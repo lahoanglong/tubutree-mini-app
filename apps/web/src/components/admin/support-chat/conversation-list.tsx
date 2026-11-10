@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { usePressLock } from '@/lib/use-press-lock';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { listSupportConversations } from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
@@ -24,6 +25,7 @@ export function ConversationList({ selectedId, onSelect }: { selectedId: string 
     refetchInterval: (query) => ((query.state.data?.pages.length ?? 1) > 1 ? false : 30_000),
   });
   const items = listQ.data?.pages.flatMap((p) => p.items) ?? [];
+  const more = usePressLock(() => (listQ.isFetchingNextPage ? undefined : listQ.fetchNextPage()));
 
   return (
     <section aria-labelledby="conv-h" className="min-w-0 space-y-3">
@@ -53,7 +55,7 @@ export function ConversationList({ selectedId, onSelect }: { selectedId: string 
         </button>
       </div>
       {listQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {listQ.isError && <LoadError onRetry={() => void listQ.refetch()} retrying={listQ.isFetching}>Không tải được danh sách hội thoại.</LoadError>}
+      {listQ.isError && <LoadError onRetry={() => listQ.refetch({ cancelRefetch: false })} retrying={listQ.isFetching}>Không tải được danh sách hội thoại.</LoadError>}
       {listQ.data && items.length === 0 && <p className="text-sm text-stone-500">{q || unforwarded ? 'Không có hội thoại khớp.' : 'Chưa có hội thoại nào.'}</p>}
       <ul className="space-y-2">
         {items.map((c) => (
@@ -86,7 +88,13 @@ export function ConversationList({ selectedId, onSelect }: { selectedId: string 
         ))}
       </ul>
       {listQ.hasNextPage && (
-        <button type="button" className={BTN_SECONDARY} disabled={listQ.isFetchingNextPage} onClick={() => void listQ.fetchNextPage()}>
+        <button
+          type="button"
+          className={`${BTN_SECONDARY} aria-disabled:opacity-60`}
+          aria-busy={more.busy || listQ.isFetchingNextPage || undefined}
+          aria-disabled={more.busy || listQ.isFetchingNextPage || undefined}
+          onClick={more.press}
+        >
           {listQ.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm'}
         </button>
       )}

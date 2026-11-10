@@ -24,6 +24,9 @@ import { DealerTierSelect } from './dealer-tier-select';
 import { useDebounced } from './search-picker';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge, chipClass } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 
 const LIST_KEY = ['admin-commission-rates'] as const;
 const errText = (e: unknown, fallback: string) => (e instanceof Error ? actionErrorText(e) : fallback);
@@ -165,18 +168,23 @@ function FillMissing({ missingTubu, maxRate }: { missingTubu: number; maxRate: n
   const { confirm, dialog } = useConfirm();
   const [text, setText] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const mut = useMutation({
+  const refresh = () => qc.invalidateQueries({ queryKey: LIST_KEY });
+  const mut = useLockedMutation({
     mutationFn: (rate: number) => fillMissingRates(rate),
     onSuccess: (r) => {
       setMsg({ ok: true, text: `Đã đặt ${formatRate(r.affiliateRate)} cho ${r.updated} biến thể.` });
       setText('');
-      void qc.invalidateQueries({ queryKey: LIST_KEY });
+      return settleWithin(refresh());
     },
-    onError: (e) => setMsg({ ok: false, text: errText(e, 'Không áp được %.') }),
+    onError: (e) => {
+      setMsg({ ok: false, text: errText(e, 'Không áp được %.') });
+      return reloadWhenStale(e, refresh);
+    },
   });
   if (missingTubu === 0 && !msg) return null;
 
   const onApply = async () => {
+    if (mut.isPending) return;
     const parsed = parseRateInput(text, maxRate);
     if ('error' in parsed) return setMsg({ ok: false, text: parsed.error });
     setMsg(null);
@@ -201,17 +209,25 @@ function FillMissing({ missingTubu, maxRate }: { missingTubu: number; maxRate: n
             placeholder="vd 10"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            disabled={mut.isPending}
+            readOnly={mut.isPending}
+            aria-busy={mut.isPending || undefined}
             className={`${FIELD_XS} w-20`}
           />
           <span aria-hidden="true">%</span>
-          <button type="button" onClick={onApply} disabled={mut.isPending || !text.trim()} className={BTN_XS_PRIMARY}>
+          <button
+            type="button"
+            onClick={onApply}
+            disabled={!text.trim()}
+            aria-busy={mut.isPending || undefined}
+            aria-disabled={mut.isPending || undefined}
+            className={`${BTN_XS_PRIMARY} aria-disabled:opacity-60`}
+          >
             {mut.isPending ? 'Đang áp…' : 'Áp dụng'}
           </button>
         </div>
       )}
       {msg && (
-        <p role={msg.ok ? 'status' : 'alert'} className={`mt-1 text-xs ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
+        <p role={msg.ok ? 'status' : 'alert'} className={`mt-1 text-xs tabular-nums ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
           {msg.text}
         </p>
       )}
@@ -240,17 +256,22 @@ function ProductCard({
   const [text, setText] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const active = p.variations.filter((v) => v.isActive).length;
-  const mut = useMutation({
+  const refresh = () => qc.invalidateQueries({ queryKey: LIST_KEY });
+  const mut = useLockedMutation({
     mutationFn: (rate: number) => setProductRate(p.id, rate),
     onSuccess: (r) => {
       setMsg({ ok: true, text: `Đã đặt ${formatRate(r.affiliateRate)} cho ${r.updated} biến thể đang bán.` });
       setText('');
       onSaved({ ...p, variations: p.variations.map((v) => (v.isActive ? { ...v, affiliateRate: r.affiliateRate } : v)) });
-      void qc.invalidateQueries({ queryKey: LIST_KEY });
+      return settleWithin(refresh());
     },
-    onError: (e) => setMsg({ ok: false, text: errText(e, 'Không đặt được %.') }),
+    onError: (e) => {
+      setMsg({ ok: false, text: errText(e, 'Không đặt được %.') });
+      return reloadWhenStale(e, refresh);
+    },
   });
   const onApply = async () => {
+    if (mut.isPending) return;
     const parsed = parseRateInput(text, maxRate);
     if ('error' in parsed) return setMsg({ ok: false, text: parsed.error });
     setMsg(null);
@@ -285,16 +306,24 @@ function ProductCard({
             placeholder="%"
             value={text}
             onChange={(e) => setText(e.target.value)}
-            disabled={mut.isPending}
+            readOnly={mut.isPending}
+            aria-busy={mut.isPending || undefined}
             className={`${FIELD_XS} w-20`}
           />
-          <button type="button" onClick={onApply} disabled={mut.isPending || !text.trim()} className={BTN_XS_SECONDARY}>
+          <button
+            type="button"
+            onClick={onApply}
+            disabled={!text.trim()}
+            aria-busy={mut.isPending || undefined}
+            aria-disabled={mut.isPending || undefined}
+            className={`${BTN_XS_SECONDARY} aria-disabled:opacity-60`}
+          >
             {mut.isPending ? 'Đang đặt…' : 'Đặt cho cả SP'}
           </button>
         </div>
       )}
       {msg && (
-        <p role={msg.ok ? 'status' : 'alert'} className={`mt-1 text-xs ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
+        <p role={msg.ok ? 'status' : 'alert'} className={`mt-1 text-xs tabular-nums ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
           {msg.text}
         </p>
       )}
@@ -336,14 +365,19 @@ function VariationRow({
     setText(initial);
   }
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const mut = useMutation({
+  const refresh = () => qc.invalidateQueries({ queryKey: LIST_KEY });
+  // Khoá giữ tới khi danh sách tải lại xong (tối đa 4 giây): nhả sớm thì nút còn hiện với mức cũ.
+  const mut = useLockedMutation({
     mutationFn: (rate: number | null) => setVariationRate(v.id, rate),
     onSuccess: (r) => {
       setMsg({ ok: true, text: r.affiliateRate === null ? 'Đã về mức mặc định.' : `Đã lưu ${formatRate(r.affiliateRate)}.` });
       onRateSaved(r.affiliateRate);
-      void qc.invalidateQueries({ queryKey: LIST_KEY });
+      return settleWithin(refresh());
     },
-    onError: (e) => setMsg({ ok: false, text: errText(e, 'Không lưu được %.') }),
+    onError: (e) => {
+      setMsg({ ok: false, text: errText(e, 'Không lưu được %.') });
+      return reloadWhenStale(e, refresh);
+    },
   });
   const parsed = text.trim() && text !== initial ? parseRateInput(text, maxRate) : null;
   const invalid = parsed && 'error' in parsed ? parsed.error : null;
@@ -423,20 +457,29 @@ function VariationRow({
           onKeyDown={(e) => {
             if (e.key === 'Enter') onSave();
           }}
-          disabled={mut.isPending}
+          readOnly={mut.isPending}
+          aria-busy={mut.isPending || undefined}
           className={`${FIELD_XS} w-20 text-right`}
         />
         <span aria-hidden="true" className="text-stone-500">%</span>
-        <button type="button" onClick={onSave} disabled={mut.isPending || !dirty} className={BTN_XS_PRIMARY}>
+        <button
+          type="button"
+          onClick={onSave}
+          disabled={!dirty}
+          aria-busy={mut.isPending || undefined}
+          aria-disabled={mut.isPending || undefined}
+          className={`${BTN_XS_PRIMARY} aria-disabled:opacity-60`}
+        >
           {mut.isPending ? 'Đang lưu…' : 'Lưu'}
         </button>
         {v.affiliateRate !== null && (
           <button
             type="button"
             onClick={onClear}
-            disabled={mut.isPending}
+            aria-busy={mut.isPending || undefined}
+            aria-disabled={mut.isPending || undefined}
             aria-label={`Về mặc định ${v.sku}`}
-            className={BTN_XS_SECONDARY}
+            className={`${BTN_XS_SECONDARY} aria-disabled:opacity-60`}
           >
             Về mặc định
           </button>
@@ -461,22 +504,26 @@ function RateCsvImport() {
     onSuccess: (p) => setPreview(p),
     onError: (e) => setMsg({ ok: false, text: errText(e, 'Không xem trước được.') }),
   });
-  const applyMut = useMutation({
+  const refresh = () => qc.invalidateQueries({ queryKey: LIST_KEY });
+  const applyMut = useLockedMutation({
     mutationFn: () => applyRateImport(csv),
     onSuccess: (r) => {
       const notFound = r.notFound.length ? ` ${r.notFound.length} SKU không khớp, đã bỏ qua: ${r.notFound.slice(0, 20).join(', ')}${r.notFound.length > 20 ? '…' : ''}.` : '';
       setMsg({ ok: true, text: `Đã đổi % cho ${r.updated} biến thể, ${r.unchanged} dòng không đổi.${notFound}` });
       setPreview(null);
       setCsv('');
-      void qc.invalidateQueries({ queryKey: LIST_KEY });
+      return settleWithin(refresh());
     },
-    onError: (e) => setMsg({ ok: false, text: errText(e, 'Không áp dụng được.') }),
+    onError: (e) => {
+      setMsg({ ok: false, text: errText(e, 'Không áp dụng được.') });
+      return reloadWhenStale(e, refresh);
+    },
   });
   const busy = previewMut.isPending || applyMut.isPending;
   const rows = preview ? [...preview.rows].sort((a, b) => STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status) || a.line - b.line) : [];
 
   const onApply = async () => {
-    if (!preview?.canApply) return;
+    if (!preview?.canApply || busy) return;
     const ok = await confirm({
       title: 'Áp % hoa hồng từ CSV',
       message:
@@ -506,23 +553,34 @@ function RateCsvImport() {
           setPreview(null);
           setMsg(null);
         }}
-        disabled={applyMut.isPending}
+        readOnly={applyMut.isPending}
+        aria-busy={applyMut.isPending || undefined}
         className={`${INPUT_CLASS} font-mono text-xs`}
       />
       <div className="flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => {
+            if (busy) return;
             setMsg(null);
             previewMut.mutate();
           }}
-          disabled={busy || !csv.trim()}
-          className={BTN_SECONDARY}
+          disabled={!csv.trim()}
+          aria-busy={previewMut.isPending || undefined}
+          aria-disabled={busy || undefined}
+          className={`${BTN_SECONDARY} aria-disabled:opacity-60`}
         >
           {previewMut.isPending ? 'Đang kiểm…' : 'Xem trước'}
         </button>
         {preview && (
-          <button type="button" onClick={onApply} disabled={busy || !preview.canApply} className={BTN_PRIMARY}>
+          <button
+            type="button"
+            onClick={onApply}
+            disabled={!preview.canApply}
+            aria-busy={applyMut.isPending || undefined}
+            aria-disabled={busy || undefined}
+            className={`${BTN_PRIMARY} aria-disabled:opacity-60`}
+          >
             {applyMut.isPending ? 'Đang áp…' : `Áp dụng ${preview.counts.OK} dòng`}
           </button>
         )}
@@ -592,17 +650,20 @@ function DealerPriceImport() {
     onSuccess: (p) => setPreview(p),
     onError: (e) => setMsg({ ok: false, text: errText(e, 'Không xem trước được.') }),
   });
-  const applyMut = useMutation({
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: LIST_KEY }), qc.invalidateQueries({ queryKey: ['admin-dealer-price-history'] })]);
+  const applyMut = useLockedMutation({
     mutationFn: () => importDealerPrices(tierId, csv),
     onSuccess: (r) => {
       const notFound = r.notFound.length ? ` ${r.notFound.length} SKU không khớp, đã bỏ qua: ${r.notFound.slice(0, 20).join(', ')}${r.notFound.length > 20 ? '…' : ''}.` : '';
       setMsg({ ok: true, text: `Đã cập nhật ${r.updated} giá sỉ, ${r.unchanged} dòng không đổi.${notFound}` });
       setPreview(null);
       setCsv('');
-      void qc.invalidateQueries({ queryKey: LIST_KEY });
-      void qc.invalidateQueries({ queryKey: ['admin-dealer-price-history'] });
+      return settleWithin(refresh());
     },
-    onError: (e) => setMsg({ ok: false, text: errText(e, 'Không nhập được giá sỉ.') }),
+    onError: (e) => {
+      setMsg({ ok: false, text: errText(e, 'Không nhập được giá sỉ.') });
+      return reloadWhenStale(e, refresh);
+    },
   });
   const busy = previewMut.isPending || applyMut.isPending;
   const rows = preview
@@ -610,12 +671,13 @@ function DealerPriceImport() {
     : [];
 
   const onPreview = () => {
+    if (busy) return;
     if (!tierId) return setMsg({ ok: false, text: 'Chọn bậc đại lý trước.' });
     setMsg(null);
     previewMut.mutate();
   };
   const onApply = async () => {
-    if (!preview?.canApply) return;
+    if (!preview?.canApply || busy) return;
     const ok = await confirm({
       title: 'Nhập giá sỉ đại lý',
       message:
@@ -653,15 +715,30 @@ function DealerPriceImport() {
           setPreview(null);
           setMsg(null);
         }}
-        disabled={applyMut.isPending}
+        readOnly={applyMut.isPending}
+        aria-busy={applyMut.isPending || undefined}
         className={`${INPUT_CLASS} font-mono text-xs`}
       />
       <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={onPreview} disabled={busy || !csv.trim()} className={BTN_SECONDARY}>
+        <button
+          type="button"
+          onClick={onPreview}
+          disabled={!csv.trim()}
+          aria-busy={previewMut.isPending || undefined}
+          aria-disabled={busy || undefined}
+          className={`${BTN_SECONDARY} aria-disabled:opacity-60`}
+        >
           {previewMut.isPending ? 'Đang kiểm…' : 'Xem trước giá sỉ'}
         </button>
         {preview && (
-          <button type="button" onClick={onApply} disabled={busy || !preview.canApply} className={BTN_PRIMARY}>
+          <button
+            type="button"
+            onClick={onApply}
+            disabled={!preview.canApply}
+            aria-busy={applyMut.isPending || undefined}
+            aria-disabled={busy || undefined}
+            className={`${BTN_PRIMARY} aria-disabled:opacity-60`}
+          >
             {applyMut.isPending ? 'Đang ghi…' : `Ghi ${preview.counts.OK} giá sỉ`}
           </button>
         )}

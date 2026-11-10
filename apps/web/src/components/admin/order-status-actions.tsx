@@ -13,6 +13,9 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { parseVndInput } from '@/lib/loyalty-pos';
 import { useConfirm, type ConfirmOptions } from './confirm-dialog';
 import { BTN_WARNING, FIELD_XS, TOUCH_H, Field } from './ui';
@@ -26,7 +29,7 @@ export interface OrderStatusAction {
 }
 
 // Nút nằm trong chi tiết đơn mở rộng: chạm 44px trên điện thoại, về cỡ gọn từ `sm` (admin tối ưu máy tính, Q-29).
-const ACTION_BASE = `${TOUCH_H} rounded-control px-2.5 py-1 text-xs font-medium disabled:opacity-50`;
+const ACTION_BASE = `${TOUCH_H} rounded-control px-2.5 py-1 text-xs font-medium disabled:opacity-50 aria-disabled:opacity-50`;
 
 /**
  * Thứ tự hiển thị theo luồng giao. Không có RETURNED: trả hàng đi qua tab Đổi/Trả (duyệt yêu cầu, hoàn tiền) chứ
@@ -152,27 +155,35 @@ export function OrderStatusActions({
   const payInFlight = useRef(false);
   const { confirm, ask, dialog } = useConfirm();
 
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['admin-orders'] });
-    void qc.invalidateQueries({ queryKey: ['admin-dashboard-stats'] });
-    void qc.invalidateQueries({ queryKey: ['admin-recycling-count'] });
-    void invalidateInbox(qc);
-  };
+  // Trả Promise để lệnh ghi giữ khoá tới khi đơn mới về (tối đa 4 giây): nhả sớm thì nút của trạng thái cũ còn bấm được và ra lỗi "đơn đã đổi".
+  const refresh = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['admin-orders'] }),
+      qc.invalidateQueries({ queryKey: ['admin-dashboard-stats'] }),
+      qc.invalidateQueries({ queryKey: ['admin-recycling-count'] }),
+      invalidateInbox(qc),
+    ]);
+  // Lời lỗi đổi trạng thái nằm ở state riêng và ngoài khối nút: `isError` chỉ lật sau khi lần tải lại xong, và khối nút biến mất khi đơn mới về không còn nút nào.
+  const [statusError, setStatusError] = useState<string | null>(null);
 
-  const statusMut = useMutation({
+  // Một lệnh đổi trạng thái mỗi lúc (khoá ref đồng bộ). Đơn vừa đổi ở nơi khác (400/404/409) thì tải lại để nút khớp trạng thái thật; lỗi khác không tải lại.
+  const statusMut = useLockedMutation({
     mutationFn: ({ status, note }: { status: string; note?: string }) => updateOrderStatus(order.id || order.code, status, note),
-    onSuccess: refresh,
-    // Lỗi thường do đơn vừa đổi trạng thái ở nơi khác: tải lại để nút bấm khớp trạng thái thật.
-    onError: refresh,
+    onMutate: () => setStatusError(null),
+    onSuccess: () => settleWithin(refresh()),
+    onError: (e) => {
+      setStatusError(actionErrorText(e));
+      return reloadWhenStale(e, refresh);
+    },
   });
 
-  const resyncMut = useMutation({
+  const resyncMut = useLockedMutation({
     mutationFn: () => resyncDeliveredEffects(order.id || order.code),
-    onSuccess: refresh,
+    onSuccess: () => settleWithin(refresh()),
   });
 
   const onResync = async () => {
-    if (resyncMut.isPending) return;
+    if (resyncMut.isPending || statusMut.isPending || payMut.isPending) return;
     const ok = await confirm({
       title: 'Chạy lại việc sau giao',
       message:
@@ -197,17 +208,20 @@ export function OrderStatusActions({
     onSuccess: (r) => {
       setPayMsg({ ok: true, text: r.message });
       setBankRef('');
-      refresh();
       onPaid?.(r.message, r.alreadyPaid);
+      return settleWithin(refresh());
     },
-    onError: (e: unknown) => setPayMsg({ ok: false, text: actionErrorText(e) }),
+    onError: (e: unknown) => {
+      setPayMsg({ ok: false, text: actionErrorText(e) });
+      return reloadWhenStale(e, refresh);
+    },
     onSettled: () => {
       payInFlight.current = false;
     },
   });
 
   const onConfirmPayment = async () => {
-    if (payInFlight.current || payMut.isPending) return;
+    if (payInFlight.current || payMut.isPending || statusMut.isPending || resyncMut.isPending) return;
     const amountError = latePayment ? receivedAmountError(received, order.total) : null;
     if (amountError) {
       setPayMsg({ ok: false, text: amountError });
@@ -241,6 +255,7 @@ export function OrderStatusActions({
   };
 
   const onStatus = async (a: OrderStatusAction) => {
+    if (busy) return;
     if (!a.confirm) {
       statusMut.mutate({ status: a.status });
       return;
@@ -256,7 +271,7 @@ export function OrderStatusActions({
   };
 
   const actions = orderStatusActions(order);
-  const busy = statusMut.isPending || payMut.isPending;
+  const busy = statusMut.isPending || payMut.isPending || resyncMut.isPending;
 
   return (
     <div className="space-y-2 border-t border-stone-200 pt-2">
@@ -282,7 +297,7 @@ export function OrderStatusActions({
                   value={groupDigits(received)}
                   onChange={(e) => setReceived(parseVndInput(e.target.value))}
                   disabled={busy}
-                  className={`${FIELD_XS} w-36 text-right`}
+                  className={`${FIELD_XS} w-36 text-right tabular-nums`}
                 />
                 <span className="shrink-0">đ</span>
               </label>
@@ -298,11 +313,13 @@ export function OrderStatusActions({
                 className={`${FIELD_XS} w-full`}
               />
             </Field>
+            {/* Bận bằng aria-busy/aria-disabled chứ không `disabled`: nút vừa đóng hộp xác nhận đang giữ tiêu điểm, vô hiệu thì Chromium thả tiêu điểm về body. */}
             <button
               type="button"
               onClick={onConfirmPayment}
-              disabled={busy}
-              className={BTN_WARNING}
+              aria-busy={payMut.isPending || undefined}
+              aria-disabled={busy || undefined}
+              className={`${BTN_WARNING} aria-disabled:opacity-60`}
             >
               {latePayment ? 'Ghi nhận tiền về muộn' : 'Đã nhận tiền'}
             </button>
@@ -320,7 +337,8 @@ export function OrderStatusActions({
           <button
             type="button"
             onClick={onResync}
-            disabled={resyncMut.isPending || busy}
+            aria-busy={resyncMut.isPending || undefined}
+            aria-disabled={busy || undefined}
             className={`${ACTION_BASE} border border-stone-300 text-stone-800 hover:bg-stone-100`}
           >
             Chạy lại việc sau giao
@@ -344,17 +362,24 @@ export function OrderStatusActions({
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-semibold text-stone-700">Chuyển trạng thái:</span>
           {actions.map((a) => (
-            <button key={a.status} type="button" onClick={() => onStatus(a)} disabled={busy} className={a.className}>
+            <button
+              key={a.status}
+              type="button"
+              onClick={() => onStatus(a)}
+              aria-busy={(statusMut.isPending && statusMut.variables?.status === a.status) || undefined}
+              aria-disabled={busy || undefined}
+              className={a.className}
+            >
               {a.label}
             </button>
           ))}
           {statusMut.isPending && <span className="text-xs text-stone-500">Đang cập nhật…</span>}
-          {statusMut.isError && (
-            <span role="alert" className="text-xs text-danger-fg">
-              {actionErrorText(statusMut.error)}
-            </span>
-          )}
         </div>
+      )}
+      {statusError && (
+        <p role="alert" className="text-xs text-danger-fg">
+          {statusError}
+        </p>
       )}
       {dialog}
     </div>

@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import React, { useRef, useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Info, X } from 'lucide-react';
 import {
   checkPancakeVariation,
@@ -18,6 +18,10 @@ import { formatVnd } from '@/lib/shop-client';
 import { useModalA11y } from '@/lib/use-modal-a11y';
 import { BTN_XS_SECONDARY, INPUT_CLASS, Notice, TOUCH_H } from '@/components/admin/ui';
 import { actionErrorText } from '@/lib/error-text';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { settleWithin } from '@/lib/settle-within';
+
+const BUSY_CLASS = 'aria-disabled:opacity-60';
 
 const INPUT = `mt-1 ${INPUT_CLASS} ${TOUCH_H}`;
 const MAX_STOCK = 100_000;
@@ -82,8 +86,9 @@ function FormFooter({ onClose, busy, submitLabel }: { onClose: () => void; busy:
       </button>
       <button
         type="submit"
-        disabled={busy}
-        className={`${TOUCH_H} rounded-control bg-forest-600 px-4 py-1.5 text-xs font-semibold text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500`}
+        aria-busy={busy || undefined}
+        aria-disabled={busy || undefined}
+        className={`${TOUCH_H} rounded-control bg-forest-600 px-4 py-1.5 text-xs font-semibold text-stone-0 hover:bg-forest-700 ${BUSY_CLASS}`}
       >
         {busy ? 'Đang gửi…' : submitLabel}
       </button>
@@ -122,14 +127,23 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
     },
   });
 
+  const submitting = useRef(false);
   const mut = useMutation({
     mutationFn: (dto: CreateMerchantProductInput) => createMerchantProduct(dto),
     onSuccess: () => onSuccess(),
     onError: (e: unknown) => setMsg(actionErrorText(e)),
+    onSettled: () => {
+      submitting.current = false;
+    },
   });
+  const send = (dto: CreateMerchantProductInput) => {
+    submitting.current = true;
+    mut.mutate(dto);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting.current) return;
     setMsg(null);
     if (tubuFulfils && linked?.pancakeId !== pancakeCode.trim()) {
       setMsg('Bấm "Kiểm tra mã" để xác nhận mã biến thể Pancake trước khi gửi.');
@@ -146,7 +160,7 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
         .filter(Boolean),
     };
     if (tubuFulfils && linked) {
-      mut.mutate({ ...common, basePrice: linked.retailPrice, tubuFulfils: true, pancakeCode: linked.pancakeId });
+      send({ ...common, basePrice: linked.retailPrice, tubuFulfils: true, pancakeCode: linked.pancakeId });
       return;
     }
     const price = parseMerchantPrice(basePrice);
@@ -155,7 +169,7 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
       setMsg(priceError);
       return;
     }
-    mut.mutate({ ...common, basePrice: price!, stock: Number(stock) });
+    send({ ...common, basePrice: price!, stock: Number(stock) });
   };
 
   return (
@@ -315,10 +329,20 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
   const [stock, setStock] = useState(String(product.variations?.[0]?.stock ?? 0));
   const [msg, setMsg] = useState<string | null>(null);
 
+  const qc = useQueryClient();
+  const submitting = useRef(false);
   const mut = useMutation({
     mutationFn: (dto: UpdateMerchantProductInput) => updateMerchantProduct(product.id, dto),
     onSuccess: () => onSuccess(),
-    onError: (e: unknown) => setMsg(actionErrorText(e)),
+    onError: (e: unknown) => {
+      setMsg(actionErrorText(e));
+      // 404/409: sản phẩm đã đổi hoặc không còn nên danh sách phía sau đang cũ. 400 là luật nhập liệu (giá, mã Pancake), không tải lại.
+      const status = errorStatus(e);
+      return status === 404 || status === 409 ? settleWithin(qc.invalidateQueries({ queryKey: ['merchant-products'] })) : undefined;
+    },
+    onSettled: () => {
+      submitting.current = false;
+    },
   });
 
   const checkMut = useMutation({
@@ -336,6 +360,7 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (submitting.current) return;
     setMsg(null);
     if (codeMode === 'change' && linked?.pancakeId !== newCode.trim()) {
       setMsg('Bấm "Kiểm tra mã" để xác nhận mã biến thể Pancake mới trước khi lưu.');
@@ -370,6 +395,7 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
       onClose();
       return;
     }
+    submitting.current = true;
     mut.mutate(dto);
   };
 

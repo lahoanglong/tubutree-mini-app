@@ -1,8 +1,8 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { ChevronDown, ChevronUp, FileText, History, MapPin, Users } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CopyButton } from '@/components/copy-button';
 import { getOrderStatusHistory, INVOICE_URL_MAX, issueOrderInvoice, type AdminOrder } from '@/lib/admin-client';
 import { actorLabel, canIssueInvoice, formatShippingAddress, invoiceStatusLabel, invoiceUrlError } from '@/lib/admin-order-detail';
@@ -14,6 +14,9 @@ import { formatDateTime } from '@/lib/format-date';
 import { COMMISSION_STATUS, getOrderReferral } from '@/lib/commission-rates';
 import { formatVnd } from '@/lib/shop-client';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 
 const statusText = (s: string) => ORDER_STATUS_LABELS[s] ?? s;
 
@@ -202,20 +205,20 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
   const qc = useQueryClient();
   const [url, setUrl] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const inFlight = useRef(false);
   const { confirm, dialog } = useConfirm();
 
-  const mut = useMutation({
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ['admin-orders'] }), qc.invalidateQueries({ queryKey: ['admin-invoice-pending-count'] })]);
+  // Khoá giữ tới khi đơn làm mới về (tối đa 4 giây): nhả sớm thì nút còn hiện với đơn chưa xuất hoá đơn và bấm lại được.
+  const mut = useLockedMutation({
     mutationFn: () => issueOrderInvoice(order.id || order.code, url),
     onSuccess: (r) => {
       setMsg({ ok: true, text: r.message });
       setUrl('');
-      void qc.invalidateQueries({ queryKey: ['admin-orders'] });
-      void qc.invalidateQueries({ queryKey: ['admin-invoice-pending-count'] });
+      return settleWithin(refresh());
     },
-    onError: (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) }),
-    onSettled: () => {
-      inFlight.current = false;
+    onError: (e: unknown) => {
+      setMsg({ ok: false, text: actionErrorText(e) });
+      return reloadWhenStale(e, refresh);
     },
   });
 
@@ -227,7 +230,7 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
   const safeInvoiceUrl = safeHttpsLink(order.invoiceUrl);
 
   const onIssue = async () => {
-    if (inFlight.current || mut.isPending) return;
+    if (mut.isPending) return;
     const err = invoiceUrlError(url);
     if (err) return setMsg({ ok: false, text: err });
     setMsg(null);
@@ -238,8 +241,7 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
         'Đơn chuyển sang "Đã xuất hoá đơn" và khách được báo trong mục Thông báo. Chỉ bấm khi hoá đơn đã được phát hành ở hệ thống hoá đơn điện tử.',
       confirmLabel: 'Đã xuất hoá đơn',
     });
-    if (!ok || inFlight.current || mut.isPending) return;
-    inFlight.current = true;
+    if (!ok) return;
     mut.mutate();
   };
 
@@ -303,15 +305,17 @@ export function OrderInvoicePanel({ order }: { order: AdminOrder }) {
               maxLength={INVOICE_URL_MAX}
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              disabled={mut.isPending}
+              readOnly={mut.isPending}
+              aria-busy={mut.isPending || undefined}
               className={`${INPUT_CLASS} min-h-[44px]`}
             />
           </Field>
           <button
             type="button"
             onClick={onIssue}
-            disabled={mut.isPending}
-            className="min-h-[44px] rounded-control bg-forest-600 px-4 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500"
+            aria-busy={mut.isPending || undefined}
+            aria-disabled={mut.isPending || undefined}
+            className="min-h-[44px] rounded-control bg-forest-600 px-4 text-sm font-medium text-stone-0 hover:bg-forest-700 aria-disabled:opacity-60"
           >
             {mut.isPending ? 'Đang ghi nhận…' : 'Đã xuất hoá đơn'}
           </button>

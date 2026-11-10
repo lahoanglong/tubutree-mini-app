@@ -71,7 +71,7 @@ function Editor() {
             <Badge>Chưa xác minh</Badge>
           )}
           <Badge tone={brand.isPublished ? 'success' : 'warning'}>{brand.isPublished ? 'Đang hiển thị' : 'Bản nháp, chờ Tubu duyệt'}</Badge>
-          <span className="text-xs text-stone-600">{brand.followerCount} theo dõi</span>
+          <span className="text-xs tabular-nums text-stone-600">{brand.followerCount} theo dõi</span>
         </div>
         <p className="text-xs text-stone-600">{BRAND_OWNER_EDIT_HINT}</p>
         <ViewBrandLink slug={brand.slug} published={brand.isPublished} />

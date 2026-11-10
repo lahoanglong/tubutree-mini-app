@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { adjustPayroll, recomputePayroll, type AdminPayrollRow } from '@tubutree/app-core/api/payroll';
 import { ApiError } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { formatVnd } from '@/lib/format-vnd';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import { currentVnYearMonth, dowLabel, shortDayLabel, vnDateKey } from '@/lib/week';
 import { Sheet } from '@/components/ui/sheet';
 import { useConfirm } from './confirm-dialog';
@@ -38,7 +39,8 @@ function defaultDay(year: number, month: number): string {
 /**
  * Thưởng/phạt tay cho một nhân viên: chọn loại và số tiền dương (máy chủ lưu số dương = trừ lương, số âm = thưởng, nên người dùng
  * không phải nhớ dấu), ngày công, lý do bắt buộc. Chỉ ghi sau khi xác nhận có nhắc lại số tiền; khoản giống hệt vừa ghi thì hỏi lại
- * trước khi ghi thêm.
+ * trước khi ghi thêm. Khoản không xoá được nên một khoá ref phủ cả đường hỏi lẫn đường gửi và nhánh "khoản giống hệt" (Huỷ → tính lại),
+ * nhả ở mọi đường thoát; lệnh bị từ chối vì bảng lương đã cũ (400/404/409 không phải khoản trùng) thì tải lại bảng (`onStale`) rồi mới nhả.
  */
 export function PayrollAdjustSheet({
   row,
@@ -46,12 +48,15 @@ export function PayrollAdjustSheet({
   month,
   onClose,
   onDone,
+  onStale,
 }: {
   row: AdminPayrollRow;
   year: number;
   month: number;
   onClose: () => void;
   onDone: (text: string) => void;
+  /** Tải lại bảng lương của tháng đang mở; trả Promise để khoá chờ được. */
+  onStale?: () => PromiseLike<unknown> | unknown;
 }) {
   const { confirm, dialog } = useConfirm();
   const name = row.staff.fullName ?? row.staff.phone ?? 'NV';
@@ -61,6 +66,9 @@ export function PayrollAdjustSheet({
   const [reason, setReason] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  // Ref vì state chỉ đúng sau lần vẽ kế; `working` chỉ để báo aria-busy và chặn đóng tờ.
+  const acting = useRef(false);
+  const [working, setWorking] = useState(false);
 
   const amount = /^\d+$/.test(amountText) ? Number(amountText) : 0;
   const reasonText = reason.trim();
@@ -90,7 +98,7 @@ export function PayrollAdjustSheet({
     },
   });
 
-  const submit = async (allowDuplicate: boolean) => {
+  const submit = async (allowDuplicate: boolean): Promise<void> => {
     setErr(null);
     setInfo(null);
     try {
@@ -107,7 +115,7 @@ export function PayrollAdjustSheet({
           tone: 'danger',
         });
         if (again) {
-          void submit(true);
+          await submit(true);
           return;
         }
         // Lần ghi trước có thể đã vào sổ mà phản hồi bị mất: tính lại để dòng lương khớp sổ dù admin không ghi thêm.
@@ -125,11 +133,11 @@ export function PayrollAdjustSheet({
         return;
       }
       setErr(actionErrorText(e));
+      await reloadWhenStale(e, () => onStale?.());
     }
   };
 
-  const review = async () => {
-    if (!valid || send.isPending) return;
+  const confirmAndWrite = async () => {
     const go = await confirm({
       title: kind === 'bonus' ? 'Ghi khoản thưởng?' : 'Ghi khoản phạt?',
       message:
@@ -139,7 +147,19 @@ export function PayrollAdjustSheet({
       confirmLabel: kind === 'bonus' ? 'Ghi thưởng' : 'Ghi phạt',
       tone: kind === 'bonus' ? 'default' : 'danger',
     });
-    if (go) void submit(false);
+    if (go) await submit(false);
+  };
+
+  const review = async () => {
+    if (!valid || acting.current) return;
+    acting.current = true;
+    setWorking(true);
+    try {
+      await confirmAndWrite();
+    } finally {
+      acting.current = false;
+      setWorking(false);
+    }
   };
 
   return (
@@ -147,15 +167,17 @@ export function PayrollAdjustSheet({
       <Sheet
         open
         onClose={onClose}
-        dismissible={!send.isPending}
+        dismissible={!working}
         title={`Thưởng/phạt · ${name}`}
         footer={
           <button
             type="button"
             data-adjust-submit
-            disabled={!valid || send.isPending}
+            disabled={!valid}
+            aria-busy={working || undefined}
+            aria-disabled={working || undefined}
             onClick={() => void review()}
-            className={`${BTN_PRIMARY} w-full`}
+            className={`${BTN_PRIMARY} w-full aria-disabled:opacity-60`}
           >
             {send.isPending ? 'Đang ghi…' : 'Xem lại và ghi'}
           </button>
@@ -202,7 +224,7 @@ export function PayrollAdjustSheet({
               step={1}
               value={amountText}
               onChange={(e) => setAmountText(e.target.value)}
-              className={INPUT_CLASS}
+              className={`${INPUT_CLASS} tabular-nums`}
             />
           </Field>
           <Field label="Ngày công">

@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listLiveAttendance, manualCheckout, type LiveAttendance } from '@/lib/admin-client';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { BTN_DANGER_OUTLINE, Notice, ToneBadge, LoadError } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 
 /** Nhân viên đang trong ca + nút "Chốt ra ca" cho người quên ra ca (ADMINOPS-17). Lương ngày đó tự tính lại. */
 export function AttendanceTab() {
@@ -14,16 +17,23 @@ export function AttendanceTab() {
   const { confirm, dialog } = useConfirm();
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const q = useQuery({ queryKey: ['admin-attendance-live'], queryFn: listLiveAttendance, refetchInterval: 60_000 });
-  const close = useMutation({
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-attendance-live'] });
+  // Chốt ra ca đổi giờ ra và lương ngày: một việc mỗi lúc (khoá ref, `isPending` chỉ đúng sau lần vẽ kế) và giữ khoá tới khi danh sách mới về
+  // (tối đa `settleWithin`) để dòng vừa chốt không còn nút bấm lại được. Phiên đã đóng (400/404: nhân viên tự ra ca, tự đóng) thì tải lại rồi mới nhả.
+  const close = useLockedMutation({
     mutationFn: (id: string) => manualCheckout(id),
     onSuccess: () => {
       setMsg({ tone: 'success', text: 'Đã chốt ra ca và tính lại lương ngày đó.' });
-      void qc.invalidateQueries({ queryKey: ['admin-attendance-live'] });
+      return settleWithin(refresh());
     },
-    onError: (e) => setMsg({ tone: 'danger', text: actionErrorText(e) }),
+    onError: (e) => {
+      setMsg({ tone: 'danger', text: actionErrorText(e) });
+      return reloadWhenStale(e, refresh);
+    },
   });
 
   const ask = async (s: LiveAttendance) => {
+    if (close.isPending) return;
     const who = s.shift.staff?.fullName ?? s.shift.staff?.phone ?? 'nhân viên';
     const ok = await confirm({
       title: 'Chốt ra ca?',
@@ -44,7 +54,7 @@ export function AttendanceTab() {
         </Notice>
       )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách chấm công.</LoadError>}
+      {q.isError && <LoadError onRetry={() => q.refetch({ cancelRefetch: false })} retrying={q.isFetching}>Không tải được danh sách chấm công.</LoadError>}
       {q.data?.length === 0 && <p className="text-sm text-stone-500">Không có ai đang trong ca.</p>}
       <ul className="space-y-2">
         {q.data?.map((s) => (
@@ -63,7 +73,13 @@ export function AttendanceTab() {
                 {s.outOfRangeCount > 0 && <ToneBadge tone="danger">Ngoài vùng {s.outOfRangeCount} nhịp</ToneBadge>}
               </div>
             </div>
-            <button type="button" disabled={close.isPending} onClick={() => void ask(s)} className={BTN_DANGER_OUTLINE}>
+            <button
+              type="button"
+              aria-busy={(close.isPending && close.variables === s.id) || undefined}
+              aria-disabled={close.isPending || undefined}
+              onClick={() => void ask(s)}
+              className={`${BTN_DANGER_OUTLINE} aria-disabled:opacity-60`}
+            >
               Chốt ra ca
             </button>
           </li>

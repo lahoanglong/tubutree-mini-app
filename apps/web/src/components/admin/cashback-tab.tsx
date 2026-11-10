@@ -1,12 +1,15 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listCashbackTxns, reviewCashbackTxn, type AdminCashbackTxn } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, LoadError } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 
 /** Nhãn trạng thái hoàn tiền sàn ngoài cho kế toán: Đã duyệt là chờ hết thời gian giữ; PAID do cron cộng thẳng vào Ví Tubu của khách, không có bước chi nào của kế toán. */
 export const CASHBACK_STATUS_LABELS: Record<string, string> = {
@@ -30,19 +33,27 @@ export function CashbackTab() {
     queryKey: ['admin-cashback', filter],
     queryFn: () => listCashbackTxns(filter || undefined),
   });
-  const review = useMutation({
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-cashback'] });
+  // Duyệt/từ chối một giao dịch đổi tiền vào Ví khách nên một việc mỗi lúc cho cả danh sách; khoá giữ tới khi danh sách làm mới về (tối đa 4 giây),
+  // nhả sớm thì giao dịch vừa duyệt còn nút và bấm lại được.
+  const review = useLockedMutation({
     mutationFn: (v: { id: string; status: 'CONFIRMED' | 'REJECTED'; note?: string }) =>
       reviewCashbackTxn(v.id, v.status, v.note),
     onSuccess: () => {
       setErr(null);
-      void qc.invalidateQueries({ queryKey: ['admin-cashback'] });
+      return settleWithin(refresh());
     },
-    onError: (e) => setErr(actionErrorText(e)),
+    onError: (e) => {
+      setErr(actionErrorText(e));
+      return reloadWhenStale(e, refresh);
+    },
   });
+  const reviewing = (id: string, status: 'CONFIRMED' | 'REJECTED') => review.isPending && review.variables?.id === id && review.variables.status === status;
 
   const label = (t: AdminCashbackTxn) => `${t.merchant?.name ?? t.provider} · ${t.merchantOrderId}`;
 
   const approve = async (t: AdminCashbackTxn) => {
+    if (review.isPending) return;
     const ok = await confirm({
       title: 'Duyệt hoàn tiền',
       message:
@@ -54,6 +65,7 @@ export function CashbackTab() {
   };
 
   const reject = async (t: AdminCashbackTxn) => {
+    if (review.isPending) return;
     const note = await ask({
       title: 'Từ chối hoàn tiền',
       message: `Giao dịch ${label(t)}: khách sẽ không nhận ${formatVnd(t.userReward)}.`,
@@ -78,12 +90,16 @@ export function CashbackTab() {
           </button>
         ))}
       </div>
-      {err && <p className="mb-2 text-sm text-danger-fg">{err}</p>}
+      {err && (
+        <p role="alert" className="mb-2 text-sm text-danger-fg">
+          {err}
+        </p>
+      )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách.</LoadError>}
       <div className="space-y-2">
         {q.data?.map((t) => (
-          <div key={t.id} className="rounded-card border border-stone-200 bg-stone-0 p-3">
+          <div key={t.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 tabular-nums">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="min-w-0 break-words text-sm font-medium">{label(t)}</span>
               <span data-cashback-status className="text-xs text-stone-500">{CASHBACK_STATUS_LABELS[t.status] ?? t.status}</span>
@@ -101,8 +117,9 @@ export function CashbackTab() {
                 {t.status !== 'CONFIRMED' && (
                   <button
                     onClick={() => void approve(t)}
-                    disabled={review.isPending}
-                    className={BTN_XS_PRIMARY}
+                    aria-busy={reviewing(t.id, 'CONFIRMED') || undefined}
+                    aria-disabled={review.isPending || undefined}
+                    className={`${BTN_XS_PRIMARY} aria-disabled:opacity-60`}
                   >
                     Duyệt hoàn tiền
                   </button>
@@ -110,8 +127,9 @@ export function CashbackTab() {
                 {t.status !== 'REJECTED' && (
                   <button
                     onClick={() => void reject(t)}
-                    disabled={review.isPending}
-                    className={BTN_XS_DANGER}
+                    aria-busy={reviewing(t.id, 'REJECTED') || undefined}
+                    aria-disabled={review.isPending || undefined}
+                    className={`${BTN_XS_DANGER} aria-disabled:opacity-60`}
                   >
                     Từ chối
                   </button>

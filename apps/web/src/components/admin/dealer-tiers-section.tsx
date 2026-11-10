@@ -1,7 +1,7 @@
 'use client';
 
-import { useRef, useState, type FormEvent } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, type FormEvent } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   createDealerTier,
   diffTier,
@@ -23,6 +23,8 @@ import { formatVnd } from '@/lib/format-vnd';
 import { useConfirm } from './confirm-dialog';
 import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, Field, INPUT_CLASS, LoadError, Notice, TOUCH_H } from './ui';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 
 type Mode = { kind: 'create' } | { kind: 'edit'; id: string; baseline: TierValues };
 interface SaveInput {
@@ -55,7 +57,6 @@ export function DealerTiersSection() {
   const [saved, setSaved] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [histOpen, setHistOpen] = useState(false);
-  const inFlight = useRef(false);
   const { confirm, dialog } = useConfirm();
 
   const histQ = useQuery({ queryKey: ['admin-dealer-tier-history'], queryFn: listDealerTierHistory, enabled: histOpen });
@@ -83,34 +84,35 @@ export function DealerTiersSection() {
   };
   const set = (k: keyof TierFormInput) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
-  const save = useMutation({
+  // Khoá giữ tới khi danh sách bậc làm mới về (tối đa 4 giây): form đã đóng mà danh sách còn giá trị cũ thì "Sửa" sẽ mở form với giá trị cũ.
+  const save = useLockedMutation({
     mutationFn: (v: SaveInput) =>
       v.creating ? createDealerTier({ id: v.id, ...v.values }) : updateDealerTier(v.id, v.values, v.baseline as TierValues),
     onSuccess: (_r, v) => {
       setSaved(`${v.creating ? 'Đã tạo' : 'Đã lưu'} bậc ${v.values.name}.`);
       setMode(null);
       setErrors([]);
-      void qc.invalidateQueries({ queryKey: ['admin-dealer-tiers'] });
-      void qc.invalidateQueries({ queryKey: ['admin-dealer-tier-history'] });
-      void qc.invalidateQueries({ queryKey: ['admin-dealer-accounts'] });
+      return settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: ['admin-dealer-tiers'] }),
+          qc.invalidateQueries({ queryKey: ['admin-dealer-tier-history'] }),
+          qc.invalidateQueries({ queryKey: ['admin-dealer-accounts'] }),
+        ]),
+      );
     },
     onError: (e: unknown) => {
       if (e instanceof ApiError && e.status === 409 && mode?.kind === 'edit') {
         setStale(true);
         setErrors(['Bậc này vừa được người khác sửa — tải lại.']);
-        void qc.invalidateQueries({ queryKey: ['admin-dealer-tiers'] });
-        return;
+        return settleWithin(qc.invalidateQueries({ queryKey: ['admin-dealer-tiers'] }));
       }
       setErrors([actionErrorText(e)]);
-    },
-    onSettled: () => {
-      inFlight.current = false;
     },
   });
 
   const onSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!mode || inFlight.current || save.isPending) return;
+    if (!mode || save.isPending) return;
     const parsed = parseTierForm(form, maxPct, creating);
     if ('errors' in parsed) {
       setErrors(parsed.errors);
@@ -132,9 +134,8 @@ export function DealerTiersSection() {
           '\n\nÁp cho các đơn đại lý đặt SAU khi lưu; đơn đã đặt giữ nguyên.',
         confirmLabel: 'Lưu thay đổi',
       });
-      if (!ok || inFlight.current || save.isPending) return;
+      if (!ok) return;
     }
-    inFlight.current = true;
     setErrors([]);
     save.mutate({ creating: mode.kind === 'create', id: mode.kind === 'edit' ? mode.id : id, values, baseline: mode.kind === 'edit' ? mode.baseline : undefined });
   };
@@ -184,7 +185,16 @@ export function DealerTiersSection() {
 
       <ul className="space-y-2">
         {tiers.map((t) => (
-          <TierItem key={t.id} tier={t} editing={mode?.kind === 'edit' && mode.id === t.id} onEdit={() => open({ kind: 'edit', id: t.id, baseline: baselineOf(t) }, tierToForm(t))} />
+          <TierItem
+            key={t.id}
+            tier={t}
+            editing={mode?.kind === 'edit' && mode.id === t.id}
+            busy={save.isPending}
+            onEdit={() => {
+              if (save.isPending) return;
+              open({ kind: 'edit', id: t.id, baseline: baselineOf(t) }, tierToForm(t));
+            }}
+          />
         ))}
       </ul>
 
@@ -228,10 +238,10 @@ export function DealerTiersSection() {
             </button>
           )}
           <div className="flex flex-wrap gap-2">
-            <button type="submit" disabled={save.isPending} className={BTN_PRIMARY}>
+            <button type="submit" aria-busy={save.isPending || undefined} aria-disabled={save.isPending || undefined} className={`${BTN_PRIMARY} aria-disabled:opacity-60`}>
               {save.isPending ? 'Đang lưu…' : 'Lưu bậc'}
             </button>
-            <button type="button" onClick={close} disabled={save.isPending} className={BTN_SECONDARY}>
+            <button type="button" onClick={() => !save.isPending && close()} aria-disabled={save.isPending || undefined} className={`${BTN_SECONDARY} aria-disabled:opacity-60`}>
               Huỷ
             </button>
           </div>
@@ -268,7 +278,7 @@ export function DealerTiersSection() {
   );
 }
 
-function TierItem({ tier: t, editing, onEdit }: { tier: DealerTierRow; editing: boolean; onEdit: () => void }) {
+function TierItem({ tier: t, editing, busy, onEdit }: { tier: DealerTierRow; editing: boolean; busy: boolean; onEdit: () => void }) {
   return (
     <li data-dealer-tier className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm">
       <div className="flex flex-wrap items-start justify-between gap-2">
@@ -276,7 +286,7 @@ function TierItem({ tier: t, editing, onEdit }: { tier: DealerTierRow; editing: 
           <div className="break-words font-semibold text-stone-900">{t.name}</div>
           <div className="font-mono text-[11px] text-stone-500">{t.id}</div>
         </div>
-        <button type="button" onClick={onEdit} disabled={editing} aria-label={`Sửa bậc ${t.name}`} className={BTN_SMALL}>
+        <button type="button" onClick={onEdit} disabled={editing} aria-disabled={busy || undefined} aria-label={`Sửa bậc ${t.name}`} className={`${BTN_SMALL} aria-disabled:opacity-60`}>
           Sửa
         </button>
       </div>

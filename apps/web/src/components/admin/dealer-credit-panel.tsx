@@ -13,6 +13,7 @@ import {
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
 import { BTN_WARNING, FIELD_XS, LoadError, Field } from './ui';
 
 const newIdempotencyKey = () =>
@@ -122,13 +123,16 @@ export function DealerCreditPanel({
       setAmount('');
       setBankRef('');
       setNote('');
-      void qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] });
+      const reload = qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] });
       onPaid?.({ amount: r.amount, balance: r.balance, reportClosed: r.reportClosed, alreadyRecorded: r.alreadyRecorded, replayed: r.replayed });
+      // Giữ khoá (và inFlight) tới khi sổ tải lại xong, tối đa 4 giây: nhả sớm thì nút còn hiện với dư nợ cũ.
+      return settleWithin(reload);
     },
     onError: (e: unknown) => {
       setMsg({ ok: false, text: actionErrorText(e) });
       // Lỗi mạng/hết giờ: máy chủ có thể đã ghi khoản này, tải lại sổ để kế toán thấy dư nợ thật trước khi bấm lại.
-      void qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] });
+      // Khác các nơi khác (chỉ tải lại khi 400/404/409): ở đây MỌI lỗi đều tải lại, vì 5xx/mất mạng chưa chứng minh khoản chưa được ghi.
+      return settleWithin(qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] }));
     },
     onSettled: () => {
       inFlight.current = false;
@@ -229,8 +233,9 @@ export function DealerCreditPanel({
                 <button
                   type="button"
                   onClick={onConfirm}
-                  disabled={busy}
-                  className={BTN_WARNING}
+                  aria-busy={busy || undefined}
+                  aria-disabled={busy || undefined}
+                  className={`${BTN_WARNING} aria-disabled:opacity-60`}
                 >
                   {busy ? 'Đang xác nhận…' : 'Xác nhận đã nhận, giảm nợ'}
                 </button>

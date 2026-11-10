@@ -180,7 +180,7 @@ export function PosScreen() {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-lg font-bold text-forest-700">{(memberPoints?.total ?? 0).toLocaleString('vi-VN')}</div>
+              <div className="text-lg font-bold tabular-nums text-forest-700">{(memberPoints?.total ?? 0).toLocaleString('vi-VN')}</div>
               <div className="text-[11px] text-stone-500">Điểm Xanh</div>
               {memberPoints?.convertedNote && <div className="text-[11px] text-stone-500">{memberPoints.convertedNote}</div>}
             </div>
@@ -207,7 +207,8 @@ export function PosScreen() {
                   placeholder="vd 250000"
                   value={total}
                   onChange={(e) => setTotal(e.target.value.replace(/[^\d.,]/g, ''))}
-                  disabled={locked}
+                  readOnly={credit.isPending}
+                  disabled={!!result}
                 />
               </Field>
               <Field label="Mã hoá đơn POS" hint="In trên hoá đơn. Mỗi hoá đơn chỉ tích 1 lần.">
@@ -218,7 +219,8 @@ export function PosScreen() {
                   value={receipt}
                   maxLength={64}
                   onChange={(e) => setReceipt(e.target.value.trim())}
-                  disabled={locked}
+                  readOnly={credit.isPending}
+                  disabled={!!result}
                 />
               </Field>
             </div>
@@ -229,7 +231,8 @@ export function PosScreen() {
                 value={note}
                 maxLength={200}
                 onChange={(e) => setNote(e.target.value)}
-                disabled={locked}
+                readOnly={credit.isPending}
+                disabled={!!result}
               />
             </Field>
             {formErr && <p role="alert" className="text-sm text-danger-fg">{formErr}</p>}
@@ -237,8 +240,9 @@ export function PosScreen() {
             {!result && (
               <button
                 type="submit"
-                disabled={locked}
-                className="min-h-[44px] w-full rounded-control bg-forest-600 px-4 py-2.5 text-sm font-semibold text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500"
+                aria-busy={credit.isPending || undefined}
+                aria-disabled={credit.isPending || undefined}
+                className="min-h-[44px] w-full rounded-control bg-forest-600 px-4 py-2.5 text-sm font-semibold text-stone-0 hover:bg-forest-700 aria-disabled:opacity-60"
               >
                 {credit.isPending ? 'Đang tích điểm…' : 'Tích điểm'}
               </button>
@@ -246,7 +250,7 @@ export function PosScreen() {
           </form>
 
           {result && (
-            <div className="mt-3 space-y-2" role="status">
+            <div className="mt-3 space-y-2 tabular-nums" role="status">
               {result.replayed ? (
                 <Notice tone="warning">
                   Hoá đơn <b>{result.posTransaction.receiptId}</b> ĐÃ được tích điểm trước đó (

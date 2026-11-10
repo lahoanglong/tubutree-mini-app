@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveExternalClaim,
   attachExternalClaimAttempt,
@@ -48,10 +48,23 @@ import { configValue } from '@/lib/admin-config-forms';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
+import { settleWithin } from '@/lib/settle-within';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useDebounced } from './search-picker';
 import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, DlRow, FIELD_XS, Notice, ToneBadge, chipClass, LoadError } from './ui';
 
 type Who = ClaimActor;
+
+/** Kết quả thao tác ở cấp danh sách: dòng có thể rời bộ lọc sau khi tải lại, lời báo đặt trong dòng sẽ mất theo. */
+type Outcome = { ok: boolean; text: string } | null;
+function OutcomeLine({ outcome, className = '' }: { outcome: Outcome; className?: string }) {
+  if (!outcome) return null;
+  return (
+    <p role={outcome.ok ? 'status' : 'alert'} className={`text-xs ${outcome.ok ? 'text-success-fg' : 'text-danger-fg'} ${className}`}>
+      {outcome.text}
+    </p>
+  );
+}
 
 /** Phần của thẻ Hôm nay cần mở sẵn; `n` đổi mỗi lần bấm thẻ để màn dựng lại với bộ lọc mới. */
 export interface ExternalClaimsSeed {
@@ -92,6 +105,7 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
   const rows = claims.data?.pages.flatMap((p) => p.data) ?? [];
   const total = claims.data?.pages[0]?.meta.total;
   const who = { isAdmin, canAct, meId };
+  const [outcome, setOutcome] = useState<Outcome>(null);
   // Chỉ admin đọc được cấu hình; nhân viên không thấy băng này.
   const flag = useQuery({ queryKey: ['admin-config', 'loyalty'], queryFn: () => getConfig('loyalty'), enabled: isAdmin });
   const flagOff = isAdmin && flag.isSuccess && configValue<unknown>(flag.data, 'loyalty.marketplace_claim_enabled', false) !== true;
@@ -165,9 +179,10 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
       {claims.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {claims.isError && <LoadError onRetry={() => void claims.refetch()} retrying={claims.isFetching}>Không tải được danh sách yêu cầu.</LoadError>}
       {claims.isSuccess && rows.length === 0 && <p className="text-sm text-stone-500">Không có yêu cầu nào khớp.</p>}
+      <OutcomeLine outcome={outcome} />
       <ul className="space-y-2">
         {rows.map((c) => (
-          <ClaimRow key={c.id} claim={c} who={who} />
+          <ClaimRow key={c.id} claim={c} who={who} onOutcome={setOutcome} />
         ))}
       </ul>
       {claims.hasNextPage && (
@@ -184,34 +199,48 @@ export function ExternalClaimsTab({ isAdmin, canAct, meId, seed }: Who & { seed?
   );
 }
 
-function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who }) {
+type ClaimJob = {
+  kind: 'approve' | 'void' | 'voidReopen' | 'keep' | 'reverse';
+  run: () => Promise<string | null>;
+  /** Máy chủ vẫn đòi ghi chú (400 NOTE_REQUIRED): mở lại hộp ghi chú thay vì báo lỗi. */
+  onNoteRequired?: (e: unknown) => void;
+};
+
+function ClaimRow({ claim: c, who, onOutcome }: { claim: AdminExternalClaimRow; who: Who; onOutcome: (o: Outcome) => void }) {
   const qc = useQueryClient();
   const { confirm, ask, dialog } = useConfirm();
   const [open, setOpen] = useState(false);
-  const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
   const detail = useQuery({ queryKey: ['admin-external-claim', c.id], queryFn: () => getExternalClaim(c.id), enabled: open });
   const row = detail.data ?? c;
   const acts = claimActions(c, who);
   const blockedApprove = acts.approve && isIntroducer(detail.data?.events ?? [], who.meId);
 
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['admin-external-claims'] });
-    void qc.invalidateQueries({ queryKey: ['admin-external-claim', c.id] });
-    void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
-  };
-  const mut = useMutation({
-    mutationFn: (run: () => Promise<string | null>) => run(),
+  const refresh = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['admin-external-claims'] }),
+      qc.invalidateQueries({ queryKey: ['admin-external-claim', c.id] }),
+      qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] }),
+    ]);
+  // Một khoá cho cả dòng, giữ tới khi danh sách tải lại xong (tối đa 4 giây): nhả sớm thì nút còn hiện với trạng thái cũ. Lỗi nào cũng tải lại
+  // (lệnh có thể đã ghi trước khi lỗi mạng/5xx về), danh sách giữ dữ liệu cũ nếu lần tải lại hỏng.
+  const mut = useLockedMutation({
+    mutationFn: (job: ClaimJob) => job.run(),
     onSuccess: (msg) => {
-      setErr(null);
-      setDone(msg);
-      refresh();
+      onOutcome(msg === null ? null : { ok: true, text: msg });
+      return settleWithin(refresh());
     },
-    onError: (e) => {
-      setErr(adminClaimErrorText(e));
-      refresh();
+    onError: (e, job) => {
+      if (job.onNoteRequired && isNoteRequiredError(e)) {
+        onOutcome(null);
+        void refresh();
+        job.onNoteRequired(e);
+        return;
+      }
+      onOutcome({ ok: false, text: adminClaimErrorText(e) });
+      return settleWithin(refresh());
     },
   });
+  const acting = (kind: ClaimJob['kind']) => mut.isPending && mut.variables?.kind === kind;
 
   const approveWithNote = async (initial = '', error?: string): Promise<void> => {
     const note = await ask({
@@ -222,13 +251,14 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
     });
     if (!note) return;
     // Máy chủ vẫn đòi ghi chú (luật lệch hoặc mốc vừa đổi): mở lại hộp với lỗi ngay trong hộp, giữ nội dung đã gõ.
-    mut.mutateAsync(async () => (await approveExternalClaim(c.id, note), 'Đã duyệt, điểm đang chờ cộng.')).catch((e: unknown) => {
-      if (!isNoteRequiredError(e)) return;
-      setErr(null);
-      void approveWithNote(note, adminClaimErrorText(e));
+    mut.mutate({
+      kind: 'approve',
+      run: async () => (await approveExternalClaim(c.id, note), 'Đã duyệt, điểm đang chờ cộng.'),
+      onNoteRequired: (e) => void approveWithNote(note, adminClaimErrorText(e)),
     });
   };
   const approve = async () => {
+    if (mut.isPending) return;
     if (approveNeedsNote(row)) return approveWithNote();
     const ok = await confirm({
       title: 'Duyệt yêu cầu tích điểm',
@@ -237,13 +267,14 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
     });
     if (!ok) return;
     // Dữ liệu danh sách có thể cũ (mốc xác minh vừa hết hạn): API đòi ghi chú thì mở ngay hộp ghi chú cho đúng claim này.
-    mut.mutateAsync(async () => (await approveExternalClaim(c.id), 'Đã duyệt, điểm đang chờ cộng.')).catch((e: unknown) => {
-      if (!isNoteRequiredError(e)) return;
-      setErr(null);
-      void approveWithNote();
+    mut.mutate({
+      kind: 'approve',
+      run: async () => (await approveExternalClaim(c.id), 'Đã duyệt, điểm đang chờ cộng.'),
+      onNoteRequired: () => void approveWithNote(),
     });
   };
   const voidIt = async (reopen: boolean) => {
+    if (mut.isPending) return;
     const reason = await ask({
       title: reopen ? 'Huỷ và mở lại mã' : 'Huỷ yêu cầu tích điểm',
       message: reopen
@@ -254,9 +285,15 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
       tone: 'danger',
       input: { label: 'Lý do (khách sẽ thấy trong thông báo)', maxLength: 300, required: true },
     });
-    if (reason) mut.mutate(async () => (await voidExternalClaim(c.id, reason, reopen), reopen ? 'Đã huỷ và mở lại mã.' : 'Đã huỷ yêu cầu.'));
+    if (reason) {
+      mut.mutate({
+        kind: reopen ? 'voidReopen' : 'void',
+        run: async () => (await voidExternalClaim(c.id, reason, reopen), reopen ? 'Đã huỷ và mở lại mã.' : 'Đã huỷ yêu cầu.'),
+      });
+    }
   };
   const reverse = async () => {
+    if (mut.isPending) return;
     const reason = await ask({
       title: 'Đảo điểm đã cộng',
       message: `Thu hồi Điểm Xanh đã cộng cho mã ${c.maskedCode}. Số điểm thực thu hồi là nhỏ nhất của điểm đã cộng, phần còn thu hồi được của lô điểm và số dư hiện tại của khách. Không hoàn tác được.`,
@@ -264,22 +301,23 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
       tone: 'danger',
       input: { label: 'Lý do', maxLength: 300, required: true },
     });
-    if (reason) mut.mutate(async () => `Đã thu hồi ${groupThousands((await reverseExternalClaim(c.id, reason)).reversedPoints)} điểm.`);
+    if (reason) mut.mutate({ kind: 'reverse', run: async () => `Đã thu hồi ${groupThousands((await reverseExternalClaim(c.id, reason)).reversedPoints)} điểm.` });
   };
 
   const keep = async () => {
+    if (mut.isPending) return;
     const note = await ask({
       title: 'Giữ điểm, gỡ cờ',
       message: `Đơn của mã ${c.maskedCode} bị hoàn một phần. Giữ nguyên Điểm Xanh đã cộng và gỡ cờ "Cần xử lý" (không thu hồi một phần). Ghi lại để đối soát.`,
       confirmLabel: 'Giữ điểm',
       input: { label: 'Ghi chú (vì sao giữ điểm)', maxLength: 300, required: true },
     });
-    if (note) mut.mutate(async () => (await keepExternalClaimPoints(c.id, note), 'Đã giữ điểm và gỡ cờ.'));
+    if (note) mut.mutate({ kind: 'keep', run: async () => (await keepExternalClaimPoints(c.id, note), 'Đã giữ điểm và gỡ cờ.') });
   };
 
   const anyAction = acts.approve || acts.void || acts.voidAndReopen || acts.reverse || acts.keepPoints;
   return (
-    <li data-external-claim={c.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm">
+    <li data-external-claim={c.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm tabular-nums">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <span className="min-w-0 break-all font-mono text-xs font-medium text-stone-900">{c.maskedCode}</span>
         <span className="flex shrink-0 flex-wrap gap-1">
@@ -350,8 +388,6 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
           )}
         </div>
       )}
-      {done && <p role="status" className="mt-2 text-xs text-success-fg">{done}</p>}
-      {err && <p role="alert" className="mt-2 text-xs text-danger-fg">{err}</p>}
       <div className="mt-2 flex flex-wrap items-center gap-2">
         <button type="button" onClick={() => setOpen((v) => !v)} className={BTN_XS_SECONDARY}>
           {open ? 'Ẩn chi tiết' : 'Chi tiết'}
@@ -361,18 +397,36 @@ function ClaimRow({ claim: c, who }: { claim: AdminExternalClaimRow; who: Who })
             {acts.approve && (
               <button
                 type="button"
-                disabled={mut.isPending || blockedApprove}
+                disabled={blockedApprove}
+                aria-busy={acting('approve') || undefined}
+                aria-disabled={mut.isPending || undefined}
                 title={blockedApprove ? 'Bạn đã gắn đơn hoặc đưa yêu cầu này vào chờ duyệt nên không tự duyệt được.' : undefined}
                 onClick={() => void approve()}
-                className={BTN_XS_PRIMARY}
+                className={`${BTN_XS_PRIMARY} aria-disabled:opacity-60`}
               >
                 Duyệt
               </button>
             )}
-            {acts.void && <button type="button" disabled={mut.isPending} onClick={() => void voidIt(false)} className={BTN_XS_DANGER}>Huỷ</button>}
-            {acts.voidAndReopen && <button type="button" disabled={mut.isPending} onClick={() => void voidIt(true)} className={BTN_XS_DANGER}>Huỷ và mở lại mã</button>}
-            {acts.keepPoints && <button type="button" disabled={mut.isPending} onClick={() => void keep()} className={BTN_XS_SECONDARY}>Giữ điểm, gỡ cờ</button>}
-            {acts.reverse && <button type="button" disabled={mut.isPending} onClick={() => void reverse()} className={BTN_XS_DANGER}>Đảo điểm</button>}
+            {acts.void && (
+              <button type="button" aria-busy={acting('void') || undefined} aria-disabled={mut.isPending || undefined} onClick={() => void voidIt(false)} className={`${BTN_XS_DANGER} aria-disabled:opacity-60`}>
+                Huỷ
+              </button>
+            )}
+            {acts.voidAndReopen && (
+              <button type="button" aria-busy={acting('voidReopen') || undefined} aria-disabled={mut.isPending || undefined} onClick={() => void voidIt(true)} className={`${BTN_XS_DANGER} aria-disabled:opacity-60`}>
+                Huỷ và mở lại mã
+              </button>
+            )}
+            {acts.keepPoints && (
+              <button type="button" aria-busy={acting('keep') || undefined} aria-disabled={mut.isPending || undefined} onClick={() => void keep()} className={`${BTN_XS_SECONDARY} aria-disabled:opacity-60`}>
+                Giữ điểm, gỡ cờ
+              </button>
+            )}
+            {acts.reverse && (
+              <button type="button" aria-busy={acting('reverse') || undefined} aria-disabled={mut.isPending || undefined} onClick={() => void reverse()} className={`${BTN_XS_DANGER} aria-disabled:opacity-60`}>
+                Đảo điểm
+              </button>
+            )}
           </>
         )}
       </div>
@@ -389,6 +443,7 @@ function AttemptsSection({ who }: { who: Who }) {
     getNextPageParam: (last) => nextPageParam(last.meta),
   });
   const rows = attempts.data?.pages.flatMap((p) => p.data) ?? [];
+  const [outcome, setOutcome] = useState<Outcome>(null);
   return (
     <section aria-label="Lần gửi mã chưa ghép được" className="space-y-2">
       <h3 className="text-sm font-semibold text-stone-900">Lần gửi mã chưa ghép được</h3>
@@ -397,9 +452,10 @@ function AttemptsSection({ who }: { who: Who }) {
       </p>
       {attempts.isError && <LoadError onRetry={() => void attempts.refetch()} retrying={attempts.isFetching}>Không tải được các lần gửi mã.</LoadError>}
       {attempts.isSuccess && rows.length === 0 && <p className="text-sm text-stone-500">Không có lần gửi mã nào cần xử lý.</p>}
+      <OutcomeLine outcome={outcome} />
       <ul className="space-y-2">
         {rows.map((a) => (
-          <AttemptRow key={a.id} attempt={a} who={who} />
+          <AttemptRow key={a.id} attempt={a} who={who} onOutcome={setOutcome} />
         ))}
       </ul>
       {attempts.hasNextPage && (
@@ -413,29 +469,36 @@ function AttemptsSection({ who }: { who: Who }) {
   );
 }
 
-function AttemptRow({ attempt: a, who }: { attempt: AdminExternalAttemptRow; who: Who }) {
+type AttemptJob = { kind: 'attach' | 'reject'; run: () => Promise<string | null> };
+
+function AttemptRow({ attempt: a, who, onOutcome }: { attempt: AdminExternalAttemptRow; who: Who; onOutcome: (o: Outcome) => void }) {
   const qc = useQueryClient();
   const { ask, dialog } = useConfirm();
-  const [err, setErr] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
   const own = !!who.meId && a.userId === who.meId;
   const canAct = (who.isAdmin || who.canAct) && !own;
   // Đã thấy đơn mà vẫn nằm đây nghĩa là nguồn đơn chưa xác định: chỉ ADMIN gắn được.
   const canAttach = canAct && (who.isAdmin || a.externalOrderId === null);
-  const mut = useMutation({
-    mutationFn: (run: () => Promise<string | null>) => run(),
+  const refresh = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['admin-external-claim-attempts'] }),
+      qc.invalidateQueries({ queryKey: ['admin-external-claims'] }),
+      qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] }),
+    ]);
+  // Giữ khoá tới khi các danh sách tải lại xong (tối đa 4 giây); lỗi nào cũng tải lại như trước.
+  const mut = useLockedMutation({
+    mutationFn: (job: AttemptJob) => job.run(),
     onSuccess: (msg) => {
-      setErr(null);
-      setDone(msg);
+      onOutcome(msg === null ? null : { ok: true, text: msg });
+      return settleWithin(refresh());
     },
-    onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ['admin-external-claim-attempts'] });
-      void qc.invalidateQueries({ queryKey: ['admin-external-claims'] });
-      void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
+    onError: (e) => {
+      onOutcome({ ok: false, text: adminClaimErrorText(e) });
+      return settleWithin(refresh());
     },
-    onError: (e) => setErr(adminClaimErrorText(e)),
   });
+  const acting = (kind: AttemptJob['kind']) => mut.isPending && mut.variables?.kind === kind;
   const attach = async () => {
+    if (mut.isPending) return;
     const id = await ask({
       title: 'Gắn lần gửi mã vào đơn',
       message: attachDialogMessage(a.maskedCode, who.isAdmin),
@@ -450,12 +513,16 @@ function AttemptRow({ attempt: a, who }: { attempt: AdminExternalAttemptRow; who
       input: { label: 'Ghi chú (lý do gắn)', maxLength: 300 },
     });
     if (note === null) return;
-    mut.mutate(async () => {
-      const r = await attachExternalClaimAttempt(a.id, id, note || undefined);
-      return r.state === 'REVIEW' ? 'Đã gắn đơn, yêu cầu đang chờ người khác duyệt.' : 'Đã gắn đơn, điểm đang chờ cộng.';
+    mut.mutate({
+      kind: 'attach',
+      run: async () => {
+        const r = await attachExternalClaimAttempt(a.id, id, note || undefined);
+        return r.state === 'REVIEW' ? 'Đã gắn đơn, yêu cầu đang chờ người khác duyệt.' : 'Đã gắn đơn, điểm đang chờ cộng.';
+      },
     });
   };
   const reject = async () => {
+    if (mut.isPending) return;
     const note = await ask({
       title: 'Từ chối lần gửi mã',
       message: `Đóng lần gửi mã ${a.maskedCode}: khách không được tích điểm cho mã này.`,
@@ -463,7 +530,7 @@ function AttemptRow({ attempt: a, who }: { attempt: AdminExternalAttemptRow; who
       tone: 'danger',
       input: { label: 'Ghi chú (tuỳ chọn)', maxLength: 300 },
     });
-    if (note !== null) mut.mutate(async () => (await rejectExternalClaimAttempt(a.id, note || undefined), 'Đã từ chối lần gửi mã.'));
+    if (note !== null) mut.mutate({ kind: 'reject', run: async () => (await rejectExternalClaimAttempt(a.id, note || undefined), 'Đã từ chối lần gửi mã.') });
   };
   return (
     <li data-external-attempt={a.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm">
@@ -487,17 +554,19 @@ function AttemptRow({ attempt: a, who }: { attempt: AdminExternalAttemptRow; who
           </ul>
         </div>
       )}
-      {done && <p role="status" className="mt-1 text-xs text-success-fg">{done}</p>}
-      {err && <p role="alert" className="mt-1 text-xs text-danger-fg">{err}</p>}
       {own && <p className="mt-1 text-xs text-stone-500">Đây là lần gửi mã của chính bạn, bạn không tự xử lý được.</p>}
       {canAct && (
         <div className="mt-2 flex flex-wrap gap-2">
           {canAttach ? (
-            <button type="button" disabled={mut.isPending} onClick={() => void attach()} className={BTN_XS_PRIMARY}>Gắn đơn</button>
+            <button type="button" aria-busy={acting('attach') || undefined} aria-disabled={mut.isPending || undefined} onClick={() => void attach()} className={`${BTN_XS_PRIMARY} aria-disabled:opacity-60`}>
+              Gắn đơn
+            </button>
           ) : (
             <span className="self-center text-xs text-stone-500">Nguồn đơn chưa xác định: chỉ ADMIN gắn được.</span>
           )}
-          <button type="button" disabled={mut.isPending} onClick={() => void reject()} className={BTN_XS_DANGER}>Từ chối</button>
+          <button type="button" aria-busy={acting('reject') || undefined} aria-disabled={mut.isPending || undefined} onClick={() => void reject()} className={`${BTN_XS_DANGER} aria-disabled:opacity-60`}>
+            Từ chối
+          </button>
         </div>
       )}
       {dialog}

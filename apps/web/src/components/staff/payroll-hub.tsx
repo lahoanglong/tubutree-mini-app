@@ -8,6 +8,8 @@ import type { SessionHistory } from '@tubutree/app-core/api/attendance';
 import { myAttendanceHistoryQuery } from '@tubutree/app-core/queries/attendance';
 import { myPayrollQuery } from '@tubutree/app-core/queries/payroll';
 import { coreHttp } from '@/lib/core-http';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import { formatVnd } from '@/lib/format-vnd';
 import {
   addDaysKey,
@@ -115,6 +117,8 @@ export function PayrollHub() {
 
   // Gửi bản chụp lúc bấm; khoá giữ tới khi bảng lương tải lại xong và nút mở tấm bị chặn trong lúc đó. Tải lại có thể lỗi (mất mạng) nên
   // hồ sơ nạp sẵn cũng được ghi ngay bằng tài khoản vừa lưu: không thì lần mở sau nạp tài khoản cũ và Lưu ghi đè tài khoản mới.
+  // Chờ tải lại có hạn `settleWithin`; bị từ chối 400/404/409 thì tải lại rồi mới nhả khoá (lời lỗi hiện ngay ở thông báo của trang).
+  const refreshPayroll = () => qc.invalidateQueries({ queryKey: ['my-payroll'] });
   const bankM = useLockedMutation({
     mutationFn: (v: BankInput) => updateBank(coreHttp, v),
     onMutate: clear,
@@ -127,9 +131,12 @@ export function PayrollHub() {
       });
       notify({ text: 'Đã lưu thông tin nhận lương.', tone: 'success' });
       setBankOpen(false);
-      return qc.invalidateQueries({ queryKey: ['my-payroll'] });
+      return settleWithin(refreshPayroll());
     },
-    onError: (e) => notify({ text: errText(e), tone: 'error' }),
+    onError: (e) => {
+      notify({ text: errText(e), tone: 'error' });
+      return reloadWhenStale(e, refreshPayroll);
+    },
   });
 
   const m = payQ.data?.month;
@@ -157,7 +164,7 @@ export function PayrollHub() {
                 Thực nhận tháng {m.month}/{m.year}
               </div>
               <div className="mt-0.5 font-display text-3xl font-semibold tabular-nums max-md:font-sans max-md:text-[length:var(--type-price-xl-size)] max-md:leading-[var(--type-price-xl-lh)] max-md:font-bold">{formatVnd(m.net)}</div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs">
+              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums">
                 <span>Giờ công: {fmtH(m.totalMinutes)}</span>
                 <span>Đơn giá: {formatVnd(payQ.data?.profile?.hourlyRate ?? 0)}/h</span>
                 <span>Lương gộp: {formatVnd(m.gross)}</span>
@@ -196,7 +203,7 @@ export function PayrollHub() {
                 <h2 className="text-sm font-bold text-stone-900">
                   Tuần {i + 1} ({shortDayLabel(w.wk)}–{shortDayLabel(addDaysKey(w.wk, 6))})
                 </h2>
-                <span className="text-sm font-bold text-forest-700">
+                <span className="text-sm font-bold tabular-nums text-forest-700">
                   {fmtH(w.minutes)} · {formatVnd(w.net)}
                 </span>
               </div>
@@ -212,13 +219,13 @@ export function PayrollHub() {
                       onClick={() => setOpenDay(isOpen ? null : key)}
                       className="flex min-h-11 w-full items-center justify-between gap-2 py-1.5 text-left"
                     >
-                      <span className="flex items-center gap-1 text-sm text-stone-900">
+                      <span className="flex items-center gap-1 text-sm tabular-nums text-stone-900">
                         <ChevronDown className={`h-4 w-4 text-stone-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
                         {dowLabel(key)} {dayOfMonth(key)} · {fmtH(d.workedMinutes)}
                       </span>
                       <span className="text-right">
                         <span className="block text-sm font-bold tabular-nums text-stone-900">{formatVnd(d.net)}</span>
-                        {d.fines > 0 && <span className="block text-xs text-danger-fg">−{formatVnd(d.fines)} phạt</span>}
+                        {d.fines > 0 && <span className="block text-xs tabular-nums text-danger-fg">−{formatVnd(d.fines)} phạt</span>}
                       </span>
                     </button>
                     {isOpen && (

@@ -217,7 +217,9 @@ describe('OrderInvoicePanel', () => {
     click(btn);
     await flush();
     expect(calls).toHaveLength(1);
-    expect(btn.disabled).toBe(true);
+    // Nút đang giữ tiêu điểm không `disabled` (Chromium thả tiêu điểm về body): báo bận bằng aria-disabled.
+    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
     release();
     await flush();
     expect(container.querySelector('[role="alert"]')?.textContent).toBe(msg);

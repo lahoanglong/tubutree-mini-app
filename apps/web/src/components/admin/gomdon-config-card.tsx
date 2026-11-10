@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Recycle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -22,6 +22,9 @@ import {
 import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_SECONDARY, Field, INPUT_CLASS, LoadError, Notice } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+
+const BUSY_CLASS = 'aria-disabled:opacity-60';
 
 /** Hằng (không phải `{}` mới mỗi render) — useEffect bên dưới so sánh theo tham chiếu. */
 const NO_CONFIG: Record<string, unknown> = Object.freeze({}) as Record<string, unknown>;
@@ -86,18 +89,24 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
     }
   }, [current, loadedFrom]);
 
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['admin-config'] });
-    void qc.invalidateQueries({ queryKey: ['admin-gomdon-status'] });
-  };
+  const toggling = useRef(false);
+  const saving = useRef(false);
+  const checking = useRef(false);
+  const refresh = () =>
+    settleWithin(
+      Promise.all([qc.invalidateQueries({ queryKey: ['admin-config'] }), qc.invalidateQueries({ queryKey: ['admin-gomdon-status'] })]),
+    );
 
   const saveToggle = useMutation({
     mutationFn: (on: boolean) => setConfig(GOMDON_TOGGLE_KEY, on),
     onSuccess: (_r, on) => {
       setMsg({ ok: true, text: on ? 'Đã BẬT công tắc kỹ thuật Gomdon.' : 'Đã TẮT công tắc kỹ thuật Gomdon.' });
-      refresh();
+      return refresh();
     },
     onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
+    onSettled: () => {
+      toggling.current = false;
+    },
   });
 
   const saveWarehouse = useMutation({
@@ -108,18 +117,24 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
     },
     onSuccess: () => {
       setMsg({ ok: true, text: 'Đã lưu kho lấy hàng & cân nặng mặc định.' });
-      refresh();
+      return refresh();
     },
     onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
+    onSettled: () => {
+      saving.current = false;
+    },
   });
 
   const checkConnection = useMutation({
     mutationFn: checkGomdonConnection,
     onSuccess: (r) => {
       setCheckMsg({ ok: r.ok, text: r.ok ? r.message : `Không đăng nhập được Gomdon: ${r.message}` });
-      void qc.invalidateQueries({ queryKey: ['admin-gomdon-status'] });
+      return settleWithin(qc.invalidateQueries({ queryKey: ['admin-gomdon-status'] }));
     },
     onError: (e) => setCheckMsg({ ok: false, text: actionErrorText(e) }),
+    onSettled: () => {
+      checking.current = false;
+    },
   });
 
   const st = statusQ.data;
@@ -141,8 +156,12 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
             className="accent-forest-600"
             aria-checked={toggle}
             checked={toggle}
-            disabled={saveToggle.isPending || !rows}
+            disabled={!rows}
+            aria-busy={saveToggle.isPending || undefined}
+            aria-disabled={saveToggle.isPending || undefined}
             onChange={(e) => {
+              if (toggling.current) return;
+              toggling.current = true;
               setMsg(null);
               saveToggle.mutate(e.target.checked);
             }}
@@ -153,7 +172,7 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
 
       <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
         {statusQ.isError && (
-          <LoadError onRetry={() => void statusQ.refetch()} retrying={statusQ.isFetching}>
+          <LoadError onRetry={() => statusQ.refetch({ cancelRefetch: false })} retrying={statusQ.isFetching}>
             Không tải được tình trạng tích hợp.
           </LoadError>
         )}
@@ -175,11 +194,14 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
         <button
           type="button"
           onClick={() => {
+            if (checking.current) return;
+            checking.current = true;
             setCheckMsg(null);
             checkConnection.mutate();
           }}
-          disabled={checkConnection.isPending}
-          className={BTN_XS_SECONDARY}
+          aria-busy={checkConnection.isPending || undefined}
+          aria-disabled={checkConnection.isPending || undefined}
+          className={`${BTN_XS_SECONDARY} ${BUSY_CLASS}`}
         >
           {checkConnection.isPending ? 'Đang kiểm tra…' : 'Kiểm tra kết nối'}
         </button>
@@ -227,6 +249,8 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
         className="mt-3 space-y-3"
         onSubmit={(e) => {
           e.preventDefault();
+          if (saving.current) return;
+          saving.current = true;
           setMsg(null);
           saveWarehouse.mutate();
         }}
@@ -256,8 +280,10 @@ export function GomdonConfigCard({ rows }: { rows: ConfigRow[] | undefined }) {
         </div>
         <button
           type="submit"
-          disabled={saveWarehouse.isPending || !rows}
-          className="min-h-[44px] rounded-control bg-forest-600 px-4 py-1.5 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500 sm:min-h-[36px]"
+          disabled={!rows}
+          aria-busy={saveWarehouse.isPending || undefined}
+          aria-disabled={saveWarehouse.isPending || undefined}
+          className={`min-h-[44px] rounded-control bg-forest-600 px-4 py-1.5 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:bg-stone-200 disabled:text-stone-500 sm:min-h-[36px] ${BUSY_CLASS}`}
         >
           {saveWarehouse.isPending ? 'Đang lưu…' : 'Lưu kho & cân nặng'}
         </button>

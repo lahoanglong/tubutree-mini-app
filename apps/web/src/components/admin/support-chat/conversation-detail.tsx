@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   blockSupportConversation,
@@ -17,6 +17,10 @@ import { useConfirm } from '../confirm-dialog';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, INPUT_CLASS, LoadError, ToneBadge } from '../ui';
 import { CONVERSATIONS_KEY } from './conversation-list';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
+
+const BUSY_CLASS = 'aria-disabled:opacity-60';
 
 const REPLY_MAX = 1000;
 const FORWARD_VIEW: Record<SupportForwardStatus, { tone: Tone; text: string }> = {
@@ -46,41 +50,67 @@ export function ConversationDetail({ id }: { id: string }) {
   const detailQ = useQuery({ queryKey: ['admin-support-conversation', id], queryFn: () => getSupportConversation(id), refetchInterval: 10_000 });
   const d = detailQ.data;
 
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['admin-support-conversation', id] });
-    void qc.invalidateQueries({ queryKey: [CONVERSATIONS_KEY] });
-  };
+  const sending = useRef(false);
+  const resending = useRef(false);
+  const blocking = useRef(false);
+  const reload = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['admin-support-conversation', id] }),
+      qc.invalidateQueries({ queryKey: [CONVERSATIONS_KEY] }),
+    ]);
   const send = useMutation({
     mutationFn: (body: string) => replySupportConversation(id, body),
     meta: { skipAdminInvalidate: true },
     onSuccess: () => {
       setReply('');
-      refresh();
+      return settleWithin(reload());
     },
-    onError: (e) => setError(errText(e, 'Không gửi được trả lời.')),
+    onError: (e) => {
+      setError(errText(e, 'Không gửi được trả lời.'));
+      return reloadWhenStale(e, reload);
+    },
+    onSettled: () => {
+      sending.current = false;
+    },
   });
   const resend = useMutation({
     mutationFn: resendSupportForward,
-    // refresh() làm mới hội thoại và danh sách; gửi lại còn đổi số "chưa chuyển vào Zalo" (hộp việc) và số chờ trả lời của thẻ cầu nối.
+    // reload() làm mới hội thoại và danh sách; gửi lại còn đổi số "chưa chuyển vào Zalo" (hộp việc) và số chờ trả lời của thẻ cầu nối.
     meta: { adminInvalidate: ['admin-ops-inbox', 'admin-support-bridge'] },
     onSuccess: (r) => {
       if (r.status !== 'SENT') setError(`Gửi lại chưa thành công (${FORWARD_VIEW[r.status].text}${r.lastError ? `: ${r.lastError}` : ''}).`);
-      refresh();
+      return settleWithin(reload());
     },
+    // Mọi lỗi đều tải lại (không chỉ 400/404/409): trạng thái chuyển của tin có thể đã đổi dù lệnh gửi lại hỏng.
     onError: (e) => {
       setError(errText(e, 'Không gửi lại được.'));
-      refresh();
+      return settleWithin(reload());
+    },
+    onSettled: () => {
+      resending.current = false;
     },
   });
   const block = useMutation({
     mutationFn: (blocked: boolean) => (blocked ? unblockSupportConversation(id) : blockSupportConversation(id)),
-    // Chặn đổi cả số "chưa chuyển vào Zalo" (loại hội thoại đã chặn) và số chờ của thẻ cầu nối, ngoài hội thoại và danh sách do refresh() lo.
+    // Chặn đổi cả số "chưa chuyển vào Zalo" (loại hội thoại đã chặn) và số chờ của thẻ cầu nối, ngoài hội thoại và danh sách do reload() lo.
     meta: { adminInvalidate: ['admin-ops-inbox', 'admin-support-bridge'] },
-    onSuccess: refresh,
-    onError: (e) => setError(errText(e, 'Không đổi được trạng thái chặn.')),
+    onSuccess: () => settleWithin(reload()),
+    onError: (e) => {
+      setError(errText(e, 'Không đổi được trạng thái chặn.'));
+      return reloadWhenStale(e, reload);
+    },
+    onSettled: () => {
+      blocking.current = false;
+    },
   });
+  const doBlock = (blocked: boolean) => {
+    if (blocking.current) return;
+    blocking.current = true;
+    block.mutate(blocked);
+  };
 
   const onBlock = async () => {
+    if (blocking.current) return;
     setError(null);
     const ok = await confirm({
       title: 'Chặn chat của khách này?',
@@ -88,11 +118,11 @@ export function ConversationDetail({ id }: { id: string }) {
       confirmLabel: 'Chặn chat',
       tone: 'danger',
     });
-    if (ok) block.mutate(false);
+    if (ok) doBlock(false);
   };
 
   if (detailQ.isLoading) return <p className="text-sm text-stone-500">Đang tải…</p>;
-  if (!d) return <LoadError onRetry={() => void detailQ.refetch()} retrying={detailQ.isFetching}>Không tải được hội thoại.</LoadError>;
+  if (!d) return <LoadError onRetry={() => detailQ.refetch({ cancelRefetch: false })} retrying={detailQ.isFetching}>Không tải được hội thoại.</LoadError>;
 
   const firstOfForward = new Set<string>();
   const resendShownFor = (m: SupportAdminMessage) => {
@@ -113,11 +143,11 @@ export function ConversationDetail({ id }: { id: string }) {
         <div className="flex items-center gap-2">
           {d.blocked && <ToneBadge tone="danger">Đã chặn</ToneBadge>}
           {d.blocked ? (
-            <button type="button" className={BTN_SECONDARY} disabled={block.isPending} onClick={() => block.mutate(true)}>
+            <button type="button" className={`${BTN_SECONDARY} ${BUSY_CLASS}`} aria-busy={block.isPending || undefined} aria-disabled={block.isPending || undefined} onClick={() => doBlock(true)}>
               Bỏ chặn
             </button>
           ) : (
-            <button type="button" className={BTN_DANGER_OUTLINE} disabled={block.isPending} onClick={() => void onBlock()}>
+            <button type="button" className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`} aria-busy={block.isPending || undefined} aria-disabled={block.isPending || undefined} onClick={() => void onBlock()}>
               Chặn chat
             </button>
           )}
@@ -159,9 +189,12 @@ export function ConversationDetail({ id }: { id: string }) {
                   {resendShownFor(m) && (
                     <button
                       type="button"
-                      className={BTN_XS_SECONDARY}
-                      disabled={resend.isPending}
+                      className={`${BTN_XS_SECONDARY} ${BUSY_CLASS}`}
+                      aria-busy={resend.isPending || undefined}
+                      aria-disabled={resend.isPending || undefined}
                       onClick={() => {
+                        if (resending.current) return;
+                        resending.current = true;
                         setError(null);
                         resend.mutate(m.forward!.id);
                       }}
@@ -185,7 +218,8 @@ export function ConversationDetail({ id }: { id: string }) {
         onSubmit={(e) => {
           e.preventDefault();
           const body = reply.trim();
-          if (!body) return;
+          if (!body || sending.current) return;
+          sending.current = true;
           setError(null);
           send.mutate(body);
         }}
@@ -194,7 +228,7 @@ export function ConversationDetail({ id }: { id: string }) {
           <span className="font-medium text-stone-700">Trả lời khách (không gửi vào nhóm Zalo)</span>
           <textarea name="reply" rows={3} maxLength={REPLY_MAX} value={reply} onChange={(e) => setReply(e.target.value)} className={`mt-1 ${INPUT_CLASS}`} />
         </label>
-        <button type="submit" className={BTN_PRIMARY} disabled={!reply.trim() || send.isPending}>
+        <button type="submit" className={`${BTN_PRIMARY} ${BUSY_CLASS}`} disabled={!reply.trim()} aria-busy={send.isPending || undefined} aria-disabled={send.isPending || undefined}>
           {send.isPending ? 'Đang gửi…' : 'Gửi trả lời'}
         </button>
       </form>

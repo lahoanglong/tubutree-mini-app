@@ -60,15 +60,38 @@ function UserStatus({ user: u }: StatusProps) {
   );
 }
 
-/** Nút Khoá / Mở khoá; nhân viên (không phải admin) chỉ xem nên không có nút. */
+/**
+ * Nút Khoá / Mở khoá; nhân viên (không phải admin) chỉ xem nên không có nút.
+ * Đang chạy thì báo bận bằng aria-busy/aria-disabled chứ không `disabled`: nút vừa mở hộp xác nhận đang giữ focus, mà nút disabled thì Chromium thả focus về body.
+ */
 function UserActions({ user: u, isAdmin, blockBusy, unblockBusy, onBlock, onUnblock }: StatusProps) {
   if (!isAdmin) return null;
   return u.isBlocked ? (
-    <button type="button" onClick={() => onUnblock(u)} disabled={unblockBusy} className={BTN_SMALL} aria-label={`Mở khoá ${labelOf(u)}`}>
+    <button
+      type="button"
+      onClick={() => {
+        if (unblockBusy) return;
+        onUnblock(u);
+      }}
+      aria-busy={unblockBusy || undefined}
+      aria-disabled={unblockBusy || undefined}
+      className={`${BTN_SMALL} aria-disabled:opacity-50`}
+      aria-label={`Mở khoá ${labelOf(u)}`}
+    >
       Mở khoá
     </button>
   ) : (
-    <button type="button" onClick={() => onBlock(u)} disabled={blockBusy} className={BTN_DANGER_OUTLINE} aria-label={`Khoá ${labelOf(u)}`}>
+    <button
+      type="button"
+      onClick={() => {
+        if (blockBusy) return;
+        onBlock(u);
+      }}
+      aria-busy={blockBusy || undefined}
+      aria-disabled={blockBusy || undefined}
+      className={`${BTN_DANGER_OUTLINE} aria-disabled:opacity-50`}
+      aria-label={`Khoá ${labelOf(u)}`}
+    >
       Khoá
     </button>
   );

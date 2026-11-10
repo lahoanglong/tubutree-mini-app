@@ -516,7 +516,8 @@ describe('SupportChatTab — nhóm nhận tin', () => {
     const btn = byText(container, 'button', 'Gửi tin thử') as HTMLButtonElement;
     click(btn);
     await flush(2);
-    expect((byText(container, 'button', 'Đang gửi') as HTMLButtonElement).disabled).toBe(true);
+    // aria-disabled thay disabled: nút vừa bấm đang giữ focus, Chromium thả focus về body khi nó bị disabled.
+    expect(byText(container, 'button', 'Đang gửi')?.getAttribute('aria-disabled')).toBe('true');
     release();
     await flush();
     expect((byText(container, 'button', 'Gửi tin thử') as HTMLButtonElement).disabled).toBe(false);

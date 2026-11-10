@@ -2,7 +2,7 @@
 
 import dynamic from 'next/dynamic';
 import { useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { adminEditSession } from '@tubutree/app-core/api/attendance';
 import {
   finalizePayroll,
@@ -16,6 +16,8 @@ import {
 import { payrollReopenMessage } from '@tubutree/app-core/payroll-copy';
 import { adminPayrollDetailQuery, adminPayrollQuery } from '@tubutree/app-core/queries/payroll';
 import { coreHttp } from '@/lib/core-http';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import { usePressLock } from '@/lib/use-press-lock';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { downloadCsvFile } from '@/lib/export-csv';
@@ -61,7 +63,8 @@ export function PayrollAdminTab() {
   const [note, setNote] = useState('');
   const [detailRow, setDetailRow] = useState<AdminPayrollRow | null>(null);
   const [adjustRow, setAdjustRow] = useState<AdminPayrollRow | null>(null);
-  // Trả lời hứa làm mới để khoá giữ tới khi bảng lương mới về: nhả sớm thì dòng vừa chốt còn hiện nút "Chốt" cũ và bấm lại được.
+  // Trả lời hứa làm mới để khoá giữ tới khi bảng lương mới về (tối đa `settleWithin`, kẻo mạng chậm giữ nút lâu hơn lệnh vừa xong): nhả sớm thì dòng vừa chốt còn hiện nút "Chốt" cũ và bấm lại được.
+  // Lệnh bị từ chối vì bảng đã cũ (tháng đã chốt/đã trả, nhân viên không còn: 400/404/409) cũng tải lại rồi mới nhả; lỗi khác không tải lại.
   // Chốt/mở lại/tính lại làm mới theo tháng của chính lệnh (đi trong biến mutation), không theo tháng đang xem lúc xong: đổi tháng khi lệnh còn bay mà làm mới nhầm tháng thì quay lại thấy dữ liệu cũ.
   // `refetchType: 'all'` vì tháng cũ lúc đó không còn ai xem nên mặc định chỉ đánh dấu cũ chứ không tải lại.
   const refreshMonth = (p: { year: number; month: number }) => qc.invalidateQueries({ queryKey: ['admin-payroll', p.year, p.month], refetchType: 'all' });
@@ -69,6 +72,9 @@ export function PayrollAdminTab() {
   const invalidate = () => void refresh();
   const ok = (text: string) => setMsg({ tone: 'success', text });
   const fail = (e: unknown) => setMsg({ tone: 'danger', text: errText(e) });
+  // Lớp nền của hai tờ nhập (Đơn giá, Ghi đã trả) che lời báo của trang, nên lỗi của lệnh gửi từ tờ hiện ngay trong tờ.
+  const [rateErr, setRateErr] = useState<string | null>(null);
+  const [payErr, setPayErr] = useState<string | null>(null);
 
   // Chốt, mở lại và đánh dấu đã trả đều đổi trạng thái bảng lương nên chỉ một việc mỗi lúc (cũng là lý do các dòng khác bị khoá khi một dòng đang chạy).
   // Khoá ref vì `isPending` chỉ đúng sau lần vẽ kế tiếp: hai cú chạm sát nhau vẫn gửi cả hai.
@@ -88,27 +94,37 @@ export function PayrollAdminTab() {
     onSuccess: () => {
       ok('Đã lưu đơn giá.');
       setRateRow(null);
-      return refresh();
+      setRateErr(null);
+      return settleWithin(refresh());
     },
-    onError: fail,
+    onError: (e) => {
+      setRateErr(errText(e));
+      return reloadWhenStale(e, refresh);
+    },
   });
   const finalizeM = useLockedMutation({
     onSettled: releaseActing,
     mutationFn: (v: PayrollJob) => finalizePayroll(coreHttp, v.r.staff.id, v.year, v.month),
     onSuccess: (_d, v) => {
       ok('Đã chốt lương.');
-      return refreshMonth(v);
+      return settleWithin(refreshMonth(v));
     },
-    onError: fail,
+    onError: (e, v) => {
+      fail(e);
+      return reloadWhenStale(e, () => refreshMonth(v));
+    },
   });
   const reopenM = useLockedMutation({
     onSettled: releaseActing,
     mutationFn: (v: PayrollJob) => reopenPayroll(coreHttp, v.r.staff.id, v.year, v.month),
     onSuccess: (_d, v) => {
       ok('Đã mở lại bảng lương — sửa xong nhớ chốt lại.');
-      return refreshMonth(v);
+      return settleWithin(refreshMonth(v));
     },
-    onError: fail,
+    onError: (e, v) => {
+      fail(e);
+      return reloadWhenStale(e, () => refreshMonth(v));
+    },
   });
   const paidM = useLockedMutation({
     onSettled: releaseActing,
@@ -116,25 +132,34 @@ export function PayrollAdminTab() {
     onSuccess: () => {
       ok('Đã đánh dấu đã trả lương.');
       setPayRow(null);
+      setPayErr(null);
       setProof('');
       setNote('');
-      return refresh();
+      return settleWithin(refresh());
     },
-    onError: fail,
+    onError: (e) => {
+      setPayErr(errText(e));
+      return reloadWhenStale(e, refresh);
+    },
   });
   const payrollBusy = finalizeM.isPending || reopenM.isPending || paidM.isPending;
   const retryPayroll = usePressLock(() => payQ.refetch());
 
-  const recomputeM = useMutation({
+  // Khoá ref (`isPending` chỉ đúng sau lần vẽ kế): hai cú chạm sát nhau không gửi hai lần tính lại; một việc mỗi lúc cho cả bảng.
+  const recomputeM = useLockedMutation({
     mutationFn: (v: PayrollJob) => recomputePayroll(coreHttp, v.r.staff.id, v.year, v.month),
     onSuccess: (_d, v) => {
       ok(`Đã tính lại bảng lương T${v.month}/${v.year} của ${v.r.staff.fullName ?? v.r.staff.phone ?? 'NV'}.`);
-      void refreshMonth(v);
+      return settleWithin(refreshMonth(v));
     },
-    onError: (e) => setMsg({ tone: 'danger', text: actionErrorText(e) }),
+    onError: (e, v) => {
+      setMsg({ tone: 'danger', text: actionErrorText(e) });
+      return reloadWhenStale(e, () => refreshMonth(v));
+    },
   });
 
   const askRecompute = async (r: AdminPayrollRow) => {
+    if (recomputeM.isPending) return;
     const go = await confirm({
       title: 'Tính lại bảng lương tháng này?',
       message: `Tính lại giờ công và tiền phạt tự động của ${r.staff.fullName ?? r.staff.phone ?? 'NV'} trong T${ym.month}/${ym.year} theo dữ liệu chấm công hiện có. Đơn giá của những ngày đã tính được giữ nguyên.`,
@@ -214,13 +239,13 @@ export function PayrollAdminTab() {
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <h3 className="break-words text-sm font-semibold text-stone-900">{name}</h3>
-                  <p className="text-xs text-stone-600">
+                  <p className="text-xs tabular-nums text-stone-600">
                     {fmtHM(row.month.totalMinutes)} · {formatVnd(row.profile?.hourlyRate ?? 0)}/h · {PAY_STATUS[row.month.status]}
                   </p>
                 </div>
                 <div className="text-right">
-                  <div className="text-sm font-bold text-forest-700">{formatVnd(row.month.net)}</div>
-                  {row.month.totalFines > 0 && <div className="text-xs text-danger-fg">−{formatVnd(row.month.totalFines)}</div>}
+                  <div className="text-sm font-bold tabular-nums text-forest-700">{formatVnd(row.month.net)}</div>
+                  {row.month.totalFines > 0 && <div className="text-xs tabular-nums text-danger-fg">−{formatVnd(row.month.totalFines)}</div>}
                 </div>
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
@@ -231,6 +256,7 @@ export function PayrollAdminTab() {
                   type="button"
                   aria-label={`Đơn giá · ${name}`}
                   onClick={() => {
+                    setRateErr(null);
                     setRateRow(row);
                     setRateVal(String(row.profile?.hourlyRate ?? 0));
                   }}
@@ -246,7 +272,8 @@ export function PayrollAdminTab() {
                     <button
                       type="button"
                       aria-label={`Tính lại tháng · ${name}`}
-                      disabled={recomputeM.isPending}
+                      aria-busy={recomputing || undefined}
+                      aria-disabled={recomputeM.isPending || undefined}
                       onClick={() => void askRecompute(row)}
                       className={BTN_XS_SECONDARY}
                     >
@@ -276,6 +303,7 @@ export function PayrollAdminTab() {
                     type="button"
                     aria-label={`Ghi đã trả lương · ${name}`}
                     onClick={() => {
+                      setPayErr(null);
                       setPayRow(row);
                       setProof('');
                       setNote('');
@@ -307,7 +335,7 @@ export function PayrollAdminTab() {
 
       <Sheet open={!!qrRow} onClose={() => setQrRow(null)} title={`Chuyển lương ${qrRow?.staff.fullName ?? ''}`}>
         <div className="flex flex-col items-center gap-2.5">
-          <div className="text-xl font-bold text-forest-700">{formatVnd(qrRow?.month.net ?? 0)}</div>
+          <div className="text-xl font-bold tabular-nums text-forest-700">{formatVnd(qrRow?.month.net ?? 0)}</div>
           {qrImg && (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={qrImg.src} alt="QR" referrerPolicy="no-referrer" className="w-full max-w-[260px]" />
@@ -340,8 +368,13 @@ export function PayrollAdminTab() {
         }
       >
         <Field label="Đơn giá (VND/giờ)">
-          <input type="number" inputMode="numeric" value={rateVal} onChange={(e) => setRateVal(e.target.value)} className={INPUT_CLASS} />
+          <input type="number" inputMode="numeric" value={rateVal} onChange={(e) => setRateVal(e.target.value)} className={`${INPUT_CLASS} tabular-nums`} />
         </Field>
+        {rateErr && (
+          <p role="alert" className="mt-2 text-sm text-danger-fg">
+            {rateErr}
+          </p>
+        )}
       </Sheet>
 
       <Sheet
@@ -367,7 +400,7 @@ export function PayrollAdminTab() {
         }
       >
         <div className="space-y-3">
-          <div className="flex justify-between text-sm">
+          <div className="flex justify-between text-sm tabular-nums">
             <span className="text-stone-600">Số tiền</span>
             <strong>{formatVnd(payRow?.month.net ?? 0)}</strong>
           </div>
@@ -383,6 +416,11 @@ export function PayrollAdminTab() {
           <Field label="Ghi chú (tuỳ chọn)">
             <input maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} className={INPUT_CLASS} />
           </Field>
+          {payErr && (
+            <p role="alert" className="text-sm text-danger-fg">
+              {payErr}
+            </p>
+          )}
         </div>
       </Sheet>
 
@@ -392,6 +430,7 @@ export function PayrollAdminTab() {
           year={ym.year}
           month={ym.month}
           onClose={() => setAdjustRow(null)}
+          onStale={refresh}
           onDone={(text) => {
             ok(text);
             invalidate();
@@ -400,7 +439,7 @@ export function PayrollAdminTab() {
         />
       )}
 
-      <DetailSheet row={detailRow} year={ym.year} month={ym.month} onClose={() => setDetailRow(null)} onChanged={invalidate} />
+      <DetailSheet row={detailRow} year={ym.year} month={ym.month} onClose={() => setDetailRow(null)} onChanged={refresh} />
     </div>
   );
 }
@@ -416,7 +455,7 @@ function DetailSheet({
   year: number;
   month: number;
   onClose: () => void;
-  onChanged: () => void;
+  onChanged: () => Promise<unknown>;
 }) {
   const qc = useQueryClient();
   const staffId = row?.staff.id ?? '';
@@ -425,6 +464,8 @@ function DetailSheet({
   const [ci, setCi] = useState('08:00');
   const [co, setCo] = useState('17:00');
   const [err, setErr] = useState<string | null>(null);
+  // Sửa giờ đổi cả giờ công của tháng lẫn dòng lương nên làm mới cả hai; khoá giữ tới khi cả hai về.
+  const refreshAll = () => Promise.all([onChanged(), qc.invalidateQueries({ queryKey: ['admin-payroll-detail', staffId, year, month] })]);
 
   const editM = useLockedMutation({
     mutationFn: (dayKey: string) =>
@@ -438,10 +479,12 @@ function DetailSheet({
     onSuccess: () => {
       setErr(null);
       setEditId(null);
-      onChanged();
-      return qc.invalidateQueries({ queryKey: ['admin-payroll-detail', staffId, year, month] });
+      return settleWithin(refreshAll());
     },
-    onError: (e) => setErr(errText(e)),
+    onError: (e) => {
+      setErr(errText(e));
+      return reloadWhenStale(e, refreshAll);
+    },
   });
 
   return (
@@ -456,7 +499,7 @@ function DetailSheet({
         )}
         {detailQ.data && (
           <>
-            <p className="text-sm">
+            <p className="text-sm tabular-nums">
               Tổng: <strong>{fmtHM(detailQ.data.month.totalMinutes)}</strong> · Thực nhận <strong>{formatVnd(detailQ.data.month.net)}</strong>
             </p>
             {detailQ.data.days.map((d) => {
@@ -464,7 +507,7 @@ function DetailSheet({
               const sess = detailQ.data.sessions.filter((s) => vnDateKey(new Date(s.checkinAt)) === dayKey);
               return (
                 <div key={d.id} className="border-t border-stone-200 pt-1.5">
-                  <div className="flex justify-between gap-2 text-sm">
+                  <div className="flex justify-between gap-2 text-sm tabular-nums">
                     <span className="font-bold">
                       {dowLabel(dayKey)} {shortDayLabel(dayKey)} · {fmtHM(d.workedMinutes)}
                     </span>
@@ -472,7 +515,7 @@ function DetailSheet({
                   </div>
                   {sess.map((s) => (
                     <div key={s.id} className="mt-0.5 flex items-center justify-between gap-2 pl-2">
-                      <span className="text-xs text-stone-600">
+                      <span className="text-xs tabular-nums text-stone-600">
                         {isoToVnHHMM(s.checkinAt)} → {s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : 'đang mở'}
                         {s.isLate ? ' · trễ' : ''}
                       </span>

@@ -80,10 +80,16 @@ describe('UsersList — R4-ADMIN-12', () => {
     }
   });
 
-  it('đang xử lý khoá thì nút khoá bị vô hiệu để không bấm hai lần', () => {
-    const { root } = setup({ narrow: true, blockBusy: true, unblockBusy: true });
-    expect(root.querySelector<HTMLButtonElement>('[aria-label="Khoá Chủ Gian Hàng Một"]')!.disabled).toBe(true);
-    expect(root.querySelector<HTMLButtonElement>('[aria-label="Mở khoá 0900000002"]')!.disabled).toBe(true);
+  it('đang xử lý khoá thì nút khoá báo bận (aria-disabled, không disabled để giữ focus) và không gọi lệnh lần hai', () => {
+    const { root, onBlock, onUnblock } = setup({ narrow: true, blockBusy: true, unblockBusy: true });
+    for (const label of ['Khoá Chủ Gian Hàng Một', 'Mở khoá 0900000002']) {
+      const b = root.querySelector<HTMLButtonElement>(`[aria-label="${label}"]`)!;
+      expect(b.getAttribute('aria-disabled')).toBe('true');
+      expect(b.disabled).toBe(false);
+      click(b);
+    }
+    expect(onBlock).not.toHaveBeenCalled();
+    expect(onUnblock).not.toHaveBeenCalled();
   });
 });
 

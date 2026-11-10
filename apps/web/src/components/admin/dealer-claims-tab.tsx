@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   approveDealerRewardClaim,
   listDealerRewardClaims,
@@ -25,6 +25,8 @@ import { useConfirm } from './confirm-dialog';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { peekDealerClaimSeed, seedDealerClaimFilter } from './inbox-filter-seeds';
 
 const STATUS_TONE: Record<DealerRewardClaimStatus, Tone> = {
@@ -53,6 +55,8 @@ export function DealerClaimsTab({ canReview = true }: { canReview?: boolean } = 
     queryFn: () => listDealerRewardClaims(filter || undefined, page),
   });
   const totalPages = q.data ? Math.max(1, Math.ceil(q.data.meta.total / q.data.meta.limit)) : 1;
+  // Lời lỗi của lệnh ghi nằm ở đây, ngoài dòng: tải lại làm dòng rời bộ lọc (yêu cầu đã được xử lý ở máy khác) thì lời lỗi vẫn còn.
+  const [notice, setNotice] = useState<string | null>(null);
 
   return (
     <div className="space-y-3">
@@ -77,6 +81,11 @@ export function DealerClaimsTab({ canReview = true }: { canReview?: boolean } = 
         </div>
       </div>
 
+      {notice && (
+        <p role="alert" className="text-sm text-danger-fg">
+          {notice}
+        </p>
+      )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {q.isError && (
         <p className="text-sm text-danger-fg">
@@ -87,7 +96,7 @@ export function DealerClaimsTab({ canReview = true }: { canReview?: boolean } = 
         </p>
       )}
       <div className="space-y-2">
-        {q.data?.data.map((c) => <ClaimRow key={c.id} claim={c} canReview={canReview} />)}
+        {q.data?.data.map((c) => <ClaimRow key={c.id} claim={c} canReview={canReview} onError={setNotice} />)}
         {q.data?.data.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
             Không có yêu cầu nào{filter ? ` ở trạng thái "${CLAIM_STATUS_LABEL[filter]}"` : ''}.
@@ -129,8 +138,12 @@ export function DealerClaimsTab({ canReview = true }: { canReview?: boolean } = 
 
 type Action = 'approve' | 'reject' | 'markPaid' | 'reopen';
 
-/** `canReview=false` (KE_TOAN): chỉ chi thưởng đã được ADMIN duyệt; duyệt/từ chối/mở lại là việc của ADMIN. */
-export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRewardClaim; canReview?: boolean }) {
+/**
+ * `canReview=false` (KE_TOAN): chỉ chi thưởng đã được ADMIN duyệt; duyệt/từ chối/mở lại là việc của ADMIN.
+ * `onError` có thì lời lỗi của lệnh ghi (máy chủ từ chối) đi lên danh sách thay vì nằm trong dòng, vì tải lại có thể gỡ dòng khỏi bộ lọc.
+ * Lỗi nhập liệu (thiếu lý do) luôn hiện ngay trên dòng.
+ */
+export function ClaimRow({ claim: c, canReview = true, onError }: { claim: AdminDealerRewardClaim; canReview?: boolean; onError?: (message: string | null) => void }) {
   const qc = useQueryClient();
   const [text, setText] = useState('');
   const [err, setErr] = useState<string | null>(null);
@@ -138,7 +151,10 @@ export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRew
   const acts = { ...base, approve: base.approve && canReview, reject: base.reject && canReview, reopen: base.reopen && canReview };
   const { confirm, dialog } = useConfirm();
 
-  const mut = useMutation({
+  const reportServerError = (message: string | null) => (onError ? onError(message) : setErr(message));
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ['admin-dealer-claims'] }), invalidateInbox(qc)]);
+  // Khoá giữ tới khi danh sách làm mới về (tối đa 4 giây): nhả sớm thì yêu cầu vừa xử lý còn nút của trạng thái cũ và bấm lại được.
+  const mut = useLockedMutation({
     mutationFn: (a: Action) => {
       if (a === 'approve') return approveDealerRewardClaim(c.id, text);
       if (a === 'reject') return rejectDealerRewardClaim(c.id, text);
@@ -147,20 +163,22 @@ export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRew
     },
     onSuccess: () => {
       setErr(null);
+      reportServerError(null);
       setText('');
-      void qc.invalidateQueries({ queryKey: ['admin-dealer-claims'] });
-      void invalidateInbox(qc);
+      return settleWithin(refresh());
     },
     onError: (e) => {
-      setErr(actionErrorText(e));
-      // Trạng thái có thể vừa bị admin khác đổi — tải lại để thấy trạng thái thật.
-      void qc.invalidateQueries({ queryKey: ['admin-dealer-claims'] });
-      void invalidateInbox(qc);
+      reportServerError(actionErrorText(e));
+      // Trạng thái có thể vừa bị admin khác đổi, hoặc lệnh đã ghi rồi mới lỗi mạng/5xx: luôn tải lại để thấy trạng thái thật, khác quy tắc chung (chỉ 400/404/409).
+      return settleWithin(refresh());
     },
   });
+  const acting = (a: Action) => mut.isPending && mut.variables === a;
 
   const run = async (a: Action) => {
+    if (mut.isPending) return;
     setErr(null);
+    reportServerError(null);
     if (a === 'reject') {
       const e = rejectReasonError(text);
       if (e) return setErr(e);
@@ -198,7 +216,7 @@ export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRew
   const actionable = acts.approve || acts.reject || acts.markPaid || acts.reopen;
 
   return (
-    <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4 tabular-nums">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -254,8 +272,9 @@ export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRew
             <button
               type="button"
               onClick={() => run('approve')}
-              disabled={mut.isPending}
-              className={BTN_PRIMARY}
+              aria-busy={acting('approve') || undefined}
+              aria-disabled={mut.isPending || undefined}
+              className={`${BTN_PRIMARY} aria-disabled:opacity-60`}
             >
               Duyệt
             </button>
@@ -264,8 +283,9 @@ export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRew
             <button
               type="button"
               onClick={() => run('reject')}
-              disabled={mut.isPending}
-              className={BTN_DANGER_OUTLINE}
+              aria-busy={acting('reject') || undefined}
+              aria-disabled={mut.isPending || undefined}
+              className={`${BTN_DANGER_OUTLINE} aria-disabled:opacity-60`}
             >
               Từ chối
             </button>
@@ -274,8 +294,9 @@ export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRew
             <button
               type="button"
               onClick={() => run('markPaid')}
-              disabled={mut.isPending}
-              className={`${TOUCH_H} rounded-control bg-info-fg px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-500`}
+              aria-busy={acting('markPaid') || undefined}
+              aria-disabled={mut.isPending || undefined}
+              className={`${TOUCH_H} rounded-control bg-info-fg px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:brightness-90 aria-disabled:opacity-60`}
             >
               Đã trao thưởng
             </button>
@@ -284,8 +305,9 @@ export function ClaimRow({ claim: c, canReview = true }: { claim: AdminDealerRew
             <button
               type="button"
               onClick={() => run('reopen')}
-              disabled={mut.isPending}
-              className={`${TOUCH_H} rounded-control border border-forest-600 px-3.5 py-1.5 text-sm font-medium text-forest-700 hover:bg-forest-50 disabled:opacity-50`}
+              aria-busy={acting('reopen') || undefined}
+              aria-disabled={mut.isPending || undefined}
+              className={`${TOUCH_H} rounded-control border border-forest-600 px-3.5 py-1.5 text-sm font-medium text-forest-700 hover:bg-forest-50 aria-disabled:opacity-50`}
             >
               Mở lại yêu cầu
             </button>

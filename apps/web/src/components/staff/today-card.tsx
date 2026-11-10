@@ -41,7 +41,7 @@ export function TodayCard() {
       )}
 
       {statusQ.data && (
-        <div className="mt-2 text-sm text-stone-800">
+        <div className="mt-2 text-sm tabular-nums text-stone-800">
           {open ? (
             <p>
               Đang trong ca · vào lúc {isoToVnHHMM(open.checkinAt)}

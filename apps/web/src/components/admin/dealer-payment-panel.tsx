@@ -14,6 +14,8 @@ import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
 import { BTN_WARNING, FIELD_XS, Field } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
 
 /**
  * Hiện "Xác nhận đã nhận chuyển khoản" khi: đơn ĐẠI LÝ, còn UNPAID, BE xác nhận KHÔNG phải đơn "Ghi công
@@ -46,26 +48,31 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
   const inFlight = useRef(false);
   const { confirm, dialog } = useConfirm();
 
+  const refresh = () =>
+    Promise.all([qc.invalidateQueries({ queryKey: ['admin-orders'] }), qc.invalidateQueries({ queryKey: ['admin-dashboard-stats'] }), invalidateInbox(qc)]);
+
   const confirmMut = useMutation({
     mutationFn: () => confirmDealerOrderPayment(order.id, { bankRef, note }),
     onSuccess: (r) => {
       setMsg({ ok: true, text: r.message });
       setBankRef('');
       setNote('');
-      void qc.invalidateQueries({ queryKey: ['admin-orders'] });
-      void qc.invalidateQueries({ queryKey: ['admin-dashboard-stats'] });
-      void invalidateInbox(qc);
+      // Giữ khoá (và inFlight) tới khi danh sách đơn tải lại xong, tối đa 4 giây: nhả sớm thì nút còn hiện với đơn cũ.
+      return settleWithin(refresh());
     },
-    onError: (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) }),
+    onError: (e: unknown) => {
+      setMsg({ ok: false, text: actionErrorText(e) });
+      return reloadWhenStale(e, refresh);
+    },
     onSettled: () => {
       inFlight.current = false;
     },
   });
 
   if (!canConfirmDealerPayment(order)) {
-    // Vừa xác nhận xong: list refetch làm đơn thành PAID → khối ẩn; giữ lại dòng kết quả để admin thấy.
-    return msg?.ok ? (
-      <p role="status" className="text-xs text-success-fg">
+    // Vừa xác nhận xong (hoặc bị từ chối vì đơn đã đổi): list refetch làm khối ẩn; giữ lại dòng kết quả, kể cả lỗi, để admin thấy.
+    return msg ? (
+      <p role={msg.ok ? 'status' : 'alert'} className={`text-xs ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>
         {msg.text}
       </p>
     ) : null;
@@ -123,8 +130,9 @@ export function DealerPaymentPanel({ order }: { order: AdminOrder }) {
         <button
           type="button"
           onClick={onConfirm}
-          disabled={busy}
-          className={BTN_WARNING}
+          aria-busy={busy || undefined}
+          aria-disabled={busy || undefined}
+          className={`${BTN_WARNING} aria-disabled:opacity-60`}
         >
           {busy ? 'Đang xác nhận…' : 'Xác nhận đã nhận chuyển khoản'}
         </button>

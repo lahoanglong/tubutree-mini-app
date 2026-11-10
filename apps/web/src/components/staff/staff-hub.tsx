@@ -6,6 +6,8 @@ import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-quer
 import { cancelShift, copyWeek, createShifts, deleteShift, updateShift, type Shift, type ShiftItemInput, type ShiftStatus } from '@tubutree/app-core/api/shifts';
 import { myShiftsQuery, shiftTemplatesQuery } from '@tubutree/app-core/queries/shifts';
 import { coreHttp } from '@/lib/core-http';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import {
   addDaysKey,
   dowLabel,
@@ -96,10 +98,15 @@ export function StaffHub() {
     return map;
   }, [shiftsQ.data]);
 
-  // Trả lời hứa làm mới để khoá giữ tới khi danh sách ca mới về (nhả sớm thì ca vừa xoá/huỷ còn nút và chạm lại được).
+  // Trả lời hứa làm mới để khoá giữ tới khi danh sách ca mới về, tối đa `settleWithin` (nhả sớm thì ca vừa xoá/huỷ còn nút và chạm lại được).
   // `refetchType: 'all'` vì tuần của lệnh có thể không còn được xem lúc xong; mặc định tuần đó chỉ bị đánh dấu cũ.
   const refresh = (week: string) => qc.invalidateQueries({ queryKey: ['my-shifts', week], refetchType: 'all' });
-  const fail = (e: unknown) => notify({ text: errText(e), tone: 'error' });
+  // Lệnh bị từ chối 400/404/409 (ca đã được duyệt hay xoá ở máy khác, bị chồng giờ) thì danh sách đang hiện đã cũ: tải lại đúng tuần của lệnh
+  // rồi mới nhả khoá. Lời lỗi đặt vào thông báo của trang trước, nên không mất khi ca biến mất khỏi danh sách.
+  const failAndReload = (e: unknown, week: string) => {
+    notify({ text: errText(e), tone: 'error' });
+    return reloadWhenStale(e, () => refresh(week));
+  };
 
   // Trạng thái bận lấy theo đích của từng lệnh (kể cả lúc lệnh đang làm mới danh sách). Nút MỞ tấm của đúng đích đó bị chặn, nên tấm
   // không bao giờ mở lại trong lúc đích còn bận (không kẹt "Đang gửi…" khi chưa gửi gì, không nạp dữ liệu cũ); đích khác không bị ảnh hưởng.
@@ -150,9 +157,9 @@ export function StaffHub() {
       onSuccess: (_data, v) => {
         notify({ text: v.editId ? 'Đã cập nhật ca.' : 'Đã gửi ca chờ duyệt.', tone: 'success' });
         setFormOpen(false);
-        return refresh(v.week);
+        return settleWithin(refresh(v.week));
       },
-      onError: fail,
+      onError: (e, v) => failAndReload(e, v.week),
       onSettled: (_data, _error, v) => unlockShift(v.editId),
     },
     (v) => v.editId ?? '',
@@ -180,9 +187,9 @@ export function StaffHub() {
       onMutate: clear,
       onSuccess: (_data, v) => {
         notify({ text: 'Đã xoá ca.', tone: 'success' });
-        return refresh(v.week);
+        return settleWithin(refresh(v.week));
       },
-      onError: fail,
+      onError: (e, v) => failAndReload(e, v.week),
       onSettled: (_data, _error, v) => unlockShift(v.id),
     },
     (v) => v.id,
@@ -208,9 +215,9 @@ export function StaffHub() {
       onSuccess: (r, v) => {
         notify({ text: `Đã đăng ký ${r.created} ca chờ duyệt.`, tone: 'success' });
         setQuickOpen(false);
-        return refresh(v.week);
+        return settleWithin(refresh(v.week));
       },
-      onError: fail,
+      onError: (e, v) => failAndReload(e, v.week),
     },
     (v) => v.week,
   );
@@ -230,9 +237,9 @@ export function StaffHub() {
     onMutate: clear,
     onSuccess: (r, v) => {
       notify(r.created > 0 ? { text: `Đã copy ${r.created} ca từ tuần trước.`, tone: 'success' } : { text: 'Tuần trước không có ca để copy.', tone: 'info' });
-      return refresh(v.week);
+      return settleWithin(refresh(v.week));
     },
-    onError: fail,
+    onError: (e, v) => failAndReload(e, v.week),
   });
   const copyBusy = copyM.isPending;
 
@@ -252,9 +259,9 @@ export function StaffHub() {
         notify(r.penalty ? { text: 'Đã huỷ ca — bị tính phạt 1h công.', tone: 'info' } : { text: 'Đã huỷ ca (không phạt).', tone: 'success' });
         // Chỉ đóng tấm của đúng ca vừa xong: huỷ ca A xong không được đóng tấm của ca B đang mở.
         setCancelId((cur) => (cur === v.id ? null : cur));
-        return refresh(v.week);
+        return settleWithin(refresh(v.week));
       },
-      onError: fail,
+      onError: (e, v) => failAndReload(e, v.week),
     },
     (v) => v.id,
   );
@@ -351,7 +358,7 @@ export function StaffHub() {
                   return (
                     <div key={s.id} className="flex items-center justify-between gap-2 border-t border-stone-200 py-2">
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm text-stone-900">
+                        <div className="text-sm tabular-nums text-stone-900">
                           {isoToVnHHMM(s.approvedStart ?? s.startAt)} – {isoToVnHHMM(s.approvedEnd ?? s.endAt)}
                           {adjusted && <span className="text-xs text-stone-600"> (đã chỉnh)</span>}
                         </div>

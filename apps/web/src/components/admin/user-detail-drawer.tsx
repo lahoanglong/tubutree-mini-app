@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { formatVnd } from '@/lib/shop-client';
 import {
   forfeitUserCommissions,
@@ -23,6 +23,12 @@ import { SideDrawer } from './side-drawer';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, Notice, ToneBadge, LoadError } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
+
+/** Nút đang chạy báo bận bằng aria-disabled thay `disabled` DOM: Chromium thả tiêu điểm về body khi nút đang giữ tiêu điểm bị disabled. */
+const BUSY_CLASS = 'aria-disabled:opacity-60';
 
 const ROLE_LABELS: Record<string, string> = {
   CUSTOMER: 'Khách hàng',
@@ -125,6 +131,8 @@ export function UserDetailDrawer({
 
 function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUserDetail; isAdmin: boolean; onOpenOrder?: (code: string) => void; onOpenUserOrders?: (userId: string, label: string) => void }) {
   const u = d.user;
+  // Câu báo huỷ hoa hồng nằm ở đây, ngoài `ForfeitCommissions`: xong thì khoản chờ về 0 và mục đó bị gỡ khỏi trang cùng câu báo.
+  const [forfeitMsg, setForfeitMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const pts = pointsSummary(u);
   return (
     <div className="space-y-3">
@@ -164,7 +172,14 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
             <Notice tone="warning">
               Đã thu hồi quyền CTV ngày {formatDate(u.affiliateRevokedAt)}. Hoa hồng cũ bị giữ; đổi vai trò sang CTV hoặc Đại lý để cấp lại.
             </Notice>
-            {isAdmin && d.forfeitableCommission && <ForfeitCommissions userId={u.id} pending={d.forfeitableCommission} />}
+            {isAdmin && d.forfeitableCommission && <ForfeitCommissions userId={u.id} pending={d.forfeitableCommission} onMessage={setForfeitMsg} />}
+          </div>
+        )}
+        {forfeitMsg && (
+          <div className="mt-2">
+            <Notice tone={forfeitMsg.tone} role={forfeitMsg.tone === 'danger' ? 'alert' : 'status'}>
+              {forfeitMsg.text}
+            </Notice>
           </div>
         )}
       </Section>
@@ -336,22 +351,32 @@ function DetailBody({ d, isAdmin, onOpenOrder, onOpenUserOrders }: { d: AdminUse
   );
 }
 
-function ForfeitCommissions({ userId, pending }: { userId: string; pending: { count: number; amount: number } }) {
+function ForfeitCommissions({
+  userId,
+  pending,
+  onMessage,
+}: {
+  userId: string;
+  pending: { count: number; amount: number };
+  onMessage: (m: { tone: 'success' | 'danger'; text: string }) => void;
+}) {
   const qc = useQueryClient();
   const { ask, dialog } = useConfirm();
-  const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
-  const run = useMutation({
+  // Khoá giữ tới khi chi tiết người dùng mới về (tối đa 4 giây): nhả sớm thì nút còn đó với số khoản cũ và bấm lại huỷ lần hai.
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+  const run = useLockedMutation({
     mutationFn: (reason: string) => forfeitUserCommissions(userId, reason),
     onSuccess: (r) => {
-      setMsg({ tone: 'success', text: `Đã huỷ ${r.cancelled} khoản hoa hồng, tổng ${formatVnd(r.amount)}.` });
-      void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+      onMessage({ tone: 'success', text: `Đã huỷ ${r.cancelled} khoản hoa hồng, tổng ${formatVnd(r.amount)}.` });
+      return settleWithin(refresh());
     },
     onError: (e) => {
-      setMsg({ tone: 'danger', text: actionErrorText(e) });
-      void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+      onMessage({ tone: 'danger', text: actionErrorText(e) });
+      return reloadWhenStale(e, refresh);
     },
   });
   const start = async () => {
+    if (run.isPending) return;
     const reason = await ask({
       title: 'Huỷ hoa hồng chờ rút',
       message: `Huỷ ${pending.count} khoản hoa hồng đã duyệt, tổng ${formatVnd(pending.amount)}, của người đã bị thu hồi quyền CTV? Không hoàn tác được và tiền không vào Ví.`,
@@ -364,19 +389,18 @@ function ForfeitCommissions({ userId, pending }: { userId: string; pending: { co
   };
   return (
     <div className="mt-2">
-      <button type="button" className={BTN_DANGER_OUTLINE} disabled={run.isPending} onClick={() => void start()}>
+      <button
+        type="button"
+        className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`}
+        aria-busy={run.isPending || undefined}
+        aria-disabled={run.isPending || undefined}
+        onClick={() => void start()}
+      >
         Huỷ hoa hồng chờ rút
       </button>
-      <p className="mt-1 text-xs text-stone-500">
+      <p className="mt-1 text-xs tabular-nums text-stone-500">
         Còn {pending.count} khoản, {formatVnd(pending.amount)} đang chờ.
       </p>
-      {msg && (
-        <div className="mt-2">
-          <Notice tone={msg.tone} role={msg.tone === 'danger' ? 'alert' : 'status'}>
-            {msg.text}
-          </Notice>
-        </div>
-      )}
       {dialog}
     </div>
   );
@@ -387,16 +411,22 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
   const { ask, dialog } = useConfirm();
   const [perms, setPerms] = useState<StaffPermission[]>(current);
   const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
-  const save = useMutation({
+  // Khoá giữ tới khi chi tiết người dùng mới về (tối đa 4 giây): nhả sớm thì nhóm việc đang hiện còn là bản cũ nên nút vẫn bấm được.
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+  const save = useLockedMutation({
     mutationFn: (reason: string) => setStaffPermissions(userId, perms, reason),
     onSuccess: (r) => {
       setMsg({ tone: 'success', text: r.changed ? 'Đã lưu nhóm việc — có hiệu lực ở lần thao tác kế tiếp của nhân viên.' : 'Không có gì thay đổi.' });
-      void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+      return settleWithin(refresh());
     },
-    onError: (e) => setMsg({ tone: 'danger', text: actionErrorText(e) }),
+    onError: (e) => {
+      setMsg({ tone: 'danger', text: actionErrorText(e) });
+      return reloadWhenStale(e, refresh);
+    },
   });
   const dirty = [...perms].sort().join(',') !== [...current].sort().join(',');
   const askSave = async () => {
+    if (save.isPending) return;
     setMsg(null);
     const reason = await ask({
       title: 'Lưu nhóm việc',
@@ -427,7 +457,14 @@ function StaffPermissionsForm({ userId, current }: { userId: string; current: St
           </label>
         ))}
       </div>
-      <button type="button" disabled={!dirty || save.isPending} onClick={() => void askSave()} className={`${BTN_PRIMARY} mt-2`}>
+      <button
+        type="button"
+        disabled={!dirty}
+        aria-busy={save.isPending || undefined}
+        aria-disabled={save.isPending || undefined}
+        onClick={() => void askSave()}
+        className={`${BTN_PRIMARY} ${BUSY_CLASS} mt-2`}
+      >
         {save.isPending ? 'Đang lưu…' : 'Lưu nhóm việc'}
       </button>
       {msg && (
@@ -446,15 +483,21 @@ function RevokeSessionsSection({ userId }: { userId: string }) {
   const qc = useQueryClient();
   const { ask, dialog } = useConfirm();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const revoke = useMutation({
+  // Khoá giữ tới khi chi tiết mới về (lịch sử khoá/cắt phiên có dòng mới): nhả sớm thì chạm lại ghi thêm một lần cắt phiên.
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+  const revoke = useLockedMutation({
     mutationFn: (reason: string) => revokeUserSessions(userId, reason),
     onSuccess: () => {
       setMsg({ ok: true, text: 'Đã cắt mọi phiên đăng nhập. Người này đăng nhập lại là dùng được.' });
-      void qc.invalidateQueries({ queryKey: ['admin-user-detail', userId] });
+      return settleWithin(refresh());
     },
-    onError: (e) => setMsg({ ok: false, text: actionErrorText(e) }),
+    onError: (e) => {
+      setMsg({ ok: false, text: actionErrorText(e) });
+      return reloadWhenStale(e, refresh);
+    },
   });
   const onClick = async () => {
+    if (revoke.isPending) return;
     setMsg(null);
     const reason = await ask({
       title: 'Cắt phiên đăng nhập',
@@ -472,7 +515,13 @@ function RevokeSessionsSection({ userId }: { userId: string }) {
   };
   return (
     <Section title="Phiên đăng nhập">
-      <button type="button" className={BTN_DANGER_OUTLINE} disabled={revoke.isPending} onClick={() => void onClick()}>
+      <button
+        type="button"
+        className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`}
+        aria-busy={revoke.isPending || undefined}
+        aria-disabled={revoke.isPending || undefined}
+        onClick={() => void onClick()}
+      >
         Cắt phiên
       </button>
       {msg && (
@@ -492,17 +541,23 @@ function WasteFlagsSection({ userId }: { userId: string }) {
   const { ask, dialog } = useConfirm();
   const [err, setErr] = useState<string | null>(null);
   const flagsQ = useQuery({ queryKey: ['admin-waste-user-flags', userId], queryFn: () => getWasteUserFlags(userId) });
-  const save = useMutation({
+  // Khoá giữ tới khi cờ mới về (tối đa 4 giây): nút Khoá/Mở khoá đảo theo cờ nên nhả sớm thì chạm lại gửi cùng một chiều lần hai.
+  const refresh = () => qc.invalidateQueries({ queryKey: ['admin-waste-user-flags', userId] });
+  const save = useLockedMutation({
     mutationFn: (v: FlagChange & { reason: string }) => setWasteUserFlags(userId, v),
     onSuccess: () => {
       setErr(null);
-      void qc.invalidateQueries({ queryKey: ['admin-waste-user-flags', userId] });
-      void qc.invalidateQueries({ queryKey: ['admin-waste-requests'] });
-      void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
+      return settleWithin(
+        Promise.all([refresh(), qc.invalidateQueries({ queryKey: ['admin-waste-requests'] }), qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] })]),
+      );
     },
-    onError: (e) => setErr(actionErrorText(e)),
+    onError: (e) => {
+      setErr(actionErrorText(e));
+      return reloadWhenStale(e, refresh);
+    },
   });
   const change = async (title: string, confirmLabel: string, locking: boolean, patch: FlagChange) => {
+    if (save.isPending) return;
     const reason = await ask({
       title,
       message: 'Lý do được lưu kèm người thao tác.',
@@ -513,6 +568,7 @@ function WasteFlagsSection({ userId }: { userId: string }) {
     if (reason) save.mutate({ ...patch, reason });
   };
   const f = flagsQ.data;
+  const busyFlag = save.isPending && save.variables ? ('blocked' in save.variables ? 'blocked' : 'shipLocked') : null;
   return (
     <Section title="Đổi rác">
       {flagsQ.isLoading && <p className="text-stone-500">Đang tải…</p>}
@@ -532,20 +588,20 @@ function WasteFlagsSection({ userId }: { userId: string }) {
           )}
           <div className="flex flex-wrap gap-2">
             {f.blockedAt ? (
-              <button type="button" className={BTN_SECONDARY} disabled={save.isPending} onClick={() => void change('Mở khoá đổi rác', 'Mở khoá', false, { blocked: false })}>
+              <button type="button" className={`${BTN_SECONDARY} ${BUSY_CLASS}`} aria-busy={busyFlag === 'blocked' || undefined} aria-disabled={save.isPending || undefined} onClick={() => void change('Mở khoá đổi rác', 'Mở khoá', false, { blocked: false })}>
                 Mở khoá đổi rác
               </button>
             ) : (
-              <button type="button" className={BTN_DANGER_OUTLINE} disabled={save.isPending} onClick={() => void change('Khoá đổi rác', 'Khoá', true, { blocked: true })}>
+              <button type="button" className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`} aria-busy={busyFlag === 'blocked' || undefined} aria-disabled={save.isPending || undefined} onClick={() => void change('Khoá đổi rác', 'Khoá', true, { blocked: true })}>
                 Khoá đổi rác
               </button>
             )}
             {f.shipLockedAt ? (
-              <button type="button" className={BTN_SECONDARY} disabled={save.isPending} onClick={() => void change('Mở khoá gửi kho', 'Mở khoá', false, { shipLocked: false })}>
+              <button type="button" className={`${BTN_SECONDARY} ${BUSY_CLASS}`} aria-busy={busyFlag === 'shipLocked' || undefined} aria-disabled={save.isPending || undefined} onClick={() => void change('Mở khoá gửi kho', 'Mở khoá', false, { shipLocked: false })}>
                 Mở khoá gửi kho
               </button>
             ) : (
-              <button type="button" className={BTN_DANGER_OUTLINE} disabled={save.isPending} onClick={() => void change('Khoá gửi kho', 'Khoá', true, { shipLocked: true })}>
+              <button type="button" className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`} aria-busy={busyFlag === 'shipLocked' || undefined} aria-disabled={save.isPending || undefined} onClick={() => void change('Khoá gửi kho', 'Khoá', true, { shipLocked: true })}>
                 Khoá gửi kho
               </button>
             )}

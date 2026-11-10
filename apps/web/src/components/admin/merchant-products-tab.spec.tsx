@@ -715,8 +715,9 @@ describe('MerchantProductsTab — hai admin cùng duyệt một sản phẩm (R5
       click(byText(container, 'button', 'Duyệt xuất bản'));
       await flush();
       expect(listCalls).toBe(2);
-      expect((byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement).disabled).toBe(true);
-      expect((byText(container, 'button', 'Từ chối') as HTMLButtonElement).disabled).toBe(true);
+      // aria-disabled thay disabled: nút vừa bấm đang giữ focus, Chromium thả focus về body khi nó bị disabled.
+      expect(byText(container, 'button', 'Duyệt xuất bản')?.getAttribute('aria-disabled')).toBe('true');
+      expect(byText(container, 'button', 'Từ chối')?.getAttribute('aria-disabled')).toBe('true');
 
       release();
       await flush();
