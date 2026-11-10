@@ -5,9 +5,11 @@ import { DEALER_REJECTED_RESUBMIT } from '@tubutree/app-core/client-copy';
 import { Hourglass, Store } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { applyDealer, type DealerApplyInput } from '@tubutree/app-core/api/dealer';
+import { errorCode } from '@tubutree/app-core/api/error-status';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
 import { coreHttp } from '@/lib/core-http';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { settleWithin } from '@/lib/settle-within';
 import { useAuth } from '@/lib/auth-context';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import {
@@ -35,7 +37,7 @@ export function DealerPending() {
       <div role="status" className="py-12 text-center">
         <Hourglass className="mx-auto h-12 w-12 text-stone-900" strokeWidth={1.5} aria-hidden="true" />
         <h2 className="mt-3 font-display text-lg font-semibold text-stone-900">Hồ sơ đang được duyệt</h2>
-        <p className="mx-auto mt-2 max-w-md text-sm text-stone-600">{pendingBody(config.isLoaded ? config.dealer?.reviewHours : null)}</p>
+        <p className="mx-auto mt-2 max-w-md text-sm tabular-nums text-stone-600">{pendingBody(config.isLoaded ? config.dealer?.reviewHours : null)}</p>
       </div>
     </DealerShell>
   );
@@ -50,14 +52,31 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
   // Gửi hồ sơ lúc ảnh CCCD còn đang lên (nhất là chọn lại ảnh mờ) sẽ gửi đi ảnh cũ để duyệt.
   const { busy: imagesBusy, onBusyChange } = useUploadBusy();
 
-  // Gửi đúng bản hồ sơ lúc bấm lần đầu (biến mutate), không đọc `form` mới hơn; khoá giữ tới khi hồ sơ mới về để màn không cho gửi lần hai trên trạng thái cũ.
+  // Hồ sơ đã nhận từ lần gửi trước: báo mức thông tin (không phải lỗi) ngay khi máy chủ trả lời. `mut.isError` chỉ bật sau khi lệnh làm mới bên dưới xong,
+  // nên lời báo nằm ở state riêng thay vì đọc từ `mut.error`.
+  const [info, setInfo] = useState<string | null>(null);
+
+  // Gửi đúng bản hồ sơ lúc bấm lần đầu (biến mutate), không đọc `form` mới hơn. Lệnh trả Promise làm mới trạng thái hồ sơ nên nút và ô ảnh giữ khoá tới khi
+  // hồ sơ mới về (tối đa `settleWithin`): nhả sớm thì form còn hiện với nút sáng lại, bấm lần nữa gửi hồ sơ thứ hai.
   const mut = useLockedMutation({
     mutationFn: (sent: DealerApplyInput) => applyDealer(coreHttp, sent),
+    // `done` của lần gửi trước còn nguyên khi làm mới trạng thái hỏng (form còn hiện, nút sáng lại): xoá cùng `info` để lần gửi lại lỗi không hiện cả dòng "Đã gửi" lẫn lời báo lỗi.
+    onMutate: () => {
+      setInfo(null);
+      setDone(false);
+    },
     onSuccess: () => {
       setDone(true);
-      return qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey });
+      return settleWithin(qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey }));
+    },
+    // Mất phản hồi rồi bấm lại: hồ sơ đã nhận, làm mới trạng thái để sang màn chờ duyệt thay vì đứng ở form.
+    onError: (e) => {
+      if (errorCode(e) !== 'DEALER_APPLICATION_PENDING') return undefined;
+      setInfo(errText(e));
+      return settleWithin(qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey }));
     },
   });
+  const alreadyApplied = errorCode(mut.error) === 'DEALER_APPLICATION_PENDING';
 
   const set = (k: keyof DealerApplyInput) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
@@ -78,10 +97,10 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
         <div className="rounded-card bg-stone-900 p-4 text-stone-0 max-md:bg-[var(--color-dealer-ink)]">
           <Store className="h-6 w-6" aria-hidden="true" />
           <h2 className="mt-1 font-display text-lg font-semibold">Trở thành đại lý Tubu</h2>
-          <p className="mt-1 text-sm text-stone-100">{applyPitch(config.isLoaded ? config.dealer?.maxDiscountPct : null)}</p>
+          <p className="mt-1 text-sm tabular-nums text-stone-100">{applyPitch(config.isLoaded ? config.dealer?.maxDiscountPct : null)}</p>
         </div>
 
-        <section data-testid="dealer-conditions" className="mt-3 rounded-card border border-stone-200 bg-stone-0 p-3 max-md:border-0">
+        <section data-testid="dealer-conditions" className="mt-3 tabular-nums rounded-card border border-stone-200 bg-stone-0 p-3 max-md:border-0">
           <h3 className={`text-sm font-semibold text-stone-900 ${phoneBodySm}`}>{DEALER_REQUIREMENTS_TITLE}</h3>
           <ul className={`mb-2 mt-1 list-disc pl-[18px] text-sm text-stone-600 ${phoneBodySm}`}>
             {DEALER_REQUIREMENTS.map((t) => (
@@ -115,13 +134,13 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
             <input className={ui.field} value={form.businessName} onChange={set('businessName')} />
           </Field>
           <Field label="Mã số thuế">
-            <input className={ui.field} value={form.taxCode ?? ''} onChange={set('taxCode')} />
+            <input className={`${ui.field} tabular-nums`} value={form.taxCode ?? ''} onChange={set('taxCode')} />
           </Field>
           <Field label="Người đại diện *">
             <input className={ui.field} value={form.ownerName} onChange={set('ownerName')} />
           </Field>
           <Field label="Số điện thoại *">
-            <input className={ui.field} type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} />
+            <input className={`${ui.field} tabular-nums`} type="tel" inputMode="tel" value={form.phone} onChange={set('phone')} />
           </Field>
           <Field label="Địa chỉ kinh doanh *">
             <input className={ui.field} value={form.address} onChange={set('address')} />
@@ -144,8 +163,9 @@ export function DealerApply({ rejected, rejectionReason }: { rejected: boolean; 
           />
           <div role="status" aria-live="polite">
             {done && <p className="text-sm font-medium text-success-fg">Đã gửi hồ sơ đăng ký đại lý!</p>}
+            {info && <p className="text-sm font-medium text-info-fg">{info}</p>}
           </div>
-          {mut.isError && (
+          {mut.isError && !alreadyApplied && (
             <p role="alert" className={ui.error}>
               {errText(mut.error)}
             </p>
