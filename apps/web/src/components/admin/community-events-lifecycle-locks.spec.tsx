@@ -385,6 +385,7 @@ describe('lệnh bị từ chối vì trạng thái đã đổi (400/404/409): t
     expect(seen).toEqual([]);
     expect(c.textContent).toContain('Không tải được danh sách sự kiện.');
     expect(c.textContent).toContain('Đã đóng sự kiện.');
+    expect(isBusy(closeBtn(c))).toBe(false);
   });
 });
 
@@ -491,6 +492,20 @@ describe('Tạo sự kiện: khoá giữ tới khi danh sách làm mới về, �
     expect(isBusy(createBtn(c))).toBe(false);
     await submit(c);
     expect(creates()).toBe(2);
+  });
+
+  it('lệnh tạo còn bay: ô ảnh bìa bị khoá bằng aria-disabled, lệnh xong thì hết khoá', async () => {
+    const c = await mount();
+    fill(c);
+    const g = gate<Response>();
+    routes.create = () => g.promise;
+    await submit(c);
+    expect(creates()).toBe(1);
+    const cover = () => c.querySelector('button[aria-label="Tải ảnh bìa sự kiện lên"]')!;
+    expect(cover().getAttribute('aria-disabled')).toBe('true');
+    g.resolve(json(200, { id: 'e9' }));
+    await flush();
+    expect(cover().getAttribute('aria-disabled')).not.toBe('true');
   });
 
   it('tạo xong mà danh sách chưa về: ô ảnh bìa không bị khoá (chỉ khoá lúc lệnh tạo còn bay)', async () => {

@@ -380,7 +380,7 @@ function CreateEventForm({ onCreated }: { onCreated: () => Promise<unknown> }) {
           {err}
         </Notice>
       )}
-      {/* Form được xoá ngay khi tạo xong nên `valid` sụp trong lúc còn giữ khoá: chỉ disabled khi không chạy, nếu không nút đang giữ focus bị thả. */}
+      {/* Form được xoá ngay khi tạo xong nên `valid` sụp trong lúc còn giữ khoá: chỉ disabled khi không chạy, để nút không đổi trạng thái giữa chừng. Khoá nhả (tối đa 4 giây sau) thì form trống nên nút disabled và focus rời nút, giống Mini. */}
       <button
         type="submit"
         disabled={(!valid && !create.isPending) || coverBusy}
