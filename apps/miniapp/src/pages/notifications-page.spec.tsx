@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -51,6 +51,8 @@ vi.mock('../components/reorder/reorder-sheet', () => ({
 
 import NotificationsPage from './notifications';
 import { TubuQueryClient } from '../services/query-client';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const SENT_AT = new Date(Date.now() - 5 * 60_000).toISOString();
 const ORDER_UNREAD = {
@@ -929,5 +931,175 @@ describe('W85A: "Xem thêm" của danh sách thông báo khoá đồng bộ', ()
     expect(mocks.getNotifications).toHaveBeenCalledTimes(2);
     await act(async () => page2.resolve(rows(20, 5)));
     expect(await screen.findByText('Tin số 24')).toBeInTheDocument();
+  });
+});
+
+describe('W108A: máy chủ từ chối lệnh đọc thì tải lại danh sách rồi mới nhả khoá', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const LIST = [ORDER_UNREAD, POINTS_READ];
+  const TEMPORARY: [string, unknown][] = [
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['quá thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+    ['lỗi không phải HTTP', new Error('boom')],
+  ];
+  const rowOf = async () => (await screen.findByText('Đơn TT001 đã được xác nhận')).closest('[role="button"]') as HTMLElement;
+  const pastCap = async () => {
+    await vi.advanceTimersByTimeAsync(50);
+    for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+  };
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+  /** Lần nạp đầu xong ngay; lần tải lại danh sách sau lệnh bị từ chối do `refetch` quyết định. */
+  const listThen = (refetch: Promise<unknown>) => mocks.getNotifications.mockResolvedValueOnce(LIST).mockReturnValueOnce(refetch).mockResolvedValue(LIST);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getSummary.mockReset();
+    mocks.getNotifications.mockReset();
+    mocks.markNotificationRead.mockReset().mockResolvedValue({ ok: true });
+    mocks.markAllNotificationsRead.mockReset().mockResolvedValue({ ok: true, count: 1 });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([400, 404, 409])('đọc một tin bị từ chối %i: tải lại danh sách, khoá giữ tới khi danh sách về, rồi chạm lại gọi lần hai', async (status) => {
+    const refetch = deferred<unknown>();
+    listThen(refetch.promise);
+    mocks.markNotificationRead.mockRejectedValueOnce(serverError('Không tìm thấy thông báo.', status)).mockResolvedValue({ ok: true });
+    renderPage();
+    const row = await rowOf();
+    await act(async () => {
+      fireEvent.click(row);
+      fireEvent.click(row);
+    });
+    await waitFor(() => expect(mocks.getNotifications).toHaveBeenCalledTimes(2));
+    expect(mocks.markNotificationRead).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      fireEvent.click(row);
+    });
+    expect(mocks.markNotificationRead).toHaveBeenCalledTimes(1);
+    await act(async () => refetch.resolve(LIST));
+    await settle();
+    fireEvent.click(row);
+    await waitFor(() => expect(mocks.markNotificationRead).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(TEMPORARY)('đọc một tin gặp %s: khoá nhả ngay, không đợi danh sách tải lại', async (_label, error) => {
+    const refetch = deferred<unknown>();
+    listThen(refetch.promise);
+    mocks.markNotificationRead.mockRejectedValueOnce(error).mockResolvedValue({ ok: true });
+    renderPage();
+    const row = await rowOf();
+    await act(async () => {
+      fireEvent.click(row);
+    });
+    await waitFor(() => expect(mocks.getNotifications).toHaveBeenCalledTimes(2));
+    fireEvent.click(row);
+    await waitFor(() => expect(mocks.markNotificationRead).toHaveBeenCalledTimes(2));
+    await act(async () => refetch.resolve(LIST));
+  });
+
+  it('đọc một tin bị từ chối mà danh sách tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS, không sớm hơn', async () => {
+    listThen(new Promise(() => undefined));
+    mocks.markNotificationRead.mockRejectedValueOnce(serverError('Không tìm thấy thông báo.', 404)).mockResolvedValue({ ok: true });
+    renderPage();
+    const row = await rowOf();
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(row);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.getNotifications).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+      fireEvent.click(row);
+    });
+    expect(mocks.markNotificationRead).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await pastCap();
+    });
+    await act(async () => {
+      fireEvent.click(row);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.markNotificationRead).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([400, 404, 409])('"Đọc tất cả" bị từ chối %i: báo lỗi tại chỗ một lần, tải lại danh sách, nút bận tới khi danh sách về rồi mới nhận cú chạm mới', async (status) => {
+    const refetch = deferred<unknown>();
+    listThen(refetch.promise);
+    mocks.markAllNotificationsRead.mockRejectedValueOnce(serverError('Hộp thư vừa đổi, bạn thử lại nhé.', status)).mockResolvedValue({ ok: true, count: 1 });
+    renderPage();
+    await screen.findByText('Đơn TT001 đã được xác nhận');
+    const readAll = await screen.findByRole('button', { name: 'Đọc tất cả' });
+    await act(async () => {
+      fireEvent.click(readAll);
+      fireEvent.click(readAll);
+    });
+    await waitFor(() => expect(mocks.getNotifications).toHaveBeenCalledTimes(2));
+    expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(1);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Hộp thư vừa đổi, bạn thử lại nhé.');
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Đọc tất cả' })).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Đọc tất cả' }));
+    });
+    expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(1);
+    await act(async () => refetch.resolve(LIST));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Đọc tất cả' })).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(screen.getByRole('button', { name: 'Đọc tất cả' }));
+    await waitFor(() => expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(2));
+  });
+
+  it.each(TEMPORARY)('"Đọc tất cả" gặp %s: khoá nhả ngay, không đợi danh sách tải lại', async (_label, error) => {
+    const refetch = deferred<unknown>();
+    listThen(refetch.promise);
+    mocks.markAllNotificationsRead.mockRejectedValueOnce(error).mockResolvedValue({ ok: true, count: 1 });
+    renderPage();
+    await screen.findByText('Đơn TT001 đã được xác nhận');
+    fireEvent.click(await screen.findByRole('button', { name: 'Đọc tất cả' }));
+    await screen.findByRole('alert');
+    await waitFor(() => expect(mocks.getNotifications).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Đọc tất cả' })).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(screen.getByRole('button', { name: 'Đọc tất cả' }));
+    await waitFor(() => expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(2));
+    await act(async () => refetch.resolve(LIST));
+  });
+
+  it('"Đọc tất cả" bị từ chối mà danh sách tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS, không sớm hơn', async () => {
+    listThen(new Promise(() => undefined));
+    mocks.markAllNotificationsRead.mockRejectedValueOnce(serverError('Hộp thư vừa đổi, bạn thử lại nhé.', 409)).mockResolvedValue({ ok: true, count: 1 });
+    renderPage();
+    await screen.findByText('Đơn TT001 đã được xác nhận');
+    const readAll = await screen.findByRole('button', { name: 'Đọc tất cả' });
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(readAll);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.getNotifications).toHaveBeenCalledTimes(2);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+      fireEvent.click(readAll);
+    });
+    expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await pastCap();
+    });
+    await act(async () => {
+      fireEvent.click(readAll);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.markAllNotificationsRead).toHaveBeenCalledTimes(2);
   });
 });

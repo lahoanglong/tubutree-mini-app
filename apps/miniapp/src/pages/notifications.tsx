@@ -21,11 +21,12 @@ import {
 import { nextNotificationCursor, notificationsInfiniteQuery } from '@tubutree/app-core/queries/account';
 import { coreHttp } from '../services/core-http';
 import type { NotificationCursor } from '@tubutree/app-core/api/account';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { trackEvent } from '../services/analytics';
 import { LineItemSkeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { useHasSubscription } from '../hooks/use-has-subscription';
@@ -170,8 +171,14 @@ export default function NotificationsPage() {
     const key = notificationsInfiniteQuery(coreHttp).queryKey;
     if (qc.isFetching({ queryKey: key }) > 0) void qc.invalidateQueries({ queryKey: key });
   };
-  const settleRead = (failed: boolean) => {
-    void qc.invalidateQueries({ queryKey: failed ? ['notifications'] : ME_SUMMARY_KEY });
+  // Máy chủ từ chối vì tin không còn khớp (400/404/409): giữ khoá tới khi danh sách mới về để cú chạm kế tiếp không gửi lại đúng lệnh vừa bị từ chối
+  // trên dữ liệu cũ. Phải làm ở `onError` chứ không `onSettled`: useLockedMutation nhả khoá ngay đầu `onSettled`, trước cả lời hứa trả về từ đó.
+  const refreshAfterRejection = (error: unknown) =>
+    isStaleStateError(error) ? settleWithin(qc.invalidateQueries({ queryKey: ['notifications'] })) : undefined;
+  // Mất mạng, quá hạn, 401, 5xx cũng tải lại danh sách nhưng nhả khoá ngay để khách thử lại liền; lỗi "không còn khớp" đã tải lại ở `onError`.
+  const settleRead = (error: unknown) => {
+    if (isStaleStateError(error)) return;
+    void qc.invalidateQueries({ queryKey: error !== null ? ['notifications'] : ME_SUMMARY_KEY });
   };
 
   // Khoá theo id tin: chạm đúp cùng một tin chưa đọc chỉ gửi một lệnh, hai tin khác nhau vẫn đọc song song.
@@ -182,8 +189,9 @@ export default function NotificationsPage() {
         markReadInCache((n) => n.id === id);
         refetchIfListBusy();
       },
+      onError: refreshAfterRejection,
       // onSettled chứ không onSuccess: đánh dấu đã đọc hỏng thì huy hiệu chưa-đọc ở trang chủ sai vĩnh viễn mà không có tín hiệu nào.
-      onSettled: (_res, err) => settleRead(err !== null),
+      onSettled: (_res, err) => settleRead(err),
     },
     (id) => id,
   );
@@ -199,8 +207,11 @@ export default function NotificationsPage() {
       markReadInCache(() => true);
       refetchIfListBusy();
     },
-    onError: (err) => setReadAllError((prev) => ({ message: getErrorMessage(err), count: (prev?.count ?? 0) + 1 })),
-    onSettled: (_res, err) => settleRead(err !== null),
+    onError: (err) => {
+      setReadAllError((prev) => ({ message: getErrorMessage(err), count: (prev?.count ?? 0) + 1 }));
+      return refreshAfterRejection(err);
+    },
+    onSettled: (_res, err) => settleRead(err),
   });
   const readAll = () => {
     haptic('light');

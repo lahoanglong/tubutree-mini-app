@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { ONBOARDING_SURVEY_ENABLED } from './onboarding-flag';
 import { useLocation, useSnackbar } from 'zmp-ui';
 import { getStorage, setStorage } from 'zmp-sdk/apis';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Baby, Check, Droplets, Flag, Flower2, Leaf, Package, PawPrint, Recycle, Smile, Sparkles, Sprout, SprayCan, Sun, User, UserRound,
   Users, Wallet, type LucideIcon,
@@ -12,6 +12,7 @@ import { getErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 import { ONBOARDING_SNOOZE_KEY, ONBOARDING_SNOOZE_MS, shouldShowOnboarding } from './onboarding-rules';
+import { useLockedMutation } from './game/use-locked-mutation';
 import { Button } from './ui/button';
 import { Heading, Text } from './ui/text';
 
@@ -135,7 +136,7 @@ function Onboarding({ onSnooze, onDone }: { onSnooze: () => void; onDone: () => 
   const total = QUESTIONS.length;
   const finishStep = total + 1;
 
-  const submit = useMutation({
+  const submit = useLockedMutation({
     mutationFn: () => completeOnboarding(Object.values(answers).flat()),
     onSuccess: () => {
       haptic('medium');

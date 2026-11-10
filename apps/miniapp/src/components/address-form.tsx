@@ -5,13 +5,15 @@ import { useSnackbar, Input } from 'zmp-ui';
 import { UserRound } from 'lucide-react';
 import { createAddress, type AddressDTO } from '../services/shop-api';
 import { updateAddress } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isStaleStateError } from '../services/api';
+import { isHttpError } from '../services/http';
 import { requestZaloProfile } from '../services/zalo-profile';
 import { usableProfileName } from '@tubutree/app-core/profile-name';
 import { validateAddressFields, type AddressField } from '@tubutree/app-core/commerce/checkout-form';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 import {
   hasAskedZaloPrefill,
   markZaloPrefillAsked,
@@ -131,7 +133,18 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
       openSnackbar({ text: initial ? 'Đã cập nhật địa chỉ.' : 'Đã thêm địa chỉ.', type: 'success' });
       onSaved(a);
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Máy chủ từ chối vì sổ không còn khớp (đủ số địa chỉ ở máy khác, địa chỉ đang sửa đã bị xoá): tải lại sổ rồi mới nhả khoá, kẻo khách bấm
+    // Lưu lại trên số liệu cũ và nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về sổ thật: nhả ngay để thử lại.
+    onError: (e: unknown) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      // Sửa mà 404: địa chỉ không còn nữa, form này không lưu được nữa nên gỡ thẻ khỏi sổ và đóng form sau khi sổ mới về.
+      const gone = initial != null && isHttpError(e) && e.response?.status === 404;
+      if (gone) queryClient.setQueryData<AddressDTO[]>(['addresses'], (list) => list?.filter((x) => x.id !== initial.id));
+      return settleWithin(queryClient.invalidateQueries({ queryKey: ['addresses'] })).then(() => {
+        if (gone) onCancel();
+      });
+    },
   });
 
   const setField = (k: FormFields) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));

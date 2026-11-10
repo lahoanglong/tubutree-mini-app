@@ -1,11 +1,13 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ReactElement } from 'react';
 import { AddressForm } from './address-form';
 import * as shopApi from '../services/shop-api';
 import * as accountApi from '../services/account-api';
 import { LAST_GEO_KEY, ZALO_PREFILL_ASKED_KEY } from '../utils/address-memory';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const mocks = vi.hoisted(() => ({
   user: { current: null as { id?: string; fullName?: string | null; phone?: string | null } | null },
@@ -453,5 +455,167 @@ describe('AddressForm — khoá chạm đúp Lưu và Điền nhanh từ Zalo (W
     await act(async () => fireEvent.click(quick));
     await act(async () => fireEvent.click(quick));
     expect(mocks.requestZaloProfile).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('AddressForm — máy chủ từ chối vì sổ không còn khớp thì tải lại rồi mới nhả khoá (W108A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const typeStreet = () => fireEvent.change(inputNear('Số nhà, tên đường'), { target: { value: '1 Nguyễn Huệ' } });
+  const saveButton = () => screen.getByText('Lưu').closest('button')!;
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([a]) => (a as { type: string }).type === 'error');
+  const pending = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const EDITING = {
+    id: 'a1', recipient: 'Ánh', phone: '0911111111', street: '1 X', district: '', districtCode: '', isDefault: false, ...HCM,
+  };
+  const OTHER = { ...EDITING, id: 'a2', recipient: 'Mai' };
+
+  /** `invalidate` quyết định lệnh tải lại của từng khoá treo hay xong ngay; mặc định xong ngay. */
+  function renderLive(initial: unknown, invalidate?: (key: readonly unknown[]) => Promise<void> | undefined) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    qc.setQueryData(['addresses'], [EDITING, OTHER]);
+    const invalidated: unknown[][] = [];
+    vi.spyOn(qc, 'invalidateQueries').mockImplementation(((filters: { queryKey: readonly unknown[] }) => {
+      invalidated.push([...filters.queryKey]);
+      return invalidate?.(filters.queryKey) ?? Promise.resolve();
+    }) as never);
+    const onCancel = vi.fn();
+    const onSaved = vi.fn();
+    renderForm(<AddressForm initial={initial as never} onCancel={onCancel} onSaved={onSaved} />, qc);
+    return { qc, invalidated, onCancel, onSaved };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.user.current = { fullName: 'Long', phone: '0900000000' };
+    localStorage.setItem(LAST_GEO_KEY, JSON.stringify(HCM));
+    (shopApi.createAddress as ReturnType<typeof vi.fn>).mockReset();
+    (accountApi.updateAddress as ReturnType<typeof vi.fn>).mockReset();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([400, 409])('thêm địa chỉ bị từ chối %i (vd đủ số địa chỉ ở máy khác): báo lỗi một lần, tải lại sổ, nút bận tới khi sổ về rồi mới nhận cú chạm mới', async (status) => {
+    (shopApi.createAddress as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(serverError('Bạn đã có đủ số địa chỉ tối đa.', status))
+      .mockResolvedValue({ id: 'new' });
+    const refresh = pending();
+    const { invalidated, onCancel } = renderLive(null, (key) => (key[0] === 'addresses' ? refresh.promise : undefined));
+    typeStreet();
+    const save = saveButton();
+    await act(async () => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    await waitFor(() => expect(invalidated).toContainEqual(['addresses']));
+    expect(shopApi.createAddress).toHaveBeenCalledTimes(1);
+    expect(errorToasts()).toHaveLength(1);
+    expect(save).toHaveAttribute('aria-busy', 'true');
+    await act(async () => fireEvent.click(save));
+    expect(shopApi.createAddress).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await waitFor(() => expect(save).not.toHaveAttribute('aria-busy'));
+    expect(onCancel).not.toHaveBeenCalled();
+    await act(async () => fireEvent.click(save));
+    expect(shopApi.createAddress).toHaveBeenCalledTimes(2);
+  });
+
+  it('sửa địa chỉ bị 404 (đã xoá ở máy khác): gỡ thẻ khỏi sổ ngay, đóng form sau khi sổ mới về, không trước', async () => {
+    (accountApi.updateAddress as ReturnType<typeof vi.fn>).mockRejectedValueOnce(serverError('Không tìm thấy địa chỉ.', 404));
+    const refresh = pending();
+    const { qc, invalidated, onCancel } = renderLive(EDITING, (key) => (key[0] === 'addresses' ? refresh.promise : undefined));
+    const save = saveButton();
+    await act(async () => {
+      fireEvent.click(save);
+      fireEvent.click(save);
+    });
+    await waitFor(() => expect(invalidated).toContainEqual(['addresses']));
+    expect(accountApi.updateAddress).toHaveBeenCalledTimes(1);
+    expect(errorToasts()).toHaveLength(1);
+    expect(qc.getQueryData<{ id: string }[]>(['addresses'])?.map((a) => a.id)).toEqual(['a2']);
+    expect(save).toHaveAttribute('aria-busy', 'true');
+    expect(onCancel).not.toHaveBeenCalled();
+    await act(async () => refresh.resolve());
+    await waitFor(() => expect(onCancel).toHaveBeenCalledTimes(1));
+    expect(accountApi.updateAddress).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([400, 409])('sửa địa chỉ bị từ chối %i (địa chỉ còn): tải lại sổ, giữ nguyên form để khách đọc lỗi và sửa tiếp', async (status) => {
+    (accountApi.updateAddress as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(serverError('Tỉnh/phường này chưa giao được.', status))
+      .mockResolvedValue(EDITING);
+    const refresh = pending();
+    const { qc, invalidated, onCancel } = renderLive(EDITING, (key) => (key[0] === 'addresses' ? refresh.promise : undefined));
+    const save = saveButton();
+    await act(async () => fireEvent.click(save));
+    await waitFor(() => expect(invalidated).toContainEqual(['addresses']));
+    expect(save).toHaveAttribute('aria-busy', 'true');
+    await act(async () => fireEvent.click(save));
+    expect(accountApi.updateAddress).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await waitFor(() => expect(save).not.toHaveAttribute('aria-busy'));
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(qc.getQueryData<{ id: string }[]>(['addresses'])).toHaveLength(2);
+    await act(async () => fireEvent.click(save));
+    expect(accountApi.updateAddress).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['quá thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+    ['lỗi không phải HTTP', new Error('boom')],
+  ])('%s: không nói gì về sổ thật nên không tải lại, không đóng form, khoá nhả ngay', async (_label, error) => {
+    (accountApi.updateAddress as ReturnType<typeof vi.fn>).mockRejectedValueOnce(error).mockResolvedValue(EDITING);
+    const { qc, invalidated, onCancel } = renderLive(EDITING);
+    const save = saveButton();
+    await act(async () => fireEvent.click(save));
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await waitFor(() => expect(save).not.toHaveAttribute('aria-busy'));
+    expect(invalidated).toEqual([]);
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(qc.getQueryData<{ id: string }[]>(['addresses'])).toHaveLength(2);
+    await act(async () => fireEvent.click(save));
+    expect(accountApi.updateAddress).toHaveBeenCalledTimes(2);
+  });
+
+  it('tải lại sổ treo mãi: khoá nhả sau LOCK_REFRESH_WAIT_MS, không sớm hơn, rồi nhận cú chạm mới', async () => {
+    (shopApi.createAddress as ReturnType<typeof vi.fn>)
+      .mockRejectedValueOnce(serverError('Bạn đã có đủ số địa chỉ tối đa.', 400))
+      .mockResolvedValue({ id: 'new' });
+    renderLive(null, () => new Promise<void>(() => undefined));
+    typeStreet();
+    const save = saveButton();
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(save);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(shopApi.createAddress).toHaveBeenCalledTimes(1);
+    expect(save).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+      fireEvent.click(save);
+    });
+    expect(shopApi.createAddress).toHaveBeenCalledTimes(1);
+    expect(save).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+      for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(save).not.toHaveAttribute('aria-busy');
+    await act(async () => {
+      fireEvent.click(save);
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(shopApi.createAddress).toHaveBeenCalledTimes(2);
   });
 });

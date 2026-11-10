@@ -10,8 +10,9 @@ import {
   walletForfeitConsent,
   walletForfeitNotice,
 } from '../utils/account-deletion-copy';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isStaleStateError } from '../services/api';
 import { formatVnd } from '../utils/format';
+import { settleWithin } from '../utils/settle-within';
 import { openOAChat, hasOA } from '../services/zmp-bridge';
 import { useLockedMutation } from './game/use-locked-mutation';
 import { Button } from './ui/button';
@@ -44,10 +45,15 @@ export function AccountDeletionSection() {
       setConfirmDelete(false);
       setWalletRetrying(false);
     },
+    // Mọi lỗi đều bỏ tick và tải lại số dư (lần gửi hết thời gian có thể đã ghi số dư mới). Máy chủ từ chối vì số dư không còn khớp (400/404/409) thì
+    // giữ khoá tới khi số dư mới về, để ô đồng ý và nút gửi không mở lại theo số cũ; lỗi tạm thì nhả ngay để khách gửi lại.
     onError: (e: unknown) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       setAgreedBalance(null);
-      void qc.invalidateQueries({ queryKey: ['wallet'] });
+      const refreshed = qc.invalidateQueries({ queryKey: ['wallet'] });
+      if (isStaleStateError(e)) return settleWithin(refreshed);
+      void refreshed;
+      return undefined;
     },
   });
 

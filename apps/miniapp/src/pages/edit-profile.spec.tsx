@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -22,7 +22,11 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/account-api', () => ({ getMe: mocks.getMe, updateMe: mocks.updateMe }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
+vi.mock('../services/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+  getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
+}));
 vi.mock('../store/auth', () => ({
   useAuthStore: Object.assign(() => ({}), {
     getState: () => ({ user: { fullName: 'Lan', avatarUrl: null } }),
@@ -45,6 +49,8 @@ vi.mock('../components/avatar-crop-modal', () => ({
 }));
 
 import EditProfilePage from './edit-profile';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const ME = { fullName: 'Lan', email: 'lan@tubu.vn', avatarUrl: null, dob: '1990-05-01' };
 
@@ -461,5 +467,146 @@ describe('Sửa hồ sơ: Lưu khoá chạm đúp trong cùng một khung hình 
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
     fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
     await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('Sửa hồ sơ: máy chủ từ chối vì hồ sơ không còn khớp thì tải lại rồi mới nhả khoá (W108A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([a]) => (a as { type: string }).type === 'error');
+  const saveButton = () => screen.getByRole('button', { name: 'Lưu thay đổi' });
+  const DOB_ONCE = 'Ngày sinh chỉ có thể đặt một lần và không tự sửa lại được. Bạn liên hệ CSKH nếu cần đính chính nhé.';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getMe.mockReset().mockResolvedValue(ME);
+    mocks.updateMe.mockReset().mockResolvedValue({ avatarUrl: null });
+    mocks.cloudinary = true;
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('ngày sinh đã được đặt ở máy khác (400): tải lại hồ sơ, ô ngày sinh khoá, ô khách vừa sửa không bị ghi đè, lần lưu kế không gửi ngày sinh', async () => {
+    const refetch = deferred<unknown>();
+    mocks.getMe
+      .mockResolvedValueOnce({ ...ME, dob: null })
+      .mockReturnValueOnce(refetch.promise)
+      .mockResolvedValue({ ...ME, dob: '1991-02-03' });
+    mocks.updateMe.mockRejectedValueOnce(serverError(DOB_ONCE, 400)).mockResolvedValue({ avatarUrl: null });
+    renderPage();
+    const name = await screen.findByLabelText('Họ và tên');
+    await waitFor(() => expect(name).toHaveValue('Lan'));
+    fireEvent.change(name, { target: { value: 'Lan Mới' } });
+    fireEvent.change(screen.getByLabelText('Ngày sinh'), { target: { value: '03/02/1991' } });
+    fireEvent.click(saveButton());
+    const confirm = await screen.findByRole('button', { name: 'Xác nhận' });
+    await act(async () => {
+      fireEvent.click(confirm);
+      fireEvent.click(confirm);
+    });
+    await waitFor(() => expect(mocks.getMe).toHaveBeenCalledTimes(2));
+    expect(mocks.updateMe).toHaveBeenCalledTimes(1);
+    expect(mocks.updateMe.mock.calls[0]![0].dob).toBe('1991-02-03');
+    expect(errorToasts()).toEqual([[{ text: DOB_ONCE, type: 'error', position: 'top' }]]);
+    expect(confirm).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(confirm);
+    });
+    expect(mocks.updateMe).toHaveBeenCalledTimes(1);
+
+    await act(async () => refetch.resolve({ ...ME, fullName: 'Tên trên máy chủ', dob: '1991-02-03' }));
+    await waitFor(() => expect(screen.getByLabelText('Ngày sinh')).toHaveValue('03/02/1991'));
+    expect((screen.getByLabelText('Ngày sinh') as HTMLInputElement).readOnly).toBe(true);
+    expect(screen.getByLabelText('Họ và tên')).toHaveValue('Lan Mới');
+    await waitFor(() => expect(saveButton()).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
+    expect(mocks.updateMe.mock.calls[1]![0].dob).toBeUndefined();
+    expect(mocks.updateMe.mock.calls[1]![0].fullName).toBe('Lan Mới');
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith(-1));
+  });
+
+  it.each([400, 404, 409])('bị từ chối %i: báo lỗi một lần, tải lại hồ sơ, nút bận tới khi hồ sơ về rồi mới nhận cú chạm mới', async (status) => {
+    const refetch = deferred<unknown>();
+    mocks.getMe.mockResolvedValueOnce(ME).mockReturnValueOnce(refetch.promise).mockResolvedValue(ME);
+    mocks.updateMe.mockRejectedValueOnce(serverError('Hồ sơ vừa đổi, bạn thử lại nhé.', status)).mockResolvedValue({ avatarUrl: null });
+    renderPage();
+    await screen.findByLabelText('Họ và tên');
+    await act(async () => {
+      fireEvent.click(saveButton());
+      fireEvent.click(saveButton());
+    });
+    await waitFor(() => expect(mocks.getMe).toHaveBeenCalledTimes(2));
+    expect(mocks.updateMe).toHaveBeenCalledTimes(1);
+    expect(errorToasts()).toHaveLength(1);
+    expect(saveButton()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    expect(mocks.updateMe).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    await act(async () => refetch.resolve(ME));
+    await waitFor(() => expect(saveButton()).not.toHaveAttribute('aria-busy'));
+    expect(errorToasts()).toHaveLength(1);
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith(-1));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['quá thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+    ['lỗi không phải HTTP', new Error('boom')],
+  ])('%s: không nói gì về hồ sơ thật nên không tải lại, khoá nhả ngay', async (_label, error) => {
+    mocks.updateMe.mockRejectedValueOnce(error).mockResolvedValue({ avatarUrl: null });
+    renderPage();
+    await screen.findByLabelText('Họ và tên');
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await waitFor(() => expect(saveButton()).not.toHaveAttribute('aria-busy'));
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.getMe).toHaveBeenCalledTimes(1);
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại hồ sơ treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS, không sớm hơn', async () => {
+    mocks.getMe.mockResolvedValueOnce(ME).mockReturnValueOnce(new Promise(() => undefined)).mockResolvedValue(ME);
+    mocks.updateMe.mockRejectedValueOnce(serverError('Hồ sơ vừa đổi, bạn thử lại nhé.', 409)).mockResolvedValue({ avatarUrl: null });
+    renderPage();
+    await screen.findByLabelText('Họ và tên');
+    await waitFor(() => expect(screen.getByLabelText('Họ và tên')).toHaveValue('Lan'));
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(saveButton());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.getMe).toHaveBeenCalledTimes(2);
+    expect(saveButton()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+      fireEvent.click(saveButton());
+    });
+    expect(mocks.updateMe).toHaveBeenCalledTimes(1);
+    expect(saveButton()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+      for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(saveButton()).not.toHaveAttribute('aria-busy');
+    await act(async () => {
+      fireEvent.click(saveButton());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.updateMe).toHaveBeenCalledTimes(2);
   });
 });

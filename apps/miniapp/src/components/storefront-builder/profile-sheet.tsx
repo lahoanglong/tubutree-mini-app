@@ -1,8 +1,10 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Input, useSnackbar } from 'zmp-ui';
 import { updateStorefront, type StorefrontEdit } from '../../services/storefront-api';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, isStaleStateError } from '../../services/api';
 import { haptic } from '../../utils/haptic';
+import { settleWithin } from '../../utils/settle-within';
 import { vi } from '../../i18n/vi';
 import { useUploadBusy } from '../../hooks/use-upload-busy';
 import { useLockedMutation } from '../game/use-locked-mutation';
@@ -25,6 +27,7 @@ export function ProfileSheet({
   onSaved: () => void;
 }) {
   const { openSnackbar } = useSnackbar();
+  const queryClient = useQueryClient();
   const [avatarUrl, setAvatarUrl] = useState(sf.avatarUrl ?? '');
   const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
   const [headerNote, setHeaderNote] = useState(sf.headerNote ?? '');
@@ -47,7 +50,12 @@ export function ProfileSheet({
       onSaved();
       onClose();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Máy chủ từ chối vì gian hàng không còn khớp (vd 404 "Chưa có gian hàng"): tải lại gian hàng rồi mới nhả khoá để màn Gian hàng đổi theo trạng thái thật,
+    // không thì bấm Lưu lại nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về gian hàng thật: nhả ngay để thử lại.
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return isStaleStateError(e) ? settleWithin(queryClient.invalidateQueries({ queryKey: ['my-storefront'] })) : undefined;
+    },
   });
 
   const complete = !!(avatarUrl.trim() && coverUrl.trim() && headerNote.trim());
