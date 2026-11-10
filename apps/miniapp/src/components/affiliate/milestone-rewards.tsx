@@ -7,6 +7,7 @@ import { claimCtvMilestone, type CtvMilestoneItem, type CtvMilestonesResponse } 
 import { getErrorMessage } from '../../services/api';
 import { formatPoints, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
+import { settleWithin } from '../../utils/settle-within';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -46,6 +47,8 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   const [showAll, setShowAll] = useState(false);
   const listId = useId();
   // Khoá đồng bộ dùng chung cho "Nhận thưởng" và "Nhận tất cả": `busy` chỉ đổi sau lần vẽ kế, hai cú chạm trong cùng một nhịp sẽ gọi API hai lần.
+  // Khoá nhả ở onSettled, tức sau khi danh sách mốc tải lại xong (có hạn chờ): nhả sớm hơn thì dòng còn cũ vẫn có nút
+  // "Nhận thưởng", chạm tiếp lúc đó chỉ ra câu lỗi "đã nhận rồi" dù điểm đã cộng.
   const claimingRef = useRef(false);
   const release = () => {
     claimingRef.current = false;
@@ -54,13 +57,9 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   const prev = data.previousMonth;
   const targets = [...(prev ? toTargets(prev.milestones, prev.monthKey) : []), ...toTargets(data.milestones, data.monthKey)];
 
-  const refreshMilestones = () => {
-    void qc.invalidateQueries({ queryKey: ['affiliate-milestones'] });
-  };
+  const refreshMilestones = () => qc.invalidateQueries({ queryKey: ['affiliate-milestones'] });
   // Thưởng cộng Điểm Xanh (lô thường): làm mới số điểm ở hub/Ví/Điểm Xanh (['loyalty']).
-  const refreshBalances = () => {
-    void qc.invalidateQueries({ queryKey: ['loyalty'] });
-  };
+  const refreshBalances = () => qc.invalidateQueries({ queryKey: ['loyalty'] });
 
   const claimOne = useMutation({
     mutationFn: (t: ClaimTarget) => claimCtvMilestone(t.id, t.month),
@@ -68,13 +67,13 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
     onSuccess: (res) => {
       haptic('heavy');
       openSnackbar({ text: res.message || 'Đã nhận thưởng mốc thành công!', type: 'success' });
-      refreshMilestones();
-      refreshBalances();
+      void refreshBalances();
+      return settleWithin(refreshMilestones());
     },
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Lỗi "đã nhận"/"chưa đạt" → trạng thái trên máy đã cũ, tải lại để nút khớp backend.
-      refreshMilestones();
+      return settleWithin(refreshMilestones());
     },
     onSettled: release,
   });
@@ -103,9 +102,9 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
           text: `Đã nhận ${done}/${total} mốc. Có ${failed.length} mốc chưa nhận được, xem bên dưới.`,
           type: 'warning',
         });
-      refreshMilestones();
       // Không mốc nào nhận được thì điểm không đổi: khỏi tải lại Điểm Xanh vô ích.
-      if (done > 0) refreshBalances();
+      if (done > 0) void refreshBalances();
+      return settleWithin(refreshMilestones());
     },
     onSettled: release,
   });
