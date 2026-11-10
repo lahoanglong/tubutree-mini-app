@@ -28,6 +28,7 @@ import { useLockedMutation } from './use-locked-mutation';
 import { NetworkError } from '@/lib/client-api';
 import { gameMoreCopy, isStaleQuizMessage } from '@tubutree/app-core/game-more-copy';
 import { actionErrorText } from '@/lib/error-text';
+import { settleWithin } from '@/lib/settle-within';
 
 export type { HarvestReward };
 
@@ -90,6 +91,7 @@ export function useGameActions({
 
   // Trả lời hứa tải lại để `onSuccess` trả ra: TanStack Query đợi nó trước `onSettled`, nên khoá của lệnh còn giữ (nút còn bận)
   // cho tới khi số nước/điểm/lô mới về. Nhả sớm hơn thì nút bấm được lúc màn còn số cũ: tưới tiếp theo số cũ, nhận thưởng lần hai.
+  // Mọi chỗ trả lời hứa qua `settleWithin` (hạn 4 giây): làm mới treo (mạng chậm) không giữ nút bận lâu hơn lệnh vừa thành công.
   const refresh = (): Promise<unknown> =>
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ['game'] }),
@@ -101,7 +103,7 @@ export function useGameActions({
   // Hết thời gian: máy chủ có thể đã ghi nhận thao tác, nên làm mới để màn hình khớp với sổ.
   const onError = (e: unknown) => {
     notify(errText(e), 'error');
-    if (e instanceof NetworkError && e.timedOut) return refresh();
+    if (e instanceof NetworkError && e.timedOut) return settleWithin(refresh());
   };
 
   const checkInM = useLockedMutation({
@@ -112,11 +114,13 @@ export function useGameActions({
       if (r.pending.length === 0) {
         queryClient.setQueryData<{ checkedInToday: boolean }>(['loyalty-checkin'], (old) => (old ? { ...old, checkedInToday: true } : old));
       }
-      return Promise.all([
-        queryClient.invalidateQueries({ queryKey: ['loyalty-checkin'] }),
-        queryClient.invalidateQueries({ queryKey: ['points-txn'] }),
-        refresh(),
-      ]);
+      return settleWithin(
+        Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['loyalty-checkin'] }),
+          queryClient.invalidateQueries({ queryKey: ['points-txn'] }),
+          refresh(),
+        ]),
+      );
     },
     onError,
   });
@@ -124,7 +128,7 @@ export function useGameActions({
     mutationFn: () => collectDew(coreHttp),
     onSuccess: (r) => {
       notify(`Hứng được +${formatDrops(r.seedsEarned)} từ giọt sương sáng 💦`, 'success');
-      return refresh();
+      return settleWithin(refresh());
     },
     onError,
   });
@@ -132,7 +136,7 @@ export function useGameActions({
     mutationFn: () => buyStreakFreeze(coreHttp),
     onSuccess: (r) => {
       notify(`Đã mua vé giữ lửa 🧊 (còn ${r.streakFreezes} vé)`, 'success');
-      return refresh();
+      return settleWithin(refresh());
     },
     onError,
   });
@@ -140,7 +144,7 @@ export function useGameActions({
     mutationFn: () => repairStreak(coreHttp),
     onSuccess: () => {
       notify('Đã hồi sinh chuỗi! 🌿', 'success');
-      return queryClient.invalidateQueries({ queryKey: ['game', 'profile'] });
+      return settleWithin(queryClient.invalidateQueries({ queryKey: ['game', 'profile'] }));
     },
     onError,
   });
@@ -149,7 +153,7 @@ export function useGameActions({
       mutationFn: (recipientId: string) => giftWater(coreHttp, recipientId),
       onSuccess: (r) => {
         notify(`Đã tặng ${formatDrops(r.amount)} cho bạn 🎁`, 'success');
-        return refresh();
+        return settleWithin(refresh());
       },
       onError,
     },
@@ -173,7 +177,7 @@ export function useGameActions({
     } else {
       notify(`${label} · còn ${formatDrops(Math.max(0, r.target - r.progress))} nữa là thu hoạch`, 'success');
     }
-    return Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['game', 'forest'] })]);
+    return settleWithin(Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['game', 'forest'] })]));
   };
 
   const waterM = useLockedMutation({
@@ -187,7 +191,7 @@ export function useGameActions({
     mutationFn: (idempotencyKey: string) => buyTree(coreHttp, idempotencyKey),
     onSuccess: (r) => {
       notify(`Đã góp 1 cây vào quỹ trồng cây 🌳 (−${formatPoints(r.cost)}) · mã ${r.certificateCode}`, 'success');
-      return Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['game', 'forest'] })]);
+      return settleWithin(Promise.all([refresh(), queryClient.invalidateQueries({ queryKey: ['game', 'forest'] })]));
     },
     onError,
   });
@@ -195,7 +199,7 @@ export function useGameActions({
     mutationFn: (slot: number) => unlockPlot(coreHttp, slot),
     onSuccess: () => {
       notify('Đã mở lô đất mới 🪴', 'success');
-      return refresh();
+      return settleWithin(refresh());
     },
     onError,
   });
@@ -212,12 +216,14 @@ export function useGameActions({
       mutationFn: ({ tier, track }: { tier: number; track: 'free' | 'premium' }) => claimSeasonPass(coreHttp, tier, track),
       onSuccess: () => {
         notify('Đã nhận thưởng chặng mùa! 🎉', 'success');
-        return Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] }),
-          queryClient.invalidateQueries({ queryKey: ['game', 'profile'] }),
-          // Thưởng bậc có thể là Điểm Xanh.
-          queryClient.invalidateQueries({ queryKey: ['loyalty'] }),
-        ]);
+        return settleWithin(
+          Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['game', 'seasonPass'] }),
+            queryClient.invalidateQueries({ queryKey: ['game', 'profile'] }),
+            // Thưởng bậc có thể là Điểm Xanh.
+            queryClient.invalidateQueries({ queryKey: ['loyalty'] }),
+          ]),
+        );
       },
       onError,
     },
@@ -228,12 +234,14 @@ export function useGameActions({
       mutationFn: (code: string) => claimMission(coreHttp, code),
       onSuccess: (r) => {
         notify(`Đã nhận +${formatNumber(r.rewardPoints)} Điểm Xanh! 🌿`, 'success');
-        return Promise.all([
-          queryClient.invalidateQueries({ queryKey: ['game', 'missions'] }),
-          queryClient.invalidateQueries({ queryKey: ['me'] }),
-          // Thưởng nhiệm vụ cộng Điểm Xanh: màn Thanh toán đọc số dư từ ['loyalty'].
-          queryClient.invalidateQueries({ queryKey: ['loyalty'] }),
-        ]);
+        return settleWithin(
+          Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['game', 'missions'] }),
+            queryClient.invalidateQueries({ queryKey: ['me'] }),
+            // Thưởng nhiệm vụ cộng Điểm Xanh: màn Thanh toán đọc số dư từ ['loyalty'].
+            queryClient.invalidateQueries({ queryKey: ['loyalty'] }),
+          ]),
+        );
       },
       onError,
     },
@@ -243,7 +251,7 @@ export function useGameActions({
     mutationFn: () => shareHarvest(coreHttp),
     onSuccess: (r) => {
       notify(r.alreadyShared ? gameNewbieCopy.harvest.shareCommunityAlready : gameNewbieCopy.harvest.shareCommunityOk, 'success');
-      return queryClient.invalidateQueries({ queryKey: ['feed'] });
+      return settleWithin(queryClient.invalidateQueries({ queryKey: ['feed'] }));
     },
     onError,
   });

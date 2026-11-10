@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Ticket, X } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   applyCoupon,
   formatVnd,
@@ -275,8 +275,10 @@ export function CouponBox({
   // `disabled`: trang chứa đang đặt hàng, khoá thật như trước.
   const working = apply.isPending || drop.isPending || autoApplyMut.isPending;
   const busy = working || disabled;
+  // Lệnh đổi mã từ nơi khác còn bay (nút áp mã ở giỏ rồi chuyển sang thanh toán) cũng dùng COUPON_MUTATION_KEY: không gửi lệnh thứ hai chồng lên nó.
+  const couponMutating = useIsMutating({ mutationKey: COUPON_MUTATION_KEY });
   const changeCoupon = (run: () => void) => {
-    if (changingRef.current || autoApplyMut.isPending) return;
+    if (changingRef.current || autoApplyMut.isPending || couponMutating > 0) return;
     changingRef.current = true;
     run();
   };
@@ -286,11 +288,11 @@ export function CouponBox({
   const applyingCustom = apply.isPending && apply.variables?.trim().toUpperCase() === code.trim().toUpperCase();
   const autoMutate = autoApplyMut.mutate;
   useEffect(() => {
-    if (!autoApply || !memoryUserId || autoSettled.current || currentCode || !previewTrusted) return;
+    if (!autoApply || !memoryUserId || autoSettled.current || currentCode || !previewTrusted || couponMutating > 0) return;
     autoSettled.current = true;
     const best = pickBestCoupon(previewsQ.data, couponsQ.data);
     if (best) autoMutate(best);
-  }, [autoApply, memoryUserId, memory, currentCode, previewTrusted, previewsQ.data, couponsQ.data, autoMutate]);
+  }, [autoApply, memoryUserId, memory, currentCode, previewTrusted, previewsQ.data, couponsQ.data, autoMutate, couponMutating]);
   const isAuto = !!autoCode && currentCode?.toUpperCase() === autoCode;
   const panelAria = inSheet ? ({ 'aria-haspopup': 'dialog' } as const) : ({ 'aria-expanded': open, 'aria-controls': 'coupon-panel' } as const);
 

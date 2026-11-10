@@ -16,6 +16,8 @@ import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { actionErrorText } from '@/lib/error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
 
 // Chỉ sổ địa chỉ rỗng mới cần màn trống: không kéo nó vào bundle đầu của trang.
 const MiniEmptyState = dynamic(() => import('@/components/mini/empty-state').then((m) => m.EmptyState), { ssr: false });
@@ -28,6 +30,15 @@ const NOTICE_MS = 4000;
 /** Việc khách làm trên MỘT địa chỉ: đặt mặc định hoặc xoá. Chung một khoá theo id nên hai việc của cùng địa chỉ không chồng nhau, địa chỉ khác vẫn chạy song song. */
 type AddressOp = { op: 'default' | 'delete'; id: string };
 const ADDRESS_OP_KEY = ['address-op'] as const;
+
+/**
+ * Máy chủ đã nói rõ địa chỉ không còn như sổ đang hiện: 400/404/409 (đã xoá ở máy khác, đã là mặc định). Mất mạng, 401 và 5xx thì không
+ * tải lại: các lỗi đó hay đến đúng lúc máy chủ đang bận, lần tải lại cũng hỏng và lỗi tải sổ sẽ thay cả sổ bằng màn lỗi.
+ */
+function addressMayHaveChanged(e: unknown): boolean {
+  const status = errorStatus(e);
+  return status === 400 || status === 404 || status === 409;
+}
 
 const line = (a: AddressDTO) => [a.street, a.ward, a.district, a.province].filter(Boolean).join(', ');
 
@@ -56,7 +67,7 @@ export default function AddressBookPage() {
       throw err;
     });
   };
-  // Trả lời hứa để khoá của địa chỉ còn giữ tới khi sổ mới về: nhả sớm thì "Đặt mặc định" bấm được lần hai trên số liệu cũ.
+  // Trả lời hứa để khoá của địa chỉ còn giữ tới khi sổ mới về (tối đa `settleWithin`, kẻo mạng chậm giữ nút lâu hơn lệnh đã xong): nhả sớm thì "Đặt mặc định" bấm được lần hai trên số liệu cũ.
   const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ['addresses'] }), qc.invalidateQueries({ queryKey: ['quote'] })]);
 
   // Báo "Đã xóa" như snackbar của Mini App: tự tắt sau vài giây và tắt ngay khi có thao tác khác bắt đầu.
@@ -70,6 +81,11 @@ export default function AddressBookPage() {
   // Lỗi nhớ theo từng địa chỉ: `mutation.error` chỉ giữ lệnh sau cùng nên lệnh của địa chỉ A lỗi sau khi địa chỉ B đã chạy sẽ mất lời báo.
   const [opErrors, setOpErrors] = useState<ReadonlyMap<string, unknown>>(() => new Map());
   const clearError = (id: string) => setOpErrors((prev) => (prev.has(id) ? new Map([...prev].filter(([k]) => k !== id)) : prev));
+  // Địa chỉ bị máy chủ báo không còn (404) rồi sổ tải lại: dòng của nó biến mất cùng lời báo trong dòng, nên lời báo được đưa lên đầu trang tới khi khách làm việc khác.
+  const clearOrphanErrors = () => {
+    const ids = new Set(qc.getQueryData<AddressDTO[]>(['addresses'])?.map((x) => x.id));
+    setOpErrors((prev) => (prev.size === 0 || [...prev.keys()].every((k) => ids.has(k)) ? prev : new Map([...prev].filter(([k]) => ids.has(k)))));
+  };
   const deleteOk = useRef(false);
   const addressOp = useLockedMutation(
     {
@@ -78,6 +94,7 @@ export default function AddressBookPage() {
       onMutate: (v) => {
         setRemovedNotice(false);
         clearError(v.id);
+        clearOrphanErrors();
         if (v.op === 'delete') deleteOk.current = false;
       },
       onSuccess: (_d, v) => {
@@ -88,11 +105,12 @@ export default function AddressBookPage() {
           // Lần tải lại có thể bị lần làm mới của lệnh sau huỷ hoặc lỗi mạng: dòng đã xoá không được ở lại chờ chúng.
           qc.setQueryData<AddressDTO[]>(['addresses'], (list) => list?.filter((x) => x.id !== v.id));
         }
-        return refresh();
+        return settleWithin(refresh());
       },
       onError: (error, v) => {
         setOpErrors((prev) => new Map(prev).set(v.id, error));
         if (v.op === 'delete') setConfirmId((cur) => (cur === v.id ? null : cur));
+        return addressMayHaveChanged(error) ? settleWithin(refresh()) : undefined;
       },
     },
     (v) => v.id,
@@ -164,6 +182,15 @@ export default function AddressBookPage() {
           Đã xoá địa chỉ.
         </p>
       )}
+
+      {addrQ.isSuccess &&
+        [...opErrors]
+          .filter(([id]) => !addresses.some((a) => a.id === id))
+          .map(([id, error]) => (
+            <p key={id} role="alert" className={`mb-3 ${ui.error}`}>
+              {actionErrorText(error)}
+            </p>
+          ))}
 
       {addrQ.isSuccess && addresses.length === 0 && !adding && (
         <div className="max-md:-mx-4">

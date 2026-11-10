@@ -7,7 +7,7 @@ import { cartVoucherHint, type CartVoucherHint } from '@tubutree/app-core/commer
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { applyCoupon, getCouponPreviews, getMyCoupons, type CouponPreviewParams } from '@/lib/shop-client';
-import { PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
+import { COUPON_MUTATION_KEY, PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { autoCouponName } from '@/lib/coupon-name';
 import { cartKey } from '@/lib/cart-key';
@@ -76,6 +76,8 @@ export function useCartVoucherHint(opts: {
 
   // Khoá ref đồng bộ: `isPending` chỉ đúng sau lần vẽ kế tiếp, hai cú chạm sát nhau vẫn đều gọi applyCoupon.
   const mut = useLockedMutation({
+    // Khách chạm "Áp mã" ở giỏ rồi sang Thanh toán ngay: dải gợi ý bị gỡ nhưng lệnh vẫn bay, nút Đặt hàng đọc khoá này để chờ.
+    mutationKey: COUPON_MUTATION_KEY,
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
     // Xoá lời báo cũ lúc bắt đầu: lỗi lặp lại cùng câu vẫn dựng lại lời báo.
     onMutate: () => setFailed(null),
