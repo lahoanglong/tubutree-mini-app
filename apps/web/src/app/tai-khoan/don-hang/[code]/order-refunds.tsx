@@ -183,11 +183,12 @@ function ChooseDestination({
       );
     },
     // Khoản hoàn đã khác thẻ: tải lại để thẻ và nút theo số thật, khoá giữ tới lúc đó (có hạn). Ví cũng tải lại vì bên thắng có thể vừa cộng tiền vào Ví.
-    // Hoàn về tài khoản ngân hàng có ô nhập: 400 ở đó là máy chủ chê số tài khoản, không phải khoản hoàn đã đổi.
-    onError: (e, choice) => {
+    // Cả khi chọn tài khoản ngân hàng: lỗi nhập đã bị `bankDetailsError` chặn trước khi gửi, nên mọi 400 máy chủ trả ở đây là trạng thái khoản hoàn
+    // (đang chuyển khoản, đã xử lý, đã mất quyền chọn), không phải số tài khoản sai.
+    onError: (e) => {
       const text = actionErrorText(e);
       setError(text);
-      const stale = serverRejectedState(e, { userInput: choice === 'BANK' });
+      const stale = serverRejectedState(e);
       rejectionRef.current = stale ? text : null;
       if (!stale) return undefined;
       return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['my-refunds', refund.orderId] }), invalidateBalances(qc)]));

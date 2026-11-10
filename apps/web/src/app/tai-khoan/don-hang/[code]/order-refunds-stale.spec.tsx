@@ -246,46 +246,68 @@ describe('ChooseDestination (web): máy chủ từ chối vì khoản hoàn đã
   });
 });
 
-describe('ChooseDestination (web): hoàn về tài khoản ngân hàng có ô nhập, 400 là máy chủ chê tài khoản', () => {
-  const openBankForm = async (r: Rendered) => {
+describe('ChooseDestination (web): hoàn về tài khoản ngân hàng — mọi 400 máy chủ trả ở đây là trạng thái khoản hoàn', () => {
+  const openBankForm = async (r: Rendered, accountNumber = '190312345678') => {
     const confirm = await openForm(r);
     click(r.container.querySelector<HTMLInputElement>('input[type="radio"][value="BANK"]'));
     await flush(2);
     const set = (label: string, value: string) =>
       typeInto([...r.container.querySelectorAll<HTMLInputElement>('input')].find((i) => i.labels?.[0]?.textContent === label) ?? null, value);
     set('Tên ngân hàng', 'Techcombank');
-    set('Số tài khoản', '190312345678');
+    set('Số tài khoản', accountNumber);
     set('Chủ tài khoản', 'NGUYEN VAN A');
     await flush(1);
     return confirm;
   };
 
-  it('400: lời máy chủ hiện trong form, KHÔNG tải lại khoản hoàn/số dư, khoá nhả ngay và lời không được báo như lời từ chối', async () => {
+  it('số tài khoản sai: form chặn trước, không gọi API, không tải lại, khoá không giữ', async () => {
     const r = await mount();
-    const confirm = await openBankForm(r);
-    m.chooseRefundDestination.mockRejectedValueOnce(new ApiError('Số tài khoản nhận tiền hoàn không hợp lệ.', 400)).mockResolvedValue(LATE);
-    m.fetchMyRefunds.mockReturnValue(new Promise(() => undefined));
+    const confirm = await openBankForm(r, '12');
     await act(async () => click(confirm));
     await flush(3);
-    expect(alertText(r)).toBe('Số tài khoản nhận tiền hoàn không hợp lệ.');
+    expect(m.chooseRefundDestination).not.toHaveBeenCalled();
     expect(m.fetchMyRefunds).toHaveBeenCalledTimes(1);
     expect(keys()).not.toContain('["my-refunds","o1"]');
-    expect(keys()).not.toContain('["wallet"]');
     expect(confirm.hasAttribute('aria-busy')).toBe(false);
-    click(button(r, 'Để sau')!);
-    await flush(2);
-    expect(alertText(r)).toBeNull();
   });
 
-  it.each([404, 409, 422])('%i: khoản hoàn đã đổi nên vẫn tải lại và giữ khoá', async (status) => {
+  const BANK_STALE = [
+    [400, 'Tubu đang chuyển khoản khoản này về Techcombank ••5678 nên không đổi được nơi nhận nữa.'],
+    [400, 'Khoản hoàn này đã được xử lý, không đổi được nơi nhận nữa.'],
+    [404, 'Không tìm thấy khoản hoàn.'],
+    [409, 'Khoản hoàn vừa được chọn ở máy khác.'],
+    [422, 'Khoản hoàn này không còn chọn được nơi nhận.'],
+  ] as const;
+  it.each(BANK_STALE)('%i "%s": lời lỗi hiện ngay, khoản hoàn và số dư được tải lại, khoá giữ tới lúc dữ liệu về', async (status, message) => {
     const r = await mount();
     const confirm = await openBankForm(r);
-    m.chooseRefundDestination.mockRejectedValue(new ApiError('Khoản hoàn đã được xử lý.', status));
-    m.fetchMyRefunds.mockReturnValue(new Promise(() => undefined));
+    m.chooseRefundDestination.mockRejectedValue(new ApiError(message, status));
+    const refresh = deferred<unknown[]>();
+    m.fetchMyRefunds.mockReturnValue(refresh.promise);
+    confirm.focus();
     await act(async () => click(confirm));
     await flush(3);
-    expect(keys()).toContain('["my-refunds","o1"]');
+    expect(alertText(r)).toBe(message);
+    expect(m.fetchMyRefunds).toHaveBeenCalledTimes(2);
+    expect(keys()).toEqual(expect.arrayContaining(['["my-refunds","o1"]', '["wallet"]', '["me"]']));
     expect(confirm.getAttribute('aria-busy')).toBe('true');
+    expect(document.activeElement).toBe(confirm);
+    await twice(confirm);
+    expect(m.chooseRefundDestination).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve([LATE]));
+    await flush(4);
+    expect(confirm.hasAttribute('aria-busy')).toBe(false);
+  });
+
+  it('400 "đã xử lý" rồi khoản hoàn đóng: form tự đóng, lời lỗi ở lại trong khối', async () => {
+    const r = await mount();
+    const confirm = await openBankForm(r);
+    m.chooseRefundDestination.mockRejectedValue(new ApiError('Khoản hoàn này đã được xử lý, không đổi được nơi nhận nữa.', 400));
+    m.fetchMyRefunds.mockResolvedValue([CLOSED]);
+    await act(async () => click(confirm));
+    await flush(4);
+    expect(form(r)).toBeNull();
+    expect(alertText(r)).toBe('Khoản hoàn này đã được xử lý, không đổi được nơi nhận nữa.');
   });
 });
 

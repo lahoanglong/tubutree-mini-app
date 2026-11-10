@@ -32,6 +32,12 @@ export function render(ui: ReactElement, client: QueryClient = new QueryClient({
   };
 }
 
+/** Rời màn rồi quay lại trên CÙNG QueryClient: state và ref của component mất (khoá chạm bằng ref trống), bộ nhớ đệm và lượt nạp đang chạy còn. */
+export function remount(r: Rendered, ui: ReactElement, client: QueryClient) {
+  act(() => r.root.render(<QueryClientProvider client={client}>{null}</QueryClientProvider>));
+  act(() => r.root.render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>));
+}
+
 /** Đợi các promise (fetch mock, mutation) chạy xong rồi React render lại. */
 export async function flush(times = 5) {
   for (let i = 0; i < times; i++) {

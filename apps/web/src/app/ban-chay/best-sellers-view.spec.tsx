@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
-import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
+import { QueryClient } from '@tanstack/react-query';
+import { byText, click, flush, remount, render, type Rendered } from '@/test-utils/dom';
 
 // Bản web của pages/best-sellers.spec.tsx (Mini App): tab danh mục tầng 1 trên URL, thẻ hạng 1..n theo vị trí thật, "Xem thêm" ở điện
 // thoại, liên kết trang số cho lg, trạng thái rỗng/lỗi, cây danh mục rỗng như PROD.
@@ -249,6 +250,30 @@ describe('BestSellersView — khoá chạm đúp "Xem thêm" và "Thử lại" t
     await flush(2);
     expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
     expect(more.getAttribute('aria-busy')).toBe('true');
+    release();
+    await flush(6);
+    expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
+    expect(ranks(container)).toHaveLength(40);
+  });
+
+  it('"Xem thêm": dựng lại màn khi trang kế còn tải (khoá ref trống, truy vấn vẫn chạy): chạm lại không tải trang kế lần hai', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    routes['/products'] = (q) => (Number(q?.page) === 2 ? gate.then(() => pageOf(21, 20, 2, 45)) : pageOf(1, 20, 1, 45));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    mounted = render(<BestSellersView />, qc);
+    const { container } = mounted;
+    await flush();
+    click(byText(container, 'button', 'Xem thêm'));
+    await flush(2);
+    expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
+    remount(mounted, <BestSellersView />, qc);
+    await flush(4);
+    const more = container.querySelector<HTMLButtonElement>('button[aria-busy="true"]')!;
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    click(more);
+    await flush(2);
+    expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
     release();
     await flush(6);
     expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);

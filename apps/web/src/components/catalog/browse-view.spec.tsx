@@ -2,7 +2,8 @@
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { forgetRecentSearchesOfSignedOutUser } from '@/lib/recent-searches';
-import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { QueryClient } from '@tanstack/react-query';
+import { byText, click, flush, remount, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls, unlabeledFields } from '@/test-utils/a11y';
 
 // Chép ý nghĩa pages/browse.spec.tsx của Mini App: hub ở gốc (không tải danh sách), danh sách có SortBar dính, trạng thái nằm trong
@@ -939,6 +940,30 @@ describe('BrowseView — tải thêm, rỗng, lỗi', () => {
     expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
   });
 
+  it('"Xem thêm": dựng lại màn khi trang 2 còn tải (khoá ref trống, truy vấn vẫn chạy): chạm lại không tải trang 2 lần hai', async () => {
+    nav.search = LIST;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    routes['/products'] = (q) => (Number(q?.page) === 2 ? gate.then(() => pageOf([product(3), product(4)], 4, 2, 2)) : pageOf([product(1), product(2)], 4, 1, 2));
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    mounted = render(<BrowseView />, qc);
+    const { container } = mounted;
+    await flush();
+    click(buttonByName(container, 'Xem thêm'));
+    await flush(2);
+    expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
+    remount(mounted, <BrowseView />, qc);
+    await flush(4);
+    const more = buttonByName(container, 'Xem thêm')!;
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    click(more);
+    await flush(2);
+    expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
+    release();
+    await flush(8);
+    expect(productCalls().filter((q) => q?.page === 2)).toHaveLength(1);
+  });
+
   it('"Xem thêm" xong: focus chuyển vào liên kết của thẻ đầu trang mới (không mất focus về body)', async () => {
     nav.search = LIST;
     routes['/products'] = (q) => (Number(q?.page) === 2 ? pageOf([product(3), product(4)], 4, 2, 2) : pageOf([product(1), product(2)], 4, 1, 2));
@@ -1130,6 +1155,43 @@ describe('BrowseView — "Thử lại" tại chỗ sau lỗi Xem thêm', () => {
     await flush(8);
     expect(container.textContent).toContain('Sản phẩm 3');
     expect(productCalls().filter((q) => q?.page === 2).length - before).toBe(1);
+  });
+});
+
+describe('BrowseView — "Thử lại" tại chỗ: dựng lại màn khi lượt thử còn chạy', () => {
+  it('khoá ref trống nhưng truy vấn còn tải: chạm "Thử lại" không tải lại lần hai (refetch mặc định huỷ lượt đang chạy)', async () => {
+    nav.search = LIST;
+    let failPage2 = true;
+    let release!: () => void;
+    const gate = new Promise<void>((r) => { release = r; });
+    routes['/products'] = (q) => {
+      if (Number(q?.page) === 2) {
+        if (failPage2) throw new Error('down');
+        return gate.then(() => pageOf([product(3)], 3, 2, 2));
+      }
+      return pageOf([product(1), product(2)], 3, 1, 2);
+    };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    mounted = render(<BrowseView />, qc);
+    const { container } = mounted;
+    await flush();
+    click(buttonByName(container, 'Xem thêm'));
+    await flush(8);
+    failPage2 = false;
+    click(buttonByName(container, 'Thử lại'));
+    await flush(2);
+    const before = productCalls().filter((q) => q?.page === 2).length;
+    remount(mounted, <BrowseView />, qc);
+    await flush(4);
+    const retry = buttonByName(container, 'Thử lại') as HTMLButtonElement;
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    click(retry);
+    await flush(2);
+    expect(productCalls().filter((q) => q?.page === 2).length).toBe(before);
+    release();
+    await flush(8);
+    expect(container.textContent).toContain('Sản phẩm 3');
+    expect(productCalls().filter((q) => q?.page === 2).length).toBe(before);
   });
 });
 

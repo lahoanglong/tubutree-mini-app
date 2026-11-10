@@ -111,7 +111,7 @@ export function OrderActions({
   // Lời lỗi giữ ở state riêng: `cancel.isError` chỉ lật sau khi Promise của onError xong, tức sau lúc tải lại, mà lời máy chủ từ chối phải hiện ngay.
   const [cancelError, setCancelError] = useState<string | null>(null);
   const cancel = useMutation({
-    mutationFn: ({ choose, reason }: { choose: boolean; reason: CancelReasonCode; toBank: boolean }) =>
+    mutationFn: ({ choose, reason }: { choose: boolean; reason: CancelReasonCode }) =>
       cancelOrder(o.code, choose ? destinationBody(cancelMethod, cancelBank) : undefined, cancelReasonBody(reason, cancelReasonText)),
     onSuccess: (cancelled) => {
       setConfirmCancel(false);
@@ -123,13 +123,13 @@ export function OrderActions({
       void qc.invalidateQueries({ queryKey: ['my-refunds'] });
       invalidateBalances(qc);
     },
-    onError: (e, { toBank }) => {
+    onError: (e) => {
       setConfirmCancel(false);
       setCancelError(actionErrorText(e));
       // BE từ chối vì đơn vừa bàn giao vận chuyển (và đã đồng bộ trạng thái mới): tải lại để ẩn nút hủy.
       const orderRefreshed = qc.invalidateQueries({ queryKey: ['order', o.code] });
-      // Hoàn về ngân hàng có ô nhập tài khoản: 400 ở đó thường là máy chủ chê số tài khoản, không phải đơn đã đổi.
-      if (!serverRejectedState(e, { userInput: toBank })) return undefined;
+      // Cả khi chọn hoàn về ngân hàng: ô tài khoản đã bị `cancelBankError` chặn trước khi gửi, và máy chủ kiểm trạng thái đơn (400 "đã bàn giao") trước khi kiểm tài khoản.
+      if (!serverRejectedState(e)) return undefined;
       // Đơn đã sang trạng thái khác (đã giao, máy khác vừa huỷ): danh sách đơn và khoản hoàn cũng đã cũ. Trả Promise để nút Huỷ đơn
       // giữ khoá tới khi dữ liệu mới về (tối đa 4 giây), kẻo sáng lại trên trạng thái cũ.
       return settleWithin(Promise.all([orderRefreshed, qc.invalidateQueries({ queryKey: ['orders'] }), qc.invalidateQueries({ queryKey: ['my-refunds'] })]));
@@ -233,7 +233,7 @@ export function OrderActions({
         setCancelTouched(true);
         if (!cancelReason || cancelBankError) return;
         cancelingRef.current = true;
-        cancel.mutate({ choose: refundMode === 'choose', reason: cancelReason, toBank: refundMode === 'choose' && cancelMethod === 'BANK' });
+        cancel.mutate({ choose: refundMode === 'choose', reason: cancelReason });
       }}
       aria-busy={cancel.isPending || undefined}
       aria-disabled={cancel.isPending || undefined}

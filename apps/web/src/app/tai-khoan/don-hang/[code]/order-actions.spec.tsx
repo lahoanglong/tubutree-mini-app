@@ -1285,27 +1285,20 @@ describe('chi tiết đơn — huỷ bị máy chủ từ chối (Wave 97B, như
     expect(btn(container, 'Huỷ đơn')?.disabled).toBe(false);
   });
 
-  it('chọn hoàn về ngân hàng + 400: là lỗi nhập tài khoản, KHÔNG tải lại danh sách đơn/khoản hoàn và không giữ khoá', async () => {
-    mocks.cancel.mockRejectedValue(new ApiError('Số tài khoản nhận tiền hoàn không hợp lệ.', 400));
+  it.each([400, 404, 409, 422])('chọn hoàn về ngân hàng + %i (đơn vừa bàn giao): kiểm trạng thái đơn chạy trước kiểm tài khoản nên là dữ liệu cũ: tải lại 3 khoá, lời lỗi hiện, nút giữ khoá tới khi đơn về', async (status) => {
+    mocks.cancel.mockRejectedValue(new ApiError('Đơn đã bàn giao cho đơn vị vận chuyển.', status));
     const { container } = await openBankCancel();
-    mocks.orderGate = new Promise<void>(() => undefined);
+    const reload = gate();
+    mocks.orderGate = reload.promise;
     confirmWithReason(container);
     await flush(8);
     expect(mocks.cancel).toHaveBeenCalledTimes(1);
-    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Số tài khoản nhận tiền hoàn không hợp lệ.');
-    expect(keys()).not.toContain('["orders"]');
-    expect(keys()).not.toContain('["my-refunds"]');
-    expect(btn(container, 'Huỷ đơn')?.disabled).toBe(false);
-  });
-
-  it.each([404, 409, 422])('chọn hoàn về ngân hàng + %i: đơn đã đổi, vẫn tải lại và giữ khoá', async (status) => {
-    mocks.cancel.mockRejectedValue(new ApiError('Đơn đã đổi trạng thái.', status));
-    const { container } = await openBankCancel();
-    mocks.orderGate = new Promise<void>(() => undefined);
-    confirmWithReason(container);
-    await flush(8);
-    expect(keys()).toEqual(expect.arrayContaining(['["orders"]', '["my-refunds"]']));
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Đơn đã bàn giao');
+    expect(keys()).toEqual(expect.arrayContaining(['["order","TB-9"]', '["orders"]', '["my-refunds"]']));
     expect(btn(container, 'Huỷ đơn')?.disabled).toBe(true);
+    reload.release();
+    await flush(8);
+    expect(btn(container, 'Huỷ đơn')?.disabled).toBe(false);
   });
 
   it('có lựa chọn nơi nhận nhưng đang chọn Ví (đơn ZaloPay đã trả) + 400: không có ô nhập, vẫn tải lại và giữ khoá', async () => {

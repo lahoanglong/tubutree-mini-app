@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { byText, click, flush, remount, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
 // R2-BUYERWEB-8: danh sách đơn chỉ có mã đơn, số sản phẩm và ngày; khách nhiều đơn không nhận ra đơn nào là đơn nào.
@@ -207,6 +207,33 @@ describe('danh sách đơn — phân trang bằng con trỏ keyset', () => {
     await flush(6);
     expect(state.calls).toHaveLength(2);
     expect(c.textContent).toContain('TB-2');
+  });
+
+  it('"Xem thêm đơn cũ hơn": dựng lại màn khi trang kế còn tải (khoá ref trống, truy vấn vẫn chạy): chạm lại không tải trang kế lần hai', async () => {
+    state.keyset = [
+      { data: [order('TB-1', [item('A')])], nextCursor: 'CUR1' },
+      { data: [order('TB-2', [item('B')])], nextCursor: null },
+    ];
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<OrdersSection />, qc);
+    mounted.push(r);
+    await flush(6);
+    let release!: () => void;
+    state.gate = new Promise<void>((res) => (release = res));
+    click(byText(r.container, 'button', 'Xem thêm đơn cũ hơn'));
+    await flush(2);
+    expect(state.calls).toHaveLength(2);
+    remount(r, <OrdersSection />, qc);
+    await flush(4);
+    const more = byText(r.container, 'button', 'Đang tải…') as HTMLButtonElement;
+    expect(more.getAttribute('aria-disabled')).toBe('true');
+    click(more);
+    await flush(2);
+    expect(state.calls).toHaveLength(2);
+    release();
+    await flush(6);
+    expect(r.container.textContent).toContain('TB-2');
+    expect(state.calls).toHaveLength(2);
   });
 
   it('đơn lặp giữa hai trang chỉ hiện một lần', async () => {
