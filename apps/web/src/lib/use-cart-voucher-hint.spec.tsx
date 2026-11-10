@@ -41,6 +41,7 @@ function Probe({ opts, go = 'giam45' }: { opts: Opts; go?: string }) {
       data-note={s.appliedNote ?? ''}
     >
       <button data-testid="go" onClick={() => s.apply(go)} />
+      <button data-testid="go-other" onClick={() => s.apply('khac30')} />
     </div>
   );
 }
@@ -54,6 +55,7 @@ async function mount(opts: Opts = BASE) {
   return {
     probe: () => r.container.querySelector<HTMLElement>('[data-testid="probe"]')!,
     go: () => r.container.querySelector<HTMLElement>('[data-testid="go"]')!,
+    goOther: () => r.container.querySelector<HTMLElement>('[data-testid="go-other"]')!,
     rerender: async (next: Opts) => {
       act(() => r.root.render(<QueryClientProvider client={qc}><Probe opts={next} /></QueryClientProvider>));
       await flush(8);
@@ -181,5 +183,76 @@ describe('useCartVoucherHint (web)', () => {
     await act(async () => release(cartOf('GIAM45')));
     await flush(8);
     expect(probe().dataset.applying).toBe('false');
+  });
+});
+
+describe('useCartVoucherHint (web): khoá đồng bộ chống chạm đúp', () => {
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  // Hai cú chạm trong CÙNG một act: React chưa vẽ lại giữa chúng nên `isPending` vẫn false ở cả hai.
+  const twice = (a: HTMLElement, b: HTMLElement = a) =>
+    act(() => {
+      a.click();
+      b.click();
+    });
+
+  beforeEach(() => {
+    state.coupons = [coupon('GIAM45'), coupon('KHAC30')];
+    state.previews.mockResolvedValue([usable('GIAM45', 45000), usable('KHAC30', 30000)]);
+  });
+
+  it('hai cú chạm cùng một khung hình: chỉ gọi applyCoupon một lần', async () => {
+    const call = pending<unknown>();
+    state.apply.mockReturnValue(call.promise);
+    const { probe, go } = await mount();
+    twice(go());
+    await flush(2);
+    expect(state.apply).toHaveBeenCalledTimes(1);
+    expect(probe().dataset.applying).toBe('true');
+    await act(async () => call.resolve(cartOf('GIAM45')));
+    await flush(8);
+    expect(probe().dataset.applying).toBe('false');
+  });
+
+  it('hai mã khác nhau liền nhau: giỏ chỉ có một mã nên chỉ mã chạm trước được gửi', async () => {
+    const call = pending<unknown>();
+    state.apply.mockReturnValue(call.promise);
+    const { go, goOther } = await mount();
+    twice(go(), goOther());
+    await flush(2);
+    expect(state.apply).toHaveBeenCalledTimes(1);
+    expect(state.apply).toHaveBeenCalledWith('GIAM45');
+    await act(async () => call.resolve(cartOf('GIAM45')));
+    await flush(8);
+  });
+
+  it('lệnh bị từ chối thì nhả khoá: lời báo lỗi hiện và chạm lại gọi được lần hai', async () => {
+    state.apply.mockRejectedValueOnce(new Error('Mã đã hết lượt dùng.')).mockResolvedValue(cartOf('GIAM45'));
+    const { probe, go } = await mount();
+    click(go());
+    await flush(8);
+    expect(probe().dataset.error).toBe('Mã đã hết lượt dùng.');
+    click(go());
+    await flush(8);
+    expect(state.apply).toHaveBeenCalledTimes(2);
+    expect(probe().dataset.error).toBe('');
+  });
+
+  it('lệnh thành công thì nhả khoá: áp mã khác sau đó vẫn gọi được', async () => {
+    state.apply.mockResolvedValue(cartOf('GIAM45'));
+    const { go, goOther } = await mount();
+    click(go());
+    await flush(8);
+    click(goOther());
+    await flush(8);
+    expect(state.apply).toHaveBeenCalledTimes(2);
+    expect(state.apply).toHaveBeenLastCalledWith('KHAC30');
   });
 });

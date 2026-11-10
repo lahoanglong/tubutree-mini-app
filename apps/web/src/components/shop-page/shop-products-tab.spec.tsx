@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { useSyncExternalStore } from 'react';
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { resetFlashSales } from '@/lib/use-flash-sales';
@@ -169,5 +170,126 @@ describe('ShopProductsTab (web) — nguồn thương hiệu (phân trang thật)
     mocks.fetchPage.mockResolvedValue({ data: [], meta: { total: 0, page: 1, limit: 20 } });
     const empty = await mount(<ShopProductsTab source={{ kind: 'brand', slug: 'rong' }} />);
     expect(empty.textContent).toContain('Shop chưa có sản phẩm nào để hiện');
+  });
+});
+
+describe('ShopProductsTab (web) — nguồn thương hiệu ở điện thoại: khoá "Xem thêm" và "Thử lại" trang kế', () => {
+  const page = (from: number, count: number) => ({
+    data: PRODUCTS.slice(from - 1, from - 1 + count),
+    meta: { total: 45, page: 1, limit: 20 },
+  });
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  const mountWith = async (qc: QueryClient) => {
+    const r = render(<ShopProductsTab source={{ kind: 'brand', slug: 'fuwa' }} />, qc);
+    mounted.push(r);
+    await flush();
+    return r.container;
+  };
+  // `queryFn` của danh sách nối dài gọi `qc.fetchQuery` cho từng trang, và `fetchQuery` dùng chung lượt đang bay cho cùng khoá, nên đếm lời gọi `fetchPage` không
+  // thấy được lần `fetchNextPage` thứ hai (nó chỉ huỷ lượt cũ rồi chạy lại queryFn). Đếm `fetchQuery` của trang 2 thì thấy: mỗi lần `fetchNextPage` lọt qua khoá là một lần.
+  const page2Asks = (fq: { mock: { calls: unknown[][] } }) =>
+    fq.mock.calls.filter(([o]) => (o as { queryKey: unknown[] }).queryKey[3] === 2).length;
+  const twice = (el: HTMLElement) =>
+    act(() => {
+      el.click();
+      el.click();
+    });
+
+  it('chạm đúp "Xem thêm" trong cùng một khung hình: chỉ xin trang 2 một lần; xong thì bấm tiếp xin được trang 3', async () => {
+    const qc = newClient();
+    const fq = vi.spyOn(qc, 'fetchQuery');
+    const c = await mountWith(qc);
+    const next = pending<ReturnType<typeof page>>();
+    mocks.fetchPage.mockImplementationOnce(() => next.promise);
+    twice(btn(c, 'Xem thêm')!);
+    await flush(2);
+    expect(page2Asks(fq)).toBe(1);
+    expect(btn(c, 'Xem thêm')!.getAttribute('aria-busy')).toBe('true');
+    await act(async () => next.resolve(page(21, 20)));
+    await flush();
+    expect(slugs(c)).toHaveLength(40);
+    click(btn(c, 'Xem thêm')!);
+    await flush();
+    expect(slugs(c)).toHaveLength(45);
+    expect(mocks.fetchPage).toHaveBeenLastCalledWith('fuwa', { page: 3, limit: 20, sort: undefined });
+  });
+
+  it('trang kế lỗi: chạm đúp "Thử lại" trong cùng một khung hình chỉ xin lại một lần; lỗi tiếp thì nhả khoá, bấm lại xin được', async () => {
+    const qc = newClient();
+    const fq = vi.spyOn(qc, 'fetchQuery');
+    const c = await mountWith(qc);
+    mocks.fetchPage.mockRejectedValueOnce(new Error('mạng'));
+    click(btn(c, 'Xem thêm')!);
+    await flush();
+    const retry = btn(c, 'Thử lại')!;
+    expect(retry).toBeDefined();
+    expect(page2Asks(fq)).toBe(1);
+
+    const again = pending<ReturnType<typeof page>>();
+    mocks.fetchPage.mockImplementationOnce(() => again.promise);
+    twice(retry);
+    await flush(2);
+    expect(page2Asks(fq)).toBe(2);
+    expect(btn(c, 'Thử lại')!.getAttribute('aria-busy')).toBe('true');
+    expect(btn(c, 'Thử lại')!.getAttribute('aria-disabled')).toBe('true');
+    expect(btn(c, 'Thử lại')!.disabled).toBe(false);
+
+    await act(async () => {
+      again.resolve(page(21, 20));
+    });
+    await flush();
+    expect(slugs(c)).toHaveLength(40);
+  });
+
+  it('trang kế lỗi hai lần liền: lần hai lỗi thì nhả khoá, bấm lại vẫn xin được', async () => {
+    const qc = newClient();
+    const fq = vi.spyOn(qc, 'fetchQuery');
+    const c = await mountWith(qc);
+    mocks.fetchPage.mockRejectedValueOnce(new Error('mạng 1')).mockRejectedValueOnce(new Error('mạng 2'));
+    click(btn(c, 'Xem thêm')!);
+    await flush();
+    click(btn(c, 'Thử lại')!);
+    await flush();
+    expect(page2Asks(fq)).toBe(2);
+    expect(btn(c, 'Thử lại')!.getAttribute('aria-busy')).toBeNull();
+    click(btn(c, 'Thử lại')!);
+    await flush();
+    expect(page2Asks(fq)).toBe(3);
+    expect(slugs(c)).toHaveLength(40);
+  });
+
+  it('đang chờ trang 2 của "Mới" rồi đổi về "Phổ biến" đã có sẵn: "Xem thêm" của "Phổ biến" xin trang 2 ngay, không bị nuốt vì khoá của "Mới"', async () => {
+    const heldNewestPage2 = pending<ReturnType<typeof page>>();
+    mocks.fetchPage.mockImplementation(async (_slug: string, q: { page?: number; sort?: string } = {}) => {
+      const n = q.page ?? 1;
+      if (q.sort === 'newest' && n === 2) return heldNewestPage2.promise;
+      return page((n - 1) * 20 + 1, 20);
+    });
+    const c = await mount(<ShopProductsTab source={{ kind: 'brand', slug: 'fuwa' }} />);
+    expect(slugs(c)).toHaveLength(20);
+
+    click(btn(c, 'Mới')!);
+    await flush();
+    expect(mocks.fetchPage).toHaveBeenCalledWith('fuwa', { page: 1, limit: 20, sort: 'newest' });
+    click(btn(c, 'Xem thêm')!);
+    await flush();
+    expect(mocks.fetchPage).toHaveBeenCalledWith('fuwa', { page: 2, limit: 20, sort: 'newest' });
+
+    click(btn(c, 'Phổ biến')!);
+    await flush();
+    expect(mocks.fetchPage).not.toHaveBeenCalledWith('fuwa', { page: 2, limit: 20, sort: undefined });
+    click(btn(c, 'Xem thêm')!);
+    await flush();
+    expect(mocks.fetchPage).toHaveBeenCalledWith('fuwa', { page: 2, limit: 20, sort: undefined });
+    expect(slugs(c)).toHaveLength(40);
+
+    await act(async () => heldNewestPage2.resolve(page(21, 20)));
   });
 });

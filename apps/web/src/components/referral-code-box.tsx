@@ -50,6 +50,8 @@ export function ReferralCodeBox({
   const [checking, setChecking] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
   const refocus = useRef(false);
+  // Khoá ref đồng bộ: `checking` chỉ đúng sau lần vẽ kế tiếp, nên hai cú bấm "Áp dụng" hoặc Enter sát nhau vẫn đều gọi /affiliate/touch.
+  const applyingRef = useRef(false);
 
   // Ô nhập bị disabled lúc kiểm tra nên trình duyệt thả focus về body; lỗi thì ô còn mở, trả focus để gõ lại ngay.
   useEffect(() => {
@@ -122,12 +124,13 @@ export function ReferralCodeBox({
   }
 
   const apply = async () => {
-    if (checking || disabled) return;
+    if (applyingRef.current || disabled) return;
     const code = draft.replace(/\s+/g, '').toUpperCase();
     if (!code) {
       setError('Bạn nhập mã người giới thiệu giúp Tubu nhé');
       return;
     }
+    applyingRef.current = true;
     refocus.current = true;
     setChecking(true);
     setError(null);
@@ -142,6 +145,7 @@ export function ReferralCodeBox({
     } catch (e) {
       setError(actionErrorText(e));
     } finally {
+      applyingRef.current = false;
       setChecking(false);
     }
   };

@@ -308,6 +308,100 @@ describe('ReferralCodeBox web — khoá bận khi đang kiểm tra mã', () => {
   });
 });
 
+describe('ReferralCodeBox web — khoá đồng bộ chống bấm đúp', () => {
+  // Hai cú bấm trong CÙNG một act: React chưa vẽ lại giữa chúng nên `checking` (state) vẫn còn false ở cả hai.
+  const twice = (...actions: (() => void)[]) =>
+    act(() => {
+      actions.forEach((a) => a());
+    });
+
+  it('hai cú bấm "Áp dụng" sát nhau, chưa kịp vẽ lại: chỉ gọi /affiliate/touch một lần, nút báo aria-busy', async () => {
+    const gate = deferred<{ ok: boolean }>();
+    mocks.recordReferralTouch.mockReturnValue(gate.promise);
+    const { container, onApplied } = mount();
+    openForm(container);
+    typeInto(input(container), 'ab12cd34');
+    const submit = submitButton(container);
+    twice(() => submit.click(), () => submit.click());
+    await flush();
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(1);
+    expect(submitButton(container).getAttribute('aria-busy')).toBe('true');
+    await act(async () => {
+      gate.resolve({ ok: true });
+    });
+    await flush();
+    expect(onApplied).toHaveBeenCalledTimes(1);
+  });
+
+  it('bấm "Áp dụng" rồi Enter (gửi form) sát nhau: chỉ gọi một lần', async () => {
+    const gate = deferred<{ ok: boolean }>();
+    mocks.recordReferralTouch.mockReturnValue(gate.promise);
+    const { container } = mount();
+    openForm(container);
+    typeInto(input(container), 'ab12cd34');
+    twice(
+      () => submitButton(container).click(),
+      () => form(container).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })),
+    );
+    await flush();
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      gate.resolve({ ok: false });
+    });
+    await flush();
+  });
+
+  it('Enter hai lần liền (không phải giữ phím) trong cùng một khung hình: chỉ gọi một lần', async () => {
+    const gate = deferred<{ ok: boolean }>();
+    mocks.recordReferralTouch.mockReturnValue(gate.promise);
+    const { container } = mount();
+    openForm(container);
+    typeInto(input(container), 'ab12cd34');
+    const send = () => form(container).dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+    twice(send, send);
+    await flush();
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      gate.resolve({ ok: false });
+    });
+    await flush();
+  });
+
+  it('lỗi mạng thì nhả khoá, mã không tìm thấy (ok:false) cũng nhả: bấm lại gọi lần hai rồi lần ba, lần ba thành công', async () => {
+    mocks.recordReferralTouch
+      .mockRejectedValueOnce(new Error('mạng'))
+      .mockResolvedValueOnce({ ok: false })
+      .mockResolvedValue({ ok: true });
+    const { container, onApplied } = mount();
+    openForm(container);
+    typeInto(input(container), 'ab12cd34');
+    click(submitButton(container));
+    await flush();
+    expect(alertEl(container)).not.toBeNull();
+    click(submitButton(container));
+    await flush();
+    expect(alertEl(container)!.textContent).toContain('Không tìm thấy mã này');
+    click(submitButton(container));
+    await flush();
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(3);
+    expect(onApplied).toHaveBeenCalledTimes(1);
+    expect(onApplied).toHaveBeenCalledWith('AB12CD34');
+  });
+
+  it('ô trống không giữ khoá: gõ mã rồi bấm lại thì gọi được', async () => {
+    mocks.recordReferralTouch.mockResolvedValue({ ok: true });
+    const { container } = mount();
+    openForm(container);
+    twice(() => submitButton(container).click());
+    expect(mocks.recordReferralTouch).not.toHaveBeenCalled();
+    expect(alertEl(container)).not.toBeNull();
+    typeInto(input(container), 'ab12cd34');
+    click(submitButton(container));
+    await flush();
+    expect(mocks.recordReferralTouch).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('ReferralCodeBox web — prop disabled khi đơn đang gửi', () => {
   it('thu gọn: nút Nhập mã bị khoá, bấm không mở ô nhập', () => {
     const { container } = mount({ disabled: true });

@@ -367,7 +367,7 @@ export function CouponBox({
         </div>
       )}
       {couponsQ.isError && (
-        <ErrorState variant="inline" message={fillCopy('coupon.pickLoadError', { reason: loadErrorText(couponsQ.error) })} onRetry={() => void couponsQ.refetch()} />
+        <ErrorState variant="inline" message={fillCopy('coupon.pickLoadError', { reason: loadErrorText(couponsQ.error) })} onRetry={() => couponsQ.refetch()} />
       )}
       {!couponsQ.isError && rows.length > 0 && (
         <>

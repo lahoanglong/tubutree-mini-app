@@ -15,6 +15,7 @@ const state = vi.hoisted(() => ({
   removeGate: null as Promise<void> | null,
   couponsGate: null as Promise<void> | null,
   couponsError: null as Error | null,
+  couponsCalls: 0,
   applyCart: {} as Record<string, unknown>,
   removed: 0,
   previews: vi.fn<(p: unknown) => Promise<unknown[]>>(),
@@ -22,6 +23,7 @@ const state = vi.hoisted(() => ({
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getMyCoupons: async () => {
+    state.couponsCalls += 1;
     await state.couponsGate;
     if (state.couponsError) throw state.couponsError;
     return state.coupons;
@@ -68,6 +70,7 @@ beforeEach(() => {
   state.removeGate = null;
   state.couponsGate = null;
   state.couponsError = null;
+  state.couponsCalls = 0;
   state.applyCart = {};
   state.removed = 0;
   state.coupons = [];
@@ -1467,6 +1470,44 @@ describe('CouponBox — panel tại chỗ (từ md): ví tải, lỗi, trống g
     expect(byText(panel(r.container), 'button', 'Thử lại')).not.toBeNull();
     expect(panel(r.container).querySelector('ul')).toBeNull();
     expect(r.container.querySelector('button[aria-label$="mã WELCOME30"]')).toBeNull();
+  });
+
+  // Tải lại lỗi khi ví đã có dữ liệu: react-query giữ dữ liệu cũ và `refetch` thứ hai sẽ huỷ rồi gọi lại API, nên chỉ cú chạm đầu được đi.
+  // (Ví chưa từng có dữ liệu thì refetch thứ hai dùng chung lượt đang bay và thẻ lỗi biến mất ngay, nên ca đó không phân biệt được có khoá hay không.)
+  it('tải lại lỗi khi ví đã có mã: chạm đúp "Thử lại" trong cùng một khung hình chỉ gọi API thêm một lần, nút báo aria-busy tới khi dữ liệu mới về', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    state.coupons = [c('WELCOME30')];
+    const r = render(<CouponBox currentCode={null} subtotal={300000} shippingFee={null} />, client);
+    mounted.push(r);
+    await flush(6);
+    await open(r.container);
+    state.couponsError = new Error('Mạng lỗi');
+    await act(async () => {
+      await client.refetchQueries({ queryKey: ['my-coupons'] });
+    });
+    await flush(4);
+    const retry = byText(panel(r.container), 'button', 'Thử lại') as HTMLButtonElement;
+    expect(retry).not.toBeNull();
+    const before = state.couponsCalls;
+
+    let release!: () => void;
+    state.couponsGate = new Promise<void>((res) => (release = res));
+    state.couponsError = null;
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await flush(2);
+    expect(state.couponsCalls).toBe(before + 1);
+    const busy = byText(panel(r.container), 'button', 'Thử lại') as HTMLButtonElement;
+    expect(busy.getAttribute('aria-busy')).toBe('true');
+    expect(busy.getAttribute('aria-disabled')).toBe('true');
+    expect(busy.disabled).toBe(false);
+
+    await act(async () => release());
+    await flush(6);
+    expect(card(r.container, 'WELCOME30')).not.toBeNull();
+    expect(byText(panel(r.container), 'button', 'Thử lại')).toBeNull();
   });
 
   it('ví chưa có mã: mở panel thấy tiêu đề mục và lời mời nhập mã, không có danh sách rỗng', async () => {

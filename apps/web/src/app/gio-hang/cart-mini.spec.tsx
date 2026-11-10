@@ -9,6 +9,7 @@ import { click, flush, render, type Rendered } from '@/test-utils/dom';
 const state = vi.hoisted(() => ({
   cart: null as unknown, coupons: [] as unknown[], previews: [] as unknown[], push: vi.fn(),
   update: null as null | ((id: string, q: number) => Promise<unknown>),
+  apply: null as null | ((code: string) => Promise<unknown>),
 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push, replace: vi.fn() }), usePathname: () => '/gio-hang' }));
@@ -18,6 +19,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getMyCoupons: async () => state.coupons,
   getCouponPreviews: async () => state.previews,
   updateCartItem: (id: string, q: number) => state.update!(id, q),
+  applyCoupon: (code: string) => state.apply!(code),
   getCartSelection: async () => {
     throw new Error('chưa mock');
   },
@@ -51,6 +53,7 @@ beforeEach(() => {
   state.previews = [];
   state.push.mockReset();
   state.update = null;
+  state.apply = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -377,5 +380,64 @@ describe('/gio-hang — nút "Mua thêm" ở dòng sắp mở khoá mã (W50A)',
     expect(c.querySelector('[data-testid="cart-voucher-apply-cta"]')).not.toBeNull();
     expect(c.querySelector('[data-testid="cart-voucher-unlock"]')).toBeNull();
     expect(c.querySelector('[data-testid="cart-voucher-unlock-cta"]')).toBeNull();
+  });
+});
+
+describe('/gio-hang — "Áp dụng ngay" ở dải gợi ý mã khoá chống chạm đúp (W81B)', () => {
+  const GIAM45 = { code: 'GIAM45', type: 'AMOUNT', value: 45000, minOrder: null, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' };
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 500));
+    });
+    await flush(6);
+  };
+  const cta = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="cart-voucher-apply-cta"]');
+
+  it('hai cú chạm sát nhau trong cùng một khung hình chỉ gọi applyCoupon một lần; xong thì dải biến mất và báo "Đã áp dụng mã"', async () => {
+    state.coupons = [GIAM45];
+    state.previews = [{ code: 'GIAM45', eligible: true, discount: 45000 }];
+    const asked: string[] = [];
+    let release!: (cart: unknown) => void;
+    state.apply = (code) => {
+      asked.push(code);
+      return new Promise((res) => {
+        release = res;
+      });
+    };
+    const c = await mount();
+    await settle();
+    const button = cta(c)!;
+    act(() => {
+      button.click();
+      button.click();
+    });
+    await flush(2);
+    expect(asked).toEqual(['GIAM45']);
+    expect(cta(c)!.getAttribute('aria-busy')).toBe('true');
+
+    await act(async () => release(cartOf([line({})], { couponCode: 'GIAM45', discount: 45000 })));
+    await flush(6);
+    expect(asked).toEqual(['GIAM45']);
+    expect(cta(c)).toBeNull();
+    expect(c.textContent).toContain('Đã áp dụng mã GIAM45');
+  });
+
+  it('lệnh lỗi thì nhả khoá: lời báo role=alert hiện và chạm lại gọi được lần hai', async () => {
+    state.coupons = [GIAM45];
+    state.previews = [{ code: 'GIAM45', eligible: true, discount: 45000 }];
+    const asked: string[] = [];
+    state.apply = async (code) => {
+      asked.push(code);
+      throw new Error('Mã giảm giá đã hết lượt dùng.');
+    };
+    const c = await mount();
+    await settle();
+    click(cta(c));
+    await flush(6);
+    expect(asked).toHaveLength(1);
+    expect(c.querySelector('[data-testid="cart-voucher-error"]')?.getAttribute('role')).toBe('alert');
+    click(cta(c));
+    await flush(6);
+    expect(asked).toHaveLength(2);
   });
 });
