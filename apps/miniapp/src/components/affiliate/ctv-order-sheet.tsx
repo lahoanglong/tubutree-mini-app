@@ -37,12 +37,13 @@ import {
   type CtvOrderItemInput,
   type CtvOrderResult,
 } from '../../services/affiliate-api';
-import { getErrorCode, getErrorMessage, getLoadErrorMessage, isOutcomeUnknown } from '../../services/api';
+import { getErrorCode, getErrorMessage, getLoadErrorMessage, isOutcomeUnknown, isStaleStateError } from '../../services/api';
 import { isHttpError } from '../../services/http';
 import { isSuggestable } from '../../hooks/use-suggest';
 import { useDebounced } from '../../utils/use-debounced';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
+import { settleWithin } from '../../utils/settle-within';
 import { createOrderKeyRing } from '../../utils/idempotency';
 import { parseTypedVnPhone } from '../../utils/vn-phone';
 import { vi } from '../../i18n/vi';
@@ -242,21 +243,24 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
       void qc.invalidateQueries({ queryKey: ['affiliate-product-breakdown'] });
       void qc.invalidateQueries({ queryKey: ['affiliate-sf-analytics'] });
     },
+    // Trả Promise tải lại báo giá: nút giữ bận tới khi báo giá mới về (tối đa LOCK_REFRESH_WAIT_MS), kẻo bấm lại gửi đúng tổng/cách trả đã cũ.
     onError: (e, s) => {
       if (isOutcomeUnknown(e)) {
         setUnconfirmedKey(s.key);
-        return;
+        return undefined;
       }
       setUnconfirmedKey(null);
       const code = getErrorCode(e);
+      const refreshQuote = () => settleWithin(qc.invalidateQueries({ queryKey: ['ctv-order-quote'] }));
       if (code && PRICE_MOVED.has(code)) {
         setPriceMoved({ message: getErrorMessage(e), itemsKey });
-        void qc.invalidateQueries({ queryKey: ['ctv-order-quote'] });
-        return;
+        return refreshQuote();
       }
-      // Báo giá đang cache còn cho COD mà máy chủ từ chối (đơn vượt trần): tải lại để khoá COD và tự chuyển sang chuyển khoản.
-      if (code === 'PAYMENT_METHOD_NOT_ALLOWED') void qc.invalidateQueries({ queryKey: ['ctv-order-quote'] });
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Báo giá đang cache còn cho COD mà máy chủ từ chối (đơn vượt trần): tải lại để khoá COD và tự chuyển sang chuyển khoản.
+      // Mọi lời từ chối 400/404/409 khác cũng nói báo giá trên màn đã cũ (tồn kho, món đổi); mạng/5xx/401 không nói gì nên nhả ngay.
+      if (code === 'PAYMENT_METHOD_NOT_ALLOWED' || isStaleStateError(e)) return refreshQuote();
+      return undefined;
     },
   });
   const checking = mut.isPending && mut.failureCount > 0;

@@ -2,7 +2,8 @@ import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { REQUIRED_FIELD } from '@tubutree/app-core/client-copy';
 import { HttpError } from '../../services/http';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
+import { LOCK_REFRESH_WAIT_MS } from '../../utils/settle-within';
 import { saveRecentCustomer, loadRecentCustomers } from './recent-customers';
 
 const mocks = vi.hoisted(() => ({
@@ -768,5 +769,167 @@ describe('CtvOrderSheet — khoá đồng bộ khi tạo đơn hộ khách (W82A
     expect(mocks.suggestProducts).toHaveBeenCalledTimes(3);
     await act(async () => finishRetry([{ slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65_000 }]));
     expect(await screen.findByText('Nước rửa chén')).toBeInTheDocument();
+  });
+});
+
+describe('CtvOrderSheet: máy chủ từ chối thì giữ khoá tới khi báo giá tải lại (W111A)', () => {
+  beforeEach(resetMocks);
+  let inv: MockInstance<QueryClient['invalidateQueries']> | undefined;
+  afterEach(() => {
+    inv?.mockRestore();
+    inv = undefined;
+    vi.useRealTimers();
+  });
+
+  const rejectedWith = (status: number, code: string | undefined, message: string) =>
+    new HttpError(message, 'ERR_BAD_REQUEST', { status, data: { statusCode: status, ...(code ? { code } : {}), message } } as never);
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để `isPending` kịp về false.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  /** Thay `invalidateQueries` để soi khoá tải lại và giữ lời hứa tải lại trong tay. */
+  const holdRefresh = () => {
+    let finish!: () => void;
+    const pending = new Promise<void>((resolve) => (finish = resolve));
+    inv = vi.spyOn(QueryClient.prototype, 'invalidateQueries').mockImplementation((() => pending) as never);
+    return { finish: () => finish() };
+  };
+  const quoteRefreshes = () =>
+    (inv?.mock.calls ?? []).filter((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey) === '["ctv-order-quote"]');
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter(([arg]) => arg.type === 'error');
+
+  it.each([
+    [400, 'OUT_OF_STOCK', 'Sản phẩm "Nước rửa chén" không đủ tồn kho.'],
+    [404, undefined, 'Không tìm thấy sản phẩm'],
+    [409, undefined, 'Bạn thử lại nhé'],
+  ])('bị từ chối %i: báo lỗi một lần, tải lại báo giá, khoá giữ tới khi báo giá về rồi mới nhả, vẫn đúng key cũ', async (status, code, message) => {
+    const refresh = holdRefresh();
+    mocks.createCtvOrder.mockRejectedValueOnce(rejectedWith(status, code, message));
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    expect(quoteRefreshes()).toHaveLength(1);
+    expect(errorSnackbars()).toHaveLength(1);
+    await settle();
+    expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(submitBtn());
+    });
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1);
+    expect(errorSnackbars()).toHaveLength(1);
+
+    await act(async () => refresh.finish());
+    await settle();
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy', 'true'));
+    fireEvent.click(submitBtn());
+    await screen.findByText(/Đã tạo đơn hộ khách/);
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(2);
+    expect(keyOfCall(1)).toBe(keyOfCall(0));
+  });
+
+  it.each(['TOTAL_CHANGED', 'PRICE_CHANGED'])('%s: báo giá đổi hiện trên form, tải lại báo giá, khoá giữ tới khi báo giá về', async (code) => {
+    const message = 'Tổng tiền đơn vừa thay đổi. Vui lòng xem lại trước khi đặt.';
+    const refresh = holdRefresh();
+    mocks.createCtvOrder.mockRejectedValueOnce(rejectedWith(400, code, message));
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    expect(quoteRefreshes()).toHaveLength(1);
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+    await settle();
+    expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(submitBtn());
+    });
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1);
+
+    await act(async () => refresh.finish());
+    await settle();
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy', 'true'));
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.createCtvOrder).toHaveBeenCalledTimes(2));
+  });
+
+  it('PAYMENT_METHOD_NOT_ALLOWED (kể cả khi không phải 400/404/409): tải lại báo giá và giữ khoá tới khi về', async () => {
+    const message = 'Thanh toán khi nhận hàng (COD) chỉ nhận đơn tối đa 5.000.000đ. Vui lòng chọn chuyển khoản.';
+    const refresh = holdRefresh();
+    mocks.createCtvOrder.mockRejectedValueOnce(rejectedWith(422, 'PAYMENT_METHOD_NOT_ALLOWED', message));
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    expect(quoteRefreshes()).toHaveLength(1);
+    await settle();
+    expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(submitBtn());
+    });
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.finish());
+    await settle();
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy', 'true'));
+  });
+
+  it.each([
+    [401, 'Hết phiên đăng nhập'],
+    [422, 'Dữ liệu chưa hợp lệ'],
+  ])('bị từ chối %i (không nói gì về trạng thái thật): không tải lại báo giá, khoá nhả ngay', async (status, message) => {
+    holdRefresh();
+    mocks.createCtvOrder.mockRejectedValueOnce(rejectedWith(status, undefined, message));
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    await settle();
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy', 'true'));
+    expect(quoteRefreshes()).toHaveLength(0);
+    fireEvent.click(submitBtn());
+    await screen.findByText(/Đã tạo đơn hộ khách/);
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(2);
+    expect(keyOfCall(1)).toBe(keyOfCall(0));
+  });
+
+  it.each([
+    ['mất mạng', () => new HttpError('Network Error', 'ERR_NETWORK')],
+    ['máy chủ lỗi 503', () => rejectedWith(503, undefined, 'Service Unavailable')],
+  ])('%s: tự kiểm tra lại một lần rồi nhả khoá, không tải lại báo giá, "Gửi lại đơn" chạy ngay', async (_label, makeError) => {
+    holdRefresh();
+    mocks.createCtvOrder.mockRejectedValueOnce(makeError()).mockRejectedValueOnce(makeError());
+    await readyWithAn();
+    fireEvent.click(submitBtn());
+    await screen.findByRole('alert', {}, { timeout: 4000 });
+    await settle();
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(2);
+    expect(quoteRefreshes()).toHaveLength(0);
+    expect(screen.getByRole('button', { name: 'Gửi lại đơn' })).not.toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi lại đơn' }));
+    await waitFor(() => expect(mocks.createCtvOrder).toHaveBeenCalledTimes(3));
+    expect(keyOfCall(2)).toBe(keyOfCall(0));
+  });
+
+  it('tải lại báo giá treo mãi: khoá nhả sau LOCK_REFRESH_WAIT_MS', async () => {
+    inv = vi.spyOn(QueryClient.prototype, 'invalidateQueries').mockImplementation((() => new Promise<void>(() => undefined)) as never);
+    mocks.createCtvOrder.mockRejectedValueOnce(rejectedWith(409, undefined, 'Bạn thử lại nhé'));
+    await readyWithAn();
+    vi.useFakeTimers();
+    fireEvent.click(submitBtn());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+    });
+    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(submitBtn());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2);
+    });
+    expect(submitBtn()).not.toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(submitBtn());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.createCtvOrder).toHaveBeenCalledTimes(2);
   });
 });

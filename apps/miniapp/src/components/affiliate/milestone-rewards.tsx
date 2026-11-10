@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
 import { Check, Trophy } from 'lucide-react';
 import { claimCtvMilestone, type CtvMilestoneItem, type CtvMilestonesResponse } from '../../services/affiliate-api';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, isOutcomeUnknown, isStaleStateError } from '../../services/api';
 import { formatPoints, formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import { settleWithin } from '../../utils/settle-within';
@@ -72,7 +72,14 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
     },
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      // Lỗi "đã nhận"/"chưa đạt" → trạng thái trên máy đã cũ, tải lại để nút khớp backend.
+      // Lỗi "đã nhận"/"chưa đạt" (400/404/409) → trạng thái trên máy đã cũ, tải lại để nút khớp backend và giữ khoá tới khi về.
+      // Mất mạng/quá hạn/401/5xx không nói gì về trạng thái thật: nhả khoá ngay, không tải lại.
+      // Quá hạn/5xx: máy chủ có thể đã ghi nhận mốc trước khi trả lời, làm mới nền (không giữ khoá) để dòng không còn nút "Nhận" của mốc đã nhận.
+      if (isOutcomeUnknown(e)) {
+        void refreshMilestones();
+        void refreshBalances();
+      }
+      if (!isStaleStateError(e)) return undefined;
       return settleWithin(refreshMilestones());
     },
     onSettled: release,

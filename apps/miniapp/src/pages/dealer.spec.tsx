@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach, afterAll } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterAll, type MockInstance } from 'vitest';
 import { preorderQty, realDiscountPct, DEALER_MAX_QTY } from './dealer-pricing';
 
 const mocks = vi.hoisted(() => ({
@@ -51,6 +51,8 @@ vi.mock('../components/image-upload', () => ({ ImageUpload: () => null }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { useAuthStore } from '../store/auth';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import DealerPage from './dealer';
 
 const row = (over: Partial<Record<string, unknown>> = {}) => ({
@@ -1030,6 +1032,215 @@ describe('DealerPage — khoá chạm đúp trong cùng một khung hình (W76A)
       fireEvent.click(a!);
       await waitFor(() => expect(mocks.claimDealerReward).toHaveBeenCalledTimes(2));
       await waitFor(() => expect(snackbarWith('Đã ghi nhận yêu cầu.')).toBe(1));
+    });
+  });
+});
+
+// W111A: lệnh ghi bị máy chủ từ chối vì màn đã cũ (400/404/409) thì nút giữ khoá tới khi dữ liệu làm mới về (tối đa LOCK_REFRESH_WAIT_MS), kẻo bấm lại trên số cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: không tải lại, nhả ngay.
+describe('DealerPage — máy chủ từ chối thì giữ khoá tới khi dữ liệu làm mới về (W111A)', () => {
+  type Refresh = () => Promise<unknown>;
+  type Opened = { invalidate: MockInstance<QueryClient['invalidateQueries']>; button: () => HTMLElement };
+  type Case = {
+    name: string;
+    /** Lệnh ghi bị giả lập. */
+    write: ReturnType<typeof vi.fn>;
+    /** Khoá tải lại kỳ vọng khi máy chủ từ chối, đúng thứ tự gọi. */
+    keys: string[][];
+    /** Giá trị lệnh ghi trả ở lần bấm lại sau khi nhả khoá. */
+    succeed: unknown;
+    /** Vị trí đối số Idempotency-Key của lệnh ghi (nếu có): bấm lại sau lỗi từ chối phải giữ nguyên. */
+    keyArg?: number;
+    open: (refresh: Refresh) => Promise<Opened>;
+  };
+
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để `isPending` kịp về false sau khi lệnh xong.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  /** Dựng trang và thay `invalidateQueries` để soi khoá tải lại và giữ lời hứa tải lại trong tay. */
+  const renderLive = (refresh: Refresh) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(<QueryClientProvider client={qc}><DealerPage /></QueryClientProvider>);
+    return invalidate;
+  };
+  const ORDER_OK = { code: 'TUBU7', status: 'CONFIRMED', paymentMethod: 'COD', items: [{ backorderedQty: 0, quantity: 1 }] };
+  const TEMPLATE = { id: 'tp1', name: 'Đơn tháng', items: [{ variationId: 'v1', quantity: 2 }] };
+  const reward = {
+    id: 'rw1', type: 'TOUR', title: 'Tour Đà Nẵng', description: null, threshold: 100_000_000, period: 'QUARTER',
+    periodKey: 'Q3/2026', periodLabel: 'Quý 3/2026', isCurrentPeriod: true, volume: 120_000_000, pendingVolume: 0,
+    achieved: true, toGo: 0, claimStatus: null, claimId: null, rejectionReason: null, claimDeadline: '2026-10-30T17:00:00.000Z',
+    canClaim: true,
+  };
+
+  const CASES: Case[] = [
+    {
+      name: 'đặt đơn sỉ (place)',
+      write: mocks.placeDealerOrder,
+      keys: [['dealer-orders'], ['dealer-me'], ['dealer-credit'], ['dealer-rewards'], ['dealer-report'], ['dealer-pricelist']],
+      succeed: ORDER_OK,
+      keyArg: 3,
+      open: async (refresh) => {
+        const invalidate = renderLive(refresh);
+        await screen.findByText(/tồn 9/);
+        fireEvent.click(plus());
+        await screen.findByRole('button', { name: 'Ghi công nợ' });
+        return { invalidate, button: () => screen.getByRole('button', { name: 'Ghi công nợ' }) };
+      },
+    },
+    {
+      name: 'báo đã chuyển khoản (pay)',
+      write: mocks.payCredit,
+      keys: [['dealer-credit'], ['dealer-me']],
+      succeed: { message: 'Đã báo cho Tubu.' },
+      keyArg: 1,
+      open: async (refresh) => {
+        const invalidate = renderLive(refresh);
+        await screen.findByText('Bạc');
+        openTab('Công nợ');
+        fireEvent.change(await screen.findByLabelText('Số tiền đã chuyển'), { target: { value: '1000000' } });
+        return { invalidate, button: () => screen.getByRole('button', { name: 'Báo đã chuyển khoản' }) };
+      },
+    },
+    {
+      name: 'lưu mẫu đơn (saveTpl)',
+      write: mocks.saveTemplate,
+      keys: [['dealer-templates']],
+      succeed: { id: 'tp1' },
+      open: async (refresh) => {
+        const invalidate = renderLive(refresh);
+        await screen.findByText(/tồn 9/);
+        fireEvent.click(plus());
+        fireEvent.click(await screen.findByRole('button', { name: 'Lưu mẫu' }));
+        fireEvent.change(await screen.findByPlaceholderText('Tên mẫu (vd Đơn tháng)'), { target: { value: 'Đơn tháng' } });
+        return { invalidate, button: () => within(screen.getByTestId('sheet')).getByRole('button', { name: 'Lưu mẫu' }) };
+      },
+    },
+    {
+      name: 'xoá mẫu đơn (delTpl)',
+      write: mocks.deleteTemplate,
+      keys: [['dealer-templates']],
+      succeed: { ok: true },
+      open: async (refresh) => {
+        mocks.getTemplates.mockResolvedValue([TEMPLATE]);
+        const invalidate = renderLive(refresh);
+        await screen.findByRole('button', { name: /Đơn tháng/ });
+        return { invalidate, button: () => screen.getByRole('button', { name: 'Xoá mẫu đơn' }) };
+      },
+    },
+    {
+      name: 'yêu cầu nhận thưởng (claimMut)',
+      write: mocks.claimDealerReward,
+      keys: [['dealer-rewards']],
+      succeed: { message: 'Đã ghi nhận yêu cầu.', alreadyClaimed: false, claimStatus: 'PENDING', claim: { id: 'c1' } },
+      open: async (refresh) => {
+        mocks.getQuarterlyReport.mockResolvedValue({
+          quarter: 'Q3/2026', periodStart: '', periodEnd: '', revenue: 120_000_000, orderCount: 14,
+          pendingRevenue: 0, pendingOrderCount: 0, bonusPct: 2, bonusAmount: 2_400_000, nextTier: null,
+          tiers: [{ min: 100_000_000, pct: 2 }],
+        });
+        mocks.getDealerRewards.mockResolvedValue({ claimGraceDays: 30, rewards: [reward] });
+        const invalidate = renderLive(refresh);
+        await screen.findByText('Bạc');
+        openTab('Báo cáo');
+        await screen.findByText('Phần thưởng đại lý');
+        await screen.findByRole('button', { name: 'Yêu cầu nhận thưởng' });
+        return { invalidate, button: () => screen.getByRole('button', { name: 'Yêu cầu nhận thưởng' }) };
+      },
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const fn of [mocks.placeDealerOrder, mocks.payCredit, mocks.saveTemplate, mocks.deleteTemplate, mocks.claimDealerReward]) fn.mockReset();
+    mocks.getDealerMe.mockResolvedValue(APPROVED_ME);
+    mocks.getPricelist.mockResolvedValue([row({ stock: 9 })]);
+    mocks.getTemplates.mockResolvedValue([]);
+    mocks.getDealerOrders.mockResolvedValue([]);
+    mocks.getCreditLedger.mockResolvedValue({ balance: 3_000_000, entries: [] });
+  });
+
+  describe.each(CASES)('$name', (c) => {
+    it.each([
+      [400, 'Việc này đã được xử lý rồi'],
+      [404, 'Không tìm thấy nữa'],
+      [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+    ])('bị từ chối %i: báo lỗi một lần, tải lại đúng khoá, nút giữ khoá tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(c.succeed);
+      const refresh = deferred();
+      const { invalidate, button } = await c.open(() => refresh.promise);
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+      expect(errorSnackbars()).toBe(1);
+      expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual(c.keys.map((queryKey) => ({ queryKey })));
+      // Đã có lời báo lỗi mà dữ liệu chưa về: nút vẫn bận, chạm thêm không gửi lần hai.
+      expect(button()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(button());
+        fireEvent.click(button());
+      });
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      expect(errorSnackbars()).toBe(1);
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      if (c.keyArg !== undefined) expect(c.write.mock.calls[1]![c.keyArg]).toBe(c.write.mock.calls[0]![c.keyArg]);
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK'), true],
+      ['hết thời gian', new HttpError('timeout', 'ECONNABORTED'), true],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503), true],
+      ['hết phiên 401', serverError('Unauthorized', 401), false],
+    ])('%s: không giữ khoá chờ tải lại, khoá nhả ngay', async (_label, error, outcomeUnknown) => {
+      c.write.mockRejectedValueOnce(error).mockResolvedValue(c.succeed);
+      const { invalidate, button } = await c.open(() => new Promise(() => undefined));
+      fireEvent.click(button());
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      // Nhận thưởng: quá hạn/5xx máy chủ có thể đã ghi nhận, nên làm mới nền đúng một lần (không giữ khoá). Các lệnh khác không tải lại.
+      if (c.name.includes('claimMut') && outcomeUnknown) {
+        expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['dealer-rewards'] }]);
+      } else {
+        expect(invalidate).not.toHaveBeenCalled();
+      }
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      if (c.keyArg !== undefined) expect(c.write.mock.calls[1]![c.keyArg]).toBe(c.write.mock.calls[0]![c.keyArg]);
+    });
+
+    it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+      c.write.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue(c.succeed);
+      const { button } = await c.open(() => new Promise(() => undefined));
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        fireEvent.click(button());
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        expect(button()).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+        await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      } finally {
+        vi.useRealTimers();
+      }
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
     });
   });
 });

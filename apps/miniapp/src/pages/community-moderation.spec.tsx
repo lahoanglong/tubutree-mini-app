@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { vi as t } from '../i18n/vi';
 import type { AdminPendingPost, AdminReport, AdminCommunityEvent, EventParticipant } from '../services/feed-api';
 import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
@@ -49,7 +50,8 @@ vi.mock('../services/feed-api', () => ({
   pickEventWinner: mocks.pickEventWinner,
 }));
 vi.mock('../services/staff-api', () => ({ getCommunityReportsCount: mocks.getCommunityReportsCount }));
-vi.mock('../services/api', () => ({
+vi.mock('../services/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   apiMediaUrl: (src: string) => (src.startsWith('/') && !src.startsWith('//') ? `https://api.test${src}` : src),
@@ -1229,5 +1231,231 @@ describe('CommunityModerationPage: sự kiện giữ khoá tới khi danh sách 
     // Danh sách đã bắt đầu tải lại nhưng chưa về (treo): câu báo lỗi không phụ thuộc nó.
     await waitFor(() => expect(openCalls()).toBe(2));
     expect(screen.getByText('Sự kiện e1')).toBeInTheDocument();
+  });
+});
+
+describe('CommunityModerationPage: bài chờ duyệt, báo cáo và tạo sự kiện giữ khoá tới khi dữ liệu làm mới về, lệnh bị từ chối vì trạng thái đã đổi thì tải lại (W111A)', () => {
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const rejected = (status: number, message: string) => new HttpError(message, undefined, { status, data: { message } });
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để `isPending` kịp về false sau khi lệnh xong.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const dateInputs = () => Array.from(document.querySelectorAll<HTMLInputElement>('input[type="datetime-local"]'));
+  /** Dựng trang và thay `invalidateQueries` để soi khoá tải lại và giữ lời hứa tải lại trong tay. */
+  const renderLive = (refresh: () => Promise<unknown>) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <CommunityModerationPage />
+      </QueryClientProvider>,
+    );
+    return { qc, invalidate };
+  };
+  const openPending = async () => {
+    await screen.findByText('Tiêu đề a');
+  };
+  const openReports = async () => {
+    await screen.findByText('Tiêu đề a');
+    goTab('Báo cáo');
+    await screen.findByRole('button', { name: 'Ẩn nội dung' });
+  };
+  const openCreate = async () => {
+    await screen.findByText('Tiêu đề a');
+    goTab('Sự kiện');
+    await screen.findByText('Sự kiện e1');
+    fireEvent.change(screen.getByPlaceholderText('Tên sự kiện'), { target: { value: 'Thử thách xanh' } });
+    fireEvent.change(dateInputs()[0]!, { target: { value: '2026-10-12T09:00' } });
+    fireEvent.change(dateInputs()[1]!, { target: { value: '2026-10-20T21:00' } });
+  };
+
+  type Case = {
+    name: string;
+    api: typeof mocks.adminApprovePost;
+    key: string[];
+    prepare?: () => void;
+    open: () => Promise<void>;
+    button: () => HTMLElement;
+    /** Tạo sự kiện xong thì biểu mẫu về trống nên nút không bấm lại được. */
+    repeatableAfterSuccess: boolean;
+  };
+  const CASES: Case[] = [
+    {
+      name: 'Duyệt bài',
+      api: mocks.adminApprovePost,
+      key: ['admin-community-pending'],
+      open: openPending,
+      button: () => screen.getAllByRole('button', { name: 'Duyệt' })[0]!,
+      repeatableAfterSuccess: true,
+    },
+    {
+      name: 'Từ chối bài',
+      api: mocks.adminRejectPost,
+      key: ['admin-community-pending'],
+      open: openPending,
+      button: () => screen.getAllByRole('button', { name: 'Từ chối' })[0]!,
+      repeatableAfterSuccess: true,
+    },
+    {
+      name: 'Ẩn nội dung (bài)',
+      api: mocks.adminHidePost,
+      key: ['admin-community-reports'],
+      open: openReports,
+      button: () => screen.getByRole('button', { name: 'Ẩn nội dung' }),
+      repeatableAfterSuccess: true,
+    },
+    {
+      name: 'Ẩn nội dung (bình luận)',
+      api: mocks.removeComment,
+      key: ['admin-community-reports'],
+      prepare: () => mocks.adminReports.mockResolvedValue([REPORT('r1', { targetType: 'COMMENT', targetId: 'c-1' })]),
+      open: openReports,
+      button: () => screen.getByRole('button', { name: 'Ẩn nội dung' }),
+      repeatableAfterSuccess: true,
+    },
+    {
+      name: 'Đã xử lý',
+      api: mocks.adminResolveReport,
+      key: ['admin-community-reports'],
+      open: openReports,
+      button: () => screen.getByRole('button', { name: 'Đã xử lý' }),
+      repeatableAfterSuccess: true,
+    },
+    {
+      name: 'Tạo sự kiện',
+      api: mocks.createEvent,
+      key: ['admin-community-events'],
+      open: openCreate,
+      button: () => screen.getByRole('button', { name: 'Tạo sự kiện' }),
+      repeatableAfterSuccess: false,
+    },
+  ];
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter(([arg]) => arg.type === 'error');
+
+  describe.each(CASES)('$name', (c) => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('thành công: khoá giữ tới khi dữ liệu làm mới về, chạm thêm trong lúc chờ không gửi lệnh nào, rồi mới nhả', async () => {
+      const refresh = deferred<void>();
+      c.prepare?.();
+      const { invalidate } = renderLive(() => refresh.promise);
+      await c.open();
+      fireEvent.click(c.button());
+      await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: c.key });
+      await settle();
+      expect(c.button()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(c.button());
+        fireEvent.click(c.button());
+      });
+      expect(c.api).toHaveBeenCalledTimes(1);
+
+      await act(async () => refresh.resolve());
+      await settle();
+      await waitFor(() => expect(c.button()).not.toHaveAttribute('aria-busy'));
+      if (c.repeatableAfterSuccess) {
+        fireEvent.click(c.button());
+        await waitFor(() => expect(c.api).toHaveBeenCalledTimes(2));
+      }
+    });
+
+    it.each([400, 404, 409])('máy chủ từ chối %i (trạng thái đã đổi): báo lỗi một lần, tải lại đúng khoá, khoá giữ tới khi dữ liệu về rồi mới nhả', async (status) => {
+      const message = 'Người khác đã xử lý mục này.';
+      c.prepare?.();
+      c.api.mockRejectedValueOnce(rejected(status, message));
+      const refresh = deferred<void>();
+      const { invalidate } = renderLive(() => refresh.promise);
+      await c.open();
+      fireEvent.click(c.button());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+      expect(errorSnackbars()).toHaveLength(1);
+      expect(invalidate).toHaveBeenCalledTimes(1);
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: c.key });
+      await settle();
+      expect(c.button()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(c.button());
+        fireEvent.click(c.button());
+      });
+      expect(c.api).toHaveBeenCalledTimes(1);
+
+      await act(async () => refresh.resolve());
+      await settle();
+      await waitFor(() => expect(c.button()).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(c.button());
+      await waitFor(() => expect(c.api).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['quá thời gian', new HttpError('timeout', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', rejected(503, 'Service Unavailable')],
+      ['hết phiên 401', rejected(401, 'Unauthorized')],
+    ])('%s: không tải lại, khoá nhả ngay để bấm lại', async (_label, error) => {
+      c.prepare?.();
+      c.api.mockRejectedValueOnce(error);
+      // Lời hứa tải lại treo mãi: nếu code chờ nó thì khoá giữ 4 giây và waitFor (1 giây) sẽ hết hạn.
+      const { invalidate } = renderLive(() => new Promise<void>(() => undefined));
+      await c.open();
+      fireEvent.click(c.button());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+      await waitFor(() => expect(c.button()).not.toHaveAttribute('aria-busy'));
+      expect(invalidate).not.toHaveBeenCalled();
+      fireEvent.click(c.button());
+      await waitFor(() => expect(c.api).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([
+      ['máy chủ từ chối 409', rejected(409, 'Người khác đã xử lý mục này.')],
+      ['thành công', null],
+    ])('tải lại treo mãi (%s): khoá vẫn nhả đúng sau LOCK_REFRESH_WAIT_MS', async (_label, error) => {
+      c.prepare?.();
+      if (error) c.api.mockRejectedValueOnce(error);
+      const { invalidate } = renderLive(() => new Promise<void>(() => undefined));
+      await c.open();
+      // Chỉ giả setTimeout: waitFor của testing-library không bị đụng, nhưng settleWithin và lô thông báo của react-query thì có.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      await act(async () => {
+        fireEvent.click(c.button());
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(invalidate).toHaveBeenCalledTimes(1);
+      expect(c.button()).toHaveAttribute('aria-busy', 'true');
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+      });
+      expect(c.button()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(c.button());
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      expect(c.api).toHaveBeenCalledTimes(1);
+
+      // Hạn 4 giây vừa chạm thì settleWithin trả, onSettled nhả khoá; thêm vài ms cho lô thông báo setTimeout(0) của react-query.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+        await vi.advanceTimersByTimeAsync(5);
+      });
+      expect(c.button()).not.toHaveAttribute('aria-busy');
+      if (error || c.repeatableAfterSuccess) {
+        await act(async () => {
+          fireEvent.click(c.button());
+          await vi.advanceTimersByTimeAsync(0);
+        });
+        expect(c.api).toHaveBeenCalledTimes(2);
+      }
+    });
   });
 });

@@ -2,6 +2,7 @@ import { act, render, screen, fireEvent, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import type { CtvMilestoneItem, CtvMilestonesResponse } from '../../services/affiliate-api';
+import { HttpError } from '../../services/http';
 import { LOCK_REFRESH_WAIT_MS } from '../../utils/settle-within';
 
 const mocks = vi.hoisted(() => ({ openSnackbar: vi.fn(), claim: vi.fn() }));
@@ -11,7 +12,11 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../../services/affiliate-api', () => ({ claimCtvMilestone: mocks.claim }));
-vi.mock('../../services/api', () => ({ getErrorMessage: (e: unknown) => (e as Error).message, getLoadErrorMessage: (e: unknown) => (e as Error).message }));
+vi.mock('../../services/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getErrorMessage: (e: unknown) => (e as Error).message,
+  getLoadErrorMessage: (e: unknown) => (e as Error).message,
+}));
 
 import { MilestoneRewards } from './milestone-rewards';
 
@@ -179,6 +184,8 @@ describe('MilestoneRewards — Nhận tất cả', () => {
 });
 
 const OK = { success: true, message: 'ok', rewardPoints: 1, monthKey: 'x' };
+/** Máy chủ từ chối vì trạng thái trên màn đã cũ (400/404/409); mặc định 409. */
+const staleRejection = (message: string, status = 409) => new HttpError(message, 'ERR_BAD_REQUEST', { status, data: { message } } as never);
 const neverSettles = () => new Promise<never>(() => {});
 const two = () =>
   data({
@@ -363,7 +370,7 @@ describe('MilestoneRewards — làm mới sau khi nhận', () => {
   });
 
   it('Nhận thưởng một mốc lỗi: chỉ tải lại danh sách mốc cho khớp backend', async () => {
-    mocks.claim.mockRejectedValue(new Error('Chưa đạt'));
+    mocks.claim.mockRejectedValue(staleRejection('Chưa đạt'));
     renderRewards(data());
     fireEvent.click(screen.getByRole('button', { name: 'Nhận thưởng' }));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Chưa đạt', type: 'error' }));
@@ -411,7 +418,7 @@ describe('MilestoneRewards — giữ khoá tới khi dữ liệu mới về', ()
   });
 
   it('nhận một mốc lỗi (đã nhận ở máy khác) nhưng danh sách chưa tải lại: nút không nhận lại để ra lần lỗi thứ hai', async () => {
-    mocks.claim.mockRejectedValue(new Error('Bạn đã nhận thưởng mốc này rồi.'));
+    mocks.claim.mockRejectedValue(staleRejection('Bạn đã nhận thưởng mốc này rồi.'));
     renderRewards(data());
     const btn = screen.getByRole('button', { name: 'Nhận thưởng' });
     fireEvent.click(btn);
@@ -492,5 +499,107 @@ describe('MilestoneRewards — giữ khoá tới khi dữ liệu mới về', ()
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(mocks.claim).toHaveBeenCalledTimes(6);
+  });
+});
+
+describe('MilestoneRewards: "Nhận thưởng" bị máy chủ từ chối thì giữ khoá tới khi danh sách mốc tải lại (W111A)', () => {
+  let inv: MockInstance<QueryClient['invalidateQueries']>;
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để `isPending` kịp về false.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter(([arg]) => arg.type === 'error');
+  const milestoneKeyCalls = () =>
+    inv.mock.calls.filter((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey) === '["affiliate-milestones"]');
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.claim.mockReset();
+    inv = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+  });
+  afterEach(() => {
+    inv.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it.each([
+    [400, 'Mốc này chưa đạt'],
+    [404, 'Không tìm thấy mốc'],
+    [409, 'Bạn đã nhận thưởng mốc này rồi.'],
+  ])('bị từ chối %i "%s": báo lỗi một lần, tải lại danh sách mốc, khoá giữ tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+    let finishRefresh!: () => void;
+    inv.mockImplementation(() => new Promise<void>((resolve) => (finishRefresh = resolve)));
+    mocks.claim.mockRejectedValueOnce(staleRejection(message, status)).mockResolvedValue(OK);
+    renderRewards(data());
+    const btn = screen.getByRole('button', { name: 'Nhận thưởng' });
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    expect(milestoneKeyCalls()).toHaveLength(1);
+    expect(inv).toHaveBeenCalledTimes(1);
+    expect(errorSnackbars()).toHaveLength(1);
+    await settle();
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+    expect(mocks.claim).toHaveBeenCalledTimes(1);
+    expect(errorSnackbars()).toHaveLength(1);
+    await act(async () => finishRefresh());
+    await settle();
+    await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.claim).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK'), true],
+    ['quá thời gian', new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED'), true],
+    ['máy chủ lỗi 503', new HttpError('Service Unavailable', 'ERR_BAD_RESPONSE', { status: 503, data: {} } as never), true],
+    ['hết phiên 401', new HttpError('Unauthorized', 'ERR_BAD_REQUEST', { status: 401, data: {} } as never), false],
+  ])('%s: không giữ khoá chờ tải lại, khoá nhả ngay, bấm lại gọi API', async (_label, error, outcomeUnknown) => {
+    inv.mockImplementation(() => new Promise<void>(() => undefined));
+    mocks.claim.mockRejectedValueOnce(error).mockResolvedValue(OK);
+    renderRewards(data());
+    const btn = screen.getByRole('button', { name: 'Nhận thưởng' });
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await settle();
+    await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy', 'true'));
+    // Quá hạn/5xx máy chủ có thể đã ghi nhận mốc: làm mới nền danh sách mốc và điểm (không giữ khoá). 401 thì không tải lại gì.
+    if (outcomeUnknown) {
+      const called = inv.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey)).sort();
+      expect(called).toEqual(['["affiliate-milestones"]', '["loyalty"]']);
+    }
+    else expect(inv).not.toHaveBeenCalled();
+    fireEvent.click(btn);
+    await waitFor(() => expect(mocks.claim).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: khoá nhả sau LOCK_REFRESH_WAIT_MS', async () => {
+    inv.mockImplementation(() => new Promise<void>(() => undefined));
+    vi.useFakeTimers();
+    mocks.claim.mockRejectedValueOnce(staleRejection('Bạn đã nhận thưởng mốc này rồi.')).mockResolvedValue(OK);
+    renderRewards(data());
+    const btn = screen.getByRole('button', { name: 'Nhận thưởng' });
+    fireEvent.click(btn);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+    });
+    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    expect(btn).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(btn);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.claim).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2);
+    });
+    expect(btn).not.toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(btn);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(mocks.claim).toHaveBeenCalledTimes(2);
   });
 });
