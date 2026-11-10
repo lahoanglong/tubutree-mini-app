@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -458,6 +458,29 @@ describe('LoyaltyPage — hạn giữ hạng, lịch sử, biểu tượng hạn
     fireEvent.click(screen.getByRole('button', { name: 'Xem thêm' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Chưa tải được, bấm để thử lại' }));
     await waitFor(() => expect(screen.getAllByText('+1')).toHaveLength(30));
+  });
+
+  it('lịch sử: chạm đúp "Xem thêm" trong cùng một nhịp chỉ xin trang kế một lần, nút khoá tới khi trang về', async () => {
+    const rows = Array.from({ length: 45 }, (_, i) => ({ id: `n${String(i).padStart(2, '0')}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: new Date(Date.UTC(2026, 9, 10, 5) - i * 1000).toISOString() }));
+    servePointsHistory(rows);
+    renderPage();
+    const more = await screen.findByRole('button', { name: 'Xem thêm' });
+    let deliver: () => void = () => undefined;
+    mocks.getPointsTransactions.mockImplementationOnce(
+      () => new Promise((resolve) => { deliver = () => resolve(rows.slice(20, 40)); }),
+    );
+    act(() => {
+      fireEvent.click(more);
+      fireEvent.click(more);
+    });
+    await waitFor(() => expect(mocks.getPointsTransactions).toHaveBeenCalledTimes(2));
+    expect(more).toHaveAttribute('aria-busy', 'true');
+    await act(async () => deliver());
+    await waitFor(() => expect(screen.getAllByText('+1')).toHaveLength(40));
+    expect(mocks.getPointsTransactions).toHaveBeenCalledTimes(2);
+    fireEvent.click(await screen.findByRole('button', { name: 'Xem thêm' }));
+    await waitFor(() => expect(screen.getAllByText('+1')).toHaveLength(45));
+    expect(mocks.getPointsTransactions).toHaveBeenCalledTimes(3);
   });
 
   it('đổi tên hạng trong admin: biểu tượng vẫn theo thứ hạng', async () => {
