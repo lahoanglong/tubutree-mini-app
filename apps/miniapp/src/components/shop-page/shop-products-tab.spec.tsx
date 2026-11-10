@@ -195,4 +195,31 @@ describe('ShopProductsTab nguồn brand: khoá chạm đúp "Xem thêm" và "Th�
     await waitFor(() => expect(tileCount()).toBe(40));
     expect(mocks.fetchBrandProducts).toHaveBeenCalledTimes(4);
   });
+
+  it('đang chờ trang 2 của "Mới" rồi đổi về "Phổ biến" đã có sẵn: "Xem thêm" của "Phổ biến" xin trang 2 ngay, không bị nuốt vì khoá của "Mới"', async () => {
+    const heldNewestPage2 = pending<ReturnType<typeof page>>();
+    // `beforeEach(() => mock.mockReset())` trả về chính mock nên vitest gọi nó không tham số khi dọn test; tham số mặc định để lần gọi đó không ném lỗi.
+    mocks.fetchBrandProducts.mockImplementation((_slug: string, { page: n, sort }: { page: number; sort?: string } = { page: 1 }) => {
+      if (sort === 'newest' && n === 2) return heldNewestPage2.promise;
+      return Promise.resolve(n === 1 ? page(1, 20, 45) : page(21, 20, 45));
+    });
+    wrap(<ShopProductsTab source={{ kind: 'brand', slug: 'fuwa' }} />);
+    await waitFor(() => expect(tileCount()).toBe(20));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mới' }));
+    await waitFor(() => expect(mocks.fetchBrandProducts).toHaveBeenCalledWith('fuwa', { page: 1, limit: 20, sort: 'newest' }));
+    await waitFor(() => expect(tileCount()).toBe(20));
+    await waitFor(() => expect(more()).not.toBeNull());
+    fireEvent.click(more()!);
+    await waitFor(() => expect(mocks.fetchBrandProducts).toHaveBeenCalledWith('fuwa', { page: 2, limit: 20, sort: 'newest' }));
+
+    fireEvent.click(screen.getByRole('button', { name: 'Phổ biến' }));
+    await waitFor(() => expect(more()).not.toBeNull());
+    expect(mocks.fetchBrandProducts).not.toHaveBeenCalledWith('fuwa', { page: 2, limit: 20, sort: undefined });
+    fireEvent.click(more()!);
+    await waitFor(() => expect(mocks.fetchBrandProducts).toHaveBeenCalledWith('fuwa', { page: 2, limit: 20, sort: undefined }));
+    await waitFor(() => expect(tileCount()).toBe(40));
+
+    await act(async () => heldNewestPage2.resolve(page(21, 20, 45)));
+  });
 });

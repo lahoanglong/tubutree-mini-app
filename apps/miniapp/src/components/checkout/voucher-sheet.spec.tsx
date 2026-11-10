@@ -999,6 +999,7 @@ describe('VoucherSheet: "Thử lại" tải danh sách mã khoá chạm đúp (W
       fireEvent.click(retry);
     });
     expect(mocks.getCoupons).toHaveBeenCalledTimes(3);
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Thử lại' })).toHaveAttribute('aria-busy', 'true'));
     await act(async () => next.resolve(COUPONS));
     expect(await screen.findByText('GIAM10')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull();

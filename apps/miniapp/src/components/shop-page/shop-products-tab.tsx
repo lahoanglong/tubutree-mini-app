@@ -105,7 +105,7 @@ export function ShopProductsTab({ source, showBrand, initialSort = 'popular', sc
         {source.kind === 'local' ? (
           <LocalList products={source.products} sort={sort} showBrand={showBrand} />
         ) : (
-          <BrandList slug={source.slug} sort={sort} showBrand={showBrand} />
+          <BrandList key={sort} slug={source.slug} sort={sort} showBrand={showBrand} />
         )}
       </div>
     </div>
