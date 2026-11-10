@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -1117,6 +1118,158 @@ describe('SubscriptionEditSheet (web): khoá đồng bộ chạm đúp (W78B)', 
     click(btn('Lưu thay đổi'));
     await flush(8);
     expect(sent('PATCH', '/me/subscriptions/s1')).toHaveLength(2);
+  });
+});
+
+describe('SubscriptionsPanel: khoá giữ tới khi danh sách làm mới về, có hạn 4 giây (W83B)', () => {
+  const RETENTION_TITLE = 'Giữ lại lịch định kỳ?';
+  const LIST = 'GET /me/subscriptions';
+  const sheetEl = () => document.querySelector('[role="dialog"]') as HTMLElement | null;
+  const cardBtns = () => Array.from(document.querySelector('li')!.querySelectorAll('button')) as HTMLButtonElement[];
+  const together = (...els: HTMLElement[]) =>
+    act(() => {
+      for (const el of els) el.click();
+    });
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  async function openRetention(c: HTMLElement) {
+    click(btn('Huỷ', c));
+    await flush(6);
+    expect(sheetEl()?.textContent).toContain(RETENTION_TITLE);
+  }
+
+  describe('danh sách không bao giờ về', () => {
+    beforeEach(() => {
+      // shouldAdvanceTime để `flush` (setTimeout 0) và bộ đếm giờ của react-query vẫn chạy; chỉ cần giả setTimeout để tua tới hạn.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('"Tạm dừng" trên thẻ: còn khoá ở 3 giây (bấm thêm không gửi lệnh), nhả sau 4 giây dù danh sách chưa về', async () => {
+      const c = await mount();
+      hold(LIST);
+      click(cardBtns()[1]!);
+      await flush(6);
+      expect(sent('POST', '/me/subscriptions/s1/status')).toHaveLength(1);
+      await advance(3_000);
+      expect(cardBtns()[1]!.getAttribute('aria-busy')).toBe('true');
+      together(cardBtns()[1]!, cardBtns()[1]!);
+      expect(sent('POST', '/me/subscriptions/s1/status')).toHaveLength(1);
+      await advance(1_500);
+      await flush(4);
+      expect(cardBtns()[1]!.hasAttribute('aria-busy')).toBe(false);
+      expect(c.textContent).toContain('Nước xả vải Tubu');
+      click(cardBtns()[1]!);
+      await flush(6);
+      expect(sent('POST', '/me/subscriptions/s1/status')).toHaveLength(2);
+    });
+
+    it('"Vẫn huỷ" trong sheet: sheet đóng ngay, nút thẻ còn khoá ở 3 giây, nhả sau 4 giây', async () => {
+      const c = await mount();
+      await openRetention(c);
+      hold(LIST);
+      click(btn('Vẫn huỷ', sheetEl()!));
+      await flush(6);
+      expect(sent('POST', '/me/subscriptions/s1/status')).toHaveLength(1);
+      expect(sheetEl()).toBeNull();
+      await advance(3_000);
+      expect(cardBtns()[2]!.getAttribute('aria-disabled')).toBe('true');
+      await advance(1_500);
+      await flush(4);
+      expect(cardBtns()[2]!.hasAttribute('aria-disabled')).toBe(false);
+    });
+
+    it('"Bỏ qua kỳ này": nút thẻ còn khoá ở 3 giây, nhả sau 4 giây', async () => {
+      const c = await mount();
+      await openRetention(c);
+      hold(LIST);
+      click(btn('Bỏ qua kỳ này', sheetEl()!));
+      await flush(6);
+      expect(sent('POST', '/me/subscriptions/s1/skip')).toHaveLength(1);
+      await advance(3_000);
+      expect(cardBtns()[2]!.getAttribute('aria-disabled')).toBe('true');
+      await advance(1_500);
+      await flush(4);
+      expect(cardBtns()[2]!.hasAttribute('aria-disabled')).toBe(false);
+    });
+  });
+
+  it('lưu ở sheet "Sửa" xong mà danh sách chưa về: "Sửa" không mở lại sheet trên số liệu cũ; danh sách về thì mở với số lượng MỚI', async () => {
+    const c = await mount();
+    const edit = btn('Sửa', c);
+    click(edit);
+    await flush(6);
+    const qty = () => btn('Giảm số lượng').nextElementSibling?.textContent;
+    expect(qty()).toBe('2');
+    click(btn('Tăng số lượng'));
+    await flush(2);
+    const releaseList = hold(LIST);
+    click(btn('Lưu thay đổi'));
+    await flush(8);
+    expect(sent('PATCH', '/me/subscriptions/s1')[0]!.body).toEqual({ quantity: 3 });
+    expect(document.body.textContent).not.toContain('Sửa gói định kỳ');
+    expect(edit.getAttribute('aria-disabled')).toBe('true');
+    expect(edit.disabled).toBe(false);
+    click(edit);
+    await flush(4);
+    expect(document.body.textContent).not.toContain('Sửa gói định kỳ');
+    subs = [{ ...SUB, quantity: 3 }];
+    releaseList();
+    await flush(8);
+    expect(edit.hasAttribute('aria-disabled')).toBe(false);
+    click(edit);
+    await flush(6);
+    expect(qty()).toBe('3');
+  });
+
+  describe('"Thử lại" danh sách (truy vấn ĐÃ có dữ liệu rồi mới lỗi)', () => {
+    // Truy vấn chưa có dữ liệu thì react-query gộp hai lần refetch làm một, nên chỉ ca còn dữ liệu cũ mà lần làm mới lỗi mới chứng minh được khoá của nút
+    // (refetch thứ hai sẽ huỷ rồi chạy lại).
+    async function mountThenRefreshError() {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const r = render(<SubscriptionsPanel />, qc);
+      mounted.push(r);
+      await flush(8);
+      expect(r.container.textContent).toContain('Nước xả vải Tubu');
+      listFailsOnce = true;
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      });
+      await flush(2);
+      const retry = btn('Thử lại', r.container);
+      expect(retry).toBeTruthy();
+      return { c: r.container, retry };
+    }
+
+    it('chạm đúp trong cùng một khung hình chỉ tải lại một lần; nút báo bận tới khi danh sách về', async () => {
+      const { c, retry } = await mountThenRefreshError();
+      const releaseList = hold(LIST);
+      const before = sent('GET', '/me/subscriptions').length;
+      together(retry, retry);
+      await flush(3);
+      expect(sent('GET', '/me/subscriptions').length - before).toBe(1);
+      expect(retry.getAttribute('aria-busy')).toBe('true');
+      releaseList();
+      await flush(8);
+      expect(c.textContent).toContain('Nước xả vải Tubu');
+      expect(sent('GET', '/me/subscriptions').length - before).toBe(1);
+    });
+
+    it('hai cú chạm ở hai lần act liên tiếp (lượt tải chưa về) vẫn chỉ một lần', async () => {
+      const { c, retry } = await mountThenRefreshError();
+      const releaseList = hold(LIST);
+      const before = sent('GET', '/me/subscriptions').length;
+      click(retry);
+      await flush(2);
+      click(retry);
+      await flush(2);
+      expect(sent('GET', '/me/subscriptions').length - before).toBe(1);
+      releaseList();
+      await flush(8);
+      expect(c.textContent).toContain('Nước xả vải Tubu');
+    });
   });
 });
 

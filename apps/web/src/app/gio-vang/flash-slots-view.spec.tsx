@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, unnamedControls } from '@/test-utils/a11y';
@@ -760,5 +761,106 @@ describe('Trang Giờ vàng (web): khoá chạm đúp', () => {
     await flush(8);
     expect(callsTo(re)).toBe(before + 1);
     expect(named(c, 'Mua ngay Sản phẩm a')).not.toBeNull();
+  });
+});
+
+describe('Trang Giờ vàng (web): khoá giữ có hạn 4 giây và "Thử lại" món khi đã có dữ liệu (W83B)', () => {
+  const hold = (path: string) => {
+    let open!: () => void;
+    state.gates.set(path, new Promise<void>((r) => (open = r)));
+    return () => {
+      state.gates.delete(path);
+      open();
+    };
+  };
+  const tapTogether = async (...els: Array<HTMLElement | null>) => {
+    await act(async () => {
+      for (const e of els) e!.click();
+    });
+  };
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  const callsTo = (re: RegExp) => state.calls.filter((p) => re.test(p)).length;
+  const remindC = (c: HTMLElement) => all<HTMLButtonElement>(c, 'button').find((b) => /^(Nhắc tôi|Đã đặt nhắc) Sản phẩm c\b/.test(b.getAttribute('aria-label') ?? ''))!;
+
+  describe('danh sách nhắc không bao giờ về', () => {
+    beforeEach(() => {
+      // shouldAdvanceTime để `flush` (setTimeout 0) và bộ đếm giờ của react-query vẫn chạy; chỉ cần giả setTimeout để tua tới hạn.
+      vi.useRealTimers();
+      vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+      vi.setSystemTime(NOW);
+    });
+
+    it('Nhắc tôi: còn khoá ở 3 giây (chạm thêm không gửi lệnh), nhả sau 4 giây dù danh sách nhắc chưa về', async () => {
+      const c = await mount();
+      click(tabs(c)[1]!);
+      await flush(4);
+      hold('/flash-sales/upcoming');
+      click(remindC(c));
+      await flush(6);
+      expect(state.posts).toEqual(['/flash-sales/items/c/remind']);
+      await advance(3_000);
+      expect(remindC(c).getAttribute('aria-busy')).toBe('true');
+      await tapTogether(remindC(c), remindC(c));
+      expect(state.posts).toHaveLength(1);
+      expect(state.deletes).toEqual([]);
+      await advance(1_500);
+      await flush(4);
+      expect(remindC(c).getAttribute('aria-busy')).toBeNull();
+      click(remindC(c));
+      await flush(6);
+      expect(state.deletes).toEqual(['/flash-sales/items/c/remind']);
+    });
+  });
+
+  // Truy vấn chưa có dữ liệu thì react-query gộp hai lần refetch làm một, nên chỉ ca còn dữ liệu cũ mà lần làm mới lỗi mới chứng minh được khoá của nút
+  // (refetch thứ hai sẽ huỷ rồi chạy lại).
+  describe('"Thử lại" ở vùng danh sách món (truy vấn ĐÃ có dữ liệu rồi mới lỗi)', () => {
+    const itemsRe = /\/flash-sales\/slots\/s12\/items/;
+    async function mountThenRefreshError() {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const r = render(<FlashSlotsView />, qc);
+      mounted.push(r);
+      await flush(8);
+      expect(named(r.container, 'Mua ngay Sản phẩm a')).not.toBeNull();
+      state.items = { ...state.items, s12: new Error('500') };
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['flash-sales', 'slots', 's12', 'items'] });
+      });
+      await flush(2);
+      const retry = named(r.container, 'Thử lại')!;
+      expect(retry).toBeTruthy();
+      state.items = { ...state.items, s12: itemsOf(S12, [item('a')]) };
+      return { c: r.container, retry };
+    }
+
+    it('chạm đúp trong cùng một khung hình chỉ tải lại một lần; nút báo bận tới khi món về', async () => {
+      const { c, retry } = await mountThenRefreshError();
+      const release = hold('/flash-sales/slots/s12/items');
+      const before = callsTo(itemsRe);
+      await tapTogether(retry, retry);
+      await flush(2);
+      expect(callsTo(itemsRe) - before).toBe(1);
+      expect(retry.getAttribute('aria-busy')).toBe('true');
+      expect(retry.disabled).toBe(false);
+      release();
+      await flush(8);
+      expect(named(c, 'Mua ngay Sản phẩm a')).not.toBeNull();
+      expect(callsTo(itemsRe) - before).toBe(1);
+    });
+
+    it('hai cú chạm ở hai lần act liên tiếp (lượt tải chưa về) vẫn chỉ một lần', async () => {
+      const { c, retry } = await mountThenRefreshError();
+      const release = hold('/flash-sales/slots/s12/items');
+      const before = callsTo(itemsRe);
+      await tapTogether(retry);
+      await tapTogether(retry);
+      expect(callsTo(itemsRe) - before).toBe(1);
+      release();
+      await flush(8);
+      expect(named(c, 'Mua ngay Sản phẩm a')).not.toBeNull();
+    });
   });
 });

@@ -16,6 +16,7 @@ import { coreHttp } from '@/lib/core-http';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
+import { settleWithin } from '@/lib/settle-within';
 import { ui } from '@/lib/guest-ui';
 import { mini, miniGhostDanger } from '@/components/order-mobile/mobile-ui';
 import { subscriptionCycleView } from './subscription-price';
@@ -54,7 +55,8 @@ export function SubscriptionsPanel() {
 
   // Tạm dừng/Tiếp tục/Huỷ và Bỏ qua kỳ loại trừ nhau trên mọi gói (giao diện cũng khoá hết nút thẻ khi một việc đang chạy): một việc mỗi lúc.
   // Ref vì `isPending` chỉ đúng sau lần vẽ kế (chạm "Tạm dừng" rồi "Vẫn huỷ" sát nhau vẫn gửi cả hai lệnh). Cả hai lệnh trả lời hứa tải lại
-  // danh sách nên khoá giữ tới khi trạng thái mới về; sheet đóng ngay khi lệnh xong để mất mạng lúc tải lại không giữ sheet kẹt.
+  // danh sách nên khoá giữ tới khi trạng thái mới về nhưng có hạn (`settleWithin`), kẻo mạng chậm giữ nút lâu hơn lệnh đã xong; sheet đóng ngay khi lệnh xong
+  // để mất mạng lúc tải lại không giữ sheet kẹt.
   const acting = useRef(false);
   const releaseActing = () => {
     acting.current = false;
@@ -70,7 +72,7 @@ export function SubscriptionsPanel() {
     onMutate: () => setNotice(null),
     onSuccess: () => {
       setCancelTarget(null);
-      return qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
     onSettled: releaseActing,
   });
@@ -80,7 +82,7 @@ export function SubscriptionsPanel() {
     onSuccess: () => {
       setNotice('Đã bỏ qua kỳ này, hẹn kỳ sau nhé');
       setCancelTarget(null);
-      return qc.invalidateQueries({ queryKey: ['subscriptions'] });
+      return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
     onSettled: releaseActing,
   });
@@ -128,9 +130,10 @@ export function SubscriptionsPanel() {
               sub={s}
               busy={sheetBusy}
               toggling={statusMut.isPending && statusMut.variables?.id === s.id && statusMut.variables.from === 'card'}
+              refreshing={subsQ.isFetching}
               address={s.addressId ? addressById.get(s.addressId) : undefined}
               onEdit={() => {
-                if (acting.current) return;
+                if (acting.current || subsQ.isFetching) return;
                 setEditTarget(s.id);
               }}
               onToggle={() => exclusive(() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE', from: 'card' }))}
@@ -218,6 +221,7 @@ function SubscriptionCard({
   sub: s,
   busy,
   toggling,
+  refreshing,
   address,
   onEdit,
   onToggle,
@@ -227,6 +231,8 @@ function SubscriptionCard({
   busy: boolean;
   /** Chính thẻ này đang đổi Tạm dừng/Tiếp tục bằng nút trên thẻ (không tính lệnh gửi từ sheet): nút đó giữ aria-busy thay vì `disabled` để không mất focus. */
   toggling: boolean;
+  /** Danh sách đang tải lại: "Sửa" chờ, kẻo mở sheet trên số liệu cũ (vừa lưu 3 mà form hiện 2, lần lưu sau ghi đè về 2). */
+  refreshing: boolean;
   address?: Parameters<typeof addressText>[0];
   onEdit: () => void;
   onToggle: () => void;
@@ -262,7 +268,7 @@ function SubscriptionCard({
       <div className="mt-2 flex flex-wrap gap-2">
         {/* "Sửa" và "Huỷ" mở sheet và sheet trả focus về đúng nút này khi đóng: lúc đó lệnh vừa gửi từ sheet còn chờ danh sách mới (busy vẫn true),
             nên khoá bằng aria-disabled (chặn ở onEdit/onCancel) chứ không `disabled`, nếu không focus rơi về body. */}
-        <button type="button" aria-disabled={busy || undefined} onClick={onEdit} className={`${ui.btnSecondary} ${mini.secondary} min-w-max flex-1`}>
+        <button type="button" aria-disabled={busy || refreshing || undefined} onClick={onEdit} className={`${ui.btnSecondary} ${mini.secondary} min-w-max flex-1`}>
           Sửa
         </button>
         <button

@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -640,5 +641,99 @@ describe('/mua-chung — khoá chạm đúp', () => {
     g.resolve([GROUP('a')]);
     await flush(5);
     expect(listGets()).toBe(before + 1);
+  });
+});
+
+describe('/mua-chung — khoá giữ tới khi danh sách làm mới về, có hạn 4 giây (W83B)', () => {
+  const gate = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((r) => (resolve = r));
+    return { promise, resolve };
+  };
+  const tapTogether = async (...els: HTMLElement[]) => {
+    await act(async () => {
+      for (const e of els) e.click();
+    });
+  };
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+  const joins = () => mocks.post.mock.calls.filter((x) => String(x[0]).endsWith('/join')).length;
+  const listGets = () => mocks.get.mock.calls.filter((x) => x[0] === '/group-buy').length;
+
+  describe('danh sách không bao giờ về', () => {
+    beforeEach(() => {
+      // shouldAdvanceTime để `flush` (setTimeout 0) và bộ đếm giờ của react-query vẫn chạy; chỉ cần giả setTimeout để tua tới hạn.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    });
+    afterEach(() => vi.useRealTimers());
+
+    it('tham gia: còn khoá ở 3 giây (chạm thêm không gửi lệnh), nhả sau 4 giây dù danh sách chưa về', async () => {
+      const c = await mount();
+      mocks.get.mockImplementation(() => new Promise(() => undefined));
+      click(btn(c, /^Tham gia mua chung/)!);
+      await flush(6);
+      expect(joins()).toBe(1);
+      expect(listGets()).toBe(2);
+      await advance(3_000);
+      const b = btn(c, /^Tham gia mua chung/)!;
+      expect(b.getAttribute('aria-busy')).toBe('true');
+      await tapTogether(b, b);
+      expect(joins()).toBe(1);
+      await advance(1_500);
+      await flush(4);
+      expect(b.hasAttribute('aria-busy')).toBe(false);
+      click(b);
+      await flush(6);
+      expect(joins()).toBe(2);
+    });
+  });
+
+  // Truy vấn chưa có dữ liệu thì react-query gộp hai lần refetch làm một, nên chỉ ca còn dữ liệu cũ mà lần làm mới lỗi mới chứng minh được khoá của nút
+  // (refetch thứ hai sẽ huỷ rồi chạy lại).
+  describe('"Thử lại" danh sách (truy vấn ĐÃ có dữ liệu rồi mới lỗi)', () => {
+    async function mountThenRefreshError() {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const r = render(<GroupBuyView />, qc);
+      mounted.push(r);
+      await flush(5);
+      expect(btn(r.container, /^Tham gia mua chung/)).toBeTruthy();
+      mocks.get.mockRejectedValueOnce(new Error('mất mạng'));
+      await act(async () => {
+        await qc.invalidateQueries({ queryKey: ['group-buy'] });
+      });
+      await flush(2);
+      const retry = btn(r.container, 'Thử lại')!;
+      expect(retry).toBeTruthy();
+      return { c: r.container, retry };
+    }
+
+    it('chạm đúp trong cùng một khung hình chỉ tải lại một lần; nút báo bận tới khi danh sách về', async () => {
+      const { c, retry } = await mountThenRefreshError();
+      const next = gate<unknown[]>();
+      mocks.get.mockReturnValue(next.promise);
+      const before = listGets();
+      await tapTogether(retry, retry);
+      await flush(2);
+      expect(listGets() - before).toBe(1);
+      expect(retry.getAttribute('aria-busy')).toBe('true');
+      next.resolve([GROUP('a')]);
+      await flush(6);
+      expect(btn(c, /^Tham gia mua chung/)).toBeTruthy();
+      expect(listGets() - before).toBe(1);
+    });
+
+    it('hai cú chạm ở hai lần act liên tiếp (lượt tải chưa về) vẫn chỉ một lần', async () => {
+      const { retry } = await mountThenRefreshError();
+      const next = gate<unknown[]>();
+      mocks.get.mockReturnValue(next.promise);
+      const before = listGets();
+      await tapTogether(retry);
+      await tapTogether(retry);
+      expect(listGets() - before).toBe(1);
+      next.resolve([GROUP('a')]);
+      await flush(6);
+    });
   });
 });

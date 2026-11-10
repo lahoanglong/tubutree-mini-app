@@ -21,6 +21,7 @@ import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { clearPendingRemind, rememberPendingRemind, takePendingRemind } from '@/lib/pending-remind';
 import { loginHref } from '@/lib/return-to';
+import { settleWithin } from '@/lib/settle-within';
 import { addToCart } from '@/lib/shop-client';
 import { Chip, EmptyState, ProductTileSkeleton, Skeleton, SlotTabs, Text, slotTabId } from '@/components/mini';
 import { Countdown } from '@/components/mini/countdown';
@@ -161,7 +162,8 @@ export default function FlashSlotsView() {
       setError(actionErrorText(e));
     },
     // Trả lời hứa tải lại: `useLockedMutation` nhả khoá của món SAU khi nó xong, nên khoá giữ tới khi danh sách nhắc thật về; không có thì lần chạm kế tính từ trạng thái lạc quan chưa được máy chủ xác nhận.
-    onSettled: (_d, _e, v) => settleReminders(v.seq),
+    // Có hạn (`settleWithin`): mạng chậm không giữ nút Nhắc tôi lâu hơn lệnh đã xong.
+    onSettled: (_d, _e, v) => settleWithin(settleReminders(v.seq)),
   }, ({ itemId }) => itemId);
   const remind = (v: Omit<RemindVars, 'seq'>) => remindMut.mutate({ ...v, seq: ++remindSeq.current });
   // `onMutate` của lệnh nhắc bắt đầu SAU huỷ lần tải đang bay (cancelQueries), nên `invalidateQueries` của lệnh này xong sớm dù danh sách chưa về từ máy chủ. Đợi thêm các lệnh
