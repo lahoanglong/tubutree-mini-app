@@ -22,6 +22,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { platformBridge } from '@/lib/platform-bridge';
+import { settleWithin } from '@/lib/settle-within';
 import { loginHref } from '@/lib/return-to';
 import { withReferral } from '@/lib/share-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -74,14 +75,14 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
   const done = rest.filter((g) => g.status === 'SUCCESS');
 
   // Khoá theo nhóm: chạm đúp vào CÙNG nhóm bị bỏ qua, hai nhóm khác nhau vẫn tham gia song song. `onSuccess` trả lời hứa tải lại danh sách
-  // nên khoá giữ tới khi `joined`/`currentSize` mới về; nhả sớm hơn thì thẻ còn nút "Tham gia" theo số cũ và bấm được lần hai.
+  // nên khoá giữ tới khi `joined`/`currentSize` mới về (tối đa `settleWithin`, kẻo mạng chậm giữ nút lâu hơn lệnh đã xong); nhả sớm hơn thì thẻ còn nút "Tham gia" theo số cũ và bấm được lần hai.
   const joinM = useLockedMutation(
     {
       mutationKey: JOIN_KEY,
       mutationFn: (id: string) => joinGroupBuy(coreHttp, id),
       onSuccess: (r) => {
         setNote({ text: r.status === 'SUCCESS' ? 'Nhóm đã đủ người! Mã giảm giá đã vào ví của bạn.' : 'Đã tham gia nhóm', error: false });
-        return qc.invalidateQueries({ queryKey: ['group-buy'] });
+        return settleWithin(qc.invalidateQueries({ queryKey: ['group-buy'] }));
       },
       onError: (e: unknown) => setNote({ text: errorText(e), error: true }),
     },
