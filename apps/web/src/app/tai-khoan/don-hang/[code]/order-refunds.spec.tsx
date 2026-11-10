@@ -139,7 +139,8 @@ describe('ChooseDestination (web): khoá lưu đồng bộ', () => {
     const confirm = await openSheet(r);
     await act(async () => click(confirm));
     expect(confirm.textContent).toBe('Đang lưu…');
-    expect(confirm.disabled).toBe(true);
+    expect(confirm.hasAttribute('disabled')).toBe(false);
+    expect(confirm.getAttribute('aria-disabled')).toBe('true');
     expect(button(r, 'Để sau')!.disabled).toBe(true);
     await act(async () => click(confirm));
     expect(m.chooseRefundDestination).toHaveBeenCalledTimes(1);
