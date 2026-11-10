@@ -660,6 +660,7 @@ describe('/doi-rac/yeu-cau/[id]: khoá Đã gửi mã vận đơn (cùng một a
   });
 });
 
+const pressBackdrop = () => click(document.querySelector('[data-sheet-backdrop]'));
 const pressEscape = () =>
   act(() => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
@@ -686,6 +687,67 @@ describe('/doi-rac/yeu-cau/[id]: sheet Huỷ không đóng được khi đang g�
     await flush(6);
     expect(dialog()).not.toBeNull();
     expect(dialog()!.querySelector('[role="alert"]')?.textContent).toContain('Yêu cầu đã đóng');
+    expect(dialog()!.querySelector('[aria-label="Đóng"]')).not.toBeNull();
+    pressEscape();
+    await flush(2);
+    expect(dialog()).toBeNull();
+  });
+});
+
+describe('/doi-rac/yeu-cau/[id]: sheet Huỷ chỉ chặn đóng trong lúc gửi lệnh, không trong lúc làm mới', () => {
+  it('POST xong mà làm mới còn treo: báo đã huỷ ngay, sheet đóng được; mở lại thì nút vẫn báo bận và không gửi POST lần hai', async () => {
+    const c = await mount();
+    click(button(c, 'Huỷ yêu cầu'));
+    await flush(2);
+    const confirm = button(dialog()!, 'Xác nhận huỷ')!;
+    const refresh = deferred();
+    state.requestGate = refresh.promise;
+    click(confirm);
+    await flush(4);
+    expect(cancelCalls()).toHaveLength(1);
+    expect(c.textContent).toContain('Đã huỷ yêu cầu');
+    expect(confirm.getAttribute('aria-busy')).toBe('true');
+    expect(confirm.getAttribute('aria-disabled')).toBe('true');
+    click(confirm);
+    await flush(2);
+    expect(cancelCalls()).toHaveLength(1);
+    expect(dialog()!.querySelector('[aria-label="Đóng"]')).not.toBeNull();
+    pressEscape();
+    await flush(2);
+    expect(dialog()).toBeNull();
+
+    click(button(c, 'Huỷ yêu cầu'));
+    await flush(2);
+    const again = button(dialog()!, 'Xác nhận huỷ')!;
+    expect(again.getAttribute('aria-busy')).toBe('true');
+    expect(again.getAttribute('aria-disabled')).toBe('true');
+    click(again);
+    await flush(2);
+    expect(cancelCalls()).toHaveLength(1);
+    pressBackdrop();
+    await flush(2);
+    expect(dialog()).toBeNull();
+
+    refresh.resolve(undefined);
+    await flush(8);
+    expect(cancelCalls()).toHaveLength(1);
+    expect(c.textContent).toContain('Đã huỷ yêu cầu');
+  });
+
+  it('POST còn bay thì sheet không đóng được, POST lỗi thì đóng lại được', async () => {
+    const gate = deferred();
+    state.cancel = () => gate.promise;
+    const c = await mount();
+    click(button(c, 'Huỷ yêu cầu'));
+    await flush(2);
+    click(button(dialog()!, 'Xác nhận huỷ'));
+    await flush(4);
+    expect(dialog()!.querySelector('[aria-label="Đóng"]')).toBeNull();
+    pressEscape();
+    await flush(2);
+    expect(dialog()).not.toBeNull();
+    await act(async () => gate.reject(new Error('Yêu cầu đã đóng')));
+    await flush(6);
     expect(dialog()!.querySelector('[aria-label="Đóng"]')).not.toBeNull();
     pressEscape();
     await flush(2);

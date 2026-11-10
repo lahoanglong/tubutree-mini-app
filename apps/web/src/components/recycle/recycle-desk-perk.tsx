@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { cashWordingMessage, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, submitDeskPerk } from '@tubutree/app-core/api/waste';
 import { deskPointReportQuery } from '@tubutree/app-core/queries/waste';
@@ -32,7 +32,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
 
   const submit = useLockedMutation({
     mutationFn: (v: string) => submitDeskPerk(coreHttp, point.id, { perkText: v.trim() }),
-    // Trả Promise làm mới: khoá và `isPending` giữ tới khi `point` mới về, nên "Chỉnh sửa" không nạp lại chữ cũ.
+    // Trả Promise làm mới để `isPending` giữ tới khi `point` mới về; đổi tab điểm rồi quay lại dựng lại thẻ (isPending về false), lúc đó `refreshing` giữ.
     onSuccess: () => {
       setSent(true);
       setOpen(false);
@@ -40,6 +40,9 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
     },
   });
   const busy = submit.isPending;
+  // Chỉ truy vấn danh sách điểm (khoá chính xác): các báo cáo cùng tiền tố tải lại thường xuyên mà không đổi chữ ưu đãi.
+  const refreshing = useIsFetching({ queryKey: WASTE_QUERY_KEYS.desk, exact: true }) > 0;
+  const editLocked = busy || refreshing;
 
   const cashProblem = findCashWording(text) !== null;
 
@@ -61,9 +64,9 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
           <button
             type="button"
             className={skin.btnSecondary}
-            aria-disabled={busy || undefined}
+            aria-disabled={editLocked || undefined}
             onClick={() => {
-              if (open || busy) return;
+              if (open || editLocked) return;
               setText(point.perkPendingText ?? point.perkText ?? '');
               setSent(false);
               submit.reset();

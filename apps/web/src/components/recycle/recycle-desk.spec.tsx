@@ -13,6 +13,7 @@ import { WAREHOUSE_DESK, makeDeskPoint, makeDeskRequest } from './recycle-fixtur
 const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   points: [] as unknown[],
+  pointsGate: null as null | Promise<unknown>,
   pointsError: null as unknown,
   lookup: null as unknown,
   lookupError: null as unknown,
@@ -36,6 +37,7 @@ vi.mock('@/lib/core-http', () => ({
     get: async (path: string) => {
       state.calls.push({ method: 'GET', path });
       if (path === '/waste/desk/points') {
+        await state.pointsGate;
         if (state.pointsError) throw state.pointsError;
         return state.points;
       }
@@ -106,6 +108,7 @@ beforeEach(() => {
   state.phase = 'authenticated';
   state.points = [makeDeskPoint()];
   state.pointsError = null;
+  state.pointsGate = null;
   state.lookupError = null;
   state.lookupGate = null;
   state.reportError = null;
@@ -1222,5 +1225,38 @@ describe('/doi-rac/quay: báo cáo tháng theo điểm không bị lẫn khi đ�
     slowB.resolve(undefined);
     await flush(8);
     expect(c.textContent).toContain('3 lượt xác nhận');
+  });
+});
+
+describe('/doi-rac/quay: gửi duyệt ưu đãi xong, danh sách điểm chưa làm mới', () => {
+  it('đổi sang điểm B rồi quay lại A trong lúc làm mới: "Chỉnh sửa" của A còn báo bận, xong thì nạp đúng chữ vừa gửi', async () => {
+    const A = makeDeskPoint();
+    state.points = [A, makeDeskPoint({ id: 'pt-2', name: 'Đại lý B' })];
+    const c = await mount();
+    click(button(c, 'Chỉnh sửa'));
+    await flush();
+    typeInto(label(dialog()!, 'Nội dung ưu đãi'), 'Tặng túi vải');
+    const refresh = deferred();
+    state.pointsGate = refresh.promise;
+    click(byText(dialog()!, 'button', 'Gửi duyệt'));
+    await flush(10);
+    expect(dialog()).toBeNull();
+    click(byText(c, '[role="tab"]', 'Đại lý B'));
+    await flush(4);
+    click(byText(c, '[role="tab"]', 'Đại lý Cô Ba'));
+    await flush(4);
+    const edit = button(c, 'Chỉnh sửa')!;
+    expect(edit.getAttribute('aria-disabled')).toBe('true');
+    click(edit);
+    await flush(3);
+    expect(dialog()).toBeNull();
+
+    state.points = [makeDeskPoint({ perkPendingText: 'Tặng túi vải' }), makeDeskPoint({ id: 'pt-2', name: 'Đại lý B' })];
+    refresh.resolve(undefined);
+    await flush(10);
+    expect(button(c, 'Chỉnh sửa')!.hasAttribute('aria-disabled')).toBe(false);
+    click(button(c, 'Chỉnh sửa'));
+    await flush(3);
+    expect((label(dialog()!, 'Nội dung ưu đãi') as HTMLInputElement).value).toBe('Tặng túi vải');
   });
 });

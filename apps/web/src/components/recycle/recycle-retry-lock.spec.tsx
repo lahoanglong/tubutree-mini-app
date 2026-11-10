@@ -8,10 +8,10 @@ import { makeRewardCatalog } from '@/components/loyalty/reward-fixtures';
 import { EMPTY_DRAFT, savePointsNav } from '@/lib/recycle-wizard';
 import { makeDeskPoint, makeRequestDetail, makeRequestSummary, makeWastePoint, makeWasteMe } from './recycle-fixtures';
 
-// Mọi "Thử lại" của chuỗi Đổi rác phải trả Promise của lần tải lại: `ErrorState` khoá nút bằng `usePressLock` chỉ khi onRetry trả Promise,
-// còn `() => void q.refetch()` trả undefined nên nút không bao giờ báo bận và hai cú chạm sát nhau tải hai lần.
+// Mỗi màn Đổi rác tự viết `onRetry` của `ErrorState`, và nút chỉ khoá khi `onRetry` trả Promise của lần tải lại (`() => void q.refetch()` trả
+// undefined: nút không báo bận, hai cú chạm sát nhau tải hai lần). Bảng này đi qua từng màn để quên trả Promise ở một chỗ là đỏ.
 // Thẻ lỗi chỉ còn nút khi truy vấn đã có dữ liệu (chưa có thì refetch đưa status về pending và thẻ biến thành khung chờ), nên mỗi ca
-// tải thành công trước rồi mới làm lần tải lại hỏng. Chép ý W77A của Mini App.
+// tải thành công trước rồi mới làm lần tải lại hỏng.
 
 const net = vi.hoisted(() => ({
   calls: [] as string[],

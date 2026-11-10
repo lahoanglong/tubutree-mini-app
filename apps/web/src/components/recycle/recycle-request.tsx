@@ -170,13 +170,17 @@ export function RecycleRequestDetail({ id }: { id: string }) {
   });
   // Khoá bằng ref: `isPending` chỉ đúng sau lần vẽ kế. Nhả ở onSettled, tức sau khi `refresh()` trong onSuccess xong.
   const cancelBusy = useRef(false);
+  // `isPending` kéo dài cả lúc làm mới (mất mạng thì treo), nên chặn đóng sheet chỉ trong lúc gửi lệnh để lỗi của lệnh không mất.
+  const [sending, setSending] = useState(false);
   const cancel = useMutation({
     mutationFn: () => cancelWasteRequest(coreHttp, id),
     onSuccess: async () => {
+      setSending(false);
+      setNotice({ text: 'Đã huỷ yêu cầu', ok: true });
       await refresh();
       setCancelOpen(false);
-      setNotice({ text: 'Đã huỷ yêu cầu', ok: true });
     },
+    onError: () => setSending(false),
     onSettled: () => {
       cancelBusy.current = false;
     },
@@ -230,7 +234,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
       type="button"
       className="inline-flex min-h-11 w-full items-center justify-center rounded-control px-5 text-sm font-semibold text-danger-fg transition active:scale-95"
       onClick={() => {
-        cancel.reset();
+        if (!cancelBusy.current) cancel.reset();
         setCancelOpen(true);
       }}
     >
@@ -459,7 +463,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
 
       <Sheet
         open={cancelOpen}
-        dismissible={!cancel.isPending}
+        dismissible={!sending}
         onClose={() => setCancelOpen(false)}
         title="Huỷ yêu cầu này?"
         footer={
@@ -471,6 +475,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
             onClick={() => {
               if (cancelBusy.current) return;
               cancelBusy.current = true;
+              setSending(true);
               cancel.mutate();
             }}
           >

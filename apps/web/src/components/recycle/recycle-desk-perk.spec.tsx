@@ -294,6 +294,40 @@ describe('WasteDeskPerk (web): khoá chạm đúp Gửi duyệt (W77B)', () => {
   });
 });
 
+describe('WasteDeskPerk (web): danh sách điểm đang làm mới', () => {
+  it('danh sách điểm đang tải lại (thẻ vừa dựng lại, chưa thấy chữ mới): "Chỉnh sửa" báo bận và không mở; tải xong thì mở được', async () => {
+    const { qc } = mount(<WasteDeskPerk point={makeDeskPoint()} />);
+    const refresh = deferred<unknown>();
+    act(() => {
+      void qc.fetchQuery({ queryKey: ['waste', 'desk'], queryFn: () => refresh.promise });
+    });
+    await flush(2);
+    expect(btn('Chỉnh sửa').getAttribute('aria-disabled')).toBe('true');
+    expect(btn('Chỉnh sửa').disabled).toBe(false);
+    click(btn('Chỉnh sửa'));
+    await act(async () => reactProps(btn('Chỉnh sửa')).onClick?.());
+    await flush(3);
+    expect(sheetOpen()).toBe(false);
+    await act(async () => refresh.resolve([]));
+    await flush(3);
+    expect(btn('Chỉnh sửa').hasAttribute('aria-disabled')).toBe(false);
+    await openSheet();
+    expect(sheetOpen()).toBe(true);
+  });
+  it('báo cáo tháng đang tải (cùng tiền tố khoá nhưng không đổi chữ ưu đãi): "Chỉnh sửa" vẫn mở được', async () => {
+    const { qc } = mount(<WasteDeskPerk point={makeDeskPoint()} />);
+    const report = deferred<unknown>();
+    act(() => {
+      void qc.fetchQuery({ queryKey: ['waste', 'desk', 'report', 'pt-1', '2026-10'], queryFn: () => report.promise });
+    });
+    await flush(2);
+    expect(btn('Chỉnh sửa').hasAttribute('aria-disabled')).toBe(false);
+    await openSheet();
+    expect(sheetOpen()).toBe(true);
+    await act(async () => report.resolve(REPORT));
+  });
+});
+
 describe('WasteDeskPerk (web): gửi lỗi', () => {
   it('lỗi hiện bằng role="alert" ngay trong sheet; sheet vẫn mở, hết bận, chữ còn nguyên', async () => {
     mocks.put.mockRejectedValue(FAIL);
