@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift, Info, Leaf, Sprout, Ticket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
@@ -45,11 +45,15 @@ import { Heading, Text } from '../components/ui/text';
 import { formatDate, formatNumber, formatPoints, formatVnd } from '../utils/format';
 import { pointsSummary } from '../utils/points-lots';
 import { pointsRulesNote } from '../utils/points-rules-note';
+import { settleWithin } from '../utils/settle-within';
 import { pointAddress } from '../utils/waste-labels';
 
 export { REWARD_TABS, openingHoursText };
 
 const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
+
+/** Khoá chung của mọi lệnh đổi quà: trang đọc `useIsMutating` để biết còn lệnh bay kể cả khi khung xác nhận đã gỡ. */
+const REDEEM_MUTATION_KEY = ['loyalty-redeem'] as const;
 
 type RedeemOutcome =
   | { kind: 'VOUCHER'; couponCode: string | null }
@@ -79,6 +83,7 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
   const freeNote = rewardFreeShipNote(reward, catalog, formatVnd);
 
   const redeem = useMutation({
+    mutationKey: [...REDEEM_MUTATION_KEY, reward.id],
     mutationFn: async (): Promise<RedeemOutcome> => {
       if (reward.kind === 'TREE') {
         await buyTree(idemKey);
@@ -86,14 +91,16 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
       }
       return outcomeOf(reward, await redeemLoyaltyReward(reward.id, idemKey));
     },
+    // Điểm đã trừ nên kết quả phải hiện ngay cả khi làm mới dữ liệu treo: chờ có hạn, không chờ vô hạn.
     onSuccess: async (outcome) => {
       onRedeemed();
-      await invalidateAfterRedeem(qc);
+      await settleWithin(invalidateAfterRedeem(qc));
       onDone(outcome);
     },
-    onError: (e) => {
+    // Khoá giữ tới khi danh mục (tồn, số dư) làm mới về: chạm tiếp lúc này chỉ gửi lại đúng lệnh vừa bị từ chối.
+    onError: async (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards });
+      await settleWithin(qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards }));
     },
     onSettled: () => {
       busyRef.current = false;
@@ -130,7 +137,16 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
         </div>
       )}
       <div style={{ display: 'flex', gap: 8 }}>
-        <Button variant="secondary" fullWidth onPress={onCancel}>Huỷ</Button>
+        <Button
+          variant="secondary"
+          fullWidth
+          aria-disabled={redeem.isPending || undefined}
+          onPress={() => {
+            if (!busyRef.current) onCancel();
+          }}
+        >
+          Huỷ
+        </Button>
         <Button fullWidth loading={redeem.isPending} onPress={confirm}>Xác nhận đổi</Button>
       </div>
     </div>
@@ -227,6 +243,8 @@ function RewardsBody() {
   const [rulesOpen, setRulesOpen] = useState(false);
   // Giữ khoá ở thân trang để đóng khung rồi mở lại cùng quà sau lỗi mạng vẫn gửi đúng khoá cũ: máy chủ có thể đã trừ điểm.
   const idem = useIdempotencyKey({ rewardId: confirmReward?.id ?? null });
+  // Đang có lệnh đổi bay: không đóng khung xác nhận, kẻo mở lại thấy nút sáng và gửi thêm một lệnh (cùng khoá) trong khi lệnh đầu chưa xong.
+  const redeeming = useIsMutating({ mutationKey: REDEEM_MUTATION_KEY }) > 0;
 
   if (rewardsQ.isError && !rewardsQ.data) return <ErrorState message={getLoadErrorMessage(rewardsQ.error)} onRetry={() => rewardsQ.refetch()} />;
   const c = rewardsQ.data;
@@ -282,7 +300,14 @@ function RewardsBody() {
           ))}
         </div>
       )}
-      <BottomSheet open={confirmReward !== null} onClose={() => setConfirmReward(null)} title="Xác nhận đổi quà">
+      <BottomSheet
+        open={confirmReward !== null}
+        onClose={() => {
+          if (!redeeming) setConfirmReward(null);
+        }}
+        dismissible={!redeeming}
+        title="Xác nhận đổi quà"
+      >
         {confirmReward && (
           <RedeemConfirm
             reward={confirmReward}
