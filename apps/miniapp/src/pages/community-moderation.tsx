@@ -23,6 +23,8 @@ import {
   type CreateEventInput,
 } from '../services/feed-api';
 import { apiMediaUrl, getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { isHttpError } from '../services/http';
+import { settleWithin } from '../utils/settle-within';
 import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { Skeleton } from '../components/ui/skeleton';
@@ -503,7 +505,8 @@ function ClosedEventCard({ event }: { event: AdminCommunityEvent }) {
   );
 }
 
-function AdminEventCard({ event, onDone }: { event: AdminCommunityEvent; onDone: () => void }) {
+function AdminEventCard({ event, onDone }: { event: AdminCommunityEvent; onDone: () => Promise<unknown> }) {
+  const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
   const [choosing, setChoosing] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
@@ -524,23 +527,39 @@ function AdminEventCard({ event, onDone }: { event: AdminCommunityEvent; onDone:
   const releaseActing = () => {
     acting.current = false;
   };
+  // Lệnh bị từ chối vì trạng thái đã đổi (sự kiện đã đóng hoặc đã có người thắng, bài dự thi bị gỡ, sự kiện không còn): thẻ đang hiện dữ
+  // liệu cũ nên tải lại cả danh sách lẫn người dự thi và giữ khoá tới khi xong, kẻo bấm lại ra đúng lỗi cũ. Lỗi mạng/5xx thì trạng thái
+  // chưa chắc đã đổi nên không tải lại.
+  const refreshWhenRejected = (e: unknown) => {
+    const status = isHttpError(e) ? e.response?.status : undefined;
+    if (status !== 400 && status !== 404 && status !== 409) return undefined;
+    return settleWithin(Promise.all([onDone(), qc.invalidateQueries({ queryKey: ['admin-community-event-participants', event.id] })]));
+  };
+  // Trả Promise: khoá giữ tới khi danh sách sự kiện làm mới về (tối đa `settleWithin`). Nhả sớm thì thẻ còn nút "Chốt"/"Đóng" của sự kiện đã
+  // xong, chạm lại ra lỗi "đã đóng" ngay sau câu báo thành công.
   const closeM = useMutation({
     mutationFn: () => closeEvent(event.id),
     onSettled: releaseActing,
     onSuccess: () => {
       openSnackbar({ text: vi.community.eventClosed, type: 'success' });
-      onDone();
+      return settleWithin(onDone());
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshWhenRejected(e);
+    },
   });
   const winnerM = useMutation({
     mutationFn: (userId: string) => pickEventWinner(event.id, userId),
     onSettled: releaseActing,
     onSuccess: () => {
       openSnackbar({ text: vi.community.winnerPicked, type: 'success' });
-      onDone();
+      return settleWithin(onDone());
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return refreshWhenRejected(e);
+    },
   });
   const busy = closeM.isPending || winnerM.isPending;
 
