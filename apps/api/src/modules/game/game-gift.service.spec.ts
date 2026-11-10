@@ -30,17 +30,18 @@ function setup(opts: {
     upsert: jest.fn().mockResolvedValue({}),
   };
   const executeRaw = jest.fn().mockResolvedValue(1);
+  const transaction = jest.fn(async (cb: (tx: unknown) => Promise<unknown>, _options?: unknown) => cb(prisma));
   const prisma = {
     user,
     waterGift,
     gameProfile,
     $executeRaw: executeRaw,
     // Truyền thẳng: hành vi rollback thật được chứng minh ở game-gift.service.tx.spec.ts (fake DB có rollback).
-    $transaction: async (cb: (tx: unknown) => Promise<unknown>) => cb(prisma),
+    $transaction: transaction,
   } as unknown as PrismaService;
   const notify = jest.fn().mockResolvedValue(undefined);
   const notifications = { notify, notifySafe: notify } as unknown as NotificationsService;
-  return { svc: new GameGiftService(prisma, config, notifications), user, waterGift, gameProfile, notify, executeRaw };
+  return { svc: new GameGiftService(prisma, config, notifications), user, waterGift, gameProfile, notify, executeRaw, transaction };
 }
 
 describe('GameGiftService.giftWater', () => {
@@ -69,6 +70,12 @@ describe('GameGiftService.giftWater', () => {
     // Hồ sơ người nhận tạo từ quà bạn bè cũng có ecoImpact theo thang (trước đây thiếu hẳn).
     expect(upsertArg.create.ecoImpact).toEqual(expect.objectContaining({ progress: 0, target: 60, treesPlanted: 0 }));
     expect(notify).toHaveBeenCalledWith('friend1', 'GAME_WATER_GIFT', expect.any(Object));
+  });
+
+  it('tx có hạn dài hơn mặc định 5 giây: chờ khoá dòng users của checkout/spin tính vào hạn, quá hạn là P2028 → 500', async () => {
+    const { svc, transaction } = setup();
+    await svc.giftWater('u1', 'friend1');
+    expect(transaction).toHaveBeenCalledWith(expect.any(Function), { timeout: 15_000, maxWait: 10_000 });
   });
 
   it('người nhận là người đã mời mình (referrer) → cũng hợp lệ', async () => {

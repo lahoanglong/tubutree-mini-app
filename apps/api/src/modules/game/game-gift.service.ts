@@ -89,6 +89,7 @@ export class GameGiftService {
     // Bản ghi gift (unique chống tặng 2 lần/ngày/người), trừ nước người gửi và cộng nước người nhận nằm trong MỘT
     // transaction: sập giữa chừng thì cả ba cùng huỷ, không còn cảnh người gửi mất nước mà người nhận không được gì.
     // Chỉ unique của chính bản ghi gift mới là "đã tặng hôm nay"; lỗi khác (DB, mạng, P2002 ở bước sau) ném nguyên văn.
+    // Chờ khoá dòng users (checkout/spin của một trong hai người đang giữ) cũng tính vào hạn tx: mặc định 5 giây dễ dính P2028.
     let giftRowInserted = false;
     try {
       await this.prisma.$transaction(async (tx) => {
@@ -129,7 +130,7 @@ export class GameGiftService {
           await creditRecipient();
           await debitSender();
         }
-      });
+      }, { timeout: 15_000, maxWait: 10_000 });
     } catch (err) {
       // Bắt NGOÀI $transaction: unique lỗi làm Postgres huỷ tx đang mở nên không thể bắt-rồi-làm-tiếp bên trong.
       if (!giftRowInserted && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
