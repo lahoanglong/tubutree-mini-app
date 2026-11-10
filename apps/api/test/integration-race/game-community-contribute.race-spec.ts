@@ -69,13 +69,13 @@ describe('GameCommunityService.contribute song song (real Postgres)', () => {
     expect(rows.every((r) => r.drops === 10)).toBe(true);
   });
 
-  it('10 lượt góp 20💧 vượt mốc 50💧: mốc chốt đúng một lần (DONE, có fulfilledAt), tổng hồ khớp tổng dòng đóng góp, không mất giọt nào', async () => {
+  it('10 lượt góp 20💧 vượt mốc 50💧: mốc chốt đúng một lần ngay ở lượt vượt, các lượt sau sang mốc kế, mốc đã đóng không nhận thêm giọt nào', async () => {
     const g = await goal(50);
     const sink = await goal(1_000_000);
     const fulfilResults: boolean[] = [];
     const original = community.fulfil.bind(community);
-    const spy = jest.spyOn(community, 'fulfil').mockImplementation(async (id: string) => {
-      const won = await original(id);
+    const spy = jest.spyOn(community, 'fulfil').mockImplementation(async (id, db) => {
+      const won = await original(id, db);
       if (id === g.id) fulfilResults.push(won);
       return won;
     });
@@ -88,12 +88,13 @@ describe('GameCommunityService.contribute song song (real Postgres)', () => {
     }
     const after = await prisma.communityGoal.findUniqueOrThrow({ where: { id: g.id } });
     const sinkAfter = await prisma.communityGoal.findUniqueOrThrow({ where: { id: sink.id } });
-    console.log('[community-cross] goal.currentDrops=%d sink.currentDrops=%d fulfilResults=%j', after.currentDrops, sinkAfter.currentDrops, fulfilResults);
     expect(after.status).toBe('DONE');
     expect(after.fulfilledAt).not.toBeNull();
-    expect(fulfilResults.filter(Boolean)).toHaveLength(1);
-    expect(after.currentDrops).toBe(await sumOf(g.id));
-    expect(sinkAfter.currentDrops).toBe(await sumOf(sink.id));
-    expect(after.currentDrops + sinkAfter.currentDrops).toBe(200);
+    expect(fulfilResults).toEqual([true]);
+    // 3 lượt (60💧) đủ mốc 50💧; lượt vượt là lượt cuối được nhận, 7 lượt còn lại chuyển sang mốc kế.
+    expect(after.currentDrops).toBe(60);
+    expect(await sumOf(g.id)).toBe(60);
+    expect(sinkAfter.currentDrops).toBe(140);
+    expect(await sumOf(sink.id)).toBe(140);
   });
 });
