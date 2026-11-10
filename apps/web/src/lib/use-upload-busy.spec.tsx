@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { describe, expect, it } from 'vitest';
 import { renderHook } from '@/test-utils/render-hook';
-import { IMAGES_UPLOADING, useUploadBusy } from './use-upload-busy';
+import { useUploadBusy } from './use-upload-busy';
 
 describe('useUploadBusy', () => {
   it('bận từ lúc một ô báo true tới lúc báo false', () => {
@@ -40,9 +40,5 @@ describe('useUploadBusy', () => {
     act(() => first(true));
     expect(h.result.current.onBusyChange).toBe(first);
     h.unmount();
-  });
-
-  it('chữ nút dùng chung cùng chữ với Mini App', () => {
-    expect(IMAGES_UPLOADING).toBe('Đang tải ảnh…');
   });
 });

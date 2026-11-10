@@ -1,8 +1,5 @@
 import { useCallback, useState } from 'react';
 
-/** Chữ trên nút Lưu/Gửi của form cha khi ảnh còn đang tải (cùng chữ với Mini App). */
-export const IMAGES_UPLOADING = 'Đang tải ảnh…';
-
 /**
  * Cờ "đang tải ảnh" cho form có một hay nhiều ô ảnh: nối `onBusyChange` vào mỗi ô, form dùng `busy` để khoá nút Lưu.
  * Mỗi ô báo true rồi false đúng một lần cho mỗi lượt tải, nên ĐẾM lượt đang chạy thay vì giữ một cờ chung: hai ô tải

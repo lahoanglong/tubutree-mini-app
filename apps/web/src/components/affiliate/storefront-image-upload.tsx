@@ -59,14 +59,17 @@ export function StorefrontImageUpload({
   const inputRef = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // `busy` chỉ đúng sau lần vẽ kế; ref chặn tệp thứ hai chọn ngay khi tệp đầu còn đang tải: ảnh chậm về sau sẽ ghi đè ảnh về trước, còn nút Lưu của form cha đã nhả khoá.
+  const uploading = useRef(false);
 
   const pick = () => {
-    if (!disabled) inputRef.current?.click();
+    if (uploading.current || disabled) return;
+    inputRef.current?.click();
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || disabled) return;
+    if (!file || uploading.current || disabled) return;
     setError(null);
     const reset = () => {
       if (inputRef.current) inputRef.current.value = '';
@@ -79,6 +82,7 @@ export function StorefrontImageUpload({
       setError('Ảnh quá lớn (tối đa 20MB). Hãy chọn ảnh khác nhé.');
       return reset();
     }
+    uploading.current = true;
     setBusy(true);
     onBusyChange?.(true);
     try {
@@ -86,6 +90,7 @@ export function StorefrontImageUpload({
     } catch {
       setError('Tải ảnh thất bại. Hãy chọn lại tệp ảnh khác.');
     } finally {
+      uploading.current = false;
       setBusy(false);
       onBusyChange?.(false);
       reset();

@@ -19,7 +19,8 @@ import {
 } from '@tubutree/app-core/dealer-apply-copy';
 import { applyPitch, pendingBody } from '@/lib/dealer-view';
 import { ui } from '@/lib/guest-ui';
-import { IMAGES_UPLOADING, useUploadBusy } from '@/lib/use-upload-busy';
+import { IMAGES_UPLOADING } from '@/lib/image-compress';
+import { useUploadBusy } from '@/lib/use-upload-busy';
 import { phoneBodySm, phoneCaption } from '@/lib/phone-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { Field } from '@/components/ui/field';

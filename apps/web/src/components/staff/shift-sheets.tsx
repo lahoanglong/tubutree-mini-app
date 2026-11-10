@@ -6,6 +6,7 @@ import { ui } from '@/lib/guest-ui';
 import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
 import { EvidenceUpload } from '@/components/evidence-upload';
+import { IMAGES_UPLOADING } from '@/lib/image-compress';
 
 export const TIME_RE = /^\d{1,2}:\d{2}$/;
 
@@ -191,6 +192,8 @@ export function CancelSheet({
   state,
   onChange,
   pending,
+  evidenceBusy,
+  onEvidenceBusyChange,
   onClose,
   onSubmit,
 }: {
@@ -198,6 +201,9 @@ export function CancelSheet({
   state: CancelState;
   onChange: (patch: Partial<CancelState>) => void;
   pending: boolean;
+  /** Ảnh chứng cứ còn đang lên: gửi lúc này sẽ huỷ ca không kèm chứng cứ, đóng lúc này làm ảnh về muộn rơi vào tấm của ca khác. */
+  evidenceBusy: boolean;
+  onEvidenceBusyChange: (busy: boolean) => void;
   onClose: () => void;
   onSubmit: () => void;
 }) {
@@ -206,18 +212,18 @@ export function CancelSheet({
     <Sheet
       open={open}
       onClose={onClose}
-      dismissible={!pending}
+      dismissible={!pending && !evidenceBusy}
       title="Huỷ ca đã duyệt"
       footer={
         <button
           type="button"
           disabled={reason.trim().length === 0 || (emergency && !evidence)}
-          aria-busy={pending || undefined}
-          aria-disabled={pending || undefined}
+          aria-busy={pending || evidenceBusy || undefined}
+          aria-disabled={pending || evidenceBusy || undefined}
           onClick={onSubmit}
           className={`${ui.btnPrimary} w-full`}
         >
-          {pending ? 'Đang huỷ…' : 'Xác nhận huỷ'}
+          {pending ? 'Đang huỷ…' : evidenceBusy ? IMAGES_UPLOADING : 'Xác nhận huỷ'}
         </button>
       }
     >
@@ -245,6 +251,8 @@ export function CancelSheet({
             max={1}
             value={evidence ? [evidence] : []}
             onChange={(v) => onChange({ evidence: v[0] ?? '' })}
+            onBusyChange={onEvidenceBusyChange}
+            disabled={pending}
           />
         )}
       </div>

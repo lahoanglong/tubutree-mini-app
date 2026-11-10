@@ -142,4 +142,26 @@ describe('StorefrontImageUpload — báo form cha đang tải ảnh', () => {
     act(() => r.container.querySelector<HTMLButtonElement>('button[aria-label="Tải lên ảnh bìa"]')!.click());
     expect(openPicker).toHaveBeenCalledTimes(1);
   });
+
+  it('một ô chỉ tải một lần một lúc: chọn thêm tệp hoặc bấm ô khi tệp đầu còn đang lên bị bỏ qua, ảnh chậm không bị ảnh khác ghi đè; xong thì chọn lại được', async () => {
+    const up = deferUpload();
+    const r = mount();
+    const input = r.container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const openPicker = vi.spyOn(input, 'click');
+    choose(r.container, file('a.png'));
+    await flush();
+    choose(r.container, file('b.png'));
+    await flush();
+    expect(m.upload).toHaveBeenCalledTimes(1);
+    act(() => r.container.querySelector<HTMLButtonElement>('button[aria-label="Tải lên ảnh bìa"]')!.click());
+    expect(openPicker).not.toHaveBeenCalled();
+    expect(log).toEqual(['busy:true']);
+
+    await act(async () => up.done('https://res.cloudinary.com/x/a.jpg'));
+    await flush();
+    expect(log).toEqual(['busy:true', 'change:https://res.cloudinary.com/x/a.jpg', 'busy:false']);
+    choose(r.container, file('b.png'));
+    await flush();
+    expect(m.upload).toHaveBeenCalledTimes(2);
+  });
 });

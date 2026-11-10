@@ -25,6 +25,7 @@ import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { errText, PeriodNav, useNotice } from './staff-shell';
+import { useUploadBusy } from '@/lib/use-upload-busy';
 import { TodayCard } from './today-card';
 import { CancelSheet, QuickSheet, ShiftFormSheet, type CancelState, type QuickState, type ShiftFormState } from './shift-sheets';
 
@@ -238,6 +239,10 @@ export function StaffHub() {
   // Huỷ ca đã duyệt
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [cancel, setCancel] = useState<CancelState>(EMPTY_CANCEL);
+  // Cờ nằm ở trang vì tấm huỷ ca gỡ nội dung khi đóng, còn ảnh về muộn vẫn ghi vào `cancel.evidence` của trang. Tắt "Đột xuất" gỡ ô ảnh
+  // nên lượt tải còn chạy không còn chặn nút (ảnh không ai chờ), bật lại thì chặn tiếp tới khi lượt đó xong.
+  const { busy: uploadBusy, onBusyChange: onEvidenceBusyChange } = useUploadBusy();
+  const evidenceBusy = cancel.emergency && uploadBusy;
   const cancelM = useLockedMutation(
     {
       mutationKey: CANCEL_KEY,
@@ -261,7 +266,7 @@ export function StaffHub() {
     setCancelId(id);
   };
   const submitCancel = () => {
-    if (!cancelId) return;
+    if (!cancelId || evidenceBusy) return;
     cancelM.mutate({ id: cancelId, reason: cancel.reason.trim(), isEmergency: cancel.emergency, evidenceUrl: cancel.evidence || undefined, week: mondayKey });
   };
 
@@ -403,7 +408,7 @@ export function StaffHub() {
 
       <ShiftFormSheet open={formOpen} state={form} onChange={patchForm} templates={templates} pending={formBusy} onClose={() => setFormOpen(false)} onSubmit={submitForm} />
       <QuickSheet open={quickOpen} state={quick} onChange={patchQuick} templates={templates} dayKeys={dayKeys} todayKey={todayKey} pending={quickingWeeks.has(mondayKey)} onClose={() => setQuickOpen(false)} onSubmit={submitQuick} />
-      <CancelSheet open={!!cancelId} state={cancel} onChange={(p) => setCancel((c) => ({ ...c, ...p }))} pending={cancelBusy} onClose={() => setCancelId(null)} onSubmit={submitCancel} />
+      <CancelSheet open={!!cancelId} state={cancel} onChange={(p) => setCancel((c) => ({ ...c, ...p }))} pending={cancelBusy} evidenceBusy={evidenceBusy} onEvidenceBusyChange={onEvidenceBusyChange} onClose={() => setCancelId(null)} onSubmit={submitCancel} />
     </div>
   );
 }
