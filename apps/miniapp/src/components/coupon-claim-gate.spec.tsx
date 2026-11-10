@@ -53,6 +53,7 @@ vi.mock('../hooks/use-cart-count', () => ({ useCartCount: () => mocks.cartCount 
 import { useAuthStore } from '../store/auth';
 import { CouponClaimGate, isGuestUser } from './coupon-claim-gate';
 import { PENDING_CLAIM_KEY } from '../services/coupon-claim';
+import { RATE_LIMITED_MESSAGE } from '../services/api';
 import { getCardGiftNote, setCardGiftNote } from '../services/card-gift-note';
 
 const REAL: AuthUser = { id: 'u1', zaloId: 'z1', phone: '0912345678', role: 'CUSTOMER', referralCode: 'R', pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0 } as AuthUser;
@@ -84,8 +85,7 @@ function deferred<T>() {
   return { promise, resolve };
 }
 
-function renderGate() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+function renderGate(qc = new QueryClient({ defaultOptions: { queries: { retry: false } } })) {
   return render(
     <QueryClientProvider client={qc}>
       <CouponClaimGate />
@@ -287,6 +287,46 @@ describe('CouponClaimGate — nhận ưu đãi từ thẻ QR hộp hàng (D2-03)
     expect(mocks.post).toHaveBeenCalledTimes(2);
   });
 
+  it('quá nhiều yêu cầu (429): nói câu giới hạn tốc độ, giữ mã chờ trên máy và cho thử lại; thử lại thành công thì hiện ưu đãi', async () => {
+    window.history.replaceState({}, '', '/?claim=SHOPEE-AB12CD34');
+    mocks.post.mockRejectedValueOnce(httpError(429)).mockResolvedValueOnce({ data: CLAIMED });
+    setAuth(REAL);
+    renderGate();
+    expect(await screen.findByText(RATE_LIMITED_MESSAGE)).toBeInTheDocument();
+    await waitFor(() => expect(mocks.storage[PENDING_CLAIM_KEY]).toBe('SHOPEE-AB12CD34'));
+    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+    expect(await screen.findByText('Bạn nhận được ưu đãi')).toBeInTheDocument();
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+  });
+
+  it('bấm "Thử lại" hai lần sát nhau trong cùng một lần vẽ: chỉ một lần gọi máy chủ', async () => {
+    window.history.replaceState({}, '', '/?claim=SHOPEE-AB12CD34');
+    const retry = deferred<{ data: typeof CLAIMED }>();
+    mocks.post.mockRejectedValueOnce(httpError(undefined)).mockReturnValueOnce(retry.promise);
+    setAuth(REAL);
+    renderGate();
+    const button = await screen.findByRole('button', { name: 'Thử lại' });
+    act(() => {
+      button.click();
+      button.click();
+    });
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+    await act(async () => retry.resolve({ data: CLAIMED }));
+    expect(await screen.findByText('Bạn nhận được ưu đãi')).toBeInTheDocument();
+    expect(mocks.post).toHaveBeenCalledTimes(2);
+  });
+
+  it('nhận xong đánh dấu ví mã giảm giá cũ để "Mã của tôi" tải lại và có mã vừa nhận', async () => {
+    window.history.replaceState({}, '', '/?claim=SHOPEE-AB12CD34');
+    mocks.post.mockResolvedValue({ data: CLAIMED });
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    qc.setQueryData(['coupons'], []);
+    setAuth(REAL);
+    renderGate(qc);
+    expect(await screen.findByText('Bạn nhận được ưu đãi')).toBeInTheDocument();
+    expect(qc.getQueryState(['coupons'])?.isInvalidated).toBe(true);
+  });
+
   it('không có link và không có mã chờ: không hiện gì, không gọi máy chủ', async () => {
     setAuth(REAL);
     renderGate();
@@ -329,6 +369,22 @@ describe('CouponClaimGate — nhận ưu đãi từ thẻ QR hộp hàng (D2-03)
       expect(screen.getByRole('button', { name: 'Để sau' })).toBeEnabled();
       fireEvent.click(screen.getByRole('button', { name: 'Để sau' }));
       await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument());
+    });
+
+    it('bấm "Đăng nhập bằng Zalo" hai lần sát nhau trong cùng một lần vẽ: chỉ một lần xin đăng nhập', async () => {
+      window.history.replaceState({}, '', '/?claim=SHOPEE-AB12CD34');
+      const login = deferred<string | null>();
+      const ensurePhone = vi.fn(() => login.promise);
+      setAuth(GUEST, 'authenticated', ensurePhone);
+      renderGate();
+      const loginBtn = await screen.findByRole('button', { name: 'Đăng nhập bằng Zalo' });
+      act(() => {
+        loginBtn.click();
+        loginBtn.click();
+      });
+      expect(ensurePhone).toHaveBeenCalledTimes(1);
+      await act(async () => login.resolve(null));
+      expect(await screen.findByText('Chưa đăng nhập được. Bạn thử lại nhé.')).toBeInTheDocument();
     });
 
     it('bấm "Để sau" ngay trong lúc React chưa vẽ lại cờ đăng nhập: ref chặn, sheet không đóng', async () => {
