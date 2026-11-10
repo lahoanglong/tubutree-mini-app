@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, Clock, XCircle } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -73,6 +73,8 @@ export function OrderActions({
   const [returnOpen, setReturnOpen] = useState(false);
   const [returnKey, setReturnKey] = useState(0);
   const [returnSent, setReturnSent] = useState(false);
+  // Lời máy chủ từ chối yêu cầu đổi/trả. Form tự hiện lời này; ở đây giữ thêm một bản để còn trên màn khi form bị gỡ (đơn vừa sang RETURNED).
+  const [returnError, setReturnError] = useState<string | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
   // State ổn định (không dựng target trong JSX): ReorderSheet khởi tạo lại lựa chọn theo danh tính của target.
   const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
@@ -92,7 +94,8 @@ export function OrderActions({
   const cancelBankError = refundMode === 'choose' && cancelMethod === 'BANK' ? bankDetailsError(cancelBank) : null;
 
   const returnsQ = useQuery({ queryKey: ['my-returns'], queryFn: fetchMyReturns, enabled: showsReturns, retry: 0 });
-  const orderReturns: ReturnRequestDTO[] = o.id ? (returnsQ.data ?? []).filter((r) => r.orderId === o.id) : [];
+  // Giữ nguyên danh tính giữa các lần vẽ: form đổi/trả suy số "còn trả được" từ mảng này.
+  const orderReturns = useMemo<ReturnRequestDTO[]>(() => (o.id ? (returnsQ.data ?? []).filter((r) => r.orderId === o.id) : []), [returnsQ.data, o.id]);
   // Cùng khoá với khối Hoàn tiền (OrderRefunds): thẻ đổi/trả nói nơi nhận theo khoản hoàn thật (khách có thể đã đổi sang Ví).
   const refundsQ = useQuery({
     queryKey: ['my-refunds', o.id],
@@ -146,9 +149,10 @@ export function OrderActions({
   const primary = plan.primary && hide(plan.primary) ? (more.shift() ?? null) : plan.primary;
   const shownPlan: OrderActionPlan = { ...plan, primary, more };
   // Lời từ chối hủy của BE và kết quả hủy phải còn trên màn dù đơn tải lại không còn việc gì để bấm.
-  if (!primary && !showsReturns && !cancel.isError && !cancel.isSuccess) return null;
+  if (!primary && !showsReturns && !cancel.isError && !cancel.isSuccess && !returnError) return null;
   const returnMore = orderReturns.some((r) => r.status === 'APPROVED');
   const onAction = (kind: OrderActionKind) => {
+    setReturnError(null);
     if (kind === 'pay') {
       // Từ md khung QR nằm ngay trong trang: cuộn tới nó thay vì rời trang.
       const panel = isPhone ? null : document.getElementById('order-pay-panel');
@@ -294,12 +298,21 @@ export function OrderActions({
         </p>
       )}
 
+      {returnError && !(delivered && returnOpen) && (
+        <p role="alert" className={`mt-3 ${ui.error}`}>
+          {returnError}
+        </p>
+      )}
       {delivered && returnOpen && (
         <ReturnRequestForm
           key={returnKey}
           order={o}
           returns={orderReturns}
-          onClose={() => setReturnOpen(false)}
+          onError={setReturnError}
+          onClose={() => {
+            setReturnOpen(false);
+            setReturnError(null);
+          }}
           onDone={() => {
             setReturnOpen(false);
             setReturnSent(true);

@@ -18,6 +18,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { platformBridge } from '@/lib/platform-bridge';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { usePressLock } from '@/lib/use-press-lock';
 import { useRovingGroup } from '@/lib/use-roving-group';
 
 const LOAD_FAILED = 'Chưa tải được cài đặt thông báo. Thử lại sau nhé.';
@@ -46,6 +47,8 @@ export default function SettingsPage() {
   const savingRef = useRef(false);
   const [saveError, setSaveError] = useState(false);
   const [fontScale, setFontScale] = useState<FontScale>('normal');
+  // Mỗi lần `logout()` là một lệnh POST /auth/logout và một lượt xoá cache: hai cú chạm cùng khung hình chỉ được chạy một.
+  const logoutLock = usePressLock(() => logout());
   const prefsRetrying = useRef(false);
   const retryPrefs = () => {
     if (prefsRetrying.current) return;
@@ -177,7 +180,14 @@ export default function SettingsPage() {
       </Section>
 
       <div className="flex flex-col gap-2">
-        <button type="button" onClick={() => void logout()} className={`${ui.btnSecondary} w-full ${mini.secondary}`}>
+        {/* Bận bằng aria chứ không `disabled`: nút đang giữ focus mà `disabled` thì Chromium thả focus về body. */}
+        <button
+          type="button"
+          onClick={logoutLock.press}
+          aria-busy={logoutLock.busy || undefined}
+          aria-disabled={logoutLock.busy || undefined}
+          className={`${ui.btnSecondary} w-full ${mini.secondary}`}
+        >
           Đăng xuất
         </button>
         <LogoutAllSection />
