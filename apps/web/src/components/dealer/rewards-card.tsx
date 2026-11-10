@@ -8,6 +8,7 @@ import { dealerRewardsQuery } from '@tubutree/app-core/queries/dealer';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
+import { settleWithin } from '@/lib/settle-within';
 import { rewardClaimView, type RewardClaimTone } from '@/lib/dealer-view';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
@@ -54,13 +55,13 @@ export function RewardsCard() {
               }
             : old,
         );
-        // Trả lời hứa tải lại: khoá dòng giữ tới khi trạng thái thật của máy chủ về.
-        return qc.invalidateQueries({ queryKey: dealerRewardsQuery(coreHttp).queryKey });
+        // Trả lời hứa tải lại: khoá dòng giữ tới khi trạng thái thật của máy chủ về, tối đa `settleWithin` (mạng chậm không giữ nút lâu hơn lệnh đã xong).
+        return settleWithin(qc.invalidateQueries({ queryKey: dealerRewardsQuery(coreHttp).queryKey }));
       },
       // Hết hạn, tụt doanh số... → tải lại để nút và trạng thái khớp máy chủ.
       onError: (e, v) => {
         setRowErrors((prev) => new Map(prev).set(claimRowKey(v), errText(e)));
-        return qc.invalidateQueries({ queryKey: dealerRewardsQuery(coreHttp).queryKey });
+        return settleWithin(qc.invalidateQueries({ queryKey: dealerRewardsQuery(coreHttp).queryKey }));
       },
     },
     claimRowKey,

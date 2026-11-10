@@ -209,9 +209,7 @@ export function ContentKitSheet({ open, onClose, productSlug }: { open: boolean;
       {q.isError && (
         <ErrorState
           message={errText(q.error)}
-          onRetry={() => {
-            if (!q.isFetching) void q.refetch();
-          }}
+          onRetry={() => (q.isFetching ? undefined : q.refetch())}
         />
       )}
       {data && (

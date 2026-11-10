@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Lightbulb } from 'lucide-react';
 import type { HarvestCouponCap, HarvestCouponTerms, HarvestSpecies } from '@tubutree/app-core/api/game';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
@@ -85,6 +86,11 @@ export function HarvestCelebration({
   onShare: () => void;
 }) {
   const t = gameNewbieCopy.harvest;
+  // Trang cha đóng hộp rồi `router.push`; hai cú chạm cùng khung hình đều thấy nút trước khi hộp đóng và đẩy hai mục lịch sử. Mỗi lần mở hộp là một khoá mới.
+  const loginSent = useRef(false);
+  useEffect(() => {
+    if (open) loginSent.current = false;
+  }, [open]);
   const seedling = sprout || (points != null && points > 0);
   const showPoints = points != null && points > 0;
   return (
@@ -114,7 +120,15 @@ export function HarvestCelebration({
             </button>
           )}
           {guest && (
-            <button type="button" onClick={onLogin} className={`${ui.btnPrimary} w-full`}>
+            <button
+              type="button"
+              onClick={() => {
+                if (loginSent.current) return;
+                loginSent.current = true;
+                onLogin();
+              }}
+              className={`${ui.btnPrimary} w-full`}
+            >
               {t.guestCta}
             </button>
           )}

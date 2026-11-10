@@ -10,6 +10,7 @@ import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { formatDate } from '@/lib/format-date';
+import { settleWithin } from '@/lib/settle-within';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
@@ -30,7 +31,7 @@ export function CreditTab() {
   // Key vẫn gửi đi (header Idempotency-Key) nhưng `POST /dealer/credit-payment` chưa đọc nó: chống báo trùng hiện chỉ dựa vào khoá phía client bên dưới,
   // không chống được timeout rồi gửi lại. Key đổi sau mỗi lần báo thành công.
   const payKey = useRef(newIdempotencyKey());
-  // Số tiền và key đi theo biến mutate (chụp lúc bấm lần đầu), không đọc `amount` mới hơn. Khoá giữ tới khi dư nợ mới về: nhả sớm thì bấm lần hai trên dư nợ cũ vẫn qua được kiểm "vượt dư nợ".
+  // Số tiền và key đi theo biến mutate (chụp lúc bấm lần đầu), không đọc `amount` mới hơn. Khoá giữ tới khi dư nợ mới về, tối đa `settleWithin`: nhả sớm thì bấm lần hai trên dư nợ cũ vẫn qua được kiểm "vượt dư nợ".
   const pay = useLockedMutation({
     mutationFn: (v: { amount: number; typed: string; key: string }) => payCredit(coreHttp, v.amount, v.key, 'Báo đã chuyển khoản'),
     // Xoá lời báo cũ ở đây: cú bấm bị khoá nuốt không chạy onMutate nên không làm mất lời báo vừa hiện.
@@ -40,10 +41,12 @@ export function CreditTab() {
       payKey.current = newIdempotencyKey();
       // Khách gõ số khác trong lúc đang gửi thì giữ số đó, chỉ xoá khi ô vẫn là số vừa gửi.
       setAmount((cur) => (cur === v.typed ? '' : cur));
-      return Promise.all([
-        qc.invalidateQueries({ queryKey: dealerCreditQuery(coreHttp).queryKey }),
-        qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey }),
-      ]);
+      return settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: dealerCreditQuery(coreHttp).queryKey }),
+          qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey }),
+        ]),
+      );
     },
   });
   const submit = () => {

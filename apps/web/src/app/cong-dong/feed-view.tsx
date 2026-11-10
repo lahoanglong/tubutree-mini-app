@@ -19,6 +19,7 @@ import { LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ErrorState } from '@/components/ui/error-state';
 import { PostCardSkeleton } from '@/components/mini/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { usePressLock } from '@/lib/use-press-lock';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -120,6 +121,8 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
     staleTime: 30_000,
     retry: false,
   });
+  // `isFetchingNextPage` chỉ đúng sau lần vẽ kế: hai cú chạm cùng khung hình đều thấy nút rảnh, và lượt nạp thứ hai huỷ lượt đầu rồi gửi lại.
+  const loadMore = usePressLock(() => feed.fetchNextPage());
   const posts = feed.data?.pages.flatMap((p) => p.posts) ?? [];
   const filtering = Boolean(dq || unanswered || tag);
 
@@ -279,7 +282,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
       {feed.isLoading ? (
         <ListSkeleton />
       ) : feed.isError ? (
-        <ErrorState message={errorText(feed.error)} onRetry={() => void feed.refetch()} />
+        <ErrorState message={errorText(feed.error)} onRetry={() => feed.refetch()} />
       ) : posts.length === 0 ? (
         filtering ? (
           <p className="py-10 text-center text-stone-700">Không tìm thấy bài phù hợp</p>
@@ -305,7 +308,7 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
                 type="button"
                 aria-busy={feed.isFetchingNextPage || undefined}
                 aria-disabled={feed.isFetchingNextPage || undefined}
-                onClick={() => !feed.isFetchingNextPage && void feed.fetchNextPage()}
+                onClick={loadMore.press}
                 className={`${miniBtnSecondary} min-w-40`}
               >
                 {feed.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm'}

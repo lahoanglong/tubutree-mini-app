@@ -14,6 +14,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { miniBtnSecondary, miniCard } from '@/components/loyalty/mini-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { usePressLock } from '@/lib/use-press-lock';
 import { formatCount } from '@/lib/checkout-points';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
@@ -80,7 +81,7 @@ function Cover({ url }: { url: string | null }) {
 
 function EventsList({ eventsQ, onSelect }: { eventsQ: UseQueryResult<CommunityEvent[]>; onSelect: (e: CommunityEvent) => void }) {
   if (eventsQ.isLoading) return <CardSkeletons height={140} />;
-  if (eventsQ.isError && !eventsQ.data) return <ErrorState message={errorText(eventsQ.error)} onRetry={() => void eventsQ.refetch()} />;
+  if (eventsQ.isError && !eventsQ.data) return <ErrorState message={errorText(eventsQ.error)} onRetry={() => eventsQ.refetch()} />;
   if (!eventsQ.data || eventsQ.data.length === 0) return <EmptyCard heading="Chưa có sự kiện nào" />;
   return (
     <div className="grid gap-3 md:grid-cols-2">
@@ -119,6 +120,8 @@ function EventEntries({
   onJoin: () => void;
 }) {
   const ended = isEventEnded(event);
+  // `isFetchingNextPage` chỉ đúng sau lần vẽ kế: hai cú chạm cùng khung hình đều thấy nút rảnh, và lượt nạp thứ hai huỷ lượt đầu rồi gửi lại.
+  const loadMore = usePressLock(() => entriesQ.fetchNextPage());
   const entries = entriesQ.data?.pages.flatMap((pg) => pg.posts) ?? [];
   return (
     <div className="flex flex-col gap-3">
@@ -144,7 +147,7 @@ function EventEntries({
       {entriesQ.isLoading ? (
         <CardSkeletons height={100} />
       ) : entriesQ.isError ? (
-        <ErrorState message={errorText(entriesQ.error)} onRetry={() => void entriesQ.refetch()} />
+        <ErrorState message={errorText(entriesQ.error)} onRetry={() => entriesQ.refetch()} />
       ) : entries.length === 0 ? (
         <EmptyCard heading="Chưa có bài viết nào" body="Hãy là người đầu tiên chia sẻ hoặc đặt câu hỏi!" />
       ) : (
@@ -158,9 +161,9 @@ function EventEntries({
             <div className="flex justify-center pt-1">
               <button
                 type="button"
-                aria-busy={entriesQ.isFetchingNextPage || undefined}
-                aria-disabled={entriesQ.isFetchingNextPage || undefined}
-                onClick={() => !entriesQ.isFetchingNextPage && void entriesQ.fetchNextPage()}
+                aria-busy={loadMore.busy || entriesQ.isFetchingNextPage || undefined}
+                aria-disabled={loadMore.busy || entriesQ.isFetchingNextPage || undefined}
+                onClick={loadMore.press}
                 className={`${miniBtnSecondary} min-w-40`}
               >
                 {entriesQ.isFetchingNextPage ? 'Đang tải…' : 'Xem thêm bài dự thi'}
