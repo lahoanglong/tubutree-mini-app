@@ -30,7 +30,6 @@ export function GardenHintBubble({ onGardenTab, onOpenGarden }: { onGardenTab: b
     const id = setTimeout(() => {
       if (overlayOpen()) return;
       markGardenHintSeen();
-      opened.current = false;
       setOpen(true);
     }, GARDEN_HINT_DELAY_MS);
     return () => clearTimeout(id);
