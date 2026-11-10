@@ -891,6 +891,58 @@ describe('OrderDetailPage: huỷ đơn và chép hoá đơn khoá chạm đúp, 
     await waitFor(() => expect(mocks.cancelOrder).toHaveBeenCalledTimes(2));
   });
 
+  describe('máy chủ từ chối huỷ thì tải lại ngay và giữ khoá tới khi đơn mới về (W104A)', () => {
+    const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+    const SHIPPED = 'Đơn đã bàn giao cho đơn vị vận chuyển nên không huỷ được.';
+
+    it.each([400, 404, 409])('bị từ chối %i: tải lại đơn, danh sách đơn và khoản hoàn', async (status) => {
+      const inv = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+      try {
+        mocks.cancelOrder.mockRejectedValueOnce(serverError(SHIPPED, status));
+        await openCancelSheet();
+        fireEvent.click(confirmButton());
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: SHIPPED, type: 'error' }));
+        const keys = () => inv.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+        await waitFor(() => expect(keys()).toEqual(expect.arrayContaining(['["order","TT001"]', '["orders"]', '["my-refunds"]'])));
+      } finally {
+        inv.mockRestore();
+      }
+    });
+
+    it('nút Huỷ đơn ở thanh thao tác khoá tới khi đơn tải lại xong, rồi biến mất vì đơn đã giao đi', async () => {
+      mocks.cancelOrder.mockRejectedValueOnce(serverError(SHIPPED, 400));
+      await openCancelSheet();
+      const refetch = deferred();
+      mocks.fetchOrder.mockReturnValue(refetch.promise);
+      fireEvent.click(confirmButton());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+      expect(await screen.findByRole('button', { name: 'Huỷ đơn' })).toBeDisabled();
+      await act(async () => refetch.resolve({ ...ORDER, status: 'SHIPPING' }));
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Huỷ đơn' })).toBeNull());
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ])('%s: vẫn tải lại đơn như trước nhưng không tải danh sách đơn và hoàn tiền, khoá nhả ngay', async (_label, error) => {
+      const inv = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+      try {
+        mocks.cancelOrder.mockRejectedValueOnce(error);
+        await openCancelSheet();
+        fireEvent.click(confirmButton());
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+        const keys = inv.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+        expect(keys).toContain('["order","TT001"]');
+        expect(keys).not.toContain('["orders"]');
+        expect(keys).not.toContain('["my-refunds"]');
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Huỷ đơn' })).toBeEnabled());
+      } finally {
+        inv.mockRestore();
+      }
+    });
+  });
+
   it('chạm đúp "Chép đường dẫn" hoá đơn chỉ chép một lần và báo một lần', async () => {
     const d = deferred();
     mocks.copyText.mockReturnValueOnce(d.promise);

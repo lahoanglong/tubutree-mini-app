@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
 import { BottomSheet } from '../ui/bottom-sheet';
@@ -11,7 +11,8 @@ import { MultiImageUpload } from '../image-upload';
 import { useLockedMutation } from '../game/use-locked-mutation';
 import { RefundDestinationPicker } from './refund-destination-picker';
 import { estimateReturn, fetchRefundBank, requestReturn, type OrderView, type ReturnRequestDTO } from '../../services/shop-api';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, isStaleStateError } from '../../services/api';
+import { settleWithin } from '../../utils/settle-within';
 import { haptic } from '../../utils/haptic';
 import { vi } from '../../i18n/vi';
 import { formatNumber, formatVnd } from '../../utils/format';
@@ -101,6 +102,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
     [lines, reasonCode, reason, method, bank, bankAllowed],
   );
 
+  const rejectedRef = useRef(false);
   const submit = useLockedMutation({
     mutationFn: () =>
       requestReturn(order.code, {
@@ -119,8 +121,33 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
       openSnackbar({ text: 'Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24h.', type: 'success' });
       onClose();
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Trả Promise: khoá giữ tới khi đơn và danh sách đổi/trả tải lại xong (tối đa `settleWithin`), kẻo nút Gửi sáng lại trên dữ liệu cũ.
+    // Lỗi tạm (mất mạng, 5xx) thì giữ nguyên: không nói gì về trạng thái thật của đơn.
+    onError: (e: unknown) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      rejectedRef.current = true;
+      return settleWithin(
+        Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['order', order.code] }),
+          queryClient.invalidateQueries({ queryKey: ['orders'] }),
+          queryClient.invalidateQueries({ queryKey: ['my-returns'] }),
+          queryClient.invalidateQueries({ queryKey: ['my-refunds'] }),
+        ]),
+      );
+    },
   });
+
+  // Đơn đã rời trạng thái Đã giao hoặc đã có yêu cầu chờ xử lý (máy khác vừa gửi, hoặc dữ liệu vừa tải lại sau khi bị từ chối): form này
+  // không gửi được nữa nên đóng. Lỗi nhập liệu thì trạng thái đơn không đổi và form giữ nguyên để khách sửa.
+  const unavailable = order.status !== 'DELIVERED' || returns.some((r) => r.orderId === order.id && r.status === 'REQUESTED');
+  useEffect(() => {
+    if (!open || !unavailable || submit.isPending) return;
+    // Khách vừa đọc lời máy chủ từ chối thì không báo thêm; còn dữ liệu nền mới về thì tấm biến mất mà không có lời nào, nên phải nói.
+    if (!rejectedRef.current) openSnackbar({ text: 'Đơn này không còn đổi/trả được nữa hoặc đã có yêu cầu đang chờ xử lý.', type: 'info' });
+    rejectedRef.current = false;
+    onClose();
+  }, [open, unavailable, submit.isPending, onClose, openSnackbar]);
 
   const setLine = (id: string, patch: Partial<ReturnLineState>) =>
     setLines((ls) => ls.map((l) => (l.orderItemId === id ? { ...l, ...patch } : l)));

@@ -48,6 +48,7 @@ vi.mock('../image-upload', () => ({
 }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
+import { HttpError } from '../../services/http';
 import { ReturnRequestSheet } from './return-request-sheet';
 
 const ORDER = {
@@ -289,5 +290,168 @@ describe('ReturnRequestSheet: gửi yêu cầu khoá chạm đúp, báo bận, s
     fireEvent.click(screen.getByRole('checkbox', { name: 'Trả Nước giặt Chai 1L' }));
     const line = await screen.findByText('Dự kiến hoàn 89.000đ');
     expect(line.closest('.tubu-nums')).not.toBeNull();
+  });
+});
+
+describe('ReturnRequestSheet: máy chủ từ chối thì tải lại ngay và đóng khi form hết hiệu lực (W104A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchRefundBank.mockResolvedValue(null);
+    mocks.estimateReturn.mockResolvedValue({ refund: 0, goods: 0, shipping: 0, isFull: false, moneyRefundable: true, pointsUsedBack: 0, lines: [] });
+  });
+
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const submitButton = () => screen.getByRole('button', { name: 'Gửi yêu cầu' });
+  const fillForm = () => {
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trả Nước giặt Chai 1L' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sản phẩm lỗi, hỏng' }));
+  };
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  /** Dựng sheet kèm QueryClient để soi lệnh tải lại; `rerender` đổi đơn/danh sách như khi dữ liệu mới về. */
+  function renderLive(invalidate?: (key: readonly unknown[]) => Promise<void> | undefined) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidated: unknown[][] = [];
+    vi.spyOn(qc, 'invalidateQueries').mockImplementation(((filters: { queryKey: readonly unknown[] }) => {
+      invalidated.push([...filters.queryKey]);
+      return invalidate?.(filters.queryKey) ?? Promise.resolve();
+    }) as never);
+    const onClose = vi.fn();
+    const tree = (order: unknown, returns: unknown[], open: boolean) => (
+      <QueryClientProvider client={qc}>
+        <ReturnRequestSheet open={open} onClose={onClose} order={order as never} returns={returns as never} returnDays={7} />
+      </QueryClientProvider>
+    );
+    const view = render(tree(ORDER, [], true));
+    return {
+      onClose,
+      invalidated,
+      rerender: (order: unknown = ORDER, returns: unknown[] = [], open = true) => view.rerender(tree(order, returns, open)),
+    };
+  }
+
+  it.each([400, 404, 409])('bị từ chối %i: tải lại đơn, danh sách đơn, đổi/trả và hoàn tiền', async (status) => {
+    mocks.requestReturn.mockRejectedValueOnce(serverError('Đơn đang có yêu cầu đổi/trả chờ xử lý.', status));
+    const { invalidated } = renderLive();
+    fillForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đơn đang có yêu cầu đổi/trả chờ xử lý.', type: 'error' }));
+    await waitFor(() => expect(invalidated).toEqual(expect.arrayContaining([['order', 'TB1'], ['orders'], ['my-returns'], ['my-refunds']])));
+  });
+
+  it('bị từ chối: nút Gửi giữ khoá tới khi đơn tải lại xong rồi mới nhả', async () => {
+    mocks.requestReturn.mockRejectedValueOnce(serverError('Đơn đang có yêu cầu đổi/trả chờ xử lý.', 400));
+    const refresh = deferred();
+    renderLive((key) => (key[0] === 'order' ? (refresh.promise as Promise<void>) : undefined));
+    fillForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    // Đã có lời báo lỗi mà đơn chưa về: nút vẫn bận, bấm thêm không gửi lại trên dữ liệu cũ.
+    expect(submitButton()).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(submitButton());
+    expect(mocks.requestReturn).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await waitFor(() => expect(submitButton()).not.toHaveAttribute('aria-busy'));
+  });
+
+  it('tải lại treo quá hạn thì nhả khoá, không giữ tấm mãi', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      mocks.requestReturn.mockRejectedValueOnce(serverError('Yêu cầu đã được xử lý.', 400));
+      renderLive(() => new Promise<void>(() => undefined));
+      fillForm();
+      fireEvent.click(submitButton());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+      expect(submitButton()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_100);
+      });
+      await waitFor(() => expect(submitButton()).not.toHaveAttribute('aria-busy'));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['quá thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+    ['lỗi không phải HTTP', new Error('boom')],
+  ])('%s: không nói gì về trạng thái thật của đơn nên không tải lại, khoá nhả ngay', async (_label, error) => {
+    mocks.requestReturn.mockRejectedValueOnce(error);
+    const { invalidated, onClose } = renderLive();
+    fillForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    await waitFor(() => expect(submitButton()).not.toHaveAttribute('aria-busy'));
+    expect(invalidated).toEqual([]);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('bị từ chối vì máy khác vừa gửi: dữ liệu mới có yêu cầu chờ xử lý thì tấm đóng, trước đó vẫn mở để khách đọc lỗi', async () => {
+    mocks.requestReturn.mockRejectedValueOnce(serverError('Đơn đang có yêu cầu đổi/trả chờ xử lý.', 400));
+    const { onClose, rerender } = renderLive();
+    fillForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
+    await waitFor(() => expect(submitButton()).not.toHaveAttribute('aria-busy'));
+    expect(onClose).not.toHaveBeenCalled();
+    mocks.openSnackbar.mockClear();
+    rerender(ORDER, [{ orderId: 'o1', status: 'REQUESTED', items: [{ orderItemId: 'i1', quantity: 1 }] }]);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    // Khách vừa đọc lời từ chối của máy chủ: đóng tấm không báo thêm lời thứ hai.
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
+  });
+
+  it('dữ liệu nền mới về làm tấm hết hiệu lực (không có lỗi nào đi kèm): tấm đóng kèm một lời báo, không đóng im lặng', async () => {
+    const { onClose, rerender } = renderLive();
+    rerender(ORDER, [{ orderId: 'o1', status: 'REQUESTED', items: [{ orderItemId: 'i1', quantity: 1 }] }]);
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đơn này không còn đổi/trả được nữa hoặc đã có yêu cầu đang chờ xử lý.', type: 'info' });
+  });
+
+  it('đơn rời trạng thái Đã giao (đã huỷ, đã trả) thì tấm đóng', async () => {
+    const { onClose, rerender } = renderLive();
+    expect(onClose).not.toHaveBeenCalled();
+    rerender({ ...(ORDER as object), status: 'RETURNED' });
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('yêu cầu đã duyệt/từ chối của đơn không đóng tấm; yêu cầu chờ xử lý của đơn khác cũng không', () => {
+    const { onClose, rerender } = renderLive();
+    rerender(ORDER, [
+      { orderId: 'o1', status: 'APPROVED', items: [{ orderItemId: 'i2', quantity: 1 }] },
+      { orderId: 'o1', status: 'REJECTED', items: [] },
+      { orderId: 'o2', status: 'REQUESTED', items: [] },
+    ]);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('tấm đang đóng thì không gọi onClose lần nào nữa dù dữ liệu đã hết hiệu lực', () => {
+    const { onClose, rerender } = renderLive();
+    rerender(ORDER, [], false);
+    rerender({ ...(ORDER as object), status: 'RETURNED' }, [], false);
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('đang gửi thì không tự đóng dù đơn vừa đổi trạng thái; gửi xong mới đóng theo kết quả', async () => {
+    const d = deferred();
+    mocks.requestReturn.mockReturnValueOnce(d.promise);
+    const { onClose, rerender } = renderLive();
+    fillForm();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(submitButton()).toHaveAttribute('aria-busy', 'true'));
+    rerender({ ...(ORDER as object), status: 'RETURNED' });
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => d.resolve({ id: 'r1' }));
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
   });
 });
