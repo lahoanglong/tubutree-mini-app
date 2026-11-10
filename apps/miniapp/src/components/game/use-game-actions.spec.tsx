@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   claimMission: vi.fn(),
   claimSeasonPass: vi.fn(),
   waterPlot: vi.fn(),
+  waterTree: vi.fn(),
 }));
 vi.mock('zmp-ui', () => ({ useSnackbar: () => ({ openSnackbar: mocks.openSnackbar }) }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -28,6 +29,7 @@ vi.mock('../../services/game-api', async (orig) => ({
   claimMission: mocks.claimMission,
   claimSeasonPass: mocks.claimSeasonPass,
   waterPlot: mocks.waterPlot,
+  waterTree: mocks.waterTree,
 }));
 
 import { useGameActions } from './use-game-actions';
@@ -181,9 +183,13 @@ const httpError = (status: number) => new HttpError('Máy chủ từ chối', un
 
 const REJECTABLE = [
   ...ONE_SHOT,
-  { name: 'tưới lô phụ', api: mocks.waterPlot, result: undefined, tap: (a: Actions) => a.waterPlotM.mutate('plot-1'), pending: (a: Actions) => a.waterPlotM.isPending, held: ['profile', 'me', 'loyalty'] as Probe[] },
+  { name: 'tưới lô phụ', api: mocks.waterPlot, tap: (a: Actions) => a.waterPlotM.mutate('plot-1'), pending: (a: Actions) => a.waterPlotM.isPending, held: ['profile', 'me', 'loyalty'] as Probe[] },
 ];
-const REJECT_STALE = REJECTABLE.flatMap((c) => [400, 404, 409].map((status) => [c.name, status, c] as const));
+// 400 kiểm mọi khoá cần tải lại (bỏ ['me'] hay ['loyalty'] khỏi nhánh lỗi thì ca tương ứng đỏ); 404/409 chỉ cần chứng minh cùng nhánh.
+const REJECT_STALE = REJECTABLE.flatMap((c) => [
+  ...c.held.map((h) => [c.name, 400, h, c] as const),
+  ...[404, 409].map((status) => [c.name, status, c.held[0]!, c] as const),
+]);
 const REJECT_TEMPORARY = REJECTABLE.flatMap((c) => [401, 500, 502].map((status) => [c.name, status, c] as const));
 
 describe('useGameActions: máy chủ từ chối việc một-lần (400/404/409) thì tải lại rồi mới nhả khoá', () => {
@@ -192,9 +198,8 @@ describe('useGameActions: máy chủ từ chối việc một-lần (400/404/409
     mocks.openSnackbar.mockClear();
   });
 
-  it.each(REJECT_STALE)('%s bị từ chối %i: tải lại dữ liệu, giữ khoá tới khi về, báo lỗi một lần', async (_name, status, c) => {
+  it.each(REJECT_STALE)('%s bị từ chối %i: tải lại %s, giữ khoá tới khi về, báo lỗi một lần', async (_name, status, held, c) => {
     c.api.mockRejectedValue(httpError(status));
-    const held = c.held[0]!;
     const { hook, fetched, release } = setupHeld(held);
     await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
     act(() => c.tap(hook.result.current));
@@ -263,5 +268,73 @@ describe('useGameActions: bị từ chối mà dữ liệu tải lại treo mãi
     act(() => c.tap(hook.result.current));
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
     expect(c.api).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('useGameActions: bị từ chối, các trường hợp biên của khoá', () => {
+  beforeEach(() => {
+    mocks.waterPlot.mockReset();
+    mocks.waterTree.mockReset();
+    mocks.claimSeasonPass.mockReset();
+    mocks.openSnackbar.mockClear();
+  });
+
+  const WATERED = { progress: 1, target: 100, harvested: false, treesPlanted: 0, reward: {} };
+
+  it('quá hạn (ECONNABORTED) đi qua nhánh từ chối: tải lại không chờ, nhả khoá ngay, chạm lại gọi được', async () => {
+    mocks.claimSeasonPass.mockRejectedValue(new HttpError('timeout', 'ECONNABORTED'));
+    const { hook, fetched } = setupHeld('seasonPass');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => hook.result.current.claimPassM.mutate({ tier: 1, track: 'free' }));
+    await waitFor(() => expect(fetched.seasonPass).toBe(2));
+    await waitFor(() => expect(hook.result.current.claimPassM.isPending).toBe(false));
+    act(() => hook.result.current.claimPassM.mutate({ tier: 1, track: 'free' }));
+    await waitFor(() => expect(mocks.claimSeasonPass).toHaveBeenCalledTimes(2));
+  });
+
+  it('lô A bị từ chối đang giữ khoá tải lại: tưới lô B vẫn gọi được ngay (khoá theo lô)', async () => {
+    mocks.waterPlot.mockRejectedValueOnce(httpError(400)).mockResolvedValueOnce(WATERED);
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => hook.result.current.waterPlotM.mutate('plot-1'));
+    await waitFor(() => expect(fetched.profile).toBe(2));
+    act(() => hook.result.current.waterPlotM.mutate('plot-2'));
+    await waitFor(() => expect(mocks.waterPlot).toHaveBeenCalledTimes(2));
+    expect(mocks.waterPlot).toHaveBeenNthCalledWith(2, 'plot-2', 20);
+  });
+
+  it('tưới lô phụ thành công không giữ khoá chờ dữ liệu: nhả ngay dù tải lại còn treo', async () => {
+    mocks.waterPlot.mockResolvedValue(WATERED);
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => hook.result.current.waterPlotM.mutate('plot-1'));
+    await waitFor(() => expect(fetched.profile).toBe(2));
+    await waitFor(() => expect(hook.result.current.waterPlotM.isPending).toBe(false));
+  });
+
+  it('nút Thu hoạch (tưới 0💧) bị từ chối 400: tải lại hồ sơ và giữ khoá tới khi về, để thẻ cũ không bấm lại mãi', async () => {
+    mocks.waterTree.mockRejectedValue(httpError(400));
+    const { hook, fetched, release } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => hook.result.current.waterM.mutate(0));
+    await waitFor(() => expect(fetched.profile).toBe(2));
+    await settleTicks();
+    expect(hook.result.current.waterM.isPending).toBe(true);
+    act(() => hook.result.current.waterM.mutate(0));
+    await settleTicks();
+    expect(mocks.waterTree).toHaveBeenCalledTimes(1);
+    await act(async () => release());
+    await waitFor(() => expect(hook.result.current.waterM.isPending).toBe(false));
+  });
+
+  it('tưới thường (20💧) bị từ chối 400: chỉ báo lỗi, không tải lại, nhả khoá ngay', async () => {
+    mocks.waterTree.mockRejectedValue(httpError(400));
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    act(() => hook.result.current.waterM.mutate(20));
+    await waitFor(() => expect(hook.result.current.waterM.isPending).toBe(false));
+    await settleTicks();
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    expect(Object.values(fetched).every((n) => n === 1)).toBe(true);
   });
 });

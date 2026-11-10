@@ -167,7 +167,9 @@ export function useGameActions({
   const waterM = useLockedMutation({
     mutationFn: (drops: number) => waterTree(drops),
     onSuccess: (r, drops) => afterWatering(`Đã tưới −${formatDrops(drops)}`, r),
-    onError,
+    // Tưới 0💧 là nút Thu hoạch: cây đã thu hoạch ở máy khác thì nút này chỉ đúng trên hồ sơ cũ, nên bị từ chối phải tải lại.
+    // Tưới thường bị từ chối (thiếu nước…) thì chỉ báo, vì lượt sau là một quyết định mới của khách.
+    onError: (e, drops) => (drops === 0 ? onRejectedOnce(e) : onError(e)),
   });
   // Khoá chống chạm đúp của lượt góp nằm ở TreeActions (cần biết kết quả để quyết định đóng hộp hay giữ key), nên
   // đây dùng useMutation thường và caller gọi mutateAsync.
