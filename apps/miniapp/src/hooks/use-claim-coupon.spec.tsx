@@ -193,3 +193,62 @@ describe('useClaimCoupon', () => {
     expect(result.current.pendingCode).toBeNull();
   });
 });
+
+// W113A: khoá "Lưu mã" chỉ giữ tới khi kho tải lại về khi máy chủ từ chối vì kho đã cũ (400/404/409). Mất mạng, quá hạn, 401, 429, 5xx không nói gì về kho (mã có thể đã vào ví): vẫn tải lại ở nền như trước nhưng nhả khoá ngay.
+describe('useClaimCoupon — chỉ giữ khoá khi máy chủ từ chối vì kho đã cũ (W113A)', () => {
+  it.each([
+    [404, 'Không tìm thấy mã này.'],
+    [409, 'Mã vừa được nhận ở nơi khác.'],
+  ])('bị từ chối %i: khoá giữ tới khi kho về, chạm tiếp không bắn lệnh nhận lần hai, kho về thì nhả', async (status, message) => {
+    let freshReady: (v: unknown) => void = () => undefined;
+    mocks.claimCoupon.mockRejectedValueOnce(httpError(status, message));
+    mocks.get.mockReturnValue(new Promise((r) => (freshReady = r)));
+    const { result } = setup();
+    let first: Promise<boolean> | undefined;
+    await act(async () => {
+      first = result.current.claim('TUBU30');
+    });
+    expect(mocks.notify).toHaveBeenCalledWith({ text: message, type: 'error' });
+    expect(result.current.pendingCode).toBe('TUBU30');
+    let second: boolean | undefined;
+    await act(async () => {
+      second = await result.current.claim('TUBU30');
+    });
+    expect(second).toBe(false);
+    expect(mocks.claimCoupon).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      freshReady([]);
+      await first;
+    });
+    expect(result.current.pendingCode).toBeNull();
+    await act(async () => {
+      await result.current.claim('TUBU30');
+    });
+    expect(mocks.claimCoupon).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['mất mạng', { isHttpError: true }],
+    ['hết thời gian', { isHttpError: true, code: 'ECONNABORTED' }],
+    ['quá nhiều yêu cầu (429)', httpError(429, 'Bạn thao tác nhanh quá.')],
+    ['máy chủ lỗi 503', httpError(503, 'Service Unavailable')],
+    ['hết phiên 401', httpError(401, 'Unauthorized')],
+  ])('%s: tải lại kho ở nền nhưng nhả khoá ngay, không chờ kho', async (_label, error) => {
+    mocks.claimCoupon.mockRejectedValueOnce(error);
+    mocks.get.mockReturnValue(new Promise(() => undefined));
+    const { result, invalidate } = setup();
+    let ok: boolean | undefined;
+    await act(async () => {
+      ok = await result.current.claim('TUBU30');
+    });
+    expect(ok).toBe(false);
+    expect(mocks.notify).toHaveBeenCalledTimes(1);
+    expect(result.current.pendingCode).toBeNull();
+    expect(mocks.get).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['coupons', 'collectable', 'mine'] });
+    await act(async () => {
+      await result.current.claim('TUBU30');
+    });
+    expect(mocks.claimCoupon).toHaveBeenCalledTimes(2);
+  });
+});

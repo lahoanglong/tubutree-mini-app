@@ -2,7 +2,7 @@ import { act, render, screen, fireEvent, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import userEvent from '@testing-library/user-event';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, type MockInstance } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -54,6 +54,8 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import CartPage from './cart';
 import { useStorefrontContext } from '../store/storefront-context';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const GONE = {
   id: 'ci-gone',
@@ -1919,5 +1921,266 @@ describe('CartPage: "Thử lại" khi giỏ không tải được (hồi quy, W9
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Thử lại' })).toBeNull());
     await act(async () => next.resolve(summary({})));
     expect(await screen.findByText('Xà bông thảo mộc')).toBeInTheDocument();
+  });
+});
+
+// W113A: lệnh ghi giỏ bị máy chủ từ chối vì giỏ đã cũ (400/404/409) thì nút giữ khoá tới khi giỏ làm mới về (tối đa LOCK_REFRESH_WAIT_MS). Mất mạng, quá hạn, 401, 5xx không nói gì về giỏ: nhả ngay.
+describe('CartPage: máy chủ từ chối thì giữ khoá tới khi giỏ làm mới về (W113A)', () => {
+  type Opened = { invalidate: MockInstance<QueryClient['invalidateQueries']>; button: () => HTMLElement };
+  type Case = {
+    name: string;
+    write: ReturnType<typeof vi.fn>;
+    succeed: unknown;
+    /** Số lần tải lại giỏ mà lệnh vẫn tự gọi ở `onSettled` (không tính lần giữ khoá) khi lỗi không phải lời từ chối. */
+    settledInvalidates: number;
+    busyAttr?: boolean;
+    open: (refresh: () => Promise<unknown>) => Promise<Opened>;
+  };
+  const LINE_B = { ...OK_LINE, id: 'ci-b', variationId: 'v-b', productName: 'Dầu gội', slug: 'dg', unitPrice: 100_000, total: 100_000 };
+  const two = () => summary({ items: [OK_LINE, LINE_B], subtotal: 150_000, itemCount: 2 });
+  const EMPTY = summary({ items: [], subtotal: 0, itemCount: 0 });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const renderLive = (refresh: () => Promise<unknown>) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <CartPage />
+      </QueryClientProvider>,
+    );
+    return invalidate;
+  };
+  const filters = (invalidate: Opened['invalidate']) => invalidate.mock.calls.map(([filter]) => filter);
+  const card = (n: number, name: string, price: number) => ({
+    id: `b${n}`, slug: `bs-${n}`, brand: 'Tubu', name, thumbnail: null, basePrice: price, salePrice: null,
+    repVariationId: `vb${n}`, isFeatured: false, inStock: true,
+  });
+  /** Máy chủ trả lỗi sau một nhịp: lệnh bay đủ lâu để lần vẽ giữa chừng (số lượng tạm) kịp xảy ra như trên mạng thật. */
+  const rejectLater = (error: unknown, ms = 60) => new Promise<never>((_, reject) => setTimeout(() => reject(error), ms));
+
+  const CASES: Case[] = [
+    {
+      name: 'xoá dòng ngừng bán',
+      write: mocks.removeCartItem,
+      succeed: summary({ unavailableItems: [] }),
+      settledInvalidates: 0,
+      open: async (refresh) => {
+        mocks.getCart.mockResolvedValue(summary({ unavailableItems: [GONE] }));
+        const invalidate = renderLive(refresh);
+        await screen.findByText('1 sản phẩm đã ngừng bán');
+        return { invalidate, button: () => screen.getByRole('button', { name: 'Xoá' }) };
+      },
+    },
+    {
+      name: 'xoá dòng giỏ',
+      write: mocks.removeCartItem,
+      succeed: EMPTY,
+      settledInvalidates: 1,
+      open: async (refresh) => {
+        mocks.getCart.mockResolvedValue(summary({}));
+        const invalidate = renderLive(refresh);
+        await screen.findByText('Xà bông thảo mộc');
+        return { invalidate, button: () => screen.getByRole('button', { name: 'Xoá Xà bông thảo mộc' }) };
+      },
+    },
+    {
+      name: 'thêm món bù đơn',
+      write: mocks.addToCart,
+      succeed: summary({}),
+      settledInvalidates: 1,
+      busyAttr: true,
+      open: async (refresh) => {
+        mocks.getCart.mockResolvedValue(summary({}));
+        mocks.fetchProducts.mockResolvedValue({ data: [card(3, 'Món C', 60_000), card(4, 'Món D', 90_000), card(5, 'Món E', 70_000)], meta: { page: 1, limit: 8, total: 3 } });
+        const invalidate = renderLive(refresh);
+        await screen.findByTestId('freeship-addons');
+        return { invalidate, button: () => screen.getByRole('button', { name: /^Thêm Món C vào giỏ/ }) };
+      },
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const fn of [mocks.removeCartItem, mocks.addToCart, mocks.updateCartItem, mocks.getCart]) fn.mockReset();
+    mocks.getCartSelection.mockRejectedValue(new Error('chưa mock'));
+    mocks.fetchProducts.mockResolvedValue({ data: [], meta: { page: 1, limit: 4, total: 0 } });
+  });
+
+  describe.each(CASES)('$name', (c) => {
+    it.each([
+      [400, 'Món này không còn trong giỏ'],
+      [404, 'Không tìm thấy dòng này'],
+      [409, 'Giỏ vừa có thay đổi, bạn thử lại nhé'],
+    ])('bị từ chối %i: báo lỗi một lần, tải lại giỏ, giữ khoá tới khi giỏ về rồi mới nhả', async (status, message) => {
+      c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(c.succeed);
+      const refresh = deferred();
+      const { invalidate, button } = await c.open(() => refresh.promise);
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+      expect(errorSnackbars()).toBe(1);
+      expect(filters(invalidate)).toEqual([{ queryKey: ['cart'] }]);
+      await waitFor(() => expect(button()).toBeInTheDocument());
+      if (c.busyAttr) expect(button()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        fireEvent.click(button());
+        fireEvent.click(button());
+      });
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      if (c.busyAttr) await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      expect(errorSnackbars()).toBe(1);
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ])('%s: không giữ khoá chờ tải lại, nhả ngay; không tải lại thêm so với trước', async (_label, error) => {
+      c.write.mockRejectedValueOnce(error).mockResolvedValue(c.succeed);
+      const { invalidate, button } = await c.open(() => new Promise(() => undefined));
+      fireEvent.click(button());
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await waitFor(() => expect(button()).toBeInTheDocument());
+      await settle();
+      if (c.busyAttr) expect(button()).not.toHaveAttribute('aria-busy');
+      expect(filters(invalidate)).toEqual(Array.from({ length: c.settledInvalidates }, () => ({ queryKey: ['cart'] })));
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+      c.write.mockRejectedValueOnce(serverError('Giỏ vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue(c.succeed);
+      const { button } = await c.open(() => new Promise(() => undefined));
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        fireEvent.click(button());
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        await waitFor(() => expect(button()).toBeInTheDocument());
+        await act(async () => {
+          fireEvent.click(button());
+        });
+        expect(c.write).toHaveBeenCalledTimes(1);
+        if (c.busyAttr) expect(button()).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+        if (c.busyAttr) await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      } finally {
+        vi.useRealTimers();
+      }
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('đổi số lượng (không có khoá riêng: cờ đang gửi của dòng giữ tới khi giỏ về)', () => {
+    const TWO_UNITS = { ...OK_LINE, quantity: 2, total: 100_000 };
+
+    it('bị từ chối 409: giỏ hoàn lại nhưng "Thành tiền" (số tự nhân) chưa hiện lại cho tới khi giỏ thật về', async () => {
+      mocks.getCart.mockResolvedValue(summary({ items: [TWO_UNITS], subtotal: 100_000, itemCount: 2 }));
+      mocks.updateCartItem.mockImplementationOnce(() => rejectLater(serverError('Giỏ vừa có thay đổi, bạn thử lại nhé', 409)));
+      const refresh = deferred();
+      const invalidate = renderLive(() => refresh.promise);
+      await screen.findByText('Xà bông thảo mộc');
+      expect(screen.getByText(/Thành tiền/)).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+      await waitFor(() => expect(errorSnackbars()).toBe(1), { timeout: 3_000 });
+      expect(filters(invalidate)).toEqual([{ queryKey: ['cart'] }]);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 600));
+      });
+      expect(screen.queryByText(/Thành tiền/)).toBeNull();
+      await act(async () => refresh.resolve());
+      expect(await screen.findByText(/Thành tiền/)).toBeInTheDocument();
+    });
+
+    it('bị từ chối 503: không giữ cờ chờ, "Thành tiền" hiện lại ngay sau khi hoàn lại; chỉ tải lại một lần như trước', async () => {
+      mocks.getCart.mockResolvedValue(summary({ items: [TWO_UNITS], subtotal: 100_000, itemCount: 2 }));
+      mocks.updateCartItem.mockImplementationOnce(() => rejectLater(serverError('Service Unavailable', 503)));
+      const invalidate = renderLive(() => new Promise(() => undefined));
+      await screen.findByText('Xà bông thảo mộc');
+      fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+      await waitFor(() => expect(errorSnackbars()).toBe(1), { timeout: 3_000 });
+      expect(await screen.findByText(/Thành tiền/)).toBeInTheDocument();
+      expect(filters(invalidate)).toEqual([{ queryKey: ['cart'] }]);
+    });
+
+    it('lệnh khác của giỏ còn bay khi lệnh này bị từ chối: chưa tải lại (bản về lúc đó thiếu lệnh kia); lệnh xong cuối tải lại đúng một lần', async () => {
+      mocks.getCart.mockResolvedValue(two());
+      const other = deferred();
+      mocks.updateCartItem.mockImplementation((id: string) =>
+        id === 'ci-ok' ? rejectLater(serverError('Giỏ vừa có thay đổi, bạn thử lại nhé', 409), 700) : (other.promise as Promise<unknown>),
+      );
+      const invalidate = renderLive(() => Promise.resolve());
+      await screen.findByText('Dầu gội');
+      for (const plus of screen.getAllByRole('button', { name: 'Tăng số lượng' })) fireEvent.click(plus);
+      await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(2), { timeout: 3_000 });
+      await waitFor(() => expect(errorSnackbars()).toBe(1), { timeout: 3_000 });
+      await settle();
+      expect(filters(invalidate)).toEqual([]);
+      await act(async () => other.resolve(summary({})));
+      await settle();
+      expect(filters(invalidate)).toEqual([{ queryKey: ['cart'] }]);
+    });
+  });
+
+  describe('Hoàn tác (thêm lại món vừa xoá)', () => {
+    const removeThenFindUndo = async (name: string) => {
+      fireEvent.click(await screen.findByRole('button', { name }));
+      return screen.findByRole('button', { name: 'Hoàn tác' });
+    };
+
+    it('máy chủ từ chối 409: tải lại giỏ và giữ khoá Hoàn tác tới khi giỏ về (Hoàn tác của món xoá kế tiếp chưa chạy)', async () => {
+      mocks.getCart.mockResolvedValue(two());
+      mocks.removeCartItem.mockResolvedValue(EMPTY);
+      mocks.addToCart.mockRejectedValueOnce(serverError('Món này đã hết hàng', 409)).mockResolvedValue(summary({}));
+      const refresh = deferred();
+      const invalidate = renderLive(() => refresh.promise);
+      const undoA = await removeThenFindUndo('Xoá Xà bông thảo mộc');
+      invalidate.mockClear();
+      await act(async () => fireEvent.click(undoA));
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      expect(filters(invalidate)).toEqual([{ queryKey: ['cart'] }]);
+      const undoB = await removeThenFindUndo('Xoá Dầu gội');
+      await act(async () => fireEvent.click(undoB));
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      await act(async () => fireEvent.click(undoB));
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+      expect(mocks.addToCart).toHaveBeenLastCalledWith('v-b', 1);
+    });
+
+    it('mất mạng: không tải lại giỏ, nhả khoá ngay', async () => {
+      mocks.getCart.mockResolvedValue(summary({}));
+      mocks.removeCartItem.mockResolvedValue(EMPTY);
+      mocks.addToCart.mockRejectedValueOnce(new HttpError('Network Error', 'ERR_NETWORK'));
+      const invalidate = renderLive(() => new Promise(() => undefined));
+      const undo = await removeThenFindUndo('Xoá Xà bông thảo mộc');
+      invalidate.mockClear();
+      await act(async () => fireEvent.click(undo));
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await settle();
+      expect(filters(invalidate)).toEqual([]);
+    });
   });
 });

@@ -2,6 +2,8 @@ import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const mocks = vi.hoisted(() => ({
   getPublicConfig: vi.fn(),
@@ -891,5 +893,111 @@ describe('W78A: Tích điểm đơn sàn khoá đồng bộ chạm đúp', () =>
     fireEvent.click(submitBtn());
     await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(2));
     expect(await screen.findByTestId('claim-result')).toBeInTheDocument();
+  });
+});
+
+// W113A: gửi mã bị máy chủ từ chối vì trạng thái đã đổi (400/404/409) thì giữ lời báo hiện có, tải lại danh sách yêu cầu và giữ khoá tới khi dữ liệu về (tối đa LOCK_REFRESH_WAIT_MS); mất mạng, quá hạn, 401, 5xx nhả ngay, không tải lại.
+describe('W113A: Tích điểm đơn sàn giữ khoá tới khi danh sách yêu cầu làm mới về', () => {
+  const SEARCHING = { status: 'SEARCHING', claimId: null, channel: null, maskedCode: 'SPX***789', points: null, expectedCreditAt: null, message: 'x' };
+  const reject = (code: string, status: number) =>
+    new HttpError('máy chủ', undefined, { status, data: { code, message: 'máy chủ' }, headers: {} });
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const submitBtn = () => screen.getByRole('button', { name: 'Tích điểm' });
+  const renderLive = (refresh: () => Promise<unknown>) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(<QueryClientProvider client={qc}><ExternalPointsPage /></QueryClientProvider>);
+    return invalidate;
+  };
+  const typeCode = async () => {
+    fireEvent.change(await screen.findByLabelText('Hoặc nhập mã vận đơn'), { target: { value: 'SPXVN123456789' } });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.submitExternalClaim.mockReset();
+    mocks.phase = 'authenticated';
+    mocks.search = '';
+    mocks.hasOA = false;
+    mocks.getOaPromptState.mockResolvedValue({ promptSeen: true, followed: false });
+    window.history.replaceState({}, '', '/points/scan');
+    __resetEntrySourceForTest();
+    setCardGiftNote(null);
+    mocks.user = { phone: '0901234567' };
+    mocks.getPublicConfig.mockResolvedValue({ loyalty: LOYALTY });
+    mocks.getMyExternalClaims.mockResolvedValue(EMPTY_LIST);
+  });
+
+  it.each([400, 404, 409])('bị từ chối %i: giữ lời báo theo mã, tải lại danh sách yêu cầu, khoá giữ tới khi dữ liệu về', async (status) => {
+    mocks.submitExternalClaim.mockRejectedValueOnce(reject('ALREADY_CLAIMED', status)).mockResolvedValue(SEARCHING);
+    const refresh = deferred();
+    const invalidate = renderLive(() => refresh.promise);
+    await typeCode();
+    fireEvent.click(submitBtn());
+    expect(await screen.findByRole('alert')).toHaveTextContent('Mã này đã được dùng để tích điểm trước đó.');
+    expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['external-claims'] }]);
+    expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(submitBtn());
+      fireEvent.click(submitBtn());
+    });
+    expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+    expect(screen.getAllByRole('alert')).toHaveLength(1);
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: báo lỗi, nhả khoá ngay, không tải lại danh sách', async (_label, error) => {
+    mocks.submitExternalClaim.mockRejectedValueOnce(error).mockResolvedValue(SEARCHING);
+    const invalidate = renderLive(() => new Promise(() => undefined));
+    await typeCode();
+    fireEvent.click(submitBtn());
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+    expect(invalidate).not.toHaveBeenCalled();
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+    mocks.submitExternalClaim.mockRejectedValueOnce(reject('ALREADY_CLAIMED', 409)).mockResolvedValue(SEARCHING);
+    renderLive(() => new Promise(() => undefined));
+    await typeCode();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(submitBtn());
+      expect(await screen.findByRole('alert')).toBeInTheDocument();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.submitExternalClaim).toHaveBeenCalledTimes(2));
   });
 });

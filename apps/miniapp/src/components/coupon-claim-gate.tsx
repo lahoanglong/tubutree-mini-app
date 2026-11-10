@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
 import { useCartCount } from '../hooks/use-cart-count';
-import { getErrorMessage, isOutcomeUnknown } from '../services/api';
+import { getErrorMessage, isOutcomeUnknown, isStaleStateError } from '../services/api';
 import { getPublicConfig } from '../services/shop-api';
 import { isHttpError } from '../services/http';
 import {
@@ -117,6 +117,9 @@ export function CouponClaimGate() {
           const retryable = isOutcomeUnknown(err) || isRateLimited(err);
           // Mã sai, hết hạn, đã có người nhận, khách đã có đơn: thử lại cũng vậy, không giữ trên máy nữa.
           if (!retryable) forget();
+          // Ví mã trong bộ nhớ có thể còn cũ so với điều máy chủ vừa nói (mã đã nằm trong ví, đã bị thu hồi): đọc lại ở nền, không giữ `inFlight`
+          // (mã đã quên nên không còn lần nhận nào để chặn, còn giữ khoá thì nút Đóng của lời báo lỗi chết tới khi ví về).
+          if (isStaleStateError(err)) void queryClient.invalidateQueries({ queryKey: ['coupons'] });
           setPhase({ kind: 'failed', message, retryable });
         }
       } finally {

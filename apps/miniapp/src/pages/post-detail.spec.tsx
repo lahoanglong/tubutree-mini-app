@@ -3,6 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { FeedComment, FeedItem } from '../services/feed-api';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -42,7 +44,8 @@ vi.mock('../services/feed-api', () => ({
   removeComment: mocks.removeComment,
   adminPin: mocks.adminPin,
 }));
-vi.mock('../services/api', () => ({
+vi.mock('../services/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   apiMediaUrl: (src: string) => (src.startsWith('/') && !src.startsWith('//') ? `https://api.test${src}` : src),
@@ -423,5 +426,155 @@ describe('PostDetailPage: "Thử lại" chạm đúp (W74A)', () => {
     expect(mocks.getPost).toHaveBeenCalledTimes(2);
     await act(async () => d.resolve(POST()));
     expect(await screen.findByText('Lan Anh')).toBeInTheDocument();
+  });
+});
+
+// W113A: báo cáo bị máy chủ từ chối hẳn (400/404/409/422) thì đóng tấm và báo lỗi bằng snackbar; riêng 400/404/409 còn tải lại bài + bình luận và giữ khoá tới khi dữ liệu về (tối đa LOCK_REFRESH_WAIT_MS). Mất mạng, quá hạn, 401, 5xx: tấm còn mở kèm lỗi tại chỗ như trước, nhả khoá ngay, không tải lại.
+describe('PostDetailPage: Báo cáo bị từ chối thì đóng tấm, tải lại bài + bình luận, giữ khoá (W113A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const errorToasts = (text: string) => mocks.openSnackbar.mock.calls.filter(([o]) => o.type === 'error' && o.text === text).length;
+  const REASON = 'Lý do báo cáo…';
+  /** Mở tấm báo cáo bài và trả nút gửi (nút "Báo cáo" cuối cùng trong DOM, nằm ở chân tấm). */
+  const openSheet = async () => {
+    await screen.findByText('Lan Anh');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    fireEvent.change(await screen.findByPlaceholderText(REASON), { target: { value: 'Spam' } });
+    const all = screen.getAllByRole('button', { name: 'Báo cáo' });
+    return all[all.length - 1]!;
+  };
+  const submitBtn = () => {
+    const all = screen.getAllByRole('button', { name: 'Báo cáo' });
+    return all[all.length - 1]!;
+  };
+  const sheetGone = () => waitFor(() => expect(screen.queryByPlaceholderText(REASON)).toBeNull());
+
+  it.each([
+    [400, 'Bạn đã báo cáo nội dung này rồi'],
+    [404, 'Nội dung bị báo cáo không còn'],
+    [409, 'Báo cáo vừa được xử lý'],
+  ])('bị từ chối %i: đóng tấm, báo lỗi một lần, tải lại bài và bình luận, khoá giữ tới khi dữ liệu về', async (status, message) => {
+    mocks.reportContent.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({ ok: true });
+    renderPage();
+    const submit = await openSheet();
+    const refresh = deferred();
+    mocks.getPost.mockReturnValueOnce(refresh.promise);
+    fireEvent.click(submit);
+    await waitFor(() => expect(errorToasts(message)).toBe(1));
+    await sheetGone();
+    // Tiền tố ['community', 'p1'] tải lại cả bài lẫn bình luận.
+    await waitFor(() => expect(mocks.getPost).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.getComments).toHaveBeenCalledTimes(2));
+    expect(screen.queryByRole('alert')).toBeNull();
+    // Dữ liệu chưa về: mở lại tấm, nút vẫn bận, chạm thêm không gửi lần hai.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    await screen.findByPlaceholderText(REASON);
+    expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryByRole('alert')).toBeNull();
+    await act(async () => {
+      fireEvent.click(submitBtn());
+      fireEvent.click(submitBtn());
+    });
+    expect(mocks.reportContent).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve(POST()));
+    await settle();
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+    expect(errorToasts(message)).toBe(1);
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.reportContent).toHaveBeenCalledTimes(2));
+  });
+
+  it('bị từ chối 422: đóng tấm và báo lỗi nhưng không tải lại, nhả khoá ngay', async () => {
+    mocks.reportContent.mockRejectedValueOnce(serverError('Dữ liệu không hợp lệ', 422)).mockResolvedValue({ ok: true });
+    renderPage();
+    const submit = await openSheet();
+    fireEvent.click(submit);
+    await waitFor(() => expect(errorToasts('Dữ liệu không hợp lệ')).toBe(1));
+    await sheetGone();
+    await settle();
+    expect(mocks.getPost).toHaveBeenCalledTimes(1);
+    expect(mocks.getComments).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    await screen.findByPlaceholderText(REASON);
+    expect(submitBtn()).not.toHaveAttribute('aria-busy');
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.reportContent).toHaveBeenCalledTimes(2));
+  });
+
+  it('tấm đã mở lại cho bình luận khác lúc lệnh bay: lỗi 404 của lệnh báo cáo bài không đóng tấm bình luận và giữ lý do đang gõ', async () => {
+    let reject!: (e: unknown) => void;
+    mocks.reportContent.mockReturnValueOnce(new Promise((_, rej) => { reject = rej; }));
+    renderPage();
+    const submit = await openSheet();
+    await act(async () => {
+      fireEvent.click(submit);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await sheetGone();
+    const row = (await screen.findByText('Trả lời của Bình')).parentElement!;
+    fireEvent.click(row.querySelector('[aria-label="Báo cáo"]') as HTMLElement);
+    fireEvent.change(await screen.findByPlaceholderText(REASON), { target: { value: 'Quảng cáo' } });
+    await act(async () => reject(serverError('Nội dung bị báo cáo không còn', 404)));
+    await waitFor(() => expect(errorToasts('Nội dung bị báo cáo không còn')).toBe(1));
+    await settle();
+    expect(screen.getByPlaceholderText(REASON)).toHaveValue('Quảng cáo');
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: tấm còn mở kèm lỗi tại chỗ, nhả khoá ngay, không tải lại, không có snackbar lỗi', async (_label, error) => {
+    mocks.reportContent.mockRejectedValueOnce(error).mockResolvedValue({ ok: true });
+    renderPage();
+    const submit = await openSheet();
+    fireEvent.click(submit);
+    expect(await screen.findByRole('alert')).toHaveTextContent(error.message);
+    expect(screen.getByPlaceholderText(REASON)).toBeInTheDocument();
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+    expect(mocks.openSnackbar).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'error' }));
+    await settle();
+    expect(mocks.getPost).toHaveBeenCalledTimes(1);
+    expect(mocks.getComments).toHaveBeenCalledTimes(1);
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.reportContent).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+    mocks.reportContent.mockRejectedValueOnce(serverError('Báo cáo vừa được xử lý', 409)).mockResolvedValue({ ok: true });
+    renderPage();
+    const submit = await openSheet();
+    mocks.getPost.mockReturnValueOnce(new Promise(() => undefined));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(submit);
+      await waitFor(() => expect(errorToasts('Báo cáo vừa được xử lý')).toBe(1));
+      await sheetGone();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+      await screen.findByPlaceholderText(REASON);
+      expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.reportContent).toHaveBeenCalledTimes(2));
   });
 });

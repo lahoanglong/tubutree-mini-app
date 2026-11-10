@@ -45,6 +45,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { haptic } from '../utils/haptic';
 import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { SubscriptionsPanel } from './subscriptions-panel';
 
 const SUB = {
@@ -933,5 +934,123 @@ describe('SubscriptionsPanel: lệnh bị từ chối vì lịch đã đổi th�
     await waitFor(() => expect(cardBtns('Tạm dừng')[0]).not.toHaveAttribute('aria-busy'));
     expect(mocks.getSubscriptions).toHaveBeenCalledTimes(1);
     expect(screen.queryByText(/Không tải được|Thử lại/)).toBeNull();
+  });
+});
+
+// W113A: sheet giữ chân (chỉ ba lựa chọn, không ô nhập) đóng khi máy chủ từ chối hẳn lệnh (400/404/409/422); riêng 400/404/409 còn tải lại danh sách và giữ khoá tới khi dữ liệu về (tối đa LOCK_REFRESH_WAIT_MS). Mất mạng, quá hạn, 401, 5xx: sheet còn mở, nhả khoá ngay, không tải lại.
+describe('SubscriptionsPanel: sheet giữ chân đóng khi lệnh bị từ chối hẳn (W113A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const errorToasts = (text: string) => mocks.openSnackbar.mock.calls.filter(([o]) => o.type === 'error' && o.text === text).length;
+  const cardCancel = () => screen.getByRole('button', { name: 'Huỷ' });
+  type Case = { name: string; write: ReturnType<typeof vi.fn>; label: string; succeed: unknown };
+  const CASES: Case[] = [
+    { name: 'Bỏ qua kỳ này (skipMut)', write: mocks.skipSubscriptionCycle, label: 'Bỏ qua kỳ này', succeed: SUB },
+    { name: '"Tạm dừng" trong sheet (statusMut)', write: mocks.setSubscriptionStatus, label: 'Tạm dừng', succeed: { ...SUB, status: 'PAUSED' } },
+    { name: '"Vẫn huỷ" (statusMut)', write: mocks.setSubscriptionStatus, label: 'Vẫn huỷ', succeed: { ...SUB, status: 'CANCELLED' } },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const m of [mocks.getSubscriptions, mocks.setSubscriptionStatus, mocks.skipSubscriptionCycle]) m.mockReset();
+    sheetSpy.calls.length = 0;
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe.each(CASES)('$name', (c) => {
+    it.each([
+      [400, 'Gói đã thay đổi'],
+      [404, 'Không tìm thấy lịch đặt định kỳ.'],
+      [409, 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.'],
+    ])('bị từ chối %i: đóng sheet, báo lỗi một lần, tải lại danh sách, khoá giữ tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      const refreshed = deferred<unknown[]>();
+      mocks.getSubscriptions.mockResolvedValueOnce([SUB]).mockReturnValueOnce(refreshed.promise).mockResolvedValue([SUB]);
+      c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(c.succeed);
+      renderPanel();
+      await openRetention();
+      fireEvent.click(inSheet(c.label));
+      await waitFor(() => expect(errorToasts(message)).toBe(1));
+      await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(retentionSheet().open).toBe(false));
+      // Danh sách chưa về: nút thẻ còn khoá, chạm lên nút thẻ không gửi thêm lệnh nào.
+      expect(cardCancel()).toBeDisabled();
+      fireEvent.click(cardBtns('Tạm dừng')[0]!);
+      expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(c.write === mocks.setSubscriptionStatus ? 1 : 0);
+      expect(mocks.skipSubscriptionCycle).toHaveBeenCalledTimes(c.write === mocks.skipSubscriptionCycle ? 1 : 0);
+      await act(async () => refreshed.resolve([SUB]));
+      await settle();
+      await waitFor(() => expect(cardCancel()).toBeEnabled());
+      expect(errorToasts(message)).toBe(1);
+      await openRetention();
+      fireEvent.click(inSheet(c.label));
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it('bị từ chối 422: đóng sheet và báo lỗi nhưng không tải lại danh sách, nhả khoá ngay', async () => {
+      mocks.getSubscriptions.mockResolvedValue([SUB]);
+      c.write.mockRejectedValueOnce(serverError('Dữ liệu không hợp lệ', 422)).mockResolvedValue(c.succeed);
+      renderPanel();
+      await openRetention();
+      fireEvent.click(inSheet(c.label));
+      await waitFor(() => expect(errorToasts('Dữ liệu không hợp lệ')).toBe(1));
+      await waitFor(() => expect(retentionSheet().open).toBe(false));
+      await waitFor(() => expect(cardCancel()).toBeEnabled());
+      await settle();
+      expect(mocks.getSubscriptions).toHaveBeenCalledTimes(1);
+      await openRetention();
+      fireEvent.click(inSheet(c.label));
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['hết thời gian', new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ])('%s: sheet còn mở, nhả khoá ngay, không tải lại danh sách', async (_label, error) => {
+      mocks.getSubscriptions.mockResolvedValue([SUB]);
+      c.write.mockRejectedValueOnce(error).mockResolvedValue(c.succeed);
+      renderPanel();
+      await openRetention();
+      fireEvent.click(inSheet(c.label));
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+      await waitFor(() => expect(inSheet(c.label)).not.toHaveAttribute('aria-busy'));
+      expect(retentionSheet().open).toBe(true);
+      expect(inSheet('Vẫn huỷ')).toBeEnabled();
+      await settle();
+      expect(mocks.getSubscriptions).toHaveBeenCalledTimes(1);
+      fireEvent.click(inSheet(c.label));
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it('tải lại treo mãi: nút thẻ còn khoá ở 3 giây, nhả sau 4 giây', async () => {
+      mocks.getSubscriptions.mockResolvedValueOnce([SUB]).mockReturnValueOnce(new Promise(() => undefined)).mockResolvedValue([SUB]);
+      c.write.mockRejectedValueOnce(serverError('Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.', 409)).mockResolvedValue(c.succeed);
+      renderPanel();
+      await openRetention();
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+      fireEvent.click(inSheet(c.label));
+      await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(retentionSheet().open).toBe(false));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(cardCancel()).toBeDisabled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      await waitFor(() => expect(cardCancel()).toBeEnabled());
+      vi.useRealTimers();
+      await openRetention();
+      fireEvent.click(inSheet(c.label));
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
   });
 });

@@ -32,7 +32,8 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useParams: () => mocks.params,
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
-vi.mock('../services/api', () => ({
+vi.mock('../services/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   isNotFoundError: (e: unknown) => (e as { status?: number } | null)?.status === 404,
@@ -68,6 +69,8 @@ vi.mock('../services/waste-api', async (orig) => ({
 import RewardsPage, { openingHoursText } from './rewards';
 import { makeGiftRedemption, makeRewardCatalog, makeRewardItem } from '../services/waste-test-fixtures';
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -434,8 +437,9 @@ describe('/rewards đổi quà: khoá có hạn, không đóng khung giữa ch�
     expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1);
   });
 
-  it('đổi lỗi mà danh mục chưa tải lại xong: nút còn khoá (aria-busy), chạm tiếp không gửi lại lệnh cũ; nhả sau tối đa 4 giây rồi đổi lại CÙNG khoá', async () => {
-    mocks.redeemLoyaltyReward.mockRejectedValueOnce(new Error('Quà này đã hết hoặc đã ngừng đổi')).mockResolvedValue(VOUCHER_RESULT);
+  it('đổi lỗi 400 mà danh mục chưa tải lại xong: nút còn khoá (aria-busy), chạm tiếp không gửi lại lệnh cũ; nhả sau tối đa 4 giây rồi khung xác nhận tự đóng (W113A)', async () => {
+    const stale = 'Quà này đã hết hoặc đã ngừng đổi';
+    mocks.redeemLoyaltyReward.mockRejectedValueOnce(new HttpError(stale, undefined, { status: 400, data: { message: stale }, headers: {} })).mockResolvedValue(VOUCHER_RESULT);
     mocks.invalidate.mockResolvedValue(undefined);
     renderPage();
     const sheet = await openConfirm();
@@ -453,10 +457,8 @@ describe('/rewards đổi quà: khoá có hạn, không đóng khung giữa ch�
     expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1);
 
     await advance(1_500);
-    await waitFor(() => expect(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' })).not.toHaveAttribute('aria-busy'));
-    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
-    await waitFor(() => expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(2));
-    expect(mocks.redeemLoyaltyReward.mock.calls.map((c) => c[1])).toEqual(['key-2', 'key-2']);
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1);
   });
 
   it('đổi xong rồi đổi lại cùng quà: lượt thứ hai dùng khoá MỚI (khoá cũ chỉ để phát lại một lượt đã trừ điểm)', async () => {
@@ -511,6 +513,127 @@ describe('/rewards đổi quà: khoá có hạn, không đóng khung giữa ch�
     await waitFor(() => expect(qc.isMutating()).toBe(1));
 
     fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+});
+
+// W113A: lệnh đổi quà bị máy chủ từ chối vì danh mục đã cũ (400/404/409) thì khoá giữ tới khi danh mục làm mới về (tối đa LOCK_REFRESH_WAIT_MS) rồi khung xác nhận đóng; 422 đóng ngay (từ chối hẳn, không có gì để chờ). Mất mạng, quá hạn, 401, 5xx: khung giữ mở, nhả khoá ngay, bấm lại phát lại đúng khoá cũ.
+describe('/rewards đổi quà: bị từ chối thì giữ khoá rồi đóng khung (W113A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const OK = {
+    success: true,
+    message: 'ok',
+    pointsSpent: 20_000,
+    remainingPoints: 10_000,
+    redemption: makeGiftRedemption({ giftKind: 'VOUCHER', status: 'FULFILLED', code: null, couponCode: 'FREESHIP-ABC' }),
+    coupon: { code: 'FREESHIP-ABC', type: 'FREESHIP', value: 0, minOrder: 99000, maxDiscount: null, endAt: '2026-11-16T16:59:59.000Z' },
+  };
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  const renderLive = (refresh: () => Promise<unknown>) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <RewardsPage />
+      </QueryClientProvider>,
+    );
+    return invalidate;
+  };
+  const filters = (invalidate: ReturnType<typeof renderLive>) => invalidate.mock.calls.map(([filter]) => filter);
+  const openConfirm = async () => {
+    fireEvent.click(within(await waitFor(() => card('Miễn phí vận chuyển'))).getByRole('button', { name: 'Đổi' }));
+    return within(await screen.findByRole('dialog'));
+  };
+  const confirmButton = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' });
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+
+  beforeEach(() => {
+    mocks.redeemLoyaltyReward.mockReset();
+    mocks.invalidate.mockReset();
+    mocks.invalidate.mockResolvedValue(undefined);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    [400, 'Quà này đã hết hoặc đã ngừng đổi'],
+    [404, 'Không tìm thấy quà này'],
+    [409, 'Quà vừa được đổi ở nơi khác'],
+  ])('bị từ chối %i: báo lỗi một lần, làm mới danh mục, nút giữ khoá tới khi danh mục về rồi khung đóng', async (status, message) => {
+    mocks.redeemLoyaltyReward.mockRejectedValueOnce(serverError(message, status));
+    const refresh = deferred();
+    const invalidate = renderLive(() => refresh.promise);
+    fireEvent.click((await openConfirm()).getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    expect(errorSnackbars()).toBe(1);
+    expect(filters(invalidate)).toEqual([{ queryKey: ['loyalty-rewards'] }]);
+    expect(confirmButton()).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(confirmButton());
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Huỷ' }));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(errorSnackbars()).toBe(1);
+  });
+
+  it('bị từ chối 422: làm mới danh mục ở nền, khung đóng ngay (không chờ danh mục), một lần báo lỗi', async () => {
+    mocks.redeemLoyaltyReward.mockRejectedValueOnce(serverError('Dữ liệu không hợp lệ', 422));
+    const invalidate = renderLive(() => new Promise(() => undefined));
+    fireEvent.click((await openConfirm()).getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(errorSnackbars()).toBe(1);
+    expect(filters(invalidate)).toEqual([{ queryKey: ['loyalty-rewards'] }]);
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: khung giữ mở, nhả khoá ngay, làm mới danh mục ở nền như trước; bấm lại phát lại CÙNG khoá', async (_label, error) => {
+    mocks.redeemLoyaltyReward.mockRejectedValueOnce(error).mockResolvedValue(OK);
+    const invalidate = renderLive(() => new Promise(() => undefined));
+    fireEvent.click((await openConfirm()).getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(errorSnackbars()).toBe(1));
+    await settle();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(confirmButton()).not.toHaveAttribute('aria-busy');
+    expect(filters(invalidate)).toEqual([{ queryKey: ['loyalty-rewards'] }]);
+    fireEvent.click(confirmButton());
+    await waitFor(() => expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(2));
+    const [k1, k2] = mocks.redeemLoyaltyReward.mock.calls.map((c) => c[1]);
+    expect(k2).toBe(k1);
+  });
+
+  it('danh mục treo mãi: khoá nhả và khung đóng đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+    mocks.redeemLoyaltyReward.mockRejectedValueOnce(serverError('Quà vừa được đổi ở nơi khác', 409));
+    renderLive(() => new Promise(() => undefined));
+    const sheet = await openConfirm();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    fireEvent.click(sheet.getByRole('button', { name: 'Xác nhận đổi' }));
+    await waitFor(() => expect(errorSnackbars()).toBe(1));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+    });
+    expect(confirmButton()).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(confirmButton());
+    expect(mocks.redeemLoyaltyReward).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });

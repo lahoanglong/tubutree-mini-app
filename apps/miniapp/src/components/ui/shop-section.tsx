@@ -8,8 +8,9 @@ import { comboTotals } from '@tubutree/app-core/commerce/shop-page';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useNotify } from '../../hooks/use-notify';
 import { addAllToCart } from '../../services/cart-batch';
-import { getErrorMessage, isBusinessMessage } from '../../services/api';
+import { getErrorMessage, isBusinessMessage, isStaleStateError } from '../../services/api';
 import { isHttpError } from '../../services/http';
+import { settleWithin } from '../../utils/settle-within';
 import { serverNow } from '../../utils/server-clock';
 import { haptic } from '../../utils/haptic';
 import { ComboCard } from './combo-card';
@@ -66,7 +67,13 @@ function ComboSection({ collection, pct, preview, onSeeAll }: { collection: Shop
       haptic('medium');
       notify({ type: 'success', text: fillCopy('shop.comboAdded') });
     },
-    onError: (error) => notify({ type: 'error', text: comboErrorText(error) }),
+    // Trả Promise: nút giữ khoá tới khi tồn kho gian hàng làm mới về (tối đa `settleWithin`) khi máy chủ từ chối (món hết hàng, ngừng bán, giá đổi). Mất mạng, quá hạn, 401, 5xx: nhả ngay.
+    // Máy chủ thêm cả lô hoặc không món nào nên giỏ không đổi: không tải lại giỏ.
+    onError: (error) => {
+      notify({ type: 'error', text: comboErrorText(error) });
+      if (!isStaleStateError(error)) return undefined;
+      return settleWithin(qc.invalidateQueries({ queryKey: ['public-storefront'] }));
+    },
     onSettled: () => {
       inflight.current = false;
     },

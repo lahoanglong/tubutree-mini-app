@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import { Page, Input, useSnackbar, useNavigate } from 'zmp-ui';
 import {
   BRAND_OWNER_COUPON_HINT,
@@ -21,7 +21,7 @@ import {
   deleteOwnedPromotion,
   type OwnedBrand,
 } from '../services/brand-owner-api';
-import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError, isTargetGoneError } from '../services/api';
 import { settleWithin } from '../utils/settle-within';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -157,11 +157,18 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã thêm khuyến mãi', type: 'success' }); void refresh(); },
     onError: onWriteError,
   });
+  // onError chạy với bản dựng lúc bấm; muốn biết form đang sửa promo nào LÚC LỖI VỀ thì phải đọc qua ref.
+  const editingIdRef = useRef(editingId);
+  editingIdRef.current = editingId;
   const updPromo = useLockedMutation({
     // Khi sửa, ô mã trống nghĩa là GỠ mã (chuỗi rỗng) — `undefined` bị bỏ qua nên mã cũ sẽ ở lại.
-    mutationFn: () => updateOwnedPromotion(editingId!, { ...promoIso(), couponCode: promo.couponCode.trim().toUpperCase() }),
+    mutationFn: (id: string) => updateOwnedPromotion(id, { ...promoIso(), couponCode: promo.couponCode.trim().toUpperCase() }),
     onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã cập nhật khuyến mãi', type: 'success' }); void refresh(); },
-    onError: onWriteError,
+    onError: (e, id) => {
+      // Form có ô nhập: chỉ đóng khi khuyến mãi đang sửa không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở ô nhập, giữ form để sửa. Chỉ đóng nếu form vẫn đang sửa đúng khuyến mãi này (đã chuyển sang sửa cái khác thì giữ).
+      if (isTargetGoneError(e) && editingIdRef.current === id) resetPromoForm();
+      return onWriteError(e);
+    },
   });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const delPromo = useLockedMutation({
@@ -169,7 +176,11 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     // So khớp đúng promo VỪA XOÁ (biến mutate) với promo đang sửa dở — không phải "có đang sửa gì đó
     // hay không" — kẻo xoá promo B trong lúc đang sửa dở promo A lại làm mất luôn form đang sửa của A.
     onSuccess: (_data, deletedId) => { if (editingId === deletedId) resetPromoForm(); setConfirmDeleteId(null); void refresh(); },
-    onError: onWriteError,
+    onError: (e, id) => {
+      // Hộp xác nhận chỉ có nút Xoá: khuyến mãi không còn/đã đổi (400/404/409/422) thì bấm lại nhận đúng lỗi đó, đóng hộp (khoá vẫn giữ tới khi hồ sơ về). Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
+      if (isServerRejection(e)) setConfirmDeleteId((cur) => (cur === id ? null : cur));
+      return onWriteError(e);
+    },
   }, (id) => id);
   const startEdit = (p: OwnedBrand['promotions'][number]) => {
     setEditingId(p.id);
@@ -318,7 +329,7 @@ function Editor({ brand }: { brand: OwnedBrand }) {
               )}
               {editingId ? (
                 <div style={{ display: 'flex', gap: 6 }}>
-                  <Button variant="secondary" style={{ flex: 1 }} disabled={!promo.title.trim() || dateRangeInvalid} loading={updPromo.isPending} onPress={() => updPromo.mutate()}>Lưu thay đổi</Button>
+                  <Button variant="secondary" style={{ flex: 1 }} disabled={!promo.title.trim() || dateRangeInvalid} loading={updPromo.isPending} onPress={() => updPromo.mutate(editingId)}>Lưu thay đổi</Button>
                   <Button variant="ghost" onPress={resetPromoForm}>Huỷ</Button>
                 </div>
               ) : (

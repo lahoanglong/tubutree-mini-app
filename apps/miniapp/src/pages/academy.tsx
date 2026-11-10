@@ -10,7 +10,8 @@ import {
   type AcademyCourseSummary,
   type AcademyCourseDetail,
 } from '../services/academy-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { SessionUnavailable } from '../components/ui/auth-gate';
@@ -166,6 +167,16 @@ function CourseDetail({ courseId }: { courseId: string }) {
         openSnackbar({ text: vi.academy.markDoneOk, type: 'success' });
         void qc.invalidateQueries({ queryKey: ['academy-course', courseId] });
         void qc.invalidateQueries({ queryKey: ['academy-courses'] });
+      },
+      // Lỗi hiện tại chỗ qua `failure`. Máy chủ từ chối vì bài/khoá đã đổi (400/404/409) thì tải lại và giữ khoá tới khi dữ liệu về (tối đa `settleWithin`); mất mạng, 401, 5xx nhả ngay.
+      onError: (e) => {
+        if (!isStaleStateError(e)) return undefined;
+        return settleWithin(
+          Promise.all([
+            qc.invalidateQueries({ queryKey: ['academy-course', courseId] }),
+            qc.invalidateQueries({ queryKey: ['academy-courses'] }),
+          ]),
+        );
       },
     },
   );

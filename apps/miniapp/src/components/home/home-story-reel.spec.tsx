@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { REEL_SEEN_KEY } from '@tubutree/app-core/commerce/story-reel';
 
 const mocks = vi.hoisted(() => ({
@@ -42,6 +42,8 @@ vi.mock('../variation-sheet', () => ({
 }));
 
 import { resetReelSeenMemory } from '../../utils/reel-seen-storage';
+import { HttpError } from '../../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../../utils/settle-within';
 import { HomeStoryReel } from './home-story-reel';
 
 const card = (n: number, over: Record<string, unknown> = {}) => ({
@@ -491,3 +493,147 @@ describe('HomeStoryReel: thêm giỏ từ Reel khoá chạm đúp (W70A)', () =>
   });
 });
 
+
+// W113A: thêm giỏ từ Reel bị máy chủ từ chối vì tồn kho/giá đã đổi (400/404/409) thì khoá của món (và bảng chọn phân loại) giữ tới khi giỏ, chi tiết món và kệ Bán chạy nhất làm mới về
+// (tối đa LOCK_REFRESH_WAIT_MS). Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: không tải lại, nhả ngay.
+describe('HomeStoryReel: máy chủ từ chối thì giữ khoá tới khi dữ liệu làm mới về (W113A)', () => {
+  type Refresh = () => Promise<unknown>;
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorNotices = () => mocks.notify.mock.calls.filter((c) => c[0].type === 'error').length;
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để trạng thái kịp cập nhật sau khi lệnh xong.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const renderLive = (refresh: Refresh): MockInstance<QueryClient['invalidateQueries']> => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <HomeStoryReel />
+      </QueryClientProvider>,
+    );
+    return invalidate;
+  };
+  const KEYS = [['cart'], ['product', 'mon-1'], ['products', 'home-best-seller']];
+
+  /** Mỗi lối thêm: `first` bắt đầu lệnh đầu, `again` là cú chạm lặp vào cùng món, `held` cho biết nút/bảng còn đang giữ khoá nhìn từ màn. */
+  const FLOWS = [
+    {
+      name: 'một chạm trong Reel (món một phân loại)',
+      args: ['v1', 1] as const,
+      setup: () => undefined,
+      first: async () => {
+        fireEvent.click(ring(1));
+        fireEvent.click(await dialogReady());
+      },
+      again: async () => {
+        fireEvent.click(ring(1));
+        fireEvent.click(await dialogReady());
+      },
+      held: () => false,
+      sheetFlow: false,
+    },
+    {
+      name: 'bảng chọn phân loại',
+      args: ['v1b', 2] as const,
+      setup: () => mocks.fetchProduct.mockResolvedValue(detail(1, [variation('v1'), variation('v1b')])),
+      first: async () => {
+        fireEvent.click(ring(1));
+        fireEvent.click(await dialogReady());
+        fireEvent.click(await screen.findByRole('button', { name: 'xác nhận phân loại' }));
+      },
+      again: async () => {
+        fireEvent.click(await screen.findByRole('button', { name: 'xác nhận phân loại' }));
+      },
+      held: () => screen.queryByTestId('variation-sheet') !== null,
+      sheetFlow: true,
+    },
+  ];
+
+  describe.each(FLOWS)('$name', (f) => {
+    beforeEach(() => f.setup());
+
+    it.each([
+      [400, 'Sản phẩm đã hết hàng'],
+      [404, 'Sản phẩm không còn bán'],
+      [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+    ])('bị từ chối %i: báo lỗi một lần, tải lại đúng khoá, giữ khoá tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      mocks.addToCart.mockRejectedValueOnce(serverError(message, status));
+      const refresh = deferred();
+      const invalidate = renderLive(() => refresh.promise);
+      await screen.findAllByTestId('story-reel-item');
+      await f.first();
+      await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ text: message, type: 'error' })));
+      expect(errorNotices()).toBe(1);
+      expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual(KEYS.map((queryKey) => ({ queryKey })));
+      // Đã báo lỗi mà dữ liệu chưa về: chạm lại vào cùng món không gửi lệnh nào (bảng chọn còn mở).
+      if (f.sheetFlow) expect(f.held()).toBe(true);
+      await f.again();
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      if (f.sheetFlow) await waitFor(() => expect(f.held()).toBe(false));
+      expect(errorNotices()).toBe(1);
+      if (!f.sheetFlow) {
+        await f.again();
+        await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+        expect(mocks.addToCart.mock.calls[1]).toEqual([...f.args]);
+      }
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ])('%s: không giữ khoá chờ tải lại, khoá nhả ngay', async (_label, error) => {
+      mocks.addToCart.mockRejectedValueOnce(error);
+      const invalidate = renderLive(() => new Promise(() => undefined));
+      await screen.findAllByTestId('story-reel-item');
+      await f.first();
+      await waitFor(() => expect(errorNotices()).toBe(1));
+      if (f.sheetFlow) await waitFor(() => expect(f.held()).toBe(false));
+      expect(invalidate).not.toHaveBeenCalled();
+      expect(mocks.addToCart.mock.calls[0]).toEqual([...f.args]);
+      fireEvent.click(ring(1));
+      fireEvent.click(await dialogReady());
+      if (f.sheetFlow) fireEvent.click(await screen.findByRole('button', { name: 'xác nhận phân loại' }));
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    });
+
+    it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+      mocks.addToCart.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409));
+      renderLive(() => new Promise(() => undefined));
+      await screen.findAllByTestId('story-reel-item');
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        await f.first();
+        await waitFor(() => expect(errorNotices()).toBe(1));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        await f.again();
+        expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+        if (f.sheetFlow) expect(f.held()).toBe(true);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+        if (f.sheetFlow) await waitFor(() => expect(f.held()).toBe(false));
+      } finally {
+        vi.useRealTimers();
+      }
+      if (!f.sheetFlow) {
+        await f.again();
+        await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+      }
+    });
+  });
+});

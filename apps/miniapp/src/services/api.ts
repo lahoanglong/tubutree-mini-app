@@ -269,6 +269,21 @@ export function isStaleStateError(error: unknown): boolean {
 }
 
 /**
+ * Máy chủ đã từ chối hẳn lệnh bằng 400/404/409/422 (thêm 422: dữ liệu gửi lên không hợp lệ). Dùng để đóng hộp xác nhận/tấm chỉ có nút Đồng ý:
+ * bấm lại đúng lệnh đó nhận đúng lỗi đó nên giữ hộp mở chỉ đánh lừa người dùng. Mất mạng, quá hạn, 401, 403, 5xx không phải lời từ chối: không tính (người dùng còn thử lại được).
+ */
+export function isServerRejection(error: unknown): boolean {
+  return isHttpError(error) && [400, 404, 409, 422].includes(error.response?.status ?? 0);
+}
+
+/**
+ * Đích của lệnh không còn hoặc vừa đổi (404/409). Tấm có ô người dùng nhập chỉ đóng khi gặp mã này: 400/422 là lỗi ở chính ô nhập, người dùng sửa rồi gửi lại được.
+ */
+export function isTargetGoneError(error: unknown): boolean {
+  return isHttpError(error) && [404, 409].includes(error.response?.status ?? 0);
+}
+
+/**
  * Lỗi mà máy chủ có thể đã làm xong việc trước khi trả lời: quá thời gian, mất kết nối giữa chừng, 5xx (kể cả proxy phía trước).
  * Lệnh tạo đơn/tiền gặp lỗi này phải gửi lại đúng Idempotency-Key cũ; 4xx là máy chủ đã từ chối, không có gì được ghi.
  */

@@ -6,9 +6,10 @@ import { QUICK_ADD_SOLD_OUT, quickAddPlan } from '@tubutree/app-core/quick-add';
 import { wishlistFilterView, type WishlistFilterKey } from '@tubutree/app-core/commerce/wishlist-filter';
 import { getWishlist } from '../services/wishlist-api';
 import { addToCart, fetchActiveFlashSales, fetchProduct, getCart, type ProductCard as ProductCardData, type VariationDetail } from '../services/shop-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError, isTargetGoneError } from '../services/api';
 import { cartKey, useCartKey } from '../services/cart-key';
 import { serverNow } from '../utils/server-clock';
+import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { playCartFeedback } from '../utils/cart-feedback';
@@ -78,6 +79,13 @@ export default function WishlistPage() {
     openSnackbar({ text: vi.product.added, type: 'success', duration: 2000, position: 'top' });
   };
 
+  // Máy chủ từ chối (400/404/409: hết hàng, món không còn): tải lại danh sách để thẻ hiện đúng trạng thái và giữ khoá `adding` tới khi dữ liệu về (tối đa `settleWithin`),
+  // kẻo bấm lại trên thẻ cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: không tải lại, nhả ngay.
+  const reloadIfRejected = async (error: unknown) => {
+    if (!isStaleStateError(error)) return;
+    await settleWithin(queryClient.invalidateQueries({ queryKey: ['wishlist'] }));
+  };
+
   // Thẻ không mang phân loại nên tải chi tiết lúc bấm (cũng cho tồn kho mới nhất), rồi theo cùng luật với trang chi tiết.
   const quickAdd = async (product: ProductCardData, source: Element | null = null) => {
     if (adding.current) return;
@@ -94,6 +102,7 @@ export default function WishlistPage() {
       else await addLine(plan.variationId, 1, source);
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      await reloadIfRejected(e);
     } finally {
       adding.current = false;
       setBusyId(null);
@@ -103,12 +112,16 @@ export default function WishlistPage() {
   const confirmPick = async (variation: { id: string }, qty: number) => {
     if (adding.current) return;
     adding.current = true;
-    setBusyId(picker?.product.id ?? null);
+    const pickedId = picker?.product.id ?? null;
+    setBusyId(pickedId);
     try {
       await addLine(variation.id, qty);
       setPicker(null);
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Món/phân loại không còn (404/409): đóng bảng của đúng món này (bảng có thể đã đổi sang món khác trong lúc lệnh bay). Bảng có ô số lượng nên 400 ("Chỉ còn N") và 422 giữ bảng để giảm số lượng; mất mạng, quá hạn, 401, 5xx cũng giữ bảng để thử lại.
+      if (isTargetGoneError(e)) setPicker((cur) => (cur?.product.id === pickedId ? null : cur));
+      await reloadIfRejected(e);
     } finally {
       adding.current = false;
       setBusyId(null);

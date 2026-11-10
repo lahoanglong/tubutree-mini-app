@@ -2,6 +2,8 @@ import { act, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { hasPartnerLinkParams, ONBOARDING_SNOOZE_KEY, ONBOARDING_SNOOZE_MS, shouldShowOnboarding } from './onboarding-rules';
 
 const mocks = vi.hoisted(() => ({
@@ -10,11 +12,12 @@ const mocks = vi.hoisted(() => ({
   setStorage: vi.fn(),
   getMe: vi.fn(),
   complete: vi.fn(),
+  openSnackbar: vi.fn(),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<typeof ZmpUi>()),
   useLocation: () => mocks.location,
-  useSnackbar: () => ({ openSnackbar: vi.fn(), closeSnackbar: vi.fn() }),
+  useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('zmp-sdk/apis', () => ({
   getStorage: async () => mocks.storage,
@@ -235,3 +238,110 @@ describe('OnboardingGate — "Hoàn tất" khoá đồng bộ chạm đúp (W108
   });
 });
 
+
+// W113A: "Hoàn tất" bị máy chủ từ chối (400/404/409) thì tải lại ['me'] và giữ khoá tới khi dữ liệu về (tối đa LOCK_REFRESH_WAIT_MS); mất mạng, quá hạn, 401, 5xx nhả ngay, không tải lại.
+describe('OnboardingGate — "Hoàn tất" bị từ chối thì giữ khoá tới khi hồ sơ làm mới về (W113A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const errorToasts = (text: string) => mocks.openSnackbar.mock.calls.filter(([o]) => o.type === 'error' && o.text === text).length;
+  const next = () => fireEvent.click(screen.getByRole('button', { name: /^(Tiếp tục|Hoàn tất)$/ }));
+  const doneBtn = () => screen.getByRole('button', { name: 'Hoàn tất' });
+  /** Dựng cổng onboarding với `invalidateQueries` giả (giữ lời hứa tải lại trong tay), trả lời đủ bốn câu và dừng ở nút "Hoàn tất". */
+  async function answerAll(refresh: () => Promise<unknown>) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(<QueryClientProvider client={qc}><OnboardingGate enabled /></QueryClientProvider>);
+    fireEvent.click(await screen.findByRole('button', { name: 'Bắt đầu' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chăm sóc da' }));
+    next();
+    fireEvent.click(screen.getByRole('radio', { name: 'Nhạy cảm' }));
+    next();
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Gia đình' }));
+    next();
+    fireEvent.click(screen.getByRole('radio', { name: 'Giá tốt' }));
+    return invalidate;
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.complete.mockReset();
+    mocks.location = { pathname: '/', search: '' };
+    mocks.storage = {};
+    mocks.getMe.mockResolvedValue({ onboarded: false });
+  });
+
+  it.each([
+    [400, 'Bạn đã làm khảo sát rồi'],
+    [404, 'Không tìm thấy hồ sơ'],
+    [409, 'Hồ sơ vừa được cập nhật'],
+  ])('bị từ chối %i: báo lỗi một lần, tải lại [me], khoá giữ tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+    mocks.complete.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({});
+    const refresh = deferred();
+    const invalidate = await answerAll(() => refresh.promise);
+    fireEvent.click(doneBtn());
+    await waitFor(() => expect(errorToasts(message)).toBe(1));
+    expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['me'] }]);
+    expect(doneBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(doneBtn());
+      fireEvent.click(doneBtn());
+    });
+    expect(mocks.complete).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    await waitFor(() => expect(doneBtn()).not.toHaveAttribute('aria-busy'));
+    expect(errorToasts(message)).toBe(1);
+    expect(screen.queryByRole('heading', { name: 'Tuyệt vời!' })).toBeNull();
+    fireEvent.click(doneBtn());
+    await waitFor(() => expect(mocks.complete).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('heading', { name: 'Tuyệt vời!' })).toBeInTheDocument();
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: báo lỗi, nhả khoá ngay, không tải lại [me]', async (_label, error) => {
+    mocks.complete.mockRejectedValueOnce(error).mockResolvedValue({});
+    const invalidate = await answerAll(() => new Promise(() => undefined));
+    fireEvent.click(doneBtn());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(doneBtn()).not.toHaveAttribute('aria-busy'));
+    expect(invalidate).not.toHaveBeenCalled();
+    fireEvent.click(doneBtn());
+    await waitFor(() => expect(mocks.complete).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+    mocks.complete.mockRejectedValueOnce(serverError('Hồ sơ vừa được cập nhật', 409)).mockResolvedValue({});
+    await answerAll(() => new Promise(() => undefined));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(doneBtn());
+      await waitFor(() => expect(errorToasts('Hồ sơ vừa được cập nhật')).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(doneBtn()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(doneBtn()).not.toHaveAttribute('aria-busy'));
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(doneBtn());
+    await waitFor(() => expect(mocks.complete).toHaveBeenCalledTimes(2));
+  });
+});

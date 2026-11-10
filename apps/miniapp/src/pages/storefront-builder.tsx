@@ -20,7 +20,7 @@ import {
   BUILDER_COPY, comboPctOutcome, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
   sectionCardView, sectionHref, sectionIdFromSearch, sectionStyleOf, type newSectionDto,
 } from '@tubutree/app-core/commerce/storefront-builder';
-import { apiMediaUrl, getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { apiMediaUrl, getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
 import { getCtvTiers } from '../services/affiliate-api';
 import { formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
@@ -217,6 +217,8 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     },
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Hộp chỉ có nút Gỡ đăng: máy chủ đã từ chối (gian hàng đã gỡ ở máy khác...) thì bấm lại nhận đúng lỗi đó, đóng hộp. Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
+      if (isServerRejection(e)) setConfirmUnpublish(false);
       return holdForFresh(e);
     },
   });
@@ -268,8 +270,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       if (id === sectionId) closeSection();
       void refresh();
     },
-    onError: (e) => {
+    onError: (e, id) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Hộp xác nhận chỉ có nút Xoá: khối không còn/đã đổi (400/404/409/422) thì bấm lại nhận đúng lỗi đó, đóng hộp (khoá vẫn giữ tới khi dữ liệu về). Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
+      if (isServerRejection(e)) setConfirmDeleteCol((cur) => (cur === id ? null : cur));
       return holdForFresh(e);
     },
   }, (id) => id);
@@ -414,8 +418,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
   const delItemMut = useLockedMutation({
     mutationFn: removeItem,
     onSuccess: () => { setConfirmDeleteItemId(null); void refresh(); },
-    onError: (e) => {
+    onError: (e, id) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Như hộp xoá khối: món không còn/đã đổi thì đóng hộp, khoá giữ tới khi dữ liệu về.
+      if (isServerRejection(e)) setConfirmDeleteItemId((cur) => (cur === id ? null : cur));
       return holdForFresh(e);
     },
   }, (id) => id);

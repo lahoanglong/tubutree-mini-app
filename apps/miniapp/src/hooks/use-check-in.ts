@@ -3,8 +3,9 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSnackbar } from 'zmp-ui';
 import { checkInSuccessText } from '@tubutree/app-core/daily-check-in-copy';
 import { checkInView, getDailyCheckInStatus, postDailyCheckIn, type CheckInStatusResponse } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isStaleStateError } from '../services/api';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 
 /**
  * Điểm danh dùng chung cho Trang chủ, Ưu đãi và trang Điểm Xanh: cùng khoá ['loyalty-checkin'], cùng POST /me/daily-check-in
@@ -31,7 +32,10 @@ export function useCheckIn(enabled: boolean) {
     },
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      void qc.invalidateQueries({ queryKey: ['loyalty-checkin'] });
+      // Mọi lỗi đều tải lại để nút khớp trạng thái thật (quá hạn/5xx: máy chủ có thể đã ghi điểm danh trước khi trả lời).
+      const reload = qc.invalidateQueries({ queryKey: ['loyalty-checkin'] });
+      // Máy chủ từ chối vì trạng thái đã đổi (400/404/409, vd đã điểm danh hôm nay): giữ khoá tới khi dữ liệu về (tối đa `settleWithin`), kẻo nút còn sáng với trạng thái cũ và bấm lại nhận đúng lỗi đó. Lỗi khác nhả khoá ngay để không kẹt.
+      return isStaleStateError(e) ? settleWithin(reload) : undefined;
     },
     onSettled: () => {
       busy.current = false;

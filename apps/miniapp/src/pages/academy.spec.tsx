@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AcademyCourseDetail, AcademyCourseSummary } from '../services/academy-api';
 import { vi as viText } from '../i18n/vi';
 import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -34,7 +35,11 @@ vi.mock('../services/academy-api', () => ({
   fetchCourse: mocks.fetchCourse,
   completeLesson: mocks.completeLesson,
 }));
-vi.mock('../services/api', () => ({ getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'), getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi') }));
+vi.mock('../services/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
+  getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
+}));
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
 
 import AcademyPage from './academy';
@@ -481,5 +486,99 @@ describe('AcademyPage: "Thử lại" chạm đúp (W74A)', () => {
     expect(mocks.fetchCourse).toHaveBeenCalledTimes(2);
     await act(async () => d.resolve(DETAIL()));
     expect(await screen.findByText('Khoá bán hàng')).toBeInTheDocument();
+  });
+});
+
+// W113A: bài học bị máy chủ từ chối vì bài/khoá đã đổi (400/404/409) thì tải lại khoá + danh sách và giữ khoá tới khi dữ liệu về (tối đa LOCK_REFRESH_WAIT_MS); mất mạng, quá hạn, 401, 5xx nhả ngay, không tải lại.
+describe('AcademyPage: bài học bị từ chối thì giữ khoá tới khi dữ liệu về (W113A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const renderLive = (refresh: () => Promise<unknown>) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(<QueryClientProvider client={qc}><AcademyPage /></QueryClientProvider>);
+    return invalidate;
+  };
+  const markDone = () => screen.getAllByRole('button', { name: viText.academy.markDone })[0]!;
+
+  beforeEach(() => {
+    mocks.params = { courseId: 'c1' };
+  });
+
+  it.each([
+    [400, 'Bài đã học rồi'],
+    [404, 'Không tìm thấy bài'],
+    [409, 'Khoá vừa đổi'],
+  ])('bị từ chối %i: tải lại khoá + danh sách, lỗi chỉ hiện khi dữ liệu đã về, khoá nhả sau đó', async (status, message) => {
+    mocks.completeLesson.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({ ok: true });
+    const refresh = deferred();
+    const invalidate = renderLive(() => refresh.promise);
+    await screen.findByText('Khoá bán hàng');
+    fireEvent.click(markDone());
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(2));
+    expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([
+      { queryKey: ['academy-course', 'c1'] },
+      { queryKey: ['academy-courses'] },
+    ]);
+    // Dữ liệu chưa về: còn giữ khoá, chưa hiện lỗi, chạm thêm không gửi lần hai.
+    expect(screen.queryByRole('alert')).toBeNull();
+    await act(async () => {
+      fireEvent.click(screen.getAllByRole('button', { name: viText.academy.markDone })[0]!);
+    });
+    expect(mocks.completeLesson).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    expect(await screen.findByRole('alert')).toHaveTextContent(message);
+    fireEvent.click(markDone());
+    await waitFor(() => expect(mocks.completeLesson).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: nhả khoá ngay, không tải lại khoá hay danh sách', async (_label, error) => {
+    mocks.completeLesson.mockRejectedValueOnce(error).mockResolvedValue({ ok: true });
+    const invalidate = renderLive(() => new Promise(() => undefined));
+    await screen.findByText('Khoá bán hàng');
+    fireEvent.click(markDone());
+    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(invalidate).not.toHaveBeenCalled();
+    fireEvent.click(markDone());
+    await waitFor(() => expect(mocks.completeLesson).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+    mocks.completeLesson.mockRejectedValueOnce(serverError('Khoá vừa đổi', 409)).mockResolvedValue({ ok: true });
+    renderLive(() => new Promise(() => undefined));
+    await screen.findByText('Khoá bán hàng');
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(markDone());
+      await waitFor(() => expect(mocks.completeLesson).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(screen.queryByRole('alert')).toBeNull();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      expect(await screen.findByRole('alert')).toHaveTextContent('Khoá vừa đổi');
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(markDone());
+    await waitFor(() => expect(mocks.completeLesson).toHaveBeenCalledTimes(2));
   });
 });

@@ -1,20 +1,37 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useSnackbar } from 'zmp-ui';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { CouponPreviewDTO, CouponPreviewRequest } from '@tubutree/shared-types';
 import { autoCouponMemory, couponHint, pickBestCoupon, type CouponHint } from '@tubutree/app-core/coupon-use';
 import { getCoupons, type CouponDTO } from '../../services/account-api';
 import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/shop-api';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, isStaleStateError } from '../../services/api';
 import { cartKey } from '../../services/cart-key';
 import { useLockedMutation } from '../game/use-locked-mutation';
 import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../../utils/use-debounced';
+import { settleWithin } from '../../utils/settle-within';
 
 /**
  * Khoá mutation của mọi lệnh áp/gỡ mã trong tấm chọn mã. Trang thanh toán đọc nó bằng `useIsMutating` để khoá nút Đặt hàng: khách có thể
  * đóng tấm khi lệnh còn chạy rồi chạm Đặt hàng ở chân trang, đơn khi đó đi với giỏ chưa có mã mà lệnh áp mã vẫn đang tới máy chủ.
  */
 export const COUPON_CHANGE_KEY = ['coupon-change'] as const;
+
+/**
+ * Máy chủ từ chối lệnh áp/gỡ mã vì màn đã cũ (400/404/409: mã hết lượt, bị tắt, giỏ vừa đổi): đọc lại số xem trước, ví mã, giỏ và báo giá, rồi chờ chúng về
+ * (tối đa `settleWithin`) để nút áp/gỡ giữ khoá tới lúc đó. Bấm lại trên số cũ nhận đúng lỗi đó. Lỗi khác trả undefined: nhả khoá ngay.
+ */
+export function holdForCouponReload(queryClient: QueryClient, error: unknown): Promise<void> | undefined {
+  if (!isStaleStateError(error)) return undefined;
+  return settleWithin(
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['coupon-previews'] }),
+      queryClient.invalidateQueries({ queryKey: ['coupons'] }),
+      queryClient.invalidateQueries({ queryKey: ['cart'] }),
+      queryClient.invalidateQueries({ queryKey: ['quote'] }),
+    ]),
+  );
+}
 
 /**
  * Số xem trước từng mã của ví cho giỏ chưa có mã. Cùng khoá truy vấn và nhịp debounce với VoucherSheet nên khi khách
@@ -105,6 +122,8 @@ export function useCheckoutCoupon(opts: {
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       onChanged();
     },
+    // Tự áp im lặng khi lỗi (màn giữ như chưa áp): chỉ khi máy chủ từ chối vì màn đã cũ thì đọc lại và giữ `busy` tới khi dữ liệu về, kẻo nút Đặt hàng sáng lại trên giỏ cũ.
+    onError: (e: unknown) => holdForCouponReload(queryClient, e),
   });
   const removeMut = useLockedMutation({
     mutationFn: removeCoupon,
@@ -115,7 +134,10 @@ export function useCheckoutCoupon(opts: {
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       onChanged();
     },
-    onError: (e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      return holdForCouponReload(queryClient, e);
+    },
   });
 
   useEffect(() => {

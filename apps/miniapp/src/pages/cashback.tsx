@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { CASHBACK_REDIRECT } from '@tubutree/app-core/client-copy';
 import { Page, Avatar, useSnackbar } from 'zmp-ui';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { AlertTriangle, Undo2 } from 'lucide-react';
 import {
@@ -13,7 +13,8 @@ import {
   type CashbackTxn,
 } from '../services/cashback-api';
 import { getWallet } from '../services/account-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { openAffiliateLink } from '../services/zmp-bridge';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -39,6 +40,7 @@ const TXN_META: Record<CashbackStatus, { label: string; tone: BadgeTone }> = {
 
 export default function CashbackPage() {
   const { openSnackbar } = useSnackbar();
+  const qc = useQueryClient();
   // /cashback/transactions & /me/wallet cần auth — fetch trước khi restore() xong sẽ 401 và kẹt
   // vĩnh viễn (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (như wallet.tsx).
   // /cashback/merchants là @Public() nên KHÔNG cần chờ authed.
@@ -58,7 +60,13 @@ export default function CashbackPage() {
       openSnackbar({ text: CASHBACK_REDIRECT, type: 'success' });
       void openAffiliateLink(r.deeplink);
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e, merchantId) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Tấm chỉ có nút Mở sàn: máy chủ từ chối hẳn (sàn ngừng/đã đổi) thì bấm lại nhận đúng lỗi đó, đóng tấm của đúng sàn này (tấm có thể đã đổi sang sàn khác trong lúc lệnh bay). Mất mạng, quá hạn, 401, 5xx giữ tấm để thử lại.
+      if (isServerRejection(e)) setSelected((cur) => (cur?.id === merchantId ? null : cur));
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(qc.invalidateQueries({ queryKey: ['cashback-merchants'] }));
+    },
   });
 
   return (

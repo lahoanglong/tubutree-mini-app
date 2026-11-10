@@ -7,6 +7,9 @@ import {
   HttpError,
   isAnonAuthCall,
   isOutcomeUnknown,
+  isServerRejection,
+  isStaleStateError,
+  isTargetGoneError,
   loginGuest,
   loginZaloMiniApp,
   setAccessToken,
@@ -149,6 +152,41 @@ describe('isOutcomeUnknown', () => {
     ['lỗi không phải HttpError', new Error('x')],
   ])('%s → đã biết kết quả (máy chủ từ chối)', (_label, err) => {
     expect(isOutcomeUnknown(err)).toBe(false);
+  });
+});
+
+// W113A: lời từ chối hẳn của máy chủ → đóng hộp xác nhận; các lỗi còn lại để người dùng thử lại.
+describe('isServerRejection / isTargetGoneError / isStaleStateError', () => {
+  const withStatus = (status: number) => httpError({ response: { status, data: {} } });
+  const NO_RESPONSE = [
+    ['mất mạng', httpError({ code: 'ERR_NETWORK', response: undefined })],
+    ['quá thời gian', httpError({ code: 'ECONNABORTED', response: undefined })],
+    ['lỗi không phải HttpError', new Error('x')],
+  ] as const;
+
+  it.each([400, 404, 409, 422])('isServerRejection: %i → true', (status) => {
+    expect(isServerRejection(withStatus(status))).toBe(true);
+  });
+  it.each([401, 403, 429, 500, 503])('isServerRejection: %i → false', (status) => {
+    expect(isServerRejection(withStatus(status))).toBe(false);
+  });
+  it.each(NO_RESPONSE)('isServerRejection: %s → false', (_label, err) => {
+    expect(isServerRejection(err)).toBe(false);
+  });
+
+  it.each([404, 409])('isTargetGoneError: %i → true', (status) => {
+    expect(isTargetGoneError(withStatus(status))).toBe(true);
+  });
+  it.each([400, 422, 401, 403, 500, 503])('isTargetGoneError: %i → false', (status) => {
+    expect(isTargetGoneError(withStatus(status))).toBe(false);
+  });
+  it.each(NO_RESPONSE)('isTargetGoneError: %s → false', (_label, err) => {
+    expect(isTargetGoneError(err)).toBe(false);
+  });
+
+  it('isStaleStateError giữ nguyên tập 400/404/409 (422 không tải lại, chỉ đóng hộp)', () => {
+    for (const status of [400, 404, 409]) expect(isStaleStateError(withStatus(status))).toBe(true);
+    for (const status of [401, 422, 500]) expect(isStaleStateError(withStatus(status))).toBe(false);
   });
 });
 

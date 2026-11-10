@@ -1,4 +1,4 @@
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -16,6 +16,8 @@ vi.mock('../services/buy-flow-events', () => ({ trackReorderCompleted: mocks.tra
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { useReorder } from './use-reorder';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import type { ReorderLine, ReorderTarget } from '../components/reorder/reorder-types';
 
 const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 1 };
@@ -210,6 +212,134 @@ describe('useReorder', () => {
       await act(async () => { await result.current.submit(ITEM, SEL); });
       expect(mocks.addToCart).toHaveBeenCalledTimes(2);
       expect(mocks.trackReorderCompleted).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+// W113A: mua lại bị máy chủ từ chối vì đơn/món đã đổi (400/404/409) thì `inFlight` giữ tới khi giỏ, đơn và kệ Mua lại làm mới về (tối đa LOCK_REFRESH_WAIT_MS), kẻo bấm lại trên số cũ nhận đúng lỗi đó.
+// Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: không tải lại, nhả ngay.
+describe('useReorder — máy chủ từ chối thì giữ khoá tới khi dữ liệu làm mới về (W113A)', () => {
+  const SEL = [{ key: 'v1', variationId: 'v-v1', quantity: 1 }];
+  const ORDER_SEL = [{ key: 'a', variationId: 'v-a', quantity: 1 }];
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const outcome = (p: Promise<unknown>) => p.then(() => 'ok', () => 'rejected');
+  const setupLive = (refresh: () => Promise<unknown>) => {
+    const qc = new QueryClient({ defaultOptions: { mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    return { invalidate, ...renderHook(() => useReorder('home_rail'), { wrapper }) };
+  };
+  const CASES = [
+    { name: 'một món (kệ Mua lại)', target: ITEM, selections: SEL, write: mocks.addToCart, keys: [['cart'], ['purchased-items'], ['orders']] },
+    { name: 'cả đơn', target: ORDER, selections: ORDER_SEL, write: mocks.repurchaseOrder, keys: [['cart'], ['purchased-items'], ['orders'], ['order', 'TUBU1']] },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.addToCart.mockReset();
+    mocks.repurchaseOrder.mockReset();
+  });
+
+  describe.each(CASES)('$name', (c) => {
+    const succeed = () =>
+      c.write.mockResolvedValue(c.target.kind === 'item' ? CART : { cart: CART, legacy: false, results: [{ orderItemId: 'a', status: 'added', addedQuantity: 1 }] });
+
+    it.each([
+      [400, 'Đơn này không mua lại được'],
+      [404, 'Không tìm thấy đơn'],
+      [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+    ])('bị từ chối %i: báo lỗi một lần, tải lại đúng khoá, giữ khoá tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      c.write.mockRejectedValueOnce(serverError(message, status));
+      succeed();
+      const refresh = deferred();
+      const { result, invalidate } = setupLive(() => refresh.promise);
+      let first!: Promise<unknown>;
+      act(() => {
+        first = result.current.submit(c.target, c.selections);
+      });
+      const firstOutcome = outcome(first);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: message, type: 'error' })));
+      expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+      expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual(c.keys.map((queryKey) => ({ queryKey })));
+      // Đã báo lỗi mà dữ liệu chưa về: vẫn bận, chạm thêm nhận lại đúng lời hứa đang bay và không gửi lần hai.
+      expect(result.current.isPending).toBe(true);
+      let second!: Promise<unknown>;
+      act(() => {
+        second = result.current.submit(c.target, c.selections);
+      });
+      expect(second).toBe(first);
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await expect(firstOutcome).resolves.toBe('rejected');
+      await waitFor(() => expect(result.current.isPending).toBe(false));
+      expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await result.current.submit(c.target, c.selections);
+      });
+      expect(c.write).toHaveBeenCalledTimes(2);
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ])('%s: không giữ khoá chờ tải lại, khoá nhả ngay', async (_label, error) => {
+      c.write.mockRejectedValueOnce(error);
+      succeed();
+      const { result, invalidate } = setupLive(() => new Promise(() => undefined));
+      await act(async () => {
+        await expect(result.current.submit(c.target, c.selections)).rejects.toBe(error);
+      });
+      expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+      expect(invalidate).not.toHaveBeenCalled();
+      expect(result.current.isPending).toBe(false);
+      await act(async () => {
+        await result.current.submit(c.target, c.selections);
+      });
+      expect(c.write).toHaveBeenCalledTimes(2);
+    });
+
+    it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+      c.write.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409));
+      succeed();
+      const { result } = setupLive(() => new Promise(() => undefined));
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        let first!: Promise<unknown>;
+        act(() => {
+          first = result.current.submit(c.target, c.selections);
+        });
+        const firstOutcome = outcome(first);
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledTimes(1));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        expect(result.current.isPending).toBe(true);
+        let second!: Promise<unknown>;
+        act(() => {
+          second = result.current.submit(c.target, c.selections);
+        });
+        expect(second).toBe(first);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+        await expect(firstOutcome).resolves.toBe('rejected');
+        await waitFor(() => expect(result.current.isPending).toBe(false));
+      } finally {
+        vi.useRealTimers();
+      }
+      await act(async () => {
+        await result.current.submit(c.target, c.selections);
+      });
+      expect(c.write).toHaveBeenCalledTimes(2);
     });
   });
 });

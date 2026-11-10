@@ -7,7 +7,7 @@ import { getAddresses, getCart, checkoutQuote, placeOrder, removeCartItem, updat
 import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
-import { getErrorCode, getErrorMessage, getLoadErrorMessage, isOutcomeUnknown } from '../services/api';
+import { getErrorCode, getErrorMessage, getLoadErrorMessage, isOutcomeUnknown, isStaleStateError } from '../services/api';
 import { isHttpError } from '../services/http';
 import { getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { trackEvent } from '../services/analytics';
@@ -39,6 +39,7 @@ import { formatVnd, formatPoints } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { checkoutEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { createOrderKeyRing } from '../utils/idempotency';
+import { settleWithin } from '../utils/settle-within';
 import { rememberActiveOrder } from '@tubutree/app-core/home-todo-rows';
 import { browserStorage } from '../utils/recently-viewed';
 import {
@@ -412,13 +413,21 @@ export default function CheckoutPage() {
       setPlaced(o);
     },
     onError: (e: unknown) => {
+      // Mọi lần tải lại của nhánh lỗi gom ở đây (mỗi khoá một lần): khi máy chủ từ chối vì màn đã cũ (400/404/409) nút Đặt hàng giữ khoá tới khi dữ liệu về
+      // (tối đa `settleWithin`), kẻo bấm lại trên giỏ/báo giá cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về giỏ: nhả ngay, bấm lại vẫn gửi cùng body, cùng khoá.
+      const reloads = new Map<string, Promise<unknown>>();
+      const reload = (queryKey: readonly unknown[]) => {
+        const id = JSON.stringify(queryKey);
+        if (!reloads.has(id)) reloads.set(id, queryClient.invalidateQueries({ queryKey }));
+      };
+      const hold = () => (isStaleStateError(e) ? settleWithin(Promise.all([...reloads.values()])) : undefined);
       if (e instanceof Error && e.message === PREVIOUS_MAYBE_PLACED) {
         unknownAttempt.current = null;
         setUnknownRev(null);
         setMaybePlaced(false);
         setPlaceNotice('previous');
         openSnackbar({ text: PREVIOUS_MAYBE_PLACED, type: 'error' });
-        return;
+        return undefined;
       }
       // 401/408/429 bị chặn trước khi vào nghiệp vụ nên không nói gì về đơn của lần trước: giữ đóng băng.
       const status = isHttpError(e) ? e.response?.status : undefined;
@@ -431,48 +440,55 @@ export default function CheckoutPage() {
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi
       // server đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
       if (attachWaste && !isOutcomeUnknown(e)) {
-        void queryClient.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me });
+        reload(WASTE_QUERY_KEYS.me);
       }
       // Giữ key: lỗi mạng/quá thời gian/5xx có thể xảy ra sau khi server đã tạo đơn — bấm lại cùng nội dung phải là replay,
       // không phải đơn thứ hai. Khách sửa địa chỉ/thanh toán/món thì keyFor tự ra key mới.
       if (getErrorCode(e) === 'CART_CHANGED') {
-        void queryClient.invalidateQueries({ queryKey: ['cart'] });
-        void queryClient.invalidateQueries({ queryKey: ['orders'] });
-        void queryClient.invalidateQueries({ queryKey: ['quote'] });
+        reload(['cart']);
+        reload(['orders']);
+        reload(['quote']);
         openSnackbar({ text: getErrorMessage(e), type: 'error' });
-        return;
+        return hold();
       }
       // `getErrorMessage` đã biến mã không dấu thành câu chung, nên nhận ra bằng thân phản hồi thô.
       if (isPriceChangedError(e)) {
         setPriceChanged(true);
-        return;
+        return undefined;
       }
       if (getErrorCode(e) === 'TOTAL_CHANGED') {
         setTotalChanged(getErrorMessage(e));
-        void queryClient.invalidateQueries({ queryKey: ['quote'] });
-        void queryClient.invalidateQueries({ queryKey: ['cart'] });
-        return;
+        reload(['quote']);
+        reload(['cart']);
+        return hold();
       }
       // Vượt giới hạn mua mỗi khách của một suất Giờ vàng: câu có sẵn con số giới hạn, sửa ở giỏ bằng cách giảm số lượng.
       const flashLimit = flashLimitNotice(e);
       if (flashLimit !== null) {
         setCartIssue(flashLimit);
-        void queryClient.invalidateQueries({ queryKey: ['cart'] });
-        return;
+        reload(['cart']);
+        return hold();
       }
       if (isCartFixableError(getErrorMessage(e))) {
         setCartIssue(getErrorMessage(e));
-        void queryClient.invalidateQueries({ queryKey: ['cart'] });
-        return;
+        reload(['cart']);
+        return hold();
       }
       // Báo giá đang cache còn cho cách vừa bị từ chối (vd nơi giao đổi sau lúc báo giá): tải lại để khoá đúng cách đó và tự chọn
       // cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi. Nơi giao đổi thường vì giỏ đổi ở nơi khác: kiện của báo giá
       // mới lấy món từ giỏ đang cache, nên tải lại cả giỏ, không thì kiện mới hiện ra không có món nào.
       if (getErrorCode(e) === 'PAYMENT_METHOD_NOT_ALLOWED') {
-        void queryClient.invalidateQueries({ queryKey: ['quote'] });
-        void queryClient.invalidateQueries({ queryKey: ['cart'] });
+        reload(['quote']);
+        reload(['cart']);
       }
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Các lời từ chối còn lại (hết hàng, mã không dùng được, địa chỉ không hợp lệ...) đều nói giỏ/báo giá/đơn đã khác với màn đang hiện.
+      if (isStaleStateError(e)) {
+        reload(['cart']);
+        reload(['quote']);
+        reload(['orders']);
+      }
+      return hold();
     },
     onSettled: () => setSubmitting(false),
   });
@@ -490,9 +506,12 @@ export default function CheckoutPage() {
       await Promise.all([queryClient.invalidateQueries({ queryKey: ['cart'] }), queryClient.invalidateQueries({ queryKey: ['quote'] })]);
     },
     // Bị từ chối thường vì tồn vừa đổi: tải lại giỏ để nút "Giảm còn n" theo tồn mới.
+    // Máy chủ từ chối (400/404/409) thì giữ khoá tới khi giỏ và báo giá về (tối đa `settleWithin`). Lỗi khác vẫn tải lại giỏ ở nền như trước (kết quả có thể đã ghi) nhưng nhả khoá ngay.
     onError: (e: unknown) => {
       notify({ text: getErrorMessage(e), type: 'error' });
-      void queryClient.invalidateQueries({ queryKey: ['cart'] });
+      const cartReload = queryClient.invalidateQueries({ queryKey: ['cart'] });
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(Promise.all([cartReload, queryClient.invalidateQueries({ queryKey: ['quote'] })]));
     },
   }, (v) => v.id);
 

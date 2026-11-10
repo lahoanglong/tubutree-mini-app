@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type { CouponDTO } from '@tubutree/app-core/api/loyalty';
 import type { CouponPreviewDTO } from '@tubutree/shared-types';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const h = vi.hoisted(() => ({
   previews: vi.fn(),
@@ -15,12 +15,17 @@ vi.mock('./use-coupon-hint', async (importOriginal) => ({
   useCouponPreviews: h.previews,
 }));
 vi.mock('../../services/shop-api', () => ({ applyCoupon: h.apply }));
-vi.mock('../../services/api', () => ({ getErrorMessage: (e: unknown) => (e as Error).message }));
+vi.mock('../../services/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getErrorMessage: (e: unknown) => (e as Error).message,
+}));
 vi.mock('../../hooks/use-notify', () => ({ useNotify: () => ({ notify: h.notify }) }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { useCartVoucherHint } from './use-cart-voucher-hint';
 import { COUPON_CHANGE_KEY } from './use-coupon-hint';
+import { HttpError } from '../../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../../utils/settle-within';
 
 const coupon = (code: string, over: Partial<CouponDTO> = {}): CouponDTO => ({
   code,
@@ -189,5 +194,87 @@ describe('useCartVoucherHint (Mini)', () => {
       expect(h.apply).toHaveBeenCalledTimes(2);
       expect(h.apply).toHaveBeenLastCalledWith('KHAC30');
     });
+  });
+});
+
+// W113A: áp mã bị máy chủ từ chối vì giỏ/mã đã cũ (400/404/409) thì đọc thêm giỏ và báo giá, nút "Áp mã" giữ khoá tới khi dữ liệu về (tối đa LOCK_REFRESH_WAIT_MS). Mất mạng, quá hạn, 401, 5xx chỉ hỏi lại xem trước như trước và nhả khoá ngay.
+describe('useCartVoucherHint — máy chủ từ chối thì giữ khoá tới khi dữ liệu làm mới về (W113A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const CART = { items: [], couponCode: 'GIAM45' };
+  const filters = (invalidate: ReturnType<typeof setup>['invalidate']) => invalidate.mock.calls.map(([filter]) => filter);
+
+  beforeEach(() => {
+    h.previews.mockReturnValue({ wallet: [coupon('GIAM45')], previews: [usable('GIAM45', 45_000)] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    [400, 'Mã đã hết lượt dùng.'],
+    [404, 'Không tìm thấy mã.'],
+    [409, 'Giỏ vừa đổi.'],
+  ])('bị từ chối %i: báo lỗi, đọc lại xem trước, ví mã, giỏ, báo giá; nút giữ khoá tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+    h.apply.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(CART);
+    const refresh = deferred();
+    const { result, invalidate } = setup();
+    invalidate.mockImplementation((() => refresh.promise) as never);
+    await act(async () => result.current.apply('GIAM45'));
+    await waitFor(() => expect(result.current.error).toBe(message));
+    expect(filters(invalidate)).toEqual([{ queryKey: ['coupon-previews'] }, { queryKey: ['coupons'] }, { queryKey: ['cart'] }, { queryKey: ['quote'] }]);
+    expect(result.current.applying).toBe(true);
+    await act(async () => {
+      result.current.apply('GIAM45');
+      result.current.apply('GIAM45');
+    });
+    expect(h.apply).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await waitFor(() => expect(result.current.applying).toBe(false));
+    await act(async () => result.current.apply('GIAM45'));
+    expect(h.apply).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: chỉ hỏi lại xem trước và ví mã như trước (không đọc giỏ/báo giá), nhả khoá ngay', async (_label, error) => {
+    h.apply.mockRejectedValueOnce(error).mockResolvedValue(CART);
+    const { result, invalidate } = setup();
+    invalidate.mockImplementation((() => new Promise(() => undefined)) as never);
+    await act(async () => result.current.apply('GIAM45'));
+    await waitFor(() => expect(result.current.applying).toBe(false));
+    expect(filters(invalidate)).toEqual([{ queryKey: ['coupon-previews'] }, { queryKey: ['coupons'] }]);
+    await act(async () => result.current.apply('GIAM45'));
+    expect(h.apply).toHaveBeenCalledTimes(2);
+  });
+
+  it('đọc lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    h.apply.mockRejectedValueOnce(serverError('Giỏ vừa đổi.', 409)).mockResolvedValue(CART);
+    const { result, invalidate } = setup();
+    invalidate.mockImplementation((() => new Promise(() => undefined)) as never);
+    await act(async () => result.current.apply('GIAM45'));
+    await waitFor(() => expect(result.current.error).toBe('Giỏ vừa đổi.'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+    });
+    await act(async () => result.current.apply('GIAM45'));
+    expect(h.apply).toHaveBeenCalledTimes(1);
+    expect(result.current.applying).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+    });
+    await waitFor(() => expect(result.current.applying).toBe(false));
+    await act(async () => result.current.apply('GIAM45'));
+    expect(h.apply).toHaveBeenCalledTimes(2);
   });
 });

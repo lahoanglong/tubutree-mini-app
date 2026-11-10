@@ -523,3 +523,52 @@ describe('CouponClaimGate — nhận ưu đãi từ thẻ QR hộp hàng (D2-03)
     expect(isGuestUser({ phone: null, zaloId: null })).toBe(true);
   });
 });
+
+// W113A: thẻ bị máy chủ từ chối vì ví/thẻ đã cũ (400/404/409) thì đọc lại ví mã ở nền (trước đây chỉ làm mới khi nhận thành công). Không giữ `inFlight`: mã đã quên nên không còn lần nhận nào để chặn, giữ khoá chỉ làm nút Đóng của lời báo chết. Mất mạng, 429, 401, 5xx không nói gì về ví: không đọc lại.
+describe('CouponClaimGate — thẻ bị từ chối thì đọc lại ví mã (W113A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.storage = {};
+    mocks.cartCount = 0;
+    mocks.hangRemove = false;
+    window.history.replaceState({}, '', '/?claim=SHOPEE-AB12CD34');
+  });
+  const liveClient = () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => new Promise(() => undefined)) as never);
+    return { qc, invalidate };
+  };
+
+  it.each([
+    [400, 'Mã giảm giá này đã được tài khoản khác nhận.'],
+    [404, 'Không tìm thấy mã này.'],
+    [409, 'Mã vừa được nhận ở nơi khác.'],
+  ])('bị từ chối %i: đọc lại ví mã đúng một lần, lời báo hiện và nút Đã hiểu đóng được ngay (không bị khoá chờ)', async (status, message) => {
+    mocks.post.mockRejectedValue(httpError(status, message));
+    const { qc, invalidate } = liveClient();
+    setAuth(REAL);
+    renderGate(qc);
+    expect(await screen.findByText(message)).toBeInTheDocument();
+    expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['coupons'] }]);
+    fireEvent.click(screen.getByRole('button', { name: 'Đã hiểu' }));
+    await waitFor(() => expect(screen.queryByTestId('sheet')).not.toBeInTheDocument());
+  });
+
+  it.each([
+    ['mất mạng', httpError(undefined)],
+    ['quá nhiều yêu cầu (429)', httpError(429)],
+    ['máy chủ lỗi 503', httpError(503, 'Service Unavailable')],
+    ['hết phiên 401', httpError(401, 'Unauthorized')],
+  ])('%s: không đọc lại ví mã', async (_label, error) => {
+    mocks.post.mockRejectedValue(error);
+    const { qc, invalidate } = liveClient();
+    setAuth(REAL);
+    renderGate(qc);
+    await screen.findByTestId('sheet');
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+});

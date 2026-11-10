@@ -17,7 +17,7 @@ import {
   type VariationDetail,
   type FlashSaleActiveItem,
 } from '../services/shop-api';
-import { getErrorMessage, getLoadErrorMessage, isNotFoundError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isNotFoundError, isStaleStateError } from '../services/api';
 import { getCoupons } from '../services/account-api';
 import type { LegalSlug } from '../services/legal-api';
 import { createGroupBuy } from '../services/groupbuy-api';
@@ -34,6 +34,7 @@ import { fetchReviews } from '../services/shop-api';
 import { trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
+import { settleWithin } from '../utils/settle-within';
 import { ErrorState } from '../components/ui/empty-state';
 import { SuggestedRail } from '../components/catalog/suggested-rail';
 import { SR_ONLY } from '../components/ui/sr-only';
@@ -305,7 +306,9 @@ export default function ProductDetailPage() {
   // khi món đã nằm trong giỏ: thử một lần ngay sau lần thêm giỏ đầu tiên thành công. Lỗi không chặn việc mua, chỉ nói lý do để khách tự chọn mã ở giỏ.
   const groupCoupon = navState?.applyCoupon?.trim().toUpperCase() || null;
   const groupCouponTried = useRef(false);
-  const applyGroupCoupon = async (cart: CartSummary): Promise<{ cart: CartSummary; note: { text: string; ok: boolean } | null }> => {
+  const applyGroupCoupon = async (
+    cart: CartSummary,
+  ): Promise<{ cart: CartSummary; note: { text: string; ok: boolean } | null; couponRejected?: boolean }> => {
     if (!groupCoupon || groupCouponTried.current) return { cart, note: null };
     groupCouponTried.current = true;
     try {
@@ -314,7 +317,7 @@ export default function ProductDetailPage() {
       const outcome = couponUseOutcome(cart.couponCode, groupCoupon, next);
       return { cart: next, note: outcome.kind === 'ok' ? { text: `Đã áp mã ${groupCoupon}`, ok: true } : { text: outcome.text, ok: outcome.kind === 'switched' } };
     } catch (e) {
-      return { cart, note: { text: couponUseCopy.notApplied(getErrorMessage(e)), ok: false } };
+      return { cart, note: { text: couponUseCopy.notApplied(getErrorMessage(e)), ok: false }, couponRejected: isStaleStateError(e) };
     }
   };
   // Đã thử áp thì gỡ mã khỏi state của mục lịch sử (như `reviewOrderId`): quay lại trang không áp lại một mã khách có thể đã bỏ chọn ở giỏ.
@@ -333,10 +336,19 @@ export default function ProductDetailPage() {
     run();
   };
 
+  /**
+   * Trả Promise để TanStack chờ trước `onSettled`: nút ghi giỏ giữ khoá tới khi số liệu mới về (tối đa `settleWithin`). Máy chủ từ chối (hết hàng, phân loại
+   * ngừng bán, giá đổi) mà nhả sớm thì bấm lại trên tồn kho cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: nhả ngay.
+   */
+  const holdUntilFresh = (error: unknown, keys: readonly (readonly unknown[])[]) => {
+    if (!isStaleStateError(error)) return undefined;
+    return settleWithin(Promise.all(keys.map((queryKey) => queryClient.invalidateQueries({ queryKey }))));
+  };
+
   const addMutation = useLockedMutation({
     mutationFn: async (input: { variation: VariationDetail; qty: number }) =>
       applyGroupCoupon(await addToCart(input.variation.id, input.qty)),
-    onSuccess: ({ cart: updatedCart, note }) => {
+    onSuccess: ({ cart: updatedCart, note, couponRejected }) => {
       queryClient.setQueryData(cartKey(), updatedCart);
       haptic('medium');
       // Nút nguồn: bấm từ bảng chọn phân loại thì nút này vẫn nằm sau tấm, vẫn đo được; không thấy thì chỉ nảy huy hiệu.
@@ -348,8 +360,14 @@ export default function ProductDetailPage() {
       // Không có ghi chú thì nút đã xác nhận bằng mắt; thanh thông báo chỉ còn khi có điều cần nói thêm (mã mua chung). Người dùng đọc màn hình vẫn nghe.
       if (note) notify({ text: `${vi.product.added} · ${note.text}`, type: note.ok ? 'success' : 'warning', duration: 3200, position: 'top' });
       else announce('status', vi.product.added);
+      // Thêm giỏ đã xong nhưng máy chủ từ chối mã mua chung (hết hạn, đã dùng): làm mới danh sách mã rồi mới nhả nút, kẻo ô ưu đãi còn hiện mã đã chết.
+      if (!couponRejected) return undefined;
+      return settleWithin(Promise.all([queryClient.invalidateQueries({ queryKey: ['coupons'] }), queryClient.invalidateQueries({ queryKey: ['quote'] })]));
     },
-    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e: unknown) => {
+      notify({ text: getErrorMessage(e), type: 'error' });
+      return holdUntilFresh(e, [['product', slug], ['cart']]);
+    },
     onSettled: releaseCartWrite,
   });
 
@@ -390,6 +408,7 @@ export default function ProductDetailPage() {
     onError: (e: unknown) => {
       setBuyFreeze(null);
       notify({ text: getErrorMessage(e), type: 'error' });
+      return holdUntilFresh(e, [['product', slug], ['cart']]);
     },
     onSettled: releaseCartWrite,
   });
@@ -400,7 +419,11 @@ export default function ProductDetailPage() {
       notify({ text: 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒', type: 'success' });
       navigate(`/group-buy/${group.id}`);
     },
-    onError: (e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }),
+    // Máy chủ từ chối (đã có nhóm đang mở, sản phẩm không còn mua chung): làm mới danh sách nhóm và sản phẩm, giữ khoá tới lúc đó.
+    onError: (e: unknown) => {
+      notify({ text: getErrorMessage(e), type: 'error' });
+      return holdUntilFresh(e, [['group-buy'], ['product', slug]]);
+    },
   });
 
   if (product.isLoading || (product.data && bundlesWaiting)) return <PdpSkeleton />;

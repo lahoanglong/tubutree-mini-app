@@ -9,7 +9,8 @@ import {
   type MyExternalClaimItem,
   type SubmitExternalClaimResponse,
 } from '../services/external-points-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { useAuthStore } from '../store/auth';
 import { getPublicConfig } from '../services/shop-api';
 import { followOA, getOaPromptState, hasOA, openOAChat, requestNotifyPermission, scanCode, setOaPromptState } from '../services/zmp-bridge';
@@ -307,6 +308,9 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
       setError(blockedAccount ? ACCOUNT_NOT_ELIGIBLE : rejected ? t.reject[rejected] : getErrorMessage(e));
       setRejectedCode(rejected ? { reject: rejected, code: v.code } : null);
       setNeedPhone(rejected === 'NOT_ELIGIBLE_USER' && !hasPhone);
+      // Máy chủ từ chối vì mã đã dùng/hết hạn/không còn (400/404/409): tải lại danh sách yêu cầu và giữ khoá tới khi dữ liệu về (tối đa `settleWithin`), kẻo gửi lại đúng mã đó nhận đúng lời từ chối. Mất mạng, quá hạn, 401, 5xx nhả ngay.
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(qc.invalidateQueries({ queryKey: ['external-claims'] }));
     },
   });
 

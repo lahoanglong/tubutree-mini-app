@@ -107,6 +107,7 @@ import { recallCheckoutSelection, rememberCheckoutSelection } from '../utils/che
 import { makeRequestSummary, makeWasteMe } from '../services/waste-test-fixtures';
 import { createQueryClient } from '../services/query-client';
 import { COUPON_CHANGE_KEY } from '../components/checkout/use-coupon-hint';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { vi as viCopy } from '../i18n/vi';
 
 const ADDRESS = {
@@ -3182,6 +3183,235 @@ describe('CheckoutPage — khoá chéo Đặt hàng với đổi mã, "Thử l�
       expect(screen.getByText(/Đặt hàng · 99\.000/)).toBeInTheDocument();
       const body = await placeOrderClick();
       expect(body).toMatchObject({ addressId: 'a2', expectedTotal: 99_000 });
+    });
+  });
+});
+
+// W113A: lệnh đặt đơn và sửa nhanh dòng bị máy chủ từ chối vì màn đã cũ (400/404/409) thì nút giữ khoá tới khi giỏ/báo giá/đơn làm mới về (tối đa LOCK_REFRESH_WAIT_MS). Mất mạng, quá hạn, 401, 5xx không nói gì về giỏ: nhả ngay, bấm lại vẫn gửi đúng Idempotency-Key cũ.
+describe('CheckoutPage — máy chủ từ chối thì giữ khoá tới khi dữ liệu làm mới về (W113A)', () => {
+  const OVER = { ...CART.items[0]!, quantity: 3, stock: 1, total: 150_000 };
+  const apiError = (status: number, code: string | null, message: string) =>
+    new HttpError('Bad Request', 'ERR_BAD_REQUEST', { status, data: { statusCode: status, ...(code ? { code } : {}), message } });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const renderLive = (refresh: () => Promise<unknown>) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <CheckoutPage />
+      </QueryClientProvider>,
+    );
+    return invalidate;
+  };
+  const filters = (invalidate: ReturnType<typeof renderLive>) => invalidate.mock.calls.map(([filter]) => filter);
+  const keysOf = (keys: string[][]) => keys.map((queryKey) => ({ queryKey }));
+  const orderButton = async () => {
+    const label = await screen.findByText(/(Đặt hàng|Thử lại) · /);
+    return label.closest('button')!;
+  };
+  const openOrder = async (refresh: () => Promise<unknown>) => {
+    const invalidate = renderLive(refresh);
+    const button = await orderButton();
+    await waitFor(() => expect(button).not.toBeDisabled());
+    // Lúc đang gửi nhãn nút đổi thành "Đang đặt…": tìm theo thanh dính, không theo chữ.
+    return { invalidate, button: () => within(screen.getByTestId('sticky-bar')).getAllByRole('button').slice(-1)[0]! };
+  };
+
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    mocks.placeOrder.mockReset();
+    mocks.updateCartItem.mockReset();
+    mocks.removeCartItem.mockReset();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.referralEligible = null;
+    mocks.voucherProps = [];
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe());
+    mocks.getCoupons.mockResolvedValue([]);
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.removeCartItem.mockResolvedValue(CART);
+    mocks.updateCartItem.mockResolvedValue(CART);
+  });
+
+  describe('Đặt hàng', () => {
+    const OK = { id: 'o1', code: 'TT001' };
+    const CASES: Array<{ name: string; make: (status: number) => HttpError; statuses: number[]; keys: string[][]; toast: boolean }> = [
+      { name: 'lời từ chối chung', make: (st) => apiError(st, null, 'Mã giảm giá đã hết hạn.'), statuses: [400, 404, 409], keys: [['cart'], ['quote'], ['orders']], toast: true },
+      { name: 'CART_CHANGED', make: (st) => apiError(st, 'CART_CHANGED', 'Giỏ vừa đổi.'), statuses: [400, 409], keys: [['cart'], ['orders'], ['quote']], toast: true },
+      { name: 'TOTAL_CHANGED', make: (st) => apiError(st, 'TOTAL_CHANGED', 'Tổng đơn đã thay đổi.'), statuses: [400, 409], keys: [['quote'], ['cart']], toast: false },
+      { name: 'vượt giới hạn mua ưu đãi', make: (st) => apiError(st, null, 'Vượt giới hạn mua ưu đãi.'), statuses: [400], keys: [['cart']], toast: false },
+    ];
+
+    describe.each(CASES)('$name', (c) => {
+      it.each(c.statuses.map((st) => [st]))('bị từ chối %i: tải lại đúng khoá, nút Đặt hàng giữ khoá tới khi dữ liệu về rồi mới nhả, bấm lại giữ đúng Idempotency-Key', async (status) => {
+        mocks.placeOrder.mockRejectedValueOnce(c.make(status)).mockResolvedValue(OK);
+        const refresh = deferred();
+        const { invalidate, button } = await openOrder(() => refresh.promise);
+        fireEvent.click(button());
+        await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+        await waitFor(() => expect(filters(invalidate)).toEqual(keysOf(c.keys)));
+        if (c.toast) await waitFor(() => expect(errorSnackbars()).toBe(1));
+        expect(button()).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          fireEvent.click(button());
+          fireEvent.click(button());
+        });
+        expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+        await act(async () => refresh.resolve());
+        await settle();
+        await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+        if (c.toast) expect(errorSnackbars()).toBe(1);
+        fireEvent.click(button());
+        await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+        expect(mocks.placeOrder.mock.calls[1]![1]).toBe(mocks.placeOrder.mock.calls[0]![1]);
+      });
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', new HttpError('Service Unavailable', undefined, { status: 503, data: { message: 'Service Unavailable' }, headers: {} })],
+      ['hết phiên 401', new HttpError('Unauthorized', undefined, { status: 401, data: { message: 'Unauthorized' }, headers: {} })],
+    ])('%s: không giữ khoá chờ tải lại và không tải lại giỏ/báo giá/đơn; bấm lại gửi đúng Idempotency-Key cũ', async (_label, error) => {
+      mocks.placeOrder.mockRejectedValueOnce(error).mockResolvedValue(OK);
+      const { invalidate, button } = await openOrder(() => new Promise(() => undefined));
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+      await settle();
+      await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      expect(invalidate).not.toHaveBeenCalled();
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+      expect(mocks.placeOrder.mock.calls[1]![1]).toBe(mocks.placeOrder.mock.calls[0]![1]);
+    });
+
+    it('giá đổi lúc đặt (PRICE_CHANGED): hộp báo riêng, không tải lại và không giữ khoá như trước', async () => {
+      mocks.placeOrder.mockRejectedValueOnce(apiError(409, 'PRICE_CHANGED', 'PRICE_CHANGED')).mockResolvedValue(OK);
+      const { invalidate, button } = await openOrder(() => new Promise(() => undefined));
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+      await settle();
+      expect(button()).not.toHaveAttribute('aria-busy');
+      expect(invalidate).not.toHaveBeenCalled();
+    });
+
+    it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+      mocks.placeOrder.mockRejectedValueOnce(apiError(409, null, 'Giỏ vừa có thay đổi, bạn thử lại nhé.')).mockResolvedValue(OK);
+      const { button } = await openOrder(() => new Promise(() => undefined));
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        fireEvent.click(button());
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        expect(button()).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          fireEvent.click(button());
+        });
+        expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+        await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+      } finally {
+        vi.useRealTimers();
+      }
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('sửa nhanh dòng (Giảm còn / Bỏ khỏi đơn)', () => {
+    const openFix = async (refresh: () => Promise<unknown>) => {
+      mocks.getCart.mockResolvedValue({ ...CART, items: [OVER] });
+      const invalidate = renderLive(refresh);
+      const problem = await screen.findByTestId('checkout-line-problem');
+      return { invalidate, button: () => within(screen.getByTestId('checkout-line-problem')).getByRole('button', { name: 'Giảm còn 1' }), problem };
+    };
+
+    it.each([
+      [400, 'Kho đã đổi, bạn thử lại nhé.'],
+      [404, 'Dòng này không còn trong giỏ.'],
+      [409, 'Giỏ vừa có thay đổi, bạn thử lại nhé.'],
+    ])('bị từ chối %i: tải lại giỏ và báo giá, nút giữ khoá tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      mocks.updateCartItem.mockRejectedValueOnce(apiError(status, null, message)).mockResolvedValue(CART);
+      const refresh = deferred();
+      const { invalidate, button } = await openFix(() => refresh.promise);
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+      expect(errorSnackbars()).toBe(1);
+      expect(filters(invalidate)).toEqual(keysOf([['cart'], ['quote']]));
+      await act(async () => {
+        fireEvent.click(button());
+        fireEvent.click(button());
+      });
+      expect(mocks.updateCartItem).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      expect(errorSnackbars()).toBe(1);
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', new HttpError('Service Unavailable', undefined, { status: 503, data: { message: 'Service Unavailable' }, headers: {} })],
+      ['hết phiên 401', new HttpError('Unauthorized', undefined, { status: 401, data: { message: 'Unauthorized' }, headers: {} })],
+    ])('%s: không giữ khoá; chỉ tải lại giỏ ở nền như trước (kết quả có thể đã ghi), không tải báo giá', async (_label, error) => {
+      mocks.updateCartItem.mockRejectedValueOnce(error).mockResolvedValue(CART);
+      const { invalidate, button } = await openFix(() => new Promise(() => undefined));
+      fireEvent.click(button());
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await settle();
+      expect(filters(invalidate)).toEqual(keysOf([['cart']]));
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(2));
+    });
+
+    it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+      mocks.updateCartItem.mockRejectedValueOnce(apiError(409, null, 'Giỏ vừa có thay đổi, bạn thử lại nhé.')).mockResolvedValue(CART);
+      const { button } = await openFix(() => new Promise(() => undefined));
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        fireEvent.click(button());
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        await act(async () => {
+          fireEvent.click(button());
+        });
+        expect(mocks.updateCartItem).toHaveBeenCalledTimes(1);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+      fireEvent.click(button());
+      await waitFor(() => expect(mocks.updateCartItem).toHaveBeenCalledTimes(2));
     });
   });
 });
