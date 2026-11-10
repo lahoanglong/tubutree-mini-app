@@ -4,6 +4,7 @@ import { PrismaModule } from '../../src/prisma/prisma.module';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { CouponClaimService } from '../../src/modules/coupons/coupon-claim.service';
 import { CouponsService } from '../../src/modules/coupons/coupons.service';
+import { REAL_USER_REQUIRED_MSG } from '../../src/common/real-user';
 import { createRealUser, createUser, randCode, summarize, warmPool } from './helpers';
 
 /**
@@ -89,6 +90,14 @@ describe('Nhận mã thẻ và dùng mã song song (real Postgres)', () => {
       expect(await claimRows(c.id)).toBe(1);
     });
 
+    it('thẻ riêng (tổng 1 lượt) mà CHÍNH người nhận chạm đúp 8 lần song song: không lượt nào bị báo "tài khoản khác nhận", đúng 1 dòng', async () => {
+      const c = await makeCoupon({ scope: 'CLAIM', usageLimit: 1 });
+      const [u] = await realUsers(1);
+      const s = summarize(await Promise.allSettled(Array.from({ length: 8 }, () => claim.claim(u!.id, c.code))));
+      expect(s.errors).toEqual([]);
+      expect(await claimRows(c.id)).toBe(1);
+    });
+
     it('mã không giới hạn tổng lượt: 10 khách đều nhận đủ 10 dòng, một khách nhận 6 lần song song chỉ có 1 dòng', async () => {
       const c = await makeCoupon({ scope: 'CLAIM' });
       const users = await realUsers(10);
@@ -112,6 +121,7 @@ describe('Nhận mã thẻ và dùng mã song song (real Postgres)', () => {
       const guest = await createUser(prisma, { zaloId: `guest_${randCode(8)}` });
       const s = summarize(await Promise.allSettled(Array.from({ length: 3 }, () => claim.claim(guest.id, c.code))));
       expect(s.fulfilled).toHaveLength(0);
+      for (const e of s.errors) expect(e).toContain(REAL_USER_REQUIRED_MSG);
       expect(await claimRows(c.id)).toBe(0);
     });
   });
@@ -157,9 +167,9 @@ describe('Nhận mã thẻ và dùng mã song song (real Postgres)', () => {
       expect(await redemptionRows(c.id)).toBe(1);
     });
 
-    it('lượt cuối còn lại: hoàn mã của đơn A cùng lúc đơn C tranh lượt → usedCount luôn bằng số dòng và không vượt tổng lượt', async () => {
+    it('lượt cuối còn lại: hoàn mã của đơn A cùng lúc đơn C tranh lượt → số dòng = usedCount ≤ tổng lượt; sau đó đơn D chỉ dùng được khi còn lượt', async () => {
       const c = await makeCoupon({ usageLimit: 2, perUserLimit: 0 });
-      const users = await realUsers(3);
+      const users = await realUsers(4);
       await coupons.redeem(c.code, users[0]!.id, `ord-${c.id}-a`);
       await coupons.redeem(c.code, users[1]!.id, `ord-${c.id}-b`);
       await Promise.allSettled([
@@ -169,6 +179,15 @@ describe('Nhận mã thẻ và dùng mã song song (real Postgres)', () => {
       const used = await usedOf(c.id);
       expect(used).toBe(await redemptionRows(c.id));
       expect(used).toBeLessThanOrEqual(2);
+      const [d] = await Promise.allSettled([coupons.redeem(c.code, users[3]!.id, `ord-${c.id}-d`)]);
+      if (used >= 2) {
+        expect(d.status).toBe('rejected');
+        expect((d as PromiseRejectedResult).reason.message).toContain('Mã giảm giá đã hết lượt sử dụng.');
+      } else {
+        expect(d.status).toBe('fulfilled');
+      }
+      expect(await usedOf(c.id)).toBe(await redemptionRows(c.id));
+      expect(await usedOf(c.id)).toBeLessThanOrEqual(2);
     });
   });
 });
