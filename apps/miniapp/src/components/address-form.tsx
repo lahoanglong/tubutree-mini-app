@@ -138,12 +138,14 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
     onError: (e: unknown) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       if (!isStaleStateError(e)) return undefined;
-      // Sửa mà 404: địa chỉ không còn nữa, form này không lưu được nữa nên gỡ thẻ khỏi sổ và đóng form sau khi sổ mới về.
+      // Sửa mà 404: địa chỉ không còn nữa, form này không lưu được nữa nên gỡ thẻ khỏi sổ và đóng form ngay. Không đợi sổ mới về: trong lúc chờ
+      // khách có thể đã mở form của thẻ khác, và `onCancel` muộn sẽ đóng nhầm form đó.
       const gone = initial != null && isHttpError(e) && e.response?.status === 404;
-      if (gone) queryClient.setQueryData<AddressDTO[]>(['addresses'], (list) => list?.filter((x) => x.id !== initial.id));
-      return settleWithin(queryClient.invalidateQueries({ queryKey: ['addresses'] })).then(() => {
-        if (gone) onCancel();
-      });
+      if (gone) {
+        queryClient.setQueryData<AddressDTO[]>(['addresses'], (list) => list?.filter((x) => x.id !== initial.id));
+        onCancel();
+      }
+      return settleWithin(queryClient.invalidateQueries({ queryKey: ['addresses'] }));
     },
   });
 

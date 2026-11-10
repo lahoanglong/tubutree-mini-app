@@ -500,7 +500,7 @@ describe('Sửa hồ sơ: máy chủ từ chối vì hồ sơ không còn khớp
       .mockReturnValueOnce(refetch.promise)
       .mockResolvedValue({ ...ME, dob: '1991-02-03' });
     mocks.updateMe.mockRejectedValueOnce(serverError(DOB_ONCE, 400)).mockResolvedValue({ avatarUrl: null });
-    renderPage();
+    const { container } = renderPage();
     const name = await screen.findByLabelText('Họ và tên');
     await waitFor(() => expect(name).toHaveValue('Lan'));
     fireEvent.change(name, { target: { value: 'Lan Mới' } });
@@ -525,9 +525,19 @@ describe('Sửa hồ sơ: máy chủ từ chối vì hồ sơ không còn khớp
     await waitFor(() => expect(screen.getByLabelText('Ngày sinh')).toHaveValue('03/02/1991'));
     expect((screen.getByLabelText('Ngày sinh') as HTMLInputElement).readOnly).toBe(true);
     expect(screen.getByLabelText('Họ và tên')).toHaveValue('Lan Mới');
+    // Khung xác nhận ngày sinh đã biến mất cùng nút "Không": tên, email và nút đổi ảnh không được kẹt ở chế độ chỉ đọc.
+    expect(screen.queryByRole('button', { name: 'Xác nhận' })).toBeNull();
+    expect((screen.getByLabelText('Họ và tên') as HTMLInputElement).readOnly).toBe(false);
+    expect((screen.getByLabelText('Email') as HTMLInputElement).readOnly).toBe(false);
+    const pickClick = vi.spyOn(container.querySelector('input[type="file"]') as HTMLInputElement, 'click');
+    fireEvent.click(screen.getByRole('button', { name: /ảnh đại diện/i }));
+    expect(pickClick).toHaveBeenCalledTimes(1);
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'sau-khi-tai-lai@tubu.vn' } });
+    expect(screen.getByLabelText('Email')).toHaveValue('sau-khi-tai-lai@tubu.vn');
     await waitFor(() => expect(saveButton()).not.toHaveAttribute('aria-busy'));
     fireEvent.click(saveButton());
     await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
+    expect(mocks.updateMe.mock.calls[1]![0].email).toBe('sau-khi-tai-lai@tubu.vn');
     expect(mocks.updateMe.mock.calls[1]![0].dob).toBeUndefined();
     expect(mocks.updateMe.mock.calls[1]![0].fullName).toBe('Lan Mới');
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith(-1));

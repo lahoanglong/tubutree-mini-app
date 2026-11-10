@@ -527,7 +527,7 @@ describe('AddressForm — máy chủ từ chối vì sổ không còn khớp th�
     expect(shopApi.createAddress).toHaveBeenCalledTimes(2);
   });
 
-  it('sửa địa chỉ bị 404 (đã xoá ở máy khác): gỡ thẻ khỏi sổ ngay, đóng form sau khi sổ mới về, không trước', async () => {
+  it('sửa địa chỉ bị 404 (đã xoá ở máy khác): gỡ thẻ khỏi sổ và đóng form ngay (không đợi sổ mới về, kẻo đóng nhầm form khác), nút vẫn bận tới khi sổ về', async () => {
     (accountApi.updateAddress as ReturnType<typeof vi.fn>).mockRejectedValueOnce(serverError('Không tìm thấy địa chỉ.', 404));
     const refresh = pending();
     const { qc, invalidated, onCancel } = renderLive(EDITING, (key) => (key[0] === 'addresses' ? refresh.promise : undefined));
@@ -541,9 +541,10 @@ describe('AddressForm — máy chủ từ chối vì sổ không còn khớp th�
     expect(errorToasts()).toHaveLength(1);
     expect(qc.getQueryData<{ id: string }[]>(['addresses'])?.map((a) => a.id)).toEqual(['a2']);
     expect(save).toHaveAttribute('aria-busy', 'true');
-    expect(onCancel).not.toHaveBeenCalled();
+    expect(onCancel).toHaveBeenCalledTimes(1);
     await act(async () => refresh.resolve());
-    await waitFor(() => expect(onCancel).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(save).not.toHaveAttribute('aria-busy'));
+    expect(onCancel).toHaveBeenCalledTimes(1);
     expect(accountApi.updateAddress).toHaveBeenCalledTimes(1);
   });
 

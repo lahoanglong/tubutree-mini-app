@@ -70,13 +70,15 @@ export default function EditProfilePage() {
   const dobCheck = validateDobVn(dobText);
   const dob = dobEditable ? (dobCheck.iso ?? '') : (meQ.data?.dob ?? '');
   const dobNew = dobEditable && dob !== '';
+  // Hồ sơ tải lại (sau khi máy chủ từ chối) có thể đã có ngày sinh: khung xác nhận biến mất cùng nút "Không", nên cờ thô phải thôi khoá các ô khác.
+  const confirming = confirmingDob && dobNew;
   const dobDisplay = formatDobDisplay(dob);
   const dobError = dobEditable && (dobTouched || dobText.length === 10) ? dobCheck.error : null;
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
   const nameError = touched ? profileNameError(fullName) : null;
 
   const handlePickAvatar = () => {
-    if (!canChangeAvatar || confirmingDob) return;
+    if (!canChangeAvatar || confirming) return;
     haptic('light');
     fileInputRef.current?.click();
   };
@@ -267,7 +269,7 @@ export default function EditProfilePage() {
           <Field label="Họ và tên" error={nameError ?? undefined}>
             <Input
               value={fullName}
-              readOnly={confirmingDob}
+              readOnly={confirming}
               onChange={(e) => {
                 editedRef.current = true;
                 setFullName(e.target.value);
@@ -282,7 +284,7 @@ export default function EditProfilePage() {
             <Input
               type="text"
               value={email}
-              readOnly={confirmingDob}
+              readOnly={confirming}
               onChange={(e) => {
                 editedRef.current = true;
                 setEmail(e.target.value);
@@ -298,7 +300,7 @@ export default function EditProfilePage() {
                 {...(dobEditable
                   ? { type: 'text', inputMode: 'numeric', placeholder: DOB_PLACEHOLDER, autoComplete: 'bday', value: dobText }
                   : { type: 'text', value: formatDobDisplay(meQ.data?.dob) || dob })}
-                readOnly={!dobEditable || confirmingDob}
+                readOnly={!dobEditable || confirming}
                 aria-invalid={dobError ? true : undefined}
                 onBlur={() => setDobTouched(true)}
                 onChange={(e) => {
@@ -338,7 +340,7 @@ export default function EditProfilePage() {
             ) : null}
           </div>
 
-          {confirmingDob && dobNew ? (
+          {confirming ? (
             <div role="alertdialog" aria-label={profileCopy.dobConfirm(dobDisplay)} style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: 12, borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)' }}>
               <Text variant="body-md" tone="primary">{profileCopy.dobConfirm(dobDisplay)}</Text>
               <Button

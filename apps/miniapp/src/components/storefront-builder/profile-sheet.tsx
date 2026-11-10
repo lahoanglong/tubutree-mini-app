@@ -50,8 +50,9 @@ export function ProfileSheet({
       onSaved();
       onClose();
     },
-    // Máy chủ từ chối vì gian hàng không còn khớp (vd 404 "Chưa có gian hàng"): tải lại gian hàng rồi mới nhả khoá để màn Gian hàng đổi theo trạng thái thật,
-    // không thì bấm Lưu lại nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về gian hàng thật: nhả ngay để thử lại.
+    // Máy chủ từ chối vì gian hàng không còn khớp (vd 404 "Chưa có gian hàng"): tải lại gian hàng rồi mới nhả khoá, không thì bấm Lưu lại nhận đúng lỗi đó
+    // trên dữ liệu cũ. Lần tải lại cũng 404 thì TanStack giữ dữ liệu cũ nên màn Gian hàng chưa tự đổi; việc đó thuộc màn Gian hàng, không xử lý ở đây.
+    // Mất mạng, quá hạn, 401, 5xx không nói gì về gian hàng thật: nhả ngay để thử lại.
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       return isStaleStateError(e) ? settleWithin(queryClient.invalidateQueries({ queryKey: ['my-storefront'] })) : undefined;
