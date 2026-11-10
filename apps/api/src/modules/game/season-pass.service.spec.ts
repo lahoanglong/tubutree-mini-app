@@ -324,3 +324,102 @@ describe('SeasonPassService.claim', () => {
     expect(p.gameProfile.upsert).not.toHaveBeenCalled();
   });
 });
+
+describe('SeasonPassService.claim: song song (bấm đúp / hai thiết bị cùng lúc)', () => {
+  const tick = () => new Promise<void>((r) => setImmediate(r));
+  const PARALLEL_TIERS = [
+    { xp: 10, free: { type: 'SEEDS', amount: 20 }, premium: { type: 'POINTS', amount: 5 } },
+    { xp: 20, free: { type: 'SEEDS', amount: 30 }, premium: { type: 'POINTS', amount: 8 } },
+  ];
+
+  /**
+   * Dòng user_season_passes giả. updateMany áp đúng `where` (userId, seasonId, NOT {mảng has tier}) rồi push
+   * KHÔNG có await giữa kiểm và ghi — tương đương Postgres khoá dòng và đánh giá lại WHERE sau khi tx trước commit.
+   * Mọi phép đọc khác cho nhường lượt (tick) để các lời gọi chen nhau như request thật.
+   */
+  function makeWorld() {
+    const pass = { userId: 'u1', seasonId: 's1', xp: 100, claimedFree: [] as number[], claimedPremium: [] as number[] };
+    const profile = { totalSeeds: 0, upserts: 0 };
+    const db: any = {
+      season: { findFirst: async () => { await tick(); return { id: 's1', name: 'Mùa Hè Xanh' }; } },
+      user: { findUnique: async () => { await tick(); return { zaloId: 'zalo-u1', phone: null }; } },
+      subscription: { findMany: async () => { await tick(); return [{ id: 'sub1' }]; } },
+      order: { count: async () => { await tick(); return 1; } },
+      userSeasonPass: {
+        findUnique: async () => { await tick(); return { ...pass, claimedFree: [...pass.claimedFree], claimedPremium: [...pass.claimedPremium] }; },
+        updateMany: async ({ where, data }: any) => {
+          await tick();
+          const field = 'claimedFree' in data ? 'claimedFree' : 'claimedPremium';
+          if (where.userId !== pass.userId || where.seasonId !== pass.seasonId) return { count: 0 };
+          if (where.NOT && (pass[field] as number[]).includes(where.NOT[field].has)) return { count: 0 };
+          (pass[field] as number[]).push(data[field].push);
+          return { count: 1 };
+        },
+      },
+      gameProfile: {
+        upsert: async ({ update }: any) => {
+          await tick();
+          profile.upserts += 1;
+          profile.totalSeeds += update.totalSeeds.increment;
+          return { totalSeeds: profile.totalSeeds };
+        },
+      },
+      $executeRaw: async () => 1,
+    };
+    db.$transaction = async (fn: (t: unknown) => unknown) => fn(db);
+    const grants: Array<{ points: number; reason: string }> = [];
+    const rewards = {
+      grant: jest.fn(async (_u: string, points: number, reason: string) => { grants.push({ points, reason }); return true; }),
+      expiresAt: jest.fn().mockResolvedValue(EXPIRES),
+    };
+    const svc = new SeasonPassService(db as PrismaService, makeConfig({ 'seasonpass.tiers': PARALLEL_TIERS, 'game.tank_capacity': 500 }), rewards as unknown as RewardPointsService);
+    return { svc, pass, profile, grants };
+  }
+
+  const settle = (ps: Promise<unknown>[]) => Promise.allSettled(ps);
+  const wins = (rs: PromiseSettledResult<unknown>[]) => rs.filter((r) => r.status === 'fulfilled');
+  const losses = (rs: PromiseSettledResult<unknown>[]) => rs.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+
+  it('FREE (SEEDS) 6 lời gọi song song cùng bậc: đúng 1 lần cộng nước, 5 lần "Đã nhận rồi."', async () => {
+    const { svc, pass, profile } = makeWorld();
+    const rs = await settle(Array.from({ length: 6 }, () => svc.claim('u1', 0, 'free')));
+    expect(wins(rs)).toHaveLength(1);
+    const lost = losses(rs);
+    expect(lost).toHaveLength(5);
+    for (const l of lost) {
+      expect(l.reason).toBeInstanceOf(BadRequestException);
+      expect(l.reason.message).toBe('Đã nhận rồi.');
+    }
+    expect(pass.claimedFree).toEqual([0]);
+    expect(profile.upserts).toBe(1);
+    expect(profile.totalSeeds).toBe(20);
+  });
+
+  it('PREMIUM (POINTS) 5 lời gọi song song cùng bậc: Điểm Xanh cấp đúng 1 lần', async () => {
+    const { svc, pass, grants } = makeWorld();
+    const rs = await settle(Array.from({ length: 5 }, () => svc.claim('u1', 0, 'premium')));
+    expect(wins(rs)).toHaveLength(1);
+    expect(losses(rs)).toHaveLength(4);
+    expect(pass.claimedPremium).toEqual([0]);
+    expect(grants).toEqual([{ points: 5, reason: 'SEASONPASS:s1:0:premium' }]);
+  });
+
+  it('bậc khác nhau / nhánh khác nhau song song không chặn nhầm nhau: mỗi (bậc, nhánh) nhận đúng một lần', async () => {
+    const { svc, pass, profile, grants } = makeWorld();
+    const calls: Array<[number, 'free' | 'premium']> = [[0, 'free'], [0, 'free'], [1, 'free'], [1, 'free'], [0, 'premium'], [0, 'premium'], [1, 'premium'], [1, 'premium']];
+    const rs = await settle(calls.map(([t, k]) => svc.claim('u1', t, k)));
+    expect(wins(rs)).toHaveLength(4);
+    expect(losses(rs)).toHaveLength(4);
+    expect([...pass.claimedFree].sort()).toEqual([0, 1]);
+    expect([...pass.claimedPremium].sort()).toEqual([0, 1]);
+    expect(profile.totalSeeds).toBe(20 + 30);
+    expect(grants.map((g) => g.reason).sort()).toEqual(['SEASONPASS:s1:0:premium', 'SEASONPASS:s1:1:premium']);
+  });
+
+  it('bấm lại tuần tự sau lượt song song: vẫn "Đã nhận rồi.", không cộng thêm', async () => {
+    const { svc, profile } = makeWorld();
+    await settle(Array.from({ length: 3 }, () => svc.claim('u1', 1, 'free')));
+    await expect(svc.claim('u1', 1, 'free')).rejects.toMatchObject({ message: 'Đã nhận rồi.' });
+    expect(profile.totalSeeds).toBe(30);
+  });
+});

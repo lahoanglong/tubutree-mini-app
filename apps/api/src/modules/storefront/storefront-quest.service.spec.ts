@@ -1,5 +1,6 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { StorefrontQuestService, QUESTS } from './storefront-quest.service';
+import { RewardPointsService } from '../wallet/reward-points.service';
 
 function makeDeps(over: any = {}) {
   const prisma = {
@@ -185,5 +186,103 @@ describe('StorefrontQuestService: "Đơn hàng đầu tiên" chỉ tính đơn k
     expect(QUESTS.find((q) => q.code === 'first_order')!.hint).toBe(
       'Chia sẻ link, khi khách tự đặt và nhận hàng thành công bạn nhận thưởng!',
     );
+  });
+});
+
+describe('StorefrontQuestService.claimQuest: song song (bấm đúp / hai thiết bị cùng lúc)', () => {
+  const tick = () => new Promise<void>((r) => setImmediate(r));
+  const sf = {
+    id: 'sf1', avatarUrl: 'a', headerNote: 'n', coverUrl: 'c', isPublished: true,
+    collections: [{ items: [{ note: 'x' }, { note: 'y' }, { note: 'z' }, { note: 'w' }, { note: 'v' }] }],
+  };
+
+  /**
+   * Sổ điểm giả giữ đúng partial unique index points_transactions_quest_unique (userId, reason) WHERE refType='QUEST':
+   * createManyAndReturn(skipDuplicates) = ON CONFLICT DO NOTHING (trả [] khi trùng), create thường ném P2002 như Postgres.
+   * Không có rollback → code chỉ được tăng số dư SAU khi dòng sổ ghi được (đúng thứ tự của applyPointsDelta).
+   */
+  function makeWorld(over: { legacyCoin?: boolean } = {}) {
+    const ledger: Array<{ userId: string; reason: string; refType: string | null; delta: number }> = [];
+    const balances = new Map<string, number>([['u1', 0], ['u2', 0]]);
+    const dup = (userId: string, row: { reason: string; refType?: string | null }) =>
+      row.refType === 'QUEST' && ledger.some((l) => l.userId === userId && l.reason === row.reason && l.refType === 'QUEST');
+    const client = {
+      storefront: { findFirst: async () => { await tick(); return sf; } },
+      commission: { count: async () => { await tick(); return 0; } },
+      coinTransaction: { findFirst: async () => { await tick(); return over.legacyCoin ? { id: 'coin-1' } : null; } },
+      pointsTransaction: {
+        createManyAndReturn: async ({ data, skipDuplicates }: any) => {
+          await tick();
+          const out: Array<{ id: string }> = [];
+          for (const row of data) {
+            if (dup(row.userId, row)) {
+              if (skipDuplicates) continue;
+              throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+            }
+            ledger.push({ userId: row.userId, reason: row.reason, refType: row.refType, delta: row.delta });
+            out.push({ id: `pt-${ledger.length}` });
+          }
+          return out;
+        },
+        create: async ({ data }: any) => {
+          await tick();
+          if (dup(data.userId, data)) throw Object.assign(new Error('Unique constraint failed'), { code: 'P2002' });
+          ledger.push({ userId: data.userId, reason: data.reason, refType: data.refType, delta: data.delta });
+          return { id: `pt-${ledger.length}` };
+        },
+      },
+      user: {
+        update: async ({ where, data }: any) => {
+          await tick();
+          balances.set(where.id, (balances.get(where.id) ?? 0) + (data.pointsBalance?.increment ?? 0));
+          return {};
+        },
+        findUniqueOrThrow: async ({ where }: any) => { await tick(); return { pointsBalance: balances.get(where.id) ?? 0 }; },
+      },
+    };
+    const prisma: any = { ...client, $transaction: async (fn: (tx: unknown) => unknown) => fn(client) };
+    const config = { get: async <T>(_k: string, fb?: T) => fb as T } as any;
+    const rewards = new RewardPointsService(prisma, config);
+    return { svc: new StorefrontQuestService(prisma, rewards, config), ledger, balances };
+  }
+
+  it('6 lời gọi song song cùng nhiệm vụ: đúng 1 lần cấp, 5 lần còn lại alreadyClaimed, ví +1.000, 1 dòng sổ', async () => {
+    const { svc, ledger, balances } = makeWorld();
+    const results = await Promise.allSettled(Array.from({ length: 6 }, () => svc.claimQuest('u1', 'publish')));
+    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(0);
+    const ok = results.map((r) => (r as PromiseFulfilledResult<Awaited<ReturnType<typeof svc.claimQuest>>>).value);
+    expect(ok.filter((r) => !r.alreadyClaimed)).toHaveLength(1);
+    expect(ok.filter((r) => r.alreadyClaimed)).toHaveLength(5);
+    for (const r of ok) expect(r).toMatchObject({ claimed: true, code: 'publish', rewardPoints: 1_000 });
+    expect(ledger).toEqual([{ userId: 'u1', reason: 'STOREFRONT_QUEST:publish', refType: 'QUEST', delta: 1_000 }]);
+    expect(balances.get('u1')).toBe(1_000);
+  });
+
+  it('bấm lại tuần tự sau lượt song song: alreadyClaimed, ví không đổi', async () => {
+    const { svc, balances } = makeWorld();
+    await Promise.all(Array.from({ length: 3 }, () => svc.claimQuest('u1', 'publish')));
+    const again = await svc.claimQuest('u1', 'publish');
+    expect(again).toMatchObject({ claimed: true, alreadyClaimed: true, pointsBalance: 1_000 });
+    expect(balances.get('u1')).toBe(1_000);
+  });
+
+  it('nhiệm vụ khác nhau / người khác nhau song song thì khoá không chặn nhầm: mỗi (user, nhiệm vụ) nhận đúng một lần', async () => {
+    const { svc, ledger, balances } = makeWorld();
+    await Promise.all([
+      ...Array.from({ length: 3 }, () => svc.claimQuest('u1', 'publish')),
+      ...Array.from({ length: 3 }, () => svc.claimQuest('u1', 'profile_complete')),
+      ...Array.from({ length: 3 }, () => svc.claimQuest('u2', 'publish')),
+    ]);
+    expect(ledger).toHaveLength(3);
+    expect(balances.get('u1')).toBe(1_000 + 2_000);
+    expect(balances.get('u2')).toBe(1_000);
+  });
+
+  it('đã nhận bằng xu trước gộp (sổ xu cũ có dòng QUEST): song song vẫn không cấp điểm', async () => {
+    const { svc, ledger, balances } = makeWorld({ legacyCoin: true });
+    const results = await Promise.all(Array.from({ length: 4 }, () => svc.claimQuest('u1', 'publish')));
+    for (const r of results) expect(r).toMatchObject({ claimed: true, alreadyClaimed: true });
+    expect(ledger).toHaveLength(0);
+    expect(balances.get('u1')).toBe(0);
   });
 });

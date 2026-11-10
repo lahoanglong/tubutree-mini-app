@@ -1333,6 +1333,88 @@ describe('GameService.buySeeds / buyTree (mua nước đã ngừng, góp quỹ t
       expect(state.pointsBalance).toBe(100_000);
       expect(prisma.plantedTree.findUnique).not.toHaveBeenCalled();
     });
+
+    /**
+     * Song song THẬT: SELECT ... FOR UPDATE dòng user giữ tới hết tx (hàng đợi FIFO như Postgres), nên request thua
+     * chỉ chạy sau khi request thắng đã ghi cây + sổ và nhả khoá. Fake không rollback: mọi guard phải nằm TRƯỚC khi ghi.
+     */
+    describe('song song (bấm đúp)', () => {
+      const tick = () => new Promise<void>((r) => setImmediate(r));
+      function withUserRowLock(prisma: any, state: { pointsBalance: number; pointsConvertedBalance: number }) {
+        // Mọi đọc/ghi nhường một lượt macrotask: không có khoá thì các request chen vào giữa lúc đọc và lúc ghi.
+        for (const model of ['user', 'pointsTransaction', 'plantedTree']) {
+          for (const [name, fn] of Object.entries(prisma[model] as Record<string, (...a: unknown[]) => unknown>)) {
+            prisma[model][name] = async (...a: unknown[]) => {
+              await tick();
+              return fn(...a);
+            };
+          }
+        }
+        let tail: Promise<void> = Promise.resolve();
+        prisma.$transaction = jest.fn(async (fn: (t: unknown) => unknown) => {
+          let release: () => void = () => undefined;
+          let locked = false;
+          const tx = Object.assign(Object.create(prisma), {
+            $queryRaw: async (strings: TemplateStringsArray) => {
+              await tick();
+              if (!/FOR UPDATE/.test(strings.join('?'))) return [{ ...state }];
+              if (!locked) {
+                const prev = tail;
+                tail = new Promise<void>((r) => { release = r; });
+                await prev;
+                locked = true;
+              }
+              return [{ ...state }];
+            },
+          });
+          try {
+            return await fn(tx);
+          } finally {
+            if (locked) release();
+          }
+        });
+      }
+      const fulfilled = <T,>(rs: PromiseSettledResult<T>[]) => rs.filter((r): r is PromiseFulfilledResult<T> => r.status === 'fulfilled').map((r) => r.value);
+
+      it('5 request CÙNG key song song: đúng 1 cây, 1 lần trừ điểm, mọi phản hồi trả cùng một kết quả', async () => {
+        const { prisma, state, entries, trees } = buyPrisma({ pointsBalance: 200_000, pointsConvertedBalance: 0 });
+        withUserRowLock(prisma, state);
+        const svc = buyService(prisma);
+        const rs = await Promise.allSettled(Array.from({ length: 5 }, () => svc.buyTree('u1', KEY)));
+        const ok = fulfilled(rs);
+        expect(ok).toHaveLength(5);
+        for (const r of ok) expect(r).toEqual({ certificateCode: treeCertificateCodeFor('u1', KEY), treeType: expect.any(String), cost: 50_000, pointsUsed: 50_000, pointsUsedConverted: 0 });
+        expect(state.pointsBalance).toBe(150_000);
+        expect(entries).toHaveLength(1);
+        expect(trees).toHaveLength(1);
+      });
+
+      it('CÙNG key, trừ cả hai lô: lượt thua dựng lại đúng phần quy đổi từ sổ, không trừ thêm lô nào', async () => {
+        const { prisma, state, entries, trees } = buyPrisma({ pointsBalance: 20_000, pointsConvertedBalance: 100_000 });
+        withUserRowLock(prisma, state);
+        const svc = buyService(prisma);
+        const ok = fulfilled(await Promise.allSettled(Array.from({ length: 4 }, () => svc.buyTree('u1', KEY))));
+        expect(ok).toHaveLength(4);
+        for (const r of ok) expect(r).toMatchObject({ cost: 50_000, pointsUsed: 50_000, pointsUsedConverted: 30_000 });
+        expect(state).toEqual({ pointsBalance: 0, pointsConvertedBalance: 70_000 });
+        expect(entries.map((e) => [e.lot, e.delta])).toEqual([['STANDARD', -20_000], ['CONVERTED', -30_000]]);
+        expect(trees).toHaveLength(1);
+      });
+
+      it('KHÔNG key, 5 request song song với 120.000 điểm / giá 50.000: đúng 2 cây, số dư 20.000, không âm', async () => {
+        const { prisma, state, entries, trees } = buyPrisma({ pointsBalance: 120_000, pointsConvertedBalance: 0 });
+        withUserRowLock(prisma, state);
+        const svc = buyService(prisma);
+        const rs = await Promise.allSettled(Array.from({ length: 5 }, () => svc.buyTree('u1')));
+        expect(fulfilled(rs)).toHaveLength(2);
+        const rejected = rs.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+        expect(rejected).toHaveLength(3);
+        for (const r of rejected) expect(r.reason).toBeInstanceOf(BadRequestException);
+        expect(state.pointsBalance).toBe(20_000);
+        expect(entries).toHaveLength(2);
+        expect(trees).toHaveLength(2);
+      });
+    });
   });
 
   it('getProfile trả spinCostPoints theo game.spin_buy_cost_points (mặc định 10.000)', async () => {
