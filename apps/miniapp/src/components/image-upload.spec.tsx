@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -436,6 +436,85 @@ describe('W60B — khoá khi đang tải, lời báo lỗi role="alert", số đ
 
     pickFiles(container, [oversized()]);
     await waitFor(() => expect(busy).toEqual([true, false, true, false]));
+  });
+
+  it('MultiImageUpload: form cha đang gửi (disabled) khoá ô "Thêm ảnh" và mọi nút "Xoá ảnh", tệp chen vào bị bỏ; hết gửi thì dùng lại được', async () => {
+    const { MultiImageUpload } = await loadConfigured();
+    const net = pendingFetch();
+    const onChange = vi.fn();
+    const busy: boolean[] = [];
+    const props = { value: ['https://i/1.jpg', 'https://i/2.jpg'], onChange, onBusyChange: (b: boolean) => busy.push(b), max: 4 };
+    const { container, rerender } = render(<MultiImageUpload {...props} disabled />);
+    const openPicker = vi.spyOn(fileInput(container), 'click');
+    const addButton = () => container.querySelector('button.tubu-press') as HTMLButtonElement;
+    const removeButtons = () => screen.getAllByRole('button', { name: 'Xoá ảnh' }) as HTMLButtonElement[];
+    expect(addButton().disabled).toBe(true);
+    expect(removeButtons().map((b) => b.disabled)).toEqual([true, true]);
+    fireEvent.click(addButton());
+    fireEvent.click(removeButtons()[0]!);
+    expect(openPicker).not.toHaveBeenCalled();
+    expect(onChange).not.toHaveBeenCalled();
+
+    pickFiles(container, [png('a.png')]);
+    await settle();
+    expect(net.fetchMock).not.toHaveBeenCalled();
+    expect(busy).toEqual([]);
+
+    rerender(<MultiImageUpload {...props} disabled={false} />);
+    expect(addButton().disabled).toBe(false);
+    expect(removeButtons().map((b) => b.disabled)).toEqual([false, false]);
+    fireEvent.click(removeButtons()[0]!);
+    expect(onChange).toHaveBeenCalledWith(['https://i/2.jpg']);
+  });
+
+  it('MultiImageUpload: Cloudinary im quá 60 giây thì huỷ lượt tải, rơi về ảnh nén tại chỗ và nhả khoá (không treo nút Gửi của form cha)', async () => {
+    class FakeReader {
+      onload: ((e: { target: { result: string } }) => void) | null = null;
+      onerror: (() => void) | null = null;
+      readAsDataURL() {
+        queueMicrotask(() => this.onload?.({ target: { result: 'data:image/png;base64,Zm9v' } }));
+      }
+    }
+    class FakeImage {
+      width = 800;
+      height = 600;
+      onload: (() => void) | null = null;
+      onerror: (() => void) | null = null;
+      set src(_v: string) {
+        queueMicrotask(() => this.onload?.());
+      }
+    }
+    vi.stubGlobal('FileReader', FakeReader);
+    vi.stubGlobal('Image', FakeImage);
+    const fetchMock = vi.fn(
+      (_url: string, init: { signal: AbortSignal }) =>
+        new Promise((_resolve, reject) => init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')))),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const { MultiImageUpload } = await loadConfigured();
+    vi.useFakeTimers();
+    try {
+      const busy: boolean[] = [];
+      const onChange = vi.fn();
+      const { container } = render(<MultiImageUpload value={[]} onChange={onChange} onBusyChange={(b) => busy.push(b)} />);
+      pickFiles(container, [png('a.png')]);
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+      expect(busy).toEqual([true]);
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(59_999);
+      });
+      expect(busy).toEqual([true]);
+      expect(onChange).not.toHaveBeenCalled();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(busy).toEqual([true, false]);
+      expect(onChange).toHaveBeenCalledWith(['data:image/png;base64,Zm9v']);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('MultiImageUpload: nhãn đếm "n/tối đa" dùng số đều để không nhảy khi số ảnh đổi', async () => {

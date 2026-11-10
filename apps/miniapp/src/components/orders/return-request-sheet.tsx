@@ -241,7 +241,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
           />
         </section>
 
-        <MultiImageUpload value={images} onChange={setImages} onBusyChange={setImagesBusy} max={3} label="Ảnh minh chứng (khuyến khích, tối đa 3)" />
+        <MultiImageUpload value={images} onChange={setImages} onBusyChange={setImagesBusy} disabled={submit.isPending} max={3} label="Ảnh minh chứng (khuyến khích, tối đa 3)" />
 
         {showsMoney &&
           (bankAllowed ? (

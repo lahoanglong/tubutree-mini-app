@@ -13,8 +13,24 @@ vi.mock('../../services/shop-api', () => ({
   estimateReturn: mocks.estimateReturn,
 }));
 vi.mock('../image-upload', () => ({
-  MultiImageUpload: ({ value, onChange, onBusyChange }: { value: string[]; onChange: (v: string[]) => void; onBusyChange?: (busy: boolean) => void }) => (
+  MultiImageUpload: ({
+    value,
+    onChange,
+    onBusyChange,
+    disabled,
+  }: {
+    value: string[];
+    onChange: (v: string[]) => void;
+    onBusyChange?: (busy: boolean) => void;
+    disabled?: boolean;
+  }) => (
     <>
+      <button type="button" disabled={disabled} onClick={() => onChange([...value, 'https://i/them.jpg'])}>
+        Thêm ảnh thử
+      </button>
+      <button type="button" disabled={disabled} onClick={() => onChange(value.slice(0, -1))}>
+        Xoá ảnh thử
+      </button>
       <button type="button" onClick={() => onBusyChange?.(true)}>
         Bắt đầu tải ảnh thử
       </button>
@@ -247,6 +263,20 @@ describe('ReturnRequestSheet: gửi yêu cầu khoá chạm đúp, báo bận, s
     fireEvent.click(submitButton());
     await waitFor(() => expect(mocks.requestReturn).toHaveBeenCalledTimes(1));
     expect(mocks.requestReturn.mock.calls[0]![1].images).toEqual(['https://i/minh-chung.jpg']);
+  });
+
+  it('đang gửi: ô thêm ảnh và nút xoá ảnh khoá, không đổi nhãn nút Gửi sang "Đang tải ảnh…"', async () => {
+    const d = deferred();
+    mocks.requestReturn.mockReturnValueOnce(d.promise);
+    renderSheet();
+    fillForm();
+    expect(screen.getByRole('button', { name: 'Thêm ảnh thử' })).not.toBeDisabled();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(submitButton()).toHaveAttribute('aria-busy', 'true'));
+    expect(screen.getByRole('button', { name: 'Thêm ảnh thử' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Xoá ảnh thử' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Đang tải ảnh…' })).toBeNull();
+    await act(async () => d.resolve({ id: 'r1' }));
   });
 
   it('nút Gửi yêu cầu cao ít nhất 44px', () => {

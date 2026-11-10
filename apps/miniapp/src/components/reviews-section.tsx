@@ -134,6 +134,8 @@ export function ReviewsSection({
   const [writing, setWriting] = useState(false);
   // Đang gửi thì không đóng được form: đóng giữa chừng gỡ WriteReview (mất khoá chống gửi đôi và chỗ hiện lỗi), mở lại là gửi được lần hai.
   const [submitting, setSubmitting] = useState(false);
+  // Ảnh đang lên cũng giữ form: đóng rồi mở lại là form mới không biết còn ảnh đang tải, gửi đi sẽ thiếu ảnh. Nằm ở đây vì WriteReview bị gỡ khi đóng.
+  const [imagesBusy, setImagesBusy] = useState(false);
   const [target, setTarget] = useState<FormTarget | null>(null);
   // BottomSheet gỡ nội dung khỏi DOM khi đóng; nháp nằm ở đây để chạm nhầm lên mask/vuốt xuống
   // không làm mất sao, nhận xét và ảnh/video đã upload (P1-2). Nháp gắn với đúng đánh giá đang soạn: mở đánh giá khác
@@ -467,7 +469,7 @@ export function ReviewsSection({
         <EmptyState variant="inline" art="sprout" heading="Chưa có đánh giá" body="Hãy là người đầu tiên chia sẻ trải nghiệm." />
       )}
 
-      <BottomSheet open={writing} onClose={() => setWriting(false)} dismissible={!submitting} title={editingId ? 'Sửa đánh giá' : 'Đánh giá sản phẩm'}>
+      <BottomSheet open={writing} onClose={() => setWriting(false)} dismissible={!submitting && !imagesBusy} title={editingId ? 'Sửa đánh giá' : 'Đánh giá sản phẩm'}>
         {editingId && myReviewQ.isPending ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }} aria-busy="true">
             <Skeleton width="100%" height={44} />
@@ -486,6 +488,8 @@ export function ReviewsSection({
             showReward={elig?.rewardAvailable !== false}
             hidden={target.kind === 'edit' && hiddenIds.has(target.reviewId)}
             onSubmittingChange={setSubmitting}
+            imagesBusy={imagesBusy}
+            onImagesBusyChange={setImagesBusy}
             onDraftChange={(patch) => setEdited((d) => ({ key, draft: { ...(d && d.key === key ? d.draft : base), ...patch } }))}
             onDone={() => {
               setEdited(null);
@@ -508,6 +512,8 @@ function WriteReview({
   showReward,
   hidden,
   onSubmittingChange,
+  imagesBusy,
+  onImagesBusyChange,
   onDraftChange,
   onDone,
 }: {
@@ -524,6 +530,8 @@ function WriteReview({
   /** Đánh giá đang sửa bị Tubu ẩn: lưu không làm nó hiện lại, nên không được báo như thể đã đổi được gì. */
   hidden: boolean;
   onSubmittingChange: (submitting: boolean) => void;
+  imagesBusy: boolean;
+  onImagesBusyChange: (busy: boolean) => void;
   onDraftChange: (patch: Partial<ReviewDraft>) => void;
   onDone: () => void;
 }) {
@@ -532,7 +540,6 @@ function WriteReview({
   const { rating, comment, images, video } = draft;
   // Đang tải video lên: gửi lúc này sẽ lưu đánh giá không kèm video (mất phần thưởng video, sửa lại cũng không được cộng thêm).
   const [videoBusy, setVideoBusy] = useState(false);
-  const [imagesBusy, setImagesBusy] = useState(false);
   const mediaBusy = videoBusy || imagesBusy;
   // Lỗi đang hiện: ở hàng sao, ở ô nhận xét, hay lỗi gửi do máy chủ trả (dưới nút). Đọc qua role=alert, focus tới chỗ cần sửa.
   const [issue, setIssue] = useState<{ field: ReviewFormField | 'submit'; message: string } | null>(null);
@@ -699,7 +706,7 @@ function WriteReview({
           </Text>
         </div>
       )}
-      <MultiImageUpload value={images} onChange={(v) => onDraftChange({ images: v })} onBusyChange={setImagesBusy} max={5} />
+      <MultiImageUpload value={images} onChange={(v) => onDraftChange({ images: v })} onBusyChange={onImagesBusyChange} disabled={submit.isPending} max={5} />
       <VideoUpload value={video} onChange={(v) => onDraftChange({ video: v })} onBusyChange={setVideoBusy} />
       {(purchaseCount > 1 || isEdit) && orderCode && (
         <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>

@@ -26,10 +26,23 @@ vi.mock('../services/shop-api', () => ({
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: mocks.auth.status, login: mocks.login }) }));
 vi.mock('./ui/auth-gate', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useLoginWithNotice: () => mocks.login }));
 vi.mock('./image-upload', () => ({
-  MultiImageUpload: ({ value, onChange, onBusyChange }: { value: string[]; onChange: (v: string[]) => void; onBusyChange?: (busy: boolean) => void }) => (
+  MultiImageUpload: ({
+    value,
+    onChange,
+    onBusyChange,
+    disabled,
+  }: {
+    value: string[];
+    onChange: (v: string[]) => void;
+    onBusyChange?: (busy: boolean) => void;
+    disabled?: boolean;
+  }) => (
     <>
-      <button type="button" onClick={() => onChange([...value, 'https://i/moi.jpg'])}>
+      <button type="button" disabled={disabled} onClick={() => onChange([...value, 'https://i/moi.jpg'])}>
         Thêm ảnh ({value.length})
+      </button>
+      <button type="button" disabled={disabled} onClick={() => onChange(value.slice(0, -1))}>
+        Xoá ảnh thử
       </button>
       <button type="button" onClick={() => onBusyChange?.(true)}>
         Bắt đầu tải ảnh thử
@@ -467,7 +480,7 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     });
   });
 
-  it('đổi chip liên tiếp: kết quả của chip cũ về SAU chip mới không đè lên danh sách đang xem (khoá theo chip, W85A)', async () => {
+  it('đổi chip liên tiếp: kết quả của chip cũ về SAU chip mới không đè lên danh sách đang xem (khoá theo chip)', async () => {
     const gates: Record<string, (v: unknown) => void> = {};
     mocks.fetchReviews.mockImplementation((_slug: string, f: number | string = 'all') => {
       if (f === 'all') return Promise.resolve(DATA);
@@ -1488,6 +1501,37 @@ describe('ReviewsSection: tải ảnh và gửi đánh giá không chồng nhau 
     await act(async () => release({ updated: false, pointsEarned: 0 }));
     await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
     expect(mocks.createReview).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang tải ảnh: form không đóng được (không có nút Đóng, Esc không đóng), nên không mở lại được form mới để gửi thiếu ảnh; tải xong thì đóng được và nháp còn ảnh', async () => {
+    await openForm();
+    expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu tải ảnh thử' }));
+    expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('radiogroup', { name: 'Số sao' })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tải xong ảnh thử' }));
+    expect(await screen.findByRole('button', { name: 'Đóng' })).toBeInTheDocument();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    expect(await screen.findByRole('button', { name: 'Thêm ảnh (1)' })).toBeInTheDocument();
+  });
+
+  it('đang gửi: ô thêm ảnh và nút xoá ảnh khoá, không đổi danh sách ảnh của lần đang gửi', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mocks.createReview.mockReturnValue(new Promise((r) => (release = r)));
+    await openForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm ảnh (0)' }));
+    expect(screen.getByRole('button', { name: 'Xoá ảnh thử' })).not.toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole('button', { name: 'Thêm ảnh (1)' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Xoá ảnh thử' })).toBeDisabled();
+    expect(screen.queryByRole('button', { name: 'Đang tải ảnh…' })).toBeNull();
+    await act(async () => release({ updated: false, pointsEarned: 0 }));
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
   });
 
   it('gửi lỗi: form vẫn mở để thấy lỗi tại chỗ, nút Đóng trở lại và gửi lại được', async () => {

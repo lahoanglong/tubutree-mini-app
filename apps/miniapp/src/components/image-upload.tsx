@@ -98,6 +98,8 @@ const UPLOAD_MAX_DIM = 1600;
 const UPLOAD_QUALITY = 0.82;
 /** JPEG nhỏ hơn mức này và cạnh dài vừa thì gửi nguyên, nén lại chỉ làm xấu thêm. */
 const UPLOAD_KEEP_BYTES = 500 * 1024;
+/** Cloudinary im quá lâu thì bỏ lượt tải, rơi về bản nén tại chỗ: ô thêm ảnh và nút Gửi của form cha chờ lượt này nên không được treo mãi. */
+const CLOUDINARY_TIMEOUT_MS = 60_000;
 
 /**
  * Bản gửi lên Cloudinary. Chỉ JPEG lớn mới nén: PNG/WebP/GIF giữ nguyên (nền trong suốt, QR, logo), và mọi lỗi giải mã
@@ -375,6 +377,7 @@ export function MultiImageUpload({
   value = [],
   onChange,
   onBusyChange,
+  disabled = false,
   max = 6,
   label = 'Ảnh đính kèm',
 }: {
@@ -382,6 +385,8 @@ export function MultiImageUpload({
   onChange: (urls: string[]) => void;
   /** Báo form cha khi đang tải: gửi lúc ảnh còn đang lên sẽ lưu bản ghi không kèm ảnh. */
   onBusyChange?: (busy: boolean) => void;
+  /** Form cha đang gửi: thêm hay xoá ảnh lúc này không vào bản đang gửi mà vẫn làm đổi nhãn nút Gửi. */
+  disabled?: boolean;
   max?: number;
   label?: string;
 }) {
@@ -394,13 +399,13 @@ export function MultiImageUpload({
   };
 
   const pick = () => {
-    if (uploading) return;
+    if (uploading || disabled) return;
     haptic('light');
     inputRef.current?.click();
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (uploading) return;
+    if (uploading || disabled) return;
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     setError(null);
@@ -416,6 +421,9 @@ export function MultiImageUpload({
         }
         let uploadedUrl = '';
         if (CONFIGURED) {
+          // Không dùng AbortSignal.timeout: WebView Zalo đời cũ chưa có.
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), CLOUDINARY_TIMEOUT_MS);
           try {
             const form = new FormData();
             form.append('file', file);
@@ -423,6 +431,7 @@ export function MultiImageUpload({
             const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD}/image/upload`, {
               method: 'POST',
               body: form,
+              signal: controller.signal,
             });
             if (res.ok) {
               const data = (await res.json()) as { secure_url?: string };
@@ -430,6 +439,8 @@ export function MultiImageUpload({
             }
           } catch {
             // fallback
+          } finally {
+            clearTimeout(timer);
           }
         }
         if (!uploadedUrl) {
@@ -482,9 +493,9 @@ export function MultiImageUpload({
             <button
               type="button"
               aria-label="Xoá ảnh"
-              disabled={uploading}
+              disabled={uploading || disabled}
               onClick={() => {
-                if (uploading) return;
+                if (uploading || disabled) return;
                 haptic('light');
                 onChange(value.filter((_, i) => i !== idx));
               }}
@@ -526,7 +537,7 @@ export function MultiImageUpload({
             type="button"
             className="tubu-press"
             onClick={pick}
-            disabled={uploading}
+            disabled={uploading || disabled}
             aria-busy={uploading || undefined}
             style={{
               width: 72,
