@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -15,12 +15,16 @@ import {
   type SupportQrState,
 } from '@/lib/admin-client';
 import { isoToVnHHMM } from '@/lib/week';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import type { Tone } from '@/lib/recycling';
 import { useConfirm } from '../confirm-dialog';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, LoadError, Notice, ToneBadge } from '../ui';
 import { QrModal } from './qr-modal';
 
 export const BRIDGE_QUERY_KEY = ['admin-support-bridge'];
+
+const BUSY_CLASS = 'aria-disabled:opacity-60';
 
 const ENABLE_RISK =
   'Tài khoản Zalo cá nhân làm cầu nối có thể bị Zalo khoá theo điều khoản của Zalo, nên hãy dùng một SIM riêng cho việc này. Không mở Zalo PC/Web bằng tài khoản đó, vì sẽ làm cầu nối mất kết nối.';
@@ -100,7 +104,20 @@ export function BridgeCard({ isAdmin, compact = false }: { isAdmin: boolean; com
   }, [savedGroupId]);
 
   const refresh = () => qc.invalidateQueries({ queryKey: BRIDGE_QUERY_KEY });
-  const fail = (fallback: string) => (e: unknown) => setNote({ ok: false, text: errText(e, fallback) });
+  const acting = useRef(false);
+  const testing = useRef(false);
+  const exclusive = (run: () => void) => {
+    if (acting.current) return;
+    acting.current = true;
+    run();
+  };
+  const releaseActing = () => {
+    acting.current = false;
+  };
+  const fail = (fallback: string) => (e: unknown) => {
+    setNote({ ok: false, text: errText(e, fallback) });
+    return reloadWhenStale(e, refresh);
+  };
 
   const login = useMutation({
     mutationFn: startSupportQr,
@@ -109,30 +126,34 @@ export function BridgeCard({ isAdmin, compact = false }: { isAdmin: boolean; com
       setQr(r);
     },
     onError: fail('Không lấy được mã QR.'),
+    onSettled: releaseActing,
   });
   const logout = useMutation({
     mutationFn: logoutSupportBridge,
     onSuccess: () => {
       setNote({ ok: true, text: 'Đã đăng xuất tài khoản cầu nối.' });
-      void refresh();
+      return settleWithin(refresh());
     },
     onError: fail('Không đăng xuất được.'),
+    onSettled: releaseActing,
   });
   const reconnect = useMutation({
     mutationFn: reconnectSupportBridge,
     onSuccess: () => {
       setNote({ ok: true, text: 'Đã yêu cầu kết nối lại.' });
-      void refresh();
+      return settleWithin(refresh());
     },
     onError: fail('Không kết nối lại được.'),
+    onSettled: releaseActing,
   });
   const saveGroup = useMutation({
     mutationFn: () => updateSupportSettings({ groupId }),
     onSuccess: (r) => {
       setNote(r.bridgeSynced ? { ok: true, text: 'Đã lưu nhóm nhận tin.' } : { ok: false, text: 'Đã lưu nhóm, nhưng chưa báo được cho cầu nối. Hệ thống sẽ thử lại sau ít phút.' });
-      void refresh();
+      return settleWithin(refresh());
     },
     onError: fail('Không lưu được nhóm.'),
+    onSettled: releaseActing,
   });
   const test = useMutation({
     mutationFn: testSupportBridge,
@@ -140,15 +161,19 @@ export function BridgeCard({ isAdmin, compact = false }: { isAdmin: boolean; com
     onMutate: () => setTestResult(null),
     onSuccess: () => setTestResult({ ok: true, text: 'Đã gửi tin thử vào nhóm. Kiểm tra nhóm Zalo.' }),
     onError: (e) => setTestResult({ ok: false, text: errText(e, 'Không gửi được tin thử.') }),
+    onSettled: () => {
+      testing.current = false;
+    },
   });
   const toggle = useMutation({
     mutationFn: (enabled: boolean) => updateSupportSettings({ enabled }),
-    onSuccess: () => void refresh(),
+    onSuccess: () => settleWithin(refresh()),
     onError: fail('Không đổi được công tắc chat.'),
+    onSettled: releaseActing,
   });
 
   const onToggle = async () => {
-    if (!status) return;
+    if (!status || acting.current) return;
     setNote(null);
     const next = !status.enabled;
     if (next && (!connected || !status.groupId)) {
@@ -160,19 +185,21 @@ export function BridgeCard({ isAdmin, compact = false }: { isAdmin: boolean; com
         ? { title: 'Bật chat với khách?', message: `Khách sẽ chat được với Tubu Tree và tin được chuyển vào nhóm Zalo.\n${ENABLE_RISK}`, confirmLabel: 'Bật chat' }
         : { title: 'Tắt chat với khách?', message: 'Khách sẽ thấy chat tạm đóng và không gửi được tin mới.', confirmLabel: 'Tắt chat', tone: 'danger' },
     );
-    if (ok) toggle.mutate(next);
+    if (ok) exclusive(() => toggle.mutate(next));
   };
   const onLogout = async () => {
+    if (acting.current) return;
     const ok = await confirm({
       title: 'Đăng xuất tài khoản cầu nối?',
       message: 'Phiên đã lưu bị xoá. Tin của khách vẫn được lưu nhưng không chuyển vào Zalo cho tới khi quét QR đăng nhập lại.',
       confirmLabel: 'Đăng xuất',
       tone: 'danger',
     });
-    if (ok) logout.mutate();
+    if (ok) exclusive(() => logout.mutate());
   };
 
   const busy = login.isPending || logout.isPending || reconnect.isPending || saveGroup.isPending || toggle.isPending;
+  const busyAttrs = (own: boolean) => ({ 'aria-busy': own || undefined, 'aria-disabled': busy || undefined });
   const view = status ? stateView(status) : null;
   const groups = groupsQ.data?.groups ?? [];
   // Chờ quét QR mà còn lỗi (thường là tệp phiên cũ chưa xoá được): vẫn cho đăng xuất để cầu nối xoá lại.
@@ -199,7 +226,7 @@ export function BridgeCard({ isAdmin, compact = false }: { isAdmin: boolean; com
         <h2 id="bridge-h" className="font-display text-lg font-semibold text-stone-900">Cầu nối Zalo</h2>
       )}
       {statusQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {statusQ.isError && <LoadError onRetry={() => void statusQ.refetch()} retrying={statusQ.isFetching}>Không tải được trạng thái cầu nối Zalo.</LoadError>}
+      {statusQ.isError && <LoadError onRetry={() => statusQ.refetch({ cancelRefetch: false })} retrying={statusQ.isFetching}>Không tải được trạng thái cầu nối Zalo.</LoadError>}
       {status && view && (!compact || expanded) && (
         <>
           <div data-bridge-state={status.state} className="flex flex-wrap items-center gap-2 text-sm">
@@ -234,17 +261,17 @@ export function BridgeCard({ isAdmin, compact = false }: { isAdmin: boolean; com
           {isAdmin && (
             <>
               <div className="flex flex-wrap gap-2">
-                <button type="button" className={BTN_PRIMARY} disabled={busy} onClick={() => login.mutate()}>
+                <button type="button" className={`${BTN_PRIMARY} ${BUSY_CLASS}`} {...busyAttrs(login.isPending)} onClick={() => exclusive(() => login.mutate())}>
                   {login.isPending ? 'Đang lấy mã…' : 'Đăng nhập Zalo'}
                 </button>
                 {/* Đang kết nối mà còn lỗi (lưu phiên, tệp cũ): kết nối lại sẽ lưu lại phiên đang chạy, không phải đăng xuất. */}
                 {((status.state !== 'CONNECTED' && status.state !== 'NEED_QR') || (status.state === 'CONNECTED' && (!!status.lastError || !!status.deaf))) && (
-                  <button type="button" className={BTN_SECONDARY} disabled={busy} onClick={() => reconnect.mutate()}>
+                  <button type="button" className={`${BTN_SECONDARY} ${BUSY_CLASS}`} {...busyAttrs(reconnect.isPending)} onClick={() => exclusive(() => reconnect.mutate())}>
                     {reconnect.isPending ? 'Đang kết nối…' : 'Kết nối lại'}
                   </button>
                 )}
                 {hasSession && (
-                  <button type="button" className={BTN_DANGER_OUTLINE} disabled={busy} onClick={() => void onLogout()}>
+                  <button type="button" className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`} {...busyAttrs(logout.isPending)} onClick={() => void onLogout()}>
                     {logout.isPending ? 'Đang đăng xuất…' : 'Đăng xuất'}
                   </button>
                 )}
@@ -269,10 +296,27 @@ export function BridgeCard({ isAdmin, compact = false }: { isAdmin: boolean; com
                     ))}
                   </select>
                 </label>
-                <button type="button" className={BTN_SECONDARY} disabled={busy || groupId === status.groupId} onClick={() => saveGroup.mutate()}>
+                <button
+                  type="button"
+                  className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
+                  disabled={groupId === status.groupId}
+                  {...busyAttrs(saveGroup.isPending)}
+                  onClick={() => exclusive(() => saveGroup.mutate())}
+                >
                   {saveGroup.isPending ? 'Đang lưu…' : 'Lưu nhóm'}
                 </button>
-                <button type="button" className={BTN_SECONDARY} disabled={test.isPending || !status.groupId} onClick={() => test.mutate()}>
+                <button
+                  type="button"
+                  className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
+                  disabled={!status.groupId}
+                  aria-busy={test.isPending || undefined}
+                  aria-disabled={test.isPending || undefined}
+                  onClick={() => {
+                    if (testing.current) return;
+                    testing.current = true;
+                    test.mutate();
+                  }}
+                >
                   {test.isPending ? 'Đang gửi…' : 'Gửi tin thử'}
                 </button>
               </div>
@@ -289,9 +333,10 @@ export function BridgeCard({ isAdmin, compact = false }: { isAdmin: boolean; com
                   role="switch"
                   aria-checked={status.enabled}
                   aria-label="Cho khách chat"
-                  disabled={busy}
+                  aria-busy={toggle.isPending || undefined}
+                  aria-disabled={busy || undefined}
                   onClick={() => void onToggle()}
-                  className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors disabled:opacity-50 ${status.enabled ? 'bg-forest-600' : 'bg-stone-300'}`}
+                  className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors ${BUSY_CLASS} ${status.enabled ? 'bg-forest-600' : 'bg-stone-300'}`}
                 >
                   <span className={`inline-block h-5 w-5 rounded-full bg-stone-0 shadow transition-transform ${status.enabled ? 'translate-x-6' : 'translate-x-1'}`} />
                 </button>

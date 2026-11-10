@@ -13,6 +13,8 @@ import {
 import { adminShiftsQuery, adminShiftTemplatesQuery } from '@tubutree/app-core/queries/shifts';
 import { invalidateInbox } from '@/lib/admin-client';
 import { coreHttp } from '@/lib/core-http';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import { usePressLock } from '@/lib/use-press-lock';
 import { addDaysKey, dowLabel, hhmmToMin, isoToVnHHMM, keyToUtcMidnightISO, mondayKeyOf, minToHHMM, shortDayLabel, vnDateTimeISO } from '@/lib/week';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
@@ -49,11 +51,15 @@ export function ShiftApprovalTab() {
   const [adjStart, setAdjStart] = useState('08:00');
   const [adjEnd, setAdjEnd] = useState('12:00');
   const [tplOpen, setTplOpen] = useState(false);
-  // Trả lời hứa làm mới để khoá của ca giữ tới khi danh sách ca mới về: nhả sớm thì nút "Duyệt" của ca vừa duyệt còn hiện và bấm lại được.
+  // Trả lời hứa làm mới để khoá của ca giữ tới khi danh sách ca mới về (tối đa `settleWithin`, kẻo mạng chậm giữ nút lâu hơn lệnh vừa xong): nhả sớm thì nút "Duyệt" của ca vừa duyệt còn hiện và bấm lại được.
+  // Lệnh bị từ chối vì danh sách đã cũ (ca không còn chờ duyệt: 400/404/409) cũng tải lại tuần của lệnh rồi mới nhả (lệnh có ô nhập giờ/tên: chỉ 404/409, 400 là lỗi nhập hiện trong tờ).
+  // Quy tắc này chỉ quyết định việc CHỜ tải lại trước khi nhả khoá: trên production MutationCache vẫn làm cũ khoá admin-* ở lỗi khác.
   // Làm mới theo tuần của chính lệnh (đi trong biến mutation), không theo tuần đang xem lúc xong: đổi tuần khi lệnh còn bay mà làm mới nhầm tuần thì quay lại thấy ca cũ còn nút "Duyệt".
   // `refetchType: 'all'` vì tuần cũ lúc đó không còn ai xem nên mặc định chỉ đánh dấu cũ chứ không tải lại.
   const invalidate = (week: string) => Promise.all([qc.invalidateQueries({ queryKey: ['admin-shifts', week], refetchType: 'all' }), invalidateInbox(qc)]);
   const fail = (e: unknown) => setMsg({ tone: 'danger', text: errText(e) });
+  // Lớp nền của tờ "Chỉnh giờ & duyệt" che lời báo của trang, nên lỗi của lệnh gửi từ tờ hiện ngay trong tờ.
+  const [adjustErr, setAdjustErr] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
     const map = new Map<string, { name: string; shifts: AdminShift[] }>();
@@ -97,9 +103,14 @@ export function ShiftApprovalTab() {
         setMsg({ tone: 'success', text: 'Đã duyệt ca.' });
         // Chỉ đóng tấm của đúng ca vừa xong: duyệt ca B không được đóng tấm "Chỉnh giờ & duyệt" của ca A đang gõ dở.
         setAdjust((cur) => (cur?.id === v.id ? null : cur));
-        return invalidate(v.week);
+        return settleWithin(invalidate(v.week));
       },
-      onError: fail,
+      onError: (e, v) => {
+        if (v.approvedStart) setAdjustErr(errText(e));
+        else fail(e);
+        // Duyệt kèm giờ đã chỉnh có ô nhập giờ nên 400 (giờ kết thúc không sau giờ bắt đầu) là lỗi nhập hiện trong tờ; duyệt thường không có ô nhập, 400 là ca đã đổi trạng thái.
+        return reloadWhenStale(e, () => invalidate(v.week), !!v.approvedStart);
+      },
     },
     (v) => v.id,
   );
@@ -109,9 +120,12 @@ export function ShiftApprovalTab() {
       mutationFn: (v: { id: string; reason: string; week: string }) => rejectShift(coreHttp, v.id, v.reason),
       onSuccess: (_d, v) => {
         setMsg({ tone: 'success', text: 'Đã từ chối ca.' });
-        return invalidate(v.week);
+        return settleWithin(invalidate(v.week));
       },
-      onError: fail,
+      onError: (e, v) => {
+        fail(e);
+        return reloadWhenStale(e, () => invalidate(v.week));
+      },
     },
     (v) => v.id,
   );
@@ -120,14 +134,18 @@ export function ShiftApprovalTab() {
     mutationFn: (v: { ids: string[]; week: string }) => bulkApproveShifts(coreHttp, v.ids),
     onSuccess: (r, v) => {
       setMsg({ tone: 'success', text: `Đã duyệt ${r.approved} ca.` });
-      return invalidate(v.week);
+      return settleWithin(invalidate(v.week));
     },
-    onError: fail,
+    onError: (e, v) => {
+      fail(e);
+      return reloadWhenStale(e, () => invalidate(v.week));
+    },
   });
   const retryShifts = usePressLock(() => shiftsQ.refetch());
   const adjustBusy = !!adjust && held(adjust.id);
 
   const openAdjust = (s: AdminShift) => {
+    setAdjustErr(null);
     setAdjust({ id: s.id, dayKey: s.workDate.slice(0, 10) });
     setAdjStart(isoToVnHHMM(s.startAt));
     setAdjEnd(isoToVnHHMM(s.endAt));
@@ -184,7 +202,7 @@ export function ShiftApprovalTab() {
           aria-busy={acting.current.size > 0 || undefined}
           aria-disabled={acting.current.size > 0 || undefined}
           onClick={() => void askBulkApprove()}
-          className={BTN_PRIMARY}
+          className={`${BTN_PRIMARY} tabular-nums`}
         >
           Duyệt tất cả ({pendingIds.length})
         </button>
@@ -213,7 +231,7 @@ export function ShiftApprovalTab() {
               return (
                 <div key={s.id} className="flex flex-wrap items-center justify-between gap-2 border-t border-stone-200 py-2">
                   <div className="min-w-0 text-sm">
-                    <div>
+                    <div className="tabular-nums">
                       {dayName} · {isoToVnHHMM(s.approvedStart ?? s.startAt)}–{isoToVnHHMM(s.approvedEnd ?? s.endAt)}
                     </div>
                     <div className="mt-0.5">
@@ -294,6 +312,11 @@ export function ShiftApprovalTab() {
             </Field>
           </div>
         </div>
+        {adjustErr && (
+          <p role="alert" className="mt-2 text-sm text-danger-fg">
+            {adjustErr}
+          </p>
+        )}
       </Sheet>
 
       <TemplateSheet open={tplOpen} onClose={() => setTplOpen(false)} />
@@ -316,17 +339,24 @@ function TemplateSheet({ open, onClose }: { open: boolean; onClose: () => void }
     onSuccess: (_data, v) => {
       setErr(null);
       setName((cur) => (cur === v.name ? '' : cur));
-      return refresh();
+      return settleWithin(refresh());
     },
-    onError: (e) => setErr(errText(e)),
+    onError: (e) => {
+      setErr(errText(e));
+      // Tên ca và giờ do admin gõ: 400 (giờ kết thúc không sau giờ bắt đầu, tên không hợp lệ) là lỗi nhập, chỉ 404/409 tải lại.
+      return reloadWhenStale(e, refresh, true);
+    },
   });
   const delM = useLockedMutation({
     mutationFn: (id: string) => deleteTemplate(coreHttp, id),
     onSuccess: () => {
       setErr(null);
-      return refresh();
+      return settleWithin(refresh());
     },
-    onError: (e) => setErr(errText(e)),
+    onError: (e) => {
+      setErr(errText(e));
+      return reloadWhenStale(e, refresh);
+    },
   });
   const sending = addM.isPending || delM.isPending;
 
@@ -355,7 +385,7 @@ function TemplateSheet({ open, onClose }: { open: boolean; onClose: () => void }
         {tplQ.data?.length === 0 && <p className="text-sm text-stone-500">Chưa có ca chuẩn.</p>}
         {(tplQ.data ?? []).map((t) => (
           <div key={t.id} className="flex items-center justify-between gap-2 text-sm">
-            <span>
+            <span className="tabular-nums">
               {t.name} · {minToHHMM(t.startMin)}–{minToHHMM(t.endMin)}
             </span>
             <button

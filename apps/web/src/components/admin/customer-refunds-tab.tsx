@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   dismissCustomerRefund,
   listCustomerRefunds,
@@ -44,6 +44,9 @@ import { useConfirm } from './confirm-dialog';
 import { formatDateTime } from '@/lib/format-date';
 import { useDebounced } from '@/lib/use-debounced';
 import { loadErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { searchEmptyHint } from './search-empty-hint';
 
 const PAGE_SIZE = 20;
@@ -52,6 +55,9 @@ const PAGE_SIZE = 20;
 const groupDigits = (n: number | null) => (n == null ? '' : String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'));
 
 const fmtDate = formatDateTime;
+
+/** Nút đang chạy báo bận bằng aria-disabled thay `disabled` DOM: Chromium thả tiêu điểm về body khi nút đang giữ tiêu điểm bị disabled. */
+const BUSY_CLASS = 'aria-disabled:opacity-60';
 
 const COD_RETURN_REF = 'cod-return-unverified';
 const HELD_RETURN_REF = 'pancake-partial-return-held';
@@ -148,22 +154,29 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
 
   const qc = useQueryClient();
   const { ask, confirm, dialog } = useConfirm();
-  const release = useMutation({
-    mutationFn: ({ refund: r, takeOverReason }: { refund: AdminCustomerRefund; takeOverReason?: string }) =>
-      releaseCustomerRefund(r.id, takeOverReason ? { takeOverReason } : undefined),
-    onSuccess: (_d, { refund: r }) => {
-      void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
-      void invalidateInbox(qc);
-      setFlash({ tone: 'success', text: `Đã trả khoản ${formatVnd(r.amount)} (đơn ${r.orderCode}) về hàng chờ. Khách lại đổi được nơi nhận.` });
+  // Lệnh ghi giữ khoá tới khi danh sách làm mới về (tối đa 4 giây): nhả sớm thì dòng vừa xử lý còn nút và bấm lại ra lỗi "không còn chờ".
+  // Quy tắc 400/404/409 chỉ quyết định việc CHỜ tải lại trước khi nhả khoá (khoản đã đổi thì dòng còn nút cũ); lỗi khác nhả khoá ngay vì 5xx/403/mất mạng không nói gì về trạng thái thật.
+  // Trên production MutationCache vẫn làm cũ mọi khoá admin-* sau mỗi lệnh kể cả lỗi 5xx, nên lệnh đã ghi trước khi lỗi vẫn được tải lại ở nền (không ai chờ).
+  // Khoá theo id khoản (ref đồng bộ): chạm đúp cùng khung hình chỉ gửi một lệnh. Lời báo ở cấp tab nên không mất khi dòng bị gỡ.
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] }), invalidateInbox(qc)]);
+  const release = useLockedMutation(
+    {
+      mutationFn: ({ refund: r, takeOverReason }: { refund: AdminCustomerRefund; takeOverReason?: string }) =>
+        releaseCustomerRefund(r.id, takeOverReason ? { takeOverReason } : undefined),
+      onSuccess: (_d, { refund: r }) => {
+        setFlash({ tone: 'success', text: `Đã trả khoản ${formatVnd(r.amount)} (đơn ${r.orderCode}) về hàng chờ. Khách lại đổi được nơi nhận.` });
+        return settleWithin(refresh());
+      },
+      onError: (e) => {
+        setFlash({ tone: 'warning', text: markPaidFailure(e, 'claim').message });
+        return reloadWhenStale(e, refresh);
+      },
     },
-    onError: (e) => {
-      void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
-      void invalidateInbox(qc);
-      setFlash({ tone: 'warning', text: markPaidFailure(e, 'claim').message });
-    },
-  });
+    (v) => v.refund.id,
+  );
 
   const onRelease = async (r: AdminCustomerRefund) => {
+    if (release.isPending) return;
     setFlash(null);
     const from = takeOverFrom(r, meId);
     if (!from) {
@@ -189,51 +202,54 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
     release.mutate({ refund: r, takeOverReason: reason });
   };
 
-  const verify = useMutation({
-    mutationFn: ({ refund: r, amount }: { refund: AdminCustomerRefund; amount: number }) => verifyCustomerRefund(r.id, { amount }),
-    onSuccess: (after, { refund: r, amount }) => {
-      void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
-      void invalidateInbox(qc);
-      setFlash({
-        tone: 'success',
-        text: isHeldReturn(r) || isCodHand(r)
-          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn ${r.orderCode}${isCodHand(r) ? ' (hãng đã thu COD, đã trừ phần nhân viên hoàn tay)' : ''}: ${refundNextStep(r, after)}.`
-          : isCodReturn(r)
-          ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn COD ${r.orderCode}: ${refundNextStep(r, after)}.`
-          : `Đã xác nhận tiền trả dư ${formatVnd(amount)} (đơn ${r.orderCode}). Khách được báo để chọn nhận về Ví Tubu hay tài khoản ngân hàng; khoản chuyển sang "Chờ chuyển khoản".`,
-      });
+  const verify = useLockedMutation(
+    {
+      mutationFn: ({ refund: r, amount }: { refund: AdminCustomerRefund; amount: number }) => verifyCustomerRefund(r.id, { amount }),
+      onSuccess: (after, { refund: r, amount }) => {
+        setFlash({
+          tone: 'success',
+          text: isHeldReturn(r) || isCodHand(r)
+            ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn ${r.orderCode}${isCodHand(r) ? ' (hãng đã thu COD, đã trừ phần nhân viên hoàn tay)' : ''}: ${refundNextStep(r, after)}.`
+            : isCodReturn(r)
+            ? `Đã xác nhận hoàn ${formatVnd(amount)} cho đơn COD ${r.orderCode}: ${refundNextStep(r, after)}.`
+            : `Đã xác nhận tiền trả dư ${formatVnd(amount)} (đơn ${r.orderCode}). Khách được báo để chọn nhận về Ví Tubu hay tài khoản ngân hàng; khoản chuyển sang "Chờ chuyển khoản".`,
+        });
+        return settleWithin(refresh());
+      },
+      onError: (e) => {
+        setFlash({ tone: 'warning', text: overpaymentFailure(e) });
+        return reloadWhenStale(e, refresh);
+      },
     },
-    onError: (e) => {
-      void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
-      void invalidateInbox(qc);
-      setFlash({ tone: 'warning', text: overpaymentFailure(e) });
+    (v) => v.refund.id,
+  );
+  const dismiss = useLockedMutation(
+    {
+      mutationFn: ({ refund: r, reason }: { refund: AdminCustomerRefund; reason: string }) => dismissCustomerRefund(r.id, reason),
+      onSuccess: (_d, { refund: r }) => {
+        setFlash({
+          tone: 'success',
+          text: isHeldReturn(r)
+            ? `Đã ghi không hoàn ${formatVnd(r.amount)} cho đơn ${r.orderCode} (nhân viên đã hoàn tay). Khách không được báo.`
+            : isCodHand(r)
+            ? `Đã ghi không hoàn ${formatVnd(r.amount)} cho đơn COD ${r.orderCode} (hãng chưa thu tiền hoặc nhân viên đã hoàn tay đủ). Khách không được báo.`
+            : isCodReturn(r)
+            ? `Đã ghi không hoàn ${formatVnd(r.amount)} cho đơn COD ${r.orderCode} (hãng vận chuyển chưa thu tiền). Khách không được báo.`
+            : `Đã đánh dấu khoản ${formatVnd(r.amount)} (đơn ${r.orderCode}) không phải tiền dư. Khách không được báo.`,
+        });
+        return settleWithin(refresh());
+      },
+      onError: (e) => {
+        setFlash({ tone: 'warning', text: overpaymentFailure(e) });
+        return reloadWhenStale(e, refresh);
+      },
     },
-  });
-  const dismiss = useMutation({
-    mutationFn: ({ refund: r, reason }: { refund: AdminCustomerRefund; reason: string }) => dismissCustomerRefund(r.id, reason),
-    onSuccess: (_d, { refund: r }) => {
-      void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
-      void invalidateInbox(qc);
-      setFlash({
-        tone: 'success',
-        text: isHeldReturn(r)
-          ? `Đã ghi không hoàn ${formatVnd(r.amount)} cho đơn ${r.orderCode} (nhân viên đã hoàn tay). Khách không được báo.`
-          : isCodHand(r)
-          ? `Đã ghi không hoàn ${formatVnd(r.amount)} cho đơn COD ${r.orderCode} (hãng chưa thu tiền hoặc nhân viên đã hoàn tay đủ). Khách không được báo.`
-          : isCodReturn(r)
-          ? `Đã ghi không hoàn ${formatVnd(r.amount)} cho đơn COD ${r.orderCode} (hãng vận chuyển chưa thu tiền). Khách không được báo.`
-          : `Đã đánh dấu khoản ${formatVnd(r.amount)} (đơn ${r.orderCode}) không phải tiền dư. Khách không được báo.`,
-      });
-    },
-    onError: (e) => {
-      void qc.invalidateQueries({ queryKey: [CUSTOMER_REFUNDS_QUERY_KEY] });
-      void invalidateInbox(qc);
-      setFlash({ tone: 'warning', text: overpaymentFailure(e) });
-    },
-  });
+    (v) => v.refund.id,
+  );
   const deciding = verify.isPending || dismiss.isPending;
 
   const onVerify = async (r: AdminCustomerRefund, amount: number | null) => {
+    if (deciding) return;
     setFlash(null);
     const cod = isCodReturn(r);
     const held = isHeldReturn(r);
@@ -284,6 +300,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
   };
 
   const onDismiss = async (r: AdminCustomerRefund) => {
+    if (deciding) return;
     setFlash(null);
     const cod = isCodReturn(r);
     const held = isHeldReturn(r);
@@ -442,12 +459,15 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
             meId={meId}
             recorded={recorded.has(r.id)}
             releasing={release.isPending && release.variables?.refund.id === r.id}
+            releaseLocked={release.isPending}
             onAction={(mode) => {
               setFlash(null);
               setTarget({ refund: r, mode });
             }}
             onRelease={() => void onRelease(r)}
             deciding={deciding}
+            verifying={verify.isPending && verify.variables?.refund.id === r.id}
+            dismissing={dismiss.isPending && dismiss.variables?.refund.id === r.id}
             onVerify={(amount) => void onVerify(r, amount)}
             onDismiss={() => void onDismiss(r)}
           />
@@ -462,7 +482,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
       {q.data && total > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-2 px-2 text-sm text-stone-600">
           <span>
-            Tổng: <b className="text-stone-900">{total}</b> khoản
+            Tổng: <b className="tabular-nums text-stone-900">{total}</b> khoản
           </span>
           {totalPages > 1 && (
             <div className="flex items-center gap-2">
@@ -474,7 +494,7 @@ export function CustomerRefundsTab({ meId, isAdmin = true, phoneMasked = !isAdmi
               >
                 ← Trước
               </button>
-              <span className="text-xs">
+              <span className="text-xs tabular-nums">
                 Trang {page}/{totalPages}
               </span>
               <button
@@ -510,9 +530,12 @@ export function CustomerRefundRow({
   meId,
   recorded = false,
   releasing = false,
+  releaseLocked = false,
   onAction,
   onRelease,
   deciding = false,
+  verifying = false,
+  dismissing = false,
   onVerify,
   onDismiss,
 }: {
@@ -520,10 +543,15 @@ export function CustomerRefundRow({
   meId?: string;
   recorded?: boolean;
   releasing?: boolean;
+  /** Đang có lệnh "Trả về hàng chờ" chạy ở dòng nào đó: nút của mọi dòng báo bận. */
+  releaseLocked?: boolean;
   onAction: (mode: RefundAction) => void;
   onRelease?: () => void;
-  /** Đang gửi "Xác nhận tiền dư" / "Không phải tiền dư". */
+  /** Đang gửi "Xác nhận tiền dư" / "Không phải tiền dư" (ở dòng nào đó, kể cả lúc chờ danh sách làm mới). */
   deciding?: boolean;
+  /** Dòng này là dòng đang xác nhận / đang bỏ qua. */
+  verifying?: boolean;
+  dismissing?: boolean;
   onVerify?: (amount: number | null) => void;
   onDismiss?: () => void;
 }) {
@@ -542,7 +570,7 @@ export function CustomerRefundRow({
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-base font-semibold text-stone-900">{formatVnd(r.amount)}</span>
+            <span className="text-base font-semibold tabular-nums text-stone-900">{formatVnd(r.amount)}</span>
             <span data-refund-status={view}>
               <ToneBadge tone={CUSTOMER_REFUND_VIEW_TONE[view]}>
                 {view === 'DISMISSED' && heldReturn
@@ -560,7 +588,7 @@ export function CustomerRefundRow({
             Đơn <span className="break-all font-mono text-xs font-medium text-stone-800">{r.orderCode}</span>
           </div>
         </div>
-        <span className="text-xs text-stone-500">Tạo lúc: {fmtDate(r.createdAt)}</span>
+        <span className="text-xs tabular-nums text-stone-500">Tạo lúc: {fmtDate(r.createdAt)}</span>
       </div>
 
       <div className="mt-2 space-y-1 text-sm text-stone-600">
@@ -643,10 +671,23 @@ export function CustomerRefundRow({
               />
               <span className="shrink-0">đ</span>
             </label>
-            <button type="button" className={BTN_WARNING} disabled={deciding} onClick={() => onVerify?.(overpaid)}>
+            {/* Bận bằng aria-busy/aria-disabled chứ không `disabled`: nút vừa đóng hộp xác nhận đang giữ tiêu điểm, vô hiệu thì Chromium thả tiêu điểm về body. */}
+            <button
+              type="button"
+              className={`${BTN_WARNING} ${BUSY_CLASS}`}
+              aria-busy={verifying || undefined}
+              aria-disabled={deciding || undefined}
+              onClick={() => onVerify?.(overpaid)}
+            >
               {heldReturn ? HELD_VERIFY_LABEL : codHand ? COD_HAND_VERIFY_LABEL : codReturn ? COD_VERIFY_LABEL : VERIFY_LABEL}
             </button>
-            <button type="button" className={BTN_SECONDARY} disabled={deciding} onClick={onDismiss}>
+            <button
+              type="button"
+              className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
+              aria-busy={dismissing || undefined}
+              aria-disabled={deciding || undefined}
+              onClick={onDismiss}
+            >
               {heldReturn ? HELD_DISMISS_LABEL : codReturn ? COD_DISMISS_LABEL : DISMISS_LABEL}
             </button>
           </div>
@@ -698,7 +739,13 @@ export function CustomerRefundRow({
                 {`Đã chuyển khoản${takeOverTag}`}
               </button>
               {onRelease && (
-                <button type="button" className={BTN_SECONDARY} disabled={releasing} onClick={onRelease}>
+                <button
+                  type="button"
+                  className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
+                  aria-busy={releasing || undefined}
+                  aria-disabled={releasing || releaseLocked || undefined}
+                  onClick={onRelease}
+                >
                   {releasing ? 'Đang trả…' : `Trả về hàng chờ${takeOverTag}`}
                 </button>
               )}

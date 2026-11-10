@@ -269,7 +269,7 @@ describe('PayrollAdminTab: tờ "Đánh dấu đã trả" và "Lưu đơn giá"'
     expect(c.textContent).toContain('Đã lưu đơn giá.');
   });
 
-  it('"Lưu đơn giá" xong mà bảng lương chưa làm mới: mở lại tờ đơn giá thì nút vẫn bận, không gửi lệnh thứ hai', async () => {
+  it('"Lưu đơn giá" xong mà bảng lương chưa làm mới: nút "Đơn giá" báo bận và không mở lại tờ (tờ sẽ điền sẵn đơn giá cũ), không gửi lệnh thứ hai; bảng về thì mở lại được', async () => {
     const list = deferred();
     const api = stub([row('1', 'Lan', 'OPEN')], { list: list.promise });
     const c = await mount();
@@ -280,15 +280,20 @@ describe('PayrollAdminTab: tờ "Đánh dấu đã trả" và "Lưu đơn giá"'
     await flush();
     expect(api.writes()).toHaveLength(1);
     expect(dialog()).toBeNull();
-    click(q(c, 'Đơn giá · Lan'));
-    await flush();
-    const save = byText(document.body, 'button', 'Lưu đơn giá') as HTMLButtonElement;
-    expect(save.getAttribute('aria-busy')).toBe('true');
-    await tap(save);
+    const open = q(c, 'Đơn giá · Lan') as HTMLButtonElement;
+    expect(open.getAttribute('aria-busy')).toBe('true');
+    expect(open.getAttribute('aria-disabled')).toBe('true');
+    expect(open.disabled).toBe(false);
+    await tap(open);
+    expect(dialog()).toBeNull();
     expect(api.writes()).toHaveLength(1);
     list.resolve();
     await flush();
-    expect(save.hasAttribute('aria-busy')).toBe(false);
+    expect(open.hasAttribute('aria-busy')).toBe(false);
+    click(open);
+    await flush();
+    expect(dialog()).not.toBeNull();
+    expect((byText(document.body, 'button', 'Lưu đơn giá') as HTMLButtonElement).hasAttribute('aria-busy')).toBe(false);
   });
 });
 

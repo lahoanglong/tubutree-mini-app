@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { StaffRole } from '@tubutree/app-core/api/staff';
 import { adminStaffQuery } from '@tubutree/app-core/queries/staff';
 import { grantDoneText, grantPermissionsHint } from '@tubutree/app-core/staff-copy';
 import { coreHttp } from '@/lib/core-http';
 import { usePressLock } from '@/lib/use-press-lock';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { grantStaffRole, revokeStaffRole, setStaffPermissions, STAFF_PERMISSION_LABELS, STAFF_PERMISSION_SHORT, type StaffPermission } from '@/lib/admin-client';
 import { errText } from '@/components/staff/staff-shell';
@@ -30,8 +32,12 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
   const [role, setRole] = useState<StaffRole>('STAFF');
   const [newPerms, setNewPerms] = useState<StaffPermission[]>([]);
   const [msg, setMsg] = useState<{ tone: 'success' | 'warning' | 'danger'; text: string } | null>(null);
-  // Trả lời hứa làm mới để khoá giữ tới khi danh sách nhân sự mới về: nhả sớm thì người vừa thu hồi còn nút "Thu hồi" và bấm lại được.
+  // Trả lời hứa làm mới để khoá giữ tới khi danh sách nhân sự mới về (tối đa `settleWithin`): nhả sớm thì người vừa thu hồi còn nút "Thu hồi" và bấm lại được.
+  // Lệnh bị từ chối 404/409 (người đã mất quyền ở máy khác, lời mời hết hạn) cũng tải lại, vì dòng đang hiện đã cũ; cả ba lệnh đều có ô nhập (SĐT, nhóm việc, lý do) nên 400 là lỗi nhập, chỉ hiện lời lỗi.
+  // Quy tắc này chỉ quyết định việc CHỜ tải lại trước khi nhả khoá: trên production MutationCache vẫn làm cũ khoá admin-* ở lỗi khác.
   const refresh = () => qc.invalidateQueries({ queryKey: ['admin-staff'] });
+  // Lời báo thành công của từng ô nhóm việc nằm ở đây, không ở trong ô: ô dựng lại bằng `key` khi nhóm việc đổi sau lần làm mới.
+  const [pickerNotes, setPickerNotes] = useState<Record<string, string>>({});
   // Thêm lại SĐT của người đã là nhân viên: máy chủ thay nhóm cũ bằng nhóm chọn ở đây, nên báo trước nhóm họ đang có.
   const typedPhone = phone.trim();
   const existingStaff = role === 'STAFF' ? staffQ.data?.members.find((m) => m.role === 'STAFF' && m.phone === typedPhone) : undefined;
@@ -53,9 +59,13 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
       setMsg({ tone: 'success', text: grantDoneText(r, to, names, alreadyStaff) });
       setPhone((cur) => (cur.trim() === to ? '' : cur));
       setNewPerms((cur) => (cur === sentPerms ? [] : cur));
-      return refresh();
+      return settleWithin(refresh());
     },
-    onError: (e) => setMsg({ tone: 'danger', text: errText(e) }),
+    onError: (e) => {
+      setMsg({ tone: 'danger', text: errText(e) });
+      // SĐT, nhóm việc và lý do do admin nhập: 400 là lỗi nhập (SĐT sai dạng, tự cấp cho chính mình...), chỉ 404/409 tải lại.
+      return reloadWhenStale(e, refresh, true);
+    },
   });
 
   const revokeM = useLockedMutation({
@@ -69,9 +79,12 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
             }
           : { tone: 'success', text: 'Đã thu hồi quyền.' },
       );
-      return refresh();
+      return settleWithin(refresh());
     },
-    onError: (e) => setMsg({ tone: 'danger', text: errText(e) }),
+    onError: (e) => {
+      setMsg({ tone: 'danger', text: errText(e) });
+      return reloadWhenStale(e, refresh, true);
+    },
   });
 
   /** Hỏi lý do (bắt buộc, ít nhất 3 ký tự). Trả null khi bỏ qua hoặc lý do quá ngắn (đã báo ở khung thông báo). */
@@ -255,6 +268,9 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
                     current={(m.staffPermissions ?? []) as StaffPermission[]}
                     save={async (perms, reason) => (await setStaffPermissions(m.id, perms, reason)).changed}
                     savedText="Đã lưu nhóm việc. Nhân viên thấy mục mới ở lần mở trang kế tiếp."
+                    note={pickerNotes[m.id]}
+                    onNote={(text) => setPickerNotes((cur) => ({ ...cur, [m.id]: text ?? '' }))}
+                    onFail={(text) => setMsg({ tone: 'danger', text })}
                     onSaved={refresh}
                   />
                 )}
@@ -294,6 +310,9 @@ export function StaffRosterTab({ meId }: { meId?: string } = {}) {
                           return true;
                         }}
                         savedText="Đã lưu nhóm việc của lời mời. Họ nhận đúng nhóm này khi mở app lần đầu."
+                        note={pickerNotes[p.phone]}
+                        onNote={(text) => setPickerNotes((cur) => ({ ...cur, [p.phone]: text ?? '' }))}
+                        onFail={(text) => setMsg({ tone: 'danger', text })}
                         onSaved={refresh}
                       />
                     )}
@@ -313,28 +332,40 @@ function PermissionPicker({
   current,
   save: persist,
   savedText,
+  note,
+  onNote,
+  onFail,
   onSaved,
 }: {
   current: StaffPermission[];
   /** Lưu danh sách nhóm; trả về có thay đổi thật hay không. */
   save: (perms: StaffPermission[], reason: string) => Promise<boolean>;
   savedText: string;
-  onSaved: () => void;
+  /** Lời báo thành công do thẻ cha giữ: ô này bị dựng lại (đổi `key`) ngay khi nhóm việc mới về, state của chính nó sẽ mất. */
+  note: string | undefined;
+  onNote: (text: string | null) => void;
+  /** Lời lỗi đi lên khung thông báo chung: dòng này có thể biến mất khi danh sách tải lại sau lệnh bị từ chối. */
+  onFail: (text: string) => void;
+  onSaved: () => Promise<unknown>;
 }) {
   const [perms, setPerms] = useState<StaffPermission[]>(current);
-  const [msg, setMsg] = useState<{ tone: 'success' | 'danger'; text: string } | null>(null);
   const { ask, dialog } = useConfirm();
-  const save = useMutation({
-    mutationFn: (reason: string) => persist(perms, reason),
+  // Giữ tới khi danh sách nhân sự mới về (tối đa `settleWithin`); lệnh bị từ chối vì dòng đã cũ thì tải lại rồi mới nhả.
+  const save = useLockedMutation({
+    mutationFn: (v: { reason: string; perms: StaffPermission[] }) => persist(v.perms, v.reason),
     onSuccess: (changed) => {
-      setMsg({ tone: 'success', text: changed ? savedText : 'Không có gì thay đổi.' });
-      onSaved();
+      onNote(changed ? savedText : 'Không có gì thay đổi.');
+      return settleWithin(onSaved());
     },
-    onError: (e) => setMsg({ tone: 'danger', text: errText(e) }),
+    onError: (e) => {
+      onFail(errText(e));
+      return reloadWhenStale(e, onSaved, true);
+    },
   });
   const dirty = [...perms].sort().join(',') !== [...current].sort().join(',');
   const askSave = async () => {
-    setMsg(null);
+    if (save.isPending) return;
+    onNote(null);
     const reason = await ask({
       title: 'Lưu nhóm việc',
       message: 'Đổi nhóm việc? Bỏ tick là mất quyền ngay.',
@@ -343,10 +374,10 @@ function PermissionPicker({
     });
     if (reason === null) return;
     if (reason.length < 3) {
-      setMsg({ tone: 'danger', text: 'Lý do cần ít nhất 3 ký tự.' });
+      onFail('Lý do cần ít nhất 3 ký tự.');
       return;
     }
-    save.mutate(reason);
+    save.mutate({ reason, perms });
   };
   return (
     <fieldset className="space-y-1">
@@ -366,12 +397,20 @@ function PermissionPicker({
           </span>
         </label>
       ))}
-      <button type="button" disabled={!dirty || save.isPending} onClick={() => void askSave()} className={BTN_PRIMARY}>
+      {/* Đang lưu giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body. Chưa đổi gì thì vẫn disabled thật. */}
+      <button
+        type="button"
+        disabled={!dirty}
+        aria-busy={save.isPending || undefined}
+        aria-disabled={save.isPending || undefined}
+        onClick={() => void askSave()}
+        className={`${BTN_PRIMARY} aria-disabled:opacity-60`}
+      >
         {save.isPending ? 'Đang lưu…' : 'Lưu nhóm việc'}
       </button>
-      {msg && (
-        <Notice tone={msg.tone} role={msg.tone === 'danger' ? 'alert' : 'status'}>
-          {msg.text}
+      {note && (
+        <Notice tone="success" role="status">
+          {note}
         </Notice>
       )}
       {dialog}

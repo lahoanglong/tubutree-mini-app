@@ -152,7 +152,11 @@ describe('DealerPaymentPanel (chi tiết đơn admin)', () => {
     await flush();
     expect(confirmDialog()).toBeNull();
     expect(calls).toHaveLength(1);
-    expect((byText(container, 'button', /Đang xác nhận|Xác nhận đã nhận chuyển khoản/) as HTMLButtonElement).disabled).toBe(true);
+    // Nút vừa nhận lại tiêu điểm từ hộp xác nhận: `disabled` làm Chromium thả tiêu điểm về body, nên khoá bằng aria-disabled + aria-busy.
+    const busyBtn = byText(container, 'button', /Đang xác nhận|Xác nhận đã nhận chuyển khoản/) as HTMLButtonElement;
+    expect(busyBtn.getAttribute('aria-disabled')).toBe('true');
+    expect(busyBtn.getAttribute('aria-busy')).toBe('true');
+    expect(busyBtn.disabled).toBe(false);
     release();
     await flush();
     expect(container.querySelector('[role="status"]')?.textContent).toBe('Đã xác nhận thanh toán đơn TB-200.');

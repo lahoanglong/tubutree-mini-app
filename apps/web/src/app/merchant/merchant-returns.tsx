@@ -1,12 +1,15 @@
 'use client';
 
-import React from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import React, { useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listMerchantReturns, markMerchantReturnReceived, type MerchantReturn } from '@/lib/merchant-client';
 import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_PRIMARY, ToneBadge } from '@/components/admin/ui';
 import { EvidenceImages } from '@/components/admin/evidence-images';
 import { actionErrorText } from '@/lib/error-text';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
 
 export const MERCHANT_RETURNS_KEY = ['merchant-returns'] as const;
 
@@ -23,11 +26,20 @@ function stateOf(r: MerchantReturn): { tone: 'warning' | 'info' | 'success'; lab
 export function MerchantReturnsSection({ showEmpty = false }: { showEmpty?: boolean }) {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: MERCHANT_RETURNS_KEY, queryFn: listMerchantReturns });
-  const received = useMutation({
+  // Lời lỗi ở state riêng: `received.isError` chỉ lật sau khi Promise của onError xong, tức sau lần tải lại (tối đa 4 giây).
+  const [error, setError] = useState<string | null>(null);
+  const refresh = () => {
+    void qc.invalidateQueries({ queryKey: ['merchant-settlement'] });
+    return qc.invalidateQueries({ queryKey: MERCHANT_RETURNS_KEY });
+  };
+  // Một yêu cầu mỗi lúc, giữ khoá tới khi danh sách hàng trả về làm mới (tối đa 4 giây): nhả sớm thì dòng vừa nhận còn nút và bấm lại ra lỗi (hoặc cộng kho hai lần nếu máy chủ không chặn).
+  const received = useLockedMutation({
     mutationFn: (id: string) => markMerchantReturnReceived(id),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: MERCHANT_RETURNS_KEY });
-      void qc.invalidateQueries({ queryKey: ['merchant-settlement'] });
+    onMutate: () => setError(null),
+    onSuccess: () => settleWithin(refresh()),
+    onError: (e: unknown) => {
+      setError(actionErrorText(e));
+      return reloadWhenStale(e, refresh);
     },
   });
   if (q.isError) return <p className="text-sm text-danger-fg">Không tải được danh sách hàng trả về.</p>;
@@ -44,9 +56,9 @@ export function MerchantReturnsSection({ showEmpty = false }: { showEmpty?: bool
         Tubu Tree xét và hoàn tiền cho khách. Khi nhận được hàng, bấm &quot;Đã nhận hàng trả&quot; để cộng lại tồn kho; phần đã đối
         soát cho đơn được trừ lại ở kỳ sau.
       </p>
-      {received.isError && (
+      {error && (
         <p role="alert" className="text-sm text-danger-fg">
-          {actionErrorText(received.error)}
+          {error}
         </p>
       )}
       <ul className="space-y-2">
@@ -78,8 +90,9 @@ export function MerchantReturnsSection({ showEmpty = false }: { showEmpty?: bool
                 <button
                   type="button"
                   onClick={() => received.mutate(r.id)}
-                  disabled={received.isPending}
-                  className={`${BTN_XS_PRIMARY} min-h-[44px] sm:min-h-0`}
+                  aria-busy={(received.isPending && received.variables === r.id) || undefined}
+                  aria-disabled={received.isPending || undefined}
+                  className={`${BTN_XS_PRIMARY} min-h-[44px] aria-disabled:opacity-60 sm:min-h-0`}
                 >
                   {received.isPending && received.variables === r.id ? 'Đang ghi nhận…' : 'Đã nhận hàng trả'}
                 </button>

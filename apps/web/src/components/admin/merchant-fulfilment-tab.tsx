@@ -1,6 +1,6 @@
 'use client';
 
-import { useId, useState } from 'react';
+import { useId, useRef, useState } from 'react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   cancelAdminMerchantPayout,
@@ -18,8 +18,17 @@ import { payoutStatus, payoutToTubu } from '@/lib/merchant-payout';
 import { formatDate, formatDateTime } from '@/lib/format-date';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { ApiError } from '@/lib/client-api';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ScrollRegion, ToneBadge, chipClass, LoadError } from './ui';
+
+/** Nút đang chạy báo bận bằng aria-disabled thay `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */
+const BUSY_CLASS = 'aria-disabled:opacity-60';
+
+/** Hàm của tab trả về Promise (làm mới, báo lỗi) để lệnh ghi giữ khoá của mình tới khi dữ liệu mới về. */
+type Settled = Promise<void> | undefined;
 import { ConsignmentExcludedList, SettlementTable, formatPct } from '@/components/settlement-table';
 import { useNarrowScreen } from './side-drawer';
 import { useConfirm } from './confirm-dialog';
@@ -74,30 +83,55 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
   });
   const slips = mergeQueuePages(payoutsQ.data?.pages, false);
   const [error, setError] = useState<string | null>(null);
-  const refresh = () => {
+  // Lệnh ghi giữ khoá tới khi tổng quan và danh sách phiếu làm mới về (tối đa 4 giây): nhả sớm thì hàng vừa lập/ghi sổ còn nút và bấm lại ra phiếu trùng hoặc lỗi "đã đổi".
+  const reload = () =>
+    Promise.all([qc.invalidateQueries({ queryKey: ['admin-merchant-fulfilment'] }), qc.invalidateQueries({ queryKey: ['admin-merchant-payouts'] })]);
+  const refresh = (): Settled => {
     setError(null);
-    void qc.invalidateQueries({ queryKey: ['admin-merchant-fulfilment'] });
-    void qc.invalidateQueries({ queryKey: ['admin-merchant-payouts'] });
     void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
+    return settleWithin(reload());
   };
-  const onError = (e: unknown) => {
+  const showError = (e: unknown): undefined => {
     const text = actionErrorText(e);
     // Chữ của máy chủ không cho biết thao tác đã ghi hay chưa (5xx vẫn có thể mang lời tiếng Việt), nên khi lỗi không phải 4xx thì nhắc tải lại.
     const unsure = !(e instanceof ApiError) || e.status >= 500;
     setError(unsure ? `${text} Tải lại trang để xem trạng thái hiện tại.` : text);
+    return undefined;
   };
+  // Lập phiếu bị từ chối vì dữ liệu đang hiện đã cũ (400/404/409: tổng bảng kê vừa khác, không còn khoản nào) thì chờ tải lại rồi mới nhả khoá. Ghi sổ/huỷ phiếu chỉ 404/409 (phiếu đã đổi):
+  // 400 của hai lệnh đó là lỗi nhập, PayoutRow tự xử lý. Lời lỗi ở state của tab nên không mất cùng hàng/phiếu bị gỡ.
+  // Bật/tắt đối tác và lưu phí bị từ chối vì luật nghiệp vụ (còn việc dở, ngoài khoảng), không phải dữ liệu cũ: màn không chờ tải lại. Quy tắc 400/404/409 chỉ quyết định việc CHỜ tải lại
+  // trước khi nhả khoá; trên production MutationCache vẫn làm cũ mọi khoá admin-* sau mỗi lệnh (kể cả lệnh lỗi), nên danh sách vẫn có thể tự tải lại.
+  const onError = (e: unknown): Settled => {
+    showError(e);
+    return reloadWhenStale(e, reload);
+  };
+  // Ref vì `isPending` chỉ đúng sau lần vẽ kế: hai cú chạm sát nhau vẫn đều thấy nút rảnh.
+  const creating = useRef(false);
   const createMut = useMutation({
     mutationFn: (s: { storefrontId: string; settleableAmount: number }) => createAdminMerchantPayout(s.storefrontId, s.settleableAmount),
     onSuccess: refresh,
     onError,
+    onSettled: () => {
+      creating.current = false;
+    },
   });
+  const onCreate = (s: OverviewStore) => {
+    if (creating.current) return;
+    creating.current = true;
+    createMut.mutate(s);
+  };
+  const partnering = useRef(false);
   const partnerMut = useMutation({
     mutationFn: (v: { storefrontId: string; isPartner: boolean }) => setStorefrontPartner(v.storefrontId, v.isPartner),
     onSuccess: refresh,
-    onError,
+    onError: showError,
+    onSettled: () => {
+      partnering.current = false;
+    },
   });
   const onTogglePartner = async (s: OverviewStore) => {
-    if (partnerMut.isPending) return;
+    if (partnering.current) return;
     const next = !s.isPartner;
     const ok = await confirm({
       title: next ? 'Bật gian hàng đối tác' : 'Tắt gian hàng đối tác',
@@ -108,7 +142,10 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
       cancelLabel: 'Đóng',
       tone: next ? 'default' : 'danger',
     });
-    if (ok && !partnerMut.isPending) partnerMut.mutate({ storefrontId: s.storefrontId, isPartner: next });
+    if (ok && !partnering.current) {
+      partnering.current = true;
+      partnerMut.mutate({ storefrontId: s.storefrontId, isPartner: next });
+    }
   };
   const partnerToggle = isAdmin ? { onToggle: onTogglePartner, pending: partnerMut.isPending } : undefined;
   const [panel, setPanel] = useState<{ storefrontId: string; kind: 'lines' | 'fees' } | null>(null);
@@ -157,7 +194,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
                     defaultPct={defaultPct}
                     creating={createMut.isPending}
                     open={panel?.storefrontId === s.storefrontId ? panel.kind : null}
-                    onCreate={() => createMut.mutate(s)}
+                    onCreate={() => onCreate(s)}
                     onToggle={(kind) => toggle(s.storefrontId, kind)}
                     partner={partnerToggle}
                     canEditFees={isAdmin}
@@ -185,7 +222,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
                         defaultPct={defaultPct}
                         creating={createMut.isPending}
                         open={panel?.storefrontId === s.storefrontId ? panel.kind : null}
-                        onCreate={() => createMut.mutate(s)}
+                        onCreate={() => onCreate(s)}
                         onToggle={(kind) => toggle(s.storefrontId, kind)}
                         partner={partnerToggle}
                         canEditFees={isAdmin}
@@ -214,9 +251,9 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
                   defaultPct={defaultPct}
                   onSaved={() => {
                     setPanel(null);
-                    refresh();
+                    return refresh();
                   }}
-                  onError={onError}
+                  onError={showError}
                 />
               )}
             </div>
@@ -298,7 +335,7 @@ interface StoreRowProps {
 function StoreActions({ store: s, creating, open, onCreate, onToggle, partner, canEditFees }: StoreRowProps) {
   return (
     <>
-      <button type="button" disabled={s.settleableLines === 0 || creating} onClick={onCreate} className={BTN_XS_PRIMARY}>
+      <button type="button" disabled={s.settleableLines === 0} aria-busy={creating || undefined} aria-disabled={creating || undefined} onClick={onCreate} className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}>
         Lập phiếu đối soát
       </button>
       <button type="button" disabled={s.settleableLines === 0} aria-expanded={open === 'lines'} onClick={() => onToggle('lines')} className={BTN_XS_SECONDARY}>
@@ -310,7 +347,13 @@ function StoreActions({ store: s, creating, open, onCreate, onToggle, partner, c
         </button>
       )}
       {partner && s.type === 'CTV' && (
-        <button type="button" disabled={partner.pending} onClick={() => partner.onToggle(s)} className={s.isPartner ? BTN_XS_DANGER : BTN_XS_SECONDARY}>
+        <button
+          type="button"
+          aria-busy={partner.pending || undefined}
+          aria-disabled={partner.pending || undefined}
+          onClick={() => partner.onToggle(s)}
+          className={`${s.isPartner ? BTN_XS_DANGER : BTN_XS_SECONDARY} ${BUSY_CLASS}`}
+        >
           {s.isPartner ? 'Tắt đối tác' : 'Bật đối tác'}
         </button>
       )}
@@ -417,13 +460,14 @@ function StoreTermsForm({
 }: {
   store: OverviewStore;
   defaultPct: number;
-  onSaved: () => void;
-  onError: (e: unknown) => void;
+  onSaved: () => Settled;
+  onError: (e: unknown) => Settled;
 }) {
   const asPct = (f: number | null | undefined) => (f == null ? '' : String(Math.round(f * 10_000) / 100));
   const [commission, setCommission] = useState(asPct(s.commissionPct));
   const [feePct, setFeePct] = useState(asPct(s.consignmentFeePct ?? 0));
   const [feeFixed, setFeeFixed] = useState(String(s.consignmentFeeFixed ?? 0));
+  const saving = useRef(false);
   const mut = useMutation({
     mutationFn: () =>
       updateAdminMerchantStoreTerms(s.storefrontId, {
@@ -433,6 +477,9 @@ function StoreTermsForm({
       }),
     onSuccess: onSaved,
     onError,
+    onSettled: () => {
+      saving.current = false;
+    },
   });
   const id = (k: string) => `terms-${s.storefrontId}-${k}`;
   return (
@@ -440,6 +487,8 @@ function StoreTermsForm({
       className="space-y-2"
       onSubmit={(e) => {
         e.preventDefault();
+        if (saving.current) return;
+        saving.current = true;
         mut.mutate();
       }}
     >
@@ -489,7 +538,7 @@ function StoreTermsForm({
             className={`mt-1 block w-36 ${FIELD_XS}`}
           />
         </div>
-        <button type="submit" disabled={mut.isPending} className={BTN_XS_PRIMARY}>
+        <button type="submit" aria-busy={mut.isPending || undefined} aria-disabled={mut.isPending || undefined} className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}>
           Lưu phí
         </button>
       </div>
@@ -509,15 +558,29 @@ function PayoutRow({
   canConfirmToTubu,
 }: {
   payout: MerchantPayout;
-  onDone: () => void;
-  onError: (e: unknown) => void;
+  onDone: () => Settled;
+  onError: (e: unknown) => Settled;
   canConfirmToTubu: boolean;
 }) {
   const [bankRef, setBankRef] = useState('');
   const [refMissing, setRefMissing] = useState(false);
   const refErrorId = useId();
-  const paidMut = useMutation({ mutationFn: () => markAdminMerchantPayoutPaid(p.id, bankRef.trim()), onSuccess: onDone, onError });
-  const cancelMut = useMutation({ mutationFn: (reason: string) => cancelAdminMerchantPayout(p.id, reason), onSuccess: onDone, onError });
+  // Mã giao dịch và lý do huỷ là ô người dùng nhập: máy chủ chỉ trả 400 khi ô trống hoặc quá dài (phiếu đã đổi là 404/409). Lỗi nhập hiện ngay trong dòng này,
+  // không tải lại danh sách (không sửa được lỗi nhập) và không lên đầu tab, xa dòng đang làm.
+  const [rowError, setRowError] = useState<string | null>(null);
+  const onRowError = (e: unknown): Settled => {
+    if (errorStatus(e) !== 400) return onError(e);
+    setRowError(actionErrorText(e));
+    return undefined;
+  };
+  // Ghi sổ và Huỷ phiếu loại trừ nhau trên một phiếu và đều không rút lại được: ref vì `isPending` chỉ đúng sau lần vẽ kế.
+  const acting = useRef(false);
+  const releaseActing = () => {
+    acting.current = false;
+  };
+  const clearRowError = () => setRowError(null);
+  const paidMut = useMutation({ mutationFn: () => markAdminMerchantPayoutPaid(p.id, bankRef.trim()), onMutate: clearRowError, onSuccess: onDone, onError: onRowError, onSettled: releaseActing });
+  const cancelMut = useMutation({ mutationFn: (reason: string) => cancelAdminMerchantPayout(p.id, reason), onMutate: clearRowError, onSuccess: onDone, onError: onRowError, onSettled: releaseActing });
   const { confirm, ask, dialog } = useConfirm();
   const busy = paidMut.isPending || cancelMut.isPending;
   const bank = p.bankInfo;
@@ -525,6 +588,7 @@ function PayoutRow({
   const status = payoutStatus(p, 'admin');
   const cancelled = p.status === 'CANCELLED';
   const askCancel = async () => {
+    if (acting.current) return;
     const reason = await ask({
       title: 'Huỷ phiếu đối soát?',
       message: `Phiếu ${signed(p.amount)} của ${p.storefront?.title ?? 'gian hàng'} (${p.lines.length} khoản) sẽ bị huỷ và các khoản quay lại bảng kê để lập phiếu mới. Gian hàng đã được báo có phiếu sẽ nhận thông báo huỷ kèm lý do bên dưới.`,
@@ -532,10 +596,14 @@ function PayoutRow({
       tone: 'danger',
       input: { label: 'Lý do huỷ (gian hàng sẽ đọc được)', placeholder: 'Vd: sai tài khoản nhận, lập nhầm kỳ', maxLength: 300, required: true },
     });
-    if (reason) cancelMut.mutate(reason);
+    if (reason && !acting.current) {
+      acting.current = true;
+      cancelMut.mutate(reason);
+    }
   };
   // Ghi sổ đối soát là không rút lại được; Enter trong ô mã giao dịch cũng gửi form nên bước hỏi phải nằm ở đây, không ở nút.
   const askPaid = async () => {
+    if (acting.current) return;
     const ref = bankRef.trim();
     // `required` của trình duyệt cho qua ô toàn dấu cách, còn API từ chối mã rỗng.
     if (!ref) {
@@ -562,7 +630,10 @@ function PayoutRow({
       confirmLabel: toTubu ? 'Đã thu' : 'Đã chuyển',
       tone: 'danger',
     });
-    if (ok) paidMut.mutate();
+    if (ok && !acting.current) {
+      acting.current = true;
+      paidMut.mutate();
+    }
   };
   return (
     <li className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 text-xs shadow-card">
@@ -639,16 +710,21 @@ function PayoutRow({
                     </p>
                   )}
                 </div>
-                <button type="submit" disabled={busy} className={BTN_XS_PRIMARY}>
+                <button type="submit" aria-busy={paidMut.isPending || undefined} aria-disabled={busy || undefined} className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}>
                   {toTubu ? 'Đã thu' : 'Đã chuyển'}
                 </button>
               </>
             )}
-            <button type="button" disabled={busy} onClick={() => void askCancel()} className={BTN_XS_DANGER}>
+            <button type="button" aria-busy={cancelMut.isPending || undefined} aria-disabled={busy || undefined} onClick={() => void askCancel()} className={`${BTN_XS_DANGER} ${BUSY_CLASS}`}>
               Huỷ phiếu
             </button>
           </form>
         </>
+      )}
+      {rowError && (
+        <p role="alert" className="text-danger-fg">
+          {rowError}
+        </p>
       )}
       {dialog}
     </li>

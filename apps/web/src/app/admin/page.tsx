@@ -7,6 +7,11 @@ import { AlertTriangle, Banknote, Check, ChevronDown, ChevronUp, Download, Recyc
 import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/lib/auth-context';
 import { formatVnd } from '@/lib/shop-client';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
+import { settleWithin } from '@/lib/settle-within';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
+import { usePressLock } from '@/lib/use-press-lock';
 import {
   listDealerApps,
   reviewDealerApp,
@@ -816,8 +821,20 @@ export default function AdminPage() {
   );
 }
 
+/** Nút đang chạy báo bận bằng aria-disabled thay `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */
+const BUSY_CLASS = 'aria-disabled:opacity-60';
+/** 400 của lệnh có ô người dùng nhập: lỗi nhập liệu của DTO, hiện ngay tại form và không tải lại (xem `hasInput` ở lib/stale-write-rejection.ts). */
+const isInputRejection = (e: unknown) => errorStatus(e) === 400;
+/** Mọi khoá `admin-*` trừ danh sách người dùng: cùng phạm vi MutationCache.onSettled của createQueryClient (lib/query-client.ts), phần danh sách người dùng được chờ riêng. */
+const ADMIN_KEYS_EXCEPT_USERS = {
+  predicate: (query: { queryKey: readonly unknown[] }) =>
+    typeof query.queryKey[0] === 'string' && query.queryKey[0].startsWith('admin-') && query.queryKey[0] !== 'admin-users',
+};
+
 function DealersTab() {
   const [filter, setFilter] = useState('PENDING');
+  // Lời lỗi của lệnh duyệt/từ chối nằm ở đây, ngoài từng hàng: tải lại danh sách làm hàng đã bị xử lý biến mất thì lời lỗi vẫn còn.
+  const [reviewError, setReviewError] = useState<string | null>(null);
   // Phân trang thật + "Tải thêm": trước đây chỉ lấy 1 trang (limit 100) và vứt meta → quá 100 hồ sơ thì
   // phần cũ nhất (chờ lâu nhất) biến mất khỏi màn hình mà không ai biết.
   const q = useInfiniteQuery({
@@ -856,15 +873,16 @@ function DealersTab() {
       </div>
       <QueueMoreNotice pending={pending} view={view} noun="hồ sơ" />
       <div className="mt-3 space-y-3">
-        {q.isError && <LoadError message="Không tải được danh sách hồ sơ đại lý." onRetry={() => void q.refetch()} />}
+        {q.isError && <LoadError message="Không tải được danh sách hồ sơ đại lý." onRetry={() => q.refetch()} />}
+        {reviewError && <p role="alert" className="text-sm text-danger-fg">{reviewError}</p>}
         {q.isLoading && <ListSkeleton label="Đang tải danh sách hồ sơ" rows={3} className="h-24" />}
-        {view.items.map((a) => <DealerRow key={a.id} app={a} />)}
+        {view.items.map((a) => <DealerRow key={a.id} app={a} onReviewError={setReviewError} />)}
         {q.data && view.items.length === 0 && <Empty>{pending ? 'Chưa có hồ sơ nào chờ duyệt. Hồ sơ xuất hiện khi khách gửi đơn đăng ký làm đại lý trong ứng dụng.' : 'Không có hồ sơ ở trạng thái này.'}</Empty>}
       </div>
       <LoadMoreButton
         hasMore={view.hasMore}
         loading={q.isFetchingNextPage}
-        onClick={() => void q.fetchNextPage()}
+        onClick={() => q.fetchNextPage()}
         error={q.isFetchNextPageError}
       />
     </div>
@@ -884,12 +902,15 @@ function QueueMoreNotice({ pending, view, noun }: { pending: boolean; view: { to
   );
 }
 
-function LoadMoreButton({ hasMore, loading, error, onClick }: { hasMore: boolean; loading: boolean; error: boolean; onClick: () => void }) {
+function LoadMoreButton({ hasMore, loading, error, onClick }: { hasMore: boolean; loading: boolean; error: boolean; onClick: () => void | PromiseLike<unknown> }) {
+  // Trang đang tải thì bỏ qua cú chạm; cú chạm trả Promise thì khoá tới khi tải xong (fetchNextPage mặc định huỷ rồi gửi lại khi chạm đúp).
+  const more = usePressLock(() => (loading ? undefined : onClick()));
   if (!hasMore) return null;
+  const pending = loading || more.busy;
   return (
     <div className="mt-3 text-center">
       {error && <p className="mb-1 text-xs text-danger-fg">Không tải thêm được, thử lại.</p>}
-      <button type="button" onClick={onClick} disabled={loading} className={BTN_SECONDARY}>
+      <button type="button" onClick={more.press} aria-busy={pending || undefined} aria-disabled={pending || undefined} className={`${BTN_SECONDARY} ${BUSY_CLASS}`}>
         {loading ? 'Đang tải…' : 'Tải thêm'}
       </button>
     </div>
@@ -897,11 +918,13 @@ function LoadMoreButton({ hasMore, loading, error, onClick }: { hasMore: boolean
 }
 
 /** Lỗi tải danh sách kèm nút thử lại: mất mạng vài giây thì không phải F5 cả trang và mất bộ lọc đang chọn. */
-function LoadError({ message, onRetry }: { message: string; onRetry: () => void }) {
+function LoadError({ message, onRetry }: { message: string; onRetry: () => void | PromiseLike<unknown> }) {
+  // Trả Promise (refetch) thì khoá chạm đúp tới khi tải xong; trả void thì không khoá.
+  const retry = usePressLock(onRetry);
   return (
     <div className="flex flex-wrap items-center gap-2">
       <p className="text-sm text-danger-fg">{message}</p>
-      <button type="button" onClick={onRetry} className={BTN_SECONDARY}>
+      <button type="button" onClick={retry.press} aria-busy={retry.busy || undefined} aria-disabled={retry.busy || undefined} className={`${BTN_SECONDARY} ${BUSY_CLASS}`}>
         Thử lại
       </button>
     </div>
@@ -917,20 +940,50 @@ function useDeleteConfirm() {
   return { askDelete, dialog };
 }
 
-function DealerRow({ app: a }: { app: DealerApp }) {
+function DealerRow({ app: a, onReviewError }: { app: DealerApp; onReviewError: (text: string | null) => void }) {
   const qc = useQueryClient();
   const [tierId, setTierId] = useState('');
   const { ask, dialog } = useConfirm();
+  // Ref vì `isPending` chỉ đúng sau lần vẽ kế: hai cú chạm sát nhau vẫn gửi cả hai lệnh. Giữ tới khi lệnh VÀ lần tải lại danh sách xong (`onSettled`).
+  const acting = useRef(false);
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
+  // Số Chờ duyệt trên chip và hộp việc cùng đổi theo danh sách.
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ['admin-dealers'] }), invalidateInbox(qc)]);
   const review = useMutation({
     mutationFn: ({ approve, reason }: { approve: boolean; reason?: string }) =>
       reviewDealerApp(a.id, approve, approve ? tierId.trim() || undefined : undefined, approve ? undefined : reason),
-    // Số Chờ duyệt trên chip và hộp việc cùng đổi theo; lỗi cũng làm mới vì hồ sơ có thể đã bị người khác xử lý.
-    onSuccess: () => Promise.all([qc.invalidateQueries({ queryKey: ['admin-dealers'] }), invalidateInbox(qc)]),
-    onError: () => void invalidateInbox(qc),
+    onMutate: () => onReviewError(null),
+    onSuccess: () => settleWithin(refresh()),
+    onError: (e) => {
+      // Lời lỗi ở cấp danh sách, không ở hàng: tải lại làm hàng đã bị xử lý biến mất thì lời lỗi vẫn còn.
+      onReviewError(actionErrorText(e));
+      // Hồ sơ đã bị admin khác xử lý (400 "Đơn đã được xử lý", 404, 409): chờ tải lại danh sách rồi mới nhả khoá, kẻo bấm lại ra đúng lỗi cũ. Lệnh này không có
+      // DTO kiểm dữ liệu nhập (lý do chỉ @IsOptional, nút Duyệt cần chọn bậc) nên 400 vẫn là dữ liệu cũ. Quy tắc 400/404/409 chỉ quyết định việc CHỜ tải lại trước khi nhả khoá:
+      // lỗi khác nhả ngay và ở đây chỉ hỏi lại hộp việc; trên production MutationCache vẫn làm cũ mọi khoá `admin-*` (kể cả danh sách hồ sơ) ở lỗi khác.
+      const reload = reloadWhenStale(e, refresh);
+      if (reload) return reload;
+      void invalidateInbox(qc);
+      return undefined;
+    },
+    onSettled: () => {
+      acting.current = false;
+    },
   });
+  const approve = () => {
+    if (acting.current) return;
+    acting.current = true;
+    review.mutate({ approve: true });
+  };
   // Từ chối là trạng thái cuối và lý do được gửi nguyên văn cho người nộp, nên bắt admin tự viết.
-  // API báo lỗi (vd hồ sơ vừa bị admin khác xử lý) thì mở lại hộp với lý do đã gõ, không bắt gõ lại.
+  // API báo lỗi (vd hồ sơ vừa bị admin khác xử lý) thì mở lại hộp với lý do đã gõ, không bắt gõ lại, trừ khi tải lại đã làm hàng này biến mất.
   const askReject = async () => {
+    if (acting.current) return;
     let initial = '';
     let error: string | undefined;
     for (;;) {
@@ -943,10 +996,12 @@ function DealerRow({ app: a }: { app: DealerApp }) {
         input: { label: 'Lý do từ chối (gửi cho người nộp)', placeholder: 'Ví dụ: ảnh CCCD mặt sau bị mờ, nộp lại giúp', required: true, initial, error },
       });
       if (!reason) return;
+      acting.current = true;
       try {
         await review.mutateAsync({ approve: false, reason });
         return;
       } catch (e) {
+        if (!alive.current) return;
         initial = reason;
         error = actionErrorText(e);
       }
@@ -975,17 +1030,25 @@ function DealerRow({ app: a }: { app: DealerApp }) {
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />
           <button
-            onClick={() => review.mutate({ approve: true })}
-            disabled={review.isPending || !tierId.trim()}
+            onClick={approve}
+            disabled={!tierId.trim()}
+            aria-busy={review.isPending || undefined}
+            aria-disabled={review.isPending || undefined}
             title={!tierId.trim() ? 'Cần chọn bậc đại lý để duyệt' : undefined}
-            className={BTN_PRIMARY}
+            className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
           >
             Duyệt
           </button>
-          <button onClick={askReject} disabled={review.isPending} className={BTN_DANGER_OUTLINE}>Từ chối</button>
+          <button
+            onClick={askReject}
+            aria-busy={review.isPending || undefined}
+            aria-disabled={review.isPending || undefined}
+            className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`}
+          >
+            Từ chối
+          </button>
         </div>
       )}
-      {review.isError && <p className="mt-1 text-xs text-danger-fg">{actionErrorText(review.error)}</p>}
       {dialog}
     </div>
   );
@@ -1034,7 +1097,7 @@ function DashboardTab({
   });
 
   if (q.isLoading) return <StatCardsSkeleton label="Đang tải số liệu tổng quan" />;
-  if (q.isError || !q.data) return <LoadError message="Không tải được các chỉ số tổng quan." onRetry={() => void q.refetch()} />;
+  if (q.isError || !q.data) return <LoadError message="Không tải được các chỉ số tổng quan." onRetry={() => q.refetch()} />;
 
   const stats = q.data;
 
@@ -1806,7 +1869,7 @@ function OrdersTab({
       {q.isError && (
         <LoadError
           message={`Không tải được danh sách đơn hàng${q.error ? `: ${loadErrorText(q.error)}` : '.'}`}
-          onRetry={() => void q.refetch()}
+          onRetry={() => q.refetch()}
         />
       )}
       {q.isLoading && (narrow ? <ListSkeleton label="Đang tải danh sách đơn hàng" rows={5} className="h-20" /> : <TableSkeleton label="Đang tải danh sách đơn hàng" />)}
@@ -2219,6 +2282,8 @@ function ReturnsTab({
   const [filter, setFilter] = useState<ReturnsFilter>(initialFilter);
   const [searchInput, setSearchInput] = useState('');
   const search = useDebounced(searchInput.trim(), 300);
+  // Lời lỗi của Từ chối / "Đã nhận hàng về" nằm ở đây, ngoài từng hàng: tab lọc mặc định "Chờ duyệt", yêu cầu bị admin khác xử lý trước thì tải lại làm hàng rời bộ lọc và lời lỗi vẫn còn.
+  const [actionError, setActionError] = useState<string | null>(null);
   // Trước đây 1 trang (mặc định 20 của BE) và vứt meta → quá 20 yêu cầu thì các yêu cầu CŨ NHẤT (sát hạn
   // 7 ngày nhất) biến mất im lặng. Nay "Tải thêm" + hiện tổng.
   const oldestFirst = filter === 'REQUESTED' || filter === 'TO_RECEIVE';
@@ -2271,15 +2336,16 @@ function ReturnsTab({
       <QueueMoreNotice pending={pending} view={view} noun="yêu cầu" />
 
       <div className="mt-3 space-y-3">
-        {q.isError && <LoadError message="Không tải được danh sách yêu cầu đổi/trả." onRetry={() => void q.refetch()} />}
+        {q.isError && <LoadError message="Không tải được danh sách yêu cầu đổi/trả." onRetry={() => q.refetch()} />}
+        {actionError && <p role="alert" className="text-sm text-danger-fg">{actionError}</p>}
         {q.isLoading && <ListSkeleton label="Đang tải danh sách yêu cầu" rows={3} className="h-24" />}
-        {view.items.map((r) => <ReturnRow key={r.id} item={r} canReview={canReview} canReceive={canReceive} />)}
+        {view.items.map((r) => <ReturnRow key={r.id} item={r} canReview={canReview} canReceive={canReceive} onActionError={setActionError} />)}
         {q.data && view.items.length === 0 && <Empty>{search ? `Không có yêu cầu đổi/trả nào khớp "${search}". ${searchEmptyHint(search, { phoneMasked: false }) ?? ''}`.trim() : 'Không có yêu cầu đổi/trả nào.'}</Empty>}
       </div>
       <LoadMoreButton
         hasMore={view.hasMore}
         loading={q.isFetchingNextPage}
-        onClick={() => void q.fetchNextPage()}
+        onClick={() => q.fetchNextPage()}
         error={q.isFetchNextPageError}
       />
     </div>
@@ -2309,6 +2375,7 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
   const [exporting, setExporting] = useState(false);
   const narrow = useNarrowScreen();
   const { confirm, ask, dialog } = useConfirm();
+  const qc = useQueryClient();
 
   const exportAll = async () => {
     setMsg(null);
@@ -2322,23 +2389,51 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
       setExporting(false);
     }
   };
-  const onError = (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) });
+  // Khoá/mở khoá đổi `isBlocked` của chính hàng đang hiện nên giữ khoá theo người dùng tới khi danh sách mới về (tối đa `settleWithin`): nhả sớm thì
+  // hàng còn nút cũ và chạm lại ra lỗi "đã khoá". Ref vì `isPending` chỉ đúng sau lần vẽ kế tiếp. Khoá và mở khoá chung một sổ vì một người chỉ ở một trạng thái.
+  const acting = useRef(new Set<string>());
+  const releaseUser = (_d: unknown, _e: unknown, v: { id: string }) => {
+    acting.current.delete(v.id);
+  };
+  // Làm cũ cùng phạm vi với MutationCache.onSettled của createQueryClient (mọi khoá `admin-*`: hộp việc, số liệu...) nhưng chỉ CHỜ danh sách người dùng: khoá của nút
+  // không được đợi khoá khác chậm hơn. `skipAdminInvalidate` tắt lần làm mới của MutationCache để lần của lệnh thay nó (không tải lại hai lần); vì vậy nhánh LỖI
+  // cũng phải tự làm mới (onError), nếu không máy chủ đã ghi mà danh sách và ngăn chi tiết vẫn hiện chưa khoá.
+  const refreshAdmin = () => {
+    void qc.invalidateQueries(ADMIN_KEYS_EXCEPT_USERS);
+    return qc.invalidateQueries({ queryKey: ['admin-users'] });
+  };
+  const onError = (e: unknown) => {
+    setMsg({ ok: false, text: actionErrorText(e) });
+    // Lệnh có ô lý do (DTO kiểm độ dài): 404/409 là tài khoản vừa đổi nên chờ tải lại xong mới nhả khoá; 400 là lỗi nhập, máy chủ chưa ghi gì nên không tải lại.
+    const reload = reloadWhenStale(e, refreshAdmin, true);
+    if (reload) return reload;
+    // Mất mạng/5xx/401/403 không nói máy chủ đã ghi hay chưa: hỏi lại danh sách nhưng không bắt khoá chờ (lần tải lại hỏng không được giữ nút).
+    if (!isInputRejection(e)) void refreshAdmin();
+    return undefined;
+  };
   const block = useMutation({
+    meta: { skipAdminInvalidate: true },
     mutationFn: ({ id, reason }: { id: string; reason: string; label: string }) => blockUser(id, reason),
     onSuccess: (_r, v) => {
       setMsg({ ok: true, text: `Đã khoá ${v.label}. Mọi phiên đăng nhập của người này đã bị thu hồi.` });
+      return settleWithin(refreshAdmin());
     },
     onError,
+    onSettled: releaseUser,
   });
   const unblock = useMutation({
+    meta: { skipAdminInvalidate: true },
     mutationFn: ({ id, reason }: { id: string; reason: string; label: string }) => unblockUser(id, reason),
     onSuccess: (_r, v) => {
       setMsg({ ok: true, text: `Đã mở khoá ${v.label}.` });
+      return settleWithin(refreshAdmin());
     },
     onError,
+    onSettled: releaseUser,
   });
 
   const askBlock = async (u: AdminUser) => {
+    if (acting.current.has(u.id)) return;
     setMsg(null);
     const label = u.fullName ?? u.phone ?? u.id;
     const reason = await ask({
@@ -2353,9 +2448,11 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
       setMsg({ ok: false, text: 'Lý do khoá cần ít nhất 3 ký tự.' });
       return;
     }
+    acting.current.add(u.id);
     block.mutate({ id: u.id, reason, label });
   };
   const askUnblock = async (u: AdminUser) => {
+    if (acting.current.has(u.id)) return;
     setMsg(null);
     const label = u.fullName ?? u.phone ?? u.id;
     const reason = await ask({
@@ -2369,6 +2466,7 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
       setMsg({ ok: false, text: 'Lý do mở khoá cần ít nhất 3 ký tự.' });
       return;
     }
+    acting.current.add(u.id);
     unblock.mutate({ id: u.id, label, reason });
   };
 
@@ -2445,7 +2543,7 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
       {searchProblem ? (
         <Notice tone="info">{searchProblem}</Notice>
       ) : q.isError ? (
-        <LoadError message="Không tải được danh sách người dùng." onRetry={() => void q.refetch()} />
+        <LoadError message="Không tải được danh sách người dùng." onRetry={() => q.refetch()} />
       ) : (
         <>
           <UsersList
@@ -2547,7 +2645,7 @@ async function lookupRoleByPhone(phone: string): Promise<string | null> {
 }
 
 /** Cấp/đổi vai trò theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi). */
-function GrantRoleForm({ onDone }: { onDone: () => void }) {
+function GrantRoleForm({ onDone }: { onDone: () => PromiseLike<unknown> | unknown }) {
   const [phone, setPhone] = useState('');
   // Không đặt vai trò mặc định: bất kỳ giá trị nào cũng là một lần đổi vai trò, và CUSTOMER còn gỡ
   // nhóm việc của nhân viên, tắt cờ đối tác của đại lý. Admin phải chọn có chủ đích.
@@ -2558,6 +2656,9 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [checking, setChecking] = useState(false);
   const { ask, dialog } = useConfirm();
+  // Ref vì `checking`/`isPending` chỉ đúng sau lần vẽ kế: hai cú chạm sát nhau vẫn tra vai trò và mở hộp hai lần. Giữ từ lúc bấm (tra vai trò, hộp lý
+  // do) tới khi lệnh VÀ lần tải lại danh sách xong (`onSettled`).
+  const acting = useRef(false);
   const mut = useMutation({
     mutationFn: (v: { phone: string; role: UserRole; reason: string; tierId?: string }) => setUserRole(v.phone, v.role, v.reason, v.tierId),
     onSuccess: (r) => {
@@ -2565,13 +2666,31 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
       setPhone('');
       setRole('');
       setTierId('');
-      onDone();
+      return settleWithin(onDone());
     },
-    onError: (e: unknown) => setMsg({ ok: false, text: actionErrorText(e) }),
+    // Vai trò/người dùng vừa đổi (404/409) thì chờ tải lại danh sách rồi mới nhả khoá. 400 là lỗi nhập (SĐT, bậc, lý do) hiện ngay dưới form, không tải lại.
+    // Lỗi mạng/5xx/401/403: lệnh không tự tải lại (trên production MutationCache vẫn làm cũ khoá `admin-*`).
+    onError: (e: unknown) => {
+      setMsg({ ok: false, text: actionErrorText(e) });
+      return reloadWhenStale(e, onDone, true);
+    },
+    onSettled: () => {
+      acting.current = false;
+    },
   });
   const submit = async () => {
+    if (acting.current) return;
+    acting.current = true;
+    let sent = false;
+    try {
+      sent = await confirmAndSend();
+    } finally {
+      if (!sent) acting.current = false;
+    }
+  };
+  const confirmAndSend = async (): Promise<boolean> => {
     setMsg(null);
-    if (!role) return;
+    if (!role) return false;
     // Chụp giá trị lúc bấm: hộp xác nhận và lệnh đổi phải nói về cùng một SĐT dù ô nhập có bị sửa giữa chừng.
     const target = { phone: stripInvisible(phone).trim(), role, tierId: needsTier ? tierId : undefined };
     setChecking(true);
@@ -2595,13 +2714,17 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
             input,
           },
     );
-    if (reason === null) return;
+    if (reason === null) return false;
     if (reason.length < 3) {
       setMsg({ ok: false, text: 'Lý do đổi vai trò cần ít nhất 3 ký tự.' });
-      return;
+      return false;
     }
     mut.mutate({ ...target, reason });
+    return true;
   };
+  const busy = mut.isPending || checking;
+  // Form được xoá ngay khi đổi xong nên điều kiện hợp lệ sụp trong lúc còn giữ khoá: chỉ disabled khi không bận, để nút đang giữ focus không bị thả.
+  const incomplete = !isPhoneInput(phone) || !role || (needsTier && !tierId.trim());
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
       <h3 className="mb-2 font-display text-sm font-semibold text-stone-900">Cấp / đổi vai trò theo SĐT</h3>
@@ -2634,8 +2757,10 @@ function GrantRoleForm({ onDone }: { onDone: () => void }) {
         </Field>
         {needsTier && <DealerTierSelect value={tierId} onChange={setTierId} className="min-w-0 flex-1" />}
         <button
-          className={BTN_PRIMARY}
-          disabled={!isPhoneInput(phone) || !role || (needsTier && !tierId.trim()) || mut.isPending || checking}
+          className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
+          disabled={incomplete && !busy}
+          aria-busy={busy || undefined}
+          aria-disabled={busy || undefined}
           title={needsTier && !tierId.trim() ? 'Cần chọn bậc đại lý để cấp vai trò DEALER' : undefined}
           onClick={submit}
         >
@@ -2674,7 +2799,7 @@ function ConfigTab({ onOpenSupportChat }: { onOpenSupportChat?: () => void }) {
   const matches = (c: ConfigRow) => !needle || foldSearch(`${c.key} ${c.description ?? ''}`).includes(needle);
   const groups = groupConfigRows(q.data ?? []);
   const shownCount = (q.data ?? []).filter(matches).length;
-  if (q.isError) return <LoadError message="Không tải được danh sách cấu hình." onRetry={() => void q.refetch()} />;
+  if (q.isError) return <LoadError message="Không tải được danh sách cấu hình." onRetry={() => q.refetch()} />;
   return (
     <div className="space-y-4">
       <FeatureFlagsCard rows={q.data} onOpenSupportChat={onOpenSupportChat} />
@@ -2753,7 +2878,9 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
   const [endPending, setEndPending] = useState(false);
   const endBeforeStart = !!f.endAt && !!f.startAt && f.endAt < f.startAt;
   const endAlreadyPast = isCouponEndPast(f.endAt);
-  const create = useMutation({
+  const [msgIsError, setMsgIsError] = useState(false);
+  const refreshCoupons = () => qc.invalidateQueries({ queryKey: ['admin-coupons'] });
+  const create = useLockedMutation({
     mutationFn: () =>
       createCoupon({
         code: f.code,
@@ -2770,11 +2897,22 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
         endAt: localDateIso(f.endAt, true, Date.now() + 30 * 864e5),
         scope: f.scope as 'PUBLIC',
       }),
-    onSuccess: () => {
-      setMsg('Đã tạo mã giảm giá!');
-      void qc.invalidateQueries({ queryKey: ['admin-coupons'] });
+    // Lời báo và màu của nó nằm ở state riêng: `create.isError` chỉ lật sau khi Promise của onSuccess/onError xong, nên lời báo sẽ hiện với màu của lần trước.
+    onMutate: () => {
+      setMsg(null);
     },
-    onError: (e) => setMsg(actionErrorText(e)),
+    onSuccess: () => {
+      setMsgIsError(false);
+      setMsg('Đã tạo mã giảm giá!');
+      return settleWithin(refreshCoupons());
+    },
+    // Mã trùng (409) hay mã không còn (404): chờ tải lại danh sách mã rồi mới nhả khoá. 400 là lỗi nhập của form (mã sai dạng, giá trị, hạn): lời lỗi đã dưới form, không tải lại.
+    // Lỗi mạng/5xx/401/403: lệnh không tự tải lại (trên production MutationCache vẫn làm cũ khoá `admin-*`).
+    onError: (e) => {
+      setMsgIsError(true);
+      setMsg(actionErrorText(e));
+      return reloadWhenStale(e, refreshCoupons, true);
+    },
   });
   const field = `${INPUT_CLASS} ${TOUCH_H}`;
   // Việc hằng ngày (xem mã nào đang chạy, gia hạn, tắt) lên đầu; tạo mã và lô thẻ hộp hàng sàn là việc hiếm nên nằm sau chip.
@@ -2859,10 +2997,16 @@ function CouponsTab({ onOpenConfig }: { onOpenConfig?: () => void } = {}) {
           </Field>
         </div>
       </div>
-      <button onClick={() => create.mutate()} disabled={!hasVisibleText(f.code) || startPending || endPending || endBeforeStart || endAlreadyPast} className={`${BTN_PRIMARY} w-full`}>Tạo mã giảm giá</button>
+      <button
+        onClick={() => create.mutate()}
+        disabled={(!hasVisibleText(f.code) || startPending || endPending || endBeforeStart || endAlreadyPast) && !create.isPending}
+        aria-busy={create.isPending || undefined}
+        aria-disabled={create.isPending || undefined}
+        className={`${BTN_PRIMARY} ${BUSY_CLASS} w-full`}
+      >Tạo mã giảm giá</button>
       {endBeforeStart && <p role="alert" className="text-xs text-danger-fg">Ngày hết hạn không được sớm hơn ngày bắt đầu. Hãy chọn lại ngày hết hạn hoặc ngày bắt đầu để tạo mã.</p>}
       {endAlreadyPast && <p role="alert" className="text-xs text-danger-fg">{COUPON_END_PAST_MESSAGE}</p>}
-      {msg && <p className={`text-sm ${create.isError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
+      {msg && <p role={msgIsError ? 'alert' : 'status'} className={`text-sm ${msgIsError ? 'text-danger-fg' : 'text-success-fg'}`}>{msg}</p>}
     </div>
     )}
     {view === 'list' && <CouponList />}
@@ -2878,9 +3022,25 @@ function BrandsTab() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['admin-brands'], queryFn: listBrands });
   const [form, setForm] = useState({ name: '', tagline: '' });
-  const create = useMutation({
+  // Lỗi của mọi lệnh ghi trên tab (tạo nhãn và các nút trong từng hàng nhãn) nằm ở đây chứ không trong hàng: sau 404/409 danh sách nhãn tải lại và hàng
+  // có thể biến mất, lời lỗi đặt trong hàng sẽ biến mất theo trước khi người dùng đọc.
+  const [err, setErr] = useState<string | null>(null);
+  const refreshBrands = () => qc.invalidateQueries({ queryKey: ['admin-brands'] });
+  const create = useLockedMutation({
     mutationFn: () => createBrand({ name: form.name.trim(), tagline: form.tagline.trim() || undefined }),
-    onSuccess: () => { setForm({ name: '', tagline: '' }); void qc.invalidateQueries({ queryKey: ['admin-brands'] }); },
+    onMutate: () => {
+      setErr(null);
+    },
+    // Khoá giữ tới khi danh sách nhãn mới về (tối đa `settleWithin`): form đã xoá nên nhả sớm thì gõ lại và chạm lại tạo thêm một nhãn.
+    onSuccess: () => {
+      setForm({ name: '', tagline: '' });
+      return settleWithin(refreshBrands());
+    },
+    // 400 là lỗi nhập của form tạo nhãn (lời lỗi ngay dưới form): không tải lại; 404/409 mới là dữ liệu cũ.
+    onError: (e) => {
+      setErr(actionErrorText(e));
+      return reloadWhenStale(e, refreshBrands, true);
+    },
   });
   const cell = 'grow basis-full sm:basis-48';
   const field = `${INPUT_CLASS} ${TOUCH_H}`;
@@ -2898,13 +3058,19 @@ function BrandsTab() {
             <input placeholder="Tagline" maxLength={200} value={form.tagline} onChange={(e) => setForm({ ...form, tagline: e.target.value })} className={field} />
           </Field>
         </div>
-        <button onClick={() => create.mutate()} disabled={!form.name.trim() || create.isPending} className={BTN_PRIMARY}>Tạo nhãn</button>
+        <button
+          onClick={() => create.mutate()}
+          disabled={!form.name.trim() && !create.isPending}
+          aria-busy={create.isPending || undefined}
+          aria-disabled={create.isPending || undefined}
+          className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
+        >Tạo nhãn</button>
       </div>
-      {create.isError && <p className="text-sm text-danger-fg">{actionErrorText(create.error)}</p>}
+      {err && <p role="alert" className="text-sm text-danger-fg">{err}</p>}
 
       <div className="space-y-3">
-        {q.isError && <LoadError message="Không tải được danh sách nhãn hàng." onRetry={() => void q.refetch()} />}
-        {q.data?.map((b) => <BrandRow key={b.id} brand={b} />)}
+        {q.isError && <LoadError message="Không tải được danh sách nhãn hàng." onRetry={() => q.refetch()} />}
+        {q.data?.map((b) => <BrandRow key={b.id} brand={b} report={setErr} />)}
         {q.data?.length === 0 && <Empty>Chưa có nhãn hàng. Tạo nhãn đầu tiên ở trên.</Empty>}
       </div>
 
@@ -2913,57 +3079,96 @@ function BrandsTab() {
   );
 }
 
-function BrandRow({ brand }: { brand: AdminBrand }) {
+function BrandRow({ brand, report }: { brand: AdminBrand; report: (text: string | null) => void }) {
   const { askDelete, dialog } = useDeleteConfirm();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const refreshBrands = () => qc.invalidateQueries({ queryKey: ['admin-brands'] });
-  const [rowErr, setRowErr] = useState<string | null>(null);
-  const onRowError = (e: unknown) => setRowErr(actionErrorText(e));
-  const patch = useMutation({
-    mutationFn: (body: Partial<{ isPublished: boolean }>) => updateBrand(brand.id, body),
-    onSuccess: () => { setRowErr(null); refreshBrands(); },
-    onError: onRowError,
+  const refreshProducts = () => qc.invalidateQueries({ queryKey: ['admin-brand-products', brand.id] });
+  const refreshPromos = () => qc.invalidateQueries({ queryKey: ['admin-brand-promos', brand.id] });
+  // Phần chung của mọi lệnh trong hàng: xoá lỗi cũ khi bắt đầu; lỗi đưa lên `report` (state của tab, không mất khi hàng biến mất) NGAY rồi mới tải lại danh sách
+  // của lệnh đó nếu máy chủ từ chối vì dữ liệu cũ (400/404/409). Khoá nhả sau lần tải lại (tối đa `settleWithin`); lỗi mạng/5xx/401/403 nhả ngay.
+  // Lệnh có form người dùng gõ truyền `input`: 400 là lỗi nhập nên hiện ngay trong form (không dồn lên đầu tab, nơi form đang gõ nằm ngoài tầm nhìn) và không tải lại;
+  // chỉ 404/409 (hàng có thể biến mất) mới đi lên `report` và tải lại.
+  const settle = (refresh: () => Promise<unknown>, start?: () => void, input?: { show: (text: string | null) => void }) => ({
+    onMutate: () => {
+      report(null);
+      input?.show(null);
+      start?.();
+    },
+    onError: (e: unknown) => {
+      const text = actionErrorText(e);
+      if (input && isInputRejection(e)) input.show(text);
+      else report(text);
+      return reloadWhenStale(e, refresh, !!input);
+    },
   });
-  const verify = useMutation({
+  const patch = useLockedMutation({
+    mutationFn: (body: Partial<{ isPublished: boolean }>) => updateBrand(brand.id, body),
+    ...settle(refreshBrands),
+    onSuccess: () => settleWithin(refreshBrands()),
+  });
+  const verify = useLockedMutation({
     mutationFn: (v: boolean) => verifyBrand(brand.id, v),
-    onSuccess: () => { setRowErr(null); refreshBrands(); },
-    onError: onRowError,
+    ...settle(refreshBrands),
+    onSuccess: () => settleWithin(refreshBrands()),
   });
   const [owner, setOwner] = useState<PickedItem | null>(null);
-  const assignOwner = useMutation({
+  const [ownerAssigned, setOwnerAssigned] = useState(false);
+  const assignOwner = useLockedMutation({
     mutationFn: () => updateBrand(brand.id, { ownerUserId: owner?.id ?? '' }),
-    onSuccess: () => { setOwner(null); refreshBrands(); },
+    ...settle(refreshBrands, () => setOwnerAssigned(false)),
+    onSuccess: () => {
+      setOwner(null);
+      setOwnerAssigned(true);
+      return settleWithin(refreshBrands());
+    },
   });
   const products = useQuery({ queryKey: ['admin-brand-products', brand.id], queryFn: () => listBrandProducts(brand.id), enabled: open });
   const promos = useQuery({ queryKey: ['admin-brand-promos', brand.id], queryFn: () => listPromotions(brand.id), enabled: open });
-  const link = useMutation({
+  const [linked, setLinked] = useState<number | null>(null);
+  const link = useLockedMutation({
     mutationFn: () => linkBrandByName(brand.id),
-    onSuccess: () => { setRowErr(null); qc.invalidateQueries({ queryKey: ['admin-brand-products', brand.id] }); },
-    onError: onRowError,
+    ...settle(refreshProducts, () => setLinked(null)),
+    onSuccess: (r) => {
+      setLinked(r.linked);
+      return settleWithin(refreshProducts());
+    },
   });
-  const detach = useMutation({
-    mutationFn: (pid: string) => detachBrandProducts(brand.id, [pid]),
-    onSuccess: () => { setRowErr(null); qc.invalidateQueries({ queryKey: ['admin-brand-products', brand.id] }); },
-    onError: onRowError,
-  });
+  // Khoá theo sản phẩm/khuyến mãi: gỡ hai món khác nhau vẫn chạy song song, chỉ chạm lặp vào CÙNG một món bị bỏ qua.
+  const detach = useLockedMutation(
+    {
+      mutationFn: (pid: string) => detachBrandProducts(brand.id, [pid]),
+      ...settle(refreshProducts),
+      onSuccess: () => settleWithin(refreshProducts()),
+    },
+    (pid) => pid,
+  );
   const [promo, setPromo] = useState({ title: '', subtitle: '', startAt: '', endAt: '' });
   const [promoStartPending, setPromoStartPending] = useState(false);
   const [promoEndPending, setPromoEndPending] = useState(false);
-  const addPromo = useMutation({
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const addPromo = useLockedMutation({
     mutationFn: () => createPromotion(brand.id, {
       title: promo.title.trim(), subtitle: promo.subtitle.trim() || undefined,
       // Cùng lỗi múi giờ với voucher — xem localDateIso.
       startAt: localDateIso(promo.startAt, false, Date.now()),
       endAt: localDateIso(promo.endAt, true, Date.now() + 30 * 864e5),
     }),
-    onSuccess: () => { setPromo({ title: '', subtitle: '', startAt: '', endAt: '' }); void qc.invalidateQueries({ queryKey: ['admin-brand-promos', brand.id] }); },
+    ...settle(refreshPromos, undefined, { show: setPromoError }),
+    onSuccess: () => {
+      setPromo({ title: '', subtitle: '', startAt: '', endAt: '' });
+      return settleWithin(refreshPromos());
+    },
   });
-  const delPromo = useMutation({
-    mutationFn: (pid: string) => deletePromotion(pid),
-    onSuccess: () => { setRowErr(null); qc.invalidateQueries({ queryKey: ['admin-brand-promos', brand.id] }); },
-    onError: onRowError,
-  });
+  const delPromo = useLockedMutation(
+    {
+      mutationFn: (pid: string) => deletePromotion(pid),
+      ...settle(refreshPromos),
+      onSuccess: () => settleWithin(refreshPromos()),
+    },
+    (pid) => pid,
+  );
   const cell = 'grow basis-full sm:basis-40';
   const grow = `${INPUT_CLASS} ${TOUCH_H}`;
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
@@ -2977,7 +3182,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
             {brand.isVerified && <ToneBadge tone="success"><Check className="h-3 w-3" aria-hidden />Chính hãng</ToneBadge>}
             {!brand.isPublished && <ToneBadge tone="neutral">Nháp</ToneBadge>}
           </div>
-          <div className="break-words text-xs text-stone-500">/{brand.slug} · {formatVnNumber(brand.followerCount)} theo dõi</div>
+          <div className="break-words text-xs tabular-nums text-stone-500">/{brand.slug} · {formatVnNumber(brand.followerCount)} theo dõi</div>
         </div>
         <button onClick={() => setOpen((o) => !o)} className={`${BTN_LINK} shrink-0 text-sm`}>{open ? 'Thu gọn' : 'Quản lý'}</button>
       </div>
@@ -2985,48 +3190,77 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
       {open && (
         <div className="mt-3 space-y-4 border-t border-stone-200 pt-3">
           <div className="flex flex-wrap gap-2">
-            <button onClick={() => patch.mutate({ isPublished: !brand.isPublished })} className={BTN_SECONDARY}>
+            <button
+              onClick={() => patch.mutate({ isPublished: !brand.isPublished })}
+              aria-busy={patch.isPending || undefined}
+              aria-disabled={patch.isPending || undefined}
+              className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
+            >
               {brand.isPublished ? 'Ẩn (chuyển nháp)' : 'Đăng'}
             </button>
-            <button onClick={() => verify.mutate(!brand.isVerified)} className={`${BTN_SECONDARY} inline-flex items-center gap-1`}>
+            <button
+              onClick={() => verify.mutate(!brand.isVerified)}
+              aria-busy={verify.isPending || undefined}
+              aria-disabled={verify.isPending || undefined}
+              className={`${BTN_SECONDARY} ${BUSY_CLASS} inline-flex items-center gap-1`}
+            >
               {brand.isVerified ? 'Bỏ chính hãng' : <>Cấp <Check className="h-4 w-4" aria-hidden /> chính hãng</>}
             </button>
-            <button onClick={() => link.mutate()} disabled={link.isPending} className={BTN_PRIMARY}>
+            <button
+              onClick={() => link.mutate()}
+              aria-busy={link.isPending || undefined}
+              aria-disabled={link.isPending || undefined}
+              className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
+            >
               Gán SP theo tên nhãn
             </button>
-            {link.data && <span className="self-center text-sm text-success-fg">Đã gán {link.data.linked} SP</span>}
+            {linked !== null && <span className="self-center text-sm text-success-fg">Đã gán <span className="tabular-nums">{linked}</span> SP</span>}
           </div>
-          {rowErr && <p className="text-xs text-danger-fg">{rowErr}</p>}
 
           {/* Gán chủ nhãn (lộ trình B) — đối tác tự quản nhãn trong Mini App */}
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-stone-500">Chủ nhãn:</span>
             <UserPicker value={owner} onChange={setOwner} label="Chọn đối tác làm chủ nhãn" className="min-w-[12rem] flex-1" />
-            <button onClick={() => assignOwner.mutate()} disabled={!owner || assignOwner.isPending} className={BTN_SECONDARY}>
+            {/* Chọn xong gán là `owner` về rỗng ngay trong lúc còn giữ khoá: chỉ disabled thật khi chưa chọn VÀ không bận, để nút đang giữ focus không bị thả. */}
+            <button
+              onClick={() => assignOwner.mutate()}
+              disabled={!owner && !assignOwner.isPending}
+              aria-busy={assignOwner.isPending || undefined}
+              aria-disabled={assignOwner.isPending || undefined}
+              className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
+            >
               Gán chủ nhãn
             </button>
-            {assignOwner.isSuccess && <span className="inline-flex items-center gap-1 text-success-fg">Đã gán <Check className="h-4 w-4" aria-hidden /></span>}
-            {assignOwner.isError && <span className="text-danger-fg">{actionErrorText(assignOwner.error)}</span>}
+            {ownerAssigned && <span className="inline-flex items-center gap-1 text-success-fg">Đã gán <Check className="h-4 w-4" aria-hidden /></span>}
           </div>
 
-          <BrandInfoForm brand={brand} />
+          <BrandInfoForm brand={brand} report={report} />
 
           <div>
-            <div className="mb-1 text-sm font-medium text-stone-900">Sản phẩm ({products.data?.length ?? 0})</div>
+            <div className="mb-1 text-sm font-medium tabular-nums text-stone-900">Sản phẩm ({products.data?.length ?? 0})</div>
             <div className="max-h-48 space-y-1 overflow-y-auto">
-              {products.data?.map((p) => (
+              {products.data?.map((p) => {
+                const detaching = detach.isPending && detach.variables === p.id;
+                return (
                 <div key={p.id} className={LIST_ITEM_CLASS}>
                   <span className="min-w-0 truncate">{p.name}</span>
                   <button
-                    onClick={() => askDelete({
-                      title: 'Gỡ sản phẩm khỏi nhãn',
-                      message: `Gỡ "${p.name}" khỏi nhãn ${brand.name}? Sản phẩm không còn thuộc nhãn này cho tới khi gán lại.`,
-                      confirmLabel: 'Gỡ sản phẩm',
-                    }, () => detach.mutate(p.id))}
-                    className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+                    onClick={() => {
+                      // Đang gỡ đúng món này thì không hỏi lại: hộp xác nhận cho một lệnh sẽ bị bỏ qua chỉ làm người dùng tưởng lệnh chạy lần nữa.
+                      if (detaching) return;
+                      void askDelete({
+                        title: 'Gỡ sản phẩm khỏi nhãn',
+                        message: `Gỡ "${p.name}" khỏi nhãn ${brand.name}? Sản phẩm không còn thuộc nhãn này cho tới khi gán lại.`,
+                        confirmLabel: 'Gỡ sản phẩm',
+                      }, () => detach.mutate(p.id));
+                    }}
+                    aria-busy={detaching || undefined}
+                    aria-disabled={detaching || undefined}
+                    className={`${BTN_LINK_DANGER} ${BUSY_CLASS} shrink-0 text-xs`}
                   >Gỡ</button>
                 </div>
-              ))}
+                );
+              })}
               {products.data?.length === 0 && <p className="text-xs text-stone-500">Chưa có SP. Bấm “Gán SP theo tên nhãn” để liên kết catalog.</p>}
             </div>
           </div>
@@ -3034,19 +3268,27 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
           <div>
             <div className="mb-1 text-sm font-medium text-stone-900">Khuyến mãi</div>
             <div className="space-y-1">
-              {promos.data?.map((pm) => (
+              {promos.data?.map((pm) => {
+                const deleting = delPromo.isPending && delPromo.variables === pm.id;
+                return (
                 <div key={pm.id} className={LIST_ITEM_CLASS}>
                   <span className="min-w-0 break-words">{pm.title}{pm.subtitle ? ` · ${pm.subtitle}` : ''}</span>
                   <button
-                    onClick={() => askDelete({
-                      title: 'Xoá khuyến mãi',
-                      message: `Xoá khuyến mãi "${pm.title}" của nhãn ${brand.name}? Không hoàn tác được.`,
-                      confirmLabel: 'Xoá khuyến mãi',
-                    }, () => delPromo.mutate(pm.id))}
-                    className={`${BTN_LINK_DANGER} shrink-0 text-xs`}
+                    onClick={() => {
+                      if (deleting) return;
+                      void askDelete({
+                        title: 'Xoá khuyến mãi',
+                        message: `Xoá khuyến mãi "${pm.title}" của nhãn ${brand.name}? Không hoàn tác được.`,
+                        confirmLabel: 'Xoá khuyến mãi',
+                      }, () => delPromo.mutate(pm.id));
+                    }}
+                    aria-busy={deleting || undefined}
+                    aria-disabled={deleting || undefined}
+                    className={`${BTN_LINK_DANGER} ${BUSY_CLASS} shrink-0 text-xs`}
                   >Xoá</button>
                 </div>
-              ))}
+                );
+              })}
             </div>
             <div className="mt-2 flex flex-wrap items-end gap-2">
               <div className={cell}>
@@ -3065,9 +3307,15 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
               <Field label="Kết thúc ngày">
                 <VnDateInput ariaLabel="Khuyến mãi kết thúc ngày" value={promo.endAt} min={promo.startAt || undefined} onChange={(v) => setPromo({ ...promo, endAt: v })} onPendingChange={setPromoEndPending} className={field} />
               </Field>
-              <button onClick={() => addPromo.mutate()} disabled={!promo.title.trim() || promoStartPending || promoEndPending} className={BTN_PRIMARY}>Thêm KM</button>
+              <button
+                onClick={() => addPromo.mutate()}
+                disabled={(!promo.title.trim() || promoStartPending || promoEndPending) && !addPromo.isPending}
+                aria-busy={addPromo.isPending || undefined}
+                aria-disabled={addPromo.isPending || undefined}
+                className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
+              >Thêm KM</button>
             </div>
-            {addPromo.isError && <p className="mt-1 text-xs text-danger-fg">{actionErrorText(addPromo.error)}</p>}
+            {promoError && <p role="alert" className="mt-1 text-sm text-danger-fg">{promoError}</p>}
           </div>
         </div>
       )}
@@ -3076,7 +3324,7 @@ function BrandRow({ brand }: { brand: AdminBrand }) {
   );
 }
 
-function BrandInfoForm({ brand }: { brand: AdminBrand }) {
+function BrandInfoForm({ brand, report }: { brand: AdminBrand; report: (text: string | null) => void }) {
   const qc = useQueryClient();
   const [f, setF] = useState({
     logoUrl: brand.logoUrl ?? '',
@@ -3086,7 +3334,10 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
     story: brand.story ?? '',
   });
   const [certs, setCerts] = useState<BrandCert[]>(brand.certifications ?? []);
-  const save = useMutation({
+  const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const refreshBrands = () => qc.invalidateQueries({ queryKey: ['admin-brands'] });
+  const save = useLockedMutation({
     mutationFn: () =>
       updateBrand(brand.id, {
         logoUrl: f.logoUrl.trim(),
@@ -3096,7 +3347,22 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
         story: f.story.trim(),
         certifications: certs.filter((c) => c.code.trim() && c.label.trim()),
       }),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-brands'] }),
+    onMutate: () => {
+      report(null);
+      setSaveError(null);
+      setSaved(false);
+    },
+    onSuccess: () => {
+      setSaved(true);
+      return settleWithin(refreshBrands());
+    },
+    // 404/409 lên `report` (state của tab): danh sách nhãn tải lại và form này có thể biến mất. 400 là lỗi nhập của form (link ảnh, chứng nhận...): hiện ngay dưới nút Lưu, không tải lại.
+    onError: (e) => {
+      const text = actionErrorText(e);
+      if (isInputRejection(e)) setSaveError(text);
+      else report(text);
+      return reloadWhenStale(e, refreshBrands, true);
+    },
   });
 
   const setCert = (i: number, patch: Partial<BrandCert>) =>
@@ -3143,9 +3409,14 @@ function BrandInfoForm({ brand }: { brand: AdminBrand }) {
       <button onClick={() => setCerts((cs) => [...cs, { code: '', label: '', verified: false }])} className={`${BTN_LINK} mt-1 text-sm`}>+ Thêm chứng nhận</button>
 
       <div className="mt-2">
-        <button onClick={() => save.mutate()} disabled={save.isPending} className={BTN_PRIMARY}>Lưu thông tin</button>
-        {save.isSuccess && <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">Đã lưu <Check className="h-4 w-4" aria-hidden /></span>}
-        {save.isError && <span className="ml-2 text-sm text-danger-fg">{actionErrorText(save.error)}</span>}
+        <button
+          onClick={() => save.mutate()}
+          aria-busy={save.isPending || undefined}
+          aria-disabled={save.isPending || undefined}
+          className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
+        >Lưu thông tin</button>
+        {saved && <span className="ml-2 inline-flex items-center gap-1 text-sm text-success-fg">Đã lưu <Check className="h-4 w-4" aria-hidden /></span>}
+        {saveError && <p role="alert" className="mt-1 text-sm text-danger-fg">{saveError}</p>}
       </div>
     </div>
   );
@@ -3175,7 +3446,7 @@ function DealerRewardsSection() {
     <div className={CARD_CLASS}>
       <div className="mb-2 flex items-center gap-1.5 font-display font-medium text-stone-900"><Store className="h-4 w-4 text-forest-700" aria-hidden />Chương trình đại lý (thưởng doanh số)</div>
       <div className="space-y-1">
-        {q.isError && <LoadError message="Không tải được danh sách chương trình." onRetry={() => void q.refetch()} />}
+        {q.isError && <LoadError message="Không tải được danh sách chương trình." onRetry={() => q.refetch()} />}
         {q.data?.map((d) => (
           <div key={d.id} className={LIST_ITEM_CLASS}>
             <span className="min-w-0 break-words">{REWARD_TYPE_LABELS[d.type] ?? d.type} · {d.title} · mốc {formatVnd(d.threshold)}/{d.period === 'YEAR' ? 'năm' : 'quý'}{d.brandId ? '' : ' · toàn shop'}</span>
@@ -3294,7 +3565,7 @@ function FlashSalesTab() {
       </div>
 
       <div className="space-y-3">
-        {q.isError && !q.data && <LoadError message="Không tải được danh sách đợt giờ vàng." onRetry={() => void q.refetch()} />}
+        {q.isError && !q.data && <LoadError message="Không tải được danh sách đợt giờ vàng." onRetry={() => q.refetch()} />}
         <div className="flex flex-wrap gap-1" role="group" aria-label="Lọc đợt giờ vàng">
           {FLASH_SALE_FILTERS.map((x) => (
             <button key={x.k} type="button" aria-pressed={saleFilter === x.k} onClick={() => setSaleFilter(x.k)} className={chipClass(saleFilter === x.k)}>
@@ -3304,7 +3575,7 @@ function FlashSalesTab() {
         </div>
         {sales.map((s) => <FlashSaleRow key={s.id} sale={s} />)}
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-        <LoadMoreButton hasMore={!!q.hasNextPage} loading={q.isFetchingNextPage} error={q.isFetchNextPageError} onClick={() => void q.fetchNextPage()} />
+        <LoadMoreButton hasMore={!!q.hasNextPage} loading={q.isFetchingNextPage} error={q.isFetchNextPageError} onClick={() => q.fetchNextPage()} />
         {q.data && sales.length === 0 && (
           <Empty>
             {saleFilter === 'ended'
@@ -3520,7 +3791,7 @@ function FlashSaleItemsPanel({ sale, ended }: { sale: AdminFlashSaleSummary; end
 
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
-  if (detail.isError) return <LoadError message="Không tải được sản phẩm của đợt này." onRetry={() => void detail.refetch()} />;
+  if (detail.isError) return <LoadError message="Không tải được sản phẩm của đợt này." onRetry={() => detail.refetch()} />;
   if (!detail.data) return <p className="mt-2 text-sm text-stone-500">Đang tải sản phẩm…</p>;
 
   return (
@@ -3675,7 +3946,7 @@ function FaqTab() {
       </div>
 
       <div className="space-y-2">
-        {q.isError && <LoadError message="Không tải được danh sách câu hỏi thường gặp." onRetry={() => void q.refetch()} />}
+        {q.isError && <LoadError message="Không tải được danh sách câu hỏi thường gặp." onRetry={() => q.refetch()} />}
         {q.data?.map((f) => <FaqRow key={f.id} faq={f} />)}
         {q.data?.length === 0 && <Empty>Chưa có câu hỏi thường gặp nào. Thêm câu đầu tiên ở trên.</Empty>}
       </div>
@@ -3866,7 +4137,7 @@ function QuickReplyTab() {
       </div>
 
       <div className="space-y-2">
-        {q.isError && <LoadError message="Không tải được danh sách mẫu tin nhanh." onRetry={() => void q.refetch()} />}
+        {q.isError && <LoadError message="Không tải được danh sách mẫu tin nhanh." onRetry={() => q.refetch()} />}
         {q.data?.map((r) => <QuickReplyRow key={r.id} item={r} />)}
         {q.data?.length === 0 && <Empty>Chưa có mẫu tin nhanh nào. Thêm mẫu đầu tiên ở trên.</Empty>}
       </div>
@@ -4224,7 +4495,7 @@ function AcademyTab() {
       </div>
 
       <div className="space-y-3">
-        {q.isError && <LoadError message="Không tải được danh sách khoá học." onRetry={() => void q.refetch()} />}
+        {q.isError && <LoadError message="Không tải được danh sách khoá học." onRetry={() => q.refetch()} />}
         {q.data?.map((c) => <CourseRow key={c.id} course={c} />)}
         {q.data?.length === 0 && <Empty>Chưa có khoá học nào. Tạo khoá đầu tiên ở trên.</Empty>}
       </div>

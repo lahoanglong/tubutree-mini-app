@@ -595,12 +595,17 @@ describe('Chạy lại việc sau giao (đơn DELIVERED chưa có deliveredEffec
     await flush();
     answerConfirm(true);
     await flush();
-    expect(btn.disabled).toBe(true);
+    // Bận bằng aria-disabled, không `disabled`: nút vừa đóng hộp xác nhận đang giữ tiêu điểm, vô hiệu thì Chromium thả tiêu điểm về body.
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.disabled).toBe(false);
     expect(container.textContent).toContain('Đang chạy');
+    click(btn);
+    await flush();
+    expect(confirmDialog()).toBeNull();
     expect(calls).toHaveLength(1);
     release();
     await flush();
-    expect(btn.disabled).toBe(false);
+    expect(btn.getAttribute('aria-disabled')).toBeNull();
   });
 
   it('API lỗi → hiện thông báo lỗi', async () => {

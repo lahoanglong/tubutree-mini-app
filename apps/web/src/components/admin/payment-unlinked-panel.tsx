@@ -1,13 +1,15 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getOrderStatusHistory, invalidateInbox, PAYMENT_UNLINKED_NOTE_MIN, PANCAKE_RESOLVE_NOTE_MAX, resolvePaymentUnlinked, type AdminOrder } from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
 import { BTN_XS_SECONDARY } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 
 /** Đơn còn mở thì Kế toán đóng bằng "Đã nhận tiền"; đơn đã huỷ/trả thì chỉ ADMIN đóng sau khi ghi tiền về muộn hoặc hoàn. */
 export const PAYMENT_UNLINKED_OPEN_TEXT =
@@ -41,7 +43,6 @@ export function PaymentUnlinkedBadge({ order }: { order: AdminOrder }) {
 export function PaymentUnlinkedPanel({ order, isAdmin, canFinance = false }: { order: AdminOrder; isAdmin: boolean; canFinance?: boolean }) {
   const qc = useQueryClient();
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const inFlight = useRef(false);
   const { ask, dialog } = useConfirm();
 
   const flagged = !!order.paymentUnlinkedAt && order.paymentStatus === 'UNPAID';
@@ -57,22 +58,19 @@ export function PaymentUnlinkedPanel({ order, isAdmin, canFinance = false }: { o
     (h) => h.actorType === 'PANCAKE' && (h.note ?? '').startsWith(UNLINKED_HISTORY_PREFIX) && new Date(h.createdAt).getTime() >= sinceMs,
   );
 
-  const resolve = useMutation({
+  const reloadOrder = () => Promise.all([qc.invalidateQueries({ queryKey: ['admin-order-history', order.id] }), qc.invalidateQueries({ queryKey: ['admin-orders'] })]);
+  // Khoá giữ tới khi đơn và danh sách khoản làm mới về (tối đa 4 giây): nhả sớm thì nút còn hiện với cờ cũ và bấm lại được.
+  const resolve = useLockedMutation({
     mutationFn: ({ note, seenAt }: { note: string; seenAt: string }) => resolvePaymentUnlinked(order.id, note, seenAt),
     onSuccess: (r) => {
       setMsg({ ok: true, text: r.message });
-      void qc.invalidateQueries({ queryKey: ['admin-order-history', order.id] });
-      void qc.invalidateQueries({ queryKey: ['admin-orders'] });
-      void invalidateInbox(qc);
+      return settleWithin(Promise.all([reloadOrder(), invalidateInbox(qc)]));
     },
     onError: (e: unknown) => {
       setMsg({ ok: false, text: actionErrorText(e) });
-      // 409 (khoản mới tới) hay 400 (bên kia đã đóng): lấy lại mốc cờ và danh sách khoản mới nhất.
-      void qc.invalidateQueries({ queryKey: ['admin-orders'] });
-      void qc.invalidateQueries({ queryKey: ['admin-order-history', order.id] });
-    },
-    onSettled: () => {
-      inFlight.current = false;
+      // 409 (khoản mới tới) hay 400 (bên kia đã đóng): lấy lại mốc cờ và danh sách khoản mới nhất. Lỗi nào cũng tải lại như trước
+      // (đã ghi rồi mới lỗi mạng/5xx thì cờ đã gỡ), khác quy tắc chung chỉ CHỜ tải lại khi 400/404/409.
+      return settleWithin(reloadOrder());
     },
   });
 
@@ -84,7 +82,7 @@ export function PaymentUnlinkedPanel({ order, isAdmin, canFinance = false }: { o
   if (!order.paymentUnlinkedAt || order.paymentStatus !== 'UNPAID') return message || null;
 
   const onResolve = async () => {
-    if (inFlight.current || resolve.isPending) return;
+    if (resolve.isPending) return;
     const note = await ask({
       title: 'Đánh dấu đã đối chiếu',
       message: `Đơn ${order.code} sẽ rời hàng đợi "Pancake báo đã thanh toán". Chỉ bấm khi đã đối chiếu sao kê và đã ghi tiền về muộn hoặc hoàn cho khách (nếu khách đã chuyển). Việc này không tự ghi tiền.`,
@@ -97,8 +95,7 @@ export function PaymentUnlinkedPanel({ order, isAdmin, canFinance = false }: { o
         validate: (t) => (t.trim().length < PAYMENT_UNLINKED_NOTE_MIN ? `Ghi chú cần ít nhất ${PAYMENT_UNLINKED_NOTE_MIN} ký tự` : null),
       },
     });
-    if (note === null || inFlight.current) return;
-    inFlight.current = true;
+    if (note === null) return;
     setMsg(null);
     resolve.mutate({ note, seenAt: order.paymentUnlinkedAt! });
   };
@@ -131,7 +128,13 @@ export function PaymentUnlinkedPanel({ order, isAdmin, canFinance = false }: { o
       )}
       {isAdmin && (
         <div className="mt-2">
-          <button type="button" onClick={onResolve} disabled={resolve.isPending} className={BTN_XS_SECONDARY}>
+          <button
+            type="button"
+            onClick={onResolve}
+            aria-busy={resolve.isPending || undefined}
+            aria-disabled={resolve.isPending || undefined}
+            className={`${BTN_XS_SECONDARY} aria-disabled:opacity-60`}
+          >
             {resolve.isPending ? 'Đang lưu…' : 'Đã đối chiếu'}
           </button>
         </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertCircle, Clock, PackageCheck, Truck } from 'lucide-react';
 import {
@@ -31,6 +31,8 @@ import {
   chipClass,
 } from '@/components/admin/ui';
 import { actionErrorText } from '@/lib/error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { isStaleWriteRejection, reloadWhenStale } from '@/lib/stale-write-rejection';
 import { safeHttpUrl } from '@/lib/order-view';
 
 const FILTERS: { k: FulfilStatus | ''; label: string }[] = [
@@ -77,6 +79,8 @@ export function FulfilOrdersTab() {
   }, [q.data, q.isPlaceholderData, page, lastPage]);
   const sla = q.data?.slaConfig;
   const counts = q.data?.counts ?? {};
+  // Đơn bị từ chối vì đã đổi trạng thái sẽ rời khỏi bộ lọc sau khi tải lại: lời giải thích đứng ở đây, ngoài thẻ bị gỡ.
+  const [notice, setNotice] = useState<string | null>(null);
 
   return (
     <div className="space-y-4">
@@ -105,6 +109,11 @@ export function FulfilOrdersTab() {
         })}
       </div>
 
+      {notice && (
+        <p role="alert" className="text-sm text-danger-fg">
+          {notice}
+        </p>
+      )}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải đơn cần giao…</p>}
       {q.isError && <p className="text-sm text-danger-fg">Không tải được đơn cần giao.</p>}
       {q.data && orders.length === 0 && (
@@ -114,7 +123,7 @@ export function FulfilOrdersTab() {
       )}
       <div className="space-y-3">
         {orders.map((o) => (
-          <FulfilOrderCard key={o.id} order={o} />
+          <FulfilOrderCard key={o.id} order={o} onNotice={setNotice} />
         ))}
       </div>
 
@@ -137,7 +146,10 @@ export function FulfilOrdersTab() {
 
 type Panel = 'ship' | 'cancel' | 'fail' | null;
 
-export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
+/** Nút đang chạy báo bận bằng aria-disabled thay `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */
+const BUSY_CLASS = 'aria-disabled:opacity-50';
+
+export function FulfilOrderCard({ order: o, onNotice }: { order: FulfilOrder; onNotice?: (text: string | null) => void }) {
   const qc = useQueryClient();
   const [panel, setPanel] = useState<Panel>(null);
   const [carrier, setCarrier] = useState('');
@@ -146,17 +158,40 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  const refresh = () => qc.invalidateQueries({ queryKey: ['merchant-fulfil-orders'] });
+  // Một việc mỗi thẻ, giữ tới khi danh sách làm mới về (tối đa 4 giây): nhả sớm thì thẻ còn nút của bước vừa xong và bấm lại ra lỗi "đơn không còn ở trạng thái này".
+  // Khoá bằng ref vì `isPending` chỉ đúng sau lần vẽ kế: hai cú chạm sát nhau (kể cả nút mở form khác) vẫn đều thấy thẻ rảnh.
+  const acting = useRef(false);
+  const exclusive = (run: () => void) => {
+    if (acting.current) return;
+    acting.current = true;
+    run();
+  };
+  // `hasInput`: lệnh có ô người dùng nhập (mã vận đơn, lý do): 400 là lỗi nhập liệu nên hiện dưới form của thẻ, không tải lại; chỉ 404/409 là đơn đã đổi.
   const mut = useMutation({
-    mutationFn: (fn: () => Promise<unknown>) => fn(),
-    onSuccess: () => {
+    mutationFn: (cmd: { run: () => Promise<unknown>; hasInput: boolean }) => cmd.run(),
+    onMutate: () => {
       setError(null);
-      setPanel(null);
-      void qc.invalidateQueries({ queryKey: ['merchant-fulfil-orders'] });
+      onNotice?.(null);
     },
-    onError: (e: unknown) => setError(actionErrorText(e)),
+    onSuccess: () => {
+      setPanel(null);
+      return settleWithin(refresh());
+    },
+    onError: (e: unknown, cmd) => {
+      const text = actionErrorText(e);
+      if (isStaleWriteRejection(e, cmd.hasInput) && onNotice) onNotice(`${text} Danh sách đã được làm mới.`);
+      else setError(text);
+      return reloadWhenStale(e, refresh, cmd.hasInput);
+    },
+    onSettled: () => {
+      acting.current = false;
+    },
   });
   const busy = mut.isPending;
+  const busyAttrs = { 'aria-busy': busy || undefined, 'aria-disabled': busy || undefined };
   const open = (p: Panel) => {
+    if (acting.current) return;
     setError(null);
     setPanel(panel === p ? null : p);
   };
@@ -235,33 +270,33 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
 
       <div className="mt-3 flex flex-wrap gap-2">
         {o.status === 'CONFIRMED' && !o.merchantAcceptedAt && (
-          <button type="button" disabled={busy} onClick={() => mut.mutate(() => acceptFulfilOrder(o.id))} className={BTN_XS_PRIMARY}>
+          <button type="button" {...busyAttrs} onClick={() => exclusive(() => mut.mutate({ run: () => acceptFulfilOrder(o.id), hasInput: false }))} className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}>
             Xác nhận đơn
           </button>
         )}
         {o.status === 'CONFIRMED' && o.merchantAcceptedAt && (
-          <button type="button" disabled={busy} onClick={() => mut.mutate(() => packFulfilOrder(o.id))} className={BTN_XS_SECONDARY}>
+          <button type="button" {...busyAttrs} onClick={() => exclusive(() => mut.mutate({ run: () => packFulfilOrder(o.id), hasInput: false }))} className={`${BTN_XS_SECONDARY} ${BUSY_CLASS}`}>
             <PackageCheck className="mr-1 inline h-3.5 w-3.5" aria-hidden="true" />
             Đã đóng gói
           </button>
         )}
         {canCancel && (
-          <button type="button" disabled={busy} onClick={() => open('ship')} aria-expanded={panel === 'ship'} className={BTN_XS_PRIMARY}>
+          <button type="button" {...busyAttrs} onClick={() => open('ship')} aria-expanded={panel === 'ship'} className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}>
             Nhập mã vận đơn
           </button>
         )}
         {o.status === 'SHIPPING' && (
           <>
-            <button type="button" disabled={busy} onClick={() => mut.mutate(() => deliverFulfilOrder(o.id))} className={BTN_XS_PRIMARY}>
+            <button type="button" {...busyAttrs} onClick={() => exclusive(() => mut.mutate({ run: () => deliverFulfilOrder(o.id), hasInput: false }))} className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}>
               Khách đã nhận hàng
             </button>
-            <button type="button" disabled={busy} onClick={() => open('fail')} aria-expanded={panel === 'fail'} className={BTN_XS_DANGER}>
+            <button type="button" {...busyAttrs} onClick={() => open('fail')} aria-expanded={panel === 'fail'} className={`${BTN_XS_DANGER} ${BUSY_CLASS}`}>
               Giao không thành công
             </button>
           </>
         )}
         {canCancel && (
-          <button type="button" disabled={busy} onClick={() => open('cancel')} aria-expanded={panel === 'cancel'} className={BTN_XS_DANGER}>
+          <button type="button" {...busyAttrs} onClick={() => open('cancel')} aria-expanded={panel === 'cancel'} className={`${BTN_XS_DANGER} ${BUSY_CLASS}`}>
             Huỷ đơn
           </button>
         )}
@@ -272,11 +307,15 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
           className="mt-3 grid gap-2 rounded-control border border-stone-200 bg-stone-50 p-3 sm:grid-cols-3"
           onSubmit={(e) => {
             e.preventDefault();
-            mut.mutate(() =>
-              shipFulfilOrder(o.id, {
-                carrier: carrier.trim(),
-                trackingCode: trackingCode.trim(),
-                trackingUrl: trackingUrl.trim() || undefined,
+            exclusive(() =>
+              mut.mutate({
+                run: () =>
+                  shipFulfilOrder(o.id, {
+                    carrier: carrier.trim(),
+                    trackingCode: trackingCode.trim(),
+                    trackingUrl: trackingUrl.trim() || undefined,
+                  }),
+                hasInput: true,
               }),
             );
           }}
@@ -294,7 +333,7 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
             <input value={trackingUrl} onChange={(e) => setTrackingUrl(e.target.value)} type="text" inputMode="url" autoCapitalize="none" spellCheck={false} placeholder="ghn.vn/…" className={`mt-1 w-full ${FIELD_XS}`} />
           </label>
           <div className="sm:col-span-3">
-            <button type="submit" disabled={busy} className={BTN_XS_PRIMARY}>
+            <button type="submit" {...busyAttrs} className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}>
               {busy ? 'Đang lưu…' : 'Xác nhận đã gửi hàng'}
             </button>
           </div>
@@ -308,7 +347,7 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
             e.preventDefault();
             const r = reason.trim();
             if (!r) return;
-            mut.mutate(() => (panel === 'fail' ? failFulfilOrder(o.id, r) : cancelFulfilOrder(o.id, r)));
+            exclusive(() => mut.mutate({ run: () => (panel === 'fail' ? failFulfilOrder(o.id, r) : cancelFulfilOrder(o.id, r)), hasInput: true }));
           }}
         >
           <label className="block text-xs font-medium text-stone-700">
@@ -316,7 +355,7 @@ export function FulfilOrderCard({ order: o }: { order: FulfilOrder }) {
             <input value={reason} onChange={(e) => setReason(e.target.value)} required maxLength={300} className={`mt-1 w-full ${FIELD_XS}`} />
           </label>
           <p className="text-xs text-stone-500">Đơn huỷ được hoàn kho; tiền khách đã trả trước được Tubu Tree hoàn theo chính sách.</p>
-          <button type="submit" disabled={busy || !reason.trim()} className={`${TOUCH_H} rounded-control bg-danger-fg px-3 py-1 text-xs font-medium text-stone-0 hover:brightness-90 disabled:opacity-50`}>
+          <button type="submit" disabled={!reason.trim()} {...busyAttrs} className={`${TOUCH_H} rounded-control bg-danger-fg px-3 py-1 text-xs font-medium text-stone-0 hover:brightness-90 disabled:opacity-50 ${BUSY_CLASS}`}>
             {busy ? 'Đang huỷ…' : panel === 'fail' ? 'Xác nhận giao không thành công' : 'Xác nhận huỷ đơn'}
           </button>
         </form>

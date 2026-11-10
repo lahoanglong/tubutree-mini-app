@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   markReturnReceived,
   previewReturnRequest,
@@ -17,8 +17,13 @@ import { useConfirm } from './confirm-dialog';
 import { EvidenceImages } from './evidence-images';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, TOUCH_H, Field } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 
 const REJECT_NOTE_MIN = 3;
+// Nút đang giữ tiêu điểm (vừa quay lại từ hộp xác nhận) mà `disabled` thì Chromium thả tiêu điểm về body: khoá bằng aria-disabled + aria-busy.
+const BUSY_CLASS = 'aria-disabled:opacity-60';
 
 function bankText(b: {
   bankName?: string | null;
@@ -48,10 +53,13 @@ export function ReturnRow({
   item: r,
   canReview = true,
   canReceive = true,
+  onActionError,
 }: {
   item: AdminReturnRequest;
   canReview?: boolean;
   canReceive?: boolean;
+  /** Lời lỗi của Từ chối / "Đã nhận hàng về" do tab giữ (như DealersTab): tab lọc mặc định "Chờ duyệt", yêu cầu đã bị xử lý thì tải lại làm hàng rời bộ lọc và lời lỗi trong hàng mất theo. */
+  onActionError: (text: string | null) => void;
 }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
@@ -59,6 +67,9 @@ export function ReturnRow({
   const [confirming, setConfirming] = useState(false);
   const [shopFault, setShopFault] = useState<boolean | undefined>(undefined);
   const [noteError, setNoteError] = useState<string | null>(null);
+  // Lỗi duyệt ở state riêng: `mutation.isError` chỉ bật sau khi lần tải lại xong, và hàng đổi trạng thái thì khối nút bị gỡ. Lỗi duyệt chỉ tính lại số tiền hoàn
+  // (hàng không rời danh sách) nên ở lại trong khối xác nhận; lỗi Từ chối / đã nhận hàng đi lên tab qua `onActionError`.
+  const [approveError, setApproveError] = useState<string | null>(null);
 
   const preview = useQuery({
     queryKey: ['admin-return-preview', r.id, shopFault],
@@ -67,32 +78,62 @@ export function ReturnRow({
     staleTime: 0,
   });
 
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['admin-returns'] });
-    void qc.invalidateQueries({ queryKey: ['admin-orders'] });
-    void qc.invalidateQueries({ queryKey: ['admin-customer-refunds'] });
-    void invalidateInbox(qc);
-  };
-  const approve = useMutation({
-    mutationFn: (p: AdminReturnPreview) =>
-      reviewReturnRequest(r.id, true, note.trim() || undefined, {
-        shopFault: p.shopFault,
-        expectedRefund: p.refund,
-      }),
-    onSuccess: () => {
-      setConfirming(false);
-      refresh();
+  const refresh = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['admin-returns'] }),
+      qc.invalidateQueries({ queryKey: ['admin-orders'] }),
+      qc.invalidateQueries({ queryKey: ['admin-customer-refunds'] }),
+      invalidateInbox(qc),
+    ]);
+  // Khoá giữ tới khi danh sách tải lại xong (tối đa 4 giây): nhả sớm thì nút còn hiện với yêu cầu cũ.
+  const approve = useLockedMutation(
+    {
+      mutationFn: (p: AdminReturnPreview) =>
+        reviewReturnRequest(r.id, true, note.trim() || undefined, {
+          shopFault: p.shopFault,
+          expectedRefund: p.refund,
+        }),
+      onMutate: () => setApproveError(null),
+      onSuccess: () => {
+        setConfirming(false);
+        return settleWithin(refresh());
+      },
+      onError: (e: unknown) => {
+        setApproveError(errorText(e, 'Không duyệt được yêu cầu.'));
+        // Mọi lỗi đều tính lại số tiền hoàn (không chỉ 400/404/409): 5xx/mất mạng chưa chứng minh yêu cầu chưa được duyệt, xem lại số mới rồi mới bấm lại.
+        return settleWithin(preview.refetch());
+      },
     },
-    onError: () => void preview.refetch(),
-  });
-  const reject = useMutation({
-    mutationFn: () => reviewReturnRequest(r.id, false, note.trim()),
-    onSuccess: refresh,
-  });
-  const received = useMutation({ mutationFn: () => markReturnReceived(r.id), onSuccess: refresh });
+    () => r.id,
+  );
+  const reject = useLockedMutation(
+    {
+      mutationFn: () => reviewReturnRequest(r.id, false, note.trim()),
+      onMutate: () => onActionError(null),
+      onSuccess: () => settleWithin(refresh()),
+      onError: (e: unknown) => {
+        onActionError(errorText(e, 'Không từ chối được yêu cầu.'));
+        return reloadWhenStale(e, refresh);
+      },
+    },
+    () => r.id,
+  );
+  const received = useLockedMutation(
+    {
+      mutationFn: () => markReturnReceived(r.id),
+      onMutate: () => onActionError(null),
+      onSuccess: () => settleWithin(refresh()),
+      onError: (e: unknown) => {
+        onActionError(errorText(e, 'Không ghi nhận được.'));
+        return reloadWhenStale(e, refresh);
+      },
+    },
+    () => r.id,
+  );
 
   const orderCode = r.order?.code ?? r.orderId;
   const askReject = async () => {
+    if (approve.isPending || reject.isPending) return;
     if (note.trim().length < REJECT_NOTE_MIN) {
       setNoteError('Ghi lý do từ chối để báo cho khách (tối thiểu 3 ký tự).');
       return;
@@ -108,6 +149,7 @@ export function ReturnRow({
     if (ok) reject.mutate();
   };
   const askReceived = async () => {
+    if (received.isPending) return;
     const ok = await confirm({
       title: 'Đã nhận hàng trả về?',
       message: `Xác nhận kho đã nhận hàng trả của đơn ${orderCode}? Kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake.`,
@@ -132,7 +174,7 @@ export function ReturnRow({
     );
 
   const p = preview.data;
-  const busy = approve.isPending || reject.isPending;
+  const busy = approve.isPending || reject.isPending || received.isPending;
   const merchantStore = r.order?.fulfiller === 'MERCHANT' ? (r.order.fulfillerStorefront?.title ?? 'Gian hàng đối tác') : null;
   const paidMoney = (r.refundAmount ?? 0) + (r.shippingRefund ?? 0);
 
@@ -178,7 +220,7 @@ export function ReturnRow({
                 {it.productName ?? 'Sản phẩm'}
                 {it.variationName ? ` · ${it.variationName}` : ''}
               </span>
-              <span className="text-xs font-medium text-stone-700">
+              <span className="text-xs font-medium tabular-nums text-stone-700">
                 Trả {it.quantity}
                 {it.orderedQuantity ? `/${it.orderedQuantity}` : ''}
               </span>
@@ -237,8 +279,9 @@ export function ReturnRow({
             <button
               type="button"
               onClick={() => void askReject()}
-              disabled={busy}
-              className={BTN_DANGER_OUTLINE}
+              aria-busy={reject.isPending || undefined}
+              aria-disabled={busy || undefined}
+              className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`}
             >
               {reject.isPending ? 'Đang từ chối…' : 'Từ chối'}
             </button>
@@ -246,11 +289,6 @@ export function ReturnRow({
           {noteError && (
             <p role="alert" className="mt-1 text-xs text-danger-fg">
               {noteError}
-            </p>
-          )}
-          {reject.isError && (
-            <p role="alert" className="mt-1 text-xs text-danger-fg">
-              {errorText(reject.error, 'Không từ chối được yêu cầu.')}
             </p>
           )}
 
@@ -349,9 +387,9 @@ export function ReturnRow({
                       ? `Hàng trả về ${p.returnTo.name}, không về kho Tubu — gian hàng xác nhận nhận hàng và tự cộng kho; khoản đã quyết toán cho gian hàng được trừ lại ở kỳ sau.`
                       : 'Bấm "Đã nhận hàng về" khi hàng về kho. Kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake.'}
                   </p>
-                  {approve.isError && (
+                  {approveError && (
                     <p role="alert" className="mt-2 text-sm text-danger-fg">
-                      {errorText(approve.error, 'Không duyệt được yêu cầu.')}
+                      {approveError}
                     </p>
                   )}
                   <div className="mt-3 flex flex-wrap gap-2">
@@ -365,9 +403,13 @@ export function ReturnRow({
                     </button>
                     <button
                       type="button"
-                      onClick={() => approve.mutate(p)}
-                      disabled={busy || preview.isFetching}
-                      className={BTN_PRIMARY}
+                      onClick={() => {
+                        if (busy || preview.isFetching) return;
+                        approve.mutate(p);
+                      }}
+                      aria-busy={approve.isPending || undefined}
+                      aria-disabled={busy || preview.isFetching || undefined}
+                      className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
                     >
                       {approve.isPending ? 'Đang duyệt…' : `Xác nhận hoàn ${formatVnd(p.refund)}`}
                     </button>
@@ -409,19 +451,15 @@ export function ReturnRow({
                   <button
                     type="button"
                     onClick={() => void askReceived()}
-                    disabled={received.isPending}
-                    className={BTN_SECONDARY}
+                    aria-busy={received.isPending || undefined}
+                    aria-disabled={busy || undefined}
+                    className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
                   >
                     {received.isPending ? 'Đang ghi nhận…' : 'Đã nhận hàng về'}
                   </button>
                 )}
               </div>
             ))}
-          {received.isError && (
-            <p role="alert" className="text-danger-fg">
-              {errorText(received.error, 'Không ghi nhận được.')}
-            </p>
-          )}
         </div>
       )}
       {dialog}

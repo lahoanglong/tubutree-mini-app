@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState } from 'react';
+import { createContext, useContext, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { addComment } from '@tubutree/app-core/api/feed';
 import { communityViewsFor, reportsTabCount, type CommunityView } from '@tubutree/app-core/community-moderation-views';
@@ -23,7 +23,6 @@ import {
   type CommunityUnansweredQuestion,
 } from '@/lib/community-moderation-client';
 import { useOpsInbox } from './use-ops-inbox';
-import { ApiError } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
 import { formatDateTime } from '@/lib/format-date';
 import { EventsPanel } from './community-events-panel';
@@ -31,6 +30,9 @@ import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, ListSkeleton, LoadError, chipClass, Notice, ToneBadge } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { isStaleWriteRejection } from '@/lib/stale-write-rejection';
+import { settleWithin } from '@/lib/settle-within';
+import { usePressLock } from '@/lib/use-press-lock';
 
 export type { CommunityView };
 
@@ -52,9 +54,34 @@ const QUERY_KEYS = {
 } as const satisfies Record<Exclude<CommunityView, 'events'>, QueryKey>;
 const INBOX_KEY: QueryKey = ['admin-ops-inbox'];
 
-/** Bài đã đổi trạng thái do người khác (409) hoặc không còn (404): dòng sẽ biến khỏi danh sách sau khi làm mới, nên lời giải thích đứng ở đầu tab thay vì trên dòng. */
+/** Bài đã đổi trạng thái do người khác (409, 400) hoặc không còn (404): dòng sẽ biến khỏi danh sách sau khi làm mới, nên lời giải thích đứng ở đầu tab thay vì trên dòng. */
 const StaleNoticeContext = createContext<(message: string | null) => void>(() => {});
-const isStale = (e: unknown): e is ApiError => e instanceof ApiError && (e.status === 409 || e.status === 404);
+
+/** Nút đang chạy báo bận bằng aria-disabled thay `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */
+const BUSY_CLASS = 'aria-disabled:opacity-60';
+
+/**
+ * Một việc mỗi lúc trên một dòng (Duyệt/Từ chối cùng một bài, Ẩn/Bỏ qua cùng một báo cáo, Ghim/Ẩn cùng một bài loại trừ nhau).
+ * Ref vì `isPending` chỉ đúng sau lần vẽ kế tiếp: hai cú chạm sát nhau trong cùng khung hình vẫn đều thấy nút rảnh.
+ */
+function useRowLock() {
+  const held = useRef(false);
+  return useMemo(
+    () => ({
+      isHeld: () => held.current,
+      take: () => {
+        if (held.current) return false;
+        held.current = true;
+        return true;
+      },
+      release: () => {
+        held.current = false;
+      },
+    }),
+    [],
+  );
+}
+type RowLock = ReturnType<typeof useRowLock>;
 
 /**
  * Kiểm duyệt cộng đồng trên web admin cho ADMIN và nhân viên nhóm CSKH (trước đây chỉ ADMIN duyệt được, và chỉ trong mini app):
@@ -139,13 +166,27 @@ function Thumbnails({ images }: { images: string[] }) {
   );
 }
 
-/** Thao tác trên một bài: gọi API, làm mới danh sách và số trên "Việc cần xử lý"; lỗi hiện ngay trên đúng bài. */
-function usePostAction<V>(fn: (v: V) => Promise<unknown>, refreshKeys: QueryKey[], failText: string) {
+/**
+ * Thao tác trên một bài: gọi API, làm mới danh sách và số trên "Việc cần xử lý". Khoá của dòng giữ tới khi danh sách làm mới về (tối đa `settleWithin`):
+ * nhả sớm thì dòng vừa duyệt còn nút và bấm lại ra lỗi "đã đổi trạng thái". Bị từ chối vì trạng thái đã đổi (400/404/409) thì lời lỗi hiện ngay ở đầu tab
+ * (dòng sắp biến khỏi danh sách) rồi tải lại; lỗi khác hiện trên đúng dòng và mã không chờ tải lại, khoá nhả ngay (lần tải lại hỏng sẽ thay danh sách bằng màn lỗi).
+ * Quy tắc 400/404/409 chỉ quyết định việc CHỜ tải lại trước khi nhả khoá: trên production MutationCache vẫn làm cũ mọi khoá `admin-*` (kể cả khoá của tab này) sau mỗi lệnh settle, kể cả 5xx.
+ * `hasInput`: lệnh nhận chữ do người kiểm duyệt nhập (lý do từ chối/ẩn, nội dung trả lời): 400 là lỗi nhập liệu nên hiện trên đúng dòng, không tải lại;
+ * chỉ 404/409 là dữ liệu cũ. `onSent`: chạy ngay khi lệnh thành công, trước và độc lập với lần làm mới danh sách (lần làm mới có thể treo tới hạn 4 giây hoặc hỏng).
+ */
+function usePostAction<V>(
+  fn: (v: V) => Promise<unknown>,
+  refreshKeys: QueryKey[],
+  failText: string,
+  lock: RowLock,
+  { hasInput = false, onSent }: { hasInput?: boolean; onSent?: (v: V) => void } = {},
+) {
   const qc = useQueryClient();
   const setStaleNotice = useContext(StaleNoticeContext);
   const [err, setErr] = useState<string | null>(null);
   const refresh = () => {
-    for (const key of [...refreshKeys, INBOX_KEY]) void qc.invalidateQueries({ queryKey: key });
+    void qc.invalidateQueries({ queryKey: INBOX_KEY });
+    return settleWithin(Promise.all(refreshKeys.map((queryKey) => qc.invalidateQueries({ queryKey }))));
   };
   const m = useMutation({
     mutationFn: fn,
@@ -153,17 +194,25 @@ function usePostAction<V>(fn: (v: V) => Promise<unknown>, refreshKeys: QueryKey[
       setErr(null);
       setStaleNotice(null);
     },
-    onSuccess: refresh,
+    onSuccess: (_data, v) => {
+      onSent?.(v);
+      return refresh();
+    },
     onError: (e) => {
-      if (isStale(e)) {
-        setStaleNotice(e.message);
-        refresh();
-        return;
+      if (isStaleWriteRejection(e, hasInput)) {
+        setStaleNotice(e instanceof Error ? e.message : failText);
+        return refresh();
       }
       setErr(e instanceof Error ? actionErrorText(e) : failText);
+      return undefined;
     },
+    onSettled: lock.release,
   });
-  return { mutate: m.mutate, pending: m.isPending, err };
+  const mutate = (v: V) => {
+    if (!lock.take()) return;
+    m.mutate(v);
+  };
+  return { mutate, pending: m.isPending, err };
 }
 
 function RowError({ message }: { message: string | null }) {
@@ -182,7 +231,7 @@ function PendingList() {
   return (
     <div className="space-y-2">
       {q.isLoading && <ListSkeleton label="Đang tải danh sách" rows={3} className="h-24" />}
-      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách bài chờ duyệt.</LoadError>}
+      {q.isError && <LoadError onRetry={() => void q.refetch({ cancelRefetch: false })} retrying={q.isFetching}>Không tải được danh sách bài chờ duyệt.</LoadError>}
       {q.data && (
         <>
           <p className="text-xs text-stone-500">{q.data.length === 0 ? 'Không có bài nào đang chờ duyệt.' : `${q.data.length} bài chờ duyệt · cũ nhất trước`}</p>
@@ -200,9 +249,11 @@ function PendingList() {
 function PendingRow({ post: p }: { post: CommunityPendingPost }) {
   const { ask, dialog } = useConfirm();
   const keys = [QUERY_KEYS.pending];
-  const approve = usePostAction(() => approveCommunityPost(p.id), keys, 'Không duyệt được bài.');
-  const reject = usePostAction((reason: string) => rejectCommunityPost(p.id, reason || undefined), keys, 'Không từ chối được bài.');
+  const lock = useRowLock();
+  const approve = usePostAction(() => approveCommunityPost(p.id), keys, 'Không duyệt được bài.', lock);
+  const reject = usePostAction((reason: string) => rejectCommunityPost(p.id, reason || undefined), keys, 'Không từ chối được bài.', lock, { hasInput: true });
   const askReject = async () => {
+    if (lock.isHeld()) return;
     const reason = await ask({
       title: 'Từ chối bài này?',
       message: 'Bài bị gỡ và tác giả được báo. Lý do dưới đây hiện cho tác giả; để trống thì dùng lý do mặc định về nội quy cộng đồng.',
@@ -221,10 +272,22 @@ function PendingRow({ post: p }: { post: CommunityPendingPost }) {
       <p className="mt-1 whitespace-pre-wrap break-words text-sm text-stone-800">{p.body}</p>
       <Thumbnails images={p.images} />
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button type="button" disabled={busy} onClick={() => approve.mutate(undefined)} className={BTN_PRIMARY}>
+        <button
+          type="button"
+          aria-busy={approve.pending || undefined}
+          aria-disabled={busy || undefined}
+          onClick={() => approve.mutate(undefined)}
+          className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
+        >
           Duyệt
         </button>
-        <button type="button" disabled={busy} onClick={() => void askReject()} className={BTN_DANGER_OUTLINE}>
+        <button
+          type="button"
+          aria-busy={reject.pending || undefined}
+          aria-disabled={busy || undefined}
+          onClick={() => void askReject()}
+          className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`}
+        >
           Từ chối
         </button>
       </div>
@@ -238,7 +301,7 @@ function ReportsList({ isAdmin }: { isAdmin: boolean }) {
   return (
     <div className="space-y-2">
       {q.isLoading && <ListSkeleton label="Đang tải danh sách" rows={3} className="h-24" />}
-      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách báo cáo vi phạm.</LoadError>}
+      {q.isError && <LoadError onRetry={() => void q.refetch({ cancelRefetch: false })} retrying={q.isFetching}>Không tải được danh sách báo cáo vi phạm.</LoadError>}
       {q.data && (
         <>
           <p className="text-xs text-stone-500">{q.data.length === 0 ? 'Chưa có báo cáo vi phạm nào đang mở.' : `${q.data.length} báo cáo đang mở · cũ nhất trước`}</p>
@@ -256,7 +319,8 @@ function ReportsList({ isAdmin }: { isAdmin: boolean }) {
 function ReportRow({ report: r, canRemoveComment }: { report: CommunityReport; canRemoveComment: boolean }) {
   const { ask, dialog } = useConfirm();
   const keys = [QUERY_KEYS.reports, QUERY_KEYS.published];
-  const resolve = usePostAction(() => resolveCommunityReport(r.id), keys, 'Không đóng được báo cáo.');
+  const lock = useRowLock();
+  const resolve = usePostAction(() => resolveCommunityReport(r.id), keys, 'Không đóng được báo cáo.', lock);
   const hide = usePostAction(
     async (reason: string) => {
       if (r.targetType === 'COMMENT') await removeCommunityComment(r.targetId);
@@ -265,8 +329,11 @@ function ReportRow({ report: r, canRemoveComment }: { report: CommunityReport; c
     },
     keys,
     'Không ẩn được nội dung.',
+    lock,
+    { hasInput: true },
   );
   const askHide = async () => {
+    if (lock.isHeld()) return;
     const isComment = r.targetType === 'COMMENT';
     const reason = await ask({
       title: isComment ? 'Gỡ bình luận này?' : 'Ẩn bài này khỏi cộng đồng?',
@@ -295,11 +362,23 @@ function ReportRow({ report: r, canRemoveComment }: { report: CommunityReport; c
       <p className="mt-1 text-xs text-stone-600">Lý do báo cáo: {r.reason}</p>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {canHide && (
-          <button type="button" disabled={busy} onClick={() => void askHide()} className={BTN_DANGER_OUTLINE}>
+          <button
+            type="button"
+            aria-busy={hide.pending || undefined}
+            aria-disabled={busy || undefined}
+            onClick={() => void askHide()}
+            className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`}
+          >
             {r.targetType === 'COMMENT' ? 'Gỡ bình luận' : 'Ẩn bài'}
           </button>
         )}
-        <button type="button" disabled={busy} onClick={() => resolve.mutate(undefined)} className={BTN_SECONDARY}>
+        <button
+          type="button"
+          aria-busy={resolve.pending || undefined}
+          aria-disabled={busy || undefined}
+          onClick={() => resolve.mutate(undefined)}
+          className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
+        >
           Bỏ qua, đóng báo cáo
         </button>
       </div>
@@ -316,10 +395,11 @@ function PublishedList({ canPin }: { canPin: boolean }) {
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
   const items = q.data?.pages.flatMap((pg) => pg.items) ?? [];
+  const more = usePressLock(() => (q.isFetchingNextPage ? undefined : q.fetchNextPage()));
   return (
     <div className="space-y-2">
       {q.isLoading && <ListSkeleton label="Đang tải danh sách" rows={3} className="h-24" />}
-      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách bài đã đăng.</LoadError>}
+      {q.isError && <LoadError onRetry={() => void q.refetch({ cancelRefetch: false })} retrying={q.isFetching}>Không tải được danh sách bài đã đăng.</LoadError>}
       {q.data && items.length === 0 && <p className="text-xs text-stone-500">Chưa có bài nào được đăng.</p>}
       <ul className="space-y-2">
         {items.map((p) => (
@@ -327,7 +407,13 @@ function PublishedList({ canPin }: { canPin: boolean }) {
         ))}
       </ul>
       {q.hasNextPage && (
-        <button type="button" disabled={q.isFetchingNextPage} onClick={() => void q.fetchNextPage()} className={BTN_SECONDARY}>
+        <button
+          type="button"
+          aria-busy={more.busy || q.isFetchingNextPage || undefined}
+          aria-disabled={more.busy || q.isFetchingNextPage || undefined}
+          onClick={more.press}
+          className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
+        >
           {q.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
         </button>
       )}
@@ -338,9 +424,11 @@ function PublishedList({ canPin }: { canPin: boolean }) {
 function PublishedRow({ post: p, canPin }: { post: CommunityPublishedPost; canPin: boolean }) {
   const { ask, dialog } = useConfirm();
   const keys = [QUERY_KEYS.published, QUERY_KEYS.unanswered];
-  const pin = usePostAction((pinned: boolean) => pinCommunityPost(p.id, pinned), keys, 'Không đổi được trạng thái ghim.');
-  const hide = usePostAction((reason: string) => hideCommunityPost(p.id, reason || undefined), keys, 'Không ẩn được bài.');
+  const lock = useRowLock();
+  const pin = usePostAction((pinned: boolean) => pinCommunityPost(p.id, pinned), keys, 'Không đổi được trạng thái ghim.', lock);
+  const hide = usePostAction((reason: string) => hideCommunityPost(p.id, reason || undefined), keys, 'Không ẩn được bài.', lock, { hasInput: true });
   const askHide = async () => {
+    if (lock.isHeld()) return;
     const reason = await ask({
       title: 'Ẩn bài này khỏi cộng đồng?',
       message: 'Bài biến khỏi bảng tin và tác giả được báo kèm lý do dưới đây; để trống thì dùng lý do mặc định về nội quy cộng đồng.',
@@ -367,11 +455,23 @@ function PublishedRow({ post: p, canPin }: { post: CommunityPublishedPost; canPi
       </div>
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {canPin && (
-          <button type="button" disabled={busy} onClick={() => pin.mutate(!p.isPinned)} className={BTN_SECONDARY}>
+          <button
+            type="button"
+            aria-busy={pin.pending || undefined}
+            aria-disabled={busy || undefined}
+            onClick={() => pin.mutate(!p.isPinned)}
+            className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
+          >
             {p.isPinned ? 'Bỏ ghim' : 'Ghim'}
           </button>
         )}
-        <button type="button" disabled={busy} onClick={() => void askHide()} className={BTN_DANGER_OUTLINE}>
+        <button
+          type="button"
+          aria-busy={hide.pending || undefined}
+          aria-disabled={busy || undefined}
+          onClick={() => void askHide()}
+          className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`}
+        >
           Ẩn
         </button>
       </div>
@@ -385,7 +485,7 @@ function UnansweredList() {
   return (
     <div className="space-y-2">
       {q.isLoading && <ListSkeleton label="Đang tải danh sách" rows={3} className="h-24" />}
-      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách câu hỏi chưa trả lời.</LoadError>}
+      {q.isError && <LoadError onRetry={() => void q.refetch({ cancelRefetch: false })} retrying={q.isFetching}>Không tải được danh sách câu hỏi chưa trả lời.</LoadError>}
       {q.data && (
         <>
           <p className="text-xs text-stone-500">
@@ -408,7 +508,13 @@ const REPLY_MAX = 500;
 
 function UnansweredRow({ question: p }: { question: CommunityUnansweredQuestion }) {
   const [reply, setReply] = useState('');
-  const send = usePostAction((body: string) => addComment(coreHttp, p.id, body), [QUERY_KEYS.unanswered], 'Không gửi được câu trả lời.');
+  const lock = useRowLock();
+  // Xoá ô ngay khi gửi xong: còn chữ thì sau khi khoá nhả (≤ 4 giây) bấm lại sẽ ra bình luận công khai thứ hai khi đã quá cửa sổ gộp trùng 10 giây của máy chủ.
+  // Chỉ xoá khi ô còn đúng chữ đã gửi, người dùng gõ tiếp câu khác trong lúc chờ thì giữ.
+  const send = usePostAction((body: string) => addComment(coreHttp, p.id, body), [QUERY_KEYS.unanswered], 'Không gửi được câu trả lời.', lock, {
+    hasInput: true,
+    onSent: (sent) => setReply((cur) => (cur.trim() === sent ? '' : cur)),
+  });
   const body = reply.trim();
   return (
     <li data-post={p.id} className="rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
@@ -422,7 +528,7 @@ function UnansweredRow({ question: p }: { question: CommunityUnansweredQuestion 
         className="mt-3 space-y-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (body && !send.pending) send.mutate(body);
+          if (body) send.mutate(body);
         }}
       >
         <label className="block text-xs">
@@ -430,7 +536,7 @@ function UnansweredRow({ question: p }: { question: CommunityUnansweredQuestion 
           <textarea name="reply" rows={2} maxLength={REPLY_MAX} value={reply} onChange={(e) => setReply(e.target.value)} className={`mt-1 ${INPUT_CLASS}`} />
         </label>
         <div className="flex flex-wrap items-center gap-2">
-          <button type="submit" disabled={!body || send.pending} className={BTN_PRIMARY}>
+          <button type="submit" disabled={!body} aria-busy={send.pending || undefined} aria-disabled={send.pending || undefined} className={`${BTN_PRIMARY} ${BUSY_CLASS}`}>
             {send.pending ? 'Đang gửi…' : 'Gửi trả lời'}
           </button>
           <Link href={`/cong-dong/${encodeURIComponent(p.id)}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-[44px] items-center px-2 text-sm font-medium text-forest-700 underline sm:min-h-6 sm:px-1">

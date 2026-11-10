@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { invalidateInbox } from '@/lib/admin-client';
 import { apiFetch } from '@/lib/client-api';
 import { formatVnd } from '@/lib/shop-client';
@@ -10,6 +10,8 @@ import { useConfirm } from './confirm-dialog';
 import { USER_ROLE_LABELS } from './users-list';
 import { formatDateTime } from '@/lib/format-date';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 
 export type DeletionStatusFilter = 'PENDING' | 'RESOLVED' | 'ALL';
 
@@ -76,6 +78,17 @@ const FILTERS: { k: DeletionStatusFilter; label: string }[] = [
 
 const QUERY_KEY = 'admin-account-deletions';
 
+/** Lời lỗi theo id yêu cầu: đặt hoặc thay lời của đúng yêu cầu đó, `null` thì gỡ; lời của yêu cầu khác giữ nguyên. */
+function withNotice(all: Record<string, string>, id: string, message: string | null): Record<string, string> {
+  if (message === null) {
+    if (!(id in all)) return all;
+    const next = { ...all };
+    delete next[id];
+    return next;
+  }
+  return { ...all, [id]: message };
+}
+
 /**
  * C-016: khách gửi yêu cầu xoá tài khoản từ miniapp; trước đây không có màn nào xử lý. "Xử lý" ẩn danh
  * dữ liệu cá nhân (BE AccountDeletionService), giữ đơn và sổ tiền cho kế toán; BE kiểm lại điều kiện
@@ -84,6 +97,9 @@ const QUERY_KEY = 'admin-account-deletions';
 export function AccountDeletionPanel({ seed = 0 }: { seed?: number }) {
   const [filter, setFilter] = useState<DeletionStatusFilter>('PENDING');
   const q = useQuery({ queryKey: [QUERY_KEY, filter], queryFn: () => listDeletionRequests(filter) });
+  // Lời lỗi của lệnh ghi nằm ở đây, ngoài dòng: tải lại làm dòng rời hàng chờ (yêu cầu đã được xử lý ở máy khác) thì lời lỗi vẫn còn.
+  // Mỗi yêu cầu một lời: lệnh ở dòng khác (thành công hay lỗi) không được xoá hay thay lời của yêu cầu vừa lỗi (lệnh không hoàn tác, có thể trừ tiền Ví).
+  const [notices, setNotices] = useState<Record<string, string>>({});
   const sectionRef = useRef<HTMLElement>(null);
   // Thẻ "Hôm nay" mở tab Người dùng: trang đặt khối này lên đầu (seed > 0); cuộn tới để khỏi nằm dưới phần đã cuộn của trang, và mở lại hàng chờ xử lý.
   useEffect(() => {
@@ -105,7 +121,10 @@ export function AccountDeletionPanel({ seed = 0 }: { seed?: number }) {
               type="button"
               role="tab"
               aria-selected={filter === f.k}
-              onClick={() => setFilter(f.k)}
+              onClick={() => {
+                setFilter(f.k);
+                setNotices({});
+              }}
               className={chipClass(filter === f.k)}
             >
               {f.label}
@@ -114,6 +133,11 @@ export function AccountDeletionPanel({ seed = 0 }: { seed?: number }) {
         </div>
       </div>
 
+      {Object.entries(notices).map(([id, text]) => (
+        <p key={id} role="alert" className="text-sm text-danger-fg">
+          {text}
+        </p>
+      ))}
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {q.isError && (
         <p className="text-sm text-danger-fg">
@@ -124,7 +148,7 @@ export function AccountDeletionPanel({ seed = 0 }: { seed?: number }) {
         </p>
       )}
       <div className="space-y-2">
-        {q.data?.map((r) => <DeletionRow key={r.id} request={r} />)}
+        {q.data?.map((r) => <DeletionRow key={r.id} request={r} onError={(message) => setNotices((all) => withNotice(all, r.id, message))} />)}
         {q.data?.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
             Không có yêu cầu nào.
@@ -135,10 +159,9 @@ export function AccountDeletionPanel({ seed = 0 }: { seed?: number }) {
   );
 }
 
-function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
+function DeletionRow({ request: r, onError }: { request: AdminDeletionRequest; onError: (message: string | null) => void }) {
   const qc = useQueryClient();
   const [note, setNote] = useState('');
-  const [err, setErr] = useState<string | null>(null);
   const pending = r.status === 'PENDING';
   const noteHasPhone = containsPhone(note);
   const blocked = r.blockers.length > 0;
@@ -149,25 +172,30 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
   const otherBlockers = r.blockers.filter((b) => b.code !== 'WALLET_BALANCE');
   const onlyWalletBlocked = walletBlocked && otherBlockers.length === 0;
   const canOverrideWallet = pending && walletBlocked && walletBalance > 0;
+  const who = r.user?.fullName || r.user?.phone || r.userId;
+  // Lời lỗi đứng ở danh sách, chung với các yêu cầu khác: phải nói là của yêu cầu nào.
+  const report = (message: string | null) => onError(message === null ? null : `Yêu cầu xoá tài khoản của "${who}" (mã ${r.id.slice(-6)}): ${message}`);
 
-  const mut = useMutation({
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: [QUERY_KEY] }), invalidateInbox(qc)]);
+  // Khoá giữ tới khi danh sách làm mới về (tối đa 4 giây): nhả sớm thì yêu cầu vừa xử lý còn nút và bấm lại được (không hoàn tác, có thể trừ tiền Ví).
+  const mut = useLockedMutation({
     mutationFn: (override?: WalletOverrideInput) => processDeletionRequest(r.id, note, override),
     onSuccess: () => {
-      setErr(null);
+      report(null);
       setNote('');
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-      void invalidateInbox(qc);
+      return settleWithin(refresh());
     },
     onError: (e) => {
-      setErr(actionErrorText(e));
-      void qc.invalidateQueries({ queryKey: [QUERY_KEY] });
-      void invalidateInbox(qc);
+      report(actionErrorText(e));
+      // Khác quy tắc chung (chỉ 400/404/409 mới CHỜ tải lại trước khi nhả khoá): lệnh không hoàn tác này lỗi nào cũng chờ tải lại xong rồi mới nhả khoá, vì yêu cầu có thể vừa được xử lý ở máy khác
+      // hoặc đã ghi rồi mới lỗi mạng/5xx, và nhả sớm thì nút còn hiện. Trên production MutationCache vẫn làm cũ khoá admin-* ở mọi lỗi, nhưng không chờ.
+      return settleWithin(refresh());
     },
   });
 
   const run = async () => {
-    setErr(null);
-    const who = r.user?.fullName || r.user?.phone || r.userId;
+    if (mut.isPending) return;
+    report(null);
     const ok = await confirm({
       title: 'Ẩn danh tài khoản?',
       message: `Ẩn danh tài khoản "${who}"? Tên, SĐT, địa chỉ, Zalo sẽ bị xoá vĩnh viễn và khách bị đăng xuất. Đơn hàng và sổ tiền vẫn được giữ. Không hoàn tác được.`,
@@ -178,8 +206,8 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
   };
 
   const runOverride = async () => {
-    setErr(null);
-    const who = r.user?.fullName || r.user?.phone || r.userId;
+    if (mut.isPending) return;
+    report(null);
     const amount = formatVnd(walletBalance);
     const reason = await ask({
       title: 'Xoá dù còn tiền Ví?',
@@ -204,7 +232,7 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
   };
 
   return (
-    <div className="rounded-card border border-stone-200 bg-stone-0 p-4">
+    <div className="rounded-card border border-stone-200 bg-stone-0 p-4 tabular-nums">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div>
           <div className="flex flex-wrap items-center gap-2">
@@ -283,8 +311,10 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
           <button
             type="button"
             onClick={() => void run()}
-            disabled={mut.isPending || blocked || noteHasPhone}
-            className="min-h-11 rounded-control bg-danger-fg px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-500"
+            disabled={blocked || noteHasPhone}
+            aria-busy={(mut.isPending && !mut.variables) || undefined}
+            aria-disabled={mut.isPending || undefined}
+            className="min-h-11 rounded-control bg-danger-fg px-3.5 py-1.5 text-sm font-medium text-stone-0 hover:brightness-90 disabled:bg-stone-200 disabled:text-stone-500 aria-disabled:opacity-60"
           >
             Xử lý (ẩn danh)
           </button>
@@ -292,8 +322,10 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
             <button
               type="button"
               onClick={() => void runOverride()}
-              disabled={mut.isPending || !onlyWalletBlocked || noteHasPhone}
-              className={BTN_DANGER_OUTLINE}
+              disabled={!onlyWalletBlocked || noteHasPhone}
+              aria-busy={(mut.isPending && !!mut.variables) || undefined}
+              aria-disabled={mut.isPending || undefined}
+              className={`${BTN_DANGER_OUTLINE} aria-disabled:opacity-60`}
             >
               Xoá dù còn tiền Ví
             </button>
@@ -305,11 +337,6 @@ function DeletionRow({ request: r }: { request: AdminDeletionRequest }) {
           )}
           {mut.isPending && <span className="text-xs text-stone-500">Đang xử lý…</span>}
         </div>
-      )}
-      {err && (
-        <p role="alert" className="mt-2 text-sm text-danger-fg">
-          {err}
-        </p>
       )}
       {dialog}
     </div>

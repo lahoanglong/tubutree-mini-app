@@ -715,8 +715,17 @@ describe('MerchantProductsTab — hai admin cùng duyệt một sản phẩm (R5
       click(byText(container, 'button', 'Duyệt xuất bản'));
       await flush();
       expect(listCalls).toBe(2);
-      expect((byText(container, 'button', 'Duyệt xuất bản') as HTMLButtonElement).disabled).toBe(true);
-      expect((byText(container, 'button', 'Từ chối') as HTMLButtonElement).disabled).toBe(true);
+      // aria-disabled thay disabled: nút vừa bấm đang giữ focus, Chromium thả focus về body khi nó bị disabled.
+      expect(byText(container, 'button', 'Duyệt xuất bản')?.getAttribute('aria-disabled')).toBe('true');
+      expect(byText(container, 'button', 'Từ chối')?.getAttribute('aria-disabled')).toBe('true');
+      // aria-disabled không chặn được cú bấm: handler tự chặn. Bấm lại ngay khi danh sách còn đang tải lại: không mở ô lý do từ chối, không gửi lệnh duyệt thứ hai.
+      const reviewCalls = () => calls.filter((c) => c.url.includes('/review')).length;
+      expect(reviewCalls()).toBe(1);
+      click(byText(container, 'button', 'Từ chối'));
+      click(byText(container, 'button', 'Duyệt xuất bản'));
+      await flush(2);
+      expect(container.querySelector('input[aria-label="Lý do từ chối"]')).toBeNull();
+      expect(reviewCalls()).toBe(1);
 
       release();
       await flush();

@@ -18,11 +18,17 @@ import {
   type PancakeLinkPreview,
 } from '@/lib/admin-client';
 import { ApiError } from '@/lib/client-api';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { settleWithin } from '@/lib/settle-within';
+import { isStaleWriteRejection, reloadWhenStale } from '@/lib/stale-write-rejection';
+import { usePressLock } from '@/lib/use-press-lock';
 import { AdminImage } from './admin-image';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError, Field } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
+
+const BUSY_CLASS = 'aria-disabled:opacity-60';
 
 /**
  * "Duyệt SP đối tác" — P0 A6-07 (docs/audit-2026-09/06-web.md): API `/admin/merchant-products/pending`
@@ -43,6 +49,7 @@ export function MerchantProductsTab({ focusConsignment = false }: { focusConsign
     getNextPageParam: (last) => nextPageParam(last.meta),
   });
   const view = mergeQueuePages(q.data?.pages, false);
+  const more = usePressLock(() => (q.isFetchingNextPage ? undefined : q.fetchNextPage()));
   const [conflict, setConflict] = useState<ReviewConflict | null>(null);
   const refreshing = q.isFetching && !q.isFetchingNextPage;
   // Dòng còn trên danh sách mới thì lời giải thích nằm ngay dưới nút của dòng đó; dòng đã biến mất (admin khác xử lý rồi) thì giữ lời giải thích ở đây.
@@ -77,7 +84,7 @@ export function MerchantProductsTab({ focusConsignment = false }: { focusConsign
       )}
       <div className="mt-4 space-y-4">
         {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách...</p>}
-        {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách sản phẩm đối tác.</LoadError>}
+        {q.isError && <LoadError onRetry={() => q.refetch({ cancelRefetch: false })} retrying={q.isFetching}>Không tải được danh sách sản phẩm đối tác.</LoadError>}
         {q.data && view.items.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">
             Không có sản phẩm đối tác nào đang chờ duyệt.
@@ -91,9 +98,10 @@ export function MerchantProductsTab({ focusConsignment = false }: { focusConsign
         <div className="mt-3 text-center">
           <button
             type="button"
-            onClick={() => void q.fetchNextPage()}
-            disabled={q.isFetchingNextPage}
-            className={BTN_SECONDARY}
+            onClick={more.press}
+            aria-busy={more.busy || q.isFetchingNextPage || undefined}
+            aria-disabled={more.busy || q.isFetchingNextPage || undefined}
+            className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
           >
             {q.isFetchingNextPage ? 'Đang tải…' : 'Tải thêm'}
           </button>
@@ -160,6 +168,7 @@ function PancakeLinkPanel({ link, storeTitle }: { link: PancakeLinkPreview; stor
  */
 function LinkedMerchantProducts({ focusConsignment, listSettled }: { focusConsignment: boolean; listSettled: boolean }) {
   const [filter, setFilter] = useState<'ALL' | 'PENDING'>(focusConsignment ? 'PENDING' : 'ALL');
+  const [notice, setNotice] = useState<LinkNotice | null>(null);
   const section = useRef<HTMLElement>(null);
   // Chỉ cuộn khi danh sách chờ duyệt phía trên đã tải xong: cuộn lúc mount thì khối còn ở vị trí thấp hơn lúc sau và trượt khỏi màn hình điện thoại.
   useEffect(() => {
@@ -195,7 +204,14 @@ function LinkedMerchantProducts({ focusConsignment, listSettled }: { focusConsig
           Chờ xác nhận ký gửi ({pendingCount})
         </button>
       </div>
-      {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách đang liên kết.</LoadError>}
+      {notice && (
+        <div className="mt-2">
+          <Notice tone="warning" role="alert">
+            <strong>{notice.name}</strong>: {notice.message} Danh sách đã được tải lại.
+          </Notice>
+        </div>
+      )}
+      {q.isError && <LoadError onRetry={() => q.refetch({ cancelRefetch: false })} retrying={q.isFetching}>Không tải được danh sách đang liên kết.</LoadError>}
       {q.data && rows.length === 0 && (
         <p className="mt-2 text-sm text-stone-500">
           {filter === 'PENDING' ? 'Không còn liên kết nào chờ xác nhận hàng ký gửi.' : 'Chưa có sản phẩm đối tác nào liên kết mã Pancake.'}
@@ -203,24 +219,47 @@ function LinkedMerchantProducts({ focusConsignment, listSettled }: { focusConsig
       )}
       <div className="mt-3 space-y-3">
         {rows.map((l) => (
-          <LinkedRow key={l.id} link={l} />
+          <LinkedRow key={l.id} link={l} onStale={setNotice} />
         ))}
       </div>
     </section>
   );
 }
 
-function LinkedRow({ link: l }: { link: AdminLinkedMerchantProduct }) {
+/** Lời báo khi lệnh trên một liên kết bị từ chối vì dữ liệu đã cũ: đứng ở cấp danh sách để còn đọc được sau khi dòng biến mất. */
+interface LinkNotice {
+  name: string;
+  message: string;
+}
+
+function LinkedRow({ link: l, onStale }: { link: AdminLinkedMerchantProduct; onStale: (n: LinkNotice | null) => void }) {
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState('');
+  const acting = useRef(false);
+  const reload = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] }),
+      qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] }),
+    ]);
   const mut = useMutation({
     mutationFn: () => unlinkMerchantProduct(l.product.id, reason.trim()),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] });
-      void qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] });
+    onMutate: () => onStale(null),
+    onSuccess: () => settleWithin(reload()),
+    onError: (e) => {
+      if (!isStaleWriteRejection(e)) return undefined;
+      onStale({ name: l.product.name, message: actionErrorText(e) });
+      return reloadWhenStale(e, reload);
+    },
+    onSettled: () => {
+      acting.current = false;
     },
   });
+  const submit = () => {
+    if (acting.current || !reason.trim()) return;
+    acting.current = true;
+    mut.mutate();
+  };
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-3 text-xs text-stone-700 shadow-card">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -257,9 +296,11 @@ function LinkedRow({ link: l }: { link: AdminLinkedMerchantProduct }) {
             <div className="flex gap-1.5">
               <button
                 type="button"
-                onClick={() => mut.mutate()}
-                disabled={!reason.trim() || mut.isPending}
-                className={`${TOUCH_H} rounded-control bg-danger-fg px-2.5 py-1 text-xs font-semibold text-stone-0 hover:brightness-90 disabled:opacity-50`}
+                onClick={submit}
+                disabled={!reason.trim()}
+                aria-busy={mut.isPending || undefined}
+                aria-disabled={mut.isPending || undefined}
+                className={`${TOUCH_H} rounded-control bg-danger-fg px-2.5 py-1 text-xs font-semibold text-stone-0 hover:brightness-90 disabled:opacity-50 ${BUSY_CLASS}`}
               >
                 {mut.isPending ? 'Đang gỡ…' : 'Xác nhận gỡ'}
               </button>
@@ -270,8 +311,8 @@ function LinkedRow({ link: l }: { link: AdminLinkedMerchantProduct }) {
           </div>
         )}
       </div>
-      {l.takeover && <ConsignmentConfirm link={l} />}
-      {mut.isError && <p className="mt-2 text-danger-fg">{actionErrorText(mut.error)}</p>}
+      {l.takeover && <ConsignmentConfirm link={l} onStale={onStale} />}
+      {mut.isError && !isStaleWriteRejection(mut.error) && <p className="mt-2 text-danger-fg">{actionErrorText(mut.error)}</p>}
     </div>
   );
 }
@@ -316,17 +357,33 @@ function EditComparison({ live, next }: { live: NonNullable<AdminPendingProduct[
  * Liên kết nhận lại mã của sản phẩm Tubu đang bán: hàng đang có trong kho có thể là hàng Tubu đã mua, nên chỉ đối soát tự động
  * cho gian hàng sau khi admin đối chiếu tồn lúc liên kết và xác nhận đó là hàng ký gửi.
  */
-function ConsignmentConfirm({ link: l }: { link: AdminLinkedMerchantProduct }) {
+function ConsignmentConfirm({ link: l, onStale }: { link: AdminLinkedMerchantProduct; onStale: (n: LinkNotice | null) => void }) {
   const qc = useQueryClient();
   const [asking, setAsking] = useState(false);
+  const acting = useRef(false);
+  const reload = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] }),
+      qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] }),
+    ]);
   const mut = useMutation({
     mutationFn: () => confirmMerchantConsignment(l.id),
-    onSuccess: () => {
-      setAsking(false);
-      void qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] });
-      void qc.invalidateQueries({ queryKey: ['admin-ops-inbox'] });
+    onMutate: () => onStale(null),
+    onSuccess: () => settleWithin(reload()).then(() => setAsking(false)),
+    onError: (e) => {
+      if (!isStaleWriteRejection(e)) return undefined;
+      onStale({ name: l.product.name, message: actionErrorText(e) });
+      return reloadWhenStale(e, reload);
+    },
+    onSettled: () => {
+      acting.current = false;
     },
   });
+  const submit = () => {
+    if (acting.current) return;
+    acting.current = true;
+    mut.mutate();
+  };
   const store = l.product.storefront?.title ?? 'gian hàng';
   return (
     <div className="mt-2 rounded-control border border-stone-200 bg-stone-50 p-2.5">
@@ -350,7 +407,13 @@ function ConsignmentConfirm({ link: l }: { link: AdminLinkedMerchantProduct }) {
             <div className="mt-2 space-y-1.5">
               <p className="font-medium text-stone-900">Đơn đặt từ lúc xác nhận sẽ vào đối soát của {store}. Không hoàn tác được.</p>
               <div className="flex gap-1.5">
-                <button type="button" onClick={() => mut.mutate()} disabled={mut.isPending} className={BTN_XS_PRIMARY}>
+                <button
+                  type="button"
+                  onClick={submit}
+                  aria-busy={mut.isPending || undefined}
+                  aria-disabled={mut.isPending || undefined}
+                  className={`${BTN_XS_PRIMARY} ${BUSY_CLASS}`}
+                >
                   {mut.isPending ? 'Đang xác nhận…' : 'Xác nhận ký gửi'}
                 </button>
                 <button type="button" onClick={() => setAsking(false)} className={BTN_XS_SECONDARY}>
@@ -361,7 +424,7 @@ function ConsignmentConfirm({ link: l }: { link: AdminLinkedMerchantProduct }) {
           )}
         </>
       )}
-      {mut.isError && <p className="mt-1 text-danger-fg">{actionErrorText(mut.error)}</p>}
+      {mut.isError && !isStaleWriteRejection(mut.error) && <p className="mt-1 text-danger-fg">{actionErrorText(mut.error)}</p>}
     </div>
   );
 }
@@ -421,6 +484,8 @@ export function MerchantProductRow({
 }) {
   const qc = useQueryClient();
   const errorRef = useRef<HTMLDivElement>(null);
+  const acting = useRef(false);
+  const [stale, setStale] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [showRejectInput, setShowRejectInput] = useState(false);
   const link = p.pancakeLink ?? null;
@@ -449,29 +514,41 @@ export function MerchantProductRow({
               updatedAt: p.updatedAt,
             },
       ),
-    onMutate: () => onConflict?.(null),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] });
-      qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] });
+    onMutate: () => {
+      setStale(null);
+      onConflict?.(null);
     },
+    onSuccess: () =>
+      settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] }),
+          qc.invalidateQueries({ queryKey: ['admin-merchant-products-linked'] }),
+        ]),
+      ),
     onError: (e) => {
-      if (e instanceof ApiError && e.status === 409) {
-        qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] });
-        onConflict?.({ id: p.id, name: p.name, message: reviewConflictMessage(e) });
-      }
+      // 400 ở đây là luật nghiệp vụ (mã Pancake không dùng được), không phải dữ liệu cũ: giữ nguyên dòng để admin đọc lời và sửa.
+      if (!isStaleWriteRejection(e) || errorStatus(e) === 400) return undefined;
+      const message = reviewConflictMessage(e as ApiError);
+      setStale(message);
+      onConflict?.({ id: p.id, name: p.name, message });
+      return reloadWhenStale(e, () => qc.invalidateQueries({ queryKey: ['admin-merchant-products-pending'] }));
+    },
+    onSettled: () => {
+      acting.current = false;
     },
   });
   const busy = reviewMut.isPending || refreshing;
-  const reviewError = reviewMut.error
-    ? reviewMut.error instanceof ApiError && reviewMut.error.status === 409
-      ? reviewConflictMessage(reviewMut.error)
-      : reviewMut.error.message
-    : null;
-  const reviewConflicted = reviewMut.error instanceof ApiError && reviewMut.error.status === 409;
+  const review = (vars: { approve: boolean; reason?: string }) => {
+    if (acting.current || refreshing) return;
+    acting.current = true;
+    reviewMut.mutate(vars);
+  };
+  const reviewError = stale ?? reviewMut.error?.message ?? null;
+  const reviewConflicted = stale !== null;
 
   useEffect(() => {
-    if (reviewMut.error) errorRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
-  }, [reviewMut.error]);
+    if (reviewMut.error || stale) errorRef.current?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+  }, [reviewMut.error, stale]);
 
   return (
     <div className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
@@ -522,11 +599,13 @@ export function MerchantProductRow({
             </label>
           )}
           <button
-            onClick={() => reviewMut.mutate({ approve: true })}
-            disabled={busy || approveBlocked}
-            className={`${TOUCH_H} inline-flex items-center justify-center gap-1 rounded-control bg-forest-600 px-4 py-1.5 text-xs font-semibold text-stone-0 shadow-card hover:bg-forest-700 disabled:opacity-50`}
+            onClick={() => review({ approve: true })}
+            disabled={approveBlocked}
+            aria-busy={busy || undefined}
+            aria-disabled={busy || undefined}
+            className={`${TOUCH_H} inline-flex items-center justify-center gap-1 rounded-control bg-forest-600 px-4 py-1.5 text-xs font-semibold text-stone-0 shadow-card hover:bg-forest-700 disabled:opacity-50 ${BUSY_CLASS}`}
           >
-            {reviewMut.isPending ? (
+            {reviewMut.isPending && stale === null ? (
               'Đang xử lý...'
             ) : (
               <>
@@ -536,9 +615,11 @@ export function MerchantProductRow({
           </button>
           {!showRejectInput ? (
             <button
-              onClick={() => setShowRejectInput(true)}
-              disabled={busy}
-              className={`${BTN_XS_DANGER} inline-flex items-center justify-center gap-1 disabled:opacity-50`}
+              onClick={() => {
+                if (!busy) setShowRejectInput(true);
+              }}
+              aria-disabled={busy || undefined}
+              className={`${BTN_XS_DANGER} inline-flex items-center justify-center gap-1 ${BUSY_CLASS}`}
             >
               <X className="h-3.5 w-3.5" aria-hidden /> Từ chối
             </button>
@@ -557,9 +638,10 @@ export function MerchantProductRow({
               </Field>
               <div className="flex gap-1.5">
                 <button
-                  onClick={() => reviewMut.mutate({ approve: false, reason: rejectReason.trim() || undefined })}
-                  disabled={busy}
-                  className={`${TOUCH_H} rounded-control bg-danger-fg px-2.5 py-1 text-xs font-semibold text-stone-0 hover:brightness-90 disabled:opacity-50`}
+                  onClick={() => review({ approve: false, reason: rejectReason.trim() || undefined })}
+                  aria-busy={busy || undefined}
+                  aria-disabled={busy || undefined}
+                  className={`${TOUCH_H} rounded-control bg-danger-fg px-2.5 py-1 text-xs font-semibold text-stone-0 hover:brightness-90 ${BUSY_CLASS}`}
                 >
                   Xác nhận từ chối
                 </button>

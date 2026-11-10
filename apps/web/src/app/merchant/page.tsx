@@ -57,6 +57,8 @@ import { ImageUrlField } from './image-url-field';
 import { ProductThumb } from './product-thumb';
 import { RowMenu } from './row-menu';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
 
 const POPULAR_BANKS = [
   { bin: '970436', name: 'Vietcombank (VCB)' },
@@ -1023,14 +1025,19 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
   // hình im lặng, đối tác bấm lại nhiều lần tưởng web bị treo. Bọc bằng useMutation, mirror đúng
   // pattern updateMut ở OrdersTab cùng file (mutation dùng chung cho cả bảng + banner lỗi phía trên).
   const [removeError, setRemoveError] = useState<string | null>(null);
+  // Khoá của menu giữ tới khi danh sách sản phẩm làm mới về (tối đa 4 giây): nhả sớm thì hàng vừa gỡ/ngừng bán còn mục menu và chọn lại ra lỗi "không còn".
+  // Bị từ chối vì trạng thái đã đổi (400/404/409) thì tải lại; lời lỗi nằm ở đầu tab nên không mất cùng hàng bị gỡ.
+  const refreshProducts = () => qc.invalidateQueries({ queryKey: ['merchant-products'] });
   const removeMut = useMutation({
     mutationFn: (productId: string) => removeResellProduct(productId),
     onSuccess: () => {
       setRemoveError(null);
-      void qc.invalidateQueries({ queryKey: ['merchant-products'] });
+      return settleWithin(refreshProducts());
     },
-    onError: (e: unknown) =>
-      setRemoveError(actionErrorText(e)),
+    onError: (e: unknown) => {
+      setRemoveError(actionErrorText(e));
+      return reloadWhenStale(e, refreshProducts);
+    },
   });
 
   const [ownError, setOwnError] = useState<string | null>(null);
@@ -1039,9 +1046,12 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
       active ? updateMerchantProduct(id, { isActive: true }) : stopSellingMerchantProduct(id),
     onSuccess: () => {
       setOwnError(null);
-      void qc.invalidateQueries({ queryKey: ['merchant-products'] });
+      return settleWithin(refreshProducts());
     },
-    onError: (e: unknown) => setOwnError(actionErrorText(e)),
+    onError: (e: unknown) => {
+      setOwnError(actionErrorText(e));
+      return reloadWhenStale(e, refreshProducts);
+    },
   });
 
   return (
@@ -1328,15 +1338,34 @@ function OrdersTab({ selfFulfils, onOpenFulfil }: { selfFulfils: boolean; onOpen
   // Trước đây mutation này KHÔNG có onError và nút không disable khi đang chạy: API trả
   // 400/403 thì màn hình không đổi gì cả, đối tác bấm lại 4-5 lần rồi tưởng hệ thống hỏng.
   const [updateError, setUpdateError] = useState<string | null>(null);
+  // Một đơn chuyển bước mỗi lúc, giữ tới khi danh sách đơn làm mới về (tối đa 4 giây): nhả sớm thì hàng còn nút của bước vừa xong và bấm lại ra lỗi "đơn không còn ở trạng thái này".
+  // Ref vì `isPending` chỉ đúng sau lần vẽ kế: hai cú chạm sát nhau (kể cả hai nút của hai đơn) vẫn đều thấy bảng rảnh.
+  // Bị từ chối vì trạng thái đã đổi (400/404/409) thì tải lại; lời lỗi nằm ở đầu tab nên không mất cùng hàng bị gỡ khỏi bộ lọc.
+  const acting = useRef(false);
+  const exclusive = (run: () => void) => {
+    if (acting.current) return;
+    acting.current = true;
+    run();
+  };
+  const refreshOrders = () => qc.invalidateQueries({ queryKey: ['merchant-orders'] });
   const updateMut = useMutation({
     mutationFn: ({ id, newStatus }: { id: string; newStatus: string }) =>
       updateMerchantOrderStatus(id, newStatus),
     onSuccess: () => {
       setUpdateError(null);
-      void qc.invalidateQueries({ queryKey: ['merchant-orders'] });
+      return settleWithin(refreshOrders());
     },
-    onError: (e: unknown) =>
-      setUpdateError(actionErrorText(e)),
+    onError: (e: unknown) => {
+      setUpdateError(actionErrorText(e));
+      return reloadWhenStale(e, refreshOrders);
+    },
+    onSettled: () => {
+      acting.current = false;
+    },
+  });
+  const orderBtn = (id: string) => ({
+    'aria-busy': (updateMut.isPending && updateMut.variables?.id === id) || undefined,
+    'aria-disabled': updateMut.isPending || undefined,
   });
 
   return (
@@ -1453,27 +1482,27 @@ function OrdersTab({ selfFulfils, onOpenFulfil }: { selfFulfils: boolean; onOpen
                         <div className="inline-flex gap-1.5">
                           {o.status === 'CONFIRMED' && (
                             <button
-                              onClick={() => updateMut.mutate({ id: o.id, newStatus: 'PACKED' })}
-                              disabled={updateMut.isPending}
-                              className={`${ORDER_ACTION} bg-sage-700 hover:brightness-90`}
+                              onClick={() => exclusive(() => updateMut.mutate({ id: o.id, newStatus: 'PACKED' }))}
+                              {...orderBtn(o.id)}
+                              className={`${ORDER_ACTION} bg-sage-700 hover:brightness-90 aria-disabled:opacity-60`}
                             >
                               Đã đóng gói
                             </button>
                           )}
                           {o.status === 'PACKED' && (
                             <button
-                              onClick={() => updateMut.mutate({ id: o.id, newStatus: 'SHIPPING' })}
-                              disabled={updateMut.isPending}
-                              className={`${ORDER_ACTION} bg-forest-800 hover:brightness-90`}
+                              onClick={() => exclusive(() => updateMut.mutate({ id: o.id, newStatus: 'SHIPPING' }))}
+                              {...orderBtn(o.id)}
+                              className={`${ORDER_ACTION} bg-forest-800 hover:brightness-90 aria-disabled:opacity-60`}
                             >
                               Bắt đầu giao
                             </button>
                           )}
                           {o.status === 'SHIPPING' && (
                             <button
-                              onClick={() => updateMut.mutate({ id: o.id, newStatus: 'DELIVERED' })}
-                              disabled={updateMut.isPending}
-                              className={`${ORDER_ACTION} bg-forest-600 hover:bg-forest-700`}
+                              onClick={() => exclusive(() => updateMut.mutate({ id: o.id, newStatus: 'DELIVERED' }))}
+                              {...orderBtn(o.id)}
+                              className={`${ORDER_ACTION} bg-forest-600 hover:bg-forest-700 aria-disabled:opacity-60`}
                             >
                               Đã giao
                             </button>

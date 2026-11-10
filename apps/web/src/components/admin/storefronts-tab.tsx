@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -24,8 +24,12 @@ import { SideDrawer } from './side-drawer';
 import { USER_ROLE_LABELS } from './users-list';
 import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
+import { settleWithin } from '@/lib/settle-within';
+import { reloadWhenStale } from '@/lib/stale-write-rejection';
+import { usePressLock } from '@/lib/use-press-lock';
 
 const REASON_MAX = 300;
+const BUSY_CLASS = 'aria-disabled:opacity-60';
 
 const CONTENT_CHANGED_TEXT = (at: string) => `Chủ đã đổi tên, lời giới thiệu hoặc ảnh sau khi duyệt (${formatDateTime(at)}). Xem lại rồi bấm "Đã xem".`;
 
@@ -90,14 +94,22 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
   const [openId, setOpenId] = useState<string | null>(null);
   const qc = useQueryClient();
   const [quickFailure, setQuickFailure] = useState<string | null>(null);
+  const quickActing = useRef(false);
+  const reloadList = () => Promise.all([invalidateInbox(qc), qc.invalidateQueries({ queryKey: ['admin-storefronts'] })]);
+  const releaseQuick = () => {
+    quickActing.current = false;
+  };
   const quickApprove = useMutation({
     mutationFn: (id: string) => approveStorefront(id, true),
     onSuccess: () => {
       setQuickFailure(null);
-      void invalidateInbox(qc);
-      return qc.invalidateQueries({ queryKey: ['admin-storefronts'] });
+      return settleWithin(reloadList());
     },
-    onError: (e) => setQuickFailure(errorText(e)),
+    onError: (e) => {
+      setQuickFailure(errorText(e));
+      return reloadWhenStale(e, reloadList);
+    },
+    onSettled: releaseQuick,
   });
 
   const [changedAgain, setChangedAgain] = useState<Record<string, ChangedAgain>>({});
@@ -110,10 +122,20 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
         const mark = changedAgainOf(result, r.contentChangedAt);
         return mark ? { ...rest, [r.id]: mark } : rest;
       });
-      return qc.invalidateQueries({ queryKey: ['admin-storefronts'] });
+      return settleWithin(reloadList());
     },
-    onError: (e) => setQuickFailure(errorText(e)),
+    onError: (e) => {
+      setQuickFailure(errorText(e));
+      return reloadWhenStale(e, reloadList);
+    },
+    onSettled: releaseQuick,
   });
+  const quickBusy = quickApprove.isPending || seen.isPending;
+  const quick = (run: () => void) => {
+    if (quickActing.current) return;
+    quickActing.current = true;
+    run();
+  };
 
   const list = useInfiniteQuery({
     queryKey: ['admin-storefronts', status, type, q, changedOnly],
@@ -122,6 +144,7 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
     getNextPageParam: (last) => nextPageParam(last.meta),
   });
   const view = mergeQueuePages(list.data?.pages, false);
+  const more = usePressLock(() => (list.isFetchingNextPage ? undefined : list.fetchNextPage()));
   const changedCount = list.data?.pages[0]?.changedAfterApproval;
 
   return (
@@ -194,7 +217,7 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
       <div className="mt-4 space-y-3">
         {quickFailure && <Notice tone="danger" role="alert">{quickFailure}</Notice>}
         {list.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách...</p>}
-        {list.isError && <LoadError onRetry={() => void list.refetch()} retrying={list.isFetching}>Không tải được danh sách gian hàng.</LoadError>}
+        {list.isError && <LoadError onRetry={() => list.refetch({ cancelRefetch: false })} retrying={list.isFetching}>Không tải được danh sách gian hàng.</LoadError>}
         {list.data && view.items.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">Không có gian hàng nào khớp bộ lọc.</p>
         )}
@@ -210,7 +233,13 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
               </div>
               <div className="flex flex-wrap gap-2">
                 {!row.approved && !row.takenDownAt && row.type === 'CTV' && !row.isPartner && (
-                  <button type="button" onClick={() => quickApprove.mutate(row.id)} disabled={quickApprove.isPending} className={BTN_PRIMARY}>
+                  <button
+                    type="button"
+                    onClick={() => quick(() => quickApprove.mutate(row.id))}
+                    aria-busy={(quickApprove.isPending && quickApprove.variables === row.id) || undefined}
+                    aria-disabled={quickBusy || undefined}
+                    className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
+                  >
                     Duyệt
                   </button>
                 )}
@@ -233,7 +262,13 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
             {changedAfterApproval(row) && (
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2 rounded-card bg-warning-bg px-2 py-1.5">
                 <p className="min-w-0 break-words text-xs text-warning-fg">{CONTENT_CHANGED_TEXT(row.contentChangedAt!)}</p>
-                <button type="button" onClick={() => seen.mutate(row)} disabled={seen.isPending} className={BTN_XS_SECONDARY}>
+                <button
+                  type="button"
+                  onClick={() => quick(() => seen.mutate(row))}
+                  aria-busy={(seen.isPending && seen.variables?.id === row.id) || undefined}
+                  aria-disabled={quickBusy || undefined}
+                  className={`${BTN_XS_SECONDARY} ${BUSY_CLASS}`}
+                >
                   Đã xem
                 </button>
               </div>
@@ -244,7 +279,13 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
 
       {view.hasMore && (
         <div className="mt-3 text-center">
-          <button type="button" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage} className={BTN_SECONDARY}>
+          <button
+            type="button"
+            onClick={more.press}
+            aria-busy={more.busy || list.isFetchingNextPage || undefined}
+            aria-disabled={more.busy || list.isFetchingNextPage || undefined}
+            className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
+          >
             {list.isFetchingNextPage ? 'Đang tải…' : `Tải thêm (${view.label})`}
           </button>
         </div>
@@ -271,15 +312,25 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
   const detail = useQuery({ queryKey: ['admin-storefront', id], queryFn: () => getAdminStorefront(id) });
   const sf = detail.data;
 
-  const refresh = () => {
-    void qc.invalidateQueries({ queryKey: ['admin-storefronts'] });
-    void invalidateInbox(qc);
-    return qc.invalidateQueries({ queryKey: ['admin-storefront', id] });
+  const acting = useRef(false);
+  const reload = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: ['admin-storefronts'] }),
+      invalidateInbox(qc),
+      qc.invalidateQueries({ queryKey: ['admin-storefront', id] }),
+    ]);
+  const refresh = () => settleWithin(reload());
+  const onError = (e: unknown, hasInput = false) => {
+    setFailure(errorText(e));
+    return reloadWhenStale(e, reload, hasInput);
   };
-  const onError = (e: unknown) => setFailure(errorText(e));
-  const takeDown = useMutation({ mutationFn: (reason: string) => takeDownStorefront(id, reason), onSuccess: refresh, onError });
-  const reinstate = useMutation({ mutationFn: () => reinstateStorefront(id), onSuccess: refresh, onError });
-  const approve = useMutation({ mutationFn: (approved: boolean) => approveStorefront(id, approved), onSuccess: refresh, onError });
+  const onSettled = () => {
+    acting.current = false;
+  };
+  // Lý do do admin nhập: 400 (trống sau khi bỏ khoảng trắng, quá dài) là lỗi nhập, chỉ hiện trong ngăn để sửa; tải lại không giúp gì. Các lệnh còn lại không có ô nhập.
+  const takeDown = useMutation({ mutationFn: (reason: string) => takeDownStorefront(id, reason), onSuccess: refresh, onError: (e) => onError(e, true), onSettled });
+  const reinstate = useMutation({ mutationFn: () => reinstateStorefront(id), onSuccess: refresh, onError: (e) => onError(e), onSettled });
+  const approve = useMutation({ mutationFn: (approved: boolean) => approveStorefront(id, approved), onSuccess: refresh, onError: (e) => onError(e), onSettled });
   const [changedAgain, setChangedAgain] = useState<ChangedAgain | null>(null);
   const seen = useMutation({
     mutationFn: (sentAt: string | null | undefined) => markStorefrontContentSeen(id, sentAt),
@@ -287,12 +338,19 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
       setChangedAgain(changedAgainOf(result, sentAt));
       return refresh();
     },
-    onError,
+    onError: (e) => onError(e),
+    onSettled,
   });
   const busy = takeDown.isPending || reinstate.isPending || approve.isPending || seen.isPending;
+  const busyAttrs = { 'aria-busy': busy || undefined, 'aria-disabled': busy || undefined };
+  const exclusive = (run: () => void) => {
+    if (acting.current) return;
+    acting.current = true;
+    run();
+  };
 
   const onTakeDown = async () => {
-    if (!sf) return;
+    if (!sf || acting.current) return;
     const reason = await ask({
       title: 'Gỡ đăng gian hàng',
       message: `"${sf.title}" sẽ biến mất khỏi trang công khai và chủ không tự đăng lại được. Chủ nhận thông báo kèm lý do bạn nhập.`,
@@ -302,11 +360,11 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
     });
     if (reason) {
       setFailure(null);
-      takeDown.mutate(reason);
+      exclusive(() => takeDown.mutate(reason));
     }
   };
   const onUnapprove = async () => {
-    if (!sf) return;
+    if (!sf || acting.current) return;
     const ok = await confirm({
       title: 'Bỏ duyệt gian hàng',
       message: `"${sf.title}" mất dấu tick xanh và nhãn "CTV tuyển chọn". Nếu hệ thống đang bắt duyệt trước khi đăng, gian hàng sẽ ẩn khỏi trang công khai.`,
@@ -315,11 +373,11 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
     });
     if (ok) {
       setFailure(null);
-      approve.mutate(false);
+      exclusive(() => approve.mutate(false));
     }
   };
   const onReinstate = async () => {
-    if (!sf) return;
+    if (!sf || acting.current) return;
     const ok = await confirm({
       title: 'Đăng lại gian hàng',
       message: `"${sf.title}" được hiện lại với khách (nếu trước đó đang đăng) và chủ nhận thông báo.`,
@@ -327,7 +385,7 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
     });
     if (ok) {
       setFailure(null);
-      reinstate.mutate();
+      exclusive(() => reinstate.mutate());
     }
   };
 
@@ -336,7 +394,7 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
   return (
     <SideDrawer title={sf?.title ?? 'Gian hàng'} onClose={onClose}>
       {detail.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
-      {detail.isError && <LoadError onRetry={() => void detail.refetch()} retrying={detail.isFetching}>Không tải được chi tiết gian hàng.</LoadError>}
+      {detail.isError && <LoadError onRetry={() => detail.refetch({ cancelRefetch: false })} retrying={detail.isFetching}>Không tải được chi tiết gian hàng.</LoadError>}
       {sf && (
         <div className="space-y-3">
           {failure && <Notice tone="danger" role="alert">{failure}</Notice>}
@@ -354,7 +412,7 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
           {changedAfterApproval(sf) && (
             <Notice tone="warning">
               {CONTENT_CHANGED_TEXT(sf.contentChangedAt!)}{' '}
-              <button type="button" onClick={() => seen.mutate(sf.contentChangedAt)} disabled={busy} className={BTN_XS_SECONDARY}>
+              <button type="button" onClick={() => exclusive(() => seen.mutate(sf.contentChangedAt))} {...busyAttrs} className={`${BTN_XS_SECONDARY} ${BUSY_CLASS}`}>
                 Đã xem
               </button>
             </Notice>
@@ -362,21 +420,21 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
 
           <div className="flex flex-wrap gap-2">
             {sf.takenDownAt ? (
-              <button type="button" onClick={() => void onReinstate()} disabled={busy} className={BTN_PRIMARY}>
+              <button type="button" onClick={() => void onReinstate()} {...busyAttrs} className={`${BTN_PRIMARY} ${BUSY_CLASS}`}>
                 Đăng lại
               </button>
             ) : (
-              <button type="button" onClick={() => void onTakeDown()} disabled={busy} className={BTN_DANGER_OUTLINE}>
+              <button type="button" onClick={() => void onTakeDown()} {...busyAttrs} className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`}>
                 Gỡ đăng
               </button>
             )}
             {canToggleApproval &&
               (sf.approved ? (
-                <button type="button" onClick={() => void onUnapprove()} disabled={busy} className={BTN_SECONDARY}>
+                <button type="button" onClick={() => void onUnapprove()} {...busyAttrs} className={`${BTN_SECONDARY} ${BUSY_CLASS}`}>
                   Bỏ duyệt
                 </button>
               ) : (
-                <button type="button" onClick={() => approve.mutate(true)} disabled={busy} className={BTN_PRIMARY}>
+                <button type="button" onClick={() => exclusive(() => approve.mutate(true))} {...busyAttrs} className={`${BTN_PRIMARY} ${BUSY_CLASS}`}>
                   Duyệt gian hàng
                 </button>
               ))}
