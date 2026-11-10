@@ -236,7 +236,7 @@ export function RecycleHome() {
       </Shell>
     );
   }
-  if (meQ.isError || !me) return <Shell><ErrorState message={errText(meQ.error)} onRetry={() => void meQ.refetch()} /></Shell>;
+  if (meQ.isError || !me) return <Shell><ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} /></Shell>;
 
   const openRequests = <RequestsBlock me={me} />;
   const recent = me.recentCompleted;

@@ -198,7 +198,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
         </Shell>
       );
     }
-    return <Shell><ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} /></Shell>;
+    return <Shell><ErrorState message={errText(q.error)} onRetry={() => q.refetch()} /></Shell>;
   }
   if (!r) return <Shell><Skeleton height={120} rounded="rounded-card" /></Shell>;
 
@@ -459,6 +459,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
 
       <Sheet
         open={cancelOpen}
+        dismissible={!cancel.isPending}
         onClose={() => setCancelOpen(false)}
         title="Huỷ yêu cầu này?"
         footer={

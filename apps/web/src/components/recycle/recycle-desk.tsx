@@ -132,6 +132,7 @@ function RejectSheet({
   return (
     <Sheet
       open={open}
+      dismissible={!pending}
       onClose={onClose}
       title="Từ chối cả yêu cầu"
       footer={
@@ -594,7 +595,7 @@ function DeskContent() {
         </div>
       );
     }
-    return <ErrorState message={errText(pointsQ.error)} onRetry={() => void pointsQ.refetch()} />;
+    return <ErrorState message={errText(pointsQ.error)} onRetry={() => pointsQ.refetch()} />;
   }
   if (pointsQ.data.length === 0) {
     // Máy chủ bỏ qua điểm của đại lý khi chương trình tắt, nên danh sách rỗng lúc đó không có nghĩa là mất quyền.

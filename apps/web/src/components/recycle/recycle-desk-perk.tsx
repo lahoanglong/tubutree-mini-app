@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { cashWordingMessage, findCashWording, type WasteDeskPointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, submitDeskPerk } from '@tubutree/app-core/api/waste';
 import { deskPointReportQuery } from '@tubutree/app-core/queries/waste';
 import { friendlyActionError as errText } from '@/lib/friendly-error';
+import { usePressLock } from '@/lib/use-press-lock';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { formatCount } from '@/lib/checkout-points';
 import { ui } from '@/lib/guest-ui';
@@ -28,12 +30,13 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
   const [text, setText] = useState('');
   const [sent, setSent] = useState(false);
 
-  const submit = useMutation({
+  const submit = useLockedMutation({
     mutationFn: (v: string) => submitDeskPerk(coreHttp, point.id, { perkText: v.trim() }),
+    // Trả Promise làm mới: khoá và `isPending` giữ tới khi `point` mới về, nên "Chỉnh sửa" không nạp lại chữ cũ.
     onSuccess: () => {
       setSent(true);
       setOpen(false);
-      void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk });
+      return qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk });
     },
   });
   const busy = submit.isPending;
@@ -58,6 +61,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
           <button
             type="button"
             className={skin.btnSecondary}
+            aria-disabled={busy || undefined}
             onClick={() => {
               if (open || busy) return;
               setText(point.perkPendingText ?? point.perkText ?? '');
@@ -126,6 +130,7 @@ export function WasteDeskPerk({ point }: { point: WasteDeskPointDTO }) {
 export function WasteDeskReport({ pointId }: { pointId: string }) {
   const month = vnMonthKey(new Date());
   const q = useQuery(deskPointReportQuery(coreHttp, pointId, month));
+  const { press: retry } = usePressLock(() => (q.isFetching ? undefined : q.refetch()));
 
   if (q.isError || (!q.data && q.errorUpdateCount > 0)) {
     return (
@@ -137,9 +142,7 @@ export function WasteDeskReport({ pointId }: { pointId: string }) {
             className={skin.btnSecondary}
             aria-disabled={q.isFetching || undefined}
             aria-busy={q.isFetching || undefined}
-            onClick={() => {
-              if (!q.isFetching) void q.refetch();
-            }}
+            onClick={retry}
           >
             Thử lại
           </button>

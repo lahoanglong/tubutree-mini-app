@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -16,6 +18,7 @@ const state = vi.hoisted(() => ({
   config: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } } as Record<string, unknown>,
   fail: false,
   reqError: null as Error | null,
+  reqGate: null as Promise<unknown> | null,
   calls: [] as string[],
 }));
 
@@ -31,6 +34,7 @@ vi.mock('@/lib/core-http', () => ({
         throw new Error('mất mạng');
       }
       if (path === '/waste/requests') {
+        await state.reqGate;
         if (state.reqError) throw state.reqError;
         return state.rows;
       }
@@ -73,6 +77,7 @@ beforeEach(() => {
   state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
   state.fail = false;
   state.reqError = null;
+  state.reqGate = null;
   state.calls = [];
 });
 afterEach(() => {
@@ -263,5 +268,42 @@ describe('số đều của khung chính', () => {
   it('<main> dùng tabular-nums để điểm, số lượng và ngày không rung khi đổi', async () => {
     const c = await mount();
     expect(c.querySelector('main')?.className).toContain('tabular-nums');
+  });
+});
+
+describe('/doi-rac/yeu-cau: tab trạng thái là bộ lọc cục bộ, không có phản hồi nào của tab cũ để ghi đè', () => {
+  it('đổi tab không gọi lại API; lần làm mới còn bay khi đang ở tab Đã đóng thì dữ liệu mới về xếp đúng tab đang chọn', async () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const r = render(<RecycleRequests />, qc);
+    mounted.push(r);
+    await flush(8);
+    const c = r.container;
+    const listCalls = () => state.calls.filter((p) => p === '/waste/requests').length;
+    expect(listCalls()).toBe(1);
+    click(tab(c, 'Đã đóng')!);
+    await flush(2);
+    expect(listCalls()).toBe(1);
+    expect(link(c, '/doi-rac/xong/r-done')).not.toBeNull();
+    expect(link(c, '/doi-rac/yeu-cau/r-open')).toBeNull();
+
+    let release!: () => void;
+    state.reqGate = new Promise<void>((res) => {
+      release = res;
+    });
+    state.rows = [...ROWS, makeRequestSummary({ id: 'r-new-closed', code: 'TR-EEEEE', status: 'CANCELLED' }), makeRequestSummary({ id: 'r-new-open', code: 'TR-FFFFF', status: 'OPEN' })];
+    await act(async () => {
+      void qc.invalidateQueries();
+    });
+    click(tab(c, 'Đang xử lý')!);
+    click(tab(c, 'Đã đóng')!);
+    await flush(2);
+    expect(listCalls()).toBe(2);
+    expect(link(c, '/doi-rac/xong/r-done')).not.toBeNull();
+    await act(async () => release());
+    await flush(6);
+    expect(tab(c, 'Đã đóng')?.getAttribute('aria-selected')).toBe('true');
+    expect(link(c, '/doi-rac/yeu-cau/r-new-closed')).not.toBeNull();
+    expect(link(c, '/doi-rac/yeu-cau/r-new-open')).toBeNull();
+    expect(listCalls()).toBe(2);
   });
 });

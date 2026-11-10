@@ -353,7 +353,7 @@ export function RecycleNew() {
   if (phase === 'loading') return shell(<AuthLoading />);
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
   if (phase === 'guest') return shell(skeleton);
-  if (meQ.isError) return shell(<ErrorState message={errText(meQ.error)} onRetry={() => void meQ.refetch()} />);
+  if (meQ.isError) return shell(<ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} />);
   if (!me || leave || !ready || missingDraft) return shell(skeleton);
   // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, không có đường lách.
   if (me.eligibility !== 'OK') return shell(<MiniAppOnlyNotice path={WIZARD_PATH} />);

@@ -659,3 +659,36 @@ describe('/doi-rac/yeu-cau/[id]: khoá Đã gửi mã vận đơn (cùng một a
     expect(c.querySelector('main')?.className).toContain('tabular-nums');
   });
 });
+
+const pressEscape = () =>
+  act(() => {
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+  });
+
+describe('/doi-rac/yeu-cau/[id]: sheet Huỷ không đóng được khi đang gửi', () => {
+  it('Esc, bấm nền và nút Đóng đều không đóng sheet; lỗi hiện ngay trong sheet còn mở; hết bận thì đóng được', async () => {
+    const gate = deferred();
+    state.cancel = () => gate.promise;
+    const c = await mount();
+    click(button(c, 'Huỷ yêu cầu'));
+    await flush(2);
+    expect(dialog()!.querySelector('[aria-label="Đóng"]')).not.toBeNull();
+    click(button(dialog()!, 'Xác nhận huỷ'));
+    await flush(4);
+    expect(cancelCalls()).toHaveLength(1);
+    expect(dialog()!.querySelector('[aria-label="Đóng"]')).toBeNull();
+    pressEscape();
+    click(document.querySelector('[data-sheet-backdrop]'));
+    await flush(2);
+    expect(dialog()).not.toBeNull();
+
+    await act(async () => gate.reject(new Error('Yêu cầu đã đóng')));
+    await flush(6);
+    expect(dialog()).not.toBeNull();
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toContain('Yêu cầu đã đóng');
+    expect(dialog()!.querySelector('[aria-label="Đóng"]')).not.toBeNull();
+    pressEscape();
+    await flush(2);
+    expect(dialog()).toBeNull();
+  });
+});
