@@ -25,9 +25,16 @@ let container: HTMLDivElement;
 let qc: QueryClient;
 const parentClick = vi.fn();
 
+let ids = ['p1'];
 const draw = () =>
   act(() => {
-    root.render(createElement(QueryClientProvider, { client: qc }, createElement('div', { onClick: parentClick }, createElement(WishlistHeart, { productId: 'p1' }))));
+    root.render(
+      createElement(
+        QueryClientProvider,
+        { client: qc },
+        createElement('div', { onClick: parentClick }, ...ids.map((id) => createElement(WishlistHeart, { key: id, productId: id }))),
+      ),
+    );
   });
 const goTo = async (phase: string) => {
   mocks.phase = phase;
@@ -35,9 +42,11 @@ const goTo = async (phase: string) => {
   await flush(8);
 };
 const heart = () => container.querySelector('button')!;
+const hearts = () => Array.from(container.querySelectorAll('button'));
 const sent = () => ({ posts: mocks.http.post.mock.calls.length, deletes: mocks.http.delete.mock.calls.length });
 
 beforeEach(() => {
+  ids = ['p1'];
   mocks.phase = 'loading';
   mocks.push.mockReset();
   parentClick.mockReset();
@@ -156,5 +165,74 @@ describe('WishlistHeart: chạm lúc app đang khôi phục phiên', () => {
     click(heart());
     await flush(8);
     expect(sent()).toEqual({ posts: 1, deletes: 0 });
+  });
+});
+
+describe('WishlistHeart: nhiều tim cùng chờ phiên (một ý định mỗi tim, nhưng chỉ một lần sang đăng nhập)', () => {
+  const setHearts = (...next: string[]) => {
+    ids = next;
+    draw();
+  };
+
+  it('chạm hai tim lúc đang khôi phục, ra khách: đúng một lần sang đăng nhập, không gọi API', async () => {
+    setHearts('p1', 'p2');
+    await flush(2);
+    for (const h of hearts()) click(h);
+    await flush(4);
+    expect(mocks.push).not.toHaveBeenCalled();
+    await goTo('guest');
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+    expect(mocks.push).toHaveBeenCalledWith('/dang-nhap?returnTo=%2Fsan-pham%2Fdau-goi%3Fref%3DA');
+    expect(sent()).toEqual({ posts: 0, deletes: 0 });
+  });
+
+  it('chạm hai tim lúc đang khôi phục, ra phiên: mỗi tim thích đúng một lần (hai ý định khác nhau không gộp)', async () => {
+    setHearts('p1', 'p2');
+    await flush(2);
+    for (const h of hearts()) click(h);
+    await goTo('authenticated');
+    expect(sent()).toEqual({ posts: 2, deletes: 0 });
+    expect(server.sort()).toEqual(['p1', 'p2']);
+  });
+
+  it('lần khôi phục khác sau khi đã chuyển (cờ đã đặt lại): ra khách vẫn sang đăng nhập được, không dính nút chết', async () => {
+    setHearts('p1', 'p2');
+    await flush(2);
+    for (const h of hearts()) click(h);
+    await goTo('guest');
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+    await goTo('loading');
+    click(hearts()[1]!);
+    await goTo('guest');
+    expect(mocks.push).toHaveBeenCalledTimes(2);
+  });
+
+  it('lần khôi phục sau khi đã qua phiên đăng nhập rồi mất phiên lại: vẫn sang đăng nhập được', async () => {
+    setHearts('p1', 'p2');
+    await flush(2);
+    for (const h of hearts()) click(h);
+    await goTo('guest');
+    await goTo('authenticated');
+    await goTo('loading');
+    click(hearts()[0]!);
+    await goTo('guest');
+    expect(mocks.push).toHaveBeenCalledTimes(2);
+  });
+
+  it('cây tim dựng mới (trang khác) sau một lần đã chuyển: ý định ở cây mới vẫn được làm', async () => {
+    setHearts('p1', 'p2');
+    await flush(2);
+    for (const h of hearts()) click(h);
+    await goTo('guest');
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+    act(() => root.unmount());
+    root = createRoot(container);
+    mocks.phase = 'loading';
+    ids = ['p3'];
+    draw();
+    await flush(2);
+    click(heart());
+    await goTo('guest');
+    expect(mocks.push).toHaveBeenCalledTimes(2);
   });
 });

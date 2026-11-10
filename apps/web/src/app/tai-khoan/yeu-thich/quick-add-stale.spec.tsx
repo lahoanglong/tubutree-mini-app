@@ -125,9 +125,12 @@ describe('Yêu thích: giỏ nhanh bị máy chủ từ chối vì trạng thái
       expect(listFetches() - listBefore).toBe(1);
       expect(add.getAttribute('aria-busy')).toBe('true');
       expect(add.getAttribute('aria-disabled')).toBe('true');
+      const other = addButton(c, 'Dầu gội')!;
+      expect(other.getAttribute('aria-disabled')).toBe('true');
+      expect(other.getAttribute('aria-busy')).not.toBe('true');
       const fetchesBefore = productFetches();
       const postsBefore = mocks.post.mock.calls.length;
-      await tapTogether(add, addButton(c, 'Dầu gội'));
+      await tapTogether(add, other);
       await flush(2);
       expect(productFetches()).toBe(fetchesBefore);
       expect(mocks.post.mock.calls.length).toBe(postsBefore);
@@ -148,6 +151,7 @@ describe('Yêu thích: giỏ nhanh bị máy chủ từ chối vì trạng thái
       expect(listFetches() - listBefore).toBe(0);
       expect(add.getAttribute('aria-busy')).toBe('false');
       expect(add.getAttribute('aria-disabled')).toBeNull();
+      expect(addButton(c, 'Dầu gội')!.getAttribute('aria-disabled')).toBeNull();
     });
 
     it('tải lại không bao giờ về: còn khoá ở 3 giây, nhả sau 4 giây', async () => {

@@ -81,7 +81,7 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
     } catch (e) {
       show({ ok: false, text: actionErrorText(e) });
       setPicker(null);
-      // Thẻ đang hiện đã cũ: giữ khoá tới khi danh sách yêu thích mới về (tối đa 4 giây) kẻo chạm lại nhận đúng lời từ chối đó. Lời lỗi đã hiện trước khi chờ.
+      // Ở trang Yêu thích, thẻ đang hiện đã cũ: giữ khoá tới khi danh sách yêu thích mới về (tối đa 4 giây) kẻo chạm lại nhận đúng lời từ chối đó. Reel Trang chủ và dải Mua lại món quen cũng dùng hook này nhưng không có truy vấn yêu thích nào đang dùng nên khoá nhả ngay. Lời lỗi đã hiện trước khi chờ.
       if (serverRejectedState(e)) await settleWithin(qc.invalidateQueries({ queryKey: wishlistQuery(coreHttp).queryKey }));
     } finally {
       inFlight.current = false;
@@ -161,13 +161,14 @@ export function useQuickAdd(source?: AddToCartSource): QuickAdd {
 /** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ: vùng chạm 44px bọc vòng trắng 32px, cùng kiểu nút tim ở góc trên. */
 export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNode; feedback: ReactNode } {
   const { quickAdd, busyId, feedback } = useQuickAdd('wishlist');
+  // Khoá chung cả trang: một thẻ đang bay thì chạm giỏ ở thẻ khác bị nuốt, nên mọi nút báo aria-disabled (chỉ thẻ đang bay báo thêm aria-busy), không `disabled` kẻo rớt focus.
   const buttonFor = (p: ProductCard) =>
     p.inStock === false ? null : (
       <button
         type="button"
         aria-label={`Thêm ${p.name} vào giỏ`}
         aria-busy={busyId === p.id}
-        aria-disabled={busyId === p.id || undefined}
+        aria-disabled={busyId !== null || undefined}
         onClick={(e) => void quickAdd(p, { origin: e.currentTarget })}
         className="inline-flex h-11 w-11 items-center justify-center text-stone-700"
       >

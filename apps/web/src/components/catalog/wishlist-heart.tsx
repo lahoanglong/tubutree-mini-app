@@ -15,6 +15,8 @@ const IDS_KEY = wishlistIdsQuery(coreHttp).queryKey;
 // Mỗi sản phẩm một hàng đợi: lệnh thêm/bỏ gửi lần lượt đúng thứ tự chạm, nên chạm nhanh không còn hai lệnh "thêm" đua nhau (409).
 const tails = new Map<string, Promise<void>>();
 let inFlight = 0;
+// Nhiều tim cùng chờ phiên mà ra khách thì chỉ một lần sang đăng nhập (cờ riêng từng tim sẽ đẩy mỗi tim một lần). Đặt lại ở mọi pha khác "guest", kể cả lúc dựng, nên lần khôi phục sau vẫn đẩy được.
+let loginPushed = false;
 
 function sendToggle(qc: QueryClient, productId: string, want: boolean) {
   inFlight += 1;
@@ -78,10 +80,14 @@ export function WishlistHeart({
   // Chạm lúc app còn đang khôi phục phiên không bị nuốt: nhớ ý định (một cờ, nên chạm nhiều lần vẫn là một ý định thích, không thêm rồi bỏ) và làm khi pha ra.
   const waitingForSession = useRef(false);
   useEffect(() => {
+    if (phase !== 'guest') loginPushed = false;
     if (!waitingForSession.current || phase === 'loading') return;
     waitingForSession.current = false;
     if (phase === 'authenticated') toggle();
-    else if (phase === 'guest') toLogin();
+    else if (phase === 'guest' && !loginPushed) {
+      loginPushed = true;
+      toLogin();
+    }
     // Chỉ theo pha: `toggle` và `toLogin` đổi tham chiếu mỗi lần dựng.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
