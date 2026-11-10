@@ -321,6 +321,8 @@ function refreshSession(): Promise<LoginResponse | null> {
  */
 let restoreInFlight: Promise<void> | null = null;
 let loginInFlight: Promise<void> | null = null;
+/** ensurePhoneOrThrow() đang chạy: nhiều nút "Đăng nhập Zalo" bấm gần nhau dùng chung một lần xin SĐT / gọi liên kết. */
+let phoneLinkInFlight: Promise<string | null> | null = null;
 /** Số restore() đang đỗ chờ logout: login() không chờ chúng (chúng chờ login), kể cả khi logout vừa xong. */
 let restoreParked = 0;
 
@@ -465,31 +467,43 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     }
   },
 
-  ensurePhoneOrThrow: async (): Promise<string | null> => {
-    const epoch = sessionEpoch;
-    const current = get().user;
-    if (current?.phone) return current.phone;
-    // Chưa có phiên (đăng nhập lỗi/đang khoá): không mở sheet xin SĐT cho một lời gọi chắc chắn bị từ chối.
-    if (!current) return null;
-    const phoneToken = await requestZaloPhoneToken();
-    if (!phoneToken) return null;
-    // Zalo không khả dụng (ngoài Zalo, -1401) thì không liên kết được: coi như khách không cho phép, không phải lỗi máy chủ.
-    let creds: Awaited<ReturnType<typeof getZaloAccessToken>>;
-    try {
-      creds = await getZaloAccessToken();
-    } catch {
-      return null;
-    }
-    // A7-01 (audit 2026-09): KHÔNG gọi loginZaloMiniApp() ở đây — đó là đăng nhập TỪ ĐẦU,
-    // không biết phiên hiện tại là ai nên có thể âm thầm trả token của MỘT USER KHÁC (đúng
-    // lỗi đang vá: khách bị đổi sang tài khoản Zalo khác đang đăng nhập trên máy, bỏ lại
-    // giỏ/địa chỉ/điểm của phiên khách). ensurePhoneApi() gửi kèm access token CỦA PHIÊN
-    // HIỆN TẠI (interceptor tự đính Authorization) — BE biết chính xác đang là ai và chỉ đổi
-    // danh tính khi an toàn (nâng cấp tại chỗ hoặc gộp khách→Zalo), không bao giờ âm thầm.
-    const res = await ensurePhoneApi(creds.code, creds.accessToken, phoneToken);
-    if (!(await adoptSession(res, epoch))) return null;
-    set({ user: res.user, status: 'authenticated' });
-    return res.user.phone ?? null;
+  ensurePhoneOrThrow: () => {
+    // Đã có SĐT (kể cả do lần liên kết khác vừa đính vào) thì không phải chờ lần đang chạy.
+    const known = get().user?.phone;
+    if (known) return Promise.resolve(known);
+    // Gộp các lần gọi chồng nhau: hai nút bấm gần nhau chỉ mở hộp xin SĐT và gọi liên kết một lần, cùng nhận một kết quả.
+    if (phoneLinkInFlight) return phoneLinkInFlight;
+    const run = (async (): Promise<string | null> => {
+      const epoch = sessionEpoch;
+      const current = get().user;
+      if (current?.phone) return current.phone;
+      // Chưa có phiên (đăng nhập lỗi/đang khoá): không mở sheet xin SĐT cho một lời gọi chắc chắn bị từ chối.
+      if (!current) return null;
+      const phoneToken = await requestZaloPhoneToken();
+      if (!phoneToken) return null;
+      // Zalo không khả dụng (ngoài Zalo, -1401) thì không liên kết được: coi như khách không cho phép, không phải lỗi máy chủ.
+      let creds: Awaited<ReturnType<typeof getZaloAccessToken>>;
+      try {
+        creds = await getZaloAccessToken();
+      } catch {
+        return null;
+      }
+      // A7-01 (audit 2026-09): KHÔNG gọi loginZaloMiniApp() ở đây — đó là đăng nhập TỪ ĐẦU,
+      // không biết phiên hiện tại là ai nên có thể âm thầm trả token của MỘT USER KHÁC (đúng
+      // lỗi đang vá: khách bị đổi sang tài khoản Zalo khác đang đăng nhập trên máy, bỏ lại
+      // giỏ/địa chỉ/điểm của phiên khách). ensurePhoneApi() gửi kèm access token CỦA PHIÊN
+      // HIỆN TẠI (interceptor tự đính Authorization) — BE biết chính xác đang là ai và chỉ đổi
+      // danh tính khi an toàn (nâng cấp tại chỗ hoặc gộp khách→Zalo), không bao giờ âm thầm.
+      const res = await ensurePhoneApi(creds.code, creds.accessToken, phoneToken);
+      if (!(await adoptSession(res, epoch))) return null;
+      set({ user: res.user, status: 'authenticated' });
+      return res.user.phone ?? null;
+    })();
+    const tracked = run.finally(() => {
+      if (phoneLinkInFlight === tracked) phoneLinkInFlight = null;
+    });
+    phoneLinkInFlight = tracked;
+    return tracked;
   },
 
   logout: () => {
@@ -500,6 +514,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       refreshInFlight = null;
       restoreInFlight = null;
       loginInFlight = null;
+      phoneLinkInFlight = null;
       setAuthReady(null);
       const memToken = unpersistedRefresh;
       unpersistedRefresh = null;
