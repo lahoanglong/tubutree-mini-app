@@ -1867,6 +1867,37 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       return invalidate;
     };
 
+    // W113A: tấm "Đã chuyển" và tấm thu hồi đóng ngay khi máy chủ từ chối 404/409; muốn "bấm lại" lúc khoá còn giữ thì phải mở lại tấm (đồng bộ, dùng được cả khi đồng hồ giả) rồi mới bấm nút xác nhận.
+    const paidSendOpen = () => screen.queryByRole('button', { name: 'Đánh dấu đã trả' }) !== null;
+    const reopenPaid = () => {
+      click('Đã chuyển · Lan');
+      const upload = btn('Ảnh xác nhận chuyển khoản *');
+      // Ô ảnh bị khoá lúc lệnh còn chạy: mở lại trong lúc giữ khoá thì chưa có ảnh, nút gửi vẫn hiện trạng thái bận.
+      if (!upload.hasAttribute('disabled')) fireEvent.click(upload);
+    };
+    const paidSend = () => {
+      if (!paidSendOpen()) reopenPaid();
+      const upload = btn('Ảnh xác nhận chuyển khoản *');
+      if (!upload.hasAttribute('disabled')) fireEvent.click(upload);
+      return btn('Đánh dấu đã trả');
+    };
+    // Trong lúc giữ khoá, nút "Thu hồi · Lan" của dòng bị khoá (disabled) nên tấm đã đóng KHÔNG mở lại được: thay vì nút trong tấm, trạng thái "đang giữ" đọc từ chính nút mở tấm (disabled ⇔ còn giữ).
+    const revokeTrigger = () => btn('Thu hồi · Lan');
+    const revokeLockProbe = () => {
+      const probe = document.createElement('div');
+      if (revokeTrigger().getAttribute('aria-disabled') === 'true') probe.setAttribute('aria-busy', 'true');
+      return probe;
+    };
+    const revokeSend = () => {
+      if (!screen.queryByRole('button', { name: 'Thu hồi' })) {
+        fireEvent.click(revokeTrigger());
+        const reason = screen.queryByLabelText('Lý do');
+        if (reason) fireEvent.change(reason, { target: { value: 'Nghỉ việc' } });
+      }
+      const send = screen.queryByRole('button', { name: 'Thu hồi' });
+      if (send) fireEvent.click(send);
+    };
+
     const PAYROLL = [['admin-payroll', 2026, 3]];
     const SHIFT_KEYS = [['admin-shifts-pending'], ['admin-shifts', '2026-03-09']];
     const TEMPLATE_KEYS = [['admin-templates'], ['shift-templates']];
@@ -1923,7 +1954,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
           const invalidate = await openPayroll(refresh);
           click('Đã chuyển · Lan');
           click('Ảnh xác nhận chuyển khoản *');
-          return { invalidate, tap: () => click('Đánh dấu đã trả'), busy: () => btn('Đánh dấu đã trả') };
+          return { invalidate, tap: () => fireEvent.click(paidSend()), busy: paidSend };
         },
       },
       {
@@ -1993,7 +2024,7 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
           const invalidate = renderLive(refresh);
           fireEvent.click(await screen.findByRole('button', { name: 'Thu hồi · Lan' }));
           fireEvent.change(screen.getByLabelText('Lý do'), { target: { value: 'Nghỉ việc' } });
-          return { invalidate, tap: () => click('Thu hồi'), busy: () => btn('Thu hồi') };
+          return { invalidate, tap: revokeSend, busy: revokeLockProbe };
         },
       },
       {
@@ -2088,6 +2119,201 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
         tap();
         await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
       });
+    });
+  });
+
+  // W113A: tấm có ô người dùng nhập (ảnh/ghi chú của "Đã chuyển", lý do thu hồi) chỉ đóng khi đích không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập nên tấm giữ mở để sửa. Khoá chạm giữ như W112A: 400/404/409 chờ dữ liệu về, 422 và lỗi tạm nhả ngay.
+  describe('tấm nhập liệu đóng khi đích không còn (W113A)', () => {
+    type Refresh = () => Promise<unknown>;
+    type Case = {
+      name: string;
+      write: ReturnType<typeof vi.fn>;
+      keys: unknown[][];
+      succeed: unknown;
+      open: (refresh: Refresh) => Promise<MockInstance<QueryClient['invalidateQueries']>>;
+      /** Mở lại tấm (và điền) sau khi nó đã đóng; có thể không mở được khi nút mở đang khoá. */
+      reopen: () => Promise<void>;
+      /** Bấm nút gửi của tấm nếu tấm đang mở. */
+      tap: () => void;
+      /** Tấm đang hiện (nút gửi còn đó). */
+      isOpen: () => boolean;
+    };
+    const deferred = () => {
+      let resolve!: (v?: unknown) => void;
+      const promise = new Promise((res) => {
+        resolve = res;
+      });
+      return { promise, resolve };
+    };
+    const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+    const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter(([a]) => a.type === 'error').length;
+    const settle = () =>
+      act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+    const btn = (name: string) => screen.getByRole('button', { name });
+    const maybe = (name: string) => screen.queryByRole('button', { name });
+    const click = (name: string) => fireEvent.click(btn(name));
+    const renderLive = (refresh: Refresh) => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+      render(
+        <QueryClientProvider client={qc}>
+          <AdminPage />
+        </QueryClientProvider>,
+      );
+      return invalidate;
+    };
+    const openPayroll = async (refresh: Refresh) => {
+      const invalidate = renderLive(refresh);
+      await screen.findByText('Lan');
+      goTab('Lương');
+      await screen.findByRole('heading', { level: 2, name: 'Lương' });
+      await screen.findAllByRole('button', { name: /^Xem giờ · / });
+      return invalidate;
+    };
+    const openPaid = () => {
+      click('Đã chuyển · Lan');
+      fireEvent.click(maybe('Ảnh xác nhận chuyển khoản *') ?? btn('Ảnh xác nhận chuyển khoản *'));
+    };
+    const openRevoke = async () => {
+      const open = await screen.findByRole('button', { name: 'Thu hồi · Lan' });
+      fireEvent.click(open);
+      const reason = screen.queryByLabelText('Lý do');
+      if (reason) fireEvent.change(reason, { target: { value: 'Nghỉ việc' } });
+    };
+
+    const TEMPORARY: [string, unknown][] = [
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ];
+    const CASES: Case[] = [
+      {
+        name: 'tấm "Đã chuyển" (paidM)',
+        write: mocks.markPaid,
+        keys: [['admin-payroll', 2026, 3]],
+        succeed: { paid: true },
+        open: async (refresh) => {
+          const invalidate = await openPayroll(refresh);
+          openPaid();
+          return invalidate;
+        },
+        reopen: async () => openPaid(),
+        tap: () => {
+          const send = maybe('Đánh dấu đã trả');
+          if (send) fireEvent.click(send);
+        },
+        isOpen: () => maybe('Đánh dấu đã trả') !== null,
+      },
+      {
+        name: 'tấm "Thu hồi quyền" (revokeM)',
+        write: mocks.revokeStaff,
+        keys: [['admin-staff']],
+        succeed: { revoked: 1, downgraded: false },
+        open: async (refresh) => {
+          const invalidate = renderLive(refresh);
+          await openRevoke();
+          return invalidate;
+        },
+        reopen: openRevoke,
+        tap: () => {
+          const send = maybe('Thu hồi');
+          if (send) fireEvent.click(send);
+        },
+        isOpen: () => maybe('Thu hồi') !== null,
+      },
+    ];
+
+    describe.each(CASES)('$name', (c) => {
+      it.each([
+        [404, 'Không tìm thấy nữa'],
+        [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+      ])('bị từ chối %i: đóng tấm, báo lỗi một lần, khoá vẫn giữ tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+        c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(c.succeed);
+        const refresh = deferred();
+        const invalidate = await c.open(() => refresh.promise);
+        c.tap();
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+        expect(errorSnackbars()).toBe(1);
+        expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual(c.keys.map((queryKey) => ({ queryKey })));
+        await waitFor(() => expect(c.isOpen()).toBe(false));
+        // Tấm đã đóng mà dữ liệu chưa về: mở lại bấm tiếp không gửi lần hai.
+        await c.reopen();
+        c.tap();
+        await settle();
+        expect(c.write).toHaveBeenCalledTimes(1);
+        await act(async () => refresh.resolve());
+        await settle();
+        expect(errorSnackbars()).toBe(1);
+        await c.reopen();
+        await waitFor(() => expect(c.isOpen()).toBe(true));
+        c.tap();
+        await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      });
+
+      it('bị từ chối 400: giữ tấm mở để sửa ô nhập, khoá vẫn giữ tới khi dữ liệu về rồi mới nhả', async () => {
+        c.write.mockRejectedValueOnce(serverError('Lý do chưa hợp lệ', 400)).mockResolvedValue(c.succeed);
+        const refresh = deferred();
+        const invalidate = await c.open(() => refresh.promise);
+        c.tap();
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        expect(invalidate).toHaveBeenCalled();
+        await settle();
+        expect(c.isOpen()).toBe(true);
+        c.tap();
+        await settle();
+        expect(c.write).toHaveBeenCalledTimes(1);
+        await act(async () => refresh.resolve());
+        await settle();
+        expect(c.isOpen()).toBe(true);
+        c.tap();
+        await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+        expect(errorSnackbars()).toBe(1);
+      });
+
+      it('bị từ chối 422: giữ tấm mở, không tải lại nên khoá nhả ngay', async () => {
+        c.write.mockRejectedValueOnce(serverError('Dữ liệu không hợp lệ', 422)).mockResolvedValue(c.succeed);
+        const invalidate = await c.open(() => new Promise(() => undefined));
+        c.tap();
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await settle();
+        expect(invalidate).not.toHaveBeenCalled();
+        expect(c.isOpen()).toBe(true);
+        c.tap();
+        await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      });
+
+      it.each(TEMPORARY)('%s: giữ tấm mở, không tải lại, khoá nhả ngay để thử lại', async (_label, error) => {
+        c.write.mockRejectedValueOnce(error).mockResolvedValue(c.succeed);
+        const invalidate = await c.open(() => new Promise(() => undefined));
+        c.tap();
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await settle();
+        expect(c.isOpen()).toBe(true);
+        expect(invalidate).not.toHaveBeenCalled();
+        c.tap();
+        await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+        expect(errorSnackbars()).toBe(1);
+      });
+    });
+
+    it('tấm "Đã chuyển" của người khác mở trong lúc lệnh của Lan còn chạy không bị đóng theo lỗi 409 của Lan', async () => {
+      const slow = deferred();
+      mocks.markPaid.mockImplementation(() => slow.promise.then(() => Promise.reject(serverError('Vừa có thay đổi, bạn thử lại nhé', 409))));
+      await openPayroll(() => new Promise(() => undefined));
+      openPaid();
+      click('Đánh dấu đã trả');
+      await waitFor(() => expect(mocks.markPaid).toHaveBeenCalledTimes(1));
+      // Tấm đóng được trong lúc lệnh chạy: đóng tấm của Lan, mở tấm của người kế (SĐT 0912345678).
+      click('Đóng');
+      click('Đã chuyển · 0912345678');
+      expect(btn('Đánh dấu đã trả')).toBeInTheDocument();
+      await act(async () => slow.resolve());
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await settle();
+      expect(btn('Đánh dấu đã trả')).toBeInTheDocument();
     });
   });
 });

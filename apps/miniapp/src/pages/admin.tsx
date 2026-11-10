@@ -27,7 +27,7 @@ import {
 import { adminEditSession } from '../services/attendance-api';
 import { payrollReopenMessage } from '@tubutree/app-core/payroll-copy';
 import { grantDoneText, grantPermissionsHint } from '@tubutree/app-core/staff-copy';
-import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError, isTargetGoneError } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { useUploadBusy } from '../hooks/use-upload-busy';
@@ -203,7 +203,7 @@ function PayrollSection() {
   });
   const paidM = useLockedMutation({
     onSettled: releaseActing,
-    mutationFn: () => markPaid(payRow!.staff.id, { year: ym.year, month: ym.month, proofImageUrl: proof, note: note || undefined }),
+    mutationFn: (r: AdminPayrollRow) => markPaid(r.staff.id, { year: ym.year, month: ym.month, proofImageUrl: proof, note: note || undefined }),
     onSuccess: () => {
       openSnackbar({ text: 'Đã đánh dấu đã trả lương.', type: 'success' });
       setPayRow(null);
@@ -211,7 +211,12 @@ function PayrollSection() {
       setNote('');
       invalidate();
     },
-    onError: onWriteRejected,
+    onError: (e, r) => {
+      // Tấm có ô ảnh/ghi chú: chỉ đóng khi nhân viên không còn hoặc bảng lương vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Ảnh/ghi chú tự xoá khi mở tấm kế tiếp.
+      // Tấm đóng được trong lúc lệnh chạy: chỉ đóng đúng tấm của dòng này, không đóng tấm của người khác mới mở.
+      if (isTargetGoneError(e)) setPayRow((cur) => (cur?.staff.id === r.staff.id ? null : cur));
+      return onWriteRejected(e);
+    },
   });
   const payrollBusy = finalizeM.isPending || reopenM.isPending || paidM.isPending;
 
@@ -379,8 +384,8 @@ function PayrollSection() {
             loading={payrollBusy}
             disabled={!proof || proofBusy}
             onPress={() => {
-              if (proofBusy) return;
-              exclusive(() => paidM.mutate());
+              if (proofBusy || !payRow) return;
+              exclusive(() => paidM.mutate(payRow));
             }}
           >
             {proofBusy ? vi.common.imagesUploading : 'Đánh dấu đã trả'}
@@ -621,7 +626,11 @@ function StaffSection() {
       );
       qc.invalidateQueries({ queryKey: ['admin-staff'] });
     },
-    onError: onWriteRejected,
+    onError: (e) => {
+      // Tấm có ô lý do: chỉ đóng khi người này không còn hoặc vừa đổi quyền ở nơi khác (404/409); 400/422 là lỗi ở ô lý do, giữ tấm để sửa. Tấm không đóng được lúc lệnh chạy (nút Huỷ và vuốt đóng đều khoá) nên đây luôn là tấm của chính lệnh này.
+      if (isTargetGoneError(e)) closeRevoke();
+      return onWriteRejected(e);
+    },
   });
   const closeRevoke = () => {
     setRevokeTarget(null);

@@ -22,7 +22,7 @@ import {
 } from '@tubutree/app-core/reward-rules';
 import { getLoyalty, getLoyaltyRewards, lockedPointsNote, redeemLoyaltyReward, rewardCardState } from '../services/account-api';
 import { buyTree } from '../services/game-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
 import { coreHttp } from '../services/core-http';
 import { WASTE_QUERY_KEYS, invalidateAfterRedeem } from '../services/waste-api';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -97,10 +97,14 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
       await settleWithin(invalidateAfterRedeem(qc));
       onDone(outcome);
     },
-    // Khoá giữ tới khi danh mục (tồn, số dư) làm mới về: chạm tiếp lúc này chỉ gửi lại đúng lệnh vừa bị từ chối.
+    // Máy chủ từ chối vì danh mục đã cũ (400/404/409: hết quà, hết điểm, vừa đổi): khoá giữ tới khi danh mục (tồn, số dư) làm mới về, chạm tiếp lúc này chỉ gửi lại đúng lệnh vừa bị từ chối.
+    // Mất mạng, quá hạn, 5xx: điểm có thể đã trừ nên vẫn làm mới danh mục ở nền nhưng nhả khoá ngay (bấm lại phát lại đúng khoá cũ).
     onError: async (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      await settleWithin(qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards }));
+      const refresh = qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards });
+      if (isStaleStateError(e)) await settleWithin(refresh);
+      // Lệnh bị từ chối hẳn (400/404/409/422) thì bấm lại đúng lệnh đó nhận đúng lỗi đó: đóng khung xác nhận, khách chọn lại trên danh mục mới. Lỗi mạng/5xx/401 giữ khung mở để thử lại.
+      if (isServerRejection(e)) onCancel();
     },
     onSettled: () => {
       busyRef.current = false;

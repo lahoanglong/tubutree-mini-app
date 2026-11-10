@@ -4,7 +4,7 @@ import { useNavigate } from 'zmp-ui';
 import { useNotify } from './use-notify';
 import { couponUseCopy, couponUseOutcome, couponUseTarget } from '@tubutree/app-core/coupon-use';
 import { cartKey } from '../services/cart-key';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isStaleStateError } from '../services/api';
 import { applyCoupon, getCart } from '../services/shop-api';
 import { copyText } from '../utils/clipboard';
 import { haptic } from '../utils/haptic';
@@ -62,6 +62,9 @@ export function useCouponUse() {
       if (outcome.kind !== 'ok') notify({ text: outcome.text, type: outcome.kind === 'notApplied' ? 'warning' : 'info' });
     } catch (e) {
       notify({ text: couponUseCopy.notApplied(getErrorMessage(e)), type: 'warning' });
+      // Máy chủ từ chối mã (hết lượt, đã dùng, bị thu hồi: 400/404/409) mà thẻ trong ví còn nói dùng được: đọc lại ví ở nền để thẻ không mời "Dùng ngay" lần nữa.
+      // Không giữ khoá chờ: ngay sau đây đã chuyển sang giỏ, chỗ nào giữ khoá cũng đã rời màn.
+      if (isStaleStateError(e)) void qc.invalidateQueries({ queryKey: ['coupons'] });
     }
     onBeforeNavigate?.();
     navigate('/cart');

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -15,6 +15,7 @@ vi.mock('../../services/shop-api', async (orig) => ({
 }));
 
 import { HttpError } from '../../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../../utils/settle-within';
 import { ShopSection, type ShopSectionItem, type ShopSectionProps } from './shop-section';
 
 const item = (n: number, over: Partial<ShopSectionItem['product']> = {}, extra: Partial<ShopSectionItem> = {}): ShopSectionItem => ({
@@ -248,5 +249,96 @@ describe('ShopSection combo', () => {
     wrap(<ShopSection collection={combo({ comboDiscountPct: null })} />);
     expect(screen.queryByTestId('shop-combo')).toBeNull();
     expect(screen.getByTestId('shop-line')).toBeInTheDocument();
+  });
+});
+
+// W113A: "Thêm cả combo" bị máy chủ từ chối vì món hết hàng/ngừng bán/giá đổi (400/404/409) thì nút giữ khoá tới khi giỏ và tồn kho gian hàng làm mới về (tối đa LOCK_REFRESH_WAIT_MS).
+// Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: không tải lại, nhả ngay.
+describe('ShopSection combo — máy chủ từ chối thì giữ khoá tới khi dữ liệu làm mới về (W113A)', () => {
+  const comboItems = [item(1), item(2, { basePrice: 50_000 }), item(3, { basePrice: 50_000 })];
+  const combo = () => col({ id: 'cb', title: 'Combo giặt', kind: 'COMBO', layout: 'GRID', comboDiscountPct: 10, items: comboItems });
+  const addButton = () => screen.getByRole('button', { name: /^Thêm cả combo Combo giặt/ });
+  const busy = () => addButton().getAttribute('aria-busy') === 'true';
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorNotices = () => mocks.notify.mock.calls.filter((c) => c[0].type === 'error').length;
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để `isPending` kịp về false sau khi lệnh xong.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const open = (refresh: () => Promise<unknown>) => {
+    wrap(<ShopSection collection={combo()} />);
+    return vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+  };
+
+  it.each([
+    [400, 'Sản phẩm Sản phẩm 2 đã hết hàng.'],
+    [404, 'Sản phẩm không còn bán'],
+    [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+  ])('bị từ chối %i: báo lỗi một lần, tải lại gian hàng (không tải giỏ vì lô bị từ chối cả lô), nút giữ khoá tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+    mocks.addAll.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({});
+    const refresh = deferred();
+    const invalidate = open(() => refresh.promise);
+    fireEvent.click(addButton());
+    await waitFor(() => expect(errorNotices()).toBe(1));
+    expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['public-storefront'] }]);
+    // Đã báo lỗi mà dữ liệu chưa về: nút vẫn bận, chạm thêm không gửi lần hai.
+    expect(busy()).toBe(true);
+    await act(async () => {
+      fireEvent.click(addButton());
+      fireEvent.click(addButton());
+    });
+    expect(mocks.addAll).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    await waitFor(() => expect(busy()).toBe(false));
+    expect(errorNotices()).toBe(1);
+    fireEvent.click(addButton());
+    await waitFor(() => expect(mocks.addAll).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: không giữ khoá chờ tải lại, khoá nhả ngay', async (_label, error) => {
+    mocks.addAll.mockRejectedValueOnce(error).mockResolvedValue({});
+    const invalidate = open(() => new Promise(() => undefined));
+    fireEvent.click(addButton());
+    await waitFor(() => expect(errorNotices()).toBe(1));
+    await waitFor(() => expect(busy()).toBe(false));
+    expect(invalidate).not.toHaveBeenCalled();
+    fireEvent.click(addButton());
+    await waitFor(() => expect(mocks.addAll).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+    mocks.addAll.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue({});
+    open(() => new Promise(() => undefined));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(addButton());
+      await waitFor(() => expect(errorNotices()).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(busy()).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(busy()).toBe(false));
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(addButton());
+    await waitFor(() => expect(mocks.addAll).toHaveBeenCalledTimes(2));
   });
 });

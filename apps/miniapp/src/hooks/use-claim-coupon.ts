@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { freshCollectableCouponsQuery } from '@tubutree/app-core/queries/loyalty';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { claimCoupon } from '../services/coupon-claim';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isStaleStateError } from '../services/api';
 import { coreHttp } from '../services/core-http';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
@@ -15,6 +15,7 @@ import { useNotify } from './use-notify';
  * đăng nhập chứ không gọi máy chủ (khỏi 401); tài khoản khách chưa liên kết bị máy chủ từ chối và câu từ chối được báo nguyên văn.
  * Lỗi nào cũng tải lại kho, nhưng bằng `freshCollectableCouponsQuery` chứ không invalidate thường: route kho có `Cache-Control: public, max-age=15`
  * nên lần tải lại ngay sau lỗi dễ lấy đúng bản cũ trong cache trình duyệt, thẻ vẫn "Lưu mã" thêm chục giây và khách bấm ra cùng một lỗi.
+ * Khoá chỉ giữ tới khi kho về khi máy chủ từ chối vì kho đã cũ (400/404/409); mất mạng, quá hạn, 401, 5xx vẫn tải lại ở nền (mã có thể đã vào ví) nhưng nhả khoá ngay.
  */
 export function useClaimCoupon() {
   const qc = useQueryClient();
@@ -47,15 +48,15 @@ export function useClaimCoupon() {
         return true;
       } catch (e) {
         notify({ text: getErrorMessage(e), type: 'error' });
+        const refresh = Promise.all([
+          qc.fetchQuery(freshCollectableCouponsQuery(coreHttp)).catch(() => undefined),
+          qc.invalidateQueries({ queryKey: ['coupons', 'collectable', 'mine'] }),
+          qc.invalidateQueries({ queryKey: ['coupons'], exact: true }),
+        ]);
         // Khoá giữ tới khi cả ba lần tải lại xong: thẻ còn cũ (vẫn "Lưu mã") chạm tiếp lúc này chỉ ra lại đúng lỗi vừa báo.
         // Có hạn chờ: mạng chết thì lần tải lại tốn cả chục giây, không để một khoá chung giữ mọi thẻ lâu thế.
-        await settleWithin(
-          Promise.all([
-            qc.fetchQuery(freshCollectableCouponsQuery(coreHttp)).catch(() => undefined),
-            qc.invalidateQueries({ queryKey: ['coupons', 'collectable', 'mine'] }),
-            qc.invalidateQueries({ queryKey: ['coupons'], exact: true }),
-          ]),
-        );
+        // Lỗi không nói gì về kho (mất mạng, quá hạn, 401, 5xx): tải lại ở nền, nhả khoá ngay.
+        if (isStaleStateError(e)) await settleWithin(refresh);
         return false;
       } finally {
         busy.current = false;

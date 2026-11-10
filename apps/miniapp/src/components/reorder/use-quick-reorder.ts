@@ -4,10 +4,11 @@ import { quickReorderLines, type QuickReorderItem } from '@tubutree/app-core/com
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useNotify } from '../../hooks/use-notify';
 import { vi } from '../../i18n/vi';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, isStaleStateError } from '../../services/api';
 import { cartKey } from '../../services/cart-key';
 import { addToCart } from '../../services/shop-api';
 import { haptic } from '../../utils/haptic';
+import { settleWithin } from '../../utils/settle-within';
 import { playCartFeedback } from '../../utils/cart-feedback';
 import { useBundleAdd } from '../product/use-bundle-add';
 
@@ -44,6 +45,11 @@ export function useQuickReorder() {
       notify({ text: vi.product.added, type: 'success', duration: 2000, position: 'top' });
     } catch (e) {
       notify({ text: getErrorMessage(e), type: 'error' });
+      // Máy chủ từ chối (món hết hàng, ngừng bán, giá đổi): giữ khoá và vòng bận tới khi giỏ và dải làm mới về (tối đa `settleWithin`), kẻo chạm lại trên số cũ nhận đúng lỗi đó.
+      // Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: nhả ngay ở `finally`.
+      if (isStaleStateError(e)) {
+        await settleWithin(Promise.all([queryClient.invalidateQueries({ queryKey: ['cart'] }), queryClient.invalidateQueries({ queryKey: ['purchased-items'] })]));
+      }
     } finally {
       inflight.current = false;
       setBusyKey(null);

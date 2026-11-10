@@ -2253,6 +2253,23 @@ describe('Trang gian hàng: máy chủ từ chối thì tải lại rồi mới 
   const openMenuOf = (label: string) => {
     fireEvent.click(screen.getByRole('button', { name: label }));
   };
+  // W113A: hộp xác nhận đóng ngay khi máy chủ từ chối; muốn "bấm lại" lúc khoá còn giữ thì phải mở lại hộp (đồng bộ, dùng được cả khi đồng hồ giả) rồi bấm nút xác nhận.
+  const reopenUnpublish = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Cài đặt' }));
+    fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: 'Gỡ đăng gian hàng' }));
+  };
+  const reopenDeleteCol = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn khối' }));
+    fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: 'Xoá khối' }));
+  };
+  const reopenDeleteItem = () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
+    fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: 'Xoá khỏi khối' }));
+  };
+  const pressConfirm = (reopen: () => void, name: string) => () => {
+    if (!screen.queryByTestId('sheet')) reopen();
+    fireEvent.click(inSheet().getByRole('button', { name }));
+  };
 
   const CASES: Case[] = [
     {
@@ -2277,7 +2294,7 @@ describe('Trang gian hàng: máy chủ từ chối thì tải lại rồi mới 
         fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
         fireEvent.click(await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Gỡ đăng gian hàng' }));
         await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Gỡ đăng' });
-        return () => fireEvent.click(inSheet().getByRole('button', { name: 'Gỡ đăng' }));
+        return pressConfirm(reopenUnpublish, 'Gỡ đăng');
       },
     },
     {
@@ -2317,7 +2334,7 @@ describe('Trang gian hàng: máy chủ từ chối thì tải lại rồi mới 
         fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn khối' }));
         fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khối' }));
         await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Xoá khối' });
-        return () => fireEvent.click(inSheet().getByRole('button', { name: 'Xoá khối' }));
+        return pressConfirm(reopenDeleteCol, 'Xoá khối');
       },
     },
     {
@@ -2372,7 +2389,7 @@ describe('Trang gian hàng: máy chủ từ chối thì tải lại rồi mới 
         fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
         fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khỏi khối' }));
         await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Xoá' });
-        return () => fireEvent.click(inSheet().getByRole('button', { name: 'Xoá' }));
+        return pressConfirm(reopenDeleteItem, 'Xoá');
       },
     },
     {
@@ -2601,6 +2618,177 @@ describe('Trang gian hàng: máy chủ từ chối thì tải lại rồi mới 
         expect(side.write.mock.calls[1]).toEqual(side.callArgs(side.secondIds));
         expect(errorToasts()).toHaveLength(1);
       });
+    });
+  });
+});
+
+// W113A: hộp xác nhận chỉ có nút Đồng ý (gỡ đăng, xoá khối, xoá món) đóng khi máy chủ từ chối hẳn (400/404/409/422): bấm lại trên màn cũ nhận đúng lỗi đó. Khoá chạm vẫn giữ tới khi dữ liệu về (400/404/409). Mất mạng, quá hạn, 401, 5xx: hộp giữ mở, khoá nhả ngay để thử lại.
+describe('Trang gian hàng: hộp xác nhận đóng khi máy chủ từ chối (W113A)', () => {
+  type Pending = { promise: Promise<void>; resolve: () => void };
+  type Case = {
+    name: string;
+    write: ReturnType<typeof vi.fn>;
+    succeed: unknown;
+    /** Dựng màn tới đúng hộp xác nhận (đã hiện nút Đồng ý). */
+    open: (qc: QueryClient) => Promise<void>;
+    /** Mở lại hộp sau khi nó đã đóng. */
+    reopen: () => Promise<void>;
+    /** Bấm nút Đồng ý của hộp. */
+    press: () => void;
+    /** Hộp đang hiện (nút Đồng ý còn đó). */
+    isOpen: () => boolean;
+  };
+  const BOTH = [['storefront-quests'], ['my-storefront']];
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error');
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+  const inSheet = () => within(screen.getByTestId('sheet'));
+  const pending = (): Pending => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((res) => { resolve = res; });
+    return { promise, resolve };
+  };
+  const TEMPORARY: [string, unknown][] = [
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['quá thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ];
+  function liveClient() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const refreshes: Pending[] = [];
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => {
+      const p = pending();
+      refreshes.push(p);
+      return p.promise;
+    }) as never);
+    return { qc, invalidate, refreshes };
+  }
+  const keysOf = (invalidate: ReturnType<typeof liveClient>['invalidate']) => invalidate.mock.calls.map(([f]) => (f as { queryKey: string[] }).queryKey);
+  const present = (name: string | RegExp) => screen.queryByTestId('sheet') !== null && within(screen.getByTestId('sheet')).queryByRole('button', { name }) !== null;
+
+  const openUnpublish = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
+    fireEvent.click(await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Gỡ đăng gian hàng' }));
+    await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Gỡ đăng' });
+  };
+  const openDeleteCol = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn khối' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khối' }));
+    await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Xoá khối' });
+  };
+  const openDeleteItem = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn sản phẩm' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khỏi khối' }));
+    await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Xoá' });
+  };
+
+  const CASES: Case[] = [
+    {
+      name: 'gỡ đăng gian hàng (unpublishMut)',
+      write: mocks.publishStorefront,
+      succeed: {},
+      open: async (qc) => {
+        mocks.getMyStorefront.mockResolvedValue(storefront({ isPublished: true }));
+        renderPage(qc);
+        await openUnpublish();
+      },
+      reopen: openUnpublish,
+      press: () => fireEvent.click(inSheet().getByRole('button', { name: 'Gỡ đăng' })),
+      isOpen: () => present('Gỡ đăng'),
+    },
+    {
+      name: 'xoá khối (deleteColMut)',
+      write: mocks.deleteCollection,
+      succeed: {},
+      open: async (qc) => {
+        renderPage(qc);
+        await openCard();
+        await openDeleteCol();
+      },
+      reopen: openDeleteCol,
+      press: () => fireEvent.click(inSheet().getByRole('button', { name: 'Xoá khối' })),
+      isOpen: () => present('Xoá khối'),
+    },
+    {
+      name: 'xoá món khỏi khối (delItemMut)',
+      write: mocks.removeItem,
+      succeed: {},
+      open: async (qc) => {
+        renderPage(qc);
+        await openCard();
+        await openDeleteItem();
+      },
+      reopen: openDeleteItem,
+      press: () => fireEvent.click(inSheet().getByRole('button', { name: 'Xoá' })),
+      isOpen: () => present('Xoá'),
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const fn of new Set(CASES.map((c) => c.write))) fn.mockReset();
+  });
+
+  describe.each(CASES)('$name', (c) => {
+    it.each([
+      [400, 'Việc này đã được xử lý rồi'],
+      [404, 'Không tìm thấy nữa'],
+      [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+    ])('bị từ chối %i: đóng hộp, báo lỗi một lần, khoá vẫn giữ tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(c.succeed);
+      const { qc, invalidate, refreshes } = liveClient();
+      await c.open(qc);
+      c.press();
+      c.press();
+      await waitFor(() => expect(errorToasts()).toEqual([[{ text: message, type: 'error' }]]));
+      await waitFor(() => expect(screen.queryByTestId('sheet')).toBeNull());
+      expect(keysOf(invalidate)).toEqual(BOTH);
+      expect(c.write).toHaveBeenCalledTimes(1);
+      // Hộp đã đóng nhưng dữ liệu chưa về: mở lại bấm tiếp không gửi lần hai.
+      await c.reopen();
+      c.press();
+      await settle();
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => refreshes.slice(0, -1).forEach((p) => p.resolve()));
+      await settle();
+      c.press();
+      await settle();
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => refreshes.at(-1)!.resolve());
+      await settle();
+      expect(errorToasts()).toHaveLength(1);
+      c.press();
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it('bị từ chối 422: đóng hộp, không tải lại (không nói gì về trạng thái thật) nên khoá nhả ngay', async () => {
+      c.write.mockRejectedValueOnce(serverError('Dữ liệu không hợp lệ', 422)).mockResolvedValue(c.succeed);
+      const { qc, invalidate } = liveClient();
+      await c.open(qc);
+      c.press();
+      await waitFor(() => expect(errorToasts()).toHaveLength(1));
+      await waitFor(() => expect(screen.queryByTestId('sheet')).toBeNull());
+      await settle();
+      expect(invalidate).not.toHaveBeenCalled();
+      await c.reopen();
+      c.press();
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      expect(errorToasts()).toHaveLength(1);
+    });
+
+    it.each(TEMPORARY)('%s: giữ hộp mở, không tải lại, khoá nhả ngay để thử lại', async (_label, error) => {
+      c.write.mockRejectedValueOnce(error).mockResolvedValue(c.succeed);
+      const { qc, invalidate } = liveClient();
+      await c.open(qc);
+      c.press();
+      await waitFor(() => expect(errorToasts()).toHaveLength(1));
+      await settle();
+      expect(c.isOpen()).toBe(true);
+      expect(invalidate).not.toHaveBeenCalled();
+      c.press();
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      expect(errorToasts()).toHaveLength(1);
     });
   });
 });

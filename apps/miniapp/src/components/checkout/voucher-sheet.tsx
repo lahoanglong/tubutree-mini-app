@@ -8,7 +8,7 @@ import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
 import { getCoupons } from '../../services/account-api';
 import type { CouponPreviewRequest } from '@tubutree/shared-types';
 import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/shop-api';
-import { getErrorMessage, getLoadErrorMessage } from '../../services/api';
+import { getErrorMessage, getLoadErrorMessage, isTargetGoneError } from '../../services/api';
 import { useNotify } from '../../hooks/use-notify';
 import { haptic } from '../../utils/haptic';
 import { formatVnd } from '../../utils/format';
@@ -22,7 +22,7 @@ import { Text } from '../ui/text';
 import { VoucherPicker } from '../ui/voucher-picker';
 import { autoCouponName } from '../../utils/coupon-name';
 import { cartKey } from '../../services/cart-key';
-import { COUPON_CHANGE_KEY } from './use-coupon-hint';
+import { COUPON_CHANGE_KEY, holdForCouponReload } from './use-coupon-hint';
 import { INPUT_LIMITS } from '../../utils/input-limits';
 
 export interface VoucherSheetProps {
@@ -141,7 +141,13 @@ export function VoucherSheet({
       onCouponApplied?.();
       onClose();
     },
-    onError: reportError,
+    // Giữ cờ `changing` tới khi dữ liệu mới về nếu máy chủ từ chối vì màn đã cũ (`onSettled` chạy sau Promise trả ở đây). Lời báo lỗi giữ nguyên.
+    // Mã gõ tay không có trong ví mà bị 400 là mã sai/hết hiệu lực chứ màn không cũ: nhả ngay như trước, khỏi khoá tới khi bốn nguồn tải lại. 404/409 vẫn tải lại.
+    onError: (e: unknown, code: string) => {
+      reportError(e);
+      const inWallet = (couponsQ.data ?? []).some((c) => c.code.toUpperCase() === code.toUpperCase());
+      return inWallet || isTargetGoneError(e) ? holdForCouponReload(queryClient, e) : undefined;
+    },
   });
 
   const removeMut = useMutation({
@@ -157,7 +163,11 @@ export function VoucherSheet({
       notify({ text: 'Đã bỏ mã giảm giá', type: 'success', duration: 2000 });
       onCouponApplied?.();
     },
-    onError: reportError,
+    // Giữ cờ `changing` tới khi dữ liệu mới về nếu máy chủ từ chối vì màn đã cũ (`onSettled` chạy sau Promise trả ở đây). Lời báo lỗi giữ nguyên.
+    onError: (e: unknown) => {
+      reportError(e);
+      return holdForCouponReload(queryClient, e);
+    },
   });
 
   const isAnyMutating = applyMut.isPending || removeMut.isPending || busy;

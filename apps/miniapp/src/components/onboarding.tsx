@@ -8,7 +8,8 @@ import {
   Users, Wallet, type LucideIcon,
 } from 'lucide-react';
 import { getMe, completeOnboarding } from '../services/account-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { useAuthStore } from '../store/auth';
 import { haptic } from '../utils/haptic';
 import { ONBOARDING_SNOOZE_KEY, ONBOARDING_SNOOZE_MS, shouldShowOnboarding } from './onboarding-rules';
@@ -143,7 +144,12 @@ function Onboarding({ onSnooze, onDone }: { onSnooze: () => void; onDone: () => 
       void qc.invalidateQueries({ queryKey: ['me'] });
       setStep(finishStep);
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Máy chủ từ chối (400/404/409) thường vì hồ sơ đã ghi nhận khảo sát ở lần trước: tải lại ['me'] và giữ khoá tới khi dữ liệu về (tối đa `settleWithin`) để màn tự đóng thay vì cho gửi lại. Mất mạng, quá hạn, 401, 5xx nhả ngay.
+      if (!isStaleStateError(e)) return undefined;
+      return settleWithin(qc.invalidateQueries({ queryKey: ['me'] }));
+    },
   });
 
   const toggle = (q: Q, key: string) => {

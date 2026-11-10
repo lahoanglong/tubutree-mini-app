@@ -8,7 +8,8 @@ import {
 } from '../services/brand-api';
 import { useStorefrontContext } from '../store/storefront-context';
 import { useAuthStore } from '../store/auth';
-import { getLoadErrorMessage, isNotFoundError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isNotFoundError, isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { formatVnd } from '../utils/format';
 import { Skeleton } from '../components/ui/skeleton';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
@@ -88,7 +89,20 @@ export default function BrandViewPage() {
       void qc.invalidateQueries({ queryKey: ['public-brand', slug] });
       notify({ text: r.following ? 'Đã theo dõi thương hiệu 💚' : 'Đã bỏ theo dõi', type: 'success' });
     },
-    onError: () => notify({ text: 'Cần đăng nhập để theo dõi thương hiệu.', type: 'warning' }),
+    onError: (e) => {
+      if (!isStaleStateError(e)) {
+        notify({ text: 'Cần đăng nhập để theo dõi thương hiệu.', type: 'warning' });
+        return undefined;
+      }
+      // Máy chủ từ chối vì trạng thái theo dõi/thương hiệu đã đổi (400/404/409): đây không phải lỗi đăng nhập. Tải lại cả hai truy vấn và giữ khoá tới khi dữ liệu về (tối đa `settleWithin`), kẻo chạm lại đọc `followQ.data` cũ và gửi cùng chiều.
+      notify({ text: getErrorMessage(e), type: 'error' });
+      return settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: ['brand-follow', slug] }),
+          qc.invalidateQueries({ queryKey: ['public-brand', slug] }),
+        ]),
+      );
+    },
   });
   // Banner share-to-earn: chỉ AFFILIATE đăng nhập mới eligible; lỗi (401/chưa login) coi như ẩn.
   const steQ = useQuery({

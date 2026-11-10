@@ -9,7 +9,7 @@ import { useNotify } from '../../hooks/use-notify';
 import { useAuthPhase } from '../../hooks/use-auth-phase';
 import { useFlashAllowance } from '../../hooks/use-flash-allowance';
 import { useLoginWithNotice } from '../../hooks/use-login-notice';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, isStaleStateError } from '../../services/api';
 import { cartKey, useCartKey } from '../../services/cart-key';
 import { addToCart, fetchActiveFlashSales, fetchProduct, getCart, type ProductCard, type VariationDetail } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
@@ -19,6 +19,7 @@ import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import { reelSeenStorage } from '../../utils/reel-seen-storage';
 import { serverNow } from '../../utils/server-clock';
+import { settleWithin } from '../../utils/settle-within';
 import { Icon } from '../ui/icon';
 import { StoryReelStrip } from '../ui/story-reel-strip';
 import { homeBestSellerQuery } from './home-best-seller-query';
@@ -196,7 +197,7 @@ export function HomeStoryReel() {
   );
   const stripItems = useMemo(() => items.map((c) => ({ slug: c.slug, name: c.name, thumbnail: c.thumbnail, seen: seen.has(c.slug) })), [items, seen]);
 
-  const addLine = async (variationId: string, qty: number) => {
+  const addLine = async (slug: string, variationId: string, qty: number) => {
     try {
       const cart = await addToCart(variationId, qty);
       queryClient.setQueryData(cartKey(), cart);
@@ -204,6 +205,17 @@ export function HomeStoryReel() {
       notify({ text: vi.product.added, type: 'success', duration: 2000, position: 'top' });
     } catch (e) {
       notify({ text: getErrorMessage(e), type: 'error' });
+      // Máy chủ từ chối (món hết hàng, phân loại ngừng bán, giá đổi): giữ khoá của món (`exclusive` nhả ở `finally`) tới khi giỏ, chi tiết món và kệ Bán chạy nhất làm mới về
+      // (tối đa `settleWithin`), kẻo chạm lại trên tồn cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: nhả ngay.
+      if (isStaleStateError(e)) {
+        await settleWithin(
+          Promise.all([
+            queryClient.invalidateQueries({ queryKey: ['cart'] }),
+            queryClient.invalidateQueries({ queryKey: ['product', slug] }),
+            queryClient.invalidateQueries({ queryKey: homeBestSellerQuery.queryKey }),
+          ]),
+        );
+      }
     }
   };
 
@@ -229,7 +241,7 @@ export function HomeStoryReel() {
       notify({ text: QUICK_ADD_SOLD_OUT, type: 'error' });
       return;
     }
-    if (plan.kind === 'add') await addLine(plan.variationId, 1);
+    if (plan.kind === 'add') await addLine(card.slug, plan.variationId, 1);
     // Bảng mở sẵn ở phân loại mang đúng giá trên nút Reel (Giờ vàng thắng thì phân loại của suất đó), không phải phân loại đại diện.
     else setPicker({ card, variations, initialId: cardAddTarget(card, flashQ.data ?? [], serverNow()).variationId });
   };
@@ -248,12 +260,14 @@ export function HomeStoryReel() {
           variations={picker.variations}
           initialId={picker.initialId}
           onClose={() => setPicker(null)}
-          onConfirm={(id, qty) =>
-            exclusive(picker.card.slug, async () => {
-              await addLine(id, qty);
-              setPicker(null);
-            })
-          }
+          onConfirm={(id, qty) => {
+            const slug = picker.card.slug;
+            return exclusive(slug, async () => {
+              await addLine(slug, id, qty);
+              // Bảng có thể đã đóng rồi mở cho món khác trong lúc lệnh (và lần chờ tải lại) chạy: chỉ đóng bảng của đúng món này.
+              setPicker((cur) => (cur?.card.slug === slug ? null : cur));
+            });
+          }}
         />
       )}
     </>

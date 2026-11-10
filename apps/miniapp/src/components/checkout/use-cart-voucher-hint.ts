@@ -4,14 +4,14 @@ import type { CouponPreviewRequest } from '@tubutree/shared-types';
 import { cartVoucherHint, type CartVoucherHint } from '@tubutree/app-core/commerce/cart-voucher-hint';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { applyCoupon } from '../../services/shop-api';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, isStaleStateError } from '../../services/api';
 import { cartKey } from '../../services/cart-key';
 import { useNotify } from '../../hooks/use-notify';
 import { useLockedMutation } from '../game/use-locked-mutation';
 import { haptic } from '../../utils/haptic';
 import { autoCouponName } from '../../utils/coupon-name';
 import { serverNow } from '../../utils/server-clock';
-import { COUPON_CHANGE_KEY, useCouponPreviews } from './use-coupon-hint';
+import { COUPON_CHANGE_KEY, holdForCouponReload, useCouponPreviews } from './use-coupon-hint';
 
 export interface CartVoucherHintState {
   /** Null khi chưa có xem trước của máy chủ, giỏ đã có mã, hoặc không có gì đáng nói. */
@@ -68,8 +68,11 @@ export function useCartVoucherHint(opts: {
     onError: (e, code) => {
       setFailed({ code: code.trim().toUpperCase(), text: getErrorMessage(e) });
       // Máy chủ vừa từ chối mã mà xem trước còn nói dùng được (hết lượt, bị tắt giữa chừng): hỏi lại để dải không giữ câu "đủ điều kiện" đã sai.
+      // Từ chối vì màn đã cũ (400/404/409) thì đọc thêm giỏ và báo giá, nút "Áp mã" giữ khoá tới khi dữ liệu về (tối đa `settleWithin`). Lỗi khác chỉ hỏi lại xem trước như trước, nhả khoá ngay.
+      if (isStaleStateError(e)) return holdForCouponReload(queryClient, e);
       void queryClient.invalidateQueries({ queryKey: ['coupon-previews'] });
       void queryClient.invalidateQueries({ queryKey: ['coupons'] });
+      return undefined;
     },
   });
 

@@ -20,7 +20,7 @@ import {
   type Shift,
   type ShiftTemplate,
 } from '../services/shifts-api';
-import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError, isTargetGoneError } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -142,6 +142,8 @@ function TodayCard() {
     },
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Tấm "Ra ca lùi giờ" có ô giờ: chỉ đóng khi phiên không còn hoặc vừa đổi (404/409, đã ra ca ở máy khác); 400/422 là giờ chọn chưa hợp lệ, giữ tấm để sửa.
+      if (isTargetGoneError(e)) setBackOpen(false);
       return refreshIfStale(e);
     },
   });
@@ -528,8 +530,8 @@ function StaffHub() {
   };
 
   const cancelM = useLockedMutation({
-    mutationFn: () =>
-      cancelShift(cancelId as string, {
+    mutationFn: (id: string) =>
+      cancelShift(id, {
         reason: cancelReason.trim(),
         isEmergency: cancelEmergency,
         evidenceUrl: cancelEvidence || undefined,
@@ -545,8 +547,10 @@ function StaffHub() {
       setCancelEvidence('');
       invalidate();
     },
-    onError: (e) => {
+    onError: (e, id) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Tấm huỷ ca có ô lý do/chứng cứ: chỉ đóng khi ca không còn hoặc vừa đổi (404/409, vd đã bị huỷ ở nơi khác); 400/422 là lỗi ở ô nhập, giữ tấm để sửa. Tấm đóng được lúc lệnh chạy: chỉ đóng đúng tấm của ca này.
+      if (isTargetGoneError(e)) setCancelId((cur) => (cur === id ? null : cur));
       return refreshIfStale(e);
     },
   });
@@ -822,8 +826,8 @@ function StaffHub() {
             loading={cancelM.isPending}
             disabled={cancelReason.trim().length === 0 || (cancelEmergency && !cancelEvidence) || evidenceBusy}
             onPress={() => {
-              if (evidenceBusy) return;
-              cancelM.mutate();
+              if (evidenceBusy || !cancelId) return;
+              cancelM.mutate(cancelId);
             }}
           >
             {evidenceBusy ? vi.common.imagesUploading : 'Xác nhận huỷ'}

@@ -20,7 +20,7 @@ import {
   type UnavailableCartLine,
 } from '../services/shop-api';
 import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { QuantitySelector } from '../components/ui/quantity-selector';
@@ -67,6 +67,7 @@ import { useCartVoucherHint } from '../components/checkout/use-cart-voucher-hint
 import { homeBestSellerQuery } from '../components/home/home-best-seller-query';
 import { cardAddTarget } from '../utils/card-add-target';
 import { serverNow } from '../utils/server-clock';
+import { settleWithin } from '../utils/settle-within';
 
 const UNDO_WINDOW_MS = 3500;
 
@@ -149,6 +150,10 @@ function useOptimisticCartOptions<TVars>(
     onError: (e: unknown, _vars, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(cartKey(), ctx.prev);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Máy chủ từ chối vì giỏ đã khác (400/404/409): giữ khoá/cờ bận của lệnh tới khi giỏ thật về (tối đa `settleWithin`), kẻo bấm lại trên số cũ vừa hoàn nhận đúng lỗi đó.
+      // Còn lệnh sửa khác đang bay thì để lệnh xong cuối đọc lại (ở `onSettled`): đọc về lúc này chưa có lệnh kia. Mất mạng, quá hạn, 401, 5xx không nói gì về giỏ: nhả ngay.
+      if (!isStaleStateError(e) || countEdits(queryClient, 0) > 1) return undefined;
+      return settleWithin(queryClient.invalidateQueries({ queryKey: ['cart'] }));
     },
     // Còn lệnh sửa giỏ khác đang bay thì chưa đọc lại: bản đọc về lúc đó chưa có lệnh kia, giỏ nháy về số cũ. Lệnh xong cuối cùng đọc lại.
     onSettled: () => {
@@ -274,6 +279,21 @@ export default function CartPage() {
       .finally(() => addonInFlight.current.delete(item.slug));
   };
 
+  // Khoá đồng bộ theo dòng ngừng bán: chạm đúp "Xoá" không gọi xoá hai lần (lần hai nhận 404). Máy chủ từ chối (400/404/409: dòng đã bị gỡ ở máy khác) thì giữ khoá tới khi giỏ đọc lại về (tối đa `settleWithin`), lỗi khác nhả ngay.
+  const discontinuedInFlight = useRef(new Set<string>());
+  const handleRemoveDiscontinued = (id: string) => {
+    if (discontinuedInFlight.current.has(id)) return;
+    discontinuedInFlight.current.add(id);
+    removeCartItem(id)
+      .then((c) => queryClient.setQueryData(cartKey(), c))
+      .catch((e: unknown) => {
+        openSnackbar({ text: getErrorMessage(e), type: 'error' });
+        if (isStaleStateError(e)) return settleWithin(queryClient.invalidateQueries({ queryKey: ['cart'] }));
+        return undefined;
+      })
+      .finally(() => discontinuedInFlight.current.delete(id));
+  };
+
   const handleRemove = (line: CartLine) => {
     haptic('light');
     remove.mutate({ id: line.id, line });
@@ -290,7 +310,12 @@ export default function CartPage() {
     if (undoTimer.current) clearTimeout(undoTimer.current);
     addToCart(line.variationId, line.quantity)
       .then((c) => queryClient.setQueryData(cartKey(), c))
-      .catch((e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }))
+      .catch((e: unknown) => {
+        openSnackbar({ text: getErrorMessage(e), type: 'error' });
+        // Máy chủ từ chối (hết hàng, món không còn...): đọc lại giỏ và giữ khoá tới khi giỏ về (tối đa `settleWithin`). Lỗi khác nhả ngay.
+        if (isStaleStateError(e)) return settleWithin(queryClient.invalidateQueries({ queryKey: ['cart'] }));
+        return undefined;
+      })
       .finally(() => {
         undoing.current = false;
       });
@@ -396,14 +421,7 @@ export default function CartPage() {
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(var(--sticky-bar-h, 150px) + 16px)' }}>
       <PageHeader title="Giỏ hàng" />
       <StorefrontContextBar />
-      <DiscontinuedNotice
-        lines={summary.unavailableItems ?? []}
-        onRemove={(id) =>
-          removeCartItem(id)
-            .then((c) => queryClient.setQueryData(cartKey(), c))
-            .catch((e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }))
-        }
-      />
+      <DiscontinuedNotice lines={summary.unavailableItems ?? []} onRemove={handleRemoveDiscontinued} />
       {empty ? (
         <>
           <EmptyState

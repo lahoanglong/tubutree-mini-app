@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -50,6 +50,8 @@ vi.mock('../components/ui/product-card', () => ({
 }));
 
 import WishlistPage from './wishlist';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { QUICK_ADD_SOLD_OUT } from '@tubutree/app-core/quick-add';
 
 let lastClient: QueryClient;
@@ -551,5 +553,191 @@ describe('Trang Yêu thích: nút giỏ nhanh và bảng chọn phân loại kho
     await act(async () => d.resolve(detail([variation('v1')])));
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(1));
     expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1, 'wishlist');
+  });
+});
+
+// W113A: thêm giỏ từ Yêu thích bị máy chủ từ chối vì tồn kho hay sản phẩm đã đổi (400/404/409) thì nút giữ khoá tới khi danh sách tải lại về (tối đa LOCK_REFRESH_WAIT_MS), kẻo bấm lại trên thẻ cũ nhận đúng lỗi đó;
+// bảng chọn phân loại (có ô số lượng) đóng khi món không còn (404/409); 400 ("Chỉ còn N") và 422 giữ bảng để giảm số lượng. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: không tải lại, nhả ngay, bảng giữ nguyên để thử lại.
+describe('Trang Yêu thích: máy chủ từ chối thì giữ khoá tới khi dữ liệu làm mới về (W113A)', () => {
+  type Refresh = () => Promise<unknown>;
+  const variation = (id: string, stock = 5) => ({ id, name: `Loại ${id}`, sku: id, attributes: {}, retailPrice: 100000, salePrice: null, stock });
+  const detail = (variations: ReturnType<typeof variation>[]) => ({ id: 'p1', slug: 'xa-bong', name: 'Xà bông', thumbnail: null, variations });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorToasts = () => mocks.snackbar.mock.calls.filter(([a]) => (a as { type: string }).type === 'error').length;
+  const quickBtn = () => screen.getByRole('button', { name: 'Thêm Xà bông vào giỏ' });
+  const busy = () => quickBtn().getAttribute('aria-busy') === 'true';
+  const sheet = () => screen.queryByTestId('variation-sheet');
+  // TanStack báo cache qua setTimeout(0): đợi một nhịp để trạng thái kịp cập nhật sau khi lệnh xong.
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const renderLive = (refresh: Refresh): MockInstance<QueryClient['invalidateQueries']> => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <WishlistPage />
+      </QueryClientProvider>,
+    );
+    return invalidate;
+  };
+
+  /** `start` chạm nút giỏ nhanh (và xác nhận ở bảng nếu có): gửi đúng một lệnh thêm giỏ. */
+  const FLOWS = [
+    {
+      name: 'nút giỏ nhanh (một phân loại)',
+      picker: false,
+      setup: () => mocks.fetchProduct.mockResolvedValue(detail([variation('v1')])),
+      start: async () => {
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' }));
+      },
+    },
+    {
+      name: 'bảng chọn phân loại',
+      picker: true,
+      setup: () => mocks.fetchProduct.mockResolvedValue(detail([variation('v1'), variation('v2')])),
+      start: async () => {
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' }));
+        await screen.findByTestId('variation-sheet');
+        fireEvent.click(screen.getByRole('button', { name: 'xác nhận phân loại' }));
+      },
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.addToCart.mockReset();
+    mocks.addToCart.mockResolvedValue({ items: [] });
+    mocks.fetchProduct.mockReset();
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
+    mocks.getWishlist.mockResolvedValue([
+      { id: 'p1', slug: 'xa-bong', name: 'Xà bông', inStock: true },
+      { id: 'p2', slug: 'dau-goi', name: 'Dầu gội', inStock: true },
+    ]);
+  });
+
+  describe.each(FLOWS)('$name', (f) => {
+    beforeEach(() => f.setup());
+
+    it.each([
+      [400, 'Chỉ còn 0 sản phẩm'],
+      [404, 'Sản phẩm không còn bán'],
+      [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+    ])('bị từ chối %i: báo lỗi một lần, tải lại danh sách, nút giữ khoá tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      mocks.addToCart.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({ items: [] });
+      const refresh = deferred();
+      const invalidate = renderLive(() => refresh.promise);
+      await f.start();
+      await waitFor(() => expect(errorToasts()).toBe(1));
+      expect(mocks.snackbar).toHaveBeenCalledWith(expect.objectContaining({ text: message, type: 'error' }));
+      expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['wishlist'] }]);
+      // Món không còn (404/409): bảng chọn đóng ngay, không đợi dữ liệu về. 400 ("Chỉ còn N"): bảng giữ để đổi số lượng. Nút giỏ vẫn bận cả hai.
+      if (f.picker && status !== 400) await waitFor(() => expect(sheet()).toBeNull());
+      if (f.picker && status === 400) expect(sheet()).not.toBeNull();
+      expect(busy()).toBe(true);
+      await act(async () => {
+        fireEvent.click(quickBtn());
+        fireEvent.click(quickBtn());
+      });
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      await waitFor(() => expect(busy()).toBe(false));
+      expect(errorToasts()).toBe(1);
+      await f.start();
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    });
+
+    it('bị từ chối 422: giữ bảng chọn (nếu có), không tải lại, nhả ngay', async () => {
+      mocks.addToCart.mockRejectedValueOnce(serverError('Dữ liệu không hợp lệ', 422)).mockResolvedValue({ items: [] });
+      const invalidate = renderLive(() => new Promise(() => undefined));
+      await f.start();
+      await waitFor(() => expect(errorToasts()).toBe(1));
+      await waitFor(() => expect(busy()).toBe(false));
+      if (f.picker) expect(sheet()).not.toBeNull();
+      expect(invalidate).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ])('%s: không giữ khoá chờ tải lại, khoá nhả ngay, bảng chọn giữ nguyên', async (_label, error) => {
+      mocks.addToCart.mockRejectedValueOnce(error).mockResolvedValue({ items: [] });
+      const invalidate = renderLive(() => new Promise(() => undefined));
+      await f.start();
+      await waitFor(() => expect(errorToasts()).toBe(1));
+      await waitFor(() => expect(busy()).toBe(false));
+      expect(invalidate).not.toHaveBeenCalled();
+      if (f.picker) expect(sheet()).not.toBeNull();
+      await f.start();
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    });
+
+    it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+      mocks.addToCart.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue({ items: [] });
+      renderLive(() => new Promise(() => undefined));
+      await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' });
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        await f.start();
+        await waitFor(() => expect(errorToasts()).toBe(1));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        expect(busy()).toBe(true);
+        await act(async () => {
+          fireEvent.click(quickBtn());
+        });
+        expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+        await waitFor(() => expect(busy()).toBe(false));
+      } finally {
+        vi.useRealTimers();
+      }
+      await f.start();
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('chi tiết món lúc bấm báo không còn (404 ở bước tải chi tiết)', () => {
+    it('báo lỗi một lần, tải lại danh sách và giữ khoá tới khi dữ liệu về; không gọi thêm giỏ', async () => {
+      mocks.fetchProduct.mockRejectedValueOnce(serverError('Không tìm thấy sản phẩm', 404)).mockResolvedValue(detail([variation('v1')]));
+      const refresh = deferred();
+      const invalidate = renderLive(() => refresh.promise);
+      fireEvent.click(await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' }));
+      await waitFor(() => expect(errorToasts()).toBe(1));
+      expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['wishlist'] }]);
+      expect(busy()).toBe(true);
+      await act(async () => {
+        fireEvent.click(quickBtn());
+      });
+      expect(mocks.fetchProduct).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      await waitFor(() => expect(busy()).toBe(false));
+      expect(mocks.addToCart).not.toHaveBeenCalled();
+    });
+
+    it('mất mạng ở bước tải chi tiết: không tải lại danh sách, nhả ngay', async () => {
+      mocks.fetchProduct.mockRejectedValueOnce(new HttpError('Network Error', 'ERR_NETWORK'));
+      const invalidate = renderLive(() => new Promise(() => undefined));
+      fireEvent.click(await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' }));
+      await waitFor(() => expect(errorToasts()).toBe(1));
+      await waitFor(() => expect(busy()).toBe(false));
+      expect(invalidate).not.toHaveBeenCalled();
+    });
   });
 });

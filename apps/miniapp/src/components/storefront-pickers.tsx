@@ -87,6 +87,15 @@ export function PickerSheet({
   const { openSnackbar } = useSnackbar();
   const [search, setSearch] = useState('');
   const listQ = useQuery({ queryKey: ['picker', search], queryFn: () => pickerProducts(search) });
+  // `addMut.variables` chỉ là món chạm SAU CÙNG nên chạm A rồi B thì A hết hiện bận dù còn chạy hay còn giữ khoá chờ dữ liệu về: sổ món bận riêng, vào ở lúc chạm, ra ở `onSettled` (cùng lúc nhả khoá ref).
+  const [busyIds, setBusyIds] = useState<ReadonlySet<string>>(() => new Set());
+  const markBusy = (id: string, on: boolean) => setBusyIds((prev) => {
+    if (prev.has(id) === on) return prev;
+    const next = new Set(prev);
+    if (on) next.add(id);
+    else next.delete(id);
+    return next;
+  });
   // Khoá theo sản phẩm: thêm hai món khác nhau vẫn song song, chạm lặp vào cùng một món thì bỏ qua.
   const addMut = useLockedMutation({
     mutationFn: (p: PickerProduct) => addItem(collectionId, { productId: p.id }),
@@ -95,7 +104,12 @@ export function PickerSheet({
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       return isStaleStateError(e) ? settleWithin(onStale()) : undefined;
     },
+    onSettled: (_data, _error, p) => markBusy(p.id, false),
   }, (p) => p.id);
+  const addProduct = (p: PickerProduct) => {
+    markBusy(p.id, true);
+    addMut.mutate(p);
+  };
   const products = listQ.data ?? [];
 
   return (
@@ -125,7 +139,7 @@ export function PickerSheet({
                     )}
                   </div>
                 </div>
-                <Button icon={Plus} loading={addMut.isPending && addMut.variables?.id === p.id} onPress={() => addMut.mutate(p)}>Thêm</Button>
+                <Button icon={Plus} loading={busyIds.has(p.id)} onPress={() => addProduct(p)}>Thêm</Button>
               </div>
             ))
           )}

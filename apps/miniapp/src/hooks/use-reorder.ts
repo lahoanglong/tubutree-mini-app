@@ -2,12 +2,13 @@ import { useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, useSnackbar } from 'zmp-ui';
 import { addToCart, repurchaseOrder, type RepurchaseResponse } from '../services/shop-api';
-import { getErrorMessage } from '../services/api';
+import { getErrorMessage, isStaleStateError } from '../services/api';
 import { trackReorderCompleted, type ReorderSource } from '../services/buy-flow-events';
 import { targetLines, type ReorderSelection, type ReorderTarget } from '../components/reorder/reorder-types';
 import { summarizeReorder, type ReorderSummary } from '../components/reorder/reorder-summary';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { settleWithin } from '../utils/settle-within';
 
 export interface UseReorderOptions {
   /** Sang giỏ sau khi thêm (kệ Mua lại, thẻ đơn, chi tiết đơn). Không bật (nhắc mua lại ở thông báo) → ở lại, snackbar có nút "Xem giỏ". */
@@ -81,7 +82,15 @@ export function useReorder(source: ReorderSource, opts: UseReorderOptions = {}):
         action: { text: vi.reorder.viewCart, close: true, onClick: () => navigate('/cart') },
       });
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    // Trả Promise: `inFlight` giữ tới khi giỏ, đơn và kệ Mua lại làm mới về (tối đa `settleWithin`) khi máy chủ từ chối (đơn không còn, món hết hàng hay ngừng bán, giá đổi),
+    // kẻo bấm lại trên số cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: nhả ngay.
+    onError: (e, v) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      if (!isStaleStateError(e)) return undefined;
+      const keys: (readonly unknown[])[] = [['cart'], ['purchased-items'], ['orders']];
+      if (v.target.kind === 'order') keys.push(['order', v.target.orderCode]);
+      return settleWithin(Promise.all(keys.map((queryKey) => qc.invalidateQueries({ queryKey }))));
+    },
   });
 
   return {

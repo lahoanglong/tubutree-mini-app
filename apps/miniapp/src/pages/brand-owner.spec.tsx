@@ -660,6 +660,20 @@ describe('BrandOwnerPage: máy chủ từ chối thì giữ khoá tới khi hồ
     return invalidate;
   };
 
+  // W113A: form sửa/hộp xoá đóng ngay khi máy chủ từ chối; muốn "bấm lại" lúc khoá còn giữ thì phải mở lại (đồng bộ, dùng được cả khi đồng hồ giả) rồi mới lấy nút xác nhận.
+  const reopeningEdit = () => {
+    if (!screen.queryByRole('button', { name: 'Lưu thay đổi' })) {
+      fireEvent.click(screen.getByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' }));
+    }
+    return screen.getByRole('button', { name: 'Lưu thay đổi' });
+  };
+  const reopeningDelete = () => {
+    if (!screen.queryByTestId('sheet')) {
+      fireEvent.click(screen.getByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
+    }
+    return within(screen.getByTestId('sheet')).getByRole('button', { name: 'Xoá' });
+  };
+
   const CASES: Case[] = [
     {
       name: 'lưu thông tin (saveMut)',
@@ -689,7 +703,7 @@ describe('BrandOwnerPage: máy chủ từ chối thì giữ khoá tới khi hồ
       open: async (refresh) => {
         const invalidate = renderLive(refresh);
         fireEvent.click(await screen.findByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' }));
-        return { invalidate, button: () => screen.getByRole('button', { name: 'Lưu thay đổi' }) };
+        return { invalidate, button: reopeningEdit };
       },
     },
     {
@@ -699,7 +713,7 @@ describe('BrandOwnerPage: máy chủ từ chối thì giữ khoá tới khi hồ
       open: async (refresh) => {
         const invalidate = renderLive(refresh);
         fireEvent.click(await screen.findByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
-        return { invalidate, button: () => within(screen.getByTestId('sheet')).getByRole('button', { name: 'Xoá' }) };
+        return { invalidate, button: reopeningDelete };
       },
     },
   ];
@@ -781,5 +795,194 @@ describe('BrandOwnerPage: máy chủ từ chối thì giữ khoá tới khi hồ
       fireEvent.click(button());
       await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
     });
+  });
+});
+
+// W113A: hộp xác nhận xoá (chỉ có nút Xoá) đóng khi máy chủ từ chối hẳn (400/404/409/422); form sửa khuyến mãi (có ô nhập) chỉ đóng khi khuyến mãi không còn hoặc vừa đổi (404/409), 400/422 giữ mở để sửa. Khoá chạm giữ như W112A: 400/404/409 chờ hồ sơ về, 422 và lỗi tạm nhả ngay.
+describe('BrandOwnerPage: hộp xoá và form sửa khuyến mãi đóng khi máy chủ từ chối (W113A)', () => {
+  type Refresh = () => Promise<unknown>;
+  type Case = {
+    name: string;
+    write: ReturnType<typeof vi.fn>;
+    /** Mã làm bề mặt đóng lại. */
+    closesOn: number[];
+    open: (refresh: Refresh) => Promise<MockInstance<QueryClient['invalidateQueries']>>;
+    /** Mở lại sau khi đã đóng. */
+    reopen: () => void;
+    /** Bấm nút gửi nếu bề mặt đang mở. */
+    tap: () => void;
+    isOpen: () => boolean;
+  };
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const renderLive = (refresh: Refresh) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(<QueryClientProvider client={qc}><BrandOwnerPage /></QueryClientProvider>);
+    return invalidate;
+  };
+  const sheetButton = (name: string) => (screen.queryByTestId('sheet') ? within(screen.getByTestId('sheet')).queryByRole('button', { name }) : null);
+  const TEMPORARY: [string, unknown][] = [
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ];
+  const STALE: [number, string][] = [
+    [400, 'Khuyến mãi này không còn hợp lệ'],
+    [404, 'Không tìm thấy nữa'],
+    [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+  ];
+
+  const CASES: Case[] = [
+    {
+      name: 'form sửa khuyến mãi (updPromo)',
+      write: mocks.updateOwnedPromotion,
+      closesOn: [404, 409],
+      open: async (refresh) => {
+        const invalidate = renderLive(refresh);
+        fireEvent.click(await screen.findByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' }));
+        return invalidate;
+      },
+      reopen: () => fireEvent.click(screen.getByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' })),
+      tap: () => {
+        const send = screen.queryByRole('button', { name: 'Lưu thay đổi' });
+        if (send) fireEvent.click(send);
+      },
+      isOpen: () => screen.queryByRole('button', { name: 'Lưu thay đổi' }) !== null,
+    },
+    {
+      name: 'hộp xoá khuyến mãi (delPromo)',
+      write: mocks.deleteOwnedPromotion,
+      closesOn: [400, 404, 409, 422],
+      open: async (refresh) => {
+        const invalidate = renderLive(refresh);
+        fireEvent.click(await screen.findByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
+        return invalidate;
+      },
+      reopen: () => fireEvent.click(screen.getByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' })),
+      tap: () => {
+        const send = sheetButton('Xoá');
+        if (send) fireEvent.click(send);
+      },
+      isOpen: () => sheetButton('Xoá') !== null,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const fn of [mocks.updateOwnedBrand, mocks.createOwnedPromotion, mocks.updateOwnedPromotion, mocks.deleteOwnedPromotion]) {
+      fn.mockReset();
+      fn.mockResolvedValue({});
+    }
+    mocks.getOwnedBrand.mockResolvedValue(BRAND);
+  });
+
+  describe.each(CASES)('$name', (c) => {
+    it.each(STALE.filter(([status]) => c.closesOn.includes(status)))('bị từ chối %i: đóng, báo lỗi một lần, khoá vẫn giữ tới khi hồ sơ về rồi mới nhả', async (status, message) => {
+      c.write.mockReset();
+      c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({});
+      const refresh = deferred();
+      const invalidate = await c.open(() => refresh.promise);
+      c.tap();
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+      expect(errorSnackbars()).toBe(1);
+      expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['owned-brand'] }]);
+      await waitFor(() => expect(c.isOpen()).toBe(false));
+      // Đã đóng mà hồ sơ chưa về: mở lại bấm tiếp không gửi lần hai.
+      c.reopen();
+      c.tap();
+      await settle();
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      expect(errorSnackbars()).toBe(1);
+      if (!c.isOpen()) c.reopen();
+      c.tap();
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it.each(STALE.filter(([status]) => !c.closesOn.includes(status)))('bị từ chối %i: giữ mở để sửa ô nhập, khoá vẫn giữ tới khi hồ sơ về rồi mới nhả', async (status, message) => {
+      c.write.mockReset();
+      c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({});
+      const refresh = deferred();
+      const invalidate = await c.open(() => refresh.promise);
+      c.tap();
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      expect(invalidate).toHaveBeenCalled();
+      await settle();
+      expect(c.isOpen()).toBe(true);
+      c.tap();
+      await settle();
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      expect(c.isOpen()).toBe(true);
+      c.tap();
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      expect(errorSnackbars()).toBe(1);
+    });
+
+    it(`bị từ chối 422: ${c.closesOn.includes(422) ? 'đóng' : 'giữ mở'}, không tải lại nên khoá nhả ngay`, async () => {
+      c.write.mockReset();
+      c.write.mockRejectedValueOnce(serverError('Dữ liệu không hợp lệ', 422)).mockResolvedValue({});
+      const invalidate = await c.open(() => new Promise(() => undefined));
+      c.tap();
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await settle();
+      expect(invalidate).not.toHaveBeenCalled();
+      expect(c.isOpen()).toBe(!c.closesOn.includes(422));
+      if (!c.isOpen()) c.reopen();
+      c.tap();
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      expect(errorSnackbars()).toBe(1);
+    });
+
+    it.each(TEMPORARY)('%s: giữ mở, không tải lại, khoá nhả ngay để thử lại', async (_label, error) => {
+      c.write.mockReset();
+      c.write.mockRejectedValueOnce(error).mockResolvedValue({});
+      const invalidate = await c.open(() => new Promise(() => undefined));
+      c.tap();
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await settle();
+      expect(c.isOpen()).toBe(true);
+      expect(invalidate).not.toHaveBeenCalled();
+      c.tap();
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      expect(errorSnackbars()).toBe(1);
+    });
+  });
+
+  it('form đã chuyển sang sửa khuyến mãi khác khi lỗi 409 của khuyến mãi trước về thì giữ nguyên form mới', async () => {
+    const slow = deferred();
+    mocks.getOwnedBrand.mockResolvedValue({
+      ...BRAND,
+      promotions: [...BRAND.promotions, { id: 'p2', title: 'Giảm 10%', subtitle: null, couponCode: null, startAt: '2026-10-01T00:00:00.000Z', endAt: '2026-10-30T00:00:00.000Z', isActive: true }],
+    });
+    mocks.updateOwnedPromotion.mockImplementation(() => slow.promise.then(() => Promise.reject(serverError('Vừa có thay đổi, bạn thử lại nhé', 409))));
+    renderLive(() => new Promise(() => undefined));
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+    await waitFor(() => expect(mocks.updateOwnedPromotion).toHaveBeenCalledTimes(1));
+    // Huỷ bản đang sửa rồi chuyển sang sửa khuyến mãi p2 trong lúc lệnh của p1 còn chạy.
+    fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa khuyến mãi Giảm 10%' }));
+    expect(screen.getByPlaceholderText(/Tiêu đề/)).toHaveValue('Giảm 10%');
+    await act(async () => slow.resolve());
+    await waitFor(() => expect(errorSnackbars()).toBe(1));
+    await settle();
+    expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Tiêu đề/)).toHaveValue('Giảm 10%');
   });
 });

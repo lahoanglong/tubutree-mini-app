@@ -88,3 +88,51 @@ describe('useCouponUse.apply — "Dùng ngay" ở thẻ mã giảm giá', () => 
     expect(mocks.navigate).toHaveBeenCalledWith('/browse');
   });
 });
+
+// W113A: "Dùng ngay" bị máy chủ từ chối vì ví đã cũ (400/404/409) thì đọc lại ví mã ở nền để thẻ không mời dùng lại mã đó. Không giữ khoá chờ: ngay sau đó đã chuyển sang giỏ. Mất mạng, quá hạn, 401, 5xx không nói gì về ví: không đọc lại.
+describe('useCouponUse.apply — đọc lại ví khi mã bị từ chối (W113A)', () => {
+  const rejection = (status: number | undefined, message = 'Mã giảm giá không dùng được.') => ({
+    isHttpError: true,
+    ...(status ? { response: { status, data: { message } } } : {}),
+  });
+  function live() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => new Promise(() => undefined)) as never);
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+    return { invalidate, ...renderHook(() => useCouponUse(), { wrapper }) };
+  }
+
+  it.each([[400], [404], [409]])('bị từ chối %i: đọc lại ví mã đúng một lần, vẫn chuyển sang giỏ ngay (không chờ ví) và chỉ một lần', async (status) => {
+    mocks.applyCoupon.mockRejectedValueOnce(rejection(status));
+    const { result, invalidate } = live();
+    await act(async () => {
+      await result.current.apply('TUBU30');
+    });
+    expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['coupons'] }]);
+    expect(mocks.notify).toHaveBeenCalledWith({ text: 'Chưa chọn sẵn được mã: Mã giảm giá không dùng được.', type: 'warning' });
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+  });
+
+  it.each([
+    ['mất mạng', rejection(undefined)],
+    ['máy chủ lỗi 503', rejection(503, 'Service Unavailable')],
+    ['hết phiên 401', rejection(401, 'Unauthorized')],
+  ])('%s: không đọc lại ví, vẫn chuyển sang giỏ', async (_label, error) => {
+    mocks.applyCoupon.mockRejectedValueOnce(error);
+    const { result, invalidate } = live();
+    await act(async () => {
+      await result.current.apply('TUBU30');
+    });
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['coupons'] });
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+  });
+
+  it('áp thành công: không đọc lại ví (chỉ báo giá như trước)', async () => {
+    const { result, invalidate } = live();
+    await act(async () => {
+      await result.current.apply('TUBU30');
+    });
+    expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['quote'] }]);
+  });
+});

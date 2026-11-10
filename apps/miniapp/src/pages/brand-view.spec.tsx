@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   authStatus: 'authenticated' as string,
@@ -47,6 +47,8 @@ vi.mock('../components/share-sheet', () => ({
   ShareSheet: ({ visible }: { visible: boolean }) => <div data-testid="share-sheet" data-visible={String(visible)} />,
 }));
 
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import BrandViewPage from './brand-view';
 
 const openTab = (name: string | RegExp) => fireEvent.click(screen.getByRole('tab', { name }));
@@ -534,5 +536,112 @@ describe('BrandViewPage — Theo dõi khoá chạm đúp (W79A)', () => {
     await waitFor(() => expect(mocks.followBrand).toHaveBeenCalledTimes(2));
     expect(await screen.findByRole('button', { name: /Đang theo dõi/ })).toBeInTheDocument();
     expect(followedToasts()).toHaveLength(1);
+  });
+});
+
+// W113A: Theo dõi bị máy chủ từ chối vì trạng thái đã đổi (400/404/409) thì tải lại trạng thái theo dõi + thương hiệu và giữ khoá tới khi dữ liệu về (tối đa LOCK_REFRESH_WAIT_MS); mất mạng, quá hạn, 401, 5xx nhả ngay, vẫn là lời nhắc đăng nhập như trước, không tải lại.
+describe('BrandViewPage — Theo dõi bị từ chối thì giữ khoá tới khi dữ liệu về (W113A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const LOGIN_WARNING = { text: 'Cần đăng nhập để theo dõi thương hiệu.', type: 'warning' };
+  const toastCount = (opts: { text: string; type: string }) => mocks.openSnackbar.mock.calls.filter(([o]) => o.text === opts.text && o.type === opts.type).length;
+  const renderLive = (refresh: () => Promise<unknown>): MockInstance<QueryClient['invalidateQueries']> => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(<QueryClientProvider client={qc}><BrandViewPage /></QueryClientProvider>);
+    return invalidate;
+  };
+  const followBtn = () => screen.getByRole('button', { name: 'Theo dõi' });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getPublicBrand.mockResolvedValue(BRAND);
+    mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
+    mocks.getBrandFollowState.mockResolvedValue({ following: false, followerCount: 12 });
+    mocks.followBrand.mockReset();
+    mocks.followBrand.mockResolvedValue({ following: true, followerCount: 13 });
+    mocks.getDealerMe.mockResolvedValue({ isDealer: false });
+    mocks.fetchFlash.mockResolvedValue([]);
+  });
+
+  it.each([
+    [400, 'Thương hiệu không nhận theo dõi lúc này'],
+    [404, 'Không tìm thấy thương hiệu'],
+    [409, 'Trạng thái theo dõi vừa đổi'],
+  ])('bị từ chối %i: báo lỗi máy chủ (không phải nhắc đăng nhập), tải lại đúng khoá, khoá giữ tới khi dữ liệu về', async (status, message) => {
+    mocks.followBrand.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({ following: true, followerCount: 13 });
+    const refresh = deferred();
+    const invalidate = renderLive(() => refresh.promise);
+    await screen.findByRole('button', { name: 'Theo dõi' });
+    fireEvent.click(followBtn());
+    await waitFor(() => expect(toastCount({ text: message, type: 'error' })).toBe(1));
+    expect(toastCount(LOGIN_WARNING)).toBe(0);
+    expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([
+      { queryKey: ['brand-follow', 'sachi'] },
+      { queryKey: ['public-brand', 'sachi'] },
+    ]);
+    expect(followBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(followBtn());
+      fireEvent.click(followBtn());
+    });
+    expect(mocks.followBrand).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    await waitFor(() => expect(followBtn()).not.toHaveAttribute('aria-busy'));
+    expect(toastCount({ text: message, type: 'error' })).toBe(1);
+    fireEvent.click(followBtn());
+    await waitFor(() => expect(mocks.followBrand).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: vẫn là lời nhắc đăng nhập như trước, nhả khoá ngay, không tải lại', async (_label, error) => {
+    mocks.followBrand.mockRejectedValueOnce(error).mockResolvedValue({ following: true, followerCount: 13 });
+    const invalidate = renderLive(() => new Promise(() => undefined));
+    await screen.findByRole('button', { name: 'Theo dõi' });
+    fireEvent.click(followBtn());
+    await waitFor(() => expect(toastCount(LOGIN_WARNING)).toBe(1));
+    await waitFor(() => expect(followBtn()).not.toHaveAttribute('aria-busy'));
+    expect(invalidate).not.toHaveBeenCalled();
+    fireEvent.click(followBtn());
+    await waitFor(() => expect(mocks.followBrand).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+    mocks.followBrand.mockRejectedValueOnce(serverError('Trạng thái theo dõi vừa đổi', 409)).mockResolvedValue({ following: true, followerCount: 13 });
+    renderLive(() => new Promise(() => undefined));
+    await screen.findByRole('button', { name: 'Theo dõi' });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(followBtn());
+      await waitFor(() => expect(toastCount({ text: 'Trạng thái theo dõi vừa đổi', type: 'error' })).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(followBtn()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(followBtn()).not.toHaveAttribute('aria-busy'));
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(followBtn());
+    await waitFor(() => expect(mocks.followBrand).toHaveBeenCalledTimes(2));
   });
 });

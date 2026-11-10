@@ -10,7 +10,7 @@ import {
 } from '../services/subscriptions-api';
 import { subscriptionCycleView } from '../utils/subscription-price';
 import { getAddresses } from '../services/shop-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isServerRejection } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { formatDate, formatVnd } from '../utils/format';
@@ -69,6 +69,8 @@ export function SubscriptionsPanel() {
   // như lệnh thành công. Lỗi tạm (mạng, 5xx) thì để nguyên danh sách.
   const onActionError = (e: unknown) => {
     openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    // Sheet giữ chân chỉ có ba lựa chọn, không ô nhập: máy chủ từ chối hẳn (400/404/409/422) thì gói đã khác thẻ, bấm lại nhận đúng lỗi đó nên đóng sheet. Mất mạng, quá hạn, 401, 5xx giữ sheet để thử lại.
+    if (isServerRejection(e)) setCancelTarget(null);
     return isStaleSubscriptionError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] })) : undefined;
   };
 

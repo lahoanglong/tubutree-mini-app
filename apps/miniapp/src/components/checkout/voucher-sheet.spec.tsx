@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 import type * as ZmpUi from 'zmp-ui';
 import type * as VoucherPickerModule from '@tubutree/app-core/commerce/voucher-picker';
 
@@ -32,6 +32,8 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { syncServerClock } from '../../utils/server-clock';
 import { VoucherSheet } from './voucher-sheet';
 import { COUPON_CHANGE_KEY } from './use-coupon-hint';
+import { HttpError } from '../../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../../utils/settle-within';
 
 const COUPONS = [
   { code: 'GIAM10', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: 50_000, endAt: '2027-01-01T00:00:00.000Z' },
@@ -1049,5 +1051,152 @@ describe('VoucherSheet: lệnh áp và gỡ mã chạy dưới khoá đổi mã 
     await waitFor(() => expect(qc.isMutating({ mutationKey: COUPON_CHANGE_KEY })).toBe(1));
     await act(async () => remove.resolve({ couponCode: null }));
     await waitFor(() => expect(qc.isMutating({ mutationKey: COUPON_CHANGE_KEY })).toBe(0));
+  });
+});
+
+// W113A: áp/gỡ mã bị máy chủ từ chối vì màn đã cũ (400/404/409) thì lời báo lỗi giữ nguyên, đọc lại ví mã, xem trước, giỏ, báo giá và giữ khoá tới khi dữ liệu về (tối đa LOCK_REFRESH_WAIT_MS). Mất mạng, quá hạn, 401, 5xx: nhả ngay, không đọc lại.
+describe('VoucherSheet — máy chủ từ chối thì giữ khoá tới khi dữ liệu làm mới về (W113A)', () => {
+  type Opened = { invalidate: MockInstance<QueryClient['invalidateQueries']>; button: () => HTMLElement };
+  type Case = { name: string; write: ReturnType<typeof vi.fn>; succeed: unknown; current?: string; button: () => HTMLElement };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const filters = (invalidate: Opened['invalidate']) => invalidate.mock.calls.map(([filter]) => filter);
+  const RELOAD = [{ queryKey: ['coupon-previews'] }, { queryKey: ['coupons'] }, { queryKey: ['cart'] }, { queryKey: ['quote'] }];
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+
+  const CASES: Case[] = [
+    { name: 'áp mã', write: mocks.applyCoupon, succeed: { couponCode: 'GIAM10' }, button: () => screen.getAllByRole('button', { name: /^Dùng mã/ })[0]! },
+    { name: 'gỡ mã', write: mocks.removeCoupon, succeed: { couponCode: null }, current: 'GIAM10', button: () => screen.getByRole('button', { name: /^Bỏ chọn mã/ }) },
+  ];
+  const open = async (c: Case, refresh: () => Promise<unknown>): Promise<Opened> => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <VoucherSheet visible onClose={() => {}} currentCode={c.current} subtotal={100_000} />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(c.button()).toBeInTheDocument());
+    return { invalidate, button: c.button };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const fn of [mocks.applyCoupon, mocks.removeCoupon]) fn.mockReset();
+    mocks.getCoupons.mockResolvedValue(COUPONS);
+    mocks.getCouponPreviews.mockResolvedValue([]);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  describe.each(CASES)('$name', (c) => {
+    it.each([
+      [400, 'Mã đã hết lượt dùng.'],
+      [404, 'Không tìm thấy mã.'],
+      [409, 'Giỏ vừa có thay đổi, bạn thử lại nhé.'],
+    ])('bị từ chối %i: lời báo lỗi tại chỗ, đọc lại bốn khoá, giữ khoá tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+      c.write.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(c.succeed);
+      const refresh = deferred();
+      const { invalidate, button } = await open(c, () => refresh.promise);
+      fireEvent.click(button());
+      expect(await screen.findByText(message)).toBeInTheDocument();
+      expect(filters(invalidate)).toEqual(RELOAD);
+      await act(async () => {
+        fireEvent.click(button());
+        fireEvent.click(button());
+      });
+      expect(c.write).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      expect(screen.getAllByText(message)).toHaveLength(1);
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it.each([
+      ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+      ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+      ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+      ['hết phiên 401', serverError('Unauthorized', 401)],
+    ])('%s: không đọc lại, nhả khoá ngay', async (_label, error) => {
+      c.write.mockRejectedValueOnce(error).mockResolvedValue(c.succeed);
+      const { invalidate, button } = await open(c, () => new Promise(() => undefined));
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(1));
+      await settle();
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(invalidate).not.toHaveBeenCalled();
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+
+    it('đọc lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+      c.write.mockRejectedValueOnce(serverError('Giỏ vừa có thay đổi, bạn thử lại nhé.', 409)).mockResolvedValue(c.succeed);
+      const { button } = await open(c, () => new Promise(() => undefined));
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      try {
+        fireEvent.click(button());
+        await screen.findByText('Giỏ vừa có thay đổi, bạn thử lại nhé.');
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+        });
+        await act(async () => {
+          fireEvent.click(button());
+        });
+        expect(c.write).toHaveBeenCalledTimes(1);
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(600);
+        });
+      } finally {
+        vi.useRealTimers();
+      }
+      fireEvent.click(button());
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+    });
+  });
+
+  describe('mã gõ tay không có trong ví', () => {
+    const typeAndApply = (value: string) => {
+      fireEvent.change(screen.getByLabelText('Nhập mã giảm giá khác'), { target: { value } });
+      fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+    };
+
+    it('bị 400 (mã sai): lời báo tại chỗ, không đọc lại bốn nguồn, nhả khoá ngay', async () => {
+      mocks.applyCoupon.mockRejectedValueOnce(serverError('Mã giảm giá không tồn tại.', 400)).mockResolvedValue({ couponCode: 'ABCD' });
+      const { invalidate } = await open(CASES[0]!, () => new Promise(() => undefined));
+      typeAndApply('abcd');
+      expect(await screen.findByText('Mã giảm giá không tồn tại.')).toBeInTheDocument();
+      await settle();
+      expect(invalidate).not.toHaveBeenCalled();
+      fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+      await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(2));
+    });
+
+    it('bị 409 (giỏ vừa đổi): vẫn đọc lại bốn nguồn và giữ khoá tới khi về', async () => {
+      mocks.applyCoupon.mockRejectedValueOnce(serverError('Giỏ vừa có thay đổi, bạn thử lại nhé.', 409)).mockResolvedValue({ couponCode: 'ABCD' });
+      const refresh = deferred();
+      const { invalidate } = await open(CASES[0]!, () => refresh.promise);
+      typeAndApply('abcd');
+      expect(await screen.findByText('Giỏ vừa có thay đổi, bạn thử lại nhé.')).toBeInTheDocument();
+      expect(filters(invalidate)).toEqual(RELOAD);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+      });
+      expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+      await act(async () => refresh.resolve());
+      await settle();
+      fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+      await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(2));
+    });
   });
 });
