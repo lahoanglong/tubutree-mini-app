@@ -3,7 +3,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
-// Đăng ký CTV (Mini ↔ web, Wave 82A ↔ 94B): khoá giữ tới khi hồ sơ CTV mới về, có hạn 4 giây; làm mới treo thì nút nhả sau hạn thay vì kẹt tới khi
+// Đăng ký CTV (chỉ web: Mini chỉ gọi `void invalidateQueries` nên không giữ khoá): khoá giữ tới khi hồ sơ CTV mới về, có hạn 4 giây; làm mới treo thì nút nhả sau hạn thay vì kẹt tới khi
 // yêu cầu hết thời gian. Còn khoá ở 3,5 giây thì chạm thêm không gửi đăng ký lần hai.
 
 const h = vi.hoisted(() => ({ hang: new Set<string>(), post: vi.fn() }));

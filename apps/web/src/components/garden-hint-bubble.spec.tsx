@@ -7,7 +7,7 @@ import { GARDEN_HINT_DELAY_MS, GardenHintBubble } from './garden-hint-bubble';
 import { GARDEN_HINT_KEY } from './garden-hint';
 
 // Bóng gợi ý tab Vườn Xanh (Mini ↔ web, Wave 84A ↔ 94B): hai cú chạm trong cùng một tác vụ đều thấy bóng trước khi `setOpen(false)` kịp vẽ,
-// nên không có khoá thì đẩy trang hai lần (hai mục lịch sử).
+// nên không có khoá thì `router.push` chạy hai lần (điều hướng thừa tới cùng một trang).
 
 const mocks = vi.hoisted(() => ({ push: vi.fn() }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
@@ -43,7 +43,7 @@ afterEach(() => {
 });
 
 describe('GardenHintBubble: khoá chạm đúp', () => {
-  it('hai cú chạm cùng khung hình vào bóng chỉ mở Vườn Xanh một lần và gỡ bóng', async () => {
+  it('hai cú chạm cùng khung hình vào bóng chỉ điều hướng tới Vườn Xanh một lần và gỡ bóng', async () => {
     await show();
     tapTogether(bubble()!);
     expect(mocks.push).toHaveBeenCalledTimes(1);

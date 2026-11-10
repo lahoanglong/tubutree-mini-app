@@ -19,7 +19,7 @@ const overlayOpen = () => typeof document !== 'undefined' && document.querySelec
 export function GardenHintBubble({ onGardenTab }: { onGardenTab: boolean }) {
   const [open, setOpen] = useState(false);
   const router = useRouter();
-  // Hai cú chạm trong cùng một tác vụ đều thấy bóng trước khi `setOpen(false)` kịp vẽ, và đều gọi `router.push` (hai mục lịch sử).
+  // Hai cú chạm trong cùng một tác vụ đều thấy bóng trước khi `setOpen(false)` kịp vẽ, và đều gọi `router.push` (điều hướng thừa tới cùng một trang).
   const opened = useRef(false);
 
   useEffect(() => {

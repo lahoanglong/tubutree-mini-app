@@ -86,7 +86,7 @@ export function HarvestCelebration({
   onShare: () => void;
 }) {
   const t = gameNewbieCopy.harvest;
-  // Trang cha đóng hộp rồi `router.push`; hai cú chạm cùng khung hình đều thấy nút trước khi hộp đóng và đẩy hai mục lịch sử. Mỗi lần mở hộp là một khoá mới.
+  // Trang cha đóng hộp rồi chuyển sang đăng nhập; hai cú chạm cùng khung hình đều thấy nút trước khi hộp đóng, nên `onLogin` chạy hai lần (mở luồng đăng nhập hai lần). Mỗi lần mở hộp là một khoá mới.
   const loginSent = useRef(false);
   useEffect(() => {
     if (open) loginSent.current = false;

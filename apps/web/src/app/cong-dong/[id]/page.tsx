@@ -116,8 +116,9 @@ export default function PostDetailPage() {
     enabled: authed && !!id,
   });
 
-  // `isFetchingNextPage` chỉ đúng sau lần vẽ kế: hai cú chạm cùng khung hình đều thấy nút rảnh, và lượt nạp thứ hai huỷ lượt đầu rồi gửi lại.
-  const loadMoreComments = usePressLock(() => comments.fetchNextPage());
+  // Khoá chạm lặp là ref trong `usePressLock` (hai cú chạm cùng khung hình). `isFetchingNextPage` chặn khi màn dựng lại với khoá mới mà lượt nạp trang kế cũ còn chạy:
+  // `fetchNextPage` mặc định huỷ lượt đang chạy rồi gửi lại, tức một yêu cầu thừa.
+  const loadMoreComments = usePressLock(() => (comments.isFetchingNextPage ? undefined : comments.fetchNextPage()));
 
   // Gốc ['community'] là tiền tố của bài ['community', id], bình luận ['community', id, 'comments'] và cả danh sách bảng tin:
   // một lần làm mới cập nhật trang này lẫn thẻ ở /cong-dong (huy hiệu hay nhất, tiêu đề sửa, số tim/bình luận, bài đã xoá).
@@ -437,8 +438,8 @@ export default function PostDetailPage() {
         {comments.hasNextPage && (
           <button
             type="button"
-            aria-busy={comments.isFetchingNextPage || undefined}
-            aria-disabled={comments.isFetchingNextPage || undefined}
+            aria-busy={loadMoreComments.busy || comments.isFetchingNextPage || undefined}
+            aria-disabled={loadMoreComments.busy || comments.isFetchingNextPage || undefined}
             onClick={loadMoreComments.press}
             className={`${miniBtnSecondary} mt-2.5`}
           >

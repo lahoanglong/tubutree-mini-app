@@ -109,8 +109,12 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
 
   // Khôi phục phiên và hộp chia sẻ của trình duyệt đều chỉ mở được một lần một lúc: lần chạm thứ hai trong lúc chạy bị bỏ qua.
   const sessionRetrying = useRef(false);
-  // Khách chạm Tham gia hai lần cùng khung hình: `router.push` không có trạng thái để thẻ báo bận, nên hai cú chạm đẩy hai mục lịch sử.
+  // Khách chạm Tham gia hai lần cùng khung hình: `router.push` không có trạng thái để thẻ báo bận, nên cả hai cú chạm đều gọi điều hướng sang đăng nhập (mở luồng đăng nhập hai lần).
+  // Cờ chỉ đặt lại khi phiên đổi pha: điều hướng không xảy ra mà màn còn sống thì nút Tham gia không được chết.
   const loginRedirected = useRef(false);
+  useEffect(() => {
+    loginRedirected.current = false;
+  }, [phase]);
   const sharingRef = useRef(false);
   const [sharingId, setSharingId] = useState<string | null>(null);
 

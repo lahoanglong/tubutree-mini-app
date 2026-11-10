@@ -120,8 +120,9 @@ function EventEntries({
   onJoin: () => void;
 }) {
   const ended = isEventEnded(event);
-  // `isFetchingNextPage` chỉ đúng sau lần vẽ kế: hai cú chạm cùng khung hình đều thấy nút rảnh, và lượt nạp thứ hai huỷ lượt đầu rồi gửi lại.
-  const loadMore = usePressLock(() => entriesQ.fetchNextPage());
+  // Khoá chạm lặp là ref trong `usePressLock` (hai cú chạm cùng khung hình). `isFetchingNextPage` chặn khi màn dựng lại với khoá mới mà lượt nạp trang kế cũ còn chạy:
+  // `fetchNextPage` mặc định huỷ lượt đang chạy rồi gửi lại, tức một yêu cầu thừa.
+  const loadMore = usePressLock(() => (entriesQ.isFetchingNextPage ? undefined : entriesQ.fetchNextPage()));
   const entries = entriesQ.data?.pages.flatMap((pg) => pg.posts) ?? [];
   return (
     <div className="flex flex-col gap-3">

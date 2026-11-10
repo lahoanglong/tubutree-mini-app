@@ -7,7 +7,7 @@ import { ApiError } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 
-// Khoá nút Đại lý giữ tới khi dữ liệu làm mới về, CÓ HẠN 4 giây (Mini ↔ web, Wave 103A ↔ 94B): làm mới treo thì nút nhả sau hạn thay vì kẹt tới khi
+// Khoá nút Đại lý giữ tới khi dữ liệu làm mới về, CÓ HẠN 4 giây (chỉ web: Mini chỉ gọi `void invalidateQueries` nên không giữ khoá): làm mới treo thì nút nhả sau hạn thay vì kẹt tới khi
 // yêu cầu hết thời gian. Mỗi ca: lệnh ghi xong ngay, lần làm mới treo; còn khoá ở 3,5 giây (chạm thêm không gửi lệnh), nhả sau 4 giây và gửi lại được.
 
 const h = vi.hoisted(() => ({
@@ -183,6 +183,9 @@ describe('Bảng giá đại lý: lệnh ghi xong mà làm mới không về', (
     expect(placeButtons(c).length).toBeGreaterThan(0);
     await advance(3_500);
     expect(placeButtons(c).every(isBusy)).toBe(true);
+    click(placeButtons(c)[0]!);
+    await flush(2);
+    expect(posts('/dealer/orders')).toBe(1);
     await advance(1_000);
     await flush(2);
     expect(placeButtons(c).length).toBeGreaterThan(0);
@@ -201,9 +204,15 @@ describe('Bảng giá đại lý: lệnh ghi xong mà làm mới không về', (
     expect(placeButtons(c).every(isBusy)).toBe(true);
     await advance(3_500);
     expect(placeButtons(c).every(isBusy)).toBe(true);
+    click(placeButtons(c)[0]!);
+    await flush(2);
+    expect(posts('/dealer/orders')).toBe(1);
     await advance(1_000);
     await flush(2);
     expect(placeButtons(c).some(isBusy)).toBe(false);
+    click(placeButtons(c)[0]!);
+    await flush(2);
+    expect(posts('/dealer/orders')).toBe(2);
   });
 
   it('lưu mẫu đơn: mở lại hộp Lưu mẫu thì nút còn bận ở 3,5 giây, nhả sau 4 giây', async () => {

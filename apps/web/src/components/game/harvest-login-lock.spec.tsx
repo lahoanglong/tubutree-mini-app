@@ -7,7 +7,7 @@ import { render, type Rendered } from '@/test-utils/dom';
 import { HarvestCelebration } from './harvest-celebration';
 
 // Hộp thu hoạch của khách vãng lai (Mini ↔ web, Wave 84A ↔ 94B): "Đăng nhập Zalo" chạm đúp cùng khung hình chỉ chuyển sang đăng nhập một lần
-// (trang cha đóng hộp rồi `router.push`; hai cú chạm đều thấy nút trước khi hộp đóng thì đẩy hai mục lịch sử).
+// (trang cha đóng hộp rồi chuyển sang đăng nhập; hai cú chạm đều thấy nút trước khi hộp đóng thì `onLogin` chạy hai lần).
 
 const base = {
   open: true,

@@ -121,8 +121,9 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
     staleTime: 30_000,
     retry: false,
   });
-  // `isFetchingNextPage` chỉ đúng sau lần vẽ kế: hai cú chạm cùng khung hình đều thấy nút rảnh, và lượt nạp thứ hai huỷ lượt đầu rồi gửi lại.
-  const loadMore = usePressLock(() => feed.fetchNextPage());
+  // Khoá chạm lặp là ref trong `usePressLock` (hai cú chạm cùng khung hình). `isFetchingNextPage` chặn khi màn dựng lại với khoá mới mà lượt nạp trang kế cũ còn chạy:
+  // `fetchNextPage` mặc định huỷ lượt đang chạy rồi gửi lại, tức một yêu cầu thừa.
+  const loadMore = usePressLock(() => (feed.isFetchingNextPage ? undefined : feed.fetchNextPage()));
   const posts = feed.data?.pages.flatMap((p) => p.posts) ?? [];
   const filtering = Boolean(dq || unanswered || tag);
 
@@ -306,8 +307,8 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
             <div className="flex justify-center pt-2">
               <button
                 type="button"
-                aria-busy={feed.isFetchingNextPage || undefined}
-                aria-disabled={feed.isFetchingNextPage || undefined}
+                aria-busy={loadMore.busy || feed.isFetchingNextPage || undefined}
+                aria-disabled={loadMore.busy || feed.isFetchingNextPage || undefined}
                 onClick={loadMore.press}
                 className={`${miniBtnSecondary} min-w-40`}
               >
