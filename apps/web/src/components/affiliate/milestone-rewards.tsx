@@ -10,6 +10,7 @@ import { loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import { coreHttp } from '@/lib/core-http';
 import { invalidateBalances } from '@/lib/balances';
 import { formatVnd } from '@/lib/format-vnd';
+import { settleWithin } from '@/lib/settle-within';
 import { ui } from '@/lib/guest-ui';
 import { phoneBodySm, phoneCaption, phoneFlatCard } from '@/lib/phone-ui';
 import { Badge } from '@/components/ui/badge';
@@ -50,6 +51,8 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   const [notice, setNotice] = useState<{ text: string; tone: 'ok' | 'warn' | 'error' } | null>(null);
   const listId = useId();
   // Khoá đồng bộ dùng chung cho "Nhận thưởng" và "Nhận tất cả": `busy` chỉ đổi sau lần vẽ kế, hai cú bấm trong cùng một nhịp sẽ gọi API hai lần.
+  // Khoá nhả ở onSettled, tức sau khi danh sách mốc và Điểm Xanh tải lại xong (tối đa `settleWithin`): nhả sớm hơn thì dòng còn cũ vẫn có nút
+  // "Nhận thưởng", chạm tiếp lúc đó chỉ ra câu lỗi "đã nhận rồi" dù điểm đã cộng.
   const claimingRef = useRef(false);
   const release = () => {
     claimingRef.current = false;
@@ -58,13 +61,12 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
   const prev = data.previousMonth;
   const targets = [...(prev ? toTargets(prev.milestones, prev.monthKey) : []), ...toTargets(data.milestones, data.monthKey)];
 
-  const refreshMilestones = () => {
-    void qc.invalidateQueries({ queryKey: affiliateMilestonesQuery(coreHttp).queryKey });
-  };
-  // Thưởng cộng Điểm Xanh (lô thường): làm mới số điểm ở thẻ tài khoản, Ví và trang Điểm Xanh.
+  const refreshMilestones = () => qc.invalidateQueries({ queryKey: affiliateMilestonesQuery(coreHttp).queryKey });
+  // Thưởng cộng Điểm Xanh (lô thường): làm mới số điểm ở thẻ tài khoản, Ví và trang Điểm Xanh. Chỉ Điểm Xanh được chờ; các số dư còn lại
+  // tải lại nền, không giữ khoá.
   const refreshBalances = () => {
-    void qc.invalidateQueries({ queryKey: loyaltyQuery(coreHttp).queryKey });
-    invalidateBalances(qc);
+    void invalidateBalances(qc);
+    return qc.invalidateQueries({ queryKey: loyaltyQuery(coreHttp).queryKey });
   };
 
   const claimOne = useMutation({
@@ -75,13 +77,12 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
     },
     onSuccess: (res) => {
       setNotice({ text: res.message || 'Đã nhận thưởng mốc thành công!', tone: 'ok' });
-      refreshMilestones();
-      refreshBalances();
+      return settleWithin(Promise.all([refreshMilestones(), refreshBalances()]));
     },
     onError: (e) => {
       setNotice({ text: actErrText(e), tone: 'error' });
       // Lỗi "đã nhận"/"chưa đạt" → trạng thái trên máy đã cũ, tải lại để nút khớp backend.
-      refreshMilestones();
+      return settleWithin(refreshMilestones());
     },
     onSettled: release,
   });
@@ -108,9 +109,8 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
       if (failed.length === 0) setNotice({ text: `Đã nhận ${done} mốc thưởng.`, tone: 'ok' });
       else if (done === 0) setNotice({ text: 'Chưa nhận được mốc nào. Xem lý do bên dưới.', tone: 'error' });
       else setNotice({ text: `Đã nhận ${done}/${total} mốc. Có ${failed.length} mốc chưa nhận được, xem bên dưới.`, tone: 'warn' });
-      refreshMilestones();
       // Không mốc nào nhận được thì điểm không đổi: khỏi tải lại Điểm Xanh và số dư vô ích.
-      if (done > 0) refreshBalances();
+      return settleWithin(Promise.all([refreshMilestones(), done > 0 ? refreshBalances() : undefined]));
     },
     onSettled: release,
   });
@@ -131,11 +131,15 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
     claimAll.mutate(targets);
   };
 
+  // Dòng đang nhận là nút đang giữ focus: không `disabled` DOM (Chromium thả focus về body), nó đã báo bận bằng loading (aria-busy + aria-disabled)
+  // và Button chặn bấm lại; các dòng khác vẫn disabled.
+  const rowClaiming = (id: string, month: string) => claimOne.isPending && claimOne.variables?.id === id && claimOne.variables?.month === month;
+
   const renderRow = (m: CtvMilestoneItem, month: string, revenue: number) => (
     <li key={`${month}:${m.id}`} data-testid="milestone-row" className="flex min-h-14 items-center gap-2.5 border-b border-stone-200 py-2">
       <div className="min-w-0 flex-1">
         <div data-testid="milestone-row-title" className={`text-sm font-semibold text-stone-900 ${phoneBodySm}`}>{m.title}</div>
-        <div data-testid="milestone-row-meta" className={`text-xs text-[var(--color-text-tertiary)] ${phoneCaption}`}>{milestoneStatusText(m, revenue)}</div>
+        <div data-testid="milestone-row-meta" className={`text-xs tabular-nums text-[var(--color-text-tertiary)] ${phoneCaption}`}>{milestoneStatusText(m, revenue)}</div>
         {!m.achieved && (
           <div className="mt-1.5">
             <ProgressBar value={m.progressPct} max={100} ariaLabel={`${m.title}: tiến độ mốc thưởng`} />
@@ -143,12 +147,12 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
         )}
       </div>
       <div className="flex shrink-0 flex-col items-end gap-1">
-        <span className={`text-sm font-semibold text-[var(--color-text-brand)] ${phoneBodySm}`}>+{formatPoints(m.rewardPoints)}</span>
+        <span className={`text-sm font-semibold tabular-nums text-[var(--color-text-brand)] ${phoneBodySm}`}>+{formatPoints(m.rewardPoints)}</span>
         {m.canClaim ? (
           <Button
             icon={Check}
-            disabled={busy}
-            loading={claimOne.isPending && claimOne.variables?.id === m.id && claimOne.variables?.month === month}
+            disabled={busy && !rowClaiming(m.id, month)}
+            loading={rowClaiming(m.id, month)}
             onPress={() => startClaimOne({ id: m.id, month, title: m.title, points: m.rewardPoints })}
           >
             Nhận thưởng
@@ -168,7 +172,7 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
         </span>
         <div>
           <h2 data-testid="milestone-title" className={`text-sm font-semibold text-stone-900 ${phoneBodySm}`}>Thưởng mốc doanh số tháng</h2>
-          <div data-testid="milestone-meta" className={`text-xs text-[var(--color-text-tertiary)] ${phoneCaption}`}>
+          <div data-testid="milestone-meta" className={`text-xs tabular-nums text-[var(--color-text-tertiary)] ${phoneCaption}`}>
             {monthLabel(data.monthKey)} · Đã chốt {formatVnd(data.currentRevenue)}
           </div>
         </div>
@@ -176,20 +180,20 @@ export function MilestoneRewards({ data }: { data: CtvMilestonesResponse }) {
 
       <p data-testid="milestone-note" className={`mb-1 text-xs text-[var(--color-text-tertiary)] ${phoneCaption}`}>{revenueRuleText(data.holdDays)}</p>
       {data.pendingRevenue > 0 && (
-        <p className={`mb-2 text-xs text-[var(--color-text-secondary)] ${phoneCaption}`}>
+        <p className={`mb-2 text-xs tabular-nums text-[var(--color-text-secondary)] ${phoneCaption}`}>
           Đang chờ chốt: <b>{formatVnd(data.pendingRevenue)}</b> (đơn chưa giao hoặc đang trong thời gian giữ đổi/trả — chưa tính vào mốc)
         </p>
       )}
 
       {targets.length >= 2 && (
-        <Button fullWidth icon={Check} disabled={claimOne.isPending} loading={claimAll.isPending} onPress={startClaimAll} className="mb-2">
+        <Button fullWidth icon={Check} disabled={claimOne.isPending} loading={claimAll.isPending} onPress={startClaimAll} className="mb-2 tabular-nums">
           {`Nhận tất cả (${targets.length} mốc, +${formatPoints(totalPoints)})`}
         </Button>
       )}
 
       <div role="status" aria-live="polite">
         {notice && (
-          <p className={`mb-2 text-sm ${notice.tone === 'error' ? 'text-danger-fg' : notice.tone === 'warn' ? 'text-warning-fg' : 'font-medium text-success-fg'}`}>
+          <p className={`mb-2 text-sm tabular-nums ${notice.tone === 'error' ? 'text-danger-fg' : notice.tone === 'warn' ? 'text-warning-fg' : 'font-medium text-success-fg'}`}>
             {notice.text}
           </p>
         )}

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   adminEventParticipants,
@@ -11,6 +11,7 @@ import {
   type AdminCommunityEvent,
   type CreateEventInput,
 } from '@tubutree/app-core/api/feed';
+import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { formatNumber } from '@/components/game/format';
 import { coreHttp } from '@/lib/core-http';
@@ -19,6 +20,7 @@ import { hasVisibleText } from '@/lib/admin-visible-text';
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
 import { IMAGES_UPLOADING } from '@/lib/image-compress';
+import { settleWithin } from '@/lib/settle-within';
 import { useUploadBusy } from '@/lib/use-upload-busy';
 import { vnDateTimeISO } from '@/lib/week';
 import { useConfirm } from './confirm-dialog';
@@ -29,6 +31,9 @@ type Status = 'OPEN' | 'CLOSED';
 type Msg = { tone: 'success' | 'warning' | 'danger'; text: string };
 
 const EVENTS_KEY = ['admin-community-events'];
+const PARTICIPANTS_KEY = 'admin-community-event-participants';
+/** Nút đang chạy báo bận bằng aria-disabled thay `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */
+const BUSY_CLASS = 'aria-disabled:opacity-60';
 const points = (n: number) => `${formatNumber(n)} Điểm Xanh`;
 /** Ô datetime-local là giờ Việt Nam, không theo múi giờ của máy đang mở trang. */
 const vnIso = (local: string) => {
@@ -45,14 +50,15 @@ export function EventsPanel() {
   const [status, setStatus] = useState<Status>('OPEN');
   const [msg, setMsg] = useState<Msg | null>(null);
   const q = useQuery({ queryKey: [...EVENTS_KEY, status], queryFn: () => adminEvents(coreHttp, status) });
-  const refresh = () => void qc.invalidateQueries({ queryKey: EVENTS_KEY });
+  // Trả Promise để lệnh ghi giữ khoá nút tới khi danh sách làm mới về, kẻo nút Chốt/Đóng của sự kiện đã xong còn bấm được.
+  const refresh = () => qc.invalidateQueries({ queryKey: EVENTS_KEY });
 
   return (
     <div className="space-y-3">
       <CreateEventForm
         onCreated={() => {
           setMsg({ tone: 'success', text: 'Đã tạo sự kiện.' });
-          refresh();
+          return refresh();
         }}
       />
       {msg && (
@@ -78,7 +84,7 @@ export function EventsPanel() {
       </div>
       {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
       {q.isError && (
-        <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>
+        <LoadError onRetry={() => q.refetch({ cancelRefetch: false })} retrying={q.isFetching}>
           Không tải được danh sách sự kiện.
         </LoadError>
       )}
@@ -97,7 +103,7 @@ function EventHead({ event: e }: { event: AdminCommunityEvent }) {
     <>
       <div className="break-words font-medium text-stone-900">{e.title}</div>
       {e.description && <p className="mt-1 whitespace-pre-wrap break-words text-sm text-stone-800">{e.description}</p>}
-      <p className="mt-1 text-xs text-stone-600">
+      <p className="mt-1 text-xs tabular-nums text-stone-600">
         Bắt đầu {formatDateTime(e.startAt)} · Kết thúc {formatDateTime(e.endAt)} · Thưởng {e.rewardPoints > 0 ? points(e.rewardPoints) : 'không có quà'}
       </p>
     </>
@@ -113,26 +119,52 @@ function ClosedEventRow({ event: e }: { event: AdminCommunityEvent }) {
   );
 }
 
-function OpenEventRow({ event: e, onMessage, onDone }: { event: AdminCommunityEvent; onMessage: (m: Msg | null) => void; onDone: () => void }) {
+function OpenEventRow({ event: e, onMessage, onDone }: { event: AdminCommunityEvent; onMessage: (m: Msg | null) => void; onDone: () => Promise<unknown> }) {
+  const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [choosing, setChoosing] = useState(false);
   const [selected, setSelected] = useState<string | null>(null);
   const participantsQ = useQuery({
-    queryKey: ['admin-community-event-participants', e.id],
+    queryKey: [PARTICIPANTS_KEY, e.id],
     queryFn: () => adminEventParticipants(coreHttp, e.id),
     enabled: choosing,
   });
   const participants = participantsQ.data ?? [];
   const chosen = participants.find((p) => p.userId === selected) ?? null;
 
+  // Ref vì `isPending` chỉ đúng sau lần vẽ kế: hai lệnh Chốt/Đóng xác nhận sát nhau trong cùng một nhịp vẫn gửi cả hai.
+  const acting = useRef(false);
+  const exclusive = (run: () => void) => {
+    if (acting.current) return;
+    acting.current = true;
+    run();
+  };
+  const releaseActing = () => {
+    acting.current = false;
+  };
+  // Lệnh bị từ chối vì trạng thái đã đổi (sự kiện đã đóng hoặc đã có người thắng, bài dự thi bị gỡ, sự kiện không còn): hàng đang hiện dữ
+  // liệu cũ nên tải lại cả danh sách lẫn người dự thi và giữ khoá tới khi xong, kẻo bấm lại ra đúng lỗi cũ. Lỗi mạng/5xx/401 thì trạng thái
+  // chưa chắc đã đổi, và tải lại hỏng sẽ thay danh sách bằng màn lỗi, nên không tải lại.
+  const refreshWhenRejected = (err: unknown) => {
+    const status = errorStatus(err);
+    if (status !== 400 && status !== 404 && status !== 409) return undefined;
+    return settleWithin(Promise.all([onDone(), qc.invalidateQueries({ queryKey: [PARTICIPANTS_KEY, e.id] })]));
+  };
+
+  // onSuccess trả Promise: mutation chỉ hết `isPending` (và onSettled nhả khoá) khi danh sách làm mới về, tối đa `settleWithin`. Nhả sớm thì
+  // hàng còn nút Chốt/Đóng của sự kiện đã xong, bấm lại ra lỗi "đã đóng" ngay sau câu báo thành công.
   const close = useMutation({
     mutationFn: () => closeEvent(coreHttp, e.id),
     onMutate: () => onMessage(null),
     onSuccess: () => {
       onMessage({ tone: 'success', text: 'Đã đóng sự kiện.' });
-      onDone();
+      return settleWithin(onDone());
     },
-    onError: (err) => onMessage({ tone: 'danger', text: actionErrorText(err) }),
+    onError: (err) => {
+      onMessage({ tone: 'danger', text: actionErrorText(err) });
+      return refreshWhenRejected(err);
+    },
+    onSettled: releaseActing,
   });
   const pick = useMutation({
     mutationFn: (userId: string) => pickEventWinner(coreHttp, e.id, userId) as Promise<{ ok: boolean; rewarded?: boolean }>,
@@ -146,23 +178,28 @@ function OpenEventRow({ event: e, onMessage, onDone }: { event: AdminCommunityEv
       } else {
         onMessage({ tone: 'success', text: `Đã chốt ${name} là người thắng.` });
       }
-      onDone();
+      return settleWithin(onDone());
     },
-    onError: (err) => onMessage({ tone: 'danger', text: actionErrorText(err) }),
+    onError: (err) => {
+      onMessage({ tone: 'danger', text: actionErrorText(err) });
+      return refreshWhenRejected(err);
+    },
+    onSettled: releaseActing,
   });
   const busy = close.isPending || pick.isPending;
 
   const askClose = async () => {
+    if (acting.current) return;
     const ok = await confirm({
       title: 'Đóng sự kiện này?',
       message: `Đóng "${e.title}" mà không chọn người thắng. Sự kiện đóng rồi không mở lại được và không ai được thưởng.`,
       confirmLabel: 'Đóng sự kiện',
       tone: 'danger',
     });
-    if (ok) close.mutate();
+    if (ok) exclusive(() => close.mutate());
   };
   const askPick = async () => {
-    if (!chosen) return;
+    if (!chosen || acting.current) return;
     const ok = await confirm({
       title: `Chốt ${chosen.name} là người thắng?`,
       message:
@@ -171,7 +208,7 @@ function OpenEventRow({ event: e, onMessage, onDone }: { event: AdminCommunityEv
           : `${chosen.name} nhận thông báo là người thắng (sự kiện không có quà). Sự kiện đóng lại, không đổi được người thắng.`,
       confirmLabel: 'Chốt người thắng',
     });
-    if (ok) pick.mutate(chosen.userId);
+    if (ok) exclusive(() => pick.mutate(chosen.userId));
   };
 
   return (
@@ -183,7 +220,7 @@ function OpenEventRow({ event: e, onMessage, onDone }: { event: AdminCommunityEv
           <p className="text-xs font-medium text-stone-700">Chọn người thắng trong số người đã có bài dự thi được đăng</p>
           {participantsQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
           {participantsQ.isError && (
-            <LoadError onRetry={() => void participantsQ.refetch()} retrying={participantsQ.isFetching}>
+            <LoadError onRetry={() => participantsQ.refetch({ cancelRefetch: false })} retrying={participantsQ.isFetching}>
               Không tải được người dự thi.
             </LoadError>
           )}
@@ -205,7 +242,7 @@ function OpenEventRow({ event: e, onMessage, onDone }: { event: AdminCommunityEv
                   >
                     <span className="block font-medium text-stone-900">{p.name}</span>
                     <span className="block truncate text-xs text-stone-600">{p.postTitle}</span>
-                    <span className="block text-xs text-stone-500">
+                    <span className="block text-xs tabular-nums text-stone-500">
                       {p.postCount} bài dự thi · mới nhất {formatDateTime(p.postedAt)}
                     </span>
                   </button>
@@ -214,7 +251,14 @@ function OpenEventRow({ event: e, onMessage, onDone }: { event: AdminCommunityEv
             </div>
           )}
           {participants.length > 0 && (
-            <button type="button" disabled={!chosen || busy} onClick={() => void askPick()} className={BTN_PRIMARY}>
+            <button
+              type="button"
+              disabled={!chosen}
+              aria-busy={busy || undefined}
+              aria-disabled={busy || undefined}
+              onClick={() => void askPick()}
+              className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
+            >
               {chosen ? `Chốt ${chosen.name} là người thắng` : 'Chọn một người ở trên'}
             </button>
           )}
@@ -222,11 +266,25 @@ function OpenEventRow({ event: e, onMessage, onDone }: { event: AdminCommunityEv
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
         {!choosing && (
-          <button type="button" disabled={busy} onClick={() => setChoosing(true)} className={BTN_SECONDARY}>
+          <button
+            type="button"
+            aria-disabled={busy || undefined}
+            onClick={() => {
+              if (acting.current) return;
+              setChoosing(true);
+            }}
+            className={`${BTN_SECONDARY} ${BUSY_CLASS}`}
+          >
             Chọn người thắng
           </button>
         )}
-        <button type="button" disabled={busy} onClick={() => void askClose()} className={BTN_DANGER_OUTLINE}>
+        <button
+          type="button"
+          aria-busy={busy || undefined}
+          aria-disabled={busy || undefined}
+          onClick={() => void askClose()}
+          className={`${BTN_DANGER_OUTLINE} ${BUSY_CLASS}`}
+        >
           Đóng sự kiện
         </button>
       </div>
@@ -234,7 +292,7 @@ function OpenEventRow({ event: e, onMessage, onDone }: { event: AdminCommunityEv
   );
 }
 
-function CreateEventForm({ onCreated }: { onCreated: () => void }) {
+function CreateEventForm({ onCreated }: { onCreated: () => Promise<unknown> }) {
   const config = useQuery({ ...publicConfigQuery(coreHttp), retry: false }).data;
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -246,6 +304,11 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
   // Tạo sự kiện lúc ảnh bìa còn đang lên sẽ tạo không bìa; ảnh về sau rơi sang biểu mẫu trống kế tiếp.
   const { busy: coverBusy, onBusyChange } = useUploadBusy();
 
+  // Ref vì `isPending` chỉ đúng sau lần vẽ kế (Enter hai lần sát nhau vẫn gửi hai lệnh). Khoá giữ tới khi danh sách làm mới về (tối đa
+  // `settleWithin`); các ô nhập vẫn sửa được trong lúc đó để người dùng soạn sự kiện kế tiếp. Riêng ô ảnh bìa chỉ khoá lúc lệnh tạo còn
+  // bay (ảnh chọn lúc đó rơi sang biểu mẫu trống kế tiếp), không khoá lúc chỉ còn chờ danh sách làm mới.
+  const creating = useRef(false);
+  const [refreshing, setRefreshing] = useState(false);
   const create = useMutation({
     mutationFn: (dto: CreateEventInput) => createEvent(coreHttp, dto),
     onSuccess: () => {
@@ -256,9 +319,14 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
       setEndAt('');
       setReward('0');
       setErr(null);
-      onCreated();
+      setRefreshing(true);
+      return settleWithin(onCreated());
     },
     onError: (e) => setErr(actionErrorText(e)),
+    onSettled: () => {
+      creating.current = false;
+      setRefreshing(false);
+    },
   });
 
   const rewardOk = reward === '' || /^\d+$/.test(reward);
@@ -274,7 +342,8 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
       className="space-y-2.5 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card"
       onSubmit={(ev) => {
         ev.preventDefault();
-        if (!valid || create.isPending || coverBusy) return;
+        if (!valid || creating.current || create.isPending || coverBusy) return;
+        creating.current = true;
         setErr(null);
         create.mutate({
           title: title.trim(),
@@ -293,7 +362,7 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
       <Field label="Mô tả (không bắt buộc)">
         <textarea name="eventDescription" rows={2} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} className={INPUT_CLASS} />
       </Field>
-      <ImageUrlField label="Ảnh bìa sự kiện" value={coverUrl} onChange={setCoverUrl} onBusyChange={onBusyChange} disabled={create.isPending} />
+      <ImageUrlField label="Ảnh bìa sự kiện" value={coverUrl} onChange={setCoverUrl} onBusyChange={onBusyChange} disabled={create.isPending && !refreshing} />
       <div className="grid gap-2.5 sm:grid-cols-2">
         <Field label="Bắt đầu (giờ Việt Nam)">
           <input type="datetime-local" name="eventStart" value={startAt} onChange={(e) => setStartAt(e.target.value)} className={INPUT_CLASS} />
@@ -304,14 +373,21 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
       </div>
       {!orderOk && <p className="text-xs text-danger-fg">Giờ kết thúc phải sau giờ bắt đầu.</p>}
       <Field label="Thưởng Điểm Xanh cho người thắng" hint={rewardHint}>
-        <input type="number" inputMode="numeric" min={0} step={1} name="eventReward" value={reward} onChange={(e) => setReward(e.target.value)} className={INPUT_CLASS} />
+        <input type="number" inputMode="numeric" min={0} step={1} name="eventReward" value={reward} onChange={(e) => setReward(e.target.value)} className={`${INPUT_CLASS} tabular-nums`} />
       </Field>
       {err && (
         <Notice tone="danger" role="alert">
           {err}
         </Notice>
       )}
-      <button type="submit" disabled={!valid || create.isPending || coverBusy} className={BTN_PRIMARY}>
+      {/* Form được xoá ngay khi tạo xong nên `valid` sụp trong lúc còn giữ khoá: chỉ disabled khi không chạy, để nút không đổi trạng thái giữa chừng. Khoá nhả (tối đa 4 giây sau) thì form trống nên nút disabled và focus rời nút, giống Mini. */}
+      <button
+        type="submit"
+        disabled={(!valid && !create.isPending) || coverBusy}
+        aria-busy={create.isPending || undefined}
+        aria-disabled={create.isPending || undefined}
+        className={`${BTN_PRIMARY} ${BUSY_CLASS}`}
+      >
         {create.isPending ? 'Đang tạo…' : coverBusy ? IMAGES_UPLOADING : 'Tạo sự kiện'}
       </button>
     </form>
