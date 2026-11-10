@@ -878,3 +878,56 @@ describe('W78A: đánh dấu đã đọc từng tin khoá đồng bộ theo id t
     await waitFor(() => expect(within(row).queryByLabelText('chưa đọc')).toBeNull());
   });
 });
+
+describe('W85A: "Xem thêm" của danh sách thông báo khoá đồng bộ', () => {
+  const rows = (from: number, n: number) =>
+    Array.from({ length: n }, (_, i) => ({
+      id: `p${from + i}`, templateCode: 'POINTS_EARNED', payload: { body: `Tin số ${from + i}` }, status: 'READ' as const, sentAt: new Date(Date.UTC(2026, 9, 28, 3, 0, 0) - (from + i) * 1000).toISOString(),
+    }));
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.getSummary.mockReset();
+    mocks.getNotifications.mockReset();
+  });
+
+  it('chạm đúp "Xem thêm" trong cùng một nhịp vẽ: chỉ một lần nạp trang 2', async () => {
+    const page2 = deferred();
+    mocks.getNotifications.mockResolvedValueOnce(rows(0, 20)).mockReturnValueOnce(page2.promise);
+    renderPage();
+    await screen.findByText('Tin số 0');
+    const more = await screen.findByRole('button', { name: 'Xem thêm' });
+    await act(async () => {
+      fireEvent.click(more);
+      fireEvent.click(more);
+    });
+    expect(mocks.getNotifications).toHaveBeenCalledTimes(2);
+    await act(async () => page2.resolve(rows(20, 5)));
+    expect(await screen.findByText('Tin số 24')).toBeInTheDocument();
+    expect(mocks.getNotifications).toHaveBeenCalledTimes(2);
+  });
+
+  it('hai lần chạm "Xem thêm" cách nhau một microtask: vẫn một lần nạp', async () => {
+    const page2 = deferred();
+    mocks.getNotifications.mockResolvedValueOnce(rows(0, 20)).mockReturnValueOnce(page2.promise);
+    renderPage();
+    await screen.findByText('Tin số 0');
+    const more = await screen.findByRole('button', { name: 'Xem thêm' });
+    await act(async () => {
+      fireEvent.click(more);
+      await Promise.resolve();
+      fireEvent.click(more);
+    });
+    expect(mocks.getNotifications).toHaveBeenCalledTimes(2);
+    await act(async () => page2.resolve(rows(20, 5)));
+    expect(await screen.findByText('Tin số 24')).toBeInTheDocument();
+  });
+});

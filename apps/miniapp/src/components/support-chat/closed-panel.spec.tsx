@@ -236,3 +236,44 @@ describe('ChatClosedPanel (Mini): bản gọn (chat tắt mà còn lịch sử)'
     expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép email hỗ trợ', type: 'success' });
   });
 });
+
+describe('ChatClosedPanel (Mini): nút gọi và nhắn OA khoá khi cầu nối còn chạy (W85A)', () => {
+  it('chạm đúp "Gọi" trong cùng một nhịp chỉ gọi cầu nối một lần; cầu nối xong thì chạm lại gọi được', async () => {
+    const gate = deferred<void>();
+    mocks.callPhone.mockReturnValueOnce(gate.promise);
+    render(<ChatClosedPanel support={FULL} />);
+    await act(async () => {
+      fireEvent.click(callBtn());
+      fireEvent.click(callBtn());
+    });
+    expect(mocks.callPhone).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await Promise.resolve();
+      fireEvent.click(callBtn());
+    });
+    expect(mocks.callPhone).toHaveBeenCalledTimes(1);
+    await act(async () => gate.resolve());
+    await act(async () => {
+      fireEvent.click(callBtn());
+    });
+    expect(mocks.callPhone).toHaveBeenCalledTimes(2);
+  });
+
+  it('chạm đúp "Nhắn OA" trong cùng một nhịp chỉ mở chat OA một lần; cầu nối xong thì chạm lại mở được', async () => {
+    mocks.hasOA = true;
+    const gate = deferred<void>();
+    mocks.openOAChat.mockReturnValueOnce(gate.promise);
+    render(<ChatClosedPanel support={FULL} />);
+    const oa = () => screen.getByRole('button', { name: copy.oa });
+    await act(async () => {
+      fireEvent.click(oa());
+      fireEvent.click(oa());
+    });
+    expect(mocks.openOAChat).toHaveBeenCalledTimes(1);
+    await act(async () => gate.resolve());
+    await act(async () => {
+      fireEvent.click(oa());
+    });
+    expect(mocks.openOAChat).toHaveBeenCalledTimes(2);
+  });
+});

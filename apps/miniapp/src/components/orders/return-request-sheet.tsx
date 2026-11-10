@@ -13,6 +13,7 @@ import { RefundDestinationPicker } from './refund-destination-picker';
 import { estimateReturn, fetchRefundBank, requestReturn, type OrderView, type ReturnRequestDTO } from '../../services/shop-api';
 import { getErrorMessage } from '../../services/api';
 import { haptic } from '../../utils/haptic';
+import { vi } from '../../i18n/vi';
 import { formatNumber, formatVnd } from '../../utils/format';
 import {
   EMPTY_BANK,
@@ -61,6 +62,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
   const [reasonCode, setReasonCode] = useState<ReturnReasonCode | null>(null);
   const [reason, setReason] = useState('');
   const [images, setImages] = useState<string[]>([]);
+  const [imagesBusy, setImagesBusy] = useState(false);
   const [method, setMethod] = useState<RefundMethodChoice>('WALLET');
   const [bank, setBank] = useState<RefundBankInput>(EMPTY_BANK);
   const [touched, setTouched] = useState(false);
@@ -163,12 +165,13 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
           <Button
             fullWidth
             loading={submit.isPending}
+            disabled={imagesBusy}
             onPress={() => {
               setTouched(true);
               if (!error) submit.mutate();
             }}
           >
-            Gửi yêu cầu
+            {imagesBusy ? vi.common.imagesUploading : 'Gửi yêu cầu'}
           </Button>
         </div>
       }
@@ -238,7 +241,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
           />
         </section>
 
-        <MultiImageUpload value={images} onChange={setImages} max={3} label="Ảnh minh chứng (khuyến khích, tối đa 3)" />
+        <MultiImageUpload value={images} onChange={setImages} onBusyChange={setImagesBusy} disabled={submit.isPending} max={3} label="Ảnh minh chứng (khuyến khích, tối đa 3)" />
 
         {showsMoney &&
           (bankAllowed ? (

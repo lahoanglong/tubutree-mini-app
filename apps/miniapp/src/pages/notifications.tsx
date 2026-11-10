@@ -388,7 +388,7 @@ export default function NotificationsPage() {
                 <DsButton
                   variant="secondary"
                   loading={notifQ.isFetchingNextPage}
-                  onPress={() => void notifQ.fetchNextPage()}
+                  onPress={() => notifQ.fetchNextPage()}
                   style={{ minWidth: 160 }}
                 >
                   Xem thêm

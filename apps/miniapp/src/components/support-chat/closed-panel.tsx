@@ -52,7 +52,7 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
       fullWidth
       onPress={() => {
         haptic('light');
-        void callPhone(hotline);
+        return callPhone(hotline);
       }}
       style={{ marginTop: 8 }}
     >
@@ -62,7 +62,7 @@ export function ChatClosedPanel({ support, compact = false }: { support: Support
   const oaNode =
     support?.zaloOaName &&
     (hasOA ? (
-      <Button variant="secondary" aria-label={copy.oa} fullWidth onPress={() => void openOAChat()}>
+      <Button variant="secondary" aria-label={copy.oa} fullWidth onPress={() => openOAChat()}>
         <WithIcon icon={MessageSquare} tone="brand">{copy.oa}</WithIcon>
       </Button>
     ) : (
