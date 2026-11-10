@@ -74,6 +74,9 @@ const state = vi.hoisted(() => ({
   copied: [] as string[],
   created: null as unknown,
   patchResult: null as unknown,
+  /** Bật thì mỗi lượt tải ảnh lên Cloudinary treo ở `uploads` tới khi test gọi `resolve`; tắt thì trả null ngay (rơi về nén tại chỗ, lỗi trong jsdom). */
+  holdUploads: false,
+  uploads: [] as { resolve: (url: string | null) => void }[],
 }));
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
@@ -110,7 +113,9 @@ vi.mock('next/navigation', async () => {
   };
 });
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: (...a: unknown[]) => state.share(...a) } }));
-vi.mock('@/components/account/cloudinary-upload', () => ({ uploadToCloudinary: async () => null }));
+vi.mock('@/components/account/cloudinary-upload', () => ({
+  uploadToCloudinary: () => (state.holdUploads ? new Promise<string | null>((resolve) => state.uploads.push({ resolve })) : Promise.resolve(null)),
+}));
 
 function httpError(status: number, message = 'lỗi máy chủ') {
   return Object.assign(new Error(message), { status });
@@ -239,6 +244,8 @@ beforeEach(() => {
   state.copied = [];
   state.created = null;
   state.patchResult = null;
+  state.holdUploads = false;
+  state.uploads = [];
   Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: async (t: string) => void state.copied.push(t) } });
 });
 afterEach(() => {
@@ -1293,5 +1300,121 @@ describe('TemplateSheet (chọn mẫu khi tạo gian hàng): hai cách tạo dù
     click(blank);
     await flush();
     expect(calls('post', '/storefront')).toHaveLength(2);
+  });
+});
+
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+// Khoá nút Lưu lúc ảnh còn đang lên (Mini ↔ web, Wave 85B ↔ Wave 90A): ô ảnh thật, chỉ giả lượt tải lên Cloudinary.
+// ---------------------------------------------------------------------------------------------------------------------------------------------------------------
+
+describe('khoá nút Lưu lúc ảnh còn đang lên — hồ sơ gian hàng và bước thông tin', () => {
+  const PATCH_ME = 'patch /storefront/me';
+  const pickImage = (label: string) => {
+    const input = document.body.querySelector<HTMLInputElement>(`input[aria-label="Chọn tệp ${label}"]`)!;
+    Object.defineProperty(input, 'files', { configurable: true, value: [new File(['x'], 'a.png', { type: 'image/png' })] });
+    act(() => {
+      input.dispatchEvent(new Event('change', { bubbles: true }));
+    });
+  };
+  const finishUpload = async (index: number, url: string) => {
+    await act(async () => state.uploads[index]!.resolve(url));
+    await flush();
+  };
+  const openProfile = async () => {
+    state.holdUploads = true;
+    mount();
+    await flush();
+    click(btn('Sửa hồ sơ'));
+    await flush();
+  };
+  const openInfoStep = async () => {
+    state.holdUploads = true;
+    state.sf = storefront({ status: 'DRAFT' });
+    mount();
+    await flush();
+    await flush();
+  };
+
+  it('Lưu hồ sơ: ảnh đang lên thì nút báo aria-busy + aria-disabled, đổi chữ, chạm không gửi; ảnh về thì nhả và gửi đúng ảnh mới', async () => {
+    await openProfile();
+    pickImage('ảnh đại diện');
+    await flush();
+    const save = btn('Đang tải ảnh…', dialog()!);
+    expectBusy(save);
+    await tap(save);
+    expect(calls('patch', '/storefront/me')).toHaveLength(0);
+    expect(dialog()).not.toBeNull();
+
+    await finishUpload(0, 'https://res.cloudinary.com/x/avatar.jpg');
+    expectIdle(btn('Lưu hồ sơ', dialog()!));
+    await tap(btn('Lưu hồ sơ', dialog()!), 1);
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    expect(calls('patch', '/storefront/me')[0]!.body).toMatchObject({ avatarUrl: 'https://res.cloudinary.com/x/avatar.jpg' });
+  });
+
+  it('Lưu hồ sơ: hai ô ảnh tải cùng lúc, ô đầu xong vẫn khoá, ô cuối xong mới nhả', async () => {
+    await openProfile();
+    pickImage('ảnh đại diện');
+    pickImage('ảnh bìa');
+    await flush();
+    expect(state.uploads).toHaveLength(2);
+    await finishUpload(0, 'https://res.cloudinary.com/x/avatar.jpg');
+    expectBusy(btn('Đang tải ảnh…', dialog()!));
+    await tap(btn('Đang tải ảnh…', dialog()!), 1);
+    expect(calls('patch', '/storefront/me')).toHaveLength(0);
+    await finishUpload(1, 'https://res.cloudinary.com/x/cover.jpg');
+    expectIdle(btn('Lưu hồ sơ', dialog()!));
+  });
+
+  it('Lưu hồ sơ: đang lưu thì hai ô ảnh khoá (aria-disabled), chọn ảnh lúc này không tải lên', async () => {
+    await openProfile();
+    const release = hold(PATCH_ME);
+    await tap(btn('Lưu hồ sơ', dialog()!), 1);
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    expect(dialog()!.querySelector('button[aria-label="Tải lên ảnh đại diện"]')!.getAttribute('aria-disabled')).toBe('true');
+    expect(dialog()!.querySelector('button[aria-label="Tải lên ảnh bìa"]')!.getAttribute('aria-disabled')).toBe('true');
+    pickImage('ảnh đại diện');
+    await flush();
+    expect(state.uploads).toHaveLength(0);
+    await release();
+  });
+
+  it('Bước thông tin: ảnh đang lên thì Tiếp tục báo aria-busy + aria-disabled, đổi chữ, chạm không gửi; ảnh về thì nhả và gửi đúng ảnh mới', async () => {
+    await openInfoStep();
+    pickImage('ảnh bìa');
+    await flush();
+    const next = btn('Đang tải ảnh…');
+    expectBusy(next);
+    await tap(next);
+    expect(calls('patch', '/storefront/me')).toHaveLength(0);
+
+    await finishUpload(0, 'https://res.cloudinary.com/x/cover.jpg');
+    expectIdle(btn('Tiếp tục'));
+    await tap(btn('Tiếp tục'), 1);
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    expect(calls('patch', '/storefront/me')[0]!.body).toMatchObject({ coverUrl: 'https://res.cloudinary.com/x/cover.jpg' });
+  });
+
+  it('Bước thông tin: hai ô ảnh tải cùng lúc, ô đầu xong vẫn khoá, ô cuối xong mới nhả', async () => {
+    await openInfoStep();
+    pickImage('ảnh đại diện');
+    pickImage('ảnh bìa');
+    await flush();
+    await finishUpload(1, 'https://res.cloudinary.com/x/cover.jpg');
+    expectBusy(btn('Đang tải ảnh…'));
+    await finishUpload(0, 'https://res.cloudinary.com/x/avatar.jpg');
+    expectIdle(btn('Tiếp tục'));
+  });
+
+  it('Bước thông tin: đang lưu thì hai ô ảnh khoá (aria-disabled), chọn ảnh lúc này không tải lên', async () => {
+    await openInfoStep();
+    const release = hold(PATCH_ME);
+    await tap(btn('Tiếp tục'), 1);
+    expect(document.body.querySelector('button[aria-label="Tải lên ảnh đại diện"]')!.getAttribute('aria-disabled')).toBe('true');
+    expect(document.body.querySelector('button[aria-label="Tải lên ảnh bìa"]')!.getAttribute('aria-disabled')).toBe('true');
+    pickImage('ảnh đại diện');
+    await flush();
+    expect(state.uploads).toHaveLength(0);
+    await release();
   });
 });

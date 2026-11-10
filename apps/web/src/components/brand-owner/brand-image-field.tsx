@@ -25,11 +25,17 @@ export function BrandImageField({
   value,
   onChange,
   upload = 'cloudinary',
+  onBusyChange,
+  disabled = false,
 }: {
   label: string;
   value: string;
   onChange: (url: string) => void;
   upload?: 'cloudinary' | 'inline';
+  /** Báo form cha khi đang tải: bấm Lưu lúc ảnh còn đang lên sẽ lưu ảnh cũ (hoặc rỗng) rồi bỏ ảnh về sau. */
+  onBusyChange?: (busy: boolean) => void;
+  /** Form cha đang lưu: đổi ảnh lúc này không vào bản đang lưu mà vẫn làm đổi nhãn nút Lưu. */
+  disabled?: boolean;
 }) {
   const subject = spokenSubject(label);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -38,14 +44,16 @@ export function BrandImageField({
   // `busy` chỉ đúng sau lần vẽ kế; ref chặn tệp thứ hai chọn ngay khi tệp đầu còn đang tải (hai lần `onChange` ghi chồng nhau, ảnh về sau thắng).
   const uploading = useRef(false);
   const pick = () => {
-    if (uploading.current) return;
+    if (uploading.current || disabled) return;
     inputRef.current?.click();
   };
 
   const onFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (!file || uploading.current) return;
+    if (!file || uploading.current || disabled) return;
     setError(null);
+    // Chỉ báo "xong" cho lượt đã báo "bận": tệp bị từ chối ở dưới dừng trước đó, và cờ đếm của form cha sẽ trừ nhầm lượt của ô khác.
+    let reportedBusy = false;
     try {
       if (!isUsableImageFile(file)) {
         setError('Tệp này không phải ảnh. Hãy chọn ảnh khác nhé.');
@@ -57,6 +65,8 @@ export function BrandImageField({
       }
       uploading.current = true;
       setBusy(true);
+      reportedBusy = true;
+      onBusyChange?.(true);
       const secureUrl = upload === 'inline' ? null : await uploadToCloudinary(file);
       onChange(secureUrl ?? (await readAndCompressImage(file)));
     } catch {
@@ -64,6 +74,7 @@ export function BrandImageField({
     } finally {
       uploading.current = false;
       setBusy(false);
+      if (reportedBusy) onBusyChange?.(false);
       if (inputRef.current) inputRef.current.value = '';
     }
   };
@@ -76,7 +87,7 @@ export function BrandImageField({
         type="button"
         onClick={pick}
         aria-busy={busy || undefined}
-        aria-disabled={busy || undefined}
+        aria-disabled={busy || disabled || undefined}
         aria-label={value ? `Đổi ảnh ${subject}` : `Tải ảnh ${subject} lên`}
         className="flex min-h-20 w-full items-center justify-center overflow-hidden rounded-control border-2 border-dashed border-stone-450 bg-stone-50 max-md:border-[1.5px] max-md:border-[color:var(--color-border-default)] max-md:bg-[color:var(--color-bg-canvas)] text-sm font-semibold text-forest-700 hover:bg-stone-100 aria-disabled:opacity-60"
       >
@@ -96,7 +107,7 @@ export function BrandImageField({
         )}
       </button>
       {value && !busy && (
-        <button type="button" onClick={pick} className={`${ui.btnText} no-underline text-forest-700`}>
+        <button type="button" onClick={pick} aria-disabled={disabled || undefined} className={`${ui.btnText} no-underline text-forest-700`}>
           <RefreshCw className="mr-1 h-3 w-3" aria-hidden="true" />
           Đổi ảnh khác
         </button>

@@ -35,6 +35,7 @@ import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { phoneSecondary } from '@/lib/phone-ui';
 import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
+import { IMAGES_UPLOADING, useUploadBusy } from '@/lib/use-upload-busy';
 import { ErrorState } from '@/components/ui/error-state';
 import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
@@ -241,6 +242,8 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
   const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Sang bước sau lúc ảnh còn đang lên sẽ gửi ảnh cũ (hoặc rỗng), ảnh mới về sau mất cùng bước này.
+  const { busy: imagesBusy, onBusyChange } = useUploadBusy();
 
   const saveMut = useLockedMutation({
     mutationFn: () => updateStorefront(coreHttp, { title: title.trim(), headerNote: note.trim(), avatarUrl: avatarUrl.trim(), coverUrl: coverUrl.trim() }),
@@ -252,6 +255,7 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
   });
 
   const next = () => {
+    if (imagesBusy) return;
     const problem = validateStorefrontInfo({ title, headerNote: note });
     setError(problem);
     setSaveError(null);
@@ -288,15 +292,15 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
       </Card>
       <Card>
         <h3 className={`${ui.sectionTitle} mb-2`}>{SIGNUP_COPY.imagesTitle}</h3>
-        <StorefrontImageUpload label="Ảnh đại diện" value={avatarUrl} onChange={setAvatarUrl} maxDim={400} quality={0.8} />
-        <StorefrontImageUpload label="Ảnh bìa" value={coverUrl} onChange={setCoverUrl} maxDim={1000} quality={0.75} />
+        <StorefrontImageUpload label="Ảnh đại diện" value={avatarUrl} onChange={setAvatarUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={400} quality={0.8} />
+        <StorefrontImageUpload label="Ảnh bìa" value={coverUrl} onChange={setCoverUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={1000} quality={0.75} />
       </Card>
       {saveError && (
         <p role="alert" className={ui.error}>
           {saveError}
         </p>
       )}
-      <StepBar onBack={onBack} next={{ label: SIGNUP_COPY.next, loading: saveMut.isPending, onPress: next }} />
+      <StepBar onBack={onBack} next={{ label: imagesBusy ? IMAGES_UPLOADING : SIGNUP_COPY.next, loading: saveMut.isPending || imagesBusy, onPress: next }} />
     </>
   );
 }

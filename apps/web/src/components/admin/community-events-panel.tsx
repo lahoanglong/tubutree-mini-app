@@ -18,6 +18,7 @@ import { actionErrorText } from '@/lib/admin-error-text';
 import { hasVisibleText } from '@/lib/admin-visible-text';
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
+import { IMAGES_UPLOADING, useUploadBusy } from '@/lib/use-upload-busy';
 import { vnDateTimeISO } from '@/lib/week';
 import { useConfirm } from './confirm-dialog';
 import { ImageUrlField } from './image-url-field';
@@ -241,6 +242,8 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
   const [endAt, setEndAt] = useState('');
   const [reward, setReward] = useState('0');
   const [err, setErr] = useState<string | null>(null);
+  // Tạo sự kiện lúc ảnh bìa còn đang lên sẽ tạo không bìa; ảnh về sau rơi sang biểu mẫu trống kế tiếp.
+  const { busy: coverBusy, onBusyChange } = useUploadBusy();
 
   const create = useMutation({
     mutationFn: (dto: CreateEventInput) => createEvent(coreHttp, dto),
@@ -270,7 +273,7 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
       className="space-y-2.5 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card"
       onSubmit={(ev) => {
         ev.preventDefault();
-        if (!valid || create.isPending) return;
+        if (!valid || create.isPending || coverBusy) return;
         setErr(null);
         create.mutate({
           title: title.trim(),
@@ -289,7 +292,7 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
       <Field label="Mô tả (không bắt buộc)">
         <textarea name="eventDescription" rows={2} maxLength={2000} value={description} onChange={(e) => setDescription(e.target.value)} className={INPUT_CLASS} />
       </Field>
-      <ImageUrlField label="Ảnh bìa sự kiện" value={coverUrl} onChange={setCoverUrl} />
+      <ImageUrlField label="Ảnh bìa sự kiện" value={coverUrl} onChange={setCoverUrl} onBusyChange={onBusyChange} disabled={create.isPending} />
       <div className="grid gap-2.5 sm:grid-cols-2">
         <Field label="Bắt đầu (giờ Việt Nam)">
           <input type="datetime-local" name="eventStart" value={startAt} onChange={(e) => setStartAt(e.target.value)} className={INPUT_CLASS} />
@@ -307,8 +310,8 @@ function CreateEventForm({ onCreated }: { onCreated: () => void }) {
           {err}
         </Notice>
       )}
-      <button type="submit" disabled={!valid || create.isPending} className={BTN_PRIMARY}>
-        {create.isPending ? 'Đang tạo…' : 'Tạo sự kiện'}
+      <button type="submit" disabled={!valid || create.isPending || coverBusy} className={BTN_PRIMARY}>
+        {create.isPending ? 'Đang tạo…' : coverBusy ? IMAGES_UPLOADING : 'Tạo sự kiện'}
       </button>
     </form>
   );

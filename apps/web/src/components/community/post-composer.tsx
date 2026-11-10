@@ -8,6 +8,7 @@ import { Sheet } from '@/components/ui/sheet';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
+import { IMAGES_UPLOADING, useUploadBusy } from '@/lib/use-upload-busy';
 import { ImageUpload } from './image-upload';
 import { ProductPicker } from './product-picker';
 import { actionErrorText } from '@/lib/error-text';
@@ -71,6 +72,8 @@ export function PostComposer({
   const [images, setImages] = useState<string[]>([]);
   const [products, setProducts] = useState<ProductSuggestion[]>([]);
   const [tagsRaw, setTagsRaw] = useState('');
+  // Đăng lúc ảnh còn đang lên sẽ đăng bài thiếu ảnh.
+  const { busy: imagesBusy, onBusyChange } = useUploadBusy();
 
   const tags = parseTags(tagsRaw);
   const removeTag = (t: string) => setTagsRaw(tags.filter((x) => x !== t).join(', '));
@@ -122,12 +125,15 @@ export function PostComposer({
         <button
           type="button"
           disabled={!canSubmit}
-          aria-busy={sending || undefined}
-          aria-disabled={sending || undefined}
-          onClick={() => submit.mutate()}
+          aria-busy={sending || imagesBusy || undefined}
+          aria-disabled={sending || imagesBusy || undefined}
+          onClick={() => {
+            if (imagesBusy) return;
+            submit.mutate();
+          }}
           className={`${ui.btnPrimary} w-full`}
         >
-          {sending ? 'Đang đăng…' : 'Đăng'}
+          {sending ? 'Đang đăng…' : imagesBusy ? IMAGES_UPLOADING : 'Đăng'}
         </button>
       }
     >
@@ -174,7 +180,7 @@ export function PostComposer({
         />
       </div>
 
-      <ImageUpload value={images} onChange={setImages} max={6} />
+      <ImageUpload value={images} onChange={setImages} onBusyChange={onBusyChange} disabled={sending} max={6} />
 
       <ProductPicker value={products} onChange={setProducts} max={5} />
 

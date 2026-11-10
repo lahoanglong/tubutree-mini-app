@@ -15,6 +15,7 @@ import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { coreHttp } from '@/lib/core-http';
 import { EMPTY_PROMO, ownerActionError, promoDateRangeError, promoPayload, promoToForm, type PromoForm } from '@/lib/brand-owner-view';
 import { ui } from '@/lib/guest-ui';
+import { IMAGES_UPLOADING, useUploadBusy } from '@/lib/use-upload-busy';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { Field } from '@/components/ui/field';
 import { Sheet } from '@/components/ui/sheet';
@@ -39,6 +40,8 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
     origin: brand.origin ?? '',
     story: brand.story ?? '',
   });
+  // Lưu lúc ảnh còn đang lên sẽ gửi logo/ảnh bìa cũ rồi bỏ ảnh về sau.
+  const { busy: imagesBusy, onBusyChange } = useUploadBusy();
   // Hồ sơ gửi đi là biến mutate chụp lúc bấm lần đầu, không đọc `f` mới hơn; khoá giữ tới khi hồ sơ mới về.
   const saveMut = useLockedMutation({
     mutationFn: (sent: typeof f) => updateOwnedBrand(coreHttp, sent),
@@ -125,26 +128,52 @@ export function ProfileTab({ brand }: { brand: OwnedBrand }) {
 
       <section aria-label={BRAND_OWNER_INFO} className={`flex flex-col gap-3 p-4 ${skin.card}`}>
         <h2 className={skin.cardTitleSans}>{BRAND_OWNER_INFO}</h2>
-        <BrandImageField label="Logo" value={f.logoUrl} onChange={(url) => setF({ ...f, logoUrl: url })} />
-        <BrandImageField label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF({ ...f, coverUrl: url })} />
+        {/* Cập nhật dạng hàm: ảnh về muộn không ghi đè chữ vừa gõ hay ảnh còn lại (`onChange` của ô là bản chụp lúc chọn tệp). */}
+        <BrandImageField label="Logo" value={f.logoUrl} onChange={(url) => setF((p) => ({ ...p, logoUrl: url }))} onBusyChange={onBusyChange} disabled={saveMut.isPending} />
+        <BrandImageField label="Ảnh bìa" value={f.coverUrl} onChange={(url) => setF((p) => ({ ...p, coverUrl: url }))} onBusyChange={onBusyChange} disabled={saveMut.isPending} />
         <Field label="Câu giới thiệu ngắn">
-          <input className={bigField} value={f.tagline} onChange={(e) => setF({ ...f, tagline: e.target.value })} />
+          <input
+            className={bigField}
+            value={f.tagline}
+            onChange={(e) => {
+              const v = e.target.value;
+              setF((p) => ({ ...p, tagline: v }));
+            }}
+          />
         </Field>
         <Field label="Nguồn gốc">
-          <input className={bigField} value={f.origin} onChange={(e) => setF({ ...f, origin: e.target.value })} />
+          <input
+            className={bigField}
+            value={f.origin}
+            onChange={(e) => {
+              const v = e.target.value;
+              setF((p) => ({ ...p, origin: v }));
+            }}
+          />
         </Field>
         <Field label="Câu chuyện thương hiệu">
-          <textarea className={`${ui.field} min-h-28 py-2`} maxLength={20000} value={f.story} onChange={(e) => setF({ ...f, story: e.target.value })} />
+          <textarea
+            className={`${ui.field} min-h-28 py-2`}
+            maxLength={20000}
+            value={f.story}
+            onChange={(e) => {
+              const v = e.target.value;
+              setF((p) => ({ ...p, story: v }));
+            }}
+          />
         </Field>
         {/* Đang lưu giữ aria-busy/aria-disabled chứ không `disabled`: nút đang giữ focus mà bị vô hiệu thì Chromium thả focus về body. */}
         <button
           type="button"
-          aria-busy={saveMut.isPending || undefined}
-          aria-disabled={saveMut.isPending || undefined}
-          onClick={() => saveMut.mutate(f)}
+          aria-busy={saveMut.isPending || imagesBusy || undefined}
+          aria-disabled={saveMut.isPending || imagesBusy || undefined}
+          onClick={() => {
+            if (imagesBusy) return;
+            saveMut.mutate(f);
+          }}
           className={`${ui.btnPrimary} w-full`}
         >
-          {saveMut.isPending ? 'Đang lưu…' : 'Lưu thông tin'}
+          {saveMut.isPending ? 'Đang lưu…' : imagesBusy ? IMAGES_UPLOADING : 'Lưu thông tin'}
         </button>
       </section>
 
