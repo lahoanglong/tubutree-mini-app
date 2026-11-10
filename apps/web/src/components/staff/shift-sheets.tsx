@@ -252,7 +252,7 @@ export function CancelSheet({
             value={evidence ? [evidence] : []}
             onChange={(v) => onChange({ evidence: v[0] ?? '' })}
             onBusyChange={onEvidenceBusyChange}
-            disabled={pending}
+            disabled={pending || evidenceBusy}
           />
         )}
       </div>

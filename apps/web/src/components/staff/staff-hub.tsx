@@ -240,9 +240,9 @@ export function StaffHub() {
   const [cancelId, setCancelId] = useState<string | null>(null);
   const [cancel, setCancel] = useState<CancelState>(EMPTY_CANCEL);
   // Cờ nằm ở trang vì tấm huỷ ca gỡ nội dung khi đóng, còn ảnh về muộn vẫn ghi vào `cancel.evidence` của trang. Tắt "Đột xuất" gỡ ô ảnh
-  // nên lượt tải còn chạy không còn chặn nút (ảnh không ai chờ), bật lại thì chặn tiếp tới khi lượt đó xong.
+  // nhưng lượt tải đã chạy vẫn ghi ảnh khi xong, nên cờ không phụ thuộc "Đột xuất": nhả sớm thì tấm đóng được, mở ca khác và ảnh ca cũ rơi vào ca mới.
   const { busy: uploadBusy, onBusyChange: onEvidenceBusyChange } = useUploadBusy();
-  const evidenceBusy = cancel.emergency && uploadBusy;
+  const evidenceBusy = uploadBusy;
   const cancelM = useLockedMutation(
     {
       mutationKey: CANCEL_KEY,
@@ -267,7 +267,9 @@ export function StaffHub() {
   };
   const submitCancel = () => {
     if (!cancelId || evidenceBusy) return;
-    cancelM.mutate({ id: cancelId, reason: cancel.reason.trim(), isEmergency: cancel.emergency, evidenceUrl: cancel.evidence || undefined, week: mondayKey });
+    // Ảnh còn trong state sau khi tắt "Đột xuất" không được đính vào huỷ không khẩn: API miễn phạt theo có/không có ảnh.
+    const evidenceUrl = cancel.emergency ? cancel.evidence || undefined : undefined;
+    cancelM.mutate({ id: cancelId, reason: cancel.reason.trim(), isEmergency: cancel.emergency, evidenceUrl, week: mondayKey });
   };
 
   return (

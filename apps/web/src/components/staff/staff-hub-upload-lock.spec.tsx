@@ -2,31 +2,37 @@
 import { act } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+// Ô ảnh thật gỡ khỏi cây khi tắt "Đột xuất" nhưng lượt tải đã chạy vẫn gọi onChange/onBusyChange lúc xong: giữ lại cặp hàm của lần vẽ cuối để mô phỏng ảnh về muộn.
+const slot = vi.hoisted(() => ({ late: null as null | { onChange: (v: string[]) => void; onBusyChange?: (busy: boolean) => void } }));
+
 vi.mock('./today-card', () => ({ TodayCard: () => null }));
 vi.mock('@/components/evidence-upload', () => ({
-  EvidenceUpload: ({ onChange, onBusyChange, disabled }: { onChange: (v: string[]) => void; onBusyChange?: (busy: boolean) => void; disabled?: boolean }) => (
-    <>
-      <button type="button" onClick={() => onChange(['data:image/jpeg;base64,CU'])}>
-        stub-co-anh
-      </button>
-      <button type="button" onClick={() => onBusyChange?.(true)}>
-        stub-bat-dau
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          onChange(['data:image/jpeg;base64,MOI']);
-          onBusyChange?.(false);
-        }}
-      >
-        stub-xong-anh
-      </button>
-      <button type="button" onClick={() => onBusyChange?.(false)}>
-        stub-xong-loi
-      </button>
-      <output data-testid="slot-disabled">{String(disabled)}</output>
-    </>
-  ),
+  EvidenceUpload: ({ onChange, onBusyChange, disabled }: { onChange: (v: string[]) => void; onBusyChange?: (busy: boolean) => void; disabled?: boolean }) => {
+    slot.late = { onChange, onBusyChange };
+    return (
+      <>
+        <button type="button" onClick={() => onChange(['data:image/jpeg;base64,CU'])}>
+          stub-co-anh
+        </button>
+        <button type="button" onClick={() => onBusyChange?.(true)}>
+          stub-bat-dau
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            onChange(['data:image/jpeg;base64,MOI']);
+            onBusyChange?.(false);
+          }}
+        >
+          stub-xong-anh
+        </button>
+        <button type="button" onClick={() => onBusyChange?.(false)}>
+          stub-xong-loi
+        </button>
+        <output data-testid="slot-disabled">{String(disabled)}</output>
+      </>
+    );
+  },
 }));
 
 import { StaffHub } from './staff-hub';
@@ -60,6 +66,8 @@ const SHIFT = {
   cancelPenalty: false,
 };
 
+const SHIFT_B = { ...SHIFT, id: 's2', startAt: `${today}T06:00:00.000Z`, endAt: `${today}T09:00:00.000Z` };
+
 function stub(cancelGate?: Promise<void>) {
   const calls: { url: string; init?: RequestInit }[] = [];
   vi.stubGlobal(
@@ -72,7 +80,7 @@ function stub(cancelGate?: Promise<void>) {
         return json({ cancelled: true, penalty: false });
       }
       if (url.includes('/staff/shift-templates')) return json([]);
-      if (url.includes('/staff/shifts')) return json([SHIFT]);
+      if (url.includes('/staff/shifts')) return json([SHIFT, SHIFT_B]);
       return json([]);
     }),
   );
@@ -88,12 +96,16 @@ const pressEscape = () =>
   act(() => {
     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
   });
-const open = async () => {
+const open = async (index = 0) => {
   const r = render(<StaffHub />);
   mounted.push(r);
   await flush();
   await flush();
-  click(r.container.querySelector('[aria-label^="Huỷ ca"]'));
+  await openAt(r, index);
+  return r;
+};
+const openAt = async (r: Rendered, index: number) => {
+  click(r.container.querySelectorAll('[aria-label^="Huỷ ca"]')[index] ?? null);
   await flush();
   typeInto(dialog()!.querySelector('textarea'), 'Bận việc nhà');
 };
@@ -144,20 +156,71 @@ describe('StaffHub — tấm huỷ ca lúc ảnh chứng cứ còn đang xử l�
     expect(confirmBtn().textContent).toBe('Xác nhận huỷ');
   });
 
-  it('tắt "Đột xuất" gỡ ô ảnh: lượt tải còn chạy không còn chặn nút (ảnh không ai chờ); bật lại thì chặn tiếp tới khi lượt đó xong', async () => {
+  it('tắt "Đột xuất" gỡ ô ảnh nhưng lượt tải còn chạy vẫn khoá nút và tấm (không nút Đóng, Esc); bật lại thì ô ảnh mới khoá chọn ảnh thứ hai; xong mới nhả', async () => {
     const api = stub();
     await open();
     click(emergencySwitch());
     stubBtn('stub-bat-dau');
     expect(confirmBtn().textContent).toBe('Đang tải ảnh…');
     click(emergencySwitch());
-    expect(confirmBtn().textContent).toBe('Xác nhận huỷ');
-    expect(closeButton()).not.toBeNull();
+    const busy = confirmBtn();
+    expect(busy.textContent).toBe('Đang tải ảnh…');
+    expect(busy.getAttribute('aria-disabled')).toBe('true');
+    click(busy);
+    await flush();
+    expect(api.cancels()).toHaveLength(0);
+    expect(closeButton()).toBeNull();
+    pressEscape();
+    expect(dialog()).not.toBeNull();
+
     click(emergencySwitch());
+    expect(dialog()!.querySelector('[data-testid="slot-disabled"]')!.textContent).toBe('true');
     expect(confirmBtn().textContent).toBe('Đang tải ảnh…');
     stubBtn('stub-xong-loi');
     expect(confirmBtn().textContent).toBe('Xác nhận huỷ');
+    expect(dialog()!.querySelector('[data-testid="slot-disabled"]')!.textContent).toBe('false');
+    expect(closeButton()).not.toBeNull();
     expect(api.cancels()).toHaveLength(0);
+  });
+
+  it('ảnh ca A về muộn sau khi tắt "Đột xuất": tấm vẫn khoá tới khi ảnh về, đóng rồi mở ca B thì không còn ảnh nào, bật "Đột xuất" ở ca B vẫn phải tự chọn ảnh', async () => {
+    const api = stub();
+    const r = await open(0);
+    click(emergencySwitch());
+    stubBtn('stub-bat-dau');
+    click(emergencySwitch());
+    expect(closeButton()).toBeNull();
+
+    const late = slot.late!;
+    act(() => late.onChange(['data:image/jpeg;base64,CUA']));
+    expect(closeButton()).toBeNull();
+    act(() => late.onBusyChange?.(false));
+    const close = closeButton();
+    expect(close).not.toBeNull();
+    click(close);
+    await flush();
+    expect(dialog()).toBeNull();
+
+    await openAt(r, 1);
+    click(emergencySwitch());
+    expect(confirmBtn().disabled).toBe(true);
+    click(confirmBtn());
+    await flush();
+    expect(api.cancels()).toHaveLength(0);
+  });
+
+  it('huỷ không khẩn không đính ảnh còn lại trong state sau khi tắt "Đột xuất"', async () => {
+    const api = stub();
+    await open();
+    click(emergencySwitch());
+    stubBtn('stub-co-anh');
+    click(emergencySwitch());
+    click(confirmBtn());
+    await flush();
+    expect(api.cancels()).toHaveLength(1);
+    const body = JSON.parse(api.cancels()[0]!.init!.body as string);
+    expect(body).toMatchObject({ isEmergency: false });
+    expect(body).not.toHaveProperty('evidenceUrl');
   });
 
   it('đang huỷ: ô ảnh nhận disabled để ảnh đổi lúc này không lọt vào lần huỷ đang chạy', async () => {
