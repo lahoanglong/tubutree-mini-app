@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -282,22 +283,51 @@ describe('danh sách đơn — nút Mua lại', () => {
 });
 
 describe('danh sách đơn — "Thử lại" khoá chạm đúp (W78B)', () => {
-  it('chạm đúp "Thử lại" cùng khung hình chỉ tải lại một lần', async () => {
+  // Khối lỗi chỉ hiện khi chưa có đơn nào. Lần đầu lỗi thì query chưa có `data` và `refetch()` thứ hai dùng chung promise của lượt đầu, nên
+  // đếm số lần gọi không phân biệt có khoá hay không (và thẻ lỗi bị thay bằng khung chờ ngay). Trường hợp phân biệt được: đã tải được trang
+  // rỗng rồi lần tải lại lỗi: khối lỗi hiện kèm `data` cũ, `refetch()` thứ hai huỷ lượt đầu và gọi lại API, nút ở nguyên chỗ để báo bận.
+  it('đã tải trang rỗng rồi tải lại lỗi: "Thử lại" chạm đúp cùng khung hình chỉ gọi API thêm một lần, nút báo bận tới khi xong', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const r = render(<OrdersSection />, client);
+    mounted.push(r);
+    await flush(6);
+    const c = r.container;
+    expect(state.calls).toHaveLength(1);
     state.fail = true;
-    const c = await mount();
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['orders'] });
+    });
+    await flush(2);
     expect(c.textContent).toContain('Không tải được danh sách đơn hàng.');
+    const before = state.calls.length;
     let release!: () => void;
     state.fail = false;
     state.orders = [order('TB-9', [item('Mật ong')])];
-    state.gate = new Promise<void>((r) => (release = r));
+    state.gate = new Promise<void>((res) => (release = res));
     const retry = byText(c, 'button', 'Thử lại') as HTMLButtonElement;
     act(() => {
       retry.click();
       retry.click();
     });
     await flush(3);
-    expect(state.calls).toHaveLength(2);
+    expect(state.calls).toHaveLength(before + 1);
+    expect(retry.isConnected).toBe(true);
+    expect(retry.getAttribute('aria-busy')).toBe('true');
+    expect(retry.getAttribute('aria-disabled')).toBe('true');
+    expect(retry.disabled).toBe(false);
     release();
+    await flush(6);
+    expect(c.textContent).toContain('TB-9');
+    expect(state.calls).toHaveLength(before + 1);
+  });
+
+  it('lần đầu lỗi: "Thử lại" tải lại được một lần (thẻ lỗi bị thay bằng khung chờ ngay nên không quan sát được trạng thái bận)', async () => {
+    state.fail = true;
+    const c = await mount();
+    expect(c.textContent).toContain('Không tải được danh sách đơn hàng.');
+    state.fail = false;
+    state.orders = [order('TB-9', [item('Mật ong')])];
+    click(byText(c, 'button', 'Thử lại'));
     await flush(6);
     expect(c.textContent).toContain('TB-9');
     expect(state.calls).toHaveLength(2);

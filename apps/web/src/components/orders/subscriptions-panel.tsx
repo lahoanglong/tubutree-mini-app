@@ -66,7 +66,7 @@ export function SubscriptionsPanel() {
   };
 
   const statusMut = useLockedMutation({
-    mutationFn: ({ id, status }: { id: string; status: SubStatus }) => setSubscriptionStatus(coreHttp, id, status),
+    mutationFn: ({ id, status }: { id: string; status: SubStatus; from: 'card' | 'sheet' }) => setSubscriptionStatus(coreHttp, id, status),
     onMutate: () => setNotice(null),
     onSuccess: () => {
       setCancelTarget(null);
@@ -91,7 +91,7 @@ export function SubscriptionsPanel() {
   const sheetBusy = statusMut.isPending || skipMut.isPending;
   const changeFromSheet = (status: SubStatus) => {
     if (!cancelTarget) return;
-    exclusive(() => statusMut.mutate({ id: cancelTarget, status }));
+    exclusive(() => statusMut.mutate({ id: cancelTarget, status, from: 'sheet' }));
   };
   const actionError = statusMut.isError ? actionErrorText(statusMut.error) : skipMut.isError ? actionErrorText(skipMut.error) : null;
 
@@ -127,11 +127,15 @@ export function SubscriptionsPanel() {
               key={s.id}
               sub={s}
               busy={sheetBusy}
-              toggling={statusMut.isPending && statusMut.variables?.id === s.id && cancelTarget === null}
+              toggling={statusMut.isPending && statusMut.variables?.id === s.id && statusMut.variables.from === 'card'}
               address={s.addressId ? addressById.get(s.addressId) : undefined}
-              onEdit={() => setEditTarget(s.id)}
-              onToggle={() => exclusive(() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE' }))}
+              onEdit={() => {
+                if (acting.current) return;
+                setEditTarget(s.id);
+              }}
+              onToggle={() => exclusive(() => statusMut.mutate({ id: s.id, status: s.status === 'ACTIVE' ? 'PAUSED' : 'ACTIVE', from: 'card' }))}
               onCancel={() => {
+                if (acting.current) return;
                 statusMut.reset();
                 skipMut.reset();
                 setCancelTarget(s.id);
@@ -221,7 +225,7 @@ function SubscriptionCard({
 }: {
   sub: SubscriptionDTO;
   busy: boolean;
-  /** Chính thẻ này đang đổi Tạm dừng/Tiếp tục: nút đó giữ aria-busy thay vì `disabled` để không mất focus. */
+  /** Chính thẻ này đang đổi Tạm dừng/Tiếp tục bằng nút trên thẻ (không tính lệnh gửi từ sheet): nút đó giữ aria-busy thay vì `disabled` để không mất focus. */
   toggling: boolean;
   address?: Parameters<typeof addressText>[0];
   onEdit: () => void;
@@ -256,7 +260,9 @@ function SubscriptionCard({
         {s.status === 'ACTIVE' ? (s.nextRunAt ? `Lần kế: ${formatDate(s.nextRunAt)}` : 'Đang lên lịch') : 'Đang tạm dừng'}
       </div>
       <div className="mt-2 flex flex-wrap gap-2">
-        <button type="button" disabled={busy} onClick={onEdit} className={`${ui.btnSecondary} ${mini.secondary} min-w-max flex-1`}>
+        {/* "Sửa" và "Huỷ" mở sheet và sheet trả focus về đúng nút này khi đóng: lúc đó lệnh vừa gửi từ sheet còn chờ danh sách mới (busy vẫn true),
+            nên khoá bằng aria-disabled (chặn ở onEdit/onCancel) chứ không `disabled`, nếu không focus rơi về body. */}
+        <button type="button" aria-disabled={busy || undefined} onClick={onEdit} className={`${ui.btnSecondary} ${mini.secondary} min-w-max flex-1`}>
           Sửa
         </button>
         <button
@@ -269,7 +275,7 @@ function SubscriptionCard({
         >
           {toggling ? 'Đang xử lý…' : s.status === 'ACTIVE' ? 'Tạm dừng' : 'Tiếp tục'}
         </button>
-        <button type="button" disabled={busy} onClick={onCancel} className={miniGhostDanger}>
+        <button type="button" aria-disabled={busy || undefined} onClick={onCancel} className={miniGhostDanger}>
           Huỷ
         </button>
       </div>

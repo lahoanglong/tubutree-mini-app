@@ -738,15 +738,32 @@ describe('hub /tai-khoan — khoá chạm đúp (W78B)', () => {
     expect(c.textContent).not.toContain('Không tải được số đơn.');
   });
 
-  it('"Thử lại" hạng và "Thử lại" số đơn chung một khoá: bấm cả hai cùng khung hình chỉ tải hạng một lần, số đơn một lần', async () => {
-    const boom = () => {
+  // Hai nút Thử lại cùng gọi /me/summary. Chỉ khi số đơn cũ đã có (data) mới phân biệt được khoá chung với hai khoá riêng: không có data thì hai
+  // `refetch()` tự dùng chung promise, còn có data thì lượt thứ hai huỷ lượt đầu và gọi API lần nữa.
+  it('"Thử lại" hạng và "Thử lại" số đơn cùng khung hình khi số đơn đã có số cũ: /me/summary chỉ gọi thêm một lần (khoá chung)', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    mocks.routes['/me/loyalty'] = () => {
       throw new Error('offline');
     };
-    mocks.routes['/me/loyalty'] = boom;
-    mocks.summarySource.orderCounts = boom;
-    const c = await mount();
-    const buttons = retryButtons(c);
+    const r = render(<AccountPage />, client);
+    mounted.push(r);
+    await flush(8);
+    mocks.summarySource.orderCounts = () => {
+      throw new Error('boom');
+    };
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ME_SUMMARY_KEY });
+    });
+    await flush(2);
+    const buttons = retryButtons(r.container);
     expect(buttons).toHaveLength(2);
+    expect(r.container.textContent).toContain('Chưa tải được hạng và điểm');
+    expect(r.container.textContent).toContain('Không tải được số đơn.');
+    const g = gate();
+    mocks.routes['/me/summary'] = async () => {
+      await g.held;
+      return { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 0, activeSubscriptions: 0 };
+    };
     const loyaltyBefore = times('/me/loyalty');
     const summaryBefore = times('/me/summary');
     act(() => {
@@ -756,6 +773,8 @@ describe('hub /tai-khoan — khoá chạm đúp (W78B)', () => {
     await flush(2);
     expect(times('/me/loyalty') - loyaltyBefore).toBe(1);
     expect(times('/me/summary') - summaryBefore).toBe(1);
+    g.release();
+    await flush(6);
   });
 
   // Có số cũ rồi mà lần tải lại nền lỗi: khối lỗi hiện kèm dữ liệu cũ, nên `refetch()` thứ hai huỷ lượt đầu và gọi API lần nữa; chỉ khoá mới giữ một lượt.

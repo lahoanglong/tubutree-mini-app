@@ -151,7 +151,7 @@ export function OrdersSection() {
       ) : ordersQ.isError && orders.length === 0 ? (
         <div className={`mt-3 p-6 text-center ${ui.card}`}>
           <p className={ui.error}>Không tải được danh sách đơn hàng.</p>
-          <button type="button" onClick={retry.press} className={`${ui.btnText} mt-1 text-forest-700`}>
+          <button type="button" onClick={retry.press} aria-busy={retry.busy || undefined} aria-disabled={retry.busy || undefined} className={`${ui.btnText} mt-1 text-forest-700`}>
             Thử lại
           </button>
         </div>

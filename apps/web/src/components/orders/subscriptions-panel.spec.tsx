@@ -398,7 +398,9 @@ describe('SubscriptionsPanel: khoá chéo statusMut ↔ skipMut, chặn đóng s
     expect(skip.disabled).toBe(false);
     expect(btn('Tạm dừng', sheetEl()!).disabled).toBe(true);
     expect(btn('Vẫn huỷ', sheetEl()!).disabled).toBe(true);
-    expect(cardBtns(cards(c)[0]!).map((b) => b.disabled)).toEqual([true, true, true]);
+    // "Sửa"/"Huỷ" của thẻ khoá bằng aria-disabled (đang là nút mở sheet, giữ focus khi sheet đóng); "Tạm dừng" của thẻ khoá thật.
+    expect(cardBtns(cards(c)[0]!).map((b) => b.disabled)).toEqual([false, true, false]);
+    expect(cardBtns(cards(c)[0]!).map((b) => aria(b, 'aria-disabled'))).toEqual(['true', null, 'true']);
 
     // bấm lại / bấm nút kia: không phát sinh lời gọi API thứ hai
     click(skip);
@@ -476,7 +478,8 @@ describe('SubscriptionsPanel: khoá chéo statusMut ↔ skipMut, chặn đóng s
     expect(btn('Bỏ qua kỳ này', sheetEl()!).disabled).toBe(true);
     expect(btn('Vẫn huỷ', sheetEl()!).disabled).toBe(true);
     const [edit, toggle, cancel] = cardBtns(cards(c)[0]!);
-    expect([edit!.disabled, toggle!.disabled, cancel!.disabled]).toEqual([true, true, true]);
+    expect([edit!.disabled, toggle!.disabled, cancel!.disabled]).toEqual([false, true, false]);
+    expect([aria(edit!, 'aria-disabled'), aria(cancel!, 'aria-disabled')]).toEqual(['true', 'true']);
     // sheet đang mở nên thẻ nền không giả vờ là nơi đang xoay
     expect(toggle!.textContent).toBe('Tạm dừng');
     expect(toggle!.hasAttribute('aria-busy')).toBe(false);
@@ -540,7 +543,8 @@ describe('SubscriptionsPanel: khoá chéo statusMut ↔ skipMut, chặn đóng s
     expect(second[1]!.textContent).toBe('Tạm dừng');
     expect(second[1]!.disabled).toBe(true);
     expect(second[1]!.hasAttribute('aria-busy')).toBe(false);
-    expect([first[0]!.disabled, first[2]!.disabled, second[0]!.disabled, second[2]!.disabled]).toEqual([true, true, true, true]);
+    expect([first[0]!.disabled, first[2]!.disabled, second[0]!.disabled, second[2]!.disabled]).toEqual([false, false, false, false]);
+    expect([first[0]!, first[2]!, second[0]!, second[2]!].map((b) => aria(b, 'aria-disabled'))).toEqual(['true', 'true', 'true', 'true']);
     expect(sheetEl()).toBeNull();
 
     click(first[1]!);
@@ -553,6 +557,7 @@ describe('SubscriptionsPanel: khoá chéo statusMut ↔ skipMut, chặn đóng s
     await flush(8);
     const [after] = cards(c).map(cardBtns) as [HTMLButtonElement[]];
     expect(after.map((b) => b.disabled)).toEqual([false, false, false]);
+    expect(after.map((b) => b.hasAttribute('aria-disabled'))).toEqual([false, false, false]);
     expect(after[1]!.textContent).toBe('Tạm dừng');
     expect(after[1]!.hasAttribute('aria-busy')).toBe(false);
   });
@@ -566,7 +571,8 @@ describe('SubscriptionsPanel: khoá chéo statusMut ↔ skipMut, chặn đóng s
     await flush(3);
     expect(cardBtns(cards(c)[0]!)[1]!.textContent).toBe('Đang xử lý…');
     expect(aria(cardBtns(cards(c)[0]!)[1]!, 'aria-busy')).toBe('true');
-    expect(cardBtns(cards(c)[0]!).map((b) => b.disabled)).toEqual([true, false, true]);
+    expect(cardBtns(cards(c)[0]!).map((b) => b.disabled)).toEqual([false, false, false]);
+    expect(cardBtns(cards(c)[0]!).map((b) => aria(b, 'aria-disabled'))).toEqual(['true', 'true', 'true']);
 
     release();
     await flush(8);
@@ -836,6 +842,7 @@ describe('SubscriptionsPanel: khoá đồng bộ chạm đúp, một việc mỗ
   const cardBtns = (li: Element) => Array.from(li.querySelectorAll('button')) as HTMLButtonElement[];
   const inSheet = (label: string) => btn(label, sheetEl()!);
   const listCalls = () => sent('GET', '/me/subscriptions');
+  const aria = (b: HTMLElement, name: string) => b.getAttribute(name);
   // Hai cú bấm trong cùng một `act`: React chưa kịp vẽ lại giữa chúng nên `isPending` còn cũ, chỉ ref đồng bộ mới chặn được.
   const together = (...els: HTMLElement[]) =>
     act(() => {
@@ -1008,6 +1015,46 @@ describe('SubscriptionsPanel: khoá đồng bộ chạm đúp, một việc mỗ
     expect(sent('POST', '/me/subscriptions/s1/status')).toHaveLength(1);
     expect(c.textContent).not.toContain('Đã bỏ qua kỳ này');
     release();
+    await flush(8);
+  });
+
+  it('lệnh gửi từ sheet xong mà danh sách mới còn treo: sheet đóng, focus về đúng nút "Huỷ" của thẻ (không rơi về body), thẻ không giả vờ đang xoay', async () => {
+    const c = await mount();
+    const [edit, toggle, cancel] = cardBtns(cards(c)[0]!) as [HTMLButtonElement, HTMLButtonElement, HTMLButtonElement];
+    cancel.focus();
+    expect(document.activeElement).toBe(cancel);
+    click(cancel);
+    await flush(6);
+    expect(sheetEl()?.textContent).toContain(RETENTION_TITLE);
+    const releaseList = hold(LIST);
+    click(inSheet('Tạm dừng'));
+    await flush(8);
+    expect(sent('POST', '/me/subscriptions/s1/status')).toHaveLength(1);
+    expect(sheetEl()).toBeNull();
+    // Danh sách mới chưa về nên lệnh còn isPending và các nút thẻ còn khoá, nhưng bằng aria-disabled để nút mở sheet nhận lại được focus.
+    expect(document.activeElement).toBe(cancel);
+    expect(cancel.disabled).toBe(false);
+    expect([aria(edit, 'aria-disabled'), aria(cancel, 'aria-disabled')]).toEqual(['true', 'true']);
+    expect(toggle.textContent).toBe('Tạm dừng');
+    expect(toggle.hasAttribute('aria-busy')).toBe(false);
+
+    releaseList();
+    await flush(8);
+    expect(cancel.hasAttribute('aria-disabled')).toBe(false);
+    expect(toggle.hasAttribute('aria-disabled')).toBe(false);
+  });
+
+  it('đang có lệnh chờ danh sách mới: bấm "Sửa" hoặc "Huỷ" trên thẻ không mở sheet nào (aria-disabled không tự chặn, phải có guard)', async () => {
+    const c = await mount();
+    const releaseList = hold(LIST);
+    click(cardBtns(cards(c)[0]!)[1]!);
+    await flush(3);
+    const [edit, , cancel] = cardBtns(cards(c)[0]!);
+    click(edit!);
+    click(cancel!);
+    await flush(4);
+    expect(sheetEl()).toBeNull();
+    releaseList();
     await flush(8);
   });
 
