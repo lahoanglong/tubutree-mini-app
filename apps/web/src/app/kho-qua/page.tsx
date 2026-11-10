@@ -32,6 +32,7 @@ import { useIdempotencyKey } from '@/lib/use-idempotency-key';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
+import { settleWithin } from '@/lib/settle-within';
 import { pointsRulesNote } from '@/lib/loyalty-copy';
 import { useCouponUse } from '@/lib/use-coupon-use';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -99,15 +100,16 @@ function RedeemConfirm({ reward, catalog, idemKey, posting, onPosting, onRedeeme
         onPosting(false);
       }
     },
+    // Điểm đã trừ nên kết quả phải hiện ngay cả khi làm mới dữ liệu treo: chờ có hạn, không chờ vô hạn.
     onSuccess: async (outcome) => {
       onRedeemed();
-      await Promise.all(WASTE_REDEEM_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
+      await settleWithin(Promise.all(WASTE_REDEEM_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey }))));
       onDone(outcome);
     },
-    // Khoá NÚT trong khung này (khung đóng được ngay khi POST xong): trả Promise làm mới để khung còn mở thì nút không gửi lại trên danh sách cũ.
+    // Khoá NÚT trong khung này (khung đóng được ngay khi POST xong): trả Promise làm mới để khung còn mở thì nút không gửi lại trên danh sách cũ, có hạn để mạng chậm không giữ nút mãi.
     onError: (e) => {
       setError(actErrText(e));
-      return qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards });
+      return settleWithin(qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards }));
     },
     onSettled: () => {
       busyRef.current = false;

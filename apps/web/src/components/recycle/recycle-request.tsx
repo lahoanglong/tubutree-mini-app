@@ -15,6 +15,7 @@ import { openingStatus, todayHoursText } from '@tubutree/app-core/waste-hours';
 import { friendlyActionError as actErrText, friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
+import { settleWithin } from '@/lib/settle-within';
 import { formatDate } from '@/lib/format-date';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { ui } from '@/lib/guest-ui';
@@ -58,9 +59,10 @@ async function copyText(text: string): Promise<boolean> {
   }
 }
 
+/** Chờ dữ liệu mới về sau một lệnh ghi đã xong, có hạn: mạng chậm không được giữ sheet/nút lâu hơn lệnh vừa thành công. */
 function useRefreshAfterWrite() {
   const qc = useQueryClient();
-  return () => Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
+  return () => settleWithin(Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey }))));
 }
 
 function TrackingForm({

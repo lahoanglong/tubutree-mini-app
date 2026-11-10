@@ -11,6 +11,7 @@ import { wasteMeQuery, wasteRequestQuery } from '@tubutree/app-core/queries/wast
 import { friendlyActionError as actErrText, friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
+import { settleWithin } from '@/lib/settle-within';
 import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
@@ -125,7 +126,7 @@ export function RecycleEdit({ id }: { id: string }) {
   const save = useMutation({
     mutationFn: () => editWasteRequest(coreHttp, id, { lines: lineInputs, ...(isDropOff && pointId ? { pointId } : {}) }),
     onSuccess: async () => {
-      await Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
+      await settleWithin(Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey }))));
       router.replace(path);
     },
     onError: () => {

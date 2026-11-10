@@ -33,6 +33,7 @@ import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree
 import { friendlyActionError as actErrText, friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
+import { settleWithin } from '@/lib/settle-within';
 import { useDebounced } from '@/lib/use-debounced';
 import { useIdempotencyKey } from '@/lib/use-idempotency-key';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -319,7 +320,7 @@ export function RecycleNew() {
       submitted.current = true;
       clearWizardStorage();
       markSubmitted();
-      await Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));
+      await settleWithin(Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey }))));
       router.replace(`/doi-rac/yeu-cau/${r.id}`);
     },
     onError: () => {
