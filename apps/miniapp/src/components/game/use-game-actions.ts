@@ -19,7 +19,7 @@ import {
   type HarvestReward,
 } from '../../services/game-api';
 import { haptic } from '../../utils/haptic';
-import { getErrorMessage } from '../../services/api';
+import { getErrorMessage, isStaleStateError } from '../../services/api';
 import { isHttpError } from '../../services/http';
 import { gameMoreCopy, isStaleQuizMessage } from '@tubutree/app-core/game-more-copy';
 import { vi } from '../../i18n/vi';
@@ -95,6 +95,14 @@ export function useGameActions({
     if (isHttpError(e) && e.code === 'ECONNABORTED') void refresh();
   };
 
+  // Máy chủ từ chối một việc một-lần bằng 400/404/409 (đã nhận, lô đã đổi, không còn đủ điều kiện): thẻ đang hiện đã cũ nên tải lại
+  // rồi mới nhả khoá. Nhả ngay thì nút còn sáng trên dữ liệu cũ và chạm lại nhận đúng lời từ chối đó. Mất mạng, quá hạn, 401 và 5xx
+  // không nói gì về trạng thái thật nên không tải lại ở đây.
+  const onRejectedOnce = (e: unknown) => {
+    onError(e);
+    return isStaleStateError(e) ? refreshThenRelease() : undefined;
+  };
+
   const checkInM = useLockedMutation({
     mutationFn: checkIn,
     onSuccess: (r) => {
@@ -115,7 +123,7 @@ export function useGameActions({
       openSnackbar({ text: `Hứng được +${formatDrops(r.seedsEarned)} từ giọt sương sáng 💦`, type: 'success' });
       return refreshThenRelease();
     },
-    onError,
+    onError: onRejectedOnce,
   });
   const freezeM = useLockedMutation({
     mutationFn: buyStreakFreeze,
@@ -132,7 +140,7 @@ export function useGameActions({
       openSnackbar({ text: vi.game.streakRepair.ok, type: 'success' });
       return settleWithin(queryClient.invalidateQueries({ queryKey: ['game', 'profile'] }));
     },
-    onError,
+    onError: onRejectedOnce,
   });
   const handleSpin = async () => {
     try {
@@ -159,7 +167,9 @@ export function useGameActions({
   const waterM = useLockedMutation({
     mutationFn: (drops: number) => waterTree(drops),
     onSuccess: (r, drops) => afterWatering(`Đã tưới −${formatDrops(drops)}`, r),
-    onError,
+    // Tưới 0💧 là nút Thu hoạch: cây đã thu hoạch ở máy khác thì nút này chỉ đúng trên hồ sơ cũ, nên bị từ chối phải tải lại.
+    // Tưới thường bị từ chối (thiếu nước…) thì chỉ báo, vì lượt sau là một quyết định mới của khách.
+    onError: (e, drops) => (drops === 0 ? onRejectedOnce(e) : onError(e)),
   });
   // Khoá chống chạm đúp của lượt góp nằm ở TreeActions (cần biết kết quả để quyết định đóng hộp hay giữ key), nên
   // đây dùng useMutation thường và caller gọi mutateAsync.
@@ -178,12 +188,12 @@ export function useGameActions({
       openSnackbar({ text: 'Đã mở lô đất mới 🪴', type: 'success' });
       return refreshThenRelease();
     },
-    onError,
+    onError: onRejectedOnce,
   });
   const waterPlotM = useLockedMutation({
     mutationFn: (plotId: string) => waterPlot(plotId, 20),
     onSuccess: (r) => afterWatering(`Đã tưới lô −${formatDrops(20)}`, r),
-    onError,
+    onError: onRejectedOnce,
   }, (plotId) => plotId);
   const claimPassM = useLockedMutation({
     mutationFn: ({ tier, track }: { tier: number; track: 'free' | 'premium' }) => claimSeasonPass(tier, track),
@@ -199,7 +209,7 @@ export function useGameActions({
         ]),
       );
     },
-    onError,
+    onError: onRejectedOnce,
   }, ({ tier, track }) => `${tier}:${track}`);
   const claimMissionM = useLockedMutation({
     mutationFn: (code: string) => claimMission(code),
@@ -215,7 +225,7 @@ export function useGameActions({
         ]),
       );
     },
-    onError,
+    onError: onRejectedOnce,
   }, (code) => code);
   const answerM = useLockedMutation({
     mutationFn: ({ id, choice }: { id: string; choice: number }) => answerQuiz(id, choice),
