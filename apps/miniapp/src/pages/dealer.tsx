@@ -44,6 +44,7 @@ import { formatDate, formatRatePct, formatVnd } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
+import { useUploadBusy } from '../hooks/use-upload-busy';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
 import { newIdempotencyKey } from '../utils/idempotency';
@@ -139,6 +140,8 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
     cccdFrontUrl: '',
     cccdBackUrl: '',
   });
+  // Gửi hồ sơ lúc ảnh CCCD còn đang lên (nhất là chọn lại ảnh mờ) sẽ gửi đi ảnh cũ để duyệt.
+  const { busy: imagesBusy, onBusyChange } = useUploadBusy();
 
   const mut = useLockedMutation({
     mutationFn: () => applyDealer(form),
@@ -237,22 +240,29 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
             label="Ảnh CCCD mặt trước *"
             value={form.cccdFrontUrl}
             onChange={(url) => setForm((f) => ({ ...f, cccdFrontUrl: url }))}
+            onBusyChange={onBusyChange}
+            disabled={mut.isPending}
           />
           <ImageUpload
             label="Ảnh CCCD mặt sau *"
             value={form.cccdBackUrl}
             onChange={(url) => setForm((f) => ({ ...f, cccdBackUrl: url }))}
+            onBusyChange={onBusyChange}
+            disabled={mut.isPending}
           />
         </div>
 
         <Button
           fullWidth
           loading={mut.isPending}
-          disabled={!valid}
-          onPress={() => mut.mutate()}
-          style={{ marginTop: 20, ...inkButton(!valid) }}
+          disabled={!valid || imagesBusy}
+          onPress={() => {
+            if (imagesBusy) return;
+            mut.mutate();
+          }}
+          style={{ marginTop: 20, ...inkButton(!valid || imagesBusy) }}
         >
-          Gửi hồ sơ đăng ký
+          {imagesBusy ? vi.common.imagesUploading : 'Gửi hồ sơ đăng ký'}
         </Button>
       </div>
     </DealerShell>

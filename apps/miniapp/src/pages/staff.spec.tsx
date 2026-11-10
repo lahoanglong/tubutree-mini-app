@@ -2,6 +2,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { vi as t } from '../i18n/vi';
 
 const mocks = vi.hoisted(() => ({
   getAttendanceStatus: vi.fn(),
@@ -19,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   navigate: vi.fn(),
   role: 'STAFF' as string,
+  // Ô ảnh giả ghi lại props lần vẽ gần nhất: test tự báo "đang tải"/"tải xong" như ô thật.
+  picker: { onChange: (_url: string): void => undefined, onBusyChange: (_busy: boolean): void => undefined, disabled: false },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -49,11 +52,14 @@ vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { user: { role: string } }) => unknown) => sel({ user: { role: mocks.role } }),
 }));
 vi.mock('../components/image-upload', () => ({
-  ImageUpload: ({ label, onChange }: { label: string; onChange: (url: string) => void }) => (
-    <button type="button" onClick={() => onChange('https://img.test/e.png')}>
-      {label}
-    </button>
-  ),
+  ImageUpload: ({ label, onChange, onBusyChange, disabled }: { label: string; onChange: (url: string) => void; onBusyChange?: (busy: boolean) => void; disabled?: boolean }) => {
+    mocks.picker = { onChange, onBusyChange: onBusyChange ?? (() => undefined), disabled: Boolean(disabled) };
+    return (
+      <button type="button" disabled={disabled} onClick={() => onChange('https://img.test/e.png')}>
+        {label}
+      </button>
+    );
+  },
 }));
 
 import StaffPage from './staff';
@@ -1169,6 +1175,64 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
         await waitFor(() => expect(mocks.cancelShift).toHaveBeenCalledTimes(2));
         await waitFor(() => expect(snackbarWith('Đã huỷ ca (không phạt).')).toBe(1));
       });
+    });
+  });
+  describe('ảnh chứng cứ huỷ ca còn đang lên (W90A)', () => {
+    const openEmergencyCancel = async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: /^Huỷ ca / }));
+      fireEvent.change(screen.getByPlaceholderText('Lý do huỷ'), { target: { value: 'Ốm' } });
+      fireEvent.click(screen.getByText('Đột xuất (có chứng cứ)'));
+      fireEvent.click(await screen.findByRole('button', { name: 'Ảnh chứng cứ' }));
+    };
+
+    it('đổi ảnh khác: lúc ảnh mới còn lên, nút khoá + đổi nhãn, bấm không huỷ ca; xong thì gửi ảnh MỚI', async () => {
+      await openEmergencyCancel();
+      expect(screen.getByRole('button', { name: 'Xác nhận huỷ' })).toBeEnabled();
+
+      act(() => mocks.picker.onBusyChange(true));
+      const waiting = screen.getByRole('button', { name: t.common.imagesUploading });
+      expect(waiting).toBeDisabled();
+      fireEvent.click(waiting);
+      await new Promise((r) => setTimeout(r, 30));
+      expect(mocks.cancelShift).not.toHaveBeenCalled();
+
+      act(() => {
+        mocks.picker.onChange('https://img.test/moi.png');
+        mocks.picker.onBusyChange(false);
+      });
+      const confirm = await screen.findByRole('button', { name: 'Xác nhận huỷ' });
+      expect(confirm).toBeEnabled();
+      fireEvent.click(confirm);
+      await waitFor(() => expect(mocks.cancelShift).toHaveBeenCalledTimes(1));
+      expect(mocks.cancelShift).toHaveBeenCalledWith('sa', { reason: 'Ốm', isEmergency: true, evidenceUrl: 'https://img.test/moi.png' });
+    });
+
+    it('tắt "Đột xuất" giữa lúc ảnh còn lên: ô ảnh biến mất nên nút không bị giữ vì ảnh không ai chờ; bật lại thì chờ tiếp tới khi lượt đó xong', async () => {
+      await openEmergencyCancel();
+      act(() => mocks.picker.onBusyChange(true));
+      expect(screen.getByRole('button', { name: t.common.imagesUploading })).toBeDisabled();
+
+      fireEvent.click(screen.getByText('Đột xuất (có chứng cứ)'));
+      expect(screen.queryByRole('button', { name: 'Ảnh chứng cứ' })).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Xác nhận huỷ' })).toBeEnabled();
+
+      fireEvent.click(screen.getByText('Đột xuất (có chứng cứ)'));
+      expect(screen.getByRole('button', { name: t.common.imagesUploading })).toBeDisabled();
+      act(() => mocks.picker.onBusyChange(false));
+      expect(await screen.findByRole('button', { name: 'Xác nhận huỷ' })).toBeEnabled();
+    });
+
+    it('đang huỷ ca thì ô ảnh khoá', async () => {
+      let release!: (v: unknown) => void;
+      mocks.cancelShift.mockReturnValueOnce(new Promise((r) => (release = r)));
+      await openEmergencyCancel();
+      expect(screen.getByRole('button', { name: 'Ảnh chứng cứ' })).toBeEnabled();
+      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }));
+      await waitFor(() => expect(mocks.cancelShift).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Ảnh chứng cứ' })).toBeDisabled());
+      await act(async () => release({ cancelled: true, penalty: false }));
+      await waitFor(() => expect(screen.queryByText('Huỷ ca đã duyệt')).not.toBeInTheDocument());
     });
   });
 });

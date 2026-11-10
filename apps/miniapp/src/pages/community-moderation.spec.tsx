@@ -2,6 +2,7 @@ import { act, render, screen, fireEvent, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { vi as t } from '../i18n/vi';
 import type { AdminPendingPost, AdminReport, AdminCommunityEvent, EventParticipant } from '../services/feed-api';
 
 const mocks = vi.hoisted(() => ({
@@ -20,6 +21,8 @@ const mocks = vi.hoisted(() => ({
   closeEvent: vi.fn(),
   pickEventWinner: vi.fn(),
   auth: { role: 'ADMIN' as string | undefined },
+  // Ô ảnh giả ghi lại props lần vẽ gần nhất: test tự báo "đang tải"/"tải xong" như ô thật.
+  picker: { onChange: (_url: string): void => undefined, onBusyChange: (_busy: boolean): void => undefined, disabled: false },
   config: { isLoaded: true, loyalty: { vndPerPoint: 10000, vndPerPointRedeem: 1000 }, community: { eventRewardMaxPoints: 1000 } } as Record<string, unknown>,
 }));
 
@@ -58,11 +61,14 @@ vi.mock('../store/auth', () => ({
 }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.config }));
 vi.mock('../components/image-upload', () => ({
-  ImageUpload: ({ label, onChange }: { label?: string; onChange: (url: string) => void }) => (
-    <button type="button" onClick={() => onChange('https://img.test/cover.jpg')}>
-      {label}
-    </button>
-  ),
+  ImageUpload: ({ label, onChange, onBusyChange, disabled }: { label?: string; onChange: (url: string) => void; onBusyChange?: (busy: boolean) => void; disabled?: boolean }) => {
+    mocks.picker = { onChange, onBusyChange: onBusyChange ?? (() => undefined), disabled: Boolean(disabled) };
+    return (
+      <button type="button" disabled={disabled} onClick={() => onChange('https://img.test/cover.jpg')}>
+        {label}
+      </button>
+    );
+  },
 }));
 
 import CommunityModerationPage from './community-moderation';
@@ -949,5 +955,52 @@ describe('CommunityModerationPage: khoá chạm đúp, khoá chéo cùng một �
       fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
       await waitFor(() => expect(mocks.closeEvent).toHaveBeenCalledWith('e1'));
     });
+  });
+});
+
+describe('CommunityModerationPage: ảnh bìa sự kiện còn đang lên thì "Tạo sự kiện" chờ (W90A)', () => {
+  const openCreateForm = async () => {
+    renderPage();
+    await screen.findByText('Tiêu đề a');
+    goTab('Sự kiện');
+    await screen.findByText('Sự kiện e1');
+    const dates = Array.from(document.querySelectorAll<HTMLInputElement>('input[type="datetime-local"]'));
+    fireEvent.change(screen.getByPlaceholderText('Tên sự kiện'), { target: { value: 'Thử thách xanh' } });
+    fireEvent.change(dates[0]!, { target: { value: '2026-10-12T09:00' } });
+    fireEvent.change(dates[1]!, { target: { value: '2026-10-20T21:00' } });
+  };
+
+  it('đang tải ảnh bìa: nút khoá + đổi nhãn, bấm không tạo sự kiện; tải xong thì tạo kèm bìa vừa tải', async () => {
+    await openCreateForm();
+    expect(screen.getByRole('button', { name: 'Tạo sự kiện' })).toBeEnabled();
+
+    act(() => mocks.picker.onBusyChange(true));
+    const waiting = screen.getByRole('button', { name: t.common.imagesUploading });
+    expect(waiting).toBeDisabled();
+    fireEvent.click(waiting);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.createEvent).not.toHaveBeenCalled();
+
+    act(() => {
+      mocks.picker.onChange('https://img.test/moi.jpg');
+      mocks.picker.onBusyChange(false);
+    });
+    const create = await screen.findByRole('button', { name: 'Tạo sự kiện' });
+    expect(create).toBeEnabled();
+    fireEvent.click(create);
+    await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1));
+    expect(mocks.createEvent).toHaveBeenCalledWith(expect.objectContaining({ coverUrl: 'https://img.test/moi.jpg' }));
+  });
+
+  it('đang tạo thì ô ảnh bìa khoá: ảnh đổi lúc này không rơi sang biểu mẫu trống sau khi tạo xong', async () => {
+    let release!: (v: unknown) => void;
+    mocks.createEvent.mockReturnValueOnce(new Promise((r) => (release = r)));
+    await openCreateForm();
+    expect(screen.getByRole('button', { name: 'Ảnh bìa sự kiện' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Tạo sự kiện' }));
+    await waitFor(() => expect(mocks.createEvent).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ảnh bìa sự kiện' })).toBeDisabled());
+    await act(async () => release({ id: 'new' }));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Ảnh bìa sự kiện' })).toBeEnabled());
   });
 });

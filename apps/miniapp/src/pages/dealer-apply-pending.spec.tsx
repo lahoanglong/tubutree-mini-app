@@ -2,11 +2,14 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { vi as t } from '../i18n/vi';
 
 const mocks = vi.hoisted(() => ({
   getDealerMe: vi.fn(),
   applyDealer: vi.fn(),
   openSnackbar: vi.fn(),
+  // Ô ảnh giả ghi lại props lần vẽ gần nhất theo nhãn: test tự báo "đang tải"/"tải xong" như ô thật.
+  pickers: {} as Record<string, { onChange: (url: string) => void; onBusyChange: (busy: boolean) => void; disabled: boolean }>,
 }));
 
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -23,9 +26,12 @@ vi.mock('../services/dealer-api', async (importOriginal) => ({
 }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, dealer: { maxDiscountPct: 0.45, reviewHours: 24 } }) }));
 vi.mock('../components/image-upload', () => ({
-  ImageUpload: ({ label, onChange }: { label: string; onChange: (u: string) => void }) => (
-    <button type="button" onClick={() => onChange('data:image/jpeg;base64,AA')}>{label}</button>
-  ),
+  ImageUpload: ({ label, onChange, onBusyChange, disabled }: { label: string; onChange: (u: string) => void; onBusyChange?: (busy: boolean) => void; disabled?: boolean }) => {
+    mocks.pickers[label] = { onChange, onBusyChange: onBusyChange ?? (() => undefined), disabled: Boolean(disabled) };
+    return (
+      <button type="button" disabled={disabled} onClick={() => onChange('data:image/jpeg;base64,AA')}>{label}</button>
+    );
+  },
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -128,5 +134,55 @@ describe('DealerPage gửi hồ sơ đăng ký khoá chạm đúp trong cùng m�
     fireEvent.click(submit);
     await waitFor(() => expect(mocks.applyDealer).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(count(SENT)).toBe(1));
+  });
+});
+
+describe('DealerPage: ảnh CCCD còn đang lên thì "Gửi hồ sơ đăng ký" chờ (W90A)', () => {
+  const FRONT = 'Ảnh CCCD mặt trước *';
+  const BACK = 'Ảnh CCCD mặt sau *';
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.applyDealer.mockReset().mockResolvedValue({ ok: true });
+    mocks.getDealerMe.mockReset().mockResolvedValue(NONE);
+  });
+
+  it('chọn lại cả hai ảnh: còn một ô đang tải là nút vẫn khoá, bấm không gửi hồ sơ; cả hai xong mới gửi, kèm ảnh MỚI', async () => {
+    renderPage();
+    await fillForm();
+    act(() => mocks.pickers[FRONT]!.onBusyChange(true));
+    act(() => mocks.pickers[BACK]!.onBusyChange(true));
+    const waiting = screen.getByRole('button', { name: t.common.imagesUploading });
+    expect(waiting).toBeDisabled();
+    fireEvent.click(waiting);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.applyDealer).not.toHaveBeenCalled();
+
+    act(() => {
+      mocks.pickers[FRONT]!.onChange('data:image/jpeg;base64,MOI');
+      mocks.pickers[FRONT]!.onBusyChange(false);
+    });
+    expect(screen.getByRole('button', { name: t.common.imagesUploading })).toBeDisabled();
+
+    act(() => mocks.pickers[BACK]!.onBusyChange(false));
+    const submit = await screen.findByRole('button', { name: 'Gửi hồ sơ đăng ký' });
+    expect(submit).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.applyDealer).toHaveBeenCalledTimes(1));
+    expect(mocks.applyDealer.mock.calls[0]![0]).toMatchObject({ cccdFrontUrl: 'data:image/jpeg;base64,MOI', cccdBackUrl: 'data:image/jpeg;base64,AA' });
+  });
+
+  it('đang gửi hồ sơ thì cả hai ô ảnh khoá', async () => {
+    let release!: (v: unknown) => void;
+    mocks.applyDealer.mockReturnValueOnce(new Promise((r) => (release = r)));
+    renderPage();
+    const submit = await fillForm();
+    expect(screen.getByRole('button', { name: FRONT })).toBeEnabled();
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.applyDealer).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByRole('button', { name: FRONT })).toBeDisabled());
+    expect(screen.getByRole('button', { name: BACK })).toBeDisabled();
+    await act(async () => release({ ok: true }));
+    await waitFor(() => expect(screen.getByRole('button', { name: FRONT })).toBeEnabled());
   });
 });

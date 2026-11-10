@@ -3,11 +3,14 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { vi as t } from '../i18n/vi';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), openSnackbar: vi.fn(), chatOn: false, openOAChat: vi.fn(),
   getOwnedBrand: vi.fn(), getOwnedBrandSales: vi.fn(),
   updateOwnedBrand: vi.fn(), createOwnedPromotion: vi.fn(), updateOwnedPromotion: vi.fn(), deleteOwnedPromotion: vi.fn(),
+  // Ô ảnh giả ghi lại props lần vẽ gần nhất theo nhãn: test tự báo "đang tải"/"tải xong" như ô thật.
+  pickers: {} as Record<string, { onChange: (url: string) => void; onBusyChange: (busy: boolean) => void; disabled: boolean }>,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -26,7 +29,12 @@ vi.mock('../services/brand-owner-api', () => ({
   updateOwnedPromotion: mocks.updateOwnedPromotion,
   deleteOwnedPromotion: mocks.deleteOwnedPromotion,
 }));
-vi.mock('../components/image-upload', () => ({ ImageUpload: ({ label }: { label: string }) => <div>{label}</div> }));
+vi.mock('../components/image-upload', () => ({
+  ImageUpload: ({ label, onChange, onBusyChange, disabled }: { label: string; onChange: (url: string) => void; onBusyChange?: (busy: boolean) => void; disabled?: boolean }) => {
+    mocks.pickers[label] = { onChange, onBusyChange: onBusyChange ?? (() => undefined), disabled: Boolean(disabled) };
+    return <div data-disabled={disabled ? 'true' : undefined}>{label}</div>;
+  },
+}));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, chat: { enabled: mocks.chatOn } }) }));
 vi.mock('../services/zmp-bridge', () => ({ hasOA: true, openOAChat: mocks.openOAChat }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -527,5 +535,68 @@ describe('BrandOwnerPage: "Liên hệ Tubu" và "Thử lại" khoá chạm đúp
     await act(async () => d.resolve(SALES));
     expect(await screen.findByText('4.560.000đ')).toBeInTheDocument();
     expect(mocks.getOwnedBrandSales).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('BrandOwnerPage: ảnh logo/bìa còn đang lên thì "Lưu thông tin" chờ (W90A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getOwnedBrand.mockResolvedValue(BRAND);
+    mocks.updateOwnedBrand.mockResolvedValue({});
+  });
+
+  it('logo và ảnh bìa tải chồng nhau: còn một ô chưa xong là nút vẫn khoá, bấm không lưu; cả hai xong mới lưu, kèm ảnh MỚI', async () => {
+    renderPage();
+    await screen.findByText('Thông tin thương hiệu');
+    act(() => mocks.pickers['Logo']!.onBusyChange(true));
+    act(() => mocks.pickers['Ảnh bìa']!.onBusyChange(true));
+    const waiting = screen.getByRole('button', { name: t.common.imagesUploading });
+    expect(waiting).toBeDisabled();
+    fireEvent.click(waiting);
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.updateOwnedBrand).not.toHaveBeenCalled();
+
+    act(() => {
+      mocks.pickers['Logo']!.onChange('https://img.test/logo.png');
+      mocks.pickers['Logo']!.onBusyChange(false);
+    });
+    expect(screen.getByRole('button', { name: t.common.imagesUploading })).toBeDisabled();
+
+    act(() => {
+      mocks.pickers['Ảnh bìa']!.onChange('https://img.test/bia.png');
+      mocks.pickers['Ảnh bìa']!.onBusyChange(false);
+    });
+    const save = await screen.findByRole('button', { name: 'Lưu thông tin' });
+    expect(save).toBeEnabled();
+    fireEvent.click(save);
+    await waitFor(() => expect(mocks.updateOwnedBrand).toHaveBeenCalledTimes(1));
+    expect(mocks.updateOwnedBrand.mock.calls[0]![0]).toMatchObject({ logoUrl: 'https://img.test/logo.png', coverUrl: 'https://img.test/bia.png' });
+  });
+
+  it('sang tab Doanh thu giữa lúc ảnh còn lên rồi quay lại: cờ nằm ở trang nên Lưu vẫn chờ tới khi lượt cũ xong', async () => {
+    mocks.getOwnedBrandSales.mockResolvedValue({ period: '30d', from: '', to: '', orderCount: 0, unitsSold: 0, revenue: 0, delivered: { orderCount: 0, revenue: 0 }, topProducts: [] });
+    renderPage();
+    await screen.findByText('Thông tin thương hiệu');
+    act(() => mocks.pickers['Logo']!.onBusyChange(true));
+    fireEvent.click(screen.getByRole('tab', { name: 'Doanh thu' }));
+    await waitFor(() => expect(screen.queryByText('Thông tin thương hiệu')).toBeNull());
+    fireEvent.click(screen.getByRole('tab', { name: 'Hồ sơ & khuyến mãi' }));
+    expect(await screen.findByRole('button', { name: t.common.imagesUploading })).toBeDisabled();
+    act(() => mocks.pickers['Logo']!.onBusyChange(false));
+    expect(await screen.findByRole('button', { name: 'Lưu thông tin' })).toBeEnabled();
+  });
+
+  it('đang lưu thì cả hai ô ảnh khoá', async () => {
+    const hold = { release: (_v: unknown): void => undefined };
+    mocks.updateOwnedBrand.mockReturnValueOnce(new Promise((r) => (hold.release = r)));
+    renderPage();
+    await screen.findByText('Thông tin thương hiệu');
+    expect(screen.getByText('Logo')).not.toHaveAttribute('data-disabled');
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu thông tin' }));
+    await waitFor(() => expect(mocks.updateOwnedBrand).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.getByText('Logo')).toHaveAttribute('data-disabled', 'true'));
+    expect(screen.getByText('Ảnh bìa')).toHaveAttribute('data-disabled', 'true');
+    await act(async () => hold.release({}));
+    await waitFor(() => expect(screen.getByText('Logo')).not.toHaveAttribute('data-disabled'));
   });
 });

@@ -30,6 +30,7 @@ import { grantDoneText, grantPermissionsHint } from '@tubutree/app-core/staff-co
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
+import { useUploadBusy } from '../hooks/use-upload-busy';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
@@ -147,6 +148,8 @@ function PayrollSection() {
   const [rateVal, setRateVal] = useState('');
   const [payRow, setPayRow] = useState<AdminPayrollRow | null>(null);
   const [proof, setProof] = useState('');
+  // Cờ nằm ở đây vì tấm "Đã chuyển" gỡ nội dung khi đóng, còn ảnh về muộn vẫn ghi vào `proof` của trang.
+  const { busy: proofBusy, onBusyChange: onProofBusyChange } = useUploadBusy();
   const [note, setNote] = useState('');
   const [detailRow, setDetailRow] = useState<AdminPayrollRow | null>(null);
   const [reopenRow, setReopenRow] = useState<AdminPayrollRow | null>(null);
@@ -360,16 +363,26 @@ function PayrollSection() {
       <BottomSheet
         open={!!payRow}
         onClose={() => setPayRow(null)}
+        // Đóng giữa lúc ảnh còn đang lên rồi mở nhân viên khác: ảnh của người trước về muộn sẽ nằm trong tấm của người sau.
+        dismissible={!proofBusy}
         title={`Xác nhận đã chuyển · ${payRow?.staff.fullName ?? ''}`}
         footer={
-          <Button fullWidth loading={payrollBusy} disabled={!proof} onPress={() => exclusive(() => paidM.mutate())}>
-            Đánh dấu đã trả
+          <Button
+            fullWidth
+            loading={payrollBusy}
+            disabled={!proof || proofBusy}
+            onPress={() => {
+              if (proofBusy) return;
+              exclusive(() => paidM.mutate());
+            }}
+          >
+            {proofBusy ? vi.common.imagesUploading : 'Đánh dấu đã trả'}
           </Button>
         }
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <KeyValueRow label="Số tiền" value={formatVnd(payRow?.month.net ?? 0)} emphasis />
-          <ImageUpload label="Ảnh xác nhận chuyển khoản *" value={proof} onChange={setProof} />
+          <ImageUpload label="Ảnh xác nhận chuyển khoản *" value={proof} onChange={setProof} onBusyChange={onProofBusyChange} disabled={paidM.isPending} />
           <Field label="Ghi chú (tuỳ chọn)">
             <Input maxLength={INPUT_LIMITS.payrollNote} value={note} onChange={(e) => setNote(e.target.value)} />
           </Field>

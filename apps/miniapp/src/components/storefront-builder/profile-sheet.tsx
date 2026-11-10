@@ -4,6 +4,7 @@ import { updateStorefront, type StorefrontEdit } from '../../services/storefront
 import { getErrorMessage } from '../../services/api';
 import { haptic } from '../../utils/haptic';
 import { vi } from '../../i18n/vi';
+import { useUploadBusy } from '../../hooks/use-upload-busy';
 import { useLockedMutation } from '../game/use-locked-mutation';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
@@ -27,6 +28,8 @@ export function ProfileSheet({
   const [avatarUrl, setAvatarUrl] = useState(sf.avatarUrl ?? '');
   const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
   const [headerNote, setHeaderNote] = useState(sf.headerNote ?? '');
+  // Lưu lúc ảnh còn đang lên sẽ gửi ảnh cũ (hoặc rỗng) rồi đóng form, ảnh mới về sau bị bỏ.
+  const { busy: imagesBusy, onBusyChange } = useUploadBusy();
 
   const saveMut = useLockedMutation({
     mutationFn: () =>
@@ -52,8 +55,8 @@ export function ProfileSheet({
   return (
     <div style={SCROLL_BODY}>
       {/* Ảnh đại diện nhỏ nên nén mạnh hơn ảnh bìa — cả hai đi kèm mọi lượt xem gian hàng. */}
-      <ImageUpload label={vi.storefront.avatar} value={avatarUrl} onChange={setAvatarUrl} maxDim={400} quality={0.8} />
-      <ImageUpload label={vi.storefront.cover} value={coverUrl} onChange={setCoverUrl} maxDim={1000} quality={0.75} />
+      <ImageUpload label={vi.storefront.avatar} value={avatarUrl} onChange={setAvatarUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={400} quality={0.8} />
+      <ImageUpload label={vi.storefront.cover} value={coverUrl} onChange={setCoverUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={1000} quality={0.75} />
 
       <Text variant="label" as="div" style={{ marginBottom: 4 }}>{vi.storefront.headerNote}</Text>
       <Input.TextArea
@@ -73,8 +76,17 @@ export function ProfileSheet({
         </Text>
       )}
 
-      <Button fullWidth loading={saveMut.isPending} onPress={() => saveMut.mutate()} style={{ marginTop: 16 }}>
-        Lưu hồ sơ
+      <Button
+        fullWidth
+        loading={saveMut.isPending}
+        disabled={imagesBusy}
+        onPress={() => {
+          if (imagesBusy) return;
+          saveMut.mutate();
+        }}
+        style={{ marginTop: 16 }}
+      >
+        {imagesBusy ? vi.common.imagesUploading : 'Lưu hồ sơ'}
       </Button>
       <Button fullWidth variant="secondary" style={{ marginTop: 8 }} onPress={onClose}>
         Đóng
