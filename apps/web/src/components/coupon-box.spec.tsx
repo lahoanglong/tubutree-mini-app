@@ -43,11 +43,11 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
 }));
 
-import { QueryClient, useQuery } from '@tanstack/react-query';
+import { MutationObserver, QueryClient, useQuery } from '@tanstack/react-query';
 import { cartKey } from '@/lib/cart-key';
 import { MD_DOWN } from '@/lib/use-media-query';
 import { syncServerClock } from '@tubutree/app-core/server-clock';
-import { CouponBox, couponProductIds, forgetAutoCoupon } from './coupon-box';
+import { COUPON_MUTATION_KEY, CouponBox, couponProductIds, forgetAutoCoupon } from './coupon-box';
 
 const c = (code: string, over: Record<string, unknown> = {}) => ({
   code, type: 'PERCENT', value: 30, minOrder: null, maxDiscount: 50000, endAt: '2030-01-01T00:00:00Z', ...over,
@@ -1845,5 +1845,69 @@ describe('CouponBox — áp/gỡ mã khoá đồng bộ chống bấm đúp (W71
     }
     release();
     await flush(6);
+  });
+});
+
+describe('CouponBox — lệnh đổi mã từ nơi khác còn bay (W91B)', () => {
+  /** Giả lệnh áp mã ở giỏ còn bay: cùng QueryClient, cùng COUPON_MUTATION_KEY, treo tới khi gọi release. */
+  const startExternalCouponMutation = (client: QueryClient) => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const observer = new MutationObserver(client, { mutationKey: COUPON_MUTATION_KEY, mutationFn: () => gate });
+    void observer.mutate();
+    return release;
+  };
+  const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+
+  it('bấm mã trong lúc lệnh áp mã khác còn bay: không gửi lệnh áp thứ hai; hết bay thì bấm được', async () => {
+    state.coupons = [c('OK')];
+    const client = newClient();
+    const release = startExternalCouponMutation(client);
+    const r = render(<CouponBox currentCode={null} subtotal={300000} shippingFee={null} />, client);
+    mounted.push(r);
+    await flush(6);
+    click(card(r.container, 'OK').querySelector('button'));
+    await flush(4);
+    expect(state.applied).toEqual([]);
+    await act(async () => release());
+    await flush(4);
+    click(card(r.container, 'OK').querySelector('button'));
+    await flush(4);
+    expect(state.applied).toEqual(['OK']);
+  });
+
+  it('tự áp mã: chờ lệnh đổi mã khác bay xong; giỏ đã có mã sau đó thì không áp thêm mã nào', async () => {
+    sessionStorage.clear();
+    state.coupons = [c('GIAM30')];
+    state.previews.mockResolvedValue([{ code: 'GIAM30', eligible: true, discount: 43800 }]);
+    const client = newClient();
+    const release = startExternalCouponMutation(client);
+    function Harness() {
+      const q = useQuery({ queryKey: cartKey(), queryFn: () => null, enabled: false, initialData: { couponCode: null } as { couponCode: string | null } });
+      return <CouponBox currentCode={q.data?.couponCode ?? null} subtotal={300000} preview={{ addressId: 'a1' }} autoApply memoryUserId="u1" />;
+    }
+    const r = render(<Harness />, client);
+    mounted.push(r);
+    await flush(10);
+    expect(state.applied).toEqual([]);
+    client.setQueryData(cartKey(), { couponCode: 'FROM-CART' });
+    await act(async () => release());
+    await flush(10);
+    expect(state.applied).toEqual([]);
+  });
+
+  it('tự áp mã: lệnh khác bay xong mà giỏ vẫn chưa có mã thì mới tự áp, đúng một lần', async () => {
+    sessionStorage.clear();
+    state.coupons = [c('GIAM30')];
+    state.previews.mockResolvedValue([{ code: 'GIAM30', eligible: true, discount: 43800 }]);
+    const client = newClient();
+    const release = startExternalCouponMutation(client);
+    const r = render(<CouponBox currentCode={null} subtotal={300000} preview={{ addressId: 'a1' }} autoApply memoryUserId="u1" />, client);
+    mounted.push(r);
+    await flush(10);
+    expect(state.applied).toEqual([]);
+    await act(async () => release());
+    await flush(10);
+    expect(state.applied).toEqual(['GIAM30']);
   });
 });

@@ -62,6 +62,7 @@ import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { OrderSuccess } from '@/components/checkout/order-success';
 import { CheckoutSkeleton } from './checkout-skeleton';
+import { InlineRetry } from './inline-retry';
 import { InvoiceSection } from './invoice-section';
 import { ErrorState } from '@/components/ui/error-state';
 import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoice';
@@ -707,9 +708,7 @@ export default function CheckoutPage() {
             {addrQ.isError && (
               <p className={`mt-2 ${ui.error}`}>
                 Không tải được danh sách địa chỉ.{' '}
-                <button type="button" onClick={() => void addrQ.refetch()} className={ui.btnText}>
-                  Thử lại
-                </button>
+                <InlineRetry onRetry={() => addrQ.refetch()} />
               </p>
             )}
             <AddressPicker
@@ -1062,17 +1061,13 @@ export default function CheckoutPage() {
               {quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED'
                 ? `${loadErrorText(quoteQ.error)} Hãy bấm Sửa ở địa chỉ đó để chọn lại tỉnh/phường, hoặc thêm địa chỉ mới.`
                 : 'Không tính được phí ship/tổng tiền.'}{' '}
-              <button type="button" onClick={() => void quoteQ.refetch()} className={ui.btnText}>
-                Thử lại
-              </button>
+              <InlineRetry onRetry={() => quoteQ.refetch()} />
             </p>
           )}
           {cartQ.isError && (
             <p className={`mt-2 ${ui.error}`}>
               Không tải được giỏ hàng.{' '}
-              <button type="button" onClick={() => void cartQ.refetch()} className={ui.btnText}>
-                Thử lại
-              </button>
+              <InlineRetry onRetry={() => cartQ.refetch()} />
             </p>
           )}
 
