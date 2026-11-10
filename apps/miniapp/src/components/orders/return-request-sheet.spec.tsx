@@ -12,7 +12,24 @@ vi.mock('../../services/shop-api', () => ({
   fetchRefundBank: mocks.fetchRefundBank,
   estimateReturn: mocks.estimateReturn,
 }));
-vi.mock('../image-upload', () => ({ MultiImageUpload: () => null }));
+vi.mock('../image-upload', () => ({
+  MultiImageUpload: ({ value, onChange, onBusyChange }: { value: string[]; onChange: (v: string[]) => void; onBusyChange?: (busy: boolean) => void }) => (
+    <>
+      <button type="button" onClick={() => onBusyChange?.(true)}>
+        Bắt đầu tải ảnh thử
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onChange([...value, 'https://i/minh-chung.jpg']);
+          onBusyChange?.(false);
+        }}
+      >
+        Tải xong ảnh thử
+      </button>
+    </>
+  ),
+}));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { ReturnRequestSheet } from './return-request-sheet';
@@ -211,6 +228,25 @@ describe('ReturnRequestSheet: gửi yêu cầu khoá chạm đúp, báo bận, s
     expect(onClose).not.toHaveBeenCalled();
     await act(async () => d.resolve({ id: 'r1' }));
     await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('đang tải ảnh minh chứng: nút gửi khoá và đổi nhãn, chạm không gửi yêu cầu thiếu ảnh; tải xong gửi kèm ảnh vừa tải (W85A)', async () => {
+    renderSheet();
+    fillForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu tải ảnh thử' }));
+    const waiting = screen.getByRole('button', { name: 'Đang tải ảnh…' });
+    expect(waiting).toBeDisabled();
+    fireEvent.click(waiting);
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(mocks.requestReturn).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tải xong ảnh thử' }));
+    expect(submitButton()).not.toBeDisabled();
+    fireEvent.click(submitButton());
+    await waitFor(() => expect(mocks.requestReturn).toHaveBeenCalledTimes(1));
+    expect(mocks.requestReturn.mock.calls[0]![1].images).toEqual(['https://i/minh-chung.jpg']);
   });
 
   it('nút Gửi yêu cầu cao ít nhất 44px', () => {

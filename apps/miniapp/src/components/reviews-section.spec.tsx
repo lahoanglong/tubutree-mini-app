@@ -26,10 +26,24 @@ vi.mock('../services/shop-api', () => ({
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: mocks.auth.status, login: mocks.login }) }));
 vi.mock('./ui/auth-gate', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useLoginWithNotice: () => mocks.login }));
 vi.mock('./image-upload', () => ({
-  MultiImageUpload: ({ value, onChange }: { value: string[]; onChange: (v: string[]) => void }) => (
-    <button type="button" onClick={() => onChange([...value, 'https://i/moi.jpg'])}>
-      Thêm ảnh ({value.length})
-    </button>
+  MultiImageUpload: ({ value, onChange, onBusyChange }: { value: string[]; onChange: (v: string[]) => void; onBusyChange?: (busy: boolean) => void }) => (
+    <>
+      <button type="button" onClick={() => onChange([...value, 'https://i/moi.jpg'])}>
+        Thêm ảnh ({value.length})
+      </button>
+      <button type="button" onClick={() => onBusyChange?.(true)}>
+        Bắt đầu tải ảnh thử
+      </button>
+      <button
+        type="button"
+        onClick={() => {
+          onChange([...value, 'https://i/xong.jpg']);
+          onBusyChange?.(false);
+        }}
+      >
+        Tải xong ảnh thử
+      </button>
+    </>
   ),
   isCloudinaryConfigured: () => mocks.cloudinary,
   VideoUpload: ({ value, onChange, onBusyChange }: { value: string; onChange: (v: string) => void; onBusyChange?: (busy: boolean) => void }) => (
@@ -451,6 +465,25 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
       expect(await screen.findByText('Nhận xét q2')).toBeInTheDocument();
       expect(shown()).toHaveLength(9);
     });
+  });
+
+  it('đổi chip liên tiếp: kết quả của chip cũ về SAU chip mới không đè lên danh sách đang xem (khoá theo chip, W85A)', async () => {
+    const gates: Record<string, (v: unknown) => void> = {};
+    mocks.fetchReviews.mockImplementation((_slug: string, f: number | string = 'all') => {
+      if (f === 'all') return Promise.resolve(DATA);
+      return new Promise((r) => (gates[String(f)] = r));
+    });
+    renderSection();
+    await screen.findByText('Nhận xét a');
+    fireEvent.click(screen.getByRole('button', { name: /^5 sao\(/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Có ảnh' }));
+    await waitFor(() => expect(Object.keys(gates).sort()).toEqual(['5', 'photo']));
+    await act(async () => gates['photo']!({ ...DATA, items: [DATA.items[2]] }));
+    expect(await screen.findByText('Nhận xét c')).toBeInTheDocument();
+    await act(async () => gates['5']!({ ...DATA, items: [DATA.items[0], DATA.items[1]] }));
+    expect(screen.getByText('Nhận xét c')).toBeInTheDocument();
+    expect(screen.queryByText('Nhận xét a')).toBeNull();
+    expect(screen.queryByText('Nhận xét b')).toBeNull();
   });
 
   it('chip lọc tải lỗi: báo lỗi có "Thử lại", phần thống kê vẫn còn; thử lại thì hiện kết quả', async () => {
@@ -1396,5 +1429,75 @@ describe('ReviewsSection: form đánh giá dùng được bằng bàn phím, l�
     fireEvent.click(screen.getByRole('button', { name: 'Lưu đánh giá' }));
     await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
     expect(mocks.createReview.mock.calls[0]![1]).toMatchObject({ rating: 4 });
+  });
+});
+
+describe('ReviewsSection: tải ảnh và gửi đánh giá không chồng nhau (W85A)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.cloudinary = true;
+    mocks.auth = { status: 'authenticated' };
+    mocks.fetchReviews.mockResolvedValue(DATA);
+    mocks.canReview.mockResolvedValue(ELIG_NEW);
+    mocks.createReview.mockReset().mockResolvedValue({ updated: false, pointsEarned: 0 });
+  });
+
+  const openForm = async () => {
+    renderSection();
+    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+    await screen.findByRole('radiogroup', { name: 'Số sao' });
+  };
+
+  it('đang tải ảnh: nút gửi khoá và đổi nhãn, bấm hay Ctrl+Enter đều không gọi createReview; tải xong gửi kèm ảnh vừa tải', async () => {
+    await openForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu tải ảnh thử' }));
+    const waiting = screen.getByRole('button', { name: 'Đang tải ảnh…' });
+    expect(waiting).toBeDisabled();
+    fireEvent.click(waiting);
+    fireEvent.keyDown(screen.getByPlaceholderText(/Chia sẻ cảm nhận/), { key: 'Enter', ctrlKey: true });
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.createReview).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tải xong ảnh thử' }));
+    const send = await screen.findByRole('button', { name: 'Gửi đánh giá' });
+    expect(send).not.toBeDisabled();
+    fireEvent.click(send);
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    expect(mocks.createReview.mock.calls[0]![1]).toMatchObject({ images: ['https://i/xong.jpg'], orderId: 'o1' });
+  });
+
+  it('đang tải cả ảnh lẫn video: nhãn nói video, xong video mà ảnh còn tải thì vẫn khoá, xong cả hai mới gửi được', async () => {
+    await openForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu tải ảnh thử' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Bắt đầu tải video thử' }));
+    expect(screen.getByRole('button', { name: 'Đang tải video…' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Tải xong video thử' }));
+    expect(screen.getByRole('button', { name: 'Đang tải ảnh…' })).toBeDisabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Tải xong ảnh thử' }));
+    expect(await screen.findByRole('button', { name: 'Gửi đánh giá' })).not.toBeDisabled();
+  });
+
+  it('đang gửi thì form không đóng được (không có nút Đóng): lần gửi chưa xong thì không mở lại được để gửi lần hai', async () => {
+    let release: (v: unknown) => void = () => undefined;
+    mocks.createReview.mockReturnValue(new Promise((r) => (release = r)));
+    await openForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Đóng' })).toBeNull());
+    expect(screen.getByRole('radiogroup', { name: 'Số sao' })).toBeInTheDocument();
+    await act(async () => release({ updated: false, pointsEarned: 0 }));
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
+    expect(mocks.createReview).toHaveBeenCalledTimes(1);
+  });
+
+  it('gửi lỗi: form vẫn mở để thấy lỗi tại chỗ, nút Đóng trở lại và gửi lại được', async () => {
+    mocks.createReview.mockRejectedValueOnce(new Error('mạng')).mockResolvedValueOnce({ updated: false, pointsEarned: 0 });
+    await openForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Có chút trục trặc, thử lại nhé');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Đóng' })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi đánh giá' }));
+    await waitFor(() => expect(mocks.createReview).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull());
   });
 });

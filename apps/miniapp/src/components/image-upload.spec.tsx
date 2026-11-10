@@ -421,6 +421,23 @@ describe('W60B — khoá khi đang tải, lời báo lỗi role="alert", số đ
     expect(onChange).not.toHaveBeenCalled();
   });
 
+  it('MultiImageUpload: báo form cha đang tải rồi tải xong (kể cả khi mọi ảnh bị bỏ vì quá lớn) để khoá nút gửi trong lúc chờ (W85A)', async () => {
+    const { MultiImageUpload } = await loadConfigured();
+    const net = pendingFetch();
+    const busy: boolean[] = [];
+    const onChange = vi.fn();
+    const { container } = render(<MultiImageUpload value={[]} onChange={onChange} onBusyChange={(b) => busy.push(b)} />);
+    pickFiles(container, [png('a.png')]);
+    await waitFor(() => expect(busy).toEqual([true]));
+    expect(onChange).not.toHaveBeenCalled();
+    net.finish('https://res.cloudinary.com/demo/a.png');
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith(['https://res.cloudinary.com/demo/a.png']));
+    await waitFor(() => expect(busy).toEqual([true, false]));
+
+    pickFiles(container, [oversized()]);
+    await waitFor(() => expect(busy).toEqual([true, false, true, false]));
+  });
+
   it('MultiImageUpload: nhãn đếm "n/tối đa" dùng số đều để không nhảy khi số ảnh đổi', async () => {
     const { MultiImageUpload } = await loadConfigured();
     render(<MultiImageUpload value={['https://i/1.jpg']} onChange={() => {}} />);

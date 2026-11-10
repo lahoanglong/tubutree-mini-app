@@ -374,17 +374,24 @@ export function VideoUpload({
 export function MultiImageUpload({
   value = [],
   onChange,
+  onBusyChange,
   max = 6,
   label = 'Ảnh đính kèm',
 }: {
   value?: string[];
   onChange: (urls: string[]) => void;
+  /** Báo form cha khi đang tải: gửi lúc ảnh còn đang lên sẽ lưu bản ghi không kèm ảnh. */
+  onBusyChange?: (busy: boolean) => void;
   max?: number;
   label?: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const changeUploading = (next: boolean) => {
+    setUploading(next);
+    onBusyChange?.(next);
+  };
 
   const pick = () => {
     if (uploading) return;
@@ -397,7 +404,7 @@ export function MultiImageUpload({
     const files = Array.from(e.target.files ?? []);
     if (files.length === 0) return;
     setError(null);
-    setUploading(true);
+    changeUploading(true);
     try {
       const newUrls: string[] = [];
       let oversizedCount = 0;
@@ -440,7 +447,7 @@ export function MultiImageUpload({
     } catch {
       setError('Tải ảnh thất bại. Hãy chọn tệp ảnh khác.');
     } finally {
-      setUploading(false);
+      changeUploading(false);
       if (inputRef.current) inputRef.current.value = '';
     }
   };

@@ -24,6 +24,7 @@ export const vi = {
     backHome: 'Về trang chủ',
     timeInput: 'Giờ',
     suggestMinChars: 'Nhập ít nhất 2 ký tự',
+    imagesUploading: 'Đang tải ảnh…',
   },
 
   errors: {
