@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getAddresses } from '../services/shop-api';
 import { getWallet } from '../services/account-api';
 import {
+  isStaleSubscriptionError,
   updateSubscription,
   type SubscriptionDTO,
   type SubscriptionPaymentMethod,
@@ -72,7 +73,11 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
       void qc.invalidateQueries({ queryKey: ['subscriptions'] });
       onClose();
     },
-    onError: (e) => openSnackbar({ text: getErrorMessage(e), type: 'error' }),
+    onError: (e) => {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Gói đã huỷ ở máy khác (sheet tự đóng khi gói rời danh sách) hoặc đã có gói trùng: danh sách đang cũ.
+      if (isStaleSubscriptionError(e)) void qc.invalidateQueries({ queryKey: ['subscriptions'] });
+    },
   });
 
   return (

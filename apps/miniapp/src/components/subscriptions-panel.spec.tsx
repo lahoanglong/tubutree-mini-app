@@ -44,6 +44,7 @@ vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) =>
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { haptic } from '../utils/haptic';
+import { HttpError } from '../services/http';
 import { SubscriptionsPanel } from './subscriptions-panel';
 
 const SUB = {
@@ -860,5 +861,77 @@ describe('SubscriptionsPanel: khoá giữ danh sách có hạn 4 giây khi làm 
     expect(screen.getByRole('button', { name: 'Huỷ' })).toBeDisabled();
     await advance(1_500);
     await waitFor(() => expect(screen.getByRole('button', { name: 'Huỷ' })).toBeEnabled());
+  });
+});
+
+describe('SubscriptionsPanel: lệnh bị từ chối vì lịch đã đổi thì tải lại danh sách (W98A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Hàng đợi `...Once` của test trước không được rò sang test sau (clearAllMocks không xoá chúng).
+    for (const m of [mocks.getSubscriptions, mocks.setSubscriptionStatus, mocks.skipSubscriptionCycle]) m.mockReset();
+    sheetSpy.calls.length = 0;
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+  });
+
+  it.each([
+    [400, 'Chỉ bỏ qua kỳ khi lịch đang chạy.'],
+    [404, 'Không tìm thấy lịch đặt định kỳ.'],
+    [409, 'Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.'],
+  ])('"Tạm dừng" bị từ chối %i: báo lời máy chủ rồi tải lại danh sách, thẻ hiện đúng trạng thái thật (cron đã tạm dừng gói)', async (status, message) => {
+    mocks.getSubscriptions.mockResolvedValueOnce([SUB]).mockResolvedValueOnce([{ ...SUB, status: 'PAUSED' as const }]);
+    mocks.setSubscriptionStatus.mockRejectedValue(serverError(message, status));
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạm dừng' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+    const resume = await screen.findByRole('button', { name: 'Tiếp tục' });
+    expect(resume).not.toHaveAttribute('aria-busy');
+    expect(resume).toBeEnabled();
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('"Bỏ qua kỳ này" bị từ chối 400 vì gói đã tạm dừng: tải lại danh sách, sheet hết nút "Bỏ qua kỳ này" (không bấm lặp lại cùng lỗi)', async () => {
+    mocks.getSubscriptions.mockResolvedValueOnce([SUB]).mockResolvedValueOnce([{ ...SUB, status: 'PAUSED' as const }]);
+    mocks.skipSubscriptionCycle.mockRejectedValue(serverError('Chỉ bỏ qua kỳ khi lịch đang chạy.', 400));
+    renderPanel();
+    await openRetention();
+    fireEvent.click(inSheet('Bỏ qua kỳ này'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Chỉ bỏ qua kỳ khi lịch đang chạy.', type: 'error' }));
+    await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(within(sheetEl()!).queryByRole('button', { name: 'Bỏ qua kỳ này' })).toBeNull());
+    expect(mocks.skipSubscriptionCycle).toHaveBeenCalledTimes(1);
+  });
+
+  it('khoá giữ tới khi danh sách tải lại về: nút thẻ vẫn bận lúc chờ, bấm thêm không gửi lệnh thứ hai', async () => {
+    const refreshed = deferred<unknown[]>();
+    mocks.getSubscriptions.mockResolvedValueOnce([SUB]).mockReturnValueOnce(refreshed.promise);
+    mocks.setSubscriptionStatus.mockRejectedValue(serverError('Lịch giao vừa thay đổi, hãy tải lại rồi thử lại.', 409));
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạm dừng' }));
+    await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalledTimes(2));
+    const stale = cardBtns('Tạm dừng')[0]!;
+    expect(stale).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(stale);
+    expect(mocks.setSubscriptionStatus).toHaveBeenCalledTimes(1);
+    await act(async () => refreshed.resolve([{ ...SUB, status: 'PAUSED' as const }]));
+    expect(await screen.findByRole('button', { name: 'Tiếp tục' })).not.toHaveAttribute('aria-busy');
+  });
+
+  it.each([
+    ['máy chủ lỗi 500', serverError('Internal server error', 500)],
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['quá thời gian', new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED')],
+  ])('%s: chỉ báo lỗi, KHÔNG tải lại danh sách (lỗi tạm không nói gì về trạng thái thật của gói)', async (_name, err) => {
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+    mocks.setSubscriptionStatus.mockRejectedValue(err);
+    renderPanel();
+    fireEvent.click(await screen.findByRole('button', { name: 'Tạm dừng' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(cardBtns('Tạm dừng')[0]).not.toHaveAttribute('aria-busy'));
+    expect(mocks.getSubscriptions).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText(/Không tải được|Thử lại/)).toBeNull();
   });
 });
