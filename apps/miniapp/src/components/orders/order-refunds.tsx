@@ -10,6 +10,7 @@ import { RefundDestinationPicker } from './refund-destination-picker';
 import { chooseRefundDestination, fetchMyRefunds, fetchRefundBank } from '../../services/shop-api';
 import { getErrorMessage, isStaleStateError } from '../../services/api';
 import { settleWithin } from '../../utils/settle-within';
+import { useSyncedDraft } from '../../hooks/use-synced-draft';
 import { formatVnd } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import {
@@ -24,6 +25,19 @@ import { bankDetailsError } from '../../utils/refund-form-rules';
 
 const TONE_ICON = { success: CheckCircle2, warning: TriangleAlert, muted: Clock } as const;
 const TONE_TEXT = { success: 'success', warning: 'warning', muted: 'secondary' } as const;
+
+type DestinationForm = { method: RefundMethodChoice; bankName: string; accountNumber: string; accountName: string };
+const EMPTY_DESTINATION: DestinationForm = { method: 'WALLET', ...EMPTY_BANK };
+
+/** Khoản hoàn đã có tài khoản thì mở sẵn ở Ngân hàng với tài khoản đó; chưa có thì mở ở Ví Tubu với ba ô trống. */
+function destinationSource(r: MyRefund): DestinationForm {
+  return {
+    method: r.bankAccountNo ? 'BANK' : 'WALLET',
+    bankName: r.bankName ?? '',
+    accountNumber: r.bankAccountNo ?? '',
+    accountName: r.bankAccountName ?? '',
+  };
+}
 
 /** Khoản hoàn tiền của đơn (chuyển khoản chờ xử lý, tiền về muộn): trạng thái từng bước và nút chọn nơi nhận (D2). */
 export function OrderRefunds({ orderId, returnRequestIds }: { orderId: string; returnRequestIds?: ReadonlySet<string> }) {
@@ -76,17 +90,29 @@ export function OrderRefunds({ orderId, returnRequestIds }: { orderId: string; r
 function ChooseDestinationSheet({ refund, onClose }: { refund: MyRefund; onClose: () => void }) {
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
-  const [method, setMethod] = useState<RefundMethodChoice>(refund.bankAccountNo ? 'BANK' : 'WALLET');
-  const [bank, setBank] = useState<RefundBankInput>(
-    refund.bankAccountNo
-      ? { bankName: refund.bankName ?? '', accountNumber: refund.bankAccountNo, accountName: refund.bankAccountName ?? '' }
-      : EMPTY_BANK,
-  );
   const [touched, setTouched] = useState(false);
-  const bankError = method === 'BANK' ? bankDetailsError(bank) : null;
 
   // Cùng khoá với danh sách ở khối cha, `enabled: false` nên chỉ đọc cache và theo dõi dữ liệu mới về, không gọi API thêm.
   const listed = useQuery({ queryKey: ['my-refunds', refund.orderId], queryFn: () => fetchMyRefunds(refund.orderId), enabled: false });
+
+  // Form bám khoản hoàn SỐNG tra theo id: ô khách chưa chạm đổi theo dữ liệu mới về lúc sheet còn mở (tải lại sau khi máy chủ từ chối, máy khác
+  // vừa lưu tài khoản), ô đã gõ giữ chữ. Chưa có danh sách trong cache thì tạm dùng khoản đã bấm; có danh sách mà không còn khoản này thì các ô giữ nguyên.
+  const live = listed.data ? listed.data.find((r) => r.id === refund.id) : refund;
+  const draft = useSyncedDraft(EMPTY_DESTINATION, live ? destinationSource(live) : null, refund.id);
+  const method = draft.values.method;
+  const bank: RefundBankInput = {
+    bankName: draft.values.bankName,
+    accountNumber: draft.values.accountNumber,
+    accountName: draft.values.accountName,
+  };
+  const setMethod = (m: RefundMethodChoice) => draft.set('method', m);
+  // Picker trả cả bản ghi ngân hàng mới; `draft.set` bỏ qua ô trùng giá trị đang hiện nên chỉ ô khách vừa sửa mới thành "đã chạm".
+  const setBank = (b: RefundBankInput) => {
+    draft.set('bankName', b.bankName);
+    draft.set('accountNumber', b.accountNumber);
+    draft.set('accountName', b.accountName);
+  };
+  const bankError = method === 'BANK' ? bankDetailsError(bank) : null;
 
   // Điền sẵn đúng một lần (như web): bản trả về muộn chỉ điền khi cả ba ô còn trống, sau đó khách sửa hay xoá ô nào cũng không bị ghi đè.
   // Khoản hoàn đã có tài khoản: không điền sẵn, kể cả khi khách xoá sạch ba ô để nhập tài khoản khác.
@@ -96,7 +122,8 @@ function ChooseDestinationSheet({ refund, onClose }: { refund: MyRefund; onClose
     const saved = prefill.data;
     if (!saved?.accountNumber || prefillAppliedRef.current) return;
     prefillAppliedRef.current = true;
-    setBank((b) => (b.bankName || b.accountNumber || b.accountName ? b : saved));
+    if (bank.bankName || bank.accountNumber || bank.accountName) return;
+    setBank(saved);
   }, [prefill.data]);
 
   // Khoá đồng bộ: `save.isPending` chỉ đổi sau lần vẽ kế, hai cú bấm "Xác nhận" sát nhau sẽ gọi API hai lần.

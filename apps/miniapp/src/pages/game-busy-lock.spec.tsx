@@ -248,7 +248,7 @@ describe('GamePage — chạm đúp cùng khung hình chỉ gọi API một lầ
     expect(mocks.api.buyTree).toHaveBeenCalledTimes(1);
   });
 
-  it('(W111A) góp quỹ bị từ chối 400: khoá của hộp xác nhận giữ tới khi hồ sơ tải lại xong, chạm lại bị bỏ qua, về rồi gửi lại được', async () => {
+  it('(W111A, W118A) góp quỹ bị từ chối 400: khoá của hộp xác nhận giữ tới khi hồ sơ tải lại xong, chạm lại bị bỏ qua, về rồi hộp đóng và mở lại gửi khoá mới', async () => {
     mocks.api.buyTree.mockRejectedValue(new HttpError('Không đủ Điểm Xanh', undefined, { status: 400, data: { message: 'Không đủ Điểm Xanh' } } as never));
     renderPage();
     await openTab('Vườn');
@@ -266,9 +266,74 @@ describe('GamePage — chạm đúp cùng khung hình chỉ gọi API một lầ
     await tapTogether(ok);
     expect(mocks.api.buyTree).toHaveBeenCalledTimes(1);
     await act(async () => refetched.resolve({ ...PROFILE }));
-    await waitFor(() => expect(ok).not.toHaveAttribute('aria-busy', 'true'));
-    await tapTogether(ok);
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Xác nhận' })).not.toBeInTheDocument());
+    fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
+    await tapTogether(await screen.findByRole('button', { name: 'Xác nhận' }));
     await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(2));
+    expect(mocks.api.buyTree.mock.calls[1]![0]).not.toBe(mocks.api.buyTree.mock.calls[0]![0]);
+  });
+
+  describe('(W118A) góp quỹ bị máy chủ từ chối hẳn thì hộp xác nhận đóng, khoá idempotency của lần mở sau là khoá mới', () => {
+    const rejected = (status: number) => new HttpError('Không đủ Điểm Xanh', undefined, { status, data: { message: 'Không đủ Điểm Xanh' } } as never);
+    const confirmButton = () => screen.queryByRole('button', { name: 'Xác nhận' });
+    const openConfirm = async () => {
+      fireEvent.click(await screen.findByRole('button', { name: /Góp quỹ trồng cây/ }));
+      return screen.findByRole('button', { name: 'Xác nhận' });
+    };
+
+    it.each([[404], [409]])('bị từ chối %i: hộp còn mở trong lúc hồ sơ tải lại, đóng sau khi dữ liệu mới về, báo một lần, mở lại gửi khoá mới', async (status) => {
+      mocks.api.buyTree.mockRejectedValueOnce(rejected(status)).mockResolvedValue({ certificateCode: 'TUBU-9', cost: 50 });
+      renderPage();
+      await openTab('Vườn');
+      const ok = await openConfirm();
+      const refetched = pending<unknown>();
+      mocks.api.getGameProfile.mockClear();
+      mocks.api.getGameProfile.mockReturnValue(refetched.promise);
+      await tapTogether(ok);
+      await waitFor(() => expect(mocks.api.getGameProfile).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      });
+      expect(confirmButton()).toBeInTheDocument();
+      expect(mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error')).toHaveLength(1);
+      await act(async () => refetched.resolve({ ...PROFILE }));
+      await waitFor(() => expect(confirmButton()).not.toBeInTheDocument());
+      expect(mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error')).toHaveLength(1);
+      await tapTogether(await openConfirm());
+      await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(2));
+      expect(mocks.api.buyTree.mock.calls[1]![0]).not.toBe(mocks.api.buyTree.mock.calls[0]![0]);
+    });
+
+    it('bị từ chối 422 (không có gì để tải lại): hộp đóng ngay, không tải lại hồ sơ, mở lại gửi khoá mới', async () => {
+      mocks.api.buyTree.mockRejectedValueOnce(rejected(422)).mockResolvedValue({ certificateCode: 'TUBU-9', cost: 50 });
+      renderPage();
+      await openTab('Vườn');
+      const ok = await openConfirm();
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+      });
+      mocks.api.getGameProfile.mockClear();
+      await tapTogether(ok);
+      await waitFor(() => expect(confirmButton()).not.toBeInTheDocument());
+      expect(mocks.api.getGameProfile).not.toHaveBeenCalled();
+      await tapTogether(await openConfirm());
+      await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(2));
+      expect(mocks.api.buyTree.mock.calls[1]![0]).not.toBe(mocks.api.buyTree.mock.calls[0]![0]);
+    });
+
+    it('máy chủ lỗi 500: hộp ở lại, "Xác nhận" gửi lại đúng khoá cũ', async () => {
+      mocks.api.buyTree.mockRejectedValueOnce(rejected(500)).mockResolvedValue({ certificateCode: 'TUBU-9', cost: 50 });
+      renderPage();
+      await openTab('Vườn');
+      const ok = await openConfirm();
+      await tapTogether(ok);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+      await waitFor(() => expect(ok).not.toHaveAttribute('aria-busy', 'true'));
+      expect(confirmButton()).toBeInTheDocument();
+      await tapTogether(ok);
+      await waitFor(() => expect(mocks.api.buyTree).toHaveBeenCalledTimes(2));
+      expect(mocks.api.buyTree.mock.calls[1]![0]).toBe(mocks.api.buyTree.mock.calls[0]![0]);
+    });
   });
 });
 

@@ -19,6 +19,7 @@ import { getErrorMessage, getLoadErrorMessage, isNotFoundError, isServerRejectio
 import { settleWithin } from '../utils/settle-within';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useSheetSeq } from '../hooks/use-sheet-seq';
+import { useSyncedDraft } from '../hooks/use-synced-draft';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { QrCode } from '../components/qr-code';
 import { SupportContact } from '../components/support-contact';
@@ -105,25 +106,28 @@ function refreshAfterRejection(qc: QueryClient, id: string): Promise<void> {
   );
 }
 
+const TRACKING_EMPTY = { carrier: '', code: '' };
+
 function TrackingForm({
   id,
-  initialCarrier,
-  initialCode,
+  liveCarrier,
+  liveCode,
   onDone,
 }: {
   id: string;
-  initialCarrier: string;
-  initialCode: string;
+  liveCarrier: string;
+  liveCode: string;
   onDone?: () => void;
 }) {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
-  const [carrier, setCarrier] = useState(initialCarrier);
-  const [code, setCode] = useState(initialCode);
+  // Yêu cầu được hỏi lại mỗi 15 giây và sau lệnh bị từ chối: ô khách chưa gõ bám dữ liệu mới, ô đã gõ giữ chữ.
+  const draft = useSyncedDraft(TRACKING_EMPTY, { carrier: liveCarrier, code: liveCode }, id);
+  const { carrier, code } = draft.values;
   const m = useLockedMutation({
     mutationFn: () => setWasteTracking(id, { carrier: carrier.trim(), trackingCode: code.trim() }),
     onSuccess: async () => {
-      await invalidateAfterWasteWrite(qc);
+      await settleWithin(invalidateAfterWasteWrite(qc));
       openSnackbar({ text: 'Đã lưu mã vận đơn', type: 'success' });
       onDone?.();
     },
@@ -136,10 +140,10 @@ function TrackingForm({
   return (
     <div style={{ ...COLUMN, gap: 10 }}>
       <Field label="Hãng">
-        <Input maxLength={INPUT_LIMITS.recycleCarrier} value={carrier} onChange={(e) => setCarrier(e.target.value)} />
+        <Input maxLength={INPUT_LIMITS.recycleCarrier} value={carrier} onChange={(e) => draft.set('carrier', e.target.value)} />
       </Field>
       <Field label="Mã vận đơn">
-        <Input maxLength={INPUT_LIMITS.recycleTrackingCode} value={code} onChange={(e) => setCode(e.target.value)} />
+        <Input maxLength={INPUT_LIMITS.recycleTrackingCode} value={code} onChange={(e) => draft.set('code', e.target.value)} />
       </Field>
       <Button fullWidth disabled={!ready} loading={m.isPending} onPress={() => m.mutate()}>
         Đã gửi
@@ -196,7 +200,7 @@ export default function RecycleRequestPage() {
     mutationFn: (rid: string) => cancelWasteRequest(rid),
     onMutate: () => cancelSeq.mark(),
     onSuccess: async (_data, _rid, sent) => {
-      await invalidateAfterWasteWrite(qc);
+      await settleWithin(invalidateAfterWasteWrite(qc));
       if (cancelSeq.isCurrent(sent)) setCancelOpen(false);
       openSnackbar({ text: 'Đã huỷ yêu cầu', type: 'success' });
     },
@@ -309,7 +313,7 @@ export default function RecycleRequestPage() {
         <Text variant="body-sm">Đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn</Text>
         <Text variant="body-sm">Kho từ chối kiện còn cước phải trả khi nhận</Text>
         <Text variant="body-sm" tone="secondary">{`Nhập mã vận đơn đến hết ${dayMonth(r.expiresAt ?? r.createdAt)}`}</Text>
-        <TrackingForm id={id} initialCarrier={r.carrier ?? ''} initialCode={r.trackingCode ?? ''} />
+        <TrackingForm id={id} liveCarrier={r.carrier ?? ''} liveCode={r.trackingCode ?? ''} />
       </section>
     ) : null;
 
@@ -408,8 +412,8 @@ export default function RecycleRequestPage() {
             (editingTracking ? (
               <TrackingForm
                 id={id}
-                initialCarrier={r.carrier ?? ''}
-                initialCode={r.trackingCode}
+                liveCarrier={r.carrier ?? ''}
+                liveCode={r.trackingCode}
                 onDone={() => setEditingTracking(false)}
               />
             ) : (

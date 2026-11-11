@@ -158,7 +158,8 @@ function DealerApply({ rejected, rejectionReason }: { rejected: boolean; rejecti
       // Mất phản hồi rồi bấm lại: hồ sơ đã nhận, làm mới trạng thái để sang màn chờ duyệt thay vì đứng ở form.
       const already = errorCode(e) === 'DEALER_APPLICATION_PENDING';
       openSnackbar({ text: getErrorMessage(e), type: already ? 'info' : 'error' });
-      if (already) return settleWithin(qc.invalidateQueries({ queryKey: ['dealer-me'] }));
+      // Mọi lời từ chối vì màn đã cũ (400/404/409: hồ sơ đã được xử lý hay đổi ở máy khác) đều tải lại trạng thái hồ sơ rồi mới nhả khoá. Mất mạng, quá hạn, 401, 5xx không nói gì về hồ sơ: nhả ngay.
+      if (already || isStaleStateError(e)) return settleWithin(qc.invalidateQueries({ queryKey: ['dealer-me'] }));
     },
   });
 

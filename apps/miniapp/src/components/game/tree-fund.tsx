@@ -23,7 +23,10 @@ export function TreeFund({
   points: number | null;
   onEarnPoints: () => void;
   buyPending: boolean;
-  /** Gửi lượt góp kèm key của hộp xác nhận đang mở; trả `true` khi thành công, `false` khi lỗi (caller đã báo lỗi). */
+  /**
+   * Gửi lượt góp kèm key của hộp xác nhận đang mở; caller đã báo lỗi. Trả `true` khi hộp phải đóng (thành công, hoặc máy chủ đã từ chối hẳn
+   * và dữ liệu mới đã về: bấm lại cùng key chỉ nhận lại đúng lời từ chối đó), `false` khi lỗi tạm (mạng, quá hạn, 401, 5xx): hộp ở lại, thử lại cùng key.
+   */
   onBuy: (idempotencyKey: string) => Promise<boolean>;
 }) {
   const [confirmOpen, setConfirmOpen] = useState(false);

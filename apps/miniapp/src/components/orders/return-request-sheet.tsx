@@ -74,18 +74,18 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
   const bankAllowed = canRefundToBank(order.paymentMethod) && !placedForCustomer;
   const showsMoney = order.total > 0 && order.paymentMethod !== 'XU';
 
+  // Nạp tài khoản đã lưu đúng một lần mỗi lần mở tấm (nơi gọi đổi `key` khi mở): xoá số tài khoản để gõ số khác không được kích hoạt nạp lại.
+  // Phản hồi về muộn chỉ điền khi LÚC ĐÓ cả ba ô còn trống, nên không bao giờ ghi đè chữ khách đã gõ.
+  const bankPrefillStartedRef = useRef(false);
   useEffect(() => {
-    if (method !== 'BANK' || bank.accountNumber) return;
-    let alive = true;
+    if (method !== 'BANK' || bankPrefillStartedRef.current) return;
+    bankPrefillStartedRef.current = true;
     void fetchRefundBank()
-      .then((b) => {
-        if (alive && b) setBank(b);
+      .then((saved) => {
+        if (saved) setBank((b) => (b.bankName || b.accountNumber || b.accountName ? b : saved));
       })
       .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [method, bank.accountNumber]);
+  }, [method]);
 
   const picked = useMemo(
     () => lines.filter((l) => l.selected && l.quantity > 0).map((l) => ({ orderItemId: l.orderItemId, quantity: l.quantity })),

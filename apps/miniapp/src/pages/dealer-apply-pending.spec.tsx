@@ -36,6 +36,7 @@ vi.mock('../components/image-upload', () => ({
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import DealerPage from './dealer';
 
 const NONE = { isDealer: false, status: null, tier: null, currentDebt: 0 };
@@ -255,7 +256,7 @@ describe('DealerPage: Gửi hồ sơ giữ khoá tới khi trạng thái hồ s�
     expect(screen.getByRole('button', { name: 'Gửi hồ sơ đăng ký' })).toBeEnabled();
   });
 
-  it('lỗi tiếng Anh của máy chủ không hiện thô: snackbar là câu tiếng Việt, hồ sơ không bị coi là đã nhận (không làm mới dealer-me)', async () => {
+  it('lỗi tiếng Anh của máy chủ không hiện thô: snackbar là câu tiếng Việt, hồ sơ không bị coi là đã nhận (dealer-me tải lại chỉ để đối chiếu, vẫn ở form)', async () => {
     mocks.getDealerMe.mockResolvedValue(NONE);
     mocks.applyDealer.mockRejectedValue(
       new HttpError('x', 'ERR_BAD_REQUEST', { status: 400, data: { message: 'phone must be a string' }, headers: {} }),
@@ -266,6 +267,104 @@ describe('DealerPage: Gửi hồ sơ giữ khoá tới khi trạng thái hồ s�
     const text = mocks.openSnackbar.mock.calls.find((c) => c[0].type === 'error')![0].text as string;
     expect(text).toBe(t.errors.generic);
     expect(text).not.toMatch(/must be/);
+    await waitFor(() => expect(mocks.getDealerMe).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Gửi hồ sơ đăng ký' })).not.toHaveAttribute('aria-busy'));
+    expect(screen.queryByText('Hồ sơ đang được duyệt')).toBeNull();
+  });
+});
+
+// W118A: mọi lời từ chối của máy chủ vì màn đã cũ (400/404/409) đều tải lại dealer-me và giữ khoá tới khi nó về, không riêng mã DEALER_APPLICATION_PENDING.
+describe('DealerPage: Gửi hồ sơ bị từ chối thì tải lại trạng thái hồ sơ rồi mới nhả khoá (W118A)', () => {
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const rejection = (status: number, message = 'Hồ sơ chưa hợp lệ.') =>
+    new HttpError('x', 'ERR_BAD_REQUEST', { status, data: { message }, headers: {} });
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.applyDealer.mockReset();
+    mocks.getDealerMe.mockReset();
+  });
+
+  it.each([[400], [404], [409]])('bị từ chối %i: tải lại dealer-me, nút giữ khoá tới khi về, chạm lại không gửi; về rồi nhả và gửi lại được', async (status) => {
+    const refetch = deferred<unknown>();
+    mocks.getDealerMe.mockResolvedValueOnce(NONE).mockReturnValueOnce(refetch.promise);
+    mocks.applyDealer.mockRejectedValueOnce(rejection(status)).mockResolvedValue({ ok: true });
+    renderPage();
+    const submit = await fillForm();
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.getDealerMe).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(errorToasts()).toBe(1));
+    expect(submit).toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(submit);
+    await settle();
+    expect(mocks.applyDealer).toHaveBeenCalledTimes(1);
+
+    await act(async () => refetch.resolve(NONE));
+    await waitFor(() => expect(submit).not.toHaveAttribute('aria-busy'));
+    expect(errorToasts()).toBe(1);
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.applyDealer).toHaveBeenCalledTimes(2));
+  });
+
+  it('bị từ chối 409 mà dealer-me về PENDING (hồ sơ đã nhận ở máy khác): sang màn chờ duyệt', async () => {
+    mocks.getDealerMe.mockResolvedValueOnce(NONE).mockResolvedValue({ ...NONE, status: 'PENDING' });
+    mocks.applyDealer.mockRejectedValue(rejection(409, 'Hồ sơ vừa có thay đổi.'));
+    renderPage();
+    fireEvent.click(await fillForm());
+    expect(await screen.findByText('Hồ sơ đang được duyệt')).toBeInTheDocument();
+    expect(mocks.applyDealer).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', new HttpError('Service Unavailable', undefined, { status: 503, data: { message: 'Service Unavailable' }, headers: {} })],
+    ['hết phiên 401', new HttpError('Unauthorized', undefined, { status: 401, data: { message: 'Unauthorized' }, headers: {} })],
+  ])('%s: không tải lại dealer-me, nhả khoá ngay, gửi lại được', async (_label, error) => {
+    mocks.getDealerMe.mockResolvedValue(NONE);
+    mocks.applyDealer.mockRejectedValueOnce(error).mockResolvedValue({ ok: true });
+    renderPage();
+    const submit = await fillForm();
+    fireEvent.click(submit);
+    await waitFor(() => expect(errorToasts()).toBe(1));
+    await waitFor(() => expect(submit).not.toHaveAttribute('aria-busy'));
+    await settle();
     expect(mocks.getDealerMe).toHaveBeenCalledTimes(1);
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.applyDealer).toHaveBeenCalledTimes(2));
+  });
+
+  it('dealer-me tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+    mocks.getDealerMe.mockResolvedValueOnce(NONE).mockReturnValue(new Promise(() => undefined));
+    mocks.applyDealer.mockRejectedValueOnce(rejection(400)).mockResolvedValue({ ok: true });
+    renderPage();
+    const submit = await fillForm();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(submit);
+      await waitFor(() => expect(errorToasts()).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(submit).toHaveAttribute('aria-busy', 'true');
+      fireEvent.click(submit);
+      expect(mocks.applyDealer).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(submit).not.toHaveAttribute('aria-busy'));
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.applyDealer).toHaveBeenCalledTimes(2));
   });
 });

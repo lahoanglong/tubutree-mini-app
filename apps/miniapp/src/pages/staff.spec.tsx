@@ -2563,4 +2563,123 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       expect(timeInputs().map((i) => i.value)).toEqual(['08:00', '12:00']);
     });
   });
+
+  describe('tấm "Đăng ký nhanh cả tuần": ca chuẩn đã chọn biến mất khỏi danh sách sống (W118A)', () => {
+    const renderLive = () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      render(
+        <QueryClientProvider client={qc}>
+          <StaffPage />
+        </QueryClientProvider>,
+      );
+      return qc;
+    };
+    const refetchTemplates = (qc: QueryClient) =>
+      act(async () => {
+        await qc.invalidateQueries({ queryKey: ['shift-templates'] });
+      });
+    const openQuick = async () => {
+      const qc = renderLive();
+      fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
+      return qc;
+    };
+
+    it('chọn ca chuẩn rồi danh sách tải lại không còn ca đó: ô giờ hiện lại với giờ đang thấy, Gửi duyệt gửi đúng giờ đó, không gửi mã ca chuẩn đã mất', async () => {
+      const qc = await openQuick();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' }));
+      expect(timeInputs()).toHaveLength(0);
+      mocks.getShiftTemplates.mockResolvedValue([TEMPLATES[1]]);
+      await refetchTemplates(qc);
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Ca sáng (08:00–12:00)' })).toBeNull());
+      expect(timeInputs().map((i) => i.value)).toEqual(['08:00', '17:00']);
+      fireEvent.change(timeInputs()[0]!, { target: { value: '09:30' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi duyệt (3 ngày)' }));
+      await waitFor(() => expect(mocks.createShifts).toHaveBeenCalledTimes(1));
+      const items = mocks.createShifts.mock.calls[0]![0] as { workDate: string; startAt: string; endAt: string; templateId?: string }[];
+      expect(items.map((x) => x.workDate)).toEqual(['2026-03-11', '2026-03-12', '2026-03-13']);
+      expect(items[0]).toEqual({ workDate: '2026-03-11', startAt: vn('2026-03-11', '09:30'), endAt: vn('2026-03-11', '17:00'), templateId: undefined });
+    });
+
+    it('ca chuẩn đã chọn vẫn còn trong danh sách sống: ô giờ ẩn và gửi giờ của ca chuẩn như cũ', async () => {
+      const qc = await openQuick();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' }));
+      await refetchTemplates(qc);
+      expect(timeInputs()).toHaveLength(0);
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi duyệt (3 ngày)' }));
+      await waitFor(() => expect(mocks.createShifts).toHaveBeenCalledTimes(1));
+      expect((mocks.createShifts.mock.calls[0]![0] as { templateId?: string }[])[0]).toEqual({
+        workDate: '2026-03-11',
+        startAt: vn('2026-03-11', '08:00'),
+        endAt: vn('2026-03-11', '12:00'),
+        templateId: 't1',
+      });
+    });
+
+    it('danh sách chỉ còn một ca chuẩn khác ca đã chọn: chọn lại ca còn lại vẫn hoạt động, nút ca chuẩn không còn bật nhầm', async () => {
+      const qc = await openQuick();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' }));
+      mocks.getShiftTemplates.mockResolvedValue([TEMPLATES[1]]);
+      await refetchTemplates(qc);
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Ca sáng (08:00–12:00)' })).toBeNull());
+      expect(screen.getByRole('button', { name: 'Ca chiều (13:00–17:00)' })).toHaveAttribute('aria-pressed', 'false');
+      fireEvent.click(screen.getByRole('button', { name: 'Ca chiều (13:00–17:00)' }));
+      expect(timeInputs()).toHaveLength(0);
+    });
+
+    it('mẫu đã chọn biến mất, khách gõ 09:00–12:00, lần tải sau mẫu có lại: ô giờ vẫn hiện giờ khách gõ, mẫu không bật lại, Gửi duyệt gửi giờ khách gõ không kèm mã mẫu', async () => {
+      const qc = await openQuick();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' }));
+      mocks.getShiftTemplates.mockResolvedValue([TEMPLATES[1]]);
+      await refetchTemplates(qc);
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Ca sáng (08:00–12:00)' })).toBeNull());
+      fireEvent.change(timeInputs()[0]!, { target: { value: '09:00' } });
+      fireEvent.change(timeInputs()[1]!, { target: { value: '12:00' } });
+      mocks.getShiftTemplates.mockResolvedValue(TEMPLATES);
+      await refetchTemplates(qc);
+      await screen.findByRole('button', { name: 'Ca sáng (08:00–12:00)' });
+      expect(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' })).toHaveAttribute('aria-pressed', 'false');
+      expect(timeInputs().map((i) => i.value)).toEqual(['09:00', '12:00']);
+      fireEvent.click(screen.getByRole('button', { name: 'Gửi duyệt (3 ngày)' }));
+      await waitFor(() => expect(mocks.createShifts).toHaveBeenCalledTimes(1));
+      expect((mocks.createShifts.mock.calls[0]![0] as unknown[])[0]).toEqual({
+        workDate: '2026-03-11',
+        startAt: vn('2026-03-11', '09:00'),
+        endAt: vn('2026-03-11', '12:00'),
+        templateId: undefined,
+      });
+    });
+
+    it('chỉ gõ giờ kết thúc rồi mẫu có lại: giờ kết thúc khách gõ còn nguyên và mẫu không chiếm lại', async () => {
+      const qc = await openQuick();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' }));
+      mocks.getShiftTemplates.mockResolvedValue([TEMPLATES[1]]);
+      await refetchTemplates(qc);
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Ca sáng (08:00–12:00)' })).toBeNull());
+      fireEvent.change(timeInputs()[1]!, { target: { value: '18:30' } });
+      mocks.getShiftTemplates.mockResolvedValue(TEMPLATES);
+      await refetchTemplates(qc);
+      await screen.findByRole('button', { name: 'Ca sáng (08:00–12:00)' });
+      expect(timeInputs().map((i) => i.value)).toEqual(['08:00', '18:30']);
+      expect(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' })).toHaveAttribute('aria-pressed', 'false');
+    });
+
+    it('chỉ gõ giờ bắt đầu rồi mẫu có lại: giờ bắt đầu khách gõ còn nguyên và mẫu không chiếm lại; nút ca chuẩn vẫn chọn lại và bỏ chọn được', async () => {
+      const qc = await openQuick();
+      fireEvent.click(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' }));
+      mocks.getShiftTemplates.mockResolvedValue([TEMPLATES[1]]);
+      await refetchTemplates(qc);
+      await waitFor(() => expect(screen.queryByRole('button', { name: 'Ca sáng (08:00–12:00)' })).toBeNull());
+      fireEvent.change(timeInputs()[0]!, { target: { value: '09:30' } });
+      mocks.getShiftTemplates.mockResolvedValue(TEMPLATES);
+      await refetchTemplates(qc);
+      await screen.findByRole('button', { name: 'Ca sáng (08:00–12:00)' });
+      expect(timeInputs().map((i) => i.value)).toEqual(['09:30', '17:00']);
+      fireEvent.click(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' }));
+      expect(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' })).toHaveAttribute('aria-pressed', 'true');
+      expect(timeInputs()).toHaveLength(0);
+      fireEvent.click(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' }));
+      expect(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' })).toHaveAttribute('aria-pressed', 'false');
+      expect(timeInputs().map((i) => i.value)).toEqual(['09:30', '17:00']);
+    });
+  });
 });

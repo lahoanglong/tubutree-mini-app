@@ -155,7 +155,8 @@ export function useGameActions({
       void refresh();
       return r;
     } catch (e) {
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Bánh xe giữ khoá quay tới khi Promise này xong: bị từ chối thì điểm và lượt quay đang hiện đã cũ nên tải lại trước khi nhả.
+      await onRejectedOnce(e);
       throw e;
     }
   };

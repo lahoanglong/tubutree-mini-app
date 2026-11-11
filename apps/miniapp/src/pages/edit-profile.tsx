@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { AVATAR_READ_FAILED } from '@tubutree/app-core/client-copy';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { Camera, Gift, Loader2 } from 'lucide-react';
@@ -10,6 +10,7 @@ import { cleanProfileName, profileNameError } from '@tubutree/app-core/profile-n
 import { getMe, updateMe } from '../services/account-api';
 import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { useAuthStore } from '../store/auth';
+import { useSyncedDraft } from '../hooks/use-synced-draft';
 import { haptic } from '../utils/haptic';
 import { settleWithin } from '../utils/settle-within';
 import { isCloudinaryConfigured, readAndCompressImage, uploadToCloudinary } from '../components/image-upload';
@@ -28,16 +29,30 @@ const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const AVATAR_UPLOAD_FAILED = 'Chưa tải được ảnh lên nên ảnh đại diện chưa đổi. Bạn thử lại nhé.';
 const AVATAR_NOT_SAVED = 'Đã lưu hồ sơ, riêng ảnh đại diện chưa lưu được. Bạn thử chọn lại ảnh sau nhé.';
 
+// avatarUrl chỉ nhận URL đã lưu (từ hồ sơ hoặc vừa tải lên Cloudinary): API không nhận base64 cho ảnh đại diện.
+type ProfileForm = { fullName: string; email: string; avatarUrl: string | null };
+const PROFILE_EMPTY: ProfileForm = { fullName: '', email: '', avatarUrl: null };
+
 export default function EditProfilePage() {
   const navigate = useNavigate();
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe });
 
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  // Chỉ nhận URL đã lưu (từ hồ sơ hoặc vừa tải lên Cloudinary): API không nhận base64 cho ảnh đại diện.
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  // Hồ sơ tải lại (sau khi máy chủ từ chối, khi quay lại app) chỉ đổi ô khách chưa sửa; ô đã gõ hay đã đổi ảnh giữ nguyên.
+  const draft = useSyncedDraft(
+    PROFILE_EMPTY,
+    meQ.data
+      ? {
+          fullName: meQ.data.fullName ?? '',
+          email: meQ.data.email ?? '',
+          // `||` vì chuỗi rỗng cũng là chưa có ảnh; ảnh Zalo đã lưu vào user lúc đăng nhập.
+          avatarUrl: meQ.data.avatarUrl || useAuthStore.getState().user?.avatarUrl || null,
+        }
+      : null,
+    true,
+  );
+  const { fullName, email, avatarUrl } = draft.values;
   // Ảnh vừa cắt, chỉ để xem trước trong lúc tải lên; không bao giờ được gửi đi.
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarChanged, setAvatarChanged] = useState(false);
@@ -53,17 +68,6 @@ export default function EditProfilePage() {
   const [rawImageForCrop, setRawImageForCrop] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
-  // Khách đã gõ hay đổi ảnh thì hồ sơ tải lại (sau khi máy chủ từ chối, khi quay lại app) chỉ đổi phần đọc thẳng từ hồ sơ như ngày sinh, không ghi đè ô đang sửa.
-  const editedRef = useRef(false);
-
-  useEffect(() => {
-    if (meQ.data && !editedRef.current) {
-      setFullName(meQ.data.fullName ?? '');
-      setEmail(meQ.data.email ?? '');
-      // `||` vì chuỗi rỗng cũng là chưa có ảnh; ảnh Zalo đã lưu vào user lúc đăng nhập.
-      setAvatarUrl(meQ.data.avatarUrl || useAuthStore.getState().user?.avatarUrl || null);
-    }
-  }, [meQ.data]);
 
   // Ngày sinh chưa đặt mà khách vừa chọn: hỏi xác nhận trước khi lưu vì API không cho sửa lại.
   const dobEditable = !meQ.data?.dob;
@@ -111,8 +115,7 @@ export default function EditProfilePage() {
       const blob = await (await fetch(croppedUrl)).blob();
       const secureUrl = await uploadToCloudinary(blob);
       if (secureUrl) {
-        editedRef.current = true;
-        setAvatarUrl(secureUrl);
+        draft.set('avatarUrl', secureUrl);
         setAvatarChanged(true);
         openSnackbar({ text: 'Đã chọn ảnh đại diện mới. Bấm "Lưu thay đổi" để lưu.', type: 'success', position: 'top' });
       } else {
@@ -270,10 +273,7 @@ export default function EditProfilePage() {
             <Input
               value={fullName}
               readOnly={confirming}
-              onChange={(e) => {
-                editedRef.current = true;
-                setFullName(e.target.value);
-              }}
+              onChange={(e) => draft.set('fullName', e.target.value)}
               onBlur={() => setTouched(true)}
               maxLength={120}
               status={nameError ? 'error' : undefined}
@@ -285,10 +285,7 @@ export default function EditProfilePage() {
               type="text"
               value={email}
               readOnly={confirming}
-              onChange={(e) => {
-                editedRef.current = true;
-                setEmail(e.target.value);
-              }}
+              onChange={(e) => draft.set('email', e.target.value)}
               onBlur={() => setTouched(true)}
               status={emailInvalid ? 'error' : undefined}
             />

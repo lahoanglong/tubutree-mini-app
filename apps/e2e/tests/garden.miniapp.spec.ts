@@ -171,7 +171,7 @@ test.describe('Vườn Xanh', () => {
     expect(calls[0]!.headers['idempotency-key']).toMatch(/\S{8,}/);
   });
 
-  test('góp quỹ thất bại: hộp ở lại, báo lỗi, "Xác nhận" gửi lại cùng Idempotency-Key', async ({ page, api }) => {
+  test('góp quỹ bị máy chủ từ chối: báo lỗi, hộp đóng sau khi dữ liệu mới về, mở lại thì "Xác nhận" gửi Idempotency-Key MỚI', async ({ page, api }) => {
     mockGame(api);
     let attempt = 0;
     api.post('/game/tree/buy', () => {
@@ -185,6 +185,30 @@ test.describe('Vườn Xanh', () => {
     await page.getByRole('button', { name: /Góp quỹ trồng cây \(/ }).click();
     await page.getByRole('button', { name: 'Xác nhận' }).click();
     await expect(page.getByText('Không đủ Điểm Xanh để góp cây.')).toBeVisible();
+    await expect(page.getByText('Góp quỹ trồng cây?')).toBeHidden();
+
+    await page.getByRole('button', { name: /Góp quỹ trồng cây \(/ }).click();
+    await page.getByRole('button', { name: 'Xác nhận' }).click();
+    await expect(page.getByText(/Đã góp 1 cây vào quỹ trồng cây/)).toBeVisible();
+
+    const calls = api.callsTo('POST', '/game/tree/buy');
+    expect(calls).toHaveLength(2);
+    expect(calls[1]!.headers['idempotency-key']).not.toBe(calls[0]!.headers['idempotency-key']);
+  });
+
+  test('góp quỹ lỗi tạm (máy chủ 500): hộp ở lại, báo lỗi, "Xác nhận" gửi lại cùng Idempotency-Key', async ({ page, api }) => {
+    mockGame(api);
+    let attempt = 0;
+    api.post('/game/tree/buy', () => {
+      attempt += 1;
+      if (attempt === 1) return reply(500, { message: 'Máy chủ đang bận.' });
+      return { certificateCode: 'CERT-E2E-3', treeType: 'Cây Sưa Đỏ', cost: 300, pointsUsed: 300, pointsUsedConverted: 0 };
+    });
+    await page.goto('/game');
+
+    await page.getByText('Vườn', { exact: true }).first().click({ timeout: 15_000 });
+    await page.getByRole('button', { name: /Góp quỹ trồng cây \(/ }).click();
+    await page.getByRole('button', { name: 'Xác nhận' }).click();
     await expect(page.getByText('Góp quỹ trồng cây?')).toBeVisible();
 
     await expect(page.getByRole('button', { name: 'Xác nhận' })).toBeEnabled();

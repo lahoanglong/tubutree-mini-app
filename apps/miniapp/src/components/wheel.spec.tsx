@@ -139,6 +139,27 @@ describe('WheelOfFortune — nút quay', () => {
     expect(spinButton()).toBeEnabled();
   });
 
+  it('onSpin bị từ chối sau khi giữ chờ dữ liệu mới: nút còn khoá và chạm lại không gọi onSpin, xong rồi mới mở lại quay được', async () => {
+    let fail!: (e: unknown) => void;
+    const held = new Promise<SpinResult>((_resolve, reject) => {
+      fail = reject;
+    });
+    const onSpin = vi.fn().mockReturnValueOnce(held).mockResolvedValue(POINTS_PRIZE);
+    render(<WheelOfFortune cost={20} onSpin={onSpin} />);
+    fireEvent.click(spinButton());
+    await advance(SPIN_MS + 500);
+    expect(spinButton()).toBeDisabled();
+    fireEvent.click(spinButton());
+    expect(onSpin).toHaveBeenCalledTimes(1);
+    await act(async () => fail(new Error('bị từ chối')));
+    await advance(0);
+    expect(spinButton()).toBeEnabled();
+    fireEvent.click(spinButton());
+    await advance(0);
+    expect(onSpin).toHaveBeenCalledTimes(2);
+    await advance(SPIN_MS);
+  });
+
   it('chạm vào chữ QUAY ở giữa bánh xe quay như nút chính', async () => {
     const onSpin = vi.fn().mockResolvedValue(POINTS_PRIZE);
     render(<WheelOfFortune cost={20} onSpin={onSpin} />);

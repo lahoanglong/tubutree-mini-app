@@ -540,3 +540,85 @@ describe('ReturnRequestSheet: máy chủ từ chối thì tải lại ngay và �
     expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đơn này không còn đổi/trả được nữa hoặc đã có yêu cầu đang chờ xử lý.', type: 'info' });
   });
 });
+
+describe('ReturnRequestSheet: tài khoản hoàn tiền mặc định nạp tối đa một lần mỗi lần mở, không ghi đè chữ đã gõ (W118A)', () => {
+  const SAVED = { bankName: 'Techcombank', accountNumber: '190312345678', accountName: 'NGUYEN VAN A' };
+  const LABELS = ['Tên ngân hàng', 'Số tài khoản', 'Chủ tài khoản'] as const;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchRefundBank.mockReset().mockResolvedValue(null);
+    mocks.estimateReturn.mockResolvedValue({ refund: 0, goods: 0, shipping: 0, isFull: false, moneyRefundable: true, pointsUsedBack: 0, lines: [] });
+  });
+
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const pickBank = () => {
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trả Nước giặt Chai 1L' }));
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Nơi nhận tiền hoàn' })).getByRole('radio', { name: /Tài khoản ngân hàng/ }));
+  };
+  const pickWallet = () => fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Nơi nhận tiền hoàn' })).getByRole('radio', { name: /Ví Tubu/ }));
+  const typeField = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  const fieldValue = (label: string) => (screen.getByLabelText(label) as HTMLInputElement).value;
+
+  it('khách gõ chủ tài khoản và số rồi xoá số: không nạp lần hai, tên chủ còn nguyên', async () => {
+    mocks.fetchRefundBank.mockResolvedValueOnce(null).mockResolvedValue(SAVED);
+    renderSheet();
+    pickBank();
+    await waitFor(() => expect(mocks.fetchRefundBank).toHaveBeenCalledTimes(1));
+    await settle();
+    typeField('Chủ tài khoản', 'TRAN BINH');
+    typeField('Số tài khoản', '555666777');
+    typeField('Số tài khoản', '');
+    await settle();
+    expect(mocks.fetchRefundBank).toHaveBeenCalledTimes(1);
+    expect(fieldValue('Chủ tài khoản')).toBe('TRAN BINH');
+    expect(fieldValue('Tên ngân hàng')).toBe('');
+    expect(fieldValue('Số tài khoản')).toBe('');
+  });
+
+  it.each(LABELS)('phản hồi nạp tài khoản về trễ sau khi khách đã gõ ô "%s": không ghi đè', async (label) => {
+    const d = deferred();
+    mocks.fetchRefundBank.mockReturnValue(d.promise);
+    renderSheet();
+    pickBank();
+    typeField(label, 'GO TAY');
+    await act(async () => d.resolve(SAVED));
+    await settle();
+    expect(fieldValue(label)).toBe('GO TAY');
+    for (const other of LABELS.filter((l) => l !== label)) expect(fieldValue(other)).toBe('');
+  });
+
+  it('phản hồi về khi cả ba ô còn trống: điền sẵn cả ba ô', async () => {
+    const d = deferred();
+    mocks.fetchRefundBank.mockReturnValue(d.promise);
+    renderSheet();
+    pickBank();
+    await act(async () => d.resolve(SAVED));
+    await waitFor(() => expect(fieldValue('Số tài khoản')).toBe('190312345678'));
+    expect(fieldValue('Tên ngân hàng')).toBe('Techcombank');
+    expect(fieldValue('Chủ tài khoản')).toBe('NGUYEN VAN A');
+  });
+
+  it('đổi sang Ví Tubu rồi quay lại Ngân hàng: không nạp lần hai, ba ô còn trống không bị điền bằng bản trả về sau', async () => {
+    mocks.fetchRefundBank.mockResolvedValueOnce(null).mockResolvedValue(SAVED);
+    renderSheet();
+    pickBank();
+    await waitFor(() => expect(mocks.fetchRefundBank).toHaveBeenCalledTimes(1));
+    await settle();
+    pickWallet();
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Nơi nhận tiền hoàn' })).getByRole('radio', { name: /Tài khoản ngân hàng/ }));
+    await settle();
+    expect(mocks.fetchRefundBank).toHaveBeenCalledTimes(1);
+    for (const label of LABELS) expect(fieldValue(label)).toBe('');
+  });
+});

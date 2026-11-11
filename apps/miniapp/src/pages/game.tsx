@@ -12,7 +12,7 @@ import { ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isServerRejection } from '../services/api';
 import { getDailyCheckInStatus, getLoyalty } from '../services/account-api';
 import { shareLink } from '../services/zmp-bridge';
 import { pointsSummary } from '../utils/points-lots';
@@ -315,7 +315,7 @@ export default function GamePage() {
             points={fundPoints}
             onEarnPoints={() => navigate('/loyalty')}
             buyPending={buyTreeM.isPending}
-            onBuy={(idempotencyKey) => buyTreeM.mutateAsync(idempotencyKey).then(() => true, () => false)}
+            onBuy={(idempotencyKey) => buyTreeM.mutateAsync(idempotencyKey).then(() => true, isServerRejection)}
           />
 
           {/* Mốc cộng đồng góp quỹ trồng cây (Phase 2) — hồ giọt nước toàn cộng đồng */}
