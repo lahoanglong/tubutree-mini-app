@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
+import { subscribeDroppedCart } from '@/lib/use-cart-write';
 import {
   couponGoodsOf,
   rememberRemovedCoupon,
@@ -37,6 +38,15 @@ export function useRemovedCoupon(cart: CartLike | null | undefined, formatMoney:
     const now = latest.current;
     if (now) setMemory((prev) => rememberRemovedCoupon(prev, now));
   }, [removed, code, hasItems]);
+
+  // Phản hồi giỏ bị `useCartWrite` bỏ (lệnh chồng nhau) vẫn có thể là phản hồi duy nhất mang `couponRemoved`: nhớ thẳng từ nó (như `remember` của Mini App), phần hàng tính theo chính phản hồi.
+  useEffect(
+    () =>
+      subscribeDroppedCart(qc, (response) => {
+        if (response.couponRemoved) setMemory((prev) => rememberRemovedCoupon(prev, response));
+      }),
+    [qc],
+  );
 
   const dismiss = useCallback(() => {
     setMemory(null);

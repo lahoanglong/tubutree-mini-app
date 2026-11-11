@@ -79,6 +79,26 @@ function reload(qc: QueryClient): Promise<void> {
   return loaded.then(done, done);
 }
 
+const droppedListeners = new WeakMap<QueryClient, Set<(cart: CartSummary) => void>>();
+
+/**
+ * Nghe các phản hồi giỏ bị bỏ (lệnh chồng nhau, xem `useCartWrite`). `couponRemoved` chỉ nằm ở đúng phản hồi làm máy chủ gỡ mã, lần tải lại sau không còn,
+ * và tính số thiếu phải theo phần hàng của chính phản hồi đó: nơi nhớ lời báo (`useRemovedCoupon`) nhận thẳng phản hồi như `remember` của Mini App, không qua cache.
+ */
+export function subscribeDroppedCart(qc: QueryClient, listener: (cart: CartSummary) => void): () => void {
+  let listeners = droppedListeners.get(qc);
+  if (!listeners) {
+    listeners = new Set();
+    droppedListeners.set(qc, listeners);
+  }
+  listeners.add(listener);
+  return () => void listeners.delete(listener);
+}
+
+function notifyDropped(qc: QueryClient, cart: CartSummary) {
+  for (const listener of droppedListeners.get(qc) ?? []) listener(cart);
+}
+
 /**
  * Cách MỌI lệnh ghi giỏ trên một màn ghi phản hồi của mình vào cache. Mỗi phản hồi là NGUYÊN giỏ tại lúc máy chủ xử lý lệnh đó, nên hai lệnh bay chồng nhau
  * (dòng này với dòng kia, dòng với món bù, Hoàn tác) mà phản hồi về lệch thứ tự thì phản hồi cũ ghi đè phần của lệnh mới. Lệnh đi MỘT MÌNH suốt đời của nó thì
@@ -95,13 +115,13 @@ export function useCartWrite() {
     begin: (): CartCommand => begin(qc),
     /** Phản hồi của lệnh: ghi thẳng khi lệnh đi một mình, còn không thì bỏ và tải lại giỏ. Trả lời hứa tải lại (đã giới hạn thời gian) hoặc `undefined`. */
     write: (cmd: CartCommand, cart: CartSummary): Promise<void> | undefined => {
-      if (!cmd.stale) {
+      // Lần tải giỏ đang bay đã gửi trước lúc máy chủ xử lý lệnh này (tải đầu trang, lấy lại khi quay lại tab): nó về muộn với giỏ cũ và đè phản hồi vừa ghi. Tải lại khởi động lại nó.
+      if (!cmd.stale && qc.isFetching({ queryKey: cartKey(), exact: true }) === 0) {
         qc.setQueryData(cartKey(), cart);
         end(qc, cmd);
         return undefined;
       }
-      // `couponRemoved` chỉ nằm ở đúng phản hồi làm máy chủ gỡ mã (lần tải lại sau không còn): giữ riêng nó, như Mini App nhớ lời báo từ mọi phản hồi dù không ghi giỏ.
-      if (cart.couponRemoved) qc.setQueryData<CartSummary>(cartKey(), (old) => old && { ...old, couponRemoved: cart.couponRemoved });
+      notifyDropped(qc, cart);
       const loaded = reload(qc);
       end(qc, cmd);
       return settleWithin(loaded);

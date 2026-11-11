@@ -65,7 +65,7 @@ const TEMPLATE_BLANK_KEY = [...TEMPLATE_KEY, 'blank'] as const;
 /**
  * Máy chủ từ chối lệnh vì trạng thái đã khác thứ đang hiện (400/404/409/422): tải lại gian hàng, Hành trình và các khoá riêng của tấm rồi mới nhả khoá nút, tối đa 4 giây;
  * bấm lại trên dữ liệu cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 403, 5xx không nói gì về dữ liệu thật: trả undefined để nhả ngay, không tải lại.
- * Tải lại không ghi đè chữ khách đang gõ: các form chỉ lấy giá trị đầu từ gian hàng lúc mở.
+ * Tải lại không ghi đè chữ khách đã gõ: ô chưa đụng theo gian hàng mới, ô đã gõ giữ chữ của khách (`useFormFields`).
  */
 function useReloadOnReject() {
   const qc = useQueryClient();
@@ -76,6 +76,17 @@ function useReloadOnReject() {
   };
 }
 
+/**
+ * Các ô của form lấy giá trị từ gian hàng và đi theo nó cho tới khi khách đụng vào ô đó. Form dựng từ bản cũ khi tấm mở lại lúc lệnh lưu trước còn chờ dữ liệu mới,
+ * hay khi gian hàng đổi sau một lệnh bị từ chối; nếu chỉ lấy giá trị đầu lúc dựng thì khách thấy giá trị vừa lưu bị trả về cũ và lần Lưu sau gửi bản cũ đè lên bản mới.
+ * Ô đã gõ là của khách: bản mới về không ghi đè.
+ */
+function useFormFields<T extends Record<string, string>>(source: T) {
+  const [typed, setTyped] = useState<Partial<T>>({});
+  const edit = (patch: Partial<T>) => setTyped((prev) => ({ ...prev, ...patch }));
+  return [{ ...source, ...typed } as T, edit] as const;
+}
+
 function InlineError({ text }: { text: string | null }) {
   return text ? (
     <p role="alert" className="mt-2 text-sm text-danger-fg">
@@ -84,7 +95,10 @@ function InlineError({ text }: { text: string | null }) {
   ) : null;
 }
 
-/** Chọn mẫu dựng sẵn theo danh mục khi tạo gian hàng mới (mỗi mẫu = 1 bộ sưu tập + tối đa 8 sản phẩm nổi bật); luôn có lối "Bỏ qua". */
+/**
+ * Chọn mẫu dựng sẵn theo danh mục khi tạo gian hàng mới (mỗi mẫu = 1 bộ sưu tập + tối đa 8 sản phẩm nổi bật); luôn có lối "Bỏ qua".
+ * Chưa có chỗ nào trong trang web gọi tới nó (web tạo gian hàng ở luồng đăng ký `storefront-signup.tsx`); giữ để ngang Mini App (`storefront-pickers.tsx`) và có test riêng.
+ */
 export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => unknown }) {
   const [error, setError] = useState<string | null>(null);
   const catQ = useQuery({ ...storefrontCategoriesQuery(coreHttp), enabled: open });
@@ -206,7 +220,8 @@ function PickerBody({ collectionId, onClose, onAdded }: { collectionId: string; 
     mutationFn: (p: PickerProduct) => addItem(coreHttp, collectionId, { productId: p.id }),
     onMutate: () => setError(null),
     onSuccess: () => settleWithin(onAdded()),
-    // Món không còn bán hay khối đã đầy: danh sách sản phẩm cũng phải tải lại, không thì món đó còn nằm đó và thêm lại nhận đúng lỗi cũ.
+    // Món không còn bán: danh sách sản phẩm cũng phải tải lại thì món đó mới biến khỏi danh sách, không thì nó còn nằm đó và thêm lại nhận đúng lỗi cũ.
+    // Khối đã đầy thì danh sách sản phẩm không đổi; chỉ gian hàng tải lại (số món thật của khối) có ích.
     onError: (e) => {
       setError(actErrText(e));
       return reloadOnReject(e, ['picker']);
@@ -280,9 +295,7 @@ export function ProfileSheet({ open, sf, onClose, onSaved }: { open: boolean; sf
 }
 
 function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: () => void; onSaved: Saved }) {
-  const [avatarUrl, setAvatarUrl] = useState(sf.avatarUrl ?? '');
-  const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
-  const [headerNote, setHeaderNote] = useState(sf.headerNote ?? '');
+  const [{ avatarUrl, coverUrl, headerNote }, edit] = useFormFields({ avatarUrl: sf.avatarUrl ?? '', coverUrl: sf.coverUrl ?? '', headerNote: sf.headerNote ?? '' });
   const [error, setError] = useState<string | null>(null);
   // Lưu lúc ảnh còn đang lên sẽ gửi ảnh cũ (hoặc rỗng) rồi đóng form, ảnh mới về sau bị bỏ.
   const { busy: imagesBusy, onBusyChange } = useUploadBusy();
@@ -309,8 +322,8 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
 
   return (
     <div>
-      <StorefrontImageUpload label="Ảnh đại diện" value={avatarUrl} onChange={setAvatarUrl} onBusyChange={onBusyChange} disabled={saving} maxDim={400} quality={0.8} />
-      <StorefrontImageUpload label="Ảnh bìa" value={coverUrl} onChange={setCoverUrl} onBusyChange={onBusyChange} disabled={saving} maxDim={1000} quality={0.75} />
+      <StorefrontImageUpload label="Ảnh đại diện" value={avatarUrl} onChange={(url) => edit({ avatarUrl: url })} onBusyChange={onBusyChange} disabled={saving} maxDim={400} quality={0.8} />
+      <StorefrontImageUpload label="Ảnh bìa" value={coverUrl} onChange={(url) => edit({ coverUrl: url })} onBusyChange={onBusyChange} disabled={saving} maxDim={1000} quality={0.75} />
       <Field label="Lời nhắn của bạn">
         <textarea
           className={`${ui.field} py-2`}
@@ -318,7 +331,7 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
           maxLength={200}
           value={headerNote}
           placeholder="VD: Mình dùng thật, review thật — hỏi mình bất cứ lúc nào nhé!"
-          onChange={(e) => setHeaderNote(e.target.value)}
+          onChange={(e) => edit({ headerNote: e.target.value })}
         />
       </Field>
       <div className="mt-1 text-xs text-stone-600">{headerNote.length}/200</div>
@@ -381,7 +394,7 @@ function ConfigForm({
   unpublishLabel: string | null;
   onUnpublish: () => void;
 }) {
-  const [form, setForm] = useState({
+  const [form, edit] = useFormFields({
     title: sf.title ?? '',
     subdomain: sf.subdomain ?? '',
     themeColor: sf.themeColor ?? DEFAULT_STOREFRONT_THEME_COLOR,
@@ -445,13 +458,13 @@ function ConfigForm({
   return (
     <div className="flex flex-col gap-3">
       <Field label="Tên gian hàng">
-        <input className={ui.field} maxLength={STOREFRONT_TITLE_MAX} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+        <input className={ui.field} maxLength={STOREFRONT_TITLE_MAX} value={form.title} onChange={(e) => edit({ title: e.target.value })} />
       </Field>
 
       {sf.subdomainEnabled && (
         <div>
           <Field label="Subdomain riêng">
-            <input className={ui.field} placeholder="vd: brand1" maxLength={STOREFRONT_SUBDOMAIN_MAX} value={form.subdomain} onChange={(e) => setForm({ ...form, subdomain: e.target.value })} />
+            <input className={ui.field} placeholder="vd: brand1" maxLength={STOREFRONT_SUBDOMAIN_MAX} value={form.subdomain} onChange={(e) => edit({ subdomain: e.target.value })} />
           </Field>
           <div className="mt-0.5 text-xs text-stone-600">URL: {form.subdomain ? `${form.subdomain}.tubutree.com` : 'ten-ban.tubutree.com'}</div>
         </div>
@@ -468,7 +481,7 @@ function ConfigForm({
                 type="button"
                 aria-label={c.label}
                 aria-pressed={selected}
-                onClick={() => setForm({ ...form, themeColor: c.code })}
+                onClick={() => edit({ themeColor: c.code })}
                 className="flex min-h-11 min-w-11 items-center justify-center"
               >
                 <span
@@ -513,9 +526,9 @@ function ConfigForm({
           <h3 className="mb-1 text-sm font-semibold text-stone-900">Kho gửi hàng &amp; hotline</h3>
           <p className="mb-2 text-xs text-stone-700">Dùng cho đơn gian hàng tự giao: khách thấy hotline này trong chi tiết đơn để liên hệ.</p>
           <div className="flex flex-col gap-2">
-            <input className={ui.field} aria-label="Địa chỉ kho xuất hàng" placeholder="Địa chỉ kho xuất hàng" maxLength={STOREFRONT_WAREHOUSE_MAX} value={form.warehouseAddress} onChange={(e) => setForm({ ...form, warehouseAddress: e.target.value })} />
-            <input className={ui.field} aria-label="Tỉnh / Thành phố" placeholder="Tỉnh / Thành phố" maxLength={STOREFRONT_WAREHOUSE_MAX} value={form.warehouseCity} onChange={(e) => setForm({ ...form, warehouseCity: e.target.value })} />
-            <input className={ui.field} aria-label="Hotline kho liên hệ" placeholder="Hotline kho liên hệ" inputMode="tel" maxLength={STOREFRONT_WAREHOUSE_MAX} value={form.warehousePhone} onChange={(e) => setForm({ ...form, warehousePhone: e.target.value })} />
+            <input className={ui.field} aria-label="Địa chỉ kho xuất hàng" placeholder="Địa chỉ kho xuất hàng" maxLength={STOREFRONT_WAREHOUSE_MAX} value={form.warehouseAddress} onChange={(e) => edit({ warehouseAddress: e.target.value })} />
+            <input className={ui.field} aria-label="Tỉnh / Thành phố" placeholder="Tỉnh / Thành phố" maxLength={STOREFRONT_WAREHOUSE_MAX} value={form.warehouseCity} onChange={(e) => edit({ warehouseCity: e.target.value })} />
+            <input className={ui.field} aria-label="Hotline kho liên hệ" placeholder="Hotline kho liên hệ" inputMode="tel" maxLength={STOREFRONT_WAREHOUSE_MAX} value={form.warehousePhone} onChange={(e) => edit({ warehousePhone: e.target.value })} />
           </div>
         </div>
       )}
@@ -548,7 +561,8 @@ export function CollectionSheet({
   onClose: () => void;
   onSaved: Saved;
 }) {
-  const saving = useIsMutating({ mutationKey: RENAME_KEY }) > 0;
+  // Chỉ lệnh của đúng khối đang mở mới chặn đóng tấm: khối khác còn chờ dữ liệu mới không được giữ tấm này.
+  const saving = useIsMutating({ mutationKey: collection ? [...RENAME_KEY, collection.id] : RENAME_KEY }) > 0;
   return (
     <Sheet open={!!collection} onClose={onClose} dismissible={!saving} title={BUILDER_COPY.renameSection}>
       {collection && <CollectionForm key={collection.id} collection={collection} onClose={onClose} onSaved={onSaved} />}
@@ -557,7 +571,7 @@ export function CollectionSheet({
 }
 
 function CollectionForm({ collection, onClose, onSaved }: { collection: StorefrontCollectionEdit; onClose: () => void; onSaved: Saved }) {
-  const [title, setTitle] = useState(collection.title);
+  const [{ title }, edit] = useFormFields({ title: collection.title });
   const [error, setError] = useState<string | null>(null);
   // Khoá theo khối, đọc từ bộ nhớ đệm dùng chung: đóng tấm lúc lệnh còn chờ dữ liệu mới rồi mở lại thì form mới vẫn biết lệnh cũ chưa xong; khối khác đổi tên song song được.
   const renameKey = [...RENAME_KEY, collection.id] as const;
@@ -581,7 +595,7 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
   return (
     <div className="flex flex-col gap-3">
       <Field label={BUILDER_COPY.sectionName}>
-        <input className={ui.field} maxLength={COLLECTION_TITLE_MAX} value={title} onChange={(e) => setTitle(e.target.value)} />
+        <input className={ui.field} maxLength={COLLECTION_TITLE_MAX} value={title} onChange={(e) => edit({ title: e.target.value })} />
       </Field>
       <InlineError text={error} />
       <button

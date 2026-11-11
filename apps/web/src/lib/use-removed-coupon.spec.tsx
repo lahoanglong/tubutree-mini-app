@@ -1,9 +1,26 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { render, type Rendered } from '@/test-utils/dom';
 import { useRemovedCoupon } from './use-removed-coupon';
+
+// Đếm người nghe phản hồi giỏ bị bỏ còn sống: hook phải huỷ nghe khi gỡ khỏi cây (không rò người nghe qua các lần mở trang).
+const listening = vi.hoisted(() => ({ live: 0 }));
+vi.mock('@/lib/use-cart-write', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/lib/use-cart-write')>();
+  return {
+    ...real,
+    subscribeDroppedCart: (...args: Parameters<typeof real.subscribeDroppedCart>) => {
+      listening.live += 1;
+      const off = real.subscribeDroppedCart(...args);
+      return () => {
+        listening.live -= 1;
+        off();
+      };
+    },
+  };
+});
 
 // W28: máy chủ chỉ báo `couponRemoved` ở đúng lần đọc giỏ làm nó gỡ mã; trang phải nhớ lời báo tới khi giỏ lại có mã, khách đóng, hoặc giỏ trống.
 
@@ -102,5 +119,14 @@ describe('useRemovedCoupon (web)', () => {
     show({ couponCode: null, couponRemoved: REMOVED, subtotal: 210_000, items: [{ total: 210_000 }] });
     show({ couponCode: null, couponRemoved: REMOVED, subtotal: 420_000, items: [{ total: 210_000 }, { total: 210_000, isFlash: true }] });
     expect(text()).toBe('Đã gỡ mã MIN300 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 90.000đ để dùng lại.');
+  });
+
+  it('nghe phản hồi giỏ bị bỏ khi hook còn sống và huỷ nghe khi gỡ khỏi cây', () => {
+    expect(listening.live).toBe(0);
+    show({ couponCode: null, subtotal: 210_000 });
+    expect(listening.live).toBe(1);
+    r!.unmount();
+    r = null;
+    expect(listening.live).toBe(0);
   });
 });

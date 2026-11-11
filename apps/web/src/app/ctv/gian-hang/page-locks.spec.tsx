@@ -923,11 +923,12 @@ describe('khoá chống chạm đúp — hồ sơ, cấu hình gian hàng', () =
 });
 
 describe('lưu ở tấm gian hàng: lời báo đã lưu trả Promise tải lại nên khoá giữ tới khi gian hàng mới về (W100B)', () => {
-  it('Lưu hồ sơ: tấm đóng ngay, mở lại lúc gian hàng mới chưa về thì nút Lưu còn bận và không gửi lần hai', async () => {
+  it('Lưu hồ sơ: tấm đóng ngay, mở lại lúc gian hàng mới chưa về thì nút Lưu còn bận và không gửi lần hai; gian hàng mới về thì ô theo bản mới và lần Lưu sau gửi bản mới', async () => {
     mount();
     await flush();
     click(btn('Sửa hồ sơ'));
     await flush();
+    typeInto(dialog()!.querySelector('textarea'), 'Lời nhắn mới');
     const releaseFresh = hold(ME);
     await tap(btn('Lưu hồ sơ', dialog()!), 1);
     expect(calls('patch', '/storefront/me')).toHaveLength(1);
@@ -938,14 +939,19 @@ describe('lưu ở tấm gian hàng: lời báo đã lưu trả Promise tải l�
     click(btn('Đang lưu…', dialog()!));
     await flush();
     expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    state.sf = storefront({ headerNote: 'Lời nhắn mới' });
     await releaseFresh();
     expectIdle(btn('Lưu hồ sơ', dialog()!));
+    expect(dialog()!.querySelector('textarea')!.value).toBe('Lời nhắn mới');
+    await tap(btn('Lưu hồ sơ', dialog()!), 1);
+    expect(calls('patch', '/storefront/me')[1]!.body).toEqual({ avatarUrl: '', coverUrl: '', headerNote: 'Lời nhắn mới' });
   });
 
-  it('Lưu cấu hình: tấm đóng ngay, mở lại lúc gian hàng mới chưa về thì nút Lưu còn bận và không gửi lần hai', async () => {
+  it('Lưu cấu hình: tấm đóng ngay, mở lại lúc gian hàng mới chưa về thì nút Lưu còn bận và không gửi lần hai; gian hàng mới về thì ô theo bản mới và lần Lưu sau gửi bản mới', async () => {
     mount();
     await flush();
     await openConfig();
+    typeInto(dialog()!.querySelector('input'), 'Tên mới');
     const releaseFresh = hold(ME);
     await tap(btn('Lưu cấu hình gian hàng', dialog()!), 1);
     expect(calls('patch', '/storefront/me')).toHaveLength(1);
@@ -955,8 +961,12 @@ describe('lưu ở tấm gian hàng: lời báo đã lưu trả Promise tải l�
     click(btn('Đang lưu…', dialog()!));
     await flush();
     expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    state.sf = storefront({ title: 'Tên mới' });
     await releaseFresh();
     expectIdle(btn('Lưu cấu hình gian hàng', dialog()!));
+    expect(dialog()!.querySelector<HTMLInputElement>('input')!.value).toBe('Tên mới');
+    await tap(btn('Lưu cấu hình gian hàng', dialog()!), 1);
+    expect((calls('patch', '/storefront/me')[1]!.body as { title?: string }).title).toBe('Tên mới');
   });
 
   it('Gỡ tài khoản ngân hàng: nút còn bận tới khi gian hàng mới về (lúc đó nút mới biến mất nếu máy chủ đã xoá)', async () => {
@@ -995,8 +1005,12 @@ describe('lưu ở tấm gian hàng: lời báo đã lưu trả Promise tải l�
     click(btn('Đang lưu…', dialog()!));
     await flush();
     expect(calls('patch', '/storefront/me/collections/c1')).toHaveLength(1);
+    state.sf = storefront({ collections: [{ id: 'c1', title: 'Tên mới', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 0, items: [item()] }] });
     await releaseFresh();
     expectIdle(btn('Lưu', dialog()!));
+    expect(dialog()!.querySelector<HTMLInputElement>('input')!.value).toBe('Tên mới');
+    await tap(btn('Lưu', dialog()!), 1);
+    expect(calls('patch', '/storefront/me/collections/c1')[1]!.body).toEqual({ title: 'Tên mới' });
   });
 });
 

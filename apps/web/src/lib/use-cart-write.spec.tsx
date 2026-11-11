@@ -5,7 +5,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 import { cartKey } from '@/lib/cart-key';
 import type { CartSummary } from '@/lib/shop-client';
-import { useCartWrite } from './use-cart-write';
+import { subscribeDroppedCart, useCartWrite } from './use-cart-write';
+import { useRemovedCoupon } from './use-removed-coupon';
 
 // Sổ lệnh giỏ theo QueryClient: lệnh đi một mình ghi thẳng phản hồi; lệnh từng chồng với việc khác bỏ phản hồi và tải lại giỏ MỘT lần sau khi mọi lệnh xong.
 
@@ -83,6 +84,69 @@ describe('useCartWrite: lệnh đi một mình', () => {
     await run(() => api().write(b, cartOf('B')));
     expect(mark(client)).toBe('B');
     expect(state.gets).toBe(gets);
+  });
+});
+
+describe('useCartWrite: lần tải giỏ đang bay lúc phản hồi về', () => {
+  // Lần tải đã gửi TRƯỚC khi máy chủ xử lý lệnh sẽ về với giỏ cũ: ghi thẳng phản hồi rồi để nó về muộn là đè giỏ mới bằng giỏ cũ.
+  const startLoad = async () => {
+    let release!: () => void;
+    state.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await run(() => void client.refetchQueries({ queryKey: cartKey() }));
+    return release;
+  };
+
+  it('lệnh đi một mình nhưng giỏ đang tải: bỏ phản hồi, tải lại; bản tải cũ về muộn không đè giỏ sau lệnh', async () => {
+    await mountWith(client);
+    state.serverCart = cartOf('trước lệnh');
+    const release = await startLoad();
+    const gets = state.gets;
+    const cmd = api().begin();
+    expect(cmd.stale).toBe(false);
+    state.serverCart = cartOf('sau lệnh');
+    let held: Promise<void> | undefined;
+    await run(() => {
+      held = api().write(cmd, cartOf('phản hồi'));
+    });
+    expect(held).toBeDefined();
+    await run(() => release());
+    await flush(6);
+    expect(state.gets).toBe(gets + 1);
+    expect(mark(client)).toBe('sau lệnh');
+  });
+
+  it('lệnh đã được tính là cũ vì lần tải đang bay: lệnh kế tiếp vẫn đi một mình khi mọi thứ đã yên', async () => {
+    await mountWith(client);
+    const release = await startLoad();
+    const a = api().begin();
+    await run(() => api().write(a, cartOf('A')));
+    await run(() => release());
+    await flush(6);
+    const b = api().begin();
+    expect(b.stale).toBe(false);
+    await run(() => api().write(b, cartOf('B')));
+    expect(mark(client)).toBe('B');
+  });
+
+  it('truy vấn con của giỏ (vd phần chọn thanh toán) đang tải không làm lệnh thành cũ: chỉ khoá giỏ chính xác mới tính', async () => {
+    await mountWith(client);
+    const gets = state.gets;
+    let finish!: () => void;
+    const child = new Promise<{ ok: true }>((resolve) => {
+      finish = () => resolve({ ok: true });
+    });
+    void client.fetchQuery({ queryKey: [...cartKey(), 'selection'], queryFn: () => child });
+    const cmd = api().begin();
+    let held: Promise<void> | undefined;
+    await run(() => {
+      held = api().write(cmd, cartOf('phản hồi'));
+    });
+    expect(held).toBeUndefined();
+    expect(mark(client)).toBe('phản hồi');
+    expect(state.gets).toBe(gets);
+    finish();
   });
 });
 
@@ -197,46 +261,186 @@ describe('useCartWrite: lệnh chồng nhau', () => {
   });
 });
 
-describe('useCartWrite: lời báo mã bị gỡ trong phản hồi bị bỏ', () => {
-  const removed = { code: 'GIAM30', reason: 'MIN_ORDER', shortfall: 50000 };
+describe('useCartWrite + useRemovedCoupon: lời báo mã bị gỡ nằm trong phản hồi bị bỏ', () => {
+  const fmt = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
+  const line = (total: number, isFlash = false) => ({ id: `l${total}`, total, isFlash });
+  const cartWith = (goods: number, extra: Record<string, unknown> = {}) =>
+    ({ ...cartOf(`giỏ ${goods}`), items: [line(goods)], subtotal: goods, couponCode: null, ...extra }) as unknown as CartSummary;
+  const removed = { code: 'GIAM30', reason: 'MIN_ORDER', shortfall: 80_000 };
+  const notice: { current: ReturnType<typeof useRemovedCoupon> | null } = { current: null };
 
-  it('phản hồi bị bỏ mà mang `couponRemoved` (chỉ có ở đúng lần đọc làm máy chủ gỡ mã): giữ lời báo ở giỏ trong cache, phần còn lại của giỏ không ghi đè', async () => {
-    await mountWith(client);
-    client.setQueryData(cartKey(), cartOf('cũ'));
+  // Người xem giỏ thật của trang giỏ: đọc cache bằng `useQuery` rồi đưa cho `useRemovedCoupon`, nên chữ lời báo là chữ khách thấy.
+  function NoticeProbe() {
+    out.api = useCartWrite();
+    const q = useQuery({
+      queryKey: cartKey(),
+      queryFn: async () => {
+        state.gets += 1;
+        const snapshot = state.serverCart;
+        if (state.gate) await state.gate;
+        return snapshot as CartSummary;
+      },
+    });
+    notice.current = useRemovedCoupon(q.data, fmt);
+    return null;
+  }
+  const mountNotice = async (seed: CartSummary) => {
+    client.setQueryData(cartKey(), seed);
+    mounted = render(<NoticeProbe />, client);
+    await flush(4);
+  };
+  const text = () => notice.current?.notice?.text ?? null;
+
+  // Lệnh A bị máy chủ gỡ mã (giỏ còn 220k < 300k): phản hồi của A mang `couponRemoved`, chỉ có ở đúng phản hồi đó. Lệnh B chồng lên A nên A thành cũ.
+  // Lần tải lại giữ tới khi trang đã vẽ xong phản hồi bị bỏ: lời báo phải nhớ đúng số ngay lúc đó chứ không chờ giỏ mới.
+  const dropResponseOfA = async (response: CartSummary) => {
+    let release!: () => void;
+    state.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     const a = api().begin();
-    api().begin();
-    await run(() => api().write(a, { ...cartOf('A'), couponRemoved: removed }));
-    const now = client.getQueryData(cartKey()) as { mark?: string; couponRemoved?: unknown };
-    expect(now.mark).toBe('cũ');
-    expect(now.couponRemoved).toEqual(removed);
+    const b = api().begin();
+    await run(() => api().write(b, cartWith(220_000)));
+    await run(() => api().write(a, response));
+    await flush(4);
+    await run(() => release());
+    state.gate = null;
+    await flush(6);
+  };
+
+  it('số thiếu tính theo phần hàng của PHẢN HỒI mang lời báo (220k), không theo giỏ cũ trong cache (300k)', async () => {
+    state.serverCart = cartWith(220_000);
+    await mountNotice(cartWith(300_000, { couponCode: 'GIAM30' }));
+    await dropResponseOfA(cartWith(220_000, { couponRemoved: removed }));
+    expect(mark(client)).toBe('giỏ 220000');
+    expect(text()).toBe('Đã gỡ mã GIAM30 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 80.000đ để dùng lại.');
   });
 
-  it('phản hồi bị bỏ không có `couponRemoved`: cache giữ nguyên', async () => {
-    await mountWith(client);
-    client.setQueryData(cartKey(), cartOf('cũ'));
+  it('chiều ngược: lần tải lại về giỏ đã có thêm hàng (300k) thì lời báo chuyển sang "đủ", không còn đòi mua thêm', async () => {
+    state.serverCart = cartWith(300_000);
+    await mountNotice(cartWith(300_000, { couponCode: 'GIAM30' }));
+    await dropResponseOfA(cartWith(220_000, { couponRemoved: removed }));
+    expect(text()).toBe('Giỏ đã đủ đơn tối thiểu của mã GIAM30. Bấm Chọn mã để dùng lại.');
+  });
+
+  it('lý do không phải đơn tối thiểu (không có số thiếu): giữ nguyên câu lý do của máy chủ', async () => {
+    state.serverCart = cartWith(220_000);
+    await mountNotice(cartWith(300_000, { couponCode: 'GIAM30' }));
+    await dropResponseOfA(cartWith(220_000, { couponRemoved: { code: 'GIAM30', reason: 'Mã đã hết hạn.' } }));
+    expect(text()).toBe('Đã gỡ mã GIAM30: Mã đã hết hạn.');
+  });
+
+  it('phản hồi bị bỏ không mang `couponRemoved`: không có lời báo, và lời báo đã nhớ không bị xoá', async () => {
+    state.serverCart = cartWith(220_000);
+    await mountNotice(cartWith(300_000, { couponCode: 'GIAM30' }));
+    await dropResponseOfA(cartWith(220_000, { couponRemoved: removed }));
+    expect(text()).not.toBeNull();
+    await dropResponseOfA(cartWith(220_000, { couponCode: 'KHAC' }));
+    expect(text()).toContain('Mua thêm 80.000đ');
+  });
+
+  it('cả hai lệnh cùng một lượt act với lần tải lại: vẫn nhớ lời báo', async () => {
+    state.serverCart = cartWith(220_000);
+    await mountNotice(cartWith(300_000, { couponCode: 'GIAM30' }));
+    const a = api().begin();
+    const b = api().begin();
+    await act(async () => {
+      void api().write(b, cartWith(220_000));
+      void api().write(a, cartWith(220_000, { couponRemoved: removed }));
+    });
+    await flush(6);
+    expect(text()).toBe('Đã gỡ mã GIAM30 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 80.000đ để dùng lại.');
+  });
+
+  it('khách đóng lời báo: mất, và lần tải lại sau đó không dựng lại', async () => {
+    state.serverCart = cartWith(220_000);
+    await mountNotice(cartWith(300_000, { couponCode: 'GIAM30' }));
+    await dropResponseOfA(cartWith(220_000, { couponRemoved: removed }));
+    await act(async () => notice.current!.dismiss());
+    expect(text()).toBeNull();
+    await act(async () => void client.invalidateQueries({ queryKey: ['cart'] }));
+    await flush(6);
+    expect(text()).toBeNull();
+  });
+
+  it('phản hồi bị bỏ không đụng vào giỏ trong cache: phần còn lại của giỏ do lần tải lại quyết định', async () => {
+    state.serverCart = cartWith(220_000);
+    await mountNotice(cartWith(300_000, { couponCode: 'GIAM30' }));
     const a = api().begin();
     api().begin();
-    await run(() => api().write(a, cartOf('A')));
-    expect(mark(client)).toBe('cũ');
+    state.gate = new Promise<void>(() => {});
+    await run(() => api().write(a, cartWith(220_000, { couponRemoved: removed })));
+    expect(mark(client)).toBe('giỏ 300000');
     expect((client.getQueryData(cartKey()) as { couponRemoved?: unknown }).couponRemoved).toBeUndefined();
   });
 
-  it('phản hồi bị bỏ không mang `couponRemoved`: không xoá lời báo đang có trong cache', async () => {
+  it('lệnh đi một mình có `couponRemoved`: ghi thẳng vào giỏ và lời báo hiện từ giỏ đó, đúng số', async () => {
+    await mountNotice(cartWith(300_000, { couponCode: 'GIAM30' }));
+    const a = api().begin();
+    await run(() => api().write(a, cartWith(220_000, { couponRemoved: removed })));
+    await flush(2);
+    expect(text()).toBe('Đã gỡ mã GIAM30 vì giỏ chưa đủ đơn tối thiểu. Mua thêm 80.000đ để dùng lại.');
+  });
+});
+
+describe('subscribeDroppedCart', () => {
+  it('nhận phản hồi bị bỏ, không nhận phản hồi ghi thẳng, và hết nhận sau khi huỷ đăng ký', async () => {
     await mountWith(client);
-    client.setQueryData(cartKey(), { ...cartOf('cũ'), couponRemoved: removed });
+    const heard: unknown[] = [];
+    const off = subscribeDroppedCart(client, (cart) => heard.push(cart));
+    const lone = api().begin();
+    await run(() => api().write(lone, cartOf('đi một mình')));
+    expect(heard).toEqual([]);
+    const a = api().begin();
+    api().begin();
+    const response = cartOf('A');
+    await run(() => api().write(a, response));
+    expect(heard).toEqual([response]);
+    off();
+    const c = api().begin();
+    await run(() => api().write(c, cartOf('C')));
+    expect(heard).toHaveLength(1);
+  });
+
+  it('mọi người nghe của cùng QueryClient đều nhận phản hồi bị bỏ, theo thứ tự đăng ký', async () => {
+    await mountWith(client);
+    const heard: string[] = [];
+    const offA = subscribeDroppedCart(client, () => heard.push('A'));
+    const offB = subscribeDroppedCart(client, () => heard.push('B'));
     const a = api().begin();
     api().begin();
     await run(() => api().write(a, cartOf('A')));
-    expect((client.getQueryData(cartKey()) as { couponRemoved?: unknown }).couponRemoved).toEqual(removed);
+    expect(heard).toEqual(['A', 'B']);
+    offA();
+    offB();
   });
 
-  it('chưa có giỏ trong cache: không dựng giỏ rỗng từ lời báo', async () => {
+  it('theo từng QueryClient: lệnh của client khác không đánh thức người nghe', async () => {
     await mountWith(client);
-    client.removeQueries({ queryKey: cartKey() });
+    const other = new QueryClient();
+    const heard: unknown[] = [];
+    const off = subscribeDroppedCart(other, (cart) => heard.push(cart));
     const a = api().begin();
     api().begin();
-    await run(() => api().write(a, { ...cartOf('A'), couponRemoved: removed }));
-    expect(client.getQueryData(cartKey())).toBeUndefined();
+    await run(() => api().write(a, cartOf('A')));
+    expect(heard).toEqual([]);
+    off();
+  });
+
+  it('huỷ đăng ký hai lần không ném lỗi và không gỡ người nghe khác', async () => {
+    await mountWith(client);
+    const first: unknown[] = [];
+    const second: unknown[] = [];
+    const offFirst = subscribeDroppedCart(client, (cart) => first.push(cart));
+    const offSecond = subscribeDroppedCart(client, (cart) => second.push(cart));
+    offFirst();
+    offFirst();
+    const a = api().begin();
+    api().begin();
+    await run(() => api().write(a, cartOf('A')));
+    expect(first).toEqual([]);
+    expect(second).toHaveLength(1);
+    offSecond();
   });
 });
 

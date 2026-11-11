@@ -61,6 +61,7 @@ import type { StorefrontCollectionEdit, StorefrontEdit } from '@tubutree/app-cor
 import { coreHttp } from '@/lib/core-http';
 import { settleWithin } from '@/lib/settle-within';
 import { CollectionSheet, ConfigSheet, PickerSheet, ProfileSheet, TemplateSheet } from './storefront-sheets';
+import { STOREFRONT_THEME_COLORS } from './storefront-theme';
 
 const SF = (over: Record<string, unknown> = {}) => ({
   id: 'sf1', slug: 'shop-aff-1', type: 'CTV', title: 'Cửa hàng Xanh', headerNote: 'Mua giúp mình nhé', avatarUrl: null, coverUrl: null, theme: 'default', themeColor: null,
@@ -83,6 +84,13 @@ function Host({ children }: { children: ReactNode }) {
   useQuery(storefrontQuestsQuery(coreHttp));
   return <>{children}</>;
 }
+
+/** Như trang cha: `sf` lấy từ bộ nhớ đệm nên đổi khi lần tải lại về (khác `asSf()` cố định, vốn không bao giờ cho thấy tải lại làm gì với form). */
+function LiveSf({ children }: { children: (sf: StorefrontEdit) => ReactElement }) {
+  const q = useQuery(myStorefrontQuery(coreHttp));
+  return q.data ? children(q.data as unknown as StorefrontEdit) : null;
+}
+const cachedSf = () => qc.getQueryData(myStorefrontQuery(coreHttp).queryKey) as { title?: string; themeColor?: string | null } | undefined;
 
 const noop = () => {};
 const ME = 'get /storefront/me';
@@ -395,15 +403,38 @@ describe('Lưu cấu hình: ô nhập khớp DTO và lỗi nhập không tải l
   });
 
   it('400 của lệnh KHÔNG gửi subdomain là trạng thái cũ: tải lại, nhưng tên khách đang gõ không bị dữ liệu mới ghi đè', async () => {
-    await mountUi(ui());
+    await mountUi(<LiveSf>{(sf) => <ConfigSheet open sf={sf} onClose={noop} onSaved={refresh} unpublishLabel={null} onUnpublish={noop} />}</LiveSf>);
     typeInto(titleInput(), 'Tên tôi gõ dở');
     state.sf = SF({ title: 'Tên từ máy chủ mới' });
     state.status.set(PATCH_ME, 400);
     const before = gets(ME);
     await tap(save());
     expect(gets(ME)).toBe(before + 1);
+    expect(cachedSf()!.title).toBe('Tên từ máy chủ mới');
     expect(titleInput().value).toBe('Tên tôi gõ dở');
     expect(alerts()).toContain('Lời máy chủ 400');
+  });
+
+  it('bị từ chối rồi gian hàng mới về từ máy khác: ô khách chưa đụng theo bản mới, ô đã gõ giữ nguyên, lần lưu kế gửi đúng cả hai', async () => {
+    const [, teal, blue] = STOREFRONT_THEME_COLORS;
+    await mountUi(<LiveSf>{(sf) => <ConfigSheet open sf={sf} onClose={noop} onSaved={refresh} unpublishLabel={null} onUnpublish={noop} />}</LiveSf>);
+    typeInto(titleInput(), 'Tên tôi gõ');
+    state.sf = SF({ title: 'Tên máy khác', themeColor: teal.code });
+    state.status.set(PATCH_ME, 409);
+    await tap(save());
+    expect(cachedSf()!.themeColor).toBe(teal.code);
+    expect(titleInput().value).toBe('Tên tôi gõ');
+    expect(document.body.querySelector(`[aria-label="${teal.label}"]`)!.getAttribute('aria-pressed')).toBe('true');
+    state.status.delete(PATCH_ME);
+    await tap(save());
+    expect(state.calls.filter((c) => c.method === 'patch')[1]!.body).toEqual({ title: 'Tên tôi gõ', themeColor: teal.code });
+    // Khách chọn màu rồi thì màu đó là của khách, dù gian hàng mới về sau.
+    await tap(document.body.querySelector<HTMLElement>(`[aria-label="${blue.label}"]`)!);
+    state.sf = SF({ themeColor: STOREFRONT_THEME_COLORS[4].code });
+    await act(async () => void qc.invalidateQueries({ queryKey: myStorefrontQuery(coreHttp).queryKey }));
+    await flush();
+    expect(document.body.querySelector(`[aria-label="${blue.label}"]`)!.getAttribute('aria-pressed')).toBe('true');
+    expect(titleInput().value).toBe('Tên tôi gõ');
   });
 
   it('404 của lệnh có gửi subdomain (gian hàng không còn) vẫn là trạng thái cũ: tải lại', async () => {
@@ -597,6 +628,24 @@ describe('Đổi tên khối: 403 của API khi khối không còn (assertOwnedC
     expectBusy(btn('Lưu', 'Đang lưu…'));
     await tap(btn('Lưu', 'Đang lưu…'));
     expect(writes('patch /storefront/me/collections/c1')).toBe(1);
+    await releaseFresh();
+  });
+
+  it('khối A còn chờ dữ liệu mới: tấm của khối B vẫn đóng được bằng chạm nền, tấm của A thì bị chặn', async () => {
+    const other = { ...COLLECTION, id: 'c2', title: 'Bộ sưu tập B' } as StorefrontCollectionEdit;
+    const onClose = vi.fn();
+    const backdrop = () => document.body.querySelector<HTMLElement>('[data-sheet-backdrop]')!;
+    await mountUi(<CollectionSheet collection={COLLECTION} onClose={onClose} onSaved={refresh} />);
+    const releaseFresh = hold(ME);
+    await tap(btn('Lưu', 'Đang lưu…'));
+    // Lưu xong thì chính lệnh gọi `onClose` một lần; chạm nền lúc A còn chờ dữ liệu mới không đóng thêm.
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await tap(backdrop());
+    expect(onClose).toHaveBeenCalledTimes(1);
+    remount(mounted!, <Host><CollectionSheet collection={other} onClose={onClose} onSaved={refresh} /></Host>, qc);
+    await flush();
+    await tap(backdrop());
+    expect(onClose).toHaveBeenCalledTimes(2);
     await releaseFresh();
   });
 

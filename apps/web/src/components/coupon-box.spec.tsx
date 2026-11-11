@@ -1914,16 +1914,40 @@ describe('CouponBox — lệnh đổi mã từ nơi khác còn bay (W91B)', () =
 });
 
 // W100B pha 2: lệnh đổi mã trả NGUYÊN giỏ nên ghi cache chung một đường với lệnh dòng/món bù. Lệnh dòng giả lập bằng `begin()` của chính đường đó.
+// Giỏ có người đọc thật (useQuery) nên "tải lại giỏ" là một lần fetch thật, và lệnh đổi mã chỉ nhả khi fetch đó về.
 describe('CouponBox: ghi giỏ chung đường với lệnh giỏ khác đang bay (W100B pha 2)', () => {
   const newClient = () => new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   const out: { w?: ReturnType<typeof useCartWrite> } = {};
+  const reads = { gets: 0, gate: null as Promise<void> | null };
+  const SEED = { items: [], couponCode: null, mark: 'cũ' };
   function Probe() {
     out.w = useCartWrite();
+    useQuery({
+      queryKey: cartKey(),
+      queryFn: async () => {
+        reads.gets += 1;
+        if (reads.gate) await reads.gate;
+        return { ...SEED, mark: 'máy chủ' };
+      },
+      staleTime: Infinity,
+    });
     return null;
   }
-  const SEED = { items: [], couponCode: null, mark: 'cũ' };
+  beforeEach(() => {
+    reads.gets = 0;
+    reads.gate = null;
+  });
+  const holdReads = () => {
+    let release!: () => void;
+    reads.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    return async () => {
+      await act(async () => release());
+      await flush(4);
+    };
+  };
   const cached = (client: QueryClient) => client.getQueryData(cartKey()) as { mark?: string; couponCode?: string | null };
-  const invalidated = (client: QueryClient) => client.getQueryState(cartKey())?.isInvalidated;
   const mountShared = async (ui: React.ReactElement) => {
     const client = newClient();
     client.setQueryData(cartKey(), SEED);
@@ -1939,30 +1963,31 @@ describe('CouponBox: ghi giỏ chung đường với lệnh giỏ khác đang ba
     click(byText(box, 'button', 'Áp dụng'));
     await flush(6);
   };
-  const finishOtherCommand = async (client: QueryClient, cmd: ReturnType<NonNullable<typeof out.w>['begin']>) => {
+  const finishOtherCommand = async (cmd: ReturnType<NonNullable<typeof out.w>['begin']>) => {
     await act(async () => {
       out.w!.write(cmd, { ...SEED, mark: 'dòng' } as never);
     });
     await flush(4);
-    return invalidated(client);
   };
+  const mutating = (client: QueryClient) => client.isMutating({ mutationKey: COUPON_MUTATION_KEY });
 
-  it('áp mã gõ tay khi lệnh giỏ khác còn bay: không ghi đè giỏ; lệnh kia xong thì giỏ được tải lại', async () => {
+  it('áp mã gõ tay khi lệnh giỏ khác còn bay: không ghi đè giỏ; lệnh kia xong thì giỏ được tải lại từ máy chủ đúng một lần', async () => {
     const { client, box } = await mountShared(<CouponBox currentCode={null} subtotal={300000} shippingFee={null} />);
     const cmd = out.w!.begin();
     await typeAndApply(box);
     expect(state.applied).toEqual(['ABC']);
     expect(cached(client).mark).toBe('cũ');
-    expect(invalidated(client)).toBe(false);
-    expect(await finishOtherCommand(client, cmd)).toBe(true);
-    expect(cached(client).mark).toBe('cũ');
+    expect(reads.gets).toBe(0);
+    await finishOtherCommand(cmd);
+    expect(reads.gets).toBe(1);
+    expect(cached(client).mark).toBe('máy chủ');
   });
 
   it('áp mã gõ tay đi một mình: ghi thẳng phản hồi vào giỏ, không tải lại', async () => {
     const { client, box } = await mountShared(<CouponBox currentCode={null} subtotal={300000} shippingFee={null} />);
     await typeAndApply(box);
     expect(cached(client).couponCode).toBe('ABC');
-    expect(invalidated(client)).toBe(false);
+    expect(reads.gets).toBe(0);
   });
 
   it('áp mã lỗi trả lại chỗ trong sổ: lệnh giỏ bắt đầu sau đó không bị coi là chồng', async () => {
@@ -1973,7 +1998,7 @@ describe('CouponBox: ghi giỏ chung đường với lệnh giỏ khác đang ba
     expect(out.w!.begin().stale).toBe(false);
   });
 
-  it('gỡ mã khi lệnh giỏ khác còn bay: không ghi đè giỏ', async () => {
+  it('gỡ mã khi lệnh giỏ khác còn bay: không ghi đè giỏ; lệnh kia xong thì giỏ được tải lại', async () => {
     const { client, box } = await mountShared(<CouponBox currentCode="ABC" subtotal={300000} shippingFee={null} />);
     const cmd = out.w!.begin();
     click(toggle(box));
@@ -1981,29 +2006,38 @@ describe('CouponBox: ghi giỏ chung đường với lệnh giỏ khác đang ba
     await flush(6);
     expect(state.removed).toBe(1);
     expect(cached(client).mark).toBe('cũ');
-    expect(await finishOtherCommand(client, cmd)).toBe(true);
+    await finishOtherCommand(cmd);
+    expect(reads.gets).toBe(1);
+    expect(cached(client).mark).toBe('máy chủ');
   });
 
-  const mutating = (client: QueryClient) => client.isMutating({ mutationKey: COUPON_MUTATION_KEY });
-
-  it('áp mã gõ tay bị bỏ phản hồi vì chồng lệnh khác: lệnh còn "đang bay" (hộp báo bận) tới khi giỏ mới về', async () => {
+  it('áp mã gõ tay bị bỏ phản hồi vì chồng lệnh khác: hộp báo bận tới khi lần tải giỏ thật về, không nhả khi lần tải còn chạy', async () => {
     const { client, box } = await mountShared(<CouponBox currentCode={null} subtotal={300000} shippingFee={null} />);
     const cmd = out.w!.begin();
     await typeAndApply(box);
     expect(mutating(client)).toBe(1);
     expect(byText(box, 'button', 'Áp dụng')!.getAttribute('aria-disabled')).toBe('true');
-    await finishOtherCommand(client, cmd);
+    const releaseReads = holdReads();
+    await finishOtherCommand(cmd);
+    expect(reads.gets).toBe(1);
+    expect(mutating(client)).toBe(1);
+    expect(byText(box, 'button', 'Áp dụng')!.getAttribute('aria-disabled')).toBe('true');
+    await releaseReads();
     expect(mutating(client)).toBe(0);
+    expect(cached(client).mark).toBe('máy chủ');
   });
 
-  it('gỡ mã bị bỏ phản hồi vì chồng lệnh khác: lệnh còn "đang bay" tới khi giỏ mới về', async () => {
+  it('gỡ mã bị bỏ phản hồi vì chồng lệnh khác: lệnh còn pending tới khi lần tải giỏ thật về', async () => {
     const { client, box } = await mountShared(<CouponBox currentCode="ABC" subtotal={300000} shippingFee={null} />);
     const cmd = out.w!.begin();
     click(toggle(box));
     click(byText(box, 'button', 'Bỏ mã đang áp dụng'));
     await flush(6);
     expect(mutating(client)).toBe(1);
-    await finishOtherCommand(client, cmd);
+    const releaseReads = holdReads();
+    await finishOtherCommand(cmd);
+    expect(mutating(client)).toBe(1);
+    await releaseReads();
     expect(mutating(client)).toBe(0);
   });
 
@@ -2017,7 +2051,7 @@ describe('CouponBox: ghi giỏ chung đường với lệnh giỏ khác đang ba
     expect(out.w!.begin().stale).toBe(false);
   });
 
-  it('tự áp mã bị bỏ phản hồi vì chồng lệnh khác: lệnh còn "đang bay" tới khi giỏ mới về', async () => {
+  const mountAuto = async () => {
     sessionStorage.clear();
     state.coupons = [c('GIAM30')];
     state.previews.mockResolvedValue([{ code: 'GIAM30', eligible: true, discount: 43800 }]);
@@ -2028,47 +2062,39 @@ describe('CouponBox: ghi giỏ chung đường với lệnh giỏ khác đang ba
       <Probe />
     </>, client);
     mounted.push(r);
+    return client;
+  };
+
+  it('tự áp mã bị bỏ phản hồi vì chồng lệnh khác: lệnh còn pending tới khi lần tải giỏ thật về', async () => {
+    const client = await mountAuto();
+    // `begin()` chạy trước khi dải tự áp kịp bắn (đợi xem trước mã), nên lệnh giả lập còn bay lúc phản hồi về.
     const cmd = out.w!.begin();
     await flush(10);
     expect(state.applied).toEqual(['GIAM30']);
     expect(mutating(client)).toBe(1);
-    await finishOtherCommand(client, cmd);
+    const releaseReads = holdReads();
+    await finishOtherCommand(cmd);
+    expect(mutating(client)).toBe(1);
+    await releaseReads();
     expect(mutating(client)).toBe(0);
   });
 
   it('tự áp mã lỗi trả lại chỗ trong sổ: lệnh giỏ bắt đầu sau đó không bị coi là chồng', async () => {
-    sessionStorage.clear();
-    state.coupons = [c('GIAM30')];
-    state.previews.mockResolvedValue([{ code: 'GIAM30', eligible: true, discount: 43800 }]);
     state.applyError = new Error('Mã đã hết lượt.');
-    const client = newClient();
-    client.setQueryData(cartKey(), SEED);
-    const r = render(<>
-      <CouponBox currentCode={null} subtotal={300000} preview={{ addressId: 'a1' }} autoApply memoryUserId="u1" />
-      <Probe />
-    </>, client);
-    mounted.push(r);
+    const client = await mountAuto();
     await flush(10);
     expect(client.getMutationCache().findAll({ mutationKey: COUPON_MUTATION_KEY }).map((mu) => mu.state.status)).toEqual(['error']);
     expect(out.w!.begin().stale).toBe(false);
   });
 
-  it('tự áp mã khi lệnh giỏ khác còn bay: không ghi đè giỏ', async () => {
-    sessionStorage.clear();
-    state.coupons = [c('GIAM30')];
-    state.previews.mockResolvedValue([{ code: 'GIAM30', eligible: true, discount: 43800 }]);
-    const client = newClient();
-    client.setQueryData(cartKey(), SEED);
-    const r = render(<>
-      <CouponBox currentCode={null} subtotal={300000} preview={{ addressId: 'a1' }} autoApply memoryUserId="u1" />
-      <Probe />
-    </>, client);
-    mounted.push(r);
-    // `begin()` chạy trước khi dải tự áp kịp bắn (đợi xem trước mã), nên lệnh giả lập còn bay lúc phản hồi về.
+  it('tự áp mã khi lệnh giỏ khác còn bay: không ghi đè giỏ; lệnh kia xong thì giỏ được tải lại', async () => {
+    const client = await mountAuto();
     const cmd = out.w!.begin();
     await flush(10);
     expect(state.applied).toEqual(['GIAM30']);
     expect(cached(client).mark).toBe('cũ');
-    expect(await finishOtherCommand(client, cmd)).toBe(true);
+    await finishOtherCommand(cmd);
+    expect(reads.gets).toBe(1);
+    expect(cached(client).mark).toBe('máy chủ');
   });
 });
