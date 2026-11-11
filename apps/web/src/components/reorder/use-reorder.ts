@@ -23,8 +23,8 @@ export interface UseReorder {
    * Gửi yêu cầu mua lại. Resolve với tóm tắt kết quả (kể cả khi không thêm được món nào).
    * Lỗi (mạng, chưa chọn dòng nào...) bị ném lại: caller PHẢI `.catch` (thường để giữ nguyên lựa chọn trong sheet).
    * Chống bấm đúp đồng bộ: đang có yêu cầu bay thì gọi lại trả về đúng promise đó, không gửi thêm request.
-   * `stillCurrent` (tuỳ chọn): hỏi lúc lệnh xong xem nơi gửi còn đúng là lần mở đã gửi không (sheet bị đóng rồi mở lại trong lúc chờ). Trả false thì KHÔNG sang giỏ
-   * dù `navigateToCart` bật: trang đang có số lượng khách chỉnh ở lần mở mới. Không truyền thì như cũ.
+   * `stillCurrent` (tuỳ chọn): hỏi lúc lệnh xong xem sheet có đang hiện đích khác với đích đã gửi không (đóng rồi mở lại đơn khác trong lúc chờ). Trả false thì KHÔNG sang giỏ
+   * dù `navigateToCart` bật: trang đang có số lượng khách chỉnh ở đích mới. Không truyền thì như cũ.
    */
   submit: (target: ReorderTarget, selections: ReorderSelection[], stillCurrent?: () => boolean) => Promise<ReorderSummary>;
   isPending: boolean;

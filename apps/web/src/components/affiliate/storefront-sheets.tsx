@@ -88,13 +88,20 @@ function useFormFields<T extends Record<string, string>>(source: T) {
 }
 
 const STALE_STOREFRONT_NOTICE = 'Chưa tải được dữ liệu gian hàng mới nhất, bấm Lưu lại sau khi tải xong.';
+const OFFLINE_STOREFRONT_NOTICE = 'Mất kết nối. Có mạng lại thì bấm Lưu.';
+const GONE_STOREFRONT_NOTICE = 'Gian hàng không còn truy cập được, tải lại trang.';
 
-type StorefrontFreshness = 'fresh' | 'reading' | 'failed';
+/** `fresh`: dữ liệu đang cầm là bản mới nhất; `reading`: đang tải lại; còn lại: không đọc được (`offline`: mất mạng, `gone`: máy chủ trả 403/404, `failed`: lỗi khác). */
+type StorefrontFreshness = 'fresh' | 'reading' | 'failed' | 'offline' | 'gone';
+
+const FRESHNESS_NOTICE = { failed: STALE_STOREFRONT_NOTICE, offline: OFFLINE_STOREFRONT_NOTICE, gone: GONE_STOREFRONT_NOTICE } as const;
 
 /**
  * Hàng rào độ mới cho lệnh Lưu dựng từ các ô của gian hàng. Khoá chạm đúp nhả sau tối đa 4 giây dù gian hàng mới chưa về, lúc đó các ô chưa chạm còn giá trị cũ
- * và Lưu sẽ gửi bản cũ đè lên bản mới trên máy chủ (cũng đúng khi bản mới về muộn hơn). TanStack Query giữ `isInvalidated` từ lúc làm mới tới lần đọc THÀNH CÔNG kế tiếp,
- * lần đọc lỗi không xoá cờ: cờ còn nghĩa là `sf` đang cầm là bản cũ. Đây không phải khoá nên không có trần chờ nào kẹt được: lần đọc lỗi thì chạm Lưu đọc lại.
+ * và Lưu sẽ gửi bản cũ đè lên bản mới trên máy chủ (cũng đúng khi bản mới về muộn hơn). TanStack Query đặt `isInvalidated` khi làm mới và cả khi một lần đọc lỗi
+ * (reducer `error` cũng đặt cờ); chỉ một lần đọc thành công mới xoá cờ, nên cờ còn nghĩa là `sf` đang cầm có thể là bản cũ. Cờ này không phải khoá nên không có trần chờ nào
+ * kẹt được: lần đọc đã dừng (lỗi, mất mạng) thì chạm Lưu đọc lại và nói rõ lý do tại chỗ. Mất mạng (`paused`) không được coi là "đang đọc", không thì nút kẹt "Đang cập nhật…".
+ * Chỗ ghi tay lên khoá gian hàng phải đi qua `setStorefrontData`, vì `setQueryData` thường xoá cờ.
  *
  * `canSave` đọc bộ nhớ đệm ngay lúc chạm, không đọc bản đã vẽ: cú chạm cùng khung hình với lệnh làm mới (React chưa kịp vẽ lại) vẫn bị chặn.
  */
@@ -104,7 +111,10 @@ function useStorefrontFresh() {
   const read = useCallback((): StorefrontFreshness => {
     const s = qc.getQueryState(queryKey);
     if (!s?.isInvalidated) return 'fresh';
-    return s.fetchStatus === 'idle' ? 'failed' : 'reading';
+    if (s.fetchStatus === 'fetching') return 'reading';
+    if (s.fetchStatus === 'paused') return 'offline';
+    const status = errorStatus(s.error);
+    return status === 403 || status === 404 ? 'gone' : 'failed';
   }, [qc, queryKey]);
   const subscribe = useCallback((notify: () => void) => qc.getQueryCache().subscribe(notify), [qc]);
   const state = useSyncExternalStore(subscribe, read, () => 'fresh' as const);
@@ -115,13 +125,13 @@ function useStorefrontFresh() {
   const canSave = () => {
     const now = read();
     if (now === 'fresh') return true;
-    if (now === 'failed') {
+    if (now !== 'reading') {
       setAsked(true);
       void qc.refetchQueries({ queryKey, exact: true });
     }
     return false;
   };
-  return { state, canSave, notice: asked && state === 'failed' ? STALE_STOREFRONT_NOTICE : null };
+  return { state, canSave, notice: asked && state !== 'fresh' && state !== 'reading' ? FRESHNESS_NOTICE[state] : null };
 }
 
 function InlineError({ text }: { text: string | null }) {
@@ -624,6 +634,8 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
   const renameKey = [...RENAME_KEY, collection.id] as const;
   const saving = useIsMutating({ mutationKey: renameKey }) > 0;
   const reloadOnReject = useReloadOnReject();
+  // Hàng rào theo cả gian hàng chứ không theo khối: khối B cũng chờ bản mới khi khối A vừa lưu và gian hàng đang tải lại, vì ô tên của B lấy từ cùng bản gian hàng cũ
+  // và có thể đã đổi ở máy khác; gửi tên cũ đè lên là mất dữ liệu.
   const fresh = useStorefrontFresh();
   const saveMut = useLockedMutation({
     mutationKey: renameKey,

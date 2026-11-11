@@ -40,9 +40,11 @@ export default function AddressBookPage() {
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
-  // Nút Huỷ khoá lúc đang lưu nhưng "Sửa" của dòng khác hay "Thêm địa chỉ mới" thay form đi được: lệnh lưu cũ xong muộn chỉ đóng form khi vẫn là lần mở đã gửi nó,
-  // không thì đóng nhầm form vừa mở lại và xoá chữ khách đang gõ.
-  const editSeq = useSheetSeq(editingId);
+  // Nút Huỷ khoá lúc đang lưu nhưng "Sửa" của dòng khác hay "Thêm địa chỉ mới" thay form đi được: lệnh lưu cũ xong muộn không được đóng form của dòng khác hay form Thêm
+  // vừa mở lại và xoá chữ khách đang gõ. Mở lại ĐÚNG dòng đang lưu thì form dựng từ danh sách cũ (chưa có bản vừa lưu): vẫn đóng như trước, giữ nó thì lần Lưu sau
+  // trả giá trị cũ về.
+  const editingIdNow = useRef(editingId);
+  editingIdNow.current = editingId;
   const addSeq = useSheetSeq(adding);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const deleteTriggers = useRef(new Map<string, HTMLButtonElement>());
@@ -213,9 +215,8 @@ export default function AddressBookPage() {
                   initial={addressToForm(a)}
                   userId={userId}
                   onSubmit={async (payload) => {
-                    const sent = editSeq.mark();
                     await updateAddress(a.id, payload);
-                    if (editSeq.isCurrent(sent)) setEditingId(null);
+                    if (editingIdNow.current === a.id) setEditingId(null);
                     refresh();
                   }}
                   onCancel={() => setEditingId(null)}

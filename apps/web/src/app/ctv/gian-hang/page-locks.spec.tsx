@@ -70,6 +70,8 @@ const state = vi.hoisted(() => ({
   failStatus: new Map<string, number>(),
   hold: new Set<string>(),
   gates: new Map<string, Promise<void>>(),
+  /** Lần gọi ĐẦU TIÊN tới khoá này đợi hàm trả lời hứa rồi lỗi 500; các lần sau theo `hold`/`fail` như thường. */
+  once: new Map<string, Promise<void>>(),
   calls: [] as Call[],
   share: vi.fn(),
   copied: [] as string[],
@@ -125,6 +127,12 @@ function httpError(status: number, message = 'lỗi máy chủ') {
 vi.mock('@/lib/core-http', () => {
   const run = async (method: string, path: string, body?: unknown, opts?: { query?: unknown }) => {
     state.calls.push({ method, path, body, query: opts?.query });
+    const once = state.once.get(`${method} ${path}`);
+    if (once) {
+      state.once.delete(`${method} ${path}`);
+      await once;
+      throw httpError(500, 'mất mạng');
+    }
     if (state.hold.has(`${method} ${path}`)) return new Promise(() => {});
     const gate = state.gates.get(`${method} ${path}`);
     if (gate) await gate;
@@ -243,6 +251,7 @@ beforeEach(() => {
   state.failStatus = new Map();
   state.hold = new Set();
   state.gates = new Map();
+  state.once = new Map();
   state.calls = [];
   state.share = vi.fn(async () => 'shared');
   state.copied = [];
@@ -945,6 +954,91 @@ describe('lưu ở tấm gian hàng: lời báo đã lưu trả Promise tải l�
     expect(dialog()!.querySelector('textarea')!.value).toBe('Lời nhắn mới');
     await tap(btn('Lưu hồ sơ', dialog()!), 1);
     expect(calls('patch', '/storefront/me')[1]!.body).toEqual({ avatarUrl: '', coverUrl: '', headerNote: 'Lời nhắn mới' });
+  });
+
+  // Wave 101B: dời khối chạy `cancelQueries` rồi `setQueryData` lên gian hàng; `setQueryData` xoá cờ "đã cũ" dù dữ liệu vẫn là bản trước lệnh lưu,
+  // nên hàng rào độ mới hở và Lưu hồ sơ gửi lại lời nhắn cũ đè lên bản vừa lưu.
+  it('Lưu hồ sơ rồi gian hàng mới treo quá 4 giây, khách dời khối lạc quan: mở lại hồ sơ vẫn bị chặn tới khi bản mới về, rồi Lưu gửi giá trị MỚI', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      state.sf = storefront({ collections: twoCollections() });
+      mount();
+      await flush();
+      click(btn('Sửa hồ sơ'));
+      await flush();
+      typeInto(dialog()!.querySelector('textarea'), 'Lời nhắn mới');
+      const releaseFresh = hold(ME);
+      await tap(btn('Lưu hồ sơ', dialog()!), 1);
+      expect(calls('patch', '/storefront/me')).toHaveLength(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_500);
+      });
+      await flush(2);
+      state.hold.add('post /storefront/me/collections/reorder');
+      click(btn('Sắp xếp'));
+      await flush();
+      click(document.querySelector('button[aria-label="Đưa khối Bộ sưu tập A xuống"]'));
+      await flush();
+      expect(calls('post', '/storefront/me/collections/reorder')).toHaveLength(1);
+      click(btn('Xong'));
+      await flush();
+      click(btn('Sửa hồ sơ'));
+      await flush();
+      expect(dialog()!.querySelector('textarea')!.value).toBe('Mua giúp mình nhé');
+      const refetches = calls('get', '/storefront/me').length;
+      await tap(btn('Lưu hồ sơ', dialog()!), 1);
+      expect(calls('patch', '/storefront/me')).toHaveLength(1);
+      expect(calls('get', '/storefront/me')).toHaveLength(refetches + 1);
+      state.sf = storefront({ headerNote: 'Lời nhắn mới', collections: twoCollections() });
+      await releaseFresh();
+      expect(dialog()!.querySelector('textarea')!.value).toBe('Lời nhắn mới');
+      await tap(btn('Lưu hồ sơ', dialog()!), 1);
+      expect(calls('patch', '/storefront/me')).toHaveLength(2);
+      expect((calls('patch', '/storefront/me')[1]!.body as { headerNote?: string }).headerNote).toBe('Lời nhắn mới');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // Các lệnh dời xếp một hàng (`scope`): lệnh đầu lỗi khi lệnh sau còn xếp hàng thì không tải lại (chờ lệnh sau xong), nên cờ "đã cũ" chỉ còn do chỗ khôi phục thứ tự giữ.
+  it('dời khối lỗi (khôi phục thứ tự) khi lệnh dời sau còn xếp hàng: hàng rào hồ sơ vẫn đứng, Lưu không gửi bản cũ', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      state.sf = storefront({ collections: twoCollections() });
+      mount();
+      await flush();
+      click(btn('Sửa hồ sơ'));
+      await flush();
+      typeInto(dialog()!.querySelector('textarea'), 'Lời nhắn mới');
+      hold(ME);
+      await tap(btn('Lưu hồ sơ', dialog()!), 1);
+      expect(calls('patch', '/storefront/me')).toHaveLength(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_500);
+      });
+      await flush(2);
+      let failFirst!: () => void;
+      state.once.set('post /storefront/me/collections/reorder', new Promise<void>((r) => { failFirst = r; }));
+      state.hold.add('post /storefront/me/collections/reorder');
+      click(btn('Sắp xếp'));
+      await flush();
+      click(document.querySelector('button[aria-label="Đưa khối Bộ sưu tập A xuống"]'));
+      await flush();
+      click(document.querySelector('button[aria-label="Đưa khối Bộ sưu tập B xuống"]'));
+      await flush();
+      expect(calls('post', '/storefront/me/collections/reorder')).toHaveLength(1);
+      await act(async () => failFirst());
+      await flush(4);
+      expect(calls('post', '/storefront/me/collections/reorder')).toHaveLength(2);
+      click(btn('Xong'));
+      await flush();
+      click(btn('Sửa hồ sơ'));
+      await flush();
+      await tap(btn('Lưu hồ sơ', dialog()!), 1);
+      expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('Lưu cấu hình: tấm đóng ngay, mở lại lúc gian hàng mới chưa về thì nút Lưu còn bận và không gửi lần hai; gian hàng mới về thì ô theo bản mới và lần Lưu sau gửi bản mới', async () => {

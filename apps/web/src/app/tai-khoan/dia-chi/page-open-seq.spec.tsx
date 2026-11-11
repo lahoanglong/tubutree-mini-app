@@ -4,7 +4,7 @@ import { act } from 'react';
 import { chooseGeo, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 
 // Wave 101B: form Sửa/Thêm địa chỉ nằm tại chỗ trong sổ. Nút Huỷ khoá lúc đang lưu nhưng "Sửa" của dòng khác hay "Thêm địa chỉ mới" thay form đi được:
-// lệnh lưu cũ xong muộn không được đóng form vừa mở lại và xoá chữ khách đang gõ.
+// lệnh lưu cũ xong muộn không được đóng form của dòng KHÁC hay form Thêm vừa mở lại và xoá chữ khách đang gõ. Mở lại ĐÚNG dòng đang lưu thì form dựng từ bản cũ nên vẫn đóng như trước.
 
 const mocks = vi.hoisted(() => ({
   list: [] as Record<string, unknown>[],
@@ -91,22 +91,25 @@ describe('Sổ địa chỉ: form Sửa', () => {
     expect(phoneInput(c).value).toBe('0911222333');
   });
 
-  it('quay lại sửa đúng địa chỉ A (form mới) và gõ: lệnh cũ xong muộn không đóng form mới', async () => {
+  // Form mở lại cho đúng dòng đang lưu dựng từ danh sách cũ (chưa có bản vừa lưu): giữ nó mở thì lần Lưu sau trả số điện thoại về giá trị cũ. Đóng để danh sách mới dựng lại.
+  it('quay lại sửa đúng địa chỉ đang lưu (form dựng từ bản cũ): lệnh cũ xong muộn đóng form như trước, không để Lưu bản cũ đè bản mới', async () => {
     const c = await mount();
     const g = gate(mocks.update);
     click(btn(c, 'Sửa địa chỉ của Trần Bình')!);
     await flush(4);
+    typeInto(phoneInput(c), '0911222333');
     click(btn(c, 'Lưu')!);
     await flush(2);
+    expect(mocks.update).toHaveBeenCalledTimes(1);
     click(btn(c, 'Sửa địa chỉ của Nguyễn An')!);
     await flush(4);
     click(btn(c, 'Sửa địa chỉ của Trần Bình')!);
     await flush(4);
-    typeInto(phoneInput(c), '0911222333');
+    expect(phoneInput(c).value).toBe('0987654321');
     await act(async () => g.release(A2));
     await flush(6);
-    expect(c.querySelector('form')).not.toBeNull();
-    expect(phoneInput(c).value).toBe('0911222333');
+    expect(c.querySelector('form')).toBeNull();
+    expect(mocks.update).toHaveBeenCalledTimes(1);
   });
 
   it('không đổi form giữa chừng: lưu xong thì form đóng như trước', async () => {

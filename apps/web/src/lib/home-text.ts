@@ -91,6 +91,7 @@ export const reorderText = {
   priceNote: 'Giá theo hiện tại, xem chính xác ở giỏ hàng.',
   addCta: (n: number) => `Thêm vào giỏ (${n})`,
   added: (n: number) => `Đã thêm ${n} món vào giỏ`,
+  addedEarlier: (n: number) => `Đã thêm ${n} món từ lần mua lại trước vào giỏ.`,
   notFullyAdded: 'Chưa thêm đủ',
   nothingAdded: 'Chưa thêm được món nào vào giỏ',
   partial: (n: number) => `chỉ thêm được ${n}`,

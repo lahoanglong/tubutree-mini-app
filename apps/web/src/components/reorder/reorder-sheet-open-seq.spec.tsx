@@ -24,6 +24,7 @@ const ORDER_A: ReorderTarget = { kind: 'order', orderCode: 'TUBU1', lines: [line
 const ORDER_B: ReorderTarget = { kind: 'order', orderCode: 'TUBU2', lines: [line('d', 'Dầu gội')] };
 
 const ADDED = { ...CART, cart: CART, results: [{ orderItemId: 'a', status: 'added', addedQuantity: 2 }] };
+const NOTHING = { ...CART, cart: CART, results: [{ orderItemId: 'a', status: 'skipped', reason: 'OUT_OF_STOCK', addedQuantity: 0 }] };
 const PARTIAL = { ...CART, cart: CART, results: [{ orderItemId: 'a', status: 'partial', reason: 'EXCEEDS_STOCK', addedQuantity: 1 }] };
 
 let mounted: Rendered | null = null;
@@ -84,42 +85,95 @@ async function sentThenReopened(again: 'a' | 'b', navigateToCart = false) {
   return g;
 }
 
-describe.each([
-  ['đơn khác', 'b' as const],
-  ['cùng đơn', 'a' as const],
-])('ReorderSheet: đóng rồi mở lại %s lúc lệnh còn bay', (_name, again) => {
-  it('lệnh cũ thêm đủ xong muộn: sheet mới KHÔNG bị đóng, số lượng đang chỉnh còn, trang vẫn nhận kết quả của đơn cũ', async () => {
-    const g = await sentThenReopened(again);
+const status = () => document.querySelector('[role="status"]');
+
+describe('ReorderSheet: đóng rồi mở lại ĐƠN KHÁC lúc lệnh còn bay', () => {
+  it('lệnh cũ thêm đủ xong muộn: sheet mới KHÔNG bị đóng, số lượng đang chỉnh còn, trang vẫn nhận kết quả, sheet mới có lời báo đã thêm của đơn trước', async () => {
+    const g = await sentThenReopened('b');
     const before = cta().textContent;
     await act(async () => g.release(ADDED));
     await flush(6);
     expect(dialog()).not.toBeNull();
     expect(cta().textContent).toBe(before);
     expect(onDone).toHaveBeenCalledTimes(1);
+    expect(status()?.textContent).toContain('Đã thêm 2 món từ lần mua lại trước vào giỏ.');
+    expect(status()?.querySelector('a[href="/gio-hang"]')).not.toBeNull();
+    expect(cta().disabled).toBe(false);
   });
 
-  it('navigateToCart: lệnh cũ xong muộn không đưa khách sang giỏ khi đã mở lại', async () => {
-    const g = await sentThenReopened(again, true);
+  it('navigateToCart: lệnh cũ xong muộn không đưa khách sang giỏ khi sheet đang là đơn khác', async () => {
+    const g = await sentThenReopened('b', true);
     await act(async () => g.release(ADDED));
     await flush(6);
     expect(mocks.push).not.toHaveBeenCalled();
     expect(dialog()).not.toBeNull();
+    expect(status()?.textContent).toContain('Đã thêm 2 món');
   });
 
-  it('lệnh cũ chỉ thêm được một phần: lời "không thêm đủ" và khoá nút của lần mở trước không rơi vào sheet mới', async () => {
-    const g = await sentThenReopened(again);
+  it('lệnh cũ chỉ thêm được một phần: lời báo số món đã vào giỏ hiện ở sheet mới, nút của sheet mới không bị khoá', async () => {
+    const g = await sentThenReopened('b');
     await act(async () => g.release(PARTIAL));
     await flush(6);
-    expect(document.querySelector('[role="status"]')).toBeNull();
+    expect(status()?.textContent).toContain('Đã thêm 1 món từ lần mua lại trước vào giỏ.');
+    expect(status()?.textContent).not.toContain('Chưa thêm đủ');
     expect(cta().disabled).toBe(false);
     expect(dialog()).not.toBeNull();
   });
 
+  it('lệnh cũ không thêm được món nào: sheet mới không hiện lời nào', async () => {
+    const g = await sentThenReopened('b');
+    await act(async () => g.release(NOTHING));
+    await flush(6);
+    expect(status()).toBeNull();
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(cta().disabled).toBe(false);
+  });
+
   it('lệnh cũ lỗi mạng: lời lỗi của lần mở trước không hiện ở sheet mới', async () => {
-    const g = await sentThenReopened(again);
+    const g = await sentThenReopened('b');
     await act(async () => g.fail(new Error('Mất kết nối')));
     await flush(6);
     expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(dialog()).not.toBeNull();
+  });
+});
+
+// Cùng đơn mở lại: khách đang nhìn đúng đơn đó và sheet không có chữ gõ dở, nên lệnh muộn xử lý như khi chưa đóng. Không báo gì thì nút bật lại
+// và chạm lần hai gửi lệnh thứ hai, cộng đôi mọi dòng vào giỏ.
+describe('ReorderSheet: đóng rồi mở lại CÙNG ĐƠN lúc lệnh còn bay', () => {
+  it('lệnh cũ thêm đủ xong muộn: sheet đóng, trang nhận kết quả, không còn nút để chạm gửi lần hai', async () => {
+    const g = await sentThenReopened('a');
+    await act(async () => g.release(ADDED));
+    await flush(6);
+    expect(dialog()).toBeNull();
+    expect(onDone).toHaveBeenCalledTimes(1);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('navigateToCart: lệnh cũ xong muộn đưa khách sang giỏ, không có lệnh thứ hai', async () => {
+    const g = await sentThenReopened('a', true);
+    await act(async () => g.release(ADDED));
+    await flush(6);
+    expect(mocks.push).toHaveBeenCalledWith('/gio-hang');
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('lệnh cũ chỉ thêm được một phần: lời "chưa thêm đủ" hiện, nút khoá nên chạm lại không cộng đôi', async () => {
+    const g = await sentThenReopened('a');
+    await act(async () => g.release(PARTIAL));
+    await flush(6);
+    expect(status()?.textContent).toContain('Chưa thêm đủ');
+    expect(cta().disabled).toBe(true);
+    click(cta());
+    await flush(2);
+    expect(mocks.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('lệnh cũ lỗi mạng: lời lỗi hiện trong sheet để khách bấm lại', async () => {
+    const g = await sentThenReopened('a');
+    await act(async () => g.fail(new Error('Mất kết nối')));
+    await flush(6);
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('Mất kết nối');
     expect(dialog()).not.toBeNull();
   });
 });

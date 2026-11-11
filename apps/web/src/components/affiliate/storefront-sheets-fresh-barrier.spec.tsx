@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, useState, type ReactElement } from 'react';
-import { QueryClient, useQuery } from '@tanstack/react-query';
+import { QueryClient, onlineManager, useQuery } from '@tanstack/react-query';
 import { flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 
 // Wave 101B: Lưu của hồ sơ, cấu hình và đổi tên khối không được gửi giá trị cũ đè bản mới trên máy chủ.
@@ -57,6 +57,8 @@ const TEAL = STOREFRONT_THEME_COLORS[1].code;
 const A1 = 'https://cdn.example/a1.png';
 const A2 = 'https://cdn.example/a2.png';
 const STALE_NOTICE = 'Chưa tải được dữ liệu gian hàng mới nhất, bấm Lưu lại sau khi tải xong.';
+const OFFLINE_NOTICE = 'Mất kết nối. Có mạng lại thì bấm Lưu.';
+const GONE_NOTICE = 'Gian hàng không còn truy cập được, tải lại trang.';
 
 const SF = (over: Record<string, unknown>) => ({
   id: 'sf1', slug: 'shop-aff-1', type: 'CTV', title: 'Cửa hàng Xanh', headerNote: 'Mua giúp mình nhé', avatarUrl: A1, coverUrl: null, theme: 'default', themeColor: null,
@@ -189,6 +191,7 @@ beforeEach(() => {
 afterEach(() => {
   mounted?.unmount();
   mounted = null;
+  onlineManager.setOnline(true);
   vi.useRealTimers();
 });
 
@@ -280,6 +283,55 @@ describe.each(FORMS)('$name', (form) => {
     expect(writes(form.patch)).toBe(1);
     expect(alerts()).toEqual([STALE_NOTICE]);
     expect(save(form).hasAttribute('aria-busy')).toBe(false);
+  });
+
+  // Mất mạng làm lần đọc lại ở trạng thái `paused` chứ không `fetching`: coi như đang đọc thì nút báo "Đang cập nhật…" mãi và chạm không nói gì.
+  it('mất mạng lúc lần đọc lại: nút không kẹt "Đang cập nhật…", chạm báo mất kết nối tại chỗ và không gửi lệnh ghi; có mạng lại thì đọc xong và Lưu gửi bản mới', async () => {
+    await mountStage(form);
+    onlineManager.setOnline(false);
+    state.sf = AFTER;
+    act(() => {
+      void qc.invalidateQueries({ queryKey: ['my-storefront'] });
+    });
+    await flush(2);
+    expect(qc.getQueryState(['my-storefront'])?.fetchStatus).toBe('paused');
+    expect(save(form).hasAttribute('aria-busy')).toBe(false);
+    expect(save(form).textContent).not.toBe('Đang cập nhật…');
+    expect(save(form).getAttribute('aria-disabled')).toBe('true');
+    expect(alerts()).toEqual([]);
+    await tap(save(form));
+    await tap(save(form));
+    expect(writes(form.patch)).toBe(0);
+    expect(alerts()).toEqual([OFFLINE_NOTICE]);
+    await act(async () => onlineManager.setOnline(true));
+    await flush(4);
+    expect(alerts()).toEqual([]);
+    expect(form.field().value).toBe(form.fieldOf(AFTER));
+    expectIdle(save(form));
+    await tap(save(form));
+    expect(writes(form.patch)).toBe(1);
+    expect(patchBodies(form.patch)[0]).toEqual(form.body(form.fieldOf(AFTER), AFTER));
+  });
+
+  it.each([403, 404])('lần đọc lại trả %i: lời nói gian hàng không còn truy cập được (không khẳng định lý do khác), Lưu không gửi; đọc được lại thì Lưu gửi bản mới', async (code) => {
+    await mountStage(form);
+    state.status.set(ME, code);
+    typeInto(form.field(), form.typedFirst);
+    await tap(save(form));
+    expect(writes(form.patch)).toBe(1);
+    await flush(2);
+    await reopen();
+    await tap(save(form));
+    expect(writes(form.patch)).toBe(1);
+    expect(alerts()).toEqual([GONE_NOTICE]);
+    state.status.delete(ME);
+    state.sf = AFTER;
+    await tap(save(form));
+    expect(alerts()).toEqual([]);
+    expectIdle(save(form));
+    await tap(save(form));
+    expect(writes(form.patch)).toBe(2);
+    expect(patchBodies(form.patch)[1]).toEqual(form.body(form.fieldOf(AFTER), AFTER));
   });
 
   it('bị máy chủ từ chối (409) rồi tải lại treo quá 4 giây: khoá nhả nhưng Lưu vẫn không gửi tới khi bản mới về', async () => {
