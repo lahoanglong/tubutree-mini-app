@@ -26,6 +26,7 @@ import {
 import { getAffiliateMe } from '../services/affiliate-api';
 import { getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
 import { haptic } from '../utils/haptic';
+import { useSheetSeq } from '../hooks/use-sheet-seq';
 import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { useUploadBusy } from '../hooks/use-upload-busy';
@@ -259,18 +260,21 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
     return isStaleStateError(e) ? settleWithin(refresh()) : undefined;
   };
 
+  // Số lần mở của tấm chọn mẫu: lệnh mang số của lần mở đã gửi nó (onMutate); phản hồi muộn chỉ đóng tấm khi đó vẫn là lần mở ấy, kẻo khách tự đóng rồi mở lại (đang chọn danh mục khác) bị lệnh cũ đóng mất tấm.
+  const templateSeq = useSheetSeq(templateOpen);
   const templateMut = useLockedMutation({
     mutationFn: (categoryId: string) => applyStorefrontTemplate(categoryId),
-    onSuccess: async () => {
+    onMutate: () => templateSeq.mark(),
+    onSuccess: async (_d, _categoryId, sent) => {
       haptic('medium');
-      setTemplateOpen(false);
+      if (templateSeq.isCurrent(sent)) setTemplateOpen(false);
       await refresh();
     },
-    onError: (e) => {
+    onError: (e, _categoryId, sent) => {
       // Tấm chọn mẫu không có ô nhập, chạm một danh mục là gửi: máy chủ từ chối hẳn (400/404/409/422: gian hàng đã có bộ sưu tập, danh mục không còn...) thì bấm lại nhận đúng lỗi đó, đóng tấm sau khi gian hàng tải lại (lời báo đã ở snackbar), rồi mới nhả khoá. Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
       const held = fail(e);
       if (!isServerRejection(e)) return held;
-      return closeAfterFresh(held, () => setTemplateOpen(false));
+      return closeAfterFresh(held, () => { if (templateSeq.isCurrent(sent)) setTemplateOpen(false); });
     },
   });
   const openPicker = useLockedMutation({

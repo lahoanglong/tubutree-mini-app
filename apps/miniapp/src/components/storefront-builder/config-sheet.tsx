@@ -102,7 +102,8 @@ export function MerchantConfigSheet({
       haptic('medium');
       openSnackbar({ text: 'Đã lưu cấu hình gian hàng!', type: 'success' });
       onSaved();
-      onClose();
+      // Lệnh báo xong muộn sau khi khách đóng tấm rồi mở lại: TanStack vẫn chạy onSuccess của tấm cũ, `onClose` của cha sẽ đóng nhầm tấm mới. `onSaved` chỉ tải lại nên luôn chạy.
+      if (mounted.current) onClose();
     },
     onError: (e) => {
       const held = failSave(e);

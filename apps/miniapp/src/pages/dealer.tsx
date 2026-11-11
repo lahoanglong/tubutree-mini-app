@@ -35,6 +35,7 @@ import {
   saveTemplate,
   deleteTemplate,
   type DealerApplyInput,
+  type DealerTemplate,
   type PricelistRow,
   type DealerOrderRules,
 } from '../services/dealer-api';
@@ -51,6 +52,7 @@ import { newIdempotencyKey } from '../utils/idempotency';
 import { ImageUpload } from '../components/image-upload';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { settleWithin } from '../utils/settle-within';
+import { useSheetSeq } from '../hooks/use-sheet-seq';
 import {
   DEALER_BENEFITS,
   DEALER_BENEFITS_TITLE,
@@ -392,16 +394,21 @@ function PriceAndOrder({ creditLimit, debt, rules }: { creditLimit: number; debt
     haptic('light');
     setQty(Object.fromEntries(items.map((i) => [i.variationId, i.quantity])));
   };
-  const saveTpl = useLockedMutation({
+  // Lệnh lưu mang số lần mở tấm lúc gửi: khách tự đóng tấm rồi mở lại và đang gõ tên mẫu khác thì phản hồi muộn không đóng tấm mới hay xoá tên đang gõ.
+  const saveSeq = useSheetSeq(saveOpen);
+  const saveTpl = useLockedMutation<DealerTemplate, Error, void, number>({
     mutationFn: () =>
       saveTemplate(
         tplName,
         Object.entries(qty).filter(([, n]) => n > 0).map(([variationId, quantity]) => ({ variationId, quantity })),
       ),
-    onSuccess: () => {
+    onMutate: () => saveSeq.mark(),
+    onSuccess: (_data, _v, sent) => {
       haptic('medium');
-      setSaveOpen(false);
-      setTplName('');
+      if (saveSeq.isCurrent(sent)) {
+        setSaveOpen(false);
+        setTplName('');
+      }
       openSnackbar({ text: 'Đã lưu mẫu đơn.', type: 'success' });
       void qc.invalidateQueries({ queryKey: ['dealer-templates'] });
     },

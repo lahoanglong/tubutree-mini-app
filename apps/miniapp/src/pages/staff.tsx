@@ -53,6 +53,7 @@ import { INPUT_LIMITS } from '../utils/input-limits';
 import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { useUploadBusy } from '../hooks/use-upload-busy';
+import { useSheetSeq } from '../hooks/use-sheet-seq';
 
 const STATUS: Record<Shift['status'], { label: string; tone: BadgeTone }> = {
   PENDING: { label: 'Chờ duyệt', tone: 'warning' },
@@ -135,24 +136,29 @@ function TodayCard() {
   const checkoutM = useLockedMutation({
     onSettled: releaseAttending,
     mutationFn: (at?: string) => attnCheckout(at),
-    onSuccess: () => {
+    onMutate: () => backSeq.mark(),
+    onSuccess: (_r, _at, sent) => {
       openSnackbar({ text: 'Đã ra ca.', type: 'success' });
-      setBackOpen(false);
+      // Tấm đóng được lúc lệnh chạy: khách đóng rồi mở lại (đang gõ giờ) thì phản hồi của lần mở trước không đóng lần mở này.
+      if (backSeq.isCurrent(sent)) setBackOpen(false);
       invalidate();
     },
-    onError: (e) => {
+    onError: (e, _at, sent) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Tấm "Ra ca lùi giờ" có ô giờ: chỉ đóng khi phiên không còn hoặc vừa đổi (404/409, đã ra ca ở máy khác); 400/422 là giờ chọn chưa hợp lệ, giữ tấm để sửa.
-      // Đóng sau khi trạng thái chấm công mới về, không đóng trước: tấm biến mất mà màn còn phiên cũ.
+      // Đóng sau khi trạng thái chấm công mới về, không đóng trước: tấm biến mất mà màn còn phiên cũ. Chỉ đóng nếu LÚC ĐÓ tấm vẫn là lần mở đã gửi lệnh.
       const held = refreshIfStale(e);
       if (!isTargetGoneError(e)) return held;
-      return closeAfterFresh(held, () => setBackOpen(false));
+      return closeAfterFresh(held, () => {
+        if (backSeq.isCurrent(sent)) setBackOpen(false);
+      });
     },
   });
   const attendBusy = checkinM.isPending || checkoutM.isPending;
 
   // Checkout lùi giờ (quên checkout khi nghỉ trưa/về sớm)
   const [backOpen, setBackOpen] = useState(false);
+  const backSeq = useSheetSeq(backOpen);
   const [backTime, setBackTime] = useState('12:00');
 
   // Neo theo ngày CHECKIN thật (không phải "hôm nay") — ca qua đêm (checkin 23:30 hôm trước,
@@ -370,6 +376,8 @@ function StaffHub() {
   // onError chạy với bản dựng lúc bấm; muốn biết tấm đang sửa ca nào LÚC LỖI VỀ thì phải đọc qua ref.
   const editIdRef = useRef(editId);
   editIdRef.current = editId;
+  // Số lần mở tấm: đóng rồi mở lại (cùng ca hay ca khác, hoặc thêm ca mới) là lần mở khác, nên mã đích nằm trong khoá để đổi ca khi tấm còn mở cũng tăng số.
+  const formSeq = useSheetSeq(formOpen ? (editId ?? 'new') : null);
   const [formDay, setFormDay] = useState(mondayKey);
   const [tplId, setTplId] = useState<string | null>(null);
   const [customStart, setCustomStart] = useState('08:00');
@@ -423,19 +431,21 @@ function StaffHub() {
       if (editId) return updateShift(editId, { startAt, endAt });
       return createShifts([{ workDate: formDay, startAt, endAt, templateId }]);
     },
-    onSuccess: () => {
+    onMutate: () => formSeq.mark(),
+    onSuccess: (_r, _shiftId, sent) => {
       openSnackbar({ text: editId ? 'Đã cập nhật ca.' : 'Đã gửi ca chờ duyệt.', type: 'success' });
-      setFormOpen(false);
+      // Khách đóng tấm rồi mở lại (đang gõ giờ) thì phản hồi của lần mở trước không đóng lần mở này.
+      if (formSeq.isCurrent(sent)) setFormOpen(false);
       invalidate();
     },
-    onError: (e, shiftId) => {
+    onError: (e, shiftId, sent) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Tấm sửa ca có ô giờ: chỉ đóng khi ca không còn hoặc vừa đổi (404/409); 400/422 là giờ chưa hợp lệ hay chồng giờ, giữ tấm để sửa. Thêm ca mới chưa có ca đích (API chỉ từ chối 400) nên không đóng.
-      // Đóng sau khi lịch tuần mới về. Tấm đóng được lúc lệnh chạy nên so ca lúc đóng (không phải lúc lỗi về): chỉ đóng nếu tấm vẫn đang sửa đúng ca này (đã mở thêm ca hoặc sửa ca khác thì giữ).
+      // Đóng sau khi lịch tuần mới về. Tấm đóng được lúc lệnh chạy nên so ca lúc đóng (không phải lúc lỗi về): chỉ đóng nếu tấm vẫn đang sửa đúng ca này (đã mở thêm ca hoặc sửa ca khác thì giữ), và vẫn là lần mở đã gửi lệnh (đóng rồi mở lại cùng ca thì giữ).
       const held = refreshIfStale(e);
       if (!isTargetGoneError(e) || !shiftId) return held;
       return closeAfterFresh(held, () => {
-        if (editIdRef.current === shiftId) setFormOpen(false);
+        if (editIdRef.current === shiftId && formSeq.isCurrent(sent)) setFormOpen(false);
       });
     },
   }, (shiftId) => shiftId ?? '');
@@ -461,6 +471,7 @@ function StaffHub() {
 
   // ── Đăng ký nhanh: 1 khung giờ áp cho nhiều ngày trong tuần ──
   const [quickOpen, setQuickOpen] = useState(false);
+  const quickSeq = useSheetSeq(quickOpen);
   const [quickTplId, setQuickTplId] = useState<string | null>(null);
   const [quickStart, setQuickStart] = useState('08:00');
   const [quickEnd, setQuickEnd] = useState('17:00');
@@ -498,9 +509,11 @@ function StaffHub() {
       }));
       return createShifts(items);
     },
-    onSuccess: (r) => {
+    onMutate: () => quickSeq.mark(),
+    onSuccess: (r, _v, sent) => {
       openSnackbar({ text: `Đã đăng ký ${r.created} ca chờ duyệt.`, type: 'success' });
-      setQuickOpen(false);
+      // Khách đóng tấm rồi mở lại (đang chọn ngày) thì phản hồi của lần mở trước không đóng lần mở này.
+      if (quickSeq.isCurrent(sent)) setQuickOpen(false);
       invalidate();
     },
     onError: (e) => {
@@ -527,6 +540,7 @@ function StaffHub() {
 
   // ── Sheet huỷ ca ──
   const [cancelId, setCancelId] = useState<string | null>(null);
+  const cancelSeq = useSheetSeq(cancelId);
   const [cancelReason, setCancelReason] = useState('');
   const [cancelEmergency, setCancelEmergency] = useState(false);
   const [cancelEvidence, setCancelEvidence] = useState('');
@@ -547,24 +561,30 @@ function StaffHub() {
         isEmergency: cancelEmergency,
         evidenceUrl: cancelEvidence || undefined,
       }),
-    onSuccess: (r) => {
+    onMutate: () => cancelSeq.mark(),
+    onSuccess: (r, _id, sent) => {
       openSnackbar({
         text: r.penalty ? 'Đã huỷ ca — bị tính phạt 1h công.' : 'Đã huỷ ca (không phạt).',
         type: r.penalty ? 'info' : 'success',
       });
-      setCancelId(null);
-      setCancelReason('');
-      setCancelEmergency(false);
-      setCancelEvidence('');
+      // Khách đóng tấm rồi mở lại (đang gõ lý do) thì phản hồi của lần mở trước không đóng lần mở này và không xoá chữ đang gõ.
+      if (cancelSeq.isCurrent(sent)) {
+        setCancelId(null);
+        setCancelReason('');
+        setCancelEmergency(false);
+        setCancelEvidence('');
+      }
       invalidate();
     },
-    onError: (e, id) => {
+    onError: (e, id, sent) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Tấm huỷ ca có ô lý do/chứng cứ: chỉ đóng khi ca không còn hoặc vừa đổi (404/409, vd đã bị huỷ ở nơi khác); 400/422 là lỗi ở ô nhập, giữ tấm để sửa.
-      // Đóng sau khi lịch tuần mới về; so id lúc đóng: chỉ đóng đúng tấm của ca này, không đóng tấm của ca khác mở trong lúc chờ.
+      // Đóng sau khi lịch tuần mới về; so id lúc đóng: chỉ đóng đúng tấm của ca này, không đóng tấm của ca khác mở trong lúc chờ, và chỉ khi vẫn là lần mở đã gửi lệnh (đóng rồi mở lại cùng ca thì giữ).
       const held = refreshIfStale(e);
       if (!isTargetGoneError(e)) return held;
-      return closeAfterFresh(held, () => setCancelId((cur) => (cur === id ? null : cur)));
+      return closeAfterFresh(held, () => {
+        if (cancelSeq.isCurrent(sent)) setCancelId((cur) => (cur === id ? null : cur));
+      });
     },
   });
 

@@ -30,6 +30,7 @@ import { grantDoneText, grantPermissionsHint } from '@tubutree/app-core/staff-co
 import { getErrorMessage, getLoadErrorMessage, isStaleStateError, isTargetGoneError } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
+import { useSheetSeq } from '../hooks/use-sheet-seq';
 import { useUploadBusy } from '../hooks/use-upload-busy';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -160,6 +161,9 @@ function PayrollSection() {
   const [note, setNote] = useState('');
   const [detailRow, setDetailRow] = useState<AdminPayrollRow | null>(null);
   const [reopenRow, setReopenRow] = useState<AdminPayrollRow | null>(null);
+  // Số lần mở tấm "Đơn giá" và "Đã chuyển": hai tấm này đóng được lúc lệnh còn bay, nên phản hồi muộn của lần mở trước (khách đóng rồi mở lại, đang gõ) không được đóng/xoá lần mở sau.
+  const rateSeq = useSheetSeq(rateRow?.staff.id ?? null);
+  const paySeq = useSheetSeq(payRow?.staff.id ?? null);
 
   // Chốt, mở lại và đánh dấu đã trả đều đổi trạng thái bảng lương nên chỉ một việc mỗi lúc (cũng là lý do các dòng khác bị khoá khi một dòng đang chạy).
   // Khoá ref vì `isPending` chỉ đúng sau lần vẽ kế tiếp: hai cú chạm sát nhau vẫn gửi cả hai.
@@ -176,17 +180,20 @@ function PayrollSection() {
 
   const rateM = useLockedMutation({
     mutationFn: (r: AdminPayrollRow) => setRate(r.staff.id, Number(rateVal)),
-    onSuccess: () => {
+    onMutate: () => rateSeq.mark(),
+    onSuccess: (_data, _r, sent) => {
       openSnackbar({ text: 'Đã lưu đơn giá.', type: 'success' });
-      setRateRow(null);
+      if (rateSeq.isCurrent(sent)) setRateRow(null);
       invalidate();
     },
-    onError: (e, r) => {
+    onError: (e, r, sent) => {
       // Tấm có ô đơn giá: chỉ đóng khi nhân viên không còn hoặc bảng lương vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa.
-      // Đóng sau khi bảng mới về (không đóng trước: tấm biến mất mà màn còn số cũ). Tấm đóng được lúc lệnh chạy nên so id lúc đóng: chỉ đóng đúng tấm của dòng này.
+      // Đóng sau khi bảng mới về (không đóng trước: tấm biến mất mà màn còn số cũ). Tấm đóng được lúc lệnh chạy nên so id lúc đóng và số lần mở: chỉ đóng đúng tấm của dòng này, ở đúng lần mở đã gửi lệnh (đóng rồi mở lại cùng dòng thì giữ).
       const held = onWriteRejected(e);
       if (!isTargetGoneError(e)) return held;
-      return closeAfterFresh(held, () => setRateRow((cur) => (cur?.staff.id === r.staff.id ? null : cur)));
+      return closeAfterFresh(held, () => {
+        if (rateSeq.isCurrent(sent)) setRateRow((cur) => (cur?.staff.id === r.staff.id ? null : cur));
+      });
     },
   });
   const finalizeM = useLockedMutation({
@@ -210,19 +217,24 @@ function PayrollSection() {
   const paidM = useLockedMutation({
     onSettled: releaseActing,
     mutationFn: (r: AdminPayrollRow) => markPaid(r.staff.id, { year: ym.year, month: ym.month, proofImageUrl: proof, note: note || undefined }),
-    onSuccess: () => {
+    onMutate: () => paySeq.mark(),
+    onSuccess: (_data, _r, sent) => {
       openSnackbar({ text: 'Đã đánh dấu đã trả lương.', type: 'success' });
-      setPayRow(null);
-      setProof('');
-      setNote('');
+      if (paySeq.isCurrent(sent)) {
+        setPayRow(null);
+        setProof('');
+        setNote('');
+      }
       invalidate();
     },
-    onError: (e, r) => {
+    onError: (e, r, sent) => {
       // Tấm có ô ảnh/ghi chú: chỉ đóng khi nhân viên không còn hoặc bảng lương vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Ảnh/ghi chú tự xoá khi mở tấm kế tiếp.
-      // Đóng sau khi bảng mới về; tấm đóng được trong lúc lệnh chạy nên so id lúc đóng: chỉ đóng đúng tấm của dòng này, không đóng tấm của người khác mới mở.
+      // Đóng sau khi bảng mới về; tấm đóng được trong lúc lệnh chạy nên so id lúc đóng và số lần mở: chỉ đóng đúng tấm của dòng này ở đúng lần mở đã gửi lệnh, không đóng tấm của người khác (hay lần mở lại của chính dòng này) mới mở.
       const held = onWriteRejected(e);
       if (!isTargetGoneError(e)) return held;
-      return closeAfterFresh(held, () => setPayRow((cur) => (cur?.staff.id === r.staff.id ? null : cur)));
+      return closeAfterFresh(held, () => {
+        if (paySeq.isCurrent(sent)) setPayRow((cur) => (cur?.staff.id === r.staff.id ? null : cur));
+      });
     },
   });
   const payrollBusy = finalizeM.isPending || reopenM.isPending || paidM.isPending;
@@ -440,6 +452,9 @@ function DetailSheet({
   const [editId, setEditId] = useState<string | null>(null);
   const [ci, setCi] = useState('08:00');
   const [co, setCo] = useState('17:00');
+  // Số lần mở khung sửa giờ. Khoá theo `row` chứ không chỉ `editId`: đóng tấm "Giờ công" không xoá `editId`, nên đóng rồi mở lại cùng nhân viên vẫn thấy khung cũ đang mở;
+  // `row` về null giữa hai lần mở nên mỗi lần mở lại đều tăng số, và lệnh lưu của lần mở trước không đóng khung của lần mở sau.
+  const editSeq = useSheetSeq(row ? editId : null);
 
   const editM = useLockedMutation({
     mutationFn: (dayKey: string) =>
@@ -454,9 +469,10 @@ function DetailSheet({
         checkinAt: vnDateTimeISO(dayKey, ci),
         checkoutAt: vnDateTimeISO(co < ci ? addDaysKey(dayKey, 1) : dayKey, co),
       }),
-    onSuccess: () => {
+    onMutate: () => editSeq.mark(),
+    onSuccess: (_data, _dayKey, sent) => {
       openSnackbar({ text: 'Đã sửa giờ & tính lại.', type: 'success' });
-      setEditId(null);
+      if (editSeq.isCurrent(sent)) setEditId(null);
       qc.invalidateQueries({ queryKey: ['admin-payroll-detail', staffId, year, month] });
       onChanged();
     },
@@ -603,6 +619,8 @@ function StaffSection() {
   // Tấm Thêm không có id đích: đích của lệnh là SĐT đã gửi, nên onError so SĐT đang gõ trong tấm với nó.
   const phoneRef = useRef(phone);
   phoneRef.current = phone;
+  // Số lần mở tấm Thêm: đóng rồi mở lại CÙNG SĐT trong lúc lệnh còn bay thì phản hồi muộn không được đóng tấm mới hay xoá SĐT/lý do/nhóm việc đang gõ (so SĐT không phân biệt được hai lần mở).
+  const grantSeq = useSheetSeq(sheetOpen);
 
   const grantM = useLockedMutation({
     // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi để máy chủ giữ nguyên nhóm đã lưu.
@@ -611,20 +629,24 @@ function StaffSection() {
       const r = await grantStaff(to, role, role === 'STAFF' && picked.length ? picked : undefined, grantReason.trim());
       return { r, to, names: picked.map((p) => STAFF_PERMISSION_LABELS[p]), alreadyStaff: existingNames !== null };
     },
-    onSuccess: ({ r, to, names, alreadyStaff }) => {
+    onMutate: () => grantSeq.mark(),
+    onSuccess: ({ r, to, names, alreadyStaff }, _to, sent) => {
       openSnackbar({ text: grantDoneText(r, to, names, alreadyStaff), type: 'success' });
-      setSheetOpen(false);
-      setPhone('');
-      setPerms([]);
-      setGrantReason('');
+      if (grantSeq.isCurrent(sent)) {
+        setSheetOpen(false);
+        setPhone('');
+        setPerms([]);
+        setGrantReason('');
+      }
       qc.invalidateQueries({ queryKey: ['admin-staff'] });
     },
-    onError: (e, to) => {
+    onError: (e, to, sent) => {
       // Tấm có ô SĐT/lý do/nhóm việc: chỉ đóng khi người này không còn hoặc vừa đổi quyền ở nơi khác (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Giữ SĐT/nhóm việc như khi người dùng tự đóng, chỉ bỏ lý do (khớp onClose của tấm).
-      // Đóng sau khi danh sách mới về; tấm đóng được lúc lệnh chạy nên so SĐT đang gõ lúc đóng (không phải lúc lỗi về): chỉ đóng khi tấm vẫn đang ở đúng SĐT này.
+      // Đóng sau khi danh sách mới về; tấm đóng được lúc lệnh chạy nên so SĐT đang gõ lúc đóng (không phải lúc lỗi về) và số lần mở: chỉ đóng khi tấm vẫn đang ở đúng SĐT này, ở đúng lần mở đã gửi lệnh.
       const held = onWriteRejected(e);
       if (!isTargetGoneError(e)) return held;
       return closeAfterFresh(held, () => {
+        if (!grantSeq.isCurrent(sent)) return;
         if (phoneRef.current.trim() !== to) return;
         setSheetOpen(false);
         setGrantReason('');
@@ -959,35 +981,44 @@ function ShiftsSection() {
     onSettled: releaseShift,
     mutationFn: (v: { id: string; approvedStart?: string; approvedEnd?: string }) =>
       approveShift(v.id, v.approvedStart ? { approvedStart: v.approvedStart, approvedEnd: v.approvedEnd } : undefined),
-    onSuccess: () => {
+    onMutate: () => adjustSeq.mark(),
+    onSuccess: (_data, v, sent) => {
       openSnackbar({ text: 'Đã duyệt ca.', type: 'success' });
-      setAdjust(null);
+      // Nút Duyệt ngoài tấm cũng dùng lệnh này: chỉ đóng tấm Chỉnh giờ nếu nó đang hiện đúng ca vừa duyệt.
+      if (adjustSeq.isCurrent(sent)) setAdjust((cur) => (cur?.id === v.id ? null : cur));
       invalidate();
     },
-    onError: (e, v) => {
+    onError: (e, v, sent) => {
       // Tấm chỉnh giờ có ô giờ: chỉ đóng khi ca không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô giờ, giữ tấm để sửa.
-      // Đóng sau khi danh sách ca mới về; so id lúc đóng: chỉ đóng tấm của đúng ca này, không đóng tấm của ca khác mới mở trong lúc chờ.
+      // Đóng sau khi danh sách ca mới về; so id lúc đóng và số lần mở: chỉ đóng tấm của đúng ca này ở đúng lần mở đã gửi lệnh, không đóng tấm của ca khác (hay lần mở lại của chính ca này) mới mở trong lúc chờ.
       const held = onWriteRejected(e);
       if (!isTargetGoneError(e)) return held;
-      return closeAfterFresh(held, () => setAdjust((cur) => (cur?.id === v.id ? null : cur)));
+      return closeAfterFresh(held, () => {
+        if (adjustSeq.isCurrent(sent)) setAdjust((cur) => (cur?.id === v.id ? null : cur));
+      });
     },
   }, (v) => v.id);
 
   const rejectM = useLockedMutation({
     onSettled: releaseShift,
     mutationFn: (v: { id: string; reason: string }) => rejectShift(v.id, v.reason),
-    onSuccess: () => {
+    onMutate: () => rejectSeq.mark(),
+    onSuccess: (_data, _v, sent) => {
       openSnackbar({ text: 'Đã từ chối ca.', type: 'success' });
-      setRejectId(null);
-      setRejectReason('');
+      if (rejectSeq.isCurrent(sent)) {
+        setRejectId(null);
+        setRejectReason('');
+      }
       invalidate();
     },
-    onError: (e, v) => {
+    onError: (e, v, sent) => {
       // Tấm từ chối có ô lý do: chỉ đóng khi ca không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô lý do, giữ tấm để sửa.
-      // Đóng sau khi danh sách ca mới về; so id lúc đóng: chỉ đóng tấm của đúng ca này.
+      // Đóng sau khi danh sách ca mới về; so id lúc đóng và số lần mở: chỉ đóng tấm của đúng ca này ở đúng lần mở đã gửi lệnh.
       const held = onWriteRejected(e);
       if (!isTargetGoneError(e)) return held;
-      return closeAfterFresh(held, () => setRejectId((cur) => (cur === v.id ? null : cur)));
+      return closeAfterFresh(held, () => {
+        if (rejectSeq.isCurrent(sent)) setRejectId((cur) => (cur === v.id ? null : cur));
+      });
     },
   }, (v) => v.id);
 
@@ -1010,6 +1041,9 @@ function ShiftsSection() {
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [tplOpen, setTplOpen] = useState(false);
+  // Số lần mở hai tấm: lệnh mang số của lần mở đã gửi nó (bắt trong `onMutate`, hai mutation ở trên đọc lúc chạy nên khai báo sau state này vẫn đúng).
+  const adjustSeq = useSheetSeq(adjust?.id ?? null);
+  const rejectSeq = useSheetSeq(rejectId);
 
   const openAdjust = (s: AdminShift) => {
     setAdjust({ id: s.id, dayKey: s.workDate.slice(0, 10) });
@@ -1198,11 +1232,15 @@ function TemplateSheet({ visible, onClose }: { visible: boolean; onClose: () => 
     );
   };
 
+  // Số lần mở tấm: TemplateSheet luôn được dựng (cha chỉ đổi `visible`) nên state và hook sống qua các lần đóng/mở. Thêm xong sau khi khách đóng rồi mở lại tấm thì không xoá tên đang gõ.
+  const addSeq = useSheetSeq(visible);
+
   const addM = useLockedMutation({
     mutationFn: () => createTemplate({ name: name.trim(), startMin: hhmmToMin(start), endMin: hhmmToMin(end) }),
-    onSuccess: () => {
+    onMutate: () => addSeq.mark(),
+    onSuccess: (_data, _v, sent) => {
       openSnackbar({ text: 'Đã thêm ca chuẩn.', type: 'success' });
-      setName('');
+      if (addSeq.isCurrent(sent)) setName('');
       qc.invalidateQueries({ queryKey: ['admin-templates'] });
       qc.invalidateQueries({ queryKey: ['shift-templates'] });
     },

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   deleteAddress: vi.fn(),
   openSnackbar: vi.fn(),
   authStatus: 'authenticated' as string,
+  forms: [] as { onSaved: (a: unknown) => void; onCancel: () => void }[],
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -23,14 +24,17 @@ vi.mock('../services/account-api', () => ({ updateAddress: mocks.updateAddress, 
 vi.mock('../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: mocks.authStatus }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../components/address-form', () => ({
-  AddressForm: ({ initial, onSaved }: { initial: { id: string } | null; onSaved: (a: unknown) => void }) => (
-    <div>
-      form
-      <button type="button" onClick={() => onSaved({ ...initial, ward: 'P2' })}>
-        Lưu thử
-      </button>
-    </div>
-  ),
+  AddressForm: ({ initial, onSaved, onCancel }: { initial: { id: string } | null; onSaved: (a: unknown) => void; onCancel: () => void }) => {
+    mocks.forms.push({ onSaved, onCancel });
+    return (
+      <div>
+        form
+        <button type="button" onClick={() => onSaved({ ...initial, ward: 'P2' })}>
+          Lưu thử
+        </button>
+      </div>
+    );
+  },
 }));
 
 import AddressesPage from './addresses';
@@ -1013,5 +1017,117 @@ describe('Sổ địa chỉ: khung xác nhận xoá đóng khi máy chủ từ c
     await settle();
     expect(screen.queryByText(/Lan · 0900000000/)).toBeNull();
     expect(screen.getByText(TITLE)).toBeInTheDocument();
+  });
+});
+
+describe('Sổ địa chỉ: phản hồi muộn của lệnh lưu không đóng tấm Thêm/Sửa mở lại (W116A)', () => {
+  const ADDR2 = { ...ADDR, id: 'a2', recipient: 'Mai' };
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const EDIT_TITLE = { level: 2, name: 'Sửa địa chỉ' };
+  const lastForm = () => mocks.forms[mocks.forms.length - 1]!;
+  const spied = () => {
+    const qc = newClient();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    renderPage(qc);
+    return invalidate;
+  };
+  const addressesRefreshed = (invalidate: ReturnType<typeof spied>) =>
+    invalidate.mock.calls.some(([f]) => JSON.stringify((f as { queryKey: unknown }).queryKey) === JSON.stringify(['addresses']));
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.forms.length = 0;
+    mocks.authStatus = 'authenticated';
+    mocks.getAddresses.mockReset().mockResolvedValue([ADDR]);
+    mocks.updateAddress.mockReset().mockResolvedValue({});
+    mocks.deleteAddress.mockReset().mockResolvedValue({});
+  });
+
+  /** Mở tấm Sửa, giữ lại hàm gọi lại của form này (lệnh lưu đã gửi từ nó), đóng tấm bằng nút Đóng rồi mở lại cùng thẻ. */
+  const sendThenCloseAndReopen = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa' }));
+    await screen.findByRole('heading', EDIT_TITLE);
+    const sent = lastForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByRole('heading', EDIT_TITLE)).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa' }));
+    await screen.findByRole('heading', EDIT_TITLE);
+    return sent;
+  };
+
+  it('lưu xong sau khi khách đóng rồi mở lại: tấm mới còn mở, sổ vẫn được tải lại', async () => {
+    const invalidate = spied();
+    const sent = await sendThenCloseAndReopen();
+    await act(async () => sent.onSaved({ ...ADDR, ward: 'P2' }));
+    await settle();
+    expect(screen.getByRole('heading', EDIT_TITLE)).toBeInTheDocument();
+    expect(screen.getByText('form')).toBeInTheDocument();
+    expect(addressesRefreshed(invalidate)).toBe(true);
+  });
+
+  it('địa chỉ không còn (form báo huỷ) sau khi khách đóng rồi mở lại: tấm mới còn mở', async () => {
+    spied();
+    const sent = await sendThenCloseAndReopen();
+    await act(async () => sent.onCancel());
+    await settle();
+    expect(screen.getByRole('heading', EDIT_TITLE)).toBeInTheDocument();
+  });
+
+  it('khách không mở lại: lưu xong vẫn đóng tấm và tải lại sổ; huỷ của form đang mở vẫn đóng tấm', async () => {
+    const invalidate = spied();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa' }));
+    await screen.findByRole('heading', EDIT_TITLE);
+    await act(async () => lastForm().onSaved({ ...ADDR, ward: 'P2' }));
+    await waitFor(() => expect(screen.queryByRole('heading', EDIT_TITLE)).toBeNull());
+    expect(addressesRefreshed(invalidate)).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa' }));
+    await screen.findByRole('heading', EDIT_TITLE);
+    await act(async () => lastForm().onCancel());
+    await waitFor(() => expect(screen.queryByRole('heading', EDIT_TITLE)).toBeNull());
+  });
+
+  it('khách đóng tấm rồi không mở lại: lệnh lưu báo xong muộn không mở gì và vẫn tải lại sổ', async () => {
+    const invalidate = spied();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa' }));
+    await screen.findByRole('heading', EDIT_TITLE);
+    const sent = lastForm();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByRole('heading', EDIT_TITLE)).toBeNull());
+    await act(async () => sent.onSaved({ ...ADDR, ward: 'P2' }));
+    await settle();
+    expect(screen.queryByRole('heading', EDIT_TITLE)).toBeNull();
+    expect(addressesRefreshed(invalidate)).toBe(true);
+  });
+
+  // Khung xác nhận xoá không cần số lần mở: khách đóng được khung lúc lệnh xoá còn bay, nhưng nút Xoá của MỌI thẻ bị khoá (disabled) tới khi lệnh xong
+  // (cả lúc chờ sổ mới), nên không mở lại được khung nào để lệnh cũ đóng nhầm. Bỏ `disabled` ở nút Xoá thì ca này đỏ: lúc đó phải thêm số lần mở cho khung xoá.
+  it('đang xoá: khách đóng khung bằng Huỷ thì nút Xoá của mọi thẻ vẫn khoá, không mở lại được khung xoá cho tới khi lệnh xong', async () => {
+    const d = deferred<unknown>();
+    mocks.getAddresses.mockReset().mockResolvedValueOnce([ADDR, ADDR2]).mockResolvedValue([ADDR2]);
+    mocks.deleteAddress.mockReturnValueOnce(d.promise);
+    renderPage();
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Xoá' }))[0]!);
+    const title = await screen.findByRole('heading', { level: 2, name: 'Xoá địa chỉ này?' });
+    await act(async () => {
+      fireEvent.click(within(title.closest('[data-testid="page"] > div') as HTMLElement).getByRole('button', { name: 'Xoá' }));
+    });
+    await waitFor(() => expect(mocks.deleteAddress).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
+    await waitFor(() => expect(screen.queryByText('Xoá địa chỉ này?')).toBeNull());
+    for (const del of screen.getAllByRole('button', { name: 'Xoá' })) expect(del).toBeDisabled();
+    await act(async () => d.resolve({}));
+    await settle();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Xoá' })).not.toBeDisabled());
+    expect(screen.queryByText('Xoá địa chỉ này?')).toBeNull();
   });
 });

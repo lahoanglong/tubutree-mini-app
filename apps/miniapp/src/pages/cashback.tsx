@@ -18,6 +18,7 @@ import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { openAffiliateLink } from '../services/zmp-bridge';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { useSheetSeq } from '../hooks/use-sheet-seq';
 import { formatVnd, formatRatePct } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { Badge, type BadgeTone } from '../components/ui/badge';
@@ -52,21 +53,27 @@ export default function CashbackPage() {
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const [selected, setSelected] = useState<CashbackMerchant | null>(null);
 
-  const clickMut = useLockedMutation({
-    mutationFn: (merchantId: string) => createCashbackClick(merchantId),
-    onSuccess: (r) => {
+  // Số lần mở tấm: khách đóng tấm đang chờ rồi mở lại CÙNG sàn thì phản hồi muộn của lệnh cũ không được đóng tấm mới mở.
+  const sheetSeq = useSheetSeq(selected?.id ?? null);
+
+  const clickMut = useLockedMutation<Awaited<ReturnType<typeof createCashbackClick>>, Error, string, number>({
+    mutationFn: (merchantId) => createCashbackClick(merchantId),
+    onMutate: () => sheetSeq.mark(),
+    onSuccess: (r, _merchantId, sentSeq) => {
       haptic('medium');
-      setSelected(null);
+      if (sheetSeq.isCurrent(sentSeq)) setSelected(null);
       openSnackbar({ text: CASHBACK_REDIRECT, type: 'success' });
       void openAffiliateLink(r.deeplink);
     },
-    onError: (e, merchantId) => {
+    onError: (e, merchantId, sentSeq) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       const held = isStaleStateError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['cashback-merchants'] })) : undefined;
       if (!isServerRejection(e)) return held;
       // Tấm chỉ có nút Mở sàn: máy chủ từ chối hẳn (sàn ngừng/đã đổi) thì bấm lại nhận đúng lỗi đó. Đóng SAU khi danh sách sàn mới về để nút báo bận tới lúc đó;
-      // tấm có thể đã đổi sang sàn khác trong lúc lệnh bay và lúc chờ nên chỉ đóng tấm của đúng sàn này. Mất mạng, quá hạn, 401, 5xx giữ tấm để thử lại.
-      return closeAfterFresh(held, () => setSelected((cur) => (cur?.id === merchantId ? null : cur)));
+      // tấm có thể đã đổi sang sàn khác (hoặc đóng rồi mở lại đúng sàn này) trong lúc lệnh bay và lúc chờ nên chỉ đóng tấm của đúng sàn này ở đúng lần mở đã gửi lệnh. Mất mạng, quá hạn, 401, 5xx giữ tấm để thử lại.
+      return closeAfterFresh(held, () => {
+        if (sheetSeq.isCurrent(sentSeq)) setSelected((cur) => (cur?.id === merchantId ? null : cur));
+      });
     },
   });
 

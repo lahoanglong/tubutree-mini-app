@@ -1,4 +1,4 @@
-import { act, render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -983,5 +983,115 @@ describe('Luồng 4 bước: tấm chọn mẫu đóng sau khi gian hàng tải 
     expect(invalidate).not.toHaveBeenCalled();
     tap();
     await waitFor(() => expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(2));
+  });
+});
+
+// W116A: khách tự đóng tấm chọn mẫu rồi mở lại trong lúc lệnh cũ còn bay hoặc gian hàng chưa tải lại xong thì lần đóng muộn của lệnh cũ (báo xong hoặc bị từ chối) không được đóng tấm mới mở (đang chọn danh mục). Lời báo, tải lại và nhả khoá vẫn chạy như cũ.
+describe('Luồng 4 bước: mở lại tấm chọn mẫu trong lúc lệnh cũ còn chờ thì không bị lệnh cũ đóng (W116A)', () => {
+  type Pending = { promise: Promise<void>; resolve: () => void };
+  const MINE = [['my-storefront']];
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error');
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+  const pending = (): Pending => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((res) => { resolve = res; });
+    return { promise, resolve };
+  };
+  const PICK = 'Dùng mẫu Chăm sóc da';
+  const picker = () => screen.queryByRole('button', { name: PICK });
+  const isOpen = () => picker() !== null;
+  const openSheet = () => fireEvent.click(screen.getByRole('button', { name: 'Chọn danh mục' }));
+  const closeSheet = () => fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: 'Đóng' }));
+  const tap = () => {
+    const pick = picker();
+    if (pick) fireEvent.click(pick);
+  };
+  /** Chỉ sau `arm()` mỗi lần tải lại mới là một lời hứa riêng giữ trong tay (bước chuyển giữa các màn cần tải lại thật). */
+  function liveClient() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    const refreshes: Pending[] = [];
+    const arm = () => {
+      invalidate.mockClear();
+      invalidate.mockImplementation((() => {
+        const p = pending();
+        refreshes.push(p);
+        return p.promise;
+      }) as never);
+    };
+    return { qc, invalidate, refreshes, arm };
+  }
+  const keysOf = (invalidate: ReturnType<typeof liveClient>['invalidate']) => invalidate.mock.calls.map(([f]) => (f as { queryKey: string[] }).queryKey);
+  const open = async (qc: QueryClient) => {
+    mocks.getMyStorefront.mockResolvedValue(draft());
+    render(<QueryClientProvider client={qc}><StorefrontBuilderPage /></QueryClientProvider>);
+    await screen.findByLabelText('Tên gian hàng');
+    next();
+    await screen.findByText('Bước 3/4');
+    openSheet();
+    await screen.findByRole('button', { name: PICK });
+  };
+
+  beforeEach(() => {
+    mocks.applyStorefrontTemplate.mockReset();
+  });
+
+  it('bị từ chối 409, khách đóng tấm rồi mở lại trong lúc gian hàng chưa tải xong: tải xong thì tấm mới còn mở, lời báo/tải lại vẫn chạy, khoá nhả', async () => {
+    mocks.applyStorefrontTemplate.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 });
+    const { qc, invalidate, refreshes, arm } = liveClient();
+    await open(qc);
+    arm();
+    tap();
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await settle();
+    expect(keysOf(invalidate)).toEqual(MINE);
+    // Tấm còn mở vì gian hàng chưa tải xong: khách tự đóng rồi mở lại.
+    expect(isOpen()).toBe(true);
+    closeSheet();
+    await waitFor(() => expect(isOpen()).toBe(false));
+    openSheet();
+    await screen.findByRole('button', { name: PICK });
+    await act(async () => refreshes.forEach((p) => p.resolve()));
+    await settle();
+    expect(isOpen()).toBe(true);
+    expect(errorToasts()).toHaveLength(1);
+    expect(keysOf(invalidate)).toEqual(MINE);
+    expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(1);
+    // Khoá đã nhả: chọn từ lần mở hiện tại đi được, và lần này tấm đóng như thường.
+    expect(picker()).not.toHaveAttribute('aria-disabled');
+    tap();
+    await waitFor(() => expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(isOpen()).toBe(false));
+  });
+
+  it('báo xong muộn sau khi khách đóng tấm rồi mở lại: tấm mới còn mở, gian hàng vẫn tải lại, khoá nhả, lệnh từ lần mở hiện tại vẫn đóng như thường', async () => {
+    let finish!: () => void;
+    mocks.applyStorefrontTemplate
+      .mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 }); }))
+      .mockResolvedValue({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 });
+    const { qc, invalidate, refreshes, arm } = liveClient();
+    await open(qc);
+    arm();
+    tap();
+    await waitFor(() => expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(1));
+    closeSheet();
+    await waitFor(() => expect(isOpen()).toBe(false));
+    openSheet();
+    await screen.findByRole('button', { name: PICK });
+    expect(invalidate).not.toHaveBeenCalled();
+    await act(async () => finish());
+    await settle();
+    expect(keysOf(invalidate)).toEqual(MINE);
+    expect(isOpen()).toBe(true);
+    // onSuccess chờ gian hàng tải lại xong mới nhả khoá.
+    await act(async () => refreshes.forEach((p) => p.resolve()));
+    await settle();
+    expect(isOpen()).toBe(true);
+    expect(errorToasts()).toHaveLength(0);
+    expect(picker()).not.toHaveAttribute('aria-disabled');
+    tap();
+    await waitFor(() => expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(isOpen()).toBe(false));
   });
 });

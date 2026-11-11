@@ -1,6 +1,6 @@
-import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import type { ComponentProps, ReactElement } from 'react';
+import { useState, type ComponentProps, type ReactElement } from 'react';
 import type * as UiForm from '../ui/form';
 import type * as ZmpUi from 'zmp-ui';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -567,5 +567,165 @@ describe('ReorderSheet: dấu "một phần", chạm chữ, câu giá có số t
     expect(screen.getByTestId('reorder-savings-note')).toHaveTextContent('Tiết kiệm 10.000đ so với lúc mua trước');
     fireEvent.click(screen.getAllByRole('button', { name: /^Tăng số lượng/ })[1]!);
     expect(screen.queryByTestId('reorder-savings-note')).toBeNull();
+  });
+});
+
+// W116A: lệnh Thêm vào giỏ báo xong muộn không đóng sheet mà khách đã đóng rồi MỞ LẠI (cùng đơn hay đơn khác) và đang chỉnh số lượng; thông báo, tải lại giỏ, nhả khoá vẫn chạy.
+describe('ReorderSheet: mở lại sheet lúc lệnh Thêm vào giỏ cũ còn bay (W116A)', () => {
+  const ORDER_B = orderReorderTarget({ code: 'TUBU9', items: [item('i1', 'Trà xanh')] });
+  const ADDED = (key: string) => ({ cart: CART, legacy: false, results: [{ orderItemId: key, status: 'added', addedQuantity: 2 }] });
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+
+  /** Cha giữ `target` như các trang thật: đóng = `setTarget(null)`, mở = nút ngoài sheet gán một đích. */
+  function Harness({ onClose, navigateToCart }: { onClose: () => void; navigateToCart?: boolean }) {
+    const [target, setTarget] = useState<ReorderTarget | null>(ORDER);
+    return (
+      <>
+        <button type="button" onClick={() => setTarget(ORDER)}>mở đơn A</button>
+        <button type="button" onClick={() => setTarget(ORDER_B)}>mở đơn B</button>
+        <ReorderSheet
+          target={target}
+          source="order_card"
+          navigateToCart={navigateToCart}
+          onClose={() => {
+            onClose();
+            setTarget(null);
+          }}
+        />
+      </>
+    );
+  }
+  const closeSheet = () => fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Đóng' }));
+  const sendFromFirstOpen = async (send: { promise: Promise<unknown> }, navigateToCart = false) => {
+    mocks.repurchaseOrder.mockReturnValueOnce(send.promise);
+    const onClose = vi.fn();
+    renderSheet(<Harness onClose={onClose} navigateToCart={navigateToCart} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' }));
+    });
+    expect(mocks.repurchaseOrder).toHaveBeenCalledTimes(1);
+    closeSheet();
+    expect(onClose).toHaveBeenCalledTimes(1);
+    return onClose;
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.repurchaseOrder.mockReset();
+    mocks.checkboxRenders.length = 0;
+    useAuthStore.setState({ status: 'idle' });
+  });
+
+  it('khách đóng rồi mở lại CÙNG đơn và chỉnh số lượng: lệnh cũ xong muộn không đóng sheet mới, số lượng đang chỉnh còn nguyên, thông báo + tải lại giỏ vẫn chạy', async () => {
+    const send = pending<unknown>();
+    const onClose = await sendFromFirstOpen(send);
+    fireEvent.click(screen.getByRole('button', { name: 'mở đơn A' }));
+    fireEvent.click(await screen.findByRole('button', { name: /^Tăng số lượng/ }));
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (3)' })).toBeInTheDocument();
+
+    await act(async () => send.resolve(ADDED('a')));
+    await waitFor(() => expect(mocks.trackReorderCompleted).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (3)' })).toBeInTheDocument();
+    // Khoá đã nhả: sheet mới gửi được lệnh của chính nó.
+    mocks.repurchaseOrder.mockResolvedValueOnce(ADDED('a'));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm vào giỏ (3)' }));
+    await waitFor(() => expect(mocks.repurchaseOrder).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
+  });
+
+  it('khách đóng rồi mở Mua lại cho đơn KHÁC: lệnh của đơn cũ xong muộn không đóng sheet của đơn mới, số lượng đang chỉnh còn nguyên', async () => {
+    const send = pending<unknown>();
+    const onClose = await sendFromFirstOpen(send);
+    fireEvent.click(screen.getByRole('button', { name: 'mở đơn B' }));
+    expect(await screen.findByRole('button', { name: 'Thêm vào giỏ (1)' })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Tăng số lượng/ }));
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' })).toBeInTheDocument();
+
+    await act(async () => send.resolve(ADDED('a')));
+    await waitFor(() => expect(mocks.trackReorderCompleted).toHaveBeenCalledTimes(1));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' })).toBeInTheDocument();
+  });
+
+  it('đối chứng: khách đóng sheet mà không mở lại, lệnh xong thì vẫn gọi onClose như cũ', async () => {
+    const send = pending<unknown>();
+    const onClose = await sendFromFirstOpen(send);
+    await act(async () => send.resolve(ADDED('a')));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
+  });
+
+  it('đối chứng: sheet mở suốt lúc lệnh bay, xong thì gọi onClose đúng một lần', async () => {
+    const send = pending<unknown>();
+    mocks.repurchaseOrder.mockReturnValueOnce(send.promise);
+    const onClose = vi.fn();
+    renderSheet(<Harness onClose={onClose} />);
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' }));
+    });
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => send.resolve(ADDED('a')));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+  });
+
+  describe('navigateToCart bật (kệ Mua lại, thẻ đơn, chi tiết đơn)', () => {
+    it('khách đóng rồi mở lại CÙNG đơn và chỉnh số lượng: lệnh cũ xong muộn KHÔNG nhảy sang giỏ, sheet mới còn mở với số lượng đang chỉnh; báo thành công có nút "Xem giỏ"', async () => {
+      const send = pending<unknown>();
+      const onClose = await sendFromFirstOpen(send, true);
+      fireEvent.click(screen.getByRole('button', { name: 'mở đơn A' }));
+      fireEvent.click(await screen.findByRole('button', { name: /^Tăng số lượng/ }));
+      expect(screen.getByRole('button', { name: 'Thêm vào giỏ (3)' })).toBeInTheDocument();
+
+      await act(async () => send.resolve(ADDED('a')));
+      await waitFor(() => expect(mocks.trackReorderCompleted).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+      expect(mocks.navigate).not.toHaveBeenCalled();
+      expect(mocks.openSnackbar).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'success', action: expect.objectContaining({ text: copy.reorder.viewCart }) }),
+      );
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Thêm vào giỏ (3)' })).toBeInTheDocument();
+    });
+
+    it('khách đóng sheet mà không mở lại: lệnh xong thì sang giỏ như cũ', async () => {
+      const send = pending<unknown>();
+      const onClose = await sendFromFirstOpen(send, true);
+      await act(async () => send.resolve(ADDED('a')));
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(2));
+      expect(mocks.navigate).toHaveBeenCalledTimes(1);
+      expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+    });
+
+    it('sheet mở suốt lúc lệnh bay: xong thì sang giỏ đúng một lần như cũ', async () => {
+      const send = pending<unknown>();
+      mocks.repurchaseOrder.mockReturnValueOnce(send.promise);
+      const onClose = vi.fn();
+      renderSheet(<Harness onClose={onClose} navigateToCart />);
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Thêm vào giỏ (2)' }));
+      });
+      await act(async () => send.resolve(ADDED('a')));
+      await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+      expect(mocks.navigate).toHaveBeenCalledTimes(1);
+      expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+    });
   });
 });

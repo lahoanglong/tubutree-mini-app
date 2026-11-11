@@ -3578,3 +3578,290 @@ describe('Trang gian hàng: hộp và tấm đóng sau khi dữ liệu mới v�
     });
   });
 });
+
+// W116A: W115A chỉ chặn lần đóng muộn khi ĐÍCH đã khác; khách tự đóng hộp/tấm rồi mở lại CÙNG đích (và đang gõ) trong lúc lệnh cũ còn bay hoặc dữ liệu mới chưa về thì lần đóng muộn của lệnh cũ (báo xong hoặc bị từ chối) không được đóng tấm mới mở và xoá chữ đang gõ.
+// Lời báo, tải lại, việc cập nhật dữ liệu và nhả khoá vẫn chạy như cũ; lệnh gửi từ chính lần mở hiện tại vẫn đóng như thường.
+describe('Trang gian hàng: mở lại cùng hộp/tấm trong lúc lệnh cũ còn chờ thì không bị lệnh cũ đóng (W116A)', () => {
+  type Pending = { promise: Promise<void>; resolve: () => void };
+  type Case = {
+    name: string;
+    write: ReturnType<typeof vi.fn>;
+    succeed: unknown;
+    /** Dựng màn tới đúng hộp/tấm đang mở (đã gõ `text` nếu là tấm có ô nhập). */
+    open: (qc: QueryClient, text: string) => Promise<void>;
+    /** Khách tự đóng hộp/tấm bằng nút của nó. */
+    close: () => void;
+    /** Mở lại cùng đích (đã gõ `text` nếu có ô nhập). */
+    reopen: (text: string) => Promise<void>;
+    /** Nút gửi của hộp/tấm (null khi đã đóng); tìm trong mọi tấm đang mở vì thành công của Thêm khối mở thêm bộ chọn món. */
+    submit: () => HTMLElement | null;
+    typed: boolean;
+    /** Lệnh xong mà màn dựng lại cả cây tấm (Thêm khối mở trang chi tiết khối mới) thì chữ đang gõ mất theo lần dựng lại, không phải do lệnh đóng tấm: chỉ kiểm tấm còn mở. */
+    keepsTextOnSuccess: boolean;
+  };
+  const BOTH = [['storefront-quests'], ['my-storefront']];
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error');
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+  const pending = (): Pending => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((res) => { resolve = res; });
+    return { promise, resolve };
+  };
+  /** Mỗi lần tải lại một lời hứa riêng giữ trong tay: test tự quyết lúc nào dữ liệu mới về. */
+  function liveClient() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const refreshes: Pending[] = [];
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => {
+      const p = pending();
+      refreshes.push(p);
+      return p.promise;
+    }) as never);
+    return { qc, invalidate, refreshes };
+  }
+  const keysOf = (invalidate: ReturnType<typeof liveClient>['invalidate']) => invalidate.mock.calls.map(([f]) => (f as { queryKey: string[] }).queryKey);
+  const sheetButton = (name: string | RegExp) => screen.queryAllByTestId('sheet').flatMap((s) => within(s).queryAllByRole('button', { name }))[0] ?? null;
+  const hasTyped = (value: string) => screen.queryAllByTestId('sheet').some((s) => within(s).queryByDisplayValue(value) !== null);
+  const NOTE_PLACEHOLDER = 'VD: Mình dùng 3 tháng, da đỡ khô hẳn.';
+  const tap = (c: Case) => {
+    const send = c.submit();
+    if (send) fireEvent.click(send);
+  };
+
+  const openUnpublish = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Cài đặt' }));
+    fireEvent.click(await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Gỡ đăng gian hàng' }));
+    await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Gỡ đăng' });
+  };
+  const openDeleteCol = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn khối' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khối' }));
+    await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Xoá khối' });
+  };
+  const openDeleteItem = async () => {
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Tuỳ chọn sản phẩm' }))[0]!);
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Xoá khỏi khối' }));
+    await within(await screen.findByTestId('sheet')).findByRole('button', { name: 'Xoá' });
+  };
+  const openRename = async (to: string) => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Tuỳ chọn khối' }));
+    fireEvent.click(within(await screen.findByTestId('sheet')).getByRole('button', { name: 'Đổi tên khối' }));
+    fireEvent.change(within(await screen.findByTestId('sheet')).getByDisplayValue('Bộ sưu tập A'), { target: { value: to } });
+  };
+  const openNewSection = async (title: string) => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm khối' }));
+    fireEvent.change(await screen.findByRole('textbox', { name: 'Tên khối' }), { target: { value: title } });
+  };
+  const openNote = async (value: string) => {
+    fireEvent.click((await screen.findAllByText('Thêm lý do giới thiệu'))[0]!);
+    fireEvent.change(within(await screen.findByTestId('sheet')).getByPlaceholderText(NOTE_PLACEHOLDER), { target: { value } });
+  };
+  const cancel = () => fireEvent.click(sheetButton('Huỷ')!);
+  const closeX = () => fireEvent.click(sheetButton('Đóng')!);
+
+  const CASES: Case[] = [
+    {
+      name: 'gỡ đăng gian hàng (unpublishMut)',
+      write: mocks.publishStorefront,
+      succeed: {},
+      open: async (qc) => {
+        mocks.getMyStorefront.mockResolvedValue(storefront({ isPublished: true }));
+        renderPage(qc);
+        await openUnpublish();
+      },
+      close: cancel,
+      reopen: () => openUnpublish(),
+      submit: () => sheetButton('Gỡ đăng'),
+      typed: false,
+      keepsTextOnSuccess: true,
+    },
+    {
+      name: 'xoá khối (deleteColMut)',
+      write: mocks.deleteCollection,
+      succeed: {},
+      open: async (qc) => {
+        renderPage(qc);
+        await openCard();
+        await openDeleteCol();
+      },
+      close: cancel,
+      reopen: () => openDeleteCol(),
+      submit: () => sheetButton('Xoá khối'),
+      typed: false,
+      keepsTextOnSuccess: true,
+    },
+    {
+      name: 'xoá món khỏi khối (delItemMut)',
+      write: mocks.removeItem,
+      succeed: {},
+      open: async (qc) => {
+        renderPage(qc);
+        await openCard();
+        await openDeleteItem();
+      },
+      close: cancel,
+      reopen: () => openDeleteItem(),
+      submit: () => sheetButton('Xoá'),
+      typed: false,
+      keepsTextOnSuccess: true,
+    },
+    {
+      name: 'tấm "Đổi tên khối" (renameColMut)',
+      write: mocks.updateCollection,
+      succeed: {},
+      open: async (qc, text) => {
+        renderPage(qc);
+        await openCard();
+        await openRename(text);
+      },
+      close: closeX,
+      reopen: (text) => openRename(text),
+      submit: () => sheetButton('Lưu'),
+      typed: true,
+      keepsTextOnSuccess: true,
+    },
+    {
+      name: 'tấm "Thêm khối" (newColMut)',
+      write: mocks.createCollection,
+      succeed: { id: 'c9', title: 'Mới', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 1, items: [] },
+      open: async (qc, text) => {
+        renderPage(qc);
+        await openNewSection(text);
+      },
+      close: closeX,
+      reopen: (text) => openNewSection(text),
+      submit: () => sheetButton('Tạo và thêm món'),
+      typed: true,
+      keepsTextOnSuccess: false,
+    },
+    {
+      name: 'tấm "Lý do giới thiệu" (noteMut)',
+      write: mocks.updateItem,
+      succeed: {},
+      open: async (qc, text) => {
+        renderPage(qc);
+        await openCard();
+        await openNote(text);
+      },
+      close: closeX,
+      reopen: (text) => openNote(text),
+      submit: () => sheetButton('Lưu'),
+      typed: true,
+      keepsTextOnSuccess: true,
+    },
+  ];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const fn of new Set(CASES.map((c) => c.write))) fn.mockReset();
+  });
+
+  describe.each(CASES)('$name', (c) => {
+    it('bị từ chối 409, khách đóng rồi mở lại cùng đích và gõ mới trong lúc dữ liệu chưa về: dữ liệu về thì tấm mới còn mở, chữ còn nguyên, lời báo/tải lại vẫn chạy, khoá nhả', async () => {
+      c.write.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue(c.succeed);
+      const { qc, invalidate, refreshes } = liveClient();
+      await c.open(qc, 'chữ cũ');
+      tap(c);
+      await waitFor(() => expect(errorToasts()).toHaveLength(1));
+      await settle();
+      expect(keysOf(invalidate)).toEqual(BOTH);
+      // Hộp/tấm còn mở vì dữ liệu chưa về: khách tự đóng rồi mở lại.
+      expect(c.submit()).not.toBeNull();
+      c.close();
+      await waitFor(() => expect(c.submit()).toBeNull());
+      await c.reopen('chữ mới');
+      await settle();
+      expect(c.submit()).not.toBeNull();
+      await act(async () => refreshes.forEach((p) => p.resolve()));
+      await settle();
+      expect(c.submit()).not.toBeNull();
+      if (c.typed) expect(hasTyped('chữ mới')).toBe(true);
+      expect(errorToasts()).toHaveLength(1);
+      expect(keysOf(invalidate)).toEqual(BOTH);
+      expect(c.write).toHaveBeenCalledTimes(1);
+      // Khoá đã nhả: gửi từ lần mở hiện tại đi được, và lần này đóng như thường.
+      expect(c.submit()).not.toHaveAttribute('aria-busy');
+      tap(c);
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(c.submit()).toBeNull());
+    });
+
+    it('báo xong muộn sau khi khách đóng rồi mở lại cùng đích: tấm mới còn mở, việc cập nhật dữ liệu vẫn chạy, khoá nhả, lệnh gửi từ lần mở hiện tại vẫn đóng như thường', async () => {
+      let finish!: () => void;
+      c.write.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve(c.succeed); })).mockResolvedValue(c.succeed);
+      const { qc, invalidate } = liveClient();
+      await c.open(qc, 'chữ cũ');
+      tap(c);
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(1));
+      c.close();
+      await waitFor(() => expect(c.submit()).toBeNull());
+      await c.reopen('chữ mới');
+      await settle();
+      expect(invalidate).not.toHaveBeenCalled();
+      await act(async () => finish());
+      await settle();
+      expect(c.submit()).not.toBeNull();
+      if (c.typed && c.keepsTextOnSuccess) expect(hasTyped('chữ mới')).toBe(true);
+      expect(keysOf(invalidate)).toEqual(BOTH);
+      expect(errorToasts()).toHaveLength(0);
+      expect(c.submit()).not.toHaveAttribute('aria-busy');
+      tap(c);
+      await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+      await waitFor(() => expect(c.submit()).toBeNull());
+    });
+  });
+
+  // Thêm khối báo xong còn chuyển sang trang khối mới và mở bộ chọn món (dựng lại cả cây tấm): chỉ làm khi lần mở đã gửi lệnh vẫn là lần mở hiện tại.
+  describe('tấm "Thêm khối": chuyển sang khối mới chỉ khi khách không mở lại tấm (newColMut)', () => {
+    const made = { id: 'c9', title: 'Mới', kind: 'NORMAL', layout: 'GRID', comboDiscountPct: null, sortOrder: 1, items: [] };
+    const SUBMIT = 'Tạo và thêm món';
+    const deferredCreate = () => {
+      let finish!: () => void;
+      mocks.createCollection.mockImplementationOnce(() => new Promise((resolve) => { finish = () => resolve(made); }));
+      return () => finish();
+    };
+
+    it('báo xong muộn sau khi khách đóng rồi mở lại: không chuyển trang, không mở bộ chọn món, tấm mới còn mở với chữ đang gõ; khối mới vào bộ nhớ, tải lại vẫn chạy', async () => {
+      const finish = deferredCreate();
+      const { qc, invalidate } = liveClient();
+      renderPage(qc);
+      await openNewSection('chữ cũ');
+      fireEvent.click(sheetButton(SUBMIT)!);
+      await waitFor(() => expect(mocks.createCollection).toHaveBeenCalledTimes(1));
+      closeX();
+      await waitFor(() => expect(sheetButton(SUBMIT)).toBeNull());
+      await openNewSection('chữ mới');
+      await settle();
+      expect(invalidate).not.toHaveBeenCalled();
+      await act(async () => finish());
+      await settle();
+      expect(keysOf(invalidate)).toEqual(BOTH);
+      expect(mocks.navigate).not.toHaveBeenCalled();
+      expect(router.loc.search).toBe('');
+      expect(screen.queryByTestId('section-detail')).not.toBeInTheDocument();
+      expect(screen.queryByText('Xà phòng')).not.toBeInTheDocument();
+      expect(sheetButton(SUBMIT)).not.toBeNull();
+      expect(hasTyped('chữ mới')).toBe(true);
+      expect(errorToasts()).toHaveLength(0);
+      expect(qc.getQueryData<{ collections: { id: string }[] }>(['my-storefront'])!.collections.map((col) => col.id)).toContain('c9');
+      expect(sheetButton(SUBMIT)).not.toHaveAttribute('aria-busy');
+    });
+
+    it('khách không mở lại: báo xong vẫn đóng tấm, chuyển sang trang khối mới và mở bộ chọn món như cũ', async () => {
+      const finish = deferredCreate();
+      const { qc, invalidate } = liveClient();
+      renderPage(qc);
+      await openNewSection('Mới');
+      fireEvent.click(sheetButton(SUBMIT)!);
+      await waitFor(() => expect(mocks.createCollection).toHaveBeenCalledTimes(1));
+      await act(async () => finish());
+      expect(await screen.findByRole('heading', { level: 1, name: 'Mới' })).toBeInTheDocument();
+      expect(await screen.findByText('Xà phòng')).toBeInTheDocument();
+      expect(screen.getByTestId('section-detail')).toBeInTheDocument();
+      expect(mocks.navigate).toHaveBeenCalledTimes(1);
+      expect(router.loc.search).toBe('?khoi=c9');
+      expect(sheetButton(SUBMIT)).toBeNull();
+      expect(keysOf(invalidate)).toEqual(BOTH);
+    });
+  });
+});

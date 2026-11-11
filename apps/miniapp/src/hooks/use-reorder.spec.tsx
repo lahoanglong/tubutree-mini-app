@@ -101,6 +101,51 @@ describe('useReorder', () => {
     expect(mocks.navigate).toHaveBeenCalledWith('/cart');
   });
 
+  describe('stillCurrent (nơi gửi đã bị đóng rồi mở lại trong lúc chờ)', () => {
+    const ADDED = { cart: CART, legacy: false, results: [{ orderItemId: 'a', status: 'added', addedQuantity: 1 }] };
+
+    it('trả false và navigateToCart bật: KHÔNG sang giỏ, rơi xuống snackbar có nút "Xem giỏ"; nút đó vẫn sang giỏ', async () => {
+      mocks.repurchaseOrder.mockResolvedValue(ADDED);
+      const { result } = setup('order_detail', { navigateToCart: true });
+      await act(async () => {
+        await result.current.submit(ORDER, [{ key: 'a', variationId: 'v-a', quantity: 1 }], () => false);
+      });
+      expect(mocks.navigate).not.toHaveBeenCalled();
+      expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+      const snack = mocks.openSnackbar.mock.calls[0]![0];
+      expect(snack).toMatchObject({ type: 'success', action: { text: 'Xem giỏ', close: true } });
+      snack.action.onClick();
+      expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+    });
+
+    it('hỏi LÚC lệnh xong, không phải lúc gửi', async () => {
+      let resolveSend!: (v: unknown) => void;
+      mocks.repurchaseOrder.mockReturnValue(new Promise((res) => { resolveSend = res; }));
+      let current = true;
+      const { result } = setup('order_detail', { navigateToCart: true });
+      let done!: Promise<unknown>;
+      await act(async () => {
+        done = result.current.submit(ORDER, [{ key: 'a', variationId: 'v-a', quantity: 1 }], () => current);
+      });
+      current = false;
+      await act(async () => {
+        resolveSend(ADDED);
+        await done;
+      });
+      expect(mocks.navigate).not.toHaveBeenCalled();
+    });
+
+    it('trả true: sang giỏ như cũ', async () => {
+      mocks.repurchaseOrder.mockResolvedValue(ADDED);
+      const { result } = setup('order_detail', { navigateToCart: true });
+      await act(async () => {
+        await result.current.submit(ORDER, [{ key: 'a', variationId: 'v-a', quantity: 1 }], () => true);
+      });
+      expect(mocks.openSnackbar).not.toHaveBeenCalled();
+      expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+    });
+  });
+
   it('không thêm được món nào → snackbar lỗi, không chuyển trang dù navigateToCart', async () => {
     mocks.repurchaseOrder.mockResolvedValue({
       cart: CART, legacy: false, results: [{ orderItemId: 'a', status: 'skipped', reason: 'INACTIVE', addedQuantity: 0 }],

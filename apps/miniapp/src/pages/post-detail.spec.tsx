@@ -686,3 +686,89 @@ describe('PostDetailPage: tấm Báo cáo đóng SAU khi dữ liệu mới về 
     expect(mocks.getPost).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('PostDetailPage: phản hồi muộn của lệnh cũ không đóng tấm Báo cáo mở lại cùng đích (W116A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const REASON = 'Lý do báo cáo…';
+  const submitBtn = () => {
+    const all = screen.getAllByRole('button', { name: 'Báo cáo' });
+    return all[all.length - 1]!;
+  };
+  const sheetOpen = () => screen.queryByPlaceholderText(REASON) !== null;
+  /** Mở tấm báo cáo bài, gõ lý do, gửi và chờ lệnh được nhận (đã gọi API). */
+  const sendFirst = async () => {
+    await screen.findByText('Lan Anh');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    fireEvent.change(await screen.findByPlaceholderText(REASON), { target: { value: 'Spam' } });
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.reportContent).toHaveBeenCalledTimes(1));
+  };
+  /** Khách đóng tấm bằng nút Đóng rồi mở lại báo cáo CÙNG bài và gõ lý do mới. */
+  const closeAndReopenSameTarget = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(sheetOpen()).toBe(false));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    fireEvent.change(await screen.findByPlaceholderText(REASON), { target: { value: 'Lý do mới' } });
+  };
+
+  it('bị từ chối 404 sau khi khách đóng rồi mở lại cùng bài: tấm mới còn mở, lý do đang gõ còn nguyên; lỗi, tải lại và nhả khoá vẫn chạy', async () => {
+    mocks.reportContent.mockRejectedValueOnce(serverError('Nội dung bị báo cáo không còn', 404)).mockResolvedValue({ ok: true });
+    renderPage();
+    const refresh = deferred();
+    await screen.findByText('Lan Anh');
+    mocks.getPost.mockReturnValueOnce(refresh.promise);
+    await sendFirst();
+    await waitFor(() => expect(mocks.getPost).toHaveBeenCalledTimes(2));
+    await closeAndReopenSameTarget();
+    // Dữ liệu mới về: lần đóng muộn của lệnh cũ không chạm tấm mới.
+    await act(async () => refresh.resolve(POST()));
+    await settle();
+    expect(sheetOpen()).toBe(true);
+    expect(screen.getByPlaceholderText(REASON)).toHaveValue('Lý do mới');
+    expect(mocks.openSnackbar.mock.calls.filter(([o]) => o.type === 'error')).toHaveLength(1);
+    expect(mocks.getComments).toHaveBeenCalledTimes(2);
+    // Khoá đã nhả: tấm mới gửi được.
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(submitBtn());
+    await waitFor(() => expect(mocks.reportContent).toHaveBeenCalledTimes(2));
+  });
+
+  it('báo xong sau khi khách đóng rồi mở lại cùng bài: tấm mới còn mở, lý do đang gõ còn nguyên; thông báo thành công vẫn hiện', async () => {
+    const send = deferred();
+    mocks.reportContent.mockReturnValueOnce(send.promise);
+    renderPage();
+    await sendFirst();
+    await closeAndReopenSameTarget();
+    await act(async () => send.resolve({ ok: true }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'success' })));
+    await settle();
+    expect(mocks.haptic).toHaveBeenCalledWith('light');
+    expect(sheetOpen()).toBe(true);
+    expect(screen.getByPlaceholderText(REASON)).toHaveValue('Lý do mới');
+  });
+
+  it('khách không mở lại: lệnh báo xong hay bị từ chối vẫn đóng tấm như trước, lý do bị xoá', async () => {
+    mocks.reportContent.mockRejectedValueOnce(serverError('Nội dung bị báo cáo không còn', 404)).mockResolvedValue({ ok: true });
+    renderPage();
+    const refresh = deferred();
+    await screen.findByText('Lan Anh');
+    mocks.getPost.mockReturnValueOnce(refresh.promise);
+    await sendFirst();
+    await waitFor(() => expect(mocks.getPost).toHaveBeenCalledTimes(2));
+    await act(async () => refresh.resolve(POST()));
+    await waitFor(() => expect(sheetOpen()).toBe(false));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    expect(await screen.findByPlaceholderText(REASON)).toHaveValue('');
+  });
+});

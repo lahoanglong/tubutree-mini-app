@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -325,5 +326,96 @@ describe('ProfileSheet: tấm có ô nhập chỉ đóng khi gian hàng không c
       for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
     });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+// W116A: lệnh Lưu báo xong muộn sau khi khách tự đóng tấm rồi mở lại (tấm cũ đã gỡ, TanStack vẫn chạy onSuccess của nó): `onClose` của cha không được đóng tấm mới mở và xoá chữ đang gõ; `onSaved` (cha tải lại) vẫn chạy.
+describe('ProfileSheet: báo lưu xong muộn sau khi khách đóng rồi mở lại tấm (W116A)', () => {
+  const TYPED = 'Lời nhắn đang gõ ở tấm mới';
+  const successToasts = () => mocks.openSnackbar.mock.calls.filter(([a]) => (a as { type: string }).type === 'success');
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+
+  /** Giống cha thật: một state mở, cùng một onClose cho mọi lần mở, tấm gỡ khi đóng; nút "Khách mở lại tấm" thay cho nút mở ngoài tấm. */
+  function Host({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+    const [open, setOpen] = useState(true);
+    return (
+      <>
+        <button type="button" onClick={() => setOpen(true)}>Khách mở lại tấm</button>
+        {open && (
+          <ProfileSheet
+            sf={sf}
+            onClose={() => {
+              onClose();
+              setOpen(false);
+            }}
+            onSaved={onSaved}
+          />
+        )}
+      </>
+    );
+  }
+  function renderHost() {
+    const onClose = vi.fn();
+    const onSaved = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })}>
+        <Host onClose={onClose} onSaved={onSaved} />
+      </QueryClientProvider>,
+    );
+    return { onClose, onSaved };
+  }
+  const sheetOpen = () => screen.queryByRole('button', { name: 'Lưu hồ sơ' }) !== null;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.updateStorefront.mockReset();
+  });
+
+  it('lưu xong muộn: tấm mới còn mở, chữ đang gõ còn nguyên, onSaved và lời báo vẫn chạy, nút ở tấm mới không bị khoá; lưu từ tấm hiện tại vẫn đóng như thường', async () => {
+    const save = deferredSave();
+    const { onClose, onSaved } = renderHost();
+    fireEvent.change(screen.getByDisplayValue('Xin chào'), { target: { value: 'Lời nhắn của tấm cũ' } });
+    await act(async () => {
+      fireEvent.click(saveBtn());
+    });
+    expect(mocks.updateStorefront).toHaveBeenCalledTimes(1);
+    // Khách tự đóng bằng nút Đóng của tấm (gọi onClose của cha) rồi mở lại.
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    onClose.mockClear();
+    expect(sheetOpen()).toBe(false);
+    fireEvent.click(screen.getByRole('button', { name: 'Khách mở lại tấm' }));
+    fireEvent.change(screen.getByDisplayValue('Xin chào'), { target: { value: TYPED } });
+
+    await act(async () => save.finish({}));
+    await waitFor(() => expect(onSaved).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(successToasts()).toHaveLength(1);
+    expect(onClose).not.toHaveBeenCalled();
+    expect(sheetOpen()).toBe(true);
+    expect(screen.getByDisplayValue(TYPED)).toBeInTheDocument();
+    expect(saveBtn()).not.toHaveAttribute('aria-busy');
+
+    mocks.updateStorefront.mockResolvedValueOnce({});
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(mocks.updateStorefront).toHaveBeenCalledTimes(2);
+    expect(sheetOpen()).toBe(false);
+  });
+
+  it('khách không mở lại: lưu xong vẫn đóng tấm đúng một lần và gọi onSaved như cũ', async () => {
+    const save = deferredSave();
+    const { onClose, onSaved } = renderHost();
+    await act(async () => {
+      fireEvent.click(saveBtn());
+    });
+    await act(async () => save.finish({}));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(onSaved).toHaveBeenCalledTimes(1);
+    expect(successToasts()).toHaveLength(1);
+    expect(sheetOpen()).toBe(false);
   });
 });
