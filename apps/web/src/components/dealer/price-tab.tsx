@@ -13,6 +13,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { settleWithin } from '@/lib/settle-within';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 import { bankPaymentHref } from '@/lib/order-view';
 import { useDebounced } from '@/lib/use-debounced';
 import { ui } from '@/lib/guest-ui';
@@ -33,6 +34,10 @@ const preorderNote = (lines: number) =>
 type Notice = { text: string; error: boolean };
 type OrderLine = { variationId: string; quantity: number };
 const DEL_TEMPLATE_KEY = ['dealer-del-template'] as const;
+// Giới hạn của SaveTemplateDto.name (apps/api/src/modules/dealer/dealer.controller.ts:34): ô chặn gõ quá để không tới 400 nhập liệu của DTO.
+const TEMPLATE_NAME_MAX = 120;
+// Mọi số liệu đơn đại lý đổi theo (hạn mức, giá, tồn, tối thiểu): đơn bị từ chối thì tải lại hết, như Mini App (apps/miniapp/src/pages/dealer.tsx:536).
+const ORDER_REFRESH_KEYS = ['dealer-orders', 'dealer-me', 'dealer-credit', 'dealer-rewards', 'dealer-report', 'dealer-pricelist'] as const;
 
 function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: (n: number) => void }) {
   const preorder = preorderQty(qty, row.stock);
@@ -85,14 +90,22 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
   const cart = useMemo(() => Object.entries(qty).filter(([, n]) => n > 0), [qty]);
 
   // Tên và các dòng đi theo biến mutate (chụp lúc bấm), không đọc `tplName`/giỏ mới hơn. Khoá giữ tới khi danh sách mẫu mới về, tối đa `settleWithin`.
+  // Lời lỗi của lần lưu ở state riêng: `saveTpl.isError` chỉ bật sau khi `onError` (tải lại, tới 4 giây) xong, mà lời báo phải hiện ngay.
+  const [saveError, setSaveError] = useState<{ value: unknown } | null>(null);
   const saveTpl = useLockedMutation({
     mutationFn: (v: { name: string; items: OrderLine[] }) => saveTemplate(coreHttp, v.name, v.items),
+    onMutate: () => setSaveError(null),
     onSuccess: (_data, v) => {
       setSaveOpen(false);
       // Khách gõ tên khác trong lúc đang gửi thì giữ chữ đó, chỉ xoá khi ô vẫn là tên vừa gửi.
       setTplName((cur) => (cur === v.name ? '' : cur));
       setNotice({ text: 'Đã lưu mẫu đơn.', error: false });
       return settleWithin(qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey }));
+    },
+    // Máy chủ từ chối (mẫu trống, không còn là đại lý...): tải lại danh sách mẫu rồi mới nhả nút. Mất mạng, 401, 5xx không nói gì về danh sách: nhả ngay.
+    onError: (e) => {
+      setSaveError({ value: e });
+      return serverRejectedState(e) ? settleWithin(qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey })) : undefined;
     },
   });
   // Khoá theo id mẫu: xoá hai mẫu khác nhau vẫn song song, chạm lặp vào cùng một mẫu thì bỏ qua. Giữ tới khi danh sách mới về (tối đa `settleWithin`), kẻo bấm lại trên mẫu đã xoá.
@@ -101,7 +114,11 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
       mutationKey: DEL_TEMPLATE_KEY,
       mutationFn: (id: string) => deleteTemplate(coreHttp, id),
       onSuccess: () => settleWithin(qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey })),
-      onError: (e) => setNotice({ text: errText(e), error: true }),
+      // API trả 400 "Không tìm thấy mẫu đơn." khi mẫu đã bị xoá ở nơi khác (deleteTemplate): tải lại để dòng biến mất, không để nút Xoá bấm mãi ra cùng một lỗi.
+      onError: (e) => {
+        setNotice({ text: errText(e), error: true });
+        return serverRejectedState(e) ? settleWithin(qc.invalidateQueries({ queryKey: dealerTemplatesQuery(coreHttp).queryKey })) : undefined;
+      },
     },
     (id) => id,
   );
@@ -201,7 +218,12 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
       if (waitingTransfer && order.paymentMethod === 'BANK_TRANSFER') router.push(bankPaymentHref(order.code));
       return refreshed;
     },
-    onError: (e) => setNotice({ text: errText(e), error: true }),
+    // Máy chủ từ chối (hạn mức, giá, tồn, tối thiểu đã đổi): tải lại số liệu rồi mới nhả nút, kẻo bấm lại trên số cũ nhận đúng lỗi đó. Idempotency-Key giữ nguyên.
+    onError: (e) => {
+      setNotice({ text: errText(e), error: true });
+      if (!serverRejectedState(e)) return undefined;
+      return settleWithin(Promise.all(ORDER_REFRESH_KEYS.map((key) => qc.invalidateQueries({ queryKey: [key] }))));
+    },
   });
   const submit = (method: 'CREDIT' | 'PREPAID') => {
     place.mutate({ method, items: cart.map(([variationId, quantity]) => ({ variationId, quantity })) });
@@ -381,10 +403,10 @@ export function PriceTab({ creditLimit, debt, rules }: { creditLimit: number; de
           </button>
         }
       >
-        <input aria-label="Tên mẫu" placeholder="Tên mẫu (vd Đơn tháng)" className={ui.field} value={tplName} onChange={(e) => setTplName(e.target.value)} />
-        {saveTpl.isError && (
+        <input aria-label="Tên mẫu" placeholder="Tên mẫu (vd Đơn tháng)" maxLength={TEMPLATE_NAME_MAX} className={ui.field} value={tplName} onChange={(e) => setTplName(e.target.value)} />
+        {saveError && (
           <p role="alert" className={`mt-2 ${ui.error}`}>
-            {errText(saveTpl.error)}
+            {errText(saveError.value)}
           </p>
         )}
       </Sheet>

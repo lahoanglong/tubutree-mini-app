@@ -23,6 +23,8 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { usePressLock } from '@/lib/use-press-lock';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { bankPaymentHref } from '@/lib/order-view';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -218,21 +220,25 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
         void qc.invalidateQueries({ queryKey: q(coreHttp).queryKey });
       }
     },
+    // Trả Promise tải lại báo giá: nút giữ bận tới khi báo giá mới về (tối đa `settleWithin`), kẻo bấm lại gửi đúng tổng/cách trả đã cũ. Lời lỗi đặt vào state TRƯỚC (`mut.isError` chỉ bật sau khi Promise này xong).
     onError: (e, s) => {
       if (isOutcomeUnknown(e)) {
         setUnconfirmedKey(s.key);
-        return;
+        return undefined;
       }
       setUnconfirmedKey(null);
       const code = errCode(e);
+      const refreshQuote = () => settleWithin(qc.invalidateQueries({ queryKey: ['ctv-order-quote'] }));
       if (code && PRICE_MOVED.has(code)) {
         setPriceMoved({ message: actErrText(e), itemsKey });
-        void qc.invalidateQueries({ queryKey: ['ctv-order-quote'] });
-        return;
+        return refreshQuote();
       }
-      // Báo giá đang cache còn cho COD mà máy chủ từ chối (đơn vượt trần): tải lại để khoá COD và tự chuyển sang chuyển khoản.
-      if (code === 'PAYMENT_METHOD_NOT_ALLOWED') void qc.invalidateQueries({ queryKey: ['ctv-order-quote'] });
       setSubmitError(actErrText(e));
+      // Máy chủ từ chối (400/404/409/422): báo giá trên màn có thể đã cũ (ngừng bán, hết tồn, đơn vượt trần COD, không còn là CTV), nên tải lại và giữ nút bận tới khi nó về.
+      // Tải với mọi 400, kể cả không mã: DTO (NO_HTML, place-order-for-customer.dto.ts:40,45) và dịch vụ (affiliate.service.ts:794,819,820,983) đều ném BadRequestException,
+      // phản hồi không cho phân biệt lỗi nhập với lỗi trạng thái. Tải lại báo giá không đụng tới ô khách đã nhập. Như apps/miniapp/src/components/affiliate/ctv-order-sheet.tsx:262 (Mini không tính 422).
+      // Mạng/5xx đã rẽ nhánh trên, 401/403 không nói gì về trạng thái: nhả ngay.
+      return serverRejectedState(e) ? refreshQuote() : undefined;
     },
     onSettled: () => {
       busy.current = false;
@@ -470,7 +476,8 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
         type="button"
         onClick={submit}
         aria-busy={mut.isPending}
-        disabled={(showErrors && !valid) || quotePending || mut.isPending}
+        aria-disabled={mut.isPending || undefined}
+        disabled={(showErrors && !valid) || quotePending}
         className={`${ui.btnPrimary} mt-3 w-full`}
       >
         {mut.isPending ? 'Đang tạo đơn…' : resendSameOrder ? t.resend : t.submit}

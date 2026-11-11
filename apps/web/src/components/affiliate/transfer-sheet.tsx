@@ -1,11 +1,15 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { requestPayout } from '@tubutree/app-core/api/affiliate';
 import { withdrawView } from '@tubutree/app-core/affiliate-rules';
+import { affiliateCommissionsQuery, affiliateDashboardQuery, affiliateMeQuery, affiliatePayoutsQuery, affiliateTaxStatementQuery } from '@tubutree/app-core/queries/affiliate';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { coreHttp } from '@/lib/core-http';
+import { invalidateBalances } from '@/lib/balances';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
@@ -61,6 +65,7 @@ function TransferForm({
   onDone,
   onBusyChange,
 }: Omit<TransferSheetProps, 'open' | 'onClose'> & { onBusyChange: (busy: boolean) => void }) {
+  const qc = useQueryClient();
   const cfgQ = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000 });
   const cfgLoaded = cfgQ.isSuccess;
   const pit = cfgQ.data?.affiliatePitWithhold;
@@ -76,7 +81,23 @@ function TransferForm({
     onSuccess: (r) => {
       onDone(r.note ?? 'Đã chuyển hoa hồng vào Ví Tubu.');
     },
-    onError: (e) => setError(actErrText(e)),
+    // Máy chủ từ chối vì số dư/hồ sơ thuế trên màn đã cũ (lệnh tự chuyển vừa chạy, MST vừa khai ở máy khác): tải lại đúng những gì đường thành công làm mới rồi mới nhả nút
+    // (tối đa `settleWithin`), kẻo bấm lại trên số cũ. Dashboard SAU Ví để số to không nhảy hai lần. Lời lỗi đặt vào state trước (`mut.isError` chỉ bật sau khi Promise này xong).
+    // PayoutDto chỉ nhận amount = số dư nguyên và taxId đúng mẫu mà form đã chặn từ trước, nên mọi 400 tới đây là trạng thái, không phải nhập liệu. Cùng payKey: 4xx là chưa ghi gì.
+    // Mạng/401/403/5xx không nói gì về trạng thái thật nên nhả ngay.
+    onError: (e) => {
+      setError(actErrText(e));
+      if (!serverRejectedState(e)) return undefined;
+      return settleWithin(
+        Promise.all([
+          ...[affiliateCommissionsQuery, affiliatePayoutsQuery, affiliateTaxStatementQuery, affiliateMeQuery].map((q) => qc.invalidateQueries({ queryKey: q(coreHttp).queryKey })),
+          (async () => {
+            await invalidateBalances(qc);
+            await qc.invalidateQueries({ queryKey: affiliateDashboardQuery(coreHttp).queryKey });
+          })(),
+        ]),
+      );
+    },
     onSettled: () => {
       busy.current = false;
       onBusyChange(false);

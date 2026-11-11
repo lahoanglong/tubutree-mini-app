@@ -11,6 +11,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { formatDate } from '@/lib/format-date';
 import { settleWithin } from '@/lib/settle-within';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
@@ -27,6 +28,8 @@ export function CreditTab() {
   const ledgerQ = useQuery(dealerCreditQuery(coreHttp));
   const [amount, setAmount] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  // Lời lỗi ở state riêng: `pay.isError` chỉ bật sau khi `onError` (tải lại, tới 4 giây) xong, mà lời báo phải hiện ngay.
+  const [payError, setPayError] = useState<{ value: unknown } | null>(null);
 
   // Key vẫn gửi đi (header Idempotency-Key) nhưng `POST /dealer/credit-payment` chưa đọc nó: chống báo trùng hiện chỉ dựa vào khoá phía client bên dưới,
   // không chống được timeout rồi gửi lại. Key đổi sau mỗi lần báo thành công.
@@ -35,12 +38,27 @@ export function CreditTab() {
   const pay = useLockedMutation({
     mutationFn: (v: { amount: number; typed: string; key: string }) => payCredit(coreHttp, v.amount, v.key, 'Báo đã chuyển khoản'),
     // Xoá lời báo cũ ở đây: cú bấm bị khoá nuốt không chạy onMutate nên không làm mất lời báo vừa hiện.
-    onMutate: () => setNotice(null),
+    onMutate: () => {
+      setNotice(null);
+      setPayError(null);
+    },
     onSuccess: (res, v) => {
       setNotice((res as { message?: string })?.message ?? 'Đã báo cho quản trị viên — chờ xác nhận đã nhận được tiền.');
       payKey.current = newIdempotencyKey();
       // Khách gõ số khác trong lúc đang gửi thì giữ số đó, chỉ xoá khi ô vẫn là số vừa gửi.
       setAmount((cur) => (cur === v.typed ? '' : cur));
+      return settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: dealerCreditQuery(coreHttp).queryKey }),
+          qc.invalidateQueries({ queryKey: dealerMeQuery(coreHttp).queryKey }),
+        ]),
+      );
+    },
+    // Máy chủ từ chối vì dư nợ/hồ sơ trên màn đã cũ (admin vừa ghi nhận một khoản khác): tải lại rồi mới nhả nút, như Mini App (apps/miniapp/src/pages/dealer.tsx:954). Cùng payKey: 4xx là chưa ghi gì.
+    // Số lẻ bị DTO (IsInt) trả 400 TRƯỚC kiểm dư nợ nên form chặn từ đầu (`payDisabled`), mọi 400 tới được đây là trạng thái.
+    onError: (e) => {
+      setPayError({ value: e });
+      if (!serverRejectedState(e)) return undefined;
       return settleWithin(
         Promise.all([
           qc.invalidateQueries({ queryKey: dealerCreditQuery(coreHttp).queryKey }),
@@ -58,7 +76,8 @@ export function CreditTab() {
 
   const balance = ledgerQ.data?.balance ?? 0;
   const entries = ledgerQ.data?.entries ?? [];
-  const payDisabled = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || Number(amount) > balance;
+  const notWhole = amount.trim() !== '' && Number.isFinite(Number(amount)) && !Number.isInteger(Number(amount));
+  const payDisabled = !Number.isFinite(Number(amount)) || Number(amount) <= 0 || Number(amount) > balance || notWhole;
 
   return (
     <div className="grid gap-4 pb-6 lg:grid-cols-2 lg:items-start">
@@ -98,9 +117,10 @@ export function CreditTab() {
         <div role="status" aria-live="polite">
           {notice && <p className="mt-2 text-sm font-medium text-success-fg">{notice}</p>}
         </div>
-        {pay.isError && (
+        {notWhole && <p className="mt-1.5 text-xs text-danger-fg">Số tiền phải là số nguyên đồng.</p>}
+        {payError && (
           <p role="alert" className={`mt-2 ${ui.error}`}>
-            {errText(pay.error)}
+            {errText(payError.value)}
           </p>
         )}
         <p className="mt-1.5 text-xs text-stone-600">

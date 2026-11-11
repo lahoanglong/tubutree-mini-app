@@ -761,3 +761,135 @@ describe('CtvOrderSheet — "Thử lại" của ô chọn sản phẩm trả Pro
     expect(state.suggestCalls).toHaveLength(3);
   });
 });
+
+describe('CtvOrderSheet — đơn bị từ chối: tải lại báo giá rồi mới nhả khoá', () => {
+  const CREATED = { id: 'o1', code: 'TUBU9', total: 84_000, status: 'PENDING', items: [] };
+  const rejectOnce = (error: ApiError) => {
+    let first = true;
+    state.order = async () => {
+      if (first) {
+        first = false;
+        throw error;
+      }
+      return CREATED;
+    };
+  };
+  /** Mọi lần báo giá kể từ lúc gọi bị giữ tới khi `release()`. */
+  const holdQuote = () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    state.quote = async () => {
+      await gate;
+      return REGULAR;
+    };
+    return { release: () => release() };
+  };
+  const busy = () => submit().getAttribute('aria-busy') === 'true';
+
+  it.each([404, 409, 422])('%i: lời lỗi hiện ngay, báo giá được tải lại và nút giữ bận tới khi về; chạm lần hai không gửi, rồi gửi lại cùng key', async (status) => {
+    rejectOnce(new ApiError('Sản phẩm không còn bán.', status));
+    await readyWithAn();
+    const quotes = state.quoteCalls.length;
+    const gate = holdQuote();
+    click(submit());
+    await until(() => text().includes('Sản phẩm không còn bán.'));
+    expect(state.quoteCalls.length).toBe(quotes + 1);
+    expect(busy()).toBe(true);
+    expect(submit().getAttribute('aria-disabled')).toBe('true');
+    expect(submit().disabled).toBe(false);
+    await act(async () => {
+      click(submit());
+      click(submit());
+    });
+    expect(orderPosts()).toHaveLength(1);
+    gate.release();
+    await until(() => !busy());
+    click(submit());
+    await until(() => text().includes('Đã tạo đơn hộ khách'));
+    expect(orderPosts()).toHaveLength(2);
+    expect(keyOf(1)).toBe(keyOf(0));
+  });
+
+  it('TOTAL_CHANGED: nút giữ bận tới khi báo giá mới về, kẻo bấm lại gửi tổng cũ', async () => {
+    rejectOnce(new ApiError('Tổng tiền đơn vừa thay đổi.', 400, 'TOTAL_CHANGED'));
+    await readyWithAn();
+    const gate = holdQuote();
+    click(submit());
+    await until(() => text().includes('Tổng tiền đơn vừa thay đổi.'));
+    expect(busy()).toBe(true);
+    await act(async () => click(submit()));
+    expect(orderPosts()).toHaveLength(1);
+    gate.release();
+    await until(() => !busy());
+  });
+
+  it('PAYMENT_METHOD_NOT_ALLOWED: nút giữ bận tới khi báo giá mới về', async () => {
+    rejectOnce(new ApiError('Đơn vượt trần COD.', 400, 'PAYMENT_METHOD_NOT_ALLOWED'));
+    await readyWithAn();
+    const gate = holdQuote();
+    click(submit());
+    await until(() => text().includes('Đơn vượt trần COD.'));
+    expect(busy()).toBe(true);
+    await act(async () => click(submit()));
+    expect(orderPosts()).toHaveLength(1);
+    gate.release();
+    await until(() => !busy());
+  });
+
+  // Không phân biệt được 400 nhập liệu và 400 trạng thái bằng mã: BadRequestException của DTO (NO_HTML, place-order-for-customer.dto.ts:40,45) và của dịch vụ (hết tồn, ngừng bán,
+  // affiliate.service.ts:819,983) đều là 400, parseError không giữ phân biệt mảng/chuỗi. Tải lại báo giá không xoá chữ khách đã nhập nên tải lại với mọi 400.
+  it.each([
+    ['không mã, lỗi nhập liệu của DTO (NO_HTML)', 'Tên người nhận và địa chỉ không được chứa ký tự < hoặc >.', null],
+    ['không mã, hết tồn', 'Sản phẩm "Nước rửa chén" không đủ tồn kho.', null],
+    ['PRODUCT_DISCONTINUED', 'Sản phẩm "Nước rửa chén" đã ngừng bán.', 'PRODUCT_DISCONTINUED'],
+    ['PARTNER_GOODS_NOT_ELIGIBLE', 'Hàng của đối tác tự giao nên CTV không lên đơn hộ được.', 'PARTNER_GOODS_NOT_ELIGIBLE'],
+  ])('400 %s: báo giá được tải lại, nút giữ bận tới khi về, chữ khách đã nhập còn nguyên', async (_name, message, code) => {
+    rejectOnce(new ApiError(message, 400, code));
+    await readyWithAn();
+    const quotes = state.quoteCalls.length;
+    const gate = holdQuote();
+    click(submit());
+    await until(() => text().includes(message));
+    expect(state.quoteCalls.length).toBe(quotes + 1);
+    expect(busy()).toBe(true);
+    await act(async () => click(submit()));
+    expect(orderPosts()).toHaveLength(1);
+    gate.release();
+    await until(() => !busy());
+    expect(text()).toContain(message);
+    expect(text()).toContain('Nước rửa chén');
+    expect(input('Tên người nhận').value).toBe('Nguyễn An');
+    expect(input('Địa chỉ (số nhà, đường)').value).toBe('12 Lê Lợi');
+  });
+
+  it.each([401, 403])('%i: không tải lại báo giá, nhả ngay', async (status) => {
+    rejectOnce(new ApiError('Hết phiên.', status));
+    await readyWithAn();
+    const quotes = state.quoteCalls.length;
+    click(submit());
+    await until(() => !busy() && !!body().querySelector('[role="alert"] p'));
+    expect(state.quoteCalls).toHaveLength(quotes);
+  });
+
+  it('báo giá tải lại treo quá 4 giây thì nhả nút', async () => {
+    rejectOnce(new ApiError('Sản phẩm không còn bán.', 409));
+    await readyWithAn();
+    holdQuote();
+    vi.useFakeTimers();
+    try {
+      click(submit());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_900);
+      });
+      expect(busy()).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(busy()).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

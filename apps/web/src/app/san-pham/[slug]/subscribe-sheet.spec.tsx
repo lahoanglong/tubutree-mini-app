@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { unnamedControls } from '@/test-utils/a11y';
 import { loadErrorText } from '@/lib/error-text';
+import { QueryClient } from '@tanstack/react-query';
+import { ApiError, NetworkError } from '@/lib/client-api';
 
 // Cùng ý nghĩa subscribe-sheet.spec.tsx của Mini App: ngày bắt đầu + cách trả + địa chỉ, cùng endpoint và body tạo subscription.
 
@@ -570,3 +572,232 @@ describe('SubscribeSheet: số đều (tabular-nums)', () => {
     }
   });
 });
+
+describe('SubscribeSheet: bị từ chối thì tải lại rồi mới nhả khoá (như apps/miniapp/src/components/subscribe-sheet.tsx:102-110)', () => {
+  const REJECTIONS = [400, 404, 409, 422] as const;
+  let client: QueryClient;
+  const mountWith = () => {
+    client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 }, mutations: { retry: false } } });
+    client.setQueryData(['subscriptions'], []);
+    const r = render(<SubscribeSheet visible onClose={onClose} onNotice={onNotice} variationId="v1" quantity={2} />, client);
+    mounted.push(r);
+    return r;
+  };
+  const submit = () => byText(body(), 'button', /^(Bắt đầu đặt định kỳ|Đang tạo…)$/) as HTMLButtonElement;
+  const busy = () => submit().getAttribute('aria-busy') === 'true';
+  /** Mọi lần tải địa chỉ/Ví kể từ lúc gọi bị giữ tới khi `release()`. */
+  const holdReload = () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    mocks.getAddresses.mockImplementation(async () => {
+      await gate;
+      return [ADDR('a2', true, '9 Hai Bà Trưng')];
+    });
+    mocks.getWallet.mockImplementation(async () => {
+      await gate;
+      return { walletBalance: 300000 };
+    });
+    return { release: () => release() };
+  };
+  const alertText = () => body().querySelector('[role="alert"]')?.textContent ?? '';
+
+  it.each(REJECTIONS)('%i: lời lỗi hiện ngay, tải lại gói, địa chỉ và Ví; nút giữ bận tới khi về; chạm lần hai không gửi', async (status) => {
+    mocks.http.post.mockRejectedValue(new ApiError('Địa chỉ không hợp lệ.', status));
+    mountWith();
+    await flush();
+    const addrs = mocks.getAddresses.mock.calls.length;
+    const wallets = mocks.getWallet.mock.calls.length;
+    const gate = holdReload();
+    click(submit());
+    await flush();
+    expect(alertText()).toBe('Địa chỉ không hợp lệ.');
+    expect(mocks.getAddresses.mock.calls.length).toBe(addrs + 1);
+    expect(mocks.getWallet.mock.calls.length).toBe(wallets + 1);
+    expect(client.getQueryState(['subscriptions'])?.isInvalidated).toBe(true);
+    expect(busy()).toBe(true);
+    expect(submit().disabled).toBe(false);
+    await act(async () => {
+      click(submit());
+      click(submit());
+    });
+    expect(mocks.http.post).toHaveBeenCalledTimes(1);
+    gate.release();
+    await flush();
+    expect(busy()).toBe(false);
+    expect(alertText()).toBe('Địa chỉ không hợp lệ.');
+    click(submit());
+    await flush();
+    expect(mocks.http.post).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([401, 403, 500, 503])('%i: không tải lại, nhả nút ngay', async (status) => {
+    mocks.http.post.mockRejectedValue(new ApiError('Máy chủ bận.', status));
+    mountWith();
+    await flush();
+    const addrs = mocks.getAddresses.mock.calls.length;
+    const wallets = mocks.getWallet.mock.calls.length;
+    click(submit());
+    await flush();
+    expect(mocks.getAddresses.mock.calls.length).toBe(addrs);
+    expect(mocks.getWallet.mock.calls.length).toBe(wallets);
+    expect(client.getQueryState(['subscriptions'])?.isInvalidated).toBe(false);
+    expect(busy()).toBe(false);
+    expect(alertText()).not.toBe('');
+  });
+
+  it('mất mạng: không tải lại, nhả ngay', async () => {
+    mocks.http.post.mockRejectedValue(new NetworkError(false));
+    mountWith();
+    await flush();
+    const addrs = mocks.getAddresses.mock.calls.length;
+    click(submit());
+    await flush();
+    expect(mocks.getAddresses.mock.calls.length).toBe(addrs);
+    expect(busy()).toBe(false);
+  });
+
+  it('tải lại treo quá 4 giây thì nhả nút', async () => {
+    mocks.http.post.mockRejectedValue(new ApiError('Gói đã có.', 409));
+    mountWith();
+    await flush();
+    holdReload();
+    // beforeEach đã giả Date: gọi useFakeTimers lần nữa khi đang giả thì không đổi gì, phải trả đồng hồ thật trước.
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    click(submit());
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_900);
+    });
+    expect(busy()).toBe(true);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    expect(busy()).toBe(false);
+  });
+
+  it('lỗi cũ biến mất ngay khi bấm lại (lúc lệnh mới còn bay)', async () => {
+    let second!: (v: unknown) => void;
+    mocks.http.post
+      .mockRejectedValueOnce(new ApiError('Máy chủ bận.', 503))
+      .mockImplementationOnce(() => new Promise((resolve) => { second = resolve; }));
+    mountWith();
+    await flush();
+    click(submit());
+    await flush();
+    expect(alertText()).toContain('Máy chủ đang bận');
+    click(submit());
+    await flush();
+    expect(mocks.http.post).toHaveBeenCalledTimes(2);
+    expect(body().querySelector('[role="alert"]')).toBeNull();
+    second({ ...SUB, firstOrder: null });
+    await flush();
+  });
+});
+
+describe('SubscribeSheet: địa chỉ đang chọn không còn sau khi tải lại (như apps/miniapp/src/components/subscribe-sheet.tsx:66-70)', () => {
+  const submit = () => byText(body(), 'button', /^(Bắt đầu đặt định kỳ|Đang tạo…)$/) as HTMLButtonElement | undefined;
+  const mountClient = () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false, staleTime: 60_000 }, mutations: { retry: false } } });
+    const r = render(<SubscribeSheet visible onClose={onClose} onNotice={onNotice} variationId="v1" quantity={2} />, client);
+    mounted.push(r);
+    return client;
+  };
+
+  it('địa chỉ mặc định bị xoá ở tab khác rồi bị từ chối: danh sách tải lại, địa chỉ mặc định mới được chọn và lần bấm sau gửi id mới', async () => {
+    mocks.http.post.mockRejectedValueOnce(new ApiError('Địa chỉ không hợp lệ.', 400)).mockResolvedValue({ ...SUB, firstOrder: null });
+    mountClient();
+    await flush();
+    expect(radio(/9 Hai Bà Trưng/).getAttribute('aria-checked')).toBe('true');
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', true, '1 Lê Lợi')]);
+    click(submit()!);
+    await flush(8);
+    expect(mocks.http.post.mock.calls[0]![1]).toMatchObject({ addressId: 'a2' });
+    expect(radio(/1 Lê Lợi/).getAttribute('aria-checked')).toBe('true');
+    expect(document.body.textContent).not.toContain('9 Hai Bà Trưng');
+    click(submit()!);
+    await flush(8);
+    expect(mocks.http.post).toHaveBeenCalledTimes(2);
+    expect(mocks.http.post.mock.calls[1]![1]).toMatchObject({ addressId: 'a1' });
+  });
+
+  it('tải lại mà không còn địa chỉ nào: không còn nút tạo nên không gửi lại id cũ', async () => {
+    mocks.http.post.mockRejectedValueOnce(new ApiError('Địa chỉ không hợp lệ.', 404));
+    mountClient();
+    await flush();
+    mocks.getAddresses.mockResolvedValue([]);
+    click(submit()!);
+    await flush(8);
+    expect(mocks.http.post).toHaveBeenCalledTimes(1);
+    expect(submit()).toBeNull();
+    expect(byText(body(), 'button', /Thêm địa chỉ/)).toBeTruthy();
+  });
+
+  it('không còn địa chỉ nào rồi khách thêm địa chỉ mới: lần tải lại sau chọn địa chỉ mới, không quay về id đã xoá', async () => {
+    mocks.http.post.mockRejectedValueOnce(new ApiError('Địa chỉ không hợp lệ.', 404)).mockResolvedValue({ ...SUB, firstOrder: null });
+    const client = mountClient();
+    await flush();
+    mocks.getAddresses.mockResolvedValue([]);
+    click(submit()!);
+    await flush(8);
+    mocks.getAddresses.mockResolvedValue([ADDR('a3', true, '5 Nguyễn Huệ')]);
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['addresses'] });
+    });
+    await flush(6);
+    expect(radio(/5 Nguyễn Huệ/).getAttribute('aria-checked')).toBe('true');
+    click(submit()!);
+    await flush(8);
+    expect(mocks.http.post.mock.calls[1]![1]).toMatchObject({ addressId: 'a3' });
+  });
+
+  it('khách chọn tay địa chỉ không mặc định rồi nó bị xoá ở tab khác: lần tải lại chuyển về địa chỉ mặc định còn lại (địa chỉ mặc định không đổi tham chiếu)', async () => {
+    mocks.getAddresses.mockResolvedValue([ADDR('a2', true, '9 Hai Bà Trưng'), ADDR('a1', false, '1 Lê Lợi')]);
+    mocks.http.post.mockRejectedValueOnce(new ApiError('Địa chỉ không hợp lệ.', 404));
+    mountClient();
+    await flush();
+    click(radio(/1 Lê Lợi/));
+    await flush();
+    mocks.getAddresses.mockResolvedValue([ADDR('a2', true, '9 Hai Bà Trưng')]);
+    click(submit()!);
+    await flush(8);
+    expect(mocks.http.post.mock.calls[0]![1]).toMatchObject({ addressId: 'a1' });
+    expect(radio(/9 Hai Bà Trưng/).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('danh sách địa chỉ được nạp lại từ đầu (chưa có dữ liệu): lựa chọn của khách không bị đặt lại trong lúc chờ', async () => {
+    const client = mountClient();
+    await flush();
+    click(radio(/1 Lê Lợi/));
+    await flush();
+    let open!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      open = resolve;
+    });
+    mocks.getAddresses.mockImplementation(async () => {
+      await gate;
+      return [ADDR('a1', false, '1 Lê Lợi'), ADDR('a2', true, '9 Hai Bà Trưng')];
+    });
+    act(() => {
+      void client.resetQueries({ queryKey: ['addresses'] });
+    });
+    await flush(6);
+    open();
+    await flush(8);
+    expect(radio(/1 Lê Lợi/).getAttribute('aria-checked')).toBe('true');
+  });
+
+  it('địa chỉ đang chọn vẫn còn trong danh sách tải lại: giữ nguyên lựa chọn của khách (không nhảy về mặc định)', async () => {
+    mocks.http.post.mockRejectedValueOnce(new ApiError('Gói đã có.', 409));
+    mountClient();
+    await flush();
+    click(radio(/1 Lê Lợi/));
+    await flush();
+    expect(radio(/1 Lê Lợi/).getAttribute('aria-checked')).toBe('true');
+    click(submit()!);
+    await flush(8);
+    expect(radio(/1 Lê Lợi/).getAttribute('aria-checked')).toBe('true');
+  });
+});
+

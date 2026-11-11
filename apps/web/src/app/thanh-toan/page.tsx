@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, CheckCircle2, ChevronRight, Plus, Recycle, Sprout } from 'lucide-react';
-import { useQuery, useMutation, useQueryClient, useIsMutating } from '@tanstack/react-query';
+import { useQuery, useMutation, useMutationState, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { useAuth } from '@/lib/auth-context';
 import { rememberActiveOrder } from '@tubutree/app-core/home-todo-rows';
@@ -56,6 +56,9 @@ import { ui, uiBar } from '@/lib/guest-ui';
 import { invalidateBalances } from '@/lib/balances';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
+import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { CouponBox, COUPON_MUTATION_KEY, forgetAutoCoupon, couponPreviewKey } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ReferralCodeBox } from '@/components/referral-code-box';
@@ -84,6 +87,7 @@ import { clearSubmitted } from '@/lib/recycle-wizard';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
+const LINE_FIX_KEY = ['checkout-line-fix'] as const;
 
 // has-[:focus-visible]: ô radio của thẻ địa chỉ bị sr-only ở điện thoại nên vòng lấy nét phải hiện trên cả thẻ.
 const OPTION_BASE = 'flex min-h-11 cursor-pointer items-center gap-3 rounded-control border p-3 text-sm has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-[color:var(--color-border-focus)]';
@@ -408,25 +412,38 @@ export default function CheckoutPage() {
 
   // Sửa nhanh dòng hết hàng/vượt tồn ngay tại màn: khách không rời trang nên các ô đã nhập còn nguyên. Đổi dòng là đổi lựa chọn của khách,
   // nên một lần đặt đang đóng băng (chưa rõ kết quả) không được phát lại nữa.
-  const lineFix = useMutation({
-    mutationFn: ({ id, fix }: { id: string; fix: LineFix }) => (fix.kind === 'remove' ? removeCartItem(id) : updateCartItem(id, fix.quantity)),
-    // Chờ giỏ và báo giá về mới thôi bận: nút xoá còn bấm được trong lúc giỏ cũ còn hiện thì lần bấm hai gọi xoá dòng đã mất và nhận 404.
-    onSuccess: async () => {
-      bumpChoice();
-      // Đơn đang gửi thì không reset: reset làm `isPending` về false trong lúc `placingRef` còn khoá, nút hiện lại "Đặt hàng" mà bấm không ăn gì tới khi phản hồi về.
-      if (!placingRef.current) place.reset();
-      await Promise.all([qc.invalidateQueries({ queryKey: ['cart'] }), qc.invalidateQueries({ queryKey: ['quote'] })]);
+  // Khoá đồng bộ THEO DÒNG như Mini App (apps/miniapp/src/pages/checkout.tsx:500-516): chạm đúp vào cùng một dòng chỉ gửi một lệnh, dòng khác vẫn đi song song.
+  // Lỗi nhớ riêng theo dòng (không đọc `lineFix.error`): `isError` chỉ bật sau khi lời hứa tải lại của `onError` xong, mà lời lỗi phải hiện ngay.
+  const [lineFixError, setLineFixError] = useState<{ id: string; error: unknown } | null>(null);
+  const lineFix = useLockedMutation(
+    {
+      mutationKey: LINE_FIX_KEY,
+      mutationFn: ({ id, fix }: { id: string; fix: LineFix }) => (fix.kind === 'remove' ? removeCartItem(id) : updateCartItem(id, fix.quantity)),
+      onMutate: ({ id }) => setLineFixError((cur) => (cur?.id === id ? null : cur)),
+      // Chờ giỏ và báo giá về mới thôi bận (tối đa 4 giây): nút xoá còn bấm được trong lúc giỏ cũ còn hiện thì lần bấm hai gọi xoá dòng đã mất và nhận 404.
+      onSuccess: () => {
+        bumpChoice();
+        // Đơn đang gửi thì không reset: reset làm `isPending` về false trong lúc `placingRef` còn khoá, nút hiện lại "Đặt hàng" mà bấm không ăn gì tới khi phản hồi về.
+        if (!placingRef.current) place.reset();
+        return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['cart'] }), qc.invalidateQueries({ queryKey: ['quote'] })]));
+      },
+      // Giỏ luôn tải lại ở nền: lệnh quá hạn/502 có thể đã ghi ở máy chủ (dòng đã mất) mà màn còn hiện dòng cũ. Máy chủ từ chối (400/404/409/422) thì giữ khoá tới khi giỏ VÀ báo giá về
+      // (tối đa 4 giây): nút "Giảm còn n" theo tồn mới và tổng tiền không còn tính dòng đã mất. Lỗi khác nhả ngay. Như apps/miniapp/src/pages/checkout.tsx:510-516 (Mini không tính 422).
+      onError: (e, { id }) => {
+        setLineFixError({ id, error: e });
+        const cartReload = qc.invalidateQueries({ queryKey: ['cart'] });
+        if (!serverRejectedState(e)) return undefined;
+        return settleWithin(Promise.all([cartReload, qc.invalidateQueries({ queryKey: ['quote'] })]));
+      },
     },
-    // Bị từ chối thường vì tồn vừa đổi: tải lại giỏ để nút "Giảm còn n" theo tồn mới.
-    onError: () => {
-      void qc.invalidateQueries({ queryKey: ['cart'] });
-    },
-  });
+    (v) => v.id,
+  );
+  const lineFixPending = useMutationState({ filters: { mutationKey: LINE_FIX_KEY, status: 'pending' }, select: (mu) => (mu.state.variables as { id: string }).id });
   const lineFixView: LineFixView = {
     problems: lineProblems,
-    pendingId: lineFix.isPending ? (lineFix.variables?.id ?? null) : null,
-    errorFor: lineFix.isError ? (lineFix.variables?.id ?? null) : null,
-    errorText: lineFix.isError ? actionErrorText(lineFix.error) : null,
+    pendingIds: lineFixPending,
+    errorFor: lineFixError?.id ?? null,
+    errorText: lineFixError ? actionErrorText(lineFixError.error) : null,
     onFix: (id, fix) => {
       if (fix.kind === 'cart') router.push('/gio-hang');
       else lineFix.mutate({ id, fix });
@@ -1240,7 +1257,7 @@ function LineRow({ item, fix }: { item: CartLine; fix: LineFixView }) {
 /** Lỗi của một dòng hàng ngay dưới dòng đó, kèm nút sửa nhanh (bỏ dòng, giảm về số còn). */
 interface LineFixView {
   problems: Record<string, LineProblem>;
-  pendingId: string | null;
+  pendingIds: string[];
   errorFor: string | null;
   errorText: string | null;
   onFix: (id: string, fix: LineAction) => void;
@@ -1249,14 +1266,20 @@ interface LineFixView {
 function LineProblemNote({ id, fix }: { id: string; fix: LineFixView }) {
   const problem = fix.problems[id];
   if (!problem) return null;
+  const busy = fix.pendingIds.includes(id);
   return (
     <div data-testid="checkout-line-problem" role="alert" className="mt-1 flex flex-wrap items-center justify-between gap-2">
       <span className="text-caption text-danger-fg">{fix.errorFor === id && fix.errorText ? fix.errorText : problem.text}</span>
       <button
         type="button"
         className={ui.btnSecondary}
-        disabled={fix.pendingId === id}
-        onClick={() => fix.onFix(id, problem.fix)}
+        aria-busy={busy || undefined}
+        aria-disabled={busy || undefined}
+        onClick={() => {
+          // Khoá ref của `useLockedMutation` mất khi trang gắn lại (rời giỏ rồi quay về lúc lệnh còn bay): báo bận lấy từ bộ nhớ chung nên chặn ở đây.
+          if (busy) return;
+          fix.onFix(id, problem.fix);
+        }}
       >
         {problem.fixLabel}
       </button>
