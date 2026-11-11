@@ -1200,3 +1200,96 @@ describe('VoucherSheet — máy chủ từ chối thì giữ khoá tới khi d�
     });
   });
 });
+
+// W116A: lệnh áp mã báo xong muộn không đóng tấm mà khách đã đóng rồi MỞ LẠI và không xoá mã đang gõ (tấm sống qua các lần mở, cha chỉ đổi `visible`); lời báo, báo cho trang, nhả khoá vẫn chạy.
+describe('VoucherSheet — mở lại tấm lúc lệnh áp mã cũ còn bay (W116A)', () => {
+  const CART = { couponCode: 'ABC', discount: 5_000, couponNotice: null };
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    const promise = new Promise<T>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const input = () => screen.getByLabelText('Nhập mã giảm giá khác') as HTMLInputElement;
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+
+  function setup() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const onClose = vi.fn();
+    const onCouponApplied = vi.fn();
+    const tree = (visible: boolean) => (
+      <QueryClientProvider client={qc}>
+        <VoucherSheet visible={visible} onClose={onClose} onCouponApplied={onCouponApplied} subtotal={100_000} />
+      </QueryClientProvider>
+    );
+    return { ...render(tree(true)), tree, onClose, onCouponApplied };
+  }
+  const typeAndApply = async (value: string) => {
+    fireEvent.change(input(), { target: { value } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+    });
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.applyCoupon.mockReset();
+    mocks.getCoupons.mockResolvedValue(COUPONS);
+    mocks.getCouponPreviews.mockResolvedValue([]);
+  });
+
+  it('báo xong sau khi khách đóng rồi mở lại tấm và gõ mã khác: tấm không đóng, mã đang gõ còn nguyên, toast + báo cho trang vẫn chạy, khoá nhả', async () => {
+    const apply = pending<typeof CART>();
+    mocks.applyCoupon.mockReturnValue(apply.promise);
+    const { rerender, tree, onClose, onCouponApplied } = setup();
+    await screen.findByRole('button', { name: /^Dùng mã GIAM10/ });
+    await typeAndApply('abc');
+    expect(mocks.applyCoupon).toHaveBeenCalledWith('ABC');
+    rerender(tree(false));
+    rerender(tree(true));
+    await screen.findByLabelText('Nhập mã giảm giá khác');
+    fireEvent.change(input(), { target: { value: 'xyz đang gõ' } });
+
+    await act(async () => apply.resolve(CART));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Đã áp dụng mã ABC', type: 'success' })));
+    expect(onCouponApplied).toHaveBeenCalledTimes(1);
+    await settle();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(input().value).toBe('xyz đang gõ');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Áp dụng' })).not.toBeDisabled());
+    expect(screen.getByRole('button', { name: 'Áp dụng' })).not.toHaveAttribute('aria-busy');
+    // Khoá đã nhả: mã đang gõ áp được.
+    mocks.applyCoupon.mockResolvedValue({ ...CART, couponCode: 'XYZ ĐANG GÕ' });
+    fireEvent.click(screen.getByRole('button', { name: 'Áp dụng' }));
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(2));
+  });
+
+  it('đối chứng: khách đóng tấm mà không mở lại, lệnh báo xong thì vẫn gọi onClose và xoá mã đã gõ như cũ', async () => {
+    const apply = pending<typeof CART>();
+    mocks.applyCoupon.mockReturnValue(apply.promise);
+    const { rerender, tree, onClose } = setup();
+    await screen.findByRole('button', { name: /^Dùng mã GIAM10/ });
+    await typeAndApply('abc');
+    rerender(tree(false));
+    await act(async () => apply.resolve(CART));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    rerender(tree(true));
+    await screen.findByLabelText('Nhập mã giảm giá khác');
+    expect(input().value).toBe('');
+  });
+
+  it('đối chứng: tấm vẫn mở suốt lúc lệnh bay, báo xong thì gọi onClose một lần và xoá mã đã gõ', async () => {
+    const apply = pending<typeof CART>();
+    mocks.applyCoupon.mockReturnValue(apply.promise);
+    const { onClose } = setup();
+    await screen.findByRole('button', { name: /^Dùng mã GIAM10/ });
+    await typeAndApply('abc');
+    await act(async () => apply.resolve(CART));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    expect(input().value).toBe('');
+  });
+});

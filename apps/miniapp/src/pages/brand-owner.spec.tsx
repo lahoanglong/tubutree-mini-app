@@ -1216,3 +1216,200 @@ describe('BrandOwnerPage: hộp xoá và form sửa khuyến mãi đóng sau khi
     expect(screen.getByPlaceholderText(/Tiêu đề/)).toHaveValue('Giảm 10% hôm nay');
   });
 });
+
+// W116A: phản hồi muộn (từ chối sau khi hồ sơ về, hoặc báo xong) của lệnh gửi ở lần sửa/lần mở trước không được đóng form hay hộp mà khách đã đóng rồi mở lại (kể cả CÙNG khuyến mãi) và không xoá chữ đang gõ. Lời báo, tải lại hồ sơ và nhả khoá vẫn chạy như cũ.
+describe('BrandOwnerPage: phản hồi muộn của lần sửa/lần mở trước không đóng lần sau (W116A)', () => {
+  type Refresh = () => Promise<unknown>;
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const renderLive = (refresh: Refresh) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(<QueryClientProvider client={qc}><BrandOwnerPage /></QueryClientProvider>);
+    return invalidate;
+  };
+  const sheetButton = (name: string) => (screen.queryByTestId('sheet') ? within(screen.getByTestId('sheet')).queryByRole('button', { name }) : null);
+  const SECOND = { id: 'p2', title: 'Giảm 10%', subtitle: null, couponCode: null, startAt: '2026-10-01T00:00:00.000Z', endAt: '2026-10-30T00:00:00.000Z', isActive: true };
+  const editButton = (title = 'MUA 2 TẶNG 1') => screen.getByRole('button', { name: `Sửa khuyến mãi ${title}` });
+  const deleteButton = (title = 'MUA 2 TẶNG 1') => screen.getByRole('button', { name: `Xoá khuyến mãi ${title}` });
+  const titleInput = () => screen.getByPlaceholderText(/Tiêu đề/) as HTMLInputElement;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const fn of [mocks.updateOwnedBrand, mocks.createOwnedPromotion, mocks.updateOwnedPromotion, mocks.deleteOwnedPromotion]) {
+      fn.mockReset();
+      fn.mockResolvedValue({});
+    }
+    mocks.getOwnedBrand.mockResolvedValue({ ...BRAND, promotions: [...BRAND.promotions, SECOND] });
+  });
+
+  describe('form sửa khuyến mãi (updPromo)', () => {
+    it('bị từ chối 409 trễ: bấm Huỷ rồi sửa lại CHÍNH khuyến mãi đó và gõ chữ mới, hồ sơ về sau thì form mới còn mở, chữ còn nguyên; lời báo, tải lại và nhả khoá vẫn chạy', async () => {
+      mocks.updateOwnedPromotion.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue({});
+      const refresh = deferred();
+      const invalidate = renderLive(() => refresh.promise);
+      fireEvent.click(await screen.findByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await settle();
+      expect(invalidate).toHaveBeenCalledTimes(1);
+      // Lỗi đã về, hồ sơ chưa về: khách huỷ rồi sửa lại đúng khuyến mãi đó và đang gõ.
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
+      fireEvent.click(editButton());
+      fireEvent.change(titleInput(), { target: { value: 'Tiêu đề đang gõ' } });
+      await act(async () => refresh.resolve());
+      await settle();
+      expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toBeInTheDocument();
+      expect(titleInput()).toHaveValue('Tiêu đề đang gõ');
+      expect(errorSnackbars()).toBe(1);
+      expect(invalidate).toHaveBeenCalledTimes(1);
+      // Khoá đã nhả: bấm Lưu gửi lệnh thứ hai, kèm chữ đang gõ.
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      await waitFor(() => expect(mocks.updateOwnedPromotion).toHaveBeenCalledTimes(2));
+      expect(mocks.updateOwnedPromotion).toHaveBeenLastCalledWith('p1', expect.objectContaining({ title: 'Tiêu đề đang gõ' }));
+    });
+
+    it('báo xong trễ: bấm Huỷ rồi sửa lại CHÍNH khuyến mãi đó và gõ chữ mới, lệnh cũ xong sau thì form mới còn mở, chữ còn nguyên; lời báo và tải lại hồ sơ vẫn chạy', async () => {
+      const slow = deferred();
+      mocks.updateOwnedPromotion.mockImplementation(() => slow.promise.then(() => ({})));
+      const invalidate = renderLive(() => Promise.resolve());
+      fireEvent.click(await screen.findByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      await waitFor(() => expect(mocks.updateOwnedPromotion).toHaveBeenCalledTimes(1));
+      fireEvent.click(screen.getByRole('button', { name: 'Huỷ' }));
+      fireEvent.click(editButton());
+      fireEvent.change(titleInput(), { target: { value: 'Tiêu đề đang gõ' } });
+      await act(async () => slow.resolve());
+      await settle();
+      expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã cập nhật khuyến mãi', type: 'success' });
+      expect(invalidate).toHaveBeenCalledTimes(1);
+      expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toBeInTheDocument();
+      expect(titleInput()).toHaveValue('Tiêu đề đang gõ');
+    });
+
+    it('báo xong khi form vẫn là lần sửa đã gửi lệnh: form đóng và ô được xoá như cũ', async () => {
+      const slow = deferred();
+      mocks.updateOwnedPromotion.mockImplementation(() => slow.promise.then(() => ({})));
+      renderLive(() => Promise.resolve());
+      fireEvent.click(await screen.findByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Lưu thay đổi' }));
+      await waitFor(() => expect(mocks.updateOwnedPromotion).toHaveBeenCalledTimes(1));
+      await act(async () => slow.resolve());
+      await settle();
+      expect(screen.queryByRole('button', { name: 'Lưu thay đổi' })).toBeNull();
+      expect(titleInput()).toHaveValue('');
+    });
+  });
+
+  describe('hộp xoá khuyến mãi (delPromo)', () => {
+    it('bị từ chối 409 trễ: đóng hộp rồi mở lại cho CHÍNH khuyến mãi đó, hồ sơ về sau thì hộp mới còn mở; lời báo, tải lại và nhả khoá vẫn chạy', async () => {
+      mocks.deleteOwnedPromotion.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue({});
+      const refresh = deferred();
+      const invalidate = renderLive(() => refresh.promise);
+      fireEvent.click(await screen.findByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
+      fireEvent.click(sheetButton('Xoá')!);
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await settle();
+      expect(invalidate).toHaveBeenCalledTimes(1);
+      fireEvent.click(sheetButton('Huỷ')!);
+      expect(sheetButton('Xoá')).toBeNull();
+      fireEvent.click(deleteButton());
+      expect(sheetButton('Xoá')).not.toBeNull();
+      await act(async () => refresh.resolve());
+      await settle();
+      expect(sheetButton('Xoá')).not.toBeNull();
+      expect(errorSnackbars()).toBe(1);
+      expect(invalidate).toHaveBeenCalledTimes(1);
+      await waitFor(() => expect(sheetButton('Xoá')).not.toHaveAttribute('aria-busy'));
+      fireEvent.click(sheetButton('Xoá')!);
+      await waitFor(() => expect(mocks.deleteOwnedPromotion).toHaveBeenCalledTimes(2));
+    });
+
+    it('báo xong trễ: đóng hộp rồi mở lại cho CHÍNH khuyến mãi đó, lệnh cũ xong sau thì hộp mới còn mở; tải lại hồ sơ vẫn chạy', async () => {
+      const slow = deferred();
+      mocks.deleteOwnedPromotion.mockImplementation(() => slow.promise.then(() => ({})));
+      const invalidate = renderLive(() => Promise.resolve());
+      fireEvent.click(await screen.findByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
+      fireEvent.click(sheetButton('Xoá')!);
+      await waitFor(() => expect(mocks.deleteOwnedPromotion).toHaveBeenCalledTimes(1));
+      fireEvent.click(sheetButton('Huỷ')!);
+      fireEvent.click(deleteButton());
+      await act(async () => slow.resolve());
+      await settle();
+      expect(invalidate).toHaveBeenCalledTimes(1);
+      expect(sheetButton('Xoá')).not.toBeNull();
+    });
+
+    it('báo xong trễ: hộp đã mở cho khuyến mãi KHÁC thì không bị đóng theo lệnh xoá của khuyến mãi trước', async () => {
+      const slow = deferred();
+      mocks.deleteOwnedPromotion.mockImplementation(() => slow.promise.then(() => ({})));
+      renderLive(() => Promise.resolve());
+      fireEvent.click(await screen.findByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
+      fireEvent.click(sheetButton('Xoá')!);
+      await waitFor(() => expect(mocks.deleteOwnedPromotion).toHaveBeenCalledTimes(1));
+      fireEvent.click(sheetButton('Huỷ')!);
+      fireEvent.click(deleteButton(SECOND.title));
+      await act(async () => slow.resolve());
+      await settle();
+      expect(sheetButton('Xoá')).not.toBeNull();
+      fireEvent.click(sheetButton('Xoá')!);
+      await waitFor(() => expect(mocks.deleteOwnedPromotion).toHaveBeenCalledTimes(2));
+      expect(mocks.deleteOwnedPromotion).toHaveBeenLastCalledWith('p2');
+    });
+
+    it('báo xong khi hộp vẫn là lần mở đã gửi lệnh: hộp đóng như cũ', async () => {
+      const slow = deferred();
+      mocks.deleteOwnedPromotion.mockImplementation(() => slow.promise.then(() => ({})));
+      renderLive(() => Promise.resolve());
+      fireEvent.click(await screen.findByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
+      fireEvent.click(sheetButton('Xoá')!);
+      await waitFor(() => expect(mocks.deleteOwnedPromotion).toHaveBeenCalledTimes(1));
+      await act(async () => slow.resolve());
+      await settle();
+      expect(sheetButton('Xoá')).toBeNull();
+    });
+
+    it('xoá đúng khuyến mãi đang sửa dở (form mở trước lúc gửi): form sửa được đóng và xoá ô như cũ', async () => {
+      const slow = deferred();
+      mocks.deleteOwnedPromotion.mockImplementation(() => slow.promise.then(() => ({})));
+      renderLive(() => Promise.resolve());
+      fireEvent.click(await screen.findByRole('button', { name: 'Sửa khuyến mãi MUA 2 TẶNG 1' }));
+      fireEvent.click(deleteButton());
+      fireEvent.click(sheetButton('Xoá')!);
+      await waitFor(() => expect(mocks.deleteOwnedPromotion).toHaveBeenCalledTimes(1));
+      await act(async () => slow.resolve());
+      await settle();
+      expect(screen.queryByRole('button', { name: 'Lưu thay đổi' })).toBeNull();
+      expect(titleInput()).toHaveValue('');
+      expect(sheetButton('Xoá')).toBeNull();
+    });
+
+    it('lệnh xoá khuyến mãi gửi khi form sửa còn đóng: mở sửa chính khuyến mãi đó sau lúc gửi và gõ chữ, lệnh xong sau thì form sửa mới giữ nguyên chữ đang gõ', async () => {
+      const slow = deferred();
+      mocks.deleteOwnedPromotion.mockImplementation(() => slow.promise.then(() => ({})));
+      renderLive(() => Promise.resolve());
+      fireEvent.click(await screen.findByRole('button', { name: 'Xoá khuyến mãi MUA 2 TẶNG 1' }));
+      fireEvent.click(sheetButton('Xoá')!);
+      await waitFor(() => expect(mocks.deleteOwnedPromotion).toHaveBeenCalledTimes(1));
+      fireEvent.click(sheetButton('Huỷ')!);
+      fireEvent.click(editButton());
+      fireEvent.change(titleInput(), { target: { value: 'Tiêu đề đang gõ' } });
+      await act(async () => slow.resolve());
+      await settle();
+      expect(screen.getByRole('button', { name: 'Lưu thay đổi' })).toBeInTheDocument();
+      expect(titleInput()).toHaveValue('Tiêu đề đang gõ');
+    });
+  });
+});

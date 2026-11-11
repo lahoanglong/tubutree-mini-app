@@ -1244,3 +1244,98 @@ describe('DealerPage — máy chủ từ chối thì giữ khoá tới khi dữ 
     });
   });
 });
+
+// W116A: lệnh lưu mẫu báo xong muộn không đóng tấm "Lưu mẫu đơn" mà khách đã đóng rồi MỞ LẠI (tên mẫu nằm ở trang, sống qua lần đóng) và đang gõ tên khác, cũng không xoá tên đó; toast, tải lại danh sách mẫu, nhả khoá vẫn chạy.
+describe('DealerPage — tấm Lưu mẫu đơn mở lại lúc lệnh cũ còn bay (W116A)', () => {
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const snackbarWith = (text: string) => mocks.openSnackbar.mock.calls.filter((c) => c[0].text === text).length;
+  const nameInput = () => within(screen.getByTestId('sheet')).getByPlaceholderText('Tên mẫu (vd Đơn tháng)') as HTMLInputElement;
+  const saveButton = () => within(screen.getByTestId('sheet')).getByRole('button', { name: 'Lưu mẫu' });
+  const openSheet = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Lưu mẫu' }));
+    await screen.findByTestId('sheet');
+  };
+  const closeSheet = async () => {
+    fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByTestId('sheet')).toBeNull());
+  };
+  /** Lưu mẫu "Đơn tháng", đóng tấm khi lệnh còn bay. */
+  const sendAndClose = async () => {
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    fireEvent.click(plus());
+    await openSheet();
+    fireEvent.change(nameInput(), { target: { value: 'Đơn tháng' } });
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    await closeSheet();
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    for (const fn of [mocks.placeDealerOrder, mocks.payCredit, mocks.saveTemplate, mocks.deleteTemplate, mocks.claimDealerReward]) fn.mockReset();
+    mocks.getDealerMe.mockResolvedValue(APPROVED_ME);
+    mocks.getPricelist.mockResolvedValue([row({ stock: 9 })]);
+    mocks.getTemplates.mockResolvedValue([]);
+    mocks.getDealerOrders.mockResolvedValue([]);
+    mocks.getCreditLedger.mockResolvedValue({ balance: 3_000_000, entries: [] });
+  });
+
+  it('báo xong sau khi khách đóng rồi mở lại tấm và gõ tên khác: tấm mới vẫn mở, tên đang gõ còn nguyên, toast + tải lại danh sách mẫu vẫn chạy, khoá nhả', async () => {
+    const d = deferred();
+    mocks.saveTemplate.mockReturnValueOnce(d.promise);
+    await sendAndClose();
+    await openSheet();
+    fireEvent.change(nameInput(), { target: { value: 'Mẫu mới đang gõ' } });
+    expect(mocks.getTemplates).toHaveBeenCalledTimes(1);
+
+    await act(async () => d.resolve({ id: 'tp1' }));
+    await waitFor(() => expect(snackbarWith('Đã lưu mẫu đơn.')).toBe(1));
+    await waitFor(() => expect(mocks.getTemplates).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(screen.getByTestId('sheet')).toBeInTheDocument();
+    expect(nameInput().value).toBe('Mẫu mới đang gõ');
+    await waitFor(() => expect(saveButton()).not.toHaveAttribute('aria-busy'));
+    expect(mocks.saveTemplate).toHaveBeenCalledTimes(1);
+  });
+
+  it('đối chứng: khách đóng tấm mà không mở lại, lệnh báo xong thì tên mẫu được xoá như cũ', async () => {
+    const d = deferred();
+    mocks.saveTemplate.mockReturnValueOnce(d.promise);
+    await sendAndClose();
+    await act(async () => d.resolve({ id: 'tp1' }));
+    await waitFor(() => expect(snackbarWith('Đã lưu mẫu đơn.')).toBe(1));
+    await openSheet();
+    expect(nameInput().value).toBe('');
+  });
+
+  it('đối chứng: khách để tấm mở, lệnh báo xong thì tấm đóng và tên mẫu được xoá như cũ', async () => {
+    const d = deferred();
+    mocks.saveTemplate.mockReturnValueOnce(d.promise);
+    renderPage();
+    await screen.findByText(/tồn 9/);
+    fireEvent.click(plus());
+    await openSheet();
+    fireEvent.change(nameInput(), { target: { value: 'Đơn tháng' } });
+    await act(async () => {
+      fireEvent.click(saveButton());
+    });
+    await act(async () => d.resolve({ id: 'tp1' }));
+    await waitFor(() => expect(screen.queryByTestId('sheet')).toBeNull());
+    await openSheet();
+    expect(nameInput().value).toBe('');
+  });
+});

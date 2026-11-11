@@ -55,7 +55,8 @@ export function ProfileSheet({
       haptic('medium');
       openSnackbar({ text: vi.storefront.profileSaved, type: 'success' });
       onSaved();
-      onClose();
+      // Lệnh báo xong muộn sau khi khách đóng tấm rồi mở lại: TanStack vẫn chạy onSuccess của tấm cũ, `onClose` của cha sẽ đóng nhầm tấm mới. `onSaved` chỉ tải lại nên luôn chạy.
+      if (mounted.current) onClose();
     },
     // Máy chủ từ chối vì gian hàng không còn khớp (vd 404 "Chưa có gian hàng"): tải lại gian hàng rồi mới nhả khoá, không thì bấm Lưu lại nhận đúng lỗi đó
     // trên dữ liệu cũ. Lần tải lại cũng 404 thì TanStack giữ dữ liệu cũ nên màn Gian hàng chưa tự đổi; việc đó thuộc màn Gian hàng, không xử lý ở đây.

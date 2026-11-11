@@ -41,6 +41,7 @@ import { promoDateRangeError, promoFormDates, promoWindow } from '../utils/brand
 import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useUploadBusy } from '../hooks/use-upload-busy';
+import { useSheetSeq } from '../hooks/use-sheet-seq';
 import { vi } from '../i18n/vi';
 import { BrandSalesTab } from './brand-owner-sales';
 import { INPUT_LIMITS } from '../utils/input-limits';
@@ -160,28 +161,42 @@ function Editor({ brand }: { brand: OwnedBrand }) {
   // onError chạy với bản dựng lúc bấm; muốn biết form đang sửa promo nào LÚC LỖI VỀ thì phải đọc qua ref.
   const editingIdRef = useRef(editingId);
   editingIdRef.current = editingId;
+  // Số lần sửa: bấm Huỷ rồi sửa lại chính khuyến mãi đó (hoặc chuyển sang sửa cái khác) là lần sửa khác; phản hồi muộn của lần trước không được xoá ô đang gõ.
+  const editSeq = useSheetSeq(editingId);
   const updPromo = useLockedMutation({
     // Khi sửa, ô mã trống nghĩa là GỠ mã (chuỗi rỗng) — `undefined` bị bỏ qua nên mã cũ sẽ ở lại.
     mutationFn: (id: string) => updateOwnedPromotion(id, { ...promoIso(), couponCode: promo.couponCode.trim().toUpperCase() }),
-    onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã cập nhật khuyến mãi', type: 'success' }); void refresh(); },
-    onError: (e, id) => {
-      // Form có ô nhập: chỉ đóng khi khuyến mãi đang sửa không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở ô nhập, giữ form để sửa. Đóng sau khi hồ sơ tải lại, và chỉ nếu LÚC ĐÓ form vẫn đang sửa đúng khuyến mãi này (đã chuyển sang sửa cái khác trong lúc chờ thì giữ).
+    onMutate: () => editSeq.mark(),
+    onSuccess: (_data, _id, sent) => {
+      if (editSeq.isCurrent(sent)) resetPromoForm();
+      openSnackbar({ text: 'Đã cập nhật khuyến mãi', type: 'success' });
+      void refresh();
+    },
+    onError: (e, id, sent) => {
+      // Form có ô nhập: chỉ đóng khi khuyến mãi đang sửa không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở ô nhập, giữ form để sửa. Đóng sau khi hồ sơ tải lại, và chỉ nếu LÚC ĐÓ form vẫn đang sửa đúng khuyến mãi này (đã chuyển sang sửa cái khác trong lúc chờ thì giữ) và vẫn là lần sửa đã gửi lệnh (Huỷ rồi sửa lại cùng khuyến mãi thì giữ).
       const held = onWriteError(e);
       if (!isTargetGoneError(e)) return held;
-      return closeAfterFresh(held, () => { if (editingIdRef.current === id) resetPromoForm(); });
+      return closeAfterFresh(held, () => { if (editingIdRef.current === id && editSeq.isCurrent(sent)) resetPromoForm(); });
     },
   });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
+  const boxSeq = useSheetSeq(confirmDeleteId);
   const delPromo = useLockedMutation({
     mutationFn: (id: string) => deleteOwnedPromotion(id),
+    // Lúc gửi ghi số lần mở của hộp xoá và số lần sửa của form: lệnh trễ không đóng hộp mới mở lại, không xoá form sửa mở sau lúc gửi.
+    onMutate: () => ({ box: boxSeq.mark(), edit: editSeq.count() }),
     // So khớp đúng promo VỪA XOÁ (biến mutate) với promo đang sửa dở — không phải "có đang sửa gì đó
     // hay không" — kẻo xoá promo B trong lúc đang sửa dở promo A lại làm mất luôn form đang sửa của A.
-    onSuccess: (_data, deletedId) => { if (editingId === deletedId) resetPromoForm(); setConfirmDeleteId(null); void refresh(); },
-    onError: (e, id) => {
+    onSuccess: (_data, deletedId, sent) => {
+      if (editingId === deletedId && editSeq.isCurrent(sent?.edit)) resetPromoForm();
+      if (boxSeq.isCurrent(sent?.box)) setConfirmDeleteId(null);
+      void refresh();
+    },
+    onError: (e, id, sent) => {
       // Hộp xác nhận chỉ có nút Xoá: khuyến mãi không còn/đã đổi (400/404/409/422) thì bấm lại nhận đúng lỗi đó, đóng hộp sau khi hồ sơ về rồi mới nhả khoá. Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
       const held = onWriteError(e);
       if (!isServerRejection(e)) return held;
-      return closeAfterFresh(held, () => setConfirmDeleteId((cur) => (cur === id ? null : cur)));
+      return closeAfterFresh(held, () => { if (boxSeq.isCurrent(sent?.box)) setConfirmDeleteId((cur) => (cur === id ? null : cur)); });
     },
   }, (id) => id);
   const startEdit = (p: OwnedBrand['promotions'][number]) => {

@@ -24,8 +24,10 @@ export interface UseReorder {
    * - Chống bấm đúp đồng bộ: khi đang có yêu cầu bay, gọi `submit` lần nữa KHÔNG gửi thêm request mà trả về đúng promise
    *   của yêu cầu đang bay (cùng kết quả/lỗi). Vì vậy caller nào cũng xử lý như một lần gọi bình thường, không có
    *   nhánh "bị chặn" riêng và không sinh thêm snackbar/event.
+   * - `stillCurrent` (tuỳ chọn): hỏi lúc lệnh xong xem nơi gửi còn đúng là lần mở đã gửi không (sheet bị đóng rồi mở lại trong lúc chờ). Trả false thì
+   *   KHÔNG sang giỏ dù `navigateToCart` bật: ở lại, snackbar có nút "Xem giỏ" như khi không bật. Không truyền thì như cũ.
    */
-  submit: (target: ReorderTarget, selections: ReorderSelection[]) => Promise<ReorderSummary>;
+  submit: (target: ReorderTarget, selections: ReorderSelection[], stillCurrent?: () => boolean) => Promise<ReorderSummary>;
   isPending: boolean;
 }
 
@@ -55,11 +57,11 @@ export function useReorder(source: ReorderSource, opts: UseReorderOptions = {}):
   const inFlight = useRef<Promise<ReorderSummary> | null>(null);
 
   const mutation = useMutation({
-    mutationFn: async (v: { target: ReorderTarget; selections: ReorderSelection[] }) => {
+    mutationFn: async (v: { target: ReorderTarget; selections: ReorderSelection[]; stillCurrent?: () => boolean }) => {
       const res = await send(source, v.target, v.selections);
       return { res, summary: summarizeReorder(res, targetLines(v.target), v.selections) };
     },
-    onSuccess: ({ summary }) => {
+    onSuccess: ({ summary }, v) => {
       // Giỏ trong phản hồi không kèm gian hàng (không có combo): tải lại giỏ thay vì ghi số cũ vào cache.
       void qc.invalidateQueries({ queryKey: ['cart'] });
       trackReorderCompleted({ source, added: summary.addedLines, skipped: summary.skippedLines });
@@ -69,7 +71,8 @@ export function useReorder(source: ReorderSource, opts: UseReorderOptions = {}):
       }
       haptic('medium');
       const type = summary.hasProblems ? 'warning' : 'success';
-      if (opts.navigateToCart) {
+      // Sheet đã đóng rồi mở lại trong lúc chờ: không nhảy sang giỏ làm mất số lượng khách đang chỉnh ở lần mở mới, rơi xuống snackbar có nút "Xem giỏ".
+      if (opts.navigateToCart && (v.stillCurrent?.() ?? true)) {
         // Giỏ đã hiện món vừa thêm; chỉ báo khi có món bị bỏ, và ở đầu màn để không che nút Thanh toán.
         if (summary.hasProblems) openSnackbar({ text: summary.message, type, position: 'top' });
         navigate('/cart');
@@ -94,10 +97,10 @@ export function useReorder(source: ReorderSource, opts: UseReorderOptions = {}):
   });
 
   return {
-    submit: (target, selections) => {
+    submit: (target, selections, stillCurrent) => {
       if (inFlight.current) return inFlight.current;
       const p = mutation
-        .mutateAsync({ target, selections })
+        .mutateAsync({ target, selections, stillCurrent })
         .then((r) => r.summary)
         .finally(() => {
           inFlight.current = null;

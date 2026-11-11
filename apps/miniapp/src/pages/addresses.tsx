@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Page, useSnackbar } from 'zmp-ui';
 import { Plus } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -193,16 +193,7 @@ export default function AddressesPage() {
         onClose={() => setEditing(null)}
         title={editing === 'new' ? 'Thêm địa chỉ' : 'Sửa địa chỉ'}
       >
-        {editing != null && (
-          <AddressForm
-            initial={editing === 'new' ? null : editing}
-            onCancel={() => setEditing(null)}
-            onSaved={() => {
-              void refresh();
-              setEditing(null);
-            }}
-          />
-        )}
+        {editing != null && <EditSheetForm editing={editing} refresh={refresh} onClose={() => setEditing(null)} />}
       </BottomSheet>
 
       {/* Xác nhận xoá (tránh mất nhầm địa chỉ — thao tác không hoàn tác). */}
@@ -235,6 +226,33 @@ export default function AddressesPage() {
         )}
       </BottomSheet>
     </Page>
+  );
+}
+
+/**
+ * Form trong tấm Thêm/Sửa. Tấm này đóng được lúc lệnh lưu còn bay và form bị gỡ khi đóng, nhưng TanStack vẫn chạy `onSuccess`/`onError` của lệnh đó sau khi form đã gỡ:
+ * nếu khách đã mở lại tấm (thêm mới hoặc sửa thẻ khác, kể cả đúng thẻ này) và đang gõ, `onSaved`/`onCancel` muộn không được đóng tấm mới. Mỗi lần mở là một form mới nên "còn gắn" là
+ * đúng dấu hiệu của lần mở đã gửi lệnh; việc tải lại sổ sau khi lưu vẫn chạy.
+ */
+function EditSheetForm({ editing, refresh, onClose }: { editing: AddressDTO | 'new'; refresh: () => unknown; onClose: () => void }) {
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  return (
+    <AddressForm
+      initial={editing === 'new' ? null : editing}
+      onCancel={() => {
+        if (mounted.current) onClose();
+      }}
+      onSaved={() => {
+        void refresh();
+        if (mounted.current) onClose();
+      }}
+    />
   );
 }
 

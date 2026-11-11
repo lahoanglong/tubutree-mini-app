@@ -2187,4 +2187,281 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       await waitFor(() => expect(mocks.createShifts).toHaveBeenCalledTimes(2));
     });
   });
+
+  // W116A: phản hồi muộn (từ chối sau khi lịch về, hoặc báo xong) của lệnh gửi ở lần mở trước không được đóng tấm mà khách đã đóng rồi mở lại (kể cả CÙNG đích) và không xoá chữ đang gõ. Lời báo, tải lại và nhả khoá vẫn chạy như cũ.
+  describe('phản hồi muộn của lần mở trước không đóng tấm mở lại (W116A)', () => {
+    type Refresh = () => Promise<unknown>;
+    const deferred = () => {
+      let resolve!: (v?: unknown) => void;
+      const promise = new Promise((res) => {
+        resolve = res;
+      });
+      return { promise, resolve };
+    };
+    const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+    const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+    const settle = () =>
+      act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+    const renderLive = (refresh: Refresh) => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+      render(
+        <QueryClientProvider client={qc}>
+          <StaffPage />
+        </QueryClientProvider>,
+      );
+      return invalidate;
+    };
+    const closeSheet = () => fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    const slowThenResolve = (slow: ReturnType<typeof deferred>, value: unknown) => () => slow.promise.then(() => value);
+    const CONFLICT = 'Vừa có thay đổi, bạn thử lại nhé';
+
+    describe('tấm "Ra ca lùi giờ" (checkoutM)', () => {
+      const openBackout = (time: string) => {
+        fireEvent.click(screen.getByText('Quên ra ca? Chọn giờ đã về →'));
+        fireEvent.change(timeInputs()[0]!, { target: { value: time } });
+      };
+      const sendBackout = () => fireEvent.click(screen.getByRole('button', { name: 'Xác nhận ra ca' }));
+      beforeEach(() => {
+        mocks.getAttendanceStatus.mockResolvedValue({ shifts: [], openSession: OPEN_SESSION });
+      });
+
+      it('bị từ chối 409 trễ: đóng tấm rồi mở lại và gõ giờ mới, trạng thái về sau thì tấm mới còn mở, giờ đang gõ còn nguyên; lời báo, tải lại và nhả khoá vẫn chạy', async () => {
+        mocks.checkout.mockRejectedValueOnce(serverError(CONFLICT, 409)).mockResolvedValue({ checkedOut: true });
+        const refresh = deferred();
+        const invalidate = renderLive(() => refresh.promise);
+        await screen.findByText('Quên ra ca? Chọn giờ đã về →');
+        openBackout('11:00');
+        sendBackout();
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await settle();
+        expect(invalidate).toHaveBeenCalledTimes(1);
+        closeSheet();
+        openBackout('11:30');
+        await act(async () => refresh.resolve());
+        await settle();
+        expect(screen.getByRole('button', { name: 'Xác nhận ra ca' })).toBeInTheDocument();
+        expect(timeInputs()[0]!.value).toBe('11:30');
+        expect(errorSnackbars()).toBe(1);
+        expect(invalidate).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Xác nhận ra ca' })).not.toHaveAttribute('aria-busy', 'true'));
+        sendBackout();
+        await waitFor(() => expect(mocks.checkout).toHaveBeenCalledTimes(2));
+      });
+
+      it('báo xong trễ: đóng tấm rồi mở lại và gõ giờ mới, lệnh cũ xong sau thì tấm mới còn mở, giờ đang gõ còn nguyên; lời báo và tải lại vẫn chạy', async () => {
+        const slow = deferred();
+        mocks.checkout.mockImplementation(slowThenResolve(slow, { checkedOut: true }));
+        const invalidate = renderLive(() => Promise.resolve());
+        await screen.findByText('Quên ra ca? Chọn giờ đã về →');
+        openBackout('11:00');
+        sendBackout();
+        await waitFor(() => expect(mocks.checkout).toHaveBeenCalledTimes(1));
+        closeSheet();
+        openBackout('11:30');
+        await act(async () => slow.resolve());
+        await settle();
+        expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã ra ca.', type: 'success' });
+        expect(invalidate).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('button', { name: 'Xác nhận ra ca' })).toBeInTheDocument();
+        expect(timeInputs()[0]!.value).toBe('11:30');
+      });
+
+      it('bấm "Ra ca" NGOÀI tấm (gửi lúc tấm đóng) rồi mở tấm lùi giờ trong lúc lệnh còn bay: báo xong thì tấm vẫn đóng như trước W116A (lệnh không thuộc lần mở nào); lời báo và tải lại vẫn chạy', async () => {
+        const slow = deferred();
+        mocks.checkout.mockImplementation(slowThenResolve(slow, { checkedOut: true }));
+        const invalidate = renderLive(() => Promise.resolve());
+        await screen.findByText('Quên ra ca? Chọn giờ đã về →');
+        fireEvent.click(screen.getByRole('button', { name: 'Ra ca' }));
+        await waitFor(() => expect(mocks.checkout).toHaveBeenCalledTimes(1));
+        openBackout('11:30');
+        expect(screen.getByRole('button', { name: 'Xác nhận ra ca' })).toBeInTheDocument();
+        await act(async () => slow.resolve());
+        await settle();
+        expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã ra ca.', type: 'success' });
+        expect(invalidate).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(screen.queryByRole('button', { name: 'Xác nhận ra ca' })).not.toBeInTheDocument());
+      });
+    });
+
+    describe('tấm "Thêm/Sửa ca" (saveM)', () => {
+      const editButtons = () => screen.getAllByRole('button', { name: /^Sửa ca / });
+      const openEdit = (time: string) => {
+        fireEvent.click(editButtons()[0]!);
+        fireEvent.change(timeInputs()[0]!, { target: { value: time } });
+      };
+
+      it('sửa ca bị từ chối 409 trễ: đóng tấm rồi mở lại CHÍNH ca đó và gõ giờ mới, lịch về sau thì tấm mới còn mở, giờ đang gõ còn nguyên; lời báo, tải lại và nhả khoá vẫn chạy', async () => {
+        mocks.updateShift.mockRejectedValueOnce(serverError(CONFLICT, 409)).mockResolvedValue({});
+        const refresh = deferred();
+        const invalidate = renderLive(() => refresh.promise);
+        await screen.findByRole('button', { name: /^Sửa ca / });
+        openEdit('09:30');
+        fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await settle();
+        expect(invalidate).toHaveBeenCalledTimes(1);
+        closeSheet();
+        openEdit('10:15');
+        await act(async () => refresh.resolve());
+        await settle();
+        expect(screen.getByRole('button', { name: 'Lưu' })).toBeInTheDocument();
+        expect(timeInputs()[0]!.value).toBe('10:15');
+        expect(errorSnackbars()).toBe(1);
+        expect(invalidate).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu' })).not.toHaveAttribute('aria-busy', 'true'));
+        fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+        await waitFor(() => expect(mocks.updateShift).toHaveBeenCalledTimes(2));
+      });
+
+      it('sửa ca báo xong trễ: đóng tấm rồi mở lại CHÍNH ca đó và gõ giờ mới, lệnh cũ xong sau thì tấm mới còn mở, giờ đang gõ còn nguyên; lời báo và tải lại vẫn chạy', async () => {
+        const slow = deferred();
+        mocks.updateShift.mockImplementation(slowThenResolve(slow, {}));
+        const invalidate = renderLive(() => Promise.resolve());
+        await screen.findByRole('button', { name: /^Sửa ca / });
+        openEdit('09:30');
+        fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+        await waitFor(() => expect(mocks.updateShift).toHaveBeenCalledTimes(1));
+        closeSheet();
+        openEdit('10:15');
+        await act(async () => slow.resolve());
+        await settle();
+        expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã cập nhật ca.', type: 'success' });
+        expect(invalidate).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('button', { name: 'Lưu' })).toBeInTheDocument();
+        expect(timeInputs()[0]!.value).toBe('10:15');
+      });
+
+      it('thêm ca mới báo xong trễ: đóng tấm rồi mở lại và chọn ca chuẩn khác, lệnh cũ xong sau thì tấm mới còn mở, ca chuẩn đã chọn còn nguyên', async () => {
+        const slow = deferred();
+        mocks.createShifts.mockImplementation(slowThenResolve(slow, { created: 1 }));
+        renderLive(() => Promise.resolve());
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm ca T4 11/03' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Ca sáng (08:00–12:00)' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Gửi duyệt' }));
+        await waitFor(() => expect(mocks.createShifts).toHaveBeenCalledTimes(1));
+        closeSheet();
+        fireEvent.click(screen.getByRole('button', { name: 'Thêm ca T4 11/03' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Ca chiều (13:00–17:00)' }));
+        await act(async () => slow.resolve());
+        await settle();
+        expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã gửi ca chờ duyệt.', type: 'success' });
+        expect(screen.getByRole('button', { name: 'Gửi duyệt' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'Ca chiều (13:00–17:00)' })).toHaveAttribute('aria-pressed', 'true');
+      });
+
+      it('báo xong khi tấm vẫn là lần mở đã gửi lệnh: tấm đóng như cũ', async () => {
+        const slow = deferred();
+        mocks.updateShift.mockImplementation(slowThenResolve(slow, {}));
+        renderLive(() => Promise.resolve());
+        await screen.findByRole('button', { name: /^Sửa ca / });
+        openEdit('09:30');
+        fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+        await waitFor(() => expect(mocks.updateShift).toHaveBeenCalledTimes(1));
+        await act(async () => slow.resolve());
+        await settle();
+        expect(screen.queryByRole('button', { name: 'Lưu' })).toBeNull();
+      });
+    });
+
+    describe('tấm "Đăng ký nhanh cả tuần" (quickM)', () => {
+      it('báo xong trễ: đóng tấm rồi mở lại và bỏ một ngày, lệnh cũ xong sau thì tấm mới còn mở, ngày đã chọn còn nguyên; lời báo và tải lại vẫn chạy', async () => {
+        const slow = deferred();
+        mocks.createShifts.mockImplementation(slowThenResolve(slow, { created: 3 }));
+        const invalidate = renderLive(() => Promise.resolve());
+        fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Gửi duyệt (3 ngày)' }));
+        await waitFor(() => expect(mocks.createShifts).toHaveBeenCalledTimes(1));
+        closeSheet();
+        fireEvent.click(screen.getByRole('button', { name: 'Đăng ký ca' }));
+        fireEvent.click(screen.getByRole('button', { name: 'T6 13/03' }));
+        expect(screen.getByRole('button', { name: 'Gửi duyệt (2 ngày)' })).toBeInTheDocument();
+        await act(async () => slow.resolve());
+        await settle();
+        expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã đăng ký 3 ca chờ duyệt.', type: 'success' });
+        expect(invalidate).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('button', { name: 'Gửi duyệt (2 ngày)' })).toBeInTheDocument();
+        expect(screen.getByRole('button', { name: 'T6 13/03' })).toHaveAttribute('aria-pressed', 'false');
+      });
+
+      it('báo xong khi tấm vẫn là lần mở đã gửi lệnh: tấm đóng như cũ', async () => {
+        const slow = deferred();
+        mocks.createShifts.mockImplementation(slowThenResolve(slow, { created: 3 }));
+        renderLive(() => Promise.resolve());
+        fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký ca' }));
+        fireEvent.click(screen.getByRole('button', { name: 'Gửi duyệt (3 ngày)' }));
+        await waitFor(() => expect(mocks.createShifts).toHaveBeenCalledTimes(1));
+        await act(async () => slow.resolve());
+        await settle();
+        expect(screen.queryByRole('button', { name: /^Gửi duyệt/ })).toBeNull();
+      });
+    });
+
+    describe('tấm "Huỷ ca đã duyệt" (cancelM)', () => {
+      const cancelButtons = () => screen.getAllByRole('button', { name: /^Huỷ ca / });
+      const reasonBox = () => screen.getByPlaceholderText('Lý do huỷ') as HTMLTextAreaElement;
+      const openCancel = (reason: string) => {
+        fireEvent.click(cancelButtons()[0]!);
+        fireEvent.change(reasonBox(), { target: { value: reason } });
+      };
+
+      it('bị từ chối 409 trễ: đóng tấm rồi mở lại CHÍNH ca đó và gõ lý do mới, lịch về sau thì tấm mới còn mở, lý do đang gõ còn nguyên; lời báo, tải lại và nhả khoá vẫn chạy', async () => {
+        mocks.cancelShift.mockRejectedValueOnce(serverError(CONFLICT, 409)).mockResolvedValue({ cancelled: true, penalty: false });
+        const refresh = deferred();
+        const invalidate = renderLive(() => refresh.promise);
+        await screen.findByRole('button', { name: /^Huỷ ca / });
+        openCancel('Bận việc nhà');
+        fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }));
+        await waitFor(() => expect(errorSnackbars()).toBe(1));
+        await settle();
+        expect(invalidate).toHaveBeenCalledTimes(1);
+        closeSheet();
+        openCancel('Lý do mới');
+        await act(async () => refresh.resolve());
+        await settle();
+        expect(screen.getByRole('button', { name: 'Xác nhận huỷ' })).toBeInTheDocument();
+        expect(reasonBox().value).toBe('Lý do mới');
+        expect(errorSnackbars()).toBe(1);
+        expect(invalidate).toHaveBeenCalledTimes(1);
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Xác nhận huỷ' })).not.toHaveAttribute('aria-busy', 'true'));
+        fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }));
+        await waitFor(() => expect(mocks.cancelShift).toHaveBeenCalledTimes(2));
+      });
+
+      it('báo xong trễ: đóng tấm rồi mở lại CHÍNH ca đó và gõ lý do mới, lệnh cũ xong sau thì tấm mới còn mở, lý do đang gõ không bị xoá; lời báo và tải lại vẫn chạy', async () => {
+        const slow = deferred();
+        mocks.cancelShift.mockImplementation(slowThenResolve(slow, { cancelled: true, penalty: false }));
+        const invalidate = renderLive(() => Promise.resolve());
+        await screen.findByRole('button', { name: /^Huỷ ca / });
+        openCancel('Bận việc nhà');
+        fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }));
+        await waitFor(() => expect(mocks.cancelShift).toHaveBeenCalledTimes(1));
+        closeSheet();
+        openCancel('Lý do mới');
+        await act(async () => slow.resolve());
+        await settle();
+        expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã huỷ ca (không phạt).', type: 'success' });
+        expect(invalidate).toHaveBeenCalledTimes(1);
+        expect(screen.getByRole('button', { name: 'Xác nhận huỷ' })).toBeInTheDocument();
+        expect(reasonBox().value).toBe('Lý do mới');
+      });
+
+      it('báo xong khi tấm vẫn là lần mở đã gửi lệnh: tấm đóng và lý do được xoá như cũ', async () => {
+        const slow = deferred();
+        mocks.cancelShift.mockImplementation(slowThenResolve(slow, { cancelled: true, penalty: false }));
+        renderLive(() => Promise.resolve());
+        await screen.findByRole('button', { name: /^Huỷ ca / });
+        openCancel('Bận việc nhà');
+        fireEvent.click(screen.getByRole('button', { name: 'Xác nhận huỷ' }));
+        await waitFor(() => expect(mocks.cancelShift).toHaveBeenCalledTimes(1));
+        await act(async () => slow.resolve());
+        await settle();
+        expect(screen.queryByRole('button', { name: 'Xác nhận huỷ' })).toBeNull();
+        fireEvent.click(cancelButtons()[0]!);
+        expect(reasonBox().value).toBe('');
+      });
+    });
+  });
 });

@@ -476,3 +476,89 @@ describe('CashbackPage — tấm sàn đóng SAU khi danh sách sàn mới về 
     expect(invalidate).not.toHaveBeenCalled();
   });
 });
+
+describe('CashbackPage — phản hồi muộn của lệnh cũ không đóng tấm sàn mở lại cùng sàn (W116A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const BUY = { name: 'Mua sắm & nhận hoàn tiền' };
+  const sheetOpen = () => screen.queryByRole('button', BUY) !== null;
+  const renderLive = (refresh: () => Promise<unknown>) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(<QueryClientProvider client={qc}><CashbackPage /></QueryClientProvider>);
+    return invalidate;
+  };
+  const openMerchant = async (name: string) => {
+    fireEvent.click(await screen.findByText(name));
+    return screen.findByRole('button', BUY);
+  };
+  /** Mở tấm Shopee, bấm Mua sắm và chờ lệnh được nhận (đã gọi API). */
+  const sendFirst = async () => {
+    fireEvent.click(await openMerchant('Shopee'));
+    await waitFor(() => expect(mocks.createCashbackClick).toHaveBeenCalledTimes(1));
+  };
+  /** Khách đóng tấm bằng nút Đóng rồi mở lại CÙNG sàn. */
+  const closeAndReopenSameMerchant = async () => {
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(sheetOpen()).toBe(false));
+    await openMerchant('Shopee');
+  };
+
+  beforeEach(() => {
+    stubLoaded();
+    mocks.createCashbackClick.mockReset();
+  });
+
+  it('bị từ chối sau khi khách đóng rồi mở lại cùng sàn: tấm mới còn mở; lỗi, tải lại và nhả khoá vẫn chạy', async () => {
+    mocks.createCashbackClick.mockRejectedValueOnce(serverError('Sàn tạm ngừng hoàn tiền', 409)).mockResolvedValue({ deeplink: 'https://aff.example/abc' });
+    const refresh = deferred();
+    const invalidate = renderLive(() => refresh.promise);
+    await sendFirst();
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+    await closeAndReopenSameMerchant();
+    // Danh sách mới về: lần đóng muộn của lệnh cũ không chạm tấm mới.
+    await act(async () => refresh.resolve());
+    await settle();
+    expect(sheetOpen()).toBe(true);
+    expect(screen.getByRole('heading', { name: 'Shopee' })).toBeInTheDocument();
+    expect(mocks.openSnackbar.mock.calls.filter(([o]) => o.type === 'error')).toHaveLength(1);
+    // Khoá đã nhả: tấm mới gửi được.
+    await waitFor(() => expect(screen.getByRole('button', BUY)).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(screen.getByRole('button', BUY));
+    await waitFor(() => expect(mocks.createCashbackClick).toHaveBeenCalledTimes(2));
+  });
+
+  it('báo xong sau khi khách đóng rồi mở lại cùng sàn: tấm mới còn mở; thông báo và mở link vẫn chạy', async () => {
+    const send = deferred();
+    mocks.createCashbackClick.mockReturnValueOnce(send.promise);
+    renderLive(() => Promise.resolve());
+    await sendFirst();
+    await closeAndReopenSameMerchant();
+    await act(async () => send.resolve({ deeplink: 'https://aff.example/abc' }));
+    await waitFor(() => expect(mocks.openAffiliateLink).toHaveBeenCalledWith('https://aff.example/abc'));
+    await settle();
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã ghi nhận hoàn tiền! Đang chuyển hướng sang sàn…', type: 'success' });
+    expect(sheetOpen()).toBe(true);
+    expect(screen.getByRole('heading', { name: 'Shopee' })).toBeInTheDocument();
+  });
+
+  it('khách không mở lại: báo xong vẫn đóng tấm như trước', async () => {
+    const send = deferred();
+    mocks.createCashbackClick.mockReturnValueOnce(send.promise);
+    renderLive(() => Promise.resolve());
+    await sendFirst();
+    await act(async () => send.resolve({ deeplink: 'https://aff.example/abc' }));
+    await waitFor(() => expect(sheetOpen()).toBe(false));
+    expect(mocks.openAffiliateLink).toHaveBeenCalledTimes(1);
+  });
+});

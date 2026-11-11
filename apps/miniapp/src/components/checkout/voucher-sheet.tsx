@@ -7,9 +7,10 @@ import { couponNotAppliedNotice } from '@tubutree/app-core/commerce/coupon-notic
 import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
 import { getCoupons } from '../../services/account-api';
 import type { CouponPreviewRequest } from '@tubutree/shared-types';
-import { applyCoupon, getCouponPreviews, removeCoupon } from '../../services/shop-api';
+import { applyCoupon, getCouponPreviews, removeCoupon, type CartSummary } from '../../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage, isTargetGoneError } from '../../services/api';
 import { useNotify } from '../../hooks/use-notify';
+import { useSheetSeq } from '../../hooks/use-sheet-seq';
 import { haptic } from '../../utils/haptic';
 import { formatVnd } from '../../utils/format';
 import { serverNow } from '../../utils/server-clock';
@@ -111,18 +112,25 @@ export function VoucherSheet({
   const release = () => {
     changing.current = false;
   };
-  const applyMut = useMutation({
+  // Lệnh áp mã mang số lần mở tấm lúc gửi: khách tự đóng tấm rồi mở lại và đang gõ mã khác thì phản hồi muộn không đóng tấm mới hay xoá mã đang gõ.
+  // Tấm sống qua các lần mở (cha chỉ đổi `visible`), nên số đếm đặt ở đây là đủ.
+  const sheetSeq = useSheetSeq(visible);
+  const applyMut = useMutation<CartSummary, Error, string, number>({
     mutationKey: COUPON_CHANGE_KEY,
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
     onSettled: release,
     // Xoá lời báo cũ lúc bắt đầu: lỗi lặp lại cùng một câu vẫn dựng lại lời báo, cuộn tới và được trình đọc màn hình đọc lại.
-    onMutate: () => setErr(null),
-    onSuccess: (cart, code) => {
+    onMutate: () => {
+      setErr(null);
+      return sheetSeq.mark();
+    },
+    onSuccess: (cart, code, sent) => {
       queryClient.setQueryData(cartKey(), cart);
       void queryClient.invalidateQueries({ queryKey: ['quote'] });
       haptic('medium');
       setErr(null);
-      setCustomCode('');
+      const reopened = !sheetSeq.isCurrent(sent);
+      if (!reopened) setCustomCode('');
       // Mã được giữ nhưng chưa giảm cho giỏ này (vd combo kéo phần hàng dưới đơn tối thiểu): nói lý do, không báo "đã áp dụng".
       // Lời báo là của CẢ giỏ: nếu xem trước cho phần đang chọn (mua một phần) nói mã dùng được thì mã được áp cho đơn này.
       const preview = previews.get(code.trim().toUpperCase());
@@ -139,7 +147,7 @@ export function VoucherSheet({
             : { text: `Đã áp dụng mã ${cart.couponCode ?? ''}`, type: 'success', duration: 2000 },
       );
       onCouponApplied?.();
-      onClose();
+      if (!reopened) onClose();
     },
     // Giữ cờ `changing` tới khi dữ liệu mới về nếu máy chủ từ chối vì màn đã cũ (`onSettled` chạy sau Promise trả ở đây). Lời báo lỗi giữ nguyên.
     // Mã gõ tay không có trong ví mà bị 400 là mã sai/hết hiệu lực chứ màn không cũ: nhả ngay như trước, khỏi khoá tới khi bốn nguồn tải lại. 404/409 vẫn tải lại.

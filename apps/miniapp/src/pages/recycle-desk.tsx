@@ -12,6 +12,7 @@ import type {
   WasteDeskPointDTO,
   WasteDeskRequestDTO,
   WasteMatchInput,
+  WasteRejectResultDTO,
   WasteRejectionReason,
   WasteShortfallReason,
 } from '@tubutree/shared-types';
@@ -21,6 +22,7 @@ import { settleWithin } from '../utils/settle-within';
 import { extractWasteLookupCode, normalizeWasteLookupCode } from '@tubutree/app-core/waste-code-input';
 import { scanCode } from '../services/zmp-bridge';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { useSheetSeq } from '../hooks/use-sheet-seq';
 import { AuthGate } from '../components/ui/auth-gate';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
@@ -295,26 +297,35 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
     onError: rejected,
   });
 
-  const reject = useLockedMutation({
+  // Lệnh từ chối mang số lần mở tấm lúc gửi: nhân viên tự đóng tấm rồi mở lại cùng phiếu (lý do/ghi chú nằm trong RejectSheet, sống qua lần đóng) thì phản hồi muộn
+  // của lệnh cũ không được đóng tấm mới, và `finish()` (gỡ phiếu, kéo theo gỡ cả RejectSheet cùng chữ đang gõ) cũng không chạy; chỉ tải lại danh sách điểm.
+  // Cũng không chạy khi phiếu đang hiện đã là phiếu khác (nhân viên đóng tấm, tra phiếu B, đang nhập số liệu): `finish()` sẽ xoá thẻ và số đã gõ của B.
+  const rejectSeq = useSheetSeq(rejectOpen);
+  const reject = useLockedMutation<WasteRejectResultDTO, Error, { req: WasteDeskRequestDTO; reason: WasteRejectionReason; note: string }, number>({
     onSettled: releaseActing,
-    mutationFn: (v: { req: WasteDeskRequestDTO; reason: WasteRejectionReason; note: string }) =>
+    mutationFn: (v) =>
       deskReject(v.req.id, {
         rejectionReason: v.reason,
         ...(v.note ? { rejectionNote: v.note } : {}),
         ...(match ? { match } : {}),
       }),
-    onSuccess: (res) => {
+    onMutate: () => rejectSeq.mark(),
+    onSuccess: (res, v, sent) => {
       openSnackbar({ text: `Đã từ chối yêu cầu ${res.code}`, type: 'success' });
+      if (requestIdRef.current !== v.req.id || !rejectSeq.isCurrent(sent)) {
+        void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.desk });
+        return;
+      }
       setRejectOpen(false);
       finish();
     },
-    onError: (e, v) => {
+    onError: (e, v, sent) => {
       const held = rejected(e);
       // Tấm có ô lý do/ghi chú: chỉ đóng khi phiếu không còn hoặc vừa đổi (404/409, vd đã xác nhận ở quầy khác), đóng SAU khi danh sách điểm mới về để nút báo bận tới lúc đó;
       // 400/422 là lỗi ở ô nhập, giữ tấm để sửa. Tấm đóng được lúc lệnh bay và nhân viên có thể đã tra phiếu khác, nên chỉ đóng khi vẫn đang ở đúng phiếu bị từ chối.
       if (!isTargetGoneError(e)) return held;
       return Promise.resolve(held).then(() => {
-        if (requestIdRef.current === v.req.id) setRejectOpen(false);
+        if (requestIdRef.current === v.req.id && rejectSeq.isCurrent(sent)) setRejectOpen(false);
       });
     },
   });

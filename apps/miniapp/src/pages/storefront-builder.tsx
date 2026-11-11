@@ -28,6 +28,7 @@ import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { trustBadgeLabel } from '../utils/storefront-badge';
 import { announce, useNotify } from '../hooks/use-notify';
+import { useSheetSeq } from '../hooks/use-sheet-seq';
 import { Badge } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { Button } from '../components/ui/button';
@@ -206,21 +207,25 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       return holdForFresh(e);
     },
   });
+  // Số lần mở của từng hộp/tấm đóng được lúc lệnh còn bay: lệnh mang số của lần mở đã gửi nó (onMutate) và phản hồi muộn chỉ đóng hộp/tấm, xoá chữ khi đó vẫn là lần mở ấy.
+  // Khách tự đóng rồi mở lại (cùng đích) trong lúc chờ thì tấm mới và chữ đang gõ không bị lệnh cũ đóng hay xoá. Hook ở trang vì state mở nằm ở đây (ruột tấm gỡ khi đóng).
+  const unpublishSeq = useSheetSeq(confirmUnpublish);
   const unpublishMut = useLockedMutation({
     onSettled: releasePublishing,
     mutationFn: () => publishStorefront(false),
-    onSuccess: () => {
+    onMutate: () => unpublishSeq.mark(),
+    onSuccess: (_d, _v, sent) => {
       haptic('medium');
-      setConfirmUnpublish(false);
+      if (unpublishSeq.isCurrent(sent)) setConfirmUnpublish(false);
       openSnackbar({ text: vi.storefront.unpublished, type: 'success' });
       void refresh();
     },
-    onError: (e) => {
+    onError: (e, _v, sent) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Hộp chỉ có nút Gỡ đăng: máy chủ đã từ chối (gian hàng đã gỡ ở máy khác...) thì bấm lại nhận đúng lỗi đó, đóng hộp sau khi gian hàng tải lại. Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
       const held = holdForFresh(e);
       if (!isServerRejection(e)) return held;
-      return closeAfterFresh(held, () => setConfirmUnpublish(false));
+      return closeAfterFresh(held, () => { if (unpublishSeq.isCurrent(sent)) setConfirmUnpublish(false); });
     },
   });
   const publishBusy = publishMut.isPending || unpublishMut.isPending;
@@ -232,15 +237,20 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
   const [renaming, setRenaming] = useState<{ id: string; title: string } | null>(null);
   const [confirmDeleteCol, setConfirmDeleteCol] = useState<string | null>(null);
 
+  const newSeq = useSheetSeq(newOpen);
   const newColMut = useLockedMutation({
     mutationFn: (dto: ReturnType<typeof newSectionDto>) => createCollection(dto),
-    onSuccess: (created, dto) => {
+    onMutate: () => newSeq.mark(),
+    onSuccess: (created, dto, sent) => {
       haptic('light');
       // Khối mới hiện ngay trong trang chi tiết, không chờ lần tải lại.
       qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) => (old ? { ...old, collections: [...old.collections, { ...created, items: created.items ?? [] }] } : old));
-      setNewOpen(false);
-      openSection(created.id);
-      setPickerCol(created.id);
+      // Khách đã đóng rồi mở lại tấm trong lúc chờ thì không chuyển sang khối mới: trang chi tiết dựng lại tấm "Thêm khối" và mất chữ đang gõ.
+      if (newSeq.isCurrent(sent)) {
+        setNewOpen(false);
+        openSection(created.id);
+        setPickerCol(created.id);
+      }
       void refresh();
       // Máy chủ kẹp `%` theo trần cấu hình: thấp hơn số vừa nhập thì nói rõ, không để CTV tưởng đã được đúng số đó.
       if (dto.kind === 'COMBO' && typeof dto.comboDiscountPct === 'number') {
@@ -248,41 +258,45 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
         if (out.clamped) notify({ text: out.text, type: 'warning' });
       }
     },
-    onError: (e) => {
+    onError: (e, _dto, sent) => {
       notify({ text: getErrorMessage(e), type: 'error' });
       // Tấm Thêm khối có ô tên/mức giảm: chỉ đóng khi gian hàng không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập (quá số khối, tên không hợp lệ...), giữ tấm để sửa.
       const held = holdForFresh(e);
       if (!isTargetGoneError(e)) return held;
-      return closeAfterFresh(held, () => setNewOpen(false));
+      return closeAfterFresh(held, () => { if (newSeq.isCurrent(sent)) setNewOpen(false); });
     },
   });
+  const renameSeq = useSheetSeq(renaming?.id ?? null);
   const renameColMut = useLockedMutation({
     mutationFn: (v: { id: string; title: string }) => updateCollection(v.id, { title: v.title }),
-    onSuccess: () => {
-      setRenaming(null);
+    onMutate: () => renameSeq.mark(),
+    onSuccess: (_d, _v, sent) => {
+      if (renameSeq.isCurrent(sent)) setRenaming(null);
       void refresh();
     },
-    onError: (e, v) => {
+    onError: (e, v, sent) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Tấm có ô tên: chỉ đóng khi khối không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô tên, giữ tấm để sửa. Tấm đóng được lúc lệnh chạy: chỉ đóng đúng tấm của khối này.
       const held = holdForFresh(e);
       if (!isTargetGoneError(e)) return held;
-      return closeAfterFresh(held, () => setRenaming((cur) => (cur?.id === v.id ? null : cur)));
+      return closeAfterFresh(held, () => { if (renameSeq.isCurrent(sent)) setRenaming((cur) => (cur?.id === v.id ? null : cur)); });
     },
   }, (v) => v.id);
+  const deleteSeq = useSheetSeq(confirmDeleteCol);
   const deleteColMut = useLockedMutation({
     mutationFn: (id: string) => deleteCollection(id),
-    onSuccess: (_d, id) => {
-      setConfirmDeleteCol(null);
+    onMutate: () => deleteSeq.mark(),
+    onSuccess: (_d, id, sent) => {
+      if (deleteSeq.isCurrent(sent)) setConfirmDeleteCol(null);
       if (id === sectionId) closeSection();
       void refresh();
     },
-    onError: (e, id) => {
+    onError: (e, id, sent) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Hộp xác nhận chỉ có nút Xoá: khối không còn/đã đổi (400/404/409/422) thì bấm lại nhận đúng lỗi đó, đóng hộp sau khi dữ liệu về rồi mới nhả khoá. Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
       const held = holdForFresh(e);
       if (!isServerRejection(e)) return held;
-      return closeAfterFresh(held, () => setConfirmDeleteCol((cur) => (cur === id ? null : cur)));
+      return closeAfterFresh(held, () => { if (deleteSeq.isCurrent(sent)) setConfirmDeleteCol((cur) => (cur === id ? null : cur)); });
     },
   }, (id) => id);
   // Chỉ gửi trường đổi (không kèm kind/title): API nhận từng phần, và Thường ↔ Combo chưa đổi được sau khi tạo.
@@ -338,20 +352,22 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       return holdForFresh(e);
     },
   }, (v) => v.id);
+  const noteSeq = useSheetSeq(notingItem?.id ?? null);
   const noteMut = useLockedMutation({
     mutationFn: (v: { id: string; note: string }) => updateItem(v.id, { note: v.note }),
-    onSuccess: () => {
+    onMutate: () => noteSeq.mark(),
+    onSuccess: (_d, _v, sent) => {
       haptic('light');
-      setNotingItem(null);
+      if (noteSeq.isCurrent(sent)) setNotingItem(null);
       openSnackbar({ text: vi.storefront.itemNoteSaved, type: 'success' });
       void refresh();
     },
-    onError: (e, v) => {
+    onError: (e, v, sent) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Tấm có ô lời nhắn: chỉ đóng khi món không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Chỉ đóng tấm của đúng món này.
       const held = holdForFresh(e);
       if (!isTargetGoneError(e)) return held;
-      return closeAfterFresh(held, () => setNotingItem((cur) => (cur?.id === v.id ? null : cur)));
+      return closeAfterFresh(held, () => { if (noteSeq.isCurrent(sent)) setNotingItem((cur) => (cur?.id === v.id ? null : cur)); });
     },
   }, (v) => v.id);
   // Trong onSuccess/onError, lần đang chạy vẫn được đếm.
@@ -426,15 +442,20 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     if (reason) announce('status', moveBlockedAnnouncement({ name, dir, reason }));
   };
   const [confirmDeleteItemId, setConfirmDeleteItemId] = useState<string | null>(null);
+  const delItemSeq = useSheetSeq(confirmDeleteItemId);
   const delItemMut = useLockedMutation({
     mutationFn: removeItem,
-    onSuccess: () => { setConfirmDeleteItemId(null); void refresh(); },
-    onError: (e, id) => {
+    onMutate: () => delItemSeq.mark(),
+    onSuccess: (_d, _id, sent) => {
+      if (delItemSeq.isCurrent(sent)) setConfirmDeleteItemId(null);
+      void refresh();
+    },
+    onError: (e, id, sent) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Như hộp xoá khối: món không còn/đã đổi thì đóng hộp sau khi dữ liệu về rồi mới nhả khoá.
       const held = holdForFresh(e);
       if (!isServerRejection(e)) return held;
-      return closeAfterFresh(held, () => setConfirmDeleteItemId((cur) => (cur === id ? null : cur)));
+      return closeAfterFresh(held, () => { if (delItemSeq.isCurrent(sent)) setConfirmDeleteItemId((cur) => (cur === id ? null : cur)); });
     },
   }, (id) => id);
 

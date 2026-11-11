@@ -2951,4 +2951,370 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       });
     });
   });
+
+  // W116A: phản hồi muộn (máy chủ từ chối sau khi chờ tải lại, hoặc báo xong) của lệnh gửi từ lần mở TRƯỚC không được đóng tấm của lần mở SAU khi khách tự đóng rồi mở lại CÙNG đích và đang gõ.
+  // So đích (W115A) không đủ vì hai lần mở cùng một đích; mã số lần mở (useSheetSeq) phân biệt được.
+  describe('tấm đóng rồi mở lại cùng đích trong lúc lệnh còn bay (W116A)', () => {
+    type Refresh = () => Promise<unknown>;
+    type Case = {
+      name: string;
+      write: ReturnType<typeof vi.fn>;
+      succeed: unknown;
+      open: (refresh: Refresh) => Promise<unknown>;
+      /** Khách đóng tấm bằng nút X rồi mở lại CÙNG đích và gõ chữ mới, trong lúc lệnh/tải lại còn treo. */
+      reopenAndType: () => void;
+      /** Chữ vừa gõ ở lần mở sau còn nguyên. */
+      typedIntact: () => boolean;
+      /** Bấm nút gửi của tấm nếu tấm đang mở. */
+      tap: () => void;
+      /** Tấm đang hiện (nút gửi còn đó). */
+      isOpen: () => boolean;
+      /** Việc cần làm thêm ở lần mở sau để nút gửi bấm được lần hai (vd tải lại ảnh). */
+      prepareResend?: () => void;
+    };
+    const deferred = () => {
+      let resolve!: (v?: unknown) => void;
+      const promise = new Promise((res) => {
+        resolve = res;
+      });
+      return { promise, resolve };
+    };
+    const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+    const countSnackbars = (type: string) => mocks.openSnackbar.mock.calls.filter(([a]) => a.type === type).length;
+    const settle = () =>
+      act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+    const btn = (name: string) => screen.getByRole('button', { name });
+    const maybe = (name: string) => screen.queryByRole('button', { name });
+    const click = (name: string) => fireEvent.click(btn(name));
+    const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+    const field = (label: string) => screen.getByLabelText(label) as HTMLInputElement | HTMLTextAreaElement;
+    const renderLive = (refresh: Refresh) => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+      render(
+        <QueryClientProvider client={qc}>
+          <AdminPage />
+        </QueryClientProvider>,
+      );
+    };
+    const openPayroll = async (refresh: Refresh) => {
+      renderLive(refresh);
+      await screen.findByText('Lan');
+      goTab('Lương');
+      await screen.findByRole('heading', { level: 2, name: 'Lương' });
+      await screen.findAllByRole('button', { name: /^Xem giờ · / });
+    };
+    const openShifts = async (refresh: Refresh) => {
+      renderLive(refresh);
+      await screen.findByText('Lan');
+      goTab('Duyệt ca');
+      await screen.findByText('09/03 – 15/03');
+      await screen.findAllByText('Chờ duyệt');
+    };
+    const openRate = (value: string) => {
+      click('Đơn giá · Lan');
+      type('Đơn giá (VND/giờ)', value);
+    };
+    const uploadProof = () => fireEvent.click(btn('Ảnh xác nhận chuyển khoản *'));
+    const openGrant = (phone: string, reason: string) => {
+      click('Thêm');
+      type('Số điện thoại', phone);
+      type('Lý do', reason);
+    };
+    const openAdjust = (day: string, value: string) => {
+      click(`Chỉnh giờ Lan ${day}`);
+      type('Bắt đầu', value);
+    };
+    const openReject = (day: string, value: string) => {
+      click(`Từ chối ca Lan ${day}`);
+      type('Lý do', value);
+    };
+    const sendIfOpen = (name: string) => () => {
+      const send = maybe(name);
+      if (send) fireEvent.click(send);
+    };
+    const showing = (name: string) => () => maybe(name) !== null;
+
+    const CASES: Case[] = [
+      {
+        name: 'tấm "Đơn giá" (rateM)',
+        write: mocks.setRate,
+        succeed: {},
+        open: async (refresh) => {
+          await openPayroll(refresh);
+          openRate('35000');
+        },
+        reopenAndType: () => {
+          click('Đóng');
+          openRate('41000');
+        },
+        typedIntact: () => field('Đơn giá (VND/giờ)').value === '41000',
+        tap: sendIfOpen('Lưu đơn giá'),
+        isOpen: showing('Lưu đơn giá'),
+      },
+      {
+        name: 'tấm "Đã chuyển" (paidM)',
+        write: mocks.markPaid,
+        succeed: { paid: true },
+        open: async (refresh) => {
+          await openPayroll(refresh);
+          click('Đã chuyển · Lan');
+          uploadProof();
+        },
+        reopenAndType: () => {
+          click('Đóng');
+          click('Đã chuyển · Lan');
+          type('Ghi chú (tuỳ chọn)', 'Ghi chú mới');
+        },
+        typedIntact: () => field('Ghi chú (tuỳ chọn)').value === 'Ghi chú mới',
+        tap: sendIfOpen('Đánh dấu đã trả'),
+        isOpen: showing('Đánh dấu đã trả'),
+        // Lần mở sau xoá ảnh cũ: phải chọn ảnh lại thì mới gửi được.
+        prepareResend: uploadProof,
+      },
+      {
+        name: 'tấm "Thêm nhân sự" (grantM)',
+        write: mocks.grantStaff,
+        succeed: { granted: 'STAFF', applied: true },
+        open: async (refresh) => {
+          renderLive(refresh);
+          await screen.findByRole('button', { name: 'Thêm' });
+          openGrant('0901112223', 'Nhân viên mới');
+        },
+        reopenAndType: () => {
+          click('Đóng');
+          click('Thêm');
+          type('Lý do', 'Lý do mới');
+        },
+        // SĐT vẫn là SĐT cũ (đóng tấm không xoá SĐT): so SĐT không phân biệt được hai lần mở.
+        typedIntact: () => field('Lý do').value === 'Lý do mới' && field('Số điện thoại').value === '0901112223',
+        tap: sendIfOpen('Lưu quyền'),
+        isOpen: showing('Lưu quyền'),
+      },
+      {
+        name: 'tấm "Chỉnh giờ & duyệt" (approveM)',
+        write: mocks.approveShift,
+        succeed: { approved: true },
+        open: async (refresh) => {
+          await openShifts(refresh);
+          openAdjust('T3 10/03', '08:30');
+        },
+        reopenAndType: () => {
+          click('Đóng');
+          openAdjust('T3 10/03', '09:45');
+        },
+        typedIntact: () => field('Bắt đầu').value === '09:45',
+        tap: sendIfOpen('Duyệt với giờ đã chỉnh'),
+        isOpen: showing('Duyệt với giờ đã chỉnh'),
+      },
+      {
+        name: 'tấm "Từ chối ca" (rejectM)',
+        write: mocks.rejectShift,
+        succeed: { rejected: true },
+        open: async (refresh) => {
+          await openShifts(refresh);
+          openReject('T3 10/03', 'Đủ người');
+        },
+        reopenAndType: () => {
+          click('Đóng');
+          openReject('T3 10/03', 'Lý do mới');
+        },
+        typedIntact: () => field('Lý do').value === 'Lý do mới',
+        tap: sendIfOpen('Xác nhận từ chối'),
+        isOpen: showing('Xác nhận từ chối'),
+      },
+    ];
+
+    describe.each(CASES)('$name', (c) => {
+      it('bị từ chối 409: khách đóng rồi mở lại cùng đích và gõ mới trong lúc chờ tải lại thì khi dữ liệu về tấm mới còn mở, chữ còn nguyên; báo lỗi, tải lại, nhả khoá vẫn chạy', async () => {
+        c.write.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue(c.succeed);
+        const refresh = deferred();
+        let refetches = 0;
+        await c.open(() => {
+          refetches += 1;
+          return refresh.promise;
+        });
+        c.tap();
+        await waitFor(() => expect(countSnackbars('error')).toBe(1));
+        await settle();
+        expect(c.isOpen()).toBe(true);
+        expect(refetches).toBeGreaterThan(0);
+        c.reopenAndType();
+        expect(c.isOpen()).toBe(true);
+        await act(async () => refresh.resolve());
+        await settle();
+        expect(c.isOpen()).toBe(true);
+        expect(c.typedIntact()).toBe(true);
+        expect(countSnackbars('error')).toBe(1);
+        // Khoá đã nhả: gửi lại ở lần mở mới chạy được, và lần mở mới vẫn đóng khi chính lệnh của nó xong.
+        c.prepareResend?.();
+        c.tap();
+        await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
+        await waitFor(() => expect(c.isOpen()).toBe(false));
+        expect(countSnackbars('success')).toBe(1);
+      });
+
+      it('báo xong muộn: khách đóng rồi mở lại cùng đích và gõ mới trong lúc lệnh còn bay thì tấm mới còn mở, chữ còn nguyên; báo thành công và tải lại vẫn chạy', async () => {
+        const write = deferred();
+        c.write.mockReturnValueOnce(write.promise);
+        let refetches = 0;
+        await c.open(() => {
+          refetches += 1;
+          return Promise.resolve();
+        });
+        c.tap();
+        await settle();
+        c.reopenAndType();
+        expect(c.write).toHaveBeenCalledTimes(1);
+        await act(async () => write.resolve(c.succeed));
+        await settle();
+        expect(countSnackbars('success')).toBe(1);
+        expect(refetches).toBeGreaterThan(0);
+        expect(c.isOpen()).toBe(true);
+        expect(c.typedIntact()).toBe(true);
+      });
+
+      it('khách đóng tấm trong lúc lệnh còn bay và KHÔNG mở lại: báo xong vẫn đóng như cũ, không lỗi', async () => {
+        const write = deferred();
+        c.write.mockReturnValueOnce(write.promise);
+        await c.open(() => Promise.resolve());
+        c.tap();
+        await settle();
+        click('Đóng');
+        await act(async () => write.resolve(c.succeed));
+        await settle();
+        expect(c.isOpen()).toBe(false);
+        expect(countSnackbars('success')).toBe(1);
+        expect(countSnackbars('error')).toBe(0);
+      });
+    });
+
+    it('Duyệt thẳng ca A bằng nút Duyệt rồi mở tấm Chỉnh giờ của ca B: báo xong của A không đóng tấm của B', async () => {
+      const write = deferred();
+      mocks.approveShift.mockReturnValueOnce(write.promise);
+      await openShifts(() => Promise.resolve());
+      click('Duyệt ca Lan T3 10/03');
+      await settle();
+      openAdjust('T4 11/03', '09:15');
+      await act(async () => write.resolve({ approved: true }));
+      await settle();
+      expect(countSnackbars('success')).toBe(1);
+      expect(maybe('Duyệt với giờ đã chỉnh')).not.toBeNull();
+      expect(field('Bắt đầu').value).toBe('09:15');
+    });
+
+    it('Duyệt thẳng ca A bằng nút Duyệt (gửi lúc tấm đóng) rồi mở tấm Chỉnh giờ của CHÍNH ca A trong lúc lệnh còn bay: báo xong thì tấm vẫn đóng như trước W116A (lệnh không thuộc lần mở nào); báo thành công và tải lại vẫn chạy', async () => {
+      const write = deferred();
+      mocks.approveShift.mockReturnValueOnce(write.promise);
+      let refetches = 0;
+      await openShifts(() => {
+        refetches += 1;
+        return Promise.resolve();
+      });
+      click('Duyệt ca Lan T3 10/03');
+      await settle();
+      openAdjust('T3 10/03', '09:15');
+      expect(maybe('Duyệt với giờ đã chỉnh')).not.toBeNull();
+      const before = refetches;
+      await act(async () => write.resolve({ approved: true }));
+      await settle();
+      expect(countSnackbars('success')).toBe(1);
+      expect(refetches).toBeGreaterThan(before);
+      expect(maybe('Duyệt với giờ đã chỉnh')).toBeNull();
+    });
+
+    describe('Sửa giờ phiên (editM)', () => {
+      const openEdit = async () => {
+        await openPayroll(() => Promise.resolve());
+        click('Xem giờ · Lan');
+        fireEvent.click(await screen.findByRole('button', { name: 'Sửa giờ phiên 08:00' }));
+        type('Giờ ra', '12:45');
+      };
+
+      it('khách đóng tấm Giờ công rồi mở lại cùng nhân viên (khung sửa vẫn mở) và gõ giờ mới trong lúc lệnh còn bay: báo xong muộn không đóng khung mới, giờ đang gõ còn nguyên; báo thành công và tải lại vẫn chạy', async () => {
+        const write = deferred();
+        mocks.adminEditSession.mockReturnValueOnce(write.promise);
+        await openEdit();
+        click('Lưu giờ');
+        await settle();
+        click('Đóng');
+        click('Xem giờ · Lan');
+        await screen.findByLabelText('Giờ ra');
+        type('Giờ ra', '13:10');
+        await act(async () => write.resolve({ updated: true }));
+        await settle();
+        expect(countSnackbars('success')).toBe(1);
+        expect(mocks.adminEditSession).toHaveBeenCalledTimes(1);
+        expect(field('Giờ ra').value).toBe('13:10');
+        expect(maybe('Lưu giờ')).not.toBeNull();
+      });
+
+      it('đang lưu phiên này mà mở khung sửa phiên khác: báo xong của phiên đầu không đóng khung của phiên sau', async () => {
+        const write = deferred();
+        mocks.adminEditSession.mockReturnValueOnce(write.promise);
+        await openEdit();
+        click('Lưu giờ');
+        await settle();
+        click('Sửa giờ phiên 22:00');
+        type('Giờ ra', '02:00');
+        await act(async () => write.resolve({ updated: true }));
+        await settle();
+        expect(countSnackbars('success')).toBe(1);
+        expect(field('Giờ ra').value).toBe('02:00');
+      });
+
+      it('không mở lại: báo xong đóng khung sửa như cũ', async () => {
+        const write = deferred();
+        mocks.adminEditSession.mockReturnValueOnce(write.promise);
+        await openEdit();
+        click('Lưu giờ');
+        await settle();
+        await act(async () => write.resolve({ updated: true }));
+        await settle();
+        expect(countSnackbars('success')).toBe(1);
+        expect(screen.queryByLabelText('Giờ ra')).toBeNull();
+      });
+    });
+
+    describe('Thêm ca chuẩn (addM)', () => {
+      const openTemplates = async () => {
+        await openShifts(() => Promise.resolve());
+        click('Ca chuẩn');
+        await screen.findByText('Ca sáng · 08:00–12:00');
+        type('Tên ca', 'Ca tối');
+        await waitFor(() => expect(btn('Thêm ca chuẩn')).toBeEnabled());
+      };
+
+      it('khách đóng tấm Ca chuẩn rồi mở lại và gõ tên mới trong lúc lệnh thêm còn bay: báo xong muộn không xoá tên đang gõ; báo thành công và tải lại vẫn chạy', async () => {
+        const write = deferred();
+        mocks.createTemplate.mockReturnValueOnce(write.promise);
+        await openTemplates();
+        click('Thêm ca chuẩn');
+        await settle();
+        click('Đóng');
+        click('Ca chuẩn');
+        await screen.findByText('Ca sáng · 08:00–12:00');
+        type('Tên ca', 'Ca đêm');
+        await act(async () => write.resolve({}));
+        await settle();
+        expect(countSnackbars('success')).toBe(1);
+        expect(mocks.createTemplate).toHaveBeenCalledTimes(1);
+        expect(field('Tên ca').value).toBe('Ca đêm');
+      });
+
+      it('không mở lại: báo xong xoá tên như cũ', async () => {
+        const write = deferred();
+        mocks.createTemplate.mockReturnValueOnce(write.promise);
+        await openTemplates();
+        click('Thêm ca chuẩn');
+        await settle();
+        await act(async () => write.resolve({}));
+        await settle();
+        expect(countSnackbars('success')).toBe(1);
+        expect(field('Tên ca').value).toBe('');
+      });
+    });
+  });
 });

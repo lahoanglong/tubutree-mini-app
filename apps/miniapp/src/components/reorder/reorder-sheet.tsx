@@ -3,6 +3,7 @@ import { vi } from '../../i18n/vi';
 import { formatVnd } from '../../utils/format';
 import { useCartUnits } from '../../hooks/use-cart-units';
 import { useReorder } from '../../hooks/use-reorder';
+import { useSheetSeq } from '../../hooks/use-sheet-seq';
 import { trackReorderClicked } from '../../services/buy-flow-events';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Button } from '../ui/button';
@@ -80,13 +81,17 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
   // Khoá ĐỒNG BỘ chống chạm đúp: isPending của react-query chỉ cập nhật sau một nhịp notify
   // (setTimeout 0) nên cú chạm thứ hai trong cùng nhịp vẫn thấy isPending=false.
   const inFlight = useRef(false);
+  // Số lần mở của sheet, theo mã đích (đơn hoặc món): khách đóng sheet rồi mở lại (cùng đơn hay đơn khác) trong lúc lệnh còn bay thì lệnh cũ xong muộn
+  // không được đóng sheet mới mở. Sheet sống qua các lần mở (cha chỉ đổi `target`), nên số đếm đặt ở đây là đủ.
+  const sheetSeq = useSheetSeq(target ? (target.kind === 'order' ? `order:${target.orderCode}` : `item:${target.line.key}`) : null);
   const submit = async () => {
     if (!target || units === 0 || !cartReady || inFlight.current) return;
     inFlight.current = true;
+    const sent = sheetSeq.mark();
     setFrozenCart(liveCart);
     let added = false;
     try {
-      const summary = await reorder.submit(target, selectedLines(target, sel));
+      const summary = await reorder.submit(target, selectedLines(target, sel), () => sheetSeq.isCurrent(sent));
       added = summary.addedUnits > 0;
     } catch {
       /* useReorder đã báo lỗi — giữ sheet + lựa chọn để khách bấm lại */
@@ -95,7 +100,7 @@ export function ReorderSheet({ target, source, onClose, navigateToCart }: Reorde
     }
     if (!added) setFrozenCart(null);
     // Ngoài try: lỗi của onClose (bug của caller) không bị nuốt như lỗi mạng.
-    if (added) onClose();
+    if (added && sheetSeq.isCurrent(sent)) onClose();
   };
 
   return (

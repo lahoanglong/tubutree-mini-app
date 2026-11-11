@@ -18,6 +18,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage, isNotFoundError, isServerRejection, isStaleStateError } from '../services/api';
 import { settleWithin } from '../utils/settle-within';
 import { useAuthPhase } from '../hooks/use-auth-phase';
+import { useSheetSeq } from '../hooks/use-sheet-seq';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { QrCode } from '../components/qr-code';
 import { SupportContact } from '../components/support-contact';
@@ -189,14 +190,17 @@ export default function RecycleRequestPage() {
     queryFn: () => getWastePoints(),
     enabled: authed && r?.method === 'DROP_OFF' && r.status === 'OPEN',
   });
-  const cancel = useLockedMutation({
+  // Lệnh huỷ mang số lần mở tấm lúc gửi: khách tự đóng tấm rồi mở lại trong lúc lệnh còn bay thì phản hồi muộn không đóng tấm mới mở.
+  const cancelSeq = useSheetSeq(cancelOpen);
+  const cancel = useLockedMutation<WasteRequestDetailDTO, Error, string, number>({
     mutationFn: (rid: string) => cancelWasteRequest(rid),
-    onSuccess: async () => {
+    onMutate: () => cancelSeq.mark(),
+    onSuccess: async (_data, _rid, sent) => {
       await invalidateAfterWasteWrite(qc);
-      setCancelOpen(false);
+      if (cancelSeq.isCurrent(sent)) setCancelOpen(false);
       openSnackbar({ text: 'Đã huỷ yêu cầu', type: 'success' });
     },
-    onError: (e, rid) => {
+    onError: (e, rid, sent) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       const held = isStaleStateError(e) ? refreshAfterRejection(qc, rid) : undefined;
       if (!isServerRejection(e)) return held;
@@ -204,7 +208,7 @@ export default function RecycleRequestPage() {
       // Màn có thể đã chuyển sang yêu cầu khác (cùng route, đổi id) nên chỉ đóng khi vẫn đang ở yêu cầu bị từ chối; id lấy từ biến của lệnh vì tuỳ chọn của
       // useMutation được cập nhật theo từng lần vẽ, `id` trong closure lúc này đã là id mới.
       return Promise.resolve(held).then(() => {
-        if (idRef.current === rid) setCancelOpen(false);
+        if (idRef.current === rid && cancelSeq.isCurrent(sent)) setCancelOpen(false);
       });
     },
   });
