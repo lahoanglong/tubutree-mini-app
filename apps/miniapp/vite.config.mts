@@ -22,6 +22,31 @@ export default defineConfig(({ command, mode }) => {
       dedupe: ['react', 'react-dom'],
       alias: { '@tubutree/shared-types': fileURLToPath(new URL('../../packages/shared-types/src/index.ts', import.meta.url)) },
     },
+    esbuild: {
+      legalComments: 'none',
+    },
+    build: {
+      target: ['es2020', 'safari13.1'],
+      rollupOptions: {
+        output: {
+          // Tách thư viện nền (React + Router, ZMP SDK, React Query + Zustand) khỏi entry để gói khởi động gọn dưới trần 450 KB/700 KB;
+          // KHÔNG gộp zmp-ui hay lucide-react vào vendor chung để giữ nguyên các chunk lazy (Sheet, icon trang quản trị).
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined;
+            if (/\/node_modules\/(react|react-dom|scheduler|react-router|react-router-dom|@remix-run\/router)\//.test(id)) {
+              return 'vendor-react';
+            }
+            if (id.includes('/node_modules/zmp-sdk/')) {
+              return 'vendor-zmp-sdk';
+            }
+            if (id.includes('/node_modules/@tanstack/') || id.includes('/node_modules/zustand/')) {
+              return 'vendor-state';
+            }
+            return undefined;
+          },
+        },
+      },
+    },
     server: {
       port: 3113,
       host: '0.0.0.0',

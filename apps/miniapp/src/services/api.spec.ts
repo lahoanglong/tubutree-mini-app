@@ -13,12 +13,13 @@ import {
   loginGuest,
   loginZaloMiniApp,
   setAccessToken,
+  setDeviceIdProvider,
   setUnauthorizedHandler,
 } from './api';
 import { vi as viCopy } from '../i18n/vi';
 import { stubFetch } from '../test/fetch-stub';
 
-vitestVi.mock('../store/auth', () => ({ getDeviceId: async () => 'dev-1' }));
+setDeviceIdProvider(async () => 'dev-1');
 
 function httpError(o: { code?: string; response?: { status: number; data?: unknown } }): unknown {
   return new HttpError('boom', o.code, o.response);

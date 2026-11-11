@@ -11,6 +11,7 @@ import {
   refreshTokens,
   setAccessToken,
   setAuthReady,
+  setDeviceIdProvider,
   setUnauthorizedHandler,
 } from '../services/api';
 import { getZaloAccessToken, requestZaloPhoneToken, getLaunchReferral } from '../services/zmp-bridge';
@@ -571,6 +572,9 @@ let onLogoutCleanup: (() => void) | null = null;
 export function setLogoutCleanup(fn: () => void): void {
   onLogoutCleanup = fn;
 }
+
+// Cung cấp hàm lấy deviceId cho interceptor của services/api.ts mà không cần api.ts import động ngược lại store/auth.ts.
+setDeviceIdProvider?.(getDeviceId);
 
 // Khi API gặp 401 → tự refresh bằng token đã lưu, trả access token mới cho interceptor.
 setUnauthorizedHandler(async () => {

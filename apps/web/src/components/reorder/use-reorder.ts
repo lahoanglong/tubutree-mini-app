@@ -8,6 +8,8 @@ import { repurchaseOrder, type RepurchaseResponse } from '@tubutree/app-core/api
 import { cartStorefrontSlug } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
 import { reorderText } from '@/lib/home-text';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { summarizeReorder, type ReorderSummary } from './reorder-summary';
 import { targetLines, type ReorderSelection, type ReorderSource, type ReorderTarget } from './reorder-types';
 
@@ -61,6 +63,13 @@ export function useReorder(opts: UseReorderOptions = {}): UseReorder {
       // Giỏ trong phản hồi không kèm gian hàng (không có combo): tải lại giỏ thay vì ghi số cũ vào cache.
       void qc.invalidateQueries({ queryKey: ['cart'] });
       if (opts.navigateToCart && summary.addedUnits > 0 && !summary.hasProblems && (v.stillCurrent?.() ?? true)) router.push('/gio-hang');
+    },
+    // Máy chủ từ chối (400/404/409/422: món hết hàng, ngừng bán, đơn không còn): giữ `inFlight` và `isPending` tới khi giỏ, danh sách đã mua và đơn làm mới về
+    // (tối đa `settleWithin`), như `useReorder` của Mini App. Mất mạng, quá hạn, 401, 5xx nhả ngay để khách thử lại.
+    onError: (e, v) => {
+      if (!serverRejectedState(e)) return;
+      const keys = [['cart'], ['purchased-items'], ['orders'], ...(v.target.kind === 'order' ? [['order', v.target.orderCode]] : [])];
+      return settleWithin(Promise.all(keys.map((queryKey) => qc.invalidateQueries({ queryKey }))));
     },
   });
 

@@ -9,16 +9,15 @@ import {
   isOutcomeUnknown,
   setAccessToken,
   setAuthReady,
+  setDeviceIdProvider,
   setUnauthorizedHandler,
 } from './api';
 import { vi as copy } from '../i18n/vi';
 import { stubFetch, stubHangingFetch } from '../test/fetch-stub';
 
-vi.mock('../store/auth', () => ({ getDeviceId: async () => 'dev-1' }));
-
 const BASE = 'http://localhost:3001/api';
 
-/** Việc nạp động '../store/auth' không đi qua setTimeout nên đồng hồ giả không đẩy được: nhường vòng lặp thật. */
+/** Nhường vòng lặp thật cho tới khi điều kiện xảy ra (dùng khi đồng hồ setTimeout đang làm giả). */
 async function until(cond: () => boolean, timeoutMs = 3_000): Promise<void> {
   const deadline = performance.now() + timeoutMs;
   while (!cond() && performance.now() < deadline) await new Promise((r) => setImmediate(r));
@@ -28,9 +27,11 @@ async function until(cond: () => boolean, timeoutMs = 3_000): Promise<void> {
 beforeEach(() => {
   setAccessToken(null);
   setAuthReady(null);
+  setDeviceIdProvider(async () => 'dev-1');
   setUnauthorizedHandler(null);
 });
 afterEach(() => {
+  setDeviceIdProvider(null);
   vi.unstubAllGlobals();
   vi.useRealTimers();
 });

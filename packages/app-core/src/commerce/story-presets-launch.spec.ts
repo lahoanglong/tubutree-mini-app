@@ -5,12 +5,15 @@ import { STORY_PRESETS } from './story-presets';
 import { baseSlug, findStoryPreset, LAUNCH_STORY_PRESETS } from './story-presets-launch';
 import { STORY_SPRITES } from './story-sprites';
 
-/** Slug thật của bốn sản phẩm đợt đầu và sản phẩm dự phòng trên PROD (docs/product-story-Rollout-Plan.md mục 4). */
+/** Slug thật của các sản phẩm chủ lực trên PROD (docs/product-story-Rollout-Plan.md mục 4 + SKU Pancake thật). */
 const PROD_SLUGS = {
   sokfarm: 'duong-hoa-dua-sokfarm-d6c685',
   bhnong: 'banh-mam-hat-yen-mach-bh-nong-ec5325',
   polang: 'dau-rua-mat-po-lang-100ml-55ml-8478ee',
+  polangShampoo: 'dau-goi-thao-duoc-po-lang-300g-77bb42',
   fuwa3e: 'nuoc-rua-chen-fuwa3e-3-8l-ef3979',
+  fuwa3e500: 'nuoc-rua-chen-fuwa3e-500ml-185d77',
+  fuwa3e100: 'nuoc-rua-chen-fuwa3e-100ml-c1337b',
   durica: 'ca-phe-sau-rieng-thom-beo-durica-le-plateau-hop-g-x-10-goi-2c9db2',
 } as const;
 
@@ -60,8 +63,8 @@ describe('LAUNCH_STORY_PRESETS', () => {
     }
   });
 
-  it('con số chỉ gồm giá trị có trong tên hoặc in trên bao bì: 100% (Sokfarm), 1000 lớp (BH.NONG), can 3,8L (Fuwa3e), hộp 10 gói (DURICA)', () => {
-    const allowed = new Set(['100', '1000', '3', '8', '10']);
+  it('con số chỉ gồm giá trị có trong tên hoặc in trên bao bì: 100% / 100ml, 300g, 500ml, 1000 lớp, can 3,8L, hộp 10 gói', () => {
+    const allowed = new Set(['100', '300', '500', '1000', '3', '8', '10']);
     for (const [key, cfg] of Object.entries(LAUNCH_STORY_PRESETS)) {
       for (const line of textOf(cfg)) for (const n of line.match(/\d+/g) ?? []) expect(allowed.has(n), `${key}: "${line}" có số ${n}`).toBe(true);
     }
@@ -93,19 +96,25 @@ describe('findStoryPreset', () => {
     }
   });
 
-  it('mẫu seed vẫn khớp đúng slug seed', () => {
+  it('mẫu seed khớp cả slug gốc lẫn slug đồng bộ Pancake có hậu tố hex 6–8 ký tự (hoa/thường, khoảng trắng thừa)', () => {
     expect(findStoryPreset('dau-goi-buoi-po-lang')).toBe(STORY_PRESETS['dau-goi-buoi-po-lang']);
+    expect(findStoryPreset('dau-goi-buoi-po-lang-d6c685')).toBe(STORY_PRESETS['dau-goi-buoi-po-lang']);
+    expect(findStoryPreset('  DAU-GOI-BUOI-PO-LANG-A1B2C3D4  ')).toBe(STORY_PRESETS['dau-goi-buoi-po-lang']);
+    expect(findStoryPreset('nuoc-rua-chen-fuwa3e-ef3979')).toBe(STORY_PRESETS['nuoc-rua-chen-fuwa3e']);
+    expect(findStoryPreset('duong-hoa-dua-sokfarm-D6C685')).toBe(LAUNCH_STORY_PRESETS['duong-hoa-dua-sokfarm']);
+    expect(findStoryPreset('dau-goi-thao-duoc-po-lang-300g-77bb42')).toBe(LAUNCH_STORY_PRESETS['dau-goi-thao-duoc-po-lang-300g']);
   });
 
-  it('không khớp mờ: sản phẩm khác cùng dòng, hậu tố không phải hex, tiền tố, slug rỗng, khoá nguyên mẫu đều không nhận kịch bản', () => {
+  it('không khớp mờ: sản phẩm khác cùng dòng, hậu tố không phải hex hoặc quá ngắn/dài, tiền tố, slug rỗng, khoá nguyên mẫu đều không nhận kịch bản', () => {
     for (const slug of [
       'mat-hoa-dua-sokfarm-d6c685',
       'duong-hoa-dua-sokfarm-xyz123',
+      'duong-hoa-dua-sokfarm-12345',
+      'duong-hoa-dua-sokfarm-123456789',
       'duong-hoa-dua-sokfarm-d6c685-moi',
       'duong-hoa-dua',
-      'dau-goi-thao-duoc-po-lang-300g-77bb42',
-      'dau-goi-buoi-po-lang-d6c685',
       '',
+      '   ',
       '__proto__',
       'constructor',
       'toString',
@@ -114,10 +123,13 @@ describe('findStoryPreset', () => {
     }
   });
 
-  it('baseSlug chỉ bỏ đúng một hậu tố hex sáu ký tự ở cuối', () => {
+  it('baseSlug chuẩn hoá chữ thường và chỉ bỏ đúng một hậu tố hex 6–8 ký tự ở cuối', () => {
     expect(baseSlug('duong-hoa-dua-sokfarm-d6c685')).toBe('duong-hoa-dua-sokfarm');
+    expect(baseSlug('  Dau-Goi-Thao-Duoc-Po-Lang-300g-77BB42 ')).toBe('dau-goi-thao-duoc-po-lang-300g');
+    expect(baseSlug('nuoc-rua-chen-fuwa3e-a1b2c3d4')).toBe('nuoc-rua-chen-fuwa3e');
     expect(baseSlug('duong-hoa-dua-sokfarm')).toBe('duong-hoa-dua-sokfarm');
     expect(baseSlug('san-pham-abcdef-123456')).toBe('san-pham-abcdef');
+    expect(baseSlug('san-pham-12345')).toBe('san-pham-12345');
   });
 });
 

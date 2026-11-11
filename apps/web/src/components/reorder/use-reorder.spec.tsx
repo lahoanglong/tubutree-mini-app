@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { renderHook } from '@/test-utils/render-hook';
+import { renderHook, waitFor } from '@/test-utils/render-hook';
 
 // Mua lại gửi cùng endpoint/body như Mini App: một sản phẩm → POST /cart/items {variationId, quantity, addSource:'repurchase'};
 // cả đơn → POST /orders/{code}/repurchase {items, addSource:'repurchase'}.
@@ -10,6 +10,8 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { post: mocks.post } }));
 vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => mocks.slug }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 
+import { ApiError } from '@/lib/client-api';
+import { LOCK_REFRESH_WAIT_MS } from '@/lib/settle-within';
 import { useReorder } from './use-reorder';
 import type { ReorderLine, ReorderTarget } from './reorder-types';
 
@@ -127,6 +129,107 @@ describe('useReorder', () => {
     const { result } = renderHook(() => useReorder());
     await act(async () => {
       await expect(result.current.submit(ITEM, [{ key: 'a', variationId: 'v-a', quantity: 1 }])).rejects.toThrow('Mất kết nối');
+    });
+  });
+
+  describe('máy chủ từ chối (400/404/409/422) thì giữ khoá tới khi dữ liệu làm mới về', () => {
+    const SEL = [{ key: 'a', variationId: 'v-a', quantity: 1 }];
+    const deferred = () => {
+      let resolve!: (v?: unknown) => void;
+      const promise = new Promise((res) => {
+        resolve = res;
+      });
+      return { promise, resolve };
+    };
+    const outcome = (p: Promise<unknown>) => p.then(() => 'ok', () => 'rejected');
+    const CASES = [
+      { name: 'một món (kệ Mua lại)', target: ITEM, keys: [['cart'], ['purchased-items'], ['orders']] },
+      { name: 'cả đơn', target: ORDER, keys: [['cart'], ['purchased-items'], ['orders'], ['order', 'TUBU1']] },
+    ] as const;
+
+    describe.each(CASES)('$name', (c) => {
+      const okBody = c.target.kind === 'item' ? CART : { cart: CART, results: [{ orderItemId: 'a', status: 'added', addedQuantity: 1 }] };
+
+      it.each([400, 404, 409, 422])('bị từ chối %i: tải lại đúng khoá, giữ isPending + inFlight tới khi làm mới xong', async (status) => {
+        mocks.post.mockRejectedValueOnce(new ApiError('Trạng thái đã đổi', status)).mockResolvedValue(okBody);
+        const refresh = deferred();
+        const { result, client } = renderHook(() => useReorder());
+        const invalidate = vi.spyOn(client, 'invalidateQueries').mockImplementation((() => refresh.promise) as never);
+
+        let first!: Promise<unknown>;
+        act(() => {
+          first = result.current.submit(c.target, SEL);
+        });
+        const firstOutcome = outcome(first);
+        await waitFor(() => expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual(c.keys.map((queryKey) => ({ queryKey }))));
+        await waitFor(() => expect(result.current.isPending).toBe(true));
+
+        let second!: Promise<unknown>;
+        act(() => {
+          second = result.current.submit(c.target, SEL);
+        });
+        expect(second).toBe(first);
+        expect(mocks.post).toHaveBeenCalledTimes(1);
+
+        await act(async () => {
+          refresh.resolve();
+          await expect(firstOutcome).resolves.toBe('rejected');
+        });
+        await waitFor(() => expect(result.current.isPending).toBe(false));
+
+        invalidate.mockRestore();
+        await act(async () => {
+          await result.current.submit(c.target, SEL);
+        });
+        expect(mocks.post).toHaveBeenCalledTimes(2);
+      });
+
+      it.each([
+        ['mất mạng', new Error('Network Error')],
+        ['hết phiên 401', new ApiError('Unauthorized', 401)],
+        ['máy chủ lỗi 503', new ApiError('Service Unavailable', 503)],
+      ])('%s: không tải lại, nhả khoá ngay', async (_label, err) => {
+        mocks.post.mockRejectedValueOnce(err).mockResolvedValue(okBody);
+        const { result, client } = renderHook(() => useReorder());
+        const invalidate = vi.spyOn(client, 'invalidateQueries').mockImplementation((() => new Promise(() => undefined)) as never);
+
+        await act(async () => {
+          await expect(result.current.submit(c.target, SEL)).rejects.toBe(err);
+        });
+        expect(invalidate).not.toHaveBeenCalled();
+        expect(result.current.isPending).toBe(false);
+
+        invalidate.mockRestore();
+        await act(async () => {
+          await result.current.submit(c.target, SEL);
+        });
+        expect(mocks.post).toHaveBeenCalledTimes(2);
+      });
+
+      it('tải lại treo mãi: nhả khoá đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+        mocks.post.mockRejectedValueOnce(new ApiError('Vừa có thay đổi', 409)).mockResolvedValue(okBody);
+        const { result, client } = renderHook(() => useReorder());
+        vi.spyOn(client, 'invalidateQueries').mockImplementation((() => new Promise(() => undefined)) as never);
+        vi.useFakeTimers();
+        try {
+          let first!: Promise<unknown>;
+          act(() => {
+            first = result.current.submit(c.target, SEL);
+          });
+          const firstOutcome = outcome(first);
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+          });
+          expect(result.current.isPending).toBe(true);
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(600);
+          });
+          await expect(firstOutcome).resolves.toBe('rejected');
+          expect(result.current.isPending).toBe(false);
+        } finally {
+          vi.useRealTimers();
+        }
+      });
     });
   });
 });

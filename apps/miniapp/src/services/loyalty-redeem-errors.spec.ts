@@ -1,8 +1,6 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { getErrorMessage, HttpError, RATE_LIMITED_MESSAGE } from './api';
 import { vi as viCopy } from '../i18n/vi';
-
-vi.mock('../store/auth', () => ({ getDeviceId: async () => 'dev-1' }));
 
 const httpError = (status: number, message: unknown, code?: string) => new HttpError('boom', undefined, { status, data: { message, ...(code ? { code } : {}) } });
 

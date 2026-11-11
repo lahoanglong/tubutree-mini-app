@@ -23,6 +23,7 @@ export function apiMediaUrl(src: string): string {
 
 let accessToken: string | null = null;
 let onUnauthorized: (() => Promise<string | null>) | null = null;
+let deviceIdProvider: (() => Promise<string>) | null = null;
 /**
  * Phiên đang được khôi phục lúc mở app. Mọi request (trừ lệnh đăng nhập/refresh công khai, xem isAnonAuthCall)
  * chờ nó xong rồi mới gửi, để KHÔNG bay đi khi chưa có access token.
@@ -87,6 +88,11 @@ export function setUnauthorizedHandler(handler: (() => Promise<string | null>) |
   onUnauthorized = handler;
 }
 
+/** Đăng ký hàm đọc deviceId cho X-Device-Id (set bởi store/auth lúc khởi tạo để tránh import vòng tĩnh + động). */
+export function setDeviceIdProvider(provider: (() => Promise<string>) | null): void {
+  deviceIdProvider = provider;
+}
+
 interface PendingRequest {
   method: string;
   url: string;
@@ -98,11 +104,6 @@ interface PendingRequest {
   retried?: boolean;
   retried429?: boolean;
 }
-
-// store/auth import api.ts nên chỉ nạp được lúc chạy; dùng chung một lần nạp cho các request đồng thời.
-const loadAuthModule = () => import('../store/auth');
-let authModulePromise: ReturnType<typeof loadAuthModule> | null = null;
-const authModule = () => (authModulePromise ??= loadAuthModule());
 
 /**
  * GET công khai của API (@Public, cùng nội dung cho mọi người): không cần chờ phiên. Thẻ SP và chi tiết SP hiện ngay khi mở
@@ -149,8 +150,7 @@ async function prepare(req: PendingRequest): Promise<void> {
   if (accessToken) {
     req.headers.set('Authorization', `Bearer ${accessToken}`);
   }
-  const { getDeviceId } = await authModule();
-  const deviceId = await getDeviceId().catch(() => undefined);
+  const deviceId = deviceIdProvider ? await deviceIdProvider().catch(() => undefined) : undefined;
   if (deviceId) req.headers.set('X-Device-Id', deviceId);
   req.headers.set('X-Client-Platform', 'miniapp');
 }

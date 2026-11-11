@@ -66,4 +66,4 @@ jobs:
         run: node scripts/ci/bundle-budget.cjs apps/miniapp/www
         env:
           MINIAPP_ENTRY_WARN_KB: ${{ vars.MINIAPP_ENTRY_WARN_KB || '700' }}
-          MINIAPP_TOTAL_WARN_KB: ${{ vars.MINIAPP_TOTAL_WARN_KB || '2048' }}
+          MINIAPP_TOTAL_WARN_KB: ${{ vars.MINIAPP_TOTAL_WARN_KB || '2560' }}

@@ -65,6 +65,15 @@ export const LAUNCH_STORY_PRESETS: Record<string, ProductStoryConfig> = {
     [pt('h1', 26, 34, 'left', 'Dầu bơ'), pt('h2', 74, 52, 'right', 'Dầu hạt chanh dây'), pt('h3', 26, 72, 'left', 'Vitamin E')],
     'Dầu bơ, dầu hạt chanh dây, vitamin E',
   ),
+  'dau-goi-thao-duoc-po-lang-300g': preset(
+    [
+      step('Gừng và bưởi', 'Có phiên bản hương gừng bưởi.', L('pomelo-peel', 'Vỏ bưởi', 'top', 30, 24, 1.1, -15)),
+      step('Hương bạc hà', 'Và phiên bản hương bạc hà.', L('ocimum-leaf', 'Lá bạc hà', 'right', 74, 30, 0.95, 10)),
+      step('Chai 300g', 'Một chai dầu gội thảo dược 300g.'),
+    ],
+    [pt('h1', 26, 34, 'left', 'Thảo dược Pơ Lang'), pt('h2', 74, 52, 'right', 'Bạc hà · Gừng bưởi'), pt('h3', 26, 72, 'left', 'Chai 300g')],
+    'Dầu gội thảo dược Pơ Lang 300g',
+  ),
   'nuoc-rua-chen-fuwa3e-3-8l': preset(
     [
       step('Enzyme vỏ dứa', 'Ảnh sản phẩm ghi làm sạch bằng enzyme vỏ dứa lên men.', L('pineapple-enzyme', 'Vỏ dứa', 'top', 30, 24, 1.1, -15)),
@@ -72,6 +81,24 @@ export const LAUNCH_STORY_PRESETS: Record<string, ProductStoryConfig> = {
       step('Can 3,8L', 'Một can 3,8 lít.'),
     ],
     [pt('h1', 26, 34, 'left', 'Enzyme vỏ dứa lên men'), pt('h2', 74, 52, 'right', 'Hương dứa'), pt('h3', 26, 72, 'left', 'Can 3,8L')],
+    'Sạch bằng enzyme từ vỏ dứa',
+  ),
+  'nuoc-rua-chen-fuwa3e-500ml': preset(
+    [
+      step('Enzyme vỏ dứa', 'Ảnh sản phẩm ghi làm sạch bằng enzyme vỏ dứa lên men.', L('pineapple-enzyme', 'Vỏ dứa', 'top', 30, 24, 1.1, -15)),
+      step('Hương dứa', 'Ảnh sản phẩm ghi hương dứa.', L('pineapple-enzyme', 'Hương dứa', 'right', 74, 30, 0.9, 10)),
+      step('Chai 500ml', 'Một chai 500ml cho bồn rửa hằng ngày.'),
+    ],
+    [pt('h1', 26, 34, 'left', 'Enzyme vỏ dứa lên men'), pt('h2', 74, 52, 'right', 'Hương dứa'), pt('h3', 26, 72, 'left', 'Chai 500ml')],
+    'Sạch bằng enzyme từ vỏ dứa',
+  ),
+  'nuoc-rua-chen-fuwa3e-100ml': preset(
+    [
+      step('Enzyme vỏ dứa', 'Ảnh sản phẩm ghi làm sạch bằng enzyme vỏ dứa lên men.', L('pineapple-enzyme', 'Vỏ dứa', 'top', 30, 24, 1.1, -15)),
+      step('Hương dứa', 'Ảnh sản phẩm ghi hương dứa.', L('pineapple-enzyme', 'Hương dứa', 'right', 74, 30, 0.9, 10)),
+      step('Chai 100ml', 'Cỡ chai nhỏ 100ml gọn mang theo.'),
+    ],
+    [pt('h1', 26, 34, 'left', 'Enzyme vỏ dứa lên men'), pt('h2', 74, 52, 'right', 'Hương dứa'), pt('h3', 26, 72, 'left', 'Chai 100ml')],
     'Sạch bằng enzyme từ vỏ dứa',
   ),
   'ca-phe-sau-rieng-thom-beo-durica-le-plateau-hop-g-x-10-goi': preset(
@@ -85,17 +112,26 @@ export const LAUNCH_STORY_PRESETS: Record<string, ProductStoryConfig> = {
   ),
 };
 
-/** Slug PROD có hậu tố băm sáu ký tự hex ở cuối; bỏ nó để khớp slug gốc. */
-export const baseSlug = (slug: string): string => slug.replace(/-[0-9a-f]{6}$/, '');
+/** Slug đồng bộ Pancake trên PROD có hậu tố băm 6–8 ký tự hex ở cuối; chuẩn hoá rồi bỏ hậu tố để khớp slug gốc. */
+export const baseSlug = (slug: string): string =>
+  slug
+    .trim()
+    .toLowerCase()
+    .replace(/-[0-9a-f]{6,8}$/i, '');
 
 /**
- * Preset cho một slug: mẫu seed khớp đúng slug, rồi mẫu đợt đầu khớp đúng slug hoặc slug gốc. Không khớp thì undefined.
- * Mọi tên có thật trong bảng (không dùng tiền tố hay khớp mờ) nên một sản phẩm khác không bao giờ vô tình nhận kịch bản.
+ * Preset cho một slug: khớp thẳng theo slug chuẩn hoá trước (LAUNCH_STORY_PRESETS rồi STORY_PRESETS), sau đó thử slug gốc đã bỏ hậu tố
+ * băm Pancake (`-[0-9a-f]{6,8}$`) trên cả hai bảng. Mọi khoá tra bằng `hasOwnProperty` (không khớp tiền tố hay khớp mờ) nên sản phẩm khác
+ * không bao giờ vô tình nhận kịch bản.
  */
 export function findStoryPreset(slug: string): ProductStoryConfig | undefined {
-  if (Object.prototype.hasOwnProperty.call(STORY_PRESETS, slug)) return STORY_PRESETS[slug];
-  for (const key of [slug, baseSlug(slug)]) {
+  const norm = slug.trim().toLowerCase();
+  if (!norm) return undefined;
+  const stripped = baseSlug(norm);
+  const candidates = stripped === norm ? [norm] : [norm, stripped];
+  for (const key of candidates) {
     if (Object.prototype.hasOwnProperty.call(LAUNCH_STORY_PRESETS, key)) return LAUNCH_STORY_PRESETS[key];
+    if (Object.prototype.hasOwnProperty.call(STORY_PRESETS, key)) return STORY_PRESETS[key];
   }
   return undefined;
 }
