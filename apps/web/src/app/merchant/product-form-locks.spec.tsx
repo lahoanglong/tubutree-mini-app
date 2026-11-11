@@ -2,7 +2,7 @@
 import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { byText, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { byText, flush, remount, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { ApiError } from '@/lib/client-api';
 import type { MerchantProduct } from '@/lib/merchant-client';
 import { CreateProductModal, EditProductModal } from './product-form';
@@ -111,6 +111,32 @@ describe('Đăng sản phẩm mới', () => {
     expect(aria(submitBtn(/Gửi kiểm duyệt/)).busy).toBeNull();
     await tap(submitBtn(/Gửi kiểm duyệt/));
     await flush();
+    expect(mocks.createProduct).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('Đăng sản phẩm mới: khoá đọc từ bộ nhớ đệm dùng chung (Wave 102B)', () => {
+  it('hộp bị dựng lại lúc lệnh còn bay (ref khoá của hộp cũ mất): gửi lần hai bị chặn, nút báo bận; lệnh cũ xong thì gửi lại được', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const g = gate();
+    mocks.createProduct.mockReturnValueOnce(g.promise);
+    const ui = <CreateProductModal onClose={() => undefined} onSuccess={() => undefined} />;
+    const r = mountWith(ui, client);
+    fillCreate();
+    await tap(submitBtn(/Gửi kiểm duyệt/));
+    await flush(1);
+    expect(mocks.createProduct).toHaveBeenCalledTimes(1);
+    remount(r, ui, client);
+    fillCreate();
+    expect(aria(submitBtn(/Đang gửi/))).toEqual({ busy: 'true', disabled: 'true', dom: false });
+    await tap(submitBtn(/Đang gửi/));
+    await flush(1);
+    expect(mocks.createProduct).toHaveBeenCalledTimes(1);
+    await act(async () => g.resolve());
+    await flush(4);
+    expect(aria(submitBtn(/Gửi kiểm duyệt/)).busy).toBeNull();
+    await tap(submitBtn(/Gửi kiểm duyệt/));
+    await flush(1);
     expect(mocks.createProduct).toHaveBeenCalledTimes(2);
   });
 });

@@ -52,7 +52,7 @@ import { isPartnerStore } from '@/lib/partner-store';
 import { FulfilOrdersTab } from './fulfil-orders-tab';
 import { SettlementTab } from './settlement-tab';
 import { MerchantReturnsSection } from './merchant-returns';
-import { CreateProductModal, EditProductModal, MerchantProductPrice } from './product-form';
+import { CREATE_OUTCOME_UNKNOWN_TEXT, CreateProductModal, EditProductModal, MerchantProductPrice } from './product-form';
 import { ImageUrlField } from './image-url-field';
 import { ProductThumb } from './product-thumb';
 import { RowMenu } from './row-menu';
@@ -998,6 +998,8 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
   const qc = useQueryClient();
   const [subTab, setSubTabState] = useState<'own' | 'resell'>(canCreate ? 'own' : 'resell');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // Lệnh đăng không có phản hồi lúc hộp đã đóng: lời báo "có thể đã đăng" ở lại trang tới lần mở hộp kế.
+  const [createNotice, setCreateNotice] = useState<string | null>(null);
   const [editing, setEditing] = useState<MerchantProduct | null>(null);
   // BE phân trang CẢ 2 danh sách bằng cùng page/limit (merchant.service.listMyProducts) → 1 số trang,
   // về trang 1 khi đổi danh sách.
@@ -1084,7 +1086,10 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
 
         {subTab === 'own' && canCreate && (
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              setCreateNotice(null);
+              setShowCreateModal(true);
+            }}
             className={`inline-flex items-center gap-1.5 rounded-control bg-forest-600 px-3.5 py-1.5 text-xs font-semibold text-stone-0 hover:bg-forest-700 ${TOUCH_H}`}
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1093,6 +1098,11 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
         )}
       </div>
 
+      {createNotice && (
+        <div role="alert" className="rounded-control border border-danger-fg bg-danger-bg px-3 py-2 text-sm text-danger-fg">
+          {createNotice}
+        </div>
+      )}
       {ownError && (
         <div role="alert" className="rounded-control border border-danger-fg bg-danger-bg px-3 py-2 text-sm text-danger-fg">
           {ownError}
@@ -1289,6 +1299,9 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
           onSuccess={(stillOpen) => {
             if (stillOpen) setShowCreateModal(false);
             void qc.invalidateQueries({ queryKey: ['merchant-products'] });
+          }}
+          onOutcomeUnknown={(stillOpen) => {
+            if (!stillOpen) setCreateNotice(CREATE_OUTCOME_UNKNOWN_TEXT);
           }}
         />
       )}

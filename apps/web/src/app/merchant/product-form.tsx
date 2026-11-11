@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Info, X } from 'lucide-react';
 import {
   checkPancakeVariation,
@@ -19,9 +19,18 @@ import { useModalA11y } from '@/lib/use-modal-a11y';
 import { BTN_XS_SECONDARY, INPUT_CLASS, Notice, TOUCH_H } from '@/components/admin/ui';
 import { actionErrorText } from '@/lib/error-text';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
+import { NetworkError } from '@/lib/client-api';
 import { settleWithin } from '@/lib/settle-within';
 
 const BUSY_CLASS = 'aria-disabled:opacity-60';
+
+/**
+ * Khoá chung của lệnh tạo sản phẩm. API không khử trùng (mỗi POST tạo một sản phẩm mới, slug và sku có hậu tố ngẫu nhiên) nên chỉ phía khách chặn được đăng trùng,
+ * và khoá theo hộp (ref) mất khi hộp bị gỡ lúc đóng: khách đóng hộp lúc lệnh còn bay rồi mở lại bấm Đăng sẽ gửi lần hai. Cờ bận đọc từ bộ nhớ đệm dùng chung.
+ */
+const CREATE_PRODUCT_KEY = ['merchant-create-product'] as const;
+/** Lỗi không có phản hồi (mất mạng giữa chừng, quá hạn): máy chủ có thể đã tạo sản phẩm, bấm Thử lại là đăng trùng. */
+export const CREATE_OUTCOME_UNKNOWN_TEXT = 'Có thể sản phẩm đã được đăng nhưng chưa nhận được phản hồi. Kiểm tra danh sách sản phẩm rồi hẵng đăng lại, kẻo bị trùng.';
 
 const INPUT = `mt-1 ${INPUT_CLASS} ${TOUCH_H}`;
 const MAX_STOCK = 100_000;
@@ -115,7 +124,18 @@ function useStillMounted() {
  * Đăng sản phẩm riêng. Hai cách giao (D4): gian hàng tự giao (tự đặt giá và tồn kho), hoặc "Tubu giao hộ" khi hàng đã nằm
  * trong kho Tubu, nhận diện bằng mã biến thể Pancake; giá và tồn khi đó theo kho Tubu.
  */
-export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (stillOpen: boolean) => void }) {
+export function CreateProductModal({
+  onClose,
+  onSuccess,
+  onOutcomeUnknown,
+}: {
+  onClose: () => void;
+  onSuccess: (stillOpen: boolean) => void;
+  /** Lệnh tạo không có phản hồi nên chưa rõ sản phẩm đã được tạo chưa; `stillOpen` false = hộp đã đóng nên lời báo phải nằm ở trang. Danh sách đã được tải lại ở đây. */
+  onOutcomeUnknown?: (stillOpen: boolean) => void;
+}) {
+  const qc = useQueryClient();
+  const creatingAnywhere = useIsMutating({ mutationKey: CREATE_PRODUCT_KEY }) > 0;
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [shortDesc, setShortDesc] = useState('');
@@ -145,9 +165,19 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
   const submitting = useRef(false);
   const stillOpen = useStillMounted();
   const mut = useMutation({
+    mutationKey: CREATE_PRODUCT_KEY,
     mutationFn: (dto: CreateMerchantProductInput) => createMerchantProduct(dto),
     onSuccess: () => onSuccess(stillOpen.current),
-    onError: (e: unknown) => setMsg(actionErrorText(e)),
+    onError: (e: unknown) => {
+      if (!(e instanceof NetworkError)) {
+        setMsg(actionErrorText(e));
+        return undefined;
+      }
+      setMsg(CREATE_OUTCOME_UNKNOWN_TEXT);
+      onOutcomeUnknown?.(stillOpen.current);
+      // Khoá giữ tới khi danh sách mới về (có hạn 4 giây): khách thấy sản phẩm đã có hay chưa trước khi đăng lại.
+      return settleWithin(qc.invalidateQueries({ queryKey: ['merchant-products'] }));
+    },
     onSettled: () => {
       submitting.current = false;
     },
@@ -159,7 +189,7 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (submitting.current) return;
+    if (submitting.current || creatingAnywhere) return;
     setMsg(null);
     if (tubuFulfils && linked?.pancakeId !== pancakeCode.trim()) {
       setMsg('Bấm "Kiểm tra mã" để xác nhận mã biến thể Pancake trước khi gửi.');
@@ -316,7 +346,7 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
           </p>
         )}
 
-        <FormFooter onClose={onClose} busy={mut.isPending} submitLabel="Gửi kiểm duyệt" />
+        <FormFooter onClose={onClose} busy={mut.isPending || creatingAnywhere} submitLabel="Gửi kiểm duyệt" />
       </form>
     </ModalShell>
   );
