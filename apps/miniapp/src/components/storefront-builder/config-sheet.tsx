@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { EyeOff } from 'lucide-react';
@@ -8,6 +8,7 @@ import { haptic } from '../../utils/haptic';
 import { settleWithin } from '../../utils/settle-within';
 import { vi } from '../../i18n/vi';
 import { DEFAULT_STOREFRONT_THEME_COLOR, STOREFRONT_THEME_COLORS } from '../../utils/storefront-theme';
+import { useSyncedDraft } from '../../hooks/use-synced-draft';
 import { useLockedMutation } from '../game/use-locked-mutation';
 import { Button } from '../ui/button';
 import { Field } from '../ui/form';
@@ -41,6 +42,23 @@ function ThemeSwatch({ code, label, selected, onPress }: { code: string; label: 
   );
 }
 
+const CONFIG_EMPTY = {
+  title: '',
+  subdomain: '',
+  themeColor: DEFAULT_STOREFRONT_THEME_COLOR,
+  warehouseAddress: '',
+  warehouseCity: '',
+  warehousePhone: '',
+};
+const toConfigForm = (sf: StorefrontEdit): typeof CONFIG_EMPTY => ({
+  title: sf.title ?? '',
+  subdomain: sf.subdomain ?? '',
+  themeColor: sf.themeColor ?? DEFAULT_STOREFRONT_THEME_COLOR,
+  warehouseAddress: sf.warehouseAddress ?? '',
+  warehouseCity: sf.warehouseCity ?? '',
+  warehousePhone: sf.warehousePhone ?? '',
+});
+
 export function MerchantConfigSheet({
   sf,
   onClose,
@@ -64,14 +82,9 @@ export function MerchantConfigSheet({
       mounted.current = false;
     };
   }, []);
-  const [form, setForm] = useState({
-    title: sf.title ?? '',
-    subdomain: sf.subdomain ?? '',
-    themeColor: sf.themeColor ?? DEFAULT_STOREFRONT_THEME_COLOR,
-    warehouseAddress: sf.warehouseAddress ?? '',
-    warehouseCity: sf.warehouseCity ?? '',
-    warehousePhone: sf.warehousePhone ?? '',
-  });
+  // `sf` là gian hàng SỐNG của cha (query `my-storefront`): gian hàng tải lại lúc tấm còn mở (máy chủ từ chối stale, Lưu lệnh khác) thì ô chưa chạm đổi theo, ô khách đã sửa giữ chữ.
+  const draft = useSyncedDraft(CONFIG_EMPTY, toConfigForm(sf), true);
+  const form = draft.values;
 
   // Kho/hotline chỉ có nghĩa với gian hàng tự giao (D4); chuỗi rỗng = xoá (BE đổi '' thành null).
   const selfFulfils = isPartnerStore(sf);
@@ -130,7 +143,7 @@ export function MerchantConfigSheet({
     <div style={SCROLL_BODY}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         <Field label="Tên gian hàng">
-          <Input maxLength={INPUT_LIMITS.storefrontTitle} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          <Input maxLength={INPUT_LIMITS.storefrontTitle} value={form.title} onChange={(e) => draft.set('title', e.target.value)} />
         </Field>
 
         {sf.subdomainEnabled && (
@@ -139,7 +152,7 @@ export function MerchantConfigSheet({
               <Input maxLength={INPUT_LIMITS.storefrontSubdomain}
                 placeholder="vd: brand1"
                 value={form.subdomain}
-                onChange={(e) => setForm({ ...form, subdomain: e.target.value })}
+                onChange={(e) => draft.set('subdomain', e.target.value)}
               />
             </Field>
             <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 2 }}>
@@ -157,7 +170,7 @@ export function MerchantConfigSheet({
                 code={c.code}
                 label={c.label}
                 selected={form.themeColor === c.code}
-                onPress={() => setForm({ ...form, themeColor: c.code })}
+                onPress={() => draft.set('themeColor', c.code)}
               />
             ))}
           </div>
@@ -199,19 +212,19 @@ export function MerchantConfigSheet({
                 aria-label="Địa chỉ kho xuất hàng"
                 placeholder="Địa chỉ kho xuất hàng"
                 value={form.warehouseAddress}
-                onChange={(e) => setForm({ ...form, warehouseAddress: e.target.value })}
+                onChange={(e) => draft.set('warehouseAddress', e.target.value)}
               />
               <Input maxLength={INPUT_LIMITS.storefrontWarehouseCity}
                 aria-label="Tỉnh / Thành phố"
                 placeholder="Tỉnh / Thành phố"
                 value={form.warehouseCity}
-                onChange={(e) => setForm({ ...form, warehouseCity: e.target.value })}
+                onChange={(e) => draft.set('warehouseCity', e.target.value)}
               />
               <Input maxLength={INPUT_LIMITS.storefrontWarehousePhone}
                 aria-label="Hotline kho liên hệ"
                 placeholder="Hotline kho liên hệ"
                 value={form.warehousePhone}
-                onChange={(e) => setForm({ ...form, warehousePhone: e.target.value })}
+                onChange={(e) => draft.set('warehousePhone', e.target.value)}
               />
             </div>
           </div>

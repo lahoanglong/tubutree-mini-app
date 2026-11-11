@@ -13,6 +13,7 @@ import { getErrorMessage, getLoadErrorMessage, isTargetGoneError } from '../serv
 import { haptic } from '../utils/haptic';
 import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
+import { useSyncedDraft } from '../hooks/use-synced-draft';
 import { useLockedMutation } from './game/use-locked-mutation';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
@@ -45,15 +46,23 @@ export function subscriptionPatch(
   return patch;
 }
 
+type EditForm = { quantity: number; weeks: number; addressId: string; payment: SubscriptionPaymentMethod };
+const EDIT_EMPTY: EditForm = { quantity: 1, weeks: 1, addressId: '', payment: 'COD' };
+const toEditForm = (sub: SubscriptionDTO): EditForm => ({
+  quantity: sub.quantity,
+  weeks: sub.intervalWeeks,
+  addressId: sub.addressId ?? '',
+  payment: sub.paymentMethod ?? 'COD',
+});
+
 /** Sửa số lượng / chu kỳ / địa chỉ / cách trả của gói đang chạy hoặc tạm dừng (C-015). Mount khi mở để state lấy từ gói đang chọn. */
 export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; onClose: () => void }) {
   const t = vi.subscriptions;
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
-  const [quantity, setQuantity] = useState(sub.quantity);
-  const [weeks, setWeeks] = useState(sub.intervalWeeks);
-  const [addressId, setAddressId] = useState(sub.addressId);
-  const [payment, setPayment] = useState<SubscriptionPaymentMethod>(sub.paymentMethod ?? 'COD');
+  // `sub` là gói SỐNG của cha (danh sách `subscriptions`): danh sách tải lại lúc sheet còn mở thì lựa chọn chưa chạm đổi theo, lựa chọn khách đã đổi giữ nguyên.
+  const draft = useSyncedDraft(EDIT_EMPTY, toEditForm(sub), true);
+  const { quantity, weeks, addressId, payment } = draft.values;
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses });
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet });
   // Truy vấn lỗi mà chưa có dữ liệu bị react-query đặt về pending lúc tải lại và xoá lỗi; giữ vùng lỗi + nút Thử lại đứng yên
@@ -115,11 +124,11 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
     >
       <SectionLabel>{t.quantityLabel}</SectionLabel>
       <div style={{ padding: '4px 0' }}>
-        <QuantitySelector value={quantity} min={1} max={MAX_QTY} disabled={save.isPending} onChange={setQuantity} />
+        <QuantitySelector value={quantity} min={1} max={MAX_QTY} disabled={save.isPending} onChange={(n) => draft.set('quantity', n)} />
       </div>
 
       <SectionLabel>{t.intervalLabel}</SectionLabel>
-      <IntervalPicker value={weeks} onChange={setWeeks} disabled={save.isPending} />
+      <IntervalPicker value={weeks} onChange={(w) => draft.set('weeks', w)} disabled={save.isPending} />
       {nextRun && (
         <Text variant="caption" tone="tertiary" as="div" numeric>
           {t.intervalNextRun(formatVnDate(vnDateOf(nextRun)))}
@@ -132,7 +141,7 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
       )}
 
       <SectionLabel>{t.paymentLabel}</SectionLabel>
-      <PaymentMethodPicker value={payment} onChange={setPayment} walletBalance={walletQ.data?.walletBalance} disabled={save.isPending} />
+      <PaymentMethodPicker value={payment} onChange={(p) => draft.set('payment', p)} walletBalance={walletQ.data?.walletBalance} disabled={save.isPending} />
 
       <SectionLabel>{t.addressLabel}</SectionLabel>
       {addrFailed || addrWaiting ? (
@@ -154,7 +163,7 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
       ) : addrQ.isLoading ? (
         <LineItemSkeleton />
       ) : (
-        <AddressPicker addresses={addrQ.data ?? []} value={addressId} onChange={setAddressId} disabled={save.isPending} />
+        <AddressPicker addresses={addrQ.data ?? []} value={addressId} onChange={(id) => draft.set('addressId', id)} disabled={save.isPending} />
       )}
     </BottomSheet>
   );

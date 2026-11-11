@@ -3317,4 +3317,233 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       });
     });
   });
+
+  describe('ô chưa chạm của tấm bám dữ liệu máy chủ mới, ô đã sửa giữ chữ (W117A)', () => {
+    const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+    const settle = () =>
+      act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+    const btn = (name: string) => screen.getByRole('button', { name });
+    const click = (name: string) => fireEvent.click(btn(name));
+    const input = (label: string) => screen.getByLabelText(label) as HTMLInputElement;
+    const type = (label: string, value: string) => fireEvent.change(input(label), { target: { value } });
+    // Tải lại thật (không giả `invalidateQueries`): kết quả mock mới của query chảy qua cache vào tấm đang mở, đúng như lúc dữ liệu mới về giữa chừng.
+    const renderLive = () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      render(
+        <QueryClientProvider client={qc}>
+          <AdminPage />
+        </QueryClientProvider>,
+      );
+      return qc;
+    };
+    const refetch = (qc: QueryClient, key: unknown[]) =>
+      act(async () => {
+        await qc.invalidateQueries({ queryKey: key });
+      });
+    const notBusy = (name: string) => waitFor(() => expect(btn(name)).not.toHaveAttribute('aria-busy', 'true'));
+
+    describe('Đơn giá (rateM)', () => {
+      const PAY_ROWS_D2 = PAY_ROWS.map((r) => (r.staff.id === 'u1' ? { ...r, profile: profile({ hourlyRate: 41000 }) } : r));
+      const openRate = async () => {
+        const qc = renderLive();
+        await screen.findByText('Lan');
+        goTab('Lương');
+        await screen.findByText('14h30 · 30.000đ/h · Đang tính');
+        click('Đơn giá · Lan');
+        expect(input('Đơn giá (VND/giờ)')).toHaveValue(30000);
+        return qc;
+      };
+
+      it('bảng lương tải lại có đơn giá mới khi khách chưa gõ: ô đổi theo, Lưu gửi đơn giá MỚI (trước đây gửi đơn giá cũ đè lên)', async () => {
+        const qc = await openRate();
+        mocks.adminGetPayroll.mockResolvedValue(PAY_ROWS_D2);
+        await refetch(qc, ['admin-payroll']);
+        await waitFor(() => expect(input('Đơn giá (VND/giờ)')).toHaveValue(41000));
+        click('Lưu đơn giá');
+        await waitFor(() => expect(mocks.setRate).toHaveBeenCalledTimes(1));
+        expect(mocks.setRate).toHaveBeenCalledWith('u1', 41000);
+      });
+
+      it('khách đã gõ đơn giá: bảng lương tải lại không ghi đè chữ đang gõ, Lưu gửi đúng chữ đó', async () => {
+        const qc = await openRate();
+        type('Đơn giá (VND/giờ)', '45000');
+        mocks.adminGetPayroll.mockResolvedValue(PAY_ROWS_D2);
+        await refetch(qc, ['admin-payroll']);
+        await screen.findByText('14h30 · 41.000đ/h · Đang tính');
+        expect(input('Đơn giá (VND/giờ)')).toHaveValue(45000);
+        click('Lưu đơn giá');
+        await waitFor(() => expect(mocks.setRate).toHaveBeenCalledTimes(1));
+        expect(mocks.setRate).toHaveBeenCalledWith('u1', 45000);
+      });
+
+      it('máy chủ từ chối 400 khi khách chưa gõ: bảng tải lại về đơn giá mới, tấm còn mở, ô là đơn giá mới, bấm Lưu lại gửi đơn giá mới', async () => {
+        mocks.setRate.mockRejectedValueOnce(serverError('Đơn giá đã đổi', 400)).mockResolvedValue({});
+        await openRate();
+        mocks.adminGetPayroll.mockResolvedValue(PAY_ROWS_D2);
+        click('Lưu đơn giá');
+        await waitFor(() => expect(mocks.setRate).toHaveBeenNthCalledWith(1, 'u1', 30000));
+        await waitFor(() => expect(input('Đơn giá (VND/giờ)')).toHaveValue(41000));
+        await settle();
+        await notBusy('Lưu đơn giá');
+        click('Lưu đơn giá');
+        await waitFor(() => expect(mocks.setRate).toHaveBeenCalledTimes(2));
+        expect(mocks.setRate).toHaveBeenNthCalledWith(2, 'u1', 41000);
+      });
+
+      it('máy chủ từ chối 400 khi khách đã gõ: tấm còn mở, chữ đang gõ còn nguyên dù bảng tải lại có đơn giá khác', async () => {
+        mocks.setRate.mockRejectedValueOnce(serverError('Đơn giá đã đổi', 400)).mockResolvedValue({});
+        await openRate();
+        type('Đơn giá (VND/giờ)', '45000');
+        mocks.adminGetPayroll.mockResolvedValue(PAY_ROWS_D2);
+        click('Lưu đơn giá');
+        await waitFor(() => expect(mocks.setRate).toHaveBeenCalledTimes(1));
+        await screen.findByText('14h30 · 41.000đ/h · Đang tính');
+        await settle();
+        await notBusy('Lưu đơn giá');
+        expect(input('Đơn giá (VND/giờ)')).toHaveValue(45000);
+        click('Lưu đơn giá');
+        await waitFor(() => expect(mocks.setRate).toHaveBeenCalledTimes(2));
+        expect(mocks.setRate).toHaveBeenNthCalledWith(2, 'u1', 45000);
+      });
+
+      it('đóng rồi mở lại: nạp lại từ bảng lương hiện tại, bỏ chữ đã gõ của lần trước', async () => {
+        const qc = await openRate();
+        type('Đơn giá (VND/giờ)', '45000');
+        click('Đóng');
+        mocks.adminGetPayroll.mockResolvedValue(PAY_ROWS_D2);
+        await refetch(qc, ['admin-payroll']);
+        await screen.findByText('14h30 · 41.000đ/h · Đang tính');
+        click('Đơn giá · Lan');
+        expect(input('Đơn giá (VND/giờ)')).toHaveValue(41000);
+      });
+    });
+
+    describe('Sửa giờ phiên (editM)', () => {
+      const DETAIL_D2 = { ...DETAIL, sessions: [{ ...DETAIL.sessions[0]!, checkinAt: vn('2026-03-02', '08:15') }, DETAIL.sessions[1]!] };
+      const openSession = async () => {
+        const qc = renderLive();
+        await screen.findByText('Lan');
+        goTab('Lương');
+        await screen.findByText('14h30 · 30.000đ/h · Đang tính');
+        click('Xem giờ · Lan');
+        fireEvent.click(await screen.findByRole('button', { name: 'Sửa giờ phiên 08:00' }));
+        expect(input('Giờ vào')).toHaveValue('08:00');
+        expect(input('Giờ ra')).toHaveValue('12:30');
+        return qc;
+      };
+
+      it('chi tiết tải lại có giờ vào mới, khách mới sửa giờ ra: giờ vào đổi theo, giờ ra giữ chữ; Lưu gửi giờ vào MỚI + giờ ra khách gõ', async () => {
+        const qc = await openSession();
+        type('Giờ ra', '13:00');
+        mocks.adminGetDetail.mockResolvedValue(DETAIL_D2);
+        await refetch(qc, ['admin-payroll-detail']);
+        await waitFor(() => expect(input('Giờ vào')).toHaveValue('08:15'));
+        expect(input('Giờ ra')).toHaveValue('13:00');
+        click('Lưu giờ');
+        await waitFor(() => expect(mocks.adminEditSession).toHaveBeenCalledTimes(1));
+        expect(mocks.adminEditSession).toHaveBeenCalledWith('ss1', { checkinAt: vn('2026-03-02', '08:15'), checkoutAt: vn('2026-03-02', '13:00') });
+      });
+
+      it('máy chủ từ chối 400: chi tiết tải lại, khung còn mở, giờ vào chưa đụng là giờ mới, giờ ra giữ chữ khách; bấm Lưu lại gửi đúng hai giá trị đó', async () => {
+        mocks.adminEditSession.mockRejectedValueOnce(serverError('Phiên đã đổi', 400)).mockResolvedValue({ updated: true });
+        await openSession();
+        type('Giờ ra', '13:00');
+        mocks.adminGetDetail.mockResolvedValue(DETAIL_D2);
+        click('Lưu giờ');
+        await waitFor(() => expect(mocks.adminEditSession).toHaveBeenNthCalledWith(1, 'ss1', { checkinAt: vn('2026-03-02', '08:00'), checkoutAt: vn('2026-03-02', '13:00') }));
+        await waitFor(() => expect(input('Giờ vào')).toHaveValue('08:15'));
+        await settle();
+        await notBusy('Lưu giờ');
+        expect(input('Giờ ra')).toHaveValue('13:00');
+        click('Lưu giờ');
+        await waitFor(() => expect(mocks.adminEditSession).toHaveBeenCalledTimes(2));
+        expect(mocks.adminEditSession).toHaveBeenNthCalledWith(2, 'ss1', { checkinAt: vn('2026-03-02', '08:15'), checkoutAt: vn('2026-03-02', '13:00') });
+      });
+
+      it('phiên đang mở được checkout ở nơi khác khi khách chưa gõ: giờ ra đổi theo giờ checkout thật', async () => {
+        const qc = renderLive();
+        await screen.findByText('Lan');
+        goTab('Lương');
+        await screen.findByText('14h30 · 30.000đ/h · Đang tính');
+        click('Xem giờ · Lan');
+        fireEvent.click(await screen.findByRole('button', { name: 'Sửa giờ phiên 22:00' }));
+        expect(input('Giờ ra')).toHaveValue('22:00');
+        mocks.adminGetDetail.mockResolvedValue({
+          ...DETAIL,
+          sessions: [DETAIL.sessions[0]!, { ...DETAIL.sessions[1]!, checkoutAt: vn('2026-03-04', '02:00') }],
+        });
+        await refetch(qc, ['admin-payroll-detail']);
+        await waitFor(() => expect(input('Giờ ra')).toHaveValue('02:00'));
+        expect(input('Giờ vào')).toHaveValue('22:00');
+      });
+
+      it('đóng tấm Giờ công rồi mở lại: nạp lại từ chi tiết hiện tại, bỏ chữ đã sửa của lần trước', async () => {
+        await openSession();
+        type('Giờ ra', '13:00');
+        click('Đóng');
+        click('Xem giờ · Lan');
+        await waitFor(() => expect(input('Giờ ra')).toHaveValue('12:30'));
+        expect(input('Giờ vào')).toHaveValue('08:00');
+      });
+    });
+
+    describe('Chỉnh giờ & duyệt (approveM)', () => {
+      const SHIFTS_D2 = SHIFTS.map((s) => (s.id === 's1' ? { ...s, startAt: vn('2026-03-10', '07:30') } : s));
+      const openAdjust = async () => {
+        const qc = renderLive();
+        await screen.findByText('Lan');
+        goTab('Duyệt ca');
+        await screen.findByText('09/03 – 15/03');
+        await screen.findAllByText('Chờ duyệt');
+        click('Chỉnh giờ Lan T3 10/03');
+        expect(input('Bắt đầu')).toHaveValue('08:00');
+        expect(input('Kết thúc')).toHaveValue('12:00');
+        return qc;
+      };
+
+      it('danh sách ca tải lại có giờ bắt đầu mới, khách mới sửa giờ kết thúc: giờ bắt đầu đổi theo, giờ kết thúc giữ chữ; Duyệt gửi giờ MỚI + giờ khách gõ', async () => {
+        const qc = await openAdjust();
+        type('Kết thúc', '11:30');
+        mocks.adminGetShifts.mockResolvedValue(SHIFTS_D2);
+        await refetch(qc, ['admin-shifts']);
+        await waitFor(() => expect(input('Bắt đầu')).toHaveValue('07:30'));
+        expect(input('Kết thúc')).toHaveValue('11:30');
+        click('Duyệt với giờ đã chỉnh');
+        await waitFor(() => expect(mocks.approveShift).toHaveBeenCalledTimes(1));
+        expect(mocks.approveShift).toHaveBeenCalledWith('s1', { approvedStart: vn('2026-03-10', '07:30'), approvedEnd: vn('2026-03-10', '11:30') });
+      });
+
+      it('máy chủ từ chối 400: danh sách tải lại, tấm còn mở, giờ bắt đầu chưa đụng là giờ mới, giờ kết thúc giữ chữ khách; bấm Duyệt lại gửi đúng hai giá trị đó', async () => {
+        mocks.approveShift.mockRejectedValueOnce(serverError('Ca đã đổi', 400)).mockResolvedValue({ approved: true });
+        await openAdjust();
+        type('Kết thúc', '11:30');
+        mocks.adminGetShifts.mockResolvedValue(SHIFTS_D2);
+        click('Duyệt với giờ đã chỉnh');
+        await waitFor(() =>
+          expect(mocks.approveShift).toHaveBeenNthCalledWith(1, 's1', { approvedStart: vn('2026-03-10', '08:00'), approvedEnd: vn('2026-03-10', '11:30') }),
+        );
+        await waitFor(() => expect(input('Bắt đầu')).toHaveValue('07:30'));
+        await settle();
+        await notBusy('Duyệt với giờ đã chỉnh');
+        expect(input('Kết thúc')).toHaveValue('11:30');
+        click('Duyệt với giờ đã chỉnh');
+        await waitFor(() => expect(mocks.approveShift).toHaveBeenCalledTimes(2));
+        expect(mocks.approveShift).toHaveBeenNthCalledWith(2, 's1', { approvedStart: vn('2026-03-10', '07:30'), approvedEnd: vn('2026-03-10', '11:30') });
+      });
+
+      it('đóng rồi mở lại: nạp lại từ ca hiện tại, bỏ chữ đã sửa của lần trước', async () => {
+        const qc = await openAdjust();
+        type('Kết thúc', '11:30');
+        click('Đóng');
+        mocks.adminGetShifts.mockResolvedValue(SHIFTS_D2);
+        await refetch(qc, ['admin-shifts']);
+        await screen.findByText('T3 10/03 · 07:30–12:00');
+        click('Chỉnh giờ Lan T3 10/03');
+        expect(input('Bắt đầu')).toHaveValue('07:30');
+        expect(input('Kết thúc')).toHaveValue('12:00');
+      });
+    });
+  });
 });

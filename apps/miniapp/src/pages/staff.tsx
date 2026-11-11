@@ -54,6 +54,7 @@ import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { useUploadBusy } from '../hooks/use-upload-busy';
 import { useSheetSeq } from '../hooks/use-sheet-seq';
+import { useSyncedDraft } from '../hooks/use-synced-draft';
 
 const STATUS: Record<Shift['status'], { label: string; tone: BadgeTone }> = {
   PENDING: { label: 'Chờ duyệt', tone: 'warning' },
@@ -63,6 +64,7 @@ const STATUS: Record<Shift['status'], { label: string; tone: BadgeTone }> = {
 };
 
 const TIME_RE = /^\d{1,2}:\d{2}$/;
+const SHIFT_FORM_EMPTY = { custom: false, tplId: '', customStart: '08:00', customEnd: '12:00' };
 
 export default function StaffPage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -377,29 +379,27 @@ function StaffHub() {
   const editIdRef = useRef(editId);
   editIdRef.current = editId;
   // Số lần mở tấm: đóng rồi mở lại (cùng ca hay ca khác, hoặc thêm ca mới) là lần mở khác, nên mã đích nằm trong khoá để đổi ca khi tấm còn mở cũng tăng số.
-  const formSeq = useSheetSeq(formOpen ? (editId ?? 'new') : null);
+  const formKey = formOpen ? (editId ?? 'new') : null;
+  const formSeq = useSheetSeq(formKey);
   const [formDay, setFormDay] = useState(mondayKey);
-  const [tplId, setTplId] = useState<string | null>(null);
-  const [customStart, setCustomStart] = useState('08:00');
-  const [customEnd, setCustomEnd] = useState('12:00');
-  const [custom, setCustom] = useState(false);
+  // Ô giờ của ca đang sửa bám ca SỐNG trong lịch tuần (không phải bản chụp lúc bấm "Sửa"): lịch tải lại giữa chừng thì ô chưa gõ đổi theo, kẻo Lưu gửi giờ cũ đè giờ mới.
+  // Thêm ca mới không có ca đích nên `source` null: mọi ô về giá trị rỗng lúc mở. Sửa ca luôn vào chế độ "giờ tuỳ chọn", không chọn ca chuẩn.
+  const liveEditShift = editId ? shiftsQ.data?.find((s) => s.id === editId) : undefined;
+  const formDraft = useSyncedDraft(
+    SHIFT_FORM_EMPTY,
+    liveEditShift ? { custom: true, tplId: '', customStart: isoToVnHHMM(liveEditShift.startAt), customEnd: isoToVnHHMM(liveEditShift.endAt) } : null,
+    formKey,
+  );
+  const { custom, tplId, customStart, customEnd } = formDraft.values;
 
   const openAdd = (dayKey: string) => {
     setEditId(null);
     setFormDay(dayKey);
-    setTplId(null);
-    setCustom(false);
-    setCustomStart('08:00');
-    setCustomEnd('12:00');
     setFormOpen(true);
   };
   const openEdit = (s: Shift) => {
     setEditId(s.id);
     setFormDay(s.workDate.slice(0, 10));
-    setCustom(true);
-    setCustomStart(isoToVnHHMM(s.startAt));
-    setCustomEnd(isoToVnHHMM(s.endAt));
-    setTplId(null);
     setFormOpen(true);
   };
 
@@ -748,15 +748,15 @@ function StaffHub() {
                       variant={picked ? 'primary' : 'secondary'}
                       aria-pressed={picked}
                       onPress={() => {
-                        setCustom(false);
-                        setTplId(t.id);
+                        formDraft.set('custom', false);
+                        formDraft.set('tplId', t.id);
                       }}
                     >
                       {t.name} ({minToHHMM(t.startMin)}–{minToHHMM(t.endMin)})
                     </Button>
                   );
                 })}
-                <Button variant={custom ? 'primary' : 'secondary'} aria-pressed={custom} onPress={() => setCustom(true)}>
+                <Button variant={custom ? 'primary' : 'secondary'} aria-pressed={custom} onPress={() => formDraft.set('custom', true)}>
                   Giờ khác
                 </Button>
               </div>
@@ -767,12 +767,12 @@ function StaffHub() {
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1 }}>
                 <Field label="Bắt đầu">
-                  <TimeInput value={customStart} onChange={setCustomStart} />
+                  <TimeInput value={customStart} onChange={(v) => formDraft.set('customStart', v)} />
                 </Field>
               </div>
               <div style={{ flex: 1 }}>
                 <Field label="Kết thúc">
-                  <TimeInput value={customEnd} onChange={setCustomEnd} />
+                  <TimeInput value={customEnd} onChange={(v) => formDraft.set('customEnd', v)} />
                 </Field>
               </div>
             </div>

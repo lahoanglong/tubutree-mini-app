@@ -15,7 +15,7 @@ vi.mock('../../services/api', async (importOriginal) => ({
   getErrorMessage: (e: unknown) => (e as Error).message,
 }));
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { MerchantConfigSheet } from './config-sheet';
 import { HttpError } from '../../services/http';
 import { LOCK_REFRESH_WAIT_MS } from '../../utils/settle-within';
@@ -368,5 +368,161 @@ describe('MerchantConfigSheet: báo lưu xong muộn sau khi khách đóng rồi
     expect(onSaved).toHaveBeenCalledTimes(1);
     expect(successToasts()).toHaveLength(1);
     expect(sheetOpen()).toBe(false);
+  });
+});
+
+// W117A: gian hàng tải lại trong lúc tấm Cài đặt còn mở (máy chủ từ chối rồi tải lại, nơi khác đổi gian hàng): ô khách CHƯA chạm đổi theo gian hàng mới, ô khách ĐÃ sửa giữ chữ. Trước đây Lưu gửi lại giá trị cũ của ô chưa chạm và đè lên gian hàng mới.
+describe('MerchantConfigSheet: bám gian hàng mới về, ô khách đã sửa giữ chữ (W117A)', () => {
+  const D1 = {
+    id: 's1', type: 'MERCHANT', title: 'Gian hàng của An', subdomain: 'an', subdomainEnabled: true, themeColor: '#16a34a',
+    warehouseAddress: '1 Lê Lợi', warehouseCity: 'HCM', warehousePhone: '0900000001', isPublished: false,
+  } as unknown as StorefrontEdit;
+  const D2 = {
+    ...D1, title: 'Gian hàng mới của An', subdomain: 'an-moi', themeColor: '#2563eb',
+    warehouseAddress: '9 Hai Bà Trưng', warehouseCity: 'Hà Nội', warehousePhone: '0900000002',
+  } as unknown as StorefrontEdit;
+  const TYPED_PHONE = '0911111111';
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const titleInput = () => screen.getByLabelText('Tên gian hàng');
+  const subdomainInput = () => screen.getByPlaceholderText('vd: brand1');
+  const addressInput = () => screen.getByLabelText('Địa chỉ kho xuất hàng');
+  const cityInput = () => screen.getByLabelText('Tỉnh / Thành phố');
+  const phoneInput = () => screen.getByLabelText('Hotline kho liên hệ');
+  const sheetOpen = () => screen.queryByRole('button', { name: 'Lưu cấu hình gian hàng' }) !== null;
+
+  /** Cha thật: `sf` đọc từ query sống `my-storefront`; "server" là gian hàng máy chủ trả ở lượt tải kế tiếp. */
+  const server = { current: D1 };
+  function Host({ onClose }: { onClose: () => void }) {
+    const [open, setOpen] = useState(true);
+    const q = useQuery({ queryKey: ['my-storefront'], queryFn: () => Promise.resolve(server.current) });
+    return (
+      <>
+        <button type="button" onClick={() => setOpen(false)}>Khách đóng tấm</button>
+        <button type="button" onClick={() => setOpen(true)}>Khách mở lại tấm</button>
+        {open && q.data && (
+          <MerchantConfigSheet
+            sf={q.data}
+            onClose={() => {
+              onClose();
+              setOpen(false);
+            }}
+            onSaved={() => {}}
+            unpublishLabel={null}
+            onUnpublish={() => {}}
+          />
+        )}
+      </>
+    );
+  }
+  async function renderHost() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={qc}>
+        <Host onClose={onClose} />
+      </QueryClientProvider>,
+    );
+    await screen.findByDisplayValue(D1.title as string);
+    return { qc, onClose };
+  }
+  const reload = (qc: QueryClient) =>
+    act(async () => {
+      await qc.invalidateQueries({ queryKey: ['my-storefront'] });
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.updateStorefront.mockReset();
+    mocks.updateStorefront.mockResolvedValue({});
+    server.current = D1;
+  });
+
+  it('gian hàng mới về lúc tấm đang mở: ô chưa chạm (tên, địa chỉ kho, tỉnh, màu) đổi theo, ô khách đã sửa (hotline) giữ chữ', async () => {
+    const { qc } = await renderHost();
+    fireEvent.change(phoneInput(), { target: { value: TYPED_PHONE } });
+    expect(addressInput()).toHaveValue('1 Lê Lợi');
+    server.current = D2;
+    await reload(qc);
+    await waitFor(() => expect(titleInput()).toHaveValue('Gian hàng mới của An'));
+    expect(addressInput()).toHaveValue('9 Hai Bà Trưng');
+    expect(cityInput()).toHaveValue('Hà Nội');
+    expect(screen.getByRole('button', { name: 'Xanh dương' })).toHaveAttribute('aria-pressed', 'true');
+    expect(phoneInput()).toHaveValue(TYPED_PHONE);
+    expect(sheetOpen()).toBe(true);
+  });
+
+  it('Lưu sau khi gian hàng mới về gửi giá trị MỚI của ô chưa chạm cùng chữ khách; subdomain chưa chạm theo bản mới nên không bị coi là đã đổi và không gửi bản cũ', async () => {
+    const { qc } = await renderHost();
+    fireEvent.change(phoneInput(), { target: { value: TYPED_PHONE } });
+    server.current = D2;
+    await reload(qc);
+    await waitFor(() => expect(subdomainInput()).toHaveValue('an-moi'));
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(1));
+    const sent = mocks.updateStorefront.mock.calls[0]![0];
+    expect(sent).toEqual({
+      title: 'Gian hàng mới của An',
+      themeColor: '#2563eb',
+      warehouseAddress: '9 Hai Bà Trưng',
+      warehouseCity: 'Hà Nội',
+      warehousePhone: TYPED_PHONE,
+    });
+    expect(sent.subdomain).toBeUndefined();
+  });
+
+  it('subdomain khách đã gõ vẫn được gửi khi khác bản máy chủ mới, và giữ chữ khi bản mới về', async () => {
+    const { qc } = await renderHost();
+    fireEvent.change(subdomainInput(), { target: { value: 'Rieng-Cua-An' } });
+    server.current = D2;
+    await reload(qc);
+    await waitFor(() => expect(titleInput()).toHaveValue('Gian hàng mới của An'));
+    expect(subdomainInput()).toHaveValue('Rieng-Cua-An');
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(1));
+    expect(mocks.updateStorefront.mock.calls[0]![0]).toEqual(expect.objectContaining({ subdomain: 'rieng-cua-an', title: 'Gian hàng mới của An' }));
+  });
+
+  it('bị từ chối 400 giữ tấm mở: gian hàng tải lại về bản mới, ô chưa chạm đổi theo, ô khách đã sửa giữ chữ, Lưu lại gửi bản mới', async () => {
+    mocks.updateStorefront.mockRejectedValueOnce(serverError('Subdomain đã có người dùng.', 400)).mockResolvedValue({});
+    const { onClose } = await renderHost();
+    fireEvent.change(phoneInput(), { target: { value: TYPED_PHONE } });
+    server.current = D2;
+    await act(async () => {
+      fireEvent.click(saveBtn());
+    });
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Subdomain đã có người dùng.', type: 'error' }));
+    await waitFor(() => expect(titleInput()).toHaveValue('Gian hàng mới của An'));
+    await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(sheetOpen()).toBe(true);
+    expect(addressInput()).toHaveValue('9 Hai Bà Trưng');
+    expect(phoneInput()).toHaveValue(TYPED_PHONE);
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(2));
+    expect(mocks.updateStorefront.mock.calls[1]![0]).toEqual({
+      title: 'Gian hàng mới của An',
+      themeColor: '#2563eb',
+      warehouseAddress: '9 Hai Bà Trưng',
+      warehouseCity: 'Hà Nội',
+      warehousePhone: TYPED_PHONE,
+    });
+  });
+
+  it('đóng rồi mở lại: nạp lại từ gian hàng hiện tại, bỏ chữ đã sửa của lần trước', async () => {
+    const { qc } = await renderHost();
+    fireEvent.change(phoneInput(), { target: { value: TYPED_PHONE } });
+    fireEvent.change(titleInput(), { target: { value: 'Tên nháp' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Khách đóng tấm' }));
+    expect(sheetOpen()).toBe(false);
+    server.current = D2;
+    await reload(qc);
+    fireEvent.click(screen.getByRole('button', { name: 'Khách mở lại tấm' }));
+    expect(titleInput()).toHaveValue('Gian hàng mới của An');
+    expect(phoneInput()).toHaveValue('0900000002');
   });
 });

@@ -31,6 +31,7 @@ import { getErrorMessage, getLoadErrorMessage, isStaleStateError, isTargetGoneEr
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
 import { useSheetSeq } from '../hooks/use-sheet-seq';
+import { useSyncedDraft } from '../hooks/use-synced-draft';
 import { useUploadBusy } from '../hooks/use-upload-busy';
 import { Badge, type BadgeTone } from '../components/ui/badge';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -137,6 +138,10 @@ const SHIFT_STATUS: Record<AdminShift['status'], { label: string; tone: BadgeTon
 const PAY_STATUS: Record<PayrollStatus, string> = { OPEN: 'Đang tính', FINALIZED: 'Đã chốt', PAID: 'Đã trả' };
 const fmtHM = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
 
+const RATE_EMPTY = { rate: '' };
+const SESSION_EMPTY = { ci: '08:00', co: '17:00' };
+const ADJUST_EMPTY = { start: '08:00', end: '12:00' };
+
 function PayrollSection() {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
@@ -153,7 +158,6 @@ function PayrollSection() {
   const [qrRow, setQrRow] = useState<AdminPayrollRow | null>(null);
   const qrSrc = qrRow ? safeImageUrl(qrRow.qrImageUrl ?? qrRow.profile?.qrImageUrl) : null;
   const [rateRow, setRateRow] = useState<AdminPayrollRow | null>(null);
-  const [rateVal, setRateVal] = useState('');
   const [payRow, setPayRow] = useState<AdminPayrollRow | null>(null);
   const [proof, setProof] = useState('');
   // Cờ nằm ở đây vì tấm "Đã chuyển" gỡ nội dung khi đóng, còn ảnh về muộn vẫn ghi vào `proof` của trang.
@@ -163,6 +167,9 @@ function PayrollSection() {
   const [reopenRow, setReopenRow] = useState<AdminPayrollRow | null>(null);
   // Số lần mở tấm "Đơn giá" và "Đã chuyển": hai tấm này đóng được lúc lệnh còn bay, nên phản hồi muộn của lần mở trước (khách đóng rồi mở lại, đang gõ) không được đóng/xoá lần mở sau.
   const rateSeq = useSheetSeq(rateRow?.staff.id ?? null);
+  // Ô đơn giá bám hàng SỐNG của bảng lương (không phải bản chụp `rateRow` lúc mở): bảng tải lại giữa chừng thì ô chưa gõ đổi theo, kẻo Lưu gửi đơn giá cũ đè đơn giá mới.
+  const liveRateRow = rateRow ? payQ.data?.find((r) => r.staff.id === rateRow.staff.id) : undefined;
+  const rateDraft = useSyncedDraft(RATE_EMPTY, liveRateRow ? { rate: String(liveRateRow.profile?.hourlyRate ?? 0) } : null, rateRow?.staff.id ?? null);
   const paySeq = useSheetSeq(payRow?.staff.id ?? null);
 
   // Chốt, mở lại và đánh dấu đã trả đều đổi trạng thái bảng lương nên chỉ một việc mỗi lúc (cũng là lý do các dòng khác bị khoá khi một dòng đang chạy).
@@ -179,7 +186,7 @@ function PayrollSection() {
   };
 
   const rateM = useLockedMutation({
-    mutationFn: (r: AdminPayrollRow) => setRate(r.staff.id, Number(rateVal)),
+    mutationFn: (r: AdminPayrollRow) => setRate(r.staff.id, Number(rateDraft.values.rate)),
     onMutate: () => rateSeq.mark(),
     onSuccess: (_data, _r, sent) => {
       openSnackbar({ text: 'Đã lưu đơn giá.', type: 'success' });
@@ -289,10 +296,7 @@ function PayrollSection() {
               <Button
                 variant="secondary"
                 aria-label={`Đơn giá · ${name}`}
-                onPress={() => {
-                  setRateRow(row);
-                  setRateVal(String(row.profile?.hourlyRate ?? 0));
-                }}
+                onPress={() => setRateRow(row)}
               >
                 Đơn giá
               </Button>
@@ -380,13 +384,13 @@ function PayrollSection() {
         onClose={() => setRateRow(null)}
         title={`Đơn giá giờ · ${rateRow?.staff.fullName ?? ''}`}
         footer={
-          <Button fullWidth loading={rateM.isPending} disabled={!/^\d+$/.test(rateVal)} onPress={() => rateRow && rateM.mutate(rateRow)}>
+          <Button fullWidth loading={rateM.isPending} disabled={!/^\d+$/.test(rateDraft.values.rate)} onPress={() => rateRow && rateM.mutate(rateRow)}>
             Lưu đơn giá
           </Button>
         }
       >
         <Field label="Đơn giá (VND/giờ)">
-          <Input type="number" value={rateVal} onChange={(e) => setRateVal(e.target.value)} />
+          <Input type="number" value={rateDraft.values.rate} onChange={(e) => rateDraft.set('rate', e.target.value)} />
         </Field>
       </BottomSheet>
 
@@ -450,11 +454,23 @@ function DetailSheet({
   });
 
   const [editId, setEditId] = useState<string | null>(null);
-  const [ci, setCi] = useState('08:00');
-  const [co, setCo] = useState('17:00');
   // Số lần mở khung sửa giờ. Khoá theo `row` chứ không chỉ `editId`: đóng tấm "Giờ công" không xoá `editId`, nên đóng rồi mở lại cùng nhân viên vẫn thấy khung cũ đang mở;
   // `row` về null giữa hai lần mở nên mỗi lần mở lại đều tăng số, và lệnh lưu của lần mở trước không đóng khung của lần mở sau.
-  const editSeq = useSheetSeq(row ? editId : null);
+  const editKey = row ? editId : null;
+  const editSeq = useSheetSeq(editKey);
+  // Giờ vào/ra bám phiên SỐNG trong chi tiết giờ công (không phải bản chụp lúc bấm "Sửa giờ"): chi tiết tải lại giữa chừng thì ô chưa gõ đổi theo, kẻo Lưu gửi giờ cũ đè giờ mới.
+  const liveSession = editKey ? detailQ.data?.sessions.find((s) => s.id === editKey) : undefined;
+  const sessionDraft = useSyncedDraft(
+    SESSION_EMPTY,
+    liveSession
+      ? {
+          ci: isoToVnHHMM(liveSession.checkinAt),
+          co: isoToVnHHMM(liveSession.checkoutAt ?? liveSession.checkinAt),
+        }
+      : null,
+    editKey,
+  );
+  const { ci, co } = sessionDraft.values;
 
   const editM = useLockedMutation({
     mutationFn: (dayKey: string) =>
@@ -515,11 +531,7 @@ function DetailSheet({
                       <Button
                         variant="ghost"
                         aria-label={`Sửa giờ phiên ${isoToVnHHMM(s.checkinAt)}`}
-                        onPress={() => {
-                          setEditId(s.id);
-                          setCi(isoToVnHHMM(s.checkinAt));
-                          setCo(s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : isoToVnHHMM(s.checkinAt));
-                        }}
+                        onPress={() => setEditId(s.id)}
                       >
                         Sửa giờ
                       </Button>
@@ -536,12 +548,12 @@ function DetailSheet({
                       <div style={{ display: 'flex', gap: 8 }}>
                         <div style={{ flex: 1 }}>
                           <Field label="Giờ vào">
-                            <TimeInput value={ci} onChange={setCi} />
+                            <TimeInput value={ci} onChange={(v) => sessionDraft.set('ci', v)} />
                           </Field>
                         </div>
                         <div style={{ flex: 1 }}>
                           <Field label="Giờ ra">
-                            <TimeInput value={co} onChange={setCo} />
+                            <TimeInput value={co} onChange={(v) => sessionDraft.set('co', v)} />
                           </Field>
                         </div>
                       </div>
@@ -1036,19 +1048,23 @@ function ShiftsSection() {
   const shiftBusy = (id: string) => acting.current.has(id) || acting.current.has(BULK_KEY);
 
   const [adjust, setAdjust] = useState<{ id: string; dayKey: string } | null>(null);
-  const [adjStart, setAdjStart] = useState('08:00');
-  const [adjEnd, setAdjEnd] = useState('12:00');
   const [rejectId, setRejectId] = useState<string | null>(null);
   const [rejectReason, setRejectReason] = useState('');
   const [tplOpen, setTplOpen] = useState(false);
   // Số lần mở hai tấm: lệnh mang số của lần mở đã gửi nó (bắt trong `onMutate`, hai mutation ở trên đọc lúc chạy nên khai báo sau state này vẫn đúng).
   const adjustSeq = useSheetSeq(adjust?.id ?? null);
   const rejectSeq = useSheetSeq(rejectId);
+  // Giờ chỉnh bám ca SỐNG trong danh sách tuần (không phải bản chụp `adjust` lúc mở): danh sách tải lại giữa chừng thì ô chưa gõ đổi theo, kẻo "Duyệt với giờ đã chỉnh" gửi giờ cũ đè giờ mới.
+  const liveAdjustShift = adjust ? shiftsQ.data?.find((s) => s.id === adjust.id) : undefined;
+  const adjustDraft = useSyncedDraft(
+    ADJUST_EMPTY,
+    liveAdjustShift ? { start: isoToVnHHMM(liveAdjustShift.startAt), end: isoToVnHHMM(liveAdjustShift.endAt) } : null,
+    adjust?.id ?? null,
+  );
+  const { start: adjStart, end: adjEnd } = adjustDraft.values;
 
   const openAdjust = (s: AdminShift) => {
     setAdjust({ id: s.id, dayKey: s.workDate.slice(0, 10) });
-    setAdjStart(isoToVnHHMM(s.startAt));
-    setAdjEnd(isoToVnHHMM(s.endAt));
   };
 
   return (
@@ -1175,12 +1191,12 @@ function ShiftsSection() {
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}>
             <Field label="Bắt đầu">
-              <Input type="text" value={adjStart} onChange={(e) => setAdjStart(e.target.value)} />
+              <Input type="text" value={adjStart} onChange={(e) => adjustDraft.set('start', e.target.value)} />
             </Field>
           </div>
           <div style={{ flex: 1 }}>
             <Field label="Kết thúc">
-              <Input type="text" value={adjEnd} onChange={(e) => setAdjEnd(e.target.value)} />
+              <Input type="text" value={adjEnd} onChange={(e) => adjustDraft.set('end', e.target.value)} />
             </Field>
           </div>
         </div>
