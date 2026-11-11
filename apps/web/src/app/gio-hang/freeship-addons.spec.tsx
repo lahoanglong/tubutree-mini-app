@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { QueryClient } from '@tanstack/react-query';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { ApiError, NetworkError } from '@/lib/client-api';
 
@@ -14,6 +15,7 @@ const state = vi.hoisted(() => ({
   bestGets: 0,
   bestGate: null as null | Promise<unknown>,
   add: null as null | ((variationId: string, qty: number) => Promise<unknown>),
+  update: null as null | ((id: string, qty: number) => Promise<unknown>),
   addCalls: [] as [string, number][],
   push: vi.fn(),
 }));
@@ -42,6 +44,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
   getMyCoupons: async () => [],
   getCouponPreviews: async () => [],
+  updateCartItem: (id: string, qty: number) => state.update!(id, qty),
   addToCart: (variationId: string, qty: number) => {
     state.addCalls.push([variationId, qty]);
     return state.add!(variationId, qty);
@@ -87,6 +90,7 @@ beforeEach(() => {
   state.addCalls = [];
   state.push.mockClear();
   state.add = async () => state.cart;
+  state.update = async () => state.cart;
 });
 afterEach(() => {
   mounted?.unmount();
@@ -563,3 +567,152 @@ describe('/gio-hang — thêm món bù đơn bị từ chối: tải lại rồi
     }
   });
 });
+
+describe('/gio-hang — món bù freeship bị từ chối rồi rời dải: lời lỗi vẫn đọc được, không hiện lại như bóng ma', () => {
+  const mountWithClient = async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    mounted = render(<CartPage />, client);
+    await flush(8);
+    return { c: mounted.container, client };
+  };
+  const addOf = (c: ParentNode, slug: string) => qa(c, 'freeship-addon').find((e) => e.dataset.slug === slug)!.querySelector<HTMLElement>('[data-testid="freeship-add"]')!;
+  const alerts = () => Array.from(document.querySelectorAll('[role="alert"]')).map((e) => e.textContent ?? '');
+  // Chỉ còn đúng 3 món đủ điều kiện (a, b, c): món c hết hàng thì dải rơi dưới mức tối thiểu và biến mất.
+  const soldOutC = best([card('a', 50000), card('b', 120000), card('c', 230000, { inStock: false }), card('d', 300000)]);
+
+  it('món duy nhất đủ điều kiện bị từ chối vì hết hàng, kệ tải lại làm dải biến mất: lời lỗi vẫn hiện một mình', async () => {
+    state.add = async () => {
+      throw new ApiError('Món c vừa hết hàng.', 409);
+    };
+    const { c } = await mountWithClient();
+    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+    state.best = soldOutC;
+    click(addOf(c, 'c'));
+    await flush(10);
+    expect(slugs(c)).toEqual([]);
+    expect(q(c, 'freeship-addons')).toBeNull();
+    expect(alerts()).toContain('Món c vừa hết hàng.');
+  });
+
+  it('dải hiện lại sau khi biến mất: lời lỗi của lần trước không hiện lại', async () => {
+    state.add = async () => {
+      throw new ApiError('Món c vừa hết hàng.', 409);
+    };
+    const { c, client } = await mountWithClient();
+    state.best = soldOutC;
+    click(addOf(c, 'c'));
+    await flush(10);
+    expect(alerts()).toContain('Món c vừa hết hàng.');
+    state.best = BEST;
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['products', 'home-best-seller'] });
+    });
+    await flush(8);
+    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+    expect(alerts()).not.toContain('Món c vừa hết hàng.');
+  });
+
+  it('dải vẫn còn sau khi bị từ chối: lời lỗi hiện cạnh dải như cũ', async () => {
+    state.add = async () => {
+      throw new ApiError('Máy chủ bận.', 503);
+    };
+    const { c } = await mountWithClient();
+    click(addOf(c, 'c'));
+    await flush(8);
+    expect(slugs(c)).toEqual(['c', 'a', 'b']);
+    expect(alerts().join(' ')).toContain('Máy chủ đang bận');
+  });
+});
+
+describe('/gio-hang — món bù freeship tải lại giỏ khi lệnh đổi số lượng dòng còn bay', () => {
+  const addOf = (c: ParentNode, slug: string) => qa(c, 'freeship-addon').find((e) => e.dataset.slug === slug)!.querySelector<HTMLElement>('[data-testid="freeship-add"]')!;
+  const plus = (c: ParentNode) => c.querySelector<HTMLElement>('[aria-label="Tăng số lượng Serum dưỡng ẩm"]')!;
+  const qtyText = (c: ParentNode) => c.querySelector('[data-testid="cart-line"] [aria-live="polite"]')!.textContent;
+  const heldLineOp = () => {
+    let done!: (cart: unknown) => void;
+    state.update = () => new Promise((resolve) => (done = resolve));
+    return { finish: (cart: unknown) => done(cart) };
+  };
+
+  it('món bù bị từ chối khi lệnh đổi số lượng đang bay: chưa tải giỏ (kẻo giỏ cũ về sau ghi đè số lượng mới), nút giữ bận, lệnh xong thì tải một lần và số lượng mới còn nguyên', async () => {
+    const c = await mount();
+    const op = heldLineOp();
+    click(plus(c));
+    await flush(4);
+    state.add = async () => {
+      throw new ApiError('Món c vừa hết hàng.', 409);
+    };
+    const carts = state.cartGets;
+    click(addOf(c, 'c'));
+    await flush(8);
+    expect(state.cartGets).toBe(carts);
+    expect(addOf(c, 'c').getAttribute('aria-busy')).toBe('true');
+    const after = cartOf([line({ quantity: 2, total: 292000 })]);
+    state.cart = after;
+    await act(async () => op.finish(after));
+    await flush(10);
+    expect(state.cartGets).toBe(carts + 1);
+    expect(addOf(c, 'c').hasAttribute('aria-busy')).toBe(false);
+    expect(qtyText(c)).toBe('2');
+  });
+
+  it('hai món bù chồng nhau thành công khi lệnh đổi số lượng đang bay: giỏ chỉ tải sau khi lệnh dòng xong', async () => {
+    const calls: ((v: unknown) => void)[] = [];
+    state.add = () => new Promise((r) => calls.push(r));
+    const c = await mount();
+    click(addOf(c, 'c'));
+    await flush(2);
+    click(addOf(c, 'a'));
+    await flush(2);
+    const op = heldLineOp();
+    click(plus(c));
+    await flush(4);
+    const carts = state.cartGets;
+    await act(async () => calls[0]!(state.cart));
+    await act(async () => calls[1]!(state.cart));
+    await flush(8);
+    expect(state.cartGets).toBe(carts);
+    const after = cartOf([line({ quantity: 2, total: 292000 })]);
+    state.cart = after;
+    await act(async () => op.finish(after));
+    await flush(10);
+    expect(state.cartGets).toBeGreaterThan(carts);
+    expect(qtyText(c)).toBe('2');
+  });
+
+  it('không có lệnh dòng nào đang bay: món bù bị từ chối tải giỏ ngay', async () => {
+    state.add = async () => {
+      throw new ApiError('Món c vừa hết hàng.', 409);
+    };
+    const c = await mount();
+    const carts = state.cartGets;
+    click(addOf(c, 'c'));
+    await flush(8);
+    expect(state.cartGets).toBe(carts + 1);
+  });
+
+  it('lệnh dòng treo quá 4 giây: món bù bị từ chối vẫn nhả nút', async () => {
+    const c = await mount();
+    heldLineOp();
+    click(plus(c));
+    await flush(4);
+    state.add = async () => {
+      throw new ApiError('Món c vừa hết hàng.', 409);
+    };
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      click(addOf(c, 'c'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_900);
+      });
+      expect(addOf(c, 'c').getAttribute('aria-busy')).toBe('true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(200);
+      });
+      expect(addOf(c, 'c').hasAttribute('aria-busy')).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+

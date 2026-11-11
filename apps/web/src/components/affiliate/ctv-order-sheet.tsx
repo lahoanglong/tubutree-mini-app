@@ -17,7 +17,6 @@ import {
   ctvOrderQuoteQuery,
 } from '@tubutree/app-core/queries/affiliate';
 import { productQuery, suggestQuery } from '@tubutree/app-core/queries/catalog';
-import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { useAuth } from '@/lib/auth-context';
 import { coreHttp } from '@/lib/core-http';
@@ -235,11 +234,11 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
         return refreshQuote();
       }
       setSubmitError(actErrText(e));
-      // Báo giá đang cache còn cho COD mà máy chủ từ chối (đơn vượt trần): tải lại để khoá COD và tự chuyển sang chuyển khoản.
-      // 404/409/422 nói báo giá trên màn đã cũ. 400 không mã thì không: CtvOrderCustomerDto (NO_HTML) trả 400 nhập liệu TRƯỚC mọi kiểm tra trạng thái mà form không chặn ký tự `<`/`>`,
-      // báo giá không liên quan nên chỉ hiện lỗi dưới form. Mạng/5xx đã rẽ nhánh trên, 401/403 không nói gì về trạng thái: nhả ngay.
-      if (code === 'PAYMENT_METHOD_NOT_ALLOWED' || (errorStatus(e) !== 400 && serverRejectedState(e))) return refreshQuote();
-      return undefined;
+      // Máy chủ từ chối (400/404/409/422): báo giá trên màn có thể đã cũ (ngừng bán, hết tồn, đơn vượt trần COD, không còn là CTV), nên tải lại và giữ nút bận tới khi nó về.
+      // Tải với mọi 400, kể cả không mã: DTO (NO_HTML, place-order-for-customer.dto.ts:40,45) và dịch vụ (affiliate.service.ts:794,819,820,983) đều ném BadRequestException,
+      // phản hồi không cho phân biệt lỗi nhập với lỗi trạng thái. Tải lại báo giá không đụng tới ô khách đã nhập. Như apps/miniapp/src/components/affiliate/ctv-order-sheet.tsx:262 (Mini không tính 422).
+      // Mạng/5xx đã rẽ nhánh trên, 401/403 không nói gì về trạng thái: nhả ngay.
+      return serverRejectedState(e) ? refreshQuote() : undefined;
     },
     onSettled: () => {
       busy.current = false;

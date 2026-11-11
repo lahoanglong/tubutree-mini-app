@@ -165,6 +165,16 @@ describe('/thanh-toan — sửa nhanh dòng hàng: khoá tới khi giỏ mới v
     );
     return { release: () => open() };
   };
+  const holdQuote = () => {
+    let open: () => void = () => undefined;
+    m.quote.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          open = () => resolve(QUOTE);
+        }),
+    );
+    return { release: () => open() };
+  };
   const fixBtn = (r: Rendered, label: string, nth = 0) => byText(problems(r)[nth]!, 'button', label) as HTMLButtonElement;
   const isBusy = (b: HTMLElement) => b.getAttribute('aria-busy') === 'true';
   const alertOf = (r: Rendered, nth = 0) => problems(r)[nth]!.querySelector('span')!.textContent;
@@ -187,16 +197,19 @@ describe('/thanh-toan — sửa nhanh dòng hàng: khoá tới khi giỏ mới v
     await flush(8);
   });
 
-  it.each([400, 404, 409, 422])('%i: lời lỗi hiện ngay dòng đó, giỏ được tải lại, nút giữ bận tới khi giỏ về; chạm lần hai không gửi', async (status) => {
+  it.each([400, 404, 409, 422])('%i: lời lỗi hiện ngay dòng đó, giỏ và báo giá được tải lại, nút giữ bận tới khi cả hai về; chạm lần hai không gửi', async (status) => {
     m.items = [line('i1', 'Dầu gội', { quantity: 4, stock: 1 })];
     m.updateCartItem.mockRejectedValue(new ApiError('Kho đã đổi, bạn thử lại nhé.', status));
     const r = await mount();
     const carts = m.cart.mock.calls.length;
-    const gate = holdCart();
+    const quotes = m.quote.mock.calls.length;
+    const cartGate = holdCart();
+    const quoteGate = holdQuote();
     click(fixBtn(r, 'Giảm còn 1'));
     await flush(6);
     expect(alertOf(r)).toBe('Kho đã đổi, bạn thử lại nhé.');
     expect(m.cart.mock.calls.length).toBe(carts + 1);
+    expect(m.quote.mock.calls.length).toBe(quotes + 1);
     expect(isBusy(fixBtn(r, 'Giảm còn 1'))).toBe(true);
     await act(async () => {
       fixBtn(r, 'Giảm còn 1').click();
@@ -204,32 +217,42 @@ describe('/thanh-toan — sửa nhanh dòng hàng: khoá tới khi giỏ mới v
     });
     expect(m.updateCartItem).toHaveBeenCalledTimes(1);
     m.items = [line('i1', 'Dầu gội', { quantity: 4, stock: 2 })];
-    gate.release();
+    cartGate.release();
+    await flush(8);
+    expect(isBusy(fixBtn(r, 'Giảm còn 2'))).toBe(true);
+    quoteGate.release();
     await flush(8);
     expect(isBusy(fixBtn(r, 'Giảm còn 2'))).toBe(false);
   });
 
-  it.each([401, 403, 500, 503])('%i: không tải lại giỏ, nhả nút ngay, giữ lời lỗi', async (status) => {
+  // Lỗi không phải từ chối (quá hạn, 502, 401...) có thể đã ghi ở máy chủ: giỏ vẫn tải lại ở nền (như Mini), nhưng nút nhả ngay và báo giá không tải lại.
+  it.each([401, 403, 500, 502, 503])('%i: giỏ tải lại ở nền, báo giá không, nút nhả ngay dù giỏ còn treo, giữ lời lỗi', async (status) => {
     m.items = [line('i1', 'Dầu gội', { stock: 0 })];
     m.removeCartItem.mockRejectedValue(new ApiError('Máy chủ bận.', status));
     const r = await mount();
     const carts = m.cart.mock.calls.length;
+    const quotes = m.quote.mock.calls.length;
     const before = alertOf(r);
+    holdCart();
     click(fixBtn(r, 'Bỏ khỏi đơn'));
     await flush(6);
-    expect(m.cart.mock.calls.length).toBe(carts);
+    expect(m.cart.mock.calls.length).toBe(carts + 1);
+    expect(m.quote.mock.calls.length).toBe(quotes);
     expect(isBusy(fixBtn(r, 'Bỏ khỏi đơn'))).toBe(false);
     expect(alertOf(r)).not.toBe(before);
   });
 
-  it('mất mạng: không tải lại giỏ, nhả ngay', async () => {
+  it('mất mạng: giỏ tải lại ở nền, báo giá không, nút nhả ngay', async () => {
     m.items = [line('i1', 'Dầu gội', { stock: 0 })];
     m.removeCartItem.mockRejectedValue(new NetworkError(false));
     const r = await mount();
     const carts = m.cart.mock.calls.length;
+    const quotes = m.quote.mock.calls.length;
+    holdCart();
     click(fixBtn(r, 'Bỏ khỏi đơn'));
     await flush(6);
-    expect(m.cart.mock.calls.length).toBe(carts);
+    expect(m.cart.mock.calls.length).toBe(carts + 1);
+    expect(m.quote.mock.calls.length).toBe(quotes);
     expect(isBusy(fixBtn(r, 'Bỏ khỏi đơn'))).toBe(false);
   });
 
@@ -379,3 +402,37 @@ describe('/thanh-toan — sửa nhanh dòng hàng: khoá tới khi giỏ mới v
     });
   });
 });
+
+describe('/thanh-toan — sửa nhanh dòng hàng: rời trang rồi quay lại khi lệnh còn bay', () => {
+  it('gắn lại trang cùng bộ nhớ truy vấn lúc lệnh xoá còn bay: nút vẫn báo bận và bấm lần hai không gửi lệnh thứ hai', async () => {
+    m.items = [line('i1', 'Dầu gội'), line('i2', 'Mật ong', { stock: 0 })];
+    let finish: () => void = () => undefined;
+    m.removeCartItem.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = () => resolve({});
+        }),
+    );
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const first = render(<CheckoutPage />, qc);
+    await flush(8);
+    click(byText(problems(first)[0]!, 'button', 'Bỏ khỏi đơn')!);
+    await flush(4);
+    expect(m.removeCartItem).toHaveBeenCalledTimes(1);
+    first.unmount();
+    const second = render(<CheckoutPage />, qc);
+    mounted.push(second);
+    await flush(8);
+    const btn = byText(problems(second)[0]!, 'button', 'Bỏ khỏi đơn') as HTMLButtonElement;
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    await act(async () => {
+      btn.click();
+      btn.click();
+    });
+    await flush(4);
+    expect(m.removeCartItem).toHaveBeenCalledTimes(1);
+    finish();
+    await flush(8);
+  });
+});
+

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
 import { pickFreeshipAddons } from '@tubutree/app-core/commerce/freeship-progress';
@@ -13,9 +13,11 @@ import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { addToCart } from '@/lib/shop-client';
 import { useCardPricing } from '@/lib/use-card-pricing';
-import { useCartWrite } from '@/lib/use-cart-write';
+import { reloadCartAfter, useCartWrite } from '@/lib/use-cart-write';
 
 const ADD_KEY = ['freeship-add'] as const;
+// Phải trùng LINE_OP_KEY của lệnh đổi số lượng/xoá dòng ở page.tsx; spec của dải này dựng cả trang giỏ nên đổi một bên là đỏ.
+const LINE_OP_KEY = ['cart-line-op'] as const;
 
 interface Candidate extends FreeshipAddonItem {
   inStock: boolean;
@@ -40,7 +42,7 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
   const pricing = useCardPricing();
   // Lỗi nhớ riêng (không đọc `mutation.error`): lỗi của món bay trước sẽ mất nếu lệnh sau cùng thuộc món khác và thành công.
   const [error, setError] = useState<{ value: unknown } | null>(null);
-  const cartWrite = useCartWrite(ADD_KEY);
+  const cartWrite = useCartWrite(ADD_KEY, LINE_OP_KEY);
   // Khoá đồng bộ THEO MÓN như Mini App: `isPending` chỉ đổi sau lần vẽ kế nên hai cú chạm sát nhau vào CÙNG một món sẽ thêm hai lần, còn chạm món khác vẫn đi ngay, không bị nuốt.
   const add = useLockedMutation(
     {
@@ -56,7 +58,8 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
       onError: (e) => {
         setError({ value: e });
         if (!serverRejectedState(e)) return undefined;
-        return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['cart'] }), qc.invalidateQueries({ queryKey: homeBestSellerQuery(coreHttp).queryKey })]));
+        // Giỏ chờ lệnh dòng đang bay xong (xem `reloadCartAfter`); kệ Bán chạy không phụ thuộc giỏ nên tải ngay.
+        return settleWithin(Promise.all([reloadCartAfter(qc, LINE_OP_KEY), qc.invalidateQueries({ queryKey: homeBestSellerQuery(coreHttp).queryKey })]));
       },
       onSettled: cartWrite.settled,
     },
@@ -81,7 +84,14 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
     });
   })();
 
-  if (picked.length === 0) return null;
+  // Món bị từ chối vì hết hàng làm kệ tải lại loại món đó, dải có thể rơi dưới mức tối thiểu và biến mất: lời lỗi vẫn hiện một mình để khách đọc được lý do.
+  // Dải hiện lại sau đó thì lời cũ bỏ đi, không cho nó sống lại cạnh một dải khác.
+  const railGone = picked.length === 0;
+  useEffect(() => {
+    if (!railGone) setError(null);
+  }, [railGone]);
+
+  if (railGone && !error) return null;
   return (
     <>
       <FreeshipAddonRail items={picked} busySlug={busySlugs} onAdd={(item) => add.mutate(item)} />

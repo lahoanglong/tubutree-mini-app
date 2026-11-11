@@ -105,9 +105,12 @@ export function SubscribeSheet({
   const addresses = addrQ.data ?? [];
   const defaultAddr = addresses.find((a) => a.isDefault) ?? addresses[0];
 
+  // Địa chỉ đang chọn không còn trong danh sách vừa tải lại (xoá ở tab khác, bị từ chối 400/404): về địa chỉ mặc định (hoặc bỏ chọn khi hết địa chỉ)
+  // để nút Tạo không gửi lại id đã mất. Như apps/miniapp/src/components/subscribe-sheet.tsx:66-70.
   useEffect(() => {
-    if (!addressId && defaultAddr) setAddressId(defaultAddr.id);
-  }, [addressId, defaultAddr]);
+    const gone = addrQ.isSuccess && addressId !== undefined && !(addrQ.data ?? []).some((a) => a.id === addressId);
+    if (!addressId || gone) setAddressId(defaultAddr?.id);
+  }, [addressId, defaultAddr, addrQ.isSuccess, addrQ.data]);
 
   const range = startDateRange();
   const dateOk = startMode === 'now' || isStartDateAllowed(startDate);

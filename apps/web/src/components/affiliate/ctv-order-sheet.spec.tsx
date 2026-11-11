@@ -838,17 +838,30 @@ describe('CtvOrderSheet — đơn bị từ chối: tải lại báo giá rồi 
     await until(() => !busy());
   });
 
-  // DTO đi trước dịch vụ: tên người nhận/địa chỉ có "<" hoặc ">" bị CtvOrderCustomerDto (NO_HTML, place-order-for-customer.dto.ts:38,42) trả 400 TRƯỚC mọi kiểm tra trạng thái,
-  // mà form không chặn ký tự đó. Báo giá không liên quan nên 400 chỉ hiện lỗi dưới form, không tải lại, nhả ngay.
-  it('400 không mã (DTO nhập liệu): hiện lỗi dưới form, KHÔNG tải lại báo giá, nhả ngay', async () => {
-    rejectOnce(new ApiError('Tên người nhận và địa chỉ không được chứa ký tự < hoặc >.', 400));
+  // Không phân biệt được 400 nhập liệu và 400 trạng thái bằng mã: BadRequestException của DTO (NO_HTML, place-order-for-customer.dto.ts:40,45) và của dịch vụ (hết tồn, ngừng bán,
+  // affiliate.service.ts:819,983) đều là 400, parseError không giữ phân biệt mảng/chuỗi. Tải lại báo giá không xoá chữ khách đã nhập nên tải lại với mọi 400.
+  it.each([
+    ['không mã, lỗi nhập liệu của DTO (NO_HTML)', 'Tên người nhận và địa chỉ không được chứa ký tự < hoặc >.', null],
+    ['không mã, hết tồn', 'Sản phẩm "Nước rửa chén" không đủ tồn kho.', null],
+    ['PRODUCT_DISCONTINUED', 'Sản phẩm "Nước rửa chén" đã ngừng bán.', 'PRODUCT_DISCONTINUED'],
+    ['PARTNER_GOODS_NOT_ELIGIBLE', 'Hàng của đối tác tự giao nên CTV không lên đơn hộ được.', 'PARTNER_GOODS_NOT_ELIGIBLE'],
+  ])('400 %s: báo giá được tải lại, nút giữ bận tới khi về, chữ khách đã nhập còn nguyên', async (_name, message, code) => {
+    rejectOnce(new ApiError(message, 400, code));
     await readyWithAn();
     const quotes = state.quoteCalls.length;
+    const gate = holdQuote();
     click(submit());
-    await until(() => text().includes('không được chứa ký tự'));
-    await wait(50);
-    expect(state.quoteCalls).toHaveLength(quotes);
-    expect(busy()).toBe(false);
+    await until(() => text().includes(message));
+    expect(state.quoteCalls.length).toBe(quotes + 1);
+    expect(busy()).toBe(true);
+    await act(async () => click(submit()));
+    expect(orderPosts()).toHaveLength(1);
+    gate.release();
+    await until(() => !busy());
+    expect(text()).toContain(message);
+    expect(text()).toContain('Nước rửa chén');
+    expect(input('Tên người nhận').value).toBe('Nguyễn An');
+    expect(input('Địa chỉ (số nhà, đường)').value).toBe('12 Lê Lợi');
   });
 
   it.each([401, 403])('%i: không tải lại báo giá, nhả ngay', async (status) => {

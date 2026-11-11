@@ -412,7 +412,7 @@ export default function CheckoutPage() {
 
   // Sửa nhanh dòng hết hàng/vượt tồn ngay tại màn: khách không rời trang nên các ô đã nhập còn nguyên. Đổi dòng là đổi lựa chọn của khách,
   // nên một lần đặt đang đóng băng (chưa rõ kết quả) không được phát lại nữa.
-  // Khoá đồng bộ THEO DÒNG như Mini App (apps/miniapp/src/pages/checkout.tsx:484-496): chạm đúp vào cùng một dòng chỉ gửi một lệnh, dòng khác vẫn đi song song.
+  // Khoá đồng bộ THEO DÒNG như Mini App (apps/miniapp/src/pages/checkout.tsx:500-516): chạm đúp vào cùng một dòng chỉ gửi một lệnh, dòng khác vẫn đi song song.
   // Lỗi nhớ riêng theo dòng (không đọc `lineFix.error`): `isError` chỉ bật sau khi lời hứa tải lại của `onError` xong, mà lời lỗi phải hiện ngay.
   const [lineFixError, setLineFixError] = useState<{ id: string; error: unknown } | null>(null);
   const lineFix = useLockedMutation(
@@ -427,11 +427,13 @@ export default function CheckoutPage() {
         if (!placingRef.current) place.reset();
         return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['cart'] }), qc.invalidateQueries({ queryKey: ['quote'] })]));
       },
-      // Máy chủ từ chối vì giỏ đã cũ (tồn vừa đổi, dòng đã mất): tải lại giỏ để nút "Giảm còn n" theo tồn mới, giữ khoá tới lúc đó. Mất mạng/401/403/5xx thì giỏ không cũ đi, nhả ngay.
+      // Giỏ luôn tải lại ở nền: lệnh quá hạn/502 có thể đã ghi ở máy chủ (dòng đã mất) mà màn còn hiện dòng cũ. Máy chủ từ chối (400/404/409/422) thì giữ khoá tới khi giỏ VÀ báo giá về
+      // (tối đa 4 giây): nút "Giảm còn n" theo tồn mới và tổng tiền không còn tính dòng đã mất. Lỗi khác nhả ngay. Như apps/miniapp/src/pages/checkout.tsx:510-516 (Mini không tính 422).
       onError: (e, { id }) => {
         setLineFixError({ id, error: e });
+        const cartReload = qc.invalidateQueries({ queryKey: ['cart'] });
         if (!serverRejectedState(e)) return undefined;
-        return settleWithin(qc.invalidateQueries({ queryKey: ['cart'] }));
+        return settleWithin(Promise.all([cartReload, qc.invalidateQueries({ queryKey: ['quote'] })]));
       },
     },
     (v) => v.id,
@@ -1273,7 +1275,11 @@ function LineProblemNote({ id, fix }: { id: string; fix: LineFixView }) {
         className={ui.btnSecondary}
         aria-busy={busy || undefined}
         aria-disabled={busy || undefined}
-        onClick={() => fix.onFix(id, problem.fix)}
+        onClick={() => {
+          // Khoá ref của `useLockedMutation` mất khi trang gắn lại (rời giỏ rồi quay về lúc lệnh còn bay): báo bận lấy từ bộ nhớ chung nên chặn ở đây.
+          if (busy) return;
+          fix.onFix(id, problem.fix);
+        }}
       >
         {problem.fixLabel}
       </button>
