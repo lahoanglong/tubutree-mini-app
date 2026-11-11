@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { STOREFRONT_TEMPLATE_BUSY, STOREFRONT_TEMPLATE_HINT } from '@tubutree/app-core/client-copy';
 import { useIsMutating, useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EyeOff, Plus } from 'lucide-react';
@@ -85,6 +85,43 @@ function useFormFields<T extends Record<string, string>>(source: T) {
   const [typed, setTyped] = useState<Partial<T>>({});
   const edit = (patch: Partial<T>) => setTyped((prev) => ({ ...prev, ...patch }));
   return [{ ...source, ...typed } as T, edit] as const;
+}
+
+const STALE_STOREFRONT_NOTICE = 'Chưa tải được dữ liệu gian hàng mới nhất, bấm Lưu lại sau khi tải xong.';
+
+type StorefrontFreshness = 'fresh' | 'reading' | 'failed';
+
+/**
+ * Hàng rào độ mới cho lệnh Lưu dựng từ các ô của gian hàng. Khoá chạm đúp nhả sau tối đa 4 giây dù gian hàng mới chưa về, lúc đó các ô chưa chạm còn giá trị cũ
+ * và Lưu sẽ gửi bản cũ đè lên bản mới trên máy chủ (cũng đúng khi bản mới về muộn hơn). TanStack Query giữ `isInvalidated` từ lúc làm mới tới lần đọc THÀNH CÔNG kế tiếp,
+ * lần đọc lỗi không xoá cờ: cờ còn nghĩa là `sf` đang cầm là bản cũ. Đây không phải khoá nên không có trần chờ nào kẹt được: lần đọc lỗi thì chạm Lưu đọc lại.
+ *
+ * `canSave` đọc bộ nhớ đệm ngay lúc chạm, không đọc bản đã vẽ: cú chạm cùng khung hình với lệnh làm mới (React chưa kịp vẽ lại) vẫn bị chặn.
+ */
+function useStorefrontFresh() {
+  const qc = useQueryClient();
+  const queryKey = myStorefrontQuery(coreHttp).queryKey;
+  const read = useCallback((): StorefrontFreshness => {
+    const s = qc.getQueryState(queryKey);
+    if (!s?.isInvalidated) return 'fresh';
+    return s.fetchStatus === 'idle' ? 'failed' : 'reading';
+  }, [qc, queryKey]);
+  const subscribe = useCallback((notify: () => void) => qc.getQueryCache().subscribe(notify), [qc]);
+  const state = useSyncExternalStore(subscribe, read, () => 'fresh' as const);
+  const [asked, setAsked] = useState(false);
+  useEffect(() => {
+    if (state === 'fresh') setAsked(false);
+  }, [state]);
+  const canSave = () => {
+    const now = read();
+    if (now === 'fresh') return true;
+    if (now === 'failed') {
+      setAsked(true);
+      void qc.refetchQueries({ queryKey, exact: true });
+    }
+    return false;
+  };
+  return { state, canSave, notice: asked && state === 'failed' ? STALE_STOREFRONT_NOTICE : null };
 }
 
 function InlineError({ text }: { text: string | null }) {
@@ -302,6 +339,7 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
   // Đọc từ bộ nhớ đệm dùng chung: đóng tấm lúc lệnh còn chờ dữ liệu mới rồi mở lại thì form mới vẫn biết lệnh cũ chưa xong.
   const saving = useIsMutating({ mutationKey: PROFILE_SAVE_KEY }) > 0;
   const reloadOnReject = useReloadOnReject();
+  const fresh = useStorefrontFresh();
   const saveMut = useLockedMutation({
     mutationKey: PROFILE_SAVE_KEY,
     // Gửi chuỗi RỖNG (không phải undefined) khi CTV chủ động xoá: undefined bị PATCH bỏ qua, nên xoá ảnh bìa rồi Lưu
@@ -336,18 +374,19 @@ function ProfileForm({ sf, onClose, onSaved }: { sf: StorefrontEdit; onClose: ()
       </Field>
       <div className="mt-1 text-xs text-stone-600">{headerNote.length}/200</div>
       {!complete && <p className="mt-2 text-xs text-stone-700">Đủ cả ba mục sẽ hoàn thành nhiệm vụ “hồ sơ gian hàng”.</p>}
-      <InlineError text={error} />
+      <InlineError text={fresh.notice ?? error} />
       <button
         type="button"
         className={`${ui.btnPrimary} mt-4 w-full`}
-        aria-busy={saving || imagesBusy || undefined}
-        aria-disabled={saving || imagesBusy || undefined}
+        aria-busy={saving || imagesBusy || fresh.state === 'reading' || undefined}
+        aria-disabled={saving || imagesBusy || fresh.state !== 'fresh' || undefined}
         onClick={() => {
           if (imagesBusy || saving) return;
+          if (!fresh.canSave()) return;
           saveMut.mutate();
         }}
       >
-        {saving ? 'Đang lưu…' : imagesBusy ? IMAGES_UPLOADING : 'Lưu hồ sơ'}
+        {saving ? 'Đang lưu…' : imagesBusy ? IMAGES_UPLOADING : fresh.state === 'reading' ? 'Đang cập nhật…' : 'Lưu hồ sơ'}
       </button>
       <button type="button" className={`${ui.btnSecondary} mt-2 w-full`} aria-disabled={saving || undefined} onClick={() => !saving && onClose()}>
         Đóng
@@ -412,6 +451,7 @@ function ConfigForm({
   const saving = useIsMutating({ mutationKey: CONFIG_SAVE_KEY }) > 0;
   const clearingBank = useIsMutating({ mutationKey: CONFIG_CLEAR_BANK_KEY }) > 0;
   const reloadOnReject = useReloadOnReject();
+  const fresh = useStorefrontFresh();
   const saveMut = useLockedMutation({
     mutationKey: CONFIG_SAVE_KEY,
     mutationFn: (dto: ConfigDto) => updateStorefront(coreHttp, dto),
@@ -443,6 +483,7 @@ function ConfigForm({
   const configBusy = saving || clearingBank;
   const save = () => {
     if (saving) return;
+    if (!fresh.canSave()) return;
     saveMut.mutate({
       title: form.title.trim() || undefined,
       subdomain: sf.subdomainEnabled && subdomainChanged ? typedSubdomain : undefined,
@@ -533,9 +574,15 @@ function ConfigForm({
         </div>
       )}
 
-      <InlineError text={error} />
-      <button type="button" className={`${ui.btnPrimary} mt-2 w-full`} aria-busy={saving || undefined} aria-disabled={saving || undefined} onClick={save}>
-        {saving ? 'Đang lưu…' : 'Lưu cấu hình gian hàng'}
+      <InlineError text={fresh.notice ?? error} />
+      <button
+        type="button"
+        className={`${ui.btnPrimary} mt-2 w-full`}
+        aria-busy={saving || fresh.state === 'reading' || undefined}
+        aria-disabled={saving || fresh.state !== 'fresh' || undefined}
+        onClick={save}
+      >
+        {saving ? 'Đang lưu…' : fresh.state === 'reading' ? 'Đang cập nhật…' : 'Lưu cấu hình gian hàng'}
       </button>
       {unpublishLabel && (
         <div className="border-t border-stone-200 pt-3">
@@ -577,6 +624,7 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
   const renameKey = [...RENAME_KEY, collection.id] as const;
   const saving = useIsMutating({ mutationKey: renameKey }) > 0;
   const reloadOnReject = useReloadOnReject();
+  const fresh = useStorefrontFresh();
   const saveMut = useLockedMutation({
     mutationKey: renameKey,
     mutationFn: () => updateCollection(coreHttp, collection.id, { title: title.trim() }),
@@ -597,19 +645,20 @@ function CollectionForm({ collection, onClose, onSaved }: { collection: Storefro
       <Field label={BUILDER_COPY.sectionName}>
         <input className={ui.field} maxLength={COLLECTION_TITLE_MAX} value={title} onChange={(e) => edit({ title: e.target.value })} />
       </Field>
-      <InlineError text={error} />
+      <InlineError text={fresh.notice ?? error} />
       <button
         type="button"
         className={`${ui.btnPrimary} w-full`}
         disabled={!title.trim()}
-        aria-busy={saving || undefined}
-        aria-disabled={saving || undefined}
+        aria-busy={saving || fresh.state === 'reading' || undefined}
+        aria-disabled={saving || fresh.state !== 'fresh' || undefined}
         onClick={() => {
           if (saving) return;
+          if (!fresh.canSave()) return;
           saveMut.mutate();
         }}
       >
-        {saving ? 'Đang lưu…' : 'Lưu'}
+        {saving ? 'Đang lưu…' : fresh.state === 'reading' ? 'Đang cập nhật…' : 'Lưu'}
       </button>
     </div>
   );
