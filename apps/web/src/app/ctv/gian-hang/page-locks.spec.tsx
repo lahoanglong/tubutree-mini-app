@@ -922,6 +922,84 @@ describe('khoá chống chạm đúp — hồ sơ, cấu hình gian hàng', () =
   });
 });
 
+describe('lưu ở tấm gian hàng: lời báo đã lưu trả Promise tải lại nên khoá giữ tới khi gian hàng mới về (W100B)', () => {
+  it('Lưu hồ sơ: tấm đóng ngay, mở lại lúc gian hàng mới chưa về thì nút Lưu còn bận và không gửi lần hai', async () => {
+    mount();
+    await flush();
+    click(btn('Sửa hồ sơ'));
+    await flush();
+    const releaseFresh = hold(ME);
+    await tap(btn('Lưu hồ sơ', dialog()!), 1);
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    expect(dialog()).toBeNull();
+    click(btn('Sửa hồ sơ'));
+    await flush();
+    expectBusy(btn('Đang lưu…', dialog()!));
+    click(btn('Đang lưu…', dialog()!));
+    await flush();
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    await releaseFresh();
+    expectIdle(btn('Lưu hồ sơ', dialog()!));
+  });
+
+  it('Lưu cấu hình: tấm đóng ngay, mở lại lúc gian hàng mới chưa về thì nút Lưu còn bận và không gửi lần hai', async () => {
+    mount();
+    await flush();
+    await openConfig();
+    const releaseFresh = hold(ME);
+    await tap(btn('Lưu cấu hình gian hàng', dialog()!), 1);
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    expect(dialog()).toBeNull();
+    await openConfig();
+    expectBusy(btn('Đang lưu…', dialog()!));
+    click(btn('Đang lưu…', dialog()!));
+    await flush();
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    await releaseFresh();
+    expectIdle(btn('Lưu cấu hình gian hàng', dialog()!));
+  });
+
+  it('Gỡ tài khoản ngân hàng: nút còn bận tới khi gian hàng mới về (lúc đó nút mới biến mất nếu máy chủ đã xoá)', async () => {
+    state.sf = storefront({ bankAccountNo: '1234567890', bankName: 'VCB' });
+    mount();
+    await flush();
+    await openConfig();
+    const releaseFresh = hold(ME);
+    await tap(btn('Gỡ tài khoản đã lưu', dialog()!), 1);
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    expectBusy(btn('Gỡ tài khoản đã lưu', dialog()!));
+    click(btn('Gỡ tài khoản đã lưu', dialog()!));
+    await flush();
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    state.sf = storefront();
+    await releaseFresh();
+    expect(Array.from(dialog()!.querySelectorAll('button')).some((b) => b.textContent === 'Gỡ tài khoản đã lưu')).toBe(false);
+  });
+
+  it('Đổi tên khối: tấm đóng ngay, mở lại lúc gian hàng mới chưa về thì nút Lưu còn bận và không gửi lần hai', async () => {
+    mount();
+    await flush();
+    await openFirstSection();
+    await openCollectionMenu();
+    click(btn('Đổi tên khối'));
+    await flush();
+    typeInto(dialog()!.querySelector('input'), 'Tên mới');
+    const releaseFresh = hold(ME);
+    await tap(btn('Lưu', dialog()!), 1);
+    expect(calls('patch', '/storefront/me/collections/c1')).toHaveLength(1);
+    expect(dialog()).toBeNull();
+    await openCollectionMenu();
+    click(btn('Đổi tên khối'));
+    await flush();
+    expectBusy(btn('Đang lưu…', dialog()!));
+    click(btn('Đang lưu…', dialog()!));
+    await flush();
+    expect(calls('patch', '/storefront/me/collections/c1')).toHaveLength(1);
+    await releaseFresh();
+    expectIdle(btn('Lưu', dialog()!));
+  });
+});
+
 describe('khoá chống chạm đúp — nhiệm vụ Hành trình gian hàng', () => {
   const claimable = () =>
     Array.from(dialog()!.querySelectorAll<HTMLElement>('button')).filter((b) => /^(Nhận|Đang nhận)/.test(b.textContent ?? ''));
