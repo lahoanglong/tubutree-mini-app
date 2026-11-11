@@ -87,7 +87,8 @@ function GameBody() {
   // Reveal "Bạn có biết…" sau khi trả lời, trước khi sang câu kế.
   const [reveal, setReveal] = useState<QuizReveal | null>(null);
 
-  const [harvest, setHarvest] = useState<{ open: boolean; reward: HarvestReward | undefined; meta: HarvestMeta | null; shared: boolean }>({ open: false, reward: undefined, meta: null, shared: false });
+  // `id` tăng mỗi lần thu hoạch: chia sẻ của lần trước xong muộn không được lật cờ `shared` của lần mới.
+  const [harvest, setHarvest] = useState<{ open: boolean; reward: HarvestReward | undefined; meta: HarvestMeta | null; shared: boolean; id: number }>({ open: false, reward: undefined, meta: null, shared: false, id: 0 });
   const [tutorialDismissed, setTutorialDismissed] = useState(() => isGameTutorialDismissed());
   const { data: loyalty } = useQuery(loyaltyQuery(coreHttp));
   // Nút điểm danh của Vườn theo trạng thái GỘP (Điểm Xanh + giọt nước): còn bấm được tới khi cả hai phần xong, để lần lỗi một phần bấm lại được.
@@ -99,7 +100,7 @@ function GameBody() {
 
   const { checkInM, dewM, freezeM, repairM, giftM, handleSpin, waterM, buyTreeM, unlockM, waterPlotM, claimPassM, claimMissionM, answerM, shareHarvestM } = useGameActions({
     notify,
-    onHarvest: (reward, meta) => setHarvest({ open: true, reward, meta, shared: false }),
+    onHarvest: (reward, meta) => setHarvest((h) => ({ open: true, reward, meta, shared: false, id: h.id + 1 })),
     onAnswered: (r: AnswerResult, vars) => setReveal({ ...r, quizId: vars.id, choice: vars.choice }),
   });
   const wheelPrize = useWheelPrize();
@@ -116,8 +117,11 @@ function GameBody() {
     if (target === 'checkin') goTab('today', GAME_CHECKIN_ANCHOR);
     else router.push(MISSION_PATHS.web[target]);
   };
-  const shareToCommunity = () =>
-    shareHarvestM.mutate(undefined, { onSuccess: () => setHarvest((h) => ({ ...h, shared: true })) });
+  const shareToCommunity = () => {
+    const sentFor = harvest.id;
+    // Một khoá chung cho mọi lần thu hoạch là đúng: máy chủ dựng bài từ số cây hiện tại của khách (mỗi mức một bài), không nhận mã lần thu hoạch.
+    shareHarvestM.mutate(undefined, { onSuccess: () => setHarvest((h) => (h.id === sentFor ? { ...h, shared: true } : h)) });
+  };
   const nextQuiz = () => {
     if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));
     setReveal(null);

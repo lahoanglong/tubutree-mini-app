@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { STOREFRONT_TEMPLATE_BUSY } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
-import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Check, Circle, Info, Plus, Trash2 } from 'lucide-react';
 import {
   SIGNUP_COPY,
@@ -34,6 +34,7 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { phoneSecondary } from '@/lib/phone-ui';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
 import { IMAGES_UPLOADING } from '@/lib/image-compress';
@@ -44,9 +45,17 @@ import { Sheet } from '@/components/ui/sheet';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StorefrontImageUpload } from './storefront-image-upload';
 import { StorefrontPreview } from './storefront-preview';
-import { PickerSheet, actErrText, errText } from './storefront-sheets';
+import { PickerSheet, actErrText, errText, useFormFields } from './storefront-sheets';
 
 const REMOVE_ITEM_KEY = ['storefront-signup-remove-item'] as const;
+
+/**
+ * Máy chủ từ chối hẳn lệnh (400/404/409/422): gian hàng đang hiện đã cũ (đã tạo ở máy khác, món đã bị xoá), bấm lại nhận đúng lỗi đó mãi, nên tải lại RỒI mới nhả khoá.
+ * Mất mạng, quá hạn, 401, 403, 5xx không nói gì về gian hàng thật: trả undefined để nhả ngay, không tải lại.
+ */
+function reloadWhenRejected(qc: QueryClient, error: unknown): Promise<void> | undefined {
+  return serverRejectedState(error) ? settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] })) : undefined;
+}
 
 interface Props {
   /** null = chưa có gian hàng (API trả 404). */
@@ -133,10 +142,13 @@ function BottomBar({ children }: { children: React.ReactNode }) {
  */
 function StepBar({
   onBack,
+  backBusy,
   next,
   hint,
 }: {
   onBack?: () => void;
+  /** "Quay lại" báo bận bằng aria (không `disabled`: nút đang giữ focus) khi bước còn lệnh đang chạy; việc chặn nằm ở `onBack` của bước. */
+  backBusy?: boolean;
   next: { label: string; onPress: () => void; loading?: boolean; disabled?: boolean };
   hint?: string;
 }) {
@@ -145,7 +157,13 @@ function StepBar({
       {hint && <p className="mb-2 text-xs text-stone-700">{hint}</p>}
       <div className="mx-auto flex max-w-5xl gap-2">
         {onBack && (
-          <button type="button" className={`${ui.btnSecondary} ${phoneSecondary}`} onClick={onBack}>
+          <button
+            type="button"
+            className={`${ui.btnSecondary} ${phoneSecondary}`}
+            aria-busy={backBusy || undefined}
+            aria-disabled={backBusy || undefined}
+            onClick={onBack}
+          >
             {SIGNUP_COPY.back}
           </button>
         )}
@@ -238,10 +256,14 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
 
 function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => void; onDone: () => void }) {
   const qc = useQueryClient();
-  const [title, setTitle] = useState(sf.title);
-  const [note, setNote] = useState(sf.headerNote ?? '');
-  const [avatarUrl, setAvatarUrl] = useState(sf.avatarUrl ?? '');
-  const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
+  // Ô chưa gõ đi theo gian hàng khi bản mới về: vào lại bước này lúc lần tải lại sau lệnh lưu trước còn chưa xong (hết hạn chờ 4 giây) thì form dựng từ bản cũ,
+  // và Tiếp tục gửi giá trị cũ đè lên giá trị vừa lưu. Ô đã gõ là của khách.
+  const [{ title, note, avatarUrl, coverUrl }, edit] = useFormFields({
+    title: sf.title,
+    note: sf.headerNote ?? '',
+    avatarUrl: sf.avatarUrl ?? '',
+    coverUrl: sf.coverUrl ?? '',
+  });
   const [error, setError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   // Sang bước sau lúc ảnh còn đang lên sẽ gửi ảnh cũ (hoặc rỗng), ảnh mới về sau mất cùng bước này.
@@ -253,15 +275,32 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
       await settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] }));
       onDone();
     },
-    onError: (e) => setSaveError(actErrText(e)),
+    onError: (e) => {
+      setSaveError(actErrText(e));
+      return reloadWhenRejected(qc, e);
+    },
+    onSettled: () => {
+      saving.current = false;
+    },
   });
+  // "Quay lại" bị chặn cho tới khi lệnh lưu (kể cả lần tải lại giữ khoá) xong: lệnh xong muộn sau khi khách đã lùi sẽ hoặc kéo khách đi tiếp ngoài ý muốn,
+  // hoặc (nếu bị chặn thì bước thông tin dựng lại) để form dựng từ bản cũ gửi đè giá trị vừa lưu. Ref vì `isPending` chỉ đúng sau lần vẽ kế:
+  // cú chạm cùng khung hình với Tiếp tục vẫn bị chặn. Ref bật trước `mutate`, nhả ở `onSettled` (cùng lúc `isPending` hết) nên phủ đúng khoảng lệnh còn bay.
+  const saving = useRef(false);
+  const goBack = () => {
+    if (saving.current) return;
+    onBack();
+  };
 
   const next = () => {
     if (imagesBusy) return;
     const problem = validateStorefrontInfo({ title, headerNote: note });
     setError(problem);
     setSaveError(null);
-    if (!problem) saveMut.mutate();
+    if (!problem) {
+      saving.current = true;
+      saveMut.mutate();
+    }
   };
 
   return (
@@ -270,7 +309,7 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
         <p className="mb-3 text-sm text-stone-600">{SIGNUP_COPY.infoIntro}</p>
         <div className="flex flex-col gap-3">
           <Field label={SIGNUP_COPY.titleLabel} error={error ?? undefined}>
-            <input className={ui.field} value={title} maxLength={120} onChange={(e) => setTitle(e.target.value)} />
+            <input className={ui.field} value={title} maxLength={120} onChange={(e) => edit({ title: e.target.value })} />
           </Field>
           <div>
             <div className="text-sm font-medium text-stone-900">{SIGNUP_COPY.slugLabel}</div>
@@ -284,7 +323,7 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
               maxLength={STOREFRONT_NOTE_MAX}
               placeholder={SIGNUP_COPY.notePlaceholder}
               value={note}
-              onChange={(e) => setNote(e.target.value)}
+              onChange={(e) => edit({ note: e.target.value })}
             />
           </Field>
           <div className="-mt-2 text-xs text-stone-600">
@@ -294,15 +333,15 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
       </Card>
       <Card>
         <h3 className={`${ui.sectionTitle} mb-2`}>{SIGNUP_COPY.imagesTitle}</h3>
-        <StorefrontImageUpload label="Ảnh đại diện" value={avatarUrl} onChange={setAvatarUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={400} quality={0.8} />
-        <StorefrontImageUpload label="Ảnh bìa" value={coverUrl} onChange={setCoverUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={1000} quality={0.75} />
+        <StorefrontImageUpload label="Ảnh đại diện" value={avatarUrl} onChange={(url) => edit({ avatarUrl: url })} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={400} quality={0.8} />
+        <StorefrontImageUpload label="Ảnh bìa" value={coverUrl} onChange={(url) => edit({ coverUrl: url })} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={1000} quality={0.75} />
       </Card>
       {saveError && (
         <p role="alert" className={ui.error}>
           {saveError}
         </p>
       )}
-      <StepBar onBack={onBack} next={{ label: imagesBusy ? IMAGES_UPLOADING : SIGNUP_COPY.next, loading: saveMut.isPending || imagesBusy, onPress: next }} />
+      <StepBar onBack={goBack} backBusy={saveMut.isPending} next={{ label: imagesBusy ? IMAGES_UPLOADING : SIGNUP_COPY.next, loading: saveMut.isPending || imagesBusy, onPress: next }} />
     </>
   );
 }
@@ -316,7 +355,10 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
   const [removeErrors, setRemoveErrors] = useState<ReadonlyMap<string, string>>(() => new Map());
   const items = sf.collections.flatMap((c) => c.items);
   const refresh = () => settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] }));
-  const fail = (e: unknown) => setError(actErrText(e));
+  const fail = (e: unknown) => {
+    setError(actErrText(e));
+    return reloadWhenRejected(qc, e);
+  };
 
   const templateMut = useLockedMutation({
     mutationFn: (categoryId: string) => applyStorefrontTemplate(coreHttp, categoryId),
@@ -325,7 +367,11 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
       setTemplateOpen(false);
       await refresh();
     },
-    onError: fail,
+    onError: async (e) => {
+      await fail(e);
+      // Mẫu chỉ áp được lên gian hàng chưa có khối: gian hàng mới về đã có khối (máy khác thêm) thì tấm chọn mẫu hết chỗ dùng, đóng để lời báo ra trang.
+      if ((qc.getQueryData<StorefrontEdit | null>(['my-storefront'])?.collections.length ?? 0) > 0) setTemplateOpen(false);
+    },
   });
   const openPicker = useLockedMutation({
     mutationFn: async () => sf.collections[0]?.id ?? (await createCollection(coreHttp, { title: SIGNUP_COPY.defaultCollection })).id,
@@ -340,7 +386,10 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
       mutationFn: (id: string) => removeItem(coreHttp, id),
       onMutate: (id) => setRemoveErrors((prev) => new Map([...prev].filter(([k]) => k !== id))),
       onSuccess: () => refresh(),
-      onError: (e, id) => setRemoveErrors((prev) => new Map(prev).set(id, actErrText(e))),
+      onError: (e, id) => {
+        setRemoveErrors((prev) => new Map(prev).set(id, actErrText(e)));
+        return reloadWhenRejected(qc, e);
+      },
     },
     (id) => id,
   );
@@ -355,7 +404,14 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
         <Card>
           <h3 className={ui.sectionTitle}>{SIGNUP_COPY.templateTitle}</h3>
           <p className="mb-2.5 mt-0.5 text-xs text-stone-600">{SIGNUP_COPY.templateHint}</p>
-          <button type="button" className={`${ui.btnSecondary} w-full`} onClick={() => setTemplateOpen(true)}>
+          <button
+            type="button"
+            className={`${ui.btnSecondary} w-full`}
+            onClick={() => {
+              setError(null);
+              setTemplateOpen(true);
+            }}
+          >
             Chọn danh mục
           </button>
         </Card>
@@ -406,7 +462,7 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
           {SIGNUP_COPY.pickCta}
         </button>
       </Card>
-      {error && (
+      {error && !templateOpen && (
         <p role="alert" className={ui.error}>
           {error}
         </p>
@@ -421,6 +477,11 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
       <Sheet open={templateOpen} onClose={() => setTemplateOpen(false)} dismissible={!templateMut.isPending} title="Bắt đầu nhanh với 1 mẫu có sẵn" description={SIGNUP_COPY.templateHint}>
         {catQ.isLoading && <Skeleton height={120} />}
         {catQ.isError && <ErrorState message={errText(catQ.error)} onRetry={() => catQ.refetch()} />}
+        {error && (
+          <p role="alert" className={`mb-2 ${ui.error}`}>
+            {error}
+          </p>
+        )}
         {catQ.data && (
           <div className="grid grid-cols-2 gap-2">
             {catQ.data.map((c: StorefrontCategory) => (

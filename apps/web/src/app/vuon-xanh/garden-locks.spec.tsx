@@ -603,6 +603,34 @@ describe('Vườn Xanh: hộp thu hoạch', () => {
     expect(postsOf('/game/harvest/share')).toHaveLength(2);
   });
 
+  it('chia sẻ lần thu hoạch trước xong muộn, sau khi khách thu hoạch lần mới: nút của lần mới KHÔNG hiện "Đã chia sẻ", chia sẻ lần mới vẫn gọi và xong bình thường', async () => {
+    const harvest2 = { ...harvest, treesPlanted: 5, reward: { coupon: 'XANH-456', certificate: 'TT-78' } };
+    state.posts['/game/harvest/share'] = () => ({ shared: true, alreadyShared: false });
+    const g = gate();
+    state.postHold.set('/game/harvest/share', g.p);
+    const c = await harvestNow();
+    click(btn(dialog()!, gameNewbieCopy.harvest.shareCommunity));
+    await flush();
+    expect(postsOf('/game/harvest/share')).toHaveLength(1);
+    click(btn(dialog()!, gameNewbieCopy.harvest.later));
+    await flush(8);
+    state.posts['/game/tree/water'] = () => harvest2;
+    click(btn(c, /Tưới hết/));
+    await flush(8);
+    expect(dialog()!.textContent).toContain('XANH-456');
+    g.open();
+    await flush(8);
+    const labels = Array.from(dialog()!.querySelectorAll('button')).map((b) => b.textContent);
+    expect(labels).not.toContain(gameNewbieCopy.harvest.shareCommunityDone);
+    const next = btn(dialog()!, gameNewbieCopy.harvest.shareCommunity);
+    expect(next.disabled).toBe(false);
+    expectIdle(next);
+    click(next);
+    await flush(8);
+    expect(postsOf('/game/harvest/share')).toHaveLength(2);
+    expect(btn(dialog()!, gameNewbieCopy.harvest.shareCommunityDone).disabled).toBe(true);
+  });
+
   it('"Dùng mã giảm giá ngay": lúc đang kiểm giỏ nút báo bận, chạm không gọi lần hai', async () => {
     await harvestNow();
     const b = btn(dialog()!, 'Dùng mã giảm giá ngay');

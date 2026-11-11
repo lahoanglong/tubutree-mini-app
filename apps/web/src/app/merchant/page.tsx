@@ -52,7 +52,14 @@ import { isPartnerStore } from '@/lib/partner-store';
 import { FulfilOrdersTab } from './fulfil-orders-tab';
 import { SettlementTab } from './settlement-tab';
 import { MerchantReturnsSection } from './merchant-returns';
-import { CreateProductModal, EditProductModal, MerchantProductPrice } from './product-form';
+import {
+  CREATE_OUTCOME_UNKNOWN_TEXT,
+  CreateProductModal,
+  EditProductModal,
+  MerchantProductPrice,
+  createSentText,
+  type CreateNotice,
+} from './product-form';
 import { ImageUrlField } from './image-url-field';
 import { ProductThumb } from './product-thumb';
 import { RowMenu } from './row-menu';
@@ -998,6 +1005,8 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
   const qc = useQueryClient();
   const [subTab, setSubTabState] = useState<'own' | 'resell'>(canCreate ? 'own' : 'resell');
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // Lệnh đăng của lần mở hộp trước xong khi hộp đó đã đóng (đã gửi, hoặc không có phản hồi): lời báo nằm trong hộp đang mở, không có hộp thì ở trang; mất khi đóng hộp hoặc gửi lại.
+  const [createNotice, setCreateNotice] = useState<CreateNotice | null>(null);
   const [editing, setEditing] = useState<MerchantProduct | null>(null);
   // BE phân trang CẢ 2 danh sách bằng cùng page/limit (merchant.service.listMyProducts) → 1 số trang,
   // về trang 1 khi đổi danh sách.
@@ -1084,7 +1093,10 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
 
         {subTab === 'own' && canCreate && (
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              setCreateNotice(null);
+              setShowCreateModal(true);
+            }}
             className={`inline-flex items-center gap-1.5 rounded-control bg-forest-600 px-3.5 py-1.5 text-xs font-semibold text-stone-0 hover:bg-forest-700 ${TOUCH_H}`}
           >
             <Plus className="h-3.5 w-3.5" aria-hidden="true" />
@@ -1093,6 +1105,16 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
         )}
       </div>
 
+      {createNotice && !showCreateModal && (
+        <div
+          role={createNotice.kind === 'sent' ? 'status' : 'alert'}
+          className={`rounded-control border px-3 py-2 text-sm ${
+            createNotice.kind === 'sent' ? 'border-success-fg bg-success-bg text-success-fg' : 'border-danger-fg bg-danger-bg text-danger-fg'
+          }`}
+        >
+          {createNotice.text}
+        </div>
+      )}
       {ownError && (
         <div role="alert" className="rounded-control border border-danger-fg bg-danger-bg px-3 py-2 text-sm text-danger-fg">
           {ownError}
@@ -1285,10 +1307,19 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
 
       {showCreateModal && (
         <CreateProductModal
-          onClose={() => setShowCreateModal(false)}
-          onSuccess={(stillOpen) => {
+          notice={createNotice}
+          onSend={() => setCreateNotice(null)}
+          onClose={() => {
+            setShowCreateModal(false);
+            setCreateNotice(null);
+          }}
+          onSuccess={(stillOpen, name) => {
             if (stillOpen) setShowCreateModal(false);
+            else setCreateNotice({ kind: 'sent', text: createSentText(name) });
             void qc.invalidateQueries({ queryKey: ['merchant-products'] });
+          }}
+          onOutcomeUnknown={(stillOpen) => {
+            if (!stillOpen) setCreateNotice({ kind: 'unknown', text: CREATE_OUTCOME_UNKNOWN_TEXT });
           }}
         />
       )}

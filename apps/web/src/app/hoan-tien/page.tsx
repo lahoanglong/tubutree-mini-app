@@ -32,6 +32,11 @@ const DEFAULT_HOLD_DAYS = 30;
 const errText = loadErrorText;
 const actErrText = actionErrorText;
 
+interface ClickResult {
+  error?: string;
+  blockedLink?: string;
+}
+
 function MerchantLogo({ merchant, size }: { merchant: CashbackMerchant; size: number }) {
   const box = { width: size, height: size };
   if (!merchant.logoUrl) {
@@ -68,43 +73,50 @@ export default function CashbackPage() {
   const holdDays = configQ.data?.cashbackHoldDays ?? DEFAULT_HOLD_DAYS;
   const [selected, setSelected] = useState<CashbackMerchant | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [clickError, setClickError] = useState<string | null>(null);
+  // Kết quả của lệnh "Mua sắm" nhớ theo từng sàn: click đã được ghi nhận ở máy chủ nên lỗi hay liên kết bị chặn popup của sàn đã gửi phải còn thấy được
+  // khi khách mở lại ĐÚNG sàn đó, dù lúc phản hồi về tấm đã đóng hay đang mở sàn khác.
+  const [results, setResults] = useState<ReadonlyMap<string, ClickResult>>(() => new Map());
+  const setResult = (merchantId: string, result: ClickResult | null) =>
+    setResults((prev) => {
+      const next = new Map(prev);
+      if (result) next.set(merchantId, result);
+      else next.delete(merchantId);
+      return next;
+    });
   // `disabled={isPending}` chỉ có hiệu lực sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
   const clickBusy = useRef(false);
   // Tab đối tác phải mở ngay trong cú bấm: đợi phản hồi POST xong mới window.open thì hết "kích hoạt người dùng" và trình duyệt chặn.
   const partnerTab = useRef<Window | null>(null);
-  const [blockedLink, setBlockedLink] = useState<string | null>(null);
 
-  // Tấm đóng được lúc lệnh còn bay: khách đóng rồi mở lại (cùng sàn hay sàn khác) thì lệnh cũ xong muộn không được đóng tấm mới hay đặt lời lỗi/liên kết của lần mở trước vào đó.
+  // Tấm đóng được lúc lệnh còn bay: khách đóng rồi mở lại thì lệnh cũ xong muộn không được đóng tấm mới.
   // Tab đối tác đã mở trong cú bấm cũ vẫn được đưa tới sàn của nó (click đã được ghi nhận) và lời báo chuyển hướng là của trang.
   const sheetSeq = useSheetSeq(selected?.id ?? null);
   const clickMut = useMutation<Awaited<ReturnType<typeof createCashbackClick>>, Error, string, number>({
     mutationFn: (merchantId) => createCashbackClick(coreHttp, merchantId),
     onMutate: () => sheetSeq.mark(),
-    onSuccess: (r, _merchantId, sent) => {
-      const current = sheetSeq.isCurrent(sent);
+    onSuccess: (r, merchantId, sent) => {
       const win = partnerTab.current;
       partnerTab.current = null;
       if (!isHttpUrl(r.deeplink)) {
         win?.close();
-        if (current) setClickError('Không mở được liên kết sàn. Thử lại sau ít phút.');
+        setResult(merchantId, { error: 'Không mở được liên kết sàn. Thử lại sau ít phút.' });
         return;
       }
       if (!win || win.closed) {
         // Bị chặn cửa sổ mới hoặc khách đã đóng tab trống: giữ khung để khách tự bấm liên kết, vì click đã được ghi nhận.
-        if (current) setBlockedLink(r.deeplink);
+        setResult(merchantId, { blockedLink: r.deeplink });
         return;
       }
       // Tab trống mở không noopener nên phải tự ngắt opener trước khi đưa tới trang đối tác.
       win.opener = null;
       win.location.replace(r.deeplink);
-      if (current) setSelected(null);
+      if (sheetSeq.isCurrent(sent)) setSelected(null);
       setNotice(CASHBACK_REDIRECT);
     },
-    onError: (e, _merchantId, sent) => {
+    onError: (e, merchantId) => {
       partnerTab.current?.close();
       partnerTab.current = null;
-      if (sheetSeq.isCurrent(sent)) setClickError(actErrText(e));
+      setResult(merchantId, { error: actErrText(e) });
     },
     onSettled: () => {
       clickBusy.current = false;
@@ -113,16 +125,16 @@ export default function CashbackPage() {
   const startClick = (merchantId: string) => {
     if (clickBusy.current) return;
     clickBusy.current = true;
-    setClickError(null);
-    setBlockedLink(null);
+    setResult(merchantId, null);
     partnerTab.current = window.open('about:blank', '_blank');
     clickMut.mutate(merchantId);
   };
+  // Đóng tấm chỉ xoá ô của sàn đang đóng (khách đã thấy nó); ô của sàn đang có lệnh bay còn trống (đã xoá lúc gửi) và sẽ nhận phản hồi muộn, ô sàn khác để nguyên.
   const closeSheet = () => {
+    if (selected) setResult(selected.id, null);
     setSelected(null);
-    setClickError(null);
-    setBlockedLink(null);
   };
+  const result = selected ? results.get(selected.id) : undefined;
 
   const balance = (() => {
     if (phase === 'loading') return <AuthLoading />;
@@ -174,7 +186,6 @@ export default function CashbackPage() {
                     data-merchant
                     onClick={() => {
                       setNotice(null);
-                      setClickError(null);
                       setSelected(m);
                     }}
                     className={`min-h-11 p-3 text-center transition hover:bg-stone-50 active:scale-95 ${miniCard}`}
@@ -272,15 +283,15 @@ export default function CashbackPage() {
             </div>
             {selected.terms && <p className="text-xs text-stone-600">{selected.terms}</p>}
             <p className="text-xs text-promo-fg">Lưu ý: phải bấm từ đây mỗi lần mua để được ghi nhận hoàn tiền.</p>
-            {clickError && (
+            {result?.error && (
               <p role="alert" className={ui.error}>
-                {clickError}
+                {result.error}
               </p>
             )}
-            {blockedLink && (
+            {result?.blockedLink && (
               <p className="text-sm text-stone-900">
                 Trình duyệt đã chặn cửa sổ mới.{' '}
-                <a href={blockedLink} target="_blank" rel="noopener noreferrer" className="font-semibold text-forest-700 underline">
+                <a href={result.blockedLink} target="_blank" rel="noopener noreferrer" className="font-semibold text-forest-700 underline">
                   Mở sàn
                 </a>
               </p>

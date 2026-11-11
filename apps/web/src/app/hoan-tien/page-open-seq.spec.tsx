@@ -88,28 +88,122 @@ describe.each([
     expect(dialog()).not.toBeNull();
     expect(dialog()!.textContent).toContain(again);
   });
+});
 
-  it('liên kết sàn cũ không hợp lệ: lời lỗi không rơi vào tấm mới, tab trống vẫn được đóng', async () => {
-    const g = await sentThenReopened(again);
+// Wave 102B: kết quả của lệnh "Mua sắm" nhớ theo TỪNG SÀN. Click đã được ghi nhận ở máy chủ nên lỗi hay liên kết bị chặn popup của sàn đã gửi không được bỏ im
+// chỉ vì khách đã đóng tấm: nó hiện khi khách mở đúng sàn đó, và không bao giờ hiện ở tấm của sàn khác.
+describe('/hoan-tien: phản hồi muộn ghi vào ô của đúng sàn đã gửi', () => {
+  const alertText = () => dialog()?.querySelector('[role="alert"]')?.textContent ?? null;
+  const blockedLinkEl = () => Array.from(dialog()?.querySelectorAll<HTMLAnchorElement>('a') ?? []).find((a) => a.textContent === 'Mở sàn') ?? null;
+  const reopen = async (name: string) => {
+    click(tile(name));
+    await flush(2);
+  };
+
+  it('sàn khác đang mở: liên kết không hợp lệ của Shopee không hiện ở tấm Lazada, tab trống được đóng; mở lại Shopee thấy lời báo', async () => {
+    const g = await sentThenReopened('Lazada');
     await act(async () => g.release({ deeplink: 'javascript:alert(1)' }));
     await flush(4);
     expect(state.win!.close).toHaveBeenCalled();
-    expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
+    expect(alertText()).toBeNull();
+    closeByBackdrop();
+    await reopen('Shopee');
+    expect(alertText()).toContain('Không mở được liên kết sàn');
   });
 
-  it('lệnh cũ bị từ chối: tab trống vẫn được đóng, lời lỗi không rơi vào tấm mới', async () => {
-    const g = await sentThenReopened(again);
+  it('sàn khác đang mở: lỗi của Shopee không hiện ở tấm Lazada, tab trống được đóng; mở lại Shopee vẫn thấy lỗi', async () => {
+    const g = await sentThenReopened('Lazada');
     await act(async () => g.fail(new Error('Sàn đã ngừng')));
     await flush(4);
     expect(state.win!.close).toHaveBeenCalled();
-    expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
+    expect(alertText()).toBeNull();
+    closeByBackdrop();
+    await reopen('Shopee');
+    expect(alertText()).toContain('Sàn đã ngừng');
   });
 
-  it('tab trống bị chặn: liên kết của sàn cũ không hiện trong tấm mới', async () => {
-    const g = await sentThenReopened(again, true);
+  it('tab trống bị chặn, sàn khác đang mở: liên kết Shopee không hiện ở tấm Lazada; mở lại Shopee thấy liên kết dùng được', async () => {
+    const g = await sentThenReopened('Lazada', true);
     await act(async () => g.release({ deeplink: 'https://aff.example/shopee' }));
     await flush(4);
     expect(dialog()!.textContent).not.toContain('Trình duyệt đã chặn cửa sổ mới');
+    closeByBackdrop();
+    await reopen('Shopee');
+    expect(dialog()!.textContent).toContain('Trình duyệt đã chặn cửa sổ mới');
+    expect(blockedLinkEl()!.getAttribute('href')).toBe('https://aff.example/shopee');
+  });
+
+  it('khách mở lại ĐÚNG sàn đã gửi: liên kết không hợp lệ và lỗi hiện ngay trong tấm đó', async () => {
+    const g = await sentThenReopened('Shopee');
+    await act(async () => g.release({ deeplink: 'javascript:alert(1)' }));
+    await flush(4);
+    expect(state.win!.close).toHaveBeenCalled();
+    expect(alertText()).toContain('Không mở được liên kết sàn');
+    closeByBackdrop();
+    const g2 = await sentThenReopened('Shopee');
+    await act(async () => g2.fail(new Error('Sàn đã ngừng')));
+    await flush(4);
+    expect(alertText()).toContain('Sàn đã ngừng');
+  });
+
+  it('khách mở lại ĐÚNG sàn đã gửi, tab bị chặn: liên kết dùng được hiện ngay trong tấm đó', async () => {
+    const g = await sentThenReopened('Shopee', true);
+    await act(async () => g.release({ deeplink: 'https://aff.example/shopee' }));
+    await flush(4);
+    expect(blockedLinkEl()!.getAttribute('href')).toBe('https://aff.example/shopee');
+  });
+
+  it('đóng tấm một sàn không nuốt ô của sàn khác: lỗi muộn của Shopee còn nguyên sau khi khách xem rồi đóng tấm Lazada', async () => {
+    const g = await sentThenReopened('Lazada');
+    await act(async () => g.fail(new Error('Sàn đã ngừng')));
+    await flush(4);
+    const g2 = gate();
+    click(buyBtn());
+    await flush();
+    await act(async () => g2.fail(new Error('Lazada bận')));
+    await flush(4);
+    expect(alertText()).toContain('Lazada bận');
+    closeByBackdrop();
+    await reopen('Shopee');
+    expect(alertText()).toContain('Sàn đã ngừng');
+    closeByBackdrop();
+    await reopen('Lazada');
+    expect(alertText()).toBeNull();
+  });
+
+  it('bấm "Mua sắm" lại ở sàn đó xoá ô của sàn đó (lời báo cũ biến mất lúc đang gửi), không đụng ô sàn khác', async () => {
+    mounted = render(<CashbackPage />);
+    await flush(8);
+    const g = gate();
+    click(tile('Shopee'));
+    click(buyBtn());
+    await flush();
+    await act(async () => g.fail(new Error('Sàn đã ngừng')));
+    await flush(4);
+    expect(alertText()).toContain('Sàn đã ngừng');
+    gate();
+    click(buyBtn());
+    await flush();
+    expect(alertText()).toBeNull();
+  });
+
+  it('lệnh sàn A còn bay: bấm "Mua sắm" ở sàn B bị chặn, chỉ có MỘT tab và MỘT lệnh, tab của A vẫn tới sàn A', async () => {
+    mounted = render(<CashbackPage />);
+    await flush(8);
+    const g = gate();
+    click(tile('Shopee'));
+    click(buyBtn());
+    await flush();
+    closeByBackdrop();
+    click(tile('Lazada'));
+    await flush(2);
+    expect(buyBtn().getAttribute('aria-busy')).toBe('true');
+    click(buyBtn());
+    await flush();
+    expect(window.open).toHaveBeenCalledTimes(1);
+    await act(async () => g.release({ deeplink: 'https://aff.example/shopee' }));
+    await flush(4);
+    expect(state.opened).toEqual(['https://aff.example/shopee']);
   });
 });
 
