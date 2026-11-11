@@ -672,12 +672,12 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
       <StorefrontShareSheet open={shareOpen} onClose={() => setShareOpen(false)} slug={sf.slug} title={sf.title} referralCode={sf.referralCode ?? null} />
       <ContentKitSheet open={!!kitSlug} onClose={() => setKitSlug(null)} productSlug={kitSlug ?? ''} />
       <PickerSheet open={!!pickerCol} collectionId={pickerCol} onClose={() => setPickerCol(null)} onAdded={refresh} />
-      <ProfileSheet open={profileOpen} sf={sf} onClose={() => setProfileOpen(false)} onSaved={(t) => { notify(t); void refresh(); }} />
+      <ProfileSheet open={profileOpen} sf={sf} onClose={() => setProfileOpen(false)} onSaved={(t) => { notify(t); return refresh(); }} />
       <ConfigSheet
         open={configOpen}
         sf={sf}
         onClose={() => setConfigOpen(false)}
-        onSaved={(t) => { notify(t); void refresh(); }}
+        onSaved={(t) => { notify(t); return refresh(); }}
         unpublishLabel={sf.isPublished ? (view.code === 'PENDING_APPROVAL' ? 'Huỷ gửi duyệt' : 'Gỡ đăng gian hàng') : null}
         onUnpublish={() => { setConfigOpen(false); setConfirmUnpublish(true); }}
       />
@@ -709,7 +709,7 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
             : []
         }
       />
-      <CollectionSheet collection={editing} onClose={() => setEditingCol(null)} onSaved={(t) => { notify(t); void refresh(); }} />
+      <CollectionSheet collection={editing} onClose={() => setEditingCol(null)} onSaved={(t) => { notify(t); return refresh(); }} />
       <StorefrontNewSection open={newOpen} onClose={() => setNewOpen(false)} pending={newColMut.isPending} error={newColError} onCreate={(dto) => newColMut.mutate(dto)} />
 
       <ConfirmSheet

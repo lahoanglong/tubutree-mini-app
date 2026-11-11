@@ -5,7 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
-import { useQuery, useMutationState, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useMutationState } from '@tanstack/react-query';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } from '@tubutree/app-core/cart-copy';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
@@ -24,7 +24,7 @@ import { ui, uiBar } from '@/lib/guest-ui';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
-import { cartKey, useCartKey } from '@/lib/cart-key';
+import { useCartKey } from '@/lib/cart-key';
 import BackLink from '@/components/back-link';
 import { CheckMark, miniCheckboxWrap, miniCheckbox } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
@@ -68,7 +68,6 @@ export default function CartPage() {
   const phase = useAuthPhase();
   // Điện thoại: hàng mã giảm giá nằm trong thanh dính đáy (như Mini App); khổ lớn hơn: trong khung tóm tắt. Một thẻ duy nhất, nên chọn chỗ bằng JS.
   const phoneCoupon = useMediaQuery('(max-width: 767px)');
-  const qc = useQueryClient();
   const router = useRouter();
   const cartKeyNow = useCartKey();
   const cartQ = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
@@ -107,29 +106,31 @@ export default function CartPage() {
   const [undoError, setUndoError] = useState<string | null>(null);
   // Lỗi nhớ theo từng dòng: `mutation.error` chỉ giữ lệnh sau cùng nên lệnh của dòng A lỗi sau khi dòng B đã chạy sẽ mất lời báo.
   const [lineErrors, setLineErrors] = useState<ReadonlyMap<string, unknown>>(() => new Map());
-  const cartWrite = useCartWrite(LINE_OP_KEY);
+  const cartWrite = useCartWrite();
   // Khoá đồng bộ theo dòng (không theo lệnh sau cùng): state chỉ đúng sau lần vẽ kế, và `variables` của mutation đổi sang dòng khác sẽ mở nhầm dòng đang bay.
   const lineOp = useLockedMutation(
     {
       mutationKey: LINE_OP_KEY,
       mutationFn: (v: LineOp) => (v.op === 'qty' ? updateCartItem(v.id, v.q) : removeCartItem(v.id)),
       onMutate: (v) => {
-        cartWrite.began();
         setLineErrors((prev) => new Map([...prev].filter(([id]) => id !== v.id)));
+        return cartWrite.begin();
       },
       // Thanh hoàn tác dựng ở đây chứ không ở callback riêng của `mutate()`: callback riêng chỉ chạy cho lệnh sau cùng, nên chạm dòng khác lúc lệnh xoá còn bay sẽ làm mất thanh.
       // Thanh chỉ mở sau khi máy chủ xoá xong: hoàn tác (thêm lại) không được vượt mặt lệnh xoá còn đang bay.
       // Trả lời hứa tải lại giỏ (khi có lệnh chồng): lệnh còn "đang bay", khoá dòng còn giữ, tới khi giỏ mới về.
-      onSuccess: (data, v) => {
-        const refreshed = cartWrite.write(data);
+      onSuccess: (data, v, cmd) => {
+        const refreshed = cartWrite.write(cmd, data);
         if (v.op === 'remove' && v.line) {
           setUndoError(null);
           setRemovedLine(v.line);
         }
         return refreshed;
       },
-      onError: (error, v) => setLineErrors((prev) => new Map(prev).set(v.id, error)),
-      onSettled: cartWrite.settled,
+      onError: (error, v, cmd) => {
+        setLineErrors((prev) => new Map(prev).set(v.id, error));
+        cartWrite.fail(cmd);
+      },
     },
     (v) => v.id,
   );
@@ -157,7 +158,7 @@ export default function CartPage() {
     focusUndo.current = false;
   }, [removedLine]);
   // Hết giờ Giờ vàng khi khách đang xem: lấy lại giỏ để máy chủ tính lại giá, không cần tải trang.
-  const refreshCart = () => void qc.invalidateQueries({ queryKey: ['cart'] });
+  const refreshCart = () => void cartWrite.reload();
   // Bấm "Hoàn tác" bằng bàn phím làm thanh hoàn tác biến mất khi nó đang giữ focus: đưa focus tới dòng vừa thêm lại (hoặc tiêu đề trang nếu dòng không còn).
   const restoreFocus = useRef<{ variationId: string } | null>(null);
   const focusHeading = () => {
@@ -201,12 +202,14 @@ export default function CartPage() {
       viaKeyboard = false;
     }
     setRemovedLine(null);
+    const cmd = cartWrite.begin();
     addToCart(line.variationId, line.quantity)
       .then((c) => {
         if (viaKeyboard) restoreFocus.current = { variationId: line.variationId };
-        qc.setQueryData(cartKey(), c);
+        cartWrite.write(cmd, c);
       })
       .catch((e: unknown) => {
+        cartWrite.fail(cmd);
         setUndoError(actionErrorText(e));
         if (viaKeyboard) focusHeading();
       })

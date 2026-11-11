@@ -13,11 +13,9 @@ import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { addToCart } from '@/lib/shop-client';
 import { useCardPricing } from '@/lib/use-card-pricing';
-import { reloadCartAfter, useCartWrite } from '@/lib/use-cart-write';
+import { useCartWrite } from '@/lib/use-cart-write';
 
 const ADD_KEY = ['freeship-add'] as const;
-// Phải trùng LINE_OP_KEY của lệnh đổi số lượng/xoá dòng ở page.tsx; spec của dải này dựng cả trang giỏ nên đổi một bên là đỏ.
-const LINE_OP_KEY = ['cart-line-op'] as const;
 
 interface Candidate extends FreeshipAddonItem {
   inStock: boolean;
@@ -42,7 +40,7 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
   const pricing = useCardPricing();
   // Lỗi nhớ riêng (không đọc `mutation.error`): lỗi của món bay trước sẽ mất nếu lệnh sau cùng thuộc món khác và thành công.
   const [error, setError] = useState<{ value: unknown } | null>(null);
-  const cartWrite = useCartWrite(ADD_KEY, LINE_OP_KEY);
+  const cartWrite = useCartWrite();
   // Khoá đồng bộ THEO MÓN như Mini App: `isPending` chỉ đổi sau lần vẽ kế nên hai cú chạm sát nhau vào CÙNG một món sẽ thêm hai lần, còn chạm món khác vẫn đi ngay, không bị nuốt.
   const add = useLockedMutation(
     {
@@ -50,18 +48,19 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
       mutationFn: (item: FreeshipAddonItem) => addToCart(item.variationId, 1),
       onMutate: () => {
         setError(null);
-        cartWrite.began();
+        return cartWrite.begin();
       },
       // `write` trả lời hứa tải lại giỏ khi có lệnh chồng: món còn bị khoá (và còn báo bận) tới khi giỏ mới về, không thì chạm lần hai thêm món đã vào giỏ.
-      onSuccess: cartWrite.write,
+      onSuccess: (cart, _item, cmd) => cartWrite.write(cmd, cart),
       // Máy chủ từ chối vì giỏ hoặc kệ đã cũ (món vừa hết hàng, đã có trong giỏ): lời lỗi hiện ngay, giữ khoá tới khi giỏ và kệ mới về (tối đa 4 giây) để món vừa bị từ chối không chạm lại được.
-      onError: (e) => {
+      onError: (e, _item, cmd) => {
         setError({ value: e });
-        if (!serverRejectedState(e)) return undefined;
-        // Giỏ chờ lệnh dòng đang bay xong (xem `reloadCartAfter`); kệ Bán chạy không phụ thuộc giỏ nên tải ngay.
-        return settleWithin(Promise.all([reloadCartAfter(qc, LINE_OP_KEY), qc.invalidateQueries({ queryKey: homeBestSellerQuery(coreHttp).queryKey })]));
+        const stale = serverRejectedState(e);
+        // Giỏ chờ các lệnh giỏ đang bay xong (xem `useCartWrite`); kệ Bán chạy không phụ thuộc giỏ nên tải ngay.
+        const cartReloaded = cartWrite.fail(cmd, stale);
+        if (!stale) return undefined;
+        return settleWithin(Promise.all([cartReloaded, qc.invalidateQueries({ queryKey: homeBestSellerQuery(coreHttp).queryKey })]));
       },
-      onSettled: cartWrite.settled,
     },
     (item) => item.slug,
   );

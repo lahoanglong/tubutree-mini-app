@@ -10,8 +10,8 @@ import { applyCoupon, getCouponPreviews, getMyCoupons, type CouponPreviewParams 
 import { COUPON_MUTATION_KEY, PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { autoCouponName } from '@/lib/coupon-name';
-import { cartKey } from '@/lib/cart-key';
 import { actionErrorText } from '@/lib/error-text';
+import { useCartWrite } from '@/lib/use-cart-write';
 
 export interface CartVoucherHintState {
   /** Null khi chưa có xem trước của máy chủ, giỏ đã có mã, hoặc không có gì đáng nói. */
@@ -41,6 +41,7 @@ export function useCartVoucherHint(opts: {
 }): CartVoucherHintState {
   const { currentCode } = opts;
   const qc = useQueryClient();
+  const cartWrite = useCartWrite();
   const [failed, setFailed] = useState<{ code: string; text: string } | null>(null);
   const [appliedNote, setAppliedNote] = useState<string | null>(null);
   useEffect(() => {
@@ -80,14 +81,19 @@ export function useCartVoucherHint(opts: {
     mutationKey: COUPON_MUTATION_KEY,
     mutationFn: (code: string) => applyCoupon(code.trim().toUpperCase()),
     // Xoá lời báo cũ lúc bắt đầu: lỗi lặp lại cùng câu vẫn dựng lại lời báo.
-    onMutate: () => setFailed(null),
-    onSuccess: (cart) => {
-      qc.setQueryData(cartKey(), cart);
+    onMutate: () => {
+      setFailed(null);
+      return cartWrite.begin();
+    },
+    onSuccess: (cart, _code, cmd) => {
+      const held = cartWrite.write(cmd, cart);
       void qc.invalidateQueries({ queryKey: ['quote'] });
       const code = cart.couponCode ?? '';
       setAppliedNote(fillCopy('cart.voucherHint.applied', { code: autoCouponName(code) ?? code }));
+      return held;
     },
-    onError: (e, code) => {
+    onError: (e, code, cmd) => {
+      cartWrite.fail(cmd);
       setFailed({ code: code.trim().toUpperCase(), text: actionErrorText(e) });
       // Máy chủ vừa từ chối mã mà xem trước còn nói dùng được (hết lượt, bị tắt giữa chừng): hỏi lại để dải không giữ câu "đủ điều kiện" đã sai.
       void qc.invalidateQueries({ queryKey: ['coupon-previews'] });
