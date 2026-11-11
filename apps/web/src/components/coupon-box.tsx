@@ -25,9 +25,9 @@ import { MD_DOWN, useMediaQuery } from '@/lib/use-media-query';
 import { autoCouponMemory, couponAutoCopy, couponHint, couponHintShort, couponHintText, pickBestCoupon } from '@tubutree/app-core/coupon-use';
 import { couponMinOrderCopy } from '@tubutree/app-core/coupon-min-order';
 import { autoCouponName } from '@/lib/coupon-name';
-import { cartKey } from '@/lib/cart-key';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
+import { useCartWrite, type CartCommand } from '@/lib/use-cart-write';
 
 /** Số voucher hiện sẵn trong panel tại chỗ (từ md); trong bảng trượt của điện thoại hiện đủ như Mini App. */
 const VISIBLE_COUPONS = 3;
@@ -213,9 +213,12 @@ export function CouponBox({
       setAutoCode(null);
     }
   }, [currentCode, memory]);
-  const afterChange = (cart: Awaited<ReturnType<typeof applyCoupon>>) => {
-    qc.setQueryData(cartKey(), cart);
+  const cartWrite = useCartWrite();
+  // Lệnh đổi mã trả NGUYÊN giỏ như lệnh dòng: ghi chung một đường để phản hồi về lệch thứ tự không đè số lượng vừa đổi. Trả lời hứa tải lại (khi có lệnh chồng) cho `onSuccess`.
+  const afterChange = (cart: Awaited<ReturnType<typeof applyCoupon>>, cmd: CartCommand) => {
+    const held = cartWrite.write(cmd, cart);
     void qc.invalidateQueries({ queryKey: ['quote'] });
+    return held;
   };
   // Khoá đồng bộ dùng chung cho áp và gỡ: `busy` (state) chỉ đúng sau lần vẽ kế nên hai cú bấm sát nhau vẫn đều gọi API, hoặc gỡ chồng lên lần áp đang chạy.
   const changingRef = useRef(false);
@@ -226,8 +229,11 @@ export function CouponBox({
     mutationKey: COUPON_MUTATION_KEY,
     mutationFn: (c: string) => applyCoupon(c.trim().toUpperCase()),
     // Lời báo cũ biến mất ngay khi thử lại, như VoucherSheet của Mini: khách thấy lần thử mới đang chạy chứ không nhìn lỗi cũ.
-    onMutate: () => setErr(null),
-    onSuccess: (cart, appliedCode) => {
+    onMutate: () => {
+      setErr(null);
+      return cartWrite.begin();
+    },
+    onSuccess: (cart, appliedCode, cmd) => {
       setErr(null);
       setCode('');
       setOpen(false);
@@ -240,9 +246,10 @@ export function CouponBox({
           ? couponNotAppliedNotice(pv.reason)
           : null,
       );
-      afterChange(cart);
+      return afterChange(cart, cmd);
     },
-    onError: (e) => {
+    onError: (e, _code, cmd) => {
+      cartWrite.fail(cmd);
       showErr(actionErrorText(e));
       // Khách có thể đã thu gọn trong lúc chờ: đưa ô nhập ra lại để sửa mã.
       setOpen(true);
@@ -252,23 +259,33 @@ export function CouponBox({
   const drop = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
     mutationFn: removeCoupon,
-    onMutate: () => setErr(null),
-    onSuccess: (cart) => {
+    onMutate: () => {
+      setErr(null);
+      return cartWrite.begin();
+    },
+    onSuccess: (cart, _vars, cmd) => {
       showApplyWarning(null);
       memory.markOff();
       setAutoCode(null);
-      afterChange(cart);
+      return afterChange(cart, cmd);
     },
-    onError: (e) => showErr(actionErrorText(e)),
+    onError: (e, _vars, cmd) => {
+      cartWrite.fail(cmd);
+      showErr(actionErrorText(e));
+    },
     onSettled: releaseChange,
   });
   const autoApplyMut = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
     mutationFn: (c: string) => applyCoupon(c),
-    onSuccess: (cart, appliedCode) => {
+    onMutate: () => cartWrite.begin(),
+    onSuccess: (cart, appliedCode, cmd) => {
       memory.markApplied(appliedCode);
       setAutoCode(appliedCode.toUpperCase());
-      afterChange(cart);
+      return afterChange(cart, cmd);
+    },
+    onError: (_e, _code, cmd) => {
+      cartWrite.fail(cmd);
     },
   });
   // `working`: lệnh đổi mã của chính hộp này đang chạy (nút giữ focus: aria-busy + aria-disabled, không `disabled` thật vì Chromium thả focus về body).
