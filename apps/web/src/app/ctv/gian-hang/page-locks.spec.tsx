@@ -1454,35 +1454,84 @@ describe('luồng đăng ký 4 bước — lệnh xong muộn và bị từ ch�
     expect(text()).toContain('Bước 2/4');
   };
 
-  it('lưu thông tin xong muộn sau khi khách đã Quay lại: không kéo khách sang bước 3, gian hàng vẫn được tải lại', async () => {
+  const titleInput = () => Array.from(document.querySelectorAll<HTMLInputElement>('input')).find((i) => i.maxLength === 120)!;
+  const patchTitles = () => calls('patch', '/storefront/me').map((c) => (c.body as { title: string }).title);
+
+  it('lưu thông tin: lúc lệnh còn bay "Quay lại" báo bận (aria-busy/aria-disabled, không disabled) và không đổi bước, kể cả bấm cùng khung hình với Tiếp tục; xong thì sang bước 3 và chỉ có một lệnh lưu, đúng chữ vừa gõ', async () => {
     await startInfoStep();
+    typeInto(titleInput(), 'Tiệm Mới');
     const release = hold('patch /storefront/me');
-    click(btn('Tiếp tục'));
+    const next = btn('Tiếp tục');
+    const back = btn('Quay lại');
+    act(() => {
+      next.click();
+      back.click();
+    });
     await flush();
-    click(btn('Quay lại'));
+    expect(text()).toContain('Bước 2/4');
+    expectBusy(back);
+    click(back);
     await flush();
-    expect(text()).toContain('Bước 1/4');
-    const before = getsOfMe();
+    expect(text()).toContain('Bước 2/4');
+    expect(calls('get', '/storefront/me')).toHaveLength(1);
     await release();
-    expect(calls('patch', '/storefront/me')).toHaveLength(1);
-    expect(getsOfMe()).toBeGreaterThan(before);
-    expect(text()).toContain('Bước 1/4');
-    expect(text()).not.toContain('Bước 3/4');
+    expect(text()).toContain('Bước 3/4');
+    expect(patchTitles()).toEqual(['Tiệm Mới']);
   });
 
-  it('lưu thông tin xong muộn lúc khách đã Quay lại rồi Bắt đầu vào lại bước thông tin: bước thông tin mới không bị lệnh cũ đẩy đi', async () => {
+  it('lưu thông tin lỗi: "Quay lại" nhả khoá ngay và bấm được', async () => {
     await startInfoStep();
-    const release = hold('patch /storefront/me');
+    state.failStatus.set('patch /storefront/me', 500);
     click(btn('Tiếp tục'));
     await flush();
+    expectIdle(btn('Quay lại'));
     click(btn('Quay lại'));
     await flush();
-    click(btn('Bắt đầu mở gian hàng'));
+    expect(text()).toContain('Bước 1/4');
+  });
+
+  it('lưu thông tin bị từ chối 409: "Quay lại" giữ khoá tới khi gian hàng mới về rồi mới bấm được', async () => {
+    await startInfoStep();
+    state.failStatus.set('patch /storefront/me', 409);
+    const releaseFresh = hold(ME);
+    click(btn('Tiếp tục'));
+    await flush();
+    expectBusy(btn('Quay lại'));
+    click(btn('Quay lại'));
     await flush();
     expect(text()).toContain('Bước 2/4');
-    await release();
-    expect(text()).toContain('Bước 2/4');
-    expect(text()).not.toContain('Bước 3/4');
+    await releaseFresh();
+    expectIdle(btn('Quay lại'));
+    click(btn('Quay lại'));
+    await flush();
+    expect(text()).toContain('Bước 1/4');
+  });
+
+  it('vào lại bước thông tin lúc gian hàng mới chưa về (hết hạn chờ 4 giây): ô chưa gõ đi theo gian hàng khi nó về, ô đã gõ giữ chữ của khách', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+    try {
+      await startInfoStep();
+      const releaseFresh = hold(ME);
+      click(btn('Tiếp tục'));
+      await flush();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_500);
+      });
+      await flush(2);
+      expect(text()).toContain('Bước 3/4');
+      click(btn('Quay lại'));
+      await flush();
+      expect(text()).toContain('Bước 2/4');
+      expect(titleInput().value).toBe('Cửa hàng Xanh');
+      const note = document.querySelector<HTMLTextAreaElement>('textarea')!;
+      typeInto(note, 'Chữ khách đang gõ');
+      state.sf = { ...state.sf!, title: 'Tiệm Mới', headerNote: 'Ghi chú mới' };
+      await releaseFresh();
+      expect(titleInput().value).toBe('Tiệm Mới');
+      expect(note.value).toBe('Chữ khách đang gõ');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('lưu thông tin xong đúng lúc khách còn ở bước đó: vẫn sang bước 3 (không chặn nhầm)', async () => {
@@ -1579,6 +1628,58 @@ describe('luồng đăng ký 4 bước — lệnh xong muộn và bị từ ch�
     expect(calls('post', '/storefront/me/apply-template')).toHaveLength(1);
     await releaseFresh();
     expect(btn('Dùng mẫu Nhà bếp', dialog()!).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('bước sản phẩm, chọn mẫu bị từ chối 400 và gian hàng mới về đã có bộ sưu tập: đóng tấm chọn mẫu, lời báo nằm trên trang (không sau tấm), ô "Chọn danh mục" biến mất', async () => {
+    await toProductsStep({ collections: [] });
+    click(btn('Chọn danh mục'));
+    await flush();
+    state.failStatus.set('post /storefront/me/apply-template', 400);
+    const releaseFresh = hold(ME);
+    click(btn('Dùng mẫu Nhà bếp', dialog()!));
+    await flush();
+    expect(dialog()).not.toBeNull();
+    state.sf = storefront({ status: 'DRAFT' });
+    await releaseFresh();
+    await flush();
+    expect(dialog()).toBeNull();
+    expect(alerts()).toEqual([REJECTED]);
+    expect(text()).not.toContain('Chọn danh mục');
+    expect(text()).toContain('Trà xanh');
+  });
+
+  it.each([
+    ['400, gian hàng mới về vẫn chưa có bộ sưu tập', 400],
+    ['500 (không tải lại)', 500],
+  ])('bước sản phẩm, chọn mẫu bị từ chối %s: tấm ở lại và lời báo nằm TRONG tấm (không có lời báo thứ hai sau tấm)', async (_name, status) => {
+    await toProductsStep({ collections: [] });
+    click(btn('Chọn danh mục'));
+    await flush();
+    state.failStatus.set('post /storefront/me/apply-template', status);
+    click(btn('Dùng mẫu Nhà bếp', dialog()!));
+    await flush();
+    await flush();
+    expect(dialog()).not.toBeNull();
+    expect(alerts()).toHaveLength(1);
+    expect(dialog()!.querySelector('[role="alert"]')).not.toBeNull();
+    expect(btn('Dùng mẫu Nhà bếp', dialog()!).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('bước sản phẩm, lời báo mẫu bị từ chối: đóng tấm "Để sau" thì lời báo ra trang, mở lại tấm thì lời báo cũ mất', async () => {
+    await toProductsStep({ collections: [] });
+    click(btn('Chọn danh mục'));
+    await flush();
+    state.failStatus.set('post /storefront/me/apply-template', 500);
+    click(btn('Dùng mẫu Nhà bếp', dialog()!));
+    await flush();
+    await flush();
+    click(btn('Để sau, tự chọn sản phẩm', dialog()!));
+    await flush();
+    expect(dialog()).toBeNull();
+    expect(alerts()).toHaveLength(1);
+    click(btn('Chọn danh mục'));
+    await flush();
+    expect(alerts()).toHaveLength(0);
   });
 
   it('bước sản phẩm, mở bộ chọn (tạo khối mặc định) bị từ chối 404: tải lại gian hàng RỒI mới nhả nút Thêm sản phẩm; 500 thì không tải lại', async () => {

@@ -31,6 +31,14 @@ const BUSY_CLASS = 'aria-disabled:opacity-60';
 const CREATE_PRODUCT_KEY = ['merchant-create-product'] as const;
 /** Lỗi không có phản hồi (mất mạng giữa chừng, quá hạn): máy chủ có thể đã tạo sản phẩm, bấm Thử lại là đăng trùng. */
 export const CREATE_OUTCOME_UNKNOWN_TEXT = 'Có thể sản phẩm đã được đăng nhưng chưa nhận được phản hồi. Kiểm tra danh sách sản phẩm rồi hẵng đăng lại, kẻo bị trùng.';
+export const createSentText = (name: string) => `Sản phẩm «${name}» của lần gửi trước đã được gửi lên chờ duyệt. Xem danh sách trước khi gửi thêm.`;
+
+/** Lời báo về lệnh của lần mở hộp trước, xong khi hộp đó đã đóng: nằm trong hộp đang mở (lớp phủ che trang) hoặc ở trang nếu không có hộp nào mở. */
+export type CreateNotice = { kind: 'sent' | 'unknown'; text: string };
+
+/** Cổng 502/504 do lớp phía trước API trả khi chờ quá lâu: API có thể đã tạo xong sản phẩm, giống mất mạng giữa chừng. */
+const GATEWAY_STATUSES = [502, 504];
+const isOutcomeUnknown = (e: unknown) => e instanceof NetworkError || GATEWAY_STATUSES.includes(errorStatus(e) ?? 0);
 
 const INPUT = `mt-1 ${INPUT_CLASS} ${TOUCH_H}`;
 const MAX_STOCK = 100_000;
@@ -128,11 +136,17 @@ export function CreateProductModal({
   onClose,
   onSuccess,
   onOutcomeUnknown,
+  onSend,
+  notice,
 }: {
   onClose: () => void;
-  onSuccess: (stillOpen: boolean) => void;
+  /** `stillOpen` false = hộp gửi lệnh này đã đóng (lệnh của lần mở trước), `name` là tên sản phẩm của lần gửi đó. */
+  onSuccess: (stillOpen: boolean, name: string) => void;
   /** Lệnh tạo không có phản hồi nên chưa rõ sản phẩm đã được tạo chưa; `stillOpen` false = hộp đã đóng nên lời báo phải nằm ở trang. Danh sách đã được tải lại ở đây. */
   onOutcomeUnknown?: (stillOpen: boolean) => void;
+  /** Khách bấm gửi thật: lời báo về lần gửi trước hết hiệu lực. */
+  onSend?: () => void;
+  notice?: CreateNotice | null;
 }) {
   const qc = useQueryClient();
   const creatingAnywhere = useIsMutating({ mutationKey: CREATE_PRODUCT_KEY }) > 0;
@@ -167,9 +181,9 @@ export function CreateProductModal({
   const mut = useMutation({
     mutationKey: CREATE_PRODUCT_KEY,
     mutationFn: (dto: CreateMerchantProductInput) => createMerchantProduct(dto),
-    onSuccess: () => onSuccess(stillOpen.current),
+    onSuccess: (_data, dto) => onSuccess(stillOpen.current, dto.name),
     onError: (e: unknown) => {
-      if (!(e instanceof NetworkError)) {
+      if (!isOutcomeUnknown(e)) {
         setMsg(actionErrorText(e));
         return undefined;
       }
@@ -184,6 +198,7 @@ export function CreateProductModal({
   });
   const send = (dto: CreateMerchantProductInput) => {
     submitting.current = true;
+    onSend?.();
     mut.mutate(dto);
   };
 
@@ -346,7 +361,23 @@ export function CreateProductModal({
           </p>
         )}
 
-        <FormFooter onClose={onClose} busy={mut.isPending || creatingAnywhere} submitLabel="Gửi kiểm duyệt" />
+        {notice?.kind === 'sent' && (
+          <p role="status" className="flex items-start gap-1 text-xs text-success-fg">
+            <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>{notice.text}</span>
+          </p>
+        )}
+        {notice?.kind === 'unknown' && (
+          <p role="alert" className="text-xs text-danger-fg">
+            {notice.text}
+          </p>
+        )}
+
+        <FormFooter
+          onClose={onClose}
+          busy={mut.isPending || creatingAnywhere}
+          submitLabel={notice?.kind === 'sent' ? 'Gửi thêm sản phẩm' : 'Gửi kiểm duyệt'}
+        />
       </form>
     </ModalShell>
   );

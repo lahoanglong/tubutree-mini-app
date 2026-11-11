@@ -81,7 +81,7 @@ function useReloadOnReject() {
  * hay khi gian hàng đổi sau một lệnh bị từ chối; nếu chỉ lấy giá trị đầu lúc dựng thì khách thấy giá trị vừa lưu bị trả về cũ và lần Lưu sau gửi bản cũ đè lên bản mới.
  * Ô đã gõ là của khách: bản mới về không ghi đè.
  */
-function useFormFields<T extends Record<string, string>>(source: T) {
+export function useFormFields<T extends Record<string, string>>(source: T) {
   const [typed, setTyped] = useState<Partial<T>>({});
   const edit = (patch: Partial<T>) => setTyped((prev) => ({ ...prev, ...patch }));
   return [{ ...source, ...typed } as T, edit] as const;

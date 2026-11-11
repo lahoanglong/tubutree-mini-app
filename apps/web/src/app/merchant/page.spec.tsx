@@ -1525,44 +1525,123 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
   // Wave 102B: API không khử trùng (mỗi POST tạo một sản phẩm mới), nên chỉ client chặn được đăng trùng.
   describe('Đăng sản phẩm mới: không đăng trùng', () => {
     const OUTCOME_UNKNOWN = 'Có thể sản phẩm đã được đăng';
-    const fillAndSend = async (root: HTMLElement) => {
+    const SUBMIT = /Gửi kiểm duyệt|Gửi thêm sản phẩm|Đang gửi/;
+    const fillAndSend = async (root: HTMLElement, name = 'SP') => {
       const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
-      typeInto(inputByLabel(overlay, 'Tên sản phẩm'), 'SP');
+      typeInto(inputByLabel(overlay, 'Tên sản phẩm'), name);
       typeInto(inputByLabel(overlay, 'Giá bán'), '5000');
       typeInto(inputByLabel(overlay, 'Tồn kho bạn đang có'), '1');
       typeInto(inputByLabel(overlay, 'Nội dung mô tả chi tiết'), 'Mô tả');
-      click(byText(overlay, 'button', /Gửi kiểm duyệt|Đang gửi/));
+      click(byText(overlay, 'button', SUBMIT));
       await flush();
       return overlay;
     };
+    const closeBox = async (root: HTMLElement) => {
+      click(root.querySelector('button[aria-label="Đóng"]'));
+      await flush();
+    };
+    const reopenBox = (root: HTMLElement) => click(byText(root, 'button', 'Đăng sản phẩm mới'));
+    const SENT_NOTICE = 'của lần gửi trước đã được gửi lên chờ duyệt. Xem danh sách trước khi gửi thêm.';
     const openCreate = async () => {
       const root = await mount();
       await openTab('Sản phẩm');
       click(byText(root, 'button', 'Đăng sản phẩm mới'));
       return root;
     };
-    const submitButton = () => byText(document.body, 'button', /Gửi kiểm duyệt|Đang gửi/)!;
+    const submitButton = () => byText(document.body, 'button', SUBMIT)!;
 
-    it('đóng hộp lúc lệnh còn bay rồi mở lại và bấm Đăng: bị chặn (nút báo bận), chỉ có MỘT lệnh tạo; lệnh cũ xong thì bấm lại được', async () => {
+    it('đóng hộp lúc lệnh còn bay rồi mở lại và bấm Đăng: bị chặn (nút báo bận), chỉ có MỘT lệnh tạo; lệnh cũ xong thì hộp mới báo sản phẩm lần trước đã gửi và nút đổi thành "Gửi thêm sản phẩm"', async () => {
       let release!: (v: unknown) => void;
       mocks.createProduct = vi.fn(() => new Promise((r) => (release = r)));
       const root = await openCreate();
-      await fillAndSend(root);
-      click(root.querySelector('button[aria-label="Đóng"]'));
-      await flush();
-      click(byText(root, 'button', 'Đăng sản phẩm mới'));
-      const overlay = await fillAndSend(root);
+      await fillAndSend(root, 'SP lần trước');
+      await closeBox(root);
+      reopenBox(root);
+      const overlay = await fillAndSend(root, 'SP mới');
       expect(mocks.createProduct).toHaveBeenCalledTimes(1);
       expect(submitButton().getAttribute('aria-busy')).toBe('true');
       expect(submitButton().getAttribute('aria-disabled')).toBe('true');
       await act(async () => release({}));
       await flush(4);
       expect(root.querySelector('.fixed.inset-0')).not.toBeNull();
-      expect(inputByLabel(overlay, 'Tên sản phẩm').value).toBe('SP');
+      expect(inputByLabel(overlay, 'Tên sản phẩm').value).toBe('SP mới');
+      const notice = overlay.querySelector('[role="status"]')!;
+      expect(notice.textContent).toContain(`Sản phẩm «SP lần trước» ${SENT_NOTICE}`);
+      expect(notice.textContent).not.toContain('SP mới');
+      expect(submitButton().textContent).toBe('Gửi thêm sản phẩm');
+      expect(submitButton().getAttribute('aria-busy')).toBeNull();
+      expect(root.querySelectorAll('[role="status"], [role="alert"]')).toHaveLength(1);
       mocks.createProduct = vi.fn(async () => ({}));
-      click(byText(root, 'button', 'Gửi kiểm duyệt'));
+      click(submitButton());
       await flush();
       expect(mocks.createProduct).toHaveBeenCalledTimes(1);
+      expect(mocks.createProduct.mock.calls[0]![0]).toMatchObject({ name: 'SP mới' });
+      expect(root.querySelector('.fixed.inset-0')).toBeNull();
+      expect(root.textContent).not.toContain(SENT_NOTICE);
+    });
+
+    it('lời báo "đã gửi" trong hộp mở lại: bấm Gửi thêm thì lời báo biến mất ngay lúc gửi (không ở lại khi lệnh mới còn bay)', async () => {
+      let release!: (v: unknown) => void;
+      mocks.createProduct = vi.fn(() => new Promise((r) => (release = r)));
+      const root = await openCreate();
+      await fillAndSend(root, 'SP lần trước');
+      await closeBox(root);
+      reopenBox(root);
+      const overlay = await fillAndSend(root, 'SP mới');
+      mocks.createProduct = vi.fn(() => new Promise(() => undefined));
+      await act(async () => release({}));
+      await flush(4);
+      expect(overlay.querySelector('[role="status"]')).not.toBeNull();
+      click(submitButton());
+      await flush();
+      expect(mocks.createProduct).toHaveBeenCalledTimes(1);
+      expect(overlay.querySelector('[role="status"]')).toBeNull();
+      expect(submitButton().getAttribute('aria-busy')).toBe('true');
+    });
+
+    it('đóng hộp đang hiện lời báo "đã gửi" rồi mở lại: lời báo không quay lại', async () => {
+      let release!: (v: unknown) => void;
+      mocks.createProduct = vi.fn(() => new Promise((r) => (release = r)));
+      const root = await openCreate();
+      await fillAndSend(root, 'SP lần trước');
+      await closeBox(root);
+      reopenBox(root);
+      await fillAndSend(root, 'SP mới');
+      await act(async () => release({}));
+      await flush(4);
+      expect(root.textContent).toContain(SENT_NOTICE);
+      click(byText(root, 'button', 'Hủy'));
+      await flush();
+      expect(root.querySelector('.fixed.inset-0')).toBeNull();
+      expect(root.textContent).not.toContain(SENT_NOTICE);
+      reopenBox(root);
+      expect(root.textContent).not.toContain(SENT_NOTICE);
+      expect(submitButton().textContent).toBe('Gửi kiểm duyệt');
+    });
+
+    it('đóng hộp lúc lệnh còn bay, lệnh xong khi KHÔNG có hộp nào mở: trang hiện lời báo "đã gửi" kèm tên sản phẩm (role=status), mở hộp mới thì lời báo mất', async () => {
+      let release!: (v: unknown) => void;
+      mocks.createProduct = vi.fn(() => new Promise((r) => (release = r)));
+      const root = await openCreate();
+      await fillAndSend(root, 'SP lần trước');
+      await closeBox(root);
+      const reads = mocks.getProducts.mock.calls.length;
+      await act(async () => release({}));
+      await flush(4);
+      expect(root.querySelector('.fixed.inset-0')).toBeNull();
+      expect(root.querySelector('[role="status"]')!.textContent).toContain(`Sản phẩm «SP lần trước» ${SENT_NOTICE}`);
+      expect(mocks.getProducts.mock.calls.length).toBeGreaterThan(reads);
+      reopenBox(root);
+      expect(root.textContent).not.toContain(SENT_NOTICE);
+    });
+
+    it('lệnh của hộp còn mở xong: hộp đóng, KHÔNG có lời báo nào (khách đã thấy hộp đóng)', async () => {
+      const root = await openCreate();
+      await fillAndSend(root);
+      await flush(4);
+      expect(root.querySelector('.fixed.inset-0')).toBeNull();
+      expect(root.querySelector('[role="status"]')).toBeNull();
+      expect(root.textContent).not.toContain(SENT_NOTICE);
     });
 
     it.each([
@@ -1612,8 +1691,69 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
       expect(root.textContent).not.toContain(OUTCOME_UNKNOWN);
     });
 
-    it('máy chủ có trả lời (500, 400): giữ hành vi cũ, lời lỗi thường, KHÔNG tải lại danh sách, nhả khoá ngay', async () => {
-      for (const err of [new ApiError('Lỗi máy chủ', 500), new ApiError('Tên sản phẩm đã có.', 400)]) {
+    it('mất mạng của lệnh cũ lúc hộp đã mở lại với dữ liệu mới: lời báo "có thể đã đăng" nằm TRONG hộp (role=alert, không bị lớp phủ che), dữ liệu mới còn nguyên, nút bận tới khi danh sách về', async () => {
+      let fail!: (e: unknown) => void;
+      mocks.createProduct = vi.fn(() => new Promise((_r, rej) => (fail = rej)));
+      const root = await openCreate();
+      await fillAndSend(root, 'SP lần trước');
+      await closeBox(root);
+      reopenBox(root);
+      const overlay = await fillAndSend(root, 'SP mới');
+      let listReady!: (v: unknown) => void;
+      mocks.getProducts = vi.fn(() => new Promise((r) => (listReady = r)));
+      await act(async () => fail(new NetworkError(true)));
+      await flush(4);
+      expect(inputByLabel(overlay, 'Tên sản phẩm').value).toBe('SP mới');
+      expect(overlay.querySelector('[role="alert"]')!.textContent).toContain(OUTCOME_UNKNOWN);
+      expect(root.querySelectorAll('[role="alert"]')).toHaveLength(1);
+      expect(submitButton().getAttribute('aria-busy')).toBe('true');
+      await act(async () =>
+        listReady({ ownProducts: [], resellProducts: [], meta: { page: 1, limit: 20, ownTotal: 0, resellTotal: 0 } }),
+      );
+      await flush(4);
+      expect(submitButton().getAttribute('aria-busy')).toBeNull();
+      expect(submitButton().textContent).toBe('Gửi kiểm duyệt');
+      mocks.createProduct = vi.fn(async () => ({}));
+      click(submitButton());
+      await flush();
+      expect(mocks.createProduct).toHaveBeenCalledTimes(1);
+      expect(overlay.isConnected).toBe(false);
+    });
+
+    it.each([502, 504])('cổng %i (máy chủ có thể đã tạo trước khi cổng báo lỗi) = kết quả không xác định: lời báo "có thể đã đăng", tải lại danh sách, nút giữ bận tới khi danh sách về', async (status) => {
+      mocks.createProduct = vi.fn(async () => {
+        throw new ApiError('Bad gateway', status);
+      });
+      const root = await openCreate();
+      let listReady!: (v: unknown) => void;
+      mocks.getProducts = vi.fn(() => new Promise((r) => (listReady = r)));
+      const overlay = await fillAndSend(root);
+      expect(overlay.querySelector('[role="alert"]')!.textContent).toContain(OUTCOME_UNKNOWN);
+      expect(mocks.getProducts).toHaveBeenCalledTimes(1);
+      expect(submitButton().getAttribute('aria-busy')).toBe('true');
+      click(submitButton());
+      await flush();
+      expect(mocks.createProduct).toHaveBeenCalledTimes(1);
+      await act(async () =>
+        listReady({ ownProducts: [], resellProducts: [], meta: { page: 1, limit: 20, ownTotal: 0, resellTotal: 0 } }),
+      );
+      await flush(4);
+      expect(submitButton().getAttribute('aria-busy')).toBeNull();
+    });
+
+    it('cổng 504 lúc khách đã đóng hộp: trang giữ lời báo "có thể đã đăng"', async () => {
+      let fail!: (e: unknown) => void;
+      mocks.createProduct = vi.fn(() => new Promise((_r, rej) => (fail = rej)));
+      const root = await openCreate();
+      await fillAndSend(root);
+      await closeBox(root);
+      await act(async () => fail(new ApiError('Gateway timeout', 504)));
+      await flush(4);
+      expect(root.querySelector('[role="alert"]')!.textContent).toContain(OUTCOME_UNKNOWN);
+    });
+
+    it('máy chủ có trả lời (500, 503, 400): giữ hành vi cũ, lời lỗi thường, KHÔNG tải lại danh sách, nhả khoá ngay', async () => {
+      for (const err of [new ApiError('Lỗi máy chủ', 500), new ApiError('Dịch vụ tạm ngưng', 503), new ApiError('Tên sản phẩm đã có.', 400)]) {
         mocks.createProduct = vi.fn(async () => {
           throw err;
         });
