@@ -3305,14 +3305,67 @@ describe('CheckoutPage — máy chủ từ chối thì giữ khoá tới khi d�
       expect(mocks.placeOrder.mock.calls[1]![1]).toBe(mocks.placeOrder.mock.calls[0]![1]);
     });
 
-    it('giá đổi lúc đặt (PRICE_CHANGED): hộp báo riêng, không tải lại và không giữ khoá như trước', async () => {
-      mocks.placeOrder.mockRejectedValueOnce(apiError(409, 'PRICE_CHANGED', 'PRICE_CHANGED')).mockResolvedValue(OK);
-      const { invalidate, button } = await openOrder(() => new Promise(() => undefined));
-      fireEvent.click(button());
-      await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
-      await settle();
-      expect(button()).not.toHaveAttribute('aria-busy');
-      expect(invalidate).not.toHaveBeenCalled();
+    describe('giá đổi lúc đặt (PRICE_CHANGED)', () => {
+      const openPriceChanged = async (status: number, refresh: () => Promise<unknown>) => {
+        mocks.placeOrder.mockRejectedValueOnce(apiError(status, 'PRICE_CHANGED', 'PRICE_CHANGED')).mockResolvedValue(OK);
+        const view = await openOrder(refresh);
+        fireEvent.click(view.button());
+        await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+        expect(await screen.findByText('Giá ưu đãi đã thay đổi')).toBeInTheDocument();
+        return view;
+      };
+
+      it.each([[400], [409]])('bị từ chối %i: hộp báo riêng, tải lại giỏ và báo giá, nút Đặt hàng giữ khoá tới khi dữ liệu về rồi mới nhả, bấm lại giữ đúng Idempotency-Key', async (status) => {
+        const refresh = deferred();
+        const { invalidate, button } = await openPriceChanged(status, () => refresh.promise);
+        await waitFor(() => expect(filters(invalidate)).toEqual(keysOf([['cart'], ['quote']])));
+        expect(errorSnackbars()).toBe(0);
+        expect(button()).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          fireEvent.click(button());
+          fireEvent.click(button());
+        });
+        expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+        await act(async () => refresh.resolve());
+        await settle();
+        await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+        fireEvent.click(button());
+        await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
+        expect(mocks.placeOrder.mock.calls[1]![1]).toBe(mocks.placeOrder.mock.calls[0]![1]);
+      });
+
+      it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+        mocks.placeOrder.mockRejectedValueOnce(apiError(400, 'PRICE_CHANGED', 'PRICE_CHANGED')).mockResolvedValue(OK);
+        const { button } = await openOrder(() => new Promise(() => undefined));
+        vi.useFakeTimers({ shouldAdvanceTime: true });
+        try {
+          fireEvent.click(button());
+          expect(await screen.findByText('Giá ưu đãi đã thay đổi')).toBeInTheDocument();
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+          });
+          expect(button()).toHaveAttribute('aria-busy', 'true');
+          await act(async () => {
+            fireEvent.click(button());
+          });
+          expect(mocks.placeOrder).toHaveBeenCalledTimes(1);
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(600);
+          });
+          await waitFor(() => expect(button()).not.toHaveAttribute('aria-busy'));
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('đóng hộp bằng nút Đóng (hay nền) cũng tải lại giỏ và báo giá như hai nút trong hộp', async () => {
+        const { invalidate } = await openPriceChanged(400, () => Promise.resolve());
+        await settle();
+        invalidate.mockClear();
+        fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+        expect(filters(invalidate)).toEqual(keysOf([['cart'], ['quote']]));
+        await waitFor(() => expect(screen.queryByText('Giá ưu đãi đã thay đổi')).toBeNull());
+      });
     });
 
     it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {

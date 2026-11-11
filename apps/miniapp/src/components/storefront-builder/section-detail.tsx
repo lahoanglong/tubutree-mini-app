@@ -44,22 +44,37 @@ const samePinGroup = (a: { isPinned: boolean }, b: { isPinned: boolean }) => a.i
 
 const caption = { fontSize: 'var(--type-caption-size)', lineHeight: 'var(--type-caption-lh)' } as const;
 
+const fmtPct = (pct: number | null) => (pct === null ? '' : String(pct));
+
 function ComboPctField({ pct, onSave }: { pct: number | null; onSave: (n: number) => Promise<number | null> }) {
-  const [text, setText] = useState(pct === null ? '' : String(pct));
+  const [text, setText] = useState(fmtPct(pct));
+  // Số máy chủ đổi (người khác sửa, tải lại) chỉ đổi ô khi khách chưa gõ; số đang gõ giữ nguyên. Lưu xong thì ô trở lại bám máy chủ.
+  const touchedRef = useRef(false);
+  useEffect(() => {
+    if (!touchedRef.current) setText(fmtPct(pct));
+  }, [pct]);
   const [saving, setSaving] = useState(false);
   // Trần thật do máy chủ giữ; chỉ biết nó khi lần lưu vừa rồi bị hạ xuống, lúc đó dòng gợi ý nói đúng số ấy.
   const [cap, setCap] = useState<number | null>(null);
   const inflight = useRef(false);
-  useEffect(() => setText(pct === null ? '' : String(pct)), [pct]);
+  const latestText = useRef(text);
+  useEffect(() => {
+    latestText.current = text;
+  });
   const parsed = parseComboPct(text);
   const save = async () => {
     if (parsed === null || inflight.current) return;
     inflight.current = true;
     setSaving(true);
+    const sentText = text;
     try {
       const saved = await onSave(parsed);
       if (saved !== null) {
-        setText(String(saved));
+        // Khách gõ tiếp trong lúc lệnh bay thì giữ số mới của họ (và dấu đã gõ), không đè bằng số vừa lưu.
+        if (latestText.current === sentText) {
+          setText(String(saved));
+          touchedRef.current = false;
+        }
         setCap(saved < parsed ? saved : null);
       }
     } finally {
@@ -73,7 +88,15 @@ function ComboPctField({ pct, onSave }: { pct: number | null; onSave: (n: number
       <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8 }}>
         <div style={{ flex: 1, minWidth: 0 }}>
           <Field label={BUILDER_COPY.comboPct}>
-            <Input inputMode="numeric" maxLength={3} value={text} onChange={(e) => setText(e.target.value)} />
+            <Input
+              inputMode="numeric"
+              maxLength={3}
+              value={text}
+              onChange={(e) => {
+                touchedRef.current = true;
+                setText(e.target.value);
+              }}
+            />
           </Field>
         </div>
         <Button variant="secondary" loading={saving} disabled={parsed === null || parsed === pct} onPress={save}>{BUILDER_COPY.comboPctSave}</Button>

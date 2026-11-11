@@ -454,7 +454,9 @@ export default function CheckoutPage() {
       // `getErrorMessage` đã biến mã không dấu thành câu chung, nên nhận ra bằng thân phản hồi thô.
       if (isPriceChangedError(e)) {
         setPriceChanged(true);
-        return undefined;
+        reload(['cart']);
+        reload(['quote']);
+        return hold();
       }
       if (getErrorCode(e) === 'TOTAL_CHANGED') {
         setTotalChanged(getErrorMessage(e));
@@ -1403,7 +1405,11 @@ export default function CheckoutPage() {
 
       <BottomSheet
         open={priceChanged}
-        onClose={() => setPriceChanged(false)}
+        onClose={() => {
+          setPriceChanged(false);
+          void queryClient.invalidateQueries({ queryKey: ['cart'] });
+          void queryClient.invalidateQueries({ queryKey: ['quote'] });
+        }}
         title={vi.flashSale.priceChangedTitle}
         description={fillCopy('checkout.priceChangedBody')}
         footer={

@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
   checkIn: vi.fn(),
   buyStreakFreeze: vi.fn(),
   buyTree: vi.fn(),
+  spin: vi.fn(),
 }));
 vi.mock('zmp-ui', () => ({ useSnackbar: () => ({ openSnackbar: mocks.openSnackbar }) }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -36,6 +37,7 @@ vi.mock('../../services/game-api', async (orig) => ({
   checkIn: mocks.checkIn,
   buyStreakFreeze: mocks.buyStreakFreeze,
   buyTree: mocks.buyTree,
+  spin: mocks.spin,
 }));
 
 import { useGameActions } from './use-game-actions';
@@ -550,5 +552,106 @@ describe('(W111A) góp quỹ trồng cây (buyTreeM, mutateAsync): Promise chỉ
       for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
     });
     expect(outcome).toMatchObject({ settled: true, ok: false });
+  });
+});
+
+/** Một lượt quay như WheelOfFortune gọi: `settled` chỉ bật khi Promise xong, tức lúc khoá `lockRef` ở bánh xe nhả. */
+function startSpin(hook: { result: { current: Actions } }) {
+  const outcome = { settled: false, rejected: false, value: undefined as unknown };
+  act(() => {
+    void hook.result.current.handleSpin().then(
+      (value) => Object.assign(outcome, { settled: true, value }),
+      () => Object.assign(outcome, { settled: true, rejected: true }),
+    );
+  });
+  return outcome;
+}
+
+describe('(W118A) vòng quay (handleSpin): lỗi thì tải lại điểm và lượt quay, bánh xe chỉ nhả khoá khi dữ liệu mới về', () => {
+  const SPIN_STALE = [
+    ...(['profile', 'me', 'loyalty'] as Probe[]).map((h) => [400, h] as const),
+    ...[404, 409].map((status) => [status, 'profile' as Probe] as const),
+  ];
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  beforeEach(() => {
+    mocks.spin.mockReset();
+    mocks.openSnackbar.mockClear();
+  });
+
+  it.each(SPIN_STALE)('bị từ chối %i: tải lại %s, handleSpin chưa xong tới khi về, báo một lần rồi mới ném lỗi', async (status, held) => {
+    mocks.spin.mockRejectedValue(httpError(status));
+    const { hook, fetched, release } = setupHeld(held);
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    const outcome = startSpin(hook);
+    await waitFor(() => expect(fetched[held]).toBe(2));
+    await settleTicks();
+    expect(outcome.settled).toBe(false);
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    expect(mocks.openSnackbar.mock.calls[0]?.[0].type).toBe('error');
+    await act(async () => release());
+    await waitFor(() => expect(outcome).toMatchObject({ settled: true, rejected: true }));
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([401, 500, 502])('gặp %i (lỗi tạm): báo lỗi và ném ngay, không tải lại', async (status) => {
+    mocks.spin.mockRejectedValue(httpError(status));
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    const outcome = startSpin(hook);
+    await waitFor(() => expect(outcome).toMatchObject({ settled: true, rejected: true }));
+    await settleTicks();
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+    expect(Object.values(fetched).every((n) => n === 1)).toBe(true);
+  });
+
+  it('mất mạng (không có phản hồi): báo lỗi và ném ngay, không tải lại như các việc khác', async () => {
+    mocks.spin.mockRejectedValue(new HttpError('Network Error', 'ERR_NETWORK'));
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    const outcome = startSpin(hook);
+    await waitFor(() => expect(outcome).toMatchObject({ settled: true, rejected: true }));
+    await settleTicks();
+    expect(Object.values(fetched).every((n) => n === 1)).toBe(true);
+  });
+
+  it('quá hạn (ECONNABORTED): tải lại không chờ, ném ngay dù tải lại còn treo', async () => {
+    mocks.spin.mockRejectedValue(new HttpError('timeout', 'ECONNABORTED'));
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    const outcome = startSpin(hook);
+    await waitFor(() => expect(fetched.profile).toBe(2));
+    await waitFor(() => expect(outcome).toMatchObject({ settled: true, rejected: true }));
+    expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
+  });
+
+  it('tải lại treo mãi: ném sau LOCK_REFRESH_WAIT_MS, không sớm hơn', async () => {
+    mocks.spin.mockRejectedValue(httpError(400));
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    vi.useFakeTimers();
+    const outcome = startSpin(hook);
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(fetched.profile).toBe(2);
+    expect(outcome.settled).toBe(false);
+    await act(async () => { await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1); });
+    expect(outcome.settled).toBe(false);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS);
+      for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(outcome).toMatchObject({ settled: true, rejected: true });
+  });
+
+  it('quay thành công: trả đúng kết quả của máy chủ và tải lại điểm không chờ', async () => {
+    const result = { prize: { id: 'p1', name: 'Thưởng 50 Điểm Xanh', rewardType: 'POINTS', value: 50 } };
+    mocks.spin.mockResolvedValue(result);
+    const { hook, fetched } = setupHeld('profile');
+    await waitFor(() => expect(Object.values(fetched).every((n) => n === 1)).toBe(true));
+    const outcome = startSpin(hook);
+    await waitFor(() => expect(outcome).toMatchObject({ settled: true, rejected: false, value: result }));
+    await waitFor(() => expect(fetched.loyalty).toBe(2));
+    expect(mocks.openSnackbar).not.toHaveBeenCalled();
   });
 });

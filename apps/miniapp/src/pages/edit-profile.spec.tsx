@@ -620,7 +620,7 @@ describe('Sửa hồ sơ: máy chủ từ chối vì hồ sơ không còn khớp
     expect(mocks.updateMe).toHaveBeenCalledTimes(2);
   });
 
-  it('khách vừa đổi ảnh đại diện rồi bị từ chối: hồ sơ tải lại không ghi đè ảnh mới (cũng không ghi đè tên), lần lưu kế gửi đúng ảnh mới', async () => {
+  it('khách vừa đổi ảnh đại diện rồi bị từ chối: hồ sơ tải lại không ghi đè ảnh mới, tên chưa sửa đổi theo hồ sơ mới, lần lưu kế gửi đúng ảnh mới và tên mới', async () => {
     const UPLOADED = 'https://res.cloudinary.com/demo/image/upload/v1/avatar-moi.jpg';
     mocks.readAndCompressImage.mockResolvedValue('data:image/jpeg;base64,UkFX');
     mocks.uploadToCloudinary.mockResolvedValue(UPLOADED);
@@ -644,12 +644,12 @@ describe('Sửa hồ sơ: máy chủ từ chối vì hồ sơ không còn khớp
     await waitFor(() => expect(mocks.getMe).toHaveBeenCalledTimes(2));
     expect(mocks.updateMe.mock.calls[0]![0].avatarUrl).toBe(UPLOADED);
     await waitFor(() => expect(saveButton()).not.toHaveAttribute('aria-busy'));
-    expect(screen.getByLabelText('Họ và tên')).toHaveValue('Lan');
+    expect(screen.getByLabelText('Họ và tên')).toHaveValue('Tên trên máy chủ');
 
     fireEvent.click(saveButton());
     await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
     expect(mocks.updateMe.mock.calls[1]![0].avatarUrl).toBe(UPLOADED);
-    expect(mocks.updateMe.mock.calls[1]![0].fullName).toBe('Lan');
+    expect(mocks.updateMe.mock.calls[1]![0].fullName).toBe('Tên trên máy chủ');
   });
 
   it('khách vừa gõ email rồi bị từ chối: hồ sơ tải lại không ghi đè email đang gõ, lần lưu kế gửi đúng email đó', async () => {
@@ -668,5 +668,69 @@ describe('Sửa hồ sơ: máy chủ từ chối vì hồ sơ không còn khớp
     await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(2));
     expect(mocks.updateMe.mock.calls[0]![0].email).toBe('moi@tubu.vn');
     expect(mocks.updateMe.mock.calls[1]![0].email).toBe('moi@tubu.vn');
+  });
+});
+
+describe('Sửa hồ sơ: ô chưa sửa bám hồ sơ mới về, ô đã sửa giữ chữ (W118A)', () => {
+  const NEW_AVATAR = 'https://res.cloudinary.com/demo/image/upload/v1/may-chu-moi.jpg';
+  const saveButton = () => screen.getByRole('button', { name: 'Lưu thay đổi' });
+  const renderLive = () => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <EditProfilePage />
+      </QueryClientProvider>,
+    );
+    return qc;
+  };
+  const refetchMe = (qc: QueryClient) =>
+    act(async () => {
+      await qc.invalidateQueries({ queryKey: ['me'] });
+    });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getMe.mockReset().mockResolvedValue(ME);
+    mocks.updateMe.mockReset().mockResolvedValue({ avatarUrl: null });
+    mocks.cloudinary = true;
+  });
+
+  it('khách mới sửa email: hồ sơ tải lại có tên và ảnh mới thì tên và ảnh đổi theo, email giữ chữ; Lưu gửi tên MỚI + ảnh MỚI + email khách gõ', async () => {
+    const qc = renderLive();
+    const email = await screen.findByLabelText('Email');
+    await waitFor(() => expect(screen.getByLabelText('Họ và tên')).toHaveValue('Lan'));
+    fireEvent.change(email, { target: { value: 'moi@tubu.vn' } });
+    mocks.getMe.mockResolvedValue({ ...ME, fullName: 'Tên mới trên máy chủ', email: 'may-chu@tubu.vn', avatarUrl: NEW_AVATAR });
+    await refetchMe(qc);
+    await waitFor(() => expect(screen.getByLabelText('Họ và tên')).toHaveValue('Tên mới trên máy chủ'));
+    expect(screen.getByLabelText('Email')).toHaveValue('moi@tubu.vn');
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
+    expect(mocks.updateMe).toHaveBeenCalledWith({ fullName: 'Tên mới trên máy chủ', email: 'moi@tubu.vn', avatarUrl: NEW_AVATAR, dob: undefined });
+  });
+
+  it('khách mới sửa tên: email của hồ sơ tải lại đổi theo, tên giữ chữ khách gõ; Lưu gửi đúng hai giá trị đó', async () => {
+    const qc = renderLive();
+    const name = await screen.findByLabelText('Họ và tên');
+    await waitFor(() => expect(name).toHaveValue('Lan'));
+    fireEvent.change(name, { target: { value: 'Lan Mới' } });
+    mocks.getMe.mockResolvedValue({ ...ME, fullName: 'Tên trên máy chủ', email: 'may-chu@tubu.vn' });
+    await refetchMe(qc);
+    await waitFor(() => expect(screen.getByLabelText('Email')).toHaveValue('may-chu@tubu.vn'));
+    expect(screen.getByLabelText('Họ và tên')).toHaveValue('Lan Mới');
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
+    expect(mocks.updateMe.mock.calls[0]![0]).toMatchObject({ fullName: 'Lan Mới', email: 'may-chu@tubu.vn' });
+  });
+
+  it('chưa sửa ô nào: hồ sơ tải lại có tên mới thì ô đổi theo và Lưu gửi tên mới', async () => {
+    const qc = renderLive();
+    await waitFor(() => expect(screen.getByLabelText('Họ và tên')).toHaveValue('Lan'));
+    mocks.getMe.mockResolvedValue({ ...ME, fullName: 'Tên mới trên máy chủ' });
+    await refetchMe(qc);
+    await waitFor(() => expect(screen.getByLabelText('Họ và tên')).toHaveValue('Tên mới trên máy chủ'));
+    fireEvent.click(saveButton());
+    await waitFor(() => expect(mocks.updateMe).toHaveBeenCalledTimes(1));
+    expect(mocks.updateMe.mock.calls[0]![0].fullName).toBe('Tên mới trên máy chủ');
   });
 });

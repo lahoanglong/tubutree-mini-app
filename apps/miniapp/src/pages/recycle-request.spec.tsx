@@ -1012,3 +1012,212 @@ describe('/recycle/r/:id: tấm huỷ mở lại cùng yêu cầu lúc lệnh c�
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 });
+
+describe('/recycle/r/:id: ô Hãng/Mã vận đơn bám yêu cầu tải lại, làm mới sau huỷ có trần chờ (W118A)', () => {
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const toasts = (text: string, type: string) => mocks.openSnackbar.mock.calls.filter((c) => c[0].text === text && c[0].type === type);
+
+  beforeEach(() => {
+    mocks.cancelWasteRequest.mockReset();
+    mocks.setWasteTracking.mockReset();
+    mocks.invalidate.mockReset();
+    mocks.params.id = 'req-1';
+  });
+  afterEach(() => {
+    mocks.invalidate.mockReset();
+    vi.useRealTimers();
+  });
+
+  const refetchRequest = (qc: { invalidateQueries: (f: { queryKey: readonly unknown[] }) => Promise<unknown> }) =>
+    act(async () => {
+      await qc.invalidateQueries({ queryKey: ['waste', 'request', 'req-1'] });
+    });
+
+  describe('TrackingForm', () => {
+    it('Gửi về kho còn mở: khách mới gõ Mã vận đơn, yêu cầu tải lại có Hãng: Hãng đổi theo, Mã giữ chữ; Đã gửi gửi đúng hai giá trị đó', async () => {
+      mocks.getWasteRequest.mockResolvedValue(MAIL());
+      mocks.setWasteTracking.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'ABC' }));
+      const { qc } = renderPage();
+      const sent = await screen.findByRole('button', { name: 'Đã gửi' });
+      fireEvent.change(screen.getByLabelText('Mã vận đơn'), { target: { value: 'ABC' } });
+      expect(sent).toBeDisabled();
+      mocks.getWasteRequest.mockResolvedValue(MAIL({ carrier: 'GHN' }));
+      await refetchRequest(qc);
+      await waitFor(() => expect(screen.getByLabelText('Hãng')).toHaveValue('GHN'));
+      expect(screen.getByLabelText('Mã vận đơn')).toHaveValue('ABC');
+      await waitFor(() => expect(sent).toBeEnabled());
+      fireEvent.click(sent);
+      await waitFor(() => expect(mocks.setWasteTracking).toHaveBeenCalledWith('req-1', { carrier: 'GHN', trackingCode: 'ABC' }));
+    });
+
+    it('đang sửa mã vận đơn (IN_TRANSIT): khách mới đổi Mã, yêu cầu tải lại có Hãng khác: Hãng đổi theo, Mã giữ chữ khách gõ', async () => {
+      mocks.getWasteRequest.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123', editable: false }));
+      mocks.setWasteTracking.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'J&T', trackingCode: 'GHN999', editable: false }));
+      const { qc } = renderPage();
+      const card = (await screen.findByText('Vận chuyển', { selector: 'h2' })).closest('section') as HTMLElement;
+      fireEvent.click(within(card).getByRole('button', { name: 'Sửa' }));
+      fireEvent.change(screen.getByLabelText('Mã vận đơn'), { target: { value: 'GHN999' } });
+      mocks.getWasteRequest.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'J&T', trackingCode: 'GHN123', editable: false }));
+      await refetchRequest(qc);
+      await waitFor(() => expect(screen.getByLabelText('Hãng')).toHaveValue('J&T'));
+      expect(screen.getByLabelText('Mã vận đơn')).toHaveValue('GHN999');
+      fireEvent.click(screen.getByRole('button', { name: 'Đã gửi' }));
+      await waitFor(() => expect(mocks.setWasteTracking).toHaveBeenCalledWith('req-1', { carrier: 'J&T', trackingCode: 'GHN999' }));
+    });
+
+    it('chưa gõ gì: yêu cầu tải lại có mã vận đơn mới thì cả hai ô đổi theo', async () => {
+      mocks.getWasteRequest.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123', editable: false }));
+      const { qc } = renderPage();
+      const card = (await screen.findByText('Vận chuyển', { selector: 'h2' })).closest('section') as HTMLElement;
+      fireEvent.click(within(card).getByRole('button', { name: 'Sửa' }));
+      mocks.getWasteRequest.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'J&T', trackingCode: 'JT777', editable: false }));
+      await refetchRequest(qc);
+      await waitFor(() => expect(screen.getByLabelText('Hãng')).toHaveValue('J&T'));
+      expect(screen.getByLabelText('Mã vận đơn')).toHaveValue('JT777');
+    });
+
+    it('đóng ô sửa rồi mở lại: nạp lại từ yêu cầu hiện tại, bỏ chữ đã gõ lần trước', async () => {
+      mocks.getWasteRequest.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123', editable: false }));
+      const { qc } = renderPage();
+      const card = (await screen.findByText('Vận chuyển', { selector: 'h2' })).closest('section') as HTMLElement;
+      fireEvent.click(within(card).getByRole('button', { name: 'Sửa' }));
+      fireEvent.change(screen.getByLabelText('Mã vận đơn'), { target: { value: 'GHN999' } });
+      mocks.setWasteTracking.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN999', editable: false }));
+      mocks.getWasteRequest.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN999', editable: false }));
+      fireEvent.click(screen.getByRole('button', { name: 'Đã gửi' }));
+      await waitFor(() => expect(mocks.setWasteTracking).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(screen.queryByLabelText('Mã vận đơn')).toBeNull());
+      await refetchRequest(qc);
+      await settle();
+      fireEvent.click(within((await screen.findByText('Vận chuyển', { selector: 'h2' })).closest('section') as HTMLElement).getByRole('button', { name: 'Sửa' }));
+      expect(screen.getByLabelText('Mã vận đơn')).toHaveValue('GHN999');
+    });
+  });
+
+  describe('Xác nhận huỷ: làm mới sau khi huỷ xong', () => {
+    it('làm mới treo mãi: tấm huỷ còn mở và bận tới LOCK_REFRESH_WAIT_MS - 500, hết hạn thì đóng, báo huỷ xong và nhả khoá', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      mocks.cancelWasteRequest.mockResolvedValue(makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false }));
+      mocks.invalidate.mockReturnValue(new Promise<void>(() => undefined));
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Huỷ yêu cầu' }));
+      const sheet = await screen.findByRole('dialog');
+      const confirm = within(sheet).getByRole('button', { name: 'Xác nhận huỷ' });
+      fireEvent.click(confirm);
+      await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(screen.getByRole('dialog')).toBe(sheet);
+      expect(confirm).toHaveAttribute('aria-busy', 'true');
+      expect(toasts('Đã huỷ yêu cầu', 'success')).toHaveLength(0);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(toasts('Đã huỷ yêu cầu', 'success')).toHaveLength(1);
+      expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(1);
+    });
+
+    it('làm mới về nhanh: tấm đóng và báo huỷ xong ngay sau khi làm mới xong, không chờ hết trần', async () => {
+      const refresh = (() => {
+        let resolve!: () => void;
+        const promise = new Promise<void>((res) => {
+          resolve = res;
+        });
+        return { promise, resolve };
+      })();
+      mocks.cancelWasteRequest.mockResolvedValue(makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false }));
+      mocks.invalidate.mockReturnValue(refresh.promise);
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Huỷ yêu cầu' }));
+      const sheet = await screen.findByRole('dialog');
+      fireEvent.click(within(sheet).getByRole('button', { name: 'Xác nhận huỷ' }));
+      await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1));
+      expect(screen.getByRole('dialog')).toBe(sheet);
+      expect(toasts('Đã huỷ yêu cầu', 'success')).toHaveLength(0);
+      await act(async () => refresh.resolve());
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      expect(toasts('Đã huỷ yêu cầu', 'success')).toHaveLength(1);
+    });
+  });
+
+  describe('Đã gửi: làm mới sau khi lưu mã vận đơn xong', () => {
+    const SAVED = 'Đã lưu mã vận đơn';
+
+    it('đang sửa (IN_TRANSIT), làm mới treo mãi: form còn mở và nút bận tới LOCK_REFRESH_WAIT_MS - 500, hết hạn thì báo đã lưu, đóng ô sửa và nhả khoá', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      mocks.getWasteRequest.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123', editable: false }));
+      mocks.setWasteTracking.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN999', editable: false }));
+      mocks.invalidate.mockReturnValue(new Promise<void>(() => undefined));
+      renderPage();
+      const card = (await screen.findByText('Vận chuyển', { selector: 'h2' })).closest('section') as HTMLElement;
+      fireEvent.click(within(card).getByRole('button', { name: 'Sửa' }));
+      fireEvent.change(screen.getByLabelText('Mã vận đơn'), { target: { value: 'GHN999' } });
+      const sent = screen.getByRole('button', { name: 'Đã gửi' });
+      fireEvent.click(sent);
+      await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(screen.getByLabelText('Mã vận đơn')).toBeInTheDocument();
+      expect(sent).toHaveAttribute('aria-busy', 'true');
+      expect(toasts(SAVED, 'success')).toHaveLength(0);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(screen.queryByLabelText('Mã vận đơn')).toBeNull());
+      expect(toasts(SAVED, 'success')).toHaveLength(1);
+      expect(mocks.setWasteTracking).toHaveBeenCalledTimes(1);
+    });
+
+    it('Gửi về kho còn mở, làm mới treo mãi: nút bận tới LOCK_REFRESH_WAIT_MS - 500, hết hạn thì báo đã lưu và nút hết bận', async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      mocks.getWasteRequest.mockResolvedValue(MAIL());
+      mocks.setWasteTracking.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123' }));
+      mocks.invalidate.mockReturnValue(new Promise<void>(() => undefined));
+      renderPage();
+      const sent = await screen.findByRole('button', { name: 'Đã gửi' });
+      fireEvent.change(screen.getByLabelText('Hãng'), { target: { value: 'GHN' } });
+      fireEvent.change(screen.getByLabelText('Mã vận đơn'), { target: { value: 'GHN123' } });
+      await waitFor(() => expect(sent).toBeEnabled());
+      fireEvent.click(sent);
+      await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(sent).toHaveAttribute('aria-busy', 'true');
+      expect(toasts(SAVED, 'success')).toHaveLength(0);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(toasts(SAVED, 'success')).toHaveLength(1));
+      await waitFor(() => expect(sent).not.toHaveAttribute('aria-busy'));
+      expect(mocks.setWasteTracking).toHaveBeenCalledTimes(1);
+    });
+
+    it('làm mới về nhanh: báo đã lưu và đóng ô sửa ngay sau khi làm mới xong, không chờ hết trần', async () => {
+      let resolve!: () => void;
+      const refresh = new Promise<void>((res) => {
+        resolve = res;
+      });
+      mocks.getWasteRequest.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN123', editable: false }));
+      mocks.setWasteTracking.mockResolvedValue(MAIL({ status: 'IN_TRANSIT', carrier: 'GHN', trackingCode: 'GHN999', editable: false }));
+      mocks.invalidate.mockReturnValue(refresh);
+      renderPage();
+      const card = (await screen.findByText('Vận chuyển', { selector: 'h2' })).closest('section') as HTMLElement;
+      fireEvent.click(within(card).getByRole('button', { name: 'Sửa' }));
+      fireEvent.change(screen.getByLabelText('Mã vận đơn'), { target: { value: 'GHN999' } });
+      fireEvent.click(screen.getByRole('button', { name: 'Đã gửi' }));
+      await waitFor(() => expect(mocks.invalidate).toHaveBeenCalledTimes(1));
+      expect(screen.getByLabelText('Mã vận đơn')).toBeInTheDocument();
+      expect(toasts(SAVED, 'success')).toHaveLength(0);
+      await act(async () => resolve());
+      await waitFor(() => expect(screen.queryByLabelText('Mã vận đơn')).toBeNull());
+      expect(toasts(SAVED, 'success')).toHaveLength(1);
+    });
+  });
+});

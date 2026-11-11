@@ -604,3 +604,87 @@ describe('ChooseDestinationSheet: máy chủ từ chối thì tải lại khoả
     expect(screen.getByRole('button', { name: 'Xác nhận' })).toBeInTheDocument();
   });
 });
+
+describe('ChooseDestinationSheet: ô chưa chạm bám khoản hoàn mới về lúc sheet còn mở, ô khách đã gõ giữ chữ (W118A)', () => {
+  beforeEach(resetMocks);
+  const HAS_BANK = { ...LATE, bankName: 'ACB', bankAccountNo: '999888777', bankAccountName: 'LE CHI' };
+  const NEWER = { ...HAS_BANK, bankName: 'MB Bank', bankAccountNo: '111222333', bankAccountName: 'TRAN BINH' };
+
+  function renderLive() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <OrderRefunds orderId="o1" />
+      </QueryClientProvider>,
+    );
+    return qc;
+  }
+  // TanStack báo người nghe cache qua setTimeout(0): đợi thông báo tới sheet rồi mới kiểm.
+  const pushFresh = async (qc: QueryClient, refund: unknown) => {
+    await act(async () => {
+      qc.setQueryData(['my-refunds', 'o1'], [refund]);
+    });
+    await settle();
+  };
+  const openChange = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Đổi nơi nhận' }));
+    return screen.findByRole('button', { name: 'Xác nhận' });
+  };
+
+  it('dữ liệu mới về: ô chưa chạm đổi theo, ô khách đã gõ giữ chữ; Xác nhận gửi đúng nội dung đang hiện', async () => {
+    mocks.fetchMyRefunds.mockResolvedValue([HAS_BANK]);
+    const qc = renderLive();
+    await openChange();
+    typeField('Chủ tài khoản', 'KHACH GO');
+    await pushFresh(qc, NEWER);
+    expect(fieldValue('Tên ngân hàng')).toBe('MB Bank');
+    expect(fieldValue('Số tài khoản')).toBe('111222333');
+    expect(fieldValue('Chủ tài khoản')).toBe('KHACH GO');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Xác nhận' }));
+    });
+    await waitFor(() =>
+      expect(mocks.chooseRefundDestination).toHaveBeenCalledWith('r1', {
+        refundMethod: 'BANK',
+        bankName: 'MB Bank',
+        accountNumber: '111222333',
+        accountName: 'KHACH GO',
+      }),
+    );
+  });
+
+  it('khoản chưa có tài khoản mà dữ liệu mới về đã có (máy khác vừa lưu): khách chưa chạm thì Ngân hàng được chọn và ba ô theo dữ liệu mới, không gọi API điền sẵn', async () => {
+    mocks.fetchMyRefunds.mockResolvedValue([LATE]);
+    const qc = renderLive();
+    await openSheet();
+    expect(screen.getByRole('radio', { name: /Ví Tubu/ })).toHaveAttribute('aria-checked', 'true');
+    await pushFresh(qc, HAS_BANK);
+    expect(screen.getByRole('radio', { name: /Tài khoản ngân hàng/ })).toHaveAttribute('aria-checked', 'true');
+    expect(fieldValue('Số tài khoản')).toBe('999888777');
+    expect(fieldValue('Tên ngân hàng')).toBe('ACB');
+    expect(mocks.fetchRefundBank).not.toHaveBeenCalled();
+  });
+
+  it('khách đã chọn Ví Tubu: dữ liệu mới về không kéo lại sang Ngân hàng; quay lại Ngân hàng thấy ô chưa chạm theo dữ liệu mới', async () => {
+    mocks.fetchMyRefunds.mockResolvedValue([HAS_BANK]);
+    const qc = renderLive();
+    await openChange();
+    fireEvent.click(screen.getByRole('radio', { name: /Ví Tubu/ }));
+    await pushFresh(qc, NEWER);
+    expect(screen.getByRole('radio', { name: /Ví Tubu/ })).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(screen.getByRole('radio', { name: /Tài khoản ngân hàng/ }));
+    expect(fieldValue('Tên ngân hàng')).toBe('MB Bank');
+    expect(fieldValue('Số tài khoản')).toBe('111222333');
+    expect(fieldValue('Chủ tài khoản')).toBe('TRAN BINH');
+  });
+
+  it('khách xoá ô tên ngân hàng rồi dữ liệu mới về: ô vẫn trống (xoá cũng là đã sửa)', async () => {
+    mocks.fetchMyRefunds.mockResolvedValue([HAS_BANK]);
+    const qc = renderLive();
+    await openChange();
+    typeField('Tên ngân hàng', '');
+    await pushFresh(qc, NEWER);
+    expect(fieldValue('Tên ngân hàng')).toBe('');
+    expect(fieldValue('Số tài khoản')).toBe('111222333');
+  });
+});

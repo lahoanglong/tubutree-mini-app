@@ -116,18 +116,22 @@ export default function OrderDetailPage() {
     enabled: !!order.data?.id && hasApprovedReturn,
   });
 
+  // Nạp tài khoản đã lưu đúng một lần mỗi lần mở tấm huỷ (đóng thì cờ được gỡ để lần mở sau nạp lại): xoá số tài khoản để gõ số khác không kích hoạt
+  // nạp lại. Phản hồi về muộn chỉ điền khi LÚC ĐÓ cả ba ô còn trống, nên không bao giờ ghi đè chữ khách đã gõ.
+  const cancelBankPrefillStartedRef = useRef(false);
   useEffect(() => {
-    if (!confirmCancel || cancelMethod !== 'BANK' || cancelBank.accountNumber) return;
-    let alive = true;
+    if (!confirmCancel) {
+      cancelBankPrefillStartedRef.current = false;
+      return;
+    }
+    if (cancelMethod !== 'BANK' || cancelBankPrefillStartedRef.current) return;
+    cancelBankPrefillStartedRef.current = true;
     void fetchRefundBank()
-      .then((b) => {
-        if (alive && b) setCancelBank(b);
+      .then((saved) => {
+        if (saved) setCancelBank((b) => (b.bankName || b.accountNumber || b.accountName ? b : saved));
       })
       .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [confirmCancel, cancelMethod, cancelBank.accountNumber]);
+  }, [confirmCancel, cancelMethod]);
 
   // ── Mời theo dõi OA sau đơn đầu tiên (finding A3-01 nửa 2 — xem shouldShowFollowOaPrompt) ──
   // Mặc định seen=true để KHÔNG nháy hiện thẻ rồi ẩn ngay trong lúc chờ đọc cờ đã lưu trên máy.

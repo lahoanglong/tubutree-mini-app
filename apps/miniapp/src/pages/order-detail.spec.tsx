@@ -1127,3 +1127,90 @@ describe('OrderDetailPage — ngày giao dự kiến, ảnh món, ghi chú (R-9,
     expect(screen.queryByText('Ghi chú')).toBeNull();
   });
 });
+
+describe('OrderDetailPage: tài khoản hoàn tiền mặc định của tấm huỷ nạp mỗi lần mở một lần, không ghi đè chữ đã gõ (W118A)', () => {
+  const SAVED = { bankName: 'VCB', accountNumber: '0071000123456', accountName: 'TRAN THI B' };
+  const LABELS = ['Tên ngân hàng', 'Số tài khoản', 'Chủ tài khoản'] as const;
+  const paidTransfer = { ...ORDER, status: 'CONFIRMED', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PAID', total: 114_000 };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchOrder.mockResolvedValue(paidTransfer);
+    mocks.fetchMyReturns.mockResolvedValue([]);
+    mocks.fetchMyRefunds.mockResolvedValue([]);
+    mocks.fetchRefundBank.mockReset().mockResolvedValue(null);
+  });
+
+  const deferred = () => {
+    let resolve!: (v: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const openBankPicker = async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
+    fireEvent.click(screen.getByRole('radio', { name: /Tài khoản ngân hàng/ }));
+  };
+  const typeField = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
+  const fieldValue = (label: string) => (screen.getByLabelText(label) as HTMLInputElement).value;
+
+  it('khách gõ chủ tài khoản và số rồi xoá số: không nạp lần hai, tên chủ còn nguyên', async () => {
+    mocks.fetchRefundBank.mockResolvedValueOnce(null).mockResolvedValue(SAVED);
+    await openBankPicker();
+    await waitFor(() => expect(mocks.fetchRefundBank).toHaveBeenCalledTimes(1));
+    await settle();
+    typeField('Chủ tài khoản', 'TRAN BINH');
+    typeField('Số tài khoản', '555666777');
+    typeField('Số tài khoản', '');
+    await settle();
+    expect(mocks.fetchRefundBank).toHaveBeenCalledTimes(1);
+    expect(fieldValue('Chủ tài khoản')).toBe('TRAN BINH');
+    expect(fieldValue('Tên ngân hàng')).toBe('');
+    expect(fieldValue('Số tài khoản')).toBe('');
+  });
+
+  it.each(LABELS)('phản hồi nạp tài khoản về trễ sau khi khách đã gõ ô "%s": không ghi đè', async (label) => {
+    const d = deferred();
+    mocks.fetchRefundBank.mockReturnValue(d.promise);
+    await openBankPicker();
+    typeField(label, 'GO TAY');
+    await act(async () => d.resolve(SAVED));
+    await settle();
+    expect(fieldValue(label)).toBe('GO TAY');
+    for (const other of LABELS.filter((l) => l !== label)) expect(fieldValue(other)).toBe('');
+  });
+
+  it('đóng tấm rồi mở lại: nạp lại một lần mới, điền sẵn khi ba ô còn trống', async () => {
+    mocks.fetchRefundBank.mockResolvedValueOnce(null).mockResolvedValue(SAVED);
+    await openBankPicker();
+    await waitFor(() => expect(mocks.fetchRefundBank).toHaveBeenCalledTimes(1));
+    await settle();
+    fireEvent.click(screen.getByRole('button', { name: 'Giữ đơn' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
+    await waitFor(() => expect(mocks.fetchRefundBank).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(fieldValue('Số tài khoản')).toBe('0071000123456'));
+    expect(fieldValue('Tên ngân hàng')).toBe('VCB');
+    expect(fieldValue('Chủ tài khoản')).toBe('TRAN THI B');
+  });
+
+  it('đóng tấm rồi mở lại khi đã gõ dở một ô: lần nạp mới không ghi đè chữ đã gõ', async () => {
+    mocks.fetchRefundBank.mockResolvedValueOnce(null).mockResolvedValue(SAVED);
+    await openBankPicker();
+    await waitFor(() => expect(mocks.fetchRefundBank).toHaveBeenCalledTimes(1));
+    await settle();
+    typeField('Chủ tài khoản', 'TRAN BINH');
+    fireEvent.click(screen.getByRole('button', { name: 'Giữ đơn' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
+    await waitFor(() => expect(mocks.fetchRefundBank).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(fieldValue('Chủ tài khoản')).toBe('TRAN BINH');
+    expect(fieldValue('Tên ngân hàng')).toBe('');
+    expect(fieldValue('Số tài khoản')).toBe('');
+  });
+});

@@ -491,11 +491,10 @@ function StaffHub() {
       else next.add(dk);
       return next;
     });
+  // Ca chuẩn đã chọn mà biến mất khỏi danh sách sống thì coi như chưa chọn: ô giờ hiện lại và Lưu gửi đúng giờ đang thấy.
+  const quickTpl = quickTplId ? tplQ.data?.find((x) => x.id === quickTplId) : undefined;
   const quickTimes = () => {
-    if (quickTplId) {
-      const t = tplQ.data?.find((x) => x.id === quickTplId);
-      if (t) return { start: minToHHMM(t.startMin), end: minToHHMM(t.endMin), templateId: t.id };
-    }
+    if (quickTpl) return { start: minToHHMM(quickTpl.startMin), end: minToHHMM(quickTpl.endMin), templateId: quickTpl.id };
     return { start: quickStart, end: quickEnd, templateId: undefined as string | undefined };
   };
   const quickM = useLockedMutation({
@@ -789,7 +788,7 @@ function StaffHub() {
           <Button
             fullWidth
             loading={quickM.isPending}
-            disabled={quickDays.size === 0 || (!quickTplId && (!TIME_RE.test(quickStart) || !TIME_RE.test(quickEnd)))}
+            disabled={quickDays.size === 0 || (!quickTpl && (!TIME_RE.test(quickStart) || !TIME_RE.test(quickEnd)))}
             onPress={() => quickM.mutate()}
           >
             Gửi duyệt {quickDays.size > 0 ? `(${quickDays.size} ngày)` : ''}
@@ -812,16 +811,29 @@ function StaffHub() {
             </div>
           )}
 
-          {!quickTplId && (
+          {!quickTpl && (
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1 }}>
                 <Field label="Bắt đầu">
-                  <TimeInput value={quickStart} onChange={setQuickStart} />
+                  <TimeInput
+                    value={quickStart}
+                    onChange={(v) => {
+                      // Giờ gõ tay là lựa chọn mới nhất: mẫu bị gỡ rồi có lại sau lần tải kế không chiếm lại ô giờ.
+                      setQuickTplId(null);
+                      setQuickStart(v);
+                    }}
+                  />
                 </Field>
               </div>
               <div style={{ flex: 1 }}>
                 <Field label="Kết thúc">
-                  <TimeInput value={quickEnd} onChange={setQuickEnd} />
+                  <TimeInput
+                    value={quickEnd}
+                    onChange={(v) => {
+                      setQuickTplId(null);
+                      setQuickEnd(v);
+                    }}
+                  />
                 </Field>
               </div>
             </div>
