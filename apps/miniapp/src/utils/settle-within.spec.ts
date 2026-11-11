@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { LOCK_REFRESH_WAIT_MS, settleWithin } from './settle-within';
+import { LOCK_REFRESH_WAIT_MS, closeAfterFresh, settleWithin } from './settle-within';
 
 describe('settleWithin', () => {
   beforeEach(() => {
@@ -48,5 +48,53 @@ describe('settleWithin', () => {
     expect(settled).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
     expect(settled).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('closeAfterFresh (W115A)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('không có lần tải lại để chờ: đóng ngay và không trả Promise (khoá nhả ngay)', () => {
+    const close = vi.fn();
+    expect(closeAfterFresh(undefined, close)).toBeUndefined();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('có lần tải lại: chưa đóng khi dữ liệu còn đang về, đóng đúng một lần ngay sau khi về, rồi Promise mới xong', async () => {
+    let finish!: () => void;
+    const fresh = new Promise<void>((r) => {
+      finish = r;
+    });
+    const close = vi.fn();
+    const done = vi.fn();
+    void closeAfterFresh(settleWithin(fresh, 1_000), close)!.then(done);
+    await vi.advanceTimersByTimeAsync(500);
+    expect(close).not.toHaveBeenCalled();
+    finish();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(done).toHaveBeenCalledTimes(1);
+  });
+
+  it('tải lại treo mãi: đóng đúng ở hạn chờ, không sớm hơn', async () => {
+    const close = vi.fn();
+    void closeAfterFresh(settleWithin(new Promise<void>(() => undefined), 1_000), close);
+    await vi.advanceTimersByTimeAsync(999);
+    expect(close).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it('tải lại bị từ chối cũng vẫn đóng (settleWithin không ném)', async () => {
+    const close = vi.fn();
+    const result = closeAfterFresh(settleWithin(Promise.reject(new Error('mạng')), 1_000), close);
+    await vi.advanceTimersByTimeAsync(0);
+    await result;
+    expect(close).toHaveBeenCalledTimes(1);
   });
 });

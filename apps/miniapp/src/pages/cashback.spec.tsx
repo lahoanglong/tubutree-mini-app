@@ -292,16 +292,17 @@ describe('CashbackPage — Mua sắm bị từ chối: đóng tấm, tải lại
     [400, 'Sàn tạm ngừng hoàn tiền'],
     [404, 'Không tìm thấy sàn'],
     [409, 'Sàn vừa đổi điều khoản'],
-  ])('bị từ chối %i: đóng tấm, báo lỗi một lần, tải lại danh sách sàn, khoá giữ tới khi dữ liệu về', async (status, message) => {
+  ])('bị từ chối %i: báo lỗi một lần, tải lại danh sách sàn, tấm giữ mở và khoá giữ tới khi dữ liệu về rồi mới đóng', async (status, message) => {
     mocks.createCashbackClick.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({ deeplink: 'https://aff.example/abc' });
     const refresh = deferred();
     const invalidate = renderLive(() => refresh.promise);
     fireEvent.click(await openShopee());
     await waitFor(() => expect(errorToasts(message)).toBe(1));
-    await waitFor(() => expect(screen.queryByRole('button', BUY)).toBeNull());
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+    await settle();
     expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['cashback-merchants'] }]);
-    // Mở lại tấm khi dữ liệu chưa về: nút vẫn bận, chạm thêm không gửi lần hai.
-    const again = await openShopee();
+    // Dữ liệu chưa về: tấm vẫn mở, nút vẫn bận, chạm thêm không gửi lần hai.
+    const again = screen.getByRole('button', BUY);
     expect(again).toHaveAttribute('aria-busy', 'true');
     await act(async () => {
       fireEvent.click(again);
@@ -309,10 +310,13 @@ describe('CashbackPage — Mua sắm bị từ chối: đóng tấm, tải lại
     });
     expect(mocks.createCashbackClick).toHaveBeenCalledTimes(1);
     await act(async () => refresh.resolve());
+    await waitFor(() => expect(screen.queryByRole('button', BUY)).toBeNull());
     await settle();
-    await waitFor(() => expect(screen.getByRole('button', BUY)).not.toHaveAttribute('aria-busy'));
+    // Khoá đã nhả: mở lại tấm, nút không còn bận.
+    const reopened = await openShopee();
+    await waitFor(() => expect(reopened).not.toHaveAttribute('aria-busy'));
     expect(errorToasts(message)).toBe(1);
-    fireEvent.click(screen.getByRole('button', BUY));
+    fireEvent.click(reopened);
     await waitFor(() => expect(mocks.createCashbackClick).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(mocks.openAffiliateLink).toHaveBeenCalledWith('https://aff.example/abc'));
   });
@@ -346,7 +350,7 @@ describe('CashbackPage — Mua sắm bị từ chối: đóng tấm, tải lại
     await waitFor(() => expect(mocks.createCashbackClick).toHaveBeenCalledTimes(2));
   });
 
-  it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+  it('tải lại treo mãi: tấm mở và khoá giữ, đúng sau LOCK_REFRESH_WAIT_MS tấm mới đóng và khoá nhả', async () => {
     mocks.createCashbackClick.mockRejectedValueOnce(serverError('Sàn vừa đổi điều khoản', 409)).mockResolvedValue({ deeplink: 'https://aff.example/abc' });
     renderLive(() => new Promise(() => undefined));
     const btn = await openShopee();
@@ -354,19 +358,121 @@ describe('CashbackPage — Mua sắm bị từ chối: đóng tấm, tải lại
     try {
       fireEvent.click(btn);
       await waitFor(() => expect(errorToasts('Sàn vừa đổi điều khoản')).toBe(1));
-      await waitFor(() => expect(screen.queryByRole('button', BUY)).toBeNull());
       await act(async () => {
         await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
       });
-      expect(await openShopee()).toHaveAttribute('aria-busy', 'true');
+      expect(screen.getByRole('button', BUY)).toHaveAttribute('aria-busy', 'true');
       await act(async () => {
         await vi.advanceTimersByTimeAsync(600);
       });
-      await waitFor(() => expect(screen.getByRole('button', BUY)).not.toHaveAttribute('aria-busy'));
+      await waitFor(() => expect(screen.queryByRole('button', BUY)).toBeNull());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      const reopened = await openShopee();
+      await waitFor(() => expect(reopened).not.toHaveAttribute('aria-busy'));
     } finally {
       vi.useRealTimers();
     }
     fireEvent.click(screen.getByRole('button', BUY));
     await waitFor(() => expect(mocks.createCashbackClick).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('CashbackPage — tấm sàn đóng SAU khi danh sách sàn mới về (W115A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const BUY = { name: 'Mua sắm & nhận hoàn tiền' };
+  const sheetOpen = () => screen.queryByRole('button', BUY) !== null;
+  const renderLive = (refresh: () => Promise<unknown>) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(<QueryClientProvider client={qc}><CashbackPage /></QueryClientProvider>);
+    return invalidate;
+  };
+  const openMerchant = async (name: string) => {
+    fireEvent.click(await screen.findByText(name));
+    return screen.findByRole('button', BUY);
+  };
+
+  beforeEach(() => {
+    stubLoaded();
+    mocks.createCashbackClick.mockReset();
+  });
+
+  it('thứ tự: tấm vẫn mở lúc danh sách chưa về, đóng đúng một lần sau khi về, rồi khoá mới nhả', async () => {
+    mocks.createCashbackClick.mockRejectedValueOnce(serverError('Sàn tạm ngừng hoàn tiền', 409)).mockResolvedValue({ deeplink: 'https://aff.example/abc' });
+    const refresh = deferred();
+    renderLive(() => refresh.promise);
+    fireEvent.click(await openMerchant('Shopee'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', text: 'Sàn tạm ngừng hoàn tiền' })));
+    await settle();
+    expect(sheetOpen()).toBe(true);
+    expect(screen.getByRole('button', BUY)).toHaveAttribute('aria-busy', 'true');
+    await act(async () => refresh.resolve());
+    await waitFor(() => expect(sheetOpen()).toBe(false));
+    await settle();
+    expect(mocks.openSnackbar.mock.calls.filter(([o]) => o.type === 'error')).toHaveLength(1);
+    expect(await openMerchant('Shopee')).not.toHaveAttribute('aria-busy');
+  });
+
+  it('tải lại treo mãi: tấm còn mở ở LOCK_REFRESH_WAIT_MS - 500, đã đóng ở LOCK_REFRESH_WAIT_MS + 100', async () => {
+    mocks.createCashbackClick.mockRejectedValueOnce(serverError('Không tìm thấy sàn', 404));
+    renderLive(() => new Promise(() => undefined));
+    const btn = await openMerchant('Shopee');
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(btn);
+      await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(sheetOpen()).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(sheetOpen()).toBe(false));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('khách đổi sang sàn khác trong lúc chờ: tấm của sàn mới không bị đóng', async () => {
+    mocks.createCashbackClick.mockRejectedValueOnce(serverError('Sàn tạm ngừng hoàn tiền', 409));
+    const refresh = deferred();
+    renderLive(() => refresh.promise);
+    const buy = await openMerchant('Shopee');
+    await act(async () => {
+      fireEvent.click(buy);
+    });
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(sheetOpen()).toBe(false));
+    await openMerchant('Lazada');
+    await act(async () => refresh.resolve());
+    await settle();
+    expect(sheetOpen()).toBe(true);
+    expect(screen.getByRole('heading', { name: 'Lazada' })).toBeInTheDocument();
+  });
+
+  it('máy chủ lỗi 503: tấm giữ mở, không tải lại, khoá nhả ngay (không đổi so với trước)', async () => {
+    mocks.createCashbackClick.mockRejectedValueOnce(serverError('Service Unavailable', 503));
+    const invalidate = renderLive(() => new Promise(() => undefined));
+    fireEvent.click(await openMerchant('Shopee'));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(screen.getByRole('button', BUY)).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(sheetOpen()).toBe(true);
+    expect(invalidate).not.toHaveBeenCalled();
   });
 });

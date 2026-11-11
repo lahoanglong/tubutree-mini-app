@@ -26,7 +26,7 @@ import {
 import { getAffiliateMe } from '../services/affiliate-api';
 import { getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
 import { haptic } from '../utils/haptic';
-import { settleWithin } from '../utils/settle-within';
+import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { useUploadBusy } from '../hooks/use-upload-busy';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -267,9 +267,10 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
       await refresh();
     },
     onError: (e) => {
-      // Tấm chọn mẫu không có ô nhập, chạm một danh mục là gửi: máy chủ từ chối hẳn (400/404/409/422: gian hàng đã có bộ sưu tập, danh mục không còn...) thì bấm lại nhận đúng lỗi đó, đóng tấm (lời báo đã ở snackbar, khoá vẫn giữ tới khi gian hàng tải lại). Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
-      if (isServerRejection(e)) setTemplateOpen(false);
-      return fail(e);
+      // Tấm chọn mẫu không có ô nhập, chạm một danh mục là gửi: máy chủ từ chối hẳn (400/404/409/422: gian hàng đã có bộ sưu tập, danh mục không còn...) thì bấm lại nhận đúng lỗi đó, đóng tấm sau khi gian hàng tải lại (lời báo đã ở snackbar), rồi mới nhả khoá. Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
+      const held = fail(e);
+      if (!isServerRejection(e)) return held;
+      return closeAfterFresh(held, () => setTemplateOpen(false));
     },
   });
   const openPicker = useLockedMutation({

@@ -135,8 +135,10 @@ function ReelOverlay({ slug, cards, flash, onShow, onClose, onAdd }: ReelOverlay
 type AddOutcome = { ok: true } | { ok: false; error: unknown };
 
 /** Bảng chọn phân loại khi phân loại đại diện của thẻ vừa hết hàng mà sản phẩm còn phân loại khác (cùng bảng với giỏ nhanh ở Yêu thích). */
-function ReelVariationPicker({ card, variations, initialId, onClose, onConfirm }: { card: ProductCard; variations: VariationDetail[]; initialId: string | null; onClose: () => void; onConfirm: (id: string, qty: number) => Promise<void> }) {
+function ReelVariationPicker({ card, variations: opened, initialId, onClose, onConfirm }: { card: ProductCard; variations: VariationDetail[]; initialId: string | null; onClose: () => void; onConfirm: (id: string, qty: number) => Promise<void> }) {
   const phase = useAuthPhase();
+  // Tồn kho sống từ chi tiết món (cùng khoá với Reel): sau lệnh bị từ chối ("Chỉ còn N") lần tải lại chi tiết cập nhật luôn trần số lượng của bảng đang mở. `opened` là bản lúc mở bảng, dùng khi cache chưa có.
+  const variations = useQuery(detailQuery(card.slug)).data?.variations ?? opened;
   const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: FLASH_STALE_MS });
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
   const flash = useFlashAllowance(flashQ.data, variations.map((v) => v.id));

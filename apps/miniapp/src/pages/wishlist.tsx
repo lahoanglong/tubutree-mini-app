@@ -119,9 +119,10 @@ export default function WishlistPage() {
       setPicker(null);
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      // Món/phân loại không còn (404/409): đóng bảng của đúng món này (bảng có thể đã đổi sang món khác trong lúc lệnh bay). Bảng có ô số lượng nên 400 ("Chỉ còn N") và 422 giữ bảng để giảm số lượng; mất mạng, quá hạn, 401, 5xx cũng giữ bảng để thử lại.
-      if (isTargetGoneError(e)) setPicker((cur) => (cur?.product.id === pickedId ? null : cur));
       await reloadIfRejected(e);
+      // Món/phân loại không còn (404/409): đóng bảng SAU khi danh sách mới về để nút báo bận tới lúc đó; bảng có thể đã đổi sang món khác trong lúc lệnh bay và lúc chờ nên chỉ đóng bảng của đúng món này.
+      // Bảng có ô số lượng nên 400 ("Chỉ còn N") và 422 giữ bảng để giảm số lượng; mất mạng, quá hạn, 401, 5xx cũng giữ bảng để thử lại.
+      if (isTargetGoneError(e)) setPicker((cur) => (cur?.product.id === pickedId ? null : cur));
     } finally {
       adding.current = false;
       setBusyId(null);

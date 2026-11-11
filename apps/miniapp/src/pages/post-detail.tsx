@@ -5,7 +5,7 @@ import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { CheckCircle2, Clock, Flag, MessageCircle, Pin } from 'lucide-react';
 import { getPost, getComments, reportContent, type FeedComment } from '../services/feed-api';
 import { apiMediaUrl, getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
-import { settleWithin } from '../utils/settle-within';
+import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { useAuthStore } from '../store/auth';
 import { SessionUnavailable, useBlockedMessage } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -66,18 +66,18 @@ export default function PostDetailPage() {
     },
     onError: (e, target) => {
       // Máy chủ từ chối hẳn (bài/bình luận không còn, đã báo cáo): bấm lại nhận đúng lỗi đó nên đóng tấm và báo bằng snackbar vì tấm đã đóng. Lý do báo cáo là ô tuỳ chọn tối đa 500 ký tự (khớp DTO), 400 không do người dùng sửa được. Mất mạng, quá hạn, 401, 5xx giữ tấm kèm lỗi tại chỗ.
-      if (isServerRejection(e)) {
-        // Tấm có thể đã đóng rồi mở cho đích khác trong lúc lệnh bay: chỉ đóng và xoá lý do khi tấm đang mở đúng là đích bị từ chối.
+      if (isServerRejection(e)) openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Tiền tố ['community', id] đã phủ cả ['community', id, 'comments']: một lệnh tải lại, không huỷ-rồi-gọi-lại lượt tải bình luận.
+      const held = isStaleStateError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['community', id] })) : undefined;
+      if (!isServerRejection(e)) return held;
+      // Đóng SAU khi bài và bình luận mới về để nút báo bận tới lúc đó. Tấm có thể đã đóng rồi mở cho đích khác trong lúc lệnh bay và lúc chờ: chỉ đóng và xoá lý do khi tấm đang mở đúng là đích bị từ chối.
+      return closeAfterFresh(held, () => {
         const open = reportTargetRef.current;
         if (open?.targetType === target.targetType && open?.targetId === target.targetId) {
           setReportTarget(null);
           setReportReason('');
         }
-        openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      }
-      if (!isStaleStateError(e)) return undefined;
-      // Tiền tố ['community', id] đã phủ cả ['community', id, 'comments']: một lệnh tải lại, không huỷ-rồi-gọi-lại lượt tải bình luận.
-      return settleWithin(qc.invalidateQueries({ queryKey: ['community', id] }));
+      });
     },
   });
 

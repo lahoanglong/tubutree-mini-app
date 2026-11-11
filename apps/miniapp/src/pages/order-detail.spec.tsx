@@ -4,6 +4,7 @@ import { act, render, screen, fireEvent, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -916,7 +917,9 @@ describe('OrderDetailPage: huỷ đơn và chép hoá đơn khoá chạm đúp, 
       mocks.fetchOrder.mockReturnValue(refetch.promise);
       fireEvent.click(confirmButton());
       await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
-      expect(await screen.findByRole('button', { name: 'Huỷ đơn' })).toBeDisabled();
+      // Đơn chưa về: tấm xác nhận còn mở (nút xác nhận bận) nên có hai nút "Huỷ đơn", nút ở thanh thao tác bị khoá.
+      await waitFor(() => expect(screen.getAllByRole('button', { name: 'Huỷ đơn' })).toHaveLength(2));
+      expect(screen.getAllByRole('button', { name: 'Huỷ đơn' })[0]).toBeDisabled();
       await act(async () => refetch.resolve({ ...ORDER, status: 'SHIPPING' }));
       await waitFor(() => expect(screen.queryByRole('button', { name: 'Huỷ đơn' })).toBeNull());
     });
@@ -940,6 +943,111 @@ describe('OrderDetailPage: huỷ đơn và chép hoá đơn khoá chạm đúp, 
       } finally {
         inv.mockRestore();
       }
+    });
+
+    describe('tấm xác nhận huỷ đóng SAU khi đơn mới về (W115A)', () => {
+      // Tấm đang mở = có hai nút "Huỷ đơn" (nút xác nhận trong tấm và nút ở thanh thao tác).
+      const sheetOpen = () => screen.queryAllByRole('button', { name: 'Huỷ đơn' }).length > 1;
+      const settle = () =>
+        act(async () => {
+          await new Promise((r) => setTimeout(r, 30));
+        });
+      // Đơn chuyển khoản chờ tiền chỉ có một nút "Huỷ đơn" (trong menu Thêm), nên dò tấm qua cảnh báo role=note chỉ có trong tấm.
+      const bankSheetOpen = () => screen.queryByRole('note') !== null;
+
+      it.each([400, 404, 409])('bị từ chối %i: lỗi hiện trước, tấm còn mở và nút xác nhận bận lúc đơn chưa về, đơn về thì tấm đóng đúng một lần rồi khoá nhả', async (status) => {
+        mocks.cancelOrder.mockRejectedValueOnce(serverError(SHIPPED, status)).mockResolvedValue({ ...ORDER, status: 'CANCELLED' });
+        await openCancelSheet();
+        const refetch = deferred();
+        mocks.fetchOrder.mockReturnValue(refetch.promise);
+        fireEvent.click(confirmButton());
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: SHIPPED, type: 'error' }));
+        await settle();
+        expect(sheetOpen()).toBe(true);
+        expect(confirmButton()).toHaveAttribute('aria-busy', 'true');
+        await act(async () => {
+          fireEvent.click(confirmButton());
+          fireEvent.click(confirmButton());
+        });
+        expect(mocks.cancelOrder).toHaveBeenCalledTimes(1);
+        await act(async () => refetch.resolve({ ...ORDER, status: 'CONFIRMED' }));
+        await waitFor(() => expect(sheetOpen()).toBe(false));
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Huỷ đơn' })).toBeEnabled());
+        expect(mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error')).toHaveLength(1);
+      });
+
+      it('đơn chuyển khoản chờ tiền (Huỷ đơn nằm trong menu Thêm): giữ đơn trong lúc chờ rồi chọn lại Huỷ đơn ở menu không mở lại tấm; hết giữ khoá thì mở được', async () => {
+        mocks.cancelOrder.mockRejectedValueOnce(serverError(SHIPPED, 409));
+        mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' });
+        renderPage();
+        fireEvent.click(await screen.findByRole('button', { name: 'Thêm thao tác' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
+        fireEvent.click(screen.getByRole('button', { name: /Đổi ý/ }));
+        const refetch = deferred();
+        mocks.fetchOrder.mockReturnValue(refetch.promise);
+        fireEvent.click(confirmButton());
+        await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: SHIPPED, type: 'error' }));
+        await settle();
+        expect(bankSheetOpen()).toBe(true);
+        // Khách tự đóng tấm bằng "Giữ đơn" lúc đơn mới chưa về, rồi thử mở lại từ menu Thêm.
+        fireEvent.click(screen.getByRole('button', { name: 'Giữ đơn' }));
+        await waitFor(() => expect(bankSheetOpen()).toBe(false));
+        fireEvent.click(screen.getByRole('button', { name: 'Thêm thao tác' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
+        await settle();
+        expect(bankSheetOpen()).toBe(false);
+        // Đơn mới về, khoá nhả: mục Huỷ đơn trong menu mở lại tấm như thường.
+        await act(async () => refetch.resolve({ ...ORDER, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID' }));
+        await settle();
+        fireEvent.click(screen.getByRole('button', { name: 'Thêm thao tác' }));
+        fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn' }));
+        await waitFor(() => expect(screen.getByRole('note')).toHaveTextContent('Nếu bạn vừa chuyển khoản'));
+        expect(mocks.cancelOrder).toHaveBeenCalledTimes(1);
+      });
+
+      it('đơn tải lại treo mãi: tấm còn mở ở LOCK_REFRESH_WAIT_MS - 500, đã đóng ở LOCK_REFRESH_WAIT_MS + 100', async () => {
+        mocks.cancelOrder.mockRejectedValueOnce(serverError(SHIPPED, 409));
+        await openCancelSheet();
+        mocks.fetchOrder.mockReturnValue(new Promise(() => undefined));
+        // Một test cũ trong file dựng đồng hồ giả (chỉ Date) mà không trả lại: `useFakeTimers` không làm gì khi đồng hồ giả đã có nên phải trả về thật trước.
+        vi.useRealTimers();
+        vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
+        try {
+          fireEvent.click(confirmButton());
+          await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: SHIPPED, type: 'error' }));
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+          });
+          expect(sheetOpen()).toBe(true);
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(600);
+          });
+          // Tấm của zmp-ui chỉ gỡ khỏi DOM sau hoạt ảnh đóng (hẹn giờ giả đang chạy): chờ thêm cho hoạt ảnh.
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(1_000);
+          });
+          await waitFor(() => expect(sheetOpen()).toBe(false));
+        } finally {
+          vi.useRealTimers();
+        }
+      });
+
+      it('máy chủ lỗi 503: không có gì để chờ nên tấm đóng ngay, không tải danh sách đơn, nhả khoá ngay (không đổi so với trước)', async () => {
+        const inv = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+        try {
+          mocks.cancelOrder.mockRejectedValueOnce(serverError('Service Unavailable', 503));
+          await openCancelSheet();
+          mocks.fetchOrder.mockReturnValue(new Promise(() => undefined));
+          fireEvent.click(confirmButton());
+          await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+          await waitFor(() => expect(sheetOpen()).toBe(false));
+          await waitFor(() => expect(screen.getByRole('button', { name: 'Huỷ đơn' })).toBeEnabled());
+          const keys = inv.mock.calls.map((c) => JSON.stringify((c[0] as { queryKey: unknown }).queryKey));
+          expect(keys).not.toContain('["orders"]');
+        } finally {
+          inv.mockRestore();
+        }
+      });
     });
   });
 

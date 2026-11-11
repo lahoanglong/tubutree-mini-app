@@ -582,7 +582,7 @@ describe('Luồng 4 bước: máy chủ từ chối thì tải lại rồi mới
         await toStep(qc, 3);
         fireEvent.click(screen.getByRole('button', { name: 'Chọn danh mục' }));
         await screen.findByRole('button', { name: 'Dùng mẫu Chăm sóc da' });
-        // W114A: tấm chọn mẫu đóng ngay khi máy chủ từ chối (400/404/409); muốn bấm lại lúc khoá còn giữ thì phải mở lại tấm (đồng bộ, danh mục đã có trong cache) rồi chạm danh mục.
+        // W114A/W115A: tấm chọn mẫu đóng khi gian hàng tải lại xong (400/404/409), cùng lúc khoá nhả; đã đóng thì phải mở lại tấm (đồng bộ, danh mục đã có trong cache) rồi chạm danh mục.
         return () => {
           if (!screen.queryByRole('button', { name: 'Dùng mẫu Chăm sóc da' })) fireEvent.click(screen.getByRole('button', { name: 'Chọn danh mục' }));
           fireEvent.click(screen.getByRole('button', { name: 'Dùng mẫu Chăm sóc da' }));
@@ -782,7 +782,7 @@ describe('Luồng 4 bước: tấm chọn mẫu đóng khi máy chủ từ chố
     [400, 'Gian hàng đã có bộ sưu tập'],
     [404, 'Không tìm thấy nữa'],
     [409, 'Vừa có thay đổi, bạn thử lại nhé'],
-  ])('bị từ chối %i: đóng tấm, báo lỗi một lần, tải lại gian hàng, khoá giữ tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+  ])('bị từ chối %i: báo lỗi một lần, tải lại gian hàng, tấm và khoá giữ tới khi dữ liệu về rồi mới đóng và nhả', async (status, message) => {
     mocks.applyStorefrontTemplate.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 });
     const { qc, invalidate, refreshes, arm } = liveClient();
     await open(qc);
@@ -790,18 +790,19 @@ describe('Luồng 4 bước: tấm chọn mẫu đóng khi máy chủ từ chố
     tap();
     tap();
     await waitFor(() => expect(errorToasts()).toEqual([[{ text: message, type: 'error' }]]));
-    await waitFor(() => expect(isOpen()).toBe(false));
     expect(keysOf(invalidate)).toEqual(MINE);
     expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(1);
-    // Tấm đã đóng mà gian hàng chưa tải lại: mở lại chạm tiếp không gửi lần hai.
-    openSheet();
+    // W115A: gian hàng chưa tải lại thì tấm còn mở, chạm tiếp không gửi lần hai; tấm chỉ đóng sau khi dữ liệu về.
+    await settle();
+    expect(isOpen()).toBe(true);
     tap();
     await settle();
     expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(1);
     await act(async () => refreshes.forEach((p) => p.resolve()));
     await settle();
+    await waitFor(() => expect(isOpen()).toBe(false));
     expect(errorToasts()).toHaveLength(1);
-    if (!isOpen()) openSheet();
+    openSheet();
     tap();
     await waitFor(() => expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(2));
   });
@@ -835,5 +836,152 @@ describe('Luồng 4 bước: tấm chọn mẫu đóng khi máy chủ từ chố
     tap();
     await waitFor(() => expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(2));
     expect(errorToasts()).toHaveLength(1);
+  });
+});
+
+// W115A: thứ tự thống nhất khi máy chủ từ chối chạm danh mục: lời báo → gian hàng tải lại xong (hoặc quá LOCK_REFRESH_WAIT_MS) → đóng tấm → nhả khoá. Tấm không đóng trước lúc dữ liệu về; 422 không có gì để chờ nên đóng ngay. Tấm luôn thuộc gian hàng của chính người dùng (một đích), nên không có ca "tấm của đích khác bị đóng nhầm"; mất mạng, quá hạn, 401, 5xx vẫn giữ tấm mở.
+describe('Luồng 4 bước: tấm chọn mẫu đóng sau khi gian hàng tải lại (W115A)', () => {
+  type Pending = { promise: Promise<void>; resolve: () => void };
+  const MINE = [['my-storefront']];
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error');
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+  const pending = (): Pending => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((res) => { resolve = res; });
+    return { promise, resolve };
+  };
+  const PICK = 'Dùng mẫu Chăm sóc da';
+  const picker = () => screen.queryByRole('button', { name: PICK });
+  const isOpen = () => picker() !== null;
+  const openSheet = () => fireEvent.click(screen.getByRole('button', { name: 'Chọn danh mục' }));
+  const tap = () => {
+    const pick = picker();
+    if (pick) fireEvent.click(pick);
+  };
+  const TEMPORARY: [string, unknown][] = [
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['quá thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ];
+  /** Chỉ sau `arm()` mỗi lần tải lại mới là một lời hứa riêng giữ trong tay (bước chuyển giữa các màn cần tải lại thật). */
+  function liveClient() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    const refreshes: Pending[] = [];
+    const arm = (opts: { hang?: boolean } = {}) => {
+      invalidate.mockClear();
+      invalidate.mockImplementation((() => {
+        const p = pending();
+        if (!opts.hang) refreshes.push(p);
+        return p.promise;
+      }) as never);
+    };
+    return { qc, invalidate, refreshes, arm };
+  }
+  const keysOf = (invalidate: ReturnType<typeof liveClient>['invalidate']) => invalidate.mock.calls.map(([f]) => (f as { queryKey: string[] }).queryKey);
+  const open = async (qc: QueryClient) => {
+    mocks.getMyStorefront.mockResolvedValue(draft());
+    render(<QueryClientProvider client={qc}><StorefrontBuilderPage /></QueryClientProvider>);
+    await screen.findByLabelText('Tên gian hàng');
+    next();
+    await screen.findByText('Bước 3/4');
+    openSheet();
+    await screen.findByRole('button', { name: PICK });
+  };
+
+  beforeEach(() => {
+    mocks.applyStorefrontTemplate.mockReset();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    [400, 'Gian hàng đã có bộ sưu tập'],
+    [404, 'Không tìm thấy nữa'],
+    [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+  ])('bị từ chối %i: tấm còn mở và khoá còn giữ khi gian hàng chưa tải lại xong, đóng đúng một lần sau khi tải xong, rồi nhả khoá', async (status, message) => {
+    mocks.applyStorefrontTemplate.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 });
+    const { qc, invalidate, refreshes, arm } = liveClient();
+    await open(qc);
+    arm();
+    tap();
+    await waitFor(() => expect(errorToasts()).toEqual([[{ text: message, type: 'error' }]]));
+    await settle();
+    expect(keysOf(invalidate)).toEqual(MINE);
+    expect(isOpen()).toBe(true);
+    expect(picker()).toHaveAttribute('aria-disabled', 'true');
+    tap();
+    await settle();
+    expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(1);
+    await act(async () => refreshes.forEach((p) => p.resolve()));
+    await settle();
+    await waitFor(() => expect(isOpen()).toBe(false));
+    expect(errorToasts()).toHaveLength(1);
+    expect(keysOf(invalidate)).toEqual(MINE);
+    // Đã đóng đúng một lần: mở lại thì không bị lệnh đóng nào gạt đi, danh mục đã nhả khoá.
+    openSheet();
+    await settle();
+    expect(isOpen()).toBe(true);
+    expect(picker()).not.toHaveAttribute('aria-disabled');
+    tap();
+    await waitFor(() => expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: tấm đóng đúng sau LOCK_REFRESH_WAIT_MS, không sớm hơn', async () => {
+    mocks.applyStorefrontTemplate.mockRejectedValueOnce(serverError('Không tìm thấy nữa', 404)).mockResolvedValue({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 });
+    const { qc, arm } = liveClient();
+    await open(qc);
+    arm({ hang: true });
+    vi.useFakeTimers();
+    tap();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(errorToasts()).toHaveLength(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+    });
+    expect(isOpen()).toBe(true);
+    expect(picker()).toHaveAttribute('aria-disabled', 'true');
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(600);
+      for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(isOpen()).toBe(false);
+    vi.useRealTimers();
+    openSheet();
+    expect(picker()).not.toHaveAttribute('aria-disabled');
+    tap();
+    await waitFor(() => expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(2));
+    expect(errorToasts()).toHaveLength(1);
+  });
+
+  it('bị từ chối 422: không có gì để chờ nên tấm đóng ngay, không tải lại', async () => {
+    mocks.applyStorefrontTemplate.mockRejectedValueOnce(serverError('Dữ liệu không hợp lệ', 422)).mockResolvedValue({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 });
+    const { qc, invalidate, arm } = liveClient();
+    await open(qc);
+    arm({ hang: true });
+    tap();
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await waitFor(() => expect(isOpen()).toBe(false));
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it.each(TEMPORARY)('%s: tấm giữ mở, không tải lại, kể cả sau khi chờ một lúc', async (_label, error) => {
+    mocks.applyStorefrontTemplate.mockRejectedValueOnce(error).mockResolvedValue({ collectionId: 'c9', title: 'Mẫu', itemCount: 8 });
+    const { qc, invalidate, arm } = liveClient();
+    await open(qc);
+    arm({ hang: true });
+    tap();
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await settle();
+    await settle();
+    expect(isOpen()).toBe(true);
+    expect(invalidate).not.toHaveBeenCalled();
+    tap();
+    await waitFor(() => expect(mocks.applyStorefrontTemplate).toHaveBeenCalledTimes(2));
   });
 });

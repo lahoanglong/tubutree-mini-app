@@ -14,7 +14,7 @@ import {
 } from '../services/cashback-api';
 import { getWallet } from '../services/account-api';
 import { getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
-import { settleWithin } from '../utils/settle-within';
+import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { openAffiliateLink } from '../services/zmp-bridge';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -62,10 +62,11 @@ export default function CashbackPage() {
     },
     onError: (e, merchantId) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      // Tấm chỉ có nút Mở sàn: máy chủ từ chối hẳn (sàn ngừng/đã đổi) thì bấm lại nhận đúng lỗi đó, đóng tấm của đúng sàn này (tấm có thể đã đổi sang sàn khác trong lúc lệnh bay). Mất mạng, quá hạn, 401, 5xx giữ tấm để thử lại.
-      if (isServerRejection(e)) setSelected((cur) => (cur?.id === merchantId ? null : cur));
-      if (!isStaleStateError(e)) return undefined;
-      return settleWithin(qc.invalidateQueries({ queryKey: ['cashback-merchants'] }));
+      const held = isStaleStateError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['cashback-merchants'] })) : undefined;
+      if (!isServerRejection(e)) return held;
+      // Tấm chỉ có nút Mở sàn: máy chủ từ chối hẳn (sàn ngừng/đã đổi) thì bấm lại nhận đúng lỗi đó. Đóng SAU khi danh sách sàn mới về để nút báo bận tới lúc đó;
+      // tấm có thể đã đổi sang sàn khác trong lúc lệnh bay và lúc chờ nên chỉ đóng tấm của đúng sàn này. Mất mạng, quá hạn, 401, 5xx giữ tấm để thử lại.
+      return closeAfterFresh(held, () => setSelected((cur) => (cur?.id === merchantId ? null : cur)));
     },
   });
 
