@@ -1286,8 +1286,8 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
       {showCreateModal && (
         <CreateProductModal
           onClose={() => setShowCreateModal(false)}
-          onSuccess={() => {
-            setShowCreateModal(false);
+          onSuccess={(stillOpen) => {
+            if (stillOpen) setShowCreateModal(false);
             void qc.invalidateQueries({ queryKey: ['merchant-products'] });
           }}
         />
@@ -1296,8 +1296,8 @@ function ProductsTab({ canCreate }: { canCreate: boolean }) {
         <EditProductModal
           product={editing}
           onClose={() => setEditing(null)}
-          onSuccess={() => {
-            setEditing(null);
+          onSuccess={(stillOpen) => {
+            if (stillOpen) setEditing(null);
             void qc.invalidateQueries({ queryKey: ['merchant-products'] });
           }}
         />

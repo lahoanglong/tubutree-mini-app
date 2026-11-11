@@ -18,6 +18,7 @@ import { PAGE_NARROW } from '@/lib/page-frame';
 import { actionErrorText } from '@/lib/error-text';
 import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
+import { useSheetSeq } from '@/lib/use-sheet-seq';
 
 // Chỉ sổ địa chỉ rỗng mới cần màn trống: không kéo nó vào bundle đầu của trang.
 const MiniEmptyState = dynamic(() => import('@/components/mini/empty-state').then((m) => m.EmptyState), { ssr: false });
@@ -39,6 +40,10 @@ export default function AddressBookPage() {
   const qc = useQueryClient();
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  // Nút Huỷ khoá lúc đang lưu nhưng "Sửa" của dòng khác hay "Thêm địa chỉ mới" thay form đi được: lệnh lưu cũ xong muộn chỉ đóng form khi vẫn là lần mở đã gửi nó,
+  // không thì đóng nhầm form vừa mở lại và xoá chữ khách đang gõ.
+  const editSeq = useSheetSeq(editingId);
+  const addSeq = useSheetSeq(adding);
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const deleteTriggers = useRef(new Map<string, HTMLButtonElement>());
   const keepRef = useRef<HTMLButtonElement>(null);
@@ -208,8 +213,9 @@ export default function AddressBookPage() {
                   initial={addressToForm(a)}
                   userId={userId}
                   onSubmit={async (payload) => {
+                    const sent = editSeq.mark();
                     await updateAddress(a.id, payload);
-                    setEditingId(null);
+                    if (editSeq.isCurrent(sent)) setEditingId(null);
                     refresh();
                   }}
                   onCancel={() => setEditingId(null)}
@@ -333,8 +339,9 @@ export default function AddressBookPage() {
             headingLevel={2}
             submitLabel="Lưu"
             onSubmit={async (payload) => {
+              const sent = addSeq.mark();
               await createAddress(payload);
-              setAdding(false);
+              if (addSeq.isCurrent(sent)) setAdding(false);
               refresh();
             }}
             onCancel={() => setAdding(false)}

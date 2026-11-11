@@ -8,6 +8,7 @@ import { ui } from '@/lib/guest-ui';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { Sheet } from '@/components/ui/sheet';
 import { homeErrorMessage } from '@/components/home/home-block-error';
+import { useSheetSeq } from '@/lib/use-sheet-seq';
 import type { ReorderSummary } from './reorder-summary';
 import {
   availableLines, availableSelectionState, initialSelection, lineAt, selectedLines, selectionSavings, selectionTotals, targetLines, toggleAllAvailable,
@@ -78,16 +79,20 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
       mounted.current = false;
     };
   }, []);
+  // Sheet đóng được lúc lệnh còn bay: khách đóng rồi mở lại (cùng đơn hay đơn khác) thì lệnh cũ xong muộn không được đóng sheet mới, hiện lời của lần mở trước
+  // hay khoá nút của sheet mới. Kết quả thêm vào giỏ vẫn báo cho trang vì việc đó đã xảy ra thật.
+  const sheetSeq = useSheetSeq(target ? (target.kind === 'order' ? `order:${target.orderCode}` : `item:${target.line.key}`) : null);
   const submit = async () => {
     if (!target || units === 0 || !cartReady || inFlight.current) return;
     inFlight.current = true;
+    const sent = sheetSeq.mark();
     setFrozenCart(liveCart);
     setNotice(null);
     let summary: ReorderSummary | null = null;
     try {
-      summary = await reorder.submit(target, selectedLines(target, sel));
+      summary = await reorder.submit(target, selectedLines(target, sel), () => sheetSeq.isCurrent(sent));
     } catch (err) {
-      if (mounted.current) {
+      if (mounted.current && sheetSeq.isCurrent(sent)) {
         setFrozenCart(null);
         setNotice({ kind: 'error', text: homeErrorMessage(err) });
       }
@@ -95,11 +100,12 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
       inFlight.current = false;
     }
     if (!summary || !mounted.current) return;
+    const current = sheetSeq.isCurrent(sent);
     if (summary.addedUnits > 0 && !summary.hasProblems) {
       onDone?.(summary);
-      onClose();
+      if (current) onClose();
     }
-    else {
+    else if (current) {
       setNotice({ kind: 'problem', text: summary.message });
       if (summary.addedUnits > 0) setPartiallyAdded(true);
       else setFrozenCart(null);
