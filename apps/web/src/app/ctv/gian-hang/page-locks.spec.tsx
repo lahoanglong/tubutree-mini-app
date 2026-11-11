@@ -1444,6 +1444,164 @@ describe('khoá chống chạm đúp — luồng đăng ký 4 bước', () => {
   });
 });
 
+describe('luồng đăng ký 4 bước — lệnh xong muộn và bị từ chối (W102B)', () => {
+  const getsOfMe = () => calls('get', '/storefront/me').length;
+  const startInfoStep = async () => {
+    state.sf = storefront({ status: 'DRAFT' });
+    mount();
+    await flush();
+    await flush();
+    expect(text()).toContain('Bước 2/4');
+  };
+
+  it('lưu thông tin xong muộn sau khi khách đã Quay lại: không kéo khách sang bước 3, gian hàng vẫn được tải lại', async () => {
+    await startInfoStep();
+    const release = hold('patch /storefront/me');
+    click(btn('Tiếp tục'));
+    await flush();
+    click(btn('Quay lại'));
+    await flush();
+    expect(text()).toContain('Bước 1/4');
+    const before = getsOfMe();
+    await release();
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    expect(getsOfMe()).toBeGreaterThan(before);
+    expect(text()).toContain('Bước 1/4');
+    expect(text()).not.toContain('Bước 3/4');
+  });
+
+  it('lưu thông tin xong muộn lúc khách đã Quay lại rồi Bắt đầu vào lại bước thông tin: bước thông tin mới không bị lệnh cũ đẩy đi', async () => {
+    await startInfoStep();
+    const release = hold('patch /storefront/me');
+    click(btn('Tiếp tục'));
+    await flush();
+    click(btn('Quay lại'));
+    await flush();
+    click(btn('Bắt đầu mở gian hàng'));
+    await flush();
+    expect(text()).toContain('Bước 2/4');
+    await release();
+    expect(text()).toContain('Bước 2/4');
+    expect(text()).not.toContain('Bước 3/4');
+  });
+
+  it('lưu thông tin xong đúng lúc khách còn ở bước đó: vẫn sang bước 3 (không chặn nhầm)', async () => {
+    await startInfoStep();
+    const release = hold('patch /storefront/me');
+    click(btn('Tiếp tục'));
+    await flush();
+    await release();
+    expect(text()).toContain('Bước 3/4');
+  });
+
+  it.each([400, 404, 409, 422])('lưu thông tin bị máy chủ từ chối %i: tải lại gian hàng RỒI mới nhả nút, lời báo hiện ngay', async (status) => {
+    await startInfoStep();
+    state.failStatus.set('patch /storefront/me', status);
+    const before = getsOfMe();
+    const releaseFresh = hold(ME);
+    click(btn('Tiếp tục'));
+    await flush();
+    expect(getsOfMe()).toBeGreaterThan(before);
+    expect(alerts()).toEqual(['Bạn chưa hoàn thành nhiệm vụ này.']);
+    expectBusy(btn('Tiếp tục'));
+    click(btn('Tiếp tục'));
+    await flush();
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    await releaseFresh();
+    expectIdle(btn('Tiếp tục'));
+  });
+
+  it.each([401, 403, 500])('lưu thông tin gặp %i: không tải lại gian hàng, nút nhả ngay', async (status) => {
+    await startInfoStep();
+    state.failStatus.set('patch /storefront/me', status);
+    const before = getsOfMe();
+    click(btn('Tiếp tục'));
+    await flush();
+    expect(calls('patch', '/storefront/me')).toHaveLength(1);
+    expect(getsOfMe()).toBe(before);
+    expectIdle(btn('Tiếp tục'));
+  });
+
+  const toProductsStep = async (over: Record<string, unknown> = {}) => {
+    state.sf = storefront({ status: 'DRAFT', ...over });
+    mount();
+    await flush();
+    await flush();
+    click(btn('Tiếp tục'));
+    await flush();
+    expect(text()).toContain('Bước 3/4');
+  };
+  const REJECTED = 'Bạn chưa hoàn thành nhiệm vụ này.';
+
+  it.each([400, 404, 409, 422])('bước sản phẩm, bỏ món bị từ chối %i: tải lại gian hàng RỒI mới nhả nút, lời báo nằm dưới món đó', async (status) => {
+    await toProductsStep();
+    const remove = btn('Bỏ Trà xanh');
+    state.failStatus.set('delete /storefront/me/items/i1', status);
+    const before = getsOfMe();
+    const releaseFresh = hold(ME);
+    click(remove);
+    await flush();
+    expect(getsOfMe()).toBeGreaterThan(before);
+    expect(alerts()).toEqual([REJECTED]);
+    expectBusy(remove);
+    click(remove);
+    await flush();
+    expect(calls('delete', '/storefront/me/items/i1')).toHaveLength(1);
+    await releaseFresh();
+    expectIdle(remove);
+  });
+
+  it.each([401, 403, 500])('bước sản phẩm, bỏ món gặp %i: không tải lại gian hàng, nút nhả ngay', async (status) => {
+    await toProductsStep();
+    state.failStatus.set('delete /storefront/me/items/i1', status);
+    const before = getsOfMe();
+    click(btn('Bỏ Trà xanh'));
+    await flush();
+    expect(calls('delete', '/storefront/me/items/i1')).toHaveLength(1);
+    expect(getsOfMe()).toBe(before);
+    expectIdle(btn('Bỏ Trà xanh'));
+  });
+
+  it('bước sản phẩm, chọn mẫu bị từ chối 400 (gian hàng đã có bộ sưu tập ở máy khác): tải lại gian hàng RỒI mới nhả ô mẫu', async () => {
+    await toProductsStep({ collections: [] });
+    click(btn('Chọn danh mục'));
+    await flush();
+    state.failStatus.set('post /storefront/me/apply-template', 400);
+    const before = getsOfMe();
+    const releaseFresh = hold(ME);
+    const kitchen = btn('Dùng mẫu Nhà bếp', dialog()!);
+    click(kitchen);
+    await flush();
+    expect(getsOfMe()).toBeGreaterThan(before);
+    expectBusy(kitchen);
+    click(kitchen);
+    await flush();
+    expect(calls('post', '/storefront/me/apply-template')).toHaveLength(1);
+    await releaseFresh();
+    expect(btn('Dùng mẫu Nhà bếp', dialog()!).getAttribute('aria-disabled')).toBeNull();
+  });
+
+  it('bước sản phẩm, mở bộ chọn (tạo khối mặc định) bị từ chối 404: tải lại gian hàng RỒI mới nhả nút Thêm sản phẩm; 500 thì không tải lại', async () => {
+    await toProductsStep({ collections: [] });
+    state.failStatus.set('post /storefront/me/collections', 404);
+    let before = getsOfMe();
+    const releaseFresh = hold(ME);
+    click(btn('Thêm sản phẩm'));
+    await flush();
+    expect(getsOfMe()).toBeGreaterThan(before);
+    expectBusy(btn('Thêm sản phẩm'));
+    await releaseFresh();
+    expectIdle(btn('Thêm sản phẩm'));
+    state.failStatus.set('post /storefront/me/collections', 500);
+    before = getsOfMe();
+    click(btn('Thêm sản phẩm'));
+    await flush();
+    expect(calls('post', '/storefront/me/collections')).toHaveLength(2);
+    expect(getsOfMe()).toBe(before);
+    expectIdle(btn('Thêm sản phẩm'));
+  });
+});
+
 describe('khoá giữ có hạn 4 giây khi dữ liệu mới không bao giờ về (W98B)', () => {
   const advance = (ms: number) =>
     act(async () => {

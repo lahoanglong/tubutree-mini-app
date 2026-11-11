@@ -3,7 +3,7 @@
 import { useRef, useState } from 'react';
 import { STOREFRONT_TEMPLATE_BUSY } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
-import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { Check, Circle, Info, Plus, Trash2 } from 'lucide-react';
 import {
   SIGNUP_COPY,
@@ -34,7 +34,9 @@ import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { ui } from '@/lib/guest-ui';
 import { phoneSecondary } from '@/lib/phone-ui';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
+import { useSheetSeq, type SheetSeq } from '@/lib/use-sheet-seq';
 import { useStickyBarOffset } from '@/components/use-sticky-bar-offset';
 import { IMAGES_UPLOADING } from '@/lib/image-compress';
 import { useUploadBusy } from '@/lib/use-upload-busy';
@@ -47,6 +49,14 @@ import { StorefrontPreview } from './storefront-preview';
 import { PickerSheet, actErrText, errText } from './storefront-sheets';
 
 const REMOVE_ITEM_KEY = ['storefront-signup-remove-item'] as const;
+
+/**
+ * Máy chủ từ chối hẳn lệnh (400/404/409/422): gian hàng đang hiện đã cũ (đã tạo ở máy khác, món đã bị xoá), bấm lại nhận đúng lỗi đó mãi, nên tải lại RỒI mới nhả khoá.
+ * Mất mạng, quá hạn, 401, 403, 5xx không nói gì về gian hàng thật: trả undefined để nhả ngay, không tải lại.
+ */
+function reloadWhenRejected(qc: QueryClient, error: unknown): Promise<void> | undefined {
+  return serverRejectedState(error) ? settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] })) : undefined;
+}
 
 interface Props {
   /** null = chưa có gian hàng (API trả 404). */
@@ -61,6 +71,8 @@ interface Props {
 export function StorefrontSignupFlow({ sf, onOpenEditor }: Props) {
   const [step, setStep] = useState(sf ? 1 : 0);
   const last = SIGNUP_STEPS.length - 1;
+  // Mỗi lần đổi bước là một "lần mở" mới: lệnh lưu gửi từ một bước xong muộn sau khi khách đã Quay lại (hay vào lại bước đó) không được kéo khách đi tiếp.
+  const stepSeq = useSheetSeq(step + 1);
 
   return (
     <div className="pb-24">
@@ -89,7 +101,7 @@ export function StorefrontSignupFlow({ sf, onOpenEditor }: Props) {
 
       <div className="mt-3 space-y-3">
         {step === 0 && <ConditionsStep sf={sf} onStarted={() => setStep(1)} />}
-        {step === 1 && sf && <InfoStep sf={sf} onBack={() => setStep(0)} onDone={() => setStep(2)} />}
+        {step === 1 && sf && <InfoStep sf={sf} stepSeq={stepSeq} onBack={() => setStep(0)} onDone={() => setStep(2)} />}
         {step === 2 && sf && <ProductsStep sf={sf} onBack={() => setStep(1)} onDone={() => setStep(last)} />}
         {step === last && sf && <ReviewStep sf={sf} onBack={() => setStep(2)} />}
         {step >= 1 && !sf && <Skeleton height={120} />}
@@ -236,7 +248,7 @@ function ConditionsStep({ sf, onStarted }: { sf: StorefrontEdit | null; onStarte
   );
 }
 
-function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => void; onDone: () => void }) {
+function InfoStep({ sf, stepSeq, onBack, onDone }: { sf: StorefrontEdit; stepSeq: SheetSeq; onBack: () => void; onDone: () => void }) {
   const qc = useQueryClient();
   const [title, setTitle] = useState(sf.title);
   const [note, setNote] = useState(sf.headerNote ?? '');
@@ -249,11 +261,16 @@ function InfoStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () => vo
 
   const saveMut = useLockedMutation({
     mutationFn: () => updateStorefront(coreHttp, { title: title.trim(), headerNote: note.trim(), avatarUrl: avatarUrl.trim(), coverUrl: coverUrl.trim() }),
-    onSuccess: async () => {
+    onMutate: () => stepSeq.mark(),
+    onSuccess: async (_data, _vars, sent) => {
       await settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] }));
-      onDone();
+      // Khách đã Quay lại (hay vào lại bước này) trong lúc chờ: thông tin vẫn đã lưu và gian hàng đã tải lại, chỉ không đi tiếp thay họ.
+      if (stepSeq.isCurrent(sent)) onDone();
     },
-    onError: (e) => setSaveError(actErrText(e)),
+    onError: (e) => {
+      setSaveError(actErrText(e));
+      return reloadWhenRejected(qc, e);
+    },
   });
 
   const next = () => {
@@ -316,7 +333,10 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
   const [removeErrors, setRemoveErrors] = useState<ReadonlyMap<string, string>>(() => new Map());
   const items = sf.collections.flatMap((c) => c.items);
   const refresh = () => settleWithin(qc.invalidateQueries({ queryKey: ['my-storefront'] }));
-  const fail = (e: unknown) => setError(actErrText(e));
+  const fail = (e: unknown) => {
+    setError(actErrText(e));
+    return reloadWhenRejected(qc, e);
+  };
 
   const templateMut = useLockedMutation({
     mutationFn: (categoryId: string) => applyStorefrontTemplate(coreHttp, categoryId),
@@ -340,7 +360,10 @@ function ProductsStep({ sf, onBack, onDone }: { sf: StorefrontEdit; onBack: () =
       mutationFn: (id: string) => removeItem(coreHttp, id),
       onMutate: (id) => setRemoveErrors((prev) => new Map([...prev].filter(([k]) => k !== id))),
       onSuccess: () => refresh(),
-      onError: (e, id) => setRemoveErrors((prev) => new Map(prev).set(id, actErrText(e))),
+      onError: (e, id) => {
+        setRemoveErrors((prev) => new Map(prev).set(id, actErrText(e)));
+        return reloadWhenRejected(qc, e);
+      },
     },
     (id) => id,
   );
