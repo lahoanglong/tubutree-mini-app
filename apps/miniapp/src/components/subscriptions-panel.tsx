@@ -15,7 +15,7 @@ import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { formatDate, formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
-import { settleWithin } from '../utils/settle-within';
+import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { Badge, type BadgeTone } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -67,11 +67,13 @@ export function SubscriptionsPanel() {
 
   // Lệnh bị từ chối vì gói đã khác thẻ (cron vừa tạm dừng, máy khác vừa huỷ): tải lại để lần bấm sau dựa trên số thật, và giữ khoá tới lúc đó
   // như lệnh thành công. Lỗi tạm (mạng, 5xx) thì để nguyên danh sách.
-  const onActionError = (e: unknown) => {
+  const onActionError = (e: unknown, id: string) => {
     openSnackbar({ text: getErrorMessage(e), type: 'error' });
-    // Sheet giữ chân chỉ có ba lựa chọn, không ô nhập: máy chủ từ chối hẳn (400/404/409/422) thì gói đã khác thẻ, bấm lại nhận đúng lỗi đó nên đóng sheet. Mất mạng, quá hạn, 401, 5xx giữ sheet để thử lại.
-    if (isServerRejection(e)) setCancelTarget(null);
-    return isStaleSubscriptionError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] })) : undefined;
+    const held = isStaleSubscriptionError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] })) : undefined;
+    if (!isServerRejection(e)) return held;
+    // Sheet giữ chân chỉ có ba lựa chọn, không ô nhập: máy chủ từ chối hẳn (400/404/409/422) thì gói đã khác thẻ, bấm lại nhận đúng lỗi đó nên đóng sheet, SAU khi danh sách mới về để nút báo bận tới lúc đó.
+    // Sheet có thể đã đóng rồi mở cho gói khác trong lúc lệnh bay và lúc chờ: chỉ đóng sheet của đúng gói này. Mất mạng, quá hạn, 401, 5xx giữ sheet để thử lại.
+    return closeAfterFresh(held, () => setCancelTarget((cur) => (cur === id ? null : cur)));
   };
 
   const statusMut = useLockedMutation({
@@ -84,7 +86,7 @@ export function SubscriptionsPanel() {
       setCancelTarget(null);
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
-    onError: onActionError,
+    onError: (e, { id }) => onActionError(e, id),
   });
 
   const skipMut = useLockedMutation({
@@ -96,7 +98,7 @@ export function SubscriptionsPanel() {
       setCancelTarget(null);
       return settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] }));
     },
-    onError: onActionError,
+    onError: (e, id) => onActionError(e, id),
   });
 
   const targetSub = subs.find((s) => s.id === cancelTarget) ?? null;

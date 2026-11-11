@@ -16,6 +16,8 @@ import { isGuestUser } from '../components/coupon-claim-gate';
 import { haptic } from '../utils/haptic';
 import { hasOA, followOA, requestNotifyPermission, getOaPromptState, setOaPromptState } from '../services/zmp-bridge';
 import { applyFontScale } from '../utils/font-scale';
+import { isStaleStateError } from '../services/api';
+import { settleWithin } from '../utils/settle-within';
 import { fetchNotifyPrefs, legacyOptOuts, saveNotifyPrefs, type NotifyPrefs } from './settings-notify-prefs';
 
 const PREFS_KEY = 'tubu_prefs';
@@ -54,6 +56,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   // `saving` chỉ đổi sau lần vẽ kế: hai cú chạm cùng nhịp (cùng công tắc hoặc hai công tắc) vẫn thấy false và gửi hai PATCH.
   const savingRef = useRef(false);
+  const notifyAttempt = useRef(0);
   const loggingOutRef = useRef(false);
 
   useEffect(() => {
@@ -95,11 +98,21 @@ export default function SettingsPage() {
     setSaving(true);
     setNotify({ ...before, [key]: !before[key] });
     haptic('light');
+    const attempt = ++notifyAttempt.current;
     try {
       setNotify(await saveNotifyPrefs({ [key]: !before[key] }));
-    } catch {
+    } catch (e) {
       setNotify(before);
       openSnackbar({ type: 'error', text: 'Chưa lưu được cài đặt. Kiểm tra mạng rồi thử lại.' });
+      // Máy chủ từ chối vì tuỳ chọn trên màn đã cũ (400/404/409): tải lại đúng bằng hàm lúc mở màn và giữ khoá tới khi về (tối đa `settleWithin`), kẻo bấm lại trên
+      // số cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: không tải lại, nhả ngay. Kết quả về muộn (quá hạn chờ) không được đè lên lần lưu mới hơn.
+      if (isStaleStateError(e)) {
+        await settleWithin(
+          fetchNotifyPrefs().then((fresh) => {
+            if (notifyAttempt.current === attempt) setNotify(fresh);
+          }),
+        );
+      }
     } finally {
       savingRef.current = false;
       setSaving(false);

@@ -28,9 +28,9 @@ vi.mock('../../store/auth', () => ({
   useAuthStore: Object.assign((sel: (s: { status: string }) => unknown) => sel(mocks.auth), { getState: () => mocks.auth }),
 }));
 vi.mock('../variation-sheet', () => ({
-  VariationSheet: (p: { open: boolean; busy?: boolean; initialId: string | null; variations: { id: string }[]; onConfirm: (v: { id: string }, qty: number) => Promise<void> | void; onClose: () => void }) =>
+  VariationSheet: (p: { open: boolean; busy?: boolean; initialId: string | null; variations: { id: string; stock?: number }[]; onConfirm: (v: { id: string }, qty: number) => Promise<void> | void; onClose: () => void }) =>
     p.open ? (
-      <div data-testid="variation-sheet" data-initial={p.initialId ?? ''} data-busy={p.busy ? 'true' : 'false'}>
+      <div data-testid="variation-sheet" data-initial={p.initialId ?? ''} data-busy={p.busy ? 'true' : 'false'} data-stocks={p.variations.map((v) => v.stock).join(',')}>
         <button type="button" onClick={() => void p.onConfirm(p.variations[1]!, 2)}>
           xác nhận phân loại
         </button>
@@ -849,5 +849,56 @@ describe('HomeStoryReel: bảng chọn phân loại đóng theo kết quả máy
     await tapConfirm();
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
     expect(mocks.addToCart.mock.calls[1]).toEqual(['v2b', 2]);
+  });
+});
+
+// Bảng chọn phân loại đọc tồn kho sống từ chi tiết món (cùng khoá `['product', slug]`): Reel đã đóng nên không còn ai theo dõi truy vấn này, nếu bảng chỉ giữ bản chụp lúc mở thì
+// lần tải lại sau lỗi 400 ("Chỉ còn N") không tới được bảng đang mở (invalidate chỉ đánh dấu cũ, không tải lại truy vấn không có người theo dõi).
+describe('HomeStoryReel: bảng chọn phân loại thấy tồn kho mới sau lỗi từ chối (W115A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const stocks = () => screen.getByTestId('variation-sheet').getAttribute('data-stocks');
+  const productFetches = () => mocks.fetchProduct.mock.calls.filter(([slug]) => slug === 'mon-1').length;
+  const openPicker = async () => {
+    fireEvent.click(ring(1));
+    fireEvent.click(await dialogReady());
+    await screen.findByTestId('variation-sheet');
+  };
+  const tapConfirm = async () => fireEvent.click(await screen.findByRole('button', { name: 'xác nhận phân loại' }));
+  let stock = 5;
+
+  beforeEach(() => {
+    stock = 5;
+    mocks.fetchProduct.mockImplementation(async (slug: string) => {
+      const n = Number(slug.split('-')[1]);
+      return detail(n, [variation(`v${n}`, stock), variation(`v${n}b`, stock)]);
+    });
+  });
+
+  it('400 "Chỉ còn 1": chi tiết món tải lại và bảng đang mở hiện tồn mới ngay, không còn bản chụp lúc mở', async () => {
+    mocks.addToCart.mockRejectedValueOnce(serverError('Chỉ còn 1 sản phẩm', 400));
+    renderHost();
+    await screen.findAllByTestId('story-reel-item');
+    await openPicker();
+    expect(stocks()).toBe('5,5');
+    expect(productFetches()).toBe(1);
+    stock = 1;
+    await tapConfirm();
+    await waitFor(() => expect(stocks()).toBe('1,1'));
+    expect(productFetches()).toBe(2);
+    expect(screen.getByTestId('variation-sheet')).toBeInTheDocument();
+  });
+
+  it('tải lại chi tiết món lỗi mạng: bảng giữ tồn đã có (không trống, không đổi)', async () => {
+    mocks.addToCart.mockRejectedValueOnce(serverError('Chỉ còn 1 sản phẩm', 400));
+    renderHost();
+    await screen.findAllByTestId('story-reel-item');
+    await openPicker();
+    mocks.fetchProduct.mockRejectedValue(new HttpError('Network Error', 'ERR_NETWORK'));
+    await tapConfirm();
+    await waitFor(() => expect(productFetches()).toBe(2));
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+    expect(stocks()).toBe('5,5');
   });
 });

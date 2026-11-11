@@ -65,6 +65,8 @@ vi.mock('../services/api', async (importOriginal) => ({
 }));
 
 import SettingsPage from './settings';
+import { HttpError } from '../services/http';
+import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 
 const render = (ui: ReactNode) => {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -466,5 +468,134 @@ describe('Cài đặt: chạm đúp cùng nhịp không gọi lặp (W78A)', () 
     expect(mocks.logout).toHaveBeenCalledTimes(1);
     fireEvent.click(out);
     await waitFor(() => expect(mocks.logout).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('Cài đặt thông báo: lưu bị từ chối thì tải lại tuỳ chọn, giữ khoá tới khi về (W115A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([o]) => (o as { type: string }).type === 'error').length;
+  const loaded = async () => {
+    render(<SettingsPage />);
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'true'));
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.stored = undefined;
+    mocks.user = { phone: '0900000000', zaloId: 'z123' };
+    mocks.storageReads = 0;
+    mocks.hasOA = false;
+    mocks.fetchNotifyPrefs.mockReset().mockResolvedValue({ notifyPromo: true, notifyGarden: true });
+    mocks.saveNotifyPrefs.mockReset().mockImplementation(async (patch: object) => ({ notifyPromo: true, notifyGarden: true, ...patch }));
+  });
+
+  it.each([
+    [400, 'Tuỳ chọn không hợp lệ'],
+    [404, 'Không tìm thấy hồ sơ'],
+    [409, 'Cài đặt vừa đổi ở máy khác'],
+  ])('bị từ chối %i: công tắc trả về như cũ, báo lỗi một lần, tải lại đúng hàm lúc mở màn, công tắc khoá tới khi dữ liệu về rồi hiện số mới', async (status, message) => {
+    mocks.saveNotifyPrefs.mockRejectedValueOnce(serverError(message, status));
+    await loaded();
+    const refresh = deferred<{ notifyPromo: boolean; notifyGarden: boolean }>();
+    mocks.fetchNotifyPrefs.mockReturnValueOnce(refresh.promise);
+    fireEvent.click(promoSwitch());
+    await waitFor(() => expect(errorToasts()).toBe(1));
+    await waitFor(() => expect(mocks.fetchNotifyPrefs).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(promoSwitch()).toHaveAttribute('aria-checked', 'true');
+    expect(promoSwitch()).toHaveAttribute('aria-disabled', 'true');
+    await act(async () => {
+      fireEvent.click(promoSwitch());
+    });
+    expect(mocks.saveNotifyPrefs).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve({ notifyPromo: false, notifyGarden: true }));
+    await waitFor(() => expect(promoSwitch()).not.toHaveAttribute('aria-disabled'));
+    expect(promoSwitch()).toHaveAttribute('aria-checked', 'false');
+    expect(errorToasts()).toBe(1);
+    fireEvent.click(promoSwitch());
+    await waitFor(() => expect(mocks.saveNotifyPrefs).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: không nói gì về trạng thái thật nên không tải lại, công tắc nhả ngay', async (_label, error) => {
+    mocks.saveNotifyPrefs.mockRejectedValueOnce(error);
+    await loaded();
+    fireEvent.click(promoSwitch());
+    await waitFor(() => expect(errorToasts()).toBe(1));
+    await waitFor(() => expect(promoSwitch()).not.toHaveAttribute('aria-disabled'));
+    await settle();
+    expect(mocks.fetchNotifyPrefs).toHaveBeenCalledTimes(1);
+    expect(promoSwitch()).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(promoSwitch());
+    await waitFor(() => expect(mocks.saveNotifyPrefs).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: công tắc còn khoá ở LOCK_REFRESH_WAIT_MS - 500, nhả ở LOCK_REFRESH_WAIT_MS + 100', async () => {
+    mocks.saveNotifyPrefs.mockRejectedValueOnce(serverError('Cài đặt vừa đổi ở máy khác', 409));
+    await loaded();
+    mocks.fetchNotifyPrefs.mockReturnValueOnce(new Promise(() => undefined));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(promoSwitch());
+      await waitFor(() => expect(mocks.fetchNotifyPrefs).toHaveBeenCalledTimes(2));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(promoSwitch()).toHaveAttribute('aria-disabled', 'true');
+      await act(async () => {
+        fireEvent.click(promoSwitch());
+      });
+      expect(mocks.saveNotifyPrefs).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(promoSwitch()).not.toHaveAttribute('aria-disabled'));
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(promoSwitch());
+    await waitFor(() => expect(mocks.saveNotifyPrefs).toHaveBeenCalledTimes(2));
+  });
+
+  it('kết quả tải lại về muộn (sau hạn chờ, sau một lần lưu mới) không đè lên số mới hơn', async () => {
+    mocks.saveNotifyPrefs.mockRejectedValueOnce(serverError('Cài đặt vừa đổi ở máy khác', 409));
+    await loaded();
+    const late = deferred<{ notifyPromo: boolean; notifyGarden: boolean }>();
+    mocks.fetchNotifyPrefs.mockReturnValueOnce(late.promise);
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(promoSwitch());
+      await waitFor(() => expect(mocks.fetchNotifyPrefs).toHaveBeenCalledTimes(2));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS + 100);
+      });
+      await waitFor(() => expect(promoSwitch()).not.toHaveAttribute('aria-disabled'));
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(promoSwitch());
+    await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'false'));
+    await act(async () => late.resolve({ notifyPromo: true, notifyGarden: true }));
+    await settle();
+    expect(promoSwitch()).toHaveAttribute('aria-checked', 'false');
+  });
+
+  it('tải lại cũng lỗi: không ném, công tắc vẫn nhả và giữ số đã trả về, chỉ một lời báo lỗi', async () => {
+    mocks.saveNotifyPrefs.mockRejectedValueOnce(serverError('Cài đặt vừa đổi ở máy khác', 409));
+    await loaded();
+    mocks.fetchNotifyPrefs.mockRejectedValueOnce(new HttpError('Network Error', 'ERR_NETWORK'));
+    fireEvent.click(promoSwitch());
+    await waitFor(() => expect(mocks.fetchNotifyPrefs).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(promoSwitch()).not.toHaveAttribute('aria-disabled'));
+    expect(promoSwitch()).toHaveAttribute('aria-checked', 'true');
+    expect(errorToasts()).toBe(1);
   });
 });

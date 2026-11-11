@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage, isNotFoundError, isStaleStateError } from '../services/api';
-import { settleWithin } from '../utils/settle-within';
+import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { getWasteRequestByOrder, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
@@ -222,16 +222,17 @@ export default function OrderDetailPage() {
       openSnackbar({ text: vi.orders.cancelled, type: 'success' });
     },
     onError: (e: unknown) => {
-      setConfirmCancel(false);
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Kho đã bàn giao vận chuyển: BE vừa đồng bộ trạng thái mới — tải lại để ẩn nút huỷ.
       const orderRefreshed = queryClient.invalidateQueries({ queryKey: ['order', code] });
-      if (!isStaleStateError(e)) return undefined;
       // Máy chủ từ chối vì đơn đã sang trạng thái khác (đã giao hàng, máy khác vừa huỷ): danh sách đơn và khoản hoàn cũng đã cũ. Trả Promise để
       // nút Huỷ đơn giữ khoá tới khi đơn tải lại xong (tối đa `settleWithin`), kẻo sáng lại với trạng thái cũ.
-      return settleWithin(
-        Promise.all([orderRefreshed, queryClient.invalidateQueries({ queryKey: ['orders'] }), queryClient.invalidateQueries({ queryKey: ['my-refunds'] })]),
-      );
+      const held = isStaleStateError(e)
+        ? settleWithin(Promise.all([orderRefreshed, queryClient.invalidateQueries({ queryKey: ['orders'] }), queryClient.invalidateQueries({ queryKey: ['my-refunds'] })]))
+        : undefined;
+      // Tấm đóng sau khi đơn mới về để nút xác nhận báo bận tới lúc đó. Suốt lúc chờ, cả nút Huỷ đơn ở thanh thao tác lẫn mục Huỷ đơn trong menu Thêm
+      // (onAction bỏ qua khi lệnh còn chạy) đều không mở lại được tấm, nên lần đóng muộn không đóng nhầm một tấm vừa mở lại.
+      return closeAfterFresh(held, () => setConfirmCancel(false));
     },
   });
 
@@ -309,8 +310,9 @@ export default function OrderDetailPage() {
   const onAction = (kind: OrderActionKind) => {
     haptic('light');
     if (kind === 'pay') navigate(`/bank-payment/${o.code}`);
-    else if (kind === 'cancel') setConfirmCancel(true);
-    else if (kind === 'contact') setContactOpen(true);
+    else if (kind === 'cancel') {
+      if (!cancel.isPending) setConfirmCancel(true);
+    } else if (kind === 'contact') setContactOpen(true);
     else if (kind === 'reorder') setReorderTarget(orderReorderTarget(o));
     else if (kind === 'return') {
       setReturnKey((k) => k + 1);

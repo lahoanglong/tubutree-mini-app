@@ -49,7 +49,7 @@ import { ImageUpload } from '../components/image-upload';
 import { PeriodNav } from '../components/period-nav';
 import { formatVnd } from '../utils/format';
 import { safeImageUrl } from '../utils/safe-image-url';
-import { settleWithin } from '../utils/settle-within';
+import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import {
   mondayKeyOf,
   addDaysKey,
@@ -182,9 +182,11 @@ function PayrollSection() {
       invalidate();
     },
     onError: (e, r) => {
-      // Tấm có ô đơn giá: chỉ đóng khi nhân viên không còn hoặc bảng lương vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Tấm đóng được lúc lệnh chạy: chỉ đóng đúng tấm của dòng này.
-      if (isTargetGoneError(e)) setRateRow((cur) => (cur?.staff.id === r.staff.id ? null : cur));
-      return onWriteRejected(e);
+      // Tấm có ô đơn giá: chỉ đóng khi nhân viên không còn hoặc bảng lương vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa.
+      // Đóng sau khi bảng mới về (không đóng trước: tấm biến mất mà màn còn số cũ). Tấm đóng được lúc lệnh chạy nên so id lúc đóng: chỉ đóng đúng tấm của dòng này.
+      const held = onWriteRejected(e);
+      if (!isTargetGoneError(e)) return held;
+      return closeAfterFresh(held, () => setRateRow((cur) => (cur?.staff.id === r.staff.id ? null : cur)));
     },
   });
   const finalizeM = useLockedMutation({
@@ -217,9 +219,10 @@ function PayrollSection() {
     },
     onError: (e, r) => {
       // Tấm có ô ảnh/ghi chú: chỉ đóng khi nhân viên không còn hoặc bảng lương vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Ảnh/ghi chú tự xoá khi mở tấm kế tiếp.
-      // Tấm đóng được trong lúc lệnh chạy: chỉ đóng đúng tấm của dòng này, không đóng tấm của người khác mới mở.
-      if (isTargetGoneError(e)) setPayRow((cur) => (cur?.staff.id === r.staff.id ? null : cur));
-      return onWriteRejected(e);
+      // Đóng sau khi bảng mới về; tấm đóng được trong lúc lệnh chạy nên so id lúc đóng: chỉ đóng đúng tấm của dòng này, không đóng tấm của người khác mới mở.
+      const held = onWriteRejected(e);
+      if (!isTargetGoneError(e)) return held;
+      return closeAfterFresh(held, () => setPayRow((cur) => (cur?.staff.id === r.staff.id ? null : cur)));
     },
   });
   const payrollBusy = finalizeM.isPending || reopenM.isPending || paidM.isPending;
@@ -617,12 +620,15 @@ function StaffSection() {
       qc.invalidateQueries({ queryKey: ['admin-staff'] });
     },
     onError: (e, to) => {
-      // Tấm có ô SĐT/lý do/nhóm việc: chỉ đóng khi người này không còn hoặc vừa đổi quyền ở nơi khác (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Tấm đóng được lúc lệnh chạy: chỉ đóng khi tấm đang gõ đúng SĐT này. Giữ SĐT/nhóm việc như khi người dùng tự đóng, chỉ bỏ lý do (khớp onClose của tấm).
-      if (isTargetGoneError(e) && phoneRef.current.trim() === to) {
+      // Tấm có ô SĐT/lý do/nhóm việc: chỉ đóng khi người này không còn hoặc vừa đổi quyền ở nơi khác (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Giữ SĐT/nhóm việc như khi người dùng tự đóng, chỉ bỏ lý do (khớp onClose của tấm).
+      // Đóng sau khi danh sách mới về; tấm đóng được lúc lệnh chạy nên so SĐT đang gõ lúc đóng (không phải lúc lỗi về): chỉ đóng khi tấm vẫn đang ở đúng SĐT này.
+      const held = onWriteRejected(e);
+      if (!isTargetGoneError(e)) return held;
+      return closeAfterFresh(held, () => {
+        if (phoneRef.current.trim() !== to) return;
         setSheetOpen(false);
         setGrantReason('');
-      }
-      return onWriteRejected(e);
+      });
     },
   });
 
@@ -642,8 +648,9 @@ function StaffSection() {
     },
     onError: (e) => {
       // Tấm có ô lý do: chỉ đóng khi người này không còn hoặc vừa đổi quyền ở nơi khác (404/409); 400/422 là lỗi ở ô lý do, giữ tấm để sửa. Tấm không đóng được lúc lệnh chạy (nút Huỷ và vuốt đóng đều khoá) nên đây luôn là tấm của chính lệnh này.
-      if (isTargetGoneError(e)) closeRevoke();
-      return onWriteRejected(e);
+      // Đóng sau khi danh sách nhân sự mới về, không đóng trước: tấm biến mất mà màn còn người cũ.
+      const held = onWriteRejected(e);
+      return isTargetGoneError(e) ? closeAfterFresh(held, closeRevoke) : held;
     },
   });
   const closeRevoke = () => {
@@ -958,9 +965,11 @@ function ShiftsSection() {
       invalidate();
     },
     onError: (e, v) => {
-      // Tấm chỉnh giờ có ô giờ: chỉ đóng khi ca không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô giờ, giữ tấm để sửa. Chỉ đóng tấm của đúng ca này, không đóng tấm của ca khác mới mở.
-      if (isTargetGoneError(e)) setAdjust((cur) => (cur?.id === v.id ? null : cur));
-      return onWriteRejected(e);
+      // Tấm chỉnh giờ có ô giờ: chỉ đóng khi ca không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô giờ, giữ tấm để sửa.
+      // Đóng sau khi danh sách ca mới về; so id lúc đóng: chỉ đóng tấm của đúng ca này, không đóng tấm của ca khác mới mở trong lúc chờ.
+      const held = onWriteRejected(e);
+      if (!isTargetGoneError(e)) return held;
+      return closeAfterFresh(held, () => setAdjust((cur) => (cur?.id === v.id ? null : cur)));
     },
   }, (v) => v.id);
 
@@ -974,9 +983,11 @@ function ShiftsSection() {
       invalidate();
     },
     onError: (e, v) => {
-      // Tấm từ chối có ô lý do: chỉ đóng khi ca không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô lý do, giữ tấm để sửa. Chỉ đóng tấm của đúng ca này.
-      if (isTargetGoneError(e)) setRejectId((cur) => (cur === v.id ? null : cur));
-      return onWriteRejected(e);
+      // Tấm từ chối có ô lý do: chỉ đóng khi ca không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô lý do, giữ tấm để sửa.
+      // Đóng sau khi danh sách ca mới về; so id lúc đóng: chỉ đóng tấm của đúng ca này.
+      const held = onWriteRejected(e);
+      if (!isTargetGoneError(e)) return held;
+      return closeAfterFresh(held, () => setRejectId((cur) => (cur === v.id ? null : cur)));
     },
   }, (v) => v.id);
 

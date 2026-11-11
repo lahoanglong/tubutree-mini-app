@@ -22,7 +22,7 @@ import {
   type OwnedBrand,
 } from '../services/brand-owner-api';
 import { getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError, isTargetGoneError } from '../services/api';
-import { settleWithin } from '../utils/settle-within';
+import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Button } from '../components/ui/button';
@@ -165,9 +165,10 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     mutationFn: (id: string) => updateOwnedPromotion(id, { ...promoIso(), couponCode: promo.couponCode.trim().toUpperCase() }),
     onSuccess: () => { resetPromoForm(); openSnackbar({ text: 'Đã cập nhật khuyến mãi', type: 'success' }); void refresh(); },
     onError: (e, id) => {
-      // Form có ô nhập: chỉ đóng khi khuyến mãi đang sửa không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở ô nhập, giữ form để sửa. Chỉ đóng nếu form vẫn đang sửa đúng khuyến mãi này (đã chuyển sang sửa cái khác thì giữ).
-      if (isTargetGoneError(e) && editingIdRef.current === id) resetPromoForm();
-      return onWriteError(e);
+      // Form có ô nhập: chỉ đóng khi khuyến mãi đang sửa không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở ô nhập, giữ form để sửa. Đóng sau khi hồ sơ tải lại, và chỉ nếu LÚC ĐÓ form vẫn đang sửa đúng khuyến mãi này (đã chuyển sang sửa cái khác trong lúc chờ thì giữ).
+      const held = onWriteError(e);
+      if (!isTargetGoneError(e)) return held;
+      return closeAfterFresh(held, () => { if (editingIdRef.current === id) resetPromoForm(); });
     },
   });
   const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
@@ -177,9 +178,10 @@ function Editor({ brand }: { brand: OwnedBrand }) {
     // hay không" — kẻo xoá promo B trong lúc đang sửa dở promo A lại làm mất luôn form đang sửa của A.
     onSuccess: (_data, deletedId) => { if (editingId === deletedId) resetPromoForm(); setConfirmDeleteId(null); void refresh(); },
     onError: (e, id) => {
-      // Hộp xác nhận chỉ có nút Xoá: khuyến mãi không còn/đã đổi (400/404/409/422) thì bấm lại nhận đúng lỗi đó, đóng hộp (khoá vẫn giữ tới khi hồ sơ về). Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
-      if (isServerRejection(e)) setConfirmDeleteId((cur) => (cur === id ? null : cur));
-      return onWriteError(e);
+      // Hộp xác nhận chỉ có nút Xoá: khuyến mãi không còn/đã đổi (400/404/409/422) thì bấm lại nhận đúng lỗi đó, đóng hộp sau khi hồ sơ về rồi mới nhả khoá. Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
+      const held = onWriteError(e);
+      if (!isServerRejection(e)) return held;
+      return closeAfterFresh(held, () => setConfirmDeleteId((cur) => (cur === id ? null : cur)));
     },
   }, (id) => id);
   const startEdit = (p: OwnedBrand['promotions'][number]) => {

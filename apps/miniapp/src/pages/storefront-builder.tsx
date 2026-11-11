@@ -24,7 +24,7 @@ import { apiMediaUrl, getErrorMessage, getLoadErrorMessage, isServerRejection, i
 import { getCtvTiers } from '../services/affiliate-api';
 import { formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
-import { settleWithin } from '../utils/settle-within';
+import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { trustBadgeLabel } from '../utils/storefront-badge';
 import { announce, useNotify } from '../hooks/use-notify';
@@ -183,7 +183,7 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     return qc.invalidateQueries({ queryKey: ['my-storefront'] });
   };
   // Máy chủ từ chối vì màn đã cũ (400/404/409: gian hàng đã đăng/gỡ ở máy khác, khối hay món không còn...): tải lại gian hàng và Hành trình rồi mới nhả khoá, kẻo bấm lại trên dữ liệu cũ nhận đúng lỗi đó.
-  // Gọi ở `return` của onError (TanStack chờ Promise đó trước onSettled), quá `settleWithin` thì nhả. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: nhả ngay, không tải lại.
+  // Gọi ở `return` của onError (TanStack chờ Promise đó trước onSettled), quá `settleWithin` thì nhả. Hộp/tấm cần đóng thì đóng qua `closeAfterFresh` trên Promise này: dữ liệu mới về → đóng → nhả khoá, đóng trước thì màn cũ lộ ra rồi nhảy theo dữ liệu mới. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: nhả ngay, không tải lại.
   const reloadAll = () => Promise.all([qc.invalidateQueries({ queryKey: ['storefront-quests'] }), qc.invalidateQueries({ queryKey: ['my-storefront'] })]);
   const holdForFresh = (e: unknown) => (isStaleStateError(e) ? settleWithin(reloadAll()) : undefined);
 
@@ -217,9 +217,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     },
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      // Hộp chỉ có nút Gỡ đăng: máy chủ đã từ chối (gian hàng đã gỡ ở máy khác...) thì bấm lại nhận đúng lỗi đó, đóng hộp. Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
-      if (isServerRejection(e)) setConfirmUnpublish(false);
-      return holdForFresh(e);
+      // Hộp chỉ có nút Gỡ đăng: máy chủ đã từ chối (gian hàng đã gỡ ở máy khác...) thì bấm lại nhận đúng lỗi đó, đóng hộp sau khi gian hàng tải lại. Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
+      const held = holdForFresh(e);
+      if (!isServerRejection(e)) return held;
+      return closeAfterFresh(held, () => setConfirmUnpublish(false));
     },
   });
   const publishBusy = publishMut.isPending || unpublishMut.isPending;
@@ -250,8 +251,9 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     onError: (e) => {
       notify({ text: getErrorMessage(e), type: 'error' });
       // Tấm Thêm khối có ô tên/mức giảm: chỉ đóng khi gian hàng không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập (quá số khối, tên không hợp lệ...), giữ tấm để sửa.
-      if (isTargetGoneError(e)) setNewOpen(false);
-      return holdForFresh(e);
+      const held = holdForFresh(e);
+      if (!isTargetGoneError(e)) return held;
+      return closeAfterFresh(held, () => setNewOpen(false));
     },
   });
   const renameColMut = useLockedMutation({
@@ -263,8 +265,9 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     onError: (e, v) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Tấm có ô tên: chỉ đóng khi khối không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô tên, giữ tấm để sửa. Tấm đóng được lúc lệnh chạy: chỉ đóng đúng tấm của khối này.
-      if (isTargetGoneError(e)) setRenaming((cur) => (cur?.id === v.id ? null : cur));
-      return holdForFresh(e);
+      const held = holdForFresh(e);
+      if (!isTargetGoneError(e)) return held;
+      return closeAfterFresh(held, () => setRenaming((cur) => (cur?.id === v.id ? null : cur)));
     },
   }, (v) => v.id);
   const deleteColMut = useLockedMutation({
@@ -276,9 +279,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     },
     onError: (e, id) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      // Hộp xác nhận chỉ có nút Xoá: khối không còn/đã đổi (400/404/409/422) thì bấm lại nhận đúng lỗi đó, đóng hộp (khoá vẫn giữ tới khi dữ liệu về). Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
-      if (isServerRejection(e)) setConfirmDeleteCol((cur) => (cur === id ? null : cur));
-      return holdForFresh(e);
+      // Hộp xác nhận chỉ có nút Xoá: khối không còn/đã đổi (400/404/409/422) thì bấm lại nhận đúng lỗi đó, đóng hộp sau khi dữ liệu về rồi mới nhả khoá. Mất mạng, quá hạn, 401, 5xx: giữ mở để thử lại.
+      const held = holdForFresh(e);
+      if (!isServerRejection(e)) return held;
+      return closeAfterFresh(held, () => setConfirmDeleteCol((cur) => (cur === id ? null : cur)));
     },
   }, (id) => id);
   // Chỉ gửi trường đổi (không kèm kind/title): API nhận từng phần, và Thường ↔ Combo chưa đổi được sau khi tạo.
@@ -345,8 +349,9 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     onError: (e, v) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Tấm có ô lời nhắn: chỉ đóng khi món không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Chỉ đóng tấm của đúng món này.
-      if (isTargetGoneError(e)) setNotingItem((cur) => (cur?.id === v.id ? null : cur));
-      return holdForFresh(e);
+      const held = holdForFresh(e);
+      if (!isTargetGoneError(e)) return held;
+      return closeAfterFresh(held, () => setNotingItem((cur) => (cur?.id === v.id ? null : cur)));
     },
   }, (v) => v.id);
   // Trong onSuccess/onError, lần đang chạy vẫn được đếm.
@@ -426,9 +431,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     onSuccess: () => { setConfirmDeleteItemId(null); void refresh(); },
     onError: (e, id) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      // Như hộp xoá khối: món không còn/đã đổi thì đóng hộp, khoá giữ tới khi dữ liệu về.
-      if (isServerRejection(e)) setConfirmDeleteItemId((cur) => (cur === id ? null : cur));
-      return holdForFresh(e);
+      // Như hộp xoá khối: món không còn/đã đổi thì đóng hộp sau khi dữ liệu về rồi mới nhả khoá.
+      const held = holdForFresh(e);
+      if (!isServerRejection(e)) return held;
+      return closeAfterFresh(held, () => setConfirmDeleteItemId((cur) => (cur === id ? null : cur)));
     },
   }, (id) => id);
 

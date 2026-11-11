@@ -509,7 +509,7 @@ describe('Lương của tôi: máy chủ từ chối thì giữ khoá tới khi 
         fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
         return {
           invalidate,
-          // W114A: tấm đóng ngay khi máy chủ từ chối 404/409; muốn thấy nút Lưu còn bận hay bấm lại trong lúc giữ khoá thì phải mở lại tấm.
+          // W114A/W115A: tấm đóng khi dữ liệu mới về (404/409), cùng lúc khoá nhả; mở lại tấm nếu đã đóng thì mới lấy được nút Lưu.
           button: () => {
             if (!screen.queryByRole('button', { name: 'Lưu' })) fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
             return screen.getByRole('button', { name: 'Lưu' });
@@ -667,7 +667,7 @@ describe('Lương của tôi: tấm nhận lương đóng khi hồ sơ không c�
   it.each([
     [404, 'Không tìm thấy hồ sơ nhân viên'],
     [409, 'Vừa có thay đổi, bạn thử lại nhé'],
-  ])('bị từ chối %i: đóng tấm, báo lỗi một lần, tải lại đúng khoá, khoá giữ tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+  ])('bị từ chối %i: báo lỗi một lần, tải lại đúng khoá, tấm và khoá giữ tới khi dữ liệu về rồi mới đóng và nhả', async (status, message) => {
     mocks.updateBank.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(PROFILE);
     const refresh = deferred();
     const invalidate = await open(() => refresh.promise);
@@ -675,16 +675,18 @@ describe('Lương của tôi: tấm nhận lương đóng khi hồ sơ không c�
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
     expect(errorSnackbars()).toBe(1);
     expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['my-payroll'] }]);
-    await waitFor(() => expect(isOpen()).toBe(false));
-    // Tấm đã đóng mà dữ liệu chưa về: mở lại, nút còn bận và bấm tiếp không gửi lần hai.
-    openSheet();
+    // W115A: dữ liệu chưa về thì tấm còn mở, nút còn bận và bấm tiếp không gửi lần hai; tấm chỉ đóng sau khi dữ liệu về.
+    await settle();
+    expect(isOpen()).toBe(true);
     expect(screen.getByRole('button', { name: 'Lưu' })).toHaveAttribute('aria-busy', 'true');
     tap();
     await settle();
     expect(mocks.updateBank).toHaveBeenCalledTimes(1);
     await act(async () => refresh.resolve());
     await settle();
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu' })).not.toHaveAttribute('aria-busy'));
+    await waitFor(() => expect(isOpen()).toBe(false));
+    openSheet();
+    expect(screen.getByRole('button', { name: 'Lưu' })).not.toHaveAttribute('aria-busy');
     expect(errorSnackbars()).toBe(1);
     tap();
     await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
@@ -764,5 +766,160 @@ describe('Lương của tôi: tấm nhận lương đóng khi hồ sơ không c�
     tap();
     await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
     expect(errorSnackbars()).toBe(1);
+  });
+});
+
+// W115A: thứ tự thống nhất khi máy chủ từ chối lệnh lưu: lời báo → dữ liệu mới về (hoặc quá LOCK_REFRESH_WAIT_MS) → đóng tấm → nhả khoá. Tấm không đóng trước lúc dữ liệu về; lúc đóng phải còn là đúng lần mở đã gửi lệnh. 400/422 và lỗi tạm vẫn không đóng tấm.
+describe('Lương của tôi: tấm nhận lương đóng sau khi dữ liệu mới về (W115A)', () => {
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const sendBtn = () => screen.queryByRole('button', { name: 'Lưu' });
+  const isOpen = () => sendBtn() !== null;
+  const openSheet = () => fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
+  const accountInput = () => screen.getByLabelText('Số tài khoản');
+  const open = async (refresh: () => Promise<unknown>) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <MyPayrollPage />
+      </QueryClientProvider>,
+    );
+    await screen.findByText('Thực nhận tháng 3/2026');
+    openSheet();
+    fireEvent.change(accountInput(), { target: { value: '9998887776' } });
+    return invalidate;
+  };
+  const tap = () => {
+    const send = sendBtn();
+    if (send) fireEvent.click(send);
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-15T05:00:00Z'));
+    vi.clearAllMocks();
+    mocks.role = 'STAFF';
+    mocks.getMyPayroll.mockImplementation((year: number, month: number) => Promise.resolve(payroll(year, month)));
+    mocks.getHistory.mockResolvedValue(SESSIONS);
+    mocks.updateBank.mockReset();
+    mocks.updateBank.mockResolvedValue(PROFILE);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    [404, 'Không tìm thấy hồ sơ nhân viên'],
+    [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+  ])('bị từ chối %i: tấm còn mở và nút còn bận khi bảng lương chưa tải lại xong, đóng sau khi tải xong, rồi nhả khoá', async (status, message) => {
+    mocks.updateBank.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(PROFILE);
+    const refresh = deferred();
+    const invalidate = await open(() => refresh.promise);
+    tap();
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    await settle();
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(isOpen()).toBe(true);
+    expect(accountInput()).toHaveValue('9998887776');
+    expect(screen.getByRole('button', { name: 'Lưu' })).toHaveAttribute('aria-busy', 'true');
+    tap();
+    await settle();
+    expect(mocks.updateBank).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    await waitFor(() => expect(isOpen()).toBe(false));
+    expect(errorSnackbars()).toBe(1);
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    // Khoá đã nhả: lần mở kế gửi lại được.
+    openSheet();
+    expect(screen.getByRole('button', { name: 'Lưu' })).not.toHaveAttribute('aria-busy');
+    tap();
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: tấm đóng đúng sau LOCK_REFRESH_WAIT_MS, không sớm hơn', async () => {
+    mocks.updateBank.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409)).mockResolvedValue(PROFILE);
+    await open(() => new Promise(() => undefined));
+    // beforeEach chỉ giả Date; muốn giả cả setTimeout phải bỏ bản cũ rồi dựng lại (trang đã tính tháng xong nên Date thật không ảnh hưởng).
+    vi.useRealTimers();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      tap();
+      await waitFor(() => expect(errorSnackbars()).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(isOpen()).toBe(true);
+      expect(screen.getByRole('button', { name: 'Lưu' })).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(isOpen()).toBe(false));
+    } finally {
+      vi.useRealTimers();
+    }
+    openSheet();
+    expect(screen.getByRole('button', { name: 'Lưu' })).not.toHaveAttribute('aria-busy');
+    tap();
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
+  });
+
+  it('khách đóng tấm rồi mở lại và gõ tiếp trong lúc chờ dữ liệu về: tấm của lần mở mới không bị đóng, chữ đã gõ còn đó', async () => {
+    mocks.updateBank.mockRejectedValueOnce(serverError('Không tìm thấy hồ sơ nhân viên', 404)).mockResolvedValue(PROFILE);
+    const refresh = deferred();
+    await open(() => refresh.promise);
+    tap();
+    await waitFor(() => expect(errorSnackbars()).toBe(1));
+    await settle();
+    expect(isOpen()).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(isOpen()).toBe(false));
+    openSheet();
+    fireEvent.change(accountInput(), { target: { value: '1112223334' } });
+    await act(async () => refresh.resolve());
+    await settle();
+    expect(isOpen()).toBe(true);
+    expect(accountInput()).toHaveValue('1112223334');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu' })).not.toHaveAttribute('aria-busy'));
+    tap();
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
+    expect(mocks.updateBank).toHaveBeenLastCalledWith(expect.objectContaining({ bankAccountNo: '1112223334' }));
+  });
+
+  it.each([
+    ['400 (lỗi ở ô nhập, có tải lại)', serverError('Số tài khoản không hợp lệ', 400), true],
+    ['422 (lỗi ở ô nhập, không tải lại)', serverError('Dữ liệu không hợp lệ', 422), false],
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK'), false],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED'), false],
+    ['hết phiên 401', serverError('Unauthorized', 401), false],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503), false],
+  ])('%s: tấm giữ mở kèm giá trị đã gõ, kể cả sau khi dữ liệu về', async (_label, error, refetches) => {
+    mocks.updateBank.mockRejectedValueOnce(error).mockResolvedValue(PROFILE);
+    const refresh = deferred();
+    const invalidate = await open(() => refresh.promise);
+    tap();
+    await waitFor(() => expect(errorSnackbars()).toBe(1));
+    await settle();
+    expect(invalidate).toHaveBeenCalledTimes(refetches ? 1 : 0);
+    expect(isOpen()).toBe(true);
+    await act(async () => refresh.resolve());
+    await settle();
+    expect(isOpen()).toBe(true);
+    expect(accountInput()).toHaveValue('9998887776');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu' })).not.toHaveAttribute('aria-busy'));
+    tap();
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
   });
 });

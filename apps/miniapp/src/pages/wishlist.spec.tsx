@@ -640,9 +640,9 @@ describe('Trang Yêu thích: máy chủ từ chối thì giữ khoá tới khi d
       await waitFor(() => expect(errorToasts()).toBe(1));
       expect(mocks.snackbar).toHaveBeenCalledWith(expect.objectContaining({ text: message, type: 'error' }));
       expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['wishlist'] }]);
-      // Món không còn (404/409): bảng chọn đóng ngay, không đợi dữ liệu về. 400 ("Chỉ còn N"): bảng giữ để đổi số lượng. Nút giỏ vẫn bận cả hai.
-      if (f.picker && status !== 400) await waitFor(() => expect(sheet()).toBeNull());
-      if (f.picker && status === 400) expect(sheet()).not.toBeNull();
+      // Dữ liệu chưa về: bảng chọn còn mở cả ba mã (404/409 đóng SAU khi dữ liệu về, 400 ("Chỉ còn N") giữ để đổi số lượng). Nút giỏ vẫn bận.
+      await settle();
+      if (f.picker) expect(sheet()).not.toBeNull();
       expect(busy()).toBe(true);
       await act(async () => {
         fireEvent.click(quickBtn());
@@ -651,6 +651,8 @@ describe('Trang Yêu thích: máy chủ từ chối thì giữ khoá tới khi d
       expect(mocks.addToCart).toHaveBeenCalledTimes(1);
       await act(async () => refresh.resolve());
       await settle();
+      if (f.picker && status !== 400) await waitFor(() => expect(sheet()).toBeNull());
+      if (f.picker && status === 400) expect(sheet()).not.toBeNull();
       await waitFor(() => expect(busy()).toBe(false));
       expect(errorToasts()).toBe(1);
       await f.start();
@@ -739,5 +741,120 @@ describe('Trang Yêu thích: máy chủ từ chối thì giữ khoá tới khi d
       await waitFor(() => expect(busy()).toBe(false));
       expect(invalidate).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('Trang Yêu thích: bảng chọn phân loại đóng SAU khi danh sách mới về (W115A)', () => {
+  const variation = (id: string, stock = 5) => ({ id, name: `Loại ${id}`, sku: id, attributes: {}, retailPrice: 100000, salePrice: null, stock });
+  const detail = (variations: ReturnType<typeof variation>[]) => ({ id: 'p1', slug: 'xa-bong', name: 'Xà bông', thumbnail: null, variations });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorToasts = () => mocks.snackbar.mock.calls.filter(([a]) => (a as { type: string }).type === 'error').length;
+  const quickBtn = () => screen.getByRole('button', { name: 'Thêm Xà bông vào giỏ' });
+  const busy = () => quickBtn().getAttribute('aria-busy') === 'true';
+  const sheet = () => screen.queryByTestId('variation-sheet');
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const renderLive = (refresh: () => Promise<unknown>): MockInstance<QueryClient['invalidateQueries']> => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <WishlistPage />
+      </QueryClientProvider>,
+    );
+    return invalidate;
+  };
+  const startPicker = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' }));
+    await screen.findByTestId('variation-sheet');
+    fireEvent.click(screen.getByRole('button', { name: 'xác nhận phân loại' }));
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.authStatus = 'authenticated';
+    mocks.addToCart.mockReset();
+    mocks.addToCart.mockResolvedValue({ items: [] });
+    mocks.fetchProduct.mockReset();
+    mocks.fetchProduct.mockResolvedValue(detail([variation('v1'), variation('v2')]));
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
+    mocks.getWishlist.mockResolvedValue([
+      { id: 'p1', slug: 'xa-bong', name: 'Xà bông', inStock: true },
+      { id: 'p2', slug: 'dau-goi', name: 'Dầu gội', inStock: true },
+    ]);
+  });
+
+  it.each([
+    [404, 'Sản phẩm không còn bán'],
+    [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+  ])('%i: lỗi hiện trước, bảng còn mở và nút bận lúc danh sách chưa về, đóng sau khi về rồi khoá mới nhả', async (status, message) => {
+    mocks.addToCart.mockRejectedValueOnce(serverError(message, status));
+    const refresh = deferred();
+    const invalidate = renderLive(() => refresh.promise);
+    await startPicker();
+    await waitFor(() => expect(mocks.snackbar).toHaveBeenCalledWith(expect.objectContaining({ text: message, type: 'error' })));
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(sheet()).not.toBeNull();
+    expect(busy()).toBe(true);
+    await act(async () => refresh.resolve());
+    await waitFor(() => expect(sheet()).toBeNull());
+    await waitFor(() => expect(busy()).toBe(false));
+    expect(errorToasts()).toBe(1);
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+  });
+
+  it('tải lại treo mãi: bảng còn mở ở LOCK_REFRESH_WAIT_MS - 500, đã đóng ở LOCK_REFRESH_WAIT_MS + 100', async () => {
+    mocks.addToCart.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409));
+    renderLive(() => new Promise(() => undefined));
+    await screen.findByRole('button', { name: 'Thêm Xà bông vào giỏ' });
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await startPicker();
+      await waitFor(() => expect(errorToasts()).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(sheet()).not.toBeNull();
+      expect(busy()).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(sheet()).toBeNull());
+      await waitFor(() => expect(busy()).toBe(false));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('400 ("Chỉ còn N"): bảng vẫn giữ mở sau khi danh sách về, nút nhả khoá (không đổi so với trước)', async () => {
+    mocks.addToCart.mockRejectedValueOnce(serverError('Chỉ còn 1 sản phẩm', 400));
+    const refresh = deferred();
+    renderLive(() => refresh.promise);
+    await startPicker();
+    await waitFor(() => expect(errorToasts()).toBe(1));
+    await act(async () => refresh.resolve());
+    await settle();
+    await waitFor(() => expect(busy()).toBe(false));
+    expect(sheet()).not.toBeNull();
+  });
+
+  it('503: bảng giữ mở, không tải lại, nút nhả ngay (không đổi so với trước)', async () => {
+    mocks.addToCart.mockRejectedValueOnce(serverError('Service Unavailable', 503));
+    const invalidate = renderLive(() => new Promise(() => undefined));
+    await startPicker();
+    await waitFor(() => expect(errorToasts()).toBe(1));
+    await waitFor(() => expect(busy()).toBe(false));
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(sheet()).not.toBeNull();
   });
 });

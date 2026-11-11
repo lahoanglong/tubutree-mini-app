@@ -50,7 +50,7 @@ import {
   dowLabel,
 } from '../utils/week';
 import { INPUT_LIMITS } from '../utils/input-limits';
-import { settleWithin } from '../utils/settle-within';
+import { closeAfterFresh, settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { useUploadBusy } from '../hooks/use-upload-busy';
 
@@ -143,8 +143,10 @@ function TodayCard() {
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Tấm "Ra ca lùi giờ" có ô giờ: chỉ đóng khi phiên không còn hoặc vừa đổi (404/409, đã ra ca ở máy khác); 400/422 là giờ chọn chưa hợp lệ, giữ tấm để sửa.
-      if (isTargetGoneError(e)) setBackOpen(false);
-      return refreshIfStale(e);
+      // Đóng sau khi trạng thái chấm công mới về, không đóng trước: tấm biến mất mà màn còn phiên cũ.
+      const held = refreshIfStale(e);
+      if (!isTargetGoneError(e)) return held;
+      return closeAfterFresh(held, () => setBackOpen(false));
     },
   });
   const attendBusy = checkinM.isPending || checkoutM.isPending;
@@ -429,9 +431,12 @@ function StaffHub() {
     onError: (e, shiftId) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       // Tấm sửa ca có ô giờ: chỉ đóng khi ca không còn hoặc vừa đổi (404/409); 400/422 là giờ chưa hợp lệ hay chồng giờ, giữ tấm để sửa. Thêm ca mới chưa có ca đích (API chỉ từ chối 400) nên không đóng.
-      // Tấm đóng được lúc lệnh chạy: chỉ đóng nếu tấm vẫn đang sửa đúng ca này (đã mở thêm ca hoặc sửa ca khác thì giữ).
-      if (isTargetGoneError(e) && shiftId && editIdRef.current === shiftId) setFormOpen(false);
-      return refreshIfStale(e);
+      // Đóng sau khi lịch tuần mới về. Tấm đóng được lúc lệnh chạy nên so ca lúc đóng (không phải lúc lỗi về): chỉ đóng nếu tấm vẫn đang sửa đúng ca này (đã mở thêm ca hoặc sửa ca khác thì giữ).
+      const held = refreshIfStale(e);
+      if (!isTargetGoneError(e) || !shiftId) return held;
+      return closeAfterFresh(held, () => {
+        if (editIdRef.current === shiftId) setFormOpen(false);
+      });
     },
   }, (shiftId) => shiftId ?? '');
   const save = () => {
@@ -555,9 +560,11 @@ function StaffHub() {
     },
     onError: (e, id) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      // Tấm huỷ ca có ô lý do/chứng cứ: chỉ đóng khi ca không còn hoặc vừa đổi (404/409, vd đã bị huỷ ở nơi khác); 400/422 là lỗi ở ô nhập, giữ tấm để sửa. Tấm đóng được lúc lệnh chạy: chỉ đóng đúng tấm của ca này.
-      if (isTargetGoneError(e)) setCancelId((cur) => (cur === id ? null : cur));
-      return refreshIfStale(e);
+      // Tấm huỷ ca có ô lý do/chứng cứ: chỉ đóng khi ca không còn hoặc vừa đổi (404/409, vd đã bị huỷ ở nơi khác); 400/422 là lỗi ở ô nhập, giữ tấm để sửa.
+      // Đóng sau khi lịch tuần mới về; so id lúc đóng: chỉ đóng đúng tấm của ca này, không đóng tấm của ca khác mở trong lúc chờ.
+      const held = refreshIfStale(e);
+      if (!isTargetGoneError(e)) return held;
+      return closeAfterFresh(held, () => setCancelId((cur) => (cur === id ? null : cur)));
     },
   });
 

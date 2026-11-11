@@ -463,7 +463,7 @@ describe('PostDetailPage: Báo cáo bị từ chối thì đóng tấm, tải l�
     [400, 'Bạn đã báo cáo nội dung này rồi'],
     [404, 'Nội dung bị báo cáo không còn'],
     [409, 'Báo cáo vừa được xử lý'],
-  ])('bị từ chối %i: đóng tấm, báo lỗi một lần, tải lại bài và bình luận, khoá giữ tới khi dữ liệu về', async (status, message) => {
+  ])('bị từ chối %i: báo lỗi một lần, tải lại bài và bình luận, tấm giữ mở và khoá giữ tới khi dữ liệu về rồi mới đóng', async (status, message) => {
     mocks.reportContent.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue({ ok: true });
     renderPage();
     const submit = await openSheet();
@@ -471,23 +471,25 @@ describe('PostDetailPage: Báo cáo bị từ chối thì đóng tấm, tải l�
     mocks.getPost.mockReturnValueOnce(refresh.promise);
     fireEvent.click(submit);
     await waitFor(() => expect(errorToasts(message)).toBe(1));
-    await sheetGone();
     // Tiền tố ['community', 'p1'] tải lại cả bài lẫn bình luận.
     await waitFor(() => expect(mocks.getPost).toHaveBeenCalledTimes(2));
     await waitFor(() => expect(mocks.getComments).toHaveBeenCalledTimes(2));
+    await settle();
     expect(screen.queryByRole('alert')).toBeNull();
-    // Dữ liệu chưa về: mở lại tấm, nút vẫn bận, chạm thêm không gửi lần hai.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
-    await screen.findByPlaceholderText(REASON);
+    // Dữ liệu chưa về: tấm vẫn mở, nút vẫn bận, chạm thêm không gửi lần hai.
+    expect(screen.getByPlaceholderText(REASON)).toBeInTheDocument();
     expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
-    expect(screen.queryByRole('alert')).toBeNull();
     await act(async () => {
       fireEvent.click(submitBtn());
       fireEvent.click(submitBtn());
     });
     expect(mocks.reportContent).toHaveBeenCalledTimes(1);
     await act(async () => refresh.resolve(POST()));
+    await sheetGone();
     await settle();
+    // Khoá đã nhả: mở lại tấm, nút không còn bận.
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    await screen.findByPlaceholderText(REASON);
     await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
     expect(errorToasts(message)).toBe(1);
     fireEvent.click(submitBtn());
@@ -551,7 +553,7 @@ describe('PostDetailPage: Báo cáo bị từ chối thì đóng tấm, tải l�
     await waitFor(() => expect(mocks.reportContent).toHaveBeenCalledTimes(2));
   });
 
-  it('tải lại treo mãi: khoá nhả đúng sau LOCK_REFRESH_WAIT_MS', async () => {
+  it('tải lại treo mãi: tấm mở và khoá giữ, đúng sau LOCK_REFRESH_WAIT_MS tấm mới đóng và khoá nhả', async () => {
     mocks.reportContent.mockRejectedValueOnce(serverError('Báo cáo vừa được xử lý', 409)).mockResolvedValue({ ok: true });
     renderPage();
     const submit = await openSheet();
@@ -560,21 +562,127 @@ describe('PostDetailPage: Báo cáo bị từ chối thì đóng tấm, tải l�
     try {
       fireEvent.click(submit);
       await waitFor(() => expect(errorToasts('Báo cáo vừa được xử lý')).toBe(1));
-      await sheetGone();
       await act(async () => {
         await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
       });
-      fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
-      await screen.findByPlaceholderText(REASON);
+      expect(screen.getByPlaceholderText(REASON)).toBeInTheDocument();
       expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
       await act(async () => {
         await vi.advanceTimersByTimeAsync(600);
       });
+      await sheetGone();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+      fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+      await screen.findByPlaceholderText(REASON);
       await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
     } finally {
       vi.useRealTimers();
     }
     fireEvent.click(submitBtn());
     await waitFor(() => expect(mocks.reportContent).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('PostDetailPage: tấm Báo cáo đóng SAU khi dữ liệu mới về (W115A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const REASON = 'Lý do báo cáo…';
+  const submitBtn = () => {
+    const all = screen.getAllByRole('button', { name: 'Báo cáo' });
+    return all[all.length - 1]!;
+  };
+  const sheetOpen = () => screen.queryByPlaceholderText(REASON) !== null;
+  const openSheet = async () => {
+    await screen.findByText('Lan Anh');
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    fireEvent.change(await screen.findByPlaceholderText(REASON), { target: { value: 'Spam' } });
+    return submitBtn();
+  };
+
+  it('thứ tự: lỗi hiện trước, tấm vẫn mở lúc tải lại chưa về, đóng đúng một lần sau khi về, lý do bị xoá, khoá nhả sau khi tấm đã đóng', async () => {
+    mocks.reportContent.mockRejectedValueOnce(serverError('Nội dung bị báo cáo không còn', 404)).mockResolvedValue({ ok: true });
+    renderPage();
+    const submit = await openSheet();
+    const refresh = deferred();
+    mocks.getPost.mockReturnValueOnce(refresh.promise);
+    fireEvent.click(submit);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error', text: 'Nội dung bị báo cáo không còn' })));
+    await waitFor(() => expect(mocks.getPost).toHaveBeenCalledTimes(2));
+    await settle();
+    expect(sheetOpen()).toBe(true);
+    expect(submitBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => refresh.resolve(POST()));
+    await waitFor(() => expect(sheetOpen()).toBe(false));
+    await settle();
+    expect(mocks.openSnackbar.mock.calls.filter(([o]) => o.type === 'error')).toHaveLength(1);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Báo cáo' })[0]!);
+    expect(await screen.findByPlaceholderText(REASON)).toHaveValue('');
+    expect(submitBtn()).not.toHaveAttribute('aria-busy');
+  });
+
+  it('tải lại treo mãi: tấm còn mở ở LOCK_REFRESH_WAIT_MS - 500, đã đóng ở LOCK_REFRESH_WAIT_MS + 100', async () => {
+    mocks.reportContent.mockRejectedValueOnce(serverError('Báo cáo vừa được xử lý', 409));
+    renderPage();
+    const submit = await openSheet();
+    mocks.getPost.mockReturnValueOnce(new Promise(() => undefined));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(submit);
+      await waitFor(() => expect(mocks.getPost).toHaveBeenCalledTimes(2));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(sheetOpen()).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(sheetOpen()).toBe(false));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('khách đổi sang báo cáo bình luận trong lúc chờ: tấm của bình luận không bị đóng, lý do đang gõ còn nguyên', async () => {
+    mocks.reportContent.mockRejectedValueOnce(serverError('Nội dung bị báo cáo không còn', 404));
+    renderPage();
+    const submit = await openSheet();
+    const refresh = deferred();
+    mocks.getPost.mockReturnValueOnce(refresh.promise);
+    await act(async () => {
+      fireEvent.click(submit);
+    });
+    await waitFor(() => expect(mocks.getPost).toHaveBeenCalledTimes(2));
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(sheetOpen()).toBe(false));
+    const row = (await screen.findByText('Trả lời của Bình')).parentElement!;
+    fireEvent.click(row.querySelector('[aria-label="Báo cáo"]') as HTMLElement);
+    fireEvent.change(await screen.findByPlaceholderText(REASON), { target: { value: 'Quảng cáo' } });
+    await act(async () => refresh.resolve(POST()));
+    await settle();
+    expect(screen.getByPlaceholderText(REASON)).toHaveValue('Quảng cáo');
+  });
+
+  it('máy chủ lỗi 503: tấm giữ mở, không tải lại, khoá nhả ngay (không đổi so với trước)', async () => {
+    mocks.reportContent.mockRejectedValueOnce(serverError('Service Unavailable', 503));
+    renderPage();
+    const submit = await openSheet();
+    fireEvent.click(submit);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Service Unavailable');
+    await waitFor(() => expect(submitBtn()).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(sheetOpen()).toBe(true);
+    expect(mocks.getPost).toHaveBeenCalledTimes(1);
   });
 });
