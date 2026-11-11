@@ -412,6 +412,29 @@ describe('rebuyPricing / phân loại đã mua (B-146)', () => {
     expect(rebuyPricing(ITEM as never, [FLASH({ endAt: new Date(Date.now() - 1000).toISOString() })] as never)).toMatchObject({ price: 65_000, isFlash: false });
   });
 
+  it('hết suất (flashAllowance=0 hoặc giỏ đã gộp đủ perUserLimit): rebuyPricing và dòng 1 món ở Trang chủ đều ghi giá thường', async () => {
+    expect(rebuyPricing({ ...ITEM, flashAllowance: 0 } as never, [FLASH()] as never)).toMatchObject({ price: 65_000, isFlash: false });
+    expect(rebuyPricing(ITEM as never, [FLASH({ perUserLimit: 1 })] as never, Date.now(), 1)).toMatchObject({ price: 65_000, isFlash: false });
+
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ ...ITEM, flashAllowance: 0 }], nextCursor: null });
+    mocks.fetchActiveFlashSales.mockResolvedValue([FLASH()]);
+    const first = renderRail();
+    const line1 = await screen.findByTestId('rebuy-line');
+    await waitFor(() => expect(mocks.fetchActiveFlashSales).toHaveBeenCalled());
+    expect(line1).toHaveTextContent('65.000đ');
+    expect(line1).not.toHaveTextContent('50.000đ');
+    first.unmount();
+
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM], nextCursor: null });
+    mocks.fetchActiveFlashSales.mockResolvedValue([FLASH({ perUserLimit: 1 })]);
+    mocks.getCart.mockResolvedValueOnce({ items: [{ id: 'l1', variationId: 'v1', productId: 'p1', quantity: 1 }] });
+    renderRail();
+    const line2 = await screen.findByTestId('rebuy-line');
+    await waitFor(() => expect(mocks.getCart).toHaveBeenCalled());
+    await waitFor(() => expect(line2).toHaveTextContent('65.000đ'));
+    expect(line2).not.toHaveTextContent('50.000đ');
+  });
+
   it('thẻ trên kệ hiện giá flash của phân loại đã mua và chạm mở đúng phân loại đó', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [ITEM, { ...ITEM, variationId: 'v3', slug: 'xa-bong', productName: 'Xà bông' }, { ...ITEM, variationId: 'v4', slug: 'tay', productName: 'Tẩy' }], nextCursor: null });
     mocks.fetchActiveFlashSales.mockResolvedValue([FLASH()]);
@@ -524,11 +547,12 @@ describe('Dải "Mua lại món quen" ở Trang chủ (W43A)', () => {
     expect(screen.queryByTestId('quick-reorder')).toBeNull();
   });
 
-  it('2 món đã mua nhưng chỉ 1 còn hàng: không dải (dưới 2 món), giữ kệ cũ cho cả hai', async () => {
+  it('2 món đã mua nhưng chỉ 1 còn hàng: không dải (dưới 2 món), giữ kệ cũ và thẻ hết hàng không có nút "Mua lại"', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [...many(1), ...many(2, { variationId: 'v-out', stock: 0, inStock: false }).slice(0, 1)], nextCursor: null });
     renderRail();
-    await screen.findByRole('region', { name: 'Mua lại' });
+    const region = await screen.findByRole('region', { name: 'Mua lại' });
     expect(screen.queryByTestId('quick-reorder')).toBeNull();
+    expect(within(region).getAllByRole('button', { name: 'Mua lại' })).toHaveLength(1);
   });
 
   it('"+ Thêm": một lệnh addToCart(đúng phân loại, 1, repurchase), báo thành công, ở lại Trang chủ (không sang giỏ)', async () => {

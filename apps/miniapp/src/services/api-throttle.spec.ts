@@ -1,8 +1,6 @@
-import { describe, it, expect, vi as vitestVi, beforeAll, beforeEach, afterEach } from 'vitest';
-import { api, getErrorMessage, HttpError, RATE_LIMITED_MESSAGE } from './api';
+import { describe, it, expect, vi as vitestVi, beforeEach, afterEach } from 'vitest';
+import { api, getErrorMessage, HttpError, RATE_LIMITED_MESSAGE, setDeviceIdProvider } from './api';
 import { stubFetch, type Reply } from '../test/fetch-stub';
-
-vitestVi.mock('../store/auth', () => ({ getDeviceId: async () => 'dev-1' }));
 
 /** fetch giả trả lần lượt các phản hồi trong `replies` (lần cuối lặp lại), ghi thời điểm từng lần gọi. */
 function scripted(replies: Reply[]) {
@@ -11,10 +9,7 @@ function scripted(replies: Reply[]) {
 }
 
 /**
- * Interceptor request có `await import(...)` — việc nạp module không đi qua setTimeout nên đồng
- * hồ giả không đẩy được; nhường vòng lặp thật (setImmediate) cho tới khi fetch được gọi.
- * Hạn chờ tính bằng performance.now() (không bị làm giả) thay vì số vòng cố định: lần nạp lạnh
- * đầu tiên có thể cần hàng trăm vòng lặp tuỳ tải máy.
+ * Nhường vòng lặp thật (setImmediate) cho tới khi fetch được gọi khi đồng hồ setTimeout đang làm giả.
  */
 async function until(cond: () => boolean, timeoutMs = 3_000): Promise<void> {
   const deadline = performance.now() + timeoutMs;
@@ -29,13 +24,12 @@ const tooMany = (headers: Record<string, string> = {}): Reply => ({
 });
 
 describe('xử lý 429 ở client miniapp', () => {
-  beforeAll(async () => {
-    await import('../store/auth');
-  });
   beforeEach(() => {
+    setDeviceIdProvider(async () => 'dev-1');
     vitestVi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
   });
   afterEach(() => {
+    setDeviceIdProvider(null);
     vitestVi.useRealTimers();
     vitestVi.unstubAllGlobals();
   });

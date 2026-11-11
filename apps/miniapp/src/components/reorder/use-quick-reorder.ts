@@ -57,7 +57,7 @@ export function useQuickReorder() {
   };
 
   const addAll = (items: readonly QuickReorderItem[]) => {
-    if (inflight.current || busyKey !== null) return;
+    if (inflight.current || busyKey !== null || bundle.inFlight()) return;
     bundle.add({
       id: ADD_ALL_ID,
       lines: quickReorderLines(items),

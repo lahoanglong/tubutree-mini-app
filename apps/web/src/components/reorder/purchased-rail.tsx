@@ -16,7 +16,7 @@ import { homeText, reorderText } from '@/lib/home-text';
 import { browserStorage } from '@/lib/recently-viewed';
 import { getCart } from '@/lib/shop-client';
 import { usePublicConfig } from '@/lib/use-public-config';
-import { useActiveFlashSales, useRunningFlash } from '@/lib/use-flash-sales';
+import { useRunningFlash } from '@/lib/use-flash-sales';
 import { productHref } from '@/lib/product-href';
 import { SubscribeSheet } from '@/app/san-pham/[slug]/subscribe-sheet';
 import { Badge } from '@/components/ui/badge';
@@ -78,16 +78,17 @@ const COMPACT_CARD_HEIGHT = 168;
 /** Thẻ ngang thấp cho kệ Mua lại khi chỉ có 1–2 món (bản web của `CompactRebuyCard` ở Mini App): ảnh nhỏ, tên, phân loại, giá, nút mua lại và đặt định kỳ. */
 function CompactRebuyCard({
   item,
+  pricing,
   onRebuy,
   onSubscribe,
 }: {
   item: PurchasedItem;
+  pricing: ReturnType<typeof rebuyPricing>;
   onRebuy: () => void;
   onSubscribe: () => void;
 }) {
   const router = useRouter();
   const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
-  const pricing = rebuyPricing(item, useActiveFlashSales());
   const available = item.inStock !== false && item.stock > 0;
   // Chỉ mời "Định kỳ" khi API xác nhận hàng không chỉ bán lẻ; API cũ chưa trả `retailOnly` thì không mời (máy chủ có thể từ chối).
   const subscribable = item.retailOnly === false;
@@ -97,7 +98,7 @@ function CompactRebuyCard({
         type="button"
         className="tubu-press"
         onClick={() => {
-          const href = productHref(encodeURIComponent(item.slug), null, item.variationId);
+          const href = productHref(encodeURIComponent(item.slug), pricing.isFlash ? item.variationId : null, item.variationId);
           announcePdpNavigation(href);
           router.push(href);
         }}
@@ -143,9 +144,16 @@ function CompactRebuyCard({
  * Một món Mua lại ở Trang chủ (Q6, bản web của `RebuyLine` ở Mini App): MỘT dòng cao 88px thay thẻ ngang 168px. Ảnh 64, tên một dòng, phân loại (kèm "Đã mua n lần"), giá;
  * nút "Mua lại" ở phải. Không mời "Định kỳ" ở đây (còn ở tab Đơn hàng): dòng này chỉ là lối mua lại nhanh. Hết hàng thì thay nút bằng chữ, không hứa món không mua được.
  */
-function RebuyLine({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void }) {
+function RebuyLine({
+  item,
+  pricing,
+  onRebuy,
+}: {
+  item: PurchasedItem;
+  pricing: ReturnType<typeof rebuyPricing>;
+  onRebuy: () => void;
+}) {
   const router = useRouter();
-  const pricing = rebuyPricing(item, useActiveFlashSales());
   const available = item.inStock !== false && item.stock > 0;
   const caption = [item.variationName, item.timesBought > 1 ? reorderText.timesBought(item.timesBought) : null].filter(Boolean).join(' · ');
   return (
@@ -157,7 +165,7 @@ function RebuyLine({ item, onRebuy }: { item: PurchasedItem; onRebuy: () => void
             type="button"
             className="tubu-press"
             onClick={() => {
-              const href = productHref(encodeURIComponent(item.slug), null, item.variationId);
+              const href = productHref(encodeURIComponent(item.slug), pricing.isFlash ? item.variationId : null, item.variationId);
               announcePdpNavigation(href);
               router.push(href);
             }}
@@ -276,11 +284,21 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
       <SectionHeader title={reorderText.railTitle} action={onHome ? { to: '/tai-khoan/don-hang?tab=delivered' } : undefined} />
       {refreshError}
       {shown.length === 0 ? null : onHome && shown.length === 1 ? (
-        <RebuyLine item={shown[0]!} onRebuy={() => setTarget(itemReorderTarget(shown[0]!))} />
+        <RebuyLine
+          item={shown[0]!}
+          pricing={rebuyPricing(shown[0]!, flash, now, cartUnits.get(shown[0]!.variationId) ?? 0)}
+          onRebuy={() => setTarget(itemReorderTarget(shown[0]!))}
+        />
       ) : !onHome && shown.length <= COMPACT_MAX_ITEMS ? (
         <div className="flex flex-col gap-2.5 md:grid md:grid-cols-2 md:gap-4">
           {shown.map((p) => (
-            <CompactRebuyCard key={p.variationId} item={p} onRebuy={() => setTarget(itemReorderTarget(p))} onSubscribe={() => setSubscribeFor(p)} />
+            <CompactRebuyCard
+              key={p.variationId}
+              item={p}
+              pricing={rebuyPricing(p, flash, now, cartUnits.get(p.variationId) ?? 0)}
+              onRebuy={() => setTarget(itemReorderTarget(p))}
+              onSubscribe={() => setSubscribeFor(p)}
+            />
           ))}
         </div>
       ) : (

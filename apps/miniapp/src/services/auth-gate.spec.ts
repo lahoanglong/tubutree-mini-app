@@ -1,15 +1,13 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { stubFetch, type FetchCall } from '../test/fetch-stub';
-import { api, isPublicGet, setAccessToken, setAuthReady } from './api';
+import { api, isPublicGet, setAccessToken, setAuthReady, setDeviceIdProvider } from './api';
 
-// Interceptor của api.ts dynamic-import '../store/auth' để lấy getDeviceId() (X-Device-Id header).
-// Mock ở đây để tránh interceptor thật kéo theo zmp-sdk/apis thật (module đó đọc `window` ngay lúc
-// import — vỡ dưới environment 'node' mặc định của *.spec.ts, xem vitest.config.mts). Cùng lý do
-// store/auth.spec.ts đã mock 'zmp-sdk/apis' — ở đây mock thẳng '../store/auth' vì đó là thứ được
-// import động, không cần chạm tới zmp-sdk.
-vi.mock('../store/auth', () => ({
-  getDeviceId: vi.fn().mockResolvedValue('test-device-id'),
-}));
+beforeEach(() => {
+  setDeviceIdProvider(vi.fn().mockResolvedValue('test-device-id'));
+});
+afterEach(() => {
+  setDeviceIdProvider(null);
+});
 
 /**
  * Mở app từ push/deeplink: trang đích fetch NGAY trong khi restore() còn đang chạy. Nếu request

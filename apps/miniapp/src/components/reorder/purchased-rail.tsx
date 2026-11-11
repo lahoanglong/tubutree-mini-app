@@ -63,7 +63,7 @@ export function toCardProduct(p: PurchasedItem): ProductCardData {
     repVariationId: p.variationId,
     pinnedVariationId: p.variationId,
     isFeatured: false,
-    inStock: p.inStock,
+    inStock: p.inStock !== false && p.stock > 0,
   };
 }
 
@@ -210,7 +210,7 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
       {shown.length === 0 ? null : onHome && shown.length === 1 ? (
         <RebuyLine
           item={shown[0]!}
-          pricing={rebuyPricing(shown[0]!, flash, serverNow())}
+          pricing={rebuyPricing(shown[0]!, flash, serverNow(), cartUnits.get(shown[0]!.variationId) ?? 0)}
           onRebuy={() => openReorder(shown[0]!)}
           onOpen={() => navigate(`/product/${encodeURIComponent(shown[0]!.slug)}`, openVariation(shown[0]!))}
         />
@@ -223,7 +223,7 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
               discountPct={discountPct}
               onRebuy={() => openReorder(p)}
               onSubscribe={() => setSubscribeFor(p)}
-              pricing={rebuyPricing(p, flash, serverNow())}
+              pricing={rebuyPricing(p, flash, serverNow(), cartUnits.get(p.variationId) ?? 0)}
               onOpen={() => navigate(`/product/${encodeURIComponent(p.slug)}`, openVariation(p))}
             />
           ))}
@@ -239,7 +239,7 @@ export function PurchasedRail({ source, restoring = false, excludeVariations }: 
                 showWishlist={false}
                 note={p.timesBought > 1 ? vi.reorder.timesBought(p.timesBought) : shown.some((x) => x.timesBought > 1) ? '' : undefined}
                 addLabel={homeCopy.reorder.buy}
-                onAdd={() => openReorder(p)}
+                onAdd={p.inStock !== false && p.stock > 0 ? () => openReorder(p) : undefined}
               />
             </RailCell>
           ))}

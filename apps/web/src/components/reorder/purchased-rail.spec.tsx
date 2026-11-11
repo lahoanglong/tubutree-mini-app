@@ -417,6 +417,26 @@ describe('PurchasedRail — Trang chủ (Q6)', () => {
     expect(first().textContent).not.toContain('40.000đ');
   });
 
+  it('dòng 1 món ở Trang chủ: còn suất Giờ vàng thì ghi giá Giờ vàng và mở ?v=v1; hết suất (flashAllowance 0) thì ghi giá thường và mở ?pv=v1', async () => {
+    mocks.flash = [{ itemId: 'f1', productSlug: 'nuoc-rua-chen', variationId: 'v1', flashPrice: 40000, endAt: new Date(Date.now() + 3_600_000).toISOString(), startAt: new Date(Date.now() - 3_600_000).toISOString() }];
+    rail = async () => ({ items: [ITEM], nextCursor: null });
+    let c = await home();
+    let line = c.querySelector('[data-testid="rebuy-line"]') as HTMLElement;
+    expect(line.textContent).toContain('40.000đ');
+    click(productButton(line));
+    expect(mocks.push).toHaveBeenCalledWith('/san-pham/nuoc-rua-chen?v=v1');
+    mounted!.unmount();
+    mocks.push.mockReset();
+
+    rail = async () => ({ items: [{ ...ITEM, flashAllowance: 0 }], nextCursor: null });
+    c = await home();
+    line = c.querySelector('[data-testid="rebuy-line"]') as HTMLElement;
+    expect(line.textContent).toContain('65.000đ');
+    expect(line.textContent).not.toContain('40.000đ');
+    click(productButton(line));
+    expect(mocks.push).toHaveBeenCalledWith('/san-pham/nuoc-rua-chen?pv=v1');
+  });
+
   it('bỏ phân loại đã nằm ở Giờ vàng: phân loại trùng không lặp lại, hết món thì khối ẩn', async () => {
     rail = async () => ({ items: [ITEM, { ...ITEM, variationId: 'v2', slug: 'sp-2', productName: 'Sản phẩm hai' }], nextCursor: null });
     const c = await home({ excludeVariations: new Set(['v1']) });
