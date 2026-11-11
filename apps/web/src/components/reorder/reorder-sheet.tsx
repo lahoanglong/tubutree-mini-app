@@ -78,16 +78,24 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
       mounted.current = false;
     };
   }, []);
+  // Sheet đóng được lúc lệnh còn bay. Chỉ khi sheet đang hiện ĐƠN KHÁC thì lệnh cũ xong muộn mới không được đóng sheet, hiện lời hay khoá nút của nó, hay đưa khách
+  // sang giỏ làm mất số lượng đang chỉnh. Đóng rồi mở lại CÙNG đơn thì khách đang nhìn đúng đơn đó và sheet không có chữ gõ dở: lệnh muộn xử lý như khi chưa đóng,
+  // nếu không thì không còn lời nào báo, nút bật lại và chạm lần hai cộng đôi mọi dòng vào giỏ.
+  const targetKey = target ? (target.kind === 'order' ? `order:${target.orderCode}` : `item:${target.line.key}`) : null;
+  const targetKeyNow = useRef(targetKey);
+  targetKeyNow.current = targetKey;
   const submit = async () => {
     if (!target || units === 0 || !cartReady || inFlight.current) return;
     inFlight.current = true;
+    const sentKey = targetKey;
+    const showsOtherTarget = () => targetKeyNow.current !== null && targetKeyNow.current !== sentKey;
     setFrozenCart(liveCart);
     setNotice(null);
     let summary: ReorderSummary | null = null;
     try {
-      summary = await reorder.submit(target, selectedLines(target, sel));
+      summary = await reorder.submit(target, selectedLines(target, sel), () => !showsOtherTarget());
     } catch (err) {
-      if (mounted.current) {
+      if (mounted.current && !showsOtherTarget()) {
         setFrozenCart(null);
         setNotice({ kind: 'error', text: homeErrorMessage(err) });
       }
@@ -95,15 +103,20 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
       inFlight.current = false;
     }
     if (!summary || !mounted.current) return;
+    const other = showsOtherTarget();
     if (summary.addedUnits > 0 && !summary.hasProblems) {
       onDone?.(summary);
-      onClose();
+      if (!other) onClose();
     }
-    else {
-      setNotice({ kind: 'problem', text: summary.message });
-      if (summary.addedUnits > 0) setPartiallyAdded(true);
-      else setFrozenCart(null);
+    if (other) {
+      // Giỏ đã được tải lại; khách chỉ cần biết món của lần trước đã vào giỏ.
+      if (summary.addedUnits > 0) setNotice({ kind: 'problem', text: reorderText.addedEarlier(summary.addedUnits) });
+      return;
     }
+    if (summary.addedUnits > 0 && !summary.hasProblems) return;
+    setNotice({ kind: 'problem', text: summary.message });
+    if (summary.addedUnits > 0) setPartiallyAdded(true);
+    else setFrozenCart(null);
   };
 
   return (

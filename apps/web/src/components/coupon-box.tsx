@@ -27,6 +27,7 @@ import { couponMinOrderCopy } from '@tubutree/app-core/coupon-min-order';
 import { autoCouponName } from '@/lib/coupon-name';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
+import { useSheetSeq } from '@/lib/use-sheet-seq';
 import { useCartWrite, type CartCommand } from '@/lib/use-cart-write';
 
 /** Số voucher hiện sẵn trong panel tại chỗ (từ md); trong bảng trượt của điện thoại hiện đủ như Mini App. */
@@ -225,18 +226,22 @@ export function CouponBox({
   const releaseChange = () => {
     changingRef.current = false;
   };
+  // Bảng đóng được lúc lệnh áp mã còn bay: lệnh mang số lần mở lúc gửi, xong muộn sau khi khách đóng rồi mở lại và đang gõ mã khác thì không đóng bảng mới, không xoá mã đang gõ.
+  const panelSeq = useSheetSeq(open);
   const apply = useMutation({
     mutationKey: COUPON_MUTATION_KEY,
     mutationFn: (c: string) => applyCoupon(c.trim().toUpperCase()),
     // Lời báo cũ biến mất ngay khi thử lại, như VoucherSheet của Mini: khách thấy lần thử mới đang chạy chứ không nhìn lỗi cũ.
     onMutate: () => {
       setErr(null);
-      return cartWrite.begin();
+      return { cmd: cartWrite.begin(), sent: panelSeq.mark() };
     },
-    onSuccess: (cart, appliedCode, cmd) => {
+    onSuccess: (cart, appliedCode, { cmd, sent }) => {
       setErr(null);
-      setCode('');
-      setOpen(false);
+      if (panelSeq.isCurrent(sent)) {
+        setCode('');
+        setOpen(false);
+      }
       // Mã freeship giỏ coi là hợp lệ nhưng xem trước của máy chủ nói không miễn được gì (đơn đã miễn phí giao): nói đúng câu
       // thanh toán sẽ nói thay vì để chip mã hiện như đã áp. Mã giữ nhưng chưa giảm đã có `notice` của giỏ.
       const pv = previews.get(appliedCode.trim().toUpperCase());
@@ -248,8 +253,8 @@ export function CouponBox({
       );
       return afterChange(cart, cmd);
     },
-    onError: (e, _code, cmd) => {
-      cartWrite.fail(cmd);
+    onError: (e, _code, ctx) => {
+      cartWrite.fail(ctx?.cmd);
       showErr(actionErrorText(e));
       // Khách có thể đã thu gọn trong lúc chờ: đưa ô nhập ra lại để sửa mã.
       setOpen(true);

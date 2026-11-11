@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { miniCard } from '@/components/loyalty/mini-surface';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { useSheetSeq } from '@/lib/use-sheet-seq';
 
 const DEFAULT_HOLD_DAYS = 30;
 
@@ -74,31 +75,36 @@ export default function CashbackPage() {
   const partnerTab = useRef<Window | null>(null);
   const [blockedLink, setBlockedLink] = useState<string | null>(null);
 
-  const clickMut = useMutation({
-    mutationFn: (merchantId: string) => createCashbackClick(coreHttp, merchantId),
-    onSuccess: (r) => {
+  // Tấm đóng được lúc lệnh còn bay: khách đóng rồi mở lại (cùng sàn hay sàn khác) thì lệnh cũ xong muộn không được đóng tấm mới hay đặt lời lỗi/liên kết của lần mở trước vào đó.
+  // Tab đối tác đã mở trong cú bấm cũ vẫn được đưa tới sàn của nó (click đã được ghi nhận) và lời báo chuyển hướng là của trang.
+  const sheetSeq = useSheetSeq(selected?.id ?? null);
+  const clickMut = useMutation<Awaited<ReturnType<typeof createCashbackClick>>, Error, string, number>({
+    mutationFn: (merchantId) => createCashbackClick(coreHttp, merchantId),
+    onMutate: () => sheetSeq.mark(),
+    onSuccess: (r, _merchantId, sent) => {
+      const current = sheetSeq.isCurrent(sent);
       const win = partnerTab.current;
       partnerTab.current = null;
       if (!isHttpUrl(r.deeplink)) {
         win?.close();
-        setClickError('Không mở được liên kết sàn. Thử lại sau ít phút.');
+        if (current) setClickError('Không mở được liên kết sàn. Thử lại sau ít phút.');
         return;
       }
       if (!win || win.closed) {
         // Bị chặn cửa sổ mới hoặc khách đã đóng tab trống: giữ khung để khách tự bấm liên kết, vì click đã được ghi nhận.
-        setBlockedLink(r.deeplink);
+        if (current) setBlockedLink(r.deeplink);
         return;
       }
       // Tab trống mở không noopener nên phải tự ngắt opener trước khi đưa tới trang đối tác.
       win.opener = null;
       win.location.replace(r.deeplink);
-      setSelected(null);
+      if (current) setSelected(null);
       setNotice(CASHBACK_REDIRECT);
     },
-    onError: (e) => {
+    onError: (e, _merchantId, sent) => {
       partnerTab.current?.close();
       partnerTab.current = null;
-      setClickError(actErrText(e));
+      if (sheetSeq.isCurrent(sent)) setClickError(actErrText(e));
     },
     onSettled: () => {
       clickBusy.current = false;

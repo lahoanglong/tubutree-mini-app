@@ -35,6 +35,7 @@ import { shallowPush, shallowReplace } from '@/lib/shallow-url';
 import { Badge } from '@/components/ui/badge';
 import { Badge as TrustBadge } from '@/components/mini/badge';
 import { storefrontBadgeLabel } from '@/lib/storefront-badge';
+import { setStorefrontData } from '@/lib/storefront-cache';
 import { Sheet } from '@/components/ui/sheet';
 import { MoveButtons } from '@/components/mini/move-buttons';
 import { ShopHeader } from '@/components/mini/shop-header';
@@ -227,7 +228,7 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
     onMutate: () => setNewColError(null),
     onSuccess: (created, dto) => {
       // Khối mới hiện ngay trong trang chi tiết, không chờ lần tải lại.
-      qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) =>
+      setStorefrontData<StorefrontEdit | null>(qc, ['my-storefront'], (old) =>
         old && created?.id ? { ...old, collections: [...old.collections, { ...created, items: created.items ?? [] }] } : old,
       );
       setNewOpen(false);
@@ -264,7 +265,7 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
     (id) => id,
   );
   const patchCollection = (id: string, patch: Partial<{ layout: 'GRID' | 'CAROUSEL' | 'STACK'; comboDiscountPct: number | null }>) =>
-    qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) => (old ? { ...old, collections: old.collections.map((c) => (c.id === id ? { ...c, ...patch } : c)) } : old));
+    setStorefrontData<StorefrontEdit | null>(qc, ['my-storefront'], (old) => (old ? { ...old, collections: old.collections.map((c) => (c.id === id ? { ...c, ...patch } : c)) } : old));
   // Chỉ gửi trường đổi (không kèm kind/title): API nhận từng phần, và Thường ↔ Combo chưa đổi được sau khi tạo.
   const layoutMut = useMutation({
     mutationFn: (v: { id: string; layout: 'GRID' | 'CAROUSEL' | 'STACK' }) => updateCollection(coreHttp, v.id, { layout: v.layout }),
@@ -330,12 +331,12 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
     onMutate: async (update: (old: StorefrontEdit) => StorefrontEdit) => {
       await qc.cancelQueries({ queryKey: ['my-storefront'] });
       const previous = qc.getQueryData<StorefrontEdit | null>(['my-storefront']);
-      qc.setQueryData<StorefrontEdit | null>(['my-storefront'], (old) => (old ? update(old) : old));
+      setStorefrontData<StorefrontEdit | null>(qc, ['my-storefront'], (old) => (old ? update(old) : old));
       return { previous };
     },
     // Mỗi lần lỗi chỉ trả về ảnh chụp lúc bấm (có thể đã là thứ tự lạc quan của lần trước), nên lần cuối phải tải lại từ máy chủ.
     onError: (e: unknown, _v: unknown, ctx: { previous: StorefrontEdit | null | undefined } | undefined) => {
-      qc.setQueryData(['my-storefront'], ctx?.previous);
+      setStorefrontData<StorefrontEdit | null>(qc, ['my-storefront'], ctx?.previous);
       fail(e);
       if (!hasOtherReorderPending()) void refresh();
     },

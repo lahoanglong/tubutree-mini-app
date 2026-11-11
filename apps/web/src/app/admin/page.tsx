@@ -1378,6 +1378,9 @@ function OrdersTab({
   const [searchInput, setSearchInput] = useState(initialSearch ?? '');
   const [search, setSearch] = useState(initialSearch ?? '');
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // `onPaid` chạy khi lệnh xác nhận tiền xong, có thể sau khi khách đã đóng ngăn kéo hay mở đơn khác: đọc đơn đang mở lúc đó, không đọc bản của lúc gửi.
+  const expandedIdNow = useRef(expandedId);
+  expandedIdNow.current = expandedId;
   const [invoice, setInvoice] = useState<InvoiceFilter | ''>(initialInvoice ?? '');
   const [from, setFrom] = useState(initialFrom ?? '');
   const [to, setTo] = useState(initialTo ?? '');
@@ -1564,7 +1567,8 @@ function OrdersTab({
     const at = list.findIndex((x) => (x.id || x.code) === (o.id || o.code));
     const total = q.data?.meta.total;
     const note: PaidNoteState = { code: o.code, remaining: extra.queue && total !== undefined ? Math.max(0, total - 1) : null, ...(alreadyPaid ? { message } : {}) };
-    if (narrow && extra.queue) {
+    // Chỉ chuyển sang đơn kế tiếp khi ngăn kéo còn đang mở đúng đơn vừa xác nhận: khách đã đóng hay mở đơn khác thì không bật ngăn kéo/thay đơn của họ.
+    if (narrow && extra.queue && expandedIdNow.current === (o.id || o.code)) {
       const next = list[at + 1] ?? (at > 0 ? list[at - 1] : undefined);
       const nextId = next ? next.id || next.code : null;
       setExpandedId(nextId);

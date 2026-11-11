@@ -23,8 +23,10 @@ export interface UseReorder {
    * Gửi yêu cầu mua lại. Resolve với tóm tắt kết quả (kể cả khi không thêm được món nào).
    * Lỗi (mạng, chưa chọn dòng nào...) bị ném lại: caller PHẢI `.catch` (thường để giữ nguyên lựa chọn trong sheet).
    * Chống bấm đúp đồng bộ: đang có yêu cầu bay thì gọi lại trả về đúng promise đó, không gửi thêm request.
+   * `stillCurrent` (tuỳ chọn): hỏi lúc lệnh xong xem sheet có đang hiện đích khác với đích đã gửi không (đóng rồi mở lại đơn khác trong lúc chờ). Trả false thì KHÔNG sang giỏ
+   * dù `navigateToCart` bật: trang đang có số lượng khách chỉnh ở đích mới. Không truyền thì như cũ.
    */
-  submit: (target: ReorderTarget, selections: ReorderSelection[]) => Promise<ReorderSummary>;
+  submit: (target: ReorderTarget, selections: ReorderSelection[], stillCurrent?: () => boolean) => Promise<ReorderSummary>;
   isPending: boolean;
 }
 
@@ -51,21 +53,21 @@ export function useReorder(opts: UseReorderOptions = {}): UseReorder {
   const inFlight = useRef<Promise<ReorderSummary> | null>(null);
 
   const mutation = useMutation({
-    mutationFn: async (v: { target: ReorderTarget; selections: ReorderSelection[] }) => {
+    mutationFn: async (v: { target: ReorderTarget; selections: ReorderSelection[]; stillCurrent?: () => boolean }) => {
       const res = await send(opts.source, v.target, v.selections);
       return summarizeReorder(res, targetLines(v.target), v.selections);
     },
-    onSuccess: (summary) => {
+    onSuccess: (summary, v) => {
       // Giỏ trong phản hồi không kèm gian hàng (không có combo): tải lại giỏ thay vì ghi số cũ vào cache.
       void qc.invalidateQueries({ queryKey: ['cart'] });
-      if (opts.navigateToCart && summary.addedUnits > 0 && !summary.hasProblems) router.push('/gio-hang');
+      if (opts.navigateToCart && summary.addedUnits > 0 && !summary.hasProblems && (v.stillCurrent?.() ?? true)) router.push('/gio-hang');
     },
   });
 
   return {
-    submit: (target, selections) => {
+    submit: (target, selections, stillCurrent) => {
       if (inFlight.current) return inFlight.current;
-      const p = mutation.mutateAsync({ target, selections }).finally(() => {
+      const p = mutation.mutateAsync({ target, selections, stillCurrent }).finally(() => {
         inFlight.current = null;
       });
       inFlight.current = p;

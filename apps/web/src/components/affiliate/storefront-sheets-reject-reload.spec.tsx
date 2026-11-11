@@ -168,6 +168,8 @@ interface Cmd {
   fail: string;
   /** Các lần tải phải được làm mới khi máy chủ từ chối. */
   reloads: string[];
+  /** Lệnh dựng từ ô của gian hàng: gian hàng mới chưa về thì hàng rào độ mới giữ nút bận dù khoá đã nhả sau 4 giây (storefront-sheets-fresh-barrier.spec). */
+  readsStorefront?: boolean;
 }
 
 const COMMANDS: Cmd[] = [
@@ -198,18 +200,20 @@ const COMMANDS: Cmd[] = [
   {
     name: 'Lưu hồ sơ',
     ui: () => <ProfileSheet open sf={asSf()} onClose={noop} onSaved={refresh} />,
-    press: () => btn('Lưu hồ sơ', 'Đang lưu…'),
+    press: () => btn('Lưu hồ sơ', 'Đang lưu…', 'Đang cập nhật…'),
     first: PATCH_ME,
     fail: PATCH_ME,
     reloads: [ME, QUESTS],
+    readsStorefront: true,
   },
   {
     name: 'Lưu cấu hình',
     ui: () => <ConfigSheet open sf={asSf()} onClose={noop} onSaved={refresh} unpublishLabel={null} onUnpublish={noop} />,
-    press: () => btn('Lưu cấu hình gian hàng', 'Đang lưu…'),
+    press: () => btn('Lưu cấu hình gian hàng', 'Đang lưu…', 'Đang cập nhật…'),
     first: PATCH_ME,
     fail: PATCH_ME,
     reloads: [ME, QUESTS],
+    readsStorefront: true,
   },
   {
     name: 'Gỡ tài khoản ngân hàng',
@@ -222,10 +226,11 @@ const COMMANDS: Cmd[] = [
   {
     name: 'Đổi tên khối',
     ui: () => <CollectionSheet collection={COLLECTION} onClose={noop} onSaved={refresh} />,
-    press: () => btn('Lưu', 'Đang lưu…'),
+    press: () => btn('Lưu', 'Đang lưu…', 'Đang cập nhật…'),
     first: 'patch /storefront/me/collections/c1',
     fail: 'patch /storefront/me/collections/c1',
     reloads: [ME, QUESTS],
+    readsStorefront: true,
   },
 ];
 
@@ -315,6 +320,21 @@ describe.each(COMMANDS)('$name', (cmd) => {
     beforeEach(() => {
       vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'], shouldAdvanceTime: true });
     });
+    // Sau 4 giây khoá chạm đúp nhả. Lệnh dựng từ ô của gian hàng còn bị hàng rào độ mới giữ ("Đang cập nhật…", không còn "Đang lưu…") tới khi một lần đọc gian hàng thành công.
+    const lockReleasedAfterCap = async () => {
+      if (cmd.readsStorefront) {
+        expectBusy(cmd.press());
+        expect(cmd.press().textContent).toBe('Đang cập nhật…');
+        state.hang.delete(ME);
+        await act(async () => {
+          await qc.refetchQueries({ queryKey: ['my-storefront'] });
+        });
+        await flush(2);
+      } else {
+        state.hang.delete(ME);
+      }
+      expectIdle(cmd.press());
+    };
 
     it('thành công: nhả khoá sau 4 giây dù lời gọi báo xong của chỗ gọi không có hạn', async () => {
       uncapped = true;
@@ -326,8 +346,7 @@ describe.each(COMMANDS)('$name', (cmd) => {
       expectBusy(cmd.press());
       await advance(1_500);
       await flush(2);
-      expectIdle(cmd.press());
-      state.hang.delete(ME);
+      await lockReleasedAfterCap();
       await tap(cmd.press());
       expect(writes(cmd.first)).toBe(2);
     });
@@ -342,9 +361,8 @@ describe.each(COMMANDS)('$name', (cmd) => {
       expectBusy(cmd.press());
       await advance(1_500);
       await flush(2);
-      expectIdle(cmd.press());
-      state.hang.delete(ME);
       state.status.delete(cmd.fail);
+      await lockReleasedAfterCap();
       await tap(cmd.press());
       expect(writes(cmd.first)).toBe(2);
     });
@@ -612,10 +630,12 @@ describe('Đổi tên khối: 403 của API khi khối không còn (assertOwnedC
     expectIdle(btn('Lưu'));
   });
 
-  it('khoá theo khối: khối A còn chờ dữ liệu mới thì khối B đổi tên được, A thì vẫn bị chặn', async () => {
+  // Chỉ pha lệnh còn bay còn thấy được khoá riêng của từng khối: sau khi lệnh xong, gian hàng được làm mới và hàng rào độ mới giữ mọi form dựng từ gian hàng
+  // (kể cả khối khác) tới khi bản mới về, cùng lúc khoá của khối A nhả (storefront-sheets-fresh-barrier.spec).
+  it('khoá theo khối: khối A còn đang gửi thì khối B đổi tên được, A thì vẫn bị chặn', async () => {
     const other = { ...COLLECTION, id: 'c2', title: 'Bộ sưu tập B' } as StorefrontCollectionEdit;
     await mountUi(<CollectionSheet collection={COLLECTION} onClose={noop} onSaved={refresh} />);
-    const releaseFresh = hold(ME);
+    const releaseWrite = hold('patch /storefront/me/collections/c1');
     await tap(btn('Lưu', 'Đang lưu…'));
     expect(writes('patch /storefront/me/collections/c1')).toBe(1);
     remount(mounted!, <Host><CollectionSheet collection={other} onClose={noop} onSaved={refresh} /></Host>, qc);
@@ -628,7 +648,7 @@ describe('Đổi tên khối: 403 của API khi khối không còn (assertOwnedC
     expectBusy(btn('Lưu', 'Đang lưu…'));
     await tap(btn('Lưu', 'Đang lưu…'));
     expect(writes('patch /storefront/me/collections/c1')).toBe(1);
-    await releaseFresh();
+    await releaseWrite();
   });
 
   it('khối A còn chờ dữ liệu mới: tấm của khối B vẫn đóng được bằng chạm nền, tấm của A thì bị chặn', async () => {

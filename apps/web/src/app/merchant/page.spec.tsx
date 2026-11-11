@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { act } from 'react';
 import MerchantPage from './page';
 import { byText, click, flush, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, scrollRegionProblems, unlabeledFields } from '@/test-utils/a11y';
@@ -1488,6 +1489,62 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     expect(err.className).toContain('text-danger-fg');
     click(byText(overlay, 'button', 'Hủy'));
     expect(root.querySelector('.fixed.inset-0')).toBeNull();
+  });
+
+  // Wave 101B: hộp đóng được lúc lệnh còn bay. Trang chỉ đóng hộp khi `onSuccess(stillOpen)` nói hộp đã gửi còn mở, nhưng luôn tải lại danh sách vì sản phẩm đã được lưu thật.
+  it('Đăng sản phẩm mới: đóng hộp lúc lệnh còn bay rồi mở lại và gõ; lệnh cũ xong muộn không đóng hộp mới, danh sách vẫn được tải lại', async () => {
+    let release!: (v: unknown) => void;
+    mocks.createProduct = vi.fn(() => new Promise((r) => (release = r)));
+    const root = await mount();
+    await openTab('Sản phẩm');
+    click(byText(root, 'button', 'Đăng sản phẩm mới'));
+    let overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    typeInto(inputByLabel(overlay, 'Tên sản phẩm'), 'SP');
+    typeInto(inputByLabel(overlay, 'Giá bán'), '5000');
+    typeInto(inputByLabel(overlay, 'Tồn kho bạn đang có'), '1');
+    typeInto(inputByLabel(overlay, 'Nội dung mô tả chi tiết'), 'Mô tả');
+    click(byText(overlay, 'button', 'Gửi kiểm duyệt'));
+    await flush();
+    expect(mocks.createProduct).toHaveBeenCalledTimes(1);
+    click(root.querySelector('button[aria-label="Đóng"]'));
+    await flush();
+    expect(root.querySelector('.fixed.inset-0')).toBeNull();
+    const reads = mocks.getProducts.mock.calls.length;
+    click(byText(root, 'button', 'Đăng sản phẩm mới'));
+    overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    typeInto(inputByLabel(overlay, 'Tên sản phẩm'), 'Chữ đang gõ');
+    await act(async () => release({}));
+    await flush(4);
+    overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    expect(overlay).not.toBeNull();
+    expect(inputByLabel(overlay, 'Tên sản phẩm').value).toBe('Chữ đang gõ');
+    expect(mocks.getProducts.mock.calls.length).toBeGreaterThan(reads);
+  });
+
+  it('Sửa sản phẩm: đóng hộp lúc lệnh còn bay rồi mở lại và gõ; lệnh cũ xong muộn không đóng hộp mới, danh sách vẫn được tải lại', async () => {
+    let release!: (v: unknown) => void;
+    mocks.updateProduct = vi.fn(() => new Promise((r) => (release = r)));
+    const root = await mount();
+    await openTab('Sản phẩm');
+    rowAction(root, 'SP a', 'Sửa');
+    let overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    typeInto(inputByLabel(overlay, 'Số còn bán được'), '12');
+    click(byText(overlay, 'button', 'Lưu thay đổi'));
+    await flush();
+    expect(mocks.updateProduct).toHaveBeenCalledTimes(1);
+    click(root.querySelector('button[aria-label="Đóng"]'));
+    await flush();
+    expect(root.querySelector('.fixed.inset-0')).toBeNull();
+    const reads = mocks.getProducts.mock.calls.length;
+    rowAction(root, 'SP a', 'Sửa');
+    overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    typeInto(inputByLabel(overlay, 'Số còn bán được'), '15');
+    await act(async () => release({}));
+    await flush(4);
+    overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    expect(overlay).not.toBeNull();
+    expect(inputByLabel(overlay, 'Số còn bán được').value).toBe('15');
+    expect(mocks.getProducts.mock.calls.length).toBeGreaterThan(reads);
   });
 });
 

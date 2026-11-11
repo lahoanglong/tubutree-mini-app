@@ -4805,6 +4805,78 @@ describe('admin/page — đơn hàng: bộ lọc theo link, hồ sơ khách, xá
     expect(container.textContent).toContain('Đã ghi nhận đơn TB10');
   });
 
+  it('390px: đơn chưa có id (nhận diện bằng mã đơn) vẫn được chuyển sang đơn kế tiếp khi ngăn kéo còn mở đúng đơn vừa xác nhận', async () => {
+    narrowScreen();
+    const api = mockFetch({ '/confirm-payment': { body: { ok: true, alreadyPaid: false, message: 'Đã xác nhận nhận tiền đơn TB10.', order: {} } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    mocks.orders = [orderOf('TB10', { id: '' }), orderOf('TB11', { id: '' })];
+    window.history.replaceState(null, '', '/admin?tab=orders&status=PENDING_PAYMENT&queue=bank_transfer_to_confirm');
+    const { container } = await mount();
+    act(() => (container.querySelector('[data-orders-cards] > li button') as HTMLElement).click());
+    await flush();
+    let dialog = document.body.querySelector('[role="dialog"]')!;
+    click([...dialog.querySelectorAll('button')].find((b) => b.textContent === 'Đã nhận tiền')!);
+    await flush();
+    answerConfirm(true);
+    await flush();
+    dialog = document.body.querySelector('[role="dialog"]')!;
+    expect(dialog.textContent).toContain('Đơn TB11');
+  });
+
+  // Wave 101B: ngăn kéo đóng được lúc lệnh xác nhận tiền còn bay; lệnh xong muộn không được thay ngăn kéo của đơn khác đang mở bằng "đơn kế tiếp".
+  describe('390px: lệnh xác nhận tiền xong muộn sau khi khách đã rời đơn', () => {
+    const setup = async () => {
+      narrowScreen();
+      const api = mockFetch({ '/confirm-payment': { body: { ok: true, alreadyPaid: false, message: 'Đã xác nhận nhận tiền đơn TB10.', order: {} } } });
+      let release!: () => void;
+      const gate = new Promise<void>((r) => (release = r));
+      const sent: string[] = [];
+      vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.includes('/confirm-payment')) {
+          sent.push(url);
+          await gate;
+        }
+        return api.fn(url, init);
+      }));
+      mocks.orders = [orderOf('TB10'), orderOf('TB11'), orderOf('TB12')];
+      window.history.replaceState(null, '', '/admin?tab=orders&status=PENDING_PAYMENT&queue=bank_transfer_to_confirm');
+      const { container } = await mount();
+      const cards = () => [...container.querySelectorAll<HTMLElement>('[data-orders-cards] > li button')];
+      act(() => cards()[0]!.click());
+      await flush();
+      const dlg = () => document.body.querySelector('[role="dialog"]');
+      click([...dlg()!.querySelectorAll('button')].find((b) => b.textContent === 'Đã nhận tiền')!);
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(sent.some((u) => u.includes('/admin/orders/id-TB10/confirm-payment'))).toBe(true);
+      click(dlg()!.querySelector('button[aria-label="Đóng"]'));
+      await flush();
+      expect(dlg()).toBeNull();
+      return { container, cards, dlg, release };
+    };
+
+    it('mở đơn khác rồi lệnh cũ xong: ngăn kéo vẫn là đơn khác, không bị thay bằng đơn kế tiếp của đơn cũ', async () => {
+      const { cards, dlg, release } = await setup();
+      act(() => cards()[2]!.click());
+      await flush();
+      expect(dlg()!.textContent).toContain('Đơn TB12');
+      await act(async () => release());
+      await flush(6);
+      expect(dlg()).not.toBeNull();
+      expect(dlg()!.textContent).toContain('Đơn TB12');
+      expect(dlg()!.textContent).not.toContain('Đang mở đơn kế tiếp');
+    });
+
+    it('không mở gì: lệnh cũ xong thì ngăn kéo vẫn đóng, danh sách giữ câu báo', async () => {
+      const { container, dlg, release } = await setup();
+      await act(async () => release());
+      await flush(6);
+      expect(dlg()).toBeNull();
+      expect(container.textContent).toContain('Đã ghi nhận đơn TB10');
+    });
+  });
+
   it('máy chủ báo alreadyPaid (người khác xác nhận trước): dòng báo hiện đúng câu của máy chủ, không nói như chính mình vừa ghi nhận', async () => {
     const already = 'Đơn TB10 đã được ghi nhận thanh toán trước đó.';
     const api = mockFetch({ '/confirm-payment': { body: { ok: true, alreadyPaid: true, message: already, order: {} } } });

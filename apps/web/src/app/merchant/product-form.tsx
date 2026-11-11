@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Info, X } from 'lucide-react';
 import {
@@ -97,10 +97,25 @@ function FormFooter({ onClose, busy, submitLabel }: { onClose: () => void; busy:
 }
 
 /**
+ * Hộp đăng/sửa đóng được lúc lệnh còn bay (X, Hủy, Esc) và mỗi lần mở là một form mới. Lệnh của lần mở trước xong muộn phải báo cho trang là hộp
+ * đã gửi không còn mở, để trang không đóng hộp vừa mở lại (xoá chữ khách đang gõ) mà vẫn tải lại danh sách vì sản phẩm đã được lưu thật.
+ */
+function useStillMounted() {
+  const ref = useRef(true);
+  useEffect(() => {
+    ref.current = true;
+    return () => {
+      ref.current = false;
+    };
+  }, []);
+  return ref;
+}
+
+/**
  * Đăng sản phẩm riêng. Hai cách giao (D4): gian hàng tự giao (tự đặt giá và tồn kho), hoặc "Tubu giao hộ" khi hàng đã nằm
  * trong kho Tubu, nhận diện bằng mã biến thể Pancake; giá và tồn khi đó theo kho Tubu.
  */
-export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
+export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: (stillOpen: boolean) => void }) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
   const [shortDesc, setShortDesc] = useState('');
@@ -128,9 +143,10 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
   });
 
   const submitting = useRef(false);
+  const stillOpen = useStillMounted();
   const mut = useMutation({
     mutationFn: (dto: CreateMerchantProductInput) => createMerchantProduct(dto),
-    onSuccess: () => onSuccess(),
+    onSuccess: () => onSuccess(stillOpen.current),
     onError: (e: unknown) => setMsg(actionErrorText(e)),
     onSettled: () => {
       submitting.current = false;
@@ -310,7 +326,7 @@ export function CreateProductModal({ onClose, onSuccess }: { onClose: () => void
  * Sửa sản phẩm tự đăng. Giá, tồn kho có hiệu lực ngay; đổi tên, mô tả, ảnh của sản phẩm đang bán thành bản sửa chờ duyệt, sản
  * phẩm vẫn bán nội dung cũ. Có bản sửa đang chờ thì form mở từ bản đó (sửa tiếp, không bắt đầu lại từ nội dung đang bán).
  */
-export function EditProductModal({ product, onClose, onSuccess }: { product: MerchantProduct; onClose: () => void; onSuccess: () => void }) {
+export function EditProductModal({ product, onClose, onSuccess }: { product: MerchantProduct; onClose: () => void; onSuccess: (stillOpen: boolean) => void }) {
   const tubu = product.fulfilment === 'TUBU';
   const unlinkedCode = !tubu ? (product.pancakeLinkCode ?? null) : null;
   const live = product.approvalStatus === 'APPROVED';
@@ -331,9 +347,10 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
 
   const qc = useQueryClient();
   const submitting = useRef(false);
+  const stillOpen = useStillMounted();
   const mut = useMutation({
     mutationFn: (dto: UpdateMerchantProductInput) => updateMerchantProduct(product.id, dto),
-    onSuccess: () => onSuccess(),
+    onSuccess: () => onSuccess(stillOpen.current),
     onError: (e: unknown) => {
       setMsg(actionErrorText(e));
       // 404/409: sản phẩm đã đổi hoặc không còn nên danh sách phía sau đang cũ. 400 là luật nhập liệu (giá, mã Pancake), không tải lại.
