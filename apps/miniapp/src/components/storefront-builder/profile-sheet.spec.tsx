@@ -138,7 +138,7 @@ describe('ProfileSheet: máy chủ từ chối vì gian hàng không còn khớp
     vi.useRealTimers();
   });
 
-  it.each([400, 404, 409])('bị từ chối %i: báo lỗi một lần, tải lại gian hàng, nút bận tới khi dữ liệu về rồi mới nhận cú chạm mới; sheet không đóng', async (status) => {
+  it.each([400, 404, 409])('bị từ chối %i: báo lỗi một lần, tải lại gian hàng, nút bận tới khi dữ liệu về rồi mới nhận cú chạm mới; sheet đóng sau khi dữ liệu về khi 404/409, 400 giữ mở (W114A)', async (status) => {
     mocks.updateStorefront.mockRejectedValueOnce(serverError('Gian hàng không còn.', status)).mockResolvedValue({});
     const refresh = pending();
     const { invalidated, onClose, onSaved } = renderLive((key) => (key[0] === 'my-storefront' ? refresh.promise : undefined));
@@ -157,11 +157,11 @@ describe('ProfileSheet: máy chủ từ chối vì gian hàng không còn khớp
     expect(mocks.updateStorefront).toHaveBeenCalledTimes(1);
     await act(async () => refresh.resolve());
     await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
-    expect(onClose).not.toHaveBeenCalled();
+    expect(onClose).toHaveBeenCalledTimes(status === 400 ? 0 : 1);
     expect(onSaved).not.toHaveBeenCalled();
     fireEvent.click(btn);
     await waitFor(() => expect(mocks.updateStorefront).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(status === 400 ? 1 : 2));
   });
 
   it.each(TEMPORARY)('%s: không nói gì về gian hàng thật nên không tải lại, khoá nhả ngay', async (_label, error) => {
@@ -204,5 +204,126 @@ describe('ProfileSheet: máy chủ từ chối vì gian hàng không còn khớp
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(mocks.updateStorefront).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('ProfileSheet: tấm có ô nhập chỉ đóng khi gian hàng không còn (404/409), sau khi dữ liệu mới về (W114A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message } } as never);
+  const pending = () => {
+    let resolve!: () => void;
+    const promise = new Promise<void>((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  function renderLive(refresh: () => Promise<void>) {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    const onClose = vi.fn();
+    render(
+      <QueryClientProvider client={qc}>
+        <ProfileSheet sf={sf} onClose={onClose} onSaved={() => {}} />
+      </QueryClientProvider>,
+    );
+    return { invalidate, onClose };
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.updateStorefront.mockReset();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([404, 409])('bị từ chối %i: chưa đóng khi dữ liệu còn đang tải, đóng đúng một lần sau khi dữ liệu về', async (status) => {
+    mocks.updateStorefront.mockRejectedValueOnce(serverError('Gian hàng không còn.', status));
+    const refresh = pending();
+    const { invalidate, onClose } = renderLive(() => refresh.promise);
+    await act(async () => {
+      fireEvent.click(saveBtn());
+    });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => refresh.resolve());
+    await settle();
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([404, 409])('bị từ chối %i rồi tấm bị gỡ và mở lại lúc dữ liệu còn tải: lệnh đóng của tấm cũ không đóng tấm mới', async (status) => {
+    mocks.updateStorefront.mockRejectedValueOnce(serverError('Gian hàng không còn.', status));
+    const refresh = pending();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh.promise) as never);
+    // Cha truyền cùng một onClose cho mọi lần mở tấm: lệnh đóng trễ của tấm cũ gọi trúng tấm mới nếu không được chặn.
+    const onClose = vi.fn();
+    const tree = () => (
+      <QueryClientProvider client={qc}>
+        <ProfileSheet sf={sf} onClose={onClose} onSaved={() => {}} />
+      </QueryClientProvider>
+    );
+    const first = render(tree());
+    await act(async () => {
+      fireEvent.click(saveBtn());
+    });
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(1));
+    first.unmount();
+    render(tree());
+    await act(async () => refresh.resolve());
+    await settle();
+    expect(onClose).not.toHaveBeenCalled();
+    expect(saveBtn()).not.toHaveAttribute('aria-busy');
+  });
+
+  it.each([400, 422])('bị từ chối %i: giữ tấm để sửa ô nhập, không đóng', async (status) => {
+    mocks.updateStorefront.mockRejectedValueOnce(serverError('Ảnh bìa không hợp lệ.', status));
+    const { onClose } = renderLive(() => Promise.resolve());
+    await act(async () => {
+      fireEvent.click(saveBtn());
+    });
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Ảnh bìa không hợp lệ.', type: 'error' }));
+    await settle();
+    await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy'));
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['quá thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: tấm giữ mở, khoá nhả ngay', async (_label, error) => {
+    mocks.updateStorefront.mockRejectedValueOnce(error);
+    const { invalidate, onClose } = renderLive(() => new Promise<void>(() => undefined));
+    await act(async () => {
+      fireEvent.click(saveBtn());
+    });
+    await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy'));
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('404 mà dữ liệu tải lại treo mãi: đóng đúng sau LOCK_REFRESH_WAIT_MS, không sớm hơn', async () => {
+    mocks.updateStorefront.mockRejectedValueOnce(serverError('Gian hàng không còn.', 404));
+    const { onClose } = renderLive(() => new Promise<void>(() => undefined));
+    vi.useFakeTimers();
+    await act(async () => {
+      fireEvent.click(saveBtn());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 1);
+    });
+    expect(onClose).not.toHaveBeenCalled();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(50);
+      for (let i = 0; i < 3; i++) await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
   });
 });

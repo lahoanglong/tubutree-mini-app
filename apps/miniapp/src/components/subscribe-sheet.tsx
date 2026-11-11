@@ -9,7 +9,7 @@ import {
   MAX_START_DAYS_AHEAD,
   type SubscriptionPaymentMethod,
 } from '../services/subscriptions-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isTargetGoneError } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { settleWithin } from '../utils/settle-within';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -104,9 +104,12 @@ export function SubscribeSheet({
       // Máy khác vừa tạo gói trùng (409) hoặc địa chỉ không còn (400/404): danh sách gói và địa chỉ của sheet đang cũ, bấm lại chỉ nhận lại đúng lỗi đó.
       // Trả Promise từ onError (không phải onSettled, vốn chạy sau và là nơi nhả khoá) để nút tạo giữ khoá tới khi dữ liệu mới về.
       if (!isStaleSubscriptionError(e)) return undefined;
-      return settleWithin(
+      const held = settleWithin(
         Promise.all([qc.invalidateQueries({ queryKey: ['subscriptions'] }), qc.invalidateQueries({ queryKey: ['addresses'] })]),
       );
+      // Sheet có ô người dùng chọn (chu kỳ, ngày, địa chỉ): chỉ đóng khi sản phẩm không còn hoặc vừa đổi (404, 409 không phải trùng gói), đóng SAU khi dữ liệu mới về;
+      // 400 và 409 trùng gói là lỗi ở lựa chọn (địa chỉ không hợp lệ, đã có gói tới địa chỉ này, hết hàng, Ví thiếu), giữ sheet để sửa. `dismissible` khoá việc đóng tay suốt lúc lệnh bay và lúc giữ khoá nên không đóng nhầm sheet khác.
+      return isTargetGoneError(e) ? held.then(() => onClose()) : held;
     },
   });
 

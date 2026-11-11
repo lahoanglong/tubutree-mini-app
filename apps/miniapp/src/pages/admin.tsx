@@ -175,13 +175,17 @@ function PayrollSection() {
   };
 
   const rateM = useLockedMutation({
-    mutationFn: () => setRate(rateRow!.staff.id, Number(rateVal)),
+    mutationFn: (r: AdminPayrollRow) => setRate(r.staff.id, Number(rateVal)),
     onSuccess: () => {
       openSnackbar({ text: 'Đã lưu đơn giá.', type: 'success' });
       setRateRow(null);
       invalidate();
     },
-    onError: onWriteRejected,
+    onError: (e, r) => {
+      // Tấm có ô đơn giá: chỉ đóng khi nhân viên không còn hoặc bảng lương vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Tấm đóng được lúc lệnh chạy: chỉ đóng đúng tấm của dòng này.
+      if (isTargetGoneError(e)) setRateRow((cur) => (cur?.staff.id === r.staff.id ? null : cur));
+      return onWriteRejected(e);
+    },
   });
   const finalizeM = useLockedMutation({
     onSettled: releaseActing,
@@ -361,7 +365,7 @@ function PayrollSection() {
         onClose={() => setRateRow(null)}
         title={`Đơn giá giờ · ${rateRow?.staff.fullName ?? ''}`}
         footer={
-          <Button fullWidth loading={rateM.isPending} disabled={!/^\d+$/.test(rateVal)} onPress={() => rateM.mutate()}>
+          <Button fullWidth loading={rateM.isPending} disabled={!/^\d+$/.test(rateVal)} onPress={() => rateRow && rateM.mutate(rateRow)}>
             Lưu đơn giá
           </Button>
         }
@@ -593,10 +597,13 @@ function StaffSection() {
     return settleWithin(qc.invalidateQueries({ queryKey: ['admin-staff'] }));
   };
 
+  // Tấm Thêm không có id đích: đích của lệnh là SĐT đã gửi, nên onError so SĐT đang gõ trong tấm với nó.
+  const phoneRef = useRef(phone);
+  phoneRef.current = phone;
+
   const grantM = useLockedMutation({
     // Nhóm việc chỉ có nghĩa với nhân viên; không chọn nhóm nào thì không gửi để máy chủ giữ nguyên nhóm đã lưu.
-    mutationFn: async () => {
-      const to = phone.trim();
+    mutationFn: async (to: string) => {
       const picked = STAFF_PERMISSIONS.filter((p) => perms.includes(p));
       const r = await grantStaff(to, role, role === 'STAFF' && picked.length ? picked : undefined, grantReason.trim());
       return { r, to, names: picked.map((p) => STAFF_PERMISSION_LABELS[p]), alreadyStaff: existingNames !== null };
@@ -609,7 +616,14 @@ function StaffSection() {
       setGrantReason('');
       qc.invalidateQueries({ queryKey: ['admin-staff'] });
     },
-    onError: onWriteRejected,
+    onError: (e, to) => {
+      // Tấm có ô SĐT/lý do/nhóm việc: chỉ đóng khi người này không còn hoặc vừa đổi quyền ở nơi khác (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Tấm đóng được lúc lệnh chạy: chỉ đóng khi tấm đang gõ đúng SĐT này. Giữ SĐT/nhóm việc như khi người dùng tự đóng, chỉ bỏ lý do (khớp onClose của tấm).
+      if (isTargetGoneError(e) && phoneRef.current.trim() === to) {
+        setSheetOpen(false);
+        setGrantReason('');
+      }
+      return onWriteRejected(e);
+    },
   });
 
   const revokeM = useLockedMutation({
@@ -643,7 +657,7 @@ function StaffSection() {
       setConfirmAdmin(true);
       return;
     }
-    grantM.mutate();
+    grantM.mutate(phone.trim());
   };
 
   return (
@@ -822,7 +836,7 @@ function StaffSection() {
         onCancel={() => setConfirmAdmin(false)}
         onConfirm={() => {
           setConfirmAdmin(false);
-          grantM.mutate();
+          grantM.mutate(phone.trim());
         }}
       />
       <BottomSheet
@@ -943,7 +957,11 @@ function ShiftsSection() {
       setAdjust(null);
       invalidate();
     },
-    onError: onWriteRejected,
+    onError: (e, v) => {
+      // Tấm chỉnh giờ có ô giờ: chỉ đóng khi ca không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô giờ, giữ tấm để sửa. Chỉ đóng tấm của đúng ca này, không đóng tấm của ca khác mới mở.
+      if (isTargetGoneError(e)) setAdjust((cur) => (cur?.id === v.id ? null : cur));
+      return onWriteRejected(e);
+    },
   }, (v) => v.id);
 
   const rejectM = useLockedMutation({
@@ -955,7 +973,11 @@ function ShiftsSection() {
       setRejectReason('');
       invalidate();
     },
-    onError: onWriteRejected,
+    onError: (e, v) => {
+      // Tấm từ chối có ô lý do: chỉ đóng khi ca không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô lý do, giữ tấm để sửa. Chỉ đóng tấm của đúng ca này.
+      if (isTargetGoneError(e)) setRejectId((cur) => (cur === v.id ? null : cur));
+      return onWriteRejected(e);
+    },
   }, (v) => v.id);
 
   const bulkM = useLockedMutation({

@@ -16,7 +16,7 @@ import type {
   WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, deskConfirm, deskFulfilGift, deskLookup, deskReject, getDeskPoints } from '../services/waste-api';
-import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError, isTargetGoneError } from '../services/api';
 import { settleWithin } from '../utils/settle-within';
 import { extractWasteLookupCode, normalizeWasteLookupCode } from '@tubutree/app-core/waste-code-input';
 import { scanCode } from '../services/zmp-bridge';
@@ -233,6 +233,8 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
   };
 
   const request = lookup;
+  const requestIdRef = useRef(request?.id);
+  requestIdRef.current = request?.id;
   const readOnly = !!request && isReadOnly(request);
   const giftReadOnly = gift ? deskGiftReadOnly(gift, { dateTime: formatDateTime, points: formatPoints }) : null;
   // Bưu kiện tra bằng mã TR- ghi trên kiện (cơ sở khớp TR_CODE); không có cơ sở khớp máy chủ trả 409 (spec 15.3, 15.5).
@@ -306,7 +308,15 @@ function DeskBody({ points }: { points: WasteDeskPointDTO[] }) {
       setRejectOpen(false);
       finish();
     },
-    onError: rejected,
+    onError: (e, v) => {
+      const held = rejected(e);
+      // Tấm có ô lý do/ghi chú: chỉ đóng khi phiếu không còn hoặc vừa đổi (404/409, vd đã xác nhận ở quầy khác), đóng SAU khi danh sách điểm mới về để nút báo bận tới lúc đó;
+      // 400/422 là lỗi ở ô nhập, giữ tấm để sửa. Tấm đóng được lúc lệnh bay và nhân viên có thể đã tra phiếu khác, nên chỉ đóng khi vẫn đang ở đúng phiếu bị từ chối.
+      if (!isTargetGoneError(e)) return held;
+      return Promise.resolve(held).then(() => {
+        if (requestIdRef.current === v.req.id) setRejectOpen(false);
+      });
+    },
   });
 
   const fulfil = useLockedMutation({

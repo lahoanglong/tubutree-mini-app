@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Input, useSnackbar } from 'zmp-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { EyeOff } from 'lucide-react';
 import { updateStorefront, type StorefrontEdit } from '../../services/storefront-api';
-import { getErrorMessage, isStaleStateError } from '../../services/api';
+import { getErrorMessage, isStaleStateError, isTargetGoneError } from '../../services/api';
 import { haptic } from '../../utils/haptic';
 import { settleWithin } from '../../utils/settle-within';
 import { vi } from '../../i18n/vi';
@@ -57,6 +57,13 @@ export function MerchantConfigSheet({
 }) {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [form, setForm] = useState({
     title: sf.title ?? '',
     subdomain: sf.subdomain ?? '',
@@ -97,7 +104,16 @@ export function MerchantConfigSheet({
       onSaved();
       onClose();
     },
-    onError: failSave,
+    onError: (e) => {
+      const held = failSave(e);
+      // Tấm có nhiều ô nhập: chỉ đóng khi gian hàng không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập (subdomain trùng, tên không hợp lệ...), giữ tấm để sửa.
+      if (!isTargetGoneError(e)) return held;
+      // Khoá nút nằm trong tấm này nên đóng tấm là gỡ luôn khoá (mở lại là bản mới, bấm Lưu lại được ngay trên dữ liệu cũ): đóng sau khi dữ liệu mới về (hoặc quá `settleWithin`), lúc khoá cũng vừa nhả.
+      // Khách có thể đóng tấm rồi mở lại trong lúc chờ (tấm mới, khoá mới): TanStack vẫn chạy onError sau khi tấm cũ gỡ, chỉ báo đóng khi chính tấm này còn gắn.
+      return (held ?? Promise.resolve()).then(() => {
+        if (mounted.current) onClose();
+      });
+    },
   });
   // Tài khoản ngân hàng nhập trước đây không được dùng để thu tiền (khách luôn trả cho Tubu Tree) — chỉ cho gỡ đi.
   const clearBankMut = useLockedMutation({

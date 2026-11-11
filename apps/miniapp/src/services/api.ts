@@ -276,11 +276,18 @@ export function isServerRejection(error: unknown): boolean {
   return isHttpError(error) && [400, 404, 409, 422].includes(error.response?.status ?? 0);
 }
 
+/** 409 mà người dùng tự sửa hoặc thử lại được: trùng giá trị (ràng buộc duy nhất, gói định kỳ cùng địa chỉ) và xung đột giao dịch. */
+const USER_FIXABLE_CONFLICTS = new Set(['P2002', 'P2034', 'SUBSCRIPTION_DUPLICATE']);
+
 /**
  * Đích của lệnh không còn hoặc vừa đổi (404/409). Tấm có ô người dùng nhập chỉ đóng khi gặp mã này: 400/422 là lỗi ở chính ô nhập, người dùng sửa rồi gửi lại được.
+ * 409 trùng giá trị (tên miền đã có người dùng, gói cùng địa chỉ) cũng là lỗi ở ô nhập, và 409 xung đột giao dịch chỉ cần gửi lại: không tính, kẻo tấm đóng và mất chữ đã gõ.
  */
 export function isTargetGoneError(error: unknown): boolean {
-  return isHttpError(error) && [404, 409].includes(error.response?.status ?? 0);
+  if (!isHttpError(error)) return false;
+  const status = error.response?.status ?? 0;
+  if (status === 404) return true;
+  return status === 409 && !USER_FIXABLE_CONFLICTS.has(String(errorCode(error) ?? ''));
 }
 
 /**

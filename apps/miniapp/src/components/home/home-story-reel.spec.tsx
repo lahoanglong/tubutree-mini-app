@@ -28,9 +28,9 @@ vi.mock('../../store/auth', () => ({
   useAuthStore: Object.assign((sel: (s: { status: string }) => unknown) => sel(mocks.auth), { getState: () => mocks.auth }),
 }));
 vi.mock('../variation-sheet', () => ({
-  VariationSheet: (p: { open: boolean; initialId: string | null; variations: { id: string }[]; onConfirm: (v: { id: string }, qty: number) => Promise<void> | void; onClose: () => void }) =>
+  VariationSheet: (p: { open: boolean; busy?: boolean; initialId: string | null; variations: { id: string }[]; onConfirm: (v: { id: string }, qty: number) => Promise<void> | void; onClose: () => void }) =>
     p.open ? (
-      <div data-testid="variation-sheet" data-initial={p.initialId ?? ''}>
+      <div data-testid="variation-sheet" data-initial={p.initialId ?? ''} data-busy={p.busy ? 'true' : 'false'}>
         <button type="button" onClick={() => void p.onConfirm(p.variations[1]!, 2)}>
           xác nhận phân loại
         </button>
@@ -580,7 +580,8 @@ describe('HomeStoryReel: máy chủ từ chối thì giữ khoá tới khi dữ 
       expect(mocks.addToCart).toHaveBeenCalledTimes(1);
       await act(async () => refresh.resolve());
       await settle();
-      if (f.sheetFlow) await waitFor(() => expect(f.held()).toBe(false));
+      // Bảng có ô số lượng: 404/409 (món không còn) đóng bảng, 400 giữ bảng để khách sửa.
+      if (f.sheetFlow) await waitFor(() => expect(f.held()).toBe(status === 400));
       expect(errorNotices()).toBe(1);
       if (!f.sheetFlow) {
         await f.again();
@@ -600,12 +601,16 @@ describe('HomeStoryReel: máy chủ từ chối thì giữ khoá tới khi dữ 
       await screen.findAllByTestId('story-reel-item');
       await f.first();
       await waitFor(() => expect(errorNotices()).toBe(1));
-      if (f.sheetFlow) await waitFor(() => expect(f.held()).toBe(false));
+      // Mất mạng, quá hạn, 401, 5xx không nói gì về món: bảng chọn phân loại giữ nguyên để thử lại.
+      if (f.sheetFlow) expect(f.held()).toBe(true);
       expect(invalidate).not.toHaveBeenCalled();
       expect(mocks.addToCart.mock.calls[0]).toEqual([...f.args]);
-      fireEvent.click(ring(1));
-      fireEvent.click(await dialogReady());
-      if (f.sheetFlow) fireEvent.click(await screen.findByRole('button', { name: 'xác nhận phân loại' }));
+      if (f.sheetFlow) {
+        fireEvent.click(await screen.findByRole('button', { name: 'xác nhận phân loại' }));
+      } else {
+        fireEvent.click(ring(1));
+        fireEvent.click(await dialogReady());
+      }
       await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
     });
 
@@ -635,5 +640,214 @@ describe('HomeStoryReel: máy chủ từ chối thì giữ khoá tới khi dữ 
         await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
       }
     });
+  });
+});
+
+// Bảng chọn phân loại có ô số lượng: chỉ đóng khi thêm xong hoặc món/phân loại không còn (404/409); 400/422 giữ bảng để khách sửa; mất mạng, quá hạn, 401, 5xx giữ bảng để thử lại.
+describe('HomeStoryReel: bảng chọn phân loại đóng theo kết quả máy chủ (W114A)', () => {
+  type Refresh = () => Promise<unknown>;
+  const deferred = <T,>() => {
+    let resolve!: (v?: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res as (v?: T) => void;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorNotices = () => mocks.notify.mock.calls.filter((c) => c[0].type === 'error').length;
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const renderLive = (refresh: Refresh): MockInstance<QueryClient['invalidateQueries']> => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <HomeStoryReel />
+      </QueryClientProvider>,
+    );
+    return invalidate;
+  };
+  const KEYS = [['cart'], ['product', 'mon-1'], ['products', 'home-best-seller']];
+  const twoVariations = async (slug: string) => {
+    const n = Number(slug.split('-')[1]);
+    return detail(n, [variation(`v${n}`), variation(`v${n}b`)]);
+  };
+  const openPicker = async (n = 1) => {
+    fireEvent.click(ring(n));
+    fireEvent.click(await dialogReady());
+    await screen.findByTestId('variation-sheet');
+  };
+  const tapConfirm = async () => fireEvent.click(await screen.findByRole('button', { name: 'xác nhận phân loại' }));
+  const pickerOpen = () => screen.queryByTestId('variation-sheet') !== null;
+  const pickerBusy = () => screen.getByTestId('variation-sheet').getAttribute('data-busy') === 'true';
+
+  beforeEach(() => {
+    mocks.fetchProduct.mockImplementation(twoVariations);
+  });
+
+  it('400: bảng giữ mở (khách sửa số lượng), lỗi một lần, tải lại đúng khoá, bảng bận tới khi dữ liệu về rồi nhả; chạm lại gửi lệnh mới và đóng bảng khi xong', async () => {
+    mocks.addToCart.mockRejectedValueOnce(serverError('Số lượng vượt tồn kho', 400));
+    const refresh = deferred();
+    const invalidate = renderLive(() => refresh.promise);
+    await screen.findAllByTestId('story-reel-item');
+    await openPicker();
+    await tapConfirm();
+    await waitFor(() => expect(errorNotices()).toBe(1));
+    expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual(KEYS.map((queryKey) => ({ queryKey })));
+    expect(pickerOpen()).toBe(true);
+    expect(pickerBusy()).toBe(true);
+    await tapConfirm();
+    await tapConfirm();
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    expect(pickerOpen()).toBe(true);
+    expect(pickerBusy()).toBe(false);
+    expect(errorNotices()).toBe(1);
+    await tapConfirm();
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    expect(mocks.addToCart.mock.calls[1]).toEqual(['v1b', 2]);
+    await waitFor(() => expect(pickerOpen()).toBe(false));
+  });
+
+  it.each([
+    [404, 'Sản phẩm không còn bán'],
+    [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+  ])('%i: món không còn nên đóng bảng sau khi dữ liệu mới về; lỗi hiện một lần, bảng bận trong lúc chờ, mở lại và chạm gọi API lần nữa', async (status, message) => {
+    mocks.addToCart.mockRejectedValueOnce(serverError(message, status));
+    const refresh = deferred();
+    const invalidate = renderLive(() => refresh.promise);
+    await screen.findAllByTestId('story-reel-item');
+    await openPicker();
+    await tapConfirm();
+    await waitFor(() => expect(mocks.notify).toHaveBeenCalledWith(expect.objectContaining({ text: message, type: 'error' })));
+    expect(errorNotices()).toBe(1);
+    expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual(KEYS.map((queryKey) => ({ queryKey })));
+    expect(pickerOpen()).toBe(true);
+    expect(pickerBusy()).toBe(true);
+    await tapConfirm();
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await waitFor(() => expect(pickerOpen()).toBe(false));
+    expect(errorNotices()).toBe(1);
+    await openPicker();
+    await tapConfirm();
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    expect(mocks.addToCart.mock.calls[1]).toEqual(['v1b', 2]);
+  });
+
+  it('422: dữ liệu gửi lên sai nên giữ bảng, không tải lại (không phải trạng thái cũ), khoá nhả ngay', async () => {
+    mocks.addToCart.mockRejectedValueOnce(serverError('Số lượng không hợp lệ', 422));
+    const invalidate = renderLive(() => new Promise(() => undefined));
+    await screen.findAllByTestId('story-reel-item');
+    await openPicker();
+    await tapConfirm();
+    await waitFor(() => expect(errorNotices()).toBe(1));
+    await settle();
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(pickerOpen()).toBe(true);
+    expect(pickerBusy()).toBe(false);
+    await tapConfirm();
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: không nói gì về món nên giữ bảng, không tải lại, khoá nhả ngay', async (_label, error) => {
+    mocks.addToCart.mockRejectedValueOnce(error);
+    const invalidate = renderLive(() => new Promise(() => undefined));
+    await screen.findAllByTestId('story-reel-item');
+    await openPicker();
+    await tapConfirm();
+    await waitFor(() => expect(errorNotices()).toBe(1));
+    await settle();
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(pickerOpen()).toBe(true);
+    expect(pickerBusy()).toBe(false);
+    await tapConfirm();
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    expect(mocks.addToCart.mock.calls[1]).toEqual(['v1b', 2]);
+    await waitFor(() => expect(pickerOpen()).toBe(false));
+  });
+
+  it('409 mà tải lại treo mãi: bảng bận tới LOCK_REFRESH_WAIT_MS rồi mới đóng và nhả', async () => {
+    mocks.addToCart.mockRejectedValueOnce(serverError('Vừa có thay đổi, bạn thử lại nhé', 409));
+    renderLive(() => new Promise(() => undefined));
+    await screen.findAllByTestId('story-reel-item');
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await openPicker();
+      await tapConfirm();
+      await waitFor(() => expect(errorNotices()).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(pickerOpen()).toBe(true);
+      expect(pickerBusy()).toBe(true);
+      await tapConfirm();
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(pickerOpen()).toBe(false));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('400 mà tải lại treo mãi: bảng vẫn mở, chạm bị bỏ qua tới LOCK_REFRESH_WAIT_MS rồi nhả để chạm lại được', async () => {
+    mocks.addToCart.mockRejectedValueOnce(serverError('Số lượng vượt tồn kho', 400));
+    renderLive(() => new Promise(() => undefined));
+    await screen.findAllByTestId('story-reel-item');
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      await openPicker();
+      await tapConfirm();
+      await waitFor(() => expect(errorNotices()).toBe(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      await tapConfirm();
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      expect(pickerBusy()).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await waitFor(() => expect(pickerBusy()).toBe(false));
+      expect(pickerOpen()).toBe(true);
+      await tapConfirm();
+      await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('lệnh của món A bị từ chối 409 khi bảng của món B đang mở: bảng B giữ nguyên', async () => {
+    const lineA = deferred<{ items: { id: string }[]; itemCount: number }>();
+    mocks.addToCart.mockReturnValueOnce(lineA.promise);
+    renderLive(() => Promise.resolve());
+    await screen.findAllByTestId('story-reel-item');
+    await openPicker(1);
+    await tapConfirm();
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'đóng bảng' }));
+    await waitFor(() => expect(pickerOpen()).toBe(false));
+    await openPicker(2);
+    expect(screen.getByTestId('variation-sheet')).toHaveAttribute('data-initial', 'v2');
+    await act(async () => lineA.reject(serverError('Sản phẩm không còn bán', 409)));
+    await settle();
+    expect(errorNotices()).toBe(1);
+    expect(pickerOpen()).toBe(true);
+    expect(pickerBusy()).toBe(false);
+    await tapConfirm();
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledTimes(2));
+    expect(mocks.addToCart.mock.calls[1]).toEqual(['v2b', 2]);
   });
 });

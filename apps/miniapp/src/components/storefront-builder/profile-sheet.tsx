@@ -1,8 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Input, useSnackbar } from 'zmp-ui';
 import { updateStorefront, type StorefrontEdit } from '../../services/storefront-api';
-import { getErrorMessage, isStaleStateError } from '../../services/api';
+import { getErrorMessage, isStaleStateError, isTargetGoneError } from '../../services/api';
 import { haptic } from '../../utils/haptic';
 import { settleWithin } from '../../utils/settle-within';
 import { vi } from '../../i18n/vi';
@@ -28,6 +28,13 @@ export function ProfileSheet({
 }) {
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const [avatarUrl, setAvatarUrl] = useState(sf.avatarUrl ?? '');
   const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
   const [headerNote, setHeaderNote] = useState(sf.headerNote ?? '');
@@ -55,7 +62,14 @@ export function ProfileSheet({
     // Mất mạng, quá hạn, 401, 5xx không nói gì về gian hàng thật: nhả ngay để thử lại.
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      return isStaleStateError(e) ? settleWithin(queryClient.invalidateQueries({ queryKey: ['my-storefront'] })) : undefined;
+      const held = isStaleStateError(e) ? settleWithin(queryClient.invalidateQueries({ queryKey: ['my-storefront'] })) : undefined;
+      // Tấm có ô nhập: chỉ đóng khi gian hàng không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa.
+      // Khoá nằm trong tấm nên đóng tấm là gỡ luôn khoá: đóng sau khi dữ liệu mới về (hoặc quá `settleWithin`), lúc khoá cũng vừa nhả.
+      if (!isTargetGoneError(e)) return held;
+      // Khách có thể đóng tấm rồi mở lại trong lúc chờ (tấm mới, khoá mới): TanStack vẫn chạy onError sau khi tấm cũ gỡ, chỉ báo đóng khi chính tấm này còn gắn.
+      return (held ?? Promise.resolve()).then(() => {
+        if (mounted.current) onClose();
+      });
     },
   });
 

@@ -9,7 +9,7 @@ import { useNotify } from '../../hooks/use-notify';
 import { useAuthPhase } from '../../hooks/use-auth-phase';
 import { useFlashAllowance } from '../../hooks/use-flash-allowance';
 import { useLoginWithNotice } from '../../hooks/use-login-notice';
-import { getErrorMessage, isStaleStateError } from '../../services/api';
+import { getErrorMessage, isStaleStateError, isTargetGoneError } from '../../services/api';
 import { cartKey, useCartKey } from '../../services/cart-key';
 import { addToCart, fetchActiveFlashSales, fetchProduct, getCart, type ProductCard, type VariationDetail } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
@@ -131,6 +131,9 @@ function ReelOverlay({ slug, cards, flash, onShow, onClose, onAdd }: ReelOverlay
   );
 }
 
+/** Kết quả một lần thêm giỏ: bảng chọn phân loại cần biết lỗi gì để quyết định đóng hay giữ. */
+type AddOutcome = { ok: true } | { ok: false; error: unknown };
+
 /** Bảng chọn phân loại khi phân loại đại diện của thẻ vừa hết hàng mà sản phẩm còn phân loại khác (cùng bảng với giỏ nhanh ở Yêu thích). */
 function ReelVariationPicker({ card, variations, initialId, onClose, onConfirm }: { card: ProductCard; variations: VariationDetail[]; initialId: string | null; onClose: () => void; onConfirm: (id: string, qty: number) => Promise<void> }) {
   const phase = useAuthPhase();
@@ -197,12 +200,13 @@ export function HomeStoryReel() {
   );
   const stripItems = useMemo(() => items.map((c) => ({ slug: c.slug, name: c.name, thumbnail: c.thumbnail, seen: seen.has(c.slug) })), [items, seen]);
 
-  const addLine = async (slug: string, variationId: string, qty: number) => {
+  const addLine = async (slug: string, variationId: string, qty: number): Promise<AddOutcome> => {
     try {
       const cart = await addToCart(variationId, qty);
       queryClient.setQueryData(cartKey(), cart);
       haptic('medium');
       notify({ text: vi.product.added, type: 'success', duration: 2000, position: 'top' });
+      return { ok: true };
     } catch (e) {
       notify({ text: getErrorMessage(e), type: 'error' });
       // Máy chủ từ chối (món hết hàng, phân loại ngừng bán, giá đổi): giữ khoá của món (`exclusive` nhả ở `finally`) tới khi giỏ, chi tiết món và kệ Bán chạy nhất làm mới về
@@ -216,6 +220,7 @@ export function HomeStoryReel() {
           ]),
         );
       }
+      return { ok: false, error: e };
     }
   };
 
@@ -263,7 +268,9 @@ export function HomeStoryReel() {
           onConfirm={(id, qty) => {
             const slug = picker.card.slug;
             return exclusive(slug, async () => {
-              await addLine(slug, id, qty);
+              const outcome = await addLine(slug, id, qty);
+              // Bảng có ô số lượng: chỉ đóng khi thêm xong hoặc món/phân loại không còn (404/409). 400/422 là số lượng hay lựa chọn sai, khách sửa rồi thêm lại được; mất mạng, quá hạn, 401, 5xx giữ bảng để thử lại.
+              if (!outcome.ok && !isTargetGoneError(outcome.error)) return;
               // Bảng có thể đã đóng rồi mở cho món khác trong lúc lệnh (và lần chờ tải lại) chạy: chỉ đóng bảng của đúng món này.
               setPicker((cur) => (cur?.card.slug === slug ? null : cur));
             });

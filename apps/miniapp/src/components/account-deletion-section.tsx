@@ -10,7 +10,7 @@ import {
   walletForfeitConsent,
   walletForfeitNotice,
 } from '../utils/account-deletion-copy';
-import { getErrorMessage, isStaleStateError } from '../services/api';
+import { getErrorMessage, isStaleStateError, isTargetGoneError } from '../services/api';
 import { formatVnd } from '../utils/format';
 import { settleWithin } from '../utils/settle-within';
 import { openOAChat, hasOA } from '../services/zmp-bridge';
@@ -51,9 +51,19 @@ export function AccountDeletionSection() {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       setAgreedBalance(null);
       const refreshed = qc.invalidateQueries({ queryKey: ['wallet'] });
-      if (isStaleStateError(e)) return settleWithin(refreshed);
-      void refreshed;
-      return undefined;
+      if (!isStaleStateError(e)) {
+        void refreshed;
+        return undefined;
+      }
+      const held = settleWithin(refreshed);
+      // Thẻ có ô đồng ý bỏ số dư: chỉ thu lại khi tài khoản không còn hoặc vừa đổi (404/409), sau khi số dư mới về; 400 là số dư lệch, khách tick lại đúng số mới ngay trên thẻ này.
+      // Huỷ bị khoá suốt lúc lệnh bay và lúc giữ khoá nên thẻ này vẫn đúng là thẻ của lệnh vừa bị từ chối.
+      return isTargetGoneError(e)
+        ? held.then(() => {
+            setConfirmDelete(false);
+            setWalletRetrying(false);
+          })
+        : held;
     },
   });
 

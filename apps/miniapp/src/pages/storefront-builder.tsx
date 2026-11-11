@@ -20,7 +20,7 @@ import {
   BUILDER_COPY, comboPctOutcome, moveAnnouncement, moveBlockReason, moveBlockedAnnouncement, overflowSectionsNotice, questStripView,
   sectionCardView, sectionHref, sectionIdFromSearch, sectionStyleOf, type newSectionDto,
 } from '@tubutree/app-core/commerce/storefront-builder';
-import { apiMediaUrl, getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
+import { apiMediaUrl, getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError, isTargetGoneError } from '../services/api';
 import { getCtvTiers } from '../services/affiliate-api';
 import { formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
@@ -249,6 +249,8 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
     },
     onError: (e) => {
       notify({ text: getErrorMessage(e), type: 'error' });
+      // Tấm Thêm khối có ô tên/mức giảm: chỉ đóng khi gian hàng không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập (quá số khối, tên không hợp lệ...), giữ tấm để sửa.
+      if (isTargetGoneError(e)) setNewOpen(false);
       return holdForFresh(e);
     },
   });
@@ -258,8 +260,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       setRenaming(null);
       void refresh();
     },
-    onError: (e) => {
+    onError: (e, v) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Tấm có ô tên: chỉ đóng khi khối không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô tên, giữ tấm để sửa. Tấm đóng được lúc lệnh chạy: chỉ đóng đúng tấm của khối này.
+      if (isTargetGoneError(e)) setRenaming((cur) => (cur?.id === v.id ? null : cur));
       return holdForFresh(e);
     },
   }, (v) => v.id);
@@ -338,8 +342,10 @@ function Builder({ sf, tier, tierPending, nextTier }: { sf: StorefrontEdit; tier
       openSnackbar({ text: vi.storefront.itemNoteSaved, type: 'success' });
       void refresh();
     },
-    onError: (e) => {
+    onError: (e, v) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Tấm có ô lời nhắn: chỉ đóng khi món không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa. Chỉ đóng tấm của đúng món này.
+      if (isTargetGoneError(e)) setNotingItem((cur) => (cur?.id === v.id ? null : cur));
       return holdForFresh(e);
     },
   }, (v) => v.id);

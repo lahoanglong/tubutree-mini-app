@@ -1,11 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Input, Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { Landmark, ChevronDown } from 'lucide-react';
 import { getMyPayroll, updateBank, type PayrollStatus, type PayrollDay, type StaffProfile } from '../services/payroll-api';
 import { getHistory, type SessionHistory } from '../services/attendance-api';
-import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isStaleStateError, isTargetGoneError } from '../services/api';
 import { settleWithin } from '../utils/settle-within';
 import { useAuthStore } from '../store/auth';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -125,15 +125,18 @@ function MyPayrollHub() {
   // Cờ nằm ở trang vì tấm "Thông tin nhận lương" gỡ nội dung khi đóng; tấm không đóng được lúc ảnh QR còn lên.
   const { busy: qrBusy, onBusyChange: onQrBusyChange } = useUploadBusy();
 
+  // Số lần mở tấm: lệnh lưu mang số của lần mở đã gửi nó, để lệnh bị từ chối trễ không đóng lần mở sau (khách đóng tấm rồi mở lại, đang gõ dở).
+  const bankSheetSeq = useRef(0);
   const openBank = () => {
     setBin(profileCache?.bankBin ?? '');
     setAccNo(profileCache?.bankAccountNo ?? '');
     setAccName(profileCache?.bankAccountName ?? '');
     setQr(profileCache?.qrImageUrl ?? '');
+    bankSheetSeq.current += 1;
     setBankOpen(true);
   };
 
-  const bankM = useLockedMutation({
+  const bankM = useLockedMutation<unknown, Error, number>({
     mutationFn: () =>
       updateBank({ bankBin: bin.trim(), bankAccountNo: accNo.trim(), bankAccountName: accName.trim(), qrImageUrl: qr || undefined }),
     onSuccess: () => {
@@ -142,8 +145,10 @@ function MyPayrollHub() {
       qc.invalidateQueries({ queryKey: ['my-payroll'] });
     },
     // Trả Promise: nút Lưu giữ khoá tới khi bảng lương và hồ sơ tải lại (tối đa `settleWithin`) khi máy chủ từ chối (hồ sơ nhân viên đã đổi hoặc bị gỡ). Mất mạng, 401, 5xx không nói gì về hồ sơ: nhả ngay.
-    onError: (e) => {
+    onError: (e, sentSeq) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      // Tấm có ô ngân hàng/QR: chỉ đóng khi hồ sơ nhân viên không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm để sửa.
+      if (isTargetGoneError(e) && sentSeq === bankSheetSeq.current) setBankOpen(false);
       if (!isStaleStateError(e)) return undefined;
       return settleWithin(qc.invalidateQueries({ queryKey: ['my-payroll'] }));
     },
@@ -286,7 +291,7 @@ function MyPayrollHub() {
             disabled={qrBusy}
             onPress={() => {
               if (qrBusy) return;
-              bankM.mutate();
+              bankM.mutate(bankSheetSeq.current);
             }}
           >
             {qrBusy ? vi.common.imagesUploading : 'Lưu'}

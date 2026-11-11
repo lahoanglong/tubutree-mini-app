@@ -180,6 +180,15 @@ describe('isServerRejection / isTargetGoneError / isStaleStateError', () => {
   it.each([400, 422, 401, 403, 500, 503])('isTargetGoneError: %i → false', (status) => {
     expect(isTargetGoneError(withStatus(status))).toBe(false);
   });
+  // W114A: 409 trùng giá trị hoặc xung đột giao dịch là lỗi người dùng tự sửa/thử lại, không phải đích đã mất.
+  it.each(['P2002', 'P2034', 'SUBSCRIPTION_DUPLICATE'])('isTargetGoneError: 409 mã %s → false', (code) => {
+    expect(isTargetGoneError(httpError({ response: { status: 409, data: { code } } }))).toBe(false);
+  });
+  it('isTargetGoneError: 409 mã khác hoặc không mã vẫn → true, 404 mang mã P2025 → true', () => {
+    expect(isTargetGoneError(httpError({ response: { status: 409, data: { code: 'CART_CHANGED' } } }))).toBe(true);
+    expect(isTargetGoneError(httpError({ response: { status: 409, data: {} } }))).toBe(true);
+    expect(isTargetGoneError(httpError({ response: { status: 404, data: { code: 'P2025' } } }))).toBe(true);
+  });
   it.each(NO_RESPONSE)('isTargetGoneError: %s → false', (_label, err) => {
     expect(isTargetGoneError(err)).toBe(false);
   });

@@ -9,7 +9,7 @@ import {
   type SubscriptionDTO,
   type SubscriptionPaymentMethod,
 } from '../services/subscriptions-api';
-import { getErrorMessage, getLoadErrorMessage } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isTargetGoneError } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
@@ -76,9 +76,15 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
     },
     onError: (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
-      // Gói đã huỷ ở máy khác (sheet tự đóng khi gói rời danh sách) hoặc đã có gói trùng: danh sách đang cũ.
-      // Trả Promise từ onError (không phải onSettled, vốn chạy sau và là nơi nhả khoá) để nút Lưu giữ khoá tới khi danh sách mới về.
-      return isStaleSubscriptionError(e) ? settleWithin(qc.invalidateQueries({ queryKey: ['subscriptions'] })) : undefined;
+      // Gói đã huỷ ở máy khác (sheet tự đóng khi gói rời danh sách), đã có gói trùng hoặc địa chỉ không còn: danh sách gói và địa chỉ đang cũ.
+      // Trả Promise từ onError (không phải onSettled, vốn chạy sau và là nơi nhả khoá) để nút Lưu giữ khoá tới khi dữ liệu mới về.
+      if (!isStaleSubscriptionError(e)) return undefined;
+      const held = settleWithin(
+        Promise.all([qc.invalidateQueries({ queryKey: ['subscriptions'] }), qc.invalidateQueries({ queryKey: ['addresses'] })]),
+      );
+      // Sheet có ô người dùng chọn: chỉ đóng khi gói không còn hoặc vừa đổi (404/409), đóng SAU khi dữ liệu mới về; 400 là lỗi ở lựa chọn (địa chỉ, số lượng...), giữ sheet để sửa.
+      // Không cần tách đích: `dismissible` khoá việc đóng tay suốt lúc lệnh bay và lúc giữ khoá, sheet này vẫn đúng là sheet của gói bị từ chối.
+      return isTargetGoneError(e) ? held.then(() => onClose()) : held;
     },
   });
 

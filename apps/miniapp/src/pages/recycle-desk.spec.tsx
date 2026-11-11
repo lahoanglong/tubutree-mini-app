@@ -32,7 +32,8 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useParams: () => mocks.params,
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
-vi.mock('../services/api', () => ({
+vi.mock('../services/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   isNotFoundError: (e: unknown) => (e as { status?: number } | null)?.status === 404,
@@ -925,6 +926,9 @@ describe('/recycle/desk: máy chủ từ chối thì giữ khoá tới khi danh 
     prepare: () => Promise<ReturnType<typeof renderPage>>;
     button: () => HTMLElement;
     tap: () => void;
+    /** W114A: tấm có ô nhập chỉ đóng khi phiếu không còn/vừa đổi (404/409); lúc đó nút phải tìm lại sau khi mở lại tấm. */
+    closesOn?: (status: number) => boolean;
+    reopen?: () => Promise<void>;
   }
   const flows: Flow[] = [
     {
@@ -966,6 +970,8 @@ describe('/recycle/desk: máy chủ từ chối thì giữ khoá tới khi danh 
       },
       button: rejectBtn,
       tap: () => fireEvent.click(rejectBtn()),
+      closesOn: (status) => status === 404 || status === 409,
+      reopen: openReject,
     },
     {
       name: 'Trao quà',
@@ -1016,6 +1022,10 @@ describe('/recycle/desk: máy chủ từ chối thì giữ khoá tới khi danh 
       expect(flow.api).toHaveBeenCalledTimes(1);
       await act(async () => refresh.resolve(flow.points));
       await settle();
+      if (flow.closesOn?.(status)) {
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        await flow.reopen!();
+      }
       await waitFor(() => expect(flow.button()).not.toHaveAttribute('aria-busy'));
       flow.tap();
       await waitFor(() => expect(flow.api).toHaveBeenCalledTimes(2));
@@ -1053,6 +1063,10 @@ describe('/recycle/desk: máy chủ từ chối thì giữ khoá tới khi danh 
         await act(async () => {
           await vi.advanceTimersByTimeAsync(600);
         });
+        if (flow.closesOn?.(409)) {
+          await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+          await flow.reopen!();
+        }
         await waitFor(() => expect(flow.button()).not.toHaveAttribute('aria-busy'));
       } finally {
         vi.useRealTimers();
@@ -1130,5 +1144,198 @@ describe('/recycle/desk: máy chủ từ chối thì giữ khoá tới khi danh 
       await waitFor(() => expect(mocks.deskConfirm).toHaveBeenCalledTimes(1));
       expect(mocks.deskReject).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+// W114A: tấm "Từ chối cả yêu cầu" có ô lý do/ghi chú nên chỉ đóng khi phiếu không còn hoặc vừa đổi (404/409), đóng SAU khi danh sách điểm mới về (nút báo bận tới lúc đó); 400/422 là lỗi ở ô nhập, giữ tấm và lý do đã chọn. Mất mạng, quá hạn, 5xx, 401: tấm ở lại, nhả khoá ngay.
+describe('/recycle/desk: tấm Từ chối đóng khi phiếu không còn hoặc vừa đổi (W114A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const REJECTED = { requestId: 'req-1', code: 'TR-8K2M9', status: 'REJECTED' };
+  const errorToasts = () => mocks.openSnackbar.mock.calls.filter(([arg]) => arg.type === 'error');
+  const rejectBtn = () => within(screen.getByRole('dialog')).getByRole('button', { name: 'Từ chối yêu cầu' });
+  const reasonRadio = () => within(screen.getByRole('dialog')).getByRole('radio', { name: 'Ướt' });
+  const openReject = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Từ chối cả yêu cầu' }));
+    await screen.findByRole('dialog');
+    fireEvent.click(reasonRadio());
+  };
+  const sheetGone = () => waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+  beforeEach(() => {
+    mocks.deskReject.mockReset();
+    mocks.deskConfirm.mockReset();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    [409, 'Yêu cầu không ở trạng thái xác nhận được'],
+    [404, 'Không tìm thấy yêu cầu'],
+  ])('bị từ chối %i: báo lỗi một lần, tải lại ["waste","desk"], tấm còn mở và nút bận tới khi danh sách về, rồi đóng và nhả khoá', async (status, message) => {
+    mocks.deskReject.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(REJECTED);
+    const { invalidate } = renderPage();
+    await lookUp();
+    await openReject();
+    const refresh = deferred<unknown[]>();
+    mocks.getDeskPoints.mockImplementationOnce(() => refresh.promise);
+    await act(async () => {
+      fireEvent.click(rejectBtn());
+      fireEvent.click(rejectBtn());
+      fireEvent.click(rejectBtn());
+    });
+    await waitFor(() => expect(mocks.getDeskPoints).toHaveBeenCalledTimes(2));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['waste', 'desk'] });
+    expect(mocks.deskReject).toHaveBeenCalledTimes(1);
+    expect(errorToasts()).toEqual([[{ text: message, type: 'error' }]]);
+    // Danh sách chưa về: tấm còn mở, nút bận, chạm thêm không gọi API.
+    await settle();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(rejectBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(rejectBtn());
+    });
+    expect(mocks.deskReject).toHaveBeenCalledTimes(1);
+
+    await act(async () => refresh.resolve([makeDeskPoint()]));
+    await sheetGone();
+    expect(errorToasts()).toHaveLength(1);
+    // Mở lại: lý do đã chọn còn nguyên (tấm chỉ ẩn, không gỡ), khoá đã nhả.
+    fireEvent.click(screen.getByRole('button', { name: 'Từ chối cả yêu cầu' }));
+    await screen.findByRole('dialog');
+    expect(reasonRadio()).toBeChecked();
+    await waitFor(() => expect(rejectBtn()).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(rejectBtn());
+    await waitFor(() => expect(mocks.deskReject).toHaveBeenCalledTimes(2));
+  });
+
+  it('bị từ chối 400: tải lại ["waste","desk"] và giữ khoá tới khi về nhưng tấm ở lại với lý do đã chọn, bấm lại gọi lần hai', async () => {
+    mocks.deskReject.mockRejectedValueOnce(serverError('Yêu cầu đã đóng', 400)).mockResolvedValue(REJECTED);
+    const { invalidate } = renderPage();
+    await lookUp();
+    await openReject();
+    const refresh = deferred<unknown[]>();
+    mocks.getDeskPoints.mockImplementationOnce(() => refresh.promise);
+    fireEvent.click(rejectBtn());
+    await waitFor(() => expect(mocks.getDeskPoints).toHaveBeenCalledTimes(2));
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['waste', 'desk'] });
+    expect(rejectBtn()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(rejectBtn());
+    });
+    expect(mocks.deskReject).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve([makeDeskPoint()]));
+    await settle();
+    await waitFor(() => expect(rejectBtn()).not.toHaveAttribute('aria-busy'));
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(reasonRadio()).toBeChecked();
+    expect(errorToasts()).toHaveLength(1);
+    fireEvent.click(rejectBtn());
+    await waitFor(() => expect(mocks.deskReject).toHaveBeenCalledTimes(2));
+  });
+
+  it('bị từ chối 422: tấm ở lại với lý do đã chọn, không tải lại, khoá nhả ngay', async () => {
+    mocks.deskReject.mockRejectedValueOnce(serverError('Ghi chú không hợp lệ', 422)).mockResolvedValue(REJECTED);
+    const { invalidate } = renderPage();
+    await lookUp();
+    await openReject();
+    fireEvent.click(rejectBtn());
+    await waitFor(() => expect(errorToasts()).toEqual([[{ text: 'Ghi chú không hợp lệ', type: 'error' }]]));
+    await waitFor(() => expect(rejectBtn()).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(reasonRadio()).toBeChecked();
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(mocks.getDeskPoints).toHaveBeenCalledTimes(1);
+    fireEvent.click(rejectBtn());
+    await waitFor(() => expect(mocks.deskReject).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian (ECONNABORTED)', new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: tấm ở lại, nhả khoá ngay, không tải lại, bấm lại gọi lần hai', async (_label, error) => {
+    mocks.deskReject.mockRejectedValueOnce(error).mockResolvedValue(REJECTED);
+    const { invalidate } = renderPage();
+    await lookUp();
+    await openReject();
+    fireEvent.click(rejectBtn());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    await waitFor(() => expect(rejectBtn()).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(mocks.getDeskPoints).toHaveBeenCalledTimes(1);
+    fireEvent.click(rejectBtn());
+    await waitFor(() => expect(mocks.deskReject).toHaveBeenCalledTimes(2));
+  });
+
+  it('danh sách điểm tải lại treo mãi: tấm còn mở và bận ở LOCK_REFRESH_WAIT_MS - 500, hết hạn thì đóng và nhả khoá', async () => {
+    mocks.deskReject.mockRejectedValueOnce(serverError('Yêu cầu không ở trạng thái xác nhận được', 409)).mockResolvedValue(REJECTED);
+    renderPage();
+    await lookUp();
+    await openReject();
+    mocks.getDeskPoints.mockImplementationOnce(() => new Promise(() => undefined));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(rejectBtn());
+      await waitFor(() => expect(errorToasts()).toHaveLength(1));
+      await waitFor(() => expect(mocks.getDeskPoints).toHaveBeenCalledTimes(2));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(rejectBtn()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await sheetGone();
+    } finally {
+      vi.useRealTimers();
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Từ chối cả yêu cầu' }));
+    await screen.findByRole('dialog');
+    await waitFor(() => expect(rejectBtn()).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(rejectBtn());
+    await waitFor(() => expect(mocks.deskReject).toHaveBeenCalledTimes(2));
+  });
+
+  it('nhân viên đã tra phiếu khác và mở tấm cho phiếu đó lúc lệnh bay: lỗi 409 của phiếu cũ không đóng tấm của phiếu mới', async () => {
+    const d = deferred<unknown>();
+    mocks.deskReject.mockReturnValueOnce(d.promise);
+    mocks.deskLookup
+      .mockResolvedValueOnce({ type: 'REQUEST', request: REQ })
+      .mockResolvedValueOnce({ type: 'REQUEST', request: makeDeskRequest({ id: 'req-2', code: 'TR-2B3C4', customerName: 'Lê*** B' }) });
+    renderPage();
+    await lookUp();
+    await openReject();
+    await act(async () => {
+      fireEvent.click(rejectBtn());
+    });
+    fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Đóng' }));
+    await sheetGone();
+    await lookUp('tr-2b3c4');
+    await screen.findByText('Lê*** B');
+    await openReject();
+    await act(async () => d.reject(serverError('Yêu cầu không ở trạng thái xác nhận được', 409)));
+    await waitFor(() => expect(errorToasts()).toHaveLength(1));
+    await settle();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(reasonRadio()).toBeChecked();
   });
 });

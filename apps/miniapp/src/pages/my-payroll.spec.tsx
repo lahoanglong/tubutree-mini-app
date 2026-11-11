@@ -28,9 +28,9 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/payroll-api', () => ({ getMyPayroll: mocks.getMyPayroll, updateBank: mocks.updateBank }));
 vi.mock('../services/attendance-api', () => ({ getHistory: mocks.getHistory }));
 vi.mock('../services/api', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
-  isStaleStateError: (await importOriginal<{ isStaleStateError: (error: unknown) => boolean }>()).isStaleStateError,
 }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { user: { role: string } }) => unknown) => sel({ user: { role: mocks.role } }),
@@ -507,7 +507,14 @@ describe('Lương của tôi: máy chủ từ chối thì giữ khoá tới khi 
         const invalidate = renderLive(refresh);
         await screen.findByText('Thực nhận tháng 3/2026');
         fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
-        return { invalidate, button: () => screen.getByRole('button', { name: 'Lưu' }) };
+        return {
+          invalidate,
+          // W114A: tấm đóng ngay khi máy chủ từ chối 404/409; muốn thấy nút Lưu còn bận hay bấm lại trong lúc giữ khoá thì phải mở lại tấm.
+          button: () => {
+            if (!screen.queryByRole('button', { name: 'Lưu' })) fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
+            return screen.getByRole('button', { name: 'Lưu' });
+          },
+        };
       },
     },
   ];
@@ -599,5 +606,163 @@ describe('Lương của tôi: máy chủ từ chối thì giữ khoá tới khi 
       fireEvent.click(button());
       await waitFor(() => expect(c.write).toHaveBeenCalledTimes(2));
     });
+  });
+});
+
+// W114A: tấm "Thông tin nhận lương" có ô nhập nên chỉ đóng khi hồ sơ nhân viên không còn hoặc vừa đổi (404/409); 400/422 là lỗi ở chính ô nhập, giữ tấm kèm giá trị đã gõ. Khoá chạm giữ như W112A: 400/404/409 chờ dữ liệu về, 422 và lỗi tạm nhả ngay. Đích luôn là hồ sơ của chính người đang đăng nhập, nhưng khách đóng tấm rồi mở lại lúc lệnh còn bay thì lệnh trễ không được đóng lần mở mới.
+describe('Lương của tôi: tấm nhận lương đóng khi hồ sơ không còn (W114A)', () => {
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    const promise = new Promise((res) => {
+      resolve = res;
+    });
+    return { promise, resolve };
+  };
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const errorSnackbars = () => mocks.openSnackbar.mock.calls.filter((c) => c[0].type === 'error').length;
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const sendBtn = () => screen.queryByRole('button', { name: 'Lưu' });
+  const isOpen = () => sendBtn() !== null;
+  const openSheet = () => fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
+  const accountInput = () => screen.getByLabelText('Số tài khoản');
+  const renderLive = (refresh: () => Promise<unknown>) => {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
+    render(
+      <QueryClientProvider client={qc}>
+        <MyPayrollPage />
+      </QueryClientProvider>,
+    );
+    return invalidate;
+  };
+  const open = async (refresh: () => Promise<unknown>) => {
+    const invalidate = renderLive(refresh);
+    await screen.findByText('Thực nhận tháng 3/2026');
+    openSheet();
+    fireEvent.change(accountInput(), { target: { value: '9998887776' } });
+    return invalidate;
+  };
+  const tap = () => {
+    const send = sendBtn();
+    if (send) fireEvent.click(send);
+  };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-15T05:00:00Z'));
+    vi.clearAllMocks();
+    mocks.role = 'STAFF';
+    mocks.getMyPayroll.mockImplementation((year: number, month: number) => Promise.resolve(payroll(year, month)));
+    mocks.getHistory.mockResolvedValue(SESSIONS);
+    mocks.updateBank.mockReset();
+    mocks.updateBank.mockResolvedValue(PROFILE);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    [404, 'Không tìm thấy hồ sơ nhân viên'],
+    [409, 'Vừa có thay đổi, bạn thử lại nhé'],
+  ])('bị từ chối %i: đóng tấm, báo lỗi một lần, tải lại đúng khoá, khoá giữ tới khi dữ liệu về rồi mới nhả', async (status, message) => {
+    mocks.updateBank.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(PROFILE);
+    const refresh = deferred();
+    const invalidate = await open(() => refresh.promise);
+    tap();
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: message, type: 'error' }));
+    expect(errorSnackbars()).toBe(1);
+    expect(invalidate.mock.calls.map(([filter]) => filter)).toEqual([{ queryKey: ['my-payroll'] }]);
+    await waitFor(() => expect(isOpen()).toBe(false));
+    // Tấm đã đóng mà dữ liệu chưa về: mở lại, nút còn bận và bấm tiếp không gửi lần hai.
+    openSheet();
+    expect(screen.getByRole('button', { name: 'Lưu' })).toHaveAttribute('aria-busy', 'true');
+    tap();
+    await settle();
+    expect(mocks.updateBank).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu' })).not.toHaveAttribute('aria-busy'));
+    expect(errorSnackbars()).toBe(1);
+    tap();
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
+  });
+
+  it('lệnh lưu bị từ chối 404 trễ, trong lúc khách đã đóng tấm rồi mở lại và đang gõ: lần mở mới giữ nguyên, chữ đã gõ còn đó', async () => {
+    let reject!: (e: unknown) => void;
+    mocks.updateBank.mockReturnValueOnce(new Promise((_, rej) => { reject = rej; }));
+    await open(() => Promise.resolve());
+    tap();
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(1));
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(isOpen()).toBe(false));
+    openSheet();
+    expect(accountInput()).toHaveValue(PROFILE.bankAccountNo);
+    fireEvent.change(accountInput(), { target: { value: '1112223334' } });
+    await act(async () => reject(serverError('Không tìm thấy hồ sơ nhân viên', 404)));
+    await waitFor(() => expect(errorSnackbars()).toBe(1));
+    await settle();
+    expect(isOpen()).toBe(true);
+    expect(accountInput()).toHaveValue('1112223334');
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu' })).not.toHaveAttribute('aria-busy'));
+    tap();
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
+    expect(mocks.updateBank).toHaveBeenLastCalledWith(expect.objectContaining({ bankAccountNo: '1112223334' }));
+  });
+
+  it('bị từ chối 400: giữ tấm mở kèm giá trị đã gõ, khoá giữ tới khi dữ liệu về rồi mới nhả', async () => {
+    mocks.updateBank.mockRejectedValueOnce(serverError('Số tài khoản không hợp lệ', 400)).mockResolvedValue(PROFILE);
+    const refresh = deferred();
+    const invalidate = await open(() => refresh.promise);
+    tap();
+    await waitFor(() => expect(errorSnackbars()).toBe(1));
+    expect(invalidate).toHaveBeenCalledTimes(1);
+    await settle();
+    expect(isOpen()).toBe(true);
+    expect(accountInput()).toHaveValue('9998887776');
+    expect(screen.getByRole('button', { name: 'Lưu' })).toHaveAttribute('aria-busy', 'true');
+    tap();
+    await settle();
+    expect(mocks.updateBank).toHaveBeenCalledTimes(1);
+    await act(async () => refresh.resolve());
+    await settle();
+    expect(isOpen()).toBe(true);
+    expect(accountInput()).toHaveValue('9998887776');
+    tap();
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
+  });
+
+  it('bị từ chối 422: giữ tấm mở kèm giá trị đã gõ, không tải lại nên khoá nhả ngay', async () => {
+    mocks.updateBank.mockRejectedValueOnce(serverError('Dữ liệu không hợp lệ', 422)).mockResolvedValue(PROFILE);
+    const invalidate = await open(() => new Promise(() => undefined));
+    tap();
+    await waitFor(() => expect(errorSnackbars()).toBe(1));
+    await settle();
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(isOpen()).toBe(true);
+    expect(accountInput()).toHaveValue('9998887776');
+    tap();
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian', new HttpError('timeout', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: giữ tấm mở kèm giá trị đã gõ, không tải lại, khoá nhả ngay để thử lại', async (_label, error) => {
+    mocks.updateBank.mockRejectedValueOnce(error).mockResolvedValue(PROFILE);
+    const invalidate = await open(() => new Promise(() => undefined));
+    tap();
+    await waitFor(() => expect(errorSnackbars()).toBe(1));
+    await settle();
+    expect(isOpen()).toBe(true);
+    expect(accountInput()).toHaveValue('9998887776');
+    expect(invalidate).not.toHaveBeenCalled();
+    tap();
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
+    expect(errorSnackbars()).toBe(1);
   });
 });

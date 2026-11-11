@@ -1,7 +1,7 @@
 import { render, screen, fireEvent, waitFor, within, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { WasteRequestDetailDTO } from '@tubutree/shared-types';
 
 const mocks = vi.hoisted(() => ({
@@ -611,7 +611,7 @@ describe('/recycle/r/:id: Huỷ và Đã gửi bị máy chủ từ chối thì 
       mocks.cancelWasteRequest.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false }));
       const refresh = deferred();
       const { invalidated } = renderLive(hold(refresh.promise));
-      const { confirm } = await openCancelSheet();
+      let { confirm } = await openCancelSheet();
       fireEvent.click(confirm());
       await waitFor(() => expect(errorToasts(message)).toHaveLength(1));
       await waitFor(() => expect(invalidated).toEqual(expect.arrayContaining(REFRESHED)));
@@ -623,6 +623,9 @@ describe('/recycle/r/:id: Huỷ và Đã gửi bị máy chủ từ chối thì 
       expect(errorToasts(message)).toHaveLength(1);
       await act(async () => refresh.resolve());
       await settle();
+      // W114A: tấm huỷ chỉ có nút Xác nhận nên đóng sau khi chi tiết mới về; mở lại để chạm lần hai.
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      ({ confirm } = await openCancelSheet());
       await waitFor(() => expect(confirm()).not.toHaveAttribute('aria-busy'));
       fireEvent.click(confirm());
       await waitFor(() => expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(2));
@@ -650,7 +653,7 @@ describe('/recycle/r/:id: Huỷ và Đã gửi bị máy chủ từ chối thì 
       try {
         mocks.cancelWasteRequest.mockRejectedValueOnce(serverError('Yêu cầu này không còn huỷ được', 409)).mockResolvedValue(makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false }));
         renderLive(() => new Promise<unknown>(() => undefined));
-        const { confirm } = await openCancelSheet();
+        let { confirm } = await openCancelSheet();
         fireEvent.click(confirm());
         await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: 'Yêu cầu này không còn huỷ được', type: 'error' })));
         expect(confirm()).toHaveAttribute('aria-busy', 'true');
@@ -661,6 +664,9 @@ describe('/recycle/r/:id: Huỷ và Đã gửi bị máy chủ từ chối thì 
         await act(async () => {
           await vi.advanceTimersByTimeAsync(600);
         });
+        // W114A: tấm huỷ đóng cùng lúc khoá nhả; mở lại để soi nút.
+        await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+        ({ confirm } = await openCancelSheet());
         await waitFor(() => expect(confirm()).not.toHaveAttribute('aria-busy'));
         fireEvent.click(confirm());
         await waitFor(() => expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(2));
@@ -739,5 +745,168 @@ describe('/recycle/r/:id: Huỷ và Đã gửi bị máy chủ từ chối thì 
         vi.useRealTimers();
       }
     });
+  });
+});
+
+// W114A: tấm huỷ chỉ có nút Xác nhận nên đóng khi máy chủ từ chối hẳn (400/404/409/422): 400/404/409 đóng SAU khi chi tiết + danh sách yêu cầu về (nút báo bận tới lúc đó), 422 đóng ngay không tải lại. Mất mạng, quá hạn, 5xx, 401: tấm ở lại, nhả khoá ngay.
+describe('/recycle/r/:id: tấm huỷ đóng khi máy chủ từ chối hẳn (W114A)', () => {
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const deferred = () => {
+    let resolve!: (v?: unknown) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const settle = () =>
+    act(async () => {
+      await new Promise((r) => setTimeout(r, 30));
+    });
+  const errorToasts = (text: string) => mocks.openSnackbar.mock.calls.filter((c) => c[0].text === text && c[0].type === 'error');
+  const REFRESHED = [['waste', 'request', 'req-1'], ['waste', 'requests']];
+  const CANCELLED = () => makeRequestDetail({ status: 'CANCELLED', cancellable: false, editable: false });
+  const hold = (promise: Promise<unknown>) => (key: readonly unknown[]) => (key[1] === 'request' ? promise : undefined);
+  const sheetGone = () => waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+
+  function renderLive(refresh?: (key: readonly unknown[]) => Promise<unknown> | undefined) {
+    const view = renderPage();
+    const invalidated: unknown[][] = [];
+    view.invalidate.mockImplementation(((filters: { queryKey: readonly unknown[] }) => {
+      invalidated.push([...filters.queryKey]);
+      return refresh?.(filters.queryKey) ?? Promise.resolve();
+    }) as never);
+    return { ...view, invalidated };
+  }
+  const openCancelSheet = async () => {
+    fireEvent.click(await screen.findByRole('button', { name: 'Huỷ yêu cầu' }));
+    const sheet = await screen.findByRole('dialog');
+    return { sheet, confirm: () => within(sheet).getByRole('button', { name: 'Xác nhận huỷ' }) };
+  };
+
+  beforeEach(() => {
+    mocks.cancelWasteRequest.mockReset();
+    mocks.params.id = 'req-1';
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it.each([
+    ['409 không còn huỷ được', 'Yêu cầu này không còn huỷ được', 409],
+    ['400 đã xử lý', 'Yêu cầu đã được xử lý', 400],
+    ['404 không còn', 'Không tìm thấy yêu cầu', 404],
+  ] as const)('bị từ chối %s: báo lỗi một lần, tấm còn mở và nút bận tới khi chi tiết về, rồi tấm đóng và nhả khoá', async (_label, message, status) => {
+    mocks.cancelWasteRequest.mockRejectedValueOnce(serverError(message, status)).mockResolvedValue(CANCELLED());
+    const refresh = deferred();
+    const { invalidated } = renderLive(hold(refresh.promise));
+    const first = await openCancelSheet();
+    await act(async () => {
+      fireEvent.click(first.confirm());
+      fireEvent.click(first.confirm());
+      fireEvent.click(first.confirm());
+    });
+    await waitFor(() => expect(errorToasts(message)).toHaveLength(1));
+    await waitFor(() => expect(invalidated).toEqual(expect.arrayContaining(REFRESHED)));
+    await settle();
+    expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(1);
+    // Chi tiết chưa về: tấm còn mở, nút bận, chạm thêm không gọi API.
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(first.confirm()).toHaveAttribute('aria-busy', 'true');
+    await act(async () => {
+      fireEvent.click(first.confirm());
+    });
+    expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(1);
+
+    await act(async () => refresh.resolve());
+    await sheetGone();
+    expect(errorToasts(message)).toHaveLength(1);
+    const again = await openCancelSheet();
+    await waitFor(() => expect(again.confirm()).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(again.confirm());
+    await waitFor(() => expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(2));
+  });
+
+  it('bị từ chối 422: tấm đóng và báo lỗi một lần, không tải lại, khoá nhả ngay', async () => {
+    mocks.cancelWasteRequest.mockRejectedValueOnce(serverError('Dữ liệu không hợp lệ', 422)).mockResolvedValue(CANCELLED());
+    // Mọi lệnh tải lại treo mãi: nếu khoá còn đợi chúng thì nút không bao giờ sáng lại.
+    const { invalidated } = renderLive(() => new Promise<unknown>(() => undefined));
+    const first = await openCancelSheet();
+    fireEvent.click(first.confirm());
+    await waitFor(() => expect(errorToasts('Dữ liệu không hợp lệ')).toHaveLength(1));
+    await sheetGone();
+    await settle();
+    expect(invalidated).toEqual([]);
+    const again = await openCancelSheet();
+    expect(again.confirm()).not.toHaveAttribute('aria-busy');
+    fireEvent.click(again.confirm());
+    await waitFor(() => expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(2));
+  });
+
+  it.each([
+    ['mất mạng', new HttpError('Network Error', 'ERR_NETWORK')],
+    ['hết thời gian (ECONNABORTED)', new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED')],
+    ['máy chủ lỗi 503', serverError('Service Unavailable', 503)],
+    ['hết phiên 401', serverError('Unauthorized', 401)],
+  ])('%s: tấm ở lại, nhả khoá ngay, không tải lại', async (_label, error) => {
+    mocks.cancelWasteRequest.mockRejectedValueOnce(error).mockResolvedValue(CANCELLED());
+    const { invalidated } = renderLive(() => new Promise<unknown>(() => undefined));
+    const first = await openCancelSheet();
+    fireEvent.click(first.confirm());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: error.message, type: 'error' })));
+    await waitFor(() => expect(first.confirm()).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(invalidated).toEqual([]);
+    fireEvent.click(first.confirm());
+    await waitFor(() => expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(2));
+  });
+
+  it('tải lại treo mãi: tấm còn mở và bận ở LOCK_REFRESH_WAIT_MS - 500, hết hạn thì đóng và nhả khoá', async () => {
+    mocks.cancelWasteRequest.mockRejectedValueOnce(serverError('Yêu cầu này không còn huỷ được', 409)).mockResolvedValue(CANCELLED());
+    renderLive(() => new Promise<unknown>(() => undefined));
+    const first = await openCancelSheet();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      fireEvent.click(first.confirm());
+      await waitFor(() => expect(errorToasts('Yêu cầu này không còn huỷ được')).toHaveLength(1));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(LOCK_REFRESH_WAIT_MS - 500);
+      });
+      expect(screen.getByRole('dialog')).toBeInTheDocument();
+      expect(first.confirm()).toHaveAttribute('aria-busy', 'true');
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(600);
+      });
+      await sheetGone();
+    } finally {
+      vi.useRealTimers();
+    }
+    const again = await openCancelSheet();
+    expect(again.confirm()).not.toHaveAttribute('aria-busy');
+    fireEvent.click(again.confirm());
+    await waitFor(() => expect(mocks.cancelWasteRequest).toHaveBeenCalledTimes(2));
+  });
+
+  it('màn đã chuyển sang yêu cầu khác lúc lệnh huỷ bay: lỗi 409 của yêu cầu cũ không đóng tấm đang mở', async () => {
+    const d = deferred();
+    mocks.cancelWasteRequest.mockReturnValueOnce(d.promise);
+    const view = renderLive();
+    const first = await openCancelSheet();
+    await act(async () => {
+      fireEvent.click(first.confirm());
+    });
+    mocks.params.id = 'req-2';
+    view.rerender(
+      <QueryClientProvider client={view.qc}>
+        <RecycleRequestPage />
+      </QueryClientProvider>,
+    );
+    await screen.findByRole('dialog');
+    await act(async () => d.reject(serverError('Yêu cầu này không còn huỷ được', 409)));
+    await waitFor(() => expect(errorToasts('Yêu cầu này không còn huỷ được')).toHaveLength(1));
+    await settle();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 });
