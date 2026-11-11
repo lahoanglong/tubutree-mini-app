@@ -923,3 +923,132 @@ describe('Lương của tôi: tấm nhận lương đóng sau khi dữ liệu m�
     await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
   });
 });
+
+// W117A: hồ sơ nhân viên tải lại trong lúc tấm "Thông tin nhận lương" còn mở (máy chủ từ chối rồi tải lại, nơi khác đổi hồ sơ): ô khách CHƯA chạm đổi theo hồ sơ mới, ô khách ĐÃ sửa giữ chữ. Trước đây Lưu gửi lại giá trị cũ của ô chưa chạm và đè lên hồ sơ mới trên máy chủ.
+describe('Lương của tôi: tấm nhận lương bám hồ sơ mới về, ô khách đã sửa giữ chữ (W117A)', () => {
+  const D2 = { ...PROFILE, bankBin: '970436', bankAccountNo: '5555555555', bankAccountName: 'TRAN THI B', qrImageUrl: 'https://img.test/qr-d2.png' };
+  const BIN_LABEL = 'Mã số ngân hàng (6 chữ số, VD 970407; chưa biết thì tải ảnh QR ở dưới)';
+  const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+  const binInput = () => screen.getByLabelText(BIN_LABEL);
+  const accountInput = () => screen.getByLabelText('Số tài khoản');
+  const nameInput = () => screen.getByLabelText('Tên chủ tài khoản');
+  const sheetOpen = () => screen.queryByRole('button', { name: 'Lưu' }) !== null;
+  const openSheet = () => fireEvent.click(screen.getByRole('button', { name: 'Thông tin nhận lương' }));
+
+  function renderWithClient() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MyPayrollPage />
+      </QueryClientProvider>,
+    );
+    return qc;
+  }
+  /** Máy chủ trả hồ sơ mới ở lượt tải sau. */
+  const serveD2 = () =>
+    mocks.getMyPayroll.mockImplementation((year: number, month: number) => Promise.resolve({ ...payroll(year, month), profile: D2 }));
+  const reload = (qc: QueryClient) =>
+    act(async () => {
+      await qc.invalidateQueries({ queryKey: ['my-payroll'] });
+    });
+  /** Mở tấm trên hồ sơ D1 và khách chỉ sửa ô số tài khoản. */
+  async function openAndEditAccount() {
+    const qc = renderWithClient();
+    await screen.findByText('Thực nhận tháng 3/2026');
+    openSheet();
+    fireEvent.change(accountInput(), { target: { value: '9998887776' } });
+    return qc;
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2026-03-15T05:00:00Z'));
+    vi.clearAllMocks();
+    mocks.role = 'STAFF';
+    mocks.getMyPayroll.mockImplementation((year: number, month: number) => Promise.resolve(payroll(year, month)));
+    mocks.getHistory.mockResolvedValue(SESSIONS);
+    mocks.updateBank.mockReset();
+    mocks.updateBank.mockResolvedValue(PROFILE);
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('hồ sơ mới về lúc tấm đang mở: ô chưa chạm (mã ngân hàng, tên chủ tài khoản) đổi theo, ô khách đã sửa (số tài khoản) giữ chữ', async () => {
+    const qc = await openAndEditAccount();
+    expect(binInput()).toHaveValue('970407');
+    serveD2();
+    await reload(qc);
+    await waitFor(() => expect(binInput()).toHaveValue('970436'));
+    expect(nameInput()).toHaveValue('TRAN THI B');
+    expect(accountInput()).toHaveValue('9998887776');
+    expect(sheetOpen()).toBe(true);
+  });
+
+  it('Lưu sau khi hồ sơ mới về gửi giá trị MỚI của ô chưa chạm (kể cả ảnh QR) cùng chữ khách đã sửa, không gửi lại giá trị cũ', async () => {
+    const qc = await openAndEditAccount();
+    serveD2();
+    await reload(qc);
+    await waitFor(() => expect(binInput()).toHaveValue('970436'));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(1));
+    expect(mocks.updateBank).toHaveBeenCalledWith({
+      bankBin: '970436',
+      bankAccountNo: '9998887776',
+      bankAccountName: 'TRAN THI B',
+      qrImageUrl: 'https://img.test/qr-d2.png',
+    });
+  });
+
+  it('ảnh QR khách đã đổi giữ nguyên khi hồ sơ mới về (kèm QR khác), các ô chưa chạm vẫn đổi theo', async () => {
+    const qc = renderWithClient();
+    await screen.findByText('Thực nhận tháng 3/2026');
+    openSheet();
+    fireEvent.click(screen.getByRole('button', { name: 'QR nhận lương' }));
+    serveD2();
+    await reload(qc);
+    await waitFor(() => expect(binInput()).toHaveValue('970436'));
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(1));
+    expect(mocks.updateBank).toHaveBeenCalledWith({
+      bankBin: '970436',
+      bankAccountNo: '5555555555',
+      bankAccountName: 'TRAN THI B',
+      qrImageUrl: 'https://img.test/qr.png',
+    });
+  });
+
+  it('bị từ chối 400 giữ tấm mở: bảng lương tải lại về hồ sơ mới, ô chưa chạm đổi theo, ô khách đã sửa giữ chữ, Lưu lại gửi bản mới', async () => {
+    mocks.updateBank.mockRejectedValueOnce(serverError('Số tài khoản không hợp lệ', 400)).mockResolvedValue(PROFILE);
+    await openAndEditAccount();
+    // Máy chủ đã đổi hồ sơ ở nơi khác: lượt tải lại sau khi bị từ chối trả bản mới.
+    serveD2();
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Số tài khoản không hợp lệ', type: 'error' }));
+    await waitFor(() => expect(binInput()).toHaveValue('970436'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Lưu' })).not.toHaveAttribute('aria-busy'));
+    expect(sheetOpen()).toBe(true);
+    expect(nameInput()).toHaveValue('TRAN THI B');
+    expect(accountInput()).toHaveValue('9998887776');
+    fireEvent.click(screen.getByRole('button', { name: 'Lưu' }));
+    await waitFor(() => expect(mocks.updateBank).toHaveBeenCalledTimes(2));
+    expect(mocks.updateBank).toHaveBeenLastCalledWith({
+      bankBin: '970436',
+      bankAccountNo: '9998887776',
+      bankAccountName: 'TRAN THI B',
+      qrImageUrl: 'https://img.test/qr-d2.png',
+    });
+  });
+
+  it('đóng rồi mở lại: nạp lại từ hồ sơ hiện tại, bỏ chữ đã sửa của lần trước', async () => {
+    const qc = await openAndEditAccount();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(sheetOpen()).toBe(false));
+    serveD2();
+    await reload(qc);
+    openSheet();
+    expect(binInput()).toHaveValue('970436');
+    expect(accountInput()).toHaveValue('5555555555');
+    expect(nameInput()).toHaveValue('TRAN THI B');
+  });
+});

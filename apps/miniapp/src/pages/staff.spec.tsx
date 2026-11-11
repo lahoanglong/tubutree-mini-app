@@ -2464,4 +2464,103 @@ describe('Ca làm của tôi theo DS v2 (C-076, C-114)', () => {
       });
     });
   });
+
+  describe('ô chưa chạm của tấm Thêm/Sửa ca bám lịch tuần mới, ô đã sửa giữ chữ (W117A)', () => {
+    const serverError = (message: string, status: number) => new HttpError(message, undefined, { status, data: { message }, headers: {} });
+    const settle = () =>
+      act(async () => {
+        await new Promise((r) => setTimeout(r, 30));
+      });
+    const click = (name: string) => fireEvent.click(screen.getByRole('button', { name }));
+    const typeAt = (index: number, value: string) => fireEvent.change(timeInputs()[index]!, { target: { value } });
+    const WEEK_D2 = WEEK_SHIFTS.map((s) => (s.id === 'sp' ? { ...s, startAt: vn('2026-03-12', '07:30') } : s));
+    // Tải lại thật (không giả `invalidateQueries`): kết quả mock mới của query chảy qua cache vào tấm đang mở.
+    const renderLive = () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+      render(
+        <QueryClientProvider client={qc}>
+          <StaffPage />
+        </QueryClientProvider>,
+      );
+      return qc;
+    };
+    const refetch = (qc: QueryClient) =>
+      act(async () => {
+        await qc.invalidateQueries({ queryKey: ['my-shifts'] });
+      });
+    const openEdit = async () => {
+      const qc = renderLive();
+      fireEvent.click(await screen.findByRole('button', { name: /^Sửa ca / }));
+      expect(timeInputs().map((i) => i.value)).toEqual(['08:00', '12:00']);
+      return qc;
+    };
+    const notBusy = () => waitFor(() => expect(screen.getByRole('button', { name: 'Lưu' })).not.toHaveAttribute('aria-busy', 'true'));
+
+    it('lịch tuần tải lại có giờ bắt đầu mới, khách mới sửa giờ kết thúc: giờ bắt đầu đổi theo, giờ kết thúc giữ chữ; Lưu gửi giờ bắt đầu MỚI + giờ kết thúc khách gõ', async () => {
+      const qc = await openEdit();
+      typeAt(1, '11:30');
+      mocks.getShifts.mockResolvedValue(WEEK_D2);
+      await refetch(qc);
+      await waitFor(() => expect(timeInputs()[0]!.value).toBe('07:30'));
+      expect(timeInputs()[1]!.value).toBe('11:30');
+      click('Lưu');
+      await waitFor(() => expect(mocks.updateShift).toHaveBeenCalledTimes(1));
+      expect(mocks.updateShift).toHaveBeenCalledWith('sp', { startAt: vn('2026-03-12', '07:30'), endAt: vn('2026-03-12', '11:30') });
+    });
+
+    it('máy chủ từ chối 400: lịch tải lại, tấm còn mở, giờ bắt đầu chưa đụng là giờ mới, giờ kết thúc giữ chữ khách; bấm Lưu lại gửi đúng hai giá trị đó', async () => {
+      mocks.updateShift.mockRejectedValueOnce(serverError('Ca đã đổi', 400)).mockResolvedValue({});
+      await openEdit();
+      typeAt(1, '11:30');
+      mocks.getShifts.mockResolvedValue(WEEK_D2);
+      click('Lưu');
+      await waitFor(() =>
+        expect(mocks.updateShift).toHaveBeenNthCalledWith(1, 'sp', { startAt: vn('2026-03-12', '08:00'), endAt: vn('2026-03-12', '11:30') }),
+      );
+      await waitFor(() => expect(timeInputs()[0]!.value).toBe('07:30'));
+      await settle();
+      await notBusy();
+      expect(timeInputs()[1]!.value).toBe('11:30');
+      click('Lưu');
+      await waitFor(() => expect(mocks.updateShift).toHaveBeenCalledTimes(2));
+      expect(mocks.updateShift).toHaveBeenNthCalledWith(2, 'sp', { startAt: vn('2026-03-12', '07:30'), endAt: vn('2026-03-12', '11:30') });
+    });
+
+    it('đóng rồi mở lại: nạp lại từ ca hiện tại, bỏ chữ đã sửa của lần trước', async () => {
+      const qc = await openEdit();
+      typeAt(1, '11:30');
+      click('Đóng');
+      mocks.getShifts.mockResolvedValue(WEEK_D2);
+      await refetch(qc);
+      await screen.findByText('07:30 – 12:00');
+      click('Sửa ca T5 12/03');
+      expect(timeInputs().map((i) => i.value)).toEqual(['07:30', '12:00']);
+    });
+
+    it('thêm ca mới (không có ca đích): ca chuẩn đã chọn còn nguyên khi lịch tuần tải lại; gửi đúng ca chuẩn đó', async () => {
+      const qc = renderLive();
+      fireEvent.click(await screen.findByRole('button', { name: 'Thêm ca T4 11/03' }));
+      click('Ca chiều (13:00–17:00)');
+      mocks.getShifts.mockResolvedValue(WEEK_D2);
+      await refetch(qc);
+      await screen.findByText('07:30 – 12:00');
+      expect(screen.getByRole('button', { name: 'Ca chiều (13:00–17:00)' })).toHaveAttribute('aria-pressed', 'true');
+      click('Gửi duyệt');
+      await waitFor(() => expect(mocks.createShifts).toHaveBeenCalledTimes(1));
+      expect(mocks.createShifts).toHaveBeenCalledWith([{ workDate: TODAY, startAt: vn(TODAY, '13:00'), endAt: vn(TODAY, '17:00'), templateId: 't2' }]);
+    });
+
+    it('thêm ca mới: đóng rồi mở lại về trạng thái rỗng (chưa chọn ca chuẩn, giờ khác 08:00–12:00)', async () => {
+      renderLive();
+      fireEvent.click(await screen.findByRole('button', { name: 'Thêm ca T4 11/03' }));
+      click('Giờ khác');
+      typeAt(0, '09:15');
+      click('Đóng');
+      fireEvent.click(screen.getByRole('button', { name: 'Thêm ca T4 11/03' }));
+      expect(screen.getByRole('button', { name: 'Gửi duyệt' })).toBeDisabled();
+      expect(screen.getByRole('button', { name: 'Ca chiều (13:00–17:00)' })).toHaveAttribute('aria-pressed', 'false');
+      click('Giờ khác');
+      expect(timeInputs().map((i) => i.value)).toEqual(['08:00', '12:00']);
+    });
+  });
 });

@@ -1,5 +1,6 @@
+import { useState } from 'react';
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -692,5 +693,129 @@ describe('SubscriptionEditSheet: đóng khi gói không còn hoặc vừa đổi
     vi.useRealTimers();
     fireEvent.click(saveBtn());
     await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(2));
+  });
+});
+
+// W117A: danh sách gói tải lại trong lúc sheet còn mở (máy chủ từ chối rồi tải lại, nơi khác đổi gói): lựa chọn khách CHƯA chạm đổi theo gói mới, lựa chọn ĐÃ đổi giữ nguyên. Trước đây lựa chọn chưa chạm giữ giá trị cũ, `dirty` so với gói mới nên Lưu gửi giá trị cũ đè lên gói mới.
+describe('SubscriptionEditSheet: bám gói mới về, lựa chọn khách đã đổi giữ nguyên (W117A)', () => {
+  const D2 = { ...SUB, intervalWeeks: 8, addressId: 'a2', paymentMethod: 'BANK_TRANSFER' as const };
+  const saveBtn = () => screen.getByRole('button', { name: 'Lưu thay đổi' });
+  const settle = () => act(async () => { await new Promise((r) => setTimeout(r, 30)); });
+  const group = () => screen.getByRole('group', { name: 'Chu kỳ giao' });
+  const weeksChip = (label: string) => within(group()).getByRole('button', { name: label });
+  const addressRadio = (re: RegExp) => screen.getByRole('radio', { name: re });
+
+  /** Cha thật (SubscriptionsPanel): gói đọc từ query sống `subscriptions`, sheet gắn `key` theo mã gói và gỡ khi đóng; "server" là danh sách máy chủ trả ở lượt tải kế tiếp. */
+  const server: { current: typeof SUB | typeof D2 } = { current: SUB };
+  function Host() {
+    const [open, setOpen] = useState(true);
+    const q = useQuery({ queryKey: ['subscriptions'], queryFn: () => Promise.resolve([server.current]) });
+    const sub = q.data?.find((s) => s.id === 's1');
+    return (
+      <>
+        <button type="button" onClick={() => setOpen(true)}>Khách mở lại sheet</button>
+        {open && sub && <SubscriptionEditSheet key={sub.id} sub={sub} onClose={() => { mocks.onClose(); setOpen(false); }} />}
+      </>
+    );
+  }
+  async function renderHost() {
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(<QueryClientProvider client={qc}><Host /></QueryClientProvider>);
+    await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ });
+    return qc;
+  }
+  const reload = (qc: QueryClient) => act(async () => { await qc.invalidateQueries({ queryKey: ['subscriptions'] }); });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.updateSubscription.mockReset();
+    mocks.updateSubscription.mockResolvedValue({ ...SUB, quantity: 3 });
+    mocks.getAddresses.mockResolvedValue(ADDRS);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+    server.current = SUB;
+  });
+
+  it('gói mới về lúc sheet đang mở: chu kỳ, địa chỉ, cách trả chưa chạm đổi theo, số lượng khách đã tăng giữ nguyên', async () => {
+    const qc = await renderHost();
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    expect(weeksChip('4 tuần')).toHaveAttribute('aria-pressed', 'true');
+    server.current = D2;
+    await reload(qc);
+    await waitFor(() => expect(weeksChip('8 tuần')).toHaveAttribute('aria-pressed', 'true'));
+    expect(weeksChip('4 tuần')).toHaveAttribute('aria-pressed', 'false');
+    expect(addressRadio(/9 Hai Bà Trưng/)).toHaveAttribute('aria-checked', 'true');
+    expect(addressRadio(/Chuyển khoản ngân hàng/)).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('3')).toBeInTheDocument();
+  });
+
+  it('Lưu sau khi gói mới về chỉ gửi thứ khách đổi: chu kỳ, địa chỉ, cách trả chưa chạm theo gói mới nên không bị gửi lại giá trị cũ', async () => {
+    const qc = await renderHost();
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    server.current = D2;
+    await reload(qc);
+    await waitFor(() => expect(weeksChip('8 tuần')).toHaveAttribute('aria-pressed', 'true'));
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(1));
+    expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { quantity: 3 });
+  });
+
+  it('chu kỳ khách đã chọn giữ nguyên khi gói mới về (kèm chu kỳ khác), nút Lưu vẫn bật và gửi đúng lựa chọn đó', async () => {
+    const qc = await renderHost();
+    fireEvent.click(weeksChip('6 tuần'));
+    server.current = D2;
+    await reload(qc);
+    await waitFor(() => expect(addressRadio(/9 Hai Bà Trưng/)).toHaveAttribute('aria-checked', 'true'));
+    expect(weeksChip('6 tuần')).toHaveAttribute('aria-pressed', 'true');
+    expect(saveBtn()).toBeEnabled();
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(1));
+    expect(mocks.updateSubscription).toHaveBeenCalledWith('s1', { intervalWeeks: 6 });
+  });
+
+  it('khách chọn đúng giá trị của gói mới thì hết thay đổi (dirty so với gói sống): nút Lưu tắt', async () => {
+    const qc = await renderHost();
+    fireEvent.click(weeksChip('8 tuần'));
+    expect(saveBtn()).toBeEnabled();
+    server.current = D2;
+    await reload(qc);
+    await waitFor(() => expect(addressRadio(/9 Hai Bà Trưng/)).toHaveAttribute('aria-checked', 'true'));
+    expect(weeksChip('8 tuần')).toHaveAttribute('aria-pressed', 'true');
+    expect(saveBtn()).toBeDisabled();
+  });
+
+  it('bị từ chối 409 trùng gói giữ sheet mở: danh sách gói tải lại về bản mới, lựa chọn chưa chạm đổi theo, số lượng đã tăng giữ nguyên, Lưu lại không đè bản mới', async () => {
+    mocks.updateSubscription.mockRejectedValueOnce(serverError(DUPLICATE_MESSAGE, 409, DUPLICATE)).mockResolvedValue({ ...D2, quantity: 3 });
+    await renderHost();
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    server.current = D2;
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: DUPLICATE_MESSAGE, type: 'error' }));
+    await waitFor(() => expect(weeksChip('8 tuần')).toHaveAttribute('aria-pressed', 'true'));
+    await waitFor(() => expect(saveBtn()).not.toHaveAttribute('aria-busy'));
+    await settle();
+    expect(mocks.onClose).not.toHaveBeenCalled();
+    expect(addressRadio(/9 Hai Bà Trưng/)).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByText('3')).toBeInTheDocument();
+    expect(saveBtn()).toBeEnabled();
+    fireEvent.click(saveBtn());
+    await waitFor(() => expect(mocks.updateSubscription).toHaveBeenCalledTimes(2));
+    expect(mocks.updateSubscription).toHaveBeenLastCalledWith('s1', { quantity: 3 });
+    await waitFor(() => expect(mocks.onClose).toHaveBeenCalledTimes(1));
+  });
+
+  it('đóng rồi mở lại: nạp lại từ gói hiện tại, bỏ lựa chọn đã đổi của lần trước', async () => {
+    const qc = await renderHost();
+    fireEvent.click(screen.getByRole('button', { name: 'Tăng số lượng' }));
+    fireEvent.click(weeksChip('10 tuần'));
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByRole('group', { name: 'Chu kỳ giao' })).toBeNull());
+    server.current = { ...D2, quantity: 5 };
+    await reload(qc);
+    fireEvent.click(screen.getByRole('button', { name: 'Khách mở lại sheet' }));
+    await screen.findByRole('radio', { name: /9 Hai Bà Trưng/ });
+    expect(weeksChip('8 tuần')).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByText('5')).toBeInTheDocument();
+    expect(addressRadio(/9 Hai Bà Trưng/)).toHaveAttribute('aria-checked', 'true');
+    expect(saveBtn()).toBeDisabled();
   });
 });

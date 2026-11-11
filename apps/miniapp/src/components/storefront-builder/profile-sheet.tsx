@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Input, useSnackbar } from 'zmp-ui';
 import { updateStorefront, type StorefrontEdit } from '../../services/storefront-api';
@@ -7,11 +7,19 @@ import { haptic } from '../../utils/haptic';
 import { settleWithin } from '../../utils/settle-within';
 import { vi } from '../../i18n/vi';
 import { useUploadBusy } from '../../hooks/use-upload-busy';
+import { useSyncedDraft } from '../../hooks/use-synced-draft';
 import { useLockedMutation } from '../game/use-locked-mutation';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 import { ImageUpload } from '../image-upload';
 import { SCROLL_BODY } from './shared';
+
+const PROFILE_EMPTY = { avatarUrl: '', coverUrl: '', headerNote: '' };
+const toProfileForm = (sf: StorefrontEdit): typeof PROFILE_EMPTY => ({
+  avatarUrl: sf.avatarUrl ?? '',
+  coverUrl: sf.coverUrl ?? '',
+  headerNote: sf.headerNote ?? '',
+});
 
 /**
  * Hồ sơ gian hàng: ảnh đại diện, ảnh bìa, lời nhắn. Ba trường này quyết định nhiệm vụ
@@ -35,9 +43,9 @@ export function ProfileSheet({
       mounted.current = false;
     };
   }, []);
-  const [avatarUrl, setAvatarUrl] = useState(sf.avatarUrl ?? '');
-  const [coverUrl, setCoverUrl] = useState(sf.coverUrl ?? '');
-  const [headerNote, setHeaderNote] = useState(sf.headerNote ?? '');
+  // `sf` là gian hàng SỐNG của cha (query `my-storefront`): tải lại lúc tấm còn mở thì ô chưa chạm đổi theo, ô khách đã sửa giữ chữ.
+  const draft = useSyncedDraft(PROFILE_EMPTY, toProfileForm(sf), true);
+  const { avatarUrl, coverUrl, headerNote } = draft.values;
   // Lưu lúc ảnh còn đang lên sẽ gửi ảnh cũ (hoặc rỗng) rồi đóng form, ảnh mới về sau bị bỏ.
   const { busy: imagesBusy, onBusyChange } = useUploadBusy();
 
@@ -79,8 +87,8 @@ export function ProfileSheet({
   return (
     <div style={SCROLL_BODY}>
       {/* Ảnh đại diện nhỏ nên nén mạnh hơn ảnh bìa — cả hai đi kèm mọi lượt xem gian hàng. */}
-      <ImageUpload label={vi.storefront.avatar} value={avatarUrl} onChange={setAvatarUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={400} quality={0.8} />
-      <ImageUpload label={vi.storefront.cover} value={coverUrl} onChange={setCoverUrl} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={1000} quality={0.75} />
+      <ImageUpload label={vi.storefront.avatar} value={avatarUrl} onChange={(url) => draft.set('avatarUrl', url)} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={400} quality={0.8} />
+      <ImageUpload label={vi.storefront.cover} value={coverUrl} onChange={(url) => draft.set('coverUrl', url)} onBusyChange={onBusyChange} disabled={saveMut.isPending} maxDim={1000} quality={0.75} />
 
       <Text variant="label" as="div" style={{ marginBottom: 4 }}>{vi.storefront.headerNote}</Text>
       <Input.TextArea
@@ -88,7 +96,7 @@ export function ProfileSheet({
         value={headerNote}
         maxLength={200}
         placeholder={vi.storefront.headerNotePlaceholder}
-        onChange={(e) => setHeaderNote(e.target.value)}
+        onChange={(e) => draft.set('headerNote', e.target.value)}
       />
       <Text variant="label" tone="tertiary" as="div" style={{ marginTop: 4 }}>
         {headerNote.length}/200

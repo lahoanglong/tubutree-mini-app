@@ -23,6 +23,7 @@ import { ImageUpload } from '../components/image-upload';
 import { PeriodNav } from '../components/period-nav';
 import { vi } from '../i18n/vi';
 import { useUploadBusy } from '../hooks/use-upload-busy';
+import { useSyncedDraft } from '../hooks/use-synced-draft';
 import { formatVnd } from '../utils/format';
 import { safeImageUrl } from '../utils/safe-image-url';
 import {
@@ -45,6 +46,14 @@ const STATUS_LABEL: Record<PayrollStatus, string> = {
 };
 
 const fmtH = (min: number) => `${Math.floor(min / 60)}h${String(min % 60).padStart(2, '0')}`;
+
+const BANK_EMPTY = { bin: '', accNo: '', accName: '', qr: '' };
+const toBankForm = (p: StaffProfile): typeof BANK_EMPTY => ({
+  bin: p.bankBin ?? '',
+  accNo: p.bankAccountNo ?? '',
+  accName: p.bankAccountName ?? '',
+  qr: p.qrImageUrl ?? '',
+});
 
 export default function MyPayrollPage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -118,20 +127,15 @@ function MyPayrollHub() {
   }, [payQ.data]);
 
   const [bankOpen, setBankOpen] = useState(false);
-  const [bin, setBin] = useState('');
-  const [accNo, setAccNo] = useState('');
-  const [accName, setAccName] = useState('');
-  const [qr, setQr] = useState('');
+  // Ô chưa chạm bám hồ sơ mới về lúc tấm còn mở (bảng lương tải lại sau khi máy chủ từ chối); ô khách đã sửa giữ chữ đang gõ.
+  const bankDraft = useSyncedDraft(BANK_EMPTY, profileCache ? toBankForm(profileCache) : null, bankOpen);
+  const { bin, accNo, accName, qr } = bankDraft.values;
   // Cờ nằm ở trang vì tấm "Thông tin nhận lương" gỡ nội dung khi đóng; tấm không đóng được lúc ảnh QR còn lên.
   const { busy: qrBusy, onBusyChange: onQrBusyChange } = useUploadBusy();
 
   // Số lần mở tấm: lệnh lưu mang số của lần mở đã gửi nó, để lệnh bị từ chối trễ không đóng lần mở sau (khách đóng tấm rồi mở lại, đang gõ dở).
   const bankSheetSeq = useRef(0);
   const openBank = () => {
-    setBin(profileCache?.bankBin ?? '');
-    setAccNo(profileCache?.bankAccountNo ?? '');
-    setAccName(profileCache?.bankAccountName ?? '');
-    setQr(profileCache?.qrImageUrl ?? '');
     bankSheetSeq.current += 1;
     setBankOpen(true);
   };
@@ -300,16 +304,16 @@ function MyPayrollHub() {
       >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
           <Field label="Mã số ngân hàng (6 chữ số, VD 970407; chưa biết thì tải ảnh QR ở dưới)">
-            <Input maxLength={INPUT_LIMITS.bankBin} inputMode="numeric" value={bin} onChange={(e) => setBin(e.target.value)} />
+            <Input maxLength={INPUT_LIMITS.bankBin} inputMode="numeric" value={bin} onChange={(e) => bankDraft.set('bin', e.target.value)} />
           </Field>
           <Field label="Số tài khoản">
-            <Input maxLength={INPUT_LIMITS.bankAccountNo} inputMode="numeric" value={accNo} onChange={(e) => setAccNo(e.target.value)} />
+            <Input maxLength={INPUT_LIMITS.bankAccountNo} inputMode="numeric" value={accNo} onChange={(e) => bankDraft.set('accNo', e.target.value)} />
           </Field>
           <Field label="Tên chủ tài khoản">
-            <Input maxLength={INPUT_LIMITS.bankAccountName} value={accName} onChange={(e) => setAccName(e.target.value)} />
+            <Input maxLength={INPUT_LIMITS.bankAccountName} value={accName} onChange={(e) => bankDraft.set('accName', e.target.value)} />
           </Field>
           <Text variant="caption" tone="tertiary" as="div">Hoặc tải ảnh QR nhận tiền (ưu tiên nếu có):</Text>
-          <ImageUpload label="QR nhận lương" value={qr} onChange={setQr} onBusyChange={onQrBusyChange} disabled={bankM.isPending} />
+          <ImageUpload label="QR nhận lương" value={qr} onChange={(url) => bankDraft.set('qr', url)} onBusyChange={onQrBusyChange} disabled={bankM.isPending} />
         </div>
       </BottomSheet>
     </Page>
