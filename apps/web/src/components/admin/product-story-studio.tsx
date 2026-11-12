@@ -12,6 +12,7 @@ import { ProductStoryShowcase } from '@/components/mini/product-story-showcase';
 import { extractStoryAssets, generateStoryDraft, type ProductDetail, type StoryAssetsResult, type StoryDraftProvider } from '@/lib/product-categories';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { StoryCompletenessPanel } from './story-completeness-panel';
+import { StoryRoiCutout } from './story-roi-cutout';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, Notice, chipClass } from './ui';
 
 const EMPTY: ProductStoryConfig = { version: 1, enabled: true, scenes: [] };
@@ -71,6 +72,7 @@ export function ProductStoryStudio({
   const [note, setNote] = useState<string | null>(null);
   const [link, setLink] = useState('');
   const [found, setFound] = useState<StoryAssetsResult | null>(null);
+  const [roiFor, setRoiFor] = useState<string | null>(null);
   const [aiNote, setAiNote] = useState('');
   const [aiInfo, setAiInfo] = useState<{ provider: StoryDraftProvider; warnings: string[] } | null>(null);
 
@@ -105,8 +107,20 @@ export function ProductStoryStudio({
       const v = link.trim();
       return extractStoryAssets(product.id, IMAGE_URL.test(v) ? { imageUrls: [v] } : { pageUrl: v });
     },
-    onSuccess: (r) => setFound(r),
+    onSuccess: (r) => {
+      setFound(r);
+      setRoiFor(null);
+    },
   });
+  // Đăng ký ảnh tách nền (bản máy chủ trả hoặc bản đã cắt khung) làm ảnh sản phẩm rồi trỏ cutoutUrl vào chính ảnh đó, không trỏ link bên thứ ba.
+  const adoptCutout = (dataUrl: string) => {
+    const slot = product.images.length;
+    onAddImage?.(dataUrl);
+    edit((c) => {
+      c.cutoutUrl = `/public-image/product/${product.id}/${slot}`;
+    });
+  };
+  const roiCut = roiFor ? found?.cutouts.find((c) => c.sourceUrl === roiFor) : undefined;
 
   // Bản nháp AI thay cảnh lắp ghép và điểm chỉ; giữ vòng cung (bám phân loại thật), ảnh sân khấu, khung ảnh và công tắc bật/tắt của sản phẩm. Chưa lưu: admin xem trước rồi tự bấm Lưu.
   const draft = useMutation({
@@ -148,7 +162,7 @@ export function ProductStoryStudio({
     });
 
   return (
-    <fieldset className="space-y-4" disabled={disabled}>
+    <fieldset className="min-w-0 space-y-4" disabled={disabled}>
       <legend className="text-sm font-medium text-stone-900">Câu chuyện sản phẩm</legend>
 
       <div className="flex flex-wrap items-center gap-3">
@@ -313,20 +327,14 @@ export function ProductStoryStudio({
                   {im.width}×{im.height}
                 </div>
                 {cut && onAddImage ? (
-                  <button
-                    type="button"
-                    className={BTN_SMALL}
-                    disabled={disabled}
-                    onClick={() => {
-                      const slot = product.images.length;
-                      onAddImage(cut.dataUrl);
-                      edit((c) => {
-                        c.cutoutUrl = `/public-image/product/${product.id}/${slot}`;
-                      });
-                    }}
-                  >
-                    Dùng làm ảnh sân khấu
-                  </button>
+                  <div className="flex flex-col gap-1">
+                    <button type="button" className={BTN_SMALL} disabled={disabled} onClick={() => adoptCutout(cut.dataUrl)}>
+                      Dùng làm ảnh sân khấu
+                    </button>
+                    <button type="button" className={BTN_SMALL} disabled={disabled} aria-expanded={roiFor === im.url} onClick={() => setRoiFor(roiFor === im.url ? null : im.url)}>
+                      Cắt khung rồi tách nền
+                    </button>
+                  </div>
                 ) : (
                   im.url.startsWith('https://') && (
                     <button
@@ -347,6 +355,18 @@ export function ProductStoryStudio({
             );
           })}
         </ul>
+        {roiCut && onAddImage && (
+          <StoryRoiCutout
+            key={roiCut.sourceUrl}
+            src={roiCut.dataUrl}
+            disabled={disabled}
+            onClose={() => setRoiFor(null)}
+            onUse={(dataUrl) => {
+              adoptCutout(dataUrl);
+              setRoiFor(null);
+            }}
+          />
+        )}
       </div>
 
       <div className="space-y-3">
