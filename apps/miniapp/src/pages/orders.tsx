@@ -4,6 +4,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchOrders } from '../services/shop-api';
 import { getLoadErrorMessage } from '../services/api';
 import { getNewCustomerOffer } from '../services/account-api';
+import { normalizeOrderSearchInput } from '@tubutree/app-core/phone-input';
 import { useAuthStore } from '../store/auth';
 import { AuthGate } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -137,7 +138,7 @@ export default function OrdersPage() {
                 setDraft(v);
                 if (v === '') setQuery('');
               }}
-              onSubmit={(v) => setQuery(v.trim())}
+              onSubmit={(v) => setQuery(normalizeOrderSearchInput(v))}
               onClear={clearSearch}
               label={vi.orders.searchLabel}
               clearLabel={vi.orders.searchClear}

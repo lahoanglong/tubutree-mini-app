@@ -59,6 +59,13 @@ describe('FlashSlotItem: khung đang diễn ra', () => {
     expect(screen.getByText('Tối đa 5/khách · 500g')).toBeInTheDocument();
   });
 
+  it('tên phân loại lẫn "[object Object]": dòng ghi chú và câu đọc đều không lộ chuỗi đó', () => {
+    const { container } = render(<FlashSlotItem item={{ ...ITEM, variationName: 'Can 5L [object Object]' }} {...base} />);
+    expect(screen.getByText('Tối đa 5/khách · Can 5L')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Serum Bã Trầu' })).toHaveAccessibleDescription(/Tối đa 5 sản phẩm mỗi khách, Can 5L$/);
+    expect(container.textContent).not.toContain('[object Object]');
+  });
+
   it('trình đọc nghe "Tối đa 5 sản phẩm mỗi khách, 500g", không nghe "gạch chéo" (F10a)', () => {
     render(<FlashSlotItem item={{ ...ITEM, variationName: '500g' }} {...base} />);
     expect(screen.getByText('Tối đa 5/khách · 500g')).toHaveAttribute('aria-hidden', 'true');

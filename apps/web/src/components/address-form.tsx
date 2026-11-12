@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react';
 import { AlertTriangle } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { pickLastGeo, recallLastGeo, rememberLastGeo } from '@tubutree/app-core/address-geo-memory';
+import { parseVnPhoneInput } from '@tubutree/app-core/phone-input';
 import { usableProfileName } from '@tubutree/app-core/profile-name';
 import { GeoPicker, EMPTY_GEO, type GeoValue } from '@/components/geo-picker';
 import {
@@ -149,11 +150,20 @@ export function AddressForm({
         label="Số điện thoại"
         value={form.phone}
         error={shown('phone')}
-        maxLength={16}
+        maxLength={20}
         autoComplete="tel"
         inputMode="tel"
-        onBlur={() => touch('phone')}
+        tabular
+        // Chuẩn hoá khi rời ô và khi dán cả số, không phải từng phím: sửa chữ đang gõ giữa chừng sẽ làm con trỏ nhảy.
+        onBlur={() => {
+          touch('phone');
+          setForm((f) => {
+            const phone = parseVnPhoneInput(f.phone) ?? f.phone;
+            return phone === f.phone ? f : { ...f, phone };
+          });
+        }}
         onChange={(v) => setForm((f) => ({ ...f, phone: v }))}
+        onPasteText={parseVnPhoneInput}
       />
       <div className="space-y-2">
         <GeoPicker value={geo} onChange={setGeo} errorProvince={shown('province')} errorWard={shown('ward')} />
@@ -199,6 +209,8 @@ function TextField({
   maxLength,
   autoComplete,
   inputMode,
+  tabular,
+  onPasteText,
 }: {
   label: string;
   value: string;
@@ -208,6 +220,10 @@ function TextField({
   maxLength: number;
   autoComplete?: string;
   inputMode?: 'tel';
+  /** Số hiển thị thẳng hàng (SĐT). */
+  tabular?: boolean;
+  /** Chữ dán vào được đổi thành giá trị chuẩn thì thay cả ô bằng giá trị đó; trả null thì để trình duyệt dán như thường. */
+  onPasteText?: (text: string) => string | null;
 }) {
   const errorId = useId();
   return (
@@ -218,13 +234,19 @@ function TextField({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
+          onPaste={(e) => {
+            const next = onPasteText?.(e.clipboardData.getData('text'));
+            if (next == null) return;
+            e.preventDefault();
+            onChange(next);
+          }}
           maxLength={maxLength}
           autoComplete={autoComplete}
           inputMode={inputMode}
           aria-required="true"
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
-          className={`${error ? ui.fieldError : ui.field} mt-1`}
+          className={`${error ? ui.fieldError : ui.field} mt-1${tabular ? ' tabular-nums' : ''}`}
         />
       </label>
       {error && (

@@ -21,6 +21,7 @@ import { actionErrorText } from '@/lib/error-text';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { NetworkError } from '@/lib/client-api';
 import { settleWithin } from '@/lib/settle-within';
+import { variationParen } from './variation-paren';
 
 const BUSY_CLASS = 'aria-disabled:opacity-60';
 
@@ -290,7 +291,7 @@ export function CreateProductModal({
                 <p role="status" className="flex items-start gap-1 text-xs text-success-fg">
                   <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                   <span>
-                    {linked.productName} ({linked.variationName}) · {formatVnd(linked.salePrice ?? linked.retailPrice)}
+                    {linked.productName}{variationParen(linked.variationName)} · {formatVnd(linked.salePrice ?? linked.retailPrice)}
                     {linked.requiresAdminConfirm
                       ? ' · mã này đang thuộc một sản phẩm Tubu Tree đang bán, chỉ được liên kết khi Tubu Tree xác nhận lúc duyệt.'
                       : linked.stock != null
@@ -544,7 +545,7 @@ export function EditProductModal({ product, onClose, onSuccess }: { product: Mer
                   <p role="status" className="flex items-start gap-1 text-xs text-success-fg">
                     <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     <span>
-                      {linked.productName} ({linked.variationName}) · {formatVnd(linked.salePrice ?? linked.retailPrice)}
+                      {linked.productName}{variationParen(linked.variationName)} · {formatVnd(linked.salePrice ?? linked.retailPrice)}
                       {linked.requiresAdminConfirm ? ' · mã này đang thuộc một sản phẩm Tubu Tree đang bán, chỉ được liên kết khi Tubu Tree xác nhận lúc duyệt.' : ''}
                     </span>
                   </p>

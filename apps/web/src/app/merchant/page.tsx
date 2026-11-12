@@ -66,6 +66,7 @@ import { RowMenu } from './row-menu';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { settleWithin } from '@/lib/settle-within';
 import { reloadWhenStale } from '@/lib/stale-write-rejection';
+import { variationParen } from './variation-paren';
 
 const POPULAR_BANKS = [
   { bin: '970436', name: 'Vietcombank (VCB)' },
@@ -1489,7 +1490,7 @@ function OrdersTab({ selfFulfils, onOpenFulfil }: { selfFulfils: boolean; onOpen
                       <div className="space-y-1">
                         {o.items?.map((it) => (
                           <div key={it.id} className="text-xs text-stone-700">
-                            • {it.productName}{it.variationName ? ` (${it.variationName})` : ''} <span className="font-semibold">x{it.quantity}</span> ({formatVnd(it.unitPrice)})
+                            • {it.productName}{variationParen(it.variationName)} <span className="font-semibold">x{it.quantity}</span> ({formatVnd(it.unitPrice)})
                             {!!it.backorderedQty && (
                               <span className="ml-1.5 rounded-full bg-warning-bg px-1.5 py-0.5 text-[10px] font-semibold text-warning-fg">
                                 Đặt trước {it.backorderedQty}

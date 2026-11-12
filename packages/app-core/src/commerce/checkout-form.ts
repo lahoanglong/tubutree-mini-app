@@ -1,4 +1,5 @@
 import { fillCopy } from '../shop-copy';
+import { normalizeVnPhoneInput } from '../phone-input';
 import { isTaxCodeValid } from './tax-code';
 
 /**
@@ -32,7 +33,8 @@ export function validateAddressFields<G extends AddressGeoCodes>(form: AddressFo
   const e: AddressFieldErrors = {};
   const recipient = form.recipient.trim();
   const street = form.street.trim();
-  const phone = form.phone.replace(/\s/g, '');
+  // Dạng chuẩn 0xxxxxxxxx khi phân tích được (dán từ Zalo có chấm, gạch, ngoặc, 84…); không thì chữ đã bỏ ký tự vô hình để VN_PHONE báo lỗi.
+  const phone = normalizeVnPhoneInput(form.phone);
   if (!recipient) e.recipient = 'Nhập tên người nhận.';
   else if (recipient.length > ADDRESS_RECIPIENT_MAX) e.recipient = `Tên người nhận tối đa ${ADDRESS_RECIPIENT_MAX} ký tự.`;
   else if (HTML_CHARS.test(recipient)) e.recipient = 'Tên người nhận không được chứa ký tự < hoặc >.';

@@ -121,7 +121,7 @@ export function PdpPointsEarn({ product, initialConfig }: { product: PointsEarnP
         className="tubu-points-earn flex min-h-11 items-end gap-1.5 text-left text-xs font-semibold text-[var(--color-text-brand)]"
       >
         <Leaf className="h-[15px] w-[15px] shrink-0" aria-hidden="true" />
-        <span>{text}</span>
+        <span className="tabular-nums">{text}</span>
         <ChevronRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
       </button>
       {everOpen && <PointsEarnSheet open={open} onClose={() => setOpen(false)} popup={popup} />}

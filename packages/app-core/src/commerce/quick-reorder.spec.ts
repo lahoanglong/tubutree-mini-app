@@ -53,6 +53,14 @@ describe('buildQuickReorderItems: món đã mua', () => {
     expect(items[1]!.name).toBe('Sản phẩm 2');
   });
 
+  it('tên phân loại hỏng ("[object Object]", toàn khoảng trắng) không để lại chữ rác hay dấu · treo', () => {
+    const items = buildQuickReorderItems({
+      now: NOW,
+      purchased: [bought(1, { variationName: '[object Object]' }), bought(2, { variationName: '   ' }), bought(3, { variationName: 'Chai 500ml [object Object]' })],
+    });
+    expect(items.map((i) => i.name)).toEqual(['Sản phẩm 1', 'Sản phẩm 2', 'Sản phẩm 3 · Chai 500ml']);
+  });
+
   it('trần 6 món, kể cả khi truyền limit lớn hơn', () => {
     const many = Array.from({ length: 9 }, (_, i) => bought(i + 1));
     expect(buildQuickReorderItems({ now: NOW, purchased: many })).toHaveLength(QUICK_REORDER_MAX);

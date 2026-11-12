@@ -67,6 +67,15 @@ describe('FlashSlotItem (web): khung đang diễn ra', () => {
     const c = show({ ...ITEM, variationName: '500g' });
     expect(c.textContent).toContain('Tối đa 5/khách · 500g');
   });
+
+  it('tên phân loại lẫn "[object Object]": dòng ghi chú và câu đọc đều không lộ chuỗi đó', () => {
+    const c = show({ ...ITEM, variationName: 'Can 5L [object Object]' });
+    expect(c.querySelector('[data-ds-part="note"]')!.textContent).toBe('Tối đa 5/khách · Can 5L');
+    const spoken = c.querySelector(`#${CSS.escape(link(c).getAttribute('aria-describedby')!)}`)!.textContent!;
+    expect(spoken).toMatch(/Tối đa 5 sản phẩm mỗi khách, Can 5L$/);
+    expect(c.textContent).not.toContain('[object Object]');
+    expect(show({ ...ITEM, variationName: '[object Object]' }).querySelector('[data-ds-part="note"]')!.textContent).toBe('Tối đa 5/khách');
+  });
 });
 
 describe('FlashSlotItem (web): món hết suất', () => {

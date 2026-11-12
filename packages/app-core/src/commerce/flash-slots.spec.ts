@@ -179,6 +179,16 @@ describe('nhãn trên dòng món', () => {
     expect(slotItemNote({ ...item('a', []), perUserLimit: -3 })).toBe('');
   });
 
+  it('slotItemNote / slotItemNoteSpoken: tên phân loại "[object Object]" bị gỡ (lẫn sau tên thật thì giữ phần tên), tên toàn khoảng trắng coi như trống', () => {
+    expect(slotItemNote({ ...item('a', []), variationName: '[object Object]', perUserLimit: 2 })).toBe('Tối đa 2/khách');
+    expect(slotItemNote({ ...item('a', []), variationName: '[object Object]', perUserLimit: 0 })).toBe('');
+    expect(slotItemNote({ ...item('a', []), variationName: 'Can 5L [object Object]', perUserLimit: 2 })).toBe('Tối đa 2/khách · Can 5L');
+    expect(slotItemNote({ ...item('a', []), variationName: '   ', perUserLimit: 0 })).toBe('');
+    expect(slotItemNoteSpoken({ ...item('a', []), variationName: '[object Object]', perUserLimit: 2 })).toBe('Tối đa 2 sản phẩm mỗi khách');
+    expect(slotItemNoteSpoken({ ...item('a', []), variationName: 'Can 5L [object Object]', perUserLimit: 2 })).toBe('Tối đa 2 sản phẩm mỗi khách, Can 5L');
+    expect(slotItemNoteSpoken({ ...item('a', []), variationName: '[object Object]', perUserLimit: 0 })).toBe('');
+  });
+
   it('slotItemNote: giới hạn ba chữ số vẫn nói đủ con số, trong trần chữ của khoá', () => {
     expect(slotItemNote({ ...item('a', []), perUserLimit: 100 })).toBe('Tối đa 100/khách');
   });

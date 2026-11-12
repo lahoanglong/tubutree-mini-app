@@ -280,6 +280,19 @@ describe('DealerPage — tab, mẫu đơn, đặt nhanh', () => {
     expect(screen.getByText('Nước rửa chén').style.webkitLineClamp).toBe('2');
   });
 
+  it('tên phân loại lẫn "[object Object]": gỡ chuỗi đó; chỉ còn chuỗi đó hoặc toàn khoảng trắng thì không có dòng phân loại', async () => {
+    mocks.getPricelist.mockResolvedValue([
+      row({ variationId: 'v1', sku: 'S-A', variation: 'Can 5L [object Object]' }),
+      row({ variationId: 'v2', sku: 'S-B', variation: '[object Object]' }),
+      row({ variationId: 'v3', sku: 'S-C', variation: '   ' }),
+    ]);
+    const { container } = renderPage();
+    expect(await screen.findByText('Can 5L')).toBeInTheDocument();
+    expect(container.textContent).not.toContain('[object Object]');
+    expect(Array.from(container.querySelectorAll<HTMLElement>('div')).filter((d) => d.style.fontWeight === '700' && d.textContent === '')).toHaveLength(0);
+    expect(screen.getAllByText(/^S-[ABC] · tồn/)).toHaveLength(3);
+  });
+
   it('bảng giá rỗng khi chưa tìm gì: nói chưa có hàng giá sỉ cho bậc, không nói "không tìm thấy"', async () => {
     mocks.getPricelist.mockResolvedValue([]);
     renderPage();

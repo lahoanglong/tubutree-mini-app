@@ -1,5 +1,5 @@
 import { ADDRESS_INPUT_LIMIT } from '../utils/input-limits';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ClipboardEvent } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useSnackbar, Input } from 'zmp-ui';
 import { UserRound } from 'lucide-react';
@@ -9,6 +9,7 @@ import { getErrorMessage, isStaleStateError } from '../services/api';
 import { isHttpError } from '../services/http';
 import { requestZaloProfile } from '../services/zalo-profile';
 import { usableProfileName } from '@tubutree/app-core/profile-name';
+import { normalizeVnPhoneInput, parseVnPhoneInput } from '@tubutree/app-core/phone-input';
 import { validateAddressFields, type AddressField } from '@tubutree/app-core/commerce/checkout-form';
 import { useAuthStore } from '../store/auth';
 import { vi } from '../i18n/vi';
@@ -116,7 +117,7 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
     mutationFn: () => {
       const payload = {
         recipient: form.recipient.trim(),
-        phone: form.phone.replace(/\s/g, ''),
+        phone: normalizeVnPhoneInput(form.phone),
         street: form.street.trim(),
         province: geo.province,
         ward: geo.ward,
@@ -150,7 +151,21 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
   });
 
   const setField = (k: FormFields) => (e: { target: { value: string } }) => setForm((f) => ({ ...f, [k]: e.target.value }));
-  const blurField = (k: FormFields) => () => setTouched((t) => (t[k] ? t : { ...t, [k]: true }));
+  // Chuẩn hoá SĐT khi rời ô và khi dán cả số, không phải từng phím: sửa chữ đang gõ giữa chừng sẽ làm con trỏ nhảy.
+  const blurField = (k: FormFields) => () => {
+    setTouched((t) => (t[k] ? t : { ...t, [k]: true }));
+    if (k !== 'phone') return;
+    setForm((f) => {
+      const phone = parseVnPhoneInput(f.phone) ?? f.phone;
+      return phone === f.phone ? f : { ...f, phone };
+    });
+  };
+  const pastePhone = (e: ClipboardEvent<HTMLInputElement>) => {
+    const phone = parseVnPhoneInput(e.clipboardData.getData('text'));
+    if (phone === null) return;
+    e.preventDefault();
+    setForm((f) => ({ ...f, phone }));
+  };
   const submit = () => {
     setSubmitted(true);
     if (Object.keys(all).length > 0) {
@@ -174,6 +189,9 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
         onChange={setField(k)}
         onBlur={blurField(k)}
         inputMode={k === 'phone' ? 'numeric' : undefined}
+        autoComplete={k === 'phone' ? 'tel' : undefined}
+        inputClassName={k === 'phone' ? 'tubu-nums' : undefined}
+        onPaste={k === 'phone' ? pastePhone : undefined}
         status={shown(k) ? 'error' : undefined}
       />
     </Field>

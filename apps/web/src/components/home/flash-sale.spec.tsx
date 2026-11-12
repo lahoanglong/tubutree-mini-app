@@ -377,6 +377,19 @@ describe('FlashSale', () => {
     expect(c.textContent).not.toContain('Nước rửa chén · 500g');
   });
 
+  it('tên phân loại lẫn "[object Object]": gỡ chuỗi đó; thẻ còn lại giữ chỗ dòng trống; mọi thẻ chỉ có chuỗi đó thì không dựng dòng', async () => {
+    activeResult = async () => [active({ variationName: 'Can 5L [object Object]' }), ...three().slice(1).map((it) => ({ ...it, variationName: '[object Object]' }))];
+    const c = await mount(<FlashSale />);
+    expect(Array.from(c.querySelectorAll('[data-ds-part="note"]')).map((n) => n.textContent)).toEqual(['Can 5L', '', '']);
+    expect(c.textContent).not.toContain('[object Object]');
+    mounted?.unmount();
+    resetFlashSales();
+    activeResult = async () => three({ variationName: '[object Object]' });
+    const only = await mount(<FlashSale />);
+    expect(only.querySelectorAll('[data-ds-part="note"]').length).toBe(0);
+    expect(only.textContent).not.toContain('[object Object]');
+  });
+
   it('có thẻ cần dòng phân loại thì mọi thẻ giữ chỗ dòng đó để giá cùng kệ thẳng hàng', async () => {
     activeResult = async () => [active({ variationName: '500g' }), ...three().slice(1).map((it) => ({ ...it, variationName: null }))];
     const c = await mount(<FlashSale />);

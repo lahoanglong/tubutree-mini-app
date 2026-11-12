@@ -6,6 +6,7 @@ import { shelf } from '@tubutree/app-core/merch/shelves';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { fetchActiveFlashSales } from '../../services/shop-api';
 import { serverNow } from '../../utils/server-clock';
+import { variationLabel } from '../../utils/variation-label';
 import { browserStorage } from '../../utils/recently-viewed';
 import { ActiveFlashCard, FlashSkeleton } from '../flash-sale';
 import { Countdown } from '../ui/countdown';
@@ -66,7 +67,7 @@ export function OffersFlash() {
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
         {live.map((item) => (
           <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(it.variationName))} />
+            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} />
           </RailCell>
         ))}
       </RailShell>
