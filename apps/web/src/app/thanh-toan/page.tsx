@@ -310,10 +310,13 @@ export default function CheckoutPage() {
   const [placeFailure, setPlaceFailure] = useState<{ error: Error } | null>(null);
   const placeError = placeFailure?.error ?? null;
   const placeFailed = placeFailure !== null;
+  // Máy chủ đã từ chối vì màn đã cũ và giỏ/báo giá đang tải lại: nút vẫn khoá, nhưng việc đang chạy là tải lại giỏ chứ không phải gửi đơn, nên chữ trên nút nói đúng việc đó.
+  const [reloadingStale, setReloadingStale] = useState(false);
   const place = useMutation({
     onMutate: () => {
       setPriceAccepted(false);
       setPlaceFailure(null);
+      setReloadingStale(false);
     },
     mutationFn: () => {
       const body: PlaceBody = {
@@ -424,8 +427,10 @@ export default function CheckoutPage() {
       reload(['cart']);
       reload(['quote']);
       reload(['orders']);
+      setReloadingStale(true);
       return settleWithin(Promise.all([...reloads.values()])).then(() => {
         placingRef.current = false;
+        setReloadingStale(false);
       });
     },
   });
@@ -671,11 +676,13 @@ export default function CheckoutPage() {
   const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
   // Lần đặt vừa rồi chưa rõ kết quả (mất mạng, quá thời gian, 5xx): nút nói rõ là gửi lại cùng đơn (cùng khoá, không tạo đơn trùng).
   const retryingPlace = placeFailed && isOutcomeUnknown(placeError) && unknownRev !== null && unknownRev === choiceTick;
-  const placeLabel = place.isPending
-    ? 'Đang đặt hàng…'
-    : quote
-      ? fillCopy(retryingPlace ? 'checkout.retryWith' : 'checkout.placeWith', { price: formatVnd(quote.total) })
-      : 'Đặt hàng';
+  const placeLabel = reloadingStale
+    ? 'Đang cập nhật giỏ…'
+    : place.isPending
+      ? 'Đang đặt hàng…'
+      : quote
+        ? fillCopy(retryingPlace ? 'checkout.retryWith' : 'checkout.placeWith', { price: formatVnd(quote.total) })
+        : 'Đặt hàng';
   // Lời báo đặt lỗi/giỏ cần sửa nằm cuối khung tóm tắt; thanh dính đáy nhắc lại để khách không phải cuộn xuống mới biết vì sao.
   // Đỏ chỉ cho lỗi thật (đặt lỗi, giá đổi, giỏ cần sửa); lý do khoá nút do thiếu địa chỉ/chưa tính được là chữ phụ như Mini.
   const barError =

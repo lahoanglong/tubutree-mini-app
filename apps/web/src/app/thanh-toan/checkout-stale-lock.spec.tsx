@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   cartCalls: 0,
   quoteCalls: 0,
   reloadGate: null as Promise<void> | null,
+  placeGate: null as Promise<void> | null,
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/lib/auth-context', () => ({
@@ -45,6 +46,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
   placeOrder: async (body: Record<string, unknown>) => {
     state.placed.push(body);
+    await state.placeGate;
     if (state.placeError) throw state.placeError;
     return { code: 'TT0001', total: 330000 };
   },
@@ -80,6 +82,7 @@ beforeEach(() => {
   state.cartCalls = 0;
   state.quoteCalls = 0;
   state.reloadGate = null;
+  state.placeGate = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -115,6 +118,51 @@ describe('/thanh-toan — máy chủ từ chối đơn vì màn đã cũ: giữ 
     click(lgButton(c));
     await flush(6);
     expect(state.placed).toHaveLength(2);
+  });
+
+  it('nhãn nút: "Đang đặt hàng…" khi đang gửi, "Đang cập nhật giỏ…" khi bị từ chối vì màn cũ và giỏ đang tải lại, rồi về chữ Đặt hàng', async () => {
+    const sendGate = defer();
+    state.placeError = new ApiError('Địa chỉ giao hàng không còn hợp lệ.', 409);
+    const c = await mount();
+    const idleLabel = lgButton(c).textContent;
+    expect(idleLabel).toMatch(/^Đặt hàng/);
+    const reloadGate = defer();
+    state.reloadGate = reloadGate.promise;
+    state.placeGate = sendGate.promise;
+    click(lgButton(c));
+    await flush(3);
+    for (const btn of [lgButton(c), barButton(c)]) expect(btn.textContent).toBe('Đang đặt hàng…');
+    await act(async () => sendGate.resolve());
+    await flush(6);
+    for (const btn of [lgButton(c), barButton(c)]) {
+      expect(btn.textContent).toBe('Đang cập nhật giỏ…');
+      expect(btn.getAttribute('aria-busy')).toBe('true');
+      expect(btn.getAttribute('aria-disabled')).toBe('true');
+    }
+    pressTwice(lgButton(c), barButton(c));
+    await flush(3);
+    expect(state.placed).toHaveLength(1);
+    await act(async () => reloadGate.resolve());
+    await flush(6);
+    for (const btn of [lgButton(c), barButton(c)]) {
+      expect(btn.textContent).toBe(idleLabel);
+      expect(btn.getAttribute('aria-busy')).toBeNull();
+      expect(btn.getAttribute('aria-disabled')).toBeNull();
+    }
+  });
+
+  it('lỗi không nói gì về giỏ (500): nút không bao giờ đổi sang "Đang cập nhật giỏ…"', async () => {
+    const sendGate = defer();
+    state.placeError = new ApiError('Máy chủ bận.', 500);
+    const c = await mount();
+    state.placeGate = sendGate.promise;
+    click(lgButton(c));
+    await flush(3);
+    expect(lgButton(c).textContent).toBe('Đang đặt hàng…');
+    await act(async () => sendGate.resolve());
+    await flush(6);
+    expect(lgButton(c).textContent).toMatch(/^Đặt hàng|^Thử lại/);
+    expect(lgButton(c).textContent).not.toContain('cập nhật giỏ');
   });
 
   it.each([
