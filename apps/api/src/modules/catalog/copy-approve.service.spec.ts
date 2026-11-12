@@ -43,6 +43,13 @@ describe('CopyApproveService.approve', () => {
     });
   });
 
+  it('giữ percentage/benefit và thành phần hiện có mà bản duyệt không nhắc tới, chỉ nối tên mới', async () => {
+    const current = [{ name: 'Enzyme dứa lên men', percentage: '15%', benefit: 'Phân giải vết bẩn' }, { name: 'Bồ kết', benefit: 'Làm sạch nhẹ' }];
+    const { svc, update } = make([product('a', { ingredients: current })]);
+    await svc.approve('admin1', [item('a', { ingredients: ['Enzyme dứa lên men', 'Tinh dầu sả'] })]);
+    expect(dataOf(update).data).toMatchObject({ ingredients: [...current, { name: 'Tinh dầu sả' }] });
+  });
+
   it('dùng mô tả đã trim; mô tả ngắn rỗng thành null', async () => {
     const { svc, update } = make([product('a')]);
     await svc.approve('admin1', [item('a', { description: '  Mô tả sạch.  ', shortDesc: '   ' })]);
@@ -104,7 +111,7 @@ describe('CopyApproveService.approve', () => {
   it('chỉ đọc sản phẩm theo id trong yêu cầu; ghi log hành động admin', async () => {
     const { svc, findMany } = make([product('a')]);
     await svc.approve('admin7', [item('a')]);
-    expect(findMany).toHaveBeenCalledWith({ where: { id: { in: ['a'] } }, select: { id: true, name: true, storefrontId: true } });
+    expect(findMany).toHaveBeenCalledWith({ where: { id: { in: ['a'] } }, select: { id: true, name: true, storefrontId: true, ingredients: true } });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('Admin admin7 duyệt mô tả sản phẩm a (Sản phẩm a)'));
   });
 });
