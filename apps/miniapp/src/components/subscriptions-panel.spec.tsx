@@ -1143,3 +1143,35 @@ describe('SubscriptionsPanel: sheet giữ chân đóng SAU khi danh sách mới 
     expect(mocks.getSubscriptions).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('SubscriptionsPanel Mini: phân loại không có tên', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sheetSpy.calls.length = 0;
+    mocks.getAddresses.mockResolvedValue([ADDR('a1', '1 Lê Lợi'), ADDR('a2', '9 Hai Bà Trưng')]);
+    mocks.getWallet.mockResolvedValue({ walletBalance: 50000 });
+  });
+  const editDescription = () => (sheetSpy.calls.filter((c) => c.title === 'Sửa gói định kỳ').at(-1) as unknown as { description?: string }).description;
+
+  it('có tên: "phân loại · SL n" và mô tả sheet sửa "tên · phân loại" như trước', async () => {
+    mocks.getSubscriptions.mockResolvedValue([SUB]);
+    renderPanel();
+    expect(await screen.findByText('Hương sả · SL 2')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Sửa' }));
+    await screen.findByText('Sửa gói định kỳ');
+    expect(editDescription()).toBe('Nước xả vải Tubu · Hương sả');
+  });
+
+  it('tên trống hoặc toàn khoảng trắng: chỉ "SL n" (không " · " mở đầu), mô tả sheet sửa chỉ tên sản phẩm', async () => {
+    for (const variationName of ['', '   ']) {
+      mocks.getSubscriptions.mockResolvedValue([{ ...SUB, variationName }]);
+      const { unmount } = renderPanel();
+      expect(await screen.findByText('SL 2')).toBeInTheDocument();
+      fireEvent.click(await screen.findByRole('button', { name: 'Sửa' }));
+      await screen.findByText('Sửa gói định kỳ');
+      expect(editDescription()).toBe('Nước xả vải Tubu');
+      unmount();
+      sheetSpy.calls.length = 0;
+    }
+  });
+});

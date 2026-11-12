@@ -52,6 +52,7 @@ import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, type OrderA
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
+import { joinVariationLine, variationLabel } from '../utils/variation-label';
 import { customerOrderNote, isSubscriptionOrder, openProductSlug } from '@tubutree/app-core/api/orders';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
@@ -304,7 +305,10 @@ export default function OrderDetailPage() {
   const timelineSteps = buildOrderTimelineSteps(o.status, orderTimelineStamps(tOrder));
   const shareText = formatOrderShareSummary({
     code: o.code,
-    items: o.items.map((it) => ({ name: it.variationName && it.variationName !== it.productName ? `${it.productName} (${it.variationName})` : it.productName, quantity: it.quantity })),
+    items: o.items.map((it) => {
+      const lineVariation = variationLabel(it.variationName);
+      return { name: lineVariation && lineVariation !== it.productName ? `${it.productName} (${lineVariation})` : it.productName, quantity: it.quantity };
+    }),
     totalAmount: o.total,
   });
   // Đơn không có hành trình 5 bước (huỷ/hoàn) mới in mốc hãng riêng; lịch sử toàn dòng rác thì không dựng khung trống.
@@ -407,7 +411,7 @@ export default function OrderDetailPage() {
               >
                 <ProductThumb src={it.thumbnail} alt="" size={48} />
                 <Text size="small" style={{ flex: 1, minWidth: 0 }}>
-                  {it.productName} · {it.variationName}{' '}
+                  {joinVariationLine(it.productName, variationLabel(it.variationName))}{' '}
                   <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', display: 'inline', fontVariantNumeric: 'tabular-nums' }}>
                     ×{it.quantity}
                   </Text>

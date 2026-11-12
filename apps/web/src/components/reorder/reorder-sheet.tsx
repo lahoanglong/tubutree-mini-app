@@ -17,6 +17,7 @@ import {
 import { useCartUnits } from './use-cart-units';
 import { useReorder } from './use-reorder';
 import { ProductThumb } from '@/components/mini';
+import { variationLabel } from '@/lib/variation-label';
 import { reorderSavingsNote, reorderSkippedNote, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
 
 export interface ReorderSheetProps {
@@ -203,6 +204,7 @@ function ReorderLineRow({ line, value, inCart, onChange }: { line: ReorderLine; 
   const checked = line.available && (value?.checked ?? false);
   const qty = value?.quantity ?? line.defaultQuantity;
   const { unitPrice, notices } = lineAt(line, qty, inCart);
+  const variation = variationLabel(line.variationName);
   return (
     <div data-testid="reorder-line" className="flex items-start gap-2.5">
       <label className="flex h-11 w-11 flex-none items-center justify-center">
@@ -221,7 +223,7 @@ function ReorderLineRow({ line, value, inCart, onChange }: { line: ReorderLine; 
       </div>
       <div className="flex min-w-0 flex-1 flex-col gap-1">
         <p className={`truncate text-sm font-semibold ${line.available ? 'text-stone-900' : 'text-[color:var(--color-text-secondary)]'}`}>{line.productName}</p>
-        {line.variationName && <p className="text-xs text-stone-600">{line.variationName}</p>}
+        {variation && <p className="text-xs text-stone-600">{variation}</p>}
         {line.available && <p className="text-sm font-bold tabular-nums text-stone-900">{formatVnd(unitPrice)}</p>}
         <LineNotices notices={notices} />
         {line.available && (

@@ -25,6 +25,7 @@ import { SubscriptionEditSheet } from './subscription-edit-sheet';
 import { PAY_SHORT, addressText } from './subscription-options';
 import { ProductThumb } from '@/components/mini';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { joinDetailParts, variationLabel } from '@/lib/variation-label';
 
 type SubStatus = SubscriptionDTO['status'];
 const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: 'warning', CANCELLED: 'neutral' };
@@ -276,7 +277,7 @@ function SubscriptionCard({
         </div>
         <div className="min-w-0 flex-1">
           <div className="text-sm font-semibold text-stone-900">{s.productName}</div>
-          <div className="text-xs text-stone-600 tabular-nums">{`${s.variationName} · SL ${s.quantity}`}</div>
+          <div className="text-xs text-stone-600 tabular-nums">{joinDetailParts([variationLabel(s.variationName), `SL ${s.quantity}`])}</div>
           <div className="text-xs font-semibold text-forest-700 tabular-nums">{`Mỗi ${s.intervalWeeks} tuần · ${formatVnd(cycle.goods)}`}</div>
           {cycle.discount > 0 && (
             <div className="flex flex-wrap items-center gap-1.5">

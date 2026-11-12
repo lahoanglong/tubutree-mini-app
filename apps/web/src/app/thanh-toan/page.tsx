@@ -84,6 +84,7 @@ import { CART_EMPTY } from '@tubutree/app-core/cart-copy';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { clearSubmitted } from '@/lib/recycle-wizard';
+import { variationLabel } from '@/lib/variation-label';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
@@ -428,9 +429,10 @@ export default function CheckoutPage() {
       reload(['quote']);
       reload(['orders']);
       setReloadingStale(true);
+      // Không hạ cờ `reloadingStale` ở đây: cờ chỉ có nghĩa khi `place.isPending` (xem `placeLabel`) và `onMutate` đặt lại cho lần đặt kế, nên nhãn không phụ thuộc thứ tự giữa lần hạ cờ
+      // và lúc React Query chuyển sang `error` (nếu hạ ở đây mà React vẽ xen giữa thì nút chớp "Đang đặt hàng…" một khung).
       return settleWithin(Promise.all([...reloads.values()])).then(() => {
         placingRef.current = false;
-        setReloadingStale(false);
       });
     },
   });
@@ -676,7 +678,7 @@ export default function CheckoutPage() {
   const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
   // Lần đặt vừa rồi chưa rõ kết quả (mất mạng, quá thời gian, 5xx): nút nói rõ là gửi lại cùng đơn (cùng khoá, không tạo đơn trùng).
   const retryingPlace = placeFailed && isOutcomeUnknown(placeError) && unknownRev !== null && unknownRev === choiceTick;
-  const placeLabel = reloadingStale
+  const placeLabel = reloadingStale && place.isPending
     ? 'Đang cập nhật giỏ…'
     : place.isPending
       ? 'Đang đặt hàng…'
@@ -1273,15 +1275,21 @@ function DesktopLines({ items, shipments, fix }: { items: CartLine[]; shipments:
   );
 }
 
+function LineVariationNote({ name }: { name: string }) {
+  const label = variationLabel(name);
+  return label ? <div className="text-caption text-[color:var(--color-text-tertiary)]">{label}</div> : null;
+}
+
 function LineRow({ item, fix }: { item: CartLine; fix: LineFixView }) {
+  const lineVariation = variationLabel(item.variationName);
   return (
     <>
       <div data-testid="checkout-line" className="flex justify-between gap-2">
         <span className="min-w-0 text-[color:var(--color-text-secondary)]">
           <span className="line-clamp-2">{item.productName}</span>
           <span className="block text-caption tabular-nums text-[color:var(--color-text-tertiary)]">
-            {item.variationName && <span>{item.variationName}</span>}
-            {item.variationName ? ' · ' : ''}×{item.quantity}
+            {lineVariation && <span>{lineVariation}</span>}
+            {lineVariation ? ' · ' : ''}×{item.quantity}
           </span>
         </span>
         <span className="shrink-0 tabular-nums text-[color:var(--color-text-primary)]">{formatVnd(item.total)}</span>
@@ -1519,7 +1527,7 @@ function MobileItems({
                   <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
                   <div className="min-w-0 flex-1">
                     <div className="line-clamp-2 text-sm">{it.productName}</div>
-                    {it.variationName && <div className="text-caption text-[color:var(--color-text-tertiary)]">{it.variationName}</div>}
+                    <LineVariationNote name={it.variationName} />
                     <div className="text-caption tabular-nums text-[color:var(--color-text-tertiary)]">
                       {formatVnd(it.unitPrice)} × {it.quantity}
                     </div>

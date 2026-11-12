@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { vi } from '../../i18n/vi';
 import { formatVnd } from '../../utils/format';
+import { variationLabel } from '../../utils/variation-label';
 import { useCartUnits } from '../../hooks/use-cart-units';
 import { useReorder } from '../../hooks/use-reorder';
 import { useSheetSeq } from '../../hooks/use-sheet-seq';
@@ -185,6 +186,7 @@ function ReorderLineRow({
   const checked = line.available && (value?.checked ?? false);
   const qty = value?.quantity ?? line.defaultQuantity;
   const { unitPrice, notices } = lineAt(line, qty, inCart);
+  const variation = variationLabel(line.variationName);
   return (
     <div
       data-testid="reorder-line"
@@ -201,9 +203,9 @@ function ReorderLineRow({
         <Text variant="body-sm" tone={line.available ? 'primary' : 'secondary'} as="div" style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
           {line.productName}
         </Text>
-        {line.variationName && (
+        {variation && (
           <Text variant="caption" tone="tertiary" as="div">
-            {line.variationName}
+            {variation}
           </Text>
         )}
         {line.available && <PriceTag value={unitPrice} size="sm" />}

@@ -46,6 +46,7 @@ import { haptic } from '../../utils/haptic';
 import { settleWithin } from '../../utils/settle-within';
 import { createOrderKeyRing } from '../../utils/idempotency';
 import { parseTypedVnPhone } from '../../utils/vn-phone';
+import { joinDetailParts, variationLabel } from '../../utils/variation-label';
 import { vi } from '../../i18n/vi';
 import { ProductThumb } from '../ui/product-thumb';
 
@@ -393,7 +394,7 @@ export function CtvOrderSheet({ onClose }: { onClose: () => void }) {
               {l.productName}
             </Text>
             <Text variant="caption" tone="tertiary" as="div">
-              {l.variationName} · {formatVnd(quotedLines.get(l.variationId)?.unitPrice ?? l.unitPrice)}
+              {joinDetailParts([variationLabel(l.variationName), formatVnd(quotedLines.get(l.variationId)?.unitPrice ?? l.unitPrice)])}
             </Text>
             {quotedLines.get(l.variationId)?.isFlash && (
               <Text variant="caption" tone="brand" as="div">
@@ -591,7 +592,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
             return (
               <ListRow
                 key={v.id}
-                title={v.name}
+                title={variationLabel(v.name, p!.variations.length) ?? p!.name}
                 trailing={
                   <Text variant="caption" tone={out ? 'tertiary' : 'brand'} style={{ fontWeight: 600 }}>
                     {out ? t.outOfStock : formatVnd(v.salePrice ?? v.retailPrice)}

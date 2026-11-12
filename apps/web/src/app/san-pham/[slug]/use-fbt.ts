@@ -15,6 +15,7 @@ import { coreHttp } from '@/lib/core-http';
 import { useFlashAllowance } from '@/lib/use-flash-allowance';
 import { getCart } from '@/lib/shop-client';
 import { useRunningFlash } from '@/lib/use-flash-sales';
+import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 
 const FIVE_MIN = 5 * 60_000;
 const NO_PRODUCTS: ReadonlySet<string> = new Set();
@@ -67,7 +68,7 @@ export function useFbt({ productId, slug, name, thumbnail, variations, blockedRe
       productId,
       slug,
       // Cùng Mini App: sản phẩm nhiều phân loại ghi kèm phân loại đang chọn (khách thấy đúng món sẽ vào giỏ).
-      name: selected?.name && variations.length > 1 ? `${name} · ${selected.name}` : name,
+      name: selected && variations.length > 1 ? joinVariationLine(name, variationLabel(selected.name, variations.length)) : name,
       thumbnail,
       variationId: selected?.id ?? null,
       price: pricing?.price ?? 0,

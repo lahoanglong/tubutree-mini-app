@@ -18,6 +18,7 @@ import { serverNow } from '../../utils/server-clock';
 import { haptic } from '../../utils/haptic';
 import { browserStorage } from '../../utils/recently-viewed';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
+import { joinDetailParts, joinVariationLine, variationLabel } from '../../utils/variation-label';
 import { isEndpointMissing } from '../home/home-blocks';
 import { HomeBlockErrorSuppressed } from '../home/home-block-error';
 import { useBlockQuery } from '../home/use-block-query';
@@ -55,7 +56,7 @@ export function toCardProduct(p: PurchasedItem): ProductCardData {
   return {
     id: p.productId,
     slug: p.slug,
-    name: p.variationName ? `${p.productName} · ${p.variationName}` : p.productName,
+    name: joinVariationLine(p.productName, variationLabel(p.variationName)),
     brand: p.brand,
     thumbnail: p.thumbnail,
     basePrice: p.price,
@@ -275,7 +276,7 @@ function RebuyLine({
   onOpen: () => void;
 }) {
   const available = item.inStock !== false && item.stock > 0;
-  const caption = [item.variationName, item.timesBought > 1 ? vi.reorder.timesBought(item.timesBought) : null].filter(Boolean).join(' · ');
+  const caption = joinDetailParts([variationLabel(item.variationName), item.timesBought > 1 ? vi.reorder.timesBought(item.timesBought) : null]);
   return (
     <div data-testid="rebuy-line" style={{ height: PURCHASED_LINE_HEIGHT, padding: '0 16px', boxSizing: 'border-box' }}>
       {/* Card bọc nội dung trong một div riêng nên hàng ngang (flex) phải nằm trong div đó, không đặt ở style của Card. */}
@@ -336,6 +337,7 @@ function CompactRebuyCard({
   const available = item.inStock !== false && item.stock > 0;
   // Chỉ mời "Định kỳ" khi API xác nhận hàng không chỉ bán lẻ; API cũ chưa trả `retailOnly` thì không mời (máy chủ có thể từ chối).
   const subscribable = SUBSCRIPTIONS_IN_MINIAPP && item.retailOnly === false;
+  const variation = variationLabel(item.variationName);
   return (
     <Card variant="raised" padding={12}>
       <button
@@ -349,9 +351,9 @@ function CompactRebuyCard({
           <Text variant="body-sm" as="span" style={{ fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: NAME_MIN_HEIGHT }}>
             {item.productName}
           </Text>
-          {item.variationName && (
+          {variation && (
             <Text variant="caption" tone="secondary" as="span" style={{ display: 'block' }}>
-              {item.variationName}
+              {variation}
             </Text>
           )}
           <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>

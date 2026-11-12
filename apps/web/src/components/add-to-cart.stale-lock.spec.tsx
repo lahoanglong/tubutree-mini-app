@@ -2,8 +2,9 @@
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { flush, render, type Rendered } from '@/test-utils/dom';
-import { QueryClient } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ApiError, NetworkError } from '@/lib/client-api';
+import { recallCheckoutSelection, rememberCheckoutSelection } from '@/lib/checkout-selection';
 
 // Máy chủ từ chối thêm giỏ vì màn đã cũ (400/404/409/422: hết hàng, phân loại ngừng bán): lời lỗi hiện NGAY, tồn kho và giỏ tải lại, hai nút giữ khoá
 // (aria-busy) tới khi chúng về (tối đa `LOCK_REFRESH_WAIT_MS`), như Mini App (`holdUntilFresh`). Nhả sớm thì chạm lần hai gửi lại đúng lệnh trên tồn kho cũ.
@@ -57,6 +58,8 @@ const mountWithClient = async () => {
   await flush();
   return { ...r, qc };
 };
+/** Khách chuyển sang trang khác: component gỡ khỏi cây (root vẫn còn để `afterEach` dọn). */
+const leave = (r: Rendered & { qc: QueryClient }) => act(() => r.root.render(<QueryClientProvider client={r.qc}>{null}</QueryClientProvider>));
 const addBtn = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-testid="pdp-add-to-cart"]')!;
 const buyBtn = (c: HTMLElement) => c.querySelector<HTMLButtonElement>('[data-testid="pdp-buy-now"]')!;
 const tap = async (...els: HTMLElement[]) => {
@@ -210,6 +213,66 @@ describe('AddToCart: máy chủ từ chối thêm giỏ vì màn đã cũ giữ 
       await flush(4);
       expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
       expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    });
+
+    it('"Mua ngay" mà khách rời trang lúc đang chờ dữ liệu mới: không bị kéo sang thanh toán, lựa chọn vừa ghi bị bỏ', async () => {
+      mocks.applyCoupon.mockRejectedValue(new ApiError('Mã nhóm đã được dùng.', 409));
+      openedFrom(`?ma=${CODE}`);
+      const r = await mountWithClient();
+      const { gate } = watchCouponReloads(r.qc);
+      await tap(buyBtn(r.container));
+      await flush(3);
+      expect(sessionStorage.getItem('tubu_checkout_selection')).not.toBeNull();
+      leave(r);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1900));
+      });
+      await act(async () => gate.resolve());
+      await flush(4);
+      expect(mocks.push).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem('tubu_checkout_selection')).toBeNull();
+    });
+
+    it('"Mua ngay" mà khách rời trang rồi trang Giỏ ghi lựa chọn khác: lựa chọn của trang Giỏ được giữ nguyên', async () => {
+      mocks.applyCoupon.mockRejectedValue(new ApiError('Mã nhóm đã được dùng.', 409));
+      openedFrom(`?ma=${CODE}`);
+      const r = await mountWithClient();
+      const { gate } = watchCouponReloads(r.qc);
+      await tap(buyBtn(r.container));
+      await flush(3);
+      leave(r);
+      // Khách sang trang Giỏ và chọn một món khác trong lúc câu báo của lần "Mua ngay" còn đang giữ.
+      rememberCheckoutSelection(['line-from-cart-page']);
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1900));
+      });
+      await act(async () => gate.resolve());
+      await flush(4);
+      expect(mocks.push).not.toHaveBeenCalled();
+      expect(recallCheckoutSelection()).toEqual(['line-from-cart-page']);
+    });
+
+    it('"Mua ngay" không có lời báo nào để giữ mà khách rời trang lúc đang thêm giỏ: không sang thanh toán', async () => {
+      const addGate = defer();
+      mocks.addToCart.mockReset().mockImplementation(async () => {
+        await addGate.promise;
+        return withLine();
+      });
+      const r = await mountWithClient();
+      await tap(buyBtn(r.container));
+      expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+      leave(r);
+      await act(async () => addGate.resolve());
+      await flush(4);
+      expect(mocks.push).not.toHaveBeenCalled();
+      expect(sessionStorage.getItem('tubu_checkout_selection')).toBeNull();
+    });
+
+    it('"Mua ngay" khi khách vẫn ở trang: vẫn sang thanh toán (mốc đối chứng cho hai ca rời trang)', async () => {
+      const r = await mountWithClient();
+      await tap(buyBtn(r.container));
+      await flush(4);
+      expect(mocks.push).toHaveBeenCalledWith('/thanh-toan');
     });
 
     it.each([

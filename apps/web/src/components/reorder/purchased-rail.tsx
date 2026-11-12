@@ -18,6 +18,7 @@ import { getCart } from '@/lib/shop-client';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { useRunningFlash } from '@/lib/use-flash-sales';
 import { productHref } from '@/lib/product-href';
+import { joinDetailParts, joinVariationLine, variationLabel } from '@/lib/variation-label';
 import { SubscribeSheet } from '@/app/san-pham/[slug]/subscribe-sheet';
 import { Badge } from '@/components/ui/badge';
 import { Button, Card, PriceTag, ProductThumb, SectionHeader, Skeleton, Text } from '@/components/mini';
@@ -59,7 +60,7 @@ export function toCardProduct(p: PurchasedItem): ProductCardData {
   return {
     id: p.productId,
     slug: p.slug,
-    name: p.variationName ? `${p.productName} · ${p.variationName}` : p.productName,
+    name: joinVariationLine(p.productName, variationLabel(p.variationName)),
     brand: p.brand,
     thumbnail: p.thumbnail,
     basePrice: p.price,
@@ -92,6 +93,7 @@ function CompactRebuyCard({
   const available = item.inStock !== false && item.stock > 0;
   // Chỉ mời "Định kỳ" khi API xác nhận hàng không chỉ bán lẻ; API cũ chưa trả `retailOnly` thì không mời (máy chủ có thể từ chối).
   const subscribable = item.retailOnly === false;
+  const variation = variationLabel(item.variationName);
   return (
     <Card variant="raised" padding={12}>
       <button
@@ -109,9 +111,9 @@ function CompactRebuyCard({
           <Text variant="body-sm" as="span" style={{ fontWeight: 600, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', minHeight: NAME_MIN_HEIGHT }}>
             {item.productName}
           </Text>
-          {item.variationName && (
+          {variation && (
             <Text variant="caption" tone="secondary" as="span" style={{ display: 'block' }}>
-              {item.variationName}
+              {variation}
             </Text>
           )}
           <span style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
@@ -155,7 +157,7 @@ function RebuyLine({
 }) {
   const router = useRouter();
   const available = item.inStock !== false && item.stock > 0;
-  const caption = [item.variationName, item.timesBought > 1 ? reorderText.timesBought(item.timesBought) : null].filter(Boolean).join(' · ');
+  const caption = joinDetailParts([variationLabel(item.variationName), item.timesBought > 1 ? reorderText.timesBought(item.timesBought) : null]);
   return (
     <div data-testid="rebuy-line" style={{ height: PURCHASED_LINE_HEIGHT, boxSizing: 'border-box' }}>
       {/* Card bọc nội dung trong một div riêng nên hàng ngang (flex) phải nằm trong div đó, không đặt ở style của Card. */}

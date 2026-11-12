@@ -16,6 +16,7 @@ import { usePublicConfig } from '../hooks/use-public-config';
 import { formatDate, formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { closeAfterFresh, settleWithin } from '../utils/settle-within';
+import { joinDetailParts, variationLabel } from '../utils/variation-label';
 import { vi } from '../i18n/vi';
 import { Badge, type BadgeTone } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -239,7 +240,7 @@ function SubscriptionCard({
             {s.productName}
           </Text>
           <Text variant="caption" tone="tertiary" as="div" numeric>
-            {s.variationName} · SL {s.quantity}
+            {joinDetailParts([variationLabel(s.variationName), `SL ${s.quantity}`])}
           </Text>
           <Text variant="caption" tone="brand" as="div" numeric style={{ fontWeight: 600 }}>
             {vi.subscriptions.perCycle(s.intervalWeeks, formatVnd(cycle.goods))}
