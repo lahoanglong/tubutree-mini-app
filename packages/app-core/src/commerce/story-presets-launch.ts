@@ -121,14 +121,15 @@ export const LAUNCH_STORY_PRESETS: Record<string, ProductStoryConfig> = {
  * nó nhận kịch bản cấp nhãn (`brand-story.ts`).
  *
  * Hàng bảng Fuwa3e: [loại hàng như trong tên, quy cách, bậc, hương]. Bậc 2 = bao bì ghi enzyme lên men từ vỏ dứa; bậc 1 = chỉ thấy logo Enzyme Cleaner
- * hay "Eco-enzyme làm nền tảng", hoặc SKU chưa có ảnh bao bì. Hương lấy từ tên SKU, hoặc từ dòng "HƯƠNG ..." in trên nhãn đúng loại hàng đó.
+ * hay "Eco-enzyme làm nền tảng"; bậc 0 = SKU chưa có ảnh bao bì để đối chiếu nên chỉ nói đúng điều tên đã nêu (thương hiệu, loại hàng, quy cách).
+ * Hương lấy từ tên SKU, hoặc từ dòng "HƯƠNG ..." in trên nhãn đúng loại hàng đó.
  */
-type FuwaRow = readonly [type: string, size: string, tier: 1 | 2, scent?: string];
-const FUWA3E_SKUS: Record<string, FuwaRow> = {
-  'refill-nuoc-rua-tay-dang-bot-fuwa3e-10l': ['Refill Nước rửa tay dạng Bọt', '10L', 1],
-  'lau-noi-that-o-to-fuwa3e-300ml': ['Lau nội thất ô tô', '300ml', 1],
-  'xit-khu-mui-o-to-fuwa3e-150ml': ['Xịt khử mùi ô tô', '150ml', 1],
-  'xit-thom-huong-xuan-fuwa3e-300ml': ['Xịt thơm hương Xuân', '300ml', 1, 'Xuân'],
+export type FuwaRow = readonly [type: string, size: string, tier: 0 | 1 | 2, scent?: string];
+export const FUWA3E_SKUS: Record<string, FuwaRow> = {
+  'refill-nuoc-rua-tay-dang-bot-fuwa3e-10l': ['Refill Nước rửa tay dạng Bọt', '10L', 0],
+  'lau-noi-that-o-to-fuwa3e-300ml': ['Lau nội thất ô tô', '300ml', 0],
+  'xit-khu-mui-o-to-fuwa3e-150ml': ['Xịt khử mùi ô tô', '150ml', 0],
+  'xit-thom-huong-xuan-fuwa3e-300ml': ['Xịt thơm hương Xuân', '300ml', 0, 'Xuân'],
   'refill-nuoc-lau-san-que-fuwa3e-10l': ['Refill Nước lau sàn Quế', '10L', 2, 'Quế'],
   'nuoc-lau-san-sa-chanh-fuwa3e-100ml': ['Nước lau sàn Sả chanh', '100ml', 2, 'Sả chanh'],
   'nuoc-ngam-rua-thuc-pham-fuwa3e-100ml': ['Nước ngâm rửa thực phẩm', '100ml', 2],
@@ -182,12 +183,14 @@ function fuwaPreset([type, size, tier, scent]: FuwaRow): ProductStoryConfig {
     [
       tier === 2
         ? step('Từ vỏ dứa lên men', 'Bao bì ghi enzyme lên men từ vỏ dứa.', L('pineapple-enzyme', 'Vỏ dứa', 'top', 30, 24, 1.1, -15))
-        : step('Dòng Enzyme Cleaner', 'Bao bì ghi Fuwa3e Enzyme Cleaner.'),
+        : tier === 1
+          ? step('Dòng Enzyme Cleaner', 'Bao bì ghi Fuwa3e Enzyme Cleaner.')
+          : step('Thương hiệu Fuwa3e', 'Sản phẩm của thương hiệu Fuwa3e.'),
       step(type, hương ? `${hương}.` : 'Một sản phẩm trong dòng Fuwa3e.', ...(scentSprite ? [L(scentSprite[0], scentSprite[1], 'right', 74, 30, 0.95, 10)] : [])),
-      step(`Quy cách ${size}`, SIZE_NOTE, ...(tier === 1 && !scentSprite ? [L('water-droplet', 'Giọt nước', 'right', 74, 30, 0.9, 10)] : [])),
+      step(`Quy cách ${size}`, SIZE_NOTE, ...(tier !== 2 && !scentSprite ? [L('water-droplet', 'Giọt nước', 'right', 74, 30, 0.9, 10)] : [])),
     ],
-    points([tier === 2 ? 'Enzyme từ vỏ dứa' : 'Enzyme Cleaner', type, ...(hương ? [hương] : []), `Quy cách ${size}`]),
-    tier === 2 ? 'Sạch bằng enzyme từ vỏ dứa' : 'Fuwa3e, dòng Enzyme Cleaner',
+    points([tier === 2 ? 'Enzyme từ vỏ dứa' : tier === 1 ? 'Enzyme Cleaner' : 'Thương hiệu Fuwa3e', type, ...(hương ? [hương] : []), `Quy cách ${size}`]),
+    tier === 2 ? 'Sạch bằng enzyme từ vỏ dứa' : tier === 1 ? 'Fuwa3e, dòng Enzyme Cleaner' : 'Sản phẩm thương hiệu Fuwa3e',
   );
 }
 
@@ -204,8 +207,8 @@ function pinebooPreset(type: string, size: string, fact: string, ...extra: Ingre
 }
 
 export const CATALOG_STORY_PRESETS: Record<string, ProductStoryConfig> = {
-  'xit-tram-cho-be-pineboo-150ml': pinebooPreset('Xịt tràm cho bé', '150ml', 'Bình xịt, nhãn ghi Outside Body Spray.', L('cajeput-leaf', 'Tràm', 'right', 74, 30, 0.95, 10)),
-  'bot-rua-tay-cho-be-pineboo-300ml': pinebooPreset('Bọt rửa tay cho bé', '300ml', 'Dạng bọt, nhãn ghi Foaming Hand Soap for Kids.'),
+  'xit-tram-cho-be-pineboo-150ml': pinebooPreset('Xịt tràm cho bé', '150ml', 'Bình xịt, bao bì ghi Outside Body Spray.', L('cajeput-leaf', 'Tràm', 'right', 74, 30, 0.95, 10)),
+  'bot-rua-tay-cho-be-pineboo-300ml': pinebooPreset('Bọt rửa tay cho bé', '300ml', 'Dạng bọt, bao bì ghi Foaming Hand Soap for Kids.'),
   'bot-tam-goi-cho-be-pineboo-500ml': pinebooPreset('Bọt tắm gội cho bé', '500ml', 'Tắm và gội trong một chai bọt, bao bì ghi bọt từ ngô.'),
   'nuoc-giat-cho-be-pineboo-2-1l': pinebooPreset('Nước giặt sinh học cho bé', '2,1L', 'Bao bì ghi nước giặt sinh học cho bé.'),
   'nuoc-giat-cho-be-pineboo-500ml': pinebooPreset('Nước giặt sinh học cho bé', '500ml', 'Bao bì ghi nước giặt sinh học cho bé.'),

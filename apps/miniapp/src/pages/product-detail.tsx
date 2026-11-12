@@ -55,6 +55,7 @@ import { addOneVariationPricing } from '@tubutree/app-core/commerce/add-one-pric
 import { buildFrequentlyBoughtBundle, pickFbtPartners } from '@tubutree/app-core/commerce/frequently-bought';
 import { pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
 import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
+import { withProductCopyFallback } from '@tubutree/app-core/commerce/product-copy-fallback';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -190,6 +191,8 @@ export default function ProductDetailPage() {
     queryKey: ['product', slug],
     queryFn: () => fetchProduct(slug!),
     enabled: !!slug,
+    // Chữ dự phòng gắn lúc đọc (không ghi vào cache) và nằm trong chunk tải lười của trang này, không vào gói đầu.
+    select: withProductCopyFallback,
   });
   // "Đã xem gần đây" (spec 5b.4): ghi khi PDP mở THÀNH CÔNG. Đặt trước mọi early-return (luật hook).
   useRecordRecentlyViewed(product.isSuccess ? product.data : undefined);

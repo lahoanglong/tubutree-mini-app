@@ -299,30 +299,36 @@ describe('CATALOG_STORY_PRESETS: sản phẩm Pineboo và Fuwa3e trong catalog P
     }
   });
 
-  it('Fuwa3e: kịch bản nào cũng nhắc enzyme; chỉ nói "vỏ dứa" ở bậc bao bì có ghi, còn lại dùng "Enzyme Cleaner"', () => {
-    const dua = Object.entries(CATALOG_STORY_PRESETS).filter(([k]) => k.includes('fuwa3e') && textOf(CATALOG_STORY_PRESETS[k]!).join(' ').includes('vỏ dứa'));
-    const cleaner = Object.entries(CATALOG_STORY_PRESETS).filter(([k]) => k.includes('fuwa3e') && !textOf(CATALOG_STORY_PRESETS[k]!).join(' ').includes('vỏ dứa'));
-    expect(dua.length + cleaner.length).toBe(39);
+  it('Fuwa3e: chỉ nói "vỏ dứa" ở bậc bao bì có ghi, "Enzyme Cleaner" ở bậc chỉ thấy logo, và SKU chưa có ảnh bao bì chỉ nói thương hiệu', () => {
+    const NO_PACK_IMAGE = [
+      'lau-noi-that-o-to-fuwa3e-300ml',
+      'refill-nuoc-rua-tay-dang-bot-fuwa3e-10l',
+      'xit-khu-mui-o-to-fuwa3e-150ml',
+      'xit-thom-huong-xuan-fuwa3e-300ml',
+    ];
+    const all = Object.entries(CATALOG_STORY_PRESETS).filter(([k]) => k.includes('fuwa3e'));
+    const joined = (k: string) => textOf(CATALOG_STORY_PRESETS[k]!).join(' ');
+    const dua = all.filter(([k]) => joined(k).includes('vỏ dứa'));
+    const cleaner = all.filter(([k]) => !joined(k).includes('vỏ dứa') && joined(k).includes('Enzyme Cleaner'));
+    const brandOnly = all.filter(([k]) => !joined(k).includes('vỏ dứa') && !joined(k).includes('Enzyme Cleaner'));
+    expect(dua.length + cleaner.length + brandOnly.length).toBe(39);
+    expect(brandOnly.map(([k]) => k).sort()).toEqual(NO_PACK_IMAGE);
     expect(cleaner.map(([k]) => k).sort()).toEqual([
       'gel-rua-chen-cho-may-fuwa3e-500ml',
-      'lau-noi-that-o-to-fuwa3e-300ml',
       'nuoc-giat-huong-bac-ha-fuwa3e-500ml',
       'nuoc-giat-huong-cam-fuwa3e-3-5l',
       'nuoc-ho-tro-xa-lam-bong-fuwa3e-500ml',
       'nuoc-lau-ban-tho-fuwa3e-500ml',
       'nuoc-lau-san-sa-chanh-fuwa3e-1l',
-      'refill-nuoc-rua-tay-dang-bot-fuwa3e-10l',
-      'xit-khu-mui-o-to-fuwa3e-150ml',
-      'xit-thom-huong-xuan-fuwa3e-300ml',
     ]);
-    for (const [k, cfg] of cleaner) expect(textOf(cfg).join(' '), k).toContain('Enzyme Cleaner');
+    for (const [k] of brandOnly) expect(joined(k), k).not.toMatch(/enzyme|bao bì ghi/i);
   });
 
   it('hương chỉ xuất hiện khi tên SKU hoặc nhãn đúng loại hàng đó ghi; SKU không hương thì không có chữ "Hương"', () => {
     for (const [k, cfg] of Object.entries(CATALOG_STORY_PRESETS)) {
       const hasScent = textOf(cfg).some((l) => /^Hương /.test(l));
       if (hasScent) expect(k, k).toMatch(/bac-ha|cam|sa-chanh|que|xuan|da-nang|gel|nuoc-rua-tay|do-lot|ban-tho|ve-sinh-nha-tam-va-toilet-fuwa3e-2l/);
-      else expect(textOf(cfg).some((l) => /hương/i.test(l)), k).toBe(false);
+      else expect(textOf(cfg).some((l) => /(?<!\p{L})hương/iu.test(l)), k).toBe(false);
     }
   });
 

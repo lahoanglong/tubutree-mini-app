@@ -9,6 +9,7 @@ import {
   getStorefront,
   getStorefrontList,
 } from './api';
+import { productMetaDescription } from './product-seo';
 
 function res(status: number, body: unknown = {}): Response {
   return new Response(JSON.stringify(body), {
@@ -171,5 +172,31 @@ describe('getBrand — hạn bộ nhớ đệm', () => {
     vi.stubGlobal('fetch', fetchMock);
     await getBrand('fuwa3e');
     expect((fetchMock.mock.calls[0]![1] as { next: { revalidate: number } }).next.revalidate).toBeLessThanOrEqual(60);
+  });
+});
+
+// PROD để trống mô tả và thành phần ở phần lớn SKU: trang, meta và JSON-LD cùng đọc `getProduct`, nên chữ dự phòng bù ở đó.
+describe('getProduct — chữ dự phòng khi PROD trống mô tả và thành phần', () => {
+  const SLUG = 'xit-tram-cho-be-pineboo-150ml-b70d1d';
+  const base = { id: 'p1', slug: SLUG, name: 'Xịt tràm cho bé Pineboo 150ml', brand: 'Tubu Tree', shortDesc: null, variations: [] };
+
+  it('mô tả và thành phần rỗng → bù theo bao bì; meta description dùng được ngay thay vì câu chung chung', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { ...base, description: '', ingredients: [] })));
+    const p = await getProduct(SLUG);
+    expect(p!.description).toContain('Bao bì ghi eco-enzyme lên men từ vỏ dứa');
+    expect(p!.ingredients!.map((i) => i.name)).toContain('Eco-enzyme lên men từ vỏ dứa');
+    expect(productMetaDescription(p!)).toMatch(/^Xịt tràm cho bé Pineboo, quy cách 150ml\./);
+    expect(productMetaDescription(p!)).not.toContain('sản phẩm thiên nhiên');
+  });
+
+  it('PROD đã có chữ → giữ nguyên từng trường, kể cả `percentage` dạng chuỗi', async () => {
+    const ingredients = [{ name: 'Dầu tràm', percentage: '5%', benefit: 'Từ DB' }];
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { ...base, description: 'Mô tả của DB', ingredients })));
+    await expect(getProduct(SLUG)).resolves.toMatchObject({ description: 'Mô tả của DB', ingredients });
+  });
+
+  it('slug lạ → không bịa chữ', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { ...base, slug: 'san-pham-la-123abc', description: '', ingredients: null })));
+    await expect(getProduct('san-pham-la-123abc')).resolves.toMatchObject({ description: '', ingredients: null });
   });
 });
