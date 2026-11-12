@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useMemo, useRef, useState } from 'react';
 import { Input, Page, useSnackbar, useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
@@ -83,13 +83,16 @@ export default function AdminPage() {
   return <AdminHub />;
 }
 
-type Tab = 'staff' | 'shifts' | 'payroll';
+type Tab = 'staff' | 'shifts' | 'payroll' | 'catalog';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'staff', label: 'Nhân sự' },
   { key: 'shifts', label: 'Duyệt ca' },
   { key: 'payroll', label: 'Lương' },
+  { key: 'catalog', label: 'Catalog' },
 ];
+
+const CatalogQualitySection = lazy(() => import('./admin-catalog-quality'));
 
 const SECTION_STYLE = { padding: '0 16px 16px', display: 'flex', flexDirection: 'column', gap: 12 } as const;
 
@@ -120,6 +123,10 @@ function AdminHub() {
           <StaffSection />
         ) : tab === 'shifts' ? (
           <ShiftsSection />
+        ) : tab === 'catalog' ? (
+          <Suspense fallback={<Skeleton height={120} radius="var(--radius-card)" style={{ margin: '0 16px' }} />}>
+            <CatalogQualitySection />
+          </Suspense>
         ) : (
           <PayrollSection />
         )}

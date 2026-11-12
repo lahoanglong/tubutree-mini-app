@@ -66,6 +66,7 @@ vi.mock('../services/payroll-api', () => ({
   markPaid: mocks.markPaid,
 }));
 vi.mock('../services/attendance-api', () => ({ adminEditSession: mocks.adminEditSession }));
+vi.mock('./admin-catalog-quality', () => ({ default: () => <div data-testid="catalog-section">Phần catalog</div> }));
 vi.mock('../services/api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)),
@@ -232,12 +233,12 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
       expect(mocks.listStaff).not.toHaveBeenCalled();
     });
 
-    it('ADMIN: một h1; ba thẻ chuyển phần (tablist), mặc định "Nhân sự"; nút sang kiểm duyệt cộng đồng', async () => {
+    it('ADMIN: một h1; bốn thẻ chuyển phần (tablist), mặc định "Nhân sự"; nút sang kiểm duyệt cộng đồng', async () => {
       renderPage();
       await screen.findByText('Lan');
       expect(h1s()).toEqual(['Quản trị nhân sự']);
       const tabs = screen.getAllByRole('tab');
-      expect(tabs.map((x) => x.textContent)).toEqual(['Nhân sự', 'Duyệt ca', 'Lương']);
+      expect(tabs.map((x) => x.textContent)).toEqual(['Nhân sự', 'Duyệt ca', 'Lương', 'Catalog']);
       expect(screen.queryByRole('tab', { name: 'Duyệt đổi vỏ' })).toBeNull();
       expect(screen.getByRole('tab', { name: 'Nhân sự' })).toHaveAttribute('aria-selected', 'true');
       for (const tab of tabs) expect(tab.style.minHeight).toBe('44px');
@@ -563,12 +564,25 @@ describe('Quản trị nhân sự theo DS v2 (C-076, C-114)', () => {
     });
   });
 
+  describe('thẻ "Catalog"', () => {
+    it('chỉ nạp phần kiểm tra catalog khi bấm thẻ, và đổi sang thẻ khác thì gỡ ra', async () => {
+      renderPage();
+      await screen.findByText('Lan');
+      expect(screen.queryByTestId('catalog-section')).toBeNull();
+      goTab('Catalog');
+      expect(await screen.findByTestId('catalog-section')).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Catalog' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tabpanel', { name: 'Catalog' })).toBeInTheDocument();
+      goTab('Lương');
+      expect(screen.queryByTestId('catalog-section')).toBeNull();
+    });
+  });
   describe('số ca chờ duyệt trên thẻ "Duyệt ca" (E-26)', () => {
-    it('có 3 ca chờ → nhãn "Duyệt ca (3)"; hai thẻ kia không đổi', async () => {
+    it('có 3 ca chờ → nhãn "Duyệt ca (3)"; ba thẻ kia không đổi', async () => {
       mocks.getShiftsPendingCount.mockResolvedValue(3);
       renderPage();
       expect(await screen.findByRole('tab', { name: 'Duyệt ca (3)' })).toBeInTheDocument();
-      expect(screen.getAllByRole('tab').map((x) => x.textContent)).toEqual(['Nhân sự', 'Duyệt ca (3)', 'Lương']);
+      expect(screen.getAllByRole('tab').map((x) => x.textContent)).toEqual(['Nhân sự', 'Duyệt ca (3)', 'Lương', 'Catalog']);
       expect(mocks.getShiftsPendingCount).toHaveBeenCalledTimes(1);
     });
 
