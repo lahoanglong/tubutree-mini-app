@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Kiểm "biên" của Tubu Tree: DNS, hạn chứng chỉ, HTTP, nén, cache, /api/health, và (với --local) đĩa, container,
 # cron gia hạn chứng chỉ, bản backup gần nhất. Chỉ ĐỌC: gọi GET tới URL công khai, đọc df/docker ps/crontab, không ghi gì.
-# Chạy được trên macOS và Linux (cần bash, curl, openssl; dig/host/nslookup để kiểm DNS; perl hoặc timeout để chặn treo).
+# Chạy được trên macOS và Linux (cần bash, curl, openssl; dig/host/nslookup, không có thì getent hoặc python3, để kiểm DNS;
+# perl hoặc timeout để chặn treo).
 #
 #   bash ops/check-edge.sh                 # từ máy bất kỳ: kiểm api.tubutree.com và app.tubutree.com
 #   bash ops/check-edge.sh --local         # trên VPS: thêm đĩa, container unhealthy, cron certbot, backup
@@ -143,6 +144,12 @@ resolve_a() {
     out="$(host -t A "$1" 2>/dev/null | awk '/has address/ { print $NF }')"
   elif command -v nslookup >/dev/null 2>&1; then
     out="$(nslookup -type=A "$1" 2>/dev/null | awk '/^Name:/ { f = 1 } f && /^Address/ { print $NF }')"
+  elif command -v getent >/dev/null 2>&1; then
+    out="$(getent ahosts "$1" 2>/dev/null | awk '!seen[$1]++ { print $1 }')"
+  elif command -v python3 >/dev/null 2>&1; then
+    out="$(python3 -c 'import socket, sys
+for ip in sorted({a[4][0] for a in socket.getaddrinfo(sys.argv[1], None, socket.AF_INET)}):
+    print(ip)' "$1" 2>/dev/null)"
   else
     return 2
   fi
@@ -162,7 +169,7 @@ check_dns() {
   local host="$1" cloudflare="$2" ips list
   ips="$(resolve_a "$host")"
   if [ $? -eq 2 ]; then
-    warn "$host DNS: máy này không có dig, host hay nslookup nên bỏ qua"
+    warn "$host DNS: máy này không có dig, host, nslookup, getent hay python3 nên bỏ qua"
     return
   fi
   list="$(printf '%s' "$ips" | tr '\n' ' ' | sed 's/ $//')"
