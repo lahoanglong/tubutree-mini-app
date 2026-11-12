@@ -1316,3 +1316,66 @@ describe('PancakeSyncService — payload thiếu trường hoặc kiểu lạ (W
     });
   });
 });
+
+/**
+ * W126: bàn làm việc chất lượng catalog ghi mô tả, mô tả ngắn và thành phần AI soạn rồi admin duyệt vào DB. Đồng bộ Pancake chạy mỗi lượt
+ * trên mọi sản phẩm nên khoá ở đây rằng nó không bao giờ xoá những chữ đó: mô tả Pancake trống không đè mô tả đã duyệt,
+ * và đồng bộ không có đường nào ghi `shortDesc` hay `ingredients`.
+ */
+describe('PancakeSyncService — chữ catalog admin đã duyệt không bị đồng bộ xoá (W126)', () => {
+  const SINCE = '2026-11-12T00:00:00.000Z';
+  const ADMIN_TEXT = 'Mô tả admin đã duyệt từ bàn làm việc chất lượng catalog';
+  const approved = {
+    id: 'prod-w126',
+    pancakeId: 'w126',
+    basePrice: 1000,
+    isActive: true,
+    pancakeHold: null,
+    forSegment: ['x'],
+    categoryIds: ['c'],
+    images: ['https://mine/a.jpg'],
+    thumbnail: 'https://mine/a.jpg',
+    description: ADMIN_TEXT,
+    shortDesc: 'Mô tả ngắn đã duyệt',
+    ingredients: [{ name: 'Bơ tươi' }],
+  };
+  const runUpdate = async (pancakeDescription: unknown, withKey = true) => {
+    const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(approved) } });
+    const payload = product('w126', [variation('v-w126')], withKey ? { description: pancakeDescription } : {});
+    await new PancakeSyncService(prisma, makeClient([[payload]]), lifecycle).syncProducts(SINCE);
+    expect(mk(prisma).product.update).toHaveBeenCalledTimes(1);
+    return mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown>;
+  };
+
+  it.each([[''], ['   '], ['\n\t  '], [' '], [null], [undefined], [{}], [['x']], [42], [true]])('mô tả Pancake %j: giữ nguyên mô tả đã duyệt', async (pancakeDescription) => {
+    expect((await runUpdate(pancakeDescription)).description).toBe(ADMIN_TEXT);
+  });
+
+  it.each([['<p></p>'], ['<br>'], ['<p><br></p>'], ['&nbsp;'], ['<p>&nbsp;</p>'], [' <div> </div> ']])('mô tả Pancake chỉ là HTML trống %j: giữ nguyên mô tả đã duyệt', async (pancakeDescription) => {
+    expect((await runUpdate(pancakeDescription)).description).toBe(ADMIN_TEXT);
+  });
+
+  it('Pancake không gửi khoá description: giữ nguyên mô tả đã duyệt', async () => {
+    expect((await runUpdate(undefined, false)).description).toBe(ADMIN_TEXT);
+  });
+
+  it('mô tả Pancake có chữ thật vẫn ghi đè (Pancake là nguồn chính khi có nội dung)', async () => {
+    expect((await runUpdate('Mô tả từ Pancake')).description).toBe('Mô tả từ Pancake');
+    expect((await runUpdate('<p>Chữ thật từ Pancake</p>')).description).toBe('<p>Chữ thật từ Pancake</p>');
+  });
+
+  it.each([[''], ['Mô tả từ Pancake'], [null]])('bản ghi cập nhật không bao giờ mang shortDesc hay ingredients (mô tả Pancake %j)', async (pancakeDescription) => {
+    const data = await runUpdate(pancakeDescription);
+    expect(data).not.toHaveProperty('shortDesc');
+    expect(data).not.toHaveProperty('ingredients');
+  });
+
+  it('bản ghi tạo mới cũng không mang shortDesc hay ingredients; mô tả Pancake trống thì mô tả là chuỗi rỗng, không phải null', async () => {
+    const prisma = makePrisma();
+    await new PancakeSyncService(prisma, makeClient([[product('w126n', [variation('v-w126n')], { description: '  ' })]]), lifecycle).syncProducts(SINCE);
+    const data = mk(prisma).product.create.mock.calls[0][0].data as Record<string, unknown>;
+    expect(data.description).toBe('');
+    expect(data).not.toHaveProperty('shortDesc');
+    expect(data).not.toHaveProperty('ingredients');
+  });
+});

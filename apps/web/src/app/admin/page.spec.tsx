@@ -2937,6 +2937,18 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
     expect(container.textContent).not.toContain('Xuất CSV');
   });
 
+  it('nhân viên đủ mọi nhóm việc không thấy Kiểm tra catalog (API kiểm tra, soạn, duyệt, thống kê AI chỉ ADMIN): link ?tab=catalogQuality rơi về mục đầu và không gọi gì', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH', 'KHO', 'MARKETING', 'KE_TOAN'] };
+    window.history.replaceState(null, '', '/admin?tab=catalogQuality');
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    expect(navItems(container)).not.toContain('Kiểm tra catalog');
+    expect(container.textContent).not.toContain('Kiểm tra chất lượng Catalog');
+    expect(api.calls.some((c) => c.url.includes('/admin/catalog-quality') || c.url.includes('/admin/ai-advisor'))).toBe(false);
+  });
+
   it('Chat CSKH: chỉ nhân viên CSKH và ADMIN thấy; KHO thì không và URL ?tab=supportChat rơi về tab đầu được phép', async () => {
     mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
     mocks.access = { role: 'STAFF', staffPermissions: ['KHO'] };
@@ -4349,15 +4361,18 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(api.calls.some((c) => c.url.includes('/admin/reports/revenue') && c.url.includes(`from=${today}`) && c.url.includes(`to=${today}`))).toBe(true);
   });
 
-  it('mục "Kiểm tra catalog" nằm trong thanh điều hướng của quản trị viên và mở thẻ Kiểm tra chất lượng Catalog, chưa gọi mạng cho tới khi bấm kiểm tra', async () => {
+  it('mục "Kiểm tra catalog" nằm trong thanh điều hướng của quản trị viên và mở thẻ Kiểm tra chất lượng Catalog kèm thẻ AI tư vấn khách, chưa gọi lần kiểm cho tới khi bấm kiểm tra', async () => {
     window.history.replaceState(null, '', '/admin?tab=catalogQuality');
-    const api = mockFetch({ '/products': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } } });
+    const api = mockFetch({
+      '/admin/ai-advisor/stats': { body: { since: '2026-11-12T01:04:00.000Z', total: 0, ok: 0, fallback: 0, latencyP95Ms: null, latencySamples: 0, topSkus: [] } },
+    });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = await mount();
     await waitFor(() => (container.textContent ?? '').includes('Kiểm tra chất lượng Catalog'));
     expect([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].some((b) => navLabel(b) === 'Kiểm tra catalog')).toBe(true);
     expect(container.textContent).toContain('Kiểm tra ngay');
-    expect(api.calls.some((c) => c.url.includes('/products'))).toBe(false);
+    await waitFor(() => (container.textContent ?? '').includes('AI tư vấn khách'));
+    expect(api.calls.some((c) => c.url.includes('/admin/catalog-quality/audit') || c.url.includes('/products'))).toBe(false);
   });
 
   it('mã đơn ở "Đơn hàng mới nhất" của Tổng quan bấm được, mở tab Đơn hàng tìm đúng mã (E-56)', async () => {

@@ -13,6 +13,10 @@ import { StoryAssetsController } from './story-assets.controller';
 import { StoryAssetsService } from './story-assets.service';
 import { StoryDraftController } from './story-draft.controller';
 import { StoryDraftService } from './story-draft.service';
+import { CatalogQualityController } from './catalog-quality.controller';
+import { CatalogAuditService } from './catalog-audit.service';
+import { CopyDraftService } from './copy-draft.service';
+import { CopyApproveService } from './copy-approve.service';
 import { CategoryAdminController } from './category-admin.controller';
 import { CategoryAdminService } from './category-admin.service';
 import { ProductCategoryAdminController } from './product-category-admin.controller';
@@ -25,8 +29,8 @@ import { AiAdvisorModule } from '../ai-advisor/ai-advisor.module';
 
 @Module({
   imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule, AiAdvisorModule],
-  controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, ProductAdminController, StoryAssetsController, StoryDraftController, PublicImageController, ImageResizeController],
-  providers: [CatalogService, HomeService, CategoryAdminService, ProductCategoryAdminService, ProductAdminService, StoryAssetsService, StoryDraftService, PublicImageService, ImageResizeService],
+  controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, PublicImageController, ImageResizeController],
+  providers: [CatalogService, HomeService, CategoryAdminService, ProductCategoryAdminService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, PublicImageService, ImageResizeService],
   exports: [CatalogService, ImageResizeService],
 })
 export class CatalogModule {}

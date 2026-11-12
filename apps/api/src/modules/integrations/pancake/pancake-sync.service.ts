@@ -1,5 +1,6 @@
 import { ConflictException, Inject, Injectable, Logger, Optional, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
+import { isBlankHtmlText } from '@tubutree/shared-types';
 import { Cron } from '@nestjs/schedule';
 import { recordCatalogRun, type CatalogRunResult } from '../../ops/ops-state';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -472,7 +473,8 @@ export class PancakeSyncService implements OnModuleInit {
       ...variations.flatMap((v) => payloadTextList(v.images)),
     ];
 
-    const description = typeof p.description === 'string' && p.description.trim() ? p.description : null;
+    // `<p></p>`, `<br>` và `&nbsp;` là cách trình soạn của Pancake lưu ô mô tả để trống: coi như trống, kẻo xoá mô tả admin đã duyệt mỗi 15 phút.
+    const description = typeof p.description === 'string' && !isBlankHtmlText(p.description) ? p.description : null;
     const sellable = variations.filter((v) => !payloadRemoved(v.is_removed) && positivePrice(v.retail_price) !== null);
     const baseData = {
       name,

@@ -53,7 +53,7 @@ class LlmCallError extends Error {
 const GATEWAY_TASK = 'tubutree';
 const DEFAULT_ANTIGRAVITY_MODEL = 'gemini-3.8-flash-high';
 // Haiku: rẻ và nhanh cho câu tư vấn 2-4 câu; đổi bằng AI_ADVISOR_CLAUDE_MODEL, độc lập với CLAUDE_API_MODEL của Story Studio.
-const DEFAULT_CLAUDE_ADVISOR_MODEL = 'claude-haiku-4-5-20251001';
+export const DEFAULT_CLAUDE_ADVISOR_MODEL = 'claude-haiku-4-5-20251001';
 const DEFAULT_CLAUDE_MAX_TOKENS = 800;
 // Mini App bỏ chờ sau 15 giây: Claude chậm hơn mức này thì khách đã thấy lỗi chung, câu xin lỗi và provider dự phòng không tới được họ.
 const DEFAULT_CLAUDE_TIMEOUT_MS = 12_000;
