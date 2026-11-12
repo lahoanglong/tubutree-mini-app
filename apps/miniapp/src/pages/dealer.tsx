@@ -48,6 +48,7 @@ import { vi } from '../i18n/vi';
 import { useUploadBusy } from '../hooks/use-upload-busy';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
+import { variationLabel } from '../utils/variation-label';
 import { newIdempotencyKey } from '../utils/idempotency';
 import { ImageUpload } from '../components/image-upload';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
@@ -792,6 +793,7 @@ function PriceRow({
 }) {
   const preorder = preorderQty(qty, row.stock);
   const discountPct = realDiscountPct(row.retailPrice, row.dealerPrice);
+  const variation = variationLabel(row.variation);
   return (
     <div
       style={{
@@ -811,9 +813,9 @@ function PriceRow({
         >
           {row.product}
         </Text>
-        {row.variation && (
+        {variation && (
           <Text variant="caption" as="div" style={{ fontWeight: 700 }}>
-            {row.variation}
+            {variation}
           </Text>
         )}
         <Text variant="caption" tone="tertiary" as="div">

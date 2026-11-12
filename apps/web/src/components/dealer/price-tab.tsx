@@ -16,6 +16,7 @@ import { settleWithin } from '@/lib/settle-within';
 import { serverRejectedState } from '@/lib/server-rejected-state';
 import { bankPaymentHref } from '@/lib/order-view';
 import { useDebounced } from '@/lib/use-debounced';
+import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { Badge } from '@/components/ui/badge';
@@ -42,12 +43,13 @@ const ORDER_REFRESH_KEYS = ['dealer-orders', 'dealer-me', 'dealer-credit', 'deal
 function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: (n: number) => void }) {
   const preorder = preorderQty(qty, row.stock);
   const discountPct = realDiscountPct(row.retailPrice, row.dealerPrice);
+  const variation = variationLabel(row.variation);
   return (
     <li className="flex items-center gap-2 border-b border-stone-200 p-3">
       <div className="min-w-0 flex-1">
         {/* Tên cho hai dòng, phân loại ở dòng riêng ngay trên SKU: hai phân loại của cùng một món không còn trông giống hệt nhau. */}
         <div className="line-clamp-2 text-sm font-semibold text-stone-900">{row.product}</div>
-        {row.variation && <div className="text-xs font-[700] text-stone-900">{row.variation}</div>}
+        {variation && <div className="text-xs font-[700] text-stone-900">{variation}</div>}
         <div className="text-xs text-stone-600">
           {row.sku} · {row.stock > 0 ? `tồn ${row.stock}` : OUT_OF_STOCK_PREORDER}
         </div>
@@ -65,7 +67,7 @@ function PriceRow({ row, qty, onQty }: { row: PricelistRow; qty: number; onQty: 
         )}
       </div>
       <div className="flex-none">
-        <QuantitySelector itemLabel={row.variation ? `${row.product} ${row.variation}` : row.product} value={qty} min={0} max={DEALER_MAX_QTY} size="md" onChange={onQty} />
+        <QuantitySelector itemLabel={joinVariationLine(row.product, variation, ' ')} value={qty} min={0} max={DEALER_MAX_QTY} size="md" onChange={onQty} />
       </div>
     </li>
   );

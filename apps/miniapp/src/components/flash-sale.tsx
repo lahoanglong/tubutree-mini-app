@@ -17,6 +17,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { flashCardProduct, soldPercent } from '../utils/flash-display';
 import { haptic } from '../utils/haptic';
 import { serverNow } from '../utils/server-clock';
+import { variationLabel } from '../utils/variation-label';
 import { settleWithin } from '../utils/settle-within';
 import { vi } from '../i18n/vi';
 import { getErrorMessage, isStaleStateError } from '../services/api';
@@ -129,7 +130,7 @@ export const FlashSale = memo(function FlashSale({ items, loading, error, onRetr
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
         {live.map((item) => (
           <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(it.variationName))} />
+            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} />
           </RailCell>
         ))}
       </RailShell>
@@ -192,7 +193,7 @@ export function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleAct
       // variationId: sản phẩm nhiều phân loại thì flash chỉ gắn vào MỘT phân loại, mà PDP mặc định chọn phân loại đầu còn hàng,
       // mở ra là giá thường, không nhãn, không đếm ngược. Khách tưởng bị treo giá (P1-3 audit mạch lạc).
       navState={{ variationId: item.variationId }}
-      note={reserveVariation ? (item.variationName ?? '') : undefined}
+      note={reserveVariation ? (variationLabel(item.variationName) ?? '') : undefined}
       footerHeight={SOLD_FOOTER_HEIGHT}
       footer={
         <div style={{ height: SOLD_FOOTER_HEIGHT, paddingTop: 4, boxSizing: 'border-box' }}>

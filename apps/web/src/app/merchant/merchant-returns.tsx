@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listMerchantReturns, markMerchantReturnReceived, type MerchantReturn } from '@/lib/merchant-client';
 import { formatDateTime } from '@/lib/format-date';
+import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 import { BTN_XS_PRIMARY, ToneBadge } from '@/components/admin/ui';
 import { EvidenceImages } from '@/components/admin/evidence-images';
 import { actionErrorText } from '@/lib/error-text';
@@ -75,8 +76,7 @@ export function MerchantReturnsSection({ showEmpty = false }: { showEmpty?: bool
               <ul className="text-stone-800">
                 {r.lines.map((l, i) => (
                   <li key={i} className="break-words">
-                    {l.productName}
-                    {l.variationName ? ` · ${l.variationName}` : ''} ×{l.quantity}
+                    {joinVariationLine(l.productName, variationLabel(l.variationName))} ×{l.quantity}
                   </li>
                 ))}
               </ul>

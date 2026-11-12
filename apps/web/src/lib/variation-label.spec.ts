@@ -61,3 +61,12 @@ describe('joinDetailParts: nối các phần có chữ', () => {
     expect(joinDetailParts(['Trả Dầu gội', 'Chai'], ' ')).toBe('Trả Dầu gội Chai');
   });
 });
+
+describe('chuỗi "[object Object]" rò vào tên phân loại không tới được khách', () => {
+  it('qua re-export: gỡ khỏi nhãn và khỏi phần chi tiết', () => {
+    expect(variationLabel('Can 5L [object Object]')).toBe('Can 5L');
+    expect(variationLabel('[object Object]', 1)).toBeNull();
+    expect(variationLabel('[object Object]', 2)).toBe(DEFAULT_VARIATION_LABEL);
+    expect(joinDetailParts(['[object Object]', 'SL 3'])).toBe('SL 3');
+  });
+});

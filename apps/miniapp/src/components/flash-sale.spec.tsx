@@ -302,6 +302,13 @@ describe('FlashSale — thẻ giờ vàng (C-076 di cư DS v2)', () => {
     expect(screen.queryByText('Mặc định')).toBeNull();
   });
 
+  it('tên phân loại lẫn "[object Object]": gỡ chuỗi đó khỏi dòng phân loại, không để lộ cho khách', async () => {
+    const [first, ...rest] = three({ variationName: 'Can 5L [object Object]' });
+    renderFlash({ items: [first!, ...rest.map((it) => ({ ...it, variationName: '[object Object]' }))] });
+    expect(await screen.findByText('Can 5L')).toBeInTheDocument();
+    expect(screen.queryByText(/object Object/)).toBeNull();
+  });
+
   it('chạm thẻ → sang SP kèm đúng phân loại đang giờ vàng', async () => {
     renderFlash({ items: three({}) });
     fireEvent.click(await screen.findByText('Nước rửa chén'));

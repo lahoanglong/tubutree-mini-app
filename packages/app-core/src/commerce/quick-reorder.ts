@@ -3,6 +3,7 @@ import type { PurchasedItem } from '../api/orders';
 import { isFlashRunning, type FlashPriceItem } from '../flash-price';
 import { rebuyPricing } from '../rebuy-pricing';
 import { serverNow } from '../server-clock';
+import { joinVariationLine, variationLabel } from '../variation-label';
 import { addOneCardPricing } from './add-one-pricing';
 import { variationLinePreview } from './flash-line';
 
@@ -80,7 +81,7 @@ function fromPurchased(p: PurchasedItem, flash: readonly FlashPriceItem[], now: 
     productId: p.productId,
     slug: p.slug,
     variationId: p.variationId,
-    name: p.variationName ? `${p.productName} · ${p.variationName}` : p.productName,
+    name: joinVariationLine(p.productName, variationLabel(p.variationName)),
     thumbnail: p.thumbnail,
     price: pricing.price,
     compareAt: pricing.compareAt,

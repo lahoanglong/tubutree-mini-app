@@ -1,6 +1,7 @@
 import type { ConsignmentExcluded, ConsignmentExcludedLine, ConsignmentTerms, SettlementLine } from '@/lib/merchant-client';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
+import { variationParen } from '@/app/merchant/variation-paren';
 import { BTN_XS_SECONDARY, ScrollRegion, ToneBadge } from '@/components/admin/ui';
 
 /** Số tiền có dấu: dương Tubu trả gian hàng, âm gian hàng nộp lại Tubu. */
@@ -89,7 +90,7 @@ export function SettlementTable<L extends SettlementLine>({
                       {l.item && (
                         <span>
                           {l.item.productName}
-                          {l.item.variationName ? ` (${l.item.variationName})` : ''}
+                          {variationParen(l.item.variationName)}
                           {itemQuantityText(l, l.item.quantity)}
                         </span>
                       )}
@@ -195,7 +196,7 @@ export function ConsignmentExcludedList({
                 <td className="px-3 py-2 text-stone-600">{formatDate(l.createdAt)}</td>
                 <td className="px-3 py-2 text-stone-700">
                   {l.productName}
-                  {l.variationName ? ` (${l.variationName})` : ''} × {l.quantity}
+                  {variationParen(l.variationName)} × {l.quantity}
                 </td>
                 <td className="px-3 py-2 text-right">{formatVnd(l.goodsAmount)}</td>
                 <td className="px-3 py-2 text-stone-600">{excludedReason(l, data.settleFrom, viewer)}</td>

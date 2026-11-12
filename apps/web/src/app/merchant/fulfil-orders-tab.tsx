@@ -18,6 +18,7 @@ import {
 import { pageRange } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDateTime } from '@/lib/format-date';
+import { variationParen } from './variation-paren';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
 import {
   BTN_SMALL,
@@ -238,7 +239,7 @@ export function FulfilOrderCard({ order: o, onNotice }: { order: FulfilOrder; on
             {o.items.map((it) => (
               <li key={it.id} className="text-xs text-stone-700">
                 {it.productName}
-                {it.variationName && it.variationName !== 'Mặc định' ? ` (${it.variationName})` : ''}{' '}
+                {variationParen(it.variationName, true)}{' '}
                 <span className="font-semibold">x{it.quantity}</span>
               </li>
             ))}
