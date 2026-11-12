@@ -445,7 +445,7 @@ export function CouponBox({
                 {currentCode}
               </span>
               {appliedDiscount > 0 && (
-                <span data-testid="coupon-discount" className="shrink-0 whitespace-nowrap text-caption font-normal text-success-fg">
+                <span data-testid="coupon-discount" className="shrink-0 whitespace-nowrap text-caption font-normal tabular-nums text-success-fg">
                   -{formatVnd(appliedDiscount)}
                 </span>
               )}
@@ -528,7 +528,7 @@ export function CouponBox({
                     {currentCode}
                   </span>
                   {appliedDiscount > 0 && (
-                    <span data-testid="coupon-discount" className="shrink-0 whitespace-nowrap text-caption font-normal text-success-fg">
+                    <span data-testid="coupon-discount" className="shrink-0 whitespace-nowrap text-caption font-normal tabular-nums text-success-fg">
                       -{formatVnd(appliedDiscount)}
                     </span>
                   )}
