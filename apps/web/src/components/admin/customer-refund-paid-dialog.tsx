@@ -15,6 +15,7 @@ import {
 import { formatVnd } from '@/lib/shop-client';
 import { formatDateTime } from '@/lib/format-date';
 import { EMPTY_BANK, bankDetailsError, type RefundBankInput } from '@/lib/refund-rules';
+import { ADMIN_TABULAR } from './tabular-nums';
 import { INPUT_CLASS, Notice } from './ui';
 
 export type MarkPaidOutcome = { kind: 'paid' } | { kind: 'claimed' } | { kind: 'stale'; message: string };
@@ -184,7 +185,7 @@ export function CustomerRefundPaidDialog({
         aria-describedby={bodyId}
         aria-busy={busy}
         onClick={(e) => e.stopPropagation()}
-        className="max-h-full w-full max-w-md overflow-y-auto rounded-sheet bg-stone-0 p-5 shadow-raised outline-none"
+        className={`max-h-full w-full max-w-md overflow-y-auto rounded-sheet bg-stone-0 p-5 shadow-raised outline-none ${ADMIN_TABULAR}`}
       >
         <h2 id={titleId} className="font-display text-base font-semibold text-stone-900">
           {claiming ? 'Bắt đầu chuyển khoản' : 'Xác nhận đã chuyển khoản'}

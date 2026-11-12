@@ -26,6 +26,15 @@ import {
   type PancakeCategoryMap,
 } from './pancake-category-map';
 import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
+import {
+  ZeroPriceCollector,
+  classifyZeroPrice,
+  isGiftMarked,
+  recordZeroPrice,
+  summarizeZeroPrice,
+  zeroPriceLogLine,
+  type ZeroPriceSummary,
+} from './pancake-zero-price';
 
 /** Lý do đồng bộ tự tắt (Variation/Product.pancakeHold). */
 export const PANCAKE_HOLD = { REMOVED: 'REMOVED', NO_PRICE: 'NO_PRICE' } as const;
@@ -110,6 +119,8 @@ export class PancakeSyncService implements OnModuleInit {
   /** Chặn nhanh lượt chồng trên chính replica này; chặn giữa các replica là khoá chung CATALOG_SYNC_LEASE. */
   private running = false;
   private bootSyncStarted = false;
+  /** SKU Pancake báo giá 0đ ở lượt đồng bộ gần nhất trên replica này (nút đồng bộ tay của admin trả lại cho người bấm). */
+  private lastZero: ZeroPriceSummary | null = null;
   /** Trần số trang — phòng trường hợp API bỏ qua tham số `page` và trả mãi cùng một trang. */
   private static readonly MAX_PAGES = 500;
 
@@ -258,6 +269,11 @@ export class PancakeSyncService implements OnModuleInit {
     }
   }
 
+  /** Kết quả 0đ của lượt đồng bộ vừa xong (null nếu chưa có lượt nào kể từ khi khởi động). */
+  lastZeroPrice(): ZeroPriceSummary | null {
+    return this.lastZero;
+  }
+
   private async sweep(lease: RunLease, updatedSince: string | undefined, opts: { forceStock?: boolean }): Promise<number> {
     // Mốc cursor lấy ở ĐẦU sync: sản phẩm đổi trong lúc sync sẽ được bắt ở lần kế
     // (upsert idempotent nên overlap nhẹ là an toàn — thà trùng còn hơn bỏ sót).
@@ -271,6 +287,7 @@ export class PancakeSyncService implements OnModuleInit {
     let unnamedRows = 0;
     const expected: SweepExpected = {};
     const seen: SweepSeen = { products: new Set(), variations: new Set() };
+    const zero = new ZeroPriceCollector();
     try {
       for (;;) {
       if (page > 1 && !(await lease.renew())) {
@@ -308,7 +325,7 @@ export class PancakeSyncService implements OnModuleInit {
         // Cô lập lỗi từng sản phẩm — 1 SP hỏng (vd slug trùng) không làm hỏng cả batch.
         try {
           // Sản phẩm thiếu mã/tên (nháp trên Pancake) là "bỏ qua", không phải lỗi: không được làm màn sức khoẻ báo lỗi mỗi lượt.
-          if (await this.upsertProduct(p, { ...opts, stockReadAt })) count++;
+          if (await this.upsertProduct(p, { ...opts, stockReadAt, zero })) count++;
           else skipped++;
         } catch (err) {
           failed++;
@@ -346,16 +363,35 @@ export class PancakeSyncService implements OnModuleInit {
           await this.deactivateMissing(seen);
         }
       }
+      const zeroSummary = await this.noteZeroPrice(zero, !updatedSince, failed + skipped);
       this.lastRunAt = startedAt;
       this.logger.log(
         `Đã đồng bộ ${count} sản phẩm từ Pancake${failed ? ` (${failed} lỗi, bỏ qua)` : ''}${skipped ? ` (${skipped} sản phẩm thiếu mã/tên, bỏ qua)` : ''}.`,
       );
-      await this.noteRun({ ok: true, count, failed, skipped });
+      await this.noteRun({ ok: true, count, failed, skipped, ...(zeroSummary.count ? { zeroPriceAnomalies: zeroSummary.count } : {}) });
       return count;
     } catch (err) {
       await this.noteRun({ ok: false, error: err instanceof Error ? err.message : String(err) });
       throw err;
     }
+  }
+
+  /**
+   * SKU Pancake báo giá 0đ trong lượt này: một dòng log có cấu trúc + lưu danh sách cho admin. Giá Tubu đã được giữ ở upsertVariation;
+   * đây chỉ để người vận hành biết SKU nào cần sửa trên POS. Best-effort như noteRun: lỗi ghi không được làm hỏng lượt đồng bộ.
+   */
+  private async noteZeroPrice(zero: ZeroPriceCollector, full: boolean, unread: number): Promise<ZeroPriceSummary> {
+    const found = zero.found;
+    const summary = summarizeZeroPrice(found, full ? 'FULL' : 'INCREMENTAL');
+    this.lastZero = summary;
+    if (found.length) this.logger.warn(zeroPriceLogLine(summary));
+    try {
+      // `unread` = sản phẩm lỗi hoặc bị bỏ qua (thiếu mã/tên): biến thể của chúng chưa được đọc, nên lượt quét toàn bộ cũng chỉ gộp, không thay hẳn danh sách.
+      await recordZeroPrice(this.prisma, { replace: full && unread === 0, found, resolved: zero.resolved });
+    } catch (e) {
+      this.logger.warn(`Không ghi được danh sách SKU giá 0đ của Pancake: ${e instanceof Error ? e.message : e}`);
+    }
+    return summary;
   }
 
   /** Lượt đồng bộ vào màn sức khoẻ vận hành — best-effort: ghi lỗi không được làm hỏng/che lỗi của lượt đồng bộ. */
@@ -455,7 +491,7 @@ export class PancakeSyncService implements OnModuleInit {
   }
 
   /** `false` = bỏ qua vì thiếu mã/tên đọc được (dữ liệu hỏng của Pancake), không ghi gì. */
-  private async upsertProduct(p: PancakeProductDTO, opts: { forceStock?: boolean; stockReadAt?: Date } = {}): Promise<boolean> {
+  private async upsertProduct(p: PancakeProductDTO, opts: { forceStock?: boolean; stockReadAt?: Date; zero?: ZeroPriceCollector } = {}): Promise<boolean> {
     // Pancake POS dùng `id` cho sản phẩm (product_id là của variation) — lấy id thật.
     const pancakeId = payloadId(p.id) ?? payloadId(p.product_id);
     const name = payloadText(p.name);
@@ -567,7 +603,7 @@ export class PancakeSyncService implements OnModuleInit {
     vid: string,
     productId: string,
     productName: string,
-    opts: { forceStock?: boolean; stockReadAt?: Date },
+    opts: { forceStock?: boolean; stockReadAt?: Date; zero?: ZeroPriceCollector },
   ): Promise<{ oldPrice: number; newPrice: number } | null> {
     let drop: { oldPrice: number; newPrice: number } | null = null;
     // So giá cũ ↔ mới để phát hiện GIẢM GIÁ (§6.14.10 Price Drop Alert).
@@ -588,6 +624,10 @@ export class PancakeSyncService implements OnModuleInit {
     // Cột `sku` là khoá duy nhất: ghi nguyên văn chuỗi Pancake gửi (không cắt khoảng trắng, kẻo lệch so với các lần đồng bộ trước và
     // với sku admin đã dán); rỗng/khoảng trắng/object lấy mã biến thể, số đổi thành chuỗi.
     const sku = typeof v.sku === 'string' ? (v.sku.trim() ? v.sku : vid) : (payloadText(v.sku) ?? vid);
+    if (opts.zero) {
+      const kind = classifyZeroPrice({ retail: v.retail_price, removed, gift: isGiftMarked(v), prev });
+      opts.zero.note(vid, kind && { pancakeId: vid, sku, productName, kind, keptPrice: kind === 'PRICE_KEPT' ? (prev?.retailPrice ?? null) : null });
+    }
     // Cột `weight` là Int: chuỗi làm Prisma ném và hỏng cả sản phẩm; số lẻ bỏ phần lẻ (đúng giá trị Prisma vẫn ghi trước đây); âm/rác là không biết.
     const weight = payloadNonNegInt(v.weight, { trunc: true });
     const label = variantLabel(v.fields) ?? productName;

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { createPortal } from 'react-dom';
 import { safeAreaPadX } from '@/lib/safe-area';
 import { hasVisibleText } from '@/lib/admin-visible-text';
+import { ADMIN_TABULAR } from './tabular-nums';
 import { INPUT_CLASS } from './ui';
 
 export interface ConfirmOptions {
@@ -129,7 +130,7 @@ export function ConfirmDialog({ options, onAnswer }: { options: ConfirmOptions; 
         aria-labelledby={titleId}
         aria-describedby={bodyId}
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-md rounded-sheet bg-stone-0 p-5 shadow-raised"
+        className={`w-full max-w-md rounded-sheet bg-stone-0 p-5 shadow-raised ${ADMIN_TABULAR}`}
       >
         <h2 id={titleId} className="font-display text-base font-semibold text-stone-900">
           {options.title}

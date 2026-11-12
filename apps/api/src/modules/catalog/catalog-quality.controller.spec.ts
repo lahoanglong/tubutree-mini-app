@@ -83,6 +83,7 @@ describe('CatalogQualityController', () => {
     expect(Reflect.getMetadata('path', CatalogQualityController)).toBe('admin/catalog-quality');
     const proto = CatalogQualityController.prototype;
     expect(Reflect.getMetadata('path', proto.getAudit)).toBe('audit');
+    expect(Reflect.getMetadata('path', proto.getPancakeZeroPrice)).toBe('pancake-zero-price');
     expect(Reflect.getMetadata('path', proto.copyDrafts)).toBe('copy-drafts');
     expect(Reflect.getMetadata('path', proto.copyApprove)).toBe('copy-approve');
   });

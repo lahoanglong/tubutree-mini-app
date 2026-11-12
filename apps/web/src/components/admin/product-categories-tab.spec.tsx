@@ -76,6 +76,20 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     expect(filtered.url).toContain('onSale=1');
   });
 
+  it('ô tích chọn từng sản phẩm nằm trong nhãn có vùng chạm 44px trên điện thoại, nút xem nhóm hàng Pancake cũng cao 44px', async () => {
+    const { container } = setup();
+    await flush();
+    const boxes = [...container.querySelectorAll<HTMLInputElement>('li input[type="checkbox"]')];
+    expect(boxes.length).toBeGreaterThan(0);
+    for (const box of boxes) {
+      const wrapper = box.closest('label');
+      expect(wrapper).not.toBeNull();
+      expect(wrapper!.className).toContain('min-h-[44px]');
+      expect(wrapper!.className).toContain('min-w-[44px]');
+    }
+    expect(byText(container, 'button', 'nhóm hàng Pancake')!.className).toContain('min-h-[44px]');
+  });
+
   it('bộ chọn danh mục theo thứ tự cây quản trị: mục con thụt "— ", mục cha có con ghi "(có mục con)"', async () => {
     const { m, container } = setup();
     await flush();

@@ -16,6 +16,8 @@ export interface PancakeVariationDTO {
   is_removed?: boolean;
   /** Pancake POS: ẩn trên website StoreCake — KHÔNG dùng để ngừng bán trên Tubu. */
   is_hidden?: boolean;
+  /** Cờ quà tặng (Pancake POS không tài liệu hoá; đọc phòng thủ): biến thể có cờ này mà giá 0đ thì không bị báo là lỗi giá. */
+  is_gift?: boolean;
 }
 
 export interface PancakeProductDTO {
