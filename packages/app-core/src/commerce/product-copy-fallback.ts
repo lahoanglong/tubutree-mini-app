@@ -103,6 +103,7 @@ const MANUAL: Record<string, ProductCopyFallback> = {
   'granola-mix-nuts-tui-tien-loi-bh-nong': entry('Granola mix nuts BH.NONG, đóng túi tiện lợi.', named('Granola'), named('Hạt mix nuts')),
   'bot-hat-cu-qua-bh-nong-lon-400g': entry('Bột hạt củ quả BH.NONG, đóng lon 400g.', named('Hạt, củ, quả')),
   'banh-mam-hat-rong-bien-bh-nong': entry('Bánh mầm hạt rong biển BH.NONG.', named('Mầm hạt'), named('Rong biển')),
+  'banh-mam-hat-yen-mach-bh-nong': entry('Bánh mầm hạt yến mạch BH.NONG.', named('Mầm hạt'), named('Hạt yến mạch')),
 
   'nuoc-mui-gia-po-lang-160ml': entry('Nước mùi già Pơ Lang, chai 160ml.', named('Mùi già')),
   'dau-goi-dau-xa-qua-bo-po-lang-300g': entry('Dầu gội và dầu xả quả bơ Pơ Lang, quy cách 300g.', named('Quả bơ')),

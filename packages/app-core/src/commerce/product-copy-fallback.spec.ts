@@ -29,9 +29,9 @@ const BRAND_WORD: [RegExp, string][] = [
   [/pơ lang/i, 'pơ lang'],
 ];
 
-describe('chữ dự phòng cho 63 sản phẩm còn hàng trên PROD (ảnh chụp 12/11/2026)', () => {
-  it('fixture đúng 63 dòng và dòng nào cũng có mô tả dự phòng', () => {
-    expect(ROWS).toHaveLength(63);
+describe('chữ dự phòng cho 64 sản phẩm còn hàng trên PROD (ảnh chụp 12/11/2026)', () => {
+  it('fixture đúng 64 dòng và dòng nào cũng có mô tả dự phòng', () => {
+    expect(ROWS).toHaveLength(64);
     for (const r of ROWS) {
       const fb = findProductCopyFallback(r.slug);
       expect(fb, r.slug).toBeDefined();
@@ -93,6 +93,7 @@ describe('chữ dự phòng cho 63 sản phẩm còn hàng trên PROD (ảnh ch�
       'granola-mix-nuts-tui-tien-loi-bh-nong',
       'bot-hat-cu-qua-bh-nong-lon-400g',
       'banh-mam-hat-rong-bien-bh-nong',
+      'banh-mam-hat-yen-mach-bh-nong',
       'nuoc-mui-gia-po-lang-160ml',
       'dau-goi-dau-xa-qua-bo-po-lang-300g',
       'combo-son-duong-po-lang-1-thoi-co-mau-1-thoi-khong-mau',

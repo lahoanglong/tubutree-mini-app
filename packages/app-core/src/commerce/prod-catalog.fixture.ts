@@ -1,7 +1,8 @@
 /**
- * Ảnh chụp catalog PROD ngày 12/11/2026: 63 sản phẩm còn hàng trong 100 dòng đầu của `GET /products` (meta.total = 111; 11 dòng không nằm trong
- * ảnh chụp). Chỉ giữ `slug` và `name` (cột `brand` của PROD là "Tubu Tree" cho mọi dòng nên không có ích). Dùng làm bộ kiểm phủ cho
- * `story-presets-launch.spec.ts` và `product-copy-fallback.spec.ts`; không import vào mã chạy thật nên không vào bundle.
+ * Ảnh chụp catalog PROD ngày 12/11/2026: 64 sản phẩm còn hàng. 63 nằm trong 100 dòng đầu của `GET /products?limit=100` (meta.total = 111); SKU thứ 64
+ * (`banh-mam-hat-yen-mach-bh-nong-ec5325`) nằm ở trang 2 (`page=2`), do PM báo là còn hàng. Chỉ giữ `slug` và `name` (cột `brand` của PROD là
+ * "Tubu Tree" cho mọi dòng nên không có ích). Dùng làm bộ kiểm phủ cho `story-presets-launch.spec.ts` và `product-copy-fallback.spec.ts`;
+ * không import vào mã chạy thật nên không vào bundle.
  */
 export interface ProdCatalogRow {
   slug: string;
@@ -72,4 +73,5 @@ export const PROD_IN_STOCK_2026_11_12: readonly ProdCatalogRow[] = [
   { slug: 'nuoc-tuong-mat-hoa-dua-sokfarm-cham-034cc1', name: 'Nước tương mật hoa dừa SOKFARM (chấm)' },
   { slug: 'mat-hoa-dua-co-dac-sokfarm-b0d1de', name: 'Mật hoa dừa cô đặc Sokfarm' },
   { slug: 'duong-hoa-dua-sokfarm-d6c685', name: 'Đường hoa dừa SOKFARM' },
+  { slug: 'banh-mam-hat-yen-mach-bh-nong-ec5325', name: 'Bánh mầm hạt yến mạch BH.NONG' },
 ];

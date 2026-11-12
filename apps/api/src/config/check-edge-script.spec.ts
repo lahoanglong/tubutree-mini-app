@@ -31,7 +31,10 @@ interface World {
    * chỉ có `python3`, hay không có gì. Khác `dig` thì PATH chỉ gồm công cụ liệt kê trong `BASE_TOOLS` (không lẫn dig của máy chạy test).
    */
   resolver?: 'dig' | 'getent' | 'python3' | 'none';
+  /** Đầu ra của `getent ahosts`. */
   getent?: string;
+  /** Đầu ra của `getent ahostsv4`; không đặt thì giả lập máy không trả được (thoát mã 2), script phải rơi xuống `getent ahosts`. */
+  getentV4?: string;
   notAfterDays?: number;
   dfPct?: number;
   dockerPs?: string;
@@ -110,7 +113,10 @@ cp "$k.h" "$hdr"; cp "$k.body" "$body"; printf '%s' "$(cat "$k.code")"`,
       const src = findOnPath(name);
       if (src) symlinkSync(src, join(tools, name));
     }
-    if (resolver === 'getent') stub('getent', `printf '%b\\n' ${JSON.stringify(world.getent ?? '')}`);
+    if (resolver === 'getent') {
+      const v4 = world.getentV4 === undefined ? 'exit 2' : `printf '%b\\n' ${JSON.stringify(world.getentV4)}; exit 0`;
+      stub('getent', `if [ "$1" = ahostsv4 ]; then ${v4}; fi\nprintf '%b\\n' ${JSON.stringify(world.getent ?? '')}`);
+    }
     pathEnv = `${bin}:${tools}`;
   }
   stub('openssl', `case "$1" in s_client) echo fake;; x509) echo "notAfter=${opensslDate(world.notAfterDays ?? 60)}";; esac`);
@@ -228,6 +234,19 @@ describe('ops/check-edge.sh', () => {
     expect(status).toBe(0);
     expect(out).toContain('api.test.vn DNS: 14.225.207.177 (đúng IP VPS)');
     expect(out).toContain('app.test.vn DNS: 14.225.207.177 (đúng IP VPS)');
+  });
+
+  it('getent ahostsv4 được ưu tiên: kết quả của nó thắng, `getent ahosts` (có thể trả IPv6 hay IP khác) không được dùng', () => {
+    const { status, out } = run(goodWorld({ resolver: 'getent', getentV4: '14.225.207.177 STREAM api.test.vn\\n14.225.207.177 DGRAM\\n14.225.207.177 RAW', getent: '1.2.3.4 STREAM api.test.vn' }));
+    expect(lines(out, 'WARN')).toEqual([]);
+    expect(status).toBe(0);
+    expect(out).toContain('api.test.vn DNS: 14.225.207.177 (đúng IP VPS)');
+  });
+
+  it('getent ahostsv4 không dùng được (thoát mã khác 0): rơi xuống getent ahosts, vẫn so đúng IP', () => {
+    const { out } = run(goodWorld({ resolver: 'getent', getent: '14.225.207.177 STREAM api.test.vn\\n2001:db8::1 STREAM api.test.vn' }));
+    expect(lines(out, 'WARN')).toEqual([]);
+    expect(out).toContain('api.test.vn DNS: 14.225.207.177 (đúng IP VPS)');
   });
 
   it('getent trả IP khác VPS vẫn WARN đúng như dig (fallback không nuốt so sánh)', () => {

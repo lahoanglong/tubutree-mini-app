@@ -221,7 +221,7 @@ describe('CATALOG_STORY_PRESETS: sản phẩm Pineboo và Fuwa3e trong catalog P
     for (const r of PINEBOO) expect(CATALOG_STORY_PRESETS[baseSlug(r.slug)], r.slug).toBeDefined();
   });
 
-  it('63/63 sản phẩm còn hàng của hai nhãn resolve ra ProductStory hợp lệ, đủ cảnh; muối rửa chén nhận kịch bản cấp nhãn', () => {
+  it('49/49 sản phẩm còn hàng của hai nhãn (6 Pineboo, 43 Fuwa3e) resolve ra ProductStory hợp lệ, đủ cảnh; muối rửa chén nhận kịch bản cấp nhãn', () => {
     for (const r of [...PINEBOO, ...FUWA3E]) {
       const cfg = resolveStoryConfig(asProduct(r));
       expect(cfg, r.slug).not.toBeNull();

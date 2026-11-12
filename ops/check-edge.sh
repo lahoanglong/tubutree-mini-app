@@ -145,7 +145,7 @@ resolve_a() {
   elif command -v nslookup >/dev/null 2>&1; then
     out="$(nslookup -type=A "$1" 2>/dev/null | awk '/^Name:/ { f = 1 } f && /^Address/ { print $NF }')"
   elif command -v getent >/dev/null 2>&1; then
-    out="$(getent ahosts "$1" 2>/dev/null | awk '!seen[$1]++ { print $1 }')"
+    out="$({ getent ahostsv4 "$1" 2>/dev/null || getent ahosts "$1" 2>/dev/null; } | awk '!seen[$1]++ { print $1 }')"
   elif command -v python3 >/dev/null 2>&1; then
     out="$(python3 -c 'import socket, sys
 for ip in sorted({a[4][0] for a in socket.getaddrinfo(sys.argv[1], None, socket.AF_INET)}):
