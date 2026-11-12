@@ -8,6 +8,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { variationPricing, type FlashPriceItem } from '@tubutree/app-core/flash-price';
 import { formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { variationLabel } from '../utils/variation-label';
 import { Badge } from './ui/badge';
 import { BottomSheet } from './ui/bottom-sheet';
 import { Button } from './ui/button';
@@ -86,6 +87,7 @@ export function VariationSheet({
   }, [open]);
 
   const selected = variations.find((v) => v.id === id);
+  const selectedLabel = selected ? variationLabel(selected.name, variations.length) : null;
   const available = (selected?.stock ?? 0) > 0;
   const label = mode === 'buy' ? 'Mua ngay' : 'Thêm vào giỏ';
   const shownQty = clampPickerQty(selected, qty);
@@ -144,7 +146,7 @@ export function VariationSheet({
           <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 4 }}>
             {selected ? (
               <>
-                {selected.name} ·{' '}
+                {selectedLabel ? `${selectedLabel} · ` : null}
                 {/* Tồn thấp chỉ đổi màu (token cảnh báo), chữ vẫn "Còn n sản phẩm" như mọi mức tồn. */}
                 <span data-testid="variation-sheet-stock" style={{ fontVariantNumeric: 'tabular-nums', ...(isLowStock(selected.stock) ? { color: 'var(--color-status-warning-fg)' } : null) }}>
                   {pickerStockText(selected.stock)}
@@ -162,6 +164,7 @@ export function VariationSheet({
           <VariationChip
             key={v.id}
             variation={v}
+            siblingCount={variations.length}
             pricing={variationPricing(v, flash)}
             active={v.id === id}
             onClick={() => {

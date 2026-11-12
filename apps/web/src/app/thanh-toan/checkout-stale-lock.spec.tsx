@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { notifyManager } from '@tanstack/react-query';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { ApiError, NetworkError } from '@/lib/client-api';
 
@@ -149,6 +150,44 @@ describe('/thanh-toan — máy chủ từ chối đơn vì màn đã cũ: giữ 
       expect(btn.getAttribute('aria-busy')).toBeNull();
       expect(btn.getAttribute('aria-disabled')).toBeNull();
     }
+  });
+
+  it('giỏ tải lại xong: nhãn đi thẳng từ "Đang cập nhật giỏ…" về chữ Đặt hàng, không chớp "Đang đặt hàng…" ở giữa', async () => {
+    const sendGate = defer();
+    state.placeError = new ApiError('Địa chỉ giao hàng không còn hợp lệ.', 409);
+    const c = await mount();
+    const idleLabel = lgButton(c).textContent;
+    const reloadGate = defer();
+    state.reloadGate = reloadGate.promise;
+    state.placeGate = sendGate.promise;
+    click(lgButton(c));
+    await flush(3);
+    await act(async () => sendGate.resolve());
+    await flush(6);
+    expect(lgButton(c).textContent).toBe('Đang cập nhật giỏ…');
+
+    // Ghi mọi lần đổi chữ trên nút khi React Query báo trạng thái chậm 40ms và React vẽ không qua `act` (act gộp mọi cập nhật thành một lượt vẽ): nhãn không được quay lại "Đang đặt hàng…".
+    // Với React Query hiện tại kết quả của observer cập nhật đồng bộ lúc dispatch nên khung thừa không xuất hiện kể cả khi cờ hạ sớm; ca này là rào chắn nếu thứ tự đó đổi (nâng cấp thư viện).
+    const env = globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean };
+    const wasActEnv = env.IS_REACT_ACT_ENVIRONMENT;
+    env.IS_REACT_ACT_ENVIRONMENT = false;
+    notifyManager.setScheduler((cb) => setTimeout(cb, 40));
+    const labels: string[] = [];
+    const watch = new MutationObserver(() => {
+      const text = lgButton(c).textContent ?? '';
+      if (labels.at(-1) !== text) labels.push(text);
+    });
+    try {
+      watch.observe(c, { subtree: true, childList: true, characterData: true });
+      reloadGate.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    } finally {
+      watch.disconnect();
+      notifyManager.setScheduler((cb) => setTimeout(cb, 0));
+      env.IS_REACT_ACT_ENVIRONMENT = wasActEnv;
+    }
+    expect(labels).not.toContain('Đang đặt hàng…');
+    expect(labels.at(-1)).toBe(idleLabel);
   });
 
   it('lỗi không nói gì về giỏ (500): nút không bao giờ đổi sang "Đang cập nhật giỏ…"', async () => {

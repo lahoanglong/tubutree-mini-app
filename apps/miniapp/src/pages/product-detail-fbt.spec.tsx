@@ -205,3 +205,42 @@ describe('ProductDetailPage: Gợi ý mua kèm hợp vị (W43A)', () => {
     expect(title.compareDocumentPosition(fbt) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
+
+describe('ProductDetailPage: phân loại không có tên (86/154 phân loại trên PROD)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.auth.status = 'idle';
+    mocks.fetchBoughtTogether.mockResolvedValue(CARDS);
+    mocks.fetchFlash.mockResolvedValue([]);
+    mocks.getBundles.mockResolvedValue({ combos: [], addons: [] });
+    mocks.getCart.mockResolvedValue({ items: [], itemCount: 0 });
+  });
+  const variation = (id: string, name: string, retailPrice: number) => ({ id, sku: id, name, attributes: {}, retailPrice, salePrice: null, stock: 5 });
+  const currentRow = async () => (await screen.findAllByTestId('fbt-row'))[0]!.textContent ?? '';
+  const chipNames = async () => Array.from((await screen.findByRole('group', { name: 'Phân loại nhanh' })).querySelectorAll('[role="button"]')).map((b) => b.firstElementChild!.textContent);
+
+  it('nhiều phân loại, phân loại đang chọn tên trống hoặc toàn khoảng trắng: khối mua kèm ghi "Tên · Mặc định", chip ghi "Mặc định"', async () => {
+    for (const blank of ['', '   ']) {
+      mocks.fetchProduct.mockResolvedValue(product({ variations: [variation('v0', blank, 75_000), variation('v1', '1 lít', 90_000)] }));
+      const { unmount } = renderPdp();
+      expect(await currentRow()).toContain('Xà phòng sả chanh · Mặc định');
+      expect(await chipNames()).toEqual(['Mặc định', '1 lít']);
+      unmount();
+    }
+  });
+
+  it('chỉ một phân loại tên trống: khối mua kèm chỉ ghi tên sản phẩm, không có chip nào', async () => {
+    mocks.fetchProduct.mockResolvedValue(product({ variations: [variation('v0', '', 75_000)] }));
+    renderPdp();
+    const row = await currentRow();
+    expect(row).toContain('Xà phòng sả chanh');
+    expect(row).not.toContain('Xà phòng sả chanh ·');
+    expect(screen.queryByRole('group', { name: 'Phân loại nhanh' })).toBeNull();
+  });
+
+  it('nhiều phân loại có tên: khối mua kèm ghi "Tên · phân loại đang chọn" như trước', async () => {
+    mocks.fetchProduct.mockResolvedValue(product({ variations: [variation('v0', '500ml', 75_000), variation('v1', '1 lít', 90_000)] }));
+    renderPdp();
+    expect(await currentRow()).toContain('Xà phòng sả chanh · 500ml');
+  });
+});

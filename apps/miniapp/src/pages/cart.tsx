@@ -68,11 +68,16 @@ import { homeBestSellerQuery } from '../components/home/home-best-seller-query';
 import { cardAddTarget } from '../utils/card-add-target';
 import { serverNow } from '../utils/server-clock';
 import { settleWithin } from '../utils/settle-within';
+import { joinVariationLine, variationLabel } from '../utils/variation-label';
 
 const UNDO_WINDOW_MS = 3500;
 
 /** Tồn giả định của dòng vừa thêm từ dải gợi ý trong lúc chờ máy chủ: 99 là mức "còn nhiều" mà API công khai trả cho tồn trên 20, nên dòng không hiện câu "chỉ còn" nhất thời. Lần đọc lại giỏ thay bằng số thật. */
 const ADDON_PENDING_STOCK = 99;
+
+/** Tên phân loại của dòng giỏ có thể là đối tượng `{ name }` (mã cũ đọc cả dạng này); kiểu khai báo là chuỗi nên đọc qua `unknown`. */
+const legacyVariationName = (v: unknown): string | null | undefined =>
+  typeof v === 'object' && v !== null ? (v as { name?: string }).name : (v as string | null | undefined);
 
 /** Dòng tạm chưa có mã thật ở máy chủ: không cho đổi số lượng, xoá hay tính vào đơn cho tới khi giỏ đọc lại (mã `pending-…` gửi lên sẽ 404). */
 const isPendingAddonLine = (line: CartLine) => line.id.startsWith('pending-');
@@ -652,8 +657,7 @@ function DiscontinuedNotice({ lines, onRemove }: { lines: UnavailableCartLine[];
       {lines.map((l) => (
         <Box key={l.id} flex alignItems="center" justifyContent="space-between" style={{ gap: 8, marginTop: 8 }}>
           <Text size="small" style={{ flex: 1, minWidth: 0, textDecoration: 'line-through' }}>
-            {l.productName}
-            {l.variationName ? ` · ${l.variationName}` : ''} × {l.quantity}
+            {joinVariationLine(l.productName, variationLabel(l.variationName))} × {l.quantity}
           </Text>
           <Button variant="ghost" onPress={() => onRemove(l.id)}>
             {vi.cart.discontinuedRemove}
@@ -723,6 +727,7 @@ function CartLineRow({
     // onQty/line.quantity ổn định trong scope mutate; chỉ trigger khi debouncedQty đổi.
   }, [debouncedQty]);
   const compareAt = lineCompareAt(line);
+  const lineVariation = variationLabel(legacyVariationName(line.variationName));
   return (
     <Box
       data-testid="cart-line"
@@ -778,11 +783,9 @@ function CartLineRow({
             {line.productName}
           </Text>
         </div>
-        {line.variationName && (
+        {lineVariation && (
           <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-            {typeof line.variationName === 'object' && line.variationName !== null
-              ? (line.variationName as { name?: string }).name ?? ''
-              : String(line.variationName)}
+            {lineVariation}
           </Text>
         )}
         {line.isFlash && (

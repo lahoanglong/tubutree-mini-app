@@ -1,173 +1,228 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { COPY_DRAFT_MAX_BATCH, type CatalogAuditResponse } from '@tubutree/shared-types';
 import { findProductCopyFallback } from '@tubutree/app-core/commerce/product-copy-fallback';
-import { isAbortError, loadCatalogForAudit, type CatalogAuditProgress, type CatalogAuditSource } from '@tubutree/app-core/commerce/catalog-audit-loader';
+import { buildPancakeFixCsv, pancakeFixCsvFilename } from '@tubutree/app-core/commerce/catalog-pancake-csv';
 import {
-  auditCatalogProducts,
+  auditProductDtos,
   CATALOG_ISSUE_KINDS,
   CATALOG_ISSUE_LABELS,
-  type CatalogAuditResult,
+  COPY_STATUS_LABELS,
+  COPY_STATUSES,
   type CatalogIssueKind,
+  type CopyStatus,
 } from '@tubutree/app-core/commerce/catalog-quality-audit';
-import { apiFetch } from '@/lib/client-api';
-import { BTN_SECONDARY, LoadError } from '@/components/admin/ui';
-
-interface ListItem {
-  slug: string;
-  name: string;
-  thumbnail?: string | null;
-  inStock?: boolean;
-}
-
-/** Đọc catalog công khai (cùng nguồn khách thấy): danh sách theo trang rồi mô tả gốc từng sản phẩm. Không gửi phiên quản trị vì đường này công khai. */
-const SOURCE: CatalogAuditSource = {
-  async listPage(page, limit) {
-    const res = await apiFetch<{ data: ListItem[]; meta: { total: number } }>(`/products?page=${page}&limit=${limit}`, { auth: false });
-    return {
-      rows: res.data.map((p) => ({ slug: p.slug, name: p.name, thumbnail: p.thumbnail ?? null, inStock: p.inStock !== false })),
-      total: res.meta.total,
-    };
-  },
-  async readDescription(slug) {
-    const p = await apiFetch<{ description?: string | null }>(`/products/${encodeURIComponent(slug)}`, { auth: false });
-    return p.description ?? null;
-  },
-};
-
-const BADGE_TONE: Record<CatalogIssueKind, string> = {
-  known_media_mismatch: 'bg-danger-bg text-danger-fg',
-  missing_thumbnail: 'bg-warning-bg text-warning-fg',
-  empty_native_description: 'bg-stone-100 text-stone-700',
-};
+import { ApiError } from '@/lib/client-api';
+import { loadErrorText } from '@/lib/admin-error-text';
+import { BTN_SECONDARY, LoadError, Notice } from '@/components/admin/ui';
+import { AdvisorStatsCard } from './advisor-stats-card';
+import { CatalogCopyReview, type CurrentCopy } from './catalog-copy-review';
+import { CatalogIssueList } from './catalog-issue-list';
+import { downloadCsvText, getCatalogAudit } from './catalog-quality-api';
 
 const hasFallbackCopy = (slug: string) => findProductCopyFallback(slug) !== undefined;
 
-type Filter = CatalogIssueKind | 'all';
+type IssueFilter = CatalogIssueKind | 'all';
+type CopyFilter = CopyStatus | 'any';
+
+const loadFailureText = (e: unknown): string =>
+  e instanceof ApiError && e.status === 403
+    ? 'Tài khoản này không có quyền xem mục Kiểm tra catalog (chỉ dành cho quản trị viên).'
+    : `Không đọc được catalog. ${loadErrorText(e)}`;
 
 export function CatalogQualityTab() {
   const [open, setOpen] = useState(true);
   const [running, setRunning] = useState(false);
-  const [progress, setProgress] = useState<CatalogAuditProgress | null>(null);
-  const [error, setError] = useState(false);
-  const [result, setResult] = useState<CatalogAuditResult | null>(null);
-  const [unreadable, setUnreadable] = useState(0);
-  const [filter, setFilter] = useState<Filter>('all');
+  const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<CatalogAuditResponse | null>(null);
+  const [filter, setFilter] = useState<IssueFilter>('all');
+  const [copyFilter, setCopyFilter] = useState<CopyFilter>('any');
+  const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const busy = useRef(false);
-  const ctrl = useRef<AbortController | null>(null);
+  // apiFetch không nhận tín hiệu huỷ: rời tab thì bỏ kết quả về muộn thay vì ghi vào component đã gỡ.
+  const alive = useRef(true);
 
-  useEffect(() => () => ctrl.current?.abort(), []);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
 
-  const run = useCallback(async () => {
-    if (busy.current) return;
+  const run = useCallback(async (): Promise<boolean> => {
+    if (busy.current) return false;
     busy.current = true;
-    const c = new AbortController();
-    ctrl.current = c;
     setRunning(true);
-    setError(false);
-    setProgress(null);
+    setError(null);
     try {
-      const load = await loadCatalogForAudit(SOURCE, { signal: c.signal, onProgress: setProgress });
-      setResult(auditCatalogProducts(load.products, { hasFallbackCopy }));
-      setUnreadable(load.unreadable.length);
-      setFilter('all');
+      const res = await getCatalogAudit();
+      if (!alive.current) return false;
+      setData(res);
+      const ids = new Set(res.products.map((p) => p.id));
+      setSelected((prev) => new Set([...prev].filter((id) => ids.has(id))));
+      return true;
     } catch (e) {
-      if (!isAbortError(e)) setError(true);
+      if (alive.current) setError(loadFailureText(e));
+      return false;
     } finally {
       busy.current = false;
-      if (ctrl.current === c) ctrl.current = null;
-      if (!c.signal.aborted) {
-        setRunning(false);
-        setProgress(null);
-      }
+      if (alive.current) setRunning(false);
     }
   }, []);
 
-  const rows = result?.rows.filter((r) => filter === 'all' || r.issues.some((i) => i.kind === filter)) ?? [];
-  const progressText = progress ? (progress.stage === 'list' ? `Đang đọc danh sách ${progress.done}/${progress.total}` : `Đang đọc mô tả ${progress.done}/${progress.total}`) : 'Đang bắt đầu';
+  const result = useMemo(() => (data ? auditProductDtos(data.products, { hasFallbackCopy }) : null), [data]);
+  const csv = useMemo(() => (data && result ? buildPancakeFixCsv(result, data.products) : null), [data, result]);
+  // Dòng đầu là tiêu đề cột.
+  const csvRows = csv ? Math.max(0, csv.split('\r\n').length - 1) : 0;
+  const current = useMemo(
+    () => new Map<string, CurrentCopy>((data?.products ?? []).map((p) => [p.id, { shortDesc: p.shortDesc, description: p.description, hasIngredients: p.hasIngredients }])),
+    [data],
+  );
+
+  const allRows = result?.rows ?? [];
+  const rows = allRows.filter((r) => (filter === 'all' || r.issues.some((i) => i.kind === filter)) && (copyFilter === 'any' || r.copyStatus === copyFilter));
+  const copyCounts = COPY_STATUSES.reduce<Record<CopyStatus, number>>(
+    (acc, s) => ({ ...acc, [s]: allRows.filter((r) => r.copyStatus === s).length }),
+    { native: 0, fallback: 0, none: 0, unknown: 0 },
+  );
+  const emptyRows = rows.filter((r) => r.id !== undefined && r.issues.some((i) => i.kind === 'empty_native_description'));
+  const selectedRows = allRows.filter((r) => r.id !== undefined && selected.has(r.id));
+
+  const toggle = (id: string, on: boolean) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (!on) next.delete(id);
+      else if (next.size < COPY_DRAFT_MAX_BATCH) next.add(id);
+      return next;
+    });
+  const selectEmpty = () => setSelected(new Set(emptyRows.slice(0, COPY_DRAFT_MAX_BATCH).map((r) => r.id!)));
+  const afterSave = (savedIds: readonly string[]) => {
+    setSelected((prev) => new Set([...prev].filter((id) => !savedIds.includes(id))));
+    return run();
+  };
+  const exportCsv = () => {
+    if (csv && csvRows > 0) downloadCsvText(csv, pancakeFixCsvFilename());
+  };
 
   return (
-    <section aria-labelledby="catalog-quality-title" className="rounded-card border border-stone-200 bg-stone-0">
-      <h2 id="catalog-quality-title" className="m-0">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls="catalog-quality-body"
-          onClick={() => setOpen((v) => !v)}
-          className="flex min-h-[44px] w-full items-center justify-between gap-2 px-3 py-2 text-left font-display text-lg font-semibold text-stone-900"
-        >
-          <span>Kiểm tra chất lượng Catalog</span>
-          <span aria-hidden="true" className="text-sm text-stone-500">
-            {open ? 'Thu gọn' : 'Mở rộng'}
-          </span>
-        </button>
-      </h2>
-      {open && (
-        <div id="catalog-quality-body" className="space-y-3 border-t border-stone-200 p-3" aria-busy={running}>
-          <p className="max-w-2xl text-sm text-stone-600">
-            Tìm sản phẩm thiếu ảnh, ảnh lệch tên và mô tả gốc còn trống để sửa ngay trong Pancake. Số liệu lấy từ catalog đang hiện cho khách, nên sửa xong cần chờ đồng bộ rồi bấm Kiểm tra lại.
-          </p>
-          <div className="flex flex-wrap items-center gap-3">
-            <button type="button" className={BTN_SECONDARY} disabled={running} onClick={() => void run()}>
-              {running ? 'Đang kiểm tra' : result || error ? 'Kiểm tra lại' : 'Kiểm tra ngay'}
-            </button>
-            {running && (
-              <span role="status" className="text-sm text-stone-600">
-                {progressText}
-              </span>
+    <div className="space-y-4">
+      <section aria-labelledby="catalog-quality-title" className="rounded-card border border-stone-200 bg-stone-0">
+        <h2 id="catalog-quality-title" className="m-0">
+          <button
+            type="button"
+            aria-expanded={open}
+            aria-controls="catalog-quality-body"
+            onClick={() => setOpen((v) => !v)}
+            className="flex min-h-[44px] w-full items-center justify-between gap-2 px-3 py-2 text-left font-display text-lg font-semibold text-stone-900"
+          >
+            <span>Kiểm tra chất lượng Catalog</span>
+            <span aria-hidden="true" className="text-sm text-stone-500">
+              {open ? 'Thu gọn' : 'Mở rộng'}
+            </span>
+          </button>
+        </h2>
+        {open && (
+          <div id="catalog-quality-body" className="space-y-3 border-t border-stone-200 p-3" aria-busy={running}>
+            <p className="max-w-2xl text-sm text-stone-600">
+              Tìm sản phẩm thiếu ảnh, ảnh lệch tên, giá hoặc tồn kho sai, biến thể chưa đặt tên và mô tả gốc còn trống, kể cả sản phẩm đang ẩn. Số liệu đọc thẳng từ cơ sở dữ liệu. Sửa giá, tồn và ảnh trong Pancake rồi chờ đồng bộ và bấm Kiểm tra lại; mô tả thì nhờ AI soạn bản nháp rồi duyệt lưu ngay tại đây.
+            </p>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                className={`${BTN_SECONDARY} aria-disabled:opacity-50`}
+                aria-disabled={running || undefined}
+                aria-busy={running || undefined}
+                onClick={() => void run()}
+              >
+                {running ? 'Đang kiểm tra' : data || error ? 'Kiểm tra lại' : 'Kiểm tra ngay'}
+              </button>
+              {running && (
+                <span role="status" className="text-sm text-stone-600">
+                  Đang đọc catalog
+                </span>
+              )}
+            </div>
+            {error && !running && <LoadError onRetry={() => void run()}>{error}</LoadError>}
+            {data && result && (
+              <>
+                {data.truncated && (
+                  <Notice tone="warning" role="status">
+                    Catalog vượt trần đọc của máy chủ nên danh sách đã bị cắt: các sản phẩm ngoài trần chưa được kiểm.
+                  </Notice>
+                )}
+                <p role="status" className="text-sm text-stone-700">
+                  {result.summary.flagged === 0
+                    ? `Đã kiểm ${result.summary.total} sản phẩm, không có lỗi.`
+                    : `Đã kiểm ${result.summary.total} sản phẩm: ${result.summary.flagged} sản phẩm cần sửa, trong đó ${result.summary.flaggedInStock} đang còn hàng.`}
+                </p>
+                <p className="text-sm text-stone-600">
+                  Mô tả trên {result.summary.total} sản phẩm:{' '}
+                  {COPY_STATUSES.filter((s) => s !== 'unknown' || result.summary.copy.unknown > 0).map((s, i) => (
+                    <span key={s}>
+                      {i > 0 && ' · '}
+                      {COPY_STATUS_LABELS[s]}: <span className="tabular-nums">{result.summary.copy[s]}</span>
+                    </span>
+                  ))}
+                </p>
+                <div role="group" aria-label="Lọc theo loại lỗi" className="flex flex-wrap gap-2">
+                  <FilterChip active={filter === 'all'} onPress={() => setFilter('all')}>
+                    Tất cả <Count n={result.summary.flagged} />
+                  </FilterChip>
+                  {CATALOG_ISSUE_KINDS.map((k) => (
+                    <FilterChip key={k} active={filter === k} onPress={() => setFilter(k)}>
+                      {CATALOG_ISSUE_LABELS[k]} <Count n={result.summary.byKind[k]} />
+                    </FilterChip>
+                  ))}
+                </div>
+                <div role="group" aria-label="Lọc theo tình trạng mô tả" className="flex flex-wrap gap-2">
+                  <FilterChip active={copyFilter === 'any'} onPress={() => setCopyFilter('any')}>
+                    Mọi tình trạng mô tả
+                  </FilterChip>
+                  {COPY_STATUSES.filter((s) => s !== 'unknown' || copyCounts.unknown > 0).map((s) => (
+                    <FilterChip key={s} active={copyFilter === s} onPress={() => setCopyFilter(s)}>
+                      {COPY_STATUS_LABELS[s]} <Count n={copyCounts[s]} />
+                    </FilterChip>
+                  ))}
+                </div>
+                <div className="flex flex-wrap items-center gap-3">
+                  <button type="button" className={BTN_SECONDARY} disabled={csvRows === 0} onClick={exportCsv}>
+                    Xuất CSV sửa Pancake
+                  </button>
+                  <span className="text-sm text-stone-600">
+                    {csvRows === 0 ? (
+                      'Không có biến thể lỗi nào để xuất (giá sai, tồn giả, chưa đặt tên).'
+                    ) : (
+                      <>
+                        Sẽ xuất <span className="tabular-nums">{csvRows}</span> dòng biến thể lỗi, kể cả biến thể và sản phẩm đang ẩn.
+                      </>
+                    )}
+                  </span>
+                </div>
+                <CatalogCopyReview
+                  selected={selectedRows.map((r) => ({ id: r.id!, name: r.name }))}
+                  current={current}
+                  emptyCount={emptyRows.length}
+                  auditBusy={running}
+                  onSelectEmpty={selectEmpty}
+                  onSaved={afterSave}
+                />
+                {rows.length === 0 ? (
+                  <p className="text-sm text-stone-500">Không có sản phẩm nào thuộc bộ lọc này.</p>
+                ) : (
+                  <CatalogIssueList rows={rows} selected={selected} selectionFull={selected.size >= COPY_DRAFT_MAX_BATCH} onToggle={toggle} />
+                )}
+              </>
             )}
           </div>
-          {error && !running && <LoadError onRetry={() => void run()}>Không đọc được catalog. Kiểm tra mạng rồi thử lại.</LoadError>}
-          {result && !error && (
-            <>
-              <p role="status" className="text-sm text-stone-700">
-                {result.summary.flagged === 0
-                  ? `Đã kiểm ${result.summary.total} sản phẩm, không có lỗi.`
-                  : `Đã kiểm ${result.summary.total} sản phẩm: ${result.summary.flagged} sản phẩm cần sửa, trong đó ${result.summary.flaggedInStock} đang còn hàng.`}
-              </p>
-              {unreadable > 0 && (
-                <p className="text-sm text-warning-fg">Chưa đọc được mô tả của {unreadable} sản phẩm nên chưa kiểm phần mô tả của chúng. Bấm Kiểm tra lại để đọc lại.</p>
-              )}
-              <div role="group" aria-label="Lọc theo loại lỗi" className="flex flex-wrap gap-2">
-                <FilterChip active={filter === 'all'} onPress={() => setFilter('all')}>
-                  Tất cả ({result.summary.flagged})
-                </FilterChip>
-                {CATALOG_ISSUE_KINDS.map((k) => (
-                  <FilterChip key={k} active={filter === k} onPress={() => setFilter(k)}>
-                    {CATALOG_ISSUE_LABELS[k]} ({result.summary.byKind[k]})
-                  </FilterChip>
-                ))}
-              </div>
-              {rows.length === 0 ? (
-                <p className="text-sm text-stone-500">Không có sản phẩm nào thuộc loại lỗi này.</p>
-              ) : (
-                <ul className="divide-y divide-stone-200 rounded-control border border-stone-200" aria-label="Sản phẩm cần sửa">
-                  {rows.map((r) => (
-                    <li key={r.slug} className="space-y-1.5 p-3">
-                      <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                        <span className="min-w-0 break-words text-sm font-medium text-stone-900">{r.name}</span>
-                        {r.inStock === false && <span className="rounded-full bg-stone-100 px-2 text-[11px] font-medium leading-5 text-stone-600">Hết hàng</span>}
-                      </div>
-                      <div className="break-all font-mono text-[11px] text-stone-500">{r.slug}</div>
-                      <ul className="space-y-1">
-                        {r.issues.map((i) => (
-                          <li key={i.kind} className="flex items-start gap-2 text-sm text-stone-700">
-                            <span className={`shrink-0 rounded-full px-2 text-[11px] font-semibold leading-5 ${BADGE_TONE[i.kind]}`}>{CATALOG_ISSUE_LABELS[i.kind]}</span>
-                            <span className="min-w-0 break-words">{i.detail}</span>
-                          </li>
-                        ))}
-                      </ul>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </>
-          )}
-        </div>
-      )}
-    </section>
+        )}
+      </section>
+      <AdvisorStatsCard />
+    </div>
   );
 }
+
+const Count = ({ n }: { n: number }) => <span className="tabular-nums">({n})</span>;
 
 function FilterChip({ active, onPress, children }: { active: boolean; onPress: () => void; children: ReactNode }) {
   return (

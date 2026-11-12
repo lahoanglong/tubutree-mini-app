@@ -893,3 +893,42 @@ describe('CtvOrderSheet — đơn bị từ chối: tải lại báo giá rồi 
     }
   });
 });
+
+describe('CtvOrderSheet — phân loại không có tên', () => {
+  const productWith = (names: string[]) => async () => ({
+    name: 'Nước rửa chén',
+    variations: names.map((name, i) => ({ id: `var${i + 1}`, name, retailPrice: 65_000, salePrice: null, stock: 10 })),
+  });
+  const openPicker = async () => {
+    mount();
+    typeInto(body().querySelector('input[type="search"]'), 'nước');
+    await until(() => !!btn(/Nước rửa chén/));
+    click(btn(/Nước rửa chén/));
+    await until(() => body().querySelectorAll('ul li button').length > 0);
+  };
+  const pickerRows = () => Array.from(body().querySelectorAll('ul li button')).map((b) => b.textContent);
+  const lineCaptions = () => Array.from(body().querySelectorAll('li.border-b div.text-xs.text-stone-600')).map((d) => d.textContent);
+
+  it('nhiều phân loại, một cái tên trống hoặc toàn khoảng trắng: dòng chọn ghi "Mặc định", cái có tên giữ nguyên', async () => {
+    state.product = productWith(['', '  ', 'Chanh']);
+    await openPicker();
+    expect(pickerRows()).toEqual(['Mặc định65.000đ', 'Mặc định65.000đ', 'Chanh65.000đ']);
+  });
+
+  it('chỉ một phân loại tên trống: dòng chọn lấy tên sản phẩm thay vì dòng trống; chọn xong dòng đơn chỉ có giá, không " · " mở đầu', async () => {
+    state.product = productWith(['']);
+    await openPicker();
+    expect(pickerRows()).toEqual(['Nước rửa chén65.000đ']);
+    click(body().querySelector('ul li button'));
+    await until(() => !!aria('Giảm số lượng'));
+    expect(lineCaptions()).toEqual(['65.000đ']);
+  });
+
+  it('phân loại có tên: dòng đơn vẫn "tên · giá"', async () => {
+    state.product = productWith(['Chanh']);
+    await openPicker();
+    click(body().querySelector('ul li button'));
+    await until(() => !!aria('Giảm số lượng'));
+    expect(lineCaptions()).toEqual(['Chanh · 65.000đ']);
+  });
+});

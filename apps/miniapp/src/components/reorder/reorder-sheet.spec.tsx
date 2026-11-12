@@ -729,3 +729,23 @@ describe('ReorderSheet: mở lại sheet lúc lệnh Thêm vào giỏ cũ còn b
     });
   });
 });
+
+describe('ReorderSheet Mini: phân loại không có tên', () => {
+  beforeEach(() => vi.clearAllMocks());
+  const rows = (names: string[]) => {
+    renderSheet(<ReorderSheet target={orderReorderTarget({ code: 'TUBU9', items: names.map((n, i) => item(`i${i}`, 'Nước rửa chén', { variationName: n })) })} source="order_card" onClose={() => {}} />);
+    return screen.getAllByTestId('reorder-line');
+  };
+  const blocks = (row: HTMLElement) => Array.from(row.querySelectorAll('div')).map((d) => d.textContent);
+
+  it('có tên: hiện dòng phân loại dưới tên sản phẩm', () => {
+    expect(blocks(rows(['Chanh'])[0]!)).toContain('Chanh');
+  });
+
+  it('tên trống hoặc toàn khoảng trắng: không dựng dòng phân loại (không khối chữ trống)', () => {
+    const [empty, blank] = rows(['', '   ']);
+    for (const row of [empty!, blank!]) {
+      expect(blocks(row).filter((t) => t !== '' && (t ?? '').trim() === '')).toEqual([]);
+    }
+  });
+});

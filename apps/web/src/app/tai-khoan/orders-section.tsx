@@ -29,6 +29,7 @@ import { canPayNow, showsPaymentDeadline } from '@/components/orders/order-rules
 import { formatCount } from '@/lib/checkout-points';
 import { ProductThumb } from '@/components/mini';
 import { useScrollHints } from '@/components/mini/use-scroll-hints';
+import { variationLabel } from '@/lib/variation-label';
 
 /** Số sản phẩm đầu mỗi đơn hiện tên + ảnh; phần còn lại gộp thành "và N sản phẩm khác". */
 const PREVIEW_ITEMS = 2;
@@ -38,16 +39,19 @@ function OrderItemsPreview({ items }: { items: OrderDTO['items'] }) {
   const more = items.length - shown.length;
   return (
     <div className="mt-2 space-y-1.5">
-      {shown.map((it, i) => (
-        <div key={`${it.productName}-${it.variationName}-${i}`} className="flex items-center gap-2.5">
-          <ProductThumb src={it.thumbnail} alt="" size={40} />
-          <div className="min-w-0 flex-1 text-sm text-stone-900">
-            <span className="line-clamp-2 break-words">{it.productName}</span>
-            {it.variationName ? <span className="block text-xs text-stone-600">{it.variationName}</span> : null}
+      {shown.map((it, i) => {
+        const lineVariation = variationLabel(it.variationName);
+        return (
+          <div key={`${it.productName}-${it.variationName}-${i}`} className="flex items-center gap-2.5">
+            <ProductThumb src={it.thumbnail} alt="" size={40} />
+            <div className="min-w-0 flex-1 text-sm text-stone-900">
+              <span className="line-clamp-2 break-words">{it.productName}</span>
+              {lineVariation ? <span className="block text-xs text-stone-600">{lineVariation}</span> : null}
+            </div>
+            {it.quantity > 1 && <span className="flex-none text-xs text-stone-600">×{it.quantity}</span>}
           </div>
-          {it.quantity > 1 && <span className="flex-none text-xs text-stone-600">×{it.quantity}</span>}
-        </div>
-      ))}
+        );
+      })}
       {more > 0 && <div className="text-xs text-stone-600">và {formatCount(more)} sản phẩm khác</div>}
     </div>
   );

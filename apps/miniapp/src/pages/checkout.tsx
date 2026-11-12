@@ -79,6 +79,7 @@ import { Text as DsText } from '../components/ui/text';
 import { ListRow } from '../components/ui/list-row';
 import { useCartKey } from '../services/cart-key';
 import { INPUT_LIMITS } from '../utils/input-limits';
+import { variationLabel } from '../utils/variation-label';
 
 const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
 
@@ -758,13 +759,7 @@ export default function CheckoutPage() {
                 <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
                 <Box style={{ flex: 1, minWidth: 0 }}>
                   <Text size="small" style={{ display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}>{it.productName}</Text>
-                  {it.variationName && (
-                    <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-                      {typeof it.variationName === 'object' && it.variationName !== null
-                        ? (it.variationName as { name?: string }).name ?? ''
-                        : String(it.variationName)}
-                    </Text>
-                  )}
+                  <LineVariationNote name={it.variationName} />
                   <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', fontVariantNumeric: 'tabular-nums' }}>
                     {formatVnd(it.unitPrice)} × {it.quantity}
                   </Text>
@@ -1537,6 +1532,16 @@ export default function CheckoutPage() {
       </BottomSheet>
     </Page>
   );
+}
+
+/** Tên phân loại của dòng đơn có thể là đối tượng `{ name }` (mã cũ đọc cả dạng này); kiểu khai báo là chuỗi nên đọc qua `unknown`. */
+function LineVariationNote({ name }: { name: unknown }) {
+  const label = variationLabel(typeof name === 'object' && name !== null ? (name as { name?: string }).name : (name as string | null | undefined));
+  return label ? (
+    <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+      {label}
+    </Text>
+  ) : null;
 }
 
 function Shell({ children }: { children: React.ReactNode }) {

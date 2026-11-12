@@ -364,3 +364,27 @@ describe('PdpFbt (web): lệnh lô bị máy chủ từ chối vì trạng thái
     expect(mocks.addAll).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('PdpFbt (web): phân loại không có tên', () => {
+  const variations = (names: [string, string]) => [
+    { id: 'v0a', name: names[0], retailPrice: 100_000, salePrice: null, stock: 10 },
+    { id: 'v0b', name: names[1], retailPrice: 180_000, salePrice: 150_000, stock: 5 },
+  ];
+  const currentRow = (c: ParentNode) => rows(c)[0]!.textContent ?? '';
+
+  it('nhiều phân loại, phân loại đang chọn tên trống hoặc toàn khoảng trắng: ghi "Tên · Mặc định", không "Tên · " treo', async () => {
+    for (const blank of ['', '   ']) {
+      const c = await mount({ variations: variations([blank, '1L']) }, 'v0a');
+      expect(currentRow(c)).toContain('Dầu gội bưởi · Mặc định');
+      expect(currentRow(c)).not.toMatch(/Dầu gội bưởi · (?!Mặc định)/);
+      mounted.forEach((m) => m.unmount());
+      mounted = [];
+    }
+  });
+
+  it('chỉ một phân loại (tên trống): chỉ tên sản phẩm, không dấu phân cách', async () => {
+    const c = await mount({ variations: [{ id: 'v0a', name: '', retailPrice: 100_000, salePrice: null, stock: 10 }] }, 'v0a');
+    expect(currentRow(c)).toContain('Dầu gội bưởi');
+    expect(currentRow(c)).not.toContain('Dầu gội bưởi ·');
+  });
+});

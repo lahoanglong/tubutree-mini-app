@@ -54,6 +54,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
 import { LineItemSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 import { ProductThumb } from '@/components/mini';
 
 // Phần dưới màn đầu (nhắc theo dõi OA, hoá đơn, đổi rác) tải sau để First Load của trang tăng ít nhất có thể.
@@ -214,7 +215,10 @@ export default function OrderDetailPage() {
   const timelineSteps = buildOrderTimelineSteps(o.status, orderTimelineStamps(trackOrder));
   const shareText = formatOrderShareSummary({
     code: o.code,
-    items: o.items.map((it) => ({ name: it.variationName && it.variationName !== it.productName ? `${it.productName} (${it.variationName})` : it.productName, quantity: it.quantity })),
+    items: o.items.map((it) => {
+      const lineVariation = variationLabel(it.variationName);
+      return { name: lineVariation && lineVariation !== it.productName ? `${it.productName} (${lineVariation})` : it.productName, quantity: it.quantity };
+    }),
     totalAmount: o.total,
   });
   // Đơn không có hành trình 5 bước (huỷ/hoàn) mới in mốc hãng riêng; lịch sử toàn dòng rác thì không dựng khung trống.
@@ -273,6 +277,7 @@ export default function OrderDetailPage() {
           {o.items.map((it, i) => {
             // Sản phẩm đã gỡ thì trang sản phẩm trả 404: dòng vẫn hiện, chỉ không dẫn đi đâu.
             const slug = openProductSlug(it);
+            const lineVariation = variationLabel(it.variationName);
             const rowBody = (
               <>
                 <span className="flex-none md:hidden">
@@ -284,12 +289,11 @@ export default function OrderDetailPage() {
                 <div className="min-w-0 flex-1">
                   {/* Điện thoại: một dòng gọn "tên · phân loại ×SL" như Mini App. */}
                   <div data-testid="mini-line" className="text-sm text-stone-900 md:hidden">
-                    {it.productName}
-                    {it.variationName ? ` · ${it.variationName}` : ''}{' '}
+                    {joinVariationLine(it.productName, lineVariation)}{' '}
                     <span className="text-xs tabular-nums text-[color:var(--color-text-tertiary)]">×{it.quantity}</span>
                   </div>
                   <div className="text-sm font-medium text-stone-900 max-md:hidden">{it.productName}</div>
-                  {it.variationName && <div className="text-xs text-stone-600 max-md:hidden">{it.variationName}</div>}
+                  {lineVariation && <div className="text-xs text-stone-600 max-md:hidden">{lineVariation}</div>}
                   <div className="mt-0.5 text-xs tabular-nums text-stone-600 max-md:hidden">
                     {formatVnd(it.unitPrice)} × {it.quantity}
                   </div>

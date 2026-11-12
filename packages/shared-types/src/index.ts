@@ -19,3 +19,5 @@ export * from './stock';
 export * from './catalog-text';
 export * from './fuwa3e-skus';
 export * from './product-copy-fallback';
+export * from './copy-claims-guard';
+export * from './catalog-copy';

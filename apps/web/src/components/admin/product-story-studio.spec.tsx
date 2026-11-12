@@ -10,6 +10,20 @@ vi.mock('@/components/mini/product-story-showcase', () => ({
   ProductStoryShowcase: (p: { previewConfig?: ProductStoryConfig }) => <div data-testid="mock-showcase" data-scenes={p.previewConfig?.scenes.length ?? 'none'} />,
 }));
 
+// Bảng khoanh khung có spec riêng (story-roi-cutout.spec): ở đây chỉ kiểm cách Studio mở nó và nhận ảnh trả về.
+vi.mock('./story-roi-cutout', () => ({
+  StoryRoiCutout: (p: { src: string; disabled?: boolean; onUse: (d: string) => void; onClose: () => void }) => (
+    <div data-testid="mock-roi" data-src={p.src} data-disabled={String(!!p.disabled)}>
+      <button type="button" onClick={() => p.onUse('data:image/webp;base64,ROI')}>
+        mock-dùng-ảnh-cắt
+      </button>
+      <button type="button" onClick={p.onClose}>
+        mock-đóng
+      </button>
+    </div>
+  ),
+}));
+
 let mounted: Rendered[] = [];
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -209,6 +223,67 @@ describe('ProductStoryStudio', () => {
     expect(last(onChange)!.cutoutUrl).toBe('/public-image/product/p1/1');
   });
 
+  describe('cắt khung rồi tách nền (poster có khung màu chạm mép)', () => {
+    const extracted = { '/story-assets/extract': { body: { images: [{ url: 'https://shop.example.com/a.png', width: 800, height: 800 }], cutouts: [{ sourceUrl: 'https://shop.example.com/a.png', dataUrl: 'data:image/webp;base64,AAAA' }] } } };
+    const fetchImages = async () => {
+      typeInto(document.querySelector('input[aria-label="Link trang sản phẩm hoặc ảnh"]'), 'https://shop.example.com/p');
+      click(byText(document.body, 'button', 'Lấy ảnh'));
+      await flush();
+    };
+
+    it('có bản tách nền và chỗ thêm ảnh: nút mở bảng khoanh khung cho đúng ảnh đó, bấm lần nữa thì đóng', async () => {
+      mount({ value: config(), onAddImage: vi.fn(), routes: extracted });
+      await fetchImages();
+      const open = byText(document.body, 'button', 'Cắt khung rồi tách nền')!;
+      expect(open.getAttribute('aria-expanded')).toBe('false');
+      expect(document.querySelector('[data-testid="mock-roi"]')).toBeNull();
+      click(open);
+      expect(document.querySelector('[data-testid="mock-roi"]')?.getAttribute('data-src')).toBe('data:image/webp;base64,AAAA');
+      expect(byText(document.body, 'button', 'Cắt khung rồi tách nền')!.getAttribute('aria-expanded')).toBe('true');
+      click(byText(document.body, 'button', 'Cắt khung rồi tách nền'));
+      expect(document.querySelector('[data-testid="mock-roi"]')).toBeNull();
+    });
+
+    it('ảnh đã cắt trả về được đăng ký làm ảnh sản phẩm và cutoutUrl trỏ vào ảnh đó (không phải bản tách nền không cắt); bảng đóng lại', async () => {
+      const onAddImage = vi.fn();
+      const { onChange } = mount({ value: config(), onAddImage, routes: extracted });
+      await fetchImages();
+      click(byText(document.body, 'button', 'Cắt khung rồi tách nền'));
+      click(byText(document.body, 'button', 'mock-dùng-ảnh-cắt'));
+      expect(onAddImage).toHaveBeenCalledTimes(1);
+      expect(onAddImage).toHaveBeenCalledWith('data:image/webp;base64,ROI');
+      expect(last(onChange)!.cutoutUrl).toBe('/public-image/product/p1/1');
+      expect(document.querySelector('[data-testid="mock-roi"]')).toBeNull();
+    });
+
+    it('"Đóng" trong bảng không đăng ký ảnh và không đổi cấu hình', async () => {
+      const onAddImage = vi.fn();
+      const { onChange } = mount({ value: config(), onAddImage, routes: extracted });
+      await fetchImages();
+      click(byText(document.body, 'button', 'Cắt khung rồi tách nền'));
+      click(byText(document.body, 'button', 'mock-đóng'));
+      expect(document.querySelector('[data-testid="mock-roi"]')).toBeNull();
+      expect(onAddImage).not.toHaveBeenCalled();
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('không có chỗ thêm ảnh hoặc không có bản tách nền: không có nút cắt khung (không có điểm ảnh để đọc)', async () => {
+      mount({ value: config(), routes: extracted });
+      await fetchImages();
+      expect(byText(document.body, 'button', 'Cắt khung rồi tách nền')).toBeFalsy();
+    });
+
+    it('lấy ảnh lần mới đóng bảng đang mở của danh sách cũ', async () => {
+      mount({ value: config(), onAddImage: vi.fn(), routes: extracted });
+      await fetchImages();
+      click(byText(document.body, 'button', 'Cắt khung rồi tách nền'));
+      expect(document.querySelector('[data-testid="mock-roi"]')).not.toBeNull();
+      click(byText(document.body, 'button', 'Lấy ảnh'));
+      await flush();
+      expect(document.querySelector('[data-testid="mock-roi"]')).toBeNull();
+    });
+  });
+
   it('xem trước và khung chỉ điểm vẽ ảnh đã đăng ký bằng chính ảnh trong form, vì đường dẫn tương đối chưa trỏ được tới API', () => {
     const images = ['https://cdn.example.com/a.jpg', 'data:image/webp;base64,BBBB'];
     mount({ value: { ...config(), cutoutUrl: '/public-image/product/p1/1' }, product: product({ images }) });
@@ -235,6 +310,11 @@ describe('ProductStoryStudio', () => {
     const { onChange } = mount({ value: config() });
     click(byText(document.body, 'button', 'Dùng kịch bản mẫu'));
     expect(onChange).toHaveBeenLastCalledWith(null);
+  });
+
+  it('khung ngoài (fieldset) có min-w-0: mặc định fieldset rộng tối thiểu bằng nội dung nên khung xem trước 375px làm Studio tràn ngang ở màn 360px', () => {
+    mount({ value: config() });
+    expect(document.querySelector('fieldset')?.className).toContain('min-w-0');
   });
 
   it('disabled khoá mọi nút sửa', () => {

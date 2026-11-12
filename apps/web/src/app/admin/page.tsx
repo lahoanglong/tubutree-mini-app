@@ -300,7 +300,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     label: 'Bán hàng',
     items: [
       { k: 'productCategories', label: 'Sản phẩm', keywords: 'ảnh mô tả sửa sản phẩm danh mục ẩn hiện nổi bật' },
-      { k: 'catalogQuality', label: 'Kiểm tra catalog', keywords: 'chất lượng catalog thiếu ảnh ảnh lệch tên mô tả trống pancake kiểm tra' },
+      { k: 'catalogQuality', label: 'Kiểm tra catalog', keywords: 'chất lượng catalog thiếu ảnh ảnh lệch tên mô tả trống pancake kiểm tra csv tồn kho giả biến thể giá 0 mô tả AI thống kê AI tư vấn' },
       { k: 'orders', label: 'Đơn hàng' },
       { k: 'externalOrders', label: 'Đơn ngoài app' },
       { k: 'returns', label: 'Đổi / Trả' },

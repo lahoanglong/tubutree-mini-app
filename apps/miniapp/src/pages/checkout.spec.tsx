@@ -3468,3 +3468,52 @@ describe('CheckoutPage — máy chủ từ chối thì giữ khoá tới khi d�
     });
   });
 });
+
+describe('CheckoutPage — phân loại không có tên (86/154 phân loại trên PROD)', () => {
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.kind = 'ctv';
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.referralEligible = null;
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+
+  const withVariation = (variationName: unknown) => ({ ...CART, items: [{ ...CART.items[0]!, variationName }] });
+  const columnTexts = async (variationName: unknown) => {
+    mocks.getCart.mockResolvedValue(withVariation(variationName));
+    const { unmount } = renderPage();
+    const column = (await screen.findByText('Xà bông thảo mộc')).parentElement!;
+    const texts = Array.from(column.children).map((n) => n.textContent);
+    unmount();
+    return texts;
+  };
+
+  it('có tên: dòng phân loại hiện giữa tên sản phẩm và dòng giá × SL', async () => {
+    const named = await columnTexts('Sả');
+    expect(named.slice(0, 3)).toEqual(['Xà bông thảo mộc', 'Sả', '50.000đ × 1']);
+  });
+
+  it('tên trống, toàn khoảng trắng hay null: không dựng dòng phân loại (cột chữ ít đúng một khối)', async () => {
+    const named = await columnTexts('Sả');
+    for (const name of ['', '   ', null]) {
+      const blank = await columnTexts(name);
+      expect(blank).toHaveLength(named.length - 1);
+      expect(blank.slice(0, 2)).toEqual(['Xà bông thảo mộc', '50.000đ × 1']);
+    }
+  });
+
+  it('tên phân loại dạng đối tượng { name } (đã đọc được từ trước) vẫn hiện; đối tượng không có name thì ẩn', async () => {
+    expect((await columnTexts({ name: 'Sả' }))[1]).toBe('Sả');
+    expect((await columnTexts({ name: '' }))[1]).toBe('50.000đ × 1');
+    expect((await columnTexts({}))[1]).toBe('50.000đ × 1');
+  });
+});

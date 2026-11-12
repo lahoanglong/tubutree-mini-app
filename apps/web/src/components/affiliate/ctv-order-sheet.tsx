@@ -36,6 +36,7 @@ import { CTV_ORDER_COPY as t } from './ctv-order-copy';
 import { loadRecentCustomers, normalizeCustomerPhone, recentCustomerLabel, saveRecentCustomer, type RecentCustomer } from './recent-customers';
 import { ProductThumb } from '@/components/mini/product-thumb';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { joinDetailParts, variationLabel } from '@/lib/variation-label';
 
 interface OrderLine {
   variationId: string;
@@ -360,7 +361,7 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
               <div className="min-w-0 flex-1">
                 <div className="truncate text-sm text-stone-900">{l.productName}</div>
                 <div className="text-xs text-stone-600">
-                  {l.variationName} · {formatVnd(q?.unitPrice ?? l.unitPrice)}
+                  {joinDetailParts([variationLabel(l.variationName), formatVnd(q?.unitPrice ?? l.unitPrice)])}
                 </div>
                 {q?.isFlash && <div className="text-xs text-promo-fg">{t.flashPrice}</div>}
                 {q?.flashLimitNotice && <div className="text-xs text-warning-fg">{q.flashLimitNotice}</div>}
@@ -572,7 +573,7 @@ function ProductVariationPicker({ onAdd }: { onAdd: (v: VariationDetail, product
                     }}
                     className="flex min-h-11 w-full items-center justify-between gap-2 text-left disabled:opacity-50"
                   >
-                    <span className="text-sm text-stone-900">{v.name}</span>
+                    <span className="text-sm text-stone-900">{variationLabel(v.name, p!.variations.length) ?? p!.name}</span>
                     <span className={`text-xs font-semibold ${out ? 'text-stone-600' : 'text-forest-700'}`}>{out ? t.outOfStock : formatVnd(v.salePrice ?? v.retailPrice)}</span>
                   </button>
                 </li>

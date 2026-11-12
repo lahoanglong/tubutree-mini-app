@@ -28,6 +28,7 @@ import {
   type ReturnReasonCode,
 } from '../../utils/refund-rules';
 import { returnFormError } from '../../utils/refund-form-rules';
+import { joinDetailParts, variationLabel } from '../../utils/variation-label';
 
 interface Props {
   open: boolean;
@@ -246,7 +247,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
             <div key={l.orderItemId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0', borderBottom: '1px solid var(--color-border-subtle)' }}>
               <Checkbox
                 checked={l.selected}
-                aria-label={`Trả ${l.productName} ${l.variationName}`}
+                aria-label={joinDetailParts([`Trả ${l.productName}`, variationLabel(l.variationName)], ' ')}
                 onChange={() => toggleLine(l)}
               />
               {/* Chạm vào tên cũng chọn dòng; bàn phím và trình đọc màn hình dùng ô tick ngay cạnh. */}
@@ -255,7 +256,7 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
                   {l.productName}
                 </Text>
                 <Text variant="caption" tone="tertiary" as="div">
-                  {l.variationName} · còn trả được {l.remaining}
+                  {joinDetailParts([variationLabel(l.variationName), `còn trả được ${l.remaining}`])}
                 </Text>
               </div>
               {l.selected && l.remaining > 1 && (

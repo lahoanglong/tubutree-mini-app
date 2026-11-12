@@ -25,6 +25,7 @@ import { actionErrorText } from '@/lib/error-text';
 import { IMAGES_UPLOADING } from '@/lib/image-compress';
 import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
+import { joinDetailParts, variationLabel } from '@/lib/variation-label';
 
 const REASON_MAX = 500;
 const STEPPER_BTN =
@@ -201,7 +202,7 @@ export function ReturnRequestForm({
                 <span className="min-w-0">
                   <span className="block break-words text-sm text-stone-900">{l.productName}</span>
                   <span className="block text-xs text-stone-600">
-                    {l.variationName} · còn trả được {l.remaining}
+                    {joinDetailParts([variationLabel(l.variationName), `còn trả được ${l.remaining}`])}
                   </span>
                 </span>
               </label>
