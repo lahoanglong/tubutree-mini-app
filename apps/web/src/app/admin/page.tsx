@@ -230,6 +230,7 @@ type Tab =
   | 'reviews'
   | 'subscriptions'
   | 'analytics'
+  | 'catalogQuality'
   | 'reports';
 // Mọi tab có tệp riêng trừ trang vào mặc định (Việc cần xử lý) tải khi mở tab: gói đầu của /admin không chứa mã của cả 60 tab.
 const tabLoading = () => <ListSkeleton label="Đang tải" rows={5} />;
@@ -260,6 +261,7 @@ const CampaignsTab = dynamic(() => import('@/components/admin/campaigns-tab').th
 const BundlesTab = dynamic(() => import('@/components/admin/bundles-tab').then((m) => m.BundlesTab), { loading: tabLoading });
 const NotificationTemplatesTab = dynamic(() => import('@/components/admin/notification-templates-tab').then((m) => m.NotificationTemplatesTab), { loading: tabLoading });
 const AnalyticsTab = dynamic(() => import('./analytics-tab').then((m) => m.AnalyticsTab), { loading: tabLoading });
+const CatalogQualityTab = dynamic(() => import('./catalog-quality-tab').then((m) => m.CatalogQualityTab), { loading: tabLoading });
 const ReportsTab = dynamic(() => import('@/components/admin/reports-tab').then((m) => m.ReportsTab), { loading: tabLoading });
 const WasteTab = dynamic(() => import('@/components/admin/waste-tab').then((m) => m.WasteTab), { loading: tabLoading });
 const CommunityModerationTab = dynamic(() => import('@/components/admin/community-moderation-tab').then((m) => m.CommunityModerationTab), { loading: tabLoading });
@@ -298,6 +300,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     label: 'Bán hàng',
     items: [
       { k: 'productCategories', label: 'Sản phẩm', keywords: 'ảnh mô tả sửa sản phẩm danh mục ẩn hiện nổi bật' },
+      { k: 'catalogQuality', label: 'Kiểm tra catalog', keywords: 'chất lượng catalog thiếu ảnh ảnh lệch tên mô tả trống pancake kiểm tra' },
       { k: 'orders', label: 'Đơn hàng' },
       { k: 'externalOrders', label: 'Đơn ngoài app' },
       { k: 'returns', label: 'Đổi / Trả' },
@@ -813,6 +816,7 @@ export default function AdminPage() {
           {active === 'quickReplies' && <QuickReplyTab />}
           {active === 'notificationTemplates' && <NotificationTemplatesTab canEditAll={isAdmin} />}
           {active === 'analytics' && <AnalyticsTab onOpenReports={allowed.has('reports') ? () => setTab('reports') : undefined} />}
+          {active === 'catalogQuality' && <CatalogQualityTab />}
           {active === 'reports' && <ReportsTab key={reportsSeed} initialPreset={reportsSeed > 0 ? 'today' : undefined} sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
           </TabErrorBoundary>
         </div>

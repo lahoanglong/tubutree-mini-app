@@ -35,20 +35,20 @@ describe('LlmClient.complete', () => {
     await expect(new LlmClient(makeConfig()).complete(MSGS)).rejects.toBeInstanceOf(ServiceUnavailableException);
   });
 
-  it('deepseek ok → trả kết quả deepseek, KHÔNG gọi gemini', async () => {
+  it('gemini ok → trả kết quả gemini, KHÔNG gọi deepseek (gemini đi trước deepseek)', async () => {
     const c = new LlmClient(makeConfig({ DEEPSEEK_API_KEY: 'k', GEMINI_API_KEY: 'g' }));
     const ds = jest.spyOn(c as never as { callDeepSeek: () => Promise<string> }, 'callDeepSeek').mockResolvedValue('DS');
     const gm = jest.spyOn(c as never as { callGemini: () => Promise<string> }, 'callGemini').mockResolvedValue('GM');
-    expect(await c.complete(MSGS)).toBe('DS');
-    expect(ds).toHaveBeenCalled();
-    expect(gm).not.toHaveBeenCalled();
+    expect(await c.complete(MSGS)).toBe('GM');
+    expect(gm).toHaveBeenCalled();
+    expect(ds).not.toHaveBeenCalled();
   });
 
-  it('deepseek lỗi → fallback sang gemini', async () => {
+  it('gemini lỗi → fallback sang deepseek', async () => {
     const c = new LlmClient(makeConfig({ DEEPSEEK_API_KEY: 'k', GEMINI_API_KEY: 'g' }));
-    jest.spyOn(c as never as { callDeepSeek: () => Promise<string> }, 'callDeepSeek').mockRejectedValue(new Error('boom'));
-    jest.spyOn(c as never as { callGemini: () => Promise<string> }, 'callGemini').mockResolvedValue('GM');
-    expect(await c.complete(MSGS)).toBe('GM');
+    jest.spyOn(c as never as { callGemini: () => Promise<string> }, 'callGemini').mockRejectedValue(new Error('boom'));
+    jest.spyOn(c as never as { callDeepSeek: () => Promise<string> }, 'callDeepSeek').mockResolvedValue('DS');
+    expect(await c.complete(MSGS)).toBe('DS');
   });
 
   it('chỉ có gemini key → dùng gemini', async () => {

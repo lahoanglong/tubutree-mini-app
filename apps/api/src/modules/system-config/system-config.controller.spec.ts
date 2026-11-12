@@ -317,7 +317,15 @@ describe('SystemConfigController.publicConfig — số trong chữ đại lý v�
 });
 
 describe('SystemConfigController.publicConfig — aiAdvisorEnabled (công tắc AI)', () => {
-  const KEYS = ['ANTIGRAVITY_GATEWAY_URL', 'ANTIGRAVITY_GATEWAY_KEY', 'DEEPSEEK_API_KEY', 'GEMINI_API_KEY', 'AI_ADVISOR_ENABLED', 'AI_ADVISOR_PROVIDER'];
+  const KEYS = [
+    'ANTIGRAVITY_GATEWAY_URL',
+    'ANTIGRAVITY_GATEWAY_KEY',
+    'ANTHROPIC_API_KEY',
+    'DEEPSEEK_API_KEY',
+    'GEMINI_API_KEY',
+    'AI_ADVISOR_ENABLED',
+    'AI_ADVISOR_PROVIDER',
+  ];
   const saved: Record<string, string | undefined> = {};
   beforeEach(() => {
     for (const k of KEYS) {

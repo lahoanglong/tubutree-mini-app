@@ -535,7 +535,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cài đặt',
     ]);
     const items = [...nav.querySelectorAll('button:not([aria-expanded])')];
-    expect(items).toHaveLength(53);
+    expect(items).toHaveLength(54);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button:not([aria-expanded])')].map(navLabel);
@@ -543,6 +543,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       expect.arrayContaining(['Lịch sử giá đại lý', 'Hoa hồng & giá sỉ', 'Đại lý & công nợ', 'Gian hàng']),
     );
     expect(group('Bán hàng')).toContain('Sản phẩm');
+    expect(group('Bán hàng')).toContain('Kiểm tra catalog');
     expect(group('Hay dùng')).toEqual(['Hôm nay', 'Đơn hàng', 'Sản phẩm', 'Người dùng', 'Chat CSKH', 'Cộng đồng', 'Mã giảm giá', 'Đổi rác', 'Gian hàng', 'Duyệt SP đối tác', 'Đại lý']);
     expect(group('Khuyến mãi và điểm')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Tích điểm tại quầy', 'Tích điểm đơn sàn', 'Chiến dịch', 'Combo và mua kèm']);
     expect(group('Đổi rác và game')).toEqual(['Đổi rác', 'Nhiệm vụ']);
@@ -4346,6 +4347,17 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(window.location.search).toBe('?tab=reports');
     expect([...container.querySelectorAll('button[aria-pressed="true"]')].map((b) => b.textContent)).toContain('Hôm nay');
     expect(api.calls.some((c) => c.url.includes('/admin/reports/revenue') && c.url.includes(`from=${today}`) && c.url.includes(`to=${today}`))).toBe(true);
+  });
+
+  it('mục "Kiểm tra catalog" nằm trong thanh điều hướng của quản trị viên và mở thẻ Kiểm tra chất lượng Catalog, chưa gọi mạng cho tới khi bấm kiểm tra', async () => {
+    window.history.replaceState(null, '', '/admin?tab=catalogQuality');
+    const api = mockFetch({ '/products': { body: { data: [], meta: { page: 1, limit: 100, total: 0 } } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    await waitFor(() => (container.textContent ?? '').includes('Kiểm tra chất lượng Catalog'));
+    expect([...container.querySelectorAll('nav[aria-label="Mục quản trị"] button')].some((b) => navLabel(b) === 'Kiểm tra catalog')).toBe(true);
+    expect(container.textContent).toContain('Kiểm tra ngay');
+    expect(api.calls.some((c) => c.url.includes('/products'))).toBe(false);
   });
 
   it('mã đơn ở "Đơn hàng mới nhất" của Tổng quan bấm được, mở tab Đơn hàng tìm đúng mã (E-56)', async () => {

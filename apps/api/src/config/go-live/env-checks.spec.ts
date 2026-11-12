@@ -393,5 +393,21 @@ describe('evaluateEnv', () => {
     it('AI_ADVISOR_PROVIDER chọn provider chưa đủ khoá → WARN', () => {
       expect(status({ AI_ADVISOR_PROVIDER: 'deepseek' }, 'env.ai_advisor')).toBe('WARN');
     });
+    it('chỉ có ANTHROPIC_API_KEY (không gateway) → PASS và nêu claude', () => {
+      const r = byId(evaluateEnv(envWith({ ANTIGRAVITY_GATEWAY_URL: '', ANTIGRAVITY_GATEWAY_KEY: '', ANTHROPIC_API_KEY: 'a-key-test' })), 'env.ai_advisor');
+      expect(r.status).toBe('PASS');
+      expect(JSON.stringify(r)).toContain('claude');
+      expect(JSON.stringify(r)).not.toContain('a-key-test');
+    });
+    it('AI_ADVISOR_PROVIDER=claude khi chưa có khoá Anthropic → WARN nêu rõ provider thiếu khoá', () => {
+      const r = byId(evaluateEnv(envWith({ AI_ADVISOR_PROVIDER: 'claude', ANTHROPIC_API_KEY: '' })), 'env.ai_advisor');
+      expect(r.status).toBe('WARN');
+      expect(r.detail).toContain('AI_ADVISOR_PROVIDER=claude');
+    });
+    it('AI_ADVISOR_PROVIDER=claude + có khoá → PASS, chỉ claude', () => {
+      const r = byId(evaluateEnv(envWith({ AI_ADVISOR_PROVIDER: 'claude', ANTHROPIC_API_KEY: 'a-key-test' })), 'env.ai_advisor');
+      expect(r.status).toBe('PASS');
+      expect(r.detail).toBe('provider dùng: claude');
+    });
   });
 });

@@ -24,13 +24,15 @@ import type { VariationSheetMode } from './variation-sheet';
 import { useFlashSalesLoaded, useRunningFlash } from '@/lib/use-flash-sales';
 import { useFlashAllowance } from '@/lib/use-flash-allowance';
 import { usePdpSelection } from './pdp-selection';
-import { LOW_STOCK_NOTICE, useProductStock } from './pdp-stock';
+import { LOW_STOCK_NOTICE, productStockKey, useProductStock } from './pdp-stock';
 import { qtyPickMax, stockText } from '@tubutree/app-core/commerce/stock-text';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { VariationChip } from './variation-chip';
 import { actionErrorText } from '@/lib/error-text';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { firstMeasurable, playCartFeedback } from '@/lib/cart-feedback';
 import { onPdpQuickAdd } from '@/lib/pdp-quick-add';
 
@@ -211,16 +213,21 @@ export default function AddToCart({
   const groupCouponTried = useRef(false);
   const applyGroupCoupon = async (cart: Awaited<ReturnType<typeof addToCart>>) => {
     const code = new URLSearchParams(window.location.search).get('ma')?.trim().toUpperCase();
-    if (!code || !GROUP_COUPON_CODE.test(code) || groupCouponTried.current) return { cart, note: null, hold: false, ok: true };
+    if (!code || !GROUP_COUPON_CODE.test(code) || groupCouponTried.current) return { cart, note: null, hold: false, ok: true, refresh: null };
     groupCouponTried.current = true;
     forgetCouponParam();
     try {
       const next = await applyCoupon(code);
       void qc.invalidateQueries({ queryKey: ['quote'] });
       const outcome = couponUseOutcome(cart.couponCode, code, next);
-      return { cart: next, note: outcome.kind === 'ok' ? `Đã áp mã ${code}.` : outcome.text, hold: outcome.kind !== 'ok', ok: outcome.kind !== 'notApplied' };
+      return { cart: next, note: outcome.kind === 'ok' ? `Đã áp mã ${code}.` : outcome.text, hold: outcome.kind !== 'ok', ok: outcome.kind !== 'notApplied', refresh: null };
     } catch (e) {
-      return { cart, note: couponUseCopy.notApplied(actionErrorText(e)), hold: true, ok: false };
+      // Máy chủ từ chối mã nhóm vì đã cũ (hết hạn, nhóm đã đóng, mã đã dùng: 400/404/409/422): làm mới danh sách mã và báo giá, nút giữ khoá tới khi chúng về (như `couponRejected` của Mini),
+      // kẻo ô ưu đãi và giỏ còn hiện mã đã chết. Mất mạng, 401 và 5xx không nói gì về mã: không tải lại.
+      const refresh = serverRejectedState(e)
+        ? Promise.all(['my-coupons', 'coupons', 'quote'].map((key) => qc.invalidateQueries({ queryKey: [key] })))
+        : null;
+      return { cart, note: couponUseCopy.notApplied(actionErrorText(e)), hold: true, ok: false, refresh };
     }
   };
 
@@ -234,7 +241,7 @@ export default function AddToCart({
     setWarn(null);
     let leaving = false;
     try {
-      const { cart, note, hold, ok } = await applyGroupCoupon(await addToCart(variationId, quantity));
+      const { cart, note, hold, ok, refresh } = await applyGroupCoupon(await addToCart(variationId, quantity));
       // Badge giỏ ở header đọc cùng queryKey ['cart'] nhưng nằm trong layout nên không bao giờ
       // remount, và providers tắt refetchOnWindowFocus — không cập nhật thì khách thêm 3 món
       // vẫn thấy số cũ, tưởng chưa thêm được rồi thêm lại thành trùng số lượng.
@@ -251,7 +258,7 @@ export default function AddToCart({
           setSuccess(ok);
           setMsg(ok ? note : null);
           setWarn(ok ? null : note);
-          await new Promise((resolve) => window.setTimeout(resolve, NOTICE_HOLD_MS));
+          await Promise.all([new Promise((resolve) => window.setTimeout(resolve, NOTICE_HOLD_MS)), refresh ? settleWithin(refresh) : undefined]);
         }
         router.push('/thanh-toan');
         return;
@@ -260,11 +267,15 @@ export default function AddToCart({
       setWarn(note && !ok ? note : null);
       setSuccess(true);
       playCartFeedback(addSource.current?.isConnected ? addSource.current : firstMeasurable('[data-testid="pdp-add-to-cart"]'));
+      if (refresh) await settleWithin(refresh);
     } catch (e) {
       setMsg(actionErrorText(e));
       setSuccess(false);
       // Thường là câu vượt tồn của máy chủ ("Chỉ còn N sản phẩm." hay "Số lượng này vượt số hàng đang có."): tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
-      void qc.invalidateQueries({ queryKey: ['product-stock', slug] });
+      const stockReloaded = qc.invalidateQueries({ queryKey: productStockKey(slug) });
+      // Máy chủ từ chối vì màn đã cũ (400/404/409/422: hết hàng, phân loại ngừng bán): lời lỗi đã hiện, giữ khoá tới khi tồn kho và giỏ mới về (tối đa `LOCK_REFRESH_WAIT_MS`), như Mini App;
+      // nhả sớm thì chạm lần hai gửi lại đúng lệnh trên tồn kho cũ. Mất mạng, 401 và 5xx không nói gì về trạng thái thật (lần tải lại cũng hỏng): nhả ngay.
+      if (serverRejectedState(e)) await settleWithin(Promise.all([stockReloaded, qc.invalidateQueries({ queryKey: ['cart'] })]));
     } finally {
       if (!leaving) {
         cartWrite.current = false;

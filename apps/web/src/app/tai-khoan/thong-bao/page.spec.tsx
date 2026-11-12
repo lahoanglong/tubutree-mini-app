@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
+import { waitFor } from '@/test-utils/render-hook';
 
 // Chép ý notifications-page.spec.tsx (Mini App): một h1 ở mọi trạng thái, không gọi API khi chưa có phiên, thử lại, dấu chưa đọc,
 // chạm tin thì đánh dấu đã đọc và mở chi tiết, nút hành động theo template, "Đọc tất cả".
@@ -17,6 +18,11 @@ vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({ usePathname: () => '/', useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null, useCartKey: () => ['cart', null] }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
+// Sheet Mua lại khoá nút Thêm vào giỏ tới khi giỏ tải xong. `getCart` đi qua `apiFetch` (fetch thật, không qua `coreHttp`), nên không mock thì lúc nút mở khoá tuỳ máy nhanh hay chậm.
+vi.mock('@/lib/shop-client', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/shop-client')>()),
+  getCart: async () => ({ items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 0 }),
+}));
 
 import NotificationsPage from './page';
 import { TubuQueryClient } from '@/lib/query-client';
@@ -247,14 +253,22 @@ describe('/tai-khoan/thong-bao: nhắc mua lại (REORDER_REMINDER)', () => {
     mocks.post.mockResolvedValue(CART);
     const { cta } = await open();
     click(cta);
-    await flush(6);
+    // Tra cứu xong mới đóng chi tiết và mở sheet; nút "Thêm vào giỏ" của sheet `disabled` cho tới khi giỏ tải xong (`cartReady`) nên bấm sớm là bấm vào nút khoá và không gửi gì.
+    // Máy chậm thì `flush` cố định chưa đủ nhịp: chờ đúng trạng thái cuối (chi tiết đã đóng, nút mở khoá, hết aria-busy) rồi mới bấm.
+    const addButton = () => byText(dialog() ?? document.body, 'button', 'Thêm vào giỏ (1)') as HTMLButtonElement | null;
+    await waitFor(() => {
+      expect(dialog()?.textContent).not.toContain('Chi tiết thông báo');
+      expect(addButton()).not.toBeNull();
+      expect(addButton()!.disabled).toBe(false);
+      expect(addButton()!.getAttribute('aria-busy')).toBeNull();
+    });
     expect(lookups()).toHaveLength(1);
     expect(lookups()[0]![1]).toEqual({ query: { variationId: 'v1', limit: 1 } });
     expect(dialog()?.textContent).toContain('Dầu gội');
-    expect(dialog()?.textContent).not.toContain('Chi tiết thông báo');
-    click(byText(dialog()!, 'button', 'Thêm vào giỏ (1)'));
-    await flush(6);
-    expect(mocks.post).toHaveBeenCalledWith('/cart/items', { variationId: 'v1', quantity: 1, addSource: 'reorder_notification' }, undefined);
+    click(addButton());
+    await waitFor(() =>
+      expect(mocks.post).toHaveBeenCalledWith('/cart/items', { variationId: 'v1', quantity: 1, addSource: 'reorder_notification' }, undefined),
+    );
     expect(mocks.push).not.toHaveBeenCalled();
   });
 

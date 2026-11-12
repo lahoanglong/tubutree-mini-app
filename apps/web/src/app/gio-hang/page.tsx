@@ -64,6 +64,17 @@ const EmptyCart = dynamic(() => import('./empty-cart'), { ssr: false });
 type LineOp = { op: 'qty'; id: string; q: number } | { op: 'remove'; id: string; line?: CartLine };
 const LINE_OP_KEY = ['cart-line-op'] as const;
 
+// Ở phạm vi module (không đọc state/props) để các effect dùng được mà không phải khai làm phụ thuộc.
+const focusIsFree = () => !document.activeElement || document.activeElement === document.body;
+const focusHeading = () => {
+  if (!focusIsFree()) return;
+  const h = document.querySelector<HTMLElement>('main h1');
+  if (!h) return;
+  h.tabIndex = -1;
+  h.addEventListener('blur', () => h.removeAttribute('tabindex'), { once: true });
+  h.focus();
+};
+
 const clampPercent = (pct: number) => (Number.isFinite(pct) ? Math.min(100, Math.max(0, Math.round(pct))) : 0);
 
 export default function CartPage() {
@@ -155,7 +166,6 @@ export default function CartPage() {
   // Dòng vừa xoá bị gỡ khỏi cây kéo theo nút Xoá đang giữ focus: chuyển focus sang "Hoàn tác" để bàn phím không rơi về đầu trang.
   // Chỉ khi nút Xoá đang có vòng lấy nét (người dùng bàn phím): chuột/cảm ứng không bị giữ đồng hồ vì một focus họ không thấy.
   // Đợi phản hồi chậm thì khách có thể đã Tab sang ô khác (vd gõ mã giảm giá): chỉ kéo focus khi nó đang rơi về body, không giật khỏi chỗ khách đang làm.
-  const focusIsFree = () => !document.activeElement || document.activeElement === document.body;
   const focusUndo = useRef(false);
   const removeOrigin = useRef<Element | null>(null);
   useEffect(() => {
@@ -166,14 +176,6 @@ export default function CartPage() {
   const refreshCart = () => void cartWrite.reload();
   // Bấm "Hoàn tác" bằng bàn phím làm thanh hoàn tác biến mất khi nó đang giữ focus: đưa focus tới dòng vừa thêm lại (hoặc tiêu đề trang nếu dòng không còn).
   const restoreFocus = useRef<{ variationId: string } | null>(null);
-  const focusHeading = () => {
-    if (!focusIsFree()) return;
-    const h = document.querySelector<HTMLElement>('main h1');
-    if (!h) return;
-    h.tabIndex = -1;
-    h.addEventListener('blur', () => h.removeAttribute('tabindex'), { once: true });
-    h.focus();
-  };
   useEffect(() => {
     const want = restoreFocus.current;
     if (!want) return;

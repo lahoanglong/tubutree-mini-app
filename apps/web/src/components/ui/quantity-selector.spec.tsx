@@ -46,6 +46,25 @@ describe('QuantitySelector', () => {
     expect(btn(mount(<QuantitySelector value={2} max={3} onChange={() => {}} />).container, 'Tăng số lượng').className).toContain('h-11 w-11');
   });
 
+  it('vùng chạm >= 44x44 cho mọi nút: − + (md 44px, sm 36px kèm lớp phủ 4px mỗi phía) và nút cộng nhanh (rộng tối thiểu 44px, không còn min-w-9)', () => {
+    for (const size of ['md', 'sm'] as const) {
+      const { container } = mount(<QuantitySelector value={2} max={20} size={size} onChange={() => {}} quickSteps={[5, 10]} />);
+      const buttons = Array.from(container.querySelectorAll<HTMLElement>('button'));
+      expect(buttons.map((b) => b.getAttribute('aria-label'))).toEqual(['Giảm số lượng', 'Tăng số lượng', 'Thêm 5', 'Thêm 10']);
+      for (const b of buttons) {
+        const name = `${b.getAttribute('aria-label')} (${size})`;
+        const cls = b.className.split(/\s+/);
+        const quick = !!b.getAttribute('aria-label')?.startsWith('Thêm');
+        // Chiều cao: md 44px thật; sm 36px thật + lớp phủ `after:-inset-1` giãn 4px mỗi phía thành 44px.
+        expect(size === 'md' ? cls.includes('h-11') : cls.includes('h-9') && cls.includes('after:-inset-1'), `${name}: chiều cao`).toBe(true);
+        // Chiều rộng: − và + vuông như chiều cao; nút cộng nhanh rộng theo chữ (`!w-auto`) nhưng không dưới 44px.
+        if (quick) expect(cls.includes('min-w-11'), `${name}: rộng tối thiểu 44px`).toBe(true);
+        else expect(size === 'md' ? cls.includes('w-11') : cls.includes('w-9') && cls.includes('after:-inset-1'), `${name}: chiều rộng`).toBe(true);
+        expect(cls, name).not.toContain('min-w-9');
+      }
+    }
+  });
+
   it('editable: gõ số vào ô, bỏ ký tự lạ, kẹp vào [min, max]', () => {
     const onChange = vi.fn();
     const { container } = mount(<QuantitySelector value={3} max={20} onChange={onChange} editable />);

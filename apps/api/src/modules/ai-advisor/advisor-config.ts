@@ -1,4 +1,7 @@
-export type AdvisorProvider = 'antigravity' | 'deepseek' | 'gemini';
+export type AdvisorProvider = 'antigravity' | 'claude' | 'deepseek' | 'gemini';
+
+/** Thứ tự tự chọn khi AI_ADVISOR_PROVIDER để trống: gateway miễn phí, rồi Claude Haiku trực tiếp, rồi các proxy OpenAI-compatible. */
+const AUTO_ORDER = ['antigravity', 'claude', 'gemini', 'deepseek'] as const satisfies readonly AdvisorProvider[];
 
 export type EnvGetter = (key: string) => string | undefined;
 
@@ -17,22 +20,24 @@ export function isAdvisorEnabled(get: EnvGetter): boolean {
   return !OFF_VALUES.has(clean(get, 'AI_ADVISOR_ENABLED').toLowerCase());
 }
 
+export const ADVISOR_PROVIDERS: readonly AdvisorProvider[] = AUTO_ORDER;
+
 export function providerConfigured(get: EnvGetter, p: AdvisorProvider): boolean {
   if (p === 'antigravity') return Boolean(clean(get, 'ANTIGRAVITY_GATEWAY_URL') && clean(get, 'ANTIGRAVITY_GATEWAY_KEY'));
+  if (p === 'claude') return Boolean(clean(get, 'ANTHROPIC_API_KEY'));
   if (p === 'deepseek') return Boolean(clean(get, 'DEEPSEEK_API_KEY'));
   return Boolean(clean(get, 'GEMINI_API_KEY'));
 }
 
 /**
  * Thứ tự thử provider. Chọn rõ AI_ADVISOR_PROVIDER thì CHỈ dùng provider đó (không âm thầm rơi sang
- * provider khác có key cũ còn sót); để trống thì tự chọn antigravity > deepseek > gemini theo cái đã cấu hình.
+ * provider khác có key cũ còn sót); để trống thì tự chọn antigravity > claude > gemini > deepseek theo cái đã cấu hình.
  */
 export function resolveProviderOrder(get: EnvGetter): AdvisorProvider[] {
   const picked = clean(get, 'AI_ADVISOR_PROVIDER').toLowerCase();
-  if (picked === 'antigravity' || picked === 'deepseek' || picked === 'gemini') {
-    return providerConfigured(get, picked) ? [picked] : [];
-  }
-  return (['antigravity', 'deepseek', 'gemini'] as const).filter((p) => providerConfigured(get, p));
+  const pinned = AUTO_ORDER.find((p) => p === picked);
+  if (pinned) return providerConfigured(get, pinned) ? [pinned] : [];
+  return AUTO_ORDER.filter((p) => providerConfigured(get, p));
 }
 
 /** Nguồn sự thật cho cả LlmClient lẫn GET /config/public: bật VÀ có ít nhất một provider dùng được. */

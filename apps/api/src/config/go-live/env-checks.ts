@@ -1,5 +1,5 @@
 import { envSchema } from '../env.validation';
-import { isAdvisorEnabled, providerConfigured, resolveProviderOrder } from '../../modules/ai-advisor/advisor-config';
+import { type AdvisorProvider, isAdvisorEnabled, providerConfigured, resolveProviderOrder } from '../../modules/ai-advisor/advisor-config';
 import { resolveOpsEmailConfig } from '../ops-email-config';
 import { MIN_WEBHOOK_SECRET_LENGTH } from '../webhook-secrets';
 import { describeSecret, envValue, looksLikePlaceholder } from './secrets';
@@ -402,7 +402,7 @@ function cloudinaryChecks(env: Env): CheckResult[] {
 }
 
 function aiChecks(env: Env): CheckResult[] {
-  const title = 'AI tư vấn (Antigravity gateway)';
+  const title = 'AI tư vấn';
   const get = (k: string) => envValue(env, k);
   if (!isAdvisorEnabled(get)) {
     return [pass(G_AI, 'env.ai_advisor', title, 'AI_ADVISOR_ENABLED đang tắt: Mini App ẩn lối vào AI')];
@@ -413,8 +413,8 @@ function aiChecks(env: Env): CheckResult[] {
   }
   if (resolveProviderOrder(get).length === 0) {
     const picked = get('AI_ADVISOR_PROVIDER');
-    const why = picked && !providerConfigured(get, picked as 'antigravity' | 'deepseek' | 'gemini') ? `AI_ADVISOR_PROVIDER=${picked} nhưng provider đó chưa đủ khoá` : 'chưa có provider nào';
-    return [warn(G_AI, 'env.ai_advisor', title, `${why}: Mini App sẽ ẩn lối vào AI`, 'Chủ ý chưa bật AI thì bỏ qua. Muốn bật: đặt ANTIGRAVITY_GATEWAY_URL và ANTIGRAVITY_GATEWAY_KEY (runbook mục AI), chạy thử 20 câu hỏi thật rồi mới mở.')];
+    const why = picked && !providerConfigured(get, picked as AdvisorProvider) ? `AI_ADVISOR_PROVIDER=${picked} nhưng provider đó chưa đủ khoá` : 'chưa có provider nào';
+    return [warn(G_AI, 'env.ai_advisor', title, `${why}: Mini App sẽ ẩn lối vào AI`, 'Chủ ý chưa bật AI thì bỏ qua. Muốn bật: đặt ANTIGRAVITY_GATEWAY_URL và ANTIGRAVITY_GATEWAY_KEY (runbook mục AI), hoặc ANTHROPIC_API_KEY để dùng Claude trực tiếp; chạy thử 20 câu hỏi thật rồi mới mở.')];
   }
   return [pass(G_AI, 'env.ai_advisor', title, `provider dùng: ${resolveProviderOrder(get).join(' > ')}`)];
 }

@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   createGroupBuy: vi.fn(),
+  getProductBundles: vi.fn().mockResolvedValue({ combos: [], addons: [] }),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -35,6 +36,9 @@ vi.mock('../services/api', async (importOriginal) => ({
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
 }));
 vi.mock('../services/account-api', () => ({ getCoupons: vi.fn().mockResolvedValue([]) }));
+// Trang giữ khung chờ tới khi bộ Combo/Mua kèm về (`useBundlesWait`): không mock thì đó là một request thật, về sớm hay muộn tuỳ máy, còn đồng hồ giả chỉ chạy tay
+// nên `openPdp` có lúc tới nút Thêm vào giỏ trước khi trang hết chờ.
+vi.mock('../services/bundle-api', () => ({ getProductBundles: mocks.getProductBundles }));
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: mocks.createGroupBuy }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
