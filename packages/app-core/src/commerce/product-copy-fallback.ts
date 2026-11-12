@@ -1,4 +1,5 @@
-import { baseSlug, FUWA3E_SKUS, type FuwaRow } from './story-presets-launch';
+import { baseSlug, isBlankHtmlText } from './catalog-text';
+import { FUWA3E_SKUS, type FuwaRow } from './story-presets-launch';
 
 /**
  * Mô tả và thành phần dự phòng cho trang sản phẩm khi PROD chưa có (cột `description` rỗng, `ingredients` rỗng).
@@ -126,10 +127,103 @@ const MANUAL: Record<string, ProductCopyFallback> = {
   ),
 };
 
+/**
+ * 47 SKU đang hết hàng trên PROD (ảnh chụp catalog 12/11/2026), để trang sản phẩm có chữ ngay khi hàng về. Nguồn duy nhất là tên sản phẩm: chưa đối
+ * chiếu ảnh bao bì nên không có câu "Bao bì ghi". Phần tên nêu công dụng, nguồn gốc hay nhãn ("giảm gãy rụng", "trị gàu", "sáng da", "thiên nhiên",
+ * "thuần chay", "chuẩn gu Huế"...) không chép lại vì cần giấy tờ; chỉ giữ loại hàng, thương hiệu, quy cách và tên nguyên liệu tên đã nêu.
+ * Không có nguồn để lập thành phần (tên chỉ nêu loại hàng) thì `ingredients` để trống.
+ */
+const OUT_OF_STOCK: Record<string, ProductCopyFallback> = {
+  'sua-hat-gao-lut-nay-mam-bh-nong-lon-400g': entry('Sữa hạt gạo lứt nảy mầm BH.NONG, đóng lon 400g.', named('Gạo lứt nảy mầm')),
+  'sua-hat-gao-lut-nay-mam-bh-nong-khong-duong-400g-gom-18-loai-hat-thuan-chay': entry(
+    'Sữa hạt gạo lứt nảy mầm BH.NONG, bản không đường, quy cách 400g, gồm 18 loại hạt.',
+    named('Gạo lứt nảy mầm'),
+    named('Hạt'),
+  ),
+  'xoai-say-deo-bh-nong': entry('Xoài sấy dẻo BH.NONG.', named('Xoài')),
+  'thanh-gao-lut-cha-bong-bh-nong-240g': entry('Thanh gạo lứt chà bông BH.NONG, quy cách 240g.', named('Gạo lứt'), named('Chà bông')),
+  'thanh-gao-lut-rong-bien-bh-nong-180g': entry('Thanh gạo lứt rong biển BH.NONG, quy cách 180g.', named('Gạo lứt'), named('Rong biển')),
+  'mixed-nuts-granola-tui-tien-loi-hat-dinh-duong-nuong-moc': entry('Granola mixed nuts đóng túi tiện lợi, hạt nướng mộc.', named('Granola'), named('Hạt nướng mộc')),
+  'hop-thiec-banh-mam-hat-rong-bien-225g': entry('Bánh mầm hạt rong biển, đóng hộp thiếc 225g.', named('Mầm hạt'), named('Rong biển')),
+  'hop-thiec-banh-mam-hat-yen-mach-225g': entry('Bánh mầm hạt yến mạch, đóng hộp thiếc 225g.', named('Mầm hạt'), named('Hạt yến mạch')),
+  'tui-tim-granola-bh-nong-250g': entry('Túi tím Granola BH.NONG, quy cách 250g.', named('Granola')),
+  'granola-mix-trai-cay-say-bh-nong-lon-450g': entry('Granola mix trái cây sấy BH.NONG, đóng lon 450g.', named('Granola'), named('Trái cây sấy')),
+  'tra-gao-lut-ray-dau-den-bh-nong-500g': entry('Trà gạo lứt rẫy đậu đen BH.NONG, quy cách 500g.', named('Gạo lứt rẫy'), named('Đậu đen')),
+
+  'cho-be-duong-hoa-dua-sokfarm-hu-thuy-tinh-150g': entry('Đường hoa dừa Sokfarm trong mục Cho bé, đóng hũ thủy tinh 150g.', named('Đường hoa dừa')),
+  'cho-be-nuoc-tuong-mat-hoa-dua-sokfarm-200ml': entry('Nước tương mật hoa dừa Sokfarm trong mục Cho bé, chai 200ml.', named('Mật hoa dừa')),
+  'cho-be-mat-co-dac-sokfarm-250g': entry('Mật cô đặc Sokfarm trong mục Cho bé, quy cách 250g.', named('Mật cô đặc')),
+  'nuoc-uong-mat-hoa-dua-tuoi-sokfarm-330ml': entry('Nước uống mật hoa dừa tươi Sokfarm, quy cách 330ml.', named('Mật hoa dừa tươi')),
+  'nuoc-tuong-mat-hoa-dua-sokfarm-nau': entry('Nước tương mật hoa dừa Sokfarm dùng để nấu.', named('Mật hoa dừa')),
+
+  'ca-phe-sau-rieng-tui-20x20g': entry('Cà phê sầu riêng, túi 20x20g.', named('Cà phê'), named('Sầu riêng')),
+  'ca-phe-muoi-tui-50x16g': entry('Cà phê muối, túi 50x16g.', named('Cà phê'), named('Muối')),
+  'ca-phe-muoi-c-sea-dam-da-thom-beo-chuan-gu-hue-hop-16g-x-10-goi': entry('Cà phê muối C&Sea, hộp 10 gói, mỗi gói 16g.', named('Cà phê'), named('Muối')),
+  'ca-phe-sua-dua-hoa-tan-kafedua-le-plateau-thom-beo-16g-x-10-goi': entry('Cà phê sữa dừa hoà tan KAFEDUA Le Plateau, hộp 10 gói, mỗi gói 16g.', named('Cà phê'), named('Sữa dừa')),
+  'ca-phe-trung-ahano-chuan-vi-ha-noi-thom-ngay-kho-cuong': entry('Cà phê trứng thương hiệu AHANO.', named('Cà phê'), named('Trứng')),
+  'ca-phe-sau-rieng-thom-beo-durica-le-plateau-hop-g-x-10-goi': entry('Cà phê sầu riêng DURICA Le Plateau, hộp 10 gói.', named('Cà phê'), named('Sầu riêng')),
+  'socola-hoa-tan-uong-lien-choco-oke': entry('Socola hoà tan uống liền CHOCO-OKE.', named('Socola')),
+
+  'nuoc-nam-dong-trung-ha-thao-hector-collagen-50ml-x-10-bo-sung-collagen-ho-tro-dep-da': entry(
+    'Nước nấm đông trùng hạ thảo Hector Collagen, hộp 10 chai, mỗi chai 50ml.',
+    named('Đông trùng hạ thảo'),
+    named('Collagen'),
+  ),
+  'nuoc-dong-trung-ha-thao-hector-collagen-plus-dep-da-chong-lao-hoa-70ml-x-10-chai': entry(
+    'Nước đông trùng hạ thảo Hector Collagen Plus, hộp 10 chai, mỗi chai 70ml.',
+    named('Đông trùng hạ thảo'),
+    named('Collagen'),
+  ),
+  'nuoc-dong-trung-ha-thao-hector-sam-tang-cuong-suc-khoe-70ml-x-10-chai': entry(
+    'Nước đông trùng hạ thảo Hector Sâm, hộp 10 chai, mỗi chai 70ml.',
+    named('Đông trùng hạ thảo'),
+    named('Sâm'),
+  ),
+  'nuoc-dong-trung-ha-thao-hector-lite-thanh-loc-co-the-70ml-x-10-chai-dieu-hoa-duong-huyet': entry(
+    'Nước đông trùng hạ thảo Hector Lite, hộp 10 chai, mỗi chai 70ml.',
+    named('Đông trùng hạ thảo'),
+  ),
+  'nuoc-uong-sang-da-hector-white-collagen-dong-trung-ha-thao-50ml-x-10-lo': entry(
+    'Nước uống Hector White Collagen đông trùng hạ thảo, hộp 10 lọ, mỗi lọ 50ml.',
+    named('Collagen'),
+    named('Đông trùng hạ thảo'),
+  ),
+  'nuoc-nam-dong-trung-ha-thao-hector-basic-dang-tui-25ml-x-10-goi': entry(
+    'Nước nấm đông trùng hạ thảo Hector Basic dạng túi, hộp 10 gói, mỗi gói 25ml.',
+    named('Đông trùng hạ thảo'),
+  ),
+  'nuoc-uong-dong-trung-ha-thao-hector-thao-moc-25ml-x-10-goi-boi-bo-co-the-tang-suc-de-khang': entry(
+    'Nước uống đông trùng hạ thảo Hector Thảo mộc, hộp 10 gói, mỗi gói 25ml.',
+    named('Đông trùng hạ thảo'),
+    named('Thảo mộc'),
+  ),
+
+  'dau-goi-thao-duoc-sam-visante-giam-gay-rung-500ml-cho-toc-yeu-gay-rung-chiet-xuat-sam-viet-nam': entry('Dầu gội thảo dược Sâm Visante, chai 500ml.', named('Sâm')),
+  'dau-goi-thao-duoc-sam-visante-tri-gau-giam-bet-dau-500ml-cho-toc-gau-bet-dau-chiet-xuat-sam': entry('Dầu gội thảo dược Sâm Visante, chai 500ml.', named('Sâm')),
+  'dau-xa-thao-duoc-visante-chiet-xuat-sam-duong-toc-mem-muot-500ml': entry('Dầu xả thảo dược Visante chiết xuất sâm, chai 500ml.', named('Sâm')),
+  'xit-duong-toc-visante-thao-duoc-chiet-xuat-sam-ngan-rung-toc-100ml': entry('Xịt dưỡng tóc thảo dược Visante chiết xuất sâm, chai 100ml.', named('Sâm')),
+  'tay-te-bao-chet-da-dau-thao-duoc-visante-lam-sach-nhe-nhang-150g': entry('Tẩy tế bào chết da đầu thảo dược Visante, quy cách 150g.'),
+  'sua-rua-mat-tao-bot-visante-chiet-xuat-sam-lam-sach-diu-nhe-150ml': entry('Sữa rửa mặt tạo bọt Visante chiết xuất sâm, quy cách 150ml.', named('Sâm')),
+  'nuoc-tay-trang-visante-chiet-xuat-sam-thien-nhien-diu-nhe-250ml': entry('Nước tẩy trang Visante chiết xuất sâm, quy cách 250ml.', named('Sâm')),
+
+  'dau-bo-tuoi-po-lang-30ml-10ml': entry('Dầu bơ tươi Pơ Lang, quy cách 30ml hoặc 10ml.', named('Dầu bơ tươi')),
+  'nuoc-tay-trang-po-lang-300ml': entry('Nước tẩy trang Pơ Lang, quy cách 300ml.'),
+  'dau-goi-thao-duoc-po-lang-300g': entry('Dầu gội thảo dược Pơ Lang, quy cách 300g.', named('Thảo dược')),
+  'sua-rua-mat-tao-bot-po-lang-150ml': entry('Sữa rửa mặt tạo bọt Pơ Lang, quy cách 150ml.'),
+  'dau-u-toc-po-lang-50ml': entry('Dầu ủ tóc Pơ Lang, quy cách 50ml.'),
+  'mat-na-ngu-po-lang-30g': entry('Mặt nạ ngủ Pơ Lang, quy cách 30g.'),
+  'son-duong-co-mau-po-lang-a01-a03-a04-a05': entry('Son dưỡng có màu Pơ Lang, các mã màu A01, A03, A04 và A05.'),
+  'son-duong-bo-tuoi-po-lang-a08': entry('Son dưỡng bơ tươi Pơ Lang, mã A08.', named('Bơ tươi')),
+  'son-duong-gac-tuoi-a07': entry('Son dưỡng gấc tươi, mã A07.', named('Gấc tươi')),
+
+  'gel-rua-chen-cho-may-fuwa3e-2000ml': fuwaCopy(['Gel rửa chén cho máy', '2000ml', 0]),
+};
+
 const CATALOG: Record<string, ProductCopyFallback> = {
   ...Object.fromEntries(Object.entries(FUWA3E_SKUS).map(([slug, row]) => [slug, fuwaCopy(row)])),
   ...Object.fromEntries(Object.entries(FUWA3E_DISH_WASH).map(([slug, row]) => [slug, fuwaCopy(row)])),
   ...MANUAL,
+  ...OUT_OF_STOCK,
 };
 
 const has = (table: Record<string, unknown>, key: string): boolean => Object.prototype.hasOwnProperty.call(table, key);
@@ -140,7 +234,7 @@ export function findProductCopyFallback(slug: string): ProductCopyFallback | und
   return has(CATALOG, key) ? CATALOG[key] : undefined;
 }
 
-const blankText = (v: string | null | undefined): boolean => !v || v.replace(/<[^>]*>|&nbsp;/gi, ' ').trim() === '';
+const blankText = isBlankHtmlText;
 
 function readIngredients(v: ProductCopyInput['ingredients']): CopyIngredient[] {
   if (typeof v === 'string') {

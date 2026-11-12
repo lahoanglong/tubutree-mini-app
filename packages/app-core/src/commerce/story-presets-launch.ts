@@ -1,5 +1,8 @@
 import type { AssemblyStep, HudCalloutPoint, IngredientLayerSprite, ProductStoryConfig, StoryFrom } from '@tubutree/shared-types';
+import { baseSlug } from './catalog-text';
 import { STORY_PRESETS } from './story-presets';
+
+export { baseSlug };
 
 /**
  * Kịch bản đợt đầu cho năm sản phẩm thật trên PROD (Sokfarm, BH.NONG, PƠ LANG, Fuwa3e, DURICA). Khoá theo slug gốc: slug PROD có thêm
@@ -215,13 +218,6 @@ export const CATALOG_STORY_PRESETS: Record<string, ProductStoryConfig> = {
   'bot-rua-binh-sua-cho-be-pineboo-500ml': pinebooPreset('Bọt rửa bình sữa cho bé', '500ml', 'Dạng bọt, bao bì ghi tạo bọt từ bột ngô.'),
   ...Object.fromEntries(Object.entries(FUWA3E_SKUS).map(([slug, row]) => [slug, fuwaPreset(row)])),
 };
-
-/** Slug đồng bộ Pancake trên PROD có hậu tố băm 6–8 ký tự hex ở cuối; chuẩn hoá rồi bỏ hậu tố để khớp slug gốc. */
-export const baseSlug = (slug: string): string =>
-  slug
-    .trim()
-    .toLowerCase()
-    .replace(/-[0-9a-f]{6,8}$/i, '');
 
 /**
  * Preset cho một slug: khớp thẳng theo slug chuẩn hoá trước (LAUNCH_STORY_PRESETS, CATALOG_STORY_PRESETS rồi STORY_PRESETS), sau đó thử slug gốc đã bỏ hậu tố

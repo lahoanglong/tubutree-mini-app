@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { parseStoryConfig, STORY_LIMITS } from '@tubutree/shared-types';
+import { BAMBOO_CLAIMS, MEDICAL_CLAIMS, NATURAL_CLAIMS, PROOF_CLAIMS } from './copy-claims-guard';
 import { STORY_PRESETS } from './story-presets';
 import { STORY_SPRITES } from './story-sprites';
 
@@ -51,17 +52,49 @@ describe('STORY_PRESETS', () => {
     for (const cfg of Object.values(STORY_PRESETS)) expect(cfg.scenes.some((s) => s.kind === 'variant_arc')).toBe(false);
   });
 
-  it('chỉ nêu phần trăm có trong dữ liệu mẫu (không bịa thông số)', () => {
-    const seed = readFileSync(resolve(__dirname, '../../../../apps/api/prisma/seed.ts'), 'utf8');
+  it('không điểm chỉ nào mang giá trị hay thanh phần trăm', () => {
     for (const [slug, cfg] of Object.entries(STORY_PRESETS)) {
       for (const sc of cfg.scenes) {
         if (sc.kind !== 'hud_callouts') continue;
         for (const p of sc.points) {
-          if (!p.value) continue;
-          expect(seed, `${slug}: ${p.label} ${p.value}`).toContain(`percentage: '${p.value}'`);
+          expect(p.value, `${slug}: ${p.label}`).toBeUndefined();
+          expect(p.barPct, `${slug}: ${p.label}`).toBeUndefined();
         }
       }
     }
+  });
+
+  describe('copy-claims-guard trên toàn bộ chữ của STORY_PRESETS', () => {
+    const textOf = (cfg: (typeof STORY_PRESETS)[string]): string[] =>
+      cfg.scenes.flatMap((sc) => {
+        if (sc.kind === 'ingredient_assembly') return sc.steps.flatMap((st) => [st.title, st.body, ...st.layers.map((l) => l.label ?? '')]);
+        if (sc.kind === 'hud_callouts') return [sc.closing, ...sc.points.flatMap((p) => [p.label, p.value ?? ''])];
+        return [];
+      });
+    const GUARDS: [string, RegExp][] = [
+      ['MEDICAL_CLAIMS', MEDICAL_CLAIMS],
+      ['PROOF_CLAIMS', PROOF_CLAIMS],
+      ['NATURAL_CLAIMS', NATURAL_CLAIMS],
+      ['BAMBOO_CLAIMS', BAMBOO_CLAIMS],
+    ];
+
+    it.each(SLUGS)('%s: mọi tiêu đề bước, nội dung bước, nhãn lớp, nhãn điểm chỉ, giá trị và câu kết đều qua bốn bộ chặn', (slug) => {
+      const lines = textOf(STORY_PRESETS[slug]!);
+      expect(lines.length, slug).toBeGreaterThan(10);
+      for (const line of lines) for (const [name, re] of GUARDS) expect(line, `${slug}: "${line}" dính ${name}`).not.toMatch(re);
+    });
+
+    it('bộ chặn còn cắn thật: những câu cũ từng nằm trong preset bị bắt', () => {
+      const OLD: [string, RegExp][] = [
+        ['Tinh dầu bưởi giúp kích thích mọc tóc, giảm gãy rụng.', MEDICAL_CLAIMS],
+        ['Tinh dầu sả khử mùi tanh, kháng khuẩn tự nhiên.', MEDICAL_CLAIMS],
+        ['Chiết xuất rau má 5% giúp phục hồi, làm dịu da.', PROOF_CLAIMS],
+        ['USDA Organic', PROOF_CLAIMS],
+        ['Vegan', PROOF_CLAIMS],
+        ['Mật ong rừng tự nhiên, không pha đường.', NATURAL_CLAIMS],
+      ];
+      for (const [text, re] of OLD) expect(text).toMatch(re);
+    });
   });
   it('mọi lời khẳng định về nguồn gốc, quy trình, công dụng đặc thù chỉ xuất hiện khi dữ liệu mẫu của chính sản phẩm đó có từ ấy', () => {
     const seed = readFileSync(resolve(__dirname, '../../../../apps/api/prisma/seed.ts'), 'utf8');
