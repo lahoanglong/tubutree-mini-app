@@ -18,6 +18,8 @@ import {
 } from '@/lib/address-form';
 import { ui } from '@/lib/guest-ui';
 import { actionErrorText } from '@/lib/error-text';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { browserStorage } from '@/lib/recently-viewed';
 import { getMe, type AddressDTO } from '@/lib/shop-client';
 
@@ -71,11 +73,22 @@ export function AddressForm({
 
   // Khoá đồng bộ: `save.isPending` chỉ đúng sau lần vẽ kế, hai cú gửi form sát nhau (bấm đúp, Enter giữ phím) sẽ tạo hai địa chỉ.
   const savingRef = useRef(false);
+  // Lời lỗi nhớ riêng (không đọc `save.error`): `save.error` chỉ có sau khi `onError` xong, mà `onError` có thể giữ tới khi sổ địa chỉ tải lại.
+  const [saveError, setSaveError] = useState<{ value: unknown } | null>(null);
   const save = useMutation({
     mutationFn: (p: AddressPayload) => onSubmit(p),
+    onMutate: () => setSaveError(null),
     onSuccess: (_r, p) => {
       // Không biết tài khoản thì không ghi: khoá chung sẽ điền nhầm tỉnh/phường cho người dùng sau trên máy dùng chung.
       if (userId) rememberLastGeo(p, browserStorage(), userId);
+    },
+    // Máy chủ từ chối vì sổ không còn khớp (địa chỉ đang sửa đã bị xoá ở máy khác, đủ số địa chỉ): lời lỗi hiện ngay, sổ địa chỉ và báo giá tải lại rồi mới nhả khoá
+    // (tối đa `LOCK_REFRESH_WAIT_MS`), như Mini App; nhả sớm thì bấm Lưu lại trên số cũ nhận đúng lỗi đó. Mất mạng và 5xx không nói gì về sổ thật nên nhả ngay.
+    onError: (e) => {
+      setSaveError({ value: e });
+      return serverRejectedState(e)
+        ? settleWithin(Promise.all([queryClient.invalidateQueries({ queryKey: ['addresses'] }), queryClient.invalidateQueries({ queryKey: ['quote'] })]))
+        : undefined;
     },
     onSettled: () => {
       savingRef.current = false;
@@ -154,9 +167,9 @@ export function AddressForm({
         onBlur={() => touch('street')}
         onChange={(v) => setForm((f) => ({ ...f, street: v }))}
       />
-      {save.isError && (
+      {saveError && (
         <p role="alert" className={ui.error}>
-          {actionErrorText(save.error)}
+          {actionErrorText(saveError.value)}
         </p>
       )}
       <div className="flex gap-2">

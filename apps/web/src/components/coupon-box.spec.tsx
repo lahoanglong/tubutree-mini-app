@@ -12,6 +12,8 @@ const state = vi.hoisted(() => ({
   applyError: null as Error | null,
   removeError: null as Error | null,
   applyGate: null as Promise<void> | null,
+  applyCalls: 0,
+  removeCalls: 0,
   removeGate: null as Promise<void> | null,
   couponsGate: null as Promise<void> | null,
   couponsError: null as Error | null,
@@ -30,12 +32,14 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   },
   getCouponPreviews: (p: unknown) => state.previews(p),
   applyCoupon: async (code: string) => {
+    state.applyCalls += 1;
     await state.applyGate;
     if (state.applyError) throw state.applyError;
     state.applied.push(code);
     return { items: [], couponCode: code, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 0, itemCount: 0, ...state.applyCart };
   },
   removeCoupon: async () => {
+    state.removeCalls += 1;
     await state.removeGate;
     if (state.removeError) throw state.removeError;
     state.removed += 1;
@@ -45,6 +49,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
 
 import { MutationObserver, QueryClient, useQuery } from '@tanstack/react-query';
 import { cartKey } from '@/lib/cart-key';
+import { ApiError, NetworkError } from '@/lib/client-api';
 import { useCartWrite } from '@/lib/use-cart-write';
 import { MD_DOWN } from '@/lib/use-media-query';
 import { syncServerClock } from '@tubutree/app-core/server-clock';
@@ -65,6 +70,8 @@ const card = (box: HTMLElement, code: string) => box.querySelector<HTMLButtonEle
 
 beforeEach(() => {
   state.applied = [];
+  state.applyCalls = 0;
+  state.removeCalls = 0;
   state.applyError = null;
   state.removeError = null;
   state.applyGate = null;
@@ -2049,6 +2056,63 @@ describe('CouponBox: ghi giỏ chung đường với lệnh giỏ khác đang ba
     await flush(6);
     expect(box.querySelector('[role="alert"]')!.textContent).toBe('Không gỡ được mã.');
     expect(out.w!.begin().stale).toBe(false);
+  });
+
+  describe('máy chủ từ chối vì màn đã cũ (W121): giữ khoá tới khi giỏ, ví mã và số xem trước mới về', () => {
+    const applyBtn = (box: HTMLElement) => byText(box, 'button', 'Áp dụng')!;
+
+    it.each([400, 404, 409, 422])('áp mã %i: lời lỗi hiện ngay, giỏ và ví mã tải lại, nút báo bận tới khi giỏ về; chạm lần hai không gửi', async (status) => {
+      state.applyError = new ApiError('Mã giảm giá đã hết lượt dùng.', status);
+      state.coupons = [c('GIAM30')];
+      const { client, box } = await mountShared(<CouponBox currentCode={null} subtotal={300000} shippingFee={null} />);
+      const couponReads = state.couponsCalls;
+      const releaseReads = holdReads();
+      await typeAndApply(box);
+      expect(box.querySelector('[role="alert"]')!.textContent).toBe('Mã giảm giá đã hết lượt dùng.');
+      expect(reads.gets).toBe(1);
+      expect(state.couponsCalls).toBe(couponReads + 1);
+      expect(mutating(client)).toBe(1);
+      expect(applyBtn(box).getAttribute('aria-disabled')).toBe('true');
+      click(applyBtn(box));
+      click(applyBtn(box));
+      await flush(4);
+      expect(state.applyCalls).toBe(1);
+      await releaseReads();
+      expect(mutating(client)).toBe(0);
+      expect(applyBtn(box).getAttribute('aria-disabled')).not.toBe('true');
+      click(applyBtn(box));
+      await flush(6);
+      expect(state.applyCalls).toBe(2);
+    });
+
+    it('gỡ mã bị từ chối 404 (mã đã bị gỡ ở tab khác): giỏ tải lại, lệnh còn pending tới khi giỏ về, chạm lần hai không gửi', async () => {
+      state.removeError = new ApiError('Giỏ không còn mã này.', 404);
+      const { client, box } = await mountShared(<CouponBox currentCode="ABC" subtotal={300000} shippingFee={null} />);
+      const releaseReads = holdReads();
+      click(toggle(box));
+      click(byText(box, 'button', 'Bỏ mã đang áp dụng'));
+      await flush(6);
+      expect(box.querySelector('[role="alert"]')!.textContent).toBe('Giỏ không còn mã này.');
+      expect(reads.gets).toBe(1);
+      expect(mutating(client)).toBe(1);
+      click(byText(box, 'button', 'Bỏ mã đang áp dụng'));
+      await flush(4);
+      expect(state.removeCalls).toBe(1);
+      await releaseReads();
+      expect(mutating(client)).toBe(0);
+    });
+
+    it.each([
+      ['lỗi 500', () => new ApiError('Máy chủ bận.', 500)],
+      ['mất mạng', () => new NetworkError(false)],
+    ])('%s: lời lỗi hiện, KHÔNG tải lại giỏ (lần tải cũng hỏng), nhả khoá ngay', async (_name, makeError) => {
+      state.applyError = makeError();
+      const { client, box } = await mountShared(<CouponBox currentCode={null} subtotal={300000} shippingFee={null} />);
+      await typeAndApply(box);
+      expect(box.querySelector('[role="alert"]')).not.toBeNull();
+      expect(reads.gets).toBe(0);
+      expect(mutating(client)).toBe(0);
+    });
   });
 
   const mountAuto = async () => {

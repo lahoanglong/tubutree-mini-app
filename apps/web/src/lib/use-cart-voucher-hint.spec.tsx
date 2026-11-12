@@ -3,6 +3,7 @@ import { act } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
+import { ApiError } from '@/lib/client-api';
 
 const state = vi.hoisted(() => ({
   coupons: [] as unknown[],
@@ -243,6 +244,28 @@ describe('useCartVoucherHint (web): khoá đồng bộ chống chạm đúp', ()
     await flush(8);
     expect(state.apply).toHaveBeenCalledTimes(2);
     expect(probe().dataset.error).toBe('');
+  });
+
+  it.each([400, 404, 409, 422])('W121: máy chủ từ chối %i (mã hết lượt, màn đã cũ): lời báo hiện, nút giữ khoá tới khi số xem trước tải lại xong; chạm lần hai không gửi', async (status) => {
+    state.apply.mockRejectedValueOnce(new ApiError('Mã đã hết lượt dùng.', status)).mockResolvedValue(cartOf('GIAM45'));
+    const { probe, go } = await mount();
+    const reload = pending<unknown[]>();
+    state.previews.mockReset();
+    state.previews.mockReturnValue(reload.promise);
+    click(go());
+    await flush(8);
+    expect(state.previews).toHaveBeenCalledTimes(1);
+    expect(probe().dataset.applying).toBe('true');
+    twice(go());
+    await flush(2);
+    expect(state.apply).toHaveBeenCalledTimes(1);
+    await act(async () => reload.resolve([usable('GIAM45', 45000), usable('KHAC30', 30000)]));
+    await flush(8);
+    expect(probe().dataset.applying).toBe('false');
+    expect(probe().dataset.error).toBe('Mã đã hết lượt dùng.');
+    click(go());
+    await flush(8);
+    expect(state.apply).toHaveBeenCalledTimes(2);
   });
 
   it('lệnh thành công thì nhả khoá: áp mã khác sau đó vẫn gọi được', async () => {

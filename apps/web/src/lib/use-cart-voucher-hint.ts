@@ -12,6 +12,8 @@ import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { autoCouponName } from '@/lib/coupon-name';
 import { actionErrorText } from '@/lib/error-text';
 import { useCartWrite } from '@/lib/use-cart-write';
+import { holdForCouponReload } from '@/lib/coupon-reload';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 
 export interface CartVoucherHintState {
   /** Null khi chưa có xem trước của máy chủ, giỏ đã có mã, hoặc không có gì đáng nói. */
@@ -93,11 +95,15 @@ export function useCartVoucherHint(opts: {
       return held;
     },
     onError: (e, code, cmd) => {
-      cartWrite.fail(cmd);
+      const rejected = serverRejectedState(e);
+      const cartReloaded = cartWrite.fail(cmd, rejected);
       setFailed({ code: code.trim().toUpperCase(), text: actionErrorText(e) });
       // Máy chủ vừa từ chối mã mà xem trước còn nói dùng được (hết lượt, bị tắt giữa chừng): hỏi lại để dải không giữ câu "đủ điều kiện" đã sai.
+      // Từ chối vì màn đã cũ thì đọc thêm giỏ và báo giá, nút "Áp mã" giữ khoá tới khi dữ liệu về (xem `holdForCouponReload`). Lỗi khác chỉ hỏi lại xem trước, nhả khoá ngay.
+      if (rejected) return holdForCouponReload(qc, cartReloaded);
       void qc.invalidateQueries({ queryKey: ['coupon-previews'] });
       void qc.invalidateQueries({ queryKey: ['my-coupons'] });
+      return undefined;
     },
   });
 

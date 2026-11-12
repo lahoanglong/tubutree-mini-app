@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
+import { ApiError, NetworkError } from '@/lib/client-api';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { chooseGeo, click, flush, render, selectByLabel, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unlabeledFields } from '@/test-utils/a11y';
@@ -229,6 +230,58 @@ describe('AddressForm — Lưu khoá đồng bộ chống bấm đúp (W71B)', (
     twice(saveBtn(c));
     await flush(4);
     expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  // Máy chủ từ chối vì sổ địa chỉ không còn khớp (địa chỉ đang sửa đã bị xoá ở máy khác, đủ số địa chỉ): sổ và báo giá tải lại, khoá giữ tới khi sổ về, lời lỗi vẫn hiện ngay.
+  const mountWithClient = async (initial: Parameters<typeof AddressForm>[0]['initial']) => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    let reload!: () => void;
+    const gate = new Promise<void>((r) => (reload = r));
+    const keys: unknown[] = [];
+    vi.spyOn(client, 'invalidateQueries').mockImplementation(((f: { queryKey: unknown }) => {
+      keys.push(f.queryKey);
+      return gate;
+    }) as never);
+    const r = render(<AddressForm title="Sửa địa chỉ" submitLabel="Lưu" initial={initial} userId="u1" onSubmit={submit} onCancel={cancel} />, client);
+    mounted.push(r);
+    await flush();
+    return { c: r.container, keys, reload: () => reload() };
+  };
+
+  it.each([400, 404, 409, 422])('W121: máy chủ từ chối %i: lời lỗi hiện ngay, sổ địa chỉ và báo giá tải lại, nút Lưu giữ bận tới khi sổ về; bấm thêm không gọi lại', async (status) => {
+    submit.mockReset().mockRejectedValue(new ApiError('Địa chỉ không còn trong sổ.', status));
+    const { c, keys, reload } = await mountWithClient(FILLED);
+    saveBtn(c).focus();
+    click(saveBtn(c));
+    await flush(4);
+    expect(c.querySelector('[role="alert"]')?.textContent).toBe('Địa chỉ không còn trong sổ.');
+    expect(keys).toEqual([['addresses'], ['quote']]);
+    expect(saveBtn(c).getAttribute('aria-busy')).toBe('true');
+    expect(saveBtn(c).disabled).toBe(false);
+    expect(document.activeElement).toBe(saveBtn(c));
+    twice(saveBtn(c));
+    await flush(2);
+    expect(submit).toHaveBeenCalledTimes(1);
+    reload();
+    await flush(4);
+    expect(saveBtn(c).getAttribute('aria-busy')).toBeNull();
+    submit.mockReset().mockResolvedValue(undefined);
+    click(saveBtn(c));
+    await flush(4);
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['lỗi 500', () => new ApiError('Máy chủ bận.', 500)],
+    ['mất mạng', () => new NetworkError(false)],
+  ])('W121: %s: lời lỗi hiện, KHÔNG tải lại sổ (lần tải cũng hỏng), nhả khoá ngay', async (_name, makeError) => {
+    submit.mockReset().mockRejectedValue(makeError());
+    const { c, keys } = await mountWithClient(FILLED);
+    click(saveBtn(c));
+    await flush(4);
+    expect(c.querySelector('[role="alert"]')).not.toBeNull();
+    expect(keys).toEqual([]);
+    expect(saveBtn(c).getAttribute('aria-busy')).toBeNull();
   });
 
   it('lưu xong mà form còn trên màn (nơi gọi chưa đóng): nhả khoá, lần lưu sau vẫn gọi được', async () => {
