@@ -9,7 +9,11 @@ import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { addToCart, applyCoupon, formatVnd, getCart } from '@/lib/shop-client';
 import { couponUseCopy, couponUseOutcome } from '@tubutree/app-core/coupon-use';
 import { loginHref, rememberPendingAdd, takePendingAdd } from '@/lib/return-to';
-import { rememberCheckoutSelection } from '@/lib/checkout-selection';
+import {
+  clearCheckoutSelection,
+  recallCheckoutSelection,
+  rememberCheckoutSelection,
+} from '@/lib/checkout-selection';
 import { ui, uiBar } from '@/lib/guest-ui';
 import { phoneBand, phoneBandPad, phoneCaption, phoneSecondary } from '@/lib/phone-ui';
 import { CountBadge } from '@/components/mini/badge';
@@ -105,6 +109,14 @@ export default function AddToCart({
   // Thêm giỏ và Mua ngay đều ghi vào giỏ nên một khoá chung cho cả hai nút, cả lối đăng nhập xong thêm nốt và lối lightbox ảnh đánh giá: bấm hai nút sát nhau chỉ ghi giỏ một lần.
   // `busy` chỉ đúng sau lần dựng kế tiếp nên không chặn được cú bấm thứ hai trong cùng khung hình; ref thì chặn ngay.
   const cartWrite = useRef(false);
+  // Khách đã rời trang sản phẩm: "Mua ngay" còn đang chờ (thêm giỏ, giữ câu báo, tải lại dữ liệu mới, tối đa vài giây) thì không được kéo họ trở lại thanh toán.
+  const alive = useRef(true);
+  useEffect(() => {
+    alive.current = true;
+    return () => {
+      alive.current = false;
+    };
+  }, []);
   // Đang làm "Mua ngay" (thêm giỏ rồi đi tiếp) hay chỉ "Thêm vào giỏ": quyết định chữ trên nút nào đang quay.
   const [buying, setBuying] = useState(false);
   // Giỏ lúc khách bấm "Mua ngay". Thêm xong, giỏ mới (có món vừa thêm) được ghi vào cache trước khi `router.push` xong, và PDP còn đứng đó: nếu số nút
@@ -250,7 +262,8 @@ export default function AddToCart({
         // "Mua ngay" chỉ thanh toán món vừa chọn: xoá lựa chọn thì trang thanh toán hiểu là TOÀN GIỎ và tính tiền cả các món
         // khách thêm từ trước. Không thấy dòng của món này (API trả giỏ thiếu) thì null = toàn giỏ, như trước khi có lựa chọn.
         const bought = (cart.items ?? []).filter((l) => l.variationId === variationId).map((l) => l.id);
-        rememberCheckoutSelection(bought.length > 0 ? bought : null);
+        const remembered = bought.length > 0 ? bought : null;
+        rememberCheckoutSelection(remembered);
         // Không bỏ khoá `busy`: trang sắp chuyển đi, bấm thêm lúc này là cộng đôi số lượng vào giỏ.
         leaving = true;
         if (hold && note) {
@@ -259,6 +272,12 @@ export default function AddToCart({
           setMsg(ok ? note : null);
           setWarn(ok ? null : note);
           await Promise.all([new Promise((resolve) => window.setTimeout(resolve, NOTICE_HOLD_MS)), refresh ? settleWithin(refresh) : undefined]);
+        }
+        if (!alive.current) {
+          // Không sang thanh toán nữa thì bỏ luôn lựa chọn vừa ghi: để lại thì lần mở thanh toán sau (cùng tab) chỉ hiện đúng món này thay vì toàn giỏ.
+          // Chỉ bỏ khi bộ nhớ vẫn đúng là lựa chọn của lần này: trang Giỏ có thể đã ghi lựa chọn khác trong lúc giữ câu báo.
+          if (JSON.stringify(recallCheckoutSelection()) === JSON.stringify(remembered)) clearCheckoutSelection();
+          return;
         }
         router.push('/thanh-toan');
         return;

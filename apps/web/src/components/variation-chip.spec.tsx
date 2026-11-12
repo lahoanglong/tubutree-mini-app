@@ -9,10 +9,11 @@ afterEach(() => {
   mounted = [];
 });
 
-function chip(over: { stock?: number; price?: number; isFlash?: boolean; salePct?: number; active?: boolean } = {}) {
+function chip(over: { stock?: number; price?: number; isFlash?: boolean; salePct?: number; active?: boolean; name?: string; siblingCount?: number } = {}) {
   const r = render(
     <VariationChip
-      variation={{ name: 'Chai 500ml', stock: over.stock ?? 10 }}
+      variation={{ name: over.name ?? 'Chai 500ml', stock: over.stock ?? 10 }}
+      {...(over.siblingCount === undefined ? {} : { siblingCount: over.siblingCount })}
       pricing={{ price: over.price ?? 85_000, isFlash: over.isFlash ?? false, ...(over.salePct === undefined ? {} : { salePct: over.salePct }) }}
       active={over.active ?? false}
       onClick={() => undefined}
@@ -72,5 +73,37 @@ describe('VariationChip web: số đều (tabular-nums) cho dòng giá và phầ
     expect(priceRow(chip({ isFlash: true })).className.split(' ')).toContain('tabular-nums');
     expect(priceRow(chip({ active: true })).className.split(' ')).toContain('tabular-nums');
     expect(priceRow(chip({ stock: 0 })).className.split(' ')).toContain('tabular-nums');
+  });
+});
+
+describe('VariationChip web: phân loại không có tên (86/154 phân loại trên PROD)', () => {
+  it('nhiều phân loại, tên trống: hiện "Mặc định" kèm giá, không chip trống', () => {
+    for (const name of ['', '   ']) {
+      const b = chip({ name, siblingCount: 3 });
+      expect(b.textContent).toBe('Mặc định · 85.000đ');
+      expect(b.children[0]!.textContent).toBe('Mặc định');
+    }
+  });
+
+  it('chỉ có chip trong bộ chọn nên không truyền siblingCount cũng coi là nhiều phân loại: "Mặc định"', () => {
+    expect(chip({ name: '' }).textContent).toBe('Mặc định · 85.000đ');
+  });
+
+  it('một phân loại duy nhất tên trống: không ô tên, không dấu " · " mở đầu, chỉ còn giá', () => {
+    const b = chip({ name: '', siblingCount: 1 });
+    expect(b.textContent).toBe('85.000đ');
+    expect(b.textContent).not.toContain('·');
+    expect(b.children).toHaveLength(1);
+    expect(b.querySelector('[aria-hidden="true"]')).toBeNull();
+  });
+
+  it('hết hàng và tên trống: vẫn ghi "Tạm hết hàng" sau chữ "Mặc định", không dấu treo', () => {
+    expect(chip({ name: ' ', siblingCount: 2, stock: 0 }).textContent).toBe('Mặc định · Tạm hết hàng');
+    expect(chip({ name: ' ', siblingCount: 1, stock: 0 }).textContent).toBe('Tạm hết hàng');
+  });
+
+  it('có tên: giữ nguyên "Tên · giá" (tên được cắt khoảng trắng), kể cả khi đứng một mình', () => {
+    expect(chip({ name: 'Chai 500ml', siblingCount: 2 }).textContent).toBe('Chai 500ml · 85.000đ');
+    expect(chip({ name: '  Chai 500ml ', siblingCount: 1 }).textContent).toBe('Chai 500ml · 85.000đ');
   });
 });

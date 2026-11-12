@@ -933,3 +933,49 @@ describe('CtvOrderSheet: máy chủ từ chối thì giữ khoá tới khi báo 
     expect(mocks.createCtvOrder).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('CtvOrderSheet Mini — phân loại không có tên', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.suggestProducts.mockResolvedValue([{ slug: 'nrc', name: 'Nước rửa chén', thumbnail: null, basePrice: 65_000 }]);
+    mocks.createCtvOrder.mockResolvedValue({ code: 'TUBU9', total: 65_000, items: [] });
+    mocks.quoteCtvOrder.mockRejectedValue(new Error('chưa có báo giá'));
+  });
+  const productWith = (names: string[]) =>
+    mocks.fetchProduct.mockResolvedValue({
+      name: 'Nước rửa chén',
+      variations: names.map((name, i) => ({ id: `var${i + 1}`, name, retailPrice: 65_000, salePrice: null, stock: 10 })),
+    });
+  const openPicker = async () => {
+    renderSheet();
+    fireEvent.change(screen.getByPlaceholderText('Tìm sản phẩm để thêm…'), { target: { value: 'nước' } });
+    fireEvent.click(await screen.findByText('Nước rửa chén'));
+    await screen.findAllByText('65.000đ');
+  };
+  const lineColumn = () => Array.from(screen.getByText('Nước rửa chén', { selector: 'div' }).parentElement!.children).map((n) => n.textContent);
+
+  it('nhiều phân loại, một cái tên trống hoặc toàn khoảng trắng: dòng chọn ghi "Mặc định", cái có tên giữ nguyên', async () => {
+    productWith(['', '  ', 'Chanh']);
+    await openPicker();
+    expect(screen.getAllByText('Mặc định')).toHaveLength(2);
+    expect(screen.getByText('Chanh')).toBeInTheDocument();
+  });
+
+  it('chỉ một phân loại tên trống: dòng chọn lấy tên sản phẩm (không dòng trống); chọn xong dòng đơn chỉ có giá, không " · " mở đầu', async () => {
+    productWith(['']);
+    await openPicker();
+    expect(screen.getAllByText('Nước rửa chén')).toHaveLength(2);
+    fireEvent.click(screen.getAllByText('Nước rửa chén')[1]!);
+    await screen.findByRole('button', { name: 'Giảm số lượng' });
+    expect(lineColumn()).toEqual(['Nước rửa chén', '65.000đ']);
+  });
+
+  it('phân loại có tên: dòng đơn vẫn "tên · giá"', async () => {
+    productWith(['Chanh']);
+    await openPicker();
+    fireEvent.click(screen.getByText('Chanh'));
+    await screen.findByRole('button', { name: 'Giảm số lượng' });
+    expect(lineColumn()).toEqual(['Nước rửa chén', 'Chanh · 65.000đ']);
+  });
+});

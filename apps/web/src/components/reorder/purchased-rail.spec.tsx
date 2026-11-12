@@ -16,7 +16,7 @@ vi.mock('@/lib/cart-key', () => ({ cartStorefrontSlug: () => null, useCartKey: (
 vi.mock('@/lib/shop-client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/shop-client')>()), getCart: async () => ({ items: [] }) }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }), usePathname: () => '/' }));
 
-import { PurchasedRail } from './purchased-rail';
+import { PurchasedRail, toCardProduct } from './purchased-rail';
 import { HomeBlockErrorSuppressed } from '@/components/home/home-block-error';
 
 const ITEM = {
@@ -481,5 +481,45 @@ describe('PurchasedRail — Trang chủ (Q6)', () => {
     );
     await flush(8);
     expect(byText(mounted.container, 'button', 'Thử lại')).toBeNull();
+  });
+});
+
+describe('PurchasedRail web: phân loại không có tên', () => {
+  const blank = (variationName: string) => ({ ...ITEM, variationName });
+
+  it('toCardProduct: tên thẻ chỉ ghép "Tên · phân loại" khi phân loại có tên; trống/khoảng trắng thì chỉ tên sản phẩm', () => {
+    expect(toCardProduct(ITEM).name).toBe('Nước rửa chén · Chanh');
+    expect(toCardProduct(blank('')).name).toBe('Nước rửa chén');
+    expect(toCardProduct(blank('  ')).name).toBe('Nước rửa chén');
+  });
+
+  it('dòng Mua lại ở Trang chủ: tên phân loại trống thì chú thích chỉ còn "Đã mua 2 lần", không " · " mở đầu', async () => {
+    for (const name of ['', '  ']) {
+      rail = async () => ({ items: [blank(name)], nextCursor: null });
+      const c = await mount({ source: 'home_rail' });
+      const line = c.querySelector('[data-testid="rebuy-line"]') as HTMLElement;
+      expect(line.textContent).toContain('Đã mua 2 lần');
+      expect(line.textContent).not.toContain('·');
+      expect(line.textContent).not.toMatch(/^\s*·|·\s*$/);
+      expect(Array.from(line.querySelectorAll('span')).some((x) => x.textContent === 'Đã mua 2 lần')).toBe(true);
+      mounted?.unmount();
+    }
+  });
+
+  it('dòng Mua lại ở Trang chủ: phân loại có tên giữ "Chanh · Đã mua 2 lần"', async () => {
+    const c = await mount({ source: 'home_rail' });
+    expect((c.querySelector('[data-testid="rebuy-line"]') as HTMLElement).textContent).toContain('Chanh · Đã mua 2 lần');
+  });
+
+  it('thẻ ngang (tab Đơn hàng, 1 món): tên phân loại trống/khoảng trắng thì không dựng dòng phân loại', async () => {
+    for (const name of ['', '  ']) {
+      rail = async () => ({ items: [blank(name)], nextCursor: null });
+      const c = await mount();
+      const region = c.querySelector('section[aria-label="Mua lại"]')!;
+      const open = productButton(region);
+      expect(Array.from(open.querySelectorAll('span')).filter((x) => x.textContent?.trim() === '')).toHaveLength(0);
+      expect(open.querySelectorAll('span[style*="display: block"]')).toHaveLength(0);
+      mounted?.unmount();
+    }
   });
 });

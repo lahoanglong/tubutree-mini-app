@@ -1,5 +1,6 @@
 import { vi } from '../../i18n/vi';
 import type { RepurchaseResponse } from '../../services/shop-api';
+import { joinVariationLine, variationLabel } from '../../utils/variation-label';
 import type { ReorderLine, ReorderSelection } from './reorder-types';
 
 export interface ReorderSummary {
@@ -21,7 +22,7 @@ export function summarizeReorder(res: RepurchaseResponse, lines: ReorderLine[], 
     const l = lines.find((x) => x.key === key);
     if (!l) return vi.reorder.unknownProduct;
     const repeated = lines.filter((x) => x.productName === l.productName).length > 1;
-    return repeated && l.variationName ? `${l.productName} - ${l.variationName}` : l.productName;
+    return repeated ? joinVariationLine(l.productName, variationLabel(l.variationName), ' - ') : l.productName;
   };
   const addedUnits = res.results.reduce((s, r) => s + r.addedQuantity, 0);
   const addedLines = res.results.filter((r) => r.status !== 'skipped').length;

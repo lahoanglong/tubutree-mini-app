@@ -44,6 +44,7 @@ import { formatVnd, formatSold } from '../utils/format';
 import { soldPercent } from '../utils/flash-display';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
+import { joinVariationLine, variationLabel } from '../utils/variation-label';
 import { hasOA, openOAChat } from '../services/zmp-bridge';
 import { isRetailOnly } from '../utils/retail-only';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
@@ -570,7 +571,7 @@ export default function ProductDetailPage() {
     current: {
       productId: p.id,
       slug: p.slug,
-      name: selected && variations.length > 1 ? `${p.name} · ${selected.name}` : p.name,
+      name: selected && variations.length > 1 ? joinVariationLine(p.name, variationLabel(selected.name, variations.length)) : p.name,
       thumbnail: p.thumbnail ?? null,
       variationId: selected?.id ?? null,
       // Giá của đơn vị vừa thêm theo giỏ hiện có: vượt suất Giờ vàng (đã dùng hết, hoặc giỏ đã đủ suất) thì giỏ tính giá thường cho cả dòng, nên khối không ghi giá Giờ vàng.

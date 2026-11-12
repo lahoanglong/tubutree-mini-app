@@ -5,9 +5,12 @@ import { Zap } from 'lucide-react';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import { formatVnd } from '@/lib/shop-client';
 import { phoneBodySm, phoneCaption } from '@/lib/phone-ui';
+import { variationLabel } from '@/lib/variation-label';
 
 export interface VariationChipProps {
   variation: { name: string; stock: number };
+  /** Số phân loại của sản phẩm (kể cả phân loại này): tên trống thì "Mặc định" khi có anh em, không có anh em thì chip chỉ còn giá. Chip chỉ vẽ trong bộ chọn từ 2 phân loại nên mặc định là 2. */
+  siblingCount?: number;
   /** Giá khách thật sự trả cho một đơn vị (đã áp Giờ vàng), từ `variationPricing`. */
   pricing: { price: number; isFlash: boolean; salePct?: number };
   active: boolean;
@@ -20,8 +23,9 @@ export interface VariationChipProps {
  * nên chip hai app cao bằng nhau. Không ghi chiều cao tuyệt đối: viền 1,5px làm tròn theo mật độ điểm ảnh của từng thiết bị (xem `apps/e2e/tests/support/variation-chip.ts`). Từ md giữ "tên · giá" một
  * dòng để nút mua còn trong 1280×800.
  */
-export function VariationChip({ variation, pricing, active, onClick }: VariationChipProps) {
+export function VariationChip({ variation, siblingCount = 2, pricing, active, onClick }: VariationChipProps) {
   const out = variation.stock <= 0;
+  const label = variationLabel(variation.name, siblingCount);
   // Giờ vàng đã có dấu riêng; ở đây chỉ phân loại đang giảm giá thường (giá gạch cao hơn giá bán) mới ghi phần trăm tiết kiệm.
   const savePct = !out && !pricing.isFlash && (pricing.salePct ?? 0) > 0 ? pricing.salePct! : 0;
   return (
@@ -38,10 +42,14 @@ export function VariationChip({ variation, pricing, active, onClick }: Variation
           : 'border-[var(--color-border-strong)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] max-md:border-[var(--color-border-subtle)]'
       } ${out ? 'opacity-60 max-md:opacity-[0.55]' : ''}`}
     >
-      <span className={`${active ? 'max-md:font-semibold' : 'max-md:font-normal'} ${out ? 'line-through' : ''} ${phoneBodySm}`}>{variation.name}</span>
-      <span aria-hidden="true" className="max-md:hidden">
-        {' · '}
-      </span>
+      {label && (
+        <>
+          <span className={`${active ? 'max-md:font-semibold' : 'max-md:font-normal'} ${out ? 'line-through' : ''} ${phoneBodySm}`}>{label}</span>
+          <span aria-hidden="true" className="max-md:hidden">
+            {' · '}
+          </span>
+        </>
+      )}
       <span
         className={`inline-flex items-center gap-0.5 tabular-nums ${phoneCaption} max-md:font-normal ${
           out

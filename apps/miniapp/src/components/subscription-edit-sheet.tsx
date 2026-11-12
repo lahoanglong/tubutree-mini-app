@@ -12,6 +12,7 @@ import {
 import { getErrorMessage, getLoadErrorMessage, isTargetGoneError } from '../services/api';
 import { haptic } from '../utils/haptic';
 import { settleWithin } from '../utils/settle-within';
+import { joinVariationLine, variationLabel } from '../utils/variation-label';
 import { vi } from '../i18n/vi';
 import { useSyncedDraft } from '../hooks/use-synced-draft';
 import { useLockedMutation } from './game/use-locked-mutation';
@@ -105,7 +106,7 @@ export function SubscriptionEditSheet({ sub, onClose }: { sub: SubscriptionDTO; 
       }}
       dismissible={!save.isPending}
       title={t.editTitle}
-      description={`${sub.productName}${sub.variationName ? ` · ${sub.variationName}` : ''}`}
+      description={joinVariationLine(sub.productName, variationLabel(sub.variationName))}
       size="full"
       footer={
         <>

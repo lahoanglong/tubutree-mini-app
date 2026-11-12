@@ -561,3 +561,23 @@ describe('ReorderSheet: dấu "một phần", câu giá có số tabular, tiết
     expect(note()).toBeNull();
   });
 });
+
+describe('ReorderSheet web: phân loại không có tên', () => {
+  const rows = (names: string[]) => {
+    mount({ target: orderReorderTarget({ code: 'TUBU9', items: names.map((n, i) => item(`i${i}`, 'Nước rửa chén', { variationName: n })) }) });
+    return Array.from(document.querySelectorAll('[data-testid="reorder-line"]')) as HTMLElement[];
+  };
+  const paragraphs = (row: HTMLElement) => Array.from(row.querySelectorAll('p')).map((p) => p.textContent);
+
+  it('có tên: hiện dòng phân loại dưới tên sản phẩm', () => {
+    expect(paragraphs(rows(['Chanh'])[0]!)).toContain('Chanh');
+  });
+
+  it('tên trống hoặc toàn khoảng trắng: không dựng dòng phân loại (không dòng chữ trống)', () => {
+    const [empty, blank] = rows(['', '   ']);
+    for (const row of [empty!, blank!]) {
+      expect(paragraphs(row).filter((t) => (t ?? '').trim() === '')).toEqual([]);
+      expect(row.querySelectorAll('p.text-xs')).toHaveLength(0);
+    }
+  });
+});

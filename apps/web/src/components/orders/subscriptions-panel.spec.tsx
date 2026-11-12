@@ -1287,3 +1287,30 @@ describe('subscriptionPatch', () => {
     expect(subscriptionPatch(sub, { ...next, quantity: 3, intervalWeeks: 8 })).toEqual({ quantity: 3, intervalWeeks: 8 });
   });
 });
+
+describe('SubscriptionsPanel web: phân loại không có tên', () => {
+  const qtyLine = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('div.text-xs.tabular-nums')).map((d) => d.textContent).find((t) => /SL \d/.test(t ?? ''));
+  const editDescription = () => (sheetSpy.calls.filter((c) => c.title === 'Sửa gói định kỳ').at(-1) as unknown as { description?: string }).description;
+
+  it('có tên: "phân loại · SL n" và mô tả sheet sửa "tên · phân loại" như trước', async () => {
+    const c = await mount();
+    expect(qtyLine(c)).toBe('Hương sả · SL 2');
+    click(btn('Sửa', c));
+    await flush(4);
+    expect(editDescription()).toBe('Nước xả vải Tubu · Hương sả');
+  });
+
+  it('tên trống hoặc toàn khoảng trắng: chỉ "SL n" (không " · " mở đầu), mô tả sheet sửa chỉ tên sản phẩm', async () => {
+    for (const variationName of ['', '   ']) {
+      subs = [{ ...SUB, variationName }];
+      const c = await mount();
+      expect(qtyLine(c)).toBe('SL 2');
+      click(btn('Sửa', c));
+      await flush(4);
+      expect(editDescription()).toBe('Nước xả vải Tubu');
+      mounted.forEach((m) => m.unmount());
+      mounted = [];
+      sheetSpy.calls.length = 0;
+    }
+  });
+});

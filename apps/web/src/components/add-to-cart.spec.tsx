@@ -1469,3 +1469,25 @@ describe('AddToCart — truy cập (A11Y-02, A11Y-03, A11Y-07)', () => {
     expect(buy.getAttribute('aria-label')).not.toContain('·');
   });
 });
+
+describe('AddToCart — phân loại không có tên (86/154 phân loại trên PROD)', () => {
+  const chipNames = (c: HTMLElement) =>
+    Array.from(c.querySelectorAll<HTMLElement>('[data-section="pdp-variation-chips"] button')).map((b) => b.firstElementChild!.textContent);
+
+  it('nhiều phân loại, một cái tên trống hoặc toàn khoảng trắng: chip ghi "Mặc định", các chip có tên giữ nguyên', () => {
+    const { container } = mount([{ ...VARIATIONS[0]!, name: '' }, { ...VARIATIONS[1]!, name: '  ' }, { id: 'v3', name: '1 lít', retailPrice: 500000, salePrice: null, stock: 4 }]);
+    expect(chipNames(container)).toEqual(['Mặc định', 'Mặc định', '1 lít']);
+  });
+
+  it('chỉ một phân loại tên trống: không có bộ chọn nào, nút Thêm vào giỏ vẫn có', () => {
+    const { container } = mount([{ ...VARIATIONS[0]!, name: '' }]);
+    expect(container.querySelector('[data-section="pdp-variation-chips"]')).toBeNull();
+    expect(container.querySelector('button[aria-pressed]')).toBeNull();
+    expect(addButton(container)).toBeTruthy();
+  });
+
+  it('nhiều phân loại, đều có tên: chip ghi đúng tên', () => {
+    const { container } = mount();
+    expect(chipNames(container)).toEqual(['250ml', '500ml']);
+  });
+});

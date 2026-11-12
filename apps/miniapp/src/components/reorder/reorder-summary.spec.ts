@@ -110,3 +110,21 @@ describe('summarizeReorder', () => {
     expect(s.message).toBe('Đã thêm 1 món vào giỏ. Chưa thêm đủ: Nước rửa chén - Trà xanh (hết hàng), Xà phòng (ngừng bán)');
   });
 });
+
+describe('summarizeReorder: tên sản phẩm lặp trong đơn kèm tên phân loại', () => {
+  const twins = [
+    { ...line('a', 'Nước rửa chén'), variationName: 'Chanh' },
+    { ...line('b', 'Nước rửa chén'), variationName: '' },
+    { ...line('c', 'Nước rửa chén'), variationName: '   ' },
+  ];
+  const skipped = (...keys: string[]) => ({ cart: CART, legacy: false, results: keys.map((k) => ({ orderItemId: k, status: 'skipped' as const, reason: 'OUT_OF_STOCK' as const, addedQuantity: 0 })) });
+
+  it('phân loại có tên: "Tên - phân loại" để biết dòng nào bị bỏ', () => {
+    expect(summarizeReorder(skipped('a'), twins, []).message).toBe('Chưa thêm được món nào vào giỏ: Nước rửa chén - Chanh (hết hàng)');
+  });
+
+  it('phân loại tên trống hay toàn khoảng trắng: chỉ tên sản phẩm, không " - " treo', () => {
+    expect(summarizeReorder(skipped('b'), twins, []).message).toBe('Chưa thêm được món nào vào giỏ: Nước rửa chén (hết hàng)');
+    expect(summarizeReorder(skipped('c'), twins, []).message).toBe('Chưa thêm được món nào vào giỏ: Nước rửa chén (hết hàng)');
+  });
+});

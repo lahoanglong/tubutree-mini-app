@@ -43,6 +43,7 @@ import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useCartWrite } from '@/lib/use-cart-write';
 import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
+import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 import { FreeshipAddons } from './freeship-addons';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
@@ -318,6 +319,7 @@ export default function CartPage() {
     const qtyPending = inFlightOps.some((v) => v.op === 'qty' && v.id === it.id);
     const lineError = lineErrors.get(it.id);
     const compareAt = lineCompareAt(it);
+    const lineVariation = variationLabel(it.variationName);
     return (
       <div key={it.id} data-testid="cart-line" data-variation-id={it.variationId} className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
         <label className="tubu-hit-flush relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center">
@@ -352,7 +354,7 @@ export default function CartPage() {
               {it.productName}
             </Link>
           </div>
-          <div className="basis-full break-words text-caption text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{it.variationName}</div>
+          {lineVariation && <div className="basis-full break-words text-caption text-stone-600 max-md:text-[color:var(--color-text-tertiary)]">{lineVariation}</div>}
           <div className="mt-1 flex items-baseline gap-x-2 max-md:order-3 max-md:mt-1.5 max-md:flex-col max-md:items-start max-md:gap-0">
             {/* Điện thoại: giá 14/20 và giá gạch 12/16 như PriceTag sm + stack của Mini App, khối giá cao 36 bằng bộ đếm nên dòng giảm giá không cao hơn dòng thường. */}
             <span className={`font-semibold max-md:text-[length:var(--type-price-sm-size)] max-md:leading-5 max-md:tabular-nums ${compareAt || it.isFlash ? 'text-[color:var(--color-text-price-deal)]' : 'text-stone-900'}`}>{formatVnd(it.unitPrice)}</span>
@@ -486,8 +488,7 @@ export default function CartPage() {
             {cart.unavailableItems!.map((it) => (
               <li key={it.id} className="flex items-center justify-between gap-2">
                 <span className="min-w-0 break-words line-through">
-                  {it.productName}
-                  {it.variationName ? ` · ${it.variationName}` : ''} × {it.quantity}
+                  {joinVariationLine(it.productName, variationLabel(it.variationName))} × {it.quantity}
                 </span>
                 <button
                   type="button"

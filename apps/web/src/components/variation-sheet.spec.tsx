@@ -467,3 +467,33 @@ describe('VariationSheet web: số đều (tabular-nums) cho tồn kho, giới h
     expect((status() as HTMLElement).style.fontVariantNumeric).toBe('tabular-nums');
   });
 });
+
+describe('VariationSheet web: phân loại không có tên (86/154 phân loại trên PROD)', () => {
+  const stockLine = () => dialog().querySelector<HTMLElement>('[data-testid="variation-sheet-stock"]')!.parentElement!;
+  const chipTexts = () => Array.from(dialog().querySelectorAll<HTMLElement>('[role="group"][aria-label="Phân loại"] button')).map((b) => b.textContent);
+  const blankFirst = (over: Partial<VariationOption> = {}): VariationOption[] => [{ ...variations[0]!, name: '', ...over }, ...variations.slice(1)];
+
+  it('nhiều phân loại, phân loại đang chọn tên trống: dòng tồn mở bằng "Mặc định", chip cũng ghi "Mặc định"', () => {
+    mountSheet({ variations: blankFirst(), flash: [] });
+    expect(stockLine().textContent).toBe('Mặc định · Còn hàng');
+    expect(chipTexts()[0]).toBe('Mặc định · 35.000đ');
+    expect(chipTexts()[1]).toBe('Combo 3 gói · Tạm hết hàng');
+  });
+
+  it('tên toàn khoảng trắng cũng là tên trống', () => {
+    mountSheet({ variations: blankFirst({ name: '   ' }), flash: [] });
+    expect(stockLine().textContent).toBe('Mặc định · Còn hàng');
+  });
+
+  it('chỉ một phân loại tên trống: dòng tồn không mở bằng " · ", chip chỉ còn giá', () => {
+    mountSheet({ variations: [blankFirst()[0]!], flash: [] });
+    expect(stockLine().textContent).toBe('Còn hàng');
+    expect(dialog().textContent).not.toContain('Mặc định');
+    expect(chipTexts()).toEqual(['35.000đ']);
+  });
+
+  it('có tên: dòng tồn vẫn "Tên · tồn" như trước', () => {
+    mountSheet({ flash: [] });
+    expect(stockLine().textContent).toBe('Gói 80 tờ · Còn hàng');
+  });
+});
