@@ -15,6 +15,21 @@ export const postCopyApprove = (items: readonly CopyApproveItem[]) =>
 
 export const getAdvisorStats = () => apiFetch<AdvisorStatsDto>('/admin/ai-advisor/stats', { cache: 'no-store' });
 
+export type PancakeZeroPriceKind = 'PRICE_KEPT' | 'NEW_AT_ZERO';
+
+/** Dạng của `GET /admin/catalog-quality/pancake-zero-price` (apps/api: ZeroPriceSummary). */
+export interface PancakeZeroPriceDto {
+  scope: 'FULL' | 'INCREMENTAL';
+  updatedAt: string;
+  count: number;
+  keptCount: number;
+  newCount: number;
+  skus: Array<{ pancakeId: string; sku: string; productName: string; kind: PancakeZeroPriceKind; keptPrice: number | null }>;
+  truncated: boolean;
+}
+
+export const getPancakeZeroPrice = () => apiFetch<PancakeZeroPriceDto>('/admin/catalog-quality/pancake-zero-price', { cache: 'no-store' });
+
 /**
  * Tải chuỗi CSV về máy. `buildPancakeFixCsv` đã tự thêm BOM UTF-8 nên KHÔNG dùng `downloadCsvFile` của lib/export-csv.ts
  * (nó thêm BOM lần nữa, Excel hiện ký tự lạ ở ô tiêu đề đầu tiên).

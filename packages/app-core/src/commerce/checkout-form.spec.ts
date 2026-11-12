@@ -33,6 +33,39 @@ describe('validateAddressFields', () => {
     expect(validateAddressFields({ ...OK, phone: '090 123 4567' }, GEO).phone).toBeUndefined();
   });
 
+  it('SĐT dán từ Zalo (chấm, gạch, ngoặc, 84, 0084, ký tự vô hình, số full-width) vẫn hợp lệ', () => {
+    for (const pasted of [
+      '0901.234.567',
+      '090-123-4567',
+      '(090) 123 4567',
+      '(+84) 901 234 567',
+      '84901234567',
+      '84 901 234 567',
+      '0084901234567',
+      '\u200B0901234567\u200B',
+      '\u202A+84 901 234 567\u202C',
+      '0901\u00A0234\u00A0567',
+      '０９０１２３４５６７',
+    ]) {
+      expect(validateAddressFields({ ...OK, phone: pasted }, GEO).phone, pasted).toBeUndefined();
+    }
+  });
+
+  it('SĐT sai vẫn báo đúng câu cũ, kể cả khi có dấu ngăn nhóm hoặc ký tự vô hình', () => {
+    const MSG = 'Số điện thoại chưa đúng. Nhập 10 số bắt đầu bằng 0 (hoặc +84 và 9 số).';
+    for (const bad of ['090.123.456', '(090) 123 45678', '84 90 123 456', '+8490123456', '0901234567x', '\u200Babc\u200B', '901234567']) {
+      expect(validateAddressFields({ ...OK, phone: bad }, GEO).phone, bad).toBe(MSG);
+    }
+  });
+
+  it('chỉ có ký tự vô hình hoặc dấu ngăn nhóm: coi là chưa nhập', () => {
+    expect(validateAddressFields({ ...OK, phone: ' \u200B \u00A0' }, GEO).phone).toBe('Nhập số điện thoại.');
+  });
+
+  it('luật cũ cho dãy 0 + 9 số vẫn giữ: không đổi hành vi với số đã lưu trước đây', () => {
+    expect(validateAddressFields({ ...OK, phone: '0012345678' }, GEO).phone).toBeUndefined();
+  });
+
   it('tên và địa chỉ không chứa < >, không dài quá giới hạn của API', () => {
     expect(validateAddressFields({ ...OK, recipient: 'A<b>' }, GEO).recipient).toBe('Tên người nhận không được chứa ký tự < hoặc >.');
     expect(validateAddressFields({ ...OK, street: 'x'.repeat(256) }, GEO).street).toBe('Số nhà, tên đường tối đa 255 ký tự.');

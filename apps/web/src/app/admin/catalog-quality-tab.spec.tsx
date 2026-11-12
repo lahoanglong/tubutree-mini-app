@@ -61,8 +61,10 @@ const PRODUCTS: CatalogAuditProductDto[] = [
 
 const STATS = { since: '2026-11-12T01:04:00.000Z', total: 0, ok: 0, fallback: 0, latencyP95Ms: null, latencySamples: 0, topSkus: [] };
 const auditBody = (products = PRODUCTS, truncated = false) => ({ body: { products, truncated } });
+const ZERO_PRICE = { scope: 'FULL', updatedAt: '2026-11-13T01:00:00.000Z', count: 0, keptCount: 0, newCount: 0, skus: [], truncated: false };
 const routes = (over: Record<string, { status?: number; body: unknown } | (() => { status?: number; body: unknown })> = {}) => ({
   '/admin/catalog-quality/audit': auditBody(),
+  '/admin/catalog-quality/pancake-zero-price': { body: ZERO_PRICE },
   '/admin/ai-advisor/stats': { body: STATS },
   ...over,
 });
@@ -236,7 +238,9 @@ describe('CatalogQualityTab', () => {
     });
     afterEach(() => {
       URL.createObjectURL = savedCreate;
-      URL.revokeObjectURL = savedRevoke;
+      // downloadCsvText thu hồi URL sau 1 giây, thường là SAU khi test đã xong; jsdom không có hàm này nên trả về hàm rỗng thay vì undefined,
+      // kẻo hẹn giờ trễ ném TypeError "không có test nào" và làm cả lần chạy vitest thoát mã 1.
+      URL.revokeObjectURL = typeof savedRevoke === 'function' ? savedRevoke : () => undefined;
     });
     const bytesOf = (blob: Blob) =>
       new Promise<Uint8Array>((resolve, reject) => {
@@ -359,14 +363,15 @@ describe('CatalogQualityTab', () => {
     });
   });
 
-  it('thẻ AI tư vấn khách nằm dưới phần Kiểm tra, tự tải khi mở tab', async () => {
+  it('thẻ SKU Pancake báo giá 0đ rồi thẻ AI tư vấn khách nằm dưới phần Kiểm tra, tự tải khi mở tab', async () => {
     const m = mockFetch(routes({ '/admin/ai-advisor/stats': { body: { ...STATS, total: 5, ok: 4, fallback: 1, latencyP95Ms: 3200, latencySamples: 5, topSkus: [{ slug: 'a', name: 'Sản phẩm A', count: 3 }] } } }));
     vi.stubGlobal('fetch', m.fn);
     const r = mount(<CatalogQualityTab />);
     await flush(10);
     const sections = Array.from(r.container.querySelectorAll('section'));
-    expect(sections.map((s) => s.querySelector('h2')?.textContent)).toEqual(['Kiểm tra chất lượng CatalogThu gọn', 'AI tư vấn khách']);
-    expect(sections[1]!.textContent).toContain('Sản phẩm A');
+    expect(sections.map((s) => s.querySelector('h2')?.textContent)).toEqual(['Kiểm tra chất lượng CatalogThu gọn', 'SKU Pancake báo giá 0đ', 'AI tư vấn khách']);
+    expect(sections[2]!.textContent).toContain('Sản phẩm A');
     expect(m.calls.filter((c) => c.url.includes('/admin/ai-advisor/stats'))).toHaveLength(1);
+    expect(m.calls.filter((c) => c.url.includes('/admin/catalog-quality/pancake-zero-price'))).toHaveLength(1);
   });
 });

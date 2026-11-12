@@ -16,6 +16,7 @@ import { RailCell, RailShell } from '@/components/mini/product-rail';
 import { coreHttp } from '@/lib/core-http';
 import { browserStorage } from '@/lib/recently-viewed';
 import { loadActiveFlashSales } from '@/lib/use-flash-sales';
+import { variationLabel } from '@/lib/variation-label';
 
 const FLASH_SHELF = shelf('offers.flash');
 // Hàng chữ "Kết thúc sau …" dưới tiêu đề: đồng hồ HH:MM:SS chỉ ở đầu khối Giờ vàng Trang chủ và trang Giờ vàng (Q3), ở Ưu đãi là chữ theo phút. Khung chờ cộng đúng chiều cao này.
@@ -71,7 +72,7 @@ export function OffersFlash() {
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
         {live.map((item) => (
           <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(it.variationName))} />
+            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} />
           </RailCell>
         ))}
       </RailShell>

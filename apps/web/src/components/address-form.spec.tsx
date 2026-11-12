@@ -440,3 +440,76 @@ describe('AddressForm — khổ điện thoại giống Mini App', () => {
     }
   });
 });
+
+// Khách dán SĐT từ Zalo (chấm, gạch, ngoặc, 84, ký tự vô hình) không được gặp lỗi sai; chuẩn hoá khi rời ô, khi dán và khi gửi, không từng phím.
+describe('AddressForm — ô SĐT nhận chữ dán từ Zalo', () => {
+  const paste = (el: Element, text: string) => {
+    const ev = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'clipboardData', { value: { getData: () => text } });
+    act(() => {
+      el.dispatchEvent(ev);
+    });
+    return ev;
+  };
+  const phone = (c: HTMLElement) => input(c, 'Số điện thoại');
+
+  it('ô có inputMode tel, autocomplete tel và số thẳng hàng (tabular-nums)', async () => {
+    const c = await mount();
+    expect(phone(c).getAttribute('inputmode')).toBe('tel');
+    expect(phone(c).getAttribute('autocomplete')).toBe('tel');
+    expect(phone(c).className.split(/\s+/)).toContain('tabular-nums');
+    expect(input(c, 'Người nhận').className.split(/\s+/)).not.toContain('tabular-nums');
+  });
+
+  it('đang gõ thì ô giữ nguyên từng ký tự (không nhảy), rời ô mới chuẩn hoá về 0xxxxxxxxx', async () => {
+    const c = await mount();
+    typeInto(phone(c), '0912.345');
+    expect(phone(c).value).toBe('0912.345');
+    typeInto(phone(c), '0912.345.678');
+    expect(phone(c).value).toBe('0912.345.678');
+    blur(phone(c));
+    await flush();
+    expect(phone(c).value).toBe('0912345678');
+    expect(c.textContent).not.toContain('Số điện thoại chưa đúng');
+  });
+
+  it('rời ô với số sai: giữ nguyên chữ khách gõ và báo đúng câu cũ', async () => {
+    const c = await mount();
+    typeInto(phone(c), '(091) 234 567');
+    blur(phone(c));
+    await flush();
+    expect(phone(c).value).toBe('(091) 234 567');
+    expect(c.textContent).toContain('Số điện thoại chưa đúng. Nhập 10 số bắt đầu bằng 0 (hoặc +84 và 9 số).');
+  });
+
+  it('dán cả số kiểu Zalo: thay ô bằng 0xxxxxxxxx ngay, kể cả khi dài hơn maxLength của ô', async () => {
+    const c = await mount();
+    for (const pasted of ['(+84) 912 345 678', '\u200E+84 912 345 678\u200E', '84912345678', '0912–345–678', '0084 912 345 678']) {
+      const ev = paste(phone(c), pasted);
+      expect(ev.defaultPrevented, pasted).toBe(true);
+      expect(phone(c).value, pasted).toBe('0912345678');
+      typeInto(phone(c), '');
+    }
+  });
+
+  it('dán chữ không phải một số điện thoại đầy đủ: để trình duyệt dán như thường', async () => {
+    const c = await mount();
+    for (const pasted of ['0912', 'Số: 0912 345 678', '']) {
+      expect(paste(phone(c), pasted).defaultPrevented, pasted).toBe(false);
+    }
+  });
+
+  it('gửi payload SĐT dạng chuẩn dù ô còn dạng dán thô (chưa rời ô)', async () => {
+    const c = await mount();
+    typeInto(input(c, 'Người nhận'), 'Nguyễn An');
+    typeInto(phone(c), '(+84) 912.345.678');
+    typeInto(input(c, 'Số nhà, tên đường'), '1 Xuân Thuỷ');
+    chooseGeo(c, 'Tỉnh/Thành phố', 'p1');
+    await flush();
+    chooseGeo(c, 'Phường/Xã', 'w1');
+    click(saveBtn(c));
+    await flush(6);
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(submit.mock.calls[0]![0]).toMatchObject({ phone: '0912345678' });
+  });
+});

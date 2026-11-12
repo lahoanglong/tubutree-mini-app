@@ -1197,6 +1197,24 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
     expect(mocks.createProduct.mock.calls[0]![0]).not.toHaveProperty('stock');
   });
 
+  it('kiểm mã mà Pancake trả tên phân loại trống / "[object Object]": dòng kết quả không còn "()" treo hay chuỗi đó', async () => {
+    const root = await mount();
+    await openTab('Sản phẩm');
+    click(byText(root, 'button', 'Đăng sản phẩm mới'));
+    const overlay = root.querySelector<HTMLElement>('.fixed.inset-0')!;
+    click(overlay.querySelectorAll<HTMLInputElement>('input[type="radio"]')[1]!);
+    for (const [variationName, expected] of [['[object Object]', 'Bột giặt quế · '], ['   ', 'Bột giặt quế · '], ['Can 5L [object Object]', 'Bột giặt quế (Can 5L) · ']] as const) {
+      mocks.checkPancake = vi.fn(async (code: string) => ({ pancakeId: code, productName: 'Bột giặt quế', variationName, retailPrice: 150000, salePrice: null, stock: 40 }));
+      typeInto(inputByLabel(overlay, 'Mã biến thể Pancake'), `PCK-${variationName.length}`);
+      click(byText(overlay, 'button', 'Kiểm tra mã'));
+      await flush();
+      const status = overlay.querySelector('[role="status"]')!.textContent!;
+      expect(status).toContain(expected);
+      expect(status).not.toContain('()');
+      expect(status).not.toContain('[object Object]');
+    }
+  });
+
   it('R2-MERCHANT-1: mã đang thuộc sản phẩm Tubu đang bán → báo cần Tubu xác nhận, không lộ tồn kho Tubu', async () => {
     mocks.checkPancake = vi.fn(async (code: string) => ({
       pancakeId: code,
@@ -1336,6 +1354,27 @@ describe('cổng đối tác — tab Quản lý sản phẩm', () => {
       click(byText(overlay, 'button', 'Lưu thay đổi'));
       await flush();
       expect(mocks.updateProduct).toHaveBeenCalledWith('u', { pancakeCode: 'PCK-NEW' });
+    });
+
+    it('form Sửa: kiểm mã mà tên phân loại là "[object Object]" thì dòng kết quả chỉ còn tên sản phẩm', async () => {
+      mocks.checkPancake = vi.fn(async (code: string) => ({
+        pancakeId: code.trim(),
+        productName: 'Bột giặt quế',
+        variationName: '[object Object]',
+        retailPrice: 150000,
+        salePrice: null,
+        stock: 40,
+      }));
+      const { open } = await openEdit(UNLINKED());
+      const overlay = open();
+      click(radioOf(overlay, 'Đổi sang mã Pancake khác'));
+      typeInto(inputByLabel(overlay, 'Mã biến thể Pancake mới'), 'PCK-NEW');
+      click(byText(overlay, 'button', 'Kiểm tra mã'));
+      await flush();
+      const status = overlay.querySelector('[role="status"]')!.textContent!;
+      expect(status).toContain('Bột giặt quế · ');
+      expect(status).not.toContain('()');
+      expect(status).not.toContain('[object Object]');
     });
 
     it('sửa lại ô mã sau khi kiểm thì kết quả kiểm cũ mất hiệu lực', async () => {
@@ -1841,6 +1880,29 @@ describe('cổng đối tác — tab Đơn qua gian hàng', () => {
     click(byText(rows[0] as HTMLElement, 'button', 'Xem ở tab Đơn cần giao'));
     await flush();
     expect(byText(root, '[role="tab"]', 'Đơn cần giao')!.getAttribute('aria-selected')).toBe('true');
+  });
+
+  it('tên phân loại trống / chỉ "[object Object]": dòng hàng không còn "()" treo; lẫn sau tên thật thì gỡ chuỗi đó', async () => {
+    const item = (id: string, productName: string, variationName: string | null) => ({ id, productName, variationName, quantity: 1, unitPrice: 50000 });
+    mocks.listOrders = vi.fn(async () => ({
+      data: [
+        ORDER('7', 'CONFIRMED', {
+          items: [item('a', 'Trà Shan', '[object Object]'), item('b', 'Bột sắn', '  '), item('c', 'Dầu dừa', 'Can 5L [object Object]'), item('d', 'Mật ong', null), item('e', 'Nghệ', '500g')],
+        }),
+      ],
+      meta: { page: 1, limit: 20, total: 1 },
+    }));
+    const root = await mount();
+    await openTab('Đơn qua gian hàng');
+    const lines = Array.from(root.querySelectorAll('tbody tr div.text-xs')).map((d) => (d.textContent ?? '').replace(/\s+/g, ' ').trim());
+    expect(lines.filter((l) => l.startsWith('•'))).toEqual([
+      '• Trà Shan x1 (50.000đ)',
+      '• Bột sắn x1 (50.000đ)',
+      '• Dầu dừa (Can 5L) x1 (50.000đ)',
+      '• Mật ong x1 (50.000đ)',
+      '• Nghệ (500g) x1 (50.000đ)',
+    ]);
+    expect(root.textContent).not.toContain('[object Object]');
   });
 
   it('bộ lọc trạng thái có tên truy cập, cao 44px và gọi lại danh sách ở trang 1 theo trạng thái chọn', async () => {

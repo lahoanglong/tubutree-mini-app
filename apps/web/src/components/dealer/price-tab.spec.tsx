@@ -52,3 +52,40 @@ describe('PriceTab: đơn của lần đặt trước trả lại do cùng Idemp
     expect(push).toHaveBeenCalledWith(expect.stringContaining('TUBU3'));
   });
 });
+
+describe('PriceTab: dòng phân loại của từng mặt hàng', () => {
+  async function showRow(variation: string) {
+    const { fn } = mockFetch({ '/dealer/pricelist': { body: [{ ...ROW, variation }] }, '/dealer/templates': { body: [] } });
+    vi.stubGlobal('fetch', fn);
+    mounted = render(<PriceTab creditLimit={50_000_000} debt={0} />);
+    await flush();
+    const c = mounted.container;
+    const variationLines = Array.from(c.querySelectorAll('div')).filter((d) => d.className.includes('font-[700]'));
+    return { text: c.textContent ?? '', variationLines, qtyLabel: c.querySelector('[aria-label^="Tăng số lượng"]')?.getAttribute('aria-label') ?? '' };
+  }
+
+  it('tên bình thường vẫn hiện ở dòng riêng và đi vào nhãn đọc của ô số lượng', async () => {
+    const r = await showRow('1kg');
+    expect(r.variationLines.map((d) => d.textContent)).toEqual(['1kg']);
+    expect(r.qtyLabel).toContain('Phân A 1kg');
+  });
+
+  it('"[object Object]" dính sau tên thật bị gỡ khỏi cả dòng hiện lẫn nhãn đọc', async () => {
+    const r = await showRow('Can 5L [object Object]');
+    expect(r.variationLines.map((d) => d.textContent)).toEqual(['Can 5L']);
+    expect(r.text).not.toContain('[object Object]');
+    expect(r.qtyLabel).toContain('Phân A Can 5L');
+    expect(r.qtyLabel).not.toContain('object');
+  });
+
+  it('chỉ còn "[object Object]" hoặc toàn khoảng trắng: không có dòng phân loại, nhãn đọc chỉ còn tên sản phẩm', async () => {
+    for (const name of ['[object Object]', '   ']) {
+      mounted?.unmount();
+      const r = await showRow(name);
+      expect(r.variationLines).toHaveLength(0);
+      expect(r.text).not.toContain('[object Object]');
+      expect(r.qtyLabel).toContain('Phân A');
+      expect(r.qtyLabel).not.toContain('object');
+    }
+  });
+});

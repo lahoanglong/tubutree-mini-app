@@ -1,6 +1,7 @@
 import type { FlashSlot, FlashSlotItem, FlashSlotStatus } from '../api/flash-sale';
 import { slotClock } from '../merch/flash-next-slot';
 import { fillCopy } from '../shop-copy';
+import { joinDetailParts, variationLabel } from '../variation-label';
 
 /** Số tab khung giờ tối đa: nhiều hơn thì dải tab phải cuộn ngang và khách không còn thấy khung kế. */
 const MAX_TABS = 5;
@@ -109,7 +110,7 @@ export function slotListView(items: readonly FlashSlotItem[], categoryId: string
  */
 export function slotItemNote(item: Pick<FlashSlotItem, 'variationName' | 'perUserLimit'>): string {
   const limit = hasLimit(item) ? fillCopy('flash.limitShort', { n: item.perUserLimit }) : null;
-  return [limit, item.variationName].filter((x): x is string => Boolean(x)).join(' · ');
+  return joinDetailParts([limit, variationLabel(item.variationName)]);
 }
 
 /**
@@ -118,7 +119,7 @@ export function slotItemNote(item: Pick<FlashSlotItem, 'variationName' | 'perUse
  */
 export function slotItemNoteSpoken(item: Pick<FlashSlotItem, 'variationName' | 'perUserLimit'>): string {
   const limit = hasLimit(item) ? fillCopy('flash.limitSpoken', { n: item.perUserLimit }) : null;
-  return [limit, item.variationName].filter((x): x is string => Boolean(x)).join(', ');
+  return joinDetailParts([limit, variationLabel(item.variationName)], ', ');
 }
 
 const hasLimit = (item: Pick<FlashSlotItem, 'perUserLimit'>): boolean => Number.isFinite(item.perUserLimit) && item.perUserLimit > 0;

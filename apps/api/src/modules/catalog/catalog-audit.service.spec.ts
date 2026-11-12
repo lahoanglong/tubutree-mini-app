@@ -110,3 +110,23 @@ describe('CatalogAuditService.audit', () => {
     expect(exact.products).toHaveLength(CATALOG_AUDIT_MAX);
   });
 });
+
+describe('CatalogAuditService.pancakeZeroPrice (W131)', () => {
+  const svcWith = (detail: unknown) => {
+    const findUnique = jest.fn(async () => (detail === undefined ? null : { detail }));
+    return { svc: new CatalogAuditService({ opsHealthState: { findUnique } } as unknown as PrismaService), findUnique };
+  };
+
+  it('đọc đúng hàng pancake.catalog.zero-price và trả danh sách SKU đã lưu', async () => {
+    const sku = { pancakeId: 'v1', sku: 'S-1', productName: 'Lau sàn quế 500ml', kind: 'PRICE_KEPT', keptPrice: 89_000 };
+    const { svc, findUnique } = svcWith({ scope: 'FULL', updatedAt: '2026-11-13T00:00:00.000Z', count: 1, keptCount: 1, newCount: 0, skus: [sku] });
+    const res = await svc.pancakeZeroPrice();
+    expect(findUnique).toHaveBeenCalledWith({ where: { key: 'pancake.catalog.zero-price' } });
+    expect(res).toMatchObject({ scope: 'FULL', count: 1, keptCount: 1, newCount: 0, skus: [sku], truncated: false });
+  });
+
+  it('chưa có lượt đồng bộ nào ghi (hoặc dữ liệu hỏng) → danh sách rỗng, không ném', async () => {
+    expect(await svcWith(undefined).svc.pancakeZeroPrice()).toMatchObject({ count: 0, skus: [] });
+    expect(await svcWith('rác').svc.pancakeZeroPrice()).toMatchObject({ count: 0, skus: [] });
+  });
+});

@@ -22,6 +22,7 @@ import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
 import { useFlashExpiry } from '@/lib/use-flash-expiry';
 import { useHydrated } from '@/lib/use-hydrated';
+import { variationLabel } from '@/lib/variation-label';
 import { browserStorage } from '@/lib/recently-viewed';
 import { Icon, SectionHeader, Skeleton, Text } from '@/components/mini';
 import { Countdown } from '@/components/mini/countdown';
@@ -145,7 +146,7 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
         {live.map((item, i) => (
           <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(it.variationName))} priority={i < FLASH_PRIORITY_CARDS} />
+            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} priority={i < FLASH_PRIORITY_CARDS} />
           </RailCell>
         ))}
       </RailShell>
@@ -221,7 +222,7 @@ export function ActiveFlashCard({ item, reserveVariation, priority = false }: { 
       // Sản phẩm nhiều phân loại thì flash chỉ gắn vào MỘT phân loại, mà trang chi tiết mặc định chọn phân loại đầu còn hàng:
       // mở ra là giá thường, không nhãn, không đếm ngược. `?v=` mở đúng phân loại có suất (chỉ khi suất thật sự rẻ hơn).
       href={productHref(encodeURIComponent(item.productSlug), view.isFlash ? item.variationId : null)}
-      note={reserveVariation ? (item.variationName ?? '') : undefined}
+      note={reserveVariation ? (variationLabel(item.variationName) ?? '') : undefined}
       footerHeight={SOLD_FOOTER_HEIGHT}
       footer={
         <div style={{ height: SOLD_FOOTER_HEIGHT, paddingTop: 4, boxSizing: 'border-box' }}>

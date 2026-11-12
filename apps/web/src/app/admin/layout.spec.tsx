@@ -15,6 +15,26 @@ describe('admin/layout', () => {
     expect(html).toMatch(/^<div class="[^"]*\bbg-stone-50\b[^"]*\btext-stone-900\b/);
   });
 
+  it('chữ số đều nhau (tabular-nums) cho mọi con: bộ đếm, doanh thu, tồn kho không nhảy bề rộng khi số đổi', () => {
+    const html = renderToStaticMarkup(
+      <PrivateLayout>
+        <main>Quản trị</main>
+      </PrivateLayout>,
+    );
+    expect(html).toMatch(/^<div class="[^"]*\btabular-nums\b/);
+  });
+
+  // Nút/ô nhập/ô chọn đặt lại font-variant-numeric về normal (đo bằng Chromium: `button` trong khung có tabular-nums vẫn là `normal`),
+  // mà bộ đếm việc và huy hiệu menu nằm ngay trong <button> — nên cần luật riêng cho từng loại.
+  it.each(['button', 'input', 'select', 'textarea'])('luật tabular-nums cũng áp cho <%s> bên trong', (tag) => {
+    const html = renderToStaticMarkup(
+      <PrivateLayout>
+        <main>Quản trị</main>
+      </PrivateLayout>,
+    );
+    expect(html).toContain(`[&amp;_${tag}]:tabular-nums`);
+  });
+
   it('vẫn chặn lập chỉ mục (noindex, nofollow)', () => {
     expect(metadata.robots).toEqual({ index: false, follow: false });
   });

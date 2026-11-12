@@ -414,6 +414,14 @@ describe('trang Đơn hàng: tìm đơn theo mã đơn hoặc tên sản phẩm'
     expect(Object.fromEntries(lastQuery())).toEqual({ status: 'DELIVERED', q: 'nuoc rua chen', page: '1', limit: '20' });
   });
 
+  it('mã đơn dán từ Zalo (ký tự vô hình, dấu cách cứng) → q đã sạch; tên sản phẩm gộp khoảng trắng, giữ hoa/thường', async () => {
+    const c = await mount();
+    await search(c, '\u200B\u202ATUBU-777\u202C\u00A0\uFEFF');
+    expect(lastQuery().get('q')).toBe('TUBU-777');
+    await search(c, '  Nước\u00A0\u00A0Rửa \n Chén\u200B Hữu Cơ ');
+    expect(lastQuery().get('q')).toBe('Nước Rửa Chén Hữu Cơ');
+  });
+
   it('chuỗi trắng không gửi q và không tải lại', async () => {
     const c = await mount();
     const before = sent('/orders').length;

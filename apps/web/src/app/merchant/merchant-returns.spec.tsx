@@ -65,6 +65,23 @@ describe('MerchantReturnsSection — gian hàng tự giao nhận hàng khách tr
     expect(mocks.received).toHaveBeenCalledWith('r1');
   });
 
+  it('tên phân loại trống / chỉ "[object Object]": dòng trả không còn " · " treo; lẫn sau tên thật thì gỡ chuỗi đó', async () => {
+    mocks.list.mockResolvedValue([
+      ret({
+        lines: [
+          { productName: 'Trà Shan', variationName: '[object Object]', quantity: 2 },
+          { productName: 'Bột sắn', variationName: '  ', quantity: 1 },
+          { productName: 'Dầu dừa', variationName: 'Can 5L [object Object]', quantity: 3 },
+          { productName: 'Mật ong', variationName: null, quantity: 4 },
+        ],
+      }),
+    ]);
+    const c = await mount();
+    const lines = Array.from(c.querySelectorAll('li li')).map((li) => li.textContent);
+    expect(lines).toEqual(['Trà Shan ×2', 'Bột sắn ×1', 'Dầu dừa · Can 5L ×3', 'Mật ong ×4']);
+    expect(c.textContent).not.toContain('[object Object]');
+  });
+
   it('đã nhận rồi: không còn nút; không có yêu cầu nào thì ẩn cả mục', async () => {
     mocks.list.mockResolvedValue([ret({ receivedAt: '2026-10-14T01:00:00Z' })]);
     const c = await mount();

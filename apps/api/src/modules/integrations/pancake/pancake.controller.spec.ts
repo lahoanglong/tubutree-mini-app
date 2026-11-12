@@ -23,3 +23,18 @@ describe('PancakeController.runSync — lỗi Pancake báo bằng tiếng Việt
     await expect(make(original).runSync()).rejects.toBe(original);
   });
 });
+
+describe('PancakeController.runSync — trả SKU Pancake báo giá 0đ cho người bấm đồng bộ (W131)', () => {
+  const make = (zero: unknown) =>
+    new PancakeController({ syncProducts: jest.fn().mockResolvedValue(7), lastZeroPrice: jest.fn().mockReturnValue(zero) } as never, {} as never);
+  const sku = { pancakeId: 'v1', sku: 'S-1', productName: 'Lau sàn quế 500ml', kind: 'PRICE_KEPT', keptPrice: 89_000 };
+
+  it('có SKU 0đ: trả đếm theo loại và danh sách; synced/stockOverwritten giữ nguyên', async () => {
+    const res = await make({ scope: 'FULL', updatedAt: 'x', count: 1, keptCount: 1, newCount: 0, skus: [sku], truncated: false }).runSync('1');
+    expect(res).toEqual({ synced: 7, stockOverwritten: true, zeroPriceAnomalies: { count: 1, keptCount: 1, newCount: 0, skus: [sku] } });
+  });
+
+  it('chưa có kết quả 0đ (null) → đếm 0, danh sách rỗng, không ném', async () => {
+    expect(await make(null).runSync()).toEqual({ synced: 7, stockOverwritten: false, zeroPriceAnomalies: { count: 0, keptCount: 0, newCount: 0, skus: [] } });
+  });
+});

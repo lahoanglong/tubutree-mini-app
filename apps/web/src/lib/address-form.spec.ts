@@ -20,13 +20,19 @@ describe('validateAddress — lỗi theo từng ô (BUYERWEB-14)', () => {
   });
 
   it('SĐT sai định dạng được giải thích, không chỉ tắt nút', () => {
-    for (const bad of ['091234567', '09123456789', '84912345678', 'abc', '0912-345-678', '+8491234567']) {
+    for (const bad of ['091234567', '09123456789', 'abc', '+8491234567', '0912.345.67', '84 12 345 678']) {
       expect(validateAddress({ ...OK, phone: bad }, GEO).phone, bad).toMatch(/^Số điện thoại chưa đúng/);
     }
   });
 
   it('SĐT đúng: 0xxxxxxxxx hoặc +84xxxxxxxxx, khoảng trắng được bỏ qua', () => {
     for (const good of ['0912345678', '+84912345678', ' 0912 345 678 ']) {
+      expect(validateAddress({ ...OK, phone: good }, GEO).phone, good).toBeUndefined();
+    }
+  });
+
+  it('SĐT dán từ Zalo: chấm, gạch, ngoặc, 84, 0084, ký tự vô hình đều hợp lệ', () => {
+    for (const good of ['0912.345.678', '091-234-5678', '(+84) 912 345 678', '84912345678', '0084912345678', '\u200B0912345678\u200B', '0912\u00A0345\u00A0678']) {
       expect(validateAddress({ ...OK, phone: good }, GEO).phone, good).toBeUndefined();
     }
   });
@@ -50,6 +56,12 @@ describe('firstInvalidField — ô đầu tiên cần đưa con trỏ tới', ()
 });
 
 describe('addressPayload / addressToForm', () => {
+  it('SĐT gửi lên luôn là dạng chuẩn 0xxxxxxxxx dù khách dán kiểu nào', () => {
+    for (const pasted of ['0912.345.678', '091-234-5678', '(+84) 912 345 678', '84912345678', '+84 912 345 678', '\u200B0912 345 678\u200B']) {
+      expect(addressPayload({ ...OK, phone: pasted }, GEO).phone, pasted).toBe('0912345678');
+    }
+  });
+
   it('payload cắt khoảng trắng, bỏ khoảng trắng trong SĐT, hệ 2 cấp nên quận/huyện rỗng', () => {
     expect(addressPayload({ recipient: ' Nguyễn An ', phone: '0912 345 678', street: ' 1 Xuân Thuỷ ' }, GEO)).toEqual({
       recipient: 'Nguyễn An',

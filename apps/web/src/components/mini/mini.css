@@ -1035,6 +1035,8 @@
   transition: transform var(--p-dur-enter) var(--p-ease-spring);
 }
 .tubu-story-arc-item[aria-checked='true'] { border: 2px solid var(--color-action-primary-bg); }
+/* Chip xa mục đang chọn co lại tới 0,6 (transform), vùng chạm phủ thêm phải lớn lên theo nghịch đảo để sau khi co vẫn đủ 44px. */
+.tubu-story-arc-item.tubu-hit-44-square::after { width: calc(44px / var(--arc-scale, 1)); height: calc(44px / var(--arc-scale, 1)); }
 
 .tubu-story-chips { display: flex; gap: 0.5rem; }
 .tubu-story-chip {
