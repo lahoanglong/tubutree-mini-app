@@ -4,7 +4,13 @@ import type { SmtpFailureKind } from './ops-email-error';
 export const CATALOG_STATE_KEY = 'pancake.catalog';
 
 /** `failed` = sản phẩm lỗi khi ghi; `skipped` = sản phẩm Pancake thiếu mã/tên (nháp), không phải lỗi. */
-export type CatalogRunResult = { ok: true; count: number; failed?: number; skipped?: number } | { ok: false; error: string };
+/**
+ * `zeroPriceAnomalies` = số biến thể Pancake báo giá 0đ trong lượt này (chỉ ghi khi > 0; danh sách SKU nằm ở hàng
+ * `pancake.catalog.zero-price`, xem pancake-zero-price.ts).
+ */
+export type CatalogRunResult =
+  | { ok: true; count: number; failed?: number; skipped?: number; zeroPriceAnomalies?: number }
+  | { ok: false; error: string };
 
 /**
  * Ghi kết quả một lượt đồng bộ danh mục Pancake vào ops_health_states (màn sức khoẻ vận hành đọc). Hàm rời, không qua
@@ -12,7 +18,10 @@ export type CatalogRunResult = { ok: true; count: number; failed?: number; skipp
  */
 export async function recordCatalogRun(prisma: Pick<PrismaClient, 'opsHealthState'>, run: CatalogRunResult, now = new Date()) {
   const data = run.ok
-    ? { lastOkAt: now, detail: { count: run.count, failed: run.failed ?? 0, skipped: run.skipped ?? 0 } }
+    ? {
+        lastOkAt: now,
+        detail: { count: run.count, failed: run.failed ?? 0, skipped: run.skipped ?? 0, ...(run.zeroPriceAnomalies ? { zeroPriceAnomalies: run.zeroPriceAnomalies } : {}) },
+      }
     : { lastErrorAt: now, lastError: run.error.slice(0, 500) };
   await prisma.opsHealthState.upsert({ where: { key: CATALOG_STATE_KEY }, create: { key: CATALOG_STATE_KEY, ...data }, update: data });
 }

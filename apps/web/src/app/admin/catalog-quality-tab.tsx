@@ -20,6 +20,7 @@ import { AdvisorStatsCard } from './advisor-stats-card';
 import { CatalogCopyReview, type CurrentCopy } from './catalog-copy-review';
 import { CatalogIssueList } from './catalog-issue-list';
 import { downloadCsvText, getCatalogAudit } from './catalog-quality-api';
+import { PancakeZeroPriceCard } from './pancake-zero-price-card';
 
 const hasFallbackCopy = (slug: string) => findProductCopyFallback(slug) !== undefined;
 
@@ -217,6 +218,7 @@ export function CatalogQualityTab() {
           </div>
         )}
       </section>
+      <PancakeZeroPriceCard />
       <AdvisorStatsCard />
     </div>
   );

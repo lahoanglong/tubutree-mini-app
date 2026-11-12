@@ -240,14 +240,11 @@ export function ProductCategoriesTab({
       )}
       <ul className="space-y-2">
         {products.map((p) => (
-          <li key={p.id} className="flex items-start gap-3 rounded-card border border-stone-200 bg-stone-0 p-3">
-            <input
-              type="checkbox"
-              aria-label={`Chọn ${p.name}`}
-              checked={selected.has(p.id)}
-              onChange={() => toggle(p.id)}
-              className="mt-1"
-            />
+          <li key={p.id} className="flex items-start gap-1 rounded-card border border-stone-200 bg-stone-0 p-3 pl-1 sm:gap-3 sm:pl-3">
+            {/* Ô tích trần chỉ 13px: nhãn bao quanh cho vùng chạm 44px trên điện thoại (cùng cách ở catalog-issue-list). */}
+            <label className="inline-flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center sm:min-h-0 sm:min-w-0 sm:pt-1">
+              <input type="checkbox" aria-label={`Chọn ${p.name}`} checked={selected.has(p.id)} onChange={() => toggle(p.id)} />
+            </label>
             <div className="min-w-0 flex-1">
               <div className="flex flex-wrap items-center gap-2">
                 <span className="break-words text-sm font-medium text-stone-900">{p.name}</span>
@@ -299,7 +296,7 @@ function PancakeCategoryHelper({ catName }: { catName: Map<string, string> }) {
   const rows = useQuery({ queryKey: ['admin-pancake-categories'], queryFn: listPancakeCategories, enabled: open, staleTime: 60_000 });
   return (
     <section aria-label="Nhóm hàng Pancake" className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3">
-      <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="text-sm font-medium text-forest-700 underline">
+      <button type="button" aria-expanded={open} onClick={() => setOpen((v) => !v)} className="inline-flex min-h-[44px] items-center text-left text-sm font-medium text-forest-700 underline sm:min-h-0">
         {open ? 'Ẩn' : 'Xem'} nhóm hàng Pancake và bản đồ tự gán
       </button>
       {open && (

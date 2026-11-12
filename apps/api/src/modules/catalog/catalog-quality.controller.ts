@@ -48,6 +48,11 @@ export class CatalogQualityController {
     return this.audit.audit();
   }
 
+  @Get('pancake-zero-price')
+  getPancakeZeroPrice() {
+    return this.audit.pancakeZeroPrice();
+  }
+
   /** Không ghi DB. Mỗi lượt có thể gọi AI trả phí nên giới hạn tốc độ riêng, chặt hơn mức chung. */
   @Post('copy-drafts')
   @Throttle({ default: { limit: 6, ttl: 60_000 } })

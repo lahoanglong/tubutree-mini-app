@@ -4,6 +4,7 @@ import { publicProductThumb } from '../../common/public-image';
 import { PrismaService } from '../../prisma/prisma.service';
 import { ingredientNames } from './ingredient-names';
 import { VARIATION_ORDER_BY } from './variation-order';
+import { readZeroPrice, type ZeroPriceSummary } from '../integrations/pancake/pancake-zero-price';
 
 /** Trần số sản phẩm một lần đọc; vượt thì `truncated`. Catalog Tubu hiện vài trăm SKU nên trần này chỉ để bảo vệ máy chủ. */
 export const CATALOG_AUDIT_MAX = 2000;
@@ -16,6 +17,11 @@ export const CATALOG_AUDIT_MAX = 2000;
 @Injectable()
 export class CatalogAuditService {
   constructor(private readonly prisma: PrismaService) {}
+
+  /** SKU Pancake đang báo giá 0đ (Tubu đã giữ giá cũ hoặc chưa mở bán): danh sách do lượt đồng bộ ghi, màn "Kiểm tra catalog" hiển thị. */
+  pancakeZeroPrice(): Promise<ZeroPriceSummary> {
+    return readZeroPrice(this.prisma);
+  }
 
   async audit(): Promise<CatalogAuditResponse> {
     const rows = await this.prisma.product.findMany({

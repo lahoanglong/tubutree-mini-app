@@ -34,7 +34,13 @@ export class PancakeController {
         `Không đồng bộ được danh mục Pancake (${pancakeErrorText(err)}). Thử lại sau ít phút; lỗi kéo dài thì kiểm khoá Pancake.`,
       );
     }
-    return { synced: count, stockOverwritten: overwriteStock };
+    // Lượt quét toàn bộ vừa chạy trên replica này: trả luôn SKU Pancake báo giá 0đ (giá Tubu đã được giữ) để người bấm biết sửa ở đâu.
+    const zero = this.sync.lastZeroPrice();
+    return {
+      synced: count,
+      stockOverwritten: overwriteStock,
+      zeroPriceAnomalies: { count: zero?.count ?? 0, keptCount: zero?.keptCount ?? 0, newCount: zero?.newCount ?? 0, skus: zero?.skus ?? [] },
+    };
   }
 
   /** Nhóm hàng Pancake + danh mục Tubu đã ánh xạ (`pancake.category_map`), để điền bản đồ ở tab Cấu hình. */

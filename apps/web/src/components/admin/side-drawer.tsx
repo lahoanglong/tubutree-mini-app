@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import { safeAreaPad } from '@/lib/safe-area';
 import { useModalA11y } from '@/lib/use-modal-a11y';
+import { ADMIN_TABULAR } from './tabular-nums';
 
 /**
  * Ngăn kéo phủ màn hình cho web admin: chi tiết đơn/người dùng trên điện thoại (thay vì mở rộng hàng trong bảng cuộn
@@ -48,7 +49,7 @@ export function SideDrawer({
         aria-labelledby={titleId}
         tabIndex={-1}
         onClick={(e) => e.stopPropagation()}
-        className={`flex h-full w-full max-w-xl flex-col bg-stone-50 shadow-raised outline-none ${side === 'right' ? 'ml-auto' : 'mr-auto max-w-xs'}`}
+        className={`flex h-full w-full max-w-xl flex-col bg-stone-50 shadow-raised outline-none ${ADMIN_TABULAR} ${side === 'right' ? 'ml-auto' : 'mr-auto max-w-xs'}`}
         style={{
           paddingTop: 'env(safe-area-inset-top, 0px)',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
