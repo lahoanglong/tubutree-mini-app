@@ -16,10 +16,11 @@ const PROD = [
   { slug: 'nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754', name: 'Nước giặt hương Bạc hà Fuwa3e 500ml', brand: 'Tubu Tree', id: 'fuwa3e' },
   { slug: 'nuoc-lau-da-nang-fuwa3e-500ml-cbb309', name: 'Nước lau đa năng FUWA3E 500ml', brand: 'Tubu Tree', id: 'fuwa3e' },
   { slug: 'ca-phe-sau-rieng-thom-beo-durica-le-plateau-hop-g-x-10-goi-2c9db2', name: 'Cà Phê Sầu Riêng Thơm Béo DURICA Le Plateau Hộp g x 10 Gói', brand: 'Tubu Tree', id: 'durica' },
+  { slug: 'xit-tram-cho-be-pineboo-150ml-b70d1d', name: 'Xịt tràm cho bé Pineboo 150ml', brand: 'Tubu Tree', id: 'pineboo' },
+  { slug: 'bot-tam-goi-cho-be-pineboo-500ml-47e6e4', name: 'Bọt tắm gội cho bé Pineboo 500ml', brand: 'Tubu Tree', id: 'pineboo' },
 ] as const;
 
 const NOT_BRAND = [
-  { slug: 'xit-tram-cho-be-pineboo-150ml-b70d1d', name: 'Xịt tràm cho bé Pineboo 150ml' },
   { slug: 'nuoc-dong-trung-ha-thao-hector-lite-db096e', name: 'Nước Đông Trùng Hạ Thảo HECTOR Lite 70ml x 10 Chai' },
   { slug: 'dau-xa-thao-duoc-visante-1314dc', name: 'Dầu Xả Thảo Dược VISANTE 500ml' },
   { slug: 'ca-phe-muoi-tui-50x16g-9fbabb', name: 'Cà phê muối túi 50x16g' },
@@ -168,10 +169,11 @@ describe('resolveStoryConfig với kịch bản cấp nhãn', () => {
     { id: 'v1', name: '500ml' },
     { id: 'v2', name: '3,5L' },
   ];
-  const brandProduct = { slug: 'nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754', name: 'Nước giặt hương Bạc hà Fuwa3e 500ml', brand: 'Tubu Tree' };
+  // Các SKU 500ml thật đã có preset riêng (CATALOG_STORY_PRESETS), nên mẫu của tầng cấp nhãn là một SKU giả định chưa có preset (cỡ 750ml).
+  const brandProduct = { slug: 'nuoc-giat-huong-bac-ha-fuwa3e-750ml-aaaaaa', name: 'Nước giặt hương Bạc hà Fuwa3e 750ml', brand: 'Tubu Tree' };
   const kinds = (c: ProductStoryConfig | null) => c?.scenes.map((s) => s.kind);
 
-  it('chưa có cấu hình, hai phân loại: vòng cung rồi điểm chỉ, điểm chỉ chỉ ghi Thương hiệu (khách đổi sang 3,5L thì "500ml" trong tên không còn đúng)', () => {
+  it('chưa có cấu hình, hai phân loại: vòng cung rồi điểm chỉ, điểm chỉ chỉ ghi Thương hiệu (khách đổi sang 3,5L thì "750ml" trong tên không còn đúng)', () => {
     const got = resolveStoryConfig({ ...brandProduct, variations: two });
     expect(kinds(got)).toEqual(['variant_arc', 'hud_callouts']);
     const hud = got!.scenes.find((s) => s.kind === 'hud_callouts');
@@ -215,7 +217,7 @@ describe('resolveStoryConfig với kịch bản cấp nhãn', () => {
     expect(hud.points.map((p) => p.label)).toEqual(['Bạc hà', 'Cam']);
   });
 
-  it('sản phẩm ngoài năm nhãn không đổi: không thành phần, một phân loại thì không có gì để kể', () => {
-    expect(resolveStoryConfig({ slug: 'xit-tram-cho-be-pineboo-150ml-b70d1d', name: 'Xịt tràm cho bé Pineboo 150ml', variations: [two[0]!] })).toBeNull();
+  it('sản phẩm ngoài sáu nhãn không đổi: không thành phần, một phân loại thì không có gì để kể', () => {
+    expect(resolveStoryConfig({ slug: 'nuoc-dong-trung-ha-thao-hector-lite-db096e', name: 'Nước Đông Trùng Hạ Thảo HECTOR Lite 70ml x 10 Chai', variations: [two[0]!] })).toBeNull();
   });
 });

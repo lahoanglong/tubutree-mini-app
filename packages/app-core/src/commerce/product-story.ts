@@ -178,7 +178,7 @@ function reconcileArc(config: ProductStoryConfig, variations: readonly ArcVariat
 
 /**
  * Cấu hình dùng để vẽ: đã lưu (hợp lệ) > preset theo slug (mẫu seed hoặc mẫu đợt đầu theo slug gốc; chèn vòng cung từ biến thể thật) > tự sinh từ thành phần >
- * kịch bản cấp nhãn cho năm nhãn chủ lực (`brand-story.ts`).
+ * kịch bản cấp nhãn cho sáu nhãn chủ lực (`brand-story.ts`).
  * `enabled:false` là admin tắt hẳn. Trả null thì trang chi tiết không vẽ gì thêm.
  */
 export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | null {
@@ -193,7 +193,7 @@ export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | n
     return arc ? { ...preset, scenes: [arc, ...preset.scenes] } : preset;
   }
   const auto = buildDefaultStoryConfig(p);
-  // Có thành phần thật thì kịch bản tự sinh giàu hơn; còn lại, sản phẩm của năm nhãn chủ lực nhận kịch bản cấp nhãn (không ghi đè gì đã lưu).
+  // Có thành phần thật thì kịch bản tự sinh giàu hơn; còn lại, sản phẩm của sáu nhãn chủ lực nhận kịch bản cấp nhãn (không ghi đè gì đã lưu).
   if (auto?.scenes.some((s) => s.kind === 'ingredient_assembly')) return auto;
   const brandConfig = buildBrandStoryConfig(p, p.variations.length);
   if (brandConfig) {
