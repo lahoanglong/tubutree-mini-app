@@ -299,6 +299,18 @@ describe('OrdersPage — tìm đơn theo mã đơn hoặc tên sản phẩm', ()
     await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalledWith({ status: 'DELIVERED', q: 'nuoc rua chen' }, 1, 20));
   });
 
+  it('mã đơn dán từ Zalo (ký tự vô hình, dấu cách cứng) → q đã sạch, vẫn khớp', async () => {
+    await openPage();
+    submit('\u200B\u202ATUBU-777\u202C\u00A0\uFEFF');
+    await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalledWith({ q: 'TUBU-777' }, 1, 20));
+  });
+
+  it('tên sản phẩm: khoảng trắng liên tiếp gộp một, giữ nguyên hoa/thường và độ dài', async () => {
+    await openPage();
+    submit('  Nước\u00A0\u00A0Rửa \n Chén\u200B Hữu Cơ ');
+    await waitFor(() => expect(mocks.fetchOrders).toHaveBeenCalledWith({ q: 'Nước Rửa Chén Hữu Cơ' }, 1, 20));
+  });
+
   it('gõ dở chưa gửi thì không gọi API; Enter với chuỗi trắng không đổi từ khoá', async () => {
     await openPage();
     fireEvent.change(searchBox(), { target: { value: 'nuoc' } });

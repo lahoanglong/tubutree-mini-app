@@ -3,6 +3,7 @@
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { loadMoreFailed } from '@tubutree/app-core/client-copy';
 import { orderCopy } from '@tubutree/app-core/account-copy';
+import { normalizeOrderSearchInput } from '@tubutree/app-core/phone-input';
 import { useState } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery } from '@tanstack/react-query';
@@ -88,7 +89,7 @@ export function OrdersSection() {
 
   const submitSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    setQuery(draft.trim());
+    setQuery(normalizeOrderSearchInput(draft));
   };
   const clearSearch = () => {
     setDraft('');

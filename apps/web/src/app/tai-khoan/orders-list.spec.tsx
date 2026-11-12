@@ -111,6 +111,20 @@ describe('danh sách đơn — ô tìm kiếm', () => {
     expect((c.querySelector('input[type="search"]') as HTMLInputElement).value).toBe('');
   });
 
+  it('mã đơn dán từ Zalo (ký tự vô hình, dấu cách cứng) → q đã sạch; tên sản phẩm gộp khoảng trắng, giữ hoa/thường', async () => {
+    state.orders = [order('TUBU-777', [item('Nước rửa chén')])];
+    const c = await mount();
+    typeInto(c.querySelector('input[type="search"]'), '\u200B\u202ATUBU-777\u202C\u00A0\uFEFF');
+    click(byText(c, 'button', 'Tìm'));
+    await flush(6);
+    expect(state.calls.at(-1)).toEqual({ page: 1, filter: { q: 'TUBU-777' } });
+    expect(c.textContent).toContain('Kết quả cho “TUBU-777”');
+    typeInto(c.querySelector('input[type="search"]'), '  Nước\u00A0\u00A0Rửa \n Chén\u200B Hữu Cơ ');
+    click(byText(c, 'button', 'Tìm'));
+    await flush(6);
+    expect(state.calls.at(-1)).toEqual({ page: 1, filter: { q: 'Nước Rửa Chén Hữu Cơ' } });
+  });
+
   it('không khớp đơn nào: câu báo riêng, không nói "chưa có đơn hàng nào"', async () => {
     const c = await mount();
     typeInto(c.querySelector('input[type="search"]'), 'zzz');

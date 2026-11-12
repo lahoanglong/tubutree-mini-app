@@ -620,3 +620,75 @@ describe('AddressForm — máy chủ từ chối vì sổ không còn khớp th�
     expect(shopApi.createAddress).toHaveBeenCalledTimes(2);
   });
 });
+
+// Khách dán SĐT từ Zalo (chấm, gạch, ngoặc, 84, ký tự vô hình) không được gặp lỗi sai; chuẩn hoá khi rời ô, khi dán và khi gửi, không từng phím.
+describe('AddressForm — ô SĐT nhận chữ dán từ Zalo', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    mocks.user.current = { fullName: 'Long', phone: null };
+  });
+
+  const paste = (el: Element, text: string) => fireEvent.paste(el, { clipboardData: { getData: () => text } });
+  // fireEvent trả false khi sự kiện bị preventDefault.
+  const wasPrevented = (notPrevented: boolean) => !notPrevented;
+
+  it('ô có inputMode, autocomplete tel và số thẳng hàng (tubu-nums)', () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    expect(inputNear('Số điện thoại')).toHaveAttribute('inputmode', 'numeric');
+    expect(inputNear('Số điện thoại')).toHaveAttribute('autocomplete', 'tel');
+    expect(inputNear('Số điện thoại').classList.contains('tubu-nums')).toBe(true);
+    expect(inputNear('Người nhận').classList.contains('tubu-nums')).toBe(false);
+  });
+
+  it('đang gõ thì ô giữ nguyên từng ký tự (không nhảy), rời ô mới chuẩn hoá về 0xxxxxxxxx', () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    const phone = inputNear('Số điện thoại');
+    fireEvent.change(phone, { target: { value: '0912.345' } });
+    expect(phone).toHaveValue('0912.345');
+    fireEvent.change(phone, { target: { value: '0912.345.678' } });
+    expect(phone).toHaveValue('0912.345.678');
+    fireEvent.blur(phone);
+    expect(phone).toHaveValue('0912345678');
+    expect(screen.queryByText(/Số điện thoại chưa đúng/)).toBeNull();
+  });
+
+  it('rời ô với số sai: giữ nguyên chữ khách gõ và báo đúng câu cũ', () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    const phone = inputNear('Số điện thoại');
+    fireEvent.change(phone, { target: { value: '(091) 234 567' } });
+    fireEvent.blur(phone);
+    expect(phone).toHaveValue('(091) 234 567');
+    expect(screen.getByText('Số điện thoại chưa đúng. Nhập 10 số bắt đầu bằng 0 (hoặc +84 và 9 số).')).toBeInTheDocument();
+  });
+
+  it('dán cả số kiểu Zalo: thay ô bằng 0xxxxxxxxx ngay', () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    const phone = inputNear('Số điện thoại');
+    for (const pasted of ['(+84) 912 345 678', '\u200E+84 912 345 678\u200E', '84912345678', '0912–345–678', '0084 912 345 678']) {
+      expect(wasPrevented(paste(phone, pasted)), pasted).toBe(true);
+      expect(phone, pasted).toHaveValue('0912345678');
+      fireEvent.change(phone, { target: { value: '' } });
+    }
+  });
+
+  it('dán chữ không phải một số điện thoại đầy đủ: để trình duyệt dán như thường', () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    const phone = inputNear('Số điện thoại');
+    for (const pasted of ['0912', 'Số: 0912 345 678', '']) {
+      expect(wasPrevented(paste(phone, pasted)), pasted).toBe(false);
+    }
+  });
+
+  it('gửi payload SĐT dạng chuẩn dù ô còn dạng dán thô (chưa rời ô)', async () => {
+    localStorage.setItem(LAST_GEO_KEY, JSON.stringify(HCM));
+    (shopApi.createAddress as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'new', ...HCM });
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    fireEvent.change(inputNear('Người nhận'), { target: { value: 'Nguyễn An' } });
+    fireEvent.change(inputNear('Số điện thoại'), { target: { value: '(+84) 912.345.678' } });
+    fireEvent.change(inputNear('Số nhà, tên đường'), { target: { value: '1 Nguyễn Huệ' } });
+    fireEvent.click(screen.getByText('Lưu'));
+    await waitFor(() => expect(shopApi.createAddress).toHaveBeenCalledTimes(1));
+    expect(shopApi.createAddress).toHaveBeenCalledWith(expect.objectContaining({ phone: '0912345678' }));
+  });
+});

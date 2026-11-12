@@ -8,6 +8,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ordersListQuery } from '@tubutree/app-core/queries/orders';
 import { newCustomerOfferQuery } from '@tubutree/app-core/queries/loyalty';
 import { orderCopy } from '@tubutree/app-core/account-copy';
+import { normalizeOrderSearchInput } from '@tubutree/app-core/phone-input';
 import { EmptyState as MiniEmptyState } from '@/components/mini/empty-state';
 import { SearchField } from '@/components/mini/search-field';
 import { PageHeader } from '@/components/ui/page-header';
@@ -118,7 +119,7 @@ function OrdersPageBody() {
                 setDraft(v);
                 if (v === '') setQuery('');
               }}
-              onSubmit={(v) => setQuery(v.trim())}
+              onSubmit={(v) => setQuery(normalizeOrderSearchInput(v))}
               onClear={clearSearch}
               label={orderCopy.searchLabel}
               clearLabel={orderCopy.searchClear}

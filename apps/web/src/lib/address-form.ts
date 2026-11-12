@@ -1,3 +1,4 @@
+import { normalizeVnPhoneInput } from '@tubutree/app-core/phone-input';
 import type { GeoValue } from '@/components/geo-picker';
 import type { AddressDTO } from './shop-client';
 
@@ -13,7 +14,8 @@ export type AddressPayload = Omit<AddressDTO, 'id' | 'isDefault'>;
 export { ADDRESS_FIELD_ORDER, ADDRESS_RECIPIENT_MAX as RECIPIENT_MAX, ADDRESS_STREET_MAX as STREET_MAX } from '@tubutree/app-core/commerce/checkout-form';
 export { firstInvalidAddressField as firstInvalidField, validateAddressFields as validateAddress } from '@tubutree/app-core/commerce/checkout-form';
 
-export const normalizePhone = (v: string) => v.replace(/\s/g, '');
+/** Dạng gửi lên máy chủ: 0xxxxxxxxx khi phân tích được (cùng luật với validateAddress), không thì chữ đã bỏ ký tự vô hình và dấu ngăn nhóm. */
+export const normalizePhone = normalizeVnPhoneInput;
 
 /** Tỉnh/phường chọn qua GeoPicker theo hệ 2 cấp của Pancake: không còn quận/huyện nên district luôn rỗng. */
 export function addressPayload(form: AddressFormValues, geo: GeoValue): AddressPayload {
