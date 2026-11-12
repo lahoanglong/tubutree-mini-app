@@ -37,7 +37,8 @@ async function audit(page: Page, label: string, opts: { focusSteps?: number } = 
   const { cls, sources } = await readClsTotal(page);
   if (process.env.W130_PRINT) console.log(`W130 CLS ${label}: ${cls.toFixed(4)}`);
   if (cls > CLS_MAX) found.push(`CLS ${cls.toFixed(3)} > ${CLS_MAX}: ${sources.slice(0, 3).join(' ; ')}`);
-  const layout = await probeLayout(page);
+  // Số giảm trong hàng mã giữ số tỉ lệ: số đều rộng hơn vài px mà hàng mã ở 320px chỉ còn độ dư 12px (xem coupon-row-checkout-320, layout-narrow.web).
+  const layout = await probeLayout(page, { ignoreNumeric: ['[data-testid="coupon-discount"]'] });
   found.push(...layout.overflow.map((m) => `tràn ngang: ${m}`), ...layout.notTabular.map((m) => `số không đều: ${m}`));
   found.push(...(await probeTapTargets(page)).map((m) => `vùng chạm: ${m}`));
   found.push(...(await probeUnnamedControls(page)).map((m) => `thiếu tên: ${m}`));
