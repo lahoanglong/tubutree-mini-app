@@ -268,6 +268,38 @@ describe('AiAdvisorService.chat — ngữ cảnh sản phẩm trung thực', () 
     expect(prompt).toContain('chưa có mô tả hay thành phần chi tiết');
   });
 
+  it('SKU có description null trong DB vẫn nhận quy cách, cách dùng và thành phần từ chữ dự phòng của shared-types trong prompt', async () => {
+    const { prompt } = await systemPromptOf(
+      [{ ...PRODUCTS[0], slug: 'xit-tram-cho-be-pineboo-150ml', name: 'Xịt tràm cho bé Pineboo 150ml', description: null, ingredients: null }],
+      'xịt tràm cho bé',
+    );
+    expect(prompt).toContain('Mô tả: Xịt tràm cho bé Pineboo, quy cách 150ml.');
+    expect(prompt).toContain('Dạng bình xịt dùng bên ngoài cơ thể');
+    expect(prompt).toContain('Thành phần: Eco-enzyme lên men từ vỏ dứa, Tràm');
+    expect(prompt).not.toContain('chưa có mô tả hay thành phần chi tiết');
+  });
+
+  it('slug có hậu tố băm Pancake và mô tả HTML trống vẫn được bù', async () => {
+    const { prompt } = await systemPromptOf(
+      [{ ...PRODUCTS[0], slug: 'bot-rua-tay-cho-be-pineboo-300ml-9f8e7d6c', name: 'Bọt rửa tay cho bé Pineboo 300ml', description: '<p>&nbsp;</p>', ingredients: [] }],
+      'bọt rửa tay cho bé',
+    );
+    expect(prompt).toContain('Bọt rửa tay cho bé Pineboo, quy cách 300ml.');
+  });
+
+  it('mô tả của chủ hàng trong DB thắng chữ dự phòng (không nối thêm, không ghi đè)', async () => {
+    const { prompt } = await systemPromptOf([{ ...PRODUCTS[0], slug: 'xit-tram-cho-be-pineboo-150ml', name: 'Xịt tràm cho bé Pineboo 150ml', description: '<p>Bản của chủ hàng.</p>', ingredients: [{ name: 'Dầu tràm' }] }], 'xịt tràm');
+    expect(prompt).toContain('Mô tả: Bản của chủ hàng.');
+    expect(prompt).toContain('Thành phần: Dầu tràm');
+    expect(prompt).not.toContain('quy cách 150ml');
+    expect(prompt).not.toContain('Eco-enzyme');
+  });
+
+  it('slug lạ (ngoài bảng dự phòng) vẫn là "chưa có", không bị gắn nhầm chữ của hàng khác', async () => {
+    const { prompt } = await systemPromptOf([{ ...PRODUCTS[0], slug: 'nrc', description: null, ingredients: null }]);
+    expect(prompt).toContain('chưa có mô tả hay thành phần chi tiết');
+  });
+
   it('truy vấn chọn thêm description và ingredients', async () => {
     const { prisma } = await systemPromptOf([FULL]);
     const select = (prisma.product.findMany as jest.Mock).mock.calls[0][0].select;

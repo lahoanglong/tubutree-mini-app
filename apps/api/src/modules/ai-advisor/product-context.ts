@@ -1,3 +1,5 @@
+import { withProductCopyFallback } from '@tubutree/shared-types';
+
 const MAX_DESCRIPTION_CHARS = 400;
 const MAX_INGREDIENTS = 8;
 
@@ -8,6 +10,7 @@ export interface ProductFacts {
 }
 
 interface FactsRow {
+  slug: string;
   description?: string | null;
   ingredients?: unknown;
 }
@@ -36,8 +39,20 @@ function ingredientNames(raw: unknown): string[] {
   return names.map((n) => plainText(n, 80)).filter((n) => n !== '' && !n.includes('[object Object]')).slice(0, MAX_INGREDIENTS);
 }
 
+/**
+ * Mô tả và thành phần trong DB luôn thắng, từng trường độc lập. Trường nào trống (mô tả rỗng/chỉ thẻ HTML trống, thành phần rỗng) thì bù chữ dự phòng của slug từ
+ * `@tubutree/shared-types`, cùng bảng mà trang sản phẩm web và Mini đang hiện, nên AI không nói khác trang sản phẩm. Slug ngoài bảng thì không bù gì (vẫn "chưa có").
+ * Thành phần DB được làm sạch trước khi vào hàm bù vì cột là Json tuỳ ý (đối tượng lạ làm `readIngredients` của hàm bù ném lỗi).
+ * Chữ bù vẫn đi qua `plainText` nên chịu cùng trần ký tự với chữ DB.
+ */
 export function productFacts(row: FactsRow): ProductFacts {
-  return { description: typeof row.description === 'string' ? plainText(row.description, MAX_DESCRIPTION_CHARS) : '', ingredients: ingredientNames(row.ingredients) };
+  const own = ingredientNames(row.ingredients);
+  const filled = withProductCopyFallback({
+    slug: row.slug,
+    description: typeof row.description === 'string' ? row.description : '',
+    ingredients: own.map((name) => ({ name })),
+  });
+  return { description: plainText(filled.description, MAX_DESCRIPTION_CHARS), ingredients: ingredientNames(filled.ingredients) };
 }
 
 /** Các dòng thụt vào dưới tên sản phẩm. Không có gì để nói thì ghi rõ "chưa có", để AI trả lời "chưa có thông tin" thay vì đoán. */
