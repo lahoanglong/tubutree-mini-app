@@ -85,6 +85,8 @@ function normalizeIngredients(raw: unknown): Ing[] {
   const out: Ing[] = [];
   for (const it of list) {
     const rec = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : null;
+    // Dòng do chữ dự phòng của trang sản phẩm dựng (`product-copy-fallback.ts`) không phải thành phần của chủ hàng: kể chuyện từ chúng sẽ thay kịch bản cấp nhãn bằng câu chung chung.
+    if (rec?.fromFallback === true) continue;
     const name = clean(rec ? rec.name : it, STORY_LIMITS.maxLabel);
     if (!name) continue;
     const ing: Ing = { name };

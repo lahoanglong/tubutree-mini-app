@@ -16,6 +16,8 @@ export interface CopyIngredient {
   name: string;
   percentage?: number | string;
   benefit?: string;
+  /** Dòng do chữ dự phòng dựng, không phải dữ liệu của chủ hàng: kịch bản câu chuyện tự sinh bỏ qua dòng này (xem `normalizeIngredients` ở product-story.ts). */
+  fromFallback?: true;
 }
 
 export interface ProductCopyFallback {
@@ -35,7 +37,7 @@ const ENZYME_PINEAPPLE: CopyIngredient = { name: 'Enzyme lên men từ vỏ dứ
 const ECO_ENZYME_PINEAPPLE: CopyIngredient = { name: 'Eco-enzyme lên men từ vỏ dứa', benefit: PACK };
 
 const named = (name: string, benefit = BY_NAME): CopyIngredient => ({ name, benefit });
-const entry = (description: string, ...ingredients: CopyIngredient[]): ProductCopyFallback => ({ description, ingredients });
+const entry = (description: string, ...ingredients: CopyIngredient[]): ProductCopyFallback => ({ description, ingredients: ingredients.map((i) => ({ ...i, fromFallback: true as const })) });
 
 function fuwaCopy([type, size, tier, scent]: FuwaRow): ProductCopyFallback {
   const facts = [
@@ -49,9 +51,9 @@ function fuwaCopy([type, size, tier, scent]: FuwaRow): ProductCopyFallback {
   );
 }
 
-/** Nước rửa chén Fuwa3e (100ml, 500ml, 3,8L): ảnh sản phẩm ghi enzyme vỏ dứa lên men và hương dứa. Có kịch bản riêng ở `LAUNCH_STORY_PRESETS` nên không nằm trong `FUWA3E_SKUS`. */
+/** Nước rửa chén Fuwa3e: ảnh 500ml và 3,8L ghi enzyme vỏ dứa lên men và hương dứa. Ảnh 100ml mang tiêu đề của hàng khác (bồn cầu) nên bản 100ml chỉ nói điều tên nêu. Có kịch bản riêng ở `LAUNCH_STORY_PRESETS` nên không nằm trong `FUWA3E_SKUS`. */
 const FUWA3E_DISH_WASH: Record<string, FuwaRow> = {
-  'nuoc-rua-chen-fuwa3e-100ml': ['Nước rửa chén', '100ml', 2, 'Dứa'],
+  'nuoc-rua-chen-fuwa3e-100ml': ['Nước rửa chén', '100ml', 0],
   'nuoc-rua-chen-fuwa3e-500ml': ['Nước rửa chén', '500ml', 2, 'Dứa'],
   'nuoc-rua-chen-fuwa3e-3-8l': ['Nước rửa chén', '3,8L', 2, 'Dứa'],
 };
@@ -68,35 +70,35 @@ const MANUAL: Record<string, ProductCopyFallback> = {
   'bot-rua-tay-cho-be-pineboo-300ml': pineboo('Bọt rửa tay cho bé Pineboo, quy cách 300ml.', 'Dạng bọt, bao bì ghi Foaming Hand Soap for Kids.'),
   'bot-tam-goi-cho-be-pineboo-500ml': pineboo(
     'Bọt tắm gội cho bé Pineboo, quy cách 500ml, tắm và gội trong một chai bọt.',
-    'Bao bì ghi thêm bọt từ ngô thiên nhiên.',
-    named('Ngô thiên nhiên', 'Bao bì ghi bọt từ ngô thiên nhiên'),
+    'Bao bì ghi thêm bọt từ ngô.',
+    named('Ngô', 'Bao bì ghi bọt từ ngô'),
   ),
   'nuoc-giat-cho-be-pineboo-2-1l': pineboo(
     'Nước giặt sinh học cho bé Pineboo, quy cách 2,1L.',
     'Bao bì ghi Baby Laundry Detergent.',
-    named('Enzyme sinh học', 'Bao bì ghi chiết xuất enzyme sinh học tự nhiên'),
+    named('Enzyme sinh học', 'Bao bì ghi chiết xuất enzyme sinh học'),
   ),
   'nuoc-giat-cho-be-pineboo-500ml': pineboo(
     'Nước giặt sinh học cho bé Pineboo, quy cách 500ml.',
     'Bao bì ghi Baby Laundry Detergent.',
-    named('Enzyme sinh học', 'Bao bì ghi chiết xuất enzyme sinh học tự nhiên'),
+    named('Enzyme sinh học', 'Bao bì ghi chiết xuất enzyme sinh học'),
   ),
   'bot-rua-binh-sua-cho-be-pineboo-500ml': pineboo(
     'Bọt rửa bình sữa cho bé Pineboo, quy cách 500ml.',
-    'Dạng bọt, bao bì ghi Foaming Baby Bottle Cleanser, bao bì ghi tạo bọt từ bột ngô.',
-    named('Bột ngô', 'Bao bì ghi tạo bọt tự nhiên từ bột ngô'),
+    'Dạng bọt, bao bì ghi Foaming Baby Bottle Cleanser, tạo bọt từ bột ngô.',
+    named('Bột ngô', 'Bao bì ghi tạo bọt từ bột ngô'),
   ),
 
   'muoi-rua-chen-cho-may-fuwa3e-2kg': entry('Muối rửa chén cho máy Fuwa3e, quy cách 2kg, dùng cho máy rửa chén.', named('Muối rửa chén')),
 
   'duong-hoa-dua-sokfarm': entry(
-    'Đường hoa dừa Sokfarm, túi 300g. Bao bì ghi đặc sản Trà Vinh, đường hoa dừa hữu cơ, thơm hương dừa.',
-    named('Hoa dừa', 'Bao bì ghi vị ngọt tự nhiên từ hoa dừa'),
+    'Đường hoa dừa Sokfarm, túi 300g. Bao bì ghi thơm hương dừa.',
+    named('Hoa dừa'),
   ),
   'duong-hoa-dua-sokfarm-hu-thuy-tinh-150g': entry('Đường hoa dừa Sokfarm, đóng hũ thủy tinh 150g.', named('Đường hoa dừa')),
   'mat-co-dac-sokfarm-hop-12-goi': entry('Mật cô đặc Sokfarm, hộp 12 gói.', named('Mật cô đặc')),
-  'mat-hoa-dua-co-dac-sokfarm': entry('Mật hoa dừa cô đặc Sokfarm, chai thủy tinh khối lượng tịnh 250 g. Bao bì ghi đặc sản Trà Vinh.', named('Mật hoa dừa')),
-  'nuoc-tuong-mat-hoa-dua-sokfarm-cham': entry('Nước tương mật hoa dừa Sokfarm dùng để chấm, chai 200 ml. Bao bì ghi đặc sản Trà Vinh.', named('Mật hoa dừa')),
+  'mat-hoa-dua-co-dac-sokfarm': entry('Mật hoa dừa cô đặc Sokfarm, chai thủy tinh khối lượng tịnh 250 g.', named('Mật hoa dừa')),
+  'nuoc-tuong-mat-hoa-dua-sokfarm-cham': entry('Nước tương mật hoa dừa Sokfarm dùng để chấm, chai 200 ml.', named('Mật hoa dừa')),
 
   'granola-mix-nuts-tui-tien-loi-bh-nong': entry('Granola mix nuts BH.NONG, đóng túi tiện lợi.', named('Granola'), named('Hạt mix nuts')),
   'bot-hat-cu-qua-bh-nong-lon-400g': entry('Bột hạt củ quả BH.NONG, đóng lon 400g.', named('Hạt, củ, quả')),

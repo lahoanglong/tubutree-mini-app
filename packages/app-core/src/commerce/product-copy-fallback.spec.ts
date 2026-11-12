@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Ingredient } from '@tubutree/shared-types';
-import { BAMBOO_CLAIMS, MEDICAL_CLAIMS, PROOF_CLAIMS } from './copy-claims-guard';
+import { BAMBOO_CLAIMS, MEDICAL_CLAIMS, NATURAL_CLAIMS, PROOF_CLAIMS } from './copy-claims-guard';
+import { resolveStoryConfig } from './product-story';
 import { findProductCopyFallback, resolveProductCopyFallback, withProductCopyFallback, type CopyIngredient } from './product-copy-fallback';
 import { PROD_IN_STOCK_2026_11_12 as ROWS } from './prod-catalog.fixture';
 
@@ -13,6 +14,7 @@ const textOf = (fb: { description: string; ingredients: CopyIngredient[] }) => [
 const NO_INGREDIENT_SOURCE = [
   'combo-sach-diu-nhe-po-lang-srm-tt',
   'lau-noi-that-o-to-fuwa3e-300ml',
+  'nuoc-rua-chen-fuwa3e-100ml',
   'refill-nuoc-rua-tay-dang-bot-fuwa3e-10l',
   'xit-khu-mui-o-to-fuwa3e-150ml',
   'xit-thom-huong-xuan-fuwa3e-300ml',
@@ -52,12 +54,13 @@ describe('chữ dự phòng cho 63 sản phẩm còn hàng trên PROD (ảnh ch�
     }
   });
 
-  it('không có tuyên bố y tế, giấy tờ, con số % hay tre ở mô tả, tên và ghi chú thành phần', () => {
+  it('không có tuyên bố y tế, giấy tờ, hữu cơ, xuất xứ, "tự nhiên", con số % hay tre ở mô tả, tên và ghi chú thành phần', () => {
     for (const r of ROWS) {
       for (const t of textOf(findProductCopyFallback(r.slug)!)) {
         expect(t, `${r.slug}: "${t}"`).not.toMatch(MEDICAL_CLAIMS);
         expect(t, `${r.slug}: "${t}"`).not.toMatch(PROOF_CLAIMS);
         expect(t, `${r.slug}: "${t}"`).not.toMatch(BAMBOO_CLAIMS);
+        expect(t, `${r.slug}: "${t}"`).not.toMatch(NATURAL_CLAIMS);
       }
     }
   });
@@ -77,8 +80,8 @@ describe('chữ dự phòng cho 63 sản phẩm còn hàng trên PROD (ảnh ch�
     }
   });
 
-  it('Fuwa3e chưa có ảnh bao bì và muối rửa chén chỉ nói điều tên nêu: không enzyme, không "Bao bì ghi"', () => {
-    for (const slug of ['lau-noi-that-o-to-fuwa3e-300ml', 'refill-nuoc-rua-tay-dang-bot-fuwa3e-10l', 'xit-khu-mui-o-to-fuwa3e-150ml', 'xit-thom-huong-xuan-fuwa3e-300ml', 'muoi-rua-chen-cho-may-fuwa3e-2kg']) {
+  it('Fuwa3e chưa có ảnh bao bì (và nước rửa chén 100ml mà ảnh mang tiêu đề hàng khác), muối rửa chén: chỉ nói điều tên nêu, không enzyme, không "Bao bì ghi"', () => {
+    for (const slug of ['lau-noi-that-o-to-fuwa3e-300ml', 'refill-nuoc-rua-tay-dang-bot-fuwa3e-10l', 'xit-khu-mui-o-to-fuwa3e-150ml', 'xit-thom-huong-xuan-fuwa3e-300ml', 'muoi-rua-chen-cho-may-fuwa3e-2kg', 'nuoc-rua-chen-fuwa3e-100ml']) {
       expect(textOf(findProductCopyFallback(slug)!).join(' '), slug).not.toMatch(/enzyme|bao bì ghi/i);
     }
   });
@@ -97,6 +100,43 @@ describe('chữ dự phòng cho 63 sản phẩm còn hàng trên PROD (ảnh ch�
     ]) {
       expect(findProductCopyFallback(slug)!.description, slug).not.toMatch(/Bao bì ghi|Trà Vinh|hữu cơ|Organic/);
     }
+  });
+});
+
+describe('chữ dự phòng không được thay câu chuyện sản phẩm', () => {
+  const VARIATIONS = [{ id: 'v1', name: 'Mặc định' }];
+  const raw = (r: { slug: string; name: string }) => ({ slug: r.slug, name: r.name, brand: 'Tubu Tree', variations: VARIATIONS, ingredients: null as Ingredient[] | null, storyConfig: null, description: '' });
+
+  it('mọi dòng của PROD: câu chuyện dựng từ sản phẩm đã bù chữ giống hệt câu chuyện dựng từ sản phẩm thô', () => {
+    for (const r of ROWS) {
+      const p = raw(r);
+      const filled = withProductCopyFallback(p);
+      if (findProductCopyFallback(r.slug)!.ingredients.length > 0) expect(filled.ingredients, r.slug).not.toBeNull();
+      expect(resolveStoryConfig(filled), r.slug).toEqual(resolveStoryConfig(p));
+    }
+  });
+
+  it('SKU chỉ có kịch bản cấp nhãn: không rơi vào kịch bản "Tinh tuyển nguyên liệu" và không lộ ghi chú nguồn của chữ dự phòng', () => {
+    for (const slug of ['muoi-rua-chen-cho-may-fuwa3e-2kg-484ca1', 'granola-mix-nuts-tui-tien-loi-bh-nong-3b8792', 'nuoc-mui-gia-po-lang-160ml-458227']) {
+      const row = ROWS.find((r) => r.slug === slug)!;
+      const cfg = resolveStoryConfig(withProductCopyFallback(raw(row)));
+      const text = JSON.stringify(cfg);
+      expect(text, slug).not.toMatch(/Tinh tuyển|Theo tên sản phẩm|Theo chữ in trên bao bì|An lành cho cả nhà/);
+    }
+  });
+
+  it('thành phần do chủ hàng nhập vẫn được kể chuyện như trước (chỉ dòng dự phòng bị bỏ qua)', () => {
+    const own = [{ name: 'Quả bơ', benefit: 'Dưỡng mềm' }, { name: 'Dầu dừa' }];
+    const row = ROWS.find((r) => r.slug.startsWith('dau-goi-dau-xa-qua-bo'))!;
+    const cfg = resolveStoryConfig(withProductCopyFallback({ ...raw(row), ingredients: own }));
+    expect(cfg!.scenes.some((s) => s.kind === 'ingredient_assembly')).toBe(true);
+  });
+
+  it('dòng thành phần dự phòng mang cờ fromFallback; dòng của DB thì không', () => {
+    const row = ROWS[0]!;
+    for (const i of findProductCopyFallback(row.slug)!.ingredients) expect(i.fromFallback).toBe(true);
+    const own = [{ name: 'Dầu tràm' }];
+    expect(withProductCopyFallback({ ...raw(row), ingredients: own }).ingredients).toBe(own);
   });
 });
 

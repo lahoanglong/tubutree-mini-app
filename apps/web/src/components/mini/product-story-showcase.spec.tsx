@@ -69,13 +69,13 @@ describe('ProductStoryShowcase (web)', () => {
   });
 
   it('sản phẩm của nhãn chủ lực chưa có cấu hình: tự vẽ điểm chỉ Thương hiệu, Quy cách, Hương đọc từ tên cùng câu kết', () => {
-    const brand = { ...PRODUCT, storyConfig: null, ingredients: null, variations: [PRODUCT.variations[0]], slug: 'nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754', name: 'Nước giặt hương Bạc hà Fuwa3e 500ml', brand: 'Tubu Tree' } as ProductDetail;
+    const brand = { ...PRODUCT, storyConfig: null, ingredients: null, variations: [PRODUCT.variations[0]], slug: 'nuoc-giat-huong-bac-ha-fuwa3e-750ml-aaaaaa', name: 'Nước giặt hương Bạc hà Fuwa3e 750ml', brand: 'Tubu Tree' } as ProductDetail;
     const { container } = mount(<ProductStoryShowcase product={brand} />);
     const callouts = qa(q(container, 'story-hud')!, 'story-callout').map((c) => c.textContent);
     expect(callouts).toHaveLength(3);
     expect(callouts[0]).toContain('Thương hiệu');
     expect(callouts[0]).toContain('Fuwa3e');
-    expect(callouts[1]).toContain('500ml');
+    expect(callouts[1]).toContain('750ml');
     expect(callouts[2]).toContain('Bạc hà');
     expect(q(container, 'story-closing')!.textContent).toBe('Fuwa3e, có tại Tubu Tree');
   });
