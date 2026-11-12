@@ -8,6 +8,9 @@ import { cartKey } from '@/lib/cart-key';
 import { copyText } from '@/lib/copy-text';
 import { applyCoupon, getCart } from '@/lib/shop-client';
 import { actionErrorText } from '@/lib/error-text';
+import { holdForCouponReload } from '@/lib/coupon-reload';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { useCartWrite } from '@/lib/use-cart-write';
 
 const errMessage = actionErrorText;
 
@@ -29,6 +32,7 @@ const NOTICE_HOLD_MS = 1800;
 export function useCouponUse() {
   const router = useRouter();
   const qc = useQueryClient();
+  const cartWrite = useCartWrite();
   const [notice, setNotice] = useState<CouponNotice | null>(null);
   // Mã đang chạy "Dùng ngay", chỉ để nút báo bận (khoá thật là ref `busy`).
   const [usingCode, setUsingCode] = useState<string | null>(null);
@@ -106,6 +110,9 @@ export function useCouponUse() {
       else hold({ code, text: outcome.text, error: outcome.kind === 'notApplied' });
     } catch (e) {
       hold({ code, text: couponUseCopy.notApplied(errMessage(e)), error: true });
+      // Máy chủ từ chối vì màn đã cũ (mã hết lượt, bị tắt, giỏ vừa đổi): câu báo đã hiện, giữ khoá tới khi giỏ, ví mã, số xem trước và báo giá mới về (xem `holdForCouponReload`);
+      // nhả sớm thì chạm lần hai áp lại đúng mã vừa bị từ chối trên ví cũ. Mất mạng, 401 và 5xx: nhả ngay.
+      if (serverRejectedState(e)) await holdForCouponReload(qc, cartWrite.reload());
     }
   };
 

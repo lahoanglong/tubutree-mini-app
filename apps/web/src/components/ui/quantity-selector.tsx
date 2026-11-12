@@ -21,7 +21,7 @@ interface QuantitySelectorProps {
 
 /**
  * Bộ chọn số lượng − [n] +, cùng hành vi với Mini App: ở min/max nút chỉ `aria-disabled` và không làm gì (không dùng
- * `disabled` để nút vẫn focus được). `sm` 36px nhưng vùng chạm vẫn 44px nhờ lớp phủ `after:-inset-1`.
+ * `disabled` để nút vẫn focus được). `sm` 36px nhưng vùng chạm vẫn 44px nhờ lớp phủ `after:-inset-1`; nút cộng nhanh rộng theo chữ nhưng không dưới 44px (`min-w-11`).
  */
 export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, editable, quickSteps, disabled, itemLabel }: QuantitySelectorProps) {
   const named = (base: string) => (itemLabel ? `${base} ${itemLabel}` : base);
@@ -80,7 +80,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, e
             type="button"
             aria-label={named(`Thêm ${n}`)}
             aria-disabled={disabled || value >= max}
-            className={`${btn(!!disabled || value >= max)} !w-auto min-w-9 px-3 text-sm font-semibold`}
+            className={`${btn(!!disabled || value >= max)} !w-auto min-w-11 px-3 text-sm font-semibold`}
             onClick={() => !disabled && value < max && onChange(Math.min(max, value + n))}
           >
             {`+${n}`}

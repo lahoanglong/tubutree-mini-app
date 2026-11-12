@@ -24,13 +24,15 @@ import type { VariationSheetMode } from './variation-sheet';
 import { useFlashSalesLoaded, useRunningFlash } from '@/lib/use-flash-sales';
 import { useFlashAllowance } from '@/lib/use-flash-allowance';
 import { usePdpSelection } from './pdp-selection';
-import { LOW_STOCK_NOTICE, useProductStock } from './pdp-stock';
+import { LOW_STOCK_NOTICE, productStockKey, useProductStock } from './pdp-stock';
 import { qtyPickMax, stockText } from '@tubutree/app-core/commerce/stock-text';
 import { cartKey, useCartKey } from '@/lib/cart-key';
 import { StickyActionBar } from './sticky-action-bar';
 import { QuantitySelector } from '@/components/ui/quantity-selector';
 import { VariationChip } from './variation-chip';
 import { actionErrorText } from '@/lib/error-text';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { firstMeasurable, playCartFeedback } from '@/lib/cart-feedback';
 import { onPdpQuickAdd } from '@/lib/pdp-quick-add';
 
@@ -264,7 +266,10 @@ export default function AddToCart({
       setMsg(actionErrorText(e));
       setSuccess(false);
       // Thường là câu vượt tồn của máy chủ ("Chỉ còn N sản phẩm." hay "Số lượng này vượt số hàng đang có."): tồn kho đang hiển thị đã cũ, lấy lại để nút/giới hạn khớp thực tế.
-      void qc.invalidateQueries({ queryKey: ['product-stock', slug] });
+      const stockReloaded = qc.invalidateQueries({ queryKey: productStockKey(slug) });
+      // Máy chủ từ chối vì màn đã cũ (400/404/409/422: hết hàng, phân loại ngừng bán): lời lỗi đã hiện, giữ khoá tới khi tồn kho và giỏ mới về (tối đa `LOCK_REFRESH_WAIT_MS`), như Mini App;
+      // nhả sớm thì chạm lần hai gửi lại đúng lệnh trên tồn kho cũ. Mất mạng, 401 và 5xx không nói gì về trạng thái thật (lần tải lại cũng hỏng): nhả ngay.
+      if (serverRejectedState(e)) await settleWithin(Promise.all([stockReloaded, qc.invalidateQueries({ queryKey: ['cart'] })]));
     } finally {
       if (!leaving) {
         cartWrite.current = false;

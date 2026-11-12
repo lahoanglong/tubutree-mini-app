@@ -26,7 +26,7 @@ export function SegmentedTabs({ items, value, onChange, scroll, label }: Segment
   useEffect(() => {
     if (!scroll) return;
     ref.current?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.scrollIntoView?.({ block: 'nearest', inline: 'nearest' });
-  }, [scroll, value]);
+  }, [ref, scroll, value]);
 
   const roving = useRovingGroup({ keys: 'horizontal' });
   const setRefs = (el: HTMLDivElement | null) => {
