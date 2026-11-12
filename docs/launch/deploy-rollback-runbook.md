@@ -394,7 +394,8 @@ Quyết định của chủ dự án: AI tư vấn trong Mini App chạy trên c
 | `ANTIGRAVITY_GATEWAY_KEY` | Key RIÊNG cho Tubu Tree (xin chủ gateway cấp, đừng dùng chung key của ChoDeli để thu hồi riêng được) |
 | `ANTIGRAVITY_MODEL` | Mặc định `gemini-3.8-flash-high` (cùng ChoDeli). Gateway báo model bị gỡ thì API tự gọi lại một lần không kèm model |
 | `ANTIGRAVITY_GATEWAY_TIMEOUT_MS` | Mặc định 45000. ChoDeli dùng 65000 vì phải lớn hơn timeout nội bộ 60 giây của agy; Tubu chọn ngắn hơn vì khách đang chờ, quá hạn thì khách thấy câu "đang phản hồi chậm" |
-| `AI_ADVISOR_PROVIDER` | Trống = tự chọn antigravity > deepseek > gemini theo cái đã có khoá. Đặt `antigravity` để CHỈ dùng gateway (không rơi sang khoá cũ còn sót) |
+| `AI_ADVISOR_PROVIDER` | Trống = tự chọn antigravity > claude > gemini > deepseek theo cái đã có khoá. Đặt `antigravity` hoặc `claude` để CHỈ dùng provider đó (không rơi sang khoá cũ còn sót) |
+| `AI_ADVISOR_CLAUDE_MODEL` | Model cho provider `claude`; mặc định `claude-haiku-4-5-20251001` (dùng chung `ANTHROPIC_API_KEY` nhưng độc lập `CLAUDE_API_MODEL` của Story Studio) |
 | `AI_ADVISOR_ENABLED` | `false` (hoặc `0`, `off`, `no`) là tắt khẩn cấp. Trống hoặc `true` là bật |
 | `AI_ADVISOR_GLOBAL_PER_MIN`, `AI_ADVISOR_MAX_CONCURRENT` | Trần toàn hệ thống, mặc định 40 lượt/phút và 3 lượt đồng thời. Mỗi lượt agy khởi động một tiến trình (khoảng 13 giây ở ChoDeli) và gateway có trần giờ/đồng thời của chính nó (trả 429 `circuit_open`), mà gateway dùng chung với ChoDeli: đừng nâng hai số này trước khi hỏi chủ gateway |
 
