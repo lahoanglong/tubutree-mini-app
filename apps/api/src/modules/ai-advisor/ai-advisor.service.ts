@@ -179,7 +179,7 @@ export class AiAdvisorService {
       ...p,
       ...cardPrices(p, variations),
       thumbnail: publicImage('product', p.id, 'thumb', p.thumbnail),
-      facts: productFacts({ description, ingredients }),
+      facts: productFacts({ slug: p.slug, description, ingredients }),
     }));
   }
 
