@@ -85,6 +85,8 @@ function normalizeIngredients(raw: unknown): Ing[] {
   const out: Ing[] = [];
   for (const it of list) {
     const rec = typeof it === 'object' && it !== null ? (it as Record<string, unknown>) : null;
+    // Dòng do chữ dự phòng của trang sản phẩm dựng (`product-copy-fallback.ts`) không phải thành phần của chủ hàng: kể chuyện từ chúng sẽ thay kịch bản cấp nhãn bằng câu chung chung.
+    if (rec?.fromFallback === true) continue;
     const name = clean(rec ? rec.name : it, STORY_LIMITS.maxLabel);
     if (!name) continue;
     const ing: Ing = { name };
@@ -178,7 +180,7 @@ function reconcileArc(config: ProductStoryConfig, variations: readonly ArcVariat
 
 /**
  * Cấu hình dùng để vẽ: đã lưu (hợp lệ) > preset theo slug (mẫu seed hoặc mẫu đợt đầu theo slug gốc; chèn vòng cung từ biến thể thật) > tự sinh từ thành phần >
- * kịch bản cấp nhãn cho năm nhãn chủ lực (`brand-story.ts`).
+ * kịch bản cấp nhãn cho sáu nhãn chủ lực (`brand-story.ts`).
  * `enabled:false` là admin tắt hẳn. Trả null thì trang chi tiết không vẽ gì thêm.
  */
 export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | null {
@@ -193,7 +195,7 @@ export function resolveStoryConfig(p: StoryProductInput): ProductStoryConfig | n
     return arc ? { ...preset, scenes: [arc, ...preset.scenes] } : preset;
   }
   const auto = buildDefaultStoryConfig(p);
-  // Có thành phần thật thì kịch bản tự sinh giàu hơn; còn lại, sản phẩm của năm nhãn chủ lực nhận kịch bản cấp nhãn (không ghi đè gì đã lưu).
+  // Có thành phần thật thì kịch bản tự sinh giàu hơn; còn lại, sản phẩm của sáu nhãn chủ lực nhận kịch bản cấp nhãn (không ghi đè gì đã lưu).
   if (auto?.scenes.some((s) => s.kind === 'ingredient_assembly')) return auto;
   const brandConfig = buildBrandStoryConfig(p, p.variations.length);
   if (brandConfig) {

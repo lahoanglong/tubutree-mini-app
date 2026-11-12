@@ -26,6 +26,8 @@ import { autoCouponMemory, couponAutoCopy, couponHint, couponHintShort, couponHi
 import { couponMinOrderCopy } from '@tubutree/app-core/coupon-min-order';
 import { autoCouponName } from '@/lib/coupon-name';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { holdForCouponReload } from '@/lib/coupon-reload';
+import { serverRejectedState } from '@/lib/server-rejected-state';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
 import { useSheetSeq } from '@/lib/use-sheet-seq';
 import { useCartWrite, type CartCommand } from '@/lib/use-cart-write';
@@ -253,11 +255,14 @@ export function CouponBox({
       );
       return afterChange(cart, cmd);
     },
+    // Máy chủ từ chối vì màn đã cũ (mã hết lượt, bị tắt, giỏ vừa đổi): tải lại giỏ, ví mã và số xem trước, giữ khoá tới khi chúng về (xem `holdForCouponReload`).
     onError: (e, _code, ctx) => {
-      cartWrite.fail(ctx?.cmd);
+      const rejected = serverRejectedState(e);
+      const cartReloaded = cartWrite.fail(ctx?.cmd, rejected);
       showErr(actionErrorText(e));
       // Khách có thể đã thu gọn trong lúc chờ: đưa ô nhập ra lại để sửa mã.
       setOpen(true);
+      return rejected ? holdForCouponReload(qc, cartReloaded) : undefined;
     },
     onSettled: releaseChange,
   });
@@ -275,8 +280,10 @@ export function CouponBox({
       return afterChange(cart, cmd);
     },
     onError: (e, _vars, cmd) => {
-      cartWrite.fail(cmd);
+      const rejected = serverRejectedState(e);
+      const cartReloaded = cartWrite.fail(cmd, rejected);
       showErr(actionErrorText(e));
+      return rejected ? holdForCouponReload(qc, cartReloaded) : undefined;
     },
     onSettled: releaseChange,
   });
@@ -289,8 +296,10 @@ export function CouponBox({
       setAutoCode(appliedCode.toUpperCase());
       return afterChange(cart, cmd);
     },
-    onError: (_e, _code, cmd) => {
-      cartWrite.fail(cmd);
+    onError: (e, _code, cmd) => {
+      const rejected = serverRejectedState(e);
+      const cartReloaded = cartWrite.fail(cmd, rejected);
+      return rejected ? holdForCouponReload(qc, cartReloaded) : undefined;
     },
   });
   // `working`: lệnh đổi mã của chính hộp này đang chạy (nút giữ focus: aria-busy + aria-disabled, không `disabled` thật vì Chromium thả focus về body).

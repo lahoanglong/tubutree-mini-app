@@ -3,6 +3,7 @@ import { act } from 'react';
 import { QueryClient } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
+import { ApiError, NetworkError } from '@/lib/client-api';
 
 // W72B: khoá chống đua của dòng giỏ (tăng/giảm số lượng, xoá, Hoàn tác). Khoá phải đồng bộ (ref) và theo TỪNG dòng:
 // state chỉ đúng sau lần vẽ kế, và `mutation.variables` chỉ nhớ lệnh sau cùng nên đã mở khoá nhầm dòng đang bay.
@@ -452,6 +453,75 @@ describe('/gio-hang — khoá đồng bộ xoá dòng và Hoàn tác', () => {
     click(undoButton(container)!);
     await flush(4);
     expect(state.added).toHaveLength(2);
+  });
+});
+
+describe('/gio-hang — máy chủ từ chối lệnh dòng vì giỏ đã cũ (W121)', () => {
+  const alertOf = (c: HTMLElement) => c.querySelector('[data-testid="cart-line"] [role="alert"]')?.textContent ?? '';
+
+  it.each([400, 404, 409, 422])('%i: lời lỗi hiện ngay, giỏ được tải lại, dòng giữ khoá và báo aria-busy tới khi giỏ mới về; chạm lần hai không gửi', async (status) => {
+    state.update = async () => {
+      throw new ApiError('Dòng này không còn trong giỏ.', status);
+    };
+    const { container } = await mount();
+    const carts = state.cartCalls;
+    const gate = defer();
+    state.gate = gate.promise;
+    click(plusA(container));
+    await flush(6);
+    expect(alertOf(container)).toBe('Dòng này không còn trong giỏ.');
+    expect(state.cartCalls).toBe(carts + 1);
+    expect(plusA(container).getAttribute('aria-busy')).toBe('true');
+    expect(plusA(container).disabled).toBe(false);
+    clickTwice(plusA(container), trashA(container));
+    await flush(2);
+    expect(state.updates).toEqual([{ id: 'i1', q: 3 }]);
+    expect(state.removed).toEqual([]);
+    state.cart = cartOf([line({ quantity: 4, total: 600000 })]);
+    await act(async () => gate.resolve(undefined));
+    await flush(6);
+    expect(plusA(container).hasAttribute('aria-busy')).toBe(false);
+    state.update = hold;
+    click(plusA(container));
+    await flush(2);
+    expect(state.updates[1]).toEqual({ id: 'i1', q: 5 });
+  });
+
+  it('xoá dòng bị từ chối (404 vì tab khác đã xoá): giỏ tải lại, dòng giữ khoá tới khi giỏ về, không hiện thanh Hoàn tác', async () => {
+    state.remove = async () => {
+      throw new ApiError('Dòng này không còn trong giỏ.', 404);
+    };
+    const { container } = await mount();
+    const carts = state.cartCalls;
+    const gate = defer();
+    state.gate = gate.promise;
+    click(trashA(container));
+    await flush(6);
+    expect(state.cartCalls).toBe(carts + 1);
+    expect(trashA(container).getAttribute('aria-busy')).toBe('true');
+    expect(undoButton(container)).toBeUndefined();
+    clickTwice(trashA(container));
+    await flush(2);
+    expect(state.removed).toEqual(['i1']);
+    await act(async () => gate.resolve(undefined));
+    await flush(6);
+    expect(trashA(container)?.hasAttribute('aria-busy') ?? false).toBe(false);
+  });
+
+  it.each([
+    ['lỗi 500', () => new ApiError('Máy chủ bận.', 500)],
+    ['mất mạng', () => new NetworkError(false)],
+  ])('%s: lời lỗi hiện, KHÔNG tải lại giỏ (lần tải cũng hỏng), khoá nhả ngay', async (_name, makeError) => {
+    state.update = async () => {
+      throw makeError();
+    };
+    const { container } = await mount();
+    const carts = state.cartCalls;
+    click(plusA(container));
+    await flush(6);
+    expect(alertOf(container)).not.toBe('');
+    expect(state.cartCalls).toBe(carts);
+    expect(plusA(container).hasAttribute('aria-busy')).toBe(false);
   });
 });
 

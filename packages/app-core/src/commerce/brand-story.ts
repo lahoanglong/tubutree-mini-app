@@ -1,7 +1,7 @@
 import { STORY_LIMITS, type HudCalloutPoint, type ProductStoryConfig } from '@tubutree/shared-types';
 
 /**
- * Câu chuyện cấp thương hiệu cho sản phẩm của năm nhãn chủ lực (Sokfarm, BH.NONG, Pơ Lang, Fuwa3e, DURICA) chưa có kịch bản riêng.
+ * Câu chuyện cấp thương hiệu cho sản phẩm của sáu nhãn chủ lực (Sokfarm, BH.NONG, Pơ Lang, Fuwa3e, DURICA, Pineboo) chưa có kịch bản riêng.
  *
  * PROD ghi `brand = "Tubu Tree"` cho mọi sản phẩm nên nhãn chỉ nhận ra được từ tên sản phẩm (và cột brand khi nó đúng nhãn). Kịch bản đợt đầu (`story-presets-launch`) là
  * của từng sản phẩm cụ thể (nước rửa chén 3,8L, đường hoa dừa...), đem áp cho cả nhãn sẽ ghi sai (nước giặt hương Bạc hà mà ghi "hương dứa"),
@@ -29,6 +29,7 @@ const BRANDS: readonly BrandProfile[] = [
   { id: 'polang', display: 'Pơ Lang', match: /\bpo[ -]?lang\b/ },
   { id: 'fuwa3e', display: 'Fuwa3e', match: /\bfuwa[ -]?3e\b/ },
   { id: 'durica', display: 'DURICA', match: /\bdurica\b/ },
+  { id: 'pineboo', display: 'Pineboo', match: /\bpine[ -]?boo\b/ },
 ];
 
 const fold = (s: string): string =>
@@ -42,7 +43,7 @@ const fold = (s: string): string =>
 
 /**
  * Nhãn nhận từ tên và cột brand, là thứ khách đọc. Không dùng slug: slug của "BH nóng giòn" cũng là `bh-nong` nên mở lại khớp nhầm, mà mọi
- * sản phẩm của năm nhãn trên PROD đã có tên nhãn trong tên. Khớp nhiều nhãn (combo hai nhãn) thì không đoán: null.
+ * sản phẩm của sáu nhãn trên PROD đã có tên nhãn trong tên. Khớp nhiều nhãn (combo hai nhãn) thì không đoán: null.
  */
 function profileOf(p: BrandStoryInput): BrandProfile | null {
   const hay = fold(`${p.brand ?? ''} ${p.name}`);
@@ -50,7 +51,7 @@ function profileOf(p: BrandStoryInput): BrandProfile | null {
   return hits.length === 1 ? hits[0]! : null;
 }
 
-/** Mã nhãn chủ lực của sản phẩm (từ tên hoặc cột brand), null nếu không thuộc năm nhãn. */
+/** Mã nhãn chủ lực của sản phẩm (từ tên hoặc cột brand), null nếu không thuộc sáu nhãn. */
 export function detectStoryBrand(p: BrandStoryInput): string | null {
   return profileOf(p)?.id ?? null;
 }
@@ -113,7 +114,7 @@ const SLOTS: readonly { x: number; y: number; side: 'left' | 'right' }[] = [
 ];
 
 /**
- * Kịch bản cấp nhãn: điểm chỉ trên ảnh lấy từ tên sản phẩm; null khi không thuộc năm nhãn chủ lực.
+ * Kịch bản cấp nhãn: điểm chỉ trên ảnh lấy từ tên sản phẩm; null khi không thuộc sáu nhãn chủ lực.
  * Có từ hai phân loại thì chỉ ghi Thương hiệu (quy cách và hương trong tên chỉ đúng với một phân loại, mà vòng cung cho khách đổi sang loại khác).
  * Một phân loại mà tên không có quy cách lẫn hương thì không dựng khối: nút "Xem câu chuyện" sẽ hứa nhiều hơn một dòng tên nhãn.
  */

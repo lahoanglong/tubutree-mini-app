@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process';
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -26,6 +26,15 @@ interface Page {
 interface World {
   pages: Record<string, Page>;
   dig?: string;
+  /**
+   * Công cụ phân giải DNS có trên máy: `dig` (mặc định), hoặc máy tối giản không có dig/host/nslookup (VPS Vietnix) chỉ có `getent`,
+   * chỉ có `python3`, hay không có gì. Khác `dig` thì PATH chỉ gồm công cụ liệt kê trong `BASE_TOOLS` (không lẫn dig của máy chạy test).
+   */
+  resolver?: 'dig' | 'getent' | 'python3' | 'none';
+  /** Đầu ra của `getent ahosts`. */
+  getent?: string;
+  /** Đầu ra của `getent ahostsv4`; không đặt thì giả lập máy không trả được (thoát mã 2), script phải rơi xuống `getent ahosts`. */
+  getentV4?: string;
   notAfterDays?: number;
   dfPct?: number;
   dockerPs?: string;
@@ -33,6 +42,17 @@ interface World {
 }
 
 const key = (url: string) => url.replace(/[^A-Za-z0-9]/g, '_');
+
+/** Lệnh check-edge.sh cần ngoài curl/openssl/dig/docker (đã giả): máy tối giản vẫn có đủ chúng. */
+const BASE_TOOLS = ['bash', 'env', 'tr', 'awk', 'grep', 'sed', 'date', 'wc', 'head', 'tail', 'ls', 'find', 'mktemp', 'rm', 'cp', 'cat', 'touch', 'sort', 'hostname', 'perl', 'timeout', 'basename', 'df'];
+
+function findOnPath(name: string): string | undefined {
+  for (const d of (process.env.PATH ?? '').split(':')) {
+    const p = join(d, name);
+    if (d && existsSync(p)) return p;
+  }
+  return undefined;
+}
 const GOOD_API_HEADERS = ['content-type: application/json', 'content-encoding: gzip', 'cache-control: public, max-age=5, s-maxage=10'];
 
 function goodWorld(overrides: Partial<World> = {}): World {
@@ -82,7 +102,23 @@ k="${fix}/$(printf '%s' "$url" | sed 's/[^A-Za-z0-9]/_/g')"
 [ -f "$k.code" ] || { echo "curl: (6) fake no fixture for $url" >&2; printf 000; exit 6; }
 cp "$k.h" "$hdr"; cp "$k.body" "$body"; printf '%s' "$(cat "$k.code")"`,
   );
-  stub('dig', `printf '%b\\n' "${world.dig ?? ''}"`);
+  const resolver = world.resolver ?? 'dig';
+  let pathEnv = `${bin}:${process.env.PATH}`;
+  if (resolver === 'dig') {
+    stub('dig', `printf '%b\\n' "${world.dig ?? ''}"`);
+  } else {
+    const tools = join(dir, 'tools');
+    mkdirSync(tools);
+    for (const name of resolver === 'python3' ? [...BASE_TOOLS, 'python3'] : BASE_TOOLS) {
+      const src = findOnPath(name);
+      if (src) symlinkSync(src, join(tools, name));
+    }
+    if (resolver === 'getent') {
+      const v4 = world.getentV4 === undefined ? 'exit 2' : `printf '%b\\n' ${JSON.stringify(world.getentV4)}; exit 0`;
+      stub('getent', `if [ "$1" = ahostsv4 ]; then ${v4}; fi\nprintf '%b\\n' ${JSON.stringify(world.getent ?? '')}`);
+    }
+    pathEnv = `${bin}:${tools}`;
+  }
   stub('openssl', `case "$1" in s_client) echo fake;; x509) echo "notAfter=${opensslDate(world.notAfterDays ?? 60)}";; esac`);
   if (world.dfPct !== undefined) {
     stub('df', `echo "Filesystem 1024-blocks Used Available Capacity Mounted on"; echo "/dev/vda1 100 ${world.dfPct} ${100 - world.dfPct} ${world.dfPct}% /"`);
@@ -98,7 +134,7 @@ cp "$k.h" "$hdr"; cp "$k.body" "$body"; printf '%s' "$(cat "$k.code")"`,
   }
   const res = spawnSync('bash', [SCRIPT, '--api-host', 'api.test.vn', '--app-host', 'app.test.vn', '--expect-ip', EXPECT_IP, '--backup-dir', backupDir, ...args], {
     encoding: 'utf8',
-    env: { PATH: `${bin}:${process.env.PATH}`, HOME: dir, TMPDIR: dir },
+    env: { PATH: pathEnv, HOME: dir, TMPDIR: dir },
   });
   rmSync(dir, { recursive: true, force: true });
   return { status: res.status, out: `${res.stdout}${res.stderr}` };
@@ -181,6 +217,59 @@ describe('ops/check-edge.sh', () => {
     expect(lines(cf.out, 'WARN')).toEqual([]);
     expect(lines(cf.out, 'INFO').join('\n')).toContain('IP biên Cloudflare');
     expect(cf.out).toContain('cf-cache-status HIT → HIT');
+  });
+
+  it('máy tối giản không có dig/host/nslookup: rơi xuống getent ahosts, lọc IPv4 và dòng trùng, không WARN', () => {
+    const getent = [
+      '14.225.207.177 STREAM api.test.vn',
+      '14.225.207.177 DGRAM',
+      '14.225.207.177 RAW',
+      '2001:db8::1 STREAM api.test.vn',
+      '2001:db8::1 DGRAM',
+      '2001:db8::1 RAW',
+    ].join('\\n');
+    const { status, out } = run(goodWorld({ resolver: 'getent', getent }));
+    expect(lines(out, 'WARN')).toEqual([]);
+    expect(lines(out, 'FAIL')).toEqual([]);
+    expect(status).toBe(0);
+    expect(out).toContain('api.test.vn DNS: 14.225.207.177 (đúng IP VPS)');
+    expect(out).toContain('app.test.vn DNS: 14.225.207.177 (đúng IP VPS)');
+  });
+
+  it('getent ahostsv4 được ưu tiên: kết quả của nó thắng, `getent ahosts` (có thể trả IPv6 hay IP khác) không được dùng', () => {
+    const { status, out } = run(goodWorld({ resolver: 'getent', getentV4: '14.225.207.177 STREAM api.test.vn\\n14.225.207.177 DGRAM\\n14.225.207.177 RAW', getent: '1.2.3.4 STREAM api.test.vn' }));
+    expect(lines(out, 'WARN')).toEqual([]);
+    expect(status).toBe(0);
+    expect(out).toContain('api.test.vn DNS: 14.225.207.177 (đúng IP VPS)');
+  });
+
+  it('getent ahostsv4 không dùng được (thoát mã khác 0): rơi xuống getent ahosts, vẫn so đúng IP', () => {
+    const { out } = run(goodWorld({ resolver: 'getent', getent: '14.225.207.177 STREAM api.test.vn\\n2001:db8::1 STREAM api.test.vn' }));
+    expect(lines(out, 'WARN')).toEqual([]);
+    expect(out).toContain('api.test.vn DNS: 14.225.207.177 (đúng IP VPS)');
+  });
+
+  it('getent trả IP khác VPS vẫn WARN đúng như dig (fallback không nuốt so sánh)', () => {
+    const { out } = run(goodWorld({ resolver: 'getent', getent: '1.2.3.4 STREAM api.test.vn' }));
+    expect(lines(out, 'WARN').join('\n')).toContain('mong đợi 14.225.207.177');
+  });
+
+  it('chỉ có python3 (không dig/host/nslookup/getent): phân giải thật qua socket, localhost → 127.0.0.1', () => {
+    const w = goodWorld({ resolver: 'python3' });
+    for (const [path, page] of Object.entries({ '/api/home': w.pages['https://api.test.vn/api/home']!, '/api/health': w.pages['https://api.test.vn/api/health']!, '/': w.pages['https://app.test.vn/']! })) {
+      w.pages[`https://localhost${path}`] = page;
+    }
+    const { status, out } = run(w, ['--api-host', 'localhost', '--app-host', 'localhost', '--expect-ip', '127.0.0.1']);
+    expect(lines(out, 'WARN')).toEqual([]);
+    expect(out).toContain('localhost DNS: 127.0.0.1 (đúng IP VPS)');
+    expect(status).toBe(0);
+  });
+
+  it('không có công cụ DNS nào (dig, host, nslookup, getent, python3): WARN rõ lý do, không FAIL', () => {
+    const { status, out } = run(goodWorld({ resolver: 'none' }));
+    expect(lines(out, 'WARN').join('\n')).toContain('api.test.vn DNS: máy này không có dig, host, nslookup, getent hay python3 nên bỏ qua');
+    expect(lines(out, 'FAIL')).toEqual([]);
+    expect(status).toBe(0);
   });
 
   it('--local: đĩa đầy 95% và container unhealthy → FAIL; backup mới → OK', () => {

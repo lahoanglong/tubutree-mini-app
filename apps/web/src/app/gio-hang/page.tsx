@@ -41,6 +41,8 @@ import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useCartWrite } from '@/lib/use-cart-write';
+import { serverRejectedState } from '@/lib/server-rejected-state';
+import { settleWithin } from '@/lib/settle-within';
 import { FreeshipAddons } from './freeship-addons';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
@@ -127,9 +129,12 @@ export default function CartPage() {
         }
         return refreshed;
       },
+      // Máy chủ từ chối vì giỏ đã khác (dòng đã bị xoá hay hết hàng ở nơi khác): lời lỗi hiện ngay, giỏ tải lại, và khoá dòng giữ tới khi giỏ mới về (tối đa `LOCK_REFRESH_WAIT_MS`)
+      // như Mini App; nhả sớm thì chạm lần hai chạy lại lệnh trên số cũ hoặc trên dòng đã mất. Lỗi mạng và 5xx không tải lại: lần tải cũng hỏng.
       onError: (error, v, cmd) => {
         setLineErrors((prev) => new Map(prev).set(v.id, error));
-        cartWrite.fail(cmd);
+        const reloaded = cartWrite.fail(cmd, serverRejectedState(error));
+        return reloaded ? settleWithin(reloaded) : undefined;
       },
     },
     (v) => v.id,

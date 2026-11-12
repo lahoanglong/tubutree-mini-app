@@ -1,4 +1,5 @@
 import { resolveServedMedia } from '@tubutree/app-core/served-media';
+import { withProductCopyFallback } from '@tubutree/app-core/commerce/product-copy-fallback';
 import { formatVnd } from './format-vnd';
 import { DEFAULT_LEGAL_VARS, type LegalVars } from './legal';
 // API_BASE_URL (server-runtime, ưu tiên) cho phép đổi endpoint khi deploy mà không rebuild;
@@ -183,8 +184,10 @@ export async function getProductsPage(params: Record<string, string> = {}): Prom
   return page ?? { data: [], meta: { page: 1, limit: HOME_PAGE_SIZE, total: 0 } };
 }
 
+/** Chi tiết sản phẩm; mô tả và thành phần PROD để trống thì bù chữ dự phòng theo bao bì/tên (trang, meta, JSON-LD cùng đọc một nguồn). */
 export async function getProduct(slug: string): Promise<ProductDetail | null> {
-  return fetchDetail<ProductDetail>(`/products/${slug}`, 300);
+  const product = await fetchDetail<ProductDetail>(`/products/${slug}`, 300);
+  return product && withProductCopyFallback(product);
 }
 
 export interface BrandCount {
