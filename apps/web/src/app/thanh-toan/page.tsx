@@ -306,8 +306,15 @@ export default function CheckoutPage() {
   const placingRef = useRef(false);
   // Khách đã bấm "Cập nhật giá mới" sau lỗi giá đổi: báo tổng mới cho tới lần đặt kế tiếp.
   const [priceAccepted, setPriceAccepted] = useState(false);
+  // Lời lỗi nhớ riêng (không đọc `place.error`): `place.error` chỉ có sau khi `onError` xong, mà `onError` giữ tới khi giỏ và báo giá tải lại; lời lỗi phải hiện ngay.
+  const [placeFailure, setPlaceFailure] = useState<{ error: Error } | null>(null);
+  const placeError = placeFailure?.error ?? null;
+  const placeFailed = placeFailure !== null;
   const place = useMutation({
-    onMutate: () => setPriceAccepted(false),
+    onMutate: () => {
+      setPriceAccepted(false);
+      setPlaceFailure(null);
+    },
     mutationFn: () => {
       const body: PlaceBody = {
         addressId: addressId!,
@@ -371,7 +378,15 @@ export default function CheckoutPage() {
       if (isBank) router.replace(bankPaymentHref(order.code));
     },
     onError: (e) => {
-      placingRef.current = false;
+      setPlaceFailure({ error: e });
+      // Mọi lần tải lại của nhánh lỗi gom ở đây (mỗi khoá một lần). Máy chủ từ chối vì màn đã cũ (400/404/409/422, `serverRejectedState`) thì nút Đặt hàng giữ khoá tới khi chúng về
+      // (tối đa `LOCK_REFRESH_WAIT_MS`), như Mini App: nhả sớm thì chạm lần hai gửi lại đúng đơn vừa bị từ chối trên giỏ/báo giá cũ. Mất mạng, 401 và 5xx không nói gì về giỏ: nhả ngay,
+      // bấm lại phải gửi cùng body, cùng khoá.
+      const reloads = new Map<string, Promise<unknown>>();
+      const reload = (queryKey: readonly unknown[]) => {
+        const id = JSON.stringify(queryKey);
+        if (!reloads.has(id)) reloads.set(id, qc.invalidateQueries({ queryKey }));
+      };
       // 401/408/429 bị chặn trước khi vào nghiệp vụ nên không nói gì về đơn của lần trước: giữ đóng băng.
       const rejectedBeforeService = e instanceof ApiError && [401, 408, 429].includes(e.status);
       if (isOutcomeUnknown(e)) unknownAttempt.current ??= attempt.current;
@@ -380,29 +395,44 @@ export default function CheckoutPage() {
       setUnknownRev(unknownAttempt.current?.rev ?? null);
       // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi máy
       // chủ đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
-      if (attachWaste && !isOutcomeUnknown(e)) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me });
+      if (attachWaste && !isOutcomeUnknown(e)) reload(WASTE_QUERY_KEYS.me);
       if (e instanceof ApiError && e.code === 'CART_CHANGED') {
         // Giỏ vừa đổi ở nơi khác (hoặc lần bấm trước đã đặt xong): dựng lại giỏ, báo giá và danh sách đơn.
-        void qc.invalidateQueries({ queryKey: ['cart'] });
-        void qc.invalidateQueries({ queryKey: ['orders'] });
-        void qc.invalidateQueries({ queryKey: ['quote'] });
+        reload(['cart']);
+        reload(['orders']);
+        reload(['quote']);
       } else if (e instanceof Error && e.message === PRICE_CHANGED) {
-        void qc.invalidateQueries({ queryKey: ['cart'] });
-        void qc.invalidateQueries({ queryKey: ['quote'] });
+        reload(['cart']);
+        reload(['quote']);
       } else if (e instanceof ApiError && e.code === 'TOTAL_CHANGED') {
-        void qc.invalidateQueries({ queryKey: ['quote'] });
-        void qc.invalidateQueries({ queryKey: ['cart'] });
+        reload(['quote']);
+        reload(['cart']);
       } else if (e instanceof ApiError && e.code === 'PAYMENT_METHOD_NOT_ALLOWED') {
         // Báo giá đang cache còn cho cách vừa bị từ chối (vd nơi giao đổi sau lúc báo giá): tải lại để khoá đúng cách đó và tự
         // chọn cách khác, không thì bấm lại bao nhiêu lần cũng nhận cùng lỗi. Nơi giao đổi thường vì giỏ đổi ở tab khác: kiện của
         // báo giá mới lấy món từ giỏ đang cache, nên tải lại cả giỏ, không thì kiện mới hiện ra không có món nào.
-        void qc.invalidateQueries({ queryKey: ['quote'] });
-        void qc.invalidateQueries({ queryKey: ['cart'] });
+        reload(['quote']);
+        reload(['cart']);
       } else if (cartFixableNotice(e, e instanceof Error ? e.message : null) !== null) {
-        void qc.invalidateQueries({ queryKey: ['cart'] });
+        reload(['cart']);
       }
+      if (!serverRejectedState(e)) {
+        placingRef.current = false;
+        return undefined;
+      }
+      // Các lời từ chối còn lại (địa chỉ không hợp lệ, mã không dùng được, dòng không còn...) đều nói giỏ, báo giá hay đơn đã khác với màn đang hiện.
+      reload(['cart']);
+      reload(['quote']);
+      reload(['orders']);
+      return settleWithin(Promise.all([...reloads.values()])).then(() => {
+        placingRef.current = false;
+      });
     },
   });
+  const resetPlace = () => {
+    place.reset();
+    setPlaceFailure(null);
+  };
 
   const startPlace = () => {
     if (placingRef.current) return;
@@ -424,7 +454,7 @@ export default function CheckoutPage() {
       onSuccess: () => {
         bumpChoice();
         // Đơn đang gửi thì không reset: reset làm `isPending` về false trong lúc `placingRef` còn khoá, nút hiện lại "Đặt hàng" mà bấm không ăn gì tới khi phản hồi về.
-        if (!placingRef.current) place.reset();
+        if (!placingRef.current) resetPlace();
         return settleWithin(Promise.all([qc.invalidateQueries({ queryKey: ['cart'] }), qc.invalidateQueries({ queryKey: ['quote'] })]));
       },
       // Giỏ luôn tải lại ở nền: lệnh quá hạn/502 có thể đã ghi ở máy chủ (dòng đã mất) mà màn còn hiện dòng cũ. Máy chủ từ chối (400/404/409/422) thì giữ khoá tới khi giỏ VÀ báo giá về
@@ -452,8 +482,8 @@ export default function CheckoutPage() {
 
   // Từ lg nút Đặt hàng nằm cuối khung "Đơn hàng", có thể ngoài màn khi khách đang điền form hoá đơn ở cột trái: đặt lỗi thì cuộn khối nút + lời báo vào màn
   // (nearest: không giật trang nếu đã thấy; 64rem = breakpoint lg) và trả focus về nút, vì nút có thể đang khoá thật (báo giá đang tải) hoặc khách đã chuyển focus đi trong lúc chờ. Dưới lg thanh dính đáy lo phần này, không cuộn trang.
-  // Query-core chạy `onError` (tải lại báo giá/giỏ) TRƯỚC khi ghi trạng thái lỗi, nên lúc `isError` hiện ra nút thường còn khoá vì báo giá đang tải và `focus()` vào nút khoá không có tác dụng:
-  // lỗi chỉ ghi một "yêu cầu focus", làm khi báo giá và giỏ tải xong. Xong mà nút vẫn khoá vì lý do khác thì bỏ yêu cầu, kẻo lúc khách sửa xong ô hoá đơn focus bị giật về nút.
+  // Lỗi hiện ra lúc nút thường còn khoá (báo giá đang tải, hoặc `onError` còn giữ lệnh tới khi giỏ và báo giá về) và `focus()` vào nút khoá không có tác dụng:
+  // lỗi chỉ ghi một "yêu cầu focus", làm khi lệnh đã xong hẳn và báo giá, giỏ tải xong. Xong mà nút vẫn khoá vì lý do khác thì bỏ yêu cầu, kẻo lúc khách sửa xong ô hoá đơn focus bị giật về nút.
   // Báo giá có thể về sau vài giây, lúc đó khách đã tab sang ô khác và đang gõ (ghi chú, hoá đơn, ô nhập mã giảm giá, ô tick Điểm Xanh nằm ngay trong khung "Đơn hàng"): giật focus về nút
   // thì Space/Enter kế tiếp bấm nhầm Đặt hàng. Nên chỉ trả focus khi nó không ở đâu cả (body, nút khoá làm mất focus) hoặc còn ở chính nút; focus ở bất kỳ phần tử nào khác (kể cả
   // liên kết cạnh nút, Enter trên đó là đi trang) thì khách đã chọn chỗ đó, yêu cầu bị bỏ, không giật.
@@ -461,20 +491,20 @@ export default function CheckoutPage() {
   const placeButtonRef = useRef<HTMLButtonElement>(null);
   const placeFocusDue = useRef(false);
   useEffect(() => {
-    if (!place.isError || !window.matchMedia?.('(min-width: 64rem)').matches) return;
+    if (!placeFailed || !window.matchMedia?.('(min-width: 64rem)').matches) return;
     placePartRef.current?.scrollIntoView({ block: 'nearest' });
     placeFocusDue.current = true;
-  }, [place.isError, place.error, place.submittedAt]);
+  }, [placeFailed, placeFailure, place.submittedAt]);
   const placeSettled = !quoteQ.isFetching && !cartQ.isFetching && !couponChanging;
   useEffect(() => {
-    if (!placeFocusDue.current || !placeSettled) return;
+    if (!placeFocusDue.current || !placeSettled || place.isPending) return;
     placeFocusDue.current = false;
     // Đọc trạng thái khoá từ chính nút đã vẽ (hook phải đứng trước các `return` sớm, lúc đó `placeDisabled` chưa tính).
     const button = placeButtonRef.current;
     const active = document.activeElement;
     const focusIsFree = !active || active === document.body || active === button;
     if (button && !button.disabled && focusIsFree) button.focus({ preventScroll: true });
-  }, [placeSettled, place.error, place.submittedAt]);
+  }, [placeSettled, place.isPending, placeFailure, place.submittedAt]);
 
   if (phase === 'loading') {
     return (
@@ -602,9 +632,9 @@ export default function CheckoutPage() {
   }
 
   const cart = cartQ.data;
-  const priceChanged = place.error instanceof Error && place.error.message === PRICE_CHANGED;
-  const placeErrorMessage = place.error instanceof Error && !priceChanged ? (place.error instanceof NetworkError ? place.error.message : actionErrorText(place.error)) : null;
-  const placeCartNotice = place.error ? cartFixableNotice(place.error, placeErrorMessage) : null;
+  const priceChanged = placeError instanceof Error && placeError.message === PRICE_CHANGED;
+  const placeErrorMessage = placeError instanceof Error && !priceChanged ? (placeError instanceof NetworkError ? placeError.message : actionErrorText(placeError)) : null;
+  const placeCartNotice = placeError ? cartFixableNotice(placeError, placeErrorMessage) : null;
   const cartIssue = placeCartNotice;
   const previewSubtotal = checkoutItems.reduce((sum, it) => sum + it.total, 0);
   // Chưa có báo giá: xem trước khoản giảm từ giỏ như Mini. Combo, mã và hạng của giỏ chỉ đúng cho cả giỏ; mua một phần thì máy chủ tính lại.
@@ -640,7 +670,7 @@ export default function CheckoutPage() {
   };
   const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
   // Lần đặt vừa rồi chưa rõ kết quả (mất mạng, quá thời gian, 5xx): nút nói rõ là gửi lại cùng đơn (cùng khoá, không tạo đơn trùng).
-  const retryingPlace = place.isError && isOutcomeUnknown(place.error) && unknownRev !== null && unknownRev === choiceTick;
+  const retryingPlace = placeFailed && isOutcomeUnknown(placeError) && unknownRev !== null && unknownRev === choiceTick;
   const placeLabel = place.isPending
     ? 'Đang đặt hàng…'
     : quote
@@ -654,7 +684,7 @@ export default function CheckoutPage() {
       ? fillCopy('checkout.priceChangedHint')
       : retryingPlace
         ? fillCopy('checkout.retryNote')
-        : place.isError
+        : placeFailed
           ? (placeErrorMessage ?? 'Đặt hàng thất bại.')
           : null);
   const addressOutdated = quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED';
@@ -676,7 +706,7 @@ export default function CheckoutPage() {
               className={ui.btnPrimary}
               disabled={quoteStale}
               onClick={() => {
-                place.reset();
+                resetPlace();
                 setPriceAccepted(true);
               }}
             >
@@ -688,7 +718,7 @@ export default function CheckoutPage() {
           </div>
         </div>
       )}
-      {priceAccepted && quote && !quoteStale && !place.isError && (
+      {priceAccepted && quote && !quoteStale && !placeFailed && (
         <p
           role="status"
           data-testid="checkout-price-updated"
@@ -1122,10 +1152,10 @@ export default function CheckoutPage() {
               {barError}
             </p>
           )}
-          {place.isError && !priceChanged && placeCartNotice === null && (
+          {placeFailed && !priceChanged && placeCartNotice === null && (
             <div role="alert" className={`mt-2 ${ui.error}`}>
               <p>{placeErrorMessage ?? 'Đặt hàng thất bại.'}</p>
-              {isOutcomeUnknown(place.error) && !retryingPlace && (
+              {isOutcomeUnknown(placeError) && !retryingPlace && (
                 <p className="mt-1 text-[color:var(--color-text-secondary)]">
                   {PREVIOUS_MAYBE_PLACED} Mở{' '}
                   <Link href="/tai-khoan/don-hang" className="font-semibold text-[color:var(--color-text-brand)] underline">
@@ -1143,7 +1173,7 @@ export default function CheckoutPage() {
                   .
                 </p>
               )}
-              {place.error?.message === PREVIOUS_MAYBE_PLACED && (
+              {placeError?.message === PREVIOUS_MAYBE_PLACED && (
                 <p className="mt-1 text-[color:var(--color-text-secondary)]">
                   Nếu đơn trước chưa có trong{' '}
                   <Link href="/tai-khoan/don-hang" className="font-semibold text-[color:var(--color-text-brand)] underline">

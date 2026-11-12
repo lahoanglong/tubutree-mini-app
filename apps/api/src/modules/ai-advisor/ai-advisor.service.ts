@@ -4,6 +4,7 @@ import { isRealUser } from '../../common/real-user';
 import { FaqService } from '../faq/faq.service';
 import { MAX_INPUT_CHARS } from './gateway-prompt';
 import { LlmClient, LlmUnavailableException, type ChatMessage, type LlmFailureReason } from './llm.client';
+import { factLines, productFacts, type ProductFacts } from './product-context';
 import { productQueryTokens, rankProducts } from './product-match';
 import { cardPrices } from '../catalog/variation-order';
 import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
@@ -18,6 +19,11 @@ export interface ProductSuggestion {
   thumbnail: string | null;
   basePrice: number;
   salePrice: number | null;
+}
+
+/** Sản phẩm kèm dữ liệu chi tiết chỉ dành cho prompt: không bao giờ đi ra ngoài API. */
+interface ProductContext extends ProductSuggestion {
+  facts: ProductFacts;
 }
 
 interface FaqContext {
@@ -49,13 +55,24 @@ const GUEST_PER_MIN = 10;
 const GUEST_WINDOW_MS = 60_000;
 
 /** Chỉ hứa "gợi ý bên dưới" khi thật sự có sản phẩm kèm theo. */
+const toSuggestion = (p: ProductContext): ProductSuggestion => ({
+  id: p.id,
+  name: p.name,
+  slug: p.slug,
+  brand: p.brand,
+  shortDesc: p.shortDesc,
+  thumbnail: p.thumbnail,
+  basePrice: p.basePrice,
+  salePrice: p.salePrice,
+});
+
 const offlineReply = (products: readonly ProductSuggestion[]): string =>
   products.length > 0 ? OFFLINE_REPLY_WITH_PRODUCTS : OFFLINE_REPLY_NO_MATCH;
 
 /**
  * AI tư vấn 24/7 (§6.14.3). RAG-lite: tìm sản phẩm khớp câu hỏi trong catalog →
- * nhét vào system prompt để LLM chỉ gợi ý sản phẩm CÓ THẬT. Dùng LlmClient
- * (Antigravity gateway / DeepSeek / Gemini). Chưa cấu hình provider → trả lời graceful, vẫn kèm gợi ý sản phẩm.
+ * nhét vào system prompt (tên, giá, mô tả, tên thành phần) để LLM chỉ gợi ý sản phẩm CÓ THẬT và chỉ nói điều có trong dữ liệu. Dùng LlmClient
+ * (Antigravity gateway / Claude / Gemini / DeepSeek). Chưa cấu hình provider → trả lời graceful, vẫn kèm gợi ý sản phẩm.
  */
 @Injectable()
 export class AiAdvisorService {
@@ -76,7 +93,8 @@ export class AiAdvisorService {
     const text = (message ?? '').trim().slice(0, MAX_INPUT_CHARS);
     if (!text) throw new BadRequestException('Bạn chưa nhập câu hỏi.');
 
-    const products = await this.suggestProducts(text);
+    const found = await this.findProducts(text);
+    const products = found.map(toSuggestion);
 
     if (!this.llm.isConfigured()) {
       return { reply: offlineReply(products), products };
@@ -94,7 +112,7 @@ export class AiAdvisorService {
     const faqs = await this.faq.listActive();
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: this.systemPrompt(products, faqs.slice(0, MAX_FAQ_IN_PROMPT)) },
+      { role: 'system', content: this.systemPrompt(found, faqs.slice(0, MAX_FAQ_IN_PROMPT)) },
       ...history.slice(-MAX_HISTORY),
       { role: 'user', content: text },
     ];
@@ -146,24 +164,31 @@ export class AiAdvisorService {
    * nên gõ không dấu vẫn tìm được; từ đệm bị bỏ, sản phẩm chỉ khớp một từ chung bị loại, còn lại xếp theo số từ khớp.
    * DB chỉ lọc thô (chứa chuỗi con) và lấy ứng viên theo độ nổi bật; việc khớp nguyên từ + xếp hạng làm ở rankProducts.
    */
-  private async suggestProducts(query: string): Promise<ProductSuggestion[]> {
+  private async findProducts(query: string): Promise<ProductContext[]> {
     const tokens = productQueryTokens(query);
     if (tokens.length === 0) return [];
     const candidates = await this.prisma.product.findMany({
       where: { ...PUBLIC_PRODUCT_WHERE, OR: tokens.map((t) => ({ nameSearch: { contains: t } })) },
       take: SUGGEST_CANDIDATES,
       orderBy: [{ isFeatured: 'desc' }, { ratingAvg: 'desc' }],
-      select: { id: true, name: true, slug: true, brand: true, shortDesc: true, thumbnail: true, basePrice: true, salePrice: true,
+      select: { id: true, name: true, slug: true, brand: true, shortDesc: true, thumbnail: true, basePrice: true, salePrice: true, description: true, ingredients: true,
         variations: { where: { isActive: true }, select: { id: true, sku: true, retailPrice: true, salePrice: true, stock: true } },
       },
     });
-    return rankProducts(tokens, candidates, MAX_SUGGESTIONS).map(({ variations, ...p }) => ({ ...p, ...cardPrices(p, variations), thumbnail: publicImage('product', p.id, 'thumb', p.thumbnail) }));
+    return rankProducts(tokens, candidates, MAX_SUGGESTIONS).map(({ variations, description, ingredients, ...p }) => ({
+      ...p,
+      ...cardPrices(p, variations),
+      thumbnail: publicImage('product', p.id, 'thumb', p.thumbnail),
+      facts: productFacts({ description, ingredients }),
+    }));
   }
 
-  private systemPrompt(products: ProductSuggestion[], faqs: FaqContext[] = []): string {
+  private systemPrompt(products: ProductContext[], faqs: FaqContext[] = []): string {
     const catalog = products.length
       ? products
-          .map((p) => `- ${p.name} (${p.brand}) — ${(p.salePrice ?? p.basePrice).toLocaleString('vi-VN')}đ${p.shortDesc ? ` · ${p.shortDesc}` : ''}`)
+          .map((p) =>
+            [`- ${p.name} (${p.brand}) — ${(p.salePrice ?? p.basePrice).toLocaleString('vi-VN')}đ${p.shortDesc ? ` · ${p.shortDesc}` : ''}`, ...factLines(p.facts)].join('\n'),
+          )
           .join('\n')
       : '(không tìm thấy sản phẩm khớp — gợi ý chung về tiêu dùng xanh)';
 
@@ -171,6 +196,9 @@ export class AiAdvisorService {
       'Bạn là trợ lý tư vấn thân thiện của Tubu Tree — thương hiệu tiêu dùng xanh, sản phẩm sinh học an toàn cho gia đình và môi trường.',
       'Trả lời bằng tiếng Việt, ngắn gọn (2–4 câu), gần gũi, có thể dùng emoji nhẹ 🌿.',
       'CHỈ gợi ý sản phẩm trong danh sách dưới đây; nếu không phù hợp thì tư vấn chung và khuyên xem thêm ở mục Sản phẩm. Không bịa tên sản phẩm hay giá.',
+      'Chỉ nêu thông tin CÓ trong dữ liệu sản phẩm và FAQ bên dưới (tên, giá, mô tả, thành phần). Không suy diễn thêm.',
+      'TUYỆT ĐỐI không nói sản phẩm chữa bệnh, điều trị hay phòng bệnh (vd trị rụng tóc, chữa viêm da); không nói diệt khuẩn hay kháng khuẩn kèm tỷ lệ (vd kháng khuẩn 99%); không nêu chứng nhận, giải thưởng, nguồn gốc hay con số phần trăm nào không có trong dữ liệu.',
+      'Khách hỏi điều dữ liệu không có (thành phần, công dụng, chứng nhận, cách dùng...): nói thẳng là mình chưa có thông tin đó và gợi ý xem trang sản phẩm hoặc nhắn CSKH, không đoán.',
       'Danh sách sản phẩm liên quan:',
       catalog,
     ];
