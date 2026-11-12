@@ -13,7 +13,7 @@ const KIND_LABEL: Record<PancakeZeroPriceKind, string> = {
 };
 
 /**
- * SKU mà Pancake POS đang báo giá 0đ (W131). Đồng bộ không bao giờ ghi 0đ ra cửa hàng: biến thể đang bán giữ giá cũ, biến thể mới
+ * SKU mà Pancake POS đang báo giá 0đ. Đồng bộ không bao giờ ghi 0đ ra cửa hàng: biến thể đang bán giữ giá cũ, biến thể mới
  * chưa có giá thì chưa mở bán. Thẻ này chỉ để quản trị viên biết SKU nào cần sửa giá ở Pancake.
  */
 export function PancakeZeroPriceCard() {

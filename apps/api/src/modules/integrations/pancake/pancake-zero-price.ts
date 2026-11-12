@@ -52,15 +52,24 @@ export interface ZeroPriceInput {
 export const isGiftMarked = (v: { is_gift?: unknown }): boolean => v.is_gift === true;
 
 /**
- * Biến thể này có phải "Pancake báo giá 0đ" cần admin biết không. Chỉ số 0 tường minh (0, "0", "0.00") — ô thiếu, chữ rác hay số âm
- * là "không biết giá" và đã có cảnh báo riêng. Bỏ qua: biến thể Pancake đã xoá, quà tặng có cờ, và biến thể admin tắt tay
- * (không hiện ngoài cửa hàng nên 0đ không gây hại).
+ * Pancake gửi giá dạng chuỗi có phần thập phân ba số ("269000.000"), nên giá 0 có thể là "0.000" — `payloadPrice` đọc chuỗi này theo mẫu
+ * ngăn nghìn và trả null, trong khi "0.00" lại đọc ra 0. Nhận mọi chuỗi chỉ gồm số 0 để dạng chuỗi nào cũng được báo như nhau.
+ */
+const isZeroText = (v: unknown): boolean => typeof v === 'string' && /^0+(?:[.,]0+)?$/.test(v.trim());
+
+/**
+ * Biến thể này có phải "Pancake báo giá 0đ" cần admin biết không. Chỉ số 0 tường minh (0, "0", "0.00", "0.000") — ô thiếu, chữ rác hay số âm
+ * là "không biết giá" và đã có cảnh báo riêng. Bỏ qua: biến thể Pancake đã xoá, quà tặng có cờ mà Tubu chưa bán theo giá dương
+ * (đang bán giá dương mà POS báo quà 0đ là chỗ cửa hàng lệch với POS nên vẫn báo), và biến thể admin tắt tay (không hiện ngoài cửa hàng
+ * nên 0đ không gây hại).
  */
 export function classifyZeroPrice(i: ZeroPriceInput): ZeroPriceKind | null {
-  if (payloadPrice(i.retail) !== 0) return null;
-  if (i.removed || i.gift) return null;
+  if (payloadPrice(i.retail) !== 0 && !isZeroText(i.retail)) return null;
+  if (i.removed) return null;
+  const sellingAtPositive = !!i.prev && i.prev.retailPrice > 0;
+  if (i.gift && !sellingAtPositive) return null;
   if (i.prev && !i.prev.isActive && i.prev.pancakeHold == null) return null;
-  return i.prev && i.prev.retailPrice > 0 ? 'PRICE_KEPT' : 'NEW_AT_ZERO';
+  return sellingAtPositive ? 'PRICE_KEPT' : 'NEW_AT_ZERO';
 }
 
 /** Gom kết quả của một lượt quét theo mã biến thể Pancake: ghi sau cùng thắng. */
@@ -158,6 +167,8 @@ export async function recordZeroPrice(
     if (run.found.length === 0 && run.resolved.size === 0) return null;
     const row = await prisma.opsHealthState.findUnique({ where: { key: ZERO_PRICE_STATE_KEY } });
     const prev = parseZeroPrice(row?.detail);
+    // Danh sách đã bị cắt ở trần: gộp từ phần còn lưu sẽ làm mất số đếm thật của phần bị cắt, nên chờ lượt quét toàn bộ.
+    if (prev?.truncated) return prev;
     const foundIds = new Set(run.found.map((a) => a.pancakeId));
     const kept = (prev?.skus ?? []).filter((a) => !run.resolved.has(a.pancakeId) && !foundIds.has(a.pancakeId));
     const merged = [...kept, ...run.found];

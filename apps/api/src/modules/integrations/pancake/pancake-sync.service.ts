@@ -363,7 +363,7 @@ export class PancakeSyncService implements OnModuleInit {
           await this.deactivateMissing(seen);
         }
       }
-      const zeroSummary = await this.noteZeroPrice(zero, !updatedSince, failed);
+      const zeroSummary = await this.noteZeroPrice(zero, !updatedSince, failed + skipped);
       this.lastRunAt = startedAt;
       this.logger.log(
         `Đã đồng bộ ${count} sản phẩm từ Pancake${failed ? ` (${failed} lỗi, bỏ qua)` : ''}${skipped ? ` (${skipped} sản phẩm thiếu mã/tên, bỏ qua)` : ''}.`,
@@ -380,14 +380,14 @@ export class PancakeSyncService implements OnModuleInit {
    * SKU Pancake báo giá 0đ trong lượt này: một dòng log có cấu trúc + lưu danh sách cho admin. Giá Tubu đã được giữ ở upsertVariation;
    * đây chỉ để người vận hành biết SKU nào cần sửa trên POS. Best-effort như noteRun: lỗi ghi không được làm hỏng lượt đồng bộ.
    */
-  private async noteZeroPrice(zero: ZeroPriceCollector, full: boolean, failed: number): Promise<ZeroPriceSummary> {
+  private async noteZeroPrice(zero: ZeroPriceCollector, full: boolean, unread: number): Promise<ZeroPriceSummary> {
     const found = zero.found;
     const summary = summarizeZeroPrice(found, full ? 'FULL' : 'INCREMENTAL');
     this.lastZero = summary;
     if (found.length) this.logger.warn(zeroPriceLogLine(summary));
     try {
-      // Lượt quét toàn bộ mà có sản phẩm lỗi chưa đọc hết biến thể: chỉ gộp, không thay hẳn danh sách.
-      await recordZeroPrice(this.prisma, { replace: full && failed === 0, found, resolved: zero.resolved });
+      // `unread` = sản phẩm lỗi hoặc bị bỏ qua (thiếu mã/tên): biến thể của chúng chưa được đọc, nên lượt quét toàn bộ cũng chỉ gộp, không thay hẳn danh sách.
+      await recordZeroPrice(this.prisma, { replace: full && unread === 0, found, resolved: zero.resolved });
     } catch (e) {
       this.logger.warn(`Không ghi được danh sách SKU giá 0đ của Pancake: ${e instanceof Error ? e.message : e}`);
     }

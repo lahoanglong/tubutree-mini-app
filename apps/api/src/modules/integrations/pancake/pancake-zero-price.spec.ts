@@ -25,7 +25,7 @@ const anomaly = (id: string, over: Partial<ZeroPriceAnomaly> = {}): ZeroPriceAno
 });
 
 describe('classifyZeroPrice — chỉ số 0 tường minh mới là "Pancake báo giá 0đ"', () => {
-  it.each([[0], ['0'], ['0.00']])('retail_price=%p trên biến thể đang bán giá dương → PRICE_KEPT', (retail) => {
+  it.each([[0], ['0'], ['0.00'], ['0.000'], [' 0.000 '], ['0,000'], ['00']])('retail_price=%p trên biến thể đang bán giá dương → PRICE_KEPT (Pancake gửi giá dạng chuỗi ba số thập phân)', (retail) => {
     expect(classifyZeroPrice(input({ retail }))).toBe('PRICE_KEPT');
   });
 
@@ -34,14 +34,19 @@ describe('classifyZeroPrice — chỉ số 0 tường minh mới là "Pancake b�
     expect(classifyZeroPrice(input({ prev: { retailPrice: 0, isActive: false, pancakeHold: 'NO_PRICE' } }))).toBe('NEW_AT_ZERO');
   });
 
-  it.each([[undefined], [null], [-5], [Number.NaN], ['abc'], [{}], [89_000], ['79.000'], ['0.000']])('retail_price=%p không phải 0 ("0.000" khớp mẫu ngăn nghìn nên không đọc được) → không báo', (retail) => {
+  it.each([[undefined], [null], [-5], [Number.NaN], ['abc'], [{}], [89_000], ['79.000'], ['0.001'], ['10.000'], ['-0.000'], ['']])('retail_price=%p không phải 0 tường minh → không báo', (retail) => {
     expect(classifyZeroPrice(input({ retail }))).toBeNull();
   });
 
-  it('biến thể Pancake đã xoá, quà tặng có cờ, hoặc admin tắt tay → không báo', () => {
+  it('biến thể Pancake đã xoá, quà tặng có cờ mà Tubu chưa bán giá dương, hoặc admin tắt tay → không báo', () => {
     expect(classifyZeroPrice(input({ removed: true }))).toBeNull();
-    expect(classifyZeroPrice(input({ gift: true }))).toBeNull();
+    expect(classifyZeroPrice(input({ gift: true, prev: null }))).toBeNull();
+    expect(classifyZeroPrice(input({ gift: true, prev: { retailPrice: 0, isActive: false, pancakeHold: 'NO_PRICE' } }))).toBeNull();
     expect(classifyZeroPrice(input({ prev: { ...sold, isActive: false, pancakeHold: null } }))).toBeNull();
+  });
+
+  it('cờ quà tặng mà Tubu đang bán giá dương → vẫn báo PRICE_KEPT (cửa hàng lệch với POS)', () => {
+    expect(classifyZeroPrice(input({ gift: true }))).toBe('PRICE_KEPT');
   });
 
   it('biến thể do chính đồng bộ ngừng (REMOVED) rồi Pancake trả lại với giá 0đ → vẫn báo, vì lượt này mở bán lại theo giá cũ', () => {
@@ -152,6 +157,16 @@ describe('recordZeroPrice / readZeroPrice — hàng ops_health_states', () => {
     await recordZeroPrice(s.prisma, { replace: false, found: [], resolved: new Set(['khac']) }, NOW);
     expect(s.findUnique).toHaveBeenCalledTimes(1);
     expect(s.upsert).not.toHaveBeenCalled();
+  });
+
+  it('danh sách đã lưu bị cắt ở trần (count thật > số SKU lưu): lượt tăng dần không gộp, giữ nguyên số đếm thật cho tới lượt quét toàn bộ', async () => {
+    const many = Array.from({ length: ZERO_PRICE_LIST_CAP + 100 }, (_, i) => anomaly(`m${i}`));
+    const s = store(summarizeZeroPrice(many, 'FULL'));
+    const out = await recordZeroPrice(s.prisma, { replace: false, found: [anomaly('moi')], resolved: new Set(['m0']) }, NOW);
+    expect(out).toMatchObject({ count: ZERO_PRICE_LIST_CAP + 100, truncated: true });
+    expect(s.upsert).not.toHaveBeenCalled();
+    await recordZeroPrice(s.prisma, { replace: true, found: [anomaly('a')], resolved: new Set() }, NOW);
+    expect(s.get()).toMatchObject({ count: 1, truncated: false });
   });
 
   it('chưa có hàng nào: lượt tăng dần tạo danh sách mới; readZeroPrice trả rỗng khi chưa từng ghi', async () => {

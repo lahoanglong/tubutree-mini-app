@@ -120,19 +120,32 @@ describe('W131: Pancake báo 0đ không được xoá giá đang bán, và phả
     expect(notifyPriceDrop).toHaveBeenCalledTimes(1);
   });
 
-  it('quà tặng có cờ is_gift, biến thể Pancake đã xoá, biến thể admin tắt tay: giá 0đ không bị báo; giá Tubu vẫn không bị ghi 0đ', async () => {
+  it('quà tặng có cờ is_gift mà Tubu chưa bán giá dương, biến thể Pancake đã xoá, biến thể admin tắt tay: giá 0đ không bị báo; giá Tubu vẫn không bị ghi 0đ', async () => {
     const r = await run(
       [
         product('pg', [variation('v-gift', { retail_price: 0, is_gift: true })]),
         product('pr', [variation('v-removed', { retail_price: 0, is_removed: true })]),
         product('pa', [variation('v-admin-off', { retail_price: 0 })]),
       ],
-      { prevByVariation: { 'v-gift': sellingAt(89_000), 'v-removed': sellingAt(89_000), 'v-admin-off': sellingAt(89_000, { isActive: false }) } },
+      { prevByVariation: { 'v-removed': sellingAt(89_000), 'v-admin-off': sellingAt(89_000, { isActive: false }) } },
     );
     expect(r.zero).toMatchObject({ count: 0 });
     expect(loggedZeroEvents()).toHaveLength(0);
     expect(r.raw.variation.upsert).toHaveBeenCalledTimes(3);
     for (const c of r.raw.variation.upsert.mock.calls) expect((c[0] as { update: object }).update).not.toHaveProperty('retailPrice');
+  });
+
+  it('cờ is_gift nhưng Tubu đang bán 89.000đ: giữ giá, vẫn báo PRICE_KEPT (cửa hàng lệch với POS)', async () => {
+    const r = await run([product('pg', [variation('v-gift', { retail_price: 0, is_gift: true })])], { prevByVariation: { 'v-gift': sellingAt(89_000) } });
+    expect(r.call!.update).not.toHaveProperty('retailPrice');
+    expect(r.zero!.skus.map((s) => `${s.pancakeId}:${s.kind}`)).toEqual(['v-gift:PRICE_KEPT']);
+  });
+
+  it.each([['0.000'], ['0.00'], ['0']])('Pancake gửi giá chuỗi retail_price=%j: giữ 89.000đ và vẫn ghi PRICE_KEPT (dạng "0.000" như "269000.000" trước đây bị bỏ sót)', async (retail) => {
+    const r = await run([product('p1', [variation('v1', { retail_price: retail })])], { prevByVariation: { v1: sellingAt(89_000) } });
+    expect(r.call!.update).not.toHaveProperty('retailPrice');
+    expect(r.zero!.skus.map((s) => `${s.pancakeId}:${s.kind}:${s.keptPrice}`)).toEqual(['v1:PRICE_KEPT:89000']);
+    expect(loggedZeroEvents()).toHaveLength(1);
   });
 
   it('thiếu giá (undefined/rác) không phải 0đ tường minh: không vào danh sách 0đ', async () => {
@@ -190,6 +203,15 @@ describe('W131: Pancake báo 0đ không được xoá giá đang bán, và phả
       const keys = r.raw.opsHealthState.upsert.mock.calls.map((c) => (c[0] as { where: { key: string } }).where.key);
       expect(keys).toEqual([CATALOG_STATE_KEY]);
       expect(r.zero!.skus.map((s) => s.pancakeId)).toEqual(['v-old']);
+    });
+
+    it('lượt quét toàn bộ có sản phẩm bị bỏ qua (thiếu tên): chỉ gộp, không thay hẳn — biến thể của nó chưa được đọc nên không được coi là đã sửa', async () => {
+      const r = await run(
+        [product('p-draft', [variation('v-old', { retail_price: 0 })], ''), product('p1', [variation('v1', { retail_price: 70_000 })])],
+        { ops: stored({ pancakeId: 'v-old' }, { pancakeId: 'v-other' }), prevByVariation: { v1: sellingAt(70_000) } },
+      );
+      expect(r.catalog).toMatchObject({ skipped: 1, failed: 0 });
+      expect(r.zero!.skus.map((s) => s.pancakeId)).toEqual(['v-old', 'v-other']);
     });
 
     it('lượt quét toàn bộ có sản phẩm lỗi khi ghi: chỉ gộp, không thay hẳn (không mất SKU chưa đọc hết)', async () => {
