@@ -26,10 +26,11 @@ const NOT_IN_EXAMPLE: Record<string, string> = {
   ANTIGRAVITY_MODEL: 'AI tư vấn tuỳ chọn',
   ANTIGRAVITY_GATEWAY_TIMEOUT_MS: 'AI tư vấn tuỳ chọn',
   AI_ADVISOR_PROVIDER: 'AI tư vấn tuỳ chọn',
+  AI_ADVISOR_CLAUDE_MODEL: 'AI tư vấn: trống = claude-haiku-4-5-20251001; ops.yml set-env chưa ghi khoá này',
   AI_ADVISOR_ENABLED: 'AI tư vấn tuỳ chọn',
   AI_ADVISOR_GLOBAL_PER_MIN: 'AI tư vấn tuỳ chọn',
   AI_ADVISOR_MAX_CONCURRENT: 'AI tư vấn tuỳ chọn',
-  ANTHROPIC_API_KEY: 'Story Studio của admin: bước Claude tuỳ chọn, trống thì bỏ qua; ghi tay vào .env trên máy chủ (chmod 600), ops.yml set-env chưa ghi khoá này; không ghi khoá vào file mẫu',
+  ANTHROPIC_API_KEY: 'Story Studio của admin và AI tư vấn khách (provider claude): tuỳ chọn, trống thì bỏ qua; ghi tay vào .env trên máy chủ (chmod 600), ops.yml set-env chưa ghi khoá này; không ghi khoá vào file mẫu',
   CLAUDE_API_MODEL: 'Story Studio: trống = claude-sonnet-5-5',
 };
 

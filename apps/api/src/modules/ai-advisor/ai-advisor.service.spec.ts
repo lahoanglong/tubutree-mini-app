@@ -212,3 +212,97 @@ describe('AiAdvisorService.chat — trần chung cho tài khoản khách', () =>
     }
   });
 });
+
+describe('AiAdvisorService.chat — ngữ cảnh sản phẩm trung thực', () => {
+  const FULL = {
+    ...PRODUCTS[0],
+    description: '<p>Nước rửa chén&nbsp;lên men từ vỏ dứa.</p><p>Quy cách 500ml.</p>',
+    ingredients: [{ name: 'Enzyme lên men từ vỏ dứa', percentage: 5 }, { name: '  ' }, { name: 'Hương dứa', benefit: 'x' }],
+  };
+  const systemPromptOf = async (products: unknown[], q = 'nước rửa chén') => {
+    const llm = makeLlm();
+    const prisma = makePrisma(products);
+    const r = await new AiAdvisorService(prisma, llm, makeFaq()).chat('u1', q);
+    return { prompt: (llm.complete as jest.Mock).mock.calls[0][0][0].content as string, r, prisma };
+  };
+
+  it('nạp mô tả (đã bỏ thẻ HTML) và tên thành phần của sản phẩm vào prompt, không kèm phần trăm', async () => {
+    const { prompt } = await systemPromptOf([FULL]);
+    expect(prompt).toContain('Mô tả: Nước rửa chén lên men từ vỏ dứa. Quy cách 500ml.');
+    expect(prompt).toContain('Thành phần: Enzyme lên men từ vỏ dứa, Hương dứa');
+    expect(prompt).not.toMatch(/<\/?p>|&nbsp;/);
+    expect(prompt).not.toContain('5%');
+  });
+
+  it('thành phần lưu dạng chuỗi (phân tách bằng dấu phẩy/chấm phẩy) cũng đọc được', async () => {
+    const { prompt } = await systemPromptOf([{ ...PRODUCTS[0], description: '', ingredients: 'Dầu tràm; Dầu dừa, ' }]);
+    expect(prompt).toContain('Thành phần: Dầu tràm, Dầu dừa');
+  });
+
+  it('cắt mô tả dài và giới hạn số thành phần để prompt không phình', async () => {
+    const long = 'a'.repeat(2000);
+    const many = Array.from({ length: 30 }, (_, i) => ({ name: `tp${i}` }));
+    const { prompt } = await systemPromptOf([{ ...PRODUCTS[0], description: long, ingredients: many }]);
+    const desc = /Mô tả: (.*)/.exec(prompt)![1]!;
+    expect(desc.length).toBeLessThanOrEqual(401);
+    expect(desc.endsWith('…')).toBe(true);
+    const tp = /Thành phần: (.*)/.exec(prompt)![1]!.split(', ');
+    expect(tp).toHaveLength(8);
+  });
+
+  it('sản phẩm không có mô tả lẫn thành phần: không bịa dòng nào, ghi rõ là chưa có', async () => {
+    const { prompt } = await systemPromptOf([{ ...PRODUCTS[0], description: '  ', ingredients: [] }]);
+    expect(prompt).not.toContain('Mô tả:');
+    expect(prompt).not.toContain('Thành phần:');
+    expect(prompt).toContain('chưa có mô tả hay thành phần chi tiết');
+  });
+
+  it('tên thành phần hỏng ("[object Object]" do nhập sai) không vào prompt', async () => {
+    const { prompt } = await systemPromptOf([{ ...PRODUCTS[0], description: '', ingredients: [{ name: '[object Object]' }, { name: 'Dầu dừa' }] }]);
+    expect(prompt).toContain('Thành phần: Dầu dừa');
+    expect(prompt).not.toContain('[object Object]');
+  });
+
+  it('DB trả thiếu cột (mock cũ, null) vẫn không lỗi', async () => {
+    const { prompt } = await systemPromptOf([{ ...PRODUCTS[0], description: null, ingredients: null }]);
+    expect(prompt).toContain('chưa có mô tả hay thành phần chi tiết');
+  });
+
+  it('truy vấn chọn thêm description và ingredients', async () => {
+    const { prisma } = await systemPromptOf([FULL]);
+    const select = (prisma.product.findMany as jest.Mock).mock.calls[0][0].select;
+    expect(select).toMatchObject({ description: true, ingredients: true });
+  });
+
+  it('danh sách products trả cho khách KHÔNG lộ description/ingredients (chỉ các trường gợi ý như trước)', async () => {
+    const { r } = await systemPromptOf([FULL]);
+    expect(Object.keys(r.products[0]!).sort()).toEqual(['basePrice', 'brand', 'id', 'name', 'salePrice', 'shortDesc', 'slug', 'thumbnail']);
+  });
+
+  describe('luật trung thực trong system prompt', () => {
+    it.each([
+      ['chỉ nêu điều có trong dữ liệu', 'Chỉ nêu thông tin CÓ trong dữ liệu'],
+      ['không bịa', 'Không bịa'],
+      ['cấm chữa bệnh/điều trị', 'chữa bệnh'],
+      ['cấm ví dụ trị rụng tóc', 'trị rụng tóc'],
+      ['cấm kháng khuẩn kèm phần trăm', 'kháng khuẩn 99%'],
+      ['cấm chứng nhận không có trong dữ liệu', 'chứng nhận'],
+      ['thiếu dữ liệu thì nói chưa có thông tin', 'chưa có thông tin'],
+    ])('%s', async (_name, needle) => {
+      const { prompt } = await systemPromptOf([FULL]);
+      expect(prompt).toContain(needle);
+    });
+
+    it('luật vẫn có khi không tìm thấy sản phẩm khớp', async () => {
+      const { prompt } = await systemPromptOf([], 'xyz lạ hoắc');
+      expect(prompt).toContain('chữa bệnh');
+      expect(prompt).toContain('Chỉ nêu thông tin CÓ trong dữ liệu');
+    });
+
+    it('vẫn giữ luật cũ: chỉ gợi ý sản phẩm trong danh sách, không bịa tên hay giá', async () => {
+      const { prompt } = await systemPromptOf([FULL]);
+      expect(prompt).toContain('CHỈ gợi ý sản phẩm trong danh sách dưới đây');
+      expect(prompt).toContain('Không bịa tên sản phẩm hay giá');
+    });
+  });
+});

@@ -162,14 +162,16 @@ export const envSchema = z.object({
   ANTIGRAVITY_GATEWAY_KEY: z.string().default(''),
   ANTIGRAVITY_MODEL: z.string().default(''),
   ANTIGRAVITY_GATEWAY_TIMEOUT_MS: z.string().default(''),
-  // '' = tự chọn antigravity > deepseek > gemini theo provider đã cấu hình; đặt rõ thì CHỈ dùng provider đó.
-  AI_ADVISOR_PROVIDER: z.enum(['', 'antigravity', 'deepseek', 'gemini']).default(''),
+  // '' = tự chọn antigravity > claude > gemini > deepseek theo provider đã cấu hình; đặt rõ thì CHỈ dùng provider đó.
+  AI_ADVISOR_PROVIDER: z.enum(['', 'antigravity', 'claude', 'deepseek', 'gemini']).default(''),
+  // Model Claude cho AI tư vấn khách; trống = claude-haiku-4-5-20251001 (rẻ, nhanh). Tách khỏi CLAUDE_API_MODEL của Story Studio để hai việc đổi model độc lập.
+  AI_ADVISOR_CLAUDE_MODEL: z.string().default(''),
   // Công tắc tắt khẩn cấp: 0/false/off/no tắt AI (Mini App ẩn lối vào nhờ aiAdvisorEnabled ở /config/public).
   AI_ADVISOR_ENABLED: z.string().default(''),
   AI_ADVISOR_GLOBAL_PER_MIN: z.string().default(''),
   AI_ADVISOR_MAX_CONCURRENT: z.string().default(''),
-  // Story Studio (admin soạn kịch bản câu chuyện sản phẩm): antigravity > Claude trực tiếp > deepseek/gemini. Khoá chỉ đọc ở API, không bao giờ trả ra client.
-  // Để trống KEY thì bước Claude bị bỏ qua. Không dùng cho AI tư vấn khách (llm.client.ts giữ nguyên yêu cầu không dùng Claude).
+  // Claude trực tiếp: Story Studio (admin soạn kịch bản, antigravity > Claude > deepseek/gemini) và AI tư vấn khách (provider `claude`, xem AI_ADVISOR_CLAUDE_MODEL).
+  // Khoá chỉ đọc ở API, không bao giờ trả ra client. Để trống KEY thì cả hai bỏ bước Claude.
   ANTHROPIC_API_KEY: z.string().default(''),
   CLAUDE_API_MODEL: z.string().default(''),
 }).superRefine((env, ctx) => {

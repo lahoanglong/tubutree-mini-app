@@ -3,12 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import type { Env } from '../../config/env.validation';
 import {
+  ADVISOR_PROVIDERS,
   type AdvisorProvider,
   isAdvisorAvailable,
   positiveInt,
   providerConfigured,
   resolveProviderOrder,
 } from './advisor-config';
+import { AnthropicCallError, type AnthropicTurn, postAnthropicMessage } from './anthropic.client';
 import { buildGatewayPrompt } from './gateway-prompt';
 
 export interface ChatMessage {
@@ -50,6 +52,11 @@ class LlmCallError extends Error {
 
 const GATEWAY_TASK = 'tubutree';
 const DEFAULT_ANTIGRAVITY_MODEL = 'gemini-3.8-flash-high';
+// Haiku: rẻ và nhanh cho câu tư vấn 2-4 câu; đổi bằng AI_ADVISOR_CLAUDE_MODEL, độc lập với CLAUDE_API_MODEL của Story Studio.
+const DEFAULT_CLAUDE_ADVISOR_MODEL = 'claude-haiku-4-5-20251001';
+const DEFAULT_CLAUDE_MAX_TOKENS = 800;
+// Mini App bỏ chờ sau 15 giây: Claude chậm hơn mức này thì khách đã thấy lỗi chung, câu xin lỗi và provider dự phòng không tới được họ.
+const DEFAULT_CLAUDE_TIMEOUT_MS = 12_000;
 // Phải dài hơn timeout nội bộ của agy trong gateway (60s theo ChoDeli) thì mới nhận được JSON {error:"timeout"}
 // gọn thay vì bị ngắt socket; nhưng khách đang chờ nên mặc định ngắn hơn, chấp nhận ngắt sớm và hiện câu xin lỗi.
 const DEFAULT_ANTIGRAVITY_TIMEOUT_MS = 45_000;
@@ -59,11 +66,11 @@ const DEFAULT_MAX_CONCURRENT = 3;
 const RATE_WINDOW_MS = 60_000;
 
 /**
- * Client LLM cho AI tư vấn (§6.14.3). Antigravity gateway (chính, cùng cách ChoDeli dùng) → DeepSeek → Gemini,
+ * Client LLM cho AI tư vấn (§6.14.3). Antigravity gateway (chính, cùng cách ChoDeli dùng) → Claude trực tiếp (Haiku) → Gemini → DeepSeek,
  * chỉ thử những provider đã cấu hình; AI_ADVISOR_PROVIDER chọn cứng một provider (xem advisor-config.ts).
  * Gate bằng cấu hình: tắt hoặc chưa có provider nào → isConfigured()=false để service tắt graceful.
- * AI tư vấn khách KHÔNG dùng Claude/Anthropic (yêu cầu nghiệp vụ): `complete()` chỉ đi qua ba provider trên. Story Studio của admin
- * có thứ tự riêng (antigravity > Claude > deepseek/gemini) nên gọi `completeVia()` cho từng provider và tự ghép Claude (AnthropicClient).
+ * Provider `claude` gọi Messages API bằng ANTHROPIC_API_KEY chung với Story Studio nhưng model riêng (AI_ADVISOR_CLAUDE_MODEL). Story Studio của admin
+ * có thứ tự riêng (antigravity > Claude > deepseek/gemini) nên gọi `completeVia()` cho từng provider và tự ghép Claude của nó (AnthropicClient).
  */
 @Injectable()
 export class LlmClient {
@@ -78,6 +85,8 @@ export class LlmClient {
   private readonly gatewayKey: string;
   private readonly gatewayModel: string;
   private readonly gatewayTimeoutMs: number;
+  private readonly claudeKey: string;
+  private readonly claudeModel: string;
   private readonly order: AdvisorProvider[];
   private readonly configured: ReadonlySet<AdvisorProvider>;
   private readonly available: boolean;
@@ -99,8 +108,10 @@ export class LlmClient {
     this.gatewayKey = (get('ANTIGRAVITY_GATEWAY_KEY') ?? '').trim();
     this.gatewayModel = (get('ANTIGRAVITY_MODEL') ?? '').trim() || DEFAULT_ANTIGRAVITY_MODEL;
     this.gatewayTimeoutMs = positiveInt(get('ANTIGRAVITY_GATEWAY_TIMEOUT_MS'), DEFAULT_ANTIGRAVITY_TIMEOUT_MS);
+    this.claudeKey = (get('ANTHROPIC_API_KEY') ?? '').trim();
+    this.claudeModel = (get('AI_ADVISOR_CLAUDE_MODEL') ?? '').trim() || DEFAULT_CLAUDE_ADVISOR_MODEL;
     this.order = resolveProviderOrder(get);
-    this.configured = new Set((['antigravity', 'deepseek', 'gemini'] as const).filter((p) => providerConfigured(get, p)));
+    this.configured = new Set(ADVISOR_PROVIDERS.filter((p) => providerConfigured(get, p)));
     this.available = isAdvisorAvailable(get);
     this.globalPerMin = positiveInt(get('AI_ADVISOR_GLOBAL_PER_MIN'), DEFAULT_GLOBAL_PER_MIN);
     this.maxConcurrent = positiveInt(get('AI_ADVISOR_MAX_CONCURRENT'), DEFAULT_MAX_CONCURRENT);
@@ -165,6 +176,7 @@ export class LlmClient {
 
   private callProvider(provider: AdvisorProvider, messages: ChatMessage[], opts: CompleteViaOptions): Promise<string> {
     if (provider === 'antigravity') return this.callAntigravity(messages, opts);
+    if (provider === 'claude') return this.callClaude(messages, opts);
     if (provider === 'deepseek') return this.callDeepSeek(messages, opts);
     return this.callGemini(messages, opts);
   }
@@ -216,6 +228,38 @@ export class LlmClient {
     }
   }
 
+  /**
+   * Messages API: `system` là tham số riêng, `messages` phải bắt đầu bằng lượt user (lịch sử cắt 6 lượt gần nhất có thể mở đầu bằng lượt trợ lý) và
+   * các lượt cùng vai liền nhau được gộp. Không gửi temperature/effort: model do admin đổi qua AI_ADVISOR_CLAUDE_MODEL có thể từ chối giá trị khác mặc định.
+   * `max_tokens` cắt giữa chừng vẫn là câu trả lời dùng được (như các provider chat khác); `refusal` thì để provider kế đảm nhận.
+   */
+  private async callClaude(messages: ChatMessage[], opts: CompleteViaOptions): Promise<string> {
+    const system = wellFormed(
+      messages
+        .filter((m) => m.role === 'system')
+        .map((m) => m.content)
+        .join('\n\n'),
+    );
+    const turns = toAnthropicTurns(messages);
+    if (turns.length === 0) throw new LlmCallError('Claude không có lượt user để gửi.', 'error');
+    try {
+      const { text, stopReason } = await postAnthropicMessage({
+        key: this.claudeKey,
+        model: this.claudeModel,
+        system,
+        messages: turns,
+        maxTokens: opts.maxTokens ?? DEFAULT_CLAUDE_MAX_TOKENS,
+        timeoutMs: opts.timeoutMs ?? DEFAULT_CLAUDE_TIMEOUT_MS,
+      });
+      if (stopReason === 'refusal') throw new LlmCallError('Claude từ chối trả lời.', 'error');
+      return text;
+    } catch (e) {
+      if (e instanceof LlmCallError) throw e;
+      if (e instanceof AnthropicCallError) throw new LlmCallError(e.message, e.kind);
+      throw e;
+    }
+  }
+
   private callDeepSeek(messages: ChatMessage[], opts: CompleteViaOptions): Promise<string> {
     return this.callChat(this.deepseekBase, this.deepseekKey, this.deepseekModel, 'DeepSeek', messages, opts);
   }
@@ -246,4 +290,24 @@ export class LlmClient {
     if (!text) throw new Error(`${label} trả về rỗng.`);
     return String(text).trim();
   }
+}
+
+/** Nửa cặp surrogate lẻ (chữ bị cắt giữa emoji) làm Messages API trả 400 "no low surrogate", nên bỏ chúng; emoji nguyên vẹn giữ nguyên. */
+function wellFormed(text: string): string {
+  return text.replace(/[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g, '');
+}
+
+/** Bỏ lượt rỗng (API đòi content không rỗng) và lượt trợ lý mở đầu (lượt đầu phải là user), gộp các lượt cùng vai liền nhau; tin `system` đã tách riêng nên bỏ qua. */
+function toAnthropicTurns(messages: ChatMessage[]): AnthropicTurn[] {
+  const turns: AnthropicTurn[] = [];
+  for (const m of messages) {
+    if (m.role === 'system') continue;
+    const content = wellFormed(m.content);
+    if (content.trim() === '') continue;
+    const last = turns[turns.length - 1];
+    if (!last && m.role === 'assistant') continue;
+    if (last && last.role === m.role) last.content = `${last.content}\n\n${content}`;
+    else turns.push({ role: m.role, content });
+  }
+  return turns;
 }
