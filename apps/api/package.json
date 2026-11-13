@@ -21,6 +21,7 @@
     "prisma:studio": "prisma studio",
     "reconcile:points": "tsx scripts/reconcile-points.ts",
     "reconcile:wallet": "tsx scripts/reconcile-wallet.ts",
+    "wp-image:sync": "tsx scripts/wp-image-sync.ts",
     "go-live:check": "tsx scripts/go-live-check.ts"
   },
   "prisma": {

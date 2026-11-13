@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
-import { isIP } from 'node:net';
+import { lookup as dnsLookup } from 'node:dns';
+import { isIP, type LookupFunction } from 'node:net';
 import { UPLOAD_IMAGE_HOSTS } from '../../common/uploaded-image';
 
 /**
@@ -73,6 +74,21 @@ export function isPrivateAddress(address: string): boolean {
   }
   return true;
 }
+
+/**
+ * Phân giải DNS rồi mới kết nối, và từ chối địa chỉ nội bộ ngay ở đây: địa chỉ được kiểm là đúng địa chỉ sẽ được nối tới.
+ * Node 20+ gọi lookup với all: true (thử nhiều địa chỉ), nên giữ riêng các địa chỉ công cộng.
+ */
+export const safeLookup: LookupFunction = (hostname, options, callback) => {
+  dnsLookup(hostname, options, (err, address, family) => {
+    if (err) return callback(err, '', 4);
+    if (Array.isArray(address)) {
+      const safe = address.filter((a) => !isPrivateAddress(a.address));
+      return safe.length > 0 ? callback(null, safe) : callback(new Error('blocked address') as NodeJS.ErrnoException, '', 4);
+    }
+    return isPrivateAddress(address) ? callback(new Error('blocked address') as NodeJS.ErrnoException, '', 4) : callback(null, address, family);
+  });
+};
 
 /** Client nhận webp thì trả webp, không thì jpeg. */
 export function negotiateFormat(accept: string | undefined): ResizeFormat {

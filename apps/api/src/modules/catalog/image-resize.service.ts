@@ -1,6 +1,4 @@
 import { HttpException, BadRequestException, BadGatewayException, Injectable, Optional, Logger, NotFoundException, PayloadTooLargeException, ServiceUnavailableException } from '@nestjs/common';
-import { lookup as dnsLookup } from 'node:dns';
-import type { LookupFunction } from 'node:net';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { request as httpsRequest } from 'node:https';
@@ -20,9 +18,9 @@ import {
   MAX_SOURCE_PIXELS,
   cacheKey,
   isAllowedWidth,
-  isPrivateAddress,
   parseOwnImagePath,
   parseRemoteSource,
+  safeLookup,
   type ResizeFormat,
 } from './image-resize';
 
@@ -31,21 +29,6 @@ export interface ResizedImage {
   mime: string;
   etag: string;
 }
-
-/**
- * Phân giải DNS rồi mới kết nối, và từ chối địa chỉ nội bộ ngay ở đây: địa chỉ được kiểm là đúng địa chỉ sẽ được nối tới.
- * Node 20+ gọi lookup với all: true (thử nhiều địa chỉ), nên giữ riêng các địa chỉ công cộng.
- */
-export const safeLookup: LookupFunction = (hostname, options, callback) => {
-  dnsLookup(hostname, options, (err, address, family) => {
-    if (err) return callback(err, '', 4);
-    if (Array.isArray(address)) {
-      const safe = address.filter((a) => !isPrivateAddress(a.address));
-      return safe.length > 0 ? callback(null, safe) : callback(new Error('blocked address') as NodeJS.ErrnoException, '', 4);
-    }
-    return isPrivateAddress(address) ? callback(new Error('blocked address') as NodeJS.ErrnoException, '', 4) : callback(null, address, family);
-  });
-};
 
 const MAX_CONCURRENT_JOBS = 4;
 /** Hàng đợi chờ xử lý tối đa: đầy thì 503 để RAM (mỗi việc giữ tới 8 MB nguồn) không phình theo số URL khác nhau. */

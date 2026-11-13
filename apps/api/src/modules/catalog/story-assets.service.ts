@@ -6,8 +6,7 @@ import { request as httpRequest } from 'node:http';
 import { request as httpsRequest } from 'node:https';
 import sharp from 'sharp';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MAX_SOURCE_PIXELS } from './image-resize';
-import { safeLookup } from './image-resize.service';
+import { MAX_SOURCE_PIXELS, safeLookup } from './image-resize';
 import { cutoutWhite } from './story-cutout';
 
 export const STORY_ASSETS_MAX_IMAGES = 12;

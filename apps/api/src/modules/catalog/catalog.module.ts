@@ -21,6 +21,8 @@ import { CategoryAdminController } from './category-admin.controller';
 import { CategoryAdminService } from './category-admin.service';
 import { ProductCategoryAdminController } from './product-category-admin.controller';
 import { ProductCategoryAdminService } from './product-category-admin.service';
+import { WpImageSyncController } from './wp-image-sync.controller';
+import { WpImageSyncService } from './wp-image-sync.service';
 import { ImageRegistryModule } from './image-registry.module';
 import { FlashSaleModule } from '../flash-sale/flash-sale.module';
 import { OrdersModule } from '../orders/orders.module';
@@ -29,8 +31,8 @@ import { AiAdvisorModule } from '../ai-advisor/ai-advisor.module';
 
 @Module({
   imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule, AiAdvisorModule],
-  controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, PublicImageController, ImageResizeController],
-  providers: [CatalogService, HomeService, CategoryAdminService, ProductCategoryAdminService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, PublicImageService, ImageResizeService],
+  controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, WpImageSyncController, PublicImageController, ImageResizeController],
+  providers: [CatalogService, HomeService, CategoryAdminService, ProductCategoryAdminService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, WpImageSyncService, PublicImageService, ImageResizeService],
   exports: [CatalogService, ImageResizeService],
 })
 export class CatalogModule {}
