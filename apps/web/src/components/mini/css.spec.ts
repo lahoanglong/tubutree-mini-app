@@ -71,8 +71,28 @@ describe('mini.css không đổi giao diện máy tính', () => {
 
   it('điện thoại: body cắt tràn ngang vì dải PageHeader tràn bằng 100vw (gồm cả thanh cuộn của trình duyệt máy tính thu hẹp)', () => {
     const globals = strip(read(join(dir, '../../app/globals.css')));
-    const phone = [...globals.matchAll(/@media \(max-width: 767px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    const phone = [...globals.matchAll(/@media \(max-width: 767\.98px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
     expect(phone).toMatch(/body\s*\{[^}]*overflow-x:\s*clip/);
+  });
+
+  it('globals.css: từ md hàng .scroll-x không vẽ thanh cuộn 6px (chuột vẫn cuộn được)', () => {
+    const globals = strip(read(join(dir, '../../app/globals.css')));
+    const md = [...globals.matchAll(/@media \(min-width: 768px\) \{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
+    expect(md).toMatch(/\.scroll-x\s*\{[^}]*scrollbar-width:\s*none/);
+    expect(md).toMatch(/\.scroll-x::-webkit-scrollbar\s*\{[^}]*display:\s*none/);
+  });
+
+  it('globals.css: màn cảm ứng và dưới md chữ ô nhập luôn 16px (Safari iOS/iPad không tự phóng to khi lấy nét)', () => {
+    const globals = strip(read(join(dir, '../../app/globals.css')));
+    const m = /@media \(pointer: coarse\), \(max-width: 767\.98px\) \{([\s\S]*?)\n\}/.exec(globals);
+    expect(m).not.toBeNull();
+    expect(m![1]).toMatch(/input:not\([^)]*\)[\s\S]*select[\s\S]*textarea\s*\{[^}]*font-size:\s*16px\s*!important/);
+  });
+
+  it('globals.css: --header-h khai trên :root (0px dưới md; từ md = hàng 6,75rem + 2px viền + vùng an toàn, đúng chiều cao SiteHeader)', () => {
+    const globals = strip(read(join(dir, '../../app/globals.css')));
+    expect(globals).toMatch(/:root\s*\{\s*--header-h:\s*0px;/);
+    expect(globals).toMatch(/--header-h:\s*calc\(6\.75rem \+ 2px \+ env\(safe-area-inset-top, 0px\)\)/);
   });
 });
 

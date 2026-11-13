@@ -129,10 +129,11 @@ describe('SiteSearch', () => {
     expect(push).not.toHaveBeenCalled();
   });
 
-  it('trên chính trang danh mục thì ẩn: trang đó có ô tìm riêng kèm gợi ý, không để hai ô tìm trùng tên', () => {
+  it('trên chính trang danh mục vẫn hiện: header luôn có đường tìm kiếm (ô tìm riêng của trang chỉ dựng dưới md, nơi header ẩn)', () => {
     nav.pathname = '/san-pham';
     const { container } = mount();
-    expect(container.querySelector('form')).toBeNull();
+    expect(container.querySelector('form[role="search"]')).not.toBeNull();
+    expect(container.querySelector('input[type="search"]')).not.toBeNull();
   });
 
   it('không có JS vẫn tìm được: form GET về /san-pham với tham số q', () => {

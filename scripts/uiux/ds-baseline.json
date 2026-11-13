@@ -5,7 +5,7 @@
    "open-snackbar": {
     "components/checkout/order-success.tsx": 4,
     "components/checkout/use-coupon-hint.ts": 4,
-    "components/storefront-builder/config-sheet.tsx": 7,
+    "components/storefront-builder/config-sheet.tsx": 6,
     "components/storefront-builder/profile-sheet.tsx": 5,
     "components/storefront-builder/quest-panel.tsx": 5,
     "components/storefront-pickers.tsx": 4,
@@ -95,15 +95,9 @@
     "app/cong-dong/[id]/page.tsx": 1,
     "app/gio-hang/page.tsx": 1,
     "app/mua-chung/group-buy-view.tsx": 1,
-    "app/tai-khoan/page.tsx": 2,
-    "app/tai-khoan/yeu-thich/quick-add.tsx": 1,
     "app/thanh-toan/bank-transfer-panel.tsx": 1,
     "components/affiliate/storefront-owner.tsx": 1,
-    "components/affiliate/storefront-signup.tsx": 1,
-    "components/catalog/wishlist-heart.tsx": 1,
-    "components/coupon-box.tsx": 1,
-    "components/order-mobile/mobile-ui.tsx": 1,
-    "lib/phone-ui.ts": 1
+    "components/affiliate/storefront-signup.tsx": 1
    },
    "strike-element": {
     "app/merchant/product-form.tsx": 1,
@@ -182,7 +176,7 @@
   "apps/web/src/app/thanh-toan/chuyen-khoan/[code]/page.tsx": 7,
   "apps/web/src/app/thanh-toan/invoice-section.tsx": 2,
   "apps/web/src/app/thanh-toan/page.tsx": 68,
-  "apps/web/src/app/tu-van/page.tsx": 10,
+  "apps/web/src/app/tu-van/page.tsx": 9,
   "apps/web/src/app/uu-dai/page.tsx": 1,
   "apps/web/src/app/vuon-xanh/page.tsx": 1,
   "apps/web/src/components/account/account-deletion-section.tsx": 4,

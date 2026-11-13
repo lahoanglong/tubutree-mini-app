@@ -134,9 +134,9 @@ describe('trang thương hiệu /brand/[slug] — khung shop giống Mini App', 
     expect(avatar.textContent).toBe('');
   });
 
-  it('đầu shop nằm trong lưới StoreLayout: bìa là ô lưới ở lg (ShopHeader inStoreGrid), không rơi về bố cục điện thoại', async () => {
+  it('đầu shop nằm trong lưới StoreLayout: bìa là ô lưới từ md (ShopHeader inStoreGrid), không rơi về bố cục điện thoại', async () => {
     const box = await html();
-    expect(box.querySelector('[data-testid="shop-cover"]')!.className).toContain('lg:col-start-1');
+    expect(box.querySelector('[data-testid="shop-cover"]')!.className).toContain('md:col-start-1');
   });
 
   it('hàng số liệu có số sản phẩm và người theo dõi; tab Shop, Sản phẩm (1), Câu chuyện', async () => {

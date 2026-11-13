@@ -33,6 +33,7 @@ import { ProductGridSkeleton } from '@/components/ui/skeleton';
 import { BrowsePager, pagedHref } from './browse-pager';
 import { PhoneCartButton } from '@/components/phone-cart-button';
 import { phoneBrandText } from '@/lib/phone-ui';
+import { MD_UP, useMediaQuery } from '@/lib/use-media-query';
 import { ActiveFilters } from './active-filters';
 import { BrowseHub } from './browse-hub';
 import { CategoryChipRow } from './category-chip-row';
@@ -79,7 +80,10 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const router = useRouter();
   const { state, urlKey, focusSearch, page, update, consumeFocus } = useBrowseState();
   const inputRef = useRef<HTMLInputElement>(null);
-  const hubState = isBrowseHub(state, page);
+  // Từ md (máy tính bảng, máy tính) không có hub: trang đệm thưa với một nút "Xem tất cả" rộng cả khung không giúp gì khi có chỗ cho cột lọc và lưới. Gốc
+  // /san-pham ở đó là danh sách "tất cả" (bộ lọc + lưới), còn HTML dựng sẵn (ISR) và lượt hydrate đầu vẫn là hub (`useMediaQuery` trả false), nên hub chỉ bị `md:hidden` che.
+  const wide = useMediaQuery(MD_UP);
+  const hubState = isBrowseHub(state, page) && !wide;
   const listTopRef = useRef<HTMLDivElement>(null);
   const sortStickyRef = useRef<HTMLDivElement>(null);
   /**
@@ -280,7 +284,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
         e.preventDefault();
         commit(draft);
       }}
-      className="flex items-center gap-2 pb-2 tubu-bleed max-md:sticky max-md:top-0 max-md:z-20 max-md:bg-[var(--color-bg-canvas)] max-md:px-4 max-md:py-1.5 lg:max-w-2xl"
+      className="flex items-center gap-2 pb-2 tubu-bleed md:hidden max-md:sticky max-md:top-0 max-md:z-20 max-md:bg-[var(--color-bg-canvas)] max-md:px-4 max-md:py-1.5 lg:max-w-2xl"
     >
       <div className="relative min-w-0 flex-1">
         <label htmlFor="browse-q" className="sr-only">
@@ -373,15 +377,17 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             }}
           />
         ) : hubState ? (
-          <BrowseHub
-            entries={entries}
-            categoriesLoading={categoriesQ.isLoading}
-            brands={brandsQ.data}
-            initialBestSellers={bestSellers}
-            onPickCategory={pickHubCategory}
-            onPickAll={() => openFromHub({ all: true })}
-            onPickBrand={(brand) => openFromHub({ brands: [brand] })}
-          />
+          <div className="md:hidden">
+            <BrowseHub
+              entries={entries}
+              categoriesLoading={categoriesQ.isLoading}
+              brands={brandsQ.data}
+              initialBestSellers={bestSellers}
+              onPickCategory={pickHubCategory}
+              onPickAll={() => openFromHub({ all: true })}
+              onPickBrand={(brand) => openFromHub({ brands: [brand] })}
+            />
+          </div>
         ) : (
           <>
             {/* Dính ở khung bọc, không ở chính SortBar: cha của phần tử dính phải cao bằng cả danh sách. Từ lg cột lọc đã có nên nút Lọc ẩn đi (`!hidden` vì nút có `display` ở style). */}

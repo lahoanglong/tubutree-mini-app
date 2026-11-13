@@ -93,33 +93,33 @@ describe('ShopHeader (web)', () => {
     expect(h1.style.minWidth).toBe('0px');
   });
 
-  it('mặc định (ngoài StoreLayout) không có lớp lg: nào: bố cục điện thoại giữ ở mọi khổ, bìa và avatar không rời nhau', () => {
+  it('mặc định (ngoài StoreLayout) không có lớp md: nào: bố cục điện thoại giữ ở mọi khổ, bìa và avatar không rời nhau', () => {
     mount(<ShopHeader title="Shop" verified badges={<span>Chính hãng</span>} action={<button type="button">Theo dõi</button>} note="Đồ xanh" />);
     const root = q('shop-cover')!.parentElement!;
     const lgClasses = Array.from(root.querySelectorAll<HTMLElement>('*'))
       .concat(root)
       .flatMap((el) => (typeof el.className === 'string' ? el.className.split(/\s+/) : []))
-      .filter((c) => c.startsWith('lg:'));
+      .filter((c) => c.startsWith('md:'));
     expect(lgClasses).toEqual([]);
     expect(q('shop-cover')!.className.split(/\s+/)).toContain(`h-[${SHOP_COVER_HEIGHT}px]`);
     expect(q('shop-avatar')!.parentElement!.parentElement!.className.split(/\s+/)).toContain('-mt-7');
   });
 
-  it('inStoreGrid: từ lg gốc là contents: bìa cột trái cao hai hàng, thông tin cột phải, avatar và nút nằm trên hàng tên, không đè mép bìa', () => {
+  it('inStoreGrid: từ md gốc là contents: bìa cột trái cao hai hàng, thông tin cột phải, avatar và nút nằm trên hàng tên, không đè mép bìa', () => {
     mount(<ShopHeader inStoreGrid title="Shop" badges={<span>Chính hãng</span>} action={<button type="button">Theo dõi</button>} note="Đồ xanh" />);
     const cover = q('shop-cover')!;
     const root = cover.parentElement!;
-    expect(root.className.split(/\s+/)).toContain('lg:contents');
+    expect(root.className.split(/\s+/)).toContain('md:contents');
     const coverCls = cover.className.split(/\s+/);
-    expect(coverCls).toEqual(expect.arrayContaining(['lg:col-start-1', 'lg:row-span-2', 'lg:row-start-1', 'lg:h-auto', `h-[${SHOP_COVER_HEIGHT}px]`]));
+    expect(coverCls).toEqual(expect.arrayContaining(['md:col-start-1', 'md:row-span-2', 'md:row-start-1', 'md:h-auto', `h-[${SHOP_COVER_HEIGHT}px]`]));
     const info = cover.nextElementSibling as HTMLElement;
-    expect(info.className.split(/\s+/)).toEqual(expect.arrayContaining(['lg:col-start-2', 'lg:row-start-1', 'lg:grid']));
+    expect(info.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-1', 'md:grid']));
     const avatarRow = q('shop-avatar')!.parentElement!.parentElement!;
-    expect(avatarRow.className.split(/\s+/)).toEqual(expect.arrayContaining(['-mt-7', 'lg:contents']));
-    expect(q('shop-avatar')!.parentElement!.className.split(/\s+/)).toContain('lg:col-start-1');
+    expect(avatarRow.className.split(/\s+/)).toEqual(expect.arrayContaining(['-mt-7', 'md:contents']));
+    expect(q('shop-avatar')!.parentElement!.className.split(/\s+/)).toContain('md:col-start-1');
     const nameCell = document.querySelector('h1')!.parentElement!;
-    expect(nameCell.className.split(/\s+/)).toEqual(expect.arrayContaining(['lg:col-start-2', 'lg:row-start-1', 'lg:mt-0']));
-    // Không còn style nội tuyến nào đè được lớp lg: ở phần tử xếp lưới.
+    expect(nameCell.className.split(/\s+/)).toEqual(expect.arrayContaining(['md:col-start-2', 'md:row-start-1', 'md:mt-0']));
+    // Không còn style nội tuyến nào đè được lớp md: ở phần tử xếp lưới.
     for (const el of [cover, info, nameCell, avatarRow]) expect(el.style.display).toBe('');
     expect(info.style.padding).toBe('');
   });

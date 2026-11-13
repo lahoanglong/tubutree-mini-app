@@ -22,6 +22,8 @@ function operatorLine(company: SupportContact['company']): string | null {
 const DISCOVER_LINKS = [
   { to: '/san-pham', label: 'Danh mục sản phẩm' },
   { to: '/uu-dai', label: 'Ưu đãi' },
+  { to: '/gio-vang', label: 'Giờ vàng' },
+  { to: '/ma-giam-gia', label: 'Mã giảm giá' },
   { to: '/mua-chung', label: 'Mua chung' },
   { to: '/cong-dong', label: 'Cộng đồng' },
   { to: '/cau-chuyen', label: 'Câu chuyện thương hiệu' },

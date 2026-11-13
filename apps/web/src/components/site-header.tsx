@@ -42,7 +42,7 @@ export default function SiteHeader() {
         </Link>
 
         {/* data-site-search: html[data-tenant-host] ẩn khung này từ khung hình đầu trên host gian hàng CTV (globals.css).
-            Ở /san-pham ô tìm của header không vẽ (trang có ô tìm riêng kèm gợi ý) nhưng khung vẫn giữ chỗ, để chuông, giỏ, tài khoản không nhảy giữa các trang. */}
+            Khung luôn giữ chỗ (kể cả host gian hàng CTV, nơi ô bị ẩn) để chuông, giỏ, tài khoản không nhảy giữa các trang. */}
         <div data-site-search className="flex min-w-0 flex-1 md:max-w-2xl">
           <SiteSearch />
         </div>
@@ -93,7 +93,7 @@ export default function SiteHeader() {
 
       {/* Máy tính: các mục gốc và chức năng chương trình (mục chưa làm xong bị ẩn). Trang chủ là logo, Cá nhân là nút tài khoản nên không lặp. */}
       <nav aria-label="Điều hướng chính" data-desktop-nav className="border-t border-stone-100">
-        <ul className={`${PAGE_WIDE} flex h-11 items-center gap-1 overflow-x-auto text-sm`}>
+        <ul className={`${PAGE_WIDE} scroll-x h-11 items-center gap-1 text-sm`}>
           {readyDesktopNav({ wasteVisible }).map((t) => {
             const active = pathname === t.path || pathname.startsWith(`${t.path}/`);
             return (

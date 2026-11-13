@@ -177,7 +177,7 @@ export function useWishlistQuickAdd(): { buttonFor: (p: ProductCard) => ReactNod
         onClick={(e) => void quickAdd(p, { origin: e.currentTarget })}
         className="inline-flex h-11 w-11 items-center justify-center text-stone-700"
       >
-        <span className={`flex h-8 w-8 items-center justify-center rounded-full bg-stone-0 shadow-[var(--elevation-1)] ${busyId === p.id ? 'opacity-60' : ''}`}>
+        <span className={`flex h-8 w-8 items-center justify-center rounded-full bg-stone-0 shadow-e1 ${busyId === p.id ? 'opacity-60' : ''}`}>
           <ShoppingCart className="h-[18px] w-[18px]" strokeWidth={1.9} aria-hidden="true" />
         </span>
       </button>

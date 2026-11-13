@@ -23,29 +23,29 @@ describe('StoreLayout', () => {
     r.unmount();
   });
 
-  it('khung lưới chỉ có lớp lg: dưới md không thêm viền, nền hay đệm; thanh tab giữ được dính (ô bọc là contents)', () => {
+  it('khung lưới chỉ có lớp md: dưới md không thêm viền, nền hay đệm; thanh tab giữ được dính (ô bọc là contents)', () => {
     const r = mountIt();
     const root = r.container.querySelector<HTMLElement>('[data-testid="store-layout"]')!;
     const own = root.className.split(/\s+/).filter(Boolean);
-    expect(own.some((c) => c.startsWith('lg:'))).toBe(true);
-    expect(own.filter((c) => !c.startsWith('lg:'))).toEqual([]);
+    expect(own.some((c) => c.startsWith('md:'))).toBe(true);
+    expect(own.filter((c) => !c.startsWith('md:'))).toEqual([]);
     const tabsCell = r.container.querySelector('[data-testid="t"]')!.parentElement!;
-    expect(tabsCell.className).toContain('max-lg:contents');
+    expect(tabsCell.className.split(/\s+/)).toContain('contents');
     r.unmount();
   });
 
-  it('từ lg đầu shop là một thẻ lưới hai cột: bìa trái cao cả hai hàng, số liệu nằm cột phải hàng dưới, cùng một thẻ với đầu shop', () => {
+  it('từ md đầu shop là một thẻ lưới hai cột: bìa trái cao cả hai hàng, số liệu nằm cột phải hàng dưới, cùng một thẻ với đầu shop', () => {
     const r = mountIt();
     const head = r.container.querySelector<HTMLElement>('[data-testid="store-head"]')!;
     const cls = head.className.split(/\s+/);
-    expect(cls).toEqual(expect.arrayContaining(['lg:grid', 'lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]', 'lg:grid-rows-[1fr_auto]', 'lg:rounded-card', 'lg:border']));
-    expect(cls.filter((c) => !c.startsWith('lg:'))).toEqual(['max-lg:contents']);
+    expect(cls).toEqual(expect.arrayContaining(['md:grid', 'md:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]', 'md:grid-rows-[1fr_auto]', 'md:rounded-card', 'md:border']));
+    expect(cls.filter((c) => !c.startsWith('md:'))).toEqual(['contents']);
     expect(head.contains(r.container.querySelector('[data-testid="h"]'))).toBe(true);
     expect(head.contains(r.container.querySelector('[data-testid="s"]'))).toBe(true);
     expect(head.contains(r.container.querySelector('[data-testid="t"]'))).toBe(false);
     const statsCell = r.container.querySelector('[data-testid="s"]')!.parentElement!;
-    expect(statsCell.className).toEqual(expect.stringContaining('lg:col-start-2'));
-    expect(statsCell.className).toEqual(expect.stringContaining('lg:row-start-2'));
+    expect(statsCell.className).toEqual(expect.stringContaining('md:col-start-2'));
+    expect(statsCell.className).toEqual(expect.stringContaining('md:row-start-2'));
     expect(statsCell.className.split(/\s+/)).toContain('contents');
     r.unmount();
   });

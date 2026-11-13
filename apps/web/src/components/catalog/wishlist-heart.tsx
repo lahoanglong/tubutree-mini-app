@@ -118,7 +118,7 @@ export function WishlistHeart({
       className={`inline-flex h-11 w-11 items-center justify-center text-stone-600 ${floating ? 'absolute right-0.5 top-0.5' : 'rounded-control hover:bg-stone-50'} ${className}`}
     >
       {floating ? (
-        <span data-testid="heart-disc" className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-0 shadow-[var(--elevation-1)]">
+        <span data-testid="heart-disc" className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-0 shadow-e1">
           <Heart className={iconClass} strokeWidth={1.75} aria-hidden="true" onAnimationEnd={() => setPopping(false)} />
         </span>
       ) : (

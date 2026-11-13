@@ -119,7 +119,7 @@ function Stat({ label, value, href }: { label: string; value: string; href: stri
     <Link
       ref={cell}
       href={href}
-      className="tubu-press block min-h-11 rounded-card bg-[var(--color-bg-surface)] px-1 py-2.5 text-center shadow-[var(--elevation-1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
+      className="tubu-press block min-h-11 rounded-card bg-[var(--color-bg-surface)] px-1 py-2.5 text-center shadow-e1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-forest-600"
     >
       <Text
         variant={look.variant}
@@ -287,7 +287,8 @@ function AccountContent() {
       </div>
       <h1 className="sr-only">Cá nhân</h1>
 
-      <div className="md:mx-auto md:mt-3 md:max-w-2xl lg:mx-0">
+      <div className="md:mt-3 md:items-start lg:grid lg:grid-cols-2 lg:gap-4 xl:grid-cols-3">
+       <div className="lg:col-span-full">
         <div data-surface="inverse" className="relative bg-[linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))] p-4 pb-7 text-[color:var(--color-text-inverse)] md:rounded-card">
           {chatEnabled && (
             <Link
@@ -347,8 +348,9 @@ function AccountContent() {
           <Stat label={homeCopy.profile.statWallet} value={formatVnd(balances.walletBalance)} href="/tai-khoan/vi-tubu" />
           <Stat label={homeCopy.profile.statCoupons} value={couponsQ.data ? homeCopy.profile.couponsCount(couponsQ.data.length) : '—'} href="/uu-dai?section=coupons" />
         </div>
+       </div>
 
-        <section aria-label={homeCopy.profile.ordersTitle} className="px-4 pt-3">
+        <section aria-label={homeCopy.profile.ordersTitle} className="px-4 pt-3 md:px-0 lg:pt-0">
           <Card padding={12}>
             <div className="mb-2 flex items-center justify-between">
               <Heading variant="title-sm" as="h2">
@@ -409,7 +411,7 @@ function AccountContent() {
         </section>
 
         {code && (
-          <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={homeCopy.profile.referralTitle} className="px-4 pt-3">
+          <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={homeCopy.profile.referralTitle} className="px-4 pt-3 md:px-0 lg:pt-0">
             <Card padding={12}>
               <Heading variant="title-sm" as="h2">
                 {homeCopy.profile.referralTitle}
@@ -460,11 +462,11 @@ function AccountContent() {
         )}
 
         {menu.map((section, gi) => (
-          <section key={section.group} aria-labelledby={`account-g${gi}`} className="mx-4 mt-3">
+          <section key={section.group} aria-labelledby={`account-g${gi}`} className="mx-4 mt-3 md:mx-0 lg:mt-0">
             <h2 id={`account-g${gi}`} className="mb-1.5 ml-1 text-caption font-semibold uppercase tracking-wide text-[color:var(--color-text-tertiary)]">
               {section.group}
             </h2>
-            <ul className="divide-y divide-[var(--color-border-subtle)] overflow-hidden rounded-card bg-[var(--color-bg-surface)] shadow-[var(--elevation-1)]">
+            <ul className="divide-y divide-[var(--color-border-subtle)] overflow-hidden rounded-card bg-[var(--color-bg-surface)] shadow-e1">
               {section.items.map((item) => {
                 const isNotif = item.to === '/tai-khoan/thong-bao';
                 const isChat = item.to === '/ho-tro/chat';
@@ -480,7 +482,7 @@ function AccountContent() {
           </section>
         ))}
 
-        <div className="max-md:hidden">
+        <div className="max-md:hidden lg:col-span-full">
           <OrdersSection />
         </div>
 

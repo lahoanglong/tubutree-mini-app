@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import Link from 'next/link';
 import { useIsMutating, useMutation } from '@tanstack/react-query';
@@ -64,6 +64,14 @@ function Advisor({ userId }: { userId: string }) {
   const endRef = useRef<HTMLDivElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   useStickyBarOffset(barRef);
+  const fieldRef = useRef<HTMLTextAreaElement>(null);
+  // Ô nhập bắt đầu ở 44px (một dòng) và giãn theo chữ tới trần 160px rồi mới cuộn; gửi xong (draft rỗng) co lại một dòng.
+  useLayoutEffect(() => {
+    const el = fieldRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(Math.max(el.scrollHeight, 44), 160)}px`;
+  }, [draft]);
   // Khoá đồng bộ: `pending` (useIsMutating) chỉ đúng sau lần vẽ kế, hai cú bấm gợi ý / Enter / Thử lại trong cùng khung hình đều thấy `pending` = false,
   // đều ghi tin của khách vào hội thoại và đều gọi chat. Nhả khi xong hay lỗi.
   const sendingRef = useRef(false);
@@ -119,7 +127,7 @@ function Advisor({ userId }: { userId: string }) {
   };
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col">
+    <div className="mx-auto flex max-w-2xl flex-col lg:max-w-4xl">
       <div role="log" aria-label="Cuộc trò chuyện" className="min-h-[50vh] py-3">
         {messages.length === 0 && (
           <div className="px-3 py-8 text-center">
@@ -141,7 +149,7 @@ function Advisor({ userId }: { userId: string }) {
         {messages.map((m, i) => (
           <div key={i} className={`mb-3 ${m.role === 'user' ? 'text-right' : 'text-left'}`}>
             <div
-              className={`inline-block max-w-[85%] whitespace-pre-wrap break-words rounded-card px-3 py-2 text-left text-sm ${
+              className={`inline-block max-w-[85%] lg:max-w-[70%] whitespace-pre-wrap break-words rounded-card px-3 py-2 text-left text-sm ${
                 m.role === 'user' ? 'bg-forest-600 text-stone-0' : 'bg-stone-0 text-stone-900 shadow-card'
               }`}
             >
@@ -155,7 +163,7 @@ function Advisor({ userId }: { userId: string }) {
               </div>
             )}
             {m.products && m.products.length > 0 && (
-              <div className="mt-2 flex max-w-md flex-col gap-1.5 text-left">
+              <div className="mt-2 flex max-w-md flex-col gap-1.5 text-left lg:max-w-lg">
                 {m.products.map((p) => (
                   <ProductRow key={p.id} p={p} />
                 ))}
@@ -176,7 +184,8 @@ function Advisor({ userId }: { userId: string }) {
 
       <div ref={barRef} data-sticky-bar className="sticky bottom-0 flex items-end gap-2 border-t border-stone-200 bg-stone-0 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:items-center">
         <textarea
-          className={`${ui.field} min-w-0 flex-1 resize-none py-2 max-md:min-h-[9rem]`}
+          ref={fieldRef}
+          className={`${ui.field} min-w-0 flex-1 resize-none py-2`}
           placeholder="Nhập câu hỏi…"
           aria-label="Nhập câu hỏi"
           value={draft}
