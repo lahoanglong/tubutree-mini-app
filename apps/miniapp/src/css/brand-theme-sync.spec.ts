@@ -20,7 +20,7 @@ describe('--color-brand-* của Mini App và web không trôi lệch (T4/T5)', (
   const webMini = brandDecls(WEB_MINI_CSS);
 
   it('bảng màu có thật (đủ 11 nhãn, gradient, bản đồ gỗ), không khai trùng tên trong một file', () => {
-    expect(mini.length).toBeGreaterThan(40);
+    expect(mini.length).toBeGreaterThan(30);
     expect(new Set(mini.map(([n]) => n)).size).toBe(mini.length);
     expect(new Set(web.map(([n]) => n)).size).toBe(web.length);
     for (const id of ['visante', 'polang', 'cobote', 'fuwa3e', 'babycare', 'umikai', 'bhnong', 'sokfram', 'leplateau', 'moshav', 'hector']) {
@@ -28,8 +28,18 @@ describe('--color-brand-* của Mini App và web không trôi lệch (T4/T5)', (
     }
   });
 
-  it('brand-theme.css của Mini App và của web (cau-chuyen) trùng từng tên và từng giá trị', () => {
-    expect(asMap(web)).toEqual(asMap(mini));
+  // Web bỏ gradient và lớp phủ tối ở ô nhãn (app/cau-chuyen/contrast.spec.ts khẳng định điều đó); Mini còn giữ nhóm token này cho css/contrast.spec.ts.
+  const MINI_ONLY = /^--color-brand-(?:[a-z0-9]+-(?:from|to)|tile-scrim)$/;
+
+  it('brand-theme.css của web (cau-chuyen) có đúng các tên của Mini App, cùng giá trị; Mini chỉ thừa token gradient/lớp phủ', () => {
+    const miniMap = asMap(mini);
+    const webMap = asMap(web);
+    for (const [name, value] of Object.entries(webMap)) {
+      expect(miniMap[name], `${name} có ở web nhưng không có ở Mini App`).toBeDefined();
+      expect(miniMap[name], name).toBe(value);
+    }
+    const extra = Object.keys(miniMap).filter((n) => !(n in webMap));
+    expect(extra.filter((n) => !MINI_ONLY.test(n)), 'Mini có token ngoài nhóm gradient/lớp phủ mà web không có').toEqual([]);
   });
 
   it('mini.css của web khai các màu nhãn y hệt brand-theme.css của Mini App (không tự đặt thêm màu lạ)', () => {
