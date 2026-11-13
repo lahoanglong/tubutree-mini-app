@@ -24,11 +24,16 @@ describe('inviteRewardLine', () => {
     expect(inviteRewardLine({ referrerPoints: 5_000, windowDays: 30 }, true)).toBe('Bạn nhận 5.000 Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai.');
   });
   it('API cũ chưa trả điểm thì nói chung, không hứa con số', () => {
-    for (const r of [null, undefined, {}, { referrerPoints: null }, { referrerPoints: 0 }]) {
+    for (const r of [null, undefined, {}, { referrerPoints: null }, { referrerPoints: 2.5 }, { referrerPoints: Number.NaN }]) {
       const text = inviteRewardLine(r, true);
       expect(text).toBe('Bạn nhận Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai.');
       expect(text).not.toMatch(/\d/);
     }
+  });
+  it('Admin tắt thưởng (máy chủ trả 0): không hứa Điểm Xanh, khối chỉ còn quà bạn mới', () => {
+    expect(inviteRewardLine({ referrerPoints: 0, minOrderAmount: 200_000, windowDays: 30 }, true)).toBe('');
+    expect(inviteRewardLine({ referrerPoints: -1 }, true)).toBe('');
+    expect(inviteBody(PROD, { referrerPoints: 0 }, true)).toBe('Bạn mới nhận mã 30.000đ cho đơn đầu từ 199k.');
   });
   it('CTV không nhận Điểm Xanh giới thiệu: không hứa thưởng', () => {
     expect(inviteRewardLine(RULES, false)).toBe('');

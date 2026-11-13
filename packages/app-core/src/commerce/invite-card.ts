@@ -33,11 +33,13 @@ export function inviteFriendGiftLine(offer: WelcomeOffer | null | undefined): st
 
 /**
  * Câu thưởng cho người mời. CTV (`earnsPoints` false) không nhận Điểm Xanh giới thiệu (chỉ hưởng hoa hồng) nên không có câu này: trả chuỗi rỗng,
- * không hứa thưởng mà máy chủ sẽ không trả.
+ * không hứa thưởng mà máy chủ sẽ không trả. Cũng rỗng khi máy chủ báo thưởng bằng 0 (Admin tắt `referral.referrer_reward_points`: không cấp điểm);
+ * chỉ khi máy chủ chưa trả số (API cũ) mới nói chung.
  */
 export function inviteRewardLine(rules: InviteRewardRules | null | undefined, earnsPoints: boolean): string {
   if (!earnsPoints) return '';
   const pts = rules?.referrerPoints;
+  if (typeof pts === 'number' && pts <= 0) return '';
   if (!posInt(pts)) return fillCopy('invite.rewardPlain');
   const min = rules?.minOrderAmount;
   const days = rules?.windowDays;
