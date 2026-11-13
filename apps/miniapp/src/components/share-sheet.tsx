@@ -10,6 +10,8 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { copyText } from '../utils/clipboard';
 import { miniAppLink } from '../utils/miniapp-link';
+import { usePublicConfig } from '../hooks/use-public-config';
+import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
 
 type ShareParams = Parameters<typeof shareLink>[0];
 
@@ -95,6 +97,7 @@ export function ShareSheet({
 }) {
   const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
+  const welcomeOffer = welcomeOfferOf(usePublicConfig());
   const path = basePath ?? `/${pathPrefix}/${slug}`;
   // Mã giới thiệu PHẢI đi kèm ở CẢ 2 lối chia sẻ. Trước đây chỉ `url` (nút Sao chép link) có
   // `?ref=`, còn nút "Chia sẻ qua Zalo" gửi `path` trần → khách mở từ Zalo mua hàng thì CTV
@@ -131,7 +134,7 @@ export function ShareSheet({
           onPress={() => {
             void lock.run('share', async () => {
               haptic('light');
-              await shareWithFallback({ title, description: captions[0] ?? '', thumbnail, path: sharePath }, url);
+              await shareWithFallback({ title, description: shareDescription(captions[0], welcomeOffer), thumbnail, path: sharePath }, url);
             });
           }}
         >

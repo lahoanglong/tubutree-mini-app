@@ -23,6 +23,8 @@ import { ProgressBar } from '../components/ui/progress-bar';
 import { Heading, Text } from '../components/ui/text';
 import { useShareWithFallback } from '../components/share-sheet';
 import { withReferral } from '../utils/share-link';
+import { usePublicConfig } from '../hooks/use-public-config';
+import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
 import { ProductThumb } from '../components/ui/product-thumb';
 
 /** Hộp chia sẻ của Zalo không có hạn: quá ngần này thì nhả khoá "Mời bạn bè" dù hộp chưa báo xong. */
@@ -58,6 +60,7 @@ export default function GroupBuyPage() {
   const ensurePhone = useAuthStore((s) => s.ensurePhone);
   const referralCode = user?.referralCode;
   const shareWithFallback = useShareWithFallback();
+  const welcomeOffer = welcomeOfferOf(usePublicConfig());
 
   const {
     data: groups,
@@ -160,7 +163,7 @@ export default function GroupBuyPage() {
       shareWithFallback(
         {
           title: `Mua chung ${g.product.name} giảm ${g.discountPct}%`,
-          description: `Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
+          description: shareDescription(`Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`, welcomeOffer),
           thumbnail: g.product.thumbnail ?? undefined,
           path: withReferral(`/group-buy/${g.id}`, referralCode),
         },

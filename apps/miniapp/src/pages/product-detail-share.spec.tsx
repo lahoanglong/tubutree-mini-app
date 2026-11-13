@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   shareWithFallback: vi.fn(),
   shareLink: vi.fn(),
   user: undefined as { referralCode: string } | undefined,
+  cfg: {} as Record<string, unknown>,
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -32,7 +33,7 @@ vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink, hasOA: false, openOAChat: vi.fn() }));
 vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.shareWithFallback }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ status: 'guest', login: vi.fn(), user: mocks.user }) }));
-vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ data: undefined }) }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }));
 vi.mock('../components/reviews-section', () => ({ ReviewsSection: () => null, Stars: () => null }));
 vi.mock('../components/wishlist-heart', () => ({ WishlistHeart: () => null }));
 vi.mock('../components/subscribe-sheet', () => ({ SubscribeSheet: () => null }));
@@ -51,6 +52,7 @@ describe('ProductDetailPage nút Chia sẻ', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.user = undefined;
+    mocks.cfg = { data: undefined };
     mocks.fetchProduct.mockResolvedValue({
       id: 'id-a', slug: 'a', brand: 'Tubu', name: 'Sản phẩm a', shortDesc: 'Mô tả ngắn', description: 'Mô tả',
       images: ['https://img/1.jpg'], thumbnail: 'https://img/thumb.jpg', basePrice: 100000, salePrice: 80000,
@@ -73,9 +75,25 @@ describe('ProductDetailPage nút Chia sẻ', () => {
     fireEvent.click(await screen.findByRole('button', { name: viText.product.share }));
     expect(mocks.shareLink).not.toHaveBeenCalled();
     expect(mocks.shareWithFallback).toHaveBeenCalledWith(
-      { title: 'Sản phẩm a', description: 'Mô tả ngắn', thumbnail: 'https://img/thumb.jpg', path: '/product/a' },
+      { title: 'Sản phẩm a', description: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Mô tả ngắn', thumbnail: 'https://img/thumb.jpg', path: '/product/a' },
       miniAppLink('/product/a'),
     );
+  });
+
+  it('có mã chào mừng ở cấu hình công khai: mô tả thẻ chia sẻ nêu đúng mã 30.000đ cho đơn đầu từ 199k', async () => {
+    mocks.cfg = { newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 } } };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/product/a']} future={FUTURE}>
+          <Routes>
+            <Route path="/product/:slug" element={<ProductDetailPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    fireEvent.click(await screen.findByRole('button', { name: viText.product.share }));
+    expect(mocks.shareWithFallback.mock.calls[0]![0].description).toBe('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree. Mô tả ngắn');
   });
 
   it('đã có tài khoản → link chia sẻ (Zalo lẫn dán tay) mang mã giới thiệu của người chia sẻ', async () => {

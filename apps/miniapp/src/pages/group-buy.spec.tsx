@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   getGroupBuy: vi.fn(),
   joinGroupBuy: vi.fn(),
   fetchActiveFlashSales: vi.fn(),
+  getPublicConfig: vi.fn(),
   shareWithFallback: vi.fn(),
   ensurePhone: vi.fn(),
   params: {} as { id?: string },
@@ -37,7 +38,7 @@ vi.mock('../services/groupbuy-api', () => ({
   getGroupBuy: mocks.getGroupBuy,
   joinGroupBuy: mocks.joinGroupBuy,
 }));
-vi.mock('../services/shop-api', () => ({ fetchActiveFlashSales: mocks.fetchActiveFlashSales }));
+vi.mock('../services/shop-api', () => ({ fetchActiveFlashSales: mocks.fetchActiveFlashSales, getPublicConfig: mocks.getPublicConfig }));
 vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.shareWithFallback }));
 vi.mock('../services/api', () => ({
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
@@ -86,6 +87,7 @@ beforeEach(() => {
   mocks.listGroupBuys.mockResolvedValue([GROUP('a'), GROUP('b', { joined: true })]);
   mocks.joinGroupBuy.mockResolvedValue({ joined: true, currentSize: 3, status: 'OPEN' });
   mocks.shareWithFallback.mockResolvedValue(undefined);
+  mocks.getPublicConfig.mockResolvedValue({});
 });
 
 describe('GroupBuyPage — hành vi giữ nguyên khi chuyển DS v2', () => {
@@ -359,6 +361,27 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     const [params, fallback] = mocks.shareWithFallback.mock.calls[0] as [Record<string, string>, string];
     expect(params.path).toBe('/group-buy/mine?ref=ABCD1234');
     expect(fallback).toContain('ABCD1234');
+  });
+
+  it('mô tả thẻ chia sẻ nhóm mở bằng ưu đãi khách mới: có mã chào mừng thật thì nêu đúng số, chưa có thì câu không số', async () => {
+    mocks.listGroupBuys.mockResolvedValue([GROUP('mine', { joined: true, isOwner: true })]);
+    const { unmount } = renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Mời bạn bè' }));
+    const plain = (mocks.shareWithFallback.mock.calls[0] as [Record<string, string>, string])[0].description!;
+    expect(plain.startsWith('Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Còn thiếu ')).toBe(true);
+    unmount();
+    mocks.shareWithFallback.mockClear();
+    mocks.getPublicConfig.mockResolvedValue({ newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 } } });
+    renderPage();
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalledTimes(2));
+    await screen.findByRole('button', { name: 'Mời bạn bè' });
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Mời bạn bè' }));
+    const withOffer = (mocks.shareWithFallback.mock.calls[0] as [Record<string, string>, string])[0].description!;
+    expect(withOffer.startsWith('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree. Còn thiếu ')).toBe(true);
+    expect(withOffer.length).toBeLessThanOrEqual(400);
   });
 
   it('thành viên (không phải người mở) cũng mời được bạn; nhóm chưa tham gia thì không có nút mời', async () => {

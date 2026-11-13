@@ -7,6 +7,9 @@ import type { HarvestCouponTerms, HarvestSpecies } from '../services/game-api';
 import { SessionUnavailable, useLoginWithNotice } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { useAuthStore } from '../store/auth';
+import { withReferral } from '../utils/share-link';
+import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
 import { useCouponUse } from '../hooks/use-coupon-use';
 import { ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
@@ -55,6 +58,7 @@ export default function GamePage() {
   const couponUse = useCouponUse();
   const navigate = useNavigate();
   const publicConfig = usePublicConfig();
+  const referralCode = useAuthStore((s) => s.user?.referralCode);
   const authed = phase === 'authenticated';
 
   const [tab, setTab] = useState<GameTabKey>('today');
@@ -115,7 +119,7 @@ export default function GamePage() {
   };
   const shareHarvest = () => {
     const t = gameNewbieCopy.harvest;
-    return shareLink({ title: t.shareTitle, description: t.shareDescription, path: '/game' }).catch(() => undefined);
+    return shareLink({ title: t.shareTitle, description: shareDescription(t.shareDescription, welcomeOfferOf(publicConfig)), path: withReferral('/game', referralCode) }).catch(() => undefined);
   };
   const nextQuiz = () => {
     if (reveal) setAnsweredIds((prev) => new Set(prev).add(reveal.quizId));

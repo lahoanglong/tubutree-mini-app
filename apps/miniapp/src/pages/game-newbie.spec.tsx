@@ -50,7 +50,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => ({ isLoaded: true, waste: { enabled: false } }) }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: 'authenticated', user: { id: 'u1' }, login: vi.fn() };
+    const state = { status: 'authenticated', user: { id: 'u1', referralCode: 'GAME1' }, login: vi.fn() };
     return sel ? sel(state) : state;
   },
 }));
@@ -421,7 +421,10 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Tưới hết (65💧)' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ với bạn bè' }));
-    expect(bridge.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/game', title: expect.any(String) }));
+    // Cùng các màn khác: link mời mang mã giới thiệu của người chia sẻ, và thẻ mở bằng ưu đãi khách mới (không có số thì câu không số).
+    expect(bridge.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/game?ref=GAME1', title: expect.any(String) }));
+    const sent = bridge.shareLink.mock.calls.at(-1)![0] as { description: string };
+    expect(sent.description.startsWith('Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. ')).toBe(true);
     expect(screen.queryByRole('button', { name: /Chia sẻ lên Cộng đồng/ })).not.toBeInTheDocument();
   });
 

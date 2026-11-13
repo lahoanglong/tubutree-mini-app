@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   shareLink: vi.fn(),
   copyText: vi.fn(),
   haptic: vi.fn(),
+  cfg: {} as Record<string, unknown>,
 }));
 // Bọc Button để đọc props mới nhất: aria-disabled và khoá của Button đã chặn lượt bấm thật,
 // nên chỉ gọi thẳng onPress mới chứng minh được khoá trong ShareSheet.
@@ -31,9 +32,14 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 vi.mock('../services/zmp-bridge', () => ({ shareLink: mocks.shareLink }));
 vi.mock('../utils/clipboard', () => ({ copyText: mocks.copyText }));
 vi.mock('../utils/haptic', () => ({ haptic: mocks.haptic }));
+vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }));
 vi.mock('./qr-code', () => ({ QrCode: ({ value }: { value: string }) => <div data-testid="qr">{value}</div> }));
 
 import { ShareSheet, useActionLock } from './share-sheet';
+
+beforeEach(() => {
+  mocks.cfg = {};
+});
 
 const STORE_LINK = 'https://zalo.me/s/2070857098114207963/s/an-lanh?ref=CTV123';
 
@@ -295,12 +301,22 @@ describe('ShareSheet — nội dung gửi đi', () => {
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     expect(mocks.shareLink.mock.calls[0]![0]).toEqual({
       title: 'Gian hàng An Lành',
-      description: `Mình tuyển vài món sống xanh đang dùng, ghé xem nha 🌿 ${STORE_LINK}`,
+      description: `Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Mình tuyển vài món sống xanh đang dùng, ghé xem nha 🌿 ${STORE_LINK}`,
       thumbnail: 'https://cdn/t.jpg',
       path: '/s/an-lanh?ref=CTV123',
     });
     expect(mocks.haptic).toHaveBeenCalledTimes(1);
     expect(mocks.haptic).toHaveBeenCalledWith('light');
+  });
+
+  it('có mã chào mừng ở cấu hình công khai: lời đăng mở bằng ưu đãi thật, mô tả vẫn trong 400 ký tự', async () => {
+    mocks.cfg = { newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 } } };
+    render(<ShareSheet visible onClose={() => {}} slug="an-lanh" title="Gian hàng An Lành" referralCode="CTV123" captions={['x'.repeat(900)]} />);
+    fireEvent.click(shareBtn());
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
+    const description = mocks.shareLink.mock.calls[0]![0].description as string;
+    expect(description.startsWith('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree. ')).toBe(true);
+    expect(description.length).toBeLessThanOrEqual(400);
   });
 
   it('Sao chép link không rung', async () => {

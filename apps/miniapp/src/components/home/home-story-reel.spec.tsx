@@ -146,10 +146,14 @@ describe('HomeStoryReel: dải Story', () => {
     expect(container).toBeEmptyDOMElement();
   });
 
-  it('tối đa 8 vòng dù nguồn trả nhiều hơn', async () => {
+  it('tối đa 15 vòng (REEL_MAX_ITEMS) dù nguồn trả nhiều hơn; 12 món thì lên đủ 12', async () => {
+    mocks.fetchProducts.mockResolvedValue(PAGE(Array.from({ length: 20 }, (_, i) => card(i + 1))));
+    const { unmount } = renderHost();
+    expect(await screen.findAllByTestId('story-reel-item')).toHaveLength(15);
+    unmount();
     mocks.fetchProducts.mockResolvedValue(PAGE(Array.from({ length: 12 }, (_, i) => card(i + 1))));
     renderHost();
-    expect(await screen.findAllByTestId('story-reel-item')).toHaveLength(8);
+    expect(await screen.findAllByTestId('story-reel-item')).toHaveLength(12);
   });
 
   it('chạm xuống một vòng tải trước chi tiết món (Reel mở ngay)', async () => {

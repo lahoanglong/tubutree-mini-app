@@ -68,6 +68,7 @@ import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-co
 import { useFlashAllowance } from '../hooks/use-flash-allowance';
 import { isLowStock, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
 import { useRecordRecentlyViewed } from '../hooks/use-record-recently-viewed';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
@@ -600,7 +601,7 @@ export default function ProductDetailPage() {
       await shareWithFallback(
         {
           title: p.name,
-          description: p.shortDesc ?? vi.home.tagline,
+          description: shareDescription(p.shortDesc ?? vi.home.tagline, welcomeOfferOf(config)),
           thumbnail: p.thumbnail ?? undefined,
           path: withReferral(`/product/${p.slug}`, code),
         },

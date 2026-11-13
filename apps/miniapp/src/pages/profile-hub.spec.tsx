@@ -112,7 +112,7 @@ function renderPage() {
   return render(<QueryClientProvider client={qc}><ProfilePage /></QueryClientProvider>);
 }
 
-const REFERRAL = { referralCode: 'LAN1', successCount: 0, earnedPoints: 0, minOrderAmount: 200_000, windowDays: 30 };
+const REFERRAL = { referralCode: 'LAN1', successCount: 0, earnedPoints: 0, minOrderAmount: 200_000, windowDays: 30, referrerRewardPoints: 5000 };
 function arrangeDefaults() {
   mocks.guest = false;
   mocks.orderCounts.mockResolvedValue({ pending_payment: 2, processing: 0, shipping: 1, delivered: 0, closed: 0 });
@@ -280,7 +280,7 @@ describe('Hub Cá nhân theo DS v2 (C-076, C-114)', () => {
     renderPage();
     await screen.findByText('Câu chuyện thương hiệu');
     expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Cá nhân']);
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Đơn của tôi', 'Mời bạn bè mua hàng', 'KIẾM TIỀN CÙNG TUBU', 'TÀI KHOẢN', 'HỖ TRỢ']);
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Đơn của tôi', 'Mời bạn sống xanh', 'KIẾM TIỀN CÙNG TUBU', 'TÀI KHOẢN', 'HỖ TRỢ']);
   });
 
   it('chưa đăng nhập vẫn có đúng một h1 và nút Đăng nhập ngay gọi login', async () => {
@@ -300,14 +300,14 @@ describe('Hub Cá nhân theo DS v2 (C-076, C-114)', () => {
     expect(mocks.restore).toHaveBeenCalled();
   });
 
-  it('hàng hồ sơ và ô mã giới thiệu là nút thật (bàn phím + đọc màn hình)', async () => {
+  it('hàng hồ sơ và nút sao chép link mời bạn là nút thật (bàn phím + đọc màn hình)', async () => {
     renderPage();
     const edit = await screen.findByRole('button', { name: /Sửa hồ sơ/ });
     fireEvent.click(edit);
     expect(mocks.navigate).toHaveBeenCalledWith('/edit-profile');
-    fireEvent.click(screen.getByRole('button', { name: 'Sao chép mã LAN1' }));
-    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith('LAN1'));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã giới thiệu', type: 'success' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép link mời bạn' }));
+    await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith(miniAppLink('/?ref=LAN1')));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép link mời bạn', type: 'success' }));
   });
 
   it('mục menu là hàng cao >= 44px; mục Thông báo hiện số chưa đọc', async () => {
@@ -432,12 +432,13 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     arrangeDefaults();
     mocks.authStatus = 'authenticated';
     mocks.notifications = [];
+    mocks.role = 'CUSTOMER';
     mocks.getPublicConfig.mockImplementation(async () => ({}));
   });
 
   it('lấy điều kiện từ /me/referral: đơn thứ hai từ mức tối thiểu trong số ngày', async () => {
     renderPage();
-    expect(await screen.findByText(/có đơn thứ hai từ 200\.000đ trong 30 ngày/)).toBeInTheDocument();
+    expect(await screen.findByText(/hoàn tất đơn thứ hai từ 200k trong 30 ngày/)).toBeInTheDocument();
   });
 
   it('đã có bạn thành công: nêu số bạn, số điểm đã nhận và mốc kế tiếp (chuyển từ trang Ví sang đây)', async () => {
@@ -455,7 +456,7 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     unmount();
     mocks.getReferral.mockResolvedValue(REFERRAL);
     renderPage();
-    await screen.findByText(/có đơn thứ hai từ 200\.000đ/);
+    await screen.findByText(/hoàn tất đơn thứ hai từ 200k/);
     expect(screen.queryByText(/Đã mời thành công/)).toBeNull();
   });
 
@@ -463,7 +464,7 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     mocks.shareLink.mockRejectedValueOnce(new Error('no share'));
     mocks.copyText.mockResolvedValueOnce(true);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/?ref=LAN1' })));
     // R-67: link chép là link Mini App, không phải link web.
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith(expect.stringContaining(miniAppLink('/?ref=LAN1'))));
@@ -475,35 +476,49 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
   it('người dùng huỷ hộp thoại chia sẻ Zalo: không snackbar, không ghi đè clipboard', async () => {
     mocks.shareLink.mockRejectedValueOnce({ code: -2003 });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     await new Promise((r) => setTimeout(r, 0));
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
     expect(mocks.copyText).not.toHaveBeenCalled();
   });
 
-  it('lời mời bạn: thưởng là Điểm Xanh, chia sẻ không hứa "cả hai nhận xu"', async () => {
+  it('lời mời bạn: có mã chào mừng thật thì thẻ chia sẻ nêu đúng mã đó, thưởng là Điểm Xanh, không hứa "cả hai nhận xu"', async () => {
+    mocks.getPublicConfig.mockImplementation(async () => ({ newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 } } }));
     mocks.shareLink.mockResolvedValue(undefined);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ' }));
+    expect(await screen.findByText(/Bạn mới nhận mã 30\.000đ cho đơn đầu từ 199k\. Bạn nhận 5\.000 Điểm Xanh/)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
-    const arg = mocks.shareLink.mock.calls[0]![0] as { description: string };
-    expect(arg.description).toContain('LAN1');
-    expect(arg.description).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])|TubuXu/iu);
+    const arg = mocks.shareLink.mock.calls[0]![0] as { title: string; description: string; path: string };
+    expect(arg.description).toBe('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree');
+    expect(arg.path).toBe('/?ref=LAN1');
+    expect(`${arg.title} ${arg.description}`).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])|TubuXu/iu);
+  });
+
+  it('chưa có mã chào mừng ở cấu hình công khai: thẻ chia sẻ dùng câu không số, không bịa mệnh giá', async () => {
+    mocks.shareLink.mockResolvedValue(undefined);
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' }));
+    await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
+    expect((mocks.shareLink.mock.calls[0]![0] as { description: string }).description).toBe('Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree');
   });
 
   it('CTV (AFFILIATE) không thấy thống kê Điểm Xanh giới thiệu', async () => {
     mocks.role = 'AFFILIATE';
     mocks.getReferral.mockResolvedValue({ ...REFERRAL, successCount: 2, earnedPoints: 20 });
     renderPage();
-    await screen.findByText('Mời bạn bè mua hàng');
+    await screen.findByText('Mời bạn sống xanh');
     expect(screen.queryByText(/Đã mời thành công/)).toBeNull();
+    // CTV chỉ hưởng hoa hồng: khối không hứa Điểm Xanh giới thiệu mà máy chủ sẽ không trả.
+    expect(screen.queryByText(/hoàn tất đơn thứ hai/)).toBeNull();
+    expect(screen.getByText('Bạn mới nhận mã giảm giá cho đơn đầu.')).toBeInTheDocument();
   });
 
   it('chưa có số liệu (API lỗi) → nói chung, không hứa con số', async () => {
     mocks.getReferral.mockRejectedValue(new Error('boom'));
     renderPage();
-    expect(await screen.findByText('Bạn nhận Điểm Xanh khi bạn bè vào app bằng mã của bạn và mua hàng.')).toBeInTheDocument();
+    expect(await screen.findByText('Bạn mới nhận mã giảm giá cho đơn đầu. Bạn nhận Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai.')).toBeInTheDocument();
   });
 });
 
@@ -674,7 +689,7 @@ describe('Lối vào khối mã giới thiệu (E-21)', () => {
   it('?section=referral cuộn tới khối mã giới thiệu khi dữ liệu mời bạn đã về', async () => {
     mocks.search = '?section=referral';
     renderPage();
-    await screen.findByText(/có đơn thứ hai từ 200\.000đ trong 30 ngày/);
+    await screen.findByText(/hoàn tất đơn thứ hai từ 200k trong 30 ngày/);
     await waitFor(() => expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled());
     const target = (window.HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock.contexts[0] as HTMLElement;
     expect(target.id).toBe('referral');
@@ -682,7 +697,7 @@ describe('Lối vào khối mã giới thiệu (E-21)', () => {
 
   it('không có ?section=referral thì không cuộn', async () => {
     renderPage();
-    await screen.findByText(/có đơn thứ hai từ 200\.000đ trong 30 ngày/);
+    await screen.findByText(/hoàn tất đơn thứ hai từ 200k trong 30 ngày/);
     expect(window.HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
   });
 });
@@ -776,7 +791,7 @@ function deferred<T>() {
 
 describe('Cá nhân: chạm đúp cùng nhịp không gọi lặp (W78A)', () => {
   const COUNTS = { pending_payment: 3, processing: 3, shipping: 3, delivered: 3, closed: 3 };
-  const copyRef = () => screen.findByRole('button', { name: /Sao chép mã LAN1/ });
+  const copyRef = () => screen.findByRole('button', { name: /Sao chép link mời bạn/ });
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -806,7 +821,7 @@ describe('Cá nhân: chạm đúp cùng nhịp không gọi lặp (W78A)', () =>
     await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
     expect(mocks.copyText).toHaveBeenCalledTimes(1);
     expect(mocks.openSnackbar).toHaveBeenCalledTimes(1);
-    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã giới thiệu', type: 'success' });
+    expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép link mời bạn', type: 'success' });
   });
 
   it('chép mã không được thì nhả khoá: bấm lại chép lần nữa', async () => {
@@ -818,14 +833,14 @@ describe('Cá nhân: chạm đúp cùng nhịp không gọi lặp (W78A)', () =>
     await waitFor(() => expect(btn).not.toHaveAttribute('aria-busy'));
     fireEvent.click(btn);
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép mã giới thiệu', type: 'success' }));
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép link mời bạn', type: 'success' }));
   });
 
   it('chạm đúp cùng nhịp vào Chia sẻ: chỉ mở hộp chia sẻ một lần, nút báo bận tới khi xong', async () => {
     const d = deferred<void>();
     mocks.shareLink.mockReturnValue(d.promise);
     renderPage();
-    const share = await screen.findByRole('button', { name: 'Chia sẻ' });
+    const share = await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' });
     await act(async () => {
       fireEvent.click(share);
       fireEvent.click(share);
@@ -843,7 +858,7 @@ describe('Cá nhân: chạm đúp cùng nhịp không gọi lặp (W78A)', () =>
     const d = deferred<void>();
     mocks.shareLink.mockReturnValue(d.promise);
     renderPage();
-    const share = await screen.findByRole('button', { name: 'Chia sẻ' });
+    const share = await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' });
     const copy = await copyRef();
     await act(async () => {
       fireEvent.click(share);
@@ -862,7 +877,7 @@ describe('Cá nhân: chạm đúp cùng nhịp không gọi lặp (W78A)', () =>
   it('khách đóng hộp chia sẻ (huỷ) thì nhả khoá: bấm Chia sẻ lại gọi lần nữa', async () => {
     mocks.shareLink.mockRejectedValueOnce({ code: -2003 }).mockResolvedValue(undefined);
     renderPage();
-    const share = await screen.findByRole('button', { name: 'Chia sẻ' });
+    const share = await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' });
     fireEvent.click(share);
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(share).not.toHaveAttribute('aria-busy'));
