@@ -6,7 +6,7 @@ import { createAdminSeason, deleteAdminSeason, listAdminSeasons, type AdminSeaso
 import { formatDate } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { VnDateInput } from './vn-date-input';
-import { BTN_XS_DANGER, BTN_XS_PRIMARY, INPUT_CLASS, Field, LoadError } from './ui';
+import { BTN_XS_DANGER, BTN_XS_PRIMARY, INPUT_CLASS, Field, LoadError, ListSkeleton } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 
 const STATUS_TEXT: Record<AdminSeason['status'], string> = { ACTIVE: 'Đang chạy', UPCOMING: 'Sắp tới', ENDED: 'Đã hết hạn' };
@@ -48,7 +48,7 @@ export function SeasonAdmin() {
       <p className="text-xs text-stone-600">
         Khách chỉ thấy mùa đang chạy trong khoảng ngày đã chọn. Hai mùa không được trùng ngày. Hết hạn thì tạo mùa mới ở dưới.
       </p>
-      {seasonsQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {seasonsQ.isLoading && <ListSkeleton label="Đang tải danh sách mùa" rows={2} className="h-14" />}
       {seasonsQ.isError && <LoadError onRetry={() => void seasonsQ.refetch()} retrying={seasonsQ.isFetching}>Không tải được danh sách mùa.</LoadError>}
       {seasonsQ.data && !running && <p className="text-sm text-warning-fg">Hiện không có mùa nào đang chạy, khách không thấy banner mùa.</p>}
       <ul className="space-y-2">

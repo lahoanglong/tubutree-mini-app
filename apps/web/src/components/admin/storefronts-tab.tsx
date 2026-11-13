@@ -1,5 +1,6 @@
 'use client';
 
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -457,11 +458,11 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
             <div className="mt-2 flex items-center gap-3">
               {sf.avatarUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={sf.avatarUrl} alt={`Ảnh đại diện của ${sf.title}`} className="h-16 w-16 rounded-card border border-stone-200 object-cover" />
+                <img key={sf.avatarUrl} src={sf.avatarUrl} alt={`Ảnh đại diện của ${sf.title}`} onError={hideBrokenImage} className="h-16 w-16 rounded-card border border-stone-200 object-cover" />
               )}
               {sf.coverUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={sf.coverUrl} alt={`Ảnh bìa của ${sf.title}`} className="h-16 min-w-0 flex-1 rounded-card border border-stone-200 object-cover" />
+                <img key={sf.coverUrl} src={sf.coverUrl} alt={`Ảnh bìa của ${sf.title}`} onError={hideBrokenImage} className="h-16 min-w-0 flex-1 rounded-card border border-stone-200 object-cover" />
               )}
               {!sf.avatarUrl && !sf.coverUrl && <p className="text-xs text-stone-500">Chưa có ảnh đại diện hay ảnh bìa.</p>}
             </div>

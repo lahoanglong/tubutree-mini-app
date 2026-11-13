@@ -1,3 +1,5 @@
+'use client';
+
 import type { ReactNode, Ref } from 'react';
 import type { Tone } from '@/lib/recycling';
 import { usePressLock } from '@/lib/use-press-lock';

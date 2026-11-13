@@ -7,7 +7,7 @@ import { formatVnRange } from '@/lib/admin-campaign-form';
 import type { Tone } from '@/lib/recycling';
 import { BundleForm, KIND_LABELS } from './bundle-form';
 import { useConfirm } from './confirm-dialog';
-import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_LINK_DANGER, LoadError, ToneBadge, chipClass } from './ui';
+import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_LINK_DANGER, LoadError, ToneBadge, chipClass, ListSkeleton } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 
 type Filter = AdminBundleStatus | '';
@@ -103,7 +103,7 @@ function EditForm({ id, onDone, onCancel }: { id: string; onDone: () => void; on
       </div>
     );
   }
-  if (!q.data) return <p className="text-sm text-stone-500">Đang tải bộ…</p>;
+  if (!q.data) return <ListSkeleton label="Đang tải bộ sản phẩm" rows={3} className="h-16" />;
   return <BundleForm key={q.data.id} initial={q.data} onDone={onDone} onCancel={onCancel} />;
 }
 

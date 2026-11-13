@@ -1,5 +1,6 @@
 'use client';
 
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { parseStoryConfig, STORY_LIMITS, type AssemblyStep, type HudCalloutPoint, type ProductStoryConfig, type StoryImageFrame, type StoryScene } from '@tubutree/shared-types';
@@ -380,7 +381,7 @@ export function ProductStoryStudio({
             return (
               <li key={im.url} className="space-y-1 rounded-card border border-stone-200 p-2">
                 {/* eslint-disable-next-line @next/next/no-img-element -- xem trước ảnh ngoài chưa đăng ký, không qua trình tối ưu ảnh */}
-                <img src={cut?.dataUrl ?? im.url} alt="" className="h-24 w-full object-contain" />
+                <img key={cut?.dataUrl ?? im.url} src={cut?.dataUrl ?? im.url} alt="" onError={hideBrokenImage} className="h-24 w-full object-contain" />
                 <div className="text-[11px] text-stone-500">
                   {im.width}×{im.height}
                 </div>
@@ -552,7 +553,7 @@ export function ProductStoryStudio({
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- ảnh tuỳ chọn của admin, cần khung cố định để quy đổi toạ độ */}
-          {stage && <img src={stage} alt="" className="pointer-events-none absolute object-contain" style={{ inset: `${STORY_PRODUCT_INSET_PCT}%`, width: `${100 - 2 * STORY_PRODUCT_INSET_PCT}%`, height: `${100 - 2 * STORY_PRODUCT_INSET_PCT}%` }} />}
+          {stage && <img key={stage} src={stage} alt="" onError={hideBrokenImage} className="pointer-events-none absolute object-contain" style={{ inset: `${STORY_PRODUCT_INSET_PCT}%`, width: `${100 - 2 * STORY_PRODUCT_INSET_PCT}%`, height: `${100 - 2 * STORY_PRODUCT_INSET_PCT}%` }} />}
           {points.map((p, i) =>
             i === sel ? (
               <button

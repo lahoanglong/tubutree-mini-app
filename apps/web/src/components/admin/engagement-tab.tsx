@@ -12,13 +12,13 @@ import {
   type MissionKind,
 } from '@/lib/admin-client';
 import { useConfirm } from './confirm-dialog';
-import { BTN_PRIMARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, INPUT_CLASS, Notice, LoadError, ToneBadge } from './ui';
+import { BTN_PRIMARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, INPUT_CLASS, Notice, LoadError, ToneBadge, ListSkeleton } from './ui';
 import { SeasonAdmin } from './season-admin';
 import { actionErrorText } from '@/lib/admin-error-text';
 
 // Tab Nhiệm vụ nằm trong First Load của /admin; màn Câu đố ít dùng nên nạp khi tab mở.
 const GameQuizAdmin = dynamic(() => import('./game-quiz-tab').then((m) => m.GameQuizAdmin), {
-  loading: () => <p className="text-sm text-stone-500">Đang tải…</p>,
+  loading: () => <ListSkeleton label="Đang tải câu đố" rows={3} className="h-16" />,
 });
 
 const REWARD_POINTS_MAX = 500_000;
@@ -36,7 +36,7 @@ export function EngagementTab() {
           thưởng chỉ áp dụng cho lượt nhận sau khi lưu. Nhiệm vụ tạm dừng sẽ ẩn với khách và không ai nhận thưởng được.
         </p>
         <NewMission />
-        {missionsQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+        {missionsQ.isLoading && <ListSkeleton label="Đang tải danh sách nhiệm vụ" rows={3} className="h-16" />}
         {missionsQ.isError && <LoadError onRetry={() => void missionsQ.refetch()} retrying={missionsQ.isFetching}>Không tải được danh sách nhiệm vụ.</LoadError>}
         {missionsQ.data?.length === 0 && <p className="text-sm text-stone-500">Chưa có nhiệm vụ nào.</p>}
         <div className="space-y-2">

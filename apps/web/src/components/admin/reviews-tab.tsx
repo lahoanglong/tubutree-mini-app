@@ -1,5 +1,6 @@
 'use client';
 
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { useEffect, useRef, useState } from 'react';
 import { Star } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -14,7 +15,7 @@ import { useConfirm } from './confirm-dialog';
 import { AdminImage, isAdminImageRef } from './admin-image';
 import { safeEvidenceImage } from './evidence-images';
 import { PageNav } from './page-nav';
-import { BTN_LINK, Notice, ToneBadge, chipClass, LoadError } from './ui';
+import { BTN_LINK, Notice, ToneBadge, chipClass, LoadError, ListSkeleton } from './ui';
 import { formatDateTime } from '@/lib/format-date';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 
@@ -87,7 +88,7 @@ export function ReviewsTab() {
           {loadErrorText(q.error) || 'Không tải được danh sách đánh giá.'}
         </LoadError>
       )}
-      {(q.isLoading || pastEnd) && <p className="text-sm text-stone-500">Đang tải đánh giá…</p>}
+      {(q.isLoading || pastEnd) && <ListSkeleton label="Đang tải đánh giá" rows={3} className="h-24" />}
       {q.data && q.data.data.length === 0 && !pastEnd && <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-sm text-stone-500">Không có đánh giá nào khớp bộ lọc.</p>}
       <div className="space-y-3">
         {q.data?.data.map((r) => <ReviewRow key={r.id} review={r} />)}
@@ -179,6 +180,7 @@ function ReviewRow({ review: r }: { review: AdminReview }) {
                 src={img.src}
                 alt={`Ảnh đánh giá ${i + 1}`}
                 referrerPolicy="no-referrer"
+                onError={hideBrokenImage}
                 className="h-16 w-16 rounded-control border border-stone-200 object-cover"
               />
             );

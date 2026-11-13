@@ -1,15 +1,16 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { listCoupons, updateCoupon, type AdminCoupon, type CouponStatusFilter } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
 import { COUPON_END_PAST_MESSAGE, vnTodayKey } from '@/lib/admin-reports';
+import { AdminPagination } from './admin-pagination';
 import { useConfirm } from './confirm-dialog';
 import { CouponListing } from './coupon-listing';
 import { VnDateInput } from './vn-date-input';
-import { BTN_SMALL, BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, TOUCH_H, ToneBadge, chipClass, LoadError, ListSkeleton } from './ui';
+import { BTN_XS_SECONDARY, FIELD_CLASS, FIELD_XS, TOUCH_H, ToneBadge, chipClass, LoadError, ListSkeleton } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 
 const PAGE_SIZE = 20;
@@ -80,6 +81,7 @@ export function CouponList() {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [page, setPage] = useState(1);
+  const listTopRef = useRef<HTMLUListElement>(null);
   const [keyword, setKeyword] = useState('');
   const [status, setStatus] = useState<CouponStatusFilter>('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -173,7 +175,7 @@ export function CouponList() {
       {q.isLoading && <ListSkeleton label="Đang tải danh sách mã" rows={4} className="h-16" />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách mã.</LoadError>}
       {q.data && q.data.data.length === 0 && <p className="text-sm text-stone-500">Chưa có mã nào khớp bộ lọc.</p>}
-      <ul className="space-y-2">
+      <ul ref={listTopRef} className="scroll-mt-24 space-y-2">
         {q.data?.data.map((c) => {
           const st = couponState(c, now);
           return (
@@ -207,19 +209,7 @@ export function CouponList() {
           );
         })}
       </ul>
-      {pages > 1 && (
-        <div className="flex items-center gap-2 text-xs text-stone-600">
-          <button type="button" className={BTN_SMALL} disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-            Trang trước
-          </button>
-          <span>
-            Trang {page}/{pages}
-          </span>
-          <button type="button" className={BTN_SMALL} disabled={page >= pages} onClick={() => setPage((p) => p + 1)}>
-            Trang sau
-          </button>
-        </div>
-      )}
+      <AdminPagination page={page} totalPages={pages} total={total} noun="mã" onPageChange={setPage} scrollTargetRef={listTopRef} />
       {dialog}
     </section>
   );
