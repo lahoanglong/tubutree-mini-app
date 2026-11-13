@@ -1783,6 +1783,8 @@ export type SubscriptionStatus = 'ACTIVE' | 'PAUSED' | 'CANCELLED';
 export interface AdminSubscription {
   id: string;
   status: SubscriptionStatus;
+  /** Mã vì sao gói đang PAUSED (app-core `subscription-pause-copy`). Optional: API cũ chưa trả, gói dừng từ trước khi có cột là null. */
+  pausedReason?: string | null;
   quantity: number;
   intervalWeeks: number;
   nextRunAt: string;

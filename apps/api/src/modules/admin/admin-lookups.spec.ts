@@ -415,6 +415,14 @@ describe('AdminService.listSubscriptions — gói mua định kỳ (chỉ xem)',
     await mkAdmin({ subscription: { findMany, count: jest.fn().mockResolvedValue(0) }, $transaction: tx }).listSubscriptions(1, 20);
     expect(findMany.mock.calls[0]![0].where).toEqual({});
   });
+
+  it('select có pausedReason để Admin thấy vì sao gói tạm dừng, vẫn không trả addressId', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    await mkAdmin({ subscription: { findMany, count: jest.fn().mockResolvedValue(0) }, $transaction: tx }).listSubscriptions(1, 20, 'PAUSED');
+    const select = findMany.mock.calls[0]![0].select;
+    expect(select.pausedReason).toBe(true);
+    expect(select.addressId).toBeUndefined();
+  });
 });
 
 describe('AdminController — route + DTO của các endpoint tra cứu', () => {

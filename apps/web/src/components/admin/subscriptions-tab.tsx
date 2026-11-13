@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { listAdminSubscriptions, type AdminSubscription, type SubscriptionStatus } from '@/lib/admin-client';
+import { subscriptionPauseAdminView } from '@tubutree/app-core/subscription-pause-copy';
 import { intervalLabel, subscriptionStatusLabel } from '@/lib/admin-pickers';
 import { PageNav } from './page-nav';
 import { Notice, ToneBadge, chipClass, LoadError, ListSkeleton } from './ui';
@@ -65,10 +66,16 @@ export function SubscriptionsTab() {
 }
 
 function SubscriptionRow({ sub: s }: { sub: AdminSubscription }) {
+  const pause = s.status === 'PAUSED' ? subscriptionPauseAdminView(s.pausedReason) : null;
   return (
     <article className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <ToneBadge tone={STATUS_TONE[s.status] ?? 'neutral'}>{subscriptionStatusLabel(s.status)}</ToneBadge>
+        {pause && (
+          <ToneBadge tone={pause.bySystem ? 'danger' : 'neutral'} title={pause.bySystem ? 'Hệ thống tự tạm dừng gói này' : undefined}>
+            {pause.label}
+          </ToneBadge>
+        )}
         <span className="text-xs text-stone-500">{intervalLabel(s.intervalWeeks)}</span>
         {s.status === 'ACTIVE' && (
           <span className="ml-auto text-xs text-stone-500">Giao kế tiếp: {formatDate(s.nextRunAt)}</span>

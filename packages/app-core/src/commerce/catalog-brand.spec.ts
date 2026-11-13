@@ -10,7 +10,8 @@ import {
 import { BRAND_ORIGINS, findBrandOrigin } from '../brand-origins';
 import { PROD_CATALOG_2026_11_12 as ALL } from './prod-catalog-full.fixture';
 
-const infer = (name: string, slug = '', brand: string | null = GENERIC_CATALOG_BRAND) => inferCatalogBrandFromTitle(name, slug, brand);
+const infer = (name: string | null | undefined, slug: string | null | undefined = '', brand: string | null = GENERIC_CATALOG_BRAND) =>
+  inferCatalogBrandFromTitle(name, slug, brand);
 
 describe('inferCatalogBrandFromTitle', () => {
   it.each([
@@ -50,6 +51,9 @@ describe('inferCatalogBrandFromTitle', () => {
     expect(infer('Cà phê muối túi 50x16g')).toBeNull();
     expect(infer('Socola Hòa Tan Uống liền CHOCO-OKE')).toBeNull();
     expect(infer('')).toBeNull();
+    expect(infer(null)).toBeNull();
+    expect(infer(undefined, null)).toBeNull();
+    expect(infer(null, 'nuoc-giat-fuwa3e-500ml-1a2b3c')).toBe('Fuwa3e');
   });
 
   it('"BH nóng" có dấu cách không phải nhãn BH.Nong, kể cả khi slug trùng `bh-nong`', () => {

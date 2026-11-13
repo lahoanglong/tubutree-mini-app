@@ -9,6 +9,7 @@ import {
   type SubscriptionDTO,
 } from '../services/subscriptions-api';
 import { subscriptionCycleView } from '../utils/subscription-price';
+import { subscriptionPauseView, SUBSCRIPTION_PAUSED_GENERIC } from '@tubutree/app-core/subscription-pause-copy';
 import { getAddresses } from '../services/shop-api';
 import { getErrorMessage, getLoadErrorMessage, isServerRejection } from '../services/api';
 import { useAuthStore } from '../store/auth';
@@ -231,6 +232,8 @@ function SubscriptionCard({
   onCancel: () => void;
 }) {
   const cycle = subscriptionCycleView(s);
+  // Gói không chạy nói rõ vì sao và cách chạy lại; không biết lý do (gói dừng từ trước, API cũ) thì chỉ dòng chung.
+  const pause = s.status === 'ACTIVE' ? null : subscriptionPauseView(s.pausedReason);
   return (
     <Card padding={12}>
       <div style={{ display: 'flex', gap: 12 }}>
@@ -268,13 +271,20 @@ function SubscriptionCard({
           {vi.subscriptions.statusLabel[s.status]}
         </Badge>
       </div>
-      <Text variant="caption" tone="secondary" as="div" numeric style={{ marginTop: 10 }}>
-        {s.status === 'ACTIVE'
-          ? s.nextRunAt
-            ? vi.subscriptions.nextRun(formatDate(s.nextRunAt))
-            : vi.subscriptions.scheduling
-          : vi.subscriptions.pausedLine}
+      <Text
+        variant="caption"
+        tone="secondary"
+        as="div"
+        numeric
+        style={{ marginTop: 10, fontWeight: pause && pause.title !== SUBSCRIPTION_PAUSED_GENERIC ? 600 : undefined }}
+      >
+        {pause ? pause.title : s.nextRunAt ? vi.subscriptions.nextRun(formatDate(s.nextRunAt)) : vi.subscriptions.scheduling}
       </Text>
+      {pause?.hint && (
+        <Text variant="caption" tone="tertiary" as="div">
+          {pause.hint}
+        </Text>
+      )}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
         <Button variant="secondary" disabled={busy || refreshing} onPress={onEdit} style={{ flex: '1 1 auto', minWidth: 'max-content' }}>
           {vi.subscriptions.edit}

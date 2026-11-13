@@ -57,9 +57,9 @@ export function isGenericCatalogBrand(brand: string | null | undefined): boolean
  * Nhãn suy từ tên (rồi từ slug khi tên không có nhãn nào), hoặc null khi không được suy:
  * `currentBrand` đã là nhãn cụ thể (Admin gán: không bao giờ đè), không nhãn nào khớp, hoặc khớp từ hai nhãn trở lên (combo hai nhãn: không đoán).
  */
-export function inferCatalogBrandFromTitle(name: string, slug: string | null | undefined, currentBrand: string | null | undefined): string | null {
+export function inferCatalogBrandFromTitle(name: string | null | undefined, slug: string | null | undefined, currentBrand: string | null | undefined): string | null {
   if (!isGenericCatalogBrand(currentBrand)) return null;
-  const folded = fold(name);
+  const folded = fold(name ?? '');
   const byName = CATALOG_BRAND_RULES.filter((r) => r.inName.test(folded));
   if (byName.length > 0) return byName.length === 1 ? byName[0]!.brand : null;
   const s = (slug ?? '').trim().toLowerCase();
@@ -68,6 +68,6 @@ export function inferCatalogBrandFromTitle(name: string, slug: string | null | u
 }
 
 /** Nhãn hiệu lực của sản phẩm: nhãn suy được, nếu không thì chính `products.brand`. */
-export function effectiveCatalogBrand(name: string, slug: string | null | undefined, brand: string): string {
+export function effectiveCatalogBrand(name: string | null | undefined, slug: string | null | undefined, brand: string): string {
   return inferCatalogBrandFromTitle(name, slug, brand) ?? brand;
 }

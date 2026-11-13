@@ -13,6 +13,8 @@ export interface SubscriptionDTO {
   quantity: number;
   intervalWeeks: number;
   status: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+  /** Vì sao gói đang PAUSED (mã trong app-core `subscription-pause-copy`), null khi không PAUSED hoặc gói dừng từ trước. Optional: API cũ chưa trả. */
+  pausedReason?: string | null;
   nextRunAt: string;
   // Tuỳ chọn: khối "subscriptions" của home feed có thể còn trong cache từ bản API cũ chưa trả các trường này.
   addressId?: string;

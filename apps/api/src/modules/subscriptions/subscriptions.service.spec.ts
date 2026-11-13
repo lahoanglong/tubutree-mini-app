@@ -544,7 +544,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     await svc.processDue();
     expect(orderCreate).not.toHaveBeenCalled();
     expect(stockExecuteRaw).not.toHaveBeenCalled();
-    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED', pausedReason: 'partner_goods' } });
     expect(JSON.stringify(notify.mock.calls)).toContain('hàng của gian hàng đối tác, không đặt định kỳ được');
     expect(analytics.recordBestEffort).toHaveBeenCalledWith(
       expect.objectContaining({ props: expect.objectContaining({ action: 'order_failed', reason: 'partner_goods' }) }),
@@ -555,7 +555,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     const { svc, analytics, updateMany, orderCreate } = makeProcess(1, { variationInactive: true });
     await svc.processDue();
     expect(orderCreate).not.toHaveBeenCalled();
-    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED', pausedReason: 'inactive_product' } });
     expect(analytics.recordBestEffort).toHaveBeenCalledWith(
       expect.objectContaining({
         eventName: 'subscription_changed',
@@ -571,7 +571,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     await svc.processDue();
     expect(stockExecuteRaw).not.toHaveBeenCalled();
     expect(orderCreate).not.toHaveBeenCalled();
-    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED', pausedReason: 'inactive_product' } });
     expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', expect.anything(), undefined, 'sub=s1');
   });
 
@@ -579,7 +579,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
     const { svc, analytics, updateMany, orderCreate } = makeProcess(1, { addressInvalid: true });
     await svc.processDue();
     expect(orderCreate).not.toHaveBeenCalled();
-    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
+    expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED', pausedReason: 'invalid_address' } });
     expect(analytics.recordBestEffort).toHaveBeenCalledWith(
       expect.objectContaining({
         eventName: 'subscription_changed',
@@ -638,7 +638,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       const applyDelta = jest.fn().mockRejectedValue(new BadRequestException('Số dư ví không đủ.'));
       const { svc, updateMany, notify, enqueuePush, analytics } = makeProcess(1, { paymentMethod: 'WALLET', applyDelta });
       await svc.processDue();
-      expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED' } });
+      expect(updateMany).toHaveBeenCalledWith({ where: { id: 's1', status: 'ACTIVE' }, data: { status: 'PAUSED', pausedReason: 'insufficient_wallet' } });
       expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', { reason: expect.stringContaining('Ví Tubu') }, undefined, 'sub=s1');
       expect(enqueuePush).not.toHaveBeenCalled();
       expect(analytics.recordBestEffort).toHaveBeenCalledWith(
@@ -684,7 +684,7 @@ describe('SubscriptionsService.processDue (claim chống double-order)', () => {
       expect(stockExecuteRaw).not.toHaveBeenCalled();
       expect(orderCreate).not.toHaveBeenCalled();
       expect(updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { id: 's1', status: 'ACTIVE' }, data: expect.objectContaining({ status: 'PAUSED' }) }),
+        expect.objectContaining({ where: { id: 's1', status: 'ACTIVE' }, data: expect.objectContaining({ status: 'PAUSED', pausedReason: 'cod_limit' }) }),
       );
       expect(notify).toHaveBeenCalledWith('u1', 'SUBSCRIPTION_PAUSED', { reason: expect.stringContaining('5.000.000đ') }, undefined, 'sub=s1');
       expect(analytics.recordBestEffort).toHaveBeenCalledWith(
@@ -1008,6 +1008,19 @@ describe('SubscriptionsService.setStatus', () => {
     expect(update).toHaveBeenCalledTimes(1);
   });
 
+  it('W140: khách bấm Tạm dừng → pausedReason="customer"; bật lại hoặc huỷ → xoá lý do', async () => {
+    const nextRunAt = new Date(Date.now() + 999_999_999);
+    const paused = makeSetStatus({ id: 's1', userId: 'u1', variationId: 'v1', status: 'ACTIVE', intervalWeeks: 4, nextRunAt });
+    await paused.svc.setStatus('u1', 's1', 'PAUSED');
+    expect(paused.update.mock.calls[0][0].data.pausedReason).toBe('customer');
+    const resumed = makeSetStatus({ id: 's1', userId: 'u1', variationId: 'v1', status: 'PAUSED', intervalWeeks: 4, nextRunAt });
+    await resumed.svc.setStatus('u1', 's1', 'ACTIVE');
+    expect(resumed.update.mock.calls[0][0].data.pausedReason).toBeNull();
+    const cancelled = makeSetStatus({ id: 's1', userId: 'u1', variationId: 'v1', status: 'PAUSED', intervalWeeks: 4, nextRunAt });
+    await cancelled.svc.setStatus('u1', 's1', 'CANCELLED');
+    expect(cancelled.update.mock.calls[0][0].data.pausedReason).toBeNull();
+  });
+
   it('không tìm thấy lịch → NotFound', async () => {
     const { svc } = makeSetStatus(null);
     await expect(svc.setStatus('u1', 's1', 'PAUSED')).rejects.toThrow('Không tìm thấy lịch đặt định kỳ.');
@@ -1168,6 +1181,27 @@ describe('SubscriptionsService.list', () => {
     const svc = new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
     const result = await svc.list('u1');
     expect(result[0]?.effectiveDiscountPct).toBe(0.14);
+  });
+
+  it('W140: trả pausedReason cho gói đang tạm dừng; gói chạy hoặc tạm dừng cũ chưa có cột → null, lý do cũ không rò sang gói đã bật lại', async () => {
+    const prisma = {
+      subscription: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 's1', variationId: 'v1', quantity: 1, intervalWeeks: 4, status: 'PAUSED', pausedReason: 'insufficient_wallet', nextRunAt: new Date() },
+          { id: 's2', variationId: 'v1', quantity: 1, intervalWeeks: 4, status: 'PAUSED', pausedReason: null, nextRunAt: new Date() },
+          { id: 's3', variationId: 'v1', quantity: 1, intervalWeeks: 4, status: 'ACTIVE', pausedReason: 'customer', nextRunAt: new Date() },
+        ]),
+        count: jest.fn().mockResolvedValue(1),
+      },
+      variation: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'v1', name: 'V', salePrice: null, retailPrice: 100000, product: { name: 'P', thumbnail: null, slug: 'p' } },
+        ]),
+      },
+    } as unknown as PrismaService;
+    const svc = new SubscriptionsService(prisma, { get: async <T>(_k: string, fb?: T) => fb as T } as unknown as SystemConfigService, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger());
+    const rows = await svc.list('u1');
+    expect(rows.map((r) => r.pausedReason)).toEqual(['insufficient_wallet', null, null]);
   });
 
   // R2-ENGAGE-9: thẻ định kỳ phải cho khách thấy số tiền thật bị tính mỗi kỳ, cùng công thức với đơn kỳ.
