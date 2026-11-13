@@ -167,7 +167,6 @@ export const vi = {
     savePill: (pct: number) => `Tiết kiệm ${pct}%`,
     nextRun: (date: string) => `Lần kế: ${date}`,
     scheduling: 'Đang lên lịch',
-    pausedLine: 'Đang tạm dừng',
     pause: 'Tạm dừng',
     resume: 'Tiếp tục',
     cancel: 'Huỷ',

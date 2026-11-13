@@ -209,6 +209,24 @@ describe('SubscriptionsPanel', () => {
     await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'ACTIVE'));
   });
 
+  it('W140: gói tạm dừng nói rõ lý do và cách chạy lại; không biết lý do (dừng từ trước, mã lạ) chỉ có dòng chung; gói đang chạy không có dòng lý do', async () => {
+    mocks.getSubscriptions.mockResolvedValue([
+      { ...SUB, id: 's1', status: 'PAUSED' as const, pausedReason: 'invalid_address' },
+      { ...SUB, id: 's2', status: 'PAUSED' as const, pausedReason: null },
+      { ...SUB, id: 's3', status: 'PAUSED' as const, pausedReason: 'mã_lạ_của_api_mới' },
+      { ...SUB, id: 's4', status: 'ACTIVE' as const, pausedReason: 'customer' },
+      { ...SUB, id: 's5', status: 'PAUSED' as const, pausedReason: 'customer' },
+    ]);
+    renderPanel();
+    expect(await screen.findByText('Địa chỉ giao hàng không còn dùng được')).toBeInTheDocument();
+    expect(screen.getByText('Bấm Sửa để chọn lại địa chỉ, rồi bấm Tiếp tục.')).toBeInTheDocument();
+    expect(screen.getAllByText('Đang tạm dừng')).toHaveLength(2);
+    expect(screen.getAllByText(/^Lần kế:/)).toHaveLength(1);
+    expect(screen.getByText('Bạn đã tạm dừng gói này')).toBeInTheDocument();
+    expect(screen.getByText('Bấm Tiếp tục khi muốn Tubu giao lại.')).toBeInTheDocument();
+    expect(screen.queryByText(/mã_lạ/)).toBeNull();
+  });
+
   it('lỗi tải → ErrorState, "Thử lại" gọi lại danh sách', async () => {
     mocks.getSubscriptions.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce([SUB]);
     renderPanel();
