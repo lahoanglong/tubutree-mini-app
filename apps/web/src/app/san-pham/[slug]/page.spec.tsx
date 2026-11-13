@@ -124,6 +124,43 @@ describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB
   });
 });
 
+describe('/san-pham/[slug] — chip xuất xứ cạnh tên nhãn (PO B3)', () => {
+  const originOf = (c: HTMLElement) => c.querySelector<HTMLAnchorElement>('[data-testid="pdp-origin-link"]');
+
+  it('Pineboo: chip "Fuwa3e · Thanh Hóa" dẫn bản đồ Fuwa3e, nằm cùng nhóm với nhãn, vùng chạm 44px và có aria-label', async () => {
+    api.product = { ...PRODUCT, brand: 'Pineboo', name: 'Xịt tràm cho bé Pineboo 150ml' };
+    const c = await mount();
+    const chip = originOf(c)!;
+    expect(chip.textContent).toBe('Fuwa3e · Thanh Hóa');
+    expect(chip.getAttribute('href')).toBe('/cau-chuyen?brand=fuwa3e');
+    expect(chip.getAttribute('aria-label')).toBe('Xem xuất xứ Fuwa3e · Thanh Hóa trên bản đồ');
+    expect(chip.className).toContain('min-h-11');
+    expect(chip.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    const brandLink = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem sản phẩm thương hiệu Pineboo"]')!;
+    expect(brandLink.parentElement).toBe(chip.parentElement);
+    // Nhóm nhãn + chip tự xuống dòng (flex-wrap, min-w-0) nên cụm Tim/Chia sẻ không bị đẩy tràn ở 320px.
+    expect(chip.parentElement!.className).toContain('flex-wrap');
+    expect(chip.parentElement!.className).toContain('min-w-0');
+    expect(chip.parentElement!.nextElementSibling!.className).toContain('flex-none');
+  });
+
+  it('nhãn có ghim riêng chỉ hiện tên tỉnh: Sokfarm → "Trà Vinh", Fuwa3e → "Thanh Hóa"', async () => {
+    for (const [brand, label, id] of [['Sokfarm', 'Trà Vinh', 'sokfram'], ['Fuwa3e', 'Thanh Hóa', 'fuwa3e']] as const) {
+      api.product = { ...PRODUCT, brand };
+      const chip = originOf(await mount())!;
+      expect(chip.textContent).toBe(label);
+      expect(chip.getAttribute('href')).toBe(`/cau-chuyen?brand=${id}`);
+    }
+  });
+
+  it('nhãn chưa có ghim hoặc vỏ "Tubu Tree" thì không có chip', async () => {
+    for (const brand of ['Xanh Việt', 'Tubu Tree']) {
+      api.product = { ...PRODUCT, brand };
+      expect(originOf(await mount())).toBeNull();
+    }
+  });
+});
+
 describe('/san-pham/[slug] — kiểu Mini App ở điện thoại', () => {
   const PRODUCT_TUBU = { ...PRODUCT, brandSlug: 'xanh-viet', fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
 

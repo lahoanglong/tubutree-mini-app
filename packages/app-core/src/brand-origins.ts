@@ -133,6 +133,45 @@ export function findBrandOrigin(brand: { slug: string; name: string }): BrandOri
   return BRAND_ORIGINS.find((o) => o.id === factoryId) ?? null;
 }
 
+/** Tên nhãn trùng một cách ghi của chính nhãn đó (tên hiển thị, `catalogBrand`, chính tả cũ), khác với nhãn mượn vùng nhà máy (Pineboo → Fuwa3e). */
+function isOwnName(origin: BrandOrigin, name: string): boolean {
+  const key = normalizeBrandKey(name);
+  return [origin.brand, origin.catalogBrand, ...(origin.legacyCatalogBrands ?? [])].some((n) => normalizeBrandKey(n) === key);
+}
+
+export interface OriginLink {
+  /** Id điểm trên bản đồ câu chuyện: đích là `/cau-chuyen?brand=<id>` (web) hoặc `/brand-story?brand=<id>` (Mini). */
+  id: string;
+  /** Chữ trên chip: tỉnh xuất xứ, kèm tên nhà máy khi nhãn mượn vùng ("Fuwa3e · Thanh Hóa"). */
+  label: string;
+  ariaLabel: string;
+}
+
+/**
+ * Chip xuất xứ ở trang chi tiết sản phẩm, theo `product.brand`: nhãn có ghim cho tên tỉnh ("Trà Vinh"), nhãn mượn vùng nhà máy (Pineboo) cho
+ * "Fuwa3e · Thanh Hóa"; nhãn chưa có ghim hoặc vỏ "Tubu Tree" thì null (không hiện chip).
+ */
+export function pdpOriginLink(productBrand: string): OriginLink | null {
+  const origin = findBrandOrigin({ slug: '', name: productBrand });
+  if (!origin) return null;
+  const label = isOwnName(origin, productBrand) ? origin.province : `${origin.brand} · ${origin.province}`;
+  return { id: origin.id, label, ariaLabel: `Xem xuất xứ ${label} trên bản đồ` };
+}
+
+export interface BrandPageOrigin {
+  id: string;
+  /** Dòng "Xuất xứ: …" khi bản ghi Brand chưa nhập xuất xứ: tỉnh, kèm "(nhà máy Fuwa3e)" khi nhãn mượn vùng nhà máy. */
+  text: string;
+}
+
+/** Xuất xứ dự phòng cho trang thương hiệu `/brand/<slug>` (web) và `brand-view` (Mini) từ bản đồ; không ghim thì null. */
+export function brandPageOrigin(brand: { slug: string; name: string }): BrandPageOrigin | null {
+  const origin = findBrandOrigin(brand);
+  if (!origin) return null;
+  const own = origin.id === brand.slug || isOwnName(origin, brand.name);
+  return { id: origin.id, text: own ? origin.province : `${origin.province} (nhà máy ${origin.brand})` };
+}
+
 /**
  * Tên chuẩn của nhãn trong `?brand=`: chính tả cũ ("Sokfram", "SOKFRAM") về `catalogBrand` hiện hành ("Sokfarm"); nhãn khác trả nguyên văn. Cùng kết quả với
  * `canonicalCatalogBrand` của shared-types (api dùng); web và Mini đọc bản này để khỏi nạp gói shared-types vào bundle trang. Spec giữ hai bảng khớp nhau.

@@ -2,7 +2,7 @@ import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import Link from 'next/link';
-import { AlertCircle, Check, ChevronRight } from 'lucide-react';
+import { AlertCircle, Check, ChevronRight, MapPin } from 'lucide-react';
 import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
 import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
 import { fetchActiveFlashSalesNoSync, toFlashSeed } from '@/lib/server-flash';
@@ -15,6 +15,7 @@ import ProductGallery from '@/components/product-gallery';
 import ShareButton from '@/components/share-button';
 import { WishlistHeart } from '@/components/catalog/wishlist-heart';
 import { brandAccent } from '@/components/mini/brand-accent';
+import { pdpOriginLink } from '@/lib/brand-origins';
 import { createServerHttp } from '@/lib/core-http-server';
 import { defaultVariationFor, runningFlash } from '@/lib/flash-price';
 import { FlashSalesSeed } from '@/lib/use-flash-sales';
@@ -96,6 +97,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const productUrl = `${SITE_URL}/san-pham/${encodeURIComponent(product.slug)}`;
   const fulfillerText = pdpFulfillerText(product);
   const unavailableText = pdpUnavailableText(product);
+  const originLink = pdpOriginLink(product.brand);
   const partnerNote = unavailableText ? null : pdpPartnerNote(product);
   const fulfillerIsTubu = fulfillerText === 'Tubu Tree giao hàng';
   const retailOnly = isRetailOnly(product);
@@ -141,6 +143,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 className={`flex min-w-0 flex-col ${phoneBandPad} max-md:pt-4 ${product.certifications.length > 0 ? '' : 'max-md:pb-4'}`}
               >
               <div className="flex items-center justify-between gap-2">
+                {/* Nhãn và chip xuất xứ xuống dòng trong nhóm này (flex-wrap, min-w-0) để cụm Tim/Chia sẻ bên phải không bị đẩy tràn ở 320px. */}
+                <div className="flex min-w-0 flex-wrap items-center gap-x-3">
                 {/* Như Mini App: tên nhãn mở danh mục lọc theo nhãn (brandBrowsePath), không rẽ sang trang nhãn. */}
                 <Link
                   href={`/san-pham?brand=${encodeURIComponent(product.brand)}`}
@@ -156,7 +160,19 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   {product.brand}
                   <ChevronRight className="hidden h-4 w-4 text-[var(--color-text-tertiary)] max-md:block" aria-hidden="true" />
                 </Link>
-                <div className="flex items-center">
+                {originLink && (
+                  <Link
+                    href={`/cau-chuyen?brand=${encodeURIComponent(originLink.id)}`}
+                    data-testid="pdp-origin-link"
+                    aria-label={originLink.ariaLabel}
+                    className="inline-flex min-h-11 min-w-0 max-w-full items-center gap-1 text-xs text-[var(--color-text-secondary)]"
+                  >
+                    <MapPin className="h-3.5 w-3.5 flex-none text-[color:var(--color-text-brand)]" aria-hidden="true" />
+                    <span className="min-w-0 truncate">{originLink.label}</span>
+                  </Link>
+                )}
+                </div>
+                <div className="flex flex-none items-center">
                   <WishlistHeart productId={product.id} />
                   <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} />
                 </div>

@@ -3,11 +3,13 @@ import {
   BRAND_ORIGINS,
   brandBrowseTarget,
   brandOriginOf,
+  brandPageOrigin,
   canonicalBrandName,
   findBrandOrigin,
   journeyBrandHref,
   journeyBrands,
   normalizeBrandKey,
+  pdpOriginLink,
 } from './brand-origins';
 import { homeCopy } from './home-copy';
 import { PROD_CATALOG_2026_11_12 } from './commerce/prod-catalog-full.fixture';
@@ -202,6 +204,51 @@ describe('findBrandOrigin', () => {
     expect(brandOriginOf('Pineboo')).toBeUndefined();
     expect(findBrandOrigin({ slug: 'khac', name: 'Pineboo' })).toBe(BRAND_ORIGINS.find((o) => o.id === 'fuwa3e'));
     expect(findBrandOrigin({ slug: 'khac', name: 'Pineboo Plus' })).toBeNull();
+  });
+});
+
+describe('pdpOriginLink — chip xuất xứ trên trang chi tiết sản phẩm', () => {
+  it('Pineboo mượn vùng nhà máy: "Fuwa3e · Thanh Hóa", đích bản đồ Fuwa3e', () => {
+    for (const name of ['Pineboo', 'PINEBOO', ' pineboo ']) {
+      expect(pdpOriginLink(name), name).toEqual({ id: 'fuwa3e', label: 'Fuwa3e · Thanh Hóa', ariaLabel: 'Xem xuất xứ Fuwa3e · Thanh Hóa trên bản đồ' });
+    }
+  });
+
+  it('nhãn có ghim riêng chỉ hiện tên tỉnh, không lặp tên nhãn (cả 8 nhãn, kể cả tên catalog và chính tả cũ)', () => {
+    expect(pdpOriginLink('Fuwa3e')?.label).toBe('Thanh Hóa');
+    expect(pdpOriginLink('Sokfarm')).toMatchObject({ id: 'sokfram', label: 'Trà Vinh' });
+    expect(pdpOriginLink('Sokfram')).toMatchObject({ id: 'sokfram', label: 'Trà Vinh' });
+    expect(pdpOriginLink('Cobote')?.label).toBe('Bến Tre');
+    expect(pdpOriginLink('Le Plateau Coffee')?.label).toBe('Lâm Đồng (Cầu Đất)');
+    expect(pdpOriginLink('Le Plateau')?.label).toBe('Lâm Đồng (Cầu Đất)');
+    expect(pdpOriginLink('BH.Nong')?.label).toBe('Quảng Nam');
+    expect(pdpOriginLink('PƠ LANG')?.label).toBe('Đắk Lắk');
+    for (const o of BRAND_ORIGINS) {
+      const link = pdpOriginLink(o.catalogBrand);
+      expect(link, o.id).toMatchObject({ id: o.id, label: o.province });
+      expect(link!.ariaLabel).toContain(o.province);
+    }
+  });
+
+  it('nhãn chưa có ghim, vỏ "Tubu Tree" và tên rỗng thì không có chip', () => {
+    for (const name of ['Tubu Tree', '', 'Xanh Việt', 'Pineboo Plus']) expect(pdpOriginLink(name), name).toBeNull();
+  });
+});
+
+describe('brandPageOrigin — xuất xứ dự phòng của trang thương hiệu', () => {
+  it('Pineboo: "Thanh Hóa (nhà máy Fuwa3e)", dẫn bản đồ Fuwa3e', () => {
+    expect(brandPageOrigin({ slug: 'pineboo', name: 'Pineboo' })).toEqual({ id: 'fuwa3e', text: 'Thanh Hóa (nhà máy Fuwa3e)' });
+    expect(brandPageOrigin({ slug: 'khac', name: ' PINEBOO ' })).toEqual({ id: 'fuwa3e', text: 'Thanh Hóa (nhà máy Fuwa3e)' });
+  });
+
+  it('nhãn có ghim riêng: chỉ tên tỉnh (khớp theo tên hoặc slug)', () => {
+    expect(brandPageOrigin({ slug: 'fuwa3e', name: 'Fuwa3e' })).toEqual({ id: 'fuwa3e', text: 'Thanh Hóa' });
+    expect(brandPageOrigin({ slug: 'sokfarm', name: 'Sokfarm' })).toEqual({ id: 'sokfram', text: 'Trà Vinh' });
+    expect(brandPageOrigin({ slug: 'cobote', name: 'Tên khác' })).toEqual({ id: 'cobote', text: 'Bến Tre' });
+  });
+
+  it('nhãn chưa có ghim thì null', () => {
+    expect(brandPageOrigin({ slug: 'bo-hon', name: 'Bồ Hòn Xanh' })).toBeNull();
   });
 });
 

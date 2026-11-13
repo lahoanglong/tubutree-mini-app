@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSPropertie
 import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
 import { announce, useNotify } from '../hooks/use-notify';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket } from 'lucide-react';
+import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket, MapPin } from 'lucide-react';
 import { PRODUCT_NOT_FOUND } from '@tubutree/app-core/client-copy';
 import {
   fetchProduct,
@@ -40,6 +40,7 @@ import { SuggestedRail } from '../components/catalog/suggested-rail';
 import { SR_ONLY } from '../components/ui/sr-only';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { brandAccent, brandBrowseLabel, brandBrowsePath } from '../utils/brands';
+import { pdpOriginLink } from '../utils/brand-origins';
 import { formatVnd, formatSold } from '../utils/format';
 import { soldPercent } from '../utils/flash-display';
 import { vi } from '../i18n/vi';
@@ -448,6 +449,7 @@ export default function ProductDetailPage() {
   }
 
   const p = product.data;
+  const originLink = pdpOriginLink(p.brand);
   const pdpCoupons = (couponsQ.data ?? []).filter((c) => !c.products || c.products.some((x) => x.id === p?.id));
   const flashList = runningFlash(flashWithAllowance);
   const priceView = selected ? variationPricing(selected, flashList) : cardPricing(p, flashList, serverNow());
@@ -690,16 +692,15 @@ export default function ProductDetailPage() {
       {/* ── Info chính ── */}
       <Box p={4} style={{ background: 'var(--color-bg-surface)' }}>
         <Box flex alignItems="center" style={{ gap: 6 }}>
+          {/* Nhãn và chip xuất xứ xuống dòng trong nhóm này (flexWrap, minWidth 0) để cụm Tim/Chia sẻ bên phải không bị đẩy tràn ở 320px. */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 'var(--space-inline-md)', minWidth: 0 }}>
           {/* Lọc theo tên nhãn đúng như catalog (p.brand), không phải slug: API so khớp chính xác tên. */}
           <button
             type="button"
             className="tubu-press"
             aria-label={brandBrowseLabel(p.brand)}
             onClick={() => navigate(brandBrowsePath(p.brand))}
-            style={{
-              display: 'flex', alignItems: 'center', gap: 6, minHeight: 44, padding: 0,
-              background: 'none', border: 'none', cursor: 'pointer', font: 'inherit',
-            }}
+            style={LINK_BUTTON_STYLE}
           >
             <span
               aria-hidden
@@ -710,7 +711,23 @@ export default function ProductDetailPage() {
             </Text>
             <Icon icon={ChevronRight} size="sm" tone="muted" />
           </button>
-          <Box style={{ marginLeft: 'auto' }}>
+          {originLink && (
+            <button
+              type="button"
+              className="tubu-press"
+              data-testid="pdp-origin-link"
+              aria-label={originLink.ariaLabel}
+              onClick={() => navigate(`/brand-story?brand=${encodeURIComponent(originLink.id)}`)}
+              style={{ ...LINK_BUTTON_STYLE, minWidth: 0, maxWidth: '100%' }}
+            >
+              <MapPin size={14} color="var(--color-text-brand)" aria-hidden style={{ flex: 'none' }} />
+              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {originLink.label}
+              </Text>
+            </button>
+          )}
+          </div>
+          <Box style={{ marginLeft: 'auto', flexShrink: 0 }}>
             <WishlistHeart productId={p.id} size={22} />
           </Box>
           <Box
@@ -1272,6 +1289,12 @@ export default function ProductDetailPage() {
     </Page>
   );
 }
+
+/** Nút chữ trần cạnh tên sản phẩm (tên nhãn, chip xuất xứ): vùng chạm cao 44px, không nền, không viền. */
+const LINK_BUTTON_STYLE: CSSProperties = {
+  display: 'flex', alignItems: 'center', gap: 6, minHeight: 44, padding: 0,
+  background: 'none', border: 'none', cursor: 'pointer', font: 'inherit',
+};
 
 /** Tên sản phẩm: Inter 18/600 (title-md) — đậm và lớn hơn tiêu đề mục (title-sm) nhưng vẫn dưới giá (24/700).
  * `font: inherit` của h1 mặc định bị thay bằng đúng bậc chữ của DS. */
