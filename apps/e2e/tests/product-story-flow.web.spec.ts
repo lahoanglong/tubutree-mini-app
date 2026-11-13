@@ -2,8 +2,8 @@ import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { expect, test, type MockApi } from './support/mock-api';
 
 /**
- * Web khách 360px và 375px (project di động): khung toàn màn của câu chuyện sản phẩm đi trọn đường mua. Mở khung từ trang sản phẩm, đi qua các chương,
- * bấm Thêm vào giỏ ở thanh đáy (khối mua mở bảng chọn phân loại vì sản phẩm có từ 2 phân loại), sang Giỏ rồi sang Thanh toán.
+ * Web khách 360px và 375px (project di động): dải câu chuyện sản phẩm nằm ngay trên trang chi tiết và đường mua đi qua nó. Đọc các chương bằng thẻ,
+ * bấm Thêm vào giỏ ở thanh dính đáy (mở bảng chọn phân loại vì sản phẩm có từ 2 phân loại), sang Giỏ rồi sang Thanh toán.
  * Phần server của Next gọi API thật nên spec dùng sản phẩm mẫu của seed (dầu gội Pơ Lang, có kịch bản mẫu); mọi lời gọi từ trình duyệt đi qua mock.
  * Host phải là localhost (baseURL): middleware coi nhãn đầu của Host là subdomain gian hàng. Không đặt đơn thật.
  */
@@ -103,23 +103,22 @@ function mockShop(api: MockApi, p: SeedProduct): { added: () => boolean } {
 
 const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
-async function openStory(page: Page): Promise<Locator> {
+/** Trang dựng hai bản dải câu chuyện (điện thoại và màn rộng), mỗi lúc chỉ một bản hiện: lấy bản đang thấy. */
+async function gotoStory(page: Page): Promise<Locator> {
   await page.goto(`/san-pham/${SLUG}`);
-  const open = page.getByTestId('pdp-story-open').locator('visible=true');
-  await expect(open).toHaveCount(1);
-  await open.scrollIntoViewIfNeeded();
-  await open.click();
-  const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-  await expect(dialog).toBeVisible();
-  return dialog;
+  const story = page.locator('[data-section="pdp-story"]').locator('visible=true');
+  await expect(story).toHaveCount(1);
+  await story.scrollIntoViewIfNeeded();
+  return story;
 }
 
 for (const vp of VIEWPORTS) {
-  test.describe(`Web khách ${vp.width}px: khung toàn màn câu chuyện sản phẩm`, () => {
+  test.describe(`Web khách ${vp.width}px: dải câu chuyện sản phẩm trên trang chi tiết`, () => {
+    // Khung toàn màn (focus trap, Esc, hai nút mua khoá khi hết hàng) nay chỉ còn ở Reel Trang chủ, do w42a-home-story-reel.*.spec.ts phủ.
     test.use({ viewport: vp });
 
     test.beforeEach(async ({ page }, testInfo) => {
-      test.skip(testInfo.project.name !== 'Web Customer Mobile', 'Khung toàn màn kiểm ở khổ điện thoại, chỉ project Web Customer Mobile');
+      test.skip(testInfo.project.name !== 'Web Customer Mobile', 'Dải câu chuyện kiểm ở khổ điện thoại, chỉ project Web Customer Mobile');
       await page.addInitScript(() => {
         try {
           localStorage.setItem('tubu_web_session', '1');
@@ -129,74 +128,73 @@ for (const vp of VIEWPORTS) {
       });
     });
 
-    test('khung phủ đúng màn, thanh mua ghim đáy, vùng chạm từ 44px, không tràn ngang', async ({ page, api, request }) => {
+    test('mọi chương hiện cùng lúc ngay trong trang, thẻ chương từ 44px và nằm gọn trong màn, không tràn ngang', async ({ page, api, request }) => {
       const p = await seeded(request);
       test.skip(!p, 'DB e2e chưa có sản phẩm mẫu của seed');
       mockShop(api, p!);
-      const dialog = await openStory(page);
+      const story = await gotoStory(page);
 
-      const box = (await dialog.boundingBox())!;
-      expect(box.x).toBe(0);
-      expect(box.y).toBe(0);
-      expect(box.width).toBe(vp.width);
-      expect(Math.abs(box.height - vp.height)).toBeLessThanOrEqual(1);
-
-      const bar = (await dialog.locator('.tubu-story-bar').boundingBox())!;
-      expect(Math.abs(bar.y + bar.height - vp.height)).toBeLessThanOrEqual(1);
-
-      expect(await noHorizontalScroll(page)).toBe(true);
-
-      const chips = await dialog.getByTestId('story-step-chip').all();
-      expect(chips.length).toBeGreaterThanOrEqual(3);
-      const targets = [dialog.getByTestId('story-close'), dialog.getByTestId('story-add-to-cart'), dialog.getByTestId('story-buy-now'), ...chips];
-      for (const t of targets) {
-        const b = (await t.boundingBox())!;
+      const cards = await story.getByTestId('story-step-card').all();
+      expect(cards.length).toBeGreaterThanOrEqual(3);
+      for (const c of cards) {
+        await expect(c).toBeVisible();
+        const b = (await c.boundingBox())!;
         expect(b.width, 'chiều rộng vùng chạm').toBeGreaterThanOrEqual(44);
         expect(b.height, 'chiều cao vùng chạm').toBeGreaterThanOrEqual(44);
-      }
-    });
-
-    test('qua từng chương: chip sáng đúng, chữ đổi, hiệu ứng vào theo đường cong 240ms, số đều', async ({ page, api, request }) => {
-      const p = await seeded(request);
-      test.skip(!p, 'DB e2e chưa có sản phẩm mẫu của seed');
-      mockShop(api, p!);
-      const dialog = await openStory(page);
-
-      const chips = dialog.getByTestId('story-step-chip');
-      const count = await chips.count();
-      expect(count).toBeGreaterThanOrEqual(3);
-      const panel = dialog.getByTestId('story-step-panel');
-
-      let previous = '';
-      for (let i = 0; i < count; i += 1) {
-        await chips.nth(i).click();
-        await expect(chips.nth(i)).toHaveAttribute('aria-current', 'step');
-        if (i > 0) await expect(panel).not.toHaveText(previous);
-        previous = (await panel.textContent()) ?? '';
-        expect(previous.trim().length).toBeGreaterThan(0);
-
-        const anim = await dialog.locator('.tubu-story-panel-in').evaluate((el) => {
-          const s = getComputedStyle(el);
-          return { name: s.animationName, duration: s.animationDuration, easing: s.animationTimingFunction, numeric: s.fontVariantNumeric };
-        });
-        expect(anim.name).toBe('tubu-story-panel-in');
-        expect(anim.duration).toBe('0.24s');
-        expect(anim.easing).toBe('cubic-bezier(0.22, 1, 0.36, 1)');
-        expect(anim.numeric).toContain('tabular-nums');
+        expect(b.x, 'thẻ lệch ra ngoài mép trái').toBeGreaterThanOrEqual(0);
+        expect(b.x + b.width, 'thẻ tràn mép phải').toBeLessThanOrEqual(vp.width);
       }
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 
-    test('Thêm vào giỏ ở thanh đáy → bảng phân loại → Giỏ → Thanh toán', async ({ page, api, request }) => {
+    test('bấm từng thẻ chương: thẻ sáng đúng, chữ các chương giữ nguyên, chuyển thẻ theo đường cong 240ms, số đều', async ({ page, api, request }) => {
+      const p = await seeded(request);
+      test.skip(!p, 'DB e2e chưa có sản phẩm mẫu của seed');
+      mockShop(api, p!);
+      const story = await gotoStory(page);
+
+      const cards = story.getByTestId('story-step-card');
+      const count = await cards.count();
+      expect(count).toBeGreaterThanOrEqual(3);
+      // Mọi chương đã hiện sẵn: chọn thẻ nào cũng không được ẩn hay đổi chữ của thẻ khác.
+      const texts = await cards.allTextContents();
+      for (const t of texts) expect(t.trim().length).toBeGreaterThan(0);
+
+      for (let i = 0; i < count; i += 1) {
+        // Thẻ nằm trong HTML máy chủ nên bấm được trước khi React hydrate nhưng chưa ăn: bấm lại tới khi thẻ sáng.
+        await expect(async () => {
+          await cards.nth(i).click();
+          await expect(cards.nth(i)).toHaveAttribute('aria-current', 'step', { timeout: 1_000 });
+        }).toPass({ timeout: 15_000 });
+        await expect(story.locator('[aria-current="step"]')).toHaveCount(1);
+        expect(await cards.allTextContents()).toEqual(texts);
+
+        const style = await cards.nth(i).evaluate((el) => {
+          const s = getComputedStyle(el);
+          return { duration: s.transitionDuration, easing: s.transitionTimingFunction, numeric: s.fontVariantNumeric };
+        });
+        expect(style.duration).toContain('0.24s');
+        expect(style.easing).toContain('cubic-bezier(0.22, 1, 0.36, 1)');
+        expect(style.numeric).toContain('tabular-nums');
+      }
+      expect(await noHorizontalScroll(page)).toBe(true);
+    });
+
+    test('chọn chương rồi Thêm vào giỏ ở thanh dính → bảng phân loại → Giỏ → Thanh toán', async ({ page, api, request }) => {
       const p = await seeded(request);
       test.skip(!p, 'DB e2e chưa có sản phẩm mẫu của seed');
       const state = mockShop(api, p!);
-      const dialog = await openStory(page);
-      await dialog.getByTestId('story-step-chip').nth(2).click();
+      const story = await gotoStory(page);
+      // Khổ điện thoại có hai nút "Thêm vào giỏ" cùng data-testid (thân trang ẩn dưới md, thanh dính): lấy bản ở thanh dính. Nút bật là lúc trang đã hydrate.
+      const add = page.getByTestId('sticky-bar').getByTestId('pdp-add-to-cart');
+      await expect(add).toBeEnabled({ timeout: 30_000 });
+      const third = story.getByTestId('story-step-card').nth(2);
+      await third.click();
+      await expect(third).toHaveAttribute('aria-current', 'step');
 
       const adding = api.waitForCall('POST', '/cart/items');
-      await dialog.getByTestId('story-add-to-cart').click();
-      // Khối mua bấm lại hộ: sản phẩm có từ 2 phân loại thì điện thoại hỏi chọn trong bảng rồi mới thêm.
+      await add.click();
+      // Sản phẩm có từ 2 phân loại thì điện thoại hỏi chọn trong bảng rồi mới thêm.
       if (p!.variations.length >= 2) {
         const sheet = page.getByRole('dialog', { name: 'Chọn phân loại' });
         await expect(sheet).toBeVisible();
@@ -210,7 +208,6 @@ for (const vp of VIEWPORTS) {
       expect(p!.variations.map((v) => v.id)).toContain(body.variationId);
       expect(body.quantity).toBeGreaterThanOrEqual(1);
       expect(state.added()).toBe(true);
-      await expect(dialog).toHaveCount(0);
 
       await page.goto('/gio-hang');
       await expect(page.getByText('Dầu gội bưởi Pơ Lang').first()).toBeVisible({ timeout: 15_000 });
@@ -222,15 +219,18 @@ for (const vp of VIEWPORTS) {
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 
-    test('giảm chuyển động: không còn chip và hiệu ứng, không tràn ngang', async ({ page, api, request }) => {
+    test('giảm chuyển động: dải vẫn đủ thẻ chương, chuyển sang bản tĩnh, thẻ không còn chuyển màu, không tràn ngang', async ({ page, api, request }) => {
       const p = await seeded(request);
       test.skip(!p, 'DB e2e chưa có sản phẩm mẫu của seed');
       mockShop(api, p!);
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      const dialog = await openStory(page);
+      const story = await gotoStory(page);
 
-      await expect(dialog.getByTestId('story-step-chip')).toHaveCount(0);
-      await expect(dialog.locator('.tubu-story-panel-in')).toHaveCount(0);
+      // Thiết lập giảm chuyển động chỉ biết ở trình duyệt nên cờ bản tĩnh bật sau hydrate.
+      await expect(story.getByTestId('product-story')).toHaveAttribute('data-animated', 'false');
+      const cards = story.getByTestId('story-step-card');
+      expect(await cards.count()).toBeGreaterThanOrEqual(3);
+      expect(await cards.first().evaluate((el) => getComputedStyle(el).transitionDuration)).toBe('0s');
       expect(await noHorizontalScroll(page)).toBe(true);
     });
   });

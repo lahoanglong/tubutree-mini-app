@@ -2,20 +2,20 @@ import type { Metadata } from 'next';
 import { fetchFaqs, fetchSupportContact, getPublicConfig } from '@tubutree/app-core/api/config';
 import { createServerHttp } from '@/lib/core-http-server';
 import { fallbackFaq } from '@/lib/faq-fallback';
-import { ogBase, withBrand } from '@/lib/og';
+import { staticPageJsonLd, staticPageMetadata } from '@/lib/page-seo';
 import { jsonLdScript } from '@/lib/product-seo';
+import { JsonLd } from '@/components/seo/json-ld';
 import { AboutView } from './about-view';
 
 export const revalidate = 3600;
 
-const DESCRIPTION = 'Tubu Tree kết nối bạn với các thương hiệu Việt tử tế: câu hỏi thường gặp, liên hệ hỗ trợ và chính sách mua sắm.';
-
-export const metadata: Metadata = {
+const SEO = {
+  path: '/gioi-thieu',
   title: 'Về Tubu Tree',
-  description: DESCRIPTION,
-  alternates: { canonical: '/gioi-thieu' },
-  openGraph: { ...ogBase, url: '/gioi-thieu', title: withBrand('Về Tubu Tree'), description: DESCRIPTION },
+  description: 'Tubu Tree kết nối bạn với các thương hiệu Việt tử tế: câu hỏi thường gặp, liên hệ hỗ trợ và chính sách mua sắm.',
 };
+
+export const metadata: Metadata = staticPageMetadata(SEO);
 
 export default async function AboutPage() {
   const http = createServerHttp({ revalidate });
@@ -31,6 +31,7 @@ export default async function AboutPage() {
   return (
     <>
       <AboutView initialFaqs={faqs} initialConfig={config} initialSupport={support} />
+      <JsonLd data={staticPageJsonLd(SEO)} />
       {faqItems.length > 0 && (
         <script
           type="application/ld+json"

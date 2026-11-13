@@ -6,7 +6,8 @@ import { SAMPLES, hideFixed, routeStoryImages, visualEnabled, visualFile } from 
 
 /**
  * Ảnh chụp Mini App 375px của dải câu chuyện với ảnh sản phẩm thật (chỉ chạy khi có STORY_SHOT_DIR và STORY_IMG_DIR, xem support/story-visual.ts).
- * Kiểm tự động trong ca: không tràn ngang, khung sân khấu có ảnh đã tải (không rỗng). Còn lại xem ảnh bằng mắt.
+ * Kiểm tự động trong ca: không tràn ngang, khung sân khấu có ảnh đã tải (không rỗng), mỗi thẻ chương bấm xong phải sáng. Còn lại xem ảnh bằng mắt.
+ * Khung toàn màn nay chỉ còn ở Reel Trang chủ, do w42a-home-story-reel.*.spec.ts phủ, nên không chụp ở đây.
  */
 test.use({ viewport: { width: 375, height: 812 } });
 test.skip(!visualEnabled(), 'cần STORY_SHOT_DIR và STORY_IMG_DIR');
@@ -56,47 +57,14 @@ for (const sample of SAMPLES) {
       await page.waitForTimeout(400);
       await shot('arc-2');
     }
-    const chips = story.getByTestId('story-step-chip');
-    const n = await chips.count();
+    // Mọi chương hiện sẵn dưới dạng thẻ: bấm từng thẻ, thẻ phải sáng rồi mới chụp.
+    const cards = story.getByTestId('story-step-card');
+    const n = await cards.count();
     for (let i = 1; i < n; i += 1) {
-      await chips.nth(i).click();
+      await cards.nth(i).click();
+      await expect(cards.nth(i)).toHaveAttribute('aria-current', 'step');
       await page.waitForTimeout(500);
       await shot(`step-${i + 1}`);
-    }
-  });
-}
-
-// Khung toàn màn của Mini: mở, chụp từng bước bằng chip.
-for (const sample of SAMPLES) {
-  test(`Mini 375px toàn màn: ${sample.key}`, async ({ page, api }) => {
-    const slug = `visual-${sample.key}`;
-    const ids = sample.variations.map((_, i) => `vis-${sample.key}-${i}`);
-    mockDiscovery(api);
-    api.get('/products/:slug', () => ({
-      ...productDetail(CATALOG[0]!.slug)!,
-      slug,
-      brand: sample.brand,
-      name: sample.name,
-      images: sample.images,
-      thumbnail: sample.images[0],
-      ingredients: sample.ingredients,
-      variations: sample.variations.map((v, i) => ({ id: ids[i]!, sku: `VIS-${i}`, name: v.name, attributes: {}, retailPrice: v.price, salePrice: null, stock: 20 })),
-      storyConfig: sample.build(ids),
-    }));
-    await routeStoryImages(page);
-    await page.goto(`/product/${slug}`);
-    await expect(page.getByTestId('product-story')).toBeVisible({ timeout: 20_000 });
-    await page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-    await expect(dialog).toBeVisible();
-    await page.waitForTimeout(500);
-    mkdirSync(visualFile(), { recursive: true });
-    await page.screenshot({ path: path.join(visualFile(), `mini-375-${sample.key}-full-open.png`) });
-    const chips = dialog.getByTestId('story-step-chip');
-    for (let i = 1; i < (await chips.count()); i += 1) {
-      await chips.nth(i).click();
-      await page.waitForTimeout(500);
-      await page.screenshot({ path: path.join(visualFile(), `mini-375-${sample.key}-full-step-${i + 1}.png`) });
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });

@@ -4,18 +4,23 @@ import { getFeedPublicPreview, type FeedPreviewItem } from '@tubutree/app-core/a
 import { getPublicConfig, type PublicConfig } from '@tubutree/app-core/api/config';
 import { CommunityChannels } from '@/components/community/community-channels';
 import { PublicPreviewList } from '@/components/community/public-preview-list';
+import { JsonLd } from '@/components/seo/json-ld';
 import { createServerHttp } from '@/lib/core-http-server';
+import { staticPageJsonLd, staticPageMetadata } from '@/lib/page-seo';
 import { FeedShell } from './feed-shell';
 import { FeedView } from './feed-view';
 
 // API cache bản xem trước 60 giây; trang ISR không giữ lâu hơn để bài đã gỡ biến mất nhanh khỏi HTML công khai.
 export const revalidate = 60;
 
-export const metadata: Metadata = {
+// Dữ liệu có cấu trúc chỉ khai trang (WebPage + breadcrumb), không khai bài đăng: bản xem trước đổi theo từng phút và có thể tắt bằng cờ.
+const SEO = {
+  path: '/cong-dong',
   title: 'Cộng đồng Vườn Tubu',
   description: 'Hỏi đáp cách dùng, chia sẻ trải nghiệm và cổ vũ nhau trong cộng đồng Vườn Tubu của Tubu Tree.',
-  alternates: { canonical: '/cong-dong' },
 };
+
+export const metadata: Metadata = staticPageMetadata(SEO);
 
 export default async function CommunityPage() {
   const http = createServerHttp({ revalidate });
@@ -25,20 +30,23 @@ export default async function CommunityPage() {
   const preview: FeedPreviewItem[] | undefined =
     config?.communityPublicPreview === true ? await getFeedPublicPreview(http).then((r) => r.posts, () => undefined) : undefined;
   return (
-    // useSearchParams (bộ lọc thẻ) buộc phần client nằm sau Suspense; HTML công khai là bản xem trước của khách.
-    <Suspense
-      fallback={
-        <FeedShell subtitle={Boolean(preview?.length)}>
-          {preview && preview.length > 0 ? (
-            <>
-              <CommunityChannels {...(config ? { initialConfig: config } : {})} />
-              <PublicPreviewList posts={preview} />
-            </>
-          ) : null}
-        </FeedShell>
-      }
-    >
-      <FeedView initialPreview={preview} initialConfig={config} />
-    </Suspense>
+    <>
+      {/* useSearchParams (bộ lọc thẻ) buộc phần client nằm sau Suspense; HTML công khai là bản xem trước của khách. */}
+      <Suspense
+        fallback={
+          <FeedShell subtitle={Boolean(preview?.length)}>
+            {preview && preview.length > 0 ? (
+              <>
+                <CommunityChannels {...(config ? { initialConfig: config } : {})} />
+                <PublicPreviewList posts={preview} />
+              </>
+            ) : null}
+          </FeedShell>
+        }
+      >
+        <FeedView initialPreview={preview} initialConfig={config} />
+      </Suspense>
+      <JsonLd data={staticPageJsonLd(SEO)} />
+    </>
   );
 }
