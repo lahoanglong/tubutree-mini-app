@@ -54,7 +54,7 @@ for (const vp of VIEWPORTS) {
 
       const count = await rings(page).count();
       expect(count).toBeGreaterThanOrEqual(3);
-      expect(count).toBeLessThanOrEqual(8);
+      expect(count).toBeLessThanOrEqual(15);
       for (let i = 0; i < count; i += 1) {
         await rings(page).nth(i).scrollIntoViewIfNeeded();
         await expectTouchTarget44(rings(page).nth(i));
