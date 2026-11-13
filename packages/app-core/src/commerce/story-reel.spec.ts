@@ -3,6 +3,7 @@ import { parseStoryConfig, STORY_LIMITS, type ProductStoryConfig } from '@tubutr
 import {
   markReelSeen,
   readReelSeen,
+  REEL_HERO_BRANDS,
   REEL_MAX_ITEMS,
   REEL_MIN_ITEMS,
   REEL_SEEN_KEY,
@@ -45,7 +46,7 @@ describe('reelItems', () => {
   });
 
   it('món không ảnh không chiếm chỗ của món có ảnh phía sau: đủ trần vẫn lấy món có ảnh', () => {
-    const list = [...Array.from({ length: 5 }, (_, i) => card(`x${i}`, { thumbnail: null })), ...Array.from({ length: 9 }, (_, i) => card(`y${i}`))];
+    const list = [...Array.from({ length: 5 }, (_, i) => card(`x${i}`, { thumbnail: null })), ...Array.from({ length: REEL_MAX_ITEMS + 5 }, (_, i) => card(`y${i}`))];
     expect(reelItems(list).map((x) => x.slug)).toEqual(Array.from({ length: REEL_MAX_ITEMS }, (_, i) => `y${i}`));
   });
 
@@ -63,6 +64,15 @@ describe('reelItems', () => {
     const out = reelItems(Array.from({ length: 20 }, (_, i) => card(`s${i}`)));
     expect(out).toHaveLength(REEL_MAX_ITEMS);
     expect(out[0]!.slug).toBe('s0');
+  });
+
+  it('trần là 15 món (W146B: top 15 món chủ lực), nâng từ 8', () => {
+    expect(REEL_MAX_ITEMS).toBe(15);
+    expect(reelItems(Array.from({ length: 24 }, (_, i) => card(`k${i}`)))).toHaveLength(15);
+  });
+
+  it('nhãn chủ lực là Pineboo, Fuwa3e, Sokfarm, Pơ Lang', () => {
+    expect([...REEL_HERO_BRANDS]).toEqual(['Pineboo', 'Fuwa3e', 'Sokfarm', 'Pơ Lang']);
   });
 
   it(`dưới ${REEL_MIN_ITEMS} món thì dải ẩn (rỗng), không để tiêu đề trơ`, () => {
@@ -212,5 +222,71 @@ describe('reelNeighbor', () => {
     expect(reelNeighbor(slugs, 'a', -1)).toBeNull();
     expect(reelNeighbor(slugs, 'b', -1)).toBe('a');
     expect(reelNeighbor(slugs, 'x', 1)).toBeNull();
+  });
+});
+
+describe('reelItems: ưu tiên món chủ lực có ảnh', () => {
+  type C = ReturnType<typeof card> & { brand?: string | null; isFeatured?: boolean };
+  const hero = (slug: string, name: string, over: Partial<C> = {}): C => ({ ...card(slug, { name }), brand: 'Tubu Tree', ...over });
+
+  it('món nhãn chủ lực (đọc từ tên khi brand là "Tubu Tree") đứng trước món thường dù bán kém hơn', () => {
+    const list: C[] = [
+      hero('t1', 'Nước rửa chén bồ hòn'),
+      hero('t2', 'Lau sàn hữu cơ'),
+      hero('p1', 'Pineboo Gel rửa tay 500ml'),
+      hero('f1', 'Fuwa3e Xịt khử mùi'),
+      hero('t3', 'Xà phòng thiên nhiên'),
+    ];
+    expect(reelItems(list).map((x) => x.slug)).toEqual(['p1', 'f1', 't1', 't2', 't3']);
+  });
+
+  it('nhận đủ 4 nhãn: Pineboo, Fuwa3e, Sokfarm (cả chính tả cũ Sokfram), Pơ Lang; giữ thứ tự nguồn trong nhóm', () => {
+    const list: C[] = [
+      hero('x1', 'Món thường 1'),
+      hero('h1', 'Sokfram Mật ong 250g'),
+      hero('h2', 'Pơ Lang Cà phê rang xay'),
+      hero('x2', 'Món thường 2'),
+      hero('h3', 'Combo', { brand: 'Sokfarm' }),
+      hero('h4', 'Fuwa3e Tẩy bồn cầu'),
+    ];
+    expect(reelItems(list).map((x) => x.slug)).toEqual(['h1', 'h2', 'h3', 'h4', 'x1', 'x2']);
+  });
+
+  it('món Admin ghim (isFeatured) đứng trước cả nhãn chủ lực', () => {
+    const list: C[] = [hero('p1', 'Pineboo Gel'), hero('t1', 'Món thường'), hero('t2', 'Món ghim', { isFeatured: true }), hero('f1', 'Fuwa3e Xịt')];
+    expect(reelItems(list).map((x) => x.slug)).toEqual(['t2', 'p1', 'f1', 't1']);
+  });
+
+  it('món chủ lực chưa có ảnh vẫn bị bỏ: không bao giờ có khung trống trên Reel', () => {
+    const list: C[] = [
+      hero('p0', 'Pineboo không ảnh', { thumbnail: null }),
+      hero('p1', 'Pineboo ảnh trống', { thumbnail: '  ' }),
+      hero('p2', 'Pineboo có ảnh'),
+      hero('t1', 'Món ghim không ảnh', { isFeatured: true, thumbnail: '' }),
+      hero('t2', 'Món 2'),
+      hero('t3', 'Món 3'),
+    ];
+    expect(reelItems(list).map((x) => x.slug)).toEqual(['p2', 't2', 't3']);
+  });
+
+  it('món chủ lực hết hàng hay đối tác giao vẫn bị loại như món thường', () => {
+    const list = [
+      hero('p1', 'Pineboo hết hàng', { inStock: false }),
+      { ...hero('p2', 'Pineboo đối tác'), fulfiller: { kind: 'MERCHANT' } },
+      hero('p3', 'Pineboo ổn'),
+      hero('t1', 'Món 1'),
+      hero('t2', 'Món 2'),
+    ];
+    expect(reelItems(list).map((x) => x.slug)).toEqual(['p3', 't1', 't2']);
+  });
+
+  it('trần 15 chọn theo nhóm: 17 món chủ lực thì món thường không lọt, và vẫn theo thứ tự nguồn', () => {
+    const heroes = Array.from({ length: 17 }, (_, i) => hero(`h${i}`, `Pineboo món ${i}`));
+    const out = reelItems([hero('t0', 'Món thường bán chạy nhất'), ...heroes]);
+    expect(out.map((x) => x.slug)).toEqual(heroes.slice(0, REEL_MAX_ITEMS).map((x) => x.slug));
+  });
+
+  it('nguồn không có brand/isFeatured (API cũ) vẫn chạy theo thứ tự nguồn', () => {
+    expect(reelItems([card('a'), card('b'), card('c'), card('d')]).map((x) => x.slug)).toEqual(['a', 'b', 'c', 'd']);
   });
 });

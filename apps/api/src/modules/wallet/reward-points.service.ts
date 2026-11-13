@@ -31,6 +31,9 @@ import {
  */
 export const POINTS_GRANT_HARD_MAX = 2_000_000;
 
+/** Điểm Xanh thưởng người mời khi không đặt `referral.referrer_reward_points`; cùng một số cho lúc cấp thưởng và cho lời mời ở `/me/referral`. */
+const REFERRER_REWARD_POINTS_DEFAULT = 5000;
+
 /** Số đơn ứng viên đọc mỗi lần khi chọn cặp thưởng giới thiệu; dừng ngay khi đủ 2 đơn không bị loại. */
 const REFERRAL_CANDIDATE_PAGE = 10;
 
@@ -181,13 +184,14 @@ export class RewardPointsService {
    * nhận từ giới thiệu (thưởng xu cũ quy ra ceil(xu/1000)), mốc và mốc kế tiếp.
    */
   async getReferralOverview(userId: string) {
-    const [user, pointsAgg, coinAgg, successCount, milestones, rules] = await Promise.all([
+    const [user, pointsAgg, coinAgg, successCount, milestones, rules, referrerRewardPoints] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { referralCode: true } }),
       this.prisma.pointsTransaction.aggregate({ where: { userId, refType: 'REFERRAL' }, _sum: { delta: true } }),
       this.prisma.coinTransaction.aggregate({ where: { userId, refType: 'REFERRAL' }, _sum: { delta: true } }),
       countReferralSuccesses(this.prisma, userId),
       this.referralMilestones(),
       this.referralOrderRules(),
+      this.config.get<number>('referral.referrer_reward_points', REFERRER_REWARD_POINTS_DEFAULT),
     ]);
     return {
       referralCode: user.referralCode,
@@ -197,6 +201,8 @@ export class RewardPointsService {
       nextMilestone: milestones.find((m) => m.count > successCount) ?? null,
       windowDays: rules.windowDays,
       minOrderAmount: rules.minOrderAmount,
+      // Lời mời "Mời bạn sống xanh" nêu đúng số điểm mà `grantReferralOrderReward` sẽ trả (cùng khoá, cùng mặc định); 0 = Admin tắt thưởng.
+      referrerRewardPoints,
     };
   }
 
@@ -223,7 +229,7 @@ export class RewardPointsService {
     if (!referrer || referrer.role === 'AFFILIATE' || isSampleOwner) return false;
 
     const [reward, { windowDays, minOrderAmount: minOrder }, expiresAt] = await Promise.all([
-      this.config.get<number>('referral.referrer_reward_points', 5000),
+      this.config.get<number>('referral.referrer_reward_points', REFERRER_REWARD_POINTS_DEFAULT),
       this.referralOrderRules(),
       this.expiresAt(),
     ]);

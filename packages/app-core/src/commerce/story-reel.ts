@@ -1,4 +1,4 @@
-import { STORY_LIMITS, type AssemblyStep, type ProductStoryConfig } from '@tubutree/shared-types';
+import { effectiveCatalogBrand, STORY_LIMITS, type AssemblyStep, type ProductStoryConfig } from '@tubutree/shared-types';
 import { fillCopy } from '../shop-copy';
 import { resolveStoryConfig, type StoryProductInput } from './product-story';
 
@@ -7,9 +7,16 @@ import { resolveStoryConfig, type StoryProductInput } from './product-story';
  * Logic chọn món, kịch bản dự phòng và trạng thái "đã xem" nằm ở đây để Mini App và web vẽ cùng một thứ.
  */
 
-/** Trần và sàn số vòng: dưới sàn thì dải ẩn hẳn (không để tiêu đề trơ), như luật kệ ở `shelves.ts`. */
-export const REEL_MAX_ITEMS = 8;
+/** Trần và sàn số vòng: dưới sàn thì dải ẩn hẳn (không để tiêu đề trơ), như luật kệ ở `shelves.ts`. Trần 15 = số món chủ lực cần lên Reel; nguồn là kệ Bán chạy nhất (24 món). */
+export const REEL_MAX_ITEMS = 15;
 export const REEL_MIN_ITEMS = 3;
+
+/**
+ * Nhãn chủ lực có ảnh thật, xếp trước trong Reel khi Admin chưa ghim món nào (`isFeatured`). So theo nhãn hiệu lực (`effectiveCatalogBrand`):
+ * PROD ghi `products.brand` = "Tubu Tree" cho mọi món, nên nhãn đọc từ tên sản phẩm; chính tả cũ "Sokfram" về "Sokfarm".
+ */
+export const REEL_HERO_BRANDS: readonly string[] = ['Pineboo', 'Fuwa3e', 'Sokfarm', 'Pơ Lang'];
+const HERO_BRAND_SET: ReadonlySet<string> = new Set(REEL_HERO_BRANDS.map((b) => b.toLowerCase()));
 
 /** Khoá sessionStorage nhớ slug đã mở Reel trong phiên: vòng đã xem đổi từ viền xanh sang viền xám. */
 export const REEL_SEEN_KEY = 'tubu.reel.seen.v1';
@@ -21,22 +28,33 @@ export interface ReelCandidate {
   inStock: boolean;
   /** Ai giao; thiếu (API cũ) coi là Tubu giao như dải gợi ý bù đơn. Món đối tác không lên dải: chương dự phòng nói "Món Tubu Tree chọn". */
   fulfiller?: { kind?: string } | null;
+  /** Admin ghim món (`isFeatured`): đứng đầu Reel. Thiếu (nguồn cũ) coi là không ghim. */
+  isFeatured?: boolean;
+  /** Nhãn của thẻ để nhận món chủ lực; thiếu thì chỉ còn tên và slug. */
+  brand?: string | null;
+}
+
+/** 0 = Admin ghim, 1 = nhãn chủ lực, 2 = còn lại. */
+function reelRank(c: ReelCandidate): 0 | 1 | 2 {
+  if (c.isFeatured === true) return 0;
+  return HERO_BRAND_SET.has(effectiveCatalogBrand(c.name, c.slug, c.brand ?? '').toLowerCase()) ? 1 : 2;
 }
 
 /**
- * Các món lên dải: Tubu giao, còn hàng, có tên, CÓ ẢNH, không trùng slug, theo đúng thứ tự nguồn (Bán chạy nhất), tối đa `REEL_MAX_ITEMS`.
- * Món chưa có ảnh bị bỏ: vòng Story chỉ có ảnh sản phẩm bên trong, ô thay thế (lá) không kể được gì trong một khung Reel.
+ * Các món lên dải: Tubu giao, còn hàng, có tên, CÓ ẢNH (`thumbnail` là ảnh đầu của sản phẩm), không trùng slug, tối đa `REEL_MAX_ITEMS`.
+ * Thứ tự: món Admin ghim (`isFeatured`), rồi món của nhãn chủ lực (`REEL_HERO_BRANDS`), rồi phần còn lại; trong mỗi nhóm giữ đúng thứ tự nguồn
+ * (Bán chạy nhất 30 ngày). Món chưa có ảnh bị bỏ dù là món chủ lực: vòng Story chỉ có ảnh sản phẩm bên trong, ô thay thế (lá) không kể được gì trong một khung Reel.
  * Dưới `REEL_MIN_ITEMS` món thì trả rỗng: dải không hiện.
  */
 export function reelItems<T extends ReelCandidate>(cards: readonly T[] | null | undefined, limit: number = REEL_MAX_ITEMS): T[] {
   const seen = new Set<string>();
-  const out: T[] = [];
+  const tiers: [T[], T[], T[]] = [[], [], []];
   for (const c of cards ?? []) {
     if (!c.slug || !c.name.trim() || !c.thumbnail?.trim() || c.inStock === false || (c.fulfiller?.kind ?? 'TUBU') !== 'TUBU' || seen.has(c.slug)) continue;
     seen.add(c.slug);
-    out.push(c);
-    if (out.length >= limit) break;
+    tiers[reelRank(c)].push(c);
   }
+  const out = tiers.flat().slice(0, Math.max(0, limit));
   return out.length >= REEL_MIN_ITEMS ? out : [];
 }
 

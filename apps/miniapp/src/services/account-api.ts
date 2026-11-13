@@ -127,6 +127,8 @@ export interface ReferralOverview {
   /** Optional: API cũ chưa trả. */
   windowDays?: number;
   minOrderAmount?: number;
+  /** Điểm Xanh người mời nhận khi bạn mới có đơn thứ hai (0 = Admin tắt thưởng). Optional: API cũ chưa trả, khi đó lời mời nói chung, không nêu số. */
+  referrerRewardPoints?: number;
 }
 
 // Me / onboarding

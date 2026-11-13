@@ -27,6 +27,8 @@ const WORST: Record<string, string> = {
   avg: '5,0',
   i: '9',
   clock: '03:15',
+  points: '999.999',
+  days: '99',
 };
 
 // Khoá cần giá trị xấu nhất riêng (số tiền rút gọn có thể ghi "999,9tr", dài hơn "999k" dùng chung cho x).
@@ -43,6 +45,7 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'shop.tierHintNext': { name: 'Đồng' },
   'support.hotline': { phone: '0984 606 774' },
   'support.orderContext': { code: 'TUBU20261015001' },
+  'invite.copyFailed': { code: 'TUBU1234567890' },
 };
 
 const hit = (text: string) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.use);

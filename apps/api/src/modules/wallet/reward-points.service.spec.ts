@@ -386,6 +386,15 @@ describe('RewardPointsService.getReferralOverview (GET /me/referral)', () => {
     expect(custom).toMatchObject({ windowDays: 45, minOrderAmount: 300000 });
   });
 
+  it('trả referrerRewardPoints từ referral.referrer_reward_points, mặc định 5000 (cùng số với lúc cấp thưởng)', async () => {
+    const def = await new RewardPointsService(overview(0), cfg()).getReferralOverview('u1');
+    expect(def.referrerRewardPoints).toBe(5000);
+    const custom = await new RewardPointsService(overview(0), cfg({ 'referral.referrer_reward_points': 7000 })).getReferralOverview('u1');
+    expect(custom.referrerRewardPoints).toBe(7000);
+    const off = await new RewardPointsService(overview(0), cfg({ 'referral.referrer_reward_points': 0 })).getReferralOverview('u1');
+    expect(off.referrerRewardPoints).toBe(0);
+  });
+
   it('không cấu hình mốc → mảng rỗng, nextMilestone null, chưa có thưởng → 0', async () => {
     const r = await new RewardPointsService(overview(0), cfg()).getReferralOverview('u1');
     expect(r).toMatchObject({ milestones: [], nextMilestone: null, earnedPoints: 0 });
