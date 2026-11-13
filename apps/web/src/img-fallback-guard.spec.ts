@@ -16,8 +16,7 @@ const EXEMPT: Record<string, string> = {
   'components/affiliate/storefront-image-upload.tsx': 'xem trước ảnh cục bộ (blob) vừa chọn',
   'components/brand-owner/brand-image-field.tsx': 'xem trước ảnh chủ thương hiệu vừa dán/chọn trong form',
   'components/evidence-upload.tsx': 'xem trước ảnh minh chứng cục bộ trong form',
-  'components/admin/': 'công cụ nội bộ Admin, chưa phải ảnh hướng khách (việc sau)',
-  'app/merchant/': 'công cụ nội bộ Gian hàng, chưa phải ảnh hướng khách (việc sau)',
+  'components/admin/': 'công cụ nội bộ Admin: do admin-img-fallback-guard.spec.ts chặn riêng (còn lại blob/data URL/mã QR)',
   'components/staff/': 'công cụ nội bộ Nhân viên, chưa phải ảnh hướng khách (việc sau)',
 };
 
