@@ -492,7 +492,7 @@ describe('ProductStoryStudio', () => {
       const c = last(onChange)!;
       expect(kinds(c)).toEqual(['variant_arc', 'ingredient_assembly', 'hud_callouts']);
       const asm = c.scenes.find((s) => s.kind === 'ingredient_assembly');
-      expect(asm && asm.kind === 'ingredient_assembly' && asm.steps.map((st) => st.title)).toEqual(['Từ hoa dừa', 'Nhiệt độ thấp', 'Không qua tinh luyện']);
+      expect(asm && asm.kind === 'ingredient_assembly' && asm.steps.map((st) => st.title)).toEqual(['Ngọt dịu từ hoa dừa', 'Chậm rãi từng công đoạn', 'Giữ vẻ mộc mạc']);
       expect(c.enabled).toBe(false);
       expect(c.cutoutUrl).toBe('https://cdn.example.com/cut.png');
       expect(c.imageFrame).toBe('floating-card');

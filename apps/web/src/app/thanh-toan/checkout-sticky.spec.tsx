@@ -219,6 +219,28 @@ describe('/thanh-toan — thanh dính đáy', () => {
     expect(barButton(c).disabled).toBe(false);
   });
 
+  it('từ lg khung "Đơn hàng" dính dưới header như giỏ hàng và không có vùng cuộn riêng; dải tổng + nút vẫn dính đáy trong khung', async () => {
+    const c = await mount();
+    const card = Array.from(c.querySelectorAll('h2')).find((h) => h.textContent === 'Đơn hàng')!.parentElement!;
+    expect(card.className).toContain('lg:sticky');
+    expect(card.className).toContain('lg:top-[calc(var(--header-h)+1rem)]');
+    expect(card.className).toContain('lg:self-start');
+    expect(card.className).not.toMatch(/overflow-y-auto|max-h-/);
+    expect(c.querySelector('[data-mini-part="place-order"]')!.className).toContain('lg:bottom-0');
+  });
+
+  it('từ md tiêu đề, lưới và thanh dính cùng một cột 2xl (main chặn ở 45rem tới hết md, nới lại ở lg); điện thoại không đổi', async () => {
+    const c = await mount();
+    const main = c.querySelector('main')!;
+    expect(main.className).toContain('md:max-w-[45rem]');
+    expect(main.className).toContain('lg:max-w-frame');
+    const inner = bar(c)!.firstElementChild as HTMLElement;
+    expect(inner.className).toContain('md:mx-auto');
+    expect(inner.className).toContain('md:max-w-2xl');
+    expect(inner.className).not.toMatch(/(^|\s)max-w-/);
+    expect(inner.contains(barButton(c))).toBe(true);
+  });
+
   it('trang vẫn còn nút "Đặt hàng" trong khung tóm tắt cho màn rộng', async () => {
     const c = await mount();
     const inCard = Array.from(c.querySelectorAll('button')).find((b) => /^Đặt hàng/.test(b.textContent ?? ''));
