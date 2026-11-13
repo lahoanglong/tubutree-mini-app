@@ -444,3 +444,49 @@ describe('số đều của khung chính', () => {
     expect(c.querySelector('main')?.className).toContain('tabular-nums');
   });
 });
+
+describe('/doi-rac — máy tính: hai cột cân đối từ lg', () => {
+  const classes = (el: Element) => el.className.split(/\s+/);
+  const before = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+
+  it('hai cột chia theo thứ tự DOM của Mini: thẻ điểm và yêu cầu đang xử lý bên trái; Cách đổi, món nhận và lối vào Kho quà bên phải', async () => {
+    state.me = makeWasteMe({ openRequests: [makeRequestSummary()] });
+    const c = await mount();
+    const layout = c.querySelector('[data-testid="recycle-home-layout"]') as HTMLElement;
+    expect(classes(layout)).toEqual(expect.arrayContaining(['flex', 'flex-col', 'gap-4', 'lg:grid', 'lg:grid-cols-2', 'lg:items-start', 'lg:gap-6']));
+    const [main, side] = Array.from(layout.children) as HTMLElement[];
+    expect(layout.children).toHaveLength(2);
+    for (const col of [main!, side!]) expect(classes(col)).toEqual(expect.arrayContaining(['contents', 'lg:flex', 'lg:flex-col', 'lg:gap-4']));
+
+    const points = byText(c, 'p', 'Điểm Xanh của bạn')!;
+    const requests = byText(c, 'h2', 'Yêu cầu đang xử lý')!;
+    const methods = byText(c, 'h2', 'Cách đổi')!;
+    const kho = link(c, '/kho-qua')!;
+    expect(main!.contains(points) && main!.contains(requests)).toBe(true);
+    expect(side!.contains(methods) && side!.contains(kho) && side!.contains(link(c, '/doi-rac/quy-dinh')!)).toBe(true);
+    expect(side!.querySelector('[data-item]')).not.toBeNull();
+    expect(before(points, requests) && before(requests, methods) && before(methods, kho)).toBe(true);
+  });
+
+  it('cột Cách đổi và món nhận xếp dọc trong cột phải (không còn lưới 2 cột lồng trong cột nửa trang)', async () => {
+    const c = await mount();
+    const grid = byText(c, 'h2', 'Cách đổi')!.parentElement!.parentElement as HTMLElement;
+    expect(classes(grid)).toEqual(expect.arrayContaining(['grid', 'gap-6']));
+    expect(classes(grid).some((x) => x.startsWith('lg:grid-cols'))).toBe(false);
+  });
+
+  it('yêu cầu đang xử lý: hai thẻ một hàng từ md, nhưng một hàng mỗi yêu cầu ở lg vì cột chỉ nửa khung; trang tạm dừng giữ hai thẻ', async () => {
+    state.me = makeWasteMe({ openRequests: [makeRequestSummary(), makeRequestSummary({ id: 'r-p', code: 'TR-PICK1', method: 'PICKUP' })] });
+    let c = await mount();
+    let cards = byText(c, 'h2', 'Yêu cầu đang xử lý')!.nextElementSibling as HTMLElement;
+    expect(classes(cards)).toEqual(expect.arrayContaining(['md:grid-cols-2', 'lg:grid-cols-1']));
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    state.me = makeWasteMe({ programmeEnabled: false, openRequests: [makeRequestSummary(), makeRequestSummary({ id: 'r-p', code: 'TR-PICK1', method: 'PICKUP' })] });
+    c = await mount();
+    cards = byText(c, 'h2', 'Yêu cầu đang xử lý')!.nextElementSibling as HTMLElement;
+    expect(classes(cards)).toContain('md:grid-cols-2');
+    expect(classes(cards)).not.toContain('lg:grid-cols-1');
+    expect(c.querySelector('[data-testid="recycle-home-layout"]')).toBeNull();
+  });
+});

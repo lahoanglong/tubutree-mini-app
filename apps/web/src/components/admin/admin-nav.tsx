@@ -40,7 +40,7 @@ function skipToContent(e: MouseEvent<HTMLAnchorElement>) {
   target.focus();
 }
 
-const ITEM_CLASS = 'flex min-h-[44px] w-full items-center gap-1.5 rounded-control px-3 py-2 text-left text-sm lg:min-h-[36px] lg:py-1.5';
+const ITEM_CLASS = 'flex min-h-[44px] w-full items-center gap-1.5 rounded-control px-3 py-2 text-left text-sm lg:[@media(pointer:fine)]:min-h-[36px] lg:[@media(pointer:fine)]:py-1.5';
 const ITEM_ACTIVE = 'bg-forest-100 font-semibold text-forest-800';
 const ITEM_IDLE = 'text-stone-700 hover:bg-stone-100';
 
@@ -118,7 +118,7 @@ function NavList<K extends string>({
           }}
           placeholder="Tìm mục…"
           aria-label="Tìm mục quản trị"
-          className="min-h-[44px] w-full rounded-control border border-stone-450 bg-stone-0 pl-9 pr-3 text-sm text-stone-900 placeholder:text-stone-500 lg:min-h-[36px]"
+          className="min-h-[44px] w-full rounded-control border border-stone-450 bg-stone-0 pl-9 pr-3 text-sm text-stone-900 placeholder:text-stone-500 lg:[@media(pointer:fine)]:min-h-[36px]"
         />
       </div>
       {q && shown.length === 0 && <p className="px-3 py-2 text-sm text-stone-600">Không có mục nào khớp &quot;{query.trim()}&quot;.</p>}
@@ -133,7 +133,7 @@ function NavList<K extends string>({
               aria-expanded={expanded}
               disabled={!!q}
               onClick={() => onToggle(g.label)}
-              className="flex min-h-[36px] w-full items-center justify-between gap-2 rounded-control px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-600 hover:bg-stone-100 disabled:hover:bg-transparent"
+              className="flex min-h-11 [@media(pointer:fine)]:min-h-9 w-full items-center justify-between gap-2 rounded-control px-3 py-1 text-left text-[11px] font-semibold uppercase tracking-wider text-stone-600 hover:bg-stone-100 disabled:hover:bg-transparent"
             >
               <span className="flex min-w-0 items-center">
                 {g.label}
@@ -200,11 +200,11 @@ export function AdminNav<K extends string>({
         Bỏ qua tới nội dung
       </a>
       <nav aria-label="Mục quản trị" data-admin-nav-part className="hidden w-60 shrink-0 lg:block">
-        <div ref={listRef} className="sticky top-4 max-h-[calc(100vh-2rem)] overflow-y-auto rounded-card border border-stone-200 bg-stone-0 p-2 shadow-card">
+        <div ref={listRef} className="sticky top-[calc(var(--portal-header-h,4rem)+1rem)] max-h-[calc(100dvh-var(--portal-header-h,4rem)-2rem)] overflow-y-auto rounded-card border border-stone-200 bg-stone-0 p-2 shadow-card">
           <NavList groups={groups} active={active} onSelect={onSelect} badge={badge} open={nav.open} onToggle={nav.toggle} />
         </div>
       </nav>
-      <div data-admin-nav-part className="sticky z-30 -mx-4 border-b border-stone-200 bg-stone-50 px-4 py-2 lg:hidden" style={{ top: 'env(safe-area-inset-top, 0px)' }}>
+      <div data-admin-nav-part className="sticky z-30 -mx-4 border-b border-stone-200 bg-stone-50 px-4 py-2 lg:hidden" style={{ top: 'var(--portal-header-h, calc(4rem + env(safe-area-inset-top, 0px)))' }}>
         <button
           type="button"
           aria-haspopup="dialog"

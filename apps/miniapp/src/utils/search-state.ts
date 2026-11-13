@@ -1,5 +1,6 @@
 import type { CatalogQuery, CatalogSort } from '../services/shop-api';
 import type { FilterType } from '../services/discovery-events';
+import { canonicalBrandName } from '@tubutree/app-core/brand-origins';
 import { BROWSE_PAGE_LIMIT, browseMode } from '@tubutree/app-core/browse/mode';
 import { MAX_QUERY_LENGTH as QUERY_LIMIT, clipQuery, orderedPriceBounds } from '@tubutree/app-core/browse/query';
 import { vi } from '../i18n/vi';
@@ -82,7 +83,8 @@ export function parseSearchState(params: URLSearchParams): SearchState {
     sort: sort && (CATALOG_SORTS as readonly string[]).includes(sort) ? (sort as CatalogSort) : undefined,
     category: params.get('category') || undefined,
     segment: params.get('segment') || undefined,
-    brands: [...new Set((params.get('brand') ?? '').split(',').map((s) => s.trim()).filter(Boolean))],
+    // Link cũ `?brand=Sokfram` về tên chuẩn "Sokfarm": chip nhãn sáng đúng và API nhận cùng một chuỗi.
+    brands: [...new Set((params.get('brand') ?? '').split(',').map((s) => canonicalBrandName(s.trim())).filter(Boolean))],
     ...orderedPriceBounds(intParam(params.get('minPrice')), intParam(params.get('maxPrice'))),
     inStock: params.get('inStock') === '1',
     minRating: rating != null && rating >= 1 && rating <= 5 ? rating : undefined,

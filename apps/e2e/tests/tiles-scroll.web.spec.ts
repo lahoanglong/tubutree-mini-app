@@ -101,7 +101,8 @@ interface MetaCell { variant: string; text: string; width: number; clipped: bool
 async function metaCells(root: Locator): Promise<MetaCell[]> {
   return root.evaluate((el) =>
     Array.from(el.querySelectorAll<HTMLElement>('[data-ds-part="meta"]'))
-      .filter((m) => (m.textContent ?? '').trim() !== '')
+      // Bản `display:none` của kệ (lưới 5×2 ở điện thoại) không có hộp: không tính vào ô đo.
+      .filter((m) => m.getClientRects().length > 0 && (m.textContent ?? '').trim() !== '')
       .map((m) => {
         const holder = m.querySelector<HTMLElement>('.tubu-meta-text');
         const full = holder?.querySelector<HTMLElement>('.tubu-meta-full');
@@ -115,12 +116,15 @@ async function metaCells(root: Locator): Promise<MetaCell[]> {
 
 const describeCell = (c: MetaCell) => `${c.variant} "${c.text}" ${c.width}px${c.clipped ? ' bị cắt' : ''}`;
 
+// Kệ Bán chạy nhất có hai bản, mỗi bản `display:none` ở một khổ: kệ vuốt ngang dưới lg, lưới 5×2 từ lg. Spec này đo khổ điện thoại nên chỉ lấy bản kệ.
+const bestRail = (page: Page) => page.getByRole('region', { name: 'Bán chạy nhất', exact: true }).getByTestId('best-seller-rail');
+
 async function openHome(page: Page, api: MockApi, width = 375): Promise<void> {
   await page.setViewportSize({ width, height: 812 });
   await page.goto('/');
   await refetchStale(page, api, 'GET', '/products');
   await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole('region', { name: 'Bán chạy nhất', exact: true }).locator('[data-ds="product-tile"]')).toHaveCount(BEST.length, { timeout: 15_000 });
+  await expect(bestRail(page).locator('[data-ds="product-tile"]')).toHaveCount(BEST.length, { timeout: 15_000 });
   await expect(page.getByTestId('home-combos')).toBeVisible({ timeout: 15_000 });
 }
 
@@ -156,7 +160,7 @@ test.describe('Web 375px: thẻ và hàng cuộn của Trang chủ', () => {
     test(`${width}px: dòng meta của kệ Bán chạy nhất (thẻ hẹp) nói "Đã bán n" và không bị cắt; lưới Gợi ý cũng không bị cắt`, async ({ page, api }) => {
       mockHome(api);
       await openHome(page, api, width);
-      const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
+      const best = bestRail(page);
       await best.scrollIntoViewIfNeeded();
       await shot(best, `home-best-${width}`);
       // Kệ hạng 112px chữ nhìn thấy: chữ đầy đủ ("★ 4,7 · Đã bán 8,2k+" 119px) không vừa nên mọi thẻ nói lượt bán bằng bản gọn; thẻ thiếu sao giữ nguyên chữ.

@@ -209,6 +209,42 @@ describe('SubscriptionsPanel', () => {
     await waitFor(() => expect(mocks.setSubscriptionStatus).toHaveBeenCalledWith('s1', 'ACTIVE'));
   });
 
+  it('W140: gói tạm dừng nói rõ lý do và cách chạy lại; không biết lý do (dừng từ trước, mã lạ) chỉ có dòng chung; gói đang chạy không có dòng lý do', async () => {
+    mocks.getSubscriptions.mockResolvedValue([
+      { ...SUB, id: 's1', status: 'PAUSED' as const, pausedReason: 'invalid_address' },
+      { ...SUB, id: 's2', status: 'PAUSED' as const, pausedReason: null },
+      { ...SUB, id: 's3', status: 'PAUSED' as const, pausedReason: 'mã_lạ_của_api_mới' },
+      { ...SUB, id: 's4', status: 'ACTIVE' as const, pausedReason: 'customer' },
+      { ...SUB, id: 's5', status: 'PAUSED' as const, pausedReason: 'customer' },
+    ]);
+    renderPanel();
+    expect(await screen.findByText('Địa chỉ giao hàng không còn dùng được')).toBeInTheDocument();
+    expect(screen.getByText('Bấm Sửa để chọn lại địa chỉ, rồi bấm Tiếp tục.')).toBeInTheDocument();
+    expect(screen.getAllByText('Đang tạm dừng')).toHaveLength(2);
+    expect(screen.getAllByText(/^Lần kế:/)).toHaveLength(1);
+    expect(screen.getByText('Bạn đã tạm dừng gói này')).toBeInTheDocument();
+    expect(screen.getByText('Bấm Tiếp tục khi muốn Tubu giao lại.')).toBeInTheDocument();
+    expect(screen.queryByText(/mã_lạ/)).toBeNull();
+  });
+
+  it.each([
+    ['insufficient_wallet', 'Ví Tubu chưa đủ tiền cho kỳ này', /Chuyển khoản ngân hàng/],
+    ['invalid_address', 'Địa chỉ giao hàng không còn dùng được', /9 Hai Bà Trưng/],
+    ['cod_limit', 'Đơn kỳ vượt hạn mức thanh toán khi nhận hàng', /Chuyển khoản ngân hàng/],
+  ])('gói tạm dừng vì %s: một chạm "Sửa" mở thẳng sheet có ô đổi cách thanh toán và địa chỉ, chọn lại được ngay', async (reason, title, option) => {
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB, status: 'PAUSED' as const, pausedReason: reason }]);
+    renderPanel();
+    expect(await screen.findByText(title)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa' }));
+    expect(await screen.findByText('Sửa gói định kỳ')).toBeInTheDocument();
+    expect(screen.getByText('Thanh toán mỗi kỳ')).toBeInTheDocument();
+    expect(screen.getByText('Giao tới')).toBeInTheDocument();
+    const save = screen.getByRole('button', { name: 'Lưu thay đổi' });
+    expect(save).toBeDisabled();
+    fireEvent.click(await screen.findByRole('radio', { name: option }));
+    expect(save).toBeEnabled();
+  });
+
   it('lỗi tải → ErrorState, "Thử lại" gọi lại danh sách', async () => {
     mocks.getSubscriptions.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce([SUB]);
     renderPanel();

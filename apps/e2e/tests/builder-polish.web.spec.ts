@@ -21,7 +21,8 @@ test.describe('Trình dựng gian hàng web 1280px (G6 #35)', () => {
 
   test('hai nút "Xem trước" và "Chia sẻ" nằm ở hàng tiêu đề, không còn thanh dính đáy', async ({ page }) => {
     await page.goto('/ctv/gian-hang');
-    await expect(page.getByText('Bộ sưu tập A')).toBeVisible({ timeout: 20_000 });
+    // Tên kệ vừa là tiêu đề khối vừa là nhãn nút trong danh sách khối: chỉ lấy tiêu đề.
+    await expect(page.getByRole('heading', { name: 'Bộ sưu tập A' })).toBeVisible({ timeout: 20_000 });
     const slot = page.getByTestId('builder-head-actions');
     await expect(slot).toBeVisible();
     const h1 = (await page.getByRole('heading', { level: 1, name: 'Gian hàng của tôi' }).boundingBox())!;

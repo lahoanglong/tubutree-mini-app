@@ -38,7 +38,8 @@ import { ShopStatsRow } from '../components/ui/shop-stats-row';
 import { ShopTopBar } from '../components/ui/shop-top-bar';
 import { VoucherTicket } from '../components/ui/voucher-ticket';
 import { ShopProductsTab } from '../components/shop-page/shop-products-tab';
-import { findBrandOrigin } from '../utils/brand-origins';
+import { brandPageOrigin } from '../utils/brand-origins';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /** Tiêu đề khi chưa có tên nhãn (đang tải/lỗi); tải xong thì tên nhãn là h1 của ShopHeader. */
 const PAGE_TITLE = 'Thương hiệu';
@@ -117,7 +118,7 @@ export default function BrandViewPage() {
   const myRef = ste?.eligible ? ste.referralCode : null;
 
   const b = q.data;
-  const mapOrigin = b ? findBrandOrigin({ slug, name: b.name }) : null;
+  const mapOrigin = b ? brandPageOrigin({ slug, name: b.name }) : null;
   const featured = useMemo(() => (b?.products ?? []).slice(0, FEATURED_MAX).map((p) => ({ ...p, brand: b?.name ?? '', isFeatured: false })), [b]);
 
   if (q.isLoading) {
@@ -151,7 +152,9 @@ export default function BrandViewPage() {
     );
   }
 
-  const hasStory = Boolean(b.story || b.origin || b.storyImages.length > 0);
+  // Bản ghi Brand chưa nhập xuất xứ thì lấy từ bản đồ (Pineboo → vùng nhà máy Fuwa3e), để tab Câu chuyện và nút bản đồ vẫn có.
+  const originText = b.origin || mapOrigin?.text;
+  const hasStory = Boolean(b.story || originText || b.storyImages.length > 0);
   const productCount = b.productCount ?? b.products.length;
   // Chỉ có nút khi tab Sản phẩm có nhiều hơn số đang hiện; số trong nhãn là tổng của tab đó.
   const featuredSeeAll = productCount > featured.length ? seeAllLabel(productCount) : null;
@@ -338,11 +341,11 @@ export default function BrandViewPage() {
         {tab === 'story' && hasStory && (
           <div style={{ padding: '0 16px' }}>
             <SectionHeader title="Câu chuyện thương hiệu" />
-            {b.origin && (
+            {originText && (
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginBottom: 8 }}>
                 <span style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
                   <MapPin size={16} color="var(--color-text-brand)" aria-hidden />
-                  <Text variant="body-sm" as="span">Xuất xứ: {b.origin}</Text>
+                  <Text variant="body-sm" as="span">Xuất xứ: {originText}</Text>
                 </span>
                 {mapOrigin && (
                   <Button variant="secondary" onPress={() => navigate(`/brand-story?brand=${mapOrigin.id}`)} style={{ flexShrink: 0 }}>
@@ -361,6 +364,7 @@ export default function BrandViewPage() {
                     alt={`${b.name}, ảnh ${i + 1}`}
                     loading="lazy"
                     style={{ flex: '0 0 auto', width: 240, height: 160, objectFit: 'cover', borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)' }}
+                    onError={hideBrokenImage}
                   />
                 ))}
               </ScrollRow>

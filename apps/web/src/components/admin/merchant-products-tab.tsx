@@ -25,7 +25,7 @@ import { usePressLock } from '@/lib/use-press-lock';
 import { AdminImage } from './admin-image';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
-import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError, Field } from './ui';
+import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError, Field, ListSkeleton } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 
 const BUSY_CLASS = 'aria-disabled:opacity-60';
@@ -83,7 +83,7 @@ export function MerchantProductsTab({ focusConsignment = false }: { focusConsign
         </div>
       )}
       <div className="mt-4 space-y-4">
-        {q.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách...</p>}
+        {q.isLoading && <ListSkeleton label="Đang tải danh sách sản phẩm gian hàng" rows={4} className="h-16" />}
         {q.isError && <LoadError onRetry={() => q.refetch({ cancelRefetch: false })} retrying={q.isFetching}>Không tải được danh sách sản phẩm đối tác.</LoadError>}
         {q.data && view.items.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">

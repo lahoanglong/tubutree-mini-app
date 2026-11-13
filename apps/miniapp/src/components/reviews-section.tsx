@@ -48,6 +48,7 @@ import { SectionTitle } from './ui/section-title';
 import { Skeleton } from './ui/skeleton';
 import { Heading, Text } from './ui/text';
 import { INPUT_LIMITS } from '../utils/input-limits';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 
 /**
@@ -425,7 +426,7 @@ export function ReviewsSection({
                         style={{ width: 64, height: 64, minWidth: 44, minHeight: 44, flex: '0 0 auto', padding: 0, border: 'none', overflow: 'hidden', borderRadius: 'var(--radius-media)', cursor: 'pointer', background: m.kind === 'video' ? 'var(--color-bg-inverse)' : 'transparent', color: 'var(--color-text-inverse)', display: 'grid', placeItems: 'center' }}
                       >
                         {m.kind === 'image' ? (
-                          <img src={apiMediaUrl(m.src)} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} />
+                          <img src={apiMediaUrl(m.src)} alt="" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} onError={hideBrokenImage} />
                         ) : (
                           <Play size={24} aria-hidden="true" />
                         )}

@@ -3259,6 +3259,9 @@ model Subscription {
   // RESTRICT (C-014): xoá địa chỉ không được kéo theo xoá cứng gói định kỳ; users.deleteAddress báo lỗi rõ.
   address       Address       @relation(fields: [addressId], references: [id], onDelete: Restrict)
   status        String        @default("ACTIVE") // ACTIVE | PAUSED | CANCELLED
+  // Vì sao gói đang PAUSED: 'customer' (khách bấm Tạm dừng) hoặc mã hệ thống tự tạm dừng (inactive_product, invalid_address,
+  // partner_goods, insufficient_wallet, cod_limit). Null khi không PAUSED hoặc gói tạm dừng từ trước khi có cột này.
+  pausedReason  String?
   // Chỉ COD | WALLET | BANK_TRANSFER (Q-13); WALLET trừ ví ngay lúc sinh đơn kỳ, thiếu số dư thì gói tạm dừng.
   paymentMethod PaymentMethod @default(COD)
   nextRunAt     DateTime

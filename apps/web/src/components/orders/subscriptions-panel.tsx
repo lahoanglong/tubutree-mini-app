@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { setSubscriptionStatus, skipSubscriptionCycle, type SubscriptionDTO } from '@tubutree/app-core/api/subscriptions';
 import { subscriptionsQuery } from '@tubutree/app-core/queries/subscriptions';
+import { subscriptionPauseView, SUBSCRIPTION_PAUSED_GENERIC } from '@tubutree/app-core/subscription-pause-copy';
 import { addressesQuery } from '@tubutree/app-core/queries/checkout';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
@@ -121,8 +122,14 @@ export function SubscriptionsPanel() {
   return (
     <div className="flex flex-col gap-3 pb-6 pt-1 max-md:px-1">
       <div>
-        <p className="text-sm text-stone-700 tabular-nums">{`Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${subscribePct}% mỗi đơn, huỷ bất kỳ lúc nào.`}</p>
-        {subs[0] && <p className="mt-1 text-xs font-medium text-forest-700 tabular-nums">{`Đang giảm ${Math.round(subs[0].effectiveDiscountPct * 100)}% cho đơn định kỳ`}</p>}
+        <p className="text-sm text-stone-700 tabular-nums">
+          {subscribePct > 0
+            ? `Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${subscribePct}% mỗi đơn, huỷ bất kỳ lúc nào.`
+            : 'Tự động đặt lại sản phẩm bạn dùng thường xuyên — huỷ bất kỳ lúc nào.'}
+        </p>
+        {subs[0] && subs[0].effectiveDiscountPct > 0 && (
+          <p className="mt-1 text-xs font-medium text-forest-700 tabular-nums">{`Đang giảm ${Math.round(subs[0].effectiveDiscountPct * 100)}% cho đơn định kỳ`}</p>
+        )}
       </div>
 
       {notice && (
@@ -144,7 +151,8 @@ export function SubscriptionsPanel() {
       ) : subsQ.isError ? (
         <ErrorState variant="inline" message={errText(subsQ.error)} onRetry={() => subsQ.refetch()} />
       ) : subs.length > 0 ? (
-        <ul className="flex flex-col gap-3">
+        // Từ md hai cột: một gói đứng một mình không dãn hết khung rộng 1150px, thẻ vẫn vừa dòng chữ. Dưới md giữ một cột như Mini App.
+        <ul className="grid grid-cols-1 gap-3 md:grid-cols-2 md:items-start">
           {subs.map((s) => (
             <SubscriptionCard
               key={s.id}
@@ -269,6 +277,8 @@ function SubscriptionCard({
   onCancel: () => void;
 }) {
   const cycle = subscriptionCycleView(s);
+  // Gói không chạy nói rõ vì sao và cách chạy lại; không biết lý do (gói dừng từ trước, API cũ) thì chỉ dòng chung.
+  const pause = s.status === 'ACTIVE' ? null : subscriptionPauseView(s.pausedReason);
   return (
     <li className={`p-3 ${ui.card} ${mini.card}`}>
       <div className="flex gap-3">
@@ -292,9 +302,10 @@ function SubscriptionCard({
           {STATUS_LABEL[s.status]}
         </Badge>
       </div>
-      <div className="mt-2.5 text-xs text-stone-700 tabular-nums">
-        {s.status === 'ACTIVE' ? (s.nextRunAt ? `Lần kế: ${formatDate(s.nextRunAt)}` : 'Đang lên lịch') : 'Đang tạm dừng'}
+      <div className={`mt-2.5 text-xs text-stone-700 tabular-nums ${pause && pause.title !== SUBSCRIPTION_PAUSED_GENERIC ? 'font-semibold' : ''}`}>
+        {pause ? pause.title : s.nextRunAt ? `Lần kế: ${formatDate(s.nextRunAt)}` : 'Đang lên lịch'}
       </div>
+      {pause?.hint && <p className="mt-0.5 text-xs text-stone-600">{pause.hint}</p>}
       <div className="mt-2 flex flex-wrap gap-2">
         {/* "Sửa" và "Huỷ" mở sheet và sheet trả focus về đúng nút này khi đóng: lúc đó lệnh vừa gửi từ sheet còn chờ danh sách mới (busy vẫn true),
             nên khoá bằng aria-disabled (chặn ở onEdit/onCancel) chứ không `disabled`, nếu không focus rơi về body. */}

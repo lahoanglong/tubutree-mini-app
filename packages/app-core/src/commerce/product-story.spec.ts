@@ -9,6 +9,7 @@ import {
   buildDefaultStoryConfig,
   layersUpTo,
   resolveStoryConfig,
+  stageLayers,
   STORY_LAYER_WIDTH_PCT,
   STORY_PRODUCT_INSET_PCT,
   storyImageFrame,
@@ -254,6 +255,64 @@ describe('khung ảnh sản phẩm trên sân khấu', () => {
   it('cấu hình đã lưu có imageFrame giữ nguyên qua resolveStoryConfig', () => {
     const saved = { ...base, imageFrame: 'cutout' };
     expect(resolveStoryConfig(product({ storyConfig: saved }))?.imageFrame).toBe('cutout');
+  });
+});
+
+describe('ảnh poster không bị phủ gì lên (W133): overlay, points, stageLayers', () => {
+  const hud: StoryScene = {
+    kind: 'hud_callouts',
+    closing: 'Kết',
+    points: [
+      { id: 'a', xPct: 26, yPct: 34, label: 'Quy cách 500ml', side: 'left' },
+      { id: 'b', xPct: 74, yPct: 52, label: 'Thương hiệu', value: 'Fuwa3e', barPct: 40, side: 'right' },
+    ],
+  };
+  const poster: ProductStoryConfig = { version: 1, enabled: true, scenes: [assembly, hud] };
+  const cutout: ProductStoryConfig = { ...poster, cutoutUrl: 'https://cdn.example.com/chai.webp' };
+
+  it('ảnh poster (thẻ nổi): overlay=false, không lớp nguyên liệu nào vẽ lên ảnh, điểm nhấn HUD thành chip không toạ độ', () => {
+    for (const reducedMotion of [false, true]) {
+      const v = storyView(poster, { reducedMotion });
+      expect(v.overlay).toBe(false);
+      expect(stageLayers(v, 0)).toEqual([]);
+      expect(stageLayers(v, 99)).toEqual([]);
+      expect(v.points).toEqual([
+        { id: 'a', label: 'Quy cách 500ml' },
+        { id: 'b', label: 'Thương hiệu', value: 'Fuwa3e' },
+      ]);
+      expect(v.points.every((p) => !('xPct' in p) && !('yPct' in p) && !('side' in p))).toBe(true);
+      expect(v.hud?.points).toHaveLength(2);
+    }
+  });
+
+  it('ảnh tách nền thật (cutout): overlay=true, lớp rơi theo bước, HUD vẽ trên ảnh nên không có chip', () => {
+    const v = storyView(cutout, { reducedMotion: false });
+    expect(v.overlay).toBe(true);
+    expect(v.points).toEqual([]);
+    expect(stageLayers(v, 0)).toHaveLength(1);
+    const still = storyView(cutout, { reducedMotion: true });
+    expect(stageLayers(still, 0)).toEqual(still.staticLayers);
+    expect(still.staticLayers).toHaveLength(1);
+  });
+
+  it('admin đặt imageFrame quyết định overlay: cutout bật, floating-card tắt kể cả khi có ảnh tách nền', () => {
+    expect(storyView({ ...poster, imageFrame: 'cutout' }, { reducedMotion: false }).overlay).toBe(true);
+    expect(storyView({ ...cutout, imageFrame: 'floating-card' }, { reducedMotion: false }).overlay).toBe(false);
+  });
+
+  it('không có HUD thì không có chip', () => {
+    expect(storyView({ version: 1, enabled: true, scenes: [assembly] }, { reducedMotion: false }).points).toEqual([]);
+  });
+
+  it('mọi kịch bản đợt đầu và catalog (không có ảnh tách nền) đều là poster: không lớp nào đè ảnh, mọi điểm nhấn thành chip', () => {
+    for (const slug of ['duong-hoa-dua-sokfarm', 've-sinh-nha-tam-va-toilet-fuwa3e-500ml', 'xit-tram-cho-be-pineboo-150ml']) {
+      const cfg = resolveStoryConfig(product({ slug, variations: variations(1) }));
+      if (!cfg) continue;
+      const v = storyView(cfg, { reducedMotion: false });
+      expect(v.overlay, slug).toBe(false);
+      expect(stageLayers(v, v.steps.length - 1), slug).toEqual([]);
+      expect(v.points.length, slug).toBe(v.hud?.points.length ?? 0);
+    }
   });
 });
 

@@ -124,6 +124,43 @@ describe('/san-pham/[slug] — tên nhãn dẫn sang trang nhãn hàng (BUYERWEB
   });
 });
 
+describe('/san-pham/[slug] — chip xuất xứ cạnh tên nhãn (PO B3)', () => {
+  const originOf = (c: HTMLElement) => c.querySelector<HTMLAnchorElement>('[data-testid="pdp-origin-link"]');
+
+  it('Pineboo: chip "Fuwa3e · Thanh Hóa" dẫn bản đồ Fuwa3e, nằm cùng nhóm với nhãn, vùng chạm 44px và có aria-label', async () => {
+    api.product = { ...PRODUCT, brand: 'Pineboo', name: 'Xịt tràm cho bé Pineboo 150ml' };
+    const c = await mount();
+    const chip = originOf(c)!;
+    expect(chip.textContent).toBe('Fuwa3e · Thanh Hóa');
+    expect(chip.getAttribute('href')).toBe('/cau-chuyen?brand=fuwa3e');
+    expect(chip.getAttribute('aria-label')).toBe('Xem xuất xứ Fuwa3e · Thanh Hóa trên bản đồ');
+    expect(chip.className).toContain('min-h-11');
+    expect(chip.querySelector('svg')?.getAttribute('aria-hidden')).toBe('true');
+    const brandLink = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem sản phẩm thương hiệu Pineboo"]')!;
+    expect(brandLink.parentElement).toBe(chip.parentElement);
+    // Nhóm nhãn + chip tự xuống dòng (flex-wrap, min-w-0) nên cụm Tim/Chia sẻ không bị đẩy tràn ở 320px.
+    expect(chip.parentElement!.className).toContain('flex-wrap');
+    expect(chip.parentElement!.className).toContain('min-w-0');
+    expect(chip.parentElement!.nextElementSibling!.className).toContain('flex-none');
+  });
+
+  it('nhãn có ghim riêng chỉ hiện tên tỉnh: Sokfarm → "Trà Vinh", Fuwa3e → "Thanh Hóa"', async () => {
+    for (const [brand, label, id] of [['Sokfarm', 'Trà Vinh', 'sokfram'], ['Fuwa3e', 'Thanh Hóa', 'fuwa3e']] as const) {
+      api.product = { ...PRODUCT, brand };
+      const chip = originOf(await mount())!;
+      expect(chip.textContent).toBe(label);
+      expect(chip.getAttribute('href')).toBe(`/cau-chuyen?brand=${id}`);
+    }
+  });
+
+  it('nhãn chưa có ghim hoặc vỏ "Tubu Tree" thì không có chip', async () => {
+    for (const brand of ['Xanh Việt', 'Tubu Tree']) {
+      api.product = { ...PRODUCT, brand };
+      expect(originOf(await mount())).toBeNull();
+    }
+  });
+});
+
 describe('/san-pham/[slug] — kiểu Mini App ở điện thoại', () => {
   const PRODUCT_TUBU = { ...PRODUCT, brandSlug: 'xanh-viet', fulfiller: { kind: 'TUBU' }, fulfilment: 'TUBU' };
 
@@ -276,7 +313,7 @@ describe('/san-pham/[slug] — thư viện ảnh (BUYERWEB-17)', () => {
     };
     const c = await mount();
     expect(c.querySelector('[data-testid="product-story"]')).not.toBeNull();
-    expect(c.querySelector('[data-testid="pdp-story-open"]')!.textContent).toBe('Xem câu chuyện sản phẩm');
+    expect(c.querySelector('[data-testid="pdp-story-open"]')).toBeNull();
     const section = Array.from(c.querySelectorAll('section')).find((x) => x.textContent?.includes('Mô tả sản phẩm'))!;
     expect(section.textContent).toContain('• Bồ kết');
     expect(c.textContent).toContain('Sạch dịu');
@@ -607,13 +644,22 @@ describe('/san-pham/[slug] — đủ chức năng như Mini App', () => {
 describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () => {
   const FLASH = { itemId: 'f1', variationId: 'v1', productSlug: 'dau-goi-bo-ket', flashPrice: 120000, retailPrice: 200000, salePrice: 150000, soldCount: 1, quota: 10, endAt: '2099-10-14T16:00:00.000Z' };
 
-  it('ảnh và thông tin nằm trong một thẻ (PdpLayout), cột thông tin không dính và không tự cuộn riêng', async () => {
+  it('ảnh và thông tin nằm trong một thẻ (PdpLayout): ô ảnh (cả ảnh lẫn thanh Giờ vàng) dính từ lg, cột thông tin không dính và không tự cuộn riêng', async () => {
     const c = await mount();
     const card = c.querySelector('[data-testid="pdp-card"]')!;
-    expect(card.querySelector('[data-testid="pdp-info"]')).not.toBeNull();
+    const info = card.querySelector('[data-testid="pdp-info"]')!;
+    expect(info).not.toBeNull();
     expect(card.querySelector('[aria-roledescription="carousel"]')).not.toBeNull();
     expect(card.className).toContain('lg:grid-cols-[440px_minmax(0,1fr)]');
-    expect(c.innerHTML).not.toMatch(/lg:sticky|overflow-y-auto/);
+    const cell = card.querySelector('[data-testid="pdp-gallery-cell"]')!;
+    expect(cell.contains(card.querySelector('[aria-roledescription="carousel"]'))).toBe(true);
+    expect(cell.contains(info)).toBe(false);
+    expect(cell.className).toContain('lg:[@media(min-height:48rem)]:sticky');
+    expect(cell.className).toContain('lg:self-start');
+    const stickyTokens = (el: Element) => (el.getAttribute('class') ?? '').split(/\s+/).filter((t) => /(^|:)sticky$/.test(t));
+    expect(Array.from(info.querySelectorAll('*')).flatMap(stickyTokens)).toEqual([]);
+    expect(stickyTokens(info)).toEqual([]);
+    expect(c.innerHTML).not.toMatch(/overflow-y-auto/);
   });
 
   it('từ lg nửa dưới hai cột: Thành phần + Cam kết + Mô tả bên trái, Đánh giá bên phải; dải gợi ý vẫn cả bề ngang bên dưới', async () => {
@@ -628,7 +674,7 @@ describe('/san-pham/[slug] — bố cục máy tính và khối mới (P8)', () 
     expect(right!.querySelector('#danh-gia')).not.toBeNull();
     // Dải gợi ý là anh em kế tiếp của hai cột, không nằm trong cột nào.
     expect(cols.nextElementSibling!.className).toContain('max-md:pb-6');
-    expect(c.innerHTML).not.toMatch(/lg:sticky|overflow-y-auto/);
+    expect(c.innerHTML).not.toMatch(/overflow-y-auto/);
   });
 
   it('thanh Giờ vàng nằm ngay dưới ảnh, trước khối thông tin', async () => {

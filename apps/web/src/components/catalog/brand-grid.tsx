@@ -5,6 +5,7 @@ import type { BrandCount } from '@tubutree/app-core/api/catalog';
 import { hubBrands } from '@tubutree/app-core/browse/hub';
 import { avatarInitial, avatarTone } from '@tubutree/app-core/initials-avatar';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { SHELL_BRAND_KEY, journeyBrandHref, journeyBrands, normalizeBrandKey } from '@tubutree/app-core/brand-origins';
 import { fallBackToOriginal, sizedImage } from '@/lib/image-src';
 import { Section, SectionHeader, Text } from '@/components/mini';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
@@ -38,25 +39,29 @@ function InitialsAvatar({ name }: { name: string }) {
 
 /**
  * Lưới logo thương hiệu ở hub (nguồn: apps/miniapp/src/components/catalog/brand-grid.tsx): 4 cột ở điện thoại, một hàng 12 ô ở lg,
- * nhiều sản phẩm trước, tối đa 12; dưới 4 nhãn thì không vẽ gì.
+ * nhiều sản phẩm trước, tối đa 12; dưới 4 nhãn thì không vẽ gì. API chỉ có nhãn vỏ "Tubu Tree" thì vẽ 8 nhãn hành trình (liên kết `?q=`).
  */
 export function BrandGrid({ brands, onSelect }: BrandGridProps) {
-  const list = hubBrands(brands);
+  // PROD ghi mọi SKU là nhãn "Tubu Tree": khi API chỉ trả vỏ chung đó thì hiện 8 nhãn hành trình (tìm theo từ khoá trong tên) thay vì ẩn cả khối.
+  const onlyShell = !!brands && brands.length > 0 && brands.every((b) => normalizeBrandKey(b.brand) === SHELL_BRAND_KEY);
+  const journey = onlyShell ? journeyBrands(brands) : [];
+  const list: HubBrand[] = journey.length > 0 ? journey.map((j) => ({ brand: j.label, count: 0, slug: j.slug })) : hubBrands(brands);
   if (list.length === 0) return null;
+  const hrefOf = (b: HubBrand, i: number) => (journey.length > 0 ? journeyBrandHref(journey[i]!, '/san-pham') : browseHref({ ...EMPTY_SEARCH_STATE, brands: [b.brand] }));
   const title = fillCopy('browse.brands');
   return (
     <Section id="browse-brands" label={title}>
       <SectionHeader title={title} />
       <div className="grid grid-cols-4 gap-2 md:grid-cols-6 lg:grid-cols-12">
-        {list.map((b) => (
+        {list.map((b, i) => (
           // Liên kết thật để công cụ tìm kiếm đi theo được; chạm/nhấp trái thường vẫn lọc tại chỗ (không tải lại trang), còn Ctrl/Cmd/chuột giữa mở tab mới như mọi liên kết.
           <Link
             key={b.brand}
-            href={browseHref({ ...EMPTY_SEARCH_STATE, brands: [b.brand] })}
+            href={hrefOf(b, i)}
             className="tubu-press"
             aria-label={fillCopy('browse.brandSpoken', { name: b.brand })}
             onClick={(e) => {
-              if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              if (journey.length > 0 || e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
               e.preventDefault();
               onSelect(b.brand);
             }}

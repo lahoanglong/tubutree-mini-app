@@ -126,12 +126,15 @@ export function PosScreen() {
   const amountPreview = parseVndInput(total);
 
   return (
-    <div className="space-y-4">
+    // Từ lg hai bước đứng cạnh nhau (quét thẻ bên trái, tích điểm bên phải) để khung rộng của iPad ngang/máy tính không bỏ trống; bước 1 luôn ở cột trái nên không nhảy chỗ khi tra ra khách.
+    <div className="space-y-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-4 lg:space-y-0">
       {enabledQ.data === false && (
-        <Notice tone="warning" role="status">
-          Tích điểm tại quầy đang TẮT — vẫn tra cứu được thành viên nhưng chưa cộng được điểm. Quản trị viên bật trong Quản trị
-          → Cấu hình → Điểm Xanh.
-        </Notice>
+        <div className="lg:col-span-2">
+          <Notice tone="warning" role="status">
+            Tích điểm tại quầy đang TẮT — vẫn tra cứu được thành viên nhưng chưa cộng được điểm. Quản trị viên bật trong Quản trị
+            → Cấu hình → Điểm Xanh.
+          </Notice>
+        </div>
       )}
 
       <section className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">

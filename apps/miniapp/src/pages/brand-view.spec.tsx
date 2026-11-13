@@ -251,6 +251,25 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     expect(screen.queryByRole('button', { name: 'Xem trên bản đồ' })).toBeNull();
   });
 
+  it('chưa nhập xuất xứ: lấy từ bản đồ, Pineboo ra "Thanh Hóa (nhà máy Fuwa3e)" và nút bản đồ mở điểm Fuwa3e', async () => {
+    mocks.getPublicBrand.mockResolvedValue({ ...BRAND, slug: 'pineboo', name: 'Pineboo', story: null, origin: null });
+    renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Pineboo' });
+    openTab('Câu chuyện');
+    expect(await screen.findByText('Xuất xứ: Thanh Hóa (nhà máy Fuwa3e)')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem trên bản đồ' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/brand-story?brand=fuwa3e');
+  });
+
+  it('xuất xứ Admin đã nhập luôn thắng bản đồ', async () => {
+    mocks.getPublicBrand.mockResolvedValue({ ...BRAND, slug: 'pineboo', name: 'Pineboo', origin: 'Hà Nội, Việt Nam' });
+    renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Pineboo' });
+    openTab('Câu chuyện');
+    expect(await screen.findByText('Xuất xứ: Hà Nội, Việt Nam')).toBeInTheDocument();
+    expect(screen.queryByText(/nhà máy Fuwa3e/)).toBeNull();
+  });
+
   it('khối chương trình đại lý dẫn tới /dealer; đại lý đã duyệt chỉ đổi chữ nút', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Đăng ký đại lý' }));

@@ -108,7 +108,7 @@ describe('PageHeader (web) ở điện thoại', () => {
 describe('khung trang có thanh tiêu đề dùng chung', () => {
   it('globals.css kéo khung lên sát mép khi con trực tiếp là PageHeader, chỉ dưới md', () => {
     const css = readFileSync(join(__dirname, '../app/globals.css'), 'utf8');
-    const media = css.slice(css.indexOf('@media (max-width: 767px) {\n  body {'));
+    const media = css.slice(css.indexOf('@media (max-width: 767.98px) {\n  body {'));
     expect(media).toMatch(/main:has\(> header\[data-page-bleed\]\)\s*\{\s*padding-top: 0;/);
   });
 
@@ -267,7 +267,7 @@ describe('GardenHintBubble', () => {
 describe('globals.css', () => {
   const css = readFileSync(join(__dirname, '../app/globals.css'), 'utf8');
   it('trang con có nút lùi nổi được đệm đỉnh 48px chỉ ở dưới md, như body.with-back-btn .page của Mini App', () => {
-    expect(css).toMatch(/@media \(max-width: 767px\)[\s\S]*body\.with-back-btn\s*\{[^}]*padding-top:\s*calc\(var\(--safe-top\) \+ 48px\)/);
+    expect(css).toMatch(/@media \(max-width: 767\.98px\)[\s\S]*body\.with-back-btn\s*\{[^}]*padding-top:\s*calc\(var\(--safe-top\) \+ 48px\)/);
   });
   it('trang hero (sản phẩm, thương hiệu, gian hàng) bỏ đệm 48px như .page-bleed của Mini App', () => {
     expect(css).toMatch(/body\.with-back-btn:has\(\[data-page-bleed\]\)\s*\{[^}]*padding-top:\s*var\(--safe-top\)/);

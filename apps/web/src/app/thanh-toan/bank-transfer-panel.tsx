@@ -9,7 +9,7 @@ import { getBankQr, formatVnd, type OrderDTO } from '@/lib/shop-client';
 import { CopyButton } from '@/components/copy-button';
 import { ui } from '@/lib/guest-ui';
 import { formatDateTime } from '@/lib/format-date';
-import { BANK_DEADLINE_LEAD, BANK_DEADLINE_TAIL, BANK_QR_HINT, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
+import { BANK_DEADLINE_LEAD, BANK_DEADLINE_TAIL, BANK_QR_HINT, BANK_QR_LOAD_FAILED, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
 import type { SaveImageResult } from '@tubutree/app-core/bridge';
 import { platformBridge } from '@/lib/platform-bridge';
 import { StickyActionBar } from '@/components/sticky-action-bar';
@@ -86,6 +86,9 @@ export function BankTransferPanel({
   const [checkError, setCheckError] = useState(BANK_CHECK_NETWORK);
   const [qrSaved, setQrSaved] = useState<SaveImageResult | null>(null);
   const [savingQr, setSavingQr] = useState(false);
+  // Ghi URL ảnh đã lỗi (không phải cờ chung) để khi đơn đổi mã QR (trả thêm tiền) ảnh mới được thử lại.
+  const [failedQr, setFailedQr] = useState<string | null>(null);
+  const qrFailed = failedQr !== null && failedQr === data?.qrImageUrl;
   // Ref: hai lần chạm liền nhau chưa kịp vẽ lại thì state `savingQr` còn cũ.
   const savingQrNow = useRef(false);
 
@@ -225,12 +228,21 @@ export function BankTransferPanel({
         className="max-md:mx-2 max-md:mt-2 max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:p-3 max-md:text-center max-md:shadow-[var(--elevation-1)]"
       >
         <div className="mt-3 flex flex-col items-center gap-2 text-center max-md:mt-0 max-md:gap-0">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={data.qrImageUrl}
-            alt="VietQR"
-            className="h-56 w-56 rounded-card border border-stone-200 bg-stone-0 object-contain max-md:h-60 max-md:w-60 max-md:max-w-[70%] max-md:rounded-none max-md:border-0"
-          />
+          {qrFailed ? (
+            <p role="status" data-testid="bank-qr-failed" className="text-sm text-[var(--color-text-secondary)]">
+              {BANK_QR_LOAD_FAILED}
+            </p>
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={data.qrImageUrl}
+              alt="VietQR"
+              width={240}
+              height={240}
+              onError={() => setFailedQr(data.qrImageUrl)}
+              className="h-56 w-56 rounded-card border border-stone-200 bg-stone-0 object-contain max-md:h-60 max-md:w-60 max-md:max-w-[70%] max-md:rounded-none max-md:border-0"
+            />
+          )}
           <div className="flex items-center justify-center gap-1.5 max-md:mt-2 max-md:py-1.5">
             <p className="text-xl font-bold text-stone-900 max-md:text-lg max-md:font-semibold max-md:text-success-fg">{formatVnd(data.amount)}</p>
             <span className="md:hidden">
@@ -242,16 +254,18 @@ export function BankTransferPanel({
               Đã nhận {formatVnd(data.paidSoFar)}, còn thiếu {formatVnd(data.amount)}. Mã QR đã trừ phần này.
             </p>
           )}
-          <button
-            type="button"
-            onClick={() => void handleSaveQr(data.qrImageUrl, data.orderCode)}
-            aria-busy={savingQr || undefined}
-            aria-disabled={savingQr || undefined}
-            className={`${ui.btnSecondary} ${mini.secondary} gap-2 max-md:mt-2 max-md:w-full`}
-          >
-            <Download className="h-4 w-4 max-md:hidden" aria-hidden="true" />
-            Lưu mã QR
-          </button>
+          {!qrFailed && (
+            <button
+              type="button"
+              onClick={() => void handleSaveQr(data.qrImageUrl, data.orderCode)}
+              aria-busy={savingQr || undefined}
+              aria-disabled={savingQr || undefined}
+              className={`${ui.btnSecondary} ${mini.secondary} gap-2 max-md:mt-2 max-md:w-full`}
+            >
+              <Download className="h-4 w-4 max-md:hidden" aria-hidden="true" />
+              Lưu mã QR
+            </button>
+          )}
           {qrSaved && (
             <p role="status" data-testid="bank-qr-saved" className="text-xs text-stone-700">
               {qrSaved === 'saved'

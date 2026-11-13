@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ADMIN_QUIZ_PAGE_SIZE,
@@ -14,7 +14,8 @@ import {
   type AdminQuizInput,
 } from '@/lib/admin-client';
 import { categoryLabel } from '@/components/game/game-utils';
-import { BTN_PRIMARY, BTN_SMALL, BTN_XS_SECONDARY, INPUT_CLASS, LoadError } from './ui';
+import { AdminPagination } from './admin-pagination';
+import { BTN_PRIMARY, BTN_XS_SECONDARY, INPUT_CLASS, ListSkeleton, LoadError } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 
 const OPTION_SLOTS = 4;
@@ -65,6 +66,7 @@ function problemOf(f: FormState): string | null {
 /** Câu đố hằng ngày của Vườn Xanh: xem, thêm, sửa. Không xoá được vì khách đã trả lời các câu này. */
 export function GameQuizAdmin() {
   const [page, setPage] = useState(1);
+  const listTopRef = useRef<HTMLUListElement>(null);
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState<string | null>(null);
   const q = useQuery({ queryKey: [...QUERY_KEY, page], queryFn: () => listAdminQuizzes(page), placeholderData: (prev) => prev });
@@ -109,31 +111,16 @@ export function GameQuizAdmin() {
           Đã thêm câu đố: {added}
         </p>
       )}
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isLoading && <ListSkeleton label="Đang tải danh sách câu đố" rows={3} className="h-20" />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách câu đố.</LoadError>}
       {q.data && rows.length === 0 && <p className="text-sm text-stone-500">Chưa có câu đố nào.</p>}
-      <ul className="space-y-2">
+      <ul ref={listTopRef} className="scroll-mt-24 space-y-2">
         {rows.map((r) => (
           <QuizRow key={r.id} item={r} />
         ))}
       </ul>
       {range && q.data!.meta.total > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500">
-          <span>{range.label}</span>
-          {range.totalPages > 1 && (
-            <div className="flex items-center gap-2">
-              <button type="button" onClick={() => setPage(page - 1)} disabled={!range.hasPrev || q.isFetching} className={BTN_SMALL}>
-                ← Trang trước
-              </button>
-              <span>
-                Trang {page}/{range.totalPages}
-              </span>
-              <button type="button" onClick={() => setPage(page + 1)} disabled={!range.hasNext || q.isFetching} className={BTN_SMALL}>
-                Trang sau →
-              </button>
-            </div>
-          )}
-        </div>
+        <AdminPagination page={page} totalPages={range.totalPages} total={q.data!.meta.total} noun="câu đố" onPageChange={setPage} scrollTargetRef={listTopRef} />
       )}
     </section>
   );

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { useState } from 'react';
+import { act, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProductStoryConfig } from '@tubutree/shared-types';
 import { byText, click, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
@@ -134,17 +134,125 @@ describe('ProductStoryStudio', () => {
     const canvas = document.querySelector<HTMLElement>('[data-testid="story-hud-canvas"]')!;
     canvas.getBoundingClientRect = () => ({ left: 100, top: 50, width: 200, height: 400, right: 300, bottom: 450, x: 100, y: 50, toJSON: () => ({}) });
     click(byText(document.body, 'button', 'Hương nhu'));
-    canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 250, clientY: 150 }));
+    act(() => void canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 250, clientY: 150 })));
     const pts = hudPoints(last(onChange));
     expect(pts[1]).toMatchObject({ id: 'h2', xPct: 75, yPct: 25 });
     expect(pts[0]).toMatchObject({ id: 'h1', xPct: 10, yPct: 10 });
+  });
+
+  describe('điểm chỉ đặt bằng bàn phím và ô số', () => {
+    const handle = () => document.querySelector<HTMLButtonElement>('[data-testid="story-hud-handle"]')!;
+    const field = (label: string) => document.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+    const arrow = (key: string, init: KeyboardEventInit = {}) => {
+      const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true, ...init });
+      act(() => void handle().dispatchEvent(e));
+      return e;
+    };
+
+    it('điểm đang chọn là nút focus được, có tên theo nhãn điểm; điểm khác vẫn chỉ là chấm trang trí', () => {
+      mount({ value: config() });
+      expect(handle().getAttribute('aria-label')).toContain('Bồ kết');
+      expect(handle().tabIndex).toBe(0);
+      expect(document.querySelectorAll('[data-testid="story-hud-canvas"] button')).toHaveLength(1);
+      click(byText(document.body, 'button', 'Hương nhu'));
+      expect(handle().getAttribute('aria-label')).toContain('Hương nhu');
+    });
+
+    it('phím mũi tên dịch 1%, Shift dịch 5%, và chặn cuộn trang', () => {
+      const { onChange } = mount({ value: config() });
+      expect(arrow('ArrowRight').defaultPrevented).toBe(true);
+      expect(hudPoints(last(onChange))[0]).toMatchObject({ xPct: 11, yPct: 10 });
+      expect(document.querySelector('[role="status"].sr-only')!.textContent).toBe('Bồ kết: ngang 11%, dọc 10%');
+      arrow('ArrowDown');
+      expect(hudPoints(last(onChange))[0]).toMatchObject({ xPct: 11, yPct: 11 });
+      arrow('ArrowLeft', { shiftKey: true });
+      expect(hudPoints(last(onChange))[0]).toMatchObject({ xPct: 6, yPct: 11 });
+      arrow('ArrowUp', { shiftKey: true });
+      expect(hudPoints(last(onChange))[0]).toMatchObject({ xPct: 6, yPct: 6 });
+      expect(hudPoints(last(onChange))[1]).toMatchObject({ xPct: 80, yPct: 80 });
+    });
+
+    it('phím mũi tên kẹp ở 0 và 100; phím khác và tổ hợp Ctrl/Alt/Cmd không làm gì', () => {
+      const { onChange } = mount({ value: config() });
+      arrow('ArrowLeft', { shiftKey: true });
+      arrow('ArrowLeft', { shiftKey: true });
+      arrow('ArrowUp', { shiftKey: true });
+      expect(hudPoints(last(onChange))[0]).toMatchObject({ xPct: 0, yPct: 5 });
+      const calls = onChange.mock.calls.length;
+      expect(arrow('a').defaultPrevented).toBe(false);
+      arrow('ArrowRight', { ctrlKey: true });
+      arrow('ArrowRight', { altKey: true });
+      arrow('ArrowRight', { metaKey: true });
+      expect(onChange.mock.calls.length).toBe(calls);
+      click(byText(document.body, 'button', 'Hương nhu'));
+      for (let i = 0; i < 5; i++) arrow('ArrowRight', { shiftKey: true });
+      expect(hudPoints(last(onChange))[1]).toMatchObject({ xPct: 100 });
+    });
+
+    it('Enter trên điểm không bị khung ảnh đọc thành cú bấm ở góc trên trái', () => {
+      const { onChange } = mount({ value: config() });
+      handle().dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 0, clientY: 0 }));
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('hai ô X/Y hiện giá trị điểm đang chọn, gõ số thì đổi đúng điểm đó', () => {
+      const { onChange } = mount({ value: config() });
+      expect(field('Vị trí ngang X (%)').value).toBe('10');
+      expect(field('Vị trí dọc Y (%)').value).toBe('10');
+      expect(field('Vị trí ngang X (%)').getAttribute('inputmode')).toBe('decimal');
+      typeInto(field('Vị trí ngang X (%)'), '42');
+      expect(hudPoints(last(onChange))[0]).toMatchObject({ xPct: 42, yPct: 10 });
+      typeInto(field('Vị trí dọc Y (%)'), '33,5');
+      expect(hudPoints(last(onChange))[0]).toMatchObject({ xPct: 42, yPct: 33.5 });
+      expect(hudPoints(last(onChange))[1]).toMatchObject({ xPct: 80, yPct: 80 });
+    });
+
+    it('gõ ngoài 0–100 thì kẹp ngay; ô trống hoặc chữ không ghi đè dữ liệu; rời ô thì về giá trị đang lưu', () => {
+      const { onChange } = mount({ value: config() });
+      typeInto(field('Vị trí ngang X (%)'), '150');
+      expect(hudPoints(last(onChange))[0]).toMatchObject({ xPct: 100 });
+      expect(field('Vị trí ngang X (%)').value).toBe('100');
+      typeInto(field('Vị trí dọc Y (%)'), '-8');
+      expect(hudPoints(last(onChange))[0]).toMatchObject({ yPct: 0 });
+      const calls = onChange.mock.calls.length;
+      typeInto(field('Vị trí dọc Y (%)'), '');
+      typeInto(field('Vị trí dọc Y (%)'), 'abc');
+      expect(onChange.mock.calls.length).toBe(calls);
+      expect(hudPoints(last(onChange))[0]).toMatchObject({ yPct: 0 });
+      act(() => void field('Vị trí dọc Y (%)').dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+      expect(field('Vị trí dọc Y (%)').value).toBe('0');
+    });
+
+    it('ô số theo kịp khi điểm đổi vị trí bằng phím mũi tên hoặc khi chọn điểm khác', () => {
+      mount({ value: config() });
+      arrow('ArrowRight', { shiftKey: true });
+      expect(field('Vị trí ngang X (%)').value).toBe('15');
+      click(byText(document.body, 'button', 'Hương nhu'));
+      expect(field('Vị trí ngang X (%)').value).toBe('80');
+      expect(field('Vị trí dọc Y (%)').value).toBe('80');
+    });
+
+    it('bấm lên ảnh cập nhật ô số', () => {
+      mount({ value: config() });
+      const canvas = document.querySelector<HTMLElement>('[data-testid="story-hud-canvas"]')!;
+      canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 200, height: 200, right: 200, bottom: 200, x: 0, y: 0, toJSON: () => ({}) });
+      act(() => void canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 50, clientY: 100 })));
+      expect(field('Vị trí ngang X (%)').value).toBe('25');
+      expect(field('Vị trí dọc Y (%)').value).toBe('50');
+    });
+
+    it('studio khoá (disabled): phím mũi tên không đổi gì', () => {
+      const { onChange } = mount({ value: config(), disabled: true });
+      arrow('ArrowRight');
+      expect(onChange).not.toHaveBeenCalled();
+    });
   });
 
   it('bấm ngoài khung ảnh vẫn kẹp về 0–100', () => {
     const { onChange } = mount({ value: config() });
     const canvas = document.querySelector<HTMLElement>('[data-testid="story-hud-canvas"]')!;
     canvas.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100, right: 100, bottom: 100, x: 0, y: 0, toJSON: () => ({}) });
-    canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 500, clientY: -20 }));
+    act(() => void canvas.dispatchEvent(new MouseEvent('click', { bubbles: true, clientX: 500, clientY: -20 })));
     expect(hudPoints(last(onChange))[0]).toMatchObject({ xPct: 100, yPct: 0 });
   });
 
@@ -492,7 +600,7 @@ describe('ProductStoryStudio', () => {
       const c = last(onChange)!;
       expect(kinds(c)).toEqual(['variant_arc', 'ingredient_assembly', 'hud_callouts']);
       const asm = c.scenes.find((s) => s.kind === 'ingredient_assembly');
-      expect(asm && asm.kind === 'ingredient_assembly' && asm.steps.map((st) => st.title)).toEqual(['Từ hoa dừa', 'Nhiệt độ thấp', 'Không qua tinh luyện']);
+      expect(asm && asm.kind === 'ingredient_assembly' && asm.steps.map((st) => st.title)).toEqual(['Ngọt dịu từ hoa dừa', 'Chậm rãi từng công đoạn', 'Giữ vẻ mộc mạc']);
       expect(c.enabled).toBe(false);
       expect(c.cutoutUrl).toBe('https://cdn.example.com/cut.png');
       expect(c.imageFrame).toBe('floating-card');

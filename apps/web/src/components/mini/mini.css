@@ -121,11 +121,13 @@
   transform: translate(-50%, -50%);
 }
 
-/* Dòng "Nhận … Điểm Xanh" ở PDP (`PdpPointsEarn`): vùng chạm dôi 22px lên trên (margin âm) để không đẩy nội dung, đệm trên đúng bằng phần dôi đó nên chữ
-   xuống hai dòng (khổ 320px) thì nút cao thêm xuống dưới thay vì đè lên dòng giá. Cùng tên `.tubu-points-earn` với Mini App. */
+/* Dòng "Nhận … Điểm Xanh" ở PDP (`PdpPointsEarn`): vùng chạm dôi 20px lên trên (margin âm) để không đẩy nội dung, đệm trên đúng bằng phần dôi đó nên chữ
+   xuống hai dòng (khổ 320px) thì nút cao thêm xuống dưới thay vì đè lên dòng giá. Cùng số đo với `.tubu-points-earn` của Mini App. */
 .tubu-points-earn {
-  margin-top: -22px;
-  padding-top: 22px;
+  box-sizing: border-box;
+  margin-top: -20px;
+  padding-top: 20px;
+  padding-bottom: 4px;
 }
 
 /* Ô chọn đầu dòng giỏ (điện thoại): khung chạm 44px chỉ chiếm 24px bề ngang bố cục như `.tubu-hit-flush` của Mini App (đệm 10px + lề âm 10px hai phía,
@@ -821,7 +823,7 @@
 
 /* Nút phụ đang tắt của trang web dựng bằng `ui.btnSecondary` + `phoneSecondary`: dưới md dùng cùng cặp token với Mini (chữ be nhạt trên nền xanh nhạt
  * không đọc nổi). Viết ở CSS thường để không thêm lớp `max-md:` cho bánh cóc; hai lớp lặp để thắng `disabled:text-stone-500` của Tailwind. */
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
   .tubu-phone-secondary.tubu-phone-secondary:disabled {
     background-color: var(--color-action-secondary-bg-disabled);
     color: var(--color-action-secondary-fg-disabled);
@@ -983,8 +985,9 @@
   padding: 0 96px 0 64px;
 }
 
-/* ProductStoryShowcase: mặc định là bố cục 375px của Mini; từ md chỉ đổi cột (lưới ở lớp Tailwind của component). */
-.tubu-story { color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+/* ProductStoryShowcase: Editorial Story Split-Card. Khối Story hẹp (điện thoại, PDP ở md 768px) là một cột như Mini: ảnh rồi các chương, từ 40rem ảnh giữ khổ 26rem và chương chia cột; từ 56rem (PDP ở lg 1024px) chia hai cột, chương bên trái, ảnh bên phải. Không cột dính, không mốc cuộn. */
+/* Bố cục theo bề rộng của chính khối Story (container query), không theo cửa sổ: khung xem trước 375px của Admin và gallery cũng ra một cột như điện thoại. */
+.tubu-story { color: var(--color-text-primary); font-variant-numeric: tabular-nums; container: tubu-story / inline-size; }
 .tubu-story-stage {
   position: relative; aspect-ratio: 1 / 1; overflow: hidden;
   border-radius: var(--radius-media);
@@ -1038,36 +1041,40 @@
 /* Chip xa mục đang chọn co lại tới 0,6 (transform), vùng chạm phủ thêm phải lớn lên theo nghịch đảo để sau khi co vẫn đủ 44px. */
 .tubu-story-arc-item.tubu-hit-44-square::after { width: calc(44px / var(--arc-scale, 1)); height: calc(44px / var(--arc-scale, 1)); }
 
-.tubu-story-chips { display: flex; gap: 0.5rem; }
-.tubu-story-chip {
-  min-height: 2.75rem; min-width: 2.75rem; border: 0; border-radius: var(--radius-pill);
-  background: var(--color-bg-chip, var(--color-bg-subtle)); color: var(--color-text-primary); font: inherit; font-weight: 600; font-variant-numeric: tabular-nums; cursor: pointer;
-  transition: transform var(--p-dur-release) var(--p-ease-out), background-color var(--dur-story) var(--ease-story), color var(--dur-story) var(--ease-story);
+/* Điểm nhấn HUD của ảnh poster/ảnh chụp: dải chip dưới khung ảnh (ảnh tách nền mới vẽ chú thích đè lên ảnh). */
+.tubu-story-points { display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-stack-xs) var(--space-stack-sm); margin: var(--space-block) 0 0; padding: 0; list-style: none; }
+.tubu-story-point {
+  display: inline-flex; flex-direction: column; align-items: center; box-sizing: border-box; max-width: 100%;
+  padding: var(--space-stack-xs) var(--space-inline-sm); text-align: center;
+  background: var(--color-bg-surface); border: 1px solid var(--color-border-default); border-radius: var(--radius-control);
+  font-size: var(--type-caption-size); line-height: var(--type-caption-lh); overflow-wrap: anywhere;
 }
-.tubu-story-chip[aria-current='step'] { background: var(--color-action-primary-bg); color: var(--color-action-primary-fg); }
-.tubu-story-progress { height: 0.25rem; margin-top: 0.75rem; border-radius: var(--radius-pill); background: var(--color-track); overflow: hidden; }
-.tubu-story-progress > span { display: block; height: 100%; background: var(--color-action-primary-bg); transition: width var(--dur-story) var(--ease-story); }
-.tubu-story-panel, .tubu-story-static > li { padding: var(--space-block) 0; }
-/* Nội dung chương mới trượt lên 8px và hiện dần; remount theo `key` của bước nên chạy lại mỗi lần đổi chương. */
-.tubu-story-panel-in { animation: tubu-story-panel-in var(--dur-story) var(--ease-story) both; }
-@keyframes tubu-story-panel-in {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: none; }
+.tubu-story-point-label { font-weight: 600; color: var(--color-text-primary); }
+.tubu-story-point-value { color: var(--color-text-secondary); }
+
+/* Dòng thời gian các chương: mọi chương cùng hiện, thẻ đang chọn nhấn viền và nền. */
+.tubu-story-timeline { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-stack-sm); margin: 0; padding: 0; list-style: none; }
+.tubu-story-step {
+  display: flex; flex-direction: column; gap: var(--space-stack-xs); box-sizing: border-box; width: 100%; height: 100%; min-height: 2.75rem;
+  padding: var(--space-block); text-align: left; font: inherit; color: inherit; cursor: pointer;
+  border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-bg-surface);
+  transition: background-color var(--dur-story) var(--ease-story), border-color var(--dur-story) var(--ease-story);
 }
+.tubu-story-step[aria-current='step'] { border-color: var(--color-action-primary-bg); background: var(--color-bg-subtle); }
+.tubu-story-step:focus-visible { outline: 2px solid var(--color-border-focus); outline-offset: 2px; }
 .tubu-story-num { margin: 0; color: var(--color-text-brand); font-weight: 700; font-size: var(--type-caption-size); }
-.tubu-story-step-title { margin: 0.25rem 0 0; font-size: var(--type-title-sm-size); line-height: var(--type-title-sm-lh); font-weight: 700; }
-.tubu-story-step-body { margin: 0.25rem 0 0; color: var(--color-text-secondary); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-lh); }
-.tubu-story-static { margin: 0; padding: 0; list-style: none; }
-.tubu-story-sentinel { display: none; }
+.tubu-story-step-title { margin: 0; font-size: var(--type-title-sm-size); line-height: var(--type-title-sm-lh); font-weight: 700; }
+.tubu-story-step-body { margin: 0; color: var(--color-text-secondary); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-lh); }
+
+.tubu-story-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: var(--space-block); align-items: start; }
+.tubu-story-split-single { width: 100%; max-width: 32rem; margin-inline: auto; }
+.tubu-story-visual { width: 100%; }
 
 .tubu-story-full { position: fixed; inset: 0; z-index: var(--z-dialog); display: flex; flex-direction: column; height: 100dvh; background: var(--color-bg-surface); }
 .tubu-story-header { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.5rem var(--space-block); }
 .tubu-story-heading { margin: 0; font-size: var(--type-title-sm-size); font-weight: 700; }
 .tubu-story-close { min-height: 2.75rem; min-width: 2.75rem; border: 0; border-radius: var(--radius-pill); background: transparent; color: var(--color-text-primary); font-size: 1.5rem; cursor: pointer; }
 .tubu-story-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0 var(--space-block) var(--space-block); }
-.tubu-story-pin { position: sticky; top: 0; z-index: 1; padding-bottom: var(--space-stack-sm); background: var(--color-bg-surface); }
-.tubu-story-full .tubu-story-sentinel { display: block; height: 30vh; }
-.tubu-story-scroll > .tubu-story-sentinel:last-child { margin-bottom: 50vh; }
 .tubu-story-bar {
   display: flex; flex: none; gap: 0.625rem; padding: 0.625rem var(--space-block);
   padding-bottom: calc(0.625rem + var(--safe-bottom)); background: var(--color-bg-surface); box-shadow: var(--elevation-3);
@@ -1078,12 +1085,18 @@
 .tubu-story-btn-primary:disabled { background: var(--color-action-primary-bg-disabled); color: var(--color-action-primary-fg-disabled); cursor: not-allowed; }
 .tubu-story-btn-secondary:disabled { background: var(--color-action-secondary-bg-disabled); color: var(--color-action-secondary-fg-disabled); cursor: not-allowed; }
 
-@media (min-width: 48rem) {
-  .tubu-story-sentinel { display: block; height: 40vh; }
-  .tubu-story-sticky { position: sticky; top: calc(var(--header-h, 0px) + 1rem); }
+@container tubu-story (min-width: 40rem) {
+  .tubu-story-visual { max-width: 26rem; margin-inline: auto; }
+  .tubu-story-timeline { grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); }
+}
+@container tubu-story (min-width: 56rem) {
+  .tubu-story-split { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-section); align-items: center; }
+  .tubu-story-split > .tubu-story-visual { order: 2; }
+  .tubu-story-split > .tubu-story-chapters { order: 1; }
+  .tubu-story-timeline { grid-template-columns: minmax(0, 1fr); }
 }
 @media (prefers-reduced-motion: reduce) {
-  .tubu-story-layer[data-animated='true'], .tubu-story-panel-in, .tubu-story-stage, .tubu-story-arc-item, .tubu-story-chip, .tubu-story-progress > span { animation: none; transition: none; }
+  .tubu-story-layer[data-animated='true'], .tubu-story-stage, .tubu-story-arc-item, .tubu-story-step { animation: none; transition: none; }
 }
 
 /* ── Reel của Trang chủ (W42A): vị trí trong dải ở đầu khung toàn màn và thanh đáy "Câu chuyện kế" + "Thêm vào giỏ · giá" ── */
@@ -1113,12 +1126,12 @@
 .tubu-reel-ring[data-seen='true'] { background: var(--color-story-ring-seen); }
 .tubu-reel-photo {
   display: block; box-sizing: border-box; width: 100%; height: 100%; border: var(--p-space-1) solid var(--color-bg-surface);
-  border-radius: var(--radius-pill); background: var(--color-bg-surface); overflow: hidden;
+  border-radius: var(--radius-pill); background: var(--color-bg-media); overflow: hidden;
 }
 .tubu-reel-badge { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); box-shadow: 0 0 0 2px var(--color-bg-surface); }
 .tubu-reel-label {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; box-sizing: border-box; width: 100%; height: var(--reel-label-h);
-  font-size: var(--type-label-size); line-height: var(--type-label-lh); font-weight: 500; overflow-wrap: anywhere;
+  font-size: var(--type-label-size); line-height: var(--type-label-lh); font-weight: var(--type-label-weight); overflow-wrap: anywhere;
 }
 .tubu-reel-item[data-seen='true'] .tubu-reel-label { color: var(--color-text-secondary); }
 .tubu-reel-skel-ring { display: block; width: var(--reel-ring); height: var(--reel-ring); border-radius: var(--radius-pill); }
@@ -1132,15 +1145,15 @@
    "đã đạt" không làm giỏ nhảy; phần đã đầy có vệt sáng chạy nhẹ, tắt khi khách chọn giảm chuyển động. ── */
 .tubu-freeship {
   box-sizing: border-box; padding: var(--space-inset-card); border-radius: var(--radius-card); background: var(--color-bg-surface); box-shadow: var(--elevation-1);
-  min-height: calc(2 * var(--type-body-sm-size) * var(--type-body-sm-lh) + var(--p-space-3) + var(--p-space-3) + 2 * var(--space-inset-card));
+  min-height: calc(2 * var(--type-caption-size) * var(--type-caption-lh) + var(--p-space-3) + 6px + 2 * var(--space-inset-card));
   font-variant-numeric: tabular-nums;
 }
-.tubu-freeship[data-reached='true'] { background: var(--color-status-success-bg); }
-.tubu-freeship-text { margin: 0; color: var(--color-text-primary); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-lh); }
-.tubu-freeship[data-reached='true'] .tubu-freeship-text { color: var(--color-text-success); font-weight: 600; }
-.tubu-freeship-track { height: var(--p-space-3); margin-top: var(--p-space-3); border-radius: var(--radius-pill); background: var(--color-track); overflow: hidden; }
+.tubu-freeship[data-reached='true'] { background: var(--color-status-success-bg); box-shadow: none; }
+.tubu-freeship-text { margin: 0; color: var(--color-text-secondary); font-size: var(--type-caption-size); line-height: var(--type-caption-lh); font-weight: var(--type-label-weight); }
+.tubu-freeship[data-reached='true'] .tubu-freeship-text { color: var(--color-text-success); }
+.tubu-freeship-track { height: 6px; margin-top: var(--p-space-3); border-radius: var(--radius-pill); background: var(--color-track); overflow: hidden; }
 /* Có nút "Mua thêm": dòng chữ và nút chung một hàng; khối cao tối thiểu bằng hàng nút 44px + thanh nên câu một dòng không co lại khi đạt ngưỡng (hết nút, hết thanh), như Mini. Câu dài (hàng gian hàng tự giao, màn hẹp) xuống ba dòng thì cao hơn mức này và co lại khi đạt. */
-.tubu-freeship[data-cta='true'] { min-height: calc(44px + var(--p-space-3) + var(--p-space-3) + 2 * var(--space-inset-card)); }
+.tubu-freeship[data-cta='true'] { min-height: calc(44px + var(--p-space-3) + 6px + 2 * var(--space-inset-card)); }
 .tubu-freeship-head { display: flex; align-items: center; gap: var(--space-inline-md); }
 .tubu-freeship-head .tubu-freeship-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .tubu-freeship-cta.zaui-btn { flex: 0 0 auto; min-width: 0; height: 44px; padding: 0 var(--space-inline-md); font-variant-numeric: inherit; }
@@ -1150,7 +1163,7 @@
   transition: width var(--dur-slow) var(--ease-out);
 }
 .tubu-freeship-fill::after {
-  content: ''; position: absolute; inset: 0; opacity: 0.5; transform: translateX(-100%);
+  content: ''; position: absolute; inset: 0; transform: translateX(-100%);
   background: linear-gradient(90deg, transparent, var(--color-skeleton-shimmer), transparent);
   animation: tubu-freeship-shimmer 2.4s var(--ease-out) infinite;
 }
@@ -1161,7 +1174,7 @@
 /* ── Dải gợi ý mua thêm cho đủ Miễn phí giao hàng (W42A, FreeshipAddonRail): thẻ rộng cố định 272, cao 116; hàng cuộn nằm trong khối (không tràn mép) vì Giỏ có đệm riêng. ── */
 .tubu-addon { margin-top: var(--p-space-3); font-variant-numeric: tabular-nums; }
 .tubu-addon-head { margin-bottom: var(--space-stack-sm); }
-.tubu-addon-row { gap: var(--p-space-3); padding: var(--p-space-1) 0; }
+.tubu-addon-row { gap: var(--p-space-3); padding: var(--space-stack-xs) 0; }
 .tubu-addon-card {
   flex: 0 0 auto; box-sizing: border-box; width: 272px; display: flex; gap: var(--p-space-3); padding: var(--p-space-3);
   border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-bg-surface);

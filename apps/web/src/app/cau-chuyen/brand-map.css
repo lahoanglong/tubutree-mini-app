@@ -1,0 +1,189 @@
+/* Bản đồ chú thích ở /cau-chuyen (brand-map.tsx). Số đo hộp nhãn khớp LABEL_METRICS ở packages/app-core/src/brand-map-data.ts:
+ * đổi ở một nơi thì đổi cả nơi kia (spec brand-map-data.spec.ts kiểm hộp không chồng theo số đó).
+ * Mọi vị trí là phần trăm của khung nên HTML dựng sẵn khớp khi hydrate, không cần đo bằng JavaScript. */
+.brandmap {
+  position: relative;
+  width: 100%;
+  max-width: var(--brandmap-max-w);
+  margin-inline: auto;
+  background: var(--color-brandmap-frame-bg);
+  border: 1px solid var(--color-brandmap-frame-border);
+  border-radius: var(--radius-sheet);
+  overflow: hidden;
+  box-shadow: var(--elevation-1);
+}
+
+.brandmap-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.brandmap-land {
+  fill: var(--color-brandmap-land);
+  stroke: var(--color-brandmap-land-edge);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.brandmap-land[data-origin] {
+  fill: var(--color-brandmap-origin);
+}
+
+.brandmap-leader {
+  stroke: var(--color-brandmap-leader);
+  stroke-width: 1;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+}
+
+.brandmap-pin {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  box-sizing: border-box;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--pin);
+  border: 2px solid var(--color-bg-surface);
+  box-shadow: var(--elevation-1);
+  pointer-events: none;
+}
+
+.brandmap-islandpin {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  box-sizing: border-box;
+  border-radius: 50%;
+  border: 1px solid var(--color-brandmap-island);
+  background: var(--color-bg-surface);
+  color: var(--color-brandmap-island);
+  font-size: var(--brandmap-label-sub-size);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.brandmap-islandpin[data-inline] {
+  position: static;
+  transform: none;
+  flex: 0 0 auto;
+}
+
+/* Dải chú giải ba đảo nằm trong khung, dưới hai cột nhãn (MAP_LEGEND_H ở app-core). */
+.brandmap-legend {
+  position: absolute;
+  inset-inline: 0;
+  bottom: 0;
+  height: calc(12 / 122 * 100%);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  padding-inline: 4px;
+  font-size: var(--brandmap-label-sub-size);
+  line-height: 16px;
+  color: var(--color-brandmap-caption);
+}
+
+.brandmap-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.brandmap-label {
+  position: absolute;
+  transform: translateY(-50%);
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 4px 6px;
+  font-family: inherit;
+  color: var(--color-text-primary);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  box-shadow: var(--elevation-1);
+  cursor: pointer;
+  text-align: left;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.brandmap-label[data-side='left'] {
+  align-items: flex-end;
+  text-align: right;
+}
+
+.brandmap-label:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+.brandmap-label-name {
+  display: block;
+  font-size: var(--brandmap-label-name-size);
+  font-weight: 700;
+  line-height: 16px;
+}
+
+.brandmap-label-sub {
+  display: block;
+  font-size: var(--brandmap-label-sub-size);
+  line-height: 14px;
+  color: var(--color-text-secondary);
+  text-wrap: balance;
+}
+
+/* Nhãn đang chọn: ghim lớn lên có vòng sáng, nhãn đổi viền và nền nhạt theo màu nhãn. Từ md luôn có một nhãn chọn sẵn (chi tiết bên cạnh);
+   dưới md chỉ hiện khi tấm chi tiết đang mở. */
+@media (min-width: 768px) {
+  .brandmap-pin[data-active] {
+    width: 18px;
+    height: 18px;
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--pin) 28%, transparent);
+  }
+  .brandmap-label[data-active] {
+    border-color: var(--pin);
+    background: color-mix(in srgb, var(--pin) 10%, var(--color-bg-surface));
+  }
+  .brandmap-leader[data-active] {
+    stroke: var(--pin);
+    stroke-width: 2;
+  }
+}
+
+.brandmap[data-sheet] .brandmap-pin[data-active] {
+  width: 18px;
+  height: 18px;
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--pin) 28%, transparent);
+}
+
+.brandmap[data-sheet] .brandmap-label[data-active] {
+  border-color: var(--pin);
+  background: color-mix(in srgb, var(--pin) 10%, var(--color-bg-surface));
+}
+
+.brandmap[data-sheet] .brandmap-leader[data-active] {
+  stroke: var(--pin);
+  stroke-width: 2;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .brandmap-pin,
+  .brandmap-label {
+    transition: box-shadow 160ms ease-out, border-color 160ms ease-out, background-color 160ms ease-out, width 160ms ease-out, height 160ms ease-out;
+  }
+}

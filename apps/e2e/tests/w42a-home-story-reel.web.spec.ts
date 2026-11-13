@@ -1,6 +1,8 @@
 import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { expect, test, type MockApi } from './support/mock-api';
 import { HOME_ME, HOME_PUBLIC } from './support/home-merged';
+import { THUMB } from './support/buy-flow-mocks';
+import { refetchStale } from './support/refetch-stale';
 
 /**
  * W42A, web khách (project di động) ở 320/360/375/393px: dải Story đầu Trang chủ và Reel toàn màn.
@@ -31,7 +33,8 @@ async function seededBestSellers(request: APIRequestContext): Promise<SeedCard[]
     const r = await request.get(`${API_ORIGIN}/api/products?sort=${sort}&limit=10`).catch(() => null);
     if (!r?.ok()) continue;
     const page = (await r.json()) as { data?: SeedCard[] };
-    const cards = (page.data ?? []).filter((c) => c.inStock !== false && c.slug && c.name?.trim());
+    // Dải Story chỉ lấy món có ảnh (`reelItems`), mà seed e2e chưa có ảnh: gắn ảnh nhỏ để dải còn đủ vòng.
+    const cards = (page.data ?? []).filter((c) => c.inStock !== false && c.slug && c.name?.trim()).map((c) => ({ ...c, thumbnail: c.thumbnail ?? THUMB }));
     return cards.length >= 3 ? cards : null;
   }
   return null;
@@ -64,6 +67,8 @@ function mockHome(api: MockApi, cards: SeedCard[]): { added: () => { variationId
     };
     return { ...empty, items: [line], subtotal: line.total, itemCount: 1 };
   });
+  // Khai trước `/products/:slug`: không thì "for-you" bị coi là một slug và trả chi tiết món thay cho danh sách.
+  api.get('/products/for-you', []);
   // Cùng nguồn với dải: món có thể không nằm trong bản seed nếu máy chủ trả khác lúc dựng trang, nên chi tiết dựng được cho mọi slug.
   api.get('/products/:slug', ({ params }) => {
     const slug = params.slug!;
@@ -76,6 +81,17 @@ function mockHome(api: MockApi, cards: SeedCard[]): { added: () => { variationId
     };
   });
   const page = (data: unknown[]) => ({ data, meta: { page: 1, limit: data.length, total: data.length } });
+  // HTML từ máy chủ dựng theo DB e2e (không ảnh nên dải trống): dải lấy lại kệ Bán chạy nhất qua lời gọi này sau khi refetchStale.
+  api.get('/products', page(cards));
+  // refetchStale làm mọi truy vấn của Trang chủ hết tươi và tải lại: lời gọi không có mock trả lỗi 404 và khối nào lặp qua kết quả sẽ vỡ trang.
+  api.get('/categories', []);
+  api.get('/brands', []);
+  api.get('/search/suggest', []);
+  api.get('/config/public', { freeshipThreshold: 350000 });
+  api.get('/flash-sales/active', []);
+  api.get('/flash-sales/upcoming', []);
+  api.get('/me/purchased-items', { items: [], nextCursor: null });
+  api.get('/me/new-customer-offer', { isNewCustomer: false, welcomeVoucher: null });
   api.get('/home', { ...HOME_PUBLIC, bestSellers: page(cards), featured: page(cards), newest: page(cards) });
   api.get('/home/me', HOME_ME);
   return { added: () => added };
@@ -84,7 +100,7 @@ function mockHome(api: MockApi, cards: SeedCard[]): { added: () => { variationId
 const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 const rings = (page: Page) => page.getByTestId('story-reel-item');
 
-async function openHome(page: Page): Promise<void> {
+async function openHome(page: Page, api: MockApi): Promise<void> {
   await page.addInitScript(() => {
     try {
       localStorage.setItem('tubu_web_session', '1');
@@ -93,6 +109,7 @@ async function openHome(page: Page): Promise<void> {
     }
   });
   await page.goto('/');
+  await refetchStale(page, api, 'GET', '/products');
   await expect(page.getByTestId('story-reel-strip')).toBeVisible({ timeout: 20_000 });
 }
 
@@ -114,7 +131,7 @@ for (const vp of VIEWPORTS) {
       const cards = await seededBestSellers(request);
       test.skip(!cards, 'DB e2e chưa có từ 3 món Bán chạy nhất còn hàng');
       mockHome(api, cards!);
-      await openHome(page);
+      await openHome(page, api);
 
       const strip = page.getByTestId('story-reel-strip');
       const box = (await strip.boundingBox())!;
@@ -137,7 +154,7 @@ for (const vp of VIEWPORTS) {
       const cards = await seededBestSellers(request);
       test.skip(!cards, 'DB e2e chưa có từ 3 món Bán chạy nhất còn hàng');
       mockHome(api, cards!);
-      await openHome(page);
+      await openHome(page, api);
 
       const first = rings(page).first();
       await expect(first).toHaveAttribute('data-seen', 'false');
@@ -170,7 +187,7 @@ for (const vp of VIEWPORTS) {
       const cards = await seededBestSellers(request);
       test.skip(!cards, 'DB e2e chưa có từ 3 món Bán chạy nhất còn hàng');
       mockHome(api, cards!);
-      await openHome(page);
+      await openHome(page, api);
 
       await rings(page).first().click();
       const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
@@ -195,7 +212,7 @@ for (const vp of VIEWPORTS) {
       const cards = await seededBestSellers(request);
       test.skip(!cards, 'DB e2e chưa có từ 3 món Bán chạy nhất còn hàng');
       const shop = mockHome(api, cards!);
-      await openHome(page);
+      await openHome(page, api);
 
       const slug = (await rings(page).first().getAttribute('data-slug'))!;
       const card = cards!.find((c) => c.slug === slug);

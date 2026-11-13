@@ -1647,6 +1647,9 @@ describe('kiểu Mini App ở điện thoại: nút thêm sản phẩm, ô số 
     expect(bar.className).toContain('max-md:fixed');
     expect(bar.className).toContain('max-md:inset-x-0');
     expect(bar.className).toContain('max-md:pb-[calc(16px+var(--safe-bottom))]');
+    // `shadow-[var(--x)]` bị Tailwind đọc là màu bóng nên thanh mất bóng; phải là thuộc tính box-shadow.
+    expect(bar.className).toContain('max-md:[box-shadow:var(--elevation-3)]');
+    expect(bar.className).not.toContain('shadow-[var(');
     expect(document.body.classList.contains('has-sticky-bar')).toBe(true);
   });
 
@@ -2454,6 +2457,37 @@ describe('từ lg: máy tính (G6 #35, H3 #7)', () => {
       expect(names(bar)).toEqual(expect.arrayContaining(['Xem trước']));
     });
   }
+
+  it('từ lg: khung "Khách sẽ thấy" của cả gian hàng nằm cột phải, dính dưới header site, là bản inert của chính gian hàng đang sửa', async () => {
+    wide(true);
+    mount();
+    await flush();
+    const live = document.querySelector<HTMLElement>('[data-testid="builder-live-preview"]')!;
+    expect(live).not.toBeNull();
+    const cls = live.className.split(/\s+/);
+    expect(cls).toEqual(expect.arrayContaining(['lg:sticky', 'lg:top-[calc(var(--header-h)+1rem)]', 'lg:overflow-y-auto']));
+    expect(live.textContent).toContain('Khách sẽ thấy');
+    const frame = live.querySelector('[data-testid="storefront-preview"]')!;
+    expect(frame.hasAttribute('inert')).toBe(true);
+    const col = live.parentElement!;
+    expect(col.className.split(/\s+/)).toEqual(expect.arrayContaining(['lg:col-start-2', 'lg:row-span-2', 'lg:self-stretch']));
+    // Hàng 2 là 1fr: cột phải cao hơn cột trái thì phần dư không đẩy "Khối của gian hàng" xa thẻ đầu.
+    expect(col.parentElement!.className.split(/\s+/)).toContain('lg:grid-rows-[auto_1fr]');
+    expect(document.querySelectorAll('[data-testid="storefront-preview"]')).toHaveLength(1);
+  });
+
+  it('dưới lg: không dựng khung xem trước cạnh danh sách (tránh nhân đôi chữ trong cây DOM); bấm "Xem trước" mới mở tấm, đúng một bản', async () => {
+    wide(false);
+    mount();
+    await flush();
+    expect(document.querySelector('[data-testid="builder-live-preview"]')).toBeNull();
+    expect(document.querySelector('[data-testid="storefront-preview"]')).toBeNull();
+    click(btn('Xem trước', document.querySelector('[data-testid="builder-bar"]') as HTMLElement));
+    await flush();
+    expect(dialog()).not.toBeNull();
+    expect(document.querySelectorAll('[data-testid="storefront-preview"]')).toHaveLength(1);
+    expect(document.querySelector('[data-testid="builder-live-preview"]')).toBeNull();
+  });
 
   it('hàng tiêu đề của trang cao tối thiểu 44px từ lg ở mọi trạng thái (tải, dựng) nên nút tới không làm tiêu đề dịch xuống (H3 #7)', async () => {
     mount();

@@ -161,7 +161,9 @@ describe('HomePage — server render phần công khai', () => {
     expect(out).toContain('Bán chạy nhất');
     expect(out).not.toContain('brand=Tubu');
     expect(out).toContain(homeCopy.journey.title);
-    expect(out).not.toContain('Dải thương hiệu');
+    expect(out).toContain('Dải thương hiệu');
+    expect(out).toContain(homeCopy.journey.body(8));
+    expect(out).toContain('/san-pham?q=Fuwa3e');
   });
 
   it('cả ba lưới sản phẩm lỗi lúc Next dựng lại trang: ném để Next giữ bản đã render, không lưu trang rỗng', async () => {

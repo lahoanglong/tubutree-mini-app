@@ -46,7 +46,8 @@ test.describe('Web khách: tài khoản', () => {
     const head = page.getByRole('link', { name: /Nguyễn Văn An/ });
     await expect(head).toHaveAttribute('href', '/tai-khoan/ho-so');
     await expect(head).toContainText('Hạt Giống');
-    await expect(page.getByRole('link', { name: /Mã giảm giá/ })).toContainText('2 mã');
+    // Thanh đầu và chân website cũng có link "Mã giảm giá": chỉ lấy ô trong hub.
+    await expect(page.getByRole('main').getByRole('link', { name: /Mã giảm giá/ })).toContainText('2 mã');
     await expect(page.getByRole('heading', { name: 'Kiếm tiền cùng Tubu', level: 2 })).toBeVisible();
     // Hàng trạng thái đơn ở đầu trang: mỗi ô mở danh sách đơn đã lọc theo trạng thái.
     await expect(page.getByRole('link', { name: /^Chờ thanh toán/ })).toHaveAttribute('href', '/tai-khoan/don-hang?tab=pending_payment');

@@ -484,6 +484,47 @@ describe('/cong-dong — giao diện điện thoại như Mini App', () => {
   });
 });
 
+describe('/cong-dong — máy tính: khung rộng 2 cột từ lg', () => {
+  const classes = (el: Element) => el.className.split(/\s+/);
+
+  it('khung rộng từ lg, bảng tin 8 cột và cột phụ 4 cột trong lưới 12 cột; dưới lg vẫn một cột như Mini', async () => {
+    const { container } = await mount();
+    const main = container.querySelector('main')!;
+    expect(classes(main)).toEqual(expect.arrayContaining(['max-w-3xl', 'lg:max-w-frame']));
+    const grid = main.querySelector('h1')!.closest('header')!.nextElementSibling as HTMLElement;
+    expect(classes(grid)).toEqual(expect.arrayContaining(['lg:grid', 'lg:grid-cols-12', 'lg:items-start']));
+    const feedCol = grid.firstElementChild as HTMLElement;
+    expect(classes(feedCol)).toEqual(expect.arrayContaining(['lg:col-span-8', 'lg:min-w-0', 'flex', 'flex-col']));
+    expect(feedCol.querySelector('[data-testid="post-card"]')).not.toBeNull();
+    const aside = container.querySelector('[data-testid="feed-aside"]') as HTMLElement;
+    expect(aside.parentElement).toBe(grid);
+    expect(grid.lastElementChild).toBe(aside);
+    expect(classes(aside)).toEqual(expect.arrayContaining(['hidden', 'lg:block', 'lg:col-span-4', 'lg:sticky']));
+  });
+
+  it('cột phụ là khung mẹo dùng cộng đồng bằng chữ của shop-copy, không có nút và không gọi API mới', async () => {
+    const { container } = await mount();
+    const aside = container.querySelector('[data-testid="feed-aside"]') as HTMLElement;
+    expect(aside.tagName).toBe('ASIDE');
+    expect(aside.getAttribute('aria-label')).toBe('Cách dùng cộng đồng');
+    expect(aside.querySelector('h2')!.textContent).toBe('Cách dùng cộng đồng');
+    expect(Array.from(aside.querySelectorAll('li')).map((li) => li.textContent)).toEqual([
+      'Hỏi rõ vấn đề, kèm ảnh nếu có, để mọi người dễ giúp.',
+      'Bấm vào hashtag trong bài để xem các bài cùng chủ đề.',
+      'Chọn “Chưa trả lời” để tìm câu hỏi đang cần người giúp.',
+    ]);
+    expect(aside.querySelector('button, a, input')).toBeNull();
+    expect(mocks.get.mock.calls.map((c) => c[0]).sort()).toEqual(['/config/public', '/feed', '/feed/categories']);
+  });
+
+  it('khách chưa đăng nhập và lúc chờ cũng có cùng khung hai cột (bản server và bản client khớp nhau)', async () => {
+    mocks.auth.status = 'idle';
+    const { container } = await mount();
+    expect(container.querySelector('main [data-testid="feed-aside"]')).not.toBeNull();
+    expect(container.querySelector('main')!.className).toContain('lg:max-w-frame');
+  });
+});
+
 describe('/cong-dong — tiêu đề chừa chỗ nút lùi', () => {
   it('thanh tiêu đề chừa 64px bên trái cho nút lùi nổi; ô tìm viền mảnh', async () => {
     const { container } = await mount();

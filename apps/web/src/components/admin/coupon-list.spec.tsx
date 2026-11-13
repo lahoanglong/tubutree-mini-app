@@ -233,6 +233,33 @@ describe('CouponList — xem, tắt, gia hạn mã (ADMINOPS-8)', () => {
   });
 });
 
+describe('CouponList — phân trang dùng AdminPagination (W142B)', () => {
+  const mountPaged = async (total: number) => {
+    const api = mockFetch({ '/admin/coupons': { body: { data: [coupon()], meta: { page: 1, limit: 20, total } } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<CouponList />);
+    mounted.push(r);
+    await flush();
+    return { r, api };
+  };
+
+  it('một trang: không vẽ thanh phân trang', async () => {
+    const { r } = await mountPaged(5);
+    expect(r.container.textContent).not.toContain('Tổng số:');
+    expect(byText(r.container, 'button', 'Trang sau →')).toBeFalsy();
+  });
+
+  it('nhiều trang: hiện tổng số mã, Trang sau gọi page=2, Trang trước mở khoá', async () => {
+    const { r, api } = await mountPaged(45);
+    expect(r.container.textContent).toContain('Tổng số: 45 mã');
+    expect(r.container.textContent).toContain('/ 3');
+    expect((byText(r.container, 'button', '← Trang trước') as HTMLButtonElement).disabled).toBe(true);
+    click(byText(r.container, 'button', 'Trang sau →'));
+    await flush();
+    expect(api.calls.some((c) => c.url.includes('page=2'))).toBe(true);
+  });
+});
+
 describe('CouponList — trạng thái theo ngày và bộ lọc (W13)', () => {
   const day = 86_400_000;
   const at = (n: number) => new Date(Date.now() + n * day).toISOString();

@@ -6,3 +6,5 @@
  */
 export const PAGE_WIDE = 'mx-auto w-full max-w-frame px-4 md:px-6';
 export const PAGE_NARROW = 'mx-auto w-full max-w-3xl px-4 md:px-6';
+/** Cột hẹp như `PAGE_NARROW` tới hết md, từ lg mở ra bề rộng `PAGE_WIDE` cho trang chia 2–3 cột trên máy tính. */
+export const PAGE_NARROW_UNTIL_LG = `${PAGE_NARROW} lg:max-w-frame`;

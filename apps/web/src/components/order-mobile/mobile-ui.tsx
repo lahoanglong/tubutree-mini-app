@@ -6,7 +6,7 @@ import { Check } from 'lucide-react';
 /** Lớp `max-md:` được Tailwind phát SAU lớp thường nên đè đúng trong media query mà không cần gỡ lớp gốc. */
 export const mini = {
   /** Thẻ ui.card thành thẻ nổi của Mini App: không viền, đổ bóng elevation-1. */
-  card: 'max-md:border-0 max-md:shadow-[var(--elevation-1)]',
+  card: 'max-md:border-0 max-md:shadow-e1',
   /** Dải trắng phẳng tràn ngang (checkout, chi tiết đơn): Box p=4 mt=2 nền surface. */
   band: 'max-md:rounded-none max-md:border-0 max-md:shadow-none',
   /** SectionTitle của Mini App: chữ không chân Inter title-sm, thay serif của web. */

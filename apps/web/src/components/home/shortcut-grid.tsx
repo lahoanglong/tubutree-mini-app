@@ -49,12 +49,12 @@ const cellStyle = {
   cursor: 'pointer',
 } as const;
 
-const GRID_BLEED = 'tubu-bleed max-md:px-2 lg:hidden';
+const GRID_BLEED = 'tubu-bleed max-md:px-2 md:hidden';
 
 /**
  * Lối tắt Trang chủ (Q7), bản web của `shortcut-grid.tsx` ở Mini App: 4 ô cố định + ô "Tất cả" trong MỘT hàng 5 cột đều nhau, không cuộn ngang. Phần
  * còn lại nằm trong sheet "Tất cả". Mục có cờ tắt bị ẩn, mục kế lấp chỗ. Mục có route web chưa làm xong bị bỏ TRƯỚC khi chia ô cố định (nên ô cố định
- * luôn đủ 4 khi còn mục). "Tích điểm đơn sàn" chưa có trang web nên không bao giờ hiện. Từ lg thanh điều hướng website đã có các lối này nên khối ẩn.
+ * luôn đủ 4 khi còn mục). "Tích điểm đơn sàn" chưa có trang web nên không bao giờ hiện. Từ md thanh đầu website (`SiteHeader`) đã hiện hàng điều hướng nên khối ẩn.
  */
 export function ShortcutGrid({ initialConfig }: { initialConfig?: PublicConfig } = {}) {
   const router = useRouter();

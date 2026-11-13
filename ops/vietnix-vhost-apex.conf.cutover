@@ -1,0 +1,95 @@
+# CUTOVER — vhost cho tubutree.com (apex) và www.tubutree.com trên Apache aaPanel của VPS Vietnix. CHƯA dùng: chỉ dán khi đã quyết đổi DNS.
+#
+# Trước khi dán (không cần hạ web nào):
+#   1. Cấp chứng chỉ bằng DNS-01 (HTTP-01 không chạy được khi tubutree.com còn ở ZenCloud), phủ cả hai tên:
+#        certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.ini \
+#          -d tubutree.com -d www.tubutree.com --cert-name tubutree.com
+#      (token Cloudflare quyền Zone:DNS:Edit; công thức đầy đủ ở docs/2026-09-12-deploy-runbook.md mục 1.6.4)
+#   2. Đặt NEXT_PUBLIC_SITE_URL=https://tubutree.com trong .env rồi build lại ảnh web (docker-compose.vietnix.yml; biến build).
+#   3. Đăng ký https://tubutree.com/dang-nhap/callback ở Zalo Developers (GIỮ URI của app.tubutree.com).
+#   4. Thử thật bằng IP, chưa đổi DNS:
+#        node scripts/ops/check-cutover-redirects.mjs --base https://tubutree.com --resolve-ip 14.225.207.177
+#        bash ops/check-edge.sh --app-host tubutree.com
+#
+# Dán thành FILE MỚI trong thư mục vhost Apache của aaPanel, đặt tên sao cho nạp TRƯỚC vhost wildcard gian hàng CTV nếu có
+# (xem runbook mục 1.6.4). Apache dùng chung với ChoDeli (đang bán thật): `apachectl configtest` rồi `apachectl -k graceful`,
+# TUYỆT ĐỐI không `restart`; file lỗi để nguyên trên đĩa làm hỏng lần reload kế tiếp của aaPanel.
+#
+# Đổi DNS: A của tubutree.com và www về 14.225.207.177, ☁ xám lúc đầu (README-vietnix-deploy.md nói rõ vì sao), TTL hạ xuống 300 giây
+# ít nhất 24 giờ trước. Quay lại: đổi A về 42.1.122.84 (WordPress ở ZenCloud không bị đổi gì).
+
+<VirtualHost *:80>
+    ServerName tubutree.com
+    ServerAlias www.tubutree.com
+    ErrorLog "/www/wwwlogs/tubutree.com-error_log"
+    CustomLog "/www/wwwlogs/tubutree.com-access_log" combined
+
+    RewriteEngine On
+    RewriteRule ^(.*)$ https://tubutree.com$1 [L,R=301]
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName www.tubutree.com
+    ErrorLog "/www/wwwlogs/www.tubutree.com-error_log"
+    CustomLog "/www/wwwlogs/www.tubutree.com-access_log" combined
+
+    SSLEngine On
+    SSLCertificateFile /etc/letsencrypt/live/tubutree.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/tubutree.com/privkey.pem
+
+    # www về apex, giữ đường dẫn; Apache tự nối query gốc vào đích khi đích không có query.
+    RewriteEngine On
+    RewriteRule ^(.*)$ https://tubutree.com$1 [L,R=301]
+</VirtualHost>
+
+<VirtualHost *:443>
+    ServerName tubutree.com
+    ErrorLog "/www/wwwlogs/tubutree.com-error_log"
+    CustomLog "/www/wwwlogs/tubutree.com-access_log" combined
+
+    SSLEngine On
+    SSLCertificateFile /etc/letsencrypt/live/tubutree.com/fullchain.pem
+    SSLCertificateKeyFile /etc/letsencrypt/live/tubutree.com/privkey.pem
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+    RequestHeader set X-Forwarded-Proto "https"
+
+    # Giữ nguyên như vhost app: không includeSubDomains, không preload để còn đường quay lại.
+    <IfModule mod_headers.c>
+        Header always set Strict-Transport-Security "max-age=31536000"
+    </IfModule>
+
+    <IfModule mod_deflate.c>
+        <IfModule mod_filter.c>
+            AddOutputFilterByType DEFLATE application/json application/manifest+json application/javascript text/javascript
+            AddOutputFilterByType DEFLATE text/html text/css text/plain text/xml application/xml application/xhtml+xml image/svg+xml
+        </IfModule>
+    </IfModule>
+
+    # ── TUỲ CHỌN, phương án A cho 200 bài blog và ảnh WordPress: reverse proxy về origin ZenCloud ──────────────────────────────
+    # Web mới không có blog. Bỏ dấu # cả khối để giữ nguyên URL /YYYY/MM/DD/<slug>/, /blog/, /category/, /wp-content/... (không chuyển hướng).
+    # Khối này PHẢI đứng trước dòng `ProxyPass /` bên dưới: Apache lấy luật khớp đầu tiên theo thứ tự khai báo.
+    # Origin = IP ZenCloud đo 13/11/2026 (42.1.122.84). ProxyPreserveHost On gửi Host: tubutree.com để WordPress nhận đúng site.
+    # Chưa kiểm: ZenCloud có chặn IP Vietnix không; WordPress có tự chuyển hướng canonical khi qua proxy không; SNI tới origin.
+    # Thử bằng `node scripts/ops/check-cutover-redirects.mjs ... --sitemap post-sitemap1.xml --blog proxy` trước khi đổi DNS.
+    #
+    #SSLProxyEngine On
+    # Chứng chỉ của origin cấp cho tên tubutree.com, không khớp địa chỉ IP trong ProxyPass; vẫn kiểm chuỗi chứng chỉ, chỉ bỏ so tên.
+    #SSLProxyCheckPeerName Off
+    #ProxyPassMatch "^/([0-9]{4}/[0-9]{2}/[0-9]{2}/.*)$" "https://42.1.122.84/$1"
+    #ProxyPassMatch "^/((?:blog|category|tag|author|wp-content|wp-includes|wp-json|feed|comments/feed)(?:/.*)?)$" "https://42.1.122.84/$1"
+    # Sitemap Rank Math (/sitemap_index.xml, /post-sitemap1.xml...) cố ý KHÔNG proxy: nó liệt kê cả 91 URL /product/ đã chuyển hướng.
+    # Dùng /sitemap.xml của web mới, rồi nộp lại ở Search Console.
+    # ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    # Next standalone đóng kết nối rảnh sau KEEP_ALIVE_TIMEOUT=55000 ms; `ttl=30` bỏ kết nối rảnh trước mốc đó.
+    ProxyPass / http://127.0.0.1:14000/ ttl=30
+    ProxyPassReverse / http://127.0.0.1:14000/
+</VirtualHost>
+
+# ── SAU cutover: app.tubutree.com chuyển 301 sang apex, giữ đường dẫn và query (giữ ít nhất 12 tháng để không gãy QR in, link CTV, tin nhắn cũ) ──
+# Sửa vhost app (ops/vietnix-vhost-app.conf.phase2): trong <VirtualHost *:443> của app.tubutree.com, thay hai dòng ProxyPass/ProxyPassReverse bằng:
+#     RewriteEngine On
+#     RewriteRule ^(.*)$ https://tubutree.com$1 [L,R=301]
+# Làm bước này SAU khi apex chạy ổn và Search Console đã nhận trang mới, không làm cùng lúc với đổi DNS.

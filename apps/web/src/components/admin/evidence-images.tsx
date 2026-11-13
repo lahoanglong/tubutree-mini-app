@@ -1,5 +1,6 @@
 'use client';
 
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { useState } from 'react';
 import { apiMediaUrl } from '@/lib/client-api';
 
@@ -10,7 +11,7 @@ const API_IMAGE_REF_RE = /^\/(?:returns|reviews|feed\/posts)\/[A-Za-z0-9_-]{1,64
  * Ảnh minh chứng đổi trả do khách gửi — dữ liệu không tin cậy (C-050). Chỉ hiện:
  * - https:// → ảnh + link mở tab mới;
  * - ảnh base64 raster (fallback của ImageUpload miniapp khi chưa cấu hình Cloudinary) → chỉ ảnh, không link
- *   (data: SVG/HTML chạy được script, còn trong <img> ảnh raster thì không);
+ *   (data: SVG/HTML chạy được script, còn trong thẻ img ảnh raster thì không);
  * - đường dẫn ảnh do chính API phục vụ (danh sách không nhúng base64 nữa: "/returns/:id/images/:i?v=…", đánh giá và bài
  *   cộng đồng "/feed/posts/:id/images/:i?v=…" tương tự) → ghép gốc API, ảnh + link mở ảnh lớn. Chỉ khớp đúng dạng đó,
  *   đường dẫn tương đối khác bị từ chối.
@@ -55,6 +56,7 @@ export function EvidenceImages({ images }: { images: string[] | null | undefined
                 alt={`Ảnh minh chứng ${idx + 1}`}
                 referrerPolicy="no-referrer"
                 loading="lazy"
+                onError={hideBrokenImage}
                 className="h-20 w-20 rounded-media border border-stone-200 object-cover shadow-card transition hover:opacity-80"
               />
             );

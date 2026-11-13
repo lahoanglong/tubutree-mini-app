@@ -6,7 +6,6 @@ import { Search } from 'lucide-react';
 import { SEARCH_MAX_LENGTH, normalizeSearchQuery } from '@/lib/catalog-filter';
 import { BROWSE_PATH, EMPTY_SEARCH_STATE, browseHref } from '@/lib/search-state';
 import { tenantSubdomainOf } from '@/lib/site';
-import { useShellPathname } from '@/lib/shell-pathname';
 
 const INPUT_ID = 'site-search-q';
 
@@ -17,16 +16,16 @@ const FIELD_CLASS =
  * Ô tìm kiếm sản phẩm ở header khách. Là form GET về `/san-pham` nên vẫn tìm được khi JS chưa chạy; khi đã có JS
  * thì điều hướng mềm. Từ khoá rỗng thì không làm gì (không đưa khách sang trang danh mục chỉ vì bấm nhầm nút).
  *
- * Trên host gian hàng CTV, `/` bị rewrite sang /s/{subdomain} và bỏ qua ?q= nên không hiển thị ô này. Trên chính
- * /san-pham cũng ẩn: trang đó có ô tìm riêng kèm gợi ý, hai ô trùng tên sẽ làm trình đọc màn hình đọc đôi.
+ * Trên host gian hàng CTV, `/` bị rewrite sang /s/{subdomain} và bỏ qua ?q= nên không hiển thị ô này. Trên /san-pham ô này
+ * vẫn hiện (luôn có đường tìm kiếm trên thanh đầu); ô tìm riêng của trang Danh mục (kèm gợi ý) chỉ dựng dưới md, nơi header ẩn,
+ * nên không có hai ô trùng tên cùng lúc.
  */
 export default function SiteSearch() {
-  const onBrowsePage = useShellPathname() === BROWSE_PATH;
   const [onTenantHost, setOnTenantHost] = useState(false);
   useEffect(() => {
     setOnTenantHost(tenantSubdomainOf(window.location.host) !== null);
   }, []);
-  if (onTenantHost || onBrowsePage) return null;
+  if (onTenantHost) return null;
 
   // useSearchParams buộc trang tĩnh phải có Suspense; khung chờ vẫn là form GET dùng được khi chưa có JS.
   return (

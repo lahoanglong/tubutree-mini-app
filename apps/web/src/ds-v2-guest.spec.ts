@@ -96,6 +96,7 @@ const SHOP: string[] = [
   'app/cau-chuyen/page.tsx',
   'app/cau-chuyen/brand-story-view.tsx',
   'app/cau-chuyen/brand-map.tsx',
+  'app/cau-chuyen/brand-badge.tsx',
 ];
 const ORDER: string[] = [
   'app/thanh-toan/chuyen-khoan/[code]/page.tsx',

@@ -602,6 +602,11 @@ export const FLASH_SKELETON_HEIGHT = 276;
 export const CATEGORY_TILE_SIZE = 56;
 export const CATEGORY_LABEL_HEIGHT = 32;
 export const CATEGORY_CELL_HEIGHT = CATEGORY_TILE_SIZE + 4 + CATEGORY_LABEL_HEIGHT;
+/**
+ * Khổ rất hẹp (320–359px): cột 20% chỉ ~58–62px nên ô 56px còn khe 2–6px với ô kề. Ô vuông co lại để luôn chừa ít nhất `CATEGORY_TILE_GUTTER` px mỗi bên cột;
+ * từ 375px cột rộng ≥ 68,6px nên ô vẫn đúng `CATEGORY_TILE_SIZE` (bằng Mini App).
+ */
+export const CATEGORY_TILE_GUTTER = 3;
 export const CATEGORY_GRID_COLUMNS = 5;
 export const CATEGORY_GRID_MAX_CELLS = 10;
 /** Lưới cuộn ngang (quá 10 ô): mỗi cột rộng 1/5,5 bề rộng khung nên cột thứ 6 ló gần nửa cột. Cột 1/5 chỉ ló phần đệm 16px, bị lớp mờ mép che hết. */

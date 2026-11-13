@@ -250,7 +250,7 @@ function GroupCard({
   const missingLine = groupMissingLine(g);
 
   return (
-    <article className={`${ui.card} flex flex-col p-3 tabular-nums max-md:border-0 max-md:shadow-[var(--elevation-1)]`}>
+    <article className={`${ui.card} flex flex-col p-3 tabular-nums max-md:border-0 max-md:[box-shadow:var(--elevation-1)]`}>
       {invitedBanner && <p className="mb-1.5 text-xs font-semibold text-forest-700 max-md:text-[length:var(--type-caption-size)]">Bạn được mời vào nhóm này</p>}
       <Link href={productHref} className="flex min-h-14 gap-3">
         <span className="inline-flex shrink-0 self-start">

@@ -308,6 +308,38 @@ describe('SubscriptionsPanel', () => {
     expect(sent('POST', '/me/subscriptions/s1/status')[0]!.body).toEqual({ status: 'ACTIVE' });
   });
 
+  it('W140: gói tạm dừng nói rõ lý do và cách chạy lại; không biết lý do (dừng từ trước, mã lạ) chỉ có dòng chung; gói đang chạy không có dòng lý do', async () => {
+    subs = [
+      { ...SUB, id: 's1', status: 'PAUSED', pausedReason: 'insufficient_wallet' },
+      { ...SUB, id: 's2', status: 'PAUSED', pausedReason: null },
+      { ...SUB, id: 's3', status: 'PAUSED', pausedReason: 'mã_lạ_của_api_mới' },
+      { ...SUB, id: 's4', status: 'ACTIVE', pausedReason: 'customer' },
+      { ...SUB, id: 's5', status: 'PAUSED', pausedReason: 'customer' },
+    ];
+    const c = await mount();
+    const cards = [...c.querySelectorAll('li')];
+    expect(cards).toHaveLength(5);
+    expect(cards[0]!.textContent).toContain('Ví Tubu chưa đủ tiền cho kỳ này');
+    expect(cards[0]!.textContent).toContain('bấm Sửa để đổi cách thanh toán, rồi bấm Tiếp tục.');
+    for (const i of [1, 2]) {
+      expect(cards[i]!.textContent).toContain('Đang tạm dừng');
+      expect(cards[i]!.textContent).not.toContain('Bấm Sửa');
+      expect(cards[i]!.textContent).not.toContain('Ví Tubu chưa đủ tiền');
+    }
+    expect(cards[3]!.textContent).toContain('Lần kế:');
+    expect(cards[3]!.textContent).not.toContain('Bạn đã tạm dừng');
+    expect(cards[4]!.textContent).toContain('Bạn đã tạm dừng gói này');
+    expect(cards[4]!.textContent).toContain('Bấm Tiếp tục khi muốn Tubu giao lại.');
+  });
+
+  it('W140: danh sách gói là lưới 1 cột ở điện thoại, 2 cột từ md để thẻ không dãn hết khung desktop', async () => {
+    const c = await mount();
+    const ul = c.querySelector('ul')!;
+    expect(ul.className).toContain('grid-cols-1');
+    expect(ul.className).toContain('md:grid-cols-2');
+    expect(ul.className).toContain('md:items-start');
+  });
+
   it('"Huỷ" mở sheet giữ chân; "Bỏ qua kỳ này" gọi POST /skip; "Vẫn huỷ" gọi CANCELLED', async () => {
     const c = await mount();
     click(btn('Huỷ', c));

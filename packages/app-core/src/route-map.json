@@ -80,9 +80,10 @@
       { "miniapp": "/ds-gallery", "web": "/ds-gallery", "private": false }
     ]},
     { "lane": "skip", "items": [
-      { "miniapp": "/points/scan", "skip": "Q2: quét mã đơn sàn cần SĐT đã xác minh và máy quét QR, chỉ có ở Mini App" }
+      { "miniapp": "/points/scan", "skip": "Q2: tích điểm đơn sàn chạy trên quyền của Zalo (quét QR bằng camera Zalo, xin SĐT đã xác minh, mời quan tâm OA); ô nhập mã tay cũng đòi SĐT đã xác minh nên không phần nào làm riêng được trên web. Web /uu-dai hiện MiniAppOnlyNotice mở lại đúng màn này trên Zalo" }
     ]}
   ],
+  "gaps": [],
   "features": [
     { "id": "coupon-claim", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "CouponClaimGate"], "web": ["apps/web/src/components/app-gates.tsx", "CouponClaimGate"] },
     { "id": "onboarding", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "OnboardingGate"], "web": ["apps/web/src/components/app-gates.tsx", "OnboardingGate"] },

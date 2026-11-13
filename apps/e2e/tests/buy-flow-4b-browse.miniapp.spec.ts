@@ -474,6 +474,8 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
       expect(controlFilled.equals(controlEmpty), 'đối chứng: ô search trơn phải vẽ "x" gốc khi có chữ').toBe(false);
 
       // Ô nhập của app hẹp lại khi nút xoá của app xuất hiện: đo dải theo hình học lúc CÓ chữ rồi so với chính vùng đó lúc trống.
+      // Ô trống vẽ chữ gợi ý ("Tìm sản phẩm…", chữ 16px) và đuôi của nó có thể nằm trong dải 40px của ô đã hẹp lại: làm chữ gợi ý trong suốt để dải chỉ còn phần nút "x" gốc (nếu có).
+      await page.addStyleTag({ content: '[role="search"] input::placeholder { color: transparent !important; }' });
       await box.focus();
       await box.fill('nuoc');
       const appBox = (await box.boundingBox())!;

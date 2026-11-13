@@ -11,6 +11,7 @@ import { ordersHomeStripQuery } from '@tubutree/app-core/queries/orders';
 import { notificationsQuery } from '@tubutree/app-core/queries/account';
 import { supportContactQuery } from '@tubutree/app-core/queries/config';
 import { supportChatQuery, supportChatSummaryQuery } from '@tubutree/app-core/queries/support-chat';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { quickReplies, supportCopy, type QuickReply } from '@tubutree/app-core/support-copy';
 import { byTime, mergeWindow, sendFailureKind } from '@tubutree/app-core/support-chat-view';
 import { Button, LineItemSkeleton, Text } from '@/components/mini';
@@ -27,7 +28,8 @@ import { coreHttp } from '@/lib/core-http';
 import { newIdempotencyKey } from '@/lib/idempotency-key';
 import { friendlyError } from '@/lib/friendly-error';
 import { formatPhoneDisplay } from '@/lib/phone-display';
-import { PAGE_NARROW } from '@/lib/page-frame';
+import { PAGE_NARROW_UNTIL_LG } from '@/lib/page-frame';
+import { ui } from '@/lib/guest-ui';
 
 const POLL_MS = 5000;
 /** Dạng slug sản phẩm (chữ thường, số, gạch nối): tham số lạ như `../auth/me` không được đổi thành một lệnh gọi API. */
@@ -251,14 +253,14 @@ function ChatBody() {
           </Text>
         </div>
       )}
-      <div data-chat-pane="" className="max-md:flex-1 md:h-[60vh] md:overflow-y-auto">
+      <div data-chat-pane="" className="max-md:flex-1 md:h-[60dvh] md:min-h-80 md:max-h-[40rem] md:overflow-y-auto">
         {(olderHasMore ?? thread.hasMore) && (
           <div style={{ textAlign: 'center', paddingTop: 8 }}>
             <Button variant="ghost" loading={loadingOlder} onPress={() => void loadOlder()}>Xem tin cũ hơn</Button>
           </div>
         )}
         <MessageList items={showGreeting ? [greeting, ...items] : items} />
-        {/* Máy tính: khung chat cao 60vh nên lúc chưa có tin còn trống nhiều; đặt câu hỏi mẫu ngay trong khung thay vì sát đáy. */}
+        {/* Máy tính: khung chat cao 60dvh nên lúc chưa có tin còn trống nhiều; đặt câu hỏi mẫu ngay trong khung thay vì sát đáy. */}
         {empty && quickReady && !closed && !closedText && (
           <div data-chat-suggest="" className="max-md:hidden">
             <QuickReplies items={quickReplies(shippingCode)} onPick={pickQuick} inPane />
@@ -300,9 +302,42 @@ function ChatBody() {
   );
 }
 
+/**
+ * Cột thông tin liên hệ bên trái của máy tính (từ lg): giờ trực, hotline, Zalo OA, email, từ cùng truy vấn cấu hình với `ChatBody` (một lần gọi API).
+ * Ẩn dưới lg nên điện thoại và Mini App không đổi; chưa có dữ liệu thì cột để trống chứ không dịch khung chat.
+ */
+function SupportAside() {
+  const supportQ = useQuery({ ...supportContactQuery(coreHttp), staleTime: 10 * 60_000 });
+  const support = supportQ.isError ? DEFAULT_SUPPORT : supportQ.data;
+  const hotline = support?.hotline ?? null;
+  const display = hotline ? formatPhoneDisplay(hotline) : '';
+  const copy = supportCopy.closed;
+  return (
+    <aside data-testid="chat-aside" aria-label={fillCopy('support.title')} className="hidden lg:col-span-4 lg:mt-4 lg:block">
+      {support && (
+        <div className={`${ui.card} flex flex-col gap-3 p-4`}>
+          <h2 className="font-display text-base font-semibold text-stone-900">{fillCopy('support.title')}</h2>
+          {support.hours && <p className="text-sm text-stone-700">{copy.hours(support.hours)}</p>}
+          {hotline && (
+            <a href={`tel:${hotline.replace(/[^\d+]/g, '')}`} className={`${ui.btnPrimary} w-full`}>
+              {fillCopy('support.hotline', { phone: display })}
+            </a>
+          )}
+          {support.zaloOaName && <p className="text-sm text-stone-700">{copy.oaName(support.zaloOaName)}</p>}
+          {support.email && (
+            <a href={`mailto:${support.email}`} className="inline-flex min-h-11 items-center break-all text-sm font-semibold text-forest-700 hover:underline">
+              {support.email}
+            </a>
+          )}
+        </div>
+      )}
+    </aside>
+  );
+}
+
 function Shell({ children }: { children: ReactNode }) {
   return (
-    <main className={`${PAGE_NARROW} py-6 max-md:px-0 max-md:py-0`}>
+    <main className={`${PAGE_NARROW_UNTIL_LG} py-6 max-md:px-0 max-md:py-0`}>
       <PageHeader title="Chat với Tubu Tree" backHref="/tai-khoan" backLabel="Tài khoản" />
       {children}
     </main>
@@ -342,8 +377,11 @@ function SupportChatPageBody() {
   }
   return (
     <Shell>
-      <div className="md:mt-4 md:overflow-hidden md:rounded-card md:border md:border-stone-200">
-        <ChatBody />
+      <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-6">
+        <SupportAside />
+        <div className="md:mt-4 md:overflow-hidden md:rounded-card md:border md:border-stone-200 lg:col-span-8 lg:min-w-0">
+          <ChatBody />
+        </div>
       </div>
     </Shell>
   );

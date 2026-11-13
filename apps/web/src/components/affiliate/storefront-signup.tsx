@@ -129,7 +129,7 @@ function BottomBar({ children }: { children: React.ReactNode }) {
     <div
       ref={ref}
       data-sticky-bar
-      className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:m-0 max-md:border-t-0 max-md:p-4 max-md:pb-[calc(16px+var(--safe-bottom))] max-md:shadow-[var(--elevation-3)]"
+      className="sticky bottom-0 z-10 -mx-4 mt-4 border-t border-stone-200 bg-stone-0 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom,0px))] max-md:fixed max-md:inset-x-0 max-md:z-30 max-md:m-0 max-md:border-t-0 max-md:p-4 max-md:pb-[calc(16px+var(--safe-bottom))] max-md:[box-shadow:var(--elevation-3)]"
     >
       {children}
     </div>

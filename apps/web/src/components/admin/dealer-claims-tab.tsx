@@ -20,7 +20,7 @@ import {
   claimActions,
   rejectReasonError,
 } from '@/lib/dealer-claims';
-import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_PRIMARY, BTN_SMALL, INPUT_CLASS, TOUCH_H, ToneBadge, chipClass } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_PRIMARY, BTN_SMALL, INPUT_CLASS, TOUCH_H, ToneBadge, chipClass, ListSkeleton } from './ui';
 import { useConfirm } from './confirm-dialog';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
@@ -98,7 +98,7 @@ export function DealerClaimsTab({ canReview = true }: { canReview?: boolean } = 
           {text}
         </p>
       ))}
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isLoading && <ListSkeleton label="Đang tải yêu cầu của đại lý" rows={3} className="h-20" />}
       {q.isError && (
         <p className="text-sm text-danger-fg">
           Không tải được danh sách yêu cầu.{' '}

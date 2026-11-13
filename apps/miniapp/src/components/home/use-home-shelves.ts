@@ -4,7 +4,7 @@ import type { BestSellersBasis, BestSellersPage } from '@tubutree/app-core/api/b
 import { comboView, type ComboView } from '@tubutree/app-core/commerce/bundle-view';
 import { quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
 import type { HomeKindState } from '@tubutree/app-core/home-layout';
-import { COMBO_HOLD_MS, comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
+import { COMBO_HOLD_MS, comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, imageFirst, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
 import { bundleKeys } from '@tubutree/app-core/queries/bundle';
 import { PURCHASED_RAIL_LIMIT } from '../reorder/purchased-rail';
 import { serverNow } from '../../utils/server-clock';
@@ -77,7 +77,11 @@ export function useHomeShelves(kind: HomeKindState): HomeShelves {
       purchased: kind === 'returning' ? quickReorderShelfItems(purchasedData ?? []).map(purchasedShelfEntry) : [],
       combos: (combosData ?? []).flatMap((b) => comboView(b, now) ?? []).map(comboShelfEntry),
       // Hạng đi cùng món qua bước chống trùng: kệ chỉ vẽ món còn lại nhưng thẻ phải ghi hạng thật, không phải số thứ tự trong kệ đã cắt.
-      bestSellers: (bestData ?? []).map((item, i) => ({ id: item.slug, item: { product: item, rank: i + 1 } })),
+      // Hạng gắn TRƯỚC khi xếp món có ảnh lên đầu (ô lá thay thế không nằm giữa màn đầu): hạng hụt thì thẻ chỉ ghi "Bán chạy" (`ranksAreSequential`).
+      bestSellers: imageFirst(
+        (bestData ?? []).map((item, i) => ({ product: item, rank: i + 1 })),
+        (x) => Boolean(x.product.thumbnail?.trim()),
+      ).map((x) => ({ id: x.product.slug, item: x })),
     });
     return {
       flash: composed.flash,

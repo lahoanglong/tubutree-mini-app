@@ -14,6 +14,7 @@ import { ErrorState } from '@/components/ui/error-state';
 import { QrCode } from '@/components/ui/qr-code';
 import { absoluteKitLink, shareCaptions, shareFallbackText, storefrontShareUrl, withAbsoluteLink } from './storefront-rules';
 import { loadErrorText } from '@/lib/error-text';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 const errText = loadErrorText;
 const COPY_FAILED = 'Không sao chép được — hãy chọn và chép thủ công.';
@@ -218,7 +219,7 @@ export function ContentKitSheet({ open, onClose, productSlug }: { open: boolean;
             <div className="mb-3 flex gap-2 overflow-x-auto">
               {data.images.map((src, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={src} alt={data.productName} className="h-[72px] w-[72px] shrink-0 rounded-control object-cover" />
+                <img key={i} src={src} alt={data.productName} className="h-[72px] w-[72px] shrink-0 rounded-control object-cover" onError={hideBrokenImage} />
               ))}
             </div>
           )}

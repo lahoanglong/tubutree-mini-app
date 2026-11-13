@@ -22,7 +22,7 @@ interface BrandProfile {
   match: RegExp;
 }
 
-// "Sokfram" là chính tả đang dùng trong catalog (cột brand cũ), nhận cả hai.
+// Tên chuẩn là "Sokfarm"; "Sokfram" là chính tả cũ của cột brand và tên sản phẩm cũ, nhận cả hai.
 const BRANDS: readonly BrandProfile[] = [
   { id: 'sokfarm', display: 'Sokfarm', match: /\bsokf(?:ar|ra)m\b/ },
   { id: 'bhnong', display: 'BH.NONG', match: /\bbh[.-]?nong\b/ },

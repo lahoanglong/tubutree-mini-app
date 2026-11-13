@@ -116,7 +116,8 @@ services:
       dockerfile: apps/web/Dockerfile
       args:
         NEXT_PUBLIC_API_BASE_URL: https://api.${WEB_DOMAIN}/api
-        NEXT_PUBLIC_SITE_URL: https://app.${WEB_DOMAIN}
+        # Gốc của canonical, sitemap, robots, OG và JSON-LD. Mặc định app.${WEB_DOMAIN}; lúc cutover đặt NEXT_PUBLIC_SITE_URL=https://tubutree.com trong .env rồi build lại ảnh web (biến build, nhúng vào bundle).
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-https://app.${WEB_DOMAIN}}
         NEXT_PUBLIC_TENANT_ROOT_DOMAIN: ${WEB_DOMAIN}
         # ZALO_APP_ID = App ID của Zalo App trên developers.zalo.me (đăng nhập web OAuth). ZALO_MINIAPP_ID = ID của Mini App, chỉ dùng cho link zalo.me/s/<id>. Hai giá trị khác nhau.
         NEXT_PUBLIC_ZALO_APP_ID: ${ZALO_APP_ID:-}

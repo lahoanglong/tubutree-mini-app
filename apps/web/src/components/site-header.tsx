@@ -1,5 +1,6 @@
 'use client';
 
+import { useLayoutEffect, useRef } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
@@ -15,6 +16,7 @@ import { useCartBumpKey } from '@/lib/cart-feedback';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { useShellPathname } from '@/lib/shell-pathname';
 import { readyDesktopNav } from '@/lib/web-nav';
+import { revealInRow } from '@/lib/reveal-in-row';
 import { useWasteVisible } from '@/lib/use-waste-visible';
 import tubuLogo from '@/assets/tubu-logo.png';
 
@@ -26,6 +28,16 @@ export default function SiteHeader() {
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: status === 'authenticated' });
   const count = cartQ.data?.itemCount ?? 0;
   const bumpKey = useCartBumpKey();
+  const navItems = readyDesktopNav({ wasteVisible });
+  const navKey = navItems.map((t) => t.path).join('|');
+  const navRowRef = useRef<HTMLUListElement>(null);
+
+  // Mục "Đổi rác" chỉ chèn vào sau khi cấu hình về: nếu khách đã Tab tới một mục phía sau nó thì mục đó bị đẩy ra ngoài khung, nên kéo lại vào tầm nhìn.
+  useLayoutEffect(() => {
+    const row = navRowRef.current;
+    const focused = document.activeElement;
+    if (row && focused instanceof HTMLElement && row.contains(focused)) revealInRow(row, focused);
+  }, [navKey]);
 
   return (
     <header
@@ -42,7 +54,7 @@ export default function SiteHeader() {
         </Link>
 
         {/* data-site-search: html[data-tenant-host] ẩn khung này từ khung hình đầu trên host gian hàng CTV (globals.css).
-            Ở /san-pham ô tìm của header không vẽ (trang có ô tìm riêng kèm gợi ý) nhưng khung vẫn giữ chỗ, để chuông, giỏ, tài khoản không nhảy giữa các trang. */}
+            Khung luôn giữ chỗ (kể cả host gian hàng CTV, nơi ô bị ẩn) để chuông, giỏ, tài khoản không nhảy giữa các trang. */}
         <div data-site-search className="flex min-w-0 flex-1 md:max-w-2xl">
           <SiteSearch />
         </div>
@@ -93,8 +105,14 @@ export default function SiteHeader() {
 
       {/* Máy tính: các mục gốc và chức năng chương trình (mục chưa làm xong bị ẩn). Trang chủ là logo, Cá nhân là nút tài khoản nên không lặp. */}
       <nav aria-label="Điều hướng chính" data-desktop-nav className="border-t border-stone-100">
-        <ul className={`${PAGE_WIDE} flex h-11 items-center gap-1 overflow-x-auto text-sm`}>
-          {readyDesktopNav({ wasteVisible }).map((t) => {
+        <ul
+          ref={navRowRef}
+          onFocusCapture={(e) => {
+            if (e.target instanceof HTMLElement) revealInRow(e.currentTarget, e.target);
+          }}
+          className={`${PAGE_WIDE} scroll-x scroll-px-4 h-11 items-center gap-1 text-sm`}
+        >
+          {navItems.map((t) => {
             const active = pathname === t.path || pathname.startsWith(`${t.path}/`);
             return (
               <li key={t.path} className="flex-none">

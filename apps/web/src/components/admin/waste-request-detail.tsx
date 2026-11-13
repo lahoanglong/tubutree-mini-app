@@ -34,7 +34,7 @@ import {
   wasteEventKindLabel,
   wasteEventMetaLines,
 } from '@/lib/waste-labels';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, INPUT_CLASS, LoadError, Notice, ScrollRegion } from './ui';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, INPUT_CLASS, LoadError, Notice, ScrollRegion, ListSkeleton } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { actionErrorText } from '@/lib/admin-error-text';
 
@@ -77,7 +77,7 @@ export function WasteRequestDetail({ id, isAdmin, onClose }: { id: string; isAdm
         <h2 className="font-display text-lg font-semibold text-stone-900">{r ? `Yêu cầu ${r.code}` : 'Yêu cầu'}</h2>
         <button type="button" className={BTN_XS_SECONDARY} onClick={onClose}>Đóng</button>
       </div>
-      {q.isPending && <p className="text-sm text-stone-600">Đang tải…</p>}
+      {q.isPending && <ListSkeleton label="Đang tải yêu cầu" rows={3} className="h-16" />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>{errText(q.error)}</LoadError>}
       {r && (
         <>

@@ -60,6 +60,27 @@
   background: var(--color-border-strong);
 }
 
+/* Hàng cuộn ngang (.scroll-x: chip, tab, kệ) từ md không vẽ thanh cuộn 6px: nó chồng lên chân chip/tab và không có ở Mini App. Chuột và
+   bàn di vẫn cuộn được (Shift + lăn, vuốt ngang); thanh cuộn dọc của trang không bị ảnh hưởng. */
+@media (min-width: 768px) {
+  .scroll-x {
+    scrollbar-width: none;
+  }
+  .scroll-x::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Safari iOS/iPad tự phóng to trang khi ô nhập lấy nét mà chữ < 16px. Trên màn cảm ứng (kể cả iPad ≥ 768px) và dưới md, chữ ô nhập luôn 16px;
+   chuột trên máy tính giữ cỡ gọn của từng ô (14px). Chỉ cỡ chữ: `!important` vì nhiều ô đặt cỡ chữ bằng style nội tuyến hoặc lớp tiện ích. */
+@media (pointer: coarse), (max-width: 767.98px) {
+  input:not([type='checkbox'], [type='radio'], [type='range'], [type='file'], [type='color'], [type='hidden'], [type='button'], [type='submit'], [type='reset'], [type='image']),
+  select,
+  textarea {
+    font-size: 16px !important;
+  }
+}
+
 /* Host gian hàng CTV: `/` bị rewrite sang /s/{subdomain} và bỏ ?q=, nên ô tìm kiếm không dùng được ở đó.
    <html data-tenant-host> do script ở <head> (tenantHostBootScript) đặt trước khi vẽ, để ô không hiện lên rồi biến mất. */
 html[data-tenant-host] [data-site-search] {
@@ -91,7 +112,9 @@ html {
   }
 }
 
-/* Chiều cao thanh đầu máy tính (hai hàng h-16 + h-11 tính theo rem, nên chữ lớn không làm cột dính sát header, cộng hai đường viền 2px): cột dính của trang đặt dưới nó. Điện thoại không có thanh này. */
+/* Chiều cao thanh đầu máy tính, đúng bằng SiteHeader (components/site-header.tsx): hàng 1 `h-16` (4rem) + hàng điều hướng `h-11` (2,75rem) = 6,75rem,
+   cộng đường viền dưới của header (1px) và đường viền trên của hàng điều hướng (1px) = 2px, cộng vùng an toàn đỉnh. Tính theo rem nên chữ lớn không làm cột dính
+   sát header. Cột dính và `scroll-padding-top` của trang đặt dưới nó; điện thoại không có thanh này (`hidden md:block`) nên 0px. Đổi chiều cao header thì sửa cả hai nơi. */
 :root {
   --header-h: 0px;
 }
@@ -107,7 +130,7 @@ html {
 :root {
   --sticky-bar-h: calc(6rem + env(safe-area-inset-bottom, 0px));
 }
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
   body.has-sticky-bar {
     padding-bottom: var(--sticky-bar-h);
   }
@@ -141,7 +164,7 @@ body.has-sticky-bar [data-bottom-nav] {
 
 /* Trang con ở điện thoại có nút lùi tròn nổi (top-left, như BackButton của Mini App): đệm đỉnh để nút không đè tiêu đề.
    body.with-back-btn do BackButton gắn; Mini App làm cùng việc bằng `.page` (apps/miniapp/src/css/tokens.css). */
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
   body {
     padding-top: var(--safe-top);
     overflow-x: clip;

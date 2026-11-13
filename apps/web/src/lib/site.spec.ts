@@ -50,10 +50,11 @@ describe('SITE_URL', () => {
 
 describe('NEXT_PUBLIC_SITE_URL lúc build', () => {
   // NEXT_PUBLIC_* bị nhúng vào bundle lúc `next build`, nên phải đi qua build arg của Dockerfile.
-  it('docker-compose.vietnix.yml truyền NEXT_PUBLIC_SITE_URL cho web theo WEB_DOMAIN', () => {
+  it('docker-compose.vietnix.yml truyền NEXT_PUBLIC_SITE_URL cho web: theo biến cùng tên (đổi sang apex lúc cutover), mặc định app.${WEB_DOMAIN}', () => {
     const compose = repoFile('docker-compose.vietnix.yml');
     const web = compose.slice(compose.indexOf('\n  web:'), compose.indexOf('\nvolumes:'));
-    expect(web).toMatch(/args:[\s\S]*NEXT_PUBLIC_SITE_URL: https:\/\/app\.\$\{WEB_DOMAIN\}/);
+    expect(web).toMatch(/args:[\s\S]*NEXT_PUBLIC_SITE_URL: \$\{NEXT_PUBLIC_SITE_URL:-https:\/\/app\.\$\{WEB_DOMAIN\}\}/);
+    expect(web).not.toMatch(/NEXT_PUBLIC_SITE_URL: https:\/\//);
   });
 
   it('Dockerfile của web khai báo ARG và ENV NEXT_PUBLIC_SITE_URL trước bước build', () => {

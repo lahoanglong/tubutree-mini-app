@@ -29,6 +29,13 @@ describe('parseSearchState', () => {
   it('thương hiệu trùng lặp chỉ giữ một (khoá chip không trùng)', () => {
     expect(parse('brand=Tubu,%20Tubu,M%E1%BB%99c').brands).toEqual(['Tubu', 'Mộc']);
   });
+
+  it('link cũ ?brand=Sokfram (mọi kiểu hoa thường) về tên chuẩn "Sokfarm"; hai cách viết gộp một', () => {
+    expect(parse('brand=Sokfram').brands).toEqual(['Sokfarm']);
+    expect(parse('brand=SOKFRAM,Fuwa3e').brands).toEqual(['Sokfarm', 'Fuwa3e']);
+    expect(parse('brand=Sokfram,Sokfarm').brands).toEqual(['Sokfarm']);
+    expect(parse('brand=Pineboo').brands).toEqual(['Pineboo']);
+  });
 });
 
 describe('serializeSearchState', () => {

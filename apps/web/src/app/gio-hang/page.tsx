@@ -30,7 +30,7 @@ import { CheckMark, miniCheckboxWrap, miniCheckbox } from '@/components/order-mo
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
-import { LineItemSkeleton } from '@/components/ui/skeleton';
+import { LineItemSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { Badge, CartVoucherHintStrip, Countdown, FreeShippingProgressBar, KeyValueRow, ProductThumb } from '@/components/mini';
 import { useCartVoucherHint } from '@/lib/use-cart-voucher-hint';
 import type { CouponPreviewParams } from '@/lib/shop-client';
@@ -59,7 +59,42 @@ const qtyButton =
 // Nút −/+ còn bấm được thì co 0,97 khi nhấn (`.tubu-press`, tắt khi khách chọn giảm chuyển động); đã khoá thì đứng yên như Mini App.
 const qtyButtonFor = (off: boolean) => (off ? qtyButton : `${qtyButton} tubu-press`);
 
-const EmptyCart = dynamic(() => import('./empty-cart'), { ssr: false });
+// Chunk giỏ trống chỉ tải khi giỏ rỗng: lúc chờ giữ chỗ bằng khung giả thay vì để trắng một nhịp.
+const EmptyCart = dynamic(() => import('./empty-cart'), {
+  ssr: false,
+  loading: () => (
+    <div role="status" aria-busy="true" className="flex flex-col items-center gap-3 py-10">
+      <span className="sr-only">Đang tải giỏ hàng…</span>
+      <Skeleton width={120} height={96} />
+      <Skeleton width={180} height={18} />
+      <Skeleton width={240} height={14} />
+      <Skeleton width={160} height={44} />
+    </div>
+  ),
+});
+
+// Lưới của giỏ có dòng và của khung chờ dùng chung một chuỗi lớp, nên khung chờ không nhảy khi giỏ về (một cột tới md, từ lg cột tóm tắt 360px).
+const CART_GRID = 'grid grid-cols-1 gap-6 max-md:gap-3 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]';
+
+function CartSkeleton() {
+  return (
+    <div role="status" aria-busy="true" className={`${CART_GRID} py-4`}>
+      <span className="sr-only">Đang tải giỏ hàng…</span>
+      <div className="flex min-w-0 flex-col gap-3">
+        <LineItemSkeleton />
+        <LineItemSkeleton />
+        <LineItemSkeleton />
+      </div>
+      <div aria-hidden="true" className={`hidden h-fit flex-col gap-2.5 p-4 ${ui.card} lg:flex lg:self-start`}>
+        <Skeleton height={16} />
+        <Skeleton height={16} />
+        <Skeleton height={44} />
+        <Skeleton height={20} />
+        <Skeleton height={44} />
+      </div>
+    </div>
+  );
+}
 
 /** Việc khách làm trên MỘT dòng giỏ: đổi số lượng hoặc xoá. Chung một khoá theo dòng nên tăng/giảm/xoá của cùng dòng không đua nhau. */
 type LineOp = { op: 'qty'; id: string; q: number } | { op: 'remove'; id: string; line?: CartLine };
@@ -506,18 +541,13 @@ export default function CartPage() {
         </div>
       )}
       {cartQ.isLoading ? (
-        <div role="status" aria-busy="true" className="flex flex-col gap-3 py-4">
-          <span className="sr-only">Đang tải giỏ hàng…</span>
-          <LineItemSkeleton />
-          <LineItemSkeleton />
-          <LineItemSkeleton />
-        </div>
+        <CartSkeleton />
       ) : cartQ.isError && !cart ? (
         <ErrorState message={loadErrorText(cartQ.error)} onRetry={() => cartQ.refetch()} />
       ) : !cart || cart.items.length === 0 ? (
         <EmptyCart />
       ) : (
-        <div className="grid grid-cols-1 gap-6 max-md:gap-3 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
+        <div className={CART_GRID}>
           <div className="min-w-0">
             {showFreeship && freeship && (
               <div data-testid="cart-freeship" className="mb-3 max-md:mb-2">
@@ -579,7 +609,7 @@ export default function CartPage() {
             </div>
           </div>
 
-          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:max-h-[calc(100vh-var(--header-h)-9rem)] lg:self-start lg:overflow-y-auto`}>
+          <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:self-start`}>
             <div data-testid="cart-summary-rows" className="max-md:hidden">
             {/* Có giảm thì hàng này là tiền hàng chưa trừ, hàng cuối là số đã giảm; chưa giảm thì hai số bằng nhau nên chỉ giữ hàng cuối. */}
             {hasDiscount && (
@@ -688,44 +718,51 @@ export default function CartPage() {
       </div>
       {showBar && (
         <StickyActionBar label="Thanh toán" hideFrom="lg">
-          {/* Dưới md khung tóm tắt bị ẩn hẳn (cả với trình đọc màn hình): lời báo ở đây là bản duy nhất khách thấy/nghe được. */}
-          {payHint && (
-            <p
-              id="cart-pay-hint"
-              role="status"
-              className={`mb-1 text-caption ${stockBlocked ? 'text-warning-fg' : 'text-stone-600'}`}
-            >
-              {payHint}
-            </p>
-          )}
-          {phoneCoupon && couponBox(true)}
-          <div className="mt-1 space-y-1">
-            {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" style={{ padding: 0 }} />}
-            {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" style={{ padding: 0 }} />}
-            {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" style={{ padding: 0 }} />}
-            {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App). Khối tổng grow 1000 và không min-w-0, nên hàng chỉ xuống dòng khi số tiền (không ngắt được)
-                rộng hơn chỗ còn lại (320px, 9 chữ số): nút xuống hàng riêng và giãn hết bề ngang thay vì cắt chữ hay chui dưới nút; chung hàng thì giữ 9.25rem. */}
-            <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
-              <div className="flex-[1000_1_0%]">
-                <div className="whitespace-nowrap text-label text-stone-600">{totalLabel}</div>
-                <div data-testid="cart-total-value" className="whitespace-nowrap text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-stone-900">
-                  {formatVnd(payTotal)}
+          <div className="md:mx-auto md:max-w-2xl">
+            {/* Dưới md khung tóm tắt bị ẩn hẳn (cả với trình đọc màn hình): lời báo ở đây là bản duy nhất khách thấy/nghe được. */}
+            {payHint && (
+              <p
+                id="cart-pay-hint"
+                role="status"
+                className={`mb-1 text-caption ${stockBlocked ? 'text-warning-fg' : 'text-stone-600'}`}
+              >
+                {payHint}
+              </p>
+            )}
+            {phoneCoupon && couponBox(true)}
+            <div className="mt-1 space-y-1">
+              {/* Từ md khung tóm tắt trong thân trang đã ghi các khoản giảm và "Tiết kiệm": thanh dính chỉ giữ tổng + nút, không lặp lại. */}
+              {(shownCombo > 0 || shownDiscount > 0 || shownTier > 0) && (
+                <div className="space-y-1 md:hidden">
+                  {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" style={{ padding: 0 }} />}
+                  {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" style={{ padding: 0 }} />}
+                  {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" style={{ padding: 0 }} />}
                 </div>
-                {saving > 0 && (
-                  <div data-testid="cart-saving" className="text-caption font-semibold text-[color:var(--color-text-price-deal)]">
-                    {fillCopy('cart.saving', { x: formatVnd(saving) })}
+              )}
+              {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App). Khối tổng grow 1000 và không min-w-0, nên hàng chỉ xuống dòng khi số tiền (không ngắt được)
+                  rộng hơn chỗ còn lại (320px, 9 chữ số): nút xuống hàng riêng và giãn hết bề ngang thay vì cắt chữ hay chui dưới nút; chung hàng thì giữ 9.25rem. */}
+              <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+                <div className="flex-[1000_1_0%]">
+                  <div className="whitespace-nowrap text-label text-stone-600">{totalLabel}</div>
+                  <div data-testid="cart-total-value" className="whitespace-nowrap text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-stone-900">
+                    {formatVnd(payTotal)}
                   </div>
+                  {saving > 0 && (
+                    <div data-testid="cart-saving" className="text-caption font-semibold text-[color:var(--color-text-price-deal)] md:hidden">
+                      {fillCopy('cart.saving', { x: formatVnd(saving) })}
+                    </div>
+                  )}
+                </div>
+                {payHint ? (
+                  <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
+                    Thanh toán ({selectedCount})
+                  </button>
+                ) : (
+                  <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
+                    Thanh toán ({selectedCount})
+                  </Link>
                 )}
               </div>
-              {payHint ? (
-                <button type="button" disabled aria-describedby="cart-pay-hint" className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
-                  Thanh toán ({selectedCount})
-                </button>
-              ) : (
-                <Link href="/thanh-toan" onClick={onPay} className={`${uiBar.primary} flex-[1_0_9.25rem]`}>
-                  Thanh toán ({selectedCount})
-                </Link>
-              )}
             </div>
           </div>
         </StickyActionBar>
@@ -763,7 +800,7 @@ function CartVoucherHintSection(props: {
 
 function Shell({ children }: { children: React.ReactNode }) {
   return (
-    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
+    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0 md:max-w-[45rem] lg:max-w-frame`}>
       <BackLink href="/" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: 'Giỏ hàng' }]}>
         ← Tiếp tục mua sắm
       </BackLink>

@@ -1,5 +1,6 @@
 'use client';
 
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { useEffect, useRef, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -233,7 +234,7 @@ export function BridgeCard({ isAdmin, compact = false }: { isAdmin: boolean; com
             <ToneBadge tone={view.tone}>{view.text}</ToneBadge>
             {status.avatar && (
               // eslint-disable-next-line @next/next/no-img-element -- ảnh đại diện Zalo, miền không cố định
-              <img src={status.avatar} alt="" referrerPolicy="no-referrer" className="h-7 w-7 rounded-full" />
+              <img key={status.avatar} src={status.avatar} alt="" referrerPolicy="no-referrer" onError={hideBrokenImage} className="h-7 w-7 rounded-full" />
             )}
             {status.displayName && <span className="font-medium text-stone-900">{status.displayName}</span>}
             {status.lastError && <span className="min-w-0 break-words text-xs text-stone-500">{status.lastError}</span>}

@@ -11,6 +11,7 @@ import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { absoluteLink, shareFallbackText, withAbsoluteLink } from '@/lib/content-kit-link';
 import { loadErrorText } from '@/lib/error-text';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 type Note = { text: string; error: boolean } | null;
 
@@ -108,7 +109,7 @@ export function ContentKitSheet({ visible, onClose, productSlug }: { visible: bo
             <div className="mb-3 flex gap-2 overflow-x-auto">
               {data.images.map((src, i) => (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img key={i} src={src} alt={data.productName} className="h-[72px] w-[72px] shrink-0 rounded-control object-cover" />
+                <img key={i} src={src} alt={data.productName} className="h-[72px] w-[72px] shrink-0 rounded-control object-cover" onError={hideBrokenImage} />
               ))}
             </div>
           )}

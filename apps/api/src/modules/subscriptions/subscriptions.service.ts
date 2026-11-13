@@ -106,6 +106,11 @@ const SCHEDULE_CHANGED_MESSAGE = 'Lịch giao vừa thay đổi, hãy tải lạ
 /** Mã lỗi ổn định cho FE: đã có gói còn chạy cùng SP + địa chỉ (C-057, Q-13). */
 export const SUBSCRIPTION_DUPLICATE = 'SUBSCRIPTION_DUPLICATE';
 
+/** `pausedReason` khi khách tự bấm Tạm dừng; các mã hệ thống tự dừng là `SystemPauseCode`. Giao diện đọc cả hai qua app-core/subscription-pause-copy. */
+const CUSTOMER_PAUSE_REASON = 'customer';
+/** Khớp `SUBSCRIPTION_PAUSE_REASONS` (trừ 'customer') của app-core: subscription-pause-copy.spec.ts đọc dòng này để bắt lệch. */
+type SystemPauseCode = 'inactive_product' | 'invalid_address' | 'partner_goods' | 'insufficient_wallet' | 'cod_limit';
+
 /** Trạng thái nằm trong partial unique index subscriptions_user_variation_address_open_key. */
 const OPEN_STATUSES = ['ACTIVE', 'PAUSED'];
 
@@ -469,6 +474,8 @@ export class SubscriptionsService {
         quantity: s.quantity,
         intervalWeeks: s.intervalWeeks,
         status: s.status,
+        // Chỉ nói lý do khi gói đang tạm dừng: gói đã bật lại hay còn chạy không mang lý do cũ.
+        pausedReason: s.status === 'PAUSED' ? (s.pausedReason ?? null) : null,
         nextRunAt: s.nextRunAt,
         addressId: s.addressId,
         paymentMethod: s.paymentMethod ?? 'COD',
@@ -557,7 +564,7 @@ export class SubscriptionsService {
         // Ghi có điều kiện theo bản vừa đọc: cron claim chen giữa (dời nextRunAt) mà ghi theo id thì trả nextRunAt cũ về, lịch lệch kỳ.
         const written = await tx.subscription.updateMany({
           where: { id, userId, status: sub.status, nextRunAt: sub.nextRunAt },
-          data: { status, nextRunAt, retryCount: 0 },
+          data: { status, nextRunAt, retryCount: 0, pausedReason: status === 'PAUSED' ? CUSTOMER_PAUSE_REASON : null },
         });
         if (written.count === 0) throw new ConflictException(SCHEDULE_CHANGED_MESSAGE);
         const updated = await tx.subscription.findUniqueOrThrow({ where: { id } });
@@ -940,9 +947,9 @@ export class SubscriptionsService {
   }
 
   /** Không sinh đơn được vì lý do không tự hết (SP ngừng bán, địa chỉ hỏng, ví thiếu): tạm dừng + báo khách. */
-  private async pauseSubscription(sub: { id: string; userId: string }, reason: string, reasonCode: string): Promise<void> {
+  private async pauseSubscription(sub: { id: string; userId: string }, reason: string, reasonCode: SystemPauseCode): Promise<void> {
     // Chỉ lật gói còn ACTIVE: khách vừa huỷ thì giữ CANCELLED.
-    await this.prisma.subscription.updateMany({ where: { id: sub.id, status: 'ACTIVE' }, data: { status: 'PAUSED' } });
+    await this.prisma.subscription.updateMany({ where: { id: sub.id, status: 'ACTIVE' }, data: { status: 'PAUSED', pausedReason: reasonCode } });
     await this.notifications.notifySafe(sub.userId, 'SUBSCRIPTION_PAUSED', { reason }, undefined, `sub=${sub.id}`);
     await this.analytics.recordBestEffort({
       eventName: 'subscription_changed',

@@ -312,10 +312,15 @@ describe('ReviewsTab / SubscriptionsTab / CashbackTab — DS v2', () => {
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<SubscriptionsTab />);
     await flush();
-    const tabs = Array.from(container.querySelectorAll('[role="tab"]')) as HTMLElement[];
-    expect(tabs).toHaveLength(4);
-    for (const t of tabs) expect(t.className).toContain('min-h-[44px]');
-    expect(tabs.filter((t) => t.getAttribute('aria-selected') === 'true')[0]!.className).toContain('bg-forest-600');
+    const statusRow = container.querySelector('[role="tablist"][aria-label="Lọc gói định kỳ theo trạng thái"]')!;
+    const reasonRow = container.querySelector('[role="tablist"][aria-label="Lọc gói định kỳ theo lý do tạm dừng"]')!;
+    expect(statusRow.querySelectorAll('[role="tab"]')).toHaveLength(4);
+    expect(reasonRow.querySelectorAll('[role="tab"]').length).toBeGreaterThan(1);
+    for (const row of [statusRow, reasonRow]) {
+      const tabs = Array.from(row.querySelectorAll('[role="tab"]')) as HTMLElement[];
+      for (const t of tabs) expect(t.className).toContain('min-h-[44px]');
+      expect(tabs.filter((t) => t.getAttribute('aria-selected') === 'true')[0]!.className).toContain('bg-forest-600');
+    }
   });
 
   it('hoàn tiền sàn ngoài: "Duyệt hoàn tiền" forest, "Từ chối" viền danger, chip lọc đang chọn forest, tất cả 44px', async () => {

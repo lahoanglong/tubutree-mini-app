@@ -16,6 +16,7 @@ import { AuthorLine } from './author-line';
 import { dedupeTagsAgainstProducts } from './post-tags';
 import { ProductThumb } from '../ui/product-thumb';
 import { TagPrice } from './tag-price';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 // Xuất để dùng lại ở community-moderation.tsx (localize post.kind thô "QUESTION"/"TIP"...).
 export const KIND_LABEL: Partial<Record<FeedItem['kind'], string>> = {
@@ -111,7 +112,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
       )}
       {post.images[0] && (
         <>
-          <img src={apiMediaUrl(post.images[0])} alt="" loading="lazy" style={{ width: '100%', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 220, objectFit: 'cover' }} />
+          <img src={apiMediaUrl(post.images[0])} alt="" loading="lazy" style={{ width: '100%', aspectRatio: '14 / 9', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 220, objectFit: 'cover' }} onError={hideBrokenImage} />
           {(post.imageCount ?? 1) > 1 && (
             <Text variant="caption" tone="secondary" as="div" style={{ marginTop: 4 }}>
               {`+${(post.imageCount ?? 1) - 1} ảnh nữa`}

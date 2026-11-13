@@ -1,5 +1,6 @@
 'use client';
 
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CampaignPlacement } from '@tubutree/app-core/api/campaign';
@@ -20,6 +21,7 @@ import {
   BTN_LINK_DANGER,
   BTN_PRIMARY,
   BTN_SECONDARY,
+  ListSkeleton,
   LoadError,
   ToneBadge,
   chipClass,
@@ -120,8 +122,10 @@ function CampaignRow({
       {row.image ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
+          key={row.image}
           src={row.image}
           alt=""
+          onError={hideBrokenImage}
           className="h-10 w-24 shrink-0 rounded-control bg-stone-100 object-cover"
         />
       ) : (
@@ -200,7 +204,7 @@ function EditForm({
       </div>
     );
   }
-  if (!q.data) return <p className="text-sm text-stone-500">Đang tải chiến dịch…</p>;
+  if (!q.data) return <ListSkeleton label="Đang tải chiến dịch" rows={4} className="h-14" />;
   return <CampaignForm key={q.data.id} initial={q.data} onDone={onDone} onCancel={onCancel} />;
 }
 

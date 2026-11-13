@@ -32,6 +32,8 @@ export interface BrandBodyProps {
   brand: BrandDetail;
   /** Id điểm trên bản đồ câu chuyện (do trang server tra theo slug và tên); null khi thương hiệu chưa có ghim. */
   mapOriginId: string | null;
+  /** Dòng xuất xứ từ bản đồ, dùng khi bản ghi Brand chưa nhập `origin` ("Thanh Hóa (nhà máy Fuwa3e)" cho Pineboo); null khi không có ghim. */
+  originFallback?: string | null;
 }
 
 /** Số sản phẩm nổi bật trên tab Shop (kệ ngang); phần còn lại ở tab Sản phẩm. */
@@ -47,13 +49,15 @@ const LINK_BTN = 'inline-flex min-h-11 flex-none items-center justify-center rou
  * Thân trang `/brand/[slug]` (client): đầu shop có Theo dõi và Chia sẻ, số liệu (kèm người theo dõi), tab Shop | Sản phẩm | Câu chuyện
  * như Mini App. Sản phẩm phân trang thật qua API (trang server chỉ nhận 30 món đầu).
  */
-export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
+export function BrandBody({ brand: b, mapOriginId, originFallback = null }: BrandBodyProps) {
   const router = useRouter();
   const [tab, setTab] = useState<ShopTabKey>('shop');
   const [promoNote, setPromoNote] = useState<string | null>(null);
   const tabsRef = useRef<HTMLDivElement>(null);
 
-  const hasStory = Boolean(b.story || b.origin || b.storyImages.length > 0);
+  // Bản ghi Brand chưa nhập xuất xứ thì lấy từ bản đồ (Pineboo → vùng nhà máy Fuwa3e), để tab Câu chuyện và nút bản đồ vẫn có.
+  const originText = b.origin || originFallback;
+  const hasStory = Boolean(b.story || originText || b.storyImages.length > 0);
   const productCount = b.productCount ?? b.products.length;
   const featured = useMemo(() => b.products.slice(0, FEATURED_MAX).map((p) => ({ ...p, brand: b.name, isFeatured: false })) as unknown as ProductCardData[], [b]);
   // Chỉ có nút khi tab Sản phẩm có nhiều hơn số đang hiện; số trong nhãn là tổng của tab đó.
@@ -200,11 +204,11 @@ export function BrandBody({ brand: b, mapOriginId }: BrandBodyProps) {
               {tab === 'story' && hasStory && (
                 <div className="px-4 md:px-0">
                   <SectionHeader title="Câu chuyện thương hiệu" />
-                  {b.origin && (
+                  {originText && (
                     <div className="mb-2 flex items-center justify-between gap-2">
                       <span className="flex min-w-0 items-center gap-1.5">
                         <MapPin className="h-4 w-4 flex-none text-[color:var(--color-text-brand)]" aria-hidden="true" />
-                        <Text variant="body-sm" as="span">Xuất xứ: {b.origin}</Text>
+                        <Text variant="body-sm" as="span">Xuất xứ: {originText}</Text>
                       </span>
                       {mapOriginId && (
                         <Link href={`/cau-chuyen?brand=${mapOriginId}`} className={LINK_BTN}>

@@ -10,7 +10,7 @@ import { personLabel } from '@/lib/admin-pickers';
 import type { PickedItem } from './search-picker';
 import { UserPicker } from './user-picker';
 import { VnDateInput } from './vn-date-input';
-import { BTN_XS_SECONDARY, INPUT_CLASS, ScrollRegion, TOUCH_H, LoadError } from './ui';
+import { BTN_XS_SECONDARY, INPUT_CLASS, ScrollRegion, TOUCH_H, LoadError, TableSkeleton } from './ui';
 import { formatDateTime } from '@/lib/format-date';
 import { loadErrorText } from '@/lib/admin-error-text';
 
@@ -79,7 +79,7 @@ export function PosCreditsTab() {
         )}
       </div>
 
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isLoading && <TableSkeleton label="Đang tải điểm cộng tại quầy" rows={5} />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>{loadErrorText(q.error)}</LoadError>}
       {q.data && (
         <>

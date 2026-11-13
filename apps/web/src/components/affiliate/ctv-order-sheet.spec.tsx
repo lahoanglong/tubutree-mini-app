@@ -335,6 +335,15 @@ describe('CtvOrderSheet — giá như khách tự đặt, kể cả giờ vàng'
     expect(state.quoteCalls.at(-1)).toEqual([{ variationId: 'var1', quantity: 1 }]);
   });
 
+  it('tổng khách trả (chữ Fraunces) dùng font-semibold: Fraunces không có bản đậm thật nên font-bold bị làm đậm giả', async () => {
+    state.quote = async () => FLASH;
+    await readyWithAn();
+    await until(() => text().includes('Chanh · 52.000đ'));
+    const cls = body().querySelector('[data-testid="ctv-order-total"]')!.className.split(/\s+/);
+    expect(cls).toEqual(expect.arrayContaining(['font-display', 'font-semibold']));
+    expect(cls).not.toContain('font-bold');
+  });
+
   it('vượt số suất giờ vàng: báo lý do dưới dòng hàng, giá thường', async () => {
     const notice = 'Giá giờ vàng chỉ áp dụng tối đa 1 sản phẩm cho bạn.';
     state.quote = async (items: { quantity: number }[]) => {
@@ -357,6 +366,9 @@ describe('CtvOrderSheet — giá như khách tự đặt, kể cả giờ vàng'
     await until(() => text().includes('Phí ship tính khi tạo đơn'));
     expect(text()).toContain('Chanh · 65.000đ');
     expect(body().querySelector('[data-testid="ctv-order-goods"]')?.textContent).toBe('65.000đ');
+    const cls = body().querySelector('[data-testid="ctv-order-goods"]')!.className.split(/\s+/);
+    expect(cls).toEqual(expect.arrayContaining(['font-display', 'font-semibold']));
+    expect(cls).not.toContain('font-bold');
   });
 });
 

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { act } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 import { AdminNav, type NavGroup } from './admin-nav';
 import { click, render, typeInto, type Rendered } from '@/test-utils/dom';
 
@@ -229,5 +230,29 @@ describe('AdminNav — gom nhóm, gập mở, tìm mục', () => {
     const openBtn = r.container.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
     expect(openBtn.querySelector('[data-badge]')?.textContent).toBe('3');
     expect(openBtn.textContent).toContain('Đổi mục');
+  });
+});
+
+// D4: thanh PortalHeader dính đầu trang che thanh "Đổi mục" và đỉnh cột menu nếu chúng cùng dính ở top≈0.
+describe('AdminNav: dính dưới thanh đầu cổng (--portal-header-h)', () => {
+  const html = () => renderToStaticMarkup(<AdminNav groups={GROUPS} active="orders" onSelect={() => {}} />);
+
+  it('thanh "Đổi mục" dính ở dưới chiều cao đo được của thanh đầu, mặc định 4rem + inset khi chưa đo', () => {
+    const bar = html().match(/<div[^>]*class="sticky z-30[^"]*"[^>]*>/)?.[0] ?? '';
+    expect(bar).toContain('top:var(--portal-header-h, calc(4rem + env(safe-area-inset-top, 0px)))');
+  });
+
+  it('cột menu lg dính dưới thanh đầu và chiều cao tối đa trừ đúng phần đó, theo dvh', () => {
+    const side = html().match(/<div[^>]*class="sticky top-[^"]*"[^>]*>/)?.[0] ?? '';
+    expect(side).toContain('top-[calc(var(--portal-header-h,4rem)+1rem)]');
+    expect(side).toContain('max-h-[calc(100dvh-var(--portal-header-h,4rem)-2rem)]');
+    expect(side).not.toContain('100vh');
+  });
+
+  it('nút nhóm menu cao 44px khi chạm, chỉ gọn lại với con trỏ chuột', () => {
+    const group = Array.from(mount('orders').querySelectorAll<HTMLButtonElement>('button[aria-expanded]')).find((b) => b.textContent?.includes('Đơn hàng'))!;
+    expect(group.className).toContain('min-h-11');
+    expect(group.className).toContain('[@media(pointer:fine)]:min-h-9');
+    expect(group.className).not.toContain('min-h-[36px]');
   });
 });

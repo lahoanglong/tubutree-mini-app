@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   checkParity,
@@ -161,6 +164,74 @@ describe('checkParity', () => {
     });
     const r = checkParity({ ...b, fileHasSymbol: () => false });
     expect(r.errors.join('\n')).toMatch(/gate.*Mini App/);
+  });
+});
+
+describe('checkParity gaps (lệch cố ý theo cờ, route có ở cả hai nền tảng)', () => {
+  const gap = () => ({
+    id: 'subscriptions-create-in-miniapp',
+    flag: ['packages/app-core/src/features.ts', 'SUBSCRIPTIONS_IN_MINIAPP'],
+    missingOn: 'miniapp',
+    reason: 'Tạm ẩn lối tạo gói ở Mini App',
+  });
+  const withGaps = (gaps: unknown[], fileHasSymbol: (f: string, s: string) => boolean = () => true) => ({
+    ...base(),
+    map: { ...base().map, gaps },
+    fileHasSymbol,
+  });
+
+  it('bản map không có gaps vẫn xanh như cũ', () => {
+    expect(checkParity(base()).errors).toEqual([]);
+  });
+
+  it('xanh khi có lý do, nền tảng thiếu hợp lệ và cờ còn trong file', () => {
+    expect(checkParity(withGaps([gap()])).errors).toEqual([]);
+  });
+
+  it('đỏ khi thiếu lý do', () => {
+    expect(checkParity(withGaps([{ ...gap(), reason: '  ' }])).errors.join('\n')).toMatch(/subscriptions-create-in-miniapp thiếu lý do/);
+  });
+
+  it('đỏ khi thiếu id hoặc id trùng', () => {
+    expect(checkParity(withGaps([{ ...gap(), id: '' }])).errors.join('\n')).toMatch(/gap thiếu id/);
+    expect(checkParity(withGaps([gap(), gap()])).errors.join('\n')).toMatch(/subscriptions-create-in-miniapp trùng/);
+  });
+
+  it('đỏ khi missingOn không phải miniapp hoặc web', () => {
+    expect(checkParity(withGaps([{ ...gap(), missingOn: 'zalo' }])).errors.join('\n')).toMatch(/missingOn/);
+    expect(checkParity(withGaps([{ ...gap(), missingOn: 'web' }])).errors).toEqual([]);
+  });
+
+  it('đỏ khi cờ không còn trong file (cờ bị xoá hoặc đổi tên: dòng không được mồ côi)', () => {
+    const r = checkParity(withGaps([gap()], () => false));
+    expect(r.errors.join('\n')).toMatch(/SUBSCRIPTIONS_IN_MINIAPP không còn trong packages\/app-core\/src\/features\.ts/);
+  });
+
+  it('đỏ khi thiếu flag, không ném lỗi', () => {
+    const r = checkParity(withGaps([{ id: 'x', missingOn: 'miniapp', reason: 'r' }]));
+    expect(r.errors.join('\n')).toMatch(/gap x: cờ \(thiếu\)/);
+  });
+});
+
+describe('route-map.json thật', () => {
+  const map = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'route-map.json'), 'utf8')) as {
+    routes: { items: { miniapp: string; skip?: string }[] }[];
+    gaps?: { id: string; flag: [string, string]; reason: string }[];
+  };
+
+  it('mỗi gap của file thật có cờ còn trong file và lý do viết đủ ý', () => {
+    expect(map.gaps?.map((g) => g.id)).not.toContain('subscriptions-create-in-miniapp');
+    for (const g of map.gaps ?? []) {
+      const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../..', g.flag[0]), 'utf8');
+      expect(src, `${g.id}: cờ ${g.flag[1]}`).toMatch(new RegExp(`\\b${g.flag[1]}\\b`));
+      expect(g.reason.length, `${g.id}: lý do quá ngắn`).toBeGreaterThanOrEqual(40);
+    }
+  });
+
+  it('dòng skip /points/scan nêu đúng điều kiện Zalo thay vì chỉ "máy quét QR"', () => {
+    const skip = map.routes.flatMap((g) => g.items).find((i) => i.miniapp === '/points/scan')?.skip ?? '';
+    expect(skip).toContain('SĐT đã xác minh');
+    expect(skip).toContain('ô nhập mã tay');
   });
 });
 

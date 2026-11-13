@@ -86,6 +86,36 @@ describe('ProductDetailPage — tên nhãn là liên kết (C-079)', () => {
     expect(parseInt(btn.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
   });
 
+  it('chip xuất xứ cạnh tên nhãn: tên tỉnh, bấm mở /brand-story đúng điểm bản đồ, vùng chạm 44px, có aria-label', async () => {
+    renderPdp();
+    const chip = await screen.findByTestId('pdp-origin-link');
+    expect(chip.textContent).toBe('Lâm Đồng (Cầu Đất)');
+    expect(chip.getAttribute('aria-label')).toBe('Xem xuất xứ Lâm Đồng (Cầu Đất) trên bản đồ');
+    expect(parseInt((chip as HTMLElement).style.minHeight, 10)).toBeGreaterThanOrEqual(44);
+    fireEvent.click(chip);
+    expect(mocks.navigate).toHaveBeenCalledWith('/brand-story?brand=leplateau');
+    // Nhãn và chip chung một nhóm flex-wrap để cụm Tim/Chia sẻ không bị đẩy tràn ở 320px.
+    const brandBtn = screen.getByRole('button', { name: 'Xem sản phẩm thương hiệu Le Plateau Coffee' });
+    expect(brandBtn.parentElement).toBe(chip.parentElement);
+    expect((chip.parentElement as HTMLElement).style.flexWrap).toBe('wrap');
+  });
+
+  it('Pineboo mượn vùng nhà máy: chip "Fuwa3e · Thanh Hóa" dẫn bản đồ Fuwa3e', async () => {
+    mocks.fetchProduct.mockResolvedValue(product({ brand: 'Pineboo', name: 'Xịt tràm cho bé Pineboo 150ml' }));
+    renderPdp();
+    const chip = await screen.findByTestId('pdp-origin-link');
+    expect(chip.textContent).toBe('Fuwa3e · Thanh Hóa');
+    fireEvent.click(chip);
+    expect(mocks.navigate).toHaveBeenCalledWith('/brand-story?brand=fuwa3e');
+  });
+
+  it('nhãn chưa có ghim hoặc vỏ "Tubu Tree" thì không có chip', async () => {
+    mocks.fetchProduct.mockResolvedValue(product({ brand: 'Tubu Tree' }));
+    renderPdp();
+    await screen.findByRole('button', { name: 'Xem sản phẩm thương hiệu Tubu Tree' });
+    expect(screen.queryByTestId('pdp-origin-link')).toBeNull();
+  });
+
   it('chứng nhận và cam kết dùng icon, không dùng ký tự ✓', async () => {
     renderPdp();
     await screen.findByText('USDA Organic');

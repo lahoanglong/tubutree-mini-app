@@ -1,19 +1,23 @@
 import type { Metadata } from 'next';
-import { ogBase, withBrand } from '@/lib/og';
+import { JsonLd } from '@/components/seo/json-ld';
+import { staticPageJsonLd, staticPageMetadata } from '@/lib/page-seo';
 import { BrandStoryView } from './brand-story-view';
 
 export const revalidate = 3600;
 
-const TITLE = 'Hành trình nguyên liệu';
-const DESCRIPTION = 'Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Khám phá xuất xứ nguyên liệu trên bản đồ gỗ 3D.';
-
-export const metadata: Metadata = {
-  title: TITLE,
-  description: DESCRIPTION,
-  alternates: { canonical: '/cau-chuyen' },
-  openGraph: { ...ogBase, url: '/cau-chuyen', title: withBrand(TITLE), description: DESCRIPTION },
+const SEO = {
+  path: '/cau-chuyen',
+  title: 'Hành trình nguyên liệu',
+  description: 'Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Khám phá xuất xứ nguyên liệu trên bản đồ vùng nguyên liệu Việt Nam.',
 };
 
+export const metadata: Metadata = staticPageMetadata(SEO);
+
 export default function BrandStoryPage() {
-  return <BrandStoryView />;
+  return (
+    <>
+      <BrandStoryView />
+      <JsonLd data={staticPageJsonLd(SEO)} />
+    </>
+  );
 }

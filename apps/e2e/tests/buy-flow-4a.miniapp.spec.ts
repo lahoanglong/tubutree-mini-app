@@ -144,20 +144,22 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('heading', { name: 'Đơn hàng' })).toBeVisible({ timeout: 15_000 });
   });
 
-  test('Trang Đơn hàng: kệ Mua lại + 6 tab (Định kỳ tạm ẩn, R-30); "Đang xử lý" gửi group=processing', async ({ page, api }) => {
+  test('Trang Đơn hàng: kệ Mua lại + 7 tab (Định kỳ luôn hiện vì cờ bật, W143); "Đang xử lý" gửi group=processing', async ({ page, api }) => {
     mockBuyFlowSession(api);
     mockOrdersTab(api);
-    // Tab Định kỳ chỉ hiện cho khách đã có gói; ca này là khách chưa có gói.
+    // Cờ SUBSCRIPTIONS_IN_MINIAPP bật: tab Định kỳ hiện cả khi khách chưa có gói.
     api.get('/me/subscriptions', []);
     await page.goto('/orders');
 
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` })).toBeVisible();
     const tabs = page.getByRole('tablist');
-    for (const t of ['Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã huỷ/hoàn']) {
+    for (const t of ['Tất cả', 'Chờ thanh toán', 'Đang xử lý', 'Đang giao', 'Đã giao', 'Đã huỷ/hoàn', 'Định kỳ']) {
       await expect(tabs.getByRole('tab', { name: t, exact: true })).toBeVisible();
     }
-    await expect(tabs.getByRole('tab', { name: 'Định kỳ' })).toHaveCount(0);
+    await expect(tabs.getByRole('tab')).toHaveCount(7);
+    // Cờ bật: kệ Mua lại ở tab Đơn hàng mời "Định kỳ" cho món đủ điều kiện (retailOnly=false, còn hàng); ở Trang chủ thì không (home-h.miniapp.spec.ts).
+    await expect(page.getByRole('region', { name: 'Mua lại' }).getByRole('button', { name: /^Định kỳ -\d+%$/ })).toBeVisible();
 
     const filtered = api.waitForCall('GET', '/orders');
     await tabs.getByRole('tab', { name: 'Đang xử lý' }).click();
@@ -174,15 +176,14 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` })).toBeVisible();
   });
 
-  test('/subscriptions (link cũ) → /orders?tab=subscriptions, Định kỳ tạm ẩn nên về tab Tất cả', async ({ page, api }) => {
+  test('/subscriptions (link cũ) → /orders?tab=subscriptions, cờ bật nên mở thẳng tab Định kỳ dù khách chưa có gói', async ({ page, api }) => {
     mockBuyFlowSession(api);
     mockOrdersTab(api);
-    // Tab Định kỳ chỉ hiện cho khách đã có gói; ca này là khách chưa có gói.
     api.get('/me/subscriptions', []);
     await page.goto('/subscriptions');
     await expect(page).toHaveURL(/\/orders\?tab=subscriptions$/, { timeout: 15_000 });
-    await expect(page.getByRole('tab', { name: 'Tất cả' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
-    await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveCount(0);
+    await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
+    await expect(page.getByRole('tab', { name: 'Tất cả' })).toHaveAttribute('aria-selected', 'false');
   });
 
   test('Thẻ đơn: ảnh SP đầu, "3 món"; "Mua lại" → sheet khoá dòng hết hàng, chỉ gửi dòng còn hàng → /cart', async ({ page, api }) => {
@@ -235,7 +236,6 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
   test('/subscriptions là redirect thay thế (replace): không vòng lặp, nút Back về trang trước, không về /subscriptions', async ({ page, api }) => {
     mockBuyFlowSession(api);
     mockOrdersTab(api);
-    // Tab Định kỳ chỉ hiện cho khách đã có gói; ca này là khách chưa có gói.
     api.get('/me/subscriptions', []);
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
@@ -247,7 +247,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
     await expect(page).toHaveURL(/\/orders\?tab=subscriptions$/, { timeout: 10_000 });
-    await expect(page.getByRole('tab', { name: 'Tất cả' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
+    await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
 
     // Redirect là replace: lịch sử chỉ thêm ĐÚNG 1 mục (pushState của chính test), không thêm mục cho /orders.
     expect(await page.evaluate(() => history.length)).toBe(historyBefore + 1);
@@ -432,7 +432,7 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
     });
   }
 
-  test('Đặt hàng thành công (DS v2): mã đơn sao chép được, tổng, điểm, giao dự kiến, 3 bước; không gợi ý định kỳ (tạm ẩn, R-30); không lá rơi', async ({ page, api }) => {
+  test('Đặt hàng thành công (DS v2): mã đơn sao chép được, tổng, điểm, giao dự kiến, 3 bước; có gợi ý Đặt định kỳ dưới hai CTA (cờ bật, W143); không lá rơi', async ({ page, api }) => {
     mockCheckout(api);
     api.get('/config/public', publicConfig({ shippingEta: { minDays: 2, maxDays: 4 } }));
     await page.goto('/checkout');
@@ -449,9 +449,18 @@ test.describe('Buy-flow 4a — nhắc mua lại, đặt hàng thành công, bố
     for (const s of ['Xác nhận đơn', 'Đóng gói', 'Giao hàng']) {
       await expect(page.getByText(s, { exact: true })).toBeVisible();
     }
-    await expect(page.getByRole('button', { name: 'Đặt định kỳ' })).toHaveCount(0);
+    // Cờ SUBSCRIPTIONS_IN_MINIAPP bật: sản phẩm của đơn (PILOT_PRODUCT, còn hàng, không phải hàng gian hàng) đủ điều kiện nên có gợi ý;
+    // nó nằm DƯỚI hai CTA để lúc sản phẩm tải xong không đẩy "Theo dõi đơn" đi chỗ khác.
+    const subscribe = page.getByRole('button', { name: 'Đặt định kỳ' });
+    await expect(subscribe).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Theo dõi đơn' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Tiếp tục mua sắm' })).toBeVisible();
+    const trackBox = (await page.getByRole('button', { name: 'Theo dõi đơn' }).boundingBox())!;
+    const continueBox = (await page.getByRole('button', { name: 'Tiếp tục mua sắm' }).boundingBox())!;
+    await expect(subscribe).toBeVisible();
+    const subscribeBox = (await subscribe.boundingBox())!;
+    expect(subscribeBox.y, 'gợi ý định kỳ nằm dưới nút Theo dõi đơn').toBeGreaterThan(trackBox.y + trackBox.height - 1);
+    expect(subscribeBox.y, 'gợi ý định kỳ nằm dưới nút Tiếp tục mua sắm').toBeGreaterThan(continueBox.y + continueBox.height - 1);
     await expect(page.locator('.tubu-leaf')).toHaveCount(0);
   });
 

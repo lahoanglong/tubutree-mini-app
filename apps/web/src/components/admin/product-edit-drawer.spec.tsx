@@ -4,6 +4,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { CategoryOption, ProductDetail } from '@/lib/product-categories';
+import { AdminToastProvider } from './admin-toast';
 import { ProductEditDrawer } from './product-edit-drawer';
 
 let mounted: Rendered[] = [];
@@ -37,7 +38,7 @@ const CATS: CategoryOption[] = [
   { id: 'b', name: 'Giặt tẩy' },
 ];
 
-function mount(opts: { cached?: ProductDetail; server: ProductDetail }) {
+function mount(opts: { cached?: ProductDetail; server: ProductDetail; toast?: boolean }) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   if (opts.cached) client.setQueryData(['admin-product', 'p1'], opts.cached);
   const m = mockFetch({
@@ -46,7 +47,8 @@ function mount(opts: { cached?: ProductDetail; server: ProductDetail }) {
   vi.stubGlobal('fetch', vi.fn(m.fn));
   const onClose = vi.fn();
   const onSaved = vi.fn();
-  const r = render(<ProductEditDrawer id="p1" categories={CATS} onClose={onClose} onSaved={onSaved} />, client);
+  const drawer = <ProductEditDrawer id="p1" categories={CATS} onClose={onClose} onSaved={onSaved} />;
+  const r = render(opts.toast ? <AdminToastProvider>{drawer}</AdminToastProvider> : drawer, client);
   mounted.push(r);
   return { m, onClose, onSaved };
 }
@@ -154,7 +156,7 @@ describe('ProductEditDrawer: hỏi lại trước khi bỏ thay đổi chưa lư
     const { onClose } = mount({ server: product() });
     await flush(6);
     typeInto(textarea(), 'x');
-    click(byText(document.body, 'form button[type="button"]', 'Đóng'));
+    click(byText(document.body, '[data-drawer-footer] button[type="button"]', 'Đóng'));
     await flush(2);
     expect(confirmDialog()).not.toBeNull();
     answerConfirm(false);
@@ -233,5 +235,118 @@ describe('ProductEditDrawer: câu chuyện sản phẩm', () => {
     await flush();
     typeInto(textarea(), 'Mô tả mới');
     expect(saveBtn().disabled).toBe(true);
+  });
+});
+
+describe('ProductEditDrawer: chân dính đáy', () => {
+  const footer = () => document.querySelector<HTMLElement>('[data-drawer-footer]')!;
+  const scroller = () => document.querySelector<HTMLElement>('[role="dialog"] .overflow-y-auto')!;
+  const reason = () => footer().querySelector<HTMLElement>('[data-testid="save-lock-reason"]')!;
+
+  it('Lưu và Đóng nằm ở chân dính, ngoài vùng cuộn có Story Studio; Lưu vẫn gửi form khi bấm', async () => {
+    const { m } = mount({ server: product() });
+    await flush(6);
+    expect(footer().contains(saveBtn())).toBe(true);
+    expect(footer().contains(byText(document.body, 'button', 'Đóng'))).toBe(true);
+    expect(scroller().contains(saveBtn())).toBe(false);
+    expect(scroller().querySelector('form')!.id).toBe(saveBtn().getAttribute('form'));
+    typeInto(textarea(), 'Mô tả mới');
+    click(saveBtn());
+    await flush(6);
+    expect(patches(m)).toEqual([{ description: 'Mô tả mới' }]);
+  });
+
+  it('Lưu khoá vì chưa sửa gì: có chữ lý do ngay cạnh nút, nối bằng aria-describedby; sửa xong thì lý do biến mất', async () => {
+    mount({ server: product() });
+    await flush(6);
+    expect(saveBtn().disabled).toBe(true);
+    expect(reason().textContent).toContain('Chưa có thay đổi nào');
+    expect(saveBtn().getAttribute('aria-describedby')).toBe(reason().id);
+    typeInto(textarea(), 'Mô tả mới');
+    expect(saveBtn().disabled).toBe(false);
+    expect(reason().textContent).toBe('');
+    expect(saveBtn().hasAttribute('aria-describedby')).toBe(false);
+  });
+
+  it('Lưu khoá vì cấu hình câu chuyện sai: lý do nêu lỗi của cấu hình thay vì "chưa sửa gì"', async () => {
+    const bad = { version: 1, enabled: true, scenes: [{ kind: 'hud_callouts', closing: '', points: [{ id: 'a', xPct: Number.NaN, yPct: 1, label: 'x', side: 'left' }] }] };
+    mount({ server: { ...product({ slug: 'dau-goi' }), storyConfig: bad as never } });
+    await flush(6);
+    typeInto(textarea(), 'Mô tả mới');
+    expect(saveBtn().disabled).toBe(true);
+    expect(reason().textContent).toContain('không hợp lệ');
+    expect(reason().textContent).not.toContain('Chưa có thay đổi nào');
+    expect(saveBtn().getAttribute('aria-describedby')).toBe(reason().id);
+  });
+
+  it('lưu xong: thông báo "Đã lưu." nằm trong chân, không kèm lý do khoá', async () => {
+    mount({ server: product() });
+    await flush(6);
+    typeInto(textarea(), 'Mô tả mới');
+    click(saveBtn());
+    await flush(8);
+    expect(footer().textContent).toContain('Đã lưu.');
+    expect(saveBtn().disabled).toBe(true);
+    expect(reason().textContent).toBe('');
+  });
+
+  it('lỗi từ máy chủ hiện role=alert trong chân, gần nút vừa bấm', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) =>
+        init?.method === 'PATCH'
+          ? new Response(JSON.stringify({ message: 'Không lưu được' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+          : new Response(JSON.stringify(product()), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      ),
+    );
+    mounted.push(render(<ProductEditDrawer id="p1" categories={CATS} onClose={vi.fn()} onSaved={vi.fn()} />, client));
+    await flush(6);
+    typeInto(textarea(), 'Mô tả mới');
+    click(saveBtn());
+    await flush(8);
+    expect(footer().querySelector('[role="alert"]')).not.toBeNull();
+  });
+
+  it('đang tải: hiện khung xương trong ngăn thay cho dòng chữ "Đang tải…"', async () => {
+    mount({ server: product() });
+    expect(document.querySelector('[role="status"][aria-busy="true"][aria-label="Đang tải sản phẩm"]')).not.toBeNull();
+    await flush(6);
+    expect(document.querySelector('[aria-label="Đang tải sản phẩm"]')).toBeNull();
+  });
+});
+
+describe('ProductEditDrawer: toast', () => {
+  const toastRegion = () => document.querySelector('[data-admin-toast-region]')!;
+  const footer = () => document.querySelector<HTMLElement>('[data-drawer-footer]')!;
+  const reason = () => footer().querySelector<HTMLElement>('[data-testid="save-lock-reason"]')!;
+
+  it('có AdminToastProvider: "Đã lưu." lên toast (thấy cả khi ngăn cuộn xa), chân ngăn không vẽ lại lần hai', async () => {
+    mount({ server: product(), toast: true });
+    await flush(6);
+    typeInto(textarea(), 'Mô tả mới');
+    click(saveBtn());
+    await flush(8);
+    expect(toastRegion().textContent).toContain('Đã lưu.');
+    expect(footer().textContent).not.toContain('Đã lưu.');
+    expect(reason().textContent).toBe('');
+  });
+
+  it('có AdminToastProvider: LỖI vẫn ở chân ngăn (role=alert cạnh nút Lưu), không nhân đôi thành toast', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) =>
+        init?.method === 'PATCH'
+          ? new Response(JSON.stringify({ message: 'Không lưu được' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+          : new Response(JSON.stringify(product()), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      ),
+    );
+    mounted.push(render(<AdminToastProvider><ProductEditDrawer id="p1" categories={CATS} onClose={vi.fn()} onSaved={vi.fn()} /></AdminToastProvider>));
+    await flush(6);
+    typeInto(textarea(), 'Mô tả mới');
+    click(saveBtn());
+    await flush(8);
+    expect(footer().querySelector('[role="alert"]')).not.toBeNull();
+    expect(toastRegion().querySelectorAll('[data-admin-toast]')).toHaveLength(0);
   });
 });

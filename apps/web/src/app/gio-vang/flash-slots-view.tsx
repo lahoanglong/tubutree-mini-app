@@ -18,7 +18,7 @@ import { cartKey } from '@/lib/cart-key';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
-import { PAGE_NARROW } from '@/lib/page-frame';
+import { PAGE_NARROW_UNTIL_LG } from '@/lib/page-frame';
 import { clearPendingRemind, rememberPendingRemind, takePendingRemind } from '@/lib/pending-remind';
 import { loginHref } from '@/lib/return-to';
 import { serverRejectedState } from '@/lib/server-rejected-state';
@@ -68,13 +68,24 @@ const STRIP: CSSProperties = {
   background: 'var(--color-bg-surface)',
 };
 
+/** Danh sách món: một cột như Mini App ở điện thoại, hai cột từ md, ba cột từ lg. Khung chờ dùng cùng lưới để món về không làm trang nhảy. */
+const LIST_GRID = 'flex flex-col gap-2 md:grid md:grid-cols-2 md:gap-3 lg:grid-cols-3';
+const LIST_PADDING: CSSProperties = { padding: '8px 16px 0' };
+
 function ListSkeleton() {
   return (
     // Cao tối thiểu một màn hình: danh sách thật dài hơn khung chờ bốn thẻ, nên không có chỗ này thì chân trang đang hiện trong màn hình bị đẩy ra ngoài khi món về (một lần xê dịch).
-    <div data-testid="flash-items-loading" aria-hidden="true" style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '8px 16px 0', minHeight: '100svh' }}>
-      {[0, 1, 2, 3].map((i) => (
-        <ProductTileSkeleton key={i} variant="line" note footerHeight={SOLD_FOOTER_HEIGHT} />
-      ))}
+    // Thẻ thứ năm và sáu chỉ vẽ từ md để hai và ba cột đủ hàng; điện thoại vẫn bốn thẻ.
+    <div data-testid="flash-items-loading" aria-hidden="true" className={LIST_GRID} style={{ ...LIST_PADDING, minHeight: '100svh' }}>
+      {[0, 1, 2, 3, 4, 5].map((i) =>
+        i < 4 ? (
+          <ProductTileSkeleton key={i} variant="line" note footerHeight={SOLD_FOOTER_HEIGHT} />
+        ) : (
+          <div key={i} className="hidden md:block">
+            <ProductTileSkeleton variant="line" note footerHeight={SOLD_FOOTER_HEIGHT} />
+          </div>
+        ),
+      )}
     </div>
   );
 }
@@ -298,7 +309,7 @@ export default function FlashSlotsView() {
     else if (rows.length === 0) list = <EmptyState variant="inline" art="box" heading={fillCopy('flash.slotEmpty')} />;
     else
       list = (
-        <ul style={{ listStyle: 'none', margin: 0, padding: '8px 16px 0', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <ul data-testid="flash-items" className={LIST_GRID} style={{ listStyle: 'none', margin: 0, ...LIST_PADDING }}>
           {rows.map((item) => (
             <li key={item.itemId}>
               <FlashSlotItem
@@ -355,7 +366,7 @@ export default function FlashSlotsView() {
   }
 
   return (
-    <main className={`${PAGE_NARROW} py-6 max-md:pt-0`}>
+    <main className={`${PAGE_NARROW_UNTIL_LG} py-6 max-md:pt-0`}>
       <PageHeader title={fillCopy('flash.title')} parentHref="/" />
       <div
         role="status"

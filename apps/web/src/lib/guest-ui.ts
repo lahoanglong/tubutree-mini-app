@@ -11,7 +11,8 @@ export const ui = {
   card: 'rounded-card border border-stone-200 bg-stone-0 shadow-card',
   /** Tiêu đề trang (h1) — Fraunces như trang chủ. */
   pageTitle: 'font-display text-2xl font-semibold text-stone-900',
-  sectionTitle: 'font-display text-lg font-semibold text-stone-900',
+  /** Tiêu đề khối 18px: Inter 600 (Fraunces dưới 22px làm nhoè dấu tiếng Việt, DESIGN.md Nguyên tắc 4). */
+  sectionTitle: 'font-ui text-lg font-semibold text-stone-900',
   /** Tiêu đề khối trong trang (Q1): Inter 16/700 -0,01em ở mọi khổ như `Heading font="ui" variant="title-sm"` của Mini App, cùng số đo `pdpSectionTitle`. Fraunces chỉ cho tiêu đề trang. */
   blockTitle:
     'font-ui text-[length:var(--type-title-sm-size)] font-bold leading-[var(--type-title-sm-lh)] tracking-[-0.01em] text-[var(--color-text-primary)]',

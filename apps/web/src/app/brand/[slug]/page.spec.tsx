@@ -134,9 +134,9 @@ describe('trang thương hiệu /brand/[slug] — khung shop giống Mini App', 
     expect(avatar.textContent).toBe('');
   });
 
-  it('đầu shop nằm trong lưới StoreLayout: bìa là ô lưới ở lg (ShopHeader inStoreGrid), không rơi về bố cục điện thoại', async () => {
+  it('đầu shop nằm trong lưới StoreLayout: bìa là ô lưới từ md (ShopHeader inStoreGrid), không rơi về bố cục điện thoại', async () => {
     const box = await html();
-    expect(box.querySelector('[data-testid="shop-cover"]')!.className).toContain('lg:col-start-1');
+    expect(box.querySelector('[data-testid="shop-cover"]')!.className).toContain('md:col-start-1');
   });
 
   it('hàng số liệu có số sản phẩm và người theo dõi; tab Shop, Sản phẩm (1), Câu chuyện', async () => {
@@ -320,6 +320,34 @@ describe('trang thương hiệu — tab Câu chuyện', () => {
     click(tabBtn(c, 'Câu chuyện'));
     expect(c.textContent).toContain('Xuất xứ: Lâm Đồng, Việt Nam');
     expect(c.textContent).not.toContain('Xem trên bản đồ');
+  });
+
+  it('bản ghi Brand chưa nhập xuất xứ: lấy từ bản đồ, Pineboo ra "Thanh Hóa (nhà máy Fuwa3e)" và nút bản đồ dẫn Fuwa3e; tab Câu chuyện vẫn có dù không có chữ và ảnh', async () => {
+    mocks.brand = { ...BRAND, slug: 'pineboo', name: 'Pineboo', story: null, origin: null };
+    const c = await live();
+    click(tabBtn(c, 'Câu chuyện'));
+    expect(c.textContent).toContain('Xuất xứ: Thanh Hóa (nhà máy Fuwa3e)');
+    const link = c.querySelector('a[href="/cau-chuyen?brand=fuwa3e"]')!;
+    expect(link.textContent).toBe('Xem trên bản đồ');
+    expect(link.className).toContain('min-h-11');
+  });
+
+  it('nhãn có ghim riêng và chưa nhập xuất xứ: chỉ tên tỉnh, không kèm nhà máy', async () => {
+    mocks.brand = { ...BRAND, slug: 'fuwa3e', name: 'Fuwa3e', story: null, origin: null };
+    const c = await live();
+    click(tabBtn(c, 'Câu chuyện'));
+    expect(c.textContent).toContain('Xuất xứ: Thanh Hóa');
+    expect(c.textContent).not.toContain('nhà máy');
+    expect(c.querySelector('a[href="/cau-chuyen?brand=fuwa3e"]')).not.toBeNull();
+  });
+
+  it('xuất xứ Admin đã nhập luôn thắng bản đồ (Pineboo vẫn có nút bản đồ)', async () => {
+    mocks.brand = { ...BRAND, slug: 'pineboo', name: 'Pineboo', origin: 'Hà Nội, Việt Nam' };
+    const c = await live();
+    click(tabBtn(c, 'Câu chuyện'));
+    expect(c.textContent).toContain('Xuất xứ: Hà Nội, Việt Nam');
+    expect(c.textContent).not.toContain('nhà máy Fuwa3e');
+    expect(c.querySelector('a[href="/cau-chuyen?brand=fuwa3e"]')).not.toBeNull();
   });
 
   it('không có câu chuyện, xuất xứ lẫn ảnh thì không có tab Câu chuyện', async () => {

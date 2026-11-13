@@ -26,7 +26,8 @@ test.describe('hub /san-pham tĩnh', () => {
     expect(new URL(res.headers()['location']!, baseURL).pathname).toBe('/san-pham');
   });
 
-  test('tìm từ hub rồi Back: về hub, ô tìm gõ được; ?focus=search vẫn đặt con trỏ vào ô tìm', async ({ page, api }) => {
+  test('tìm từ hub rồi Back: về hub, ô tìm gõ được; ?focus=search vẫn đặt con trỏ vào ô tìm', async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name === 'Web Customer', 'Từ md /san-pham không có hub và ô tìm riêng (ô tìm của thanh đầu website thay thế); khổ điện thoại kiểm ở project Mobile');
     api.get('/categories', [{ id: 'c-goi', parentId: null, name: 'Dầu gội', slug: 'dau-goi', image: null, sortOrder: 1, productCount: 4 }]);
     api.get('/brands', [{ brand: 'Tubu', count: 3 }]);
     api.get('/flash-sales/active', []);
@@ -93,7 +94,8 @@ test.describe('ô tìm ở /san-pham sau khi hub thành route riêng', () => {
     expect(errors).toEqual([]);
   });
 
-  test('gõ, Enter, bấm X: ô tìm vẫn giữ con trỏ và hiện Tìm gần đây; Back về hub trước đó', async ({ page, api }) => {
+  test('gõ, Enter, bấm X: ô tìm vẫn giữ con trỏ và hiện Tìm gần đây; Back về hub trước đó', async ({ page, api }, testInfo) => {
+    test.skip(testInfo.project.name === 'Web Customer', 'Từ md /san-pham không có hub và ô tìm riêng (ô tìm của thanh đầu website thay thế); khổ điện thoại kiểm ở project Mobile');
     api.get('/flash-sales/active', []);
     api.get('/products', { data: [], meta: { page: 1, limit: 20, total: 0 } });
     api.get('/search/suggest', []);

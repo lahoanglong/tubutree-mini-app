@@ -16,6 +16,7 @@ import { SectionHeader } from '../components/ui/section-header';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { VoucherTicket } from '../components/ui/voucher-ticket';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /** Tiêu đề khi chưa có tên chương trình (đang tải, lỗi); tải xong thì tên chương trình là h1 duy nhất của trang. */
 const PAGE_TITLE = 'Chương trình';
@@ -100,6 +101,7 @@ export default function CampaignPage() {
             alt=""
             decoding="async"
             style={{ display: 'block', width: '100%', aspectRatio: 'var(--banner-ratio)', objectFit: 'cover', borderRadius: 'var(--radius-media)' }}
+            onError={hideBrokenImage}
           />
         )}
         {range && (

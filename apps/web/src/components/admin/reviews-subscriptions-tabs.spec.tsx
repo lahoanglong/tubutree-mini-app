@@ -228,6 +228,193 @@ describe('SubscriptionsTab', () => {
   });
 });
 
+describe('SubscriptionsTab — lý do tạm dừng (W142A)', () => {
+  const paused = (id: string, pausedReason?: string | null) => ({ ...SUB, id, status: 'PAUSED', ...(pausedReason === undefined ? {} : { pausedReason }) });
+  const rows = (container: HTMLElement) => Array.from(container.querySelectorAll('article'));
+  const badgeOf = (row: Element, label: string) => Array.from(row.querySelectorAll('span')).find((s) => s.textContent === label);
+
+  it.each([
+    ['customer', 'Khách tự dừng'],
+    ['insufficient_wallet', 'Ví không đủ số dư'],
+    ['invalid_address', 'Địa chỉ lỗi'],
+    ['inactive_product', 'Ngừng bán'],
+    ['cod_limit', 'Vượt hạn mức COD'],
+    ['partner_goods', 'Hàng đối tác'],
+  ])('gói PAUSED lý do %s hiện huy hiệu "%s" cạnh trạng thái', async (code, label) => {
+    stub(() => ({ body: page([paused('s2', code)]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    const row = rows(container)[0]!;
+    expect(badgeOf(row, 'Tạm dừng')).toBeTruthy();
+    expect(badgeOf(row, label)).toBeTruthy();
+  });
+
+  it('hệ thống tự dừng thì huy hiệu đỏ kèm chú thích, khách tự dừng thì trung tính', async () => {
+    stub(() => ({ body: page([paused('s2', 'insufficient_wallet'), paused('s3', 'customer')]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    const [system, customer] = rows(container);
+    const systemBadge = badgeOf(system!, 'Ví không đủ số dư')!;
+    expect(systemBadge.className).toContain('bg-danger-bg');
+    expect(systemBadge.getAttribute('title')).toBe('Hệ thống tự tạm dừng gói này');
+    const customerBadge = badgeOf(customer!, 'Khách tự dừng')!;
+    expect(customerBadge.className).toContain('bg-stone-100');
+    expect(customerBadge.hasAttribute('title')).toBe(false);
+  });
+
+  it.each([[null], [undefined], [''], ['mã_lạ_của_api_mới'], ['constructor']])('lý do %p: "Chưa rõ lý do", không lộ mã thô, không đoán', async (reason) => {
+    stub(() => ({ body: page([paused('s2', reason as string | null | undefined)]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    const row = rows(container)[0]!;
+    const badge = badgeOf(row, 'Chưa rõ lý do')!;
+    expect(badge).toBeTruthy();
+    expect(badge.className).toContain('bg-stone-100');
+    if (reason) expect(row.textContent).not.toContain(reason);
+  });
+
+  it('gói không PAUSED không hiện huy hiệu lý do dù dữ liệu còn sót mã', async () => {
+    stub(() => ({
+      body: page([
+        { ...SUB, id: 's1', status: 'ACTIVE', pausedReason: 'customer' },
+        { ...SUB, id: 's3', status: 'CANCELLED', pausedReason: 'cod_limit' },
+      ]),
+    }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    expect(rows(container)).toHaveLength(2);
+    const text = rows(container).map((r) => r.textContent).join(' ');
+    for (const label of ['Khách tự dừng', 'Vượt hạn mức COD', 'Chưa rõ lý do']) expect(text).not.toContain(label);
+  });
+
+  it('nhãn viết theo giọng nhân viên, không xưng "Bạn" như chữ gửi khách', async () => {
+    stub(() => ({ body: page(['customer', 'inactive_product', 'invalid_address', 'partner_goods', 'insufficient_wallet', 'cod_limit'].map((c, i) => paused(`s${i}`, c))) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    expect(rows(container)).toHaveLength(6);
+    expect(container.textContent).not.toMatch(/Bạn|Bấm /);
+  });
+});
+
+describe('SubscriptionsTab — lọc theo lý do tạm dừng (W144)', () => {
+  const REASON_ROW = 'div[aria-label="Lọc gói định kỳ theo lý do tạm dừng"]';
+  const reasonTab = (container: HTMLElement, label: string) => byText(container, `${REASON_ROW} button[role="tab"]`, label)!;
+  const query = (calls: { url: string }[]) => new URL(calls.at(-1)!.url, 'http://localhost').searchParams;
+  const pageOf = (url: string) => Number(new URL(url, 'http://localhost').searchParams.get('page') ?? 1);
+
+  it('hiện hàng 8 chip lý do ngay khi vào tab (đang ở Tất cả), "Mọi lý do" được chọn và chưa gửi pausedReason', async () => {
+    const calls = stub(() => ({ body: page([SUB]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    const tabs = Array.from(container.querySelectorAll<HTMLElement>(`${REASON_ROW} button[role="tab"]`));
+    expect(tabs.map((t) => t.textContent)).toEqual([
+      'Mọi lý do',
+      'Hệ thống tự dừng',
+      'Khách tự dừng',
+      'Ngừng bán',
+      'Địa chỉ lỗi',
+      'Hàng đối tác',
+      'Ví không đủ số dư',
+      'Vượt hạn mức COD',
+    ]);
+    expect(tabs.map((t) => t.getAttribute('aria-selected'))).toEqual(['true', ...Array(7).fill('false')]);
+    expect(query(calls).has('pausedReason')).toBe(false);
+    expect(container.querySelectorAll('button:not([role="tab"])').length).toBe(0);
+  });
+
+  it.each([
+    ['Ví không đủ số dư', 'insufficient_wallet'],
+    ['Địa chỉ lỗi', 'invalid_address'],
+    ['Ngừng bán', 'inactive_product'],
+    ['Vượt hạn mức COD', 'cod_limit'],
+    ['Hàng đối tác', 'partner_goods'],
+    ['Khách tự dừng', 'customer'],
+    ['Hệ thống tự dừng', 'system'],
+  ])('bấm "%s" gửi pausedReason=%s, chip được chọn, không gửi status', async (label, code) => {
+    const calls = stub(() => ({ body: page([SUB]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    click(reasonTab(container, label));
+    await flush();
+    const q = query(calls);
+    expect(q.get('pausedReason')).toBe(code);
+    expect(q.has('status')).toBe(false);
+    expect(q.get('page')).toBe('1');
+    expect(reasonTab(container, label).getAttribute('aria-selected')).toBe('true');
+    expect(reasonTab(container, 'Mọi lý do').getAttribute('aria-selected')).toBe('false');
+  });
+
+  it('"Mọi lý do" bỏ lọc lý do', async () => {
+    const calls = stub(() => ({ body: page([SUB]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    click(reasonTab(container, 'Ví không đủ số dư'));
+    await flush();
+    expect(query(calls).get('pausedReason')).toBe('insufficient_wallet');
+    click(reasonTab(container, 'Mọi lý do'));
+    await flush();
+    expect(query(calls).has('pausedReason')).toBe(false);
+  });
+
+  it('đang ở chip Tạm dừng: vẫn có hàng lý do và gửi cả status=PAUSED lẫn pausedReason', async () => {
+    const calls = stub(() => ({ body: page([SUB]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    click(byText(container, 'button[role="tab"]', 'Tạm dừng'));
+    await flush();
+    expect(container.querySelector(REASON_ROW)).not.toBeNull();
+    click(reasonTab(container, 'Hệ thống tự dừng'));
+    await flush();
+    const q = query(calls);
+    expect(q.get('status')).toBe('PAUSED');
+    expect(q.get('pausedReason')).toBe('system');
+  });
+
+  it('sang Đang chạy hoặc Đã huỷ: ẩn hàng lý do và bỏ lọc lý do; về Tất cả không dính lọc cũ', async () => {
+    const calls = stub(() => ({ body: page([SUB]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    for (const target of ['Đang chạy', 'Đã huỷ']) {
+      click(reasonTab(container, 'Địa chỉ lỗi'));
+      await flush();
+      expect(query(calls).get('pausedReason')).toBe('invalid_address');
+      click(byText(container, 'button[role="tab"]', target));
+      await flush();
+      expect(container.querySelector(REASON_ROW)).toBeNull();
+      const q = query(calls);
+      expect(q.get('status')).toBe(target === 'Đang chạy' ? 'ACTIVE' : 'CANCELLED');
+      expect(q.has('pausedReason')).toBe(false);
+      click(byText(container, 'button[role="tab"]', 'Tất cả'));
+      await flush();
+      expect(query(calls).has('pausedReason')).toBe(false);
+      expect(reasonTab(container, 'Mọi lý do').getAttribute('aria-selected')).toBe('true');
+    }
+  });
+
+  it('đổi lý do khi đang ở trang 2 thì về trang 1', async () => {
+    const calls = stub((url) => ({ body: page([SUB], 45, pageOf(url)) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    click(byText(container, 'button', 'Sau'));
+    await flush();
+    expect(query(calls).get('page')).toBe('2');
+    click(reasonTab(container, 'Hệ thống tự dừng'));
+    await flush();
+    expect(query(calls).get('page')).toBe('1');
+    expect(query(calls).get('pausedReason')).toBe('system');
+  });
+
+  it('lọc ra rỗng: báo chưa có gói khớp bộ lọc, hàng lý do vẫn còn để đổi lọc', async () => {
+    stub((url) => ({ body: page(url.includes('pausedReason=cod_limit') ? [] : [SUB]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    click(reasonTab(container, 'Vượt hạn mức COD'));
+    await flush();
+    expect(container.textContent).toMatch(/chưa có gói định kỳ nào khớp bộ lọc/i);
+    expect(container.querySelector(REASON_ROW)).not.toBeNull();
+  });
+});
+
 // D7-27: hai tab không có tiêu đề nên người dùng bàn phím/đọc màn hình không biết mình đang ở tab nào.
 describe('Tiêu đề tab (D7-27)', () => {
   it('tab Đánh giá có h2 "Đánh giá"', async () => {

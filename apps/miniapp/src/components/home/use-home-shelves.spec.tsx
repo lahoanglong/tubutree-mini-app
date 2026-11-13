@@ -152,6 +152,17 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
     expect(result.current.bestSellerRanks).toEqual([1, 3, 4, 5]);
   });
 
+  it('món chưa có ảnh xuống cuối kệ Bán chạy nhất (ô lá thay thế không đứng giữa màn đầu), hạng thật vẫn đi theo món nên thẻ chỉ ghi "Bán chạy"', async () => {
+    const withImage = (slug: string, img: string | null) => ({ ...card(slug), thumbnail: img });
+    mocks.fetchProducts.mockResolvedValue({
+      data: [withImage('x', null), withImage('y', 'y.webp'), withImage('z', '  '), withImage('w', 'w.webp'), withImage('v', 'v.webp')],
+      meta: { page: 1, limit: 12, total: 5 },
+    });
+    const { result } = setup('new');
+    await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['y', 'w', 'v', 'x', 'z']));
+    expect(result.current.bestSellerRanks).toEqual([2, 4, 5, 1, 3]);
+  });
+
   it('bestSellerBasis là days30 khi API trả theo 30 ngày', async () => {
     const { result } = setup('returning');
     await waitFor(() => expect(result.current.bestSellers.length).toBeGreaterThan(0));

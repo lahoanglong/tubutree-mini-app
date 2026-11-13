@@ -39,10 +39,27 @@ describe('PdpLayout', () => {
     expect(rest.className).not.toContain('280px');
   });
 
-  it('cột thông tin không tự cuộn riêng và không dính: không overflow-y-auto, sticky, max-height theo khung nhìn', () => {
+  it('từ lg ô ảnh dính dưới header (chỉ khi khung nhìn cao ≥ 48rem) và tự co theo nội dung, để cột trái không hở trắng', () => {
     r = mount(true);
-    const html = r.container.innerHTML;
-    expect(html).not.toMatch(/overflow-y-auto|sticky|max-h-\[calc\(100vh/);
+    const cell = r.container.querySelector('[data-testid="pdp-gallery-cell"]') as HTMLElement;
+    expect(cell.textContent).toBe('ANH');
+    expect(cell.className).toContain('min-w-0');
+    expect(cell.className).toContain('lg:self-start');
+    expect(cell.className).toContain('lg:top-[calc(var(--header-h)+1rem)]');
+    expect(cell.className).toContain('lg:[@media(min-height:48rem)]:sticky');
+    // Dính chỉ ở lg: không có dạng `sticky` trần hay `md:sticky` làm ảnh dính ở khổ hẹp.
+    expect(cell.className).not.toMatch(/(^|\s)(md:)?sticky/);
+  });
+
+  it('cột thông tin cuộn cùng trang: không dính, không vùng cuộn riêng, không max-height theo khung nhìn', () => {
+    r = mount(true);
+    const card = r.container.querySelector('[data-testid="pdp-card"]') as HTMLElement;
+    const cell = card.querySelector('[data-testid="pdp-gallery-cell"]') as HTMLElement;
+    const info = Array.from(card.children).find((c) => c !== cell) as HTMLElement;
+    expect(info.textContent).toBe('THONG TIN');
+    const outside = r.container.innerHTML.replace(cell.outerHTML, '');
+    expect(outside).not.toMatch(/overflow-y-auto|sticky|max-h-\[calc\(100vh/);
+    expect(cell.className).not.toMatch(/overflow|max-h-/);
   });
 
   it('dưới md xếp dọc nguyên con: bố cục không dùng lớp max-md:', () => {

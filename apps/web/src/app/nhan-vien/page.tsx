@@ -13,6 +13,7 @@ export default function StaffPage() {
       title="Ca làm của tôi"
       loginMessage="Đăng nhập để xem ca làm của bạn."
       returnTo="/nhan-vien"
+      wide
     >
       <StaffHub />
     </StaffGate>

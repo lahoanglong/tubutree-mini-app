@@ -32,6 +32,11 @@ vi.mock('@/lib/platform-bridge', () => ({
 }));
 
 import AboutPage, { metadata } from './page';
+import { SITE_URL } from '@/lib/site';
+
+const ldBlocks = (c: HTMLElement): Record<string, unknown>[] =>
+  Array.from(c.querySelectorAll('script[type="application/ld+json"]')).map((s) => JSON.parse(s.textContent!));
+const faqLd = (c: HTMLElement) => ldBlocks(c).find((d) => d['@type'] === 'FAQPage') as { '@type': string; mainEntity: { name: string }[] };
 
 const SUPPORT = { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: null as string | null };
 const FAQS = [
@@ -127,7 +132,7 @@ describe('/gioi-thieu: trang công khai', () => {
 
   it('FAQPage JSON-LD lấy đúng danh sách FAQ server đã đọc; cùng bản dự phòng với client khi admin chưa nhập dòng nào', async () => {
     mocks.serverGet.mockImplementation(async (path: string) => (path === '/faqs' ? FAQS : { support: SUPPORT }));
-    const ld = (c: HTMLElement) => JSON.parse(c.querySelector('script[type="application/ld+json"]')!.textContent!);
+    const ld = faqLd;
     const real = render(await AboutPage());
     mounted.push(real);
     expect(ld(real.container)).toMatchObject({ '@type': 'FAQPage' });
@@ -145,7 +150,20 @@ describe('/gioi-thieu: trang công khai', () => {
   it('server không đọc được FAQ thì không khai FAQPage (HTML chưa có câu hỏi nào để khớp)', async () => {
     const r = render(await AboutPage());
     mounted.push(r);
-    expect(r.container.querySelector('script[type="application/ld+json"]')).toBeNull();
+    expect(ldBlocks(r.container).filter((d) => d['@type'] === 'FAQPage')).toEqual([]);
+    // WebPage + breadcrumb không phụ thuộc FAQ nên vẫn có.
+    expect(ldBlocks(r.container).some((d) => Array.isArray(d['@graph']))).toBe(true);
+  });
+
+  it('khai thêm WebPage + BreadcrumbList của chính trang, URL tuyệt đối từ SITE_URL, không lấn FAQPage', async () => {
+    mocks.serverGet.mockImplementation(async (path: string) => (path === '/faqs' ? FAQS : { support: SUPPORT }));
+    const r = render(await AboutPage());
+    mounted.push(r);
+    const blocks = ldBlocks(r.container);
+    expect(blocks.map((d) => d['@type'] ?? 'graph').sort()).toEqual(['FAQPage', 'graph']);
+    const graph = blocks.find((d) => Array.isArray(d['@graph']))!['@graph'] as Record<string, unknown>[];
+    expect(graph.map((n) => n['@type'])).toEqual(['WebPage', 'BreadcrumbList']);
+    expect(graph[0]).toMatchObject({ url: `${SITE_URL}/gioi-thieu`, name: 'Về Tubu Tree', inLanguage: 'vi' });
   });
 
   it('server không đọc được FAQ: vẫn dựng trang, client tự tải như trước', async () => {

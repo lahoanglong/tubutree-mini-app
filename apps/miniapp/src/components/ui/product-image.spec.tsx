@@ -94,9 +94,19 @@ describe('ảnh hiện dần và khung (PL-15)', () => {
     }
   });
 
-  it('ô thay thế dùng nền trung tính, không nhuộm màu nhãn', () => {
+  it('ô thay thế là thẻ thực vật một tông xanh: chữ cái đầu và tên nhãn viết hoa, không nhuộm màu nhãn', () => {
     const { container } = render(<div style={{ position: 'relative' }}><ProductImage src={null} brand="Tubu" /></div>);
     const fallback = container.querySelector('[data-testid="product-image-fallback"]') as HTMLElement;
+    expect(fallback.getAttribute('aria-hidden')).toBe('true');
+    expect(fallback.textContent).toBe('TTUBU');
     expect(fallback.querySelector('[style*="opacity"]')).toBeNull();
+    expect(fallback.innerHTML).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+  });
+
+  it('nhãn rỗng thì ghi Tubu Tree; ảnh nhỏ (ô 56px) vẽ bản gọn không có dòng tên', () => {
+    const empty = render(<div style={{ position: 'relative' }}><ProductImage src={null} brand="" /></div>);
+    expect(empty.container.querySelector('[data-testid="product-image-fallback"]')!.textContent).toBe('TTUBU TREE');
+    const small = render(<div style={{ position: 'relative' }}><ProductImage src={null} brand="Tubu Tree" width={56} /></div>);
+    expect(small.container.querySelectorAll('[data-testid="product-image-fallback"]')[0]).toBeDefined();
   });
 });

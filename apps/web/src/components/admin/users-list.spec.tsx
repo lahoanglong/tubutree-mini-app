@@ -108,3 +108,68 @@ describe('UsersList — định dạng điểm và nhãn vai trò (D7-07)', () =
     expect(text).not.toContain('AFFILIATE');
   });
 });
+
+describe('UsersList — tiêu đề/cột đầu dính, cả hàng bấm được', () => {
+  it('khung bảng tự cuộn dọc có trần; mọi tiêu đề dính trên cùng, cột Tên dính trái kèm nền đặc', () => {
+    const { root } = setup();
+    expect(root.querySelector('[role="region"]')!.className).toContain('max-h-[70vh]');
+    const heads = Array.from(root.querySelectorAll('th'));
+    for (const h of heads) {
+      expect(h.className).toContain('sticky');
+      expect(h.className).toContain('top-0');
+      expect(h.className).toContain('bg-stone-50');
+    }
+    expect(heads[0]!.className).toContain('left-0');
+    expect(heads[1]!.className).not.toContain('left-0');
+    const rows = Array.from(root.querySelectorAll('tbody tr'));
+    for (const row of rows) {
+      expect(row.className).toContain('group');
+      const first = row.querySelector('td')!;
+      expect(first.className).toContain('sticky');
+      expect(first.className).toContain('left-0');
+      expect(first.className).toContain('bg-stone-0');
+    }
+  });
+
+  it('bấm vào ô bất kỳ của hàng (không phải nút) mở hồ sơ người dùng đó', () => {
+    const { root, onOpenDetail } = setup();
+    const rows = Array.from(root.querySelectorAll<HTMLElement>('tbody tr'));
+    expect(rows[0]!.className).toContain('cursor-pointer');
+    click(rows[1]!.querySelectorAll('td')[1]!);
+    expect(onOpenDetail).toHaveBeenCalledTimes(1);
+    expect(onOpenDetail).toHaveBeenCalledWith('u2');
+  });
+
+  it('bấm nút tên chỉ mở hồ sơ một lần (không nổi bọt lên hàng)', () => {
+    const { root, onOpenDetail } = setup();
+    click(root.querySelector('[aria-label="Xem chi tiết Chủ Gian Hàng Một"]'));
+    expect(onOpenDetail).toHaveBeenCalledTimes(1);
+  });
+
+  it('bấm Khoá / Mở khoá chỉ chạy hộp xác nhận, không kéo theo mở hồ sơ', () => {
+    const { root, onOpenDetail, onBlock, onUnblock } = setup();
+    click(root.querySelector('[aria-label="Khoá Chủ Gian Hàng Một"]'));
+    click(root.querySelector('[aria-label="Mở khoá 0900000002"]'));
+    expect(onBlock).toHaveBeenCalledTimes(1);
+    expect(onUnblock).toHaveBeenCalledTimes(1);
+    expect(onOpenDetail).not.toHaveBeenCalled();
+  });
+
+  it('đang bôi đen chữ (sao chép SĐT) thì bấm hàng không mở hồ sơ', () => {
+    const { root, onOpenDetail } = setup();
+    const spy = vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => '0900000001' } as Selection);
+    try {
+      click(root.querySelector('tbody tr td:nth-child(2)'));
+      expect(onOpenDetail).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('nhân viên (không phải admin): không có cột Thao tác nhưng hàng vẫn bấm được', () => {
+    const { root, onOpenDetail } = setup({ isAdmin: false });
+    expect(Array.from(root.querySelectorAll('th')).map((h) => h.textContent)).not.toContain('Thao tác');
+    click(root.querySelector('tbody tr td:nth-child(3)'));
+    expect(onOpenDetail).toHaveBeenCalledWith('u1');
+  });
+});

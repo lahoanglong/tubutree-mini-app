@@ -1,9 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { ChevronRight, Map as MapIcon } from 'lucide-react';
+import { journeyBrandHref, journeyBrands } from '@tubutree/app-core/brand-origins';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { fetchBrands } from '../../services/shop-api';
-import { brandBrowsePath } from '../../utils/brands';
 import { haptic } from '../../utils/haptic';
 import { Chip } from '../ui/chip';
 import { Icon } from '../ui/icon';
@@ -14,14 +14,15 @@ import { Text } from '../ui/text';
 
 /**
  * "Hành trình nguyên liệu" giữa Trang chủ: tiêu đề `SectionHeader` (Inter 16/700, nút "Xem bản đồ") rồi thẻ mở bản đồ xuất xứ kèm dải
- * thương hiệu Việt (chạm mở trang thương hiệu). Nội dung riêng và đẹp nhất của Tubu nên đứng giữa trang, không ở đáy. Chưa có danh sách thương hiệu thì
- * vẫn có thẻ bản đồ.
+ * thương hiệu Việt (chạm mở trang thương hiệu hoặc tìm sản phẩm của nhãn). Nội dung riêng và đẹp nhất của Tubu nên đứng giữa trang, không ở đáy.
+ * PROD ghi mọi SKU là nhãn "Tubu Tree" nên dải lấy 8 nhãn hành trình từ app-core (`journeyBrands`, cùng web), API chỉ bổ sung `slug` và nhãn lạ;
+ * chưa có danh sách thương hiệu thì vẫn đủ 8 nhãn.
  */
 export function BrandJourney() {
   const navigate = useNavigate();
   // Nhãn chậm đổi (sync Pancake ~15 phút/lần) → cache 60s, ghi đè mặc định 10s.
   const brands = useQuery({ queryKey: ['brands'], queryFn: fetchBrands, staleTime: 60_000 });
-  const list = brands.data ?? [];
+  const list = journeyBrands(brands.data);
   const go = (to: string) => {
     haptic('light');
     navigate(to);
@@ -52,8 +53,8 @@ export function BrandJourney() {
         {list.length > 0 && (
           <ScrollRow label="Dải thương hiệu, vuốt ngang để xem thêm" style={{ gap: 8, padding: '8px 0 4px' }}>
             {list.map((b) => (
-              <Chip key={b.brand} onPress={() => go(b.slug ? `/brand/${encodeURIComponent(b.slug)}` : brandBrowsePath(b.brand))}>
-                {b.brand}
+              <Chip key={b.key} onPress={() => go(journeyBrandHref(b, '/browse'))}>
+                {b.label}
               </Chip>
             ))}
           </ScrollRow>

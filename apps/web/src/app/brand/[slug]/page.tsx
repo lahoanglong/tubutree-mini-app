@@ -4,7 +4,7 @@ import { getBrand } from '@/lib/api';
 import { ogBase, withBrand } from '@/lib/og';
 import { brandMetaDescription, breadcrumbJsonLd, jsonLdScript } from '@/lib/product-seo';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { findBrandOrigin } from '@/lib/brand-origins';
+import { brandPageOrigin } from '@/lib/brand-origins';
 import { BrandBody } from '@/components/shop-page/brand-body';
 
 // Admin gỡ đăng không làm mới được trang này, nên hạn ngắn để nhãn bị gỡ không còn hiện lâu; vẫn dựng phía server cho SEO.
@@ -45,12 +45,12 @@ export default async function BrandPage({
   const { slug } = await params;
   const b = await getBrand(slug);
   if (!b) notFound();
-  const mapOrigin = findBrandOrigin({ slug: b.slug, name: b.name });
+  const mapOrigin = brandPageOrigin({ slug: b.slug, name: b.name });
 
   // Thân trang là client (Theo dõi, tab, phân trang) nên chỉ nhận dữ liệu thuần; điện thoại bìa tràn mép nên main không đệm.
   return (
     <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:p-0 max-md:pb-[calc(90px+var(--safe-bottom))]`}>
-      <BrandBody brand={b} mapOriginId={mapOrigin?.id ?? null} />
+      <BrandBody brand={b} mapOriginId={mapOrigin?.id ?? null} originFallback={mapOrigin?.text ?? null} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{

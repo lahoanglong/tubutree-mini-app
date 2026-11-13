@@ -13,7 +13,7 @@ import {
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { PAYOUT_STATUS_LABEL, PAYOUT_STATUS_ORDER, payoutActions, rejectPayoutReasonError } from '@/lib/payout-admin';
-import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_PRIMARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, Notice, ScrollRegion, TOUCH_H, ToneBadge, chipClass, LoadError, Field } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_PRIMARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, Notice, ScrollRegion, TOUCH_H, ToneBadge, chipClass, LoadError, Field, ListSkeleton, TableSkeleton } from './ui';
 import { useConfirm } from './confirm-dialog';
 import { VnMonthInput } from './vn-date-input';
 import type { Tone } from '@/lib/recycling';
@@ -103,7 +103,7 @@ export function PayoutAdminTab({ canReview = true }: { canReview?: boolean }) {
             {text}
           </p>
         ))}
-        {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+        {q.isLoading && <ListSkeleton label="Đang tải danh sách lệnh rút" rows={4} className="h-16" />}
         {q.isError && (
           <p className="text-sm text-danger-fg">
             Không tải được danh sách lệnh rút.{' '}
@@ -178,7 +178,7 @@ function PitReportSection() {
         cấp chứng từ khấu trừ khi CTV yêu cầu. MST/CCCD là số CTV khai lúc chuyển hoa hồng vào Ví.
       </Notice>
       {!valid && <p className="text-sm text-stone-600">Chọn đủ tháng và năm để xem báo cáo.</p>}
-      {q.isLoading && valid && <p className="text-sm text-stone-500">Đang tải báo cáo…</p>}
+      {q.isLoading && valid && <TableSkeleton label="Đang tải báo cáo thuế TNCN" rows={5} />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được báo cáo thuế TNCN.</LoadError>}
       {q.data && (
         <>

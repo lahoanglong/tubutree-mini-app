@@ -21,7 +21,7 @@ import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { Sheet } from '@/components/ui/sheet';
 import { errText, PeriodNav } from '@/components/staff/staff-shell';
 import { useConfirm } from './confirm-dialog';
-import { BTN_LINK, BTN_LINK_DANGER, BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLASS, Notice, ToneBadge } from './ui';
+import { BTN_LINK, BTN_LINK_DANGER, BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLASS, Notice, ToneBadge, ListSkeleton } from './ui';
 import type { Tone } from '@/lib/recycling';
 
 const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
@@ -208,7 +208,7 @@ export function ShiftApprovalTab() {
         </button>
       )}
 
-      {shiftsQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {shiftsQ.isLoading && <ListSkeleton label="Đang tải danh sách ca làm" rows={3} className="h-16" />}
       {shiftsQ.isError && (
         <div role="alert" className="text-sm text-danger-fg">
           {errText(shiftsQ.error)}{' '}
@@ -381,7 +381,7 @@ function TemplateSheet({ open, onClose }: { open: boolean; onClose: () => void }
     >
       <div className="space-y-3">
         {err && <p role="alert" className="text-sm text-danger-fg">{err}</p>}
-        {tplQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+        {tplQ.isLoading && <ListSkeleton label="Đang tải mẫu ca" rows={2} className="h-12" />}
         {tplQ.data?.length === 0 && <p className="text-sm text-stone-500">Chưa có ca chuẩn.</p>}
         {(tplQ.data ?? []).map((t) => (
           <div key={t.id} className="flex items-center justify-between gap-2 text-sm">

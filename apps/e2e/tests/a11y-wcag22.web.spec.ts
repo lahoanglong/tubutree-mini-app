@@ -1,6 +1,6 @@
 import { expect, test } from './support/mock-api';
 import { mockCollectable } from './support/voucher-mocks';
-import { mockBuyer, measureFocusRing, seedSession } from './support/a11y-buyer';
+import { BUYER_PUBLIC_CONFIG, mockBuyer, measureFocusRing, seedSession } from './support/a11y-buyer';
 
 /**
  * Gói U (WCAG 2.2 AA) trên web khách: những điều chỉ trình duyệt thật đo được (jsdom không dàn trang, không có :focus-visible).
@@ -82,6 +82,26 @@ test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
       const seen = new Set<string>();
       for (; steps < 90; steps++) {
         await page.keyboard.press('Tab');
+        // Hàng điều hướng của thanh đầu cuộn ngang (từ md, 9 mục dài hơn khung 800px): phần tử vừa lấy nét có thể đang được cuộn vào tầm nhìn, nên đợi vị trí đứng yên (3 khung hình liền) rồi mới đo.
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) => {
+              const el = document.activeElement as HTMLElement | null;
+              if (!el) return resolve();
+              const started = performance.now();
+              let last = '';
+              let same = 0;
+              const tick = () => {
+                const b = el.getBoundingClientRect();
+                const key = `${b.left}|${b.top}`;
+                same = key === last ? same + 1 : 0;
+                last = key;
+                if (same >= 3 || performance.now() - started > 1500) resolve();
+                else requestAnimationFrame(tick);
+              };
+              requestAnimationFrame(tick);
+            }),
+        );
         const r = await page.evaluate(() => {
           const el = document.activeElement as HTMLElement | null;
           if (!el || el === document.body) return null;
@@ -91,18 +111,49 @@ test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
           const y = b.top + b.height / 2;
           const top = document.elementFromPoint(x, y);
           const name = (el.getAttribute('aria-label') ?? el.textContent ?? el.tagName).trim().slice(0, 40);
-          return { id: `${el.tagName}:${name}:${Math.round(b.top)}`, skip: false, name, ok: !!top && (el === top || el.contains(top) || top.contains(el)), y, vh: window.innerHeight };
+          const by = top ? `${top.tagName.toLowerCase()}.${String(top.className).slice(0, 50)}` : 'ngoài màn';
+          return { id: `${el.tagName}:${name}:${Math.round(b.top)}`, skip: false, name, ok: !!top && (el === top || el.contains(top) || top.contains(el)), y, vh: window.innerHeight, by, x: Math.round(x) };
         });
         if (!r) break;
         if (r.skip) continue;
         if (seen.has(r.id)) break;
         seen.add(r.id);
-        if (!r.ok) covered.push(`${r.name} (y=${Math.round(r.y!)})`);
+        if (!r.ok) covered.push(`${r.name} (x=${r.x}, y=${Math.round(r.y!)}) bị ${r.by} đè`);
       }
       expect(seen.size, 'đã Tab qua đủ phần tử của giỏ').toBeGreaterThan(20);
       expect(covered).toEqual([]);
     });
   }
+
+  test('800px: mục "Đổi rác" chèn vào hàng điều hướng sau khi focus đã ở "Cộng đồng" thì "Cộng đồng" vẫn nằm trọn trong khung', async ({ page, api }) => {
+    mockBuyer(api, { lines: 2 });
+    let release!: () => void;
+    const configGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    api.get('/config/public', async () => {
+      await configGate;
+      return BUYER_PUBLIC_CONFIG;
+    });
+    await page.setViewportSize({ width: 800, height: 720 });
+    await page.goto('/gio-hang');
+    const navItems = page.locator('[data-desktop-nav] li');
+    await expect(navItems).toHaveCount(8, { timeout: 20_000 });
+    const community = page.getByRole('navigation', { name: 'Điều hướng chính' }).getByRole('link', { name: 'Cộng đồng' });
+    for (let i = 0; i < 20 && !(await community.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab');
+    await expect(community).toBeFocused();
+    release();
+    await expect(navItems).toHaveCount(9);
+    await expect
+      .poll(() =>
+        community.evaluate((el) => {
+          const b = el.getBoundingClientRect();
+          const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+          return b.left >= 0 && b.right <= window.innerWidth && !!top && (el === top || el.contains(top));
+        }),
+      )
+      .toBe(true);
+  });
 });
 
 test.describe('A11Y-09: thanh toán', () => {

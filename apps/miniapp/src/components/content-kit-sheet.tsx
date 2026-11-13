@@ -13,6 +13,7 @@ import { Skeleton } from './ui/skeleton';
 import { ErrorState } from './ui/empty-state';
 import { copyText } from '../utils/clipboard';
 import { miniAppLink } from '../utils/miniapp-link';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /**
  * `app.miniapp_base_url` (URL gốc Mini App, vd https://zalo.me/s/<Mini App ID>) chưa cấu hình thì API trả đường dẫn tương
@@ -113,6 +114,7 @@ export function ContentKitSheet({
                     src={src}
                     alt={data.productName}
                     style={{ width: 72, height: 72, borderRadius: 'var(--radius-media)', objectFit: 'cover', flexShrink: 0 }}
+                    onError={hideBrokenImage}
                   />
                 ))}
               </div>

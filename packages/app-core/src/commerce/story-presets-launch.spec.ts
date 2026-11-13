@@ -272,7 +272,7 @@ describe('CATALOG_STORY_PRESETS: sản phẩm Pineboo và Fuwa3e trong catalog P
     }
   });
 
-  it('quy cách trong kịch bản đúng quy cách trong tên SKU, và loại hàng Fuwa3e là đoạn của tên SKU', () => {
+  it('quy cách trong kịch bản đúng quy cách trong tên SKU, và loại hàng Fuwa3e (điểm nhấn thứ hai) là đoạn của tên SKU', () => {
     for (const r of [...PINEBOO, ...FUWA3E]) {
       const cfg = CATALOG_STORY_PRESETS[baseSlug(r.slug)];
       if (!cfg) continue;
@@ -280,21 +280,20 @@ describe('CATALOG_STORY_PRESETS: sản phẩm Pineboo và Fuwa3e trong catalog P
       const lines = textOf(cfg);
       expect(lines.some((l) => l.includes(`Quy cách ${size}`)), `${r.slug}: thiếu "Quy cách ${size}"`).toBe(true);
       if (FUWA3E.includes(r)) {
-        const assembly = cfg.scenes.find((s) => s.kind === 'ingredient_assembly');
-        const title = assembly?.kind === 'ingredient_assembly' ? assembly.steps[1]!.title : '';
-        expect(r.name.toLowerCase(), `${r.slug}: loại hàng "${title}" không có trong tên`).toContain(title.toLowerCase());
+        const type = hudOf(cfg).points[1]!.label;
+        expect(r.name.toLowerCase(), `${r.slug}: loại hàng "${type}" không có trong tên`).toContain(type.toLowerCase());
       }
     }
   });
 
-  it('Pineboo: cả sáu kịch bản nói eco-enzyme từ vỏ dứa (đúng chữ bao bì), HUD có tên loại hàng, quy cách và lời kết nêu nhãn', () => {
+  it('Pineboo: cả sáu kịch bản nói eco-enzyme từ vỏ dứa (đúng chữ bao bì), HUD có tên loại hàng, quy cách và lời kết nêu nhãn Pineboo', () => {
     for (const r of PINEBOO) {
       const cfg = CATALOG_STORY_PRESETS[baseSlug(r.slug)]!;
       const lines = textOf(cfg).join(' | ').toLowerCase();
       expect(lines, r.slug).toContain('eco-enzyme');
       expect(lines, r.slug).toContain('vỏ dứa');
       const hud = hudOf(cfg);
-      expect(hud.closing, r.slug).toBe('Pineboo, eco-enzyme từ vỏ dứa cho bé');
+      expect(hud.closing, r.slug).toContain('Pineboo');
       expect(hud.points.map((p) => p.label)).toContain(`Quy cách ${r.name.match(SIZE_IN_NAME)![0].replace(/\s/g, '')}`);
     }
   });
@@ -348,5 +347,42 @@ describe('CATALOG_STORY_PRESETS: sản phẩm Pineboo và Fuwa3e trong catalog P
     }
     expect(findStoryPreset('xit-tram-cho-be-pineboo-150ml-b70d1d')).toBe(CATALOG_STORY_PRESETS['xit-tram-cho-be-pineboo-150ml']);
     expect(findStoryPreset('  XIT-TRAM-CHO-BE-PINEBOO-150ML-B70D1D ')).toBe(CATALOG_STORY_PRESETS['xit-tram-cho-be-pineboo-150ml']);
+  });
+});
+
+describe('giọng văn kịch bản (W133): ấm, không kiểu hồ sơ, không lặp một cụm', () => {
+  const all: [string, ProductStoryConfig][] = [...Object.entries(LAUNCH_STORY_PRESETS), ...Object.entries(CATALOG_STORY_PRESETS)];
+  const visible = (cfg: ProductStoryConfig): string[] =>
+    cfg.scenes.flatMap((sc) => {
+      if (sc.kind === 'ingredient_assembly') return sc.steps.flatMap((st) => [st.title, st.body]);
+      if (sc.kind === 'hud_callouts') return [sc.closing, ...sc.points.map((p) => p.label)];
+      return [];
+    });
+
+  it('không câu nào mở đầu bằng "Bao bì ghi" hay "Ảnh sản phẩm ghi" (chữ bao bì là nguồn sự thật, không phải câu khách phải đọc)', () => {
+    for (const [key, cfg] of all) for (const line of visible(cfg)) expect(line, `${key}: "${line}"`).not.toMatch(/^(bao bì|ảnh sản phẩm|tên bánh)[^.]{0,12}ghi/i);
+  });
+
+  it('không câu đệm chung chung "Chọn quy cách vừa với nhu cầu của nhà bạn" hay "Một sản phẩm trong dòng"', () => {
+    for (const [key, cfg] of all) for (const line of visible(cfg)) expect(line, `${key}: "${line}"`).not.toMatch(/chọn quy cách vừa|một sản phẩm trong dòng/i);
+  });
+
+  it('tiêu đề chương không trùng nhãn điểm nhấn và không trùng dòng kết (mỗi nơi nói một lần)', () => {
+    for (const [key, cfg] of all) {
+      const assembly = cfg.scenes.find((s) => s.kind === 'ingredient_assembly');
+      const hud = cfg.scenes.find((s) => s.kind === 'hud_callouts');
+      if (assembly?.kind !== 'ingredient_assembly' || hud?.kind !== 'hud_callouts') throw new Error(`${key}: thiếu cảnh`);
+      const titles = assembly.steps.map((s) => s.title.toLowerCase());
+      for (const p of hud.points) expect(titles, `${key}: nhãn "${p.label}" trùng tiêu đề chương`).not.toContain(p.label.toLowerCase());
+      expect(titles, `${key}: dòng kết trùng tiêu đề chương`).not.toContain(hud.closing.toLowerCase());
+      expect(hud.points.map((p) => p.label.toLowerCase()), `${key}: dòng kết trùng nhãn điểm nhấn`).not.toContain(hud.closing.toLowerCase());
+    }
+  });
+
+  it('cụm "vỏ dứa" xuất hiện tối đa hai lần trong chữ khách đọc của một kịch bản (trước đây năm lần cùng một ý)', () => {
+    for (const [key, cfg] of all) {
+      const n = visible(cfg).join(' | ').toLowerCase().split('vỏ dứa').length - 1;
+      expect(n, key).toBeLessThanOrEqual(2);
+    }
   });
 });

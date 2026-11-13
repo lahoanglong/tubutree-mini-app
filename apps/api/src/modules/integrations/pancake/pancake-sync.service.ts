@@ -1,6 +1,6 @@
 import { ConflictException, Inject, Injectable, Logger, Optional, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import { isBlankHtmlText } from '@tubutree/shared-types';
+import { GENERIC_CATALOG_BRAND, GENERIC_CATALOG_BRANDS, effectiveCatalogBrand, inferCatalogBrandFromTitle, isBlankHtmlText } from '@tubutree/shared-types';
 import { Cron } from '@nestjs/schedule';
 import { recordCatalogRun, type CatalogRunResult } from '../../ops/ops-state';
 import { PrismaService } from '../../../prisma/prisma.service';
@@ -539,6 +539,10 @@ export class PancakeSyncService implements OnModuleInit {
     // chưa thấy ảnh mới. Có /img xen giữa thì một lượt đồng bộ có thể gây vài lần nạp nối tiếp, mỗi lần một truy vấn rẻ.
     const imagesChanged = !existing || baseData.thumbnail !== (existing.thumbnail ?? null) || JSON.stringify(baseData.images) !== JSON.stringify(existing.images ?? []);
 
+    // Pancake không có cột thương hiệu: nhãn đọc từ tên. Chỉ khi sản phẩm chưa có nhãn thật (rỗng hoặc "Tubu Tree"); nhãn Admin đã gán thì giữ.
+    const slug = existing?.slug ?? this.slugify(name, pancakeId);
+    const inferredBrand = inferCatalogBrandFromTitle(name, slug, existing?.brand ?? GENERIC_CATALOG_BRAND);
+
     const product = existing
       ? await this.prisma.product.update({
           where: { id: existing.id },
@@ -553,8 +557,8 @@ export class PancakeSyncService implements OnModuleInit {
             ...baseData,
             ...productHold,
             pancakeId,
-            brand: 'Tubu Tree',
-            slug: this.slugify(name, pancakeId),
+            brand: effectiveCatalogBrand(name, slug, GENERIC_CATALOG_BRAND),
+            slug,
             forSegment: inferred,
             categoryIds: mappedCats,
           },
@@ -565,6 +569,10 @@ export class PancakeSyncService implements OnModuleInit {
     // tay trong khoảng đó thì lệnh này không khớp dòng nào và danh mục của admin còn nguyên.
     if (existing && mappedCats.length) {
       await this.prisma.product.updateMany({ where: { id: existing.id, categoryIds: { isEmpty: true } }, data: { categoryIds: mappedCats } });
+    }
+    // Nhãn cũng ghi có điều kiện "vẫn chưa có nhãn thật", cùng lý do: Admin vừa gán nhãn trong lúc đồng bộ thì nhãn đó còn nguyên.
+    if (existing && inferredBrand) {
+      await this.prisma.product.updateMany({ where: { id: existing.id, brand: { in: [...GENERIC_CATALOG_BRANDS] } }, data: { brand: inferredBrand } });
     }
 
     // Biến thể giảm sâu nhất theo % — giá cũ/mới của nó đi vào nội dung thông báo và để xét ngưỡng giảm tối thiểu.

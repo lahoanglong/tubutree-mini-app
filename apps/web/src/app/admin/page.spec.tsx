@@ -826,6 +826,97 @@ describe('admin/page — hàng đơn hàng', () => {
   });
 });
 
+describe('admin/page — bảng Đơn hàng: tiêu đề dính, cả hàng bấm được', () => {
+  const dealerOrder = {
+    id: 'o1',
+    code: 'TT100',
+    status: 'CONFIRMED',
+    total: 250000,
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    createdAt: '2026-10-02T03:00:00.000Z',
+    user: { fullName: 'Khách A', phone: '0922222222' },
+    items: [{ id: 'i1', productName: 'Hạt chia', variationName: '500g', unitPrice: 50000, quantity: 5, total: 250000 }],
+  };
+  const openWithOrder = async () => {
+    mocks.orders = [dealerOrder];
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    return mount();
+  };
+  const toggleOf = (c: HTMLElement) => [...c.querySelectorAll('button')].find((b) => b.textContent === 'Xem & Sửa' || b.textContent === 'Đóng')!;
+
+  it('khung bảng có trần chiều cao; tiêu đề dính trên cùng, cột Mã đơn dính trái', async () => {
+    const { container } = await openWithOrder();
+    const region = container.querySelector('[role="region"][aria-label="Danh sách đơn hàng"]')!;
+    expect(region.className).toContain('max-h-[70vh]');
+    expect(region.className).toContain('overflow-auto');
+    const heads = [...region.querySelectorAll('th')];
+    for (const h of heads) expect(h.className).toContain('sticky');
+    expect(heads[0]!.className).toContain('left-0');
+    expect(heads[0]!.textContent).toBe('Mã đơn');
+    expect(region.querySelector('tbody td')!.className).toContain('sticky');
+  });
+
+  it('bấm vào ô bất kỳ của hàng mở chi tiết, bấm lần nữa thu lại; nút Xem & Sửa chỉ đổi một lần (không nổi bọt)', async () => {
+    const { container } = await openWithOrder();
+    const row = container.querySelector<HTMLElement>('tbody tr')!;
+    expect(row.className).toContain('cursor-pointer');
+    expect(toggleOf(container).textContent).toBe('Xem & Sửa');
+    act(() => (row.querySelectorAll('td')[1] as HTMLElement).click());
+    await flush();
+    expect(toggleOf(container).textContent).toBe('Đóng');
+    expect(container.textContent).toContain('Hạt chia');
+    act(() => (row.querySelectorAll('td')[1] as HTMLElement).click());
+    await flush();
+    expect(toggleOf(container).textContent).toBe('Xem & Sửa');
+    act(() => toggleOf(container).click());
+    await flush();
+    expect(toggleOf(container).textContent).toBe('Đóng');
+    act(() => toggleOf(container).click());
+    await flush();
+    expect(toggleOf(container).textContent).toBe('Xem & Sửa');
+  });
+
+  it('đang bôi đen chữ thì bấm hàng không mở chi tiết', async () => {
+    const { container } = await openWithOrder();
+    const spy = vi.spyOn(window, 'getSelection').mockReturnValue({ toString: () => 'Khách A' } as Selection);
+    try {
+      act(() => (container.querySelector('tbody tr td:nth-child(2)') as HTMLElement).click());
+      await flush();
+      expect(toggleOf(container).textContent).toBe('Xem & Sửa');
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it('mở chi tiết thì cuộn hàng chi tiết vào tầm nhìn của khung (block nearest)', async () => {
+    const scrollIntoView = vi.fn();
+    // Gán trên Element.prototype (nơi các ca khác gán spy) và dọn bằng delete: để lại `undefined` ở đây sẽ che spy của ca sau.
+    const proto = Element.prototype as { scrollIntoView?: unknown };
+    const had = Object.prototype.hasOwnProperty.call(proto, 'scrollIntoView');
+    const before = proto.scrollIntoView;
+    proto.scrollIntoView = scrollIntoView;
+    try {
+      const { container } = await openWithOrder();
+      act(() => toggleOf(container).click());
+      await flush();
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: 'nearest' });
+    } finally {
+      if (had) proto.scrollIntoView = before;
+      else delete proto.scrollIntoView;
+    }
+  });
+
+  it('phân trang chung: ô số trang nhảy tới trang cuối và gọi lại listOrders đúng trang', async () => {
+    const { container } = await openWithOrder();
+    const input = container.querySelector<HTMLInputElement>('input[aria-label^="Số trang"]')!;
+    typeInto(input, '3');
+    act(() => void input.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    await flush();
+    expect(mocks.listOrders.mock.calls.at(-1)![0]).toBe(3);
+  });
+});
+
 describe('admin/page — hàng đợi "Cần xử lý Pancake"', () => {
   const flagged = {
     id: 'o9',
@@ -1066,13 +1157,44 @@ describe('admin/page — tab Người dùng', () => {
     return mount();
   };
 
-  it('bảng người dùng: ô dữ liệu có đệm ngang như ô tiêu đề, bảng cuộn ngang trong khung riêng', async () => {
+  it('bảng người dùng: ô dữ liệu có đệm ngang như ô tiêu đề, bảng cuộn trong khung riêng (ngang, và dọc để tiêu đề dính)', async () => {
     const { container } = await openUsers();
     const table = container.querySelector('table')!;
-    expect(table.parentElement!.className).toContain('overflow-x-auto');
+    expect(table.parentElement!.className).toContain('overflow-auto');
+    expect(table.parentElement!.className).toContain('max-h-[70vh]');
     const cells = [...table.querySelectorAll('tbody td')];
     expect(cells.map((c) => c.textContent)).toEqual(['Nguyễn An', '0944444444', 'Khách hàng', '12', '01/09/2026', 'Đang hoạt động', 'Khoá']);
     for (const c of cells) expect(c.className).toContain('px-3');
+  });
+
+  it('đang tải lần đầu: hiện khung xương bảng chứ không dựng bảng rỗng; tải xong mới có bảng', async () => {
+    let release!: () => void;
+    mocks.listUsersGate = new Promise<void>((r) => { release = r; });
+    let container!: HTMLElement;
+    try {
+      ({ container } = await openUsers());
+      expect(container.querySelector('[role="status"][aria-busy="true"][aria-label="Đang tải danh sách người dùng"]')).not.toBeNull();
+      expect(container.querySelector('table')).toBeNull();
+      expect(container.textContent).not.toContain('Chưa có người dùng nào.');
+    } finally {
+      mocks.listUsersGate = null;
+      release();
+    }
+    await flush();
+    expect(container.querySelector('[aria-label="Đang tải danh sách người dùng"]')).toBeNull();
+    expect(container.querySelector('table')).not.toBeNull();
+  });
+
+  it('phân trang chung: ô số trang nhảy thẳng tới trang 3 (kẹp ở trang cuối), gọi listUsers đúng trang', async () => {
+    mocks.listUsersArgs = [];
+    const { container } = await openUsers();
+    const input = container.querySelector<HTMLInputElement>('input[aria-label^="Số trang"]')!;
+    expect(input.value).toBe('1');
+    typeInto(input, '9');
+    act(() => void input.form!.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true })));
+    await flush();
+    expect(mocks.listUsersArgs.at(-1)![0]).toBe(3);
+    expect(container.querySelector<HTMLInputElement>('input[aria-label^="Số trang"]')!.value).toBe('3');
   });
 
   // ADMINOPS-11: trước đây không tìm được người dùng (listUsers chỉ gửi page) và không có cách khoá tài khoản gian lận.
@@ -1425,7 +1547,7 @@ describe('admin/page — tab Cấu hình', () => {
   it('lỗi tải cấu hình báo bằng màu danger và không dựng các thẻ cấu hình', async () => {
     mocks.configFails = true;
     const { container } = await openConfig();
-    const err = [...container.querySelectorAll('p')].find((p) => p.textContent === 'Không tải được danh sách cấu hình.')!;
+    const err = [...container.querySelectorAll('[role="alert"]')].find((p) => p.textContent?.startsWith('Không tải được danh sách cấu hình.'))!;
     expect(err.className).toContain('text-danger-fg');
     expect(container.querySelector('h2')).toBeNull();
   });

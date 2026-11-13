@@ -1,13 +1,15 @@
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
 import { mockCheckout, CHECKOUT_ADDRESS, ORDER_CODE_COD } from './support/checkout-mocks';
 import { mockDiscovery, productDetail, CATALOG } from './support/discovery-mocks';
 import { PILOT_CART } from './support/pilot-mocks';
 
 /**
- * Mini App 360px và 375px: Reel 100dvh của câu chuyện sản phẩm đi trọn đường mua. Mở Reel, vuốt qua năm chương 01 → 05 (ảnh nguyên liệu của chương kế
- * được tải trước), đọc thẻ chỉ nguyên liệu, bấm Thêm vào giỏ ngay ở thanh đáy của Reel, sang Giỏ, sang Thanh toán và đặt COD. API mock toàn bộ.
+ * Mini App 360px và 375px: dải câu chuyện sản phẩm nằm ngay trên trang chi tiết và đường mua đi qua nó. Bấm qua năm thẻ chương 01 → 05 (ảnh nguyên liệu của chương
+ * kế được tải trước), đọc thẻ chỉ nguyên liệu, bấm Thêm vào giỏ ở thanh dưới của trang, sang Giỏ, sang Thanh toán và đặt COD. API mock toàn bộ.
  * Ảnh nguyên liệu dùng host ngoài (mock-api chặn host ngoài): cái cần xem là trình duyệt CÓ GỬI request, không phải ảnh có tải về.
+ * Có `cutoutUrl` để khung ảnh là ảnh tách nền: chỉ lúc đó sprite nguyên liệu và thẻ chỉ HUD mới vẽ đè lên ảnh (ảnh poster không vẽ gì lên).
+ * `cutout: false` là ảnh poster (thẻ nổi): không lớp nguyên liệu, điểm nhấn thành chip dưới ảnh.
  */
 const SLUG = 'tinh-dau-thu-nghiem';
 const BASE = CATALOG[0]!;
@@ -21,6 +23,7 @@ const VIEWPORTS = [
 const STORY = {
   version: 1,
   enabled: true,
+  cutoutUrl: `${CDN}/cutout.png`,
   scenes: [
     {
       kind: 'ingredient_assembly',
@@ -55,7 +58,10 @@ const CART_LINE = {
 const FULL_CART = { ...PILOT_CART, items: [CART_LINE], subtotal: 165_000, itemCount: 1 };
 const EMPTY = { ...PILOT_CART, items: [], subtotal: 0, itemCount: 0 };
 
-function mockFlow(api: MockApi, opts: { stock?: number } = {}): { added: () => boolean } {
+// Ảnh poster: cùng kịch bản nhưng không có cutoutUrl (undefined bị JSON bỏ đi).
+const POSTER_STORY = { ...STORY, cutoutUrl: undefined };
+
+function mockFlow(api: MockApi, opts: { stock?: number; cutout?: boolean } = {}): { added: () => boolean } {
   let added = false;
   mockDiscovery(api);
   // Sau mockDiscovery: nó đặt /me/addresses rỗng, còn Thanh toán cần địa chỉ mặc định của mockCheckout.
@@ -68,7 +74,7 @@ function mockFlow(api: MockApi, opts: { stock?: number } = {}): { added: () => b
     shortDesc: 'Tinh dầu thiên nhiên.',
     certifications: ['Vegan'],
     ingredients: [{ name: 'Tinh dầu bưởi', percentage: '2%', benefit: 'Kích thích mọc tóc' }],
-    storyConfig: STORY,
+    storyConfig: opts.cutout === false ? POSTER_STORY : STORY,
     variations: [{ id: VARIATION_ID, sku: 'FLOW-1', name: 'Mặc định', attributes: {}, retailPrice: 165_000, salePrice: null, stock: opts.stock ?? 5 }],
   }));
   api.get('/cart', () => (added ? FULL_CART : EMPTY));
@@ -82,73 +88,67 @@ function mockFlow(api: MockApi, opts: { stock?: number } = {}): { added: () => b
 
 const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
+/** Vào trang chi tiết, chờ dải câu chuyện dựng xong rồi cuộn tới nó (ảnh chương kế chỉ tải khi dải đã gần khung nhìn). */
+async function gotoStory(page: Page): Promise<Locator> {
+  await page.goto(`/product/${SLUG}`);
+  const story = page.getByTestId('product-story');
+  await expect(story).toBeVisible({ timeout: 20_000 });
+  await story.scrollIntoViewIfNeeded();
+  return story;
+}
+
 for (const vp of VIEWPORTS) {
-  test.describe(`Reel câu chuyện sản phẩm ${vp.width}px: Reel → Giỏ → Thanh toán`, () => {
+  test.describe(`Dải câu chuyện sản phẩm ${vp.width}px: Chi tiết → Giỏ → Thanh toán`, () => {
+    // Khung toàn màn (thanh đáy ghim, hai nút mua khoá khi hết hàng) nay chỉ còn ở Reel Trang chủ, do w42a-home-story-reel.*.spec.ts phủ.
     test.use({ viewport: vp });
 
-    test('Reel phủ 100dvh, thanh đáy ghim đúng đáy, vùng chạm từ 44px, không tràn ngang', async ({ page, api }) => {
+    test('mọi chương hiện cùng lúc ngay trong trang, thẻ chương từ 44px và nằm gọn trong màn, không tràn ngang', async ({ page, api }) => {
       mockFlow(api);
-      await page.goto(`/product/${SLUG}`);
-      await expect(page.getByTestId('product-story')).toBeVisible({ timeout: 20_000 });
-      expect(await noHorizontalScroll(page)).toBe(true);
+      const story = await gotoStory(page);
 
-      await page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }).click();
-      const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-      await expect(dialog).toBeVisible();
-
-      const box = (await dialog.boundingBox())!;
-      expect(box.x).toBe(0);
-      expect(box.y).toBe(0);
-      expect(box.width).toBe(vp.width);
-      expect(Math.abs(box.height - vp.height)).toBeLessThanOrEqual(1);
-
-      const bar = (await dialog.locator('.tubu-story-bar').boundingBox())!;
-      expect(Math.abs(bar.y + bar.height - vp.height)).toBeLessThanOrEqual(1);
-      expect(bar.x).toBe(0);
-      expect(bar.width).toBe(vp.width);
-
-      expect(await noHorizontalScroll(page)).toBe(true);
-      expect(await dialog.getByTestId('story-scroll').evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true);
-
-      const targets = [dialog.getByTestId('story-close'), dialog.getByTestId('story-add-to-cart'), dialog.getByTestId('story-buy-now'), ...(await dialog.getByTestId('story-step-chip').all())];
-      expect(targets).toHaveLength(8);
-      for (const t of targets) {
-        const b = (await t.boundingBox())!;
+      const cards = story.getByTestId('story-step-card');
+      await expect(cards).toHaveCount(5);
+      for (const c of await cards.all()) {
+        await expect(c).toBeVisible();
+        const b = (await c.boundingBox())!;
         expect(b.width, 'chiều rộng vùng chạm').toBeGreaterThanOrEqual(44);
         expect(b.height, 'chiều cao vùng chạm').toBeGreaterThanOrEqual(44);
+        expect(b.x, 'thẻ lệch ra ngoài mép trái').toBeGreaterThanOrEqual(0);
+        expect(b.x + b.width, 'thẻ tràn mép phải').toBeLessThanOrEqual(vp.width);
       }
+      expect(await noHorizontalScroll(page)).toBe(true);
     });
 
-    test('vuốt qua năm chương 01 → 05: chữ và lớp nguyên liệu đổi, hiệu ứng vào theo ease-story 240ms, ảnh chương kế được tải trước', async ({ page, api }) => {
+    test('bấm qua năm chương 01 → 05: thẻ sáng đúng, lớp nguyên liệu thêm dần, hiệu ứng rơi theo ease-story 240ms, ảnh chương kế được tải trước', async ({ page, api }) => {
       mockFlow(api);
       const requested: string[] = [];
       page.on('request', (r) => {
         if (r.url().startsWith(CDN)) requested.push(r.url().slice(CDN.length + 1));
       });
-      await page.goto(`/product/${SLUG}`);
-      await expect(page.getByTestId('product-story')).toBeVisible({ timeout: 20_000 });
-      await page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }).click();
-      const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-      await expect(dialog).toBeVisible();
+      const story = await gotoStory(page);
 
-      const chips = dialog.getByTestId('story-step-chip');
-      await expect(chips).toHaveCount(5);
+      const cards = story.getByTestId('story-step-card');
+      await expect(cards).toHaveCount(5);
       // Ở chương 01: ảnh chương 02 đã đi tải, chương 03 thì chưa.
       await expect.poll(() => requested.includes('ing-2.png')).toBe(true);
       expect(requested).not.toContain('ing-3.png');
 
       for (let i = 0; i < 5; i += 1) {
-        await chips.nth(i).click();
-        await expect(chips.nth(i)).toHaveAttribute('aria-current', 'step');
-        await expect(dialog.getByTestId('story-step-panel')).toContainText(`Chương ${i + 1}`);
-        await expect(dialog.getByTestId('story-step-panel')).toContainText('100g, 250kcal, 45.000đ');
-        await expect(dialog.getByTestId('story-layer')).toHaveCount(i + 1);
+        await cards.nth(i).click();
+        await expect(cards.nth(i)).toHaveAttribute('aria-current', 'step');
+        await expect(story.locator('[aria-current="step"]')).toHaveCount(1);
+        // Mọi chương hiện sẵn: chọn thẻ nào cũng không được ẩn chữ của thẻ khác.
+        for (let n = 0; n < 5; n += 1) await expect(cards.nth(n)).toContainText(`Chương ${n + 1}`);
+        await expect(cards.nth(i)).toContainText('100g, 250kcal, 45.000đ');
+        await expect(story.getByTestId('story-layer')).toHaveCount(i + 1);
 
-        const anim = await dialog.locator('.tubu-story-panel-in').evaluate((el) => {
+        // Lớp vừa thêm là lớp cuối (mỗi chương một lớp, vẽ tích luỹ).
+        const drop = await story.getByTestId('story-layer').nth(i).evaluate((el) => {
           const s = getComputedStyle(el);
-          return { name: s.animationName, duration: s.animationDuration, easing: s.animationTimingFunction, numeric: s.fontVariantNumeric };
+          return { name: s.animationName, duration: s.animationDuration, easing: s.animationTimingFunction };
         });
-        expect(anim).toEqual({ name: 'tubu-story-panel-in', duration: '0.24s', easing: 'cubic-bezier(0.22, 1, 0.36, 1)', numeric: 'tabular-nums' });
+        expect(drop).toEqual({ name: 'tubu-story-drop', duration: '0.24s', easing: 'cubic-bezier(0.22, 1, 0.36, 1)' });
+        expect(await cards.nth(i).evaluate((el) => getComputedStyle(el).fontVariantNumeric)).toContain('tabular-nums');
 
         // Chương kế (nếu còn) đã được yêu cầu tải ngay khi chương này hiện.
         if (i < 4) await expect.poll(() => requested.includes(`ing-${i + 2}.png`)).toBe(true);
@@ -158,13 +158,10 @@ for (const vp of VIEWPORTS) {
 
     test('thẻ chỉ nguyên liệu: tên và hàm lượng nằm gọn trong khung, không tràn ngang', async ({ page, api }) => {
       mockFlow(api);
-      await page.goto(`/product/${SLUG}`);
-      await expect(page.getByTestId('product-story')).toBeVisible({ timeout: 20_000 });
-      await page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }).click();
-      const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-      const hud = dialog.getByTestId('story-hud');
+      const story = await gotoStory(page);
+      const hud = story.getByTestId('story-hud');
       await hud.scrollIntoViewIfNeeded();
-      const callouts = dialog.getByTestId('story-callout');
+      const callouts = story.getByTestId('story-callout');
       await expect(callouts).toHaveCount(2);
       await expect(callouts.nth(0)).toContainText('Tinh dầu bưởi');
       await expect(callouts.nth(0)).toContainText('2%');
@@ -177,20 +174,52 @@ for (const vp of VIEWPORTS) {
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 
-    test('Thêm vào giỏ ở thanh đáy Reel → Giỏ → Thanh toán → đặt COD thành công', async ({ page, api }) => {
-      const state = mockFlow(api);
-      await page.goto(`/product/${SLUG}`);
-      await expect(page.getByTestId('product-story')).toBeVisible({ timeout: 20_000 });
-      await page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }).click();
-      const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-      await dialog.getByTestId('story-step-chip').nth(2).click();
+    test('ảnh poster (không ảnh tách nền): điểm nhấn thành chip dưới khung ảnh, không lớp hay chú thích đè lên ảnh, không tràn ngang', async ({ page, api }) => {
+      mockFlow(api, { cutout: false });
+      const story = await gotoStory(page);
+      const stage = story.getByTestId('story-stage');
+      await expect(stage).toHaveAttribute('data-frame', 'floating-card');
+      await expect(story.getByTestId('story-hud')).toHaveCount(0);
+      await expect(story.getByTestId('story-callout')).toHaveCount(0);
+      await expect(story.getByTestId('story-layer')).toHaveCount(0);
 
+      const points = story.getByTestId('story-points');
+      await points.scrollIntoViewIfNeeded();
+      await expect(stage.getByTestId('story-point')).toHaveCount(0);
+      const chips = points.getByTestId('story-point');
+      await expect(chips).toHaveCount(2);
+      await expect(chips.nth(0)).toContainText('Tinh dầu bưởi');
+      await expect(chips.nth(0)).toContainText('2%');
+      await expect(chips.nth(1)).toContainText('Bồ kết');
+      await expect(story.getByTestId('story-closing')).toContainText('An lành cho cả nhà');
+      for (const c of await chips.all()) {
+        const b = (await c.boundingBox())!;
+        expect(b.x).toBeGreaterThanOrEqual(0);
+        expect(b.x + b.width).toBeLessThanOrEqual(vp.width);
+      }
+
+      // Chọn chương chỉ đổi thẻ đang chọn: khung poster không thả lớp nguyên liệu nào.
+      const cards = story.getByTestId('story-step-card');
+      await cards.nth(3).click();
+      await expect(cards.nth(3)).toHaveAttribute('aria-current', 'step');
+      await expect(story.getByTestId('story-layer')).toHaveCount(0);
+      expect(await noHorizontalScroll(page)).toBe(true);
+    });
+
+    test('chọn chương rồi Thêm vào giỏ ở thanh dưới → Giỏ → Thanh toán → đặt COD thành công', async ({ page, api }) => {
+      const state = mockFlow(api);
+      const story = await gotoStory(page);
+      const third = story.getByTestId('story-step-card').nth(2);
+      await third.click();
+      await expect(third).toHaveAttribute('aria-current', 'step');
+
+      const add = page.getByTestId('sticky-bar').getByRole('button', { name: 'Thêm vào giỏ' });
+      await expect(add).toBeEnabled({ timeout: 15_000 });
       const adding = api.waitForCall('POST', '/cart/items');
-      await dialog.getByTestId('story-add-to-cart').click();
+      await add.click();
       const call = await adding;
       expect(call.body).toMatchObject({ variationId: VARIATION_ID, quantity: 1 });
       expect(state.added()).toBe(true);
-      await expect(dialog).toHaveCount(0);
 
       await page.getByRole('button', { name: 'Xem giỏ hàng' }).click();
       await expect(page).toHaveURL(/\/cart/);
@@ -211,32 +240,18 @@ for (const vp of VIEWPORTS) {
       await expect(page.getByText(ORDER_CODE_COD)).toBeVisible();
     });
 
-    test('hết hàng: thanh đáy Reel khoá cả hai nút, không gọi thêm giỏ', async ({ page, api }) => {
-      mockFlow(api, { stock: 0 });
-      await page.goto(`/product/${SLUG}`);
-      await expect(page.getByTestId('product-story')).toBeVisible({ timeout: 20_000 });
-      await page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }).click();
-      const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-      await expect(dialog.getByTestId('story-add-to-cart')).toBeDisabled();
-      await expect(dialog.getByTestId('story-buy-now')).toBeDisabled();
-      expect(api.callsTo('POST', '/cart/items')).toHaveLength(0);
-    });
-
-    test('giảm chuyển động: không còn chip và hiệu ứng, cả năm chương hiện tĩnh, vẫn không tràn ngang', async ({ page, api }) => {
+    test('giảm chuyển động: dải vẫn đủ năm thẻ chương, bản tĩnh vẽ đủ năm lớp ngay và không hiệu ứng rơi, vẫn không tràn ngang', async ({ page, api }) => {
       mockFlow(api);
       await page.emulateMedia({ reducedMotion: 'reduce' });
-      await page.goto(`/product/${SLUG}`);
-      await expect(page.getByTestId('product-story')).toBeVisible({ timeout: 20_000 });
-      await page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }).click();
-      const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-      await expect(dialog).toBeVisible();
-      await expect(dialog.getByTestId('story-step-chip')).toHaveCount(0);
-      await expect(dialog.getByTestId('story-static-steps').locator('li')).toHaveCount(5);
-      await expect(dialog.locator('.tubu-story-panel-in')).toHaveCount(0);
-      const layerAnim = await dialog.getByTestId('story-layer').first().evaluate((el) => getComputedStyle(el).animationName);
-      expect(layerAnim).toBe('none');
+      const story = await gotoStory(page);
+
+      await expect(story.getByTestId('story-step-card')).toHaveCount(5);
+      const layers = story.getByTestId('story-layer');
+      await expect(layers).toHaveCount(5);
+      for (const l of await layers.all()) {
+        expect(await l.evaluate((el) => getComputedStyle(el).animationName)).toBe('none');
+      }
       expect(await noHorizontalScroll(page)).toBe(true);
-      await expect(dialog.getByTestId('story-add-to-cart')).toBeEnabled();
     });
   });
 }

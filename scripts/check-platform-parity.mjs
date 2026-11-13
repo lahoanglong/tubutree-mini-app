@@ -104,6 +104,21 @@ export function checkParity({ miniappRoutes, miniappRedirects = [], map, webFile
       errors.push(`feature ${f.id}: symbol ${webSymbol} không có trong ${webFile} (web), hãy đặt pending hoặc làm`);
     }
   }
+  // Lệch cố ý không nằm ở một route (cờ tính năng ẩn một lối vào, route có ở cả hai nền tảng): mỗi dòng nêu cờ, nền tảng thiếu và lý do,
+  // và cờ phải còn trong file để dòng không mồ côi khi cờ bị xoá.
+  const gapIds = new Set();
+  for (const g of map.gaps ?? []) {
+    const label = typeof g.id === 'string' && g.id.trim() !== '' ? g.id : '(thiếu id)';
+    if (label === '(thiếu id)') errors.push('gap thiếu id');
+    else if (gapIds.has(label)) errors.push(`gap ${label} trùng`);
+    gapIds.add(label);
+    if (typeof g.reason !== 'string' || g.reason.trim() === '') errors.push(`gap ${label} thiếu lý do`);
+    if (g.missingOn !== 'miniapp' && g.missingOn !== 'web') errors.push(`gap ${label}: missingOn phải là "miniapp" hoặc "web"`);
+    const [flagFile, flagSymbol] = Array.isArray(g.flag) ? g.flag : [];
+    if (typeof flagFile !== 'string' || typeof flagSymbol !== 'string' || !fileHasSymbol(flagFile, flagSymbol)) {
+      errors.push(`gap ${label}: cờ ${flagSymbol ?? '(thiếu)'} không còn trong ${flagFile ?? '(thiếu file)'}, xoá dòng hoặc sửa lại`);
+    }
+  }
   return { errors, warnings };
 }
 

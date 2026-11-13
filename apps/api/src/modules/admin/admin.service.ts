@@ -637,8 +637,16 @@ export class AdminService {
   }
 
   /** Gói mua định kỳ để CSKH tra (chỉ xem; khách tự tạm dừng/huỷ trong app). Không trả addressId. */
-  async listSubscriptions(page: number, limit: number, status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED') {
+  async listSubscriptions(page: number, limit: number, status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED', pausedReason?: string) {
     const where: Prisma.SubscriptionWhereInput = status ? { status } : {};
+    // `pausedReason` chỉ có nghĩa với gói PAUSED (cột có thể còn sót mã ở gói đã chạy lại/huỷ), nên luôn đi kèm status PAUSED trong AND:
+    // `status=ACTIVE&pausedReason=...` ra rỗng thay vì lẫn gói khác. "system" = đã có mã và không phải khách tự dừng; gói dừng từ trước khi có cột (null) không tính.
+    if (pausedReason) {
+      where.AND = [
+        { status: 'PAUSED' },
+        pausedReason === 'system' ? { AND: [{ pausedReason: { not: null } }, { pausedReason: { not: 'customer' } }] } : { pausedReason },
+      ];
+    }
     const [items, total] = await this.prisma.$transaction([
       this.prisma.subscription.findMany({
         where,
@@ -647,6 +655,7 @@ export class AdminService {
         select: {
           id: true,
           status: true,
+          pausedReason: true,
           quantity: true,
           intervalWeeks: true,
           nextRunAt: true,

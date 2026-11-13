@@ -8,7 +8,7 @@ export const phoneSecondary =
 export const phoneBrandText = 'max-md:text-[var(--color-text-brand)] max-md:no-underline';
 
 /** Thẻ phẳng của `Card` Mini App: không viền, đổ bóng elevation-1. Ghép sau `ui.card`. */
-export const phoneFlatCard = 'max-md:border-0 max-md:shadow-[var(--elevation-1)]';
+export const phoneFlatCard = 'max-md:border-0 max-md:shadow-e1';
 
 /** Tiêu đề thẻ 16px như `Heading variant="title-sm"` của Mini App. Ghép sau `ui.sectionTitle` (18px ở máy tính). */
 export const phoneSectionTitle = 'max-md:text-[length:var(--type-title-sm-size)] max-md:leading-[var(--type-title-sm-lh)]';

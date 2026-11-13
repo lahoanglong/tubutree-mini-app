@@ -1,5 +1,6 @@
 'use client';
 
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { useEffect, useRef, useState } from 'react';
 import { getAdminImage } from '@/lib/admin-client';
 import { apiMediaUrl } from '@/lib/client-api';
@@ -76,7 +77,7 @@ export function AdminImage({ src, alt, className }: { src: string | null | undef
   if (!admin) {
     const direct = directImageSrc(src);
     // eslint-disable-next-line @next/next/no-img-element
-    return direct ? <img src={direct} alt={alt} referrerPolicy="no-referrer" className={className} /> : null;
+    return direct ? <img key={direct} src={direct} alt={alt} referrerPolicy="no-referrer" onError={hideBrokenImage} className={className} /> : null;
   }
   if (typeof state === 'object') {
     return (

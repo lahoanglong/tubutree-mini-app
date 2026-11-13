@@ -108,6 +108,12 @@ describe('AiAdvisorPage — hành vi giữ nguyên khi chuyển DS v2', () => {
     expect(await screen.findByText('Mình gợi ý bạn thử loại này')).toBeInTheDocument();
   });
 
+  it('ô soạn chừa vùng an toàn đáy (thanh Home iPhone) trên đệm 8px cũ', () => {
+    renderPage();
+    const composer = input().closest('div[style*="border-top"]') as HTMLElement;
+    expect(composer.style.paddingBottom).toBe('calc(var(--space-inline-sm) + var(--safe-bottom))');
+  });
+
   it('ô nhập giới hạn 500 ký tự', () => {
     renderPage();
     expect(input().maxLength).toBe(500);
