@@ -3,11 +3,14 @@ import {
   CATALOG_BRAND_RULES,
   GENERIC_CATALOG_BRAND,
   INFERRABLE_CATALOG_BRANDS,
+  LEGACY_CATALOG_BRAND_SPELLINGS,
+  canonicalCatalogBrand,
+  catalogBrandSpellings,
   effectiveCatalogBrand,
   inferCatalogBrandFromTitle,
   isGenericCatalogBrand,
 } from '@tubutree/shared-types';
-import { BRAND_ORIGINS, findBrandOrigin } from '../brand-origins';
+import { BRAND_ORIGINS, canonicalBrandName, findBrandOrigin } from '../brand-origins';
 import { PROD_CATALOG_2026_11_12 as ALL } from './prod-catalog-full.fixture';
 
 const infer = (name: string | null | undefined, slug: string | null | undefined = '', brand: string | null = GENERIC_CATALOG_BRAND) =>
@@ -27,8 +30,9 @@ describe('inferCatalogBrandFromTitle', () => {
     ['Nước Đông Trùng Hạ Thảo HECTOR Lite 70ml x 10 Chai', 'Hector'],
     ['Cà Phê Sữa Dừa Hòa Tan KAFEDUA Le Plateau Thơm Béo 16g x 10 Gói', 'Le Plateau Coffee'],
     ['Dầu dừa ép lạnh Cobote 250ml', 'Cobote'],
-    ['Mật hoa dừa cô đặc Sokfarm', 'Sokfram'],
-    ['Đường hoa dừa SOKFRAM', 'Sokfram'],
+    ['Mật hoa dừa cô đặc Sokfarm', 'Sokfarm'],
+    ['Đường hoa dừa SOKFRAM', 'Sokfarm'],
+    ['Đường hoa dừa Sokfram', 'Sokfarm'],
   ])('%s -> %s', (name, brand) => {
     expect(infer(name)).toBe(brand);
   });
@@ -90,6 +94,45 @@ describe('effectiveCatalogBrand', () => {
     expect(effectiveCatalogBrand('Xịt tràm Pineboo 150ml', '', 'Fuwa3e')).toBe('Fuwa3e');
     expect(effectiveCatalogBrand('Cà phê muối túi 50x16g', '', 'Tubu Tree')).toBe('Tubu Tree');
   });
+
+  it('cột brand còn chính tả cũ "Sokfram" thì ra tên chuẩn "Sokfarm", không đè nhãn Admin khác', () => {
+    expect(effectiveCatalogBrand('Mật hoa dừa Sokfarm', '', 'Sokfram')).toBe('Sokfarm');
+    expect(effectiveCatalogBrand('Mật hoa dừa Sokfarm', '', 'SOKFRAM')).toBe('Sokfarm');
+    expect(effectiveCatalogBrand('Mật hoa dừa Sokfarm', '', 'Tubu Tree')).toBe('Sokfarm');
+    expect(effectiveCatalogBrand('Mật hoa dừa Sokfarm', '', 'Gốm Bát Tràng')).toBe('Gốm Bát Tràng');
+  });
+});
+
+describe('canonicalCatalogBrand / catalogBrandSpellings — tương thích ngược "Sokfram"', () => {
+  it.each(['Sokfram', 'sokfram', 'SOKFRAM', ' Sokfram ', 'Sokfarm', 'SOKFARM', 'sokfarm'])('%j -> "Sokfarm"', (raw) => {
+    expect(canonicalCatalogBrand(raw)).toBe('Sokfarm');
+  });
+
+  it('nhãn khác trả nguyên văn (kể cả vỏ "Tubu Tree" và rỗng)', () => {
+    for (const b of ['Fuwa3e', 'Pineboo', 'Pơ Lang', 'Le Plateau Coffee', 'Tubu Tree', '', 'Gốm Bát Tràng']) expect(canonicalCatalogBrand(b)).toBe(b);
+  });
+
+  it('mọi cách ghi của Sokfarm: tên chuẩn trước rồi chính tả cũ; nhãn khác chỉ chính nó', () => {
+    expect(catalogBrandSpellings('Sokfram')).toEqual(['Sokfarm', 'Sokfram']);
+    expect(catalogBrandSpellings('Sokfarm')).toEqual(['Sokfarm', 'Sokfram']);
+    expect(catalogBrandSpellings('Fuwa3e')).toEqual(['Fuwa3e']);
+    expect(catalogBrandSpellings('Tubu Tree')).toEqual(['Tubu Tree']);
+  });
+
+  it('tên chuẩn của nhãn suy được luôn là chính nó: không nhãn nào bị đổi tên ngoài chính tả cũ', () => {
+    for (const b of INFERRABLE_CATALOG_BRANDS) expect(canonicalCatalogBrand(b)).toBe(b);
+  });
+
+  it('bảng chính tả cũ của shared-types khớp legacyCatalogBrands của BRAND_ORIGINS, và canonicalBrandName (web/Mini) cho cùng kết quả', () => {
+    for (const o of BRAND_ORIGINS) {
+      expect(LEGACY_CATALOG_BRAND_SPELLINGS[o.catalogBrand] ?? []).toEqual(o.legacyCatalogBrands ?? []);
+    }
+    const canonicals = new Set(BRAND_ORIGINS.map((o) => o.catalogBrand));
+    for (const canonical of Object.keys(LEGACY_CATALOG_BRAND_SPELLINGS)) expect(canonicals.has(canonical)).toBe(true);
+    for (const raw of ['Sokfram', 'sokfram', 'SOKFRAM', ' Sokfram ', 'Sokfarm', 'sokfarm', 'Fuwa3e', 'Pineboo', 'Le Plateau Coffee', 'Tubu Tree', '', 'Gốm Bát Tràng']) {
+      expect(canonicalBrandName(raw), raw).toBe(canonicalCatalogBrand(raw));
+    }
+  });
 });
 
 describe('isGenericCatalogBrand', () => {
@@ -113,10 +156,10 @@ describe('bảng nhãn khớp BRAND_ORIGINS', () => {
     expect(INFERRABLE_CATALOG_BRANDS).toHaveLength(BRAND_ORIGINS.length + 1);
   });
 
-  it('chuỗi suy ra tìm lại đúng nhãn trên bản đồ (trừ Pineboo)', () => {
+  it('chuỗi suy ra tìm lại đúng nhãn trên bản đồ (Pineboo dùng vùng của nhà máy Fuwa3e)', () => {
     for (const b of INFERRABLE_CATALOG_BRANDS) {
       const origin = findBrandOrigin({ slug: '', name: b });
-      if (b === 'Pineboo') expect(origin).toBeNull();
+      if (b === 'Pineboo') expect(origin?.catalogBrand).toBe('Fuwa3e');
       else expect(origin?.catalogBrand).toBe(b);
     }
   });
@@ -137,13 +180,13 @@ describe('catalog PROD 12/11/2026 (111 SKU, tất cả đang ghi "Tubu Tree")', 
       Pineboo: count('Pineboo'),
       'Pơ Lang': count('Pơ Lang'),
       'BH.Nong': count('BH.Nong'),
-      Sokfram: count('Sokfram'),
+      Sokfarm: count('Sokfarm'),
       Visante: count('Visante'),
       Hector: count('Hector'),
       'Le Plateau Coffee': count('Le Plateau Coffee'),
       Cobote: count('Cobote'),
       'không nhãn': count(null),
-    }).toEqual({ Fuwa3e: 44, Pineboo: 6, 'Pơ Lang': 14, 'BH.Nong': 12, Sokfram: 10, Visante: 7, Hector: 7, 'Le Plateau Coffee': 2, Cobote: 0, 'không nhãn': 9 });
+    }).toEqual({ Fuwa3e: 44, Pineboo: 6, 'Pơ Lang': 14, 'BH.Nong': 12, Sokfarm: 10, Visante: 7, Hector: 7, 'Le Plateau Coffee': 2, Cobote: 0, 'không nhãn': 9 });
   });
 
   it('9 SKU không in tên nhãn ở tên lẫn slug thì giữ "Tubu Tree"', () => {

@@ -75,6 +75,21 @@ describe('PancakeSyncService — thương hiệu suy từ tên sản phẩm', ()
     expect(product.create).toHaveBeenCalledWith({ data: expect.objectContaining({ brand: 'Pineboo' }) });
   });
 
+  it.each(['Mật hoa dừa cô đặc Sokfarm 250g', 'Mật hoa dừa cô đặc Sokfram 250g', 'MẬT HOA DỪA SOKFRAM'])(
+    'sản phẩm mới tên "%s" (chính tả nào cũng được) → brand ghi tên chuẩn "Sokfarm", không bao giờ "Sokfram"',
+    async (title) => {
+      const { prisma, product } = makePrisma();
+      await new PancakeSyncService(prisma, makeClient([[pancakeProduct('a', title)]]), lifecycle).syncProducts();
+      expect(product.create).toHaveBeenCalledWith({ data: expect.objectContaining({ brand: 'Sokfarm' }) });
+    },
+  );
+
+  it('sản phẩm mới có tên Pineboo → brand "Pineboo" riêng, không bị gộp vào Fuwa3e dù xuất xứ dẫn về Fuwa3e', async () => {
+    const { prisma, product } = makePrisma();
+    await new PancakeSyncService(prisma, makeClient([[pancakeProduct('a', 'Xịt tràm cho bé Pineboo 150ml')]]), lifecycle).syncProducts();
+    expect(product.create).toHaveBeenCalledWith({ data: expect.objectContaining({ brand: 'Pineboo' }) });
+  });
+
   it('sản phẩm mới không có tên nhãn → "Tubu Tree" như trước', async () => {
     const { prisma, product } = makePrisma();
     await new PancakeSyncService(prisma, makeClient([[pancakeProduct('a', 'Cà phê muối túi 50x16g')]]), lifecycle).syncProducts();
@@ -92,7 +107,7 @@ describe('PancakeSyncService — thương hiệu suy từ tên sản phẩm', ()
     const created = product.create.mock.calls.map((c) => (c[0] as { data: { brand: string } }).data.brand);
     const tally: Record<string, number> = {};
     for (const b of created) tally[b] = (tally[b] ?? 0) + 1;
-    expect(tally).toEqual({ Fuwa3e: 44, 'Pơ Lang': 14, 'BH.Nong': 12, Sokfram: 10, Visante: 7, Hector: 7, Pineboo: 6, 'Le Plateau Coffee': 2, 'Tubu Tree': 9 });
+    expect(tally).toEqual({ Fuwa3e: 44, 'Pơ Lang': 14, 'BH.Nong': 12, Sokfarm: 10, Visante: 7, Hector: 7, Pineboo: 6, 'Le Plateau Coffee': 2, 'Tubu Tree': 9 });
   });
 
   it('sản phẩm cũ còn "Tubu Tree" → ghi nhãn suy được, có điều kiện "vẫn chưa có nhãn thật"', async () => {
@@ -101,6 +116,18 @@ describe('PancakeSyncService — thương hiệu suy từ tên sản phẩm', ()
     expect(brandWrites(product)).toEqual([{ where: { id: 'existing', brand: { in: ['', 'Tubu Tree'] } }, data: { brand: 'Pineboo' } }]);
     // Lệnh cập nhật chung không đụng tới brand.
     expect((product.update.mock.calls[0]![0] as { data: Record<string, unknown> }).data).not.toHaveProperty('brand');
+  });
+
+  it('sản phẩm cũ còn "Tubu Tree" mà tên viết "Sokfram" → ghi "Sokfarm"', async () => {
+    const { prisma, product } = makePrisma(existingRow({ slug: 'mat-hoa-dua-sokfram-aa11bb' }));
+    await new PancakeSyncService(prisma, makeClient([[pancakeProduct('a', 'Mật hoa dừa Sokfram 250g')]]), lifecycle).syncProducts();
+    expect(brandWrites(product)).toEqual([{ where: { id: 'existing', brand: { in: ['', 'Tubu Tree'] } }, data: { brand: 'Sokfarm' } }]);
+  });
+
+  it('dòng cũ đã mang brand "Sokfram" (nhãn đã gán) không bị đồng bộ ghi đè; đọc catalog tự ánh xạ về "Sokfarm"', async () => {
+    const { prisma, product } = makePrisma(existingRow({ brand: 'Sokfram' }));
+    await new PancakeSyncService(prisma, makeClient([[pancakeProduct('a', 'Mật hoa dừa Sokfarm 250g')]]), lifecycle).syncProducts();
+    expect(brandWrites(product)).toEqual([]);
   });
 
   it('sản phẩm cũ có brand rỗng cũng được suy', async () => {

@@ -136,4 +136,9 @@ describe('brandAccent', () => {
     expect(brandAccent('POLANG')).toBe('var(--color-brand-polang)');
     expect(brandAccent('Không biết')).toBe('var(--color-action-primary-bg)');
   });
+
+  it('Sokfarm (tên chuẩn) và "Sokfram" (chính tả cũ trong DB) cùng một màu nhận diện', () => {
+    expect(brandAccent('Sokfarm')).toBe('var(--color-brand-sokfram)');
+    expect(brandAccent('SOKFRAM')).toBe('var(--color-brand-sokfram)');
+  });
 });

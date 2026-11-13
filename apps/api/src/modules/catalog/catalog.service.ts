@@ -1,4 +1,13 @@
-import { exposedStock, GENERIC_CATALOG_BRANDS, INFERRABLE_CATALOG_BRANDS, inferCatalogBrandFromTitle, isGenericCatalogBrand, PRODUCT_SLUGS_LIST_MAX } from '@tubutree/shared-types';
+import {
+  canonicalCatalogBrand,
+  catalogBrandSpellings,
+  exposedStock,
+  GENERIC_CATALOG_BRANDS,
+  INFERRABLE_CATALOG_BRANDS,
+  inferCatalogBrandFromTitle,
+  isGenericCatalogBrand,
+  PRODUCT_SLUGS_LIST_MAX,
+} from '@tubutree/shared-types';
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
@@ -108,6 +117,16 @@ function standingOf(p: { id: string; basePrice: number; salePrice: number | null
 
 /** Sản phẩm chưa có nhãn thật: `brand` đang lưu và nhãn suy từ tên (null khi tên không nói rõ một nhãn). */
 type GenericBrandEntry = { id: string; brand: string; inferred: string | null };
+
+/**
+ * Điều kiện cột `products.brand` cho một nhãn. Nhãn còn chính tả cũ trong DB ("Sokfram" của "Sokfarm") khớp mọi cách ghi, không phân biệt hoa thường,
+ * để dòng cũ và link `?brand=Sokfram` vẫn ra đúng sản phẩm; nhãn khác lọc đúng chuỗi như trước.
+ */
+function brandColumnWhere(brand: string): Prisma.ProductWhereInput {
+  const spellings = catalogBrandSpellings(brand);
+  if (spellings.length === 1) return { brand: spellings[0]! };
+  return { OR: spellings.map((s) => ({ brand: { equals: s, mode: 'insensitive' as const } })) };
+}
 
 /** Danh mục kèm số SP đang bán — miniapp chỉ hiện danh mục có hàng (plan 4b Ruling 4). */
 export type CategoryWithCount = Category & { productCount: number };
@@ -484,14 +503,18 @@ export class CatalogService {
       where.slug = { in: slugs.split(',').map((x) => x.trim()).filter(Boolean).slice(0, MAX_LIST_SLUGS) };
     }
     if (brand) {
-      const brandList = brand.split(',').map((b) => b.trim()).filter(Boolean);
+      // Chính tả cũ ("Sokfram") về tên chuẩn trước khi lọc: link đã chia sẻ không gãy.
+      const brandList = brand.split(',').map((b) => canonicalCatalogBrand(b.trim())).filter(Boolean);
       const byInference = await this.brandInferenceWhere(brandList);
+      const hasLegacySpelling = brandList.some((b) => catalogBrandSpellings(b).length > 1);
       if (byInference) {
         and.push(byInference);
-      } else if (brandList.length === 1) {
+      } else if (!hasLegacySpelling && brandList.length === 1) {
         where.brand = brandList[0];
-      } else if (brandList.length > 1) {
+      } else if (!hasLegacySpelling && brandList.length > 1) {
         where.brand = { in: brandList };
+      } else if (brandList.length > 0) {
+        and.push({ OR: brandList.map(brandColumnWhere) });
       }
     }
     if (category) {
@@ -604,6 +627,7 @@ export class CatalogService {
     const brandSlug = brandRef?.isPublished ? brandRef.slug : null;
     return {
       ...publicProduct,
+      brand: canonicalCatalogBrand(publicProduct.brand),
       images: publicImages('product', product.id, publicProduct.images ?? []),
       thumbnail: publicProductThumb(publicProduct),
       // Tồn ảo của hàng không quản kho (Pancake 99.999.988) không ra khỏi trang chi tiết; dưới ngưỡng giữ nguyên số cho bảng chọn "Chỉ còn n".
@@ -640,7 +664,7 @@ export class CatalogService {
   async related(slug: string) {
     const product = await this.prisma.product.findUnique({ where: { slug }, select: { id: true, brand: true } });
     if (!product) throw new NotFoundException('Không tìm thấy sản phẩm.');
-    const where = { ...PUBLIC_PRODUCT_WHERE, brand: product.brand, id: { not: product.id } };
+    const where: Prisma.ProductWhereInput = { ...PUBLIC_PRODUCT_WHERE, ...brandColumnWhere(product.brand), id: { not: product.id } };
     const siblings = await this.prisma.product.findMany({ where, select: { id: true, soldApp: true, soldExternal: true } });
     const ids = siblings
       .sort((x, y) => y.soldApp + y.soldExternal - (x.soldApp + x.soldExternal) || (x.id < y.id ? -1 : x.id > y.id ? 1 : 0))
@@ -807,11 +831,16 @@ export class CatalogService {
     });
     const counts = await this.countByEffectiveBrand(rows);
     // Slug của nhãn đã công khai (khớp theo tên) để trang chủ dẫn tới /brand/:slug; nhãn chưa có trang thì null.
+    // Bản ghi Brand tạo từ chính tả cũ ("Sokfram") vẫn gắn được vào nhãn chuẩn ("Sokfarm"): tên cũ đặt trước để bản ghi tên chuẩn ghi đè khi có cả hai.
     const published = await this.prisma.brand.findMany({
-      where: { isPublished: true, name: { in: [...counts.keys()] } },
+      where: { isPublished: true, name: { in: [...new Set([...counts.keys()].flatMap(catalogBrandSpellings))] } },
       select: { name: true, slug: true },
     });
-    const slugByName = new Map(published.map((b) => [b.name, b.slug]));
+    const isLegacyName = (name: string) => canonicalCatalogBrand(name) !== name;
+    const slugByName = new Map<string, string>();
+    for (const b of [...published].sort((x, y) => Number(isLegacyName(y.name)) - Number(isLegacyName(x.name)))) {
+      slugByName.set(canonicalCatalogBrand(b.name), b.slug);
+    }
     const value = [...counts].map(([brand, count]) => ({ brand, count, slug: slugByName.get(brand) ?? null }));
     this.brandsCache = { value, expiresAt: Date.now() + this.TTL_MS };
     return value;
@@ -825,7 +854,7 @@ export class CatalogService {
     const counts = new Map<string, number>();
     const add = (brand: string, n: number) => counts.set(brand, (counts.get(brand) ?? 0) + n);
     const genericRows = rows.filter((r) => isGenericCatalogBrand(r.brand));
-    for (const r of rows) if (!isGenericCatalogBrand(r.brand)) add(r.brand, r._count._all);
+    for (const r of rows) if (!isGenericCatalogBrand(r.brand)) add(canonicalCatalogBrand(r.brand), r._count._all);
     if (genericRows.length > 0) {
       const generic = new Set(genericRows.map((r) => r.brand));
       for (const e of await this.genericBrandIndex()) if (generic.has(e.brand)) add(e.inferred ?? e.brand, 1);
@@ -859,7 +888,7 @@ export class CatalogService {
     return {
       OR: brandList.map((b): Prisma.ProductWhereInput => {
         if (isGenericCatalogBrand(b)) return { brand: b, id: { notIn: inferred.map((e) => e.id) } };
-        return INFERRABLE_CATALOG_BRANDS.includes(b) ? { OR: [{ brand: b }, { id: { in: idsOf(b) } }] } : { brand: b };
+        return INFERRABLE_CATALOG_BRANDS.includes(b) ? { OR: [brandColumnWhere(b), { id: { in: idsOf(b) } }] } : brandColumnWhere(b);
       }),
     };
   }
@@ -1019,7 +1048,7 @@ export class CatalogService {
         return {
           id: p.id,
           slug: p.slug,
-          brand: p.brand,
+          brand: canonicalCatalogBrand(p.brand),
           name: p.name,
           thumbnail: publicProductThumb(p),
           ...cardPrices(p, p.variations),
