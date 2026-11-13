@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { HOME_BEST_SELLER_LIMIT } from '../home-layout';
-import { comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, purchasedShelfEntry, ranksAreSequential, seeAllHref, variationKey, type ShelfEntry } from './home-shelves';
+import { comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, imageFirst, purchasedShelfEntry, ranksAreSequential, seeAllHref, variationKey, type ShelfEntry } from './home-shelves';
 
 const e = <T,>(id: string, item: T): ShelfEntry<T> => ({ id, item });
 const ids = (n: number, prefix = 'p') => Array.from({ length: n }, (_, i) => e(`${prefix}${i}`, `${prefix}${i}`));
@@ -243,5 +243,33 @@ describe('seeAllHref', () => {
   });
   it('kệ không có lối xem tất cả trả null', () => {
     expect(seeAllHref('home.combos')).toBeNull();
+  });
+});
+
+describe('imageFirst: món có ảnh lên trước (kệ Bán chạy nhất)', () => {
+  const p = (slug: string, thumbnail: string | null) => ({ slug, thumbnail, rank: 0 });
+  const has = (x: { thumbnail: string | null }) => Boolean(x.thumbnail?.trim());
+
+  it('giữ thứ tự tương đối trong từng nhóm, món không ảnh xuống cuối', () => {
+    const list = [p('a', null), p('b', 'b.webp'), p('c', null), p('d', 'd.webp'), p('e', 'e.webp')];
+    expect(imageFirst(list, has).map((x) => x.slug)).toEqual(['b', 'd', 'e', 'a', 'c']);
+  });
+
+  it('không đổi gì khi mọi món đều có ảnh hoặc đều không có; không sửa mảng gốc', () => {
+    const all = [p('a', 'a.webp'), p('b', 'b.webp')];
+    const none = [p('a', null), p('b', ' ')];
+    expect(imageFirst(all, has)).toEqual(all);
+    expect(imageFirst(none, has)).toEqual(none);
+    const src = [p('x', null), p('y', 'y.webp')];
+    imageFirst(src, has);
+    expect(src.map((s) => s.slug)).toEqual(['x', 'y']);
+  });
+
+  it('hạng thật đi theo món: xếp lại rồi chống trùng/cắt 10 vẫn ghi đúng hạng và hạng hụt thì kệ không đánh số', () => {
+    const source = Array.from({ length: 12 }, (_, i) => ({ slug: `s${i + 1}`, thumbnail: i === 1 || i === 2 ? null : `s${i + 1}.webp`, rank: i + 1 }));
+    const r = composeHomeShelves({ ...none, bestSellers: imageFirst(source, has).map((x) => e(x.slug, x)) });
+    expect(r.bestSellers).toHaveLength(10);
+    expect(r.bestSellers.map((x) => x.slug)).toEqual(['s1', 's4', 's5', 's6', 's7', 's8', 's9', 's10', 's11', 's12']);
+    expect(ranksAreSequential(r.bestSellers.map((x) => x.rank))).toBe(false);
   });
 });

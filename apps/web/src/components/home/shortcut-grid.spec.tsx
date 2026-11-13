@@ -79,8 +79,10 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(c.querySelector('[role="group"][aria-label*="vuốt ngang"]')).toBeNull();
   });
 
-  it('chỉ ở khổ điện thoại: ẩn từ lg vì thanh điều hướng website đã có các lối này', () => {
-    expect(mount().querySelector('section')!.className).toContain('lg:hidden');
+  it('chỉ ở khổ điện thoại: ẩn từ md vì thanh đầu website (SiteHeader) đã hiện hàng điều hướng', () => {
+    const cls = mount().querySelector('section')!.className;
+    expect(cls).toContain('md:hidden');
+    expect(cls).not.toContain('lg:hidden');
   });
 
   it('Giờ vàng tới /gio-vang, Mã giảm giá tới trang Mã giảm giá, Đổi rác và Mua chung đúng route web', () => {
@@ -161,7 +163,7 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     const cls = mount().querySelector('section')!.className;
     expect(cls).toContain('tubu-bleed');
     expect(cls).toContain('max-md:px-2');
-    expect(cls).toContain('lg:hidden');
+    expect(cls).toContain('md:hidden');
   });
 
   it('cấu hình công khai chưa về: khung trơn cao 84px thay lưới, không ô bấm được; lỗi (hết chờ) thì dựng lưới với cờ tắt', () => {

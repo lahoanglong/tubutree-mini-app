@@ -245,16 +245,20 @@ describe('HomeView — HubLayout cho máy tính', () => {
     expect(rest.contains(block(c, 'welcome'))).toBe(false);
   });
 
-  it('chưa có banner (chờ P11): không vẽ khung banner, aside chiếm 12 cột; khối banner rỗng vẫn đứng đúng thứ tự', async () => {
+  it('chưa có banner (chờ P11): không vẽ khung banner; từ md khối giới thiệu mặc định (hero) chiếm chỗ banner, aside còn 4 cột; khối banner rỗng vẫn đứng đúng thứ tự', async () => {
     const c = await mount();
     expect(c.querySelector('[data-hub-part="banner"]')).toBeNull();
-    expect(hubPart(c, 'aside').className).toContain('lg:col-span-12');
+    const hero = hubPart(c, 'hero');
+    expect(hero.className).toEqual(expect.stringContaining('hidden md:block'));
+    expect(hero.className).toContain('lg:col-span-8');
+    expect(hero.querySelector('[data-testid="home-editorial-hero"]')).not.toBeNull();
+    expect(hubPart(c, 'aside').className).toContain('lg:col-span-4');
     expect(blockOrder(c)).toContain('banner');
   });
 
-  it('lối tắt 4 ô chỉ ở điện thoại: từ lg ẩn (thanh đầu website đã đủ lối vào)', async () => {
+  it('lối tắt 4 ô chỉ ở điện thoại: từ md ẩn (thanh đầu website đã hiện điều hướng)', async () => {
     const c = await mount();
-    expect(block(c, 'shortcuts').querySelector('section')?.className).toContain('lg:hidden');
+    expect(block(c, 'shortcuts').querySelector('section')?.className).toContain('md:hidden');
   });
 });
 
@@ -289,12 +293,15 @@ describe('HomeView — banner chiến dịch (P11)', () => {
     expect(hubPart(c, 'aside')!.className).toContain('lg:col-span-4');
     expect(hubPart(c, 'banner')!.contains(block(c, 'banner'))).toBe(true);
     expect(blockOrder(c)).toEqual([...homeBlockOrder('new')]);
+    expect(hubPart(c, 'hero')).toBeNull();
+    expect(c.querySelector('[data-testid="home-editorial-hero"]')).toBeNull();
   });
 
-  it('server đã hỏi và không có chiến dịch: ẩn hẳn, không khung banner, aside chiếm 12 cột, không khung chờ', async () => {
+  it('server đã hỏi và không có chiến dịch: ẩn hẳn, không khung banner và không khung chờ; hero giới thiệu chiếm chỗ từ md, aside 4 cột', async () => {
     const c = await mount(<HomeView initial={{ campaigns: [] }} />);
     expect(hubPart(c, 'banner')).toBeNull();
-    expect(hubPart(c, 'aside')!.className).toContain('lg:col-span-12');
+    expect(hubPart(c, 'hero')).not.toBeNull();
+    expect(hubPart(c, 'aside')!.className).toContain('lg:col-span-4');
     expect(block(c, 'banner').childElementCount).toBe(0);
     expect(c.querySelector('[data-testid="home-banner-loading"]')).toBeNull();
     expect(calledCampaigns()).toHaveLength(0);
@@ -790,7 +797,7 @@ describe('HomeView — ảnh ưu tiên của Bán chạy nhất (khối ảnh đ
   const LEAD = [['eager', 'high'], ['eager', 'high'], ['lazy', null], ['lazy', null]];
   const LAZY = Array.from({ length: 4 }, () => ['lazy', null]);
   const shelfImages = (c: HTMLElement) =>
-    Array.from(region(c, 'Bán chạy nhất')!.querySelectorAll('img')).map((i) => [i.getAttribute('loading'), i.getAttribute('fetchpriority')]);
+    Array.from(region(c, 'Bán chạy nhất')!.querySelectorAll('[data-testid="best-seller-rail"] img')).map((i) => [i.getAttribute('loading'), i.getAttribute('fetchpriority')]);
   const flashItem = (slug: string) => ({
     itemId: `i-${slug}`, variationId: `v-${slug}`, productSlug: slug, productName: `Giờ vàng ${slug}`, thumbnail: thumb(slug),
     retailPrice: 100000, flashPrice: 80000, quota: 10, soldCount: 1, endAt: new Date(Date.now() + 3_600_000).toISOString(),

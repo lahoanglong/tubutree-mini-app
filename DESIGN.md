@@ -166,7 +166,7 @@ Máy tính (từ `lg`): hai cột gọn ở `/tai-khoan/don-hang/:code`, trái t
 
 ### Khuôn trang web (chỉ web)
 
-`HubLayout`, `ListingLayout`, `PdpLayout`, `StoreLayout` ở `apps/web/src/components/layouts/`. Chi tiết ở mục Khuôn trang web máy tính.
+`HubLayout`, `ListingLayout`, `PdpLayout`, `StoreLayout` ở `apps/web/src/components/layouts/`. Chi tiết ở mục Khuôn trang web máy tính. `HomeEditorialHero` (`apps/web/src/components/home/`, chỉ web): khối giới thiệu mặc định của Trang chủ từ md khi không có banner chiến dịch, đứng ở slot `hero` của `HubLayout` (cùng tỉ lệ `--banner-ratio` nên chiến dịch về muộn không làm trang nhảy; điện thoại ẩn hẳn, chữ ở `homeCopy.hero`).
 
 ## Sắp có (đợt 4b/4c)
 
@@ -256,7 +256,7 @@ Mỗi trang mua sắm trên web dùng một khuôn trong `apps/web/src/component
 
 | Khuôn | Trang | Slot |
 |---|---|---|
-| `HubLayout` | Trang chủ | `banner?`, `aside`, `children` (lưới 12 cột: banner 8 cột + `aside` 4 cột) |
+| `HubLayout` | Trang chủ | `hero?`, `banner?`, `aside`, `children` (lưới 12 cột: banner hoặc `hero` 8 cột + `aside` 4 cột; `hero` chỉ từ md) |
 | `ListingLayout` | Danh mục `/san-pham` | `breadcrumb?`, `title`, `caption?`, `toolbar?`, `sidebar?`, `children` (cột lọc 200px) |
 | `PdpLayout` | chi tiết sản phẩm | `gallery`, `info`, `below`, `aside?` (ảnh và thông tin trong một thẻ, nút mua trong màn 1280×800) |
 | `StoreLayout` | `/s/[slug]`, `/brand/[slug]` | `header`, `stats?`, `intro?`, `tabs?`, `children` |

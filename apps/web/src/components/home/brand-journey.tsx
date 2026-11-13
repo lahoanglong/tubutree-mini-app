@@ -6,19 +6,19 @@ import { ChevronRight, Map as MapIcon } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { brandsQuery } from '@tubutree/app-core/queries/catalog';
 import { coreHttp } from '@/lib/core-http';
-import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
+import { journeyBrandHref, journeyBrands } from '@/lib/brand-origins';
 import { Chip, Icon, ScrollRow, SectionHeader, Text } from '@/components/mini';
 import { SR_ONLY } from '@/components/mini/sr-only';
 
 /**
  * "Hành trình nguyên liệu" giữa Trang chủ (bản web của `brand-journey.tsx` ở Mini App): tiêu đề `SectionHeader` (Inter 16/700, nút
- * "Xem bản đồ") rồi thẻ mở bản đồ xuất xứ, kèm dải thương hiệu Việt (chạm mở trang thương hiệu). `initialBrands` là danh sách server đã tải cho trang ISR. Chưa có danh sách thương hiệu thì vẫn có thẻ bản đồ.
+ * "Xem bản đồ") rồi thẻ mở bản đồ xuất xứ, kèm dải thương hiệu Việt (chạm mở trang thương hiệu hoặc tìm sản phẩm của nhãn). PROD ghi mọi SKU là nhãn "Tubu Tree" nên dải lấy 8 nhãn hành trình từ app-core (`journeyBrands`), API chỉ bổ sung `slug` và nhãn lạ. `initialBrands` là danh sách server đã tải cho trang ISR.
  */
 export function BrandJourney({ initialBrands }: { initialBrands?: { brand: string; count: number; slug?: string | null }[] }) {
   const router = useRouter();
   // Nhãn chậm đổi (sync Pancake ~15 phút/lần) → cache 60s.
   const brands = useQuery({ ...brandsQuery(coreHttp), staleTime: 60_000, ...(initialBrands ? { initialData: initialBrands } : {}) });
-  const list = brands.data ?? [];
+  const list = journeyBrands(brands.data);
   return (
     <section aria-label={homeCopy.journey.title}>
       <SectionHeader title={homeCopy.journey.title} action={{ label: homeCopy.journey.cta, to: '/cau-chuyen' }} />
@@ -45,8 +45,8 @@ export function BrandJourney({ initialBrands }: { initialBrands?: { brand: strin
         {list.length > 0 && (
           <ScrollRow arrows label="Dải thương hiệu, vuốt ngang để xem thêm" style={{ gap: 8, padding: '8px 0 4px' }}>
             {list.map((b) => (
-              <Chip key={b.brand} href={b.slug ? `/brand/${encodeURIComponent(b.slug)}` : browseHref({ ...EMPTY_SEARCH_STATE, brands: [b.brand] })}>
-                {b.brand}
+              <Chip key={b.key} href={journeyBrandHref(b, '/san-pham')}>
+                {b.label}
               </Chip>
             ))}
           </ScrollRow>

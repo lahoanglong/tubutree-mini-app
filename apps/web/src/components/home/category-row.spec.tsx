@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { Baby, LayoutGrid } from 'lucide-react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { click, render, type Rendered } from '@/test-utils/dom';
-import { CATEGORY_CELL_HEIGHT, CATEGORY_LABEL_GUTTER, CATEGORY_LABEL_HEIGHT, CATEGORY_LABEL_TRACKING } from '@tubutree/app-core/home-layout';
+import { CATEGORY_CELL_HEIGHT, CATEGORY_LABEL_GUTTER, CATEGORY_LABEL_HEIGHT, CATEGORY_LABEL_TRACKING, CATEGORY_TILE_GUTTER } from '@tubutree/app-core/home-layout';
 import type { CategoryEntry } from '@/lib/browse-categories';
 
 import { CategoryRow } from './category-row';
@@ -264,5 +264,40 @@ describe('CategoryRow web — lưới 2 hàng × 5 cột như Mini (Q7)', () => 
     expect(grid.className).not.toMatch(/-mx-|max-w-none/);
     expect(grid.style.marginLeft).toBe('');
     expect(grid.style.paddingLeft).toBe('');
+  });
+});
+
+describe('CategoryRow web — từ md là hàng 5 thẻ ngang (W134)', () => {
+  it('lưới tới 10 ô: từ md 5 cột bằng nhau cách đều (ghi đè inline 20%), điện thoại giữ số đo Mini', () => {
+    const { grid } = mount(5);
+    expect(grid.className).toContain('md:!grid-cols-5');
+    expect(grid.className).toContain('md:!gap-x-3');
+    expect(grid.style.gridTemplateColumns).toBe('repeat(5, 20%)');
+    expect(grid.className).toContain('max-md:px-4');
+  });
+
+  it('mỗi ô từ md là thẻ ngang nền sáng viền nhẹ cao bằng ô điện thoại; nhãn căn trái', () => {
+    const { c } = mount(3);
+    const cell = Array.from(c.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Danh mục 0')!;
+    for (const cls of ['md:!flex-row', 'md:!rounded-card', 'md:!border', 'md:!min-h-[5.75rem]', 'md:!text-left']) expect(cell.className).toContain(cls);
+    expect(cell.style.flexDirection).toBe('column');
+    const label = labelOf(c, 'Danh mục 0');
+    expect(label.className).toContain('md:!flex-1');
+    expect(label.className).toContain('md:!text-left');
+  });
+
+  it('lưới cuộn ngang (quá 10 ô) không đổi sang thẻ ngang', () => {
+    const { c, grid } = mount(12);
+    expect(grid.className).not.toContain('md:!grid-cols-5');
+    const cell = Array.from(c.querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Danh mục 0')!;
+    expect(cell.className).not.toContain('md:!flex-row');
+  });
+
+  it('ô vuông co ở khổ rất hẹp để chừa khe với ô kề (CATEGORY_TILE_GUTTER mỗi bên), từ 375px vẫn 56px', () => {
+    const { c } = mount(3);
+    const tile = c.querySelector<HTMLElement>('[data-testid="category-tile"]')!;
+    expect(tile.style.width).toBe('56px');
+    expect(tile.style.maxWidth).toBe(`calc(100% - ${CATEGORY_TILE_GUTTER * 2}px)`);
+    expect(tile.style.aspectRatio).toBe('1 / 1');
   });
 });

@@ -9,12 +9,18 @@ import { ranksAreSequential, seeAllHref } from '@tubutree/app-core/merch/home-sh
 import { shelf } from '@tubutree/app-core/merch/shelves';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '@/lib/core-http';
-import { ProductRail, SectionHeader } from '@/components/mini';
+import { ProductCard, ProductRail, ProductTileSkeleton, SectionHeader } from '@/components/mini';
+import { GRID_RANK_IMAGE_SIZES } from '@/lib/product-grid';
 import { HomeBlockError } from './home-block-error';
 import { useBlockQuery } from './use-block-query';
 
 /** Số khung chờ: vừa đủ lấp một màn ở 375px (thẻ hạng rộng `--tile-w-sm`), phần dư cuộn ngang. */
 const SKELETON_COUNT = 5;
+/** Khung chờ của lưới lg: hai hàng 5 cột như kệ đầy (trần `home.bestSellers` là 10 món). */
+const GRID_SKELETON_COUNT = 10;
+
+/** Từ lg kệ thành lưới đúng 5 cột (10 món = hai hàng đầy, không thanh cuộn ngang): thẻ hạng cùng bề rộng thẻ lưới Sản phẩm, tên đọc trọn. Cùng cột với `/ban-chay`. */
+const GRID_RANK_LG = 'grid grid-cols-5 gap-4';
 
 /** Thẻ tải ảnh ngay khi kệ là khối ảnh đầu tiên của trang: ở 375px thấy trọn hai thẻ hạng (thẻ thứ ba lấp ló), một trong hai là ảnh LCP. */
 export const BEST_SELLER_LEAD_PRIORITY = 2;
@@ -44,10 +50,31 @@ export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, r
     return error ? <HomeBlockError title={title} error={error} onRetry={() => onRetry?.()} retrying={retrying} /> : null;
   }
   const seeAll = seeAllHref('home.bestSellers', 'web');
+  const plain = ranks !== undefined && !ranksAreSequential(ranks);
   return (
     <section aria-label={title}>
       <SectionHeader title={title} subtitle={bestSellersBasisCopy([{ basis }])} action={seeAll ? { to: seeAll } : undefined} />
-      <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={ranks !== undefined && !ranksAreSequential(ranks)} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={priorityCount} />
+      {/* Hai bản, mỗi bản `display:none` ở một khổ (như `ShopSection`): kệ vuốt ngang của Mini App dưới lg, lưới 5×2 từ lg. Ảnh ưu tiên chỉ cấp cho kệ: bản lưới nằm ẩn ở điện thoại. */}
+      <div data-testid="best-seller-rail" className="lg:hidden">
+        <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={plain} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={priorityCount} />
+      </div>
+      <div data-testid="best-seller-grid" className="hidden lg:block">
+        {loading ? (
+          <div aria-hidden="true" className={GRID_RANK_LG}>
+            {Array.from({ length: GRID_SKELETON_COUNT }, (_, i) => (
+              <ProductTileSkeleton key={i} variant="rank" />
+            ))}
+          </div>
+        ) : (
+          <ul role="list" className={GRID_RANK_LG} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+            {items.map((p, i) => (
+              <li key={p.id} className="min-w-0">
+                <ProductCard product={p} variant="rank" rank={ranks?.[i] ?? i + 1} rankPlain={plain} imageSizes={GRID_RANK_IMAGE_SIZES} />
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </section>
   );
 }

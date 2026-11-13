@@ -100,22 +100,31 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
       <Card variant="flat" padding={0}>
         <div style={{ minHeight: HOME_GIFT_HEIGHT, boxSizing: 'border-box', padding: '0 12px 0 16px', paddingBlock: '0.5rem 0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <button
-            type="button"
-            aria-expanded={expanded}
-            aria-label={`${homeText.newGift.title}: ${headline}. ${expanded ? homeText.newGift.collapse : homeText.newGift.expand}`}
-            className="tubu-press"
-            onClick={() => setExpanded((v) => !v)}
-            style={{ flex: 1, minWidth: 0, minHeight: 44, display: 'flex', alignItems: 'center', gap: 8, padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}
-          >
+          {/* Điện thoại: nút gập (Mini App). Từ md chi tiết luôn mở sẵn nên nút ẩn hẳn (không còn trong cây trợ năng) và tiêu đề là chữ tĩnh. */}
+          <div className="min-w-0 flex-1 md:hidden">
+            <button
+              type="button"
+              aria-expanded={expanded}
+              aria-label={`${homeText.newGift.title}: ${headline}. ${expanded ? homeText.newGift.collapse : homeText.newGift.expand}`}
+              className="tubu-press"
+              onClick={() => setExpanded((v) => !v)}
+              style={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 8, padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}
+            >
+              <Icon icon={Gift} tone="brand" />
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {homeText.newGift.title}
+                </Text>
+              </span>
+              <Icon icon={expanded ? ChevronUp : ChevronDown} size="sm" tone="muted" />
+            </button>
+          </div>
+          <div className="hidden min-h-11 min-w-0 flex-1 items-center gap-2 md:flex">
             <Icon icon={Gift} tone="brand" />
-            <span style={{ flex: 1, minWidth: 0 }}>
-              <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {homeText.newGift.title}
-              </Text>
-            </span>
-            <Icon icon={expanded ? ChevronUp : ChevronDown} size="sm" tone="muted" />
-          </button>
+            <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              {homeText.newGift.title}
+            </Text>
+          </div>
           {promised && promised.amount > 0 ? (
             <Link href="/dang-nhap" aria-label={homeCopy.guestGift.cta} className="zaui-btn zaui-btn-primary tubu-btn" style={CTA_STYLE}>
               <span>{homeCopy.guestGift.ctaShort}</span>
@@ -130,7 +139,8 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
             {headline}
           </Text>
         </div>
-        {expanded && (
+        {/* Điện thoại: mở bằng nút gập. Từ md luôn mở: bề ngang đủ chỗ cho quyền lợi, không bắt khách bấm mũi tên để thấy mã và ba lợi ích. */}
+        <div data-testid="new-customer-gift-details" className={expanded ? undefined : 'hidden md:block'}>
           <div style={{ padding: '0 16px 16px' }}>
             {voucher && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
@@ -161,7 +171,7 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
             <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 12 }}>
               {homeText.newGift.benefitsTitle}
             </Text>
-            <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0 md:grid md:grid-cols-3 md:gap-4 lg:flex lg:flex-col lg:gap-2">
               {benefits.map((b) => (
                 <li key={b.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
                   <Icon icon={b.icon} size="sm" tone="brand" style={{ flex: '0 0 auto', marginTop: 3 }} />
@@ -172,7 +182,7 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
               ))}
             </ul>
           </div>
-        )}
+        </div>
       </Card>
     </section>
   );
@@ -180,8 +190,9 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
 
 function NewCustomerGiftSkeleton() {
   return (
-    <div data-testid="new-customer-gift-loading" aria-hidden="true">
-      <Skeleton height={HOME_GIFT_HEIGHT} radius="var(--radius-card)" />
+    // Từ md chi tiết luôn mở nên khối thật cao hơn dải gọn của điện thoại: khung chờ cao theo đó (`md:h-64`) để thẻ về không đẩy các khối dưới.
+    <div data-testid="new-customer-gift-loading" aria-hidden="true" className="md:h-64">
+      <Skeleton height="100%" radius="var(--radius-card)" style={{ minHeight: HOME_GIFT_HEIGHT }} />
     </div>
   );
 }
