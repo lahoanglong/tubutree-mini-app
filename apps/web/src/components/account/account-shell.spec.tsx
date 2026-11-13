@@ -26,8 +26,8 @@ const mount = (ui: React.ReactElement) => {
   return r.container;
 };
 
-describe('AccountShell (menu tài khoản từ lg)', () => {
-  it('đã đăng nhập: có menu nhóm theo mục, đánh dấu mục đang mở, ẩn mục chưa làm xong, menu chỉ từ lg', () => {
+describe('AccountShell (menu tài khoản từ md)', () => {
+  it('đã đăng nhập: có menu nhóm theo mục, đánh dấu mục đang mở, ẩn mục chưa làm xong, menu chỉ từ md', () => {
     const c = mount(
       <AccountShell>
         <main>nội dung</main>
@@ -35,7 +35,7 @@ describe('AccountShell (menu tài khoản từ lg)', () => {
     );
     const nav = c.querySelector('nav[aria-label="Menu tài khoản"]') as HTMLElement;
     expect(nav.className).toMatch(/\bhidden\b/);
-    expect(nav.className).toMatch(/\blg:block\b/);
+    expect(nav.className).toMatch(/\bmd:block\b/);
     expect(nav.querySelector('a[aria-current="page"]')?.textContent).toBe('Ví Tubu');
     expect(nav.querySelector('a[href="/kho-qua/cua-toi"]')).toBeNull();
     expect(nav.querySelector('a[href="/tai-khoan/diem-xanh"]')).not.toBeNull();
@@ -72,6 +72,7 @@ describe('AccountShell (menu tài khoản từ lg)', () => {
         <main>đang tải</main>
       </AccountShell>,
     );
+    expect(c.firstElementChild?.className).toContain('md:grid-cols-[12.5rem_minmax(0,1fr)]');
     expect(c.firstElementChild?.className).toContain('lg:grid-cols-[240px_minmax(0,1fr)]');
     expect(c.querySelector('[data-testid="account-shell-nav-skeleton"]')).not.toBeNull();
     expect(c.querySelector('nav')).toBeNull();
@@ -87,9 +88,10 @@ describe('AccountShell (menu tài khoản từ lg)', () => {
         <main>mất mạng</main>
       </AccountShell>,
     );
+    expect(c.firstElementChild?.className).toContain('md:grid-cols-[12.5rem_minmax(0,1fr)]');
     expect(c.firstElementChild?.className).toContain('lg:grid-cols-[240px_minmax(0,1fr)]');
     const skeleton = c.querySelector('[data-testid="account-shell-nav-skeleton"]') as HTMLElement;
-    expect(skeleton.className.split(/\s+/)).toContain('lg:block');
+    expect(skeleton.className.split(/\s+/)).toContain('md:block');
     expect(c.querySelector('nav')).toBeNull();
     expect(c.textContent).toContain('mất mạng');
     mocks.phase = 'authenticated';
@@ -115,12 +117,12 @@ describe('AccountShell (menu tài khoản từ lg)', () => {
     );
     const root = c.firstElementChild as HTMLElement;
     const cls = root.className.split(/\s+/);
-    expect(cls).not.toContain('lg:grid');
-    expect(cls).not.toContain('lg:grid-cols-[240px_minmax(0,1fr)]');
-    expect(cls).toContain('[html[data-restoring]_&]:lg:grid');
+    expect(cls).not.toContain('md:grid');
+    expect(cls).not.toContain('md:grid-cols-[12.5rem_minmax(0,1fr)]');
+    expect(cls).toContain('[html[data-restoring]_&]:md:grid');
     const skeleton = c.querySelector('[data-testid="account-shell-nav-skeleton"]') as HTMLElement;
-    expect(skeleton.className.split(/\s+/)).not.toContain('lg:block');
-    expect(skeleton.className).toContain('[html[data-restoring]_&]:lg:block');
+    expect(skeleton.className.split(/\s+/)).not.toContain('md:block');
+    expect(skeleton.className).toContain('[html[data-restoring]_&]:md:block');
     mocks.phase = 'authenticated';
   });
 

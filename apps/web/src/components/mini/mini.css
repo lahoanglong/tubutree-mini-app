@@ -821,7 +821,7 @@
 
 /* Nút phụ đang tắt của trang web dựng bằng `ui.btnSecondary` + `phoneSecondary`: dưới md dùng cùng cặp token với Mini (chữ be nhạt trên nền xanh nhạt
  * không đọc nổi). Viết ở CSS thường để không thêm lớp `max-md:` cho bánh cóc; hai lớp lặp để thắng `disabled:text-stone-500` của Tailwind. */
-@media (max-width: 767px) {
+@media (max-width: 767.98px) {
   .tubu-phone-secondary.tubu-phone-secondary:disabled {
     background-color: var(--color-action-secondary-bg-disabled);
     color: var(--color-action-secondary-fg-disabled);

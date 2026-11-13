@@ -18,7 +18,7 @@ vi.mock('@tanstack/react-query', () => ({
   }),
 }));
 vi.mock('@/lib/shop-client', () => ({ getCart: vi.fn() }));
-vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => ['/', '/tai-khoan', '/vuon-xanh', '/mua-chung', '/tai-khoan/thong-bao'].includes(p) }));
+vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => ['/', '/tai-khoan', '/vuon-xanh', '/mua-chung', '/gio-vang', '/ma-giam-gia', '/tai-khoan/thong-bao'].includes(p) }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => mocks.path }));
 
 import SiteHeader from './site-header';
@@ -129,6 +129,10 @@ describe('SiteHeader', () => {
     expect(desk).not.toContain('>Cá nhân<');
     expect(desk).toContain('>Vườn Xanh<');
     expect(desk).toContain('>Mua chung<');
+    expect(desk).toContain('>Giờ vàng<');
+    expect(desk).toContain('>Mã giảm giá<');
+    expect(desk).toMatch(/href="\/gio-vang"/);
+    expect(desk).toMatch(/href="\/ma-giam-gia"/);
     expect(desk).not.toContain('>Danh mục<');
     expect(desk).not.toContain('>Kho quà<');
   });

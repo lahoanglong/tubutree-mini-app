@@ -467,12 +467,14 @@ describe('Trợ lý AI: thanh nhập', () => {
 });
 
 describe('Trợ lý AI: giao diện điện thoại như Mini App', () => {
-  it('thanh nhập dính đáy màn hình ở điện thoại (fixed), ô nhập cao như Mini App; máy tính giữ sticky', async () => {
+  it('thanh nhập dính đáy màn hình ở điện thoại (fixed), ô nhập một dòng tự giãn; máy tính giữ sticky', async () => {
     const c = await mount();
     const bar = input(c).parentElement as HTMLElement;
     expect(bar.className).toContain('max-md:fixed');
     expect(bar.className).toContain('max-md:inset-x-0');
-    expect(input(c).className).toContain('max-md:min-h-[9rem]');
+    // Ô nhập bắt đầu một dòng 44px (min-h-11 của ui.field) rồi giãn theo chữ; không còn trần thấp cố định 144px ở điện thoại.
+    expect(input(c).className).toContain('min-h-11');
+    expect(input(c).className).not.toContain('9rem');
     expect(bar.className).toContain('sticky');
   });
 

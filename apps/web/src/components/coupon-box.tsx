@@ -475,7 +475,7 @@ export function CouponBox({
         sheet
           ? undefined
           : `mt-3 border-t border-[color:var(--color-border-subtle)] pt-3 max-md:mt-0 max-md:border-t-0 max-md:bg-[var(--color-bg-surface)] ${
-              band ? 'max-md:p-4' : 'max-md:rounded-card max-md:p-3 max-md:shadow-[var(--elevation-1)]'
+              band ? 'max-md:p-4' : 'max-md:rounded-card max-md:p-3 max-md:shadow-e1'
             }`
       }
     >

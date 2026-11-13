@@ -144,9 +144,9 @@ describe('trang gian hàng — khung shop giống Mini App', () => {
     expect(avatar.textContent).toBe('');
   });
 
-  it('đầu shop nằm trong lưới StoreLayout: bìa là ô lưới ở lg (ShopHeader inStoreGrid), không rơi về bố cục điện thoại', async () => {
+  it('đầu shop nằm trong lưới StoreLayout: bìa là ô lưới từ md (ShopHeader inStoreGrid), không rơi về bố cục điện thoại', async () => {
     const box = await html();
-    expect(box.querySelector('[data-testid="shop-cover"]')!.className).toContain('lg:col-start-1');
+    expect(box.querySelector('[data-testid="shop-cover"]')!.className).toContain('md:col-start-1');
   });
 
   it('hàng số liệu: "1 Sản phẩm"; tab Shop và "Sản phẩm (1)"; một bộ thì không có tab Danh mục', async () => {

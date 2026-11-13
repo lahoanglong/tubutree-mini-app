@@ -68,8 +68,8 @@ function isActive(pathname: string, to: string): boolean {
 }
 
 /**
- * Khung khu tài khoản cho máy tính (từ lg): cột menu 240px bên trái, nội dung bên phải, để đổi từ Ví sang Điểm, Địa chỉ… không phải
- * về Tài khoản rồi chọn lại. Dưới lg khung không làm gì (children nguyên như cũ, điện thoại giống Mini App). Chỉ hiện menu khi đã
+ * Khung khu tài khoản cho máy tính bảng và máy tính (từ md): cột menu 200px (240px từ lg) bên trái, nội dung bên phải, để đổi từ Ví sang Điểm, Địa chỉ… không phải
+ * về Tài khoản rồi chọn lại. Dưới md khung không làm gì (children nguyên như cũ, điện thoại giống Mini App). Chỉ hiện menu khi đã
  * đăng nhập (khách thấy màn yêu cầu đăng nhập, không có gì để chuyển mục).
  *
  * Mỗi trang con tự vẽ <main> riêng (khung PAGE_WIDE/PAGE_NARROW nên tự căn giữa và có lề): trong khung này lề đó bỏ đi để nội dung
@@ -96,12 +96,12 @@ export function AccountShell({ children }: { children: ReactNode }) {
   // Lần dựng đầu (SSR và hydrate) state luôn là "chưa biết": bố cục khung do thuộc tính data-restoring trên <html> (script ở <head> đặt
   // từ cờ phiên) quyết định bằng CSS, nên HTML server giống nhau cho mọi người và không lệch hydrate; sau mount state React thay thế.
   // Tailwind chỉ nhận lớp viết nguyên văn (không ghép chuỗi), nên các lớp "boot" ghi đủ từng cái.
-  const frameCls = 'lg:grid lg:grid-cols-[240px_minmax(0,1fr)] lg:items-start lg:gap-6 lg:px-6 lg:pt-6';
+  const frameCls = 'md:grid md:grid-cols-[12.5rem_minmax(0,1fr)] md:items-start md:gap-6 md:px-6 md:pt-6 lg:grid-cols-[240px_minmax(0,1fr)]';
   const bootFrameCls =
-    '[html[data-restoring]_&]:lg:grid [html[data-restoring]_&]:lg:grid-cols-[240px_minmax(0,1fr)] [html[data-restoring]_&]:lg:items-start [html[data-restoring]_&]:lg:gap-6 [html[data-restoring]_&]:lg:px-6 [html[data-restoring]_&]:lg:pt-6';
-  const innerFrameCls = 'min-w-0 lg:[&_main]:mx-0 lg:[&_main]:px-0 lg:[&_main.max-w-frame]:max-w-none lg:[&_[data-back-link]]:hidden';
+    '[html[data-restoring]_&]:md:grid [html[data-restoring]_&]:md:grid-cols-[12.5rem_minmax(0,1fr)] [html[data-restoring]_&]:md:items-start [html[data-restoring]_&]:md:gap-6 [html[data-restoring]_&]:md:px-6 [html[data-restoring]_&]:md:pt-6 [html[data-restoring]_&]:lg:grid-cols-[240px_minmax(0,1fr)]';
+  const innerFrameCls = 'min-w-0 md:[&_main]:mx-0 md:[&_main]:px-0 md:[&_main.max-w-frame]:max-w-none md:[&_[data-back-link]]:hidden';
   const bootInnerCls =
-    'min-w-0 [html[data-restoring]_&]:lg:[&_main]:mx-0 [html[data-restoring]_&]:lg:[&_main]:px-0 [html[data-restoring]_&]:lg:[&_main.max-w-frame]:max-w-none [html[data-restoring]_&]:lg:[&_[data-back-link]]:hidden';
+    'min-w-0 [html[data-restoring]_&]:md:[&_main]:mx-0 [html[data-restoring]_&]:md:[&_main]:px-0 [html[data-restoring]_&]:md:[&_main.max-w-frame]:max-w-none [html[data-restoring]_&]:md:[&_[data-back-link]]:hidden';
 
   // Cây DOM giữ nguyên khi phiên đổi từ đang kiểm tra sang đã đăng nhập (chỉ lớp và menu thay đổi): trang con không bị dựng lại.
   return (
@@ -110,7 +110,7 @@ export function AccountShell({ children }: { children: ReactNode }) {
         <div
           aria-hidden="true"
           data-testid="account-shell-nav-skeleton"
-          className={waiting ? 'hidden lg:block' : 'hidden [html[data-restoring]_&]:lg:block'}
+          className={waiting ? 'hidden md:block' : 'hidden [html[data-restoring]_&]:md:block'}
         >
           {[0, 1, 2].map((g) => (
             <div key={g} className="mb-4 space-y-2">
@@ -126,7 +126,7 @@ export function AccountShell({ children }: { children: ReactNode }) {
         <nav
           aria-label="Menu tài khoản"
           data-testid="account-shell-nav"
-          className="hidden lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:block lg:max-h-[calc(100vh-var(--header-h)-32px)] lg:self-start lg:overflow-y-auto"
+          className="hidden md:sticky md:top-[calc(var(--header-h)+16px)] md:block md:max-h-[calc(100vh-var(--header-h)-32px)] md:self-start md:overflow-y-auto"
         >
           {GROUPS.map((g) => {
             const items = g.items.filter((i) => isWebRouteReady(i.to) && (CASHBACK_ENABLED || i.to !== '/hoan-tien'));

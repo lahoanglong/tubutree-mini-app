@@ -194,6 +194,41 @@ describe('BrowseView — hub ở gốc', () => {
   });
 });
 
+describe('BrowseView — từ md không có hub', () => {
+  const origMatchMedia = window.matchMedia;
+  afterEach(() => {
+    window.matchMedia = origMatchMedia;
+  });
+  const wideScreen = () => {
+    window.matchMedia = ((query: string) => ({
+      matches: query.includes('min-width: 768px'),
+      media: query,
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
+    })) as unknown as typeof window.matchMedia;
+  };
+
+  it('gốc /san-pham ở khổ md+: danh sách tất cả (SortBar, số kết quả, tải 20 món), h1 "Tất cả sản phẩm", không hub; ô tìm riêng của trang chỉ dựng dưới md', async () => {
+    wideScreen();
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('h1')!.textContent).toBe('Tất cả sản phẩm');
+    expect(container.querySelector('[data-testid="result-count"]')).not.toBeNull();
+    expect(container.querySelector('[role="group"][aria-label="Sắp xếp"]')).not.toBeNull();
+    expect(container.textContent).not.toContain('Xem tất cả sản phẩm');
+    expect(productCalls()[0]).toEqual({ page: 1, limit: 20 });
+    expect(container.querySelector('form[role="search"]')!.className.split(/\s+/)).toContain('md:hidden');
+  });
+
+  it('khổ điện thoại (không khớp md): vẫn là hub, không tải danh sách', async () => {
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('h1')!.textContent).toBe('Danh mục');
+    expect(container.querySelector('[data-testid="result-count"]')).toBeNull();
+    expect(productCalls().filter((q) => q?.page !== undefined)).toEqual([]);
+  });
+});
+
 describe('BrowseView — danh sách và trạng thái URL', () => {
   it('?all=1: danh sách không lọc 20 món một trang, SortBar + số kết quả, không có ô danh mục', async () => {
     nav.search = LIST;

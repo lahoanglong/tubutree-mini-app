@@ -386,7 +386,8 @@ describe('/tai-khoan/don-hang/[code] — chi tiết đơn và thanh toán lại'
     expect(container.querySelector('[role="alert"]')?.textContent).toContain('Không tìm thấy');
     expect(container.querySelector('[data-testid="error-message"]')?.textContent).toBe('Không tìm thấy đơn hàng này.');
     expect(headingProblems(container)).toEqual([]);
-    expect(container.querySelector('a[href="/tai-khoan"]')).not.toBeNull();
+    // Nút Back về danh sách đơn (cha trực tiếp), không nhảy qua Tài khoản.
+    expect(container.querySelector('a[href="/tai-khoan/don-hang"]')).not.toBeNull();
   });
 
   it('lỗi khác 404: báo lỗi (không nhầm với không tìm thấy) và có nút Thử lại', async () => {

@@ -26,8 +26,8 @@ export interface ShopHeaderProps {
   /** Lời nhắn của shop / khẩu hiệu thương hiệu: cắt 2 dòng, "Xem thêm" mở hết. */
   note?: string | null;
   /**
-   * Chỉ truyền true khi đặt trong `header` của `StoreLayout`: từ lg đầu shop xếp vào lưới của nó (gốc `contents`). Không truyền (mặc định)
-   * thì không có lớp `lg:` nào và bố cục điện thoại giữ ở mọi khổ, nên dựng ngoài `StoreLayout` (vd xem trước gian hàng) không vỡ.
+   * Chỉ truyền true khi đặt trong `header` của `StoreLayout`: từ md đầu shop xếp vào lưới của nó (gốc `contents`). Không truyền (mặc định)
+   * thì không có lớp `md:` nào và bố cục điện thoại giữ ở mọi khổ, nên dựng ngoài `StoreLayout` (vd xem trước gian hàng) không vỡ.
    */
   inStoreGrid?: boolean;
   /**
@@ -42,22 +42,22 @@ export const SHOP_COVER_HEIGHT = 120;
 /** ~2 dòng ở 375px; ngắn hơn thì không cần nút "Xem thêm". */
 const NOTE_FOLD_CHARS = 90;
 
-/** Lớp lg: của từng phần tử khi nằm trong lưới `StoreLayout` (xem `inStoreGrid`). */
+/** Lớp md: của từng phần tử khi nằm trong lưới `StoreLayout` (xem `inStoreGrid`). */
 const LG = {
-  root: 'lg:contents',
-  cover: 'lg:col-start-1 lg:row-span-2 lg:row-start-1 lg:h-auto lg:min-h-[200px]',
-  info: 'lg:col-start-2 lg:row-start-1 lg:grid lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:items-start lg:gap-x-4 lg:gap-y-1 lg:px-6 lg:pb-2 lg:pt-6',
-  avatarRow: 'lg:contents',
-  avatar: 'lg:col-start-1 lg:row-span-3 lg:row-start-1 lg:h-[72px] lg:w-[72px]',
-  action: 'lg:col-start-3 lg:row-start-1 lg:pb-0',
-  name: 'lg:col-start-2 lg:row-start-1 lg:mt-0',
-  badges: 'lg:col-start-2 lg:row-start-2 lg:mt-0',
-  note: 'lg:col-span-2 lg:col-start-2 lg:row-start-3 lg:mt-0',
+  root: 'md:contents',
+  cover: 'md:col-start-1 md:row-span-2 md:row-start-1 md:h-auto md:min-h-[200px]',
+  info: 'md:col-start-2 md:row-start-1 md:grid md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-start md:gap-x-4 md:gap-y-1 md:px-6 md:pb-2 md:pt-6',
+  avatarRow: 'md:contents',
+  avatar: 'md:col-start-1 md:row-span-3 md:row-start-1 md:h-[72px] md:w-[72px]',
+  action: 'md:col-start-3 md:row-start-1 md:pb-0',
+  name: 'md:col-start-2 md:row-start-1 md:mt-0',
+  badges: 'md:col-start-2 md:row-start-2 md:mt-0',
+  note: 'md:col-span-2 md:col-start-2 md:row-start-3 md:mt-0',
 } as const;
 
-/** Bìa: điện thoại tràn 100vw (cao 120px); từ lg là ô trái 5/12 của khung 1200px (store-layout) ~500px. */
+/** Bìa: điện thoại tràn 100vw (cao 120px); từ md là ô trái 5/12 của khung 1200px (store-layout) ~500px. */
 const COVER_SIZES = SHOP_COVER_SIZES;
-/** Avatar: 56px, từ lg 72px (`LG.avatar`). */
+/** Avatar: 56px, từ md 72px (`LG.avatar`). */
 const AVATAR_SIZES = SHOP_AVATAR_SIZES;
 
 const CLAMP_2: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' };
@@ -66,9 +66,9 @@ const CLAMP_2: CSSProperties = { display: '-webkit-box', WebkitLineClamp: 2, Web
  * Đầu trang shop dùng chung cho gian hàng CTV và thương hiệu (critique-store 3.1): bìa phẳng, avatar 56px đè mép bìa, tên, huy hiệu,
  * nút hành động ở hàng avatar (không còn thanh dính đáy). Bìa/avatar/dấu tích chỉ trang trí; tên là h1.
  *
- * Với `inStoreGrid`, từ lg phần tử gốc là `contents`: bìa và khối thông tin thành hai ô của lưới do `StoreLayout` dựng (bìa bên trái, thông tin
- * bên phải, số liệu ngay dưới thông tin), avatar không còn đè mép bìa mà đứng đầu hàng tên. Phần khác nhau giữa điện thoại và lg nằm ở lớp
- * Tailwind (không ở style nội tuyến, vì style nội tuyến đè lớp `lg:`); các lớp `lg:` viết nguyên văn trong `LG` để Tailwind quét được.
+ * Với `inStoreGrid`, từ md phần tử gốc là `contents`: bìa và khối thông tin thành hai ô của lưới do `StoreLayout` dựng (bìa bên trái, thông tin
+ * bên phải, số liệu ngay dưới thông tin), avatar không còn đè mép bìa mà đứng đầu hàng tên. Phần khác nhau giữa điện thoại và md nằm ở lớp
+ * Tailwind (không ở style nội tuyến, vì style nội tuyến đè lớp `md:`); các lớp `md:` viết nguyên văn trong `LG` để Tailwind quét được.
  */
 export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verified, badges, action, note, inStoreGrid = false, imageSource = 'storefront' }: ShopHeaderProps) {
   const [open, setOpen] = useState(false);
