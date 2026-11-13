@@ -43,7 +43,14 @@ describe('BestSellerRail web — Bán chạy nhất có hạng (Q18)', () => {
   });
 
   it('hạng hụt vì kệ trên chiếm (#1, #2, #4) hay mất hạng 1 (#2, #3): thẻ chỉ ghi "Bán chạy" không số; hạng liền 1..k giữ số (P2 #4)', () => {
-    const badges = () => Array.from(mounted!.container.querySelectorAll('[data-ds-part="rank"]')).map((n) => n.textContent);
+    const badgesIn = (part: 'best-seller-rail' | 'best-seller-grid') =>
+      Array.from(mounted!.container.querySelectorAll(`[data-testid="${part}"] [data-ds-part="rank"]`)).map((n) => n.textContent);
+    // Kệ (dưới lg) và lưới (từ lg) là hai bản của cùng một dữ liệu nên luôn ghi cùng một nhãn hạng.
+    const badges = () => {
+      const rail = badgesIn('best-seller-rail');
+      expect(badgesIn('best-seller-grid')).toEqual(rail);
+      return rail;
+    };
     mounted = render(<BestSellerRail items={[card(1), card(2), card(4)]} ranks={[1, 2, 4]} loading={false} />);
     expect(badges()).toEqual(['Bán chạy', 'Bán chạy', 'Bán chạy']);
     mounted.unmount();
@@ -52,6 +59,31 @@ describe('BestSellerRail web — Bán chạy nhất có hạng (Q18)', () => {
     mounted.unmount();
     mounted = render(<BestSellerRail items={[card(1), card(2), card(3)]} ranks={[1, 2, 3]} loading={false} />);
     expect(badges()).toEqual(['#1', '#2', '#3']);
+  });
+
+  it('từ lg kệ thành lưới 5 cột (10 món = hai hàng đầy, không thanh cuộn ngang); dưới lg giữ kệ vuốt ngang như Mini', () => {
+    mounted = render(<BestSellerRail items={cards(10)} loading={false} />);
+    const c = mounted.container;
+    const rail = c.querySelector<HTMLElement>('[data-testid="best-seller-rail"]')!;
+    const grid = c.querySelector<HTMLElement>('[data-testid="best-seller-grid"]')!;
+    expect(rail.className).toContain('lg:hidden');
+    expect(rail.querySelector('[role="region"][aria-label*="vuốt ngang"]')).not.toBeNull();
+    expect(grid.className).toContain('hidden');
+    expect(grid.className).toContain('lg:block');
+    expect(grid.querySelector('[role="region"]')).toBeNull();
+    const list = grid.querySelector('ul')!;
+    expect(list.className).toContain('grid-cols-5');
+    expect(list.querySelectorAll(':scope > li')).toHaveLength(10);
+    expect(Array.from(list.querySelectorAll('a[href^="/san-pham/"]')).map((a) => a.getAttribute('href'))).toEqual(
+      Array.from(rail.querySelectorAll('a[href^="/san-pham/"]')).map((a) => a.getAttribute('href')),
+    );
+  });
+
+  it('đang tải: lưới lg có 10 khung chờ (hai hàng), kệ có 5; không có thẻ thật', () => {
+    mounted = render(<BestSellerRail items={[]} loading />);
+    const c = mounted.container;
+    expect(c.querySelector('[data-testid="best-seller-grid"] ul')).toBeNull();
+    expect(c.querySelectorAll('[data-testid="best-seller-grid"] > div[aria-hidden="true"] > *')).toHaveLength(10);
   });
 
   it('kệ đã bỏ món trùng kệ trên (hạng #2, #3, #5): không đánh lại từ #1 và không ghi số hụt', () => {

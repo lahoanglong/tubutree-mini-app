@@ -91,7 +91,7 @@ import { loadHomeBelow } from '../components/home/home-lazy';
 beforeAll(() => loadHomeBelow());
 
 const card = (id: string, name: string) => ({
-  id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true,
+  id, slug: id, brand: 'Tubu', name, thumbnail: `https://img.test/${id}.webp`, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true,
 });
 const PAGE = (items: ReturnType<typeof card>[]) => ({ data: items, meta: { page: 1, limit: 6, total: items.length } });
 // Kệ Bán chạy nhất chỉ hiện từ 3 món (SHELVES), nên mock mặc định trả 4 món.

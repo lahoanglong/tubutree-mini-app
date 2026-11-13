@@ -187,6 +187,20 @@ describe('useHomeShelves (web)', () => {
     expect(s.bestSellerRanks).toEqual([1, 3, 4, 5]);
   });
 
+  it('món chưa có ảnh xuống cuối kệ Bán chạy nhất (ô lá thay thế không đứng giữa màn đầu), hạng thật vẫn đi theo món nên thẻ chỉ ghi "Bán chạy"', async () => {
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/flash-sales/active') return [];
+      if (path.startsWith('/products')) {
+        const withImage = (slug: string, img: string | null) => ({ ...card(slug), thumbnail: img });
+        return { data: [withImage('x', null), withImage('y', 'y.webp'), withImage('z', null), withImage('w', 'w.webp'), withImage('v', 'v.webp')], meta: { page: 1, limit: 12, total: 5 } };
+      }
+      return [];
+    });
+    const s = await mount('new');
+    expect(s.bestSellers.map((p) => p.slug)).toEqual(['y', 'w', 'v', 'x', 'z']);
+    expect(s.bestSellerRanks).toEqual([2, 4, 5, 1, 3]);
+  });
+
   it('suất đã quá giờ không chiếm món: 3 suất trong bộ nhớ, 1 đã hết giờ thì kệ ẩn và KHÔNG giữ món (cả ba còn ở Bán chạy nhất)', async () => {
     const gone = new Date(Date.now() - 1000).toISOString();
     mocks.get.mockImplementation(async (path: string) => {

@@ -84,4 +84,22 @@ describe('BrandGrid', () => {
     expect(grid.className).toContain('grid-cols-4');
     expect(grid.className).toContain('lg:grid-cols-12');
   });
+  it('API chỉ trả nhãn vỏ "Tubu Tree": hiện 8 nhãn hành trình, liên kết thật tới /san-pham?q=, không chặn chạm', () => {
+    const { c, onSelect } = mount([{ brand: 'Tubu Tree', count: 111 }]);
+    const links = [...c.querySelectorAll<HTMLAnchorElement>('a')];
+    expect(links).toHaveLength(8);
+    expect(links.map((a) => a.getAttribute('aria-label'))).toEqual(['Fuwa3e', 'BH.Nong', 'Pơ Lang', 'Visante', 'Hector', 'Le Plateau', 'Cobote', 'Sokfarm'].map((n) => `${n}, xem thương hiệu`));
+    expect(links.map((a) => a.getAttribute('href'))).toEqual(['Fuwa3e', 'BH.NONG', 'PƠ LANG', 'Visante', 'Hector', 'Le Plateau', 'Cobote', 'Sokfarm'].map((q) => `/san-pham?q=${encodeURIComponent(q).replace(/%20/g, '+')}`));
+    expect(c.textContent).not.toContain('Tubu Tree');
+    const ev = new MouseEvent('click', { bubbles: true, cancelable: true });
+    links[0]!.dispatchEvent(ev);
+    expect(ev.defaultPrevented).toBe(false);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('API có nhãn thật cùng nhãn vỏ thì vẫn dùng danh sách API (không đổi sang nhãn hành trình)', () => {
+    const { c } = mount([{ brand: 'Tubu Tree', count: 50 }, ...brands(4)]);
+    expect(names(c)).toContain('Nhãn 03, xem thương hiệu');
+    expect(names(c)).not.toContain('Fuwa3e, xem thương hiệu');
+  });
 });

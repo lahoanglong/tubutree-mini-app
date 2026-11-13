@@ -2,17 +2,28 @@
 
 import { LayoutGrid } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_GUTTER, CATEGORY_LABEL_HEIGHT, CATEGORY_LABEL_TRACKING, CATEGORY_SCROLL_COLUMNS, CATEGORY_TILE_SIZE, categoryGridScrolls, categorySkeletonCells, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
+import { CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_GUTTER, CATEGORY_LABEL_HEIGHT, CATEGORY_LABEL_TRACKING, CATEGORY_SCROLL_COLUMNS, CATEGORY_TILE_GUTTER, CATEGORY_TILE_SIZE, categoryGridScrolls, categorySkeletonCells, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
 import type { CategoryEntry } from '@/lib/browse-categories';
 import { fallBackToOriginal, sizedImage } from '@/lib/image-src';
 import { Icon, ScrollRow, SectionHeader, Skeleton, Text } from '@/components/mini';
 
 const TILE = CATEGORY_TILE_SIZE;
 const LABEL_HEIGHT = CATEGORY_LABEL_HEIGHT;
+/** Ô vuông co lại ở khổ rất hẹp để chừa khe với ô kề (xem `CATEGORY_TILE_GUTTER`); từ 375px vẫn đúng `TILE`. */
+const TILE_FIT = { width: TILE, maxWidth: `calc(100% - ${CATEGORY_TILE_GUTTER * 2}px)`, aspectRatio: '1 / 1', flex: '0 0 auto' } as const;
 /** Khung chờ không bao giờ dài hơn một màn (2 hàng × 5 cột): ô vượt màn chỉ có khi đã có dữ liệu thật. */
 const MAX_SKELETON_CELLS = CATEGORY_GRID_MAX_CELLS;
 /** Điện thoại: hàng cuộn tràn ra mép màn như Mini (`.tubu-bleed` lùi lề trang, đệm 16px nằm trong hàng, cột thứ 6 thò ra mép). Chỉ dưới md, từ md hàng nằm trong khung trang nên không tràn ngang. */
 const SCROLL_BLEED = 'tubu-bleed max-md:px-4';
+/**
+ * Từ md (lưới tới 10 ô, 5 cột): mỗi ô là một thẻ ngang (ô vuông bên trái, nhãn căn trái bên phải, nền sáng, viền nhẹ) cao bằng ô điện thoại (`CATEGORY_CELL_HEIGHT`)
+ * để khối không nhảy khi danh mục về; icon 56px không còn trơ trọi giữa ô rộng 230px. Phải dùng `!` vì số đo điện thoại nằm inline (bản gốc Mini); dưới md không đổi gì.
+ */
+const CARD_MD =
+  'md:!min-h-[5.75rem] md:!flex-row md:!gap-3 md:!rounded-card md:!border md:!border-solid md:!border-[var(--color-border-subtle)] md:!bg-[var(--color-bg-surface)] md:!px-4 md:!py-0 md:!text-left md:transition-[box-shadow,border-color] md:hover:!border-[var(--color-border-default)] md:hover:[box-shadow:var(--elevation-1)]';
+const LABEL_MD = 'md:!h-auto md:!w-auto md:!min-w-0 md:!flex-1 md:!text-left md:!text-[length:var(--type-body-sm-size)] md:!leading-[var(--type-body-sm-lh)]';
+/** Từ md lưới tới 10 ô là 5 cột bằng nhau cách đều 12px (điện thoại: 5 cột 20% sát nhau). Không áp cho lưới cuộn ngang. */
+const GRID_MD = 'md:!grid-cols-5 md:!gap-x-3';
 const TINTS: ShortcutTint[] = ['forest', 'sage', 'clay', 'amber', 'sky', 'rose'];
 
 // Tới 10 ô (kể cả "Tất cả"): xếp theo hàng, đọc trái sang phải như thứ tự đọc của trình đọc màn hình và "Tất cả" luôn ở cuối. Quá 10 ô mới xếp theo cột để cuộn ngang.
@@ -48,10 +59,11 @@ const cellStyle = {
  * vùng nhãn cao cố định để mọi ô thẳng hàng. `overflowWrap: anywhere` chỉ cứu từ đơn dài hơn cả cột (chữ nước ngoài): cắt bằng overflow thì mất chữ cuối mà không có "…".
  * `scrolls`: cột 5,5 chỉ rộng ~62px nên siết chữ và chừa `CATEGORY_LABEL_GUTTER` mỗi bên để nhãn không chạm nhãn ô kề (số đo ở `home-layout.ts`).
  */
-function Label({ children, scrolls = false }: { children: string; scrolls?: boolean }) {
+function Label({ children, scrolls = false, card = false }: { children: string; scrolls?: boolean; card?: boolean }) {
   return (
     <Text
       variant="label"
+      className={card ? LABEL_MD : undefined}
       style={{
         textAlign: 'center', width: '100%', height: LABEL_HEIGHT, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere',
         ...(scrolls ? { letterSpacing: CATEGORY_LABEL_TRACKING, boxSizing: 'border-box', padding: `0 ${CATEGORY_LABEL_GUTTER}px` } : null),
@@ -78,7 +90,7 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
       <ScrollRow
         label={homeCopy.categories.rail}
         arrows={scrolls}
-        className={SCROLL_BLEED}
+        className={scrolls ? SCROLL_BLEED : `${SCROLL_BLEED} ${GRID_MD}`}
         style={{ display: 'grid', ...flow, rowGap: 8, paddingBlock: '4px 8px' }}
       >
         {isLoading ? (
@@ -95,11 +107,11 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
             {entries.map((e, i) => {
               const tint = SHORTCUT_TINT_VARS[TINTS[i % TINTS.length]!];
               return (
-                <button key={`${e.kind}:${e.key}`} type="button" className="tubu-press" onClick={() => onSelect(e)} style={cellStyle}>
+                <button key={`${e.kind}:${e.key}`} type="button" className={scrolls ? 'tubu-press' : `tubu-press ${CARD_MD}`} onClick={() => onSelect(e)} style={cellStyle}>
                   <span
                     aria-hidden
                     data-testid="category-tile"
-                    style={{ width: TILE, height: TILE, borderRadius: 'var(--radius-card)', background: tint.bg, color: tint.fg, display: 'grid', placeItems: 'center', overflow: 'hidden' }}
+                    style={{ ...TILE_FIT, borderRadius: 'var(--radius-card)', background: tint.bg, color: tint.fg, display: 'grid', placeItems: 'center', overflow: 'hidden' }}
                   >
                     {e.image ? (
                       // eslint-disable-next-line @next/next/no-img-element
@@ -108,13 +120,13 @@ export function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholde
                       <Icon icon={e.icon} size="lg" tone="current" />
                     )}
                   </span>
-                  <Label scrolls={scrolls}>{e.label}</Label>
+                  <Label scrolls={scrolls} card={!scrolls}>{e.label}</Label>
                 </button>
               );
             })}
             {onSeeAll && (
-              <button type="button" aria-label={homeCopy.categories.allAria} className="tubu-press" onClick={onSeeAll} style={cellStyle}>
-                <span aria-hidden style={{ width: TILE, height: TILE, borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
+              <button type="button" aria-label={homeCopy.categories.allAria} className={scrolls ? 'tubu-press' : `tubu-press ${CARD_MD}`} onClick={onSeeAll} style={cellStyle}>
+                <span aria-hidden style={{ ...TILE_FIT, borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
                   <Icon icon={LayoutGrid} size="lg" tone="current" />
                 </span>
                 <Label scrolls={scrolls}>{homeCopy.categories.all}</Label>

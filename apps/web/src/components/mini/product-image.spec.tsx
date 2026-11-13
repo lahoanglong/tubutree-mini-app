@@ -163,10 +163,25 @@ describe('ảnh hiện dần, viền trung tính, ô thay thế không nhuộm m
     expect(img.style.outline).toBe('');
   });
 
-  it('ô thay thế chỉ có lá xanh trên nền khung ảnh: không tên nhãn, không nền ngả màu nhãn', () => {
+  it('ô thay thế là thẻ thực vật: chữ cái đầu và tên nhãn viết hoa, hoạ tiết lá một tông xanh, không nền ngả màu nhãn', () => {
     const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src={null} brand="Polang" /></div>);
     const fallback = container.querySelector('[data-testid="product-image-fallback"]') as HTMLElement;
-    expect(fallback.textContent).toBe('');
+    expect(fallback.getAttribute('aria-hidden')).toBe('true');
+    expect(fallback.textContent).toBe('PPOLANG');
+    expect(fallback.querySelectorAll('path')).toHaveLength(2);
+    expect(fallback.innerHTML).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(fallback.querySelector('div')).toBeNull();
+  });
+
+  it('nhãn rỗng thì ghi Tubu Tree; nhãn dài bị cắt có dấu …', () => {
+    const empty = mount(<div style={{ position: 'relative' }}><ProductImage src={null} brand="  " /></div>);
+    expect(empty.container.querySelector('[data-testid="product-image-fallback"]')!.textContent).toBe('TTUBU TREE');
+    const long = mount(<div style={{ position: 'relative' }}><ProductImage src={null} brand="Thương hiệu có tên rất dài" /></div>);
+    expect(long.container.querySelector('[data-testid="product-image-fallback"]')!.textContent).toBe('TTHƯƠNG HIỆU C…');
+  });
+
+  it('ảnh nhỏ (ô 56px) vẽ bản gọn: chỉ chữ cái đầu, bỏ dòng tên vì chữ sẽ thành vệt', () => {
+    const { container } = mount(<div style={{ position: 'relative' }}><ProductImage src={null} brand="Tubu Tree" size={56} width={56} /></div>);
+    expect(container.querySelector('[data-testid="product-image-fallback"]')!.textContent).toBe('T');
   });
 });

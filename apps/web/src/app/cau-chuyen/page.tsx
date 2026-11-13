@@ -5,7 +5,7 @@ import { BrandStoryView } from './brand-story-view';
 export const revalidate = 3600;
 
 const TITLE = 'Hành trình nguyên liệu';
-const DESCRIPTION = 'Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Khám phá xuất xứ nguyên liệu trên bản đồ gỗ 3D.';
+const DESCRIPTION = 'Mỗi thương hiệu Tubu Tree đều gắn liền với một tỉnh thành Việt Nam. Khám phá xuất xứ nguyên liệu trên bản đồ vùng nguyên liệu Việt Nam.';
 
 export const metadata: Metadata = {
   title: TITLE,
