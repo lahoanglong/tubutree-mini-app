@@ -56,17 +56,17 @@ for (const sample of SAMPLES) {
       await page.waitForTimeout(400);
       await shot('arc-2');
     }
-    const chips = story.getByTestId('story-step-chip');
-    const n = await chips.count();
+    const cards = story.getByTestId('story-step-card');
+    const n = await cards.count();
     for (let i = 1; i < n; i += 1) {
-      await chips.nth(i).click();
+      await cards.nth(i).click();
       await page.waitForTimeout(500);
       await shot(`step-${i + 1}`);
     }
   });
 }
 
-// Khung toàn màn của Mini: mở, chụp từng bước bằng chip.
+// Khung toàn màn của Mini: mở, chọn từng thẻ chương rồi chụp: một ảnh ở chỗ thẻ vừa chọn, một ảnh ở đầu khung để thấy sân khấu đổi theo.
 for (const sample of SAMPLES) {
   test(`Mini 375px toàn màn: ${sample.key}`, async ({ page, api }) => {
     const slug = `visual-${sample.key}`;
@@ -92,11 +92,14 @@ for (const sample of SAMPLES) {
     await page.waitForTimeout(500);
     mkdirSync(visualFile(), { recursive: true });
     await page.screenshot({ path: path.join(visualFile(), `mini-375-${sample.key}-full-open.png`) });
-    const chips = dialog.getByTestId('story-step-chip');
-    for (let i = 1; i < (await chips.count()); i += 1) {
-      await chips.nth(i).click();
+    const cards = dialog.getByTestId('story-step-card');
+    for (let i = 1; i < (await cards.count()); i += 1) {
+      await cards.nth(i).click();
       await page.waitForTimeout(500);
       await page.screenshot({ path: path.join(visualFile(), `mini-375-${sample.key}-full-step-${i + 1}.png`) });
+      await dialog.getByTestId('story-scroll').evaluate((el) => void (el.scrollTop = 0));
+      await page.waitForTimeout(200);
+      await page.screenshot({ path: path.join(visualFile(), `mini-375-${sample.key}-full-step-${i + 1}-stage.png`) });
     }
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
   });

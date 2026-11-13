@@ -438,8 +438,14 @@ export class ListLinkedMerchantProductsQuery extends PaginationQuery {
   @IsOptional() @IsIn(['PENDING']) consignment?: 'PENDING';
 }
 
+/** Mã lý do tạm dừng gói định kỳ + "system" (mọi gói hệ thống tự dừng). Khớp `SUBSCRIPTION_PAUSE_REASONS` của app-core: admin-lookups.spec.ts đọc dòng này để bắt lệch. */
+export const SUBSCRIPTION_PAUSE_FILTERS = ['customer', 'inactive_product', 'invalid_address', 'partner_goods', 'insufficient_wallet', 'cod_limit', 'system'] as const;
+export type SubscriptionPauseFilter = (typeof SUBSCRIPTION_PAUSE_FILTERS)[number];
+
 export class ListSubscriptionsQuery extends PaginationQuery {
   @IsOptional() @IsIn(['ACTIVE', 'PAUSED', 'CANCELLED']) status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED';
+  /** Chỉ gói PAUSED theo lý do; kết hợp với `status` khác PAUSED thì ra rỗng. */
+  @IsOptional() @IsIn(SUBSCRIPTION_PAUSE_FILTERS) pausedReason?: SubscriptionPauseFilter;
 }
 
 export class IssueInvoiceDto {
@@ -572,7 +578,7 @@ export class AdminController {
   /** Gói mua định kỳ (chỉ xem). */
   @Get('subscriptions')
   subscriptions(@Query() q: ListSubscriptionsQuery) {
-    return this.admin.listSubscriptions(q.page, q.limit, q.status);
+    return this.admin.listSubscriptions(q.page, q.limit, q.status, q.pausedReason);
   }
 
   // Cấp/đổi role theo SĐT — thay script SSH grant-admin.js (có guard @Roles + log ai đổi).
