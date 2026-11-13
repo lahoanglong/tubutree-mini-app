@@ -46,9 +46,9 @@ export const WP_IMAGE_CANDIDATES: readonly WpImageCandidate[] = [
 
   { productSlug: 'ca-phe-muoi-tui-50x16g-9fbabb', tier: 'SAME_LINE', sources: [{ id: 8654, slug: 'ca-phe-muoi-csea' }], note: 'Cùng dòng cà phê muối gói 16g. WordPress bán hộp 10 gói, ở đây bán túi 50 gói: kiểm bao bì.' },
   { productSlug: 'ca-phe-sau-rieng-tui-20x20g-746f71', tier: 'SAME_LINE', sources: [{ id: 8657, slug: 'ca-phe-sau-rieng-durica' }], note: 'Cùng dòng cà phê sầu riêng. Quy cách khác (WordPress hộp 10 gói): kiểm bao bì.' },
-  { productSlug: 'cho-be-duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-64ec0b', tier: 'SAME_LINE', sources: [{ id: 8486, slug: 'duong-hoa-dua-organic-sokfarm' }], note: 'Cùng đường hoa dừa Sokfarm. WordPress là túi 300g, ở đây là hũ thủy tinh 150g: kiểm bao bì.' },
+  { productSlug: 'cho-be-duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-64ec0b', tier: 'SAME_LINE', sources: [{ id: 8486, slug: 'duong-hoa-dua-organic-sokfarm' }], note: 'Cùng đường hoa dừa Sokfarm. WordPress là túi 300g, ở đây là hũ thuỷ tinh 150g: kiểm bao bì.' },
   { productSlug: 'dau-goi-dau-xa-qua-bo-po-lang-300g-bef378', tier: 'SAME_LINE', sources: [{ id: 8098, slug: 'dau-goi-dau-thao-duoc-tu-trai-bo-po-lang' }], note: 'WordPress có dầu gội trái bơ Pơ Lang, chưa thấy dầu xả riêng (còn combo gội + gel tắm #8094, không dùng ở đây).' },
-  { productSlug: 'duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-b67af3', tier: 'SAME_LINE', sources: [{ id: 8486, slug: 'duong-hoa-dua-organic-sokfarm' }], note: 'Như dòng "CHO BÉ" cùng quy cách: WordPress túi 300g, ở đây hũ thủy tinh 150g.' },
+  { productSlug: 'duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-b67af3', tier: 'SAME_LINE', sources: [{ id: 8486, slug: 'duong-hoa-dua-organic-sokfarm' }], note: 'Như dòng "CHO BÉ" cùng quy cách: WordPress túi 300g, ở đây hũ thuỷ tinh 150g.' },
   { productSlug: 'mat-co-dac-sokfarm-hop-12-goi-9139b9', tier: 'SAME_LINE', sources: [{ id: 8454, slug: 'mat-hoa-dua-co-dac-organic-sokfarm' }], note: 'Cùng mật cô đặc. WordPress là chai 250g, ở đây là hộp 12 gói: kiểm bao bì.' },
   { productSlug: 'nuoc-uong-mat-hoa-dua-tuoi-sokfarm-330ml-b68b8c', tier: 'SAME_LINE', sources: [{ id: 8437, slug: 'mat-hoa-dua-tuoi-organic-sokfarm' }], note: 'Cùng nước mật hoa dừa tươi. WordPress 250ml, ở đây hộp 330ml: kiểm bao bì.' },
 
