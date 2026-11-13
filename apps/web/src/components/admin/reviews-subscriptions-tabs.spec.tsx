@@ -228,6 +228,73 @@ describe('SubscriptionsTab', () => {
   });
 });
 
+describe('SubscriptionsTab — lý do tạm dừng (W142A)', () => {
+  const paused = (id: string, pausedReason?: string | null) => ({ ...SUB, id, status: 'PAUSED', ...(pausedReason === undefined ? {} : { pausedReason }) });
+  const rows = (container: HTMLElement) => Array.from(container.querySelectorAll('article'));
+  const badgeOf = (row: Element, label: string) => Array.from(row.querySelectorAll('span')).find((s) => s.textContent === label);
+
+  it.each([
+    ['customer', 'Khách tự dừng'],
+    ['insufficient_wallet', 'Ví không đủ số dư'],
+    ['invalid_address', 'Địa chỉ lỗi'],
+    ['inactive_product', 'Ngừng bán'],
+    ['cod_limit', 'Vượt hạn mức COD'],
+    ['partner_goods', 'Hàng đối tác'],
+  ])('gói PAUSED lý do %s hiện huy hiệu "%s" cạnh trạng thái', async (code, label) => {
+    stub(() => ({ body: page([paused('s2', code)]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    const row = rows(container)[0]!;
+    expect(badgeOf(row, 'Tạm dừng')).toBeTruthy();
+    expect(badgeOf(row, label)).toBeTruthy();
+  });
+
+  it('hệ thống tự dừng thì huy hiệu đỏ kèm chú thích, khách tự dừng thì trung tính', async () => {
+    stub(() => ({ body: page([paused('s2', 'insufficient_wallet'), paused('s3', 'customer')]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    const [system, customer] = rows(container);
+    const systemBadge = badgeOf(system!, 'Ví không đủ số dư')!;
+    expect(systemBadge.className).toContain('bg-danger-bg');
+    expect(systemBadge.getAttribute('title')).toBe('Hệ thống tự tạm dừng gói này');
+    const customerBadge = badgeOf(customer!, 'Khách tự dừng')!;
+    expect(customerBadge.className).toContain('bg-stone-100');
+    expect(customerBadge.hasAttribute('title')).toBe(false);
+  });
+
+  it.each([[null], [undefined], [''], ['mã_lạ_của_api_mới'], ['constructor']])('lý do %p: "Chưa rõ lý do", không lộ mã thô, không đoán', async (reason) => {
+    stub(() => ({ body: page([paused('s2', reason as string | null | undefined)]) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    const row = rows(container)[0]!;
+    const badge = badgeOf(row, 'Chưa rõ lý do')!;
+    expect(badge).toBeTruthy();
+    expect(badge.className).toContain('bg-stone-100');
+    if (reason) expect(row.textContent).not.toContain(reason);
+  });
+
+  it('gói không PAUSED không hiện huy hiệu lý do dù dữ liệu còn sót mã', async () => {
+    stub(() => ({
+      body: page([
+        { ...SUB, id: 's1', status: 'ACTIVE', pausedReason: 'customer' },
+        { ...SUB, id: 's3', status: 'CANCELLED', pausedReason: 'cod_limit' },
+      ]),
+    }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    const text = container.textContent ?? '';
+    for (const label of ['Khách tự dừng', 'Vượt hạn mức COD', 'Chưa rõ lý do']) expect(text).not.toContain(label);
+  });
+
+  it('nhãn viết theo giọng nhân viên, không xưng "Bạn" như chữ gửi khách', async () => {
+    stub(() => ({ body: page(['customer', 'inactive_product', 'invalid_address', 'partner_goods', 'insufficient_wallet', 'cod_limit'].map((c, i) => paused(`s${i}`, c))) }));
+    const { container } = mount(<SubscriptionsTab />);
+    await flush();
+    expect(rows(container)).toHaveLength(6);
+    expect(container.textContent).not.toMatch(/Bạn|Bấm /);
+  });
+});
+
 // D7-27: hai tab không có tiêu đề nên người dùng bàn phím/đọc màn hình không biết mình đang ở tab nào.
 describe('Tiêu đề tab (D7-27)', () => {
   it('tab Đánh giá có h2 "Đánh giá"', async () => {

@@ -647,6 +647,7 @@ export class AdminService {
         select: {
           id: true,
           status: true,
+          pausedReason: true,
           quantity: true,
           intervalWeeks: true,
           nextRunAt: true,

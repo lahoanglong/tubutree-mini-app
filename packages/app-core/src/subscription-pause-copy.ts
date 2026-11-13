@@ -34,3 +34,29 @@ export function subscriptionPauseView(reason: string | null | undefined): Subscr
   if (typeof reason === 'string' && isKnown(reason)) return COPY[reason];
   return { title: SUBSCRIPTION_PAUSED_GENERIC, hint: '' };
 }
+
+export interface SubscriptionPauseAdminView {
+  /** Nhãn ngắn cho huy hiệu trên danh sách Gói định kỳ của Admin (giọng nhân viên, không xưng "Bạn"). */
+  label: string;
+  /** true khi hệ thống tự dừng gói (CSKH nên xem); false khi khách tự dừng hoặc chưa rõ lý do. */
+  bySystem: boolean;
+}
+
+export const SUBSCRIPTION_PAUSE_ADMIN_LABEL_MAX = 24;
+
+export const SUBSCRIPTION_PAUSE_ADMIN_UNKNOWN = 'Chưa rõ lý do';
+
+const ADMIN_COPY: Record<SubscriptionPauseReason, SubscriptionPauseAdminView> = {
+  customer: { label: 'Khách tự dừng', bySystem: false },
+  inactive_product: { label: 'Ngừng bán', bySystem: true },
+  invalid_address: { label: 'Địa chỉ lỗi', bySystem: true },
+  partner_goods: { label: 'Hàng đối tác', bySystem: true },
+  insufficient_wallet: { label: 'Ví không đủ số dư', bySystem: true },
+  cod_limit: { label: 'Vượt hạn mức COD', bySystem: true },
+};
+
+/** Nhãn cho Admin theo cùng mã lý do với `subscriptionPauseView`. `reason` null/undefined/lạ → "Chưa rõ lý do", không đoán. */
+export function subscriptionPauseAdminView(reason: string | null | undefined): SubscriptionPauseAdminView {
+  if (typeof reason === 'string' && isKnown(reason)) return ADMIN_COPY[reason];
+  return { label: SUBSCRIPTION_PAUSE_ADMIN_UNKNOWN, bySystem: false };
+}

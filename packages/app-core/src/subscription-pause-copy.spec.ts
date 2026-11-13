@@ -5,8 +5,11 @@ import { describe, expect, it } from 'vitest';
 import { FORBIDDEN_TERMS } from './shop-copy';
 import {
   SUBSCRIPTION_PAUSED_GENERIC,
+  SUBSCRIPTION_PAUSE_ADMIN_LABEL_MAX,
+  SUBSCRIPTION_PAUSE_ADMIN_UNKNOWN,
   SUBSCRIPTION_PAUSE_MAX,
   SUBSCRIPTION_PAUSE_REASONS,
+  subscriptionPauseAdminView,
   subscriptionPauseView,
 } from './subscription-pause-copy';
 
@@ -44,6 +47,40 @@ describe('subscriptionPauseView', () => {
     expect(subscriptionPauseView('inactive_product').hint).not.toContain('Tiếp tục');
     expect(subscriptionPauseView('partner_goods').hint).not.toContain('Tiếp tục');
   });
+});
+
+describe('subscriptionPauseAdminView', () => {
+  it.each([
+    ['customer', 'Khách tự dừng', false],
+    ['inactive_product', 'Ngừng bán', true],
+    ['invalid_address', 'Địa chỉ lỗi', true],
+    ['partner_goods', 'Hàng đối tác', true],
+    ['insufficient_wallet', 'Ví không đủ số dư', true],
+    ['cod_limit', 'Vượt hạn mức COD', true],
+  ])('%s → "%s", hệ thống tự dừng = %s', (code, label, bySystem) => {
+    expect(subscriptionPauseAdminView(code)).toEqual({ label, bySystem });
+  });
+
+  it('mọi mã lý do đều có nhãn riêng, ngắn, không xưng "Bạn" (đủ mã: thêm mã mới phải thêm nhãn Admin)', () => {
+    const labels = SUBSCRIPTION_PAUSE_REASONS.map((c) => subscriptionPauseAdminView(c).label);
+    expect(new Set(labels).size).toBe(labels.length);
+    for (const label of labels) {
+      expect(label).not.toBe(SUBSCRIPTION_PAUSE_ADMIN_UNKNOWN);
+      expect(label.length).toBeLessThanOrEqual(SUBSCRIPTION_PAUSE_ADMIN_LABEL_MAX);
+      expect(label).not.toMatch(/Bạn|Bấm /);
+    }
+  });
+
+  it('chỉ "customer" là không phải hệ thống dừng', () => {
+    expect(SUBSCRIPTION_PAUSE_REASONS.filter((c) => !subscriptionPauseAdminView(c).bySystem)).toEqual(['customer']);
+  });
+
+  it.each([[null], [undefined], [''], ['mã_lạ_của_api_mới'], ['constructor'], ['toString'], ['__proto__']])(
+    'lý do %p (trống, lạ, tên thuộc tính của Object): "Chưa rõ lý do", không đánh dấu hệ thống, không đoán',
+    (reason) => {
+      expect(subscriptionPauseAdminView(reason as string | null | undefined)).toEqual({ label: SUBSCRIPTION_PAUSE_ADMIN_UNKNOWN, bySystem: false });
+    },
+  );
 });
 
 describe('mã lý do khớp API', () => {
