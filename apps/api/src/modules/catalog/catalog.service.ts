@@ -1,4 +1,4 @@
-import { exposedStock, PRODUCT_SLUGS_LIST_MAX } from '@tubutree/shared-types';
+import { exposedStock, GENERIC_CATALOG_BRANDS, INFERRABLE_CATALOG_BRANDS, inferCatalogBrandFromTitle, isGenericCatalogBrand, PRODUCT_SLUGS_LIST_MAX } from '@tubutree/shared-types';
 import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { Prisma, type Category } from '@prisma/client';
@@ -106,6 +106,9 @@ function standingOf(p: { id: string; basePrice: number; salePrice: number | null
   return cardPriceWithFlash(p, p.variations, offers.get(p.id));
 }
 
+/** Sản phẩm chưa có nhãn thật: `brand` đang lưu và nhãn suy từ tên (null khi tên không nói rõ một nhãn). */
+type GenericBrandEntry = { id: string; brand: string; inferred: string | null };
+
 /** Danh mục kèm số SP đang bán — miniapp chỉ hiện danh mục có hàng (plan 4b Ruling 4). */
 export type CategoryWithCount = Category & { productCount: number };
 /** Nút của cây danh mục: `productCount` của cha đã cộng cả con (mỗi sản phẩm một lần). */
@@ -150,6 +153,8 @@ export class CatalogService {
   // Khi scale → chuyển sang Redis (đã có trong compose), hoặc emit event từ sync job
   // để gọi invalidate trên TẤT CẢ instance.
   private brandsCache: { value: unknown; expiresAt: number } | null = null;
+  // Sản phẩm công khai chưa có nhãn thật ("Tubu Tree"/rỗng) kèm nhãn suy từ tên (xem catalog-brand.ts ở shared-types). Cùng hạn chế per-instance như brandsCache.
+  private genericBrandCache: { value: GenericBrandEntry[]; expiresAt: number } | null = null;
   private categoriesCache: { tree: CategoryNode[]; flat: CategoryWithCount[]; expiresAt: number } | null = null;
   // Id con theo id cha, cho lọc `?category=<cha>` gồm cả con. Cùng hạn chế per-instance như categoriesCache.
   private categoryChildrenCache: { value: Map<string, string[]>; expiresAt: number } | null = null;
@@ -480,7 +485,10 @@ export class CatalogService {
     }
     if (brand) {
       const brandList = brand.split(',').map((b) => b.trim()).filter(Boolean);
-      if (brandList.length === 1) {
+      const byInference = await this.brandInferenceWhere(brandList);
+      if (byInference) {
+        and.push(byInference);
+      } else if (brandList.length === 1) {
         where.brand = brandList[0];
       } else if (brandList.length > 1) {
         where.brand = { in: brandList };
@@ -797,15 +805,63 @@ export class CatalogService {
       where: PUBLIC_PRODUCT_WHERE,
       _count: { _all: true },
     });
+    const counts = await this.countByEffectiveBrand(rows);
     // Slug của nhãn đã công khai (khớp theo tên) để trang chủ dẫn tới /brand/:slug; nhãn chưa có trang thì null.
     const published = await this.prisma.brand.findMany({
-      where: { isPublished: true, name: { in: rows.map((r) => r.brand) } },
+      where: { isPublished: true, name: { in: [...counts.keys()] } },
       select: { name: true, slug: true },
     });
     const slugByName = new Map(published.map((b) => [b.name, b.slug]));
-    const value = rows.map((r) => ({ brand: r.brand, count: r._count._all, slug: slugByName.get(r.brand) ?? null }));
+    const value = [...counts].map(([brand, count]) => ({ brand, count, slug: slugByName.get(brand) ?? null }));
     this.brandsCache = { value, expiresAt: Date.now() + this.TTL_MS };
     return value;
+  }
+
+  /**
+   * Số sản phẩm theo nhãn hiệu lực: cột `brand` khi đã là nhãn thật, còn "Tubu Tree"/rỗng thì nhãn suy từ tên. Đồng bộ Pancake ghi "Tubu Tree"
+   * cho mọi sản phẩm, nên trước khi `brand` được ghi lại thì đây là chỗ duy nhất tách được từng nhãn. Chỉ đọc thêm khi thật sự có hàng chưa gán nhãn.
+   */
+  private async countByEffectiveBrand(rows: { brand: string; _count: { _all: number } }[]): Promise<Map<string, number>> {
+    const counts = new Map<string, number>();
+    const add = (brand: string, n: number) => counts.set(brand, (counts.get(brand) ?? 0) + n);
+    const genericRows = rows.filter((r) => isGenericCatalogBrand(r.brand));
+    for (const r of rows) if (!isGenericCatalogBrand(r.brand)) add(r.brand, r._count._all);
+    if (genericRows.length > 0) {
+      const generic = new Set(genericRows.map((r) => r.brand));
+      for (const e of await this.genericBrandIndex()) if (generic.has(e.brand)) add(e.inferred ?? e.brand, 1);
+    }
+    return counts;
+  }
+
+  private async genericBrandIndex(): Promise<GenericBrandEntry[]> {
+    if (this.genericBrandCache && this.genericBrandCache.expiresAt > Date.now()) return this.genericBrandCache.value;
+    const rows = await this.prisma.product.findMany({
+      where: { ...PUBLIC_PRODUCT_WHERE, brand: { in: [...GENERIC_CATALOG_BRANDS] } },
+      select: { id: true, name: true, slug: true, brand: true },
+      orderBy: { id: 'asc' },
+    });
+    const value = rows.map((r) => ({ id: r.id, brand: r.brand, inferred: inferCatalogBrandFromTitle(r.name, r.slug, r.brand) }));
+    this.genericBrandCache = { value, expiresAt: Date.now() + this.TTL_MS };
+    return value;
+  }
+
+  /**
+   * Điều kiện lọc `?brand=` theo nhãn hiệu lực, hoặc null khi cột `brand` đủ dùng (không nhãn nào được hỏi là nhãn suy được/mặc định, hoặc
+   * không sản phẩm nào đang được suy nhãn). Hỏi nhãn suy được ("Fuwa3e") thì lấy thêm sản phẩm "Tubu Tree" có tên nhãn đó; hỏi "Tubu Tree" thì
+   * loại các sản phẩm đã suy ra nhãn khác, để bộ lọc khớp với số đếm của `/brands`.
+   */
+  private async brandInferenceWhere(brandList: string[]): Promise<Prisma.ProductWhereInput | null> {
+    const asked = brandList.filter((b) => INFERRABLE_CATALOG_BRANDS.includes(b) || isGenericCatalogBrand(b));
+    if (asked.length === 0) return null;
+    const inferred = (await this.genericBrandIndex()).filter((e): e is GenericBrandEntry & { inferred: string } => e.inferred !== null);
+    if (inferred.length === 0) return null;
+    const idsOf = (b: string) => inferred.filter((e) => e.inferred === b).map((e) => e.id);
+    return {
+      OR: brandList.map((b): Prisma.ProductWhereInput => {
+        if (isGenericCatalogBrand(b)) return { brand: b, id: { notIn: inferred.map((e) => e.id) } };
+        return INFERRABLE_CATALOG_BRANDS.includes(b) ? { OR: [{ brand: b }, { id: { in: idsOf(b) } }] } : { brand: b };
+      }),
+    };
   }
 
   /** `[id, ...mọi con cháu]` của một danh mục (xem `expandCategoryScope`), cây đọc từ cache 60 giây. */
