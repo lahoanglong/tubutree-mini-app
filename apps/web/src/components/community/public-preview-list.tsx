@@ -10,7 +10,7 @@ import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /**
  * Bài xem trước cho khách chưa đăng nhập: chỉ đọc, không có nút thích/bình luận/mở bài (các thao tác đó cần đăng nhập),
- * nên thẻ không tương tác; lối duy nhất đi tiếp là nút đăng nhập ở đầu danh sách. Là server component để bài có sẵn trong HTML.
+ * nên thẻ không tương tác; lối duy nhất đi tiếp là nút đăng nhập ở đầu danh sách. Là client component chỉ vì `onError` của ảnh; vẫn dựng sẵn ở máy chủ nên bài có trong HTML. Trang cha truyền mỗi `posts` (JSON thuần), spec `use-client-boundary` giữ điều đó.
  */
 export function PublicPreviewList({ posts }: { posts: FeedPreviewItem[] }) {
   return (
