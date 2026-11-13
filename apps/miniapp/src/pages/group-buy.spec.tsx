@@ -368,7 +368,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     const { unmount } = renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Mời bạn bè' }));
     const plain = (mocks.shareWithFallback.mock.calls[0] as [Record<string, string>, string])[0].description!;
-    expect(plain.startsWith('Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Còn thiếu ')).toBe(true);
+    expect(plain.startsWith('Tubu Tree tặng khách mới mã giảm giá cho đơn đầu. Còn thiếu ')).toBe(true);
     unmount();
     mocks.shareWithFallback.mockClear();
     mocks.getPublicConfig.mockResolvedValue({ newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 } } });
@@ -380,7 +380,7 @@ describe('GroupBuyPage — nhóm của mình và mời bạn (ENGAGE-9)', () => 
     });
     fireEvent.click(screen.getByRole('button', { name: 'Mời bạn bè' }));
     const withOffer = (mocks.shareWithFallback.mock.calls[0] as [Record<string, string>, string])[0].description!;
-    expect(withOffer.startsWith('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree. Còn thiếu ')).toBe(true);
+    expect(withOffer.startsWith('Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k. Còn thiếu ')).toBe(true);
     expect(withOffer.length).toBeLessThanOrEqual(400);
   });
 

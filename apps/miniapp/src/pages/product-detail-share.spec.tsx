@@ -75,7 +75,7 @@ describe('ProductDetailPage nút Chia sẻ', () => {
     fireEvent.click(await screen.findByRole('button', { name: viText.product.share }));
     expect(mocks.shareLink).not.toHaveBeenCalled();
     expect(mocks.shareWithFallback).toHaveBeenCalledWith(
-      { title: 'Sản phẩm a', description: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Mô tả ngắn', thumbnail: 'https://img/thumb.jpg', path: '/product/a' },
+      { title: 'Sản phẩm a', description: 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu. Mô tả ngắn', thumbnail: 'https://img/thumb.jpg', path: '/product/a' },
       miniAppLink('/product/a'),
     );
   });
@@ -93,7 +93,7 @@ describe('ProductDetailPage nút Chia sẻ', () => {
       </QueryClientProvider>,
     );
     fireEvent.click(await screen.findByRole('button', { name: viText.product.share }));
-    expect(mocks.shareWithFallback.mock.calls[0]![0].description).toBe('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree. Mô tả ngắn');
+    expect(mocks.shareWithFallback.mock.calls[0]![0].description).toBe('Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k. Mô tả ngắn');
   });
 
   it('đã có tài khoản → link chia sẻ (Zalo lẫn dán tay) mang mã giới thiệu của người chia sẻ', async () => {

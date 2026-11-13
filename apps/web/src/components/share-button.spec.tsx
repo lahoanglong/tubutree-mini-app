@@ -37,7 +37,7 @@ describe('ShareButton', () => {
     const { container } = mount();
     click(byText(container, 'button', 'Chia sẻ'));
     await flush();
-    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree', url: `${window.location.origin}/san-pham/dau-goi` });
+    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu', url: `${window.location.origin}/san-pham/dau-goi` });
   });
 
   it('có mã chào mừng thật và mô tả ngắn: lời kèm mở bằng ưu đãi rồi mô tả', async () => {
@@ -48,7 +48,7 @@ describe('ShareButton', () => {
     mounted.push(r);
     click(byText(r.container, 'button', 'Chia sẻ'));
     await flush();
-    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree. Sạch dịu nhẹ', url: `${window.location.origin}/san-pham/dau-goi` });
+    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k. Sạch dịu nhẹ', url: `${window.location.origin}/san-pham/dau-goi` });
   });
 
   it('khách đã đăng nhập: link kèm mã giới thiệu của họ', async () => {
@@ -58,7 +58,7 @@ describe('ShareButton', () => {
     const { container } = mount();
     click(byText(container, 'button', 'Chia sẻ'));
     await flush();
-    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree', url: `${window.location.origin}/san-pham/dau-goi?ref=AN%201` });
+    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu', url: `${window.location.origin}/san-pham/dau-goi?ref=AN%201` });
   });
 
   it('không có Web Share API: sao chép link và báo "Đã sao chép"', async () => {

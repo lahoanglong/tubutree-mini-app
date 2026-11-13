@@ -180,7 +180,7 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     await flush(3);
     expect(share).toHaveBeenCalledWith({
       title: 'Tubu Tree: trồng cây, nhận quà',
-      text: 'Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree',
+      text: 'Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k',
       url: `${window.location.origin}/?ref=AN1`,
     });
     mounted.forEach((m) => m.unmount());
@@ -190,7 +190,7 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     const c2 = await mount();
     click(byText(c2, 'button', 'Chia sẻ qua Zalo'));
     await flush(3);
-    expect(share.mock.calls[0]![0].text).toBe('Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree');
+    expect(share.mock.calls[0]![0].text).toBe('Tubu Tree tặng khách mới mã giảm giá cho đơn đầu');
   });
 
   it('đã có bạn thành công: nêu số bạn, số điểm đã nhận và mốc kế tiếp; chưa có ai thì không hiện dòng thống kê', async () => {

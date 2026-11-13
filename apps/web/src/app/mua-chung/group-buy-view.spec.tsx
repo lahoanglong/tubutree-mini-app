@@ -305,7 +305,7 @@ describe('/mua-chung — nhóm của mình và mời bạn', () => {
     expect(mocks.share).toHaveBeenCalledTimes(1);
     expect(mocks.share).toHaveBeenCalledWith({
       title: 'Mua chung Sản phẩm mine giảm 20%',
-      text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Còn thiếu 3 người nữa là đủ nhóm, vào tham gia cùng mình nhé!',
+      text: 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu. Còn thiếu 3 người nữa là đủ nhóm, vào tham gia cùng mình nhé!',
       path: '/mua-chung/mine',
     });
   });
@@ -316,7 +316,7 @@ describe('/mua-chung — nhóm của mình và mời bạn', () => {
     const c = await mount();
     click(btn(c, 'Mời bạn bè')!);
     await flush(2);
-    expect(mocks.share.mock.calls[0]![0].text).toBe('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree. Còn thiếu 3 người nữa là đủ nhóm, vào tham gia cùng mình nhé!');
+    expect(mocks.share.mock.calls[0]![0].text).toBe('Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k. Còn thiếu 3 người nữa là đủ nhóm, vào tham gia cùng mình nhé!');
   });
 
   it('người chia sẻ có mã giới thiệu: đường dẫn mang ?ref=', async () => {

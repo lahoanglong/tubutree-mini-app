@@ -242,7 +242,7 @@ describe('/san-pham/[slug] — chia sẻ (D5-04)', () => {
     const btn = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Chia sẻ')!;
     click(btn);
     await flush();
-    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Sạch dịu nhẹ', url: `${window.location.origin}/san-pham/dau-goi-bo-ket` });
+    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu. Sạch dịu nhẹ', url: `${window.location.origin}/san-pham/dau-goi-bo-ket` });
     Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
   });
 });

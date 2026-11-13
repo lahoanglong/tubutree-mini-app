@@ -424,7 +424,7 @@ describe('Vườn Xanh người mới — hộp chúc mừng', () => {
     // Cùng các màn khác: link mời mang mã giới thiệu của người chia sẻ, và thẻ mở bằng ưu đãi khách mới (không có số thì câu không số).
     expect(bridge.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/game?ref=GAME1', title: expect.any(String) }));
     const sent = bridge.shareLink.mock.calls.at(-1)![0] as { description: string };
-    expect(sent.description.startsWith('Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. ')).toBe(true);
+    expect(sent.description.startsWith('Tubu Tree tặng khách mới mã giảm giá cho đơn đầu. ')).toBe(true);
     expect(screen.queryByRole('button', { name: /Chia sẻ lên Cộng đồng/ })).not.toBeInTheDocument();
   });
 

@@ -530,9 +530,9 @@ export const SHOP_COPY: Record<string, string> = {
   'reel.fbShipTitle': 'Giao đến tận nhà',
   'reel.fbShipBody': 'Đặt ngay, đơn của bạn được giao đến tận nhà.',
   // Lời mời kèm thẻ chia sẻ Zalo và khối "Mời bạn sống xanh" (W146B). Số tiền lấy từ cấu hình công khai (`newCustomer.welcomeVoucher`), thiếu thì nói chung, không hứa con số.
-  'share.offer': 'Tặng mã {amount} cho đơn đầu từ {min} khi mở trên Tubu Tree',
-  'share.offerNoMin': 'Tặng mã {amount} cho đơn đầu khi mở trên Tubu Tree',
-  'share.offerPlain': 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree',
+  'share.offer': 'Tubu Tree tặng khách mới mã {amount} cho đơn đầu từ {min}',
+  'share.offerNoMin': 'Tubu Tree tặng khách mới mã {amount} cho đơn đầu',
+  'share.offerPlain': 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu',
   'invite.title': 'Mời bạn sống xanh',
   'invite.friendGift': 'Bạn mới nhận mã {amount} cho đơn đầu từ {min}.',
   'invite.friendGiftNoMin': 'Bạn mới nhận mã {amount} cho đơn đầu.',

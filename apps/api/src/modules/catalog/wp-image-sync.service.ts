@@ -171,20 +171,25 @@ export class WpImageSyncService {
     return { productId, state: 'APPLIED', appliedCount: outcome.imageCount };
   }
 
+  /** Cùng hàng đợi với `approve`: kiểm rồi ghi quyết định không được chen vào giữa lúc một lượt duyệt đang ghi ảnh, nếu không SKIPPED đè lên APPLIED. */
   async skip(adminId: string, productId: string): Promise<WpImageActionResponse> {
-    const { candidate, hasImages } = await this.loadCandidate(productId);
-    if (hasImages) throw new ConflictException(MSG.hasImages);
-    await this.assertNotApplied(candidate);
-    await recordDecision(this.prisma, candidate.productSlug, { decision: 'SKIPPED', by: adminId, at: new Date().toISOString() });
-    return { productId, state: 'SKIPPED' };
+    return this.serialize<WpImageActionResponse>(async () => {
+      const { candidate, hasImages } = await this.loadCandidate(productId);
+      if (hasImages) throw new ConflictException(MSG.hasImages);
+      await this.assertNotApplied(candidate);
+      await recordDecision(this.prisma, candidate.productSlug, { decision: 'SKIPPED', by: adminId, at: new Date().toISOString() });
+      return { productId, state: 'SKIPPED' };
+    });
   }
 
-  /** Xem lại ứng viên đã bỏ qua. Ảnh đã nạp không gỡ ở đây (đó là sửa sản phẩm). */
+  /** Xem lại ứng viên đã bỏ qua. Ảnh đã nạp không gỡ ở đây (đó là sửa sản phẩm). Cùng hàng đợi với `approve` như `skip`. */
   async restore(productId: string): Promise<WpImageActionResponse> {
-    const { candidate } = await this.loadCandidate(productId);
-    await this.assertNotApplied(candidate);
-    await clearDecision(this.prisma, candidate.productSlug);
-    return { productId, state: 'PENDING' };
+    return this.serialize<WpImageActionResponse>(async () => {
+      const { candidate } = await this.loadCandidate(productId);
+      await this.assertNotApplied(candidate);
+      await clearDecision(this.prisma, candidate.productSlug);
+      return { productId, state: 'PENDING' };
+    });
   }
 
   private candidateOf(slug: string): WpImageCandidate {

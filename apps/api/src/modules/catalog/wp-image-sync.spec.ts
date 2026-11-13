@@ -495,6 +495,49 @@ describe('WpImageSyncService', () => {
     expect(byId('p1').images).toHaveLength(2);
   });
 
+  it.each([
+    ['skip', (svc: WpImageSyncService) => svc.skip('b', 'p1')],
+    ['restore', (svc: WpImageSyncService) => svc.restore('p1')],
+  ])('%s chen giữa lúc đang duyệt không đè quyết định APPLIED: xếp sau lượt duyệt rồi báo đã có ảnh', async (_name, act) => {
+    const pngA = await png('#123456');
+    const slow = async () => {
+      await new Promise((r) => setTimeout(r, 25));
+      return ok(pngA);
+    };
+    const routes: Record<string, Route> = { [api(source.slug)]: wpJson(source.id, source.slug, [upload('a1')]), [upload('a1')]: slow };
+    const { svc, store, calls, decisions, byId } = await setup([{ id: 'p1', slug: EXACT_SLUG }], routes);
+
+    // Giữ phần GHI của skip/restore cho tới khi lượt duyệt xong: nếu chúng không xếp hàng thì kiểm xong rồi mới ghi, đè lên APPLIED.
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const realUpsert = store.opsHealthState.upsert.getMockImplementation()!;
+    store.opsHealthState.upsert.mockImplementation(async (args) => {
+      if ((args.create.detail as { decision: string }).decision === 'SKIPPED') await gate;
+      return realUpsert(args);
+    });
+    const realDelete = store.opsHealthState.deleteMany.getMockImplementation()!;
+    store.opsHealthState.deleteMany.mockImplementation(async (args) => {
+      await gate;
+      return realDelete(args);
+    });
+
+    const approving = svc.approve('a', 'p1');
+    for (let i = 0; i < 200 && !calls.includes(upload('a1')); i += 1) await new Promise((r) => setTimeout(r, 1));
+    expect(calls).toContain(upload('a1'));
+    const racing = act(svc).then(
+      () => null,
+      (e: unknown) => e,
+    );
+    void approving.finally(release);
+
+    await approving;
+    expect(await racing).toBeInstanceOf(ConflictException);
+    expect(byId('p1').images).toHaveLength(1);
+    expect(decisions.get(`catalog.wp_image:${EXACT_SLUG}`)?.detail).toMatchObject({ decision: 'APPLIED', by: 'a' });
+  });
+
   it('hai lượt duyệt đồng thời được xếp hàng: không bao giờ tải ảnh chồng lên nhau', async () => {
     const other = candidateForSlug(OTHER_SLUG)!.sources[0]!;
     const pngA = await png('#123456');

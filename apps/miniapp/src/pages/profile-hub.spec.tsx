@@ -491,7 +491,7 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     const arg = mocks.shareLink.mock.calls[0]![0] as { title: string; description: string; path: string };
-    expect(arg.description).toBe('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree');
+    expect(arg.description).toBe('Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k');
     expect(arg.path).toBe('/?ref=LAN1');
     expect(`${arg.title} ${arg.description}`).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])|TubuXu/iu);
   });
@@ -501,7 +501,7 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
-    expect((mocks.shareLink.mock.calls[0]![0] as { description: string }).description).toBe('Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree');
+    expect((mocks.shareLink.mock.calls[0]![0] as { description: string }).description).toBe('Tubu Tree tặng khách mới mã giảm giá cho đơn đầu');
   });
 
   it('CTV (AFFILIATE) không thấy thống kê Điểm Xanh giới thiệu', async () => {

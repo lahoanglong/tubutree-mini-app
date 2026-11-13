@@ -28,23 +28,30 @@ describe('welcomeOfferOf', () => {
 
 describe('shareOfferLine', () => {
   it('với số trên PROD đúng chữ chủ chốt: 30.000đ, đơn đầu từ 199k', () => {
-    expect(shareOfferLine(PROD)).toBe('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree');
+    expect(shareOfferLine(PROD)).toBe('Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k');
   });
 
   it('số do Admin đặt chảy theo cấu hình, không viết cứng', () => {
-    expect(shareOfferLine({ amount: 50_000, minOrder: 300_000 })).toBe('Tặng mã 50.000đ cho đơn đầu từ 300k khi mở trên Tubu Tree');
+    expect(shareOfferLine({ amount: 50_000, minOrder: 300_000 })).toBe('Tubu Tree tặng khách mới mã 50.000đ cho đơn đầu từ 300k');
     expect(shareOfferLine({ amount: 20_000, minOrder: 150_500 })).toContain('150.500đ');
   });
 
   it('không yêu cầu đơn tối thiểu thì bỏ vế "từ …"', () => {
-    expect(shareOfferLine({ amount: 30_000, minOrder: 0 })).toBe('Tặng mã 30.000đ cho đơn đầu khi mở trên Tubu Tree');
+    expect(shareOfferLine({ amount: 30_000, minOrder: 0 })).toBe('Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu');
   });
 
   it('chưa có số thì câu không số', () => {
     const line = shareOfferLine(null);
-    expect(line).toBe('Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree');
+    expect(line).toBe('Tubu Tree tặng khách mới mã giảm giá cho đơn đầu');
     expect(line).not.toMatch(/\d/);
     expect(shareOfferLine(undefined)).toBe(line);
+  });
+
+  it('mọi biến thể nói rõ đối tượng và phạm vi: chỉ khách mới, chỉ đơn đầu (khách cũ nhận thẻ không tưởng mình cũng được)', () => {
+    for (const text of [shareOfferLine(PROD), shareOfferLine(null), shareOfferLine({ amount: 30_000, minOrder: 0 })]) {
+      expect(text).toContain('khách mới');
+      expect(text).toContain('đơn đầu');
+    }
   });
 
   it('không dính thuật ngữ cấm của gian hàng', () => {
@@ -56,7 +63,7 @@ describe('shareOfferLine', () => {
 
 describe('shareDescription', () => {
   it('dòng ưu đãi đứng đầu, rồi mô tả sản phẩm', () => {
-    expect(shareDescription('Gel rửa tay bồ hòn', PROD)).toBe('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree. Gel rửa tay bồ hòn');
+    expect(shareDescription('Gel rửa tay bồ hòn', PROD)).toBe('Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k. Gel rửa tay bồ hòn');
   });
 
   it('mô tả rỗng, null hay toàn khoảng trắng thì chỉ có dòng ưu đãi', () => {
@@ -85,7 +92,7 @@ describe('shareDescription', () => {
   });
 
   it('gộp xuống dòng và khoảng trắng thừa của mô tả', () => {
-    expect(shareDescription('Dòng một\n\n  dòng   hai', null)).toBe('Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Dòng một dòng hai');
+    expect(shareDescription('Dòng một\n\n  dòng   hai', null)).toBe('Tubu Tree tặng khách mới mã giảm giá cho đơn đầu. Dòng một dòng hai');
   });
 
   it('giới hạn tuỳ chọn nhỏ hơn dòng ưu đãi thì cắt dòng ưu đãi, không ném lỗi', () => {

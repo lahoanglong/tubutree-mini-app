@@ -301,7 +301,7 @@ describe('ShareSheet — nội dung gửi đi', () => {
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     expect(mocks.shareLink.mock.calls[0]![0]).toEqual({
       title: 'Gian hàng An Lành',
-      description: `Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Mình tuyển vài món sống xanh đang dùng, ghé xem nha 🌿 ${STORE_LINK}`,
+      description: `Tubu Tree tặng khách mới mã giảm giá cho đơn đầu. Mình tuyển vài món sống xanh đang dùng, ghé xem nha 🌿 ${STORE_LINK}`,
       thumbnail: 'https://cdn/t.jpg',
       path: '/s/an-lanh?ref=CTV123',
     });
@@ -315,7 +315,7 @@ describe('ShareSheet — nội dung gửi đi', () => {
     fireEvent.click(shareBtn());
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     const description = mocks.shareLink.mock.calls[0]![0].description as string;
-    expect(description.startsWith('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree. ')).toBe(true);
+    expect(description.startsWith('Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k. ')).toBe(true);
     expect(description.length).toBeLessThanOrEqual(400);
   });
 

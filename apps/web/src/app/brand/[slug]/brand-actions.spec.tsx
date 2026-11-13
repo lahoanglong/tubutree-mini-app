@@ -178,7 +178,7 @@ describe('/brand/[slug] — chia sẻ', () => {
     click(btn(c, 'Chia sẻ')!);
     click(btn(document.body, 'Chia sẻ qua thiết bị')!);
     await flush(2);
-    expect(mocks.share).toHaveBeenCalledWith({ title: 'Sachi trên Tubu Tree', text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree', path: '/brand/sachi' });
+    expect(mocks.share).toHaveBeenCalledWith({ title: 'Sachi trên Tubu Tree', text: 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu', path: '/brand/sachi' });
   });
 
   it('có mã chào mừng thật: lời chia sẻ nhãn mở bằng đúng ưu đãi đó', async () => {
@@ -187,7 +187,7 @@ describe('/brand/[slug] — chia sẻ', () => {
     click(btn(c, 'Chia sẻ')!);
     click(btn(document.body, 'Chia sẻ qua thiết bị')!);
     await flush(2);
-    expect(mocks.share).toHaveBeenCalledWith({ title: 'Sachi trên Tubu Tree', text: 'Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree', path: '/brand/sachi' });
+    expect(mocks.share).toHaveBeenCalledWith({ title: 'Sachi trên Tubu Tree', text: 'Tubu Tree tặng khách mới mã 30.000đ cho đơn đầu từ 199k', path: '/brand/sachi' });
   });
 
   it('Sao chép link chép link tuyệt đối và báo đã sao chép; chép lỗi thì nói chép tay', async () => {
@@ -249,7 +249,7 @@ describe('/brand/[slug] — dải chia sẻ kiếm tiền', () => {
     await flush(2);
     expect(mocks.share).toHaveBeenCalledWith({
       title: 'Sachi trên Tubu Tree',
-      text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Mình tin dùng Sachi \u{1F33F} Ghé xem & ưu đãi nha',
+      text: 'Tubu Tree tặng khách mới mã giảm giá cho đơn đầu. Mình tin dùng Sachi \u{1F33F} Ghé xem & ưu đãi nha',
       path: '/brand/sachi?ref=AFF1',
     });
   });
