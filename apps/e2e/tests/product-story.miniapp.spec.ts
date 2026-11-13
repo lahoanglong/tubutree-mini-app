@@ -4,7 +4,9 @@ import { CATALOG, mockDiscovery, productDetail } from './support/discovery-mocks
 import { blockingViolations, runAxe, staleBaseline } from './support/axe';
 
 /**
- * Mini App 375px: dải câu chuyện sản phẩm ở trang chi tiết (ProductStoryShowcase) và khung toàn màn. API mock toàn bộ.
+ * Mini App 375px: dải câu chuyện sản phẩm ở trang chi tiết (ProductStoryShowcase, thẻ chia đôi: sân khấu + các chương). API mock toàn bộ.
+ * Mọi chương hiện cùng lúc dạng thẻ `story-step-card`; trang chi tiết không còn nút "Xem câu chuyện sản phẩm" hay khung toàn màn (như web), nút mua nằm ở thanh dưới.
+ * Khung toàn màn chỉ còn cho Reel ở Trang chủ (w42a-home-story-reel.miniapp.spec.ts).
  * Dùng slug có kịch bản mẫu (dầu gội Pơ Lang) và hai phân loại nên vòng cung sinh từ phân loại thật.
  */
 test.use({ viewport: { width: 375, height: 812 } });
@@ -36,7 +38,7 @@ function mockStoryProduct(api: MockApi, stock = 5): void {
 const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
 test.describe('câu chuyện sản phẩm — Mini App 375px', () => {
-  test('dải hiện ở trang chi tiết: vòng cung chọn phân loại, chip đổi bước, không tràn ngang', async ({ page, api }) => {
+  test('dải hiện ở trang chi tiết: vòng cung chọn phân loại, mọi chương hiện sẵn, bấm thẻ đổi bước, không tràn ngang', async ({ page, api }) => {
     mockStoryProduct(api);
     await page.goto(`/product/${SLUG}`);
     const story = page.getByTestId('product-story');
@@ -48,51 +50,42 @@ test.describe('câu chuyện sản phẩm — Mini App 375px', () => {
     await arc.nth(1).click();
     await expect(arc.nth(1)).toHaveAttribute('aria-checked', 'true');
 
-    const chips = story.getByTestId('story-step-chip');
-    await expect(chips).toHaveCount(5);
-    await chips.nth(2).click();
-    await expect(chips.nth(2)).toHaveAttribute('aria-current', 'step');
-    await expect(story.getByTestId('story-step-panel')).toContainText('Bồ kết');
+    const cards = story.getByTestId('story-step-card');
+    await expect(cards).toHaveCount(5);
+    for (let i = 0; i < 5; i++) await expect(cards.nth(i)).toBeVisible();
+    await cards.nth(2).click();
+    await expect(cards.nth(2)).toHaveAttribute('aria-current', 'step');
+    await expect(cards.nth(2)).toContainText('Bồ kết');
 
     expect(await noHorizontalScroll(page)).toBe(true);
   });
 
-  test('nút trên ảnh mở khung toàn màn, có hai nút mua, Esc đóng', async ({ page, api }) => {
+  test('không có nút "Xem câu chuyện sản phẩm" và không dựng khung toàn màn; dải không có nút mua riêng', async ({ page, api }) => {
     mockStoryProduct(api);
     await page.goto(`/product/${SLUG}`);
-    await expect(page.getByTestId('product-story')).toBeVisible({ timeout: 20_000 });
-    await page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByTestId('story-add-to-cart')).toBeEnabled();
-    await expect(dialog.getByTestId('story-buy-now')).toBeEnabled();
-    expect(await noHorizontalScroll(page)).toBe(true);
-    await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
+    const story = page.getByTestId('product-story');
+    await expect(story).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' })).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toHaveCount(0);
+    for (const id of ['story-add-to-cart', 'story-buy-now', 'story-close']) await expect(story.getByTestId(id)).toHaveCount(0);
   });
 
-  test('hết hàng: hai nút của khung toàn màn khoá', async ({ page, api }) => {
+  test('hết hàng: dải vẫn hiện đủ chương, không có nút mua nào trong dải', async ({ page, api }) => {
     mockStoryProduct(api, 0);
     await page.goto(`/product/${SLUG}`);
-    await expect(page.getByTestId('product-story')).toBeVisible({ timeout: 20_000 });
-    await page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }).click();
-    const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-    await expect(dialog.getByTestId('story-add-to-cart')).toBeDisabled();
-    await expect(dialog.getByTestId('story-buy-now')).toBeDisabled();
+    const story = page.getByTestId('product-story');
+    await expect(story).toBeVisible({ timeout: 20_000 });
+    await expect(story.getByTestId('story-step-card')).toHaveCount(5);
+    await expect(story.getByTestId('story-add-to-cart')).toHaveCount(0);
   });
 
-  test('axe serious/critical: dải trong trang và khung toàn màn', async ({ page, api }) => {
+  test('axe serious/critical: dải trong trang', async ({ page, api }) => {
     mockStoryProduct(api);
     await page.goto(`/product/${SLUG}`);
     await expect(page.getByTestId('product-story')).toBeVisible({ timeout: 20_000 });
     await page.evaluate(() => document.fonts.ready);
-    let found = await runAxe(page);
+    const found = await runAxe(page);
     expect(blockingViolations('miniapp', 'Câu chuyện sản phẩm', found)).toEqual([]);
     expect(staleBaseline('miniapp', 'Câu chuyện sản phẩm', found)).toEqual([]);
-
-    await page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }).click();
-    await expect(page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toBeVisible();
-    found = await runAxe(page);
-    expect(blockingViolations('miniapp', 'Câu chuyện sản phẩm (toàn màn)', found)).toEqual([]);
   });
 });

@@ -13,6 +13,7 @@ export default function MyPayrollPage() {
       title="Lương của tôi"
       loginMessage="Đăng nhập để xem lương của bạn."
       returnTo="/nhan-vien/bang-luong"
+      wide
     >
       <PayrollHub />
     </StaffGate>

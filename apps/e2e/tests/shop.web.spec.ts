@@ -670,15 +670,48 @@ test.describe('Web: nhãn hàng', () => {
   });
 });
 
+// Điện thoại (< md): chạm thẻ nhãn mở tấm câu chuyện. Từ md: Master–Detail, bảng chi tiết nằm cạnh bản đồ nên không có tấm.
+// File này chạy ở cả project Desktop Chrome và Pixel 7, nên mỗi ca tự đặt khổ màn.
 test.describe('Web khách: Hành trình nguyên liệu /cau-chuyen', () => {
-  test('mở ô nhãn: sheet có câu chuyện và nút dẫn tới /san-pham?brand= theo tên trong catalog', async ({ page, api }) => {
+  const LE_PLATEAU = 'brand-card-leplateau';
+  const LE_PLATEAU_HREF = '/san-pham?brand=Le%20Plateau%20Coffee';
+
+  test('điện thoại 375px: chạm thẻ nhãn mở tấm có câu chuyện và nút dẫn tới /san-pham?brand= theo tên trong catalog', async ({ page, api }) => {
     api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/cau-chuyen');
     await expect(page.getByRole('heading', { level: 1, name: 'Hành trình nguyên liệu' })).toBeVisible();
-    await page.getByRole('button', { name: /Le Plateau.*Lâm Đồng \(Cầu Đất\)/ }).click();
+    await expect(page.getByTestId('brand-detail')).toBeHidden();
+    await page.getByTestId(LE_PLATEAU).click();
     const dialog = page.getByRole('dialog', { name: 'Le Plateau' });
     await expect(dialog.getByText(/Arabica Cầu Đất/)).toBeVisible();
-    await expect(dialog.getByRole('link', { name: 'Khám phá sản phẩm Le Plateau' })).toHaveAttribute('href', '/san-pham?brand=Le%20Plateau%20Coffee');
+    await expect(dialog.getByRole('link', { name: 'Khám phá sản phẩm Le Plateau' })).toHaveAttribute('href', LE_PLATEAU_HREF);
+  });
+
+  test('máy tính 1280px: mặc định hiện nhãn đầu; chọn thẻ đổi bảng chi tiết cạnh bản đồ, không mở tấm, nút dẫn tới /san-pham?brand=', async ({ page, api }) => {
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/cau-chuyen');
+    const detail = page.getByTestId('brand-detail');
+    await expect(detail).toBeVisible();
+    await expect(page.getByTestId('brand-card-leplateau')).toHaveAttribute('data-active', 'false');
+
+    await page.getByTestId(LE_PLATEAU).click();
+    await expect(page.getByTestId(LE_PLATEAU)).toHaveAttribute('data-active', 'true');
+    await expect(detail.getByRole('heading', { name: 'Le Plateau' })).toBeVisible();
+    await expect(detail.getByText(/Arabica Cầu Đất/)).toBeVisible();
+    await expect(page.getByTestId('brand-detail-cta')).toHaveAttribute('href', LE_PLATEAU_HREF);
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    expect(await noHorizontalScroll(page)).toBeLessThanOrEqual(0);
+  });
+
+  test('máy tính: ?brand= chọn sẵn nhãn trong bảng chi tiết', async ({ page, api }) => {
+    api.post('/auth/refresh', reply(401, { message: 'Chưa đăng nhập' }));
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto('/cau-chuyen?brand=leplateau');
+    await expect(page.getByTestId(LE_PLATEAU)).toHaveAttribute('data-active', 'true');
+    await expect(page.getByTestId('brand-detail').getByRole('heading', { name: 'Le Plateau' })).toBeVisible();
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 
   test('điện thoại 320px: không cuộn ngang', async ({ page, api }) => {

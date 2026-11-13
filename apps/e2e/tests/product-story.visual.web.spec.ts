@@ -8,7 +8,8 @@ import { SAMPLES, hideFixed, routeStoryImages, visualEnabled, visualFile } from 
 /**
  * Ảnh chụp web 375px và 1280px của dải câu chuyện với ảnh sản phẩm thật (chỉ chạy khi có STORY_SHOT_DIR và STORY_IMG_DIR, xem support/story-visual.ts).
  * Trang chi tiết dựng ở phía máy chủ từ API thật nên dữ liệu mẫu ghi thẳng vào DB tạm của web-gate.sh (không bao giờ vào DB khác) trước lượt vào trang đầu tiên.
- * Kiểm tự động trong ca: không tràn ngang, ảnh sân khấu đã tải. Còn lại xem ảnh bằng mắt.
+ * Kiểm tự động trong ca: không tràn ngang, ảnh sân khấu đã tải, mỗi thẻ chương bấm xong phải sáng. Còn lại xem ảnh bằng mắt.
+ * Khung toàn màn nay chỉ còn ở Reel Trang chủ, do w42a-home-story-reel.*.spec.ts phủ, nên không chụp ở đây.
  */
 test.skip(!visualEnabled(), 'cần STORY_SHOT_DIR và STORY_IMG_DIR');
 
@@ -87,24 +88,8 @@ for (const sample of SAMPLES) {
       await page.screenshot({ path: base('before') });
       await setSections('');
       await story.scrollIntoViewIfNeeded();
-
-      const sentinels = story.locator('.tubu-story-sentinel');
-      const total = (await sentinels.first().isVisible().catch(() => false)) ? await sentinels.count() : 0;
-      for (let i = 0; i < total; i += 1) {
-        await sentinels.nth(i).evaluate((el) => el.scrollIntoView({ block: 'center' }));
-        await page.waitForTimeout(500);
-        await expect(story.getByTestId('story-step-chip').nth(i)).toHaveAttribute('aria-current', 'step');
-        const pinned = await story.getByTestId('story-stage').evaluate((el) => {
-          const r = el.getBoundingClientRect();
-          return r.top >= 0 && r.bottom <= window.innerHeight;
-        });
-        expect(pinned, `sân khấu còn ghim trong khung nhìn ở bước ${i + 1}`).toBe(true);
-        await page.screenshot({ path: base(`scrub-${i + 1}`) });
-      }
-      await story.scrollIntoViewIfNeeded();
       await hideFixed(page);
       await shoot(story, base);
-      await openFullscreen(page, story, base);
     });
   }
 }
@@ -118,31 +103,14 @@ async function shoot(story: import('@playwright/test').Locator, base: (n: string
     await page.waitForTimeout(400);
     await story.screenshot({ path: base('arc-2'), animations: 'disabled' });
   }
-  const chips = story.getByTestId('story-step-chip');
-  const n = await chips.count();
+  // Mọi chương hiện sẵn dưới dạng thẻ: bấm từng thẻ, thẻ phải sáng rồi mới chụp.
+  const cards = story.getByTestId('story-step-card');
+  const n = await cards.count();
   for (let i = 1; i < n; i += 1) {
-    await chips.nth(i).click();
+    await cards.nth(i).click();
+    await expect(cards.nth(i)).toHaveAttribute('aria-current', 'step');
     await page.waitForTimeout(500);
     await story.screenshot({ path: base(`step-${i + 1}`), animations: 'disabled' });
   }
-}
-
-/** Khung toàn màn: cuộn qua từng mốc, mỗi mốc phải đổi chip và sân khấu vẫn nằm trong khung nhìn (bản chạy trên điện thoại cũng dùng khung này). */
-async function openFullscreen(page: import('@playwright/test').Page, story: import('@playwright/test').Locator, base: (n: string) => string): Promise<void> {
-  await story.getByTestId('pdp-story-open').click();
-  const dialog = page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-  await expect(dialog).toBeVisible();
-  await page.waitForTimeout(400);
-  await page.screenshot({ path: base('full-open') });
-  const sentinels = dialog.locator('.tubu-story-sentinel');
-  const total = await sentinels.count();
-  for (let i = 0; i < total; i += 1) {
-    await sentinels.nth(i).evaluate((el) => el.scrollIntoView({ block: 'center' }));
-    await page.waitForTimeout(500);
-    await expect(dialog.getByTestId('story-step-chip').nth(i)).toHaveAttribute('aria-current', 'step');
-    await page.screenshot({ path: base(`full-scrub-${i + 1}`) });
-  }
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.keyboard.press('Escape');
-  await expect(dialog).toHaveCount(0);
 }

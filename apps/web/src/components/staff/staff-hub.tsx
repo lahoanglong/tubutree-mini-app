@@ -26,7 +26,7 @@ import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { Badge, type BadgeTone } from '@/components/ui/badge';
 import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
-import { errText, PeriodNav, useNotice } from './staff-shell';
+import { errText, PeriodNav, staffLayout, useNotice } from './staff-shell';
 import { useUploadBusy } from '@/lib/use-upload-busy';
 import { TodayCard } from './today-card';
 import { CancelSheet, QuickSheet, ShiftFormSheet, type CancelState, type QuickState, type ShiftFormState } from './shift-sheets';
@@ -282,140 +282,147 @@ export function StaffHub() {
   };
 
   return (
-    <div className="flex flex-col gap-3 pb-6">
-      <div aria-live="polite">{noticeNode}</div>
-      <TodayCard />
+    <div className={staffLayout.root}>
+      <div aria-live="polite" className={staffLayout.notice}>
+        {noticeNode}
+      </div>
+      {/* Từ lg: cột bên gồm thẻ hôm nay, chuyển tuần và hai nút; cột chính là lịch tuần (hai cột ngày). Dưới lg hai khối này là `contents`. */}
+      <div className={staffLayout.aside}>
+        <TodayCard />
 
-      <PeriodNav
-        label={`${shortDayLabel(mondayKey)} – ${shortDayLabel(addDaysKey(mondayKey, 6))}`}
-        prevLabel="Tuần trước"
-        nextLabel="Tuần sau"
-        onPrev={() => setMondayKey(addDaysKey(mondayKey, -7))}
-        onNext={() => setMondayKey(addDaysKey(mondayKey, 7))}
-      />
+        <PeriodNav
+          label={`${shortDayLabel(mondayKey)} – ${shortDayLabel(addDaysKey(mondayKey, 6))}`}
+          prevLabel="Tuần trước"
+          nextLabel="Tuần sau"
+          onPrev={() => setMondayKey(addDaysKey(mondayKey, -7))}
+          onNext={() => setMondayKey(addDaysKey(mondayKey, 7))}
+        />
 
-      <div className="flex flex-wrap gap-2">
-        <button
-          type="button"
-          aria-busy={quickBusy || undefined}
-          aria-disabled={quickBusy || undefined}
-          onClick={openQuick}
-          className={`${ui.btnPrimary} min-w-[10rem] flex-1`}
-        >
-          <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Đăng ký ca
-        </button>
-        <button
-          type="button"
-          aria-label="Chép tuần trước"
-          aria-busy={copyBusy || undefined}
-          aria-disabled={copyBusy || undefined}
-          onClick={() => copyM.mutate({ week: mondayKey })}
-          className={`${skin.btnSecondary} min-w-[10rem] flex-1`}
-        >
-          <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />
-          Chép tuần
-        </button>
+        <div className="flex flex-wrap gap-2">
+          <button
+            type="button"
+            aria-busy={quickBusy || undefined}
+            aria-disabled={quickBusy || undefined}
+            onClick={openQuick}
+            className={`${ui.btnPrimary} min-w-[10rem] flex-1`}
+          >
+            <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Đăng ký ca
+          </button>
+          <button
+            type="button"
+            aria-label="Chép tuần trước"
+            aria-busy={copyBusy || undefined}
+            aria-disabled={copyBusy || undefined}
+            onClick={() => copyM.mutate({ week: mondayKey })}
+            className={`${skin.btnSecondary} min-w-[10rem] flex-1`}
+          >
+            <Copy className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            Chép tuần
+          </button>
+        </div>
       </div>
 
-      {(tplQ.isLoading || shiftsQ.isLoading) && <Skeleton height={120} rounded="rounded-card" />}
-      {shiftsQ.isError && <ErrorState message={errText(shiftsQ.error)} onRetry={() => shiftsQ.refetch()} />}
+      <div className={staffLayout.main}>
+        {(tplQ.isLoading || shiftsQ.isLoading) && <Skeleton height={120} rounded="rounded-card" />}
+        {shiftsQ.isError && <ErrorState message={errText(shiftsQ.error)} onRetry={() => shiftsQ.refetch()} />}
 
-      {shiftsQ.data && (
-        <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-          {dayKeys.map((dk) => {
-            const dayName = `${dowLabel(dk)} ${shortDayLabel(dk)}`;
-            const shifts = byDay[dk] ?? [];
-            return (
-              <section key={dk} className={`p-3 ${skin.card}${dk === todayKey ? ' border-forest-600 max-md:!border-forest-600' : ''}`}>
-                <div className="mb-1 flex items-center justify-between gap-2">
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <h2 className={skin.cardTitle}>
-                      {dowLabel(dk)} · {shortDayLabel(dk)}
-                    </h2>
-                    {dk === todayKey && (
-                      <Badge tone="brand" size="sm">
-                        Hôm nay
-                      </Badge>
-                    )}
-                  </div>
-                  {dk >= todayKey && (
-                    <button
-                      type="button"
-                      aria-label={`Thêm ca ${dayName}`}
-                      aria-busy={addBusy || undefined}
-                      aria-disabled={addBusy || undefined}
-                      onClick={() => openAdd(dk)}
-                      className={`${rowBtn} text-forest-600`}
-                    >
-                      <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
-                      Thêm
-                    </button>
-                  )}
-                </div>
-                {shifts.length === 0 && <p className="text-xs text-stone-600">Chưa đăng ký ca.</p>}
-                {shifts.map((s) => {
-                  const st = STATUS[s.status];
-                  const adjusted = !!s.approvedStart || !!s.approvedEnd;
-                  return (
-                    <div key={s.id} className="flex items-center justify-between gap-2 border-t border-stone-200 py-2">
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm tabular-nums text-stone-900">
-                          {isoToVnHHMM(s.approvedStart ?? s.startAt)} – {isoToVnHHMM(s.approvedEnd ?? s.endAt)}
-                          {adjusted && <span className="text-xs text-stone-600"> (đã chỉnh)</span>}
-                        </div>
-                        <div className="mt-0.5">
-                          <Badge tone={st.tone} size="sm">
-                            {st.label}
-                            {s.status === 'CANCELLED' && s.cancelPenalty ? ' · phạt 1h' : ''}
-                          </Badge>
-                        </div>
-                        {s.status === 'REJECTED' && s.rejectReason && <p className="mt-0.5 text-xs text-stone-700">Lý do: {s.rejectReason}</p>}
-                      </div>
-                      {s.status === 'PENDING' && (
-                        <div className="flex gap-1">
-                          <button
-                            type="button"
-                            aria-label={`Sửa ca ${dayName}`}
-                            aria-busy={rowBusy(s.id) || undefined}
-                            aria-disabled={rowBusy(s.id) || undefined}
-                            onClick={() => openEdit(s)}
-                            className={`${rowBtn} text-forest-600`}
-                          >
-                            Sửa
-                          </button>
-                          <button
-                            type="button"
-                            aria-label={`Xoá ca ${dayName}`}
-                            aria-busy={rowBusy(s.id) || undefined}
-                            aria-disabled={rowBusy(s.id) || undefined}
-                            onClick={() => lockShift(s.id, () => delM.mutate({ id: s.id, week: mondayKey }))}
-                            className={`${rowBtn} text-danger-fg`}
-                          >
-                            Xoá
-                          </button>
-                        </div>
-                      )}
-                      {s.status === 'APPROVED' && (
-                        <button
-                          type="button"
-                          aria-label={`Huỷ ca ${dayName}`}
-                          aria-busy={rowBusy(s.id) || undefined}
-                          aria-disabled={rowBusy(s.id) || undefined}
-                          onClick={() => openCancel(s.id)}
-                          className={`${rowBtn} text-danger-fg`}
-                        >
-                          Huỷ ca
-                        </button>
+        {shiftsQ.data && (
+          <div className="grid gap-3 md:grid-cols-2">
+            {dayKeys.map((dk) => {
+              const dayName = `${dowLabel(dk)} ${shortDayLabel(dk)}`;
+              const shifts = byDay[dk] ?? [];
+              return (
+                <section key={dk} className={`p-3 ${skin.card}${dk === todayKey ? ' border-forest-600 max-md:!border-forest-600' : ''}`}>
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <div className="flex min-w-0 flex-wrap items-center gap-2">
+                      <h2 className={skin.cardTitle}>
+                        {dowLabel(dk)} · {shortDayLabel(dk)}
+                      </h2>
+                      {dk === todayKey && (
+                        <Badge tone="brand" size="sm">
+                          Hôm nay
+                        </Badge>
                       )}
                     </div>
-                  );
-                })}
-              </section>
-            );
-          })}
-        </div>
-      )}
+                    {dk >= todayKey && (
+                      <button
+                        type="button"
+                        aria-label={`Thêm ca ${dayName}`}
+                        aria-busy={addBusy || undefined}
+                        aria-disabled={addBusy || undefined}
+                        onClick={() => openAdd(dk)}
+                        className={`${rowBtn} text-forest-600`}
+                      >
+                        <Plus className="mr-1 h-4 w-4" aria-hidden="true" />
+                        Thêm
+                      </button>
+                    )}
+                  </div>
+                  {shifts.length === 0 && <p className="text-xs text-stone-600">Chưa đăng ký ca.</p>}
+                  {shifts.map((s) => {
+                    const st = STATUS[s.status];
+                    const adjusted = !!s.approvedStart || !!s.approvedEnd;
+                    return (
+                      <div key={s.id} className="flex items-center justify-between gap-2 border-t border-stone-200 py-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm tabular-nums text-stone-900">
+                            {isoToVnHHMM(s.approvedStart ?? s.startAt)} – {isoToVnHHMM(s.approvedEnd ?? s.endAt)}
+                            {adjusted && <span className="text-xs text-stone-600"> (đã chỉnh)</span>}
+                          </div>
+                          <div className="mt-0.5">
+                            <Badge tone={st.tone} size="sm">
+                              {st.label}
+                              {s.status === 'CANCELLED' && s.cancelPenalty ? ' · phạt 1h' : ''}
+                            </Badge>
+                          </div>
+                          {s.status === 'REJECTED' && s.rejectReason && <p className="mt-0.5 text-xs text-stone-700">Lý do: {s.rejectReason}</p>}
+                        </div>
+                        {s.status === 'PENDING' && (
+                          <div className="flex gap-1">
+                            <button
+                              type="button"
+                              aria-label={`Sửa ca ${dayName}`}
+                              aria-busy={rowBusy(s.id) || undefined}
+                              aria-disabled={rowBusy(s.id) || undefined}
+                              onClick={() => openEdit(s)}
+                              className={`${rowBtn} text-forest-600`}
+                            >
+                              Sửa
+                            </button>
+                            <button
+                              type="button"
+                              aria-label={`Xoá ca ${dayName}`}
+                              aria-busy={rowBusy(s.id) || undefined}
+                              aria-disabled={rowBusy(s.id) || undefined}
+                              onClick={() => lockShift(s.id, () => delM.mutate({ id: s.id, week: mondayKey }))}
+                              className={`${rowBtn} text-danger-fg`}
+                            >
+                              Xoá
+                            </button>
+                          </div>
+                        )}
+                        {s.status === 'APPROVED' && (
+                          <button
+                            type="button"
+                            aria-label={`Huỷ ca ${dayName}`}
+                            aria-busy={rowBusy(s.id) || undefined}
+                            aria-disabled={rowBusy(s.id) || undefined}
+                            onClick={() => openCancel(s.id)}
+                            className={`${rowBtn} text-danger-fg`}
+                          >
+                            Huỷ ca
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </section>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <ShiftFormSheet open={formOpen} state={form} onChange={patchForm} templates={templates} pending={formBusy} onClose={() => setFormOpen(false)} onSubmit={submitForm} />
       <QuickSheet open={quickOpen} state={quick} onChange={patchQuick} templates={templates} dayKeys={dayKeys} todayKey={todayKey} pending={quickingWeeks.has(mondayKey)} onClose={() => setQuickOpen(false)} onSubmit={submitQuick} />

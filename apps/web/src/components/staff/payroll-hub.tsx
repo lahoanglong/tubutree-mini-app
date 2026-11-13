@@ -34,7 +34,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EvidenceUpload } from '@/components/evidence-upload';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { safeEvidenceImage } from '@/components/admin/evidence-images';
-import { errText, PeriodNav, useNotice } from './staff-shell';
+import { errText, PeriodNav, staffLayout, useNotice } from './staff-shell';
 import { IMAGES_UPLOADING } from '@/lib/image-compress';
 import { useUploadBusy } from '@/lib/use-upload-busy';
 
@@ -144,111 +144,112 @@ export function PayrollHub() {
   const proof = m?.proofImageUrl ? safeEvidenceImage(m.proofImageUrl) : null;
 
   return (
-    <div className="flex flex-col gap-3 pb-6">
-      <div aria-live="polite">{noticeNode}</div>
-      <PeriodNav
-        label={`Tháng ${ym.month}/${ym.year}`}
-        prevLabel="Tháng trước"
-        nextLabel="Tháng sau"
-        onPrev={() => setYm(shiftYearMonth(ym.year, ym.month, -1))}
-        onNext={() => setYm(shiftYearMonth(ym.year, ym.month, 1))}
-      />
+    <div className={staffLayout.root}>
+      <div aria-live="polite" className={staffLayout.notice}>
+        {noticeNode}
+      </div>
+      {/* Từ lg: cột bên gồm chuyển tháng, trạng thái tải, tổng kết và nút nhận lương; cột chính là các tuần. Dưới lg cột bên là `contents` (cùng thứ tự DOM như trước). */}
+      <div className={staffLayout.aside}>
+        <PeriodNav
+          label={`Tháng ${ym.month}/${ym.year}`}
+          prevLabel="Tháng trước"
+          nextLabel="Tháng sau"
+          onPrev={() => setYm(shiftYearMonth(ym.year, ym.month, -1))}
+          onNext={() => setYm(shiftYearMonth(ym.year, ym.month, 1))}
+        />
 
-      {payQ.isLoading && <Skeleton height={120} rounded="rounded-card" />}
-      {payQ.isError && <ErrorState message={errText(payQ.error)} onRetry={() => payQ.refetch()} />}
+        {payQ.isLoading && <Skeleton height={120} rounded="rounded-card" />}
+        {payQ.isError && <ErrorState message={errText(payQ.error)} onRetry={() => payQ.refetch()} />}
 
-      <div className="grid gap-3 lg:grid-cols-[22rem_1fr] lg:items-start">
-        <div className="flex flex-col gap-3">
-          {m && (
-            <section aria-label="Tổng kết tháng" className="rounded-card bg-forest-800 p-4 text-stone-0 max-md:[background:linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))]">
-              <div className="text-sm">
-                Thực nhận tháng {m.month}/{m.year}
+        {m && (
+          <section aria-label="Tổng kết tháng" className="rounded-card bg-forest-800 p-4 text-stone-0 max-md:[background:linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))]">
+            <div className="text-sm">
+              Thực nhận tháng {m.month}/{m.year}
+            </div>
+            <div className="mt-0.5 font-display text-3xl font-semibold tabular-nums max-md:font-sans max-md:text-[length:var(--type-price-xl-size)] max-md:leading-[var(--type-price-xl-lh)] max-md:font-bold">{formatVnd(m.net)}</div>
+            <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums">
+              <span>Giờ công: {fmtH(m.totalMinutes)}</span>
+              <span>Đơn giá: {formatVnd(payQ.data?.profile?.hourlyRate ?? 0)}/h</span>
+              <span>Lương gộp: {formatVnd(m.gross)}</span>
+              <span>Phạt: {formatVnd(m.totalFines)}</span>
+            </div>
+            <div className="mt-2">
+              <Badge tone="neutral">{STATUS_LABEL[m.status]}</Badge>
+            </div>
+            {m.status === 'PAID' && proof && (
+              <div className="mt-3">
+                <div className="mb-1 text-xs">Ảnh xác nhận đã chuyển:</div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={proof.src} alt="Xác nhận chuyển khoản" className="max-w-full rounded-control" />
               </div>
-              <div className="mt-0.5 font-display text-3xl font-semibold tabular-nums max-md:font-sans max-md:text-[length:var(--type-price-xl-size)] max-md:leading-[var(--type-price-xl-lh)] max-md:font-bold">{formatVnd(m.net)}</div>
-              <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs tabular-nums">
-                <span>Giờ công: {fmtH(m.totalMinutes)}</span>
-                <span>Đơn giá: {formatVnd(payQ.data?.profile?.hourlyRate ?? 0)}/h</span>
-                <span>Lương gộp: {formatVnd(m.gross)}</span>
-                <span>Phạt: {formatVnd(m.totalFines)}</span>
-              </div>
-              <div className="mt-2">
-                <Badge tone="neutral">{STATUS_LABEL[m.status]}</Badge>
-              </div>
-              {m.status === 'PAID' && proof && (
-                <div className="mt-3">
-                  <div className="mb-1 text-xs">Ảnh xác nhận đã chuyển:</div>
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={proof.src} alt="Xác nhận chuyển khoản" className="max-w-full rounded-control" />
+            )}
+          </section>
+        )}
+
+        <button
+          type="button"
+          onClick={openBank}
+          disabled={!profileLoaded}
+          aria-busy={bankM.isPending || undefined}
+          aria-disabled={bankM.isPending || undefined}
+          className={skin.btnSecondary}
+        >
+          <Landmark className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          Thông tin nhận lương
+        </button>
+      </div>
+
+      <div className={staffLayout.mainBox}>
+        {weeks.map((w, i) => (
+          <section key={w.wk} className={`p-3 ${skin.card}`}>
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <h2 className="text-sm font-bold text-stone-900">
+                Tuần {i + 1} ({shortDayLabel(w.wk)}–{shortDayLabel(addDaysKey(w.wk, 6))})
+              </h2>
+              <span className="text-sm font-bold tabular-nums text-forest-700">
+                {fmtH(w.minutes)} · {formatVnd(w.net)}
+              </span>
+            </div>
+            {w.days.map((d) => {
+              const key = d.workDate.slice(0, 10);
+              const sess = sessionsByDay[key] ?? [];
+              const isOpen = openDay === key;
+              return (
+                <div key={d.id} className="border-t border-stone-200">
+                  <button
+                    type="button"
+                    aria-expanded={isOpen}
+                    onClick={() => setOpenDay(isOpen ? null : key)}
+                    className="flex min-h-11 w-full items-center justify-between gap-2 py-1.5 text-left"
+                  >
+                    <span className="flex items-center gap-1 text-sm tabular-nums text-stone-900">
+                      <ChevronDown className={`h-4 w-4 text-stone-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
+                      {dowLabel(key)} {dayOfMonth(key)} · {fmtH(d.workedMinutes)}
+                    </span>
+                    <span className="text-right">
+                      <span className="block text-sm font-bold tabular-nums text-stone-900">{formatVnd(d.net)}</span>
+                      {d.fines > 0 && <span className="block text-xs tabular-nums text-danger-fg">−{formatVnd(d.fines)} phạt</span>}
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="pb-1.5 pl-6">
+                      {sess.length === 0 && <p className="text-xs text-stone-600">Không có phiên chấm công.</p>}
+                      {sess.map((s) => (
+                        <p key={s.id} className="text-xs text-stone-700">
+                          {isoToVnHHMM(s.checkinAt)} → {s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : 'đang mở'}
+                          {s.isLate ? ' · trễ' : ''}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                 </div>
-              )}
-            </section>
-          )}
-
-          <button
-            type="button"
-            onClick={openBank}
-            disabled={!profileLoaded}
-            aria-busy={bankM.isPending || undefined}
-            aria-disabled={bankM.isPending || undefined}
-            className={skin.btnSecondary}
-          >
-            <Landmark className="mr-1.5 h-4 w-4" aria-hidden="true" />
-            Thông tin nhận lương
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-3">
-          {weeks.map((w, i) => (
-            <section key={w.wk} className={`p-3 ${skin.card}`}>
-              <div className="mb-1 flex items-center justify-between gap-2">
-                <h2 className="text-sm font-bold text-stone-900">
-                  Tuần {i + 1} ({shortDayLabel(w.wk)}–{shortDayLabel(addDaysKey(w.wk, 6))})
-                </h2>
-                <span className="text-sm font-bold tabular-nums text-forest-700">
-                  {fmtH(w.minutes)} · {formatVnd(w.net)}
-                </span>
-              </div>
-              {w.days.map((d) => {
-                const key = d.workDate.slice(0, 10);
-                const sess = sessionsByDay[key] ?? [];
-                const isOpen = openDay === key;
-                return (
-                  <div key={d.id} className="border-t border-stone-200">
-                    <button
-                      type="button"
-                      aria-expanded={isOpen}
-                      onClick={() => setOpenDay(isOpen ? null : key)}
-                      className="flex min-h-11 w-full items-center justify-between gap-2 py-1.5 text-left"
-                    >
-                      <span className="flex items-center gap-1 text-sm tabular-nums text-stone-900">
-                        <ChevronDown className={`h-4 w-4 text-stone-600 transition-transform ${isOpen ? 'rotate-180' : ''}`} aria-hidden="true" />
-                        {dowLabel(key)} {dayOfMonth(key)} · {fmtH(d.workedMinutes)}
-                      </span>
-                      <span className="text-right">
-                        <span className="block text-sm font-bold tabular-nums text-stone-900">{formatVnd(d.net)}</span>
-                        {d.fines > 0 && <span className="block text-xs tabular-nums text-danger-fg">−{formatVnd(d.fines)} phạt</span>}
-                      </span>
-                    </button>
-                    {isOpen && (
-                      <div className="pb-1.5 pl-6">
-                        {sess.length === 0 && <p className="text-xs text-stone-600">Không có phiên chấm công.</p>}
-                        {sess.map((s) => (
-                          <p key={s.id} className="text-xs text-stone-700">
-                            {isoToVnHHMM(s.checkinAt)} → {s.checkoutAt ? isoToVnHHMM(s.checkoutAt) : 'đang mở'}
-                            {s.isLate ? ' · trễ' : ''}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </section>
-          ))}
-          {payQ.data && payQ.data.days.length === 0 && (
-            <EmptyState art="box" heading="Chưa có dữ liệu công tháng này." variant="inline" />
-          )}
-        </div>
+              );
+            })}
+          </section>
+        ))}
+        {payQ.data && payQ.data.days.length === 0 && (
+          <EmptyState art="box" heading="Chưa có dữ liệu công tháng này." variant="inline" />
+        )}
       </div>
 
       <Sheet

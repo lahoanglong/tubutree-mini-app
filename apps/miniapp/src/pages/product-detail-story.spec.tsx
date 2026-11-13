@@ -81,37 +81,18 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
     expect(screen.queryByTestId('product-story')).toBeNull();
   });
 
-  it('có thành phần: khối câu chuyện nằm trước mục Thành phần và nút mở khung toàn màn, Esc đóng', async () => {
+  it('có thành phần: khối câu chuyện nằm trước mục Thành phần, không có nút "Xem câu chuyện sản phẩm" và không dựng khung toàn màn (dải đã kể đủ các chương)', async () => {
     mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }] }));
     renderPdp();
     const section = await screen.findByTestId('product-story');
     const heading = screen.getByText('Thành phần', { selector: 'h2' });
     expect(section.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-    expect(within(dialog).getByTestId('story-buy-now')).toBeInTheDocument();
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Xem câu chuyện sản phẩm' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toBeNull();
+    expect(section).not.toHaveAttribute('data-fullscreen');
   });
 
-  it.each(['story-add-to-cart', 'story-buy-now'])('%s: đóng khung câu chuyện trước khi xử lý, để bảng chọn phân loại và thông báo không bị che', async (testId) => {
-    mocks.fetchProduct.mockResolvedValue(
-      product({
-        ingredients: [{ name: 'Sả chanh', percentage: '12%' }],
-        variations: [
-          { id: 'v1', sku: 'S1', name: '250g', attributes: {}, retailPrice: 100000, salePrice: null, stock: 5 },
-          { id: 'v2', sku: 'S2', name: '500g', attributes: {}, retailPrice: 180000, salePrice: null, stock: 5 },
-        ],
-      }),
-    );
-    renderPdp();
-    await screen.findByTestId('product-story');
-    fireEvent.click(screen.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-    fireEvent.click(within(dialog).getByTestId(testId));
-    expect(screen.queryByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toBeNull();
-  });
-  it('phân loại đang chọn hết hàng: hai nút của khung câu chuyện khoá, như thanh mua của trang', async () => {
+  it('dải trong trang không có nút mua riêng (Thêm vào giỏ / Mua ngay nằm ở thanh dưới), kể cả khi hết hàng', async () => {
     mocks.fetchProduct.mockResolvedValue(
       product({
         ingredients: [{ name: 'Sả chanh', percentage: '12%' }],
@@ -119,21 +100,22 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
       }),
     );
     renderPdp();
-    await screen.findByTestId('product-story');
-    fireEvent.click(screen.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-    expect(within(dialog).getByTestId('story-add-to-cart')).toBeDisabled();
-    expect(within(dialog).getByTestId('story-buy-now')).toBeDisabled();
+    const story = await screen.findByTestId('product-story');
+    for (const id of ['story-add-to-cart', 'story-buy-now', 'story-close']) expect(within(story).queryByTestId(id), id).toBeNull();
   });
 
-  it('còn hàng: hai nút của khung câu chuyện dùng được', async () => {
+  it('mọi chương hiện cùng lúc dạng thẻ; bấm một thẻ chọn chương đó (aria-current), không có chip/panel/mốc cuộn cũ', async () => {
     mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }] }));
     renderPdp();
-    await screen.findByTestId('product-story');
-    fireEvent.click(screen.getByRole('button', { name: 'Xem câu chuyện sản phẩm' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Câu chuyện sản phẩm' });
-    expect(within(dialog).getByTestId('story-buy-now')).toBeEnabled();
+    const story = await screen.findByTestId('product-story');
+    const cards = within(story).getAllByTestId('story-step-card');
+    expect(cards.length).toBeGreaterThan(1);
+    fireEvent.click(cards[cards.length - 1]!);
+    expect(within(story).getAllByTestId('story-step-card')[cards.length - 1]).toHaveAttribute('aria-current', 'step');
+    for (const id of ['story-step-chip', 'story-step-panel', 'story-static-steps']) expect(within(story).queryByTestId(id), id).toBeNull();
+    expect(story.querySelector('.tubu-story-sentinel')).toBeNull();
   });
+
   it('khối câu chuyện nằm ngay dưới khối mua nhanh (sau ô Số lượng), trước Đánh giá nhanh và mục Thành phần', async () => {
     mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }] }));
     mocks.fetchReviews.mockResolvedValue({ data: [], average: 4.5, count: 2, items: [{ id: 'r1', rating: 5, comment: 'Thơm', images: [], videoUrl: null, author: 'An', createdAt: '2026-11-01T00:00:00.000Z' }] });
