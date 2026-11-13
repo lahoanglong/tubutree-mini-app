@@ -16,6 +16,7 @@ const BRAND_IDS: Record<string, string> = {
   umikai: 'umikai',
   'bh.nong': 'bhnong',
   bhnong: 'bhnong',
+  sokfarm: 'sokfram',
   sokfram: 'sokfram',
   leplateau: 'leplateau',
   leplateaucoffee: 'leplateau',
@@ -32,7 +33,7 @@ export function brandAccent(brand: string): string {
 /**
  * Danh sách sản phẩm của một nhãn. API `/products?brand=` so khớp CHÍNH XÁC chuỗi `products.brand`
  * (không phải slug, không phân biệt gì khác tên hiển thị), nên truyền tên đúng như catalog: "Le Plateau"
- * hay "Sokfarm" cho danh sách rỗng vì catalog ghi "Le Plateau Coffee" và "Sokfram".
+ * cho danh sách rỗng vì catalog ghi "Le Plateau Coffee". "Sokfarm" là tên chuẩn; link cũ `?brand=Sokfram` vẫn ra đúng sản phẩm (API ánh xạ về "Sokfarm").
  */
 export function brandBrowsePath(catalogBrand: string): string {
   const name = catalogBrand.trim();

@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { redirect } from 'next/navigation';
 import { fetchBrands, fetchCatalog, fetchCategories } from '@tubutree/app-core/api/catalog';
 import { fetchBestSellers } from '@tubutree/app-core/api/browse';
+import { canonicalBrandName } from '@tubutree/app-core/brand-origins';
 import { categoryTrail } from '@tubutree/app-core/browse/category-tree';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { shelf } from '@tubutree/app-core/merch/shelves';
@@ -43,7 +44,9 @@ export async function generateMetadata({ searchParams }: { searchParams: BrowseS
     if (!node) return { robots: { index: false, follow: true } };
     return browseMetadata({ category: { id: categoryId, name: node.name } }, true);
   }
-  const brand = firstParam(params.get('brand') ?? undefined);
+  // Link cũ `?brand=Sokfram` dùng metadata và canonical của "Sokfarm", không bị noindex vì tên không có trong /brands.
+  const rawBrand = firstParam(params.get('brand') ?? undefined);
+  const brand = rawBrand ? canonicalBrandName(rawBrand) : rawBrand;
   const brandKnown = brand ? (await fetchBrands(createServerHttp())).some((b) => b.brand === brand) : true;
   return browseMetadata({ brand, page: parsePage(params.get('page')) }, brandKnown);
 }

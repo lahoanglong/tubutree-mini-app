@@ -3,6 +3,7 @@ import {
   BRAND_ORIGINS,
   brandBrowseTarget,
   brandOriginOf,
+  canonicalBrandName,
   findBrandOrigin,
   journeyBrandHref,
   journeyBrands,
@@ -133,7 +134,7 @@ describe('journeyBrands — dải thương hiệu Trang chủ', () => {
   it('nhãn API khớp 8 nhãn thì lấy slug cho đích trang nhãn, vẫn đứng đúng thứ tự', () => {
     const list = journeyBrands([
       { brand: 'Le Plateau Coffee', slug: 'le-plateau' },
-      { brand: 'Sokfram', slug: 'sokfarm' },
+      { brand: 'Sokfarm', slug: 'sokfarm' },
     ]);
     expect(list).toHaveLength(8);
     const byKey = Object.fromEntries(list.map((j) => [j.key, j]));
@@ -141,6 +142,12 @@ describe('journeyBrands — dải thương hiệu Trang chủ', () => {
     expect(journeyBrandHref(byKey.leplateau!, '/san-pham')).toBe('/brand/le-plateau');
     expect(byKey.sokfram!.slug).toBe('sokfarm');
     expect(list.map((j) => j.key)).toEqual(BRAND_ORIGINS.map((o) => o.id));
+  });
+
+  it('dòng API còn chính tả cũ "Sokfram" vẫn gắn slug vào nhãn Sokfarm, không thành nhãn lạ', () => {
+    const list = journeyBrands([{ brand: 'Sokfram', slug: 'sokfarm' }]);
+    expect(list).toHaveLength(8);
+    expect(list.find((j) => j.key === 'sokfram')).toMatchObject({ label: 'Sokfarm', slug: 'sokfarm' });
   });
 
   it('nhãn API lạ nối thêm phía sau, không trùng, đích lọc ?brand=', () => {
@@ -167,6 +174,45 @@ describe('findBrandOrigin', () => {
     expect(findBrandOrigin({ slug: 'fuwa3e', name: 'x' })?.id).toBe('fuwa3e');
     expect(findBrandOrigin({ slug: 'khac', name: ' BH.NONG ' })?.id).toBe('bhnong');
     expect(findBrandOrigin({ slug: 'khac', name: 'Không có' })).toBeNull();
+  });
+
+  it('"Sokfarm" là tên chuẩn; DB hoặc link cũ ghi "Sokfram" (mọi kiểu hoa thường) vẫn ra đúng nhãn', () => {
+    const sok = BRAND_ORIGINS.find((o) => o.id === 'sokfram')!;
+    expect(sok.catalogBrand).toBe('Sokfarm');
+    expect(sok.brand).toBe('Sokfarm');
+    for (const name of ['Sokfarm', 'SOKFARM', 'Sokfram', 'SOKFRAM', ' sokfram ']) expect(findBrandOrigin({ slug: 'khac', name })?.id, name).toBe('sokfram');
+  });
+
+  it('Pineboo (kể cả hoa thường, khoảng trắng, theo slug) dùng vùng nguyên liệu của nhà máy Fuwa3e, Thanh Hóa', () => {
+    for (const arg of [
+      { slug: 'khac', name: 'Pineboo' },
+      { slug: 'khac', name: 'PINEBOO' },
+      { slug: 'khac', name: ' pineboo ' },
+      { slug: 'pineboo', name: 'Thương hiệu Mẹ & Bé' },
+    ]) {
+      const origin = findBrandOrigin(arg);
+      expect(origin?.id, JSON.stringify(arg)).toBe('fuwa3e');
+      expect(origin?.province).toBe('Thanh Hóa');
+      expect(origin?.ingredient).toContain('vỏ dứa');
+    }
+  });
+
+  it('Pineboo chỉ mượn vùng khi tra xuất xứ: nhãn trên thẻ, bộ lọc và dải thương hiệu vẫn riêng (không có ghim, không thuộc 8 nhãn hành trình)', () => {
+    expect(BRAND_ORIGINS.map((o) => o.catalogBrand)).not.toContain('Pineboo');
+    expect(brandOriginOf('Pineboo')).toBeUndefined();
+    expect(findBrandOrigin({ slug: 'khac', name: 'Pineboo' })).toBe(BRAND_ORIGINS.find((o) => o.id === 'fuwa3e'));
+    expect(findBrandOrigin({ slug: 'khac', name: 'Pineboo Plus' })).toBeNull();
+  });
+});
+
+describe('canonicalBrandName — link cũ ?brand=Sokfram', () => {
+  it('chính tả cũ về "Sokfarm"; nhãn khác trả nguyên văn', () => {
+    expect(canonicalBrandName('Sokfram')).toBe('Sokfarm');
+    expect(canonicalBrandName(' SOKFRAM ')).toBe('Sokfarm');
+    expect(canonicalBrandName('sokfarm')).toBe('Sokfarm');
+    expect(canonicalBrandName('Fuwa3e')).toBe('Fuwa3e');
+    expect(canonicalBrandName('Pineboo')).toBe('Pineboo');
+    expect(canonicalBrandName('')).toBe('');
   });
 });
 

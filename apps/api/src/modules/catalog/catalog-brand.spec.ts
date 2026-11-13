@@ -25,7 +25,7 @@ describe('CatalogService.brands — nhãn suy từ tên khi cột brand còn "Tu
       Fuwa3e: 44,
       'Pơ Lang': 14,
       'BH.Nong': 12,
-      Sokfram: 10,
+      Sokfarm: 10,
       Visante: 7,
       Hector: 7,
       Pineboo: 6,
@@ -53,7 +53,33 @@ describe('CatalogService.brands — nhãn suy từ tên khi cột brand còn "Tu
     expect(out.find((b) => b.brand === 'Hector')).toEqual({ brand: 'Hector', count: 7, slug: 'hector' });
     expect(out.find((b) => b.brand === 'Fuwa3e')?.slug).toBeNull();
     const asked = (brandFindMany.mock.calls[0]![0] as { where: { name: { in: string[] } } }).where.name.in;
-    expect([...asked].sort()).toEqual(['BH.Nong', 'Fuwa3e', 'Hector', 'Le Plateau Coffee', 'Pineboo', 'Pơ Lang', 'Sokfram', 'Tubu Tree', 'Visante']);
+    // Sokfarm hỏi cả chính tả cũ: bản ghi Brand tạo từ "Sokfram" vẫn gắn được slug.
+    expect([...asked].sort()).toEqual(['BH.Nong', 'Fuwa3e', 'Hector', 'Le Plateau Coffee', 'Pineboo', 'Pơ Lang', 'Sokfarm', 'Sokfram', 'Tubu Tree', 'Visante']);
+  });
+
+  it('cột brand còn "Sokfram" (mọi kiểu hoa thường) cộng dồn vào "Sokfarm", không thành hai dòng', async () => {
+    const { svc } = brandsService(
+      [
+        { brand: 'Sokfram', _count: { _all: 3 } },
+        { brand: 'Sokfarm', _count: { _all: 2 } },
+        { brand: 'SOKFRAM', _count: { _all: 1 } },
+        { brand: 'Fuwa3e', _count: { _all: 4 } },
+      ],
+      [],
+    );
+    const out = (await svc.brands()) as Out;
+    expect(Object.fromEntries(out.map((b) => [b.brand, b.count]))).toEqual({ Sokfarm: 6, Fuwa3e: 4 });
+    expect(out.some((b) => /sokfram/i.test(b.brand))).toBe(false);
+  });
+
+  it('slug của nhãn công khai: bản ghi Brand tên cũ "Sokfram" gắn vào "Sokfarm", tên chuẩn thắng khi có cả hai', async () => {
+    const rows = [{ brand: 'Sokfram', _count: { _all: 3 } }];
+    const legacyOnly = (await brandsService(rows, [], [{ name: 'Sokfram', slug: 'sokfram-cu' }]).svc.brands()) as Out;
+    expect(legacyOnly).toEqual([{ brand: 'Sokfarm', count: 3, slug: 'sokfram-cu' }]);
+    const both = (await brandsService(rows, [], [{ name: 'Sokfarm', slug: 'sokfarm' }, { name: 'Sokfram', slug: 'sokfram-cu' }]).svc.brands()) as Out;
+    expect(both).toEqual([{ brand: 'Sokfarm', count: 3, slug: 'sokfarm' }]);
+    const bothReversed = (await brandsService(rows, [], [{ name: 'Sokfram', slug: 'sokfram-cu' }, { name: 'Sokfarm', slug: 'sokfarm' }]).svc.brands()) as Out;
+    expect(bothReversed).toEqual([{ brand: 'Sokfarm', count: 3, slug: 'sokfarm' }]);
   });
 
   it('nhãn Admin đã gán cộng dồn với nhãn suy được, không bị đè', async () => {
@@ -95,6 +121,38 @@ describe('CatalogService.brands — nhãn suy từ tên khi cột brand còn "Tu
   });
 });
 
+describe('CatalogService — hiển thị và "cùng nhãn" với cột brand còn chính tả cũ "Sokfram"', () => {
+  const baseCard = (brand: string) => ({
+    id: 'p1', slug: 'p1', brand, name: 'Mật hoa dừa Sokfarm', thumbnail: null, images: [], basePrice: 1000, salePrice: null, isFeatured: false,
+    ratingAvg: 0, reviewCount: 0, soldExternal: 0, soldApp: 0,
+    variations: [{ id: 'p1-v', sku: 'p1-sku', retailPrice: 1000, salePrice: null, stock: 5 }],
+  });
+
+  it('related: sản phẩm mang "Sokfram" tìm anh em ở cả hai cách ghi; nhãn thường vẫn lọc bằng đúng chuỗi brand', async () => {
+    const findMany = jest.fn().mockResolvedValue([]);
+    const prisma = { product: { findUnique: jest.fn().mockResolvedValue({ id: 'self', brand: 'Sokfram' }), findMany } } as unknown as PrismaService;
+    await new CatalogService(prisma).related('mat-hoa-dua');
+    expect(findMany.mock.calls[0]![0].where).toEqual({
+      isActive: true,
+      approvalStatus: 'APPROVED',
+      id: { not: 'self' },
+      OR: [{ brand: { equals: 'Sokfarm', mode: 'insensitive' } }, { brand: { equals: 'Sokfram', mode: 'insensitive' } }],
+    });
+  });
+
+  it('thẻ sản phẩm ghi "Sokfarm" dù cột brand còn "Sokfram"; nhãn khác nguyên văn', async () => {
+    const mk = (brand: string) =>
+      ({
+        product: { findMany: jest.fn().mockResolvedValue([baseCard(brand)]), count: jest.fn().mockResolvedValue(1) },
+        $transaction: jest.fn().mockResolvedValue([[baseCard(brand)], 1]),
+      }) as unknown as PrismaService;
+    for (const [stored, shown] of [['Sokfram', 'Sokfarm'], ['SOKFRAM', 'Sokfarm'], ['Sokfarm', 'Sokfarm'], ['Fuwa3e', 'Fuwa3e'], ['Tubu Tree', 'Tubu Tree']] as const) {
+      const out = (await new CatalogService(mk(stored)).list({ page: 1, limit: 10 })) as unknown as { data: { brand: string }[] };
+      expect({ stored, shown: out.data[0]!.brand }).toEqual({ stored, shown });
+    }
+  });
+});
+
 describe('CatalogService.list ?brand= — lọc theo nhãn hiệu lực', () => {
   const card = (id: string) => ({
     id, slug: id, brand: 'Tubu Tree', name: id, thumbnail: null, images: [], basePrice: 1000, salePrice: null, isFeatured: false,
@@ -133,6 +191,36 @@ describe('CatalogService.list ?brand= — lọc theo nhãn hiệu lực', () => 
     await svc.list({ page: 1, limit: 10, brand: 'Sokfram, Pineboo, Le Plateau Coffee' });
     const or = (pageWhere().AND as { OR: { OR: [unknown, { id: { in: string[] } }] }[] }[])[0]!.OR;
     expect(or.map((b) => b.OR[1].id.in.length)).toEqual([10, 6, 2]);
+  });
+
+  const sokfarmColumn = {
+    OR: [{ brand: { equals: 'Sokfarm', mode: 'insensitive' } }, { brand: { equals: 'Sokfram', mode: 'insensitive' } }],
+  };
+
+  it('?brand=Sokfram (link cũ), ?brand=sokfarm, ?brand=SOKFRAM ra cùng một điều kiện: cột brand mọi cách ghi HOẶC SKU "Tubu Tree" tên Sokfarm (10 SKU PROD)', async () => {
+    const ids = idsOf('Sokfarm');
+    expect(ids).toHaveLength(10);
+    for (const asked of ['Sokfram', 'Sokfarm', 'sokfarm', 'SOKFRAM', ' Sokfram ']) {
+      const { svc, pageWhere } = listService(GENERIC_ROWS);
+      await svc.list({ page: 1, limit: 10, brand: asked });
+      const where = pageWhere();
+      expect({ asked, brand: where.brand }).toEqual({ asked, brand: undefined });
+      expect({ asked, and: where.AND }).toEqual({ asked, and: [{ OR: [{ OR: [sokfarmColumn, { id: { in: ids } }] }] }] });
+    }
+  });
+
+  it('?brand=Sokfram khi không SKU nào đang được suy nhãn: vẫn khớp cả hai cách ghi trong cột brand, không lọc theo chuỗi "Sokfram" trần', async () => {
+    const { svc, pageWhere } = listService([{ id: 'a', name: 'Cà phê muối túi 50x16g', slug: 'a', brand: 'Tubu Tree' }]);
+    await svc.list({ page: 1, limit: 10, brand: 'Sokfram' });
+    const where = pageWhere();
+    expect(where.brand).toBeUndefined();
+    expect(where.AND).toEqual([{ OR: [sokfarmColumn] }]);
+  });
+
+  it('?brand=Sokfram cùng nhãn khác không suy được: nhánh Sokfarm khớp mọi cách ghi, nhánh kia lọc cột brand như cũ', async () => {
+    const { svc, pageWhere } = listService([{ id: 'a', name: 'Cà phê muối túi 50x16g', slug: 'a', brand: 'Tubu Tree' }]);
+    await svc.list({ page: 1, limit: 10, brand: 'Sokfram, Gốm Bát Tràng' });
+    expect(pageWhere().AND).toEqual([{ OR: [sokfarmColumn, { brand: 'Gốm Bát Tràng' }] }]);
   });
 
   it('?brand=Tubu Tree → chỉ phần chưa nhận ra nhãn nào (loại 102 SKU đã suy ra nhãn), khớp số đếm của /brands', async () => {

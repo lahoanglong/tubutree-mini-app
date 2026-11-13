@@ -9,6 +9,8 @@ export interface BrandOrigin {
   brand: string;
   /** Tên đúng như cột products.brand của catalog (PDP dùng để lọc theo nhãn thật). */
   catalogBrand: string;
+  /** Chính tả cũ của `catalogBrand` còn trong DB và link đã chia sẻ (`?brand=Sokfram`); nhận khi tra nhãn, không bao giờ hiển thị. */
+  legacyCatalogBrands?: readonly string[];
   /**
    * Từ khoá tìm sản phẩm của nhãn, viết ĐÚNG như trong tên sản phẩm. PROD ghi mọi SKU là brand "Tubu Tree" nên `?brand=` luôn ra 0 sản phẩm;
    * `?q=` khớp tên sản phẩm (không phân biệt hoa thường), chữ hoa ở `PƠ LANG` và `BH.NONG` là cách tên sản phẩm đang viết, để kết quả
@@ -94,9 +96,11 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
     geo: { x: 212, y: 536 },
   },
   {
+    // `id` giữ nguyên chính tả cũ: nó là token CSS (`--color-brand-sokfram`), khoá bản đồ/huy hiệu và đích `/cau-chuyen?brand=sokfram` của link đã chia sẻ, không hiển thị.
     id: 'sokfram',
     brand: 'Sokfarm',
-    catalogBrand: 'Sokfram',
+    catalogBrand: 'Sokfarm',
+    legacyCatalogBrands: ['Sokfram'],
     searchKeyword: 'Sokfarm',
     province: 'Trà Vinh',
     ingredient: 'Mật hoa dừa hữu cơ',
@@ -105,10 +109,38 @@ export const BRAND_ORIGINS: BrandOrigin[] = [
   },
 ];
 
-/** Nhãn có trên bản đồ xuất xứ (khớp theo id/slug hoặc tên catalog); nhãn chưa có ghim thì null. */
+/**
+ * Nhãn không có ghim riêng nhưng nguyên liệu lấy từ một nhà máy đã có ghim: khoá = tên nhãn đã chuẩn hoá (`normalizeBrandKey`), giá trị = id nhãn có ghim.
+ * Pineboo (dòng Mẹ & Bé) vẫn là nhãn riêng trên thẻ sản phẩm và bộ lọc, nhưng sản xuất tại nhà máy Fuwa3e, Thanh Hóa (enzyme dứa lên men).
+ */
+const SHARED_FACTORY_ORIGIN: Readonly<Record<string, string>> = { pineboo: 'fuwa3e' };
+
+/**
+ * Nhãn có trên bản đồ xuất xứ (khớp theo id/slug hoặc tên catalog, kể cả chính tả cũ); nhãn dùng chung nhà máy (Pineboo) trả vùng của nhà máy đó;
+ * nhãn chưa có ghim thì null.
+ */
 export function findBrandOrigin(brand: { slug: string; name: string }): BrandOrigin | null {
   const name = brand.name.trim().toLowerCase();
-  return BRAND_ORIGINS.find((o) => o.id === brand.slug || o.catalogBrand.toLowerCase() === name || o.brand.toLowerCase() === name) ?? null;
+  const own = BRAND_ORIGINS.find(
+    (o) =>
+      o.id === brand.slug ||
+      o.catalogBrand.toLowerCase() === name ||
+      o.brand.toLowerCase() === name ||
+      o.legacyCatalogBrands?.some((l) => l.toLowerCase() === name),
+  );
+  if (own) return own;
+  const factoryId = SHARED_FACTORY_ORIGIN[normalizeBrandKey(brand.name)] ?? SHARED_FACTORY_ORIGIN[normalizeBrandKey(brand.slug)];
+  return BRAND_ORIGINS.find((o) => o.id === factoryId) ?? null;
+}
+
+/**
+ * Tên chuẩn của nhãn trong `?brand=`: chính tả cũ ("Sokfram", "SOKFRAM") về `catalogBrand` hiện hành ("Sokfarm"); nhãn khác trả nguyên văn. Cùng kết quả với
+ * `canonicalCatalogBrand` của shared-types (api dùng); web và Mini đọc bản này để khỏi nạp gói shared-types vào bundle trang. Spec giữ hai bảng khớp nhau.
+ */
+export function canonicalBrandName(name: string): string {
+  const key = name.trim().toLowerCase();
+  const hit = BRAND_ORIGINS.find((o) => o.legacyCatalogBrands && [o.catalogBrand, ...o.legacyCatalogBrands].some((s) => s.toLowerCase() === key));
+  return hit ? hit.catalogBrand : name;
 }
 
 /** Bỏ dấu, hạ chữ thường, bỏ mọi ký tự không phải chữ-số: "PƠ LANG", "Pơ Lang" và "pơlang" cùng ra "polang"; "BH.NONG" ra "bhnong". */
@@ -122,7 +154,7 @@ export function normalizeBrandKey(text: string): string {
 }
 
 /**
- * Cách viết chấp nhận được của mỗi nhãn (đã chuẩn hoá). Catalog PROD ghi "Sokfram" ở cột brand nhưng tên sản phẩm viết "Sokfarm", nên nhãn
+ * Cách viết chấp nhận được của mỗi nhãn (đã chuẩn hoá). Tên chuẩn là "Sokfarm" nhưng cột brand và tên sản phẩm cũ còn "Sokfram", nên nhãn
  * này nhận cả hai; "Le Plateau Coffee" chứa "Le Plateau" nên không cần dòng riêng.
  */
 const BRAND_ALIASES: Record<string, string[]> = {

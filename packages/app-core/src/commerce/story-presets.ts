@@ -110,10 +110,10 @@ export const STORY_PRESETS: Record<string, ProductStoryConfig> = {
       step('Từng cụm granola', 'Granola ở dạng cụm nhỏ.', L('granola-clusters', 'right', 74, 30, 1, -5), L('granola-clusters', 'top', 60, 56, 0.8, 30)),
       step('Bữa sáng', 'Granola dùng cho bữa sáng.', L('granola-clusters', 'right', 76, 50, 1, -20), L('granola-clusters', 'left', 26, 62, 0.7)),
       step('Quy cách 400g', 'Gói 400g.', L('granola-clusters', 'bottom', 50, 70, 1.1)),
-      step('Sokfram', 'Granola ngũ cốc hạt của Sokfram.', L('granola-clusters', 'left', 24, 30, 0.8), L('granola-clusters', 'right', 78, 66, 0.7)),
+      step('Sokfarm', 'Granola ngũ cốc hạt của Sokfarm.', L('granola-clusters', 'left', 24, 30, 0.8), L('granola-clusters', 'right', 78, 66, 0.7)),
     ],
     [pt('h1', 26, 34, 'left', 'Ngũ cốc'), pt('h2', 74, 54, 'right', 'Hạt'), pt('h3', 26, 72, 'left', 'Gói 400g')],
-    'Granola ngũ cốc hạt Sokfram',
+    'Granola ngũ cốc hạt Sokfarm',
   ),
   'bot-rau-ma-sokfram': preset(
     [
@@ -121,10 +121,10 @@ export const STORY_PRESETS: Record<string, ProductStoryConfig> = {
       step('Sấy lạnh', 'Bột rau má được sấy lạnh.', L('water-droplet', 'right', 74, 30, 0.9), L('centella-leaf', 'top', 60, 56, 0.8, 30)),
       step('Dạng bột', 'Dạng bột để pha uống.', L('centella-leaf', 'right', 76, 50, 1, 10), L('centella-leaf', 'left', 26, 62, 0.7, -20)),
       step('Quy cách 150g', 'Gói 150g.', L('centella-leaf', 'bottom', 50, 70, 1)),
-      step('Sokfram', 'Bột rau má nguyên chất của Sokfram.', L('centella-leaf', 'left', 24, 30, 0.8), L('water-droplet', 'right', 78, 66, 0.7)),
+      step('Sokfarm', 'Bột rau má nguyên chất của Sokfarm.', L('centella-leaf', 'left', 24, 30, 0.8), L('water-droplet', 'right', 78, 66, 0.7)),
     ],
     [pt('h1', 26, 34, 'left', 'Rau má'), pt('h2', 74, 54, 'right', 'Sấy lạnh'), pt('h3', 26, 72, 'left', 'Pha uống')],
-    'Bột rau má Sokfram',
+    'Bột rau má Sokfarm',
   ),
 
   // ── Nhóm 3: chăm sóc nhà cửa sinh học ──

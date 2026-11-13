@@ -440,7 +440,7 @@ type SeedProduct = {
 };
 
 // Catalog mẫu đa thương hiệu (8 brand đại diện hệ sinh thái tubutree.com): Visante, Pơ Lang,
-// Fuwa3e, Cobote, Le Plateau Coffee, BH.Nong, Sokfram, Hector. KHÔNG dùng ảnh demo picsum
+// Fuwa3e, Cobote, Le Plateau Coffee, BH.Nong, Sokfarm, Hector. KHÔNG dùng ảnh demo picsum
 // (trông giả/rẻ tiền) — để rỗng cho FE hiện placeholder lá; Pancake sync ghi đè ảnh THẬT khi có.
 // ≥40 SP để demo "đa thương hiệu".
 const PRODUCTS: SeedProduct[] = [
@@ -659,27 +659,27 @@ const PRODUCTS: SeedProduct[] = [
     variations: [{ sku: 'BHN-TEA-20', name: 'Hộp 20 túi', attributes: { count: '20' }, retailPrice: 85000, stock: 180, weight: 80 }],
   },
 
-  // ── Sokfram — thực phẩm organic ──────────────────────────────
+  // ── Sokfarm — thực phẩm organic (id và slug giữ chính tả cũ "sokfram": link và tham chiếu đã chia sẻ) ──
   {
-    id: 'p-sokfram-rice', brand: 'Sokfram', slug: 'gao-lut-huyet-rong-sokfram', name: 'Gạo lứt huyết rồng Sokfram',
+    id: 'p-sokfram-rice', brand: 'Sokfarm', slug: 'gao-lut-huyet-rong-sokfram', name: 'Gạo lứt huyết rồng Sokfarm',
     shortDesc: 'Gạo lứt đỏ giàu chất xơ, dẻo thơm.', basePrice: 75000, categoryIds: ['cat-food'],
     forSegment: ['eco'], certifications: ['Organic'], isFeatured: true,
     variations: [{ sku: 'SOK-RC-1KG', name: '1kg', attributes: { weight: '1kg' }, retailPrice: 75000, stock: 220, weight: 1050 }],
   },
   {
-    id: 'p-sokfram-coconut', brand: 'Sokfram', slug: 'dau-dua-ep-lanh-sokfram', name: 'Dầu dừa ép lạnh Sokfram',
+    id: 'p-sokfram-coconut', brand: 'Sokfarm', slug: 'dau-dua-ep-lanh-sokfram', name: 'Dầu dừa ép lạnh Sokfarm',
     shortDesc: 'Ép lạnh nguyên chất, dùng ăn & dưỡng.', basePrice: 130000, salePrice: 110000, categoryIds: ['cat-food', 'cat-skincare'],
     forSegment: ['eco', 'skincare'], certifications: ['Organic', 'Ép lạnh'],
     variations: [{ sku: 'SOK-CO-500', name: '500ml', attributes: { size: '500ml' }, retailPrice: 130000, salePrice: 110000, stock: 140, weight: 560 }],
   },
   {
-    id: 'p-sokfram-centella', brand: 'Sokfram', slug: 'bot-rau-ma-sokfram', name: 'Bột rau má nguyên chất Sokfram',
+    id: 'p-sokfram-centella', brand: 'Sokfarm', slug: 'bot-rau-ma-sokfram', name: 'Bột rau má nguyên chất Sokfarm',
     shortDesc: 'Sấy lạnh giữ dưỡng chất, pha uống tiện lợi.', basePrice: 99000, categoryIds: ['cat-food'],
     forSegment: ['eco'], certifications: ['Organic'],
     variations: [{ sku: 'SOK-CT-150', name: '150g', attributes: { weight: '150g' }, retailPrice: 99000, stock: 160, weight: 180 }],
   },
   {
-    id: 'p-sokfram-granola', brand: 'Sokfram', slug: 'granola-hat-sokfram', name: 'Granola ngũ cốc hạt Sokfram',
+    id: 'p-sokfram-granola', brand: 'Sokfarm', slug: 'granola-hat-sokfram', name: 'Granola ngũ cốc hạt Sokfarm',
     shortDesc: 'Ăn sáng healthy, ngọt nhẹ từ mật ong.', basePrice: 140000, categoryIds: ['cat-food'],
     forSegment: ['eco'], certifications: ['Không đường tinh luyện'],
     variations: [{ sku: 'SOK-GR-400', name: '400g', attributes: { weight: '400g' }, retailPrice: 140000, stock: 120, weight: 440 }],
@@ -755,7 +755,7 @@ const PRODUCTS: SeedProduct[] = [
     variations: [{ sku: 'BHN-CGL-100', name: 'Hũ 100g', attributes: { size: '100g' }, retailPrice: 220000, stock: 70, weight: 160 }],
   },
   {
-    id: 'p-sokfram-chia', brand: 'Sokfram', slug: 'hat-chia-uc-sokfram', name: 'Hạt chia Úc Sokfram',
+    id: 'p-sokfram-chia', brand: 'Sokfarm', slug: 'hat-chia-uc-sokfram', name: 'Hạt chia Úc Sokfarm',
     shortDesc: 'Giàu Omega-3 & chất xơ, pha uống tiện.', basePrice: 115000, categoryIds: ['cat-food'],
     forSegment: ['eco'], certifications: ['Organic'],
     variations: [{ sku: 'SOK-CH-500', name: '500g', attributes: { weight: '500g' }, retailPrice: 115000, stock: 150, weight: 540 }],

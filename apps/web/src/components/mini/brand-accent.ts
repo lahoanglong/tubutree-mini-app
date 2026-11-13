@@ -9,6 +9,7 @@ const BRAND_IDS: Record<string, string> = {
   umikai: 'umikai',
   'bh.nong': 'bhnong',
   bhnong: 'bhnong',
+  sokfarm: 'sokfram',
   sokfram: 'sokfram',
   leplateau: 'leplateau',
   leplateaucoffee: 'leplateau',

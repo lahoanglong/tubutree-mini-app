@@ -23,7 +23,14 @@ describe('brandBrowsePath (C-079)', () => {
   });
 
   it('cắt khoảng trắng hai đầu (API so khớp chính xác)', () => {
-    expect(brandBrowsePath('  Sokfram ')).toBe('/browse?brand=Sokfram');
+    expect(brandBrowsePath('  Sokfarm ')).toBe('/browse?brand=Sokfarm');
+  });
+
+  it('nhãn Sokfarm dùng tên chuẩn; màu nhãn nhận cả tên chuẩn lẫn chính tả cũ trong DB', () => {
+    expect(brandBrowsePath(BRAND_ORIGINS.find((o) => o.id === 'sokfram')!.catalogBrand)).toBe('/browse?brand=Sokfarm');
+    expect(brandAccent('Sokfarm')).toBe('var(--color-brand-sokfram)');
+    expect(brandAccent('Sokfram')).toBe('var(--color-brand-sokfram)');
+    expect(brandAccent('SOKFARM')).toBe('var(--color-brand-sokfram)');
   });
 });
 
