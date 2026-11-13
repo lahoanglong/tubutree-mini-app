@@ -18,7 +18,7 @@ import { storyView } from './product-story';
 const card = (slug: string, over: Partial<{ name: string; inStock: boolean; thumbnail: string | null }> = {}) => ({
   slug,
   name: over.name ?? `Món ${slug}`,
-  thumbnail: over.thumbnail ?? null,
+  thumbnail: over.thumbnail === undefined ? `https://img.test/${slug}.webp` : over.thumbnail,
   inStock: over.inStock ?? true,
 });
 
@@ -37,6 +37,16 @@ describe('reelItems', () => {
   it('giữ thứ tự nguồn, bỏ món hết hàng, trùng slug, tên rỗng', () => {
     const out = reelItems([card('a'), card('b', { inStock: false }), card('a'), card('c', { name: '  ' }), card('d'), card('e'), card('f')]);
     expect(out.map((x) => x.slug)).toEqual(['a', 'd', 'e', 'f']);
+  });
+
+  it('bỏ món chưa có ảnh (null, rỗng, khoảng trắng): vòng Story không có gì để kể ngoài chiếc lá thay thế', () => {
+    const out = reelItems([card('a'), card('b', { thumbnail: null }), card('c', { thumbnail: '' }), card('d', { thumbnail: '   ' }), card('e'), card('f')]);
+    expect(out.map((x) => x.slug)).toEqual(['a', 'e', 'f']);
+  });
+
+  it('món không ảnh không chiếm chỗ của món có ảnh phía sau: đủ trần vẫn lấy món có ảnh', () => {
+    const list = [...Array.from({ length: 5 }, (_, i) => card(`x${i}`, { thumbnail: null })), ...Array.from({ length: 9 }, (_, i) => card(`y${i}`))];
+    expect(reelItems(list).map((x) => x.slug)).toEqual(Array.from({ length: REEL_MAX_ITEMS }, (_, i) => `y${i}`));
   });
 
   it('bỏ món đối tác giao (chương dự phòng nói "Món Tubu Tree chọn"); thiếu fulfiller coi là Tubu giao', () => {

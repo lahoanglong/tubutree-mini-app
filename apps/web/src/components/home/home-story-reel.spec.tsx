@@ -29,7 +29,7 @@ vi.mock('@/components/variation-sheet', () => ({
 import { HomeStoryReel } from './home-story-reel';
 
 const card = (id: string, over: Record<string, unknown> = {}) => ({
-  id, slug: id, brand: 'Tubu', name: `Món ${id}`, thumbnail: null, basePrice: 50000, salePrice: null, isFeatured: false, inStock: true, repVariationId: `v-${id}`, ...over,
+  id, slug: id, brand: 'Tubu', name: `Món ${id}`, thumbnail: `https://img.test/${id}.webp`, basePrice: 50000, salePrice: null, isFeatured: false, inStock: true, repVariationId: `v-${id}`, ...over,
 });
 const PAGE = (cards: unknown[]): BestSellersPage => ({ data: cards, meta: { page: 1, limit: 10, total: cards.length }, basis: 'days30' }) as unknown as BestSellersPage;
 const CARDS = [card('a'), card('b'), card('c'), card('d')];

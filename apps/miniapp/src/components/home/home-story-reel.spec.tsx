@@ -51,7 +51,7 @@ const card = (n: number, over: Record<string, unknown> = {}) => ({
   slug: `mon-${n}`,
   brand: 'Tubu',
   name: `Món ${n}`,
-  thumbnail: null,
+  thumbnail: `https://img.test/p${n}.webp`,
   basePrice: 50_000,
   salePrice: null,
   repVariationId: `v${n}`,

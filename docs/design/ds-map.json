@@ -924,6 +924,11 @@
       "reason": "Mini App đã có sẵn ô chọn tỉnh/phường mở BottomSheet có ô tìm không dấu ngay trong geo-picker.tsx (GeoSelect); web tách phần sheet ra file riêng để GeoPicker dùng cho cả hai cấp và tự sang Phường/Xã sau khi chọn tỉnh"
     },
     {
+      "name": "HomeEditorialHero",
+      "web": "apps/web/src/components/home/home-editorial-hero.tsx",
+      "reason": "khối giới thiệu mặc định ở Trang chủ web từ md, đứng ở slot hero của HubLayout khi DB không có banner chiến dịch (điện thoại ẩn hẳn); Mini App chỉ có khổ điện thoại nên không có khối này"
+    },
+    {
       "name": "HubLayout",
       "web": "apps/web/src/components/layouts/hub-layout.tsx",
       "reason": "khuôn lưới máy tính từ lg (cột, độ rộng tối đa, vùng dính); dưới md trả nguyên con nên Mini chỉ có khổ điện thoại không cần"

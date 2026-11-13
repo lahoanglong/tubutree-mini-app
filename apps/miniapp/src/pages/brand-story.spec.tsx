@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { render, screen, fireEvent, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -13,16 +16,18 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
-import { BRAND_ORIGINS } from '../utils/brand-origins';
+import { BRAND_ORIGINS, brandBrowseTarget } from '../utils/brand-origins';
 import BrandStoryPage from './brand-story';
 
-// Ghim trên bản đồ: nút data-testid "brand-pin-<id>", cùng mở sheet với ô lưới bên dưới. Ghim aria-hidden (xem
-// test target-size bên dưới) nên getByRole không thấy và cũng không có aria-label (tên vô nghĩa trên phần tử ẩn).
-const tile = (brand: string) => {
-  const origin = BRAND_ORIGINS.find((o) => o.brand === brand);
-  if (!origin) throw new Error(`không có nhãn ${brand}`);
-  return screen.getByTestId(`brand-pin-${origin.id}`);
+const here = dirname(fileURLToPath(import.meta.url));
+const MAP_CSS = readFileSync(join(here, '../css/brand-map.css'), 'utf8');
+const origin = (brand: string) => {
+  const o = BRAND_ORIGINS.find((x) => x.brand === brand);
+  if (!o) throw new Error(`không có nhãn ${brand}`);
+  return o;
 };
+const mapLabel = (brand: string) => screen.getByTestId(`brand-map-label-${origin(brand).id}`);
+const card = (brand: string) => screen.getByTestId(`brand-card-${origin(brand).id}`);
 
 describe('BrandStoryPage — Hành trình nguyên liệu dẫn đúng danh sách (C-079)', () => {
   beforeEach(() => {
@@ -40,37 +45,33 @@ describe('BrandStoryPage — Hành trình nguyên liệu dẫn đúng danh sách
     expect(screen.queryByTestId('sheet')).toBeNull();
   });
 
-  it.each(BRAND_ORIGINS.map((o) => [o.brand, o.catalogBrand] as const))(
-    'bấm %s rồi "Khám phá sản phẩm" mở /browse?brand= theo tên nhãn trong catalog (%s)',
-    (brand, catalogBrand) => {
+  it.each(BRAND_ORIGINS.map((o) => [o.brand, o.searchKeyword] as const))(
+    'bấm %s rồi "Khám phá sản phẩm" mở /browse?q= theo từ khoá trong tên sản phẩm (%s)',
+    (brand, keyword) => {
       render(<BrandStoryPage />);
-      fireEvent.click(tile(brand));
+      fireEvent.click(mapLabel(brand));
       const sheet = screen.getByTestId('sheet');
       fireEvent.click(within(sheet).getByRole('button', { name: new RegExp(`Khám phá sản phẩm ${brand}`) }));
       expect(mocks.navigate).toHaveBeenCalledTimes(1);
-      expect(mocks.navigate).toHaveBeenCalledWith(`/browse?brand=${encodeURIComponent(catalogBrand)}`);
+      expect(mocks.navigate).toHaveBeenCalledWith(brandBrowseTarget(origin(brand), '/browse'));
+      const target = new URL(mocks.navigate.mock.calls[0]![0] as string, 'https://x.test');
+      expect(target.pathname).toBe('/browse');
+      expect(target.searchParams.get('q')).toBe(keyword);
+      expect(target.searchParams.has('brand')).toBe(false);
     },
   );
 
-  it('hai nhãn từng ra danh sách rỗng nay dẫn tới tên catalog', () => {
+  it('hai nhãn từng ra danh sách rỗng nay tìm theo từ khoá đúng viết trong tên sản phẩm', () => {
     render(<BrandStoryPage />);
-    fireEvent.click(tile('Le Plateau'));
+    fireEvent.click(mapLabel('Le Plateau'));
     fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: /Khám phá sản phẩm/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/browse?brand=Le%20Plateau%20Coffee');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/browse?q=Le+Plateau');
 
-    fireEvent.click(tile('Sokfarm'));
+    fireEvent.click(mapLabel('Sokfarm'));
     fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: /Khám phá sản phẩm/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/browse?brand=Sokfram');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/browse?q=Sokfarm');
   });
 });
-
-/** Ô lưới dưới bản đồ: tên đọc ra từ chữ bên trong. getAllByRole bỏ qua ghim bản đồ vì chúng aria-hidden. */
-const gridTile = (brand: string) => {
-  const found = screen.getAllByRole('button').find((b) => (b.textContent ?? '').includes(brand));
-  if (!found) throw new Error(`không có ô lưới cho ${brand}`);
-  return found;
-};
-const minHeightOf = (el: HTMLElement) => parseInt(el.style.minHeight, 10);
 
 describe('BrandStoryPage — cấu trúc và vùng chạm (C-076, C-114)', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -82,29 +83,34 @@ describe('BrandStoryPage — cấu trúc và vùng chạm (C-076, C-114)', () =>
     expect(h1[0]!.textContent).toBe('Hành trình nguyên liệu');
   });
 
-  it('8 ô lưới là nút thật cao ít nhất 44px và mở cùng sheet với ghim bản đồ', () => {
+  it('8 thẻ là nút thật có huy hiệu SVG riêng, tên nhãn, tỉnh, nguyên liệu; mở cùng sheet với nhãn trên bản đồ', () => {
     render(<BrandStoryPage />);
+    const shapes = new Set<string>();
     for (const o of BRAND_ORIGINS) {
-      const el = gridTile(o.brand);
+      const el = card(o.brand);
       expect(el.tagName).toBe('BUTTON');
-      expect(minHeightOf(el)).toBeGreaterThanOrEqual(44);
+      expect(el.tabIndex).toBe(0);
+      expect(el.textContent).toContain(o.brand);
+      expect(el.textContent).toContain(o.province);
+      expect(el.textContent).toContain(o.ingredient);
+      const badge = within(el).getByTestId(`brand-badge-${o.id}`);
+      expect(badge).toHaveAttribute('aria-hidden', 'true');
+      shapes.add(Array.from(badge.querySelectorAll('path')).map((p) => p.getAttribute('d')).join('|'));
     }
-    fireEvent.click(gridTile('Cobote'));
+    expect(shapes.size).toBe(8);
+    fireEvent.click(card('Cobote'));
     expect(within(screen.getByTestId('sheet')).getByRole('heading', { level: 2, name: 'Cobote' })).toBeTruthy();
   });
 
-  it('8 ghim bản đồ là nút có vùng chạm ít nhất 44px', () => {
-    render(<BrandStoryPage />);
-    for (const o of BRAND_ORIGINS) {
-      const pin = tile(o.brand);
-      expect(pin.tagName).toBe('BUTTON');
-      expect(minHeightOf(pin)).toBeGreaterThanOrEqual(44);
-    }
+  it('thẻ và nhãn bản đồ cao ít nhất 44px (khai trong CSS)', () => {
+    const block = (sel: string) => new RegExp(`${sel.replace('.', '\\.')}\\s*\\{[^}]*min-height:\\s*44px`).test(MAP_CSS);
+    expect(block('.brandcard')).toBe(true);
+    expect(block('.brandmap-label')).toBe(true);
   });
 
   it('sheet có tiêu đề h2 là tên nhãn, tỉnh, nguyên liệu, câu chuyện và nút Đóng', () => {
     render(<BrandStoryPage />);
-    fireEvent.click(tile('Visante'));
+    fireEvent.click(mapLabel('Visante'));
     const sheet = within(screen.getByTestId('sheet'));
     expect(sheet.getByRole('heading', { level: 2, name: 'Visante' })).toBeTruthy();
     expect(sheet.getByText(/Khánh Hòa \(Nha Trang\)/)).toBeTruthy();
@@ -116,62 +122,66 @@ describe('BrandStoryPage — cấu trúc và vùng chạm (C-076, C-114)', () =>
 
   it('bấm Khám phá sản phẩm đóng sheet trước khi chuyển trang', () => {
     render(<BrandStoryPage />);
-    fireEvent.click(tile('Hector'));
+    fireEvent.click(mapLabel('Hector'));
     fireEvent.click(within(screen.getByTestId('sheet')).getByRole('button', { name: /Khám phá sản phẩm Hector/ }));
     expect(screen.queryByTestId('sheet')).toBeNull();
-    expect(mocks.navigate).toHaveBeenCalledWith('/browse?brand=Hector');
+    expect(mocks.navigate).toHaveBeenCalledWith('/browse?q=Hector');
   });
 
-  it('mỗi ô nhãn có lớp phủ tối dưới chữ trắng để đạt 4,5:1 (D8-1)', () => {
-    render(<BrandStoryPage />);
-    for (const o of BRAND_ORIGINS) {
-      const scrim = within(gridTile(o.brand)).getByTestId('brand-tile-scrim');
-      expect(scrim.style.background).toContain('--color-brand-tile-scrim');
-      expect(scrim.textContent).toContain(o.brand);
-      expect(scrim.textContent).toContain(o.province);
-    }
+  it('không còn gradient, lớp phủ tối hay emoji ở ô nhãn và câu dẫn (D8-1, D6-19)', () => {
+    const { container } = render(<BrandStoryPage />);
+    expect(container.innerHTML).not.toMatch(/gradient|brand-tile-scrim/);
+    expect(container.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
+    expect(screen.getByText(/Mỗi thương hiệu Tubu Tree đều gắn liền/).textContent).toContain('Chạm tên thương hiệu trên bản đồ vùng nguyên liệu Việt Nam');
   });
 
-  it('câu dẫn đầu trang không kết bằng emoji 🌿 (D6-19)', () => {
+  it('bản đồ có nhãn cho trình đọc màn hình, không còn chữ "Gỗ 3D"', () => {
     render(<BrandStoryPage />);
-    const intro = screen.getByText(/Mỗi thương hiệu Tubu Tree đều gắn liền/);
-    expect(intro.textContent).not.toMatch(/\p{Extended_Pictographic}/u);
-  });
-
-  it('bản đồ có nhãn cho trình đọc màn hình', () => {
-    render(<BrandStoryPage />);
-    expect(screen.getByRole('img', { name: /Bản đồ Gỗ 3D Việt Nam/ })).toBeTruthy();
+    expect(screen.getByRole('img', { name: 'Bản đồ vùng nguyên liệu Việt Nam, vẽ sơ đồ' })).toBeTruthy();
+    expect(screen.queryByRole('img', { name: /Gỗ 3D/ })).toBeNull();
   });
 });
 
-describe('BrandStoryPage — ghim bản đồ và vùng chạm (axe target-size, WCAG 2.5.8)', () => {
+describe('BrandStoryPage — bản đồ chú thích', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  it('8 ghim chỉ là lối tắt bằng hình trùng với 8 ô lưới: ẩn khỏi trình đọc màn hình và khỏi thứ tự Tab, vẫn chạm được', () => {
+  it('8 nhãn trên bản đồ là nút thật: Tab tới được, không aria-hidden, tên có nhãn và tỉnh; bấm mở sheet', () => {
     render(<BrandStoryPage />);
     for (const o of BRAND_ORIGINS) {
-      const pin = tile(o.brand);
-      expect(pin).toHaveAttribute('aria-hidden', 'true');
-      expect(pin).not.toHaveAttribute('aria-label');
-      expect(pin.tabIndex).toBe(-1);
-      expect(minHeightOf(pin)).toBeGreaterThanOrEqual(44);
+      const label = mapLabel(o.brand);
+      expect(label.tagName).toBe('BUTTON');
+      expect(label.tabIndex).toBe(0);
+      expect(label).not.toHaveAttribute('aria-hidden');
+      expect(label.textContent).toContain(o.brand);
+      expect(label.textContent).toContain(o.province);
     }
-    fireEvent.click(tile('Hector'));
+    fireEvent.click(mapLabel('Hector'));
     expect(within(screen.getByTestId('sheet')).getByRole('heading', { level: 2, name: 'Hector' })).toBeTruthy();
   });
 
-  it('người dùng trình đọc màn hình/bàn phím vẫn có đủ 8 nhãn qua ô lưới: nút Tab tới được, tên có nhãn và tỉnh, bấm mở sheet', () => {
+  it('chấm ghim chỉ để nhìn: ẩn khỏi trình đọc, không phải nút', () => {
     render(<BrandStoryPage />);
-    const accessible = screen.getAllByRole('button');
     for (const o of BRAND_ORIGINS) {
-      const grid = accessible.find((b) => (b.textContent ?? '').includes(o.brand));
-      expect(grid, `ô lưới ${o.brand}`).toBeDefined();
-      expect(grid!.textContent).toContain(o.province);
-      expect(grid!.tabIndex).toBe(0);
+      const pin = screen.getByTestId(`brand-map-pin-${o.id}`);
+      expect(pin.tagName).toBe('SPAN');
+      expect(pin).toHaveAttribute('aria-hidden', 'true');
     }
-    fireEvent.click(accessible.find((b) => (b.textContent ?? '').includes('Cobote'))!);
-    expect(within(screen.getByTestId('sheet')).getByRole('heading', { level: 2, name: 'Cobote' })).toBeTruthy();
-    // Không có ghim nào trong cây truy cập.
-    expect(accessible.filter((b) => (b.getAttribute('data-testid') ?? '').startsWith('brand-pin-'))).toEqual([]);
+  });
+
+  it('ba đảo có chấm số và tên ở dải chú giải', () => {
+    render(<BrandStoryPage />);
+    const legend = screen.getByTestId('brand-map-legend');
+    for (const name of ['Hoàng Sa', 'Trường Sa', 'Phú Quốc']) expect(legend.textContent).toContain(name);
+    expect(document.querySelectorAll('[data-testid^="brand-map-island-"]')).toHaveLength(3);
+  });
+
+  it('chọn nhãn sáng đúng nhãn đó trên bản đồ, không có chuyển động vĩnh viễn', () => {
+    const { container } = render(<BrandStoryPage />);
+    expect(container.querySelectorAll('[data-active]')).toHaveLength(0);
+    expect(container.innerHTML).not.toContain('pulse');
+    fireEvent.click(mapLabel('Visante'));
+    expect(mapLabel('Visante')).toHaveAttribute('data-active');
+    expect(screen.getByTestId(`brand-map-pin-${origin('Visante').id}`)).toHaveAttribute('data-active');
+    expect(mapLabel('Hector')).not.toHaveAttribute('data-active');
   });
 });
