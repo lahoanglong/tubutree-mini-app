@@ -16,6 +16,7 @@ import { invalidateInbox, type InboxKey } from '@/lib/admin-client';
 import { useOpsInbox } from './use-ops-inbox';
 import { CategoryTreePanel } from './category-tree-panel';
 import { ProductEditDrawer } from './product-edit-drawer';
+import { WpImageCandidatesPanel } from './wp-image-candidates-panel';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
 import { useToastedMessage } from './admin-toast';
@@ -287,6 +288,8 @@ export function ProductCategoriesTab({
           onSaved={() => void refreshAfterTreeChange()}
         />
       )}
+
+      <WpImageCandidatesPanel onChanged={() => void refreshAfterTreeChange()} />
 
       <PancakeCategoryHelper catName={catName} />
     </div>
