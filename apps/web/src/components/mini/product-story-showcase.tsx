@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, 
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
 import { ChevronRight } from 'lucide-react';
 import type { HudCalloutPoint, IngredientLayerSprite, ProductStoryConfig } from '@tubutree/shared-types';
-import { arcSlot, ambientVar, layersUpTo, resolveStoryConfig, storyView } from '@tubutree/app-core/commerce/product-story';
+import { arcSlot, ambientVar, resolveStoryConfig, stageLayers, storyView } from '@tubutree/app-core/commerce/product-story';
 import { preloadImages, STORY_PRELOAD_ROOT_MARGIN, storyPreloadUrls } from '@tubutree/app-core/commerce/story-preload';
 import { resolveReelStoryConfig } from '@tubutree/app-core/commerce/story-reel';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -132,35 +132,18 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
 
   const rootRef = useRef<HTMLElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
-  const sentinels = useRef<(HTMLElement | null)[]>([]);
   const stepCount = view?.steps.length ?? 0;
   const animated = view?.animated ?? true;
 
-  // Cuộn tới đâu bước nhảy tới đó; môi trường không có IntersectionObserver vẫn dùng được bằng chip.
-  useEffect(() => {
-    if (!animated || stepCount === 0 || typeof IntersectionObserver === 'undefined') return;
-    const io = new IntersectionObserver(
-      (entries) => {
-        for (const e of entries) {
-          if (!e.isIntersecting) continue;
-          const i = sentinels.current.indexOf(e.target as HTMLElement);
-          if (i >= 0) setStep(i);
-        }
-      },
-      { rootMargin: '-40% 0px -40% 0px' },
-    );
-    sentinels.current.forEach((el) => el && io.observe(el));
-    return () => io.disconnect();
-  }, [animated, stepCount]);
-
   // Bản tĩnh (giảm chuyển động) đã vẽ mọi lớp ngay nên không còn gì để tải trước; bản động tải ảnh nguyên liệu của chương kế để chuyển chương không chớp trắng.
   // `reduced` mặc định false ở lần render đầu (để hydrate khớp HTML dựng sẵn) nên đọc thiết lập thật trực tiếp ở đây, không tin `animated` của lần đó.
-  // Chỉ tải khi mục Story đã gần khung nhìn: khách không cuộn tới thì không tốn dữ liệu.
+  // Chỉ tải khi mục Story đã gần khung nhìn: khách không cuộn tới thì không tốn dữ liệu. Ảnh poster không vẽ lớp nguyên liệu nên không có gì để tải.
   const storySteps = view?.steps;
+  const overlay = view?.overlay ?? false;
   const seen = useSeen(rootRef, view !== null);
   useEffect(() => {
-    if (animated && seen && storySteps && !prefersReducedMotion()) preloadImages(storyPreloadUrls(storySteps, step));
-  }, [animated, seen, storySteps, step]);
+    if (animated && overlay && seen && storySteps && !prefersReducedMotion()) preloadImages(storyPreloadUrls(storySteps, step));
+  }, [animated, overlay, seen, storySteps, step]);
 
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -209,20 +192,19 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
   if (!config || !view) return null;
 
   const activeStep = Math.min(Math.max(step, 0), Math.max(stepCount - 1, 0));
-  const layers = view.animated ? layersUpTo(view.steps, activeStep) : view.staticLayers;
+  const layers = stageLayers(view, activeStep);
   const ambient = arcItems ? ambientVar(arcItems[arcActive]!.ambient) : 'var(--color-bg-media)';
   const image = config.cutoutUrl ?? product.images[0] ?? product.thumbnail;
-  const panel = view.steps[activeStep];
   const title = fillCopy('story.title');
 
-  const stage = (
-    <div className="tubu-story-sticky min-w-0 md:order-2 md:self-start">
+  const visual = (
+    <div className="tubu-story-visual min-w-0">
       <div data-testid="story-stage" data-frame={view.frame} className="tubu-story-stage" style={{ background: ambient }}>
         <ProductImage src={image} brand={product.brand} alt={fillCopy('story.stageAlt', { name: product.name })} width={448} sizes={STAGE_SIZES} fit="contain" className="tubu-story-product" />
         {layers.map((l) => (
           <Layer key={l.id} layer={l} animated={view.animated} />
         ))}
-        {view.hud ? (
+        {view.overlay && view.hud ? (
           <div data-testid="story-hud" role="group" aria-label={fillCopy('story.hudLabel')} className="tubu-story-hud">
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true" focusable="false" className="tubu-story-hud-lines">
               {view.hud.points.map((p) => (
@@ -268,62 +250,42 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
           })}
         </div>
       ) : null}
+      {view.points.length > 0 ? (
+        <ul data-testid="story-points" aria-label={fillCopy('story.hudLabel')} className="tubu-story-points">
+          {view.points.map((p) => (
+            <li key={p.id} data-testid="story-point" className="tubu-story-point">
+              <span className="tubu-story-point-label">{p.label}</span>
+              {p.value ? <span className="tubu-story-point-value">{p.value}</span> : null}
+            </li>
+          ))}
+        </ul>
+      ) : null}
       {view.hud ? <p data-testid="story-closing" className="tubu-story-closing">{view.hud.closing}</p> : null}
     </div>
   );
 
-  // Mốc cuộn của chế độ ghép lớp theo cuộn. Nội tuyến nằm cuối cột bước (md+ ghim sân khấu suốt đường cuộn); toàn màn nằm ngoài khối ghim
-  // để sân khấu và chip luôn ở trên cùng khi cuộn qua mốc, kể cả khổ điện thoại một cột.
-  const sentinelEls = view.steps.map((s, i) => <div key={s.num} aria-hidden="true" ref={(el) => void (sentinels.current[i] = el)} className="tubu-story-sentinel" />);
-
-  const steps =
-    stepCount === 0 ? null : view.animated ? (
-      <div className="min-w-0 md:order-1">
-        <div className="tubu-story-sticky">
-        <nav aria-label={fillCopy('story.stepsLabel')} className="tubu-story-chips">
+  // Mọi chương cùng hiện, bấm một thẻ để chọn: không còn mốc cuộn rỗng, chiều cao cột chữ do chính các thẻ quyết định.
+  const chapters =
+    stepCount === 0 ? null : (
+      <nav aria-label={fillCopy('story.stepsLabel')} className="tubu-story-chapters min-w-0">
+        <ol className="tubu-story-timeline">
           {view.steps.map((s, i) => (
-            <button
-              key={s.num}
-              type="button"
-              data-testid="story-step-chip"
-              aria-current={i === activeStep ? 'step' : undefined}
-              aria-label={fillCopy('story.stepChip', { num: s.num, title: s.title })}
-              className="tubu-story-chip tubu-hit-44-square"
-              onClick={() => setStep(i)}
-            >
-              {s.num}
-            </button>
+            <li key={s.num}>
+              <button type="button" data-testid="story-step-card" aria-current={i === activeStep ? 'step' : undefined} className="tubu-story-step tubu-hit-44" onClick={() => setStep(i)}>
+                <span className="tubu-story-num">{s.num}</span>
+                <span className="tubu-story-step-title">{s.title}</span>
+                <span className="tubu-story-step-body">{s.body}</span>
+              </button>
+            </li>
           ))}
-        </nav>
-        <div aria-hidden="true" className="tubu-story-progress">
-          <span style={{ width: `${((activeStep + 1) / stepCount) * 100}%` }} />
-        </div>
-        <div data-testid="story-step-panel" aria-live="polite" className="tubu-story-panel">
-          <div key={activeStep} className="tubu-story-panel-in">
-            <p className="tubu-story-num">{panel?.num}</p>
-            <h3 className="tubu-story-step-title">{panel?.title}</h3>
-            <p className="tubu-story-step-body">{panel?.body}</p>
-          </div>
-        </div>
-        </div>
-        {fullscreen ? null : sentinelEls}
-      </div>
-    ) : (
-      <ol data-testid="story-static-steps" className="tubu-story-static md:order-1">
-        {view.steps.map((s) => (
-          <li key={s.num}>
-            <p className="tubu-story-num">{s.num}</p>
-            <h3 className="tubu-story-step-title">{s.title}</h3>
-            <p className="tubu-story-step-body">{s.body}</p>
-          </li>
-        ))}
-      </ol>
+        </ol>
+      </nav>
     );
 
   const body = (
-    <div className={stepCount > 0 ? 'grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:items-start md:gap-8' : 'grid min-w-0 grid-cols-1 gap-4 md:mx-auto md:max-w-lg'}>
-      {stage}
-      {steps}
+    <div className={stepCount > 0 ? 'tubu-story-split' : 'tubu-story-split tubu-story-split-single'}>
+      {visual}
+      {chapters}
     </div>
   );
 
@@ -359,16 +321,7 @@ export function ProductStoryShowcase({ product, selectedVariationId, onSelectVar
           <span aria-hidden="true">×</span>
         </button>
       </header>
-      <div className="tubu-story-scroll">
-        {view.animated && stepCount > 0 ? (
-          <>
-            <div className="tubu-story-pin">{body}</div>
-            {sentinelEls}
-          </>
-        ) : (
-          body
-        )}
-      </div>
+      <div className="tubu-story-scroll">{body}</div>
       {reel ? (
         <div className="tubu-story-bar tubu-story-bar-reel" data-reel="true">
           {onNext && (

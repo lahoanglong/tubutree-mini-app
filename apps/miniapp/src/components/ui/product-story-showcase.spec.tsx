@@ -56,6 +56,9 @@ const fullConfig = (over: { label?: string } = {}): ProductStoryConfig => ({
   ],
 });
 
+/** Ảnh tách nền thật: chỉ lúc này sprite nguyên liệu và chú thích HUD mới được vẽ đè lên ảnh. */
+const cutConfig = (over: { label?: string } = {}): ProductStoryConfig => ({ ...fullConfig(over), cutoutUrl: 'https://example.com/cut.png' });
+
 function mockMatchMedia(reduce: boolean) {
   vi.stubGlobal('matchMedia', (q: string) => ({
     matches: reduce && q.includes('reduce'),
@@ -86,17 +89,16 @@ describe('ProductStoryShowcase (Mini)', () => {
     expect(screen.getByTestId('product-story')).toHaveAttribute('data-animated', 'true');
   });
 
-  it('khung ảnh: ảnh gốc (không có ảnh tách nền) vào thẻ nổi ở cả sân khấu và khung HUD; có ảnh tách nền thì cutout; admin đặt thì theo admin', () => {
+  it('khung ảnh: ảnh gốc (không có ảnh tách nền) vào thẻ nổi; có ảnh tách nền thì cutout; admin đặt thì theo admin', () => {
     const { unmount } = render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} />);
     expect(screen.getByTestId('story-stage')).toHaveAttribute('data-frame', 'floating-card');
-    expect(screen.getByTestId('story-hud').querySelector('[data-frame]')).toHaveAttribute('data-frame', 'floating-card');
     unmount();
 
-    const cut = render(<ProductStoryShowcase product={baseProduct} previewConfig={{ ...fullConfig(), cutoutUrl: 'https://example.com/cut.png' }} />);
+    const cut = render(<ProductStoryShowcase product={baseProduct} previewConfig={cutConfig()} />);
     expect(screen.getByTestId('story-stage')).toHaveAttribute('data-frame', 'cutout');
     cut.unmount();
 
-    render(<ProductStoryShowcase product={baseProduct} previewConfig={{ ...fullConfig(), cutoutUrl: 'https://example.com/cut.png', imageFrame: 'floating-card' }} />);
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={{ ...cutConfig(), imageFrame: 'floating-card' }} />);
     expect(screen.getByTestId('story-stage')).toHaveAttribute('data-frame', 'floating-card');
   });
 
@@ -134,64 +136,110 @@ describe('ProductStoryShowcase (Mini)', () => {
     expect(screen.getAllByTestId('story-arc-item')[1]).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('steps chips switch the active step (aria-current)', () => {
-    render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} />);
+  it('mọi chương cùng hiện thành thẻ bấm được; bấm một thẻ chọn chương đó (aria-current) và thả thêm lớp nguyên liệu (ảnh tách nền)', () => {
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={cutConfig()} />);
     const nav = screen.getByRole('navigation', { name: 'Các bước' });
-    const chips = within(nav).getAllByTestId('story-step-chip');
-    expect(chips.map((c) => c.textContent)).toEqual(['01', '02', '03']);
-    chips.forEach((c) => expect(c.getAttribute('aria-label')!.startsWith(c.textContent!)).toBe(true));
-    expect(chips[0]).toHaveAttribute('aria-current', 'step');
-    expect(screen.getByTestId('story-step-panel')).toHaveTextContent('Tiêu đề 1');
+    const cards = within(nav).getAllByTestId('story-step-card');
+    expect(cards.map((c) => c.querySelector('.tubu-story-num')!.textContent)).toEqual(['01', '02', '03']);
+    expect(within(nav).getByRole('list').tagName).toBe('OL');
+    expect(cards.every((c) => c.tagName === 'BUTTON' && c.getAttribute('type') === 'button')).toBe(true);
+    expect(cards[0]).toHaveTextContent('Tiêu đề 1');
+    expect(cards[0]).toHaveTextContent('Nội dung 1');
+    expect(cards[2]).toHaveTextContent('Nội dung 3');
+    expect(cards[0]).toHaveAttribute('aria-current', 'step');
     expect(screen.getAllByTestId('story-layer')).toHaveLength(1);
-    fireEvent.click(chips[2]!);
-    expect(chips[2]).toHaveAttribute('aria-current', 'step');
-    expect(chips[0]).not.toHaveAttribute('aria-current');
-    expect(screen.getByTestId('story-step-panel')).toHaveTextContent('Tiêu đề 3');
-    expect(screen.getByTestId('story-step-panel')).toHaveTextContent('Nội dung 3');
+    fireEvent.click(cards[2]!);
+    expect(cards[2]).toHaveAttribute('aria-current', 'step');
+    expect(cards[0]).not.toHaveAttribute('aria-current');
     expect(screen.getAllByTestId('story-layer')).toHaveLength(3);
+    // Chương chưa chọn vẫn đọc được.
+    expect(cards[0]).toHaveTextContent('Nội dung 1');
   });
 
-  it('reduced motion renders all steps statically', () => {
+  it('reduced motion: vẽ mọi lớp ngay (bản tĩnh) mà các chương vẫn là cùng danh sách thẻ', () => {
     mockMatchMedia(true);
-    render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} />);
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={cutConfig()} />);
     expect(screen.getByTestId('product-story')).toHaveAttribute('data-animated', 'false');
-    const list = screen.getByTestId('story-static-steps');
-    expect(within(list).getAllByRole('listitem')).toHaveLength(3);
-    expect(list).toHaveTextContent('Tiêu đề 2');
-    expect(list).toHaveTextContent('Nội dung 3');
-    expect(screen.queryByTestId('story-step-chip')).toBeNull();
+    expect(screen.getAllByTestId('story-step-card')).toHaveLength(3);
+    expect(screen.queryByTestId('story-static-steps')).toBeNull();
+    expect(screen.getAllByTestId('story-layer')).toHaveLength(3);
     for (const l of screen.getAllByTestId('story-layer')) expect(l).toHaveAttribute('data-static', 'true');
   });
 
-  it('HUD callouts render label and value as text', () => {
-    render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} />);
+  it('HUD callouts (ảnh tách nền): nằm trong khung sân khấu, nhãn và giá trị là chữ; không còn khung ảnh thứ hai; không có chip', () => {
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={cutConfig()} />);
     const hud = screen.getByTestId('story-hud');
+    expect(screen.getByTestId('story-stage')).toContainElement(hud);
+    expect(document.querySelectorAll('.tubu-story-frame')).toHaveLength(1);
     const callouts = within(hud).getAllByTestId('story-callout');
     expect(callouts).toHaveLength(2);
     expect(callouts[0]).toHaveTextContent('Sả chanh');
     expect(callouts[0]).toHaveTextContent('12%');
-    expect(hud).toHaveTextContent('An lành cho cả nhà');
+    expect(screen.getByTestId('story-closing')).toHaveTextContent('An lành cho cả nhà');
+    expect(screen.queryByTestId('story-points')).toBeNull();
   });
 
-  it('sản phẩm của nhãn chủ lực chưa có cấu hình: tự vẽ điểm chỉ Thương hiệu, Quy cách, Hương đọc từ tên cùng câu kết', () => {
+  it('ảnh poster: không lớp nguyên liệu, không chú thích, không đường nối trên ảnh; điểm nhấn thành chip dưới khung ảnh và chọn chương không thả lớp nào', () => {
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} />);
+    const stage = screen.getByTestId('story-stage');
+    expect(stage).toHaveAttribute('data-frame', 'floating-card');
+    expect(stage.querySelectorAll('[data-testid="story-layer"], [data-testid="story-callout"], [data-testid="story-hud"], svg, .tubu-story-dot')).toHaveLength(0);
+    const points = screen.getByTestId('story-points');
+    expect(points.tagName).toBe('UL');
+    expect(points).toHaveAttribute('aria-label', 'Thành phần nổi bật');
+    expect(stage).not.toContainElement(points);
+    expect(stage.compareDocumentPosition(points) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const chips = within(points).getAllByTestId('story-point');
+    expect(chips).toHaveLength(2);
+    expect(chips[0]).toHaveTextContent('Sả chanh');
+    expect(chips[0]).toHaveTextContent('12%');
+    expect(chips[1]).toHaveTextContent('Bồ kết');
+    expect(screen.getByTestId('story-closing')).toHaveTextContent('An lành cho cả nhà');
+    fireEvent.click(screen.getAllByTestId('story-step-card')[2]!);
+    expect(screen.queryAllByTestId('story-layer')).toHaveLength(0);
+    expect(screen.getAllByTestId('story-step-card')[2]).toHaveAttribute('aria-current', 'step');
+  });
+
+  it('admin ép imageFrame: floating-card tắt đè dù có ảnh tách nền; cutout bật đè dù không có', () => {
+    const a = render(<ProductStoryShowcase product={baseProduct} previewConfig={{ ...cutConfig(), imageFrame: 'floating-card' }} />);
+    expect(screen.queryAllByTestId('story-callout')).toHaveLength(0);
+    expect(screen.getAllByTestId('story-point')).toHaveLength(2);
+    a.unmount();
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={{ ...fullConfig(), imageFrame: 'cutout' }} />);
+    expect(screen.getAllByTestId('story-callout')).toHaveLength(2);
+    expect(screen.queryAllByTestId('story-point')).toHaveLength(0);
+  });
+
+  it('sản phẩm của nhãn chủ lực chưa có cấu hình: tự vẽ điểm nhấn Thương hiệu, Quy cách, Hương đọc từ tên cùng câu kết (chip dưới ảnh poster)', () => {
     const brand = { ...baseProduct, slug: 'nuoc-giat-huong-bac-ha-fuwa3e-750ml-aaaaaa', name: 'Nước giặt hương Bạc hà Fuwa3e 750ml', brand: 'Tubu Tree' } as unknown as ProductDetail;
     render(<ProductStoryShowcase product={brand} />);
-    const hud = screen.getByTestId('story-hud');
-    const callouts = within(hud).getAllByTestId('story-callout');
-    expect(callouts).toHaveLength(3);
-    expect(callouts[0]).toHaveTextContent('Thương hiệu');
-    expect(callouts[0]).toHaveTextContent('Fuwa3e');
-    expect(callouts[1]).toHaveTextContent('750ml');
-    expect(callouts[2]).toHaveTextContent('Bạc hà');
-    expect(hud).toHaveTextContent('Fuwa3e, có tại Tubu Tree');
+    expect(screen.queryByTestId('story-hud')).toBeNull();
+    expect(screen.queryAllByTestId('story-callout')).toHaveLength(0);
+    const chips = within(screen.getByTestId('story-points')).getAllByTestId('story-point');
+    expect(chips).toHaveLength(3);
+    expect(chips[0]).toHaveTextContent('Thương hiệu');
+    expect(chips[0]).toHaveTextContent('Fuwa3e');
+    expect(chips[1]).toHaveTextContent('750ml');
+    expect(chips[2]).toHaveTextContent('Bạc hà');
+    expect(screen.getByTestId('story-closing')).toHaveTextContent('Fuwa3e, có tại Tubu Tree');
   });
 
-  it('hostile label renders as text not HTML', () => {
+  it('hostile label renders as text not HTML (cả chú thích trên ảnh tách nền lẫn chip dưới ảnh poster)', () => {
     const hostile = '<img src=x onerror=alert(1)> & "q"';
-    const { container } = render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig({ label: hostile })} />);
+    const cut = render(<ProductStoryShowcase product={baseProduct} previewConfig={cutConfig({ label: hostile })} />);
     for (const c of screen.getAllByTestId('story-callout')) expect(c.querySelector('img')).toBeNull();
-    expect(container.querySelector('img[onerror]')).toBeNull();
+    expect(cut.container.querySelector('img[onerror]')).toBeNull();
     expect(screen.getAllByTestId('story-callout')[0]).toHaveTextContent(hostile);
+    cut.unmount();
+    const poster = render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig({ label: hostile })} />);
+    for (const c of screen.getAllByTestId('story-point')) expect(c.querySelector('img')).toBeNull();
+    expect(poster.container.querySelector('img[onerror]')).toBeNull();
+    expect(screen.getAllByTestId('story-point')[0]).toHaveTextContent(hostile);
+  });
+
+  it('không còn khối chương nào chỉ hiện một bước: không story-step-chip, story-step-panel hay story-static-steps', () => {
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={fullConfig()} />);
+    for (const id of ['story-step-chip', 'story-step-panel', 'story-static-steps']) expect(screen.queryByTestId(id), id).toBeNull();
   });
 
   it('fullscreen: Esc calls onClose, role=dialog, buy bar has 2 buttons that call handlers', () => {
@@ -260,6 +308,7 @@ const imgLayer = (id: string, imageUrl: string) => ({ id, imageUrl, label: id, f
 const imageStory: ProductStoryConfig = {
   version: 1,
   enabled: true,
+  cutoutUrl: 'https://example.com/cut.png',
   scenes: [
     {
       kind: 'ingredient_assembly',
@@ -292,7 +341,7 @@ describe('W40B: tải trước ảnh chương kế và chuyển chương mượt
   it('mở ở chương 01 thì tải ảnh nguyên liệu của chương 02; sang chương kế tải tiếp chương sau nó; cuối cùng và quay lại không tải lại', () => {
     render(<ProductStoryShowcase product={baseProduct} previewConfig={imageStory} />);
     expect(loaded).toEqual(['/api/ing-1.png']);
-    const chips = screen.getAllByTestId('story-step-chip');
+    const chips = screen.getAllByTestId('story-step-card');
     fireEvent.click(chips[1]!);
     expect(loaded).toEqual(['/api/ing-1.png', '/api/ing-2.png']);
     fireEvent.click(chips[2]!);
@@ -331,16 +380,22 @@ describe('W40B: tải trước ảnh chương kế và chuyển chương mượt
     expect(loaded).toEqual([]);
   });
 
-  it('đổi chương dựng lại khối nội dung (key theo bước) để chạy lại hiệu ứng vào, chữ đổi theo', () => {
+  it('ảnh poster (không có ảnh tách nền) không vẽ lớp nguyên liệu nên không tải trước ảnh nào', () => {
+    const { cutoutUrl: _omit, ...poster } = imageStory;
+    void _omit;
+    render(<ProductStoryShowcase product={baseProduct} previewConfig={poster} />);
+    fireEvent.click(screen.getAllByTestId('story-step-card')[1]!);
+    expect(loaded).toEqual([]);
+  });
+
+  it('chọn chương đổi thẻ đang chọn (aria-current) mà không dựng lại các thẻ khác', () => {
     render(<ProductStoryShowcase product={baseProduct} previewConfig={imageStory} />);
-    const panel = screen.getByTestId('story-step-panel');
-    const before = panel.firstElementChild!;
-    expect(before).toHaveClass('tubu-story-panel-in');
-    fireEvent.click(screen.getAllByTestId('story-step-chip')[1]!);
-    const after = screen.getByTestId('story-step-panel').firstElementChild!;
-    expect(after).toHaveClass('tubu-story-panel-in');
-    expect(after).not.toBe(before);
-    expect(after).toHaveTextContent('Chương 2');
+    const before = screen.getAllByTestId('story-step-card');
+    fireEvent.click(before[1]!);
+    const after = screen.getAllByTestId('story-step-card');
+    expect(after[0]).toBe(before[0]);
+    expect(after[1]).toBe(before[1]);
+    expect(after.map((c) => c.getAttribute('aria-current'))).toEqual([null, 'step', null]);
   });
 
   describe('story.css', () => {
@@ -348,35 +403,40 @@ describe('W40B: tải trước ảnh chương kế và chuyển chương mượt
     const reduced = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
     const rule = (sel: string) => new RegExp(`${sel.replace(/[.[\]()]/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
 
-    it('chuyển chương, lớp rơi và nền cảnh dùng đường cong ease-story 240ms (token, không số rải rác)', () => {
-      expect(rule('.tubu-story-panel-in')).toMatch(/animation:\s*tubu-story-panel-in var\(--dur-story\) var\(--ease-story\) both/);
+    it('chọn thẻ chương, lớp rơi và nền cảnh dùng đường cong ease-story 240ms (token, không số rải rác)', () => {
       expect(rule('.tubu-story-layer')).toMatch(/animation:\s*tubu-story-drop var\(--dur-story\) var\(--ease-story\) both/);
       expect(rule('.tubu-story-stage')).toMatch(/transition:\s*background var\(--dur-story\) var\(--ease-story\)/);
-      expect(rule('.tubu-story-chip')).toMatch(/transition:\s*transform var\(--p-dur-release\) var\(--p-ease-out\), background-color var\(--dur-story\) var\(--ease-story\), color var\(--dur-story\) var\(--ease-story\)/);
+      expect(rule('.tubu-story-step')).toMatch(/transition:\s*background-color var\(--dur-story\) var\(--ease-story\), border-color var\(--dur-story\) var\(--ease-story\)/);
       const tokens = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
       expect(tokens).toMatch(/--ease-story:\s*var\(--p-ease-story\)/);
       expect(tokens).toMatch(/--dur-story:\s*var\(--p-dur-story\)/);
     });
 
-    it('giảm chuyển động tắt hiệu ứng vào của chương, lớp rơi, nền cảnh và đổi màu chip', () => {
-      expect(reduced).toMatch(/\.tubu-story-layer,\s*\.tubu-story-panel-in\s*\{\s*animation:\s*none/);
-      expect(reduced).toMatch(/\.tubu-story-stage,\s*\.tubu-story-arc-item,\s*\.tubu-story-chip\s*\{\s*transition:\s*none/);
+    it('giảm chuyển động tắt lớp rơi, nền cảnh và đổi màu thẻ chương', () => {
+      expect(reduced).toMatch(/\.tubu-story-layer\s*\{\s*animation:\s*none/);
+      expect(reduced).toMatch(/\.tubu-story-stage,\s*\.tubu-story-arc-item,\s*\.tubu-story-step\s*\{\s*transition:\s*none/);
     });
 
-    it('số đều (tabular-nums) cho chữ bước, thẻ chỉ, chip, nhãn vòng cung và thanh mua của khung toàn màn', () => {
+    it('số đều (tabular-nums) cho chữ chương, chip điểm nhấn, nhãn vòng cung và thanh mua của khung toàn màn', () => {
       expect(rule('.tubu-story')).toMatch(/font-variant-numeric:\s*tabular-nums/);
       expect(rule('.tubu-story-dialog')).toMatch(/font-variant-numeric:\s*tabular-nums/);
-      expect(rule('.tubu-story-chip')).toMatch(/font-variant-numeric:\s*tabular-nums/);
       expect(rule('.tubu-story-arc-item')).toMatch(/font-variant-numeric:\s*tabular-nums/);
     });
 
-    it('vùng chạm 44px: chip, mục vòng cung và nút đóng', () => {
-      for (const sel of ['.tubu-story-chip', '.tubu-story-arc-item']) {
-        expect(rule(sel), sel).toMatch(/min-width:\s*44px/);
-        expect(rule(sel), sel).toMatch(/min-height:\s*44px/);
-      }
+    it('vùng chạm 44px: thẻ chương, mục vòng cung và nút đóng', () => {
+      expect(rule('.tubu-story-step')).toMatch(/min-height:\s*44px/);
+      expect(rule('.tubu-story-arc-item')).toMatch(/min-width:\s*44px/);
+      expect(rule('.tubu-story-arc-item')).toMatch(/min-height:\s*44px/);
       expect(rule('.tubu-story-close')).toMatch(/width:\s*44px/);
       expect(rule('.tubu-story-close')).toMatch(/height:\s*44px/);
+    });
+
+    it('không còn khối ghim, mốc cuộn hay chip bước; thẻ chương và chip điểm nhấn chỉ dùng token', () => {
+      for (const gone of ['.tubu-story-chips', '.tubu-story-chip', '.tubu-story-panel', '.tubu-story-static', '.tubu-story-progress', '.tubu-story-sentinel', '.tubu-story-pin']) expect(css.includes(gone), gone).toBe(false);
+      expect(rule('.tubu-story-step')).toMatch(/border:\s*1px solid var\(--color-border-subtle\)/);
+      expect(rule(".tubu-story-step[aria-current='step']")).toMatch(/background:\s*var\(--color-bg-subtle\)/);
+      expect(rule('.tubu-story-point')).toMatch(/border:\s*1px solid var\(--color-border-default\)/);
+      expect(rule('.tubu-story-hud')).toMatch(/position:\s*absolute/);
     });
   });
 });

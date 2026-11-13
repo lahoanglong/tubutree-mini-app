@@ -220,14 +220,28 @@ export function storyImageFrame(config: Pick<ProductStoryConfig, 'cutoutUrl' | '
   return config.imageFrame ?? (config.cutoutUrl ? 'cutout' : 'floating-card');
 }
 
+/** Một điểm nhấn HUD vẽ thành chip dưới khung ảnh (không có toạ độ vì không đè lên ảnh). */
+export interface StoryPointView {
+  id: string;
+  label: string;
+  value?: string;
+}
+
 export interface StoryViewModel {
   /** false khi khách chọn giảm chuyển động: hai app vẽ bản tĩnh đủ nội dung bằng `staticLayers`. */
   animated: boolean;
   cutoutUrl: string | null;
   frame: StoryImageFrame;
+  /**
+   * true chỉ khi ảnh là ảnh tách nền thật (`cutout`): lúc đó sprite nguyên liệu và hộp chú thích HUD mới được vẽ đè lên ảnh.
+   * Ảnh poster, ảnh chụp bối cảnh (thẻ nổi) đã in sẵn chữ và hình, đè gì lên cũng che mất nên không vẽ gì lên ảnh.
+   */
+  overlay: boolean;
   arc: VariantArcItem[] | null;
   steps: StoryStepView[];
   hud: { points: HudCalloutPoint[]; closing: string } | null;
+  /** Điểm nhấn HUD thành dải chip dưới khung ảnh khi `overlay` là false; rỗng khi HUD đã vẽ trên ảnh hoặc không có HUD. */
+  points: StoryPointView[];
   staticLayers: IngredientLayerSprite[];
 }
 
@@ -243,7 +257,16 @@ export function storyView(config: ProductStoryConfig, opts: { reducedMotion: boo
   const animated = !opts.reducedMotion;
   const seen = new Set<string>();
   const staticLayers = animated ? [] : steps.flatMap((s) => s.layers).filter((l) => (seen.has(l.id) ? false : (seen.add(l.id), true)));
-  return { animated, cutoutUrl: config.cutoutUrl ?? null, frame: storyImageFrame(config), arc, steps, hud, staticLayers };
+  const frame = storyImageFrame(config);
+  const overlay = frame === 'cutout';
+  const points: StoryPointView[] = !overlay && hud ? hud.points.map((p) => ({ id: p.id, label: p.label, ...(p.value ? { value: p.value } : null) })) : [];
+  return { animated, cutoutUrl: config.cutoutUrl ?? null, frame, overlay, arc, steps, hud, points, staticLayers };
+}
+
+/** Lớp nguyên liệu vẽ trên khung ảnh ở bước đang xem: không có lớp nào khi ảnh không phải ảnh tách nền (xem `StoryViewModel.overlay`). */
+export function stageLayers(view: Pick<StoryViewModel, 'overlay' | 'animated' | 'steps' | 'staticLayers'>, active: number): IngredientLayerSprite[] {
+  if (!view.overlay) return [];
+  return view.animated ? layersUpTo(view.steps, active) : view.staticLayers;
 }
 
 /** Lớp nguyên liệu đã "rơi vào" tới bước đang xem (tích luỹ); chỉ số ngoài khoảng được kẹp. */

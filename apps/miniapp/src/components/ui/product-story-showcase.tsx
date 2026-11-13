@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronRight, X } from 'lucide-react';
 import type { ProductDetail } from '@tubutree/app-core/api/catalog';
-import { ambientVar, arcSlot, layersUpTo, resolveStoryConfig, storyView, type StoryViewModel } from '@tubutree/app-core/commerce/product-story';
+import { ambientVar, arcSlot, resolveStoryConfig, stageLayers, storyView, type StoryViewModel } from '@tubutree/app-core/commerce/product-story';
 import { preloadImages, STORY_PRELOAD_ROOT_MARGIN, storyPreloadUrls } from '@tubutree/app-core/commerce/story-preload';
 import { resolveReelStoryConfig } from '@tubutree/app-core/commerce/story-reel';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -82,7 +82,9 @@ function Layer({ layer, isStatic }: { layer: IngredientLayerSprite; isStatic: bo
   );
 }
 
-function Stage({ product, imageUrl, frame, ambient, layers, isStatic }: { product: ProductDetail; imageUrl: string | null; frame: StoryViewModel['frame']; ambient: string; layers: IngredientLayerSprite[]; isStatic: boolean }) {
+const clampPct = (n: number) => Math.min(100, Math.max(0, n));
+
+function Stage({ product, imageUrl, frame, ambient, layers, isStatic, hud }: { product: ProductDetail; imageUrl: string | null; frame: StoryViewModel['frame']; ambient: string; layers: IngredientLayerSprite[]; isStatic: boolean; hud: StoryViewModel['hud'] }) {
   return (
     <div
       data-testid="story-stage"
@@ -98,100 +100,39 @@ function Stage({ product, imageUrl, frame, ambient, layers, isStatic }: { produc
       {layers.map((l) => (
         <Layer key={l.id} layer={l} isStatic={isStatic} />
       ))}
-    </div>
-  );
-}
-
-const clampPct = (n: number) => Math.min(100, Math.max(0, n));
-
-function Hud({ product, imageUrl, frame, hud }: { product: ProductDetail; imageUrl: string | null; frame: StoryViewModel['frame']; hud: NonNullable<StoryViewModel['hud']> }) {
-  return (
-    <div data-testid="story-hud" className="tubu-story-hud">
-      <div role="group" aria-label={fillCopy('story.hudLabel')} data-frame={frame} className="tubu-story-frame" style={{ background: ambientVar('sand') }}>
-        <div className="tubu-story-product" aria-hidden>
-          <ProductImage src={imageUrl} brand={product.brand} width={480} fit="contain" />
-        </div>
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden focusable="false" className="tubu-story-hud-lines">
+      {hud && (
+        <div data-testid="story-hud" role="group" aria-label={fillCopy('story.hudLabel')} className="tubu-story-hud">
+          <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden focusable="false" className="tubu-story-hud-lines">
+            {hud.points.map((p) => (
+              <line
+                key={p.id}
+                x1={clampPct(p.xPct)}
+                y1={clampPct(p.yPct)}
+                x2={p.side === 'left' ? 37 : 63}
+                y2={clampPct(p.yPct)}
+                stroke="var(--color-border-strong)"
+                strokeWidth={1.5}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          </svg>
           {hud.points.map((p) => (
-            <line
-              key={p.id}
-              x1={clampPct(p.xPct)}
-              y1={clampPct(p.yPct)}
-              x2={p.side === 'left' ? 37 : 63}
-              y2={clampPct(p.yPct)}
-              stroke="var(--color-border-strong)"
-              strokeWidth={1.5}
-              vectorEffect="non-scaling-stroke"
-            />
+            <span key={`dot-${p.id}`} aria-hidden className="tubu-story-dot" style={{ left: `${clampPct(p.xPct)}%`, top: `${clampPct(p.yPct)}%` }} />
           ))}
-        </svg>
-        {hud.points.map((p) => (
-          <span key={`dot-${p.id}`} aria-hidden className="tubu-story-dot" style={{ left: `${clampPct(p.xPct)}%`, top: `${clampPct(p.yPct)}%` }} />
-        ))}
-        {hud.points.map((p) => (
-          <div key={p.id} data-testid="story-callout" data-side={p.side} className="tubu-story-callout" style={{ top: `${clampPct(p.yPct)}%` }}>
-            <div className="tubu-story-callout-label">{p.label}</div>
-            {p.value && <div className="tubu-story-callout-value">{p.value}</div>}
-            {p.barPct !== undefined && (
-              <div aria-hidden className="tubu-story-callout-track">
-                <div className="tubu-story-callout-fill" style={{ width: `${clampPct(p.barPct)}%` }} />
-              </div>
-            )}
-          </div>
-        ))}
-      </div>
-      <p className="tubu-story-closing">{hud.closing}</p>
+          {hud.points.map((p) => (
+            <div key={p.id} data-testid="story-callout" data-side={p.side} className="tubu-story-callout" style={{ top: `${clampPct(p.yPct)}%` }}>
+              <div className="tubu-story-callout-label">{p.label}</div>
+              {p.value && <div className="tubu-story-callout-value">{p.value}</div>}
+              {p.barPct !== undefined && (
+                <div aria-hidden className="tubu-story-callout-track">
+                  <div className="tubu-story-callout-fill" style={{ width: `${clampPct(p.barPct)}%` }} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
-  );
-}
-
-function StepChips({ steps, active, onPick }: { steps: { num: string; title: string }[]; active: number; onPick: (i: number) => void }) {
-  const track = useRef<HTMLDivElement>(null);
-  // Chỉ cuộn do khách vuốt mới đổi bước: lần gọi đầu của observer báo cả chip đang nằm giữa, không được tính.
-  const touched = useRef(false);
-  useEffect(() => {
-    const root = track.current;
-    if (!root || typeof IntersectionObserver === 'undefined') return;
-    const mark = () => {
-      touched.current = true;
-    };
-    root.addEventListener('scroll', mark, { passive: true });
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (!touched.current) return;
-        for (const e of entries) {
-          if (!e.isIntersecting) continue;
-          const i = Number((e.target as HTMLElement).dataset.index);
-          if (Number.isInteger(i)) onPick(i);
-        }
-      },
-      { root, rootMargin: '0px -40% 0px -40%', threshold: 0.5 },
-    );
-    root.querySelectorAll('[data-index]').forEach((el) => io.observe(el));
-    return () => {
-      root.removeEventListener('scroll', mark);
-      io.disconnect();
-    };
-  }, [steps.length, onPick]);
-  return (
-    <nav aria-label={fillCopy('story.stepsLabel')}>
-      <div ref={track} className="tubu-story-chips">
-        {steps.map((s, i) => (
-          <button
-            key={s.num}
-            type="button"
-            data-testid="story-step-chip"
-            data-index={i}
-            aria-current={i === active ? 'step' : undefined}
-            aria-label={fillCopy('story.stepChip', { num: s.num, title: s.title })}
-            className="tubu-story-chip tubu-press tubu-hit-44-square"
-            onClick={() => onPick(i)}
-          >
-            {s.num}
-          </button>
-        ))}
-      </div>
-    </nav>
   );
 }
 
@@ -220,7 +161,6 @@ function Scenes({ props, view, seen }: { props: ProductStoryShowcaseProps; view:
   const [activeStep, setActiveStep] = useState(0);
   const [arcPick, setArcPick] = useState<number | null>(null);
   useEffect(() => setArcPick(null), [selectedVariationId]);
-  const pickStep = useCallback((i: number) => setActiveStep(i), []);
 
   const arc = view.arc;
   const matched = arc && selectedVariationId ? arc.findIndex((a) => a.variationId === selectedVariationId) : -1;
@@ -228,18 +168,18 @@ function Scenes({ props, view, seen }: { props: ProductStoryShowcaseProps; view:
   const ambient = arc && arc[arcActive] ? ambientVar(arc[arcActive]!.ambient) : ambientVar('sand');
   const imageUrl = view.cutoutUrl ?? product.images[0] ?? product.thumbnail ?? null;
   const step = Math.min(activeStep, Math.max(0, view.steps.length - 1));
-  const layers = view.animated ? layersUpTo(view.steps, step) : view.staticLayers;
-  const showStage = view.steps.length > 0 || arc !== null;
+  const layers = stageLayers(view, step);
+  const showStage = view.steps.length > 0 || arc !== null || view.hud !== null;
 
-  // Bản tĩnh (giảm chuyển động) đã vẽ mọi lớp ngay nên không còn gì để tải trước; bản động tải ảnh nguyên liệu của chương kế để vuốt sang không chớp trắng.
-  // Chỉ tải khi mục Story đã gần khung nhìn: khách không cuộn tới thì không tốn dữ liệu.
+  // Bản tĩnh (giảm chuyển động) đã vẽ mọi lớp ngay nên không còn gì để tải trước; bản động tải ảnh nguyên liệu của chương kế để chọn chương không chớp trắng.
+  // Chỉ tải khi mục Story đã gần khung nhìn: khách không cuộn tới thì không tốn dữ liệu. Ảnh poster không vẽ lớp nguyên liệu nên không có gì để tải.
   useEffect(() => {
-    if (view.animated && seen) preloadImages(storyPreloadUrls(view.steps, step));
-  }, [view.animated, view.steps, step, seen]);
+    if (view.animated && view.overlay && seen) preloadImages(storyPreloadUrls(view.steps, step));
+  }, [view.animated, view.overlay, view.steps, step, seen]);
 
   return (
     <>
-      {showStage && <Stage product={product} imageUrl={imageUrl} frame={view.frame} ambient={ambient} layers={layers} isStatic={!view.animated} />}
+      {showStage && <Stage product={product} imageUrl={imageUrl} frame={view.frame} ambient={ambient} layers={layers} isStatic={!view.animated} hud={view.overlay ? view.hud : null} />}
 
       {arc && (
         <div role="radiogroup" aria-label={fillCopy('story.arcLabel')} className="tubu-story-arc">
@@ -273,30 +213,38 @@ function Scenes({ props, view, seen }: { props: ProductStoryShowcaseProps; view:
         </div>
       )}
 
-      {view.steps.length > 0 &&
-        (view.animated ? (
-          <div className="tubu-story-steps">
-            <StepChips steps={view.steps} active={step} onPick={pickStep} />
-            <div data-testid="story-step-panel" aria-live="polite" className="tubu-story-panel">
-              <div key={step} className="tubu-story-panel-in">
-                <h3 className="tubu-story-step-title">{view.steps[step]!.title}</h3>
-                <p className="tubu-story-step-body">{view.steps[step]!.body}</p>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <ol data-testid="story-static-steps" className="tubu-story-static">
-            {view.steps.map((s) => (
+      {view.points.length > 0 && (
+        <ul data-testid="story-points" aria-label={fillCopy('story.hudLabel')} className="tubu-story-points">
+          {view.points.map((p) => (
+            <li key={p.id} data-testid="story-point" className="tubu-story-point">
+              <span className="tubu-story-point-label">{p.label}</span>
+              {p.value && <span className="tubu-story-point-value">{p.value}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {view.hud && (
+        <p data-testid="story-closing" className="tubu-story-closing">
+          {view.hud.closing}
+        </p>
+      )}
+
+      {view.steps.length > 0 && (
+        <nav aria-label={fillCopy('story.stepsLabel')} className="tubu-story-steps">
+          <ol className="tubu-story-timeline">
+            {view.steps.map((s, i) => (
               <li key={s.num}>
-                <div className="tubu-story-static-num">{s.num}</div>
-                <h3 className="tubu-story-step-title">{s.title}</h3>
-                <p className="tubu-story-step-body">{s.body}</p>
+                <button type="button" data-testid="story-step-card" aria-current={i === step ? 'step' : undefined} className="tubu-story-step tubu-press tubu-hit-44" onClick={() => setActiveStep(i)}>
+                  <span className="tubu-story-num">{s.num}</span>
+                  <span className="tubu-story-step-title">{s.title}</span>
+                  <span className="tubu-story-step-body">{s.body}</span>
+                </button>
               </li>
             ))}
           </ol>
-        ))}
-
-      {view.hud && <Hud product={product} imageUrl={imageUrl} frame={view.frame} hud={view.hud} />}
+        </nav>
+      )}
     </>
   );
 }

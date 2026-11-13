@@ -934,8 +934,8 @@ export default function CheckoutPage() {
           </div>
         </div>
 
-        {/* Khung cuộn cùng trang, không cột dính và không vùng cuộn riêng (DESIGN.md, Khuôn trang web máy tính): chỉ dải tổng + nút Đặt hàng bên dưới dính đáy màn nên nút luôn trong tầm nhìn dù khung dài. */}
-        <div className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:self-start`}>
+        {/* Từ lg khung "Đơn hàng" dính dưới header (không vùng cuộn riêng, DESIGN.md) để cột phải đi theo khi cột trái dài; dải tổng + nút Đặt hàng bên dưới dính đáy màn nên nút luôn trong tầm nhìn dù khung cao hơn màn. */}
+        <div className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+1rem)] lg:self-start`}>
           <h2 className={`${ui.sectionTitle} max-md:hidden`}>Đơn hàng</h2>
           {/* Từ md danh sách chữ hiện đủ dòng, không vùng cuộn lồng: dòng thứ 6 trở đi gập sau nút kèm tiền; giỏ tách kiện hiện hết
               để khách thấy đủ mọi kiện và phí giao cộng vào tổng. */}
@@ -1127,7 +1127,7 @@ export default function CheckoutPage() {
             </p>
           )}
 
-          {/* Dưới lg nút đặt hàng nằm ở thanh dính đáy (cuối trang). Từ lg khung "Đơn hàng" không dính và không cuộn riêng (DESIGN.md); chỉ khối dưới đây (dải tổng + nút) dính đáy màn trong khung, để nút và lý do khoá/lỗi đặt hàng nằm sát nhau. */}
+          {/* Dưới lg nút đặt hàng nằm ở thanh dính đáy (cuối trang). Từ lg khung "Đơn hàng" dính dưới header và khối dưới đây (dải tổng + nút) dính đáy màn trong khung, để nút và lý do khoá/lỗi đặt hàng nằm sát nhau và còn trong tầm nhìn khi khung cao hơn màn. */}
           </div>
           <div ref={placePartRef} data-mini-part="place-order" className="max-md:order-11 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pb-4 lg:sticky lg:bottom-0 lg:bg-[var(--color-bg-surface)] lg:py-4">
           {/* Bản sao hiển thị của dòng Tổng cộng ở khối tổng phía trên (ẩn từ lg): tổng tiền đi cùng khối dính, luôn nằm cạnh nút Đặt hàng. */}
@@ -1198,25 +1198,27 @@ export default function CheckoutPage() {
         </div>
       </div>
       <StickyActionBar label="Đặt hàng" hideFrom="lg">
-        {barError && (
-          <p aria-hidden="true" className="mb-2 text-caption text-danger-fg">
-            {barError}
+        <div className="md:mx-auto md:max-w-2xl">
+          {barError && (
+            <p aria-hidden="true" className="mb-2 text-caption text-danger-fg">
+              {barError}
+            </p>
+          )}
+          {/* Vùng báo luôn có mặt trong cây, chỉ đổi chữ: vùng gắn vào cùng lúc với chữ thì đọc màn hình (VoiceOver) thường không đọc. */}
+          <p role="status" className={barNote ? 'mb-2 text-caption text-[color:var(--color-text-secondary)]' : 'sr-only'}>
+            {barNote}
           </p>
-        )}
-        {/* Vùng báo luôn có mặt trong cây, chỉ đổi chữ: vùng gắn vào cùng lúc với chữ thì đọc màn hình (VoiceOver) thường không đọc. */}
-        <p role="status" className={barNote ? 'mb-2 text-caption text-[color:var(--color-text-secondary)]' : 'sr-only'}>
-          {barNote}
-        </p>
-        <button
-          type="button"
-          onClick={onPlace}
-          disabled={placeDisabled}
-          aria-busy={place.isPending || undefined}
-          aria-disabled={place.isPending || undefined}
-          className={`${uiBar.primary} w-full`}
-        >
-          {placeLabel}
-        </button>
+          <button
+            type="button"
+            onClick={onPlace}
+            disabled={placeDisabled}
+            aria-busy={place.isPending || undefined}
+            aria-disabled={place.isPending || undefined}
+            className={`${uiBar.primary} w-full`}
+          >
+            {placeLabel}
+          </button>
+        </div>
       </StickyActionBar>
     </Shell>
   );
@@ -1478,7 +1480,7 @@ function AddressPicker({
 // `bare`: màn thành công ở điện thoại không có thanh tiêu đề (Mini App OrderSuccess tự có h1), từ md vẫn như các màn khác.
 function Shell({ children, bare }: { children: React.ReactNode; bare?: boolean }) {
   return (
-    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
+    <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0 md:max-w-[45rem] lg:max-w-frame`}>
       <BackLink href="/gio-hang" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: 'Giỏ hàng', href: '/gio-hang' }, { label: 'Thanh toán' }]}>
         ← Về giỏ hàng
       </BackLink>

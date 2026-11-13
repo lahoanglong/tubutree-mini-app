@@ -93,53 +93,41 @@
 .tubu-story-steps {
   margin-top: var(--space-block);
 }
-.tubu-story-chips {
-  display: flex;
+/* Dòng thời gian các chương: mọi chương cùng hiện (không mốc cuộn), thẻ đang chọn nhấn viền và nền. */
+.tubu-story-timeline {
+  display: grid;
   gap: var(--space-stack-sm);
-  padding: var(--space-stack-xs) 0;
-  scroll-snap-type: x mandatory;
-  overflow-x: auto;
-  scrollbar-width: none;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
-.tubu-story-chips::-webkit-scrollbar {
-  display: none;
-}
-.tubu-story-chip {
-  flex: 0 0 auto;
-  scroll-snap-align: center;
-  min-width: 44px;
+.tubu-story-step {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+  box-sizing: border-box;
+  width: 100%;
   min-height: 44px;
-  border: none;
-  border-radius: var(--radius-pill);
-  background: var(--color-bg-chip);
-  color: var(--color-text-primary);
-  font-family: var(--font-ui);
-  font-size: var(--type-label-size);
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
+  padding: var(--space-block);
+  text-align: left;
+  font: inherit;
+  color: inherit;
   cursor: pointer;
-  transition: transform var(--p-dur-release) var(--p-ease-out), background-color var(--dur-story) var(--ease-story), color var(--dur-story) var(--ease-story);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  transition: background-color var(--dur-story) var(--ease-story), border-color var(--dur-story) var(--ease-story);
 }
-.tubu-story-chip[aria-current='step'] {
-  background: var(--color-action-primary-bg);
-  color: var(--color-action-primary-fg);
+.tubu-story-step[aria-current='step'] {
+  border-color: var(--color-action-primary-bg);
+  background: var(--color-bg-subtle);
 }
-.tubu-story-panel {
-  margin-top: var(--space-stack-sm);
-}
-/* Nội dung chương mới trượt lên 8px và hiện dần; remount theo `key` của bước nên chạy lại mỗi lần đổi chương. */
-.tubu-story-panel-in {
-  animation: tubu-story-panel-in var(--dur-story) var(--ease-story) both;
-}
-@keyframes tubu-story-panel-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
+.tubu-story-num {
+  margin: 0;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: 700;
+  color: var(--color-text-brand);
 }
 .tubu-story-step-title {
   margin: 0;
@@ -150,26 +138,49 @@
   color: var(--color-text-primary);
 }
 .tubu-story-step-body {
-  margin: var(--space-stack-xs) 0 0;
+  margin: 0;
   font-size: var(--type-body-md-size);
   line-height: var(--type-body-md-lh);
   color: var(--color-text-secondary);
 }
-.tubu-story-static {
-  list-style: none;
+
+/* Điểm nhấn HUD của ảnh poster/ảnh chụp: dải chip dưới khung ảnh (ảnh tách nền mới vẽ chú thích đè lên ảnh). */
+.tubu-story-points {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-stack-xs) var(--space-stack-sm);
   margin: var(--space-block) 0 0;
   padding: 0;
-  display: grid;
-  gap: var(--space-block);
+  list-style: none;
 }
-.tubu-story-static-num {
-  font-size: var(--type-label-size);
+.tubu-story-point {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  box-sizing: border-box;
+  max-width: 100%;
+  padding: var(--space-stack-xs) var(--space-inline-sm);
+  text-align: center;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border-default);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  overflow-wrap: anywhere;
+}
+.tubu-story-point-label {
   font-weight: 600;
+  color: var(--color-text-primary);
+}
+.tubu-story-point-value {
   color: var(--color-text-secondary);
 }
 
 .tubu-story-hud {
-  margin-top: var(--space-block);
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 .tubu-story-hud-lines {
   position: absolute;
@@ -287,13 +298,12 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tubu-story-layer,
-  .tubu-story-panel-in {
+  .tubu-story-layer {
     animation: none;
   }
   .tubu-story-stage,
   .tubu-story-arc-item,
-  .tubu-story-chip {
+  .tubu-story-step {
     transition: none;
   }
 }
