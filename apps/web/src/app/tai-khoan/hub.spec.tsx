@@ -133,24 +133,64 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     expect(link(c, '/tai-khoan/ho-so')!.querySelector('img')?.getAttribute('src')).toBe('https://img.test/a.jpg');
   });
 
-  it('nút "Mã giới thiệu" chép mã và báo đã chép', async () => {
+  it('mã hiện bằng chữ; nút "Sao chép link mời bạn" chép link có ?ref= và báo đã chép', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     const c = await mount();
-    const btn = byText(c, 'button', 'Mã của bạn: AN1')!;
-    expect(btn.getAttribute('aria-label')).toBe('Mã của bạn: AN1, sao chép');
-    click(btn);
+    expect(c.textContent).toContain('Mã của bạn: AN1');
+    click(byText(c, 'button', 'Sao chép link mời bạn'));
     await flush(3);
-    expect(writeText).toHaveBeenCalledWith('AN1');
-    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã sao chép mã giới thiệu');
+    expect(writeText).toHaveBeenCalledWith(`${window.location.origin}/?ref=AN1`);
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã sao chép link mời bạn');
   });
 
   it('không chép được thì nói mã để khách tự chép', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
     const c = await mount();
-    click(byText(c, 'button', 'Mã của bạn: AN1'));
+    click(byText(c, 'button', 'Sao chép link mời bạn'));
     await flush(3);
-    expect(c.querySelector('[role="status"]')?.textContent).toContain('Không sao chép được — mã của bạn: AN1');
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Không sao chép được. Mã của bạn: AN1');
+  });
+
+  it('khối "Mời bạn sống xanh" nêu đúng quà thật: mã chào mừng của Admin cho bạn mới, Điểm Xanh và điều kiện từ /me/referral cho người mời', async () => {
+    mocks.routes['/config/public'] = () => ({ newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 } } });
+    mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 0, earnedPoints: 0, minOrderAmount: 200000, windowDays: 30, referrerRewardPoints: 5000 });
+    const c = await mount();
+    expect(c.textContent).toContain('Bạn mới nhận mã 30.000đ cho đơn đầu từ 199k. Bạn nhận 5.000 Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai từ 200k trong 30 ngày.');
+  });
+
+  it('chưa có số liệu: nói chung, không bịa con số; CTV không bị hứa Điểm Xanh giới thiệu', async () => {
+    mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 0, earnedPoints: 0 });
+    const c = await mount();
+    expect(c.textContent).toContain('Bạn mới nhận mã giảm giá cho đơn đầu. Bạn nhận Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai.');
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    mocks.auth.user = { ...mocks.auth.user, role: 'AFFILIATE' };
+    const c2 = await mount();
+    expect(c2.textContent).toContain('Bạn mới nhận mã giảm giá cho đơn đầu.');
+    expect(c2.textContent).not.toContain('hoàn tất đơn thứ hai');
+  });
+
+  it('"Chia sẻ qua Zalo": hộp chia sẻ nhận link ?ref= và lời mở bằng ưu đãi thật; chưa có mã chào mừng thì câu không số', async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn() }, share });
+    mocks.routes['/config/public'] = () => ({ newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 } } });
+    const c = await mount();
+    click(byText(c, 'button', 'Chia sẻ qua Zalo'));
+    await flush(3);
+    expect(share).toHaveBeenCalledWith({
+      title: 'Tubu Tree: trồng cây, nhận quà',
+      text: 'Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree',
+      url: `${window.location.origin}/?ref=AN1`,
+    });
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    share.mockClear();
+    mocks.routes['/config/public'] = () => ({});
+    const c2 = await mount();
+    click(byText(c2, 'button', 'Chia sẻ qua Zalo'));
+    await flush(3);
+    expect(share.mock.calls[0]![0].text).toBe('Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree');
   });
 
   it('đã có bạn thành công: nêu số bạn, số điểm đã nhận và mốc kế tiếp; chưa có ai thì không hiện dòng thống kê', async () => {
@@ -176,7 +216,7 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     mocks.auth.user = { ...mocks.auth.user, referralCode: '' };
     const c = await mount();
     expect(byText(c, 'button', 'Mã của bạn')).toBeNull();
-    expect(c.textContent).not.toContain('Mời bạn bè mua hàng');
+    expect(c.textContent).not.toContain('Mời bạn sống xanh');
   });
 });
 
@@ -277,7 +317,7 @@ describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
 describe('hub /tai-khoan — menu theo nhóm', () => {
   it('các nhóm là h2, vẫn đúng một h1, OrdersSection còn nguyên', async () => {
     const c = await mount();
-    expect(headings2(c)).toEqual(expect.arrayContaining(['Đơn của tôi', 'Mời bạn bè mua hàng', 'Kiếm tiền cùng Tubu', 'Tài khoản', 'Hỗ trợ']));
+    expect(headings2(c)).toEqual(expect.arrayContaining(['Đơn của tôi', 'Mời bạn sống xanh', 'Kiếm tiền cùng Tubu', 'Tài khoản', 'Hỗ trợ']));
     expect(headingProblems(c)).toEqual([]);
     expect(c.textContent).toContain('Đơn hàng của tôi');
   });
@@ -640,8 +680,8 @@ describe('hub /tai-khoan — khoá chạm đúp (W78B)', () => {
   };
   const times = (path: string) => mocks.calls.filter((p) => p === path).length;
   const retryButtons = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLButtonElement>('button')).filter((b) => b.textContent === 'Thử lại');
-  const copyBtn = (c: HTMLElement) => byText(c, 'button', 'Mã của bạn: AN1') as HTMLButtonElement;
-  const shareBtn = (c: HTMLElement) => byText(c, 'button', 'Chia sẻ') as HTMLButtonElement;
+  const copyBtn = (c: HTMLElement) => byText(c, 'button', 'Sao chép link mời bạn') as HTMLButtonElement;
+  const shareBtn = (c: HTMLElement) => byText(c, 'button', 'Chia sẻ qua Zalo') as HTMLButtonElement;
 
   it('chạm đúp nút chép mã cùng khung hình: clipboard ghi một lần; đang chép cả hai nút khoá bằng aria-disabled, nút chép báo aria-busy', async () => {
     const g = gate();
@@ -667,7 +707,7 @@ describe('hub /tai-khoan — khoá chạm đúp (W78B)', () => {
     }
     g.release();
     await flush(4);
-    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã sao chép mã giới thiệu');
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã sao chép link mời bạn');
     expect(copy.hasAttribute('aria-disabled')).toBe(false);
     expect(sharing.hasAttribute('aria-disabled')).toBe(false);
     click(copy);
@@ -706,12 +746,12 @@ describe('hub /tai-khoan — khoá chạm đúp (W78B)', () => {
     const c = await mount();
     click(copyBtn(c));
     await flush(3);
-    expect(c.querySelector('[role="status"]')?.textContent).toContain('Không sao chép được — mã của bạn: AN1');
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Không sao chép được. Mã của bạn: AN1');
     expect(copyBtn(c).hasAttribute('aria-busy')).toBe(false);
     click(copyBtn(c));
     await flush(3);
     expect(writeText).toHaveBeenCalledTimes(2);
-    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã sao chép mã giới thiệu');
+    expect(c.querySelector('[role="status"]')?.textContent).toContain('Đã sao chép link mời bạn');
   });
 
   it('"Thử lại" số đơn chạm đúp cùng khung hình: /me/summary chỉ tải lại một lần', async () => {

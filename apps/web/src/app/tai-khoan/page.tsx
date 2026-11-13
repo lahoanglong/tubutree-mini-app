@@ -4,10 +4,13 @@ import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Copy, CreditCard, Leaf, MessageCircle, Package, PackageCheck, Pencil, Repeat, Truck, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Copy, CreditCard, Leaf, MessageCircle, Package, PackageCheck, Pencil, Repeat, Share2, Truck, type LucideIcon } from 'lucide-react';
 import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { STAT_VALUE_LINE_HEIGHT, STAT_VALUE_LOOKS, statValueFits, statValueStart } from '@tubutree/app-core/account-stat';
+import { inviteBody, inviteLink, inviteShareText } from '@tubutree/app-core/commerce/invite-card';
+import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
 import { homeCopy } from '@tubutree/app-core/home-copy';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
 import { PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
@@ -220,7 +223,10 @@ function AccountContent() {
   const unread = summaryQ.data?.unreadNotifications ?? 0;
   const referral = referralQ.data;
   const code = referral?.referralCode ?? user.referralCode;
-  const minOrder = referral?.minOrderAmount ? formatVnd(referral.minOrderAmount) : null;
+  // CTV chỉ hưởng hoa hồng, không nhận Điểm Xanh giới thiệu: khối không hứa thưởng điểm cho họ.
+  const earnsPoints = user.role !== 'AFFILIATE';
+  const welcomeOffer = welcomeOfferOf(cfgQ.data);
+  const referralRules = { referrerPoints: referral?.referrerRewardPoints, minOrderAmount: referral?.minOrderAmount, windowDays: referral?.windowDays };
 
   const menu = buildAccountMenu({
     role: user.role,
@@ -249,31 +255,30 @@ function AccountContent() {
     if (!code) return;
     void referralLock.run('copy', async () => {
       try {
-        await navigator.clipboard.writeText(code);
-        setCopyMsg('Đã sao chép mã giới thiệu');
+        await navigator.clipboard.writeText(inviteLink(window.location.origin, code));
+        setCopyMsg(fillCopy('invite.copied'));
       } catch {
-        setCopyMsg(`Không sao chép được — mã của bạn: ${code}`);
+        setCopyMsg(fillCopy('invite.copyFailed', { code }));
       }
     });
   };
   const shareReferral = () => {
     if (!code) return;
     void referralLock.run('share', async () => {
-      const url = `${window.location.origin}/?ref=${encodeURIComponent(code)}`;
-      const text = `Dùng mã ${code} khi mua hàng ở Tubu Tree nhé: ${url}`;
+      const url = inviteLink(window.location.origin, code);
       if (typeof navigator.share === 'function') {
         try {
-          await navigator.share({ title: 'Tubu Tree — Trồng cây, nhận quà', text, url });
+          await navigator.share({ title: fillCopy('invite.shareTitle'), text: shareDescription(null, welcomeOffer), url });
           return;
         } catch (e) {
           if (e instanceof DOMException && e.name === 'AbortError') return;
         }
       }
       try {
-        await navigator.clipboard.writeText(text);
-        setCopyMsg('Đã sao chép lời mời kèm liên kết');
+        await navigator.clipboard.writeText(inviteShareText(url));
+        setCopyMsg(fillCopy('invite.copied'));
       } catch {
-        setCopyMsg(`Không chia sẻ được — mã của bạn: ${code}`);
+        setCopyMsg(fillCopy('invite.copyFailed', { code }));
       }
     });
   };
@@ -411,47 +416,48 @@ function AccountContent() {
         </section>
 
         {code && (
-          <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={homeCopy.profile.referralTitle} className="px-4 pt-3 md:px-0 lg:pt-0">
+          <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={fillCopy('invite.title')} className="px-4 pt-3 md:px-0 lg:pt-0">
             <Card padding={12}>
               <Heading variant="title-sm" as="h2">
-                {homeCopy.profile.referralTitle}
+                {fillCopy('invite.title')}
               </Heading>
               <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 4 }}>
-                {homeCopy.profile.referralBody(minOrder, referral?.windowDays ?? null)}
+                {inviteBody(welcomeOffer, referralRules, earnsPoints)}
               </Text>
-              {referral && user.role !== 'AFFILIATE' && (referral.successCount > 0 || referral.earnedPoints > 0) && (
+              {referral && earnsPoints && (referral.successCount > 0 || referral.earnedPoints > 0) && (
                 <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }}>
                   {homeCopy.profile.referralStats(referral.successCount, `${formatCount(referral.earnedPoints)} điểm`)}
                 </Text>
               )}
               {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
-              {referral?.nextMilestone && user.role !== 'AFFILIATE' && referral.nextMilestone.count > referral.successCount && (
+              {referral?.nextMilestone && earnsPoints && referral.nextMilestone.count > referral.successCount && (
                 <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>
                   {homeCopy.profile.referralMilestone(referral.nextMilestone.count - referral.successCount, `${formatCount(referral.nextMilestone.bonusPoints)} điểm`)}
                 </Text>
               )}
-              <div className="mt-2.5 flex items-center gap-2">
-                <button
-                  type="button"
-                  aria-label={`${homeCopy.profile.referralCode}: ${code}, ${homeCopy.profile.referralCopy.toLowerCase()}`}
-                  aria-busy={referralLock.active === 'copy' || undefined}
-                  aria-disabled={referralLock.busy || undefined}
-                  onClick={copyReferral}
-                  className="tubu-press flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 rounded-control bg-[var(--color-action-secondary-bg)] px-3 py-2 text-left"
-                >
-                  <Text variant="caption" style={{ color: 'var(--color-action-secondary-fg)' }}>
-                    {homeCopy.profile.referralCode}: <strong>{code}</strong>
-                  </Text>
-                  <Copy className="h-4 w-4 flex-none text-forest-600" aria-hidden="true" />
-                </button>
+              <p className="mt-2.5 text-caption tabular-nums text-[color:var(--color-action-secondary-fg)]">
+                {fillCopy('invite.codeLabel')}: <strong>{code}</strong>
+              </p>
+              <div className="mt-2 flex flex-col gap-2">
                 <button
                   type="button"
                   aria-busy={referralLock.active === 'share' || undefined}
                   aria-disabled={referralLock.busy || undefined}
                   onClick={shareReferral}
-                  className={`${ui.btnPrimary} flex-none`}
+                  className={`${ui.btnPrimary} w-full gap-2`}
                 >
-                  {homeCopy.profile.referralShare}
+                  <Share2 className="h-4 w-4" aria-hidden="true" />
+                  {fillCopy('invite.shareZalo')}
+                </button>
+                <button
+                  type="button"
+                  aria-busy={referralLock.active === 'copy' || undefined}
+                  aria-disabled={referralLock.busy || undefined}
+                  onClick={copyReferral}
+                  className={`${ui.btnSecondary} w-full gap-2`}
+                >
+                  <Copy className="h-4 w-4" aria-hidden="true" />
+                  {fillCopy('invite.copyLink')}
                 </button>
               </div>
               <p role="status" className={copyMsg ? 'mt-1.5 text-caption text-stone-600' : 'sr-only'}>

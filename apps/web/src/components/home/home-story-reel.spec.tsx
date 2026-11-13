@@ -125,11 +125,18 @@ describe('HomeStoryReel (web)', () => {
     expect(mounted!.container.textContent).toBe('');
   });
 
-  it('dải chỉ lấy tối đa 8 món', async () => {
-    const many = Array.from({ length: 12 }, (_, i) => card(`m${i}`));
+  it('dải chỉ lấy tối đa 15 món (REEL_MAX_ITEMS)', async () => {
+    const many = Array.from({ length: 20 }, (_, i) => card(`m${i}`));
     mount(<HomeStoryReel initialBestSellers={PAGE(many)} />);
     await flush(2);
-    expect(rings()).toHaveLength(8);
+    expect(rings()).toHaveLength(15);
+  });
+
+  it('nguồn có 12 món thì dải lên đủ 12, không cắt về 8 như trước', async () => {
+    const twelve = Array.from({ length: 12 }, (_, i) => card(`m${i}`));
+    mount(<HomeStoryReel initialBestSellers={PAGE(twelve)} />);
+    await flush(2);
+    expect(rings()).toHaveLength(12);
   });
 
   it('chạm vòng: khung chờ toàn màn có nút đóng 44px, rồi Reel thật với vị trí, giá và "Câu chuyện kế"; vòng đổi xám và ghi vào sessionStorage', async () => {

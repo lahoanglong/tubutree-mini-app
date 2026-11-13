@@ -8,6 +8,7 @@ import { BadgePercent, Check, Copy, Plus, Share2, Store } from 'lucide-react';
 import { followBrand, unfollowBrand } from '@tubutree/app-core/api/brand';
 import { brandFollowQuery, brandShareToEarnQuery } from '@tubutree/app-core/queries/brand';
 import { dealerMeQuery } from '@tubutree/app-core/queries/dealer';
+import { shareDescription } from '@tubutree/app-core/commerce/share-offer';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { Button } from '@/components/mini/button';
@@ -23,6 +24,7 @@ import { ui } from '@/lib/guest-ui';
 import { platformBridge } from '@/lib/platform-bridge';
 import { loginHref } from '@/lib/return-to';
 import { isWebRouteReady } from '@/lib/route-map';
+import { useWelcomeOffer } from '@/lib/use-welcome-offer';
 
 type Note = { text: string; error: boolean } | null;
 
@@ -144,6 +146,7 @@ function BrandShareSheet({
   captions: string[];
 }) {
   const [note, setNote] = useState<Note>(null);
+  const offer = useWelcomeOffer(open);
   if (!open) return null;
 
   // Mã giới thiệu đi cùng cả link sao chép lẫn nút chia sẻ, nếu không CTV mất hoa hồng khi khách mở từ nút chia sẻ.
@@ -161,8 +164,7 @@ function BrandShareSheet({
   };
   const share = async () => {
     setNote(null);
-    const text = base[0];
-    const result = await platformBridge.share({ title: `${name} trên Tubu Tree`, ...(text ? { text } : {}), path });
+    const result = await platformBridge.share({ title: `${name} trên Tubu Tree`, text: shareDescription(base[0], offer), path });
     if (result === 'copied') setNote({ text: 'Đã sao chép', error: false });
     else if (result === 'failed') setNote({ text: 'Không sao chép được — hãy chọn và chép thủ công.', error: true });
   };

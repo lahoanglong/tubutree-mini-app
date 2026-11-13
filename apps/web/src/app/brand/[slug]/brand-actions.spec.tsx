@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   post: vi.fn(),
   del: vi.fn(),
   share: vi.fn(),
+  offer: null as null | { amount: number; minOrder: number },
   follow: { following: false, followerCount: 12 } as { following: boolean; followerCount: number },
   ste: { eligible: false } as unknown,
   steError: false,
@@ -26,6 +27,7 @@ vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: mocks.ret
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post, delete: mocks.del } }));
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: mocks.share } }));
+vi.mock('@/lib/use-welcome-offer', () => ({ useWelcomeOffer: () => mocks.offer }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => (p === '/dai-ly' ? mocks.dealerReady : true) }));
 
 import { BrandActions, BrandDealerBlock, BrandPromoCode } from './brand-actions';
@@ -59,6 +61,7 @@ const btn = (root: ParentNode, name: string | RegExp) =>
 
 beforeEach(() => {
   mocks.phase = 'authenticated';
+  mocks.offer = null;
   mocks.follow = { following: false, followerCount: 12 };
   mocks.ste = { eligible: false };
   mocks.steError = false;
@@ -175,7 +178,16 @@ describe('/brand/[slug] — chia sẻ', () => {
     click(btn(c, 'Chia sẻ')!);
     click(btn(document.body, 'Chia sẻ qua thiết bị')!);
     await flush(2);
-    expect(mocks.share).toHaveBeenCalledWith({ title: 'Sachi trên Tubu Tree', path: '/brand/sachi' });
+    expect(mocks.share).toHaveBeenCalledWith({ title: 'Sachi trên Tubu Tree', text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree', path: '/brand/sachi' });
+  });
+
+  it('có mã chào mừng thật: lời chia sẻ nhãn mở bằng đúng ưu đãi đó', async () => {
+    mocks.offer = { amount: 30000, minOrder: 199000 };
+    const c = await mount(actions());
+    click(btn(c, 'Chia sẻ')!);
+    click(btn(document.body, 'Chia sẻ qua thiết bị')!);
+    await flush(2);
+    expect(mocks.share).toHaveBeenCalledWith({ title: 'Sachi trên Tubu Tree', text: 'Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree', path: '/brand/sachi' });
   });
 
   it('Sao chép link chép link tuyệt đối và báo đã sao chép; chép lỗi thì nói chép tay', async () => {
@@ -237,7 +249,7 @@ describe('/brand/[slug] — dải chia sẻ kiếm tiền', () => {
     await flush(2);
     expect(mocks.share).toHaveBeenCalledWith({
       title: 'Sachi trên Tubu Tree',
-      text: 'Mình tin dùng Sachi \u{1F33F} Ghé xem & ưu đãi nha',
+      text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Mình tin dùng Sachi \u{1F33F} Ghé xem & ưu đãi nha',
       path: '/brand/sachi?ref=AFF1',
     });
   });

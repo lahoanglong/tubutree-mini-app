@@ -39,6 +39,7 @@ vi.mock('@/lib/core-http-server', () => ({
 vi.mock('next/navigation', async (importOriginal) => ({ ...(await importOriginal<typeof import('next/navigation')>()), useRouter: () => ({ push: vi.fn() }) }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => api.flash, useRunningFlash: () => ({ flash: (api.flash as { endAt?: string }[]).filter((f) => !f.endAt || Date.parse(f.endAt) > Date.now()), now: Date.now() }), FlashSalesSeed: ({ children }: { children: unknown }) => children }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => api.auth }));
+vi.mock('@/lib/use-welcome-offer', () => ({ useWelcomeOffer: () => null }));
 vi.mock('@/lib/reviews-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/reviews-client')>()),
   fetchProductReviews: async () => api.reviews,
@@ -241,7 +242,7 @@ describe('/san-pham/[slug] — chia sẻ (D5-04)', () => {
     const btn = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Chia sẻ')!;
     click(btn);
     await flush();
-    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', url: `${window.location.origin}/san-pham/dau-goi-bo-ket` });
+    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Sạch dịu nhẹ', url: `${window.location.origin}/san-pham/dau-goi-bo-ket` });
     Object.defineProperty(navigator, 'share', { value: undefined, configurable: true });
   });
 });

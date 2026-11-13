@@ -18,6 +18,7 @@ const h = vi.hoisted(() => ({
   post: vi.fn(),
 }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => [] }));
+vi.mock('@/lib/use-welcome-offer', () => ({ useWelcomeOffer: () => null }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'authenticated' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: null, retrySession: vi.fn() }) }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }) }));

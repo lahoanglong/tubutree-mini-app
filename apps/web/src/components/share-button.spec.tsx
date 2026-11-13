@@ -3,8 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act } from 'react';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 
-const mocks = vi.hoisted(() => ({ auth: { user: null as null | { referralCode: string } } }));
+const mocks = vi.hoisted(() => ({ auth: { user: null as null | { referralCode: string } }, offer: null as null | { amount: number; minOrder: number } }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
+vi.mock('@/lib/use-welcome-offer', () => ({ useWelcomeOffer: () => mocks.offer }));
 
 import ShareButton from './share-button';
 
@@ -21,6 +22,7 @@ const setNav = (props: { share?: unknown; writeText?: unknown }) => {
 
 beforeEach(() => {
   mocks.auth = { user: null };
+  mocks.offer = null;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -35,7 +37,18 @@ describe('ShareButton', () => {
     const { container } = mount();
     click(byText(container, 'button', 'Chia sẻ'));
     await flush();
-    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', url: `${window.location.origin}/san-pham/dau-goi` });
+    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree', url: `${window.location.origin}/san-pham/dau-goi` });
+  });
+
+  it('có mã chào mừng thật và mô tả ngắn: lời kèm mở bằng ưu đãi rồi mô tả', async () => {
+    mocks.offer = { amount: 30000, minOrder: 199000 };
+    const share = vi.fn().mockResolvedValue(undefined);
+    setNav({ share });
+    const r = render(<ShareButton title="Dầu gội bồ kết" path="/san-pham/dau-goi" description="Sạch dịu nhẹ" />);
+    mounted.push(r);
+    click(byText(r.container, 'button', 'Chia sẻ'));
+    await flush();
+    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree. Sạch dịu nhẹ', url: `${window.location.origin}/san-pham/dau-goi` });
   });
 
   it('khách đã đăng nhập: link kèm mã giới thiệu của họ', async () => {
@@ -45,7 +58,7 @@ describe('ShareButton', () => {
     const { container } = mount();
     click(byText(container, 'button', 'Chia sẻ'));
     await flush();
-    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', url: `${window.location.origin}/san-pham/dau-goi?ref=AN%201` });
+    expect(share).toHaveBeenCalledWith({ title: 'Dầu gội bồ kết', text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree', url: `${window.location.origin}/san-pham/dau-goi?ref=AN%201` });
   });
 
   it('không có Web Share API: sao chép link và báo "Đã sao chép"', async () => {

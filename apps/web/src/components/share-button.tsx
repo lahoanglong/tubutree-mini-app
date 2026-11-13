@@ -2,18 +2,21 @@
 
 import { useState } from 'react';
 import { Share2 } from 'lucide-react';
+import { shareDescription } from '@tubutree/app-core/commerce/share-offer';
 import { useAuth } from '@/lib/auth-context';
 import { usePressLock } from '@/lib/use-press-lock';
+import { useWelcomeOffer } from '@/lib/use-welcome-offer';
 
 type Note = { text: string; error: boolean } | null;
 
 /**
  * Chia sẻ link sản phẩm: hộp chia sẻ của hệ điều hành (Web Share API) khi trình duyệt có, không thì sao chép link.
  * Khách đã đăng nhập thì link kèm mã giới thiệu của chính họ (?ref=), cùng cách Mini App chia sẻ; khách chưa đăng nhập
- * chia sẻ link thường để không đứng tên mã của người khác.
+ * chia sẻ link thường để không đứng tên mã của người khác. Lời kèm theo mở bằng ưu đãi khách mới (mã chào mừng thật, hoặc câu không số).
  */
-export default function ShareButton({ title, path }: { title: string; path: string }) {
+export default function ShareButton({ title, path, description }: { title: string; path: string; description?: string | null }) {
   const { user } = useAuth();
+  const offer = useWelcomeOffer();
   const [note, setNote] = useState<Note>(null);
 
   const onShare = async () => {
@@ -21,7 +24,7 @@ export default function ShareButton({ title, path }: { title: string; path: stri
     const url = `${window.location.origin}${path}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`;
     if (typeof navigator.share === 'function') {
       try {
-        await navigator.share({ title, url });
+        await navigator.share({ title, text: shareDescription(description, offer), url });
         return;
       } catch (e) {
         // Khách đóng hộp chia sẻ: không phải lỗi, không sao chép thay.

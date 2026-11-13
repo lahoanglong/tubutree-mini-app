@@ -174,7 +174,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 </div>
                 <div className="flex flex-none items-center">
                   <WishlistHeart productId={product.id} />
-                  <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} />
+                  <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} description={shortDesc} />
                 </div>
               </div>
               <h1 className="font-display text-2xl font-semibold text-stone-900 max-md:font-[family-name:var(--font-ui)] max-md:text-lg max-md:leading-[1.44] sm:text-3xl max-md:sm:text-lg">{product.name}</h1>

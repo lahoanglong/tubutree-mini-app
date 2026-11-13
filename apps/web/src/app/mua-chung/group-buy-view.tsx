@@ -7,6 +7,7 @@ import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-quer
 import { Share2 } from 'lucide-react';
 import { joinGroupBuy, type GroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
+import { shareDescription } from '@tubutree/app-core/commerce/share-offer';
 import { groupBuyListQuery, groupBuyOneQuery } from '@tubutree/app-core/queries/groupbuy';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { EmptyState } from '@/components/empty-state';
@@ -27,6 +28,7 @@ import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { loginHref } from '@/lib/return-to';
 import { withReferral } from '@/lib/share-link';
+import { useWelcomeOffer } from '@/lib/use-welcome-offer';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { ProductThumb } from '@/components/mini';
 import { loadErrorText } from '@/lib/error-text';
@@ -54,6 +56,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
   const qc = useQueryClient();
   const phase = useAuthPhase();
   const { user, retrySession } = useAuth();
+  const offer = useWelcomeOffer(Boolean(user));
   const authed = phase === 'authenticated';
   const [note, setNote] = useState<Note>(null);
 
@@ -134,7 +137,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
     try {
       const result = await platformBridge.share({
         title: `Mua chung ${g.product.name} giảm ${g.discountPct}%`,
-        text: `Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`,
+        text: shareDescription(`Còn thiếu ${groupMissing(g)} người nữa là đủ nhóm, vào tham gia cùng mình nhé!`, offer),
         path: withReferral(`/mua-chung/${encodeURIComponent(g.id)}`, user?.referralCode),
       });
       if (result === 'copied') setNote({ text: 'Đã sao chép liên kết nhóm.', error: false });

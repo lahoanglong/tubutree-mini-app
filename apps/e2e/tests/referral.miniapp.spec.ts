@@ -2,7 +2,7 @@ import type { ReferralOverview, WalletSummary, LoyaltyOverview } from '../../min
 import { test, expect, makeUser, mockSession, reply, type MockApi } from './support/mock-api';
 
 /**
- * Zalo Mini App E2E — Giới thiệu bạn bè. Không có trang riêng: khối "Mời bạn bè mua hàng" (mã, chia sẻ, số bạn thành công)
+ * Zalo Mini App E2E — Giới thiệu bạn bè. Không có trang riêng: khối "Mời bạn sống xanh" (mã, chia sẻ, số bạn thành công)
  * nằm ở /profile (apps/miniapp/src/pages/profile.tsx, GET /me/referral). Trang Ví không còn khối này.
  */
 
@@ -33,6 +33,7 @@ const REFERRAL: ReferralOverview = {
   nextMilestone: { count: 5, bonusPoints: 100 },
   minOrderAmount: 250_000,
   windowDays: 14,
+  referrerRewardPoints: 5000,
 };
 
 function mockProfilePage(api: MockApi, referral: unknown = REFERRAL, role: 'CUSTOMER' | 'AFFILIATE' = 'CUSTOMER') {
@@ -49,10 +50,9 @@ test.describe('Giới thiệu bạn bè', () => {
     mockProfilePage(api);
     await page.goto('/profile');
 
-    await expect(page.getByRole('heading', { name: 'Mời bạn bè mua hàng' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: 'Mời bạn sống xanh' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
-    await expect(page.getByText(/250\.000/)).toBeVisible();
-    await expect(page.getByText(/trong 14 ngày/)).toBeVisible();
+    await expect(page.getByText(/Bạn nhận 5\.000 Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai từ 250k trong 14 ngày/)).toBeVisible();
     await expect(page.getByText('Đã mời thành công 2 bạn, nhận 40 điểm.')).toBeVisible();
     await expect(page.getByText('Mời thêm 3 bạn để nhận 100 điểm')).toBeVisible();
   });
@@ -70,13 +70,13 @@ test.describe('Giới thiệu bạn bè', () => {
     mockProfilePage(api);
     await page.goto('/profile');
 
-    await page.getByRole('button', { name: 'Chia sẻ', exact: true }).click({ timeout: 15_000 });
+    await page.getByRole('button', { name: 'Chia sẻ qua Zalo', exact: true }).click({ timeout: 15_000 });
     // Trước đây thumbnail thiếu làm zmp-sdk từ chối (zod) nên luôn rơi vào thông báo dự phòng. Nay payload hợp lệ, SDK
     // ngoài Zalo trả về bình thường: không có thông báo lỗi, nút vẫn bấm được. Nhánh dự phòng (SDK từ chối → chép
     // liên kết + báo; người dùng huỷ → im lặng) do profile-hub.spec.tsx kiểm, vì e2e không ép được SDK từ chối.
     await page.waitForTimeout(500);
     await expect(page.getByText(/Chưa chia sẻ được qua Zalo|Mã giới thiệu của bạn/)).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Chia sẻ', exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Chia sẻ qua Zalo', exact: true })).toBeEnabled();
     await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
   });
 
@@ -86,7 +86,7 @@ test.describe('Giới thiệu bạn bè', () => {
 
     await expect(page.getByText('BANBE77', { exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByText(/Đã mời thành công/)).toHaveCount(0);
-    await expect(page.getByText('Bạn nhận Điểm Xanh khi bạn bè vào app bằng mã của bạn và mua hàng.')).toBeVisible();
+    await expect(page.getByText('Bạn mới nhận mã giảm giá cho đơn đầu. Bạn nhận Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai.')).toBeVisible();
   });
 
   test('CTV (AFFILIATE) không thấy số liệu Điểm Xanh giới thiệu vì API không thưởng cho role này', async ({ page, api }) => {
@@ -97,7 +97,7 @@ test.describe('Giới thiệu bạn bè', () => {
     await expect(page.getByText(/Đã mời thành công/)).toHaveCount(0);
   });
 
-  test('hồ sơ: chạm mã giới thiệu báo đã sao chép; clipboard bị từ chối thì báo mã để chép tay', async ({ page, api }) => {
+  test('hồ sơ: chạm Sao chép link mời bạn báo đã sao chép; clipboard bị từ chối thì báo mã để chép tay', async ({ page, api }) => {
     mockSession(api, makeUser({ id: 'user-ref', referralCode: 'BANBE77' }));
     api.get('/me/loyalty', LOYALTY);
     api.get('/me/wallet', WALLET);
@@ -119,13 +119,13 @@ test.describe('Giới thiệu bạn bè', () => {
     });
     await page.goto('/profile');
 
-    const copy = page.getByRole('button', { name: /Sao chép mã BANBE77/ });
+    const copy = page.getByRole('button', { name: 'Sao chép link mời bạn' });
     await copy.click({ timeout: 15_000 });
-    await expect(page.getByText('Đã sao chép mã giới thiệu')).toBeVisible();
-    expect(await page.evaluate(() => (window as unknown as { __copied: string }).__copied)).toBe('BANBE77');
+    await expect(page.getByText('Đã sao chép link mời bạn')).toBeVisible();
+    expect(await page.evaluate(() => (window as unknown as { __copied: string }).__copied)).toMatch(/^https:\/\/zalo\.me\/s\/\d+\/\?ref=BANBE77$/);
 
     await page.evaluate(() => ((window as unknown as { __copyOk: boolean }).__copyOk = false));
     await copy.click();
-    await expect(page.getByText('Không sao chép được — mã của bạn: BANBE77')).toBeVisible();
+    await expect(page.getByText('Không sao chép được. Mã của bạn: BANBE77')).toBeVisible();
   });
 });

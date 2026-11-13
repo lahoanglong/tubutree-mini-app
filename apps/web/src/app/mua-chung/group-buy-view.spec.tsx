@@ -20,7 +20,9 @@ const mocks = vi.hoisted(() => ({
   one: null as unknown,
   oneError: false,
   flash: [] as unknown[],
+  offer: null as null | { amount: number; minOrder: number },
 }));
+vi.mock('@/lib/use-welcome-offer', () => ({ useWelcomeOffer: () => mocks.offer }));
 vi.mock('@/lib/use-flash-sales', () => ({ useActiveFlashSales: () => mocks.flash }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.user, retrySession: mocks.retrySession }) }));
@@ -62,6 +64,7 @@ const btn = (c: HTMLElement, name: string | RegExp) =>
 
 beforeEach(() => {
   mocks.flash = [];
+  mocks.offer = null;
   mocks.phase = 'authenticated';
   mocks.user = null;
   mocks.list = [GROUP('a'), GROUP('b', { joined: true })];
@@ -302,9 +305,18 @@ describe('/mua-chung — nhóm của mình và mời bạn', () => {
     expect(mocks.share).toHaveBeenCalledTimes(1);
     expect(mocks.share).toHaveBeenCalledWith({
       title: 'Mua chung Sản phẩm mine giảm 20%',
-      text: 'Còn thiếu 3 người nữa là đủ nhóm, vào tham gia cùng mình nhé!',
+      text: 'Tặng mã giảm giá cho đơn đầu khi mở trên Tubu Tree. Còn thiếu 3 người nữa là đủ nhóm, vào tham gia cùng mình nhé!',
       path: '/mua-chung/mine',
     });
+  });
+
+  it('có mã chào mừng thật: lời mời nhóm mở bằng đúng ưu đãi đó', async () => {
+    mocks.offer = { amount: 30000, minOrder: 199000 };
+    mocks.list = [GROUP('mine', { joined: true, isOwner: true })];
+    const c = await mount();
+    click(btn(c, 'Mời bạn bè')!);
+    await flush(2);
+    expect(mocks.share.mock.calls[0]![0].text).toBe('Tặng mã 30.000đ cho đơn đầu từ 199k khi mở trên Tubu Tree. Còn thiếu 3 người nữa là đủ nhóm, vào tham gia cùng mình nhé!');
   });
 
   it('người chia sẻ có mã giới thiệu: đường dẫn mang ?ref=', async () => {
