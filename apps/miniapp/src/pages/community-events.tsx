@@ -25,6 +25,7 @@ import { Heading, Text } from '../components/ui/text';
 import PostCard from '../components/community/post-card';
 import { formatDate, formatPoints } from '../utils/format';
 import { haptic } from '../utils/haptic';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /** Sự kiện đã qua endAt → không nhận bài dự thi nữa. */
 function isEventEnded(event: Pick<CommunityEvent, 'endAt'>): boolean {
@@ -192,7 +193,8 @@ function EventCard({ event, onClick }: { event: CommunityEvent; onClick: () => v
           src={event.coverUrl}
           alt=""
           loading="lazy"
-          style={{ width: '100%', maxHeight: 160, objectFit: 'cover', display: 'block' }}
+          style={{ width: '100%', aspectRatio: '2 / 1', maxHeight: 160, objectFit: 'cover', display: 'block' }}
+          onError={hideBrokenImage}
         />
       )}
       <div style={{ padding: 12 }}>
@@ -260,7 +262,8 @@ function EventEntries({
               src={event.coverUrl}
               alt=""
               loading="lazy"
-              style={{ width: '100%', maxHeight: 180, objectFit: 'cover', display: 'block' }}
+              style={{ width: '100%', aspectRatio: '2 / 1', maxHeight: 180, objectFit: 'cover', display: 'block' }}
+              onError={hideBrokenImage}
             />
           )}
           <div style={{ padding: 12 }}>

@@ -9,6 +9,7 @@ import { Section } from '../ui/section';
 import { SectionHeader } from '../ui/section-header';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 const GRID: CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: 8 };
 const MEDIA = 40;
@@ -86,7 +87,7 @@ export function CategoryTiles({ entries, isLoading, placeholderCount, onSelect, 
             {entries.slice(0, HUB_CATEGORY_MAX).map((e) => (
               <Tile key={`${e.kind}:${e.key}`} label={e.label} onPress={() => onSelect(e)}>
                 {e.image ? (
-                  <img src={e.image} alt="" width={MEDIA} height={MEDIA} loading="lazy" style={{ width: MEDIA, height: MEDIA, objectFit: 'cover' }} />
+                  <img src={e.image} alt="" width={MEDIA} height={MEDIA} loading="lazy" style={{ width: MEDIA, height: MEDIA, objectFit: 'cover' }} onError={hideBrokenImage} />
                 ) : (
                   <Icon icon={e.icon} size="md" tone="brand" />
                 )}

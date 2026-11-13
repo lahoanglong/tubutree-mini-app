@@ -36,6 +36,7 @@ import { ConfirmDeleteSheet, EditPostSheet, ReportSheet } from './post-sheets';
 import { PAGE_NARROW } from '@/lib/page-frame';
 import { ProductThumb } from '@/components/mini';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 const TITLE = 'Cộng đồng Vườn Tubu';
 const ICON_BTN = 'inline-flex h-11 min-h-11 w-11 shrink-0 items-center justify-center rounded-control text-stone-700 hover:bg-stone-100';
@@ -349,7 +350,7 @@ export default function PostDetailPage() {
           <div className="mt-3 grid gap-2 md:grid-cols-2">
             {images.map((src, i) => (
               // eslint-disable-next-line @next/next/no-img-element
-              <img key={i} src={src} alt="" loading="lazy" className="w-full rounded-media object-cover" />
+              <img key={i} src={src} alt="" loading="lazy" className="w-full rounded-media object-cover" onError={hideBrokenImage} />
             ))}
           </div>
         )}

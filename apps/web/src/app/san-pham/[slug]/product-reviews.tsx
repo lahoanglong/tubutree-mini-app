@@ -59,6 +59,7 @@ import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { useRovingGroup } from '@/lib/use-roving-group';
 import { usePressLock } from '@/lib/use-press-lock';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 // Mã tải video (Cloudinary, đo độ dài) chỉ cần khi khách mở form đánh giá: tách khỏi First Load của trang sản phẩm.
 const ReviewVideoUpload = dynamic(() => import('./review-video-upload').then((m) => m.ReviewVideoUpload), { ssr: false });
@@ -441,7 +442,7 @@ export function ProductReviews({ slug }: { slug: string }) {
                             className="tubu-press block h-16 min-h-11 w-16 min-w-11 flex-none overflow-hidden rounded-control"
                           >
                             {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={mediaSrc(m.src)} alt="" loading="lazy" className="block h-full w-full object-cover" />
+                            <img src={mediaSrc(m.src)} alt="" loading="lazy" className="block h-full w-full object-cover" onError={hideBrokenImage} />
                           </button>
                         ) : (
                           <button

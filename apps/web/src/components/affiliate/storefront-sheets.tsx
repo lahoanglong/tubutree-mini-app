@@ -36,6 +36,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StorefrontImageUpload } from './storefront-image-upload';
 import { DEFAULT_STOREFRONT_THEME_COLOR, STOREFRONT_THEME_COLORS } from './storefront-theme';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /** Trần của DTO `UpdateStorefrontDto` (apps/api storefront.controller.ts): tên 120, thông tin kho 200; subdomain 3-30 ký tự theo SUBDOMAIN_RE của identifier-validation.ts. */
 const STOREFRONT_TITLE_MAX = 120;
@@ -219,7 +220,7 @@ export function TemplateSheet({ open, onClose, onCreated }: { open: boolean; onC
             >
               {c.image ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={c.image} alt="" className="mx-auto mb-1.5 block h-9 w-9 rounded-control object-cover" />
+                <img src={c.image} alt="" className="mx-auto mb-1.5 block h-9 w-9 rounded-control object-cover" onError={hideBrokenImage} />
               ) : (
                 <div className="mx-auto mb-1.5 h-9 w-9 rounded-control bg-stone-100" />
               )}

@@ -3,6 +3,7 @@ import type { SupportSender } from '@tubutree/shared-types';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 import { formatDateTime } from '../../utils/format';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 export type ChatItemStatus = 'sent' | 'sending' | 'failed' | 'rejected';
 
@@ -65,7 +66,7 @@ function Bubble({ item }: { item: ChatItem }) {
         }}
       >
         {item.imageUrl && (
-          <img src={item.imageUrl} alt="Ảnh đã gửi" style={{ display: 'block', maxWidth: '100%', borderRadius: 'var(--radius-control)', marginBottom: item.body ? 6 : 0 }} />
+          <img src={item.imageUrl} alt="Ảnh đã gửi" style={{ display: 'block', maxWidth: '100%', borderRadius: 'var(--radius-control)', marginBottom: item.body ? 6 : 0 }} onError={hideBrokenImage} />
         )}
         {item.body && <Text variant="body-md" tone="primary" style={{ color: 'inherit' }}>{item.body}</Text>}
       </div>

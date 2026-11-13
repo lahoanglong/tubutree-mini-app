@@ -15,6 +15,7 @@ import { Skeleton } from './ui/skeleton';
 import { useLockedMutation } from './game/use-locked-mutation';
 import { Text } from './ui/text';
 import { STOREFRONT_TEMPLATE_BUSY, STOREFRONT_TEMPLATE_HINT } from '@tubutree/app-core/client-copy';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 export const TEMPLATE_TITLE = 'Bắt đầu nhanh với 1 mẫu có sẵn';
 export const TEMPLATE_HINT = STOREFRONT_TEMPLATE_HINT;
@@ -59,7 +60,7 @@ export function TemplatePickerSheet({
               }}
             >
               {c.image ? (
-                <img src={c.image} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 'var(--radius-media)', margin: '0 auto 6px', display: 'block' }} />
+                <img src={c.image} alt="" style={{ width: 36, height: 36, objectFit: 'cover', borderRadius: 'var(--radius-media)', margin: '0 auto 6px', display: 'block' }} onError={hideBrokenImage} />
               ) : (
                 <div style={{ width: 36, height: 36, borderRadius: 'var(--radius-media)', background: 'var(--color-bg-subtle)', margin: '0 auto 6px' }} />
               )}

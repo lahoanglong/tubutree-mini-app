@@ -8,6 +8,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { fetchProductReviews } from '@/lib/reviews-client';
 import { Stars, mediaSrc } from './product-reviews';
 import { pdpBand, pdpSectionTitle } from './pdp-sections';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /**
  * "Đánh giá nhanh" (Q8): điểm + 2 đánh giá đầu, ưu tiên có ảnh. Dùng chung khoá `['reviews', slug]` với danh sách đầy đủ phía dưới nên
@@ -61,7 +62,7 @@ export function PdpQuickReviews({ slug }: { slug: string }) {
               <div data-testid="quick-review-photos" className="mt-0.5 flex gap-1.5">
                 {r.images.slice(0, 3).map((src, i) => (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img key={`${src}-${i}`} src={mediaSrc(src)} alt="" loading="lazy" className="h-12 w-12 flex-none rounded-control object-cover" />
+                  <img key={`${src}-${i}`} src={mediaSrc(src)} alt="" loading="lazy" className="h-12 w-12 flex-none rounded-control object-cover" onError={hideBrokenImage} />
                 ))}
               </div>
             )}

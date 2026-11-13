@@ -1,3 +1,5 @@
+'use client';
+
 import Link from 'next/link';
 import { CheckCircle2, Hash, Heart, MessageCircle } from 'lucide-react';
 import type { FeedItem } from '@tubutree/app-core/api/feed';
@@ -6,6 +8,7 @@ import { AuthorLine, Avatar, KIND_ICON, KIND_LABEL, safeMediaUrl, timeAgo } from
 import { dedupeTagsAgainstProducts } from './post-tags';
 import { miniBleed } from '@/components/loyalty/mini-surface';
 import { ProductThumb } from '@/components/mini';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 const CLAMP3 = { display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const;
 const CLAMP1 = { display: '-webkit-box', WebkitLineClamp: 1, WebkitBoxOrient: 'vertical', overflow: 'hidden' } as const;
@@ -55,7 +58,7 @@ export function PostCard({ post }: { post: FeedItem }) {
       {cover && (
         <>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={cover} alt="" loading="lazy" className="mt-2 max-h-56 w-full rounded-media object-cover" />
+          <img src={cover} alt="" loading="lazy" className="mt-2 aspect-[14/9] max-h-56 w-full rounded-media object-cover" onError={hideBrokenImage} />
           {extra > 0 && <div className="mt-1 text-xs text-stone-600">{`+${extra} ảnh nữa`}</div>}
         </>
       )}

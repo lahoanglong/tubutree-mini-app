@@ -26,6 +26,7 @@ import { miniCard } from '@/components/loyalty/mini-surface';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { useSheetSeq } from '@/lib/use-sheet-seq';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 const DEFAULT_HOLD_DAYS = 30;
 
@@ -45,7 +46,7 @@ function MerchantLogo({ merchant, size }: { merchant: CashbackMerchant; size: nu
     );
   }
   // eslint-disable-next-line @next/next/no-img-element -- logo sàn từ API, miền không cố định nên next/image không cấu hình trước được
-  return <img src={merchant.logoUrl} alt="" style={box} className="mx-auto flex-none rounded-full object-cover" />;
+  return <img src={merchant.logoUrl} alt="" style={box} className="mx-auto flex-none rounded-full object-cover" onError={hideBrokenImage} />;
 }
 
 function Steps({ items }: { items: string[] }) {

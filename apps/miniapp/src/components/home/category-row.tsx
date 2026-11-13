@@ -8,6 +8,7 @@ import { ScrollRow } from '../ui/scroll-row';
 import { SectionHeader } from '../ui/section-header';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 const TILE = CATEGORY_TILE_SIZE;
 const LABEL_HEIGHT = CATEGORY_LABEL_HEIGHT;
@@ -101,7 +102,7 @@ export const CategoryRow = memo(function CategoryRow({ entries, isLoading, onSel
                       style={{ width: TILE, height: TILE, borderRadius: 'var(--radius-card)', background: tint.bg, color: tint.fg, display: 'grid', placeItems: 'center', overflow: 'hidden' }}
                     >
                       {e.image ? (
-                        <img src={e.image} alt="" width={TILE} height={TILE} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        <img src={e.image} alt="" width={TILE} height={TILE} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={hideBrokenImage} />
                       ) : (
                         <Icon icon={e.icon} size="lg" tone="current" />
                       )}

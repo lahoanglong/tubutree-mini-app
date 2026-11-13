@@ -1,11 +1,14 @@
+'use client';
+
 import { avatarInitial } from '@tubutree/app-core/initials-avatar';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /** Ảnh đại diện của chính khách: có ảnh thì hiện ảnh, chưa có thì chữ cái đầu của tên trên nền xanh (giống Mini App). */
 export function ProfileAvatar({ name, src, size, className = '' }: { name?: string | null; src?: string | null; size: number; className?: string }) {
   const box = { width: size, height: size };
   if (src) {
     // eslint-disable-next-line @next/next/no-img-element -- URL Cloudinary, domain không cố định
-    return <img src={src} alt="" style={box} className={`flex-none rounded-full bg-forest-100 object-cover ${className}`} />;
+    return <img src={src} alt="" style={box} className={`flex-none rounded-full bg-forest-100 object-cover ${className}`} onError={hideBrokenImage} />;
   }
   return (
     <span

@@ -10,6 +10,7 @@ import { InitialsAvatar } from '../ui/initials-avatar';
 import { Text } from '../ui/text';
 import { ExpertBadge } from './author-line';
 import { KIND_ICON, KIND_LABEL } from './post-card';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /**
  * Bài xem trước cho khách chưa đăng nhập: chỉ đọc, không có nút thích/bình luận/mở bài (các thao tác đó cần đăng nhập),
@@ -69,7 +70,8 @@ export function PublicPreviewList({ posts, onLogin }: { posts: FeedPreviewItem[]
                 src={apiMediaUrl(post.image)}
                 alt=""
                 loading="lazy"
-                style={{ width: '100%', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 220, objectFit: 'cover' }}
+                style={{ width: '100%', aspectRatio: '14 / 9', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 220, objectFit: 'cover' }}
+                onError={hideBrokenImage}
               />
             )}
             <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>

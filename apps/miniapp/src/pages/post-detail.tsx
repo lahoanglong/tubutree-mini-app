@@ -27,6 +27,7 @@ import { AuthorLine } from '../components/community/author-line';
 import { KIND_ICON, KIND_LABEL } from '../components/community/post-card';
 import { ProductThumb } from '../components/ui/product-thumb';
 import { TagPrice } from '../components/community/tag-price';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 export default function PostDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -223,6 +224,7 @@ export default function PostDetailPage() {
                 alt=""
                 loading="lazy"
                 style={{ width: '100%', borderRadius: 'var(--radius-media)', objectFit: 'cover' }}
+                onError={hideBrokenImage}
               />
             ))}
           </div>

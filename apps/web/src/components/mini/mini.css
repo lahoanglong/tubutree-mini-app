@@ -121,11 +121,13 @@
   transform: translate(-50%, -50%);
 }
 
-/* Dòng "Nhận … Điểm Xanh" ở PDP (`PdpPointsEarn`): vùng chạm dôi 22px lên trên (margin âm) để không đẩy nội dung, đệm trên đúng bằng phần dôi đó nên chữ
-   xuống hai dòng (khổ 320px) thì nút cao thêm xuống dưới thay vì đè lên dòng giá. Cùng tên `.tubu-points-earn` với Mini App. */
+/* Dòng "Nhận … Điểm Xanh" ở PDP (`PdpPointsEarn`): vùng chạm dôi 20px lên trên (margin âm) để không đẩy nội dung, đệm trên đúng bằng phần dôi đó nên chữ
+   xuống hai dòng (khổ 320px) thì nút cao thêm xuống dưới thay vì đè lên dòng giá. Cùng số đo với `.tubu-points-earn` của Mini App. */
 .tubu-points-earn {
-  margin-top: -22px;
-  padding-top: 22px;
+  box-sizing: border-box;
+  margin-top: -20px;
+  padding-top: 20px;
+  padding-bottom: 4px;
 }
 
 /* Ô chọn đầu dòng giỏ (điện thoại): khung chạm 44px chỉ chiếm 24px bề ngang bố cục như `.tubu-hit-flush` của Mini App (đệm 10px + lề âm 10px hai phía,
@@ -1124,12 +1126,12 @@
 .tubu-reel-ring[data-seen='true'] { background: var(--color-story-ring-seen); }
 .tubu-reel-photo {
   display: block; box-sizing: border-box; width: 100%; height: 100%; border: var(--p-space-1) solid var(--color-bg-surface);
-  border-radius: var(--radius-pill); background: var(--color-bg-surface); overflow: hidden;
+  border-radius: var(--radius-pill); background: var(--color-bg-media); overflow: hidden;
 }
 .tubu-reel-badge { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); box-shadow: 0 0 0 2px var(--color-bg-surface); }
 .tubu-reel-label {
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; box-sizing: border-box; width: 100%; height: var(--reel-label-h);
-  font-size: var(--type-label-size); line-height: var(--type-label-lh); font-weight: 500; overflow-wrap: anywhere;
+  font-size: var(--type-label-size); line-height: var(--type-label-lh); font-weight: var(--type-label-weight); overflow-wrap: anywhere;
 }
 .tubu-reel-item[data-seen='true'] .tubu-reel-label { color: var(--color-text-secondary); }
 .tubu-reel-skel-ring { display: block; width: var(--reel-ring); height: var(--reel-ring); border-radius: var(--radius-pill); }
@@ -1143,15 +1145,15 @@
    "đã đạt" không làm giỏ nhảy; phần đã đầy có vệt sáng chạy nhẹ, tắt khi khách chọn giảm chuyển động. ── */
 .tubu-freeship {
   box-sizing: border-box; padding: var(--space-inset-card); border-radius: var(--radius-card); background: var(--color-bg-surface); box-shadow: var(--elevation-1);
-  min-height: calc(2 * var(--type-body-sm-size) * var(--type-body-sm-lh) + var(--p-space-3) + var(--p-space-3) + 2 * var(--space-inset-card));
+  min-height: calc(2 * var(--type-caption-size) * var(--type-caption-lh) + var(--p-space-3) + 6px + 2 * var(--space-inset-card));
   font-variant-numeric: tabular-nums;
 }
-.tubu-freeship[data-reached='true'] { background: var(--color-status-success-bg); }
-.tubu-freeship-text { margin: 0; color: var(--color-text-primary); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-lh); }
-.tubu-freeship[data-reached='true'] .tubu-freeship-text { color: var(--color-text-success); font-weight: 600; }
-.tubu-freeship-track { height: var(--p-space-3); margin-top: var(--p-space-3); border-radius: var(--radius-pill); background: var(--color-track); overflow: hidden; }
+.tubu-freeship[data-reached='true'] { background: var(--color-status-success-bg); box-shadow: none; }
+.tubu-freeship-text { margin: 0; color: var(--color-text-secondary); font-size: var(--type-caption-size); line-height: var(--type-caption-lh); font-weight: var(--type-label-weight); }
+.tubu-freeship[data-reached='true'] .tubu-freeship-text { color: var(--color-text-success); }
+.tubu-freeship-track { height: 6px; margin-top: var(--p-space-3); border-radius: var(--radius-pill); background: var(--color-track); overflow: hidden; }
 /* Có nút "Mua thêm": dòng chữ và nút chung một hàng; khối cao tối thiểu bằng hàng nút 44px + thanh nên câu một dòng không co lại khi đạt ngưỡng (hết nút, hết thanh), như Mini. Câu dài (hàng gian hàng tự giao, màn hẹp) xuống ba dòng thì cao hơn mức này và co lại khi đạt. */
-.tubu-freeship[data-cta='true'] { min-height: calc(44px + var(--p-space-3) + var(--p-space-3) + 2 * var(--space-inset-card)); }
+.tubu-freeship[data-cta='true'] { min-height: calc(44px + var(--p-space-3) + 6px + 2 * var(--space-inset-card)); }
 .tubu-freeship-head { display: flex; align-items: center; gap: var(--space-inline-md); }
 .tubu-freeship-head .tubu-freeship-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .tubu-freeship-cta.zaui-btn { flex: 0 0 auto; min-width: 0; height: 44px; padding: 0 var(--space-inline-md); font-variant-numeric: inherit; }
@@ -1161,7 +1163,7 @@
   transition: width var(--dur-slow) var(--ease-out);
 }
 .tubu-freeship-fill::after {
-  content: ''; position: absolute; inset: 0; opacity: 0.5; transform: translateX(-100%);
+  content: ''; position: absolute; inset: 0; transform: translateX(-100%);
   background: linear-gradient(90deg, transparent, var(--color-skeleton-shimmer), transparent);
   animation: tubu-freeship-shimmer 2.4s var(--ease-out) infinite;
 }
@@ -1172,7 +1174,7 @@
 /* ── Dải gợi ý mua thêm cho đủ Miễn phí giao hàng (W42A, FreeshipAddonRail): thẻ rộng cố định 272, cao 116; hàng cuộn nằm trong khối (không tràn mép) vì Giỏ có đệm riêng. ── */
 .tubu-addon { margin-top: var(--p-space-3); font-variant-numeric: tabular-nums; }
 .tubu-addon-head { margin-bottom: var(--space-stack-sm); }
-.tubu-addon-row { gap: var(--p-space-3); padding: var(--p-space-1) 0; }
+.tubu-addon-row { gap: var(--p-space-3); padding: var(--space-stack-xs) 0; }
 .tubu-addon-card {
   flex: 0 0 auto; box-sizing: border-box; width: 272px; display: flex; gap: var(--p-space-3); padding: var(--p-space-3);
   border: 1px solid var(--color-border-subtle); border-radius: var(--radius-card); background: var(--color-bg-surface);

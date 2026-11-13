@@ -1,3 +1,5 @@
+'use client';
+
 import type { ReactNode } from 'react';
 import { History, Search } from 'lucide-react';
 import type { ProductSuggestion } from '@tubutree/app-core/api/catalog';
@@ -10,6 +12,7 @@ import { SUGGEST_MIN_CHARS } from '@/lib/use-suggest';
 import { foldVietnamese, includesFolded } from '@/lib/vn-fold';
 import { ui } from '@/lib/guest-ui';
 import { Skeleton } from '@/components/mini/skeleton';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 export const SUGGEST_LIMITS = { recent: 3, categories: 4 } as const;
 
@@ -150,7 +153,7 @@ function Thumb({ src }: { src: string | null }) {
   return (
     <span aria-hidden="true" className="block h-10 w-10 flex-none overflow-hidden rounded-control bg-stone-100">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {src && <img src={src} alt="" loading="lazy" className="block h-full w-full object-cover" />}
+      {src && <img src={src} alt="" loading="lazy" className="block h-full w-full object-cover" onError={hideBrokenImage} />}
     </span>
   );
 }

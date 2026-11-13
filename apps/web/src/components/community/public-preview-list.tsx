@@ -1,13 +1,16 @@
+'use client';
+
 import Link from 'next/link';
 import { Heart, MessageCircle } from 'lucide-react';
 import type { FeedPreviewItem } from '@tubutree/app-core/api/feed';
 import { loginHref } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
 import { Avatar, ExpertBadge, KIND_ICON, KIND_LABEL, safeMediaUrl, timeAgo } from './post-parts';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /**
  * Bài xem trước cho khách chưa đăng nhập: chỉ đọc, không có nút thích/bình luận/mở bài (các thao tác đó cần đăng nhập),
- * nên thẻ không tương tác; lối duy nhất đi tiếp là nút đăng nhập ở đầu danh sách. Là server component để bài có sẵn trong HTML.
+ * nên thẻ không tương tác; lối duy nhất đi tiếp là nút đăng nhập ở đầu danh sách. Là client component chỉ vì `onError` của ảnh; vẫn dựng sẵn ở máy chủ nên bài có trong HTML. Trang cha truyền mỗi `posts` (JSON thuần), spec `use-client-boundary` giữ điều đó.
  */
 export function PublicPreviewList({ posts }: { posts: FeedPreviewItem[] }) {
   return (
@@ -44,7 +47,7 @@ export function PublicPreviewList({ posts }: { posts: FeedPreviewItem[] }) {
               <div className="mt-1 text-sm text-stone-800">{post.snippet}</div>
               {image && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={image} alt="" loading="lazy" className="mt-2 max-h-56 w-full rounded-media object-cover" />
+                <img src={image} alt="" loading="lazy" className="mt-2 aspect-[14/9] max-h-56 w-full rounded-media object-cover" onError={hideBrokenImage} />
               )}
               <div className="mt-2.5 flex gap-4 text-sm text-stone-700">
                 <span className="inline-flex items-center gap-1">
