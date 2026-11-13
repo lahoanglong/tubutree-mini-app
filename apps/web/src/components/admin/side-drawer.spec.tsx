@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { act, useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
-import { SideDrawer } from './side-drawer';
+import { answerConfirm, click, confirmDialog, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
+import { SideDrawer, useSideDrawerClose } from './side-drawer';
 import { useConfirm } from './confirm-dialog';
 
 let mounted: Rendered[] = [];
@@ -126,3 +126,121 @@ describe('SideDrawer safe-area', () => {
   });
 });
 
+describe('SideDrawer chân dính và bề rộng theo phía', () => {
+  const panel = () => document.querySelector<HTMLElement>('[role="dialog"]')!;
+
+  it('footer nằm ngoài khung cuộn, dính đáy, chừa inset đáy; khung không chừa thêm lần nữa', () => {
+    mount(
+      <SideDrawer title="Sửa" onClose={() => undefined} footer={<button type="button">Lưu</button>}>
+        <p>nội dung dài</p>
+      </SideDrawer>,
+    );
+    const footer = document.querySelector<HTMLElement>('[data-drawer-footer]')!;
+    expect(footer.textContent).toBe('Lưu');
+    expect(footer.className).toContain('shrink-0');
+    expect(footer.className).toContain('border-t');
+    expect(footer.className).toContain('pb-[max(0.75rem,env(safe-area-inset-bottom,0px))]');
+    const scroller = panel().querySelector<HTMLElement>('.overflow-y-auto')!;
+    expect(scroller.contains(footer)).toBe(false);
+    expect(scroller.textContent).toBe('nội dung dài');
+    expect(panel().style.paddingBottom).toBe('0px');
+  });
+
+  it('không có footer thì không dựng vùng chân', () => {
+    mount(<SideDrawer title="Sửa" onClose={() => undefined}>x</SideDrawer>);
+    expect(document.querySelector('[data-drawer-footer]')).toBeNull();
+  });
+
+  it('ngăn trái hẹp (max-w-xs) và ngăn phải rộng (max-w-xl): không để hai max-w cùng một chuỗi lớp', () => {
+    mount(<SideDrawer title="Menu" side="left" onClose={() => undefined}>x</SideDrawer>);
+    expect(panel().className).toContain('max-w-xs');
+    expect(panel().className).not.toContain('max-w-xl');
+    mounted.pop()!.unmount();
+    mount(<SideDrawer title="Đơn" onClose={() => undefined}>x</SideDrawer>);
+    expect(panel().className).toContain('max-w-xl');
+    expect(panel().className).not.toContain('max-w-xs');
+  });
+});
+
+describe('SideDrawer dirty guard', () => {
+  function Dirty({ dirty, onClose }: { dirty: boolean; onClose: () => void }) {
+    return (
+      <SideDrawer title="Sửa" dirty={dirty} onClose={onClose} footer={<InnerClose />}>
+        <input aria-label="ô" />
+      </SideDrawer>
+    );
+  }
+  function InnerClose() {
+    const close = useSideDrawerClose();
+    return (
+      <button type="button" data-testid="inner-close" onClick={close}>
+        Đóng trong chân
+      </button>
+    );
+  }
+
+  it('chưa dirty: Esc, bấm nền, nút X, nút trong chân đều đóng ngay, không hỏi', () => {
+    const onClose = vi.fn();
+    mount(<Dirty dirty={false} onClose={onClose} />);
+    key('Escape');
+    click(document.querySelector('[data-drawer-backdrop]'));
+    click(document.querySelector('button[aria-label="Đóng"]'));
+    click(document.querySelector('[data-testid="inner-close"]'));
+    expect(onClose).toHaveBeenCalledTimes(4);
+    expect(confirmDialog()).toBeNull();
+  });
+
+  it('dirty: mỗi đường đóng đều hỏi "Bỏ thay đổi chưa lưu?"; Tiếp tục sửa giữ ngăn, Bỏ thay đổi mới đóng', async () => {
+    const onClose = vi.fn();
+    mount(<Dirty dirty onClose={onClose} />);
+    const routes: Array<() => void> = [
+      () => void key('Escape'),
+      () => click(document.querySelector('[data-drawer-backdrop]')),
+      () => click(document.querySelector('button[aria-label="Đóng"]')),
+      () => click(document.querySelector('[data-testid="inner-close"]')),
+    ];
+    for (const route of routes) {
+      route();
+      await flush(2);
+      expect(confirmDialog()!.textContent).toContain('Bỏ thay đổi chưa lưu');
+      answerConfirm(false);
+      await flush(2);
+      expect(onClose).not.toHaveBeenCalled();
+      expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    }
+    click(document.querySelector('button[aria-label="Đóng"]'));
+    await flush(2);
+    answerConfirm(true);
+    await flush(2);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it('dirty cài cảnh báo rời trang (beforeunload); hết dirty hoặc đóng ngăn thì gỡ', () => {
+    const fire = () => {
+      const e = new Event('beforeunload', { cancelable: true });
+      window.dispatchEvent(e);
+      return e.defaultPrevented;
+    };
+    function Toggle() {
+      const [dirty, setDirty] = useState(false);
+      return (
+        <>
+          <button type="button" data-testid="toggle" onClick={() => setDirty((d) => !d)} />
+          <Dirty dirty={dirty} onClose={() => undefined} />
+        </>
+      );
+    }
+    const r = mount(<Toggle />);
+    const toggle = () => click(document.querySelector('[data-testid="toggle"]'));
+    expect(fire()).toBe(false);
+    toggle();
+    expect(fire()).toBe(true);
+    toggle();
+    expect(fire()).toBe(false);
+    toggle();
+    expect(fire()).toBe(true);
+    r.unmount();
+    mounted.pop();
+    expect(fire()).toBe(false);
+  });
+});

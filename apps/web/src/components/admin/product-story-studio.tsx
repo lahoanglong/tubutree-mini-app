@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type KeyboardEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { parseStoryConfig, STORY_LIMITS, type AssemblyStep, type HudCalloutPoint, type ProductStoryConfig, type StoryImageFrame, type StoryScene } from '@tubutree/shared-types';
 import type { ProductDetail as PublicProduct } from '@tubutree/app-core/api/catalog';
@@ -13,12 +13,18 @@ import { extractStoryAssets, generateStoryDraft, type ProductDetail, type StoryA
 import { actionErrorText } from '@/lib/admin-error-text';
 import { StoryCompletenessPanel } from './story-completeness-panel';
 import { StoryRoiCutout } from './story-roi-cutout';
-import { BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, FIELD_CLASS, INPUT_CLASS, Notice, chipClass } from './ui';
+import { BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, FIELD_CLASS, Field, INPUT_CLASS, Notice, TOUCH_H, chipClass } from './ui';
 
 const EMPTY: ProductStoryConfig = { version: 1, enabled: true, scenes: [] };
 const OWN_IMAGE = /^\/public-image\/product\/[A-Za-z0-9_-]+\/(\d{1,2})(?:\?|$)/;
 const IMAGE_URL = /\.(png|jpe?g|webp|gif)(\?.*)?$/i;
 const clamp = (n: number) => Math.min(100, Math.max(0, Math.round(n)));
+// Ô số và phím mũi tên cho phép lẻ một chữ số thập phân để canh tinh hơn cú bấm chuột (bấm vẫn ra số nguyên).
+const clampPct = (n: number) => Math.min(100, Math.max(0, Math.round(n * 10) / 10));
+const parsePct = (raw: string): number | null => {
+  const n = Number(raw.trim().replace(',', '.'));
+  return raw.trim() !== '' && Number.isFinite(n) ? n : null;
+};
 const AI_NOTE_MAX = 500;
 const FRAME_AUTO = 'auto';
 const FRAME_LABEL: Record<StoryImageFrame, string> = { 'floating-card': 'Thẻ nổi (ảnh có nền, poster)', cutout: 'Ảnh tách nền đặt thẳng lên nền cảnh' };
@@ -49,6 +55,38 @@ function previewProduct(p: ProductDetail): PublicProduct {
   };
 }
 
+/** Ô số 0–100 cho toạ độ điểm chỉ: gõ dở ("12.") giữ nguyên chữ đang gõ, vượt khoảng thì kẹp ngay về 0/100, rời ô thì về đúng giá trị đã lưu. */
+function PctField({ label, value, onCommit }: { label: string; value: number; onCommit: (n: number) => void }) {
+  const [text, setText] = useState(String(value));
+  useEffect(() => {
+    setText((t) => {
+      const n = parsePct(t);
+      return n !== null && clampPct(n) === value ? t : String(value);
+    });
+  }, [value]);
+  return (
+    <Field label={label}>
+      <input
+        aria-label={label}
+        inputMode="decimal"
+        autoComplete="off"
+        className={`${INPUT_CLASS} ${TOUCH_H}`}
+        value={text}
+        onChange={(e) => {
+          const raw = e.target.value;
+          setText(raw);
+          const n = parsePct(raw);
+          if (n === null) return;
+          const c = clampPct(n);
+          if (c !== n) setText(String(c));
+          onCommit(c);
+        }}
+        onBlur={() => setText(String(value))}
+      />
+    </Field>
+  );
+}
+
 /**
  * Story Studio: sửa cấu hình câu chuyện sản phẩm và xem trước ngay. Thành phần có kiểm soát: `value` null là "đang dùng kịch bản mẫu hoặc tự sinh",
  * lần sửa đầu tiên chốt kịch bản đó thành cấu hình riêng rồi mới đổi.
@@ -68,6 +106,8 @@ export function ProductStoryStudio({
   disabled?: boolean;
 }) {
   const [pick, setPick] = useState(0);
+  // Chỉ phím mũi tên mới cập nhật vùng đọc: gắn nó vào dữ liệu thì mỗi ký tự gõ ở ô tên hay ô X/Y đều bị đọc lại.
+  const [moveNote, setMoveNote] = useState('');
   const [mode, setMode] = useState<'phone' | 'desktop'>('phone');
   const [note, setNote] = useState<string | null>(null);
   const [link, setLink] = useState('');
@@ -160,6 +200,24 @@ export function ProductStoryStudio({
       const p = hud(c)?.points[i];
       if (p) fn(p);
     });
+  // Điểm chỉ đang chọn dịch bằng phím mũi tên (Shift: bước 5), để người không dùng chuột vẫn canh được vị trí.
+  const nudgePoint = (e: KeyboardEvent<HTMLElement>) => {
+    if (disabled || e.altKey || e.ctrlKey || e.metaKey) return;
+    const step = e.shiftKey ? 5 : 1;
+    const delta: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    const d = delta[e.key];
+    if (!d) return;
+    e.preventDefault();
+    const cur = points[sel];
+    if (!cur) return;
+    const x = clampPct(cur.xPct + d[0]);
+    const y = clampPct(cur.yPct + d[1]);
+    setMoveNote(`${cur.label || 'Điểm chỉ'}: ngang ${x}%, dọc ${y}%`);
+    setPoint(sel, (p) => {
+      p.xPct = x;
+      p.yPct = y;
+    });
+  };
 
   return (
     <fieldset className="min-w-0 space-y-4" disabled={disabled}>
@@ -231,7 +289,7 @@ export function ProductStoryStudio({
         <select
           id={`story-frame-${product.id}`}
           data-testid="story-frame"
-          className={`${FIELD_CLASS} w-full sm:w-auto`}
+          className={`${FIELD_CLASS} ${TOUCH_H} w-full sm:w-auto`}
           value={current.imageFrame ?? FRAME_AUTO}
           disabled={disabled}
           onChange={(e) => {
@@ -305,7 +363,7 @@ export function ProductStoryStudio({
       <div className="space-y-2">
         <div className="text-sm font-medium text-stone-900">Lấy ảnh từ link</div>
         <div className="flex flex-wrap gap-2">
-          <input aria-label="Link trang sản phẩm hoặc ảnh" className={`${INPUT_CLASS} min-w-0 flex-1`} placeholder="https://…" maxLength={2048} value={link} onChange={(e) => setLink(e.target.value)} />
+          <input aria-label="Link trang sản phẩm hoặc ảnh" className={`${INPUT_CLASS} ${TOUCH_H} min-w-0 flex-1`} placeholder="https://…" maxLength={2048} value={link} onChange={(e) => setLink(e.target.value)} />
           <button type="button" className={BTN_SECONDARY} disabled={disabled || extract.isPending || link.trim() === ''} onClick={() => extract.mutate()}>
             {extract.isPending ? 'Đang lấy…' : 'Lấy ảnh'}
           </button>
@@ -376,7 +434,7 @@ export function ProductStoryStudio({
           <div key={i} className="space-y-2 rounded-card border border-stone-200 p-3">
             <input
               aria-label={`Tiêu đề bước ${i + 1}`}
-              className={INPUT_CLASS}
+              className={`${INPUT_CLASS} ${TOUCH_H}`}
               maxLength={STORY_LIMITS.maxLabel}
               value={s.title}
               onChange={(e) =>
@@ -387,7 +445,7 @@ export function ProductStoryStudio({
             />
             <input
               aria-label={`Nội dung bước ${i + 1}`}
-              className={INPUT_CLASS}
+              className={`${INPUT_CLASS} ${TOUCH_H}`}
               maxLength={STORY_LIMITS.maxBody}
               value={s.body}
               onChange={(e) =>
@@ -418,7 +476,7 @@ export function ProductStoryStudio({
             {s.layers.length < STORY_LIMITS.maxLayersPerStep && (
               <select
                 aria-label={`Thêm nguyên liệu vào bước ${i + 1}`}
-                className={FIELD_CLASS}
+                className={`${FIELD_CLASS} ${TOUCH_H}`}
                 value=""
                 onChange={(e) => {
                   const id = e.target.value;
@@ -450,7 +508,7 @@ export function ProductStoryStudio({
       </div>
 
       <div className="space-y-2">
-        <div className="text-sm font-medium text-stone-900">Điểm chỉ thành phần (bấm lên ảnh để đặt vị trí, tối đa {STORY_LIMITS.maxHudPoints})</div>
+        <div className="text-sm font-medium text-stone-900">Điểm chỉ thành phần (bấm lên ảnh, nhập số hoặc dùng phím mũi tên để đặt vị trí, tối đa {STORY_LIMITS.maxHudPoints})</div>
         <div className="flex flex-wrap gap-2">
           {points.map((p, i) => (
             <button key={p.id} type="button" aria-pressed={i === sel} className={chipClass(i === sel)} onClick={() => setPick(i)}>
@@ -495,20 +553,34 @@ export function ProductStoryStudio({
         >
           {/* eslint-disable-next-line @next/next/no-img-element -- ảnh tuỳ chọn của admin, cần khung cố định để quy đổi toạ độ */}
           {stage && <img src={stage} alt="" className="pointer-events-none absolute object-contain" style={{ inset: `${STORY_PRODUCT_INSET_PCT}%`, width: `${100 - 2 * STORY_PRODUCT_INSET_PCT}%`, height: `${100 - 2 * STORY_PRODUCT_INSET_PCT}%` }} />}
-          {points.map((p, i) => (
-            <span
-              key={p.id}
-              aria-hidden
-              className={`pointer-events-none absolute -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-stone-0 ${i === sel ? 'size-4 bg-forest-600' : 'size-3 bg-stone-600'}`}
-              style={{ left: `${p.xPct}%`, top: `${p.yPct}%` }}
-            />
-          ))}
+          {points.map((p, i) =>
+            i === sel ? (
+              <button
+                key={p.id}
+                type="button"
+                data-testid="story-hud-handle"
+                aria-label={`Điểm chỉ ${p.label || 'chưa đặt tên'}. Phím mũi tên để dịch, giữ Shift để dịch 5%.`}
+                onKeyDown={nudgePoint}
+                // Enter/Space trên nút sinh click không toạ độ; chặn lại để khung ảnh không đọc nó thành "bấm tại góc trên trái".
+                onClick={(e) => e.stopPropagation()}
+                className="pointer-events-none absolute size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-stone-0 bg-forest-600"
+                style={{ left: `${p.xPct}%`, top: `${p.yPct}%` }}
+              />
+            ) : (
+              <span
+                key={p.id}
+                aria-hidden
+                className="pointer-events-none absolute size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-stone-0 bg-stone-600"
+                style={{ left: `${p.xPct}%`, top: `${p.yPct}%` }}
+              />
+            ),
+          )}
         </div>
         {points[sel] && (
           <div className="grid gap-2 sm:grid-cols-3">
             <input
               aria-label="Tên điểm chỉ"
-              className={INPUT_CLASS}
+              className={`${INPUT_CLASS} ${TOUCH_H}`}
               maxLength={STORY_LIMITS.maxLabel}
               value={points[sel].label}
               onChange={(e) =>
@@ -519,7 +591,7 @@ export function ProductStoryStudio({
             />
             <input
               aria-label="Giá trị điểm chỉ"
-              className={INPUT_CLASS}
+              className={`${INPUT_CLASS} ${TOUCH_H}`}
               maxLength={STORY_LIMITS.maxLabel}
               placeholder="Ví dụ 2%"
               value={points[sel].value ?? ''}
@@ -544,6 +616,33 @@ export function ProductStoryStudio({
             </button>
           </div>
         )}
+        {points[sel] && (
+          <div className="grid grid-cols-2 gap-2">
+            <PctField
+              key={`${points[sel].id}-x`}
+              label="Vị trí ngang X (%)"
+              value={points[sel].xPct}
+              onCommit={(n) =>
+                setPoint(sel, (p) => {
+                  p.xPct = n;
+                })
+              }
+            />
+            <PctField
+              key={`${points[sel].id}-y`}
+              label="Vị trí dọc Y (%)"
+              value={points[sel].yPct}
+              onCommit={(n) =>
+                setPoint(sel, (p) => {
+                  p.yPct = n;
+                })
+              }
+            />
+          </div>
+        )}
+        <span role="status" className="sr-only">
+          {moveNote}
+        </span>
       </div>
 
       <div className="space-y-2">

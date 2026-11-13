@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useId, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { parseStoryConfig, type ProductStoryConfig } from '@tubutree/shared-types';
 import { getAdminProduct, patchAdminProduct, type CategoryOption, type ProductDetail, type ProductPatch } from '@/lib/product-categories';
 import { formatVnd } from '@/lib/format-vnd';
 import { ImageUrlField } from './image-url-field';
 import { ProductStoryStudio } from './product-story-studio';
-import { SideDrawer } from './side-drawer';
-import { useDiscardGuard } from './use-discard-guard';
-import { BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, Notice, chipClass } from './ui';
+import { SideDrawer, useSideDrawerClose } from './side-drawer';
+import { BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, Notice, TOUCH_H, chipClass } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 
 const MAX_IMAGES = 8;
@@ -32,39 +32,40 @@ export function ProductEditDrawer({
 }) {
   const q = useQuery({ queryKey: ['admin-product', id], queryFn: () => getAdminProduct(id) });
   const [dirty, setDirty] = useState(false);
-  const { guard, dialog } = useDiscardGuard(dirty);
-  const close = () => guard(onClose);
   // Mở lại từ cache cũ thì react-query trả bản cũ ngay rồi tải lại nền: chờ bản tải xong mới dựng form, nếu không form giữ chữ/danh mục cũ.
   // Đã dựng thì giữ nguyên dù về sau có lần tải lại nền (sau khi lưu), để không mất chữ đang gõ.
   const [ready, setReady] = useState(false);
   useEffect(() => {
     if (q.data && !q.isFetching) setReady(true);
   }, [q.data, q.isFetching]);
+  // Nút Lưu/Đóng sống trong chân dính của ngăn kéo nhưng đọc trạng thái của form: form đưa chúng vào ô này bằng portal.
+  const [footerSlot, setFooterSlot] = useState<HTMLElement | null>(null);
+  const showForm = !!q.data && ready;
   return (
-    <>
-      <SideDrawer title={q.data?.name ?? 'Sản phẩm'} onClose={close}>
-        {(q.isLoading || (q.data && !ready)) && <p className="text-sm text-stone-500">Đang tải…</p>}
-        {q.isError && <Notice tone="danger" role="alert">{errText(q.error, 'Không tải được sản phẩm.')}</Notice>}
-        {q.data && ready && <Form product={q.data} categories={categories} onClose={close} onSaved={onSaved} onDirtyChange={setDirty} />}
-      </SideDrawer>
-      {dialog}
-    </>
+    <SideDrawer title={q.data?.name ?? 'Sản phẩm'} onClose={onClose} dirty={dirty} footer={showForm ? <div ref={setFooterSlot} /> : undefined}>
+      {(q.isLoading || (q.data && !ready)) && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isError && <Notice tone="danger" role="alert">{errText(q.error, 'Không tải được sản phẩm.')}</Notice>}
+      {q.data && ready && <Form product={q.data} categories={categories} footerSlot={footerSlot} onSaved={onSaved} onDirtyChange={setDirty} />}
+    </SideDrawer>
   );
 }
 
 function Form({
   product: live,
   categories,
-  onClose,
+  footerSlot,
   onSaved,
   onDirtyChange,
 }: {
   product: ProductDetail;
   categories: CategoryOption[];
-  onClose: () => void;
+  footerSlot: HTMLElement | null;
   onSaved: () => void;
   onDirtyChange: (dirty: boolean) => void;
 }) {
+  const formId = useId();
+  const reasonId = useId();
+  const requestClose = useSideDrawerClose();
   // Bản gốc của các trường sửa được, chốt lúc dựng form và chỉ đổi khi lưu thành công. So với `live` thì lần tải lại nền (mutation nào cũng làm cũ
   // khoá admin) làm mọi trường khác nhau và Lưu ghi đè lại những gì người khác vừa đổi mà admin không đụng tới.
   const [product, setBase] = useState<ProductDetail>(live);
@@ -95,7 +96,14 @@ function Form({
   if (JSON.stringify(story) !== JSON.stringify(product.storyConfig ?? null)) patch.storyConfig = story;
   const changed = Object.keys(patch).length > 0;
   // Cấu hình sai thì API từ chối 400: chặn ngay ở nút Lưu để admin thấy lỗi ở Story Studio thay vì sau khi bấm.
-  const storyInvalid = story !== null && !parseStoryConfig(story).ok;
+  const storyError = (() => {
+    if (story === null) return null;
+    const r = parseStoryConfig(story);
+    return r.ok ? null : r.error;
+  })();
+  const storyInvalid = storyError !== null;
+  // Nút Lưu khoá thì nói lý do ngay cạnh nút (lỗi chi tiết ở Story Studio nằm xa, dưới phần cuộn). Sau khi lưu xong đã có "Đã lưu.".
+  const lockReason = storyError !== null ? `Chưa lưu được: cấu hình câu chuyện không hợp lệ (${storyError}). Sửa ở mục Câu chuyện sản phẩm.` : !changed && !msg?.ok ? 'Chưa có thay đổi nào để lưu.' : null;
   const studioProduct = useMemo(() => ({ ...product, images: images.map((s) => s.trim()).filter(Boolean) }), [product, images]);
   useEffect(() => onDirtyChange(changed), [changed, onDirtyChange]);
 
@@ -114,6 +122,7 @@ function Form({
 
   return (
     <form
+      id={formId}
       className="space-y-4 p-4"
       onSubmit={(e) => {
         e.preventDefault();
@@ -151,11 +160,11 @@ function Form({
           )}
           <label className="block text-sm text-stone-700">
             Mô tả ngắn
-            <input value={shortDesc} maxLength={400} onChange={(e) => setShortDesc(e.target.value)} className={`${INPUT_CLASS} mt-1`} />
+            <input value={shortDesc} maxLength={400} onChange={(e) => setShortDesc(e.target.value)} className={`${INPUT_CLASS} ${TOUCH_H} mt-1`} />
           </label>
           <label className="block text-sm text-stone-700">
             Mô tả
-            <textarea value={description} maxLength={6000} rows={6} onChange={(e) => setDescription(e.target.value)} className={`${INPUT_CLASS} mt-1`} />
+            <textarea value={description} maxLength={6000} rows={6} onChange={(e) => setDescription(e.target.value)} className={`${INPUT_CLASS} ${TOUCH_H} mt-1`} />
           </label>
           {product.managedByPancake && (
             <p className="text-xs text-stone-500">
@@ -211,15 +220,28 @@ function Form({
         onAddImage={locked || images.length >= MAX_IMAGES ? undefined : (dataUrl) => setImages((prev) => [...prev, dataUrl])}
       />
 
-      {msg && <Notice tone={msg.ok ? 'success' : 'danger'} role={msg.ok ? 'status' : 'alert'}>{msg.text}</Notice>}
-      <div className="flex gap-2">
-        <button type="submit" disabled={save.isPending || !changed || storyInvalid} className={BTN_PRIMARY}>
-          {save.isPending ? 'Đang lưu…' : 'Lưu'}
-        </button>
-        <button type="button" onClick={onClose} className={BTN_SECONDARY}>
-          Đóng
-        </button>
-      </div>
+      {footerSlot &&
+        createPortal(
+          <>
+            {msg && (
+              <div className="mb-2">
+                <Notice tone={msg.ok ? 'success' : 'danger'} role={msg.ok ? 'status' : 'alert'}>{msg.text}</Notice>
+              </div>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <button type="submit" form={formId} disabled={save.isPending || !changed || storyInvalid} aria-describedby={lockReason ? reasonId : undefined} className={BTN_PRIMARY}>
+                {save.isPending ? 'Đang lưu…' : 'Lưu'}
+              </button>
+              <button type="button" onClick={requestClose} className={BTN_SECONDARY}>
+                Đóng
+              </button>
+              <p id={reasonId} data-testid="save-lock-reason" role="status" className="min-w-0 flex-1 basis-40 text-xs text-stone-600 empty:hidden">
+                {lockReason}
+              </p>
+            </div>
+          </>,
+          footerSlot,
+        )}
     </form>
   );
 }

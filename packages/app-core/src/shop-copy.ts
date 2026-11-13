@@ -593,6 +593,11 @@ export const SHOP_COPY: Record<string, string> = {
   'wishlist.empty.sale': 'Chưa có sản phẩm đang giảm giá trong danh sách yêu thích',
   'wishlist.empty.inStock': 'Chưa có sản phẩm còn hàng trong danh sách yêu thích',
   'wishlist.empty.cta': 'Xem tất cả sản phẩm đã lưu',
+  // Cộng đồng: khung hướng dẫn ở cột phụ bên phải trang web từ lg (`app/cong-dong/feed-shell.tsx`); điện thoại và Mini App không có cột này.
+  'community.guideTitle': 'Cách dùng cộng đồng',
+  'community.guideAsk': 'Hỏi rõ vấn đề, kèm ảnh nếu có, để mọi người dễ giúp.',
+  'community.guideTag': 'Bấm vào hashtag trong bài để xem các bài cùng chủ đề.',
+  'community.guideUnanswered': 'Chọn “Chưa trả lời” để tìm câu hỏi đang cần người giúp.',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

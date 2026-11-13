@@ -21,6 +21,18 @@ describe('CtvDashboardSkeleton', () => {
     expect(grids.map((g) => (g.className.match(/grid-cols-(\d)/) ?? [])[1])).toEqual(['4', '2']);
   });
 
+  it('cùng khuôn với bảng điều khiển thật: bám mép trái (không mx-auto), từ lg hai cột 24rem + phần còn lại, thẻ hoa hồng và lối tắt ở cột trái', () => {
+    mounted = render(<CtvDashboardSkeleton />);
+    const root = mounted.container.querySelector<HTMLElement>('[data-testid="ctv-skeleton"]')!;
+    const cls = root.className.split(/\s+/);
+    expect(cls).toEqual(expect.arrayContaining(['md:max-w-2xl', 'lg:max-w-none', 'lg:grid', 'lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]']));
+    expect(cls).not.toContain('mx-auto');
+    const [left, right] = Array.from(root.children).filter((c) => !c.classList.contains('sr-only'));
+    expect(left!.className).toContain('lg:col-start-1');
+    expect(left!.querySelector('.grid-cols-4')).not.toBeNull();
+    expect(right!.className).toContain('lg:col-start-2');
+  });
+
   it('báo trạng thái đang tải cho trình đọc màn hình', () => {
     mounted = render(<CtvDashboardSkeleton />);
     const root = mounted.container.querySelector('[data-testid="ctv-skeleton"]')!;

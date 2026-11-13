@@ -32,6 +32,7 @@ import { ui } from '@/lib/guest-ui';
 import { phoneBrandText, phoneCaption, phoneFlatCard, phoneSecondary } from '@/lib/phone-ui';
 import { settleWithin } from '@/lib/settle-within';
 import { shallowPush, shallowReplace } from '@/lib/shallow-url';
+import { LG_UP, useMediaQuery } from '@/lib/use-media-query';
 import { Badge } from '@/components/ui/badge';
 import { Badge as TrustBadge } from '@/components/mini/badge';
 import { storefrontBadgeLabel } from '@/lib/storefront-badge';
@@ -159,6 +160,9 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
   const [shareOpen, setShareOpen] = useState(false);
   const [confirmUnpublish, setConfirmUnpublish] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // Khung xem trước cạnh danh sách khối chỉ dựng từ lg: nó là bản `inert` của chính nội dung đang sửa, nên ở khổ nhỏ (bấm "Xem trước" mở tấm) dựng sẵn thêm
+  // một bản ẩn bằng CSS vẫn nhân đôi chữ trong cây DOM. Màn này dựng sau khi dữ liệu về (không có HTML dựng sẵn) nên không có lượt hydrate lệch và không nhảy khung.
+  const wideLayout = useMediaQuery(LG_UP);
   const [questOpen, setQuestOpen] = useState(false);
   const [newOpen, setNewOpen] = useState(false);
   const [newColError, setNewColError] = useState<string | null>(null);
@@ -550,7 +554,7 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
           }}
         />
       ) : (
-        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:items-start lg:gap-x-6">
+        <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_22rem] lg:grid-rows-[auto_1fr] lg:items-start lg:gap-x-6">
           <div className="lg:col-start-1">
             {/* Đầu xem trước dùng đúng ShopHeader của trang khách; `.tubu-bleed` kéo bìa ra mép màn điện thoại như Mini (từ md nằm trong khung trang). */}
             <div className="tubu-bleed md:overflow-hidden md:rounded-card">
@@ -607,9 +611,21 @@ export function StorefrontBuilder({ sf, tier, tierPending, nextTier = null }: { 
             </div>
           </div>
 
-          <div className="mt-3 space-y-3 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0">
+          {/* Cột phải kéo dài hết hai hàng (`self-stretch`) để khung xem trước có chỗ trượt khi dính; hàng 2 là `1fr` nên cột này cao hơn cột trái thì phần dư rơi vào hàng 2,
+              không đẩy "Khối của gian hàng" xa khỏi thẻ đầu. */}
+          <div className="mt-3 space-y-3 lg:col-start-2 lg:row-span-2 lg:row-start-1 lg:mt-0 lg:self-stretch">
             {view.code === 'LIVE' && <StatsSection />}
             {questsQ.data && <QuestStrip {...questStripView(questsQ.data, (n) => `${formatCount(n)} điểm`)} onOpen={() => setQuestOpen(true)} />}
+            {wideLayout && (
+              // Nội dung bên trong `inert` nên không có gì để Tab tới: vùng cuộn tự nhận focus để người dùng bàn phím cuộn được khi gian hàng dài hơn khung.
+              <section data-testid="builder-live-preview" role="region" aria-label={BUILDER_COPY.preview} tabIndex={0} className="lg:sticky lg:top-[calc(var(--header-h)+1rem)] lg:max-h-[calc(100vh-var(--header-h)-2rem)] lg:overflow-y-auto">
+                <div className="mb-1.5 flex items-baseline gap-2">
+                  <div className="text-xs font-medium text-stone-700">{BUILDER_COPY.preview}</div>
+                  <div className="text-xs text-stone-600">{BUILDER_COPY.previewNote}</div>
+                </div>
+                <StorefrontPreview sf={sf} />
+              </section>
+            )}
           </div>
 
           <div className="mt-3 space-y-3 lg:col-start-1">

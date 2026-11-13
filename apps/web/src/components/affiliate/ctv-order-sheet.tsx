@@ -440,7 +440,7 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
           </div>
           <div className="flex items-center justify-between gap-2 pt-1.5">
             <dt className="text-stone-700">{t.customerTotal}</dt>
-            <dd data-testid="ctv-order-total" className="font-display text-lg font-bold tabular-nums text-forest-700">
+            <dd data-testid="ctv-order-total" className="font-display text-lg font-semibold tabular-nums text-forest-700">
               {quote ? formatVnd(quote.total) : t.calculating}
             </dd>
           </div>
@@ -451,7 +451,7 @@ function CtvOrderForm({ onClose }: { onClose: () => void }) {
             <div className="text-sm text-stone-600">{t.goodsSubtotal}</div>
             <div className="text-xs text-stone-600">{t.shipNote}</div>
           </div>
-          <span data-testid="ctv-order-goods" className="font-display text-lg font-bold tabular-nums text-forest-700">
+          <span data-testid="ctv-order-goods" className="font-display text-lg font-semibold tabular-nums text-forest-700">
             {formatVnd(goods)}
           </span>
         </div>

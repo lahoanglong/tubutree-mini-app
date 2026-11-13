@@ -525,7 +525,7 @@ describe('/cong-dong/[id] — giao diện điện thoại như Mini App', () => 
   it('ô Viết trả lời cố định đáy màn hình ở điện thoại, đổ bóng', async () => {
     const { container } = await mount();
     const form = container.querySelector('form')!;
-    for (const c of ['max-md:fixed', 'max-md:inset-x-0', 'max-md:shadow-[var(--elevation-3)]']) expect(form.className).toContain(c);
+    for (const c of ['max-md:fixed', 'max-md:inset-x-0', 'max-md:[box-shadow:var(--elevation-3)]']) expect(form.className).toContain(c);
   });
 
   it('tiêu đề trên thanh trắng, trang bỏ đệm 48px', async () => {

@@ -10,6 +10,7 @@ import { fetchActiveFlashSales, fetchBrands, fetchCatalog, type ProductCard, typ
 import { getLoadErrorMessage } from '../services/api';
 import { trackFilterApplied, trackSearchPerformed, trackSearchResultClicked } from '../services/discovery-events';
 import { CartButton } from '../components/cart-button';
+import { CAPSULE_INSET_END } from '../utils/capsule';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { ActiveFilters } from '../components/catalog/active-filters';
 import { BrowseHub } from '../components/catalog/browse-hub';
@@ -55,12 +56,15 @@ const STICKY_SEARCH: CSSProperties = {
   alignItems: 'center',
   gap: 8,
   padding: '6px 16px',
+  // Giỏ (hoặc nút Huỷ) nằm bên trái viên thuốc của Zalo, không dưới nó. Ghi sau `padding` nên thắng ở mép phải.
+  paddingRight: CAPSULE_INSET_END,
   background: 'var(--color-bg-canvas)',
 };
 
 const PAGE_STYLE = {
   background: 'var(--color-bg-canvas)',
-  paddingBottom: 72,
+  // Thanh dưới cao 60px cộng vùng an toàn, nút giữa nhô thêm: đệm cố định 72px làm khối cuối bị che trên iPhone có thanh Home.
+  paddingBottom: 'calc(72px + var(--safe-bottom))',
   '--sort-bar-top': `calc(var(--safe-top) + ${SEARCH_ROW_HEIGHT}px)`,
 } as CSSProperties;
 

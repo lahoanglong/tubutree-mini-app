@@ -119,7 +119,7 @@ describe('/mua-chung — danh sách nhóm', () => {
     // Mini App: thẻ không viền, chữ body-sm/caption (lớn hơn text-sm/xs cũ).
     const article = c.querySelector('article')!;
     expect(article.className).toContain('max-md:border-0');
-    expect(article.className).toContain('max-md:shadow-[var(--elevation-1)]');
+    expect(article.className).toContain('max-md:[box-shadow:var(--elevation-1)]');
     expect(c.querySelector('article a span.font-semibold')!.className).toContain('max-md:text-[length:var(--type-body-sm-size)]');
     const grid = c.querySelector('article')?.parentElement;
     expect(grid?.className).toContain('grid-cols-[minmax(0,1fr)]');

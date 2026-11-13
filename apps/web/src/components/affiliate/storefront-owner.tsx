@@ -19,7 +19,7 @@ export function useIsStorefrontOwner(referralCode: string | null | undefined): b
 const guestHref = () => (isWebRouteReady('/san-pham') ? '/san-pham' : '/');
 
 /** Điện thoại: thanh dính đáy như StickyActionBar của Mini App; từ md là nút thường trong thẻ đầu trang. */
-const BAR = 'max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:bg-stone-0 max-md:p-4 max-md:pb-[calc(16px+var(--safe-bottom))] max-md:shadow-[var(--elevation-3)]';
+const BAR = 'max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-30 max-md:bg-stone-0 max-md:p-4 max-md:pb-[calc(16px+var(--safe-bottom))] max-md:[box-shadow:var(--elevation-3)]';
 
 function GuestLink({ label }: { label: string }) {
   return (
