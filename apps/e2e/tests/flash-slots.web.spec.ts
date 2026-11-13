@@ -72,7 +72,9 @@ test.describe('Web khách: Giờ vàng theo khung, đã đăng nhập', () => {
     await expect(buyButtons(page).last()).toHaveCSS('opacity', '0.55');
   });
 
-  test('khung 14 món cao hơn màn hình: cuộn tới cuối vẫn thấy dải tab và đồng hồ dưới thanh trên cùng, đổi khung được mà không cuộn ngược', async ({ page }) => {
+  test('khung 14 món cao hơn màn hình: cuộn tới cuối vẫn thấy dải tab và đồng hồ dưới thanh trên cùng, đổi khung được mà không cuộn ngược', async ({ page }, testInfo) => {
+    // Từ lg danh sách ba cột (14 món chỉ 5 hàng) nên không còn cao hơn một màn 1280x720: hạ chiều cao màn để "cao hơn màn hình" vẫn đúng.
+    if (testInfo.project.name === 'Web Customer') await page.setViewportSize({ width: 1280, height: 400 });
     await page.goto('/gio-vang');
     const tablist = page.getByRole('tablist', { name: 'Khung giờ' });
     await expect(tablist).toBeVisible();
@@ -81,7 +83,7 @@ test.describe('Web khách: Giờ vàng theo khung, đã đăng nhập', () => {
     // Cuộn tới món cuối, không tới đáy tài liệu: ở đáy, chân trang (cao thấp tuỳ font của máy) chiếm màn hình, khối nội dung hết chỗ
     // và đẩy dải tab lên theo đúng luật sticky.
     await rowOf(buyButtons(page).last()).evaluate((el) => el.scrollIntoView({ block: 'end' }));
-    await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 }).toBeGreaterThan(600);
+    await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 }).toBeGreaterThan(300);
     // `top` đã tính: điện thoại là dưới thanh nút lùi (56px), máy tính là dưới thanh đầu trang của site (--header-h).
     const stickyTop = await sticky.evaluate((el) => parseFloat(getComputedStyle(el).top));
     expect(stickyTop).toBeGreaterThan(0);

@@ -208,6 +208,23 @@ describe('BrowseView — từ md không có hub', () => {
     })) as unknown as typeof window.matchMedia;
   };
 
+  it('?focus=search ở khổ md+: ô tìm riêng của trang bị ẩn nên focus ô tìm của thanh đầu website rồi gỡ cờ khỏi URL', async () => {
+    wideScreen();
+    const header = document.createElement('input');
+    header.type = 'search';
+    header.id = 'site-search-q';
+    document.body.appendChild(header);
+    try {
+      nav.search = 'focus=search';
+      mount();
+      await flush();
+      expect(document.activeElement).toBe(header);
+      expect(nav.shallows.at(-1)).toBe('/san-pham');
+    } finally {
+      header.remove();
+    }
+  });
+
   it('gốc /san-pham ở khổ md+: danh sách tất cả (SortBar, số kết quả, tải 20 món), h1 "Tất cả sản phẩm", không hub; ô tìm riêng của trang chỉ dựng dưới md', async () => {
     wideScreen();
     const { container } = mount();

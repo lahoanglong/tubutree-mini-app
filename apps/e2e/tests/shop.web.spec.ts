@@ -76,9 +76,9 @@ test.describe('Web khách: danh mục /san-pham', () => {
       if (call.query.get('limit') === '1') return pageOf([product(1)], 5, 1, 1);
       return pageOf([product(1), product(2)], 2);
     });
-    // Từ lg bộ lọc nằm ở cột bên trái nên không có nút mở sheet; project desktop hạ xuống khổ dưới lg để kiểm luồng sheet,
-    // project Mobile giữ nguyên khổ điện thoại.
-    if (testInfo.project.name === 'Web Customer') await page.setViewportSize({ width: 900, height: 900 });
+    // Từ md không còn hub (gốc /san-pham là danh sách "tất cả" kèm cột lọc) và từ lg bộ lọc nằm ở cột bên trái nên không có nút mở sheet; project desktop
+    // hạ xuống khổ điện thoại lớn (dưới md) để kiểm luồng hub và sheet, project Mobile giữ nguyên khổ điện thoại.
+    if (testInfo.project.name === 'Web Customer') await page.setViewportSize({ width: 700, height: 900 });
     // Gốc /san-pham là hub (không tải danh sách): chỉ có ô danh mục, thương hiệu và kệ Bán chạy nhất.
     await page.goto('/san-pham');
     await refetchStale(page, api, 'GET', '/categories');
@@ -129,8 +129,10 @@ test.describe('Web khách: danh mục /san-pham', () => {
     await expect(page).toHaveURL(/inStock=1/);
   });
 
-  test('gõ hiện gợi ý sản phẩm; Enter ghi từ khoá vào URL; tìm không ra thì nói rõ', async ({ page, api }) => {
+  test('gõ hiện gợi ý sản phẩm; Enter ghi từ khoá vào URL; tìm không ra thì nói rõ', async ({ page, api }, testInfo) => {
     mockCatalog(api);
+    // Gợi ý nằm ở ô tìm riêng của trang Danh mục, chỉ dựng dưới md (từ md thanh đầu website có ô tìm không gợi ý).
+    if (testInfo.project.name === 'Web Customer') await page.setViewportSize({ width: 700, height: 900 });
     api.get('/products', ({ call }) => (call.query.get('q') === 'xyz' ? pageOf([], 0) : pageOf([product(1)], 1)));
     await page.goto('/san-pham');
     const input = page.getByRole('searchbox', { name: 'Tìm sản phẩm' });
@@ -228,7 +230,9 @@ test.describe('Web khách: Trang chủ /', () => {
     mockHome(api);
     await page.goto('/');
     await refetchStale(page, api, 'GET', '/products');
-    const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
+    // Hai bản, mỗi bản `display:none` ở một khổ: kệ vuốt ngang dưới lg, lưới 5×2 từ lg.
+    const phoneRail = (page.viewportSize()?.width ?? 1280) < 1024;
+    const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true }).getByTestId(phoneRail ? 'best-seller-rail' : 'best-seller-grid');
     await expect(best.getByText('Sữa rửa mặt bán chạy')).toBeVisible();
     for (const rank of ['#1', '#2', '#3']) await expect(best.getByText(rank, { exact: true })).toBeVisible();
     const suggest = page.getByRole('region', { name: 'Gợi ý hôm nay' });

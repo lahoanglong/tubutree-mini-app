@@ -82,6 +82,26 @@ test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
       const seen = new Set<string>();
       for (; steps < 90; steps++) {
         await page.keyboard.press('Tab');
+        // Hàng điều hướng của thanh đầu cuộn ngang (từ md, 9 mục dài hơn khung 800px): phần tử vừa lấy nét có thể đang được cuộn vào tầm nhìn, nên đợi vị trí đứng yên (3 khung hình liền) rồi mới đo.
+        await page.evaluate(
+          () =>
+            new Promise<void>((resolve) => {
+              const el = document.activeElement as HTMLElement | null;
+              if (!el) return resolve();
+              const started = performance.now();
+              let last = '';
+              let same = 0;
+              const tick = () => {
+                const b = el.getBoundingClientRect();
+                const key = `${b.left}|${b.top}`;
+                same = key === last ? same + 1 : 0;
+                last = key;
+                if (same >= 3 || performance.now() - started > 1500) resolve();
+                else requestAnimationFrame(tick);
+              };
+              requestAnimationFrame(tick);
+            }),
+        );
         const r = await page.evaluate(() => {
           const el = document.activeElement as HTMLElement | null;
           if (!el || el === document.body) return null;
@@ -91,13 +111,14 @@ test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
           const y = b.top + b.height / 2;
           const top = document.elementFromPoint(x, y);
           const name = (el.getAttribute('aria-label') ?? el.textContent ?? el.tagName).trim().slice(0, 40);
-          return { id: `${el.tagName}:${name}:${Math.round(b.top)}`, skip: false, name, ok: !!top && (el === top || el.contains(top) || top.contains(el)), y, vh: window.innerHeight };
+          const by = top ? `${top.tagName.toLowerCase()}.${String(top.className).slice(0, 50)}` : 'ngoài màn';
+          return { id: `${el.tagName}:${name}:${Math.round(b.top)}`, skip: false, name, ok: !!top && (el === top || el.contains(top) || top.contains(el)), y, vh: window.innerHeight, by, x: Math.round(x) };
         });
         if (!r) break;
         if (r.skip) continue;
         if (seen.has(r.id)) break;
         seen.add(r.id);
-        if (!r.ok) covered.push(`${r.name} (y=${Math.round(r.y!)})`);
+        if (!r.ok) covered.push(`${r.name} (x=${r.x}, y=${Math.round(r.y!)}) bị ${r.by} đè`);
       }
       expect(seen.size, 'đã Tab qua đủ phần tử của giỏ').toBeGreaterThan(20);
       expect(covered).toEqual([]);

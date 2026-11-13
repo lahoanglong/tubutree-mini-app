@@ -192,11 +192,15 @@ test.describe('Web khách: thanh toán', () => {
     if (desktop) await page.getByRole('link', { name: 'Đơn của tôi' }).click();
     else await page.getByRole('button', { name: 'Theo dõi đơn' }).click();
     await expect(page).toHaveURL(/\/tai-khoan\/don-hang/);
-    // Chi tiết đơn ở điện thoại không có thanh tab (như Mini App); nút lùi về /tai-khoan bằng router.replace vì trang mở thẳng nên chưa có lịch sử trong web.
+    // Chi tiết đơn ở điện thoại không có thanh tab (như Mini App); nút lùi về trang cha bằng router.replace vì trang mở thẳng nên chưa có lịch sử trong web.
+    // Cha trực tiếp của chi tiết đơn là danh sách đơn (không nhảy qua Tài khoản), nên về Tài khoản phải lùi thêm một bậc.
     if (desktop) await page.locator('a[href="/tai-khoan"]:visible').first().click();
     else {
-      // Nút lùi nổi đọc trang cha từ tiêu đề trang hoặc từ khung chờ của nhóm /tai-khoan; cả hai khai báo /tai-khoan.
-      await expect(page.locator('[data-back-href]')).toBeAttached();
+      // Nút lùi nổi đọc trang cha từ tiêu đề trang hoặc từ khung chờ của nhóm /tai-khoan (khung chờ khai /tai-khoan): đợi tiêu đề thật khai đúng cha rồi mới bấm.
+      await expect(page.locator('[data-back-href="/tai-khoan/don-hang"]')).toBeAttached();
+      await page.getByRole('button', { name: 'Quay lại' }).click();
+      await expect(page).toHaveURL(/\/tai-khoan\/don-hang$/);
+      await expect(page.locator('[data-back-href="/tai-khoan"]')).toBeAttached();
       await page.getByRole('button', { name: 'Quay lại' }).click();
     }
     await expect(page).toHaveURL(/\/tai-khoan$/);

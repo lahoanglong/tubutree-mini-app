@@ -128,9 +128,11 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   }, []);
 
   // `?focus=search` từ ô tìm ở trang chủ: focus thẳng ô thật rồi bỏ cờ khỏi URL, để quay lại không bật bàn phím lần nữa.
+  // Từ md ô tìm của trang bị ẩn (`md:hidden`, không focus được): ô tìm của thanh đầu website là ô duy nhất nên focus vào nó.
   useEffect(() => {
     if (!focusSearch) return;
-    inputRef.current?.focus();
+    const wideNow = typeof window.matchMedia === 'function' && window.matchMedia(MD_UP).matches;
+    (wideNow ? (document.getElementById('site-search-q') ?? inputRef.current) : inputRef.current)?.focus();
     setEditing(true);
     consumeFocus();
   }, [focusSearch, consumeFocus]);
@@ -377,17 +379,21 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             }}
           />
         ) : hubState ? (
-          <div className="md:hidden">
-            <BrowseHub
-              entries={entries}
-              categoriesLoading={categoriesQ.isLoading}
-              brands={brandsQ.data}
-              initialBestSellers={bestSellers}
-              onPickCategory={pickHubCategory}
-              onPickAll={() => openFromHub({ all: true })}
-              onPickBrand={(brand) => openFromHub({ brands: [brand] })}
-            />
-          </div>
+          <>
+            <div className="md:hidden">
+              <BrowseHub
+                entries={entries}
+                categoriesLoading={categoriesQ.isLoading}
+                brands={brandsQ.data}
+                initialBestSellers={bestSellers}
+                onPickCategory={pickHubCategory}
+                onPickAll={() => openFromHub({ all: true })}
+                onPickBrand={(brand) => openFromHub({ brands: [brand] })}
+              />
+            </div>
+            {/* Từ md hub bị che và danh sách chỉ vào sau hydrate: giữ chiều cao một màn hình để chân trang đang hiện trong màn hình không bị đẩy ra ngoài khi danh sách tới (một lần xê dịch lớn). */}
+            <div aria-hidden="true" className="hidden md:block" style={{ minHeight: '100svh' }} />
+          </>
         ) : (
           <>
             {/* Dính ở khung bọc, không ở chính SortBar: cha của phần tử dính phải cao bằng cả danh sách. Từ lg cột lọc đã có nên nút Lọc ẩn đi (`!hidden` vì nút có `display` ở style). */}

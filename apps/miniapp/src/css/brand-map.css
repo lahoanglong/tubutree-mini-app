@@ -65,6 +65,7 @@
   color: var(--color-brandmap-island);
   font-size: var(--brandmap-label-sub-size);
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
   line-height: 1;
   pointer-events: none;
 }
