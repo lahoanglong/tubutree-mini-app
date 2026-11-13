@@ -223,9 +223,9 @@ test.describe('Đổi rác tạm dừng nhưng còn yêu cầu đang mở', () =
   });
 });
 
-test.describe('Kệ Mua lại: Định kỳ tạm ẩn ở Mini App, thẻ cao như nhau', () => {
+test.describe('Kệ Mua lại ở Trang chủ: một dòng chỉ có Mua lại, không mời Định kỳ (lối đặt định kỳ nằm ở tab Đơn hàng), thẻ cao như nhau', () => {
   for (const width of [375, 320]) {
-    test(`${width}px: không có nút Định kỳ (cờ tắt), vẫn có Mua lại; tên ngắn và tên dài cho thẻ cao bằng nhau (≤ 1px)`, async ({ page, api }) => {
+    test(`${width}px: không có nút Định kỳ dù cờ bật và hàng không chỉ bán lẻ (RebuyLine không mời), vẫn có Mua lại; tên ngắn và tên dài cho thẻ cao bằng nhau (≤ 1px)`, async ({ page, api }) => {
       await page.setViewportSize({ width, height: 812 });
       const heights: number[] = [];
       for (const name of ['An', 'Nước Rửa Chén Sinh Học Tubu Hương Chanh Gừng Loại Đậm Đặc 500ml Chai Lớn']) {
@@ -235,7 +235,7 @@ test.describe('Kệ Mua lại: Định kỳ tạm ẩn ở Mini App, thẻ cao n
         await page.goto('/');
         const card = page.getByRole('region', { name: 'Mua lại' });
         await expect(card).toBeVisible({ timeout: 15_000 });
-        await expect(card.getByRole('button', { name: /Định kỳ/ })).toHaveCount(0);
+        await expect(card.getByRole('button', { name: /định kỳ/i })).toHaveCount(0);
         await expect(card.getByRole('button', { name: 'Mua lại' }).first()).toBeVisible();
         heights.push((await card.boundingBox())!.height);
       }
