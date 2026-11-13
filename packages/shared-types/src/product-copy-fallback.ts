@@ -96,9 +96,9 @@ const MANUAL: Record<string, ProductCopyFallback> = {
     'Đường hoa dừa Sokfarm, túi 300g. Bao bì ghi thơm hương dừa.',
     named('Hoa dừa'),
   ),
-  'duong-hoa-dua-sokfarm-hu-thuy-tinh-150g': entry('Đường hoa dừa Sokfarm, đóng hũ thủy tinh 150g.', named('Đường hoa dừa')),
+  'duong-hoa-dua-sokfarm-hu-thuy-tinh-150g': entry('Đường hoa dừa Sokfarm, đóng hũ thuỷ tinh 150g.', named('Đường hoa dừa')),
   'mat-co-dac-sokfarm-hop-12-goi': entry('Mật cô đặc Sokfarm, hộp 12 gói.', named('Mật cô đặc')),
-  'mat-hoa-dua-co-dac-sokfarm': entry('Mật hoa dừa cô đặc Sokfarm, chai thủy tinh khối lượng tịnh 250 g.', named('Mật hoa dừa')),
+  'mat-hoa-dua-co-dac-sokfarm': entry('Mật hoa dừa cô đặc Sokfarm, chai thuỷ tinh khối lượng tịnh 250 g.', named('Mật hoa dừa')),
   'nuoc-tuong-mat-hoa-dua-sokfarm-cham': entry('Nước tương mật hoa dừa Sokfarm dùng để chấm, chai 200 ml.', named('Mật hoa dừa')),
 
   'granola-mix-nuts-tui-tien-loi-bh-nong': entry('Granola mix nuts BH.NONG, đóng túi tiện lợi.', named('Granola'), named('Hạt mix nuts')),
@@ -150,7 +150,7 @@ const OUT_OF_STOCK: Record<string, ProductCopyFallback> = {
   'granola-mix-trai-cay-say-bh-nong-lon-450g': entry('Granola mix trái cây sấy BH.NONG, đóng lon 450g.', named('Granola'), named('Trái cây sấy')),
   'tra-gao-lut-ray-dau-den-bh-nong-500g': entry('Trà gạo lứt rẫy đậu đen BH.NONG, quy cách 500g.', named('Gạo lứt rẫy'), named('Đậu đen')),
 
-  'cho-be-duong-hoa-dua-sokfarm-hu-thuy-tinh-150g': entry('Đường hoa dừa Sokfarm trong mục Cho bé, đóng hũ thủy tinh 150g.', named('Đường hoa dừa')),
+  'cho-be-duong-hoa-dua-sokfarm-hu-thuy-tinh-150g': entry('Đường hoa dừa Sokfarm trong mục Cho bé, đóng hũ thuỷ tinh 150g.', named('Đường hoa dừa')),
   'cho-be-nuoc-tuong-mat-hoa-dua-sokfarm-200ml': entry('Nước tương mật hoa dừa Sokfarm trong mục Cho bé, chai 200ml.', named('Mật hoa dừa')),
   'cho-be-mat-co-dac-sokfarm-250g': entry('Mật cô đặc Sokfarm trong mục Cho bé, quy cách 250g.', named('Mật cô đặc')),
   'nuoc-uong-mat-hoa-dua-tuoi-sokfarm-330ml': entry('Nước uống mật hoa dừa tươi Sokfarm, quy cách 330ml.', named('Mật hoa dừa tươi')),

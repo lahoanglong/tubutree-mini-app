@@ -245,8 +245,8 @@ describe('chữ dự phòng của cả catalog', () => {
     }
   });
 
-  it('phần lớn catalog ghi được: SKU bị chặn là ngoại lệ hiếm', () => {
-    expect(slugs.filter(dirty).length).toBeLessThan(slugs.length / 10);
+  it('không chữ dự phòng nào của catalog vi phạm bộ chặn hay Q13 (apps/api không quét shared-types nên spec này là cổng duy nhất)', () => {
+    expect(slugs.filter(dirty)).toEqual([]);
   });
 
   it('ghi xong rồi lập kế hoạch lại thì không còn gì để ghi, kể cả chữ dự phòng ngắn hơn 40 ký tự (không ghi đi ghi lại)', async () => {
