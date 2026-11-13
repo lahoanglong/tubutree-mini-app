@@ -13,6 +13,10 @@ export const ADDRESS = {
 };
 export const ADDRESS_2 = { ...ADDRESS, id: 'a2', recipient: 'Trần Thị Bình', street: '34 Hàng Bạc', isDefault: false };
 
+export const BUYER_PUBLIC_CONFIG = {
+  freeshipThreshold: 500_000, aiAdvisorEnabled: false, support: { hotline: '0984606774', email: 'tubutree@gmail.com' }, waste: { enabled: true, dropoff: true, mailin: true, pickup: false },
+};
+
 export const cartLines = (n: number) =>
   Array.from({ length: n }, (_, i) => ({
     id: `i${i + 1}`, variationId: `v${i + 1}`, productName: `Sản phẩm số ${i + 1}`, variationName: '500ml', slug: `sp-${i + 1}`, thumbnail: null,
@@ -50,7 +54,7 @@ export function mockBuyer(api: MockApi, opts: BuyerOptions = {}): void {
   api.get('/dealer/me', { status: 'NONE', isDealer: false });
   api.get('/orders', { data: [], meta: { page: 1, limit: 20, total: 0 } });
   api.get('/products', { data: [], meta: { page: 1, limit: 30, total: 0 } });
-  api.get('/config/public', { freeshipThreshold: 500_000, aiAdvisorEnabled: false, support: { hotline: '0984606774', email: 'tubutree@gmail.com' }, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } });
+  api.get('/config/public', BUYER_PUBLIC_CONFIG);
   api.get('/flash-sales/active', []);
   api.get('/cart', { items, couponCode: null, subtotal, discount: 0, freeship: false, freeshipThreshold: 500_000, itemCount: items.length });
   api.post('/checkout/quote', {

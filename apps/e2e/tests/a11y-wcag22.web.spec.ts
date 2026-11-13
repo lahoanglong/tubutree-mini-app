@@ -1,6 +1,6 @@
 import { expect, test } from './support/mock-api';
 import { mockCollectable } from './support/voucher-mocks';
-import { mockBuyer, measureFocusRing, seedSession } from './support/a11y-buyer';
+import { BUYER_PUBLIC_CONFIG, mockBuyer, measureFocusRing, seedSession } from './support/a11y-buyer';
 
 /**
  * Gói U (WCAG 2.2 AA) trên web khách: những điều chỉ trình duyệt thật đo được (jsdom không dàn trang, không có :focus-visible).
@@ -124,6 +124,36 @@ test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
       expect(covered).toEqual([]);
     });
   }
+
+  test('800px: mục "Đổi rác" chèn vào hàng điều hướng sau khi focus đã ở "Cộng đồng" thì "Cộng đồng" vẫn nằm trọn trong khung', async ({ page, api }) => {
+    mockBuyer(api, { lines: 2 });
+    let release!: () => void;
+    const configGate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    api.get('/config/public', async () => {
+      await configGate;
+      return BUYER_PUBLIC_CONFIG;
+    });
+    await page.setViewportSize({ width: 800, height: 720 });
+    await page.goto('/gio-hang');
+    const navItems = page.locator('[data-desktop-nav] li');
+    await expect(navItems).toHaveCount(8, { timeout: 20_000 });
+    const community = page.getByRole('navigation', { name: 'Điều hướng chính' }).getByRole('link', { name: 'Cộng đồng' });
+    for (let i = 0; i < 20 && !(await community.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab');
+    await expect(community).toBeFocused();
+    release();
+    await expect(navItems).toHaveCount(9);
+    await expect
+      .poll(() =>
+        community.evaluate((el) => {
+          const b = el.getBoundingClientRect();
+          const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
+          return b.left >= 0 && b.right <= window.innerWidth && !!top && (el === top || el.contains(top));
+        }),
+      )
+      .toBe(true);
+  });
 });
 
 test.describe('A11Y-09: thanh toán', () => {
