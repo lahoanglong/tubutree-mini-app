@@ -2,6 +2,7 @@
 import { act } from 'react';
 import { describe, it, expect, vi, afterEach, beforeAll, beforeEach } from 'vitest';
 import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED } from '@tubutree/app-core/client-copy';
+import { BANK_QR_LOAD_FAILED } from '@tubutree/app-core/bank-payment-copy';
 import { BankTransferPanel } from './bank-transfer-panel';
 import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 import type { OrderDTO } from '@/lib/shop-client';
@@ -91,6 +92,21 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
       expect(api.calls).toHaveLength(0);
     },
   );
+
+  it('ảnh QR không tải được: thay bằng lời dặn chép số tài khoản, ẩn nút Lưu mã QR, không để icon ảnh gãy', async () => {
+    const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    const img = container.querySelector('img[alt="VietQR"]') as HTMLImageElement;
+    await act(async () => {
+      img.dispatchEvent(new Event('error'));
+    });
+    expect(container.querySelector('[data-testid="bank-qr-failed"]')?.textContent).toBe(BANK_QR_LOAD_FAILED);
+    expect(container.querySelector('img[alt="VietQR"]')).toBeNull();
+    expect([...container.querySelectorAll('button')].some((b) => b.textContent?.includes('Lưu mã QR'))).toBe(false);
+    expect(container.textContent).toContain('9984606774');
+  });
 
   it('có nút "Tôi đã chuyển khoản — Kiểm tra" — bấm thì gọi lại API kiểm tra trạng thái', async () => {
     const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });

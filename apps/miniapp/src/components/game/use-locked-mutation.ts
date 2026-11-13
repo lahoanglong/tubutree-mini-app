@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { useMutation, type UseMutateFunction, type UseMutationOptions, type UseMutationResult } from '@tanstack/react-query';
+import { isThenable } from '../ui/button';
 
 export type LockedMutation<TData, TError, TVariables, TContext> = Omit<
   UseMutationResult<TData, TError, TVariables, TContext>,
@@ -10,7 +11,9 @@ export type LockedMutation<TData, TError, TVariables, TContext> = Omit<
  * `useMutation` mà `mutate` bỏ qua cú gọi thứ hai khi cú đầu chưa xong. `disabled={isPending}` chỉ đúng sau
  * lần dựng lại kế tiếp, nên hai cú chạm sát nhau trong cùng khung hình vẫn đều thấy nút đang bật và đều gọi
  * API; ref đồng bộ thì chặn được ngay. Khoá nhả ở `onSettled` (thành công lẫn lỗi) nên lỗi mạng không làm
- * nút chết.
+ * nút chết. `onSettled` của người dùng trả Promise (vd tải lại danh sách) thì khoá nhả SAU khi nó xong, kể cả khi nó
+ * ném lỗi: nhả trước thì lệnh khác đích đổi `variables` của mutation, nút hết bận, và chạm lại đích cũ gửi lệnh mới
+ * trong lúc máy chủ chưa xác nhận dữ liệu mới. Giữ y hệt bản web (`apps/web/.../use-locked-mutation.ts`).
  *
  * `keyOf` chia khoá theo đích của thao tác: các nút cùng loại nhưng khác đích (tưới lô A và lô B, tặng nước
  * cho hai bạn) vẫn gọi song song như khi chỉ dựa vào `isPending`, chỉ cú chạm lặp vào CÙNG đích bị bỏ qua.
@@ -25,8 +28,20 @@ export function useLockedMutation<TData = unknown, TError = Error, TVariables = 
   const { mutate, mutateAsync: _unguarded, ...rest } = useMutation<TData, TError, TVariables, TContext>({
     ...options,
     onSettled: (...args) => {
-      inFlight.current.delete(keyOf(args[2]));
-      return onSettled?.(...args);
+      const release = () => {
+        inFlight.current.delete(keyOf(args[2]));
+      };
+      try {
+        const result = onSettled?.(...args);
+        if (!isThenable(result)) {
+          release();
+          return result;
+        }
+        return Promise.resolve(result).finally(release);
+      } catch (e) {
+        release();
+        throw e;
+      }
     },
   });
 

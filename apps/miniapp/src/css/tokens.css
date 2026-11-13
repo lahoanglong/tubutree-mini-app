@@ -10,7 +10,19 @@
 /* Biến tiện ích riêng của miniapp (safe-area, nhịp chuyển động, font đọc dài, bóng thẻ) cho .tubu-*,
  * .page và component. KHÔNG khai báo lại họ tên v1 (--neutral-*, --primary-*, --radius-md...):
  * ds-no-legacy-aliases.spec.ts chặn. Màu thô còn lại (shimmer, pulse, chấm ảnh) gom ở khối dưới. */
+/* Phông dự phòng chỉnh cỡ theo Inter (số đo công bố của Inter so với Arial), cùng số với apps/web/src/app/globals.css: trong lúc Inter chưa tải
+ * xong trên WebView Zalo, chữ chiếm gần đúng bề rộng và chiều cao cuối cùng nên lúc đổi phông trang ít xê dịch. design-tokens khai ngăn xếp
+ * `'Inter', system-ui` không có chỗ cho nó, nên khai lại `--font-ui` ở đây (file này nạp sau design-tokens). font-inter-fallback-sync.spec.ts giữ hai bản khớp. */
+@font-face {
+  font-family: 'Inter Fallback';
+  src: local('Arial'), local('Helvetica Neue'), local('Liberation Sans');
+  size-adjust: 107.4%;
+  ascent-override: 90.2%;
+  descent-override: 22.48%;
+  line-gap-override: 0%;
+}
 :root {
+  --font-ui: 'Inter', 'Inter Fallback', system-ui, sans-serif;
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --shadow-card: var(--elevation-1);

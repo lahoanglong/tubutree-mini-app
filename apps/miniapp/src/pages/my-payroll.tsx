@@ -38,6 +38,7 @@ import {
   vnDateKey,
 } from '../utils/week';
 import { INPUT_LIMITS } from '../utils/input-limits';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 const STATUS_LABEL: Record<PayrollStatus, string> = {
   OPEN: 'Đang tính',
@@ -203,7 +204,7 @@ function MyPayrollHub() {
                 <Text variant="caption" tone="inverse" as="div" style={{ marginBottom: 4 }}>
                   Ảnh xác nhận đã chuyển:
                 </Text>
-                <img src={safeImageUrl(m.proofImageUrl) as string} alt="Xác nhận chuyển khoản" style={{ maxWidth: '100%', borderRadius: 'var(--radius-media)' }} />
+                <img src={safeImageUrl(m.proofImageUrl) as string} alt="Xác nhận chuyển khoản" style={{ maxWidth: '100%', borderRadius: 'var(--radius-media)' }} onError={hideBrokenImage} />
               </div>
             )}
           </div>

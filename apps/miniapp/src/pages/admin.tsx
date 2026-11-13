@@ -67,6 +67,7 @@ import {
   vnDateKey,
 } from '../utils/week';
 import { INPUT_LIMITS, STAFF_REASON_MIN } from '../utils/input-limits';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 export default function AdminPage() {
   const role = useAuthStore((s) => s.user?.role);
@@ -373,7 +374,7 @@ function PayrollSection() {
           <Text variant="price-xl" tone="brand">
             {formatVnd(qrRow?.month.net ?? 0)}
           </Text>
-          {qrSrc && <img src={qrSrc} alt="QR" style={{ maxWidth: 260, width: '100%' }} />}
+          {qrSrc && <img src={qrSrc} alt="QR" style={{ maxWidth: 260, width: '100%' }} onError={hideBrokenImage} />}
           {qrRow?.profile?.bankAccountNo && (
             <Text variant="body-sm">
               {qrRow.profile.bankAccountName} · {qrRow.profile.bankAccountNo}

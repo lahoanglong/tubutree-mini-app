@@ -5,6 +5,7 @@ import type { CSSProperties } from 'react';
 import type { LucideIcon } from 'lucide-react';
 import { Icon } from './icon';
 import { Text, Heading } from './text';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 export function StatTile({ label, value, delta, icon: IconCmp, onPress }: { label: string; value: string; delta?: string; icon?: LucideIcon; onPress?: () => void }) {
   const style: CSSProperties = { background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', boxShadow: 'var(--elevation-1)', padding: 12 };
@@ -39,7 +40,7 @@ export function Avatar({ src, fallback, size = 44 }: { src?: string | null; fall
   return (
     <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', background: 'var(--color-action-primary-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }}>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Heading variant="title-sm" as="span" tone="inverse">{fallback.charAt(0).toUpperCase()}</Heading>}
+      {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={hideBrokenImage} /> : <Heading variant="title-sm" as="span" tone="inverse">{fallback.charAt(0).toUpperCase()}</Heading>}
     </div>
   );
 }

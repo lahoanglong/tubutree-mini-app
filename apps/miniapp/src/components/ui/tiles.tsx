@@ -1,6 +1,7 @@
 import type { LucideIcon } from 'lucide-react';
 import { Icon } from './icon';
 import { Text, Heading } from './text';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 export function StatTile({ label, value, delta, icon: IconCmp, onPress }: { label: string; value: string; delta?: string; icon?: LucideIcon; onPress?: () => void }) {
   return (
@@ -25,7 +26,7 @@ export function CountdownChip({ endsAt }: { endsAt: string }) {
 export function Avatar({ src, fallback, size = 44 }: { src?: string | null; fallback: string; size?: number }) {
   return (
     <div style={{ width: size, height: size, borderRadius: '50%', overflow: 'hidden', background: 'var(--color-action-primary-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', flex: '0 0 auto' }}>
-      {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Heading variant="title-sm" as="span" tone="inverse">{fallback.charAt(0).toUpperCase()}</Heading>}
+      {src ? <img src={src} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={hideBrokenImage} /> : <Heading variant="title-sm" as="span" tone="inverse">{fallback.charAt(0).toUpperCase()}</Heading>}
     </div>
   );
 }

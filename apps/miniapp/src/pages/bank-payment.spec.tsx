@@ -2,6 +2,7 @@ import { act, render, screen, fireEvent, waitFor, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED } from '@tubutree/app-core/client-copy';
+import { BANK_QR_LOAD_FAILED } from '@tubutree/app-core/bank-payment-copy';
 import { HttpError } from '../services/http';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
@@ -69,6 +70,15 @@ describe('Thanh toán chuyển khoản: không dùng emoji làm icon (C-113)', (
     expect(note.textContent).toContain('Giữ nguyên nội dung TT001 để hệ thống tự xác nhận.');
     expect(note.querySelector('svg')).not.toBeNull();
     expect(EMOJI.test(container.textContent ?? '')).toBe(false);
+  });
+
+  it('ảnh QR không tải được: thay bằng lời dặn chép số tài khoản, ẩn nút Lưu mã QR, không để icon ảnh gãy', async () => {
+    renderPage();
+    fireEvent.error(await screen.findByAltText('VietQR'));
+    expect(await screen.findByTestId('bank-qr-failed')).toHaveTextContent(BANK_QR_LOAD_FAILED);
+    expect(screen.queryByAltText('VietQR')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Lưu mã QR' })).toBeNull();
+    expect(screen.getByText('Số tài khoản')).toBeInTheDocument();
   });
 
   it('bấm Kiểm tra khi chưa có tiền về: cảnh báo "chưa thấy tiền về", không emoji', async () => {

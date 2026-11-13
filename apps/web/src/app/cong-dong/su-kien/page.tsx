@@ -21,6 +21,7 @@ import { formatDate } from '@/lib/format-date';
 import { ui } from '@/lib/guest-ui';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { loadErrorText } from '@/lib/error-text';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 const errorText = loadErrorText;
 const formatPoints = (n: number) => `${formatCount(n)} điểm`;
@@ -76,7 +77,7 @@ function EventMeta({ event, rewardPrefix }: { event: CommunityEvent; rewardPrefi
 function Cover({ url }: { url: string | null }) {
   const src = safeMediaUrl(url);
   // eslint-disable-next-line @next/next/no-img-element
-  return src ? <img src={src} alt="" loading="lazy" className="block max-h-44 w-full object-cover" /> : null;
+  return src ? <img src={src} alt="" loading="lazy" className="block aspect-[2/1] max-h-44 w-full object-cover" onError={hideBrokenImage} /> : null;
 }
 
 function EventsList({ eventsQ, onSelect }: { eventsQ: UseQueryResult<CommunityEvent[]>; onSelect: (e: CommunityEvent) => void }) {

@@ -6,6 +6,7 @@ import { InitialsAvatar } from '../ui/initials-avatar';
 import { Section } from '../ui/section';
 import { SectionHeader } from '../ui/section-header';
 import { Text } from '../ui/text';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 const AVATAR = 48;
 
@@ -60,6 +61,7 @@ export function BrandGrid({ brands, onSelect }: BrandGridProps) {
                   height={AVATAR}
                   loading="lazy"
                   style={{ width: AVATAR, height: AVATAR, flex: '0 0 auto', borderRadius: '50%', objectFit: 'cover', background: 'var(--color-bg-media)' }}
+                  onError={hideBrokenImage}
                 />
               ) : (
                 <InitialsAvatar name={b.brand} size={AVATAR} />

@@ -22,7 +22,7 @@ import { ErrorState } from '../components/ui/empty-state';
 import { SupportHotline } from '../components/support-hotline';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { platformBridge } from '../services/platform-bridge';
-import { BANK_DEADLINE_LEAD, BANK_DEADLINE_TAIL, BANK_QR_HINT, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
+import { BANK_DEADLINE_LEAD, BANK_DEADLINE_TAIL, BANK_QR_HINT, BANK_QR_LOAD_FAILED, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
 import type { SaveImageResult } from '@tubutree/app-core/bridge';
 
 const PAGE_TITLE = 'Thanh toán chuyển khoản';
@@ -74,6 +74,7 @@ export default function BankPaymentPage() {
 
   const qc = useQueryClient();
   const [qrSaved, setQrSaved] = useState<SaveImageResult | null>(null);
+  const [failedQr, setFailedQr] = useState<string | null>(null);
   const { data, isLoading, refetch, isFetching, error } = useQuery({
     queryKey: ['bank-qr', code],
     queryFn: () => getBankQr(code!),
@@ -82,6 +83,8 @@ export default function BankPaymentPage() {
     refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' || isFinalRejection(q.state.error) ? false : 4000),
   });
 
+  // Ghi URL ảnh đã lỗi (không phải cờ chung) để khi đơn đổi mã QR (trả thêm tiền) ảnh mới được thử lại.
+  const qrFailed = failedQr !== null && failedQr === data?.qrImageUrl;
   const remaining = useRemaining(data?.paymentDeadline);
 
   // Khoá đồng bộ THEO TỪNG DÒNG chép (khoá là nhãn): hai cú chạm cùng nhịp vào một dòng chỉ ghi clipboard một lần, còn chạm sang
@@ -267,22 +270,35 @@ export default function BankPaymentPage() {
 
       <Box p={2}>
         <Box p={3} style={{ background: 'var(--color-bg-surface)', borderRadius: 'var(--radius-card)', textAlign: 'center' }}>
-          <img
-            src={data.qrImageUrl}
-            alt="VietQR"
-            style={{ width: 240, height: 240, maxWidth: '70%', margin: '0 auto', display: 'block' }}
-          />
+          {qrFailed ? (
+            <Box mb={2} role="status" data-testid="bank-qr-failed">
+              <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>
+                {BANK_QR_LOAD_FAILED}
+              </Text>
+            </Box>
+          ) : (
+            <img
+              src={data.qrImageUrl}
+              alt="VietQR"
+              width={240}
+              height={240}
+              onError={() => setFailedQr(data.qrImageUrl)}
+              style={{ width: 240, height: 240, maxWidth: '70%', margin: '0 auto', display: 'block' }}
+            />
+          )}
           <Row hero label="Số tiền" value={<Money amount={data.amount} />} copyName="số tiền" onCopy={() => copy(String(data.amount), 'số tiền')} />
-          <Button
-            variant="secondary"
-            fullWidth
-            onPress={async () => {
-              setQrSaved(await platformBridge.saveImage(data.qrImageUrl, `tubu-qr-${data.orderCode}.png`));
-            }}
-            style={{ marginTop: 8 }}
-          >
-            Lưu mã QR
-          </Button>
+          {!qrFailed && (
+            <Button
+              variant="secondary"
+              fullWidth
+              onPress={async () => {
+                setQrSaved(await platformBridge.saveImage(data.qrImageUrl, `tubu-qr-${data.orderCode}.png`));
+              }}
+              style={{ marginTop: 8 }}
+            >
+              Lưu mã QR
+            </Button>
+          )}
           {qrSaved && (
             <div role="status" data-testid="bank-qr-saved" style={{ marginTop: 6 }}>
               <Text size="small" style={{ color: 'var(--color-text-secondary)' }}>

@@ -2,6 +2,7 @@ import { useId, useState, type CSSProperties, type ElementType, type ReactNode }
 import { CheckCircle2, Sprout } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { Heading, Text } from './text';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 export interface ShopHeaderProps {
   /** Tên shop (Fraunces); tối đa 2 dòng. */
@@ -53,7 +54,7 @@ export function ShopHeader({ title, titleAs = 'h1', coverUrl, avatarUrl, verifie
               }}
             >
               {avatarUrl ? (
-                <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={hideBrokenImage} />
               ) : (
                 <Sprout size={28} color="var(--color-text-inverse)" aria-hidden="true" />
               )}

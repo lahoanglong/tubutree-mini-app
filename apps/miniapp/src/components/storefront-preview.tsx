@@ -5,6 +5,7 @@ import type { StorefrontEdit } from '../services/storefront-api';
 import { apiMediaUrl } from '../services/api';
 import { Heading, Text } from './ui/text';
 import { ShopSection } from './ui/shop-section';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /**
  * Bản xem trước gian hàng cho chính chủ, dùng khi khách chưa xem được (nháp, chờ duyệt): dựng bằng chính `ShopSection` của tab Shop
@@ -25,7 +26,7 @@ export function StorefrontPreview({ sf }: { sf: StorefrontEdit }) {
             display: 'flex', alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
           }}
         >
-          {avatar ? <img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <Sprout size={24} color="var(--color-text-inverse)" />}
+          {avatar ? <img src={avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={hideBrokenImage} /> : <Sprout size={24} color="var(--color-text-inverse)" />}
         </div>
         <Heading variant="title-md" as="h3" style={{ marginTop: 6 }}>{sf.title}</Heading>
         <Text variant="caption" tone="tertiary" as="div">/s/{sf.slug}</Text>

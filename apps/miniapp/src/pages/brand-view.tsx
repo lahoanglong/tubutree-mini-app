@@ -39,6 +39,7 @@ import { ShopTopBar } from '../components/ui/shop-top-bar';
 import { VoucherTicket } from '../components/ui/voucher-ticket';
 import { ShopProductsTab } from '../components/shop-page/shop-products-tab';
 import { findBrandOrigin } from '../utils/brand-origins';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 /** Tiêu đề khi chưa có tên nhãn (đang tải/lỗi); tải xong thì tên nhãn là h1 của ShopHeader. */
 const PAGE_TITLE = 'Thương hiệu';
@@ -361,6 +362,7 @@ export default function BrandViewPage() {
                     alt={`${b.name}, ảnh ${i + 1}`}
                     loading="lazy"
                     style={{ flex: '0 0 auto', width: 240, height: 160, objectFit: 'cover', borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)' }}
+                    onError={hideBrokenImage}
                   />
                 ))}
               </ScrollRow>

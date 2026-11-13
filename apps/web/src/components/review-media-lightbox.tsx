@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { Check, ChevronLeft, ChevronRight, ShoppingCart, Star, X } from 'lucide-react';
 import { lightboxCounter, lightboxStep, swipeDirection, type ReviewMediaItem } from '@tubutree/app-core/commerce/review-media';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 export interface ReviewMediaLightboxProps {
   open: boolean;
@@ -157,7 +158,7 @@ export function ReviewMediaLightbox({ open, onClose, items, index, onIndexChange
           <video key={src} src={src} controls playsInline preload="metadata" className="max-h-full max-w-full rounded-control bg-[var(--color-bg-inverse)]" />
         ) : (
           // eslint-disable-next-line @next/next/no-img-element
-          <img key={src} src={src} alt={`Ảnh đánh giá của ${author}`} draggable={false} className="max-h-full max-w-full select-none rounded-control object-contain" />
+          <img key={src} src={src} alt={`Ảnh đánh giá của ${author}`} draggable={false} className="max-h-full max-w-full select-none rounded-control object-contain" onError={hideBrokenImage} />
         )}
         {count > 1 && (
           <>

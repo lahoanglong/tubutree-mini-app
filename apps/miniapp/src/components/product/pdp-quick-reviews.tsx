@@ -9,6 +9,7 @@ import { Badge } from '../ui/badge';
 import { SectionTitle } from '../ui/section-title';
 import { Text } from '../ui/text';
 import '../../css/pdp-quick-reviews.css';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 export interface PdpQuickReviewsProps {
   average: number;
@@ -68,7 +69,7 @@ export function PdpQuickReviews({ average, count, items, onSeeAll }: PdpQuickRev
             {r.images.length > 0 && (
               <div data-testid="quick-review-photos" className="tubu-qr-photos">
                 {r.images.slice(0, 3).map((src, i) => (
-                  <img key={`${src}-${i}`} src={apiMediaUrl(src)} alt="" loading="lazy" className="tubu-qr-photo" />
+                  <img key={`${src}-${i}`} src={apiMediaUrl(src)} alt="" loading="lazy" className="tubu-qr-photo" onError={hideBrokenImage} />
                 ))}
               </div>
             )}

@@ -43,6 +43,7 @@ import { communityViewsFor, reportsTabCount, type CommunityView } from '@tubutre
 import { getCommunityReportsCount } from '../services/staff-api';
 import { KIND_LABEL } from '../components/community/post-card';
 import { ImageUpload } from '../components/image-upload';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 // report.targetType thô "POST"/"COMMENT" → nhãn vi.
 const TARGET_LABEL: Record<string, string> = {
@@ -218,7 +219,8 @@ function PendingCard({
           src={apiMediaUrl(post.images[0])}
           alt=""
           loading="lazy"
-          style={{ width: '100%', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 200, objectFit: 'cover' }}
+          style={{ width: '100%', aspectRatio: '14 / 9', borderRadius: 'var(--radius-media)', marginTop: 8, maxHeight: 200, objectFit: 'cover' }}
+          onError={hideBrokenImage}
         />
       )}
       <div style={ACTION_ROW_STYLE}>
