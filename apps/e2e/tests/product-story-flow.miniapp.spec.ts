@@ -9,6 +9,7 @@ import { PILOT_CART } from './support/pilot-mocks';
  * kế được tải trước), đọc thẻ chỉ nguyên liệu, bấm Thêm vào giỏ ở thanh dưới của trang, sang Giỏ, sang Thanh toán và đặt COD. API mock toàn bộ.
  * Ảnh nguyên liệu dùng host ngoài (mock-api chặn host ngoài): cái cần xem là trình duyệt CÓ GỬI request, không phải ảnh có tải về.
  * Có `cutoutUrl` để khung ảnh là ảnh tách nền: chỉ lúc đó sprite nguyên liệu và thẻ chỉ HUD mới vẽ đè lên ảnh (ảnh poster không vẽ gì lên).
+ * `cutout: false` là ảnh poster (thẻ nổi): không lớp nguyên liệu, điểm nhấn thành chip dưới ảnh.
  */
 const SLUG = 'tinh-dau-thu-nghiem';
 const BASE = CATALOG[0]!;
@@ -57,7 +58,10 @@ const CART_LINE = {
 const FULL_CART = { ...PILOT_CART, items: [CART_LINE], subtotal: 165_000, itemCount: 1 };
 const EMPTY = { ...PILOT_CART, items: [], subtotal: 0, itemCount: 0 };
 
-function mockFlow(api: MockApi, opts: { stock?: number } = {}): { added: () => boolean } {
+// Ảnh poster: cùng kịch bản nhưng không có cutoutUrl (undefined bị JSON bỏ đi).
+const POSTER_STORY = { ...STORY, cutoutUrl: undefined };
+
+function mockFlow(api: MockApi, opts: { stock?: number; cutout?: boolean } = {}): { added: () => boolean } {
   let added = false;
   mockDiscovery(api);
   // Sau mockDiscovery: nó đặt /me/addresses rỗng, còn Thanh toán cần địa chỉ mặc định của mockCheckout.
@@ -70,7 +74,7 @@ function mockFlow(api: MockApi, opts: { stock?: number } = {}): { added: () => b
     shortDesc: 'Tinh dầu thiên nhiên.',
     certifications: ['Vegan'],
     ingredients: [{ name: 'Tinh dầu bưởi', percentage: '2%', benefit: 'Kích thích mọc tóc' }],
-    storyConfig: STORY,
+    storyConfig: opts.cutout === false ? POSTER_STORY : STORY,
     variations: [{ id: VARIATION_ID, sku: 'FLOW-1', name: 'Mặc định', attributes: {}, retailPrice: 165_000, salePrice: null, stock: opts.stock ?? 5 }],
   }));
   api.get('/cart', () => (added ? FULL_CART : EMPTY));
@@ -167,6 +171,38 @@ for (const vp of VIEWPORTS) {
         expect(b.x).toBeGreaterThanOrEqual(0);
         expect(b.x + b.width).toBeLessThanOrEqual(vp.width);
       }
+      expect(await noHorizontalScroll(page)).toBe(true);
+    });
+
+    test('ảnh poster (không ảnh tách nền): điểm nhấn thành chip dưới khung ảnh, không lớp hay chú thích đè lên ảnh, không tràn ngang', async ({ page, api }) => {
+      mockFlow(api, { cutout: false });
+      const story = await gotoStory(page);
+      const stage = story.getByTestId('story-stage');
+      await expect(stage).toHaveAttribute('data-frame', 'floating-card');
+      await expect(story.getByTestId('story-hud')).toHaveCount(0);
+      await expect(story.getByTestId('story-callout')).toHaveCount(0);
+      await expect(story.getByTestId('story-layer')).toHaveCount(0);
+
+      const points = story.getByTestId('story-points');
+      await points.scrollIntoViewIfNeeded();
+      await expect(stage.getByTestId('story-point')).toHaveCount(0);
+      const chips = points.getByTestId('story-point');
+      await expect(chips).toHaveCount(2);
+      await expect(chips.nth(0)).toContainText('Tinh dầu bưởi');
+      await expect(chips.nth(0)).toContainText('2%');
+      await expect(chips.nth(1)).toContainText('Bồ kết');
+      await expect(story.getByTestId('story-closing')).toContainText('An lành cho cả nhà');
+      for (const c of await chips.all()) {
+        const b = (await c.boundingBox())!;
+        expect(b.x).toBeGreaterThanOrEqual(0);
+        expect(b.x + b.width).toBeLessThanOrEqual(vp.width);
+      }
+
+      // Chọn chương chỉ đổi thẻ đang chọn: khung poster không thả lớp nguyên liệu nào.
+      const cards = story.getByTestId('story-step-card');
+      await cards.nth(3).click();
+      await expect(cards.nth(3)).toHaveAttribute('aria-current', 'step');
+      await expect(story.getByTestId('story-layer')).toHaveCount(0);
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 

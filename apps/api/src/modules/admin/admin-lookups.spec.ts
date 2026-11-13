@@ -1,4 +1,6 @@
 import 'reflect-metadata';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { PAGE_TOO_DEEP_MSG } from '../../common/pagination';
 import { RequestMethod } from '@nestjs/common';
 import { METHOD_METADATA, PATH_METADATA } from '@nestjs/common/constants';
@@ -12,6 +14,7 @@ import {
   PendingMerchantProductsQuery,
   ListUsersQuery,
   ProductSearchQuery,
+  SUBSCRIPTION_PAUSE_FILTERS,
   VariationLookupQuery,
 } from './admin.controller';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
@@ -423,6 +426,53 @@ describe('AdminService.listSubscriptions — gói mua định kỳ (chỉ xem)',
     expect(select.pausedReason).toBe(true);
     expect(select.addressId).toBeUndefined();
   });
+
+  describe('lọc theo lý do tạm dừng (W144)', () => {
+    const run = async (status?: 'ACTIVE' | 'PAUSED' | 'CANCELLED', pausedReason?: string) => {
+      const findMany = jest.fn().mockResolvedValue([]);
+      const count = jest.fn().mockResolvedValue(7);
+      const out = await mkAdmin({ subscription: { findMany, count }, $transaction: tx }).listSubscriptions(2, 20, status, pausedReason);
+      return { where: findMany.mock.calls[0]![0].where, countWhere: count.mock.calls[0]![0].where, out };
+    };
+
+    it.each(['customer', 'inactive_product', 'invalid_address', 'partner_goods', 'insufficient_wallet', 'cod_limit'])(
+      'mã %s: đúng gói PAUSED mang mã đó, danh sách và tổng dùng cùng một where',
+      async (code) => {
+        const { where, countWhere, out } = await run(undefined, code);
+        expect(where).toEqual({ AND: [{ status: 'PAUSED' }, { pausedReason: code }] });
+        expect(countWhere).toEqual(where);
+        expect(out.meta).toMatchObject({ page: 2, limit: 20, total: 7 });
+      },
+    );
+
+    it('"system": đã có mã và không phải khách tự dừng; gói dừng từ trước khi có cột (null) không tính', async () => {
+      const { where, countWhere } = await run('PAUSED', 'system');
+      expect(where).toEqual({
+        status: 'PAUSED',
+        AND: [{ status: 'PAUSED' }, { AND: [{ pausedReason: { not: null } }, { pausedReason: { not: 'customer' } }] }],
+      });
+      expect(countWhere).toEqual(where);
+    });
+
+    it('kèm status khác PAUSED vẫn ép PAUSED trong AND nên ra rỗng, không lẫn gói ACTIVE còn sót mã', async () => {
+      const { where } = await run('ACTIVE', 'customer');
+      expect(where).toEqual({ status: 'ACTIVE', AND: [{ status: 'PAUSED' }, { pausedReason: 'customer' }] });
+    });
+
+    it('danh sách mã của bộ lọc = SUBSCRIPTION_PAUSE_REASONS của app-core + "system" (thêm mã mới ở một bên mà quên bên kia sẽ đỏ)', () => {
+      const src = readFileSync(join(__dirname, '../../../../../packages/app-core/src/subscription-pause-copy.ts'), 'utf8');
+      const list = /SUBSCRIPTION_PAUSE_REASONS = \[([^\]]+)\]/.exec(src)?.[1];
+      expect(list).toBeTruthy();
+      const codes = [...list!.matchAll(/'([a-z_]+)'/g)].map((m) => m[1]!);
+      expect([...SUBSCRIPTION_PAUSE_FILTERS].sort()).toEqual([...codes, 'system'].sort());
+    });
+
+    it('không có pausedReason thì where giữ nguyên như trước W144', async () => {
+      expect((await run(undefined, undefined)).where).toEqual({});
+      expect((await run('PAUSED', undefined)).where).toEqual({ status: 'PAUSED' });
+      expect((await run('PAUSED', '')).where).toEqual({ status: 'PAUSED' });
+    });
+  });
 });
 
 describe('AdminController — route + DTO của các endpoint tra cứu', () => {
@@ -458,7 +508,9 @@ describe('AdminController — route + DTO của các endpoint tra cứu', () => 
     await ctl.reviews(Object.assign(new ListReviewsQuery(), { page: 2, limit: 10, visibility: 'hidden', rating: 1 }));
     expect(admin.listReviews).toHaveBeenCalledWith(2, 10, 'hidden', 1);
     await ctl.subscriptions(Object.assign(new ListSubscriptionsQuery(), { page: 1, limit: 20, status: 'PAUSED' }));
-    expect(admin.listSubscriptions).toHaveBeenCalledWith(1, 20, 'PAUSED');
+    expect(admin.listSubscriptions).toHaveBeenCalledWith(1, 20, 'PAUSED', undefined);
+    await ctl.subscriptions(Object.assign(new ListSubscriptionsQuery(), { page: 3, limit: 10, status: 'PAUSED', pausedReason: 'insufficient_wallet' }));
+    expect(admin.listSubscriptions).toHaveBeenLastCalledWith(3, 10, 'PAUSED', 'insufficient_wallet');
     await ctl.users(Object.assign(new ListUsersQuery(), { page: 1, limit: 8, search: '090' }), { sub: 'a1', role: 'ADMIN' } as never);
     expect(admin.listUsers).toHaveBeenCalledWith(1, 8, '090', false);
   });
@@ -469,6 +521,10 @@ describe('AdminController — route + DTO của các endpoint tra cứu', () => 
     expect((await validate(plainToInstance(ListReviewsQuery, { rating: '9' }))).some((e) => e.property === 'rating')).toBe(true);
     expect(await validate(plainToInstance(ListSubscriptionsQuery, { status: 'CANCELLED' }))).toHaveLength(0);
     expect((await validate(plainToInstance(ListSubscriptionsQuery, { status: 'HACK' }))).some((e) => e.property === 'status')).toBe(true);
+    for (const pausedReason of SUBSCRIPTION_PAUSE_FILTERS) expect(await validate(plainToInstance(ListSubscriptionsQuery, { pausedReason }))).toHaveLength(0);
+    for (const pausedReason of ['HACK', '', 'Customer', 'constructor', "customer' OR 1=1"]) {
+      expect((await validate(plainToInstance(ListSubscriptionsQuery, { pausedReason }))).some((e) => e.property === 'pausedReason')).toBe(true);
+    }
     expect((await validate(plainToInstance(ProductSearchQuery, { q: 'x'.repeat(101) }))).some((e) => e.property === 'q')).toBe(true);
     expect((await validate(plainToInstance(VariationLookupQuery, { ids: 'x'.repeat(3001) }))).some((e) => e.property === 'ids')).toBe(true);
     expect((await validate(plainToInstance(ListUsersQuery, { search: 'x'.repeat(101) }))).some((e) => e.property === 'search')).toBe(true);

@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { listAdminSubscriptions, type AdminSubscription, type SubscriptionStatus } from '@/lib/admin-client';
-import { subscriptionPauseAdminView } from '@tubutree/app-core/subscription-pause-copy';
+import { listAdminSubscriptions, type AdminSubscription, type SubscriptionPauseFilter, type SubscriptionStatus } from '@/lib/admin-client';
+import { SUBSCRIPTION_PAUSE_REASONS, subscriptionPauseAdminView } from '@tubutree/app-core/subscription-pause-copy';
 import { intervalLabel, subscriptionStatusLabel } from '@/lib/admin-pickers';
 import { PageNav } from './page-nav';
 import { Notice, ToneBadge, chipClass, LoadError, ListSkeleton } from './ui';
@@ -18,14 +18,22 @@ const STATUS_CHIPS: { k: SubscriptionStatus | ''; label: string }[] = [
   { k: 'CANCELLED', label: 'Đã huỷ' },
 ];
 const STATUS_TONE = { ACTIVE: 'success', PAUSED: 'warning', CANCELLED: 'neutral' } as const;
+/** Hàng lọc lý do (chỉ khi đang xem Tất cả hoặc Tạm dừng): "Hệ thống tự dừng" gom mọi gói cần CSKH gọi hỗ trợ khách; nhãn từng mã lấy từ cùng bảng với huy hiệu trên thẻ. */
+const REASON_CHIPS: { k: SubscriptionPauseFilter | ''; label: string }[] = [
+  { k: '', label: 'Mọi lý do' },
+  { k: 'system', label: 'Hệ thống tự dừng' },
+  ...SUBSCRIPTION_PAUSE_REASONS.map((k) => ({ k, label: subscriptionPauseAdminView(k).label })),
+];
 
 /** Gói mua định kỳ cho CSKH tra cứu — chỉ xem: khách tự tạm dừng/huỷ trong Mini App, cron tự tạo đơn. */
 export function SubscriptionsTab() {
   const [page, setPage] = useState(1);
   const [status, setStatus] = useState<SubscriptionStatus | ''>('');
+  const [reason, setReason] = useState<SubscriptionPauseFilter | ''>('');
+  const showReasons = status === '' || status === 'PAUSED';
   const q = useQuery({
-    queryKey: ['admin-subscriptions', page, status],
-    queryFn: () => listAdminSubscriptions(page, status || undefined, PAGE_SIZE),
+    queryKey: ['admin-subscriptions', page, status, reason],
+    queryFn: () => listAdminSubscriptions(page, status || undefined, PAGE_SIZE, reason || undefined),
   });
 
   return (
@@ -42,6 +50,7 @@ export function SubscriptionsTab() {
             onClick={() => {
               setPage(1);
               setStatus(c.k);
+              if (c.k === 'ACTIVE' || c.k === 'CANCELLED') setReason('');
             }}
             className={chipClass(status === c.k)}
           >
@@ -49,6 +58,25 @@ export function SubscriptionsTab() {
           </button>
         ))}
       </div>
+      {showReasons && (
+        <div role="tablist" aria-label="Lọc gói định kỳ theo lý do tạm dừng" className="flex flex-wrap gap-2">
+          {REASON_CHIPS.map((c) => (
+            <button
+              key={c.k || 'any'}
+              type="button"
+              role="tab"
+              aria-selected={reason === c.k}
+              onClick={() => {
+                setPage(1);
+                setReason(c.k);
+              }}
+              className={chipClass(reason === c.k)}
+            >
+              {c.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {q.isError && (
         <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>

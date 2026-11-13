@@ -4,6 +4,7 @@ import type { QueryClient } from '@tanstack/react-query';
 import { apiBlob, apiDownload, apiFetch } from './client-api';
 import { vnDateKey } from './week';
 import type { GomdonAlertView } from './recycling';
+import type { SubscriptionPauseReason } from '@tubutree/app-core/subscription-pause-copy';
 import type {
   AdminGiftRedemptionRowDTO, AdminWasteGiftDTO, AdminWasteItemDTO, AdminWastePointDTO, AdminWastePointQuery,
   AdminWasteRequestQuery, AdminWasteRequestRowDTO, GiftRedemptionDTO, GiftRedemptionsQuery,
@@ -1793,9 +1794,12 @@ export interface AdminSubscription {
   user: { id: string; fullName: string | null; phone: string | null };
   variation: { id: string; name: string; sku: string; product: { id: string; name: string } };
 }
-export const listAdminSubscriptions = (page = 1, status?: SubscriptionStatus, limit = 20) => {
+/** Bộ lọc lý do tạm dừng của API: một mã của app-core `subscription-pause-copy`, hoặc "system" = mọi gói hệ thống tự dừng. */
+export type SubscriptionPauseFilter = SubscriptionPauseReason | 'system';
+export const listAdminSubscriptions = (page = 1, status?: SubscriptionStatus, limit = 20, pausedReason?: SubscriptionPauseFilter) => {
   const params = new URLSearchParams({ page: String(page), limit: String(limit) });
   if (status) params.set('status', status);
+  if (pausedReason) params.set('pausedReason', pausedReason);
   return apiFetch<Page<AdminSubscription>>(`/admin/subscriptions?${params.toString()}`);
 };
 

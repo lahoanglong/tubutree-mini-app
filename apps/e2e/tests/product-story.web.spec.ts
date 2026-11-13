@@ -1,23 +1,22 @@
-import type { APIRequestContext } from '@playwright/test';
+import type { APIRequestContext, Locator, Page } from '@playwright/test';
 import { expect, test, type MockApi } from './support/mock-api';
 import { blockingViolations, runAxe } from './support/axe';
 
 /**
- * Web khách: dải câu chuyện sản phẩm (thẻ chia đôi: sân khấu + các chương) nằm ngay dưới khối mua nhanh (sau ô Số lượng, trước Combo) ở 375px và ở đầu phần dưới từ md.
- * Mọi chương hiện cùng lúc dạng thẻ `story-step-card`, bấm một thẻ để chọn; PDP không còn nút hay khung toàn màn mở lại cùng nội dung (khung toàn màn chỉ còn cho Reel ở Trang chủ).
- * Phần server của Next gọi API thật nên spec dùng sản phẩm mẫu của seed (dầu gội Pơ Lang, có kịch bản mẫu); mọi lời gọi từ trình duyệt đi qua mock.
+ * Web khách: dải câu chuyện sản phẩm là mục nội tuyến kiểu Split-Card (W133). Ảnh sân khấu một cột, mọi chương luôn hiện thành thẻ bấm được (thẻ đang chọn có aria-current="step"),
+ * không còn mốc cuộn, cột ghim hay khung toàn màn trên trang sản phẩm (khung toàn màn chỉ còn cho Reel Trang chủ, spec ở w42a-home-story-reel.web.spec.ts).
+ * Phần server của Next gọi API thật nên spec dùng sản phẩm mẫu của seed (dầu gội Pơ Lang): kịch bản mẫu của nó dùng ảnh poster (không có ảnh tách nền) nên sprite nguyên liệu và chú thích
+ * không được vẽ đè lên ảnh, điểm nhấn HUD thành dải chip dưới ảnh; mọi lời gọi từ trình duyệt đi qua mock.
  */
 const SLUG = 'dau-goi-buoi-po-lang';
 const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
 
-type Seeded = { variations: { id: string; stock: number }[] };
-
-async function seeded(request: APIRequestContext): Promise<Seeded | null> {
+async function seeded(request: APIRequestContext): Promise<{ variations: { id: string; stock: number }[] } | null> {
   const r = await request.get(`${API_ORIGIN}/api/products/${SLUG}`).catch(() => null);
-  return r?.ok() ? ((await r.json()) as Seeded) : null;
+  return r?.ok() ? ((await r.json()) as { variations: { id: string; stock: number }[] }) : null;
 }
 
-function mockPdp(api: MockApi, p: Seeded): void {
+function mockPdp(api: MockApi, p: { variations: { id: string; stock: number }[] }): void {
   api.get('/flash-sales/active', []);
   api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12 });
   api.get(`/products/${SLUG}`, { variations: p.variations });
@@ -29,8 +28,30 @@ function mockPdp(api: MockApi, p: Seeded): void {
   api.get('/me/wishlist/ids', []);
 }
 
-test.describe('Web khách: câu chuyện sản phẩm', () => {
-  test('375px: dải ở dưới khối mua nhanh, một bản hiện, mọi chương hiện sẵn và bấm thẻ để chọn, không tràn ngang, không nút/khung toàn màn, axe sạch', async ({ page, api, request }) => {
+interface Box {
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Đo sân khấu, thẻ chương đầu và dải chip trong một lần evaluate để cùng một lần cuộn, không lệch vì ảnh nạp muộn giữa hai lần đo. */
+async function layout(story: Locator): Promise<{ stage: Box; card: Box; points: Box | null }> {
+  return story.evaluate((el) => {
+    const box = (selector: string): Box | null => {
+      const node = el.querySelector(selector);
+      if (!node) return null;
+      const r = node.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height };
+    };
+    return { stage: box('[data-testid="story-stage"]')!, card: box('[data-testid="story-step-card"]')!, points: box('[data-testid="story-points"]') };
+  });
+}
+
+const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
+
+test.describe('Web khách: câu chuyện sản phẩm nội tuyến', () => {
+  test('375px: dải ở dưới khối mua nhanh, một bản hiện, ảnh trên rồi tới mọi chương, ảnh poster không bị phủ gì, không tràn ngang, axe sạch, không có khung toàn màn', async ({ page, api, request }) => {
     const p = await seeded(request);
     test.skip(!p, 'DB e2e chưa có sản phẩm mẫu của seed');
     mockPdp(api, p!);
@@ -51,62 +72,77 @@ test.describe('Web khách: câu chuyện sản phẩm', () => {
     const storyBox = await story.boundingBox();
     expect(qtyBox && storyBox && storyBox.y > qtyBox.y).toBe(true);
 
-    // Mọi chương cùng hiện (không còn mốc cuộn hay chip chỉ hiện một bước): bấm thẻ nào thì thẻ đó mang aria-current.
+    // Mọi chương cùng hiện (không ẩn chữ sau chip hay mốc cuộn); chương đầu đang chọn.
     const cards = story.getByTestId('story-step-card');
-    const total = await cards.count();
-    expect(total).toBeGreaterThan(1);
-    for (let i = 0; i < total; i++) await expect(cards.nth(i)).toBeVisible();
-    await cards.nth(1).click();
-    await expect(cards.nth(1)).toHaveAttribute('aria-current', 'step');
-    await expect(cards.nth(0)).not.toHaveAttribute('aria-current', 'step');
+    expect(await cards.count()).toBeGreaterThanOrEqual(3);
+    for (const card of await cards.all()) await expect(card).toBeVisible();
+    await expect(cards.first()).toHaveAttribute('aria-current', 'step');
+    await expect(story.locator('[aria-current="step"]')).toHaveCount(1);
 
-    // Sprite nguyên liệu chỉ vẽ trên ảnh tách nền (frame "cutout"), rộng 24% khung sân khấu; ảnh thường thì không vẽ lớp nào đè lên ảnh.
-    const frame = await story.getByTestId('story-stage').getAttribute('data-frame');
-    if (frame === 'cutout') {
-      const ratio = await story.evaluate((el) => {
-        const stage = el.querySelector<HTMLElement>('[data-testid="story-stage"]')!;
-        const layer = el.querySelector<HTMLElement>('[data-testid="story-layer"]')!;
-        return layer.offsetWidth / stage.offsetWidth;
-      });
-      expect(ratio).toBeGreaterThan(0.23);
-      expect(ratio).toBeLessThan(0.25);
-    } else {
-      await expect(story.getByTestId('story-layer')).toHaveCount(0);
-      await expect(story.getByTestId('story-hud')).toHaveCount(0);
+    // Ảnh poster: không sprite, không chú thích, không lớp HUD đè lên ảnh; điểm nhấn là dải chip nằm dưới khung ảnh.
+    for (const id of ['story-layer', 'story-callout', 'story-hud']) await expect(story.getByTestId(id)).toHaveCount(0);
+    await expect(story.getByTestId('story-stage')).toHaveAttribute('data-frame', 'floating-card');
+    await expect(story.getByTestId('story-points').getByTestId('story-point').first()).toBeVisible();
+    await expect(story.getByTestId('story-closing')).toBeVisible();
+
+    // Một cột ở 375px: ảnh rồi mới tới các chương, chip dưới ảnh.
+    const g = await layout(story);
+    expect(g.stage.y + g.stage.h, 'ảnh nằm trên thẻ chương đầu').toBeLessThanOrEqual(g.card.y + 1);
+    expect(g.points && g.points.y >= g.stage.y + g.stage.h - 1, 'chip điểm nhấn nằm dưới khung ảnh').toBe(true);
+
+    // Vòng cung phân loại: có từ 2 phân loại thì mỗi phân loại một mục và đúng một mục đang chọn.
+    if (p!.variations.length >= 2) {
+      await expect(story.getByTestId('story-arc-item')).toHaveCount(p!.variations.length);
+      await expect(story.locator('[data-testid="story-arc-item"][aria-checked="true"]')).toHaveCount(1);
     }
 
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    // Bấm thẻ chương thứ hai: thẻ đó thành chương đang chọn, chương đầu vẫn đọc được.
+    await cards.nth(1).click();
+    await expect(cards.nth(1)).toHaveAttribute('aria-current', 'step');
+    await expect(cards.first()).not.toHaveAttribute('aria-current', 'step');
+    await expect(cards.first().locator('.tubu-story-step-body')).toBeVisible();
 
-    await expect(page.getByTestId('pdp-story-open')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Xem câu chuyện sản phẩm' })).toHaveCount(0);
-    await expect(page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toHaveCount(0);
+    expect(await noHorizontalScroll(page)).toBe(true);
 
     await page.evaluate(() => document.fonts.ready);
     const found = await runAxe(page);
     expect(blockingViolations('web', 'Câu chuyện sản phẩm', found)).toEqual([]);
+
+    // Trang sản phẩm không còn khung toàn màn: không nút mở, bấm thẻ không bật hộp thoại.
+    await expect(page.getByTestId('pdp-story-open')).toHaveCount(0);
+    await expect(page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toHaveCount(0);
   });
 
-  test('máy tính 1280px: bản đầu phần dưới hiện, bản điện thoại ẩn; chọn thẻ chương, không nút hay khung toàn màn', async ({ page, api, request }) => {
+  test('1280px: bản rộng ở đầu phần dưới, chương bên trái và ảnh bên phải, chọn chương không mở khung toàn màn', async ({ page, api, request }) => {
     const p = await seeded(request);
     test.skip(!p, 'DB e2e chưa có sản phẩm mẫu của seed');
     mockPdp(api, p!);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(`/san-pham/${SLUG}`);
 
-    const story = page.locator('[data-section="pdp-story"]').locator('visible=true');
+    const stories = page.locator('[data-section="pdp-story"]');
+    await expect(stories).toHaveCount(2);
+    const story = stories.locator('visible=true');
     await expect(story).toHaveCount(1);
-    // Bản máy tính nằm ở phần dưới (ngoài cột thông tin), khác bản điện thoại nằm trong cột thông tin.
-    expect(await story.evaluate((el) => !!el.closest('[data-testid="pdp-info"]'))).toBe(false);
     await story.scrollIntoViewIfNeeded();
 
+    const inInfo = await story.evaluate((el) => !!el.closest('[data-testid="pdp-info"]'));
+    expect(inInfo, 'bản rộng nằm ở phần dưới, không nằm trong cột thông tin').toBe(false);
+
+    // Khối Story rộng từ 56rem thì chia hai cột: chương bên trái, ảnh bên phải (khung PDP 1200px trừ đệm còn khoảng 1100px).
+    const g = await layout(story);
+    expect(g.card.x + g.card.w, 'thẻ chương nằm hẳn bên trái ảnh').toBeLessThanOrEqual(g.stage.x + 1);
+
     const cards = story.getByTestId('story-step-card');
-    const total = await cards.count();
-    expect(total).toBeGreaterThan(1);
-    await cards.nth(total - 1).click();
-    await expect(cards.nth(total - 1)).toHaveAttribute('aria-current', 'step');
+    const count = await cards.count();
+    expect(count).toBeGreaterThanOrEqual(3);
+    await expect(cards.first()).toHaveAttribute('aria-current', 'step');
+    await cards.last().click();
+    await expect(cards.last()).toHaveAttribute('aria-current', 'step');
+    await expect(story.locator('[aria-current="step"]')).toHaveCount(1);
 
     await expect(page.getByTestId('pdp-story-open')).toHaveCount(0);
     await expect(page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toHaveCount(0);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(await noHorizontalScroll(page)).toBe(true);
   });
 });

@@ -252,13 +252,13 @@ Thẻ "Sắp diễn ra" của khối Giờ vàng Trang chủ hai app đọc ch�
 
 ## Khuôn trang web máy tính
 
-Mỗi trang mua sắm trên web dùng một khuôn trong `apps/web/src/components/layouts/`. Khuôn chỉ lo lưới từ `lg` (cột, độ rộng tối đa, vùng dính); dưới `md` trả nguyên con để khổ điện thoại giống Mini. Cột dính chỉ từ `lg` và chỉ ở ba chỗ: ảnh `PdpLayout` (khi màn cao từ 48rem), khung "Đơn hàng" ở Giỏ và Thanh toán, cột trái cổng nhân viên (`staffLayout`); mọi chỗ dính đặt `top` theo biến chiều cao header. Không vùng cuộn riêng bên trong trang.
+Mỗi trang mua sắm trên web dùng một khuôn trong `apps/web/src/components/layouts/`. Khuôn chỉ lo lưới từ `lg` (cột, độ rộng tối đa, vùng dính); dưới `md` trả nguyên con để khổ điện thoại giống Mini. Cột dính chỉ từ `lg` và chỉ ở ba chỗ: ô ảnh của `PdpLayout` (chỉ khi khung nhìn cao từ 48rem, thấp hơn thì không dính kẻo cắt đáy ảnh), khung "Đơn hàng" ở Giỏ hàng `/gio-hang` (`data-testid="cart-summary"`) và Thanh toán `/thanh-toan` (kèm nút đặt hàng dính đáy cột tóm tắt), cột trái cổng nhân viên (`staffLayout`); mọi chỗ dính đặt `top` theo biến chiều cao header. Dưới `lg` không có gì dính, các khối xếp dọc như Mini. Không vùng cuộn riêng bên trong trang.
 
 | Khuôn | Trang | Slot |
 |---|---|---|
 | `HubLayout` | Trang chủ | `hero?`, `banner?`, `aside`, `children` (lưới 12 cột: banner hoặc `hero` 8 cột + `aside` 4 cột; `hero` chỉ từ md) |
 | `ListingLayout` | Danh mục `/san-pham` | `breadcrumb?`, `title`, `caption?`, `toolbar?`, `sidebar?`, `children` (cột lọc 200px) |
-| `PdpLayout` | chi tiết sản phẩm | `gallery`, `info`, `below`, `aside?` (ảnh và thông tin trong một thẻ, nút mua trong màn 1280×800; ô ảnh dính dưới header từ `lg` khi màn cao từ 48rem) |
+| `PdpLayout` | chi tiết sản phẩm | `gallery`, `info`, `below`, `aside?` (từ `lg` ảnh 440px và thông tin trong một thẻ; ô ảnh dính dưới header khi khung nhìn cao từ 48rem, cột thông tin cuộn cùng trang; nút mua trong màn 1280×800) |
 | `StoreLayout` | `/s/[slug]`, `/brand/[slug]` | `header`, `stats?`, `intro?`, `tabs?`, `children` |
 
 Chân trang web ở 375px khác Mini là chủ ý: Mini App không có chân trang, web giữ chân trang `apps/web/src/components/site-footer.tsx` với các liên kết pháp lý (`apps/web/src/lib/legal.ts`) và dòng đơn vị vận hành, nên màn web dài hơn Mini ở cuối trang. Khi so ảnh 375px Mini ↔ web, bỏ qua phần chân trang này; không gỡ để cho giống.

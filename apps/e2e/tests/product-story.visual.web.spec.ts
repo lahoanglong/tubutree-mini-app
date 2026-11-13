@@ -1,15 +1,18 @@
 import { mkdirSync } from 'node:fs';
 import path from 'node:path';
+import type { Locator } from '@playwright/test';
+import type { ProductStoryConfig } from '@tubutree/shared-types';
 import { test, expect } from './support/mock-api';
 import { seedDatabaseUrl } from './support/a11y-db';
 import { writableTempDb } from './support/waste-db';
 import { SAMPLES, hideFixed, routeStoryImages, visualEnabled, visualFile } from './support/story-visual';
 
 /**
- * Ảnh chụp web 375px và 1280px của dải câu chuyện với ảnh sản phẩm thật (chỉ chạy khi có STORY_SHOT_DIR và STORY_IMG_DIR, xem support/story-visual.ts).
+ * Ảnh chụp web 375px và 1280px của dải câu chuyện nội tuyến (Split-Card, W133) với ảnh sản phẩm thật (chỉ chạy khi có STORY_SHOT_DIR và STORY_IMG_DIR, xem support/story-visual.ts).
  * Trang chi tiết dựng ở phía máy chủ từ API thật nên dữ liệu mẫu ghi thẳng vào DB tạm của web-gate.sh (không bao giờ vào DB khác) trước lượt vào trang đầu tiên.
- * Kiểm tự động trong ca: không tràn ngang, ảnh sân khấu đã tải, mỗi thẻ chương bấm xong phải sáng. Còn lại xem ảnh bằng mắt.
- * Khung toàn màn nay chỉ còn ở Reel Trang chủ, do w42a-home-story-reel.*.spec.ts phủ, nên không chụp ở đây.
+ * Kiểm tự động trong ca: không tràn ngang, ảnh sân khấu đã tải, số thẻ chương, chú thích HUD và chip điểm nhấn khớp cấu hình mẫu (chú thích chỉ đè lên ảnh tách nền, ảnh poster thì thành chip dưới ảnh),
+ * bố cục một cột (ảnh trên chương) ở 375px và hai cột (chương trái, ảnh phải) ở 1280px, bấm thẻ chương và mục vòng cung đổi đúng mục đang chọn. Không có ảnh chụp để so: không có baseline nào trong repo, còn lại xem ảnh bằng mắt.
+ * Trang sản phẩm không còn khung toàn màn nên không còn ảnh `scrub-*` (cuộn qua mốc) và `full-*` (khung toàn màn) như bản cũ.
  */
 test.skip(!visualEnabled(), 'cần STORY_SHOT_DIR và STORY_IMG_DIR');
 
@@ -78,6 +81,7 @@ for (const sample of SAMPLES) {
       await story.scrollIntoViewIfNeeded();
       await expect.poll(() => story.locator('.tubu-story-product').first().evaluate((el) => (el as HTMLImageElement).complete && (el as HTMLImageElement).naturalWidth > 0)).toBe(true);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await expectStructure(story, sample.build(hit!.variationIds), vp.width >= 1024);
 
       mkdirSync(visualFile(), { recursive: true });
       const base = (name: string) => path.join(visualFile(), `web-${vp.tag}-${sample.key}-${name}.png`);
@@ -88,18 +92,45 @@ for (const sample of SAMPLES) {
       await page.screenshot({ path: base('before') });
       await setSections('');
       await story.scrollIntoViewIfNeeded();
+
       await hideFixed(page);
       await shoot(story, base);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+      await expect(page.getByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toHaveCount(0);
     });
   }
 }
 
-async function shoot(story: import('@playwright/test').Locator, base: (n: string) => string): Promise<void> {
+/** Số thẻ chương, chú thích HUD và chip điểm nhấn phải khớp cấu hình mẫu; hướng bố cục theo bề rộng (một cột dưới 56rem, hai cột từ đó). */
+async function expectStructure(story: Locator, config: ProductStoryConfig, wide: boolean): Promise<void> {
+  const steps = config.scenes.flatMap((s) => (s.kind === 'ingredient_assembly' ? s.steps : []));
+  const hud = config.scenes.flatMap((s) => (s.kind === 'hud_callouts' ? [s] : []))[0];
+  // Mẫu không đặt imageFrame nên khung theo ảnh: có ảnh tách nền (cutoutUrl) thì chú thích đè lên ảnh, không thì poster thành chip dưới ảnh.
+  const overlay = Boolean(config.cutoutUrl);
+  await expect(story.getByTestId('story-step-card')).toHaveCount(steps.length);
+  await expect(story.getByTestId('story-callout')).toHaveCount(overlay && hud ? hud.points.length : 0);
+  await expect(story.getByTestId('story-point')).toHaveCount(!overlay && hud ? hud.points.length : 0);
+  if (!overlay) await expect(story.getByTestId('story-layer')).toHaveCount(0);
+  if (steps.length === 0) return;
+  await expect(story.getByTestId('story-step-card').first()).toHaveAttribute('aria-current', 'step');
+  const g = await story.evaluate((el) => {
+    const box = (selector: string) => {
+      const r = el.querySelector(selector)!.getBoundingClientRect();
+      return { x: r.x, y: r.y, w: r.width, h: r.height };
+    };
+    return { stage: box('[data-testid="story-stage"]'), card: box('[data-testid="story-step-card"]') };
+  });
+  if (wide) expect(g.card.x + g.card.w, 'hai cột: thẻ chương nằm bên trái ảnh').toBeLessThanOrEqual(g.stage.x + 1);
+  else expect(g.stage.y + g.stage.h, 'một cột: ảnh nằm trên thẻ chương đầu').toBeLessThanOrEqual(g.card.y + 1);
+}
+
+async function shoot(story: Locator, base: (n: string) => string): Promise<void> {
   const page = story.page();
   await story.screenshot({ path: base('1'), animations: 'disabled' });
   const arc = story.getByTestId('story-arc-item');
   if ((await arc.count()) > 1) {
     await arc.nth(1).click();
+    await expect(arc.nth(1)).toHaveAttribute('aria-checked', 'true');
     await page.waitForTimeout(400);
     await story.screenshot({ path: base('arc-2'), animations: 'disabled' });
   }
@@ -112,5 +143,4 @@ async function shoot(story: import('@playwright/test').Locator, base: (n: string
     await page.waitForTimeout(500);
     await story.screenshot({ path: base(`step-${i + 1}`), animations: 'disabled' });
   }
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
 }
