@@ -22,9 +22,9 @@ export default function PosPage() {
     return <Center>Chỉ nhân viên hoặc quản trị viên mới dùng được màn thu ngân.</Center>;
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-6 text-stone-900">
+    <main className="mx-auto max-w-2xl px-4 py-6 text-stone-900 md:max-w-3xl lg:max-w-5xl">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h1 className="font-display text-xl font-bold">Thu ngân · Tích Điểm Xanh tại quầy</h1>
+        <h1 className="font-display text-xl font-semibold">Thu ngân · Tích Điểm Xanh tại quầy</h1>
         {user.role === 'ADMIN' && (
           <Link href="/admin?tab=posCredits" className="inline-flex min-h-[44px] items-center text-sm font-medium text-forest-700 underline">
             Sổ tích điểm tại quầy →

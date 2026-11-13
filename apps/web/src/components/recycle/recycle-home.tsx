@@ -149,13 +149,14 @@ function GuestLogin() {
   );
 }
 
-function RequestsBlock({ me }: { me: WasteMeDTO }) {
+/** `stacked`: khối nằm trong cột nửa trang của máy tính (từ lg), mỗi yêu cầu một hàng thay vì hai thẻ chen trong cột hẹp. */
+function RequestsBlock({ me, stacked = false }: { me: WasteMeDTO; stacked?: boolean }) {
   const cfg = usePublicConfig();
   if (me.openRequests.length === 0) return null;
   return (
     <section className="space-y-2">
       <h2 className={skin.sectionTitle}>Yêu cầu đang xử lý</h2>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className={`grid gap-3 md:grid-cols-2${stacked ? ' lg:grid-cols-1' : ''}`}>
         {me.openRequests.map((r) => {
           const tl = timelineFor(r);
           const closed = tl ? null : closedLabel({ ...r, rejectionReason: null, rejectionNote: null, reversedPoints: null, reversalReason: null });
@@ -239,6 +240,7 @@ export function RecycleHome() {
   if (meQ.isError || !me) return <Shell><ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} /></Shell>;
 
   const openRequests = <RequestsBlock me={me} />;
+  const openRequestsStacked = <RequestsBlock me={me} stacked />;
   const recent = me.recentCompleted;
   const recentBlock =
     recent && recent.pointsAwarded != null && recent.pointsAwarded > 0 ? (
@@ -294,59 +296,67 @@ export function RecycleHome() {
   const impact = impactLine(me.impactGrams);
   const giftNames = rewardsQ.data?.rewards.slice(0, 2).map((r) => r.name).join(', ');
 
+  // Máy tính (từ lg): hai cột cân đối chia theo thứ tự DOM của Mini (thẻ điểm và yêu cầu đang xử lý bên trái, cách đổi, món nhận và lối vào kho quà bên phải).
+  // Dưới lg hai khung cột là `contents` nên các khối vẫn xếp một cột cách nhau 16px như trước.
   return (
     <Shell showHistory>
-      {deskRow && <div className={skin.card}>{deskRow}</div>}
-      <div className={`space-y-2 p-4 ${skin.card}`}>
-        <p className="text-xs text-stone-600">Điểm Xanh của bạn</p>
-        <p className="font-display text-3xl font-semibold tabular-nums text-stone-900">{formatPoints(total)}</p>
-        {total > 0 && <p className="text-sm text-stone-700">{`Dùng như ${formatVnd(total * POINT_VALUE_VND)} khi mua sắm`}</p>}
-        {impact && (
-          <div>
-            <p className="text-sm text-stone-900">{impact}</p>
-            <p className="text-xs text-stone-600">Ước tính theo khối lượng trung bình</p>
-          </div>
-        )}
-        {progress && (
-          <div>
-            <ProgressBar value={progress.have} max={progress.cost} label={`Còn ${formatPoints(progress.missing)} tới ${progress.rewardName}`} />
-            {firstActive && (
-              <p className="mt-1 text-xs text-stone-600">{`tương đương khoảng ${equivalentUnits(progress.missing, firstActive)} ${firstActive.name.toLowerCase()}`}</p>
+      <div data-testid="recycle-home-layout" className="flex flex-col gap-4 lg:grid lg:grid-cols-2 lg:items-start lg:gap-6">
+        <div data-recycle-col="main" className="contents lg:flex lg:flex-col lg:gap-4">
+          {deskRow && <div className={skin.card}>{deskRow}</div>}
+          <div className={`space-y-2 p-4 ${skin.card}`}>
+            <p className="text-xs text-stone-600">Điểm Xanh của bạn</p>
+            <p className="font-display text-3xl font-semibold tabular-nums text-stone-900">{formatPoints(total)}</p>
+            {total > 0 && <p className="text-sm text-stone-700">{`Dùng như ${formatVnd(total * POINT_VALUE_VND)} khi mua sắm`}</p>}
+            {impact && (
+              <div>
+                <p className="text-sm text-stone-900">{impact}</p>
+                <p className="text-xs text-stone-600">Ước tính theo khối lượng trung bình</p>
+              </div>
+            )}
+            {progress && (
+              <div>
+                <ProgressBar value={progress.have} max={progress.cost} label={`Còn ${formatPoints(progress.missing)} tới ${progress.rewardName}`} />
+                {firstActive && (
+                  <p className="mt-1 text-xs text-stone-600">{`tương đương khoảng ${equivalentUnits(progress.missing, firstActive)} ${firstActive.name.toLowerCase()}`}</p>
+                )}
+              </div>
+            )}
+            {methods.length > 0 && (
+              <Link href="/doi-rac/tao" className={`${ui.btnPrimary} w-full sm:w-auto`}>
+                Đổi rác ngay
+              </Link>
             )}
           </div>
-        )}
-        {methods.length > 0 && (
-          <Link href="/doi-rac/tao" className={`${ui.btnPrimary} w-full sm:w-auto`}>
-            Đổi rác ngay
-          </Link>
-        )}
-      </div>
 
-      {recentBlock}
+          {recentBlock}
 
-      {openRequests}
+          {openRequestsStacked}
+        </div>
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        {methods.length > 0 && (
-          <section className="space-y-2">
-            <h2 className={skin.sectionTitle}>Cách đổi</h2>
-            <ul className="space-y-2">
-              {methods.map((m) => (
-                <li key={m}>
-                  <p className="text-sm font-semibold text-stone-900">{METHOD_LABELS[m]}</p>
-                  <p className="text-xs text-stone-600">{METHOD_LINE[m]}</p>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+        <div data-recycle-col="side" className="contents lg:flex lg:flex-col lg:gap-4">
+          <div className="grid gap-6">
+            {methods.length > 0 && (
+              <section className="space-y-2">
+                <h2 className={skin.sectionTitle}>Cách đổi</h2>
+                <ul className="space-y-2">
+                  {methods.map((m) => (
+                    <li key={m}>
+                      <p className="text-sm font-semibold text-stone-900">{METHOD_LABELS[m]}</p>
+                      <p className="text-xs text-stone-600">{METHOD_LINE[m]}</p>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
 
-        <ItemList items={items} />
-      </div>
+            <ItemList items={items} />
+          </div>
 
-      <div className={`divide-y divide-stone-200 ${skin.plain} max-md:divide-y-0`}>
-        <RecycleLinkRow bare href="/kho-qua" title="Kho quà" subtitle={giftNames || undefined} />
-        <RecycleLinkRow bare href="/doi-rac/quy-dinh" title="Thể lệ chương trình" />
+          <div className={`divide-y divide-stone-200 ${skin.plain} max-md:divide-y-0`}>
+            <RecycleLinkRow bare href="/kho-qua" title="Kho quà" subtitle={giftNames || undefined} />
+            <RecycleLinkRow bare href="/doi-rac/quy-dinh" title="Thể lệ chương trình" />
+          </div>
+        </div>
       </div>
     </Shell>
   );

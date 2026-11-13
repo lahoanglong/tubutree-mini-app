@@ -154,7 +154,7 @@ describe('ProductEditDrawer: hỏi lại trước khi bỏ thay đổi chưa lư
     const { onClose } = mount({ server: product() });
     await flush(6);
     typeInto(textarea(), 'x');
-    click(byText(document.body, 'form button[type="button"]', 'Đóng'));
+    click(byText(document.body, '[data-drawer-footer] button[type="button"]', 'Đóng'));
     await flush(2);
     expect(confirmDialog()).not.toBeNull();
     answerConfirm(false);
@@ -233,5 +233,76 @@ describe('ProductEditDrawer: câu chuyện sản phẩm', () => {
     await flush();
     typeInto(textarea(), 'Mô tả mới');
     expect(saveBtn().disabled).toBe(true);
+  });
+});
+
+describe('ProductEditDrawer: chân dính đáy', () => {
+  const footer = () => document.querySelector<HTMLElement>('[data-drawer-footer]')!;
+  const scroller = () => document.querySelector<HTMLElement>('[role="dialog"] .overflow-y-auto')!;
+  const reason = () => footer().querySelector<HTMLElement>('[data-testid="save-lock-reason"]')!;
+
+  it('Lưu và Đóng nằm ở chân dính, ngoài vùng cuộn có Story Studio; Lưu vẫn gửi form khi bấm', async () => {
+    const { m } = mount({ server: product() });
+    await flush(6);
+    expect(footer().contains(saveBtn())).toBe(true);
+    expect(footer().contains(byText(document.body, 'button', 'Đóng'))).toBe(true);
+    expect(scroller().contains(saveBtn())).toBe(false);
+    expect(scroller().querySelector('form')!.id).toBe(saveBtn().getAttribute('form'));
+    typeInto(textarea(), 'Mô tả mới');
+    click(saveBtn());
+    await flush(6);
+    expect(patches(m)).toEqual([{ description: 'Mô tả mới' }]);
+  });
+
+  it('Lưu khoá vì chưa sửa gì: có chữ lý do ngay cạnh nút, nối bằng aria-describedby; sửa xong thì lý do biến mất', async () => {
+    mount({ server: product() });
+    await flush(6);
+    expect(saveBtn().disabled).toBe(true);
+    expect(reason().textContent).toContain('Chưa có thay đổi nào');
+    expect(saveBtn().getAttribute('aria-describedby')).toBe(reason().id);
+    typeInto(textarea(), 'Mô tả mới');
+    expect(saveBtn().disabled).toBe(false);
+    expect(reason().textContent).toBe('');
+    expect(saveBtn().hasAttribute('aria-describedby')).toBe(false);
+  });
+
+  it('Lưu khoá vì cấu hình câu chuyện sai: lý do nêu lỗi của cấu hình thay vì "chưa sửa gì"', async () => {
+    const bad = { version: 1, enabled: true, scenes: [{ kind: 'hud_callouts', closing: '', points: [{ id: 'a', xPct: Number.NaN, yPct: 1, label: 'x', side: 'left' }] }] };
+    mount({ server: { ...product({ slug: 'dau-goi' }), storyConfig: bad as never } });
+    await flush(6);
+    typeInto(textarea(), 'Mô tả mới');
+    expect(saveBtn().disabled).toBe(true);
+    expect(reason().textContent).toContain('không hợp lệ');
+    expect(reason().textContent).not.toContain('Chưa có thay đổi nào');
+    expect(saveBtn().getAttribute('aria-describedby')).toBe(reason().id);
+  });
+
+  it('lưu xong: thông báo "Đã lưu." nằm trong chân, không kèm lý do khoá', async () => {
+    mount({ server: product() });
+    await flush(6);
+    typeInto(textarea(), 'Mô tả mới');
+    click(saveBtn());
+    await flush(8);
+    expect(footer().textContent).toContain('Đã lưu.');
+    expect(saveBtn().disabled).toBe(true);
+    expect(reason().textContent).toBe('');
+  });
+
+  it('lỗi từ máy chủ hiện role=alert trong chân, gần nút vừa bấm', async () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: string, init?: RequestInit) =>
+        init?.method === 'PATCH'
+          ? new Response(JSON.stringify({ message: 'Không lưu được' }), { status: 400, headers: { 'Content-Type': 'application/json' } })
+          : new Response(JSON.stringify(product()), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      ),
+    );
+    mounted.push(render(<ProductEditDrawer id="p1" categories={CATS} onClose={vi.fn()} onSaved={vi.fn()} />, client));
+    await flush(6);
+    typeInto(textarea(), 'Mô tả mới');
+    click(saveBtn());
+    await flush(8);
+    expect(footer().querySelector('[role="alert"]')).not.toBeNull();
   });
 });

@@ -27,6 +27,8 @@ describe('StorefrontAction', () => {
     const bar = mounted.container.firstElementChild!;
     expect(bar.className).toContain('max-md:fixed');
     expect(bar.className).toContain('max-md:bottom-0');
+    expect(bar.className).toContain('max-md:[box-shadow:var(--elevation-3)]');
+    expect(bar.className).not.toContain('shadow-[var(');
     expect(mounted.container.querySelector('button')!.className).toContain('max-md:w-full');
   });
 

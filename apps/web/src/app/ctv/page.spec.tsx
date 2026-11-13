@@ -951,6 +951,61 @@ const formAlert = (c: HTMLElement) => c.querySelector<HTMLElement>('main [role="
 const formStatus = (c: HTMLElement) => c.querySelector<HTMLElement>('main [role="status"]');
 const statusRegion = (c: HTMLElement) => c.querySelector<HTMLElement>('main > .mt-4 > [role="status"]');
 
+describe('/ctv — khuôn máy tính: cùng trục với tiêu đề', () => {
+  const cls = (el: Element | null) => (el?.className ?? '').split(/\s+/);
+  const open = async () => {
+    const { container } = mount();
+    await flush();
+    const hero = container.querySelector('section[aria-label="Hoa hồng có thể chuyển vào Ví"]')!;
+    const tabs = container.querySelector('[role="tablist"][aria-label="Mục của trang cộng tác viên"]')!;
+    return { container, hero, tabs };
+  };
+
+  it('không lớp bọc nào giữa khung trang và thẻ hoa hồng canh giữa (mx-auto) hay giữ trần 2xl ở mọi khổ: mép trái dashboard là mép trái khung như tiêu đề', async () => {
+    const { container, hero } = await open();
+    const main = container.querySelector('main')!;
+    expect(cls(main)).toEqual(expect.arrayContaining(['max-w-frame', 'mx-auto']));
+    for (let el = hero.parentElement; el && el !== main; el = el.parentElement) {
+      expect(cls(el)).not.toContain('mx-auto');
+      // Chỉ `md:max-w-2xl` (khổ tablet) và `lg:max-w-none`; không có trần 2xl ở mọi khổ.
+      expect(cls(el)).not.toContain('max-w-2xl');
+    }
+  });
+
+  it('từ lg hai cột: lưới 24rem + phần còn lại, cột trái là thẻ hoa hồng và lối tắt, cột phải là các mục; md giữ cột đọc 2xl bám mép trái', async () => {
+    const { hero, tabs } = await open();
+    const left = hero.parentElement!;
+    const right = tabs.parentElement!;
+    const grid = left.parentElement!;
+    expect(right.parentElement).toBe(grid);
+    expect(cls(grid)).toEqual(expect.arrayContaining(['lg:grid', 'lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)]', 'lg:max-w-none', 'md:max-w-2xl', 'lg:space-y-0']));
+    expect(cls(left)).toContain('lg:col-start-1');
+    expect(cls(right)).toContain('lg:col-start-2');
+    expect(left.querySelector('[role="group"][aria-label="Lối tắt của CTV"]')).not.toBeNull();
+    expect(right.querySelector('[role="group"][aria-label="Lối tắt của CTV"]')).toBeNull();
+  });
+
+  it('thứ tự DOM không đổi (thẻ hoa hồng → lối tắt → Ví → tab) nên thứ tự Tab khớp thứ tự nhìn; dưới lg vẫn một cột với số đo như Mini App', async () => {
+    const { container, hero, tabs } = await open();
+    const shortcuts = container.querySelector('[role="group"][aria-label="Lối tắt của CTV"]')!;
+    const wallet = container.querySelector('a[href="/tai-khoan/vi-tubu"]')!;
+    const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(hero, shortcuts)).toBe(true);
+    expect(follows(shortcuts, wallet)).toBe(true);
+    expect(follows(wallet, tabs)).toBe(true);
+    expect(cls(hero.parentElement)).toEqual(expect.arrayContaining(['max-md:space-y-3', 'max-md:[&>:first-child]:mb-4']));
+    expect(cls(tabs.parentElement)).toEqual(expect.arrayContaining(['space-y-3', 'md:space-y-4']));
+    expect(cls(hero.parentElement!.parentElement)).toEqual(expect.arrayContaining(['space-y-3', 'md:space-y-4']));
+  });
+
+  it('số to của thẻ hoa hồng dùng font-semibold: Fraunces không có bản đậm thật nên font-bold bị làm đậm giả', async () => {
+    const { hero } = await open();
+    const amount = Array.from(hero.querySelectorAll('div')).find((d) => d.textContent === '80.000đ')!;
+    expect(cls(amount)).toEqual(expect.arrayContaining(['font-display', 'font-semibold']));
+    expect(cls(amount)).not.toContain('font-bold');
+  });
+});
+
 describe('/ctv — khoá Đăng ký CTV (cùng một act)', () => {
   let scrollSpy: ReturnType<typeof vi.spyOn>;
   beforeEach(() => {

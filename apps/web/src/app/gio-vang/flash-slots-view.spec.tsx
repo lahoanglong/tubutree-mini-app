@@ -185,6 +185,17 @@ describe('Trang Giờ vàng (web): khung giờ và danh sách', () => {
     expect(c.querySelector('[data-testid="flash-sticky"]')).toBe(sticky);
   });
 
+  it('máy tính: khung rộng từ lg và danh sách món thành lưới 2 cột (md) rồi 3 cột (lg); điện thoại giữ một cột', async () => {
+    const c = await mount();
+    const main = c.querySelector('main')!;
+    expect(main.className).toContain('max-w-3xl');
+    expect(main.className).toContain('lg:max-w-frame');
+    const list = c.querySelector('[data-testid="flash-items"]') as HTMLElement;
+    for (const cls of ['flex', 'flex-col', 'md:grid', 'md:grid-cols-2', 'lg:grid-cols-3']) expect(list.className.split(/\s+/), cls).toContain(cls);
+    expect([list.style.paddingTop, list.style.paddingLeft, list.style.paddingRight]).toEqual(['8px', '16px', '16px']);
+    expect(list.querySelectorAll(':scope > li')).toHaveLength(2);
+  });
+
   it('đồng hồ khung đang diễn ra có nhãn "Kết thúc sau", không lặp "Đang diễn ra" của tab', async () => {
     const c = await mount();
     const sticky = c.querySelector('[data-testid="flash-sticky"]') as HTMLElement;
@@ -479,6 +490,17 @@ describe('Trang Giờ vàng (web): trạng thái tải, rỗng, lỗi', () => {
     expect(tabsBar!.style.height).toBe('56px');
     expect(strip!.style.height).toBe('44px');
     expect(list!.getAttribute('data-testid')).toBe('flash-items-loading');
+  });
+
+  it('khung chờ danh sách cùng lưới với danh sách thật; thẻ thứ năm và sáu chỉ từ md, điện thoại vẫn bốn thẻ', () => {
+    const r = render(<FlashSlotsView />);
+    mounted.push(r);
+    const list = r.container.querySelector('[data-testid="flash-items-loading"]') as HTMLElement;
+    for (const cls of ['flex', 'flex-col', 'md:grid', 'md:grid-cols-2', 'lg:grid-cols-3']) expect(list.className.split(/\s+/), cls).toContain(cls);
+    const kids = Array.from(list.children) as HTMLElement[];
+    expect(kids).toHaveLength(6);
+    expect(kids.slice(0, 4).every((k) => !k.className.includes('hidden'))).toBe(true);
+    expect(kids.slice(4).every((k) => k.className === 'hidden md:block')).toBe(true);
   });
 
   it('không có khung nào: trạng thái rỗng, nút dẫn tới danh mục sản phẩm', async () => {

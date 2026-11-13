@@ -137,6 +137,13 @@ describe('FeedPage — chỉ đọc theo chính sách Zalo (4.1, 4.6)', () => {
     expect(screen.queryByRole('button', { name: 'Facebook' })).toBeNull();
   });
 
+  it('hai nút bên phải tiêu đề nằm bên trái viên thuốc của Zalo (lề 16 sẵn có + 80 bù = 96px)', async () => {
+    renderPage();
+    await screen.findByText('Lan Anh');
+    const actions = screen.getByRole('button', { name: 'Tìm kiếm' }).parentElement as HTMLElement;
+    expect(actions).toHaveStyle({ marginRight: '80px' });
+  });
+
   it('nút "Hỏi Tubu" mở chat OA; không có OA thì không vẽ nút', async () => {
     const view = renderPage();
     await screen.findByText('Lan Anh');

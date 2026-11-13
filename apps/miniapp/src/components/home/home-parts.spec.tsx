@@ -59,6 +59,28 @@ describe('HomeHeader — một hàng dính 56px (logo, ô tìm, chuông, giỏ)'
     expect(mocks.navigate).toHaveBeenCalledWith('/browse?focus=search');
   });
 
+  it('chừa vùng viên thuốc của Zalo bên phải (96px) để chuông và giỏ không nằm dưới nó', () => {
+    wrap(<HomeHeader unreadCount={0} />);
+    expect(screen.getByTestId('home-header')).toHaveStyle({ paddingLeft: '16px', paddingRight: '96px' });
+  });
+
+  it('khổ ≤360px: ô tìm chỉ còn biểu tượng (chữ gợi ý không lọt), tên truy cập vẫn đọc được; khổ rộng hơn vẫn có chữ', () => {
+    const original = window.matchMedia;
+    const stub = (narrow: boolean) =>
+      ((query: string) => ({ matches: narrow && query.includes('max-width: 360px'), media: query, addEventListener: () => {}, removeEventListener: () => {} })) as unknown as typeof window.matchMedia;
+    try {
+      window.matchMedia = stub(true);
+      const { unmount } = wrap(<HomeHeader unreadCount={0} />);
+      expect(screen.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }).textContent).toBe('');
+      unmount();
+      window.matchMedia = stub(false);
+      wrap(<HomeHeader unreadCount={0} />);
+      expect(screen.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }).textContent).toBe('Bạn tìm gì hôm nay?');
+    } finally {
+      window.matchMedia = original;
+    }
+  });
+
   it('ô tìm, chuông, giỏ cùng một hàng và đều có vùng chạm ≥44px', () => {
     wrap(<HomeHeader unreadCount={0} />);
     const row = screen.getByTestId('home-header');

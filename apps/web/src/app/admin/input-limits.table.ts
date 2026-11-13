@@ -154,6 +154,7 @@ export const EXEMPT_INPUTS: Record<string, string> = {
   "components/admin/product-story-studio.tsx::s.body": "storyConfig là JSON kiểm bằng parseStoryConfig (shared-types, STORY_LIMITS.maxBody), không có @MaxLength trên DTO; ô chặn đúng trần đó",
   "components/admin/product-story-studio.tsx::points[sel].label": "storyConfig là JSON kiểm bằng parseStoryConfig (shared-types, STORY_LIMITS.maxLabel), không có @MaxLength trên DTO; ô chặn đúng trần đó",
   "components/admin/product-story-studio.tsx::points[sel].value ?? ''": "storyConfig là JSON kiểm bằng parseStoryConfig (shared-types, STORY_LIMITS.maxLabel), không có @MaxLength trên DTO; ô chặn đúng trần đó",
+  "components/admin/product-story-studio.tsx::text": "ô gõ số (inputMode decimal) cho toạ độ điểm chỉ: giá trị được kẹp 0–100 ngay khi gõ, không phải độ dài chuỗi",
   "components/admin/dealer-tiers-section.tsx::form.name": "TierValuesDto.name chỉ có @IsString, không có trần; 60 là trần do màn tự đặt",
   "components/admin/commission-rates-tab.tsx::text": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
   "components/admin/commission-rates-tab.tsx::text#2": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",

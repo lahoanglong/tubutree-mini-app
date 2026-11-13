@@ -1272,15 +1272,15 @@ function DashboardTab({
         </ul>
 
         <ScrollRegion label="Đơn hàng gần đây" className="mt-3 hidden sm:block">
-          <table className="w-full text-left text-sm">
+          <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="bg-stone-50 text-xs text-stone-500">
               <tr>
-                <th className="px-3 py-2 font-medium">Mã đơn</th>
-                <th className="px-3 py-2 font-medium">Khách hàng</th>
-                <th className="px-3 py-2 font-medium">Thanh toán</th>
-                <th className="px-3 py-2 font-medium">Tổng tiền</th>
-                <th className="px-3 py-2 font-medium">Trạng thái</th>
-                <th className="px-3 py-2 font-medium">Thời gian</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">Mã đơn</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">Khách hàng</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">Thanh toán</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">Tổng tiền</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">Trạng thái</th>
+                <th className="whitespace-nowrap px-3 py-2 font-medium">Thời gian</th>
               </tr>
             </thead>
             <tbody>
@@ -4810,9 +4810,10 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
 function Table({ head, label, children }: { head: string[]; label: string; children: React.ReactNode }) {
   return (
     <ScrollRegion label={label} className="rounded-card border border-stone-200 bg-stone-0">
-      <table className="w-full text-left text-sm">
+      {/* Bảng nhiều cột mà không có độ rộng tối thiểu thì ở 360–768px các cột bị ép hẹp, tiêu đề gãy từng chữ theo chiều dọc: giữ nguyên chữ và để khung cuộn ngang. */}
+      <table className="w-full min-w-[640px] text-left text-sm">
         <thead className="bg-stone-50 text-xs text-stone-500">
-          <tr>{head.map((h) => <th key={h} className="px-3 py-2 font-medium">{h}</th>)}</tr>
+          <tr>{head.map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 font-medium">{h}</th>)}</tr>
         </thead>
         <tbody className="px-3">{children}</tbody>
       </table>

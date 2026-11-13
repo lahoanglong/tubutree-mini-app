@@ -45,6 +45,17 @@ describe('Trang thu ngân /admin/pos — DS v2', () => {
     expect(s.container.querySelector('[data-testid="pos-screen"]')).not.toBeNull();
   });
 
+  it('khung mở rộng theo khổ: giữ 672px ở điện thoại, rộng dần ở iPad (md) và máy tính (lg); tiêu đề semibold như các trang admin khác', () => {
+    mocks.auth = { user: { role: 'STAFF', fullName: 'Lê Bình' }, status: 'authenticated', initialized: true };
+    const { container } = mount(<PosPage />);
+    const main = container.querySelector('main')!;
+    expect(main.className).toContain('max-w-2xl');
+    expect(main.className).toContain('md:max-w-3xl');
+    expect(main.className).toContain('lg:max-w-5xl');
+    expect(container.querySelector('h1')?.className).toContain('font-semibold');
+    expect(container.querySelector('h1')?.className).not.toContain('font-bold');
+  });
+
   it('vai trò khác: chỉ báo không có quyền, không hiện màn thu ngân', () => {
     mocks.auth = { user: { role: 'CUSTOMER' }, status: 'authenticated', initialized: true };
     const { container } = mount(<PosPage />);

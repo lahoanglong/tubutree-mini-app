@@ -23,8 +23,12 @@ import { SearchField } from '../components/ui/search-field';
 import PostCard from '../components/community/post-card';
 import { PublicPreviewList } from '../components/community/public-preview-list';
 import { hasOA, openOAChat } from '../services/zmp-bridge';
+import { capsuleExtra } from '../utils/capsule';
 import { haptic } from '../utils/haptic';
 import { useDebounced } from '../utils/use-debounced';
+
+/** Lề phải sẵn có của `PageHeader` (padding 12px 16px). */
+const PAGE_HEADER_GUTTER = 16;
 
 const SORTS: { key: FeedSort; label: string }[] = [
   { key: 'new', label: vi.community.sortNew },
@@ -160,7 +164,8 @@ export default function FeedPage() {
       <PageHeader
         title={vi.community.title}
         actions={
-          <div style={{ display: 'flex', alignItems: 'center' }}>
+          // `PageHeader` đã có lề phải 16; bù phần còn lại để hai nút nằm bên trái viên thuốc của Zalo.
+          <div style={{ display: 'flex', alignItems: 'center', marginRight: capsuleExtra(PAGE_HEADER_GUTTER) }}>
             {hasOA && (
               <IconButton
                 icon={MessageCircle}

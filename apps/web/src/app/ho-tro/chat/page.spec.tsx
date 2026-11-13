@@ -504,11 +504,13 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
     await waitFor(() => expect(c.textContent).toContain('Đã giao'));
     expect(c.textContent).toContain('Giờ trực: 8:00–21:00 mỗi ngày');
     expect(c.textContent).not.toContain('Chạm vào số để sao chép');
-    expect(c.textContent).not.toContain('tubutree@gmail.com');
+    // Chỉ xét phần liên hệ gọn: cột thông tin của máy tính (ẩn dưới lg bằng CSS, jsdom không áp) luôn liệt kê email.
+    const panel = () => c.querySelector('[data-testid="chat-closed"]')!.textContent;
+    expect(panel()).not.toContain('tubutree@gmail.com');
     click(buttonByName(c, 'Cách liên hệ khác'));
-    await waitFor(() => expect(c.textContent).toContain('tubutree@gmail.com'));
+    await waitFor(() => expect(panel()).toContain('tubutree@gmail.com'));
     click(buttonByName(c, 'Thu gọn'));
-    await waitFor(() => expect(c.textContent).not.toContain('tubutree@gmail.com'));
+    await waitFor(() => expect(panel()).not.toContain('tubutree@gmail.com'));
   });
 
   it('chat tắt và chưa có tin nào: không gọi báo đã đọc', async () => {
@@ -945,5 +947,53 @@ describe('/ho-tro/chat — Chat với Tubu Tree', () => {
       await waitFor(() => expect(textbox(c)).not.toBeNull());
       expect(mocks.getThread.mock.calls.length).toBe(before + 1);
     });
+  });
+});
+
+describe('/ho-tro/chat — máy tính: 2 cột từ lg', () => {
+  const classes = (el: Element) => el.className.split(/\s+/);
+
+  it('khung rộng từ lg; cột thông tin bên trái (ẩn dưới lg), khung chat 8 cột bên phải; khung tin cao theo dvh chứ không 60vh cứng', async () => {
+    const c = mount();
+    await waitFor(() => expect(textbox(c)).not.toBeNull());
+    expect(classes(c.querySelector('main')!)).toEqual(expect.arrayContaining(['max-w-3xl', 'lg:max-w-frame']));
+    const aside = c.querySelector('[data-testid="chat-aside"]') as HTMLElement;
+    const grid = aside.parentElement!;
+    expect(classes(grid)).toEqual(expect.arrayContaining(['lg:grid', 'lg:grid-cols-12', 'lg:items-start']));
+    expect(classes(aside)).toEqual(expect.arrayContaining(['hidden', 'lg:block', 'lg:col-span-4']));
+    const chatCol = aside.nextElementSibling as HTMLElement;
+    expect(classes(chatCol)).toEqual(expect.arrayContaining(['lg:col-span-8', 'lg:min-w-0', 'md:rounded-card']));
+    expect(chatCol.querySelector('[data-chat-pane]')).not.toBeNull();
+    const pane = classes(c.querySelector('[data-chat-pane]')!);
+    expect(pane).toEqual(expect.arrayContaining(['md:h-[60dvh]', 'md:min-h-80', 'md:max-h-[40rem]']));
+    expect(pane.some((x) => x.includes('vh]') && !x.includes('dvh]'))).toBe(false);
+  });
+
+  it('cột thông tin: giờ trực, hotline gọi được (tel:), Zalo OA và email từ cấu hình; chỉ một lần gọi cấu hình cho cả cột lẫn khung chat', async () => {
+    mocks.contact.mockResolvedValue({
+      support: { hotline: '0984 606 774', email: 'tubutree@gmail.com', zaloOaName: 'Tubu Tree' },
+      chat: { enabled: true, hours: { start: '08:00', end: '21:00' } },
+    });
+    const c = mount();
+    await waitFor(() => expect(c.querySelector('[data-testid="chat-aside"] h2')).not.toBeNull());
+    const aside = c.querySelector('[data-testid="chat-aside"]') as HTMLElement;
+    expect(aside.getAttribute('aria-label')).toBe('Cần hỗ trợ?');
+    expect(aside.querySelector('h2')!.textContent).toBe('Cần hỗ trợ?');
+    expect(aside.textContent).toContain('Giờ trực: 8:00–21:00 mỗi ngày');
+    expect(aside.textContent).toContain('Zalo OA: Tubu Tree');
+    const call = aside.querySelector('a[href^="tel:"]') as HTMLAnchorElement;
+    expect(call.getAttribute('href')).toBe('tel:0984606774');
+    expect(call.textContent).toBe('Gọi hotline 0984 606 774');
+    expect(classes(call)).toContain('min-h-11');
+    expect(aside.querySelector('a[href="mailto:tubutree@gmail.com"]')!.textContent).toBe('tubutree@gmail.com');
+    expect(mocks.contact).toHaveBeenCalledTimes(1);
+  });
+
+  it('cấu hình chỉ có hotline: cột chỉ có số gọi, không dòng rỗng', async () => {
+    const c = mount();
+    await waitFor(() => expect(c.querySelector('[data-testid="chat-aside"] a[href^="tel:"]')).not.toBeNull());
+    const aside = c.querySelector('[data-testid="chat-aside"]') as HTMLElement;
+    expect(aside.querySelectorAll('p')).toHaveLength(1);
+    expect(aside.querySelector('a[href^="mailto:"]')).toBeNull();
   });
 });

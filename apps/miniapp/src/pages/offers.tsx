@@ -108,7 +108,8 @@ export default function OffersPage() {
 
   const now = Date.now();
   return (
-    <Page className="page" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 100 }}>
+    // Không dùng class "page": PageHeader đã cộng vùng an toàn, thêm .page sẽ cộng lần hai (như ghi ở bank-payment.tsx).
+    <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 100 }}>
       <PageHeader title={homeCopy.offers.title} back={false} />
       {/* Khách chưa đăng nhập là khách mới; đã đăng nhập mà máy chưa nhớ loại thì chưa biết (chỉ thấy chiến dịch cho mọi người). */}
       <CampaignBanner placement="OFFERS_TOP" kind={authed ? (readStoredHomeKind(user?.id) ?? 'unknown') : 'new'} />

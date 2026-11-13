@@ -210,6 +210,8 @@ export default function AiAdvisorPage() {
       <div
         style={{
           padding: 8,
+          // Trang không có đệm đáy (`paddingBottom: 0`) nên ô soạn tự chừa vùng an toàn, không thì thanh Home của iPhone đè lên nút Gửi. 8px = `--space-inline-sm`, giữ đúng đệm cũ.
+          paddingBottom: 'calc(var(--space-inline-sm) + var(--safe-bottom))',
           display: 'flex',
           gap: 8,
           alignItems: 'center',

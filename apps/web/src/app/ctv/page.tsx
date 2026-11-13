@@ -468,7 +468,10 @@ function Dashboard() {
       <div role="status" aria-live="polite">
         {notice && !notice.error && <p className="mb-3 text-sm font-medium text-success-fg">{notice.text}</p>}
       </div>
-      <div className="mx-auto max-w-2xl space-y-4 max-md:space-y-3 max-md:[&>:first-child]:mb-4">
+      {/* Khối nội dung bám mép trái khung PAGE_WIDE cùng trục với tiêu đề, không canh giữa. Từ lg hai cột (số liệu và lối tắt bên trái, các mục bên phải);
+          thứ tự DOM giữ nguyên (thẻ hoa hồng → lối tắt → Ví → các mục) nên thứ tự Tab khớp thứ tự nhìn, dưới lg xếp một cột đúng như Mini App. */}
+      <div className="space-y-3 md:max-w-2xl md:space-y-4 lg:grid lg:max-w-none lg:grid-cols-[minmax(0,24rem)_minmax(0,1fr)] lg:items-start lg:gap-x-6 lg:space-y-0">
+      <div className="space-y-4 max-md:space-y-3 max-md:[&>:first-child]:mb-4 lg:col-start-1">
         {dashQ.isError ? (
           // Không đưa "0đ" khi lỗi tải: CTV sẽ tưởng mình chưa có hoa hồng.
           <ErrorState message={errText(dashQ.error)} onRetry={() => dashQ.refetch()} />
@@ -490,7 +493,7 @@ function Dashboard() {
               )}
               <div className="text-sm max-md:leading-[var(--type-body-sm-lh)] max-md:opacity-[0.85]">{hero.label}</div>
             </div>
-            <div className="mt-1 font-display text-3xl font-bold tabular-nums max-md:text-[length:var(--type-display-lg-size)] max-md:leading-10">{formatVnd(hero.amount)}</div>
+            <div className="mt-1 font-display text-3xl font-semibold tabular-nums max-md:text-[length:var(--type-display-lg-size)] max-md:leading-10">{formatVnd(hero.amount)}</div>
             <div className={`mt-1 text-xs ${phoneCaption} max-md:opacity-90`}>Đang chờ: {formatVnd(head.pending)} · {commissionPendingNote(autoTransfer)}</div>
             {head.big > 0 && <div className={`mt-1 text-xs ${phoneCaption} max-md:opacity-90`}>{transferHeroNote(autoTransfer, needsTaxId)}</div>}
             <div className="mt-3 flex flex-wrap gap-x-4 gap-y-2">
@@ -522,6 +525,9 @@ function Dashboard() {
           </p>
         )}
 
+      </div>
+
+      <div className="space-y-3 md:space-y-4 lg:col-start-2">
         <SegmentedTabs items={[...CTV_TABS]} value={tab} onChange={setTab} label="Mục của trang cộng tác viên" />
 
         {tab === 'overview' && (
@@ -758,6 +764,7 @@ function Dashboard() {
           </Section>
           </>
         )}
+      </div>
       </div>
       <CtvOrderSheet open={ctvOrdering} onClose={() => setCtvOrdering(false)} />
       <StorefrontShareSheet

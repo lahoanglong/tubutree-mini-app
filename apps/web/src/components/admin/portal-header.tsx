@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Leaf, LogOut, Store } from 'lucide-react';
@@ -13,6 +14,9 @@ export function portalLabel(pathname: string | null | undefined): string | null 
   return pathname === '/admin' || pathname!.startsWith('/admin/') ? 'Quản trị' : 'Đối tác';
 }
 
+/** Biến CSS giữ chiều cao thật của thanh đầu cổng; thanh dính của admin-nav đọc đúng tên này (`var(--portal-header-h, …)`) để khỏi nằm dưới thanh. */
+const PORTAL_HEADER_H_VAR = '--portal-header-h';
+
 /**
  * Thanh đầu riêng của quản trị, POS và đối tác. Thay SiteHeader (giỏ hàng, tìm sản phẩm, tài khoản khách) vốn vô nghĩa ở đây
  * và chiếm chỗ của bảng làm việc. Không có h1: mỗi trang tự giữ tiêu đề của mình.
@@ -21,10 +25,33 @@ export default function PortalHeader() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
   const label = portalLabel(pathname);
+  const headerRef = useRef<HTMLElement>(null);
+  const shown = label !== null;
+  // Chiều cao thay đổi theo khổ chữ, inset tai thỏ và việc nút chữ co lại ở máy hẹp: đo thật thay vì đoán một hằng số.
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!shown || !el) return;
+    const root = document.documentElement;
+    const sync = () => root.style.setProperty(PORTAL_HEADER_H_VAR, `${el.getBoundingClientRect().height}px`);
+    sync();
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', sync);
+      return () => {
+        window.removeEventListener('resize', sync);
+        root.style.removeProperty(PORTAL_HEADER_H_VAR);
+      };
+    }
+    const ro = new ResizeObserver(sync);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      root.style.removeProperty(PORTAL_HEADER_H_VAR);
+    };
+  }, [shown]);
   if (!label) return null;
 
   return (
-    <header className="sticky top-0 z-40 border-b border-stone-200 bg-stone-0/90 backdrop-blur-md" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
+    <header ref={headerRef} className="sticky top-0 z-40 border-b border-stone-200 bg-stone-0/90 backdrop-blur-md" style={{ paddingTop: 'env(safe-area-inset-top, 0px)' }}>
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-2 px-4 py-1 sm:gap-3 sm:py-2">
         <Link href="/" className="flex min-h-[44px] min-w-0 items-center gap-2 whitespace-nowrap sm:gap-2.5" aria-label={`Tubu Tree, cổng ${label}`}>
           <span className="flex h-9 w-9 items-center justify-center rounded-control bg-forest-600 text-stone-0 shadow-card">

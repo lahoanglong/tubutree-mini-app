@@ -575,4 +575,9 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'wishlist.empty.sale': 60,
   'wishlist.empty.inStock': 60,
   'wishlist.empty.cta': 30,
+  // Cộng đồng: khung hướng dẫn ở cột phụ (tiêu đề một dòng; ba mẹo, mỗi mẹo tối đa hai dòng ở cột 4/12 của khung 1200)
+  'community.guideTitle': 24,
+  'community.guideAsk': 60,
+  'community.guideTag': 60,
+  'community.guideUnanswered': 62,
 };

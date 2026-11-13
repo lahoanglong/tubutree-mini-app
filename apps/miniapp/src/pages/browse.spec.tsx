@@ -264,6 +264,12 @@ describe('BrowsePage (DS v2, spec 5b.2)', () => {
     expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Danh mục']);
   });
 
+  it('hàng ô tìm chừa vùng viên thuốc của Zalo bên phải (96px) cho giỏ hoặc nút Huỷ', async () => {
+    renderAt('/browse?all=1');
+    await listPainted();
+    expect(screen.getByTestId('browse-search-row')).toHaveStyle({ paddingLeft: '16px', paddingRight: '96px' });
+  });
+
   it('header có nút giỏ khi không gõ (CartButton), và không có nút "Huỷ"', async () => {
     renderAt('/browse?all=1');
     await listPainted();

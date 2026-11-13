@@ -5,7 +5,7 @@
    "open-snackbar": {
     "components/checkout/order-success.tsx": 4,
     "components/checkout/use-coupon-hint.ts": 4,
-    "components/storefront-builder/config-sheet.tsx": 7,
+    "components/storefront-builder/config-sheet.tsx": 6,
     "components/storefront-builder/profile-sheet.tsx": 5,
     "components/storefront-builder/quest-panel.tsx": 5,
     "components/storefront-pickers.tsx": 4,
@@ -92,14 +92,10 @@
     "components/shop-page/shop-pager.tsx": 7
    },
    "shadow-var-color": {
-    "app/cong-dong/[id]/page.tsx": 1,
     "app/gio-hang/page.tsx": 1,
-    "app/mua-chung/group-buy-view.tsx": 1,
     "app/tai-khoan/page.tsx": 2,
     "app/tai-khoan/yeu-thich/quick-add.tsx": 1,
     "app/thanh-toan/bank-transfer-panel.tsx": 1,
-    "components/affiliate/storefront-owner.tsx": 1,
-    "components/affiliate/storefront-signup.tsx": 1,
     "components/catalog/wishlist-heart.tsx": 1,
     "components/coupon-box.tsx": 1,
     "components/order-mobile/mobile-ui.tsx": 1,
@@ -490,7 +486,7 @@
   "apps/web/src/app/dang-nhap/login-skeleton.tsx": 4,
   "apps/web/src/app/dang-nhap/page.tsx": 2,
   "apps/web/src/app/gio-hang/page.tsx": 8,
-  "apps/web/src/app/gio-vang/flash-slots-view.tsx": 17,
+  "apps/web/src/app/gio-vang/flash-slots-view.tsx": 13,
   "apps/web/src/app/gioi-thieu/about-view.tsx": 1,
   "apps/web/src/app/ho-tro/chat/page.tsx": 9,
   "apps/web/src/app/hoan-tien/page.tsx": 2,
