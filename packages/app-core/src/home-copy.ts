@@ -42,6 +42,15 @@ export const homeCopy = {
     body: (brands: number) => (brands > 0 ? `${brands} thương hiệu Việt, từ nhiều vùng đất` : 'Sản phẩm Tubu từ nhiều vùng đất Việt Nam'),
     cta: 'Xem bản đồ',
   },
+  /** Khối giới thiệu đầu Trang chủ web từ md khi không có banner chiến dịch (`HomeEditorialHero`); điện thoại và Mini App không có. Chỉ nêu điều có thật: trang Hành trình nguyên liệu và danh mục sản phẩm. */
+  hero: {
+    label: 'Giới thiệu Tubu Tree',
+    eyebrow: 'Tubu Tree',
+    title: 'Sản phẩm Việt từ nhiều vùng đất, giao đến nhà bạn',
+    body: 'Tìm hiểu thương hiệu và vùng đất của nguyên liệu, rồi chọn món bạn cần.',
+    ctaShop: 'Khám phá sản phẩm',
+    ctaStory: 'Xem hành trình nguyên liệu',
+  },
   community: {
     title: 'Cộng đồng hỏi đáp',
     seeAll: 'Xem tất cả',

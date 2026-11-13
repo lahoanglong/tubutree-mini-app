@@ -83,11 +83,29 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect((r.querySelector('[style*="min-height"]') as HTMLElement).style.minHeight).toBe(`${HOME_GIFT_HEIGHT}px`);
   });
 
-  it('dải gọn: tóm tắt mã chào mừng trên một dòng, chưa mở chi tiết', async () => {
-    const text = region(await mount())!.textContent!;
-    expect(text).toContain('Mã 25.000đ · cho đơn từ 150.000đ');
-    expect(text).not.toContain('Dùng đến');
-    expect(text).not.toContain('Đặt định kỳ giảm 17% mỗi đơn');
+  it('dải gọn: tóm tắt mã chào mừng trên một dòng; chi tiết còn gập ở điện thoại (ẩn bằng CSS, vẫn có trong HTML cho md trở lên)', async () => {
+    const root = region(await mount())!;
+    expect(root.textContent).toContain('Mã 25.000đ · cho đơn từ 150.000đ');
+    const details = root.querySelector<HTMLElement>('[data-testid="new-customer-gift-details"]')!;
+    expect(details.className.split(' ')).toEqual(expect.arrayContaining(['hidden', 'md:block']));
+  });
+
+  it('từ md chi tiết luôn mở: nút gập chỉ có ở điện thoại (md:hidden), tiêu đề là chữ tĩnh; ba lợi ích xếp 3 cột ở md và 1 cột khi aside chỉ còn 4 cột (lg)', async () => {
+    const root = region(await mount())!;
+    const toggle = root.querySelector<HTMLElement>('button[aria-expanded]')!;
+    expect(toggle.parentElement!.className).toContain('md:hidden');
+    const staticTitle = Array.from(root.querySelectorAll<HTMLElement>('div.hidden.md\\:flex')).find((d) => d.textContent === 'Quà khách mới');
+    expect(staticTitle).toBeDefined();
+    const list = root.querySelector<HTMLElement>('ul')!;
+    expect(list.className).toContain('md:grid-cols-3');
+    expect(list.className).toContain('lg:flex-col');
+  });
+
+  it('mở bằng nút gập ở điện thoại: chi tiết hết lớp hidden', async () => {
+    const c = await mount();
+    await open(c);
+    const details = region(c)!.querySelector<HTMLElement>('[data-testid="new-customer-gift-details"]')!;
+    expect(details.className).not.toContain('hidden');
   });
 
   it('voucher theo phần trăm và miễn phí giao', async () => {

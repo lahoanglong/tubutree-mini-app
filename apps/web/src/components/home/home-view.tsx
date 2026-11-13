@@ -37,6 +37,7 @@ import { refreshHomeQueries } from './home-blocks';
 import { HomeBlockErrorSuppressed } from './home-block-error';
 import { HomeHeader } from './home-header';
 import { HomePageError } from './home-page-error';
+import { HomeEditorialHero } from './home-editorial-hero';
 import { HomeStoryReel } from './home-story-reel';
 import { MemberCard, MemberCardSkeleton, MemberCardUnavailable } from './member-card';
 import { NewCustomerGift } from './new-customer-gift';
@@ -226,6 +227,8 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
       rest.map(wrap)
     ) : (
       <HubLayout
+        // Không có chiến dịch: từ md khối giới thiệu mặc định đứng ở chỗ banner (cùng tỉ lệ khung nên chiến dịch về muộn không làm trang nhảy); điện thoại không thấy nó.
+        hero={hasBanner ? undefined : <HomeEditorialHero />}
         // Banner rỗng thì không vẽ khung (không chừa cột trống); khối vẫn đứng đầu `rest` đúng thứ tự.
         banner={hasBanner ? wrap('banner') : undefined}
         aside={
@@ -233,7 +236,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
           // mỗi thẻ ~180px, cắt hết số điểm và tên khách, nên xếp dọc.
           <div
             data-testid="home-aside"
-            className={`md:flex md:gap-4 md:[&>div:empty]:hidden md:[&>div]:min-w-0 md:[&>div]:flex-1 ${hasBanner ? 'lg:flex-col lg:[&>div]:flex-none' : ''}`}
+            className={`md:flex md:gap-4 md:[&>div:empty]:hidden md:[&>div]:min-w-0 md:[&>div]:flex-1 lg:flex-col lg:[&>div]:flex-none`}
           >
             {asideIds.map(wrap)}
           </div>

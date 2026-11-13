@@ -9,6 +9,8 @@ describe('/cau-chuyen — trang công khai có metadata', () => {
   it('có tiêu đề, mô tả, canonical và được lập chỉ mục', () => {
     expect(metadata.title).toBe('Hành trình nguyên liệu');
     expect(metadata.description).toContain('Tubu Tree');
+    expect(metadata.description).toContain('bản đồ vùng nguyên liệu Việt Nam');
+    expect(metadata.description).not.toMatch(/gỗ|3D/);
     expect(metadata.alternates?.canonical).toBe('/cau-chuyen');
     expect(metadata.robots).toBeUndefined();
   });

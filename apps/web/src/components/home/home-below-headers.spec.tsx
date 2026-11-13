@@ -82,7 +82,7 @@ describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng Secti
     const c = await mount(<BrandJourney initialBrands={[{ brand: 'Tubu', count: 4, slug: 'tubu' }, { brand: 'Lá Xanh', count: 2, slug: 'la-xanh' }]} />);
     const spokenCopy = Array.from(c.querySelectorAll('span')).filter((e) => e.children.length === 0 && /thương hiệu Việt/.test(e.textContent ?? '') && !e.closest('[aria-hidden="true"]'));
     expect(spokenCopy).toHaveLength(1);
-    expect(spokenCopy[0]!.textContent).toBe(homeCopy.journey.body(2));
+    expect(spokenCopy[0]!.textContent).toBe(homeCopy.journey.body(10));
     expect(spokenCopy[0]!.closest('button')).toBeNull();
   });
 

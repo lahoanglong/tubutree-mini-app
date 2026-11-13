@@ -108,6 +108,18 @@ export function composeHomeShelves<F, P, C, B>(input: HomeShelvesInput<F, P, C, 
   };
 }
 
+/**
+ * Xếp món CÓ ẢNH lên trước món chưa có ảnh, giữ nguyên thứ tự tương đối trong mỗi nhóm (ổn định). Dùng cho kệ Bán chạy nhất ở Trang chủ: ô ảnh thay thế (lá) nằm giữa
+ * màn đầu làm kệ trông hỏng, nên món có ảnh thật đứng trước; món không ảnh vẫn còn trong kệ nếu còn chỗ. Hạng thật của từng món phải được gắn TRƯỚC khi gọi hàm này
+ * (xem `ranksAreSequential`: hạng hụt thì thẻ chỉ ghi "Bán chạy", không ghi số sai).
+ */
+export function imageFirst<T>(items: readonly T[], hasImage: (item: T) => boolean): T[] {
+  const withImage: T[] = [];
+  const without: T[] = [];
+  for (const it of items) (hasImage(it) ? withImage : without).push(it);
+  return withImage.length === 0 || without.length === 0 ? [...items] : [...withImage, ...without];
+}
+
 /** Route nhận `?category=`: lối xem tất cả của kệ đang lọc theo danh mục giữ phạm vi đó, để hạng trên kệ và ở trang đích cùng một thước đo. */
 const CATEGORY_AWARE = new Set(['/best-sellers']);
 
