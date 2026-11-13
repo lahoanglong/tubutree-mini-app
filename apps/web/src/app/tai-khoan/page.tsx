@@ -350,7 +350,7 @@ function AccountContent() {
         </div>
        </div>
 
-        <section aria-label={homeCopy.profile.ordersTitle} className="px-4 pt-3 md:px-0 lg:pt-0">
+        <section aria-label={homeCopy.profile.ordersTitle} className="px-4 pt-3 md:px-0 lg:pt-0 xl:col-span-2">
           <Card padding={12}>
             <div className="mb-2 flex items-center justify-between">
               <Heading variant="title-sm" as="h2">

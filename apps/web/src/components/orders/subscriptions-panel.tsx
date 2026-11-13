@@ -122,8 +122,14 @@ export function SubscriptionsPanel() {
   return (
     <div className="flex flex-col gap-3 pb-6 pt-1 max-md:px-1">
       <div>
-        <p className="text-sm text-stone-700 tabular-nums">{`Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${subscribePct}% mỗi đơn, huỷ bất kỳ lúc nào.`}</p>
-        {subs[0] && <p className="mt-1 text-xs font-medium text-forest-700 tabular-nums">{`Đang giảm ${Math.round(subs[0].effectiveDiscountPct * 100)}% cho đơn định kỳ`}</p>}
+        <p className="text-sm text-stone-700 tabular-nums">
+          {subscribePct > 0
+            ? `Tự động đặt lại sản phẩm bạn dùng thường xuyên — tiết kiệm ${subscribePct}% mỗi đơn, huỷ bất kỳ lúc nào.`
+            : 'Tự động đặt lại sản phẩm bạn dùng thường xuyên — huỷ bất kỳ lúc nào.'}
+        </p>
+        {subs[0] && subs[0].effectiveDiscountPct > 0 && (
+          <p className="mt-1 text-xs font-medium text-forest-700 tabular-nums">{`Đang giảm ${Math.round(subs[0].effectiveDiscountPct * 100)}% cho đơn định kỳ`}</p>
+        )}
       </div>
 
       {notice && (
