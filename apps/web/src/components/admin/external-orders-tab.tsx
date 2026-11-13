@@ -15,7 +15,7 @@ import {
 import { formatDateTime } from '@/lib/format-date';
 import { formatVnd } from '@/lib/shop-client';
 import { useDebounced } from './search-picker';
-import { BTN_SECONDARY, BTN_XS_SECONDARY, DlRow, FIELD_XS, Notice, ScrollRegion, ToneBadge, LoadError } from './ui';
+import { BTN_SECONDARY, BTN_XS_SECONDARY, DlRow, FIELD_XS, Notice, ScrollRegion, ToneBadge, LoadError, ListSkeleton } from './ui';
 
 const SOURCE_LABEL: Record<ExternalOrderSource, string> = {
   MARKETPLACE: 'Đơn sàn',
@@ -100,7 +100,7 @@ export function ExternalOrdersTab({ isAdmin }: { isAdmin: boolean }) {
           ))}
         </select>
       </div>
-      {orders.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {orders.isLoading && <ListSkeleton label="Đang tải đơn từ nguồn ngoài" rows={4} className="h-16" />}
       {orders.isError && <LoadError onRetry={() => void orders.refetch()} retrying={orders.isFetching}>Không tải được đơn ngoài app.</LoadError>}
       {orders.isSuccess && rows.length === 0 && (
         <p className="text-sm text-stone-500">{filtered ? 'Không có đơn nào khớp bộ lọc.' : 'Chưa nhận được đơn ngoài app nào từ Pancake.'}</p>

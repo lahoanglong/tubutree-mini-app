@@ -1,5 +1,6 @@
 'use client';
 
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { useRef, useState, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -22,7 +23,7 @@ import { formatDate, formatDateTime } from '@/lib/format-date';
 import { useConfirm } from './confirm-dialog';
 import { SideDrawer } from './side-drawer';
 import { USER_ROLE_LABELS } from './users-list';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_SECONDARY, FIELD_CLASS, Notice, TOUCH_H, ToneBadge, chipClass, LoadError, ListSkeleton } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { settleWithin } from '@/lib/settle-within';
 import { reloadWhenStale } from '@/lib/stale-write-rejection';
@@ -216,7 +217,7 @@ export function StorefrontsTab({ initialStatus = '' }: { initialStatus?: Storefr
 
       <div className="mt-4 space-y-3">
         {quickFailure && <Notice tone="danger" role="alert">{quickFailure}</Notice>}
-        {list.isLoading && <p className="text-sm text-stone-500">Đang tải danh sách...</p>}
+        {list.isLoading && <ListSkeleton label="Đang tải danh sách gian hàng" rows={4} className="h-20" />}
         {list.isError && <LoadError onRetry={() => list.refetch({ cancelRefetch: false })} retrying={list.isFetching}>Không tải được danh sách gian hàng.</LoadError>}
         {list.data && view.items.length === 0 && (
           <p className="rounded-card border border-stone-200 bg-stone-0 p-6 text-center text-sm text-stone-500">Không có gian hàng nào khớp bộ lọc.</p>
@@ -393,7 +394,7 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
 
   return (
     <SideDrawer title={sf?.title ?? 'Gian hàng'} onClose={onClose}>
-      {detail.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {detail.isLoading && <ListSkeleton label="Đang tải chi tiết gian hàng" rows={3} className="h-12" />}
       {detail.isError && <LoadError onRetry={() => detail.refetch({ cancelRefetch: false })} retrying={detail.isFetching}>Không tải được chi tiết gian hàng.</LoadError>}
       {sf && (
         <div className="space-y-3">
@@ -457,11 +458,11 @@ function StorefrontDrawer({ id, onClose }: { id: string; onClose: () => void }) 
             <div className="mt-2 flex items-center gap-3">
               {sf.avatarUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={sf.avatarUrl} alt={`Ảnh đại diện của ${sf.title}`} className="h-16 w-16 rounded-card border border-stone-200 object-cover" />
+                <img key={sf.avatarUrl} src={sf.avatarUrl} alt={`Ảnh đại diện của ${sf.title}`} onError={hideBrokenImage} className="h-16 w-16 rounded-card border border-stone-200 object-cover" />
               )}
               {sf.coverUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={sf.coverUrl} alt={`Ảnh bìa của ${sf.title}`} className="h-16 min-w-0 flex-1 rounded-card border border-stone-200 object-cover" />
+                <img key={sf.coverUrl} src={sf.coverUrl} alt={`Ảnh bìa của ${sf.title}`} onError={hideBrokenImage} className="h-16 min-w-0 flex-1 rounded-card border border-stone-200 object-cover" />
               )}
               {!sf.avatarUrl && !sf.coverUrl && <p className="text-xs text-stone-500">Chưa có ảnh đại diện hay ảnh bìa.</p>}
             </div>

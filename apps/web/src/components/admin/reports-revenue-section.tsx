@@ -7,7 +7,7 @@ import { downloadOrderItemsCsv, getRevenueReport, type ReportRange, type Revenue
 import { REVENUE_MAX_DAYS, pivotRevenue, rangeError } from '@/lib/admin-reports';
 import { formatVnd } from '@/lib/shop-client';
 import { formatDate } from '@/lib/format-date';
-import { BTN_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
+import { BTN_SECONDARY, Notice, ScrollRegion, LoadError, TableSkeleton } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 
 /**
@@ -28,7 +28,7 @@ export function ReportsRevenueSection({ range }: { range: ReportRange }) {
         Doanh thu theo ngày và kênh
       </h3>
       {error && <Notice tone="warning" role="alert">{error}</Notice>}
-      {!error && q.isLoading && <p className="text-sm text-stone-500">Đang tải báo cáo…</p>}
+      {!error && q.isLoading && <TableSkeleton label="Đang tải báo cáo doanh thu" rows={5} />}
       {!error && q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được báo cáo doanh thu.</LoadError>}
       {q.data && !error && <RevenueBody report={q.data} />}
       <ExportButtons range={range} disabled={!!error} />

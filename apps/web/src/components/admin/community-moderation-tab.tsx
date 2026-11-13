@@ -1,5 +1,6 @@
 'use client';
 
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { createContext, useContext, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
 import { addComment } from '@tubutree/app-core/api/feed';
@@ -159,6 +160,7 @@ function Thumbnails({ images }: { images: string[] }) {
           alt={`Ảnh ${idx + 1} của bài`}
           referrerPolicy="no-referrer"
           loading="lazy"
+          onError={hideBrokenImage}
           className="h-20 w-20 rounded-media border border-stone-200 object-cover shadow-card"
         />
       ))}

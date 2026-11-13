@@ -32,7 +32,7 @@ import { useUploadBusy } from '@/lib/use-upload-busy';
 import { useConfirm } from './confirm-dialog';
 import { safeEvidenceImage } from './evidence-images';
 import { payrollCsv } from './payroll-csv';
-import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
+import { BTN_LINK, BTN_PRIMARY, BTN_SECONDARY, BTN_XS_PRIMARY, BTN_XS_SECONDARY, Field, INPUT_CLASS, Notice, ListSkeleton } from './ui';
 
 // Chỉ nạp khi bấm "Thưởng/phạt": giữ gói đầu của /admin nhẹ.
 const PayrollAdjustSheet = dynamic(() => import('./payroll-adjust-sheet').then((m) => m.PayrollAdjustSheet));
@@ -217,7 +217,7 @@ export function PayrollAdminTab() {
           {msg.text}
         </Notice>
       )}
-      {payQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {payQ.isLoading && <ListSkeleton label="Đang tải bảng lương" rows={4} className="h-16" />}
       {payQ.isError && (
         <div role="alert" className="text-sm text-danger-fg">
           {errText(payQ.error)}{' '}
@@ -499,7 +499,7 @@ function DetailSheet({
     <Sheet open={!!row} onClose={onClose} dismissible={!editM.isPending} size="full" title={`Giờ công · ${row?.staff.fullName ?? ''} · T${month}/${year}`}>
       <div className="space-y-2.5">
         {err && <p role="alert" className="text-sm text-danger-fg">{err}</p>}
-        {detailQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+        {detailQ.isLoading && <ListSkeleton label="Đang tải giờ công" rows={3} className="h-12" />}
         {detailQ.isError && (
           <p role="alert" className="text-sm text-danger-fg">
             {errText(detailQ.error)}

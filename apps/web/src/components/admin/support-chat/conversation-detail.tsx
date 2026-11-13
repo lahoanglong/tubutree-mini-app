@@ -1,5 +1,6 @@
 'use client';
 
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -179,7 +180,7 @@ export function ConversationDetail({ id }: { id: string }) {
               {m.imageUrl &&
                 (isHttpUrl(m.imageUrl) ? (
                   // eslint-disable-next-line @next/next/no-img-element -- ảnh từ khách hoặc Zalo, miền không cố định
-                  <img src={m.imageUrl} alt={m.sender === 'CUSTOMER' ? 'Ảnh khách gửi' : 'Ảnh nhân viên gửi'} className="mt-1 max-h-48 rounded-control" />
+                  <img src={m.imageUrl} alt={m.sender === 'CUSTOMER' ? 'Ảnh khách gửi' : 'Ảnh nhân viên gửi'} onError={hideBrokenImage} className="mt-1 max-h-48 rounded-control" />
                 ) : (
                   <p className="text-[11px] text-stone-500">Ảnh không hiển thị được</p>
                 ))}

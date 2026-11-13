@@ -22,7 +22,7 @@ import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { settleWithin } from '@/lib/settle-within';
 import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import { ORDER_STATUS_LABELS } from '@/lib/export-csv';
-import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ScrollRegion, ToneBadge, chipClass, LoadError } from './ui';
+import { BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ScrollRegion, ToneBadge, chipClass, LoadError, ListSkeleton } from './ui';
 
 /** Nút đang chạy báo bận bằng aria-disabled thay `disabled` DOM: Chromium thả focus về body khi nút đang giữ focus bị disabled. */
 const BUSY_CLASS = 'aria-disabled:opacity-60';
@@ -174,7 +174,7 @@ export function MerchantFulfilmentTab({ onOpenConsignmentConfirm, isAdmin = fals
           {error}
         </Notice>
       )}
-      {overviewQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {overviewQ.isLoading && <ListSkeleton label="Đang tải tổng quan đơn đối tác" rows={3} className="h-16" />}
       {overviewQ.isError && <LoadError onRetry={() => void overviewQ.refetch()} retrying={overviewQ.isFetching}>Không tải được tổng quan đơn đối tác.</LoadError>}
 
       {o && (
@@ -431,7 +431,7 @@ function StatementLines({
   onOpenConsignmentConfirm?: () => void;
 }) {
   const q = useQuery({ queryKey: ['admin-merchant-statement', storefrontId], queryFn: () => getAdminMerchantStatement(storefrontId) });
-  if (q.isLoading) return <p className="text-stone-500">Đang tải bảng kê…</p>;
+  if (q.isLoading) return <ListSkeleton label="Đang tải bảng kê" rows={3} className="h-12" />;
   if (q.isError || !q.data) return <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được bảng kê.</LoadError>;
   return (
     <div className="space-y-3">

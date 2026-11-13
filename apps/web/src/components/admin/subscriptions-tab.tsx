@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { listAdminSubscriptions, type AdminSubscription, type SubscriptionStatus } from '@/lib/admin-client';
 import { intervalLabel, subscriptionStatusLabel } from '@/lib/admin-pickers';
 import { PageNav } from './page-nav';
-import { Notice, ToneBadge, chipClass, LoadError } from './ui';
+import { Notice, ToneBadge, chipClass, LoadError, ListSkeleton } from './ui';
 import { formatDate } from '@/lib/format-date';
 import { loadErrorText } from '@/lib/admin-error-text';
 
@@ -54,7 +54,7 @@ export function SubscriptionsTab() {
           {loadErrorText(q.error) || 'Không tải được danh sách gói định kỳ.'}
         </LoadError>
       )}
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải gói định kỳ…</p>}
+      {q.isLoading && <ListSkeleton label="Đang tải gói định kỳ" rows={3} className="h-20" />}
       {q.data && q.data.data.length === 0 && <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-sm text-stone-500">Chưa có gói định kỳ nào khớp bộ lọc.</p>}
       <div className="space-y-3">
         {q.data?.data.map((s) => <SubscriptionRow key={s.id} sub={s} />)}

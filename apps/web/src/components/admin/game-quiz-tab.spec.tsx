@@ -141,7 +141,8 @@ describe('GameQuizAdmin (câu đố hằng ngày)', () => {
     const api = stub({ total: 45 });
     const { container } = mount();
     await flush();
-    expect(container.textContent).toContain('Hiển thị 1–1/45');
+    expect(container.textContent).toContain('Tổng số: 45 câu đố');
+    expect(container.textContent).toContain('/ 3');
     click(byText(container, 'button', /Trang sau/));
     await flush();
     expect(api.gets().some((c) => c.url.includes('page=2'))).toBe(true);

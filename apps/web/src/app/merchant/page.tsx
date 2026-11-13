@@ -1,5 +1,6 @@
 'use client';
 
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import React, { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { keepPreviousData, useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
@@ -677,7 +678,7 @@ function StoreSettingsTab({
             <div className="relative h-24 w-full bg-stone-300 transition-colors" style={{ backgroundColor: themeColor }}>
               {coverUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={coverUrl} alt="Cover" className="h-full w-full object-cover" />
+                <img key={coverUrl} src={coverUrl} alt="Cover" onError={hideBrokenImage} className="h-full w-full object-cover" />
               ) : (
                 <div className="h-full w-full opacity-80" style={{ background: `linear-gradient(135deg, ${themeColor} 0%, var(--color-bg-inverse) 100%)` }} />
               )}
@@ -689,7 +690,7 @@ function StoreSettingsTab({
                 <div className="h-12 w-12 shrink-0 overflow-hidden rounded-control border-2 border-stone-0 bg-stone-0 shadow-card">
                   {avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={avatarUrl} alt="Avatar" className="h-full w-full object-cover" />
+                    <img key={avatarUrl} src={avatarUrl} alt="Avatar" onError={hideBrokenImage} className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-base font-bold text-stone-0" style={{ backgroundColor: themeColor }}>
                       {title.slice(0, 1).toUpperCase() || 'T'}
@@ -715,7 +716,7 @@ function StoreSettingsTab({
                       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-control bg-forest-50">
                         {p.thumbnail ? (
                           // eslint-disable-next-line @next/next/no-img-element
-                          <img src={p.thumbnail} alt="" className="h-full w-full object-cover" />
+                          <img key={p.thumbnail} src={p.thumbnail} alt="" onError={hideBrokenImage} className="h-full w-full object-cover" />
                         ) : (
                           <Leaf className="h-5 w-5 text-forest-600" aria-hidden="true" />
                         )}

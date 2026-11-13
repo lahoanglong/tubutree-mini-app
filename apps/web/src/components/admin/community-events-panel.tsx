@@ -25,7 +25,7 @@ import { useUploadBusy } from '@/lib/use-upload-busy';
 import { vnDateTimeISO } from '@/lib/week';
 import { useConfirm } from './confirm-dialog';
 import { ImageUrlField } from './image-url-field';
-import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, chipClass, Field, INPUT_CLASS, LoadError, Notice } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_PRIMARY, BTN_SECONDARY, chipClass, Field, INPUT_CLASS, LoadError, Notice, ListSkeleton } from './ui';
 
 type Status = 'OPEN' | 'CLOSED';
 type Msg = { tone: 'success' | 'warning' | 'danger'; text: string };
@@ -82,7 +82,7 @@ export function EventsPanel() {
           </button>
         ))}
       </div>
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isLoading && <ListSkeleton label="Đang tải danh sách sự kiện" rows={3} className="h-24" />}
       {q.isError && (
         <LoadError onRetry={() => q.refetch({ cancelRefetch: false })} retrying={q.isFetching}>
           Không tải được danh sách sự kiện.
@@ -218,7 +218,7 @@ function OpenEventRow({ event: e, onMessage, onDone }: { event: AdminCommunityEv
       {choosing && (
         <div className="mt-3 space-y-2">
           <p className="text-xs font-medium text-stone-700">Chọn người thắng trong số người đã có bài dự thi được đăng</p>
-          {participantsQ.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+          {participantsQ.isLoading && <ListSkeleton label="Đang tải người dự thi" rows={2} className="h-10" />}
           {participantsQ.isError && (
             <LoadError onRetry={() => participantsQ.refetch({ cancelRefetch: false })} retrying={participantsQ.isFetching}>
               Không tải được người dự thi.

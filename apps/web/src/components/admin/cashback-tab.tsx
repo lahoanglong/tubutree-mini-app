@@ -5,7 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { listCashbackTxns, reviewCashbackTxn, type AdminCashbackTxn } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
 import { useConfirm } from './confirm-dialog';
-import { BTN_XS_DANGER, BTN_XS_PRIMARY, LoadError } from './ui';
+import { BTN_XS_DANGER, BTN_XS_PRIMARY, LoadError, ListSkeleton } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { settleWithin } from '@/lib/settle-within';
 import { reloadWhenStale } from '@/lib/stale-write-rejection';
@@ -95,7 +95,7 @@ export function CashbackTab() {
           {err}
         </p>
       )}
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isLoading && <ListSkeleton label="Đang tải cấu hình hoàn tiền" rows={3} className="h-14" />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách.</LoadError>}
       <div className="space-y-2">
         {q.data?.map((t) => (
