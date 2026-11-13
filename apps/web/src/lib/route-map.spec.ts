@@ -8,7 +8,7 @@ import {
   publicAllowPaths,
   publicStaticRoutes,
 } from './route-map';
-import { buildMiniappRedirects } from './miniapp-redirects.mjs';
+import { MINIAPP_PERMANENT_SOURCES, buildMiniappRedirects } from './miniapp-redirects.mjs';
 
 const groups = (items: unknown[]) => [{ lane: 't', items }] as never;
 
@@ -174,9 +174,13 @@ describe('publicAllowPaths', () => {
 describe('miniappRedirects', () => {
   const list = miniappRedirects();
 
-  it('307 (permanent false) cho mọi dòng', () => {
+  it('307 (permanent false) cho mọi dòng, trừ ba đường trùng URL WooCommerce cũ (/cart, /checkout, /refill) là 301', () => {
     expect(list.length).toBeGreaterThan(20);
-    expect(list.every((r) => r.permanent === false)).toBe(true);
+    for (const r of list) {
+      if (MINIAPP_PERMANENT_SOURCES.includes(r.source)) expect(r, r.source).toEqual({ source: r.source, destination: r.destination, statusCode: 301 });
+      else expect(r.permanent, r.source).toBe(false);
+    }
+    expect(list.filter((r) => r.statusCode === 301).map((r) => r.source).sort()).toEqual(['/cart', '/checkout', '/refill']);
   });
 
   it('bỏ dòng hai bên cùng đường dẫn, /product/:slug và dòng skip', () => {
@@ -187,7 +191,7 @@ describe('miniappRedirects', () => {
   });
 
   it('chuyển đúng đích, giữ query đích', () => {
-    expect(list).toContainEqual({ source: '/cart', destination: '/gio-hang', permanent: false });
+    expect(list).toContainEqual({ source: '/cart', destination: '/gio-hang', statusCode: 301 });
     expect(list).toContainEqual({
       source: '/subscriptions',
       destination: '/tai-khoan/don-hang?tab=subscriptions',

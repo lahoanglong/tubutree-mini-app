@@ -13,7 +13,8 @@
 //   PASS  301/308 một chặng tới đúng đích và đích trả 2xx; 410 cho trang demo; URL không có luật thì trả 2xx không chuyển hướng.
 //   WARN  chuyển hướng tạm thời (302/303/307).
 //   FAIL  sai đích, chuỗi từ 2 chặng, vòng lặp, sang origin khác, đích 4xx/5xx, lỗi mạng, hoặc mong 410 mà không phải 410.
-// Chặng chỉ bỏ dấu "/" cuối (Next tự làm với mọi URL WordPress vì chúng đều kết thúc bằng "/") KHÔNG tính là chặng nội dung, chỉ ghi chú.
+// URL WordPress có luật (chuyển hướng hoặc 410) mà đi qua chặng bỏ dấu "/" cuối trước (308 rồi 301) là FAIL: web đặt skipTrailingSlashRedirect để mọi URL
+// WordPress cũ, vốn đều kết thúc bằng "/", đi MỘT chặng. URL không có luật (vd /gio-hang/) bỏ dấu "/" bằng 308 là bình thường, chỉ ghi chú.
 // Mã thoát: 0 không có FAIL (WARN vẫn 0, trừ --strict), 1 có FAIL, 2 sai tham số.
 // Node in cảnh báo ExperimentalWarning/MODULE_TYPELESS_PACKAGE_JSON ra stderr khi nạp tệp .ts: vô hại, không ảnh hưởng kết quả.
 import { readFileSync } from 'node:fs';
@@ -75,6 +76,7 @@ export function classifyChain({ expected, steps, flags = {} }) {
 
   if (expected.kind === 'gone') {
     if (contentHops.length) return { verdict: 'FAIL', reason: 'mong 410 nhưng bị chuyển hướng', notes };
+    if (slashHops) return { verdict: 'FAIL', reason: 'mong 410 ngay ở URL gốc nhưng phải bỏ dấu / cuối trước (thêm một chặng)', notes };
     return last.status === 410 ? { verdict: 'PASS', reason: '410', notes } : { verdict: 'FAIL', reason: `mong 410, nhận ${last.status}`, notes };
   }
 
@@ -89,6 +91,7 @@ export function classifyChain({ expected, steps, flags = {} }) {
     return { verdict: 'FAIL', reason: `sai đích: ${first.next ? first.next.path + first.next.search : '?'} (mong ${expected.location})`, notes };
   }
   if (contentHops.length > 1) return { verdict: 'FAIL', reason: `chuỗi ${contentHops.length} chặng nội dung`, notes };
+  if (slashHops) return { verdict: 'FAIL', reason: 'chuỗi 2 chặng: bỏ dấu / cuối rồi mới chuyển hướng (cần chuyển hướng thẳng một chặng)', notes };
   if (!ok2xx) return { verdict: 'FAIL', reason: `đích trả ${last.status}`, notes };
   if (!PERMANENT_STATUSES.has(first.status)) return { verdict: 'WARN', reason: `chuyển hướng tạm thời (${first.status})`, notes };
   return { verdict: 'PASS', reason: String(first.status), notes };
@@ -215,6 +218,7 @@ async function loadTable() {
 function defaultInventory(table) {
   const paths = [
     ...Object.keys(table.LEGACY_PAGE_REDIRECTS),
+    ...Object.keys(table.LEGACY_FILE_REDIRECTS),
     ...Object.keys(table.LEGACY_PRODUCT_REDIRECTS).map((slug) => `/product/${slug}`),
     '/shop/page/2',
     '/product-category/fuwa3e',

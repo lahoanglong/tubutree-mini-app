@@ -43,6 +43,9 @@ const csp = buildCsp({ apiBaseUrl, sentryConnect, dev: process.env.NODE_ENV !== 
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false, // ẩn header X-Powered-By: Next.js (info-disclosure nhỏ, không cần thiết)
+  // Next mặc định bỏ dấu `/` cuối bằng 308 TRƯỚC middleware, nên URL WordPress `/product/<slug>/` đi hai chặng (308 rồi 301). Tắt luật đó để
+  // middleware.ts tự xử lý: URL WordPress cũ 301 thẳng tới đích, đường dẫn khác vẫn 308 về dạng không có `/` cuối như trước.
+  skipTrailingSlashRedirect: true,
   experimental: {
     webpackBuildWorker: false,
   },

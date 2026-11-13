@@ -10,8 +10,9 @@ import { PROD_CATALOG_2026_11_12 } from '@tubutree/app-core/commerce/prod-catalo
 import { classifyChain, expectedFor, parseArgs, parseSitemapLocs, toPathAndSearch, walk, type ChainStep } from '../../../../scripts/ops/check-cutover-redirects.mjs';
 import { LEGAL_SLUGS } from '@/lib/legal';
 import { middleware } from '../middleware';
-import { buildMiniappRedirects } from './miniapp-redirects.mjs';
+import { MINIAPP_PERMANENT_SOURCES, buildMiniappRedirects } from './miniapp-redirects.mjs';
 import {
+  LEGACY_FILE_REDIRECTS,
   LEGACY_GONE_EXACT,
   LEGACY_GONE_PREFIXES,
   LEGACY_PAGE_REDIRECTS,
@@ -64,9 +65,10 @@ const WP_PAGE_PATHS = [
   '/huong-dan-mua-hang', '/phuong-thuc-van-chuyen', '/test', '/track-order', '/my-account/wishlist',
 ];
 
-// Trang WordPress không cần dòng ở bảng: trùng đúng đường dẫn web mới (Next tự bỏ dấu / cuối), hoặc đã có chủ khác chạy trước middleware.
+// Trang WordPress không cần dòng ở bảng: trùng đúng đường dẫn web mới (middleware chỉ bỏ dấu / cuối bằng 308).
 const IDENTITY_PAGES = ['/', '/gio-hang', '/thanh-toan', '/tai-khoan'];
-const OWNED_BY_NEXT_CONFIG = ['/refill'];
+// Ba đường trùng URL WooCommerce cũ và trùng đường dẫn Mini App: next.config redirects (301) chạy trước middleware, bảng này giữ cùng đích cho dạng có dấu /.
+const WOOCOMMERCE_AND_MINIAPP_PATHS = ['/cart', '/checkout', '/refill'];
 
 const WP_CATEGORY_PATHS = [
   '/category/uncategorized/', '/category/cau-chuyen-fuwa/', '/category/gel-rua-chen-cho-may-fuwa3e/', '/category/nuoc-giat-fuwa3e/',
@@ -144,7 +146,7 @@ describe('chuyển hướng trang WordPress', () => {
   it('40 trang thật của sitemap: hoặc có luật, hoặc nằm trong danh sách trùng đường dẫn/đã có chủ', () => {
     expect(new Set(WP_PAGE_PATHS).size).toBe(40);
     for (const path of WP_PAGE_PATHS) {
-      const known = resolveLegacyWpPath(`${path}/`) !== null || IDENTITY_PAGES.includes(path) || OWNED_BY_NEXT_CONFIG.includes(path);
+      const known = resolveLegacyWpPath(`${path}/`) !== null || IDENTITY_PAGES.includes(path);
       expect(known, path).toBe(true);
     }
   });
@@ -184,7 +186,18 @@ describe('chuyển hướng trang WordPress', () => {
       const config = MINIAPP_REDIRECT_SOURCES.get(source);
       if (config) expect(config, source).toBe(to);
     }
-    for (const path of OWNED_BY_NEXT_CONFIG) expect(MINIAPP_REDIRECT_SOURCES.has(path), path).toBe(true);
+  });
+
+  it('/cart, /checkout, /refill: bảng WordPress, luật Mini App và next.config cùng đích và đều là 301', () => {
+    expect(new Set(MINIAPP_PERMANENT_SOURCES)).toEqual(new Set(WOOCOMMERCE_AND_MINIAPP_PATHS));
+    const rules = buildMiniappRedirects(routeMap.routes);
+    for (const path of WOOCOMMERCE_AND_MINIAPP_PATHS) {
+      const to = LEGACY_PAGE_REDIRECTS[path];
+      expect(to, path).toBeDefined();
+      expect(rules.find((r: { source: string }) => r.source === path), path).toEqual({ source: path, destination: to, statusCode: 301 });
+      expect(resolveLegacyWpPath(`${path}/`), path).toEqual({ kind: 'redirect', status: 301, location: to });
+    }
+    expect(locationOf('/refill/')).toBe('/doi-rac');
   });
 
   it('nguồn không đè route thật của web (trừ /product, nơi chỉ slug WordPress bị bắt)', () => {
@@ -296,13 +309,107 @@ describe('isWpBlogPath', () => {
 });
 
 describe('middleware: URL WordPress cũ', () => {
-  const visit = (host: string, path: string) => middleware(new NextRequest(`https://${host}${path}`, { headers: { host } }));
+  const visit = (host: string, path: string, scheme = 'https') => middleware(new NextRequest(`${scheme}://${host}${path}`, { headers: { host } }));
+  // Next 15 không nhận Location tương đối từ middleware (500), nên Location là URL tuyệt đối; so đường dẫn + query ở đây, so gốc ở ca riêng.
+  const pathOf = (res: Response): string | null => {
+    const location = res.headers.get('location');
+    if (!location) return null;
+    const url = new URL(location);
+    return url.pathname + url.search;
+  };
 
-  it('301 sang trang mới trên apex, www, app và localhost, Location tương đối', () => {
+  it('301 sang trang mới trên apex, www, app và localhost, Location tuyệt đối trên đúng host khách gọi', () => {
     for (const host of ['tubutree.com', 'www.tubutree.com', 'app.tubutree.com', 'localhost:3000']) {
       const res = visit(host, '/product/xit-tram-cho-be-pineboo-150ml/');
       expect(res.status, host).toBe(301);
-      expect(res.headers.get('location'), host).toBe('/san-pham/xit-tram-cho-be-pineboo-150ml-b70d1d');
+      expect(pathOf(res), host).toBe('/san-pham/xit-tram-cho-be-pineboo-150ml-b70d1d');
+    }
+  });
+
+  it('URL WordPress có dấu / cuối đi MỘT chặng 301 thẳng tới đích (không 308 rồi 301), giữ cả utm và ref', () => {
+    const cases: Array<[string, string]> = [
+      ['/product/xit-tram-cho-be-pineboo-150ml/', '/san-pham/xit-tram-cho-be-pineboo-150ml-b70d1d'],
+      ['/product/giam-mat-hoa-dua-huu-co-sokfarm-256ml/?utm_source=gg&ref=CTV9', '/san-pham?q=sokfarm&utm_source=gg&ref=CTV9'],
+      ['/shop/', '/san-pham'],
+      ['/cart/', '/gio-hang'],
+      ['/checkout/', '/thanh-toan'],
+      ['/refill/', '/doi-rac'],
+      ['/my-account/orders/', '/tai-khoan/don-hang'],
+    ];
+    for (const [path, to] of cases) {
+      const res = visit('tubutree.com', path);
+      expect(res.status, path).toBe(301);
+      expect(pathOf(res), path).toBe(to);
+    }
+  });
+
+  it('mọi 91 slug sản phẩm WordPress có dấu / cuối đều 301 một chặng với Location là đích của bảng', () => {
+    for (const slug of WP_PRODUCT_SLUGS) {
+      const res = visit('tubutree.com', `/product/${slug}/`);
+      expect(res.status, slug).toBe(301);
+      expect(pathOf(res), slug).toBe(locationOf(`/product/${slug}`));
+    }
+  });
+
+  it('/cart, /checkout, /refill không dấu / cuối cũng 301 (không 307) và không có chặng thứ hai', () => {
+    for (const [path, to] of [['/cart', '/gio-hang'], ['/checkout', '/thanh-toan'], ['/refill', '/doi-rac']] as const) {
+      const res = visit('tubutree.com', path);
+      expect(res.status, path).toBe(301);
+      expect(pathOf(res), path).toBe(to);
+    }
+  });
+
+  it('/sitemap_index.xml (dấu chấm trong tên, có hoặc không dấu / cuối) 301 về /sitemap.xml, giữ utm', () => {
+    for (const path of ['/sitemap_index.xml', '/sitemap_index.xml/', '/Sitemap_Index.xml']) {
+      const res = visit('tubutree.com', path);
+      expect(res.status, path).toBe(301);
+      expect(pathOf(res), path).toBe('/sitemap.xml');
+    }
+    expect(pathOf(visit('www.tubutree.com', '/sitemap_index.xml?utm_source=gsc'))).toBe('/sitemap.xml?utm_source=gsc');
+    expect(LEGACY_FILE_REDIRECTS['/sitemap_index.xml']).toBe('/sitemap.xml');
+    expect(readdirSync(APP_DIR)).toContain('sitemap.ts');
+  });
+
+  it('/sitemap.xml của web mới và tệp tĩnh khác có dấu chấm đi thẳng; host gian hàng CTV không bị áp luật tệp', () => {
+    for (const path of ['/sitemap.xml', '/robots.txt', '/wp-content/uploads/2025/05/a.png']) {
+      const res = visit('tubutree.com', path);
+      expect(res.status, path).toBe(200);
+      expect(res.headers.get('location'), path).toBeNull();
+    }
+    expect(visit('ctv-an.tubutree.com', '/sitemap_index.xml').status).toBe(200);
+  });
+
+  it('đường dẫn không phải URL WordPress mà có dấu / cuối vẫn 308 về dạng không dấu như Next làm trước đây, giữ query', () => {
+    const cases: Array<[string, string]> = [
+      ['/san-pham/', '/san-pham'],
+      ['/gio-hang/', '/gio-hang'],
+      ['/san-pham/abc-123/?q=po+lang', '/san-pham/abc-123?q=po+lang'],
+      ['/chinh-sach/bao-mat/', '/chinh-sach/bao-mat'],
+      ['/product/slug-moi-cua-ctv/', '/product/slug-moi-cua-ctv'],
+    ];
+    for (const [path, to] of cases) {
+      const res = visit('tubutree.com', path);
+      expect(res.status, path).toBe(308);
+      expect(pathOf(res), path).toBe(to);
+    }
+    expect(visit('tubutree.com', '/').status).toBe(200);
+    expect(visit('ctv-an.tubutree.com', '/san-pham/').status).toBe(308);
+  });
+
+  it('Location do NextResponse.redirect dựng trên URL của chính request (Next 15 trả 500 nếu middleware tự viết Location tương đối; Next đổi Location cùng host thành tương đối khi gửi)', () => {
+    for (const host of ['tubutree.com', 'www.tubutree.com', 'app.tubutree.com']) {
+      expect(visit(host, '/shop/').headers.get('location'), host).toBe(`https://${host}/san-pham`);
+    }
+    expect(visit('localhost:3000', '/shop/', 'http').headers.get('location')).toBe('http://localhost:3000/san-pham');
+    expect(visit('localhost:3000', '/san-pham/', 'http').headers.get('location')).toBe('http://localhost:3000/san-pham');
+    expect(visit('tubutree.com', '/san-pham/?q=po+lang').headers.get('location')).toBe('https://tubutree.com/san-pham?q=po+lang');
+  });
+
+  it('bỏ dấu / cuối không bao giờ thành chuyển hướng sang host khác: //evil.com/ và /\\evil.com/ về đường dẫn cùng host', () => {
+    for (const path of ['//evil.com/', '///evil.com//', '/\\evil.com/', '//evil.com/x/']) {
+      const res = visit('tubutree.com', path);
+      expect(res.status, path).toBe(308);
+      expect(new URL(res.headers.get('location')!).origin, path).toBe('https://tubutree.com');
     }
   });
 
@@ -317,7 +424,7 @@ describe('middleware: URL WordPress cũ', () => {
   it('giữ utm và mã giới thiệu CTV, bỏ tham số riêng của WordPress', () => {
     const res = visit('tubutree.com', '/shop/?utm_source=fb&s=nuoc&ref=CTV1');
     expect(res.status).toBe(301);
-    expect(res.headers.get('location')).toBe('/san-pham?utm_source=fb&ref=CTV1');
+    expect(pathOf(res)).toBe('/san-pham?utm_source=fb&ref=CTV1');
   });
 
   it('cache ngắn để còn sửa bảng sau cutover', () => {
@@ -390,9 +497,18 @@ describe('scripts/ops/check-cutover-redirects.mjs: hàm thuần', () => {
     expect(toPathAndSearch('  ')).toBeNull();
   });
 
-  it('301 một chặng tới đúng đích và đích 200: PASS (chặng bỏ dấu / chỉ ghi chú)', () => {
-    const steps = [step(308, '/shop/', { path: '/shop' }), step(301, '/shop', { path: '/san-pham' }), step(200, '/san-pham', null)];
-    expect(classifyChain({ expected: redirectTo('/san-pham'), steps })).toEqual({ verdict: 'PASS', reason: '301', notes: ['1 chặng bỏ dấu /'] });
+  it('301 một chặng tới đúng đích và đích 200: PASS', () => {
+    const steps = [step(301, '/shop/', { path: '/san-pham' }), step(200, '/san-pham', null)];
+    expect(classifyChain({ expected: redirectTo('/san-pham'), steps })).toEqual({ verdict: 'PASS', reason: '301', notes: [] });
+  });
+
+  it('URL WordPress phải bỏ dấu / cuối bằng 308 rồi mới 301 (hoặc 410) là FAIL: cần một chặng; URL không có luật bỏ dấu / là bình thường', () => {
+    const two = [step(308, '/shop/', { path: '/shop' }), step(301, '/shop', { path: '/san-pham' }), step(200, '/san-pham', null)];
+    expect(classifyChain({ expected: redirectTo('/san-pham'), steps: two })).toMatchObject({ verdict: 'FAIL', reason: expect.stringContaining('chuỗi 2 chặng') });
+    const gone = [step(308, '/elements/a/', { path: '/elements/a' }), step(410, '/elements/a', null)];
+    expect(classifyChain({ expected: { kind: 'gone' }, steps: gone })).toMatchObject({ verdict: 'FAIL', reason: expect.stringContaining('410') });
+    const plain = [step(308, '/gio-hang/', { path: '/gio-hang' }), step(200, '/gio-hang', null)];
+    expect(classifyChain({ expected: { kind: 'none' }, steps: plain })).toEqual({ verdict: 'PASS', reason: '200', notes: ['1 chặng bỏ dấu /'] });
   });
 
   it('chuyển hướng tạm thời là WARN; sai đích, chuỗi hai chặng, đích 404, không chuyển hướng là FAIL', () => {
@@ -458,7 +574,7 @@ describe('scripts/ops/check-cutover-redirects.mjs: hàm thuần', () => {
 });
 
 describe('scripts/ops/check-cutover-redirects.mjs: đi theo chuyển hướng thật qua middleware', () => {
-  // Máy chủ giả: Next bỏ dấu / cuối bằng 308 trước middleware, rồi middleware của web trả lời; trang không bị chặn trả 200.
+  // Máy chủ giả: next.config đặt skipTrailingSlashRedirect nên Next KHÔNG bỏ dấu / cuối trước middleware; middleware của web trả lời mọi đường dẫn (kể cả 308 bỏ dấu /); trang không bị chặn trả 200.
   function startFakeSite(extra?: (path: string) => { status: number; location?: string } | null): Promise<{ base: string; close: () => Promise<void> }> {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', 'http://app.tubutree.com');
@@ -468,13 +584,9 @@ describe('scripts/ops/check-cutover-redirects.mjs: đi theo chuyển hướng th
         res.end();
         return;
       }
-      if (url.pathname.length > 1 && url.pathname.endsWith('/')) {
-        res.writeHead(308, { location: url.pathname.replace(/\/+$/, '') + url.search });
-        res.end();
-        return;
-      }
       const out = middleware(new NextRequest(`http://app.tubutree.com${url.pathname}${url.search}`, { headers: { host: 'app.tubutree.com' } }));
-      const location = out.headers.get('location');
+      // Location dựng trên URL của request (http://app.tubutree.com); Next thật đổi nó thành tương đối trước khi gửi (đã kiểm bằng next dev), nên ở đây chỉ giữ đường dẫn.
+      const location = out.headers.get('location')?.replace(/^http:\/\/app\.tubutree\.com/, '');
       res.writeHead(out.status, location ? { location } : {});
       res.end();
     });
@@ -486,10 +598,17 @@ describe('scripts/ops/check-cutover-redirects.mjs: đi theo chuyển hướng th
     });
   }
 
-  it('91 URL sản phẩm và mọi trang trong bảng, kèm dấu / cuối như WordPress: PASS hết, chỉ một chặng nội dung', async () => {
+  it('91 URL sản phẩm, mọi trang và tệp trong bảng, kèm dấu / cuối như WordPress: PASS hết và đúng MỘT chặng (không chặng bỏ dấu /)', async () => {
     const site = await startFakeSite();
     try {
-      const paths = [...Object.keys(LEGACY_PAGE_REDIRECTS), ...WP_PRODUCT_SLUGS.map((s) => `/product/${s}`), '/elements/hotspot', '/demos/x', '/gio-hang', '/product-category/fuwa3e'].map((p) => `${p}/`);
+      const paths = [
+        ...Object.keys(LEGACY_PAGE_REDIRECTS),
+        ...Object.keys(LEGACY_FILE_REDIRECTS),
+        ...WP_PRODUCT_SLUGS.map((s) => `/product/${s}`),
+        '/elements/hotspot',
+        '/demos/x',
+        '/product-category/fuwa3e',
+      ].map((p) => `${p}/`);
       expect(paths.length).toBeGreaterThan(120);
       const failures: string[] = [];
       for (const path of paths) {
@@ -497,8 +616,21 @@ describe('scripts/ops/check-cutover-redirects.mjs: đi theo chuyển hướng th
         const { steps, flags } = await walk({ base: site.base, path, timeout: 5000 });
         const verdict = classifyChain({ expected, steps, flags });
         if (verdict.verdict !== 'PASS') failures.push(`${path}: ${verdict.verdict} ${verdict.reason}`);
+        if (verdict.notes.length > 0) failures.push(`${path}: còn chặng bỏ dấu /: ${verdict.notes.join(', ')}`);
+        expect(steps[0]?.status, path).toBe(expected.kind === 'gone' ? 410 : 301);
       }
       expect(failures).toEqual([]);
+    } finally {
+      await site.close();
+    }
+  });
+
+  it('đường dẫn của web mới có dấu / cuối vẫn về dạng không dấu bằng 308 rồi 200: PASS, chỉ ghi chú chặng bỏ dấu /', async () => {
+    const site = await startFakeSite();
+    try {
+      const { steps, flags } = await walk({ base: site.base, path: '/gio-hang/', timeout: 5000 });
+      expect(classifyChain({ expected: { kind: 'none' }, steps, flags })).toEqual({ verdict: 'PASS', reason: '200', notes: ['1 chặng bỏ dấu /'] });
+      expect(steps[0]?.status).toBe(308);
     } finally {
       await site.close();
     }

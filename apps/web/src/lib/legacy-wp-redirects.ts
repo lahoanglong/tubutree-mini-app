@@ -11,8 +11,11 @@
  *   `/san-pham?q=<từ khoá>` (tìm không dấu của API), sản phẩm đã ngừng hẳn thì sang `/san-pham`.
  * - Chỉ khớp slug khi cùng dòng sản phẩm, cùng thương hiệu và không mơ hồ về quy cách/mùi hương; còn lại để người duyệt tay (ma trận trong
  *   `legacy-wp-redirects.spec.ts` kiểm từng đích có thật trong ảnh chụp catalog 12/11/2026).
- * - Các trang trùng đúng đường dẫn web mới (`/gio-hang`, `/thanh-toan`, `/tai-khoan`) không có dòng ở đây: dấu `/` cuối do Next tự bỏ.
- * - `/refill` của WordPress cũng không có dòng: Mini App đã giữ đường dẫn này cho chương trình đổi rác (next.config redirects, chạy trước middleware).
+ * - Các trang trùng đúng đường dẫn web mới (`/gio-hang`, `/thanh-toan`, `/tai-khoan`) không có dòng ở đây: middleware bỏ dấu `/` cuối bằng 308.
+ * - Dấu `/` cuối của URL WordPress KHÔNG tốn thêm một chặng: `next.config.mjs` đặt `skipTrailingSlashRedirect`, middleware thấy nguyên đường dẫn
+ *   và 301 thẳng tới đích. `/cart`, `/checkout`, `/refill` còn có luật cùng đích ở next.config redirects của Mini App (chạy trước middleware, cũng 301).
+ * - `/sitemap_index.xml` (Rank Math) có dòng trong `LEGACY_FILE_REDIRECTS` để Search Console không gặp 404 sau cutover; middleware phải xét nó
+ *   TRƯỚC luật bỏ qua đường dẫn có dấu chấm.
  *
  * Tệp này cố ý không import gì và chỉ dùng cú pháp TypeScript xoá được, để `scripts/ops/check-cutover-redirects.mjs` nạp thẳng bằng Node.
  */
@@ -31,6 +34,7 @@ export const LEGACY_PAGE_REDIRECTS: Readonly<Record<string, string>> = {
   '/cua-hang': ALL,
   '/cart': '/gio-hang',
   '/checkout': '/thanh-toan',
+  '/refill': '/doi-rac',
   '/my-account': '/tai-khoan',
   '/my-account/wishlist': '/tai-khoan/yeu-thich',
   '/my-account/orders': '/tai-khoan/don-hang',
@@ -63,6 +67,11 @@ export const LEGACY_PAGE_REDIRECTS: Readonly<Record<string, string>> = {
   '/car-fresh': q('o to'),
   '/fuwa3e-x-fundiin': q('fuwa3e'),
   '/combo-qua-tet-2023': q('combo'),
+};
+
+/** Tệp WordPress có dấu chấm trong tên (đường dẫn đã bỏ dấu `/` cuối, chữ thường) -> đích. Rank Math nộp `sitemap_index.xml`, web mới chỉ có `sitemap.xml`. */
+export const LEGACY_FILE_REDIRECTS: Readonly<Record<string, string>> = {
+  '/sitemap_index.xml': '/sitemap.xml',
 };
 
 /** Tiền tố WordPress có đuôi tuỳ ý (đường dẫn con) -> đích chung, dùng khi đường dẫn đầy đủ không có dòng riêng ở bảng trên. */
@@ -237,6 +246,9 @@ function redirect(location: string): LegacyResolution {
 export function resolveLegacyWpPath(pathname: string): LegacyResolution | null {
   const path = normalizePath(pathname);
   if (path === null || path === '/') return null;
+
+  const file = own(LEGACY_FILE_REDIRECTS, path);
+  if (file) return redirect(file);
 
   if (LEGACY_GONE_EXACT.includes(path) || LEGACY_GONE_PREFIXES.some((prefix) => underPrefix(path, prefix))) return { kind: 'gone', status: 410 };
 
