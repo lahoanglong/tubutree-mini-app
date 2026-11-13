@@ -124,6 +124,13 @@ describe('HomeStoryReel: dải Story', () => {
     expect(screen.queryByTestId('story-reel-skeleton')).toBeNull();
   });
 
+  it('món chưa có ảnh bị bỏ khỏi dải (ô thay thế không kể được gì trong khung Reel), món còn lại giữ thứ tự', async () => {
+    mocks.fetchProducts.mockResolvedValue(PAGE([card(1, { thumbnail: null }), card(2), card(3, { thumbnail: '  ' }), card(4), card(5), card(6)]));
+    renderHost();
+    expect(await screen.findAllByTestId('story-reel-item')).toHaveLength(4);
+    expect(screen.getAllByTestId('story-reel-item').map((b) => b.textContent)).toEqual(['Story Món 2', 'Story Món 4', 'Story Món 5', 'Story Món 6']);
+  });
+
   it('món hết hàng bị bỏ; còn dưới 3 món thì dải biến mất (không để tiêu đề trơ)', async () => {
     mocks.fetchProducts.mockResolvedValue(PAGE([card(1), card(2, { inStock: false }), card(3, { inStock: false }), card(4)]));
     const { container } = renderHost();

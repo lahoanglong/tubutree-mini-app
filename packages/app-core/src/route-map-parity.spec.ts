@@ -220,7 +220,7 @@ describe('route-map.json thật', () => {
   };
 
   it('mỗi gap của file thật có cờ còn trong file và lý do viết đủ ý', () => {
-    expect(map.gaps?.map((g) => g.id)).toContain('subscriptions-create-in-miniapp');
+    expect(map.gaps?.map((g) => g.id)).not.toContain('subscriptions-create-in-miniapp');
     for (const g of map.gaps ?? []) {
       const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../../..', g.flag[0]), 'utf8');
       expect(src, `${g.id}: cờ ${g.flag[1]}`).toMatch(new RegExp(`\\b${g.flag[1]}\\b`));

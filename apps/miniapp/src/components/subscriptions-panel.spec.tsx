@@ -227,6 +227,24 @@ describe('SubscriptionsPanel', () => {
     expect(screen.queryByText(/mã_lạ/)).toBeNull();
   });
 
+  it.each([
+    ['insufficient_wallet', 'Ví Tubu chưa đủ tiền cho kỳ này', /Chuyển khoản ngân hàng/],
+    ['invalid_address', 'Địa chỉ giao hàng không còn dùng được', /9 Hai Bà Trưng/],
+    ['cod_limit', 'Đơn kỳ vượt hạn mức thanh toán khi nhận hàng', /Chuyển khoản ngân hàng/],
+  ])('gói tạm dừng vì %s: một chạm "Sửa" mở thẳng sheet có ô đổi cách thanh toán và địa chỉ, chọn lại được ngay', async (reason, title, option) => {
+    mocks.getSubscriptions.mockResolvedValue([{ ...SUB, status: 'PAUSED' as const, pausedReason: reason }]);
+    renderPanel();
+    expect(await screen.findByText(title)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Sửa' }));
+    expect(await screen.findByText('Sửa gói định kỳ')).toBeInTheDocument();
+    expect(screen.getByText('Thanh toán mỗi kỳ')).toBeInTheDocument();
+    expect(screen.getByText('Giao tới')).toBeInTheDocument();
+    const save = screen.getByRole('button', { name: 'Lưu thay đổi' });
+    expect(save).toBeDisabled();
+    fireEvent.click(await screen.findByRole('radio', { name: option }));
+    expect(save).toBeEnabled();
+  });
+
   it('lỗi tải → ErrorState, "Thử lại" gọi lại danh sách', async () => {
     mocks.getSubscriptions.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce([SUB]);
     renderPanel();

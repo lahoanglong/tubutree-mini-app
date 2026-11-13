@@ -12,8 +12,8 @@ export const SEASON_PASS_ENABLED = false;
  */
 export const GAME_SOCIAL_ON_WEB = false;
 
-/** Giao định kỳ trong Mini App: chủ chốt tạm ẩn đợt đầu (28/10). Chỉ ẩn lối vào ở Mini App, web giữ nguyên. */
-export const SUBSCRIPTIONS_IN_MINIAPP = false;
+/** Giao định kỳ trong Mini App: chủ chốt bật ngang web (13/11), sau lần tạm ẩn đợt đầu (28/10). Đổi sang false thì ẩn lại bốn lối tạo gói ở Mini App, web giữ nguyên. */
+export const SUBSCRIPTIONS_IN_MINIAPP = true;
 
 /** Hoàn tiền sàn ngoài (AccessTrade): chưa có key, kéo khách sang sàn khác, ngược north-star mua lại. */
 export const CASHBACK_ENABLED = false;

@@ -83,14 +83,7 @@
       { "miniapp": "/points/scan", "skip": "Q2: tích điểm đơn sàn chạy trên quyền của Zalo (quét QR bằng camera Zalo, xin SĐT đã xác minh, mời quan tâm OA); ô nhập mã tay cũng đòi SĐT đã xác minh nên không phần nào làm riêng được trên web. Web /uu-dai hiện MiniAppOnlyNotice mở lại đúng màn này trên Zalo" }
     ]}
   ],
-  "gaps": [
-    {
-      "id": "subscriptions-create-in-miniapp",
-      "flag": ["packages/app-core/src/features.ts", "SUBSCRIPTIONS_IN_MINIAPP"],
-      "missingOn": "miniapp",
-      "reason": "Chủ dự án chốt tạm ẩn lối TẠO gói giao định kỳ ở Mini App đợt đầu (28/10): nút Đặt định kỳ ở chi tiết sản phẩm, kệ Mua lại, trang đặt hàng thành công và quà khách mới. Web có đủ (chi tiết sản phẩm, tab Định kỳ). Khách đã có gói đặt trên web vẫn thấy tab Định kỳ ở Mini App (/orders?tab=subscriptions) để xem, sửa, tạm dừng, huỷ, nên màn quản lý hai nền tảng giữ khớp. Bật lại: đổi cờ thành true rồi xoá dòng này"
-    }
-  ],
+  "gaps": [],
   "features": [
     { "id": "coupon-claim", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "CouponClaimGate"], "web": ["apps/web/src/components/app-gates.tsx", "CouponClaimGate"] },
     { "id": "onboarding", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "OnboardingGate"], "web": ["apps/web/src/components/app-gates.tsx", "OnboardingGate"] },
