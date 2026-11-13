@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
+import { AdminToastProvider } from './admin-toast';
 import { ProductCategoriesTab } from './product-categories-tab';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, selectValue, typeInto, type Rendered } from '@/test-utils/dom';
 import type { CategoryProductsPage } from '@/lib/product-categories';
@@ -36,7 +37,8 @@ const TREE = {
 };
 const INBOX = { generatedAt: '2026-11-01T03:00:00.000Z', items: [{ key: 'productsUncategorized', count: 2 }, { key: 'productsMissingImage', count: 7 }] };
 
-function setup(props: { initialMissingImage?: boolean; initialUncategorized?: boolean; assignBody?: unknown } = {}) {
+function setup(props: { initialMissingImage?: boolean; initialUncategorized?: boolean; assignBody?: unknown; toast?: boolean } = {}) {
+  const { toast, ...tabProps } = props;
   let tree = TREE;
   const m = mockFetch({
     '/admin/product-categories/assign': { body: props.assignBody ?? { requested: 2, changed: 1, unchanged: 1, category: { id: 'c2', name: 'Nhà bếp' } } },
@@ -51,7 +53,8 @@ function setup(props: { initialMissingImage?: boolean; initialUncategorized?: bo
     '/admin/categories': () => ({ body: tree }),
   });
   vi.stubGlobal('fetch', vi.fn(m.fn));
-  const r = render(<ProductCategoriesTab {...props} />);
+  const tab = <ProductCategoriesTab {...tabProps} />;
+  const r = render(toast ? <AdminToastProvider>{tab}</AdminToastProvider> : tab);
   mounted.push(r);
   return { m, container: r.container };
 }
@@ -173,6 +176,29 @@ describe('ProductCategoriesTab (gán danh mục hàng loạt)', () => {
     const call = m.calls.find((c) => c.url.includes('/assign'))!;
     expect(JSON.parse(String(call.init?.body))).toEqual({ productIds: ['p1', 'p2'], categoryId: 'c2', mode: 'ADD' });
     expect(container.textContent).toContain('1 sản phẩm đổi, 1 không đổi');
+  });
+
+  it('đang tải danh sách: khung xương thay dòng chữ "Đang tải…", tải xong thì biến mất', async () => {
+    const { container } = setup();
+    expect(container.querySelector('[role="status"][aria-busy="true"][aria-label="Đang tải danh sách sản phẩm"]')).not.toBeNull();
+    await flush();
+    expect(container.querySelector('[aria-label="Đang tải danh sách sản phẩm"]')).toBeNull();
+  });
+
+  it('gán xong ở danh sách dài: kết quả lên toast (thấy dù đã cuộn xuống), không còn Notice inline đầu tab', async () => {
+    const { container } = setup({ toast: true });
+    await flush();
+    click(container.querySelector('label input[type="checkbox"]'));
+    selectValue(container.querySelector('select[aria-label="Danh mục"]'), 'c2');
+    await flush();
+    click(byText(container, 'button', 'Gán danh mục'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    const region = container.querySelector('[data-admin-toast-region]')!;
+    expect(region.textContent).toContain('1 sản phẩm đổi, 1 không đổi');
+    const inline = [...container.querySelectorAll('[role="status"]')].filter((n) => !region.contains(n) && n.textContent?.includes('1 sản phẩm đổi'));
+    expect(inline).toHaveLength(0);
   });
 
   it('sản phẩm bị trần danh mục chặn: kết quả nêu tên, không gộp vào "không đổi (đã đúng sẵn)"', async () => {

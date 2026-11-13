@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { AdminToastProvider } from '@/components/admin/admin-toast';
 import { ADMIN_TABULAR } from '@/components/admin/tabular-nums';
 
 /**
@@ -13,7 +14,13 @@ export const metadata: Metadata = { robots: { index: false, follow: false } };
  *
  * `tabular-nums` ở đây (font-variant-numeric được kế thừa) để MỌI số trong quản trị (bộ đếm việc, doanh thu, tồn kho, tổng đơn, huy hiệu menu)
  * có chữ số rộng đều nhau (xem ADMIN_TABULAR: vì sao cần luật riêng cho nút/ô nhập và cho ngăn trượt, hộp thoại).
+ *
+ * Vùng toast (`AdminToastProvider`) nằm TRONG khung này, không qua portal, nên kế thừa luôn nền và chữ số đều nhau.
  */
 export default function PrivateLayout({ children }: { children: React.ReactNode }) {
-  return <div className={`bg-stone-50 text-stone-900 ${ADMIN_TABULAR}`}>{children}</div>;
+  return (
+    <div className={`bg-stone-50 text-stone-900 ${ADMIN_TABULAR}`}>
+      <AdminToastProvider>{children}</AdminToastProvider>
+    </div>
+  );
 }

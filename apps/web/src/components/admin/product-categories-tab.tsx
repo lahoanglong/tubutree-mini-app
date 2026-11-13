@@ -18,7 +18,8 @@ import { CategoryTreePanel } from './category-tree-panel';
 import { ProductEditDrawer } from './product-edit-drawer';
 import { useConfirm } from './confirm-dialog';
 import { useDebounced } from './search-picker';
-import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, Notice, ToneBadge, chipClass } from './ui';
+import { useToastedMessage } from './admin-toast';
+import { BTN_SECONDARY, BTN_XS_DANGER, BTN_XS_PRIMARY, BTN_XS_SECONDARY, FIELD_XS, ListSkeleton, Notice, ToneBadge, chipClass } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 
 const LIST_KEY = ['admin-category-products'] as const;
@@ -57,6 +58,8 @@ export function ProductCategoriesTab({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [categoryId, setCategoryId] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Gán danh mục xong ở hàng dưới cùng của danh sách dài: thông báo đứng đầu tab đã ra khỏi màn hình, nên đẩy lên toast.
+  const inlineMsg = useToastedMessage(msg);
   const q = useDebounced(typed.trim(), 300);
 
   // "Chưa có danh mục" luôn đi cùng onSale: số trên chip là số hàng đang bán, danh sách phải khớp với số đó.
@@ -205,9 +208,9 @@ export function ProductCategoriesTab({
           Mục này có mục con. Chọn một mục con để gán.
         </p>
       )}
-      {msg && <Notice tone={msg.ok ? 'success' : 'danger'} role={msg.ok ? 'status' : 'alert'}>{msg.text}</Notice>}
+      {inlineMsg && <Notice tone={inlineMsg.ok ? 'success' : 'danger'} role={inlineMsg.ok ? 'status' : 'alert'}>{inlineMsg.text}</Notice>}
 
-      {list.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {list.isLoading && <ListSkeleton label="Đang tải danh sách sản phẩm" rows={5} className="h-14" />}
       {list.isError && (
         <p role="alert" className="text-sm text-danger-fg">
           {listErrorText}{' '}

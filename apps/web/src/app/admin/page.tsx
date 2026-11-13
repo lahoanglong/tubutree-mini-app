@@ -153,8 +153,12 @@ import {
   chipClass,
   FIELD_CLASS,
   ListSkeleton,
+  LoadError,
   Notice,
   StatCardsSkeleton,
+  STICKY_FIRST_TD,
+  STICKY_FIRST_TH,
+  STICKY_TH,
   TableSkeleton,
   Field,
   INPUT_CLASS,
@@ -162,6 +166,8 @@ import {
   TOUCH_H,
   ToneBadge,
 } from '@/components/admin/ui';
+import { AdminPagination } from '@/components/admin/admin-pagination';
+import { useToastedMessage } from '@/components/admin/admin-toast';
 import { reportSectionsFor } from '@/components/admin/report-sections';
 import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
 import { InboxBadge, OpsInboxTab, type TodayStatKey } from '@/components/admin/ops-inbox-tab';
@@ -921,20 +927,6 @@ function LoadMoreButton({ hasMore, loading, error, onClick }: { hasMore: boolean
   );
 }
 
-/** Lỗi tải danh sách kèm nút thử lại: mất mạng vài giây thì không phải F5 cả trang và mất bộ lọc đang chọn. */
-function LoadError({ message, onRetry }: { message: string; onRetry: () => void | PromiseLike<unknown> }) {
-  // Trả Promise (refetch) thì khoá chạm đúp tới khi tải xong; trả void thì không khoá.
-  const retry = usePressLock(onRetry);
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      <p className="text-sm text-danger-fg">{message}</p>
-      <button type="button" onClick={retry.press} aria-busy={retry.busy || undefined} aria-disabled={retry.busy || undefined} className={`${BTN_SECONDARY} ${BUSY_CLASS}`}>
-        Thử lại
-      </button>
-    </div>
-  );
-}
-
 /** Xoá/gỡ không hoàn tác: hỏi trước, chỉ chạy khi admin đồng ý (cùng cách với xoá đợt flash sale). */
 function useDeleteConfirm() {
   const { confirm, dialog } = useConfirm();
@@ -1399,6 +1391,14 @@ function OrdersTab({
   const [exporting, setExporting] = useState(false);
   // Điện thoại: chi tiết đơn mở trong ngăn kéo thay vì chen vào giữa bảng đang cuộn ngang.
   const narrow = useNarrowScreen();
+  const tableTopRef = useRef<HTMLDivElement>(null);
+  const cardsTopRef = useRef<HTMLUListElement>(null);
+  const detailRowRef = useRef<HTMLTableRowElement>(null);
+  // Khung bảng có trần chiều cao và tự cuộn dọc (để tiêu đề đứng yên): bấm đơn ở đáy khung thì chi tiết vừa mở nằm ngoài vùng nhìn thấy.
+  useEffect(() => {
+    if (narrow || !expandedId) return;
+    detailRowRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [expandedId, narrow]);
   const badRange = !!from && !!to && from > to;
 
   const q = useQuery({
@@ -1884,7 +1884,7 @@ function OrdersTab({
 
       {q.data && narrow && (
         // Điện thoại: mỗi đơn một thẻ (mã, tiền, trạng thái, khách, ngày) như "Đơn hàng mới nhất" ở Tổng quan; bảng 3 cột cuộn ngang cắt mất cột Tổng tiền.
-        <ul aria-label="Danh sách đơn hàng" data-orders-cards className="divide-y divide-stone-100 rounded-card border border-stone-200 bg-stone-0 shadow-card">
+        <ul ref={cardsTopRef} aria-label="Danh sách đơn hàng" data-orders-cards className="scroll-mt-24 divide-y divide-stone-100 rounded-card border border-stone-200 bg-stone-0 shadow-card">
           {q.data.data.length === 0 ? (
             <li className="py-8 text-center text-sm text-stone-500">Không tìm thấy đơn hàng nào phù hợp.</li>
           ) : (
@@ -1920,17 +1920,17 @@ function OrdersTab({
       )}
 
       {q.data && !narrow && (
-        <ScrollRegion label="Danh sách đơn hàng" className="rounded-card border border-stone-200 bg-stone-0 shadow-card">
+        <ScrollRegion ref={tableTopRef} stickyHead label="Danh sách đơn hàng" className="scroll-mt-24 rounded-card border border-stone-200 bg-stone-0 shadow-card">
           <table className="w-full text-left text-sm">
-            <thead className="bg-stone-50 text-xs text-stone-500">
+            <thead className="text-xs text-stone-500">
               <tr>
-                <th className="px-3 py-2.5 font-medium">Mã đơn</th>
-                <th className="px-3 py-2.5 font-medium">Khách hàng</th>
-                <th className="hidden px-3 py-2.5 font-medium md:table-cell">Thanh toán</th>
-                <th className="px-3 py-2.5 font-medium">Tổng tiền</th>
-                <th className="hidden whitespace-nowrap px-3 py-2.5 font-medium md:table-cell">Trạng thái</th>
-                <th className="hidden px-3 py-2.5 font-medium md:table-cell">Ngày đặt</th>
-                <th className="hidden whitespace-nowrap px-3 py-2.5 text-right font-medium md:table-cell">Chi tiết / Cập nhật</th>
+                <th className={`${STICKY_FIRST_TH} px-3 py-2.5 font-medium`}>Mã đơn</th>
+                <th className={`${STICKY_TH} px-3 py-2.5 font-medium`}>Khách hàng</th>
+                <th className={`${STICKY_TH} hidden px-3 py-2.5 font-medium md:table-cell`}>Thanh toán</th>
+                <th className={`${STICKY_TH} px-3 py-2.5 font-medium`}>Tổng tiền</th>
+                <th className={`${STICKY_TH} hidden whitespace-nowrap px-3 py-2.5 font-medium md:table-cell`}>Trạng thái</th>
+                <th className={`${STICKY_TH} hidden px-3 py-2.5 font-medium md:table-cell`}>Ngày đặt</th>
+                <th className={`${STICKY_TH} hidden whitespace-nowrap px-3 py-2.5 text-right font-medium md:table-cell`}>Chi tiết / Cập nhật</th>
               </tr>
             </thead>
             <tbody>
@@ -1946,25 +1946,15 @@ function OrdersTab({
                   return (
                     <React.Fragment key={o.id || o.code}>
                       <tr
-                        className={`border-t border-stone-100 hover:bg-stone-50 ${narrow ? 'cursor-pointer' : ''}`}
-                        onClick={narrow ? () => setExpandedId(o.id || o.code) : undefined}
+                        className="group cursor-pointer border-t border-stone-100 hover:bg-stone-50"
+                        // Cả hàng bấm được (ô "Xem & Sửa" chỉ cao ~26px); đang bôi đen chữ để sao chép thì không tính là bấm mở. Bàn phím dùng nút "Xem & Sửa".
+                        onClick={() => {
+                          if (window.getSelection()?.toString()) return;
+                          setExpandedId(isExpanded ? null : (o.id || o.code));
+                        }}
                       >
-                        <td className="px-3 py-3">
-                          {narrow ? (
-                            <button
-                              type="button"
-                              aria-haspopup="dialog"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setExpandedId(o.id || o.code);
-                              }}
-                              className="-my-2 min-h-[44px] text-left font-semibold text-forest-700 underline decoration-forest-300 underline-offset-2"
-                            >
-                              {o.code}
-                            </button>
-                          ) : (
-                            <div className="font-semibold text-stone-800">{o.code}</div>
-                          )}
+                        <td className={`${STICKY_FIRST_TD} px-3 py-3`}>
+                          <div className="font-semibold text-stone-800">{o.code}</div>
                           <div className="mt-0.5 flex flex-wrap gap-1">
                             {o.fulfiller === 'MERCHANT' && (
                               <ToneBadge tone="info" title={o.fulfillerStorefront?.title ?? undefined}>
@@ -2010,21 +2000,20 @@ function OrdersTab({
                         <td className="hidden px-3 py-3 text-right md:table-cell">
                           <button
                             type="button"
-                            aria-haspopup={narrow ? 'dialog' : undefined}
                             onClick={(e) => {
                               e.stopPropagation();
                               setExpandedId(isExpanded ? null : (o.id || o.code));
                             }}
                             className={`${BTN_SMALL} inline-flex items-center gap-1 whitespace-nowrap`}
                           >
-                            {isExpanded && !narrow ? 'Đóng' : 'Xem & Sửa'}
-                            {isExpanded && !narrow ? <ChevronUp className="h-3 w-3" aria-hidden /> : <ChevronDown className="h-3 w-3" aria-hidden />}
+                            {isExpanded ? 'Đóng' : 'Xem & Sửa'}
+                            {isExpanded ? <ChevronUp className="h-3 w-3" aria-hidden /> : <ChevronDown className="h-3 w-3" aria-hidden />}
                           </button>
                         </td>
                       </tr>
 
-                      {isExpanded && !narrow && (
-                        <tr className="border-t border-stone-100 bg-stone-50">
+                      {isExpanded && (
+                        <tr ref={detailRowRef} className="border-t border-stone-100 bg-stone-50">
                           <td colSpan={7} className="px-4 py-3">
                             <OrderDetailBody o={o} isAdmin={isAdmin} canFinance={canFinance} canWarehouse={canWarehouse} onPaid={(message, alreadyPaid) => onPaid(o, message, alreadyPaid)} onOpenProfile={canViewProfile && o.user?.id ? () => setProfileId(o.user!.id) : undefined} />
                           </td>
@@ -2082,33 +2071,14 @@ function OrdersTab({
         />
       )}
 
-      {/* Pagination Bar */}
-      {q.data && totalPages > 1 && (
-        <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-2 text-sm text-stone-600">
-          <div>
-            Tổng số: <span className="font-semibold text-stone-900">{q.data.meta.total}</span> đơn hàng
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={page <= 1}
-              className={BTN_SMALL}
-            >
-              ← Trang trước
-            </button>
-            <span className="text-xs">
-              Trang <span className="font-semibold">{page}</span> / {totalPages}
-            </span>
-            <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-              className={BTN_SMALL}
-            >
-              Trang sau →
-            </button>
-          </div>
-        </div>
-      )}
+      <AdminPagination
+        page={page}
+        totalPages={q.data ? totalPages : 1}
+        total={q.data?.meta.total ?? 0}
+        noun="đơn hàng"
+        onPageChange={setPage}
+        scrollTargetRef={narrow ? cardsTopRef : tableTopRef}
+      />
     </div>
   );
 }
@@ -2379,9 +2349,12 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
   });
   const totalPages = q.data ? Math.min(Math.ceil(q.data.meta.total / q.data.meta.limit), isAdmin ? Infinity : STAFF_USER_MAX_PAGE) : 1;
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Khoá/mở khoá ở hàng cuối bảng dài: thông báo inline đứng đầu tab nằm ngoài tầm mắt nên đẩy lên toast (không có toast thì vẫn inline).
+  const inlineMsg = useToastedMessage(msg);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const narrow = useNarrowScreen();
+  const listTopRef = useRef<HTMLDivElement>(null);
   const { confirm, ask, dialog } = useConfirm();
   const qc = useQueryClient();
 
@@ -2545,8 +2518,8 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
           <span>Khách vãng lai là lượt mở app chưa đăng nhập, không có SĐT; không tính vào số người dùng.</span>
         </div>
       )}
-      {msg && (
-        <p role="status" className={`text-sm ${msg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{msg.text}</p>
+      {inlineMsg && (
+        <p role="status" className={`text-sm ${inlineMsg.ok ? 'text-success-fg' : 'text-danger-fg'}`}>{inlineMsg.text}</p>
       )}
       {searchProblem ? (
         <Notice tone="info">{searchProblem}</Notice>
@@ -2554,48 +2527,30 @@ function UsersTab({ isAdmin = true, onOpenOrder, onOpenUserOrders }: { isAdmin?:
         <LoadError message="Không tải được danh sách người dùng." onRetry={() => q.refetch()} />
       ) : (
         <>
-          <UsersList
-            users={q.data?.data ?? []}
-            isAdmin={isAdmin}
-            narrow={narrow}
-            blockBusy={block.isPending}
-            unblockBusy={unblock.isPending}
-            onOpenDetail={setDetailId}
-            onBlock={askBlock}
-            onUnblock={askUnblock}
-          />
+          {/* Chưa có dữ liệu thì không dựng bảng rỗng: bảng chỉ có tiêu đề trông như "không có ai". */}
+          <div ref={listTopRef} className="scroll-mt-24">
+            {q.isLoading ? (
+              narrow ? <ListSkeleton label="Đang tải danh sách người dùng" rows={5} className="h-24" /> : <TableSkeleton label="Đang tải danh sách người dùng" />
+            ) : (
+              <UsersList
+                users={q.data?.data ?? []}
+                isAdmin={isAdmin}
+                narrow={narrow}
+                blockBusy={block.isPending}
+                unblockBusy={unblock.isPending}
+                onOpenDetail={setDetailId}
+                onBlock={askBlock}
+                onUnblock={askUnblock}
+              />
+            )}
+          </div>
           {q.data && q.data.data.length === 0 && (
             <p className="text-sm text-stone-500">
               {search ? `Không có người dùng nào khớp “${search}”.` : 'Chưa có người dùng nào.'}
             </p>
           )}
 
-          {q.data && totalPages > 1 && (
-            <div className="flex flex-wrap items-center justify-between gap-2 px-2 pt-2 text-sm text-stone-600">
-              <div>
-                Tổng số: <span className="font-semibold text-stone-900">{q.data.meta.total}</span> người dùng
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page <= 1}
-                  className={BTN_SMALL}
-                >
-                  ← Trang trước
-                </button>
-                <span className="text-xs">
-                  Trang <span className="font-semibold">{page}</span> / {totalPages}
-                </span>
-                <button
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={page >= totalPages}
-                  className={BTN_SMALL}
-                >
-                  Trang sau →
-                </button>
-              </div>
-            </div>
-          )}
+          {q.data && <AdminPagination page={page} totalPages={totalPages} total={q.data.meta.total} noun="người dùng" onPageChange={setPage} scrollTargetRef={listTopRef} />}
         </>
       )}
       {dialog}
@@ -3582,7 +3537,7 @@ function FlashSalesTab() {
           ))}
         </div>
         {sales.map((s) => <FlashSaleRow key={s.id} sale={s} />)}
-        {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+        {q.isLoading && <ListSkeleton label="Đang tải danh sách đợt giờ vàng" rows={3} className="h-24" />}
         <LoadMoreButton hasMore={!!q.hasNextPage} loading={q.isFetchingNextPage} error={q.isFetchNextPageError} onClick={() => q.fetchNextPage()} />
         {q.data && sales.length === 0 && (
           <Empty>
@@ -3800,7 +3755,7 @@ function FlashSaleItemsPanel({ sale, ended }: { sale: AdminFlashSaleSummary; end
   const field = `${FIELD_CLASS} ${TOUCH_H}`;
 
   if (detail.isError) return <LoadError message="Không tải được sản phẩm của đợt này." onRetry={() => detail.refetch()} />;
-  if (!detail.data) return <p className="mt-2 text-sm text-stone-500">Đang tải sản phẩm…</p>;
+  if (!detail.data) return <div className="mt-2"><ListSkeleton label="Đang tải sản phẩm của đợt" rows={2} className="h-12" /></div>;
 
   return (
     <div className="mt-2">
@@ -4293,7 +4248,7 @@ function ContentKitTab() {
         </div>
       </div>
 
-      {loadedId && q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {loadedId && q.isLoading && <ListSkeleton label="Đang tải bộ nội dung" rows={3} className="h-20" />}
       {loadedId && q.isError && <p className="text-sm text-danger-fg">{loadErrorText(q.error)}</p>}
       {loadedId && q.isSuccess && (
         <ContentKitEditor key={loadedId} productId={loadedId} initial={q.data} />
@@ -4809,11 +4764,11 @@ function LessonRow({ lesson }: { lesson: AdminLesson }) {
 
 function Table({ head, label, children }: { head: string[]; label: string; children: React.ReactNode }) {
   return (
-    <ScrollRegion label={label} className="rounded-card border border-stone-200 bg-stone-0">
+    <ScrollRegion label={label} stickyHead className="rounded-card border border-stone-200 bg-stone-0">
       {/* Bảng nhiều cột mà không có độ rộng tối thiểu thì ở 360–768px các cột bị ép hẹp, tiêu đề gãy từng chữ theo chiều dọc: giữ nguyên chữ và để khung cuộn ngang. */}
       <table className="w-full min-w-[640px] text-left text-sm">
-        <thead className="bg-stone-50 text-xs text-stone-500">
-          <tr>{head.map((h) => <th key={h} className="whitespace-nowrap px-3 py-2 font-medium">{h}</th>)}</tr>
+        <thead className="text-xs text-stone-500">
+          <tr>{head.map((h) => <th key={h} className={`${STICKY_TH} whitespace-nowrap px-3 py-2 font-medium`}>{h}</th>)}</tr>
         </thead>
         <tbody className="px-3">{children}</tbody>
       </table>

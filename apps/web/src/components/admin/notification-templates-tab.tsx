@@ -9,7 +9,7 @@ import {
   type AdminNotificationTemplate,
   type NotificationDelivery,
 } from '@/lib/admin-client';
-import { BTN_XS_PRIMARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge, LoadError } from './ui';
+import { BTN_XS_PRIMARY, FIELD_XS, INPUT_CLASS, Notice, ToneBadge, LoadError, ListSkeleton } from './ui';
 import type { Tone } from '@/lib/recycling';
 import { formatDateTime } from '@/lib/format-date';
 import { actionErrorText } from '@/lib/admin-error-text';
@@ -45,7 +45,7 @@ export function NotificationTemplatesTab({ canEditAll = true }: { canEditAll?: b
           Mẫu đơn hàng, tiền, đối tác chỉ quản trị viên sửa. Đổi kênh gửi hay mã mẫu ZNS (tính phí mỗi tin) nhờ quản trị viên.
         </Notice>
       )}
-      {q.isLoading && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {q.isLoading && <ListSkeleton label="Đang tải mẫu thông báo" rows={4} className="h-16" />}
       {q.isError && <LoadError onRetry={() => void q.refetch()} retrying={q.isFetching}>Không tải được danh sách mẫu thông báo.</LoadError>}
       <div className="space-y-2">
         {rows?.map((t) => <TemplateRow key={t.code} item={t} canEditDelivery={canEditAll} />)}

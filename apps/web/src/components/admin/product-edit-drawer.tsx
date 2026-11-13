@@ -9,7 +9,8 @@ import { formatVnd } from '@/lib/format-vnd';
 import { ImageUrlField } from './image-url-field';
 import { ProductStoryStudio } from './product-story-studio';
 import { SideDrawer, useSideDrawerClose } from './side-drawer';
-import { BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, Notice, TOUCH_H, chipClass } from './ui';
+import { useToastedMessage } from './admin-toast';
+import { BTN_PRIMARY, BTN_SECONDARY, INPUT_CLASS, ListSkeleton, Notice, TOUCH_H, chipClass } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 
 const MAX_IMAGES = 8;
@@ -43,7 +44,7 @@ export function ProductEditDrawer({
   const showForm = !!q.data && ready;
   return (
     <SideDrawer title={q.data?.name ?? 'Sản phẩm'} onClose={onClose} dirty={dirty} footer={showForm ? <div ref={setFooterSlot} /> : undefined}>
-      {(q.isLoading || (q.data && !ready)) && <p className="text-sm text-stone-500">Đang tải…</p>}
+      {(q.isLoading || (q.data && !ready)) && <ListSkeleton label="Đang tải sản phẩm" rows={4} className="h-14" />}
       {q.isError && <Notice tone="danger" role="alert">{errText(q.error, 'Không tải được sản phẩm.')}</Notice>}
       {q.data && ready && <Form product={q.data} categories={categories} footerSlot={footerSlot} onSaved={onSaved} onDirtyChange={setDirty} />}
     </SideDrawer>
@@ -78,6 +79,8 @@ function Form({
   const [story, setStory] = useState<ProductStoryConfig | null>(product.storyConfig ?? null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => setMsg(null), [images, description, shortDesc, isActive, isFeatured, categoryIds, story]);
+  // "Đã lưu." lên toast để thấy cả khi ngăn đã cuộn xa; lỗi giữ trong chân dính, nằm ngay cạnh nút Lưu và đứng yên tới khi sửa xong.
+  const inlineMsg = useToastedMessage(msg, { successOnly: true });
 
   const locked = product.partnerOwned;
   const cleanImages = images.map((s) => s.trim()).filter(Boolean);
@@ -223,9 +226,9 @@ function Form({
       {footerSlot &&
         createPortal(
           <>
-            {msg && (
+            {inlineMsg && (
               <div className="mb-2">
-                <Notice tone={msg.ok ? 'success' : 'danger'} role={msg.ok ? 'status' : 'alert'}>{msg.text}</Notice>
+                <Notice tone={inlineMsg.ok ? 'success' : 'danger'} role={inlineMsg.ok ? 'status' : 'alert'}>{inlineMsg.text}</Notice>
               </div>
             )}
             <div className="flex flex-wrap items-center gap-2">

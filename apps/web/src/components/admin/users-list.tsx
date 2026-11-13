@@ -3,7 +3,7 @@
 import type { AdminUser } from '@/lib/admin-client';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
-import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_SMALL, ScrollRegion, ToneBadge } from './ui';
+import { BTN_DANGER_OUTLINE, BTN_LINK, BTN_SMALL, STICKY_FIRST_TD, STICKY_FIRST_TH, STICKY_TH, ScrollRegion, ToneBadge } from './ui';
 
 export const USER_ROLE_LABELS: Record<string, string> = { CUSTOMER: 'Khách hàng', AFFILIATE: 'CTV', DEALER: 'Đại lý', STAFF: 'Nhân viên', ADMIN: 'Quản trị' };
 
@@ -36,7 +36,10 @@ function UserName({ user: u, onOpenDetail, card = false }: { user: AdminUser; on
   return (
     <button
       type="button"
-      onClick={() => onOpenDetail(u.id)}
+      onClick={(e) => {
+        e.stopPropagation();
+        onOpenDetail(u.id);
+      }}
       aria-haspopup="dialog"
       className={`${BTN_LINK} text-left ${card ? '-ml-2 justify-start' : ''}`}
       aria-label={`Xem chi tiết ${labelOf(u)}`}
@@ -130,19 +133,27 @@ export function UsersList(props: UsersListProps) {
     );
   }
   return (
-    <ScrollRegion label="Danh sách người dùng" className="rounded-card border border-stone-200 bg-stone-0">
+    <ScrollRegion stickyHead label="Danh sách người dùng" className="rounded-card border border-stone-200 bg-stone-0">
       <table className="w-full text-left text-sm">
-        <thead className="bg-stone-50 text-xs text-stone-500">
+        <thead className="text-xs text-stone-500">
           <tr>
-            {['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày', 'Trạng thái', ...(props.isAdmin ? ['Thao tác'] : [])].map((h) => (
-              <th key={h} className="px-3 py-2 font-medium">{h}</th>
+            {['Tên', 'SĐT', 'Vai trò', 'Điểm', 'Ngày', 'Trạng thái', ...(props.isAdmin ? ['Thao tác'] : [])].map((h, i) => (
+              <th key={h} className={`${i === 0 ? STICKY_FIRST_TH : STICKY_TH} px-3 py-2 font-medium`}>{h}</th>
             ))}
           </tr>
         </thead>
         <tbody className="px-3">
           {users.map((u) => (
-            <tr key={u.id} className="border-t border-stone-100">
-              <td className="px-3 py-2 font-medium">
+            <tr
+              key={u.id}
+              className="group cursor-pointer border-t border-stone-100 hover:bg-stone-50"
+              // Cả hàng bấm được để mở hồ sơ; đang bôi đen chữ (sao chép SĐT) thì không tính là bấm. Bàn phím dùng nút tên.
+              onClick={() => {
+                if (window.getSelection()?.toString()) return;
+                onOpenDetail(u.id);
+              }}
+            >
+              <td className={`${STICKY_FIRST_TD} px-3 py-2 font-medium`}>
                 <UserName user={u} onOpenDetail={onOpenDetail} />
               </td>
               <td className="px-3 py-2">{u.phone ?? '—'}</td>
@@ -155,7 +166,8 @@ export function UsersList(props: UsersListProps) {
                 <UserStatus user={u} {...status} />
               </td>
               {props.isAdmin && (
-                <td className="px-3 py-2">
+                // Nút Khoá/Mở khoá có hộp xác nhận riêng: bấm vào ô thao tác không được kéo theo mở hồ sơ.
+                <td className="px-3 py-2" onClick={(e) => e.stopPropagation()}>
                   <UserActions user={u} {...status} />
                 </td>
               )}

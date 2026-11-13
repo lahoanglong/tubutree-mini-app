@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import type { Tone } from '@/lib/recycling';
+import { usePressLock } from '@/lib/use-press-lock';
 
 /** Màu theo tông — cùng bảng màu badge trạng thái đơn trong web admin (OrderStatusBadge). */
 export const TONE_CLASS: Record<Tone, string> = {
@@ -23,7 +24,7 @@ export function ToneBadge({ tone, children, title, wrap }: { tone: Tone; childre
 }
 
 // Màu trạng thái là biến CSS nên không có hậu tố độ trong suốt: viền dùng thẳng màu chữ của tông.
-const NOTICE_CLASS: Record<'info' | 'warning' | 'danger' | 'success', string> = {
+export const NOTICE_CLASS: Record<'info' | 'warning' | 'danger' | 'success', string> = {
   info: 'border-info-fg bg-info-bg text-info-fg',
   warning: 'border-warning-fg bg-warning-bg text-warning-fg',
   danger: 'border-danger-fg bg-danger-bg text-danger-fg',
@@ -48,13 +49,36 @@ export function Notice({
 
 /**
  * Lỗi tải danh sách kèm nút "Thử lại": không có nút thì nhân viên phải F5 cả trang và mất bộ lọc đang chọn.
- * `onRetry` truyền `() => void q.refetch()` của đúng truy vấn vừa lỗi.
+ * `onRetry` truyền `() => void q.refetch()` của đúng truy vấn vừa lỗi; trả Promise thì nút khoá tới khi tải xong, và `retrying`
+ * (vd `q.isFetching`) khoá thêm khi lần tải lại đến từ nơi khác. Nội dung là `children`, hoặc `message` khi chỉ có một chuỗi.
+ * Báo bận bằng aria-disabled chứ không `disabled`: nút đang giữ focus mà bị disabled thì Chromium thả focus về body.
  */
-export function LoadError({ children, onRetry, retrying = false }: { children: ReactNode; onRetry: () => void; retrying?: boolean }) {
+export function LoadError({
+  children,
+  message,
+  onRetry,
+  retrying = false,
+}: {
+  children?: ReactNode;
+  message?: string;
+  onRetry: () => void | PromiseLike<unknown>;
+  retrying?: boolean;
+}) {
+  const retry = usePressLock(onRetry);
+  const busy = retrying || retry.busy;
   return (
     <div role="alert" className="flex flex-wrap items-center gap-2 text-sm text-danger-fg">
-      <span className="min-w-0 break-words">{children}</span>
-      <button type="button" className={BTN_SECONDARY} disabled={retrying} onClick={onRetry}>
+      <span className="min-w-0 break-words">{children ?? message}</span>
+      <button
+        type="button"
+        onClick={() => {
+          if (retrying) return;
+          retry.press();
+        }}
+        aria-busy={busy || undefined}
+        aria-disabled={busy || undefined}
+        className={`${BTN_SECONDARY} aria-disabled:opacity-60`}
+      >
         Thử lại
       </button>
     </div>
@@ -98,14 +122,36 @@ export function TableSkeleton({ label, rows = 6 }: { label: string; rows?: numbe
 /**
  * Khung cuộn ngang bọc bảng. Bảng không có nút/ô nhập trong hàng thì khung không có gì focus được, bàn phím không
  * cuộn tới cột bị che (axe `scrollable-region-focusable`): tự nhận tab, kèm tên vùng cho trình đọc màn hình.
+ *
+ * `stickyHead`: `overflow-x-auto` biến khung thành vùng cuộn nên `position: sticky` của tiêu đề chỉ bám theo KHUNG này chứ không theo trang;
+ * bảng dài thì khung phải tự cuộn dọc (có trần chiều cao) để tiêu đề và cột đầu (STICKY_TH / STICKY_FIRST_TH / STICKY_FIRST_TD) đứng yên.
  */
-export function ScrollRegion({ label, className = '', children }: { label: string; className?: string; children: ReactNode }) {
+export function ScrollRegion({
+  label,
+  className = '',
+  stickyHead = false,
+  ref,
+  children,
+}: {
+  label: string;
+  className?: string;
+  stickyHead?: boolean;
+  /** Đích cuộn của AdminPagination khi đổi trang. */
+  ref?: Ref<HTMLDivElement>;
+  children: ReactNode;
+}) {
   return (
-    <div role="region" tabIndex={0} aria-label={label} className={`overflow-x-auto ${className}`.trim()}>
+    <div ref={ref} role="region" tabIndex={0} aria-label={label} className={`${stickyHead ? 'max-h-[70vh] overflow-auto' : 'overflow-x-auto'} ${className}`.trim()}>
       {children}
     </div>
   );
 }
+
+// Ô tiêu đề / cột đầu dính trong ScrollRegion `stickyHead`. Phải có nền đặc, nếu không hàng cuộn qua lộ xuyên chữ. Hàng cha cần class `group`
+// để ô cột đầu đổi nền theo hover của hàng (STICKY_FIRST_TD không tự biết hàng đang hover).
+export const STICKY_TH = 'sticky top-0 z-10 bg-stone-50';
+export const STICKY_FIRST_TH = 'sticky left-0 top-0 z-20 bg-stone-50';
+export const STICKY_FIRST_TD = 'sticky left-0 z-[5] bg-stone-0 group-hover:bg-stone-50';
 
 /** `className`: nhãn đứng trong hàng flex cùng nút (độ rộng/basis của cả cụm nhãn + ô). */
 export function Field({ label, children, hint, className = '' }: { label: string; children: ReactNode; hint?: string; className?: string }) {
