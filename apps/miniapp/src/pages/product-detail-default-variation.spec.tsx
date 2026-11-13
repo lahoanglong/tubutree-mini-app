@@ -2,9 +2,16 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { afterEach, describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ fetchProduct: vi.fn(), fetchActiveFlashSales: vi.fn(), addToCart: vi.fn(), authStatus: 'guest' }));
+const flags = vi.hoisted(() => ({ subscriptions: true }));
+vi.mock('../utils/features', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  get SUBSCRIPTIONS_IN_MINIAPP() {
+    return flags.subscriptions;
+  },
+}));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
@@ -230,11 +237,24 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
   });
 });
 
-describe('ProductDetailPage — giao định kỳ tạm ẩn ở Mini App (R-30)', () => {
-  it('không hiện dòng "Đặt định kỳ"', async () => {
+describe('ProductDetailPage — lối Đặt định kỳ theo cờ giao định kỳ ở Mini App (R-30)', () => {
+  beforeEach(() => {
     mocks.authStatus = 'authenticated';
     mocks.fetchActiveFlashSales.mockResolvedValue([]);
     mocks.fetchProduct.mockResolvedValue(product);
+  });
+  afterEach(() => {
+    flags.subscriptions = true;
+  });
+
+  it('cờ bật: có dòng "Đặt định kỳ — tiết kiệm 10%" (số đọc từ cấu hình) cho món còn hàng', async () => {
+    renderPdp();
+    await screen.findAllByText('500g');
+    expect(await screen.findByText('Đặt định kỳ — tiết kiệm 10%')).toBeInTheDocument();
+  });
+
+  it('cờ tắt: không hiện dòng "Đặt định kỳ"', async () => {
+    flags.subscriptions = false;
     renderPdp();
     await screen.findAllByText('500g');
     expect(screen.queryByText(/Đặt định kỳ/)).toBeNull();

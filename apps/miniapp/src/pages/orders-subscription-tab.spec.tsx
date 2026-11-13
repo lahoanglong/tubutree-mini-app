@@ -3,7 +3,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// Cờ SUBSCRIPTIONS_IN_MINIAPP giữ nguyên (tắt): khách đặt gói trên web vẫn phải thấy tab Định kỳ, khách không có gói thì không.
+// Cờ SUBSCRIPTIONS_IN_MINIAPP đặt tắt ở đây để ghim công tắc ẩn lối vào: khách đã có gói vẫn thấy tab Định kỳ, khách không có gói thì không. Cờ bật: orders.spec.tsx.
+vi.mock('../utils/features', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), SUBSCRIPTIONS_IN_MINIAPP: false }));
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(), fetchOrders: vi.fn(), fetchPurchasedItems: vi.fn(), getSubscriptions: vi.fn(), search: '', getNewCustomerOffer: vi.fn(),
   getPublicConfig: vi.fn().mockResolvedValue({ subscribeDiscountPct: 0.12 }),

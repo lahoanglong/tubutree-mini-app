@@ -37,6 +37,13 @@ vi.mock('../services/account-api', () => ({
   markAllNotificationsRead: mocks.markAllNotificationsRead,
 }));
 vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: mocks.getSubscriptions }));
+const flags = vi.hoisted(() => ({ subscriptions: true }));
+vi.mock('../utils/features', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  get SUBSCRIPTIONS_IN_MINIAPP() {
+    return flags.subscriptions;
+  },
+}));
 vi.mock('../services/analytics', () => ({ trackEvent: mocks.trackEvent }));
 vi.mock('../services/shop-api', () => ({ fetchPurchasedItems: mocks.fetchPurchasedItems }));
 vi.mock('../services/buy-flow-events', () => ({ trackReorderReminderCta: vi.fn() }));
@@ -391,16 +398,25 @@ describe('E-71: tin gói định kỳ', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.authStatus = 'authenticated';
+    flags.subscriptions = false;
   });
 
-  it('khách có gói đang chạy hoặc tạm dừng: có nút "Xem gói" mở tab Định kỳ', async () => {
+  it('cờ giao định kỳ bật (Mini App có lối tạo gói): tin gói luôn có nút "Xem gói", khỏi tra danh sách gói', async () => {
+    flags.subscriptions = true;
+    const dialog = await open();
+    fireEvent.click(await within(dialog).findByRole('button', { name: 'Xem gói' }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/orders?tab=subscriptions', expect.objectContaining({ replace: true }));
+    expect(mocks.getSubscriptions).not.toHaveBeenCalled();
+  });
+
+  it('cờ tắt, khách có gói đang chạy hoặc tạm dừng: có nút "Xem gói" mở tab Định kỳ', async () => {
     mocks.getSubscriptions.mockResolvedValue([{ id: 's1', status: 'PAUSED' }]);
     const dialog = await open();
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Xem gói' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/orders?tab=subscriptions', expect.objectContaining({ replace: true }));
   });
 
-  it('khách không có gói (hoặc chỉ gói đã huỷ): không có nút', async () => {
+  it('cờ tắt, khách không có gói (hoặc chỉ gói đã huỷ): không có nút', async () => {
     mocks.getSubscriptions.mockResolvedValue([{ id: 's1', status: 'CANCELLED' }]);
     const dialog = await open();
     await waitFor(() => expect(mocks.getSubscriptions).toHaveBeenCalled());

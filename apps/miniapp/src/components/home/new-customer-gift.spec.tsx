@@ -13,7 +13,14 @@ const mocks = vi.hoisted(() => ({
   guest: false,
   ensurePhone: vi.fn(),
 }));
+const flags = vi.hoisted(() => ({ subscriptions: true }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
+vi.mock('../../utils/features', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  get SUBSCRIPTIONS_IN_MINIAPP() {
+    return flags.subscriptions;
+  },
+}));
 vi.mock('../../services/shop-api', () => ({ getPublicConfig: mocks.getPublicConfig, fetchHasAnyOrder: mocks.fetchHasAnyOrder }));
 vi.mock('../../services/account-api', () => ({ getNewCustomerOffer: mocks.getNewCustomerOffer }));
 vi.mock('../../store/auth', () => ({
@@ -64,6 +71,7 @@ const expanded = async () => {
 describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    flags.subscriptions = true;
     mocks.status = 'authenticated';
     mocks.guest = false;
     mocks.fetchHasAnyOrder.mockResolvedValue(false);
@@ -89,7 +97,7 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect((region.querySelector('[style*="min-height"]') as HTMLElement).style.minHeight).toBe(`${HOME_GIFT_HEIGHT}px`);
   });
 
-  it('khách chưa có đơn + có voucher: hiện voucher (mức, đơn tối thiểu, hạn) và các lợi ích mua trực tiếp (không có định kỳ vì Mini App ẩn định kỳ), số đọc từ cấu hình', async () => {
+  it('khách chưa có đơn + có voucher: hiện voucher (mức, đơn tối thiểu, hạn) và các lợi ích mua trực tiếp, kể cả Đặt định kỳ vì Mini App đã bật định kỳ; số đọc từ cấu hình', async () => {
     renderGift();
     const region = await expanded();
     expect(region).toHaveTextContent('Mã giảm giá chào mừng 25.000đ');
@@ -97,8 +105,16 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(region).toHaveTextContent('Dùng đến 17/11/2026');
     expect(region).toHaveTextContent('Miễn phí giao hàng cho đơn từ 350.000đ');
     expect(region).toHaveTextContent('Mỗi đơn tích 2% tiền hàng thành Điểm Xanh, 1 điểm = 1.000đ');
-    expect(region).not.toHaveTextContent('Đặt định kỳ');
+    expect(region).toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
     expect(region.textContent).not.toMatch(/30\.000|199\.000|10\.000đ|12%/);
+  });
+
+  it('cờ giao định kỳ ở Mini App tắt: lợi ích không có dòng Đặt định kỳ (công tắc ẩn lối vào)', async () => {
+    flags.subscriptions = false;
+    renderGift();
+    const region = await expanded();
+    expect(region).toHaveTextContent('Miễn phí giao hàng cho đơn từ 350.000đ');
+    expect(region).not.toHaveTextContent('Đặt định kỳ');
   });
 
   it('freeship đơn đầu bật → lợi ích giao hàng nói đơn đầu (kèm ngưỡng nếu có), thay cho ngưỡng freeship thường', async () => {
@@ -137,7 +153,7 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     renderGift();
     const region = await expanded();
     expect(region).not.toHaveTextContent('Mã giảm giá chào mừng');
-    expect(region).not.toHaveTextContent('Đặt định kỳ');
+    expect(region).toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
   });
 
   it('khách đã có đơn (theo API) → không hiện gì', async () => {
@@ -183,14 +199,14 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     const region = await expanded();
     expect(region).not.toHaveTextContent('Điểm Xanh');
     expect(region).toHaveTextContent('Miễn phí giao hàng cho đơn từ 350.000đ');
-    expect(region).not.toHaveTextContent('Đặt định kỳ');
+    expect(region).toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
   });
 
   it('chưa đăng nhập: không gọi API khách, vẫn hiện lợi ích (không có voucher)', async () => {
     mocks.status = 'idle';
     renderGift();
     const region = await expanded();
-    expect(region).not.toHaveTextContent('Đặt định kỳ');
+    expect(region).toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
     expect(region).not.toHaveTextContent('Mã giảm giá chào mừng');
     expect(mocks.getNewCustomerOffer).not.toHaveBeenCalled();
   });
