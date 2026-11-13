@@ -66,6 +66,25 @@ describe('/thanh-toan — khung chờ và lỗi tải (R-7, R-22)', () => {
     expect(r.container.querySelector('[data-testid="checkout-skeleton"]')).not.toBeNull();
   });
 
+  it('khung chờ cùng lưới với trang thật: md gap-6, từ lg cột phải 360px (22,5rem) có khung giả, khối sản phẩm và tóm tắt nhường chỗ cho khung đó', async () => {
+    m.cart.mockImplementation(never);
+    const r = await mount();
+    const sk = r.container.querySelector<HTMLElement>('[data-testid="checkout-skeleton"]')!;
+    expect(sk.className).toMatch(/\bmd:gap-6\b/);
+    expect(sk.className).toContain('md:max-w-2xl');
+    expect(sk.className).toContain('lg:grid-cols-[minmax(0,1fr)_22.5rem]');
+    const aside = sk.querySelector<HTMLElement>('[data-testid="checkout-skeleton-aside"]')!;
+    expect(aside.className).toMatch(/\bhidden\b/);
+    expect(aside.className).toMatch(/\blg:flex\b/);
+    expect(aside.className).toMatch(/\blg:col-start-2\b/);
+    const bands = Array.from(sk.children).filter((el) => el !== aside) as HTMLElement[];
+    expect(bands).toHaveLength(7);
+    const hiddenAtLg = bands.filter((b) => /\blg:hidden\b/.test(b.className));
+    expect(hiddenAtLg).toHaveLength(2);
+    for (const b of bands.filter((x) => !hiddenAtLg.includes(x))) expect(b.className).toMatch(/\blg:col-start-1\b/);
+    expect(aside.className).toMatch(new RegExp(`\\blg:row-span-${bands.length - hiddenAtLg.length}\\b`));
+  });
+
   it('có đủ giỏ, địa chỉ, báo giá: không còn khung chờ', async () => {
     const r = await mount();
     expect(r.container.querySelector('[data-testid="checkout-skeleton"]')).toBeNull();

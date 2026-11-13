@@ -226,6 +226,20 @@ describe('AddToCart — ô số lượng như Mini App', () => {
     expect(container.querySelector('[aria-live="polite"]')!.textContent).toBe('2');
     expect(minus.getAttribute('aria-disabled')).toBe('false');
   });
+
+  it('từ md hàng Số lượng cho nút "Thêm vào giỏ · giá" xuống hàng riêng khi cột hẹp (nhãn không ngắt dòng, vẫn ≥ 44px), điện thoại không đổi', async () => {
+    const { container } = mount();
+    await flush();
+    const row = container.querySelector<HTMLElement>('[data-section="pdp-quantity"]')!;
+    expect(row.className).toMatch(/\bmd:flex-wrap\b/);
+    expect(row.className).not.toMatch(/(^|\s)flex-wrap\b/);
+    const add = row.querySelector<HTMLButtonElement>('[data-testid="pdp-add-to-cart"]')!;
+    expect(add.className).toMatch(/\bwhitespace-nowrap\b/);
+    expect(add.className).toMatch(/\bmin-h-11\b/);
+    expect(add.className).toMatch(/\bhidden\b/);
+    expect(add.className).toMatch(/\bmd:inline-flex\b/);
+    expect(add.textContent).toMatch(/^Thêm vào giỏ · /);
+  });
 });
 
 describe('AddToCart — áp mã mua chung từ ?ma=', () => {

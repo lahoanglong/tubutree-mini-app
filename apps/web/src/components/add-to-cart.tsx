@@ -448,11 +448,12 @@ export default function AddToCart({
         </p>
       )}
 
-      <div data-section="pdp-quantity" className={`mt-4 flex items-center gap-3 tubu-pdp-order-6 max-md:justify-between ${phoneBand}`}>
+      <div data-section="pdp-quantity" className={`mt-4 flex items-center gap-3 tubu-pdp-order-6 max-md:justify-between md:flex-wrap ${phoneBand}`}>
         <span className="text-sm font-semibold text-stone-900 md:hidden">Số lượng</span>
         <QuantitySelector value={qty} max={maxQty} onChange={setQty} />
-        {/* Từ md: nút thêm giỏ ngay cạnh số lượng. Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}
-        <button type="button" data-testid="pdp-add-to-cart" onClick={(e) => { addSource.current = e.currentTarget; onAdd(); }} disabled={cannotBuy} aria-busy={addBusy} aria-disabled={busy || undefined} className={`${ui.btnSecondary} hidden flex-1 tabular-nums md:inline-flex`}>
+        {/* Từ md: nút thêm giỏ ngay cạnh số lượng; cột thông tin hẹp (~344px ở 768) không đủ chỗ cho "Thêm vào giỏ · giá" nên nút xuống hàng riêng thay vì gãy chữ.
+            Dưới md hai nút nằm ở thanh dính đáy (bên dưới). */}
+        <button type="button" data-testid="pdp-add-to-cart" onClick={(e) => { addSource.current = e.currentTarget; onAdd(); }} disabled={cannotBuy} aria-busy={addBusy} aria-disabled={busy || undefined} className={`${ui.btnSecondary} hidden flex-1 whitespace-nowrap tabular-nums md:inline-flex`}>
           {addLabel}
         </button>
       </div>

@@ -71,12 +71,15 @@ describe('ProductStoryShowcase (web)', () => {
   it('sản phẩm của nhãn chủ lực chưa có cấu hình: tự vẽ điểm chỉ Thương hiệu, Quy cách, Hương đọc từ tên cùng câu kết', () => {
     const brand = { ...PRODUCT, storyConfig: null, ingredients: null, variations: [PRODUCT.variations[0]], slug: 'nuoc-giat-huong-bac-ha-fuwa3e-750ml-aaaaaa', name: 'Nước giặt hương Bạc hà Fuwa3e 750ml', brand: 'Tubu Tree' } as ProductDetail;
     const { container } = mount(<ProductStoryShowcase product={brand} />);
-    const callouts = qa(q(container, 'story-hud')!, 'story-callout').map((c) => c.textContent);
-    expect(callouts).toHaveLength(3);
-    expect(callouts[0]).toContain('Thương hiệu');
-    expect(callouts[0]).toContain('Fuwa3e');
-    expect(callouts[1]).toContain('750ml');
-    expect(callouts[2]).toContain('Bạc hà');
+    // Ảnh sản phẩm là poster (không có ảnh tách nền): điểm nhấn là chip dưới ảnh, không có chú thích nào đè lên ảnh.
+    expect(q(container, 'story-hud')).toBeNull();
+    expect(qa(container, 'story-callout')).toHaveLength(0);
+    const points = qa(q(container, 'story-points')!, 'story-point').map((c) => c.textContent);
+    expect(points).toHaveLength(3);
+    expect(points[0]).toContain('Thương hiệu');
+    expect(points[0]).toContain('Fuwa3e');
+    expect(points[1]).toContain('750ml');
+    expect(points[2]).toContain('Bạc hà');
     expect(q(container, 'story-closing')!.textContent).toBe('Fuwa3e, có tại Tubu Tree');
   });
 
@@ -107,49 +110,51 @@ describe('ProductStoryShowcase (web)', () => {
     expect(off!.style.transform).toBe('');
   });
 
-  it('step chips switch the active step (aria-current)', () => {
+  it('mọi chương cùng hiện thành thẻ bấm được; bấm một thẻ chọn chương đó (aria-current) và thả thêm lớp nguyên liệu', () => {
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
-    const chips = qa(container, 'story-step-chip');
-    expect(chips.map((c) => c.textContent)).toEqual(['01', '02']);
-    chips.forEach((c) => expect(c.getAttribute('aria-label')!.startsWith(c.textContent!)).toBe(true));
-    expect(chips[0]!.getAttribute('aria-current')).toBe('step');
-    expect(q(container, 'story-step-panel')!.textContent).toContain('Tinh tuyển');
+    const list = q(container, 'product-story')!.querySelector('ol')!;
+    expect(list.tagName).toBe('OL');
+    expect(list.closest('nav')!.getAttribute('aria-label')).toBe('Các bước');
+    const cards = qa(container, 'story-step-card');
+    expect(cards.map((c) => c.querySelector('.tubu-story-num')!.textContent)).toEqual(['01', '02']);
+    expect(cards[0]!.textContent).toContain('Tinh tuyển');
+    expect(cards[0]!.textContent).toContain('Vỏ bưởi tươi.');
+    expect(cards[1]!.textContent).toContain('Cùng sả chanh.');
+    expect(cards.every((c) => c.tagName === 'BUTTON' && c.getAttribute('type') === 'button')).toBe(true);
+    expect(cards[0]!.getAttribute('aria-current')).toBe('step');
     expect(qa(container, 'story-layer')).toHaveLength(1);
-    click(chips[1]!);
-    expect(qa(container, 'story-step-chip')[1]!.getAttribute('aria-current')).toBe('step');
-    expect(qa(container, 'story-step-chip')[0]!.hasAttribute('aria-current')).toBe(false);
-    expect(q(container, 'story-step-panel')!.textContent).toContain('Cùng sả chanh');
+    click(cards[1]!);
+    expect(qa(container, 'story-step-card')[1]!.getAttribute('aria-current')).toBe('step');
+    expect(qa(container, 'story-step-card')[0]!.hasAttribute('aria-current')).toBe(false);
     expect(qa(container, 'story-layer')).toHaveLength(2);
     expect(qa(container, 'story-layer').every((l) => l.getAttribute('aria-hidden') === 'true')).toBe(true);
+    // Chương chưa chọn vẫn đọc được: không ẩn chữ sau thẻ.
+    expect(qa(container, 'story-step-card')[0]!.textContent).toContain('Vỏ bưởi tươi.');
   });
 
-  it('reduced motion renders all steps statically', () => {
+  it('reduced motion: vẽ mọi lớp ngay (bản tĩnh) mà các chương vẫn là cùng danh sách thẻ', () => {
     reduced = true;
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
     expect(q(container, 'product-story')!.getAttribute('data-animated')).toBe('false');
-    const list = q(container, 'story-static-steps')!;
-    expect(list.tagName).toBe('OL');
-    expect(list.querySelectorAll('li')).toHaveLength(2);
-    expect(q(container, 'story-step-chip')).toBeNull();
+    expect(qa(container, 'story-step-card')).toHaveLength(2);
     expect(qa(container, 'story-layer')).toHaveLength(2);
+    expect(qa(container, 'story-layer').every((l) => l.getAttribute('data-animated') === 'false')).toBe(true);
   });
 
-  it('fullscreen: khối sân khấu + chip được ghim, các mốc cuộn nằm ngoài khối đó nên sân khấu không trôi khỏi màn khi cuộn qua mốc', () => {
+  it('không còn mốc cuộn rỗng và cột ghim: không .tubu-story-sentinel, .tubu-story-pin hay .tubu-story-sticky ở khung nội tuyến lẫn toàn màn', () => {
+    for (const fullscreen of [false, true]) {
+      const { container, unmount } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen={fullscreen} onClose={() => {}} />);
+      for (const cls of ['tubu-story-sentinel', 'tubu-story-pin', 'tubu-story-sticky', 'tubu-story-panel', 'tubu-story-chips']) expect(container.querySelector(`.${cls}`), `${cls} fullscreen=${fullscreen}`).toBeNull();
+      expect(container.querySelector('[data-testid="story-step-panel"]')).toBeNull();
+      unmount();
+    }
+  });
+
+  it('fullscreen: khung cuộn chứa đủ sân khấu và mọi chương (không ghim, không mốc)', () => {
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} fullscreen onClose={() => {}} />);
     const scroll = container.querySelector('.tubu-story-scroll')!;
-    const pin = scroll.querySelector(':scope > .tubu-story-pin');
-    expect(pin).not.toBeNull();
-    expect(pin!.querySelector('[data-testid="story-stage"]')).not.toBeNull();
-    expect(pin!.querySelector('[data-testid="story-step-chip"]')).not.toBeNull();
-    expect(pin!.querySelector('.tubu-story-sentinel')).toBeNull();
-    expect(scroll.querySelectorAll(':scope > .tubu-story-sentinel')).toHaveLength(2);
-  });
-
-  it('khung nội tuyến giữ các mốc trong cột bước để md+ ghim sân khấu suốt đường cuộn', () => {
-    const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
-    expect(container.querySelector('.tubu-story-pin')).toBeNull();
-    expect(container.querySelectorAll('.tubu-story-sentinel')).toHaveLength(2);
-    expect(q(container, 'story-step-panel')!.closest('.grid')!.contains(container.querySelector('.tubu-story-sentinel'))).toBe(true);
+    expect(scroll.querySelector('[data-testid="story-stage"]')).not.toBeNull();
+    expect(scroll.querySelectorAll('[data-testid="story-step-card"]')).toHaveLength(2);
   });
 
   it('fullscreen: Esc calls onClose, role=dialog, buy bar buttons call handlers', () => {
@@ -218,6 +223,17 @@ describe('ProductStoryShowcase (web)', () => {
     expect(callout.textContent).toContain(evil);
   });
 
+  it('poster: nhãn độc hại ở điểm nhấn cũng chỉ là chữ, không thành HTML', () => {
+    const evil = '<img src=x onerror=alert(1)>';
+    const { cutoutUrl: _omit, ...noCut } = CONFIG;
+    void _omit;
+    const config: ProductStoryConfig = { ...noCut, scenes: [{ kind: 'hud_callouts', closing: 'ok', points: [{ id: 'p1', xPct: 10, yPct: 10, label: evil, value: evil, side: 'left' }] }] };
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={config} />);
+    const point = q(container, 'story-point')!;
+    expect(point.querySelector('img')).toBeNull();
+    expect(point.textContent).toContain(evil);
+  });
+
   it('previewConfig overrides product config', () => {
     const preview: ProductStoryConfig = { ...CONFIG, enabled: false, scenes: [{ kind: 'hud_callouts', closing: 'Xem thử', points: [{ id: 'p1', xPct: 10, yPct: 10, label: 'Thử', side: 'left' }] }] };
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={preview} />);
@@ -225,35 +241,121 @@ describe('ProductStoryShowcase (web)', () => {
     expect(q(container, 'story-callout')!.textContent).toContain('Thử');
   });
 
-  it('md layout: root has two-column classes (md:grid-cols-2), stage sticky', () => {
+  it('Editorial split-card: ảnh (cột phải từ lg) và các chương (cột trái từ lg) nằm trong cùng một lưới; dưới lg một cột, ảnh trước', () => {
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
-    const grid = container.querySelector('[data-testid="product-story"] .md\\:grid-cols-2')!;
-    expect(grid).not.toBeNull();
-    expect(q(grid, 'story-stage')!.parentElement!.className).toContain('tubu-story-sticky');
-    expect(q(grid, 'story-step-panel')).not.toBeNull();
+    const split = container.querySelector('.tubu-story-split')!;
+    expect(split.className).not.toContain('tubu-story-split-single');
+    const [visual, chapters] = Array.from(split.children) as HTMLElement[];
+    expect(visual!.className).toContain('tubu-story-visual');
+    expect(visual!.querySelector('[data-testid="story-stage"]')).not.toBeNull();
+    expect(chapters!.className).toContain('tubu-story-chapters');
+    expect(chapters!.querySelectorAll('[data-testid="story-step-card"]')).toHaveLength(2);
+    const css = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
+    const lgBlock = /@container tubu-story \(min-width: 56rem\) \{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
+    expect(lgBlock).toMatch(/\.tubu-story-split \{[^}]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+    expect(lgBlock).toMatch(/\.tubu-story-split > \.tubu-story-visual \{ order: 2; \}/);
+    expect(lgBlock).toMatch(/\.tubu-story-split > \.tubu-story-chapters \{ order: 1; \}/);
+    // Dưới lg không đặt hai cột: khung gốc một cột.
+    expect(/\.tubu-story-split \{([^}]*)\}/.exec(css)?.[1]).toMatch(/grid-template-columns: minmax\(0, 1fr\)/);
   });
 
-  it('md+: ghim dưới header dính của trang (var(--header-h)) để sân khấu và chip không chui xuống dưới header', () => {
-    const { container } = mount(<ProductStoryShowcase product={PRODUCT} />);
-    const stageCol = q(container, 'story-stage')!.parentElement!;
-    const stepsCol = q(container, 'story-step-panel')!.parentElement!;
-    for (const el of [stageCol, stepsCol]) expect(el.className).toContain('tubu-story-sticky');
+  it('bố cục theo bề rộng khối Story (container query), không theo cửa sổ: khung xem trước điện thoại ở máy tính vẫn một cột', () => {
     const css = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
-    const at = css.indexOf('.tubu-story-sticky {');
-    expect(css.slice(css.lastIndexOf('@media', at), at)).toContain('min-width: 48rem');
-    const rule = /\.tubu-story-sticky\s*\{([^}]*)\}/.exec(css)?.[1] ?? '';
-    expect(rule).toContain('position: sticky');
-    expect(rule).toContain('var(--header-h, 0px)');
+    expect(/\.tubu-story \{([^}]*)\}/.exec(css)?.[1]).toMatch(/container:\s*tubu-story \/ inline-size/);
+    const storyMedia = [...css.matchAll(/@media \(min-width: (?:48|64)rem\) \{\s*\.tubu-story/g)];
+    expect(storyMedia).toHaveLength(0);
+  });
+
+  it('khối Story rộng từ 40rem giữ ảnh vừa khổ 26rem và chia chương thành cột; từ 56rem trả chương về một cột bên trái; không ghim cột nào', () => {
+    const css = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
+    const md = /@container tubu-story \(min-width: 40rem\) \{\s*\.tubu-story-visual([\s\S]*?)\n\}/.exec(css)?.[0] ?? '';
+    expect(md).toContain('max-width: 26rem');
+    expect(md).toMatch(/\.tubu-story-timeline \{[^}]*repeat\(auto-fit, minmax\(12rem, 1fr\)\)/);
+    expect(css).not.toMatch(/\.tubu-story-sticky/);
+    expect(css).not.toMatch(/\.tubu-story-sentinel/);
+    expect(css).not.toMatch(/\.tubu-story[^{]*\{[^}]*40vh/);
+    expect(css).not.toMatch(/\.tubu-story[^{]*\{[^}]*120vh/);
   });
 
   it('không có bước nào (chỉ vòng cung và HUD): một cột, sân khấu căn giữa, không để nửa phải trống', () => {
     const arcHud: ProductStoryConfig = { ...CONFIG, scenes: CONFIG.scenes.filter((s) => s.kind !== 'ingredient_assembly') };
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={arcHud} />);
-    expect(q(container, 'story-step-chip')).toBeNull();
-    const grid = q(container, 'story-stage')!.closest('.grid')!;
-    expect(grid.className).not.toContain('md:grid-cols-2');
-    expect(grid.className).toContain('md:max-w-lg');
-    expect(grid.className).toContain('md:mx-auto');
+    expect(q(container, 'story-step-card')).toBeNull();
+    const split = q(container, 'story-stage')!.closest('.tubu-story-split')!;
+    expect(split.className).toContain('tubu-story-split-single');
+    const css = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
+    const single = /\.tubu-story-split-single \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    expect(single).toContain('max-width: 32rem');
+    expect(single).toContain('margin-inline: auto');
+  });
+});
+
+describe('ảnh poster không bị phủ gì lên: chip dưới ảnh thay sprite và chú thích (W133)', () => {
+  const { cutoutUrl: _omit, ...POSTER } = CONFIG;
+  void _omit;
+
+  it('poster (không có ảnh tách nền): không lớp nguyên liệu, không chú thích, không đường nối, không chấm trên ảnh; điểm nhấn thành chip dưới khung ảnh', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={POSTER} />);
+    const stage = q(container, 'story-stage')!;
+    expect(stage.getAttribute('data-frame')).toBe('floating-card');
+    expect(stage.querySelectorAll('[data-testid="story-layer"], [data-testid="story-callout"], [data-testid="story-hud"], svg, .tubu-story-dot')).toHaveLength(0);
+    const points = q(container, 'story-points')!;
+    expect(points.tagName).toBe('UL');
+    expect(points.getAttribute('aria-label')).toBe('Thành phần nổi bật');
+    expect(stage.contains(points)).toBe(false);
+    expect(stage.parentElement!.contains(points)).toBe(true);
+    // Chip nằm sau khung ảnh trong cùng cột (dưới ảnh).
+    expect(stage.compareDocumentPosition(points) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const items = qa(points, 'story-point');
+    expect(items).toHaveLength(2);
+    expect(items[0]!.textContent).toContain('Bồ kết');
+    expect(items[0]!.textContent).toContain('12%');
+    expect(items[1]!.textContent).toBe('Sả');
+    expect(q(container, 'story-closing')!.textContent).toBe('An lành');
+  });
+
+  it('poster: chọn chương không thả lớp nào lên ảnh, kể cả khi giảm chuyển động', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={POSTER} />);
+    click(qa(container, 'story-step-card')[1]!);
+    expect(qa(container, 'story-layer')).toHaveLength(0);
+    expect(qa(container, 'story-step-card')[1]!.getAttribute('aria-current')).toBe('step');
+    reduced = true;
+    const still = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={POSTER} />);
+    expect(qa(still.container, 'story-layer')).toHaveLength(0);
+    expect(qa(still.container, 'story-callout')).toHaveLength(0);
+  });
+
+  it('ảnh tách nền thật (cutout): sprite và chú thích mới được vẽ đè lên ảnh, không có chip', () => {
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={CONFIG} />);
+    const stage = q(container, 'story-stage')!;
+    expect(stage.getAttribute('data-frame')).toBe('cutout');
+    expect(stage.querySelectorAll('[data-testid="story-layer"]')).toHaveLength(1);
+    expect(stage.querySelectorAll('[data-testid="story-callout"]')).toHaveLength(2);
+    expect(q(container, 'story-points')).toBeNull();
+  });
+
+  it('admin ép imageFrame: floating-card tắt đè dù có ảnh tách nền; cutout bật đè dù không có', () => {
+    const forcedCard = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={{ ...CONFIG, imageFrame: 'floating-card' }} />);
+    expect(qa(forcedCard.container, 'story-callout')).toHaveLength(0);
+    expect(qa(forcedCard.container, 'story-point')).toHaveLength(2);
+    forcedCard.unmount();
+    const forcedCut = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={{ ...POSTER, imageFrame: 'cutout' }} />);
+    expect(qa(forcedCut.container, 'story-callout')).toHaveLength(2);
+    expect(qa(forcedCut.container, 'story-point')).toHaveLength(0);
+  });
+
+  it('chip dưới ảnh cùng số đo ở Mini và web: đệm, nền, viền, bo, cỡ chữ, kiểu chữ nhãn và giá trị', () => {
+    const rule = (css: string, selector: string): string => [...css.matchAll(new RegExp(`^${selector.replace(/\./g, '\\.')} \\{[^}]*\\}`, 'gm'))].map((m) => m[0]).join('\n');
+    const decl = (block: string, prop: string): string | undefined => new RegExp(`(?:^|[\\s;{])${prop}:\\s*([^;}]+)`).exec(block)?.[1]?.trim();
+    const webCss = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
+    const miniCss = readFileSync(resolve(__dirname, '../../../../miniapp/src/css/story.css'), 'utf8');
+    const mini = rule(miniCss, '.tubu-story-point');
+    const web = rule(webCss, '.tubu-story-point');
+    expect(mini).not.toBe('');
+    expect(web).not.toBe('');
+    for (const prop of ['padding', 'background', 'border', 'border-radius', 'font-size', 'line-height']) expect(decl(web, prop), prop).toBe(decl(mini, prop));
+    expect(decl(rule(webCss, '.tubu-story-point-label'), 'font-weight')).toBe(decl(rule(miniCss, '.tubu-story-point-label'), 'font-weight'));
+    expect(decl(rule(webCss, '.tubu-story-point-value'), 'color')).toBe(decl(rule(miniCss, '.tubu-story-point-value'), 'color'));
   });
 });
 
@@ -323,6 +425,7 @@ const imgLayer = (id: string, imageUrl: string) => ({ id, imageUrl, label: id, f
 const IMAGE_STORY: ProductStoryConfig = {
   version: 1,
   enabled: true,
+  cutoutUrl: 'https://cdn.test/cutout.png',
   scenes: [
     {
       kind: 'ingredient_assembly',
@@ -356,11 +459,11 @@ describe('W40B: tải trước ảnh chương kế và chuyển chương mượt
   it('mở ở chương 01 thì tải ảnh nguyên liệu của chương 02; sang chương kế tải tiếp chương sau nó; cuối cùng và quay lại không tải lại', () => {
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={IMAGE_STORY} />);
     expect(loaded).toEqual(['/api/ing-1.png']);
-    const chips = qa(container, 'story-step-chip');
+    const chips = qa(container, 'story-step-card');
     click(chips[1]!);
     expect(loaded).toEqual(['/api/ing-1.png', '/api/ing-2.png']);
-    click(qa(container, 'story-step-chip')[2]!);
-    click(qa(container, 'story-step-chip')[0]!);
+    click(qa(container, 'story-step-card')[2]!);
+    click(qa(container, 'story-step-card')[0]!);
     expect(loaded).toEqual(['/api/ing-1.png', '/api/ing-2.png']);
   });
 
@@ -403,15 +506,22 @@ describe('W40B: tải trước ảnh chương kế và chuyển chương mượt
     expect(loaded).toEqual(['/api/ing-1.png']);
   });
 
-  it('đổi chương dựng lại khối nội dung (key theo bước) để chạy lại hiệu ứng vào, chữ đổi theo', () => {
+  it('ảnh poster (không có ảnh tách nền) không vẽ lớp nguyên liệu nên không tải trước ảnh nào', () => {
+    const { cutoutUrl: _omit, ...poster } = IMAGE_STORY;
+    void _omit;
+    const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={poster} />);
+    click(qa(container, 'story-step-card')[1]!);
+    expect(loaded).toEqual([]);
+  });
+
+  it('chọn chương đổi thẻ đang chọn (aria-current) mà không dựng lại các thẻ khác', () => {
     const { container } = mount(<ProductStoryShowcase product={PRODUCT} previewConfig={IMAGE_STORY} />);
-    const before = q(container, 'story-step-panel')!.firstElementChild!;
-    expect(before.classList.contains('tubu-story-panel-in')).toBe(true);
-    click(qa(container, 'story-step-chip')[1]!);
-    const after = q(container, 'story-step-panel')!.firstElementChild!;
-    expect(after.classList.contains('tubu-story-panel-in')).toBe(true);
-    expect(after).not.toBe(before);
-    expect(after.textContent).toContain('Chương 2');
+    const before = qa(container, 'story-step-card');
+    click(before[1]!);
+    const after = qa(container, 'story-step-card');
+    expect(after[0]).toBe(before[0]);
+    expect(after[1]).toBe(before[1]);
+    expect(after.map((c) => c.getAttribute('aria-current'))).toEqual([null, 'step', null]);
   });
 
   describe('mini.css', () => {
@@ -419,31 +529,35 @@ describe('W40B: tải trước ảnh chương kế và chuyển chương mượt
     const reduced = [...css.matchAll(/@media \(prefers-reduced-motion: reduce\)\s*\{([\s\S]*?)\n\}/g)].map((m) => m[1]).join('\n');
     const line = (sel: string) => new RegExp(`${sel.replace(/[.[\]()']/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
 
-    it('chuyển chương, lớp rơi, nền cảnh và thanh tiến trình dùng ease-story 240ms như Mini', () => {
-      expect(line('.tubu-story-panel-in')).toMatch(/animation:\s*tubu-story-panel-in var\(--dur-story\) var\(--ease-story\) both/);
+    it('chọn thẻ chương, lớp rơi và nền cảnh dùng ease-story 240ms như Mini', () => {
       expect(line(".tubu-story-layer[data-animated='true']")).toMatch(/animation:\s*tubu-story-fall var\(--dur-story\) var\(--ease-story\) both/);
       expect(line('.tubu-story-stage')).toMatch(/transition:\s*background var\(--dur-story\) var\(--ease-story\)/);
-      expect(line('.tubu-story-progress > span')).toMatch(/transition:\s*width var\(--dur-story\) var\(--ease-story\)/);
-      expect(line('.tubu-story-chip')).toMatch(/transition:\s*transform var\(--p-dur-release\) var\(--p-ease-out\), background-color var\(--dur-story\) var\(--ease-story\), color var\(--dur-story\) var\(--ease-story\)/);
+      expect(line('.tubu-story-step')).toMatch(/transition:\s*background-color var\(--dur-story\) var\(--ease-story\), border-color var\(--dur-story\) var\(--ease-story\)/);
       expect(css).toMatch(/--ease-story:\s*var\(--p-ease-story\)/);
       expect(css).toMatch(/--dur-story:\s*var\(--p-dur-story\)/);
     });
 
-    it('giảm chuyển động tắt hiệu ứng vào của chương và đổi màu chip', () => {
-      expect(reduced).toMatch(/\.tubu-story-panel-in/);
-      expect(reduced).toMatch(/\.tubu-story-chip/);
+    it('giảm chuyển động tắt lớp rơi, nền cảnh và đổi màu thẻ chương', () => {
+      expect(reduced).toMatch(/\.tubu-story-layer/);
+      expect(reduced).toMatch(/\.tubu-story-step/);
       expect(reduced).toMatch(/animation:\s*none;\s*transition:\s*none/);
     });
 
-    it('số đều cho cả dải câu chuyện, chip và nhãn vòng cung; vùng chạm chip, vòng cung, nút đóng, nút mua từ 44px', () => {
+    it('số đều cho cả dải câu chuyện và nhãn vòng cung; vùng chạm thẻ chương, vòng cung, nút đóng, nút mua từ 44px', () => {
       expect(line('.tubu-story')).toMatch(/font-variant-numeric:\s*tabular-nums/);
-      expect(line('.tubu-story-chip')).toMatch(/font-variant-numeric:\s*tabular-nums/);
       expect(line('.tubu-story-arc-item')).toMatch(/font-variant-numeric:\s*tabular-nums/);
-      for (const sel of ['.tubu-story-chip', '.tubu-story-arc-item', '.tubu-story-close']) {
+      for (const sel of ['.tubu-story-step', '.tubu-story-arc-item', '.tubu-story-close']) {
         expect(line(sel), sel).toMatch(/min-height:\s*2\.75rem/);
-        expect(line(sel), sel).toMatch(/min-width:\s*2\.75rem/);
       }
+      for (const sel of ['.tubu-story-arc-item', '.tubu-story-close']) expect(line(sel), sel).toMatch(/min-width:\s*2\.75rem/);
       expect(line('.tubu-story-btn')).toMatch(/min-height:\s*3rem/);
+    });
+
+    it('thẻ chương: viền mảnh, thẻ đang chọn nhấn viền chính và nền nhạt, chỉ dùng token', () => {
+      expect(line('.tubu-story-step')).toMatch(/border:\s*1px solid var\(--color-border-subtle\)/);
+      expect(line('.tubu-story-step')).toMatch(/border-radius:\s*var\(--radius-card\)/);
+      expect(line(".tubu-story-step[aria-current='step']")).toMatch(/border-color:\s*var\(--color-action-primary-bg\)/);
+      expect(line(".tubu-story-step[aria-current='step']")).toMatch(/background:\s*var\(--color-bg-subtle\)/);
     });
   });
 });
@@ -675,7 +789,8 @@ describe('W70B: giảm chuyển động theo dõi thay đổi khi đang xem (nh�
     on = true;
     act(() => listeners.forEach((fn) => fn()));
     expect(q(container, 'product-story')!.getAttribute('data-animated')).toBe('false');
-    expect(q(container, 'story-static-steps')).not.toBeNull();
+    expect(qa(container, 'story-layer').every((l) => l.getAttribute('data-animated') === 'false')).toBe(true);
+    expect(qa(container, 'story-step-card')).toHaveLength(2);
     on = false;
     act(() => listeners.forEach((fn) => fn()));
     expect(q(container, 'product-story')!.getAttribute('data-animated')).toBe('true');

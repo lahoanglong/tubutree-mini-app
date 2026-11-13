@@ -221,6 +221,59 @@ describe('/gio-hang — thanh dính đáy như Mini App', () => {
   });
 });
 
+describe('/gio-hang — khổ máy tính bảng và máy tính (W133)', () => {
+  it('khung tóm tắt dính dưới header từ lg và KHÔNG có vùng cuộn riêng (không max-h, không overflow-y-auto)', async () => {
+    const c = await mount();
+    const card = c.querySelector('[data-testid="cart-summary"]')!;
+    expect(card.className).toContain('lg:sticky');
+    expect(card.className).toContain('lg:top-[calc(var(--header-h)+16px)]');
+    expect(card.className).toContain('lg:self-start');
+    expect(card.className).not.toMatch(/overflow-y-auto|max-h-/);
+  });
+
+  it('thanh dính ở md: nội dung cùng cột 2xl với lưới; các khoản giảm của thanh ẩn từ md (khung tóm tắt đã ghi), tổng và nút vẫn hiện', async () => {
+    state.cart = cartOf([line({})], { discount: 50000, couponCode: 'XANH50' });
+    const c = await mount();
+    const inner = bar(c).firstElementChild as HTMLElement;
+    expect(inner.className).toContain('md:mx-auto');
+    expect(inner.className).toContain('md:max-w-2xl');
+    expect(inner.className).not.toMatch(/(^|\s)max-w-/);
+    const inBar = Array.from(bar(c).querySelectorAll('*')).find((e) => e.children.length === 0 && e.textContent === 'Giảm giá')!;
+    expect(inBar.closest('.md\\:hidden')).not.toBeNull();
+    expect(bar(c).querySelector('[data-testid="cart-total-value"]')!.closest('.md\\:hidden')).toBeNull();
+    expect(bar(c).querySelector('a[href="/thanh-toan"]')!.closest('.md\\:hidden')).toBeNull();
+    const rows = c.querySelector('[data-testid="cart-summary-rows"]')!;
+    expect(rows.textContent).toContain('Giảm giá');
+    expect(rows.className).not.toMatch(/(^|\s)(md:)?hidden\b/);
+  });
+
+  it('không có khoản giảm: thanh dính không dựng khối giảm giá (không thêm lề trên dòng tổng)', async () => {
+    const c = await mount();
+    expect(bar(c).querySelector('.md\\:hidden')).toBeNull();
+  });
+
+  it('tiêu đề cùng cột với lưới ở md: main chặn ở 45rem tới hết md, nới lại ở lg', async () => {
+    const c = await mount();
+    const main = c.querySelector('main')!;
+    expect(main.className).toContain('md:max-w-[45rem]');
+    expect(main.className).toContain('lg:max-w-frame');
+  });
+
+  it('khung chờ dùng đúng lớp lưới của giỏ thật và có khung tóm tắt giả từ lg', async () => {
+    const r = render(<CartPage />);
+    mounted.push(r);
+    const sk = r.container.querySelector<HTMLElement>('[role="status"][aria-busy="true"]')!;
+    expect(sk).not.toBeNull();
+    await flush(6);
+    const grid = r.container.querySelector<HTMLElement>('[data-testid="cart-summary"]')!.parentElement!;
+    expect(grid.className).toContain('lg:grid-cols-[minmax(0,1fr)_360px]');
+    expect(sk.className).toContain(grid.className);
+    const aside = sk.lastElementChild as HTMLElement;
+    expect(aside.className).toMatch(/\bhidden\b/);
+    expect(aside.className).toMatch(/\blg:flex\b/);
+  });
+});
+
 // P2 #13, #14 của review hình bước chốt: một nhãn cho cùng một số ở 375 và 1280; nút − khoá ở số lượng 1 như Mini; tên dòng cùng độ đậm.
 describe('/gio-hang — một nhãn, nút − và tên dòng như Mini App (G2)', () => {
   const summary = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="cart-summary"]')!;
