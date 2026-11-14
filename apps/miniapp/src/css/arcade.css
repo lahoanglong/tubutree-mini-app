@@ -122,8 +122,6 @@
   }
 }
 .tubu-arcade-panel {
-  /* Chip Tip: cao 44px thật (chip md mặc định 36px), không chỉ vùng chạm dôi bằng ::after. */
-  --arcade-hit-min: 44px;
   position: absolute;
   right: 0;
   bottom: 0;

@@ -480,11 +480,11 @@ describe('ArcadeGameOverlay: kết quả khi đã đăng nhập', () => {
     expect(onClose.mock.invocationCallOrder[0]!).toBeLessThan(mocks.navigate.mock.invocationCallOrder[0]!);
   });
 
-  it('chip Tip cao tối thiểu 44px thật qua token của bảng kết quả', async () => {
+  it('chip Tip cao tối thiểu 44px thật (2,75rem, ghi đè min-height 36px nội tại của Chip)', async () => {
     mountOverlay();
     await playToEnd(dewRun(120, 5));
     const chip = within(screen.getByTestId('arcade-result')).getByRole('button', { name: 'Xem Nước rửa chén Bồ Hòn' });
-    expect(chip.style.minHeight).toBe('var(--arcade-hit-min)');
+    expect(chip.style.minHeight).toBe('2.75rem');
     expect(chip.closest('.tubu-arcade-panel')).not.toBeNull();
   });
 
