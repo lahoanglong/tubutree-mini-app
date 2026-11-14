@@ -5,9 +5,11 @@ import { validate } from 'class-validator';
 import { COPY_DRAFT_MAX_BATCH } from '@tubutree/shared-types';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import type { CatalogAuditService } from './catalog-audit.service';
-import { CatalogQualityController, CopyApproveDto, CopyDraftsDto } from './catalog-quality.controller';
+import { CatalogQualityController, CopyApproveDto, CopyDraftsDto, ExtractIngredientsDto, INGREDIENT_IMAGE_DTO_MAX, SaveIngredientsDto } from './catalog-quality.controller';
 import type { CopyApproveService } from './copy-approve.service';
 import type { CopyDraftService } from './copy-draft.service';
+import type { IngredientEnrichService } from './ingredient-enrich.service';
+import { OCR_IMAGE_MAX_BYTES } from '../ai-advisor/ingredient-ocr';
 
 const errs = (cls: new () => object, body: object) => validate(plainToInstance(cls, body));
 const approveItem = (id: string, over: object = {}) => ({ id, shortDesc: 'ngắn', description: 'Mô tả', ingredients: ['Bơ'], ...over });
@@ -76,7 +78,16 @@ describe('CatalogQualityController', () => {
   const audit = { audit: jest.fn().mockResolvedValue({ products: [], truncated: false }) };
   const drafts = { generate: jest.fn().mockResolvedValue({ drafts: [], failed: [] }) };
   const approval = { approve: jest.fn().mockResolvedValue({ saved: [], rejected: [] }) };
-  const ctrl = new CatalogQualityController(audit as unknown as CatalogAuditService, drafts as unknown as CopyDraftService, approval as unknown as CopyApproveService);
+  const enrich = {
+    extract: jest.fn().mockResolvedValue({ id: 'p1', readable: true, ingredients: [], warnings: [] }),
+    save: jest.fn().mockResolvedValue({ id: 'p1', ingredients: [], added: 0 }),
+  };
+  const ctrl = new CatalogQualityController(
+    audit as unknown as CatalogAuditService,
+    drafts as unknown as CopyDraftService,
+    approval as unknown as CopyApproveService,
+    enrich as unknown as IngredientEnrichService,
+  );
 
   it('chỉ ADMIN, prefix admin/catalog-quality (không dưới admin/catalog-products/:id)', () => {
     expect(Reflect.getMetadata(ROLES_KEY, CatalogQualityController)).toEqual(['ADMIN']);
@@ -86,6 +97,14 @@ describe('CatalogQualityController', () => {
     expect(Reflect.getMetadata('path', proto.getPancakeZeroPrice)).toBe('pancake-zero-price');
     expect(Reflect.getMetadata('path', proto.copyDrafts)).toBe('copy-drafts');
     expect(Reflect.getMetadata('path', proto.copyApprove)).toBe('copy-approve');
+    expect(Reflect.getMetadata('path', proto.extractIngredients)).toBe(':id/extract-ingredients');
+    expect(Reflect.getMetadata('path', proto.saveIngredients)).toBe(':id/ingredients');
+  });
+
+  it('extract-ingredients giới hạn 10 lượt mỗi phút (gọi AI trả phí)', () => {
+    const proto = CatalogQualityController.prototype;
+    expect(Reflect.getMetadata('THROTTLER:LIMITdefault', proto.extractIngredients)).toBe(10);
+    expect(Reflect.getMetadata('THROTTLER:TTLdefault', proto.extractIngredients)).toBe(60_000);
   });
 
   it('copy-drafts giới hạn 6 lượt mỗi phút (gọi AI trả phí)', () => {
@@ -101,5 +120,42 @@ describe('CatalogQualityController', () => {
     expect(audit.audit).toHaveBeenCalledTimes(1);
     expect(drafts.generate).toHaveBeenCalledWith(['a']);
     expect(approval.approve).toHaveBeenCalledWith('admin1', [approveItem('a')]);
+  });
+
+  it('chuyển id sản phẩm, ảnh, tên thành phần và id admin cho IngredientEnrichService', async () => {
+    await ctrl.extractIngredients('p1', { image: 'data:image/jpeg;base64,AAAA' });
+    await ctrl.saveIngredients('admin1', 'p1', { ingredients: ['Đường'] });
+    expect(enrich.extract).toHaveBeenCalledWith('p1', 'data:image/jpeg;base64,AAAA');
+    expect(enrich.save).toHaveBeenCalledWith('admin1', 'p1', ['Đường']);
+  });
+});
+
+describe('DTO extract-ingredients', () => {
+  it('image: chuỗi, không rỗng, không vượt trần thô (đủ cho ảnh 5 MB sau base64)', async () => {
+    expect(await errs(ExtractIngredientsDto, { image: 'data:image/jpeg;base64,AAAA' })).toHaveLength(0);
+    expect(await errs(ExtractIngredientsDto, { image: '' })).not.toHaveLength(0);
+    expect(await errs(ExtractIngredientsDto, { image: 12 })).not.toHaveLength(0);
+    expect(await errs(ExtractIngredientsDto, {})).not.toHaveLength(0);
+    expect(await errs(ExtractIngredientsDto, { image: 'x'.repeat(INGREDIENT_IMAGE_DTO_MAX + 1) })).not.toHaveLength(0);
+    expect(await errs(ExtractIngredientsDto, { image: 'x'.repeat(INGREDIENT_IMAGE_DTO_MAX) })).toHaveLength(0);
+  });
+
+  it('trần thô đủ chứa ảnh đúng trần OCR_IMAGE_MAX_BYTES đã mã hoá base64 kèm tiền tố data URL', () => {
+    const base64Chars = Math.ceil(OCR_IMAGE_MAX_BYTES / 3) * 4;
+    expect(INGREDIENT_IMAGE_DTO_MAX).toBeGreaterThanOrEqual(base64Chars + 'data:image/jpeg;base64,'.length);
+  });
+});
+
+describe('DTO save-ingredients', () => {
+  it('ingredients: 1..20 chuỗi, mỗi chuỗi tối đa 200 ký tự; chữ được cắt khoảng trắng', async () => {
+    expect(await errs(SaveIngredientsDto, { ingredients: ['Đường'] })).toHaveLength(0);
+    expect(await errs(SaveIngredientsDto, { ingredients: ids(20) })).toHaveLength(0);
+    expect(await errs(SaveIngredientsDto, { ingredients: ids(21) })).not.toHaveLength(0);
+    expect(await errs(SaveIngredientsDto, { ingredients: [] })).not.toHaveLength(0);
+    expect(await errs(SaveIngredientsDto, { ingredients: 'Đường' })).not.toHaveLength(0);
+    expect(await errs(SaveIngredientsDto, { ingredients: [3] })).not.toHaveLength(0);
+    expect(await errs(SaveIngredientsDto, { ingredients: ['x'.repeat(201)] })).not.toHaveLength(0);
+    expect(await errs(SaveIngredientsDto, {})).not.toHaveLength(0);
+    expect(plainToInstance(SaveIngredientsDto, { ingredients: ['\u200b  Đường \u200b'] }).ingredients).toEqual(['Đường']);
   });
 });

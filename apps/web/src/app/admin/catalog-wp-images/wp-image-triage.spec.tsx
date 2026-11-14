@@ -1,8 +1,12 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
+import { act } from 'react';
 import { WpImageTriage } from './wp-image-triage';
 import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { WpImageList, WpImageRow } from '@/lib/wp-image-candidates';
+
+const compress = vi.hoisted(() => ({ readAndCompressImage: vi.fn() }));
+vi.mock('@/lib/image-compress', async (orig) => ({ ...(await orig<typeof import('@/lib/image-compress')>()), readAndCompressImage: compress.readAndCompressImage }));
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -40,16 +44,34 @@ const list = (items: WpImageRow[], hasImages = 0): WpImageList => ({
   },
 });
 
-function setup(initial: WpImageList, opts: { approve?: { status?: number; body: unknown }; hold?: Promise<void>; listError?: boolean } = {}) {
+interface SetupOpts {
+  approve?: { status?: number; body: unknown };
+  hold?: Promise<void>;
+  listError?: boolean;
+  /** Trả lời của PATCH /admin/catalog-products/:id (mặc định 200). */
+  upload?: { status?: number; body: unknown };
+  holdUpload?: Promise<void>;
+  /** Danh sách máy chủ trả SAU khi PATCH thành công (mặc định không đổi). */
+  afterUpload?: (current: WpImageList) => WpImageList;
+}
+
+function setup(initial: WpImageList, opts: SetupOpts = {}) {
   let data = initial;
   const m = mockFetch({
     '/approve': () => opts.approve ?? { body: { productId: 'p1', state: 'APPLIED', appliedCount: 3 } },
+    '/admin/catalog-products/': () => opts.upload ?? { body: { id: 'p1' } },
     '/skip': { body: { productId: 'p1', state: 'SKIPPED' } },
     '/restore': { body: { productId: 'p1', state: 'PENDING' } },
     '/admin/catalog-wp-images': () => (opts.listError ? { status: 500, body: { message: 'Lỗi máy chủ' } } : { body: data }),
   });
   const fn = vi.fn(async (url: string, init?: RequestInit) => {
     if (opts.hold && url.includes('/approve')) await opts.hold;
+    if (url.includes('/admin/catalog-products/')) {
+      if (opts.holdUpload) await opts.holdUpload;
+      const res = await m.fn(url, init);
+      if (res.ok && opts.afterUpload) data = opts.afterUpload(data);
+      return res;
+    }
     return m.fn(url, init);
   });
   vi.stubGlobal('fetch', fn);
@@ -343,7 +365,7 @@ describe('WpImageTriage (trang duyệt ảnh WordPress)', () => {
       expect(container.textContent).toContain('Tổng 3 sản phẩm; 3 chưa có ảnh (2 có ảnh gợi ý, 1 chưa có gợi ý).');
     });
 
-    it('dòng chưa có gợi ý: nói cần ảnh mới, không có nút duyệt hay bỏ qua, không có ô chọn ảnh', async () => {
+    it('dòng chưa có gợi ý: nói cần ảnh mới, không có nút duyệt/bỏ qua hay ô chọn ảnh WordPress, chỉ có ô tải ảnh tay', async () => {
       const { container } = setup(list([none]));
       await flush();
       click(pill(container, 'noSuggestion'));
@@ -352,7 +374,8 @@ describe('WpImageTriage (trang duyệt ảnh WordPress)', () => {
       expect(card.textContent).toContain('Cần ảnh mới: tải lên ở trang sản phẩm.');
       expect(card.textContent).toContain('Không có ảnh WordPress để chọn cho sản phẩm này.');
       expect(card.textContent).not.toContain('Chưa hỏi được WordPress');
-      expect(card.querySelectorAll('button, input[type="checkbox"]')).toHaveLength(0);
+      expect(card.querySelectorAll('input[type="checkbox"]')).toHaveLength(0);
+      expect(Array.from(card.querySelectorAll('button')).map((x) => x.textContent)).toEqual(['Chọn ảnh', 'Dán ảnh']);
       expect(card.querySelector('[role="img"][aria-label="Chưa có ảnh"]')).not.toBeNull();
     });
 
@@ -366,7 +389,7 @@ describe('WpImageTriage (trang duyệt ảnh WordPress)', () => {
       const card = cards(container).find((c) => c.textContent?.includes('Bột hạt củ quả'))!;
       expect(card.textContent).toContain('Chưa hỏi được WordPress. Bấm “Tải lại” ở đầu trang.');
       expect(card.textContent).not.toContain('Không có ảnh WordPress để chọn');
-      expect(card.querySelectorAll('button')).toHaveLength(0);
+      expect(Array.from(card.querySelectorAll('button')).map((x) => x.textContent)).toEqual(['Chọn ảnh', 'Dán ảnh']);
       expect(container.textContent).toContain('Tổng 3 sản phẩm; 3 chưa có ảnh (1 có ảnh gợi ý, 1 chưa có gợi ý, 1 chưa hỏi được WordPress).');
     });
 
@@ -398,5 +421,178 @@ describe('WpImageTriage (trang duyệt ảnh WordPress)', () => {
     click(byText(container, 'button', 'Tải lại'));
     await flush();
     expect(m.calls.length).toBeGreaterThan(before);
+  });
+});
+
+const dropOn = (zone: Element, file: File) => {
+  const ev = new Event('drop', { bubbles: true, cancelable: true });
+  Object.defineProperty(ev, 'dataTransfer', { value: { files: [file] } });
+  act(() => {
+    zone.dispatchEvent(ev);
+  });
+};
+const recent = (c: HTMLElement) => Array.from(c.querySelectorAll('[data-testid="wp-triage-recent-item"]'));
+const zoneOf = (card: Element) => card.querySelector<HTMLElement>('[data-testid="image-drop-zone"]');
+const png = (name = 'a.png') => new File(['x'], name, { type: 'image/png' });
+const DATA_URL = 'data:image/jpeg;base64,QUJD';
+const toggleToHasImages = (id: string) => (cur: WpImageList): WpImageList => list(cur.items.map((r) => (r.productId === id ? row({ ...r, state: 'HAS_IMAGES', wp: null, defaultImageUrls: null }) : r)));
+const without = (id: string) => (cur: WpImageList): WpImageList => list(cur.items.filter((r) => r.productId !== id));
+const patches = (m: ReturnType<typeof mockFetch>) => m.calls.filter((c) => c.url.includes('/admin/catalog-products/') && c.init?.method === 'PATCH');
+
+describe('WpImageTriage — tải ảnh tay bằng kéo-thả / dán', () => {
+  beforeEach(() => {
+    compress.readAndCompressImage.mockReset().mockResolvedValue(DATA_URL);
+  });
+
+  it('chỉ thẻ còn rỗng ảnh (chờ duyệt, đã bỏ qua, chưa có gợi ý) có ô nhận ảnh; thẻ đã duyệt hoặc đã có ảnh thì không', async () => {
+    const { container } = setup(
+      list([
+        row(),
+        row({ productId: 'p2', productSlug: 'sp-hai', name: 'SP hai', state: 'SKIPPED' }),
+        row({ productId: 'p3', productSlug: 'sp-ba', name: 'SP ba', tier: 'NONE', tierLabel: 'Chưa có gợi ý', wp: null, defaultImageUrls: null }),
+        row({ productId: 'p4', productSlug: 'sp-bon', name: 'SP bốn', state: 'APPLIED', appliedCount: 3, wp: null, defaultImageUrls: null }),
+        row({ productId: 'p5', productSlug: 'sp-nam', name: 'SP năm', state: 'HAS_IMAGES', wp: null, defaultImageUrls: null }),
+      ]),
+    );
+    await flush();
+    click(pill(container, 'all'));
+    const byState = Object.fromEntries(cards(container).map((c) => [c.querySelector('h2')!.textContent, zoneOf(c) !== null]));
+    expect(byState).toEqual({ 'Mật cô đặc 250g': true, 'SP hai': true, 'SP ba': true, 'SP bốn': false, 'SP năm': false });
+    expect(zoneOf(cards(container)[0]!)!.getAttribute('aria-label')).toBe('Ảnh cho Mật cô đặc 250g');
+  });
+
+  it('thả ảnh vào thẻ: nén rồi PATCH đúng một ảnh, báo thành công, nạp lại danh sách thì thẻ sang "Đã có ảnh"; ảnh vừa chọn nằm ở dải "vừa tải" dù thẻ đã rời bộ lọc', async () => {
+    const { m, container } = setup(list([row(), row({ productId: 'p2', productSlug: 'sp-hai', name: 'SP hai' })]), { afterUpload: toggleToHasImages('p1') });
+    await flush();
+    const file = png();
+    dropOn(zoneOf(cards(container)[0]!)!, file);
+    await flush();
+    expect(compress.readAndCompressImage).toHaveBeenCalledWith(file);
+    const sent = patches(m);
+    expect(sent).toHaveLength(1);
+    expect(sent[0]!.url).toContain('/admin/catalog-products/p1');
+    expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ images: [DATA_URL], ifImagesEmpty: true });
+    expect(container.textContent).toContain('Đã gắn ảnh đại diện cho "Mật cô đặc 250g".');
+    expect(m.calls.filter((c) => c.url.includes('?live=1')).length).toBeGreaterThanOrEqual(2);
+    expect(cards(container).map((c) => c.querySelector('h2')!.textContent)).toEqual(['SP hai']);
+    const [item] = recent(container);
+    expect(item!.querySelector<HTMLImageElement>('img[alt="Ảnh vừa chọn cho Mật cô đặc 250g"]')?.getAttribute('src')).toBe(DATA_URL);
+    expect(item!.textContent).toContain('Mật cô đặc 250g');
+    expect(item!.textContent).toContain('Đã gắn ảnh đại diện.');
+    click(pill(container, 'all'));
+    const card = cards(container).find((c) => c.querySelector('h2')!.textContent === 'Mật cô đặc 250g')!;
+    expect(card.getAttribute('data-state')).toBe('HAS_IMAGES');
+    expect(zoneOf(card)).toBeNull();
+    expect(card.querySelector('img[alt^="Ảnh vừa chọn"]')).toBeNull();
+  });
+
+  it('dán Ctrl+V vào ô cũng tải lên như thả', async () => {
+    const { m, container } = setup(list([row()]), { afterUpload: toggleToHasImages('p1') });
+    await flush();
+    const ev = new Event('paste', { bubbles: true, cancelable: true });
+    Object.defineProperty(ev, 'clipboardData', { value: { files: [png('dan.png')], items: [] } });
+    act(() => {
+      zoneOf(cards(container)[0]!)!.dispatchEvent(ev);
+    });
+    await flush();
+    expect(patches(m)).toHaveLength(1);
+  });
+
+  it('trong lúc lưu: ảnh xem trước hiện ngay, mọi ô nhận ảnh và nút Duyệt bị khoá, ảnh thứ hai ở thẻ khác bị bỏ qua', async () => {
+    let release!: () => void;
+    const holdUpload = new Promise<void>((r) => (release = r));
+    const { m, container } = setup(list([row(), row({ productId: 'p2', productSlug: 'sp-hai', name: 'SP hai' })]), { holdUpload, afterUpload: toggleToHasImages('p1') });
+    await flush();
+    click(pill(container, 'all'));
+    dropOn(zoneOf(cards(container)[0]!)!, png());
+    await flush();
+    const [first, second] = cards(container);
+    expect(recent(container)).toHaveLength(1);
+    expect(recent(container)[0]!.querySelector('img[alt="Ảnh vừa chọn cho Mật cô đặc 250g"]')).not.toBeNull();
+    expect(recent(container)[0]!.textContent).toContain('Đang lưu ảnh…');
+    for (const z of [zoneOf(first!), zoneOf(second!)]) expect(z!.getAttribute('aria-busy')).toBe('true');
+    expect(container.querySelector('button[aria-label="Duyệt dùng ảnh này cho SP hai"]')!.getAttribute('aria-disabled')).toBe('true');
+    dropOn(zoneOf(second!)!, png('b.png'));
+    await flush();
+    expect(compress.readAndCompressImage).toHaveBeenCalledTimes(1);
+    release();
+    await flush();
+    expect(patches(m)).toHaveLength(1);
+  });
+
+  it('ở bộ lọc mặc định (Chờ duyệt): thẻ rời danh sách ngay khi lưu nhưng ảnh xem trước vẫn hiện ở dải "vừa tải"; đổi bộ lọc hay gõ ô tìm không làm mất dải', async () => {
+    let release!: () => void;
+    const holdUpload = new Promise<void>((r) => (release = r));
+    const { container } = setup(list([row(), row({ productId: 'p2', productSlug: 'sp-hai', name: 'SP hai' })]), { holdUpload, afterUpload: without('p1') });
+    await flush();
+    dropOn(zoneOf(cards(container)[0]!)!, png());
+    await flush();
+    expect(cards(container).map((c) => c.querySelector('h2')!.textContent)).toEqual(['SP hai']);
+    expect(recent(container)[0]!.textContent).toContain('Đang lưu ảnh…');
+    click(pill(container, 'skipped'));
+    typeInto(container.querySelector('input[type="search"], input[aria-label^="Tìm"]'), 'khong-co-san-pham-nay');
+    expect(recent(container)).toHaveLength(1);
+    release();
+    await flush();
+    expect(recent(container)).toHaveLength(1);
+    expect(recent(container)[0]!.textContent).toContain('Đã gắn ảnh đại diện.');
+    expect(recent(container)[0]!.querySelector('img[alt="Ảnh vừa chọn cho Mật cô đặc 250g"]')).not.toBeNull();
+  });
+
+  it('nén lỗi: báo lỗi tiếng Việt, không gửi gì lên máy chủ, thẻ giữ nguyên và nhận lại ảnh khác được', async () => {
+    compress.readAndCompressImage.mockRejectedValueOnce(new Error('Ảnh quá nặng sau khi nén'));
+    const { m, container } = setup(list([row()]), { afterUpload: toggleToHasImages('p1') });
+    await flush();
+    dropOn(zoneOf(cards(container)[0]!)!, png());
+    await flush();
+    expect(container.textContent).toContain('Không xử lý được ảnh này. Chọn ảnh khác.');
+    expect(patches(m)).toHaveLength(0);
+    expect(cards(container)[0]!.getAttribute('data-state')).toBe('PENDING');
+    dropOn(zoneOf(cards(container)[0]!)!, png('khac.png'));
+    await flush();
+    expect(patches(m)).toHaveLength(1);
+  });
+
+  it('máy chủ từ chối: báo lỗi, bỏ ảnh xem trước, thẻ về lại "Chưa có ảnh" với ô nhận ảnh dùng được', async () => {
+    const { container } = setup(list([row()]), { upload: { status: 400, body: { message: 'Ảnh chỉ nhận ảnh tải lên (png, jpeg, webp, gif) hoặc link https.' } } });
+    await flush();
+    dropOn(zoneOf(cards(container)[0]!)!, png());
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Ảnh chỉ nhận ảnh tải lên');
+    const card = cards(container)[0]!;
+    expect(card.getAttribute('data-state')).toBe('PENDING');
+    expect(recent(container)).toHaveLength(0);
+    expect(container.querySelector('img[alt^="Ảnh vừa chọn"]')).toBeNull();
+    expect(card.querySelector('[role="img"][aria-label="Chưa có ảnh"]')).not.toBeNull();
+    expect(zoneOf(card)!.getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('sản phẩm vừa có ảnh từ người khác (409): báo đúng lời máy chủ, bỏ ảnh xem trước, nạp lại danh sách để thấy dữ liệu mới, không ghi đè', async () => {
+    const { m, container } = setup(list([row()]), { upload: { status: 409, body: { message: 'Sản phẩm này vừa có ảnh (người khác thêm hoặc đã duyệt từ WordPress). Tải lại danh sách để xem ảnh hiện có rồi quyết định.' } } });
+    await flush();
+    const loadsBefore = m.calls.filter((c) => c.url.includes('?live=1')).length;
+    dropOn(zoneOf(cards(container)[0]!)!, png());
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Sản phẩm này vừa có ảnh');
+    expect(recent(container)).toHaveLength(0);
+    expect(m.calls.filter((c) => c.url.includes('?live=1')).length).toBeGreaterThan(loadsBefore);
+    expect(container.querySelector('[data-testid="wp-triage-progress"]')!.textContent).toBe('Đã đủ ảnh 0/1 sản phẩm.');
+  });
+
+  it('thanh tiến độ "Đã đủ ảnh X/Y sản phẩm": đếm đã duyệt + đã có ảnh, tăng sau khi tải ảnh kể cả khi sản phẩm rời danh sách', async () => {
+    const { container } = setup(
+      list([row(), row({ productId: 'p2', productSlug: 'sp-hai', name: 'SP hai' }), row({ productId: 'p3', productSlug: 'sp-ba', name: 'SP ba', state: 'HAS_IMAGES', wp: null, defaultImageUrls: null })]),
+      { afterUpload: without('p1') },
+    );
+    await flush();
+    const text = () => container.querySelector('[data-testid="wp-triage-progress"]')!.textContent;
+    const bar = () => container.querySelector('[role="progressbar"]')!;
+    expect(text()).toBe('Đã đủ ảnh 1/3 sản phẩm.');
+    expect(bar().getAttribute('aria-label')).toBe('Tiến độ bổ sung ảnh');
+    expect([bar().getAttribute('aria-valuenow'), bar().getAttribute('aria-valuemax')]).toEqual(['1', '3']);
+    dropOn(zoneOf(cards(container)[0]!)!, png());
+    await flush();
+    expect(text()).toBe('Đã đủ ảnh 2/3 sản phẩm.');
+    expect([bar().getAttribute('aria-valuenow'), bar().getAttribute('aria-valuemax')]).toEqual(['2', '3']);
   });
 });

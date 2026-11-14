@@ -12,12 +12,26 @@ export interface AnthropicTurn {
   content: string;
 }
 
+/** Ảnh gửi cho model đọc (Messages API nhận base64 kèm loại ảnh, không nhận data URL). */
+export interface AnthropicImageInput {
+  mediaType: 'image/jpeg' | 'image/png' | 'image/webp';
+  base64: string;
+}
+
+type AnthropicContentBlock = { type: 'text'; text: string } | { type: 'image'; source: { type: 'base64'; media_type: AnthropicImageInput['mediaType']; data: string } };
+
+/** Lượt gửi đi: chữ thuần (mọi chỗ gọi cũ) hoặc danh sách khối khi có ảnh. `AnthropicTurn[]` vẫn gán được. */
+export interface AnthropicRequestTurn {
+  role: 'user' | 'assistant';
+  content: string | AnthropicContentBlock[];
+}
+
 export interface AnthropicRequest {
   key: string;
   model: string;
   /** Rỗng thì bỏ hẳn trường `system` (API không nhận khối system rỗng). */
   system: string;
-  messages: AnthropicTurn[];
+  messages: AnthropicRequestTurn[];
   maxTokens: number;
   timeoutMs: number;
   /** `output_config.effort: low` chỉ model đời mới nhận (Sonnet 5.5); Haiku 4.5 trả 400, nên chỉ bật khi người gọi chắc chắn. */
@@ -122,6 +136,39 @@ export class AnthropicClient {
         lowEffort: true,
       });
       // max_tokens: JSON cụt giữa chừng; refusal: model từ chối. Cả hai đều không phải bản nháp dùng được.
+      if (stopReason !== undefined && stopReason !== 'end_turn') throw new Error(`Claude dừng sớm: ${stopReason.slice(0, 30)}`);
+      return text;
+    } catch (e) {
+      const err = e as Error;
+      if (err.message.startsWith('Claude không kết nối được')) this.logger.warn(err.message);
+      throw err;
+    }
+  }
+
+  /**
+   * Như `complete` nhưng lượt user mang thêm một ảnh (ảnh đứng trước chữ, đúng khuyến nghị của Messages API). Dùng để đọc chữ trên bao bì:
+   * model mặc định (Sonnet 5.5) đọc được ảnh; model đặt qua CLAUDE_API_MODEL phải hỗ trợ ảnh. Ảnh KHÔNG bao giờ vào log hay thông điệp lỗi.
+   */
+  async completeWithImage(system: string, user: string, image: AnthropicImageInput, maxTokens: number, timeoutMs: number = DEFAULT_TIMEOUT_MS): Promise<string> {
+    if (!this.isConfigured()) throw new Error('Claude chưa cấu hình khoá.');
+    try {
+      const { text, stopReason } = await postAnthropicMessage({
+        key: this.key,
+        model: this.model,
+        system,
+        messages: [
+          {
+            role: 'user',
+            content: [
+              { type: 'image', source: { type: 'base64', media_type: image.mediaType, data: image.base64 } },
+              { type: 'text', text: user },
+            ],
+          },
+        ],
+        maxTokens,
+        timeoutMs,
+        lowEffort: true,
+      });
       if (stopReason !== undefined && stopReason !== 'end_turn') throw new Error(`Claude dừng sớm: ${stopReason.slice(0, 30)}`);
       return text;
     } catch (e) {

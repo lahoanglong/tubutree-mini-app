@@ -6,13 +6,14 @@ import { AiAdvisorController } from './ai-advisor.controller';
 import { AiAdvisorService } from './ai-advisor.service';
 import { AnthropicClient } from './anthropic.client';
 import { CopyAiService } from './copy-ai.service';
+import { IngredientOcrService } from './ingredient-ocr.service';
 import { LlmClient } from './llm.client';
 import { StoryAiService } from './story-ai.service';
 
 @Module({
   imports: [FaqModule],
   controllers: [AiAdvisorController, AdvisorStatsController],
-  providers: [AiAdvisorService, AdvisorStatsService, LlmClient, AnthropicClient, StoryAiService, CopyAiService],
-  exports: [AiAdvisorService, StoryAiService, CopyAiService],
+  providers: [AiAdvisorService, AdvisorStatsService, LlmClient, AnthropicClient, StoryAiService, CopyAiService, IngredientOcrService],
+  exports: [AiAdvisorService, StoryAiService, CopyAiService, IngredientOcrService],
 })
 export class AiAdvisorModule {}

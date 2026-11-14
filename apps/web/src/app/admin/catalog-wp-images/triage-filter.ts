@@ -59,9 +59,13 @@ export function filterCounts(items: readonly WpImageRow[]): Record<TriageFilter,
   return counts;
 }
 
-export type TriageAction = { kind: 'approve'; productId: string; imageCount: number } | { kind: 'skip'; productId: string } | { kind: 'restore'; productId: string };
+export type TriageAction =
+  | { kind: 'approve'; productId: string; imageCount: number }
+  | { kind: 'skip'; productId: string }
+  | { kind: 'restore'; productId: string }
+  | { kind: 'upload'; productId: string };
 
-const NEXT_STATE: Record<TriageAction['kind'], WpRowState> = { approve: 'APPLIED', skip: 'SKIPPED', restore: 'PENDING' };
+const NEXT_STATE: Record<TriageAction['kind'], WpRowState> = { approve: 'APPLIED', skip: 'SKIPPED', restore: 'PENDING', upload: 'HAS_IMAGES' };
 
 /**
  * Bản cập nhật lạc quan: thẻ đổi trạng thái ngay khi bấm, máy chủ trả lỗi thì phía gọi trả về bản cũ rồi nạp lại.
@@ -76,11 +80,23 @@ export function applyOptimistic(list: WpImageList, action: TriageAction): WpImag
           ...row,
           state: next,
           appliedCount: action.kind === 'approve' ? action.imageCount : null,
-          // Duyệt xong không còn ảnh ứng viên để chọn; bỏ qua/khôi phục giữ nguyên ảnh đã hỏi để thẻ không trống.
-          ...(action.kind === 'approve' ? { wp: null, defaultImageUrls: null } : {}),
+          // Duyệt hay tải ảnh tay xong thì không còn ảnh ứng viên để chọn; bỏ qua/khôi phục giữ nguyên ảnh đã hỏi để thẻ không trống.
+          ...(action.kind === 'approve' || action.kind === 'upload' ? { wp: null, defaultImageUrls: null } : {}),
         },
   );
   const counts: Record<WpRowState, number> = { PENDING: 0, SKIPPED: 0, APPLIED: 0, HAS_IMAGES: 0 };
   for (const row of items) counts[row.state] += 1;
   return { items, counts };
+}
+
+/**
+ * Tiến độ bổ sung ảnh: "đã đủ" = đã duyệt ảnh WordPress + đã có ảnh. Sản phẩm không có trong bảng làm tay rời danh sách ngay khi có ảnh (máy chủ chỉ trả
+ * sản phẩm còn rỗng ảnh hoặc đã có quyết định), nên các sản phẩm vừa được tải ảnh tay trong phiên mà không còn trong `items` được cộng vào cả đủ lẫn tổng
+ * để thanh không tụt về sau khi nạp lại.
+ */
+export function imageProgress(items: readonly WpImageRow[], uploadedIds: ReadonlySet<string>): { done: number; total: number } {
+  const present = new Set(items.map((r) => r.productId));
+  const vanished = [...uploadedIds].filter((id) => !present.has(id)).length;
+  const done = items.filter((r) => r.state === 'APPLIED' || r.state === 'HAS_IMAGES').length;
+  return { done: done + vanished, total: items.length + vanished };
 }

@@ -220,6 +220,8 @@ const EXPECTED: Record<string, Access> = {
   'GET /admin/catalog-quality/pancake-zero-price': ADMIN_ONLY,
   'POST /admin/catalog-quality/copy-drafts': ADMIN_ONLY,
   'POST /admin/catalog-quality/copy-approve': ADMIN_ONLY,
+  'POST /admin/catalog-quality/:id/extract-ingredients': ADMIN_ONLY,
+  'POST /admin/catalog-quality/:id/ingredients': ADMIN_ONLY,
   'GET /admin/catalog-wp-images': ADMIN_ONLY,
   'POST /admin/catalog-wp-images/:productId/approve': ADMIN_ONLY,
   'POST /admin/catalog-wp-images/:productId/skip': ADMIN_ONLY,

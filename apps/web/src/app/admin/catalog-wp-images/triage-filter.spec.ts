@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { WpImageList, WpImageRow } from '@/lib/wp-image-candidates';
-import { TRIAGE_FILTERS, applyOptimistic, filterCounts, hasSuggestion, matchesFilter, matchesQuery, stillWithoutImage } from './triage-filter';
+import { TRIAGE_FILTERS, applyOptimistic, filterCounts, hasSuggestion, imageProgress, matchesFilter, matchesQuery, stillWithoutImage } from './triage-filter';
 
 const row = (over: Partial<WpImageRow>): WpImageRow => ({
   productId: 'p1',
@@ -118,5 +118,49 @@ describe('applyOptimistic', () => {
     const before = JSON.stringify(list);
     applyOptimistic(list, { kind: 'approve', productId: 'a', imageCount: 1 });
     expect(JSON.stringify(list)).toBe(before);
+  });
+});
+
+describe('applyOptimistic — tải ảnh tay', () => {
+  const countOf = (items: WpImageRow[]) => ({
+    PENDING: items.filter((r) => r.state === 'PENDING').length,
+    SKIPPED: items.filter((r) => r.state === 'SKIPPED').length,
+    APPLIED: items.filter((r) => r.state === 'APPLIED').length,
+    HAS_IMAGES: items.filter((r) => r.state === 'HAS_IMAGES').length,
+  });
+  const list: WpImageList = { items: rows, counts: countOf(rows) };
+
+  it('dòng tải ảnh xong thành "Đã có ảnh" (HAS_IMAGES), bỏ ảnh ứng viên, cập nhật số đếm, không đụng dòng khác', () => {
+    const next = applyOptimistic(list, { kind: 'upload', productId: 'a' });
+    expect(next.items[0]).toMatchObject({ productId: 'a', state: 'HAS_IMAGES', appliedCount: null, wp: null, defaultImageUrls: null });
+    expect(next.counts).toEqual({ ...list.counts, PENDING: list.counts.PENDING - 1, HAS_IMAGES: list.counts.HAS_IMAGES + 1 });
+    expect(next.items[1]).toBe(list.items[1]);
+  });
+
+  it('dòng đã bỏ qua tải ảnh tay cũng thành HAS_IMAGES, không còn nằm trong nhóm "Chưa có ảnh"', () => {
+    const next = applyOptimistic(list, { kind: 'upload', productId: 'c' });
+    expect(next.items.find((r) => r.productId === 'c')!.state).toBe('HAS_IMAGES');
+    expect(filterCounts(next.items).noImage).toBe(filterCounts(list.items).noImage - 1);
+  });
+});
+
+describe('imageProgress — thanh "Đã đủ X / Y sản phẩm"', () => {
+  // rows: d đã duyệt, e và h đã có ảnh => 3 dòng đã đủ trên 9 dòng.
+  it('đã đủ = đã duyệt + đã có ảnh; tổng = mọi dòng trên trang', () => {
+    expect(imageProgress(rows, new Set())).toEqual({ done: 3, total: rows.length });
+  });
+
+  it('sản phẩm tải ảnh tay trong phiên mà máy chủ không còn trả về (rời danh sách) vẫn tính vào cả đủ lẫn tổng', () => {
+    expect(imageProgress(rows, new Set(['gone-1', 'gone-2']))).toEqual({ done: 5, total: rows.length + 2 });
+  });
+
+  it('id đã tải ảnh mà vẫn còn trong danh sách (HAS_IMAGES) không bị đếm hai lần', () => {
+    const list: WpImageList = { items: rows, counts: { PENDING: 5, SKIPPED: 1, APPLIED: 1, HAS_IMAGES: 2 } };
+    const after = applyOptimistic(list, { kind: 'upload', productId: 'a' });
+    expect(imageProgress(after.items, new Set(['a']))).toEqual({ done: 4, total: rows.length });
+  });
+
+  it('danh sách rỗng: 0 / 0', () => {
+    expect(imageProgress([], new Set())).toEqual({ done: 0, total: 0 });
   });
 });

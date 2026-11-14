@@ -12,6 +12,8 @@ const IMAGE_MAX = 1_500_000;
 
 export class UpdateProductDto {
   @OptionalNotNull() @IsArray() @ArrayMaxSize(PRODUCT_IMAGES_MAX) @IsString({ each: true }) @MaxLength(IMAGE_MAX, { each: true }) images?: string[];
+  /** Chỉ ghi `images` khi sản phẩm chưa có ảnh; đã có thì 409 (xem ProductPatch.ifImagesEmpty). */
+  @OptionalNotNull() @IsBoolean() ifImagesEmpty?: boolean;
   @OptionalNotNull() @Trim() @IsString() @MaxLength(6000) description?: string;
   /** null hoặc chuỗi rỗng = xoá mô tả ngắn. */
   @IsOptional() @ValidateIf((_, v) => v !== null) @Trim() @IsString() @MaxLength(400) shortDesc?: string | null;

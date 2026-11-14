@@ -4,7 +4,7 @@ import type { CatalogAuditProductDto, CatalogAuditVariationDto } from '@tubutree
 import { KNOWN_MEDIA_MISMATCHES } from '@tubutree/app-core/commerce/catalog-quality-audit';
 import { PANCAKE_FIX_CSV_HEADERS } from '@tubutree/app-core/commerce/catalog-pancake-csv';
 import { CatalogQualityTab } from './catalog-quality-tab';
-import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { byText, click, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 
 let mounted: Rendered[] = [];
 afterEach(() => {
@@ -373,5 +373,63 @@ describe('CatalogQualityTab', () => {
     expect(sections[2]!.textContent).toContain('Sản phẩm A');
     expect(m.calls.filter((c) => c.url.includes('/admin/ai-advisor/stats'))).toHaveLength(1);
     expect(m.calls.filter((c) => c.url.includes('/admin/catalog-quality/pancake-zero-price'))).toHaveLength(1);
+  });
+});
+
+describe('CatalogQualityTab — bổ sung thành phần và ảnh ngay tại tab', () => {
+  const NO_ING = [
+    P({ id: 'p-a', slug: 'mat-co-dac', name: 'Mật cô đặc', hasIngredients: false }),
+    P({ id: 'p-b', slug: 'xoai-say', name: 'Xoài sấy', hasIngredients: false }),
+    P({ id: 'p-c', slug: 'da-du', name: 'Đã đủ thành phần', hasIngredients: true }),
+    P({ id: 'p-d', slug: 'dang-an', name: 'Đang ẩn thiếu thành phần', hasIngredients: false, isActive: false }),
+  ];
+  const block = (r: Rendered) => r.container.querySelector<HTMLElement>('[role="region"][aria-labelledby="ingredients-fill-title"]');
+  const progress = (r: Rendered) => r.container.querySelector('[data-testid="ingredients-progress"]')?.textContent;
+
+  it('chỉ hiện sau khi đã kiểm; liệt kê sản phẩm ĐANG BÁN mà thiếu thành phần (bỏ sản phẩm ẩn), tiến độ tính trên sản phẩm đang bán', async () => {
+    const m = mockFetch(routes({ '/admin/catalog-quality/audit': auditBody(NO_ING) }));
+    vi.stubGlobal('fetch', m.fn);
+    const r = mount(<CatalogQualityTab />);
+    await flush();
+    expect(block(r)).toBeNull();
+    await runCheck(r);
+    expect(block(r)).not.toBeNull();
+    expect(Array.from(r.container.querySelectorAll('[data-testid^="ingredients-row-"]')).map((e) => e.getAttribute('data-testid'))).toEqual(['ingredients-row-p-a', 'ingredients-row-p-b']);
+    expect(progress(r)).toBe('Đã đủ thành phần 1/3 sản phẩm.');
+  });
+
+  it('lưu một sản phẩm: gọi API thành phần rồi kiểm lại catalog, sản phẩm đó rời danh sách và tiến độ tăng', async () => {
+    let audits = 0;
+    const m = mockFetch(
+      routes({
+        '/admin/catalog-quality/audit': () => {
+          audits += 1;
+          return auditBody(audits === 1 ? NO_ING : NO_ING.map((p) => (p.id === 'p-a' ? { ...p, hasIngredients: true } : p)));
+        },
+        '/ingredients': { body: { id: 'p-a', ingredients: ['Đường', 'Muối'], added: 2 } },
+      }),
+    );
+    vi.stubGlobal('fetch', m.fn);
+    const r = mount(<CatalogQualityTab />);
+    await runCheck(r);
+    const row = r.container.querySelector<HTMLElement>('[data-testid="ingredients-row-p-a"]')!;
+    typeInto(row.querySelector('textarea'), 'Đường, Muối');
+    click(byText(row, 'button', 'Lưu thành phần'));
+    await flush(20);
+    expect(m.calls.filter((c) => c.url.includes('/admin/catalog-quality/p-a/ingredients') && c.init?.method === 'POST')).toHaveLength(1);
+    expect(auditCalls(m)).toHaveLength(2);
+    expect(r.container.querySelector('[data-testid="ingredients-row-p-a"]')).toBeNull();
+    expect(r.container.querySelector('[data-testid="ingredients-row-p-b"]')).not.toBeNull();
+    expect(progress(r)).toBe('Đã đủ thành phần 2/3 sản phẩm.');
+  });
+
+  it('có lối vào trang bổ sung ảnh hàng loạt (kéo-thả, dán) ngay cạnh bộ lọc "Thiếu ảnh"', async () => {
+    const m = mockFetch(routes());
+    vi.stubGlobal('fetch', m.fn);
+    const r = mount(<CatalogQualityTab />);
+    await runCheck(r);
+    const link = r.container.querySelector<HTMLAnchorElement>('a[href="/admin/catalog-wp-images"]');
+    expect(link?.textContent).toBe('Bổ sung ảnh hàng loạt (kéo-thả, dán ảnh)');
+    expect(/min-h-\[44px\]/.test(link!.className)).toBe(true);
   });
 });

@@ -83,6 +83,26 @@ describe('ProductAdminService — sửa sản phẩm', () => {
     expect(update.mock.calls[2][0].data).toEqual({ images: [], thumbnail: null });
   });
 
+  it('ifImagesEmpty: sản phẩm đã có ảnh (người khác vừa thêm) → 409 nói rõ, không ghi đè; chưa có ảnh thì ghi; không cờ thì vẫn thay như cũ', async () => {
+    const withImages = setup(row({ images: ['https://cdn.example.com/cu.jpg'] }));
+    await expect(withImages.svc.update('a1', 'p1', { images: [PNG], ifImagesEmpty: true })).rejects.toBeInstanceOf(ConflictException);
+    await expect(withImages.svc.update('a1', 'p1', { images: [PNG], ifImagesEmpty: true })).rejects.toThrow('Sản phẩm này vừa có ảnh');
+    expect(withImages.update).not.toHaveBeenCalled();
+    await withImages.svc.update('a1', 'p1', { images: [PNG] });
+    expect(withImages.update).toHaveBeenCalledTimes(1);
+
+    const empty = setup(row({ images: [] }));
+    await empty.svc.update('a1', 'p1', { images: [PNG], ifImagesEmpty: true });
+    expect(empty.update).toHaveBeenCalledTimes(1);
+    expect((empty.update.mock.calls[0][0].data as { images: string[] }).images).toEqual([PNG]);
+  });
+
+  it('ifImagesEmpty không ảnh hưởng lần sửa không đụng tới ảnh (sản phẩm đã có ảnh vẫn sửa được mô tả)', async () => {
+    const { svc, update } = setup(row({ images: ['https://cdn.example.com/cu.jpg'] }));
+    await svc.update('a1', 'p1', { description: 'Mô tả mới', ifImagesEmpty: true });
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
   it.each([
     ['http thường', ['http://x/a.jpg']],
     ['SVG', ['data:image/svg+xml;base64,PHN2Zz4=']],
@@ -261,6 +281,10 @@ describe('UpdateProductDto', () => {
   const bad = (b: object) => validateSync(plainToInstance(UpdateProductDto, b), { whitelist: true, forbidNonWhitelisted: true }).length;
   it('nhận body hợp lệ và shortDesc null', () => {
     expect(bad({ images: ['https://x/a.jpg'], description: 'a', shortDesc: null, isActive: false, isFeatured: true, categoryIds: ['c'] })).toBe(0);
+  });
+  it('nhận ifImagesEmpty boolean, từ chối chuỗi', () => {
+    expect(bad({ images: ['https://x/a.jpg'], ifImagesEmpty: true })).toBe(0);
+    expect(bad({ ifImagesEmpty: 'yes' })).toBeGreaterThan(0);
   });
   it.each([
     ['description không phải chuỗi', { description: 5 }],
