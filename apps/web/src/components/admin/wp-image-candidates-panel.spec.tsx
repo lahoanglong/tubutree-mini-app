@@ -28,6 +28,7 @@ const row = (over: Partial<WpImageRow> = {}): WpImageRow => ({
   appliedCount: null,
   wp: [{ id: 8454, slug: 'mat-hoa-dua-co-dac', name: 'Mật hoa dừa cô đặc', imageUrls: [wpUrl('a'), wpUrl('b'), wpUrl('c')], error: null }],
   defaultImageUrls: [wpUrl('a'), wpUrl('b'), wpUrl('c')],
+  suggestUnavailable: false,
   ...over,
 });
 const list = (items: WpImageRow[], hasImages = 0): WpImageList => ({
@@ -85,6 +86,21 @@ describe('WpImageCandidatesPanel (duyệt ảnh WordPress cho sản phẩm chưa
     expect(container.textContent).not.toContain('Có ảnh sẵn');
     expect(container.textContent).toContain('Đã nạp ảnh: Đã nạp rồi (3 ảnh)');
     expect(container.textContent).toContain('1 sản phẩm trong danh sách đã có ảnh');
+  });
+
+  it('dòng hạng NONE (không có ảnh WordPress để chọn) không hiện ở panel: không có gì để duyệt hay bỏ qua', async () => {
+    const none = row({ productId: 'p9', name: 'Xoài sấy dẻo', tier: 'NONE', tierLabel: 'Chưa có gợi ý', note: '', wp: null, defaultImageUrls: null });
+    const mixed = setup(list([row(), none]));
+    await open(mixed.container);
+    expect(mixed.container.textContent).toContain('Mật cô đặc 250g');
+    expect(mixed.container.textContent).not.toContain('Xoài sấy dẻo');
+    expect(mixed.container.querySelector('button[aria-label="Bỏ qua Mật cô đặc 250g"]')).not.toBeNull();
+    expect(mixed.container.querySelector('button[aria-label="Bỏ qua Xoài sấy dẻo"]')).toBeNull();
+
+    const onlyNone = setup(list([none]));
+    await open(onlyNone.container);
+    expect(onlyNone.container.textContent).toContain('Không còn sản phẩm nào chờ duyệt ảnh từ WordPress.');
+    expect(onlyNone.container.textContent).not.toContain('Xoài sấy dẻo');
   });
 
   it('nhóm chắc chắn duyệt thẳng không hỏi lại, gửi đúng bộ ảnh, báo thành công, nạp lại danh sách và báo tab làm mới', async () => {

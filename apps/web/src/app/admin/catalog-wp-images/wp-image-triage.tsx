@@ -209,7 +209,13 @@ export function WpImageTriage() {
       {list.isSuccess && (
         <p className="text-xs text-stone-500">
           Tổng <span className="tabular-nums">{items.length}</span> sản phẩm; <span className="tabular-nums">{totals.noImage}</span> chưa có ảnh (<span className="tabular-nums">{totals.suggested}</span> có ảnh gợi ý,{' '}
-          <span className="tabular-nums">{totals.noSuggestion}</span> chưa có gợi ý).
+          <span className="tabular-nums">{totals.noSuggestion}</span> chưa có gợi ý
+          {totals.noImage > totals.suggested + totals.noSuggestion && (
+            <>
+              , <span className="tabular-nums">{totals.noImage - totals.suggested - totals.noSuggestion}</span> chưa hỏi được WordPress
+            </>
+          )}
+          ).
         </p>
       )}
     </div>
@@ -282,7 +288,7 @@ function TriageCard({
             </p>
           )}
           {withoutImage && sources.length === 0 && (
-            <p className="text-xs text-stone-600">{row.tier === 'NONE' ? 'Không có ảnh WordPress để chọn cho sản phẩm này.' : 'Chưa hỏi được WordPress. Bấm “Tải lại” ở đầu trang.'}</p>
+            <p className="text-xs text-stone-600">{row.tier === 'NONE' && !row.suggestUnavailable ? 'Không có ảnh WordPress để chọn cho sản phẩm này.' : 'Chưa hỏi được WordPress. Bấm “Tải lại” ở đầu trang.'}</p>
           )}
           {withoutImage &&
             sources.map((s) => (

@@ -599,13 +599,14 @@ describe('loadWpCatalog', () => {
     expect(calls).toEqual([catalogUrl()]);
   });
 
-  it('đủ 100 sản phẩm thì đọc trang kế; trang sau lỗi thì giữ phần đã đọc', async () => {
+  it('đủ 100 sản phẩm thì đọc trang kế; trang sau lỗi thì trả null chứ không trả kho đọc dở', async () => {
     const { http, calls } = fakeHttp({ [catalogUrl(1)]: bulk(1, 100), [catalogUrl(2)]: bulk(101, 5) });
     expect(await loadWpCatalog(http)).toHaveLength(105);
     expect(calls).toEqual([catalogUrl(1), catalogUrl(2)]);
 
-    const partial = fakeHttp({ [catalogUrl(1)]: bulk(1, 100), [catalogUrl(2)]: new Error('ECONNRESET') });
-    expect(await loadWpCatalog(partial.http)).toHaveLength(100);
+    for (const second of [new Error('ECONNRESET'), { status: 500, contentType: 'text/html', body: Buffer.alloc(0) }, ok('<html>', 'text/html')]) {
+      expect(await loadWpCatalog(fakeHttp({ [catalogUrl(1)]: bulk(1, 100), [catalogUrl(2)]: second as Route }).http)).toBeNull();
+    }
   });
 
   it('dừng ở 5 trang dù WordPress cứ trả đủ 100', async () => {
@@ -631,9 +632,10 @@ describe('WpImageSyncService: gợi ý theo tên cho sản phẩm ngoài bảng 
   const SEED: Partial<ProductRow>[] = [
     { id: 'g', slug: GRANOLA, name: 'Granola mix nuts túi tiện lợi BH.NONG', brand: 'BH.Nong' },
     { id: 'm', slug: MANGO, name: 'Xoài sấy dẻo BH.NONG', brand: 'BH.Nong' },
-    { id: 'off', slug: 'granola-mix-nuts-tat', name: 'Granola mix nuts BH.NONG đã tắt', brand: 'BH.Nong', isActive: false },
-    { id: 'sf', slug: 'granola-mix-nuts-doi-tac', name: 'Granola mix nuts BH.NONG của đối tác', brand: 'BH.Nong', storefrontId: 'sf1' },
-    { id: 'has', slug: 'granola-mix-nuts-co-anh', name: 'Granola mix nuts BH.NONG có ảnh', brand: 'BH.Nong', images: ['data:image/png;base64,iVBORw0KGgo='] },
+    // Cùng tên với "g" nên nếu không bị chặn vì tắt/đối tác/đã có ảnh thì đều có gợi ý: bỏ chốt chặn nào là test đỏ.
+    { id: 'off', slug: 'granola-mix-nuts-tat', name: 'Granola mix nuts túi tiện lợi BH.NONG', brand: 'BH.Nong', isActive: false },
+    { id: 'sf', slug: 'granola-mix-nuts-doi-tac', name: 'Granola mix nuts túi tiện lợi BH.NONG', brand: 'BH.Nong', storefrontId: 'sf1' },
+    { id: 'has', slug: 'granola-mix-nuts-co-anh', name: 'Granola mix nuts túi tiện lợi BH.NONG', brand: 'BH.Nong', images: ['data:image/png;base64,iVBORw0KGgo='] },
   ];
 
   async function setup(routes?: Record<string, Route>, seed: Partial<ProductRow>[] = SEED) {
@@ -718,11 +720,35 @@ describe('WpImageSyncService: gợi ý theo tên cho sản phẩm ngoài bảng 
     await expect(svc.restore('m')).rejects.toBeInstanceOf(NotFoundException);
   });
 
-  it('gợi ý không bao giờ tự nạp: runExactSync chỉ đụng nhóm EXACT của bảng làm tay', async () => {
+  it('gợi ý không bao giờ tự nạp: runExactSync chỉ đụng đúng các dòng EXACT của bảng làm tay', async () => {
     const { store, byId, http } = await setup();
     const rows = await runExactSync({ store: store as never, http }, { apply: true, actor: 'cli' });
-    expect(rows.every((r) => WP_IMAGE_CANDIDATES.find((c) => c.productSlug === r.productSlug)!.tier === 'EXACT')).toBe(true);
+    expect(rows.map((r) => r.productSlug)).toEqual(WP_IMAGE_CANDIDATES.filter((c) => c.tier === 'EXACT').map((c) => c.productSlug));
     expect([byId('g').images, byId('m').images]).toEqual([[], []]);
+  });
+
+  it('SP đã bỏ qua rồi bị tắt: dòng NONE kèm lý do (không gợi ý, không bấm được); cờ chưa-hỏi-được chỉ bật khi kho WordPress lỗi', async () => {
+    const seed: Partial<ProductRow>[] = [{ id: 'g', slug: GRANOLA, name: 'Granola mix nuts túi tiện lợi BH.NONG', brand: 'BH.Nong' }, { id: 'off', slug: 'granola-tat', name: 'Granola mix nuts túi tiện lợi BH.NONG', brand: 'BH.Nong', isActive: false }];
+    const skipped = { key: 'catalog.wp_image:granola-tat', lastOkAt: new Date(), detail: { decision: 'SKIPPED', by: 'u', at: '2026-11-14T00:00:00.000Z' } };
+    const up = await setup(undefined, seed);
+    up.decisions.set(skipped.key, skipped);
+    const ok1 = await up.svc.list(true);
+    expect(ok1.items.map((r) => [r.productSlug, r.tier, r.state, r.suggestUnavailable])).toEqual([[GRANOLA, 'CANDIDATE', 'PENDING', false], ['granola-tat', 'NONE', 'SKIPPED', false]]);
+    expect(ok1.items[1]!.note).toMatch(/đang tắt/);
+    const down = await setup({ [catalogUrl()]: new Error('ENOTFOUND') }, seed);
+    down.decisions.set(skipped.key, skipped);
+    expect((await down.svc.list(true)).items.map((r) => [r.productSlug, r.tier, r.suggestUnavailable])).toEqual([[GRANOLA, 'NONE', true], ['granola-tat', 'NONE', false]]);
+  });
+
+  it('restore dòng đã bỏ qua không cần kho WordPress: WordPress tắt hay đổi tên vẫn gỡ được "Đã bỏ qua"; SP chưa từng quyết định thì 404', async () => {
+    const { svc, decisions } = await setup();
+    await svc.skip('admin-2', 'g');
+    const down = await setup({ [catalogUrl()]: new Error('ENOTFOUND') });
+    for (const [key, value] of decisions) down.decisions.set(key, value);
+    expect(await down.svc.restore('g')).toEqual({ productId: 'g', state: 'PENDING' });
+    expect(down.decisions.size).toBe(0);
+    await expect(down.svc.restore('m')).rejects.toBeInstanceOf(NotFoundException);
+    await expect(down.svc.restore('sf')).rejects.toBeInstanceOf(NotFoundException);
   });
 
   it('ứng viên làm tay vẫn đi trước gợi ý, dòng làm tay và dòng gợi ý cùng hiện trong một danh sách', async () => {

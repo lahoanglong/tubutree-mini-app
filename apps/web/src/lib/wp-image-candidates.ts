@@ -32,6 +32,8 @@ export interface WpImageRow {
   appliedCount: number | null;
   wp: WpResolved[] | null;
   defaultImageUrls: string[] | null;
+  /** true: chưa đọc được kho WordPress nên chưa biết có gợi ý hay không (khác "đã đối chiếu mà không có gì giống"); chỉ đi với tier NONE. */
+  suggestUnavailable: boolean;
 }
 
 export interface WpImageList {

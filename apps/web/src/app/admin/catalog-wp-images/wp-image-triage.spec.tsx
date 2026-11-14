@@ -27,6 +27,7 @@ const row = (over: Partial<WpImageRow> = {}): WpImageRow => ({
   appliedCount: null,
   wp: [{ id: 8454, slug: 'mat-hoa-dua-co-dac', name: 'Mật hoa dừa cô đặc', imageUrls: [wpUrl('a'), wpUrl('b'), wpUrl('c')], error: null }],
   defaultImageUrls: [wpUrl('a'), wpUrl('b'), wpUrl('c')],
+  suggestUnavailable: false,
   ...over,
 });
 const list = (items: WpImageRow[], hasImages = 0): WpImageList => ({
@@ -353,6 +354,20 @@ describe('WpImageTriage (trang duyệt ảnh WordPress)', () => {
       expect(card.textContent).not.toContain('Chưa hỏi được WordPress');
       expect(card.querySelectorAll('button, input[type="checkbox"]')).toHaveLength(0);
       expect(card.querySelector('[role="img"][aria-label="Chưa có ảnh"]')).not.toBeNull();
+    });
+
+    it('WordPress lỗi lúc gợi ý: dòng báo chưa hỏi được, không bị tính vào "Chưa có gợi ý", dòng tổng nói rõ', async () => {
+      const unknown = row({ ...none, productId: 'p7', productSlug: 'bot-hat-cu-qua', name: 'Bột hạt củ quả', suggestUnavailable: true, note: 'Chưa đọc được kho sản phẩm WordPress để gợi ý ảnh. Bấm "Tải lại" sau ít phút.' });
+      const { container } = setup(list([row(), none, unknown]));
+      await flush();
+      expect(pill(container, 'noSuggestion').textContent).toBe('Chưa có gợi ý1');
+      expect(pill(container, 'noImage').textContent).toBe('Chưa có ảnh3');
+      click(pill(container, 'noImage'));
+      const card = cards(container).find((c) => c.textContent?.includes('Bột hạt củ quả'))!;
+      expect(card.textContent).toContain('Chưa hỏi được WordPress. Bấm “Tải lại” ở đầu trang.');
+      expect(card.textContent).not.toContain('Không có ảnh WordPress để chọn');
+      expect(card.querySelectorAll('button')).toHaveLength(0);
+      expect(container.textContent).toContain('Tổng 3 sản phẩm; 3 chưa có ảnh (1 có ảnh gợi ý, 1 chưa có gợi ý, 1 chưa hỏi được WordPress).');
     });
 
     it('dòng gợi ý theo tên: hiện hạng và lý do khớp, duyệt phải qua hộp xác nhận nêu hạng', async () => {

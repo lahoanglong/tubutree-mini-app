@@ -17,6 +17,7 @@ const row = (over: Partial<WpImageRow>): WpImageRow => ({
   appliedCount: null,
   wp: [{ id: 1, slug: 'wp-1', name: 'WP 1', imageUrls: ['https://tubutree.com/a.png'], error: null }],
   defaultImageUrls: ['https://tubutree.com/a.png'],
+  suggestUnavailable: false,
   ...over,
 });
 
@@ -29,6 +30,7 @@ const rows: WpImageRow[] = [
   row({ productId: 'f', tier: 'CANDIDATE', state: 'PENDING' }),
   row({ productId: 'g', tier: 'NONE', state: 'PENDING', wp: null, defaultImageUrls: null }),
   row({ productId: 'h', tier: 'NONE', state: 'HAS_IMAGES', wp: null, defaultImageUrls: null }),
+  row({ productId: 'i', tier: 'NONE', state: 'PENDING', suggestUnavailable: true, wp: null, defaultImageUrls: null }),
 ];
 
 describe('nhóm lọc duyệt ảnh WordPress', () => {
@@ -38,29 +40,30 @@ describe('nhóm lọc duyệt ảnh WordPress', () => {
 
   it('mỗi nhóm lọc đúng dòng; "Chờ duyệt" không lẫn dòng chưa có gợi ý (không có gì để duyệt)', () => {
     const ids = (f: Parameters<typeof matchesFilter>[1]) => rows.filter((r) => matchesFilter(r, f)).map((r) => r.productId);
-    expect(ids('all')).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+    expect(ids('all')).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']);
     expect(ids('pending')).toEqual(['a', 'b', 'f']);
     expect(ids('exact')).toEqual(['a', 'c']);
     expect(ids('applied')).toEqual(['d']);
     expect(ids('skipped')).toEqual(['c']);
-    expect(ids('noImage')).toEqual(['a', 'b', 'c', 'f', 'g']);
+    expect(ids('noImage')).toEqual(['a', 'b', 'c', 'f', 'g', 'i']);
     expect(ids('suggested')).toEqual(['a', 'b', 'c', 'f']);
     expect(ids('noSuggestion')).toEqual(['g']);
   });
 
-  it('"Có ảnh gợi ý" cộng "Chưa có gợi ý" đúng bằng "Chưa có ảnh"', () => {
+  it('WordPress lỗi (chưa biết có gợi ý hay không) không bị tính là "Chưa có gợi ý", vẫn tính là "Chưa có ảnh"', () => {
     const c = filterCounts(rows);
-    expect(c.suggested + c.noSuggestion).toBe(c.noImage);
+    expect(c.noSuggestion).toBe(1);
+    expect(c.suggested + c.noSuggestion + rows.filter((r) => r.suggestUnavailable).length).toBe(c.noImage);
   });
 
   it('bộ đếm khớp số dòng của từng nhóm', () => {
-    expect(filterCounts(rows)).toEqual({ all: 8, pending: 3, exact: 2, applied: 1, skipped: 1, noImage: 5, suggested: 4, noSuggestion: 1 });
+    expect(filterCounts(rows)).toEqual({ all: 9, pending: 3, exact: 2, applied: 1, skipped: 1, noImage: 6, suggested: 4, noSuggestion: 1 });
     expect(filterCounts([])).toEqual({ all: 0, pending: 0, exact: 0, applied: 0, skipped: 0, noImage: 0, suggested: 0, noSuggestion: 0 });
   });
 
   it('"Chưa có ảnh" chỉ tính sản phẩm còn rỗng ảnh; chỉ hạng NONE là không có gợi ý', () => {
-    expect(rows.map(stillWithoutImage)).toEqual([true, true, true, false, false, true, true, false]);
-    expect(rows.map(hasSuggestion)).toEqual([true, true, true, true, true, true, false, false]);
+    expect(rows.map(stillWithoutImage)).toEqual([true, true, true, false, false, true, true, false, true]);
+    expect(rows.map(hasSuggestion)).toEqual([true, true, true, true, true, true, false, false, false]);
   });
 });
 

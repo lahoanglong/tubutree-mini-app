@@ -183,7 +183,7 @@ const MAX_CATALOG_BYTES = 4 * 1024 * 1024;
 
 /**
  * Kho sản phẩm WordPress (Store API công khai, GET) để gợi ý ảnh cho sản phẩm chưa có dòng làm tay. Chỉ giữ sản phẩm có ảnh.
- * Trang đầu lỗi (mạng, WordPress đã tắt, dữ liệu rác) trả null để phía gọi phân biệt "chưa hỏi được" với "không có gì khớp"; trang sau lỗi thì dừng và giữ phần đã đọc.
+ * Trang nào lỗi (mạng, WordPress đã tắt, dữ liệu rác) cũng trả null, không trả kho đọc dở: phía gọi phân biệt "chưa hỏi được" với "không có gì khớp", và kho thiếu trang không bị cache làm lệch trọng số từ khoá.
  */
 export async function loadWpCatalog(http: WpHttp): Promise<WpCatalogItem[] | null> {
   const items: WpCatalogItem[] = [];
@@ -191,12 +191,12 @@ export async function loadWpCatalog(http: WpHttp): Promise<WpCatalogItem[] | nul
     let rows: unknown;
     try {
       const res = await http(new URL(`${WP_STORE_API}?per_page=${WP_CATALOG_PAGE_SIZE}&page=${page}`), { maxBytes: MAX_CATALOG_BYTES, timeoutMs: HTTP_TIMEOUT_MS });
-      if (res.status !== 200) return page === 1 ? null : items;
+      if (res.status !== 200) return null;
       rows = JSON.parse(res.body.toString('utf8'));
     } catch {
-      return page === 1 ? null : items;
+      return null;
     }
-    if (!Array.isArray(rows)) return page === 1 ? null : items;
+    if (!Array.isArray(rows)) return null;
     items.push(...parseWpCatalog(rows));
     if (rows.length < WP_CATALOG_PAGE_SIZE) break;
   }

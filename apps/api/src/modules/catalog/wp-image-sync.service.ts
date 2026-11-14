@@ -49,6 +49,7 @@ const NOTE_NO_MATCH = 'Chưa thấy sản phẩm nào ở WordPress đủ giốn
 const NOTE_WP_DOWN = 'Chưa đọc được kho sản phẩm WordPress để gợi ý ảnh. Bấm "Tải lại" sau ít phút.';
 const NOTE_APPLIED_BY_SUGGESTION = 'Ảnh đã được nạp từ WordPress theo gợi ý tên.';
 const NOTE_HAS_IMAGES = 'Sản phẩm đã có ảnh.';
+const NOTE_INACTIVE = 'Sản phẩm đang tắt nên chưa gợi ý ảnh. Bật lại sản phẩm rồi bấm "Tải lại".';
 
 const clip = (s: string): string => (s.length > SUGGEST_NAME_MAX ? `${s.slice(0, SUGGEST_NAME_MAX - 1)}…` : s);
 const suggestionNote = (found: readonly WpSuggestion[]): string =>
@@ -77,6 +78,8 @@ export interface WpImageRow {
   wp: ResolvedWpProduct[] | null;
   /** Bộ ảnh mà "Duyệt" dùng khi không chọn tay; cùng luật với `applyWpCandidate` nên bảng duyệt không tự suy lại. */
   defaultImageUrls: string[] | null;
+  /** true: chưa đọc được kho WordPress nên chưa biết có gợi ý hay không (khác "đã đối chiếu mà không có gì giống"); chỉ đi với tier NONE. */
+  suggestUnavailable: boolean;
 }
 
 export interface WpImageListResponse {
@@ -150,6 +153,7 @@ export class WpImageSyncService {
         appliedCount: decision?.decision === 'APPLIED' ? (decision.imageCount ?? null) : null,
         wp: null,
         defaultImageUrls: null,
+        suggestUnavailable: false,
       });
     }
 
@@ -211,10 +215,13 @@ export class WpImageSyncService {
     });
   }
 
-  /** Xem lại ứng viên đã bỏ qua. Ảnh đã nạp không gỡ ở đây (đó là sửa sản phẩm). Cùng hàng đợi với `approve` như `skip`. */
+  /**
+   * Xem lại ứng viên đã bỏ qua. Ảnh đã nạp không gỡ ở đây (đó là sửa sản phẩm). Cùng hàng đợi với `approve` như `skip`.
+   * Với sản phẩm ngoài bảng làm tay chỉ cần đã có quyết định: xoá quyết định không phụ thuộc kho WordPress, nếu không WordPress tắt hay đổi tên là không gỡ được "Đã bỏ qua".
+   */
   async restore(productId: string): Promise<WpImageActionResponse> {
     return this.serialize<WpImageActionResponse>(async () => {
-      const { candidate } = await this.loadCandidate(productId);
+      const { candidate } = await this.loadCandidate(productId, true);
       await this.assertNotApplied(candidate);
       await clearDecision(this.prisma, candidate.productSlug);
       return { productId, state: 'PENDING' };
@@ -253,14 +260,17 @@ export class WpImageSyncService {
       const decision = decisions.get(p.slug);
       let tier: WpRowTier = 'NONE';
       let note = NOTE_HAS_IMAGES;
+      let suggestUnavailable = false;
       if (state === 'APPLIED') {
         tier = 'CANDIDATE';
         note = NOTE_APPLIED_BY_SUGGESTION;
       } else if (state !== 'HAS_IMAGES') {
-        const candidate = matcher ? suggestCandidate(p, matcher) : null;
+        // Sản phẩm đang tắt không gợi ý (approve/skip cũng từ chối sản phẩm tắt), để dòng không hiện nút mà bấm vào là 404.
+        const candidate = matcher && p.isActive ? suggestCandidate(p, matcher) : null;
         if (candidate) candidates.set(p.slug, candidate);
         tier = candidate ? 'CANDIDATE' : 'NONE';
-        note = candidate?.note ?? (matcher ? NOTE_NO_MATCH : NOTE_WP_DOWN);
+        suggestUnavailable = matcher === null && p.isActive;
+        note = candidate?.note ?? (!p.isActive ? NOTE_INACTIVE : matcher ? NOTE_NO_MATCH : NOTE_WP_DOWN);
       }
       return {
         productId: p.id,
@@ -277,6 +287,7 @@ export class WpImageSyncService {
         appliedCount: decision?.decision === 'APPLIED' ? (decision.imageCount ?? null) : null,
         wp: null,
         defaultImageUrls: null,
+        suggestUnavailable,
       };
     });
     // Dòng có gợi ý lên trước dòng không có; trong cùng nhóm giữ thứ tự tên.
@@ -302,10 +313,16 @@ export class WpImageSyncService {
     return candidate;
   }
 
-  private async loadCandidate(productId: string): Promise<{ candidate: WpImageCandidate; hasImages: boolean }> {
+  /** Ứng viên của sản phẩm đã có quyết định (chỉ để xoá quyết định): không gọi WordPress. Sản phẩm đối tác hoặc chưa từng được quyết định thì không phải ứng viên. */
+  private async decidedCandidate(product: { slug: string; storefrontId: string | null }): Promise<WpImageCandidate> {
+    if (product.storefrontId !== null || !(await loadDecisions(this.prisma)).has(product.slug)) throw new NotFoundException(MSG.notCandidate);
+    return { productSlug: product.slug, tier: 'CANDIDATE', sources: [], note: '' };
+  }
+
+  private async loadCandidate(productId: string, decidedOnly = false): Promise<{ candidate: WpImageCandidate; hasImages: boolean }> {
     const product = await this.prisma.product.findUnique({ where: { id: productId }, select: { slug: true, name: true, brand: true, isActive: true, storefrontId: true } });
     if (!product) throw new NotFoundException(MSG.noProduct);
-    const candidate = candidateForSlug(product.slug) ?? (await this.suggestFor(product));
+    const candidate = candidateForSlug(product.slug) ?? (await (decidedOnly ? this.decidedCandidate(product) : this.suggestFor(product)));
     if (product.storefrontId !== null) throw new ConflictException(MSG.partner);
     const empty = await this.prisma.product.count({ where: { id: productId, images: { isEmpty: true } } });
     return { candidate, hasImages: empty === 0 };

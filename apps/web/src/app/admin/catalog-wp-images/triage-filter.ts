@@ -18,7 +18,10 @@ export const TRIAGE_FILTERS: ReadonlyArray<{ key: TriageFilter; label: string }>
 /** "Chưa có ảnh" = sản phẩm vẫn đang rỗng ảnh (chờ duyệt hoặc đã bỏ qua); đã nạp ảnh hay vốn có ảnh thì không tính. */
 export const stillWithoutImage = (row: WpImageRow): boolean => row.state === 'PENDING' || row.state === 'SKIPPED';
 
-/** Dòng có ảnh WordPress để chọn (bảng làm tay hoặc gợi ý theo tên). Dòng NONE không có gì để duyệt, chỉ báo cần ảnh mới. */
+/**
+ * Dòng có ảnh WordPress để chọn (bảng làm tay hoặc gợi ý theo tên). Dòng NONE không có gì để duyệt: hoặc cần ảnh mới ("Chưa có gợi ý"),
+ * hoặc chưa hỏi được WordPress (`suggestUnavailable`, không tính vào "Chưa có gợi ý" vì chưa biết).
+ */
 export const hasSuggestion = (row: WpImageRow): boolean => row.tier !== 'NONE';
 
 export function matchesFilter(row: WpImageRow, filter: TriageFilter): boolean {
@@ -38,7 +41,7 @@ export function matchesFilter(row: WpImageRow, filter: TriageFilter): boolean {
     case 'suggested':
       return stillWithoutImage(row) && hasSuggestion(row);
     case 'noSuggestion':
-      return stillWithoutImage(row) && !hasSuggestion(row);
+      return stillWithoutImage(row) && !hasSuggestion(row) && !row.suggestUnavailable;
   }
 }
 
