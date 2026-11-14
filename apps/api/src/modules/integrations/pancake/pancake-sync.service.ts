@@ -515,7 +515,7 @@ export class PancakeSyncService implements OnModuleInit {
     // TubuTree là nguồn chuẩn của mô tả giàu: mô tả đã có từ 80 ký tự (không phải bản chép tên) không bao giờ bị Pancake đè. Dưới mức đó, Pancake chỉ gửi tên
     // sản phẩm hay một cụm POS ngắn (dưới 40 ký tự) thì không được thay mô tả đã có từ 40 ký tự (admin hay CLI bổ sung chữ đã duyệt).
     const keepDescription = keepExistingDescription(existing?.description, incomingDescription, name);
-    if (keepDescription) this.logger.log(`Giữ mô tả đã có của sản phẩm Pancake ${pancakeId}: mô tả TubuTree đã đạt chuẩn giàu từ 80 ký tự, hoặc chữ Pancake gửi tới ngắn hơn 40 ký tự / chỉ chép tên sản phẩm.`);
+    if (keepDescription) this.logger.debug(`Giữ mô tả đã có của sản phẩm Pancake ${pancakeId}: mô tả TubuTree đã đạt chuẩn giàu từ 80 ký tự, hoặc chữ Pancake gửi tới ngắn hơn 40 ký tự / chỉ chép tên sản phẩm.`);
     const description = keepDescription ? null : incomingDescription;
     const sellable = variations.filter((v) => !payloadRemoved(v.is_removed) && positivePrice(v.retail_price) !== null);
     const baseData = {

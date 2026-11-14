@@ -113,7 +113,7 @@ describe('CatalogCopyReview: soạn bản nháp', () => {
     api(draftsOk(D('a'), D('b'), D('c')));
     const r = mount({ batches: [sel('a', 'b', 'c')] });
     await compose(r);
-    const WARN = 'Sản phẩm này đã có mô tả từ Pancake. Đồng bộ Pancake (mỗi 15 phút) sẽ ghi đè mô tả khi Pancake có chữ thật; mô tả vừa lưu chỉ bền khi ô mô tả trên Pancake để trống.';
+    const WARN = 'Sản phẩm này đã có mô tả từ Pancake. Mô tả từ 80 ký tự (không phải bản chép tên sản phẩm) được giữ: đồng bộ Pancake (mỗi 15 phút) không ghi đè. Ngắn hơn 80 ký tự thì đồng bộ vẫn ghi đè khi Pancake có chữ thật từ 40 ký tự; mô tả vừa lưu chỉ bền khi ô mô tả trên Pancake để trống.';
     expect(card(r, 'a').textContent).toContain(WARN);
     expect(card(r, 'b').textContent).not.toContain('đã có mô tả từ Pancake');
     expect(card(r, 'c').textContent).not.toContain('đã có mô tả từ Pancake');

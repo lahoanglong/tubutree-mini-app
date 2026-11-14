@@ -353,7 +353,7 @@ function CopyCard({
           )}
           {current && !isBlankHtmlText(current.description) && (
             <Notice tone="warning">
-              Sản phẩm này đã có mô tả từ Pancake. Đồng bộ Pancake (mỗi 15 phút) sẽ ghi đè mô tả khi Pancake có chữ thật; mô tả vừa lưu chỉ bền khi ô mô tả trên Pancake để trống.
+              Sản phẩm này đã có mô tả từ Pancake. Mô tả từ 80 ký tự (không phải bản chép tên sản phẩm) được giữ: đồng bộ Pancake (mỗi 15 phút) không ghi đè. Ngắn hơn 80 ký tự thì đồng bộ vẫn ghi đè khi Pancake có chữ thật từ 40 ký tự; mô tả vừa lưu chỉ bền khi ô mô tả trên Pancake để trống.
             </Notice>
           )}
           {card.rejected.length > 0 && (

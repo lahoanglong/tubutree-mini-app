@@ -171,7 +171,7 @@ function Form({
           </label>
           {product.managedByPancake && (
             <p className="text-xs text-stone-500">
-              Lưu ý: mỗi lần đồng bộ, Pancake có ảnh thì ảnh ở đây bị thay bằng ảnh của Pancake, Pancake có mô tả thì mô tả ở đây bị thay. Pancake để
+              Lưu ý: mỗi lần đồng bộ, Pancake có ảnh thì ảnh ở đây bị thay bằng ảnh của Pancake, Pancake có mô tả thật từ 40 ký tự thì mô tả ở đây bị thay, trừ khi mô tả ở đây đã từ 80 ký tự (đồng bộ không bao giờ đè; muốn sửa thì sửa tại đây). Pancake để
               trống thì giữ nguyên bản của bạn. Danh mục đã chọn ở đây thì đồng bộ không đổi; sản phẩm chưa có danh mục sẽ được điền theo bản đồ nhóm hàng Pancake.
             </p>
           )}
