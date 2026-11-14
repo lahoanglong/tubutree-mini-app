@@ -84,15 +84,17 @@ export function ArcadeHub() {
           <Text variant="body-sm" tone="secondary" as="p">
             {fillCopy('arcade.hub.sub')}
           </Text>
+          {/* Cùng kiểu với bản Mini (arcade.css `.tubu-arcade-badge`): nền dịu, khung đang chạy thì nền xanh nhạt kèm viền trong. */}
           <div
+            role="note"
             data-testid="arcade-badge"
             data-active={badge.activeWindow ?? undefined}
-            className={`flex flex-col gap-1 rounded-card p-3 ${badge.activeWindow ? 'bg-[var(--color-promo-bg)] text-[var(--color-promo-fg)]' : 'bg-[var(--color-bg-subtle)] text-[var(--color-text-secondary)]'}`}
+            className={`flex flex-col gap-1 rounded-card p-3 ${badge.activeWindow ? 'bg-[var(--color-action-secondary-bg)] shadow-[inset_0_0_0_1px_var(--color-action-secondary-border)]' : 'bg-[var(--color-bg-subtle)]'}`}
           >
-            <Text variant="body-sm" as="p" tone={badge.activeWindow ? 'primary' : 'secondary'} style={{ fontWeight: 600, color: 'inherit' }}>
+            <Text variant="caption" tone="primary" as="p">
               {badge.label}
             </Text>
-            <Text variant="caption" as="p" style={{ color: 'inherit' }}>
+            <Text variant="caption" tone={badge.activeWindow ? 'brand' : 'secondary'} as="p" style={badge.activeWindow ? { fontWeight: 'var(--type-label-weight)' } : undefined}>
               {badge.hint}
             </Text>
           </div>
@@ -105,7 +107,8 @@ export function ArcadeHub() {
               {fillCopy('arcade.guest.demo')}
             </Text>
           )}
-          <ul className="m-0 flex list-none flex-col gap-2 p-0">
+          {/* Hai thẻ cạnh nhau khi đủ rộng (mỗi thẻ tối thiểu 18rem), một cột ở điện thoại và ở cột hẹp của Vườn Xanh: không cần điểm ngắt. */}
+          <ul className="m-0 grid list-none grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))] gap-2 p-0">
             {ARCADE_GAME_IDS.map((id) => {
               const k = ARCADE_COPY_KEY[id];
               const title = fillCopy(`arcade.${k}.title`);
@@ -114,27 +117,30 @@ export function ArcadeHub() {
               const best = authed ? mine?.bestScore : guestBest?.[id];
               return (
                 <li key={id} data-testid={`arcade-card-${id}`}>
-                  <Card variant="flat" padding={12}>
-                    <Heading variant="title-sm" font="ui" as="h3">
-                      {title}
-                    </Heading>
-                    <Text variant="body-sm" tone="secondary" as="p" className="mt-1">
-                      {fillCopy(`arcade.${k}.desc`)}
-                    </Text>
-                    <div className="mt-2 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        {best ? (
-                          <Text variant="caption" tone="tertiary" as="p" numeric>
-                            {fillCopy('arcade.best', { n: best })}
-                          </Text>
-                        ) : null}
-                        {authed && mine && (
-                          <Text variant="caption" tone="tertiary" as="p" numeric data-testid={`arcade-used-${id}`}>
-                            {fillCopy('arcade.result.used', { n: mine.used, m: mine.cap })}
-                          </Text>
-                        )}
+                  <Card variant="outline" padding={12}>
+                    <div className="flex items-center gap-3">
+                      <div className="flex min-w-0 flex-1 flex-col gap-1">
+                        <Heading variant="title-sm" font="ui" as="h3">
+                          {title}
+                        </Heading>
+                        <Text variant="body-sm" tone="secondary" as="p">
+                          {fillCopy(`arcade.${k}.desc`)}
+                        </Text>
+                        {/* Giữ chỗ một dòng chữ nhỏ lúc trạng thái chưa về để thẻ không nhảy khi kỷ lục và số lượt hiện ra. */}
+                        <div className="min-h-[calc(var(--type-caption-size)*var(--type-caption-lh))]">
+                          {best ? (
+                            <Text variant="caption" tone="secondary" as="p" numeric>
+                              {fillCopy('arcade.best', { n: best })}
+                            </Text>
+                          ) : null}
+                          {authed && mine && (
+                            <Text variant="caption" tone="secondary" as="p" numeric data-testid={`arcade-used-${id}`}>
+                              {fillCopy('arcade.result.used', { n: mine.used, m: mine.cap })}
+                            </Text>
+                          )}
+                        </div>
                       </div>
-                      <Button variant="secondary" aria-label={`${play} ${title}`} onPress={() => setOpen(id)}>
+                      <Button variant="secondary" className="flex-none" aria-label={`${play} ${title}`} onPress={() => setOpen(id)}>
                         {play}
                       </Button>
                     </div>

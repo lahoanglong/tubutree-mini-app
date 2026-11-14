@@ -149,6 +149,80 @@ describe('ArcadeGameOverlay: mở lớp phủ', () => {
   });
 });
 
+describe('ArcadeGameOverlay: đo khung canvas và theme', () => {
+  const size = (w: number, h: number) => {
+    Object.defineProperty(HTMLElement.prototype, 'clientWidth', { configurable: true, get: () => w });
+    Object.defineProperty(HTMLElement.prototype, 'clientHeight', { configurable: true, get: () => h });
+  };
+  afterEach(() => {
+    Reflect.deleteProperty(HTMLElement.prototype, 'clientWidth');
+    Reflect.deleteProperty(HTMLElement.prototype, 'clientHeight');
+    Reflect.deleteProperty(globalThis, 'ResizeObserver');
+  });
+
+  it('đo bằng clientWidth/clientHeight (cỡ bố cục), không bằng getBoundingClientRect đang bị scale 0.97 của hiệu ứng mở', async () => {
+    size(480, 660);
+    // Hộp thoại đang `scale(0.97)`: khung đo bằng getBoundingClientRect nhỏ hơn cỡ thật 3%.
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 465.6, height: 640.2, x: 0, y: 0, top: 0, left: 0, right: 465.6, bottom: 640.2, toJSON: () => ({}) });
+    Object.defineProperty(window, 'devicePixelRatio', { configurable: true, value: 2 });
+    await open();
+    expect(m.ctl.resize).toHaveBeenCalledWith(480, 660, 2);
+    expect(m.ctl.resize).not.toHaveBeenCalledWith(465.6, 640.2, 2);
+    Reflect.deleteProperty(window, 'devicePixelRatio');
+  });
+
+  it('ResizeObserver bắn lại thì đo lại theo cỡ mới (xoay màn hình, đổi cỡ cửa sổ)', async () => {
+    size(480, 660);
+    let fire: () => void = () => undefined;
+    const observe = vi.fn();
+    const disconnect = vi.fn();
+    class FakeRO {
+      constructor(cb: () => void) {
+        fire = cb;
+      }
+      observe = observe;
+      disconnect = disconnect;
+    }
+    (globalThis as unknown as { ResizeObserver: unknown }).ResizeObserver = FakeRO;
+    await open();
+    expect(observe).toHaveBeenCalledTimes(1);
+    size(400, 520);
+    act(() => fire());
+    expect(m.ctl.resize).toHaveBeenLastCalledWith(400, 520, 1);
+    mounted!.unmount();
+    mounted = null;
+    expect(disconnect).toHaveBeenCalledTimes(1);
+  });
+
+  it('không có ResizeObserver: nghe sự kiện resize của cửa sổ và gỡ khi đóng', async () => {
+    size(300, 500);
+    await open();
+    size(310, 520);
+    act(() => void window.dispatchEvent(new Event('resize')));
+    expect(m.ctl.resize).toHaveBeenLastCalledWith(310, 520, 1);
+    mounted!.unmount();
+    mounted = null;
+    const calls = m.ctl.resize.mock.calls.length;
+    act(() => void window.dispatchEvent(new Event('resize')));
+    expect(m.ctl.resize.mock.calls.length).toBe(calls);
+  });
+
+  it('theme đọc cùng token với Mini (arcade-theme.ts): dải đất, Combo và chữ ra cùng màu', async () => {
+    vi.spyOn(window, 'getComputedStyle').mockReturnValue({ getPropertyValue: (token: string) => `val(${token})` } as unknown as CSSStyleDeclaration);
+    await open();
+    expect(m.opts!.theme).toEqual({
+      bg: 'val(--color-bg-subtle)',
+      surface: 'val(--color-bg-surface)',
+      forest: 'val(--color-text-brand)',
+      sage: 'val(--color-action-secondary-border)',
+      cream: 'val(--color-track)',
+      ink: 'val(--color-text-primary)',
+      accent: 'val(--color-flash-fg)',
+      danger: 'val(--color-text-danger)',
+    });
+  });
+});
+
 describe('ArcadeGameOverlay: bàn phím', () => {
   const key = (k: string, init: KeyboardEventInit = {}) => act(() => void document.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true, ...init })));
 
@@ -595,6 +669,23 @@ describe('ArcadeGameOverlay: kết quả, Tip và trợ năng', () => {
     expect(unnamedControls(dialog()!)).toEqual([]);
     expect(smallTouchTargets(dialog()!)).toEqual([]);
     expect(headingLevels(dialog()!)).toEqual([2, 3]);
+  });
+
+  it('chip của Tip cao tối thiểu 44px (2,75rem), vẫn là liên kết thật', async () => {
+    await open();
+    await play();
+    await finish(dewRun(520, { dodgedHazards: 5 }));
+    const chip = Array.from(dialog()!.querySelectorAll<HTMLAnchorElement>('a')).find((a) => a.textContent === 'Xem Nước rửa chén Bồ Hòn')!;
+    expect(chip.style.minHeight).toBe('2.75rem');
+    expect(chip.getAttribute('href')).toBe(`/san-pham?q=${encodeURIComponent('bồ hòn')}`);
+  });
+
+  it('dòng gợi ý bàn phím vẫn có trong DOM nhưng ẩn trên màn chạm (pointer: coarse) bằng CSS', async () => {
+    await open();
+    const keys = document.querySelector<HTMLElement>('[data-testid="arcade-keys"]')!;
+    expect(keys.textContent).toBe('Bàn phím: mũi tên trái, phải để di chuyển chiếc lá.');
+    expect(keys.className).toContain('[@media(pointer:coarse)]:hidden');
+    expect(keys.className).not.toContain('max-md:');
   });
 
   it('nút Đóng và Chơi lại đủ 44px (min-height tường minh)', async () => {

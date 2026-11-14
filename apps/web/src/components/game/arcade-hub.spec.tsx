@@ -238,6 +238,52 @@ describe('ArcadeHub: huy hiệu khung giờ thưởng', () => {
   });
 });
 
+describe('ArcadeHub: bố cục giống Mini', () => {
+  const at = (iso: string) => vi.useFakeTimers({ toFake: ['Date', 'setInterval', 'clearInterval'], now: new Date(iso) });
+
+  it('huy hiệu khung giờ: nền dịu khi không có khung, nền xanh nhạt kèm viền trong khi đang chạy (cùng token với Mini), không còn nền cam', async () => {
+    at('2026-11-15T03:00:00Z');
+    await mountHub();
+    const idle = q('[data-testid="arcade-badge"]')!;
+    expect(idle.className).toContain('--color-bg-subtle');
+    expect(idle.className).not.toContain('--color-action-secondary-bg');
+    mounted!.unmount();
+    mounted = null;
+    vi.useRealTimers();
+    at('2026-11-15T01:30:00Z');
+    await mountHub();
+    const active = q('[data-testid="arcade-badge"]')!;
+    expect(active.className).toContain('bg-[var(--color-action-secondary-bg)]');
+    expect(active.className).toContain('--color-action-secondary-border');
+    expect(active.className).not.toMatch(/promo/);
+    expect(active.getAttribute('role')).toBe('note');
+    expect(active.innerHTML).not.toMatch(/promo/);
+  });
+
+  it('lưới game: từ chỗ đủ rộng hai thẻ đứng cạnh nhau (cột tự chia, mỗi thẻ tối thiểu 18rem), hẹp thì một cột; không dùng max-md', async () => {
+    await mountHub();
+    const list = card('dew_catcher').parentElement!;
+    expect(list.className).toContain('grid');
+    expect(list.className).toContain('grid-cols-[repeat(auto-fit,minmax(min(100%,18rem),1fr))]');
+    expect(list.className).not.toContain('max-md:');
+    expect(Array.from(list.children).map((c) => (c as HTMLElement).dataset.testid)).toEqual(['arcade-card-dew_catcher', 'arcade-card-refill_rush']);
+  });
+
+  it('thẻ game kiểu Mini: chữ bên trái, nút Chơi bên phải cùng hàng (không rơi xuống dưới), thẻ viền trắng để nút nổi rõ', async () => {
+    m.phase = 'guest';
+    await mountHub();
+    const row = card('dew_catcher').querySelector('button')!.parentElement!;
+    expect(row.className).toContain('flex');
+    expect(row.className).toContain('items-center');
+    const [text, btn] = Array.from(row.children) as HTMLElement[];
+    expect(text!.className).toContain('flex-1');
+    expect(text!.className).toContain('min-w-0');
+    expect(btn!.tagName).toBe('BUTTON');
+    expect(btn!.className).toContain('flex-none');
+    expect(btn!.className).toContain('zaui-btn');
+  });
+});
+
 describe('ArcadeHub: trợ năng', () => {
   it.each(['authenticated', 'guest'])('(%s) nút có tên tiếng Việt, vùng chạm 44px, heading h2 rồi hai h3', async (phase) => {
     m.phase = phase;

@@ -33,15 +33,16 @@ interface End {
 export const ARCADE_COPY_KEY: Record<ArcadeGameId, 'dew' | 'rush'> = { dew_catcher: 'dew', refill_rush: 'rush' };
 
 // Màu canvas đọc từ token ngữ nghĩa lúc mở (đổi chủ đề thì ván sau lấy màu mới); jsdom và trình duyệt cũ không trả giá trị thì dùng màu chữ của canvas.
+// Cùng bảng token với bản Mini (apps/miniapp/src/components/game/arcade-theme.ts) để dải đất, Combo và chữ ra cùng màu ở hai nền tảng.
 const THEME_TOKENS: Record<keyof ArcadeTheme, string> = {
   bg: '--color-bg-subtle',
   surface: '--color-bg-surface',
   forest: '--color-text-brand',
-  sage: '--color-story-tone-leaf',
+  sage: '--color-action-secondary-border',
   cream: '--color-track',
   ink: '--color-text-primary',
-  accent: '--color-promo-solid-bg',
-  danger: '--color-status-danger-fg',
+  accent: '--color-flash-fg',
+  danger: '--color-text-danger',
 };
 
 function readTheme(el: Element): ArcadeTheme {
@@ -57,6 +58,9 @@ function prefersReducedMotion(): boolean {
     return false;
   }
 }
+
+// Chip cỡ md cao 36px; chip tip nằm giữa bảng điểm nên nâng hẳn lên 44px (đơn vị rem để không thêm số px viết tay).
+const TIP_CHIP_STYLE = { minHeight: '2.75rem' } as const;
 
 const currentPath = () => `${window.location.pathname}${window.location.search}`;
 
@@ -162,10 +166,9 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     let cancelled = false;
     let ctl: ArcadeControls | null = null;
     let observer: ResizeObserver | null = null;
-    const fit = () => {
-      const r = stage.getBoundingClientRect();
-      ctl?.resize(r.width, r.height, window.devicePixelRatio || 1);
-    };
+    // clientWidth/clientHeight là cỡ bố cục, không bị `transform` của hiệu ứng mở hộp thoại (scale 0.97 trong `tubu-dialog-pop`) kéo nhỏ như
+    // getBoundingClientRect: đo bằng cái sau thì khung nền của canvas nhỏ hơn cỡ CSS 3% và ảnh vẽ bị phóng to, mờ.
+    const fit = () => ctl?.resize(stage.clientWidth, stage.clientHeight, window.devicePixelRatio || 1);
     import('@tubutree/app-core/arcade/arcade-canvas').then(
       ({ mountArcade: mount }) => {
         if (cancelled) return;
@@ -298,7 +301,8 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
                   <Text variant="body-md" as="p">
                     {fillCopy(`arcade.${k}.how`)}
                   </Text>
-                  <Text variant="caption" tone="tertiary" as="p">
+                  {/* Gợi ý phím chỉ có nghĩa với bàn phím: màn chạm (pointer: coarse) ẩn bằng CSS, vẫn nằm trong DOM. */}
+                  <Text variant="caption" tone="tertiary" as="p" className="[@media(pointer:coarse)]:hidden" data-testid="arcade-keys">
                     {fillCopy(`arcade.${k}.keys`)}
                   </Text>
                   <Button data-testid="arcade-start" size="lg" loading={!mounted} onPress={start}>
@@ -360,7 +364,11 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
                   <Text variant="body-sm" as="p">
                     {tip.text}
                   </Text>
-                  {tip.chip && <Chip href={tip.chip.to.web}>{tip.chip.label}</Chip>}
+                  {tip.chip && (
+                    <Chip href={tip.chip.to.web} style={TIP_CHIP_STYLE}>
+                      {tip.chip.label}
+                    </Chip>
+                  )}
                 </div>
               )}
               <div className="mt-auto flex flex-wrap gap-2 pt-2">

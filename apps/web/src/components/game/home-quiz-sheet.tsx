@@ -185,10 +185,21 @@ export function HomeQuizSheet({ onClose, claimed, onClaimed }: HomeQuizSheetProp
             </div>
           )}
           {kit.length > 0 && (
-            <ul data-testid="home-quiz-kit" className="m-0 flex list-none flex-col gap-2 p-0">
+            // Thẻ `line` chỉ còn ảnh, tên (tối đa 2 dòng) và giá trên cả hàng; nút thêm giỏ ở hàng riêng bên dưới, rộng hết hàng. Để nút trong thẻ thì ở sheet 360px
+            // nó chiếm gần nửa hàng, tên bị cắt còn một nửa và giá gạch thành vệt.
+            <ul data-testid="home-quiz-kit" className="m-0 flex list-none flex-col gap-3 p-0">
               {kit.map((p) => (
-                <li key={p.id}>
-                  <ProductCard product={p} variant="line" addLabel={fillCopy('homeQuiz.result.addAll')} onAdd={() => void add(p)} />
+                <li key={p.id} className="flex flex-col gap-2">
+                  <ProductCard product={p} variant="line" />
+                  <Button
+                    fullWidth
+                    variant="secondary"
+                    loading={quick.busyId === p.id}
+                    aria-label={`${fillCopy('homeQuiz.result.addAll')}: ${p.name}`}
+                    onPress={() => void add(p)}
+                  >
+                    {fillCopy('homeQuiz.result.addAll')}
+                  </Button>
                 </li>
               ))}
             </ul>

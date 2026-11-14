@@ -6,7 +6,7 @@ import type { PageResponse, ProductCard } from '@tubutree/app-core/api/catalog';
 import { homeQuizQuestions, pickKitProducts, type HomeQuizAnswers } from '@tubutree/app-core/arcade/home-quiz';
 import { QUICK_ADD_SOLD_OUT } from '@tubutree/app-core/quick-add';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
-import { headingLevels, unnamedControls } from '@/test-utils/a11y';
+import { duplicateControlNames, headingLevels, unnamedControls } from '@/test-utils/a11y';
 import { newTestClient } from '@/test-utils/render-hook';
 import { loginHref, takePendingAdd } from '@/lib/return-to';
 
@@ -253,6 +253,44 @@ describe('HomeQuizCard: kết quả', () => {
     expect(kitNames()).toEqual(KIT_NAMES);
     expect(kitNames()).toEqual(pickKitProducts(ANSWERS, CATALOG, 3).map((p) => p.name));
     expect(addButtons()).toHaveLength(3);
+  });
+
+  it('mỗi món: thẻ ảnh-tên-giá chiếm cả hàng, nút thêm giỏ nằm hàng riêng bên dưới, rộng hết hàng và cao ít nhất 44px', async () => {
+    await reachResult();
+    const rows = Array.from(document.querySelectorAll('[data-testid="home-quiz-kit"] li'));
+    expect(rows).toHaveLength(3);
+    for (const li of rows) {
+      const tile = li.querySelector('[data-ds="product-tile"]')!;
+      const buttonsInRow = li.querySelectorAll('button');
+      expect(buttonsInRow).toHaveLength(1);
+      const add = buttonsInRow[0]!;
+      expect(tile.contains(add)).toBe(false);
+      expect(tile.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(li.className).toContain('flex-col');
+      expect(add.className).toContain('zaui-btn-full-width');
+      expect(parseFloat(add.style.minHeight)).toBeGreaterThanOrEqual(44);
+      expect(add.textContent).toBe('+ Thêm vào giỏ');
+    }
+  });
+
+  it('ba nút thêm giỏ có tên truy cập khác nhau (kèm tên món), vẫn chứa chữ nhìn thấy', async () => {
+    await reachResult();
+    expect(addButtons().map((b) => b.getAttribute('aria-label'))).toEqual(KIT_NAMES.map((n) => `+ Thêm vào giỏ: ${n}`));
+    expect(duplicateControlNames(dialog()!)).toEqual([]);
+  });
+
+  it('đang thêm một món: chỉ nút của món đó báo đang tải', async () => {
+    const base = net.apiFetch.getMockImplementation()!;
+    net.apiFetch.mockImplementation(async (path: string, opts?: { method?: string }) => {
+      if (path.split('?')[0] === '/products/refill') return new Promise(() => undefined);
+      return base(path, opts);
+    });
+    await reachResult();
+    click(addButtons()[0]!);
+    await flush(3);
+    const all = Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="home-quiz-kit"] li button'));
+    expect(all[0]!.getAttribute('aria-busy')).toBe('true');
+    expect(all[1]!.getAttribute('aria-busy')).toBeNull();
   });
 
   it('chờ danh sách: ba khung chờ có aria-busy, rồi thay bằng thẻ thật', async () => {
