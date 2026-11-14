@@ -2,6 +2,7 @@ import { render, screen, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, type ReactNode } from 'react';
 import { beforeAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { stubHangingFetch } from '../test/fetch-stub';
 import { BANNER_HINT_KEY, HOME_SETTLE_MAX_MS, homeBlockOrder, homeRenderOrder } from '@tubutree/app-core/home-layout';
 
 // Khung chờ chung của Trang chủ ở cấp trang: Giờ vàng thật (khối hiện lỗi + "Thử lại"), giờ giả, StrictMode. home.spec.tsx mock Giờ vàng nên không thấy được.
@@ -28,6 +29,9 @@ vi.mock('../services/shop-api', () => ({
   fetchUpcomingFlashSales: vi.fn().mockResolvedValue([]),
   getCart: vi.fn(),
 }));
+// Banner đầu Trang chủ nằm trong các truy vấn giữ khung chờ chung. Không mock thì nó đi fetch thật tới localhost:3001 và kết quả về lúc nào tuỳ máy,
+// ngoài tầm giờ giả; trên CI tải cao thì khung chờ còn nguyên lúc kiểm. fetch còn lại (/me/summary, /home, /bundles/combos) treo hẳn để spec không chạm mạng.
+vi.mock('../services/campaign-api', () => ({ fetchHomeCampaigns: () => Promise.resolve([]) }));
 vi.mock('../services/account-api', () => ({ getNotifications: mocks.getNotifications }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string; user: { id: string } | null }) => unknown) => sel({ status: mocks.auth.status, user: mocks.auth.user }),
@@ -86,6 +90,7 @@ function renderHome() {
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: false });
   vi.clearAllMocks();
+  stubHangingFetch();
   localStorage.clear();
   mocks.auth.status = 'authenticated';
   mocks.auth.user = { id: 'u1' };
@@ -95,7 +100,10 @@ beforeEach(() => {
   mocks.fetchPurchasedItems.mockReturnValue(never());
   mocks.fetchActiveFlashSales.mockReturnValue(never());
 });
-afterEach(() => vi.useRealTimers());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.unstubAllGlobals();
+});
 
 describe('HomePage — khung chờ chung (cấp trang)', () => {
   it('Giờ vàng (truy vấn quyết định) lỗi lúc đang giữ khung chờ: thả khung chờ, khối Giờ vàng hiện lỗi kèm "Thử lại", bấm Thử lại tải lại đúng khối đó', async () => {
