@@ -124,7 +124,7 @@ const ACCOUNT: string[] = [
   'components/account/account-menu.ts',
   'components/account/avatar-crop-sheet.tsx',
 ];
-const LOYALTY: string[] = ['app/tai-khoan/diem-xanh/page.tsx', 'app/tai-khoan/vi-tubu/page.tsx', 'app/tai-khoan/ledger-shell.tsx', 'app/kho-qua/page.tsx', 'app/kho-qua/cua-toi/page.tsx', 'app/hoan-tien/page.tsx', 'components/loyalty/claim-point.tsx'];
+const LOYALTY: string[] = ['app/tai-khoan/diem-xanh/page.tsx', 'app/tai-khoan/vi-tubu/page.tsx', 'app/tai-khoan/ledger-shell.tsx', 'app/kho-qua/page.tsx', 'components/rewards/rewards-view.tsx', 'app/kho-qua/cua-toi/page.tsx', 'app/hoan-tien/page.tsx', 'components/loyalty/claim-point.tsx'];
 const COMMUNITY: string[] = [
   'app/cong-dong/page.tsx',
   'app/cong-dong/feed-view.tsx',

@@ -28,6 +28,7 @@ vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: mocks.user, retrySession: mocks.retrySession }) }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
+vi.mock('@/lib/shop-client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/shop-client')>()), getCart: async () => ({ itemCount: 3 }) }));
 vi.mock('@/lib/platform-bridge', () => ({ platformBridge: { share: mocks.share } }));
 
 import { GroupBuyView } from './group-buy-view';
@@ -114,6 +115,16 @@ describe('/mua-chung — danh sách nhóm', () => {
     expect(c.textContent).toContain('−20%');
     expect(c.textContent).toContain('2/5 người · còn 2 giờ');
     expect(mocks.get).toHaveBeenCalledWith('/group-buy');
+  });
+
+  it('đầu trang có nút Giỏ 44×44 cho điện thoại kèm số lượng (một chạm vào /gio-hang), ẩn từ md', async () => {
+    const c = await mount();
+    const cart = c.querySelector<HTMLAnchorElement>('header a[href="/gio-hang"]')!;
+    expect(cart.getAttribute('aria-label')).toBe('Giỏ hàng, 3 sản phẩm');
+    expect(cart.className).toContain('h-11');
+    expect(cart.className).toContain('w-11');
+    expect(cart.className).toContain('md:hidden');
+    expect(cart.textContent).toContain('3');
   });
 
   it('lưới nhóm có cột co được (minmax(0,1fr)) để tên dài cắt bằng dấu ba chấm thay vì đẩy trang tràn ngang ở 320px', async () => {

@@ -11,6 +11,7 @@ import { shareDescription } from '@tubutree/app-core/commerce/share-offer';
 import { groupBuyListQuery, groupBuyOneQuery } from '@tubutree/app-core/queries/groupbuy';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { EmptyState } from '@/components/empty-state';
+import { PhoneCartButton } from '@/components/phone-cart-button';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { Badge } from '@/components/ui/badge';
@@ -163,7 +164,7 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
 
   return (
     <main className={`${PAGE_WIDE} py-6`}>
-      <PageHeader title="Mua chung giá tốt" subtitle="Rủ thêm bạn cho đủ nhóm — đủ người, ai cũng nhận mã giảm giá!" />
+      <PageHeader title="Mua chung giá tốt" subtitle="Rủ thêm bạn cho đủ nhóm — đủ người, ai cũng nhận mã giảm giá!" actions={<PhoneCartButton />} />
 
       {note && (
         <p role={note.error ? 'alert' : 'status'} className={`mt-3 text-sm ${note.error ? 'text-danger-fg' : 'text-success-fg'}`}>

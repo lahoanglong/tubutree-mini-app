@@ -17,7 +17,7 @@ vi.mock('next/navigation', () => ({
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: vi.fn(), post: vi.fn(), delete: vi.fn() } }));
-vi.mock('@/lib/shop-client', () => ({ getActiveFlashSales: async () => [] }));
+vi.mock('@/lib/shop-client', () => ({ getActiveFlashSales: async () => [], getCart: async () => ({ itemCount: 0 }) }));
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => (
     <a data-next-link="" href={href} {...rest}>
@@ -115,6 +115,20 @@ describe('trang thương hiệu /brand/[slug] — khung shop giống Mini App', 
     expect((meta.openGraph as { images: { url: string }[] }).images).toEqual([expect.objectContaining({ url: '/opengraph-image.png', width: 1200 })]);
     expect(meta.description).toContain('Bồ Hòn Xanh');
     expect((meta.description as string).length).toBeLessThanOrEqual(160);
+  });
+
+  it('điện thoại có nút Giỏ 44×44 nổi góc phải trên, đối xứng nút lùi bên trái (một chạm vào /gio-hang); từ md ẩn vì thanh đầu của web đã có giỏ', async () => {
+    const box = await html();
+    const cart = box.querySelector<HTMLAnchorElement>('a[aria-label="Giỏ hàng"]')!;
+    expect(cart.getAttribute('href')).toBe('/gio-hang');
+    expect(cart.className).toContain('h-11');
+    expect(cart.className).toContain('w-11');
+    expect(cart.className).toContain('md:hidden');
+    const wrap = cart.parentElement!;
+    expect(wrap.className).toContain('md:hidden');
+    expect(wrap.getAttribute('style')).toContain('position:fixed');
+    expect(wrap.getAttribute('style')).toContain('z-index:40');
+    expect(wrap.getAttribute('style')).toContain('right:var(--space-inline-md)');
   });
 
   it('có BreadcrumbList JSON-LD Trang chủ › nhãn', async () => {

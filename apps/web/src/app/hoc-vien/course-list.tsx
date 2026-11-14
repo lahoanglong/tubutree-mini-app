@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { BackAwareLink } from '@/components/back-aware-link';
 import { useQuery } from '@tanstack/react-query';
 import { BookOpen, CheckCircle2 } from 'lucide-react';
 import type { AcademyCourseSummary } from '@tubutree/app-core/api/academy';
@@ -65,9 +66,9 @@ export function CtvOnlyNotice() {
     <section className={`${ui.card} p-8 text-center`}>
       <h2 className="font-display text-base font-semibold text-stone-900">Học viện CTV dành cho cộng tác viên</h2>
       <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">Tài khoản của bạn chưa có quyền học khoá đào tạo. Tìm hiểu cách trở thành cộng tác viên Tubu Tree.</p>
-      <Link href="/ctv" className={`${ui.btnPrimary} mt-4`}>
+      <BackAwareLink href="/ctv" className={`${ui.btnPrimary} mt-4`}>
         Tìm hiểu về CTV
-      </Link>
+      </BackAwareLink>
     </section>
   );
 }
@@ -98,9 +99,9 @@ function CoursesLoaded() {
       <section className={`${ui.card} p-8 text-center`}>
         <h2 className="font-display text-base font-semibold text-stone-900">Chưa có khoá học nào</h2>
         <p className="mx-auto mt-1 max-w-sm text-sm text-stone-600">Tubu sẽ sớm thêm khoá học đào tạo cho CTV.</p>
-        <Link href="/ctv" className={`${ui.btnPrimary} mt-4`}>
+        <BackAwareLink href="/ctv" className={`${ui.btnPrimary} mt-4`}>
           Về trang Cộng tác viên
-        </Link>
+        </BackAwareLink>
       </section>
     );
   }

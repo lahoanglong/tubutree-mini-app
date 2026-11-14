@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { BackAwareLink } from '@/components/back-aware-link';
 import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
@@ -500,7 +500,7 @@ export default function AddToCart({
           {statusBody}
         </div>
         <div className="flex items-center gap-2.5">
-          <Link
+          <BackAwareLink
             href="/gio-hang"
             data-cart-target=""
             aria-label="Xem giỏ hàng"
@@ -508,7 +508,7 @@ export default function AddToCart({
           >
             <ShoppingCart className="h-[22px] w-[22px]" aria-hidden="true" />
             <CountBadge count={cartCount} bump />
-          </Link>
+          </BackAwareLink>
           {available ? (
             <div className="flex min-w-0 flex-1 gap-2.5">
               <button type="button" data-testid="pdp-add-to-cart" onClick={(e) => { addSource.current = e.currentTarget; onAdd(); }} disabled={cannotBuy} aria-busy={addBusy} aria-disabled={busy || undefined} className={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}>
