@@ -37,7 +37,7 @@ function makePrisma(opts: { prevByVariation?: Record<string, Prev>; ops?: Map<st
     jest.fn(async ({ where, update }: { where: { key: string }; update: { detail?: unknown } }) => {
       ops.set(where.key, { detail: update.detail });
     });
-  const prisma = {
+  const base = {
     product: {
       findUnique: jest.fn().mockResolvedValue(opts.existingProduct ?? null),
       create: opts.productCreate ?? jest.fn().mockImplementation(async ({ data }) => ({ id: `prod-${data.pancakeId}`, ...data })),
@@ -55,8 +55,9 @@ function makePrisma(opts: { prevByVariation?: Record<string, Prev>; ops?: Map<st
     wishlist: { findMany: jest.fn().mockResolvedValue([]) },
     $executeRaw: jest.fn().mockResolvedValue(1),
     $queryRaw: jest.fn().mockResolvedValue([{ holder: 'this-run' }]),
-    $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)),
   };
+  // `$transaction` đứng ngoài literal: tự tham chiếu `prisma` trong chính literal làm TS suy ra `any` cho cả đối tượng.
+  const prisma = { ...base, $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(base)) };
   return { prisma: prisma as unknown as PrismaService, raw: prisma, ops };
 }
 
