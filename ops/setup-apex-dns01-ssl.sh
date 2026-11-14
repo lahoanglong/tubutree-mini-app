@@ -18,6 +18,7 @@
 #   DOMAINS ("tubutree.com www.tubutree.com")  PROPAGATION_SECONDS (30)  MIN_CERT_DAYS (14)
 #   CERTBOT_EMAIL (rỗng: bỏ qua nếu máy đã có tài khoản ACME; chưa có tài khoản thì phải đặt)  PRE_CHECK (ops/pre-cutover-check.sh)
 #   CA_FILE (rỗng = kho CA hệ thống; chuỗi chứng chỉ ở LIVE_DIR phải được CA này tin)
+#   APACHECTL (/www/server/apache/bin/apachectl: --issue gắn --deploy-hook "apachectl -t && apachectl -k graceful" như lineage app/api, nếu tệp này chạy được)
 set -u
 
 SELF_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,6 +31,7 @@ MIN_CERT_DAYS="${MIN_CERT_DAYS:-14}"
 CERTBOT_EMAIL="${CERTBOT_EMAIL:-}"
 PRE_CHECK="${PRE_CHECK:-$SELF_DIR/pre-cutover-check.sh}"
 CA_FILE="${CA_FILE:-}"
+APACHECTL="${APACHECTL:-/www/server/apache/bin/apachectl}"
 PLUGIN_PKG="python3-certbot-dns-cloudflare"
 PROD_CERT_NAME="tubutree.com"
 STAGING_CERT_NAME="tubutree.com-staging"
@@ -189,22 +191,37 @@ do_install_plugin() {
   # shellcheck disable=SC2086 # tách từ có chủ ý: danh sách gói
   DEBIAN_FRONTEND=noninteractive apt-get install -y $pkgs || die "apt-get install $pkgs lỗi"
   plugin_installed || die "đã chạy apt-get nhưng vẫn không thấy plugin dns-cloudflare (kiểm: certbot plugins)"
-  echo "Đã cài plugin dns-cloudflare."
+  # Gói apt cài xong chưa chứng tỏ certbot nạp được plugin (lệch bản plugin và certbot): hỏi chính certbot, để --check và pre-cutover-check không báo READY oan.
+  certbot plugins --prepare 2>&1 | grep -q 'dns-cloudflare' ||
+    die "đã cài gói $PLUGIN_PKG nhưng certbot không nạp được plugin (certbot plugins --prepare không thấy dns-cloudflare; certbot $(certbot --version 2>&1 | head -1)): xem certbot plugins --prepare, có thể lệch bản plugin và certbot"
+  echo "Đã cài plugin dns-cloudflare (certbot nạp được)."
 }
 
 # Bộ lọc che giá trị token: đọc token TRONG awk từ tệp (không đưa token qua tham số dòng lệnh, `ps` không thấy), thay mọi chỗ khớp bằng [REDACTED].
 redact_token() {
-  awk -v f="$CF_CREDENTIALS" '
+  # Che CẢ giá trị thô (đúng như ghi trong tệp, kể cả ngoặc và chú thích) LẪN giá trị certbot thực dùng (đã bóc ngoặc đơn/kép và chú thích ` # ...`).
+  awk -v f="$CF_CREDENTIALS" -v q="'" '
+    function redact(text, t,    i) {
+      if (length(t) == 0) return text
+      while ((i = index(text, t)) > 0) text = substr(text, 1, i - 1) "[REDACTED]" substr(text, i + length(t))
+      return text
+    }
     BEGIN {
-      tok = ""
+      raw = ""; val = ""
       while ((getline l < f) > 0) {
-        if (l ~ /^[[:space:]]*dns_cloudflare_api_token[[:space:]]*=/) { sub(/^[^=]*=[[:space:]]*/, "", l); sub(/[[:space:]]+$/, "", l); tok = l }
+        if (l ~ /^[[:space:]]*dns_cloudflare_api_token[[:space:]]*=/) {
+          sub(/^[^=]*=[[:space:]]*/, "", l); sub(/[[:space:]]+$/, "", l); sub(/\r$/, "", l)
+          raw = l
+          sub(/[[:space:]]+#.*$/, "", l); sub(/[[:space:]]+$/, "", l)
+          if (l ~ "^[\"" q "]" && l ~ "[\"" q "]$" && length(l) >= 2) l = substr(l, 2, length(l) - 2)
+          val = l
+        }
       }
       close(f)
     }
     {
-      out = $0
-      if (length(tok) > 0) { while ((i = index(out, tok)) > 0) out = substr(out, 1, i - 1) "[REDACTED]" substr(out, i + length(tok)) }
+      out = redact($0, raw)
+      if (val != raw) out = redact(out, val)
       print out
     }'
 }
@@ -228,6 +245,13 @@ do_issue() {
   else
     cert_name="$PROD_CERT_NAME"
     server_dir="acme-v02.api.letsencrypt.org"
+    # Lineage app/api đã có renew_hook nạp lại Apache; thiếu hook này thì Apache giữ chứng chỉ cũ sau mỗi lần gia hạn (sau ~90 ngày là hết hạn thật).
+    # --deploy-hook chạy khi cấp lần đầu và mỗi lần gia hạn; configtest chạy trước, graceful không cắt kết nối. Script này KHÔNG tự chạy apachectl.
+    if [ -x "$APACHECTL" ]; then
+      args+=(--deploy-hook "$APACHECTL -t && $APACHECTL -k graceful")
+    else
+      info "không thấy $APACHECTL chạy được: lineage KHÔNG có hook nạp lại Apache, sau mỗi lần gia hạn phải tự graceful Apache"
+    fi
   fi
   args+=(--cert-name "$cert_name")
   if [ -n "$CERTBOT_EMAIL" ]; then

@@ -7,7 +7,7 @@
 #
 # Các bước, dừng ở bước đầu tiên lỗi:
 #   1. GET https://api.tubutree.com/api/health phải trả 200 và có "db":"up" + "redis":"up" (thứ tự bắt buộc: API ổn trước, Mini App sau; docs/launch/deploy-rollback-runbook.md).
-#   2. (chỉ với --testing) có zmp CLI và đã đăng nhập, để khỏi build xong mới biết thiếu.
+#   2. (chỉ với --testing) có zmp CLI và đã đăng nhập (ZMP_TOKEN trong môi trường, hoặc dòng ZMP_TOKEN=... ở apps/miniapp/.env, hoặc ~/.zmp), để khỏi build xong mới biết thiếu.
 #   3. Node >= 22; pnpm --filter @tubutree/shared-types build; typecheck; test; VITE_API_BASE_URL=https://api.tubutree.com/api ... build; bundle-budget.cjs ở chế độ strict
 #      (vượt ngưỡng cảnh báo của dự án thì dừng; đặt MINIAPP_ENTRY_WARN_KB / MINIAPP_TOTAL_WARN_KB nếu chủ chấp nhận bản lớn hơn). apps/miniapp/www nằm trong .gitignore, không commit.
 #   4. Không có zmp hoặc chưa đăng nhập: in hướng dẫn 2 dòng rồi thoát 3 (bản build vẫn đã kiểm xong).
@@ -23,6 +23,7 @@ REPO_ROOT="$(cd "$SELF_DIR/../.." && pwd)"
 API_BASE_URL="https://api.tubutree.com/api"
 API_HEALTH_URL="${API_HEALTH_URL:-$API_BASE_URL/health}"
 ZMP_HOME="${ZMP_HOME:-${HOME:-/root}/.zmp}"
+ZMP_ENV_FILE="$REPO_ROOT/apps/miniapp/.env"
 CURL_TIMEOUT="${CURL_TIMEOUT:-15}"
 
 usage() { sed -n '2,/^set -u/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; }
@@ -79,14 +80,16 @@ zmp_status() { # trả 0 khi đủ CLI và phiên đăng nhập
     ZMP_REASON="chưa cài zmp CLI"
     return 1
   fi
+  # zmp đọc ZMP_TOKEN từ môi trường hoặc từ .env ở thư mục nó chạy (apps/miniapp, nơi `zmp login` ghi); grep -q để không bao giờ in giá trị.
   if [ -n "${ZMP_TOKEN:-}" ] || [ -e "$ZMP_HOME" ]; then return 0; fi
-  ZMP_REASON="chưa đăng nhập zmp (không có $ZMP_HOME, ZMP_TOKEN rỗng)"
+  if [ -f "$ZMP_ENV_FILE" ] && grep -q '^ZMP_TOKEN=.' "$ZMP_ENV_FILE" 2>/dev/null; then return 0; fi
+  ZMP_REASON="chưa đăng nhập zmp (không có ZMP_TOKEN trong môi trường hay $ZMP_ENV_FILE, không có $ZMP_HOME)"
   return 1
 }
 
 print_zmp_help() { # $1 = dòng mở đầu (build đã xong hay chưa chạy)
   echo "$1 CHƯA thể đưa lên Zalo: $ZMP_REASON" >&2
-  echo "  1) Chạy một lần mỗi máy:  zmp login   (cài zmp CLI nếu chưa có: npm i -g zmp-cli)" >&2
+  echo "  1) Chạy một lần mỗi máy:  cd apps/miniapp && zmp login   (cài zmp CLI nếu chưa có: npm i -g zmp-cli; token lưu ở apps/miniapp/.env, đã nằm trong .gitignore)" >&2
   echo "  2) Rồi chạy lại:          bash scripts/ops/publish-zmp-release.sh --testing \"W153-W157 sync cart, cancel refund, zero-price & variation labels\"" >&2
 }
 

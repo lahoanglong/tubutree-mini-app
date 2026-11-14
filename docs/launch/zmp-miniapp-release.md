@@ -16,7 +16,7 @@ Danh sách này lấy từ `git diff <merge>^1 <merge> -- apps/miniapp packages/
 | W126–127, W129 (cùng #353) | Chỉ ở Admin: màn chất lượng catalog (`pages/admin-catalog-quality.tsx`) và ba tệp app-core cho bộ kiểm catalog; khung cắt ROI Story và thanh toán web không vào gói Mini | `pages/admin-catalog-quality.tsx`, `packages/app-core/src/commerce/catalog-*.ts`, `copy-claims-guard.ts` |
 | W130 + W131 (`b1b9147d6`, #354) | Ô số điện thoại ở địa chỉ nhận hàng chuẩn hoá khi rời ô và khi dán cả số; ô tìm đơn chuẩn hoá chuỗi tìm; quy tắc nhãn phân loại trống áp thêm cho Giờ vàng, ưu đãi chớp nhoáng và danh sách đại lý; `variation-label` chuyển về `app-core` dùng chung với web | `components/address-form.tsx`, `pages/orders.tsx`, `components/flash-sale.tsx`, `components/offers/offers-flash.tsx`, `pages/dealer.tsx`, `packages/app-core/src/phone-input.ts`, `variation-label.ts` |
 | W132–W145 (`4b20d72f4`, #355) | Đợt chỉnh giao diện lớn (111 tệp): thẻ Story hai cột gọn một màn trên chi tiết sản phẩm, giỏ và thanh toán responsive, Mini chừa viên thuốc Zalo và safe-area (W135), bản đồ xuất xứ thương hiệu bằng SVG, chữ kịch bản story viết lại, ghi rõ trạng thái đăng ký định kỳ đang tạm dừng, thiết kế token và chữ | `components/ui/product-story-showcase.tsx`, `pages/product-detail.tsx`, `pages/home.tsx`, `pages/brand-*.tsx`, `css/brand-map.css`, `css/tokens.css`, `components/subscriptions-panel.tsx`, `packages/app-core/src/commerce/story-*.ts` |
-| W146B (`4d6aaca78`, `dc466d31e`, `d9b7a83eb`, `e152be99a`) | Lời chia sẻ nêu ưu đãi cho khách mới, Vườn Xanh gắn `?ref=`, khối "Mời bạn sống xanh" ở Cá nhân (không hứa Điểm Xanh khi Admin tắt thưởng) | `components/share-sheet.tsx`, `pages/profile.tsx`, `pages/game.tsx`, `pages/group-buy.tsx`, `packages/app-core/src/commerce/share-offer.ts`, `invite-card.ts` |
+| W146B (`4d6aaca78`, `dc466d31e`, `d9b7a83eb`, `e152be99a`) | Lời chia sẻ nêu ưu đãi cho khách mới, Vườn Xanh gắn `?ref=`, khối "Mời bạn sống xanh" ở Cá nhân (không hứa Điểm Xanh khi Admin tắt thưởng); dải Reel trang chủ nâng trần từ 8 lên 15 món (`REEL_MAX_ITEMS`) | `components/share-sheet.tsx`, `pages/profile.tsx`, `pages/game.tsx`, `pages/group-buy.tsx`, `packages/app-core/src/commerce/share-offer.ts`, `invite-card.ts`, `story-reel.ts` |
 | W153 (`d2fd5f409`) | Dán số điện thoại vào ô địa chỉ: bôi một PHẦN ô rồi dán chỉ thay đúng đoạn bôi, không xoá phần còn lại | `components/address-form.tsx` |
 | W155 (`0efcc543d`) | Vùng chạm tối thiểu 44px: ô Số lượng (dùng ở Đổi rác), nút Chia sẻ và dòng Điểm Xanh ở chi tiết sản phẩm | `components/ui/quantity-selector.tsx`, `css/tokens.css`, `pages/product-detail.tsx` |
 | W148A, W152, W154, W156, W157, W158–W159 | KHÔNG có tệp nào của `apps/miniapp` hay `packages/app-core` đổi (W148A và W152 chỉ đổi dữ liệu SKU hoặc spec test; W154, W156, W157 là API/Admin; W158–W159 là `ops/`) | không có |
@@ -48,7 +48,7 @@ Kết quả lần kiểm 2026-11-14 (đã chạy thật, một chuỗi liền, t
 | `vitest` Mini App | 501 tệp, 10756 test, xanh | chưa ghi |
 | `vite build` | xanh, 3,61 giây | xanh, 6,5 giây |
 | File JS lớn nhất (entry) | `assets/index.CubBH98e.module.js` 422 KB raw / 138 KB gzip (vite báo 412,72 kB / 141,08 kB gzip) | `assets/index.D-fJGZ6m.module.js` 409 KB raw / 134 KB gzip (vite báo 401,79 kB) |
-| Tổng bản build | 234 tệp, 2379 KB raw / 916 KB gzip (JS 219 tệp 2056 KB, CSS 6 tệp 163 KB, ảnh và font 7 tệp 158 KB) | 230 tệp, 2354 KB raw / 906 KB gzip |
+| Tổng bản build | 234 tệp, 2379 KB raw / 916 KB gzip (JS 219 tệp 2056 KB, CSS 6 tệp 163 KB, ảnh và font 7 tệp 158 KB, 2 tệp loại khác) | 230 tệp, 2354 KB raw / 906 KB gzip |
 | Ngưỡng cảnh báo của dự án | entry 700 KB, tổng 2560 KB: không vượt (entry 60% ngưỡng, tổng 93%) | không vượt |
 
 So với 2026-11-13: thêm 4 tệp, tổng +25 KB raw (+1,1%) và +10 KB gzip, entry +13 KB raw (+3,2%) và +4 KB gzip. Mục tiêu entry của đợt hiệu năng là dưới 450 KB (`docs/2026-10-review/03-perf.md` A3-013): vẫn đạt.
@@ -64,13 +64,13 @@ bash scripts/ops/publish-zmp-release.sh --testing "<mô tả>"   # kiểm rồi 
 
 Script dừng ở bước đầu tiên lỗi:
 1. `GET https://api.tubutree.com/api/health` phải trả 200 và có `"db":"up"` + `"redis":"up"`.
-2. Chỉ với `--testing`: kiểm `zmp` CLI (`command -v zmp`, hoặc `npx --no-install zmp`) và phiên đăng nhập (`~/.zmp` hoặc `ZMP_TOKEN`) TRƯỚC khi build, để khỏi build xong mới biết thiếu. Chưa đăng nhập thì in hướng dẫn: chạy `zmp login`, rồi chạy lại lệnh `--testing`; thoát mã 3.
+2. Chỉ với `--testing`: kiểm `zmp` CLI (`command -v zmp`, hoặc `npx --no-install zmp`) và phiên đăng nhập (`ZMP_TOKEN` trong môi trường, hoặc dòng `ZMP_TOKEN=` ở `apps/miniapp/.env` nơi `zmp login` ghi token và đã nằm trong `.gitignore`, hoặc `~/.zmp`) TRƯỚC khi build, để khỏi build xong mới biết thiếu. Chưa đăng nhập thì in hướng dẫn: chạy `cd apps/miniapp && zmp login`, rồi chạy lại lệnh `--testing`; thoát mã 3.
 3. Node >= 22, rồi cả chuỗi ở mục 2 với `VITE_API_BASE_URL=https://api.tubutree.com/api`, bundle-budget strict.
 4. Chỉ cờ `--testing` mới gọi `zmp deploy`; không có cờ này script không bao giờ đẩy gì lên Zalo.
 
-Script không đọc, không in giá trị `ZMP_TOKEN` hay nội dung `~/.zmp`, và không bao giờ nộp bản production.
+Script không in giá trị `ZMP_TOKEN` hay nội dung `~/.zmp` và `apps/miniapp/.env` (chỉ `grep -q` xem có dòng `ZMP_TOKEN=` có giá trị), và không bao giờ nộp bản production.
 
-Trạng thái kiểm 2026-11-14 trên máy dev này: không cài `zmp` CLI (`command -v zmp` rỗng) và không có `~/.zmp`, nên CHƯA có bằng chứng `zmp deploy` chạy được; script mới được chạy thử với `curl`, `pnpm`, `zmp` giả ở 11 ca (chỉ kiểm, `--testing` đủ điều kiện, thiếu `zmp`, thiếu mô tả, tham số sai, health 500, health thiếu redis, test lỗi, `--help`) và phần build/bundle thật ở mục 2. Đưa bản lên Zalo là thao tác ra bên ngoài nên cần người phát hành quyết định.
+Trạng thái kiểm 2026-11-14 trên máy dev này: không cài `zmp` CLI (`command -v zmp` rỗng) và không có `~/.zmp`, nên CHƯA có bằng chứng `zmp deploy` chạy được; script mới được chạy thử với `curl`, `pnpm`, `zmp` giả ở 16 ca (chỉ kiểm, `--testing` đủ điều kiện, thiếu `zmp`, thiếu mô tả, tham số sai, health 500, health thiếu redis, test lỗi, `--help`, và 5 ca nhận diện đăng nhập: `.env` có token, `.env` token rỗng, `.env` token bị chú thích, không có `.env`, token trong môi trường) và phần build/bundle thật ở mục 2. Đưa bản lên Zalo là thao tác ra bên ngoài nên cần người phát hành quyết định.
 
 Thứ tự bắt buộc (theo runbook deploy):
 1. API đã chạy ổn 30 đến 60 phút (màn Sức khoẻ hệ thống không đỏ).
@@ -92,7 +92,8 @@ Chưa ai xem các màn này trên Zalo thật hay trên Safari; mọi kiểm tra
 7. Giờ vàng và danh sách đại lý: dòng phân loại tên trống không hiện ngoặc trống.
 8. Chi tiết sản phẩm: nút Chia sẻ, dòng Điểm Xanh và ô Số lượng chạm được dễ (cao tối thiểu 44px); Đổi rác: ô Số lượng cũng vậy.
 9. Chia sẻ sản phẩm và Cá nhân: lời chia sẻ nêu ưu đãi cho khách mới; khối "Mời bạn sống xanh" không hứa Điểm Xanh khi Admin tắt thưởng.
-10. Mọi màn có header: nội dung không bị viên thuốc Zalo che, chừa safe-area trên máy tai thỏ.
+10. Trang chủ: dải Reel hiện tối đa 15 món khi nguồn có đủ.
+11. Mọi màn có header: nội dung không bị viên thuốc Zalo che, chừa safe-area trên máy tai thỏ.
 
 ## 5. Việc còn treo
 

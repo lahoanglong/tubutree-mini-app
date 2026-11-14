@@ -13,6 +13,8 @@ trap 'rm -rf "$WORK"' EXIT
 REAL_OPENSSL="$(command -v openssl)"
 REAL_BASH="$(command -v bash)"
 TOKEN="SECRETTOKEN_TEST_9f8e7d6c5b4a"
+QTOKEN="SECRETQUOTED_TEST_a1b2c3d4"
+CTOKEN="SECRETCOMMENT_TEST_e5f6a7b8"
 FAILED=0
 pass() { echo "ok   $1"; }
 fail() { echo "FAIL $1"; FAILED=1; }
@@ -22,17 +24,26 @@ lacks() { if grep -qF -- "$3" <<<"$2"; then fail "$1: không được có '$3'";
 
 # ── công cụ cơ bản (symlink) và lệnh giả ──
 mkdir -p "$WORK/bin" "$WORK/stub" "$WORK/cb" "$WORK/snapbin/snap/bin" "$WORK/cf" "$WORK/pki"
-for t in bash sh sed awk grep stat date head cut tr basename dirname cat openssl mktemp uname hostname; do
+for t in bash sh sed awk grep stat date head cut tr basename dirname cat cp openssl mktemp uname hostname; do
   p="$(command -v "$t" 2>/dev/null || true)"
   [ -n "$p" ] && ln -s "$p" "$WORK/bin/$t"
 done
 cat > "$WORK/cb/certbot" <<'STUB'
 #!/usr/bin/env bash
 echo "certbot $*" >> "$CALLS"
+if [ "${1:-}" = plugins ]; then
+  [ "${PLUGINS_MISSING:-0}" = 1 ] || echo "* dns-cloudflare"
+  exit 0
+fi
 if [ "${CERTBOT_LEAK:-0}" = 1 ]; then
   # Giả lập certbot lỡ in tệp credentials ra cả stdout lẫn stderr: bộ lọc của script phải che giá trị token.
   cat "$CF_CREDENTIALS"
   cat "$CF_CREDENTIALS" >&2
+fi
+if [ -n "${PARSED_TOKEN:-}" ]; then
+  # Giả lập certbot/plugin in giá trị token ĐÃ bóc ngoặc và chú thích (như bộ đọc ini của certbot), không phải dòng thô trong tệp.
+  echo "request header Authorization: Bearer $PARSED_TOKEN"
+  echo "request header Authorization: Bearer $PARSED_TOKEN" >&2
 fi
 echo "certbot giả: xong"
 exit "${CERTBOT_RC:-0}"
@@ -47,6 +58,8 @@ cat > "$WORK/stub/apt-get" <<'STUB'
 #!/usr/bin/env bash
 echo "apt-get $*" >> "$CALLS"
 [ "${APT_FAIL:-0}" = 1 ] && exit 100
+# Cài certbot thì certbot giả xuất hiện trong PATH (như apt thật), để bước kiểm sau cài chạy được.
+case " $* " in *" certbot "*) cp "$CB_SRC" "$STUB_DIR/certbot" ;; esac
 echo installed > "$PLUGIN_STATE"
 exit 0
 STUB
@@ -60,16 +73,30 @@ cat > "$WORK/stub/id" <<'STUB'
 case "${1:-}" in -u) echo "${FAKE_UID:-0}" ;; -un) if [ "${FAKE_UID:-0}" = 0 ]; then echo root; else echo tester; fi ;; *) echo "uid=${FAKE_UID:-0}" ;; esac
 STUB
 for t in nginx apachectl; do
-  printf '#!/usr/bin/env bash\necho "%s $*" >> "$CALLS"\n' "$t" > "$WORK/stub/$t"
+  printf '#!/usr/bin/env bash\necho "EXEC-%s $*" >> "$CALLS"\n' "$t" > "$WORK/stub/$t"
 done
+# apachectl "thật" để --issue đặt hook gia hạn: chỉ cần tồn tại và chạy được; nếu script chạy nó thì $CALLS có EXEC-apachectl.
+mkdir -p "$WORK/fakeapache"
+printf '#!/usr/bin/env bash\necho "EXEC-apachectl $*" >> "$CALLS"\n' > "$WORK/fakeapache/apachectl"
+chmod +x "$WORK/fakeapache/apachectl"
 cat > "$WORK/stub/pre-check.sh" <<'STUB'
 #!/usr/bin/env bash
 echo "pre-check $*" >> "$CALLS"
+# Giả lập bảng kiểm lỡ in tệp credentials: bộ lọc của script phải che cả đầu ra này.
+cat "$CF_CREDENTIALS" 2>/dev/null
 echo "[READY]         vhost-src      giả"
 echo "[ACTION_NEEDED] cf-token       giả"
 exit 1
 STUB
 chmod +x "$WORK"/stub/* "$WORK/cb/certbot" "$WORK/snapbin/snap/bin/certbot"
+# Script chạy từ bản sao cạnh hai cutover-apex-*.sh giả có ghi log: nếu script gọi chúng, $CALLS có dòng "cutover-apex".
+mkdir -p "$WORK/ops"
+cp "$SCRIPT" "$WORK/ops/setup-apex-dns01-ssl.sh"
+for t in cutover-apex-apply.sh cutover-apex-rollback.sh; do
+  printf '#!/usr/bin/env bash\necho "cutover-apex %s $*" >> "$CALLS"\n' "$t" > "$WORK/ops/$t"
+  chmod +x "$WORK/ops/$t"
+done
+RUN_SCRIPT="$WORK/ops/setup-apex-dns01-ssl.sh"
 [ -x "$WORK/bin/openssl" ] || { echo "FAIL không có openssl"; exit 1; }
 
 # ── chứng chỉ thử (openssl thật), tự ký và tự làm CA qua CA_FILE ──
@@ -108,8 +135,8 @@ script_path() { # PATH cho script: lệnh giả + công cụ cơ bản; certbot 
 guards() { # nhãn
   lacks "$1: stdout không lộ token" "$OUT" "$TOKEN"
   lacks "$1: stderr không lộ token" "$ERR" "$TOKEN"
-  lacks "$1: không gọi nginx" "$(cat "$CALLS")" "nginx"
-  lacks "$1: không gọi apachectl" "$(cat "$CALLS")" "apachectl"
+  lacks "$1: không chạy nginx" "$(cat "$CALLS")" "EXEC-nginx"
+  lacks "$1: không chạy apachectl" "$(cat "$CALLS")" "EXEC-apachectl"
   lacks "$1: không gọi cutover-apex" "$(cat "$CALLS")" "cutover-apex"
 }
 run() { # nhãn args...   (biến thể lấy từ shell hiện tại)
@@ -120,8 +147,9 @@ run() { # nhãn args...   (biến thể lấy từ shell hiện tại)
     CF_CREDENTIALS="$WORK/cf/cloudflare.ini" LIVE_DIR="$WORK/live/tubutree.com" LE_ACCOUNTS_DIR="$WORK/accounts" \
     CA_FILE="${TEST_CA:-$WORK/pki/good.crt}" PRE_CHECK="$WORK/stub/pre-check.sh" PROPAGATION_SECONDS=30 \
     CERTBOT_RC="${CERTBOT_RC:-0}" CERTBOT_LEAK="${CERTBOT_LEAK:-0}" APT_FAIL="${APT_FAIL:-0}" FAKE_UID="${FAKE_UID:-0}" \
+    APACHECTL="${APACHECTL:-$WORK/none/apachectl}" PLUGINS_MISSING="${PLUGINS_MISSING:-0}" PARSED_TOKEN="${PARSED_TOKEN:-}" CB_SRC="$WORK/cb/certbot" STUB_DIR="$WORK/stub" \
     ${CERTBOT_EMAIL:+CERTBOT_EMAIL="$CERTBOT_EMAIL"} \
-    "$REAL_BASH" "$SCRIPT" "$@" 2>"$WORK/err.txt")"
+    "$REAL_BASH" "$RUN_SCRIPT" "$@" 2>"$WORK/err.txt")"
   RC=$?
   ERR="$(cat "$WORK/err.txt")"
   guards "$label"
@@ -132,15 +160,16 @@ run_snap() { # nhãn args...: certbot nằm dưới .../snap/bin
   : > "$CALLS"
   OUT="$(env PATH="$WORK/snapbin/snap/bin:$WORK/stub:$WORK/bin" CALLS="$CALLS" PLUGIN_STATE="$WORK/plugin.state" FAKE_UID=0 \
     CF_CREDENTIALS="$WORK/cf/cloudflare.ini" LIVE_DIR="$WORK/live/tubutree.com" LE_ACCOUNTS_DIR="$WORK/accounts" \
-    "$REAL_BASH" "$SCRIPT" "$@" 2>"$WORK/err.txt")"
+    "$REAL_BASH" "$RUN_SCRIPT" "$@" 2>"$WORK/err.txt")"
   RC=$?
   ERR="$(cat "$WORK/err.txt")"
   guards "$label"
 }
 reset_state() {
   rm -rf "$WORK/accounts" "$WORK/plugin.state" "$WORK/live"
+  rm -f "$WORK/stub/certbot"
   mkdir -p "$WORK/accounts/acme-v02.api.letsencrypt.org" "$WORK/accounts/acme-staging-v02.api.letsencrypt.org"
-  unset CERTBOT_RC CERTBOT_LEAK APT_FAIL FAKE_UID CERTBOT_EMAIL TEST_CA NO_CERTBOT
+  unset CERTBOT_RC CERTBOT_LEAK APT_FAIL FAKE_UID CERTBOT_EMAIL TEST_CA NO_CERTBOT PLUGINS_MISSING PARSED_TOKEN APACHECTL
   no_creds
 }
 installed() { echo installed > "$WORK/plugin.state"; }
@@ -369,6 +398,61 @@ installed; no_creds
 run "issue thiếu tệp token" --issue
 check "issue thiếu tệp token: mã thoát 1" "$RC" 1
 check "issue thiếu tệp token: KHÔNG gọi certbot" "$(certbot_calls)" 0
+
+# ══ Sửa theo review: bộ lọc token với giá trị có ngoặc/chú thích; plugin phải nạp được sau cài ══
+reset_state
+installed; set_creds 600 "dns_cloudflare_api_token = \"$QTOKEN\""; CERTBOT_LEAK=1; PARSED_TOKEN="$QTOKEN"
+run "staging token trong ngoặc kép" --staging
+check "token ngoặc kép: mã thoát 0" "$RC" 0
+lacks "token ngoặc kép: stdout không lộ giá trị" "$OUT" "$QTOKEN"
+lacks "token ngoặc kép: stderr không lộ giá trị" "$ERR" "$QTOKEN"
+contains "token ngoặc kép: có [REDACTED]" "$OUT" "[REDACTED]"
+
+reset_state
+installed; set_creds 600 "dns_cloudflare_api_token = '$QTOKEN'"; CERTBOT_LEAK=1; PARSED_TOKEN="$QTOKEN"
+run "issue token trong ngoặc đơn" --issue
+lacks "token ngoặc đơn: stdout không lộ giá trị" "$OUT" "$QTOKEN"
+lacks "token ngoặc đơn: stderr không lộ giá trị" "$ERR" "$QTOKEN"
+
+reset_state
+installed; set_creds 600 "dns_cloudflare_api_token = $CTOKEN # token prod"; CERTBOT_LEAK=1; PARSED_TOKEN="$CTOKEN"
+run "staging token kèm chú thích" --staging
+check "token kèm chú thích: mã thoát 0" "$RC" 0
+lacks "token kèm chú thích: stdout không lộ giá trị" "$OUT" "$CTOKEN"
+lacks "token kèm chú thích: stderr không lộ giá trị" "$ERR" "$CTOKEN"
+
+reset_state
+installed; set_creds 600; CERTBOT_LEAK=1
+run "bảng kiểm giả in tệp token" --staging
+lacks "pre-check đi qua bộ lọc: stdout không lộ token" "$OUT" "$TOKEN"
+contains "pre-check đi qua bộ lọc: dòng khoá còn, giá trị bị che" "$OUT" "dns_cloudflare_api_token = [REDACTED]"
+
+reset_state
+run "install: certbot plugins thấy dns-cloudflare" --install-plugin
+check "install kiểm nạp: mã thoát 0" "$RC" 0
+contains "install kiểm nạp: có chạy certbot plugins" "$(cat "$CALLS")" "certbot plugins"
+reset_state
+PLUGINS_MISSING=1
+run "install: plugin cài mà certbot không nạp" --install-plugin
+check "install plugin không nạp: mã thoát 1" "$RC" 1
+contains "install plugin không nạp: nêu certbot không nạp được" "$ERR" "không nạp được plugin"
+
+# ══ Sửa theo review: lineage thật phải có hook nạp lại Apache khi cấp/gia hạn (app/api đã có renew_hook tương tự) ══
+reset_state
+installed; set_creds 600; APACHECTL="$WORK/fakeapache/apachectl"
+run "issue có apachectl" --issue
+check "issue hook: mã thoát 0" "$RC" 0
+contains "issue hook: có --deploy-hook configtest rồi graceful" "$(grep '^certbot' "$CALLS")" "--deploy-hook $WORK/fakeapache/apachectl -t && $WORK/fakeapache/apachectl -k graceful"
+lacks "issue hook: script KHÔNG tự chạy apachectl" "$(cat "$CALLS")" "EXEC-apachectl"
+reset_state
+installed; set_creds 600
+run "issue không có apachectl" --issue
+lacks "issue không apachectl: KHÔNG có --deploy-hook" "$(grep '^certbot' "$CALLS")" "--deploy-hook"
+contains "issue không apachectl: báo phải tự graceful sau gia hạn" "$OUT" "không thấy"
+reset_state
+installed; set_creds 600; APACHECTL="$WORK/fakeapache/apachectl"
+run "staging có apachectl" --staging
+lacks "staging: KHÔNG đặt --deploy-hook (lineage thử)" "$(grep '^certbot' "$CALLS")" "--deploy-hook"
 
 # ══ Tĩnh: mã nguồn script (bỏ dòng chú thích) ══
 CODE="$(grep -v '^[[:space:]]*#' "$SCRIPT")"
