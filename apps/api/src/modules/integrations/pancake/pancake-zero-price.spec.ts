@@ -169,6 +169,27 @@ describe('recordZeroPrice / readZeroPrice — hàng ops_health_states', () => {
     expect(s.get()).toMatchObject({ count: 1, truncated: false });
   });
 
+  it('`present` (quét toàn bộ có sản phẩm lỗi/nháp): gỡ mục đã biến khỏi Pancake, giữ mục của biến thể thấy nhưng chưa đọc được, giữ phạm vi đã lưu', async () => {
+    const s = store(summarizeZeroPrice([anomaly('unread'), anomaly('gone'), anomaly('fixed'), anomaly('same')], 'FULL'));
+    await recordZeroPrice(
+      s.prisma,
+      { replace: false, found: [anomaly('same', { keptPrice: 70_000 })], resolved: new Set(['fixed']), present: new Set(['unread', 'fixed', 'same']) },
+      NOW,
+    );
+    expect(s.get().skus.map((x) => `${x.pancakeId}:${x.keptPrice}`)).toEqual(['unread:89000', 'same:70000']);
+    expect(s.get().scope).toBe('FULL');
+  });
+
+  it('`present` mà không có gì đổi: không ghi lại; chưa có hàng và không có gì để báo: không tạo hàng rỗng', async () => {
+    const s = store(summarizeZeroPrice([anomaly('a')], 'FULL'));
+    await recordZeroPrice(s.prisma, { replace: false, found: [], resolved: new Set(), present: new Set(['a']) }, NOW);
+    expect(s.findUnique).toHaveBeenCalledTimes(1);
+    expect(s.upsert).not.toHaveBeenCalled();
+    const empty = store(null);
+    expect(await recordZeroPrice(empty.prisma, { replace: false, found: [], resolved: new Set(), present: new Set(['a']) }, NOW)).toBeNull();
+    expect(empty.upsert).not.toHaveBeenCalled();
+  });
+
   it('chưa có hàng nào: lượt tăng dần tạo danh sách mới; readZeroPrice trả rỗng khi chưa từng ghi', async () => {
     const s = store(null);
     expect((await readZeroPrice(s.prisma)).count).toBe(0);

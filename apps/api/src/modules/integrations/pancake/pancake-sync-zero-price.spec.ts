@@ -205,20 +205,57 @@ describe('W131: Pancake báo 0đ không được xoá giá đang bán, và phả
       expect(r.zero!.skus.map((s) => s.pancakeId)).toEqual(['v-old']);
     });
 
-    it('lượt quét toàn bộ có sản phẩm bị bỏ qua (thiếu tên): chỉ gộp, không thay hẳn — biến thể của nó chưa được đọc nên không được coi là đã sửa', async () => {
+    it('lượt quét toàn bộ có sản phẩm bị bỏ qua (thiếu tên): SKU của nó (chưa đọc được) vẫn còn, SKU đã biến khỏi Pancake bị gỡ', async () => {
       const r = await run(
         [product('p-draft', [variation('v-old', { retail_price: 0 })], ''), product('p1', [variation('v1', { retail_price: 70_000 })])],
         { ops: stored({ pancakeId: 'v-old' }, { pancakeId: 'v-other' }), prevByVariation: { v1: sellingAt(70_000) } },
       );
       expect(r.catalog).toMatchObject({ skipped: 1, failed: 0 });
-      expect(r.zero!.skus.map((s) => s.pancakeId)).toEqual(['v-old', 'v-other']);
+      expect(r.zero!.skus.map((s) => s.pancakeId)).toEqual(['v-old']);
     });
 
-    it('lượt quét toàn bộ có sản phẩm lỗi khi ghi: chỉ gộp, không thay hẳn (không mất SKU chưa đọc hết)', async () => {
+    it('lượt quét toàn bộ có sản phẩm lỗi khi ghi: chỉ gộp, SKU của nó (chưa đọc hết) vẫn còn, SKU đã biến khỏi Pancake bị gỡ', async () => {
       const productCreate = jest.fn().mockRejectedValue(new Error('slug trùng'));
-      const r = await run([product('p1', [variation('v1', { retail_price: 0 })])], { ops: stored({ pancakeId: 'v-old' }), productCreate });
+      const r = await run([product('p1', [variation('v1', { retail_price: 0 })])], { ops: stored({ pancakeId: 'v1' }, { pancakeId: 'v-gone' }), productCreate });
       expect(r.catalog).toMatchObject({ failed: 1 });
-      expect(r.zero!.skus.map((s) => s.pancakeId)).toEqual(['v-old']);
+      expect(r.zero!.skus.map((s) => s.pancakeId)).toEqual(['v1']);
+    });
+
+    it('lượt quét toàn bộ có sản phẩm nháp: biến thể đã đọc mà hết 0đ vẫn được gỡ như thường', async () => {
+      const r = await run(
+        [product('p-draft', [variation('v-draft')], ''), product('p1', [variation('v-fixed', { retail_price: 70_000 })])],
+        { ops: stored({ pancakeId: 'v-fixed' }, { pancakeId: 'v-draft' }), prevByVariation: { 'v-fixed': sellingAt(70_000) } },
+      );
+      expect(r.zero!.skus.map((s) => s.pancakeId)).toEqual(['v-draft']);
+    });
+
+    it('lượt quét toàn bộ có phần tử không phải sản phẩm (không biết nó che biến thể nào): không gỡ mục nào theo kiểu "không còn thấy", chỉ gộp', async () => {
+      const r = await run(
+        [null, product('p1', [variation('v1', { retail_price: 70_000 })])],
+        { ops: stored({ pancakeId: 'v-old' }, { pancakeId: 'v-gone' }), prevByVariation: { v1: sellingAt(70_000) } },
+      );
+      expect(r.catalog).toMatchObject({ failed: 1 });
+      expect(r.zero!.skus.map((s) => s.pancakeId)).toEqual(['v-old', 'v-gone']);
+    });
+
+    it('trang đầu rỗng (Pancake trả 0 sản phẩm): danh sách đang lưu không bị thay bằng danh sách rỗng', async () => {
+      const r = await run([], { ops: stored({ pancakeId: 'v-old' }, { pancakeId: 'v-other' }) });
+      expect(r.n).toBe(0);
+      expect(r.zero!.skus.map((s) => s.pancakeId)).toEqual(['v-old', 'v-other']);
+      const keys = r.raw.opsHealthState.upsert.mock.calls.map((c) => (c[0] as { where: { key: string } }).where.key);
+      expect(keys).not.toContain(ZERO_PRICE_STATE_KEY);
+    });
+
+    it('Pancake không báo tổng trang/tổng bản ghi nên không chứng minh được đã quét hết: danh sách đang lưu không bị thay hẳn', async () => {
+      const m = makePrisma({ ops: stored({ pancakeId: 'v-old' }, { pancakeId: 'v-other' }), prevByVariation: { v1: sellingAt(70_000) } });
+      let call = 0;
+      const client = {
+        isConfigured: () => true,
+        fetchProducts: jest.fn(async () => ({ success: true, data: call++ === 0 ? [product('p1', [variation('v1', { retail_price: 70_000 })])] : [] })),
+      } as unknown as PancakeClient;
+      await new PancakeSyncService(m.prisma, client, lifecycle).syncProducts();
+      const zero = m.ops.get(ZERO_PRICE_STATE_KEY)!.detail as ReturnType<typeof summarizeZeroPrice>;
+      expect(zero.skus.map((s) => s.pancakeId)).toEqual(['v-old', 'v-other']);
     });
   });
 
