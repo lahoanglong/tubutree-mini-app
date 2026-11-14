@@ -689,4 +689,6 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'homeQuiz.result.claimed': 49,
   'homeQuiz.result.guest': 34,
   'homeQuiz.result.error': 43,
+  'homeQuiz.result.shop': 12,
+  'homeQuiz.result.cart': 12,
 };
