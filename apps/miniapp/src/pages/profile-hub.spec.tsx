@@ -71,7 +71,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   Avatar: () => <span />,
   useNavigate: () => mocks.navigate,
-  useLocation: () => ({ search: mocks.search }),
+  useLocation: () => ({ pathname: '/profile', search: mocks.search }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/support-chat-api', () => ({
@@ -333,7 +333,8 @@ describe('Hub Cá nhân theo DS v2 (C-076, C-114)', () => {
   it('ô Ví Tubu mang state.from để nút quay lại về hub; ô Mã giảm giá mở tab Ưu đãi ở phần mã', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /^2 mã\s*Mã giảm giá$/ }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/offers?section=coupons');
+    // Hồ sơ → Ưu đãi là tab gốc sang tab gốc: thay mục hiện tại, tránh lịch sử [/, /profile, /offers] mà BottomNav sau đó nhân bản.
+    expect(mocks.navigate).toHaveBeenCalledWith('/offers?section=coupons', { replace: true });
     fireEvent.click(await screen.findByRole('button', { name: /Ví Tubu$/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/wallet', { state: { from: '/profile' } });
   });

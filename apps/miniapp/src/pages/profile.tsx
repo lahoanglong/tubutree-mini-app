@@ -1,6 +1,7 @@
 import { ctvMenuEntry } from '@tubutree/app-core/storefront-signup';
 import { BRAND_OWNER_TITLE } from '@tubutree/app-core/client-copy';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
@@ -95,6 +96,7 @@ const ORDER_ROW_ICON: Record<string, LucideIcon> = {
 
 export default function ProfilePage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const location = useLocation();
   const { openSnackbar } = useSnackbar();
   const shareWithFallback = useShareWithFallback();
@@ -345,7 +347,7 @@ export default function ProfilePage() {
       <div style={{ padding: '0 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: -20, position: 'relative' }}>
         <Stat label={homeCopy.profile.statPoints} value={formatPoints(pointsTotal)} onClick={() => navigate('/loyalty')} />
         <Stat label={homeCopy.profile.statWallet} value={formatVnd(walletQ.data?.walletBalance ?? user.walletBalance)} onClick={() => navigate('/wallet', { state: { from: '/profile' } })} />
-        <Stat label={homeCopy.profile.statCoupons} value={couponsQ.data ? homeCopy.profile.couponsCount(couponsQ.data.length) : '—'} onClick={() => navigate('/offers?section=coupons')} />
+        <Stat label={homeCopy.profile.statCoupons} value={couponsQ.data ? homeCopy.profile.couponsCount(couponsQ.data.length) : '—'} onClick={() => goSmart('/offers?section=coupons')} />
       </div>
 
       <GuestLinkCard title={homeCopy.profile.guestTitle} body={homeCopy.profile.guestBody} cta={homeCopy.profile.guestCta} />

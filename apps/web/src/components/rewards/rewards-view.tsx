@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { usePathname, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight, Gift, Info, Leaf, Sprout, Ticket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -356,6 +357,11 @@ function RewardsBody() {
 
 /** Khách chưa đăng nhập: xem được quà đổi bằng Điểm Xanh nhưng chưa đổi được. */
 function GuestRewards() {
+  // Trang đang đứng (kèm query) làm nơi quay về: RewardsView nhúng ở tab Đổi quà của /uu-dai thì đăng nhập xong phải về đúng hub, không nhảy sang /kho-qua.
+  // Hai hook đọc ở đây (không ở RewardsView) vì GuestRewards chỉ vẽ sau hydrate, nên trang /kho-qua dựng tĩnh không bị buộc bọc Suspense.
+  const pathname = usePathname();
+  const search = useSearchParams()?.toString();
+  const returnTo = search ? `${pathname}?${search}` : pathname;
   const q = useQuery(loyaltyPreviewQuery(coreHttp));
   const [tab, setTab] = useState<string>(REWARD_TABS[0].key);
   const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
@@ -364,7 +370,7 @@ function GuestRewards() {
   return (
     <div className="space-y-4 pb-12">
       <p className="text-base text-stone-700">{guestPreviewCopy.hint}</p>
-      <GuestLoginLink returnTo="/kho-qua" />
+      <GuestLoginLink returnTo={returnTo} />
       {q.isError && !q.data ? (
         <ErrorState message={errText(q.error)} onRetry={() => void q.refetch()} />
       ) : !catalog ? (

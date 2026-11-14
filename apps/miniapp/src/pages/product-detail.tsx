@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { Box, Page, Text, useNavigate, useParams, useLocation } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { announce, useNotify } from '../hooks/use-notify';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Repeat, ChevronRight, ShoppingCart, Share2, Users, Truck, Megaphone, Check, MessageCircle, Ticket, MapPin } from 'lucide-react';
@@ -131,6 +132,7 @@ function runningFlash(list: readonly FlashSaleActiveItem[] | undefined): FlashSa
 export default function ProductDetailPage() {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const { notify } = useNotify();
   const shareWithFallback = useShareWithFallback();
   const queryClient = useQueryClient();
@@ -1217,7 +1219,7 @@ export default function ProductDetailPage() {
             aria-label={vi.product.viewCart}
             data-cart-target=""
             className="tubu-press"
-            onClick={() => navigate('/cart')}
+            onClick={() => goSmart('/cart')}
             style={{
               position: 'relative',
               width: 48,

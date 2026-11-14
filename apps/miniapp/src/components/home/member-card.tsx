@@ -1,6 +1,5 @@
 import { useContext, type CSSProperties } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'zmp-ui';
 import { ChevronRight, Leaf } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_HERO_HEIGHT, memberCardAriaLabel, memberCardView } from '@tubutree/app-core/home-layout';
@@ -8,6 +7,7 @@ import { givenName } from '@tubutree/app-core/person-name';
 import { useCheckIn } from '../../hooks/use-check-in';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { vi } from '../../i18n/vi';
+import { useSmartNavigate } from '../../lib/smart-nav';
 import { getLoyalty } from '../../services/account-api';
 import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
@@ -74,7 +74,7 @@ export function MemberCardUnavailable({ onRetry }: { onRetry: () => void }) {
  * Số điểm lấy từ hồ sơ đăng nhập khi tổng quan chưa về; tổng quan lỗi thì dòng điểm báo lỗi kèm "Thử lại".
  */
 export function MemberCard() {
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const user = useAuthStore((s) => s.user);
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const cfg = usePublicConfig();
@@ -101,7 +101,7 @@ export function MemberCard() {
           className="tubu-press"
           onClick={() => {
             haptic('light');
-            navigate('/offers');
+            goSmart('/offers');
           }}
           style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 4, padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit', minHeight: 44 }}
         >

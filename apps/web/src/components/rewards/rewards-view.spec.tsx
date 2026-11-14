@@ -10,9 +10,15 @@ const state = vi.hoisted(() => ({
   rewards: null as object | null,
   preview: null as object | null,
   calls: [] as string[],
+  pathname: '/uu-dai',
+  search: '',
 }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/uu-dai' }));
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: vi.fn() }),
+  usePathname: () => state.pathname,
+  useSearchParams: () => new URLSearchParams(state.search),
+}));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => state.phase }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ retrySession: vi.fn() }) }));
 vi.mock('@/lib/core-http', () => ({
@@ -42,6 +48,8 @@ beforeEach(() => {
   state.rewards = makeRewardCatalog();
   state.preview = { rewards: [makeRewardItem({ canRedeem: false })], giftClaimDays: 60, claimPoint: null, tiers: [], rates: {}, pointExpireMonths: 12 };
   state.calls = [];
+  state.pathname = '/uu-dai';
+  state.search = '';
 });
 afterEach(() => {
   mounted?.unmount();
@@ -79,5 +87,23 @@ describe('RewardsView (thân Kho quà dùng chung)', () => {
     c = await mount();
     expect(c.textContent).toContain('Không kết nối được với Tubu Tree');
     expect(state.calls).toEqual([]);
+  });
+
+  it('khách ở tab Đổi quà của hub Ưu đãi: nút Đăng nhập mang returnTo=/uu-dai?tab=rewards để đăng nhập xong quay về đúng hub', async () => {
+    state.phase = 'guest';
+    state.pathname = '/uu-dai';
+    state.search = 'tab=rewards';
+    const c = await mount();
+    const login = c.querySelector<HTMLAnchorElement>('a[href^="/dang-nhap"]');
+    expect(login?.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent('/uu-dai?tab=rewards')}`);
+  });
+
+  it('khách ở /kho-qua độc lập (không query): returnTo vẫn là /kho-qua', async () => {
+    state.phase = 'guest';
+    state.pathname = '/kho-qua';
+    state.search = '';
+    const c = await mount();
+    const login = c.querySelector<HTMLAnchorElement>('a[href^="/dang-nhap"]');
+    expect(login?.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fkho-qua');
   });
 });

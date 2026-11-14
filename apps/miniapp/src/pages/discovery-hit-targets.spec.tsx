@@ -8,7 +8,11 @@ const mocks = vi.hoisted(() => ({
   user: { fullName: 'Lan', pointsBalance: 60 } as { fullName: string; pointsBalance: number } | null,
   authed: true,
 }));
-vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
+vi.mock('zmp-ui', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/', search: '', state: null }),
+}));
 vi.mock('../services/shop-api', () => ({
   getPublicConfig: vi.fn().mockResolvedValue({ aiAdvisorEnabled: true }),
   fetchBrands: vi.fn().mockResolvedValue([{ brand: 'Tubu', count: 3 }, { brand: 'Cỏ Mềm', count: 2 }]),

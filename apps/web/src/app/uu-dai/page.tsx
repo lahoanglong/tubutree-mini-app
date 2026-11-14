@@ -233,7 +233,7 @@ function OffersContent() {
       <PageHeader title={homeCopy.offers.title} />
       {/* Dính dưới đầu trang (Ưu đãi là tab gốc nên không có nút lùi; `sticky-below-back` chỉ có tác dụng ở trang con có nút lùi). Cùng khuôn với Mã giảm giá. */}
       <div className="tubu-bleed sticky-below-back sticky top-[var(--safe-top)] z-[2] bg-[var(--color-bg-canvas)] px-4 pb-1 pt-2 md:top-[var(--header-h)] md:px-0">
-        <div className="md:w-fit md:max-w-full">
+        <div className="md:max-w-md">
           <SegmentedTabs label={fillCopy('offers.tabsLabel')} items={[...OFFERS_TABS]} value={tab} onChange={pickTab} />
         </div>
       </div>

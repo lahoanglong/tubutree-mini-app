@@ -1,6 +1,6 @@
 import { ShoppingCart } from 'lucide-react';
-import { useNavigate } from 'zmp-ui';
 import { useCartCount } from '../hooks/use-cart-count';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { Icon } from './ui/icon';
@@ -8,7 +8,7 @@ import { CartBadge } from './ui/cart-badge';
 
 /** Nút giỏ dùng chung ở header các trang mua sắm (spec §3.5). */
 export function CartButton() {
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const count = useCartCount();
   return (
     <button
@@ -18,7 +18,7 @@ export function CartButton() {
       className="tubu-press"
       onClick={() => {
         haptic('light');
-        navigate('/cart');
+        goSmart('/cart');
       }}
       style={{
         position: 'relative',
