@@ -1,5 +1,5 @@
 import { ConflictException, Inject, Injectable, Logger, Optional, ServiceUnavailableException, type OnModuleInit } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, Product } from '@prisma/client';
 import { GENERIC_CATALOG_BRAND, GENERIC_CATALOG_BRANDS, effectiveCatalogBrand, inferCatalogBrandFromTitle, isBlankHtmlText } from '@tubutree/shared-types';
 import { Cron } from '@nestjs/schedule';
 import { recordCatalogRun, type CatalogRunResult } from '../../ops/ops-state';
@@ -286,6 +286,8 @@ export class PancakeSyncService implements OnModuleInit {
     let truncated = false;
     let pagesWithData = 0;
     let unnamedRows = 0;
+    // Phần tử không phải sản phẩm: ta không biết nó che những biến thể nào, nên lượt quét có nó không được gỡ mục 0đ đã lưu theo kiểu "không còn thấy trên Pancake".
+    let junkRows = 0;
     const expected: SweepExpected = {};
     const seen: SweepSeen = { products: new Set(), variations: new Set() };
     const zero = new ZeroPriceCollector();
@@ -311,6 +313,7 @@ export class PancakeSyncService implements OnModuleInit {
         // mà lượt 15 phút sau gặp lại đúng nó. Tính như một hàng không mã để so với total_entries vẫn khớp.
         if (!isRecord(row)) {
           unnamedRows++;
+          junkRows++;
           failed++;
           this.logger.error(`Bỏ qua phần tử không phải sản phẩm ở trang ${page} của Pancake: ${JSON.stringify(row) ?? String(row)}`.slice(0, 200));
           continue;
@@ -364,7 +367,10 @@ export class PancakeSyncService implements OnModuleInit {
           await this.deactivateMissing(seen);
         }
       }
-      const zeroSummary = await this.noteZeroPrice(zero, !updatedSince, failed + skipped);
+      // Chỉ lượt quét toàn bộ ĐÃ chứng minh được là hết danh mục (có tổng trang/tổng số bản ghi và trang đầu có dữ liệu, cùng điều kiện với bước ngừng bán) mới được
+      // thay hẳn danh sách SKU 0đ; trang đầu rỗng hay Pancake không báo tổng thì danh sách đang lưu không được phép bị xoá.
+      const complete = !updatedSince && pagesWithData > 0 && (expected.pages !== undefined || expected.entries !== undefined);
+      const zeroSummary = await this.noteZeroPrice(zero, { full: !updatedSince, complete, seen: junkRows === 0 ? seen.variations : null }, failed + skipped);
       this.lastRunAt = startedAt;
       this.logger.log(
         `Đã đồng bộ ${count} sản phẩm từ Pancake${failed ? ` (${failed} lỗi, bỏ qua)` : ''}${skipped ? ` (${skipped} sản phẩm thiếu mã/tên, bỏ qua)` : ''}.`,
@@ -381,14 +387,15 @@ export class PancakeSyncService implements OnModuleInit {
    * SKU Pancake báo giá 0đ trong lượt này: một dòng log có cấu trúc + lưu danh sách cho admin. Giá Tubu đã được giữ ở upsertVariation;
    * đây chỉ để người vận hành biết SKU nào cần sửa trên POS. Best-effort như noteRun: lỗi ghi không được làm hỏng lượt đồng bộ.
    */
-  private async noteZeroPrice(zero: ZeroPriceCollector, full: boolean, unread: number): Promise<ZeroPriceSummary> {
+  private async noteZeroPrice(zero: ZeroPriceCollector, sweep: { full: boolean; complete: boolean; seen: ReadonlySet<string> | null }, unread: number): Promise<ZeroPriceSummary> {
     const found = zero.found;
-    const summary = summarizeZeroPrice(found, full ? 'FULL' : 'INCREMENTAL');
+    const summary = summarizeZeroPrice(found, sweep.full ? 'FULL' : 'INCREMENTAL');
     this.lastZero = summary;
     if (found.length) this.logger.warn(zeroPriceLogLine(summary));
     try {
       // `unread` = sản phẩm lỗi hoặc bị bỏ qua (thiếu mã/tên): biến thể của chúng chưa được đọc, nên lượt quét toàn bộ cũng chỉ gộp, không thay hẳn danh sách.
-      await recordZeroPrice(this.prisma, { replace: full && unread === 0, found, resolved: zero.resolved });
+      const replace = sweep.complete && unread === 0;
+      await recordZeroPrice(this.prisma, { replace, found, resolved: zero.resolved, ...(sweep.complete && !replace && sweep.seen ? { present: sweep.seen } : {}) });
     } catch (e) {
       this.logger.warn(`Không ghi được danh sách SKU giá 0đ của Pancake: ${e instanceof Error ? e.message : e}`);
     }
@@ -548,50 +555,68 @@ export class PancakeSyncService implements OnModuleInit {
     const slug = existing?.slug ?? this.slugify(name, pancakeId);
     const inferredBrand = inferCatalogBrandFromTitle(name, slug, existing?.brand ?? GENERIC_CATALOG_BRAND);
 
-    const product = existing
-      ? await this.prisma.product.update({
-          where: { id: existing.id },
-          data: {
-            ...baseData,
-            // Lệnh này không bao giờ mang `description`: `existing.description` đọc từ trước, nên ghi cột ở đây (kể cả ghi lại bản đã đọc) sẽ đè mô tả admin vừa lưu
-            // trong khoảng giữa. Mô tả Pancake, khi được phép ghi, đi riêng bằng lệnh có điều kiện ngay dưới.
-            ...productHold,
-            ...((existing.forSegment?.length ?? 0) === 0 ? { forSegment: inferred } : {}),
-          },
-        })
-      : await this.prisma.product.create({
-          data: {
-            ...baseData,
-            description: description ?? '',
-            ...productHold,
-            pancakeId,
-            brand: effectiveCatalogBrand(name, slug, GENERIC_CATALOG_BRAND),
-            slug,
-            forSegment: inferred,
-            categoryIds: mappedCats,
-          },
-        });
-    if (imagesChanged) this.imageStale?.markStale();
-
-    // Mô tả Pancake chỉ ghi khi cột vẫn đúng bản đã đọc ở trên (và chỉ khi mô tả đó chưa đạt chuẩn giàu, xem `keepDescription`): admin vừa lưu mô tả mới trong khoảng
-    // đọc rồi ghi thì lệnh không khớp dòng nào và mô tả của admin còn nguyên. Mô tả Pancake bị bỏ lượt này chỉ được xét lại khi Pancake sửa sản phẩm đó lần nữa
-    // (lượt 15 phút lọc theo `updated_since`) hoặc ở lượt quét toàn bộ ban đêm.
-    if (existing && description !== null) {
-      const written = await this.prisma.product.updateMany({ where: { id: existing.id, description: existing.description ?? '' }, data: { description } });
-      if (written?.count === 0) {
-        this.logger.log(`Bỏ qua mô tả Pancake của sản phẩm ${pancakeId}: mô tả vừa được đổi trong lúc đồng bộ nên giữ bản mới, bản Pancake chờ lượt quét sau.`);
+    // Mọi lệnh ghi lên CÙNG một hàng sản phẩm của sản phẩm đã có đi chung một giao dịch: lỗi DB tạm giữa chừng thì hàng này hoặc đổi trọn hoặc giữ nguyên,
+    // không còn cảnh tên/giá đã ghi mà mô tả, danh mục hay nhãn chưa tới. Biến thể ở dưới cố ý KHÔNG vào giao dịch này: mỗi biến thể được cô lập lỗi riêng.
+    let product: Product;
+    let descriptionSkipped = false;
+    // Giao dịch hàng sản phẩm hỏng (khoá chết, hết hạn giao dịch...) thì biến thể của nó VẪN được đồng bộ giá/tồn dưới `existing.id`, lỗi ném sau cùng: lượt 15 phút
+    // chỉ lấy sản phẩm Pancake vừa sửa nên không tự đọc lại sản phẩm này, nếu bỏ biến thể thì giá/tồn của nó cũ tới lượt quét đêm.
+    let productError: unknown = null;
+    if (existing) {
+      try {
+        ({ product, descriptionSkipped } = await this.prisma.$transaction(async (tx) => {
+          const updated = await tx.product.update({
+            where: { id: existing.id },
+            data: {
+              ...baseData,
+              // Lệnh này không bao giờ mang `description`: `existing.description` đọc từ trước, nên ghi cột ở đây (kể cả ghi lại bản đã đọc) sẽ đè mô tả admin vừa lưu
+              // trong khoảng giữa. Mô tả Pancake, khi được phép ghi, đi riêng bằng lệnh có điều kiện ngay dưới.
+              ...productHold,
+              ...((existing.forSegment?.length ?? 0) === 0 ? { forSegment: inferred } : {}),
+            },
+          });
+          // Mô tả Pancake chỉ ghi khi cột vẫn đúng bản đã đọc ở trên (và chỉ khi mô tả đó chưa đạt chuẩn giàu, xem `keepDescription`): admin vừa lưu mô tả mới trong khoảng
+          // đọc rồi ghi thì lệnh không khớp dòng nào và mô tả của admin còn nguyên. Mô tả Pancake bị bỏ lượt này chỉ được xét lại khi Pancake sửa sản phẩm đó lần nữa
+          // (lượt 15 phút lọc theo `updated_since`) hoặc ở lượt quét toàn bộ ban đêm.
+          let skipped = false;
+          if (description !== null) {
+            const cas = await tx.product.updateMany({ where: { id: existing.id, description: existing.description ?? '' }, data: { description } });
+            skipped = cas?.count === 0;
+          }
+          // Điền danh mục bằng lệnh có điều kiện "vẫn còn rỗng", tách khỏi update ở trên: `existing` đọc từ trước, nếu admin vừa gán
+          // tay trong khoảng đó thì lệnh này không khớp dòng nào và danh mục của admin còn nguyên.
+          if (mappedCats.length) {
+            await tx.product.updateMany({ where: { id: existing.id, categoryIds: { isEmpty: true } }, data: { categoryIds: mappedCats } });
+          }
+          // Nhãn cũng ghi có điều kiện "vẫn chưa có nhãn thật", cùng lý do: Admin vừa gán nhãn trong lúc đồng bộ thì nhãn đó còn nguyên.
+          if (inferredBrand) {
+            await tx.product.updateMany({ where: { id: existing.id, brand: { in: [...GENERIC_CATALOG_BRANDS] } }, data: { brand: inferredBrand } });
+          }
+          return { product: updated, descriptionSkipped: skipped };
+        }));
+      } catch (err) {
+        productError = err;
+        product = existing;
+        this.logger.error(`Ghi hàng sản phẩm Pancake ${pancakeId} lỗi, vẫn đồng bộ biến thể của nó: ${err instanceof Error ? err.message : err}`);
       }
+    } else {
+      product = await this.prisma.product.create({
+        data: {
+          ...baseData,
+          description: description ?? '',
+          ...productHold,
+          pancakeId,
+          brand: effectiveCatalogBrand(name, slug, GENERIC_CATALOG_BRAND),
+          slug,
+          forSegment: inferred,
+          categoryIds: mappedCats,
+        },
+      });
     }
-
-    // Điền danh mục bằng lệnh có điều kiện "vẫn còn rỗng", tách khỏi update ở trên: `existing` đọc từ trước, nếu admin vừa gán
-    // tay trong khoảng đó thì lệnh này không khớp dòng nào và danh mục của admin còn nguyên.
-    if (existing && mappedCats.length) {
-      await this.prisma.product.updateMany({ where: { id: existing.id, categoryIds: { isEmpty: true } }, data: { categoryIds: mappedCats } });
+    if (descriptionSkipped) {
+      this.logger.log(`Bỏ qua mô tả Pancake của sản phẩm ${pancakeId}: mô tả vừa được đổi trong lúc đồng bộ nên giữ bản mới, bản Pancake chờ lượt quét sau.`);
     }
-    // Nhãn cũng ghi có điều kiện "vẫn chưa có nhãn thật", cùng lý do: Admin vừa gán nhãn trong lúc đồng bộ thì nhãn đó còn nguyên.
-    if (existing && inferredBrand) {
-      await this.prisma.product.updateMany({ where: { id: existing.id, brand: { in: [...GENERIC_CATALOG_BRANDS] } }, data: { brand: inferredBrand } });
-    }
+    if (imagesChanged && productError === null) this.imageStale?.markStale();
 
     // Biến thể giảm sâu nhất theo % — giá cũ/mới của nó đi vào nội dung thông báo và để xét ngưỡng giảm tối thiểu.
     let bestDrop: { oldPrice: number; newPrice: number } | null = null;
@@ -619,7 +644,7 @@ export class PancakeSyncService implements OnModuleInit {
     if (bestDrop) {
       await this.lifecycle.notifyWishlistPriceDrop(product.id, product.name, bestDrop).catch(() => undefined);
     }
-    if (variationError) throw variationError;
+    if (productError ?? variationError) throw productError ?? variationError;
     return true;
   }
 

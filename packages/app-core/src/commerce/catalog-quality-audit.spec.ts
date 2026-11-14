@@ -224,8 +224,21 @@ describe('auditCatalogProducts: lỗi cấp biến thể', () => {
     expect(variationKinds([V({ stock: 9_999_999 })])).toEqual(['placeholder_stock']);
   });
 
-  it.each([['rỗng', ''], ['toàn khoảng trắng', '   \t '], ['[object Object]', '[object Object]'], ['[object Object] có khoảng trắng', ' [object Object] ']])('tên biến thể %s bị báo chưa đặt tên', (_n, name) => {
+  it.each([
+    ['rỗng', ''],
+    ['toàn khoảng trắng', '   \t '],
+    ['[object Object]', '[object Object]'],
+    ['[object Object] có khoảng trắng', ' [object Object] '],
+    ['có [object Object] ở giữa', 'Hộp [object Object] 100g'],
+    ['có [object Object] ở đầu', '[object Object] 500ml'],
+    ['có [object Object] ở cuối', 'Chai 500ml [object Object]'],
+    ['lặp [object Object] liền nhau', '[object Object][object Object]'],
+  ])('tên biến thể %s bị báo chưa đặt tên', (_n, name) => {
     expect(variationKinds([V({ name })])).toEqual(['unnamed_variation']);
+  });
+
+  it('tên có ngoặc vuông bình thường không bị báo là hỏng', () => {
+    expect(variationKinds([V({ name: 'Chai [500ml]' }), V({ id: 'o', name: 'Object 500ml' })])).toEqual([]);
   });
 
   it('biến thể đang ẩn (isActive=false) và sản phẩm đang ẩn vẫn bị báo cả ba loại', () => {

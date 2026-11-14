@@ -42,6 +42,7 @@ function makePrisma(existing: Existing | null = null) {
     $executeRaw: jest.fn().mockResolvedValue(1),
     $queryRaw: jest.fn().mockResolvedValue([{ holder: 'this-run' }]),
   };
+  Object.assign(prisma, { $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(prisma)) });
   return { prisma: prisma as unknown as PrismaService, product };
 }
 

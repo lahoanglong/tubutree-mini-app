@@ -63,12 +63,15 @@ describe('buildPancakeFixCsv', () => {
     expect(lines(two)[1]).toContain(',placeholder_stock|unnamed_variation,');
   });
 
-  it('name: tên biến thể nếu có; trống hoặc "[object Object]" thì dùng tên sản phẩm', () => {
-    const out = csv([P([V({ id: 'a', sku: 'A', name: 'Chai 500ml', retailPrice: 0 }), V({ id: 'b', sku: 'B', name: '  ' }), V({ id: 'c', sku: 'C', name: '[object Object]' })])]);
+  it('name: tên biến thể nếu có; trống hoặc chỉ còn "[object Object]" thì dùng tên sản phẩm; dính giữa tên thì giữ phần tên thật đã gỡ chuỗi hỏng (vẫn báo unnamed_variation)', () => {
+    const out = csv([
+      P([V({ id: 'a', sku: 'A', name: 'Chai 500ml', retailPrice: 0 }), V({ id: 'b', sku: 'B', name: '  ' }), V({ id: 'c', sku: 'C', name: '[object Object]' }), V({ id: 'd', sku: 'D', name: 'Hộp [object Object] 100g' })]),
+    ]);
     const rows = lines(out).slice(1);
     expect(rows[0]).toContain(',A,Chai 500ml,');
     expect(rows[1]).toContain(',B,Sản phẩm A,unnamed_variation,');
     expect(rows[2]).toContain(',C,Sản phẩm A,unnamed_variation,');
+    expect(rows[3]).toContain(',D,Hộp 100g,unnamed_variation,');
   });
 
   it('pancakeId null thì để ô rỗng; số xuất thô (không dấu chấm nghìn, không đơn vị)', () => {

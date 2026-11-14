@@ -154,24 +154,27 @@ const sameList = (a: readonly ZeroPriceAnomaly[], b: readonly ZeroPriceAnomaly[]
  * - Lượt tăng dần (15 phút, chỉ thấy sản phẩm vừa đổi) hoặc lượt có sản phẩm lỗi: gộp vào danh sách đang lưu — thêm SKU mới thấy,
  *   gỡ SKU lượt này đọc được mà hết 0đ; không có gì đổi thì không ghi. SKU đã sửa nhưng chưa được lượt tăng dần nào chạm tới
  *   sẽ được gỡ ở lượt quét toàn bộ kế tiếp (đêm).
+ * - `present`: lượt quét toàn bộ trọn vẹn nhưng có sản phẩm lỗi/nháp, nên không thay hẳn được. Tập mọi mã biến thể Pancake lượt này THẤY (kể cả của sản phẩm
+ *   lỗi): mục đã lưu mà mã không còn trong tập là biến thể đã biến khỏi Pancake, được gỡ; mục của sản phẩm lỗi (chưa đọc được) vẫn còn.
  */
 export async function recordZeroPrice(
   prisma: OpsStore,
-  run: { replace: boolean; found: readonly ZeroPriceAnomaly[]; resolved: ReadonlySet<string> },
+  run: { replace: boolean; found: readonly ZeroPriceAnomaly[]; resolved: ReadonlySet<string>; present?: ReadonlySet<string> },
   now = new Date(),
 ): Promise<ZeroPriceSummary | null> {
   let next: ZeroPriceSummary;
   if (run.replace) {
     next = summarizeZeroPrice(run.found, 'FULL', now);
   } else {
-    if (run.found.length === 0 && run.resolved.size === 0) return null;
+    if (run.found.length === 0 && run.resolved.size === 0 && !run.present) return null;
     const row = await prisma.opsHealthState.findUnique({ where: { key: ZERO_PRICE_STATE_KEY } });
     const prev = parseZeroPrice(row?.detail);
     // Danh sách đã bị cắt ở trần: gộp từ phần còn lưu sẽ làm mất số đếm thật của phần bị cắt, nên chờ lượt quét toàn bộ.
     if (prev?.truncated) return prev;
     const foundIds = new Set(run.found.map((a) => a.pancakeId));
-    const kept = (prev?.skus ?? []).filter((a) => !run.resolved.has(a.pancakeId) && !foundIds.has(a.pancakeId));
+    const kept = (prev?.skus ?? []).filter((a) => !run.resolved.has(a.pancakeId) && !foundIds.has(a.pancakeId) && (!run.present || run.present.has(a.pancakeId)));
     const merged = [...kept, ...run.found];
+    if (!prev && merged.length === 0) return null;
     if (prev && sameList(prev.skus, merged)) return prev;
     next = summarizeZeroPrice(merged, prev?.scope ?? 'INCREMENTAL', now);
   }

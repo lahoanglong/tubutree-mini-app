@@ -167,7 +167,7 @@ const MISMATCH_BY_SLUG: ReadonlyMap<string, KnownMediaMismatch> = new Map(KNOWN_
 
 const MAX_SKUS_SHOWN = 3;
 
-/** Máy chủ có thể trả tên biến thể là chuỗi hóa của object khi dữ liệu Pancake hỏng. */
+/** Máy chủ có thể trả tên biến thể là chuỗi hóa của object khi dữ liệu Pancake hỏng; chuỗi này có khi dính giữa hay sau tên thật, nên so khớp bằng `includes`. */
 const BROKEN_VARIATION_NAME = '[object Object]';
 
 const skuLabel = (v: AuditVariation): string => v.sku.trim() || v.pancakeId || v.id;
@@ -180,7 +180,7 @@ function skuList(labels: readonly string[]): string {
 const isInvalidPrice = (v: AuditVariation): boolean => typeof v.retailPrice !== 'number' || !Number.isFinite(v.retailPrice) || v.retailPrice <= 0;
 const isPlaceholderStock = (v: AuditVariation): boolean => v.stock >= PLACEHOLDER_STOCK_MIN;
 /** Dùng chung với CSV sửa Pancake để cột `name` rơi về tên sản phẩm đúng ở những biến thể bị báo chưa đặt tên. */
-export const isUnnamedVariation = (v: Pick<AuditVariation, 'name'>): boolean => typeof v.name !== 'string' || v.name.trim() === '' || v.name.trim() === BROKEN_VARIATION_NAME;
+export const isUnnamedVariation = (v: Pick<AuditVariation, 'name'>): boolean => typeof v.name !== 'string' || v.name.trim() === '' || v.name.includes(BROKEN_VARIATION_NAME);
 
 const priceText = (n: number): string => (typeof n === 'number' && Number.isFinite(n) ? formatVnNumber(n) : 'không phải số');
 

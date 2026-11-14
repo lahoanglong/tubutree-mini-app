@@ -219,6 +219,7 @@ describe('promptShortDesc', () => {
 
 describe('variantSpecs', () => {
   const v = (name: string | null, retailPrice: number, salePrice: number | null = null, id = name ?? 'x') => ({ id, sku: id, name, retailPrice, salePrice });
+  const withStock = (name: string | null, retailPrice: number, stock: number | undefined, id = name ?? 'x') => ({ ...v(name, retailPrice, null, id), stock });
 
   it('mỗi dòng "tên quy cách — giá", rẻ trước, giá là giá đang bán nếu có', () => {
     expect(variantSpecs([v('Chai 3,8L', 250_000), v('Túi refill 500ml', 60_000, 45_000), v('Chai 500ml', 80_000)])).toEqual([
@@ -228,8 +229,55 @@ describe('variantSpecs', () => {
     ]);
   });
 
-  it('bỏ biến thể tên rỗng, toàn khoảng trắng, null hay "[object Object]"', () => {
-    expect(variantSpecs([v('', 10_000, null, 'a'), v('   ', 20_000, null, 'b'), v(null, 30_000, null, 'c'), v('[object Object]', 40_000, null, 'd'), v('Chai 1L', 50_000, null, 'e')])).toEqual(['Chai 1L — 50.000đ']);
+  it('gỡ chuỗi "[object Object]" khỏi tên như web: dính giữa tên thì còn phần tên thật, chỉ còn chuỗi đó thì là "Mặc định"', () => {
+    expect(variantSpecs([v('[object Object]', 40_000, null, 'd'), v('Hộp [object Object] 100g', 45_000, null, 'f'), v('Chai 1L', 50_000, null, 'e')])).toEqual([
+      'Mặc định — 40.000đ',
+      'Hộp 100g — 45.000đ',
+      'Chai 1L — 50.000đ',
+    ]);
+    expect(variantSpecs([v('Chai [object Object][object Object] 1L', 10_000, null, 'a'), v('Chai 2L', 20_000, null, 'b')])).toEqual(['Chai 1L — 10.000đ', 'Chai 2L — 20.000đ']);
+  });
+
+  it('tên trống, toàn khoảng trắng hay null: khi có phân loại anh em thì gọi "Mặc định" đúng nhãn khách thấy ở web, kèm giá', () => {
+    expect(variantSpecs([v('', 10_000, null, 'a'), v('   ', 20_000, null, 'b'), v(null, 30_000, null, 'c'), v('Chai 1L', 50_000, null, 'e')])).toEqual([
+      'Mặc định — 10.000đ',
+      'Mặc định — 20.000đ',
+      'Mặc định — 30.000đ',
+      'Chai 1L — 50.000đ',
+    ]);
+  });
+
+  it('hai phân loại, một tên trống và một tên hỏng: cả hai ra "Mặc định" như hai chip ở web, phân biệt bằng giá', () => {
+    expect(variantSpecs([v('[object Object]', 40_000, null, 'd'), v('', 20_000, null, 'b')])).toEqual(['Mặc định — 20.000đ', 'Mặc định — 40.000đ']);
+  });
+
+  it('sản phẩm chỉ có đúng một phân loại tên trống: không dòng nào (web cũng không hiện nhãn, giá đã ở dòng sản phẩm)', () => {
+    expect(variantSpecs([v('', 10_000)])).toEqual([]);
+    expect(variantSpecs([v(null, 10_000)])).toEqual([]);
+    expect(variantSpecs([v('[object Object]', 10_000)])).toEqual([]);
+  });
+
+  it('dòng "Mặc định" chịu cùng trần 6 dòng với dòng có tên', () => {
+    const many = Array.from({ length: 8 }, (_, i) => v(i < 2 ? '' : `Loại ${i}`, 10_000 * (i + 1), null, `id${i}`));
+    const lines = variantSpecs(many);
+    expect(lines).toHaveLength(6);
+    expect(lines.slice(0, 3)).toEqual(['Mặc định — 10.000đ', 'Mặc định — 20.000đ', 'Loại 2 — 30.000đ']);
+  });
+
+  it('phân loại hết tồn (tồn <= 0) ghi "(hết hàng)" sau giá; còn tồn hoặc không có trường tồn thì không ghi', () => {
+    expect(
+      variantSpecs([withStock('Chai 500ml', 80_000, 12), withStock('Túi refill 500ml', 60_000, 0), withStock('Chai 3,8L', 250_000, -2), withStock('Chai 1L', 120_000, undefined)]),
+    ).toEqual(['Túi refill 500ml — 60.000đ (hết hàng)', 'Chai 500ml — 80.000đ', 'Chai 1L — 120.000đ', 'Chai 3,8L — 250.000đ (hết hàng)']);
+  });
+
+  it('tồn ảo của hàng không quản kho (số rất lớn) vẫn là còn hàng', () => {
+    expect(variantSpecs([withStock('Chai 500ml', 80_000, 99_999_988)])).toEqual(['Chai 500ml — 80.000đ']);
+  });
+
+  it('dấu hết hàng đi cùng giá đang bán và cùng nhãn "Mặc định"; vẫn chịu trần 6 dòng', () => {
+    expect(variantSpecs([withStock('', 90_000, 0, 'a'), withStock('Chai 1L', 120_000, 5, 'b')])).toEqual(['Mặc định — 90.000đ (hết hàng)', 'Chai 1L — 120.000đ']);
+    const many = Array.from({ length: 9 }, (_, i) => withStock(`Loại ${i}`, 10_000 * (i + 1), 0, `id${i}`));
+    expect(variantSpecs(many)).toHaveLength(6);
   });
 
   it('tối đa 6 dòng, giữ 6 biến thể rẻ nhất', () => {

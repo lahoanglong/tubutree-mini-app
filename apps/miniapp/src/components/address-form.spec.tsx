@@ -680,6 +680,35 @@ describe('AddressForm — ô SĐT nhận chữ dán từ Zalo', () => {
     }
   });
 
+  it('chỉ bôi một phần ô rồi dán cả số: không thay cả ô, để trình duyệt chèn vào đúng đoạn đã chọn', () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    const phone = inputNear('Số điện thoại') as HTMLInputElement;
+    fireEvent.change(phone, { target: { value: '0987654321' } });
+    phone.setSelectionRange(0, 3);
+    expect(wasPrevented(paste(phone, '(+84) 912 345 678'))).toBe(false);
+    expect(phone).toHaveValue('0987654321');
+  });
+
+  it('ô đã điền sẵn, con trỏ không bôi gì (giữa hay cuối ô): dán cả số vẫn thay cả ô, không nối chuỗi', () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    const phone = inputNear('Số điện thoại') as HTMLInputElement;
+    for (const caret of [1, 2]) {
+      fireEvent.change(phone, { target: { value: 'ab' } });
+      phone.setSelectionRange(caret, caret);
+      expect(wasPrevented(paste(phone, '0912 345 678')), `con trỏ ${caret}`).toBe(true);
+      expect(phone, `con trỏ ${caret}`).toHaveValue('0912345678');
+    }
+  });
+
+  it('bôi chọn hết ô đang có chữ rồi dán cả số: thay cả ô bằng 0xxxxxxxxx', () => {
+    renderForm(<AddressForm initial={null} onCancel={() => {}} onSaved={() => {}} />);
+    const phone = inputNear('Số điện thoại') as HTMLInputElement;
+    fireEvent.change(phone, { target: { value: '0987654321' } });
+    phone.setSelectionRange(0, phone.value.length);
+    expect(wasPrevented(paste(phone, '(+84) 912 345 678'))).toBe(true);
+    expect(phone).toHaveValue('0912345678');
+  });
+
   it('gửi payload SĐT dạng chuẩn dù ô còn dạng dán thô (chưa rời ô)', async () => {
     localStorage.setItem(LAST_GEO_KEY, JSON.stringify(HCM));
     (shopApi.createAddress as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 'new', ...HCM });

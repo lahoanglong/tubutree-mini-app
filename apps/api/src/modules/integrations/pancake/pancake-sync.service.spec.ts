@@ -63,6 +63,8 @@ function makePrisma(over: Record<string, unknown> = {}) {
     const b = (base as Record<string, unknown>)[k];
     merged[k] = b && typeof b === 'object' && v && typeof v === 'object' ? { ...b, ...v } : v;
   }
+  // Giao dịch tương tác chạy ngay, `tx` là chính kho giả này: spec nào cần kiểm hoàn tác tự đưa `$transaction` riêng (xem W153).
+  if (!('$transaction' in merged)) merged.$transaction = jest.fn(async (fn: (tx: unknown) => unknown) => fn(merged));
   return merged as unknown as PrismaService;
 }
 
