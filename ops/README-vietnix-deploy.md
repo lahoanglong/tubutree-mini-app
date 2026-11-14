@@ -203,3 +203,9 @@ bản về từ remote và bấm giờ). Bước diễn tập, đo thời gian b
 Quay lại `docker-compose.prod.yml` (có Caddy, không giới hạn RAM) trên máy mới, migrate DNS
 sang IP mới, rồi tắt stack trên VPS Vietnix này (`docker compose -f docker-compose.vietnix.yml
 down -v`) + xoá 2 file vhost Apache + xoá `/opt/tubutree`.
+
+## Cutover apex tubutree.com (chuẩn bị xong, CHƯA chạy)
+
+Kết quả diễn tập, đường dẫn backup, 4 điều kiện còn thiếu và lệnh một chạm: `docs/launch/apex-cutover-rehearsal-2026-11-14.md`.
+`bash ops/cutover-apex-apply.sh` chỉ kiểm điều kiện; `--apply` mới cài vhost `ops/vietnix-vhost-apex.conf.cutover` (configtest, graceful, tự quay lại nếu hỏng);
+`bash ops/cutover-apex-rollback.sh` gỡ lại trong chưa tới 1 giây. Không script nào đổi DNS, cấp chứng chỉ hay deploy web.

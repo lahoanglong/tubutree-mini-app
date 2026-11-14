@@ -1,22 +1,34 @@
-# CUTOVER — vhost cho tubutree.com (apex) và www.tubutree.com trên Apache aaPanel của VPS Vietnix. CHƯA dùng: chỉ dán khi đã quyết đổi DNS.
+# CUTOVER — vhost cho tubutree.com (apex) và www.tubutree.com trên Apache aaPanel của VPS Vietnix. CHƯA dùng: chỉ cài khi chủ đã duyệt cutover.
 #
-# Trước khi dán (không cần hạ web nào):
-#   1. Cấp chứng chỉ bằng DNS-01 (HTTP-01 không chạy được khi tubutree.com còn ở ZenCloud), phủ cả hai tên:
+# Cài bằng MỘT lệnh (kiểm trước, rồi cài; tự quay lại nếu configtest hoặc kiểm chuyển hướng hỏng), chạy TRÊN VPS:
+#   bash ops/cutover-apex-apply.sh            # chỉ kiểm điều kiện, không đổi gì
+#   bash ops/cutover-apex-apply.sh --apply    # cài vhost này thành tubutree.com.conf, configtest, graceful, kiểm 459 URL WordPress
+#   bash ops/cutover-apex-rollback.sh         # gỡ vhost, trả Apache về đúng trạng thái trước khi cài
+# Cài vhost KHÔNG đổi lưu lượng thật: tubutree.com vẫn trỏ ZenCloud tới khi chủ đổi bản ghi A ở Cloudflare (xem docs/launch/apex-cutover-rehearsal-2026-11-14.md).
+#
+# Điều kiện (cutover-apex-apply.sh kiểm hết, thiếu cái nào thì dừng trước khi đụng Apache):
+#   1. Chứng chỉ phủ cả hai tên, đặt ở /etc/letsencrypt/live/tubutree.com/. VPS CHƯA có (14/11/2026) và certbot CHƯA có plugin dns-cloudflare; cần token Cloudflare
+#      quyền Zone:DNS:Edit của chủ. HTTP-01 không chạy được khi tubutree.com còn ở ZenCloud. Công thức:
+#        apt install python3-certbot-dns-cloudflare
+#        install -d -m 700 /root/.secrets && (đặt dns_cloudflare_api_token = <token> vào /root/.secrets/cloudflare.ini, chmod 600)
 #        certbot certonly --dns-cloudflare --dns-cloudflare-credentials /root/.secrets/cloudflare.ini \
 #          -d tubutree.com -d www.tubutree.com --cert-name tubutree.com
-#      (token Cloudflare quyền Zone:DNS:Edit; công thức đầy đủ ở docs/2026-09-12-deploy-runbook.md mục 1.6.4)
-#   2. Đặt NEXT_PUBLIC_SITE_URL=https://tubutree.com trong .env rồi build lại ảnh web (docker-compose.vietnix.yml; biến build).
-#   3. Đăng ký https://tubutree.com/dang-nhap/callback ở Zalo Developers (GIỮ URI của app.tubutree.com).
-#   4. Thử thật bằng IP, chưa đổi DNS:
-#        node scripts/ops/check-cutover-redirects.mjs --base https://tubutree.com --resolve-ip 14.225.207.177
-#        bash ops/check-edge.sh --app-host tubutree.com
+#      (công thức đầy đủ ở docs/2026-09-12-deploy-runbook.md mục 1.6.4)
+#   2. Web chạy bản dựng có NEXT_PUBLIC_SITE_URL=https://tubutree.com (biến build, nhúng vào bundle; .env VPS hiện KHÔNG đặt biến này nên sitemap/canonical/OG
+#      còn ra app.tubutree.com). Đặt trong .env rồi build lại ảnh web bằng docker-compose.vietnix.yml. Đây là một lần deploy, cần chủ cho phép riêng.
+#   3. API chấp nhận Origin https://tubutree.com cho đăng nhập: CORS_ORIGINS của API (.env VPS) hiện CHỈ có https://app.tubutree.com, nên cookieAuthOriginGuard trả 403 ở
+#      /api/auth/refresh|logout|guest|zalo-oauth khi khách vào apex (đo 14/11/2026). Đặt CORS_ORIGINS=https://app.tubutree.com,https://tubutree.com rồi tạo lại container api
+#      (API ngừng vài giây; cần chủ cho phép riêng). Giữ app.tubutree.com trong danh sách vì app.* còn chạy song song ít nhất 12 tháng.
+#   4. Ảnh WordPress đã sao về /www/wwwroot/tubutree.com/wp-content/uploads (khối "ẢNH WORDPRESS" bên dưới phục vụ thẳng từ đây):
+#        node scripts/ops/wp-public-export.mjs --out /opt/backups/tubutree-wp-precutover-20261114/wp-public-export \
+#             --uploads-dir /www/wwwroot/tubutree.com/wp-content/uploads --resolve-ip 42.1.122.84
+#   5. Đăng ký https://tubutree.com/dang-nhap/callback ở Zalo Developers (GIỮ URI của app.tubutree.com).
 #
-# Dán thành FILE MỚI trong thư mục vhost Apache của aaPanel, đặt tên sao cho nạp TRƯỚC vhost wildcard gian hàng CTV nếu có
-# (xem runbook mục 1.6.4). Apache dùng chung với ChoDeli (đang bán thật): `apachectl configtest` rồi `apachectl -k graceful`,
-# TUYỆT ĐỐI không `restart`; file lỗi để nguyên trên đĩa làm hỏng lần reload kế tiếp của aaPanel.
+# Apache dùng chung với ChoDeli (đang bán thật): `apachectl -t` rồi `apachectl -k graceful`, TUYỆT ĐỐI không `restart`; file lỗi để nguyên trên đĩa làm hỏng lần reload
+# kế tiếp của aaPanel (script apply tự gỡ file nếu configtest hỏng).
 #
-# Đổi DNS: A của tubutree.com và www về 14.225.207.177, ☁ xám lúc đầu (README-vietnix-deploy.md nói rõ vì sao), TTL hạ xuống 300 giây
-# ít nhất 24 giờ trước. Quay lại: đổi A về 42.1.122.84 (WordPress ở ZenCloud không bị đổi gì).
+# Đổi DNS (việc của chủ, ở Cloudflare): A của tubutree.com và www về 14.225.207.177, ☁ xám lúc đầu (README-vietnix-deploy.md nói rõ vì sao). TTL đã là 300 giây (đo 14/11).
+# Quay lại: đổi A của tubutree.com về 42.1.122.84 (ZenCloud, WordPress không bị đổi gì), www về như cũ.
 
 <VirtualHost *:80>
     ServerName tubutree.com
@@ -67,21 +79,42 @@
         </IfModule>
     </IfModule>
 
-    # ── TUỲ CHỌN, phương án A cho 200 bài blog và ảnh WordPress: reverse proxy về origin ZenCloud ──────────────────────────────
-    # Web mới không có blog. Bỏ dấu # cả khối để giữ nguyên URL /YYYY/MM/DD/<slug>/, /blog/, /category/, /wp-content/... (không chuyển hướng).
-    # Khối này PHẢI đứng trước dòng `ProxyPass /` bên dưới: Apache lấy luật khớp đầu tiên theo thứ tự khai báo.
-    # Origin = IP ZenCloud đo 13/11/2026 (42.1.122.84). ProxyPreserveHost On gửi Host: tubutree.com để WordPress nhận đúng site.
-    # Chưa kiểm: ZenCloud có chặn IP Vietnix không; WordPress có tự chuyển hướng canonical khi qua proxy không; SNI tới origin.
-    # Thử bằng `node scripts/ops/check-cutover-redirects.mjs ... --sitemap post-sitemap1.xml --blog proxy` trước khi đổi DNS.
-    #
-    #SSLProxyEngine On
-    # Chứng chỉ của origin cấp cho tên tubutree.com, không khớp địa chỉ IP trong ProxyPass; vẫn kiểm chuỗi chứng chỉ, chỉ bỏ so tên.
-    #SSLProxyCheckPeerName Off
-    #ProxyPassMatch "^/([0-9]{4}/[0-9]{2}/[0-9]{2}/.*)$" "https://42.1.122.84/$1"
-    #ProxyPassMatch "^/((?:blog|category|tag|author|wp-content|wp-includes|wp-json|feed|comments/feed)(?:/.*)?)$" "https://42.1.122.84/$1"
+    # ── ẢNH WORDPRESS: /wp-content/uploads/ phục vụ THẲNG từ đĩa, tệp tĩnh chỉ đọc ─────────────────────────────────────────────────────
+    # Vì sao: link ảnh cũ nằm ở Google Images, xem trước Zalo/Facebook, bài blog, và cột ảnh sản phẩm do wp-image-sync đọc (https://tubutree.com/wp-content/uploads/...).
+    # Phục vụ từ đĩa nghĩa là các link đó vẫn sống kể cả khi tắt PHP/WordPress ở ZenCloud, và không đi qua Next hay origin nào.
+    # `ProxyPass ... !` PHẢI đứng trước mọi ProxyPass/ProxyPassMatch bên dưới (Apache lấy luật khớp đầu tiên theo thứ tự khai báo).
+    # Thư mục do `scripts/ops/wp-public-export.mjs` sao về (WordPress thật nằm ở ZenCloud, không có trên VPS này); tệp thiếu ở đĩa trả 404, KHÔNG rơi xuống Next.
+    ProxyPass /wp-content/uploads/ !
+    Alias /wp-content/uploads/ /www/wwwroot/tubutree.com/wp-content/uploads/
+    <Directory "/www/wwwroot/tubutree.com/wp-content/uploads/">
+        Options -Indexes -ExecCGI -Includes +SymLinksIfOwnerMatch
+        AllowOverride None
+        Require all granted
+        # Tắt thực thi: tệp script trong uploads không bao giờ chạy và không được tải về như mã nguồn.
+        RemoveHandler .php .phtml .phar .pl .py .cgi
+        <FilesMatch "(?i)\.(php[0-9]?|phtml|phar|pl|py|cgi|sh|shtml)$">
+            Require all denied
+        </FilesMatch>
+        <IfModule mod_headers.c>
+            Header always set X-Content-Type-Options "nosniff"
+            Header always set Cache-Control "public, max-age=2592000"
+        </IfModule>
+    </Directory>
+    # ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+
+    # ── BLOG WORDPRESS (phương án A): reverse proxy về origin ZenCloud ───────────────────────────────────────────────────────────────
+    # Web mới không có blog. Giữ nguyên URL /YYYY/MM/DD/<slug>/ (199 bài đang index), /category/, /wp-json/ (wp-image-sync dùng Store API), /feed/ ... không chuyển hướng.
+    # Phụ thuộc: ZenCloud phải còn chạy WordPress. Tắt WordPress ở ZenCloud là 215 URL blog trả 502. Muốn bỏ phụ thuộc thì xoá khối này và quyết định chuyển hướng/410
+    # cho nhóm `isWpBlogPath` (apps/web/src/lib/legacy-wp-redirects.ts) trước, rồi chạy lại `check-cutover-redirects.mjs`.
+    # Khối này đứng trước `ProxyPass /` bên dưới. Origin = IP ZenCloud đo 14/11/2026 (42.1.122.84); ProxyPreserveHost On gửi Host: tubutree.com để WordPress nhận đúng site.
+    SSLProxyEngine On
+    # Chứng chỉ của origin cấp cho tên tubutree.com, không khớp địa chỉ IP trong ProxyPassMatch; vẫn kiểm chuỗi chứng chỉ, chỉ bỏ so tên.
+    SSLProxyCheckPeerName Off
+    ProxyPassMatch "^/([0-9]{4}/[0-9]{2}/[0-9]{2}/.*)$" "https://42.1.122.84/$1"
+    ProxyPassMatch "^/((?:blog|category|tag|author|wp-content|wp-includes|wp-json|feed|comments/feed)(?:/.*)?)$" "https://42.1.122.84/$1"
     # Sitemap Rank Math (/sitemap_index.xml, /post-sitemap1.xml...) cố ý KHÔNG proxy: nó liệt kê cả 91 URL /product/ đã chuyển hướng.
-    # Dùng /sitemap.xml của web mới, rồi nộp lại ở Search Console.
-    # ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+    # Các URL đó 301 về /sitemap.xml của web mới (LEGACY_FILE_REDIRECTS); nộp lại sitemap ở Search Console.
+    # ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
     # Next standalone đóng kết nối rảnh sau KEEP_ALIVE_TIMEOUT=55000 ms; `ttl=30` bỏ kết nối rảnh trước mốc đó.
     ProxyPass / http://127.0.0.1:14000/ ttl=30

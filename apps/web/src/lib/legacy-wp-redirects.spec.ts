@@ -1,5 +1,6 @@
 // @vitest-environment node
-import { readFileSync, readdirSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -8,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 import routeMap from '@tubutree/app-core/route-map.json';
 import { PROD_CATALOG_2026_11_12 } from '@tubutree/app-core/commerce/prod-catalog-full.fixture';
 import { classifyChain, expectedFor, parseArgs, parseSitemapLocs, toPathAndSearch, walk, type ChainStep } from '../../../../scripts/ops/check-cutover-redirects.mjs';
+import { collectUploadPaths, parseArgs as parseExportArgs, safeUploadPath } from '../../../../scripts/ops/wp-public-export.mjs';
 import { LEGAL_SLUGS } from '@/lib/legal';
 import { middleware } from '../middleware';
 import { MINIAPP_PERMANENT_SOURCES, buildMiniappRedirects } from './miniapp-redirects.mjs';
@@ -468,13 +470,198 @@ describe('cấu hình cutover', () => {
     expect(blogAt).toBeLessThan(vhost.indexOf('ProxyPass / http://127.0.0.1:14000/'));
   });
 
-  it('vhost apex: khối proxy tuỳ chọn phủ đúng nhóm đường dẫn mà isWpBlogPath coi là blog, và đang tắt (comment) theo mặc định', () => {
+  it('vhost apex: khối proxy blog phủ đúng nhóm đường dẫn mà isWpBlogPath coi là blog, và đang BẬT (dòng thật, không phải comment)', () => {
     const vhost = read('ops/vietnix-vhost-apex.conf.cutover');
     for (const prefix of ['blog', 'category', 'tag', 'author', 'wp-content', 'wp-includes', 'wp-json', 'feed']) {
       expect(vhost, prefix).toMatch(new RegExp(`\\(\\?:[a-z|\\-/]*\\b${prefix}\\b`));
     }
     const active = vhost.split('\n').filter((line) => !line.trimStart().startsWith('#'));
-    expect(active.some((line) => /ProxyPassMatch|SSLProxyEngine/.test(line))).toBe(false);
+    expect(active.some((line) => /^\s*ProxyPassMatch /.test(line))).toBe(true);
+    expect(active.some((line) => /^\s*SSLProxyEngine On/.test(line))).toBe(true);
+  });
+
+  it('vhost apex: /wp-content/uploads/ phục vụ thẳng từ đĩa, chỉ đọc, chặn thực thi, và đứng TRƯỚC mọi ProxyPass (Apache lấy luật khớp đầu tiên)', () => {
+    const vhost = read('ops/vietnix-vhost-apex.conf.cutover');
+    const active = vhost.split('\n').filter((line) => !line.trimStart().startsWith('#')).join('\n');
+    const exclude = active.indexOf('ProxyPass /wp-content/uploads/ !');
+    const blogMatch = active.indexOf('ProxyPassMatch "^/((?:blog|category|tag|author|wp-content');
+    const dateMatch = active.indexOf('ProxyPassMatch "^/([0-9]{4}');
+    const next = active.indexOf('ProxyPass / http://127.0.0.1:14000/');
+    expect(exclude).toBeGreaterThan(-1);
+    expect(exclude).toBeLessThan(dateMatch);
+    expect(exclude).toBeLessThan(blogMatch);
+    expect(blogMatch).toBeLessThan(next);
+    expect(active).toContain('Alias /wp-content/uploads/ /www/wwwroot/tubutree.com/wp-content/uploads/');
+    const dir = /<Directory "\/www\/wwwroot\/tubutree\.com\/wp-content\/uploads\/">([\s\S]*?)<\/Directory>/.exec(active)?.[1] ?? '';
+    expect(dir).toContain('-Indexes');
+    expect(dir).toContain('-ExecCGI');
+    expect(dir).toContain('AllowOverride None');
+    expect(dir).toMatch(/RemoveHandler[^\n]*\.php/);
+    expect(dir).toMatch(/FilesMatch[^\n]*php[\s\S]*Require all denied/);
+    expect(dir).toContain('X-Content-Type-Options "nosniff"');
+  });
+
+  it('8 sitemap con Rank Math và locations.kml: có luật 301 về /sitemap.xml hoặc 410, không còn 404 sau cutover', () => {
+    const children = ['post-sitemap1', 'post-sitemap2', 'page-sitemap', 'product-sitemap', 'category-sitemap', 'blocks-sitemap', 'featured_item-sitemap', 'local-sitemap'];
+    for (const name of children) {
+      for (const path of [`/${name}.xml`, `/${name}.xml/`, `/${name.toUpperCase()}.XML`]) {
+        expect(resolveLegacyWpPath(path), path).toEqual({ kind: 'redirect', status: 301, location: '/sitemap.xml' });
+        const res = middleware(new NextRequest(`https://tubutree.com${path}`, { headers: { host: 'tubutree.com' } }));
+        expect(res.status, path).toBe(301);
+        expect(res.headers.get('location'), path).toMatch(/\/sitemap\.xml$/);
+      }
+    }
+    expect(resolveLegacyWpPath('/locations.kml')).toEqual({ kind: 'gone', status: 410 });
+    expect(middleware(new NextRequest('https://tubutree.com/locations.kml/', { headers: { host: 'tubutree.com' } })).status).toBe(410);
+  });
+});
+
+describe('ops/cutover-apex-apply.sh và cutover-apex-rollback.sh (chỉ đọc mã, KHÔNG chạy)', () => {
+  const apply = read('ops/cutover-apex-apply.sh');
+  const rollback = read('ops/cutover-apex-rollback.sh');
+  const code = (text: string) => text.split('\n').filter((line) => !line.trimStart().startsWith('#')).join('\n');
+
+  it('cả hai chạy được (bit thực thi) và cú pháp bash hợp lệ', () => {
+    for (const file of ['ops/cutover-apex-apply.sh', 'ops/cutover-apex-rollback.sh', 'scripts/ops/wp-public-export.mjs']) {
+      expect(statSync(`${REPO}${file}`).mode & 0o111, file).not.toBe(0);
+    }
+    for (const file of ['ops/cutover-apex-apply.sh', 'ops/cutover-apex-rollback.sh']) {
+      expect(() => execFileSync('bash', ['-n', `${REPO}${file}`]), file).not.toThrow();
+    }
+  });
+
+  it('không bao giờ restart/stop Apache dùng chung với ChoDeli: chỉ configtest rồi graceful, và configtest đứng trước graceful', () => {
+    for (const [name, text] of [['apply', apply], ['rollback', rollback]] as const) {
+      const body = code(text);
+      expect(body, name).not.toMatch(/apachectl[^\n]*\b(restart|stop|start)\b|systemctl|service\s+(httpd|apache)|httpd\s+-k\s+(stop|restart)|killall|pkill/i);
+      expect(body.indexOf('-t 2>&1'), name).toBeGreaterThan(-1);
+      expect(body.indexOf('-t 2>&1'), name).toBeLessThan(body.indexOf('-k graceful'));
+    }
+  });
+
+  it('apply: mặc định chỉ kiểm, phải có --apply mới cài; kiểm đủ điều kiện trước khi đụng Apache; hỏng thì tự gọi rollback', () => {
+    const body = code(apply);
+    expect(body).toMatch(/APPLY=0/);
+    expect(body.indexOf('if [ "$APPLY" = 0 ]')).toBeGreaterThan(-1);
+    expect(body.indexOf('if [ "$APPLY" = 0 ]')).toBeLessThan(body.indexOf('install -m 600'));
+    for (const needle of ['sha256sum -c', 'subjectAltName', 'checkend', 'CORS_ORIGINS', 'sitemap.xml', 'check-cutover-redirects.mjs', '--blog skip', '--blog proxy', '--host-header tubutree.com', 'cutover-apex-rollback.sh']) {
+      expect(body, needle).toContain(needle);
+    }
+    expect(body).toContain('rollback_and_exit');
+    expect((body.match(/rollback_and_exit "/g) ?? []).length).toBeGreaterThanOrEqual(6);
+    expect(body).not.toMatch(/certbot\s|docker\s+(compose|build|restart|stop|rm)|git\s+(push|pull)/);
+  });
+
+  it('rollback: trả đúng trạng thái trước khi cài, từ chối xoá tệp lạ nếu không có --force, và không xoá ảnh uploads', () => {
+    const body = code(rollback);
+    expect(body).toContain('PRE_EXISTED');
+    expect(body).toContain('cmp -s "$TARGET" "$VHOST_SRC"');
+    expect(body).toContain('--force');
+    expect(body).not.toMatch(/rm\s+-[a-z]*r|wp-content|UPLOADS/);
+  });
+});
+
+describe('scripts/ops/wp-public-export.mjs: hàm thuần', () => {
+  it('safeUploadPath chỉ nhận đường dẫn con của /wp-content/uploads/, không thoát thư mục', () => {
+    expect(safeUploadPath('/wp-content/uploads/2024/05/a.png')).toBe('2024/05/a.png');
+    expect(safeUploadPath('/wp-content/uploads/2025/01/dao%C2%A7u-1.png')).toBe(`2025/01/dao${String.fromCharCode(0xa7)}u-1.png`);
+    for (const bad of ['/wp-content/uploads/', '/wp-content/uploads/../../wp-config.php', '/wp-content/uploads/%2e%2e/x', '/wp-content/uploads/a//b.png', '/wp-content/uploads/./a.png', '/wp-content/themes/a.png', '/uploads/a.png', '/wp-content/uploads/%ZZ.png']) {
+      expect(safeUploadPath(bad), bad).toBeNull();
+    }
+  });
+
+  it('collectUploadPaths gom URL ảnh trong JSON/HTML, bỏ query và host lạ, hiểu cả JSON thô viết \\/', () => {
+    const found = collectUploadPaths([
+      { content: { rendered: '<img src="https://tubutree.com/wp-content/uploads/2024/05/a.png?x=1" srcset="https://tubutree.com/wp-content/uploads/2024/05/a-300x200.png 300w, https://www.tubutree.com/wp-content/uploads/2024/05/a-150x150.png 150w">' } },
+      { link: 'https://evil.example/wp-content/uploads/2024/05/x.png' },
+      { link: 'https://tubutree.com/wp-content/uploads/../../wp-config.php' },
+    ]);
+    collectUploadPaths(String.raw`{"guid":"http:\/\/tubutree.com\/wp-content\/uploads\/2020\/01\/b.jpg"}`, found);
+    expect([...found].sort()).toEqual(['/wp-content/uploads/2020/01/b.jpg', '/wp-content/uploads/2024/05/a-150x150.png', '/wp-content/uploads/2024/05/a-300x200.png', '/wp-content/uploads/2024/05/a.png']);
+  });
+
+  it('parseArgs: mặc định, đủ tuỳ chọn, và lỗi tham số', () => {
+    expect(parseExportArgs(['--out', '/b'])).toMatchObject({ out: '/b', uploadsDir: '', origin: 'https://tubutree.com', concurrency: 3, dryRun: false });
+    expect(parseExportArgs(['--out', '/b', '--uploads-dir', '/u', '--resolve-ip', '42.1.122.84', '--concurrency', '5', '--delay-ms', '0', '--limit', '10', '--dry-run'])).toMatchObject({
+      uploadsDir: '/u',
+      resolveIp: '42.1.122.84',
+      concurrency: 5,
+      delayMs: 0,
+      limit: 10,
+      dryRun: true,
+    });
+    expect(() => parseExportArgs([])).toThrow(/--out/);
+    expect(() => parseExportArgs(['--out', '/b', '--lạ'])).toThrow(/Tham số lạ/);
+    expect(() => parseExportArgs(['--out', '/b', '--origin', 'khong-phai-url'])).toThrow(/--origin/);
+    expect(() => parseExportArgs(['--out', '/b', '--limit', '-1'])).toThrow(/số nguyên/);
+  });
+});
+
+describe('danh mục URL WordPress đang index (scripts/ops/data/wp-live-urls-20261114.txt): diễn tập N/N PASS qua middleware thật', () => {
+  const inventory = read('scripts/ops/data/wp-live-urls-20261114.txt')
+    .split(/\r?\n/)
+    .filter((line) => line.trim() && !line.startsWith('#'));
+  const OWN_PATHS = new Set(['/', '/gio-hang/', '/tai-khoan/', '/thanh-toan/']);
+
+  it('459 đường dẫn không trùng; mỗi URL hoặc là blog/ảnh (proxy), hoặc có luật 301/410, hoặc là trang của web mới', () => {
+    expect(inventory).toHaveLength(459);
+    expect(new Set(inventory).size).toBe(459);
+    const unexplained = inventory.filter((line) => {
+      const path = toPathAndSearch(line)?.path ?? '';
+      return !isWpBlogPath(path) && !resolveLegacyWpPath(path) && !OWN_PATHS.has(path);
+    });
+    expect(unexplained).toEqual([]);
+  });
+
+  it('đi theo từng URL không phải blog bằng bộ kiểm thật: PASS hết, đúng một chặng nội dung, 0 vòng lặp, 0 chuỗi 2 chặng', async () => {
+    const server = http.createServer((req, res) => {
+      const url = new URL(req.url ?? '/', 'https://tubutree.com');
+      const out = middleware(new NextRequest(`https://tubutree.com${url.pathname}${url.search}`, { headers: { host: 'tubutree.com' } }));
+      const location = out.headers.get('location')?.replace(/^https:\/\/tubutree\.com/, '');
+      res.writeHead(out.status, location ? { location } : {});
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const failures: string[] = [];
+      let checked = 0;
+      for (const line of inventory) {
+        const target = toPathAndSearch(line);
+        if (!target || isWpBlogPath(target.path)) continue;
+        const expected = expectedFor(resolveLegacyWpPath(target.path));
+        const { steps, flags } = await walk({ base: `http://127.0.0.1:${port}`, path: target.path, search: target.search, timeout: 5000 });
+        const verdict = classifyChain({ expected, steps, flags });
+        checked += 1;
+        if (verdict.verdict !== 'PASS') failures.push(`${line}: ${verdict.verdict} ${verdict.reason}`);
+        if (expected.kind === 'redirect' && steps.filter((st) => st.next && st.status === 301).length !== 1) failures.push(`${line}: không đúng một chặng 301`);
+      }
+      expect(checked).toBe(inventory.length - inventory.filter((line) => isWpBlogPath(toPathAndSearch(line)?.path ?? '')).length);
+      expect(checked).toBe(238);
+      expect(failures).toEqual([]);
+    } finally {
+      await new Promise<void>((done) => server.close(() => done()));
+    }
+  });
+
+  it('--host-header: bộ kiểm gửi Host của tên miền thật tới cổng Next (127.0.0.1:14000) thay vì host của --base', async () => {
+    const seen: string[] = [];
+    const server = http.createServer((req, res) => {
+      seen.push(String(req.headers.host));
+      res.writeHead(200);
+      res.end();
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
+    const { port } = server.address() as AddressInfo;
+    try {
+      await walk({ base: `http://127.0.0.1:${port}`, hostHeader: 'tubutree.com', path: '/', timeout: 3000 });
+      await walk({ base: `http://127.0.0.1:${port}`, path: '/', timeout: 3000 });
+      expect(seen).toEqual(['tubutree.com', `127.0.0.1:${port}`]);
+      expect(parseArgs(['--base', 'http://127.0.0.1:14000', '--host-header', 'tubutree.com']).hostHeader).toBe('tubutree.com');
+      expect(() => parseArgs(['--host-header'])).toThrow(/cần một giá trị/);
+    } finally {
+      await new Promise<void>((done) => server.close(() => done()));
+    }
   });
 });
 
