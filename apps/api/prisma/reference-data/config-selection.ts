@@ -107,6 +107,7 @@ const EXTERNAL_ORDER_CONFIG = 'src/modules/external-points/external-order.config
 const EXTERNAL_CLAIM_CONFIG = 'src/modules/external-points/external-claim.config.ts';
 const EARN_RATES = 'src/modules/loyalty/earn-rates.ts';
 const EXTERNAL_CHAT_CONFIG = 'src/modules/external-points/external-chat.config.ts';
+const GAME_ARCADE_CONFIG = 'src/modules/game/game-arcade.constants.ts';
 
 export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'community.rep_post', value: 5, category: 'community', description: 'Điểm uy tín cộng cho người có bài cộng đồng được đăng', fallbackSource: { file: FEED, text: "get<number>('community.rep_post', 5)" } },
@@ -145,6 +146,10 @@ export const EXTRA_CONFIGS: readonly ExtraConfig[] = [
   { key: 'pancake.staff_map', value: {}, category: 'pancake', description: 'Ánh xạ id tài khoản Pancake của nhân viên → userId nhân viên trên Tubu Tree, dạng { "pancakeId": "userId" }. Dùng để chặn nhân viên tự duyệt điểm đơn mình tạo và tự nhận điểm đơn mình tạo. Để trống thì chỉ so tên', fallbackSource: { file: EXTERNAL_CHAT_CONFIG, text: 'config.get<unknown>(PANCAKE_STAFF_MAP_KEY, {})' } },
   { key: 'pancake.external_lookup_enabled', value: false, category: 'pancake', description: 'Khi khách nhập mã chưa có trong "Đơn ngoài app", tra Pancake theo mã (tối đa 5 giây, ngắt mạch sau 3 lỗi). Chỉ bật khi đã kiểm Pancake tìm được theo mã vận đơn', fallbackSource: { file: 'src/modules/external-points/external-claim-lookup.service.ts', text: 'EXTERNAL_LOOKUP_ENABLED_KEY, false' } },
   { key: 'staff.grant_invite_ttl_days', value: 7, category: 'staff', description: 'Số ngày lời mời nhân viên theo SĐT (người chưa có tài khoản) còn hiệu lực, từ 1 đến 30; quá hạn thì người đó đăng nhập cũng không được nâng quyền (admin mời lại để gia hạn)', fallbackSource: { file: 'src/modules/staff/rbac/grant-invite-config.ts', text: 'export const DEFAULT_GRANT_INVITE_TTL_DAYS = 7;' } },
+  { key: 'game.arcade_enabled', value: true, category: 'game', description: 'true = mini-game Hứng Sương Tinh Khiết và Phân Loại Vỏ Chai Thần Tốc có thưởng 💧 và Điểm Xanh; false = vẫn chơi và ghi kỷ lục nhưng không thưởng', fallbackSource: { file: GAME_ARCADE_CONFIG, text: 'export const ARCADE_ENABLED_DEFAULT = true;' } },
+  { key: 'game.arcade_water_base', value: 5, category: 'game', description: '💧 nền thưởng mỗi ván mini-game có thưởng; ván đạt mốc khá được cộng thêm 3, mốc xuất sắc cộng thêm 2 nữa (mặc định mỗi ván được 5, 8 hoặc 10 giọt)', fallbackSource: { file: GAME_ARCADE_CONFIG, text: 'export const ARCADE_WATER_BASE_DEFAULT = 5;' } },
+  { key: 'game.arcade_points_per_run', value: 1, category: 'game', description: 'Điểm Xanh (1 điểm = 1đ) cộng cho mỗi ván mini-game có thưởng, cùng lúc với 💧 (0 = không cộng điểm)', fallbackSource: { file: GAME_ARCADE_CONFIG, text: 'export const ARCADE_POINTS_PER_RUN_DEFAULT = 1;' } },
+  { key: 'game.home_quiz_seeds', value: 20, category: 'game', description: '💧 thưởng một lần cho mỗi tài khoản khi làm xong thẻ chẩn đoán tổ ấm (0 = không tặng)', fallbackSource: { file: GAME_ARCADE_CONFIG, text: 'export const HOME_QUIZ_SEEDS_DEFAULT = 20;' } },
   { key: 'pancake.external_poll_enabled', value: false, category: 'pancake', description: 'Kéo dự phòng mỗi 10 phút: lấy đơn sàn đã cập nhật trong 2 giờ gần nhất khi webhook sàn rớt. Chỉ bật sau khi đã kiểm tham số startDateTime và order_sources trên Pancake thật', fallbackSource: { file: 'src/modules/external-points/external-claim-poll.service.ts', text: 'EXTERNAL_POLL_ENABLED_KEY, false' } },
 ];
 

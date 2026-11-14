@@ -240,6 +240,12 @@ export const FIELD_LABELS: Record<string, string> = {
   verified: 'Đã xác minh',
   year: 'Năm',
   zaloTemplateId: 'Mã mẫu ZNS',
+  gameId: 'Trò chơi',
+  score: 'Điểm của ván chơi',
+  durationMs: 'Thời gian ván chơi',
+  family: 'Câu trả lời về gia đình',
+  worry: 'Câu trả lời về nỗi lo',
+  format: 'Câu trả lời về dạng sản phẩm',
 };
 
 /** Nhãn riêng của một trường trong một DTO, khi chữ trên màn hình khác nhãn toàn cục (cùng tên `category` mà là "Nhóm", "Chủ đề" hay "Danh mục"). */

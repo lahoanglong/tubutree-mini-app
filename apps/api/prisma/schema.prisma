@@ -300,6 +300,7 @@ model User {
   dealerTemplates        DealerOrderTemplate[]
   gameProfile            GameProfile?
   gameWaterEvents        GameWaterEvent[]
+  gameArcadeScores       GameArcadeScore[]
   reviews                Review[]
   refreshTokens          RefreshToken[]
   plantedTrees           PlantedTree[]
@@ -2308,6 +2309,23 @@ model GameWaterEvent {
   @@unique([reason, refId])
   @@index([userId, createdAt])
   @@map("game_water_events")
+}
+
+/// Kỷ lục và số ván của mini-game arcade (`gameId` dew_catcher | refill_rush), mỗi (user, game) một dòng. `lastRunAt` là lúc
+/// ván gần nhất kết thúc, để chặn ván mới bắt đầu trước khi ván cũ xong. Lượt thưởng mỗi ngày nằm ở `game_water_events`, không ở đây.
+model GameArcadeScore {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  gameId    String
+  bestScore Int       @default(0)
+  plays     Int       @default(0)
+  lastRunAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([userId, gameId])
+  @@map("game_arcade_scores")
 }
 
 // Cây thật cam kết trồng khi user thu hoạch cây ảo (§6.7.7 "Tác động xanh").

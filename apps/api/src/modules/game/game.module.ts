@@ -11,6 +11,7 @@ import { GameGiftService } from './game-gift.service';
 import { GameGardenService } from './game-garden.service';
 import { GameOrderWaterService } from './game-order-water.service';
 import { SeasonPassService } from './season-pass.service';
+import { GameArcadeService } from './game-arcade.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { FeedModule } from '../feed/feed.module';
@@ -30,6 +31,7 @@ import { FeedModule } from '../feed/feed.module';
     GameGardenService,
     GameOrderWaterService,
     SeasonPassService,
+    GameArcadeService,
   ],
   exports: [GameService, GameEconomyService, GameOrderWaterService],
 })
