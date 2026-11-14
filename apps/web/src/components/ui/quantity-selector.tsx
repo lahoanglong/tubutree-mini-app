@@ -51,7 +51,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, e
           value={String(value)}
           onFocus={(e) => e.currentTarget.select()}
           onChange={(e) => onChange(parseQtyInput(e.target.value, min, max))}
-          className={`w-14 rounded-control border border-stone-450 bg-stone-0 text-center font-semibold tabular-nums text-stone-900 ${size === 'md' ? 'h-11 text-base' : 'h-9 text-sm'}`}
+          className={`w-14 rounded-control border border-stone-450 bg-stone-0 text-center font-semibold tabular-nums text-stone-900 h-11 ${size === 'md' ? 'text-base' : 'text-sm'}`}
         />
       ) : (
         <span className={`min-w-[22px] text-center font-semibold tabular-nums text-stone-900 ${size === 'md' ? 'text-base' : 'text-sm'}`} aria-live="polite">

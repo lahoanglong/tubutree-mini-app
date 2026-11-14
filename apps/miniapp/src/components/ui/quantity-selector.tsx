@@ -68,7 +68,7 @@ export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, e
           onChange={(e) => onChange(parseQtyInput(e.target.value, min, max))}
           style={{
             width: 56,
-            height: side,
+            height: Math.max(side, 44),
             boxSizing: 'border-box',
             textAlign: 'center',
             fontWeight: 600,

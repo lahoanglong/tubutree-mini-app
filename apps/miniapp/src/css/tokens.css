@@ -225,8 +225,10 @@ body.with-back-btn .page.page-bleed {
 }
 
 /* Dòng "Nhận … Điểm Xanh" ở PDP: vùng chạm dôi 20px lên trên (margin âm) để không đẩy nội dung, đệm trên đúng bằng phần dôi đó nên chữ xuống hai dòng
-   (khổ 320px) thì nút cao thêm xuống dưới thay vì đè lên dòng giá. Để trong CSS vì bánh cóc px của P17b chỉ đếm TSX. */
+   (khổ 320px) thì nút cao thêm xuống dưới thay vì đè lên dòng giá. Để trong CSS vì bánh cóc px của P17b chỉ đếm TSX.
+   `position: relative`: không có thì chữ giá (nội dung dòng) vẽ trên nút và nuốt cú chạm ở 20px dôi lên, vùng chạm thật chỉ còn ~24px. */
 .tubu-points-earn {
+  position: relative;
   box-sizing: border-box;
   margin: -20px 0 0;
   padding: 20px 0 4px;
