@@ -37,7 +37,6 @@ function isForbidden(e: unknown): boolean {
 }
 
 function CtvOnlyNotice() {
-  const navigate = useNavigate();
   const goSmart = useSmartNavigate();
   return (
     <EmptyState
