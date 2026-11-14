@@ -884,6 +884,27 @@ describe('Vườn Xanh: mini game và Chẩn đoán tổ ấm', () => {
     expect(headingProblems(c)).toEqual([]);
   });
 
+  it('khách cũng thấy thẻ Chẩn đoán tổ ấm (dưới sảnh game), thẻ vẫn hứa quà và không gọi API nào', async () => {
+    state.phase = 'guest';
+    const c = await mount();
+    const card = c.querySelector('[data-testid="home-quiz-card"]')!;
+    expect(card).not.toBeNull();
+    expect(card.querySelector('h2')!.textContent).toBe('Chẩn đoán tổ ấm');
+    expect(card.textContent).toContain('Lần đầu hoàn thành có quà Giọt nước');
+    const hub = c.querySelector('[data-testid="arcade-hub"]')!;
+    expect(hub.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(getsOf('/game/arcade/status')).toHaveLength(0);
+    expect(state.calls.filter((x) => x.path === '/products' || x.path.startsWith('/game/home-quiz'))).toEqual([]);
+  });
+
+  it('đã đăng nhập mà máy chủ báo quizClaimed: thẻ không hứa quà lần nữa', async () => {
+    state.data['/game/arcade/status'] = { ...ARCADE_STATUS, quizClaimed: true };
+    const c = await mount();
+    const card = c.querySelector('[data-testid="home-quiz-card"]')!;
+    expect(card.textContent).not.toContain('Lần đầu hoàn thành có quà Giọt nước');
+    expect(card.textContent).toContain('Bạn đã nhận quà Giọt nước của Chẩn đoán tổ ấm');
+  });
+
   it('thẻ Chẩn đoán tổ ấm tĩnh: không gọi API sản phẩm hay quà trước khi bấm Bắt đầu', async () => {
     const c = await mount();
     expect(state.calls.filter((x) => x.path === '/products' || x.path.startsWith('/game/home-quiz'))).toEqual([]);

@@ -664,6 +664,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'arcade.result.error': 43,
   'arcade.guest.login': 59,
   'arcade.guest.demo': 46,
+  'arcade.pending.saved': 28,
   // Chẩn đoán tổ ấm (W164)
   'homeQuiz.card.title': 17,
   'homeQuiz.card.sub': 42,

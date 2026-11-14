@@ -6,6 +6,9 @@ import type { ArcadeCompleteResult } from '@tubutree/app-core/api/game';
 import type { ArcadeMountOptions, ArcadeResult } from '@tubutree/app-core/arcade/arcade-canvas';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingLevels, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { ApiError } from '@/lib/client-api';
+import { ARCADE_PENDING_KEY } from './arcade-pending';
 
 const m = vi.hoisted(() => ({
   phase: 'authenticated' as string,
@@ -417,6 +420,141 @@ describe('ArcadeGameOverlay: đã đăng nhập, lưu kết quả', () => {
     await finish();
     click(Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="arcade-result"] button')).find((b) => b.textContent === 'Đóng')!);
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ArcadeGameOverlay: lỗi máy chủ theo mã HTTP', () => {
+  const retryButton = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="arcade-result"] button')).find((b) => b.textContent === 'Thử lại') ?? null;
+
+  it('HTTP 400 (ván bị từ chối): nói ván không hợp lệ, KHÔNG có nút Thử lại, không tự gửi lại', async () => {
+    m.post.mockRejectedValue(new ApiError('Bad Request', 400));
+    await open();
+    await play();
+    await finish(dewRun(640));
+    expect(text()).toContain('Bạn đạt 640 điểm');
+    expect(text()).toContain(fillCopy('arcade.result.invalid'));
+    expect(text()).not.toContain(fillCopy('arcade.result.error'));
+    expect(retryButton()).toBeNull();
+    await flush(4);
+    expect(m.post).toHaveBeenCalledTimes(1);
+  });
+
+  it('HTTP 400 rồi Chơi lại: ván mới vẫn gửi và nhận thưởng bình thường', async () => {
+    m.post.mockRejectedValueOnce(new ApiError('Bad Request', 400));
+    await open();
+    await play();
+    await finish(dewRun(640));
+    click(btn('Chơi lại'));
+    await finish(dewRun(700));
+    expect(m.post).toHaveBeenCalledTimes(2);
+    expect(text()).toContain('Nhận 8 Giọt nước vào Vườn');
+    expect(text()).not.toContain(fillCopy('arcade.result.invalid'));
+  });
+
+  it.each([503, 500])('HTTP %i (lỗi phía máy chủ): vẫn mời Thử lại và gửi lại đúng ván đó', async (status) => {
+    m.post.mockRejectedValueOnce(new ApiError('lỗi máy chủ', status));
+    await open();
+    await play();
+    await finish(dewRun(640));
+    expect(text()).toContain(fillCopy('arcade.result.error'));
+    expect(text()).not.toContain(fillCopy('arcade.result.invalid'));
+    click(retryButton());
+    await flush(4);
+    expect(m.post).toHaveBeenCalledTimes(2);
+    expect(text()).toContain('Nhận 8 Giọt nước vào Vườn');
+  });
+
+  it('lỗi mạng (không có mã HTTP): mời Thử lại', async () => {
+    m.post.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await open();
+    await play();
+    await finish();
+    expect(retryButton()).not.toBeNull();
+    expect(text()).toContain(fillCopy('arcade.result.error'));
+  });
+
+  it('lý do LOW_SCORE: nói điểm chưa đủ để thưởng, không khoe Giọt nước', async () => {
+    m.post.mockResolvedValue(SAVED({ rewarded: false, reason: 'LOW_SCORE', waterEarned: 0, pointsEarned: 0, isNewBest: false, bestScore: 700 }));
+    await open();
+    await play();
+    await finish(dewRun(120));
+    expect(text()).toContain(fillCopy('arcade.result.lowScore'));
+    expect(text()).toContain('Kỷ lục 700');
+    expect(text()).not.toContain('Giọt nước vào Vườn');
+  });
+
+  it('lý do lạ máy chủ thêm sau: không nói sai, vẫn hiện điểm và kỷ lục', async () => {
+    m.post.mockResolvedValue(SAVED({ rewarded: false, reason: 'TUONG_LAI' as never, waterEarned: 0, pointsEarned: 0, isNewBest: false, bestScore: 700 }));
+    await open();
+    await play();
+    await finish(dewRun(120));
+    expect(text()).toContain('Bạn đạt 120 điểm');
+    expect(text()).toContain('Kỷ lục 700');
+    expect(text()).not.toContain('Giọt nước vào Vườn');
+  });
+
+  it('số lượt đúng như máy chủ trả: trần lớn hơn 3 vẫn hiện nguyên (used 2/cap 5)', async () => {
+    m.post.mockResolvedValue(SAVED({ used: 2, cap: 5 }));
+    await open();
+    await play();
+    await finish();
+    expect(text()).toContain('Đã dùng 2/5 lượt thưởng hôm nay');
+  });
+});
+
+describe('ArcadeGameOverlay: khách bấm Đăng nhập thì ván được nhớ qua vòng đăng nhập', () => {
+  beforeEach(() => {
+    m.phase = 'guest';
+    sessionStorage.clear();
+  });
+  const loginLink = () => Array.from(dialog()!.querySelectorAll('a')).find((a) => a.textContent?.includes('Đăng nhập'))!;
+  const pending = () => JSON.parse(sessionStorage.getItem(ARCADE_PENDING_KEY) ?? 'null');
+
+  it('chưa bấm nút thì chưa nhớ gì (chơi xong rồi đóng không để lại ván chờ)', async () => {
+    await open();
+    await play();
+    await finish(dewRun(520));
+    expect(sessionStorage.getItem(ARCADE_PENDING_KEY)).toBeNull();
+  });
+
+  it('bấm nút đăng nhập: ghi gameId, điểm, thời lượng và mốc giờ vào sessionStorage trước khi chuyển trang', async () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
+    await open();
+    await play();
+    await finish(dewRun(520));
+    const link = loginLink();
+    link.addEventListener('click', (e) => e.preventDefault());
+    click(link);
+    expect(pending()).toEqual({ gameId: 'dew_catcher', score: 520, durationMs: 40_000, endedAt: 1_700_000_000_000 });
+    expect(link.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fvuon-xanh');
+  });
+
+  it('ván của game khác được ghi đúng gameId; chơi lại ván cao hơn rồi bấm thì ghi đè ván cũ', async () => {
+    await open('refill_rush');
+    await play();
+    await finish({ gameId: 'refill_rush', score: 300, durationMs: 45_000, stats: RUSH_STATS });
+    loginLink().addEventListener('click', (e) => e.preventDefault());
+    click(loginLink());
+    expect(pending()).toMatchObject({ gameId: 'refill_rush', score: 300, durationMs: 45_000 });
+    click(btn('Chơi lại'));
+    await finish({ gameId: 'refill_rush', score: 450, durationMs: 45_000, stats: { ...RUSH_STATS, score: 450 } });
+    loginLink().addEventListener('click', (e) => e.preventDefault());
+    click(loginLink());
+    expect(pending()).toMatchObject({ score: 450 });
+  });
+
+  it('sessionStorage hỏng: bảng điểm và nút đăng nhập vẫn hiện đúng, bấm không ném lỗi', async () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('đầy');
+    });
+    await open();
+    await play();
+    await finish(dewRun(520));
+    const link = loginLink();
+    expect(link.textContent).toBe('Đăng nhập lưu kỷ lục & nhận ngay 8 Giọt nước vào Vườn');
+    expect(link.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fvuon-xanh');
+    link.addEventListener('click', (e) => e.preventDefault());
+    expect(() => click(link)).not.toThrow();
   });
 });
 

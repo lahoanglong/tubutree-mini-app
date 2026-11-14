@@ -5,14 +5,16 @@ import { useQuery } from '@tanstack/react-query';
 import { Gamepad2 } from 'lucide-react';
 import { ARCADE_GAME_IDS, type ArcadeGameId } from '@tubutree/app-core/arcade/arcade-config';
 import { arcadeWindowBadge } from '@tubutree/app-core/arcade/badge';
+import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { gameArcadeStatusQuery } from '@tubutree/app-core/queries/game';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { Button, Card, Heading, Text } from '@/components/mini';
-import { ARCADE_COPY_KEY, ArcadeGameOverlay } from './arcade-game-overlay';
+import { ARCADE_COPY_KEY, ArcadeGameOverlay, rewardLines } from './arcade-game-overlay';
 import { readGuestBest } from './arcade-storage';
 import { GameCard } from './game-card';
+import { usePendingArcadeSave, type PendingSaveState } from './use-arcade-save';
 
 const MINUTE_MS = 60_000;
 
@@ -26,6 +28,38 @@ function useMinuteClock(): Date {
   return now;
 }
 
+/** Dải báo ván khách chơi trước khi đăng nhập đã được gửi nốt: điểm, rồi phần thưởng (hoặc lý do không thưởng) đúng như màn kết quả. */
+function PendingSaved({ state, retry }: { state: PendingSaveState; retry: () => void }) {
+  if (state.status === 'idle' || state.status === 'saving') return null;
+  const box = 'flex flex-col items-start gap-1 rounded-card bg-[var(--color-bg-subtle)] p-3';
+  if (state.status === 'error') {
+    return (
+      <div data-testid="arcade-pending-error" className={box}>
+        <Text variant="body-sm" tone="danger" as="p">
+          {fillCopy(state.invalid ? 'arcade.result.invalid' : 'arcade.result.error')}
+        </Text>
+        {!state.invalid && (
+          <Button variant="secondary" onPress={retry}>
+            {gameNewbieCopy.loadError.retry}
+          </Button>
+        )}
+      </div>
+    );
+  }
+  return (
+    <div data-testid="arcade-pending-saved" className={box}>
+      <Text variant="body-sm" tone="primary" as="p" numeric style={{ fontWeight: 600 }}>
+        {fillCopy('arcade.pending.saved', { n: state.run.score })}
+      </Text>
+      {rewardLines(state.data).map((line) => (
+        <Text key={line} variant="body-sm" tone="secondary" as="p" numeric>
+          {line}
+        </Text>
+      ))}
+    </div>
+  );
+}
+
 /**
  * Sảnh mini game ở Vườn Xanh: huy hiệu khung giờ thưởng, hai thẻ game (tên, một dòng mô tả, kỷ lục, nút Chơi). Giữ luôn trạng thái mở
  * `ArcadeGameOverlay` nên nơi gắn chỉ là `<ArcadeHub />`. Đã đăng nhập: kỷ lục và số lượt thưởng hôm nay lấy từ máy chủ; khách chơi thử,
@@ -35,6 +69,7 @@ export function ArcadeHub() {
   const authed = useAuthPhase() === 'authenticated';
   const status = useQuery({ ...gameArcadeStatusQuery(coreHttp), enabled: authed });
   const badge = arcadeWindowBadge(useMinuteClock());
+  const pending = usePendingArcadeSave(authed);
   const [open, setOpen] = useState<ArcadeGameId | null>(null);
   // Đọc kỷ lục khách sau khi mount và mỗi lần đóng lớp phủ: máy chủ dựng HTML không có localStorage nên không đọc trong lúc render.
   const [guestBest, setGuestBest] = useState<Record<ArcadeGameId, number> | null>(null);
@@ -60,6 +95,10 @@ export function ArcadeHub() {
             <Text variant="caption" as="p" style={{ color: 'inherit' }}>
               {badge.hint}
             </Text>
+          </div>
+          {/* Vùng báo luôn có mặt, chỉ đổi phần con: vùng live vừa gắn cùng chữ thường không được đọc ra. */}
+          <div role="status" aria-live="polite" data-testid="arcade-pending">
+            <PendingSaved state={pending.state} retry={pending.retry} />
           </div>
           {!authed && (
             <Text variant="caption" tone="tertiary" as="p">

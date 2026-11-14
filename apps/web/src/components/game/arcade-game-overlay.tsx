@@ -7,7 +7,7 @@ import { Pause, Play, X } from 'lucide-react';
 import { arcadeWaterFor, type ArcadeGameId } from '@tubutree/app-core/arcade/arcade-config';
 import type { ArcadeResult, ArcadeTheme, mountArcade } from '@tubutree/app-core/arcade/arcade-canvas';
 import { endTip } from '@tubutree/app-core/arcade/arcade-tips';
-import type { ArcadeCompleteResult, ArcadeReason } from '@tubutree/app-core/api/game';
+import type { ArcadeCompleteResult } from '@tubutree/app-core/api/game';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -17,6 +17,7 @@ import { loginHref } from '@/lib/return-to';
 import { useModalA11y } from '@/lib/use-modal-a11y';
 import { Badge, Button, Chip, Heading, IconButton, Skeleton, Text } from '@/components/mini';
 import { SR_ONLY } from '@/components/mini/sr-only';
+import { rememberPendingArcade } from './arcade-pending';
 import { readGuestBest, writeGuestBest } from './arcade-storage';
 import { useArcadeSave, type ArcadeSaveState } from './use-arcade-save';
 
@@ -59,15 +60,17 @@ function prefersReducedMotion(): boolean {
 
 const currentPath = () => `${window.location.pathname}${window.location.search}`;
 
-const REASON_COPY: Record<ArcadeReason, string> = {
+// Khoá chữ theo lý do không thưởng; lý do máy chủ thêm sau mà bản này chưa biết thì không nói gì thay vì nói sai.
+const REASON_COPY: Record<string, string> = {
   DAILY_CAP: 'arcade.result.capped',
   TOO_FAST: 'arcade.result.tooFast',
   DISABLED: 'arcade.result.disabled',
   NOT_REAL_USER: 'arcade.result.notReal',
+  LOW_SCORE: 'arcade.result.lowScore',
 };
 
-/** Các dòng thưởng của ván đã lưu: ván được thưởng nêu Giọt nước, Điểm Xanh và số lượt; hết lượt vẫn nêu số lượt; lý do khác chỉ nói lý do. */
-function rewardLines(d: ArcadeCompleteResult): string[] {
+/** Các dòng thưởng của ván đã lưu: ván được thưởng nêu Giọt nước, Điểm Xanh và số lượt (đúng số máy chủ trả, trần có thể hơn 3); hết lượt vẫn nêu số lượt; lý do khác chỉ nói lý do. */
+export function rewardLines(d: ArcadeCompleteResult): string[] {
   const used = fillCopy('arcade.result.used', { n: d.used, m: d.cap });
   if (d.rewarded) {
     return [
@@ -77,7 +80,8 @@ function rewardLines(d: ArcadeCompleteResult): string[] {
       d.windowBonus ? fillCopy('arcade.result.window') : '',
     ].filter(Boolean);
   }
-  const reason = d.reason ? fillCopy(REASON_COPY[d.reason]) : '';
+  const reasonKey = d.reason ? REASON_COPY[d.reason] : undefined;
+  const reason = reasonKey ? fillCopy(reasonKey) : '';
   return [reason, d.reason === 'DAILY_CAP' ? used : ''].filter(Boolean);
 }
 
@@ -96,7 +100,7 @@ function summaryLines(end: End, authed: boolean, save: ArcadeSaveState): Line[] 
     if (save.data.isNewBest) lines.push({ text: fillCopy('arcade.newBest'), kind: 'best' });
     lines.push(...plain([fillCopy('arcade.best', { n: save.data.bestScore }), ...rewardLines(save.data)]));
   } else if (save.status === 'error') {
-    lines.push({ text: fillCopy('arcade.result.error'), kind: 'error' });
+    lines.push({ text: fillCopy(save.invalid ? 'arcade.result.invalid' : 'arcade.result.error'), kind: 'error' });
   }
   return lines;
 }
@@ -233,6 +237,11 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     setPaused(!paused);
   };
 
+  // Đăng nhập là rời trang: nhớ ván này để sảnh gửi nốt sau khi quay về (ván chờ tối đa 10 phút).
+  const rememberRun = () => {
+    if (end) rememberPendingArcade({ gameId: end.result.gameId, score: end.result.score, durationMs: end.result.durationMs });
+  };
+
   const title = fillCopy(`arcade.${k}.title`);
   const lines = useMemo(() => (end ? summaryLines(end, authed, save.state) : []), [end, authed, save.state]);
   const tip = useMemo(() => (end ? endTip(gameId, end.result.stats) : null), [end, gameId]);
@@ -329,7 +338,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
                 ))}
               </ul>
               {saving && <Skeleton height={56} />}
-              {authed && save.state.status === 'error' && (
+              {authed && save.state.status === 'error' && !save.state.invalid && (
                 <div>
                   <Button variant="secondary" onPress={save.retry}>
                     {gameNewbieCopy.loadError.retry}
@@ -337,7 +346,12 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
                 </div>
               )}
               {!authed && (
-                <Link href={loginHref(currentPath())} className={`${ui.btnPrimary} py-2 text-center`}>
+                <Link
+                  href={loginHref(currentPath())}
+                  className={`${ui.btnPrimary} py-2 text-center`}
+                  onClick={rememberRun}
+                  onAuxClick={rememberRun}
+                >
                   {fillCopy('arcade.guest.login', { n: arcadeWaterFor(gameId, end.result.score) })}
                 </Link>
               )}

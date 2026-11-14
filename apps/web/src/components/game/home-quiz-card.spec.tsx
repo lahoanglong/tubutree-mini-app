@@ -49,7 +49,14 @@ const detail = (slug: string, variations = 1) => ({
 });
 const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: 0 };
 
-const h = { catalog: CATALOG, productsHang: null as null | ((v: unknown) => void), variations: {} as Record<string, number>, soldOut: new Set<string>() };
+const STATUS = (quizClaimed: boolean) => ({
+  games: { dew_catcher: { bestScore: 0, plays: 0, used: 0, cap: 3 }, refill_rush: { bestScore: 0, plays: 0, used: 0, cap: 3 } },
+  window: null,
+  windowBonus: false,
+  nextWindowAt: null,
+  quizClaimed,
+});
+const h = { catalog: CATALOG, productsHang: null as null | ((v: unknown) => void), variations: {} as Record<string, number>, soldOut: new Set<string>(), quizClaimed: false, statusHang: false };
 
 let mounted: Rendered | null = null;
 let qc: QueryClient;
@@ -98,6 +105,8 @@ beforeEach(() => {
   h.productsHang = null;
   h.variations = {};
   h.soldOut = new Set();
+  h.quizClaimed = false;
+  h.statusHang = false;
   sessionStorage.clear();
   localStorage.clear();
   window.history.pushState({}, '', '/vuon-xanh');
@@ -105,6 +114,7 @@ beforeEach(() => {
     const key = path.split('?')[0]!;
     const method = opts?.method ?? 'GET';
     if (key === '/products' && method === 'GET') return h.productsHang ? new Promise((r) => (h.productsHang = r)) : page(h.catalog);
+    if (key === '/game/arcade/status') return h.statusHang ? new Promise(() => undefined) : STATUS(h.quizClaimed);
     if (key === '/game/home-quiz/complete') return { granted: 20, alreadyClaimed: false, totalSeeds: 25 };
     if (key === '/cart/items' && method === 'POST') return { ...CART, itemCount: 1 };
     if (key === '/cart') return CART;
@@ -127,7 +137,8 @@ afterEach(() => {
 });
 
 describe('HomeQuizCard: thẻ mời', () => {
-  it('thẻ tĩnh: h2, mô tả, dòng quà, nút Bắt đầu có tên đầy đủ; chưa bấm thì không gọi mạng và không có hộp thoại', async () => {
+  it('khách: thẻ tĩnh (h2, mô tả, dòng hứa quà, nút Bắt đầu có tên đầy đủ), chưa bấm thì không gọi mạng và không có hộp thoại', async () => {
+    net.phase = 'guest';
     mounted = render(<HomeQuizCard />, qc);
     await flush(3);
     const c = q('home-quiz-card')!;
@@ -138,6 +149,43 @@ describe('HomeQuizCard: thẻ mời', () => {
     expect(c.getAttribute('aria-labelledby')).toBe(c.querySelector('h2')!.id);
     expect(dialog()).toBeNull();
     expect(net.apiFetch).not.toHaveBeenCalled();
+  });
+
+  it('đã đăng nhập: chỉ đọc trạng thái (GET /game/arcade/status), chưa gọi sản phẩm hay quà; chưa nhận quà thì vẫn hứa quà', async () => {
+    mounted = render(<HomeQuizCard />, qc);
+    await flush(3);
+    expect(calls()).toEqual(['GET /game/arcade/status']);
+    expect(q('home-quiz-card')!.textContent).toContain('Lần đầu hoàn thành có quà Giọt nước');
+    expect(dialog()).toBeNull();
+  });
+
+  it('đã đăng nhập và máy chủ báo quizClaimed: dòng phụ đổi sang "đã nhận quà", không hứa lần nữa', async () => {
+    h.quizClaimed = true;
+    mounted = render(<HomeQuizCard />, qc);
+    await flush(3);
+    const c = q('home-quiz-card')!;
+    expect(c.textContent).not.toContain('Lần đầu hoàn thành có quà Giọt nước');
+    expect(c.textContent).toContain('Bạn đã nhận quà Giọt nước của Chẩn đoán tổ ấm');
+  });
+
+  it('đang chờ trạng thái: dòng quà vẫn chiếm chỗ nhưng ẩn (không thấy lời hứa rồi mất, thẻ không đổi chiều cao)', async () => {
+    h.statusHang = true;
+    mounted = render(<HomeQuizCard />, qc);
+    await flush(3);
+    const line = Array.from(q('home-quiz-card')!.querySelectorAll('p')).find((p) => p.textContent === 'Lần đầu hoàn thành có quà Giọt nước')!;
+    expect(line.className).toContain('invisible');
+  });
+
+  it('lỗi đọc trạng thái: quay về dòng hứa quà, hiện rõ', async () => {
+    const base = net.apiFetch.getMockImplementation()!;
+    net.apiFetch.mockImplementation(async (path: string, opts?: { method?: string }) => {
+      if (path.split('?')[0] === '/game/arcade/status') throw new Error('mất mạng');
+      return base(path, opts);
+    });
+    mounted = render(<HomeQuizCard />, qc);
+    await flush(4);
+    const line = Array.from(q('home-quiz-card')!.querySelectorAll('p')).find((p) => p.textContent === 'Lần đầu hoàn thành có quà Giọt nước')!;
+    expect(line.className).not.toContain('invisible');
   });
 
   it('bấm Bắt đầu mở sheet ở câu 1/3 với hai đáp án; vẫn chưa tải sản phẩm', async () => {
@@ -276,7 +324,7 @@ describe('HomeQuizCard: nhận quà (đã đăng nhập)', () => {
     expect(dialog()!.querySelector('a[href^="/dang-nhap"]')).toBeNull();
   });
 
-  it('alreadyClaimed: không khoe quà, không báo lỗi', async () => {
+  it('alreadyClaimed từ máy chủ: không khoe quà, nói một dòng đã nhận, không báo lỗi', async () => {
     net.apiFetch.mockImplementation(async (path: string, opts?: { method?: string }) => {
       const key = path.split('?')[0]!;
       if (key === '/game/home-quiz/complete') return { granted: 0, alreadyClaimed: true, totalSeeds: 25 };
@@ -288,7 +336,26 @@ describe('HomeQuizCard: nhận quà (đã đăng nhập)', () => {
     await reachResult();
     expect(callsTo('POST /game/home-quiz/complete')).toHaveLength(1);
     expect(dialogText()).not.toContain('Giọt nước vào Vườn');
+    expect(dialogText()).toContain('Bạn đã nhận quà Giọt nước của Chẩn đoán tổ ấm');
     expect(dialog()!.querySelector('[role="alert"]')).toBeNull();
+  });
+
+  it('máy chủ đã báo quizClaimed từ trước: sheet không gọi nhận quà, chỉ một dòng "đã nhận quà"', async () => {
+    h.quizClaimed = true;
+    mounted = render(<HomeQuizCard />, qc);
+    await flush(3);
+    await openSheet();
+    await answerAll();
+    expect(callsTo('POST /game/home-quiz/complete')).toHaveLength(0);
+    expect(dialogText()).toContain('Bạn đã nhận quà Giọt nước của Chẩn đoán tổ ấm');
+    expect(dialogText()).not.toContain('Bạn nhận');
+    expect(kitNames()).toEqual(KIT_NAMES);
+  });
+
+  it('nhận quà lần đầu thì không có dòng "đã nhận quà"', async () => {
+    await reachResult();
+    expect(dialogText()).toContain('Bạn nhận 20 Giọt nước vào Vườn');
+    expect(dialogText()).not.toContain('Bạn đã nhận quà');
   });
 
   it('Làm lại rồi xong lần nữa trong cùng sheet: không gọi máy chủ lần hai', async () => {

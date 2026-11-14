@@ -31,7 +31,7 @@ type ClaimState = 'idle' | 'saving' | 'error';
 
 export interface HomeQuizSheetProps {
   onClose: () => void;
-  /** Quà đã nhận (một lần mỗi tài khoản): giữ ở thẻ để mở lại sheet không gọi máy chủ lần nữa. */
+  /** Quà đã nhận (một lần mỗi tài khoản, kể cả khi máy chủ đã báo từ trước): giữ ở thẻ để mở lại sheet không gọi máy chủ lần nữa. */
   claimed: HomeQuizResult | null;
   onClaimed: (result: HomeQuizResult) => void;
 }
@@ -111,7 +111,9 @@ export function HomeQuizSheet({ onClose, claimed, onClaimed }: HomeQuizSheetProp
   };
 
   const question = questions[stage];
+  // Lần đầu có quà thì nói số Giọt nước; đã nhận từ trước thì chỉ một dòng nói vậy (không khoe lại).
   const reward = claimed && claimed.granted > 0 ? fillCopy('homeQuiz.result.granted', { n: claimed.granted }) : '';
+  const alreadyClaimed = claimed?.alreadyClaimed === true && !reward ? fillCopy('homeQuiz.result.claimed') : '';
   return (
     <Sheet open onClose={onClose} title={fillCopy('homeQuiz.card.title')}>
       {question ? (
@@ -208,6 +210,11 @@ export function HomeQuizSheet({ onClose, claimed, onClaimed }: HomeQuizSheetProp
             {reward && (
               <Text variant="body-sm" tone="brand" as="p" numeric>
                 {reward}
+              </Text>
+            )}
+            {alreadyClaimed && (
+              <Text variant="body-sm" tone="secondary" as="p">
+                {alreadyClaimed}
               </Text>
             )}
           </div>

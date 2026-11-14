@@ -685,6 +685,7 @@ export const SHOP_COPY: Record<string, string> = {
   'arcade.result.error': 'Chưa lưu được ván này. Bạn thử lại nhé.',
   'arcade.guest.login': 'Đăng nhập lưu kỷ lục & nhận ngay {n} Giọt nước vào Vườn',
   'arcade.guest.demo': 'Bạn đang chơi thử, kỷ lục lưu trên máy này',
+  'arcade.pending.saved': 'Đã lưu ván vừa chơi: {n} điểm',
   // Chẩn đoán tổ ấm (W164): thẻ ở Trang chủ, sheet ba câu, kết quả. Câu hỏi ghép khoá `homeQuiz.<id>.title` và `homeQuiz.<id>.<đáp án>` (xem `arcade/home-quiz.ts`).
   'homeQuiz.card.title': 'Chẩn đoán tổ ấm',
   'homeQuiz.card.sub': '30 giây, gợi ý bộ sản phẩm hợp nhà bạn',

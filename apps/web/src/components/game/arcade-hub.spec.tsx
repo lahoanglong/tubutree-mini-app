@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
-import { act } from 'react';
+import { act, StrictMode } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { ArcadeStatus } from '@tubutree/app-core/api/game';
+import type { ArcadeCompleteResult, ArcadeStatus } from '@tubutree/app-core/api/game';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { ApiError } from '@/lib/client-api';
 import type { ArcadeMountOptions } from '@tubutree/app-core/arcade/arcade-canvas';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingLevels, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
@@ -24,6 +27,7 @@ vi.mock('@tubutree/app-core/arcade/arcade-canvas', () => ({
 }));
 
 import { ArcadeHub } from './arcade-hub';
+import { ARCADE_PENDING_KEY } from './arcade-pending';
 
 const STATUS: ArcadeStatus = {
   games: {
@@ -247,5 +251,203 @@ describe('ArcadeHub: trợ năng', () => {
     await mountHub();
     const names = Array.from(document.querySelectorAll('button')).map((b) => b.getAttribute('aria-label'));
     expect(new Set(names).size).toBe(names.length);
+  });
+});
+
+const SAVED = (over: Partial<ArcadeCompleteResult> = {}): ArcadeCompleteResult => ({
+  gameId: 'dew_catcher', score: 520, bestScore: 520, isNewBest: true, rewarded: true, reason: null, waterEarned: 8, pointsEarned: 1, totalSeeds: 40,
+  used: 2, cap: 4, window: null, windowBonus: false, ...over,
+});
+const RUN = { gameId: 'dew_catcher', score: 520, durationMs: 40_000 };
+const putPending = (over: Record<string, unknown> = {}) => sessionStorage.setItem(ARCADE_PENDING_KEY, JSON.stringify({ ...RUN, endedAt: Date.now() - 60_000, ...over }));
+const pendingRaw = () => sessionStorage.getItem(ARCADE_PENDING_KEY);
+const completes = () => m.post.mock.calls.filter((c) => c[0] === '/game/arcade-complete');
+const region = () => q('[data-testid="arcade-pending"]')!;
+const retryBtn = () => Array.from(region().querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Thử lại') ?? null;
+
+describe('ArcadeHub: gửi nốt ván khách chơi trước khi đăng nhập', () => {
+  beforeEach(() => {
+    sessionStorage.clear();
+    m.post.mockResolvedValue(SAVED());
+  });
+
+  it('đã đăng nhập và có ván chờ: gửi đúng MỘT lần với gameId, điểm, thời lượng; xoá khoá; dải báo điểm và phần thưởng', async () => {
+    putPending();
+    await mountHub();
+    expect(completes()).toHaveLength(1);
+    expect(completes()[0]!.slice(0, 2)).toEqual(['/game/arcade-complete', RUN]);
+    expect(pendingRaw()).toBeNull();
+    const banner = q('[data-testid="arcade-pending-saved"]')!;
+    expect(banner.textContent).toContain('Đã lưu ván vừa chơi: 520 điểm');
+    expect(banner.textContent).toContain('Nhận 8 Giọt nước vào Vườn');
+    expect(banner.textContent).toContain('+1 Điểm Xanh');
+    expect(banner.textContent).toContain('Đã dùng 2/4 lượt thưởng hôm nay');
+    expect(region().getAttribute('role')).toBe('status');
+  });
+
+  it('làm mới game, me, loyalty sau khi gửi', async () => {
+    const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    putPending();
+    await mountHub();
+    expect(spy.mock.calls.map((c) => JSON.stringify(c[0]?.queryKey))).toEqual(expect.arrayContaining(['["game"]', '["me"]', '["loyalty"]']));
+  });
+
+  it('Strict Mode (hiệu ứng chạy hai lần): vẫn đúng một lần gửi', async () => {
+    putPending();
+    mounted = render(
+      <StrictMode>
+        <ArcadeHub />
+      </StrictMode>,
+    );
+    await flush(5);
+    expect(completes()).toHaveLength(1);
+    expect(q('[data-testid="arcade-pending-saved"]')).not.toBeNull();
+  });
+
+  it('vào lại sảnh sau khi đã gửi: không gửi lần hai (khoá đã xoá)', async () => {
+    putPending();
+    await mountHub();
+    mounted!.unmount();
+    mounted = null;
+    await mountHub();
+    expect(completes()).toHaveLength(1);
+    expect(q('[data-testid="arcade-pending-saved"]')).toBeNull();
+  });
+
+  it('hai sảnh dựng cùng lúc cũng chỉ gửi một lần', async () => {
+    putPending();
+    mounted = render(
+      <>
+        <ArcadeHub />
+        <ArcadeHub />
+      </>,
+    );
+    await flush(5);
+    expect(completes()).toHaveLength(1);
+  });
+
+  it('ván quá 10 phút: bỏ và xoá, không gửi, không có dải báo', async () => {
+    putPending({ endedAt: Date.now() - 11 * 60_000 });
+    await mountHub();
+    expect(completes()).toHaveLength(0);
+    expect(pendingRaw()).toBeNull();
+    expect(q('[data-testid="arcade-pending-saved"]')).toBeNull();
+  });
+
+  it('khách (chưa đăng nhập): không gửi, giữ khoá cho lần đăng nhập sau', async () => {
+    m.phase = 'guest';
+    putPending();
+    await mountHub();
+    expect(completes()).toHaveLength(0);
+    expect(pendingRaw()).not.toBeNull();
+  });
+
+  it('đang khôi phục phiên (loading) thì chưa gửi; có phiên thật rồi mới gửi, đúng một lần', async () => {
+    m.phase = 'loading';
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    putPending();
+    mounted = render(<ArcadeHub />, qc);
+    await flush(4);
+    expect(completes()).toHaveLength(0);
+    expect(pendingRaw()).not.toBeNull();
+    m.phase = 'authenticated';
+    act(() =>
+      mounted!.root.render(
+        <QueryClientProvider client={qc}>
+          <ArcadeHub />
+        </QueryClientProvider>,
+      ),
+    );
+    await flush(5);
+    expect(completes()).toHaveLength(1);
+    expect(pendingRaw()).toBeNull();
+  });
+
+  it('sessionStorage hỏng: sảnh vẫn dựng, không gửi, không ném lỗi', async () => {
+    vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new Error('chặn');
+    });
+    await mountHub();
+    expect(card('dew_catcher')).toBeTruthy();
+    expect(completes()).toHaveLength(0);
+  });
+
+  it('không có ván chờ: không gửi gì, vùng báo vẫn có mặt và rỗng', async () => {
+    await mountHub();
+    expect(completes()).toHaveLength(0);
+    expect(region().getAttribute('aria-live')).toBe('polite');
+    expect(region().textContent).toBe('');
+  });
+
+  it('ván không được thưởng: dải báo nói lý do (hết lượt), không khoe Giọt nước', async () => {
+    m.post.mockResolvedValue(SAVED({ rewarded: false, reason: 'DAILY_CAP', waterEarned: 0, pointsEarned: 0, used: 3, cap: 3, isNewBest: false }));
+    putPending();
+    await mountHub();
+    const banner = q('[data-testid="arcade-pending-saved"]')!.textContent!;
+    expect(banner).toContain('Đã lưu ván vừa chơi: 520 điểm');
+    expect(banner).toContain('Hết lượt thưởng hôm nay, bạn vẫn phá kỷ lục được 🌿');
+    expect(banner).not.toContain('Nhận');
+  });
+
+  it('lý do LOW_SCORE: dải báo nói điểm chưa đủ thưởng', async () => {
+    m.post.mockResolvedValue(SAVED({ rewarded: false, reason: 'LOW_SCORE', waterEarned: 0, pointsEarned: 0, isNewBest: false }));
+    putPending();
+    await mountHub();
+    expect(q('[data-testid="arcade-pending-saved"]')!.textContent).toContain(fillCopy('arcade.result.lowScore'));
+  });
+
+  it('lỗi mạng: báo chưa lưu được, ghi lại khoá chờ (giữ mốc giờ gốc), Thử lại gửi lại đúng ván đó một lần rồi xoá khoá', async () => {
+    const endedAt = Date.now() - 120_000;
+    putPending({ endedAt });
+    m.post.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await mountHub();
+    expect(completes()).toHaveLength(1);
+    expect(q('[data-testid="arcade-pending-error"]')!.textContent).toContain(fillCopy('arcade.result.error'));
+    expect(JSON.parse(pendingRaw()!)).toEqual({ ...RUN, endedAt });
+    const retry = retryBtn()!;
+    act(() => {
+      retry.click();
+      retry.click();
+    });
+    await flush(5);
+    expect(completes()).toHaveLength(2);
+    expect(completes()[1]![1]).toEqual(RUN);
+    expect(pendingRaw()).toBeNull();
+    expect(q('[data-testid="arcade-pending-error"]')).toBeNull();
+    expect(q('[data-testid="arcade-pending-saved"]')!.textContent).toContain('Nhận 8 Giọt nước vào Vườn');
+  });
+
+  it('lỗi 5xx rồi vào lại sảnh trong 10 phút: gửi tiếp ván còn chờ', async () => {
+    putPending();
+    m.post.mockRejectedValueOnce(new ApiError('lỗi máy chủ', 503));
+    await mountHub();
+    expect(retryBtn()).not.toBeNull();
+    mounted!.unmount();
+    mounted = null;
+    await mountHub();
+    expect(completes()).toHaveLength(2);
+    expect(pendingRaw()).toBeNull();
+    expect(q('[data-testid="arcade-pending-saved"]')).not.toBeNull();
+  });
+
+  it('HTTP 400: nói ván không hợp lệ, KHÔNG có nút Thử lại và bỏ hẳn ván (không ghi lại khoá)', async () => {
+    putPending();
+    m.post.mockRejectedValueOnce(new ApiError('Bad Request', 400));
+    await mountHub();
+    expect(q('[data-testid="arcade-pending-error"]')!.textContent).toContain(fillCopy('arcade.result.invalid'));
+    expect(retryBtn()).toBeNull();
+    expect(pendingRaw()).toBeNull();
+    mounted!.unmount();
+    mounted = null;
+    await mountHub();
+    expect(completes()).toHaveLength(1);
+  });
+
+  it('dải báo có tên truy cập và nút Thử lại đủ 44px', async () => {
+    putPending();
+    m.post.mockRejectedValueOnce(new Error('mạng'));
+    await mountHub();
+    expect(unnamedControls(mounted!.container)).toEqual([]);
+    expect(smallTouchTargets(mounted!.container)).toEqual([]);
   });
 });

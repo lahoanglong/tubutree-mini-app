@@ -437,6 +437,7 @@ export default function GamePage() {
           <div className="flex flex-col gap-3">
             <GameLoginGate returnTo="/vuon-xanh" />
             <ArcadeHub />
+            <HomeQuizCard />
           </div>
         )}
         {phase === 'authenticated' && (
