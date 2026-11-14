@@ -26,9 +26,12 @@ export const postExtractIngredients = (id: string, image: string) =>
 export const postSaveIngredients = (id: string, ingredients: readonly string[]) =>
   apiFetch<IngredientsSaveResponse>(`${catalogQuality(id)}/ingredients`, { method: 'POST', body: { ingredients } });
 
-/** Gắn ảnh cho sản phẩm (PATCH admin/catalog-products/:id): `images` thay cả danh sách, ảnh đầu là ảnh đại diện. */
+/**
+ * Gắn ảnh cho sản phẩm CHƯA CÓ ảnh (PATCH admin/catalog-products/:id): `images` thay cả danh sách, ảnh đầu là ảnh đại diện. `ifImagesEmpty` làm máy chủ
+ * trả 409 thay vì ghi đè khi danh sách đang xem đã cũ và người khác vừa thêm ảnh.
+ */
 export const setProductImages = (id: string, images: readonly string[]) =>
-  apiFetch<unknown>(`/admin/catalog-products/${encodeURIComponent(id)}`, { method: 'PATCH', body: { images } });
+  apiFetch<unknown>(`/admin/catalog-products/${encodeURIComponent(id)}`, { method: 'PATCH', body: { images, ifImagesEmpty: true } });
 
 export const getAdvisorStats = () => apiFetch<AdvisorStatsDto>('/admin/ai-advisor/stats', { cache: 'no-store' });
 

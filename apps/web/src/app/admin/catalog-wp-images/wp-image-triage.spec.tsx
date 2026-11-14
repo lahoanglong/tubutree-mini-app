@@ -471,7 +471,7 @@ describe('WpImageTriage — tải ảnh tay bằng kéo-thả / dán', () => {
     const sent = patches(m);
     expect(sent).toHaveLength(1);
     expect(sent[0]!.url).toContain('/admin/catalog-products/p1');
-    expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ images: [DATA_URL] });
+    expect(JSON.parse(String(sent[0]!.init!.body))).toEqual({ images: [DATA_URL], ifImagesEmpty: true });
     expect(container.textContent).toContain('Đã gắn ảnh đại diện cho "Mật cô đặc 250g".');
     expect(m.calls.filter((c) => c.url.includes('?live=1')).length).toBeGreaterThanOrEqual(2);
     expect(cards(container).map((c) => c.querySelector('h2')!.textContent)).toEqual(['SP hai']);
@@ -565,6 +565,18 @@ describe('WpImageTriage — tải ảnh tay bằng kéo-thả / dán', () => {
     expect(container.querySelector('img[alt^="Ảnh vừa chọn"]')).toBeNull();
     expect(card.querySelector('[role="img"][aria-label="Chưa có ảnh"]')).not.toBeNull();
     expect(zoneOf(card)!.getAttribute('aria-busy')).toBeNull();
+  });
+
+  it('sản phẩm vừa có ảnh từ người khác (409): báo đúng lời máy chủ, bỏ ảnh xem trước, nạp lại danh sách để thấy dữ liệu mới, không ghi đè', async () => {
+    const { m, container } = setup(list([row()]), { upload: { status: 409, body: { message: 'Sản phẩm này vừa có ảnh (người khác thêm hoặc đã duyệt từ WordPress). Tải lại danh sách để xem ảnh hiện có rồi quyết định.' } } });
+    await flush();
+    const loadsBefore = m.calls.filter((c) => c.url.includes('?live=1')).length;
+    dropOn(zoneOf(cards(container)[0]!)!, png());
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Sản phẩm này vừa có ảnh');
+    expect(recent(container)).toHaveLength(0);
+    expect(m.calls.filter((c) => c.url.includes('?live=1')).length).toBeGreaterThan(loadsBefore);
+    expect(container.querySelector('[data-testid="wp-triage-progress"]')!.textContent).toBe('Đã đủ ảnh 0/1 sản phẩm.');
   });
 
   it('thanh tiến độ "Đã đủ ảnh X/Y sản phẩm": đếm đã duyệt + đã có ảnh, tăng sau khi tải ảnh kể cả khi sản phẩm rời danh sách', async () => {

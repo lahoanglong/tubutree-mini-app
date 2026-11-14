@@ -13,6 +13,8 @@ export const PRODUCT_CATEGORIES_MAX = 10;
 
 export interface ProductPatch {
   images?: string[];
+  /** Chỉ ghi `images` khi sản phẩm chưa có ảnh nào: danh sách ở màn hình admin có thể đã cũ, người khác vừa thêm ảnh thì không được xoá âm thầm. */
+  ifImagesEmpty?: boolean;
   description?: string;
   shortDesc?: string | null;
   isActive?: boolean;
@@ -77,6 +79,10 @@ export class ProductAdminService {
     const touchesContent = patch.images !== undefined || patch.description !== undefined || patch.shortDesc !== undefined;
     if (touchesContent && current.storefrontId !== null) {
       throw new BadRequestException('Ảnh và mô tả của sản phẩm đối tác do đối tác tự sửa trong Cổng người bán. Ở đây chỉ ẩn/hiện, nổi bật và danh mục.');
+    }
+
+    if (patch.ifImagesEmpty && patch.images !== undefined && current.images.length > 0) {
+      throw new ConflictException('Sản phẩm này vừa có ảnh (người khác thêm hoặc đã duyệt từ WordPress). Tải lại danh sách để xem ảnh hiện có rồi quyết định.');
     }
 
     const data: Record<string, unknown> = {};

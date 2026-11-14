@@ -42,6 +42,9 @@ function encode(img: HTMLImageElement, maxDim: number, quality: number): string 
   canvas.height = height;
   const ctx = canvas.getContext('2d');
   if (!ctx) throw new Error('Trình duyệt không xử lý được ảnh');
+  // JPEG không có kênh trong suốt: PNG nền trong suốt (ảnh cắt nền sản phẩm) sẽ ra nền đen nếu không tô trắng trước.
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, width, height);
   ctx.drawImage(img, 0, 0, width, height);
   return canvas.toDataURL('image/jpeg', quality);
 }

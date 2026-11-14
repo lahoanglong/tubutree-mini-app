@@ -12,7 +12,7 @@ function stubBrowser(lengthFor: (maxSide: number, quality: number) => number) {
   const realCreate = document.createElement.bind(document);
   vi.spyOn(document, 'createElement').mockImplementation(((tag: string) => {
     if (tag !== 'canvas') return realCreate(tag);
-    const canvas = { width: 0, height: 0, getContext: () => ({ drawImage: vi.fn() }), toDataURL };
+    const canvas = { width: 0, height: 0, getContext: () => ({ drawImage: vi.fn(), fillRect: vi.fn(), fillStyle: '' }), toDataURL };
     created.push(canvas);
     return canvas as unknown as HTMLCanvasElement;
   }) as typeof document.createElement);
