@@ -1,4 +1,4 @@
-import { baseSlug, FUWA3E_SKUS, type AssemblyStep, type FuwaRow, type HudCalloutPoint, type IngredientLayerSprite, type ProductStoryConfig, type StoryFrom } from '@tubutree/shared-types';
+import { baseSlug, FUWA3E_SKUS, parseStoryConfig, type AssemblyStep, type FuwaRow, type HudCalloutPoint, type IngredientLayerSprite, type ProductStoryConfig, type StoryFrom } from '@tubutree/shared-types';
 import { STORY_PRESETS } from './story-presets';
 
 export { baseSlug, FUWA3E_SKUS, type FuwaRow };
@@ -169,4 +169,44 @@ export function findStoryPreset(slug: string): ProductStoryConfig | undefined {
     if (Object.prototype.hasOwnProperty.call(STORY_PRESETS, key)) return STORY_PRESETS[key];
   }
   return undefined;
+}
+
+/** Tuyên bố cần giấy tờ hoặc số liệu không có trong dữ liệu PROD: không được xuất hiện trong chữ kịch bản đợt đầu. */
+export const STORY_BANNED_CLAIMS =
+  /trà vinh|bến tre|quảng nam|đắk lắk|đắc lắc|thanh hoá|thanh hóa|tây nguyên|hữu cơ|organic|low ?gi|vegan|thuần chay|diệt khuẩn|kháng khuẩn|calo|protein|canxi|chất xơ|lành tính|an toàn|không hoá chất|không hóa chất|chữa|điều trị|mọc tóc|giảm |tốt nhất|số 1|số một|thượng hạng|tự nhiên 100|sấy thăng hoa|thăng hoa|đài loan|việt nam|nhập khẩu|xuất xứ|chứng nhận|tiêu chuẩn|sản xuất|thực vật|nguyên liệu|tinh khiết|không đường|không chất bảo quản|thanh lọc|detox|trẻ hoá|trẻ hóa|làm trắng|khử mùi|dưỡng ẩm|da |tóc/i;
+
+/** Con số duy nhất được in trên bao bì hay có trong tên sản phẩm đợt đầu: 100% / 100ml, 300g, 500ml, 1000 lớp, can 3,8L, hộp 10 gói. */
+const STORY_ALLOWED_NUMBERS = new Set(['100', '300', '500', '1000', '3', '8', '10']);
+const STORY_LEAKED_VALUE = /\[object Object\]|\bundefined\b|\bnull\b|\bNaN\b/i;
+
+function storyTextLines(cfg: ProductStoryConfig): string[] {
+  return cfg.scenes.flatMap((sc) => {
+    if (sc.kind === 'ingredient_assembly') return sc.steps.flatMap((st) => [st.title, st.body, ...st.layers.map((l) => l.label)]);
+    if (sc.kind === 'hud_callouts') return [sc.closing, ...sc.points.map((p) => p.label), ...sc.points.flatMap((p) => (p.value ? [p.value] : []))];
+    if (sc.kind === 'variant_arc') return sc.items.map((i) => i.label);
+    return [];
+  });
+}
+
+/**
+ * Bộ kiểm cuối cho một kịch bản sắp ghi lên PROD (seed bản nháp): cấu hình hợp lệ, chữ không có từ cấm, không lọt `[object Object]` hay `undefined`, và con số chỉ
+ * gồm số in trên bao bì. Rỗng là sạch. Nhãn vòng cung đọc từ tên phân loại thật nên chỉ bị chặn chữ lọt giá trị, không bị chặn từ cấm hay con số (tên phân loại do nhãn hàng đặt).
+ */
+export function storyDraftProblems(cfg: ProductStoryConfig): string[] {
+  const parsed = parseStoryConfig(cfg);
+  if (!parsed.ok) return [`cấu hình không hợp lệ: ${parsed.error}`];
+  const problems: string[] = [];
+  for (const sc of cfg.scenes) {
+    if (sc.kind === 'variant_arc') {
+      for (const item of sc.items) if (STORY_LEAKED_VALUE.test(item.label)) problems.push(`"${item.label}": tên mục vòng cung lộ giá trị lỗi`);
+    }
+  }
+  const authored = storyTextLines({ ...cfg, scenes: cfg.scenes.filter((sc) => sc.kind !== 'variant_arc') });
+  for (const line of authored) {
+    if (STORY_LEAKED_VALUE.test(line)) problems.push(`"${line}": lộ giá trị lỗi`);
+    const banned = STORY_BANNED_CLAIMS.exec(line);
+    if (banned) problems.push(`"${line}": từ cấm "${banned[0]}"`);
+    for (const n of line.match(/\d+/g) ?? []) if (!STORY_ALLOWED_NUMBERS.has(n)) problems.push(`"${line}": số ${n} không có trên bao bì`);
+  }
+  return problems;
 }

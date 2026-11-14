@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { parseStoryConfig, STORY_LIMITS, type ProductStoryConfig } from '@tubutree/shared-types';
 import { resolveStoryConfig, storyView } from './product-story';
 import { STORY_PRESETS } from './story-presets';
-import { baseSlug, CATALOG_STORY_PRESETS, findStoryPreset, LAUNCH_STORY_PRESETS } from './story-presets-launch';
+import { baseSlug, CATALOG_STORY_PRESETS, findStoryPreset, LAUNCH_STORY_PRESETS, STORY_BANNED_CLAIMS, storyDraftProblems } from './story-presets-launch';
 import { STORY_SPRITES } from './story-sprites';
 import { BAMBOO_CLAIMS, MEDICAL_CLAIMS, PROOF_CLAIMS } from './copy-claims-guard';
 import { PROD_IN_STOCK_2026_11_12 } from './prod-catalog.fixture';
@@ -58,8 +58,7 @@ describe('LAUNCH_STORY_PRESETS', () => {
   });
 
   it('không có tuyên bố cần giấy tờ: vùng miền, hữu cơ, vegan, diệt khuẩn, calo, công dụng sức khoẻ, so sánh hơn', () => {
-    const BANNED =
-      /trà vinh|bến tre|quảng nam|đắk lắk|đắc lắc|thanh hoá|thanh hóa|tây nguyên|hữu cơ|organic|low ?gi|vegan|thuần chay|diệt khuẩn|kháng khuẩn|calo|protein|canxi|chất xơ|lành tính|an toàn|không hoá chất|không hóa chất|chữa|điều trị|mọc tóc|giảm |tốt nhất|số 1|số một|thượng hạng|tự nhiên 100|sấy thăng hoa|thăng hoa|đài loan|việt nam|nhập khẩu|xuất xứ|chứng nhận|tiêu chuẩn|sản xuất|thực vật|nguyên liệu|tinh khiết|không đường|không chất bảo quản|thanh lọc|detox|trẻ hoá|trẻ hóa|làm trắng|khử mùi|dưỡng ẩm|da |tóc/i;
+    const BANNED = STORY_BANNED_CLAIMS;
     for (const [key, cfg] of Object.entries(LAUNCH_STORY_PRESETS)) {
       for (const line of textOf(cfg)) expect(line, `${key}: "${line}"`).not.toMatch(BANNED);
     }
@@ -384,5 +383,53 @@ describe('giọng văn kịch bản (W133): ấm, không kiểu hồ sơ, không
       const n = visible(cfg).join(' | ').toLowerCase().split('vỏ dứa').length - 1;
       expect(n, key).toBeLessThanOrEqual(2);
     }
+  });
+});
+
+describe('storyDraftProblems — bộ kiểm dùng chung cho bản nháp seed lên PROD', () => {
+  const base = (): ProductStoryConfig => structuredClone(LAUNCH_STORY_PRESETS['duong-hoa-dua-sokfarm']!);
+  const withTitle = (title: string): ProductStoryConfig => {
+    const c = base();
+    const a = c.scenes.find((sc) => sc.kind === 'ingredient_assembly');
+    if (a?.kind === 'ingredient_assembly') a.steps[0]!.title = title;
+    return c;
+  };
+
+  it('cả năm preset đợt đầu không có vấn đề nào', () => {
+    for (const [key, cfg] of Object.entries(LAUNCH_STORY_PRESETS)) expect(storyDraftProblems(cfg), key).toEqual([]);
+  });
+
+  it('chặn từ cấm và nêu rõ dòng chữ vi phạm', () => {
+    const problems = storyDraftProblems(withTitle('Đường hữu cơ cho bé'));
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('Đường hữu cơ cho bé');
+    expect(problems[0]).toMatch(/từ cấm/);
+  });
+
+  it('chặn chữ [object Object], undefined và null lọt vào nội dung', () => {
+    for (const bad of ['[object Object]', 'Giá trị undefined', 'null']) expect(storyDraftProblems(withTitle(bad)), bad).not.toEqual([]);
+  });
+
+  it('chặn tên mục vòng cung lộ [object Object] (tên phân loại hỏng từ Pancake) nhưng không chặn tên phân loại hợp lệ như 5KG', () => {
+    const c = base();
+    c.scenes = [{ kind: 'variant_arc', items: [{ variationId: 'v1', label: '[object Object]', ambient: 'leaf' }, { variationId: 'v2', label: '5KG', ambient: 'amber' }] }, ...c.scenes];
+    const problems = storyDraftProblems(c);
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toContain('[object Object]');
+    expect(problems[0]).toMatch(/vòng cung/);
+  });
+
+  it('chặn con số không in trên bao bì (36 calo) nhưng cho phép 100, 300, 500, 1000, 3, 8, 10', () => {
+    expect(storyDraftProblems(withTitle('Mỗi thanh 36 miếng'))[0]).toMatch(/số 36/);
+    expect(storyDraftProblems(withTitle('100% nguyên chất 300 1000'))).toEqual([]);
+  });
+
+  it('cấu hình không qua parseStoryConfig bị báo (ảnh sân khấu http không an toàn)', () => {
+    const c = { ...base(), cutoutUrl: 'http://insecure.example.com/a.png' };
+    expect(storyDraftProblems(c).some((m) => /không hợp lệ/.test(m))).toBe(true);
+  });
+
+  it('không đổi enabled của preset: bản nháp do người gọi ghi đè khi seed, preset vẫn bật sẵn', () => {
+    for (const cfg of Object.values(LAUNCH_STORY_PRESETS)) expect(cfg.enabled).toBe(true);
   });
 });
