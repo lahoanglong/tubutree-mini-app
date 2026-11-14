@@ -149,6 +149,7 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
 
 /** Ô gõ chữ không đặt `maxLength`, kèm lý do. */
 export const EXEMPT_INPUTS: Record<string, string> = {
+  "app/admin/catalog-ingredients-fill.tsx::state.text": "mỗi dòng một thành phần: DTO SaveIngredientsDto giới hạn từng tên (200), tối đa 20 tên, và checkIngredientsForSave giới hạn 8 tên × 80 ký tự; web đếm tên (ingredient-draft.ts) và chặn nút Lưu trước khi gửi, không giới hạn cả khối chữ vì bản nháp AI đọc từ ảnh có thể dài hơn để nhân viên bớt",
   "app/admin/catalog-copy-review.tsx::value": "một thẻ dùng chung cho mô tả ngắn (chặn 140), mô tả (chặn 800) và thành phần (đếm số tên, không chặn gõ); CopyApproveItemDto cố ý rộng hơn (400/6000) để vượt trần chỉ từ chối riêng mục đó, trần nội dung do checkCopyForSave kiểm lại ở API",
   "components/admin/product-story-studio.tsx::s.title": "storyConfig là JSON kiểm bằng parseStoryConfig (shared-types, STORY_LIMITS.maxLabel), không có @MaxLength trên DTO; ô chặn đúng trần đó",
   "components/admin/product-story-studio.tsx::s.body": "storyConfig là JSON kiểm bằng parseStoryConfig (shared-types, STORY_LIMITS.maxBody), không có @MaxLength trên DTO; ô chặn đúng trần đó",

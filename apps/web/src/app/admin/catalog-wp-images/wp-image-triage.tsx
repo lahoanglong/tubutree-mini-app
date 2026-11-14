@@ -3,6 +3,8 @@
 import { useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
+import { ProgressBar } from '@/components/ui/progress-bar';
+import { readAndCompressImage } from '@/lib/image-compress';
 import {
   WP_TIER_TONE,
   approveWpImages,
@@ -19,7 +21,9 @@ import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { useToastedMessage } from '@/components/admin/admin-toast';
 import { BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, ListSkeleton, LoadError, Notice, TOUCH_H, ToneBadge } from '@/components/admin/ui';
-import { TRIAGE_FILTERS, applyOptimistic, filterCounts, hasSuggestion, matchesFilter, matchesQuery, stillWithoutImage, type TriageAction, type TriageFilter } from './triage-filter';
+import { setProductImages } from '../catalog-quality-api';
+import { ImageDropZone } from '../image-drop-zone';
+import { TRIAGE_FILTERS, applyOptimistic, filterCounts, hasSuggestion, imageProgress, matchesFilter, matchesQuery, stillWithoutImage, type TriageAction, type TriageFilter } from './triage-filter';
 
 const KEY = ['admin-wp-image-triage'] as const;
 
@@ -51,6 +55,9 @@ const when = (iso: string | null): string | null => {
  * Duyệt = máy chủ tải ảnh về và lưu vào sản phẩm (không dẫn link sang WordPress). Nhóm khác "Chắc chắn cùng sản phẩm" phải qua hộp xác nhận vì có thể là ảnh của quy cách khác.
  * Danh sách gồm sản phẩm trong bảng ứng viên làm tay, sản phẩm rỗng ảnh có gợi ý theo tên ("Gợi ý theo tên, chưa kiểm": phải đối chiếu bao bì) và sản phẩm rỗng ảnh
  * chưa có gợi ý nào ("Chưa có gợi ý": không có thao tác duyệt, cần ảnh mới). Ô tìm và nhóm lọc cùng áp: số đếm của từng nhóm tính trên kết quả tìm.
+ * Thẻ còn rỗng ảnh có ô nhận ảnh (chọn tệp, kéo-thả, dán Ctrl+V): ảnh được nén ở trình duyệt rồi gắn làm ảnh đại diện qua `PATCH admin/catalog-products/:id`,
+ * không phải mở từng trang sản phẩm. Thẻ rời bộ lọc ngay khi lưu (như nút Duyệt), nên ảnh vừa chọn hiện ở dải "Ảnh vừa tải trong phiên này" nằm ngoài bộ lọc
+ * và ô tìm. Thanh tiến độ "Đã đủ ảnh X/Y" đếm cả sản phẩm vừa được tải ảnh trong phiên mà máy chủ không còn trả về.
  */
 export function WpImageTriage() {
   const qc = useQueryClient();
@@ -59,6 +66,10 @@ export function WpImageTriage() {
   const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<Record<string, string[]>>({});
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  // Ảnh vừa chọn (hiện ở dải "vừa tải", kể cả khi thẻ đã rời danh sách), sản phẩm đã được tải ảnh tay trong phiên, và thẻ đang nén ảnh.
+  const [previews, setPreviews] = useState<Record<string, { url: string; name: string }>>({});
+  const [uploaded, setUploaded] = useState<ReadonlySet<string>>(new Set());
+  const [compressingId, setCompressingId] = useState<string | null>(null);
   const inlineMsg = useToastedMessage(msg);
   // Ref chặn cú chạm thứ hai trong cùng khung hình; state `isPending` chỉ đúng sau lần vẽ kế.
   const inFlight = useRef(false);
@@ -70,9 +81,17 @@ export function WpImageTriage() {
   const shown = searched.filter((r) => matchesFilter(r, filter));
   const searching = query.trim() !== '';
   const totals = filterCounts(items);
+  const progress = imageProgress(items, uploaded);
 
   const act = useMutation({
-    mutationFn: ({ action, row, urls }: Vars) => (action.kind === 'approve' ? approveWpImages(row.productId, urls) : action.kind === 'skip' ? skipWpImages(row.productId) : restoreWpImages(row.productId)),
+    mutationFn: ({ action, row, urls }: Vars) =>
+      action.kind === 'approve'
+        ? approveWpImages(row.productId, urls)
+        : action.kind === 'upload'
+          ? setProductImages(row.productId, urls)
+          : action.kind === 'skip'
+            ? skipWpImages(row.productId)
+            : restoreWpImages(row.productId),
     onMutate: async ({ action }) => {
       await qc.cancelQueries({ queryKey: KEY });
       const previous = qc.getQueryData<WpImageList>(KEY);
@@ -80,16 +99,20 @@ export function WpImageTriage() {
       return { previous };
     },
     onSuccess: (r, { action, row, urls }) => {
+      if (action.kind === 'upload') setUploaded((prev) => new Set(prev).add(row.productId));
       const text =
         action.kind === 'approve'
-          ? `Đã lưu ${r.appliedCount ?? urls.length} ảnh vào "${row.name}".`
-          : action.kind === 'skip'
+          ? `Đã lưu ${(r as { appliedCount?: number }).appliedCount ?? urls.length} ảnh vào "${row.name}".`
+          : action.kind === 'upload'
+            ? `Đã gắn ảnh đại diện cho "${row.name}".`
+            : action.kind === 'skip'
             ? `Đã bỏ qua "${row.name}".`
             : `Đã đưa "${row.name}" về danh sách chờ duyệt.`;
       setMsg({ ok: true, text });
     },
-    onError: (e, _vars, ctx) => {
+    onError: (e, vars, ctx) => {
       if (ctx?.previous) qc.setQueryData(KEY, ctx.previous);
+      if (vars.action.kind === 'upload') setPreviews(({ [vars.row.productId]: _dropped, ...rest }) => rest);
       setMsg({ ok: false, text: e instanceof Error ? actionErrorText(e) : 'Không thực hiện được. Thử lại sau.' });
     },
     onSettled: () => {
@@ -98,14 +121,35 @@ export function WpImageTriage() {
       void qc.invalidateQueries({ queryKey: KEY });
     },
   });
-  const busy = act.isPending;
-  const actingId = busy ? act.variables?.row.productId : undefined;
+  const busy = act.isPending || compressingId !== null;
+  const pendingVars = act.isPending ? act.variables : undefined;
+  const actingId = pendingVars && pendingVars.action.kind !== 'upload' ? pendingVars.row.productId : undefined;
+  const uploadingId = compressingId ?? (pendingVars?.action.kind === 'upload' ? pendingVars.row.productId : undefined);
 
   const run = (vars: Vars) => {
     if (inFlight.current) return;
     inFlight.current = true;
     setMsg(null);
     act.mutate(vars);
+  };
+
+  const upload = async (row: WpImageRow, file: File) => {
+    if (busy || inFlight.current) return;
+    inFlight.current = true;
+    setMsg(null);
+    setCompressingId(row.productId);
+    let dataUrl: string;
+    try {
+      dataUrl = await readAndCompressImage(file);
+    } catch {
+      inFlight.current = false;
+      setCompressingId(null);
+      setMsg({ ok: false, text: 'Không xử lý được ảnh này. Chọn ảnh khác.' });
+      return;
+    }
+    setPreviews((prev) => ({ ...prev, [row.productId]: { url: dataUrl, name: row.name } }));
+    setCompressingId(null);
+    act.mutate({ action: { kind: 'upload', productId: row.productId }, row, urls: [dataUrl] });
   };
 
   const selectionFor = (row: WpImageRow): string[] => picked[row.productId] ?? row.defaultImageUrls ?? [];
@@ -157,6 +201,30 @@ export function WpImageTriage() {
         </button>
       </div>
 
+      {list.isSuccess && progress.total > 0 && (
+        <div className="space-y-1">
+          <p data-testid="wp-triage-progress" className="text-xs text-stone-700">
+            Đã đủ ảnh <span className="tabular-nums">{progress.done}</span>/<span className="tabular-nums">{progress.total}</span> sản phẩm.
+          </p>
+          <ProgressBar value={progress.done} max={progress.total} ariaLabel="Tiến độ bổ sung ảnh" />
+        </div>
+      )}
+
+      {Object.keys(previews).length > 0 && (
+        <ul data-testid="wp-triage-recent" aria-label="Ảnh vừa tải trong phiên này" className="m-0 list-none space-y-2 p-0">
+          {Object.entries(previews).map(([id, p]) => (
+            <li key={id} data-testid="wp-triage-recent-item" className="flex min-w-0 items-center gap-3 rounded-control border border-stone-200 bg-stone-0 p-2">
+              {/* eslint-disable-next-line @next/next/no-img-element -- data URL xem trước ảnh vừa chọn */}
+              <img src={p.url} alt={`Ảnh vừa chọn cho ${p.name}`} onError={hideBrokenImage} className="h-14 w-14 shrink-0 rounded-control border border-stone-200 object-cover" />
+              <div className="min-w-0">
+                <p className="m-0 break-words text-sm font-medium text-stone-900">{p.name}</p>
+                <p className="m-0 text-xs text-stone-600">{uploaded.has(id) ? 'Đã gắn ảnh đại diện.' : 'Đang lưu ảnh…'}</p>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+
       <div role="group" aria-label="Lọc theo trạng thái" className="flex min-w-0 flex-wrap gap-2">
         {TRIAGE_FILTERS.map((f) => (
           <button key={f.key} type="button" data-testid={`wp-triage-pill-${f.key}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)} className={pillClass(filter === f.key)}>
@@ -198,6 +266,8 @@ export function WpImageTriage() {
             selected={selectionFor(row)}
             busy={busy}
             acting={actingId === row.productId}
+            uploading={uploadingId === row.productId}
+            onUpload={(file) => void upload(row, file)}
             onToggle={(u) => toggle(row, u)}
             onApprove={() => void approve(row)}
             onSkip={() => run({ action: { kind: 'skip', productId: row.productId }, row, urls: [] })}
@@ -227,6 +297,8 @@ function TriageCard({
   selected,
   busy,
   acting,
+  uploading,
+  onUpload,
   onToggle,
   onApprove,
   onSkip,
@@ -236,6 +308,8 @@ function TriageCard({
   selected: string[];
   busy: boolean;
   acting: boolean;
+  uploading: boolean;
+  onUpload: (file: File) => void;
   onToggle: (url: string) => void;
   onApprove: () => void;
   onSkip: () => void;
@@ -275,6 +349,12 @@ function TriageCard({
           >
             {withoutImage ? 'Chưa có ảnh' : row.state === 'APPLIED' ? 'Đã có ảnh vừa duyệt' : 'Đã có ảnh'}
           </div>
+          {uploading && (
+            <p role="status" className="text-xs text-stone-600">
+              Đang xử lý ảnh…
+            </p>
+          )}
+          {(withoutImage || uploading) && <ImageDropZone label={`Ảnh cho ${row.name}`} busy={busy} onFile={onUpload} />}
           {row.variations.length > 0 && <p className="break-words text-xs text-stone-600">Phân loại: {row.variations.join(', ')}</p>}
         </section>
 

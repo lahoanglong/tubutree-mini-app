@@ -1,4 +1,4 @@
-import type { AdvisorStatsDto, CatalogAuditResponse, CopyApproveItem, CopyApproveResponse, CopyDraftsResponse } from '@tubutree/shared-types';
+import type { AdvisorStatsDto, CatalogAuditResponse, CopyApproveItem, CopyApproveResponse, CopyDraftsResponse, IngredientsFromImageResponse, IngredientsSaveResponse } from '@tubutree/shared-types';
 import { apiFetch } from '@/lib/client-api';
 
 /** AI soạn cả lô có thể mất gần một phút ở máy chủ: nới hạn chờ mặc định (20 giây) để web không báo mất mạng trong lúc máy chủ còn đang soạn. */
@@ -12,6 +12,23 @@ export const postCopyDrafts = (ids: readonly string[]) =>
 
 export const postCopyApprove = (items: readonly CopyApproveItem[]) =>
   apiFetch<CopyApproveResponse>('/admin/catalog-quality/copy-approve', { method: 'POST', body: { items } });
+
+/** AI đọc nhãn mất tới ~40 giây ở máy chủ (OCR_TIMEOUT_MS): nới hạn chờ mặc định để web không báo mất mạng trong lúc máy chủ còn đọc. */
+export const INGREDIENT_OCR_TIMEOUT_MS = 60_000;
+
+const catalogQuality = (id: string) => `/admin/catalog-quality/${encodeURIComponent(id)}`;
+
+/** Bản nháp tên thành phần đọc từ ảnh nhãn (không ghi DB). `image` là data URL JPEG/PNG/WebP ≤ 5 MB. */
+export const postExtractIngredients = (id: string, image: string) =>
+  apiFetch<IngredientsFromImageResponse>(`${catalogQuality(id)}/extract-ingredients`, { method: 'POST', body: { image }, timeoutMs: INGREDIENT_OCR_TIMEOUT_MS });
+
+/** Lưu thành phần admin đã xem: máy chủ chỉ nối tên mới vào cột thành phần. */
+export const postSaveIngredients = (id: string, ingredients: readonly string[]) =>
+  apiFetch<IngredientsSaveResponse>(`${catalogQuality(id)}/ingredients`, { method: 'POST', body: { ingredients } });
+
+/** Gắn ảnh cho sản phẩm (PATCH admin/catalog-products/:id): `images` thay cả danh sách, ảnh đầu là ảnh đại diện. */
+export const setProductImages = (id: string, images: readonly string[]) =>
+  apiFetch<unknown>(`/admin/catalog-products/${encodeURIComponent(id)}`, { method: 'PATCH', body: { images } });
 
 export const getAdvisorStats = () => apiFetch<AdvisorStatsDto>('/admin/ai-advisor/stats', { cache: 'no-store' });
 

@@ -57,3 +57,22 @@ export async function readAndCompressImage(file: File, maxLength: number = MAX_U
   if (dataUrl.length > maxLength) throw new Error('Ảnh quá nặng sau khi nén');
   return dataUrl;
 }
+
+/** Trần ký tự ảnh base64 cho nhãn bao bì gửi AI đọc: dưới trần 5 MB (sau base64 ≈ 6,99 triệu ký tự) của API admin/catalog-quality/:id/extract-ingredients. */
+export const LABEL_OCR_MAX_DATA_URL_LENGTH = 6_500_000;
+
+/** Chữ in trên nhãn rất nhỏ nên cần cạnh dài lớn hơn ảnh minh chứng (1200px); nặng quá thì hạ một bậc. */
+export const LABEL_OCR_ATTEMPTS: ReadonlyArray<{ maxDim: number; quality: number }> = [
+  { maxDim: 2000, quality: 0.85 },
+  { maxDim: 1600, quality: 0.7 },
+];
+
+/** Nén ảnh nhãn bao bì thành data URL JPEG đủ nét để AI đọc chữ nhỏ; vẫn vượt trần của API sau hai mức thì báo lỗi thay vì để API từ chối. */
+export async function readImageForLabelOcr(file: File): Promise<string> {
+  const img = await load(file);
+  for (const { maxDim, quality } of LABEL_OCR_ATTEMPTS) {
+    const dataUrl = encode(img, maxDim, quality);
+    if (dataUrl.length <= LABEL_OCR_MAX_DATA_URL_LENGTH) return dataUrl;
+  }
+  throw new Error('Ảnh quá nặng sau khi nén');
+}

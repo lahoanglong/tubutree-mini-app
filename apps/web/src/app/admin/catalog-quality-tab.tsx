@@ -13,11 +13,13 @@ import {
   type CatalogIssueKind,
   type CopyStatus,
 } from '@tubutree/app-core/commerce/catalog-quality-audit';
+import Link from 'next/link';
 import { ApiError } from '@/lib/client-api';
 import { loadErrorText } from '@/lib/admin-error-text';
 import { BTN_SECONDARY, LoadError, Notice } from '@/components/admin/ui';
 import { AdvisorStatsCard } from './advisor-stats-card';
 import { CatalogCopyReview, type CurrentCopy } from './catalog-copy-review';
+import { CatalogIngredientsFill } from './catalog-ingredients-fill';
 import { CatalogIssueList } from './catalog-issue-list';
 import { downloadCsvText, getCatalogAudit } from './catalog-quality-api';
 import { PancakeZeroPriceCard } from './pancake-zero-price-card';
@@ -80,6 +82,9 @@ export function CatalogQualityTab() {
     () => new Map<string, CurrentCopy>((data?.products ?? []).map((p) => [p.id, { shortDesc: p.shortDesc, description: p.description, hasIngredients: p.hasIngredients }])),
     [data],
   );
+
+  const activeProducts = (data?.products ?? []).filter((p) => p.isActive);
+  const missingIngredients = activeProducts.filter((p) => !p.hasIngredients).map((p) => ({ id: p.id, name: p.name }));
 
   const allRows = result?.rows ?? [];
   const rows = allRows.filter((r) => (filter === 'all' || r.issues.some((i) => i.kind === filter)) && (copyFilter === 'any' || r.copyStatus === copyFilter));
@@ -176,6 +181,12 @@ export function CatalogQualityTab() {
                     </FilterChip>
                   ))}
                 </div>
+                <Link
+                  href="/admin/catalog-wp-images"
+                  className="inline-flex min-h-[44px] items-center text-sm font-medium text-forest-700 underline underline-offset-2 sm:min-h-[36px]"
+                >
+                  Bổ sung ảnh hàng loạt (kéo-thả, dán ảnh)
+                </Link>
                 <div role="group" aria-label="Lọc theo tình trạng mô tả" className="flex flex-wrap gap-2">
                   <FilterChip active={copyFilter === 'any'} onPress={() => setCopyFilter('any')}>
                     Mọi tình trạng mô tả
@@ -200,6 +211,7 @@ export function CatalogQualityTab() {
                     )}
                   </span>
                 </div>
+                <CatalogIngredientsFill products={missingIngredients} total={activeProducts.length} onSaved={() => run()} />
                 <CatalogCopyReview
                   selected={selectedRows.map((r) => ({ id: r.id!, name: r.name }))}
                   current={current}
