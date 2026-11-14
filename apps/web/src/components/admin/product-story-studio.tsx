@@ -12,7 +12,7 @@ import { STORY_SPRITES } from '@tubutree/app-core/commerce/story-sprites';
 import { ProductStoryShowcase } from '@/components/mini/product-story-showcase';
 import { extractStoryAssets, generateStoryDraft, type ProductDetail, type StoryAssetsResult, type StoryDraftProvider } from '@/lib/product-categories';
 import { actionErrorText } from '@/lib/admin-error-text';
-import { StoryCompletenessPanel } from './story-completeness-panel';
+import { StoryCompletenessPanel, storyPublication } from './story-completeness-panel';
 import { StoryRoiCutout } from './story-roi-cutout';
 import { BTN_PRIMARY, BTN_SECONDARY, BTN_SMALL, FIELD_CLASS, Field, INPUT_CLASS, Notice, TOUCH_H, chipClass } from './ui';
 
@@ -114,6 +114,7 @@ export function ProductStoryStudio({
   const [link, setLink] = useState('');
   const [found, setFound] = useState<StoryAssetsResult | null>(null);
   const [roiFor, setRoiFor] = useState<string | null>(null);
+  const [fullOpen, setFullOpen] = useState(false);
   const [aiNote, setAiNote] = useState('');
   const [aiInfo, setAiInfo] = useState<{ provider: StoryDraftProvider; warnings: string[] } | null>(null);
 
@@ -267,6 +268,23 @@ export function ProductStoryStudio({
             }}
           >
             Áp dụng mẫu câu chuyện thương hiệu
+          </button>
+        )}
+        {brandPreset && (
+          <button
+            type="button"
+            data-testid="story-load-draft-preset"
+            className={BTN_SECONDARY}
+            disabled={disabled}
+            onClick={() => {
+              // Mẫu theo slug gốc, luôn về Nháp (enabled=false) để người duyệt xem thử trước khi công bố; giữ ảnh sân khấu và khung ảnh đang đặt. Chưa lưu.
+              const { cutoutUrl, imageFrame } = current;
+              setNote('Đã nạp kịch bản mẫu ở trạng thái Nháp (chưa bật). Đối chiếu chữ với bao bì, xem thử toàn màn hình, rồi bật câu chuyện và bấm Lưu sản phẩm.');
+              setPick(0);
+              onChange({ ...(generated ?? brandPreset), enabled: false, ...(cutoutUrl ? { cutoutUrl } : {}), ...(imageFrame ? { imageFrame } : {}) });
+            }}
+          >
+            Nạp kịch bản mẫu (Nháp)
           </button>
         )}
         {value && (
@@ -656,7 +674,12 @@ export function ProductStoryStudio({
             Máy tính
           </button>
         </div>
-        <StoryCompletenessPanel result={completeness} />
+        <div>
+          <button type="button" data-testid="story-fullscreen-preview" className={BTN_SECONDARY} aria-haspopup="dialog" onClick={() => setFullOpen(true)}>
+            Xem thử toàn màn hình (Admin Preview)
+          </button>
+        </div>
+        <StoryCompletenessPanel result={completeness} publication={storyPublication(value, generated)} />
         <div
           data-testid="story-preview-frame"
           data-mode={mode}
@@ -665,6 +688,17 @@ export function ProductStoryStudio({
           <ProductStoryShowcase product={preview} previewConfig={previewConfig} />
         </div>
       </div>
+
+      {fullOpen && (
+        <>
+          <ProductStoryShowcase product={preview} previewConfig={previewConfig} fullscreen onClose={() => setFullOpen(false)} />
+          {!current.enabled && (
+            <div data-testid="story-draft-banner" role="status" className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+env(safe-area-inset-bottom,0px))] z-[calc(var(--z-dialog)+1)] flex justify-center px-4">
+              <span className="rounded-control border border-warning-fg bg-warning-bg px-3 py-1.5 text-sm font-medium text-warning-fg shadow-raised">Bản nháp — chưa hiển thị cho khách</span>
+            </div>
+          )}
+        </>
+      )}
     </fieldset>
   );
 }
