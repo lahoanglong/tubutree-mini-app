@@ -1,6 +1,7 @@
 import type { WpImageList, WpImageRow, WpRowState } from '@/lib/wp-image-candidates';
+import { includesFolded } from '@/lib/vn-fold';
 
-export type TriageFilter = 'all' | 'pending' | 'exact' | 'applied' | 'skipped' | 'noImage';
+export type TriageFilter = 'all' | 'pending' | 'exact' | 'applied' | 'skipped' | 'noImage' | 'suggested' | 'noSuggestion';
 
 /** Thứ tự và chữ của các nhóm lọc ở đầu trang. */
 export const TRIAGE_FILTERS: ReadonlyArray<{ key: TriageFilter; label: string }> = [
@@ -10,17 +11,22 @@ export const TRIAGE_FILTERS: ReadonlyArray<{ key: TriageFilter; label: string }>
   { key: 'applied', label: 'Đã duyệt' },
   { key: 'skipped', label: 'Đã bỏ qua' },
   { key: 'noImage', label: 'Chưa có ảnh' },
+  { key: 'suggested', label: 'Có ảnh gợi ý' },
+  { key: 'noSuggestion', label: 'Chưa có gợi ý' },
 ];
 
 /** "Chưa có ảnh" = sản phẩm vẫn đang rỗng ảnh (chờ duyệt hoặc đã bỏ qua); đã nạp ảnh hay vốn có ảnh thì không tính. */
 export const stillWithoutImage = (row: WpImageRow): boolean => row.state === 'PENDING' || row.state === 'SKIPPED';
+
+/** Dòng có ảnh WordPress để chọn (bảng làm tay hoặc gợi ý theo tên). Dòng NONE không có gì để duyệt, chỉ báo cần ảnh mới. */
+export const hasSuggestion = (row: WpImageRow): boolean => row.tier !== 'NONE';
 
 export function matchesFilter(row: WpImageRow, filter: TriageFilter): boolean {
   switch (filter) {
     case 'all':
       return true;
     case 'pending':
-      return row.state === 'PENDING';
+      return row.state === 'PENDING' && hasSuggestion(row);
     case 'exact':
       return row.tier === 'EXACT';
     case 'applied':
@@ -29,11 +35,23 @@ export function matchesFilter(row: WpImageRow, filter: TriageFilter): boolean {
       return row.state === 'SKIPPED';
     case 'noImage':
       return stillWithoutImage(row);
+    case 'suggested':
+      return stillWithoutImage(row) && hasSuggestion(row);
+    case 'noSuggestion':
+      return stillWithoutImage(row) && !hasSuggestion(row);
   }
 }
 
+/** Ô tìm: mọi từ gõ vào phải có trong tên hoặc mã sản phẩm, không phân biệt dấu và hoa thường ("ca phe" ra "Cà phê", "9fbabb" ra đúng mã). Ô trống thì giữ hết. */
+export function matchesQuery(row: WpImageRow, query: string): boolean {
+  const words = query.trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return true;
+  const haystack = `${row.name} ${row.productSlug}`;
+  return words.every((w) => includesFolded(haystack, w));
+}
+
 export function filterCounts(items: readonly WpImageRow[]): Record<TriageFilter, number> {
-  const counts: Record<TriageFilter, number> = { all: 0, pending: 0, exact: 0, applied: 0, skipped: 0, noImage: 0 };
+  const counts = Object.fromEntries(TRIAGE_FILTERS.map((f) => [f.key, 0])) as Record<TriageFilter, number>;
   for (const row of items) for (const f of TRIAGE_FILTERS) if (matchesFilter(row, f.key)) counts[f.key] += 1;
   return counts;
 }

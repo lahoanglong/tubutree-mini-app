@@ -30,7 +30,7 @@ export default function CatalogWpImagesPage() {
       </div>
       <p className="mt-1 text-sm text-stone-600">
         Đặt ảnh Tubu Tree cạnh ảnh tìm được ở tubutree.com (WordPress cũ). Duyệt thì ảnh được tải về và lưu vào sản phẩm, không dẫn link sang WordPress.
-        Chỉ nhóm “Chắc chắn cùng sản phẩm” là cùng sản phẩm; các nhóm còn lại phải đối chiếu bao bì trước khi duyệt.
+        Chỉ nhóm “Chắc chắn cùng sản phẩm” là cùng sản phẩm; các nhóm còn lại, kể cả “Gợi ý theo tên, chưa kiểm”, phải đối chiếu bao bì trước khi duyệt. Sản phẩm “Chưa có gợi ý” cần ảnh mới.
       </p>
       <div className="mt-4">
         <WpImageTriage />

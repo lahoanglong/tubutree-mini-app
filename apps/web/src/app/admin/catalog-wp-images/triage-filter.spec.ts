@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { WpImageList, WpImageRow } from '@/lib/wp-image-candidates';
-import { TRIAGE_FILTERS, applyOptimistic, filterCounts, matchesFilter, stillWithoutImage } from './triage-filter';
+import { TRIAGE_FILTERS, applyOptimistic, filterCounts, hasSuggestion, matchesFilter, matchesQuery, stillWithoutImage } from './triage-filter';
 
 const row = (over: Partial<WpImageRow>): WpImageRow => ({
   productId: 'p1',
@@ -26,35 +26,72 @@ const rows: WpImageRow[] = [
   row({ productId: 'c', tier: 'EXACT', state: 'SKIPPED' }),
   row({ productId: 'd', tier: 'WEAK', state: 'APPLIED', appliedCount: 3, wp: null, defaultImageUrls: null }),
   row({ productId: 'e', tier: 'COMPOSITE', state: 'HAS_IMAGES', wp: null, defaultImageUrls: null }),
+  row({ productId: 'f', tier: 'CANDIDATE', state: 'PENDING' }),
+  row({ productId: 'g', tier: 'NONE', state: 'PENDING', wp: null, defaultImageUrls: null }),
+  row({ productId: 'h', tier: 'NONE', state: 'HAS_IMAGES', wp: null, defaultImageUrls: null }),
 ];
 
 describe('nhóm lọc duyệt ảnh WordPress', () => {
-  it('đủ sáu nhóm theo thứ tự đề bài', () => {
-    expect(TRIAGE_FILTERS.map((f) => f.label)).toEqual(['Tất cả', 'Chờ duyệt', 'Khớp chính xác', 'Đã duyệt', 'Đã bỏ qua', 'Chưa có ảnh']);
+  it('đủ tám nhóm: sáu nhóm cũ giữ thứ tự, thêm "Có ảnh gợi ý" và "Chưa có gợi ý"', () => {
+    expect(TRIAGE_FILTERS.map((f) => f.label)).toEqual(['Tất cả', 'Chờ duyệt', 'Khớp chính xác', 'Đã duyệt', 'Đã bỏ qua', 'Chưa có ảnh', 'Có ảnh gợi ý', 'Chưa có gợi ý']);
   });
 
-  it('mỗi nhóm lọc đúng dòng', () => {
+  it('mỗi nhóm lọc đúng dòng; "Chờ duyệt" không lẫn dòng chưa có gợi ý (không có gì để duyệt)', () => {
     const ids = (f: Parameters<typeof matchesFilter>[1]) => rows.filter((r) => matchesFilter(r, f)).map((r) => r.productId);
-    expect(ids('all')).toEqual(['a', 'b', 'c', 'd', 'e']);
-    expect(ids('pending')).toEqual(['a', 'b']);
+    expect(ids('all')).toEqual(['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']);
+    expect(ids('pending')).toEqual(['a', 'b', 'f']);
     expect(ids('exact')).toEqual(['a', 'c']);
     expect(ids('applied')).toEqual(['d']);
     expect(ids('skipped')).toEqual(['c']);
-    expect(ids('noImage')).toEqual(['a', 'b', 'c']);
+    expect(ids('noImage')).toEqual(['a', 'b', 'c', 'f', 'g']);
+    expect(ids('suggested')).toEqual(['a', 'b', 'c', 'f']);
+    expect(ids('noSuggestion')).toEqual(['g']);
+  });
+
+  it('"Có ảnh gợi ý" cộng "Chưa có gợi ý" đúng bằng "Chưa có ảnh"', () => {
+    const c = filterCounts(rows);
+    expect(c.suggested + c.noSuggestion).toBe(c.noImage);
   });
 
   it('bộ đếm khớp số dòng của từng nhóm', () => {
-    expect(filterCounts(rows)).toEqual({ all: 5, pending: 2, exact: 2, applied: 1, skipped: 1, noImage: 3 });
-    expect(filterCounts([])).toEqual({ all: 0, pending: 0, exact: 0, applied: 0, skipped: 0, noImage: 0 });
+    expect(filterCounts(rows)).toEqual({ all: 8, pending: 3, exact: 2, applied: 1, skipped: 1, noImage: 5, suggested: 4, noSuggestion: 1 });
+    expect(filterCounts([])).toEqual({ all: 0, pending: 0, exact: 0, applied: 0, skipped: 0, noImage: 0, suggested: 0, noSuggestion: 0 });
   });
 
-  it('"Chưa có ảnh" chỉ tính sản phẩm còn rỗng ảnh', () => {
-    expect(rows.map(stillWithoutImage)).toEqual([true, true, true, false, false]);
+  it('"Chưa có ảnh" chỉ tính sản phẩm còn rỗng ảnh; chỉ hạng NONE là không có gợi ý', () => {
+    expect(rows.map(stillWithoutImage)).toEqual([true, true, true, false, false, true, true, false]);
+    expect(rows.map(hasSuggestion)).toEqual([true, true, true, true, true, true, false, false]);
+  });
+});
+
+describe('ô tìm duyệt ảnh WordPress', () => {
+  const sp = row({ name: 'Cà phê muối túi 50x16g', productSlug: 'ca-phe-muoi-tui-50x16g-9fbabb' });
+
+  it('ô trống hoặc toàn khoảng trắng giữ hết', () => {
+    expect(matchesQuery(sp, '')).toBe(true);
+    expect(matchesQuery(sp, '   ')).toBe(true);
+  });
+
+  it('không phân biệt dấu và hoa thường: "ca phe" ra "Cà phê", "CÀ PHÊ" cũng ra', () => {
+    expect(matchesQuery(sp, 'ca phe')).toBe(true);
+    expect(matchesQuery(sp, 'CÀ PHÊ MUỐI')).toBe(true);
+    expect(matchesQuery(sp, 'đường')).toBe(false);
+  });
+
+  it('khớp theo mã sản phẩm (slug), kể cả phần băm cuối và dạng có gạch nối', () => {
+    expect(matchesQuery(sp, '9fbabb')).toBe(true);
+    expect(matchesQuery(sp, 'ca-phe-muoi')).toBe(true);
+    expect(matchesQuery(sp, '9fbabc')).toBe(false);
+  });
+
+  it('nhiều từ: phải có đủ mọi từ, thứ tự tuỳ ý', () => {
+    expect(matchesQuery(sp, 'muối cà')).toBe(true);
+    expect(matchesQuery(sp, 'muối sầu')).toBe(false);
   });
 });
 
 describe('applyOptimistic', () => {
-  const list: WpImageList = { items: rows, counts: { PENDING: 2, SKIPPED: 1, APPLIED: 1, HAS_IMAGES: 1 } };
+  const list: WpImageList = { items: rows.slice(0, 5), counts: { PENDING: 2, SKIPPED: 1, APPLIED: 1, HAS_IMAGES: 1 } };
 
   it('duyệt: dòng thành APPLIED kèm số ảnh, bỏ ảnh ứng viên, đếm lại, không đổi dòng khác', () => {
     const next = applyOptimistic(list, { kind: 'approve', productId: 'a', imageCount: 2 });

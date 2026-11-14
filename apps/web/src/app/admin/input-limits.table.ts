@@ -204,6 +204,7 @@ export const EXEMPT_INPUTS: Record<string, string> = {
   "components/admin/customer-refund-paid-dialog.tsx::bank[key]": "maxLength theo từng ô: 40 cho số tài khoản, 120 cho còn lại, khớp MarkCustomerRefundPaidDto",
   "app/admin/page.tsx::search": "ô lọc khoá cấu hình ngay trên trình duyệt, không gửi lên API",
   "components/admin/admin-nav.tsx::query": "ô lọc menu ngay trên trình duyệt, không gửi lên API",
+  "app/admin/catalog-wp-images/wp-image-triage.tsx::query": "ô tìm chỉ lọc danh sách đã tải ngay trên trình duyệt, không gửi lên API",
   "components/admin/community-events-panel.tsx::startAt": "ô ngày giờ định dạng cố định, kiểm bằng bộ chọn thời gian",
   "components/admin/community-events-panel.tsx::endAt": "ô ngày giờ định dạng cố định, kiểm bằng bộ chọn thời gian",
   "components/admin/image-url-field.tsx::isEmbedded ? '' : value": "dùng chung cho nhiều DTO có trần khác nhau (500 hoặc 1.500.000 ký tự); mỗi nơi dùng tự kiểm",

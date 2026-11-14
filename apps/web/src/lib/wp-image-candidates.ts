@@ -3,7 +3,8 @@
 import type { Tone } from './recycling';
 import { apiFetch } from './client-api';
 
-export type WpTier = 'EXACT' | 'SAME_LINE' | 'WEAK' | 'COMPOSITE';
+/** CANDIDATE: gợi ý tự động theo tên, chưa ai kiểm bao bì. NONE: sản phẩm rỗng ảnh nhưng WordPress không có gì đủ giống (không có thao tác duyệt). */
+export type WpTier = 'EXACT' | 'SAME_LINE' | 'WEAK' | 'COMPOSITE' | 'CANDIDATE' | 'NONE';
 export type WpRowState = 'PENDING' | 'SKIPPED' | 'APPLIED' | 'HAS_IMAGES';
 
 export interface WpResolved {
@@ -49,6 +50,8 @@ export const WP_TIER_TONE: Record<WpTier, Tone> = {
   SAME_LINE: 'info',
   WEAK: 'warning',
   COMPOSITE: 'warning',
+  CANDIDATE: 'warning',
+  NONE: 'neutral',
 };
 
 /** Khớp PRODUCT_IMAGES_LIMIT của API. */
