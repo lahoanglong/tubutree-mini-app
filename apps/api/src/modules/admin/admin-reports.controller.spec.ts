@@ -19,6 +19,7 @@ describe('AdminReportsController', () => {
     exportTax: ['KE_TOAN'],
     exportPayouts: ['KE_TOAN'],
     exportRefunds: ['KE_TOAN'],
+    exportPaymentDiscounts: ['KE_TOAN'],
   };
 
   it('@Roles ADMIN ở lớp; mỗi route mở đúng một nhóm việc (@AllowStaff) theo bảng', () => {

@@ -108,6 +108,14 @@ export interface AdminOrder {
   paymentStatus?: string;
   shippingFee?: number;
   discountTotal?: number;
+  /** Tiền hàng theo đơn giá gốc (cột Order.subtotal), chưa trừ chiết khấu. */
+  subtotal?: number;
+  /** Tổng các khoản giảm (Order.discount) và các phần của nó; đơn cũ chỉ có tổng, các phần bằng 0. */
+  discount?: number;
+  couponDiscount?: number;
+  comboDiscount?: number;
+  tierDiscount?: number;
+  pointsDiscount?: number;
   /** Điểm Xanh khách đã dùng cho đơn — trả lại khi huỷ. */
   pointsUsed?: number;
   /** true = CTV lên đơn hộ khách cuối: tiền huỷ/trả hoàn cho khách cuối, không hoàn cho CTV (OrderReversalService.refundEndCustomer). */
@@ -730,6 +738,8 @@ export const getDealerCreditLedger = (userId: string) =>
 
 export interface RecordDealerCreditPaymentResult {
   balance: number;
+  /** Chiết khấu thanh toán vừa ghi (đồng, đã ghi vào Chi phí tài chính TK 635); chỉ có khi lần ghi này có chiết khấu. */
+  paymentDiscount?: number;
   /** Chỉ có khi gửi kèm reportId: false là mã giao dịch đã có trong sổ từ lần ghi khác nên báo cáo này vẫn chưa đóng. */
   reportClosed?: boolean;
   /** Báo cáo đã được ghi nhận từ trước (người khác ghi trước, hoặc bấm đúp): lần gọi này không ghi gì vào sổ. */
@@ -743,14 +753,28 @@ export interface RecordDealerCreditPaymentResult {
  */
 export const recordDealerCreditPayment = (
   userId: string,
-  input: { amount: number; bankRef?: string; note?: string; /** Báo cáo chuyển khoản của đại lý mà khoản này xử lý; đóng báo cáo cùng lúc ghi sổ. */ reportId?: string },
+  input: {
+    amount: number;
+    bankRef?: string;
+    note?: string;
+    /** Báo cáo chuyển khoản của đại lý mà khoản này xử lý; đóng báo cáo cùng lúc ghi sổ. */
+    reportId?: string;
+    /** Chiết khấu thanh toán (đồng): phần xoá nợ ngoài tiền thực thu `amount`, ghi vào Chi phí tài chính TK 635. Cần kèm `note` nêu lý do. */
+    paymentDiscount?: number;
+  },
   idempotencyKey?: string,
 ) => {
   const bankRef = input.bankRef?.trim().slice(0, DEALER_BANK_REF_MAX) || undefined;
   const note = input.note?.trim().slice(0, DEALER_PAYMENT_NOTE_MAX) || undefined;
   return apiFetch<RecordDealerCreditPaymentResult>(`/admin/dealers/${encodeURIComponent(userId)}/credit-payment`, {
     method: 'POST',
-    body: { amount: input.amount, ...(bankRef ? { bankRef } : {}), ...(note ? { note } : {}), ...(input.reportId ? { reportId: input.reportId } : {}) },
+    body: {
+      amount: input.amount,
+      ...(bankRef ? { bankRef } : {}),
+      ...(note ? { note } : {}),
+      ...(input.reportId ? { reportId: input.reportId } : {}),
+      ...(input.paymentDiscount ? { paymentDiscount: input.paymentDiscount } : {}),
+    },
     headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
   });
 };

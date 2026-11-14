@@ -17,8 +17,53 @@ import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 import { settleWithin } from '@/lib/settle-within';
 import { reloadWhenStale } from '@/lib/stale-write-rejection';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
+import { invoiceBreakdownOf, PAYMENT_DISCOUNT_LABEL, TRADE_DISCOUNT_LABEL } from '@tubutree/shared-types';
 
 const statusText = (s: string) => ORDER_STATUS_LABELS[s] ?? s;
+
+/**
+ * Hoá đơn bán hàng theo chuẩn kế toán: tiền hàng đủ đơn giá gốc, chiết khấu thương mại là một dòng giảm riêng, rồi tổng cộng hoá đơn.
+ * Chiết khấu thanh toán không bao giờ nằm ở đây: nó phát sinh lúc thu tiền và nằm ở khối Công nợ đại lý.
+ * Đơn không có `subtotal` (bản API cũ) thì không dựng được hoá đơn nên không hiện.
+ */
+export function OrderInvoiceBreakdown({ order }: { order: AdminOrder }) {
+  if (typeof order.subtotal !== 'number') return null;
+  const b = invoiceBreakdownOf({
+    subtotal: order.subtotal,
+    discount: order.discount ?? order.discountTotal ?? 0,
+    shippingFee: order.shippingFee,
+    couponDiscount: order.couponDiscount,
+    comboDiscount: order.comboDiscount,
+    tierDiscount: order.tierDiscount,
+    pointsDiscount: order.pointsDiscount,
+  });
+  const rows: { key: string; label: string; value: string; strong?: boolean }[] = [
+    { key: 'goods', label: 'Tổng tiền hàng', value: formatVnd(b.goodsSubtotal) },
+    { key: 'trade', label: TRADE_DISCOUNT_LABEL, value: b.tradeDiscountAmount > 0 ? `-${formatVnd(b.tradeDiscountAmount)}` : formatVnd(0) },
+    ...(b.pointsDiscountAmount > 0 ? [{ key: 'points', label: 'Quy đổi Điểm Xanh', value: `-${formatVnd(b.pointsDiscountAmount)}` }] : []),
+    ...(b.shippingFee > 0 ? [{ key: 'ship', label: 'Phí giao hàng', value: formatVnd(b.shippingFee) }] : []),
+    { key: 'total', label: 'Tổng cộng hoá đơn', value: formatVnd(b.invoiceTotal), strong: true },
+  ];
+  return (
+    <section aria-label="Hoá đơn bán hàng" data-order-invoice-breakdown className="rounded-card border border-stone-200 bg-stone-0 p-3">
+      <div className="flex items-center gap-2">
+        <FileText className="h-4 w-4 text-stone-500" aria-hidden />
+        <span className="text-xs font-semibold uppercase text-stone-600">Hoá đơn bán hàng</span>
+      </div>
+      <dl className="mt-2 grid grid-cols-[1fr_auto] gap-x-3 gap-y-1 text-xs tabular-nums text-stone-700">
+        {rows.map((r) => (
+          <div key={r.key} data-invoice-row={r.key} className="contents">
+            <dt className={r.strong ? 'font-semibold text-stone-900' : undefined}>{r.label}</dt>
+            <dd className={`text-right ${r.strong ? 'font-semibold text-stone-900' : ''}`}>{r.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <p className="mt-2 text-[11px] text-stone-500">
+        Đơn giá từng sản phẩm giữ nguyên. {PAYMENT_DISCOUNT_LABEL} (trả sớm, đúng hạn) không giảm hoá đơn: ghi lúc thu tiền ở khối Công nợ đại lý.
+      </p>
+    </section>
+  );
+}
 
 /** Địa chỉ giao (ảnh chụp lúc đặt) để CSKH tra mà không phải vào DB. */
 export function OrderShippingAddress({ order }: { order: AdminOrder }) {

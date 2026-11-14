@@ -11,8 +11,9 @@ const mocks = vi.hoisted(() => ({
   downloadPitCsv: vi.fn(),
   downloadPayoutsCsv: vi.fn(),
   downloadRefundsCsv: vi.fn(),
+  downloadPaymentDiscountsCsv: vi.fn(),
 }));
-vi.mock('@/lib/admin-reports-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-reports-client')>()), getRevenueReport: mocks.getRevenueReport, getSourceReport: mocks.getSourceReport, downloadOrderItemsCsv: mocks.downloadOrderItemsCsv, downloadPitCsv: mocks.downloadPitCsv, downloadPayoutsCsv: mocks.downloadPayoutsCsv, downloadRefundsCsv: mocks.downloadRefundsCsv }));
+vi.mock('@/lib/admin-reports-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-reports-client')>()), getRevenueReport: mocks.getRevenueReport, getSourceReport: mocks.getSourceReport, downloadOrderItemsCsv: mocks.downloadOrderItemsCsv, downloadPitCsv: mocks.downloadPitCsv, downloadPayoutsCsv: mocks.downloadPayoutsCsv, downloadRefundsCsv: mocks.downloadRefundsCsv, downloadPaymentDiscountsCsv: mocks.downloadPaymentDiscountsCsv }));
 vi.mock('@/lib/admin-client', async (orig) => ({ ...(await orig<typeof import('@/lib/admin-client')>()), downloadOrdersCsv: mocks.downloadOrdersCsv }));
 
 let mounted: Rendered[] = [];
@@ -307,6 +308,19 @@ describe('ReportsTab (D1-04: báo cáo theo khoảng ngày)', () => {
       click(btn(container, 'Xuất CSV hoàn tiền'));
       await flush();
       expect(mocks.downloadRefundsCsv).toHaveBeenCalledWith(range, 'OPEN');
+    });
+
+    it('nút chiết khấu thanh toán (TK 635) gọi file riêng với khoảng ngày đang chọn, tách khỏi file hoàn tiền', async () => {
+      mocks.downloadPaymentDiscountsCsv.mockResolvedValue({ filename: 'ck-tt.csv', bytes: 1 });
+      const { container } = mount(<ReportsTab />);
+      await flush();
+      expect(container.textContent).toContain('Chiết khấu thanh toán (TK 635)');
+      expect(container.textContent).toContain('Nợ TK 635 Chi phí tài chính, Có TK 131');
+      click(btn(container, 'Xuất CSV chiết khấu thanh toán'));
+      await flush();
+      expect(mocks.downloadPaymentDiscountsCsv).toHaveBeenCalledWith({ from: '2026-09-19', to: '2026-10-18' });
+      expect(mocks.downloadRefundsCsv).not.toHaveBeenCalled();
+      expect(container.textContent).toContain('Đã tải ck-tt.csv');
     });
 
     it('câu chỉ sang tab thuế dùng đúng tên mục trên thanh bên ("Thuế TNCN hoa hồng")', async () => {

@@ -53,6 +53,7 @@ export const FIELD_LABELS: Record<string, string> = {
   bankInfo: 'Thông tin ngân hàng',
   bankName: 'Tên ngân hàng',
   bankRef: 'Mã giao dịch ngân hàng',
+  paymentDiscount: 'Chiết khấu thanh toán',
   basePrice: 'Giá gốc',
   benefit: 'Công dụng',
   bodyTemplate: 'Nội dung mẫu',

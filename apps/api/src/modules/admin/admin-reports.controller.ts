@@ -16,7 +16,7 @@ import { streamCsv } from './admin-export';
 import { AdminReportsService } from './admin-reports.service';
 import { IsCalendarDate } from '../../common/calendar-date';
 import { EXPORT_MAX_DAYS, resolveReportRange } from './report-range';
-import { payoutCsvChunks, payoutExportWhere, pitCsvChunks, refundCsvChunks, refundExportWhere } from './admin-finance-export';
+import { paymentDiscountCsvChunks, payoutCsvChunks, payoutExportWhere, pitCsvChunks, refundCsvChunks, refundExportWhere } from './admin-finance-export';
 
 /** Khoảng ngày giờ VN, tính cả hai đầu. Thiếu thì lấy 30 ngày gần nhất (resolveReportRange). */
 export class ReportRangeQuery {
@@ -99,6 +99,16 @@ export class AdminReportsController {
     const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
     await streamCsv(res, `lenh-rut-tien-${range.from}-${range.to}.csv`, payoutCsvChunks(this.prisma, payoutExportWhere(range, q.status)), (n) =>
       this.admin.recordExport(actorId ?? '', 'exports/payouts', { from: range.from, to: range.to, status: q.status }, n),
+    );
+  }
+
+  /** Chiết khấu thanh toán đã xoá nợ đại lý (Nợ TK 635 / Có TK 131) theo ngày ghi sổ. Hoá đơn bán hàng không đổi. */
+  @AllowStaff('KE_TOAN')
+  @Get('exports/payment-discounts')
+  async exportPaymentDiscounts(@Query() q: ReportRangeQuery, @Res() res: Response, @CurrentUser() viewer: JwtPayload) {
+    const range = resolveReportRange(q.from, q.to, { maxDays: EXPORT_MAX_DAYS });
+    await streamCsv(res, `chiet-khau-thanh-toan-${range.from}-${range.to}.csv`, paymentDiscountCsvChunks(this.prisma, range, { maskPhones: !seesFullOrderPhones(viewer) }), (n) =>
+      this.admin.recordExport(viewer.sub, 'exports/payment-discounts', { from: range.from, to: range.to }, n),
     );
   }
 

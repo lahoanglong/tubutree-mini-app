@@ -22,3 +22,4 @@ export * from './catalog-brand';
 export * from './product-copy-fallback';
 export * from './copy-claims-guard';
 export * from './catalog-copy';
+export * from './order-discount';

@@ -39,6 +39,12 @@ import { canonicalUserId } from '../external-points/external-claim-audit';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
 import { assertBankRefUnusedByOrder, bankRefUsedByOrderMessage, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
 import { isRealUser } from '../../common/real-user';
+import {
+  PAYMENT_DISCOUNT_ACCOUNT_LABEL,
+  PAYMENT_DISCOUNT_LABEL,
+  PAYMENT_DISCOUNT_LEDGER_REF,
+  settlePayment,
+} from '@tubutree/shared-types';
 import { DEALER_APPLICATION_LIST_SELECT } from './dealer-application-select';
 
 const PAYMENT_STATUS_LABEL_VI: Record<string, string> = {
@@ -113,6 +119,8 @@ const vnd = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
  * 2.147.483.647 sẽ vỡ ở DB thành lỗi 500. Chặn sớm bằng 400 rõ ràng; đơn lớn hơn thì tách nhiều đơn.
  */
 export const DEALER_ORDER_TOTAL_MAX = 2_000_000_000;
+/** Order.subtotal là Int 32 bit: tiền hàng theo giá gốc (trước chiết khấu) không được vượt số này. */
+const INT32_MAX = 2_147_483_647;
 
 /**
  * Ngưỡng/doanh số tích luỹ lưu BigInt (có thể vượt INT4) nhưng API và phép tính dùng number:
@@ -278,7 +286,12 @@ export class DealerService {
     });
     const vmap = new Map(variations.map((v) => [v.id, v]));
 
+    // Chiết khấu thương mại của bậc đại lý: đơn giá và `total` của dòng giữ giá lẻ (hoá đơn: tiền hàng đủ, dòng giảm riêng),
+    // phần giảm gom thành một dòng giảm trên đơn (`discount`). Tiền khách thực trả từng dòng nằm ở `paidTotal`
+    // (hoàn tiền, hoa hồng đọc số này khi các dòng cộng đúng bằng tiền hàng của đơn).
+    // `subtotal` = tiền hàng theo đơn giá gốc; `goodsNet` = phải trả tiền hàng (ngưỡng tối thiểu, freeship, công nợ tính trên số này).
     let subtotal = 0;
+    let tradeDiscount = 0;
     // Giá/tổng tiền tính đủ 100% số lượng đặt, KỂ CẢ phần sẽ đặt trước — đại lý trả đúng giá đã
     // chốt lúc đặt, không phải trả thêm khi hàng về (backorderedQty chỉ ảnh hưởng tồn kho).
     const items = dto.items.map((line) => {
@@ -286,9 +299,12 @@ export class DealerService {
       if (!v) throw new BadRequestException(`Sản phẩm ${line.variationId} không tồn tại.`);
       if (!isSellableVariation(v)) throw productDiscontinuedError(v.product.name);
       if (isPartnerOwnedVariation(v)) throw partnerGoodsError('DEALER', v.product.name);
-      const unitPrice = this.unitPrice(v, tier?.id, discountPct);
-      const total = unitPrice * line.quantity;
-      subtotal += total;
+      const dealerPrice = this.unitPrice(v, tier?.id, discountPct);
+      // Giá riêng theo bậc cao hơn giá lẻ thì không có gì để giảm: giữ giá đó, không ghi dòng giảm âm.
+      const unitPrice = Math.max(v.retailPrice, dealerPrice);
+      const paidTotal = dealerPrice * line.quantity;
+      subtotal += unitPrice * line.quantity;
+      tradeDiscount += (unitPrice - dealerPrice) * line.quantity;
       return {
         variationId: v.id,
         productName: v.product.name,
@@ -296,25 +312,29 @@ export class DealerService {
         variationName: v.name,
         unitPrice,
         quantity: line.quantity,
-        total,
+        total: unitPrice * line.quantity,
+        paidTotal,
       };
     });
 
-    if (subtotal > DEALER_ORDER_TOTAL_MAX) {
+    const goodsNet = subtotal - tradeDiscount;
+    if (goodsNet > DEALER_ORDER_TOTAL_MAX) {
       throw new BadRequestException(
-        `Tổng đơn ${vnd(subtotal)} vượt mức tối đa ${vnd(DEALER_ORDER_TOTAL_MAX)} cho một đơn đại lý — bạn tách thành nhiều đơn nhé.`,
+        `Tổng đơn ${vnd(goodsNet)} vượt mức tối đa ${vnd(DEALER_ORDER_TOTAL_MAX)} cho một đơn đại lý — bạn tách thành nhiều đơn nhé.`,
       );
     }
-
+    if (subtotal > INT32_MAX) {
+      throw new BadRequestException('Tiền hàng theo giá gốc của đơn vượt giới hạn của hệ thống — bạn tách thành nhiều đơn nhé.');
+    }
     const rules = await this.orderRules();
-    if (rules.minOrder > 0 && subtotal < rules.minOrder) {
+    if (rules.minOrder > 0 && goodsNet < rules.minOrder) {
       throw new BadRequestException({
         code: 'DEALER_ORDER_BELOW_MIN',
-        message: `Đơn đại lý tối thiểu ${vnd(rules.minOrder)} tiền hàng, đơn của bạn mới ${vnd(subtotal)}. Bạn thêm hàng vào đơn nhé.`,
+        message: `Đơn đại lý tối thiểu ${vnd(rules.minOrder)} tiền hàng, đơn của bạn mới ${vnd(goodsNet)}. Bạn thêm hàng vào đơn nhé.`,
       });
     }
-    const shippingFee = subtotal >= rules.freeShipFrom ? 0 : rules.feeBelow;
-    const total = subtotal + shippingFee;
+    const shippingFee = goodsNet >= rules.freeShipFrom ? 0 : rules.feeBelow;
+    const total = goodsNet + shippingFee;
 
     // Kho Pancake cần tên, SĐT, địa chỉ người nhận — trước đây đơn đại lý chỉ có ghi chú "giao theo hợp đồng".
     const shippingAddress = await resolveDealerRecipient(this.prisma, userId, dto.addressId);
@@ -381,7 +401,9 @@ export class DealerService {
               type: 'DEALER',
               status: onCredit ? 'CONFIRMED' : 'PENDING_PAYMENT',
               subtotal,
-              discount: 0,
+              // Chiết khấu thương mại của bậc đại lý. Không điền tierDiscount (nhãn "Ưu đãi hạng thành viên" của khách lẻ): tách
+              // chiết khấu thương mại / điểm đọc thẳng `discount` khi các cột thành phần đều 0.
+              discount: tradeDiscount,
               shippingFee,
               total,
               paymentMethod: 'BANK_TRANSFER',
@@ -604,9 +626,16 @@ export class DealerService {
     adminId: string,
     dealerUserId: string,
     amount: number,
-    opts: { note?: string; bankRef?: string; idempotencyKey?: string; byStaff?: boolean; reportId?: string } = {},
+    opts: { note?: string; bankRef?: string; idempotencyKey?: string; byStaff?: boolean; reportId?: string; paymentDiscount?: number } = {},
   ) {
     if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException('Số tiền không hợp lệ.');
+    // Chiết khấu thanh toán: hoá đơn vẫn đủ 100%, tiền thực thu là `amount`, phần xoá nợ thêm ghi vào TK 635. Kiểm kiểu và lý do ở
+    // đây; trần theo dư nợ và theo phần trăm kiểm lại trong transaction (settlePayment).
+    const paymentDiscount = opts.paymentDiscount ?? 0;
+    if (!Number.isInteger(paymentDiscount) || paymentDiscount < 0) throw new BadRequestException('Chiết khấu thanh toán không hợp lệ.');
+    if (paymentDiscount > 0 && !opts.note?.trim()) {
+      throw new BadRequestException('Ghi lý do chiết khấu thanh toán (trả sớm hay đúng hạn theo hợp đồng) vào ô ghi chú.');
+    }
     // Người đã mất vai trò đại lý mà còn nợ vẫn ghi nhận được (bên dưới), nên kế toán vốn là đại lý cũ có thể tự xoá nợ của mình.
     // So cả tài khoản gốc sau gộp (mergedIntoId): sổ nợ nằm ở tài khoản cũ đã gộp vào kế toán vẫn là sổ của chính họ.
     if (opts.byStaff && (dealerUserId === adminId || (await canonicalUserId(this.prisma, dealerUserId)) === (await canonicalUserId(this.prisma, adminId)))) {
@@ -641,6 +670,17 @@ export class DealerService {
                 : 'Idempotency-Key đã được sử dụng với số tiền khác, bạn thử lại nhé.'
               : 'Báo cáo này đã được ghi nhận với số tiền khác trước đó.',
           );
+        }
+        // Dòng xoá nợ chiết khấu thanh toán đi cùng khoá (`${key}:ck`): bấm lại cùng khoá mà đòi một mức chiết khấu khác với mức đã ghi thì
+        // không được coi là phát lại (sẽ nuốt một khoản chiết khấu). Bỏ chiết khấu khi bấm lại thì không có gì ghi thêm: vẫn là phát lại.
+        if (paymentDiscount > 0) {
+          const priorDiscount = await this.prisma.dealerCreditLedger.findFirst({
+            where: { userId: dealerUserId, refType: PAYMENT_DISCOUNT_LEDGER_REF, refId: `${key}:ck` },
+            select: { delta: true },
+          });
+          if (-(priorDiscount?.delta ?? 0) !== paymentDiscount) {
+            throw new BadRequestException('Khoản này đã được ghi với chiết khấu thanh toán khác trước đó, bạn tải lại sổ công nợ rồi kiểm tra nhé.');
+          }
         }
         return this.creditLedgerWithReport(dealerUserId, reportId, true);
       }
@@ -677,18 +717,23 @@ export class DealerService {
           if (payRef) await this.assertBankRefFreeForPayment(tx, payRef, key ? { userId: dealerUserId, refId: key } : undefined);
           const agg = await tx.dealerCreditLedger.aggregate({ where: { userId: dealerUserId }, _sum: { delta: true } });
           const debt = agg._sum.delta ?? 0;
-          if (amount > debt) {
+          if (paymentDiscount === 0 && amount > debt) {
             throw new BadRequestException(
               `Số tiền (${vnd(amount)}) vượt dư nợ hiện tại của đại lý (${vnd(debt)}).`,
             );
           }
+          if (paymentDiscount > 0) {
+            const settled = settlePayment({ receivable: debt, cashCollected: amount, paymentDiscount });
+            if (!settled.ok) throw new BadRequestException(settled.reason);
+          }
+          const actor = `${opts.byStaff ? 'Kế toán' : 'Admin'} ${adminId}`;
           await tx.dealerCreditLedger.create({
             data: {
               userId: dealerUserId,
               delta: -amount,
               refType: 'PAYMENT',
               note: [
-                `${opts.byStaff ? 'Kế toán' : 'Admin'} ${adminId} xác nhận đã nhận chuyển khoản`,
+                `${actor} xác nhận đã nhận chuyển khoản`,
                 opts.bankRef?.trim() ? `Mã GD ${opts.bankRef.trim()}` : null,
                 opts.note?.trim() || null,
               ]
@@ -697,6 +742,21 @@ export class DealerService {
               ...(key ? { refId: key } : {}),
             },
           });
+          if (paymentDiscount > 0) {
+            // Hoá đơn vẫn đủ 100%: phần xoá nợ này không sửa đơn nào, chỉ giảm công nợ và ghi chi phí tài chính. Ghi chú không chứa "Mã GD"
+            // để kiểm trùng mã giao dịch (isBankRefOnPayment) không đếm dòng này là một lần thu tiền.
+            await tx.dealerCreditLedger.create({
+              data: {
+                userId: dealerUserId,
+                delta: -paymentDiscount,
+                refType: PAYMENT_DISCOUNT_LEDGER_REF,
+                note: [`${actor} ghi ${PAYMENT_DISCOUNT_LABEL.toLowerCase()} ${vnd(paymentDiscount)} vào ${PAYMENT_DISCOUNT_ACCOUNT_LABEL}`, opts.note?.trim()]
+                  .filter(Boolean)
+                  .join(' · '),
+                ...(key ? { refId: `${key}:ck` } : {}),
+              },
+            });
+          }
         },
         { isolationLevel: 'Serializable' },
       );
@@ -717,6 +777,7 @@ export class DealerService {
 
     this.logger.warn(
       `Admin ${adminId} xác nhận đại lý ${dealerUserId} đã trả nợ ${vnd(amount)}` +
+        (paymentDiscount > 0 ? ` kèm ${PAYMENT_DISCOUNT_LABEL.toLowerCase()} ${vnd(paymentDiscount)} (${PAYMENT_DISCOUNT_ACCOUNT_LABEL})` : '') +
         (opts.bankRef ? ` (mã GD ${opts.bankRef})` : '') +
         '.',
     );
@@ -726,7 +787,8 @@ export class DealerService {
         .catch((e) => this.logger.warn(`notify DEALER_CREDIT_PAYMENT_CONFIRMED lỗi (${dealerUserId}): ${(e as Error).message}`));
     }
     const ledger = await this.creditLedger(dealerUserId);
-    return reportId ? { ...ledger, reportClosed: true } : ledger;
+    const withDiscount = paymentDiscount > 0 ? { ...ledger, paymentDiscount } : ledger;
+    return reportId ? { ...withDiscount, reportClosed: true } : withDiscount;
   }
 
   /**

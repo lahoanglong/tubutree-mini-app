@@ -96,6 +96,11 @@ export class RecordDealerCreditPaymentDto {
   @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
   /** Báo cáo chuyển khoản của đại lý mà khoản này xử lý; đóng báo cáo cùng lúc ghi sổ (DealerCreditPaymentReport). */
   @IsOptional() @IsString() @MaxLength(64) reportId?: string;
+  /**
+   * Chiết khấu thanh toán (trả sớm/đúng hạn): phần xoá nợ ngoài `amount` (tiền thực thu), ghi vào Chi phí tài chính TK 635. Hoá đơn
+   * không đổi. Có giá trị > 0 thì bắt buộc kèm `note` nêu lý do; trần theo PAYMENT_DISCOUNT_MAX_PCT và dư nợ kiểm ở service.
+   */
+  @IsOptional() @IsInt() @Min(0) paymentDiscount?: number;
 }
 
 /**
@@ -131,6 +136,7 @@ export class DealerCreditAdminController {
       idempotencyKey,
       byStaff: role !== 'ADMIN',
       reportId: dto.reportId,
+      paymentDiscount: dto.paymentDiscount,
     });
   }
 }

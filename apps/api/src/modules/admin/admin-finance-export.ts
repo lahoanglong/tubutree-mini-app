@@ -4,6 +4,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { formatVnDateTime } from '../../common/vn-time';
 import { maskPhoneKeepLast3, maskVnPhonesInText } from '../../common/mask-pii';
 import { OPEN_CUSTOMER_REFUND_STATUSES } from '../orders/refund-queue';
+import { PAYMENT_DISCOUNT_LABEL, PAYMENT_DISCOUNT_LEDGER_REF } from '@tubutree/shared-types';
 import { EXPORT_BATCH, row, text } from './admin-export';
 
 /**
@@ -181,6 +182,64 @@ export async function* payoutCsvChunks(prisma: PrismaService, where: Prisma.Payo
           p.bankRef ?? '',
           p.rejectionReason ?? '',
           p.adminNote ?? '',
+        ]);
+      })
+      .join('');
+    if (batch.length < EXPORT_BATCH) return;
+    cursor = batch[batch.length - 1]!.id;
+  }
+}
+
+// ── Chiết khấu thanh toán (Chi phí tài chính TK 635) ──
+
+export const PAYMENT_DISCOUNT_CSV_HEADERS = [
+  'Ngày ghi sổ',
+  'Mã đại lý',
+  'Đại lý',
+  'SĐT',
+  'Số tiền chiết khấu thanh toán (VNĐ)',
+  'Tài khoản nợ',
+  'Tài khoản có',
+  'Lý do và người ghi',
+  'Mã dòng sổ công nợ',
+];
+
+/**
+ * Mỗi dòng xoá nợ do chiết khấu thanh toán (DealerCreditLedger refType PAYMENT_DISCOUNT) trong [start, end) theo ngày ghi: hoá đơn bán
+ * hàng không đổi, khoản này là Nợ TK 635 (Chi phí tài chính) / Có TK 131 (Phải thu của khách hàng). Cột số tiền luôn dương.
+ * `maskPhones`: người xuất không thấy SĐT đầy đủ (seesFullOrderPhones) chỉ nhận 3 số cuối.
+ */
+export async function* paymentDiscountCsvChunks(prisma: PrismaService, range: Range, opts: { maskPhones?: boolean } = {}): AsyncGenerator<string> {
+  yield row(PAYMENT_DISCOUNT_CSV_HEADERS);
+  const where = { refType: PAYMENT_DISCOUNT_LEDGER_REF, createdAt: { gte: range.start, lt: range.end } } satisfies Prisma.DealerCreditLedgerWhereInput;
+  let cursor: string | undefined;
+  for (;;) {
+    const batch = await prisma.dealerCreditLedger.findMany({
+      where,
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      take: EXPORT_BATCH,
+      ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+      select: { id: true, userId: true, delta: true, note: true, createdAt: true },
+    });
+    if (batch.length === 0) return;
+    const users = await prisma.user.findMany({
+      where: { id: { in: [...new Set(batch.map((b) => b.userId))] } },
+      select: { id: true, fullName: true, phone: true },
+    });
+    const byId = new Map(users.map((u) => [u.id, u]));
+    yield batch
+      .map((l) => {
+        const u = byId.get(l.userId);
+        return row([
+          dateTime(l.createdAt),
+          l.userId,
+          u?.fullName ?? '',
+          text(opts.maskPhones ? maskPhoneKeepLast3(u?.phone) : u?.phone),
+          -l.delta,
+          `635 - ${PAYMENT_DISCOUNT_LABEL}`,
+          '131 - Phải thu của khách hàng',
+          opts.maskPhones && l.note ? maskVnPhonesInText(l.note) : (l.note ?? ''),
+          l.id,
         ]);
       })
       .join('');

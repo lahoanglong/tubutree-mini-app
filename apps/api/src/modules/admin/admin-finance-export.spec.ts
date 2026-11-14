@@ -1,9 +1,11 @@
 import type { PrismaService } from '../../prisma/prisma.service';
 import { EXPORT_BATCH } from './admin-export';
 import {
+  PAYMENT_DISCOUNT_CSV_HEADERS,
   PAYOUT_CSV_HEADERS,
   PIT_CSV_HEADERS,
   REFUND_CSV_HEADERS,
+  paymentDiscountCsvChunks,
   payoutCsvChunks,
   payoutExportWhere,
   pitCsvChunks,
@@ -250,5 +252,73 @@ describe('refundExportWhere / refundCsvChunks (danh sách hoàn tiền, D1-14)',
     expect(masked).not.toContain('0912345');
     expect(masked).toContain('666');
     expect(masked).toContain('678');
+  });
+});
+
+describe('paymentDiscountCsvChunks (chiết khấu thanh toán, Nợ TK 635 / Có TK 131)', () => {
+  const col = (name: string) => PAYMENT_DISCOUNT_CSV_HEADERS.indexOf(name);
+  const ledgerRow = (over: Record<string, unknown> = {}) => ({
+    id: 'l1',
+    userId: 'd1',
+    delta: -20_000,
+    note: 'Admin a1 ghi chiết khấu thanh toán 20.000đ vào Chi phí tài chính (TK 635) · Trả sớm',
+    createdAt: new Date('2026-10-10T03:00:00Z'),
+    ...over,
+  });
+  const users = [{ id: 'd1', fullName: 'Cty A', phone: '0987654321' }];
+
+  function build(rows: ({ id: string } & Record<string, unknown>)[]) {
+    const ledgerFind = cursorModel(rows);
+    const userFind = jest.fn(async (args: { where: { id: { in: string[] } } }) => users.filter((u) => args.where.id.in.includes(u.id)));
+    const prisma = { dealerCreditLedger: { findMany: ledgerFind }, user: { findMany: userFind } } as unknown as PrismaService;
+    return { prisma, ledgerFind };
+  }
+
+  it('lọc đúng refType PAYMENT_DISCOUNT trong khoảng ngày ghi; số tiền luôn dương; nợ TK 635, có TK 131; hoá đơn không đổi', async () => {
+    const { prisma, ledgerFind } = build([ledgerRow()]);
+    const csv = await collect(paymentDiscountCsvChunks(prisma, RANGE));
+    const lines = csv.trimEnd().split('\r\n');
+    expect(parseLine(lines[0]!)).toEqual(PAYMENT_DISCOUNT_CSV_HEADERS);
+    const cells = parseLine(lines[1]!);
+    expect(cells[col('Số tiền chiết khấu thanh toán (VNĐ)')]).toBe('20000');
+    expect(cells[col('Tài khoản nợ')]).toBe('635 - Chiết khấu thanh toán');
+    expect(cells[col('Tài khoản có')]).toBe('131 - Phải thu của khách hàng');
+    expect(cells[col('Đại lý')]).toBe('Cty A');
+    expect(cells[col('Mã dòng sổ công nợ')]).toBe('l1');
+    const { where } = ledgerFind.mock.calls[0]![0] as unknown as { where: { refType: string; createdAt: { gte: Date; lt: Date } } };
+    expect(where.refType).toBe('PAYMENT_DISCOUNT');
+    expect(where.createdAt).toEqual({ gte: RANGE.start, lt: RANGE.end });
+  });
+
+  it('không có dòng nào thì chỉ có hàng tiêu đề', async () => {
+    const { prisma } = build([]);
+    const csv = await collect(paymentDiscountCsvChunks(prisma, RANGE));
+    expect(csv.trimEnd().split('\r\n')).toHaveLength(1);
+  });
+
+  it('người xuất không thấy SĐT đầy đủ chỉ nhận 3 số cuối, cả trong ghi chú; quản trị viên thấy đủ', async () => {
+    const withPhoneNote = ledgerRow({ note: 'Gọi 0912345678 xác nhận trả sớm' });
+    const masked = parseLine((await collect(paymentDiscountCsvChunks(build([withPhoneNote]).prisma, RANGE, { maskPhones: true }))).trimEnd().split('\r\n')[1]!);
+    expect(masked[col('SĐT')]).not.toContain('0987654321');
+    expect(masked[col('SĐT')]).toContain('321');
+    expect(masked[col('Lý do và người ghi')]).not.toContain('0912345678');
+    const full = parseLine((await collect(paymentDiscountCsvChunks(build([withPhoneNote]).prisma, RANGE))).trimEnd().split('\r\n')[1]!);
+    expect(full[col('SĐT')]).toContain('0987654321');
+    expect(full[col('Lý do và người ghi')]).toContain('0912345678');
+  });
+
+  it('lấy hết mọi lô theo con trỏ, không dừng ở một lô', async () => {
+    const rows = Array.from({ length: EXPORT_BATCH + 3 }, (_, i) => ledgerRow({ id: `l${String(i).padStart(5, '0')}` }));
+    const { prisma, ledgerFind } = build(rows);
+    const lines = (await collect(paymentDiscountCsvChunks(prisma, RANGE))).trimEnd().split('\r\n');
+    expect(lines).toHaveLength(1 + EXPORT_BATCH + 3);
+    expect(ledgerFind).toHaveBeenCalledTimes(2);
+  });
+
+  it('ô bắt đầu bằng dấu công thức được thêm dấu nháy đơn (tên đại lý do người dùng nhập)', async () => {
+    const { prisma } = build([ledgerRow({ userId: 'd2' })]);
+    (prisma as unknown as { user: { findMany: jest.Mock } }).user.findMany = jest.fn().mockResolvedValue([{ id: 'd2', fullName: '=HYPERLINK("x")', phone: null }]);
+    const csv = await collect(paymentDiscountCsvChunks(prisma, RANGE));
+    expect(csv).toContain("'=HYPERLINK");
   });
 });

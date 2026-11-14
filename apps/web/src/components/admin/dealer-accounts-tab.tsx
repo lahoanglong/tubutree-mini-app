@@ -63,6 +63,29 @@ export function DealerAccountsTab({ isAdmin = true }: { isAdmin?: boolean } = {}
           )}
         </div>
 
+        {q.data?.monthDiscounts && (
+          <dl data-dealer-discount-summary aria-label="Chiết khấu trong tháng" className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            <div className="rounded-card border border-stone-200 bg-stone-0 p-3">
+              <dt className="text-xs text-stone-600">CK thương mại (trên hoá đơn) · tháng {monthLabel(q.data.month)}</dt>
+              <dd className="mt-0.5">
+                <span data-trade-discount className="block text-base font-semibold tabular-nums text-stone-900">
+                  {formatVnd(q.data.monthDiscounts.trade)}
+                </span>
+                <span className="block text-[11px] text-stone-500">Giảm thẳng trên hoá đơn, đơn giá hàng không đổi.</span>
+              </dd>
+            </div>
+            <div className="rounded-card border border-stone-200 bg-stone-0 p-3">
+              <dt className="text-xs text-stone-600">CK thanh toán (chi phí tài chính TK 635) · tháng {monthLabel(q.data.month)}</dt>
+              <dd className="mt-0.5">
+                <span data-payment-discount className="block text-base font-semibold tabular-nums text-stone-900">
+                  {formatVnd(q.data.monthDiscounts.payment)}
+                </span>
+                <span className="block text-[11px] text-stone-500">Hoá đơn vẫn đủ 100%, phần này xoá nợ lúc thu tiền.</span>
+              </dd>
+            </div>
+          </dl>
+        )}
+
         <div className="flex flex-wrap items-center gap-2">
           <input
             type="search"

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import {
+  downloadPaymentDiscountsCsv,
   downloadPayoutsCsv,
   downloadPitCsv,
   downloadRefundsCsv,
@@ -31,7 +32,7 @@ const REFUND_STATUS_OPTIONS: { value: '' | RefundExportStatus; label: string }[]
   { value: 'DISMISSED', label: 'Không phải tiền dư' },
 ];
 
-type Kind = 'tax' | 'payouts' | 'refunds';
+type Kind = 'tax' | 'payouts' | 'refunds' | 'paymentDiscounts';
 
 /** Ba file CSV cho kế toán: khấu trừ TNCN của CTV, lệnh chuyển hoa hồng, hoàn tiền khách. Dùng khoảng ngày chung của tab Báo cáo. */
 export function ReportsFinanceSection({ range }: { range: ReportRange }) {
@@ -50,7 +51,9 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
           ? await downloadPitCsv(range)
           : kind === 'payouts'
             ? await downloadPayoutsCsv(range, payoutStatus || undefined)
-            : await downloadRefundsCsv(range, refundStatus || undefined);
+            : kind === 'paymentDiscounts'
+              ? await downloadPaymentDiscountsCsv(range)
+              : await downloadRefundsCsv(range, refundStatus || undefined);
       setMsg({ ok: true, text: `Đã tải ${r.filename}.` });
     } catch (e) {
       setMsg({ ok: false, text: actionErrorText(e) });
@@ -66,7 +69,7 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
         Xuất file cho kế toán
       </h3>
       {error && <Notice tone="warning" role="alert">{error}</Notice>}
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
         <div className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
           <h4 className="text-sm font-medium text-stone-900">Khấu trừ thuế TNCN của CTV</h4>
           <p className="text-xs text-stone-500">Mỗi người nhận một dòng, gồm các lệnh đã chi hoa hồng trong khoảng ngày chi (giờ Việt Nam). Cùng số với bảng theo tháng ở mục Thuế TNCN hoa hồng.</p>
@@ -106,6 +109,16 @@ export function ReportsFinanceSection({ range }: { range: ReportRange }) {
           </label>
           <button type="button" disabled={disabled} onClick={() => void run('refunds')} className={BTN_SECONDARY}>
             {busy === 'refunds' ? 'Đang xuất…' : 'Xuất CSV hoàn tiền'}
+          </button>
+        </div>
+        <div className="space-y-2 rounded-card border border-stone-200 bg-stone-0 p-3 shadow-card">
+          <h4 className="text-sm font-medium text-stone-900">Chiết khấu thanh toán (TK 635)</h4>
+          <p className="text-xs text-stone-500">
+            Phần công nợ đại lý được xoá khi thu tiền trả sớm hoặc đúng hạn, theo ngày ghi sổ: Nợ TK 635 Chi phí tài chính, Có TK 131. Hoá đơn bán hàng vẫn đủ 100%. Chiết khấu thương mại nằm ở cột
+            &quot;CK thương mại trên HĐ&quot; của file đơn hàng.
+          </p>
+          <button type="button" disabled={disabled} onClick={() => void run('paymentDiscounts')} className={BTN_SECONDARY}>
+            {busy === 'paymentDiscounts' ? 'Đang xuất…' : 'Xuất CSV chiết khấu thanh toán'}
           </button>
         </div>
       </div>
