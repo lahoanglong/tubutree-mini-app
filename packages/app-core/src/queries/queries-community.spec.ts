@@ -182,6 +182,7 @@ const cases: Case[] = [
     ['game', 'seasonPass'],
     '/game/season-pass',
   ],
+  ['gameArcade', (h) => game.gameArcadeStatusQuery(h), ['game', 'arcade'], '/game/arcade/status'],
 ];
 
 describe('queries cộng đồng, CTV, gian hàng, game — queryKey giống Mini App', () => {

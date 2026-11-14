@@ -1,6 +1,7 @@
 import type { HttpClient } from '../http';
 import {
   fetchSeasonPass,
+  getArcadeStatus,
   getCollection,
   getCommunity,
   getFriends,
@@ -61,4 +62,8 @@ export const gameGardenQuery = (http: HttpClient) => ({
 export const gameSeasonPassQuery = (http: HttpClient) => ({
   queryKey: ['game', 'seasonPass'] as const,
   queryFn: () => fetchSeasonPass(http),
+});
+export const gameArcadeStatusQuery = (http: HttpClient) => ({
+  queryKey: ['game', 'arcade'] as const,
+  queryFn: () => getArcadeStatus(http),
 });

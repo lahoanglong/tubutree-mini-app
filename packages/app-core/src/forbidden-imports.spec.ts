@@ -86,6 +86,7 @@ function isValueReference(id: ts.Identifier): boolean {
   const parent = id.parent;
   if (ts.isPropertyAccessExpression(parent) && parent.name === id) return false;
   if (ts.isPropertyAssignment(parent) && parent.name === id) return false;
+  if (ts.isPropertySignature(parent) && parent.name === id) return false;
   if (ts.isVariableDeclaration(parent) && parent.name === id) return false;
   if (ts.isParameter(parent) && parent.name === id) return false;
   if (ts.isTypeReferenceNode(parent) || ts.isTypeQueryNode(parent)) return false;
@@ -160,6 +161,8 @@ describe('findViolations tự kiểm', () => {
     ['export function f() { return globalThis.localStorage; }'],
     ['export const g = () => navigator.userAgent;'],
     ['const o = { self: 1 }; const n = o.self;'],
+    ['export interface R { window: string | null; self?: number }'],
+    ['export type T = { navigator: number; document: string };'],
   ])('cho qua %s', (source) => {
     expect(findViolations(source)).toEqual([]);
   });
