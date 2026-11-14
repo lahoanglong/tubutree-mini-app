@@ -399,7 +399,16 @@ describe('PancakeSyncService — tồn kho không còn ghi đè tuyệt đối',
 type Model = { findMany: jest.Mock; findUnique: jest.Mock; updateMany: jest.Mock; upsert: jest.Mock; create: jest.Mock; update: jest.Mock };
 type M = { variation: Model; product: Model };
 const mk = (prisma: PrismaService) => prisma as unknown as M;
-const variation = (id: string, over: Record<string, unknown> = {}) => ({ id, sku: id, retail_price: 1000, fields: {}, ...over });
+/** Dữ liệu ghi vào sản phẩm đã có: lệnh `update` chính (không bao giờ mang `description`) cộng mô tả Pancake ghi qua lệnh có điều kiện `updateMany` (W151). */
+const writtenData = (prisma: PrismaService): Record<string, unknown> => {
+  const data = { ...(mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown>) };
+  expect(data).not.toHaveProperty('description');
+  const cas = mk(prisma).product.updateMany.mock.calls.map(([a]) => a as { where: Record<string, unknown>; data: Record<string, unknown> }).filter((a) => 'description' in a.data);
+  expect(cas.length).toBeLessThanOrEqual(1);
+  const [only] = cas;
+  return only ? { ...data, description: only.data.description } : data;
+};
+const variation =(id: string, over: Record<string, unknown> = {}) => ({ id, sku: id, retail_price: 1000, fields: {}, ...over });
 const product = (id: string, variations: unknown[], over: Record<string, unknown> = {}) => ({ id, name: 'Nước rửa chén', variations, ...over });
 
 describe('PANCAKE-11: hàng bị xoá khỏi Pancake thì ngừng bán trên Tubu', () => {
@@ -630,7 +639,7 @@ describe('PANCAKE-12: biến thể thiếu giá không bao giờ thành hàng 0�
 
     const real = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(mine) } });
     await new PancakeSyncService(real, makeClient([[{ ...noImg, description: 'Mô tả từ Pancake' }]]), lifecycle).syncProducts('2026-10-13T00:00:00.000Z');
-    expect(mk(real).product.update.mock.calls[0][0].data).toMatchObject({ description: 'Mô tả từ Pancake' });
+    expect(writtenData(real)).toMatchObject({ description: 'Mô tả từ Pancake' });
   });
 
   it('sản phẩm đang bán, Pancake tạm trả thiếu giá → vẫn bán theo giá cũ (không tự ngừng)', async () => {
@@ -1346,7 +1355,7 @@ describe('PancakeSyncService — chữ catalog admin đã duyệt không bị đ
     const payload = product('w126', [variation('v-w126')], withKey ? { description: pancakeDescription } : {});
     await new PancakeSyncService(prisma, makeClient([[payload]]), lifecycle).syncProducts(SINCE);
     expect(mk(prisma).product.update).toHaveBeenCalledTimes(1);
-    return mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown>;
+    return writtenData(prisma);
   };
 
   it.each([[''], ['   '], ['\n\t  '], [' '], [null], [undefined], [{}], [['x']], [42], [true]])('mô tả Pancake %j: giữ nguyên mô tả đã duyệt', async (pancakeDescription) => {
@@ -1392,7 +1401,7 @@ describe('PancakeSyncService — chữ catalog admin đã duyệt không bị đ
   it('mô tả đang có ngắn hơn 40 ký tự thì chữ Pancake ngắn vẫn là nguồn chính (không có gì giàu hơn để giữ)', async () => {
     const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue({ ...approved, description: 'Sữa hạt điều' }) } });
     await new PancakeSyncService(prisma, makeClient([[product('w126', [variation('v-w126')], { description: 'Sữa hạt điều 400g' })]]), lifecycle).syncProducts(SINCE);
-    expect((mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown>).description).toBe('Sữa hạt điều 400g');
+    expect(writtenData(prisma).description).toBe('Sữa hạt điều 400g');
   });
 
   describe('W149A: mô tả TubuTree từ 80 ký tự là nguồn chuẩn, đồng bộ 15 phút không bao giờ ghi đè', () => {
@@ -1403,7 +1412,7 @@ describe('PancakeSyncService — chữ catalog admin đã duyệt không bị đ
       const payload = { ...product('w126', [variation('v-w126')], { description: pancakeDescription }), name: pancakeName };
       await new PancakeSyncService(prisma, makeClient([[payload]]), lifecycle).syncProducts(SINCE);
       expect(mk(prisma).product.update).toHaveBeenCalledTimes(1);
-      return mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown>;
+      return writtenData(prisma);
     };
 
     it.each([
@@ -1445,23 +1454,32 @@ describe('PancakeSyncService — chữ catalog admin đã duyệt không bị đ
     const ADMIN_NEW = 'Mô tả mới do Admin vừa lưu trong lúc đồng bộ Pancake đang chạy, dài hơn tám mươi ký tự nên vẫn là mô tả giàu.';
     const PANCAKE_120 = 'Mô tả mới do nhân viên gõ bên Pancake POS, dài đủ một trăm hai mươi ký tự để chắc chắn vượt xa mọi ngưỡng ngắn mà lớp bảo vệ cũ từng dùng.';
 
-    /** Hàng Postgres giả: `findUnique` trả ảnh chụp lúc đọc; `update` cho Admin lưu xong TRƯỚC khi lệnh của đồng bộ tới nơi, rồi chỉ áp những khoá có trong `data` (đúng như Postgres). */
-    const raceRun = async (readDescription: string, pancakeDescription: unknown, withKey = true) => {
+    /**
+     * Hàng Postgres giả: `findUnique` trả ảnh chụp lúc đọc; `update` cho Admin lưu xong TRƯỚC khi lệnh của đồng bộ tới nơi, rồi chỉ áp những khoá có trong `data`.
+     * `updateMany` áp `data` chỉ khi mọi điều kiện `where` có mặt khớp hàng hiện tại (đúng như Postgres); `adminSavesAt` chọn lúc Admin chen vào.
+     */
+    const raceRun = async (readDescription: string, pancakeDescription: unknown, withKey = true, adminSavesAt: 'update' | 'never' = 'update') => {
       const row: Record<string, unknown> = { ...approved, description: readDescription };
       const prisma = makePrisma({
         product: {
           findUnique: jest.fn(async () => ({ ...row })),
           update: jest.fn(async ({ data }: { data: Record<string, unknown> }) => {
-            row.description = ADMIN_NEW;
+            if (adminSavesAt === 'update') row.description = ADMIN_NEW;
             Object.assign(row, data);
             return { ...row };
+          }),
+          updateMany: jest.fn(async ({ where, data }: { where: Record<string, unknown>; data: Record<string, unknown> }) => {
+            if (!('description' in data)) return { count: 0 };
+            if ('description' in where && where.description !== row.description) return { count: 0 };
+            Object.assign(row, data);
+            return { count: 1 };
           }),
         },
       });
       const payload = product('w126', [variation('v-w126')], withKey ? { description: pancakeDescription } : {});
       await new PancakeSyncService(prisma, makeClient([[payload]]), lifecycle).syncProducts(SINCE);
       expect(mk(prisma).product.update).toHaveBeenCalledTimes(1);
-      return { row, data: mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown> };
+      return { row, data: writtenData(prisma), prisma };
     };
 
     it.each([
@@ -1494,11 +1512,50 @@ describe('PancakeSyncService — chữ catalog admin đã duyệt không bị đ
       }
     });
 
-    it('chỉ khi Pancake ghi mô tả mới (mô tả đang có chưa đạt chuẩn giàu) thì lệnh update mới mang khoá description', async () => {
-      const { data } = await raceRun('Xoài', PANCAKE_120);
+    it('Pancake ghi mô tả mới (mô tả đang có chưa đạt chuẩn giàu), không ai chen vào: mô tả Pancake được ghi, qua lệnh có điều kiện khớp bản đã đọc', async () => {
+      const { row, data, prisma } = await raceRun('Xoài', PANCAKE_120, true, 'never');
       expect(data.description).toBe(PANCAKE_120);
+      expect(row.description).toBe(PANCAKE_120);
+      const cas = mk(prisma).product.updateMany.mock.calls.map(([a]) => a).filter((a) => 'description' in a.data);
+      expect(cas).toHaveLength(1);
+      expect(cas[0].where).toEqual({ id: approved.id, description: 'Xoài' });
       const html = `<p>${PANCAKE_120}</p>`;
-      expect((await raceRun('', html)).data.description).toBe(html);
+      const second = await raceRun('', html, true, 'never');
+      expect(second.data.description).toBe(html);
+      expect(second.row.description).toBe(html);
+    });
+
+    it('W151: Pancake ghi mô tả mới nhưng Admin lưu bản mới xen giữa lúc đọc và lúc ghi: bản của Admin còn nguyên, Pancake không đè', async () => {
+      for (const readDescription of ['Xoài', '', 'Mô tả admin đã duyệt từ bàn làm việc chất lượng catalog']) {
+        const { row, prisma } = await raceRun(readDescription, PANCAKE_120);
+        expect(row.description).toBe(ADMIN_NEW);
+        const cas = mk(prisma).product.updateMany.mock.calls.map(([a]) => a).filter((a) => 'description' in a.data);
+        expect(cas).toHaveLength(1);
+        expect(cas[0].where.description).toBe(readDescription);
+      }
+    });
+
+    it('W151: CAS trượt thì ghi một dòng log để vận hành biết mô tả Pancake bị bỏ lượt này; CAS khớp thì không log', async () => {
+      const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+      try {
+        await raceRun('Xoài', PANCAKE_120);
+        expect(log.mock.calls.filter(([m]) => String(m).includes('Bỏ qua mô tả Pancake'))).toHaveLength(1);
+        log.mockClear();
+        await raceRun('Xoài', PANCAKE_120, true, 'never');
+        expect(log.mock.calls.filter(([m]) => String(m).includes('Bỏ qua mô tả Pancake'))).toHaveLength(0);
+      } finally {
+        log.mockRestore();
+      }
+    });
+
+    it('W151: lệnh update chính không bao giờ mang khoá description, kể cả khi Pancake ghi mô tả mới', async () => {
+      const { prisma } = await raceRun('Xoài', PANCAKE_120, true, 'never');
+      expect(mk(prisma).product.update.mock.calls[0][0].data).not.toHaveProperty('description');
+    });
+
+    it('W151: giữ mô tả (không ghi mô tả Pancake) thì không có lệnh có điều kiện nào chạm cột description', async () => {
+      const { prisma } = await raceRun(RICH, PANCAKE_120, true, 'never');
+      expect(mk(prisma).product.updateMany.mock.calls.filter(([a]) => 'description' in a.data)).toHaveLength(0);
     });
 
     it('tạo mới luôn mang description: chữ Pancake nếu có, chuỗi rỗng nếu trống', async () => {
@@ -1521,7 +1578,7 @@ describe('PancakeSyncService — chữ catalog admin đã duyệt không bị đ
       const payload = { ...product('w126', [variation('v-w126')], withKey ? { description: pancakeDescription } : {}), name: NEW_NAME };
       await new PancakeSyncService(prisma, makeClient([[payload]]), lifecycle).syncProducts(SINCE);
       expect(mk(prisma).product.update).toHaveBeenCalledTimes(1);
-      return mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown>;
+      return writtenData(prisma);
     };
 
     it('tiền đề: tên cũ và mô tả giàu thật đều từ 80 ký tự', () => {
@@ -1563,7 +1620,7 @@ describe('PancakeSyncService — chữ catalog admin đã duyệt không bị đ
       const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue({ ...approved, name: OLD_NAME, description: OLD_NAME }) } });
       const payload = { ...product('w126', [variation('v-w126')], { description: PANCAKE_120 }), name: OLD_NAME };
       await new PancakeSyncService(prisma, makeClient([[payload]]), lifecycle).syncProducts(SINCE);
-      expect((mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown>).description).toBe(PANCAKE_120);
+      expect(writtenData(prisma).description).toBe(PANCAKE_120);
     });
   });
 
