@@ -96,3 +96,47 @@ describe('BackButton — ROOTS từ nav-config', () => {
     expect(z(screen.getByTestId('shop-top-bar'))).toBeGreaterThan(z(bar));
   });
 });
+
+function setIdx(idx: number) {
+  window.history.replaceState({ idx, key: `k${idx}`, usr: null }, '');
+}
+
+describe('BackButton: lùi thật, không đẩy chồng (W163)', () => {
+  beforeEach(() => {
+    mocks.navigate.mockClear();
+    setIdx(0);
+  });
+  it('tab gốc luôn ẩn nút, kể cả khi state còn `from` (bám theo từ trang khác)', () => {
+    mocks.location = { pathname: '/profile', search: '', state: { from: '/wallet' } };
+    render(<BackButton />);
+    expect(screen.queryByRole('button', { name: 'Quay lại' })).toBeNull();
+    expect(document.body.classList.contains('with-back-btn')).toBe(false);
+  });
+  it('Hồ sơ → Ví → Quay lại: navigate(-1), không navigate("/profile") chồng', () => {
+    setIdx(2);
+    mocks.location = { pathname: '/wallet', search: '', state: { from: '/profile' } };
+    render(<BackButton />);
+    act(() => screen.getByRole('button', { name: 'Quay lại' }).click());
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).toHaveBeenCalledWith(-1);
+  });
+  it('mở thẳng Ví (idx 0) có `from`: replace về trang `from`', () => {
+    mocks.location = { pathname: '/wallet', search: '', state: { from: '/profile' } };
+    render(<BackButton />);
+    act(() => screen.getByRole('button', { name: 'Quay lại' }).click());
+    expect(mocks.navigate).toHaveBeenCalledWith('/profile', { replace: true });
+  });
+  it('mở thẳng trang con không có `from` (idx 0): replace về trang chủ', () => {
+    mocks.location = { pathname: '/orders', search: '', state: null };
+    render(<BackButton />);
+    act(() => screen.getByRole('button', { name: 'Quay lại' }).click());
+    expect(mocks.navigate).toHaveBeenCalledWith('/', { replace: true });
+  });
+  it('trang con có lịch sử, không có `from`: navigate(-1)', () => {
+    setIdx(1);
+    mocks.location = { pathname: '/orders', search: '', state: null };
+    render(<BackButton />);
+    act(() => screen.getByRole('button', { name: 'Quay lại' }).click());
+    expect(mocks.navigate).toHaveBeenCalledWith(-1);
+  });
+});

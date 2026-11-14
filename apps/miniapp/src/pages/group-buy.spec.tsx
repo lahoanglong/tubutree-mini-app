@@ -7,6 +7,7 @@ import { formatVnd } from '../utils/format';
 import { syncServerClock } from '../utils/server-clock';
 
 const mocks = vi.hoisted(() => ({
+  cartCount: 0,
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
   login: vi.fn(),
@@ -40,6 +41,7 @@ vi.mock('../services/groupbuy-api', () => ({
 }));
 vi.mock('../services/shop-api', () => ({ fetchActiveFlashSales: mocks.fetchActiveFlashSales, getPublicConfig: mocks.getPublicConfig }));
 vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.shareWithFallback }));
+vi.mock('../hooks/use-cart-count', () => ({ useCartCount: () => mocks.cartCount }));
 vi.mock('../services/api', () => ({
   getErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
   getLoadErrorMessage: (e: unknown) => (e instanceof Error ? e.message : 'lỗi'),
@@ -81,6 +83,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.fetchActiveFlashSales.mockResolvedValue([]);
   mocks.params = {};
+  mocks.cartCount = 0;
   mocks.auth.status = 'authenticated';
   mocks.auth.user = undefined;
   mocks.auth.error = undefined;
@@ -934,5 +937,18 @@ describe('GroupBuyPage — tải lại nhóm khi máy chủ từ chối tham gia
       renderPage();
       expect(await screen.findByRole('button', { name: JOIN })).not.toBeDisabled();
     });
+  });
+});
+
+describe('GroupBuyPage — lối thoát nhanh vào Giỏ (W163)', () => {
+  it('đầu trang có nút Giỏ hàng 44px kèm số món, bấm đi thẳng /cart', async () => {
+    mocks.cartCount = 3;
+    renderPage();
+    await screen.findByText('Sản phẩm a');
+    const cart = screen.getByRole('button', { name: 'Giỏ hàng, 3 sản phẩm' });
+    expect(cart.style.width).toBe('44px');
+    expect(cart.style.height).toBe('44px');
+    fireEvent.click(cart);
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart');
   });
 });

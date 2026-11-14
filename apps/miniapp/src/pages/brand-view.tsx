@@ -36,6 +36,8 @@ import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { ShopHeader } from '../components/ui/shop-header';
 import { ShopStatsRow } from '../components/ui/shop-stats-row';
 import { ShopTopBar } from '../components/ui/shop-top-bar';
+import { CartButton } from '../components/cart-button';
+import { CAPSULE_INSET_END } from '../utils/capsule';
 import { VoucherTicket } from '../components/ui/voucher-ticket';
 import { ShopProductsTab } from '../components/shop-page/shop-products-tab';
 import { brandPageOrigin } from '../utils/brand-origins';
@@ -180,7 +182,11 @@ export default function BrandViewPage() {
 
   return (
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)' }}>
-      <ShopTopBar title={b.name} />
+      <ShopTopBar title={b.name} endInset={CAPSULE_INSET_END + 52} />
+      {/* Lối thoát nhanh: đi sâu mấy tầng vẫn vào Giỏ một chạm. Nằm cạnh viên thuốc Zalo (góc phải trên luôn của Zalo), trên nền thanh của BackButton (199) và tên shop (200). */}
+      <div style={{ position: 'fixed', top: 'calc(var(--safe-top) + var(--space-stack-sm))', right: CAPSULE_INSET_END + 8, zIndex: 201, borderRadius: 'var(--radius-pill)', boxShadow: 'var(--elevation-2)' }}>
+        <CartButton />
+      </div>
       <ShopHeader
         title={b.name}
         coverUrl={b.coverUrl}

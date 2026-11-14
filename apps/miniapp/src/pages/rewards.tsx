@@ -364,13 +364,20 @@ function GuestRewards() {
   );
 }
 
+/** Thân Kho quà dùng chung cho trang `/rewards` và tab Đổi quà của Ưu đãi (một nguồn, không chép logic đổi quà). */
+export function RewardsView() {
+  return (
+    <AuthGate guest={<GuestRewards />}>
+      <RewardsBody />
+    </AuthGate>
+  );
+}
+
 export default function RewardsPage() {
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title="Kho quà" />
-      <AuthGate guest={<GuestRewards />}>
-        <RewardsBody />
-      </AuthGate>
+      <RewardsView />
     </Page>
   );
 }

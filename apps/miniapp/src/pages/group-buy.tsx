@@ -19,6 +19,8 @@ import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { PageHeader } from '../components/ui/page-header';
+import { CartButton } from '../components/cart-button';
+import { capsuleExtra } from '../utils/capsule';
 import { ProgressBar } from '../components/ui/progress-bar';
 import { Heading, Text } from '../components/ui/text';
 import { useShareWithFallback } from '../components/share-sheet';
@@ -191,7 +193,15 @@ export default function GroupBuyPage() {
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)', paddingBottom: 80 }}>
-      <PageHeader title="Mua chung giá tốt" subtitle="Rủ thêm bạn cho đủ nhóm — đủ người, ai cũng nhận mã giảm giá!" />
+      <PageHeader
+        title="Mua chung giá tốt"
+        subtitle="Rủ thêm bạn cho đủ nhóm — đủ người, ai cũng nhận mã giảm giá!"
+        actions={
+          <div style={{ flex: '0 0 auto', marginRight: capsuleExtra(16) }}>
+            <CartButton />
+          </div>
+        }
+      />
 
       {isLoading ? (
         <div style={{ padding: 8, display: 'flex', flexDirection: 'column', gap: 10 }}>

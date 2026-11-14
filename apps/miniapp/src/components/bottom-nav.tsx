@@ -38,7 +38,8 @@ export default function BottomNav() {
       scrollPageToTop();
       return;
     }
-    navigate(t.path);
+    // Tab gốc ↔ tab gốc thay mục hiện tại (không chồng lịch sử ngang): Back từ tab nào cũng không bị trượt qua hàng loạt tab đã mở.
+    navigate(t.path, { replace: true });
   };
 
   return (
@@ -58,7 +59,7 @@ export default function BottomNav() {
         zIndex: 100,
       }}
     >
-      <GardenHintBubble onGardenTab={pathname === '/game'} onOpenGarden={() => navigate('/game')} />
+      <GardenHintBubble onGardenTab={pathname === '/game'} onOpenGarden={() => navigate('/game', { replace: true })} />
       {NAV_TABS.map((t) => {
         const active = pathname === t.path;
         const count = t.badge === 'active-orders' ? activeOrders : 0;

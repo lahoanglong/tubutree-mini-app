@@ -315,6 +315,17 @@ export const SHOP_COPY: Record<string, string> = {
   'offers.guestPointsTitle': 'Điểm Xanh và điểm danh',
   'offers.guestPointsBody': 'Đăng nhập để xem điểm, hạng và điểm danh nhận thưởng mỗi ngày.',
   'offers.guestMineBody': 'Đăng nhập để xem mã bạn đã lưu và dùng ngay khi mua hàng.',
+  // Trung tâm Ưu đãi: ba phân mục đổi tại chỗ (commerce/offers-hub.ts).
+  'offers.tabsLabel': 'Các mục Ưu đãi',
+  'offers.tabDeals': 'Săn mã',
+  'offers.tabWallet': 'Mã của tôi',
+  'offers.tabRewards': 'Đổi quà',
+  // Dải điểm danh mỏng ở Săn mã: điểm danh làm ở Vườn Xanh, đây chỉ báo trạng thái hôm nay.
+  'offers.checkInDone': 'Hôm nay bạn đã điểm danh',
+  'offers.checkInTodo': 'Hôm nay bạn chưa điểm danh',
+  'offers.openGarden': 'Mở tab Vườn Xanh',
+  'offers.walletMore': 'Nhận thêm mã',
+  'offers.walletHistory': 'Mã đã dùng, hết hạn',
 
   // Combo và mua kèm
   'combo.title': 'Combo tiết kiệm',

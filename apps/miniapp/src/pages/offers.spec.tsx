@@ -55,6 +55,9 @@ vi.mock('../store/auth', () => {
 });
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
+// Kho quà có spec riêng (rewards.spec.tsx); ở đây chỉ kiểm tab Đổi quà nạp nó đúng lúc.
+vi.mock('./rewards', () => ({ RewardsView: () => <div data-testid="rewards-view">Kho quà</div> }));
+
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import OffersPage from './offers';
 
@@ -74,7 +77,7 @@ function renderPage() {
   return render(<QueryClientProvider client={qc}><OffersPage /></QueryClientProvider>);
 }
 
-describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
+describe('Trung tâm Ưu đãi (tab giữa thanh đáy, ba phân mục)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
@@ -97,306 +100,341 @@ describe('Trang Ưu đãi (tab giữa thanh đáy, phương án A)', () => {
     window.HTMLElement.prototype.scrollIntoView = vi.fn();
   });
 
-  it('banner OFFERS_TOP nằm ngay dưới tiêu đề trang, trên cả thẻ Điểm Xanh', async () => {
-    const live = {
-      id: 'c1', slug: 'giua-thu', title: 'Giữa Thu', image: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', linkType: 'CAMPAIGN_PAGE', linkValue: null, audience: 'ALL',
-      startAt: new Date(Date.now() - 86_400_000).toISOString(), endAt: new Date(Date.now() + 86_400_000).toISOString(),
-    };
-    mocks.campaigns.mockResolvedValue([live]);
-    renderPage();
-    const banner = await screen.findByRole('region', { name: 'Chương trình nổi bật' });
-    expect(mocks.campaigns).toHaveBeenCalledWith('/campaigns', expect.objectContaining({ query: { placement: 'OFFERS_TOP' } }));
-    const points = await screen.findByRole('region', { name: /Điểm Xanh/ });
-    expect(banner.compareDocumentPosition(points) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Giữa Thu' })).toHaveAttribute('href', '/campaign/giua-thu');
-  });
+  const goTab = (name: string) => fireEvent.click(screen.getByRole('tab', { name }));
+  const manyCoupons = (n: number) => Array.from({ length: n }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) }));
+  const LIVE_CAMPAIGN = {
+    id: 'c1', slug: 'giua-thu', title: 'Giữa Thu', image: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', linkType: 'CAMPAIGN_PAGE', linkValue: null, audience: 'ALL',
+    startAt: new Date(Date.now() - 86_400_000).toISOString(), endAt: new Date(Date.now() + 86_400_000).toISOString(),
+  };
 
-  it('khách chưa đăng nhập vẫn thấy banner đầu trang (ngoài nhánh đăng nhập)', async () => {
-    mocks.phase = 'guest';
-    mocks.campaigns.mockResolvedValue([
-      { id: 'c1', slug: 'a', title: 'Chương trình A', image: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', linkType: 'CAMPAIGN_PAGE', linkValue: null, audience: 'ALL', startAt: new Date(Date.now() - 1000).toISOString(), endAt: new Date(Date.now() + 86_400_000).toISOString() },
-    ]);
-    renderPage();
-    expect(await screen.findByRole('link', { name: 'Chương trình A' })).toBeInTheDocument();
-  });
-
-  it('có đủ: thẻ Điểm Xanh và hạng, Điểm danh, Đổi quà, Quà của tôi, Đổi rác, Tích điểm đơn sàn, Mua chung, Mã giảm giá của tôi', async () => {
-    renderPage();
-    expect(await screen.findByText('Mầm Xanh')).toBeInTheDocument();
-    expect(await screen.findByRole('heading', { name: 'Điểm danh mỗi ngày' })).toBeInTheDocument();
-    for (const t of ['Đổi quà', 'Quà của tôi', 'Đổi rác lấy quà', 'Tích điểm đơn sàn', 'Mua chung nhóm']) {
-      expect(screen.getByText(t)).toBeInTheDocument();
-    }
-    expect(await screen.findByText('Giảm 25k')).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: 'Mã của tôi' })).toBeInTheDocument();
-  });
-
-  it('cờ Đổi rác và Tích điểm đơn sàn tắt → hai dòng đó bị ẩn, phần còn lại giữ nguyên', async () => {
-    mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
-    renderPage();
-    await screen.findByText('Quà của tôi');
-    expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
-    expect(screen.queryByText('Tích điểm đơn sàn')).toBeNull();
-    expect(screen.getByText('Mua chung nhóm')).toBeInTheDocument();
-  });
-
-  it('các dòng điều hướng đúng trang', async () => {
-    renderPage();
-    fireEvent.click(await screen.findByText('Đổi quà'));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/rewards');
-    fireEvent.click(screen.getByText('Đổi rác lấy quà'));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
-    fireEvent.click(screen.getByText('Mua chung nhóm'));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/group-buy');
-    fireEvent.click(screen.getByRole('button', { name: /Hạng và lịch sử điểm/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/loyalty');
-  });
-
-  it('nút điểm danh dùng luồng sẵn có (POST check-in), không đổi mức thưởng', async () => {
-    mocks.postCheckIn.mockResolvedValue({ success: true, message: 'Đã điểm danh +8 điểm', pointsEarned: 8 });
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Điểm danh/ }));
-    await waitFor(() => expect(mocks.postCheckIn).toHaveBeenCalledTimes(1));
-  });
-
-  it('Mã của tôi chỉ xếp 3 phiếu; từ 4 mã trở lên nút ghi "Tất cả (n)", tên đọc giữ đủ số ("Tất cả (8) Mã của tôi"), bỏ chữ "n mã" cũ', async () => {
-    mocks.getCoupons.mockResolvedValue(Array.from({ length: 8 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) })));
-    renderPage();
-    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
-    await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
-    const all = within(mine).getByRole('button', { name: 'Tất cả (8) Mã của tôi' });
-    expect(all).toHaveTextContent('Tất cả (8)');
-    expect(mine.textContent).not.toMatch(/\b8 mã/);
-    fireEvent.click(all);
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=mine');
-  });
-
-  it('chấm đỏ: ví có 4 mã sắp hết hạn mà trang chỉ vẽ 3 thì chỉ 3 mã vào danh sách đã xem (mã thứ 4 chưa ai thấy)', async () => {
-    const soon = (i: number) => ({ ...COUPON, code: `SOON-${i}`, endAt: new Date(Date.now() + (i + 1) * 3_600_000).toISOString() });
-    mocks.getCoupons.mockResolvedValue([0, 1, 2, 3].map(soon));
-    renderPage();
-    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
-    await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
-    await waitFor(() => expect(localStorage.getItem('tubu_offers_seen_coupons')).not.toBeNull());
-    const seen = JSON.parse(localStorage.getItem('tubu_offers_seen_coupons')!) as { items: string[] };
-    expect(seen.items.map((k) => k.split('@')[0]).sort()).toEqual(['SOON-0', 'SOON-1', 'SOON-2']);
-  });
-
-  it('Mã của tôi đúng 3 mã: đủ 3 phiếu, nút cũng ghi "Tất cả (3)" (một mẫu, đếm đúng số trang đích sẽ vẽ)', async () => {
-    mocks.getCoupons.mockResolvedValue(Array.from({ length: 3 }, (_, i) => ({ ...COUPON, code: `MA-${i}`, value: 10_000 * (i + 1) })));
-    renderPage();
-    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
-    await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(3));
-    expect(within(mine).getByRole('button', { name: 'Tất cả (3) Mã của tôi' })).toHaveTextContent('Tất cả (3)');
-  });
-
-  it('chưa có mã nào → trạng thái rỗng có hướng dẫn đổi quà, không có nút xem tất cả', async () => {
-    mocks.getCoupons.mockResolvedValue([]);
-    renderPage();
-    expect(await screen.findByText('Chưa có mã giảm giá khả dụng')).toBeInTheDocument();
-    const mine = screen.getByRole('region', { name: 'Mã của tôi' });
-    expect(within(mine).queryByRole('button', { name: /tất cả/i })).toBeNull();
-  });
-
-  it('?section=coupons cuộn tới phần mã giảm giá khi dữ liệu mã đã về', async () => {
-    mocks.search = '?section=coupons';
-    renderPage();
-    await screen.findByText('Giảm 25k');
-    await waitFor(() => expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled());
-  });
-
-  it('lỗi tải mã → báo tại chỗ và có "Thử lại", các phần khác vẫn hiện', async () => {
-    mocks.getCoupons.mockRejectedValue(new Error('boom'));
-    renderPage();
-    expect(await screen.findByText(/Chưa tải được mã giảm giá/)).toBeInTheDocument();
-    expect(screen.getByText('Quà của tôi')).toBeInTheDocument();
-  });
-
-  it('tài khoản khách Mini App thấy thẻ liên kết Zalo; khách thật thì không', async () => {
-    const first = renderPage();
-    await screen.findByText('Quà của tôi');
-    expect(screen.queryByText('Liên kết Zalo để giữ điểm và nhận quà')).toBeNull();
-    first.unmount();
-    mocks.guest = true;
-    renderPage();
-    expect(await screen.findByText('Liên kết Zalo để giữ điểm và nhận quà')).toBeInTheDocument();
-  });
-
-  it('tài khoản khách bị chặn Điểm Xanh: cả trang chỉ một nút "Liên kết Zalo" (ở thẻ mời), thẻ điểm danh không lặp ghi chú', async () => {
-    mocks.guest = true;
-    mocks.getCheckIn.mockResolvedValue({ checkedInToday: false, streakDays: 0, currentCycleDay: 1, todayPoints: 0, todayWater: 10, pointsBlocked: 'GUEST', rewards: REWARDS });
-    renderPage();
-    expect(await screen.findByRole('heading', { name: 'Điểm danh mỗi ngày' })).toBeInTheDocument();
-    // Ghi chú là chunk nạp lười: nạp trước rồi chờ một nhịp, để "không thấy" nghĩa là không vẽ chứ không phải chưa tới.
-    await import('../components/loyalty/guest-points-note');
-    await new Promise((r) => setTimeout(r, 50));
-    expect(screen.getAllByRole('button', { name: homeCopy.profile.guestCta })).toHaveLength(1);
-    expect(screen.queryByTestId('guest-points-note')).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Đăng nhập Zalo' })).toBeNull();
-  });
-
-  it('chưa đăng nhập → thẻ mời đăng nhập ở khối cần tài khoản, không gọi API ưu đãi', async () => {
-    mocks.phase = 'guest';
-    renderPage();
-    expect(await screen.findByRole('region', { name: 'Điểm Xanh và điểm danh' })).toBeInTheDocument();
-    expect(mocks.getLoyalty).not.toHaveBeenCalled();
-    expect(mocks.getCoupons).not.toHaveBeenCalled();
-  });
-
-  it('thẻ mời của khách: tiêu đề dưới 22px dùng Inter, không Fraunces (Q1)', async () => {
-    mocks.phase = 'guest';
-    renderPage();
-    const region = await screen.findByRole('region', { name: 'Điểm Xanh và điểm danh' });
-    const h = within(region).getByRole('heading', { level: 2 });
-    expect(h.style.fontFamily).toContain('--font-ui');
-    expect(h.style.fontFamily).not.toContain('--font-display');
-  });
-
-  it('tên đọc của thẻ Điểm Xanh chứa hạng và số điểm đang hiển thị', async () => {
-    renderPage();
-    const card = await screen.findByRole('button', { name: /Hạng và lịch sử điểm/ });
-    await waitFor(() => expect(card).toHaveAccessibleName(/^Mầm Xanh, Hạng và lịch sử điểm, 120 điểm/));
-  });
-
-  it('chưa có số hạng: không đoán "Mầm Xanh", giữ chỗ thanh tiến độ; lỗi thì báo và "Thử lại" gọi lại', async () => {
-    mocks.getLoyalty.mockRejectedValueOnce(new Error('boom'));
-    renderPage();
-    expect(await screen.findByText('Chưa tải được hạng và điểm')).toBeInTheDocument();
-    expect(screen.queryByText('Mầm Xanh')).toBeNull();
-    expect(screen.queryByRole('progressbar')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
-    expect(await screen.findByText('Mầm Xanh')).toBeInTheDocument();
-    expect(screen.queryByText('Chưa tải được hạng và điểm')).toBeNull();
-  });
-
-  it('đang trong hạn giữ hạng: dòng giữ hạng, không vẽ thanh tiến độ lên hạng kế', async () => {
-    mocks.getLoyalty.mockResolvedValue({
-      pointsBalance: 100, pointsConvertedBalance: 20, tier: { name: 'Lộc Biếc' }, nextTier: null,
-      tierGrace: { until: '2026-11-07T00:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 30_000 },
+  describe('thanh tab và đổi tab', () => {
+    it('ba tab Săn mã, Mã của tôi, Đổi quà; mặc định Săn mã đang chọn', async () => {
+      renderPage();
+      const tabs = await screen.findAllByRole('tab');
+      expect(tabs.map((t) => t.textContent)).toEqual(['Săn mã', 'Mã của tôi', 'Đổi quà']);
+      expect(screen.getByRole('tablist', { name: 'Các mục Ưu đãi' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Săn mã' })).toHaveAttribute('aria-selected', 'true');
+      expect(screen.getByRole('tabpanel', { name: 'Săn mã' })).toBeInTheDocument();
     });
-    renderPage();
-    expect(await screen.findByText(/Giữ hạng Lộc Biếc: đơn giao thành công thêm 400.000đ trước 07\/11\/2026/)).toBeInTheDocument();
-    expect(screen.queryByRole('progressbar')).toBeNull();
+    it('bấm tab: đổi tại chỗ bằng replace (Back không tua từng tab); tab mặc định không kèm tham số', async () => {
+      renderPage();
+      await screen.findAllByRole('tab');
+      goTab('Mã của tôi');
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?tab=wallet', { replace: true });
+      goTab('Đổi quà');
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?tab=rewards', { replace: true });
+    });
+    it('đang ở Mã của tôi, bấm Săn mã: về /offers bằng replace; bấm lại đúng tab đang chọn thì không làm gì', async () => {
+      mocks.search = '?tab=wallet';
+      renderPage();
+      await screen.findAllByRole('tab');
+      goTab('Mã của tôi');
+      expect(mocks.navigate).not.toHaveBeenCalled();
+      goTab('Săn mã');
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/offers', { replace: true });
+    });
+    it('tab lạ trên URL: về Săn mã', async () => {
+      mocks.search = '?tab=claim';
+      renderPage();
+      expect(await screen.findByRole('tab', { name: 'Săn mã' })).toHaveAttribute('aria-selected', 'true');
+    });
+    it('link cũ ?section=coupons mở thẳng tab Mã của tôi', async () => {
+      mocks.search = '?section=coupons';
+      renderPage();
+      expect(await screen.findByRole('tab', { name: 'Mã của tôi' })).toHaveAttribute('aria-selected', 'true');
+      expect(await screen.findByText('Giảm 25k')).toBeInTheDocument();
+    });
   });
 
-  it('không trong hạn giữ hạng: vẫn có thanh tiến độ lên hạng kế', async () => {
-    renderPage();
-    await screen.findByText('Mầm Xanh');
-    expect(await screen.findByRole('progressbar', { name: 'Tiến độ lên hạng kế' })).toBeInTheDocument();
+  describe('tab Săn mã', () => {
+    it('banner OFFERS_TOP nằm ngay dưới thanh tab, trên cả thẻ Điểm Xanh', async () => {
+      mocks.campaigns.mockResolvedValue([LIVE_CAMPAIGN]);
+      renderPage();
+      const banner = await screen.findByRole('region', { name: 'Chương trình nổi bật' });
+      expect(mocks.campaigns).toHaveBeenCalledWith('/campaigns', expect.objectContaining({ query: { placement: 'OFFERS_TOP' } }));
+      const points = await screen.findByRole('region', { name: /Điểm Xanh/ });
+      expect(banner.compareDocumentPosition(points) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(screen.getByRole('link', { name: 'Giữa Thu' })).toHaveAttribute('href', '/campaign/giua-thu');
+    });
+
+    it('thứ tự: Banner, Giờ vàng, Nhận mã, Điểm Xanh, dải điểm danh', async () => {
+      mocks.campaigns.mockResolvedValue([LIVE_CAMPAIGN]);
+      mocks.flash.mockResolvedValue([FLASH_ITEM]);
+      mocks.collectable.mockResolvedValue([OPEN_CODE]);
+      renderPage();
+      const regions = [
+        await screen.findByRole('region', { name: 'Chương trình nổi bật' }),
+        await screen.findByRole('region', { name: 'Giờ vàng hôm nay' }),
+        await screen.findByRole('region', { name: 'Nhận mã' }),
+        await screen.findByRole('region', { name: /Điểm Xanh/ }),
+        await screen.findByRole('region', { name: 'Hôm nay bạn chưa điểm danh' }),
+      ];
+      for (let i = 1; i < regions.length; i++) {
+        expect(regions[i - 1]!.compareDocumentPosition(regions[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `khối ${i}`).toBeTruthy();
+      }
+    });
+
+    it('không còn mã của tôi, Kho quà hay thẻ điểm danh đầy đủ ở tab này; Kho quà chưa nạp', async () => {
+      renderPage();
+      await screen.findByText('Mầm Xanh');
+      expect(screen.queryByRole('region', { name: 'Mã của tôi' })).toBeNull();
+      expect(screen.queryByRole('heading', { name: 'Điểm danh mỗi ngày' })).toBeNull();
+      expect(screen.queryByTestId('rewards-view')).toBeNull();
+      expect(screen.queryByText('Quà của tôi')).toBeNull();
+    });
+
+    it('dải điểm danh chỉ báo trạng thái hôm nay và mở tab Vườn Xanh, không gọi POST check-in', async () => {
+      renderPage();
+      const strip = await screen.findByRole('region', { name: 'Hôm nay bạn chưa điểm danh' });
+      expect(within(strip).getByText('Mở tab Vườn Xanh')).toBeInTheDocument();
+      fireEvent.click(within(strip).getByRole('button'));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/game', { replace: true });
+      expect(mocks.postCheckIn).not.toHaveBeenCalled();
+    });
+
+    it('đã điểm danh hôm nay: dải ghi "đã điểm danh"', async () => {
+      mocks.getCheckIn.mockResolvedValue({ checkedInToday: true, streakDays: 4, currentCycleDay: 5, todayPoints: 0, rewards: REWARDS });
+      renderPage();
+      expect(await screen.findByRole('region', { name: 'Hôm nay bạn đã điểm danh' })).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Hôm nay bạn chưa điểm danh' })).toBeNull();
+    });
+
+    it('tiện ích: Mua chung nhóm và Tích điểm đơn sàn; cờ tắt thì ẩn Tích điểm đơn sàn', async () => {
+      const first = renderPage();
+      expect(await screen.findByText('Mua chung nhóm')).toBeInTheDocument();
+      expect(screen.getByText('Tích điểm đơn sàn')).toBeInTheDocument();
+      fireEvent.click(screen.getByText('Mua chung nhóm'));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/group-buy');
+      first.unmount();
+      mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
+      renderPage();
+      await screen.findByText('Mua chung nhóm');
+      expect(screen.queryByText('Tích điểm đơn sàn')).toBeNull();
+    });
+
+    it('thẻ Điểm Xanh dẫn tới /loyalty; tên đọc chứa hạng và số điểm', async () => {
+      renderPage();
+      const card = await screen.findByRole('button', { name: /Hạng và lịch sử điểm/ });
+      await waitFor(() => expect(card).toHaveAccessibleName(/^Mầm Xanh, Hạng và lịch sử điểm, 120 điểm/));
+      fireEvent.click(card);
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/loyalty');
+    });
+
+    it('chưa có số hạng: không đoán "Mầm Xanh", giữ chỗ thanh tiến độ; lỗi thì báo và "Thử lại" gọi lại', async () => {
+      mocks.getLoyalty.mockRejectedValueOnce(new Error('boom'));
+      renderPage();
+      expect(await screen.findByText('Chưa tải được hạng và điểm')).toBeInTheDocument();
+      expect(screen.queryByText('Mầm Xanh')).toBeNull();
+      expect(screen.queryByRole('progressbar')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Thử lại' }));
+      expect(await screen.findByText('Mầm Xanh')).toBeInTheDocument();
+      expect(screen.queryByText('Chưa tải được hạng và điểm')).toBeNull();
+    });
+
+    it('đang trong hạn giữ hạng: dòng giữ hạng, không vẽ thanh tiến độ lên hạng kế', async () => {
+      mocks.getLoyalty.mockResolvedValue({
+        pointsBalance: 100, pointsConvertedBalance: 20, tier: { name: 'Lộc Biếc' }, nextTier: null,
+        tierGrace: { until: '2026-11-07T00:00:00.000Z', spendingToKeep: 400_000, pointsToKeep: 30_000 },
+      });
+      renderPage();
+      expect(await screen.findByText(/Giữ hạng Lộc Biếc: đơn giao thành công thêm 400.000đ trước 07\/11\/2026/)).toBeInTheDocument();
+      expect(screen.queryByRole('progressbar')).toBeNull();
+    });
+
+    it('không trong hạn giữ hạng: vẫn có thanh tiến độ lên hạng kế', async () => {
+      renderPage();
+      await screen.findByText('Mầm Xanh');
+      expect(await screen.findByRole('progressbar', { name: 'Tiến độ lên hạng kế' })).toBeInTheDocument();
+    });
+
+    it('tài khoản khách Mini App thấy thẻ liên kết Zalo (một nút duy nhất); khách thật thì không', async () => {
+      const first = renderPage();
+      await screen.findByText('Mầm Xanh');
+      expect(screen.queryByText('Liên kết Zalo để giữ điểm và nhận quà')).toBeNull();
+      first.unmount();
+      mocks.guest = true;
+      mocks.getCheckIn.mockResolvedValue({ checkedInToday: false, streakDays: 0, currentCycleDay: 1, todayPoints: 0, todayWater: 10, pointsBlocked: 'GUEST', rewards: REWARDS });
+      renderPage();
+      expect(await screen.findByText('Liên kết Zalo để giữ điểm và nhận quà')).toBeInTheDocument();
+      expect(screen.getAllByRole('button', { name: homeCopy.profile.guestCta })).toHaveLength(1);
+      expect(screen.queryByRole('button', { name: 'Đăng nhập Zalo' })).toBeNull();
+    });
+
+    it('khách chưa đăng nhập: vẫn thấy banner, Giờ vàng, Nhận mã, một thẻ mời "Đăng nhập"; không gọi API riêng của khách', async () => {
+      mocks.phase = 'guest';
+      mocks.campaigns.mockResolvedValue([LIVE_CAMPAIGN]);
+      mocks.flash.mockResolvedValue([FLASH_ITEM]);
+      mocks.collectable.mockResolvedValue([OPEN_CODE]);
+      renderPage();
+      const banner = await screen.findByRole('link', { name: 'Giữa Thu' });
+      const flash = await screen.findByRole('region', { name: 'Giờ vàng hôm nay' });
+      const collect = await screen.findByRole('region', { name: 'Nhận mã' });
+      const points = await screen.findByRole('region', { name: 'Điểm Xanh và điểm danh' });
+      const blocks = [banner, flash, collect, points];
+      for (let i = 1; i < blocks.length; i++) {
+        expect(blocks[i - 1]!.compareDocumentPosition(blocks[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `khối ${i}`).toBeTruthy();
+      }
+      expect(screen.getAllByRole('button', { name: 'Đăng nhập' })).toHaveLength(1);
+      expect(screen.queryByRole('region', { name: /điểm danh$/i })?.textContent ?? '').not.toContain('Vườn Xanh');
+      expect(mocks.getLoyalty).not.toHaveBeenCalled();
+      expect(mocks.getCoupons).not.toHaveBeenCalled();
+      expect(mocks.getCheckIn).not.toHaveBeenCalled();
+    });
+
+    it('thẻ mời của khách: tiêu đề dưới 22px dùng Inter, không Fraunces (Q1)', async () => {
+      mocks.phase = 'guest';
+      renderPage();
+      const region = await screen.findByRole('region', { name: 'Điểm Xanh và điểm danh' });
+      const h = within(region).getByRole('heading', { level: 2 });
+      expect(h.style.fontFamily).toContain('--font-ui');
+      expect(h.style.fontFamily).not.toContain('--font-display');
+    });
+
+    it('Nhận mã tải lỗi: báo tại chỗ có "Thử lại", các khối khác vẫn vẽ', async () => {
+      mocks.collectable.mockRejectedValue({ isHttpError: true, response: { status: 500, data: { message: 'x' } } });
+      renderPage();
+      const collect = await screen.findByRole('region', { name: 'Nhận mã' });
+      expect(within(collect).getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+      expect(screen.getByText('Mua chung nhóm')).toBeInTheDocument();
+    });
+
+    it('phiên đang khôi phục hoặc mất mạng: không mời đăng nhập (người dùng có thể đang có phiên)', async () => {
+      mocks.phase = 'loading';
+      const first = renderPage();
+      await screen.findByRole('tab', { name: 'Săn mã' });
+      expect(screen.queryByRole('button', { name: 'Đăng nhập' })).toBeNull();
+      first.unmount();
+      mocks.phase = 'unavailable';
+      renderPage();
+      await screen.findByRole('tab', { name: 'Săn mã' });
+      expect(screen.queryByRole('button', { name: 'Đăng nhập' })).toBeNull();
+    });
   });
 
-  it('mã sắp hết hạn có chữ "Còn n ngày" tông cảnh báo; mã còn xa thì chữ "Dùng đến"', async () => {
-    const soon = new Date(Date.now() + 2 * 86_400_000).toISOString();
-    const far = new Date(Date.now() + 30 * 86_400_000).toISOString();
-    mocks.getCoupons.mockResolvedValue([{ ...COUPON, code: 'SOON', endAt: soon }, { ...COUPON, endAt: far }]);
-    renderPage();
-    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
-    const expiries = await within(mine).findAllByTestId('voucher-expiry');
-    expect(expiries.map((e) => e.textContent)).toEqual(['Còn 2 ngày', expect.stringMatching(/^Dùng đến \d{2}\/\d{2}$/)]);
-    expect(expiries[0]!.style.color).toBe('var(--color-status-warning-fg)');
-    expect(expiries[1]!.style.color).toBe('var(--color-text-tertiary)');
+  describe('tab Mã của tôi', () => {
+    beforeEach(() => {
+      mocks.search = '?tab=wallet';
+    });
+
+    it('xếp CẢ ví (không cắt ở 3), mỗi phiếu có "Dùng ngay"; không còn nút "Tất cả (n)"', async () => {
+      mocks.getCoupons.mockResolvedValue(manyCoupons(8));
+      renderPage();
+      const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+      await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(8));
+      expect(within(mine).getAllByRole('button', { name: 'Dùng ngay' })).toHaveLength(8);
+      expect(within(mine).queryByRole('button', { name: /Tất cả/ })).toBeNull();
+    });
+
+    it('"Dùng ngay" dùng luồng coupon-use có sẵn (đi giỏ hoặc sản phẩm), không sang trang /vouchers', async () => {
+      renderPage();
+      const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+      fireEvent.click(await within(mine).findByRole('button', { name: 'Dùng ngay' }));
+      await waitFor(() => expect(mocks.navigate).toHaveBeenCalled());
+      expect(mocks.navigate).not.toHaveBeenCalledWith('/vouchers');
+      expect(mocks.navigate).not.toHaveBeenCalledWith('/vouchers?tab=mine');
+    });
+
+    it('hàng "Mã đã dùng, hết hạn" mở lịch sử ở trang Mã giảm giá', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByText('Mã đã dùng, hết hạn'));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=history');
+    });
+
+    it('chưa có mã nào: trạng thái rỗng, nút "Nhận thêm mã" về tab Săn mã bằng replace', async () => {
+      mocks.getCoupons.mockResolvedValue([]);
+      renderPage();
+      expect(await screen.findByText('Chưa có mã giảm giá khả dụng')).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Nhận thêm mã' }));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/offers', { replace: true });
+    });
+
+    it('lỗi tải mã: báo tại chỗ và có "Thử lại"', async () => {
+      mocks.getCoupons.mockRejectedValue(new Error('boom'));
+      renderPage();
+      expect(await screen.findByText(/Chưa tải được mã giảm giá/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    });
+
+    it('mã sắp hết hạn có chữ "Còn n ngày" tông cảnh báo; mã còn xa thì chữ "Dùng đến"', async () => {
+      const soon = new Date(Date.now() + 2 * 86_400_000).toISOString();
+      const far = new Date(Date.now() + 30 * 86_400_000).toISOString();
+      mocks.getCoupons.mockResolvedValue([{ ...COUPON, code: 'SOON', endAt: soon }, { ...COUPON, endAt: far }]);
+      renderPage();
+      const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+      const expiries = await within(mine).findAllByTestId('voucher-expiry');
+      expect(expiries.map((e) => e.textContent)).toEqual(['Còn 2 ngày', expect.stringMatching(/^Dùng đến \d{2}\/\d{2}$/)]);
+      expect(expiries[0]!.style.color).toBe('var(--color-status-warning-fg)');
+      expect(expiries[1]!.style.color).toBe('var(--color-text-tertiary)');
+    });
+
+    it('chấm đỏ: cả ví đã hiện nên cả 4 mã sắp hết hạn vào danh sách đã xem', async () => {
+      const soon = (i: number) => ({ ...COUPON, code: `SOON-${i}`, endAt: new Date(Date.now() + (i + 1) * 3_600_000).toISOString() });
+      mocks.getCoupons.mockResolvedValue([0, 1, 2, 3].map(soon));
+      renderPage();
+      const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
+      await waitFor(() => expect(within(mine).getAllByRole('group')).toHaveLength(4));
+      await waitFor(() => expect(localStorage.getItem('tubu_offers_seen_coupons')).not.toBeNull());
+      const seen = JSON.parse(localStorage.getItem('tubu_offers_seen_coupons')!) as { items: string[] };
+      expect(seen.items.map((k) => k.split('@')[0]).sort()).toEqual(['SOON-0', 'SOON-1', 'SOON-2', 'SOON-3']);
+    });
+
+    it('chấm đỏ chưa tắt khi khách mới ở tab Săn mã (chưa thấy ví)', async () => {
+      mocks.search = '';
+      const soon = { ...COUPON, code: 'SOON-0', endAt: new Date(Date.now() + 3_600_000).toISOString() };
+      mocks.getCoupons.mockResolvedValue([soon]);
+      renderPage();
+      await screen.findByText('Mầm Xanh');
+      await waitFor(() => expect(mocks.getCoupons).toHaveBeenCalled());
+      expect(localStorage.getItem('tubu_offers_seen_coupons')).toBeNull();
+    });
+
+    it('khách chưa đăng nhập: thẻ mời "Đăng nhập" (bấm gọi đăng nhập), không gọi API ví', async () => {
+      mocks.phase = 'guest';
+      renderPage();
+      const invite = await screen.findByRole('button', { name: 'Đăng nhập' });
+      fireEvent.click(invite);
+      expect(mocks.login).toHaveBeenCalledTimes(1);
+      expect(mocks.getCoupons).not.toHaveBeenCalled();
+    });
   });
 
-  it('Mã của tôi: mỗi thẻ có nút "Dùng ngay"; "Tất cả (n)" tới /vouchers?tab=mine', async () => {
-    renderPage();
-    const mine = await screen.findByRole('region', { name: 'Mã của tôi' });
-    expect(await within(mine).findByRole('button', { name: 'Dùng ngay' })).toBeInTheDocument();
-    fireEvent.click(within(mine).getByRole('button', { name: /Tất cả \(1\)/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=mine');
-  });
+  describe('tab Đổi quà', () => {
+    beforeEach(() => {
+      mocks.search = '?tab=rewards';
+    });
 
-  it('thứ tự trang theo Q10: Banner, Giờ vàng, Nhận mã, Điểm Xanh, Mã của tôi, Đổi quà', async () => {
-    mocks.campaigns.mockResolvedValue([
-      { id: 'c1', slug: 'giua-thu', title: 'Giữa Thu', image: 'data:image/gif;base64,R0lGODlhAQABAAAAACw=', linkType: 'CAMPAIGN_PAGE', linkValue: null, audience: 'ALL', startAt: new Date(Date.now() - 86_400_000).toISOString(), endAt: new Date(Date.now() + 86_400_000).toISOString() },
-    ]);
-    mocks.flash.mockResolvedValue([FLASH_ITEM]);
-    mocks.collectable.mockResolvedValue([OPEN_CODE]);
-    renderPage();
-    const regions = [
-      await screen.findByRole('region', { name: 'Chương trình nổi bật' }),
-      await screen.findByRole('region', { name: 'Giờ vàng hôm nay' }),
-      await screen.findByRole('region', { name: 'Nhận mã' }),
-      await screen.findByRole('region', { name: /Điểm Xanh/ }),
-      await screen.findByRole('region', { name: 'Mã của tôi' }),
-      await screen.findByRole('region', { name: /Đổi quà/ }),
-    ];
-    for (let i = 1; i < regions.length; i++) {
-      expect(regions[i - 1]!.compareDocumentPosition(regions[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `khối ${i}`).toBeTruthy();
-    }
-  });
+    it('nạp Kho quà tại chỗ, kèm dải sang Điểm Xanh (hạng, lịch sử điểm) và Đổi rác', async () => {
+      renderPage();
+      expect(await screen.findByTestId('rewards-view')).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Đổi quà' })).toHaveAttribute('aria-selected', 'true');
+      fireEvent.click(screen.getByText('Hạng và lịch sử điểm'));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/loyalty');
+      fireEvent.click(screen.getByText('Đổi rác lấy quà'));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
+    });
 
-  it('khách chưa đăng nhập: Giờ vàng, Nhận mã, rồi mỗi khối cần tài khoản một thẻ mời cùng nhãn "Đăng nhập", Đổi quà vẫn hiện; không gọi API riêng của khách', async () => {
-    mocks.phase = 'guest';
-    mocks.flash.mockResolvedValue([FLASH_ITEM]);
-    mocks.collectable.mockResolvedValue([OPEN_CODE]);
-    renderPage();
-    const flash = await screen.findByRole('region', { name: 'Giờ vàng hôm nay' });
-    const collect = await screen.findByRole('region', { name: 'Nhận mã' });
-    const points = await screen.findByRole('region', { name: 'Điểm Xanh và điểm danh' });
-    const mine = screen.getByRole('region', { name: 'Mã của tôi' });
-    const rewards = screen.getByRole('region', { name: 'Đổi quà' });
-    const blocks = [flash, collect, points, mine, rewards];
-    for (let i = 1; i < blocks.length; i++) {
-      expect(blocks[i - 1]!.compareDocumentPosition(blocks[i]!) & Node.DOCUMENT_POSITION_FOLLOWING, `khối ${i}`).toBeTruthy();
-    }
-    expect(screen.getAllByRole('button', { name: 'Đăng nhập' })).toHaveLength(2);
-    expect(screen.queryByRole('button', { name: 'Đăng nhập ngay' })).toBeNull();
-    expect(screen.queryByText('Đăng nhập để xem ưu đãi')).toBeNull();
-    expect(within(rewards).getByText('Quà của tôi')).toBeInTheDocument();
-    expect(within(rewards).getByText('Vườn Xanh')).toBeInTheDocument();
-    fireEvent.click(within(mine).getByRole('button', { name: 'Đăng nhập' }));
-    expect(mocks.login).toHaveBeenCalledTimes(1);
-    expect(mocks.getLoyalty).not.toHaveBeenCalled();
-    expect(mocks.getCoupons).not.toHaveBeenCalled();
-  });
+    it('Đổi rác tạm dừng mà khách còn yêu cầu mở: dòng đổi thành "Yêu cầu của tôi"; hết yêu cầu thì ẩn', async () => {
+      mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
+      mocks.recycleOpen = true;
+      const first = renderPage();
+      expect(await screen.findByText('Yêu cầu của tôi')).toBeInTheDocument();
+      expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
+      fireEvent.click(screen.getByText('Yêu cầu của tôi'));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
+      first.unmount();
+      mocks.recycleOpen = false;
+      renderPage();
+      await screen.findByTestId('rewards-view');
+      expect(screen.queryByText('Yêu cầu của tôi')).toBeNull();
+      expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
+    });
 
-  it('phiên đang khôi phục hoặc mất mạng: không mời đăng nhập (người dùng có thể đang có phiên)', async () => {
-    mocks.phase = 'loading';
-    const first = renderPage();
-    await screen.findByRole('region', { name: 'Chương trình nổi bật' }).catch(() => undefined);
-    expect(screen.queryByRole('button', { name: 'Đăng nhập' })).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Đổi quà' })).toBeNull();
-    first.unmount();
-    mocks.phase = 'unavailable';
-    renderPage();
-    expect(await screen.findByRole('button', { name: /Thử lại/ })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Đăng nhập' })).toBeNull();
-    expect(screen.queryByRole('region', { name: 'Mã của tôi' })).toBeNull();
-  });
-
-  it('tài khoản thật đã đăng nhập: không có thẻ mời đăng nhập; tài khoản khách vẫn có thẻ liên kết Zalo như cũ', async () => {
-    const real = renderPage();
-    await screen.findByRole('region', { name: 'Mã của tôi' });
-    expect(screen.queryByRole('button', { name: 'Đăng nhập' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Liên kết Zalo' })).toBeNull();
-    real.unmount();
-    mocks.guest = true;
-    renderPage();
-    expect(await screen.findByRole('button', { name: 'Liên kết Zalo' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Đăng nhập' })).toBeNull();
-  });
-
-  it('Nhận mã tải lỗi: báo tại chỗ có "Thử lại", các khối khác vẫn vẽ', async () => {
-    mocks.collectable.mockRejectedValue({ isHttpError: true, response: { status: 500, data: { message: 'x' } } });
-    renderPage();
-    const collect = await screen.findByRole('region', { name: 'Nhận mã' });
-    expect(within(collect).getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
-    expect(screen.getByText('Quà của tôi')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'Mã của tôi' })).toBeInTheDocument();
-  });
-
-  it('Đổi rác tạm dừng mà khách còn yêu cầu mở: dòng đổi thành "Yêu cầu của tôi"; hết yêu cầu thì ẩn', async () => {
-    mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
-    mocks.recycleOpen = true;
-    const first = renderPage();
-    expect(await screen.findByText('Yêu cầu của tôi')).toBeInTheDocument();
-    expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
-    fireEvent.click(screen.getByText('Yêu cầu của tôi'));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
-    first.unmount();
-    mocks.recycleOpen = false;
-    renderPage();
-    await screen.findByText('Quà của tôi');
-    expect(screen.queryByText('Yêu cầu của tôi')).toBeNull();
+    it('khách chưa đăng nhập: vẫn xem Kho quà, không có dải Điểm Xanh/Đổi rác (cần tài khoản)', async () => {
+      mocks.phase = 'guest';
+      renderPage();
+      expect(await screen.findByTestId('rewards-view')).toBeInTheDocument();
+      expect(screen.queryByText('Hạng và lịch sử điểm')).toBeNull();
+      expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
+    });
   });
 });

@@ -105,7 +105,7 @@ describe('BottomNav', () => {
     render(<BottomNav />);
     expect(screen.getByRole('button', { name: 'Ưu đãi' })).toHaveAttribute('aria-current', 'page');
     fireEvent.click(screen.getByRole('button', { name: 'Cá nhân' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/profile');
+    expect(mocks.navigate).toHaveBeenCalledWith('/profile', { replace: true });
   });
 
   describe('bấm lại tab đang mở', () => {
@@ -171,7 +171,7 @@ describe('BottomNav', () => {
       const first = render(<BottomNav />);
       settle();
       fireEvent.click(screen.getByText(HINT));
-      expect(mocks.navigate).toHaveBeenCalledWith('/game');
+      expect(mocks.navigate).toHaveBeenCalledWith('/game', { replace: true });
       expect(screen.queryByText(HINT)).toBeNull();
       first.unmount();
       render(<BottomNav />);

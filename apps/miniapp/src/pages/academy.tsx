@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Page, useSnackbar, useNavigate, useParams } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { PlayCircle, FileText, CheckCircle2, BookOpen } from 'lucide-react';
@@ -37,13 +38,14 @@ function isForbidden(e: unknown): boolean {
 
 function CtvOnlyNotice() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   return (
     <EmptyState
       art="leaf"
       heading={vi.academy.ctvOnlyTitle}
       body={vi.academy.ctvOnlyBody}
       ctaLabel={vi.academy.ctvOnlyCta}
-      onCta={() => navigate('/affiliate')}
+      onCta={() => goSmart('/affiliate')}
     />
   );
 }
@@ -53,6 +55,7 @@ export default function AcademyPage() {
   // khỏi Học viện thay vì quay về danh sách, và không có cách nào gửi link tới một khoá.
   const { courseId } = useParams<{ courseId?: string }>();
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
 
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
@@ -60,7 +63,7 @@ export default function AcademyPage() {
       {courseId ? (
         <CourseDetail courseId={courseId} />
       ) : (
-        <CourseList onOpen={(id) => navigate(`/academy/${id}`)} onBackToCtv={() => navigate('/affiliate')} />
+        <CourseList onOpen={(id) => navigate(`/academy/${id}`)} onBackToCtv={() => goSmart('/affiliate')} />
       )}
     </Page>
   );
