@@ -184,6 +184,62 @@ describe('productTitle / productMetaDescription (S9, S16)', () => {
   });
 });
 
+describe('W160 — metaTitle/metaDesc đã duyệt trong DB được ưu tiên', () => {
+  it('productTitle dùng đúng metaTitle đã duyệt; layout tự thêm " — Tubu Tree" nên hậu tố thương hiệu Tubu Tree của chính nó bị gỡ để khỏi lặp', () => {
+    expect(productTitle({ name: 'Dầu gội', brand: 'Xanh Việt', metaTitle: 'Dầu gội bồ kết | Xanh Việt' })).toBe('Dầu gội bồ kết | Xanh Việt');
+    expect(productTitle({ name: 'Dầu gội', brand: 'Tubu Tree', metaTitle: 'Dầu gội bồ kết | Tubu Tree' })).toBe('Dầu gội bồ kết');
+    expect(productTitle({ name: 'Dầu gội', brand: 'Tubu Tree', metaTitle: 'Dầu gội bồ kết — Tubu Tree' })).toBe('Dầu gội bồ kết');
+    expect(productTitle({ name: 'Dầu gội', brand: 'Tubu Tree', metaTitle: 'Dầu gội bồ kết | TUBU TREE' })).toBe('Dầu gội bồ kết');
+  });
+
+  it('metaTitle trống, chỉ khoảng trắng hay null: rơi về cách dựng từ tên + nhãn như cũ', () => {
+    for (const metaTitle of [null, undefined, '', '   ']) {
+      expect(productTitle({ name: 'Dầu gội', brand: 'Xanh Việt', metaTitle })).toBe('Dầu gội — Xanh Việt');
+    }
+  });
+
+  it('metaTitle vượt trần 65 ký tự bị cắt an toàn ở ranh giới từ, không vượt trần', () => {
+    const long = Array.from({ length: 30 }, (_, i) => `từ${i}`).join(' ');
+    const out = productTitle({ name: 'Dầu gội', brand: 'Xanh Việt', metaTitle: long });
+    expect(out.length).toBeLessThanOrEqual(65);
+    expect(out.endsWith('…')).toBe(true);
+    expect(long.startsWith(out.slice(0, -1))).toBe(true);
+  });
+
+  it('metaTitle đủ ngắn: giữ nguyên, chỉ cắt khoảng trắng hai đầu', () => {
+    expect(productTitle({ name: 'x', brand: 'Xanh Việt', metaTitle: '  Dầu gội bồ kết | Xanh Việt  ' })).toBe('Dầu gội bồ kết | Xanh Việt');
+  });
+
+  it('productMetaDescription dùng metaDesc đã duyệt trước mô tả ngắn/đầy đủ; trống thì như cũ', () => {
+    expect(productMetaDescription({ ...BASE, metaDesc: 'Mô tả đã duyệt.' })).toBe('Mô tả đã duyệt.');
+    for (const metaDesc of [null, undefined, '', '  ']) {
+      expect(productMetaDescription({ ...BASE, metaDesc })).toBe('Sạch dịu nhẹ');
+    }
+  });
+
+  it('metaDesc vượt trần 155 ký tự bị cắt an toàn ở ranh giới từ', () => {
+    const long = Array.from({ length: 80 }, (_, i) => `từ${i}`).join(' ');
+    const out = productMetaDescription({ ...BASE, metaDesc: long });
+    expect(out.length).toBeLessThanOrEqual(155);
+    expect(out.endsWith('…')).toBe(true);
+  });
+
+  it('productJsonLd: shortDesc rỗng ("" không lọt qua ??) thì mô tả lấy từ description, rồi metaDesc, rồi dựng từ tên + nhãn; không bao giờ rỗng', () => {
+    const URL = 'https://app.tubutree.com/san-pham/dau-goi';
+    expect(productJsonLd({ ...BASE, shortDesc: '', description: '<p>Mô tả dài.</p>' }, URL).description).toBe('Mô tả dài.');
+    expect(productJsonLd({ ...BASE, shortDesc: ' ', description: '', metaDesc: 'Mô tả đã duyệt.' } as ProductDetail, URL).description).toBe('Mô tả đã duyệt.');
+    expect(productJsonLd({ ...BASE, shortDesc: null, description: '' }, URL).description).toBe('Dầu gội bồ kết — Xanh Việt, bán tại Tubu Tree.');
+  });
+
+  it('productJsonLd: nhãn trống thì brand là "Tubu Tree" (JSON-LD không có name rỗng); có sku và offers khi một phân loại', () => {
+    const URL = 'https://app.tubutree.com/san-pham/dau-goi';
+    const ld = productJsonLd({ ...BASE, brand: '  ' }, URL);
+    expect(ld.brand).toEqual({ '@type': 'Brand', name: 'Tubu Tree' });
+    expect(ld.sku).toBe('DG-250');
+    expect(ld.offers).toMatchObject({ '@type': 'Offer', priceCurrency: 'VND' });
+  });
+});
+
 describe('brandMetaDescription (S2)', () => {
   it('khẩu hiệu → câu giới thiệu → dựng từ tên (+ xuất xứ)', () => {
     expect(brandMetaDescription({ name: 'Hector', tagline: 'Sống xanh', story: 'dài' })).toBe('Sống xanh');
