@@ -12,6 +12,9 @@ const BTN_BASE = `${TOUCH} rounded-control px-3.5 py-1.5 text-sm font-medium ari
 const BTN_PRIMARY_44 = `${BTN_BASE} bg-forest-600 text-stone-0 hover:bg-forest-700`;
 const BTN_SECONDARY_44 = `${BTN_BASE} border border-stone-450 bg-stone-0 text-stone-700 hover:bg-stone-50`;
 const FIELD_44 = `block w-full ${TOUCH} ${FIELD_CLASS}`;
+/** Trần DTO (SeoApplyItemDto), rộng hơn trần hiển thị 65/155: gõ quá trần hiển thị thì bộ đếm báo đỏ, chỉ trần DTO mới chặn gõ. */
+const TITLE_DTO_MAX = 400;
+const DESC_DTO_MAX = 1000;
 
 type Filter = 'missing' | 'all';
 interface Draft {
@@ -242,14 +245,14 @@ function SeoRow({ idBase, row, value, checked, onCheck, onEdit }: { idBase: stri
         <label htmlFor={`${idBase}-t`} className="text-xs font-medium text-stone-700">
           Tiêu đề SEO<span className="sr-only"> của {row.name}</span>
         </label>
-        <input id={`${idBase}-t`} type="text" value={value.title} onChange={(e) => onEdit({ title: e.target.value })} aria-invalid={titleOver || undefined} aria-describedby={`${idBase}-tc`} className={`mt-1 ${FIELD_44}`} />
+        <input id={`${idBase}-t`} type="text" maxLength={TITLE_DTO_MAX} value={value.title} onChange={(e) => onEdit({ title: e.target.value })} aria-invalid={titleOver || undefined} aria-describedby={`${idBase}-tc`} className={`mt-1 ${FIELD_44}`} />
         <Counter testId={`seo-title-count-${row.id}`} domId={`${idBase}-tc`} n={value.title.length} max={SEO_TITLE_MAX} />
       </div>
       <div className="min-w-0">
         <label htmlFor={`${idBase}-d`} className="text-xs font-medium text-stone-700">
           Mô tả SEO<span className="sr-only"> của {row.name}</span>
         </label>
-        <textarea id={`${idBase}-d`} rows={3} value={value.desc} onChange={(e) => onEdit({ desc: e.target.value })} aria-invalid={descOver || undefined} aria-describedby={`${idBase}-dc`} className={`mt-1 ${FIELD_44}`} />
+        <textarea id={`${idBase}-d`} rows={3} maxLength={DESC_DTO_MAX} value={value.desc} onChange={(e) => onEdit({ desc: e.target.value })} aria-invalid={descOver || undefined} aria-describedby={`${idBase}-dc`} className={`mt-1 ${FIELD_44}`} />
         <Counter testId={`seo-desc-count-${row.id}`} domId={`${idBase}-dc`} n={value.desc.length} max={SEO_DESC_MAX} />
       </div>
     </>

@@ -5,6 +5,8 @@ import { CAMPAIGN_ENTITY_SLUG_MAX } from '@tubutree/shared-types';
 export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?: string }> = {
   "components/admin/product-story-studio.tsx::aiNote": { dto: "apps/api/src/modules/catalog/story-draft.controller.ts:GenerateStoryDraftDto.note", max: 500 },
   "components/admin/product-story-studio.tsx::link": { dto: "apps/api/src/modules/catalog/story-assets.controller.ts:ExtractStoryAssetsDto.pageUrl", max: 2048 },
+  "app/admin/catalog-seo-bulk.tsx::value.title": { dto: "apps/api/src/modules/catalog/catalog-quality.controller.ts:SeoApplyItemDto.metaTitle", max: 400 },
+  "app/admin/catalog-seo-bulk.tsx::value.desc": { dto: "apps/api/src/modules/catalog/catalog-quality.controller.ts:SeoApplyItemDto.metaDesc", max: 1000 },
   "app/admin/page.tsx::searchInput": { dto: "apps/api/src/modules/admin/admin.controller.ts:ListOrdersQuery.search", max: 100 },
   "app/admin/page.tsx::phone": { dto: "apps/api/src/modules/admin/admin.controller.ts:SetUserRoleDto.phone", max: 20 },
   "app/admin/page.tsx::f.code": { dto: "apps/api/src/modules/admin/admin.controller.ts:CreateCouponDto.code", max: 64 },
@@ -205,6 +207,7 @@ export const EXEMPT_INPUTS: Record<string, string> = {
   "components/admin/customer-refund-paid-dialog.tsx::bank[key]": "maxLength theo từng ô: 40 cho số tài khoản, 120 cho còn lại, khớp MarkCustomerRefundPaidDto",
   "app/admin/page.tsx::search": "ô lọc khoá cấu hình ngay trên trình duyệt, không gửi lên API",
   "components/admin/admin-nav.tsx::query": "ô lọc menu ngay trên trình duyệt, không gửi lên API",
+  "app/admin/catalog-seo-bulk.tsx::query": "ô tìm chỉ lọc danh sách đã tải ngay trên trình duyệt, không gửi lên API",
   "app/admin/catalog-wp-images/wp-image-triage.tsx::query": "ô tìm chỉ lọc danh sách đã tải ngay trên trình duyệt, không gửi lên API",
   "components/admin/community-events-panel.tsx::startAt": "ô ngày giờ định dạng cố định, kiểm bằng bộ chọn thời gian",
   "components/admin/community-events-panel.tsx::endAt": "ô ngày giờ định dạng cố định, kiểm bằng bộ chọn thời gian",
