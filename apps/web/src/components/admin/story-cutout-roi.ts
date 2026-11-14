@@ -29,6 +29,14 @@ export const PREVIEW_EDGE = 480;
 export const ROI_DATA_URL_MAX = 1_400_000;
 /** Ngưỡng "gần trắng", cùng giá trị với máy chủ: ảnh chụp nền trắng hay có viền xám nhạt do nén. */
 export const LIGHT = 235;
+/** Độ lệch màu nền cho phép so với trắng tinh: ngưỡng = 255 − độ lệch. Mặc định 20 cho đúng `LIGHT` (235) của máy chủ. */
+export const TOLERANCE_DEFAULT = 255 - LIGHT;
+/** Nới tối đa 60 (ngưỡng 195): xa hơn thì nền xám đậm ăn vào cả thân sản phẩm sáng màu. */
+export const TOLERANCE_MAX = 60;
+/** "Bỏ viền khung poster": thụt 12% mỗi cạnh, đủ qua khung dày ~8% của poster Tubu Tree. */
+export const POSTER_INSET_PCT = 12;
+/** "Khung dọc trung tâm": chai, túi đứng chiếm giữa poster, 60% ngang × 82% dọc. */
+export const CENTER_PORTRAIT = { width: 0.6, height: 0.82 } as const;
 /** Điểm ảnh gần trong suốt coi là nền (ảnh đã được máy chủ tách một phần). */
 const SEE_THROUGH = 16;
 
@@ -40,6 +48,12 @@ export function clampRoi(roi: Roi, min = ROI_MIN): Roi {
   const width = clamp(roi.width, min, 1);
   const height = clamp(roi.height, min, 1);
   return { x: clamp(roi.x, 0, 1 - width), y: clamp(roi.y, 0, 1 - height), width, height };
+}
+
+/** Ngưỡng sáng (0..255) ứng với độ lệch `tolerance`; ngoài 0..`TOLERANCE_MAX` bị kẹp, không phải số thì về mặc định. */
+export function lightThreshold(tolerance: number = TOLERANCE_DEFAULT): number {
+  if (!Number.isFinite(tolerance)) return LIGHT;
+  return 255 - clamp(Math.round(tolerance), 0, TOLERANCE_MAX);
 }
 
 /** Khung thụt vào đều `pct`% mỗi cạnh ("Cắt viền 10%"). `pct` ngoài 0..37,5 bị kẹp để khung còn ít nhất 25% mỗi chiều (`ROI_MIN`). */
@@ -63,6 +77,17 @@ export function dragRoi(start: Roi, handle: RoiHandle, dx: number, dy: number, m
   if (handle === 'nw' || handle === 'ne') top = clamp(top + dy, 0, bottom - min);
   else bottom = clamp(bottom + dy, top + min, 1);
   return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+/** Khung của nút "Bỏ viền khung poster (co 12%)". */
+export function posterFrameRoi(): Roi {
+  return insetRoi(POSTER_INSET_PCT);
+}
+
+/** Khung của nút "Khung dọc trung tâm (60%×82%)": nằm giữa ảnh. */
+export function centerPortraitRoi(): Roi {
+  const { width, height } = CENTER_PORTRAIT;
+  return { x: (1 - width) / 2, y: (1 - height) / 2, width, height };
 }
 
 export interface PixelRect {
@@ -124,15 +149,16 @@ export interface CutoutResult {
  * Tách nền sáng: chỉ điểm ảnh sáng (hoặc đã trong suốt) NỐI LIỀN với mép ảnh, loang 4 hướng từ 4 cạnh, thành trong suốt.
  * Vùng sáng kín trong thân sản phẩm (nhãn trắng, ánh sáng) không nối ra mép nên được giữ. Không sửa `src`.
  */
-export function cutoutLight(src: Rgba): CutoutResult {
+export function cutoutLight(src: Rgba, tolerance: number = TOLERANCE_DEFAULT): CutoutResult {
   const { width, height } = src;
+  const light = lightThreshold(tolerance);
   const data = new Uint8ClampedArray(src.data);
   const total = width * height;
   const isBackground = (p: number) => {
     const i = p * 4;
     return (
       (data[i + 3] ?? 255) < SEE_THROUGH ||
-      ((data[i] ?? 0) >= LIGHT && (data[i + 1] ?? 0) >= LIGHT && (data[i + 2] ?? 0) >= LIGHT)
+      ((data[i] ?? 0) >= light && (data[i + 1] ?? 0) >= light && (data[i + 2] ?? 0) >= light)
     );
   };
   const seen = new Uint8Array(total);
@@ -170,8 +196,8 @@ export function cutoutLight(src: Rgba): CutoutResult {
 }
 
 /** Cắt theo `roi` rồi tách nền. `FULL_ROI` cho đúng kết quả của việc tách nền không cắt. */
-export function applyRoiCutout(src: Rgba, roi: Roi): CutoutResult {
-  return cutoutLight(cropRgba(src, roiRect(roi, src.width, src.height)));
+export function applyRoiCutout(src: Rgba, roi: Roi, tolerance: number = TOLERANCE_DEFAULT): CutoutResult {
+  return cutoutLight(cropRgba(src, roiRect(roi, src.width, src.height)), tolerance);
 }
 
 /** "85,9" kiểu Việt Nam, một chữ số thập phân; không dùng `toLocaleString` để kết quả không đổi theo bộ ICU của máy. */

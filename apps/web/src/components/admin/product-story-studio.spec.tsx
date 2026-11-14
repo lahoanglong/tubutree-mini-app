@@ -7,7 +7,15 @@ import type { ProductDetail } from '@/lib/product-categories';
 import { ProductStoryStudio } from './product-story-studio';
 
 vi.mock('@/components/mini/product-story-showcase', () => ({
-  ProductStoryShowcase: (p: { previewConfig?: ProductStoryConfig }) => <div data-testid="mock-showcase" data-scenes={p.previewConfig?.scenes.length ?? 'none'} />,
+  ProductStoryShowcase: (p: { previewConfig?: ProductStoryConfig; fullscreen?: boolean; onClose?: () => void }) => (
+    <div data-testid={p.fullscreen ? 'mock-showcase-full' : 'mock-showcase'} data-scenes={p.previewConfig?.scenes.length ?? 'none'} data-enabled={String(p.previewConfig?.enabled)}>
+      {p.fullscreen && (
+        <button type="button" onClick={p.onClose}>
+          mock-đóng-xem-thử
+        </button>
+      )}
+    </div>
+  ),
 }));
 
 // Bảng khoanh khung có spec riêng (story-roi-cutout.spec): ở đây chỉ kiểm cách Studio mở nó và nhận ảnh trả về.
@@ -624,6 +632,139 @@ describe('ProductStoryStudio', () => {
     it('khung ảnh khoá khi form bị khoá', () => {
       mount({ value: config(), disabled: true });
       expect(frame().disabled).toBe(true);
+    });
+  });
+  describe('nạp kịch bản mẫu ở trạng thái Nháp', () => {
+    const SOKFARM = 'duong-hoa-dua-sokfarm-d6c685';
+    const FUWA = 'nuoc-rua-chen-fuwa3e-3-8l-ef3979';
+    const draftBtn = () => document.querySelector<HTMLButtonElement>('[data-testid="story-load-draft-preset"]');
+    const kinds = (c: ProductStoryConfig | null) => c?.scenes.map((s) => s.kind);
+
+    it('nút chỉ hiện với sản phẩm có mẫu theo slug gốc (bỏ hậu tố băm) và ghi đúng nhãn', () => {
+      mount({ value: null });
+      expect(draftBtn()).toBeNull();
+      mount({ value: null, product: product({ slug: SOKFARM }) });
+      expect(draftBtn()?.textContent).toBe('Nạp kịch bản mẫu (Nháp)');
+    });
+
+    it('bấm nạp: điền mẫu kèm vòng cung từ phân loại thật, đặt enabled=false, bỏ tick ô Bật, chưa lưu và không gọi mạng', () => {
+      const { onChange, m } = mount({ value: null, product: product({ slug: SOKFARM, name: 'Đường hoa dừa SOKFARM' }) });
+      click(draftBtn());
+      const c = last(onChange)!;
+      expect(c.enabled).toBe(false);
+      expect(kinds(c)).toEqual(['variant_arc', 'ingredient_assembly', 'hud_callouts']);
+      const asm = c.scenes.find((sc) => sc.kind === 'ingredient_assembly');
+      expect(asm && asm.kind === 'ingredient_assembly' && asm.steps.map((st) => st.title)).toEqual(['Ngọt dịu từ hoa dừa', 'Chậm rãi từng công đoạn', 'Giữ vẻ mộc mạc']);
+      expect(document.querySelector<HTMLInputElement>('[data-testid="story-enabled"]')!.checked).toBe(false);
+      expect(document.body.textContent).toContain('Đã nạp kịch bản mẫu ở trạng thái Nháp');
+      expect(m.calls).toHaveLength(0);
+    });
+
+    it('đang bật mà nạp mẫu vẫn về Nháp (enabled=false), giữ ảnh sân khấu và khung ảnh đã đặt', () => {
+      const saved: ProductStoryConfig = { ...config(), enabled: true, cutoutUrl: '/public-image/product/p1/1', imageFrame: 'cutout' };
+      const { onChange } = mount({ value: saved, product: product({ slug: SOKFARM, images: ['data:image/webp;base64,A', 'data:image/webp;base64,B'] }) });
+      click(draftBtn());
+      const c = last(onChange)!;
+      expect(c.enabled).toBe(false);
+      expect(c.cutoutUrl).toBe('/public-image/product/p1/1');
+      expect(c.imageFrame).toBe('cutout');
+    });
+
+    it('sản phẩm một phân loại (Fuwa3e 3,8L) không có vòng cung nhưng vẫn nạp được mẫu Nháp', () => {
+      const { onChange } = mount({ value: null, product: product({ slug: FUWA, name: 'Nước rửa chén Fuwa3e 3,8L', variations: [{ id: 'v1', name: '3,8L' }], ingredients: null }) });
+      click(draftBtn());
+      const c = last(onChange)!;
+      expect(c.enabled).toBe(false);
+      expect(kinds(c)).toEqual(['ingredient_assembly', 'hud_callouts']);
+    });
+
+    it('nút khoá khi form bị khoá', () => {
+      mount({ value: null, product: product({ slug: SOKFARM }), disabled: true });
+      expect(draftBtn()!.disabled).toBe(true);
+    });
+  });
+
+  describe('xem thử toàn màn hình (Admin Preview) kể cả khi đang Nháp', () => {
+    const previewBtn = () => document.querySelector<HTMLButtonElement>('[data-testid="story-fullscreen-preview"]')!;
+    const full = () => document.querySelector<HTMLElement>('[data-testid="mock-showcase-full"]');
+    const banner = () => document.querySelector<HTMLElement>('[data-testid="story-draft-banner"]');
+
+    it('nút ghi đúng nhãn; chưa bấm thì chưa có khung toàn màn', () => {
+      mount({ value: { ...config(), enabled: false } });
+      expect(previewBtn().textContent).toBe('Xem thử toàn màn hình (Admin Preview)');
+      expect(full()).toBeNull();
+      expect(banner()).toBeNull();
+    });
+
+    it('bản nháp (enabled=false): mở khung toàn màn với cấu hình đang soạn và băng "Bản nháp — chưa hiển thị cho khách"', () => {
+      mount({ value: { ...config(), enabled: false } });
+      click(previewBtn());
+      expect(full()?.getAttribute('data-scenes')).toBe('2');
+      expect(full()?.getAttribute('data-enabled')).toBe('false');
+      expect(banner()?.textContent).toBe('Bản nháp — chưa hiển thị cho khách');
+      expect(banner()?.getAttribute('role')).toBe('status');
+    });
+
+    it('đang bật công khai: mở khung toàn màn nhưng không có băng nháp', () => {
+      mount({ value: config() });
+      click(previewBtn());
+      expect(full()).not.toBeNull();
+      expect(banner()).toBeNull();
+    });
+
+    it('đang dùng kịch bản mẫu chưa lưu (value null) vẫn xem thử được', () => {
+      mount({ value: null });
+      click(previewBtn());
+      expect(full()).not.toBeNull();
+    });
+
+    it('đóng khung (nút đóng hoặc Esc của khung) gỡ cả khung lẫn băng', () => {
+      mount({ value: { ...config(), enabled: false } });
+      click(previewBtn());
+      click(byText(document.body, 'button', 'mock-đóng-xem-thử'));
+      expect(full()).toBeNull();
+      expect(banner()).toBeNull();
+    });
+
+    it('băng nằm trên khung toàn màn (z cao hơn --z-dialog) và không chặn chạm', () => {
+      mount({ value: { ...config(), enabled: false } });
+      click(previewBtn());
+      expect(banner()!.className).toContain('pointer-events-none');
+      expect(banner()!.className).toContain('z-[calc(var(--z-dialog)+1)]');
+    });
+
+    it('nút xem thử đạt chuẩn chạm 44px', () => {
+      mount({ value: config() });
+      expect(previewBtn().className).toContain('min-h-[44px]');
+    });
+  });
+
+  describe('ba trạng thái xuất bản trong bảng kiểm', () => {
+    const status = () => document.querySelector<HTMLElement>('[data-testid="story-status"]')!;
+
+    it('chưa lưu cấu hình riêng: "Chưa có kịch bản"', () => {
+      mount({ value: null });
+      expect(status().getAttribute('data-status')).toBe('none');
+      expect(status().textContent).toContain('Chưa có kịch bản');
+    });
+
+    it('đã lưu và bật: "Đang bật công khai"; đã lưu mà tắt: "Bản nháp chờ duyệt"', () => {
+      mount({ value: config() });
+      expect(status().getAttribute('data-status')).toBe('live');
+      expect(status().textContent).toContain('Đang bật công khai');
+      mounted.forEach((x) => x.unmount());
+      mounted = [];
+      mount({ value: { ...config(), enabled: false } });
+      expect(status().getAttribute('data-status')).toBe('draft');
+      expect(status().textContent).toContain('Bản nháp chờ duyệt');
+    });
+
+    it('gạt ô Bật câu chuyện đổi trạng thái giữa nháp và công khai ngay trên màn', () => {
+      mount({ value: { ...config(), enabled: false } });
+      click(document.querySelector('[data-testid="story-enabled"]'));
+      expect(status().getAttribute('data-status')).toBe('live');
+      click(document.querySelector('[data-testid="story-enabled"]'));
+      expect(status().getAttribute('data-status')).toBe('draft');
     });
   });
 });

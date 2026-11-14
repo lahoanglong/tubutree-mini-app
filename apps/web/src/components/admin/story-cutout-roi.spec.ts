@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyRoiCutout, clampRoi, cropRgba, cutoutLight, downscaleRgba, dragRoi, formatPct, FULL_ROI, insetRoi, PREVIEW_EDGE, ROI_DATA_URL_MAX, ROI_MIN, roiRect, type Rgba } from './story-cutout-roi';
+import { applyRoiCutout, centerPortraitRoi, clampRoi, cropRgba, cutoutLight, downscaleRgba, dragRoi, formatPct, FULL_ROI, insetRoi, lightThreshold, PREVIEW_EDGE, posterFrameRoi, ROI_DATA_URL_MAX, ROI_MIN, roiRect, TOLERANCE_DEFAULT, TOLERANCE_MAX, type Rgba } from './story-cutout-roi';
 
 /**
  * Poster 100x100: khung đỏ dày 8 chạm mép ảnh, bên trong nền trắng, một sản phẩm tối 30x30 ở giữa (35..64) có ô trắng 6x6 kín bên trong (47..52).
@@ -228,5 +228,77 @@ describe('formatPct', () => {
     expect(formatPct(0)).toBe('0,0');
     expect(formatPct(-3)).toBe('0,0');
     expect(formatPct(140)).toBe('100,0');
+  });
+});
+
+describe('posterFrameRoi — nút "Bỏ viền khung poster (co 12%)"', () => {
+  it('co đều 12% mỗi cạnh, bằng insetRoi(12)', () => {
+    const r = posterFrameRoi();
+    expect(r).toEqual(insetRoi(12));
+    expect(r.x).toBeCloseTo(0.12, 10);
+    expect(r.width).toBeCloseTo(0.76, 10);
+  });
+
+  it('khung đỏ dày 8% của poster thử nằm gọn ngoài vùng cắt: tách hơn 40% nền và giữ thân sản phẩm', () => {
+    const r = applyRoiCutout(poster(), posterFrameRoi());
+    expect(r.image.width).toBe(76);
+    expect(r.removed).toBe(76 * 76 - 900);
+    expect(r.removedPct).toBeGreaterThan(40);
+  });
+});
+
+describe('centerPortraitRoi — nút "Khung dọc trung tâm (60%×82%)"', () => {
+  it('rộng 60%, cao 82%, nằm chính giữa ảnh', () => {
+    const r = centerPortraitRoi();
+    expect(r.width).toBeCloseTo(0.6, 10);
+    expect(r.height).toBeCloseTo(0.82, 10);
+    expect(r.x).toBeCloseTo(0.2, 10);
+    expect(r.y).toBeCloseTo(0.09, 10);
+    expect(clampRoi(r)).toEqual(r);
+  });
+
+  it('cắt ảnh vuông 100x100 ra 60x82 và vẫn tách được nền quanh sản phẩm ở giữa', () => {
+    const r = applyRoiCutout(poster(), centerPortraitRoi());
+    expect(r.image.width).toBe(60);
+    expect(r.image.height).toBe(82);
+    expect(r.removed).toBe(60 * 82 - 900);
+  });
+});
+
+describe('ngưỡng độ lệch màu nền (tolerance)', () => {
+  /** Nền xám nhạt `bg` thay cho nền trắng, không có khung: ảnh chụp nền hơi xám do nén. */
+  function greyShot(bg: number): Rgba {
+    const data = new Uint8ClampedArray(SIZE * SIZE * 4);
+    for (let i = 0; i < SIZE * SIZE; i++) data.set([bg, bg, bg, 255], i * 4);
+    for (let y = 35; y < 65; y++) for (let x = 35; x < 65; x++) data.set([30, 30, 30, 255], (y * SIZE + x) * 4);
+    return { data, width: SIZE, height: SIZE };
+  }
+
+  it('mặc định 20 (ngưỡng 235) khớp thuật toán máy chủ; tối đa 60; ngưỡng = 255 − độ lệch, kẹp 0..60', () => {
+    expect(TOLERANCE_DEFAULT).toBe(20);
+    expect(TOLERANCE_MAX).toBe(60);
+    expect(lightThreshold(TOLERANCE_DEFAULT)).toBe(235);
+    expect(lightThreshold(0)).toBe(255);
+    expect(lightThreshold(-5)).toBe(255);
+    expect(lightThreshold(999)).toBe(255 - TOLERANCE_MAX);
+    expect(lightThreshold(Number.NaN)).toBe(235);
+  });
+
+  it('nền xám 220 không tách ở mặc định nhưng tách sạch khi nới độ lệch lên 40', () => {
+    const src = greyShot(220);
+    expect(cutoutLight(src).removed).toBe(0);
+    const loose = cutoutLight(src, 40);
+    expect(loose.removed).toBe(SIZE * SIZE - 900);
+    expect(loose.image.data[(50 * SIZE + 50) * 4 + 3]).toBe(255);
+  });
+
+  it('độ lệch 0 chỉ tách trắng tinh: nền 250 còn nguyên, nền 255 mất', () => {
+    expect(cutoutLight(greyShot(250), 0).removed).toBe(0);
+    expect(cutoutLight(greyShot(255), 0).removed).toBe(SIZE * SIZE - 900);
+  });
+
+  it('không truyền độ lệch thì ra đúng kết quả cũ của poster (không đổi hành vi)', () => {
+    expect(applyRoiCutout(poster(), insetRoi(10)).removed).toBe(80 * 80 - 900);
+    expect(applyRoiCutout(poster(), insetRoi(10), TOLERANCE_DEFAULT).removed).toBe(80 * 80 - 900);
   });
 });

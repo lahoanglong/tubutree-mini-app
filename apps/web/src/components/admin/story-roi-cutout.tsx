@@ -12,16 +12,20 @@ import {
 import { BTN_PRIMARY, BTN_SECONDARY, Notice } from './ui';
 import {
   applyRoiCutout,
+  centerPortraitRoi,
   downscaleRgba,
   dragRoi,
   formatPct,
   FULL_ROI,
   insetRoi,
   PREVIEW_EDGE,
+  posterFrameRoi,
   ROI_DATA_URL_MAX,
   type Rgba,
   type Roi,
   type RoiHandle,
+  TOLERANCE_DEFAULT,
+  TOLERANCE_MAX,
 } from './story-cutout-roi';
 
 const KEY_STEP = 0.01;
@@ -138,6 +142,7 @@ export function StoryRoiCutout({
   const [pixels, setPixels] = useState<Rgba | null>(null);
   const [failed, setFailed] = useState(false);
   const [roi, setRoi] = useState<Roi>(FULL_ROI);
+  const [tolerance, setTolerance] = useState(TOLERANCE_DEFAULT);
   const boxRef = useRef<HTMLDivElement>(null);
   const resultRef = useRef<HTMLCanvasElement>(null);
   const drag = useRef<{ handle: RoiHandle; x: number; y: number; start: Roi; id: number } | null>(
@@ -149,6 +154,7 @@ export function StoryRoiCutout({
     setPixels(null);
     setFailed(false);
     setRoi(FULL_ROI);
+    setTolerance(TOLERANCE_DEFAULT);
     void readPixels(src).then((p) => {
       if (!live) return;
       if (p) setPixels(p);
@@ -161,13 +167,14 @@ export function StoryRoiCutout({
 
   // Khung kéo cập nhật ngay; phần xem trước và số % tính trên bản thu nhỏ (ảnh đầy đủ chỉ tính lúc bấm Dùng) theo giá trị trễ để kéo không giật.
   const settled = useDeferredValue(roi);
+  const settledTolerance = useDeferredValue(tolerance);
   const preview = useMemo(() => (pixels ? downscaleRgba(pixels, PREVIEW_EDGE) : null), [pixels]);
   const result = useMemo(
-    () => (preview ? applyRoiCutout(preview, settled) : null),
-    [preview, settled],
+    () => (preview ? applyRoiCutout(preview, settled, settledTolerance) : null),
+    [preview, settled, settledTolerance],
   );
   const [tooBig, setTooBig] = useState(false);
-  useEffect(() => setTooBig(false), [roi]);
+  useEffect(() => setTooBig(false), [roi, tolerance]);
 
   useEffect(() => {
     const canvas = resultRef.current;
@@ -218,14 +225,14 @@ export function StoryRoiCutout({
 
   const finish = () => {
     if (!pixels || disabled) return;
-    const encoded = encodeWithinLimit(applyRoiCutout(pixels, roi).image);
+    const encoded = encodeWithinLimit(applyRoiCutout(pixels, roi, tolerance).image);
     if (encoded.ok) onUse(encoded.url);
     else if (encoded.reason === 'size') setTooBig(true);
     else setFailed(true);
   };
 
   const pct = result?.removedPct ?? 0;
-  const pending = settled !== roi;
+  const pending = settled !== roi || settledTolerance !== tolerance;
 
   return (
     <div
@@ -326,11 +333,59 @@ export function StoryRoiCutout({
               type="button"
               className={BTN_SECONDARY}
               disabled={disabled}
-              onClick={() => setRoi(FULL_ROI)}
+              onClick={() => setRoi(posterFrameRoi())}
+            >
+              Bỏ viền khung poster (co 12%)
+            </button>
+            <button
+              type="button"
+              className={BTN_SECONDARY}
+              disabled={disabled}
+              onClick={() => setRoi(centerPortraitRoi())}
+            >
+              Khung dọc trung tâm (60%×82%)
+            </button>
+            <button
+              type="button"
+              className={BTN_SECONDARY}
+              disabled={disabled}
+              onClick={() => {
+                setRoi(FULL_ROI);
+                setTolerance(TOLERANCE_DEFAULT);
+              }}
             >
               Đặt lại
             </button>
           </div>
+
+          <div className="flex min-h-[44px] items-center gap-3">
+            <label htmlFor="story-roi-tolerance" className="shrink-0 text-xs text-stone-700">
+              Độ lệch màu nền
+            </label>
+            <input
+              id="story-roi-tolerance"
+              data-testid="story-roi-tolerance"
+              type="range"
+              aria-label="Độ lệch màu nền"
+              aria-describedby="story-roi-tolerance-hint"
+              min={0}
+              max={TOLERANCE_MAX}
+              step={1}
+              value={tolerance}
+              disabled={disabled}
+              className="h-[44px] min-w-0 flex-1 accent-forest-600 disabled:opacity-50"
+              onChange={(e) => setTolerance(Number(e.target.value))}
+            />
+            <span
+              className="w-8 shrink-0 text-right text-xs font-medium tabular-nums text-stone-900"
+              data-testid="story-roi-tolerance-value"
+            >
+              {tolerance}
+            </span>
+          </div>
+          <p className="text-xs text-stone-600" id="story-roi-tolerance-hint">
+            Nền ảnh hơi xám thì kéo sang phải để tách thêm; kéo về 0 chỉ tách nền trắng tinh.
+          </p>
 
           <div className="space-y-1">
             <p className="text-sm text-stone-900" role="status" aria-live="polite">
