@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import type { Response } from 'express';
+import { tradeDiscountOf } from '@tubutree/shared-types';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { formatVnDateTime } from '../../common/vn-time';
 import { maskPhoneKeepLast3, maskPhoneLikeRuns } from '../../common/mask-pii';
@@ -117,6 +118,9 @@ export const ORDER_CSV_HEADERS = [
   'CTV giới thiệu',
   'SĐT CTV',
   'Gian hàng',
+  // Chiết khấu thương mại ghi thành dòng giảm trên hoá đơn (Tạm tính vẫn là tiền hàng đủ đơn giá gốc). Không gồm tiền quy đổi Điểm Xanh;
+  // chiết khấu thanh toán không nằm trong file đơn vì nó phát sinh lúc thu tiền (xem file "Chiết khấu thanh toán").
+  'CK thương mại trên HĐ (VNĐ)',
 ];
 
 const ORDER_SELECT = {
@@ -130,6 +134,10 @@ const ORDER_SELECT = {
   paymentStatus: true,
   subtotal: true,
   discount: true,
+  couponDiscount: true,
+  comboDiscount: true,
+  tierDiscount: true,
+  pointsDiscount: true,
   shippingFee: true,
   pointsUsed: true,
   total: true,
@@ -188,6 +196,7 @@ function orderRow(o: ExportOrder, referrers: ReadonlyMap<string, Referrer>, mask
     referrer?.fullName ?? '',
     phone(referrer?.phone),
     o.storefront?.title ?? '',
+    tradeDiscountOf(o),
   ]);
 }
 

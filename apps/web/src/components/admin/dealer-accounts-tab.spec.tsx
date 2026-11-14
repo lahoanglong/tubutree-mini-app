@@ -90,6 +90,40 @@ function stub(
 }
 const accountCalls = (api: ReturnType<typeof stub>) => api.calls.filter((c) => c.url.includes('/admin/dealers/accounts'));
 
+describe('DealerAccountsTab — hai loại chiết khấu trong tháng', () => {
+  it('hai thẻ riêng: CK thương mại (trên hoá đơn) và CK thanh toán (chi phí tài chính TK 635), mỗi thẻ một số', async () => {
+    stub({ ...page(ROWS), monthDiscounts: { trade: 1_200_000, payment: 350_000 } });
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    const block = container.querySelector<HTMLElement>('[data-dealer-discount-summary]')!;
+    expect(block.getAttribute('aria-label')).toBe('Chiết khấu trong tháng');
+    expect(block.querySelector('[data-trade-discount]')!.textContent).toBe('1.200.000đ');
+    expect(block.querySelector('[data-payment-discount]')!.textContent).toBe('350.000đ');
+    const labels = Array.from(block.querySelectorAll('dt')).map((d) => d.textContent ?? '');
+    expect(labels[0]).toContain('CK thương mại (trên hoá đơn)');
+    expect(labels[1]).toContain('CK thanh toán (chi phí tài chính TK 635)');
+    expect(block.textContent).toContain('đơn giá hàng không đổi');
+    expect(block.textContent).toContain('Hoá đơn vẫn đủ 100%');
+    expect(dlProblems(container)).toEqual([]);
+  });
+
+  it('tháng chưa có chiết khấu → hai thẻ hiện 0đ, không ẩn', async () => {
+    stub({ ...page(ROWS), monthDiscounts: { trade: 0, payment: 0 } });
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    expect(container.querySelector('[data-trade-discount]')!.textContent).toBe('0đ');
+    expect(container.querySelector('[data-payment-discount]')!.textContent).toBe('0đ');
+  });
+
+  it('API cũ không trả monthDiscounts → không hiện khối, danh sách vẫn dùng được', async () => {
+    stub(page(ROWS));
+    const { container } = mount(<DealerAccountsTab />);
+    await flush();
+    expect(container.querySelector('[data-dealer-discount-summary]')).toBeNull();
+    expect(container.textContent).toContain('Đại lý Hoa');
+  });
+});
+
 describe('DealerAccountsTab — đại lý báo đã chuyển khoản (E-25)', () => {
   it('có báo cáo: khối "Đại lý báo đã chuyển (n)" nêu đại lý, số tiền, ghi chú; không có báo cáo thì không hiện khối', async () => {
     const none = mount(<DealerAccountsTab />);

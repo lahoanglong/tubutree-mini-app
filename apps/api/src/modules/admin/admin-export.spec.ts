@@ -385,8 +385,29 @@ describe('cột nguồn đơn trong CSV đơn hàng (D1-04a)', () => {
   }
 
   it('thêm cột Nền tảng, Nguồn đơn, CTV giới thiệu, SĐT CTV, Gian hàng vào CUỐI file (không dịch cột cũ)', () => {
-    expect(ORDER_CSV_HEADERS.slice(-5)).toEqual(['Nền tảng', 'Nguồn đơn', 'CTV giới thiệu', 'SĐT CTV', 'Gian hàng']);
-    expect(ORDER_CSV_HEADERS.indexOf('Ghi chú')).toBe(ORDER_CSV_HEADERS.length - 6);
+    // Cột CK thương mại (W154) nối tiếp sau Gian hàng: mọi cột có từ trước giữ nguyên vị trí cho bảng tính kế toán tham chiếu theo cột.
+    expect(ORDER_CSV_HEADERS.slice(-6, -1)).toEqual(['Nền tảng', 'Nguồn đơn', 'CTV giới thiệu', 'SĐT CTV', 'Gian hàng']);
+    expect(ORDER_CSV_HEADERS.indexOf('Ghi chú')).toBe(ORDER_CSV_HEADERS.length - 7);
+    expect(ORDER_CSV_HEADERS.at(-1)).toBe('CK thương mại trên HĐ (VNĐ)');
+  });
+
+  it('cột CK thương mại trên HĐ: tiền hàng (Tạm tính) giữ đủ đơn giá gốc, chiết khấu thương mại là cột riêng, tiền quy đổi Điểm Xanh không tính vào', async () => {
+    const base = fakeOrders(3).map((o) => ({ ...o, note: null }));
+    const orders = [
+      { ...base[0]!, subtotal: 100_000, discount: 20_000, tierDiscount: 20_000, shippingFee: 0, total: 80_000 },
+      { ...base[1]!, subtotal: 200_000, discount: 50_000, couponDiscount: 30_000, pointsDiscount: 20_000, total: 170_000 },
+      { ...base[2]!, subtotal: 100_000, discount: 20_000, total: 100_000 },
+    ];
+    const { prisma } = twoModelPrisma(orders, []);
+    const lines = (await collect(orderCsvChunks(prisma, {}))).trimEnd().split('\r\n');
+    const subtotalCol = cell('Tạm tính (VNĐ)');
+    const discountCol = cell('Giảm giá (VNĐ)');
+    const tradeCol = cell('CK thương mại trên HĐ (VNĐ)');
+    const row = (i: number) => parseLine(lines[i + 1]!);
+    expect([row(0)[subtotalCol], row(0)[discountCol], row(0)[tradeCol]]).toEqual(['100000', '20000', '20000']);
+    expect([row(1)[subtotalCol], row(1)[discountCol], row(1)[tradeCol]]).toEqual(['200000', '50000', '30000']);
+    // Đơn cũ chỉ có tổng giảm (các cột phần đều không có): coi trọn là chiết khấu thương mại.
+    expect([row(2)[subtotalCol], row(2)[tradeCol]]).toEqual(['100000', '20000']);
   });
 
   it('đơn gian hàng do khách tự mua qua link CTV: nền tảng, nguồn, CTV, gian hàng, mỗi lô chỉ tra CTV một lần', async () => {

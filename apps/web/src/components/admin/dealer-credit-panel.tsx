@@ -11,15 +11,22 @@ import {
   type AdminOrder,
 } from '@/lib/admin-client';
 import { formatVnd } from '@/lib/shop-client';
+import {
+  PAYMENT_DISCOUNT_ACCOUNT_LABEL,
+  PAYMENT_DISCOUNT_LABEL,
+  PAYMENT_DISCOUNT_LEDGER_REF,
+  settlePayment,
+  suggestPaymentDiscount,
+} from '@tubutree/shared-types';
 import { useConfirm } from './confirm-dialog';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { settleWithin } from '@/lib/settle-within';
-import { BTN_WARNING, FIELD_XS, LoadError, Field } from './ui';
+import { BTN_LINK, BTN_WARNING, FIELD_XS, LoadError, Field } from './ui';
 
 const newIdempotencyKey = () =>
   globalThis.crypto?.randomUUID?.() ?? `dp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 
-type SentSet = { key: string; amount: number; bankRef: string; reportId: string | null; sentAt: number };
+type SentSet = { key: string; amount: number; paymentDiscount?: number; bankRef: string; reportId: string | null; sentAt: number };
 // Quá hạn này thì coi lần gửi trước đã xong hoặc hỏng hẳn: dùng lại khoá sẽ trả bản ghi cũ và nuốt khoản thật mới cùng số tiền.
 const SENT_TTL_MS = 15 * 60 * 1000;
 const sentStorageKey = (userId: string) => `dealer-credit-idem:${userId}`;
@@ -29,6 +36,7 @@ const readSent = (userId: string): SentSet | null => {
     return v &&
       typeof v.key === 'string' &&
       typeof v.amount === 'number' &&
+      (v.paymentDiscount === undefined || typeof v.paymentDiscount === 'number') &&
       typeof v.bankRef === 'string' &&
       (v.reportId === null || typeof v.reportId === 'string') &&
       typeof v.sentAt === 'number'
@@ -76,6 +84,7 @@ export function DealerCreditPanel({
   const qc = useQueryClient();
   const [open, setOpen] = useState(defaultOpen);
   const [amount, setAmount] = useState(defaultAmount ? String(defaultAmount) : '');
+  const [discount, setDiscount] = useState('');
   const [bankRef, setBankRef] = useState('');
   const [note, setNote] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -96,16 +105,21 @@ export function DealerCreditPanel({
   const payMut = useMutation({
     mutationFn: () => {
       const amt = Math.trunc(Number(amount));
+      const disc = Math.trunc(Number(discount)) || 0;
       // Mã giao dịch được máy chủ kiểm trùng riêng, không dùng làm khoá.
       const ref = bankRef.trim();
       const stored = sent.current ?? readSent(userId as string);
       const rid = reportId ?? null;
-      const reusable = !!stored && stored.amount === amt && stored.bankRef === ref && stored.reportId === rid && Date.now() - stored.sentAt <= SENT_TTL_MS;
-      const set: SentSet = reusable ? (stored as SentSet) : { key: newIdempotencyKey(), amount: amt, bankRef: ref, reportId: rid, sentAt: Date.now() };
+      const reusable =
+        !!stored && stored.amount === amt && (stored.paymentDiscount ?? 0) === disc && stored.bankRef === ref && stored.reportId === rid && Date.now() - stored.sentAt <= SENT_TTL_MS;
+      const set: SentSet = reusable ? (stored as SentSet) : { key: newIdempotencyKey(), amount: amt, paymentDiscount: disc, bankRef: ref, reportId: rid, sentAt: Date.now() };
       sent.current = set;
       writeSent(userId as string, set);
       const key = set.key;
-      return recordDealerCreditPayment(userId as string, { amount: amt, bankRef, note, ...(reportId ? { reportId } : {}) }, key).then((r) => ({ ...r, amount: amt }));
+      return recordDealerCreditPayment(userId as string, { amount: amt, bankRef, note, ...(reportId ? { reportId } : {}), ...(disc > 0 ? { paymentDiscount: disc } : {}) }, key).then((r) => ({
+        ...r,
+        amount: amt,
+      }));
     },
     onSuccess: (r) => {
       setMsg({
@@ -116,11 +130,14 @@ export function DealerCreditPanel({
           ? `Báo cáo này đã được ghi nhận trước đó, lần này sổ công nợ không đổi. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
           : r.reportClosed === false
             ? `Mã giao dịch này đã có trong sổ từ lần ghi trước nên không ghi thêm. Dư nợ hiện tại: ${formatVnd(r.balance)}.`
-            : `Đã ghi giảm công nợ. Dư nợ còn lại: ${formatVnd(r.balance)}.`,
+            : r.paymentDiscount
+              ? `Đã ghi giảm công nợ: thực thu ${formatVnd(r.amount)} và ${PAYMENT_DISCOUNT_LABEL.toLowerCase()} ${formatVnd(r.paymentDiscount)} (${PAYMENT_DISCOUNT_ACCOUNT_LABEL}). Dư nợ còn lại: ${formatVnd(r.balance)}.`
+              : `Đã ghi giảm công nợ. Dư nợ còn lại: ${formatVnd(r.balance)}.`,
       });
       sent.current = null;
       writeSent(userId as string, null);
       setAmount('');
+      setDiscount('');
       setBankRef('');
       setNote('');
       const reload = qc.invalidateQueries({ queryKey: ['dealer-credit-ledger', userId] });
@@ -149,10 +166,29 @@ export function DealerCreditPanel({
       setMsg({ ok: false, text: 'Nhập số tiền hợp lệ (đơn vị đồng, số nguyên dương).' });
       return;
     }
+    const disc = discount.trim() === '' ? 0 : Number(discount);
+    if (!Number.isInteger(disc) || disc < 0) {
+      setMsg({ ok: false, text: `${PAYMENT_DISCOUNT_LABEL} phải là số nguyên không âm (đồng).` });
+      return;
+    }
+    if (disc > 0) {
+      if (!note.trim()) {
+        setMsg({ ok: false, text: `Ghi lý do ${PAYMENT_DISCOUNT_LABEL.toLowerCase()} (trả sớm hay đúng hạn theo hợp đồng) vào ô ghi chú.` });
+        return;
+      }
+      const settled = settlePayment({ receivable: balance, cashCollected: amt, paymentDiscount: disc });
+      if (!settled.ok) {
+        setMsg({ ok: false, text: settled.reason });
+        return;
+      }
+    }
     const ok = await confirm({
       title: 'Xác nhận đã nhận tiền trả nợ',
       message:
-        `Xác nhận đã nhận ${formatVnd(amt)} trả nợ từ đại lý này?\n\n` +
+        (disc > 0
+          ? `Xác nhận đã nhận ${formatVnd(amt)} và xoá thêm ${formatVnd(disc)} công nợ làm ${PAYMENT_DISCOUNT_LABEL.toLowerCase()} (ghi vào ${PAYMENT_DISCOUNT_ACCOUNT_LABEL})?\n\n` +
+            `Hoá đơn của các đơn không đổi. Công nợ giảm ${formatVnd(amt + disc)}, còn lại ${formatVnd(balance - amt - disc)}.\n\n`
+          : `Xác nhận đã nhận ${formatVnd(amt)} trả nợ từ đại lý này?\n\n`) +
         'Số tiền sẽ bị chặn không vượt quá dư nợ hiện tại tại thời điểm xác nhận. Không có thao tác huỷ — chỉ bấm khi đã thấy tiền về tài khoản.',
       confirmLabel: 'Đã nhận tiền',
     });
@@ -165,6 +201,12 @@ export function DealerCreditPanel({
   // Quy ước của sổ (DealerService): tổng delta dương = đang nợ; đơn ghi công nợ cộng, khoản đã trả trừ.
   const balance = ledgerQ.data?.balance ?? 0;
   const busy = payMut.isPending;
+  // Bảng đối chiếu: phải thu = thực thu + chiết khấu thanh toán (chi phí tài chính TK 635), cùng luật settlePayment với máy chủ.
+  const cashNum = Math.trunc(Number(amount)) || 0;
+  const discNum = discount.trim() === '' ? 0 : Number(discount);
+  const settlement = cashNum > 0 && balance > 0 ? settlePayment({ receivable: balance, cashCollected: cashNum, paymentDiscount: discNum }) : null;
+  const suggested = suggestPaymentDiscount(balance, cashNum);
+  const clearRest = suggested > 0 && settlePayment({ receivable: balance, cashCollected: cashNum, paymentDiscount: suggested }).ok ? suggested : 0;
 
   return (
     <section aria-label="Công nợ đại lý" className="rounded-card border border-stone-200 bg-stone-0 p-3">
@@ -192,7 +234,9 @@ export function DealerCreditPanel({
               <ul className="max-h-32 overflow-y-auto rounded-control border border-stone-200 bg-stone-50 p-1.5 text-[11px] text-stone-600">
                 {ledgerQ.data.entries.slice(0, 20).map((e) => (
                   <li key={e.id} className="flex justify-between gap-2 py-0.5">
-                    <span className="truncate">{e.note || e.refType}</span>
+                    <span className="truncate" data-ledger-ref={e.refType === PAYMENT_DISCOUNT_LEDGER_REF ? e.refType : undefined}>
+                      {e.note || e.refType}
+                    </span>
                     <span className={e.delta > 0 ? 'text-danger-fg' : 'text-success-fg'}>{formatVnd(e.delta)}</span>
                   </li>
                 ))}
@@ -211,6 +255,17 @@ export function DealerCreditPanel({
                     className={`${FIELD_XS} w-full`}
                   />
                 </Field>
+                <Field label="CK thanh toán (đ, tuỳ chọn)" className="w-40">
+                  <input
+                    type="number"
+                    min={0}
+                    aria-label="CK thanh toán (đ, tuỳ chọn)"
+                    value={discount}
+                    onChange={(e) => setDiscount(e.target.value)}
+                    disabled={busy}
+                    className={`${FIELD_XS} w-full`}
+                  />
+                </Field>
                 <Field label="Mã giao dịch (tuỳ chọn)" className="grow basis-40">
                   <input
                     type="text"
@@ -221,7 +276,7 @@ export function DealerCreditPanel({
                     className={`${FIELD_XS} w-full`}
                   />
                 </Field>
-                <Field label="Ghi chú (tuỳ chọn)" className="grow basis-40">
+                <Field label={discNum > 0 ? `Lý do ${PAYMENT_DISCOUNT_LABEL.toLowerCase()} (bắt buộc)` : 'Ghi chú (tuỳ chọn)'} className="grow basis-40">
                   <input
                     type="text"
                     maxLength={DEALER_PAYMENT_NOTE_MAX}
@@ -241,6 +296,30 @@ export function DealerCreditPanel({
                   {busy ? 'Đang xác nhận…' : 'Xác nhận đã nhận, giảm nợ'}
                 </button>
               </div>
+              {settlement && (
+                <div data-payment-settlement className="space-y-1 rounded-control border border-stone-200 bg-stone-50 p-2 text-[11px] text-stone-700">
+                  {settlement.ok ? (
+                    <dl className="grid grid-cols-[1fr_auto] gap-x-3 gap-y-0.5 tabular-nums">
+                      <dt>Phải thu hoá đơn</dt>
+                      <dd className="text-right font-semibold text-stone-900">{formatVnd(settlement.settlement.receivable)}</dd>
+                      <dt>Thực thu tiền</dt>
+                      <dd className="text-right">{formatVnd(settlement.settlement.cashCollected)}</dd>
+                      <dt>CK thanh toán ({PAYMENT_DISCOUNT_ACCOUNT_LABEL})</dt>
+                      <dd className="text-right">{formatVnd(settlement.settlement.financialExpense)}</dd>
+                      <dt className="font-semibold">Công nợ còn lại</dt>
+                      <dd className="text-right font-semibold text-stone-900">{formatVnd(settlement.settlement.remaining)}</dd>
+                    </dl>
+                  ) : (
+                    <p className="text-danger-fg">{settlement.reason}</p>
+                  )}
+                  {clearRest > 0 && discNum !== clearRest && (
+                    <button type="button" disabled={busy} onClick={() => setDiscount(String(clearRest))} className={`${BTN_LINK} text-[11px]`}>
+                      Xoá nợ phần còn lại {formatVnd(clearRest)} bằng CK thanh toán
+                    </button>
+                  )}
+                  <p className="text-stone-500">Hoá đơn bán hàng vẫn đủ 100%; CK thanh toán chỉ xoá công nợ lúc thu tiền.</p>
+                </div>
+              )}
             </>
           )}
           {msg && (

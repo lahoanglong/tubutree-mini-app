@@ -254,6 +254,7 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/quick-replies': [CSKH],
   'DELETE /admin/quick-replies/:id': [CSKH],
   'PATCH /admin/quick-replies/:id': [CSKH],
+  'GET /admin/reports/exports/payment-discounts': [KE_TOAN],
   'GET /admin/reports/exports/payouts': [KE_TOAN],
   'GET /admin/reports/exports/refunds': [KE_TOAN],
   'GET /admin/reports/exports/tax': [KE_TOAN],

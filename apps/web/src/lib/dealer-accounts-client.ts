@@ -25,6 +25,13 @@ export interface DealerAccountsPage {
   /** 'YYYY-MM' giờ VN. */
   month: string;
   summary: { totalDebt: number; debtors: number };
+  /** Hai khoản kế toán ghi riêng trong tháng của toàn bộ đại lý. Bản API cũ không có. */
+  monthDiscounts?: {
+    /** Chiết khấu thương mại nằm trên hoá đơn các đơn đại lý (đồng). */
+    trade: number;
+    /** Chiết khấu thanh toán đã xoá nợ, ghi vào Chi phí tài chính TK 635 (đồng). */
+    payment: number;
+  };
 }
 export const DEALER_ACCOUNTS_PAGE_SIZE = 20;
 

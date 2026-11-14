@@ -137,7 +137,7 @@ import { InvoiceFilterChips } from '@/components/admin/invoice-filter-chips';
 import { VnDateInput, VnDateTimeInput, datePresets } from '@/components/admin/vn-date-input';
 import { OrderExtraFilters } from '@/components/admin/order-extra-filters';
 import { searchEmptyHint } from '@/components/admin/search-empty-hint';
-import { OrderInvoicePanel, OrderReferralPanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
+import { OrderInvoiceBreakdown, OrderInvoicePanel, OrderReferralPanel, OrderShippingAddress, OrderStatusHistory } from '@/components/admin/order-detail-extras';
 import { DealerTierSelect } from '@/components/admin/dealer-tier-select';
 import { ProductPicker, useVariationLabels } from '@/components/admin/product-picker';
 import type { PickedItem } from '@/components/admin/search-picker';
@@ -2203,6 +2203,8 @@ function OrderDetailBody({
           <p className="text-xs text-stone-500">Không có danh sách sản phẩm chi tiết.</p>
         )}
       </div>
+
+      {canFinance && <OrderInvoiceBreakdown order={o} />}
 
       <OrderShippingAddress order={o} />
 

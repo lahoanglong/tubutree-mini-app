@@ -65,6 +65,10 @@ export const downloadPitCsv = (r: ReportRange) =>
 export const downloadPayoutsCsv = (r: ReportRange, status?: PayoutExportStatus) =>
   apiDownload(`/admin/reports/exports/payouts?${withStatus(r, status)}`, `lenh-rut-tien-${r.from}-${r.to}.csv`);
 
+/** Chiết khấu thanh toán đã xoá nợ đại lý (Nợ TK 635 / Có TK 131) theo ngày ghi sổ. */
+export const downloadPaymentDiscountsCsv = (r: ReportRange) =>
+  apiDownload(`/admin/reports/exports/payment-discounts?${rangeQuery(r)}`, `chiet-khau-thanh-toan-${r.from}-${r.to}.csv`);
+
 /** Khoản hoàn tiền khách theo ngày tạo khoản hoàn. */
 export const downloadRefundsCsv = (r: ReportRange, status?: RefundExportStatus) =>
   apiDownload(`/admin/reports/exports/refunds?${withStatus(r, status)}`, `hoan-tien-khach-${r.from}-${r.to}.csv`);

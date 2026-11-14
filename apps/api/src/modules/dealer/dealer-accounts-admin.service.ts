@@ -5,6 +5,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { escapePrismaLike } from '../catalog/search-text';
 import { startOfVnMonth, vnMonthKey, VN_OFFSET_MS } from '../../common/vn-time';
 import { paginated } from '../../common/pagination';
+import { PAYMENT_DISCOUNT_LEDGER_REF } from '@tubutree/shared-types';
 import { DEALER_SETTLED_STATUSES } from './dealer.service';
 import {
   DEALER_MAX_DISCOUNT_KEY,
@@ -274,11 +275,20 @@ export class DealerAccountsAdminService {
       monthOrders: number;
       roleRevoked: boolean;
     };
-    const [rows, [agg]] = await Promise.all([
+    const [rows, [agg], [tradeAgg], [paymentAgg]] = await Promise.all([
       this.prisma.$queryRaw<Row[]>`${base}
         SELECT * FROM x ORDER BY "debt" DESC, "fullName" ASC NULLS LAST, "id" ASC LIMIT ${q.limit} OFFSET ${offset}`,
       this.prisma.$queryRaw<{ total: number; totalDebt: bigint | null; debtors: number }[]>`${base}
         SELECT count(*)::int AS "total", SUM(GREATEST("debt", 0))::bigint AS "totalDebt", (count(*) FILTER (WHERE "debt" > 0))::int AS "debtors" FROM x`,
+      // Hai khoản kế toán ghi riêng, toàn bộ đại lý trong tháng (không theo bộ lọc danh sách): chiết khấu thương mại nằm trên hoá đơn đơn đại lý,
+      // chiết khấu thanh toán là dòng xoá nợ ghi vào Chi phí tài chính (TK 635) lúc thu tiền.
+      this.prisma.$queryRaw<{ trade: bigint | null }[]>`
+        SELECT COALESCE(SUM(o."discount"), 0)::bigint AS "trade" FROM "orders" o
+         WHERE o."type" = 'DEALER' AND o."createdAt" >= ${monthStart} AND o."createdAt" < ${monthEnd}
+           AND o."status" NOT IN ('CANCELLED', 'RETURNED') AND o."paymentStatus" NOT IN ('REFUNDED', 'FAILED')`,
+      this.prisma.$queryRaw<{ payment: bigint | null }[]>`
+        SELECT COALESCE(-SUM(l."delta"), 0)::bigint AS "payment" FROM "dealer_credit_ledgers" l
+         WHERE l."refType" = ${PAYMENT_DISCOUNT_LEDGER_REF} AND l."createdAt" >= ${monthStart} AND l."createdAt" < ${monthEnd}`,
     ]);
     const data = rows.map((r) => {
       const debt = Number(r.debt);
@@ -300,6 +310,7 @@ export class DealerAccountsAdminService {
       ...paginated(data, q.page, q.limit, agg?.total ?? 0),
       month: vnMonthKey(now),
       summary: { totalDebt: Number(agg?.totalDebt ?? 0), debtors: agg?.debtors ?? 0 },
+      monthDiscounts: { trade: Number(tradeAgg?.trade ?? 0), payment: Number(paymentAgg?.payment ?? 0) },
     };
   }
 }

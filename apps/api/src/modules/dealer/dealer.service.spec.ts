@@ -697,12 +697,18 @@ describe('DealerService.placeOrder — tồn kho', () => {
       { items: [{ variationId: 'v1', quantity: 4 }], paymentMethod: 'PREPAID' } as never,
     );
     const created = orderCreate.mock.calls[0]![0] as {
-      data: { subtotal: number; items: { create: { total: number }[] } };
+      data: { subtotal: number; discount: number; total: number; shippingFee: number; items: { create: { unitPrice: number; total: number; paidTotal: number }[] } };
     };
     // 100000 x 0.8 (chiết khấu mặc định 20%, không tier) x 4 = 320000 — GIỐNG HỆT giá khi đủ
-    // hàng, không bị tính khác vì có phần đặt trước.
-    expect(created.data.subtotal).toBe(320000);
-    expect(created.data.items.create[0]!.total).toBe(320000);
+    // hàng, không bị tính khác vì có phần đặt trước. Chiết khấu thương mại là dòng giảm trên đơn
+    // (tiền hàng gốc 400000 − 80000), đơn giá dòng giữ giá lẻ.
+    expect(created.data.subtotal).toBe(400000);
+    expect(created.data.discount).toBe(80000);
+    expect(created.data.subtotal - created.data.discount).toBe(320000);
+    expect(created.data.total).toBe(320000 + created.data.shippingFee);
+    expect(created.data.items.create[0]!.unitPrice).toBe(100000);
+    expect(created.data.items.create[0]!.total).toBe(400000);
+    expect(created.data.items.create[0]!.paidTotal).toBe(320000);
   });
 });
 
