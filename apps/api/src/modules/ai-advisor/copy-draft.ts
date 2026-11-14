@@ -286,6 +286,37 @@ export function composeCopyDraft(input: CopyDraftInput, ai: CopyAiReply | null, 
 
 export type CopySaveCheck = { ok: true; value: { shortDesc: string; description: string; ingredients: string[] } } | { ok: false; reasons: string[] };
 
+/** Chuẩn hoá, bỏ trống/trùng rồi kiểm từng tên thành phần bằng đúng một bộ luật (dùng chung cho duyệt mô tả và bổ sung thành phần riêng). */
+function checkIngredientNames(raw: readonly string[]): { names: string[]; reasons: string[] } {
+  const reasons: string[] = [];
+  const names: string[] = [];
+  const seen = new Set<string>();
+  for (const r of raw) {
+    const name = squashName(r);
+    const key = fold(name);
+    if (key === '' || seen.has(key)) continue;
+    seen.add(key);
+    names.push(name);
+  }
+  if (names.length > COPY_INGREDIENTS_MAX) reasons.push(`Tối đa ${COPY_INGREDIENTS_MAX} thành phần (đang ${names.length}).`);
+  for (const name of names) {
+    if (name.length > COPY_INGREDIENT_NAME_MAX) reasons.push(`Thành phần "${brief(name)}" dài quá ${COPY_INGREDIENT_NAME_MAX} ký tự.`);
+    if (MARKUP_RESIDUE.test(name)) reasons.push(`Thành phần "${brief(name)}": ${PLAIN_TEXT_ONLY}.`);
+    const claims = claimsIn(name);
+    if (claims.length > 0) reasons.push(`Thành phần "${brief(name)}" có tuyên bố bị chặn (${claims.map((c) => CLAIM_LABEL[c] ?? c).join(', ')}).`);
+  }
+  return { names, reasons };
+}
+
+export type IngredientsSaveCheck = { ok: true; value: string[] } | { ok: false; reasons: string[] };
+
+/** Kiểm danh sách thành phần admin gửi lên (hoặc bản nháp đọc từ ảnh bao bì) mà không cần mô tả: rỗng cũng là lỗi vì việc này chỉ để bổ sung. */
+export function checkIngredientsForSave(raw: readonly string[]): IngredientsSaveCheck {
+  const { names, reasons } = checkIngredientNames(raw);
+  if (names.length === 0) return { ok: false, reasons: ['Chưa có thành phần nào.'] };
+  return reasons.length > 0 ? { ok: false, reasons } : { ok: true, value: names };
+}
+
 /**
  * Kiểm lại bản admin duyệt (có thể đã sửa tay) bằng đúng bộ chặn của bản nháp. Còn tuyên bố cấm thì TỪ CHỐI và nêu câu bị chặn, không tự sửa lặng lẽ.
  * Chỉ chuẩn hoá phần không đổi nghĩa: bỏ thẻ HTML và giải mã thực thể một lượt như web, NFC, bỏ ký tự rộng 0, cắt khoảng trắng, bỏ thành phần trống hoặc trùng.
@@ -308,22 +339,8 @@ export function checkCopyForSave(item: Pick<CopyApproveItem, 'shortDesc' | 'desc
     for (const s of sanitizeCopyText(shortDesc, 'strict').removed) reasons.push(`Mô tả ngắn có câu bị chặn: "${s}"`);
   }
 
-  const names: string[] = [];
-  const seen = new Set<string>();
-  for (const raw of item.ingredients) {
-    const name = squashName(raw);
-    const key = fold(name);
-    if (key === '' || seen.has(key)) continue;
-    seen.add(key);
-    names.push(name);
-  }
-  if (names.length > COPY_INGREDIENTS_MAX) reasons.push(`Tối đa ${COPY_INGREDIENTS_MAX} thành phần (đang ${names.length}).`);
-  for (const name of names) {
-    if (name.length > COPY_INGREDIENT_NAME_MAX) reasons.push(`Thành phần "${brief(name)}" dài quá ${COPY_INGREDIENT_NAME_MAX} ký tự.`);
-    if (MARKUP_RESIDUE.test(name)) reasons.push(`Thành phần "${brief(name)}": ${PLAIN_TEXT_ONLY}.`);
-    const claims = claimsIn(name);
-    if (claims.length > 0) reasons.push(`Thành phần "${brief(name)}" có tuyên bố bị chặn (${claims.map((c) => CLAIM_LABEL[c] ?? c).join(', ')}).`);
-  }
+  const { names, reasons: nameReasons } = checkIngredientNames(item.ingredients);
+  reasons.push(...nameReasons);
 
   return reasons.length > 0 ? { ok: false, reasons } : { ok: true, value: { shortDesc, description, ingredients: names } };
 }

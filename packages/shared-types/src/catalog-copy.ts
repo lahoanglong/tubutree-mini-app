@@ -4,6 +4,8 @@
  * - `GET  /admin/catalog-quality/audit`       → `CatalogAuditResponse` (ADMIN; mọi sản phẩm kể cả đang ẩn, kèm biến thể)
  * - `POST /admin/catalog-quality/copy-drafts` body `{ ids }` (1..`COPY_DRAFT_MAX_BATCH`) → `CopyDraftsResponse` (ADMIN; không ghi DB)
  * - `POST /admin/catalog-quality/copy-approve` body `{ items }` (1..`COPY_DRAFT_MAX_BATCH`) → `CopyApproveResponse` (ADMIN; ghi DB sau khi lọc lại phía máy chủ)
+ * - `POST /admin/catalog-quality/:id/extract-ingredients` body `{ image }` (data URL JPEG/PNG/WebP, tối đa 5 MB) → `IngredientsFromImageResponse` (ADMIN; AI đọc nhãn bao bì, KHÔNG ghi DB; 503 tiếng Việt khi chưa có khoá AI)
+ * - `POST /admin/catalog-quality/:id/ingredients` body `{ ingredients }` (1..8 tên) → `IngredientsSaveResponse` (ADMIN; chỉ NỐI thêm tên mới vào cột `ingredients`, cùng bộ chặn với duyệt mô tả)
  * - `GET  /admin/ai-advisor/stats`            → `AdvisorStatsDto` (ADMIN; bộ đếm trong bộ nhớ của instance API)
  */
 export const COPY_DRAFT_MAX_BATCH = 10;
@@ -74,6 +76,24 @@ export interface CopyApproveResponse {
   saved: string[];
   /** Bị chặn: còn tuyên bố cấm sau khi lọc lại, nội dung rỗng, hay sản phẩm của đối tác/không tồn tại. */
   rejected: { id: string; reasons: string[] }[];
+}
+
+export interface IngredientsFromImageResponse {
+  id: string;
+  /** false: ảnh mờ, không phải bao bì hoặc không có mục Thành phần; `ingredients` rỗng và `warnings` nói rõ. */
+  readable: boolean;
+  /** Bản nháp tên thành phần đọc từ nhãn (có thể nhiều hơn trần lưu); admin phải xem và sửa trước khi lưu. */
+  ingredients: string[];
+  /** Điều bộ chặn lúc lưu sẽ từ chối (quá trần, tuyên bố bị chặn...) và lý do không đọc được, tiếng Việt. */
+  warnings: string[];
+}
+
+export interface IngredientsSaveResponse {
+  id: string;
+  /** Tên thành phần sau khi lưu (gồm cả các dòng đã có từ trước). */
+  ingredients: string[];
+  /** Số tên mới được nối thêm; 0 khi mọi tên đã có sẵn. */
+  added: number;
 }
 
 export interface AdvisorStatsDto {

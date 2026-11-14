@@ -112,3 +112,41 @@ describe('AnthropicClient', () => {
     await expect(client().complete('s', 'u', 10)).rejects.toThrow(/quá thời gian/);
   });
 });
+
+describe('AnthropicClient.completeWithImage', () => {
+  const realFetch = global.fetch;
+  afterEach(() => {
+    global.fetch = realFetch;
+    jest.restoreAllMocks();
+  });
+  const image = { mediaType: 'image/jpeg' as const, base64: 'QUJDRA==' };
+
+  it('gửi khối image base64 rồi khối text trong MỘT lượt user, giữ system, khoá chỉ ở header', async () => {
+    const fetchMock = jest.fn(async () => ok({ content: [{ type: 'text', text: '{"readable":true}' }], stop_reason: 'end_turn' }));
+    global.fetch = fetchMock as never;
+    await expect(client().completeWithImage('hệ thống', 'đọc nhãn', image, 600, 30_000)).resolves.toBe('{"readable":true}');
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    const body = JSON.parse(init.body as string) as { messages: unknown[]; system: string; max_tokens: number; output_config: unknown };
+    expect(body.system).toBe('hệ thống');
+    expect(body.max_tokens).toBe(600);
+    expect(body.messages).toEqual([
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: 'QUJDRA==' } },
+          { type: 'text', text: 'đọc nhãn' },
+        ],
+      },
+    ]);
+    expect(init.body as string).not.toContain(KEY);
+  });
+
+  it('không có khoá thì không gọi mạng; stop_reason khác end_turn là lỗi', async () => {
+    global.fetch = jest.fn() as never;
+    await expect(client({ ANTHROPIC_API_KEY: '' }).completeWithImage('s', 'u', image, 10)).rejects.toThrow(/chưa cấu hình/);
+    expect(global.fetch).not.toHaveBeenCalled();
+
+    global.fetch = jest.fn(async () => ok({ content: [{ type: 'text', text: '{' }], stop_reason: 'max_tokens' })) as never;
+    await expect(client().completeWithImage('s', 'u', image, 10)).rejects.toThrow('Claude dừng sớm: max_tokens');
+  });
+});

@@ -2,6 +2,7 @@ import { findProductCopyFallback, listProductCopyFallbackSlugs } from '@tubutree
 import {
   buildCopyMessages,
   checkCopyForSave,
+  checkIngredientsForSave,
   composeCopyDraft,
   COPY_DESCRIPTION_MAX,
   COPY_INGREDIENT_NAME_MAX,
@@ -393,5 +394,44 @@ describe('checkCopyForSave', () => {
   it('bản nháp AI sinh ra luôn qua được bước kiểm khi duyệt (hai bộ chặn cùng một luật)', () => {
     const d = draftOf(composeCopyDraft(input(), reply({ description: 'Son dưỡng dạng thỏi. Giúp chữa nứt nẻ môi. Dùng hằng ngày.' }), COPY_REASON.unusable));
     expect(checkCopyForSave(d).ok).toBe(true);
+  });
+});
+
+describe('checkIngredientsForSave — chỉ thành phần, không cần mô tả', () => {
+  it('chuẩn hoá, bỏ dòng trống và trùng (không phân biệt dấu/hoa thường), giữ thứ tự', () => {
+    const r = checkIngredientsForSave(['  Bơ   tươi ', 'bo tuoi', '', 'Gấc', '<b>Sáp ong</b>']);
+    expect(r).toEqual({ ok: true, value: ['Bơ tươi', 'Gấc', 'Sáp ong'] });
+  });
+
+  it('danh sách rỗng (sau khi bỏ dòng trống) bị từ chối với lý do rõ ràng', () => {
+    expect(checkIngredientsForSave(['', '   '])).toEqual({ ok: false, reasons: ['Chưa có thành phần nào.'] });
+    expect(checkIngredientsForSave([])).toEqual({ ok: false, reasons: ['Chưa có thành phần nào.'] });
+  });
+
+  it(`quá ${COPY_INGREDIENTS_MAX} tên, tên quá ${COPY_INGREDIENT_NAME_MAX} ký tự hoặc còn mã HTML thì từ chối`, () => {
+    const many = Array.from({ length: COPY_INGREDIENTS_MAX + 1 }, (_, i) => `Thành phần ${i}`);
+    const tooMany = checkIngredientsForSave(many);
+    expect(tooMany.ok).toBe(false);
+    expect(tooMany.ok === false && tooMany.reasons.join(' ')).toContain(`Tối đa ${COPY_INGREDIENTS_MAX} thành phần`);
+
+    const long = checkIngredientsForSave(['x'.repeat(COPY_INGREDIENT_NAME_MAX + 1)]);
+    expect(long.ok === false && long.reasons.join(' ')).toContain(`dài quá ${COPY_INGREDIENT_NAME_MAX} ký tự`);
+
+    const markup = checkIngredientsForSave(['Bơ &amp;#7919; tươi']);
+    expect(markup.ok).toBe(false);
+  });
+
+  it('thành phần mang tuyên bố bị chặn (công dụng y tế) bị từ chối kèm tên', () => {
+    const r = checkIngredientsForSave(['Bơ tươi', 'Chữa nứt nẻ môi']);
+    expect(r.ok).toBe(false);
+    expect(r.ok === false && r.reasons.join(' ')).toContain('Chữa nứt nẻ môi');
+  });
+
+  it('cùng luật với checkCopyForSave: tên nào checkCopyForSave chặn thì ở đây cũng chặn', () => {
+    const names = ['Chữa nứt nẻ môi', 'Hương liệu tự nhiên'];
+    for (const n of names) {
+      const full = checkCopyForSave({ shortDesc: '', description: 'Mô tả sạch.', ingredients: [n] });
+      expect(checkIngredientsForSave([n]).ok).toBe(full.ok);
+    }
   });
 });
