@@ -10,16 +10,19 @@ import {
   candidateForSlug,
   clearDecision,
   loadDecisions,
+  loadWpCatalog,
   nodeWpHttp,
   pickImageUrls,
   recordDecision,
   resolveWpProduct,
+  type DecisionDetail,
   type ResolvedWpProduct,
   type WpCandidateTier,
   type WpDecision,
   type WpHttp,
   type WpImageCandidate,
 } from './wp-image-sync.core';
+import { buildWpMatcher, type WpCatalogItem, type WpMatcher, type WpSuggestion } from './wp-image-suggest';
 
 export const WP_HTTP = Symbol('WP_HTTP');
 
@@ -35,8 +38,28 @@ const MSG = {
 
 const WP_CACHE_TTL_MS = 10 * 60 * 1000;
 const WP_LOOKUP_CONCURRENCY = 3;
+const SUGGEST_NAME_MAX = 60;
 
 export type WpRowState = 'PENDING' | 'SKIPPED' | 'APPLIED' | 'HAS_IMAGES';
+/** NONE: sản phẩm đang rỗng ảnh nhưng WordPress không có gì đủ giống để gợi ý (không có thao tác duyệt, cần ảnh mới). */
+export type WpRowTier = WpCandidateTier | 'NONE';
+
+const NONE_LABEL = 'Chưa có gợi ý';
+const NOTE_NO_MATCH = 'Chưa thấy sản phẩm nào ở WordPress đủ giống tên để gợi ý ảnh. Cần ảnh mới: tải lên ở trang sản phẩm.';
+const NOTE_WP_DOWN = 'Chưa đọc được kho sản phẩm WordPress để gợi ý ảnh. Bấm "Tải lại" sau ít phút.';
+const NOTE_APPLIED_BY_SUGGESTION = 'Ảnh đã được nạp từ WordPress theo gợi ý tên.';
+const NOTE_HAS_IMAGES = 'Sản phẩm đã có ảnh.';
+const NOTE_INACTIVE = 'Sản phẩm đang tắt nên chưa gợi ý ảnh. Bật lại sản phẩm rồi bấm "Tải lại".';
+
+const clip = (s: string): string => (s.length > SUGGEST_NAME_MAX ? `${s.slice(0, SUGGEST_NAME_MAX - 1)}…` : s);
+const suggestionNote = (found: readonly WpSuggestion[]): string =>
+  `Gợi ý tự động theo tên, chưa ai kiểm bao bì: ${found.map((f) => `"${clip(f.name)}" (khớp ${Math.round(f.score * 100)}%)`).join('; ')}. Đối chiếu bao bì trước khi duyệt.`;
+
+/** Ứng viên dựng từ gợi ý tên cho sản phẩm không nằm trong bảng làm tay; null khi WordPress không có gì đủ giống. Hạng luôn là CANDIDATE, không bao giờ EXACT. */
+function suggestCandidate(product: { slug: string; name: string; brand: string }, matcher: WpMatcher): WpImageCandidate | null {
+  const found = matcher({ name: product.name, brand: product.brand });
+  return found.length === 0 ? null : { productSlug: product.slug, tier: 'CANDIDATE', sources: found.map((f) => f.source), note: suggestionNote(found) };
+}
 
 export interface WpImageRow {
   productId: string;
@@ -44,7 +67,7 @@ export interface WpImageRow {
   name: string;
   isActive: boolean;
   variations: string[];
-  tier: WpCandidateTier;
+  tier: WpRowTier;
   tierLabel: string;
   note: string;
   state: WpRowState;
@@ -55,6 +78,8 @@ export interface WpImageRow {
   wp: ResolvedWpProduct[] | null;
   /** Bộ ảnh mà "Duyệt" dùng khi không chọn tay; cùng luật với `applyWpCandidate` nên bảng duyệt không tự suy lại. */
   defaultImageUrls: string[] | null;
+  /** true: chưa đọc được kho WordPress nên chưa biết có gợi ý hay không (khác "đã đối chiếu mà không có gì giống"); chỉ đi với tier NONE. */
+  suggestUnavailable: boolean;
 }
 
 export interface WpImageListResponse {
@@ -79,6 +104,7 @@ export class WpImageSyncService {
   private readonly cache = new Map<string, { at: number; value: ResolvedWpProduct }>();
   /** Mỗi lượt duyệt tải tới 8 ảnh nguồn (8 MB, 16 MP mỗi ảnh) qua sharp: nối đuôi để hai lượt đồng thời không cộng dồn RAM. */
   private tail: Promise<unknown> = Promise.resolve();
+  private catalogCache: { at: number; value: WpCatalogItem[] } | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -127,13 +153,20 @@ export class WpImageSyncService {
         appliedCount: decision?.decision === 'APPLIED' ? (decision.imageCount ?? null) : null,
         wp: null,
         defaultImageUrls: null,
+        suggestUnavailable: false,
       });
     }
 
+    const candidateBySlug = new Map<string, WpImageCandidate>(candidates.map((c) => [c.productSlug, c]));
     if (live) {
-      const toResolve = rows.filter((r) => r.state === 'PENDING' || r.state === 'SKIPPED');
+      // Sản phẩm rỗng ảnh chưa có dòng làm tay: gợi ý theo tên (CANDIDATE) hoặc báo chưa có gợi ý (NONE). Chỉ ở chế độ live vì cần kho WordPress.
+      const extra = await this.suggestedRows(decisions, new Set(slugs));
+      rows.push(...extra.rows);
+      for (const [slug, candidate] of extra.candidates) candidateBySlug.set(slug, candidate);
+
+      const toResolve = rows.filter((r) => (r.state === 'PENDING' || r.state === 'SKIPPED') && candidateBySlug.has(r.productSlug));
       await this.pool(toResolve, async (row) => {
-        const candidate = this.candidateOf(row.productSlug);
+        const candidate = candidateBySlug.get(row.productSlug)!;
         row.wp = await Promise.all(candidate.sources.map((s) => this.resolveCached(s)));
         row.defaultImageUrls = pickImageUrls(candidate.tier, row.wp);
       });
@@ -182,27 +215,114 @@ export class WpImageSyncService {
     });
   }
 
-  /** Xem lại ứng viên đã bỏ qua. Ảnh đã nạp không gỡ ở đây (đó là sửa sản phẩm). Cùng hàng đợi với `approve` như `skip`. */
+  /**
+   * Xem lại ứng viên đã bỏ qua. Ảnh đã nạp không gỡ ở đây (đó là sửa sản phẩm). Cùng hàng đợi với `approve` như `skip`.
+   * Với sản phẩm ngoài bảng làm tay chỉ cần đã có quyết định: xoá quyết định không phụ thuộc kho WordPress, nếu không WordPress tắt hay đổi tên là không gỡ được "Đã bỏ qua".
+   */
   async restore(productId: string): Promise<WpImageActionResponse> {
     return this.serialize<WpImageActionResponse>(async () => {
-      const { candidate } = await this.loadCandidate(productId);
+      const { candidate } = await this.loadCandidate(productId, true);
       await this.assertNotApplied(candidate);
       await clearDecision(this.prisma, candidate.productSlug);
       return { productId, state: 'PENDING' };
     });
   }
 
-  private candidateOf(slug: string): WpImageCandidate {
-    const c = candidateForSlug(slug);
-    if (!c) throw new NotFoundException(MSG.notCandidate);
-    return c;
+  /**
+   * Dòng cho sản phẩm đang bán, rỗng ảnh, không nằm trong bảng làm tay (cộng sản phẩm đã có quyết định duyệt để dòng "Đã duyệt" không biến mất).
+   * Có gợi ý theo tên thì hạng CANDIDATE kèm ứng viên để tải ảnh WordPress; không có thì hạng NONE và không có thao tác duyệt.
+   */
+  private async suggestedRows(decisions: ReadonlyMap<string, DecisionDetail>, curatedSlugs: ReadonlySet<string>): Promise<{ rows: WpImageRow[]; candidates: Map<string, WpImageCandidate> }> {
+    const decidedSlugs = [...decisions.keys()].filter((s) => !curatedSlugs.has(s));
+    const products = await this.prisma.product.findMany({
+      where: { storefrontId: null, slug: { notIn: [...curatedSlugs] }, OR: [{ isActive: true, images: { isEmpty: true } }, { slug: { in: decidedSlugs } }] },
+      select: { id: true, slug: true, name: true, brand: true, isActive: true, variations: { where: { isActive: true }, select: { name: true }, orderBy: VARIATION_ORDER_BY } },
+      orderBy: { name: 'asc' },
+    });
+    const candidates = new Map<string, WpImageCandidate>();
+    if (products.length === 0) return { rows: [], candidates };
+
+    // Không tải cột images (base64 nhiều MB): chỉ cần biết sản phẩm nào đang rỗng.
+    const empty = await this.prisma.product.findMany({ where: { slug: { in: products.map((p) => p.slug) }, images: { isEmpty: true } }, select: { slug: true } });
+    const emptySlugs = new Set(empty.map((p) => p.slug));
+    const stateOf = (slug: string): WpRowState => {
+      const decision = decisions.get(slug)?.decision;
+      if (decision === 'APPLIED') return 'APPLIED';
+      if (!emptySlugs.has(slug)) return 'HAS_IMAGES';
+      return decision === 'SKIPPED' ? 'SKIPPED' : 'PENDING';
+    };
+    const open = products.filter((p) => stateOf(p.slug) === 'PENDING' || stateOf(p.slug) === 'SKIPPED');
+    const catalog = open.length > 0 ? await this.catalog() : null;
+    const matcher = catalog ? buildWpMatcher(catalog) : null;
+
+    const rows: WpImageRow[] = products.map((p) => {
+      const state = stateOf(p.slug);
+      const decision = decisions.get(p.slug);
+      let tier: WpRowTier = 'NONE';
+      let note = NOTE_HAS_IMAGES;
+      let suggestUnavailable = false;
+      if (state === 'APPLIED') {
+        tier = 'CANDIDATE';
+        note = NOTE_APPLIED_BY_SUGGESTION;
+      } else if (state !== 'HAS_IMAGES') {
+        // Sản phẩm đang tắt không gợi ý (approve/skip cũng từ chối sản phẩm tắt), để dòng không hiện nút mà bấm vào là 404.
+        const candidate = matcher && p.isActive ? suggestCandidate(p, matcher) : null;
+        if (candidate) candidates.set(p.slug, candidate);
+        tier = candidate ? 'CANDIDATE' : 'NONE';
+        suggestUnavailable = matcher === null && p.isActive;
+        note = candidate?.note ?? (!p.isActive ? NOTE_INACTIVE : matcher ? NOTE_NO_MATCH : NOTE_WP_DOWN);
+      }
+      return {
+        productId: p.id,
+        productSlug: p.slug,
+        name: p.name,
+        isActive: p.isActive,
+        variations: p.variations.map((v) => v.name),
+        tier,
+        tierLabel: tier === 'NONE' ? NONE_LABEL : WP_TIER_LABELS[tier],
+        note,
+        state,
+        decidedBy: decision?.by ?? null,
+        decidedAt: decision?.at ?? null,
+        appliedCount: decision?.decision === 'APPLIED' ? (decision.imageCount ?? null) : null,
+        wp: null,
+        defaultImageUrls: null,
+        suggestUnavailable,
+      };
+    });
+    // Dòng có gợi ý lên trước dòng không có; trong cùng nhóm giữ thứ tự tên.
+    rows.sort((a, b) => Number(a.tier === 'NONE') - Number(b.tier === 'NONE'));
+    return { rows, candidates };
   }
 
-  private async loadCandidate(productId: string): Promise<{ candidate: WpImageCandidate; hasImages: boolean }> {
-    const product = await this.prisma.product.findUnique({ where: { id: productId }, select: { slug: true, storefrontId: true } });
-    if (!product) throw new NotFoundException(MSG.noProduct);
-    const candidate = candidateForSlug(product.slug);
+  private async catalog(): Promise<WpCatalogItem[] | null> {
+    if (this.catalogCache && Date.now() - this.catalogCache.at < WP_CACHE_TTL_MS) return this.catalogCache.value;
+    const value = await loadWpCatalog(this.http);
+    // Lỗi (WordPress tắt, mạng chập chờn) không cache, như `resolveCached`.
+    if (value) this.catalogCache = { at: Date.now(), value };
+    return value;
+  }
+
+  /** Ứng viên theo gợi ý tên cho sản phẩm ngoài bảng làm tay. Sản phẩm đối tác hoặc đang tắt không có; kho WordPress không đọc được thì 502; không có gì giống thì coi như không phải ứng viên. */
+  private async suggestFor(product: { slug: string; name: string; brand: string; isActive: boolean; storefrontId: string | null }): Promise<WpImageCandidate> {
+    if (product.storefrontId !== null || !product.isActive) throw new NotFoundException(MSG.notCandidate);
+    const catalog = await this.catalog();
+    if (!catalog) throw new BadGatewayException(MSG.wpDown);
+    const candidate = suggestCandidate(product, buildWpMatcher(catalog));
     if (!candidate) throw new NotFoundException(MSG.notCandidate);
+    return candidate;
+  }
+
+  /** Ứng viên của sản phẩm đã có quyết định (chỉ để xoá quyết định): không gọi WordPress. Sản phẩm đối tác hoặc chưa từng được quyết định thì không phải ứng viên. */
+  private async decidedCandidate(product: { slug: string; storefrontId: string | null }): Promise<WpImageCandidate> {
+    if (product.storefrontId !== null || !(await loadDecisions(this.prisma)).has(product.slug)) throw new NotFoundException(MSG.notCandidate);
+    return { productSlug: product.slug, tier: 'CANDIDATE', sources: [], note: '' };
+  }
+
+  private async loadCandidate(productId: string, decidedOnly = false): Promise<{ candidate: WpImageCandidate; hasImages: boolean }> {
+    const product = await this.prisma.product.findUnique({ where: { id: productId }, select: { slug: true, name: true, brand: true, isActive: true, storefrontId: true } });
+    if (!product) throw new NotFoundException(MSG.noProduct);
+    const candidate = candidateForSlug(product.slug) ?? (await (decidedOnly ? this.decidedCandidate(product) : this.suggestFor(product)));
     if (product.storefrontId !== null) throw new ConflictException(MSG.partner);
     const empty = await this.prisma.product.count({ where: { id: productId, images: { isEmpty: true } } });
     return { candidate, hasImages: empty === 0 };

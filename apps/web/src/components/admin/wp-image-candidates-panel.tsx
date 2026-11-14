@@ -38,7 +38,9 @@ export function WpImageCandidatesPanel({ onChanged }: { onChanged?: () => void }
 
   const list = useQuery({ queryKey: KEY, queryFn: () => listWpImageCandidates(true), enabled: open, staleTime: 60_000 });
   const items = list.data?.items ?? [];
-  const pending = items.filter((r) => r.state === 'PENDING');
+  // Dòng hạng NONE (WordPress không có ảnh đủ giống) không có gì để duyệt hay bỏ qua: chỉ trang duyệt ảnh toàn màn mới liệt kê.
+  // Dòng hạng NONE (WordPress không có ảnh đủ giống) không có gì để duyệt hay bỏ qua: chỉ trang duyệt ảnh toàn màn mới liệt kê.
+  const pending = items.filter((r) => r.state === 'PENDING' && r.tier !== 'NONE');
   const skipped = items.filter((r) => r.state === 'SKIPPED');
   const applied = items.filter((r) => r.state === 'APPLIED');
   const hasImages = list.data?.counts.HAS_IMAGES ?? 0;

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { WpImageTriage } from './wp-image-triage';
-import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
+import { answerConfirm, byText, click, confirmDialog, flush, mockFetch, render, typeInto, type Rendered } from '@/test-utils/dom';
 import type { WpImageList, WpImageRow } from '@/lib/wp-image-candidates';
 
 let mounted: Rendered[] = [];
@@ -27,6 +27,7 @@ const row = (over: Partial<WpImageRow> = {}): WpImageRow => ({
   appliedCount: null,
   wp: [{ id: 8454, slug: 'mat-hoa-dua-co-dac', name: 'Mật hoa dừa cô đặc', imageUrls: [wpUrl('a'), wpUrl('b'), wpUrl('c')], error: null }],
   defaultImageUrls: [wpUrl('a'), wpUrl('b'), wpUrl('c')],
+  suggestUnavailable: false,
   ...over,
 });
 const list = (items: WpImageRow[], hasImages = 0): WpImageList => ({
@@ -62,7 +63,7 @@ const pill = (c: HTMLElement, key: string) => c.querySelector<HTMLButtonElement>
 const cards = (c: HTMLElement) => Array.from(c.querySelectorAll('[data-testid="wp-triage-card"]'));
 
 describe('WpImageTriage (trang duyệt ảnh WordPress)', () => {
-  it('hỏi WordPress một lần khi mở (?live=1), mặc định lọc "Chờ duyệt", sáu nhóm kèm số đều chữ số', async () => {
+  it('hỏi WordPress một lần khi mở (?live=1), mặc định lọc "Chờ duyệt", tám nhóm kèm số đều chữ số', async () => {
     const { m, container } = setup(
       list([
         row(),
@@ -75,7 +76,7 @@ describe('WpImageTriage (trang duyệt ảnh WordPress)', () => {
     await flush();
     expect(m.calls.filter((c) => c.url.includes('/admin/catalog-wp-images?live=1'))).toHaveLength(1);
     const pills = Array.from(container.querySelectorAll('[data-testid^="wp-triage-pill-"]'));
-    expect(pills.map((p) => p.textContent)).toEqual(['Tất cả5', 'Chờ duyệt2', 'Khớp chính xác4', 'Đã duyệt1', 'Đã bỏ qua1', 'Chưa có ảnh3']);
+    expect(pills.map((p) => p.textContent)).toEqual(['Tất cả5', 'Chờ duyệt2', 'Khớp chính xác4', 'Đã duyệt1', 'Đã bỏ qua1', 'Chưa có ảnh3', 'Có ảnh gợi ý3', 'Chưa có gợi ý0']);
     expect(pills.every((p) => p.querySelector('.tabular-nums'))).toBe(true);
     expect(pills.every((p) => /min-h-\[44px\]/.test(p.className) && /min-w-\[44px\]/.test(p.className))).toBe(true);
     expect(pill(container, 'pending').getAttribute('aria-pressed')).toBe('true');
@@ -253,10 +254,146 @@ describe('WpImageTriage (trang duyệt ảnh WordPress)', () => {
     expect(m.calls.length).toBeGreaterThan(before);
   });
 
+  describe('ô tìm, nhóm gợi ý và dòng chưa có gợi ý', () => {
+    const none = row({
+      productId: 'p9',
+      productSlug: 'xoai-say-deo-bh-nong-5f75de',
+      name: 'Xoài sấy dẻo BH.NONG',
+      tier: 'NONE',
+      tierLabel: 'Chưa có gợi ý',
+      note: 'Chưa thấy sản phẩm nào ở WordPress đủ giống tên để gợi ý ảnh. Cần ảnh mới: tải lên ở trang sản phẩm.',
+      wp: null,
+      defaultImageUrls: null,
+    });
+    const cand = row({
+      productId: 'p8',
+      productSlug: 'granola-mix-nuts-tui-tien-loi-bh-nong-3b8792',
+      name: 'Granola mix nuts túi tiện lợi BH.NONG',
+      tier: 'CANDIDATE',
+      tierLabel: 'Gợi ý theo tên, chưa kiểm',
+      note: 'Gợi ý tự động theo tên, chưa ai kiểm bao bì: "Granola mix trái cây sấy BH.NONG" (khớp 62%). Đối chiếu bao bì trước khi duyệt.',
+    });
+    const search = (c: HTMLElement) => c.querySelector<HTMLInputElement>('[data-testid="wp-triage-search"]')!;
+
+    it('có ô tìm cỡ chạm 44px, nhãn rõ', async () => {
+      const { container } = setup(list([row()]));
+      await flush();
+      const input = search(container);
+      expect(input.type).toBe('search');
+      expect(input.getAttribute('aria-label')).toBe('Tìm sản phẩm theo tên hoặc mã');
+      expect(input.className).toMatch(/min-h-\[44px\]/);
+    });
+
+    it('gõ không dấu ra sản phẩm có dấu; số đếm của nhóm tính trên kết quả tìm; báo số khớp; xoá ô thì trả đủ', async () => {
+      const { container } = setup(list([row(), row({ productId: 'p2', productSlug: 'ca-phe-muoi-tui-50x16g-9fbabb', name: 'Cà phê muối túi 50x16g' })]));
+      await flush();
+      expect(cards(container)).toHaveLength(2);
+      expect(container.querySelector('[role="status"]')).toBeNull();
+      typeInto(search(container), 'ca phe');
+      await flush();
+      expect(cards(container)).toHaveLength(1);
+      expect(cards(container)[0]!.textContent).toContain('Cà phê muối túi 50x16g');
+      expect(pill(container, 'pending').textContent).toBe('Chờ duyệt1');
+      expect(pill(container, 'all').textContent).toBe('Tất cả1');
+      expect(container.querySelector('[role="status"]')?.textContent).toBe('Tìm “ca phe”: 1/2 sản phẩm khớp.');
+      typeInto(search(container), '');
+      await flush();
+      expect(cards(container)).toHaveLength(2);
+      expect(container.querySelector('[role="status"]')).toBeNull();
+    });
+
+    it('tìm theo mã sản phẩm; không có gì khớp thì nói rõ từ đang tìm', async () => {
+      const { container } = setup(list([row(), row({ productId: 'p2', productSlug: 'ca-phe-muoi-tui-50x16g-9fbabb', name: 'Cà phê muối túi 50x16g' })]));
+      await flush();
+      typeInto(search(container), '9fbabb');
+      await flush();
+      expect(cards(container).map((c) => c.textContent)).toEqual([expect.stringContaining('Mã sản phẩm: ca-phe-muoi-tui-50x16g-9fbabb')]);
+      typeInto(search(container), 'không có đâu');
+      await flush();
+      expect(cards(container)).toHaveLength(0);
+      expect(container.textContent).toContain('Không có sản phẩm nào khớp “không có đâu”.');
+    });
+
+    it('tìm và nhóm lọc cùng áp; đang lưu thì ô tìm vẫn gõ được nhưng không gửi thêm việc', async () => {
+      let release!: () => void;
+      const hold = new Promise<void>((r) => (release = r));
+      const { m, container } = setup(list([row(), row({ productId: 'p2', productSlug: 'sp-hai', name: 'SP hai' })]), { hold });
+      await flush();
+      click(container.querySelector('button[aria-label="Duyệt dùng ảnh này cho Mật cô đặc 250g"]'));
+      await flush();
+      typeInto(search(container), 'hai');
+      await flush();
+      expect(search(container).disabled).toBe(false);
+      expect(cards(container).map((c) => c.getAttribute('data-state'))).toEqual(['PENDING']);
+      release();
+      await flush();
+      expect(posts(m, '/approve')).toHaveLength(1);
+    });
+
+    it('nhóm "Có ảnh gợi ý" và "Chưa có gợi ý" tách đúng, số đếm và dòng tổng khớp nhau', async () => {
+      const { container } = setup(list([row(), cand, none]));
+      await flush();
+      expect(pill(container, 'pending').textContent).toBe('Chờ duyệt2');
+      expect(pill(container, 'suggested').textContent).toBe('Có ảnh gợi ý2');
+      expect(pill(container, 'noSuggestion').textContent).toBe('Chưa có gợi ý1');
+      expect(pill(container, 'noImage').textContent).toBe('Chưa có ảnh3');
+      expect(cards(container).map((c) => c.querySelector('h2')?.textContent)).toEqual(['Mật cô đặc 250g', 'Granola mix nuts túi tiện lợi BH.NONG']);
+      click(pill(container, 'noSuggestion'));
+      expect(cards(container).map((c) => c.querySelector('h2')?.textContent)).toEqual(['Xoài sấy dẻo BH.NONG']);
+      expect(container.textContent).toContain('Tổng 3 sản phẩm; 3 chưa có ảnh (2 có ảnh gợi ý, 1 chưa có gợi ý).');
+    });
+
+    it('dòng chưa có gợi ý: nói cần ảnh mới, không có nút duyệt hay bỏ qua, không có ô chọn ảnh', async () => {
+      const { container } = setup(list([none]));
+      await flush();
+      click(pill(container, 'noSuggestion'));
+      const card = cards(container)[0]!;
+      expect(card.textContent).toContain('Chưa có gợi ý');
+      expect(card.textContent).toContain('Cần ảnh mới: tải lên ở trang sản phẩm.');
+      expect(card.textContent).toContain('Không có ảnh WordPress để chọn cho sản phẩm này.');
+      expect(card.textContent).not.toContain('Chưa hỏi được WordPress');
+      expect(card.querySelectorAll('button, input[type="checkbox"]')).toHaveLength(0);
+      expect(card.querySelector('[role="img"][aria-label="Chưa có ảnh"]')).not.toBeNull();
+    });
+
+    it('WordPress lỗi lúc gợi ý: dòng báo chưa hỏi được, không bị tính vào "Chưa có gợi ý", dòng tổng nói rõ', async () => {
+      const unknown = row({ ...none, productId: 'p7', productSlug: 'bot-hat-cu-qua', name: 'Bột hạt củ quả', suggestUnavailable: true, note: 'Chưa đọc được kho sản phẩm WordPress để gợi ý ảnh. Bấm "Tải lại" sau ít phút.' });
+      const { container } = setup(list([row(), none, unknown]));
+      await flush();
+      expect(pill(container, 'noSuggestion').textContent).toBe('Chưa có gợi ý1');
+      expect(pill(container, 'noImage').textContent).toBe('Chưa có ảnh3');
+      click(pill(container, 'noImage'));
+      const card = cards(container).find((c) => c.textContent?.includes('Bột hạt củ quả'))!;
+      expect(card.textContent).toContain('Chưa hỏi được WordPress. Bấm “Tải lại” ở đầu trang.');
+      expect(card.textContent).not.toContain('Không có ảnh WordPress để chọn');
+      expect(card.querySelectorAll('button')).toHaveLength(0);
+      expect(container.textContent).toContain('Tổng 3 sản phẩm; 3 chưa có ảnh (1 có ảnh gợi ý, 1 chưa có gợi ý, 1 chưa hỏi được WordPress).');
+    });
+
+    it('dòng gợi ý theo tên: hiện hạng và lý do khớp, duyệt phải qua hộp xác nhận nêu hạng', async () => {
+      const { m, container } = setup(list([cand]));
+      await flush();
+      const card = cards(container)[0]!;
+      expect(card.textContent).toContain('Gợi ý theo tên, chưa kiểm');
+      expect(card.textContent).toContain('khớp 62%');
+      click(byText(container, 'button', 'Duyệt dùng ảnh này'));
+      await flush();
+      expect(confirmDialog()?.textContent).toContain('Gợi ý theo tên, chưa kiểm');
+      answerConfirm(false);
+      await flush();
+      expect(posts(m, '/approve')).toHaveLength(0);
+      click(byText(container, 'button', 'Duyệt dùng ảnh này'));
+      await flush();
+      answerConfirm(true);
+      await flush();
+      expect(posts(m, '/p8/approve')).toHaveLength(1);
+    });
+  });
+
   it('bảng ứng viên rỗng thì nói rõ; nút Tải lại gọi lại danh sách', async () => {
     const { m, container } = setup(list([]));
     await flush();
-    expect(container.textContent).toContain('Chưa có sản phẩm nào trong bảng ứng viên ảnh WordPress.');
+    expect(container.textContent).toContain('Chưa có sản phẩm nào cần duyệt ảnh WordPress.');
     const before = m.calls.length;
     click(byText(container, 'button', 'Tải lại'));
     await flush();

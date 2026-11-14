@@ -18,8 +18,8 @@ import { formatDateTime } from '@/lib/format-date';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { useToastedMessage } from '@/components/admin/admin-toast';
-import { BTN_PRIMARY, BTN_SECONDARY, ListSkeleton, LoadError, Notice, ToneBadge } from '@/components/admin/ui';
-import { TRIAGE_FILTERS, applyOptimistic, filterCounts, matchesFilter, stillWithoutImage, type TriageAction, type TriageFilter } from './triage-filter';
+import { BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, ListSkeleton, LoadError, Notice, TOUCH_H, ToneBadge } from '@/components/admin/ui';
+import { TRIAGE_FILTERS, applyOptimistic, filterCounts, hasSuggestion, matchesFilter, matchesQuery, stillWithoutImage, type TriageAction, type TriageFilter } from './triage-filter';
 
 const KEY = ['admin-wp-image-triage'] as const;
 
@@ -49,12 +49,14 @@ const when = (iso: string | null): string | null => {
 /**
  * Bàn duyệt ảnh WordPress toàn trang: mỗi sản phẩm một thẻ đặt ảnh Tubu Tree cạnh ảnh ứng viên ở tubutree.com, một chạm Duyệt / Bỏ qua / Đưa về chờ duyệt.
  * Duyệt = máy chủ tải ảnh về và lưu vào sản phẩm (không dẫn link sang WordPress). Nhóm khác "Chắc chắn cùng sản phẩm" phải qua hộp xác nhận vì có thể là ảnh của quy cách khác.
- * Danh sách chỉ có sản phẩm nằm trong bảng ứng viên của máy chủ; sản phẩm đang bán chưa có ảnh nhưng không có ứng viên thì không hiện ở đây.
+ * Danh sách gồm sản phẩm trong bảng ứng viên làm tay, sản phẩm rỗng ảnh có gợi ý theo tên ("Gợi ý theo tên, chưa kiểm": phải đối chiếu bao bì) và sản phẩm rỗng ảnh
+ * chưa có gợi ý nào ("Chưa có gợi ý": không có thao tác duyệt, cần ảnh mới). Ô tìm và nhóm lọc cùng áp: số đếm của từng nhóm tính trên kết quả tìm.
  */
 export function WpImageTriage() {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const [filter, setFilter] = useState<TriageFilter>('pending');
+  const [query, setQuery] = useState('');
   const [picked, setPicked] = useState<Record<string, string[]>>({});
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const inlineMsg = useToastedMessage(msg);
@@ -63,8 +65,11 @@ export function WpImageTriage() {
 
   const list = useQuery({ queryKey: KEY, queryFn: () => listWpImageCandidates(true), staleTime: 60_000, refetchOnWindowFocus: false });
   const items = list.data?.items ?? [];
-  const counts = filterCounts(items);
-  const shown = items.filter((r) => matchesFilter(r, filter));
+  const searched = items.filter((r) => matchesQuery(r, query));
+  const counts = filterCounts(searched);
+  const shown = searched.filter((r) => matchesFilter(r, filter));
+  const searching = query.trim() !== '';
+  const totals = filterCounts(items);
 
   const act = useMutation({
     mutationFn: ({ action, row, urls }: Vars) => (action.kind === 'approve' ? approveWpImages(row.productId, urls) : action.kind === 'skip' ? skipWpImages(row.productId) : restoreWpImages(row.productId)),
@@ -128,14 +133,17 @@ export function WpImageTriage() {
     <div className="space-y-4">
       {dialog}
       <div className="flex flex-wrap items-center gap-2">
-        <div role="group" aria-label="Lọc theo trạng thái" className="flex min-w-0 flex-wrap gap-2">
-          {TRIAGE_FILTERS.map((f) => (
-            <button key={f.key} type="button" data-testid={`wp-triage-pill-${f.key}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)} className={pillClass(filter === f.key)}>
-              {f.label}
-              <span className="tabular-nums">{counts[f.key]}</span>
-            </button>
-          ))}
-        </div>
+        <input
+          type="search"
+          data-testid="wp-triage-search"
+          aria-label="Tìm sản phẩm theo tên hoặc mã"
+          placeholder="Tìm theo tên hoặc mã sản phẩm"
+          autoComplete="off"
+          enterKeyHint="search"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className={`${FIELD_CLASS} ${TOUCH_H} w-full sm:w-80`}
+        />
         <button
           type="button"
           onClick={() => {
@@ -149,6 +157,21 @@ export function WpImageTriage() {
         </button>
       </div>
 
+      <div role="group" aria-label="Lọc theo trạng thái" className="flex min-w-0 flex-wrap gap-2">
+        {TRIAGE_FILTERS.map((f) => (
+          <button key={f.key} type="button" data-testid={`wp-triage-pill-${f.key}`} aria-pressed={filter === f.key} onClick={() => setFilter(f.key)} className={pillClass(filter === f.key)}>
+            {f.label}
+            <span className="tabular-nums">{counts[f.key]}</span>
+          </button>
+        ))}
+      </div>
+
+      {list.isSuccess && searching && (
+        <p role="status" className="text-xs text-stone-600">
+          Tìm “{query.trim()}”: <span className="tabular-nums">{searched.length}</span>/<span className="tabular-nums">{items.length}</span> sản phẩm khớp.
+        </p>
+      )}
+
       {inlineMsg && (
         <Notice tone={inlineMsg.ok ? 'success' : 'danger'} role={inlineMsg.ok ? 'status' : 'alert'}>
           {inlineMsg.text}
@@ -159,7 +182,11 @@ export function WpImageTriage() {
       {list.isError && <LoadError message={loadErrorText(list.error)} onRetry={() => list.refetch()} retrying={list.isFetching} />}
       {list.isSuccess && shown.length === 0 && (
         <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-center text-sm text-stone-600">
-          {items.length === 0 ? 'Chưa có sản phẩm nào trong bảng ứng viên ảnh WordPress.' : 'Không có sản phẩm nào trong nhóm này.'}
+          {items.length === 0
+            ? 'Chưa có sản phẩm nào cần duyệt ảnh WordPress.'
+            : searching && searched.length === 0
+              ? `Không có sản phẩm nào khớp “${query.trim()}”.`
+              : 'Không có sản phẩm nào trong nhóm này.'}
         </p>
       )}
 
@@ -181,7 +208,14 @@ export function WpImageTriage() {
 
       {list.isSuccess && (
         <p className="text-xs text-stone-500">
-          Tổng <span className="tabular-nums">{items.length}</span> sản phẩm trong bảng ứng viên; <span className="tabular-nums">{counts.noImage}</span> sản phẩm còn chưa có ảnh.
+          Tổng <span className="tabular-nums">{items.length}</span> sản phẩm; <span className="tabular-nums">{totals.noImage}</span> chưa có ảnh (<span className="tabular-nums">{totals.suggested}</span> có ảnh gợi ý,{' '}
+          <span className="tabular-nums">{totals.noSuggestion}</span> chưa có gợi ý
+          {totals.noImage > totals.suggested + totals.noSuggestion && (
+            <>
+              , <span className="tabular-nums">{totals.noImage - totals.suggested - totals.noSuggestion}</span> chưa hỏi được WordPress
+            </>
+          )}
+          ).
         </p>
       )}
     </div>
@@ -253,7 +287,9 @@ function TriageCard({
                 : 'Sản phẩm đã có ảnh nên không cần ảnh từ WordPress.'}
             </p>
           )}
-          {withoutImage && sources.length === 0 && <p className="text-xs text-stone-600">Chưa hỏi được WordPress. Bấm “Tải lại” ở đầu trang.</p>}
+          {withoutImage && sources.length === 0 && (
+            <p className="text-xs text-stone-600">{row.tier === 'NONE' && !row.suggestUnavailable ? 'Không có ảnh WordPress để chọn cho sản phẩm này.' : 'Chưa hỏi được WordPress. Bấm “Tải lại” ở đầu trang.'}</p>
+          )}
           {withoutImage &&
             sources.map((s) => (
               <div key={s.slug} className="space-y-1.5">
@@ -298,7 +334,7 @@ function TriageCard({
         </section>
       </div>
 
-      {(pending || row.state === 'SKIPPED') && (
+      {(pending || row.state === 'SKIPPED') && hasSuggestion(row) && (
         <div className="flex flex-wrap items-center gap-2">
           {pending ? (
             <>

@@ -4,6 +4,7 @@ import sharp from 'sharp';
 import { hasImageSignature, isStorefrontImageValue } from '../../common/uploaded-image';
 import { storedThumbnailFor } from '../../common/public-image';
 import { MAX_SOURCE_BYTES, MAX_SOURCE_PIXELS, safeLookup } from './image-resize';
+import { parseWpCatalog, type WpCatalogItem } from './wp-image-suggest';
 
 /**
  * Nạp ảnh sản phẩm từ WordPress cũ (tubutree.com) về kho riêng của hệ thống để tắt WordPress không làm chết ảnh.
@@ -15,7 +16,8 @@ import { MAX_SOURCE_BYTES, MAX_SOURCE_PIXELS, safeLookup } from './image-resize'
  * phẩm (EXACT) mới nạp thẳng được; các nhóm còn lại có thể là ảnh sai bao bì nên BẮT BUỘC người duyệt từng dòng.
  */
 
-export type WpCandidateTier = 'EXACT' | 'SAME_LINE' | 'WEAK' | 'COMPOSITE';
+/** CANDIDATE: gợi ý tự động theo tên (`wp-image-suggest.ts`) cho sản phẩm chưa có dòng làm tay; chưa ai kiểm bao bì, không bao giờ được nạp tự động. */
+export type WpCandidateTier = 'EXACT' | 'SAME_LINE' | 'WEAK' | 'COMPOSITE' | 'CANDIDATE';
 
 export interface WpSource {
   /** Mã sản phẩm WooCommerce. */
@@ -36,6 +38,7 @@ export const WP_TIER_LABELS: Readonly<Record<WpCandidateTier, string>> = {
   SAME_LINE: 'Cùng dòng, khác quy cách',
   WEAK: 'Khớp yếu',
   COMPOSITE: 'Combo, chỉ có ảnh từng món',
+  CANDIDATE: 'Gợi ý theo tên, chưa kiểm',
 };
 
 export const WP_IMAGE_CANDIDATES: readonly WpImageCandidate[] = [
@@ -172,6 +175,32 @@ export async function resolveWpProduct(http: WpHttp, source: WpSource): Promise<
     }
   }
   return { id: source.id, slug: source.slug, name: typeof found.name === 'string' ? found.name : null, imageUrls, error: imageUrls.length === 0 ? 'Sản phẩm WordPress không có ảnh.' : null };
+}
+
+const WP_CATALOG_PAGE_SIZE = 100;
+const WP_CATALOG_MAX_PAGES = 5;
+const MAX_CATALOG_BYTES = 4 * 1024 * 1024;
+
+/**
+ * Kho sản phẩm WordPress (Store API công khai, GET) để gợi ý ảnh cho sản phẩm chưa có dòng làm tay. Chỉ giữ sản phẩm có ảnh.
+ * Trang nào lỗi (mạng, WordPress đã tắt, dữ liệu rác) cũng trả null, không trả kho đọc dở: phía gọi phân biệt "chưa hỏi được" với "không có gì khớp", và kho thiếu trang không bị cache làm lệch trọng số từ khoá.
+ */
+export async function loadWpCatalog(http: WpHttp): Promise<WpCatalogItem[] | null> {
+  const items: WpCatalogItem[] = [];
+  for (let page = 1; page <= WP_CATALOG_MAX_PAGES; page += 1) {
+    let rows: unknown;
+    try {
+      const res = await http(new URL(`${WP_STORE_API}?per_page=${WP_CATALOG_PAGE_SIZE}&page=${page}`), { maxBytes: MAX_CATALOG_BYTES, timeoutMs: HTTP_TIMEOUT_MS });
+      if (res.status !== 200) return null;
+      rows = JSON.parse(res.body.toString('utf8'));
+    } catch {
+      return null;
+    }
+    if (!Array.isArray(rows)) return null;
+    items.push(...parseWpCatalog(rows));
+    if (rows.length < WP_CATALOG_PAGE_SIZE) break;
+  }
+  return items;
 }
 
 /**
