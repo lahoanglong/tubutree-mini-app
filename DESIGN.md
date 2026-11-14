@@ -164,6 +164,16 @@ Máy tính (từ `lg`): hai cột gọn ở `/tai-khoan/don-hang/:code`, trái t
 
 `ReviewMediaLightbox` (Mini + web): ảnh/video đánh giá toàn màn hình, nền `--color-bg-lightbox` làm mờ, mở 220ms theo đường cong drawer (cùng tấm đáy), bộ đếm `n / N` số đều, nút Trước/Sau và × ≥ 44px, vuốt ngang, nút back đóng. `AddressLocationSheet` (chỉ web; Mini đã có trong `geo-picker.tsx`): sheet tìm không dấu cho Tỉnh/Thành phố và Phường/Xã, dòng ≥ 44px, chọn tỉnh xong tự mở Phường/Xã. Thêm giỏ: `playCartFeedback` (chấm bay 420ms tới `[data-cart-target]`) và huy hiệu giỏ nảy `.cart-badge-bump` 220ms; giảm chuyển động thì bỏ cả hai.
 
+### Mini-game và Chẩn đoán tổ ấm (W164)
+
+| Cần | Dùng |
+|---|---|
+| sảnh hai mini-game ở Vườn Xanh (`Hứng Sương Tinh Khiết`, `Phân Loại Vỏ Chai Thần Tốc`) kèm huy hiệu khung giờ thưởng và kỷ lục cá nhân | `ArcadeHub` (không props, tự giữ trạng thái mở lớp phủ; lượt dùng hôm nay từ `gameArcadeStatusQuery`) |
+| lớp phủ toàn màn chơi một ván, bảng kết quả, Tip Sạch Lành, nút đăng nhập cho khách | `ArcadeGameOverlay` (`gameId`, `onClose`; không có route, canvas dựng bằng `mountArcade`, tải bằng `import()` động) |
+| thẻ "Chọn bộ chăm nhà chuẩn cho gia đình bạn (30 giây)": 3 câu, gợi ý 2–3 sản phẩm thật, "+ Thêm vào giỏ" | `HomeQuizCard` (ở Vườn Xanh và khối `quiz` của Trang chủ, sau `journey`) |
+
+Logic ở `packages/app-core/src/arcade/`: engine thuần không DOM (`dew-catcher.ts`, `refill-rush.ts`, toạ độ chuẩn hoá 0..1, `rng` tiêm vào để test), bộ vẽ và nhập liệu `arcade-canvas.ts` (nhận canvas qua giao diện cấu trúc tối thiểu, `raf/caf/now` tiêm vào, màu qua `theme` do app đọc từ token ngữ nghĩa nên không có hex), khung giờ thưởng giờ VN `arcade-config.ts`, `badge.ts`, `home-quiz.ts` (`pickKitProducts`), tip `arcade-tips.ts`. Tổng mã `arcade/` (không tính spec) dưới 30KB, `arcade-guard.spec` canh. Số liệu thưởng và trần chống cày ở máy chủ (`game-arcade.constants.ts`, `POST /game/arcade-complete`): 3 lượt thưởng mỗi ngày mỗi game, thêm 1 lượt khi ván xong trong khung `06:30–09:00` hoặc `20:00–22:00` giờ VN; hết lượt vẫn chơi và phá kỷ lục. Khách chưa đăng nhập chơi trọn vẹn, chỉ không lưu và không nhận thưởng. Chữ ở `arcade.*` và `homeQuiz.*` của `shop-copy.ts`. Hai câu hứa sản phẩm trong Tip (Bồ Hòn 0% Paraben & SLS; giữ vỏ chai TubuTree đổi Điểm Xanh & Quà tặng) là nguyên văn spec W164, các câu khác chỉ là lời khuyên sống xanh.
+
 ### Khuôn trang web (chỉ web)
 
 `HubLayout`, `ListingLayout`, `PdpLayout`, `StoreLayout` ở `apps/web/src/components/layouts/`. Chi tiết ở mục Khuôn trang web máy tính. `HomeEditorialHero` (`apps/web/src/components/home/`, chỉ web): khối giới thiệu mặc định của Trang chủ từ md khi không có banner chiến dịch, đứng ở slot `hero` của `HubLayout` (cùng tỉ lệ `--banner-ratio` nên chiến dịch về muộn không làm trang nhảy; điện thoại ẩn hẳn, chữ ở `homeCopy.hero`).
