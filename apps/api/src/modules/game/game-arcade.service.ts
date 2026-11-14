@@ -7,11 +7,11 @@ import { isRealUser } from '../../common/real-user';
 import { startOfVnDay, vnDateKey } from '../../common/vn-time';
 import { ensureGameProfile } from './game-profile';
 import {
-  ARCADE_DAILY_CAP_BASE,
   ARCADE_DURATION_SLACK_MS,
   ARCADE_ENABLED_DEFAULT,
   ARCADE_GAME_IDS,
   ARCADE_MIN_DURATION_MS,
+  ARCADE_MIN_REWARD_SCORE,
   ARCADE_NOMINAL_MS,
   ARCADE_POINTS_PER_RUN_DEFAULT,
   ARCADE_POINTS_PER_RUN_MAX,
@@ -23,12 +23,18 @@ import {
   HOME_QUIZ_REASON,
   HOME_QUIZ_SEEDS_DEFAULT,
   HOME_QUIZ_SEEDS_MAX,
-  arcadeDailyCap,
-  arcadeMaxScore,
+  arcadeBaseRefId,
+  arcadeBonusRefId,
+  arcadeCap,
+  arcadeUsageOf,
   arcadeWater,
   arcadeWindowAt,
+  arcadeWindowBonusOpen,
+  maxScoreFor,
+  nextArcadeSlot,
   nextArcadeWindowStart,
   type ArcadeGameId,
+  type ArcadeUsage,
   type ArcadeWindowId,
 } from './game-arcade.constants';
 
@@ -38,7 +44,7 @@ export interface ArcadeCompleteInput {
   durationMs: number;
 }
 
-export type ArcadeNoRewardReason = 'DAILY_CAP' | 'TOO_FAST' | 'NOT_REAL_USER' | 'DISABLED';
+export type ArcadeNoRewardReason = 'DAILY_CAP' | 'TOO_FAST' | 'LOW_SCORE' | 'NOT_REAL_USER' | 'DISABLED';
 
 export interface ArcadeCompleteResult {
   gameId: ArcadeGameId;
@@ -50,11 +56,12 @@ export interface ArcadeCompleteResult {
   waterEarned: number;
   pointsEarned: number;
   totalSeeds: number;
-  /** Số lượt thưởng đã dùng hôm nay (giờ VN) SAU ván này. */
+  /** Tổng lượt thưởng (cơ sở cộng thưởng khung) đã dùng hôm nay giờ VN, tính SAU ván này. */
   used: number;
-  /** Trần lượt thưởng tại lúc ván hoàn thành. */
+  /** 3 + số lượt thưởng khung đã dùng hôm nay + 1 nếu đang trong khung mà lượt thưởng khung đó chưa dùng. */
   cap: number;
   window: ArcadeWindowId | null;
+  /** Lúc ván xong (trước khi tiêu lượt): đang trong khung và lượt thưởng của khung đó chưa dùng. */
   windowBonus: boolean;
 }
 
@@ -109,13 +116,17 @@ export class GameArcadeService {
     return { enabled: enabledRaw !== false && enabledRaw !== 'false', waterBase, pointsPerRun };
   }
 
-  /** Khung giờ thưởng chỉ có nghĩa khi game đang thưởng: tắt game thì không quảng cáo khung và trần về mức nền. */
-  private windowFor(now: Date, enabled: boolean): { window: ArcadeWindowId | null; cap: number } {
-    const window = enabled ? arcadeWindowAt(now) : null;
-    return { window, cap: enabled ? arcadeDailyCap(now) : ARCADE_DAILY_CAP_BASE };
+  /** Khung giờ thưởng chỉ có nghĩa khi game đang thưởng: tắt game thì không quảng cáo khung. */
+  private windowFor(now: Date, enabled: boolean): ArcadeWindowId | null {
+    return enabled ? arcadeWindowAt(now) : null;
   }
 
-  /** Chặn điểm bịa trước khi chạm DB: thời lượng phải nằm trong khoảng một ván thật, điểm không vượt trần điểm mỗi giây. */
+  /** Lượt thưởng đã dùng hôm nay của một game: đọc refId các dòng sổ để tách lượt cơ sở và lượt thưởng khung. */
+  private usageOf(rows: readonly { refId: string | null }[]): ArcadeUsage {
+    return arcadeUsageOf(rows.map((r) => r.refId));
+  }
+
+  /** Chặn điểm bịa trước khi chạm DB: thời lượng phải nằm trong khoảng một ván thật, điểm không vượt `maxScoreFor`. */
   private assertPlausible(input: ArcadeCompleteInput): void {
     const { gameId, score, durationMs } = input;
     if (!ARCADE_GAME_IDS.includes(gameId)) throw new BadRequestException('Trò chơi này chưa có trong Tubu.');
@@ -125,18 +136,26 @@ export class GameArcadeService {
     if (durationMs > ARCADE_NOMINAL_MS[gameId] + ARCADE_DURATION_SLACK_MS) {
       throw new BadRequestException('Thời gian ván chơi chưa hợp lệ. Bạn thử chơi lại một ván nhé.');
     }
-    if (!Number.isInteger(score) || score < 0 || score > arcadeMaxScore(gameId, durationMs)) {
+    if (!Number.isInteger(score) || score < 0 || score > maxScoreFor(gameId, durationMs)) {
       throw new BadRequestException('Điểm của ván này chưa hợp lệ. Bạn thử chơi lại một ván nhé.');
     }
   }
 
   /**
-   * Ghi một ván vừa xong: cập nhật kỷ lục rồi (nếu hợp lệ) cộng giọt nước và Điểm Xanh của lượt thưởng.
+   * Ghi một ván vừa xong: cập nhật kỷ lục rồi (nếu đủ điều kiện) cộng giọt nước và Điểm Xanh của một lượt thưởng.
+   *
+   * Lượt thưởng mỗi ngày VN mỗi game: 3 lượt cơ sở (refId `userId:ngày:n`) và, cho MỖI khung giờ, thêm một lượt riêng của khung đó
+   * (refId `userId:ngày:bonus:khung`). Ván xong LÚC trong khung W dùng lượt cơ sở nếu còn; hết lượt cơ sở thì dùng lượt thưởng của
+   * W nếu hôm nay chưa dùng; còn lại hết lượt. Ngoài khung chỉ có lượt cơ sở. Tối đa 3 + 2 = 5 lượt mỗi game mỗi ngày, và lượt
+   * của khung tối không phụ thuộc buổi sáng đã dùng hết hay chưa.
+   *
+   * Lý do không thưởng, theo thứ tự ưu tiên: DISABLED, NOT_REAL_USER, TOO_FAST, LOW_SCORE, DAILY_CAP. TOO_FAST là ván không được
+   * ghi gì (kể cả kỷ lục); mọi lý do còn lại vẫn ghi kỷ lục, số ván và `lastRunAt`. LOW_SCORE và DAILY_CAP không tiêu lượt.
    *
    * Mọi thứ nằm trong một transaction giữ khoá `users` rồi `game_profiles` (cùng thứ tự với nước theo đơn và Đổi rác), nên hai
-   * ván của cùng khách hoàn thành song song được xếp hàng: lượt thưởng cuối của ngày chỉ có một người ăn, và ván thứ hai thấy
-   * `lastRunAt` của ván thứ nhất (ván chưa kịp chơi xong đã báo hoàn thành là TOO_FAST). Trần lượt dùng sổ `game_water_events`
-   * (unique reason+refId theo ô lượt) nên trần giữ đúng cả khi khoá bị bỏ qua ở đâu đó. `createMany(skipDuplicates)` thay
+   * ván của cùng khách hoàn thành song song được xếp hàng: lượt thưởng cuối của ngày chỉ có một ván ăn, và ván thứ hai thấy
+   * `lastRunAt` của ván thứ nhất (ván chưa kịp chơi xong đã báo hoàn thành là TOO_FAST). Đếm lượt đọc sổ `game_water_events` sau
+   * khi đã khoá; unique (reason, refId) theo ô lượt là chốt chặn nếu khoá bị bỏ qua ở đâu đó. `createMany(skipDuplicates)` thay
    * `create` rồi bắt P2002: lỗi unique trong transaction Postgres huỷ cả transaction, mất luôn kỷ lục vừa ghi.
    * Khách vãng lai (zaloId guest_, không SĐT) vẫn được ghi kỷ lục nhưng không nhận thưởng, và không bị tạo hồ sơ game.
    */
@@ -146,20 +165,22 @@ export class GameArcadeService {
     const settings = await this.settings();
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { zaloId: true, phone: true } });
     const real = isRealUser(user);
-    const rewardable = settings.enabled && real;
+    const lowScore = score < ARCADE_MIN_REWARD_SCORE[gameId];
+    const eligible = settings.enabled && real && !lowScore;
     const water = arcadeWater(gameId, score, settings.waterBase);
     // Đọc hạn điểm bằng kết nối pool riêng nên phải gọi ngoài transaction.
-    const expiresAt = rewardable && settings.pointsPerRun > 0 ? await this.loyalty.pointsExpiresAt(now) : null;
-    if (rewardable) await ensureGameProfile(this.prisma, this.config, userId);
+    const expiresAt = eligible && settings.pointsPerRun > 0 ? await this.loyalty.pointsExpiresAt(now) : null;
+    if (eligible) await ensureGameProfile(this.prisma, this.config, userId);
 
-    const { window, cap } = this.windowFor(now, settings.enabled);
+    const window = this.windowFor(now, settings.enabled);
     const reason = ARCADE_WATER_REASONS[gameId];
+    const dateKey = vnDateKey(now);
     const dayStart = startOfVnDay(now);
 
     return this.prisma.$transaction(async (tx) => {
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
       let totalSeeds = 0;
-      if (rewardable) {
+      if (eligible) {
         const profile = await tx.$queryRaw<{ totalSeeds: number }[]>`
           SELECT "totalSeeds" FROM "game_profiles" WHERE "userId" = ${userId} FOR UPDATE`;
         if (profile.length === 0) throw new ConflictException('Hồ sơ game đang được cập nhật. Bạn thử lại sau ít giây nhé.');
@@ -167,10 +188,14 @@ export class GameArcadeService {
       } else {
         totalSeeds = (await tx.gameProfile.findUnique({ where: { userId }, select: { totalSeeds: true } }))?.totalSeeds ?? 0;
       }
-      const countToday = () => tx.gameWaterEvent.count({ where: { userId, reason, createdAt: { gte: dayStart } } });
+      const readUsage = async () =>
+        this.usageOf(await tx.gameWaterEvent.findMany({ where: { userId, reason, createdAt: { gte: dayStart } }, select: { refId: true } }));
       const prev = await tx.gameArcadeScore.findUnique({ where: { userId_gameId: { userId, gameId } } });
-      const usedBefore = await countToday();
-      const result = (extra: Partial<ArcadeCompleteResult> & { bestScore: number }): ArcadeCompleteResult => ({
+      const usage = await readUsage();
+      const result = (
+        extra: Partial<ArcadeCompleteResult> & { bestScore: number },
+        at: ArcadeUsage = usage,
+      ): ArcadeCompleteResult => ({
         gameId,
         score,
         isNewBest: false,
@@ -179,41 +204,41 @@ export class GameArcadeService {
         waterEarned: 0,
         pointsEarned: 0,
         totalSeeds,
-        used: usedBefore,
-        cap,
+        used: at.total,
+        cap: arcadeCap(window, at),
         window,
-        windowBonus: window !== null,
+        windowBonus: arcadeWindowBonusOpen(window, at),
         ...extra,
       });
 
       // Ván này bắt đầu (hoàn thành trừ thời lượng) trước khi ván trước kết thúc: không thể là hai ván chơi nối tiếp.
-      if (prev?.lastRunAt && now.getTime() - durationMs < prev.lastRunAt.getTime() - ARCADE_TOO_FAST_TOLERANCE_MS) {
-        return result({ bestScore: prev.bestScore, reason: 'TOO_FAST' });
-      }
-
-      const previousBest = prev?.bestScore ?? 0;
-      const isNewBest = score > previousBest;
-      const bestScore = Math.max(previousBest, score);
-      if (prev) {
-        await tx.gameArcadeScore.update({
-          where: { id: prev.id },
-          data: { bestScore, plays: { increment: 1 }, lastRunAt: now },
-        });
-      } else {
-        await tx.gameArcadeScore.create({ data: { userId, gameId, bestScore, plays: 1, lastRunAt: now } });
+      const tooFast = !!prev?.lastRunAt && now.getTime() - durationMs < prev.lastRunAt.getTime() - ARCADE_TOO_FAST_TOLERANCE_MS;
+      let bestScore = prev?.bestScore ?? 0;
+      let isNewBest = false;
+      if (!tooFast) {
+        isNewBest = score > bestScore;
+        bestScore = Math.max(bestScore, score);
+        if (prev) {
+          await tx.gameArcadeScore.update({ where: { id: prev.id }, data: { bestScore, plays: { increment: 1 }, lastRunAt: now } });
+        } else {
+          await tx.gameArcadeScore.create({ data: { userId, gameId, bestScore, plays: 1, lastRunAt: now } });
+        }
       }
 
       if (!settings.enabled) return result({ bestScore, isNewBest, reason: 'DISABLED' });
       if (!real) return result({ bestScore, isNewBest, reason: 'NOT_REAL_USER' });
-      if (usedBefore >= cap) return result({ bestScore, isNewBest, reason: 'DAILY_CAP' });
+      if (tooFast) return result({ bestScore, isNewBest, reason: 'TOO_FAST' });
+      if (lowScore) return result({ bestScore, isNewBest, reason: 'LOW_SCORE' });
+      const slot = nextArcadeSlot(window, usage);
+      if (!slot) return result({ bestScore, isNewBest, reason: 'DAILY_CAP' });
 
-      const slot = usedBefore + 1;
-      const refId = `${userId}:${vnDateKey(now)}:${slot}`;
+      const refId =
+        slot.kind === 'base' ? arcadeBaseRefId(userId, dateKey, slot.slot) : arcadeBonusRefId(userId, dateKey, slot.window);
       const taken = await tx.gameWaterEvent.createMany({
         data: [{ userId, delta: water, reason, refId, createdAt: now }],
         skipDuplicates: true,
       });
-      if (taken.count === 0) return result({ bestScore, isNewBest, reason: 'DAILY_CAP', used: await countToday() });
+      if (taken.count === 0) return result({ bestScore, isNewBest, reason: 'DAILY_CAP' }, await readUsage());
 
       const profile = await tx.gameProfile.update({
         where: { userId },
@@ -241,39 +266,44 @@ export class GameArcadeService {
         waterEarned: water,
         pointsEarned,
         totalSeeds: profile.totalSeeds,
-        used: slot,
+        used: usage.total + 1,
       });
     });
   }
 
-  /** Kỷ lục, số ván và lượt thưởng đã dùng hôm nay của từng game, cùng khung giờ thưởng đang chạy hay sắp tới. */
+  /**
+   * Kỷ lục, số ván và lượt thưởng hôm nay của từng game, cùng khung giờ thưởng đang chạy. `cap` tính riêng từng game (lượt thưởng
+   * khung là của từng game); `windowBonus` ở đây là còn ít nhất một game chưa dùng lượt thưởng của khung đang chạy.
+   */
   async status(userId: string, now: Date = new Date()): Promise<ArcadeStatus> {
     const settings = await this.settings();
-    const { window, cap } = this.windowFor(now, settings.enabled);
+    const window = this.windowFor(now, settings.enabled);
     const reasons = ARCADE_GAME_IDS.map((g) => ARCADE_WATER_REASONS[g]);
-    const [scores, usedRows, quiz] = await Promise.all([
+    const [scores, todayRows, quiz] = await Promise.all([
       this.prisma.gameArcadeScore.findMany({ where: { userId }, select: { gameId: true, bestScore: true, plays: true } }),
-      this.prisma.gameWaterEvent.groupBy({
-        by: ['reason'],
+      this.prisma.gameWaterEvent.findMany({
         where: { userId, reason: { in: reasons }, createdAt: { gte: startOfVnDay(now) } },
-        _count: { _all: true },
+        select: { reason: true, refId: true },
       }),
       this.prisma.gameWaterEvent.findUnique({
         where: { reason_refId: { reason: HOME_QUIZ_REASON, refId: userId } },
         select: { id: true },
       }),
     ]);
+    const usages = Object.fromEntries(
+      ARCADE_GAME_IDS.map((gameId) => [gameId, this.usageOf(todayRows.filter((r) => r.reason === ARCADE_WATER_REASONS[gameId]))]),
+    ) as Record<ArcadeGameId, ArcadeUsage>;
     const games = Object.fromEntries(
       ARCADE_GAME_IDS.map((gameId) => {
         const row = scores.find((s) => s.gameId === gameId);
-        const used = usedRows.find((r) => r.reason === ARCADE_WATER_REASONS[gameId])?._count._all ?? 0;
-        return [gameId, { bestScore: row?.bestScore ?? 0, plays: row?.plays ?? 0, used, cap }];
+        const usage = usages[gameId];
+        return [gameId, { bestScore: row?.bestScore ?? 0, plays: row?.plays ?? 0, used: usage.total, cap: arcadeCap(window, usage) }];
       }),
     ) as ArcadeStatus['games'];
     return {
       games,
       window,
-      windowBonus: window !== null,
+      windowBonus: ARCADE_GAME_IDS.some((gameId) => arcadeWindowBonusOpen(window, usages[gameId])),
       nextWindowAt: settings.enabled ? nextArcadeWindowStart(now).toISOString() : null,
       quizClaimed: quiz !== null,
     };

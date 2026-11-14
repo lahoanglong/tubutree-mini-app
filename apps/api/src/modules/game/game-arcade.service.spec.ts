@@ -2,17 +2,25 @@ import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
-import { startOfVnDay } from '../../common/vn-time';
+import { startOfVnDay, vnDateKey } from '../../common/vn-time';
 import { GameArcadeService } from './game-arcade.service';
 import {
   ARCADE_GAME_IDS,
+  ARCADE_MAX_SCORE_PER_SEC,
+  ARCADE_MIN_REWARD_SCORE,
   ARCADE_NOMINAL_MS,
-  arcadeDailyCap,
-  arcadeMaxScore,
+  arcadeBaseRefId,
+  arcadeBonusRefId,
+  arcadeCap,
+  arcadeUsageOf,
   arcadeWater,
   arcadeWindowAt,
+  arcadeWindowBonusOpen,
+  maxScoreFor,
+  nextArcadeSlot,
   nextArcadeWindowStart,
   type ArcadeGameId,
+  type ArcadeWindowId,
 } from './game-arcade.constants';
 
 /** 'HH:MM:SS' giờ VN của ngày 15/11/2026 (UTC+7, không DST) thành Date, độc lập TZ của process. */
@@ -78,7 +86,9 @@ function makeWorld(opts: WorldOpts = {}) {
     (where.createdAt === undefined || e.createdAt >= where.createdAt.gte);
 
   const gameWaterEvent = {
-    count: jest.fn(async ({ where }: { where: Parameters<typeof eventMatches>[1] }) => events.filter((e) => eventMatches(e, where)).length),
+    findMany: jest.fn(async ({ where }: { where: Parameters<typeof eventMatches>[1] }) =>
+      events.filter((e) => eventMatches(e, where)).map((e) => ({ reason: e.reason, refId: e.refId })),
+    ),
     findUnique: jest.fn(async ({ where }: { where: { reason_refId: { reason: string; refId: string } } }) => {
       const { reason, refId } = where.reason_refId;
       return events.some((e) => e.reason === reason && e.refId === refId) ? { id: 'ev' } : null;
@@ -94,11 +104,6 @@ function makeWorld(opts: WorldOpts = {}) {
         count++;
       }
       return { count };
-    }),
-    groupBy: jest.fn(async ({ where }: { where: Parameters<typeof eventMatches>[1] }) => {
-      const by = new Map<string, number>();
-      for (const e of events.filter((x) => eventMatches(x, where))) by.set(e.reason, (by.get(e.reason) ?? 0) + 1);
-      return [...by].map(([reason, n]) => ({ reason, _count: { _all: n } }));
     }),
   };
   const gameArcadeScore = {
@@ -165,7 +170,7 @@ function makeWorld(opts: WorldOpts = {}) {
     user: { findUnique: user.findUnique },
     gameProfile: { findUnique: gameProfile.findUnique, create: gameProfile.create },
     gameArcadeScore: { findMany: gameArcadeScore.findMany },
-    gameWaterEvent: { groupBy: gameWaterEvent.groupBy, findUnique: gameWaterEvent.findUnique },
+    gameWaterEvent: { findMany: gameWaterEvent.findMany, findUnique: gameWaterEvent.findUnique },
     $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
       const held: Array<() => void> = [];
       const before = snapshot();
@@ -201,9 +206,14 @@ function makeWorld(opts: WorldOpts = {}) {
   const config = { get: jest.fn(async (k: string, d: unknown) => (k in cfg ? cfg[k] : d)) };
   const loyalty = { pointsExpiresAt: jest.fn(async () => EXPIRES) };
   const svc = new GameArcadeService(prisma as unknown as PrismaService, config as unknown as SystemConfigService, loyalty as unknown as LoyaltyService);
-  const seedToday = (gameId: ArcadeGameId, n: number, at: Date) => {
-    const reason = gameId === 'dew_catcher' ? 'ARCADE_DEW_CATCHER' : 'ARCADE_REFILL_RUSH';
-    for (let i = 1; i <= n; i++) events.push({ userId: USER, delta: 5, reason, refId: `${USER}:old:${i}:${gameId}`, createdAt: at });
+  const reasonOf = (gameId: ArcadeGameId) => (gameId === 'dew_catcher' ? 'ARCADE_DEW_CATCHER' : 'ARCADE_REFILL_RUSH');
+  /** `n` lượt cơ sở đã dùng của ngày VN chứa `at`. */
+  const seedBase = (gameId: ArcadeGameId, n: number, at: Date) => {
+    for (let i = 1; i <= n; i++) events.push({ userId: USER, delta: 5, reason: reasonOf(gameId), refId: arcadeBaseRefId(USER, vnDateKey(at), i), createdAt: at });
+  };
+  /** Lượt thưởng khung `window` đã dùng của ngày VN chứa `at`. */
+  const seedBonus = (gameId: ArcadeGameId, window: ArcadeWindowId, at: Date) => {
+    events.push({ userId: USER, delta: 5, reason: reasonOf(gameId), refId: arcadeBonusRefId(USER, vnDateKey(at), window), createdAt: at });
   };
   const seedScore = (gameId: ArcadeGameId) => scores.push({ id: `s${++seq}`, userId: USER, gameId, bestScore: 0, plays: 0, lastRunAt: null });
   return {
@@ -229,7 +239,8 @@ function makeWorld(opts: WorldOpts = {}) {
         return users.get(USER)!.pointsBalance;
       },
     },
-    seedToday,
+    seedBase,
+    seedBonus,
     seedScore,
   };
 }
@@ -254,7 +265,6 @@ describe('khung giờ thưởng theo giờ VN (thuần số học, không phụ 
   it.each(cases)('%s giờ VN: khung %p', (hms, window) => {
     const t = vn(hms);
     expect(arcadeWindowAt(t)).toBe(window);
-    expect(arcadeDailyCap(t)).toBe(window ? 4 : 3);
   });
 
   it('mốc UTC đổi sang giờ VN đúng (UTC+7), không dùng giờ local của process', () => {
@@ -280,11 +290,80 @@ describe('điểm thưởng giọt nước và trần điểm', () => {
     expect(arcadeWater('dew_catcher', 900, 7)).toBe(12);
   });
 
-  it('trần điểm một giây: dew 120/s, rush 60/s, làm tròn lên', () => {
-    expect(arcadeMaxScore('dew_catcher', 40_000)).toBe(4800);
-    expect(arcadeMaxScore('refill_rush', 45_000)).toBe(2700);
-    expect(arcadeMaxScore('dew_catcher', 5_000)).toBe(600);
-    expect(arcadeMaxScore('dew_catcher', 5_001)).toBe(601);
+  it('trần điểm theo đường cong RATE × d × min(1, d / nominal): bình phương tới hết thời lượng danh nghĩa rồi tuyến tính', () => {
+    expect(ARCADE_MAX_SCORE_PER_SEC).toEqual({ dew_catcher: 160, refill_rush: 60 });
+    const dew = (ms: number) => maxScoreFor('dew_catcher', ms);
+    expect(dew(5_000)).toBe(100);
+    expect(dew(7_500)).toBe(225);
+    expect(dew(20_000)).toBe(1_600);
+    expect(dew(40_000)).toBe(6_400);
+    expect(dew(50_000)).toBe(8_000); // nominal + 10s: tuyến tính 160/s
+    const rush = (ms: number) => maxScoreFor('refill_rush', ms);
+    expect(rush(5_000)).toBe(34); // 60 × 5 × 5/45 = 33,33 làm tròn lên
+    expect(rush(20_000)).toBe(534); // 60 × 20 × 20/45 = 533,33
+    expect(rush(45_000)).toBe(2_700);
+    expect(rush(55_000)).toBe(3_300);
+  });
+
+  it('trần tăng đều theo thời lượng, và làm tròn lên khi lẻ (5.001 ms dew = 100,03 → 101)', () => {
+    for (const gameId of ARCADE_GAME_IDS) {
+      let last = 0;
+      for (let ms = 5_000; ms <= ARCADE_NOMINAL_MS[gameId] + 10_000; ms += 500) {
+        const max = maxScoreFor(gameId, ms);
+        expect(max).toBeGreaterThanOrEqual(last);
+        last = max;
+      }
+    }
+    expect(maxScoreFor('dew_catcher', 5_001)).toBe(101);
+  });
+
+  it('ngưỡng thưởng tối thiểu: dew 100, rush 60; ván ngắn nhất hợp lệ của dew vừa đủ ngưỡng, của rush không thể đạt', () => {
+    expect(ARCADE_MIN_REWARD_SCORE).toEqual({ dew_catcher: 100, refill_rush: 60 });
+    expect(maxScoreFor('dew_catcher', 5_000)).toBeGreaterThanOrEqual(ARCADE_MIN_REWARD_SCORE.dew_catcher);
+    expect(maxScoreFor('refill_rush', 5_000)).toBeLessThan(ARCADE_MIN_REWARD_SCORE.refill_rush);
+  });
+});
+
+describe('lượt thưởng cơ sở và lượt thưởng khung (hàm thuần)', () => {
+  const base = (n: number) => Array.from({ length: n }, (_, i) => arcadeBaseRefId('u1', '2026-11-15', i + 1));
+  const bonus = (w: ArcadeWindowId) => arcadeBonusRefId('u1', '2026-11-15', w);
+
+  it('refId: cơ sở `user:ngày:n`, thưởng khung `user:ngày:bonus:khung`', () => {
+    expect(arcadeBaseRefId('u1', '2026-11-15', 2)).toBe('u1:2026-11-15:2');
+    expect(arcadeBonusRefId('u1', '2026-11-15', 'SUONG_SOM')).toBe('u1:2026-11-15:bonus:SUONG_SOM');
+  });
+
+  it('usage tách lượt cơ sở và lượt thưởng khung từ refId', () => {
+    const u = arcadeUsageOf([...base(3), bonus('MUA_RAO'), null]);
+    expect(u.baseUsed).toBe(4);
+    expect([...u.bonusUsed]).toEqual(['MUA_RAO']);
+    expect(u.total).toBe(5);
+  });
+
+  it('cap = 3 + lượt thưởng khung đã dùng + 1 nếu đang trong khung mà lượt của khung đó chưa dùng', () => {
+    const none = arcadeUsageOf([]);
+    expect(arcadeCap(null, none)).toBe(3);
+    expect(arcadeCap('SUONG_SOM', none)).toBe(4);
+    const morning = arcadeUsageOf([...base(3), bonus('SUONG_SOM')]);
+    expect(arcadeCap(null, morning)).toBe(4);
+    expect(arcadeCap('SUONG_SOM', morning)).toBe(4);
+    expect(arcadeCap('MUA_RAO', morning)).toBe(5);
+    const both = arcadeUsageOf([...base(3), bonus('SUONG_SOM'), bonus('MUA_RAO')]);
+    expect(arcadeCap('MUA_RAO', both)).toBe(5);
+    expect(arcadeCap(null, both)).toBe(5);
+    expect(arcadeWindowBonusOpen('MUA_RAO', morning)).toBe(true);
+    expect(arcadeWindowBonusOpen('SUONG_SOM', morning)).toBe(false);
+    expect(arcadeWindowBonusOpen(null, none)).toBe(false);
+  });
+
+  it('ô lượt kế tiếp: cơ sở trước, hết cơ sở mới tới thưởng khung của khung đang chạy; ngoài khung không có thưởng', () => {
+    expect(nextArcadeSlot(null, arcadeUsageOf([]))).toEqual({ kind: 'base', slot: 1 });
+    expect(nextArcadeSlot('MUA_RAO', arcadeUsageOf(base(2)))).toEqual({ kind: 'base', slot: 3 });
+    expect(nextArcadeSlot('MUA_RAO', arcadeUsageOf(base(3)))).toEqual({ kind: 'bonus', window: 'MUA_RAO' });
+    expect(nextArcadeSlot('MUA_RAO', arcadeUsageOf([...base(3), bonus('SUONG_SOM')]))).toEqual({ kind: 'bonus', window: 'MUA_RAO' });
+    expect(nextArcadeSlot('MUA_RAO', arcadeUsageOf([...base(3), bonus('MUA_RAO')]))).toBeNull();
+    expect(nextArcadeSlot(null, arcadeUsageOf(base(3)))).toBeNull();
+    expect(nextArcadeSlot(null, arcadeUsageOf([...base(3), bonus('SUONG_SOM')]))).toBeNull();
   });
 });
 
@@ -298,43 +377,56 @@ describe('GameArcadeService.complete: kiểm tra ván chơi (400 trước khi ch
   };
 
   it('thời lượng dưới 5 giây hoặc quá thời lượng danh nghĩa cộng 10 giây', async () => {
-    await bad({ ...run(10), durationMs: 4_999 });
-    await bad({ ...run(10), durationMs: 0 });
-    await bad({ ...run(10), durationMs: -40_000 });
-    await bad({ ...run(10), durationMs: 50_001 }); // dew: 40s + 10s
+    await bad({ ...run(100), durationMs: 4_999 });
+    await bad({ ...run(100), durationMs: 0 });
+    await bad({ ...run(100), durationMs: -40_000 });
+    await bad({ ...run(100), durationMs: 50_001 }); // dew: 40s + 10s
     await bad({ gameId: 'refill_rush', score: 10, durationMs: 55_001 }); // rush: 45s + 10s
   });
 
   it('ranh hợp lệ: đúng 5.000 ms và đúng nominal + 10.000 ms', async () => {
     const a = makeWorld();
-    await expect(a.svc.complete(USER, run(10, 5_000), T0)).resolves.toMatchObject({ rewarded: true });
+    await expect(a.svc.complete(USER, run(100, 5_000), T0)).resolves.toMatchObject({ rewarded: true });
     const b = makeWorld();
-    await expect(b.svc.complete(USER, run(10, 50_000), T0)).resolves.toMatchObject({ rewarded: true });
+    await expect(b.svc.complete(USER, run(100, 50_000), T0)).resolves.toMatchObject({ rewarded: true });
     const c = makeWorld();
-    await expect(c.svc.complete(USER, { gameId: 'refill_rush', score: 10, durationMs: 55_000 }, T0)).resolves.toMatchObject({ rewarded: true });
+    await expect(c.svc.complete(USER, { gameId: 'refill_rush', score: 60, durationMs: 55_000 }, T0)).resolves.toMatchObject({ rewarded: true });
   });
 
-  it('điểm vượt trần điểm mỗi giây của thời lượng đã khai', async () => {
-    await bad({ ...run(601, 5_000) });
-    await bad({ ...run(4_801, 40_000) });
+  it('điểm vượt trần theo đường cong của thời lượng đã khai: 5s, 7,5s, 20s, nominal, nominal + 10s', async () => {
+    await bad(run(101, 5_000));
+    await bad(run(900, 7_500)); // ván tự khai 7,5s mà 900 điểm
+    await bad(run(226, 7_500));
+    await bad(run(1_601, 20_000));
+    await bad(run(6_401, 40_000));
+    await bad(run(8_001, 50_000));
+    await bad({ gameId: 'refill_rush', score: 35, durationMs: 5_000 });
+    await bad({ gameId: 'refill_rush', score: 535, durationMs: 20_000 });
     await bad({ gameId: 'refill_rush', score: 2_701, durationMs: 45_000 });
-    const ok = makeWorld();
-    await expect(ok.svc.complete(USER, run(600, 5_000), T0)).resolves.toMatchObject({ bestScore: 600 });
+    await bad({ gameId: 'refill_rush', score: 3_301, durationMs: 55_000 });
+    for (const [score, durationMs] of [[100, 5_000], [225, 7_500], [1_600, 20_000], [6_400, 40_000], [8_000, 50_000]] as const) {
+      const ok = makeWorld();
+      await expect(ok.svc.complete(USER, run(score, durationMs), T0)).resolves.toMatchObject({ bestScore: score });
+    }
+    for (const [score, durationMs] of [[34, 5_000], [534, 20_000], [2_700, 45_000], [3_300, 55_000]] as const) {
+      const ok = makeWorld();
+      await expect(ok.svc.complete(USER, { gameId: 'refill_rush', score, durationMs }, T0)).resolves.toMatchObject({ bestScore: score });
+    }
   });
 
   it('điểm âm, điểm hoặc thời lượng không nguyên/NaN, game lạ', async () => {
     await bad({ ...run(-1) });
     await bad({ ...run(10.5) });
     await bad({ ...run(Number.NaN) });
-    await bad({ ...run(10), durationMs: 40_000.5 });
-    await bad({ ...run(10), durationMs: Number.NaN });
+    await bad({ ...run(100), durationMs: 40_000.5 });
+    await bad({ ...run(100), durationMs: Number.NaN });
     await bad({ gameId: 'tetris', score: 10, durationMs: 40_000 });
   });
 
   it('câu lỗi là tiếng Việt thân thiện, không chữ cấm', async () => {
     const w = makeWorld();
     const messages: string[] = [];
-    for (const input of [{ ...run(10), durationMs: 1_000 }, { ...run(10), durationMs: 90_000 }, run(9_999)]) {
+    for (const input of [{ ...run(100), durationMs: 1_000 }, { ...run(100), durationMs: 90_000 }, run(9_999)]) {
       try {
         await w.svc.complete(USER, input, T0);
       } catch (e) {
@@ -395,16 +487,16 @@ describe('GameArcadeService.complete: thưởng', () => {
     const a = makeWorld({ cfg: { 'game.arcade_water_base': 7 } });
     await expect(a.svc.complete(USER, run(900), T0)).resolves.toMatchObject({ waterEarned: 12 });
     const b = makeWorld({ cfg: { 'game.arcade_water_base': 'abc' } });
-    await expect(b.svc.complete(USER, run(10), T0)).resolves.toMatchObject({ waterEarned: 5 });
+    await expect(b.svc.complete(USER, run(100), T0)).resolves.toMatchObject({ waterEarned: 5 });
     const c = makeWorld({ cfg: { 'game.arcade_water_base': -3 } });
-    await expect(c.svc.complete(USER, run(10), T0)).resolves.toMatchObject({ waterEarned: 5 });
+    await expect(c.svc.complete(USER, run(100), T0)).resolves.toMatchObject({ waterEarned: 5 });
     const d = makeWorld({ cfg: { 'game.arcade_water_base': 99_999 } });
-    await expect(d.svc.complete(USER, run(10), T0)).resolves.toMatchObject({ waterEarned: 50 });
+    await expect(d.svc.complete(USER, run(100), T0)).resolves.toMatchObject({ waterEarned: 50 });
   });
 
   it('cộng Điểm Xanh bằng sổ lô STANDARD có hạn, cùng transaction, số dư khớp tổng sổ', async () => {
     const w = makeWorld();
-    const res = await w.svc.complete(USER, run(10), T0);
+    const res = await w.svc.complete(USER, run(100), T0);
     expect(res.pointsEarned).toBe(1);
     expect(w.state.points).toEqual([
       expect.objectContaining({
@@ -419,7 +511,7 @@ describe('GameArcadeService.complete: thưởng', () => {
     ]);
     expect(w.loyalty.pointsExpiresAt).toHaveBeenCalledWith(T0);
     expect(w.state.balance).toBe(sumPoints(w.state.points));
-    await w.svc.complete(USER, run(10), new Date(T0.getTime() + 60_000));
+    await w.svc.complete(USER, run(100), new Date(T0.getTime() + 60_000));
     expect(w.state.balance).toBe(2);
     expect(w.state.balance).toBe(sumPoints(w.state.points));
     expect(new Set(w.state.points.map((p) => p.refId)).size).toBe(2);
@@ -428,13 +520,13 @@ describe('GameArcadeService.complete: thưởng', () => {
   it('game.arcade_points_per_run = 0 hoặc hỏng thì không cộng điểm và không đọc hạn điểm; quá biên kẹp 10', async () => {
     for (const bad of [0, 'abc', -1, null]) {
       const w = makeWorld({ cfg: { 'game.arcade_points_per_run': bad } });
-      await expect(w.svc.complete(USER, run(10), T0)).resolves.toMatchObject({ rewarded: true, pointsEarned: 0 });
+      await expect(w.svc.complete(USER, run(100), T0)).resolves.toMatchObject({ rewarded: true, pointsEarned: 0 });
       expect(w.state.points).toHaveLength(0);
       expect(w.state.balance).toBe(0);
       expect(w.loyalty.pointsExpiresAt).not.toHaveBeenCalled();
     }
     const big = makeWorld({ cfg: { 'game.arcade_points_per_run': 1_000_000 } });
-    await expect(big.svc.complete(USER, run(10), T0)).resolves.toMatchObject({ pointsEarned: 10 });
+    await expect(big.svc.complete(USER, run(100), T0)).resolves.toMatchObject({ pointsEarned: 10 });
     expect(big.state.balance).toBe(sumPoints(big.state.points));
   });
 
@@ -466,41 +558,87 @@ describe('GameArcadeService.complete: thưởng', () => {
   });
 });
 
-describe('GameArcadeService.complete: trần lượt thưởng mỗi ngày VN', () => {
-  it('ngoài khung giờ: 3 lượt, ván thứ 4 vẫn chơi và phá kỷ lục nhưng không thưởng', async () => {
+describe('GameArcadeService.complete: lượt thưởng mỗi ngày VN (3 lượt cơ sở và một lượt riêng cho mỗi khung giờ)', () => {
+  const at = (i: number, from: Date = T0) => new Date(from.getTime() + i * 60_000);
+  const rush = (score = 100) => ({ gameId: 'refill_rush' as const, score, durationMs: 45_000 });
+
+  it('ngoài khung giờ: 3 lượt cơ sở, ván thứ 4 vẫn chơi và phá kỷ lục nhưng không thưởng, không có lượt thưởng khung', async () => {
     const w = makeWorld();
-    const at = (i: number) => new Date(T0.getTime() + i * 60_000);
     const results = [];
     for (let i = 0; i < 4; i++) results.push(await w.svc.complete(USER, run(100 + i * 100), at(i)));
-    expect(results.map((r) => [r.rewarded, r.reason, r.used, r.cap])).toEqual([
-      [true, null, 1, 3],
-      [true, null, 2, 3],
-      [true, null, 3, 3],
-      [false, 'DAILY_CAP', 3, 3],
+    expect(results.map((r) => [r.rewarded, r.reason, r.used, r.cap, r.windowBonus])).toEqual([
+      [true, null, 1, 3, false],
+      [true, null, 2, 3, false],
+      [true, null, 3, 3, false],
+      [false, 'DAILY_CAP', 3, 3, false],
     ]);
     expect(results[3]).toMatchObject({ waterEarned: 0, pointsEarned: 0, bestScore: 400, isNewBest: true, totalSeeds: 15 });
-    expect(w.state.events).toHaveLength(3);
+    expect(w.state.events.map((e) => e.refId)).toEqual([1, 2, 3].map((n) => `${USER}:2026-11-15:${n}`));
     expect(w.state.points).toHaveLength(3);
     expect(w.state.scores[0]).toMatchObject({ bestScore: 400, plays: 4 });
     expect(w.state.balance).toBe(sumPoints(w.state.points));
   });
 
-  it('trong khung giờ: 4 lượt, ván thứ 5 hết lượt', async () => {
+  it('trong khung sáng: 3 lượt cơ sở rồi lượt thưởng khung (tổng 4), ván thứ 5 hết lượt', async () => {
     const w = makeWorld();
     const start = vn('07:00:00');
     const results = [];
-    for (let i = 0; i < 5; i++) results.push(await w.svc.complete(USER, run(100), new Date(start.getTime() + i * 60_000)));
-    expect(results.map((r) => [r.rewarded, r.used, r.cap, r.window, r.windowBonus])).toEqual([
-      [true, 1, 4, 'SUONG_SOM', true],
-      [true, 2, 4, 'SUONG_SOM', true],
-      [true, 3, 4, 'SUONG_SOM', true],
-      [true, 4, 4, 'SUONG_SOM', true],
-      [false, 4, 4, 'SUONG_SOM', true],
+    for (let i = 0; i < 5; i++) results.push(await w.svc.complete(USER, run(100), at(i, start)));
+    expect(results.map((r) => [r.rewarded, r.reason, r.used, r.cap, r.window, r.windowBonus])).toEqual([
+      [true, null, 1, 4, 'SUONG_SOM', true],
+      [true, null, 2, 4, 'SUONG_SOM', true],
+      [true, null, 3, 4, 'SUONG_SOM', true],
+      [true, null, 4, 4, 'SUONG_SOM', true], // ăn lượt thưởng khung; windowBonus phản ánh lúc xong, trước khi tiêu
+      [false, 'DAILY_CAP', 4, 4, 'SUONG_SOM', false],
     ]);
+    expect(w.state.events.map((e) => e.refId)).toEqual([
+      `${USER}:2026-11-15:1`,
+      `${USER}:2026-11-15:2`,
+      `${USER}:2026-11-15:3`,
+      `${USER}:2026-11-15:bonus:SUONG_SOM`,
+    ]);
+    expect(w.state.points.map((p) => p.refId)).toEqual(w.state.events.map((e) => e.refId));
+    expect(w.state.balance).toBe(sumPoints(w.state.points));
   });
 
-  // 3 lượt đã dùng sáng sớm; ván hoàn thành đúng ranh quyết định có thêm lượt hay không.
-  const boundaries: [string, boolean, string | null][] = [
+  it('sáng dùng đủ 3 + lượt thưởng sáng = 4 rồi tối vẫn nhận thêm 1 (tổng 5), rồi hết lượt', async () => {
+    const w = makeWorld();
+    w.seedBase('dew_catcher', 3, vn('06:40:00'));
+    w.seedBonus('dew_catcher', 'SUONG_SOM', vn('06:45:00'));
+    const noon = await w.svc.complete(USER, run(100), vn('12:00:00'));
+    expect(noon).toMatchObject({ rewarded: false, reason: 'DAILY_CAP', used: 4, cap: 4, window: null, windowBonus: false });
+    const evening = await w.svc.complete(USER, run(100), vn('20:00:00'));
+    expect(evening).toMatchObject({ rewarded: true, reason: null, used: 5, cap: 5, window: 'MUA_RAO', windowBonus: true });
+    expect(w.state.events.at(-1)!.refId).toBe(`${USER}:2026-11-15:bonus:MUA_RAO`);
+    const after = await w.svc.complete(USER, run(100), vn('20:05:00'));
+    expect(after).toMatchObject({ rewarded: false, reason: 'DAILY_CAP', used: 5, cap: 5, windowBonus: false });
+    expect(w.state.events).toHaveLength(5);
+  });
+
+  it('dùng hết buổi sáng không làm mất lượt khung tối, và ngược lại lượt khung tối không phụ thuộc lượt sáng', async () => {
+    const w = makeWorld();
+    w.seedBase('dew_catcher', 3, vn('06:40:00')); // sáng chỉ dùng lượt cơ sở, chưa ăn lượt thưởng sáng
+    await expect(w.svc.complete(USER, run(100), vn('19:30:00'))).resolves.toMatchObject({ rewarded: false, reason: 'DAILY_CAP', used: 3, cap: 3 });
+    await expect(w.svc.complete(USER, run(100), vn('20:00:00'))).resolves.toMatchObject({ rewarded: true, used: 4, cap: 4, windowBonus: true });
+    await expect(w.svc.complete(USER, run(100), vn('21:00:00'))).resolves.toMatchObject({ rewarded: false, reason: 'DAILY_CAP', used: 4, cap: 4 });
+  });
+
+  it('ván trong khung dùng lượt cơ sở trước: còn lượt cơ sở thì lượt thưởng khung được giữ lại cho ván sau', async () => {
+    const w = makeWorld();
+    w.seedBase('dew_catcher', 2, vn('00:30:00'));
+    const first = await w.svc.complete(USER, run(100), vn('20:00:00'));
+    const second = await w.svc.complete(USER, run(100), vn('20:01:00'));
+    const third = await w.svc.complete(USER, run(100), vn('20:02:00'));
+    expect([first, second, third].map((r) => [r.rewarded, r.used, r.cap])).toEqual([
+      [true, 3, 4],
+      [true, 4, 4],
+      [false, 4, 4],
+    ]);
+    expect(w.state.events.map((e) => e.refId).slice(2)).toEqual([`${USER}:2026-11-15:3`, `${USER}:2026-11-15:bonus:MUA_RAO`]);
+  });
+
+  // Đã dùng 3 lượt cơ sở; ván hoàn thành đúng ranh quyết định có lượt thưởng khung hay không.
+  const boundaries: [string, boolean, ArcadeWindowId | null][] = [
     ['06:29:59', false, null],
     ['06:30:00', true, 'SUONG_SOM'],
     ['08:59:59', true, 'SUONG_SOM'],
@@ -510,53 +648,82 @@ describe('GameArcadeService.complete: trần lượt thưởng mỗi ngày VN', 
     ['21:59:59', true, 'MUA_RAO'],
     ['22:00:00', false, null],
   ];
-  it.each(boundaries)('đã dùng 3 lượt, hoàn thành lúc %s giờ VN: còn lượt thứ 4 = %s', async (hms, rewarded, window) => {
+  it.each(boundaries)('đã dùng 3 lượt cơ sở, hoàn thành lúc %s giờ VN: có lượt thưởng khung = %s', async (hms, rewarded, window) => {
     const w = makeWorld();
-    const now = vn(hms);
-    w.seedToday('dew_catcher', 3, vn('00:30:00'));
-    const res = await w.svc.complete(USER, run(100), now);
-    expect(res).toMatchObject({ rewarded, window, windowBonus: window !== null, cap: window ? 4 : 3, used: rewarded ? 4 : 3 });
-    expect(res.reason).toBe(rewarded ? null : 'DAILY_CAP');
-    expect(res.waterEarned).toBe(rewarded ? 5 : 0);
+    w.seedBase('dew_catcher', 3, vn('00:30:00'));
+    const res = await w.svc.complete(USER, run(100), vn(hms));
+    expect(res).toMatchObject({
+      rewarded,
+      window,
+      windowBonus: window !== null,
+      cap: window ? 4 : 3,
+      used: rewarded ? 4 : 3,
+      reason: rewarded ? null : 'DAILY_CAP',
+      waterEarned: rewarded ? 5 : 0,
+    });
     expect(w.state.events).toHaveLength(rewarded ? 4 : 3);
+    if (window) expect(w.state.events.at(-1)!.refId).toBe(`${USER}:2026-11-15:bonus:${window}`);
   });
 
-  it('trần tính theo lúc HOÀN THÀNH: dùng 4 lượt trong khung, ván xong sau khung thì hết lượt', async () => {
+  it('đã dùng lượt thưởng của khung đó rồi thì ván sau trong cùng khung hết lượt, khung kia vẫn còn', async () => {
     const w = makeWorld();
-    w.seedToday('dew_catcher', 4, vn('08:00:00'));
-    await expect(w.svc.complete(USER, run(100), vn('09:00:00'))).resolves.toMatchObject({ rewarded: false, reason: 'DAILY_CAP', used: 4, cap: 3 });
+    w.seedBase('dew_catcher', 3, vn('00:30:00'));
+    w.seedBonus('dew_catcher', 'SUONG_SOM', vn('06:45:00'));
+    await expect(w.svc.complete(USER, run(100), vn('08:59:59'))).resolves.toMatchObject({ rewarded: false, reason: 'DAILY_CAP', used: 4, cap: 4, windowBonus: false });
+    await expect(w.svc.complete(USER, run(100), vn('20:00:00'))).resolves.toMatchObject({ rewarded: true, used: 5, cap: 5, windowBonus: true });
   });
 
-  it('mỗi game một trần riêng', async () => {
+  it('mỗi game một bộ lượt riêng, kể cả lượt thưởng khung', async () => {
     const w = makeWorld();
-    w.seedToday('dew_catcher', 3, vn('00:30:00'));
-    await expect(w.svc.complete(USER, run(100), T0)).resolves.toMatchObject({ rewarded: false, reason: 'DAILY_CAP' });
-    await expect(
-      w.svc.complete(USER, { gameId: 'refill_rush', score: 100, durationMs: 45_000 }, T0),
-    ).resolves.toMatchObject({ rewarded: true, used: 1 });
+    w.seedBase('dew_catcher', 3, vn('00:30:00'));
+    w.seedBonus('dew_catcher', 'SUONG_SOM', vn('06:45:00'));
+    await expect(w.svc.complete(USER, run(100), vn('07:30:00'))).resolves.toMatchObject({ rewarded: false, reason: 'DAILY_CAP' });
+    await expect(w.svc.complete(USER, rush(), vn('07:30:00'))).resolves.toMatchObject({ rewarded: true, used: 1, cap: 4, windowBonus: true });
+    expect(w.state.events.at(-1)).toMatchObject({ reason: 'ARCADE_REFILL_RUSH', refId: `${USER}:2026-11-15:1` });
   });
 
-  it('sang ngày VN mới (00:00 giờ VN) trần được làm mới, lượt hôm qua không tính', async () => {
+  it('sang ngày VN mới (00:00 giờ VN): lượt cơ sở và lượt thưởng khung hôm qua không tính', async () => {
     const w = makeWorld();
-    w.seedToday('dew_catcher', 3, vn('23:59:59', '2026-11-14'));
+    const yesterday = vn('23:59:59', '2026-11-14');
+    w.seedBase('dew_catcher', 3, yesterday);
+    w.seedBonus('dew_catcher', 'MUA_RAO', yesterday);
     const res = await w.svc.complete(USER, run(100), vn('00:00:00'));
-    expect(res).toMatchObject({ rewarded: true, used: 1, cap: 3 });
+    expect(res).toMatchObject({ rewarded: true, used: 1, cap: 3, window: null });
     expect(w.state.events.at(-1)!.refId).toBe(`${USER}:2026-11-15:1`);
     expect(startOfVnDay(vn('00:00:00')).toISOString()).toBe(vn('00:00:00').toISOString());
   });
 
-  it('hai ván hoàn thành song song lúc còn đúng 1 lượt: chỉ một ván ăn lượt', async () => {
+  it('lượt thưởng khung tối hôm qua không chặn lượt thưởng khung tối hôm nay (refId theo ngày)', async () => {
     const w = makeWorld();
-    w.seedToday('dew_catcher', 2, vn('00:30:00'));
-    const [a, b] = await Promise.all([
-      w.svc.complete(USER, run(100), new Date(T0.getTime())),
-      w.svc.complete(USER, run(100), new Date(T0.getTime() + 60_000)),
-    ]);
+    const yesterday = vn('21:00:00', '2026-11-14');
+    w.seedBase('dew_catcher', 3, yesterday);
+    w.seedBonus('dew_catcher', 'MUA_RAO', yesterday);
+    w.seedBase('dew_catcher', 3, vn('00:10:00'));
+    await expect(w.svc.complete(USER, run(100), vn('20:00:00'))).resolves.toMatchObject({ rewarded: true, used: 4, cap: 4 });
+    expect(w.state.events.at(-1)!.refId).toBe(`${USER}:2026-11-15:bonus:MUA_RAO`);
+  });
+
+  it('hai ván hoàn thành song song lúc còn đúng 1 lượt cơ sở (ngoài khung): chỉ một ván ăn lượt', async () => {
+    const w = makeWorld();
+    w.seedBase('dew_catcher', 2, vn('00:30:00'));
+    const [a, b] = await Promise.all([w.svc.complete(USER, run(100), T0), w.svc.complete(USER, run(100), at(1))]);
     expect([a.rewarded, b.rewarded].sort()).toEqual([false, true]);
     expect([a, b].find((r) => !r.rewarded)!.reason).toBe('DAILY_CAP');
     expect(w.state.events).toHaveLength(3);
     expect(w.state.points).toHaveLength(1);
     expect(w.state.profile!.totalSeeds).toBe(5);
+    expect(w.state.balance).toBe(sumPoints(w.state.points));
+  });
+
+  it('hai ván song song lúc hết lượt cơ sở trong khung: chỉ một ván ăn lượt thưởng khung', async () => {
+    const w = makeWorld();
+    w.seedBase('dew_catcher', 3, vn('00:30:00'));
+    const start = vn('07:00:00');
+    const [a, b] = await Promise.all([w.svc.complete(USER, run(100), start), w.svc.complete(USER, run(100), at(1, start))]);
+    expect([a.rewarded, b.rewarded].sort()).toEqual([false, true]);
+    expect(b).toMatchObject({ reason: 'DAILY_CAP', used: 4 });
+    expect(w.state.events.filter((e) => e.refId!.endsWith(':bonus:SUONG_SOM'))).toHaveLength(1);
+    expect(w.state.points).toHaveLength(1);
     expect(w.state.balance).toBe(sumPoints(w.state.points));
   });
 
@@ -568,20 +735,101 @@ describe('GameArcadeService.complete: trần lượt thưởng mỗi ngày VN', 
     expect(w.state.scores[0]!.plays).toBe(1);
   });
 
-  it('backstop unique: hai tx cùng đọc "còn chỗ" (không khoá) vẫn không vượt trần, tx thua thành DAILY_CAP mà không mất kỷ lục', async () => {
+  it('backstop unique ô cơ sở: hai tx cùng đọc "còn chỗ" (không khoá) vẫn không vượt trần, tx thua thành DAILY_CAP mà không mất kỷ lục', async () => {
     const w = makeWorld({ noLock: true });
-    w.seedToday('dew_catcher', 2, vn('00:30:00'));
+    w.seedBase('dew_catcher', 2, vn('00:30:00'));
     w.seedScore('dew_catcher');
-    const [a, b] = await Promise.all([
-      w.svc.complete(USER, run(100), T0),
-      w.svc.complete(USER, run(700), new Date(T0.getTime() + 60_000)),
-    ]);
+    const [a, b] = await Promise.all([w.svc.complete(USER, run(100), T0), w.svc.complete(USER, run(700), at(1))]);
     expect([a.rewarded, b.rewarded].filter(Boolean)).toHaveLength(1);
     const loser = [a, b].find((r) => !r.rewarded)!;
     expect(loser).toMatchObject({ reason: 'DAILY_CAP', used: 3 });
     expect(w.state.events).toHaveLength(3);
     expect(w.state.points).toHaveLength(1);
     expect(w.state.scores[0]!.plays).toBe(2);
+  });
+
+  it('backstop unique lượt thưởng khung: hai tx không khoá cùng muốn lượt thưởng khung, chỉ một dòng được ghi', async () => {
+    const w = makeWorld({ noLock: true });
+    w.seedBase('dew_catcher', 3, vn('00:30:00'));
+    w.seedScore('dew_catcher');
+    const start = vn('07:00:00');
+    const [a, b] = await Promise.all([w.svc.complete(USER, run(100), start), w.svc.complete(USER, run(100), at(1, start))]);
+    expect([a.rewarded, b.rewarded].filter(Boolean)).toHaveLength(1);
+    expect([a, b].find((r) => !r.rewarded)).toMatchObject({ reason: 'DAILY_CAP', used: 4, cap: 4 });
+    expect(w.state.events).toHaveLength(4);
+    expect(w.state.points).toHaveLength(1);
+  });
+});
+
+describe('GameArcadeService.complete: ván dưới ngưỡng thưởng (LOW_SCORE)', () => {
+  it.each([
+    ['dew_catcher', 99, 100],
+    ['refill_rush', 59, 60],
+  ] as const)('%s: %i điểm không thưởng và không tiêu lượt, %i điểm thưởng bình thường', async (gameId, low, enough) => {
+    const durationMs = ARCADE_NOMINAL_MS[gameId];
+    const w = makeWorld();
+    const res = await w.svc.complete(USER, { gameId, score: low, durationMs }, T0);
+    expect(res).toMatchObject({ rewarded: false, reason: 'LOW_SCORE', waterEarned: 0, pointsEarned: 0, used: 0, cap: 3, bestScore: low, isNewBest: true });
+    expect(w.state.events).toHaveLength(0);
+    expect(w.state.points).toHaveLength(0);
+    expect(w.state.profile!.totalSeeds).toBe(0);
+    expect(w.state.scores[0]).toMatchObject({ gameId, bestScore: low, plays: 1, lastRunAt: T0 });
+
+    const next = await w.svc.complete(USER, { gameId, score: enough, durationMs }, new Date(T0.getTime() + durationMs + 1_000));
+    expect(next).toMatchObject({ rewarded: true, reason: null, used: 1 });
+    expect(w.state.scores[0]).toMatchObject({ bestScore: enough, plays: 2 });
+  });
+
+  it('vẫn cập nhật kỷ lục, số ván và lastRunAt (nên ván kế tiếp bị TOO_FAST tính từ ván điểm thấp)', async () => {
+    const w = makeWorld();
+    await w.svc.complete(USER, run(50), T0);
+    await w.svc.complete(USER, run(80), new Date(T0.getTime() + 41_000));
+    expect(w.state.scores[0]).toMatchObject({ bestScore: 80, plays: 2, lastRunAt: new Date(T0.getTime() + 41_000) });
+    await expect(w.svc.complete(USER, run(300), new Date(T0.getTime() + 50_000))).resolves.toMatchObject({ reason: 'TOO_FAST' });
+  });
+
+  it('không tiêu lượt: nhiều ván điểm thấp rồi ván đủ điểm vẫn nhận lượt thứ nhất, và không cần hồ sơ game', async () => {
+    const w = makeWorld({ noProfile: true });
+    for (let i = 0; i < 5; i++) await expect(w.svc.complete(USER, run(50), new Date(T0.getTime() + i * 41_000))).resolves.toMatchObject({ reason: 'LOW_SCORE', used: 0 });
+    expect(w.state.profile).toBeUndefined();
+    expect(w.loyalty.pointsExpiresAt).not.toHaveBeenCalled();
+    await expect(w.svc.complete(USER, run(100), new Date(T0.getTime() + 5 * 41_000))).resolves.toMatchObject({ rewarded: true, used: 1 });
+  });
+});
+
+describe('GameArcadeService.complete: thứ tự lý do không thưởng', () => {
+  // DISABLED > NOT_REAL_USER > TOO_FAST > LOW_SCORE > DAILY_CAP. TOO_FAST là ván không ghi gì; các lý do khác vẫn ghi kỷ lục.
+  const secondRun = new Date(T0.getTime() + 10_000); // báo xong sau 10s mà khai ván dài 40s: TOO_FAST
+
+  it('DISABLED thắng mọi lý do còn lại', async () => {
+    const w = makeWorld({ user: { zaloId: 'guest_h_abc', phone: null } });
+    await w.svc.complete(USER, run(300), T0);
+    w.cfg['game.arcade_enabled'] = false;
+    await expect(w.svc.complete(USER, run(10), secondRun)).resolves.toMatchObject({ reason: 'DISABLED' });
+    expect(w.state.scores[0]).toMatchObject({ plays: 1, lastRunAt: T0 }); // vẫn TOO_FAST nên không ghi
+  });
+
+  it('NOT_REAL_USER thắng TOO_FAST, LOW_SCORE và DAILY_CAP', async () => {
+    const w = makeWorld({ user: { zaloId: 'guest_h_abc', phone: null } });
+    await w.svc.complete(USER, run(300), T0);
+    await expect(w.svc.complete(USER, run(10), secondRun)).resolves.toMatchObject({ reason: 'NOT_REAL_USER' });
+    const lowCap = makeWorld({ user: { zaloId: 'guest_h_abc', phone: null } });
+    await expect(lowCap.svc.complete(USER, run(10), T0)).resolves.toMatchObject({ reason: 'NOT_REAL_USER', bestScore: 10 });
+  });
+
+  it('TOO_FAST thắng LOW_SCORE và DAILY_CAP, và không ghi gì', async () => {
+    const w = makeWorld();
+    w.seedBase('dew_catcher', 3, vn('00:30:00'));
+    await w.svc.complete(USER, run(300), T0);
+    await expect(w.svc.complete(USER, run(10), secondRun)).resolves.toMatchObject({ reason: 'TOO_FAST', isNewBest: false, bestScore: 300 });
+    expect(w.state.scores[0]).toMatchObject({ plays: 1, lastRunAt: T0 });
+  });
+
+  it('LOW_SCORE thắng DAILY_CAP: hết lượt mà điểm thấp thì nói điểm thấp', async () => {
+    const w = makeWorld();
+    w.seedBase('dew_catcher', 3, vn('00:30:00'));
+    await expect(w.svc.complete(USER, run(99), T0)).resolves.toMatchObject({ reason: 'LOW_SCORE', used: 3, cap: 3 });
+    await expect(w.svc.complete(USER, run(300), new Date(T0.getTime() + 41_000))).resolves.toMatchObject({ reason: 'DAILY_CAP' });
   });
 });
 
@@ -697,7 +945,8 @@ describe('GameArcadeService.status', () => {
 
   it('người mới: mọi số 0, ngoài khung giờ trần 3; lượt hôm qua không tính', async () => {
     const w = makeWorld();
-    w.seedToday('dew_catcher', 3, vn('10:00:00', '2026-11-14'));
+    w.seedBase('dew_catcher', 3, vn('10:00:00', '2026-11-14'));
+    w.seedBonus('dew_catcher', 'MUA_RAO', vn('21:00:00', '2026-11-14'));
     await expect(w.svc.status(USER, T0)).resolves.toEqual({
       games: {
         dew_catcher: { bestScore: 0, plays: 0, used: 0, cap: 3 },
@@ -708,6 +957,35 @@ describe('GameArcadeService.status', () => {
       nextWindowAt: vn('20:00:00').toISOString(),
       quizClaimed: false,
     });
+  });
+
+  it('used là cơ sở cộng thưởng khung; cap = 3 + thưởng khung đã dùng + 1 nếu khung đang chạy còn lượt (tính riêng từng game)', async () => {
+    const w = makeWorld();
+    w.seedBase('dew_catcher', 3, vn('06:40:00'));
+    w.seedBonus('dew_catcher', 'SUONG_SOM', vn('06:45:00'));
+    const sang = await w.svc.status(USER, vn('08:00:00'));
+    expect(sang.games).toEqual({
+      dew_catcher: { bestScore: 0, plays: 0, used: 4, cap: 4 },
+      refill_rush: { bestScore: 0, plays: 0, used: 0, cap: 4 },
+    });
+    expect(sang).toMatchObject({ window: 'SUONG_SOM', windowBonus: true }); // rush còn lượt thưởng sáng
+    const trua = await w.svc.status(USER, vn('12:00:00'));
+    expect(trua.games.dew_catcher).toMatchObject({ used: 4, cap: 4 });
+    expect(trua.games.refill_rush).toMatchObject({ used: 0, cap: 3 });
+    expect(trua).toMatchObject({ window: null, windowBonus: false });
+    const toi = await w.svc.status(USER, vn('20:30:00'));
+    expect(toi.games.dew_catcher).toMatchObject({ used: 4, cap: 5 });
+    expect(toi.games.refill_rush).toMatchObject({ used: 0, cap: 4 });
+    expect(toi).toMatchObject({ window: 'MUA_RAO', windowBonus: true });
+  });
+
+  it('windowBonus ở status là false khi mọi game đã dùng lượt thưởng của khung đang chạy', async () => {
+    const w = makeWorld();
+    for (const gameId of ARCADE_GAME_IDS) {
+      w.seedBase(gameId, 3, vn('06:40:00'));
+      w.seedBonus(gameId, 'SUONG_SOM', vn('06:45:00'));
+    }
+    await expect(w.svc.status(USER, vn('08:00:00'))).resolves.toMatchObject({ window: 'SUONG_SOM', windowBonus: false });
   });
 
   it('quizClaimed theo dòng HOME_QUIZ_BONUS của chính user', async () => {
