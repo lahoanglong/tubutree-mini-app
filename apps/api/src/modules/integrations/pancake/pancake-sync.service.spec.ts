@@ -1393,6 +1393,51 @@ describe('PancakeSyncService — chữ catalog admin đã duyệt không bị đ
     expect((mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown>).description).toBe('Sữa hạt điều 400g');
   });
 
+  describe('W149A: mô tả TubuTree từ 80 ký tự là nguồn chuẩn, đồng bộ 15 phút không bao giờ ghi đè', () => {
+    const RICH = 'Xoài sấy dẻo BH.NONG. Xoài được sấy theo kiểu dẻo như tên gọi, dùng làm món ăn vặt hoặc ăn nhẹ.';
+    const PANCAKE_120 = 'Mô tả mới do nhân viên gõ bên Pancake POS, dài đủ một trăm hai mươi ký tự để chắc chắn vượt xa mọi ngưỡng ngắn mà lớp bảo vệ cũ từng dùng.';
+    const runWith = async (existingDescription: string, pancakeDescription: unknown, pancakeName = 'Sản phẩm w149a') => {
+      const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue({ ...approved, description: existingDescription }) } });
+      const payload = { ...product('w126', [variation('v-w126')], { description: pancakeDescription }), name: pancakeName };
+      await new PancakeSyncService(prisma, makeClient([[payload]]), lifecycle).syncProducts(SINCE);
+      expect(mk(prisma).product.update).toHaveBeenCalledTimes(1);
+      return (mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown>).description;
+    };
+
+    it.each([
+      ['mô tả mới dài 120 ký tự', PANCAKE_120],
+      ['mô tả mới bọc HTML', `<p>${PANCAKE_120}</p>`],
+      ['mô tả mới kèm ảnh', `<p>${PANCAKE_120}</p><img src="https://cdn.example/a.jpg">`],
+      ['chữ ngắn dưới 40', 'Xoài sấy dẻo'],
+      ['HTML trống', '<p><br></p>'],
+      ['rỗng', ''],
+      ['null', null],
+    ])('mô tả TubuTree %#: %s từ Pancake không đè được mô tả giàu', async (_label, pancakeDescription) => {
+      expect(RICH.length).toBeGreaterThanOrEqual(80);
+      expect(await runWith(RICH, pancakeDescription)).toBe(RICH);
+    });
+
+    it('Pancake chép đúng tên sản phẩm: mô tả giàu vẫn đứng vững', async () => {
+      expect(await runWith(RICH, 'Xoài sấy dẻo BH.NONG', 'Xoài sấy dẻo BH.NONG')).toBe(RICH);
+    });
+
+    it.each([[''], ['Xoài'], ['a'.repeat(39)], [ADMIN_TEXT]])('mô tả TubuTree rỗng hoặc dưới 80 ký tự (%j) vẫn nhận mô tả thật từ Pancake', async (existing) => {
+      expect(ADMIN_TEXT.length).toBeLessThan(80);
+      expect(await runWith(existing, PANCAKE_120)).toBe(PANCAKE_120);
+    });
+
+    it('bản chép tên sản phẩm dài từ 80 ký tự không bị nhầm là mô tả giàu: Pancake có chữ thật thì thay', async () => {
+      const longName = 'Cà Phê Muối C&Sea Đậm Đà Thơm Béo Chuẩn Gu Huế Hộp 16g x 10 Gói Thơm Ngon Đặc Biệt Nhập Khẩu Chính Hãng';
+      expect(longName.length).toBeGreaterThanOrEqual(80);
+      expect(await runWith(longName, PANCAKE_120, longName)).toBe(PANCAKE_120);
+    });
+
+    it('mô tả TubuTree 40..79 ký tự giữ lớp bảo vệ cũ: Pancake ngắn không đè, Pancake chữ thật đè', async () => {
+      expect(await runWith(ADMIN_TEXT, 'Mô tả từ Pancake')).toBe(ADMIN_TEXT);
+      expect(await runWith(ADMIN_TEXT, PANCAKE_120)).toBe(PANCAKE_120);
+    });
+  });
+
   it.each([[''], ['Mô tả từ Pancake'], [null]])('bản ghi cập nhật không bao giờ mang shortDesc hay ingredients (mô tả Pancake %j)', async (pancakeDescription) => {
     const data = await runUpdate(pancakeDescription);
     expect(data).not.toHaveProperty('shortDesc');

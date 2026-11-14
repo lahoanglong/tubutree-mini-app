@@ -1,5 +1,5 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
-import { baseSlug, claimsIn, findProductCopyFallback, isBlankHtmlText, normalizeCopyText, type CopyIngredient } from '@tubutree/shared-types';
+import { FALLBACK_DESCRIPTION_MIN_CHARS, baseSlug, claimsIn, findProductCopyFallback, isBlankHtmlText, normalizeCopyText, type CopyIngredient } from '@tubutree/shared-types';
 import { ingredientNames } from './ingredient-names';
 
 /**
@@ -14,6 +14,12 @@ import { ingredientNames } from './ingredient-names';
  */
 
 export const MIN_DESCRIPTION_CHARS = 40;
+
+/**
+ * Mô tả đang có từ mức này (ký tự chữ, đã bỏ thẻ) mà không phải bản chép tên sản phẩm là mô tả giàu chuẩn TubuTree: đồng bộ Pancake không bao giờ ghi đè,
+ * bất kể Pancake gửi chữ dài bao nhiêu. Muốn đổi thì sửa ở Admin TubuTree hoặc chạy CLI bổ sung chữ với `--force`.
+ */
+export const RICH_DESCRIPTION_MIN_CHARS = FALLBACK_DESCRIPTION_MIN_CHARS;
 
 export type CopyFamily = 'tra-thao-moc' | 'hat-dinh-duong' | 'mat-ong' | 'bot-rau-cu' | 'trai-cay-say' | 'gia-vi' | 'san-pham-xanh' | 'khac';
 
@@ -93,14 +99,18 @@ export function descriptionState(description: string | null | undefined, name: s
 }
 
 /**
- * Đồng bộ Pancake có nên giữ mô tả đang có thay vì ghi chữ Pancake gửi tới: mô tả đang có từ `MIN_DESCRIPTION_CHARS` ký tự chữ (đã bỏ thẻ) mà chữ Pancake
- * ngắn hơn mức đó (thường là tên sản phẩm hay một cụm POS), hoặc đúng bằng tên sản phẩm ở mọi độ dài (cần `name`). Chữ Pancake có ảnh/video hay từ
- * 40 ký tự trở lên mà không phải bản chép tên vẫn là nguồn chính như trước.
+ * Đồng bộ Pancake có nên giữ mô tả đang có thay vì ghi chữ Pancake gửi tới. Hai lớp:
+ * 1. Mô tả đang có đạt chuẩn giàu (từ `RICH_DESCRIPTION_MIN_CHARS` ký tự chữ, không phải bản chép tên, cần `name` để nhận ra bản chép): luôn giữ, kể cả khi Pancake
+ *    gửi chữ dài hơn hay kèm ảnh/video. TubuTree là nguồn chuẩn của mô tả giàu.
+ * 2. Mô tả đang có từ `MIN_DESCRIPTION_CHARS` ký tự mà chữ Pancake ngắn hơn mức đó (thường là tên sản phẩm hay một cụm POS), hoặc đúng bằng tên sản phẩm ở mọi
+ *    độ dài (cần `name`). Chữ Pancake có ảnh/video hay từ 40 ký tự trở lên mà không phải bản chép tên vẫn là nguồn chính cho mô tả chưa đạt chuẩn giàu.
+ * Một bên trống thì không giữ: Pancake trống đã được `upsertProduct` xử lý bằng cách dùng lại mô tả đang có.
  */
 export function keepExistingDescription(existing: string | null | undefined, incoming: string | null | undefined, name?: string): boolean {
   if (isBlankHtmlText(existing) || isBlankHtmlText(incoming)) return false;
-  if (MEDIA_TAG.test(incoming ?? '')) return false;
   const have = plainText(existing);
+  if (have.length >= RICH_DESCRIPTION_MIN_CHARS && !(name !== undefined && isNameCopy(have, name))) return true;
+  if (MEDIA_TAG.test(incoming ?? '')) return false;
   if (have.length < MIN_DESCRIPTION_CHARS) return false;
   const next = plainText(incoming);
   if (next.length < MIN_DESCRIPTION_CHARS) return true;

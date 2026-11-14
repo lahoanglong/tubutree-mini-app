@@ -10,7 +10,7 @@
  * script in tên DB đích trước khi chạy. Script không làm tươi bộ nhớ đệm API (khởi động lại API để thấy ngay).
  */
 import { PrismaClient } from '@prisma/client';
-import { NOT_WRITTEN, applyPlans, loadHouseProducts, parseCliArgs, planEnrichment, renderTable, summarize } from './catalog-copy-enrichment.core';
+import { MIN_DESCRIPTION_CHARS, NOT_WRITTEN, RICH_DESCRIPTION_MIN_CHARS, applyPlans, loadHouseProducts, parseCliArgs, planEnrichment, renderTable, summarize } from './catalog-copy-enrichment.core';
 
 function target(): string {
   try {
@@ -59,7 +59,7 @@ async function main(): Promise<void> {
       console.log(`\n${blocked.length} SP KHÔNG ghi vì chữ dự phòng vi phạm bộ chặn (sửa ở packages/shared-types/src/product-copy-fallback.ts):`);
       for (const b of blocked) console.log(`  - ${b.slug}: ${b.reason}`);
     }
-    if (force) console.log('\nLưu ý: đồng bộ Pancake giữ mô tả đã có từ 40 ký tự khi Pancake chỉ gửi chữ ngắn hơn 40, nhưng chữ Pancake từ 40 ký tự trở lên vẫn ghi đè mỗi 15 phút, nên mô tả đè bằng --force có thể bị trả về bản Pancake.');
+    if (force) console.log(`\nLưu ý: đồng bộ Pancake 15 phút không bao giờ ghi đè mô tả đã có từ ${RICH_DESCRIPTION_MIN_CHARS} ký tự (không phải bản chép tên), nên mô tả đè bằng --force sẽ được giữ. Mô tả ngắn hơn ${RICH_DESCRIPTION_MIN_CHARS} ký tự vẫn có thể bị chữ Pancake từ ${MIN_DESCRIPTION_CHARS} ký tự trở lên ghi đè.`);
   } finally {
     await prisma.$disconnect();
   }

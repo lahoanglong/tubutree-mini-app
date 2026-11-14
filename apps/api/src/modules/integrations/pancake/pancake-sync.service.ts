@@ -512,14 +512,15 @@ export class PancakeSyncService implements OnModuleInit {
 
     // `<p></p>`, `<br>` và `&nbsp;` là cách trình soạn của Pancake lưu ô mô tả để trống: coi như trống, kẻo xoá mô tả admin đã duyệt mỗi 15 phút.
     const incomingDescription = typeof p.description === 'string' && !isBlankHtmlText(p.description) ? p.description : null;
-    // Pancake chỉ gửi tên sản phẩm hay một cụm POS ngắn (dưới 40 ký tự) thì không được thay mô tả đã có từ 40 ký tự (admin hay CLI bổ sung chữ đã duyệt).
+    // TubuTree là nguồn chuẩn của mô tả giàu: mô tả đã có từ 80 ký tự (không phải bản chép tên) không bao giờ bị Pancake đè. Dưới mức đó, Pancake chỉ gửi tên
+    // sản phẩm hay một cụm POS ngắn (dưới 40 ký tự) thì không được thay mô tả đã có từ 40 ký tự (admin hay CLI bổ sung chữ đã duyệt).
     const keepDescription = keepExistingDescription(existing?.description, incomingDescription, name);
-    if (keepDescription) this.logger.log(`Giữ mô tả đã có của sản phẩm Pancake ${pancakeId}: chữ Pancake gửi tới ngắn hơn 40 ký tự hoặc chỉ chép tên sản phẩm.`);
+    if (keepDescription) this.logger.log(`Giữ mô tả đã có của sản phẩm Pancake ${pancakeId}: mô tả TubuTree đã đạt chuẩn giàu từ 80 ký tự, hoặc chữ Pancake gửi tới ngắn hơn 40 ký tự / chỉ chép tên sản phẩm.`);
     const description = keepDescription ? null : incomingDescription;
     const sellable = variations.filter((v) => !payloadRemoved(v.is_removed) && positivePrice(v.retail_price) !== null);
     const baseData = {
       name,
-      // Mô tả Pancake để trống (hoặc ngắn hơn mô tả đang có, xem trên) không xoá mô tả admin đã nhập; có nội dung thật thì Pancake là nguồn chính.
+      // Mô tả Pancake để trống (hoặc bị `keepExistingDescription` giữ lại, xem trên) không xoá mô tả admin đã nhập; mô tả chưa đạt chuẩn giàu mà Pancake có nội dung thật thì Pancake là nguồn chính.
       description: description ?? existing?.description ?? '',
       images: imgs.length ? imgs : (existing?.images ?? []),
       thumbnail: imgs[0] ?? existing?.thumbnail ?? null,

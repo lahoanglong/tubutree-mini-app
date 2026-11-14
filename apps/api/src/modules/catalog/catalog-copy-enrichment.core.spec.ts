@@ -1,7 +1,8 @@
-import { claimsIn, findProductCopyFallback, listProductCopyFallbackSlugs } from '@tubutree/shared-types';
+import { FALLBACK_DESCRIPTION_MIN_CHARS, claimsIn, findProductCopyFallback, listProductCopyFallbackSlugs } from '@tubutree/shared-types';
 import {
   MIN_DESCRIPTION_CHARS,
   NOT_WRITTEN,
+  RICH_DESCRIPTION_MIN_CHARS,
   applyPlans,
   classifyFamily,
   copyViolations,
@@ -196,32 +197,106 @@ describe('planProduct: không đè chữ người đã sửa', () => {
     expect(keepExistingDescription(`<p>${rich}</p>`, 'Xoài sấy dẻo')).toBe(true);
   });
 
-  it('keepExistingDescription: Pancake có chữ từ 40 ký tự, mô tả cũ ngắn, hoặc một bên trống thì không giữ', () => {
-    const rich = 'Xoài sấy dẻo BH.NONG. Xoài được sấy theo kiểu dẻo như tên gọi, dùng làm món ăn vặt hoặc ăn nhẹ.';
+  it('keepExistingDescription: mô tả đang có chưa đạt chuẩn giàu (40..79) mà Pancake có chữ từ 40 ký tự, mô tả cũ ngắn, hoặc một bên trống thì không giữ', () => {
+    const mid = 'Xoài sấy dẻo BH.NONG, dùng làm món ăn vặt hoặc ăn nhẹ.';
+    expect(mid.length).toBeGreaterThanOrEqual(MIN_DESCRIPTION_CHARS);
+    expect(mid.length).toBeLessThan(RICH_DESCRIPTION_MIN_CHARS);
     const longIncoming = 'Mô tả mới từ Pancake có đủ bốn mươi ký tự trở lên.';
     expect(longIncoming.length).toBeGreaterThanOrEqual(MIN_DESCRIPTION_CHARS);
-    expect(keepExistingDescription(rich, longIncoming)).toBe(false);
+    expect(keepExistingDescription(mid, longIncoming)).toBe(false);
     expect(keepExistingDescription('Xoài sấy dẻo', 'Xoài sấy dẻo BH.NONG')).toBe(false);
     expect(keepExistingDescription('', 'Xoài sấy dẻo')).toBe(false);
-    expect(keepExistingDescription(rich, '')).toBe(false);
-    expect(keepExistingDescription(rich, null)).toBe(false);
+    expect(keepExistingDescription(mid, '')).toBe(false);
+    expect(keepExistingDescription(mid, null)).toBe(false);
     expect(keepExistingDescription(null, 'Xoài sấy dẻo')).toBe(false);
     expect(keepExistingDescription('<p><br></p>', 'Xoài sấy dẻo')).toBe(false);
   });
 
-  it('keepExistingDescription: Pancake gửi chữ ngắn kèm ảnh/video thì không giữ (ảnh là nội dung thật)', () => {
-    const rich = 'Xoài sấy dẻo BH.NONG. Xoài được sấy theo kiểu dẻo như tên gọi, dùng làm món ăn vặt hoặc ăn nhẹ.';
-    expect(keepExistingDescription(rich, '<p>Thông tin sản phẩm</p><img src="https://cdn.example/a.jpg">')).toBe(false);
-    expect(keepExistingDescription(rich, '<iframe src="https://cdn.example/v"></iframe>Xem')).toBe(false);
+  it('keepExistingDescription: Pancake gửi chữ ngắn kèm ảnh/video thì không giữ mô tả chưa đạt chuẩn giàu (ảnh là nội dung thật)', () => {
+    const mid = 'Xoài sấy dẻo BH.NONG, dùng làm món ăn vặt hoặc ăn nhẹ.';
+    expect(keepExistingDescription(mid, '<p>Thông tin sản phẩm</p><img src="https://cdn.example/a.jpg">')).toBe(false);
+    expect(keepExistingDescription(mid, '<iframe src="https://cdn.example/v"></iframe>Xem')).toBe(false);
   });
 
-  it('keepExistingDescription: Pancake chép tên dài từ 40 ký tự thì giữ khi có truyền tên; không truyền tên thì không giữ', () => {
+  it('keepExistingDescription: Pancake chép tên dài từ 40 ký tự thì giữ khi có truyền tên; không truyền tên thì không giữ (mô tả đang có 40..79)', () => {
     const name = 'Cà Phê Muối C&Sea Đậm Đà Thơm Béo Chuẩn Gu Huế Hộp 16g x 10 Gói';
-    const rich = 'Cà phê muối C&Sea, hộp 10 gói, mỗi gói 16g. Vị cà phê có muối theo tên gọi, dùng làm thức uống.';
+    const mid = 'Cà phê muối C&Sea, hộp 10 gói, mỗi gói 16g, dùng làm thức uống.';
     expect(name.length).toBeGreaterThanOrEqual(MIN_DESCRIPTION_CHARS);
-    expect(keepExistingDescription(rich, name, name)).toBe(true);
-    expect(keepExistingDescription(rich, name)).toBe(false);
+    expect(mid.length).toBeLessThan(RICH_DESCRIPTION_MIN_CHARS);
+    expect(keepExistingDescription(mid, name, name)).toBe(true);
+    expect(keepExistingDescription(mid, name)).toBe(false);
     expect(keepExistingDescription(name, name, name)).toBe(false);
+  });
+
+  describe('keepExistingDescription: TubuTree là nguồn chuẩn của mô tả giàu từ 80 ký tự (W149A)', () => {
+    const name = 'Xoài sấy dẻo BH.NONG';
+    const rich = 'Xoài sấy dẻo BH.NONG. Xoài được sấy theo kiểu dẻo như tên gọi, dùng làm món ăn vặt hoặc ăn nhẹ.';
+    const pancake120 = 'Mô tả mới do nhân viên gõ bên Pancake POS, dài đủ một trăm hai mươi ký tự để chắc chắn vượt xa mọi ngưỡng ngắn mà lớp bảo vệ cũ từng dùng.';
+
+    it('ngưỡng giàu là đúng FALLBACK_DESCRIPTION_MIN_CHARS = 80', () => {
+      expect(RICH_DESCRIPTION_MIN_CHARS).toBe(FALLBACK_DESCRIPTION_MIN_CHARS);
+      expect(RICH_DESCRIPTION_MIN_CHARS).toBe(80);
+      expect(rich.length).toBeGreaterThanOrEqual(80);
+      expect(pancake120.length).toBeGreaterThanOrEqual(120);
+    });
+
+    it.each([
+      ['rỗng', ''],
+      ['null', null],
+      ['chỉ HTML trống', '<p><br></p>'],
+      ['ngắn dưới 40', 'Xoài sấy dẻo'],
+      ['chép đúng tên', name],
+      ['chữ dài 120 ký tự từ Pancake', pancake120],
+      ['chữ dài bọc HTML', `<p>${pancake120}</p>`],
+      ['chữ dài kèm ảnh', `<p>${pancake120}</p><img src="https://cdn.example/a.jpg">`],
+      ['chỉ có video, không chữ', '<iframe src="https://cdn.example/v"></iframe>'],
+    ])('mô tả TubuTree từ 80 ký tự đứng vững trước payload Pancake %s: không bao giờ ghi đè (có hay không truyền tên)', (_label, incoming) => {
+      const isBlank = incoming === null || incoming === '' || incoming === '<p><br></p>' || incoming.startsWith('<iframe');
+      // Pancake không có chữ (kể cả chỉ có video) không phải ca ghi đè: upsertProduct tự dùng lại mô tả đang có, nên hàm trả false là đúng.
+      expect(keepExistingDescription(rich, incoming, name)).toBe(!isBlank);
+      expect(keepExistingDescription(rich, incoming)).toBe(!isBlank);
+    });
+
+    it('mô tả TubuTree bọc HTML mà chữ nhìn thấy từ 80 ký tự cũng là giàu; chữ nhìn thấy dưới 80 thì chưa dù cả chuỗi HTML dài hơn 80', () => {
+      expect(keepExistingDescription(`<p>${rich}</p>`, pancake120, name)).toBe(true);
+      const htmlLong79 = `<p><strong>${'a'.repeat(79)}</strong></p>`;
+      expect(htmlLong79.length).toBeGreaterThan(80);
+      expect(keepExistingDescription(htmlLong79, pancake120, name)).toBe(false);
+    });
+
+    it('biên 79 / 80 ký tự: 80 giữ mọi chữ Pancake; 79 vẫn để chữ Pancake từ 40 ký tự ghi đè', () => {
+      const t79 = 'a'.repeat(79);
+      const t80 = 'a'.repeat(80);
+      expect(keepExistingDescription(t80, pancake120, name)).toBe(true);
+      expect(keepExistingDescription(t79, pancake120, name)).toBe(false);
+      expect(keepExistingDescription(t79, 'ngắn', name)).toBe(true);
+    });
+
+    it.each([[''], [null], ['Xoài'], ['a'.repeat(39)], ['<p></p>']])(
+      'mô tả TubuTree rỗng hoặc dưới 80 ký tự (%j) vẫn nhận mô tả thật từ Pancake (từ 40 ký tự, khác tên)',
+      (existing) => {
+        expect(keepExistingDescription(existing, pancake120, name)).toBe(false);
+      },
+    );
+
+    it('mô tả 40..79 ký tự vẫn giữ lớp bảo vệ cũ: Pancake ngắn hoặc chép tên không đè, Pancake chữ thật thì đè', () => {
+      const mid = 'Xoài sấy dẻo BH.NONG, dùng làm món ăn vặt hoặc ăn nhẹ.';
+      expect(mid.length).toBeGreaterThanOrEqual(40);
+      expect(mid.length).toBeLessThan(80);
+      expect(keepExistingDescription(mid, 'Xoài sấy dẻo', name)).toBe(true);
+      expect(keepExistingDescription(mid, name, name)).toBe(true);
+      expect(keepExistingDescription(mid, pancake120, name)).toBe(false);
+    });
+
+    it('bản chép tên sản phẩm dài từ 80 ký tự KHÔNG bị nhầm là mô tả giàu: Pancake chữ thật vẫn thay được, tên đã chép thì không tự đè lên chính nó', () => {
+      const longName = 'Cà Phê Muối C&Sea Đậm Đà Thơm Béo Chuẩn Gu Huế Hộp 16g x 10 Gói Thơm Ngon Đặc Biệt Nhập Khẩu Chính Hãng';
+      expect(longName.length).toBeGreaterThanOrEqual(80);
+      for (const copy of [longName, longName.toUpperCase(), `<p>${longName}</p>`, `${longName}.`]) {
+        expect(keepExistingDescription(copy, pancake120, longName)).toBe(false);
+        expect(descriptionState(copy, longName)).toBe('PLACEHOLDER');
+      }
+      expect(keepExistingDescription(longName, longName, longName)).toBe(false);
+    });
   });
 
   it('descriptionState: bản chép tên từ 40 ký tự trở lên cũng là PLACEHOLDER; chữ dài có thêm nội dung vẫn là OK', () => {
