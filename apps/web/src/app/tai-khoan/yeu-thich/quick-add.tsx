@@ -38,6 +38,8 @@ export interface QuickAdd {
   addVariation: (variationId: string, opts?: { origin?: Element | null }) => Promise<void>;
   /** Hiện một thông báo nổi ở đáy màn (cùng chỗ với "Đã thêm vào giỏ!"). */
   notify: (n: QuickAddNotice) => void;
+  /** Thông báo đang hiện, để nơi dùng `inlineNotice` tự vẽ trong khung của mình. */
+  notice: QuickAddNotice | null;
   /** Mã sản phẩm đang được thêm (chặn bấm lại ở nơi vẽ nút). */
   busyId: string | null;
   /** Thông báo nổi và bảng chọn phân loại: nơi dùng vẽ ở bất cứ đâu trong cây. */
@@ -47,10 +49,11 @@ export interface QuickAdd {
 /**
  * Đường giỏ nhanh dùng chung cho thẻ yêu thích, Reel Trang chủ và dải Mua lại món quen. Thẻ không mang phân loại nên tải chi tiết lúc thêm (cũng cho tồn kho mới nhất), rồi theo cùng luật
  * với trang chi tiết: một phân loại thì thêm thẳng, nhiều thì mở bảng chọn. `source` là nguồn ghi nhận lúc thêm giỏ (thiếu thì không ghi).
+ * `inlineNotice`: nơi gọi nằm trong hộp thoại phủ lên cả thông báo nổi (z-40 dưới hộp thoại z-50), nên `feedback` bỏ thông báo nổi và nơi gọi vẽ `notice` ngay trong hộp.
  * `staleKey` là khoá truy vấn của danh sách đang vẽ thẻ/món để thêm: máy chủ từ chối vì trạng thái đã đổi (400/404/409/422) thì danh sách đó đã cũ nên tải lại đúng khoá này.
  * Cùng lúc tải lại chi tiết của đúng sản phẩm vừa bấm (khi biết slug): Reel và nơi khác vẽ nút từ chi tiết đó, còn bản cũ thì nút vẫn sáng.
  */
-export function useQuickAdd(source: AddToCartSource | undefined, staleKey: readonly unknown[]): QuickAdd {
+export function useQuickAdd(source: AddToCartSource | undefined, staleKey: readonly unknown[], opts: { inlineNotice?: boolean } = {}): QuickAdd {
   const qc = useQueryClient();
   const flash = useActiveFlashSales();
   const phase = useAuthPhase();
@@ -125,7 +128,7 @@ export function useQuickAdd(source: AddToCartSource | undefined, staleKey: reado
     <>
       {/* Vùng báo luôn có mặt trong cây, chỉ đổi phần con: vùng live vừa gắn cùng chữ thường không được đọc ra. */}
       <div role="status">
-        {notice && (
+        {notice && !opts.inlineNotice && (
           <div
             role={notice.ok ? undefined : 'alert'}
             data-surface="inverse"
@@ -160,7 +163,7 @@ export function useQuickAdd(source: AddToCartSource | undefined, staleKey: reado
     </>
   );
 
-  return { quickAdd, addVariation, notify: show, busyId, feedback };
+  return { quickAdd, addVariation, notify: show, notice, busyId, feedback };
 }
 
 /** Nút giỏ nhanh nổi ở góc dưới ảnh thẻ: vùng chạm 44px bọc vòng trắng 32px, cùng kiểu nút tim ở góc trên. */

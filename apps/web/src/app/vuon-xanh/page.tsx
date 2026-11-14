@@ -22,6 +22,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs, useTabParam } from '@/components/ui/segmented-tabs';
+import { ArcadeHub } from '@/components/game/arcade-hub';
 import { CheckInStreak } from '@/components/game/checkin-streak';
 import { CommunityGoal } from '@/components/game/community-goal';
 import { EcoImpact } from '@/components/game/eco-impact';
@@ -32,6 +33,7 @@ import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { GameLoginGate, GameSkeleton } from '@/components/game/game-states';
 import { GAME_TAB_KEYS, GAME_COL, GAME_TABS, GameCol, GameTabPanel, type GameTabKey } from '@/components/game/game-tabs';
 import { GardenHero } from '@/components/game/garden-hero';
+import { HomeQuizCard } from '@/components/game/home-quiz-card';
 import { HarvestCelebration } from '@/components/game/harvest-celebration';
 import { OrderWaterCard } from '@/components/game/order-water-card';
 import { LuckyWheelCard } from '@/components/game/lucky-wheel-card';
@@ -253,6 +255,9 @@ function GameBody() {
           />
           </div>
 
+          <ArcadeHub />
+          <HomeQuizCard />
+
           <div className="empty:hidden">
           <MissionsCard
             missions={missions}
@@ -428,7 +433,12 @@ export default function GamePage() {
       <div className="mt-4">
         {phase === 'loading' && <AuthLoading />}
         {phase === 'unavailable' && <SessionUnavailable />}
-        {phase === 'guest' && <GameLoginGate returnTo="/vuon-xanh" />}
+        {phase === 'guest' && (
+          <div className="flex flex-col gap-3">
+            <GameLoginGate returnTo="/vuon-xanh" />
+            <ArcadeHub />
+          </div>
+        )}
         {phase === 'authenticated' && (
           <Suspense fallback={<GameSkeleton />}>
             <GameBody />

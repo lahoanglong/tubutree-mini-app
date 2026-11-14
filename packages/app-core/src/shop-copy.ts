@@ -712,6 +712,8 @@ export const SHOP_COPY: Record<string, string> = {
   'homeQuiz.result.error': 'Chưa lưu được kết quả. Bạn thử lại nhé.',
   'homeQuiz.result.loadError': 'Chưa tải được gợi ý. Bạn thử lại nhé.',
   'homeQuiz.result.browse': 'Xem sản phẩm',
+  'homeQuiz.result.shop': 'Xem sản phẩm',
+  'homeQuiz.result.cart': 'Xem giỏ hàng',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */
