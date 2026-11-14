@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate, useLocation } from 'zmp-ui';
 import { ChevronLeft } from 'lucide-react';
 import { useStorefrontContext } from '../store/storefront-context';
-import { isRootPath } from './nav-config';
+import { isRootPath, recordVisit, smartBack } from '../lib/smart-nav';
 
 /**
  * Nút back NỔI cho trang con. Vì đã ẩn actionBar gốc Zalo (immersive, content tràn
@@ -38,7 +38,14 @@ export default function BackButton() {
   const rawFrom = (location.state as { from?: string } | null)?.from;
   const fromPath =
     typeof rawFrom === 'string' && rawFrom !== location.pathname ? rawFrom : undefined;
-  const show = !isRootPath(location.pathname) || Boolean(fromPath);
+  // 5 tab gốc luôn ẩn nút, bất kể `state.from` (có BottomNav; nút nổi ở đó chỉ gây lùi vòng).
+  const show = !isRootPath(location.pathname);
+
+  // Vết đường dẫn cho `smartNavigate` biết trang ngay trước (xem lib/smart-nav.ts). Ghi cả khi nút ẩn vì tab gốc cũng là "trang trước".
+  const fullPath = location.pathname + (location.search ?? '');
+  useEffect(() => {
+    recordVisit(fullPath);
+  }, [fullPath]);
 
   useEffect(() => {
     document.body.classList.toggle('with-back-btn', show);
@@ -80,15 +87,8 @@ export default function BackButton() {
         aria-label="Quay lại"
         className="tubu-press"
         onClick={() => {
-          if (fromPath) {
-            navigate(fromPath);
-          } else {
-            // Mở thẳng trang con (share-link/thông báo) → history rỗng, navigate(-1) kẹt.
-            const idx = (window.history.state?.idx as number | undefined) ?? 0;
-            if (idx > 0) navigate(-1);
-            else
-              navigate(sfSlug ? (sfKind === 'brand' ? `/brand/${sfSlug}` : `/s/${sfSlug}`) : '/');
-          }
+          // Còn lịch sử thì lùi thật (navigate(-1)); `state.from` chỉ còn là đích khi mở thẳng trang con (share-link/thông báo, idx 0).
+          smartBack(navigate, fromPath ?? (sfSlug ? (sfKind === 'brand' ? `/brand/${sfSlug}` : `/s/${sfSlug}`) : '/'));
         }}
         style={{
           position: 'fixed',

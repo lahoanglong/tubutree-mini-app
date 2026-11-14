@@ -646,6 +646,12 @@
       "miniapp": "apps/miniapp/src/components/ui/shop-top-bar.tsx",
       "web": "apps/web/src/components/mini/shop-top-bar.tsx",
       "props": "ShopTopBarProps",
+      "propsDiff": {
+        "miniOnly": [
+          "endInset"
+        ],
+        "reason": "chừa chỗ bên phải cho viên thuốc Zalo (⋯ ✕) và nút Giỏ nổi cạnh nó trên Mini App; web không có viên thuốc Zalo nên không cần chừa"
+      },
       "screens": [
         "/brand/:slug",
         "/s/:slug"

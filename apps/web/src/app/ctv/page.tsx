@@ -2,6 +2,7 @@
 
 import { useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import Link from 'next/link';
+import { BackAwareLink } from '@/components/back-aware-link';
 import dynamic from 'next/dynamic';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { BadgePercent, ChevronRight, GraduationCap, Handshake, Landmark, Link2, Receipt, Store, TrendingUp, Wallet } from 'lucide-react';
@@ -551,9 +552,9 @@ function Dashboard() {
                     return (
                       <li key={step.key}>
                         {step.href ? (
-                          <Link href={step.href} className={cls}>
+                          <BackAwareLink href={step.href} className={cls}>
                             {inner}
-                          </Link>
+                          </BackAwareLink>
                         ) : (
                           <button type="button" onClick={step.onPress} className={cls}>
                             {inner}
@@ -581,10 +582,10 @@ function Dashboard() {
 
           {hasCourses && isWebRouteReady('/hoc-vien') && (
             <div>
-              <Link href="/hoc-vien" className={`${ui.btnSecondary} ${phoneSecondary} w-full gap-2`}>
+              <BackAwareLink href="/hoc-vien" className={`${ui.btnSecondary} ${phoneSecondary} w-full gap-2`}>
                 <GraduationCap className="h-5 w-5" aria-hidden="true" />
                 Học viện CTV
-              </Link>
+              </BackAwareLink>
               <p className="mt-1 text-center text-xs text-stone-600 max-md:text-[length:var(--type-caption-size)] max-md:text-[var(--color-text-tertiary)]">Khoá học đào tạo dành cho CTV</p>
             </div>
           )}

@@ -14,6 +14,7 @@ import type { BrandDetail, ProductCard as ProductCardData } from '@/lib/api';
 import { copyText } from '@/lib/copy-text';
 import { fallBackToOriginal, sizedImage } from '@/lib/image-src';
 import { StoreLayout } from '@/components/layouts/store-layout';
+import { PhoneCartButton } from '@/components/phone-cart-button';
 import { Badge } from '@/components/mini/badge';
 import { EmptyState } from '@/components/mini/empty-state';
 import { Icon } from '@/components/mini/icon';
@@ -78,6 +79,10 @@ export function BrandBody({ brand: b, mapOriginId, originFallback = null }: Bran
   return (
     <>
       <ShopTopBar title={b.name} />
+      {/* Lối thoát nhanh: đi sâu mấy tầng vẫn vào Giỏ một chạm. Đối xứng với nút lùi nổi bên trái (cùng độ cao, cùng lớp 40, trên nền đặc của BackButton); từ md thanh đầu của web đã có giỏ. */}
+      <div className="md:hidden" style={{ position: 'fixed', top: 'calc(var(--safe-top) + var(--space-stack-sm))', right: 'var(--space-inline-md)', zIndex: 40, borderRadius: 'var(--radius-pill)', boxShadow: 'var(--elevation-2)' }}>
+        <PhoneCartButton />
+      </div>
       <BrandActions slug={b.slug} name={b.name} followerCount={b.followerCount}>
         {(a) => (
           <StoreLayout

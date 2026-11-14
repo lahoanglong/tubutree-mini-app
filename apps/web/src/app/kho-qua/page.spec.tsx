@@ -26,7 +26,7 @@ const state = vi.hoisted(() => ({
   cartGate: null as Promise<void> | null,
 }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push }), usePathname: () => '/' }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: state.push }), usePathname: () => '/kho-qua', useSearchParams: () => new URLSearchParams() }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   getCart: async () => {

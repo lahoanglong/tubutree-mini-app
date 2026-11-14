@@ -5,6 +5,8 @@ export interface ShopTopBarProps {
   title: string;
   /** Cuộn quá mức này (px) thì hiện tên shop; mặc định khi bìa đã trôi hết dưới thanh. */
   threshold?: number;
+  /** Bề rộng chừa bên phải (px) cho viên thuốc Zalo và nút nổi cạnh nó; mặc định chỉ chừa viên thuốc. */
+  endInset?: number;
 }
 
 /**
@@ -13,7 +15,7 @@ export interface ShopTopBarProps {
  * thuốc của Zalo, và không bắt chạm. zIndex 200, giữa nền của `BackButton` (199) và nút lùi (201): cùng 199 thì nền đặc của nó che mất chữ; nút lùi
  * 201 nên luôn nằm trên thanh này dù `BackButton` đứng trước trang trong DOM (để Tab gặp nó đầu tiên), và 64px đệm trái giữ chữ không chạm nút.
  */
-export function ShopTopBar({ title, threshold = SHOP_COVER_HEIGHT - 56 }: ShopTopBarProps) {
+export function ShopTopBar({ title, threshold = SHOP_COVER_HEIGHT - 56, endInset = 96 }: ShopTopBarProps) {
   const [shown, setShown] = useState(false);
   useEffect(() => {
     // Cuộn xảy ra ở .zaui-page chứ không ở window; sự kiện scroll không nổi bọt nên bắt ở pha capture. Hàng ngang, sheet cũng phát scroll:
@@ -35,7 +37,7 @@ export function ShopTopBar({ title, threshold = SHOP_COVER_HEIGHT - 56 }: ShopTo
       aria-hidden={!shown}
       style={{
         position: 'fixed', top: 0, left: 0, right: 0, height: 'calc(var(--safe-top) + 56px)', zIndex: 200,
-        display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: '0 96px 0 64px',
+        display: 'flex', alignItems: 'flex-end', justifyContent: 'center', padding: `0 ${endInset}px 0 64px`,
         opacity: shown ? 1 : 0, transition: 'opacity 150ms', pointerEvents: 'none',
       }}
     >

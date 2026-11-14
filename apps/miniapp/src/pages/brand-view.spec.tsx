@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach, type MockInstance } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
+  cartCount: 0,
   authStatus: 'authenticated' as string,
   navigate: vi.fn(),
   openSnackbar: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('../services/brand-api', () => ({
   unfollowBrand: mocks.unfollowBrand,
   fetchBrandProducts: mocks.fetchBrandProducts,
 }));
+vi.mock('../hooks/use-cart-count', () => ({ useCartCount: () => mocks.cartCount }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   fetchActiveFlashSales: mocks.fetchFlash,
@@ -77,6 +79,7 @@ function renderPage() {
 describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.cartCount = 0;
     mocks.authStatus = 'authenticated';
     mocks.getPublicBrand.mockResolvedValue(BRAND);
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
@@ -86,6 +89,18 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
     mocks.getDealerMe.mockResolvedValue({ isDealer: false });
     mocks.copyText.mockResolvedValue(true);
     mocks.fetchFlash.mockResolvedValue([]);
+  });
+
+  it('có nút Giỏ hàng 44px nổi cạnh viên thuốc Zalo, kèm số món, bấm đi thẳng /cart (W163)', async () => {
+    mocks.cartCount = 2;
+    renderPage();
+    await screen.findByRole('heading', { level: 1, name: 'Sachi' });
+    const cart = screen.getByRole('button', { name: 'Giỏ hàng, 2 sản phẩm' });
+    expect(cart.style.width).toBe('44px');
+    expect(cart.style.height).toBe('44px');
+    expect((cart.parentElement as HTMLElement).style.position).toBe('fixed');
+    fireEvent.click(cart);
+    expect(mocks.navigate).toHaveBeenCalledWith('/cart');
   });
 
   it('hiện tên nhãn, tagline, số theo dõi và các khối của tab Shop', async () => {
@@ -295,6 +310,7 @@ describe('BrandViewPage — nội dung và hành vi giữ nguyên', () => {
 describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.cartCount = 0;
     mocks.authStatus = 'authenticated';
     mocks.getPublicBrand.mockResolvedValue(BRAND);
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
@@ -380,6 +396,7 @@ describe('BrandViewPage — cấu trúc và vùng chạm (C-076, C-114)', () => 
 describe('BrandViewPage — hàng chứng nhận cuộn ngang focus được (axe scrollable-region-focusable)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.cartCount = 0;
     mocks.authStatus = 'authenticated';
     mocks.getPublicBrand.mockResolvedValue(BRAND);
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
@@ -412,6 +429,7 @@ describe('BrandViewPage — hàng chứng nhận cuộn ngang focus được (ax
 describe('BrandViewPage — khung shop (tab, Theo dõi ở đầu, Sản phẩm phân trang thật)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.cartCount = 0;
     mocks.authStatus = 'authenticated';
     mocks.getPublicBrand.mockResolvedValue(BRAND);
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
@@ -496,6 +514,7 @@ describe('BrandViewPage — Theo dõi khoá chạm đúp (W79A)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.cartCount = 0;
     mocks.authStatus = 'authenticated';
     mocks.getPublicBrand.mockResolvedValue(BRAND);
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });
@@ -584,6 +603,7 @@ describe('BrandViewPage — Theo dõi bị từ chối thì giữ khoá tới kh
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.cartCount = 0;
     mocks.authStatus = 'authenticated';
     mocks.getPublicBrand.mockResolvedValue(BRAND);
     mocks.getBrandShareToEarn.mockResolvedValue({ eligible: false });

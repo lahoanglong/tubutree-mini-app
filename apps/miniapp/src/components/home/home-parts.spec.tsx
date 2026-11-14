@@ -9,7 +9,11 @@ const mocks = vi.hoisted(() => ({
   haptic: vi.fn(),
   user: null as null | { fullName: string; pointsBalance: number; pointsConvertedBalance?: number },
 }));
-vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
+vi.mock('zmp-ui', async (importOriginal) => ({
+  ...(await importOriginal<typeof ZmpUi>()),
+  useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/', search: '', state: null }),
+}));
 vi.mock('../../services/shop-api', () => ({ fetchActiveFlashSales: vi.fn().mockResolvedValue([]), getCart: vi.fn() }));
 vi.mock('../../store/auth', () => ({
   useAuthStore: (sel: (s: { status: string; user: typeof mocks.user }) => unknown) => sel({ status: 'idle', user: mocks.user }),

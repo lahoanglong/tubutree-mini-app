@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, Sheet, useSnackbar, useNavigate, useLocation } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useInfiniteQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { fetchCourses } from '../services/academy-api';
@@ -321,6 +322,7 @@ function RegisterGate() {
 function Dashboard() {
   const { openSnackbar } = useSnackbar();
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const qc = useQueryClient();
   const meQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe });
   const dashQ = useQuery({ queryKey: ['affiliate-dashboard'], queryFn: getAffiliateDashboard });
@@ -556,7 +558,7 @@ function Dashboard() {
             ...(meQ.data?.canOpenStorefront !== false
               ? [{ key: 'store', label: 'Mở gian hàng của bạn', icon: Store, onPress: () => navigate('/storefront') }]
               : []),
-            ...(hasCourses ? [{ key: 'learn', label: 'Học khoá đầu tiên', icon: GraduationCap, onPress: () => navigate('/academy') }] : []),
+            ...(hasCourses ? [{ key: 'learn', label: 'Học khoá đầu tiên', icon: GraduationCap, onPress: () => goSmart('/academy') }] : []),
           ].map((step, i) => (
             <button
               key={step.key}
@@ -697,7 +699,7 @@ function Dashboard() {
 
       {hasCourses && (
         <div style={BLOCK_GAP}>
-          <Button fullWidth variant="secondary" icon={GraduationCap} onPress={() => navigate('/academy')}>
+          <Button fullWidth variant="secondary" icon={GraduationCap} onPress={() => goSmart('/academy')}>
             {vi.academy.entry}
           </Button>
           <Text variant="caption" tone="tertiary" as="div" style={{ marginTop: 4, textAlign: 'center' }}>

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteMeDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
 import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react';
@@ -93,6 +94,7 @@ export function attachablePickup(me: WasteMeDTO | undefined, pickupFlag: boolean
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const [policy, setPolicy] = useState<WebPolicySlug | null>(null);
   const { openSnackbar } = useSnackbar();
   const { notify } = useNotify();
@@ -690,7 +692,7 @@ export default function CheckoutPage() {
               {shownCartIssue}
             </Text>
             <Box mt={2}>
-              <Button variant="secondary" onPress={() => navigate('/cart')}>
+              <Button variant="secondary" onPress={() => goSmart('/cart')}>
                 {vi.checkout.backToCart}
               </Button>
             </Box>
@@ -771,7 +773,7 @@ export default function CheckoutPage() {
                         loading={lineFix.isPending && lineFix.variables?.id === it.id}
                         onPress={() => {
                           const fix = lineProblems[it.id]!.fix;
-                          if (fix.kind === 'cart') navigate('/cart');
+                          if (fix.kind === 'cart') goSmart('/cart');
                           else lineFix.mutate({ id: it.id, fix });
                         }}
                       >
@@ -1427,7 +1429,7 @@ export default function CheckoutPage() {
                 setPriceChanged(false);
                 void queryClient.invalidateQueries({ queryKey: ['cart'] });
                 void queryClient.invalidateQueries({ queryKey: ['quote'] });
-                navigate('/cart');
+                goSmart('/cart');
               }}
             >
               {priceChangedActions().viewCart}

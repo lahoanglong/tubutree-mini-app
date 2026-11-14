@@ -76,6 +76,8 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
 import { coreHttp } from '@/lib/core-http';
 import BackLink from '@/components/back-link';
+import { BackAwareLink } from '@/components/back-aware-link';
+import { pushOrBack } from '@/lib/nav-depth';
 import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { Button, ProductThumb } from '@/components/mini';
@@ -482,7 +484,7 @@ export default function CheckoutPage() {
     errorFor: lineFixError?.id ?? null,
     errorText: lineFixError ? actionErrorText(lineFixError.error) : null,
     onFix: (id, fix) => {
-      if (fix.kind === 'cart') router.push('/gio-hang');
+      if (fix.kind === 'cart') pushOrBack(router, '/gio-hang');
       else lineFix.mutate({ id, fix });
     },
   };
@@ -721,9 +723,9 @@ export default function CheckoutPage() {
             >
               {priceChangedActions().accept}
             </button>
-            <Link href="/gio-hang" className={ui.btnSecondary}>
+            <BackAwareLink href="/gio-hang" className={ui.btnSecondary}>
               {priceChangedActions().viewCart}
-            </Link>
+            </BackAwareLink>
           </div>
         </div>
       )}
@@ -743,9 +745,9 @@ export default function CheckoutPage() {
           className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg"
         >
           <p className="min-w-0 flex-1 break-words">{cartIssue}</p>
-          <Link href="/gio-hang" className={ui.btnSecondary}>
+          <BackAwareLink href="/gio-hang" className={ui.btnSecondary}>
             Về giỏ hàng để sửa
-          </Link>
+          </BackAwareLink>
         </div>
       )}
       <div className="grid gap-6 max-md:grid-cols-[minmax(0,1fr)] max-md:gap-0 md:mx-auto md:max-w-2xl lg:max-w-none lg:grid-cols-[minmax(0,1fr)_360px]">
@@ -945,9 +947,9 @@ export default function CheckoutPage() {
           {itemIds && cart && (
             <p className="mt-2 text-caption text-[color:var(--color-text-secondary)]">
               Đang thanh toán {itemIds.length}/{cart.items.length} sản phẩm trong giỏ.{' '}
-              <Link href="/gio-hang" className="font-semibold text-[color:var(--color-text-brand)] underline">
+              <BackAwareLink href="/gio-hang" className="font-semibold text-[color:var(--color-text-brand)] underline">
                 Đổi lựa chọn
-              </Link>
+              </BackAwareLink>
             </p>
           )}
           {splitNote && <p className="mt-2 text-caption text-[color:var(--color-text-secondary)] hidden md:block">{splitNote}</p>}

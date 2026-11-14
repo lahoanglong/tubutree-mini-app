@@ -1,6 +1,8 @@
 import type { Page } from '@playwright/test';
 import { expect, makeOrder, makeUser, mockSession, reply, test, type MockApi } from './support/mock-api';
 import { checkInStatus, mockHomeEngagement } from './support/discovery-mocks';
+import { hubTab } from './support/offers-mocks';
+import { mockCollectable } from './support/voucher-mocks';
 import { assertSeededOnCi, firstPublicBrandSlug, seedShopScreens } from './support/a11y-db';
 import { expectChipHitArea44 } from './support/hit-area';
 import { shortcutLabelProblems } from './support/shortcut-labels';
@@ -765,53 +767,64 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 350000, itemCount: 0 });
   };
 
-  test('chưa điểm danh + mã sắp hết hạn: có chấm đỏ và khối Cộng đồng; mở Ưu đãi thì còn chấm vì chưa điểm danh', async ({ page, api }) => {
+  test('chưa điểm danh + mã sắp hết hạn: có chấm đỏ và khối Cộng đồng; mở Ưu đãi rồi tab Mã của tôi thì còn chấm vì chưa điểm danh', async ({ page, api }) => {
     await login(page, api);
     mockHomeEngagement(api, { checkedIn: false, expiringInDays: 2 });
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Cộng đồng' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toBeVisible();
     await page.getByRole('link', { name: /^Ưu đãi/ }).click();
+    // Mã của tôi là một tab của Ưu đãi (mặc định mở Săn mã): phiếu sắp hết hạn chỉ hiện sau khi mở tab này.
+    await hubTab(page, 'Mã của tôi').click();
     await expect(page.getByTestId('voucher-expiry').filter({ hasText: 'Còn 2 ngày' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toBeVisible();
   });
 
   for (const checkedIn of [false, true]) {
-    test(`Ưu đãi ${checkedIn ? 'đã' : 'chưa'} điểm danh: khung chờ Điểm danh cao đúng thẻ thật, Mã của tôi và Đổi quà không bị đẩy khi thẻ về`, async ({ page, api }) => {
+    test(`Ưu đãi ${checkedIn ? 'đã' : 'chưa'} điểm danh: dải điểm danh mỏng về muộn không vẽ khung chờ, Nhận mã và Điểm Xanh không bị đẩy khi dải về`, async ({ page, api }) => {
       await login(page, api);
       let release!: () => void;
+      let asked = false;
       const hold = new Promise<void>((resolve) => { release = resolve; });
       mockHomeEngagement(api, { checkedIn, expiringInDays: 2 });
+      mockCollectable(api);
       api.get('/me/daily-check-in', async () => {
+        asked = true;
         await hold;
         return checkInStatus(checkedIn);
       });
       await page.goto('/uu-dai');
-      const skeleton = page.getByRole('region', { name: 'Điểm danh mỗi ngày', exact: true }).locator('.tubu-skeleton');
-      await expect(skeleton).toBeVisible();
-      // Mọi khối khác đã vẽ xong khi thẻ còn là khung chờ: cú nhảy đo được chỉ còn do thẻ về.
-      await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true }).getByTestId('voucher-expiry').first()).toBeVisible();
-      await expect(page.getByRole('region', { name: 'Điểm Xanh của bạn' })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Nhận mã', exact: true })).toBeVisible();
+      await expect(page.getByRole('region', { name: 'Điểm Xanh của bạn', exact: true })).toBeVisible();
+      await expect(page.getByTestId('offers-collect-loading')).toHaveCount(0);
+      // Lời gọi đã tới máy chủ mock nhưng đang bị giữ (mock chỉ ghi cờ khi hàm chạy).
+      await expect.poll(() => asked, { timeout: 10_000 }).toBe(true);
+      // Dải chưa có dữ liệu thì không vẽ gì: không khung chờ, không thẻ điểm danh đầy đủ.
+      const strip = page.getByRole('region', { name: checkedIn ? 'Hôm nay bạn đã điểm danh' : 'Hôm nay bạn chưa điểm danh', exact: true });
+      await expect(page.getByRole('region', { name: /^Hôm nay bạn (chưa|đã) điểm danh$/ })).toHaveCount(0);
+      await expect(page.getByRole('region', { name: 'Điểm danh mỗi ngày', exact: true })).toHaveCount(0);
+      await expect(page.getByTestId('daily-check-in')).toHaveCount(0);
       const top = async (name: string) => (await page.getByRole('region', { name, exact: true }).boundingBox())!.y;
-      const placeholderH = (await skeleton.boundingBox())!.height;
-      const mineY = await top('Mã của tôi');
-      const rewardsY = await top('Đổi quà');
+      const collectY = await top('Nhận mã');
+      const pointsY = await top('Điểm Xanh của bạn');
       release();
-      const card = page.getByTestId('daily-check-in');
-      await expect(card).toBeVisible();
-      await expect(skeleton).toHaveCount(0);
-      expect((await card.boundingBox())!.height, 'thẻ thật lệch khung chờ').toBeCloseTo(placeholderH, 0);
-      expect(await top('Mã của tôi'), 'Mã của tôi bị đẩy khi thẻ về').toBeCloseTo(mineY, 0);
-      expect(await top('Đổi quà'), 'Đổi quà bị đẩy khi thẻ về').toBeCloseTo(rewardsY, 0);
+      await expect(strip).toBeVisible();
+      await expect(strip.getByText('Mở tab Vườn Xanh')).toBeVisible();
+      expect(await top('Nhận mã'), 'Nhận mã bị đẩy khi dải về').toBeCloseTo(collectY, 0);
+      expect(await top('Điểm Xanh của bạn'), 'Điểm Xanh bị đẩy khi dải về').toBeCloseTo(pointsY, 0);
     });
   }
 
-  test('đã điểm danh + mã sắp hết hạn: mở Ưu đãi xong thì chấm đỏ tắt', async ({ page, api }) => {
+  test('đã điểm danh + mã sắp hết hạn: chấm đỏ chỉ tắt khi mở tab Mã của tôi, mở tab Săn mã (mặc định) thì còn', async ({ page, api }) => {
     await login(page, api);
     mockHomeEngagement(api, { checkedIn: true, expiringInDays: 2 });
     await page.goto('/');
     await expect(page.getByTestId('offers-dot')).toBeVisible();
     await page.getByRole('link', { name: /^Ưu đãi/ }).click();
+    // Tab Săn mã không cho khách thấy ví nên chưa tính là "đã xem" mã sắp hết hạn: chờ trang Ưu đãi dựng xong rồi chấm vẫn còn.
+    await expect(page.getByRole('region', { name: 'Điểm Xanh của bạn', exact: true })).toBeVisible();
+    await expect(page.getByTestId('offers-dot')).toBeVisible();
+    await hubTab(page, 'Mã của tôi').click();
     await expect(page.getByTestId('voucher-expiry').filter({ hasText: 'Còn 2 ngày' })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
   });

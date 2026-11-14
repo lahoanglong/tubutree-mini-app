@@ -1,10 +1,20 @@
 import { fireEvent, render as rtlRender, screen } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactElement } from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { beforeEach, describe, it, expect, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ haptic: vi.fn(), fullName: 'Nguyễn Thị Quay Lại' as string | null, loyalty: vi.fn(() => new Promise(() => {})) }));
-vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => vi.fn() }));
+const mocks = vi.hoisted(() => ({
+  haptic: vi.fn(),
+  fullName: 'Nguyễn Thị Quay Lại' as string | null,
+  loyalty: vi.fn(() => new Promise(() => {})),
+  navigate: vi.fn(),
+  pathname: '/',
+}));
+vi.mock('zmp-ui', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: mocks.pathname, search: '', state: null }),
+}));
 vi.mock('../../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../../store/auth', () => ({
   useAuthStore: (sel: (s: { user: { fullName: string | null; pointsBalance: number }; status: string }) => unknown) =>
@@ -121,5 +131,28 @@ describe('MemberCard — tên đọc khi tổng quan lỗi', () => {
     expect(btn.getAttribute('aria-label')).toContain(homeCopy.member.tierFailed);
     expect(btn.getAttribute('aria-label')).not.toMatch(/\d+ điểm/);
     mocks.loyalty.mockImplementation(() => new Promise(() => {}));
+  });
+});
+
+describe('MemberCard — mở Ưu đãi (W163)', () => {
+  const open = () => fireEvent.click(screen.getByRole('button', { name: new RegExp(homeCopy.member.openLabel) }));
+  beforeEach(() => {
+    mocks.navigate.mockClear();
+    mocks.pathname = '/';
+    mocks.fullName = 'Trần Văn An';
+  });
+
+  it('từ Trang chủ (tab gốc) sang Ưu đãi (tab gốc): thay mục hiện tại, không để lịch sử [/, /offers] rồi [/, /offers, /]', () => {
+    render(<MemberCard />);
+    open();
+    expect(mocks.navigate).toHaveBeenCalledTimes(1);
+    expect(mocks.navigate).toHaveBeenCalledWith('/offers', { replace: true });
+  });
+
+  it('từ trang không phải tab gốc: đẩy /offers như thường', () => {
+    mocks.pathname = '/loyalty';
+    render(<MemberCard />);
+    open();
+    expect(mocks.navigate).toHaveBeenCalledWith('/offers');
   });
 });

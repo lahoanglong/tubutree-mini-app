@@ -21,6 +21,7 @@ function scrollToTop() {
 /**
  * Thanh đáy 5 mục cho điện thoại (từ md thì thanh đầu trang đảm nhiệm). Tab Ưu đãi có chấm đỏ khi chưa điểm danh hôm nay hoặc có mã
  * sắp hết hạn; tab Cá nhân mang huy hiệu số đơn đang xử lý. Chỉ hiện ở 5 route gốc; ẩn khi trang có `sticky-action-bar` (globals.css, theo lớp `has-sticky-bar` của <body>). Khối đệm cùng chiều cao giữ chân trang không bị che.
+ * Chuyển tab gốc dùng replace (như `navigate(..., { replace: true })` ở Mini App): Back không tua qua từng tab đã bấm.
  */
 export default function BottomNav() {
   const pathname = useShellPathname();
@@ -56,6 +57,7 @@ export default function BottomNav() {
             <Link
               key={t.path}
               href={t.path}
+              replace
               aria-label={count > 0 ? `${t.label}, ${count} đơn đang xử lý` : dot ? `${t.label}, có việc cần làm` : t.label}
               aria-current={active ? 'page' : undefined}
               data-center={t.center ? 'true' : undefined}

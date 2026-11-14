@@ -23,9 +23,10 @@ const m = vi.hoisted(() => ({
   updateCartItem: vi.fn(),
   replace: vi.fn(),
   push: vi.fn(),
+  back: vi.fn(),
 }));
 
-vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: m.replace, push: m.push }) }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: m.replace, push: m.push, back: m.back }) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u', walletBalance: 0 }, status: 'authenticated' }) }));
 vi.mock('@/lib/geo-client', () => ({ getProvinces: async () => [], getCommunes: async () => [] }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -61,6 +62,7 @@ beforeEach(() => {
   m.updateCartItem.mockReset().mockResolvedValue({});
   m.replace.mockReset();
   m.push.mockReset();
+  m.back.mockReset();
   m.items = [];
   m.cart.mockReset().mockImplementation(async () => ({
     items: m.items, couponCode: null, subtotal: 100000, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: m.items.length,
@@ -69,7 +71,15 @@ beforeEach(() => {
 afterEach(() => {
   mounted.forEach((x) => x.unmount());
   mounted = [];
+  // Trả lịch sử về một mục vào thẳng (độ sâu 0) cho ca sau.
+  Object.getPrototypeOf(window.history).replaceState.call(window.history, null, '', '/');
 });
+
+// Giả lập Giỏ → Thanh toán: mục hiện tại là /thanh-toan và mục ngay trước là /gio-hang (nav-depth đóng dấu khi pushState).
+const arriveFromCart = () => {
+  Object.getPrototypeOf(window.history).replaceState.call(window.history, { __NA: true }, '', '/gio-hang');
+  window.history.pushState({ __NA: true }, '', '/thanh-toan');
+};
 
 describe('/thanh-toan — thanh toán một phần giỏ: dòng chọn cuối cùng và lựa chọn đã chết (hk)', () => {
   it('dòng hết hàng là dòng DUY NHẤT được chọn: nút là "Về giỏ hàng", không xoá tại màn (xoá thì lựa chọn rỗng và màn chuyển sang cả giỏ)', async () => {
@@ -84,6 +94,30 @@ describe('/thanh-toan — thanh toán một phần giỏ: dòng chọn cuối c�
     expect(m.removeCartItem).not.toHaveBeenCalled();
     expect(r.container.textContent).not.toContain('Mật ong');
     expect(quoteItemIds().every((ids) => JSON.stringify(ids) === JSON.stringify(['A']))).toBe(true);
+  });
+
+  it('đến từ Giỏ rồi bấm "Về giỏ hàng" ở dòng lỗi: lùi một mục (router.back), không đẩy thêm bản sao của giỏ', async () => {
+    arriveFromCart();
+    rememberCheckoutSelection(['A']);
+    m.items = [line('A', 'Dầu gội', { stock: 0 }), line('B', 'Mật ong'), line('C', 'Xà bông')];
+    const r = await mount();
+    click(byText(problems(r)[0]!, 'button', 'Về giỏ hàng')!);
+    await flush(4);
+    expect(m.back).toHaveBeenCalledTimes(1);
+    expect(m.push).not.toHaveBeenCalled();
+  });
+
+  it('đến từ Giỏ rồi bấm "Đổi lựa chọn": lùi về giỏ thay vì đẩy trang giỏ mới', async () => {
+    arriveFromCart();
+    rememberCheckoutSelection(['A', 'B']);
+    m.items = [line('A', 'Dầu gội'), line('B', 'Mật ong'), line('C', 'Xà bông')];
+    const r = await mount();
+    const link = byText(r.container, 'a', 'Đổi lựa chọn')!;
+    const ev = new MouseEvent('click', { bubbles: true, cancelable: true, button: 0 });
+    link.dispatchEvent(ev);
+    await flush(2);
+    expect(ev.defaultPrevented).toBe(true);
+    expect(m.back).toHaveBeenCalledTimes(1);
   });
 
   it('được chọn từ hai dòng: dòng hết hàng vẫn bỏ được tại màn', async () => {

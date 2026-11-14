@@ -310,6 +310,15 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'offers.guestPointsTitle': 26,
   'offers.guestPointsBody': null,
   'offers.guestMineBody': null,
+  'offers.tabsLabel': 20,
+  'offers.tabDeals': 12,
+  'offers.tabWallet': 12,
+  'offers.tabRewards': 12,
+  'offers.checkInDone': 30,
+  'offers.checkInTodo': 30,
+  'offers.openGarden': 20,
+  'offers.walletMore': 16,
+  'offers.walletHistory': 22,
 
   // Combo và mua kèm
   'combo.title': null,

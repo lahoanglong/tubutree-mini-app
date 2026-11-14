@@ -1,8 +1,8 @@
 'use client';
 
-import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { ShoppingCart } from 'lucide-react';
+import { BackAwareLink } from '@/components/back-aware-link';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useCartKey } from '@/lib/cart-key';
 import { getCart } from '@/lib/shop-client';
@@ -13,7 +13,7 @@ export function PhoneCartButton() {
   const cartQ = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: useAuthPhase() === 'authenticated' });
   const count = cartQ.data?.itemCount ?? 0;
   return (
-    <Link
+    <BackAwareLink
       href="/gio-hang"
       data-cart-target=""
       aria-label={count > 0 ? `Giỏ hàng, ${count} sản phẩm` : 'Giỏ hàng'}
@@ -21,6 +21,6 @@ export function PhoneCartButton() {
     >
       <ShoppingCart className="h-5 w-5" aria-hidden="true" />
       <CountBadge count={count} bump />
-    </Link>
+    </BackAwareLink>
   );
 }

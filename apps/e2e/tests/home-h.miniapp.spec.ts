@@ -3,6 +3,7 @@ import { test, expect, E2E_TOKENS, makeUser } from './support/mock-api';
 import { PURCHASED_PAGE } from './support/buy-flow-mocks';
 import { BINH_SUA, mockDiscovery, mockHomeEngagement, toCard } from './support/discovery-mocks';
 import { expectChipHitArea44 } from './support/hit-area';
+import { hubTab, mockRewardsCatalog } from './support/offers-mocks';
 
 /**
  * Zalo Mini App E2E — gói H sau review: không nhảy bố cục ở Trang chủ, chấm đỏ Ưu đãi nhớ đã xem, Cộng đồng, vùng chạm chip.
@@ -150,7 +151,7 @@ test.describe('Trang chủ — khôi phục phiên chậm', () => {
 });
 
 test.describe('Trang chủ — chấm đỏ Ưu đãi và Cộng đồng', () => {
-  test('chưa điểm danh + mã sắp hết hạn: có chấm đỏ và khối Cộng đồng; mở Ưu đãi thì mã đã xem nhưng chưa điểm danh vẫn còn chấm', async ({ page, api }) => {
+  test('chưa điểm danh + mã sắp hết hạn: có chấm đỏ và khối Cộng đồng; mở tab Mã của tôi thì mã đã xem nhưng chưa điểm danh vẫn còn chấm', async ({ page, api }) => {
     mockDiscovery(api, { returning: true });
     mockHomeEngagement(api, { checkedIn: false, expiringInDays: 2 });
     await page.goto('/');
@@ -158,16 +159,23 @@ test.describe('Trang chủ — chấm đỏ Ưu đãi và Cộng đồng', () =>
     await expect(page.getByTestId('offers-dot')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: /^Ưu đãi/ }).click();
     await expect(page.getByRole('heading', { name: /Ưu đãi/ }).first()).toBeVisible({ timeout: 15_000 });
+    // Mã nằm ở tab Mã của tôi, không ở tab Săn mã (mặc định).
+    await expect(page.getByRole('group', { name: /Giảm 10%/ })).toHaveCount(0);
+    await hubTab(page, 'Mã của tôi').click();
     await expect(page.getByRole('group', { name: /Giảm 10%/ }).getByText('Còn 2 ngày')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('offers-dot')).toBeVisible();
   });
 
-  test('đã điểm danh + mã sắp hết hạn: mở Ưu đãi xong thì chấm đỏ tắt, tải lại vẫn tắt', async ({ page, api }) => {
+  test('đã điểm danh + mã sắp hết hạn: chấm đỏ chỉ tắt khi khách mở tab Mã của tôi (thấy cả ví), tải lại vẫn tắt', async ({ page, api }) => {
     mockDiscovery(api, { returning: true });
     mockHomeEngagement(api, { checkedIn: true, expiringInDays: 2 });
     await page.goto('/');
     await expect(page.getByTestId('offers-dot')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: /^Ưu đãi/ }).click();
+    // Ở tab Săn mã khách chưa thấy ví nên mã chưa được ghi "đã xem": chấm còn nguyên.
+    await expect(hubTab(page, 'Săn mã')).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
+    await expect(page.getByTestId('offers-dot')).toBeVisible();
+    await hubTab(page, 'Mã của tôi').click();
     await expect(page.getByRole('group', { name: /Giảm 10%/ }).getByText('Còn 2 ngày')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
     await page.goto('/');
@@ -198,9 +206,11 @@ test.describe('Đổi rác tạm dừng nhưng còn yêu cầu đang mở', () =
     mockDiscovery(api, { returning: true });
     mockHomeEngagement(api);
     api.get('/waste/me/open-count', { count: 2 });
+    mockRewardsCatalog(api);
     await page.goto('/');
     await expect(page.getByRole('button', { name: /Yêu cầu của tôi/ }).first()).toBeVisible({ timeout: 15_000 });
-    await page.goto('/offers');
+    // Lối vào Đổi rác của Ưu đãi nằm ở tab Đổi quà.
+    await page.goto('/offers?tab=rewards');
     await expect(page.getByText('Yêu cầu của tôi', { exact: true }).first()).toBeVisible({ timeout: 15_000 });
     expect(api.callsTo('GET', '/waste/me/open-count').length).toBeGreaterThan(0);
     expect(api.callsTo('GET', '/waste/me')).toHaveLength(0);

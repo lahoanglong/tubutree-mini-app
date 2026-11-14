@@ -7,6 +7,7 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 // không bao giờ tới nhánh "Vui lòng đăng nhập".
 
 const mocks = vi.hoisted(() => ({
+  pathname: '/tai-khoan/don-hang',
   auth: {
     user: null as null | Record<string, unknown>,
     status: 'idle' as string,
@@ -19,7 +20,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => mocks.auth }));
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn() }),
-  usePathname: () => '/tai-khoan/don-hang',
+  usePathname: () => mocks.pathname,
   useParams: () => ({ code: 'TB-77', id: 'p1' }),
   useSearchParams: () => new URLSearchParams(),
 }));
@@ -80,6 +81,7 @@ const mount = (ui: Parameters<typeof render>[0]) => {
 };
 
 beforeEach(() => {
+  mocks.pathname = '/tai-khoan/don-hang';
   mocks.auth.status = 'idle';
   mocks.auth.initialized = true;
   mocks.auth.user = null;
@@ -149,6 +151,8 @@ const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, .
 
 describe.each(PAGES)('khách chưa đăng nhập mở %s', (_name, page, returnTo) => {
   it('thấy nút đăng nhập Zalo mang theo returnTo, không kẹt ở "Đang tải…"', async () => {
+    // Màn dùng chung (Kho quà) lấy returnTo từ trang đang đứng, nên mock phải ở đúng URL của trang đang thử.
+    mocks.pathname = returnTo;
     const { container } = mount(page());
     await flush();
     expect(container.textContent).not.toContain('Đang tải…');

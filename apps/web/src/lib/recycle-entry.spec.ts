@@ -32,7 +32,7 @@ describe('lối vào đổi rác trên route map thật', () => {
   it('trang Ưu đãi có lối vào Đổi rác lấy quà và route /uu-dai đã sẵn sàng', () => {
     expect(isWebRouteReady('/uu-dai')).toBe(true);
     const page = readFileSync(fileURLToPath(new URL('../app/uu-dai/page.tsx', import.meta.url)), 'utf8');
-    expect(page).toContain("to: '/doi-rac'");
+    expect(page).toContain("go('/doi-rac')");
     expect(page).toContain('Đổi rác lấy quà');
   });
 });
