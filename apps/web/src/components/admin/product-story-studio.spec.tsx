@@ -742,10 +742,17 @@ describe('ProductStoryStudio', () => {
   describe('ba trạng thái xuất bản trong bảng kiểm', () => {
     const status = () => document.querySelector<HTMLElement>('[data-testid="story-status"]')!;
 
-    it('chưa lưu cấu hình riêng: "Chưa có kịch bản"', () => {
-      mount({ value: null });
+    it('chưa lưu cấu hình riêng và không có kịch bản mẫu hay tự sinh: "Chưa có kịch bản"', () => {
+      mount({ value: null, product: product({ slug: 'san-pham-tron', name: 'Sản phẩm trơn', brand: 'Khác', ingredients: null, certifications: [], variations: [] }) });
       expect(status().getAttribute('data-status')).toBe('none');
       expect(status().textContent).toContain('Chưa có kịch bản');
+    });
+
+    it('chưa lưu cấu hình riêng nhưng sản phẩm có kịch bản mẫu đang bật (khách đang thấy): "Đang hiện kịch bản mẫu", không phải "Chưa có kịch bản"', () => {
+      mount({ value: null, product: product({ slug: 'duong-hoa-dua-sokfarm-d6c685' }) });
+      expect(status().getAttribute('data-status')).toBe('runtime');
+      expect(status().textContent).toContain('Đang hiện kịch bản mẫu');
+      expect(status().textContent).not.toContain('Chưa có kịch bản');
     });
 
     it('đã lưu và bật: "Đang bật công khai"; đã lưu mà tắt: "Bản nháp chờ duyệt"', () => {

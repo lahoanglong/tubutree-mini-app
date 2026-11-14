@@ -25,12 +25,25 @@ describe('storyPublication', () => {
     expect(storyPublication(cfg(true))).toBe('live');
     expect(storyPublication(cfg(false))).toBe('draft');
   });
+
+  it('chưa lưu cấu hình riêng nhưng kịch bản mẫu hoặc tự sinh đang chạy cho khách là "runtime", không phải "none"', () => {
+    expect(storyPublication(null, cfg(true))).toBe('runtime');
+    expect(storyPublication(undefined, cfg(true))).toBe('runtime');
+    expect(storyPublication(null, cfg(false))).toBe('none');
+    expect(storyPublication(null, null)).toBe('none');
+  });
+
+  it('cấu hình đã lưu thắng kịch bản dự phòng', () => {
+    expect(storyPublication(cfg(false), cfg(true))).toBe('draft');
+    expect(storyPublication(cfg(true), null)).toBe('live');
+  });
 });
 
 describe('StoryCompletenessPanel — dòng trạng thái xuất bản', () => {
   const cases = [
     ['live', 'Đang bật công khai'],
     ['draft', 'Bản nháp chờ duyệt'],
+    ['runtime', 'Đang hiện kịch bản mẫu'],
     ['none', 'Chưa có kịch bản'],
   ] as const;
 
@@ -45,13 +58,24 @@ describe('StoryCompletenessPanel — dòng trạng thái xuất bản', () => {
     });
   }
 
-  it('ba chip có chữ khác nhau để không nhầm bản nháp với bản đang chạy', () => {
+  it('bốn chip có chữ khác nhau để không nhầm bản nháp với bản đang chạy', () => {
     const texts = cases.map(([state]) => {
       const r = render(<StoryCompletenessPanel result={result()} publication={state} />);
       mounted.push(r);
       return r.container.querySelector('[data-testid="story-status"]')!.textContent;
     });
-    expect(new Set(texts).size).toBe(3);
+    expect(new Set(texts).size).toBe(4);
+  });
+
+  it('"runtime" nói khách đang thấy kịch bản mẫu và lưu cấu hình riêng sẽ thay nó; "none" nói khách không thấy gì', () => {
+    const rt = render(<StoryCompletenessPanel result={result()} publication="runtime" />);
+    mounted.push(rt);
+    const note = rt.container.querySelector('[data-testid="story-status-note"]')?.textContent ?? '';
+    expect(note).toContain('khách đang thấy');
+    expect(note).toContain('thay');
+    const none = render(<StoryCompletenessPanel result={result()} publication="none" />);
+    mounted.push(none);
+    expect(none.container.querySelector('[data-testid="story-status-note"]')?.textContent).toContain('khách chưa thấy');
   });
 
   it('bản nháp nói rõ khách chưa thấy; đang bật nói rõ khách đang thấy', () => {

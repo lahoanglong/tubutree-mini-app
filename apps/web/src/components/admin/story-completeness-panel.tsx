@@ -11,18 +11,26 @@ const STATE_TONE: Record<CheckState, Tone> = { ok: 'success', warn: 'warning', m
 const SOURCE_TEXT: Record<CheckSource, string> = { auto: 'Tự động từ sản phẩm', custom: 'Đã chỉnh tay' };
 const AMBIENT_TEXT = { leaf: 'Xanh lá', amber: 'Hổ phách', rose: 'Hồng', sky: 'Xanh trời', sand: 'Cát' } as const;
 
-/** Trạng thái xuất bản của cấu hình đang soạn: đang bật công khai, bản nháp chờ duyệt (đã có cấu hình nhưng tắt), hoặc chưa có cấu hình riêng. */
-export type StoryPublication = 'live' | 'draft' | 'none';
+/**
+ * Trạng thái xuất bản của cấu hình đang soạn: đang bật công khai, bản nháp chờ duyệt (đã có cấu hình nhưng tắt),
+ * đang hiện kịch bản mẫu hoặc tự sinh (chưa lưu cấu hình riêng nhưng khách vẫn thấy), hoặc không có gì để khách thấy.
+ */
+export type StoryPublication = 'live' | 'draft' | 'runtime' | 'none';
 
-export function storyPublication(config: Pick<ProductStoryConfig, 'enabled'> | null | undefined): StoryPublication {
-  if (config === null || config === undefined) return 'none';
+/** `fallback` là kịch bản mà trang khách dùng khi chưa có cấu hình riêng (mẫu theo slug hoặc tự sinh), đúng như `resolveStoryConfig` với `storyConfig: null`. */
+export function storyPublication(
+  config: Pick<ProductStoryConfig, 'enabled'> | null | undefined,
+  fallback?: Pick<ProductStoryConfig, 'enabled'> | null,
+): StoryPublication {
+  if (config === null || config === undefined) return fallback?.enabled ? 'runtime' : 'none';
   return config.enabled ? 'live' : 'draft';
 }
 
 const PUBLICATION: Record<StoryPublication, { tone: Tone; label: string; note: string }> = {
   live: { tone: 'success', label: 'Đang bật công khai', note: 'Theo cấu hình đang soạn: khách đang thấy câu chuyện này trên trang sản phẩm sau khi bấm Lưu sản phẩm.' },
-  draft: { tone: 'warning', label: 'Bản nháp chờ duyệt', note: 'Bản nháp, chưa hiển thị cho khách. Xem thử toàn màn hình, đối chiếu chữ với bao bì, rồi bật ô "Bật câu chuyện sản phẩm" và Lưu để công bố.' },
-  none: { tone: 'neutral', label: 'Chưa có kịch bản', note: 'Chưa lưu cấu hình riêng cho sản phẩm này; khách chỉ thấy kịch bản mẫu hoặc tự sinh nếu sản phẩm có đủ dữ liệu.' },
+  draft: { tone: 'warning', label: 'Bản nháp chờ duyệt', note: 'Theo cấu hình đang soạn: bản nháp, chưa hiển thị cho khách sau khi bấm Lưu sản phẩm. Xem thử toàn màn hình, đối chiếu chữ với bao bì, rồi bật ô "Bật câu chuyện sản phẩm" và Lưu để công bố.' },
+  runtime: { tone: 'info', label: 'Đang hiện kịch bản mẫu', note: 'Chưa lưu cấu hình riêng: khách đang thấy kịch bản mẫu hoặc tự sinh của sản phẩm này. Lưu cấu hình riêng (bật hoặc tắt) sẽ thay kịch bản đó; tắt rồi Lưu là ẩn câu chuyện khỏi khách.' },
+  none: { tone: 'neutral', label: 'Chưa có kịch bản', note: 'Chưa lưu cấu hình riêng và chưa đủ dữ liệu để tự sinh: khách chưa thấy câu chuyện nào cho sản phẩm này.' },
 };
 
 const VERDICT: Record<CompletenessVerdict, { tone: 'success' | 'warning' | 'danger'; text: (n: number) => string }> = {

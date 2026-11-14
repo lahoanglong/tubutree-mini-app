@@ -679,7 +679,7 @@ export function ProductStoryStudio({
             Xem thử toàn màn hình (Admin Preview)
           </button>
         </div>
-        <StoryCompletenessPanel result={completeness} publication={storyPublication(value)} />
+        <StoryCompletenessPanel result={completeness} publication={storyPublication(value, generated)} />
         <div
           data-testid="story-preview-frame"
           data-mode={mode}
