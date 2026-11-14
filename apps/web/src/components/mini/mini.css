@@ -122,8 +122,10 @@
 }
 
 /* Dòng "Nhận … Điểm Xanh" ở PDP (`PdpPointsEarn`): vùng chạm dôi 20px lên trên (margin âm) để không đẩy nội dung, đệm trên đúng bằng phần dôi đó nên chữ
-   xuống hai dòng (khổ 320px) thì nút cao thêm xuống dưới thay vì đè lên dòng giá. Cùng số đo với `.tubu-points-earn` của Mini App. */
+   xuống hai dòng (khổ 320px) thì nút cao thêm xuống dưới thay vì đè lên dòng giá. Cùng số đo với `.tubu-points-earn` của Mini App.
+   `position: relative`: không có thì chữ giá vẽ trên nút và nuốt cú chạm ở 20px dôi lên (vùng chạm thật còn ~24px). */
 .tubu-points-earn {
+  position: relative;
   box-sizing: border-box;
   margin-top: -20px;
   padding-top: 20px;

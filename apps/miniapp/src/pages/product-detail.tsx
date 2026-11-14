@@ -740,6 +740,7 @@ export default function ProductDetailPage() {
             style={{
               width: 44,
               height: 44,
+              flexShrink: 0,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

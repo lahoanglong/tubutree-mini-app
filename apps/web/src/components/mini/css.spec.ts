@@ -218,6 +218,8 @@ describe('mini.css: sheet từ md là hộp thoại giữa màn (K7)', () => {
     const margin = /margin-top:\s*-(\d+)px/.exec(row)?.[1];
     expect(margin).toBeDefined();
     expect(row).toMatch(new RegExp(`padding-top:\\s*${margin}px`));
+    // Không định vị thì chữ giá vẽ trên nút và nuốt cú chạm ở phần dôi lên: vùng chạm thật chỉ còn ~24px.
+    expect(row).toMatch(/position:\s*relative/);
   });
 
   it('--dialog-w là 480px trong tokens.css', () => {

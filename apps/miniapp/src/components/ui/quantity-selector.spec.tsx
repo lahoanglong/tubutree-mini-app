@@ -109,6 +109,13 @@ describe('QuantitySelector — nhập nhanh (editable, quickSteps)', () => {
     fireEvent.change(box, { target: { value: '' } });
     expect(onChange).toHaveBeenLastCalledWith(0);
   });
+  it('ô gõ cao 44px ở cả hai cỡ: ô nhập không có vùng chạm giãn như nút nên 36px là dưới ngưỡng', () => {
+    for (const size of ['sm', 'md'] as const) {
+      const { unmount } = render(<QuantitySelector value={3} max={50} min={0} size={size} editable onChange={() => {}} />);
+      expect(screen.getByRole('textbox', { name: 'Số lượng' }).style.height, size).toBe('44px');
+      unmount();
+    }
+  });
   it('nút +5, +10 cộng dồn và dừng ở max; hết chỗ thì aria-disabled', () => {
     const onChange = vi.fn();
     const { rerender } = render(<QuantitySelector value={8} max={12} min={0} quickSteps={[5, 10]} onChange={onChange} />);

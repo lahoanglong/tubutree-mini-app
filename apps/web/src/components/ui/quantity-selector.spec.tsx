@@ -78,6 +78,15 @@ describe('QuantitySelector', () => {
     expect(onChange).toHaveBeenLastCalledWith(1);
   });
 
+  it('editable: ô gõ cao 44px (h-11) ở cả hai cỡ, ô nhập không có vùng chạm giãn như nút nên h-9 là dưới ngưỡng', () => {
+    for (const size of ['sm', 'md'] as const) {
+      const { container } = mount(<QuantitySelector value={3} max={20} size={size} onChange={() => {}} editable />);
+      const cls = container.querySelector<HTMLInputElement>('input[aria-label="Số lượng"]')!.className;
+      expect(cls, size).toContain('h-11');
+      expect(cls, size).not.toContain('h-9');
+    }
+  });
+
   it('quickSteps: +5 / +10 cộng dồn và kẹp vào max; ở max thì aria-disabled, không gọi onChange', () => {
     const onChange = vi.fn();
     const { container } = mount(<QuantitySelector value={18} max={20} onChange={onChange} quickSteps={[5, 10]} />);

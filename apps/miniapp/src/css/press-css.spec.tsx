@@ -32,6 +32,8 @@ describe('css/tokens.css: phản hồi nhấn (polish PL-11)', () => {
     expect(row.style.getPropertyValue('margin-top')).toBe('-20px');
     expect(row.style.getPropertyValue('padding-top')).toBe('20px');
     expect(row.style.getPropertyValue('box-sizing')).toBe('border-box');
+    // Không định vị thì chữ giá vẽ trên nút và nuốt cú chạm ở phần dôi lên: vùng chạm thật chỉ còn ~24px.
+    expect(row.style.getPropertyValue('position')).toBe('relative');
   });
 
   it('.tubu-nums (gốc màn Cá nhân, Điểm Xanh, Mã giảm giá, CTV, Đánh giá): số đều cho điểm, tiền, mệnh giá, lịch sử', () => {
