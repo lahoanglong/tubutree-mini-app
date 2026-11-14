@@ -72,6 +72,15 @@ export const LEGACY_PAGE_REDIRECTS: Readonly<Record<string, string>> = {
 /** Tệp WordPress có dấu chấm trong tên (đường dẫn đã bỏ dấu `/` cuối, chữ thường) -> đích. Rank Math nộp `sitemap_index.xml`, web mới chỉ có `sitemap.xml`. */
 export const LEGACY_FILE_REDIRECTS: Readonly<Record<string, string>> = {
   '/sitemap_index.xml': '/sitemap.xml',
+  // 8 sitemap con Rank Math (sitemap_index.xml 14/11/2026) còn nằm trong Search Console; sitemap.xml của web mới thay hết, nên 301 về đó thay vì 404.
+  '/post-sitemap1.xml': '/sitemap.xml',
+  '/post-sitemap2.xml': '/sitemap.xml',
+  '/page-sitemap.xml': '/sitemap.xml',
+  '/product-sitemap.xml': '/sitemap.xml',
+  '/category-sitemap.xml': '/sitemap.xml',
+  '/blocks-sitemap.xml': '/sitemap.xml',
+  '/featured_item-sitemap.xml': '/sitemap.xml',
+  '/local-sitemap.xml': '/sitemap.xml',
 };
 
 /** Tiền tố WordPress có đuôi tuỳ ý (đường dẫn con) -> đích chung, dùng khi đường dẫn đầy đủ không có dòng riêng ở bảng trên. */
@@ -86,7 +95,7 @@ const SHOP_PAGINATION = /^\/(?:shop|cua-hang)\/page\/\d+$/;
 
 /** Nội dung mẫu/nháp của theme và trang thử: trả 410 để Google gỡ nhanh khỏi chỉ mục. */
 export const LEGACY_GONE_PREFIXES: readonly string[] = ['/elements', '/demos', '/blocks', '/featured_item'];
-export const LEGACY_GONE_EXACT: readonly string[] = ['/draf-main-page', '/test'];
+export const LEGACY_GONE_EXACT: readonly string[] = ['/draf-main-page', '/test', '/locations.kml'];
 
 /** Slug sản phẩm WordPress (đủ 91 trong sitemap 13/11/2026) -> đích. Thêm dòng mới ở đây, `legacy-wp-redirects.spec.ts` kiểm đích còn sống. */
 export const LEGACY_PRODUCT_REDIRECTS: Readonly<Record<string, string>> = {

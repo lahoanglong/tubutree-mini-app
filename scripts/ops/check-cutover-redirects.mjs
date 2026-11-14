@@ -7,6 +7,8 @@
 //   # Cả sitemap WordPress đã lưu về (mỗi file một --sitemap) và mẫu blog đi qua reverse proxy:
 //   node scripts/ops/check-cutover-redirects.mjs --base https://tubutree.com --resolve-ip 14.225.207.177 \
 //        --sitemap product-sitemap.xml --sitemap page-sitemap.xml --blog proxy
+//   # Thử thẳng cổng Next trên VPS (127.0.0.1:14000, chưa qua Apache) bằng Host của tên miền thật:
+//   node scripts/ops/check-cutover-redirects.mjs --base http://127.0.0.1:14000 --host-header tubutree.com --urls scripts/ops/data/wp-live-urls-20261114.txt
 //   node scripts/ops/check-cutover-redirects.mjs --help
 //
 // Mỗi URL được đi theo chuyển hướng tay (tối đa 6 chặng) rồi xếp PASS / WARN / FAIL:
@@ -97,7 +99,7 @@ export function classifyChain({ expected, steps, flags = {} }) {
   return { verdict: 'PASS', reason: String(first.status), notes };
 }
 
-function requestOnce(url, { resolveIp, method, timeout }) {
+function requestOnce(url, { resolveIp, hostHeader, method, timeout }) {
   const secure = url.protocol === 'https:';
   const options = {
     method,
@@ -105,7 +107,7 @@ function requestOnce(url, { resolveIp, method, timeout }) {
     port: url.port || (secure ? 443 : 80),
     path: url.pathname + url.search,
     // Kết nối tới IP nhưng gửi Host và SNI của tên miền thật, tương đương `curl --resolve`.
-    headers: { host: url.host, 'user-agent': 'tubutree-cutover-check/1', accept: 'text/html,*/*' },
+    headers: { host: hostHeader || url.host, 'user-agent': 'tubutree-cutover-check/1', accept: 'text/html,*/*' },
     servername: url.hostname,
     timeout,
   };
@@ -121,7 +123,7 @@ function requestOnce(url, { resolveIp, method, timeout }) {
 }
 
 /** Đi theo chuyển hướng bằng tay từ `path+search` trên `base`; trả `{ steps, flags }` cho classifyChain. */
-export async function walk({ base, resolveIp = '', path, search = '', method = 'HEAD', timeout = 15000 }) {
+export async function walk({ base, resolveIp = '', hostHeader = '', path, search = '', method = 'HEAD', timeout = 15000 }) {
   const baseUrl = new URL(base);
   const steps = [];
   const seen = new Set();
@@ -129,7 +131,7 @@ export async function walk({ base, resolveIp = '', path, search = '', method = '
   for (let i = 0; i <= MAX_HOPS; i += 1) {
     if (seen.has(current.href)) return { steps, flags: { loop: true } };
     seen.add(current.href);
-    const res = await requestOnce(current, { resolveIp, method, timeout });
+    const res = await requestOnce(current, { resolveIp, hostHeader, method, timeout });
     let next = null;
     if (isRedirectStatus(res.status) && res.location) {
       const target = new URL(res.location, current);
@@ -156,6 +158,7 @@ Kiểm bảng chuyển hướng WordPress -> web mới trên một host. Chỉ �
 Tuỳ chọn:
   --base URL          gốc cần kiểm, vd https://tubutree.com (mặc định https://app.tubutree.com)
   --resolve-ip IP     kết nối tới IP này nhưng giữ Host/SNI của --base (như curl --resolve); vd 14.225.207.177
+  --host-header HOST  gửi header Host này thay cho host của --base (như curl -H "Host: ..."); dùng khi --base là http://127.0.0.1:14000
   --sitemap FILE      sitemap WordPress đã lưu về, lặp lại được; mỗi <loc> là một URL cần kiểm
   --urls FILE         mỗi dòng một URL tuyệt đối hoặc đường dẫn bắt đầu bằng /
   --blog proxy|skip   URL blog/ảnh/feed của WordPress: proxy = mong trả 2xx không chuyển hướng; skip = bỏ qua (mặc định)
@@ -171,8 +174,8 @@ Không có --sitemap/--urls thì kiểm bộ URL dựng từ chính bảng chuy�
 Mã thoát: 0 không có FAIL, 1 có FAIL, 2 sai tham số.`;
 
 export function parseArgs(argv) {
-  const opts = { base: 'https://app.tubutree.com', resolveIp: '', sitemaps: [], urls: '', blog: 'skip', method: 'HEAD', concurrency: 4, timeout: 15000, limit: 0, strict: false, json: false, help: false };
-  const takes = new Set(['--base', '--resolve-ip', '--sitemap', '--urls', '--blog', '--method', '--concurrency', '--timeout', '--limit']);
+  const opts = { base: 'https://app.tubutree.com', resolveIp: '', hostHeader: '', sitemaps: [], urls: '', blog: 'skip', method: 'HEAD', concurrency: 4, timeout: 15000, limit: 0, strict: false, json: false, help: false };
+  const takes = new Set(['--base', '--resolve-ip', '--host-header', '--sitemap', '--urls', '--blog', '--method', '--concurrency', '--timeout', '--limit']);
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '-h' || arg === '--help') opts.help = true;
@@ -184,6 +187,7 @@ export function parseArgs(argv) {
       if (value === undefined) throw new Error(`${arg} cần một giá trị`);
       if (arg === '--base') opts.base = value;
       else if (arg === '--resolve-ip') opts.resolveIp = value;
+      else if (arg === '--host-header') opts.hostHeader = value;
       else if (arg === '--sitemap') opts.sitemaps.push(value);
       else if (arg === '--urls') opts.urls = value;
       else if (arg === '--blog') opts.blog = value;
@@ -279,7 +283,7 @@ async function main() {
     const isBlog = table.isWpBlogPath(input.path);
     if (isBlog && opts.blog === 'skip') return { ...input, verdict: 'SKIP', reason: 'blog/ảnh WordPress (--blog skip)', notes: [], expected: { kind: 'blog' }, steps: [] };
     const expected = isBlog ? { kind: 'none' } : expectedFor(table.resolveLegacyWpPath(input.path));
-    const { steps, flags } = await walk({ base: opts.base, resolveIp: opts.resolveIp, path: input.path, search: input.search, method: opts.method, timeout: opts.timeout });
+    const { steps, flags } = await walk({ base: opts.base, resolveIp: opts.resolveIp, hostHeader: opts.hostHeader, path: input.path, search: input.search, method: opts.method, timeout: opts.timeout });
     return { ...input, expected, steps, ...classifyChain({ expected, steps, flags }) };
   });
 
