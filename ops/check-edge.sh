@@ -19,6 +19,7 @@ DISK_WARN_PCT="${DISK_WARN_PCT:-80}"
 DISK_FAIL_PCT="${DISK_FAIL_PCT:-90}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/tubutree}"
 BACKUP_MAX_AGE_HOURS="${BACKUP_MAX_AGE_HOURS:-8}"
+OFFSITE_MAX_AGE_HOURS="${OFFSITE_MAX_AGE_HOURS:-30}"
 CURL_TIMEOUT="${CURL_TIMEOUT:-15}"
 API_LOCAL_URL="${API_LOCAL_URL:-http://127.0.0.1:14001}"
 APP_LOCAL_URL="${APP_LOCAL_URL:-http://127.0.0.1:14000}"
@@ -43,6 +44,8 @@ Tuỳ chọn (có thể đặt bằng biến môi trường cùng tên viết ho
   --disk-fail PCT        đĩa đầy từ PCT% thì FAIL (90)               DISK_FAIL_PCT
   --backup-dir DIR       thư mục backup (/var/backups/tubutree)      BACKUP_DIR
   --backup-max-hours N   bản backup mới nhất cũ hơn N giờ thì WARN (8, cron 6 giờ/lần)  BACKUP_MAX_AGE_HOURS
+  --offsite-max-hours N  dấu .last-offsite-ok (ops/backup-offsite.sh) cũ hơn N giờ thì WARN, hơn 3N thì FAIL (30, chạy hằng ngày)
+                         OFFSITE_MAX_AGE_HOURS; không có dấu = offsite chưa bật, chỉ ghi chú (không WARN/FAIL)
   --timeout SECONDS      thời gian chờ mỗi request (15)              CURL_TIMEOUT
   --local                chạy trên VPS: thêm đĩa, docker, cron certbot, backup, cổng loopback 14001/14000
   -h, --help             in trợ giúp này
@@ -57,7 +60,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -h | --help) usage; exit 0 ;;
     --local) LOCAL=1; shift ;;
-    --api-host | --app-host | --expect-ip | --api-path | --warn-days | --fail-days | --disk-warn | --disk-fail | --backup-dir | --backup-max-hours | --timeout)
+    --api-host | --app-host | --expect-ip | --api-path | --warn-days | --fail-days | --disk-warn | --disk-fail | --backup-dir | --backup-max-hours | --offsite-max-hours | --timeout)
       if [ $# -lt 2 ]; then echo "Thiếu giá trị cho $1 (xem --help)" >&2; exit 2; fi
       case "$1" in
         --api-host) API_HOST="$2" ;;
@@ -70,6 +73,7 @@ while [ $# -gt 0 ]; do
         --disk-fail) DISK_FAIL_PCT="$2" ;;
         --backup-dir) BACKUP_DIR="$2" ;;
         --backup-max-hours) BACKUP_MAX_AGE_HOURS="$2" ;;
+        --offsite-max-hours) OFFSITE_MAX_AGE_HOURS="$2" ;;
         --timeout) CURL_TIMEOUT="$2" ;;
       esac
       shift 2
@@ -78,7 +82,7 @@ while [ $# -gt 0 ]; do
   esac
 done
 
-for n in CERT_WARN_DAYS CERT_FAIL_DAYS DISK_WARN_PCT DISK_FAIL_PCT BACKUP_MAX_AGE_HOURS CURL_TIMEOUT; do
+for n in CERT_WARN_DAYS CERT_FAIL_DAYS DISK_WARN_PCT DISK_FAIL_PCT BACKUP_MAX_AGE_HOURS OFFSITE_MAX_AGE_HOURS CURL_TIMEOUT; do
   case "$(eval "printf '%s' \"\$$n\"")" in
     '' | *[!0-9]*) echo "$n phải là số nguyên không âm (xem --help)" >&2; exit 2 ;;
   esac
@@ -301,7 +305,7 @@ check_disk() {
 }
 
 check_local() {
-  local bad names newest fresh
+  local bad names
   info "--- Máy này ($(hostname 2>/dev/null || echo '?')) ---"
   check_disk /
   [ "$(df -P /var/lib/docker 2>/dev/null | awk 'NR == 2 { print $6 }')" = "$(df -P / 2>/dev/null | awk 'NR == 2 { print $6 }')" ] || check_disk /var/lib/docker
@@ -334,30 +338,64 @@ check_local() {
     warn "chứng chỉ: không thấy cron hoặc timer certbot (xem ops/README-vietnix-deploy.md, mục certbot renew); crontab của root chỉ đọc được bằng root, thử lại với sudo"
   fi
 
+  check_backup
+}
+
+# Backup local (tubutree_*.sql.gz): có file, file mới nhất không rỗng và không quá cũ. Dấu .last-offsite-ok do ops/backup-offsite.sh ghi sau mỗi lần đẩy ra
+# ngoài máy thành công: CÓ dấu thì kiểm tuổi (WARN quá OFFSITE_MAX_AGE_HOURS, FAIL quá 3 lần); KHÔNG có dấu thì offsite chưa bật, chỉ ghi chú, không WARN/FAIL.
+check_backup() {
+  local newest newest_any fresh marker
   if [ -d "$BACKUP_DIR" ]; then
-    newest="$(ls -t "$BACKUP_DIR"/tubutree_*.sql.gz 2>/dev/null | head -1)"
-    if [ -z "$newest" ]; then
+    newest_any="$(ls -t "$BACKUP_DIR"/tubutree_*.sql.gz 2>/dev/null | head -1)"
+    # Bản mới nhất KHÔNG rỗng: backup-db.sh tạo file 0 byte trước khi dump, nên file rỗng mới nhất có thể là lần dump đang chạy hoặc đã lỗi.
+    newest="$(find "$BACKUP_DIR" -maxdepth 1 -name 'tubutree_*.sql.gz' -size +0c -exec ls -t {} + 2>/dev/null | head -1)"
+    if [ -z "$newest_any" ]; then
       fail "backup: $BACKUP_DIR chưa có file tubutree_*.sql.gz nào"
+    elif [ -z "$newest" ]; then
+      fail "backup: mọi file tubutree_*.sql.gz trong $BACKUP_DIR đều rỗng (0 byte): dump lỗi? tail /var/log/tubutree-backup.log"
     else
-      fresh="$(find "$BACKUP_DIR" -maxdepth 1 -name 'tubutree_*.sql.gz' -mmin "-$((BACKUP_MAX_AGE_HOURS * 60))" 2>/dev/null | head -1)"
+      if [ "$newest_any" != "$newest" ] && [ ! -s "$newest_any" ]; then
+        warn "backup: $(basename "$newest_any") rỗng (0 byte): đang dump dở hoặc dump lỗi, kiểm tail /var/log/tubutree-backup.log"
+      fi
+      fresh="$(find "$BACKUP_DIR" -maxdepth 1 -name 'tubutree_*.sql.gz' -size +0c -mmin "-$((BACKUP_MAX_AGE_HOURS * 60))" 2>/dev/null | head -1)"
       if [ -n "$fresh" ]; then
         ok "backup: bản mới nhất trong ${BACKUP_MAX_AGE_HOURS} giờ qua ($(basename "$newest"))"
       else
         warn "backup: bản mới nhất ($(basename "$newest")) cũ hơn ${BACKUP_MAX_AGE_HOURS} giờ, cron backup có chạy không? tail /var/log/tubutree-backup.log"
       fi
     fi
+    marker="$BACKUP_DIR/.last-offsite-ok"
+    if [ -e "$marker" ]; then
+      if [ -n "$(find "$marker" -mmin "-$((OFFSITE_MAX_AGE_HOURS * 60))" 2>/dev/null)" ]; then
+        ok "backup offsite: lần đẩy ra ngoài máy gần nhất trong ${OFFSITE_MAX_AGE_HOURS} giờ qua"
+      elif [ -n "$(find "$marker" -mmin "-$((OFFSITE_MAX_AGE_HOURS * 180))" 2>/dev/null)" ]; then
+        warn "backup offsite: lần đẩy ra ngoài máy gần nhất cũ hơn ${OFFSITE_MAX_AGE_HOURS} giờ, tail /var/log/tubutree-backup-offsite.log (token rclone hết hạn? RCLONE_REMOTE?)"
+      else
+        fail "backup offsite: lần đẩy ra ngoài máy gần nhất cũ hơn $((OFFSITE_MAX_AGE_HOURS * 3)) giờ: bản sao ngoài máy đã dừng, đĩa VPS hỏng là mất dữ liệu"
+      fi
+    elif [ -n "$(find "$BACKUP_DIR" -maxdepth 1 -name 'tubutree_*_offsite.sql.gz' 2>/dev/null | head -1)" ]; then
+      # Đã có bản nhãn offsite nhưng chưa từng ghi dấu: cron đã bật mà upload lỗi mỗi đêm (thiếu rclone, remote không phải crypt, token hỏng).
+      warn "backup offsite: có bản nhãn offsite nhưng chưa từng đẩy thành công ($marker không có): tail /var/log/tubutree-backup-offsite.log (rclone cài chưa? RCLONE_REMOTE có phải remote crypt?)"
+    else
+      info "backup offsite: chưa bật (không có $marker; ops/backup-offsite.sh chưa chạy thành công lần nào)"
+    fi
   else
     warn "backup: không thấy thư mục $BACKUP_DIR (chưa cài backup, hoặc chạy bằng user không đọc được)"
   fi
 }
 
-printf 'Tubu Tree check-edge %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
-info "--- $API_HOST ---"
-check_host api "$API_HOST" "$API_PATH" api
-check_health "https://$API_HOST/api/health" "api"
-info "--- $APP_HOST ---"
-check_host app "$APP_HOST" "/" app
-if [ "$LOCAL" = 1 ]; then check_local; fi
+main() {
+  printf 'Tubu Tree check-edge %s\n' "$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+  info "--- $API_HOST ---"
+  check_host api "$API_HOST" "$API_PATH" api
+  check_health "https://$API_HOST/api/health" "api"
+  info "--- $APP_HOST ---"
+  check_host app "$APP_HOST" "/" app
+  if [ "$LOCAL" = 1 ]; then check_local; fi
 
-printf '\nTổng: %s OK, %s WARN, %s FAIL\n' "$N_OK" "$N_WARN" "$N_FAIL"
-[ "$N_FAIL" -eq 0 ]
+  printf '\nTổng: %s OK, %s WARN, %s FAIL\n' "$N_OK" "$N_WARN" "$N_FAIL"
+  [ "$N_FAIL" -eq 0 ]
+}
+
+# Chạy trực tiếp thì kiểm thật; được `source` (ops/test-check-edge-backup.sh) thì chỉ nạp hàm, không gọi mạng.
+if [ "${BASH_SOURCE[0]:-$0}" = "$0" ]; then main; fi

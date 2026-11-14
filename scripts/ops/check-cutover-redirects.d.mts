@@ -28,6 +28,7 @@ export interface CliOptions {
   limit: number;
   strict: boolean;
   json: boolean;
+  offline: boolean;
   help: boolean;
 }
 export function isRedirectStatus(status: number): boolean;
@@ -39,3 +40,18 @@ export function classifyChain(input: { expected: ExpectedOutcome; steps: ChainSt
 export function walk(input: { base: string; resolveIp?: string; hostHeader?: string; path: string; search?: string; method?: string; timeout?: number }): Promise<{ steps: ChainStep[]; flags: ChainFlags }>;
 export function expectedFor(resolution: { kind: 'redirect'; location: string } | { kind: 'gone' } | null): ExpectedOutcome;
 export function parseArgs(argv: string[]): CliOptions;
+export interface OfflineTable {
+  resolveLegacyWpPath(pathname: string): { kind: 'redirect'; status: 301; location: string } | { kind: 'gone'; status: 410 } | null;
+  isWpBlogPath(pathname: string): boolean;
+}
+export interface OfflineRow {
+  path: string;
+  search: string;
+  expected: ExpectedOutcome | { kind: 'blog' };
+  steps: ChainStep[];
+  notes: string[];
+  verdict: 'PASS' | 'WARN' | 'FAIL' | 'SKIP';
+  reason: string;
+}
+export function defaultInventory(table: { LEGACY_PAGE_REDIRECTS: Record<string, string>; LEGACY_FILE_REDIRECTS: Record<string, string>; LEGACY_PRODUCT_REDIRECTS: Record<string, string>; LEGACY_GONE_EXACT: readonly string[] }): { path: string; search: string }[];
+export function checkRuleTableOffline(table: OfflineTable, inputs: { path: string; search: string }[], options?: { requireRule?: boolean }): OfflineRow[];
