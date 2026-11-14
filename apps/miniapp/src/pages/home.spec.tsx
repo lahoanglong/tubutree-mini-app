@@ -163,6 +163,19 @@ describe('HomePage (phương án A, 9 khối)', () => {
     expect(screen.getByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
   });
 
+  it('khối Chẩn đoán tổ ấm (W164): đứng ngay sau Hành trình ở cả hai loại khách, là thẻ tĩnh có h2, không gọi API tới khi khách mở sheet', async () => {
+    mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
+    renderHome();
+    await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
+    for (const order of [RETURNING, NEW]) expect(order[order.indexOf('journey') + 1]).toBe('quiz');
+    const quiz = block('quiz');
+    expect(within(quiz).getByRole('heading', { level: 2, name: 'Chẩn đoán tổ ấm' })).toBeInTheDocument();
+    expect(within(quiz).getByRole('button', { name: /Bắt đầu Chẩn đoán tổ ấm/ })).toBeInTheDocument();
+    await screen.findByRole('region', { name: 'Bán chạy nhất' });
+    expect(mocks.coreGet.mock.calls.map(([path]) => String(path)).filter((path) => path.startsWith('/game'))).toEqual([]);
+    expect(mocks.fetchProducts.mock.calls.filter(([q]) => q?.limit === 40)).toEqual([]);
+  });
+
   it('"Bán chạy nhất" lấy HOME_BEST_SELLER_LIMIT món theo 30 ngày, có hạng, và "Xem tất cả" mở trang Bán chạy nhất (cùng thước đo 30 ngày)', async () => {
     renderHome();
     const best = await screen.findByRole('region', { name: 'Bán chạy nhất' });

@@ -44,6 +44,8 @@ import { EcoImpact } from '../components/game/eco-impact';
 import { LuckyWheelCard } from '../components/game/lucky-wheel-card';
 import { QuizCard, type QuizReveal } from '../components/game/quiz-card';
 import { MissionsCard } from '../components/game/missions-card';
+import { ArcadeHub } from '../components/game/arcade-hub';
+import { HomeQuizCard } from '../components/game/home-quiz-card';
 import { HarvestCelebration } from '../components/game/harvest-celebration';
 import { WheelPrizeSheet } from '../components/game/wheel-prize-sheet';
 import { GAME_TABS, GameTabPanel, type GameTabKey } from '../components/game/game-tabs';
@@ -239,6 +241,8 @@ export default function GamePage() {
           />
           </div>
 
+          <ArcadeHub />
+          <HomeQuizCard />
           <MissionsCard
             missions={missions}
             streakDays={profile?.streakDays}
@@ -347,9 +351,7 @@ export default function GamePage() {
             onClick={() => navigate('/feed')}
           />
         </GameTabPanel>
-
       </div>
-
       {/* Hộp kết quả vòng quay: ngoài khối tab để vẫn hiện khi người chơi đã đổi tab trong lúc quay. */}
       <WheelPrizeSheet {...wheelPrize.sheet} onUseCoupon={() => navigate('/browse')} />
 

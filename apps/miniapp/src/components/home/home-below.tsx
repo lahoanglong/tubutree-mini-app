@@ -2,6 +2,7 @@
 export { BrandJourney } from './brand-journey';
 export { CommunityPreview } from './community-preview';
 export { SuggestFeed } from './suggest-feed';
+export { HomeQuiz } from './home-quiz';
 
 import { useScrollRestoration } from '../../hooks/use-scroll-restoration';
 
