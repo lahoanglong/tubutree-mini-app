@@ -1,6 +1,6 @@
 import { FALLBACK_DESCRIPTION_MAX_CHARS, FALLBACK_DESCRIPTION_MIN_CHARS, baseSlug, findProductCopyFallback, listProductCopyFallbackSlugs } from '@tubutree/shared-types';
 import { applyPlans, copyViolations, planEnrichment, summarize, type EnrichProductInput, type EnrichStore } from './catalog-copy-enrichment.core';
-import { PROD_HOUSE_SKUS_2026_11_13 as PROD } from './prod-house-skus.fixture';
+import { PROD_HOUSE_SKUS_2026_11_13 as PROD } from './prod-house-skus.fixtures';
 
 const T0 = new Date('2026-11-13T10:00:00.000Z');
 

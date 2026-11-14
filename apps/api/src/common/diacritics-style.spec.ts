@@ -18,7 +18,7 @@ function walk(dir: string): string[] {
 
 const API_ROOT = join(__dirname, '..', '..');
 const files = [
-  ...walk(join(API_ROOT, 'src')).filter((f) => /\.ts$/.test(f) && !/\.spec\.ts$/.test(f)),
+  ...walk(join(API_ROOT, 'src')).filter((f) => /\.ts$/.test(f) && !/\.(?:spec|fixtures)\.ts$/.test(f)),
   join(API_ROOT, 'prisma/seed.ts'),
   ...walk(join(API_ROOT, 'prisma/reference-data')).filter((f) => /\.(ts|json)$/.test(f) && !/\.spec\.ts$/.test(f)),
 ];
