@@ -106,7 +106,24 @@
 .tubu-arcade-cover > p {
   max-width: 20rem;
 }
+/* Gợi ý phím mũi tên chỉ có nghĩa với bàn phím: màn cảm ứng ẩn khỏi mắt nhưng vẫn ở trong DOM cho trình đọc màn hình. */
+@media (pointer: coarse) {
+  .tubu-arcade-keys {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+}
 .tubu-arcade-panel {
+  /* Chip Tip: cao 44px thật (chip md mặc định 36px), không chỉ vùng chạm dôi bằng ::after. */
+  --arcade-hit-min: 44px;
   position: absolute;
   right: 0;
   bottom: 0;

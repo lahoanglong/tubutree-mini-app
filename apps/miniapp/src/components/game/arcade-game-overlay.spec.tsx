@@ -24,7 +24,7 @@ vi.mock('../../store/auth', () => {
       ? { status: 'authenticated', user: { id: 'u1', phone: '0900000001', zaloId: 'zalo-1' } }
       : mocks.phase === 'device'
         ? { status: 'authenticated', user: { id: 'g1', phone: null, zaloId: 'guest_abc' } }
-        : { status: mocks.phase === 'loading' ? 'loading' : 'unauthenticated', user: null };
+        : { status: 'idle', user: null };
   return { useAuthStore: Object.assign((sel: (s: ReturnType<typeof state>) => unknown) => sel(state()), { getState: state }) };
 });
 vi.mock('../../hooks/use-login-notice', () => ({ useLoginWithNotice: () => mocks.login }));
@@ -141,6 +141,15 @@ describe('ArcadeGameOverlay: dựng canvas và màn bắt đầu', () => {
     expect(screen.getByRole('heading', { level: 2, name: 'Phân Loại Vỏ Chai Thần Tốc' })).toBeInTheDocument();
     expect(within(screen.getByTestId('arcade-ready')).getByText(fillCopy('arcade.rush.how'))).toBeInTheDocument();
     expect(screen.getByTestId('arcade-canvas')).toHaveAttribute('aria-label', fillCopy('arcade.rush.aria'));
+  });
+
+  it('gợi ý phím mũi tên luôn có trong DOM (trình đọc màn hình) với class để CSS ẩn trên màn cảm ứng', async () => {
+    mountOverlay({ gameId: 'dew_catcher' });
+    await ready();
+    const hint = within(screen.getByTestId('arcade-ready')).getByText(fillCopy('arcade.dew.keys'));
+    expect(hint).toHaveClass('tubu-arcade-keys');
+    expect(hint).not.toHaveAttribute('hidden');
+    expect(hint).not.toHaveAttribute('aria-hidden');
   });
 
   it('khách thấy "Chơi thử" kèm dòng kỷ lục lưu trên máy; người đã đăng nhập thấy "Chơi" và không có dòng đó', async () => {
@@ -469,6 +478,14 @@ describe('ArcadeGameOverlay: kết quả khi đã đăng nhập', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
     expect(mocks.navigate).toHaveBeenCalledWith(`/browse?q=${encodeURIComponent('bồ hòn')}`);
     expect(onClose.mock.invocationCallOrder[0]!).toBeLessThan(mocks.navigate.mock.invocationCallOrder[0]!);
+  });
+
+  it('chip Tip cao tối thiểu 44px thật qua token của bảng kết quả', async () => {
+    mountOverlay();
+    await playToEnd(dewRun(120, 5));
+    const chip = within(screen.getByTestId('arcade-result')).getByRole('button', { name: 'Xem Nước rửa chén Bồ Hòn' });
+    expect(chip.style.minHeight).toBe('var(--arcade-hit-min)');
+    expect(chip.closest('.tubu-arcade-panel')).not.toBeNull();
   });
 
   it('game Vỏ Chai: gửi đúng gameId của game đang chơi', async () => {

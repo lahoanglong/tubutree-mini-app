@@ -105,6 +105,7 @@ export function ArcadeResultPanel({ run, real, save, local, onRetrySave, onLogin
       {tip.chip && (
         <div>
           <Chip
+            style={{ minHeight: 'var(--arcade-hit-min)' }}
             onPress={() => {
               onClose();
               navigate(tip.chip!.to.miniapp);

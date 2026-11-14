@@ -212,15 +212,11 @@ export function HomeQuizSheet({ open, onClose }: HomeQuizSheetProps) {
             {picks.length > 0 && (
               <ul className="tubu-hqz-list" data-testid="home-quiz-picks">
                 {picks.map((product) => (
-                  <li key={product.id}>
-                    <ProductCard
-                      product={product}
-                      variant="line"
-                      showWishlist={false}
-                      listSource="home_quiz"
-                      addLabel={fillCopy('homeQuiz.result.addAll')}
-                      onAdd={() => add(product)}
-                    />
+                  <li key={product.id} className="tubu-hqz-pick">
+                    <ProductCard product={product} variant="line" showWishlist={false} listSource="home_quiz" />
+                    <Button variant="secondary" fullWidth onPress={() => add(product)}>
+                      {fillCopy('homeQuiz.result.addAll')}
+                    </Button>
                   </li>
                 ))}
               </ul>

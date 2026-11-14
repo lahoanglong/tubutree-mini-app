@@ -245,6 +245,9 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
                 <Text variant="body-md" as="p">
                   {fillCopy(`arcade.${key}.how`)}
                 </Text>
+                <Text variant="caption" tone="secondary" as="p" className="tubu-arcade-keys">
+                  {fillCopy(`arcade.${key}.keys`)}
+                </Text>
                 <Button loading={!loaded} onPress={begin}>
                   {fillCopy(real ? 'arcade.play' : 'arcade.tryPlay')}
                 </Button>

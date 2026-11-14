@@ -6,9 +6,10 @@ import { useAuthStore } from '../store/auth';
 import { useRealUser } from './use-real-user';
 
 const user = (over: Partial<AuthUser>) => ({ id: 'u1', phone: null, zaloId: null, ...over }) as AuthUser;
-const setAuth = (status: 'loading' | 'authenticated' | 'unauthenticated' | 'error', u: AuthUser | null) => act(() => useAuthStore.setState({ status, user: u }));
+type Status = ReturnType<typeof useAuthStore.getState>['status'];
+const setAuth = (status: Status, u: AuthUser | null) => act(() => useAuthStore.setState({ status, user: u }));
 
-afterEach(() => setAuth('unauthenticated', null));
+afterEach(() => setAuth('idle', null));
 
 describe('useRealUser: khách thật theo cùng luật của máy chủ', () => {
   it.each([
@@ -19,7 +20,7 @@ describe('useRealUser: khách thật theo cùng luật của máy chủ', () => 
     ['không có SĐT lẫn zaloId', 'authenticated', user({}), false],
     ['phiên đang khôi phục', 'loading', user({ phone: '0900000001' }), false],
     ['phiên lỗi (mất mạng)', 'error', user({ phone: '0900000001' }), false],
-    ['chưa đăng nhập', 'unauthenticated', null, false],
+    ['chưa đăng nhập', 'idle', null, false],
     ['đã đăng nhập nhưng chưa có hồ sơ', 'authenticated', null, false],
   ] as const)('%s → %s', (_name, status, u, expected) => {
     setAuth(status, u);

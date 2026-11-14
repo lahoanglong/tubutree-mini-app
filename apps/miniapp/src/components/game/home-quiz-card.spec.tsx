@@ -52,14 +52,9 @@ vi.mock('../variation-sheet', () => ({
   ),
 }));
 vi.mock('../ui/product-card', () => ({
-  ProductCard: (p: { product: { name: string }; variant: string; showWishlist?: boolean; listSource?: string; addLabel?: string; onAdd?: () => void }) => (
+  ProductCard: (p: { product: { name: string }; variant: string; showWishlist?: boolean; listSource?: string }) => (
     <div data-testid="kit-card" data-variant={p.variant} data-wishlist={String(p.showWishlist)} data-source={p.listSource}>
       <span>{p.product.name}</span>
-      {p.onAdd && (
-        <button type="button" onClick={p.onAdd}>
-          {p.addLabel}
-        </button>
-      )}
     </div>
   ),
 }));
@@ -103,6 +98,11 @@ async function answerAll() {
   }
   await screen.findByTestId('home-quiz-result');
 }
+/** Nút thêm giỏ là anh em của thẻ trong cùng `<li>` (hàng riêng bên dưới thẻ), không còn nằm trong ProductCard. */
+const addButtons = async () => {
+  const list = await screen.findByTestId('home-quiz-picks');
+  return within(list).getAllByRole('button', { name: fillCopy('homeQuiz.result.addAll') });
+};
 const names = () => screen.getAllByTestId('kit-card').map((c) => c.querySelector('span')!.textContent);
 
 beforeEach(() => {
@@ -271,7 +271,7 @@ describe('HomeQuizCard: kết quả và gợi ý sản phẩm', () => {
     expect(sheet().getByRole('heading', { level: 3, name: fillCopy('homeQuiz.result.title') })).toBeInTheDocument();
   });
 
-  it('thẻ gợi ý dùng dạng dòng, không tim yêu thích, ghi nguồn home_quiz, nút "+ Thêm vào giỏ" cho từng món', async () => {
+  it('thẻ gợi ý dùng dạng dòng, không tim yêu thích, ghi nguồn home_quiz, nút "+ Thêm vào giỏ" hàng riêng dưới từng món', async () => {
     renderCard();
     await answerAll();
     const cards = await screen.findAllByTestId('kit-card');
@@ -279,7 +279,11 @@ describe('HomeQuizCard: kết quả và gợi ý sản phẩm', () => {
       expect(card).toHaveAttribute('data-variant', 'line');
       expect(card).toHaveAttribute('data-wishlist', 'false');
       expect(card).toHaveAttribute('data-source', 'home_quiz');
-      expect(within(card).getByRole('button', { name: '+ Thêm vào giỏ' })).toBeInTheDocument();
+      expect(within(card).queryByRole('button')).toBeNull();
+      const row = card.parentElement!;
+      expect(row).toHaveClass('tubu-hqz-pick');
+      const add = within(row).getByRole('button', { name: '+ Thêm vào giỏ' });
+      expect(card.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
   });
 
@@ -422,7 +426,7 @@ describe('HomeQuizCard: quà Giọt nước', () => {
     mocks.auth.user = DEVICE_USER;
     renderCard();
     await answerAll();
-    fireEvent.click(within((await screen.findAllByTestId('kit-card'))[0]!).getByRole('button', { name: '+ Thêm vào giỏ' }));
+    fireEvent.click((await addButtons())[0]!);
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1));
     expect(mocks.login).not.toHaveBeenCalled();
   });
@@ -464,7 +468,7 @@ describe('HomeQuizCard: quà Giọt nước', () => {
 });
 
 describe('HomeQuizCard: thêm vào giỏ một chạm', () => {
-  const firstAdd = async () => within((await screen.findAllByTestId('kit-card'))[0]!).getByRole('button', { name: '+ Thêm vào giỏ' });
+  const firstAdd = async () => (await addButtons())[0]!;
 
   it('một phân loại còn hàng: tải chi tiết rồi thêm thẳng 1 sản phẩm, báo đã thêm, cập nhật giỏ', async () => {
     renderCard();
@@ -531,7 +535,7 @@ describe('HomeQuizCard: thêm vào giỏ một chạm', () => {
     mocks.addToCart.mockRejectedValueOnce(new Error('mạng'));
     renderCard();
     await answerAll();
-    const buttons = (await screen.findAllByTestId('kit-card')).map((c) => within(c).getByRole('button', { name: '+ Thêm vào giỏ' }));
+    const buttons = await addButtons();
     act(() => {
       buttons[0]!.click();
       buttons[1]!.click();

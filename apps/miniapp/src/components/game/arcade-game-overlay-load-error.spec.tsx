@@ -10,7 +10,7 @@ vi.mock('../../store/auth', () => {
       ? { status: 'authenticated', user: { id: 'u1', phone: '0900000001', zaloId: 'zalo-1' } }
       : mocks.phase === 'device'
         ? { status: 'authenticated', user: { id: 'g1', phone: null, zaloId: 'guest_abc' } }
-        : { status: mocks.phase === 'loading' ? 'loading' : 'unauthenticated', user: null };
+        : { status: 'idle', user: null };
   return { useAuthStore: Object.assign((sel: (s: ReturnType<typeof state>) => unknown) => sel(state()), { getState: state }) };
 });
 vi.mock('../../hooks/use-login-notice', () => ({ useLoginWithNotice: () => vi.fn() }));
