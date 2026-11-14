@@ -1,3 +1,4 @@
+import { variationLabel } from '../variation-label';
 import { vnDayKey } from '../waste-copy';
 import { CATALOG_ISSUE_KINDS, isUnnamedVariation, type AuditProduct, type CatalogAuditResult, type CatalogIssueKind } from './catalog-quality-audit';
 
@@ -48,7 +49,7 @@ export function buildPancakeFixCsv(result: CatalogAuditResult, products: readonl
       if (!kinds) continue;
       const codes = VARIATION_KINDS.filter((k) => kinds.includes(k));
       lines.push(
-        [cell(v.pancakeId), cell(v.sku), cell(isUnnamedVariation(v) ? product.name : v.name), cell(codes.join('|')), cell(v.stock), cell(v.retailPrice)].join(','),
+        [cell(v.pancakeId), cell(v.sku), cell(isUnnamedVariation(v) ? (variationLabel(v.name) ?? product.name) : v.name), cell(codes.join('|')), cell(v.stock), cell(v.retailPrice)].join(','),
       );
     }
   }

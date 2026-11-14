@@ -9,6 +9,11 @@ describe('ingredientNames', () => {
     expect(ingredientNames(['Gấc', '  ', null, 7, 'rác [object Object]'])).toEqual(['Gấc']);
   });
 
+  it('"[object Object]" ở giữa hay đầu tên thành phần cũng bị bỏ (khớp bằng includes, không chỉ khớp nguyên chuỗi)', () => {
+    expect(ingredientNames([{ name: 'Hộp [object Object] 100g' }, { name: '[object Object] sả' }, { name: 'Gấc' }])).toEqual(['Gấc']);
+    expect(ingredientNames('Bơ, Dầu [object Object] dừa; Gấc')).toEqual(['Bơ', 'Gấc']);
+  });
+
   it('chuỗi tách bằng dấu phẩy, chấm phẩy hay xuống dòng', () => {
     expect(ingredientNames('Bơ, Gấc; Dầu dừa\n Mật ong ,,')).toEqual(['Bơ', 'Gấc', 'Dầu dừa', 'Mật ong']);
   });

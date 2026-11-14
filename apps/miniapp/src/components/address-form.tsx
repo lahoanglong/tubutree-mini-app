@@ -161,6 +161,9 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
     });
   };
   const pastePhone = (e: ClipboardEvent<HTMLInputElement>) => {
+    // Chỉ khi khách bôi chọn MỘT PHẦN ô thì để trình duyệt chèn vào đúng đoạn chọn (không xoá phần còn lại); ô trống, bôi hết, hay con trỏ không bôi gì thì chữ dán là cả số mới nên thay cả ô.
+    const el = e.currentTarget;
+    if (el.selectionStart !== el.selectionEnd && !(el.selectionStart === 0 && el.selectionEnd === el.value.length)) return;
     const phone = parseVnPhoneInput(e.clipboardData.getData('text'));
     if (phone === null) return;
     e.preventDefault();

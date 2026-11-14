@@ -87,16 +87,30 @@ export function promptShortDesc(shortDesc: string | null | undefined): string | 
   return clean === '' ? null : clean;
 }
 
+/** Chữ khách thấy ở web cho phân loại không tên khi sản phẩm có từ 2 phân loại; trùng `DEFAULT_VARIATION_LABEL` của app-core (api không phụ thuộc app-core nên không import được). */
+const DEFAULT_VARIANT_LABEL = 'Mặc định';
+/** Tên phân loại từ sàn đôi khi là object bị ép thành chuỗi; web gỡ chuỗi này khỏi nhãn (`variationLabel`), AI cũng không được đọc nó lại cho khách. */
+const OBJECT_STRING = /\[object Object\]/gi;
+
 /**
- * Dòng "tên quy cách — giá" của các phân loại đang bán, rẻ trước, tối đa 6. Tên trống/toàn khoảng trắng hay "[object Object]" (đồng bộ Pancake từng ghi sai)
- * bị bỏ: AI sẽ đọc lại nguyên văn cho khách. Giá là giá đang bán (`salePrice` nếu có), cùng cách ghi giá ở dòng sản phẩm.
+ * Dòng "tên quy cách — giá" của các phân loại đang bán, rẻ trước, tối đa 6; phân loại hết tồn (`stock` <= 0, như `cardInStock`) ghi thêm "(hết hàng)"
+ * để AI không hứa giao loại đã hết. Thiếu `stock` (mock cũ) thì coi như chưa biết, không ghi dấu.
+ * Chuỗi "[object Object]" (đồng bộ Pancake từng ghi sai) được gỡ khỏi tên như `variationLabel` ở web: "Hộp [object Object] 100g" ra "Hộp 100g", AI không đọc lại chuỗi hỏng cho khách.
+ * Tên trống/toàn khoảng trắng (hoặc chỉ còn chuỗi hỏng) gọi là "Mặc định" như khách thấy ở web khi sản phẩm có từ 2 phân loại; phân loại duy nhất không tên thì không có dòng,
+ * vì web không hiện nhãn và giá đã nằm ở dòng sản phẩm. Nhiều phân loại cùng tên trống đều ra "Mặc định", chỉ phân biệt được bằng giá, y như chip ở web.
+ * Giá là giá đang bán (`salePrice` nếu có), cùng cách ghi giá ở dòng sản phẩm.
  */
-export function variantSpecs(variations: readonly { id: string; sku: string; name?: string | null; retailPrice: number; salePrice: number | null }[] | null | undefined): string[] {
+export function variantSpecs(
+  variations: readonly { id: string; sku: string; name?: string | null; retailPrice: number; salePrice: number | null; stock?: number }[] | null | undefined,
+): string[] {
+  const all = variations ?? [];
   const lines: string[] = [];
-  for (const v of sortVariationsByPrice([...(variations ?? [])])) {
-    const name = plainText(typeof v.name === 'string' ? v.name : '', MAX_VARIANT_NAME_CHARS);
-    if (name === '' || name.includes('[object Object]')) continue;
-    lines.push(`${name} — ${(v.salePrice ?? v.retailPrice).toLocaleString('vi-VN')}đ`);
+  for (const v of sortVariationsByPrice([...all])) {
+    const written = plainText(typeof v.name === 'string' ? v.name.replace(OBJECT_STRING, ' ') : '', MAX_VARIANT_NAME_CHARS);
+    const name = written !== '' ? written : all.length > 1 ? DEFAULT_VARIANT_LABEL : '';
+    if (name === '') continue;
+    const soldOut = typeof v.stock === 'number' && v.stock <= 0;
+    lines.push(`${name} — ${(v.salePrice ?? v.retailPrice).toLocaleString('vi-VN')}đ${soldOut ? ' (hết hàng)' : ''}`);
     if (lines.length === MAX_VARIANT_LINES) break;
   }
   return lines;

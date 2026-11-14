@@ -222,7 +222,7 @@ function TextField({
   inputMode?: 'tel';
   /** Số hiển thị thẳng hàng (SĐT). */
   tabular?: boolean;
-  /** Chữ dán vào được đổi thành giá trị chuẩn thì thay cả ô bằng giá trị đó; trả null thì để trình duyệt dán như thường. */
+  /** Chữ dán đổi được thành giá trị chuẩn thì thay cả ô bằng giá trị đó; trả null, hoặc khách đang bôi chọn một phần ô, thì để trình duyệt dán như thường. */
   onPasteText?: (text: string) => string | null;
 }) {
   const errorId = useId();
@@ -235,6 +235,9 @@ function TextField({
           onChange={(e) => onChange(e.target.value)}
           onBlur={onBlur}
           onPaste={(e) => {
+            // Chỉ khi khách bôi chọn MỘT PHẦN ô thì để trình duyệt chèn vào đúng đoạn chọn (không xoá phần còn lại); ô trống, bôi hết, hay con trỏ không bôi gì thì chữ dán là cả số mới nên thay cả ô.
+    const el = e.currentTarget;
+    if (el.selectionStart !== el.selectionEnd && !(el.selectionStart === 0 && el.selectionEnd === el.value.length)) return;
             const next = onPasteText?.(e.clipboardData.getData('text'));
             if (next == null) return;
             e.preventDefault();

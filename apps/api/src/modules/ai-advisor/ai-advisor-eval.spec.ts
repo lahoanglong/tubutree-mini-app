@@ -485,7 +485,7 @@ const SCENARIOS: Scenario[] = [
   },
   {
     id: '12',
-    name: 'refill 3,8L tiết kiệm: dòng "Quy cách" có tên + giá từng quy cách rẻ trước, biến thể tên rỗng/khoảng trắng/[object Object] bị bỏ',
+    name: 'refill 3,8L tiết kiệm: dòng "Quy cách" có tên + giá từng quy cách rẻ trước, biến thể tên rỗng/khoảng trắng/[object Object] ra "Mặc định" như khách thấy',
     question: 'nước giặt refill 3,8L có tiết kiệm hơn chai 500ml không',
     catalog: [
       product('refill', 'Nước giặt sinh học Fuwa3e', {
@@ -503,10 +503,30 @@ const SCENARIOS: Scenario[] = [
     check: (o) => {
       const block = blockOf(o.catalog, 'Nước giặt sinh học Fuwa3e');
       expect(block).toContain('— 90.000đ');
-      expect(block).toContain('  Quy cách: Chai 500ml — 90.000đ; Túi refill 3,8L — 250.000đ');
-      expect(block).not.toMatch(/95\.000|96\.000|97\.000|\[object Object\]/);
+      expect(block).toContain('  Quy cách: Chai 500ml — 90.000đ; Mặc định — 95.000đ; Mặc định — 96.000đ; Mặc định — 97.000đ; Túi refill 3,8L — 250.000đ');
+      expect(block).not.toMatch(/\[object Object\]/);
       expect(o.system).toContain(RULE.priceMath);
       expect(o.system).toContain('nói rõ phép tính');
+    },
+  },
+  {
+    id: '12b',
+    name: 'quy cách hết tồn: dòng "Quy cách" ghi "(hết hàng)" đúng phân loại hết, phân loại còn tồn không có, prompt dặn không hứa giao loại hết',
+    question: 'nước giặt refill 3,8L còn hàng không shop',
+    catalog: [
+      product('refill2', 'Nước giặt sinh học Fuwa3e', {
+        variations: [variation('q1', 'Chai 500ml', 90_000, null, 40), variation('q2', 'Túi refill 3,8L', 300_000, 250_000, 0), variation('q3', '', 95_000, null, 0)],
+      }),
+    ],
+    llm: reply(),
+    outcome: 'ok',
+    check: (o) => {
+      const block = blockOf(o.catalog, 'Nước giặt sinh học Fuwa3e');
+      expect(block.split('\n')[0]).not.toContain('HẾT HÀNG');
+      expect(block).toContain('  Quy cách: Chai 500ml — 90.000đ; Mặc định — 95.000đ (hết hàng); Túi refill 3,8L — 250.000đ (hết hàng)');
+      expect(o.system).toContain(RULE.outOfStock);
+      expect(o.system).toContain('quy cách ghi (hết hàng)');
+      expect(o.system).toContain('không hứa giao quy cách hay sản phẩm đang hết hàng');
     },
   },
   {

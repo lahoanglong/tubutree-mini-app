@@ -482,13 +482,13 @@ describe('AddressForm — ô SĐT nhận chữ dán từ Zalo', () => {
     expect(c.textContent).toContain('Số điện thoại chưa đúng. Nhập 10 số bắt đầu bằng 0 (hoặc +84 và 9 số).');
   });
 
-  it('dán cả số kiểu Zalo: thay ô bằng 0xxxxxxxxx ngay, kể cả khi dài hơn maxLength của ô', async () => {
+  it('dán cả số kiểu Zalo vào ô trống: thay ô bằng 0xxxxxxxxx ngay, kể cả khi dài hơn maxLength của ô', async () => {
     const c = await mount();
     for (const pasted of ['(+84) 912 345 678', '\u200E+84 912 345 678\u200E', '84912345678', '0912–345–678', '0084 912 345 678']) {
+      typeInto(phone(c), '');
       const ev = paste(phone(c), pasted);
       expect(ev.defaultPrevented, pasted).toBe(true);
       expect(phone(c).value, pasted).toBe('0912345678');
-      typeInto(phone(c), '');
     }
   });
 
@@ -497,6 +497,35 @@ describe('AddressForm — ô SĐT nhận chữ dán từ Zalo', () => {
     for (const pasted of ['0912', 'Số: 0912 345 678', '']) {
       expect(paste(phone(c), pasted).defaultPrevented, pasted).toBe(false);
     }
+  });
+
+  it('chỉ bôi một phần ô rồi dán cả số: không thay cả ô, để trình duyệt chèn vào đúng đoạn đã chọn', async () => {
+    const c = await mount();
+    typeInto(phone(c), '0987654321');
+    phone(c).setSelectionRange(0, 3);
+    const ev = paste(phone(c), '(+84) 912 345 678');
+    expect(ev.defaultPrevented).toBe(false);
+    expect(phone(c).value).toBe('0987654321');
+  });
+
+  it('ô đã điền sẵn, con trỏ không bôi gì (giữa hay cuối ô): dán cả số vẫn thay cả ô, không nối chuỗi', async () => {
+    const c = await mount();
+    for (const caret of [1, 2]) {
+      typeInto(phone(c), 'ab');
+      phone(c).setSelectionRange(caret, caret);
+      const ev = paste(phone(c), '0912 345 678');
+      expect(ev.defaultPrevented, `con trỏ ${caret}`).toBe(true);
+      expect(phone(c).value, `con trỏ ${caret}`).toBe('0912345678');
+    }
+  });
+
+  it('bôi chọn hết ô đang có chữ rồi dán cả số: thay cả ô bằng 0xxxxxxxxx', async () => {
+    const c = await mount();
+    typeInto(phone(c), '0987654321');
+    phone(c).setSelectionRange(0, phone(c).value.length);
+    const ev = paste(phone(c), '(+84) 912 345 678');
+    expect(ev.defaultPrevented).toBe(true);
+    expect(phone(c).value).toBe('0912345678');
   });
 
   it('gửi payload SĐT dạng chuẩn dù ô còn dạng dán thô (chưa rời ô)', async () => {
