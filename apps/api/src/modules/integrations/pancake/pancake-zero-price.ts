@@ -66,7 +66,8 @@ const isZeroText = (v: unknown): boolean => typeof v === 'string' && /^0+(?:[.,]
 export function classifyZeroPrice(i: ZeroPriceInput): ZeroPriceKind | null {
   if (payloadPrice(i.retail) !== 0 && !isZeroText(i.retail)) return null;
   if (i.removed) return null;
-  const sellingAtPositive = !!i.prev && i.prev.retailPrice > 0;
+  // Biến thể đang giữ REMOVED có giá cũ nhưng không đang bán: lượt này nó chuyển NO_PRICE (không giữ giá), nên báo như SKU mới ở 0đ.
+  const sellingAtPositive = !!i.prev && i.prev.retailPrice > 0 && i.prev.pancakeHold !== 'REMOVED';
   if (i.gift && !sellingAtPositive) return null;
   if (i.prev && !i.prev.isActive && i.prev.pancakeHold == null) return null;
   return sellingAtPositive ? 'PRICE_KEPT' : 'NEW_AT_ZERO';

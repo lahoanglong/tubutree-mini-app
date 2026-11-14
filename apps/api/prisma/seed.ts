@@ -858,6 +858,8 @@ export const NOTIFICATION_TEMPLATES = [
   // admin xác nhận, không tự trừ nợ (DealerService.reportCreditPayment/adminRecordCreditPayment).
   { id: 'nt-dealer-credit-reported', code: 'DEALER_CREDIT_PAYMENT_REPORTED', channel: 'INAPP', bodyTemplate: '📥 Đại lý {{dealer}} báo đã chuyển khoản {{amount}}đ trả nợ. Vào trang quản trị (Đại lý → Công nợ) để kiểm tra sao kê và xác nhận.', createOnly: true },
   { id: 'nt-dealer-credit-confirmed', code: 'DEALER_CREDIT_PAYMENT_CONFIRMED', channel: 'INAPP', bodyTemplate: '✅ Tubu Tree đã xác nhận nhận {{amount}}đ trả nợ của bạn — công nợ đã được cập nhật. Cảm ơn bạn 🌿', createOnly: true },
+  // W156: lần thu tiền kèm chiết khấu thanh toán (xoá nợ vào TK 635). Cùng lời với migration 20261114190000_w156_dealer_credit_payment_discount_template.
+  { id: 'nt-dealer-credit-confirmed-discount', code: 'DEALER_CREDIT_PAYMENT_CONFIRMED_DISCOUNT', channel: 'INAPP', bodyTemplate: '✅ Tubu Tree đã xác nhận nhận {{amount}}đ tiền thực thu trả nợ của bạn, kèm {{discount}}đ chiết khấu thanh toán được xoá nợ. Tổng công nợ giảm {{cleared}}đ. Cảm ơn bạn 🌿', createOnly: true },
   // Chat CSKH: cùng mã/nội dung với migration 20261023100000_support_chat. createOnly: admin sửa nội dung rồi thì seed không ghi đè.
   { id: 'nt-support-chat-reply', code: 'SUPPORT_CHAT_REPLY', channel: 'INAPP', bodyTemplate: 'Tubu Tree đã trả lời bạn: {{preview}}', createOnly: true },
   { id: 'nt-ops-zalo-bridge-down', code: 'OPS_ZALO_BRIDGE_DOWN', channel: 'INAPP', bodyTemplate: 'Cầu nối Zalo của chat CSKH mất kết nối từ {{since}} ({{state}}). Vào tab Chat CSKH để kết nối lại.', createOnly: true },

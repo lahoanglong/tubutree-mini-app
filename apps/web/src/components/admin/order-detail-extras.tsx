@@ -36,6 +36,7 @@ export function OrderInvoiceBreakdown({ order }: { order: AdminOrder }) {
     comboDiscount: order.comboDiscount,
     tierDiscount: order.tierDiscount,
     pointsDiscount: order.pointsDiscount,
+    pointsUsed: order.pointsUsed,
   });
   const rows: { key: string; label: string; value: string; strong?: boolean }[] = [
     { key: 'goods', label: 'Tổng tiền hàng', value: formatVnd(b.goodsSubtotal) },

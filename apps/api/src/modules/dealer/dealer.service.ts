@@ -39,6 +39,7 @@ import { canonicalUserId } from '../external-points/external-claim-audit';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
 import { assertBankRefUnusedByOrder, bankRefUsedByOrderMessage, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
 import { isRealUser } from '../../common/real-user';
+import { formatVndDigits } from '../../common/format-vnd';
 import {
   PAYMENT_DISCOUNT_ACCOUNT_LABEL,
   PAYMENT_DISCOUNT_LABEL,
@@ -782,9 +783,21 @@ export class DealerService {
         '.',
     );
     if (this.notifications) {
-      await this.notifications
-        .notify(dealerUserId, 'DEALER_CREDIT_PAYMENT_CONFIRMED', { amount: amount.toLocaleString('vi-VN') })
-        .catch((e) => this.logger.warn(`notify DEALER_CREDIT_PAYMENT_CONFIRMED lỗi (${dealerUserId}): ${(e as Error).message}`));
+      // Có chiết khấu thanh toán: đại lý phải thấy riêng tiền thực thu và phần xoá nợ để đối chiếu sổ, nên dùng mẫu tin riêng.
+      // Hai lệnh notify viết thẳng mã mẫu: bộ kiểm tĩnh (notification-variables.spec) đối chiếu biến từng chỗ gọi với bảng biến.
+      const sent =
+        paymentDiscount > 0
+          ? this.notifications
+              .notify(dealerUserId, 'DEALER_CREDIT_PAYMENT_CONFIRMED_DISCOUNT', {
+                amount: formatVndDigits(amount),
+                discount: formatVndDigits(paymentDiscount),
+                cleared: formatVndDigits(amount + paymentDiscount),
+              })
+              .catch((e) => this.logger.warn(`notify DEALER_CREDIT_PAYMENT_CONFIRMED_DISCOUNT lỗi (${dealerUserId}): ${(e as Error).message}`))
+          : this.notifications
+              .notify(dealerUserId, 'DEALER_CREDIT_PAYMENT_CONFIRMED', { amount: formatVndDigits(amount) })
+              .catch((e) => this.logger.warn(`notify DEALER_CREDIT_PAYMENT_CONFIRMED lỗi (${dealerUserId}): ${(e as Error).message}`));
+      await sent;
     }
     const ledger = await this.creditLedger(dealerUserId);
     const withDiscount = paymentDiscount > 0 ? { ...ledger, paymentDiscount } : ledger;

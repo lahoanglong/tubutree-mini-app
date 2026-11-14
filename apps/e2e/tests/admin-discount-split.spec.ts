@@ -11,6 +11,8 @@ import type { Locator, Page as PwPage } from '@playwright/test';
  * và bảng đối chiếu thu tiền `[data-payment-settlement]` trong "Công nợ đại lý". Mock mọi lệnh gọi /api, không cần API/DB.
  * Điện thoại (dưới 768px) mở chi tiết trong ngăn kéo thay vì chen vào bảng, nên spec chạy cả hai khổ.
  *
+ * W156: đơn lẻ CŨ (bốn cột giảm chi tiết đều 0) có dùng Điểm Xanh phải tách tiền điểm khỏi chiết khấu thương mại trên khối hoá đơn.
+ *
  * Ảnh chỉ chụp khi đặt W154_SHOT_DIR, để chạy CI không ghi file ra ngoài thư mục test.
  */
 
@@ -82,17 +84,45 @@ const LEDGER: DealerCreditLedger = {
   entries: [{ id: 'e1', delta: 100_000, refType: 'ORDER', refId: 'o1', note: `Đơn ${ORDER_CODE} ghi công nợ`, createdAt: '2026-11-14T03:00:00.000Z' }],
 };
 
-function mockOrdersTab(api: MockApi) {
-  api.get('/admin/orders', page([dealerOrder()]));
+/**
+ * Đơn lẻ CŨ: tạo trước khi API lưu từng khoản giảm nên cả bốn cột (coupon/combo/tier/points) bằng 0, chỉ có tổng `discount` 30.000đ.
+ * Khách đã dùng 10.000 Điểm Xanh (1 điểm = 1đ) nên 10.000đ là tiền điểm và chỉ 20.000đ là chiết khấu thương mại (voucher).
+ */
+const LEGACY_ORDER_CODE = 'TT-20260901-LE01';
+function legacyRetailOrder(): AdminOrder {
+  return {
+    id: 'o2',
+    code: LEGACY_ORDER_CODE,
+    status: 'CONFIRMED',
+    type: 'RETAIL',
+    paymentMethod: 'COD',
+    paymentStatus: 'UNPAID',
+    subtotal: 100_000,
+    discount: 30_000,
+    couponDiscount: 0,
+    comboDiscount: 0,
+    tierDiscount: 0,
+    pointsDiscount: 0,
+    pointsUsed: 10_000,
+    shippingFee: 0,
+    total: 70_000,
+    createdAt: '2026-09-01T03:00:00.000Z',
+    user: { id: 'user-2', phone: '0907654321', fullName: 'Khách Lẻ Cũ' },
+    items: [{ id: 'i2', productName: 'Nước rửa chén Tubu', variationName: '1L', unitPrice: 100_000, quantity: 1, total: 100_000 }],
+  };
+}
+
+function mockOrdersTab(api: MockApi, order: AdminOrder = dealerOrder()) {
+  api.get('/admin/orders', page([order]));
   api.get('/admin/orders/status-counts', { all: 1, byStatus: { CONFIRMED: 1 } });
   api.get('/admin/dealers/:id/credit-ledger', LEDGER);
 }
 
 /** Máy tính mở dòng đơn trong bảng, điện thoại mở thẻ đơn thành ngăn kéo. */
-async function openOrderDetail(p: PwPage, narrow: boolean) {
+async function openOrderDetail(p: PwPage, narrow: boolean, code: string = ORDER_CODE) {
   await p.goto('/admin?tab=orders');
   if (narrow) {
-    await p.getByRole('button', { name: new RegExp(ORDER_CODE) }).click();
+    await p.getByRole('button', { name: new RegExp(code) }).click();
     await expect(p.getByRole('dialog')).toBeVisible({ timeout: 15_000 });
   } else {
     await p.getByRole('button', { name: 'Xem & Sửa', exact: true }).click({ timeout: 15_000 });
@@ -178,6 +208,35 @@ test.describe('Admin — chiết khấu thương mại và chiết khấu thanh 
 
       // Chỉ xem trước: không bấm "Xác nhận đã nhận" nên sổ không bị ghi.
       expect(api.callsTo('POST', '/admin/dealers/:id/credit-payment')).toHaveLength(0);
+    });
+  }
+});
+
+test.describe('Admin — hoá đơn đơn lẻ CŨ có dùng Điểm Xanh (W156)', () => {
+  test.beforeEach(async ({ page: p, api }) => {
+    mockAdminSession(api);
+    mockOrdersTab(api, legacyRetailOrder());
+    await p.addInitScript(() => {
+      window.localStorage.setItem('tubu_web_session', '1');
+    });
+  });
+
+  for (const vp of VIEWPORTS) {
+    test(`hoá đơn ${vp.tag}px: tiền hàng 100.000đ, CK thương mại chỉ -20.000đ, Điểm Xanh -10.000đ là dòng riêng, tổng 70.000đ, không tràn ngang`, async ({ page: p }) => {
+      await p.setViewportSize({ width: vp.width, height: vp.height });
+      await openOrderDetail(p, vp.width < 768, LEGACY_ORDER_CODE);
+
+      const invoice = p.getByRole('region', { name: 'Hoá đơn bán hàng', exact: true });
+      await expect(invoice).toBeVisible({ timeout: 15_000 });
+      await expect(invoice.locator('[data-invoice-row=goods] dd')).toHaveText('100.000đ');
+      await expect(invoice.locator('[data-invoice-row=trade] dd')).toHaveText('-20.000đ');
+      await expect(invoice.locator('[data-invoice-row=points] dd')).toHaveText('-10.000đ');
+      await expect(invoice.locator('[data-invoice-row=total] dd')).toHaveText('70.000đ');
+      await expect(invoice.locator('[data-invoice-row=ship]')).toHaveCount(0);
+      await expect(invoice.locator('[data-invoice-row]')).toHaveCount(4);
+
+      await expectNoHorizontalOverflow(p, invoice);
+      await shot(p, invoice, `tubu-w156-invoice-legacy-points-${vp.tag}.png`);
     });
   }
 });

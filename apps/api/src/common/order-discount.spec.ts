@@ -51,6 +51,41 @@ describe('invoiceBreakdownOf — chiết khấu thương mại nằm trên hoá 
     expect(b.invoiceTotal).toBe(80_000);
   });
 
+  describe('đơn lẻ CŨ (bốn cột giảm chi tiết đều 0, chỉ có tổng discount)', () => {
+    it('có dùng Điểm Xanh: tiền điểm tách thành khoản riêng, phần còn lại mới là chiết khấu thương mại', () => {
+      const b = invoiceBreakdownOf({ subtotal: 100_000, discount: 30_000, pointsUsed: 10_000, shippingFee: 0 });
+      expect(b).toMatchObject({ goodsSubtotal: 100_000, tradeDiscountAmount: 20_000, pointsDiscountAmount: 10_000, invoiceTotal: 70_000 });
+      expect(tradeDiscountOf({ discount: 30_000, pointsUsed: 10_000 })).toBe(20_000);
+    });
+
+    it('chỉ dùng Điểm Xanh (không có voucher): chiết khấu thương mại bằng 0, cả tổng giảm là tiền điểm', () => {
+      const b = invoiceBreakdownOf({ subtotal: 100_000, discount: 5_000, pointsUsed: 5_000 });
+      expect(b).toMatchObject({ tradeDiscountAmount: 0, pointsDiscountAmount: 5_000, invoiceTotal: 95_000 });
+    });
+
+    it('có voucher, không dùng điểm: trọn tổng giảm vẫn là chiết khấu thương mại (không đổi so với trước)', () => {
+      const b = invoiceBreakdownOf({ subtotal: 100_000, discount: 30_000, pointsUsed: 0 });
+      expect(b).toMatchObject({ tradeDiscountAmount: 30_000, pointsDiscountAmount: 0, invoiceTotal: 70_000 });
+      expect(invoiceBreakdownOf({ subtotal: 100_000, discount: 30_000 })).toMatchObject({ tradeDiscountAmount: 30_000, pointsDiscountAmount: 0 });
+    });
+
+    it('điểm lớn hơn tổng giảm (dữ liệu lệch) bị kẹp bằng tổng giảm, chiết khấu thương mại không âm', () => {
+      const b = invoiceBreakdownOf({ subtotal: 100_000, discount: 8_000, pointsUsed: 20_000 });
+      expect(b).toMatchObject({ tradeDiscountAmount: 0, pointsDiscountAmount: 8_000, invoiceTotal: 92_000 });
+    });
+
+    it('tổng tiền hàng − CK thương mại − điểm + phí giao luôn bằng tổng giảm đã trừ (không mất, không thừa đồng nào)', () => {
+      const b = invoiceBreakdownOf({ subtotal: 150_000, discount: 42_000, pointsUsed: 12_000, shippingFee: 19_000 });
+      expect(b.tradeDiscountAmount + b.pointsDiscountAmount).toBe(42_000);
+      expect(b.invoiceTotal).toBe(150_000 - 42_000 + 19_000);
+    });
+  });
+
+  it('đơn đại lý MỚI (đã có cột bậc đại lý): điểm lấy theo pointsDiscount, pointsUsed không được tính lần nữa', () => {
+    const b = invoiceBreakdownOf({ subtotal: 100_000, discount: 20_000, tierDiscount: 20_000, pointsUsed: 7_000 });
+    expect(b).toMatchObject({ tradeDiscountAmount: 20_000, pointsDiscountAmount: 0, invoiceTotal: 80_000 });
+  });
+
   it('không có chiết khấu → dòng giảm 0, hoá đơn = tiền hàng + phí giao', () => {
     const b = invoiceBreakdownOf({ subtotal: 100_000, discount: 0, shippingFee: 19_000 });
     expect(b.tradeDiscountAmount).toBe(0);

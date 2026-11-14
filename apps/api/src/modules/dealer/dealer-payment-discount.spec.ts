@@ -227,6 +227,40 @@ describe('DealerService.adminRecordCreditPayment — chiết khấu thanh toán 
     expect(txOptions()).toEqual({ isolationLevel: 'Serializable' });
   });
 
+  describe('thông báo "đã ghi nhận thanh toán" gửi đại lý', () => {
+    it('không chiết khấu thanh toán: mẫu cũ, chỉ số tiền thực thu, định dạng dấu chấm ngăn nghìn', async () => {
+      const { svc, notify } = build({ debt: 500_000 });
+      await svc.adminRecordCreditPayment('admin1', 'd1', 300_000);
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify).toHaveBeenCalledWith('d1', 'DEALER_CREDIT_PAYMENT_CONFIRMED', { amount: '300.000' });
+    });
+
+    it('paymentDiscount = 0 nêu tường minh: vẫn là mẫu cũ, không nhắc chiết khấu', async () => {
+      const { svc, notify } = build({ debt: 2_000_000 });
+      await svc.adminRecordCreditPayment('admin1', 'd1', 1_300_000, { paymentDiscount: 0 });
+      expect(notify).toHaveBeenCalledWith('d1', 'DEALER_CREDIT_PAYMENT_CONFIRMED', { amount: '1.300.000' });
+    });
+
+    it('có chiết khấu thanh toán: mẫu riêng nêu tiền thực thu, phần chiết khấu xoá nợ và tổng công nợ giảm (thu + chiết khấu)', async () => {
+      const { svc, notify } = build({ debt: 100_000 });
+      await svc.adminRecordCreditPayment('admin1', 'd1', 80_000, { idempotencyKey: 'FT1', paymentDiscount: 20_000, note: 'Trả sớm' });
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(notify).toHaveBeenCalledWith('d1', 'DEALER_CREDIT_PAYMENT_CONFIRMED_DISCOUNT', { amount: '80.000', discount: '20.000', cleared: '100.000' });
+    });
+
+    it('số tiền triệu: dấu chấm ngăn nghìn đúng ở cả ba số, tổng giảm là tổng của hai khoản', async () => {
+      const { svc, notify } = build({ debt: 5_000_000 });
+      await svc.adminRecordCreditPayment('admin1', 'd1', 2_400_000, { idempotencyKey: 'FT2', paymentDiscount: 600_000, note: 'Đúng hạn' });
+      expect(notify).toHaveBeenCalledWith('d1', 'DEALER_CREDIT_PAYMENT_CONFIRMED_DISCOUNT', { amount: '2.400.000', discount: '600.000', cleared: '3.000.000' });
+    });
+
+    it('thu tiền bị từ chối (vượt phải thu): không báo đại lý', async () => {
+      const { svc, notify } = build({ debt: 100_000 });
+      await expect(svc.adminRecordCreditPayment('admin1', 'd1', 90_000, { paymentDiscount: 20_000, note: 'Trả sớm' })).rejects.toThrow();
+      expect(notify).not.toHaveBeenCalled();
+    });
+  });
+
   it('dòng chiết khấu thanh toán không chứa "Mã GD" (kiểm trùng mã giao dịch chỉ đếm dòng PAYMENT là một lần thu tiền)', async () => {
     const { svc, rows } = build({ debt: 100_000 });
     await svc.adminRecordCreditPayment('admin1', 'd1', 80_000, { bankRef: 'FT777', paymentDiscount: 20_000, note: 'Trả đúng hạn' });

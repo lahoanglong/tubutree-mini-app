@@ -29,7 +29,11 @@ export interface OrderDiscountParts {
   comboDiscount?: number;
   tierDiscount?: number;
   pointsDiscount?: number;
+  /** Điểm Xanh khách đã dùng. Chỉ để tách tiền điểm khỏi đơn cũ chưa lưu từng khoản giảm (xem `splitDiscount`). */
+  pointsUsed?: number;
 }
+
+type DiscountSplitInput = Pick<OrderDiscountParts, 'discount' | 'couponDiscount' | 'comboDiscount' | 'tierDiscount' | 'pointsDiscount' | 'pointsUsed'>;
 
 export interface InvoiceBreakdown {
   /** Tiền hàng theo đơn giá gốc, chưa trừ gì. */
@@ -47,23 +51,30 @@ export interface InvoiceBreakdown {
 
 const int = (n: number | undefined): number => (typeof n === 'number' && Number.isFinite(n) ? Math.trunc(n) : 0);
 
+/** 1 Điểm Xanh = 1đ (migration points_1d; cấu hình `loyalty.vnd_per_point_redeem` mặc định 1). */
+export const VND_PER_GREEN_POINT = 1;
+
 /**
- * Tách tổng giảm của đơn thành chiết khấu thương mại và tiền điểm. Đơn tạo trước khi API lưu từng khoản giảm (cả bốn cột bằng 0)
- * chỉ có tổng `discount`: coi trọn tổng đó là chiết khấu thương mại. Có từng khoản thì trừ riêng tiền điểm, phần chênh không
- * gán được vào khoản nào vẫn là chiết khấu thương mại.
+ * Tách tổng giảm của đơn thành chiết khấu thương mại và tiền điểm. Có từng khoản giảm thì trừ riêng tiền điểm, phần chênh không
+ * gán được vào khoản nào vẫn là chiết khấu thương mại. Đơn tạo trước khi API lưu từng khoản giảm (cả bốn cột bằng 0) chỉ có tổng
+ * `discount`: nếu đơn có dùng Điểm Xanh thì tiền điểm = `pointsUsed` × 1đ (kẹp bằng tổng giảm) và phần còn lại là chiết khấu thương mại;
+ * không dùng điểm thì coi trọn tổng đó là chiết khấu thương mại.
  */
-function splitDiscount(o: Pick<OrderDiscountParts, 'discount' | 'couponDiscount' | 'comboDiscount' | 'tierDiscount' | 'pointsDiscount'>): {
+function splitDiscount(o: DiscountSplitInput): {
   trade: number;
   points: number;
 } {
   const discount = Math.max(0, int(o.discount));
   const known = int(o.couponDiscount) + int(o.comboDiscount) + int(o.tierDiscount) + int(o.pointsDiscount);
-  if (known === 0) return { trade: discount, points: 0 };
+  if (known === 0) {
+    const points = Math.min(Math.max(0, int(o.pointsUsed)) * VND_PER_GREEN_POINT, discount);
+    return { trade: discount - points, points };
+  }
   const points = Math.min(Math.max(0, int(o.pointsDiscount)), discount);
   return { trade: discount - points, points };
 }
 
-export function tradeDiscountOf(o: Pick<OrderDiscountParts, 'discount' | 'couponDiscount' | 'comboDiscount' | 'tierDiscount' | 'pointsDiscount'>): number {
+export function tradeDiscountOf(o: DiscountSplitInput): number {
   return splitDiscount(o).trade;
 }
 

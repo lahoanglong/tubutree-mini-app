@@ -49,8 +49,8 @@ describe('classifyZeroPrice — chỉ số 0 tường minh mới là "Pancake b�
     expect(classifyZeroPrice(input({ gift: true }))).toBe('PRICE_KEPT');
   });
 
-  it('biến thể do chính đồng bộ ngừng (REMOVED) rồi Pancake trả lại với giá 0đ → vẫn báo, vì lượt này mở bán lại theo giá cũ', () => {
-    expect(classifyZeroPrice(input({ prev: { ...sold, isActive: false, pancakeHold: 'REMOVED' } }))).toBe('PRICE_KEPT');
+  it('biến thể do chính đồng bộ ngừng (REMOVED) rồi Pancake trả lại với giá 0đ → vẫn báo, nhưng như SKU mới ở 0đ vì lượt này nó chuyển NO_PRICE chứ không mở bán lại theo giá cũ', () => {
+    expect(classifyZeroPrice(input({ prev: { ...sold, isActive: false, pancakeHold: 'REMOVED' } }))).toBe('NEW_AT_ZERO');
   });
 
   it('isGiftMarked: chỉ `is_gift === true`, chuỗi/số không tính', () => {

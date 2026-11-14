@@ -66,6 +66,7 @@ const REQUIRED_CODES = [
   'WINBACK_VOUCHER',
   'MILESTONE_VOUCHER',
   'SECOND_ORDER_VOUCHER',
+  'DEALER_CREDIT_PAYMENT_CONFIRMED_DISCOUNT',
 ];
 
 describe('seed mẫu thông báo', () => {
