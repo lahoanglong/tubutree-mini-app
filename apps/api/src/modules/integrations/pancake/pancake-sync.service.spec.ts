@@ -1535,6 +1535,19 @@ describe('PancakeSyncService — chữ catalog admin đã duyệt không bị đ
       }
     });
 
+    it('W151: CAS trượt thì ghi một dòng log để vận hành biết mô tả Pancake bị bỏ lượt này; CAS khớp thì không log', async () => {
+      const log = jest.spyOn(Logger.prototype, 'log').mockImplementation(() => undefined);
+      try {
+        await raceRun('Xoài', PANCAKE_120);
+        expect(log.mock.calls.filter(([m]) => String(m).includes('Bỏ qua mô tả Pancake'))).toHaveLength(1);
+        log.mockClear();
+        await raceRun('Xoài', PANCAKE_120, true, 'never');
+        expect(log.mock.calls.filter(([m]) => String(m).includes('Bỏ qua mô tả Pancake'))).toHaveLength(0);
+      } finally {
+        log.mockRestore();
+      }
+    });
+
     it('W151: lệnh update chính không bao giờ mang khoá description, kể cả khi Pancake ghi mô tả mới', async () => {
       const { prisma } = await raceRun('Xoài', PANCAKE_120, true, 'never');
       expect(mk(prisma).product.update.mock.calls[0][0].data).not.toHaveProperty('description');

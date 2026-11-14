@@ -574,9 +574,13 @@ export class PancakeSyncService implements OnModuleInit {
     if (imagesChanged) this.imageStale?.markStale();
 
     // Mô tả Pancake chỉ ghi khi cột vẫn đúng bản đã đọc ở trên (và chỉ khi mô tả đó chưa đạt chuẩn giàu, xem `keepDescription`): admin vừa lưu mô tả mới trong khoảng
-    // đọc rồi ghi thì lệnh không khớp dòng nào, mô tả của admin còn nguyên và lượt đồng bộ 15 phút sau đọc lại bản mới để quyết lại.
+    // đọc rồi ghi thì lệnh không khớp dòng nào và mô tả của admin còn nguyên. Mô tả Pancake bị bỏ lượt này chỉ được xét lại khi Pancake sửa sản phẩm đó lần nữa
+    // (lượt 15 phút lọc theo `updated_since`) hoặc ở lượt quét toàn bộ ban đêm.
     if (existing && description !== null) {
-      await this.prisma.product.updateMany({ where: { id: existing.id, description: existing.description ?? '' }, data: { description } });
+      const written = await this.prisma.product.updateMany({ where: { id: existing.id, description: existing.description ?? '' }, data: { description } });
+      if (written?.count === 0) {
+        this.logger.log(`Bỏ qua mô tả Pancake của sản phẩm ${pancakeId}: mô tả vừa được đổi trong lúc đồng bộ nên giữ bản mới, bản Pancake chờ lượt quét sau.`);
+      }
     }
 
     // Điền danh mục bằng lệnh có điều kiện "vẫn còn rỗng", tách khỏi update ở trên: `existing` đọc từ trước, nếu admin vừa gán
