@@ -553,9 +553,8 @@ export class PancakeSyncService implements OnModuleInit {
           where: { id: existing.id },
           data: {
             ...baseData,
-            // Giữ mô tả (hoặc Pancake để trống, không xoá mô tả admin đã nhập) thì bỏ hẳn khoá: `existing.description` đọc từ trước, nếu admin vừa lưu mô tả mới trong
-            // khoảng đó thì ghi lại bản đọc cũ sẽ đè mất nó; không có khoá thì Postgres giữ nguyên cột đang có lúc ghi. Chưa đạt chuẩn giàu mà Pancake có nội dung thật thì Pancake là nguồn chính.
-            ...(description === null ? {} : { description }),
+            // Lệnh này không bao giờ mang `description`: `existing.description` đọc từ trước, nên ghi cột ở đây (kể cả ghi lại bản đã đọc) sẽ đè mô tả admin vừa lưu
+            // trong khoảng giữa. Mô tả Pancake, khi được phép ghi, đi riêng bằng lệnh có điều kiện ngay dưới.
             ...productHold,
             ...((existing.forSegment?.length ?? 0) === 0 ? { forSegment: inferred } : {}),
           },
@@ -573,6 +572,12 @@ export class PancakeSyncService implements OnModuleInit {
           },
         });
     if (imagesChanged) this.imageStale?.markStale();
+
+    // Mô tả Pancake chỉ ghi khi cột vẫn đúng bản đã đọc ở trên (và chỉ khi mô tả đó chưa đạt chuẩn giàu, xem `keepDescription`): admin vừa lưu mô tả mới trong khoảng
+    // đọc rồi ghi thì lệnh không khớp dòng nào, mô tả của admin còn nguyên và lượt đồng bộ 15 phút sau đọc lại bản mới để quyết lại.
+    if (existing && description !== null) {
+      await this.prisma.product.updateMany({ where: { id: existing.id, description: existing.description ?? '' }, data: { description } });
+    }
 
     // Điền danh mục bằng lệnh có điều kiện "vẫn còn rỗng", tách khỏi update ở trên: `existing` đọc từ trước, nếu admin vừa gán
     // tay trong khoảng đó thì lệnh này không khớp dòng nào và danh mục của admin còn nguyên.
