@@ -5,10 +5,11 @@ import type { ArcadeCompleteResult } from '@tubutree/app-core/api/game';
 import type { ArcadeMountOptions, ArcadeResult } from '@tubutree/app-core/arcade/arcade-canvas';
 import { arcadeWaterFor } from '@tubutree/app-core/arcade/arcade-config';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { HttpError } from '../../services/http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  phase: 'authenticated' as 'authenticated' | 'guest',
+  phase: 'authenticated' as 'authenticated' | 'guest' | 'device',
   login: vi.fn(),
   navigate: vi.fn(),
   submit: vi.fn(),
@@ -17,7 +18,15 @@ const mocks = vi.hoisted(() => ({
   controller: { start: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), resize: vi.fn() },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
-vi.mock('../../hooks/use-auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('../../store/auth', () => {
+  const state = () =>
+    mocks.phase === 'authenticated'
+      ? { status: 'authenticated', user: { id: 'u1', phone: '0900000001', zaloId: 'zalo-1' } }
+      : mocks.phase === 'device'
+        ? { status: 'authenticated', user: { id: 'g1', phone: null, zaloId: 'guest_abc' } }
+        : { status: mocks.phase === 'loading' ? 'loading' : 'unauthenticated', user: null };
+  return { useAuthStore: Object.assign((sel: (s: ReturnType<typeof state>) => unknown) => sel(state()), { getState: state }) };
+});
 vi.mock('../../hooks/use-login-notice', () => ({ useLoginWithNotice: () => mocks.login }));
 vi.mock('../../services/arcade-api', () => ({
   arcadeStatusQuery: { queryKey: ['game', 'arcade'], queryFn: vi.fn() },
@@ -385,6 +394,52 @@ describe('ArcadeGameOverlay: kết quả khi đã đăng nhập', () => {
     expect(phase()).toBe('result');
   });
 
+  const httpError = (status: number) => new HttpError('lỗi', undefined, { status, data: { message: 'lỗi' }, headers: {} });
+
+  it('HTTP 400 (điểm không hợp lệ): nói ván không hợp lệ, KHÔNG mời Thử lại và không gửi lại', async () => {
+    mocks.submit.mockRejectedValue(httpError(400));
+    mountOverlay();
+    await playToEnd(dewRun(120));
+    const panel = screen.getByTestId('arcade-result');
+    expect(await within(panel).findByText(fillCopy('arcade.result.invalid'))).toBeInTheDocument();
+    expect(within(panel).queryByRole('button', { name: 'Thử lại' })).toBeNull();
+    expect(within(panel).queryByText(fillCopy('arcade.result.error'))).toBeNull();
+    expect(within(panel).getByText(fillCopy('arcade.result.score', { n: 120 }))).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Chơi lại' })).toBeInTheDocument();
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([500, 503, 429])('HTTP %i và lỗi mạng: vẫn báo "Chưa lưu được" và giữ nút Thử lại', async (status) => {
+    mocks.submit.mockRejectedValue(httpError(status));
+    mountOverlay();
+    await playToEnd(dewRun(120));
+    const panel = screen.getByTestId('arcade-result');
+    expect(await within(panel).findByText(fillCopy('arcade.result.error'))).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    expect(within(panel).queryByText(fillCopy('arcade.result.invalid'))).toBeNull();
+  });
+
+  it('lý do LOW_SCORE: hiện câu điểm thấp chưa tính thưởng, kèm lượt đã dùng đúng như máy chủ trả', async () => {
+    mocks.submit.mockResolvedValue(saved({ rewarded: false, reason: 'LOW_SCORE', waterEarned: 0, pointsEarned: 0, used: 1, cap: 4, isNewBest: false, bestScore: 200 }));
+    mountOverlay();
+    await playToEnd(dewRun(30));
+    const panel = screen.getByTestId('arcade-result');
+    expect(await within(panel).findByText(fillCopy('arcade.result.lowScore'))).toBeInTheDocument();
+    expect(within(panel).getByText(fillCopy('arcade.result.used', { n: 1, m: 4 }))).toBeInTheDocument();
+    expect(within(panel).queryByText(/Nhận \d+ Giọt nước/)).toBeNull();
+  });
+
+  it('trần lượt thưởng lấy từ máy chủ, không cố định 3: cap 4 và 6 hiện đúng n/m', async () => {
+    for (const [used, cap] of [[3, 4], [2, 6]] as const) {
+      mocks.submit.mockResolvedValue(saved({ used, cap }));
+      mocks.mount.mockClear();
+      const view = mountOverlay();
+      await playToEnd(dewRun(120));
+      expect(await screen.findByText(fillCopy('arcade.result.used', { n: used, m: cap }))).toBeInTheDocument();
+      view.unmount();
+    }
+  });
+
   it('Chơi lại: start lần hai, bảng điểm cũ biến mất; ván thứ hai gửi riêng một lần (tổng hai lần, không nhân đôi)', async () => {
     mountOverlay();
     await playToEnd(dewRun(120));
@@ -493,6 +548,128 @@ describe('ArcadeGameOverlay: khách chơi thử', () => {
     mountOverlay();
     await playToEnd(dewRun(100));
     expect(within(screen.getByTestId('arcade-result')).getByText(fillCopy('arcade.result.score', { n: 100 }))).toBeInTheDocument();
+  });
+});
+
+describe('ArcadeGameOverlay: tài khoản khách theo thiết bị (guest_)', () => {
+  beforeEach(() => {
+    mocks.phase = 'device';
+  });
+
+  it('phiên có nhưng không phải khách thật: "Chơi thử", ván KHÔNG gửi máy chủ, kỷ lục lưu trên máy, hiện nút đăng nhập nêu số Giọt nước', async () => {
+    mountOverlay();
+    await ready();
+    expect(screen.getByRole('button', { name: 'Chơi thử' })).toBeInTheDocument();
+    expect(within(screen.getByTestId('arcade-ready')).getByText(fillCopy('arcade.guest.demo'))).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Chơi thử' }));
+    act(() => mocks.options!.onEnd(dewRun(900)));
+    const panel = await screen.findByTestId('arcade-result');
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(window.localStorage.getItem('tubu.arcade.best.dew_catcher')).toBe('900');
+    expect(within(panel).getByText(fillCopy('arcade.newBest'))).toBeInTheDocument();
+    fireEvent.click(within(panel).getByRole('button', { name: 'Đăng nhập lưu kỷ lục & nhận ngay 10 Giọt nước vào Vườn' }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+    expect(within(panel).queryByText(fillCopy('arcade.result.notReal'))).toBeNull();
+  });
+
+  it('đăng nhập xong thành khách thật ngay trên bảng điểm thì ván tự được gửi đúng một lần', async () => {
+    const { rerender, qc } = mountOverlay();
+    await playToEnd(dewRun(130));
+    expect(mocks.submit).not.toHaveBeenCalled();
+    mocks.phase = 'authenticated';
+    rerender(
+      <QueryClientProvider client={qc}>
+        <ArcadeGameOverlay gameId="dew_catcher" onClose={onClose} />
+      </QueryClientProvider>,
+    );
+    await screen.findByText(fillCopy('arcade.result.water', { n: 8 }));
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('ArcadeGameOverlay: giữ focus trong lớp phủ (aria-modal)', () => {
+  const tab = (shiftKey = false) => fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Tab', shiftKey });
+  const focusables = () => {
+    const root = overlay();
+    return Array.from(root.querySelectorAll<HTMLElement>('button, [tabindex]:not([tabindex="-1"])')).filter((el) => el.style.visibility !== 'hidden');
+  };
+
+  it('Tab ở phần tử cuối quay về phần tử đầu, Shift+Tab ở phần tử đầu nhảy xuống cuối; nút Tạm dừng ẩn bị bỏ qua', async () => {
+    mountOverlay();
+    await ready();
+    const items = focusables();
+    expect(items.map((el) => el.getAttribute('aria-label') ?? el.textContent)).toEqual(['Đóng', fillCopy('arcade.dew.aria'), 'Chơi']);
+    items[items.length - 1]!.focus();
+    tab();
+    expect(document.activeElement).toBe(items[0]);
+    tab(true);
+    expect(document.activeElement).toBe(items[items.length - 1]);
+  });
+
+  it('focus đang nằm ngoài lớp phủ thì Tab kéo về phần tử đầu, Shift+Tab về phần tử cuối', async () => {
+    mountOverlay();
+    await ready();
+    const items = focusables();
+    const outside = document.createElement('button');
+    document.body.append(outside);
+    outside.focus();
+    tab();
+    expect(document.activeElement).toBe(items[0]);
+    outside.focus();
+    tab(true);
+    expect(document.activeElement).toBe(items[items.length - 1]);
+    outside.remove();
+  });
+
+  it('khi lớp phủ vừa mở (focus ở khung) Shift+Tab nhảy xuống phần tử cuối, Tab thường để trình duyệt tự đi tiếp', async () => {
+    mountOverlay();
+    await ready();
+    overlay().focus();
+    expect(document.activeElement).toBe(overlay());
+    const items = focusables();
+    const notPrevented = fireEvent.keyDown(overlay(), { key: 'Tab' });
+    expect(notPrevented).toBe(true);
+    expect(document.activeElement).toBe(overlay());
+    tab(true);
+    expect(document.activeElement).toBe(items[items.length - 1]);
+  });
+
+  it('vòng Tab theo pha: đang chơi thì nút Tạm dừng hiện nên nằm trong vòng; bảng kết quả quay vòng giữa Đóng (thanh trên) và Đóng (cuối bảng)', async () => {
+    mountOverlay();
+    fireEvent.click(await ready());
+    expect(focusables().map((el) => el.getAttribute('aria-label') ?? el.textContent)).toEqual(['Đóng', 'Tạm dừng', fillCopy('arcade.dew.aria')]);
+    act(() => mocks.options!.onEnd(dewRun(120)));
+    await screen.findByTestId('arcade-result');
+    const items = focusables();
+    const last = items[items.length - 1]!;
+    expect(last).toHaveTextContent('Đóng');
+    last.focus();
+    tab();
+    expect(document.activeElement).toBe(items[0]);
+  });
+
+  it('Esc đóng lớp phủ ở mọi pha (sẵn sàng, đang chơi, kết quả)', async () => {
+    mountOverlay();
+    fireEvent.click(await ready());
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(1);
+    act(() => mocks.options!.onEnd(dewRun(120)));
+    await screen.findByTestId('arcade-result');
+    fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' });
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('đóng thì focus về đúng nút đã mở lớp phủ (kể cả khi mở từ nút trong trang)', async () => {
+    const opener = document.createElement('button');
+    opener.textContent = 'Mở game';
+    document.body.append(opener);
+    opener.focus();
+    const { unmount } = mountOverlay();
+    await ready();
+    expect(document.activeElement).not.toBe(opener);
+    unmount();
+    expect(document.activeElement).toBe(opener);
+    opener.remove();
   });
 });
 

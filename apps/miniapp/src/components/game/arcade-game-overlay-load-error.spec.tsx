@@ -2,9 +2,17 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ loads: 0 }));
+const mocks = vi.hoisted(() => ({ loads: 0, phase: 'authenticated' }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => vi.fn() }));
-vi.mock('../../hooks/use-auth-phase', () => ({ useAuthPhase: () => 'authenticated' }));
+vi.mock('../../store/auth', () => {
+  const state = () =>
+    mocks.phase === 'authenticated'
+      ? { status: 'authenticated', user: { id: 'u1', phone: '0900000001', zaloId: 'zalo-1' } }
+      : mocks.phase === 'device'
+        ? { status: 'authenticated', user: { id: 'g1', phone: null, zaloId: 'guest_abc' } }
+        : { status: mocks.phase === 'loading' ? 'loading' : 'unauthenticated', user: null };
+  return { useAuthStore: Object.assign((sel: (s: ReturnType<typeof state>) => unknown) => sel(state()), { getState: state }) };
+});
 vi.mock('../../hooks/use-login-notice', () => ({ useLoginWithNotice: () => vi.fn() }));
 vi.mock('../../services/arcade-api', () => ({
   arcadeStatusQuery: { queryKey: ['game', 'arcade'], queryFn: vi.fn() },

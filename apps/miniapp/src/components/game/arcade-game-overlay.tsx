@@ -4,8 +4,8 @@ import { Pause, Play, X } from 'lucide-react';
 import type { ArcadeGameId } from '@tubutree/app-core/arcade/arcade-config';
 import type { ArcadeResult, mountArcade } from '@tubutree/app-core/arcade/arcade-canvas';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { useAuthPhase } from '../../hooks/use-auth-phase';
 import { useLoginWithNotice } from '../../hooks/use-login-notice';
+import { useRealUser } from '../../hooks/use-real-user';
 import { getLoadErrorMessage } from '../../services/api';
 import { Button } from '../ui/button';
 import { ErrorState } from '../ui/empty-state';
@@ -21,6 +21,7 @@ type Controller = ReturnType<typeof mountArcade>;
 type Phase = 'ready' | 'playing' | 'paused' | 'result';
 
 const COPY_KEY = { dew_catcher: 'dew', refill_rush: 'rush' } as const;
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 type ArcadeEngine = { mountArcade: typeof mountArcade };
 let engine: Promise<ArcadeEngine> | null = null;
@@ -44,7 +45,7 @@ export interface ArcadeGameOverlayProps {
  * và nút đăng nhập nêu số Giọt nước nhận được. Mở thì khoá cuộn nền; đóng thì trả focus về nút đã mở nó.
  */
 export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
-  const authed = useAuthPhase() === 'authenticated';
+  const real = useRealUser();
   const login = useLoginWithNotice();
   const key = COPY_KEY[gameId];
   const titleId = useId();
@@ -54,8 +55,8 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
   const controller = useRef<Controller | null>(null);
   const phaseRef = useRef<Phase>('ready');
   const endedRef = useRef(false);
-  const authedRef = useRef(authed);
-  authedRef.current = authed;
+  const realRef = useRef(real);
+  realRef.current = real;
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
 
@@ -65,7 +66,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
   const [loadError, setLoadError] = useState<unknown>(null);
   const [run, setRun] = useState<ArcadeResult | null>(null);
   const [local, setLocal] = useState<{ best: number; isNewBest: boolean } | null>(null);
-  const save = useArcadeComplete(run, authed);
+  const save = useArcadeComplete(run, real);
 
   const setPhase = (next: Phase) => {
     phaseRef.current = next;
@@ -76,7 +77,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
   const handleEnd = (result: ArcadeResult) => {
     if (endedRef.current) return;
     endedRef.current = true;
-    if (!authedRef.current) setLocal(saveLocalBest(result.gameId, result.score));
+    if (!realRef.current) setLocal(saveLocalBest(result.gameId, result.score));
     setRun(result);
     setPhase('result');
   };
@@ -157,7 +158,31 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     document.body.style.overflow = 'hidden';
     rootRef.current?.focus();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeRef.current();
+      if (e.key === 'Escape') {
+        closeRef.current();
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const root = rootRef.current;
+      if (!root) return;
+      // aria-modal không tự giữ focus: Tab ở nút cuối quay về nút đầu (và ngược lại) để không lọt ra trang Vườn phía sau. Nút Tạm dừng ẩn bằng visibility không focus được nên bỏ.
+      const items = Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE)).filter((el) => el.style.visibility !== 'hidden');
+      if (items.length === 0) {
+        e.preventDefault();
+        root.focus();
+        return;
+      }
+      const first = items[0]!;
+      const last = items[items.length - 1]!;
+      const active = document.activeElement;
+      const outside = !root.contains(active) || active === root;
+      if (e.shiftKey && (active === first || outside)) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && (active === last || (outside && active !== root))) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener('keydown', onKey);
     return () => {
@@ -221,9 +246,9 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
                   {fillCopy(`arcade.${key}.how`)}
                 </Text>
                 <Button loading={!loaded} onPress={begin}>
-                  {fillCopy(authed ? 'arcade.play' : 'arcade.tryPlay')}
+                  {fillCopy(real ? 'arcade.play' : 'arcade.tryPlay')}
                 </Button>
-                {!authed && (
+                {!real && (
                   <Text variant="caption" tone="secondary" as="p">
                     {fillCopy('arcade.guest.demo')}
                   </Text>
@@ -242,7 +267,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
         {phase === 'result' && run && (
           <ArcadeResultPanel
             run={run}
-            authed={authed}
+            real={real}
             save={save}
             local={local}
             onRetrySave={save.retry}

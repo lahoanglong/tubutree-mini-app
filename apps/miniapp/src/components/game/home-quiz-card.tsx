@@ -1,5 +1,8 @@
 import { lazy, Suspense, useId, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { useRealUser } from '../../hooks/use-real-user';
+import { arcadeStatusQuery } from '../../services/arcade-api';
 import { haptic } from '../../utils/haptic';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
@@ -10,11 +13,16 @@ import '../../css/home-quiz.css';
 const HomeQuizSheet = lazy(() => import('./home-quiz-sheet').then((m) => ({ default: m.HomeQuizSheet })));
 
 /**
- * Thẻ mời "Chẩn đoán tổ ấm" (30 giây, gợi ý bộ sản phẩm hợp nhà bạn) dùng ở khối Trang chủ `quiz` và ở Vườn Xanh cạnh sảnh mini game. Thẻ TĨNH: không gọi API
- * tới khi khách mở sheet nên không làm trang nhảy. Sheet ở lại (chỉ đóng) sau lần mở đầu để giữ câu trả lời và kết quả nếu khách mở lại.
+ * Thẻ mời "Chẩn đoán tổ ấm" (30 giây, gợi ý bộ sản phẩm hợp nhà bạn) dùng ở khối Trang chủ `quiz` và ở Vườn Xanh cạnh sảnh mini game. Sheet và gợi ý sản phẩm không
+ * gọi API tới khi khách mở sheet. Khách thật đã đăng nhập thì thẻ dùng chung truy vấn trạng thái mini game (cùng khoá với `ArcadeHub`, một request) để biết quà đã nhận
+ * chưa: nhận rồi thì dòng phụ không hứa quà nữa. Khách và tài khoản khách theo thiết bị không gọi gì, vẫn thấy lời hứa. Sheet ở lại (chỉ đóng) sau lần mở đầu để giữ câu trả
+ * lời và kết quả nếu khách mở lại.
  */
 export function HomeQuizCard() {
   const titleId = useId();
+  const real = useRealUser();
+  const status = useQuery({ ...arcadeStatusQuery, enabled: real, staleTime: 30_000 });
+  const claimed = real && status.data?.quizClaimed === true;
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   return (
@@ -28,7 +36,7 @@ export function HomeQuizCard() {
             {fillCopy('homeQuiz.card.sub')}
           </Text>
           <Text variant="caption" tone="brand" as="p">
-            {fillCopy('homeQuiz.card.reward')}
+            {fillCopy(claimed ? 'homeQuiz.result.claimed' : 'homeQuiz.card.reward')}
           </Text>
           <Button
             aria-label={`${fillCopy('homeQuiz.card.cta')} ${fillCopy('homeQuiz.card.title')}`}

@@ -7,7 +7,8 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  auth: { status: 'authenticated' as 'authenticated' | 'unauthenticated' },
+  auth: { status: 'authenticated' as 'authenticated' | 'unauthenticated', user: null as { id: string; phone: string | null; zaloId: string | null } | null },
+  arcadeStatus: vi.fn(),
   login: vi.fn(),
   navigate: vi.fn(),
   snackbar: vi.fn(),
@@ -24,12 +25,12 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   useSnackbar: () => ({ openSnackbar: mocks.snackbar }),
 }));
 vi.mock('../../store/auth', () => {
-  const state = () => ({ status: mocks.auth.status, user: { id: 'u1' } });
+  const state = () => ({ status: mocks.auth.status, user: mocks.auth.user });
   return { useAuthStore: Object.assign((sel: (s: ReturnType<typeof state>) => unknown) => sel(state()), { getState: state }) };
 });
 vi.mock('../../hooks/use-login-notice', () => ({ useLoginWithNotice: () => mocks.login }));
 vi.mock('../../services/arcade-api', () => ({
-  arcadeStatusQuery: { queryKey: ['game', 'arcade'], queryFn: vi.fn() },
+  arcadeStatusQuery: { queryKey: ['game', 'arcade'], queryFn: () => mocks.arcadeStatus() },
   submitArcadeRun: vi.fn(),
   submitHomeQuiz: (answers: unknown) => mocks.submit(answers),
 }));
@@ -65,6 +66,8 @@ vi.mock('../ui/product-card', () => ({
 
 import { HomeQuizCard } from './home-quiz-card';
 
+const REAL_USER = { id: 'u1', phone: '0900000001', zaloId: 'zalo-1' };
+const DEVICE_USER = { id: 'g1', phone: null, zaloId: 'guest_abc' };
 const ANSWERS: HomeQuizAnswers = { family: 'baby_pet', worry: 'grease', format: 'bottle' };
 const LABELS = ['Có em bé hoặc thú cưng', 'Vết dầu mỡ bám dai', 'Chai vòi tiện lợi'];
 const product = (id: string, name: string, over: Record<string, unknown> = {}) => ({
@@ -105,6 +108,8 @@ const names = () => screen.getAllByTestId('kit-card').map((c) => c.querySelector
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.auth.status = 'authenticated';
+  mocks.auth.user = REAL_USER;
+  mocks.arcadeStatus.mockResolvedValue({ games: {}, window: null, windowBonus: false, nextWindowAt: null, quizClaimed: false });
   mocks.fetchProducts.mockResolvedValue(page(CATALOG));
   mocks.submit.mockResolvedValue({ granted: 10, alreadyClaimed: false, totalSeeds: 50 });
   mocks.addToCart.mockResolvedValue({ items: [], itemCount: 0 });
@@ -127,6 +132,61 @@ describe('HomeQuizCard: thẻ mời (tĩnh)', () => {
     expect(within(region).getByRole('button', { name: 'Bắt đầu Chẩn đoán tổ ấm' })).toHaveTextContent('Bắt đầu');
     expect(screen.queryByRole('dialog')).toBeNull();
     for (const fn of [mocks.fetchProducts, mocks.submit, mocks.fetchProduct, mocks.addToCart, mocks.getCart]) expect(fn).not.toHaveBeenCalled();
+  });
+});
+
+describe('HomeQuizCard: dòng quà trên thẻ', () => {
+  const REWARD = fillCopy('homeQuiz.card.reward');
+  const CLAIMED = fillCopy('homeQuiz.result.claimed');
+  const claimedStatus = (quizClaimed: boolean) => ({ games: {}, window: null, windowBonus: false, nextWindowAt: null, quizClaimed });
+
+  it('khách thật chưa nhận quà: vẫn nói lần đầu có quà Giọt nước; hỏi trạng thái đúng một lần', async () => {
+    mocks.arcadeStatus.mockResolvedValue(claimedStatus(false));
+    renderCard();
+    await waitFor(() => expect(mocks.arcadeStatus).toHaveBeenCalledTimes(1));
+    expect(screen.getByText(REWARD)).toBeInTheDocument();
+    expect(screen.queryByText(CLAIMED)).toBeNull();
+  });
+
+  it('khách thật đã nhận quà (quizClaimed: true): thẻ không hứa quà nữa, dùng câu trung tính', async () => {
+    mocks.arcadeStatus.mockResolvedValue(claimedStatus(true));
+    renderCard();
+    expect(await screen.findByText(CLAIMED)).toBeInTheDocument();
+    expect(screen.queryByText(REWARD)).toBeNull();
+    expect(screen.getByText(fillCopy('homeQuiz.card.sub'))).toBeInTheDocument();
+  });
+
+  it('trạng thái đang tải hoặc lỗi: giữ lời hứa mặc định, không treo thẻ', async () => {
+    mocks.arcadeStatus.mockRejectedValue(new Error('mạng'));
+    renderCard();
+    await waitFor(() => expect(mocks.arcadeStatus).toHaveBeenCalled());
+    expect(screen.getByText(REWARD)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Bắt đầu Chẩn đoán tổ ấm' })).toBeEnabled();
+  });
+
+  it.each([
+    ['khách chưa đăng nhập', 'unauthenticated', null],
+    ['tài khoản khách theo thiết bị', 'authenticated', DEVICE_USER],
+  ] as const)('%s: không gọi trạng thái mini game và vẫn thấy lời hứa quà', (_name, status, user) => {
+    mocks.auth.status = status;
+    mocks.auth.user = user;
+    mocks.arcadeStatus.mockResolvedValue(claimedStatus(true));
+    renderCard();
+    expect(mocks.arcadeStatus).not.toHaveBeenCalled();
+    expect(screen.getByText(REWARD)).toBeInTheDocument();
+  });
+
+  it('nhận quà xong trong sheet thì sau khi đóng, thẻ đổi sang câu đã nhận (trạng thái được làm mới)', async () => {
+    mocks.arcadeStatus.mockResolvedValue(claimedStatus(false));
+    renderCard();
+    await waitFor(() => expect(mocks.arcadeStatus).toHaveBeenCalledTimes(1));
+    mocks.arcadeStatus.mockResolvedValue(claimedStatus(true));
+    await answerAll();
+    await screen.findByText(fillCopy('homeQuiz.result.granted', { n: 10 }));
+    fireEvent.click(sheet().getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(await screen.findByText(CLAIMED)).toBeInTheDocument();
+    expect(screen.queryByText(REWARD)).toBeNull();
   });
 });
 
@@ -306,6 +366,65 @@ describe('HomeQuizCard: quà Giọt nước', () => {
     await waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(1));
     await screen.findAllByTestId('kit-card');
     expect(screen.queryByText(/Bạn nhận \d+ Giọt nước/)).toBeNull();
+    expect(within(screen.getByTestId('home-quiz-result')).getByText(fillCopy('homeQuiz.result.claimed'))).toBeInTheDocument();
+  });
+
+  it('granted = 0 mà chưa đánh dấu đã nhận: không hứa quà và cũng không nói đã nhận', async () => {
+    mocks.submit.mockResolvedValue({ granted: 0, alreadyClaimed: false, totalSeeds: 50 });
+    renderCard();
+    await answerAll();
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(1));
+    await screen.findAllByTestId('kit-card');
+    const result = within(screen.getByTestId('home-quiz-result'));
+    expect(result.queryByText(/Bạn nhận \d+ Giọt nước/)).toBeNull();
+    expect(result.queryByText(fillCopy('homeQuiz.result.claimed'))).toBeNull();
+  });
+
+  it('lưu quà lỗi rồi Làm lại và hoàn thành lần nữa: gửi lại MỘT lần (lần lỗi không tính), sau đó mới khoá', async () => {
+    mocks.submit.mockRejectedValueOnce(new Error('mạng'));
+    renderCard();
+    await answerAll();
+    await screen.findByText(fillCopy('homeQuiz.result.error'));
+    expect(mocks.submit).toHaveBeenCalledTimes(1);
+    fireEvent.click(sheet().getByRole('button', { name: 'Làm lại' }));
+    await screen.findByText('Câu 1/3');
+    expect(screen.queryByText(fillCopy('homeQuiz.result.error'))).toBeNull();
+    for (const label of LABELS) {
+      fireEvent.click(sheet().getByRole('button', { name: new RegExp(label) }));
+      if (label !== LABELS[2]) await waitFor(() => expect(screen.getByTestId('home-quiz-step')).not.toHaveTextContent(label));
+    }
+    expect(await screen.findByText(fillCopy('homeQuiz.result.granted', { n: 10 }))).toBeInTheDocument();
+    expect(mocks.submit).toHaveBeenCalledTimes(2);
+    expect(mocks.submit).toHaveBeenLastCalledWith(ANSWERS);
+    fireEvent.click(sheet().getByRole('button', { name: 'Làm lại' }));
+    await screen.findByText('Câu 1/3');
+    for (const label of LABELS) {
+      fireEvent.click(sheet().getByRole('button', { name: new RegExp(label) }));
+      if (label !== LABELS[2]) await waitFor(() => expect(screen.getByTestId('home-quiz-step')).not.toHaveTextContent(label));
+    }
+    await screen.findByTestId('home-quiz-result');
+    expect(mocks.submit).toHaveBeenCalledTimes(2);
+  });
+
+  it('tài khoản khách theo thiết bị (guest_): xem đủ gợi ý, KHÔNG gửi quà, có nút đăng nhập; không gọi trạng thái mini game', async () => {
+    mocks.auth.user = DEVICE_USER;
+    renderCard();
+    await answerAll();
+    await screen.findAllByTestId('kit-card');
+    expect(mocks.submit).not.toHaveBeenCalled();
+    expect(mocks.arcadeStatus).not.toHaveBeenCalled();
+    expect(sheet().queryByText(fillCopy('homeQuiz.result.error'))).toBeNull();
+    fireEvent.click(sheet().getByRole('button', { name: fillCopy('homeQuiz.result.guest') }));
+    expect(mocks.login).toHaveBeenCalledTimes(1);
+  });
+
+  it('tài khoản khách theo thiết bị vẫn thêm được vào giỏ (giỏ không cần khách thật)', async () => {
+    mocks.auth.user = DEVICE_USER;
+    renderCard();
+    await answerAll();
+    fireEvent.click(within((await screen.findAllByTestId('kit-card'))[0]!).getByRole('button', { name: '+ Thêm vào giỏ' }));
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1));
+    expect(mocks.login).not.toHaveBeenCalled();
   });
 
   it('lưu quà lỗi: báo lỗi, vẫn thấy gợi ý sản phẩm, Thử lại gửi lại và hiện quà', async () => {
@@ -323,6 +442,7 @@ describe('HomeQuizCard: quà Giọt nước', () => {
 
   it('khách: xem đủ gợi ý, KHÔNG gửi quà; nút đăng nhập mở đăng nhập; đăng nhập xong thì quà tự được ghi một lần', async () => {
     mocks.auth.status = 'unauthenticated';
+    mocks.auth.user = null;
     const view = renderCard();
     await answerAll();
     await screen.findAllByTestId('kit-card');
@@ -330,6 +450,7 @@ describe('HomeQuizCard: quà Giọt nước', () => {
     fireEvent.click(sheet().getByRole('button', { name: fillCopy('homeQuiz.result.guest') }));
     expect(mocks.login).toHaveBeenCalledTimes(1);
     mocks.auth.status = 'authenticated';
+    mocks.auth.user = REAL_USER;
     view.rerender(
       <QueryClientProvider client={qc}>
         <HomeQuizCard />
@@ -423,6 +544,7 @@ describe('HomeQuizCard: thêm vào giỏ một chạm', () => {
 
   it('khách: mời đăng nhập trước, chưa đăng nhập được thì không gọi chi tiết hay giỏ', async () => {
     mocks.auth.status = 'unauthenticated';
+    mocks.auth.user = null;
     renderCard();
     await answerAll();
     fireEvent.click(await firstAdd());
@@ -433,8 +555,10 @@ describe('HomeQuizCard: thêm vào giỏ một chạm', () => {
 
   it('khách đăng nhập thành công ngay lúc bấm: thêm tiếp món vừa chọn', async () => {
     mocks.auth.status = 'unauthenticated';
+    mocks.auth.user = null;
     mocks.login.mockImplementation(async () => {
       mocks.auth.status = 'authenticated';
+      mocks.auth.user = REAL_USER;
     });
     renderCard();
     await answerAll();

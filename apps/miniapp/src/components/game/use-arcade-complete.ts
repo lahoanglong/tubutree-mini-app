@@ -2,20 +2,21 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { ArcadeCompleteResult } from '@tubutree/app-core/api/game';
 import type { ArcadeResult } from '@tubutree/app-core/arcade/arcade-canvas';
+import { isHttpError } from '../../services/http';
 import { submitArcadeRun } from '../../services/arcade-api';
 
-export type ArcadeSaveStatus = 'idle' | 'saving' | 'saved' | 'error';
+export type ArcadeSaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'invalid';
 
 interface Slot {
   run: ArcadeResult;
-  status: 'saving' | 'saved' | 'error';
+  status: 'saving' | 'saved' | 'error' | 'invalid';
   result?: ArcadeCompleteResult;
 }
 
 /**
  * Gửi kết quả MỘT ván đã đăng nhập lên máy chủ đúng một lần: theo đối tượng `run` (không theo lần vẽ), nên vẽ lại, Strict Mode hay `onEnd` bắn hai lần
  * không gửi thêm. Lỗi mạng giữ nguyên ván đó và chỉ `retry` mới gửi lại (máy chủ chặn ván trùng bằng TOO_FAST nên gửi lại không nhân đôi thưởng).
- * Khách chưa đăng nhập: không gửi gì, nhưng ván vẫn được giữ và tự gửi khi họ đăng nhập xong ngay trên bảng điểm.
+ * Khách chưa đăng nhập hoặc tài khoản khách theo thiết bị (`authed` = false): không gửi gì, nhưng ván vẫn được giữ và tự gửi khi họ đăng nhập xong ngay trên bảng điểm.
  */
 export function useArcadeComplete(run: ArcadeResult | null, authed: boolean) {
   const queryClient = useQueryClient();
@@ -34,8 +35,10 @@ export function useArcadeComplete(run: ArcadeResult | null, authed: boolean) {
         setSlot((s) => (s?.run === r ? { run: r, status: 'saved', result } : s));
         // Số Giọt nước ở Vườn và trạng thái lượt thưởng đổi theo ván này.
         void queryClient.invalidateQueries({ queryKey: ['game'] });
-      } catch {
-        setSlot((s) => (s?.run === r ? { run: r, status: 'error' } : s));
+      } catch (error) {
+        // 400: máy chủ từ chối chính ván này (điểm không hợp lệ), gửi lại vẫn 400 nên không mời thử lại. Mất mạng, quá hạn, 5xx thì thử lại được.
+        const status = isHttpError(error) && error.response?.status === 400 ? 'invalid' : 'error';
+        setSlot((s) => (s?.run === r ? { run: r, status } : s));
       } finally {
         if (inFlight.current === r) inFlight.current = null;
       }

@@ -6,13 +6,21 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
-  phase: 'authenticated' as 'authenticated' | 'guest' | 'loading',
+  phase: 'authenticated' as 'authenticated' | 'guest' | 'loading' | 'device',
   status: vi.fn(),
   mount: vi.fn(),
   controller: { start: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), resize: vi.fn() },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => vi.fn() }));
-vi.mock('../../hooks/use-auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
+vi.mock('../../store/auth', () => {
+  const state = () =>
+    mocks.phase === 'authenticated'
+      ? { status: 'authenticated', user: { id: 'u1', phone: '0900000001', zaloId: 'zalo-1' } }
+      : mocks.phase === 'device'
+        ? { status: 'authenticated', user: { id: 'g1', phone: null, zaloId: 'guest_abc' } }
+        : { status: mocks.phase === 'loading' ? 'loading' : 'unauthenticated', user: null };
+  return { useAuthStore: Object.assign((sel: (s: ReturnType<typeof state>) => unknown) => sel(state()), { getState: state }) };
+});
 vi.mock('../../hooks/use-login-notice', () => ({ useLoginWithNotice: () => vi.fn() }));
 vi.mock('../../services/arcade-api', () => ({
   arcadeStatusQuery: { queryKey: ['game', 'arcade'], queryFn: () => mocks.status() },
@@ -102,6 +110,17 @@ describe('ArcadeHub: sảnh mini game', () => {
     expect(screen.getAllByText(fillCopy('arcade.guest.demo'))).toHaveLength(1);
     expect(game('refill_rush').getByText(fillCopy('arcade.best', { n: 310 }))).toBeInTheDocument();
     expect(game('dew_catcher').queryByText(/^Kỷ lục/)).toBeNull();
+    expect(screen.queryByText(/Đã dùng \d+\/\d+ lượt thưởng/)).toBeNull();
+    expect(mocks.status).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản khách theo thiết bị (guest_): coi như khách chơi thử, đọc kỷ lục từ máy, KHÔNG gọi máy chủ', () => {
+    mocks.phase = 'device';
+    window.localStorage.setItem('tubu.arcade.best.dew_catcher', '120');
+    renderHub();
+    expect(screen.getByRole('button', { name: 'Chơi thử Hứng Sương Tinh Khiết' })).toBeInTheDocument();
+    expect(screen.getAllByText(fillCopy('arcade.guest.demo'))).toHaveLength(1);
+    expect(game('dew_catcher').getByText(fillCopy('arcade.best', { n: 120 }))).toBeInTheDocument();
     expect(screen.queryByText(/Đã dùng \d+\/\d+ lượt thưởng/)).toBeNull();
     expect(mocks.status).not.toHaveBeenCalled();
   });

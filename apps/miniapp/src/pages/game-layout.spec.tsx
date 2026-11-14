@@ -39,7 +39,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, user: { id: 'u1' }, login: vi.fn() };
+    const state = { status: mocks.auth.status, user: { id: 'u1', phone: '0900000001' }, login: vi.fn() };
     return sel ? sel(state) : state;
   },
 }));

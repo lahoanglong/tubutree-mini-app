@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ARCADE_GAME_IDS, type ArcadeGameId } from '@tubutree/app-core/arcade/arcade-config';
 import { arcadeWindowBadge } from '@tubutree/app-core/arcade/badge';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { useAuthPhase } from '../../hooks/use-auth-phase';
+import { useRealUser } from '../../hooks/use-real-user';
 import { arcadeStatusQuery } from '../../services/arcade-api';
 import { haptic } from '../../utils/haptic';
 import { Button } from '../ui/button';
@@ -30,12 +30,12 @@ function useMinuteClock(): Date {
 }
 
 /**
- * Sảnh mini game ở Vườn Xanh: huy hiệu khung giờ thưởng và hai thẻ game (tên, một dòng mô tả, kỷ lục, nút Chơi). Người đã đăng nhập thấy kỷ lục và số lượt thưởng đã dùng
+ * Sảnh mini game ở Vườn Xanh: huy hiệu khung giờ thưởng và hai thẻ game (tên, một dòng mô tả, kỷ lục, nút Chơi). Khách thật đã đăng nhập (không tính tài khoản khách theo thiết bị) thấy kỷ lục và số lượt thưởng đã dùng
  * hôm nay từ máy chủ; khách chơi thử, kỷ lục lưu trên máy. Giữ luôn trạng thái mở `ArcadeGameOverlay` nên nơi gắn chỉ cần một dòng `<ArcadeHub />`.
  */
 export function ArcadeHub() {
-  const authed = useAuthPhase() === 'authenticated';
-  const status = useQuery({ ...arcadeStatusQuery, enabled: authed, staleTime: 30_000 });
+  const real = useRealUser();
+  const status = useQuery({ ...arcadeStatusQuery, enabled: real, staleTime: 30_000 });
   const [open, setOpen] = useState<ArcadeGameId | null>(null);
   const headingId = useId();
   const badge = arcadeWindowBadge(useMinuteClock());
@@ -51,7 +51,7 @@ export function ArcadeHub() {
           {badge.hint}
         </Text>
       </div>
-      {!authed && (
+      {!real && (
         <Text variant="caption" tone="secondary" as="p">
           {fillCopy('arcade.guest.demo')}
         </Text>
@@ -61,7 +61,7 @@ export function ArcadeHub() {
           const key = COPY_KEY[gameId];
           const title = fillCopy(`arcade.${key}.title`);
           const server = status.data?.games[gameId];
-          const best = authed ? server?.bestScore ?? 0 : readLocalBest(gameId);
+          const best = real ? server?.bestScore ?? 0 : readLocalBest(gameId);
           return (
             <li key={gameId}>
               <Card variant="outline" padding={12}>
@@ -74,13 +74,13 @@ export function ArcadeHub() {
                       {fillCopy(`arcade.${key}.desc`)}
                     </Text>
                     <div className="tubu-arcade-meta">
-                      {authed && status.isLoading && <div className="tubu-skeleton tubu-arcade-meta" aria-hidden />}
+                      {real && status.isLoading && <div className="tubu-skeleton tubu-arcade-meta" aria-hidden />}
                       {best > 0 && (
                         <Text variant="caption" tone="secondary" as="p" numeric>
                           {fillCopy('arcade.best', { n: best })}
                         </Text>
                       )}
-                      {authed && server && (
+                      {real && server && (
                         <Text variant="caption" tone="secondary" as="p" numeric>
                           {fillCopy('arcade.result.used', { n: server.used, m: server.cap })}
                         </Text>
@@ -90,13 +90,13 @@ export function ArcadeHub() {
                   <Button
                     variant="secondary"
                     className="tubu-arcade-play"
-                    aria-label={`${fillCopy(authed ? 'arcade.play' : 'arcade.tryPlay')} ${title}`}
+                    aria-label={`${fillCopy(real ? 'arcade.play' : 'arcade.tryPlay')} ${title}`}
                     onPress={() => {
                       haptic('light');
                       setOpen(gameId);
                     }}
                   >
-                    {fillCopy(authed ? 'arcade.play' : 'arcade.tryPlay')}
+                    {fillCopy(real ? 'arcade.play' : 'arcade.tryPlay')}
                   </Button>
                 </div>
               </Card>

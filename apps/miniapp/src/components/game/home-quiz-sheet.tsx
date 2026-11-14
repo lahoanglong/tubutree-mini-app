@@ -4,8 +4,8 @@ import { useNavigate } from 'zmp-ui';
 import { homeQuizQuestions, pickKitProducts, type HomeQuizAnswers } from '@tubutree/app-core/arcade/home-quiz';
 import type { HomeQuizResult } from '@tubutree/app-core/api/game';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { useAuthPhase } from '../../hooks/use-auth-phase';
 import { useLoginWithNotice } from '../../hooks/use-login-notice';
+import { useRealUser } from '../../hooks/use-real-user';
 import { vi } from '../../i18n/vi';
 import { submitHomeQuiz } from '../../services/arcade-api';
 import { fetchProducts } from '../../services/shop-api';
@@ -39,7 +39,7 @@ export interface HomeQuizSheetProps {
 export function HomeQuizSheet({ open, onClose }: HomeQuizSheetProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const authed = useAuthPhase() === 'authenticated';
+  const real = useRealUser();
   const login = useLoginWithNotice();
   const questions = useMemo(() => homeQuizQuestions(), []);
   const [answers, setAnswers] = useState<Partial<HomeQuizAnswers>>({});
@@ -76,13 +76,14 @@ export function HomeQuizSheet({ open, onClose }: HomeQuizSheetProps) {
     },
     [queryClient],
   );
-  // Một lần cho cả đời thẻ: vẽ lại, Strict Mode, mở lại hay làm lại bộ câu hỏi không gửi thêm (quà chỉ có một lần cho mỗi tài khoản). Khách đăng nhập xong
-  // ngay trên kết quả thì `authed` đổi và quà tự được ghi.
+  // Một lần cho cả đời thẻ: vẽ lại, Strict Mode, mở lại hay làm lại bộ câu hỏi không gửi thêm (quà chỉ có một lần cho mỗi tài khoản); riêng sau lỗi thì "Làm lại"
+  // mở khoá (xem `retake`). Khách (kể cả tài khoản khách theo thiết bị, máy chủ không phát quà cho họ) không gửi gì; đăng nhập thật xong ngay trên kết quả thì `real` đổi
+  // và quà tự được ghi.
   useEffect(() => {
-    if (!complete || !authed || claimStarted.current) return;
+    if (!complete || !real || claimStarted.current) return;
     claimStarted.current = true;
     claimGift(complete);
-  }, [complete, authed, claimGift]);
+  }, [complete, real, claimGift]);
 
   // Sang câu kế thì đưa focus về tiêu đề câu hỏi: nút vừa bấm đã biến mất, trình đọc màn hình cần nghe câu mới.
   useEffect(() => {
@@ -102,7 +103,11 @@ export function HomeQuizSheet({ open, onClose }: HomeQuizSheetProps) {
   const retake = () => {
     setAnswers({});
     setStep(0);
-    setClaim({ status: 'idle' });
+    // Lần nhận quà vừa lỗi chưa tính: hoàn thành lần sau phải gửi lại. Đã gửi được (hay đang gửi) thì giữ nguyên, quà chỉ có một lần.
+    if (claim.status === 'error') {
+      claimStarted.current = false;
+      setClaim({ status: 'idle' });
+    }
   };
   const browse = () => {
     onClose();
@@ -111,6 +116,7 @@ export function HomeQuizSheet({ open, onClose }: HomeQuizSheetProps) {
 
   const current = done ? null : questions[step]!;
   const granted = claim.status === 'saved' && claim.result && !claim.result.alreadyClaimed && claim.result.granted > 0 ? claim.result.granted : 0;
+  const alreadyClaimed = claim.status === 'saved' && claim.result?.alreadyClaimed === true;
 
   return (
     <>
@@ -163,6 +169,11 @@ export function HomeQuizSheet({ open, onClose }: HomeQuizSheetProps) {
                   {fillCopy('homeQuiz.result.granted', { n: granted })}
                 </Text>
               )}
+              {alreadyClaimed && (
+                <Text variant="body-sm" tone="secondary" as="p">
+                  {fillCopy('homeQuiz.result.claimed')}
+                </Text>
+              )}
               {claim.status === 'error' && (
                 <>
                   <Text variant="body-sm" tone="danger" as="p">
@@ -174,7 +185,7 @@ export function HomeQuizSheet({ open, onClose }: HomeQuizSheetProps) {
                 </>
               )}
             </div>
-            {!authed && (
+            {!real && (
               <Button variant="secondary" onPress={() => login()}>
                 {fillCopy('homeQuiz.result.guest')}
               </Button>

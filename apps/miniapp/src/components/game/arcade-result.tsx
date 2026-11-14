@@ -1,6 +1,6 @@
 import { useId, useMemo } from 'react';
 import { useNavigate } from 'zmp-ui';
-import type { ArcadeCompleteResult, ArcadeReason } from '@tubutree/app-core/api/game';
+import type { ArcadeCompleteResult } from '@tubutree/app-core/api/game';
 import { arcadeWaterFor } from '@tubutree/app-core/arcade/arcade-config';
 import { endTip } from '@tubutree/app-core/arcade/arcade-tips';
 import type { ArcadeResult } from '@tubutree/app-core/arcade/arcade-canvas';
@@ -14,16 +14,19 @@ import { Heading, Text } from '../ui/text';
 import type { ArcadeSaveStatus } from './use-arcade-complete';
 import '../../css/arcade.css';
 
-const REASON_COPY: Record<ArcadeReason, string> = {
+// Khoá theo chuỗi: lý do máy chủ trả thêm mà bảng này chưa biết thì không hiện dòng giải thích, chứ không làm hỏng bảng điểm.
+const REASON_COPY: Record<string, string> = {
   DAILY_CAP: 'arcade.result.capped',
   TOO_FAST: 'arcade.result.tooFast',
   NOT_REAL_USER: 'arcade.result.notReal',
   DISABLED: 'arcade.result.disabled',
+  LOW_SCORE: 'arcade.result.lowScore',
 };
 
 export interface ArcadeResultPanelProps {
   run: ArcadeResult;
-  authed: boolean;
+  /** Khách thật đã đăng nhập (`useRealUser`): tài khoản khách theo thiết bị cũng là `false`, vì máy chủ không phát thưởng cho họ. */
+  real: boolean;
   save: { status: ArcadeSaveStatus; result: ArcadeCompleteResult | null };
   /** Kỷ lục chơi thử của khách (lưu trên máy); đã đăng nhập thì lấy từ máy chủ. */
   local: { best: number; isNewBest: boolean } | null;
@@ -37,12 +40,12 @@ export interface ArcadeResultPanelProps {
  * Bảng kết quả cuối ván. Vùng `aria-live="polite"` gồm điểm, kỷ lục và phần thưởng: phần thưởng về muộn sau máy chủ nên được đọc khi xuất hiện.
  * Lỗi lưu không làm mất bảng điểm: hiện câu báo và nút thử lại cho đúng ván này.
  */
-export function ArcadeResultPanel({ run, authed, save, local, onRetrySave, onLogin, onPlayAgain, onClose }: ArcadeResultPanelProps) {
+export function ArcadeResultPanel({ run, real, save, local, onRetrySave, onLogin, onPlayAgain, onClose }: ArcadeResultPanelProps) {
   const navigate = useNavigate();
   const headingId = useId();
   const tip = useMemo(() => endTip(run.gameId, run.stats), [run]);
   const saved = save.result;
-  const best = saved ? { best: saved.bestScore, isNewBest: saved.isNewBest } : authed ? null : local;
+  const best = saved ? { best: saved.bestScore, isNewBest: saved.isNewBest } : real ? null : local;
 
   return (
     <div className="tubu-arcade-panel" role="region" aria-labelledby={headingId} data-testid="arcade-result">
@@ -61,26 +64,31 @@ export function ArcadeResultPanel({ run, authed, save, local, onRetrySave, onLog
             {best.isNewBest && <Badge tone="brand">{fillCopy('arcade.newBest')}</Badge>}
           </div>
         )}
-        {authed && save.status === 'saving' && <div className="tubu-skeleton tubu-arcade-saving" aria-hidden data-testid="arcade-saving" />}
-        {authed && save.status === 'error' && (
+        {real && save.status === 'saving' && <div className="tubu-skeleton tubu-arcade-saving" aria-hidden data-testid="arcade-saving" />}
+        {real && save.status === 'error' && (
           <Text variant="body-sm" tone="danger" as="p">
             {fillCopy('arcade.result.error')}
           </Text>
         )}
+        {real && save.status === 'invalid' && (
+          <Text variant="body-sm" tone="danger" as="p">
+            {fillCopy('arcade.result.invalid')}
+          </Text>
+        )}
         {saved && <SavedRewards saved={saved} />}
-        {!authed && (
+        {!real && (
           <Text variant="caption" tone="secondary" as="p">
             {fillCopy('arcade.guest.demo')}
           </Text>
         )}
       </div>
 
-      {authed && save.status === 'error' && (
+      {real && save.status === 'error' && (
         <Button variant="secondary" onPress={onRetrySave}>
           {vi.common.retry}
         </Button>
       )}
-      {!authed && (
+      {!real && (
         <Button
           onPress={() => {
             haptic('light');
@@ -118,7 +126,7 @@ export function ArcadeResultPanel({ run, authed, save, local, onRetrySave, onLog
 }
 
 function SavedRewards({ saved }: { saved: ArcadeCompleteResult }) {
-  const reason = saved.reason ? REASON_COPY[saved.reason] : null;
+  const reason = saved.reason ? (REASON_COPY[saved.reason] ?? null) : null;
   return (
     <ul className="tubu-arcade-rewards" data-testid="arcade-rewards">
       {saved.waterEarned > 0 && (
@@ -142,7 +150,7 @@ function SavedRewards({ saved }: { saved: ArcadeCompleteResult }) {
           </Text>
         </li>
       )}
-      {(saved.reason === null || saved.reason === 'DAILY_CAP') && saved.cap > 0 && (
+      {(saved.reason === null || saved.reason === 'DAILY_CAP' || saved.reason === 'LOW_SCORE') && saved.cap > 0 && (
         <li>
           <Text variant="caption" tone="secondary" numeric>
             {fillCopy('arcade.result.used', { n: saved.used, m: saved.cap })}
