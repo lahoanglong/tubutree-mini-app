@@ -30,16 +30,16 @@ function makeClient(pages: unknown[][]): PancakeClient {
 type Prev = { retailPrice: number; salePrice: number | null; isActive: boolean; pancakeHold: string | null } | null;
 
 /** Prisma giả: `ops` giữ các hàng ops_health_states như bảng thật (key → bản ghi cuối), `prevByVariation` là biến thể đã có trên Tubu. */
-function makePrisma(opts: { prevByVariation?: Record<string, Prev>; ops?: Map<string, { detail: unknown }>; opsUpsert?: jest.Mock; productCreate?: jest.Mock } = {}) {
+function makePrisma(opts: { prevByVariation?: Record<string, Prev>; ops?: Map<string, { detail: unknown }>; opsUpsert?: jest.Mock; productCreate?: jest.Mock; existingProduct?: Record<string, unknown> } = {}) {
   const ops = opts.ops ?? new Map<string, { detail: unknown }>();
   const upsert =
     opts.opsUpsert ??
     jest.fn(async ({ where, update }: { where: { key: string }; update: { detail?: unknown } }) => {
       ops.set(where.key, { detail: update.detail });
     });
-  const prisma = {
+  const base = {
     product: {
-      findUnique: jest.fn().mockResolvedValue(null),
+      findUnique: jest.fn().mockResolvedValue(opts.existingProduct ?? null),
       create: opts.productCreate ?? jest.fn().mockImplementation(async ({ data }) => ({ id: `prod-${data.pancakeId}`, ...data })),
       update: jest.fn().mockImplementation(async ({ data }) => ({ id: 'existing', ...data })),
       findMany: jest.fn().mockResolvedValue([]),
@@ -56,6 +56,8 @@ function makePrisma(opts: { prevByVariation?: Record<string, Prev>; ops?: Map<st
     $executeRaw: jest.fn().mockResolvedValue(1),
     $queryRaw: jest.fn().mockResolvedValue([{ holder: 'this-run' }]),
   };
+  // `$transaction` đứng ngoài literal: tự tham chiếu `prisma` trong chính literal làm TS suy ra `any` cho cả đối tượng.
+  const prisma = { ...base, $transaction: jest.fn(async (fn: (tx: unknown) => unknown) => fn(base)) };
   return { prisma: prisma as unknown as PrismaService, raw: prisma, ops };
 }
 
@@ -269,5 +271,95 @@ describe('W131: Pancake báo 0đ không được xoá giá đang bán, và phả
     expect(r.n).toBe(1);
     expect(ops.get(CATALOG_STATE_KEY)?.detail).toMatchObject({ count: 1, failed: 0, zeroPriceAnomalies: 1 });
     expect(warn.mock.calls.some((c) => String(c[0]).includes('Không ghi được danh sách SKU giá 0đ'))).toBe(true);
+  });
+});
+
+describe('W156: biến thể/sản phẩm REMOVED mà Pancake trả lại với giá 0đ không được tự mở bán lại theo giá cũ', () => {
+  const removedAt = (retailPrice: number): NonNullable<Prev> => ({ retailPrice, salePrice: null, isActive: false, pancakeHold: 'REMOVED' });
+
+  it('biến thể REMOVED (còn giá cũ 89.000đ) quay lại payload với retail_price 0: chuyển NO_PRICE, vẫn ngừng bán, không giữ giá cũ để bán', async () => {
+    const r = await run([product('p1', [variation('v1', { retail_price: 0 })])], { prevByVariation: { v1: removedAt(89_000) } });
+    expect(r.call!.update).toMatchObject({ isActive: false, pancakeHold: 'NO_PRICE' });
+    expect(r.call!.update).not.toHaveProperty('retailPrice');
+    expect(r.call!.update).not.toMatchObject({ isActive: true });
+    expect(r.zero!.skus[0]).toMatchObject({ pancakeId: 'v1', kind: 'NEW_AT_ZERO', keptPrice: null });
+    expect(notifyPriceDrop).not.toHaveBeenCalled();
+  });
+
+  it.each([[null], [undefined], ['abc']])('biến thể REMOVED quay lại với retail_price %j (thiếu/rác): cũng không mở bán lại theo giá cũ', async (retail) => {
+    const r = await run([product('p1', [variation('v1', { retail_price: retail })])], { prevByVariation: { v1: removedAt(89_000) } });
+    expect(r.call!.update).toMatchObject({ isActive: false, pancakeHold: 'NO_PRICE' });
+  });
+
+  it('biến thể NO_PRICE vừa chuyển từ REMOVED: lượt sau vẫn 0đ thì giữ nguyên NO_PRICE, không ghi lại', async () => {
+    const r = await run([product('p1', [variation('v1', { retail_price: 0 })])], { prevByVariation: { v1: { retailPrice: 89_000, salePrice: null, isActive: false, pancakeHold: 'NO_PRICE' } } });
+    expect(r.call!.update).not.toHaveProperty('isActive');
+    expect(r.call!.update).not.toHaveProperty('pancakeHold');
+    // Giá cũ còn trong DB không được báo là "đã giữ giá cũ": SKU đang ngừng bán, admin phải sửa giá trên Pancake.
+    expect(r.zero!.skus[0]).toMatchObject({ pancakeId: 'v1', kind: 'NEW_AT_ZERO', keptPrice: null });
+    expect(r.zero).toMatchObject({ count: 1, keptCount: 0, newCount: 1 });
+  });
+
+  it('biến thể is_gift đã chuyển NO_PRICE (còn giá cũ trong DB) vẫn 0đ: không báo, như quà tặng chưa từng bán', async () => {
+    const r = await run([product('p1', [variation('v1', { retail_price: 0, is_gift: true })])], {
+      prevByVariation: { v1: { retailPrice: 89_000, salePrice: null, isActive: false, pancakeHold: 'NO_PRICE' } },
+    });
+    expect(r.zero).toMatchObject({ count: 0 });
+  });
+
+  it('Pancake gửi giá > 0 hợp lệ cho biến thể REMOVED: mở bán lại với giá MỚI', async () => {
+    const r = await run([product('p1', [variation('v1', { retail_price: 95_000 })])], { prevByVariation: { v1: removedAt(89_000) } });
+    expect(r.call!.update).toMatchObject({ isActive: true, pancakeHold: null, retailPrice: 95_000 });
+  });
+
+  it('Pancake gửi giá > 0 cho biến thể NO_PRICE (đã chuyển từ REMOVED): mở bán lại với giá mới', async () => {
+    const r = await run([product('p1', [variation('v1', { retail_price: 95_000 })])], {
+      prevByVariation: { v1: { retailPrice: 89_000, salePrice: null, isActive: false, pancakeHold: 'NO_PRICE' } },
+    });
+    expect(r.call!.update).toMatchObject({ isActive: true, pancakeHold: null, retailPrice: 95_000 });
+  });
+
+  it('mở bán lại từ REMOVED/NO_PRICE với giá thấp hơn giá cũ trong DB: KHÔNG báo wishlist "giảm giá" (giá cũ chưa từng là giá khách thấy)', async () => {
+    for (const hold of ['REMOVED', 'NO_PRICE']) {
+      notifyPriceDrop.mockClear();
+      const r = await run([product('p1', [variation('v1', { retail_price: 80_000 })])], {
+        prevByVariation: { v1: { retailPrice: 89_000, salePrice: null, isActive: false, pancakeHold: hold } },
+      });
+      expect(r.call!.update).toMatchObject({ isActive: true, pancakeHold: null, retailPrice: 80_000 });
+      expect(notifyPriceDrop).not.toHaveBeenCalled();
+    }
+  });
+
+  it('đang bán 89.000đ (không bị giữ) hạ còn 80.000đ: vẫn báo giảm giá như trước', async () => {
+    await run([product('p1', [variation('v1', { retail_price: 80_000 })])], { prevByVariation: { v1: sellingAt(89_000) } });
+    expect(notifyPriceDrop).toHaveBeenCalledTimes(1);
+  });
+
+  it('biến thể admin tắt tay (pancakeHold null) báo 0đ: không bị đồng bộ động tới (không mở, không đổi hold)', async () => {
+    const r = await run([product('p1', [variation('v1', { retail_price: 0 })])], { prevByVariation: { v1: sellingAt(89_000, { isActive: false }) } });
+    expect(r.call!.update).not.toHaveProperty('isActive');
+    expect(r.call!.update).not.toHaveProperty('pancakeHold');
+  });
+
+  it('SẢN PHẨM REMOVED (basePrice cũ > 0) quay lại mà mọi biến thể đều 0đ: sản phẩm chuyển NO_PRICE, không mở bán lại theo giá cũ', async () => {
+    const m = makePrisma({
+      existingProduct: { id: 'prod-1', pancakeId: 'p1', name: 'Lau sàn quế 500ml', basePrice: 89_000, isActive: false, pancakeHold: 'REMOVED', images: [], thumbnail: null, forSegment: ['eco'], categoryIds: ['c1'], description: '' },
+      prevByVariation: { v1: removedAt(89_000) },
+    });
+    const svc = new PancakeSyncService(m.prisma, makeClient([[product('p1', [variation('v1', { retail_price: 0 })])]]), lifecycle);
+    await svc.syncProducts();
+    const data = (m.raw.product.update.mock.calls[0]?.[0] as { data: Record<string, unknown> }).data;
+    expect(data).toMatchObject({ isActive: false, pancakeHold: 'NO_PRICE' });
+  });
+
+  it('SẢN PHẨM REMOVED quay lại và có biến thể giá > 0: sản phẩm mở bán lại như cũ', async () => {
+    const m = makePrisma({
+      existingProduct: { id: 'prod-1', pancakeId: 'p1', name: 'Lau sàn quế 500ml', basePrice: 89_000, isActive: false, pancakeHold: 'REMOVED', images: [], thumbnail: null, forSegment: ['eco'], categoryIds: ['c1'], description: '' },
+      prevByVariation: { v1: removedAt(89_000) },
+    });
+    const svc = new PancakeSyncService(m.prisma, makeClient([[product('p1', [variation('v1', { retail_price: 95_000 })])]]), lifecycle);
+    await svc.syncProducts();
+    const data = (m.raw.product.update.mock.calls[0]?.[0] as { data: Record<string, unknown> }).data;
+    expect(data).toMatchObject({ isActive: true, pancakeHold: null, basePrice: 95_000 });
   });
 });

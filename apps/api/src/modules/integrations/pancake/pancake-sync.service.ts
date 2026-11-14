@@ -491,11 +491,14 @@ export class PancakeSyncService implements OnModuleInit {
       }
       return { prices: { retailPrice: retail, salePrice: sale }, noPrice: false };
     }
+    // Biến thể đang bị giữ REMOVED (Pancake từng bỏ nó) mà quay lại không kèm giá hợp lệ thì giá cũ trong DB là giá của lần bán trước, không phải
+    // giá Pancake đang báo: không được dùng nó để mở bán lại. Chuyển sang NO_PRICE và chỉ mở khi Pancake gửi giá dương.
+    const wasRemoved = prev?.pancakeHold === PANCAKE_HOLD.REMOVED;
     this.logger.warn(
       `Biến thể Pancake ${v.id} thiếu/không hợp lệ retail_price (${JSON.stringify(v.retail_price) ?? 'undefined'}) — ` +
-        (prev && prev.retailPrice > 0 ? `giữ giá cũ ${prev.retailPrice}.` : 'không mở bán tới khi có giá.'),
+        (prev && prev.retailPrice > 0 && prev.pancakeHold == null ? `giữ giá cũ ${prev.retailPrice}.` : 'không mở bán tới khi có giá.'),
     );
-    return { prices: {}, noPrice: !prev || prev.retailPrice <= 0 || prev.pancakeHold === PANCAKE_HOLD.NO_PRICE };
+    return { prices: {}, noPrice: !prev || prev.retailPrice <= 0 || prev.pancakeHold === PANCAKE_HOLD.NO_PRICE || wasRemoved };
   }
 
   /** `false` = bỏ qua vì thiếu mã/tên đọc được (dữ liệu hỏng của Pancake), không ghi gì. */
@@ -535,7 +538,8 @@ export class PancakeSyncService implements OnModuleInit {
     // Chưa biến thể nào có giá (và sản phẩm chưa từng bán có giá) → chưa mở bán, kẻo hiện "0đ" ngoài danh mục.
     // Sản phẩm đang bán mà Pancake tạm trả thiếu giá thì giữ bán theo giá cũ như biến thể (variationPrices).
     const priced = sellable.length > 0;
-    const soldBefore = !!existing && existing.basePrice > 0 && existing.pancakeHold !== PANCAKE_HOLD.NO_PRICE;
+    // Sản phẩm đang bị giữ REMOVED không tính là "đã từng bán": giá cũ của nó không đủ để mở bán lại khi Pancake trả về mà chưa biến thể nào có giá.
+    const soldBefore = !!existing && existing.basePrice > 0 && existing.pancakeHold !== PANCAKE_HOLD.NO_PRICE && existing.pancakeHold !== PANCAKE_HOLD.REMOVED;
     const productHold = this.holdPatch(
       existing,
       payloadRemoved(p.is_removed) ? PANCAKE_HOLD.REMOVED : !priced && !soldBefore ? PANCAKE_HOLD.NO_PRICE : null,
@@ -667,7 +671,8 @@ export class PancakeSyncService implements OnModuleInit {
     const hold = this.holdPatch(prev, removed ? PANCAKE_HOLD.REMOVED : noPrice ? PANCAKE_HOLD.NO_PRICE : null);
     // Biến thể khách không mua được sau lượt này (Pancake xoá, hoặc admin đã tắt bán) hạ giá thì không báo "giảm giá".
     const sellable = !removed && (hold.isActive ?? prev?.isActive) !== false;
-    if (prev && sellable && prices.retailPrice != null) {
+    // Biến thể đang bị giữ (REMOVED/NO_PRICE) không đang bán: giá cũ trong DB không phải giá khách thấy, nên mở bán lại với giá mới không phải "giảm giá".
+    if (prev && sellable && prev.pancakeHold == null && prices.retailPrice != null) {
       const newEff = prices.salePrice ?? prices.retailPrice;
       const oldEff = prev.salePrice ?? prev.retailPrice;
       if (newEff > 0 && newEff < oldEff) drop = { oldPrice: oldEff, newPrice: newEff };

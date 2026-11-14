@@ -392,11 +392,15 @@ describe('cột nguồn đơn trong CSV đơn hàng (D1-04a)', () => {
   });
 
   it('cột CK thương mại trên HĐ: tiền hàng (Tạm tính) giữ đủ đơn giá gốc, chiết khấu thương mại là cột riêng, tiền quy đổi Điểm Xanh không tính vào', async () => {
-    const base = fakeOrders(3).map((o) => ({ ...o, note: null }));
+    const base = fakeOrders(5).map((o) => ({ ...o, note: null }));
     const orders = [
       { ...base[0]!, subtotal: 100_000, discount: 20_000, tierDiscount: 20_000, shippingFee: 0, total: 80_000 },
       { ...base[1]!, subtotal: 200_000, discount: 50_000, couponDiscount: 30_000, pointsDiscount: 20_000, total: 170_000 },
-      { ...base[2]!, subtotal: 100_000, discount: 20_000, total: 100_000 },
+      { ...base[2]!, subtotal: 100_000, discount: 20_000, pointsUsed: 0, total: 100_000 },
+      // Đơn lẻ cũ: bốn cột giảm đều 0 nhưng khách đã dùng 10.000 Điểm Xanh (1 điểm = 1đ) → 10.000đ là tiền điểm, không phải CK thương mại.
+      { ...base[3]!, subtotal: 100_000, discount: 30_000, pointsUsed: 10_000, total: 70_000 },
+      // Đơn đại lý mới có cột bậc đại lý: pointsUsed không được trừ thêm lần nữa.
+      { ...base[4]!, subtotal: 100_000, discount: 20_000, tierDiscount: 20_000, pointsUsed: 7_000, total: 80_000 },
     ];
     const { prisma } = twoModelPrisma(orders, []);
     const lines = (await collect(orderCsvChunks(prisma, {}))).trimEnd().split('\r\n');
@@ -408,6 +412,8 @@ describe('cột nguồn đơn trong CSV đơn hàng (D1-04a)', () => {
     expect([row(1)[subtotalCol], row(1)[discountCol], row(1)[tradeCol]]).toEqual(['200000', '50000', '30000']);
     // Đơn cũ chỉ có tổng giảm (các cột phần đều không có): coi trọn là chiết khấu thương mại.
     expect([row(2)[subtotalCol], row(2)[tradeCol]]).toEqual(['100000', '20000']);
+    expect([row(3)[subtotalCol], row(3)[discountCol], row(3)[tradeCol]]).toEqual(['100000', '30000', '20000']);
+    expect([row(4)[discountCol], row(4)[tradeCol]]).toEqual(['20000', '20000']);
   });
 
   it('đơn gian hàng do khách tự mua qua link CTV: nền tảng, nguồn, CTV, gian hàng, mỗi lô chỉ tra CTV một lần', async () => {

@@ -60,6 +60,21 @@ describe('OrderInvoiceBreakdown: chiết khấu thương mại ghi thẳng trên
     expect(rowText(container, 'total')).toBe('Tổng cộng hoá đơn75.000đ');
   });
 
+  it('đơn lẻ CŨ (bốn cột giảm đều 0) có dùng Điểm Xanh: tiền điểm hiện dòng riêng, CK thương mại chỉ còn phần voucher', () => {
+    const { container } = mount(
+      <OrderInvoiceBreakdown order={order({ type: 'RETAIL', subtotal: 100_000, discount: 30_000, pointsUsed: 10_000, total: 70_000 })} />,
+    );
+    expect(rowText(container, 'trade')).toContain('-20.000đ');
+    expect(rowText(container, 'points')).toContain('-10.000đ');
+    expect(rowText(container, 'total')).toBe('Tổng cộng hoá đơn70.000đ');
+  });
+
+  it('đơn lẻ CŨ chỉ có voucher (không dùng điểm): không có dòng Điểm Xanh, CK thương mại giữ trọn tổng giảm', () => {
+    const { container } = mount(<OrderInvoiceBreakdown order={order({ type: 'RETAIL', subtotal: 100_000, discount: 30_000, pointsUsed: 0, total: 70_000 })} />);
+    expect(rowText(container, 'trade')).toContain('-30.000đ');
+    expect(rowText(container, 'points')).toBeNull();
+  });
+
   it('chiết khấu thanh toán không bao giờ là dòng của hoá đơn; chú thích chỉ sang khối Công nợ đại lý', () => {
     const { container } = mount(<OrderInvoiceBreakdown order={order({ subtotal: 100_000, discount: 20_000 })} />);
     const labels = Array.from(container.querySelectorAll('dt')).map((d) => d.textContent);
