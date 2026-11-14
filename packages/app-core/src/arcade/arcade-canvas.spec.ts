@@ -587,6 +587,73 @@ describe('Dew: tim', () => {
   });
 });
 
+describe('Rush: bố cục không đè chữ (khung 360 x 756)', () => {
+  const px = (o: { font: string }) => Number(/(\d+)px/.exec(o.font)![1]);
+  const W = 360;
+  const H = 756;
+  function playing(seed = 3) {
+    const h = setup('refill_rush', {}, seed);
+    h.api.resize(W, H, 1);
+    h.api.start();
+    h.frames(45);
+    h.clear();
+    return h;
+  }
+
+  it('cây trang trí nằm trọn trong dải trống giữa thanh Fever và khung vật, xa nhãn, thanh thời gian và cue', () => {
+    const h = playing();
+    h.frame();
+    const trees = h.textOf('🌲');
+    expect(trees).toHaveLength(5);
+    for (const t of trees) {
+      expect((t.args[1]! - px(t) * 0.58) / H, 'đỉnh cây dưới thanh Fever').toBeGreaterThan(0.09 + 0.013);
+      expect((t.args[1]! + px(t) * 0.58) / H, 'đáy cây trên khung vật (bắt đầu ở 0.3)').toBeLessThan(0.3);
+    }
+    const label = h.texts().find((o) => LABEL_STATION.has(o.text!))!;
+    expect(label.args[1]! / H).toBeGreaterThan(0.3);
+  });
+
+  it('Dew giữ nguyên vị trí cây', () => {
+    const h = setup('dew_catcher');
+    h.api.start();
+    expect(h.textOf('🌲').map((o) => o.args[1]! / 600)).toEqual([0.56, 0.59, 0.56, 0.59, 0.56].map((y) => expect.closeTo(y, 5)));
+  });
+
+  it('cue Sai −2s màu danger, đủ đậm sau nửa giây và nằm trong dải sạch giữa thanh thời gian vật và các ô trạm', () => {
+    const seed = 3;
+    const h = playing(seed);
+    h.keys('keydown', KEY_OF[other(firstStation(seed))]);
+    h.frame(16);
+    const wrong = fillCopy('arcade.hud.wrong');
+    const first = h.textOf(wrong)[0]!;
+    expect(first.fill).toBe(THEME.danger);
+    expect(first.alpha).toBe(1);
+    h.clear();
+    h.frame(500);
+    const later = h.textOf(wrong)[0]!;
+    expect(later.fill).toBe(THEME.danger);
+    expect(later.alpha).toBe(1);
+    for (const cue of [first, later]) {
+      expect(cue.args[1]! / H).toBeGreaterThan(0.57 + 0.013 + 0.02);
+      expect(cue.args[1]! / H).toBeLessThan(0.66);
+    }
+    expect(later.args[1]!).toBeLessThan(first.args[1]!);
+  });
+
+  it('mũi tên trạm to hơn và sát nhãn: không chạm nhãn, cách chưa tới 7% chiều cao', () => {
+    const h = playing();
+    h.frame();
+    const bays: [RushStation, string][] = [['return', '⬅'], ['compost', '⬇'], ['refill', '➡']];
+    for (const [station, glyph] of bays) {
+      const label = h.textOf(fillCopy(`arcade.station.${station}.short`))[0]!;
+      const arrow = h.textOf(glyph)[0]!;
+      expect(px(arrow), station).toBeGreaterThanOrEqual(0.085 * W);
+      expect(label.args[1]! - arrow.args[1]!, station).toBeLessThan(0.07 * H);
+      expect(arrow.args[1]! + px(arrow) * 0.55, station).toBeLessThan(label.args[1]! - px(label) * 0.55);
+    }
+  });
+});
+
 describe('reducedMotion', () => {
   function playRush(reducedMotion: boolean) {
     const seed = 3;
@@ -596,7 +663,7 @@ describe('reducedMotion', () => {
     h.keys('keydown', { return: 'ArrowLeft', refill: 'ArrowRight', compost: 'ArrowDown' }[firstStation(seed)]);
     const cueY: number[] = [];
     const cueAlpha: number[] = [];
-    for (const ms of [16, 100, 100]) {
+    for (const ms of [16, ...Array(16).fill(50)]) {
       h.clear();
       h.frame(ms);
       const cue = h.textOf('+10')[0];
@@ -608,15 +675,15 @@ describe('reducedMotion', () => {
 
   it('cue điểm nổi lên và mờ dần; reducedMotion giữ yên chỗ nhưng vẫn mờ dần', () => {
     const moving = playRush(false);
-    expect(moving.cueY[1]).toBeLessThan(moving.cueY[0]!);
-    expect(moving.cueY[2]).toBeLessThan(moving.cueY[1]!);
+    // Mỗi khung chỉ tiến tối đa 50 ms: tuổi cue là 16, 66, ..., 816 ms.
+    for (let i = 1; i < 17; i++) expect(moving.cueY[i]).toBeLessThan(moving.cueY[i - 1]!);
     const still = playRush(true);
-    expect(still.cueY[1]).toBe(still.cueY[0]);
-    expect(still.cueY[2]).toBe(still.cueY[0]);
+    for (let i = 1; i < 17; i++) expect(still.cueY[i]).toBe(still.cueY[0]);
     for (const r of [moving, still]) {
-      expect(r.cueAlpha[0]).toBeLessThan(1);
-      expect(r.cueAlpha[1]).toBeLessThan(r.cueAlpha[0]!);
-      expect(r.cueAlpha[2]).toBeLessThan(r.cueAlpha[1]!);
+      expect(r.cueAlpha.slice(0, 12)).toEqual(Array(12).fill(1));
+      expect(r.cueAlpha[12]).toBeLessThan(1);
+      for (let i = 13; i < 17; i++) expect(r.cueAlpha[i]).toBeLessThan(r.cueAlpha[i - 1]!);
+      expect(r.cueAlpha[16]).toBeGreaterThan(0);
     }
   });
 

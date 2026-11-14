@@ -56,7 +56,7 @@ export function mountArcade(o: ArcadeMountOptions) {
   let keyDir = 0;
   let down: { x: number; y: number } | null = null;
   let hudKey = '';
-  let cue: { text: string; x: number; y: number; age: number; color: string } | null = null;
+  let cue: { text: string; x: number; y: number; age: number; color: string; rise: number; fade: number } | null = null;
 
   const txt = (t: string, x: number, y: number, size: number, color = theme.ink, align = 'center', a = 1) => {
     g.globalAlpha = a;
@@ -109,8 +109,8 @@ export function mountArcade(o: ArcadeMountOptions) {
     BAYS.forEach(([station, arrow], i) => {
       const b = bay(i);
       box(b.x, b.y, b.w, b.h, theme.surface);
-      txt(arrow, b.x + b.w / 2, b.y + b.h * 0.34, 0.06, theme.forest);
-      txt(fillCopy(`arcade.station.${station}.short`), b.x + b.w / 2, b.y + b.h * 0.78, 0.04);
+      txt(arrow, b.x + b.w / 2, b.y + b.h * 0.42, 0.09, theme.forest);
+      txt(fillCopy(`arcade.station.${station}.short`), b.x + b.w / 2, b.y + b.h * 0.68, 0.04);
     });
   };
 
@@ -119,10 +119,10 @@ export function mountArcade(o: ArcadeMountOptions) {
     if (!ev) return;
     if ('mult' in ev) {
       const text = ev.type === 'hit' ? '−❤️' : `+${ev.points}${ev.mult > 1 && !reduced ? ' ✦' : ''}`;
-      cue = { text, x: ev.x, y: DEW_CATCH_Y - 0.04, age: 0, color: ev.type === 'hit' ? theme.danger : theme.forest };
+      cue = { text, x: ev.x, y: DEW_CATCH_Y - 0.04, age: 0, color: ev.type === 'hit' ? theme.danger : theme.forest, rise: 0.12, fade: 1 };
     } else {
       const b = bay(BAYS.findIndex(([st]) => st === ev.station));
-      cue = { text: ev.type === 'correct' ? `+${ev.points}` : fillCopy(`arcade.hud.${ev.type}`), x: b.x + b.w / 2, y: b.y - 0.03, age: 0, color: ev.type === 'correct' ? theme.forest : theme.danger };
+      cue = { text: ev.type === 'correct' ? `+${ev.points}` : fillCopy(`arcade.hud.${ev.type}`), x: b.x + b.w / 2, y: b.y - 0.03, age: 0, color: ev.type === 'correct' ? theme.forest : theme.danger, rise: 0.02, fade: 3 };
     }
   };
 
@@ -131,7 +131,8 @@ export function mountArcade(o: ArcadeMountOptions) {
     g.setTransform(dpr, 0, 0, dpr, 0, 0);
     g.textBaseline = 'middle';
     box(0, 0, 1, 1, theme.bg);
-    for (let i = 0; i < 5; i++) txt('🌲', (i + 0.5) / 5, 0.56 + (i % 2) * 0.03, 0.2, theme.ink, 'center', 0.16);
+    // Rush: cây ở dải trống trên khung vật, không đè nhãn, thanh và cue.
+    for (let i = 0; i < 5; i++) txt('🌲', (i + 0.5) / 5, (rush ? 0.2 : 0.56) + (i % 2) * 0.03, 0.2, theme.ink, 'center', 0.16);
     box(0, 0.94, 1, 0.06, theme.sage, 0.4);
     const s = dew ? dew.state() : rush!.state();
     let hud: ArcadeHud;
@@ -144,7 +145,7 @@ export function mountArcade(o: ArcadeMountOptions) {
       drawRush(r);
       hud = { score: r.score, secondsLeft: Math.ceil(r.timeLeftMs / 1000), lives: null, combo: r.streak, multiplier: r.feverMs > 0 ? 2 : 1 };
     }
-    if (cue && (cue.age += dt) < 900) txt(cue.text, cue.x, cue.y - (reduced ? 0 : (cue.age / 1000) * 0.12), 0.05, cue.color, 'center', 1 - cue.age / 900);
+    if (cue && (cue.age += dt) < 900) txt(cue.text, cue.x, cue.y - (reduced ? 0 : (cue.age / 1000) * cue.rise), 0.05, cue.color, 'center', Math.min(1, cue.fade * (1 - cue.age / 900)));
     const key = JSON.stringify(hud);
     if (key !== hudKey) {
       hudKey = key;
