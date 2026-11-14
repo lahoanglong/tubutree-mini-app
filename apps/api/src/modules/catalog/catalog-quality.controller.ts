@@ -13,6 +13,7 @@ import { CatalogAuditService } from './catalog-audit.service';
 import { CopyApproveService } from './copy-approve.service';
 import { CopyDraftService } from './copy-draft.service';
 import { IngredientEnrichService } from './ingredient-enrich.service';
+import { SEO_APPLY_MAX_BATCH, SeoEnrichService, type SeoApplyItem } from './seo-enrich.service';
 
 export class CopyDraftsDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(COPY_DRAFT_MAX_BATCH) @ArrayUnique() @IsString({ each: true }) @IsNotEmpty({ each: true }) @MaxLength(64, { each: true }) ids!: string[];
@@ -44,6 +45,18 @@ export class SaveIngredientsDto {
   @IsArray() @ArrayMinSize(1) @ArrayMaxSize(COPY_INGREDIENTS_MAX + 12) @TrimEach() @IsString({ each: true }) @MaxLength(200, { each: true }) ingredients!: string[];
 }
 
+// Trần ở DTO rộng hơn trần nội dung (65/155 ký tự): vượt trần nội dung thì service nêu lý do kèm tên sản phẩm, không làm 400 chung cả lô.
+export class SeoApplyItemDto implements SeoApplyItem {
+  @IsString() @IsNotEmpty() @MaxLength(64) productId!: string;
+  @Trim() @IsString() @MaxLength(400) metaTitle!: string;
+  @Trim() @IsString() @MaxLength(1000) metaDesc!: string;
+}
+
+export class SeoApplyDto {
+  // Cùng khuôn với CopyApproveDto: phần tử không phải đối tượng bị 400 ở `IsObject`, `i?.productId` để `ArrayUnique` không ném TypeError (500) trên `null`.
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(SEO_APPLY_MAX_BATCH) @IsObject({ each: true }) @ArrayUnique((i: SeoApplyItemDto | null) => i?.productId) @ValidateNested({ each: true }) @Type(() => SeoApplyItemDto) items!: SeoApplyItemDto[];
+}
+
 /**
  * Bàn làm việc chất lượng catalog (admin): xem sản phẩm thiếu mô tả/thành phần, nhờ AI soạn bản nháp, rồi duyệt ghi vào DB.
  * Prefix riêng `admin/catalog-quality`, không nằm dưới `admin/catalog-products/:id` để không đụng route theo id.
@@ -57,6 +70,7 @@ export class CatalogQualityController {
     private readonly drafts: CopyDraftService,
     private readonly approval: CopyApproveService,
     private readonly ingredients: IngredientEnrichService,
+    private readonly seo: SeoEnrichService,
   ) {}
 
   @Get('audit')
@@ -79,6 +93,18 @@ export class CatalogQualityController {
   @Post('copy-approve')
   copyApprove(@CurrentUser('sub') adminId: string, @Body() dto: CopyApproveDto) {
     return this.approval.approve(adminId, dto.items);
+  }
+
+  /** Hiện trạng SEO của sản phẩm nhà đang bán kèm bản đề xuất dựng từ dữ liệu thật. Chỉ đọc, không gọi AI. */
+  @Get('seo')
+  getSeo() {
+    return this.seo.list();
+  }
+
+  /** Ghi `metaTitle`/`metaDesc` admin đã duyệt: cả lô trong một giao dịch, từ chối trống, quá dài, mã HTML và tuyên bố ngoài tên sản phẩm. */
+  @Post('seo/apply')
+  applySeo(@CurrentUser('sub') adminId: string, @Body() dto: SeoApplyDto) {
+    return this.seo.apply(adminId, dto.items);
   }
 
   /** AI đọc mục Thành phần trên ảnh bao bì ra bản nháp. Không ghi DB; mỗi lượt gọi AI trả phí nên giới hạn tốc độ riêng. */

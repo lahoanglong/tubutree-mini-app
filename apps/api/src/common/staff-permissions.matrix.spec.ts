@@ -222,6 +222,8 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/catalog-quality/copy-approve': ADMIN_ONLY,
   'POST /admin/catalog-quality/:id/extract-ingredients': ADMIN_ONLY,
   'POST /admin/catalog-quality/:id/ingredients': ADMIN_ONLY,
+  'GET /admin/catalog-quality/seo': ADMIN_ONLY,
+  'POST /admin/catalog-quality/seo/apply': ADMIN_ONLY,
   'GET /admin/catalog-wp-images': ADMIN_ONLY,
   'POST /admin/catalog-wp-images/:productId/approve': ADMIN_ONLY,
   'POST /admin/catalog-wp-images/:productId/skip': ADMIN_ONLY,

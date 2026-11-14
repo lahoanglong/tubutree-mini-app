@@ -5,10 +5,11 @@ import { validate } from 'class-validator';
 import { COPY_DRAFT_MAX_BATCH } from '@tubutree/shared-types';
 import { ROLES_KEY } from '../../common/decorators/roles.decorator';
 import type { CatalogAuditService } from './catalog-audit.service';
-import { CatalogQualityController, CopyApproveDto, CopyDraftsDto, ExtractIngredientsDto, INGREDIENT_IMAGE_DTO_MAX, SaveIngredientsDto } from './catalog-quality.controller';
+import { CatalogQualityController, CopyApproveDto, CopyDraftsDto, ExtractIngredientsDto, INGREDIENT_IMAGE_DTO_MAX, SaveIngredientsDto, SeoApplyDto } from './catalog-quality.controller';
 import type { CopyApproveService } from './copy-approve.service';
 import type { CopyDraftService } from './copy-draft.service';
 import type { IngredientEnrichService } from './ingredient-enrich.service';
+import { SEO_APPLY_MAX_BATCH, SEO_DESC_MAX, SEO_TITLE_MAX, type SeoEnrichService } from './seo-enrich.service';
 import { OCR_IMAGE_MAX_BYTES } from '../ai-advisor/ingredient-ocr';
 
 const errs = (cls: new () => object, body: object) => validate(plainToInstance(cls, body));
@@ -82,11 +83,16 @@ describe('CatalogQualityController', () => {
     extract: jest.fn().mockResolvedValue({ id: 'p1', readable: true, ingredients: [], warnings: [] }),
     save: jest.fn().mockResolvedValue({ id: 'p1', ingredients: [], added: 0 }),
   };
+  const seo = {
+    list: jest.fn().mockResolvedValue({ rows: [], total: 0, missing: 0, truncated: false }),
+    apply: jest.fn().mockResolvedValue({ updated: 1, skippedIds: [] }),
+  };
   const ctrl = new CatalogQualityController(
     audit as unknown as CatalogAuditService,
     drafts as unknown as CopyDraftService,
     approval as unknown as CopyApproveService,
     enrich as unknown as IngredientEnrichService,
+    seo as unknown as SeoEnrichService,
   );
 
   it('chỉ ADMIN, prefix admin/catalog-quality (không dưới admin/catalog-products/:id)', () => {
@@ -99,6 +105,22 @@ describe('CatalogQualityController', () => {
     expect(Reflect.getMetadata('path', proto.copyApprove)).toBe('copy-approve');
     expect(Reflect.getMetadata('path', proto.extractIngredients)).toBe(':id/extract-ingredients');
     expect(Reflect.getMetadata('path', proto.saveIngredients)).toBe(':id/ingredients');
+    expect(Reflect.getMetadata('path', proto.getSeo)).toBe('seo');
+    expect(Reflect.getMetadata('path', proto.applySeo)).toBe('seo/apply');
+  });
+
+  it('route SEO không đè route theo id (`seo/apply` không khớp `:id/ingredients` hay `:id/extract-ingredients`)', () => {
+    const proto = CatalogQualityController.prototype;
+    const paths = [proto.getSeo, proto.applySeo].map((h) => Reflect.getMetadata('path', h) as string);
+    for (const p of paths) expect(p).not.toMatch(/^:id/);
+  });
+
+  it('chuyển id admin và các mục SEO cho SeoEnrichService', async () => {
+    const items = [{ productId: 'a', metaTitle: 'T | Tubu Tree', metaDesc: 'Mô tả.' }];
+    await ctrl.getSeo();
+    await ctrl.applySeo('admin1', { items });
+    expect(seo.list).toHaveBeenCalledTimes(1);
+    expect(seo.apply).toHaveBeenCalledWith('admin1', items);
   });
 
   it('extract-ingredients giới hạn 10 lượt mỗi phút (gọi AI trả phí)', () => {
@@ -143,6 +165,47 @@ describe('DTO extract-ingredients', () => {
   it('trần thô đủ chứa ảnh đúng trần OCR_IMAGE_MAX_BYTES đã mã hoá base64 kèm tiền tố data URL', () => {
     const base64Chars = Math.ceil(OCR_IMAGE_MAX_BYTES / 3) * 4;
     expect(INGREDIENT_IMAGE_DTO_MAX).toBeGreaterThanOrEqual(base64Chars + 'data:image/jpeg;base64,'.length);
+  });
+});
+
+describe('DTO seo-apply', () => {
+  const seoItem = (id: string, over: object = {}) => ({ productId: id, metaTitle: 'Tiêu đề | Tubu Tree', metaDesc: 'Mô tả ngắn.', ...over });
+
+  it(`items: 1..${SEO_APPLY_MAX_BATCH} mục đúng dạng, productId không trùng`, async () => {
+    expect(await errs(SeoApplyDto, { items: [seoItem('a')] })).toHaveLength(0);
+    expect(await errs(SeoApplyDto, { items: ids(SEO_APPLY_MAX_BATCH).map((i) => seoItem(i)) })).toHaveLength(0);
+    expect(await errs(SeoApplyDto, { items: [] })).not.toHaveLength(0);
+    expect(await errs(SeoApplyDto, { items: ids(SEO_APPLY_MAX_BATCH + 1).map((i) => seoItem(i)) })).not.toHaveLength(0);
+    expect(await errs(SeoApplyDto, { items: [seoItem('a'), seoItem('a')] })).not.toHaveLength(0);
+    expect(await errs(SeoApplyDto, {})).not.toHaveLength(0);
+  });
+
+  it('phần tử null hay không phải đối tượng: lỗi xác thực (400), không ném TypeError (500)', async () => {
+    for (const items of [[null], [undefined], [seoItem('a'), null], ['a'], [5], [[]]]) {
+      await expect(errs(SeoApplyDto, { items })).resolves.not.toHaveLength(0);
+    }
+    const pipe = new ValidationPipe({ whitelist: true, transform: true });
+    await expect(pipe.transform({ items: [null] }, { type: 'body', metatype: SeoApplyDto })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(pipe.transform({ items: [seoItem('a')] }, { type: 'body', metatype: SeoApplyDto })).resolves.toBeInstanceOf(SeoApplyDto);
+  });
+
+  it('mục thiếu trường, sai kiểu hay productId rỗng bị 400; chữ rỗng hoặc vượt trần nội dung vẫn qua DTO (service nêu lý do từng mục)', async () => {
+    expect(await errs(SeoApplyDto, { items: [{ productId: 'a', metaTitle: 'T' }] })).not.toHaveLength(0);
+    expect(await errs(SeoApplyDto, { items: [seoItem('a', { metaTitle: 5 })] })).not.toHaveLength(0);
+    expect(await errs(SeoApplyDto, { items: [seoItem('a', { productId: '' })] })).not.toHaveLength(0);
+    expect(await errs(SeoApplyDto, { items: [seoItem('a', { metaTitle: '', metaDesc: '' })] })).toHaveLength(0);
+    expect(await errs(SeoApplyDto, { items: [seoItem('a', { metaTitle: 'T'.repeat(SEO_TITLE_MAX + 20), metaDesc: 'D'.repeat(SEO_DESC_MAX + 50) })] })).toHaveLength(0);
+  });
+
+  it('trần thô chặn chuỗi khổng lồ', async () => {
+    expect(await errs(SeoApplyDto, { items: [seoItem('a', { metaTitle: 'T'.repeat(401) })] })).not.toHaveLength(0);
+    expect(await errs(SeoApplyDto, { items: [seoItem('a', { metaDesc: 'D'.repeat(1001) })] })).not.toHaveLength(0);
+  });
+
+  it('chữ được cắt khoảng trắng và ký tự vô hình hai đầu', () => {
+    const dto = plainToInstance(SeoApplyDto, { items: [seoItem('a', { metaTitle: '​  Tiêu đề ​', metaDesc: ' Mô tả ' })] });
+    expect(dto.items[0]!.metaTitle).toBe('Tiêu đề');
+    expect(dto.items[0]!.metaDesc).toBe('Mô tả');
   });
 });
 
