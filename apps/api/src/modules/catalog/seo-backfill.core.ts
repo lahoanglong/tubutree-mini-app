@@ -2,11 +2,13 @@ import type { PrismaClient } from '@prisma/client';
 import { normalizeCopyText } from '@tubutree/shared-types';
 import { checkIngredientsForSave } from '../ai-advisor/copy-draft';
 import { ingredientNames } from './ingredient-names';
+import { foldVietnamese } from './search-text';
 import { SEO_DESC_MAX, SEO_TITLE_MAX, draftSeo, isBlank, seoTextProblems, type SeoProductInput } from './seo-enrich.core';
 
 /**
  * Lõi script backfill W160: điền `metaTitle`/`metaDesc` còn trống cho SP nhà đang bán, và thành phần THẬT cho SP chưa có.
- * Thành phần chỉ ghi khi có nguồn kiểm được: nhãn "Thành phần:" trong mô tả, hoặc danh sách người đã đọc từ bao bì (`--verified-file`).
+ * Thành phần CHỈ ghi từ danh sách người đã đọc từ bao bì (`--verified-file`). Nhãn "Thành phần:" trong mô tả chỉ là gợi ý đưa vào báo cáo, không bao giờ ghi:
+ * mô tả có thể do AI soạn, và đọc nhầm một đoạn văn thành danh sách thì trang bán hàng khai sai thành phần (kể cả chất gây dị ứng).
  * Không có nguồn thì để trống và báo cáo, không bao giờ đoán.
  */
 
@@ -20,7 +22,7 @@ export interface BackfillProductInput extends SeoProductInput {
   updatedAt: Date;
 }
 
-export type IngredientSource = 'DESCRIPTION_LABEL' | 'VERIFIED_FILE';
+export type IngredientSource = 'VERIFIED_FILE';
 export type IngredientState = 'HAS' | 'FILL' | 'UNRESOLVED' | 'N/A';
 export type BackfillStatus = 'ENRICH' | 'COMPLETE' | 'BLOCKED' | 'EXCLUDED';
 
@@ -36,27 +38,76 @@ export interface BackfillPlan {
   ingredients: { names: string[]; source: IngredientSource } | null;
   ingredientState: IngredientState;
   ingredientReason: string;
+  /** Danh sách đọc được từ nhãn trong mô tả, CHƯA ghi; để người đối chiếu bao bì. */
+  ingredientSuggestion: string[] | null;
+  /** Chữ gốc của mô tả mà gợi ý lấy ra, để người duyệt đối chiếu. */
+  ingredientEvidence: string;
   problems: string[];
 }
 
-const LABEL = /(?:thành phần|nguyên liệu|ingredients?)\s*[:：]\s*/iu;
+const LABEL = /(?<![\p{L}\p{N}])(?:thành phần|nguyên liệu|ingredients?)[ \t]*[:：][ \t]*/iu;
 const NO_LABEL = 'Mô tả không có nhãn "Thành phần:" hay "Nguyên liệu:".';
+/** Chữ đứng ngay trước nhãn khiến danh sách sau nhãn KHÔNG phải thành phần đầy đủ: "không chứa …", "free of …", "key/main …". */
+const NOT_THE_FULL_LIST = /(?:^|[^a-z])(?:khong (?:chua|co|dung|su dung|bao gom)|free of|free|without|no|key|main|active|top|chinh|noi bat)\s*$/;
+const PLACEHOLDER = /^(?:xem |dang cap nhat|chua co|updating|n a$)|bao bi/;
+const BULLET = /^[-–—•*·]|\s[-–—•]\s/;
+const NAME_WORDS_MAX = 5;
+
+/** Tách ở dấu phẩy/chấm phẩy ngoài ngoặc; ngoặc không khớp thì `null` (danh sách đã bị cắt hoặc hỏng). */
+function splitTopLevel(line: string): string[] | null {
+  const parts: string[] = [];
+  let depth = 0;
+  let cur = '';
+  for (const ch of line) {
+    if (ch === '(' || ch === '[') depth++;
+    else if (ch === ')' || ch === ']') depth--;
+    if (depth < 0) return null;
+    if ((ch === ',' || ch === ';') && depth === 0) {
+      parts.push(cur);
+      cur = '';
+    } else cur += ch;
+  }
+  if (depth !== 0) return null;
+  parts.push(cur);
+  return parts;
+}
+
+function suspiciousName(name: string): string | null {
+  if (name.includes(':')) return `"${name}" có dấu ":" (dính chữ khác sau danh sách).`;
+  if (BULLET.test(name)) return `"${name}" có gạch đầu dòng dính liền.`;
+  if (PLACEHOLDER.test(foldVietnamese(name).replace(/[^a-z0-9]+/g, ' ').trim())) return `"${name}" là chữ giữ chỗ, không phải tên thành phần.`;
+  if (name.replace(/\([^)]*\)|\[[^\]]*\]/g, ' ').split(/\s+/).filter(Boolean).length > NAME_WORDS_MAX) return `"${name}" dài như một câu văn, không phải tên thành phần.`;
+  return null;
+}
 
 export type IngredientExtract = { ok: true; names: string[] } | { ok: false; reason: string };
 
-/** Danh sách sau nhãn "Thành phần:", "Nguyên liệu:" hay "Ingredients:" đến hết dòng/câu. Vi phạm bộ chặn (công dụng, chứng nhận, phần trăm, quá 8 tên) thì từ chối cả danh sách. */
+/**
+ * Danh sách sau nhãn "Thành phần:", "Nguyên liệu:" hay "Ingredients:" trên CÙNG dòng đến hết câu. Từ chối cả danh sách khi: nhãn đứng riêng một dòng, danh sách chưa hết ("…"),
+ * đứng sau "không chứa/free of/key", ngoặc lệch, tên giống câu văn/chữ giữ chỗ/gạch đầu dòng, hoặc vi phạm bộ chặn (công dụng, chứng nhận, phần trăm, quá 8 tên).
+ */
 export function extractIngredientsFromText(text: string | null | undefined): IngredientExtract {
   if (typeof text !== 'string' || text.trim() === '') return { ok: false, reason: 'Mô tả trống.' };
   const plain = normalizeCopyText(text);
   const found = LABEL.exec(plain);
   if (!found) return { ok: false, reason: NO_LABEL };
+
+  const before = foldVietnamese(plain.slice(Math.max(0, found.index - 30), found.index)).toLowerCase();
+  if (NOT_THE_FULL_LIST.test(before)) return { ok: false, reason: 'Nhãn nằm sau "không chứa/free of/key…", không phải danh sách thành phần đầy đủ.' };
+
   const rest = plain.slice(found.index + found[0].length);
-  const line = (rest.split('\n')[0] ?? '').split(/\.(?=\s|$)/)[0] ?? '';
-  const raw = line
-    .split(/[,;]/)
-    .map((s) => s.trim().replace(/\.$/, '').trim())
-    .filter((s) => s !== '');
-  const check = checkIngredientsForSave(raw);
+  if (rest === '' || rest.startsWith('\n')) return { ok: false, reason: 'Nhãn đứng riêng một dòng, danh sách nằm ở dòng dưới nên không đọc chắc được.' };
+  const line = rest.split('\n')[0] ?? '';
+  if (/\.{2,}|…/.test(line)) return { ok: false, reason: 'Danh sách chưa hết ("…").' };
+
+  const parts = splitTopLevel(line.split(/\.(?=\s|$)/)[0] ?? '');
+  if (parts === null) return { ok: false, reason: 'Ngoặc không khớp, danh sách có thể bị cắt.' };
+  const names = parts.map((s) => s.trim().replace(/\.$/, '').trim()).filter((s) => s !== '');
+  for (const name of names) {
+    const why = suspiciousName(name);
+    if (why) return { ok: false, reason: why };
+  }
+  const check = checkIngredientsForSave(names);
   return check.ok ? { ok: true, names: check.value } : { ok: false, reason: check.reasons.join(' ') };
 }
 
@@ -103,23 +154,30 @@ export interface PlanOptions {
   verified?: VerifiedIngredients;
 }
 
-function planIngredients(p: BackfillProductInput, opts: PlanOptions): Pick<BackfillPlan, 'ingredients' | 'ingredientState' | 'ingredientReason'> {
-  if (ingredientNames(p.ingredients).length > 0) return { ingredients: null, ingredientState: 'HAS', ingredientReason: '' };
+type IngredientPlan = Pick<BackfillPlan, 'ingredients' | 'ingredientState' | 'ingredientReason' | 'ingredientSuggestion' | 'ingredientEvidence'>;
+const NO_SUGGESTION = { ingredientSuggestion: null, ingredientEvidence: '' } as const;
+const EVIDENCE_MAX = 300;
+
+function planIngredients(p: BackfillProductInput, opts: PlanOptions): IngredientPlan {
+  if (ingredientNames(p.ingredients).length > 0) return { ingredients: null, ingredientState: 'HAS', ingredientReason: '', ...NO_SUGGESTION };
   const fromFile = opts.verified?.[p.slug];
   if (fromFile) {
     const check = checkIngredientsForSave(fromFile);
-    if (check.ok) return { ingredients: { names: check.value, source: 'VERIFIED_FILE' }, ingredientState: 'FILL', ingredientReason: '' };
-    return { ingredients: null, ingredientState: 'UNRESOLVED', ingredientReason: `Danh sách đã xác minh bị chặn: ${check.reasons.join(' ')}` };
+    if (check.ok) return { ingredients: { names: check.value, source: 'VERIFIED_FILE' }, ingredientState: 'FILL', ingredientReason: '', ...NO_SUGGESTION };
+    return { ingredients: null, ingredientState: 'UNRESOLVED', ingredientReason: `Danh sách đã xác minh bị chặn: ${check.reasons.join(' ')}`, ...NO_SUGGESTION };
   }
   const fromText = extractIngredientsFromText(p.description);
-  if (fromText.ok) return { ingredients: { names: fromText.names, source: 'DESCRIPTION_LABEL' }, ingredientState: 'FILL', ingredientReason: '' };
-  return { ingredients: null, ingredientState: 'UNRESOLVED', ingredientReason: fromText.reason };
+  if (fromText.ok) {
+    const evidence = normalizeCopyText(p.description ?? '').replace(/\s+/g, ' ').slice(0, EVIDENCE_MAX);
+    return { ingredients: null, ingredientState: 'UNRESOLVED', ingredientReason: 'Chỉ có gợi ý từ mô tả, chưa đối chiếu bao bì nên KHÔNG ghi.', ingredientSuggestion: fromText.names, ingredientEvidence: evidence };
+  }
+  return { ingredients: null, ingredientState: 'UNRESOLVED', ingredientReason: fromText.reason, ...NO_SUGGESTION };
 }
 
 export function planProduct(p: BackfillProductInput, opts: PlanOptions = {}): BackfillPlan {
   const base = { id: p.id, slug: p.slug, name: p.name, thumbnail: p.thumbnail };
   if (!p.isActive || p.storefrontId !== null) {
-    return { ...base, status: 'EXCLUDED', seo: null, seoEmptyAfter: false, ingredients: null, ingredientState: 'N/A', ingredientReason: '', problems: [] };
+    return { ...base, status: 'EXCLUDED', seo: null, seoEmptyAfter: false, ingredients: null, ingredientState: 'N/A', ingredientReason: '', ...NO_SUGGESTION, problems: [] };
   }
 
   const missingTitle = isBlank(p.metaTitle);
@@ -149,7 +207,7 @@ export interface BackfillSummary {
   seoWrites: number;
   ingredientWrites: number;
   emptySeoAfter: number;
-  unresolved: { slug: string; name: string; thumbnail: string | null; reason: string }[];
+  unresolved: { slug: string; name: string; thumbnail: string | null; reason: string; suggestion: string[] | null; evidence: string }[];
   blocked: { slug: string; problems: string[] }[];
 }
 
@@ -160,7 +218,7 @@ export function summarizeBackfill(plans: readonly BackfillPlan[]): BackfillSumma
     seoWrites: active.filter((p) => p.seo !== null).length,
     ingredientWrites: active.filter((p) => p.ingredients !== null).length,
     emptySeoAfter: active.filter((p) => p.seoEmptyAfter).length,
-    unresolved: active.filter((p) => p.ingredientState === 'UNRESOLVED').map((p) => ({ slug: p.slug, name: p.name, thumbnail: p.thumbnail, reason: p.ingredientReason })),
+    unresolved: active.filter((p) => p.ingredientState === 'UNRESOLVED').map((p) => ({ slug: p.slug, name: p.name, thumbnail: p.thumbnail, reason: p.ingredientReason, suggestion: p.ingredientSuggestion, evidence: p.ingredientEvidence })),
     blocked: plans.filter((p) => p.problems.length > 0).map((p) => ({ slug: p.slug, problems: p.problems })),
   };
 }
@@ -171,12 +229,15 @@ export function renderReport(plans: readonly BackfillPlan[], s: BackfillSummary)
   lines.push(`Sẽ ghi SEO: ${s.seoWrites} SP. Sẽ ghi thành phần: ${s.ingredientWrites} SP. Còn trống SEO sau khi ghi: ${s.emptySeoAfter} SP.`);
   const fills = plans.filter((p) => p.ingredients !== null);
   if (fills.length > 0) {
-    lines.push('\nThành phần SẼ ghi (nguồn):');
+    lines.push('\nThành phần SẼ ghi (từ file đã xác minh):');
     for (const p of fills) lines.push(`  - ${p.slug} [${p.ingredients!.source}]: ${p.ingredients!.names.join(', ')}`);
   }
   if (s.unresolved.length > 0) {
     lines.push(`\n${s.unresolved.length} SP chưa có nguồn thành phần thật, GIỮ TRỐNG (hỏi nhãn hàng hoặc đọc bao bì):`);
-    for (const u of s.unresolved) lines.push(`  - ${u.slug} | ${u.name} | ảnh: ${u.thumbnail ?? '(chưa có ảnh)'} | ${u.reason}`);
+    for (const u of s.unresolved) {
+      lines.push(`  - ${u.slug} | ${u.name} | ảnh: ${u.thumbnail ?? '(chưa có ảnh)'} | ${u.reason}`);
+      if (u.suggestion) lines.push(`      gợi ý từ mô tả (CHƯA ghi): ${u.suggestion.join(', ')}\n      chữ gốc: "${u.evidence}"`);
+    }
   }
   if (s.blocked.length > 0) {
     lines.push(`\n${s.blocked.length} SP bị chặn không ghi SEO:`);

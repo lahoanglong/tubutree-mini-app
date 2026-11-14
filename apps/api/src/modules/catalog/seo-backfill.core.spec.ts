@@ -67,6 +67,49 @@ describe('extractIngredientsFromText', () => {
   });
 });
 
+describe('extractIngredientsFromText — dạng dễ ghi sai thành phần', () => {
+  const bad = (text: string) => extractIngredientsFromText(text).ok;
+
+  it('nhãn đứng riêng một dòng (danh sách ở dòng dưới) thì từ chối, không lấy mỗi dòng đầu', () => {
+    expect(bad('<p><strong>Thành phần:</strong></p><ul><li>Bột mì</li><li>Đường</li><li>Đậu phộng</li></ul>')).toBe(false);
+    expect(bad('Thành phần:\nBột mì\nĐường\nĐậu phộng')).toBe(false);
+  });
+
+  it('danh sách chưa hết (có "…" hoặc "...") thì từ chối', () => {
+    expect(bad('Thành phần: Cà phê, muối, sữa... và nhiều hương vị khác')).toBe(false);
+    expect(bad('Thành phần: Cà phê, muối, sữa…')).toBe(false);
+  });
+
+  it('câu phủ định đứng trước nhãn ("không chứa thành phần:") thì từ chối', () => {
+    expect(bad('Sản phẩm không chứa thành phần: paraben, SLS, cồn.')).toBe(false);
+    expect(bad('Không chứa nguyên liệu: đường, sữa, gluten.')).toBe(false);
+    expect(bad('Free of ingredients: paraben, sls')).toBe(false);
+  });
+
+  it('chữ giữ chỗ hay câu văn không phải tên thành phần thì từ chối', () => {
+    expect(bad('Thành phần: xem trên bao bì sản phẩm.')).toBe(false);
+    expect(bad('Thành phần: Đang cập nhật')).toBe(false);
+    expect(bad('Nguyên liệu: được tuyển chọn kỹ từ nông trại Đà Lạt, phơi khô và rang mộc.')).toBe(false);
+  });
+
+  it('dính chữ khác sau danh sách (có dấu ":" thứ hai) thì từ chối', () => {
+    expect(bad('Thành phần: Gạo lứt, đậu đỏ Hạn sử dụng: 12 tháng')).toBe(false);
+  });
+
+  it('gạch đầu dòng dính trong một dòng thì từ chối', () => {
+    expect(bad('Thành phần: - Bột mì - Đường - Muối')).toBe(false);
+  });
+
+  it('"Key ingredients" là thành phần nổi bật, không phải danh sách đầy đủ', () => {
+    expect(bad('Key ingredients: aloe vera, vitamin E.')).toBe(false);
+  });
+
+  it('dấu phẩy trong ngoặc không cắt tên; ngoặc lệch thì từ chối', () => {
+    expect(extractIngredientsFromText('Thành phần: Nước, chất tạo ngọt (sorbitol, stevia), muối.')).toEqual({ ok: true, names: ['Nước', 'chất tạo ngọt (sorbitol, stevia)', 'muối'] });
+    expect(bad('Thành phần: Nước, chất (sorbitol, muối')).toBe(false);
+  });
+});
+
 describe('parseVerifiedIngredients', () => {
   it('đọc bản đồ slug sang danh sách tên', () => {
     expect(parseVerifiedIngredients('{"a-1":["Bột gạo","Đường"]}')).toEqual({ ok: true, value: { 'a-1': ['Bột gạo', 'Đường'] } });
@@ -155,13 +198,16 @@ describe('planBackfill — thành phần', () => {
 
   it('thành phần chỉ có "[object Object]" vẫn tính là trống', () => {
     const plan = planOne([row({ ...seoDone, ingredients: ['[object Object]'], description: 'Thành phần: Gừng, mật ong.' })]);
-    expect(plan.ingredients).toEqual({ names: ['Gừng', 'mật ong'], source: 'DESCRIPTION_LABEL' });
+    expect(plan.ingredients).toBeNull();
+    expect(plan.ingredientState).toBe('UNRESOLVED');
   });
 
-  it('lấy từ nhãn "Thành phần:" trong mô tả khi trống', () => {
+  it('nhãn "Thành phần:" trong mô tả chỉ là GỢI Ý: không ghi, nêu danh sách gợi ý trong kế hoạch', () => {
     const plan = planOne([row({ ...seoDone, description: 'Trà dễ uống. Thành phần: Gừng, mật ong.' })]);
-    expect(plan.ingredients).toEqual({ names: ['Gừng', 'mật ong'], source: 'DESCRIPTION_LABEL' });
-    expect(plan.status).toBe('ENRICH');
+    expect(plan.ingredients).toBeNull();
+    expect(plan.status).toBe('COMPLETE');
+    expect(plan.ingredientState).toBe('UNRESOLVED');
+    expect(plan.ingredientSuggestion).toEqual(['Gừng', 'mật ong']);
   });
 
   it('không có nguồn thật thì để TRỐNG và ghi UNRESOLVED kèm lý do', () => {
@@ -203,8 +249,8 @@ describe('applyBackfill', () => {
   });
 
   it('apply ghi có điều kiện updatedAt, storefrontId null, isActive và chỉ các trường trong kế hoạch', async () => {
-    const rows = [row({ description: 'Thành phần: Gừng, mật ong.' })];
-    const plans = planBackfill(rows);
+    const rows = [row()];
+    const plans = planBackfill(rows, { verified: { 'tra-gung-tubu-aaaaaa': ['Gừng', 'mật ong'] } });
     const { store, updateMany } = makeStore();
     const out = await applyBackfill(store, rows, plans, { apply: true });
     expect(out).toEqual([{ slug: 'tra-gung-tubu-aaaaaa', status: 'APPLIED' }]);
@@ -246,7 +292,7 @@ describe('summarizeBackfill / renderReport', () => {
   ];
 
   it('đếm đúng và nêu SKU còn thiếu thành phần', () => {
-    const s = summarizeBackfill(planBackfill(rows));
+    const s = summarizeBackfill(planBackfill(rows, { verified: { 'a-1': ['Gừng', 'mật ong'] } }));
     expect(s.activeTotal).toBe(3);
     expect(s.seoWrites).toBe(1);
     expect(s.ingredientWrites).toBe(1);
@@ -262,9 +308,19 @@ describe('summarizeBackfill / renderReport', () => {
   });
 
   it('báo cáo liệt kê SKU thiếu thành phần kèm ảnh để chủ hỏi nhãn hàng', () => {
-    const text = renderReport(planBackfill(rows), summarizeBackfill(planBackfill(rows)));
+    const plans = planBackfill(rows, { verified: { 'a-1': ['Gừng', 'mật ong'] } });
+    const text = renderReport(plans, summarizeBackfill(plans));
     expect(text).toContain('b-2');
     expect(text).toContain('https://cdn.example/tra-gung.png');
     expect(text).not.toContain('d-4');
+  });
+
+  it('báo cáo nêu gợi ý từ mô tả kèm đoạn chữ gốc để người duyệt đối chiếu, và ghi rõ chưa ghi', () => {
+    const r = [row({ id: 's', slug: 's-5', name: 'S', metaTitle: 'S | Tubu Tree', metaDesc: 'S.', description: 'Trà dễ uống. Thành phần: Gừng, mật ong.' })];
+    const plans = planBackfill(r);
+    const text = renderReport(plans, summarizeBackfill(plans));
+    expect(text).toContain('Gừng, mật ong');
+    expect(text).toContain('Trà dễ uống. Thành phần: Gừng, mật ong.');
+    expect(text).toMatch(/gợi ý/i);
   });
 });
