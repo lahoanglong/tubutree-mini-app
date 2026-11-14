@@ -12,7 +12,6 @@ export const DEW_DURATION_MS = ARCADE_NOMINAL_MS.dew_catcher;
 export const DEW_HEARTS = 3;
 export const DEW_MAGNET_MS = 4_000;
 export const DEW_PADDLE_W = 0.22;
-/** Mỗi vật được xét hứng hoặc né đúng một lần, lúc vượt hàng này. */
 export const DEW_CATCH_Y = 0.86;
 export const DEW_MIN_SPAWN_MS = 400;
 export const DEW_MIN_DX = 0.14;
@@ -22,42 +21,24 @@ export const dewMultiplier = (combo: number): number => (combo >= 25 ? 5 : combo
 
 export interface DewItem { id: number; kind: DewKind; x: number; y: number }
 export interface DewEvent { type: 'catch' | 'hit' | 'dodge'; x: number; points: number; mult: number }
-export interface DewCatcherStats {
-  score: number;
-  maxCombo: number;
-  dewCaught: number;
-  dodgedHazards: number;
-  heartsLeft: number;
-  endedBy: 'time' | 'hearts';
-  durationMs: number;
-}
-export interface DewCatcherState {
-  timeLeftMs: number;
-  score: number;
-  hearts: number;
-  combo: number;
-  multiplier: number;
-  maxCombo: number;
-  magnetMs: number;
-  paddleX: number;
-  paddleW: number;
-  items: DewItem[];
-  events: DewEvent[];
-  over: boolean;
-}
+export interface DewCatcherStats { score: number; maxCombo: number; dewCaught: number; dodgedHazards: number; heartsLeft: number; endedBy: 'time' | 'hearts'; durationMs: number }
+export interface DewCatcherState { timeLeftMs: number; score: number; hearts: number; combo: number; multiplier: number; maxCombo: number; magnetMs: number; paddleX: number; paddleW: number; items: DewItem[]; events: DewEvent[]; over: boolean }
 
-/** Engine thuần, toạ độ 0..1; `step` chia nhỏ 25 ms để dt lớn không bỏ sót va chạm. Chỉ chạm vật độc mới gãy combo. */
+// Combo gãy khi chạm vật độc hoặc để rơi vật tốt.
 export function createDewCatcher({ rng = Math.random, durationMs = DEW_DURATION_MS }: { rng?: () => number; durationMs?: number } = {}) {
-  let id = 0, elapsed = 0, spawnIn = 500, paddleX = 0.5, lastX = 0.5, magnetMs = 0, combo = 0, maxCombo = 0, spawned = 0, hazards = 0, run = 0, score = 0, hearts = DEW_HEARTS, caught = 0, dodged = 0;
+  let id = 0, elapsed = 0, spawnIn = 500, paddleX = 0.5, lastX = 0.5, magnetMs = 0, combo = 0, maxCombo = 0, spawned = 0, hazards = 0, run = 0, score = 0, hearts = DEW_HEARTS, caught = 0, dodged = 0, value = 0;
   let endedBy: 'time' | 'hearts' | null = null;
   let items: DewItem[] = [];
   let events: DewEvent[] = [];
 
   const spawn = () => {
-    // Độc hại: tối đa 25% số vật đã rơi, không quá 2 vật liền nhau, dù rng đòi nhiều hơn.
+    // Vật độc tối đa 25% số vật đã rơi, không quá 2 liền.
     const hazard = rng() < 0.25 && run < 2 && (hazards + 1) * 4 <= spawned + 1;
     const r = rng();
-    const kind: DewKind = hazard ? (r < 0.5 ? 'chem' : 'dust') : r < 0.7 ? 'dew' : r < 0.9 ? 'berry' : 'oil';
+    let kind: DewKind = hazard ? (r < 0.5 ? 'chem' : 'dust') : r < 0.7 ? 'dew' : r < 0.9 ? 'berry' : 'oil';
+    // Điểm gốc trung bình mỗi vật tối đa 15 (dư 30 cho vài vật đầu): điểm lý thuyết dưới trần của máy chủ dù rng đòi toàn tinh dầu.
+    if (value + DEW_ITEMS[kind].points > 15 * spawned + 45) kind = 'dew';
+    value += DEW_ITEMS[kind].points;
     let x = 0.08 + rng() * 0.84;
     if (Math.abs(x - lastX) < DEW_MIN_DX) {
       x = x >= lastX ? lastX + DEW_MIN_DX : lastX - DEW_MIN_DX;
@@ -81,7 +62,10 @@ export function createDewCatcher({ rng = Math.random, durationMs = DEW_DURATION_
       } else dodged++;
       return inReach;
     }
-    if (!inReach) return false;
+    if (!inReach) {
+      combo = 0;
+      return false;
+    }
     const mult = dewMultiplier(combo);
     const points = def.points * mult;
     score += points;
@@ -93,7 +77,7 @@ export function createDewCatcher({ rng = Math.random, durationMs = DEW_DURATION_
   };
 
   const tick = (dt: number) => {
-    const p = elapsed / durationMs;
+    const p = Math.min(1, elapsed / DEW_DURATION_MS);
     const left = durationMs - elapsed;
     const d = Math.min(dt, left);
     elapsed = d === left ? durationMs : elapsed + d;

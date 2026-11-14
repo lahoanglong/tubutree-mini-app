@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ARCADE_MAX_SCORE_PER_SEC, ARCADE_MIN_DURATION_MS } from './arcade-config';
+import { ARCADE_MIN_DURATION_MS, arcadeMaxScore } from './arcade-config';
 import {
   createRefillRush,
   RUSH_DURATION_MS,
@@ -172,6 +172,31 @@ describe('đúng, sai, quá hạn', () => {
     expect(later.limitMs).toBeLessThan(first.item!.limitMs);
   });
 
+  it('sai nghỉ 1,4 giây và quá hạn nghỉ khoảng 0,9 giây trước vật kế (đúng chỉ nghỉ 0,4 giây)', () => {
+    const msUntilItem = (e: Engine) => {
+      let ms = 0;
+      while (!e.state().item && ms < 5_000) {
+        e.step(1);
+        ms++;
+      }
+      return ms;
+    };
+    const right = createRefillRush({ rng: mulberry32(4) });
+    right.pick(untilItem(right).item!.station);
+    expect(msUntilItem(right)).toBe(RUSH_GAP_MS);
+
+    const wrong = createRefillRush({ rng: mulberry32(4) });
+    wrong.pick(wrongStation(untilItem(wrong).item!.station));
+    expect(msUntilItem(wrong)).toBe(RUSH_GAP_MS + RUSH_WRONG_PENALTY_MS / 2);
+
+    const late = createRefillRush({ rng: mulberry32(4) });
+    untilItem(late);
+    while (!late.state().events.some((ev) => ev.type === 'late')) late.step(1);
+    const waited = msUntilItem(late);
+    expect(waited).toBeGreaterThan(RUSH_GAP_MS + RUSH_LATE_PENALTY_MS / 2 - 26);
+    expect(waited).toBeLessThanOrEqual(RUSH_GAP_MS + RUSH_LATE_PENALTY_MS / 2);
+  });
+
   it('không có vật hoặc sau khi hết ván thì pick không làm gì', () => {
     const e = createRefillRush({ rng: mulberry32(4) });
     expect(e.pick('return')).toBe(false);
@@ -310,7 +335,7 @@ describe('kết thúc ván và thống kê', () => {
   });
 });
 
-describe('khớp trần điểm mỗi giây của máy chủ', () => {
+describe('khớp trần điểm của máy chủ (arcadeMaxScore)', () => {
   it.each([1, 2, 3, 4, 5])('trả lời đúng tức thì (seed %i) không vượt trần và còn dư ít nhất 25%', (seed) => {
     const e = createRefillRush({ rng: mulberry32(seed) });
     for (let i = 0; i < 100_000 && !e.state().over; i++) {
@@ -319,8 +344,7 @@ describe('khớp trần điểm mỗi giây của máy chủ', () => {
       e.step(1);
     }
     const stats = e.stats()!;
-    const cap = Math.ceil((stats.durationMs / 1000) * ARCADE_MAX_SCORE_PER_SEC.refill_rush);
-    expect(stats.score).toBeLessThanOrEqual(cap * 0.75);
+    expect(stats.score).toBeLessThanOrEqual(arcadeMaxScore('refill_rush', stats.durationMs) * 0.75);
   });
 
   it('mọi nhịp khung hình cho điểm tối đa dưới trần', () => {
@@ -332,7 +356,46 @@ describe('khớp trần điểm mỗi giây của máy chủ', () => {
         e.step(frame);
       }
       const stats = e.stats()!;
-      expect(stats.score, `khung ${frame} ms`).toBeLessThanOrEqual(Math.ceil((stats.durationMs / 1000) * ARCADE_MAX_SCORE_PER_SEC.refill_rush));
+      expect(stats.score, `khung ${frame} ms`).toBeLessThanOrEqual(arcadeMaxScore('refill_rush', stats.durationMs));
     }
+  });
+
+  /** Trả lời tức thì với độ chính xác `accuracy`; từ `dumpAtMs` cố ý trả lời sai để ván kết thúc sớm nhất có thể (điểm dồn lại trong thời gian ngắn). */
+  function play(seed: number, accuracy: number, dumpAtMs: number, stepMs: number) {
+    const e = createRefillRush({ rng: mulberry32(seed) });
+    const noise = mulberry32(1_000 + seed);
+    for (let t = 0; !e.state().over && t < 200_000; t += stepMs) {
+      const it = e.state().item;
+      if (it) e.pick(t < dumpAtMs && noise() < accuracy ? it.station : wrongStation(it.station));
+      e.step(stepMs);
+    }
+    return e.stats()!;
+  }
+
+  it('mọi rng, độ chính xác, nhịp khung và mốc cố ý sai: điểm <= arcadeMaxScore(durationMs của ván)', () => {
+    let worst = 0;
+    let games = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]) {
+      for (const accuracy of [1, 0.95, 0.8, 0.5]) {
+        for (const dumpAt of [0, 4_000, 8_000, 12_000, 16_000, 20_000, 25_000, 30_000, 40_000, Infinity]) {
+          for (const step of [1, 16, 50]) {
+            const st = play(seed, accuracy, dumpAt, step);
+            const cap = arcadeMaxScore('refill_rush', st.durationMs);
+            expect(st.score, `seed ${seed} chính xác ${accuracy} sai từ ${dumpAt} bước ${step}: ${st.durationMs} ms`).toBeLessThanOrEqual(cap);
+            worst = Math.max(worst, st.score / cap);
+            games++;
+          }
+        }
+      }
+    }
+    expect(games).toBe(1_200);
+    expect(worst).toBeLessThan(0.85);
+  });
+
+  it('ván kết thúc sớm vì phạt vẫn có điểm tối đa dưới trần của thời gian thực', () => {
+    const st = play(2, 1, 12_000, 16);
+    expect(st.durationMs).toBeLessThan(RUSH_DURATION_MS);
+    expect(st.score).toBeGreaterThan(0);
+    expect(st.score).toBeLessThanOrEqual(arcadeMaxScore('refill_rush', st.durationMs));
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ARCADE_MAX_SCORE_PER_SEC, ARCADE_MIN_DURATION_MS, arcadeScoreTier } from './arcade-config';
+import { ARCADE_MIN_DURATION_MS, arcadeMaxScore, arcadeScoreTier } from './arcade-config';
 import {
   createDewCatcher,
   DEW_CATCH_Y,
@@ -136,18 +136,32 @@ describe('điểm và combo', () => {
     expect(events.filter((ev) => ev.type === 'catch').map((c) => c.points)).toEqual([25, 30, 10]);
   });
 
-  it('vật tốt rơi sót không gãy combo và không mất tim', () => {
+  it('để rơi vật tốt quá hàng hứng thì gãy combo về 0, không mất tim, không cộng điểm', () => {
     const e = createDewCatcher({ rng: scripted(Array(30).fill('dew') as DewKind[]) });
-    run(e, (s) => s.combo >= 1);
-    const scoreAfterFirst = e.state().score;
+    run(e, (s) => s.combo >= 3);
+    const before = e.state();
+    expect(before.combo).toBe(3);
     e.setPaddleX(0.5);
-    const crossed = new Set<number>();
+    const events: DewEvent[] = [];
     for (let i = 0; i < 300; i++) {
       e.step(16);
-      for (const it of e.state().items) if (it.y > DEW_CATCH_Y + 0.02) crossed.add(it.id);
+      events.push(...e.state().events);
     }
-    expect(crossed.size).toBeGreaterThanOrEqual(2);
-    expect(e.state()).toMatchObject({ combo: 1, score: scoreAfterFirst, hearts: DEW_HEARTS });
+    expect(events.some((ev) => ev.type === 'catch')).toBe(false);
+    expect(e.state()).toMatchObject({ combo: 0, multiplier: 1, score: before.score, hearts: DEW_HEARTS, maxCombo: 3 });
+  });
+
+  it('một vật tốt lọt qua là đủ gãy: hệ số x2 về x1 và vật hứng kế tiếp tính 10', () => {
+    const e = createDewCatcher({ rng: scripted(Array(40).fill('dew') as DewKind[]) });
+    run(e, (s) => s.combo >= 6);
+    expect(e.state().multiplier).toBe(2);
+    e.setPaddleX(0.5);
+    for (let i = 0; i < 400 && e.state().combo > 0; i++) e.step(16);
+    expect(e.state()).toMatchObject({ combo: 0, multiplier: 1 });
+    const scoreBefore = e.state().score;
+    const { events } = run(e, (s) => s.combo >= 1);
+    expect(events.filter((ev) => ev.type === 'catch')[0]).toMatchObject({ points: 10, mult: 1 });
+    expect(e.state().score).toBe(scoreBefore + 10);
   });
 });
 
@@ -294,6 +308,24 @@ describe('luật rơi: độc hại, khoảng cách, tốc độ', () => {
     },
   );
 
+  it.each<[string, () => number]>([['rng luôn đòi Tinh Dầu', () => 0.99], ['rng luôn đòi Quả Bồ Hòn', () => 0.8], ...[1, 2, 3, 4].map((s): [string, () => number] => [`seed ${s}`, mulberry32(s)])])(
+    'điểm gốc trung bình mỗi vật không quá 15 (dư 30 ở đầu), (%s)',
+    (_n, rng) => {
+      const spawns = observeSpawns(rng);
+      let total = 0;
+      spawns.forEach((s, i) => {
+        total += DEW_ITEMS[s.kind].points;
+        expect(total, `vật thứ ${i + 1}`).toBeLessThanOrEqual(15 * i + 45);
+      });
+    },
+  );
+
+  it('luật điểm gốc không khoá hẳn vật quý: rng đòi Tinh Dầu vẫn ra Tinh Dầu xen giữa sương', () => {
+    const kinds = new Set(observeSpawns(() => 0.99).map((s) => s.kind));
+    expect(kinds.has('oil')).toBe(true);
+    expect(kinds.has('dew')).toBe(true);
+  });
+
   it('vật độc có xuất hiện khi rng cho phép (không bị khoá hẳn)', () => {
     const spawns = observeSpawns(mulberry32(7));
     expect(spawns.some((s) => DEW_ITEMS[s.kind].hazard)).toBe(true);
@@ -381,13 +413,12 @@ describe('kết thúc ván và stats', () => {
   });
 });
 
-describe('khớp trần điểm mỗi giây của máy chủ', () => {
+describe('khớp trần điểm của máy chủ (arcadeMaxScore)', () => {
   it.each([1, 2, 3, 4, 5, 6, 7, 8])('người chơi hoàn hảo (seed %i) không vượt trần và đạt mốc khá', (seed) => {
     const e = createDewCatcher({ rng: mulberry32(seed) });
     run(e, () => false);
     const stats = e.stats()!;
-    const cap = Math.ceil((stats.durationMs / 1000) * ARCADE_MAX_SCORE_PER_SEC.dew_catcher);
-    expect(stats.score).toBeLessThanOrEqual(cap);
+    const cap = arcadeMaxScore('dew_catcher', stats.durationMs);
     expect(stats.score).toBeLessThanOrEqual(cap * 0.85);
     expect(arcadeScoreTier('dew_catcher', stats.score)).not.toBe('base');
   });
@@ -396,7 +427,68 @@ describe('khớp trần điểm mỗi giây của máy chủ', () => {
     const e = createDewCatcher({ rng: mulberry32(5) });
     run(e, () => false, 'hit');
     const stats = e.stats()!;
-    expect(stats.score).toBeLessThanOrEqual(Math.ceil((stats.durationMs / 1000) * ARCADE_MAX_SCORE_PER_SEC.dew_catcher));
+    expect(stats.score).toBeLessThanOrEqual(arcadeMaxScore('dew_catcher', stats.durationMs));
+  });
+
+  /** Người chơi hoàn hảo, đến `dumpAtMs` thì cố ý đâm vật độc để ván kết thúc sớm nhất có thể. */
+  function playDump(rng: () => number, dumpAtMs: number, stepMs: number, durationMs?: number) {
+    const e = createDewCatcher({ rng, durationMs });
+    for (let t = 0; !e.state().over && t < 200_000; t += stepMs) {
+      bot(e, t < dumpAtMs ? 'avoid' : 'hit');
+      e.step(stepMs);
+    }
+    return e.stats()!;
+  }
+
+  it('mọi rng, nhịp khung và mốc đâm vật độc: điểm <= arcadeMaxScore(durationMs của ván)', () => {
+    let worst = 0;
+    let games = 0;
+    for (const seed of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+      for (const dumpAt of [0, 6_000, 12_000, 20_000, 30_000, Infinity]) {
+        for (const step of [8, 25, 50]) {
+          const st = playDump(mulberry32(seed), dumpAt, step);
+          const cap = arcadeMaxScore('dew_catcher', st.durationMs);
+          expect(st.score, `seed ${seed} đâm từ ${dumpAt} bước ${step}: ${st.durationMs} ms`).toBeLessThanOrEqual(cap);
+          worst = Math.max(worst, st.score / cap);
+          games++;
+        }
+      }
+    }
+    expect(games).toBe(216);
+    expect(worst).toBeLessThan(0.9);
+  });
+
+  it.each<[string, number]>([['rng luôn đòi Tinh Dầu', 0.99], ['rng luôn đòi Quả Bồ Hòn', 0.8], ['rng luôn 0.5', 0.5], ['rng luôn 0', 0]])(
+    '%s: điểm lý thuyết cao nhất vẫn dưới trần ở mọi mốc kết thúc',
+    (_n, value) => {
+      for (const dumpAt of [0, 8_000, 15_000, 25_000, Infinity]) {
+        const st = playDump(() => value, dumpAt, 16);
+        expect(st.score, `đâm từ ${dumpAt}`).toBeLessThanOrEqual(arcadeMaxScore('dew_catcher', st.durationMs));
+      }
+    },
+  );
+
+  it.each([5_000, 7_000, 10_000, 20_000, 40_000, 60_000])('durationMs=%i: độ khó đi theo giờ danh nghĩa nên ván ngắn vẫn dưới trần của chính nó', (durationMs) => {
+    for (const seed of [1, 2, 3, 4, 5, 6]) {
+      for (const dumpAt of [0, 10_000, Infinity]) {
+        const st = playDump(mulberry32(seed), dumpAt, 16, durationMs);
+        expect(st.durationMs).toBeGreaterThanOrEqual(Math.min(durationMs, ARCADE_MIN_DURATION_MS));
+        expect(st.score, `seed ${seed} đâm từ ${dumpAt}`).toBeLessThanOrEqual(arcadeMaxScore('dew_catcher', st.durationMs));
+      }
+    }
+  });
+
+  it('ván ngắn là tiền tố của ván danh nghĩa: cùng rng, cùng thao tác thì cùng vật rơi', () => {
+    const short = createDewCatcher({ rng: mulberry32(3), durationMs: 10_000 });
+    const full = createDewCatcher({ rng: mulberry32(3) });
+    for (let i = 0; i < 400; i++) {
+      for (const e of [short, full]) {
+        bot(e);
+        e.step(16);
+      }
+      expect(short.state().items).toEqual(full.state().items);
+      expect(short.state().score).toBe(full.state().score);
+    }
   });
 
   it('hàng hứng nằm trong khung và dưới đáy khung vật', () => {

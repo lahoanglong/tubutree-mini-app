@@ -637,8 +637,8 @@ describe('reducedMotion', () => {
   }
 
   it('Dew: cue có dấu ✦ khi combo nhân điểm, bỏ dấu ✦ khi reducedMotion', () => {
-    const normal = playDewBot(false, 11);
-    const reduced = playDewBot(true, 11);
+    const normal = playDewBot(false, 3);
+    const reduced = playDewBot(true, 3);
     expect(normal.cues.some((c) => c.endsWith(' ✦'))).toBe(true);
     expect(reduced.cues.some((c) => c.includes('✦'))).toBe(false);
     expect(normal.cues.map((c) => c.replace(' ✦', ''))).toEqual(reduced.cues);

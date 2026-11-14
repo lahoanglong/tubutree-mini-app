@@ -4,7 +4,8 @@ export type ArcadeWindowId = 'SUONG_SOM' | 'MUA_RAO';
 export type ArcadeTier = 'base' | 'good' | 'great';
 
 export const ARCADE_NOMINAL_MS: Record<ArcadeGameId, number> = { dew_catcher: 40_000, refill_rush: 45_000 };
-export const ARCADE_MAX_SCORE_PER_SEC: Record<ArcadeGameId, number> = { dew_catcher: 120, refill_rush: 60 };
+export const ARCADE_MAX_SCORE_PER_SEC: Record<ArcadeGameId, number> = { dew_catcher: 160, refill_rush: 60 };
+export const ARCADE_MIN_REWARD_SCORE: Record<ArcadeGameId, number> = { dew_catcher: 100, refill_rush: 60 };
 export const ARCADE_MIN_DURATION_MS = 5_000;
 const TIERS: Record<ArcadeGameId, [good: number, great: number]> = { dew_catcher: [400, 900], refill_rush: [250, 550] };
 const HOUR = 3_600_000;
@@ -16,10 +17,9 @@ const vnMs = (d: Date) => (((d.getTime() + 7 * HOUR) % DAY) + DAY) % DAY;
 
 export const arcadeWindowAt = (now: Date): ArcadeWindowId | null => WINDOWS.find(([, from, to]) => vnMs(now) >= from && vnMs(now) < to)?.[0] ?? null;
 
-/** Theo lúc ván hoàn thành. */
+/** Trần khi chưa dùng thưởng khung: 3, hoặc 4 trong khung. Tính lúc ván hoàn thành. */
 export const arcadeDailyCap = (now: Date): number => (arcadeWindowAt(now) ? 4 : 3);
 
-/** Đầu khung gần nhất sau `now` (đang trong khung thì là khung kế). */
 export function nextArcadeWindowStart(now: Date): Date {
   const t = vnMs(now);
   const next = WINDOWS.find(([, from]) => from > t);
@@ -33,3 +33,7 @@ export function arcadeScoreTier(gameId: ArcadeGameId, score: number): ArcadeTier
 
 export const arcadeWaterFor = (gameId: ArcadeGameId, score: number, base = 5): number =>
   base + { base: 0, good: 3, great: 5 }[arcadeScoreTier(gameId, score)];
+
+/** Ván ngắn hơn danh nghĩa bị siết theo bình phương thời gian; tính bằng số nguyên mili giây để ranh không lệch vì dấu phẩy động. */
+export const arcadeMaxScore = (gameId: ArcadeGameId, durationMs: number): number =>
+  Math.ceil((ARCADE_MAX_SCORE_PER_SEC[gameId] * durationMs * Math.min(durationMs, ARCADE_NOMINAL_MS[gameId])) / (1000 * ARCADE_NOMINAL_MS[gameId]));

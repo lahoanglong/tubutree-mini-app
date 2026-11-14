@@ -61,6 +61,15 @@ describe('câu chữ theo hợp đồng W164', () => {
     expect(fillCopy('arcade.result.capped')).toBe('Hết lượt thưởng hôm nay, bạn vẫn phá kỷ lục được 🌿');
   });
 
+  it('lý do không thưởng nêu rõ khi ván thấp điểm hoặc không hợp lệ (tên khoá cố định cho Mini và web)', () => {
+    expect(fillCopy('arcade.result.lowScore')).toBe('Ván này chưa đủ điểm để nhận thưởng. Chơi thêm một ván nhé 🌿');
+    expect(fillCopy('arcade.result.invalid')).toBe('Điểm ván này chưa hợp lệ nên chưa được lưu.');
+    for (const key of ['arcade.result.lowScore', 'arcade.result.invalid']) {
+      expect(SHOP_COPY_MAX[key], key).toBeGreaterThanOrEqual(SHOP_COPY[key]!.length);
+      expect(SHOP_COPY[key]).not.toContain('!');
+    }
+  });
+
   it('nút đăng nhập của khách nêu số Giọt nước nhận được', () => {
     expect(fillCopy('arcade.guest.login', { n: 8 })).toBe('Đăng nhập lưu kỷ lục & nhận ngay 8 Giọt nước vào Vườn');
     expect(fillCopy('arcade.guest.login', { n: 10 })).toContain('10 Giọt nước');

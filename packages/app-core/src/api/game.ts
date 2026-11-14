@@ -323,7 +323,7 @@ export const getFriends = (http: HttpClient) => http.get<Friend[]>('/game/friend
 export const giftWater = (http: HttpClient, recipientId: string) =>
   http.post<{ amount: number; recipientId: string }>(`/game/gift/${recipientId}`);
 
-export type ArcadeReason = 'DAILY_CAP' | 'TOO_FAST' | 'NOT_REAL_USER' | 'DISABLED';
+export type ArcadeReason = 'DAILY_CAP' | 'TOO_FAST' | 'NOT_REAL_USER' | 'DISABLED' | 'LOW_SCORE';
 export interface ArcadeCompleteBody {
   gameId: ArcadeGameId;
   score: number;

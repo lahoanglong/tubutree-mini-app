@@ -3,36 +3,28 @@ import type { ArcadeGameId } from './arcade-config';
 import { createDewCatcher, DEW_CATCH_Y, DEW_HEARTS, DEW_ITEMS, type DewCatcherState, type DewCatcherStats, type DewEvent } from './dew-catcher';
 import { createRefillRush, type RefillRushState, type RefillRushStats, type RushEvent, type RushStation } from './refill-rush';
 
+// `fillStyle: unknown` vì canvas thật còn nhận gradient, pattern.
 export interface ArcadeCtx2D {
-  // `unknown`: canvas thật còn nhận gradient, pattern.
-  fillStyle: unknown;
-  globalAlpha: number;
-  font: string;
-  textAlign: string;
-  textBaseline: string;
+  fillStyle: unknown; globalAlpha: number; font: string; textAlign: string; textBaseline: string;
   setTransform(a: number, b: number, c: number, d: number, e: number, f: number): void;
   fillRect(x: number, y: number, w: number, h: number): void;
   fillText(text: string, x: number, y: number, maxWidth?: number): void;
 }
+// Mọi trường đều tuỳ chọn để `Event` của DOM gán được.
 export interface ArcadeEvent { clientX?: number; clientY?: number; key?: string; preventDefault?(): void }
 export interface ArcadeCanvasLike {
-  width: number;
-  height: number;
+  width: number; height: number;
   getContext(type: '2d'): ArcadeCtx2D | null;
   getBoundingClientRect(): { left: number; top: number; width: number; height: number };
-  // Mọi trường của `ArcadeEvent` đều tuỳ chọn để `Event` của DOM gán được.
   addEventListener(type: string, listener: (e: ArcadeEvent) => void): void;
   removeEventListener(type: string, listener: (e: ArcadeEvent) => void): void;
 }
 export type ArcadeTheme = Record<'bg' | 'surface' | 'forest' | 'sage' | 'cream' | 'ink' | 'accent' | 'danger', string>;
-/** `lives` null ở Refill; `multiplier` là hệ số combo (Dew) hoặc 2 khi Fever (Refill). */
+// `lives` null ở Refill; `multiplier` là hệ số combo (Dew) hoặc 2 khi Fever (Refill).
 export interface ArcadeHud { score: number; secondsLeft: number; lives: number | null; combo: number; multiplier: number }
 export interface ArcadeResult { gameId: ArcadeGameId; score: number; durationMs: number; stats: DewCatcherStats | RefillRushStats }
 export interface ArcadeMountOptions {
-  game: ArcadeGameId;
-  canvas: ArcadeCanvasLike;
-  theme: ArcadeTheme;
-  reducedMotion?: boolean;
+  game: ArcadeGameId; canvas: ArcadeCanvasLike; theme: ArcadeTheme; reducedMotion?: boolean;
   raf(cb: (ts: number) => void): number;
   caf(id: number): void;
   now(): number;
@@ -66,7 +58,6 @@ export function mountArcade(o: ArcadeMountOptions) {
   let hudKey = '';
   let cue: { text: string; x: number; y: number; age: number; color: string } | null = null;
 
-  // Toạ độ 0..1 như engine; cỡ chữ theo bề rộng.
   const txt = (t: string, x: number, y: number, size: number, color = theme.ink, align = 'center', a = 1) => {
     g.globalAlpha = a;
     g.font = `600 ${Math.round(size * W)}px system-ui, sans-serif`;

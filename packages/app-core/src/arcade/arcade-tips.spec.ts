@@ -41,17 +41,25 @@ describe('endTip: hai nhánh có tên sản phẩm', () => {
     }
   });
 
-  it('chai đúng dưới 5 thì chỉ có mẹo sống xanh', () => {
-    for (const correct of [0, 4]) expect(endTip('refill_rush', { correct }, () => 0).chip).toBeUndefined();
+  it('Refill Rush luôn có chip tới Đổi rác, kể cả khi đúng dưới 5 hoặc không có thống kê, và câu đổi theo số đúng', () => {
+    const recycle = { miniapp: '/recycle', web: '/doi-rac' };
+    for (const stats of [{}, { correct: 0 }, { correct: 4 }, { correct: 5 }, { correct: 60 }, { dodgedHazards: 9 }]) {
+      for (const r of [0, 0.5, 0.999]) expect(endTip('refill_rush', stats, () => r).chip?.to, JSON.stringify(stats)).toEqual(recycle);
+    }
+    const low = endTip('refill_rush', { correct: 4 }, () => 0);
+    expect(low.text).not.toContain('Điểm Xanh');
+    expect(low.text.trim()).not.toBe('');
+    expect(endTip('refill_rush', { correct: 5 }, () => 0).text).toBe('Mỗi vỏ chai TubuTree giữ lại đều đổi được Điểm Xanh & Quà tặng!');
   });
 
-  it('thống kê của game này không kích hoạt nhánh của game kia', () => {
-    expect(endTip('refill_rush', { dodgedHazards: 9 }, () => 0).chip).toBeUndefined();
+  it('Dew chỉ có chip khi né từ 3 giọt; thống kê của game kia không kích hoạt nhánh này', () => {
     expect(endTip('dew_catcher', { correct: 9 }, () => 0).chip).toBeUndefined();
+    expect(endTip('dew_catcher', { dodgedHazards: 2, correct: 40 }, () => 0).chip).toBeUndefined();
+    expect(endTip('refill_rush', { dodgedHazards: 9 }, () => 0).text).not.toContain('hoá chất');
   });
 
   it('chip trỏ đúng cặp route có thật trong route-map.json', () => {
-    const chips = [endTip('dew_catcher', { dodgedHazards: 3 }).chip!, endTip('refill_rush', { correct: 5 }).chip!];
+    const chips = [endTip('dew_catcher', { dodgedHazards: 3 }).chip!, endTip('refill_rush', { correct: 5 }).chip!, endTip('refill_rush', {}).chip!];
     for (const chip of chips) {
       expect(pairs.some(([m, w]) => m === pathOf(chip.to.miniapp) && w === pathOf(chip.to.web)), chip.to.miniapp).toBe(true);
     }
@@ -85,6 +93,7 @@ describe('mẹo sống xanh', () => {
       endTip('dew_catcher', { dodgedHazards: 3 }),
       endTip('dew_catcher', { dodgedHazards: 99 }),
       endTip('refill_rush', { correct: 5 }),
+      endTip('refill_rush', { correct: 1 }, () => 0),
     ];
     for (const tip of all) {
       expect(tip.text.length, tip.text).toBeLessThanOrEqual(120);

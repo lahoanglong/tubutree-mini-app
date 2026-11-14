@@ -110,6 +110,11 @@ describe('game arcade, chẩn đoán tổ ấm: chỉ gửi đúng trường c�
     expect(Object.keys(calls[0]!.body as object).sort()).toEqual(['family', 'format', 'worry']);
   });
 
+  it('ArcadeReason gồm LOW_SCORE (ván hợp lệ nhưng dưới ngưỡng thưởng)', () => {
+    const reasons: g.ArcadeReason[] = ['DAILY_CAP', 'TOO_FAST', 'NOT_REAL_USER', 'DISABLED', 'LOW_SCORE'];
+    expect(new Set(reasons).size).toBe(5);
+  });
+
   it('trả nguyên phản hồi của máy chủ cho nơi gọi', async () => {
     const reply = { gameId: 'dew_catcher', score: 1, bestScore: 1, isNewBest: true, rewarded: true, reason: null, waterEarned: 5, pointsEarned: 1, totalSeeds: 50, used: 1, cap: 3, window: null, windowBonus: false };
     const { http } = fakeHttp(() => reply);

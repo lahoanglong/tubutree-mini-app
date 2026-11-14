@@ -12,7 +12,7 @@ export const RUSH_WRONG_PENALTY_MS = 2_000;
 export const RUSH_LATE_PENALTY_MS = 1_000;
 export const RUSH_FEVER_STEPS = 5;
 export const RUSH_FEVER_MS = 4_000;
-/** Nghỉ giữa hai vật: giữ điểm tối đa dưới trần điểm mỗi giây của máy chủ. */
+/** Nghỉ giữa hai vật; sai hoặc quá hạn nghỉ thêm nửa số giây bị trừ. */
 export const RUSH_GAP_MS = 400;
 export const RUSH_POINTS = 10;
 
@@ -20,32 +20,9 @@ export const rushLimitMs = (progress: number): number => Math.round(3200 - 1700 
 
 export interface RushItemView { id: number; station: RushStation; emoji: string; label: string; limitMs: number; leftMs: number }
 export interface RushEvent { type: 'correct' | 'wrong' | 'late' | 'fever'; station: RushStation; points: number }
-export interface RefillRushStats {
-  score: number;
-  correct: number;
-  wrong: number;
-  timedOut: number;
-  maxStreak: number;
-  feverCount: number;
-  durationMs: number;
-}
-export interface RefillRushState {
-  timeLeftMs: number;
-  score: number;
-  streak: number;
-  maxStreak: number;
-  bar: number;
-  barMax: number;
-  feverMs: number;
-  feverCount: number;
-  correct: number;
-  wrong: number;
-  item: RushItemView | null;
-  events: RushEvent[];
-  over: boolean;
-}
+export interface RefillRushStats { score: number; correct: number; wrong: number; timedOut: number; maxStreak: number; feverCount: number; durationMs: number }
+export interface RefillRushState { timeLeftMs: number; score: number; streak: number; maxStreak: number; bar: number; barMax: number; feverMs: number; feverCount: number; correct: number; wrong: number; item: RushItemView | null; events: RushEvent[]; over: boolean }
 
-/** Engine thuần; sai hoặc quá hạn xả Fever Xanh (5 đúng liên tiếp, x2 điểm). */
 export function createRefillRush({ rng = Math.random, durationMs = RUSH_DURATION_MS }: { rng?: () => number; durationMs?: number } = {}) {
   let id = 0, elapsed = 0, timeLeft = durationMs, gap = 600;
   let cur: RushItemView | null = null;
@@ -69,7 +46,7 @@ export function createRefillRush({ rng = Math.random, durationMs = RUSH_DURATION
     streak = bar = fever = 0;
     timeLeft = Math.max(0, timeLeft - penalty);
     cur = null;
-    gap = RUSH_GAP_MS;
+    gap = RUSH_GAP_MS + penalty / 2;
   };
   const tick = (dt: number) => {
     const d = Math.min(dt, timeLeft);

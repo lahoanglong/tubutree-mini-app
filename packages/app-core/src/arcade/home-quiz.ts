@@ -3,11 +3,7 @@ import { fillCopy } from '../shop-copy';
 export type HomeQuizFamily = 'baby_pet' | 'adult_only';
 export type HomeQuizWorry = 'dry_skin' | 'strong_scent' | 'grease';
 export type HomeQuizFormat = 'bottle' | 'refill';
-export interface HomeQuizAnswers {
-  family: HomeQuizFamily;
-  worry: HomeQuizWorry;
-  format: HomeQuizFormat;
-}
+export interface HomeQuizAnswers { family: HomeQuizFamily; worry: HomeQuizWorry; format: HomeQuizFormat }
 
 const STEPS: readonly (readonly [keyof HomeQuizAnswers, ...(readonly [string, string])[]])[] = [
   ['family', ['baby_pet', '🐾'], ['adult_only', '🏡']],
@@ -17,7 +13,7 @@ const STEPS: readonly (readonly [keyof HomeQuizAnswers, ...(readonly [string, st
 export const homeQuizQuestions = () =>
   STEPS.map(([id, ...opts]) => ({ id, title: fillCopy(`homeQuiz.${id}.title`), options: opts.map(([value, emoji]) => ({ value, emoji, label: fillCopy(`homeQuiz.${id}.${value}`) })) }));
 
-/** Từ khoá đã bỏ dấu, khớp theo nguyên từ. */
+// Từ khoá đã bỏ dấu, khớp theo nguyên từ.
 const KEYWORDS: Record<string, string[]> = {
   baby_pet: ['an toan', 'diu nhe', 'huu co', 'thien nhien', 'bo hon'],
   adult_only: [],
@@ -29,20 +25,7 @@ const KEYWORDS: Record<string, string[]> = {
 };
 const fold = (s: string) => ` ${s.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/gi, 'd').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim()} `;
 
-/** Trường của `ProductCard` và `ProductDTO`; ngoài `id`, `name` đều tuỳ chọn. */
-export interface KitProduct {
-  id: string;
-  name: string;
-  category?: string | null;
-  tags?: readonly string[] | null;
-  shortDesc?: string | null;
-  description?: string | null;
-  inStock?: boolean;
-  isActive?: boolean;
-  basePrice?: number;
-  isFeatured?: boolean;
-  sold?: number;
-}
+export interface KitProduct { id: string; name: string; category?: string | null; tags?: readonly string[] | null; shortDesc?: string | null; description?: string | null; inStock?: boolean; isActive?: boolean; basePrice?: number; isFeatured?: boolean; sold?: number }
 
 function matchScore(p: KitProduct, a: HomeQuizAnswers): number {
   const [name, meta, desc] = [fold(p.name), fold([p.category, ...(p.tags ?? [])].join(' ')), fold(`${p.shortDesc ?? ''} ${p.description ?? ''}`)];
@@ -53,7 +36,7 @@ function matchScore(p: KitProduct, a: HomeQuizAnswers): number {
   return score;
 }
 
-/** 2–3 món còn bán hợp câu trả lời; thiếu thì bổ sung món nổi bật, bán chạy; không có món bán được thì []. */
+// Thiếu món khớp thì bổ sung món nổi bật, bán chạy; không có món bán được thì [].
 export function pickKitProducts<T extends KitProduct>(answers: HomeQuizAnswers, products: readonly T[], max = 3): T[] {
   const rows = products
     .map((p, i) => ({ p, i, score: p.isActive !== false && p.inStock !== false && (p.basePrice ?? 1) > 0 ? matchScore(p, answers) : -1 }))
