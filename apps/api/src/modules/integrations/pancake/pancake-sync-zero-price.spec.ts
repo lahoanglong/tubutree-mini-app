@@ -294,6 +294,16 @@ describe('W156: biến thể/sản phẩm REMOVED mà Pancake trả lại với 
     const r = await run([product('p1', [variation('v1', { retail_price: 0 })])], { prevByVariation: { v1: { retailPrice: 89_000, salePrice: null, isActive: false, pancakeHold: 'NO_PRICE' } } });
     expect(r.call!.update).not.toHaveProperty('isActive');
     expect(r.call!.update).not.toHaveProperty('pancakeHold');
+    // Giá cũ còn trong DB không được báo là "đã giữ giá cũ": SKU đang ngừng bán, admin phải sửa giá trên Pancake.
+    expect(r.zero!.skus[0]).toMatchObject({ pancakeId: 'v1', kind: 'NEW_AT_ZERO', keptPrice: null });
+    expect(r.zero).toMatchObject({ count: 1, keptCount: 0, newCount: 1 });
+  });
+
+  it('biến thể is_gift đã chuyển NO_PRICE (còn giá cũ trong DB) vẫn 0đ: không báo, như quà tặng chưa từng bán', async () => {
+    const r = await run([product('p1', [variation('v1', { retail_price: 0, is_gift: true })])], {
+      prevByVariation: { v1: { retailPrice: 89_000, salePrice: null, isActive: false, pancakeHold: 'NO_PRICE' } },
+    });
+    expect(r.zero).toMatchObject({ count: 0 });
   });
 
   it('Pancake gửi giá > 0 hợp lệ cho biến thể REMOVED: mở bán lại với giá MỚI', async () => {
@@ -306,6 +316,22 @@ describe('W156: biến thể/sản phẩm REMOVED mà Pancake trả lại với 
       prevByVariation: { v1: { retailPrice: 89_000, salePrice: null, isActive: false, pancakeHold: 'NO_PRICE' } },
     });
     expect(r.call!.update).toMatchObject({ isActive: true, pancakeHold: null, retailPrice: 95_000 });
+  });
+
+  it('mở bán lại từ REMOVED/NO_PRICE với giá thấp hơn giá cũ trong DB: KHÔNG báo wishlist "giảm giá" (giá cũ chưa từng là giá khách thấy)', async () => {
+    for (const hold of ['REMOVED', 'NO_PRICE']) {
+      notifyPriceDrop.mockClear();
+      const r = await run([product('p1', [variation('v1', { retail_price: 80_000 })])], {
+        prevByVariation: { v1: { retailPrice: 89_000, salePrice: null, isActive: false, pancakeHold: hold } },
+      });
+      expect(r.call!.update).toMatchObject({ isActive: true, pancakeHold: null, retailPrice: 80_000 });
+      expect(notifyPriceDrop).not.toHaveBeenCalled();
+    }
+  });
+
+  it('đang bán 89.000đ (không bị giữ) hạ còn 80.000đ: vẫn báo giảm giá như trước', async () => {
+    await run([product('p1', [variation('v1', { retail_price: 80_000 })])], { prevByVariation: { v1: sellingAt(89_000) } });
+    expect(notifyPriceDrop).toHaveBeenCalledTimes(1);
   });
 
   it('biến thể admin tắt tay (pancakeHold null) báo 0đ: không bị đồng bộ động tới (không mở, không đổi hold)', async () => {

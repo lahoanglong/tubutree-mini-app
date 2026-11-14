@@ -496,7 +496,7 @@ export class PancakeSyncService implements OnModuleInit {
     const wasRemoved = prev?.pancakeHold === PANCAKE_HOLD.REMOVED;
     this.logger.warn(
       `Biến thể Pancake ${v.id} thiếu/không hợp lệ retail_price (${JSON.stringify(v.retail_price) ?? 'undefined'}) — ` +
-        (prev && prev.retailPrice > 0 && !wasRemoved ? `giữ giá cũ ${prev.retailPrice}.` : 'không mở bán tới khi có giá.'),
+        (prev && prev.retailPrice > 0 && prev.pancakeHold == null ? `giữ giá cũ ${prev.retailPrice}.` : 'không mở bán tới khi có giá.'),
     );
     return { prices: {}, noPrice: !prev || prev.retailPrice <= 0 || prev.pancakeHold === PANCAKE_HOLD.NO_PRICE || wasRemoved };
   }
@@ -671,7 +671,8 @@ export class PancakeSyncService implements OnModuleInit {
     const hold = this.holdPatch(prev, removed ? PANCAKE_HOLD.REMOVED : noPrice ? PANCAKE_HOLD.NO_PRICE : null);
     // Biến thể khách không mua được sau lượt này (Pancake xoá, hoặc admin đã tắt bán) hạ giá thì không báo "giảm giá".
     const sellable = !removed && (hold.isActive ?? prev?.isActive) !== false;
-    if (prev && sellable && prices.retailPrice != null) {
+    // Biến thể đang bị giữ (REMOVED/NO_PRICE) không đang bán: giá cũ trong DB không phải giá khách thấy, nên mở bán lại với giá mới không phải "giảm giá".
+    if (prev && sellable && prev.pancakeHold == null && prices.retailPrice != null) {
       const newEff = prices.salePrice ?? prices.retailPrice;
       const oldEff = prev.salePrice ?? prev.retailPrice;
       if (newEff > 0 && newEff < oldEff) drop = { oldPrice: oldEff, newPrice: newEff };
