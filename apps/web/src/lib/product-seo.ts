@@ -67,14 +67,37 @@ export function trimAtWord(text: string, max = META_DESCRIPTION_MAX): string {
   return `${cut.replace(/[\s,;:.\-–—]+$/, '')}…`;
 }
 
-/** Tiêu đề trang sản phẩm (chưa gồm hậu tố "— Tubu Tree" của template gốc); sản phẩm thuộc nhãn Tubu Tree thì không lặp tên nhãn. */
-export function productTitle(p: Pick<ProductDetail, 'name' | 'brand'>): string {
+/** Trần của `metaTitle`/`metaDesc` đã duyệt trong Admin (khớp `SEO_TITLE_MAX`/`SEO_DESC_MAX` ở apps/api): giá trị nhập ngoài Admin vượt trần thì cắt an toàn. */
+export const META_TITLE_APPROVED_MAX = 65;
+export const META_DESC_APPROVED_MAX = 155;
+
+/**
+ * SEO đã duyệt trong DB. API trả cả hai trường nhưng `ProductDetail` chưa khai, nên nhận qua kiểu cấu trúc tùy chọn:
+ * trang truyền nguyên `product` nên giá trị tới nơi mà không cần đổi nơi gọi.
+ */
+export interface ApprovedSeo {
+  metaTitle?: string | null;
+  metaDesc?: string | null;
+}
+
+// Template tiêu đề gốc đã thêm " — Tubu Tree", nên hậu tố thương hiệu của chính `metaTitle` ("| Tubu Tree", "— Tubu Tree") phải gỡ để khỏi lặp.
+const OWN_BRAND_SUFFIX = new RegExp(`\\s*[|—–-]\\s*${BRAND_NAME}\\s*$`, 'i');
+
+/**
+ * Tiêu đề trang sản phẩm (chưa gồm hậu tố "— Tubu Tree" của template gốc). Có `metaTitle` đã duyệt thì dùng đúng giá trị đó (cắt an toàn nếu vượt trần);
+ * không thì dựng từ tên + nhãn, sản phẩm thuộc nhãn Tubu Tree không lặp tên nhãn.
+ */
+export function productTitle(p: Pick<ProductDetail, 'name' | 'brand'> & ApprovedSeo): string {
+  const approved = p.metaTitle?.trim();
+  if (approved) return trimAtWord(approved.replace(OWN_BRAND_SUFFIX, '').trim() || approved, META_TITLE_APPROVED_MAX);
   const brand = p.brand?.trim();
   return brand && brand.toLowerCase() !== BRAND_NAME.toLowerCase() ? `${p.name} — ${brand}` : p.name;
 }
 
-/** Mô tả meta: mô tả ngắn, rồi mô tả đầy đủ (chuỗi rỗng từ Pancake không rơi xuống `??`), cuối cùng dựng từ tên + nhãn. */
-export function productMetaDescription(p: Pick<ProductDetail, 'name' | 'brand' | 'shortDesc' | 'description'>): string {
+/** Mô tả meta: `metaDesc` đã duyệt, rồi mô tả ngắn, rồi mô tả đầy đủ (chuỗi rỗng từ Pancake không rơi xuống `??`), cuối cùng dựng từ tên + nhãn. */
+export function productMetaDescription(p: Pick<ProductDetail, 'name' | 'brand' | 'shortDesc' | 'description'> & ApprovedSeo): string {
+  const approved = p.metaDesc?.trim();
+  if (approved) return trimAtWord(approved, META_DESC_APPROVED_MAX);
   const own = plainText(p.shortDesc) || plainText(p.description);
   if (own) return trimAtWord(own);
   const brand = p.brand?.trim();
@@ -123,7 +146,7 @@ export function breadcrumbJsonLd(items: readonly Crumb[]): Record<string, unknow
 }
 
 /** Dữ liệu có cấu trúc schema.org/Product để Google hiện giá, tình trạng hàng và đánh giá ở kết quả tìm kiếm. */
-export function productJsonLd(p: ProductDetail, url: string): Record<string, unknown> {
+export function productJsonLd(p: ProductDetail & ApprovedSeo, url: string): Record<string, unknown> {
   const images = galleryImages(p);
   const prices = p.variations.map((v) => v.salePrice ?? v.retailPrice);
   const availability = productAvailability(p);
@@ -147,8 +170,9 @@ export function productJsonLd(p: ProductDetail, url: string): Record<string, unk
     '@type': 'Product',
     name: p.name,
     url,
-    brand: { '@type': 'Brand', name: p.brand },
-    description: plainText(p.shortDesc ?? p.description).slice(0, JSON_LD_DESCRIPTION_MAX),
+    brand: { '@type': 'Brand', name: p.brand?.trim() || BRAND_NAME },
+    // Chuỗi rỗng từ Pancake không rơi xuống `??`; mô tả JSON-LD không bao giờ rỗng vì Google coi thiếu `description` là cảnh báo.
+    description: (plainText(p.shortDesc) || plainText(p.description) || productMetaDescription(p)).slice(0, JSON_LD_DESCRIPTION_MAX),
     offers,
   };
   if (images.length > 0) ld.image = images;

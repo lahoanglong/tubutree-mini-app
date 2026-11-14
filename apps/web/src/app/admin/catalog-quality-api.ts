@@ -33,6 +33,51 @@ export const postSaveIngredients = (id: string, ingredients: readonly string[]) 
 export const setProductImages = (id: string, images: readonly string[]) =>
   apiFetch<unknown>(`/admin/catalog-products/${encodeURIComponent(id)}`, { method: 'PATCH', body: { images, ifImagesEmpty: true } });
 
+/** Trần SEO đã duyệt; khớp `SEO_TITLE_MAX`/`SEO_DESC_MAX` ở apps/api (kiểu dưới đây khai lại vì shared-types nằm ngoài phạm vi wave này). */
+export const SEO_TITLE_MAX = 65;
+export const SEO_DESC_MAX = 155;
+
+/** Một dòng của `GET /admin/catalog-quality/seo` (apps/api: SeoRowDto). */
+export interface CatalogSeoRow {
+  id: string;
+  slug: string;
+  name: string;
+  brand: string;
+  metaTitle: string | null;
+  metaDesc: string | null;
+  titleLength: number;
+  descLength: number;
+  missingTitle: boolean;
+  missingDesc: boolean;
+  tooLongTitle: boolean;
+  tooLongDesc: boolean;
+  /** Bản nháp dựng từ dữ liệu thật của sản phẩm (không bịa công dụng, hữu cơ, xuất xứ). */
+  suggested: { metaTitle: string; metaDesc: string };
+}
+
+export interface CatalogSeoResponse {
+  rows: CatalogSeoRow[];
+  total: number;
+  missing: number;
+  truncated: boolean;
+}
+
+export interface SeoApplyItem {
+  productId: string;
+  metaTitle: string;
+  metaDesc: string;
+}
+
+export interface SeoApplyResponse {
+  updated: number;
+  skippedIds: string[];
+}
+
+export const getCatalogSeo = () => apiFetch<CatalogSeoResponse>('/admin/catalog-quality/seo', { cache: 'no-store' });
+
+/** Ghi SEO admin đã duyệt: máy chủ kiểm lại trống, độ dài, mã HTML, tuyên bố ngoài tên sản phẩm và ghi cả lô trong một giao dịch. */
+export const postSeoApply = (items: readonly SeoApplyItem[]) => apiFetch<SeoApplyResponse>('/admin/catalog-quality/seo/apply', { method: 'POST', body: { items } });
+
 export const getAdvisorStats = () => apiFetch<AdvisorStatsDto>('/admin/ai-advisor/stats', { cache: 'no-store' });
 
 export type PancakeZeroPriceKind = 'PRICE_KEPT' | 'NEW_AT_ZERO';

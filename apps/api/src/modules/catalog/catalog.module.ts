@@ -18,6 +18,7 @@ import { CatalogAuditService } from './catalog-audit.service';
 import { CopyDraftService } from './copy-draft.service';
 import { CopyApproveService } from './copy-approve.service';
 import { IngredientEnrichService } from './ingredient-enrich.service';
+import { SeoEnrichService } from './seo-enrich.service';
 import { CategoryAdminController } from './category-admin.controller';
 import { CategoryAdminService } from './category-admin.service';
 import { ProductCategoryAdminController } from './product-category-admin.controller';
@@ -33,7 +34,7 @@ import { AiAdvisorModule } from '../ai-advisor/ai-advisor.module';
 @Module({
   imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule, AiAdvisorModule],
   controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, WpImageSyncController, PublicImageController, ImageResizeController],
-  providers: [CatalogService, HomeService, CategoryAdminService, ProductCategoryAdminService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, IngredientEnrichService, WpImageSyncService, PublicImageService, ImageResizeService],
+  providers: [CatalogService, HomeService, CategoryAdminService, ProductCategoryAdminService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, IngredientEnrichService, SeoEnrichService, WpImageSyncService, PublicImageService, ImageResizeService],
   exports: [CatalogService, ImageResizeService],
 })
 export class CatalogModule {}

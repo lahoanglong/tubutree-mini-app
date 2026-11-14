@@ -433,3 +433,38 @@ describe('CatalogQualityTab — bổ sung thành phần và ảnh ngay tại tab
     expect(/min-h-\[44px\]/.test(link!.className)).toBe(true);
   });
 });
+
+describe('CatalogQualityTab — duyệt SEO hàng loạt (W160)', () => {
+  const SEO_ROWS = [
+    { id: 'p-a', slug: 'mat-co-dac', name: 'Mật cô đặc', brand: 'Tubu Tree', metaTitle: null, metaDesc: null, titleLength: 0, descLength: 0, missingTitle: true, missingDesc: true, tooLongTitle: false, tooLongDesc: false, suggested: { metaTitle: 'Mật cô đặc | Tubu Tree', metaDesc: 'Mật cô đặc. Mua tại Tubu Tree.' } },
+    { id: 'p-b', slug: 'xoai-say', name: 'Xoài sấy', brand: 'Tubu Tree', metaTitle: 'Xoài sấy | Tubu Tree', metaDesc: 'Xoài sấy. Mua tại Tubu Tree.', titleLength: 20, descLength: 28, missingTitle: false, missingDesc: false, tooLongTitle: false, tooLongDesc: false, suggested: { metaTitle: 'Xoài sấy | Tubu Tree', metaDesc: 'Xoài sấy. Mua tại Tubu Tree.' } },
+  ];
+  const region = (r: Rendered) => r.container.querySelector<HTMLElement>('[role="region"][aria-labelledby="seo-bulk-title"]');
+  const seoGets = (m: ReturnType<typeof mockFetch>) => m.calls.filter((c) => c.url.endsWith('/admin/catalog-quality/seo'));
+
+  it('chỉ hiện sau khi đã kiểm; không tự gọi API SEO, bấm "Mở bảng SEO" mới đọc và liệt kê dòng thiếu SEO', async () => {
+    const m = mockFetch(routes({ '/admin/catalog-quality/seo': { body: { rows: SEO_ROWS, total: 2, missing: 1, truncated: false } } }));
+    vi.stubGlobal('fetch', m.fn);
+    const r = mount(<CatalogQualityTab />);
+    await flush();
+    expect(region(r)).toBeNull();
+    await runCheck(r);
+    expect(region(r)).not.toBeNull();
+    expect(seoGets(m)).toHaveLength(0);
+    click(byText(region(r)!, 'button', 'Mở bảng SEO'));
+    await flush(10);
+    expect(seoGets(m)).toHaveLength(1);
+    expect(Array.from(r.container.querySelectorAll('[data-testid^="seo-row-"]')).map((e) => e.getAttribute('data-testid'))).toEqual(['seo-row-p-a']);
+  });
+
+  it('bảng SEO nằm ngay sau khối bổ sung thành phần, trong cùng thẻ Kiểm tra', async () => {
+    vi.stubGlobal('fetch', mockFetch(routes()).fn);
+    const r = mount(<CatalogQualityTab />);
+    await runCheck(r);
+    const ids = Array.from(r.container.querySelectorAll('[role="region"][aria-labelledby]')).map((e) => e.getAttribute('aria-labelledby'));
+    const iIng = ids.indexOf('ingredients-fill-title');
+    const iSeo = ids.indexOf('seo-bulk-title');
+    expect(iIng).toBeGreaterThanOrEqual(0);
+    expect(iSeo).toBe(iIng + 1);
+  });
+});

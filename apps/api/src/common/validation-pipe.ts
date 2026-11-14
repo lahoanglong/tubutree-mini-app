@@ -192,6 +192,8 @@ export const FIELD_LABELS: Record<string, string> = {
   shippingFee: 'Phí vận chuyển',
   shortCode: 'Mã rút gọn',
   shortDesc: 'Mô tả ngắn',
+  metaTitle: 'Tiêu đề SEO',
+  metaDesc: 'Mô tả SEO',
   shortfallReason: 'Lý do thiếu hàng',
   sku: 'Mã SKU',
   slug: 'Đường dẫn',

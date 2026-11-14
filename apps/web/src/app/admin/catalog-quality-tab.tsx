@@ -21,6 +21,7 @@ import { AdvisorStatsCard } from './advisor-stats-card';
 import { CatalogCopyReview, type CurrentCopy } from './catalog-copy-review';
 import { CatalogIngredientsFill } from './catalog-ingredients-fill';
 import { CatalogIssueList } from './catalog-issue-list';
+import { CatalogSeoBulk } from './catalog-seo-bulk';
 import { downloadCsvText, getCatalogAudit } from './catalog-quality-api';
 import { PancakeZeroPriceCard } from './pancake-zero-price-card';
 
@@ -212,6 +213,7 @@ export function CatalogQualityTab() {
                   </span>
                 </div>
                 <CatalogIngredientsFill products={missingIngredients} total={activeProducts.length} onSaved={() => run()} />
+                <CatalogSeoBulk />
                 <CatalogCopyReview
                   selected={selectedRows.map((r) => ({ id: r.id!, name: r.name }))}
                   current={current}
