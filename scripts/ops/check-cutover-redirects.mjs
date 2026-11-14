@@ -9,6 +9,8 @@
 //        --sitemap product-sitemap.xml --sitemap page-sitemap.xml --blog proxy
 //   # Thử thẳng cổng Next trên VPS (127.0.0.1:14000, chưa qua Apache) bằng Host của tên miền thật:
 //   node scripts/ops/check-cutover-redirects.mjs --base http://127.0.0.1:14000 --host-header tubutree.com --urls scripts/ops/data/wp-live-urls-20261114.txt
+//   # Chỉ kiểm chính bảng luật, KHÔNG gọi mạng (dùng trong ops/pre-cutover-check.sh): đích cùng origin, không vòng, không chuỗi 2 chặng, không dính blog:
+//   node scripts/ops/check-cutover-redirects.mjs --offline
 //   node scripts/ops/check-cutover-redirects.mjs --help
 //
 // Mỗi URL được đi theo chuyển hướng tay (tối đa 6 chặng) rồi xếp PASS / WARN / FAIL:
@@ -17,6 +19,8 @@
 //   FAIL  sai đích, chuỗi từ 2 chặng, vòng lặp, sang origin khác, đích 4xx/5xx, lỗi mạng, hoặc mong 410 mà không phải 410.
 // URL WordPress có luật (chuyển hướng hoặc 410) mà đi qua chặng bỏ dấu "/" cuối trước (308 rồi 301) là FAIL: web đặt skipTrailingSlashRedirect để mọi URL
 // WordPress cũ, vốn đều kết thúc bằng "/", đi MỘT chặng. URL không có luật (vd /gio-hang/) bỏ dấu "/" bằng 308 là bình thường, chỉ ghi chú.
+// --offline không gửi request nào: tra từng URL bằng `resolveLegacyWpPath` rồi xếp PASS / FAIL theo lỗi của chính bảng luật (đích không phải đường dẫn cùng origin,
+// đích trỏ lại chính nó, đích vẫn còn luật = chuỗi 2 chặng, đích là đường dẫn blog đang reverse proxy, URL blog mà lại có luật, URL dựng từ bảng mà không còn luật).
 // Mã thoát: 0 không có FAIL (WARN vẫn 0, trừ --strict), 1 có FAIL, 2 sai tham số.
 // Node in cảnh báo ExperimentalWarning/MODULE_TYPELESS_PACKAGE_JSON ra stderr khi nạp tệp .ts: vô hại, không ảnh hưởng kết quả.
 import { readFileSync } from 'node:fs';
@@ -168,19 +172,21 @@ Tuỳ chọn:
   --limit N           chỉ kiểm N URL đầu
   --strict            WARN cũng làm thoát mã 1
   --json              in kết quả dạng JSON
+  --offline           chỉ kiểm bảng luật, không gọi mạng (--base, --resolve-ip, --host-header, --method, --concurrency, --timeout bị bỏ qua)
   -h, --help          in trợ giúp này
 
 Không có --sitemap/--urls thì kiểm bộ URL dựng từ chính bảng chuyển hướng (mọi trang, 91 sản phẩm, vài trang demo), mỗi URL kèm dấu / cuối như WordPress.
 Mã thoát: 0 không có FAIL, 1 có FAIL, 2 sai tham số.`;
 
 export function parseArgs(argv) {
-  const opts = { base: 'https://app.tubutree.com', resolveIp: '', hostHeader: '', sitemaps: [], urls: '', blog: 'skip', method: 'HEAD', concurrency: 4, timeout: 15000, limit: 0, strict: false, json: false, help: false };
+  const opts = { base: 'https://app.tubutree.com', resolveIp: '', hostHeader: '', sitemaps: [], urls: '', blog: 'skip', method: 'HEAD', concurrency: 4, timeout: 15000, limit: 0, strict: false, json: false, offline: false, help: false };
   const takes = new Set(['--base', '--resolve-ip', '--host-header', '--sitemap', '--urls', '--blog', '--method', '--concurrency', '--timeout', '--limit']);
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === '-h' || arg === '--help') opts.help = true;
     else if (arg === '--strict') opts.strict = true;
     else if (arg === '--json') opts.json = true;
+    else if (arg === '--offline') opts.offline = true;
     else if (takes.has(arg)) {
       i += 1;
       const value = argv[i];
@@ -219,7 +225,7 @@ async function loadTable() {
   }
 }
 
-function defaultInventory(table) {
+export function defaultInventory(table) {
   const paths = [
     ...Object.keys(table.LEGACY_PAGE_REDIRECTS),
     ...Object.keys(table.LEGACY_FILE_REDIRECTS),
@@ -232,6 +238,31 @@ function defaultInventory(table) {
     ...table.LEGACY_GONE_EXACT,
   ];
   return paths.map((p) => ({ path: `${p}/`, search: '' }));
+}
+
+/**
+ * Kiểm bảng luật KHÔNG gọi mạng. `inputs` = `[{ path, search }]`. `requireRule` = true khi bộ URL dựng từ chính bảng (mỗi URL phải còn luật);
+ * false khi URL do người dùng đưa (không có luật là bình thường: web xử lý bằng route riêng). Trả các dòng cùng dạng với bộ kiểm có mạng.
+ */
+export function checkRuleTableOffline(table, inputs, { requireRule = false } = {}) {
+  return inputs.map((input) => {
+    const resolution = table.resolveLegacyWpPath(input.path);
+    const expected = expectedFor(resolution);
+    const row = (verdict, reason, kind = expected) => ({ ...input, expected: kind, steps: [], notes: [], verdict, reason });
+    if (table.isWpBlogPath(input.path)) {
+      return resolution ? row('FAIL', 'vừa có luật chuyển hướng vừa là đường dẫn blog (đang reverse proxy)') : row('SKIP', 'blog/ảnh WordPress (reverse proxy, không có luật)', { kind: 'blog' });
+    }
+    if (!resolution) return requireRule ? row('FAIL', 'không còn luật cho URL dựng từ bảng') : row('PASS', 'không có luật (route của web xử lý)');
+    if (resolution.kind === 'gone') return row('PASS', '410');
+    const location = resolution.location;
+    if (!location.startsWith('/') || location.startsWith('//')) return row('FAIL', `đích không phải đường dẫn cùng origin: ${location}`);
+    const target = toPathAndSearch(location);
+    if (!target) return row('FAIL', `đích không đọc được: ${location}`);
+    if (trimSlash(target.path) === trimSlash(input.path)) return row('FAIL', 'đích trỏ lại chính URL nguồn (vòng lặp)');
+    if (table.isWpBlogPath(target.path)) return row('FAIL', `đích là đường dẫn blog đang reverse proxy về WordPress: ${target.path}`);
+    if (table.resolveLegacyWpPath(target.path)) return row('FAIL', `đích ${target.path} vẫn còn luật chuyển hướng: chuỗi 2 chặng`);
+    return row('PASS', String(resolution.status));
+  });
 }
 
 function collectInputs(opts, table) {
@@ -279,25 +310,27 @@ async function main() {
 
   const table = await loadTable();
   const inputs = collectInputs(opts, table);
-  const rows = await mapPool(inputs, opts.concurrency, async (input) => {
-    const isBlog = table.isWpBlogPath(input.path);
-    if (isBlog && opts.blog === 'skip') return { ...input, verdict: 'SKIP', reason: 'blog/ảnh WordPress (--blog skip)', notes: [], expected: { kind: 'blog' }, steps: [] };
-    const expected = isBlog ? { kind: 'none' } : expectedFor(table.resolveLegacyWpPath(input.path));
-    const { steps, flags } = await walk({ base: opts.base, resolveIp: opts.resolveIp, hostHeader: opts.hostHeader, path: input.path, search: input.search, method: opts.method, timeout: opts.timeout });
-    return { ...input, expected, steps, ...classifyChain({ expected, steps, flags }) };
-  });
+  const rows = opts.offline
+    ? checkRuleTableOffline(table, inputs, { requireRule: !opts.sitemaps.length && !opts.urls })
+    : await mapPool(inputs, opts.concurrency, async (input) => {
+        const isBlog = table.isWpBlogPath(input.path);
+        if (isBlog && opts.blog === 'skip') return { ...input, verdict: 'SKIP', reason: 'blog/ảnh WordPress (--blog skip)', notes: [], expected: { kind: 'blog' }, steps: [] };
+        const expected = isBlog ? { kind: 'none' } : expectedFor(table.resolveLegacyWpPath(input.path));
+        const { steps, flags } = await walk({ base: opts.base, resolveIp: opts.resolveIp, hostHeader: opts.hostHeader, path: input.path, search: input.search, method: opts.method, timeout: opts.timeout });
+        return { ...input, expected, steps, ...classifyChain({ expected, steps, flags }) };
+      });
 
   const count = (v) => rows.filter((r) => r.verdict === v).length;
   const summary = { total: rows.length, pass: count('PASS'), warn: count('WARN'), fail: count('FAIL'), skip: count('SKIP') };
   if (opts.json) {
-    console.log(JSON.stringify({ base: opts.base, resolveIp: opts.resolveIp || null, summary, rows }, null, 2));
+    console.log(JSON.stringify({ base: opts.offline ? null : opts.base, offline: opts.offline, resolveIp: opts.resolveIp || null, summary, rows }, null, 2));
   } else {
     for (const r of rows) {
       const to = r.expected.kind === 'redirect' ? ` -> ${r.expected.location}` : r.expected.kind === 'gone' ? ' -> 410' : '';
       const notes = r.notes.length ? ` [${r.notes.join(', ')}]` : '';
       console.log(`${r.verdict.padEnd(4)}  ${r.path}${r.search}${to}  (${r.reason})${notes}`);
     }
-    console.log(`\n${opts.base}${opts.resolveIp ? ` qua ${opts.resolveIp}` : ''}: ${summary.total} URL, ${summary.pass} PASS, ${summary.warn} WARN, ${summary.fail} FAIL, ${summary.skip} SKIP`);
+    console.log(`\n${opts.offline ? 'offline (bảng luật, không gọi mạng)' : `${opts.base}${opts.resolveIp ? ` qua ${opts.resolveIp}` : ''}`}: ${summary.total} URL, ${summary.pass} PASS, ${summary.warn} WARN, ${summary.fail} FAIL, ${summary.skip} SKIP`);
   }
   return summary.fail || (opts.strict && summary.warn) ? 1 : 0;
 }

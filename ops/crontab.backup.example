@@ -14,5 +14,12 @@ PATH=/usr/local/bin:/usr/bin:/bin
 # Bản TRƯỚC mỗi deploy không đặt trong cron: chạy tay `bash ops/backup-predeploy.sh` ngay trước deploy
 # (nhãn predeploy, giữ 10 bản, không ping healthcheck của cron này).
 
+# TUỲ CHỌN, bản offsite hằng ngày có dấu thời điểm (ops/backup-offsite.sh): dòng cron 6 giờ ở trên đã đẩy bản ra ngoài máy qua backup-db.sh nhưng không ghi
+# dấu /var/backups/tubutree/.last-offsite-ok, nên `ops/check-edge.sh --local` không theo dõi được tuổi của đường đó. Bản này dump riêng (nhãn offsite), đẩy lên
+# RCLONE_REMOTE (PHẢI là remote rclone crypt, như dòng trên), kiểm file đã có ở remote rồi mới ghi dấu; check-edge WARN khi dấu quá 30 giờ, FAIL quá 90 giờ.
+# Giữ 14 ngày ở máy và 30 ngày ở remote (RETENTION_DAYS, OFFSITE_RETENTION_DAYS), CHỈ dọn file nhãn offsite của chính nó: không đụng bản cron hay predeploy.
+# Bỏ dấu # đầu dòng để bật; chưa đặt RCLONE_REMOTE thì script chỉ giữ bản local và in `SKIP offsite (RCLONE_REMOTE unset)`.
+# 47 3 * * * COMPOSE_FILE=/opt/tubutree/docker-compose.vietnix.yml RCLONE_REMOTE=tubucrypt: /opt/tubutree/ops/backup-offsite.sh >> /var/log/tubutree-backup-offsite.log 2>&1
+
 # --- crontab của ROOT (`sudo crontab -e`): gia hạn chứng chỉ Let's Encrypt, xem ops/README-vietnix-deploy.md ---
 # 0 3 * * * certbot renew --quiet --post-hook "/www/server/apache/bin/apachectl -k graceful"

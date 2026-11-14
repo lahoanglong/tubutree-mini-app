@@ -162,6 +162,14 @@ backup vẫn chạy nhưng log có dòng `WARN` (và `go-live:check` báo). Di�
 bản về từ remote và bấm giờ). Bước diễn tập, đo thời gian backup và khôi phục khi deploy hỏng nằm ở
 [runbook deploy](../docs/launch/deploy-rollback-runbook.md) mục 1.2 và mục 7.
 
+### Bản offsite hằng ngày có theo dõi tuổi (W158, tuỳ chọn)
+
+`bash ops/backup-offsite.sh` dump riêng (file `tubutree_<giờ>_offsite.sql.gz`), kiểm file > 0 byte và `gzip -t`, đẩy lên `RCLONE_REMOTE`, kiểm file đã có ở remote rồi mới ghi dấu `/var/backups/tubutree/.last-offsite-ok`. Chưa đặt `RCLONE_REMOTE` thì chỉ giữ bản local và in `SKIP offsite (RCLONE_REMOTE unset)` (thoát 0). Remote PHẢI là rclone `crypt` như `backup-db.sh` (remote loại khác bị từ chối, thoát 3, trừ `BACKUP_ALLOW_PLAIN_REMOTE=1`). Giữ 14 ngày ở máy và 30 ngày ở remote (`RETENTION_DAYS`, `OFFSITE_RETENTION_DAYS`), chỉ dọn file nhãn `offsite` của chính nó nên không đụng bản cron hay predeploy; dọn remote chỉ ở thư mục gốc (`--max-depth 1`), thư mục con như `archive/` không bị đụng. Upload lỗi thì bỏ qua cả việc dọn bản local (bản offsite cũ có thể là bản duy nhất chưa từng lên remote). Dòng cron mẫu (đang là comment) ở [crontab.backup.example](crontab.backup.example). Mã thoát: 0 xong, 1 sai cấu hình, 2 dump hỏng, 3 bản local xong nhưng không có bản ngoài máy.
+
+`bash ops/check-edge.sh --local` thêm hai kiểm: bản mới nhất không rỗng (file 0 byte là dump lỗi hoặc đang chạy dở), và nếu có dấu `.last-offsite-ok` thì tuổi của nó (WARN quá `--offsite-max-hours`, mặc định 30; FAIL quá gấp 3). Chưa có dấu và chưa có bản nhãn `offsite` nào thì chỉ ghi chú `backup offsite: chưa bật`, không WARN/FAIL; đã có bản nhãn `offsite` mà chưa từng có dấu (cron bật nhưng upload lỗi mỗi đêm: thiếu rclone, remote không phải crypt) thì WARN. Lưu ý: dòng cron 6 giờ qua `backup-db.sh` cũng đẩy ra ngoài máy nhưng không ghi dấu này, nên check-edge chỉ theo dõi được đường `backup-offsite.sh`.
+
+Kiểm thử (không cần Docker/rclone/mạng): `bash ops/test-backup-offsite.sh`, `bash ops/test-check-edge-backup.sh`.
+
 ## Nén, giữ kết nối và kiểm biên (2026-10-18)
 
 - Vhost phase2 có `mod_deflate` (JSON/HTML/JS/CSS/SVG) và `ProxyPass ... ttl=30`; API đặt `keepAliveTimeout` 125 s, web
@@ -204,8 +212,16 @@ Quay lại `docker-compose.prod.yml` (có Caddy, không giới hạn RAM) trên 
 sang IP mới, rồi tắt stack trên VPS Vietnix này (`docker compose -f docker-compose.vietnix.yml
 down -v`) + xoá 2 file vhost Apache + xoá `/opt/tubutree`.
 
+## Dọn thẻ `:prev-*` an toàn (W158)
+
+`bash tools/deploy/prune-prev-images.sh` mặc định chỉ in kế hoạch; `--dry-run` nói rõ điều đó (thắng `--apply` nếu đưa cả hai), `--apply` mới xoá, `--keep=N` hoặc `KEEP_PREV=N` đổi số bản giữ (cờ thắng biến). Luôn giữ ít nhất 3 bản: dưới 3 bị từ chối (thoát 2) trừ khi `PRUNE_ALLOW_LOW_KEEP=1`. Chỉ động tới thẻ `prev-<8 hex>` của `tubutree-api` và `tubutree-web`; không bao giờ động tới `:latest`, `:rollback`, thẻ khác, hay cặp image đang gắn `:latest` hoặc đang được một container (chạy hay đã dừng) dùng: cặp đó được giữ thêm, kế hoạch ghi `(đang chạy hoặc gắn :latest, giữ thêm)`. `dep1-prepare.sh` vẫn gọi `--apply` như cũ. Kiểm thử: `bash tools/deploy/test-prune-prev-images.sh`.
+
 ## Cutover apex tubutree.com (chuẩn bị xong, CHƯA chạy)
 
 Kết quả diễn tập, đường dẫn backup, 4 điều kiện còn thiếu và lệnh một chạm: `docs/launch/apex-cutover-rehearsal-2026-11-14.md`.
 `bash ops/cutover-apex-apply.sh` chỉ kiểm điều kiện; `--apply` mới cài vhost `ops/vietnix-vhost-apex.conf.cutover` (configtest, graceful, tự quay lại nếu hỏng);
 `bash ops/cutover-apex-rollback.sh` gỡ lại trong chưa tới 1 giây. Không script nào đổi DNS, cấp chứng chỉ hay deploy web.
+
+### Bảng kiểm sẵn sàng `ops/pre-cutover-check.sh` (W159, chỉ đọc)
+
+`bash ops/pre-cutover-check.sh` (trên VPS bằng root, để đọc `/etc/letsencrypt` và `/root/.secrets`) in mỗi hạng mục một dòng `[READY]` hoặc `[ACTION_NEEDED]`, thoát 0 khi mọi mục READY, 1 khi còn ACTION_NEEDED. Không cài vhost, không đổi DNS, không cấp hay gia hạn chứng chỉ, không ghi file nào của dự án hay hệ thống (kể cả tệp tạm), không bao giờ in giá trị token Cloudflare hay biến env nào khác của container api. Chỉ dùng `openssl`, `curl` GET (chỉ thêm header `Host`), `docker inspect --format`, `df`, `stat`, `gzip -t`; ngoại lệ duy nhất là `docker run --rm --network none --read-only` khi máy thiếu Node >= 22.18. Hạng mục: `vhost-src` (vhost cutover khai đường dẫn chứng chỉ), `cert-file` (chứng chỉ ở đường dẫn đó phủ `tubutree.com` và `www.tubutree.com`, còn >= 14 ngày, khoá khớp, chuỗi được CA tin cậy qua `openssl verify` nên chứng chỉ tự ký hoặc staging `--test-cert` không qua; `*.tubutree.com` phủ `www` nhưng không phủ apex), `cert-app`/`cert-api` (chứng chỉ đang chạy >= 14 ngày), `dns01-tool` (certbot + plugin dns-cloudflare, hoặc acme.sh + dns_cf), `cf-token` (token Cloudflare có mặt, không rỗng, tệp mode 600), `app-http` và `api-health` (trả đúng 200), `site-url` (sitemap của web ra `https://tubutree.com`, tức `NEXT_PUBLIC_SITE_URL` đúng), `cors-origins` (env `CORS_ORIGINS` của container api có `https://tubutree.com`, nếu không khách ở apex bị 403 khi đăng nhập), `live-redirect` (Next đang chạy trả 301 cho `/post-sitemap1.xml` với `Host: tubutree.com`, tức luật chuyển hướng mới đã deploy; ba mục này là các điều kiện chặn của `docs/launch/apex-cutover-rehearsal-2026-11-14.md`), `disk-free` (trống >= 20%), `pg-backup` (bản mới nhất hợp lệ `gzip -t`, trong 8 giờ), `redirect-rules` (`node scripts/ops/check-cutover-redirects.mjs --offline`, chỉ kiểm bảng luật trong mã nguồn chứ không kiểm bản đang chạy, việc đó là của `live-redirect`: bảng chuyển hướng không có đích ngoài origin, vòng lặp, chuỗi 2 chặng; Node < 22.18 thì chạy trong ảnh của container web, `--network none`, chỉ đọc). Kiểm thử: `bash ops/test-pre-cutover-check.sh`, `node --test scripts/ops/check-cutover-redirects-offline.test.mjs`.
