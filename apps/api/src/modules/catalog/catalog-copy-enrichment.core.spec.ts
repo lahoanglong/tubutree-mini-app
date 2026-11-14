@@ -299,6 +299,63 @@ describe('planProduct: không đè chữ người đã sửa', () => {
     });
   });
 
+  describe('keepExistingDescription: sản phẩm đổi tên trên Pancake, mô tả cũ là bản chép tên cũ (W150A)', () => {
+    const oldName = 'Cà Phê Muối C&Sea Đậm Đà Thơm Béo Chuẩn Gu Huế Hộp 16g x 10 Gói Thơm Ngon Đặc Biệt Nhập Khẩu Chính Hãng';
+    const newName = 'Cà Phê Muối C&Sea Huế Hộp 10 Gói';
+    const pancake120 = 'Mô tả mới do nhân viên gõ bên Pancake POS, dài đủ một trăm hai mươi ký tự để chắc chắn vượt xa mọi ngưỡng ngắn mà lớp bảo vệ cũ từng dùng.';
+    const richText = 'Cà phê muối C&Sea đóng hộp mười gói, mỗi gói mười sáu gam, pha cùng nước nóng hoặc nước đá; mô tả do TubuTree biên tập.';
+
+    it('tiền đề: tên cũ và mô tả giàu thật đều từ 80 ký tự, tên mới khác tên cũ', () => {
+      expect(oldName.length).toBeGreaterThanOrEqual(RICH_DESCRIPTION_MIN_CHARS);
+      expect(richText.length).toBeGreaterThanOrEqual(RICH_DESCRIPTION_MIN_CHARS);
+      expect(newName).not.toBe(oldName);
+    });
+
+    it('không truyền tên cũ: bản chép tên cũ (từ 80 ký tự) bị nhận nhầm là mô tả giàu và khoá cứng (hành vi cũ, giữ để tương thích)', () => {
+      expect(keepExistingDescription(oldName, pancake120, newName)).toBe(true);
+    });
+
+    it.each([
+      ['nguyên văn', oldName],
+      ['chữ hoa', oldName.toUpperCase()],
+      ['bọc HTML', `<p>${oldName}</p>`],
+      ['thêm dấu chấm', `${oldName}.`],
+      ['không dấu', oldName.normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D')],
+    ])('truyền tên cũ: bản chép tên cũ (%s) không còn là mô tả giàu, chữ thật từ Pancake thay được', (_label, copy) => {
+      expect(keepExistingDescription(copy, pancake120, newName, oldName)).toBe(false);
+      expect(keepExistingDescription(copy, `<p>${pancake120}</p>`, newName, oldName)).toBe(false);
+    });
+
+    it('bản chép tên cũ mà Pancake gửi chữ trống: không phải ca ghi đè (upsertProduct tự giữ mô tả đang có, không xoá trắng)', () => {
+      for (const blank of [null, undefined, '', '<p><br></p>']) {
+        expect(keepExistingDescription(oldName, blank, newName, oldName)).toBe(false);
+      }
+    });
+
+    it('bản chép tên cũ mà Pancake gửi chữ ngắn dưới 40 ký tự: vẫn giữ tạm, không bị thay bằng cụm POS ngắn', () => {
+      expect(keepExistingDescription(oldName, 'Hộp 10 gói', newName, oldName)).toBe(true);
+    });
+
+    it('bản chép tên cũ mà Pancake chép tên mới (từ 40 ký tự): thay bản chép cũ bằng bản chép mới, không khoá bản cũ', () => {
+      const newLongName = 'Cà Phê Muối C&Sea Huế Hộp 16g x 10 Gói Thơm Ngon Chính Hãng';
+      expect(newLongName.length).toBeGreaterThanOrEqual(MIN_DESCRIPTION_CHARS);
+      expect(keepExistingDescription(oldName, newLongName, newLongName, oldName)).toBe(false);
+    });
+
+    it('mô tả giàu thật (không trùng tên cũ lẫn tên mới) vẫn được khoá dù có truyền tên cũ', () => {
+      expect(keepExistingDescription(richText, pancake120, newName, oldName)).toBe(true);
+      expect(keepExistingDescription(`<p>${richText}</p>`, 'Hộp 10 gói', newName, oldName)).toBe(true);
+    });
+
+    it('tên cũ trùng tên mới, trống hoặc không truyền: kết quả y như khi chỉ có tên mới', () => {
+      for (const prev of [newName, undefined, null, '', '   ']) {
+        expect(keepExistingDescription(richText, pancake120, newName, prev)).toBe(true);
+        expect(keepExistingDescription(newName, pancake120, newName, prev)).toBe(false);
+        expect(keepExistingDescription(oldName, pancake120, newName, prev)).toBe(true);
+      }
+    });
+  });
+
   it('descriptionState: bản chép tên từ 40 ký tự trở lên cũng là PLACEHOLDER; chữ dài có thêm nội dung vẫn là OK', () => {
     const name = 'Cà Phê Muối C&Sea Đậm Đà Thơm Béo Chuẩn Gu Huế Hộp 16g x 10 Gói';
     expect(descriptionState(name, name)).toBe('PLACEHOLDER');

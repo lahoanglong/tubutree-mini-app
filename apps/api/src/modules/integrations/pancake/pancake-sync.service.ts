@@ -514,14 +514,13 @@ export class PancakeSyncService implements OnModuleInit {
     const incomingDescription = typeof p.description === 'string' && !isBlankHtmlText(p.description) ? p.description : null;
     // TubuTree là nguồn chuẩn của mô tả giàu: mô tả đã có từ 80 ký tự (không phải bản chép tên) không bao giờ bị Pancake đè. Dưới mức đó, Pancake chỉ gửi tên
     // sản phẩm hay một cụm POS ngắn (dưới 40 ký tự) thì không được thay mô tả đã có từ 40 ký tự (admin hay CLI bổ sung chữ đã duyệt).
-    const keepDescription = keepExistingDescription(existing?.description, incomingDescription, name);
+    // Truyền cả tên đang lưu: sản phẩm vừa đổi tên trên Pancake mà mô tả là bản chép tên cũ thì không phải mô tả giàu.
+    const keepDescription = keepExistingDescription(existing?.description, incomingDescription, name, existing?.name);
     if (keepDescription) this.logger.debug(`Giữ mô tả đã có của sản phẩm Pancake ${pancakeId}: mô tả TubuTree đã đạt chuẩn giàu từ 80 ký tự, hoặc chữ Pancake gửi tới ngắn hơn 40 ký tự / chỉ chép tên sản phẩm.`);
     const description = keepDescription ? null : incomingDescription;
     const sellable = variations.filter((v) => !payloadRemoved(v.is_removed) && positivePrice(v.retail_price) !== null);
     const baseData = {
       name,
-      // Mô tả Pancake để trống (hoặc bị `keepExistingDescription` giữ lại, xem trên) không xoá mô tả admin đã nhập; mô tả chưa đạt chuẩn giàu mà Pancake có nội dung thật thì Pancake là nguồn chính.
-      description: description ?? existing?.description ?? '',
       images: imgs.length ? imgs : (existing?.images ?? []),
       thumbnail: imgs[0] ?? existing?.thumbnail ?? null,
       basePrice: positivePrice(sellable[0]?.retail_price) ?? existing?.basePrice ?? 0,
@@ -554,6 +553,9 @@ export class PancakeSyncService implements OnModuleInit {
           where: { id: existing.id },
           data: {
             ...baseData,
+            // Giữ mô tả (hoặc Pancake để trống, không xoá mô tả admin đã nhập) thì bỏ hẳn khoá: `existing.description` đọc từ trước, nếu admin vừa lưu mô tả mới trong
+            // khoảng đó thì ghi lại bản đọc cũ sẽ đè mất nó; không có khoá thì Postgres giữ nguyên cột đang có lúc ghi. Chưa đạt chuẩn giàu mà Pancake có nội dung thật thì Pancake là nguồn chính.
+            ...(description === null ? {} : { description }),
             ...productHold,
             ...((existing.forSegment?.length ?? 0) === 0 ? { forSegment: inferred } : {}),
           },
@@ -561,6 +563,7 @@ export class PancakeSyncService implements OnModuleInit {
       : await this.prisma.product.create({
           data: {
             ...baseData,
+            description: description ?? '',
             ...productHold,
             pancakeId,
             brand: effectiveCatalogBrand(name, slug, GENERIC_CATALOG_BRAND),
