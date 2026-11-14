@@ -14,6 +14,7 @@ import {
   type WpRowState,
 } from '@/lib/wp-image-candidates';
 import type { Tone } from '@/lib/recycling';
+import { formatDateTime } from '@/lib/format-date';
 import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 import { useConfirm } from '@/components/admin/confirm-dialog';
 import { useToastedMessage } from '@/components/admin/admin-toast';
@@ -41,9 +42,8 @@ interface Vars {
 }
 
 const when = (iso: string | null): string | null => {
-  if (!iso) return null;
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? null : d.toLocaleString('vi-VN', { dateStyle: 'short', timeStyle: 'short' });
+  const s = formatDateTime(iso);
+  return s === '—' ? null : s;
 };
 
 /**
