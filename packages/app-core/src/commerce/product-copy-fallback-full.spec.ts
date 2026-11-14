@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { Ingredient } from '@tubutree/shared-types';
+import { FALLBACK_DESCRIPTION_MAX_CHARS, FALLBACK_DESCRIPTION_MIN_CHARS, type Ingredient } from '@tubutree/shared-types';
 import { BAMBOO_CLAIMS, MEDICAL_CLAIMS, NATURAL_CLAIMS, PROOF_CLAIMS } from './copy-claims-guard';
 import { baseSlug } from './catalog-text';
 import { PROD_CATALOG_2026_11_12 as ALL } from './prod-catalog-full.fixture';
@@ -79,7 +79,8 @@ describe('chữ dự phòng cho 111/111 SKU của catalog PROD (ảnh chụp 12/
     for (const r of ALL) {
       const fb = findProductCopyFallback(r.slug);
       expect(fb, r.slug).toBeDefined();
-      expect(fb!.description.trim().length, r.slug).toBeGreaterThan(20);
+      expect(fb!.description.trim().length, r.slug).toBeGreaterThanOrEqual(FALLBACK_DESCRIPTION_MIN_CHARS);
+      expect(fb!.description.trim().length, r.slug).toBeLessThanOrEqual(FALLBACK_DESCRIPTION_MAX_CHARS);
       expect(findProductCopyFallback(baseSlug(r.slug)), r.slug).toBe(fb);
     }
   });

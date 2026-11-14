@@ -59,7 +59,7 @@ async function main(): Promise<void> {
       console.log(`\n${blocked.length} SP KHÔNG ghi vì chữ dự phòng vi phạm bộ chặn (sửa ở packages/shared-types/src/product-copy-fallback.ts):`);
       for (const b of blocked) console.log(`  - ${b.slug}: ${b.reason}`);
     }
-    if (force) console.log('\nLưu ý: đồng bộ Pancake ghi đè mô tả không trống mỗi 15 phút, nên mô tả đè bằng --force có thể bị trả về bản Pancake.');
+    if (force) console.log('\nLưu ý: đồng bộ Pancake giữ mô tả đã có từ 40 ký tự khi Pancake chỉ gửi chữ ngắn hơn 40, nhưng chữ Pancake từ 40 ký tự trở lên vẫn ghi đè mỗi 15 phút, nên mô tả đè bằng --force có thể bị trả về bản Pancake.');
   } finally {
     await prisma.$disconnect();
   }

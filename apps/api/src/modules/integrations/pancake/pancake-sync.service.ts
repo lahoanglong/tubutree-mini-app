@@ -7,6 +7,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { PancakeClient } from './pancake.client';
 import { LifecycleService } from '../../lifecycle/lifecycle.service';
 import { ImageRegistryStale } from '../../catalog/image-registry-stale';
+import { keepExistingDescription } from '../../catalog/catalog-copy-enrichment.core';
 import { applyPancakeStock, forcePancakeStock } from '../../catalog/variation-stock';
 import type { PancakeProductDTO, PancakeProductsResponse, PancakeVariationDTO } from './pancake.types';
 import { CRON_TZ } from '../../../common/cron-tz';
@@ -510,11 +511,15 @@ export class PancakeSyncService implements OnModuleInit {
     ];
 
     // `<p></p>`, `<br>` và `&nbsp;` là cách trình soạn của Pancake lưu ô mô tả để trống: coi như trống, kẻo xoá mô tả admin đã duyệt mỗi 15 phút.
-    const description = typeof p.description === 'string' && !isBlankHtmlText(p.description) ? p.description : null;
+    const incomingDescription = typeof p.description === 'string' && !isBlankHtmlText(p.description) ? p.description : null;
+    // Pancake chỉ gửi tên sản phẩm hay một cụm POS ngắn (dưới 40 ký tự) thì không được thay mô tả đã có từ 40 ký tự (admin hay CLI bổ sung chữ đã duyệt).
+    const keepDescription = keepExistingDescription(existing?.description, incomingDescription, name);
+    if (keepDescription) this.logger.log(`Giữ mô tả đã có của sản phẩm Pancake ${pancakeId}: chữ Pancake gửi tới ngắn hơn 40 ký tự hoặc chỉ chép tên sản phẩm.`);
+    const description = keepDescription ? null : incomingDescription;
     const sellable = variations.filter((v) => !payloadRemoved(v.is_removed) && positivePrice(v.retail_price) !== null);
     const baseData = {
       name,
-      // Mô tả Pancake để trống không xoá mô tả admin đã nhập ở trang quản trị; có nội dung thật thì Pancake là nguồn chính.
+      // Mô tả Pancake để trống (hoặc ngắn hơn mô tả đang có, xem trên) không xoá mô tả admin đã nhập; có nội dung thật thì Pancake là nguồn chính.
       description: description ?? existing?.description ?? '',
       images: imgs.length ? imgs : (existing?.images ?? []),
       thumbnail: imgs[0] ?? existing?.thumbnail ?? null,

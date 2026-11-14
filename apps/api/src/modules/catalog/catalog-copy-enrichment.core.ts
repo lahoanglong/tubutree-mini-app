@@ -71,20 +71,40 @@ export type DescriptionState =
   /** Trống hoặc chỉ có thẻ/khoảng trắng (không kể ảnh/video): coi là chưa viết, được bù. */
   | 'EMPTY'
   /**
-   * Ngắn hơn 40 ký tự và đúng bằng tên sản phẩm (sau khi bỏ dấu, hoa thường, dấu câu): kiểu Pancake chép tên vào mô tả. KHÔNG được bù: đồng bộ Pancake
-   * (`pancake-sync.service.ts`) ghi đè mô tả không trống mỗi 15 phút, nên chữ bù sẽ bị trả về bản chép tên ngay lượt sau.
+   * Ngắn hơn 40 ký tự và đúng bằng tên sản phẩm (sau khi bỏ dấu, hoa thường, dấu câu): kiểu Pancake chép tên vào mô tả. Coi là chưa viết, được bù như `EMPTY`
+   * mà không cần `--force`. Chữ bù không bị trả về bản chép tên vì đồng bộ Pancake giữ mô tả đã có từ 40 ký tự khi Pancake chỉ gửi chữ ngắn hơn 40 (`keepExistingDescription`).
    */
   | 'PLACEHOLDER'
   /** Ngắn hơn 40 ký tự nhưng có nội dung ngoài tên (kể cả chữ không phải Latin, ký hiệu): người đã viết, giữ. */
   | 'SHORT_EDIT'
   | 'OK';
 
+/** Chữ đúng bằng tên sản phẩm (bỏ dấu, hoa thường, dấu câu), mọi độ dài: Pancake chép tên sản phẩm vào ô mô tả. */
+const isNameCopy = (text: string, name: string): boolean => {
+  const d = fold(text);
+  return d !== '' && d === fold(name);
+};
+
 export function descriptionState(description: string | null | undefined, name: string): DescriptionState {
   if (isBlankHtmlText(description)) return MEDIA_TAG.test(description ?? '') ? 'SHORT_EDIT' : 'EMPTY';
   const text = plainText(description);
-  if (text.length >= MIN_DESCRIPTION_CHARS) return 'OK';
-  const d = fold(text);
-  return d !== '' && d === fold(name) ? 'PLACEHOLDER' : 'SHORT_EDIT';
+  if (isNameCopy(text, name)) return 'PLACEHOLDER';
+  return text.length >= MIN_DESCRIPTION_CHARS ? 'OK' : 'SHORT_EDIT';
+}
+
+/**
+ * Đồng bộ Pancake có nên giữ mô tả đang có thay vì ghi chữ Pancake gửi tới: mô tả đang có từ `MIN_DESCRIPTION_CHARS` ký tự chữ (đã bỏ thẻ) mà chữ Pancake
+ * ngắn hơn mức đó (thường là tên sản phẩm hay một cụm POS), hoặc đúng bằng tên sản phẩm ở mọi độ dài (cần `name`). Chữ Pancake có ảnh/video hay từ
+ * 40 ký tự trở lên mà không phải bản chép tên vẫn là nguồn chính như trước.
+ */
+export function keepExistingDescription(existing: string | null | undefined, incoming: string | null | undefined, name?: string): boolean {
+  if (isBlankHtmlText(existing) || isBlankHtmlText(incoming)) return false;
+  if (MEDIA_TAG.test(incoming ?? '')) return false;
+  const have = plainText(existing);
+  if (have.length < MIN_DESCRIPTION_CHARS) return false;
+  const next = plainText(incoming);
+  if (next.length < MIN_DESCRIPTION_CHARS) return true;
+  return name !== undefined && isNameCopy(next, name) && !isNameCopy(have, name);
 }
 
 /** Cột `ingredients` (Json) có dòng thành phần thật. Dùng đúng `ingredientNames` của catalog (bỏ tên trống và "[object Object]" Pancake từng ghi) để khớp màn Kiểm tra catalog. */
@@ -99,6 +119,12 @@ function sameIngredients(raw: unknown, list: readonly CopyIngredient[]): boolean
   });
 }
 
+/**
+ * Mùi vị, độ giòn/mềm: catalog chưa có nguồn cho chúng (chữ dự phòng chỉ chép điều tên hay bao bì nói). Hẹp có chủ ý; "hương dứa" in trên bao bì không nằm trong đây.
+ * Gói shared-types dùng chung với Mini nên mẫu này sống ở API, nơi chỉ lệnh bổ sung chữ dùng nó.
+ */
+const TASTE_CLAIMS = /thơm béo|thơm ngậy|đậm đà|vị thơm|\bgiòn\b|mềm mượt|dễ chia phần|dễ mang theo/i;
+
 /** Chính tả cũ của Q13("hòa, hóa, khỏe, thủy, tùy"): chữ hiện ra với khách chỉ được dùng kiểu "hoà, hoá, khoẻ, thuỷ, tuỳ". Địa danh giữ chính tả hành chính. */
 const OLD_STYLE_TONE = /(?:[òóỏõọ][ae]|[ùúủũụ]y)(?![\p{L}])/iu;
 const PLACE_NAMES = /Thanh Hóa|Khánh Hòa/gi;
@@ -109,6 +135,7 @@ const PLACE_NAMES = /Thanh Hóa|Khánh Hòa/gi;
  */
 export function copyViolations(text: string): string[] {
   const bad = claimsIn(text, 'strict');
+  if (TASTE_CLAIMS.test(text)) bad.push('mùi vị chưa có nguồn');
   if (OLD_STYLE_TONE.test(text.normalize('NFC').replace(PLACE_NAMES, ''))) bad.push('chính tả Q13 kiểu cũ');
   return bad;
 }
@@ -181,11 +208,11 @@ export function planProduct(p: EnrichProductInput, opts: PlanOptions = {}): Prod
   const force = opts.force === true;
   const plan: ProductPlan = { ...base, status: 'COMPLETE', reason: 'Đã đủ chữ' };
 
-  // Mô tả: chỉ bù khi trống. PLACEHOLDER (bản chép tên của Pancake) giữ nguyên vì đồng bộ Pancake sẽ đè lại; --force vẫn đè được nhưng cũng bị đồng bộ trả lại nếu Pancake có mô tả.
+  // Mô tả: bù khi trống hoặc chỉ là bản chép tên của Pancake (PLACEHOLDER); chữ người đã viết (SHORT_EDIT, OK) được giữ trừ khi --force.
   const before = descriptionState(p.description, p.name);
   if (plainText(p.description) === plainText(fallback.description)) {
     // đã đúng chữ dự phòng, không có gì để ghi hay giữ
-  } else if (before === 'EMPTY') plan.description = { mode: 'FILL', before, value: fallback.description };
+  } else if (before === 'EMPTY' || before === 'PLACEHOLDER') plan.description = { mode: 'FILL', before, value: fallback.description };
   else if (force) plan.description = { mode: 'FORCE', before, value: fallback.description };
   else plan.kept.push('description');
 

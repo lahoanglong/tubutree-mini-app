@@ -252,7 +252,8 @@ describe('composeCopyDraft — chữ dự phòng', () => {
     const d = draftOf(composeCopyDraft(input(), null, COPY_REASON.notConfigured));
     expect(d.source).toBe('fallback');
     expect(d.description).toBe(fb.description);
-    expect(d.shortDesc).toBe(fb.description);
+    expect(d.shortDesc).toBe('Son dưỡng bơ tươi Pơ Lang, mã A08.');
+    expect(fb.description.startsWith(`${d.shortDesc} `)).toBe(true);
     expect(d.ingredients).toEqual(['Bơ tươi']);
     expect(d.warnings).toEqual(['AI chưa cấu hình, dùng chữ dự phòng.']);
   });

@@ -7,6 +7,7 @@ import {
   copyViolations,
   descriptionState,
   hasIngredients,
+  keepExistingDescription,
   loadHouseProducts,
   parseCliArgs,
   planEnrichment,
@@ -172,11 +173,76 @@ describe('planProduct: không đè chữ người đã sửa', () => {
     expect(plan.kept).toContain('description');
   });
 
-  it('mô tả chỉ lặp tên (PLACEHOLDER) được giữ: Pancake đè lại mỗi 15 phút nên bù cũng vô ích; chỉ --force mới đè', () => {
+  it('mô tả chỉ lặp tên (PLACEHOLDER) được bù như trống, không cần --force và không đánh dấu FORCE', () => {
     const body = row({ description: 'Xoài sấy dẻo BH.Nong', ingredients: [{ name: 'Xoài' }] });
-    expect(planProduct(body).description).toBeUndefined();
-    expect(planProduct(body).kept).toContain('description');
-    expect(planProduct(body, { force: true }).description?.mode).toBe('FORCE');
+    const plan = planProduct(body);
+    expect(plan.status).toBe('ENRICH');
+    expect(plan.description).toMatchObject({ mode: 'FILL', before: 'PLACEHOLDER' });
+    expect(plan.kept).not.toContain('description');
+    expect(planProduct(body, { force: true }).description?.mode).toBe('FILL');
+  });
+
+  it('PLACEHOLDER có hậu tố quy cách trong tên ("… 400g") vẫn được bù; chữ người viết thêm sau tên thì giữ', () => {
+    const sized = row({ slug: 'bot-hat-cu-qua-bh-nong-lon-400g-9495bf', name: 'Bột hạt củ quả BH.NONG - Lon 400g', description: 'Bột hạt củ quả BH.NONG - Lon 400g' });
+    expect(planProduct(sized).description?.mode).toBe('FILL');
+    const edited = row({ description: 'Xoài sấy dẻo BH.Nong hết hàng' });
+    expect(planProduct(edited).description).toBeUndefined();
+  });
+
+  it('keepExistingDescription: giữ mô tả đã có từ 40 ký tự khi Pancake chỉ gửi chữ ngắn hơn 40', () => {
+    const rich = 'Xoài sấy dẻo BH.NONG. Xoài được sấy theo kiểu dẻo như tên gọi, dùng làm món ăn vặt hoặc ăn nhẹ.';
+    expect(keepExistingDescription(rich, 'Xoài sấy dẻo')).toBe(true);
+    expect(keepExistingDescription(rich, '<p>Xoài sấy dẻo BH.NONG</p>')).toBe(true);
+    expect(keepExistingDescription(`<p>${rich}</p>`, 'Xoài sấy dẻo')).toBe(true);
+  });
+
+  it('keepExistingDescription: Pancake có chữ từ 40 ký tự, mô tả cũ ngắn, hoặc một bên trống thì không giữ', () => {
+    const rich = 'Xoài sấy dẻo BH.NONG. Xoài được sấy theo kiểu dẻo như tên gọi, dùng làm món ăn vặt hoặc ăn nhẹ.';
+    const longIncoming = 'Mô tả mới từ Pancake có đủ bốn mươi ký tự trở lên.';
+    expect(longIncoming.length).toBeGreaterThanOrEqual(MIN_DESCRIPTION_CHARS);
+    expect(keepExistingDescription(rich, longIncoming)).toBe(false);
+    expect(keepExistingDescription('Xoài sấy dẻo', 'Xoài sấy dẻo BH.NONG')).toBe(false);
+    expect(keepExistingDescription('', 'Xoài sấy dẻo')).toBe(false);
+    expect(keepExistingDescription(rich, '')).toBe(false);
+    expect(keepExistingDescription(rich, null)).toBe(false);
+    expect(keepExistingDescription(null, 'Xoài sấy dẻo')).toBe(false);
+    expect(keepExistingDescription('<p><br></p>', 'Xoài sấy dẻo')).toBe(false);
+  });
+
+  it('keepExistingDescription: Pancake gửi chữ ngắn kèm ảnh/video thì không giữ (ảnh là nội dung thật)', () => {
+    const rich = 'Xoài sấy dẻo BH.NONG. Xoài được sấy theo kiểu dẻo như tên gọi, dùng làm món ăn vặt hoặc ăn nhẹ.';
+    expect(keepExistingDescription(rich, '<p>Thông tin sản phẩm</p><img src="https://cdn.example/a.jpg">')).toBe(false);
+    expect(keepExistingDescription(rich, '<iframe src="https://cdn.example/v"></iframe>Xem')).toBe(false);
+  });
+
+  it('keepExistingDescription: Pancake chép tên dài từ 40 ký tự thì giữ khi có truyền tên; không truyền tên thì không giữ', () => {
+    const name = 'Cà Phê Muối C&Sea Đậm Đà Thơm Béo Chuẩn Gu Huế Hộp 16g x 10 Gói';
+    const rich = 'Cà phê muối C&Sea, hộp 10 gói, mỗi gói 16g. Vị cà phê có muối theo tên gọi, dùng làm thức uống.';
+    expect(name.length).toBeGreaterThanOrEqual(MIN_DESCRIPTION_CHARS);
+    expect(keepExistingDescription(rich, name, name)).toBe(true);
+    expect(keepExistingDescription(rich, name)).toBe(false);
+    expect(keepExistingDescription(name, name, name)).toBe(false);
+  });
+
+  it('descriptionState: bản chép tên từ 40 ký tự trở lên cũng là PLACEHOLDER; chữ dài có thêm nội dung vẫn là OK', () => {
+    const name = 'Cà Phê Muối C&Sea Đậm Đà Thơm Béo Chuẩn Gu Huế Hộp 16g x 10 Gói';
+    expect(descriptionState(name, name)).toBe('PLACEHOLDER');
+    expect(descriptionState(`${name} hàng mới về kho miền Nam`, name)).toBe('OK');
+  });
+
+  it('copyViolations chặn mùi vị chưa có nguồn nhưng không chặn "Hương dứa" in trên bao bì', () => {
+    expect(copyViolations('Tên sản phẩm nêu hương đậm đà thơm béo.')).toContain('mùi vị chưa có nguồn');
+    expect(copyViolations('Bánh giòn tan.')).toContain('mùi vị chưa có nguồn');
+    expect(copyViolations('Hương dứa. Quy cách 500ml.')).toEqual([]);
+  });
+
+  it('đủ 39 ký tự chữ thì chưa phải mô tả giàu hơn; đủ 40 thì giữ', () => {
+    const t39 = 'a'.repeat(39);
+    const t40 = 'a'.repeat(40);
+    expect(keepExistingDescription(t39, 'ngắn')).toBe(false);
+    expect(keepExistingDescription(t40, 'ngắn')).toBe(true);
+    expect(keepExistingDescription(t40, t39)).toBe(true);
+    expect(keepExistingDescription(t40, t40)).toBe(false);
   });
 
   it('mô tả chỉ có ảnh được giữ, không bị coi là trống', () => {

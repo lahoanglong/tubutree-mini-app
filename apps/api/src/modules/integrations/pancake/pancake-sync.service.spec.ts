@@ -1359,9 +1359,38 @@ describe('PancakeSyncService — chữ catalog admin đã duyệt không bị đ
     expect((await runUpdate(undefined, false)).description).toBe(ADMIN_TEXT);
   });
 
-  it('mô tả Pancake có chữ thật vẫn ghi đè (Pancake là nguồn chính khi có nội dung)', async () => {
-    expect((await runUpdate('Mô tả từ Pancake')).description).toBe('Mô tả từ Pancake');
-    expect((await runUpdate('<p>Chữ thật từ Pancake</p>')).description).toBe('<p>Chữ thật từ Pancake</p>');
+  it('mô tả Pancake từ 40 ký tự trở lên vẫn ghi đè (Pancake là nguồn chính khi có nội dung đủ dài)', async () => {
+    const longText = 'Mô tả từ Pancake có đủ bốn mươi ký tự trở lên.';
+    expect(longText.length).toBeGreaterThanOrEqual(40);
+    expect((await runUpdate(longText)).description).toBe(longText);
+    expect((await runUpdate(`<p>${longText}</p>`)).description).toBe(`<p>${longText}</p>`);
+  });
+
+  it.each([['Mô tả từ Pancake'], ['<p>Chữ thật từ Pancake</p>'], ['Sữa hạt điều'], ['<p>Sữa hạt điều 400g</p>'], ['a'.repeat(39)]])(
+    'Pancake chỉ gửi chữ ngắn hơn 40 ký tự (%j): giữ mô tả đã duyệt từ 40 ký tự, không để tên hay cụm POS đè lên',
+    async (pancakeDescription) => {
+      expect(ADMIN_TEXT.length).toBeGreaterThanOrEqual(40);
+      expect((await runUpdate(pancakeDescription)).description).toBe(ADMIN_TEXT);
+    },
+  );
+
+  it('Pancake gửi chữ ngắn nhưng kèm ảnh: là nội dung thật, vẫn ghi đè mô tả đã duyệt', async () => {
+    const withImage = '<p>Thông tin</p><img src="https://cdn.example/a.jpg">';
+    expect((await runUpdate(withImage)).description).toBe(withImage);
+  });
+
+  it('Pancake chép đúng tên sản phẩm dài từ 40 ký tự: giữ mô tả đã duyệt', async () => {
+    const longName = 'Sản phẩm thử nghiệm với tên rất dài để vượt bốn mươi ký tự';
+    expect(longName.length).toBeGreaterThanOrEqual(40);
+    const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(approved) } });
+    await new PancakeSyncService(prisma, makeClient([[{ ...product('w126', [variation('v-w126')], { description: longName }), name: longName }]]), lifecycle).syncProducts(SINCE);
+    expect((mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown>).description).toBe(ADMIN_TEXT);
+  });
+
+  it('mô tả đang có ngắn hơn 40 ký tự thì chữ Pancake ngắn vẫn là nguồn chính (không có gì giàu hơn để giữ)', async () => {
+    const prisma = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue({ ...approved, description: 'Sữa hạt điều' }) } });
+    await new PancakeSyncService(prisma, makeClient([[product('w126', [variation('v-w126')], { description: 'Sữa hạt điều 400g' })]]), lifecycle).syncProducts(SINCE);
+    expect((mk(prisma).product.update.mock.calls[0][0].data as Record<string, unknown>).description).toBe('Sữa hạt điều 400g');
   });
 
   it.each([[''], ['Mô tả từ Pancake'], [null]])('bản ghi cập nhật không bao giờ mang shortDesc hay ingredients (mô tả Pancake %j)', async (pancakeDescription) => {
