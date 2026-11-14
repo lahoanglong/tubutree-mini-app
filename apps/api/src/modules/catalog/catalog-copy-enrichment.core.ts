@@ -105,16 +105,25 @@ export function descriptionState(description: string | null | undefined, name: s
  * 2. Mô tả đang có từ `MIN_DESCRIPTION_CHARS` ký tự mà chữ Pancake ngắn hơn mức đó (thường là tên sản phẩm hay một cụm POS), hoặc đúng bằng tên sản phẩm ở mọi
  *    độ dài (cần `name`). Chữ Pancake có ảnh/video hay từ 40 ký tự trở lên mà không phải bản chép tên vẫn là nguồn chính cho mô tả chưa đạt chuẩn giàu.
  * Một bên trống thì không giữ: Pancake trống đã được `upsertProduct` xử lý bằng cách dùng lại mô tả đang có.
+ *
+ * `existingProductName` là tên sản phẩm đang lưu trong DB, trước khi lượt đồng bộ này đổi sang `name`. Nhân viên đổi tên trên Pancake POS thì mô tả đang có có thể
+ * là bản chép nguyên tên cũ; bản chép đó cũng là chữ dự phòng, không được hưởng quyền "mô tả giàu" ở lớp 1, kẻo khoá vĩnh viễn chỉ vì không còn khớp tên mới.
  */
-export function keepExistingDescription(existing: string | null | undefined, incoming: string | null | undefined, name?: string): boolean {
+export function keepExistingDescription(
+  existing: string | null | undefined,
+  incoming: string | null | undefined,
+  name?: string,
+  existingProductName?: string | null,
+): boolean {
   if (isBlankHtmlText(existing) || isBlankHtmlText(incoming)) return false;
   const have = plainText(existing);
-  if (have.length >= RICH_DESCRIPTION_MIN_CHARS && !(name !== undefined && isNameCopy(have, name))) return true;
+  const haveIsNameCopy = [name, existingProductName].some((n) => typeof n === 'string' && isNameCopy(have, n));
+  if (have.length >= RICH_DESCRIPTION_MIN_CHARS && !haveIsNameCopy) return true;
   if (MEDIA_TAG.test(incoming ?? '')) return false;
   if (have.length < MIN_DESCRIPTION_CHARS) return false;
   const next = plainText(incoming);
   if (next.length < MIN_DESCRIPTION_CHARS) return true;
-  return name !== undefined && isNameCopy(next, name) && !isNameCopy(have, name);
+  return name !== undefined && isNameCopy(next, name) && !haveIsNameCopy;
 }
 
 /** Cột `ingredients` (Json) có dòng thành phần thật. Dùng đúng `ingredientNames` của catalog (bỏ tên trống và "[object Object]" Pancake từng ghi) để khớp màn Kiểm tra catalog. */
