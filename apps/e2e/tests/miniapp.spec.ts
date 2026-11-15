@@ -91,6 +91,8 @@ test.describe('Zalo Mini App E2E - Luồng Đặt hàng Guest', () => {
     await page.goto('/');
 
     // ProductCard render với aria-label = product.name
+    // Sản phẩm nằm ở lưới Gợi ý hôm nay cuối Trang chủ, chỉ tải khi khối gần màn hình (suggest-feed.tsx): cuộn tới như khách.
+    await page.getByRole('region', { name: 'Gợi ý hôm nay' }).scrollIntoViewIfNeeded();
     const card = page.locator('[aria-label="Nước Rửa Chén Sinh Học Tubu"]').first();
     await expect(card).toBeVisible({ timeout: 15_000 });
 

@@ -7,6 +7,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useLoginWithNotice } from '../../hooks/use-login-notice';
 import { useRealUser } from '../../hooks/use-real-user';
 import { getLoadErrorMessage } from '../../services/api';
+import { startArcadeRun } from '../../services/arcade-api';
 import { Button } from '../ui/button';
 import { ErrorState } from '../ui/empty-state';
 import { IconButton } from '../ui/icon-button';
@@ -14,7 +15,7 @@ import { Heading, Text } from '../ui/text';
 import { saveLocalBest } from './arcade-best';
 import { ArcadeResultPanel } from './arcade-result';
 import { prefersReducedMotion, readArcadeTheme } from './arcade-theme';
-import { useArcadeComplete } from './use-arcade-complete';
+import { useArcadeComplete, type PlayedRun } from './use-arcade-complete';
 import '../../css/arcade.css';
 
 type Controller = ReturnType<typeof mountArcade>;
@@ -55,6 +56,9 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
   const controller = useRef<Controller | null>(null);
   const phaseRef = useRef<Phase>('ready');
   const endedRef = useRef(false);
+  // Mã ván của lần bấm Chơi gần nhất; `startToken` tăng mỗi lần để lời đáp muộn của ván cũ không đè mã ván mới.
+  const runIdRef = useRef<string | null>(null);
+  const startToken = useRef(0);
   const realRef = useRef(real);
   realRef.current = real;
   const closeRef = useRef(onClose);
@@ -64,7 +68,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
   const [attempt, setAttempt] = useState(0);
   const [loaded, setLoaded] = useState(false);
   const [loadError, setLoadError] = useState<unknown>(null);
-  const [run, setRun] = useState<ArcadeResult | null>(null);
+  const [run, setRun] = useState<PlayedRun | null>(null);
   const [local, setLocal] = useState<{ best: number; isNewBest: boolean } | null>(null);
   const save = useArcadeComplete(run, real);
 
@@ -78,7 +82,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     if (endedRef.current) return;
     endedRef.current = true;
     if (!realRef.current) setLocal(saveLocalBest(result.gameId, result.score));
-    setRun(result);
+    setRun({ ...result, runId: runIdRef.current });
     setPhase('result');
   };
   const handleEndRef = useRef(handleEnd);
@@ -196,6 +200,15 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     const ctl = controller.current;
     if (!ctl) return;
     endedRef.current = false;
+    runIdRef.current = null;
+    const token = ++startToken.current;
+    // Không chặn vào ván: mã thường về lâu trước khi ván kết thúc. Xin mã lỗi thì ván không có mã và bảng điểm báo không hợp lệ.
+    startArcadeRun(gameId).then(
+      (started) => {
+        if (startToken.current === token) runIdRef.current = started.runId;
+      },
+      () => {},
+    );
     setRun(null);
     setLocal(null);
     setPhase('playing');

@@ -409,6 +409,12 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
         nextWindowAt: null,
         quizClaimed: false,
       });
+      // Bấm Chơi ở sảnh mini game (Mini App và web, cả khách) xin mã ván; mặc định cấp một mã cố định hết hạn sau 10 phút.
+      api.fallback('POST', '/game/arcade-start', {
+        runId: 'r1.dew_catcher.1763190000000.e2e.sig',
+        startedAt: '2026-11-15T10:00:00.000Z',
+        expiresAt: '2026-11-15T10:10:00.000Z',
+      });
       // Bán chạy nhất nuôi dải Story của Trang chủ và dải gợi ý bù đơn của Giỏ; cả hai tự ẩn khi rỗng, nên mọi spec chạm Giỏ hay Trang chủ không phải khai riêng: mặc định không có món nào.
       api.fallback('GET', '/products', { data: [], meta: { page: 1, limit: 10, total: 0 }, basis: 'days30' });
       // Cá nhân, Trang chủ, thanh đáy và chuông web đọc mọi số đếm từ MỘT lời gọi /me/summary. Mock gộp này dựng từ các mock lẻ mà spec

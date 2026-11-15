@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException, Injectable, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
@@ -16,7 +17,9 @@ import {
   ARCADE_POINTS_PER_RUN_DEFAULT,
   ARCADE_POINTS_PER_RUN_MAX,
   ARCADE_POINTS_REASON_PREFIX,
-  ARCADE_TOO_FAST_TOLERANCE_MS,
+  ARCADE_RUN_SLACK_MS,
+  ARCADE_RUN_TTL_MS,
+  ARCADE_RUN_USED_CODE,
   ARCADE_WATER_BASE_DEFAULT,
   ARCADE_WATER_BASE_MAX,
   ARCADE_WATER_REASONS,
@@ -37,14 +40,24 @@ import {
   type ArcadeUsage,
   type ArcadeWindowId,
 } from './game-arcade.constants';
+import { readArcadeRun, signArcadeRun } from './game-arcade-run';
 
 export interface ArcadeCompleteInput {
   gameId: ArcadeGameId;
   score: number;
   durationMs: number;
+  /** Mã ván do `start` cấp; bắt buộc để ván được ghi. */
+  runId: string;
 }
 
-export type ArcadeNoRewardReason = 'DAILY_CAP' | 'TOO_FAST' | 'LOW_SCORE' | 'NOT_REAL_USER' | 'DISABLED';
+/** Mã ván vừa cấp: khách gửi lại nguyên văn khi báo kết quả. */
+export interface ArcadeStartResult {
+  runId: string;
+  startedAt: string;
+  expiresAt: string;
+}
+
+export type ArcadeNoRewardReason = 'DAILY_CAP' | 'LOW_SCORE' | 'NOT_REAL_USER' | 'DISABLED';
 
 export interface ArcadeCompleteResult {
   gameId: ArcadeGameId;
@@ -93,7 +106,48 @@ export class GameArcadeService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
     private readonly loyalty: LoyaltyService,
+    private readonly env: ConfigService,
   ) {}
+
+  private runSecret(): string | undefined {
+    return this.env.get<string>('JWT_ACCESS_SECRET') || undefined;
+  }
+
+  /**
+   * Cấp mã ván lúc khách bấm Chơi. Công khai cho cả khách chưa đăng nhập (web chơi thử rồi đăng nhập nhận thưởng; Mini App chơi bằng
+   * tài khoản khách rồi gộp vào tài khoản thật), nên mã KHÔNG buộc với userId: thứ nó chứng minh là ván này có thật và đã kéo dài bao lâu,
+   * còn "ván của ai" chỉ có nghĩa lúc ghi, khi người nhận đã đăng nhập. Mỗi lần cấp không tốn gì ngoài một HMAC (có Throttle ở controller).
+   */
+  start(gameId: ArcadeGameId, now: Date = new Date()): ArcadeStartResult {
+    const issuedAt = now.getTime();
+    return {
+      runId: signArcadeRun(gameId, issuedAt, this.runSecret()),
+      startedAt: now.toISOString(),
+      expiresAt: new Date(issuedAt + ARCADE_RUN_TTL_MS).toISOString(),
+    };
+  }
+
+  /**
+   * Kiểm mã ván trước khi chạm DB: chữ ký, đúng game, còn hạn (tối đa 10 phút) và khách không khai ván dài hơn thời gian thật. Điểm tối
+   * đa hợp lệ đã bị `assertPlausible` buộc theo `durationMs` (`maxScoreFor` tăng theo thời lượng), nên `durationMs <= thời gian đo + slack`
+   * cũng chính là "thời gian đo >= thời gian tối thiểu để đạt điểm này": bắn thẳng kết quả vài chục mili giây sau `arcade-start` thì
+   * ván tự khai 40 giây bị loại, ván tự khai ngắn thì điểm tối đa của nó nhỏ.
+   * @returns giờ cấp mã (mili giây), dùng để chốt "mã dùng một lần" trong transaction.
+   */
+  private assertRun(runId: unknown, gameId: ArcadeGameId, durationMs: number, now: Date): number {
+    const run = readArcadeRun(runId, this.runSecret());
+    if (!run || run.gameId !== gameId) {
+      throw new BadRequestException('Mã ván chơi chưa hợp lệ. Bạn bấm Chơi để bắt đầu một ván mới nhé.');
+    }
+    const elapsed = now.getTime() - run.issuedAt;
+    if (elapsed > ARCADE_RUN_TTL_MS) {
+      throw new BadRequestException('Ván này đã quá hạn ghi điểm (tối đa 10 phút). Bạn chơi một ván mới nhé.');
+    }
+    if (durationMs > elapsed + ARCADE_RUN_SLACK_MS) {
+      throw new BadRequestException('Ván chơi kết thúc quá nhanh so với lúc bắt đầu. Bạn thử chơi lại một ván nhé.');
+    }
+    return run.issuedAt;
+  }
 
   /**
    * Số nguyên không âm trong [0, max]. Hỏng (chuỗi lạ, âm, NaN): `whenInvalid` 'off' coi là 0 và cảnh báo (khoá tính bằng Điểm
@@ -149,12 +203,15 @@ export class GameArcadeService {
    * W nếu hôm nay chưa dùng; còn lại hết lượt. Ngoài khung chỉ có lượt cơ sở. Tối đa 3 + 2 = 5 lượt mỗi game mỗi ngày, và lượt
    * của khung tối không phụ thuộc buổi sáng đã dùng hết hay chưa.
    *
-   * Lý do không thưởng, theo thứ tự ưu tiên: DISABLED, NOT_REAL_USER, TOO_FAST, LOW_SCORE, DAILY_CAP. TOO_FAST là ván không được
-   * ghi gì (kể cả kỷ lục); mọi lý do còn lại vẫn ghi kỷ lục, số ván và `lastRunAt`. LOW_SCORE và DAILY_CAP không tiêu lượt.
+   * Lý do không thưởng, theo thứ tự ưu tiên: DISABLED, NOT_REAL_USER, LOW_SCORE, DAILY_CAP; ván nào cũng ghi kỷ lục, số ván và
+   * `lastRunAt`. LOW_SCORE và DAILY_CAP không tiêu lượt.
+   *
+   * Ván phải mang `runId` do `start` cấp (xem `assertRun`): sai chữ ký, sai game, quá 10 phút, hay khai dài hơn thời gian thật thì 400;
+   * mã đã dùng (cấp không muộn hơn `lastRunAt` của người nhận) thì 409. Ván bắt đầu trước khi ván trước kết thúc vì thế cũng 409.
    *
    * Mọi thứ nằm trong một transaction giữ khoá `users` rồi `game_profiles` (cùng thứ tự với nước theo đơn và Đổi rác), nên hai
    * ván của cùng khách hoàn thành song song được xếp hàng: lượt thưởng cuối của ngày chỉ có một ván ăn, và ván thứ hai thấy
-   * `lastRunAt` của ván thứ nhất (ván chưa kịp chơi xong đã báo hoàn thành là TOO_FAST). Đếm lượt đọc sổ `game_water_events` sau
+   * `lastRunAt` của ván thứ nhất (cùng mã thì 409). Đếm lượt đọc sổ `game_water_events` sau
    * khi đã khoá; unique (reason, refId) theo ô lượt là chốt chặn nếu khoá bị bỏ qua ở đâu đó. `createMany(skipDuplicates)` thay
    * `create` rồi bắt P2002: lỗi unique trong transaction Postgres huỷ cả transaction, mất luôn kỷ lục vừa ghi.
    * Khách vãng lai (zaloId guest_, không SĐT) vẫn được ghi kỷ lục nhưng không nhận thưởng, và không bị tạo hồ sơ game.
@@ -162,6 +219,7 @@ export class GameArcadeService {
   async complete(userId: string, input: ArcadeCompleteInput, now: Date = new Date()): Promise<ArcadeCompleteResult> {
     this.assertPlausible(input);
     const { gameId, score, durationMs } = input;
+    const issuedAt = this.assertRun(input.runId, gameId, durationMs, now);
     const settings = await this.settings();
     const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { zaloId: true, phone: true } });
     const real = isRealUser(user);
@@ -191,6 +249,12 @@ export class GameArcadeService {
       const readUsage = async () =>
         this.usageOf(await tx.gameWaterEvent.findMany({ where: { userId, reason, createdAt: { gte: dayStart } }, select: { refId: true } }));
       const prev = await tx.gameArcadeScore.findUnique({ where: { userId_gameId: { userId, gameId } } });
+      // Mã dùng một lần không cần bảng riêng: ván nào cũng ghi `lastRunAt` (lúc hoàn thành, luôn sau lúc cấp mã), nên mã cấp không muộn
+      // hơn `lastRunAt` của người nhận đã được dùng rồi (hoặc đã bị một ván khác vượt mặt). Giữ khoá `users` ở trên nên hai lần gửi song
+      // song cùng một mã xếp hàng và lần sau thấy `lastRunAt` của lần trước.
+      if (prev?.lastRunAt && issuedAt <= prev.lastRunAt.getTime()) {
+        throw new ConflictException({ statusCode: 409, error: 'Conflict', code: ARCADE_RUN_USED_CODE, message: 'Ván này đã được ghi rồi. Bạn bấm Chơi để bắt đầu một ván mới nhé.' });
+      }
       const usage = await readUsage();
       const result = (
         extra: Partial<ArcadeCompleteResult> & { bestScore: number },
@@ -211,23 +275,16 @@ export class GameArcadeService {
         ...extra,
       });
 
-      // Ván này bắt đầu (hoàn thành trừ thời lượng) trước khi ván trước kết thúc: không thể là hai ván chơi nối tiếp.
-      const tooFast = !!prev?.lastRunAt && now.getTime() - durationMs < prev.lastRunAt.getTime() - ARCADE_TOO_FAST_TOLERANCE_MS;
-      let bestScore = prev?.bestScore ?? 0;
-      let isNewBest = false;
-      if (!tooFast) {
-        isNewBest = score > bestScore;
-        bestScore = Math.max(bestScore, score);
-        if (prev) {
-          await tx.gameArcadeScore.update({ where: { id: prev.id }, data: { bestScore, plays: { increment: 1 }, lastRunAt: now } });
-        } else {
-          await tx.gameArcadeScore.create({ data: { userId, gameId, bestScore, plays: 1, lastRunAt: now } });
-        }
+      const isNewBest = score > (prev?.bestScore ?? 0);
+      const bestScore = Math.max(prev?.bestScore ?? 0, score);
+      if (prev) {
+        await tx.gameArcadeScore.update({ where: { id: prev.id }, data: { bestScore, plays: { increment: 1 }, lastRunAt: now } });
+      } else {
+        await tx.gameArcadeScore.create({ data: { userId, gameId, bestScore, plays: 1, lastRunAt: now } });
       }
 
       if (!settings.enabled) return result({ bestScore, isNewBest, reason: 'DISABLED' });
       if (!real) return result({ bestScore, isNewBest, reason: 'NOT_REAL_USER' });
-      if (tooFast) return result({ bestScore, isNewBest, reason: 'TOO_FAST' });
       if (lowScore) return result({ bestScore, isNewBest, reason: 'LOW_SCORE' });
       const slot = nextArcadeSlot(window, usage);
       if (!slot) return result({ bestScore, isNewBest, reason: 'DAILY_CAP' });

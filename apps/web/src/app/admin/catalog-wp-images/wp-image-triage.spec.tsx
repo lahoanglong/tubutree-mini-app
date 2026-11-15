@@ -13,6 +13,7 @@ afterEach(() => {
   mounted.forEach((m) => m.unmount());
   mounted = [];
   vi.unstubAllGlobals();
+  window.localStorage.clear();
 });
 
 const wpUrl = (n: string) => `https://tubutree.com/wp-content/uploads/2024/05/${n}.png`;
@@ -594,5 +595,29 @@ describe('WpImageTriage — tải ảnh tay bằng kéo-thả / dán', () => {
     await flush();
     expect(text()).toBe('Đã đủ ảnh 2/3 sản phẩm.');
     expect([bar().getAttribute('aria-valuenow'), bar().getAttribute('aria-valuemax')]).toEqual(['2', '3']);
+  });
+
+  it('F5 sau khi tải ảnh tay: sản phẩm đã có ảnh không còn trong danh sách máy chủ nhưng thanh tiến độ KHÔNG tụt (nhớ ở trình duyệt)', async () => {
+    const p2 = row({ productId: 'p2', productSlug: 'sp-hai', name: 'SP hai' });
+    const p3 = row({ productId: 'p3', productSlug: 'sp-ba', name: 'SP ba', state: 'HAS_IMAGES', wp: null, defaultImageUrls: null });
+    const first = setup(list([row(), p2, p3]), { afterUpload: without('p1') });
+    await flush();
+    dropOn(zoneOf(cards(first.container)[0]!)!, png());
+    await flush();
+    expect(first.container.querySelector('[data-testid="wp-triage-progress"]')!.textContent).toBe('Đã đủ ảnh 2/3 sản phẩm.');
+
+    mounted.forEach((m) => m.unmount());
+    mounted = [];
+    const reloaded = setup(list([p2, p3]));
+    await flush();
+    expect(reloaded.container.querySelector('[data-testid="wp-triage-progress"]')!.textContent).toBe('Đã đủ ảnh 2/3 sản phẩm.');
+    expect(reloaded.container.querySelector('[role="progressbar"]')!.getAttribute('aria-valuenow')).toBe('2');
+  });
+
+  it('chưa tải ảnh tay lần nào: tải lại trang không cộng thêm gì vào tiến độ', async () => {
+    const p2 = row({ productId: 'p2', productSlug: 'sp-hai', name: 'SP hai' });
+    const { container } = setup(list([row(), p2]));
+    await flush();
+    expect(container.querySelector('[data-testid="wp-triage-progress"]')!.textContent).toBe('Đã đủ ảnh 0/2 sản phẩm.');
   });
 });

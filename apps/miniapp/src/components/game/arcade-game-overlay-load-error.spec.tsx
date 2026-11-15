@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from '@testing-library/rea
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ loads: 0, phase: 'authenticated' }));
+const mocks = vi.hoisted(() => ({ loads: 0, phase: 'authenticated', start: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => vi.fn() }));
 vi.mock('../../store/auth', () => {
   const state = () =>
@@ -16,6 +16,7 @@ vi.mock('../../store/auth', () => {
 vi.mock('../../hooks/use-login-notice', () => ({ useLoginWithNotice: () => vi.fn() }));
 vi.mock('../../services/arcade-api', () => ({
   arcadeStatusQuery: { queryKey: ['game', 'arcade'], queryFn: vi.fn() },
+  startArcadeRun: (gameId: unknown) => mocks.start(gameId),
   submitArcadeRun: vi.fn(),
   submitHomeQuiz: vi.fn(),
 }));
@@ -47,6 +48,7 @@ describe('ArcadeGameOverlay: gói game không tải được (mạng yếu)', ()
     const cover = await screen.findByTestId('arcade-ready');
     await waitFor(() => expect(within(cover).getByRole('button', { name: /Thử lại/ })).toBeInTheDocument());
     expect(within(cover).queryByRole('button', { name: /^Chơi/ })).toBeNull();
+    expect(mocks.start).not.toHaveBeenCalled();
     expect(screen.getByTestId('arcade-overlay').dataset.phase).toBe('ready');
     fireEvent.click(within(screen.getByRole('dialog')).getByRole('button', { name: 'Đóng' }));
     expect(onClose).toHaveBeenCalledTimes(1);

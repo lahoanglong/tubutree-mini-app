@@ -243,6 +243,7 @@ export const FIELD_LABELS: Record<string, string> = {
   gameId: 'Trò chơi',
   score: 'Điểm của ván chơi',
   durationMs: 'Thời gian ván chơi',
+  runId: 'Mã ván chơi',
   family: 'Câu trả lời về gia đình',
   worry: 'Câu trả lời về nỗi lo',
   format: 'Câu trả lời về dạng sản phẩm',

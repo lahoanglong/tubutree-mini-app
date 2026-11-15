@@ -1,5 +1,5 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
-import { AnthropicCallError, AnthropicClient, type AnthropicImageInput } from './anthropic.client';
+import { AnthropicCallError, AnthropicClient, AnthropicTruncatedError, type AnthropicImageInput } from './anthropic.client';
 import { buildIngredientOcrMessages, OCR_MAX_TOKENS, parseIngredientOcrReply, type IngredientOcrReply } from './ingredient-ocr';
 
 /** Apache proxy cắt ở 60 giây: dừng chờ model ở 40 giây để còn chỗ cho truy vấn DB và gửi JSON về. */
@@ -12,6 +12,7 @@ export const OCR_MSG = {
   busy: 'AI đang đọc ảnh khác. Thử lại sau ít phút, hoặc nhập tay thành phần.',
   timeout: 'AI đọc ảnh quá thời gian chờ. Thử lại với ảnh nhỏ hơn, hoặc nhập tay thành phần.',
   error: 'AI chưa đọc được ảnh lúc này. Thử lại sau, hoặc nhập tay thành phần.',
+  truncated: 'Mục Thành phần trên nhãn dài quá nên AI đọc chưa hết, danh sách bị cắt giữa chừng. Chụp riêng phần "Thành phần" thật gần và rõ rồi thử lại, hoặc nhập tay thành phần.',
 } as const;
 
 /**
@@ -42,10 +43,17 @@ export class IngredientOcrService {
       const reply = parseIngredientOcrReply(text);
       if (!reply) {
         this.logger.warn('Đọc ảnh bao bì: Claude trả chữ không dựng được JSON.');
+        // Có mở ngoặc `{` mà không có `}` nào sau nó là JSON cụt giữa chừng (proxy không báo stop_reason), khác ảnh không có mục Thành phần và khác JSON đủ nhưng sai định dạng.
+        if (text.indexOf('{') >= 0 && text.lastIndexOf('}') < text.indexOf('{')) throw new ServiceUnavailableException(OCR_MSG.truncated);
         return { readable: false, ingredients: [] };
       }
       return reply;
     } catch (e) {
+      if (e instanceof ServiceUnavailableException) throw e;
+      if (e instanceof AnthropicTruncatedError) {
+        this.logger.warn('Đọc ảnh bao bì: Claude chạm trần token, JSON bị cụt.');
+        throw new ServiceUnavailableException(OCR_MSG.truncated);
+      }
       const kind = e instanceof AnthropicCallError ? e.kind : 'error';
       this.logger.warn(`Đọc ảnh bao bì: Claude lỗi (${kind}).`);
       throw new ServiceUnavailableException(kind === 'busy' ? OCR_MSG.busy : kind === 'timeout' ? OCR_MSG.timeout : OCR_MSG.error);

@@ -1,5 +1,5 @@
 import { Logger, ServiceUnavailableException } from '@nestjs/common';
-import { AnthropicCallError, type AnthropicClient } from './anthropic.client';
+import { AnthropicCallError, AnthropicTruncatedError, type AnthropicClient } from './anthropic.client';
 import { IngredientOcrService, OCR_MAX_CONCURRENT, OCR_MSG, OCR_TIMEOUT_MS } from './ingredient-ocr.service';
 import { OCR_MAX_TOKENS } from './ingredient-ocr';
 
@@ -65,6 +65,33 @@ describe('IngredientOcrService.read', () => {
       expect(messageOf(err).message).toBe(expected);
       expect(messageOf(err).message).not.toMatch(/Claude|529|401|max_tokens/);
     }
+  });
+
+  it('trần token đủ cho nhãn dày (>= 2048): JSON 30 tên cộng phần suy nghĩ thích ứng không bị cụt ở trần cũ 1200', () => {
+    expect(OCR_MAX_TOKENS).toBeGreaterThanOrEqual(2048);
+  });
+
+  it('model chạm trần token (stop_reason max_tokens): 503 câu riêng nói nhãn dài bị cắt và chỉ cách chụp lại hoặc nhập tay, không lộ tên lỗi kỹ thuật', async () => {
+    const { svc } = make({ reply: async () => Promise.reject(new AnthropicTruncatedError()) });
+    const err = await svc.read(IMAGE, 'x').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ServiceUnavailableException);
+    expect(messageOf(err).message).toBe(OCR_MSG.truncated);
+    expect(OCR_MSG.truncated).toMatch(/dài/);
+    expect(OCR_MSG.truncated).toMatch(/nhập tay/);
+    expect(OCR_MSG.truncated).not.toMatch(/Claude|max_tokens|JSON/);
+    expect(OCR_MSG.truncated).not.toBe(OCR_MSG.error);
+  });
+
+  it('chữ trả về có mở ngoặc { nhưng JSON cụt (proxy không báo stop_reason): 503 câu "cắt giữa chừng", khác ảnh không có mục Thành phần', async () => {
+    const cut = make({ reply: '{"readable":true,"ingredients":["Đường","Mu' });
+    const err = await cut.svc.read(IMAGE, 'x').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ServiceUnavailableException);
+    expect(messageOf(err).message).toBe(OCR_MSG.truncated);
+  });
+
+  it('JSON có đóng ngoặc nhưng sai định dạng (không phải cụt): trả readable=false như chữ lạ, không nói "nhãn dài quá"', async () => {
+    const bad = make({ reply: '{"readable":true,"ingredients":["Đường"]} ghi chú {thêm}' });
+    await expect(bad.svc.read(IMAGE, 'x')).resolves.toEqual({ readable: false, ingredients: [] });
   });
 
   it(`tối đa ${OCR_MAX_CONCURRENT} lượt đọc cùng lúc: lượt thừa bị 503 bận ngay, không gọi model; xong thì nhả chỗ (kể cả khi lỗi)`, async () => {

@@ -87,11 +87,14 @@ describe('CatalogQualityTab', () => {
     expect(byText(r.container, 'button', 'Kiểm tra ngay')).not.toBeNull();
     const toggle = r.container.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
     expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const body = r.container.querySelector<HTMLElement>('#catalog-quality-body')!;
+    expect(body.parentElement!.hidden).toBe(false);
     click(toggle);
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
-    expect(byText(r.container, 'button', 'Kiểm tra ngay')).toBeNull();
+    expect(body.parentElement!.hidden).toBe(true);
     click(toggle);
-    expect(byText(r.container, 'button', 'Kiểm tra ngay')).not.toBeNull();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(body.parentElement!.hidden).toBe(false);
   });
 
   it('bấm kiểm tra: MỘT lời gọi admin thay cho đọc từng sản phẩm, hiện số đếm, 6 chip loại lỗi và badge tình trạng mô tả', async () => {
@@ -421,6 +424,24 @@ describe('CatalogQualityTab — bổ sung thành phần và ảnh ngay tại tab
     expect(r.container.querySelector('[data-testid="ingredients-row-p-a"]')).toBeNull();
     expect(r.container.querySelector('[data-testid="ingredients-row-p-b"]')).not.toBeNull();
     expect(progress(r)).toBe('Đã đủ thành phần 2/3 sản phẩm.');
+  });
+
+  it('Thu gọn rồi Mở rộng: bản nháp thành phần chưa lưu và kết quả kiểm vẫn còn, không gọi lại API kiểm', async () => {
+    const m = mockFetch(routes({ '/admin/catalog-quality/audit': auditBody(NO_ING) }));
+    vi.stubGlobal('fetch', m.fn);
+    const r = mount(<CatalogQualityTab />);
+    await runCheck(r);
+    const textarea = () => r.container.querySelector<HTMLElement>('[data-testid="ingredients-row-p-a"]')!.querySelector('textarea')!;
+    typeInto(textarea(), 'Đường, Muối');
+    const node = textarea();
+    const toggle = r.container.querySelector<HTMLButtonElement>('button[aria-expanded]')!;
+    click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(textarea()).toBe(node);
+    expect(textarea().value).toBe('Đường, Muối');
+    expect(auditCalls(m)).toHaveLength(1);
   });
 
   it('có lối vào trang bổ sung ảnh hàng loạt (kéo-thả, dán) ngay cạnh bộ lọc "Thiếu ảnh"', async () => {

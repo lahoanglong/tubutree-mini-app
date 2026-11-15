@@ -3,6 +3,7 @@ import { ROUTE_ARGS_METADATA } from '@nestjs/common/constants';
 import { RouteParamtypes } from '@nestjs/common/enums/route-paramtypes.enum';
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
+import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
 import { GameController } from './game.controller';
 import type { GameGardenService } from './game-garden.service';
 import type { GameArcadeService } from './game-arcade.service';
@@ -66,15 +67,38 @@ describe('GameController — mini-game arcade và thẻ chẩn đoán tổ ấm'
     const none = {} as never;
     return new GameController(none, none, none, none, none, none, none, none, none, arcade as GameArcadeService);
   };
-  const dtoOf = (method: string) =>
-    (Reflect.getMetadata('design:paramtypes', GameController.prototype, method) as Array<new () => object>)[1]!;
-  const errorsFor = async (method: string, plain: object) =>
-    (await validate(plainToInstance(dtoOf(method), plain), { whitelist: true, forbidNonWhitelisted: true })).map((e) => e.property).sort();
+  const dtoOf = (method: string, index = 1) =>
+    (Reflect.getMetadata('design:paramtypes', GameController.prototype, method) as Array<new () => object>)[index]!;
+  const errorsFor = async (method: string, plain: object, index = 1) =>
+    (await validate(plainToInstance(dtoOf(method, index), plain), { whitelist: true, forbidNonWhitelisted: true })).map((e) => e.property).sort();
+  const RUN = 'r1.dew_catcher.1763190000000.abc.sig';
 
   it('POST /game/arcade-complete chuyển body tới GameArcadeService.complete cùng userId', async () => {
     const complete = jest.fn().mockResolvedValue({ rewarded: true });
-    await arcadeCtrl({ complete }).arcadeComplete('u1', { gameId: 'refill_rush', score: 120, durationMs: 45_000 });
-    expect(complete).toHaveBeenCalledWith('u1', { gameId: 'refill_rush', score: 120, durationMs: 45_000 });
+    await arcadeCtrl({ complete }).arcadeComplete('u1', { gameId: 'refill_rush', score: 120, durationMs: 45_000, runId: RUN });
+    expect(complete).toHaveBeenCalledWith('u1', { gameId: 'refill_rush', score: 120, durationMs: 45_000, runId: RUN });
+  });
+
+  it('POST /game/arcade-start chuyển game tới GameArcadeService.start, không cần userId', () => {
+    const start = jest.fn().mockReturnValue({ runId: RUN });
+    expect(arcadeCtrl({ start }).arcadeStart({ gameId: 'dew_catcher' })).toEqual({ runId: RUN });
+    expect(start).toHaveBeenCalledWith('dew_catcher');
+  });
+
+  it('arcade-start công khai (khách chơi thử cũng xin được mã) và giới hạn 20 lần mỗi phút; arcade-complete vẫn cần đăng nhập', () => {
+    const start = GameController.prototype.arcadeStart;
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, start)).toBe(true);
+    expect(Reflect.getMetadata('THROTTLER:LIMITdefault', start)).toBe(20);
+    expect(Reflect.getMetadata('THROTTLER:TTLdefault', start)).toBe(60_000);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, GameController.prototype.arcadeComplete)).toBeUndefined();
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, GameController)).toBeUndefined();
+  });
+
+  it('DTO arcade-start chỉ nhận game hợp lệ', async () => {
+    expect(await errorsFor('arcadeStart', { gameId: 'refill_rush' }, 0)).toEqual([]);
+    expect(await errorsFor('arcadeStart', { gameId: 'tetris' }, 0)).toEqual(['gameId']);
+    expect(await errorsFor('arcadeStart', {}, 0)).toEqual(['gameId']);
+    expect(await errorsFor('arcadeStart', { gameId: 'dew_catcher', userId: 'x' }, 0)).toEqual(['userId']);
   });
 
   it('GET /game/arcade/status và POST /game/home-quiz/complete chỉ truyền userId', async () => {
@@ -94,19 +118,22 @@ describe('GameController — mini-game arcade và thẻ chẩn đoán tổ ấm'
   });
 
   it('DTO arcade-complete nhận game hợp lệ, điểm nguyên >= 0 và thời lượng nguyên', async () => {
-    expect(await errorsFor('arcadeComplete', { gameId: 'dew_catcher', score: 0, durationMs: 40_000 })).toEqual([]);
-    expect(await errorsFor('arcadeComplete', { gameId: 'refill_rush', score: 250, durationMs: 5_000 })).toEqual([]);
+    expect(await errorsFor('arcadeComplete', { gameId: 'dew_catcher', score: 0, durationMs: 40_000, runId: RUN })).toEqual([]);
+    expect(await errorsFor('arcadeComplete', { gameId: 'refill_rush', score: 250, durationMs: 5_000, runId: RUN })).toEqual([]);
   });
 
   it.each([
-    [{ gameId: 'tetris', score: 10, durationMs: 40_000 }, ['gameId']],
-    [{ score: 10, durationMs: 40_000 }, ['gameId']],
-    [{ gameId: 'dew_catcher', score: -1, durationMs: 40_000 }, ['score']],
-    [{ gameId: 'dew_catcher', score: 1.5, durationMs: 40_000 }, ['score']],
-    [{ gameId: 'dew_catcher', score: '10', durationMs: 40_000 }, ['score']],
-    [{ gameId: 'dew_catcher', score: 10, durationMs: 40_000.5 }, ['durationMs']],
-    [{ gameId: 'dew_catcher', score: 10 }, ['durationMs']],
-    [{ gameId: 'dew_catcher', score: 10, durationMs: 40_000, userId: 'x' }, ['userId']],
+    [{ gameId: 'tetris', score: 10, durationMs: 40_000, runId: RUN }, ['gameId']],
+    [{ score: 10, durationMs: 40_000, runId: RUN }, ['gameId']],
+    [{ gameId: 'dew_catcher', score: -1, durationMs: 40_000, runId: RUN }, ['score']],
+    [{ gameId: 'dew_catcher', score: 1.5, durationMs: 40_000, runId: RUN }, ['score']],
+    [{ gameId: 'dew_catcher', score: '10', durationMs: 40_000, runId: RUN }, ['score']],
+    [{ gameId: 'dew_catcher', score: 10, durationMs: 40_000.5, runId: RUN }, ['durationMs']],
+    [{ gameId: 'dew_catcher', score: 10, runId: RUN }, ['durationMs']],
+    [{ gameId: 'dew_catcher', score: 10, durationMs: 40_000 }, ['runId']],
+    [{ gameId: 'dew_catcher', score: 10, durationMs: 40_000, runId: 7 }, ['runId']],
+    [{ gameId: 'dew_catcher', score: 10, durationMs: 40_000, runId: 'x'.repeat(201) }, ['runId']],
+    [{ gameId: 'dew_catcher', score: 10, durationMs: 40_000, runId: RUN, userId: 'x' }, ['userId']],
   ])('DTO arcade-complete từ chối %j', async (body, props) => {
     expect(await errorsFor('arcadeComplete', body)).toEqual(props);
   });

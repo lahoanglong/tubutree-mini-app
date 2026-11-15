@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
+import type { ConfigService } from '@nestjs/config';
 import type { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import type { LoyaltyService } from '../loyalty/loyalty.service';
@@ -9,6 +10,8 @@ import {
   ARCADE_MAX_SCORE_PER_SEC,
   ARCADE_MIN_REWARD_SCORE,
   ARCADE_NOMINAL_MS,
+  ARCADE_RUN_SLACK_MS,
+  ARCADE_RUN_TTL_MS,
   arcadeBaseRefId,
   arcadeBonusRefId,
   arcadeCap,
@@ -39,9 +42,13 @@ interface WorldOpts {
   noLock?: boolean;
   /** Hồ sơ game biến mất giữa lúc ensure và lúc vào tx (gộp tài khoản chạy xen vào). */
   vanishProfile?: boolean;
+  /** Bí mật ký mã ván (JWT_ACCESS_SECRET); bỏ trống thì dùng khoá dev của service. */
+  secret?: string;
 }
 
 const USER = 'u1';
+/** Giá trị `runId` đánh dấu "harness cấp mã hợp lệ theo thời gian ván" cho các ca không bàn về mã ván. */
+const AUTO_RUN = 'auto';
 const EXPIRES = new Date('2027-11-15T00:00:00.000Z');
 
 /** DB trong bộ nhớ đủ cho GameArcadeService: khoá `users` FOR UPDATE xếp hàng theo user, tx lỗi thì khôi phục trạng thái. */
@@ -173,12 +180,16 @@ function makeWorld(opts: WorldOpts = {}) {
     gameWaterEvent: { findMany: gameWaterEvent.findMany, findUnique: gameWaterEvent.findUnique },
     $transaction: jest.fn(async (fn: (tx: unknown) => Promise<unknown>) => {
       const held: Array<() => void> = [];
-      const before = snapshot();
+      // Như Postgres: tx chỉ hoàn tác phần của chính nó, nên mốc khôi phục là lúc giành được khoá (tx đứng sau không xoá kết quả tx đứng trước).
+      let before = snapshot();
       const tx = {
         $queryRaw: jest.fn(async (strings: TemplateStringsArray, ...values: unknown[]) => {
           const sql = strings.join('?');
           if (sql.includes('FROM "users"')) {
-            if (!opts.noLock) held.push(await acquire(values[0] as string));
+            if (!opts.noLock) {
+              held.push(await acquire(values[0] as string));
+              before = snapshot();
+            }
             return [{ id: values[0] }];
           }
           if (sql.includes('FROM "game_profiles"')) {
@@ -205,7 +216,19 @@ function makeWorld(opts: WorldOpts = {}) {
   };
   const config = { get: jest.fn(async (k: string, d: unknown) => (k in cfg ? cfg[k] : d)) };
   const loyalty = { pointsExpiresAt: jest.fn(async () => EXPIRES) };
-  const svc = new GameArcadeService(prisma as unknown as PrismaService, config as unknown as SystemConfigService, loyalty as unknown as LoyaltyService);
+  const svc = new GameArcadeService(
+    prisma as unknown as PrismaService,
+    config as unknown as SystemConfigService,
+    loyalty as unknown as LoyaltyService,
+    { get: () => opts.secret } as unknown as ConfigService,
+  );
+  // Ca cũ chỉ quan tâm điểm và thời điểm: `runId: AUTO_RUN` được thay bằng mã cấp đúng `durationMs` trước lúc báo xong (thời gian đo = thời lượng khai).
+  const complete = svc.complete.bind(svc);
+  svc.complete = (userId, input, now = new Date()) => {
+    if (input.runId !== undefined && input.runId !== AUTO_RUN) return complete(userId, input, now);
+    const issuedAt = Number.isFinite(input.durationMs) ? now.getTime() - input.durationMs : now.getTime();
+    return complete(userId, { ...input, runId: svc.start(input.gameId, new Date(issuedAt)).runId }, now);
+  };
   const reasonOf = (gameId: ArcadeGameId) => (gameId === 'dew_catcher' ? 'ARCADE_DEW_CATCHER' : 'ARCADE_REFILL_RUSH');
   /** `n` lượt cơ sở đã dùng của ngày VN chứa `at`. */
   const seedBase = (gameId: ArcadeGameId, n: number, at: Date) => {
@@ -245,7 +268,7 @@ function makeWorld(opts: WorldOpts = {}) {
   };
 }
 
-const run = (score = 300, durationMs = 40_000) => ({ gameId: 'dew_catcher' as const, score, durationMs });
+const run = (score = 300, durationMs = 40_000) => ({ gameId: 'dew_catcher' as const, score, durationMs, runId: AUTO_RUN });
 const T0 = vn('12:00:00');
 const sumPoints = (rows: PointRow[]) => rows.reduce((s, r) => s + r.delta, 0);
 
@@ -390,7 +413,7 @@ describe('GameArcadeService.complete: kiểm tra ván chơi (400 trước khi ch
     const b = makeWorld();
     await expect(b.svc.complete(USER, run(100, 50_000), T0)).resolves.toMatchObject({ rewarded: true });
     const c = makeWorld();
-    await expect(c.svc.complete(USER, { gameId: 'refill_rush', score: 60, durationMs: 55_000 }, T0)).resolves.toMatchObject({ rewarded: true });
+    await expect(c.svc.complete(USER, { gameId: 'refill_rush', score: 60, durationMs: 55_000 , runId: AUTO_RUN}, T0)).resolves.toMatchObject({ rewarded: true });
   });
 
   it('điểm vượt trần theo đường cong của thời lượng đã khai: 5s, 7,5s, 20s, nominal, nominal + 10s', async () => {
@@ -410,7 +433,7 @@ describe('GameArcadeService.complete: kiểm tra ván chơi (400 trước khi ch
     }
     for (const [score, durationMs] of [[34, 5_000], [534, 20_000], [2_700, 45_000], [3_300, 55_000]] as const) {
       const ok = makeWorld();
-      await expect(ok.svc.complete(USER, { gameId: 'refill_rush', score, durationMs }, T0)).resolves.toMatchObject({ bestScore: score });
+      await expect(ok.svc.complete(USER, { gameId: 'refill_rush', score, durationMs, runId: AUTO_RUN }, T0)).resolves.toMatchObject({ bestScore: score });
     }
   });
 
@@ -478,7 +501,7 @@ describe('GameArcadeService.complete: thưởng', () => {
 
   it('refill_rush dùng sổ lượt riêng và mốc điểm riêng', async () => {
     const w = makeWorld();
-    const res = await w.svc.complete(USER, { gameId: 'refill_rush', score: 550, durationMs: 45_000 }, T0);
+    const res = await w.svc.complete(USER, { gameId: 'refill_rush', score: 550, durationMs: 45_000 , runId: AUTO_RUN}, T0);
     expect(res).toMatchObject({ rewarded: true, waterEarned: 10 });
     expect(w.state.events[0]).toMatchObject({ reason: 'ARCADE_REFILL_RUSH', delta: 10 });
   });
@@ -550,7 +573,7 @@ describe('GameArcadeService.complete: thưởng', () => {
   it('mỗi game có kỷ lục riêng', async () => {
     const w = makeWorld();
     await w.svc.complete(USER, run(300), T0);
-    await w.svc.complete(USER, { gameId: 'refill_rush', score: 100, durationMs: 45_000 }, T0);
+    await w.svc.complete(USER, { gameId: 'refill_rush', score: 100, durationMs: 45_000 , runId: AUTO_RUN}, T0);
     expect(w.state.scores.map((s) => [s.gameId, s.bestScore])).toEqual([
       ['dew_catcher', 300],
       ['refill_rush', 100],
@@ -560,7 +583,7 @@ describe('GameArcadeService.complete: thưởng', () => {
 
 describe('GameArcadeService.complete: lượt thưởng mỗi ngày VN (3 lượt cơ sở và một lượt riêng cho mỗi khung giờ)', () => {
   const at = (i: number, from: Date = T0) => new Date(from.getTime() + i * 60_000);
-  const rush = (score = 100) => ({ gameId: 'refill_rush' as const, score, durationMs: 45_000 });
+  const rush = (score = 100) => ({ gameId: 'refill_rush' as const, score, durationMs: 45_000, runId: AUTO_RUN });
 
   it('ngoài khung giờ: 3 lượt cơ sở, ván thứ 4 vẫn chơi và phá kỷ lục nhưng không thưởng, không có lượt thưởng khung', async () => {
     const w = makeWorld();
@@ -727,10 +750,12 @@ describe('GameArcadeService.complete: lượt thưởng mỗi ngày VN (3 lượ
     expect(w.state.balance).toBe(sumPoints(w.state.points));
   });
 
-  it('hai ván cùng giờ hoàn thành song song: ván thứ hai chưa kịp chơi xong nên TOO_FAST, chỉ một lượt bị tiêu', async () => {
+  it('hai ván cùng giờ hoàn thành song song: ván thứ hai bắt đầu trước khi ván thứ nhất xong nên 409, chỉ một lượt bị tiêu', async () => {
     const w = makeWorld();
-    const [a, b] = await Promise.all([w.svc.complete(USER, run(100), T0), w.svc.complete(USER, run(100), T0)]);
-    expect([a.reason, b.reason]).toEqual([null, 'TOO_FAST']);
+    const [a, b] = await Promise.allSettled([w.svc.complete(USER, run(100), T0), w.svc.complete(USER, run(100), T0)]);
+    expect(a).toMatchObject({ status: 'fulfilled', value: { reason: null } });
+    expect(b).toMatchObject({ status: 'rejected' });
+    expect((b as PromiseRejectedResult).reason).toBeInstanceOf(ConflictException);
     expect(w.state.events).toHaveLength(1);
     expect(w.state.scores[0]!.plays).toBe(1);
   });
@@ -768,24 +793,24 @@ describe('GameArcadeService.complete: ván dưới ngưỡng thưởng (LOW_SCOR
   ] as const)('%s: %i điểm không thưởng và không tiêu lượt, %i điểm thưởng bình thường', async (gameId, low, enough) => {
     const durationMs = ARCADE_NOMINAL_MS[gameId];
     const w = makeWorld();
-    const res = await w.svc.complete(USER, { gameId, score: low, durationMs }, T0);
+    const res = await w.svc.complete(USER, { gameId, score: low, durationMs, runId: AUTO_RUN }, T0);
     expect(res).toMatchObject({ rewarded: false, reason: 'LOW_SCORE', waterEarned: 0, pointsEarned: 0, used: 0, cap: 3, bestScore: low, isNewBest: true });
     expect(w.state.events).toHaveLength(0);
     expect(w.state.points).toHaveLength(0);
     expect(w.state.profile!.totalSeeds).toBe(0);
     expect(w.state.scores[0]).toMatchObject({ gameId, bestScore: low, plays: 1, lastRunAt: T0 });
 
-    const next = await w.svc.complete(USER, { gameId, score: enough, durationMs }, new Date(T0.getTime() + durationMs + 1_000));
+    const next = await w.svc.complete(USER, { gameId, score: enough, durationMs, runId: AUTO_RUN }, new Date(T0.getTime() + durationMs + 1_000));
     expect(next).toMatchObject({ rewarded: true, reason: null, used: 1 });
     expect(w.state.scores[0]).toMatchObject({ bestScore: enough, plays: 2 });
   });
 
-  it('vẫn cập nhật kỷ lục, số ván và lastRunAt (nên ván kế tiếp bị TOO_FAST tính từ ván điểm thấp)', async () => {
+  it('vẫn cập nhật kỷ lục, số ván và lastRunAt (nên ván bắt đầu trước lúc ván điểm thấp xong bị 409)', async () => {
     const w = makeWorld();
     await w.svc.complete(USER, run(50), T0);
     await w.svc.complete(USER, run(80), new Date(T0.getTime() + 41_000));
     expect(w.state.scores[0]).toMatchObject({ bestScore: 80, plays: 2, lastRunAt: new Date(T0.getTime() + 41_000) });
-    await expect(w.svc.complete(USER, run(300), new Date(T0.getTime() + 50_000))).resolves.toMatchObject({ reason: 'TOO_FAST' });
+    await expect(w.svc.complete(USER, run(300), new Date(T0.getTime() + 50_000))).rejects.toBeInstanceOf(ConflictException);
   });
 
   it('không tiêu lượt: nhiều ván điểm thấp rồi ván đủ điểm vẫn nhận lượt thứ nhất, và không cần hồ sơ game', async () => {
@@ -798,31 +823,23 @@ describe('GameArcadeService.complete: ván dưới ngưỡng thưởng (LOW_SCOR
 });
 
 describe('GameArcadeService.complete: thứ tự lý do không thưởng', () => {
-  // DISABLED > NOT_REAL_USER > TOO_FAST > LOW_SCORE > DAILY_CAP. TOO_FAST là ván không ghi gì; các lý do khác vẫn ghi kỷ lục.
-  const secondRun = new Date(T0.getTime() + 10_000); // báo xong sau 10s mà khai ván dài 40s: TOO_FAST
+  // DISABLED > NOT_REAL_USER > LOW_SCORE > DAILY_CAP. Ván nào cũng ghi kỷ lục, số ván và lastRunAt.
+  const secondRun = new Date(T0.getTime() + 41_000);
 
   it('DISABLED thắng mọi lý do còn lại', async () => {
     const w = makeWorld({ user: { zaloId: 'guest_h_abc', phone: null } });
     await w.svc.complete(USER, run(300), T0);
     w.cfg['game.arcade_enabled'] = false;
     await expect(w.svc.complete(USER, run(10), secondRun)).resolves.toMatchObject({ reason: 'DISABLED' });
-    expect(w.state.scores[0]).toMatchObject({ plays: 1, lastRunAt: T0 }); // vẫn TOO_FAST nên không ghi
+    expect(w.state.scores[0]).toMatchObject({ plays: 2, lastRunAt: secondRun });
   });
 
-  it('NOT_REAL_USER thắng TOO_FAST, LOW_SCORE và DAILY_CAP', async () => {
+  it('NOT_REAL_USER thắng LOW_SCORE và DAILY_CAP', async () => {
     const w = makeWorld({ user: { zaloId: 'guest_h_abc', phone: null } });
     await w.svc.complete(USER, run(300), T0);
     await expect(w.svc.complete(USER, run(10), secondRun)).resolves.toMatchObject({ reason: 'NOT_REAL_USER' });
     const lowCap = makeWorld({ user: { zaloId: 'guest_h_abc', phone: null } });
     await expect(lowCap.svc.complete(USER, run(10), T0)).resolves.toMatchObject({ reason: 'NOT_REAL_USER', bestScore: 10 });
-  });
-
-  it('TOO_FAST thắng LOW_SCORE và DAILY_CAP, và không ghi gì', async () => {
-    const w = makeWorld();
-    w.seedBase('dew_catcher', 3, vn('00:30:00'));
-    await w.svc.complete(USER, run(300), T0);
-    await expect(w.svc.complete(USER, run(10), secondRun)).resolves.toMatchObject({ reason: 'TOO_FAST', isNewBest: false, bestScore: 300 });
-    expect(w.state.scores[0]).toMatchObject({ plays: 1, lastRunAt: T0 });
   });
 
   it('LOW_SCORE thắng DAILY_CAP: hết lượt mà điểm thấp thì nói điểm thấp', async () => {
@@ -833,48 +850,131 @@ describe('GameArcadeService.complete: thứ tự lý do không thưởng', () =>
   });
 });
 
-describe('GameArcadeService.complete: chống chạy nhanh (TOO_FAST)', () => {
-  it('ván mới bắt đầu trước khi ván cũ kết thúc: không thưởng, không ghi kỷ lục, không đổi lastRunAt', async () => {
-    const w = makeWorld();
-    await w.svc.complete(USER, run(300), T0);
-    const second = new Date(T0.getTime() + 10_000); // báo xong sau 10s mà khai ván dài 40s
-    const res = await w.svc.complete(USER, run(900), second);
-    expect(res).toMatchObject({
-      rewarded: false,
-      reason: 'TOO_FAST',
-      isNewBest: false,
-      bestScore: 300,
-      waterEarned: 0,
-      pointsEarned: 0,
-      used: 1,
-      totalSeeds: 5,
-    });
-    expect(w.state.scores[0]).toMatchObject({ bestScore: 300, plays: 1, lastRunAt: T0 });
+describe('GameArcadeService.start và mã ván (runId)', () => {
+  const SECRET = 'a-very-long-test-secret-for-arcade-runs';
+  const startAt = (w: ReturnType<typeof makeWorld>, at: Date, gameId: ArcadeGameId = 'dew_catcher') => w.svc.start(gameId, at).runId;
+  const body = (runId: string, score = 100, durationMs = 40_000) => ({ gameId: 'dew_catcher' as const, score, durationMs, runId });
+  const untouched = (w: ReturnType<typeof makeWorld>) => {
+    expect(w.prisma.$transaction).not.toHaveBeenCalled();
+    expect(w.state.events).toHaveLength(0);
+    expect(w.state.scores).toHaveLength(0);
+  };
+
+  it('start cấp mã kèm giờ bắt đầu và hạn đúng 10 phút', () => {
+    const r = makeWorld().svc.start('refill_rush', T0);
+    expect(r.startedAt).toBe(T0.toISOString());
+    expect(r.expiresAt).toBe(new Date(T0.getTime() + ARCADE_RUN_TTL_MS).toISOString());
+    expect(r.runId).toMatch(/^r1\.refill_rush\.\d+\./);
+    expect(makeWorld().svc.start('refill_rush', T0).runId).not.toBe(r.runId);
+  });
+
+  it('thiếu mã, mã bịa, mã bị sửa một ký tự hoặc ký bằng bí mật khác: 400 và không chạm DB', async () => {
+    const w = makeWorld({ secret: SECRET });
+    const good = startAt(w, T0);
+    const forged = makeWorld({ secret: 'another-secret-another-secret-123456' }).svc.start('dew_catcher', T0).runId;
+    const raw = (input: unknown) => GameArcadeService.prototype.complete.call(w.svc, USER, input as never, new Date(T0.getTime() + 40_000));
+    for (const runId of [undefined, null, 7, '', 'abc', 'r1.dew_catcher.1.n.s', good.slice(0, -1) + (good.endsWith('A') ? 'B' : 'A'), forged]) {
+      await expect(raw({ ...body('x'), runId })).rejects.toBeInstanceOf(BadRequestException);
+    }
+    untouched(w);
+  });
+
+  it('mã của game này không dùng cho game khác, và đổi game trong mã làm hỏng chữ ký', async () => {
+    const w = makeWorld({ secret: SECRET });
+    const dew = startAt(w, T0, 'dew_catcher');
+    const done = new Date(T0.getTime() + 45_000);
+    await expect(w.svc.complete(USER, { gameId: 'refill_rush', score: 60, durationMs: 45_000, runId: dew }, done)).rejects.toBeInstanceOf(BadRequestException);
+    await expect(
+      w.svc.complete(USER, { gameId: 'refill_rush', score: 60, durationMs: 45_000, runId: dew.replace('dew_catcher', 'refill_rush') }, done),
+    ).rejects.toBeInstanceOf(BadRequestException);
+    untouched(w);
+  });
+
+  it('bắn kết quả ngay sau start (0,1 giây) với ván tự khai 40 giây: 400, không thưởng, không ghi kỷ lục', async () => {
+    const w = makeWorld({ secret: SECRET });
+    const runId = startAt(w, T0);
+    await expect(w.svc.complete(USER, body(runId, 1_600, 40_000), new Date(T0.getTime() + 100))).rejects.toBeInstanceOf(BadRequestException);
+    untouched(w);
+  });
+
+  it('ranh thời gian đo: durationMs đúng bằng thời gian đo cộng slack hợp lệ, hơn 1 ms là 400', async () => {
+    const dur = 20_000;
+    const at = new Date(T0.getTime() + dur - ARCADE_RUN_SLACK_MS);
+    const ok = makeWorld({ secret: SECRET });
+    await expect(ok.svc.complete(USER, body(startAt(ok, T0), 100, dur), at)).resolves.toMatchObject({ rewarded: true });
+    const fast = makeWorld({ secret: SECRET });
+    await expect(fast.svc.complete(USER, body(startAt(fast, T0), 100, dur), new Date(at.getTime() - 1))).rejects.toBeInstanceOf(BadRequestException);
+    untouched(fast);
+  });
+
+  it('tạm dừng làm ván kéo dài hơn thời lượng chơi vẫn hợp lệ trong hạn 10 phút; quá hạn 1 ms là 400', async () => {
+    const ok = makeWorld({ secret: SECRET });
+    await expect(ok.svc.complete(USER, body(startAt(ok, T0), 100, 40_000), new Date(T0.getTime() + ARCADE_RUN_TTL_MS))).resolves.toMatchObject({ rewarded: true });
+    const late = makeWorld({ secret: SECRET });
+    await expect(late.svc.complete(USER, body(startAt(late, T0), 100, 40_000), new Date(T0.getTime() + ARCADE_RUN_TTL_MS + 1))).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    untouched(late);
+  });
+
+  it('phát lại cùng một mã: lần hai 409, sổ nước, điểm và kỷ lục không đổi', async () => {
+    const w = makeWorld({ secret: SECRET });
+    const runId = startAt(w, T0);
+    const done = new Date(T0.getTime() + 40_000);
+    await expect(w.svc.complete(USER, body(runId, 300), done)).resolves.toMatchObject({ rewarded: true, used: 1 });
+    const replay = await w.svc.complete(USER, body(runId, 900), new Date(done.getTime() + 5_000)).catch((e: unknown) => e);
+    expect(replay).toBeInstanceOf(ConflictException);
+    expect((replay as ConflictException).getResponse()).toMatchObject({ statusCode: 409, code: 'ARCADE_RUN_USED' });
     expect(w.state.events).toHaveLength(1);
     expect(w.state.points).toHaveLength(1);
+    expect(w.state.scores[0]).toMatchObject({ bestScore: 300, plays: 1, lastRunAt: done });
   });
 
-  it('ranh: bắt đầu đúng 3 giây trước lúc ván cũ xong vẫn hợp lệ, trễ hơn 1 ms là TOO_FAST', async () => {
-    const dur = 40_000;
-    const ok = makeWorld();
-    await ok.svc.complete(USER, run(100, dur), T0);
-    await expect(ok.svc.complete(USER, run(100, dur), new Date(T0.getTime() + dur - 3_000))).resolves.toMatchObject({ rewarded: true });
-    const fast = makeWorld();
-    await fast.svc.complete(USER, run(100, dur), T0);
-    await expect(fast.svc.complete(USER, run(100, dur), new Date(T0.getTime() + dur - 3_001))).resolves.toMatchObject({ reason: 'TOO_FAST' });
+  it('mã đã dùng ở ván không thưởng (LOW_SCORE) cũng không dùng lại được', async () => {
+    const w = makeWorld({ secret: SECRET });
+    const runId = startAt(w, T0);
+    const done = new Date(T0.getTime() + 40_000);
+    await expect(w.svc.complete(USER, body(runId, 10), done)).resolves.toMatchObject({ reason: 'LOW_SCORE' });
+    await expect(w.svc.complete(USER, body(runId, 10), done)).rejects.toBeInstanceOf(ConflictException);
+    expect(w.state.scores[0]).toMatchObject({ plays: 1 });
   });
 
-  it('ván nối tiếp bình thường (bấm chơi lại ngay) không bị chặn', async () => {
-    const w = makeWorld();
-    await w.svc.complete(USER, run(100), T0);
-    await expect(w.svc.complete(USER, run(100), new Date(T0.getTime() + 41_000))).resolves.toMatchObject({ rewarded: true, used: 2 });
+  it('hai lần gửi song song cùng một mã: đúng một lần thắng, lần kia 409, chỉ một dòng thưởng', async () => {
+    const w = makeWorld({ secret: SECRET });
+    const runId = startAt(w, T0);
+    const done = new Date(T0.getTime() + 40_000);
+    const settled = await Promise.allSettled([w.svc.complete(USER, body(runId, 300), done), w.svc.complete(USER, body(runId, 300), done)]);
+    expect(settled.filter((s) => s.status === 'fulfilled')).toHaveLength(1);
+    const rejected = settled.filter((s): s is PromiseRejectedResult => s.status === 'rejected');
+    expect(rejected).toHaveLength(1);
+    expect(rejected[0]!.reason).toBeInstanceOf(ConflictException);
+    expect(w.state.events).toHaveLength(1);
+    expect(w.state.scores[0]).toMatchObject({ plays: 1 });
   });
 
-  it('chặn theo từng game: ván game khác không tính', async () => {
-    const w = makeWorld();
-    await w.svc.complete(USER, run(100), T0);
+  it('mã cấp trước lúc ván trước kết thúc (hai ván chồng nhau) 409, kể cả khi mã chưa từng dùng', async () => {
+    const w = makeWorld({ secret: SECRET });
+    const first = startAt(w, T0);
+    const second = startAt(w, new Date(T0.getTime() + 5_000));
+    await w.svc.complete(USER, body(first, 100), new Date(T0.getTime() + 40_000));
+    await expect(w.svc.complete(USER, body(second, 100), new Date(T0.getTime() + 45_000))).rejects.toBeInstanceOf(ConflictException);
+    expect(w.state.scores[0]).toMatchObject({ plays: 1 });
+  });
+
+  it('ván nối tiếp bình thường (mã mới cấp sau khi ván trước xong) vẫn được thưởng', async () => {
+    const w = makeWorld({ secret: SECRET });
+    const done1 = new Date(T0.getTime() + 40_000);
+    await w.svc.complete(USER, body(startAt(w, T0)), done1);
+    const next = new Date(done1.getTime() + 1);
+    await expect(w.svc.complete(USER, body(startAt(w, next)), new Date(next.getTime() + 40_000))).resolves.toMatchObject({ rewarded: true, used: 2 });
+  });
+
+  it('mã đã dùng tính riêng từng game: ván game khác không bị coi là phát lại', async () => {
+    const w = makeWorld({ secret: SECRET });
+    await w.svc.complete(USER, body(startAt(w, T0)), new Date(T0.getTime() + 40_000));
+    const rush = startAt(w, new Date(T0.getTime() + 1_000), 'refill_rush');
     await expect(
-      w.svc.complete(USER, { gameId: 'refill_rush', score: 100, durationMs: 45_000 }, new Date(T0.getTime() + 1_000)),
+      w.svc.complete(USER, { gameId: 'refill_rush', score: 100, durationMs: 40_000, runId: rush }, new Date(T0.getTime() + 41_000)),
     ).resolves.toMatchObject({ rewarded: true });
   });
 });
@@ -928,7 +1028,7 @@ describe('GameArcadeService.status', () => {
     const w = makeWorld();
     await w.svc.complete(USER, run(300), vn('07:00:00'));
     await w.svc.complete(USER, run(500), vn('07:02:00'));
-    await w.svc.complete(USER, { gameId: 'refill_rush', score: 200, durationMs: 45_000 }, vn('07:03:00'));
+    await w.svc.complete(USER, { gameId: 'refill_rush', score: 200, durationMs: 45_000 , runId: AUTO_RUN}, vn('07:03:00'));
     const status = await w.svc.status(USER, vn('07:10:00'));
     expect(status).toEqual({
       games: {

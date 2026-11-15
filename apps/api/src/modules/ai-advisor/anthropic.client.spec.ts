@@ -1,5 +1,5 @@
 import { ConfigService } from '@nestjs/config';
-import { AnthropicClient } from './anthropic.client';
+import { AnthropicClient, AnthropicTruncatedError } from './anthropic.client';
 
 const KEY = 'test-key-0123456789-secret';
 
@@ -147,6 +147,13 @@ describe('AnthropicClient.completeWithImage', () => {
     expect(global.fetch).not.toHaveBeenCalled();
 
     global.fetch = jest.fn(async () => ok({ content: [{ type: 'text', text: '{' }], stop_reason: 'max_tokens' })) as never;
-    await expect(client().completeWithImage('s', 'u', image, 10)).rejects.toThrow('Claude dừng sớm: max_tokens');
+    const truncated = await client().completeWithImage('s', 'u', image, 10).catch((e: unknown) => e);
+    expect(truncated).toBeInstanceOf(AnthropicTruncatedError);
+    expect((truncated as Error).message).toBe('Claude dừng sớm: max_tokens');
+
+    global.fetch = jest.fn(async () => ok({ content: [{ type: 'text', text: 'Tôi từ chối.' }], stop_reason: 'refusal' })) as never;
+    const refused = await client().completeWithImage('s', 'u', image, 10).catch((e: unknown) => e);
+    expect(refused).not.toBeInstanceOf(AnthropicTruncatedError);
+    expect((refused as Error).message).toBe('Claude dừng sớm: refusal');
   });
 });

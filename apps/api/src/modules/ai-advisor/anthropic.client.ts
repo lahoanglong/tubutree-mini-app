@@ -54,6 +54,13 @@ export class AnthropicCallError extends Error {
   }
 }
 
+/** Model dừng vì chạm `max_tokens`: câu trả lời (thường là JSON) bị cụt giữa chừng, không dùng được. Tách khỏi lỗi chung để người gọi nói rõ "nhãn quá dài" thay vì "thử lại sau". */
+export class AnthropicTruncatedError extends Error {
+  constructor() {
+    super('Claude dừng sớm: max_tokens');
+  }
+}
+
 /**
  * Một lượt gọi Messages API, dùng chung cho Story Studio (`AnthropicClient`) và AI tư vấn khách (`LlmClient`, provider `claude`).
  * Khoá chỉ đi vào header; không bao giờ vào thông điệp lỗi hay log. 429 và 529 (quá tải) là `busy`, hết hạn là `timeout`.
@@ -169,6 +176,7 @@ export class AnthropicClient {
         timeoutMs,
         lowEffort: true,
       });
+      if (stopReason === 'max_tokens') throw new AnthropicTruncatedError();
       if (stopReason !== undefined && stopReason !== 'end_turn') throw new Error(`Claude dừng sớm: ${stopReason.slice(0, 30)}`);
       return text;
     } catch (e) {

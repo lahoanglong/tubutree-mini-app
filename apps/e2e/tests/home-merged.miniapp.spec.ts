@@ -12,6 +12,8 @@ test.describe('Trang chủ — request gộp', () => {
     await expect(page.getByRole('region', { name: 'Mua lại' }).getByText(MERGED_PURCHASED)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Danh mục', exact: true }).getByText('Danh mục gộp')).toBeVisible();
+    // Lưới Gợi ý hôm nay chỉ tải khi khối gần màn hình (suggest-feed.tsx): khách cuộn tới thì mới thấy.
+    await page.getByRole('region', { name: 'Gợi ý hôm nay' }).scrollIntoViewIfNeeded();
     await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' }).getByText(MERGED_FOR_YOU)).toBeVisible();
     expect(api.callsTo('GET', '/home')).toHaveLength(1);
     const me = api.callsTo('GET', '/home/me');

@@ -10,8 +10,11 @@ export const OCR_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
 export const OCR_NAMES_MAX = 30;
 const OCR_NAME_CHARS_MAX = 200;
 const PRODUCT_NAME_CHARS_MAX = 120;
-/** JSON có tối đa OCR_NAMES_MAX tên ngắn (vài trăm token); trần cao hơn chỉ kéo dài lúc model lan man. */
-export const OCR_MAX_TOKENS = 1200;
+/**
+ * Tối đa OCR_NAMES_MAX tên, mỗi tên vài chục token tiếng Việt có dấu (khoảng 800 token JSON), cộng phần suy nghĩ thích ứng tính CHUNG vào trần này (effort low vẫn tốn vài trăm).
+ * Nhãn dày chạm trần thì JSON cụt giữa chừng và không dùng được, nên để dư; trần cao hơn nữa chỉ kéo dài lúc model lan man.
+ */
+export const OCR_MAX_TOKENS = 2048;
 
 const MSG_TYPE = 'Ảnh chỉ nhận JPEG, PNG hoặc WebP.';
 const DATA_URL_RE = /^data:image\/(png|jpe?g|webp);base64,/;

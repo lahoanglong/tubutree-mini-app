@@ -13,12 +13,19 @@ const m = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   get: vi.fn(),
   post: vi.fn(),
+  start: vi.fn(),
   opts: null as ArcadeMountOptions | null,
   ctl: { start: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), resize: vi.fn() },
 }));
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => m.phase }));
-vi.mock('@/lib/core-http', () => ({ coreHttp: { get: (...a: unknown[]) => m.get(...a), post: (...a: unknown[]) => m.post(...a) } }));
+// `arcade-start` (xin mã ván lúc bấm Chơi) tách khỏi `arcade-complete`: ca đếm lần lưu ván chỉ nhìn `m.post`.
+vi.mock('@/lib/core-http', () => ({
+  coreHttp: {
+    get: (...a: unknown[]) => m.get(...a),
+    post: (...a: unknown[]) => (a[0] === '/game/arcade-start' ? m.start(...a) : m.post(...a)),
+  },
+}));
 vi.mock('@tubutree/app-core/arcade/arcade-canvas', () => ({
   mountArcade: (o: ArcadeMountOptions) => {
     m.opts = o;
@@ -57,6 +64,7 @@ beforeEach(() => {
   Object.values(m.ctl).forEach((f) => f.mockReset());
   m.get.mockReset().mockResolvedValue(STATUS);
   m.post.mockReset();
+  m.start.mockReset().mockResolvedValue({ runId: 'r1.dew_catcher.1.n.sig', startedAt: '2026-11-15T10:00:00.000Z', expiresAt: '2026-11-15T10:10:00.000Z' });
   localStorage.clear();
   window.history.pushState({}, '', '/vuon-xanh');
 });
@@ -145,7 +153,7 @@ describe('ArcadeHub: khách', () => {
     expect(hubText()).not.toContain('Kỷ lục');
   });
 
-  it('chơi một ván trong lớp phủ rồi đóng: kỷ lục mới hiện ngay ở thẻ, không có request nào', async () => {
+  it('chơi một ván trong lớp phủ rồi đóng: kỷ lục mới hiện ngay ở thẻ, chỉ xin mã ván và không lưu gì lên máy chủ', async () => {
     await mountHub();
     click(playButton('Chơi thử Hứng Sương Tinh Khiết'));
     await flush(4);
@@ -156,6 +164,8 @@ describe('ArcadeHub: khách', () => {
     await flush(2);
     expect(q('[role="dialog"]')).toBeNull();
     expect(card('dew_catcher').textContent).toContain('Kỷ lục 480');
+    expect(m.start).toHaveBeenCalledTimes(1);
+    expect(m.start.mock.calls[0]!.slice(0, 2)).toEqual(['/game/arcade-start', { gameId: 'dew_catcher' }]);
     expect(m.post).not.toHaveBeenCalled();
     expect(m.get).not.toHaveBeenCalled();
   });
@@ -304,7 +314,7 @@ const SAVED = (over: Partial<ArcadeCompleteResult> = {}): ArcadeCompleteResult =
   gameId: 'dew_catcher', score: 520, bestScore: 520, isNewBest: true, rewarded: true, reason: null, waterEarned: 8, pointsEarned: 1, totalSeeds: 40,
   used: 2, cap: 4, window: null, windowBonus: false, ...over,
 });
-const RUN = { gameId: 'dew_catcher', score: 520, durationMs: 40_000 };
+const RUN = { gameId: 'dew_catcher', score: 520, durationMs: 40_000, runId: 'r1.dew_catcher.1700000000000.nonce.sig' };
 const putPending = (over: Record<string, unknown> = {}) => sessionStorage.setItem(ARCADE_PENDING_KEY, JSON.stringify({ ...RUN, endedAt: Date.now() - 60_000, ...over }));
 const pendingRaw = () => sessionStorage.getItem(ARCADE_PENDING_KEY);
 const completes = () => m.post.mock.calls.filter((c) => c[0] === '/game/arcade-complete');
@@ -504,6 +514,30 @@ describe('ArcadeHub: gửi nốt ván khách chơi trước khi đăng nhập', 
     mounted = null;
     await mountHub();
     expect(completes()).toHaveLength(1);
+  });
+
+  it('HTTP 409 tạm thời (không mang mã ARCADE_RUN_USED): giữ ván chờ và vẫn có nút Thử lại', async () => {
+    putPending();
+    m.post.mockRejectedValueOnce(new ApiError('Hồ sơ game đang được cập nhật.', 409));
+    await mountHub();
+    expect(retryBtn()).not.toBeNull();
+    expect(pendingRaw()).not.toBeNull();
+  });
+
+  it('HTTP 409 (mã ván đã dùng): như 400, không nút Thử lại và bỏ hẳn ván', async () => {
+    putPending();
+    m.post.mockRejectedValueOnce(new ApiError('Conflict', 409, 'ARCADE_RUN_USED'));
+    await mountHub();
+    expect(q('[data-testid="arcade-pending-error"]')!.textContent).toContain(fillCopy('arcade.result.invalid'));
+    expect(retryBtn()).toBeNull();
+    expect(pendingRaw()).toBeNull();
+  });
+
+  it('ván chờ kiểu cũ (không có mã ván) bị bỏ, không gửi gì lên máy chủ', async () => {
+    sessionStorage.setItem(ARCADE_PENDING_KEY, JSON.stringify({ gameId: 'dew_catcher', score: 520, durationMs: 40_000, endedAt: Date.now() - 60_000 }));
+    await mountHub();
+    expect(completes()).toHaveLength(0);
+    expect(pendingRaw()).toBeNull();
   });
 
   it('dải báo có tên truy cập và nút Thử lại đủ 44px', async () => {

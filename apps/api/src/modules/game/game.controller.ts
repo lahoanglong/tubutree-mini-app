@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Headers, Param, Post, Res } from '@nestjs/common';
 import type { Response } from 'express';
-import { IsIn, IsInt, IsOptional, Min } from 'class-validator';
+import { IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { Throttle } from '@nestjs/throttler';
 import { Public } from '../../common/decorators/public.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
@@ -31,10 +31,14 @@ class SeasonPassClaimDto {
   @IsIn(['free', 'premium']) track!: 'free' | 'premium';
 }
 
+class ArcadeStartDto {
+  @IsIn(ARCADE_GAME_IDS) gameId!: ArcadeGameId;
+}
 class ArcadeCompleteDto {
   @IsIn(ARCADE_GAME_IDS) gameId!: ArcadeGameId;
   @IsInt() @Min(0) score!: number;
   @IsInt() durationMs!: number;
+  @IsString() @MaxLength(200) runId!: string;
 }
 class HomeQuizDto {
   @IsIn(['baby_pet', 'adult_only']) family!: 'baby_pet' | 'adult_only';
@@ -151,6 +155,14 @@ export class GameController {
   @Post('gift/:recipientId')
   giftWater(@CurrentUser('sub') userId: string, @Param('recipientId') recipientId: string) {
     return this.gift.giftWater(userId, recipientId);
+  }
+
+  // Công khai: khách chưa đăng nhập cũng chơi thử và cần mã ván để đăng nhập xong mới nhận thưởng. Mỗi ván một lần lúc bấm Chơi.
+  @Public()
+  @Throttle({ default: { limit: 20, ttl: 60_000 } })
+  @Post('arcade-start')
+  arcadeStart(@Body() dto: ArcadeStartDto) {
+    return this.arcade.start(dto.gameId);
   }
 
   // Mỗi ván gọi một lần lúc kết thúc; 12 ván/phút là nhiều hơn mức người chơi thật chạm tới (ván ngắn nhất 5 giây).

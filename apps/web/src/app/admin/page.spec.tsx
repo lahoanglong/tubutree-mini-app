@@ -4497,6 +4497,36 @@ describe('admin/page: Hôm nay, đơn chuyển khoản, người dùng thật (R
     expect(api.calls.some((c) => c.url.includes('/admin/catalog-quality/audit') || c.url.includes('/products'))).toBe(false);
   });
 
+  it('quản trị viên có lối vào "Bổ sung ảnh hàng loạt" ngay dưới "Kiểm tra catalog" trong nhóm Bán hàng: liên kết sang /admin/catalog-wp-images, bấm không đổi tab', async () => {
+    window.history.replaceState(null, '', '/admin?tab=orders');
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    const group = container.querySelector('nav[aria-label="Mục quản trị"] [role="group"][aria-label="Bán hàng"]')!;
+    const rows = [...group.querySelectorAll('li')].map((li) => navLabel(li));
+    const at = rows.indexOf('Kiểm tra catalog');
+    expect(at).toBeGreaterThanOrEqual(0);
+    expect(rows[at + 1]).toBe('Bổ sung ảnh hàng loạt');
+    const a = group.querySelector<HTMLAnchorElement>('a[data-nav-item="catalogWpImages"]')!;
+    expect(a.getAttribute('href')).toBe('/admin/catalog-wp-images');
+    expect(a.className).toContain('min-h-[44px]');
+    a.addEventListener('click', (e) => e.preventDefault());
+    click(a);
+    await flush();
+    expect(window.location.search).toBe('?tab=orders');
+    expect(container.querySelector('nav[aria-label="Mục quản trị"] [aria-current="page"]')!.textContent).toContain('Đơn hàng');
+  });
+
+  it('nhân viên (kể cả đủ mọi nhóm việc) không thấy lối vào "Bổ sung ảnh hàng loạt": API ảnh WordPress chỉ nhận ADMIN', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH', 'KHO', 'MARKETING', 'KE_TOAN'] };
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    expect(container.querySelector('nav[aria-label="Mục quản trị"] a[href="/admin/catalog-wp-images"]')).toBeNull();
+    expect(container.querySelector('nav[aria-label="Mục quản trị"]')!.textContent).not.toContain('Bổ sung ảnh hàng loạt');
+  });
+
   it('mã đơn ở "Đơn hàng mới nhất" của Tổng quan bấm được, mở tab Đơn hàng tìm đúng mã (E-56)', async () => {
     window.history.replaceState(null, '', '/admin?tab=dashboard');
     const { container } = await mount();
