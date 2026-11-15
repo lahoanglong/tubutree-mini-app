@@ -1,4 +1,4 @@
-import { lazy, Suspense, useId, useState } from 'react';
+import { lazy, Suspense, useCallback, useId, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useRealUser } from '../../hooks/use-real-user';
@@ -13,16 +13,18 @@ import '../../css/home-quiz.css';
 const HomeQuizSheet = lazy(() => import('./home-quiz-sheet').then((m) => ({ default: m.HomeQuizSheet })));
 
 /**
- * Thẻ mời "Chẩn đoán tổ ấm" (30 giây, gợi ý bộ sản phẩm hợp nhà bạn) dùng ở khối Trang chủ `quiz` và ở Vườn Xanh cạnh sảnh mini game. Sheet và gợi ý sản phẩm không
- * gọi API tới khi khách mở sheet. Khách thật đã đăng nhập thì thẻ dùng chung truy vấn trạng thái mini game (cùng khoá với `ArcadeHub`, một request) để biết quà đã nhận
- * chưa: nhận rồi thì dòng phụ không hứa quà nữa. Khách và tài khoản khách theo thiết bị không gọi gì, vẫn thấy lời hứa. Sheet ở lại (chỉ đóng) sau lần mở đầu để giữ câu trả
+ * Thẻ mời "Chẩn đoán tổ ấm" (30 giây, gợi ý bộ sản phẩm hợp nhà bạn) dùng ở khối Trang chủ `quiz` và ở Vườn Xanh cạnh sảnh mini game. Thẻ tự nó KHÔNG tạo request nào (sheet và gợi ý sản phẩm chỉ gọi API khi khách mở sheet), còn trạng thái mini game chỉ được đọc từ cache cùng khoá với `ArcadeHub` (Vườn Xanh tải, Trang chủ không). Cache báo quà đã nhận (hoặc sheet vừa
+ * ghi quà xong) thì dòng phụ không hứa quà nữa; chưa biết thì giữ lời hứa mặc định. Khách và tài khoản khách theo thiết bị luôn thấy lời hứa. Sheet ở lại (chỉ đóng) sau lần mở đầu để giữ câu trả
  * lời và kết quả nếu khách mở lại.
  */
 export function HomeQuizCard() {
   const titleId = useId();
   const real = useRealUser();
-  const status = useQuery({ ...arcadeStatusQuery, enabled: real, staleTime: 30_000 });
-  const claimed = real && status.data?.quizClaimed === true;
+  // Chỉ đọc cache, không bao giờ tải: ngân sách request của Trang chủ không có chỗ cho trạng thái mini game. Ở Vườn Xanh `ArcadeHub` tải cùng khoá nên thẻ vẫn cập nhật.
+  const status = useQuery({ ...arcadeStatusQuery, enabled: false });
+  const [claimedNow, setClaimedNow] = useState(false);
+  const onClaimed = useCallback(() => setClaimedNow(true), []);
+  const claimed = real && (claimedNow || status.data?.quizClaimed === true);
   const [loaded, setLoaded] = useState(false);
   const [open, setOpen] = useState(false);
   return (
@@ -52,7 +54,7 @@ export function HomeQuizCard() {
       </Card>
       {loaded && (
         <Suspense fallback={null}>
-          <HomeQuizSheet open={open} onClose={() => setOpen(false)} />
+          <HomeQuizSheet open={open} onClose={() => setOpen(false)} onClaimed={onClaimed} />
         </Suspense>
       )}
     </section>

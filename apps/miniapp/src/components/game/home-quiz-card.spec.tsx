@@ -80,8 +80,10 @@ const page = (data: unknown[]) => ({ data, meta: { page: 1, limit: 40, total: da
 const detail = (variations: { id: string; stock: number }[]) => ({ id: 'a', slug: 'sp-a', name: 'Nước rửa chén', thumbnail: null, variations: variations.map((v) => ({ name: v.id, sku: v.id, attributes: {}, retailPrice: 50_000, salePrice: null, ...v })) });
 
 let qc: QueryClient;
-function renderCard() {
+/** `seed` giả lập cache đã có trạng thái mini game (Vườn Xanh đã tải) trước khi thẻ dựng. */
+function renderCard(seed?: unknown) {
   qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  if (seed !== undefined) qc.setQueryData(['game', 'arcade'], seed);
   const wrap = (children: ReactNode) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
   return render(wrap(<HomeQuizCard />));
 }
@@ -140,53 +142,74 @@ describe('HomeQuizCard: dòng quà trên thẻ', () => {
   const CLAIMED = fillCopy('homeQuiz.result.claimed');
   const claimedStatus = (quizClaimed: boolean) => ({ games: {}, window: null, windowBonus: false, nextWindowAt: null, quizClaimed });
 
-  it('khách thật chưa nhận quà: vẫn nói lần đầu có quà Giọt nước; hỏi trạng thái đúng một lần', async () => {
-    mocks.arcadeStatus.mockResolvedValue(claimedStatus(false));
+  const settle = () => act(async () => { await Promise.resolve(); });
+
+  it('Trang chủ (cache chưa có trạng thái): giữ lời hứa mặc định và thẻ KHÔNG tạo request mạng nào', async () => {
+    mocks.arcadeStatus.mockResolvedValue(claimedStatus(true));
     renderCard();
-    await waitFor(() => expect(mocks.arcadeStatus).toHaveBeenCalledTimes(1));
+    await settle();
+    expect(mocks.arcadeStatus).not.toHaveBeenCalled();
+    expect(screen.getByText(REWARD)).toBeInTheDocument();
+    expect(screen.queryByText(CLAIMED)).toBeNull();
+    expect(screen.getByRole('button', { name: 'Bắt đầu Chẩn đoán tổ ấm' })).toBeEnabled();
+  });
+
+  it('cache báo chưa nhận quà: vẫn nói lần đầu có quà Giọt nước, không tải lại', async () => {
+    renderCard(claimedStatus(false));
+    await settle();
+    expect(mocks.arcadeStatus).not.toHaveBeenCalled();
     expect(screen.getByText(REWARD)).toBeInTheDocument();
     expect(screen.queryByText(CLAIMED)).toBeNull();
   });
 
-  it('khách thật đã nhận quà (quizClaimed: true): thẻ không hứa quà nữa, dùng câu trung tính', async () => {
-    mocks.arcadeStatus.mockResolvedValue(claimedStatus(true));
-    renderCard();
+  it('cache báo đã nhận quà (quizClaimed: true): thẻ không hứa quà nữa, dùng câu trung tính, không tải lại', async () => {
+    renderCard(claimedStatus(true));
     expect(await screen.findByText(CLAIMED)).toBeInTheDocument();
+    expect(mocks.arcadeStatus).not.toHaveBeenCalled();
     expect(screen.queryByText(REWARD)).toBeNull();
     expect(screen.getByText(fillCopy('homeQuiz.card.sub'))).toBeInTheDocument();
   });
 
-  it('trạng thái đang tải hoặc lỗi: giữ lời hứa mặc định, không treo thẻ', async () => {
-    mocks.arcadeStatus.mockRejectedValue(new Error('mạng'));
+  it('Vườn Xanh: ArcadeHub nạp cùng khoá sau khi thẻ đã dựng thì thẻ đổi dòng phụ theo cache', async () => {
     renderCard();
-    await waitFor(() => expect(mocks.arcadeStatus).toHaveBeenCalled());
     expect(screen.getByText(REWARD)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Bắt đầu Chẩn đoán tổ ấm' })).toBeEnabled();
+    act(() => qc.setQueryData(['game', 'arcade'], claimedStatus(true)));
+    expect(await screen.findByText(CLAIMED)).toBeInTheDocument();
+    expect(screen.queryByText(REWARD)).toBeNull();
+    expect(mocks.arcadeStatus).not.toHaveBeenCalled();
   });
 
   it.each([
     ['khách chưa đăng nhập', 'unauthenticated', null],
     ['tài khoản khách theo thiết bị', 'authenticated', DEVICE_USER],
-  ] as const)('%s: không gọi trạng thái mini game và vẫn thấy lời hứa quà', (_name, status, user) => {
+  ] as const)('%s: không gọi trạng thái mini game và vẫn thấy lời hứa quà dù cache có quizClaimed', async (_name, status, user) => {
     mocks.auth.status = status;
     mocks.auth.user = user;
-    mocks.arcadeStatus.mockResolvedValue(claimedStatus(true));
-    renderCard();
+    renderCard(claimedStatus(true));
+    await settle();
     expect(mocks.arcadeStatus).not.toHaveBeenCalled();
     expect(screen.getByText(REWARD)).toBeInTheDocument();
   });
 
-  it('nhận quà xong trong sheet thì sau khi đóng, thẻ đổi sang câu đã nhận (trạng thái được làm mới)', async () => {
-    mocks.arcadeStatus.mockResolvedValue(claimedStatus(false));
+  it('nhận quà xong trong sheet ở Trang chủ (cache trống): thẻ đổi sang câu đã nhận mà không tạo request trạng thái', async () => {
     renderCard();
-    await waitFor(() => expect(mocks.arcadeStatus).toHaveBeenCalledTimes(1));
-    mocks.arcadeStatus.mockResolvedValue(claimedStatus(true));
     await answerAll();
     await screen.findByText(fillCopy('homeQuiz.result.granted', { n: 10 }));
     fireEvent.click(sheet().getByRole('button', { name: 'Đóng' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     expect(await screen.findByText(CLAIMED)).toBeInTheDocument();
     expect(screen.queryByText(REWARD)).toBeNull();
+    expect(mocks.arcadeStatus).not.toHaveBeenCalled();
+    expect(qc.getQueryData(['game', 'arcade'])).toBeUndefined();
+  });
+
+  it('nhận quà xong khi cache đã có trạng thái (chưa nhận): bản trong cache được vá quizClaimed, giữ nguyên phần còn lại', async () => {
+    renderCard(claimedStatus(false));
+    await answerAll();
+    await screen.findByText(fillCopy('homeQuiz.result.granted', { n: 10 }));
+    expect(await screen.findByText(CLAIMED)).toBeInTheDocument();
+    expect(qc.getQueryData(['game', 'arcade'])).toEqual(claimedStatus(true));
+    expect(mocks.arcadeStatus).not.toHaveBeenCalled();
   });
 });
 

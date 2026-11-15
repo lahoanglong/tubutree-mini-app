@@ -2,12 +2,12 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { homeQuizQuestions, pickKitProducts, type HomeQuizAnswers } from '@tubutree/app-core/arcade/home-quiz';
-import type { HomeQuizResult } from '@tubutree/app-core/api/game';
+import type { ArcadeStatus, HomeQuizResult } from '@tubutree/app-core/api/game';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useLoginWithNotice } from '../../hooks/use-login-notice';
 import { useRealUser } from '../../hooks/use-real-user';
 import { vi } from '../../i18n/vi';
-import { submitHomeQuiz } from '../../services/arcade-api';
+import { arcadeStatusQuery, submitHomeQuiz } from '../../services/arcade-api';
 import { fetchProducts } from '../../services/shop-api';
 import { haptic } from '../../utils/haptic';
 import { BottomSheet } from '../ui/bottom-sheet';
@@ -29,6 +29,8 @@ type Claim = { status: 'idle' | 'saving' | 'saved' | 'error'; result?: HomeQuizR
 export interface HomeQuizSheetProps {
   open: boolean;
   onClose: () => void;
+  /** Quà đã ghi xong (kể cả "đã nhận từ trước"): thẻ mời đổi dòng phụ dù Trang chủ không tải trạng thái mini game. */
+  onClaimed?: () => void;
 }
 
 /**
@@ -36,7 +38,7 @@ export interface HomeQuizSheetProps {
  * `pickKitProducts` chọn, mỗi món một chạm vào giỏ. Đã đăng nhập thì nhận quà Giọt nước đúng một lần (`submitHomeQuiz`); khách xem đủ kết quả và có nút đăng nhập,
  * đăng nhập xong thì quà tự được ghi.
  */
-export function HomeQuizSheet({ open, onClose }: HomeQuizSheetProps) {
+export function HomeQuizSheet({ open, onClose, onClaimed }: HomeQuizSheetProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const real = useRealUser();
@@ -68,13 +70,16 @@ export function HomeQuizSheet({ open, onClose }: HomeQuizSheetProps) {
       submitHomeQuiz(a).then(
         (result) => {
           setClaim({ status: 'saved', result });
+          // Bản trạng thái đã có trong cache (Vườn Xanh) được vá ngay: thẻ mời chỉ đọc cache, không tự tải lại. Chưa có bản nào thì không dựng bản giả.
+          queryClient.setQueryData<ArcadeStatus>(arcadeStatusQuery.queryKey, (old) => (old ? { ...old, quizClaimed: true } : old));
+          onClaimed?.();
           // Số Giọt nước ở Vườn đổi theo quà này.
           void queryClient.invalidateQueries({ queryKey: ['game'] });
         },
         () => setClaim({ status: 'error' }),
       );
     },
-    [queryClient],
+    [queryClient, onClaimed],
   );
   // Một lần cho cả đời thẻ: vẽ lại, Strict Mode, mở lại hay làm lại bộ câu hỏi không gửi thêm (quà chỉ có một lần cho mỗi tài khoản); riêng sau lỗi thì "Làm lại"
   // mở khoá (xem `retake`). Khách (kể cả tài khoản khách theo thiết bị, máy chủ không phát quà cho họ) không gửi gì; đăng nhập thật xong ngay trên kết quả thì `real` đổi
