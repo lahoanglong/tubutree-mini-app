@@ -164,7 +164,7 @@ export default function AffiliatePage() {
 }
 
 function CannotRegister() {
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   return (
     <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title={PAGE_TITLE} />
@@ -173,7 +173,7 @@ function CannotRegister() {
         heading="Tài khoản này không đăng ký CTV được"
         body="Màn hoa hồng CTV hiện khi tài khoản đã có gian hàng CTV hoặc đã có hoa hồng."
         ctaLabel="Về Hồ sơ"
-        onCta={() => navigate('/profile')}
+        onCta={() => goSmart('/profile')}
       />
     </Page>
   );

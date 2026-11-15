@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ navigate: vi.fn(), notify: vi.fn(), getCart: vi.fn(), applyCoupon: vi.fn() }));
-vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
+vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate, useLocation: () => ({ pathname: '/rewards', search: '', hash: '', state: null, key: 'default' }) }));
 vi.mock('./use-notify', () => ({ useNotify: () => ({ notify: mocks.notify }) }));
 vi.mock('../services/shop-api', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),

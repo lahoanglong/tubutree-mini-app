@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Input, Page, useNavigate, useSnackbar } from 'zmp-ui';
+import { Input, Page, useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { Landmark, ChevronDown } from 'lucide-react';
@@ -58,7 +59,7 @@ const toBankForm = (p: StaffProfile): typeof BANK_EMPTY => ({
 
 export default function MyPayrollPage() {
   const role = useAuthStore((s) => s.user?.role);
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   if (role !== 'STAFF' && role !== 'ADMIN') {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
@@ -68,7 +69,7 @@ export default function MyPayrollPage() {
           heading="Trang dành cho nhân viên"
           body="Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền."
           ctaLabel="Về Cá nhân"
-          onCta={() => navigate('/profile')}
+          onCta={() => goSmart('/profile')}
         />
       </Page>
     );

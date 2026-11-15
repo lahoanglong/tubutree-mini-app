@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { useNavigate, useSnackbar } from 'zmp-ui';
+import { useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getSubscriptions,
@@ -39,7 +40,7 @@ const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: '
  * sửa số lượng/địa chỉ/cách trả (C-015), huỷ qua sheet giữ chân (tạm dừng / bỏ qua kỳ / vẫn huỷ).
  */
 export function SubscriptionsPanel() {
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   // /me/subscriptions cần auth — fetch trước khi restore() xong sẽ 401 và kẹt (retry:false cho 4xx).
@@ -156,7 +157,7 @@ export function SubscriptionsPanel() {
           heading={vi.subscriptions.emptyHeading}
           body={vi.subscriptions.emptyBody}
           ctaLabel={vi.subscriptions.emptyCta}
-          onCta={() => navigate('/browse')}
+          onCta={() => goSmart('/browse')}
         />
       )}
 

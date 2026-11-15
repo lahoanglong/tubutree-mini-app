@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Sprout, Recycle, Check, Gift, Copy, Lightbulb, QrCode as QrCodeIcon, Ticket } from 'lucide-react';
 import {
@@ -67,6 +68,7 @@ function useLastNonNull<T>(value: T | null): T | null {
 
 export default function LoyaltyPage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const publicConfig = usePublicConfig();
   const { openSnackbar } = useSnackbar();
   // Các endpoint /me/* cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
@@ -296,7 +298,7 @@ export default function LoyaltyPage() {
                 title={couponRow.title}
                 subtitle={couponRow.sub}
                 trailing="chevron"
-                onPress={() => navigate(couponRow.to === 'coupons' ? '/offers?section=coupons' : '/rewards')}
+                onPress={() => goSmart(couponRow.to === 'coupons' ? '/offers?section=coupons' : '/rewards')}
                 style={{ padding: 12 }}
               />
             </Card>
@@ -316,7 +318,7 @@ export default function LoyaltyPage() {
               title="Vườn Xanh"
               subtitle="Chăm cây nhận quà"
               trailing="chevron"
-              onPress={() => navigate('/game')}
+              onPress={() => goSmart('/game')}
               style={{ padding: 12 }}
             />
             {!publicConfig.waste.enabled && hasWasteHistory && (
@@ -471,7 +473,7 @@ export default function LoyaltyPage() {
           </Section>
 
           <div style={{ padding: 16, display: 'flex', justifyContent: 'center' }}>
-            <Button variant="secondary" onPress={() => navigate('/browse')}>
+            <Button variant="secondary" onPress={() => goSmart('/browse')}>
               Mua sắm để tích thêm Điểm Xanh →
             </Button>
           </div>

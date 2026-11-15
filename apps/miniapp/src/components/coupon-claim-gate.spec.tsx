@@ -24,6 +24,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
       </div>
     ) : null,
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/points/scan', search: '', hash: '', state: null, key: 'default' }),
 }));
 vi.mock('zmp-sdk/apis', () => ({
   getStorage: async ({ keys }: { keys: string[] }) => Object.fromEntries(keys.filter((k) => k in mocks.storage).map((k) => [k, mocks.storage[k]])),

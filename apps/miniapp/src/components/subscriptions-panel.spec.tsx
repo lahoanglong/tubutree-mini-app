@@ -26,6 +26,7 @@ vi.mock('./ui/bottom-sheet', async (importOriginal) => {
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/subscriptions', search: '', hash: '', state: null, key: 'default' }),
   useSnackbar: () => ({ openSnackbar: mocks.openSnackbar, closeSnackbar: vi.fn() }),
 }));
 vi.mock('../services/subscriptions-api', async (importOriginal) => ({

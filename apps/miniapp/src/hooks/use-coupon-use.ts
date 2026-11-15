@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useNotify } from './use-notify';
 import { couponUseCopy, couponUseOutcome, couponUseTarget } from '@tubutree/app-core/coupon-use';
 import { cartKey } from '../services/cart-key';
@@ -15,7 +15,7 @@ import { haptic } from '../utils/haptic';
  * thiểu, phạm vi sản phẩm) vẫn đưa khách tới giỏ và nói lý do; giỏ đang giữ mã khác thì báo đã đổi.
  */
 export function useCouponUse() {
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const qc = useQueryClient();
   const { notify } = useNotify();
   // Khoá đồng bộ chống chạm đúp: chỉ một lần "Dùng ngay" đang chạy, nên chuyển trang đúng một lần.
@@ -46,12 +46,12 @@ export function useCouponUse() {
       // Không đọc được giỏ: không đoán là trống, đưa khách tới giỏ để thấy tình trạng thật.
       notify({ text: couponUseCopy.notApplied(getErrorMessage(e)), type: 'warning' });
       onBeforeNavigate?.();
-      navigate('/cart');
+      goSmart('/cart');
       return;
     }
     if (couponUseTarget(before.itemCount) === 'products') {
       onBeforeNavigate?.();
-      navigate('/browse');
+      goSmart('/browse');
       return;
     }
     try {
@@ -67,7 +67,7 @@ export function useCouponUse() {
       if (isStaleStateError(e)) void qc.invalidateQueries({ queryKey: ['coupons'] });
     }
     onBeforeNavigate?.();
-    navigate('/cart');
+    goSmart('/cart');
   };
 
   return { copy, apply };

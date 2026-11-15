@@ -1,4 +1,6 @@
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
+import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
 import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy, wasteIntroCopy } from '@tubutree/app-core/waste-copy';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
@@ -184,6 +186,7 @@ function RequestsBlock({ me, onOpen }: { me: WasteMeDTO; onOpen: (id: string) =>
 
 export default function RecyclePage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const phase = useAuthPhase();
@@ -293,7 +296,7 @@ export default function RecyclePage() {
         <NoticeCard text={PAUSED_TEXT} />
         {requestsBlock}
         <div>
-          <ListRow title="Kho quà" trailing="chevron" onPress={() => navigate('/rewards')} />
+          <ListRow title="Kho quà" trailing="chevron" onPress={() => goSmart(offersTabHref('/offers', 'rewards'))} />
         </div>
       </>,
     );
@@ -399,7 +402,7 @@ export default function RecyclePage() {
       <ItemList items={items} />
 
       <div>
-        <ListRow title="Kho quà" subtitle={giftNames || undefined} trailing="chevron" onPress={() => navigate('/rewards')} />
+        <ListRow title="Kho quà" subtitle={giftNames || undefined} trailing="chevron" onPress={() => goSmart(offersTabHref('/offers', 'rewards'))} />
         <ListRow title="Thể lệ chương trình" trailing="chevron" onPress={() => navigate('/recycle/rules')} />
       </div>
     </>,

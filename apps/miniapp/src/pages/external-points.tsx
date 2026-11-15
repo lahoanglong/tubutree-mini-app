@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { Input, Page, useLocation, useNavigate } from 'zmp-ui';
+import { Input, Page, useLocation } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { CheckCircle2, Clock, Info, MessageCircle, ScanLine } from 'lucide-react';
 import {
@@ -490,7 +491,7 @@ function ClaimForm({ fromCard, channel, initialCode, codeParamRejected }: { from
 }
 
 function ClosedView({ fromCard, maxAgeDays }: { fromCard: boolean; maxAgeDays: number | null }) {
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   return (
     <div data-testid={fromCard ? 'claim-soon' : 'claim-closed'}>
       <EmptyState
@@ -498,10 +499,10 @@ function ClosedView({ fromCard, maxAgeDays }: { fromCard: boolean; maxAgeDays: n
         heading={fromCard ? t.soonTitle : t.closedTitle}
         body={fromCard ? t.soonBody(maxAgeDays) : t.closedBody}
         ctaLabel={t.soonShop}
-        onCta={() => navigate('/browse')}
+        onCta={() => goSmart('/browse')}
       />
       <div style={{ padding: '0 16px 24px' }}>
-        <Button fullWidth variant="ghost" onPress={() => navigate('/')}>{t.soonHome}</Button>
+        <Button fullWidth variant="ghost" onPress={() => goSmart('/')}>{t.soonHome}</Button>
       </div>
     </div>
   );

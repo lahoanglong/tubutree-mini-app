@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { Share2 } from 'lucide-react';
@@ -53,6 +54,7 @@ function timeLeft(iso: string): string {
 
 export default function GroupBuyPage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const { id: invitedId } = useParams<{ id: string }>();
@@ -229,7 +231,7 @@ export default function GroupBuyPage() {
           heading="Chưa có nhóm mua chung nào"
           body="Mở nhóm từ trang sản phẩm để rủ bạn bè mua chung giá tốt!"
           ctaLabel="Khám phá sản phẩm"
-          onCta={() => navigate('/browse')}
+          onCta={() => goSmart('/browse')}
         />
       )}
     </Page>

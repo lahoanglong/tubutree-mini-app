@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Page, useLocation, useNavigate } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { fetchOrders } from '../services/shop-api';
 import { getLoadErrorMessage } from '../services/api';
@@ -39,6 +40,7 @@ const SEARCH_MAX_LENGTH = 60;
  */
 export default function OrdersPage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const location = useLocation();
   const phase = useAuthPhase();
   // Tab Định kỳ chỉ có khi khách đã có gói (đặt trên web): danh sách tab và tab mở sẵn theo ?tab= phải chờ biết điều đó.
@@ -190,7 +192,7 @@ export default function OrdersPage() {
                 heading={vi.orders.emptyHeading}
                 body={emptyBody}
                 ctaLabel={vi.orders.emptyCta}
-                onCta={() => navigate('/browse')}
+                onCta={() => goSmart('/browse')}
               />
               <BestSellerRailQuery />
             </>

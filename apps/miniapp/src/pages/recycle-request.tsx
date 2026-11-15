@@ -3,6 +3,7 @@ import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
 import { Input, Page, useNavigate, useParams, useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import type { WasteRequestDetailDTO, WasteRequestLineDTO } from '@tubutree/shared-types';
@@ -154,6 +155,7 @@ function TrackingForm({
 
 export default function RecycleRequestPage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
   const { id = '' } = useParams();
@@ -334,7 +336,7 @@ export default function RecycleRequestPage() {
         ) : (
           <>
             <Text variant="body-sm">Gắn yêu cầu này vào đơn mua kế tiếp ở bước thanh toán</Text>
-            <Button fullWidth onPress={() => navigate('/')}>Đi mua hàng</Button>
+            <Button fullWidth onPress={() => goSmart('/')}>Đi mua hàng</Button>
           </>
         )}
       </section>

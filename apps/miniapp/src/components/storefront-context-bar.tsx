@@ -1,4 +1,4 @@
-import { useNavigate } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { Store } from 'lucide-react';
 import { useStorefrontContext } from '../store/storefront-context';
 import { vi } from '../i18n/vi';
@@ -12,7 +12,7 @@ import { Text } from './ui/text';
  * Đặt ngay sau đỉnh Page trên các trang trong luồng mua: product-detail, cart.
  */
 export function StorefrontContextBar() {
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const { slug, clear } = useStorefrontContext();
   if (!slug) return null;
   return (
@@ -35,7 +35,7 @@ export function StorefrontContextBar() {
         variant="ghost"
         onPress={() => {
           clear();
-          navigate('/');
+          goSmart('/');
         }}
       >
         {vi.storefront.backToTubu}

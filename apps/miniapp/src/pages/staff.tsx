@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Input, Page, useNavigate, useSnackbar } from 'zmp-ui';
+import { Input, Page, useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Copy, LogIn, LogOut, MapPin } from 'lucide-react';
 import {
@@ -68,7 +69,7 @@ const SHIFT_FORM_EMPTY = { custom: false, tplId: '', customStart: '08:00', custo
 
 export default function StaffPage() {
   const role = useAuthStore((s) => s.user?.role);
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   if (role !== 'STAFF' && role !== 'ADMIN') {
     return (
       <Page style={{ background: 'var(--color-bg-canvas)' }}>
@@ -78,7 +79,7 @@ export default function StaffPage() {
           heading="Trang dành cho nhân viên"
           body="Tài khoản này chưa có quyền nhân viên. Liên hệ quản trị để được cấp quyền."
           ctaLabel="Về Cá nhân"
-          onCta={() => navigate('/profile')}
+          onCta={() => goSmart('/profile')}
         />
       </Page>
     );

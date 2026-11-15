@@ -1,5 +1,6 @@
 import { useState, type CSSProperties } from 'react';
-import { Page, useLocation, useNavigate } from 'zmp-ui';
+import { Page, useLocation } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { MapPin } from 'lucide-react';
 import { BADGE_VIEWBOX, badgeBackground, drawBadge } from '@tubutree/app-core/brand-badges';
 import { MAP_FRAME, MAP_GEO_TRANSFORM, MAP_LAYOUT, MAP_REGIONS, MAP_VIEWBOX, regionPath } from '@tubutree/app-core/brand-map-data';
@@ -158,13 +159,13 @@ function IngredientMap({ onPick, activeId }: { onPick: (loc: BrandOrigin) => voi
 }
 
 function BrowseButton({ origin, onGo }: { origin: BrandOrigin; onGo: () => void }) {
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   return (
     <Button
       fullWidth
       onPress={() => {
         onGo();
-        navigate(brandBrowseTarget(origin, '/browse'));
+        goSmart(brandBrowseTarget(origin, '/browse'));
       }}
       style={{ marginTop: 16 }}
     >

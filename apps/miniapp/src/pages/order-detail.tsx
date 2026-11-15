@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
 import { Box, Page, Text, Sheet, useParams, useNavigate, useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Recycle, Star, Leaf, CheckCircle2, XCircle, Clock, type LucideIcon } from 'lucide-react';
 import { fetchOrder, fetchOrders, cancelOrder, fetchMyRefunds, fetchMyReturns, fetchRefundBank, type OrderView } from '../services/shop-api';
@@ -79,6 +80,7 @@ import { bankDetailsError } from '../utils/refund-form-rules';
 export default function OrderDetailPage() {
   const { code } = useParams<{ code: string }>();
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const publicConfig = usePublicConfig();
@@ -264,7 +266,7 @@ export default function OrderDetailPage() {
     return (
       <Shell>
         {isNotFoundError(order.error) ? (
-          <ErrorState message="Không tìm thấy đơn hàng này." onRetry={() => undefined} onHome={() => navigate('/')} />
+          <ErrorState message="Không tìm thấy đơn hàng này." onRetry={() => undefined} onHome={() => goSmart('/')} />
         ) : (
           <ErrorState message={getLoadErrorMessage(order.error)} onRetry={() => order.refetch()} />
         )}

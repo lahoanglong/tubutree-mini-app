@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   keySeq: 0,
   params: {} as Record<string, string>,
-  location: { pathname: '/', search: '', state: null as unknown },
+  location: { pathname: '/recycle', search: '', state: null as unknown },
   auth: { status: 'authenticated' as 'idle' | 'loading' | 'authenticated' | 'error', error: undefined as string | undefined },
   login: vi.fn(),
   ensurePhone: vi.fn(),
@@ -191,11 +191,11 @@ describe('/recycle trang vào (§4.1)', () => {
     renderPage();
     expect(await screen.findByText('Thùng carton cũ: 3 thùng, Vỏ hộp sữa sạch: 5 vỏ')).toBeInTheDocument();
   });
-  it('hàng quà dẫn tới /rewards; lối vào đại lý chỉ khi có deskPoints', async () => {
+  it('hàng quà dẫn tới Hub Ưu đãi tab rewards (không về /rewards cũ); lối vào đại lý chỉ khi có deskPoints', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ deskPoints: [{ id: 'pt-1', name: 'Đại lý Cô Ba', kind: 'PARTNER' }] }));
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: /Kho quà/ }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/rewards');
+    expect(mocks.navigate).toHaveBeenCalledWith('/offers?tab=rewards');
     fireEvent.click(screen.getByRole('button', { name: /Nhận hàng tại điểm/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/recycle/desk');
   });

@@ -5,6 +5,7 @@ const mocks = vi.hoisted(() => ({ navigate: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useNavigate: () => mocks.navigate,
+  useLocation: () => ({ pathname: '/s/lan', search: '', hash: '', state: null, key: 'default' }),
 }));
 
 import { StorefrontContextBar } from './storefront-context-bar';

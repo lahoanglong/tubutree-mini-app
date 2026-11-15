@@ -440,7 +440,7 @@ export default function ProductDetailPage() {
         <h1 style={SR_ONLY}>{PDP_TITLE}</h1>
         {isNotFoundError(product.error) ? (
           <>
-            <ErrorState message={PRODUCT_NOT_FOUND} onRetry={() => undefined} onHome={() => navigate('/')} />
+            <ErrorState message={PRODUCT_NOT_FOUND} onRetry={() => undefined} onHome={() => goSmart('/')} />
             {/* Khách từ link sàn/CTV vào sản phẩm đã gỡ: cho họ chỗ đi tiếp thay vì ngõ cụt. */}
             <SuggestedRail listSource="pdp_not_found" />
           </>

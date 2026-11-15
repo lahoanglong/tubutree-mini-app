@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift } from 'lucide-react';
 import { useAuthStore } from '../store/auth';
@@ -63,7 +63,7 @@ export function CouponClaimGate() {
   const cfgQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000, enabled: onScanRoute() });
   // Cờ tắt thì màn Tích điểm chỉ là "sắp mở": nút chính của sheet không được hứa việc chưa làm được.
   const scanFlowOn = onScanRoute() && cfgQ.data?.loyalty?.marketplaceClaimEnabled === true;
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const cartCount = useCartCount();
   const [pending, setPending] = useState<string | null>(null);
   const [phase, setPhase] = useState<Phase>({ kind: 'closed' });
@@ -169,7 +169,7 @@ export function CouponClaimGate() {
 
   const useNow = () => {
     close();
-    navigate(cartCount > 0 ? '/cart' : '/browse');
+    goSmart(cartCount > 0 ? '/cart' : '/browse');
   };
 
   const view = describe(phase);

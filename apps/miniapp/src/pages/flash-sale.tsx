@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { flashSlotItemsQuery, flashSlotsQuery } from '@tubutree/app-core/queries/flash-sale';
@@ -79,6 +80,7 @@ function ListSkeleton() {
  */
 export default function FlashSalePage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const qc = useQueryClient();
   const { notify } = useNotify();
   const panelId = useId();
@@ -213,7 +215,7 @@ export default function FlashSalePage() {
     if (!activeSlot) return;
     const next = slotAfterEnd(slots ?? [], activeSlot.id, now);
     if (next) pick(next);
-    else navigate('/browse');
+    else goSmart('/browse');
   };
 
   const onToggleRemind = (item: FlashSlotItemData) => {
@@ -258,7 +260,7 @@ export default function FlashSalePage() {
   };
 
   const empty = (
-    <EmptyState art="sprout" heading={fillCopy('flash.emptyTitle')} body={fillCopy('flash.emptyBody')} ctaLabel={fillCopy('flash.emptyCta')} onCta={() => navigate('/browse')} />
+    <EmptyState art="sprout" heading={fillCopy('flash.emptyTitle')} body={fillCopy('flash.emptyBody')} ctaLabel={fillCopy('flash.emptyCta')} onCta={() => goSmart('/browse')} />
   );
 
   let body: React.ReactNode;

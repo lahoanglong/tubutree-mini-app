@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react';
-import { Page, useNavigate, useSnackbar } from 'zmp-ui';
+import { Page, useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { ShoppingCart } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { QUICK_ADD_SOLD_OUT, quickAddPlan } from '@tubutree/app-core/quick-add';
@@ -44,7 +45,7 @@ function QuickAddButton({ name, busy, onPress }: { name: string; busy: boolean; 
 }
 
 export default function WishlistPage() {
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const { openSnackbar } = useSnackbar();
   const queryClient = useQueryClient();
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -193,7 +194,7 @@ export default function WishlistPage() {
               heading="Chưa có sản phẩm yêu thích"
               body="Chạm biểu tượng trái tim trên sản phẩm để lưu lại xem sau."
               ctaLabel="Khám phá sản phẩm"
-              onCta={() => navigate('/browse')}
+              onCta={() => goSmart('/browse')}
             />
           )}
         </div>

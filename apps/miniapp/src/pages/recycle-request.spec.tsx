@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   keySeq: 0,
   params: { id: 'req-1' } as Record<string, string>,
-  location: { pathname: '/', search: '', state: null as unknown },
+  location: { pathname: '/recycle/r/req-1', search: '', state: null as unknown },
   auth: { status: 'authenticated' as 'idle' | 'loading' | 'authenticated' | 'error' },
   login: vi.fn(),
   ensurePhone: vi.fn(),

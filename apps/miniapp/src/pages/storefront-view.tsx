@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Page, useParams, useNavigate } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, Share2, Sparkles } from 'lucide-react';
 import { publicTier, planShopSections, shopTabs, storefrontStatsInput, uniqueShopProducts, type ShopTabKey } from '@tubutree/app-core/commerce/shop-page';
@@ -31,7 +32,7 @@ import { ShopProductsTab } from '../components/shop-page/shop-products-tab';
 
 export default function StorefrontViewPage() {
   const { slug = '' } = useParams<{ slug: string }>();
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const q = useQuery({ queryKey: ['public-storefront', slug], queryFn: () => getPublicStorefront(slug), staleTime: 60_000 });
   const setSfContext = useStorefrontContext((s) => s.setContext);
 
@@ -54,7 +55,7 @@ export default function StorefrontViewPage() {
       <Page className="page" style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={vi.storefront.publicTitle} />
         {gone ? (
-          <ErrorState message={vi.storefront.notFound} onRetry={() => undefined} onHome={() => navigate('/')} />
+          <ErrorState message={vi.storefront.notFound} onRetry={() => undefined} onHome={() => goSmart('/')} />
         ) : (
           <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />
         )}
@@ -77,6 +78,7 @@ const TABS_PAD_BOTTOM = 8;
 
 function StorefrontShop({ sf }: { sf: Storefront }) {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const [shareOpen, setShareOpen] = useState(false);
   const [tab, setTab] = useState<ShopTabKey>('shop');
   const [scopeId, setScopeId] = useState<string | null>(null);
@@ -148,7 +150,7 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
           heading={vi.storefront.emptyHeading}
           body={isOwner ? vi.storefront.emptyOwnerBody : vi.storefront.emptyBody}
           ctaLabel={isOwner ? vi.storefront.addProduct : vi.storefront.viewProducts}
-          onCta={() => navigate(isOwner ? '/storefront' : '/browse')}
+          onCta={() => goSmart(isOwner ? '/storefront' : '/browse')}
         />
       ) : (
         <>
@@ -192,7 +194,7 @@ function StorefrontShop({ sf }: { sf: Storefront }) {
       {/* Không có nút dính đáy kéo khách rời gian hàng: lối sang danh mục chung chỉ là link phụ ở cuối trang. */}
       {!isOwner && collections.length > 0 && (
         <Box mt={2} px={4} style={{ textAlign: 'center' }}>
-          <Button variant="ghost" onPress={() => navigate('/browse')}>{vi.storefront.moreAtTubu}</Button>
+          <Button variant="ghost" onPress={() => goSmart('/browse')}>{vi.storefront.moreAtTubu}</Button>
         </Box>
       )}
 

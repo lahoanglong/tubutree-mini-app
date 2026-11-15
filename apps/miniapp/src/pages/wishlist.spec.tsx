@@ -50,6 +50,7 @@ vi.mock('../components/ui/product-card', () => ({
 }));
 
 import WishlistPage from './wishlist';
+import { recordVisit, resetNavTrail } from '../lib/smart-nav';
 import { HttpError } from '../services/http';
 import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { QUICK_ADD_SOLD_OUT } from '@tubutree/app-core/quick-add';
@@ -100,6 +101,22 @@ describe('Trang Yêu thích', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
     fireEvent.click(screen.getByRole('button', { name: 'Khám phá sản phẩm' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/browse');
+  });
+
+  it('danh sách trống: Duyệt → Yêu thích → Khám phá lùi về Duyệt cũ, không đẩy Duyệt thứ hai (W165)', async () => {
+    const setIdx = (idx: number) => window.history.replaceState({ idx, key: `k${idx}`, usr: null }, '');
+    try {
+      setIdx(1);
+      recordVisit('/browse');
+      setIdx(2);
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: 'Khám phá sản phẩm' }));
+      expect(mocks.navigate).toHaveBeenCalledTimes(1);
+      expect(mocks.navigate).toHaveBeenCalledWith(-1);
+    } finally {
+      resetNavTrail();
+      setIdx(0);
+    }
   });
 
   it('lỗi tải: vẫn một h1, "Thử lại" gọi lại API', async () => {

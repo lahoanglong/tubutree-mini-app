@@ -1,5 +1,6 @@
 import { useRef, type CSSProperties } from 'react';
-import { Page, useNavigate } from 'zmp-ui';
+import { Page } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { BEST_SELLERS_ALL_KEY, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersBasisCopy, bestSellersRankFrom } from '@tubutree/app-core/browse/best-sellers';
@@ -39,7 +40,7 @@ const TABS_BAR: CSSProperties = {
  * Khách chưa đăng nhập xem được: chỉ gọi API công khai. Danh sách phẳng từ trang 1 nên hạng thẻ tiếp nối qua "Xem thêm".
  */
 export default function BestSellersPage() {
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const [params, setParams] = useSearchParams();
   const categories = useCategories();
   const anchorRef = useRef<HTMLDivElement>(null);
@@ -87,7 +88,7 @@ export default function BestSellersPage() {
             art="leaf"
             heading={fillCopy('rank.emptyTitle')}
             ctaLabel={fillCopy('rank.emptyCta')}
-            onCta={() => navigate(scope.category ? `/browse?category=${encodeURIComponent(scope.category)}` : '/browse?all=1')}
+            onCta={() => goSmart(scope.category ? `/browse?category=${encodeURIComponent(scope.category)}` : '/browse?all=1')}
           />
         ) : (
           <>

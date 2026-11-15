@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useMutation, useQueryClient, type QueryClient, type UseMutationOptions } from '@tanstack/react-query';
 import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
@@ -177,6 +178,7 @@ function useOptimisticCart<TVars>(
 
 export default function CartPage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const queryClient = useQueryClient();
   const { openSnackbar } = useSnackbar();
   const phase = useAuthPhase();
@@ -434,7 +436,7 @@ export default function CartPage() {
             heading={vi.cart.emptyHeading}
             body={vi.cart.emptyBody}
             ctaLabel={vi.cart.emptyCta}
-            onCta={() => navigate('/browse')}
+            onCta={() => goSmart('/browse')}
           />
           <SuggestedRail listSource="cart_empty" />
         </>
@@ -442,7 +444,7 @@ export default function CartPage() {
         <>
           {showFreeship && (
             <Box px={3} pt={2}>
-              <FreeShippingProgressBar base={freeshipBase} threshold={summary.freeshipThreshold} serverReached={freeshipServerReached} tubuOnly={hasMerchant} onShopMore={() => navigate('/')} />
+              <FreeShippingProgressBar base={freeshipBase} threshold={summary.freeshipThreshold} serverReached={freeshipServerReached} tubuOnly={hasMerchant} onShopMore={() => goSmart('/')} />
             </Box>
           )}
           {addonItems.length > 0 && (
@@ -622,11 +624,11 @@ function CartVoucherHintSection(props: {
   previewKey: string;
 }) {
   const v = useCartVoucherHint(props);
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   if (!v.hint) return null;
   return (
     <Box px={3} pt={2}>
-      <CartVoucherHintStrip hint={v.hint} onApply={v.apply} applying={v.applying} error={v.error} onShopMore={() => navigate('/')} />
+      <CartVoucherHintStrip hint={v.hint} onApply={v.apply} applying={v.applying} error={v.error} onShopMore={() => goSmart('/')} />
     </Box>
   );
 }
