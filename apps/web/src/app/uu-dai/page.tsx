@@ -231,7 +231,7 @@ function OffersContent() {
   const activeLabel = OFFERS_TABS.find((t) => t.key === tab)!.label;
   return (
     <>
-      <PageHeader title={homeCopy.offers.title} />
+      <PageHeader title={homeCopy.offers.title} backHref="/" />
       <div className="mt-3">
         <GroupCycleDealsNavPills activeOverride="deals" />
       </div>

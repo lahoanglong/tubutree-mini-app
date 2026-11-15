@@ -172,7 +172,7 @@ describe('homePickupDetailRows', () => {
       { label: 'Địa chỉ lấy rác', value: '12 Lê Lợi, Phường Bến Nghé, Thành phố Hồ Chí Minh' },
       { label: 'Cân nặng ước tính', value: '2 kg' },
       { label: 'Phí shipper', value: '25.000đ' },
-      { label: 'Đã trừ Điểm Xanh', value: '20.000 điểm' },
+      { label: 'Đã trừ Điểm Xanh', value: '20.000\u00A0điểm' },
     ]);
   });
   it('thiếu địa chỉ / chưa trừ điểm thì bỏ dòng tương ứng', () => {
@@ -183,7 +183,7 @@ describe('homePickupDetailRows', () => {
   it('đã huỷ và hoàn điểm: có dòng hoàn', () => {
     const rows = homePickupDetailRows(homePickup({ shipFeePointsRefunded: 20_000 }));
     expect(rows.map((r) => r.label)).toEqual(['Địa chỉ lấy rác', 'Cân nặng ước tính', 'Phí shipper', 'Đã trừ Điểm Xanh', 'Đã hoàn Điểm Xanh']);
-    expect(rows.at(-1)?.value).toBe('20.000 điểm');
+    expect(rows.at(-1)?.value).toBe('20.000\u00A0điểm');
   });
 });
 

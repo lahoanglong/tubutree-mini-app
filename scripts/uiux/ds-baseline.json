@@ -11,7 +11,7 @@
     "components/storefront-pickers.tsx": 4,
     "pages/cart.tsx": 8,
     "pages/checkout.tsx": 6,
-    "pages/group-buy.tsx": 6,
+    "pages/group-buy.tsx": 9,
     "pages/storefront-builder.tsx": 14,
     "pages/wishlist.tsx": 7
    },
@@ -36,9 +36,10 @@
     "components/variation-sheet.tsx": 1,
     "components/waste-item-thumb.tsx": 1,
     "pages/ai-advisor.tsx": 1,
+    "pages/brand-story.tsx": 1,
     "pages/cart.tsx": 1,
     "pages/checkout.tsx": 1,
-    "pages/group-buy.tsx": 1,
+    "pages/group-buy.tsx": 2,
     "pages/order-detail.tsx": 1,
     "pages/post-detail.tsx": 1,
     "pages/product-detail.tsx": 3
@@ -100,10 +101,11 @@
     "components/recycle/waste-point-picker.tsx": 1
    },
    "tile-custom": {
+    "app/cau-chuyen/brand-story-view.tsx": 1,
     "app/cong-dong/[id]/page.tsx": 1,
     "app/gio-hang/page.tsx": 1,
     "app/merchant/page.tsx": 2,
-    "app/mua-chung/group-buy-view.tsx": 1,
+    "app/mua-chung/group-buy-view.tsx": 2,
     "app/san-pham/[slug]/pdp-bundles.tsx": 1,
     "app/tai-khoan/don-hang/[code]/page.tsx": 2,
     "app/tai-khoan/orders-section.tsx": 1,
@@ -420,7 +422,7 @@
   "apps/miniapp/src/pages/best-sellers.tsx": 10,
   "apps/miniapp/src/pages/brand-owner-sales.tsx": 13,
   "apps/miniapp/src/pages/brand-owner.tsx": 35,
-  "apps/miniapp/src/pages/brand-story.tsx": 14,
+  "apps/miniapp/src/pages/brand-story.tsx": 1,
   "apps/miniapp/src/pages/brand-view.tsx": 35,
   "apps/miniapp/src/pages/browse.tsx": 15,
   "apps/miniapp/src/pages/campaign.tsx": 10,

@@ -94,7 +94,7 @@ const ACCOUNT: TitleCase[] = [
 ];
 const LOYALTY: TitleCase[] = [
   ['/tai-khoan/diem-xanh', points, 'Hạng thành viên & Điểm Xanh — Tubu Tree', [account]],
-  ['/kho-qua', rewards, 'Kho quà — Tubu Tree'],
+  ['/kho-qua', rewards, 'Kho quà Điểm Xanh — Tubu Tree'],
   ['/kho-qua/cua-toi', myRewards, 'Quà của tôi — Tubu Tree', [rewards]],
   ['/hoan-tien', cashback, 'Hoàn tiền — Tubu Tree'],
 ];

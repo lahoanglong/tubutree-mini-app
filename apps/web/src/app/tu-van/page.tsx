@@ -224,7 +224,7 @@ export default function AdvisorPage() {
 
   return (
     <main className={`${PAGE_WIDE} py-6 pb-24 max-md:pb-0 max-md:pt-0`}>
-      <PageHeader title="Trợ lý AI Tubu" subtitle={aiOff || !cfg.isLoaded ? undefined : 'Tư vấn sản phẩm tiêu dùng xanh 24/7'} />
+      <PageHeader title="Trợ lý AI Tubu" backHref="/" subtitle={aiOff || !cfg.isLoaded ? undefined : 'Tư vấn sản phẩm tiêu dùng xanh 24/7'} />
       <div className="mt-4">
         {aiOff ? (
           <AdvisorPaused />
@@ -232,7 +232,36 @@ export default function AdvisorPage() {
           <>
             {phase === 'loading' && <AuthLoading />}
             {phase === 'unavailable' && <SessionUnavailable />}
-            {phase === 'guest' && <LoginRequired message="Đăng nhập để hỏi Trợ lý AI" returnTo="/tu-van" />}
+            {phase === 'guest' && (
+              <div className="space-y-4">
+                <section
+                  data-testid="advisor-guest-intro"
+                  className="rounded-card border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 [box-shadow:var(--elevation-1)]"
+                >
+                  <div className="inline-flex items-center gap-1.5 rounded-pill bg-[var(--color-bg-subtle)] px-3 py-1 text-xs font-semibold text-[var(--color-text-brand)]">
+                    <Sparkles className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                    TƯ VẤN THÀNH PHẦN SINH HỌC 24/7
+                  </div>
+                  <h2 className="mt-2.5 font-display text-lg font-semibold text-[var(--color-text-primary)]">
+                    Chọn đúng sản phẩm lành tính cho từng không gian tổ ấm
+                  </h2>
+                  <p className="mt-1 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+                    Trợ lý AI Tubu tra cứu bảng thành phần thực vật, gợi ý sản phẩm an toàn cho bé và thú cưng, đồng thời hướng dẫn cách tái chế vỏ chai sau khi dùng.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2" aria-label="Chủ đề gợi ý">
+                    {SUGGESTIONS.map((s) => (
+                      <span
+                        key={s}
+                        className="rounded-pill border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] px-3 py-1.5 text-xs text-[var(--color-text-secondary)]"
+                      >
+                        “{s}”
+                      </span>
+                    ))}
+                  </div>
+                </section>
+                <LoginRequired message="Đăng nhập để hỏi Trợ lý AI" returnTo="/tu-van" />
+              </div>
+            )}
             {phase === 'authenticated' && <Advisor userId={user?.id ?? ''} />}
           </>
         )}

@@ -788,7 +788,7 @@ describe('/doi-rac/yeu-cau/[id]: đơn Shipper lấy tận nhà', () => {
     state.request = makeHomePickupRequest();
     const c = await mount();
     const d = c.querySelector('[data-testid="home-pickup-detail"]')!;
-    for (const t of ['Địa chỉ lấy rác', '12 Lê Lợi, Phường Bến Thành, TP. Hồ Chí Minh', 'Cân nặng ước tính', '2 kg', 'Phí shipper', '25.000đ', 'Đã trừ Điểm Xanh', '25.000 điểm']) {
+    for (const t of ['Địa chỉ lấy rác', '12 Lê Lợi, Phường Bến Thành, TP. Hồ Chí Minh', 'Cân nặng ước tính', '2 kg', 'Phí shipper', '25.000đ', 'Đã trừ Điểm Xanh', '25.000\u00A0điểm']) {
       expect(d.textContent).toContain(t);
     }
     expect(d.textContent).not.toMatch(/thu hộ|COD|tiền mặt/i);

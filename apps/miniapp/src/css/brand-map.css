@@ -19,10 +19,42 @@
   height: 100%;
 }
 
+.brandmap-grid line {
+  stroke: var(--color-brandmap-frame-border);
+  stroke-width: 0.75;
+  stroke-dasharray: 2 3;
+  opacity: 0.55;
+  vector-effect: non-scaling-stroke;
+}
+
+.brandmap-compass-ring {
+  fill: var(--color-bg-surface);
+  stroke: var(--color-brandmap-land-edge);
+  stroke-width: 0.9;
+  vector-effect: non-scaling-stroke;
+}
+
+.brandmap-compass-north {
+  fill: var(--color-brandmap-origin);
+}
+
+.brandmap-compass-south {
+  fill: var(--color-brandmap-land-edge);
+}
+
+.brandmap-coast-halo {
+  fill: none;
+  stroke: var(--color-brandmap-frame-border);
+  stroke-width: 3.5;
+  stroke-linejoin: round;
+  opacity: 0.5;
+  vector-effect: non-scaling-stroke;
+}
+
 .brandmap-land {
   fill: var(--color-brandmap-land);
   stroke: var(--color-brandmap-land-edge);
-  stroke-width: 1;
+  stroke-width: 1.05;
   stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
 }

@@ -303,7 +303,7 @@ body.has-sticky-bar [data-bottom-nav] {
   margin-top: var(--space-stack-sm);
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-stack-xs);
 }
 
 .tubu-quick-pill {
@@ -311,11 +311,11 @@ body.has-sticky-bar [data-bottom-nav] {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 5px;
+  gap: 3px;
   height: 44px;
   min-height: 44px;
   min-width: 0;
-  padding: 0 8px;
+  padding: 0 7px;
   box-sizing: border-box;
   border: 1px solid var(--color-border-subtle);
   border-radius: var(--radius-control);
@@ -325,10 +325,17 @@ body.has-sticky-bar [data-bottom-nav] {
   font-size: var(--type-label-size);
   line-height: var(--type-label-lh);
   font-weight: 600;
+  letter-spacing: -0.01em;
   white-space: nowrap;
   text-decoration: none;
   cursor: pointer;
   transition: border-color var(--motion-tap), background-color var(--motion-tap);
+}
+
+.tubu-quick-pill svg {
+  width: 13px;
+  height: 13px;
+  flex-shrink: 0;
 }
 
 .tubu-quick-pill:hover {
@@ -340,7 +347,7 @@ body.has-sticky-bar [data-bottom-nav] {
   flex: 0 0 auto;
   background: var(--color-bg-subtle);
   color: var(--color-text-secondary);
-  padding: 0 10px;
+  padding: 0 8px;
 }
 
 @media (min-width: 768px) {
@@ -385,7 +392,14 @@ body.has-sticky-bar [data-bottom-nav] {
 
   .tubu-quick-pill {
     flex: 0 1 auto;
+    gap: 6px;
     padding: 0 14px;
     font-size: var(--type-caption-size);
+    letter-spacing: normal;
+  }
+
+  .tubu-quick-pill svg {
+    width: 14px;
+    height: 14px;
   }
 }

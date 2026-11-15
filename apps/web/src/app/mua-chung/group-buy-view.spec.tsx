@@ -760,3 +760,60 @@ describe('/mua-chung — khoá giữ tới khi danh sách làm mới về, có h
     });
   });
 });
+
+describe('/mua-chung — kệ Mở nhóm Mua chung mới (W173)', () => {
+  it('hiện sản phẩm Tubu giao đủ điều kiện và tạo phòng 1 chạm sang /mua-chung/:id?moi=1', async () => {
+    mocks.list = [];
+    mocks.get.mockImplementation(async (path: string) => {
+      if (path === '/group-buy') return [];
+      if (path === '/products') {
+        return {
+          data: [
+            {
+              id: 'p-fuwa',
+              slug: 'nuoc-rua-chen-fuwa3e',
+              brand: 'Fuwa3e',
+              name: 'Nước rửa chén sinh học Fuwa3e',
+              thumbnail: null,
+              basePrice: 125_000,
+              salePrice: 109_000,
+              isFeatured: true,
+              inStock: true,
+              fulfiller: { kind: 'TUBU', name: 'Tubu Tree', shippingFee: 0, freeShipFrom: 0 },
+            },
+            {
+              id: 'p-merchant',
+              slug: 'mon-doi-tac',
+              brand: 'Partner',
+              name: 'Món đối tác tự giao',
+              thumbnail: null,
+              basePrice: 90_000,
+              salePrice: null,
+              isFeatured: false,
+              inStock: true,
+              fulfiller: { kind: 'MERCHANT', name: 'Đối tác', shippingFee: 20_000, freeShipFrom: null },
+            },
+          ],
+          meta: { page: 1, limit: 8, total: 2 },
+        };
+      }
+      return null;
+    });
+    mocks.post.mockResolvedValueOnce({ id: 'gb-99' });
+
+    const c = await mount();
+    const shelf = c.querySelector('[data-testid="group-buy-starter-shelf"]')!;
+    expect(shelf).not.toBeNull();
+    expect(shelf.textContent).toContain('Mở nhóm Mua chung mới — Chọn món giá kho');
+    expect(shelf.textContent).toContain('Nước rửa chén sinh học Fuwa3e');
+    expect(shelf.textContent).not.toContain('Món đối tác tự giao');
+    expect(headingProblems(c)).toEqual([]);
+    expect(unnamedControls(c)).toEqual([]);
+    expect(smallTouchTargets(c)).toEqual([]);
+
+    click(btn(c, /Mở nhóm ngay cho Nước rửa chén sinh học Fuwa3e/)!);
+    await flush(5);
+    expect(mocks.post).toHaveBeenCalledWith('/group-buy', { productId: 'p-fuwa' });
+    expect(mocks.push).toHaveBeenCalledWith('/mua-chung/gb-99?moi=1');
+  });
+});

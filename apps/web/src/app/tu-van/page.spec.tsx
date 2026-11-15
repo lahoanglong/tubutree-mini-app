@@ -121,14 +121,14 @@ describe('Trợ lý AI: trạng thái trang', () => {
     expect(c.querySelector('textarea')).toBeNull();
     expect(state.replace).not.toHaveBeenCalled();
     expect(c.querySelector('a[href="/ho-tro/chat"]')?.textContent).toContain('Chat với Tubu');
-    expect(c.querySelector('a[href="/"]')?.textContent).toContain('Về Trang chủ');
+    expect(c.querySelector('header + div a[href="/"]')?.textContent).toContain('Về Trang chủ');
     expect(c.querySelector('a[href^="tel:"]')).toBeNull();
   });
 
   it('nút phụ "Về Trang chủ" dùng kiểu nút phụ của Mini App ở điện thoại (nền xanh nhạt, không viền), không phải nút viền trắng', async () => {
     state.config = { aiAdvisorEnabled: false, chat: { enabled: true }, support: { hotline: '0984 606 774' } };
     const c = await mount();
-    const home = c.querySelector('a[href="/"]') as HTMLElement;
+    const home = c.querySelector('header + div a[href="/"]') as HTMLElement;
     expect(home.className).toContain('max-md:bg-forest-50');
     expect(home.className).toContain('max-md:border-transparent');
     expect(home.className).toContain('max-md:text-forest-700');

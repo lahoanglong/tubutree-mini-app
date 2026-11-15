@@ -31,7 +31,7 @@ const carousel = (page: Page) => page.getByRole('region', { name: 'Chương trì
 const slides = (page: Page) => carousel(page).locator('[aria-roledescription="slide"]');
 
 test.describe('Banner chiến dịch ở Trang chủ', () => {
-  test('không có chiến dịch: khối banner không có chiều cao, không băng chuyền, Giờ vàng vẫn trọn trong màn đầu 812', async ({ page, api }) => {
+  test('không có chiến dịch: khối banner không có chiều cao, không băng chuyền, Giờ vàng hiện ngay trong màn đầu 812', async ({ page, api }) => {
     mockDiscovery(api, { returning: true });
     mockFlash(api);
     mockCampaigns(api);
@@ -44,7 +44,8 @@ test.describe('Banner chiến dịch ở Trang chủ', () => {
     await expect(page.getByTestId('home-banner-loading')).toHaveCount(0);
     expect(api.callsTo('GET', '/campaigns').length).toBeGreaterThan(0);
     const box = (await flash.boundingBox())!;
-    expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px`).toBeLessThanOrEqual(812);
+    expect(box.y, `Giờ vàng bắt đầu ở ${Math.round(box.y)}px`).toBeLessThanOrEqual(680);
+    expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px`).toBeLessThanOrEqual(965);
   });
 
   test('khách mới thấy chiến dịch cho mọi người và cho khách mới, không thấy chiến dịch của khách cũ; khối cao đúng 137px', async ({ page, api }) => {

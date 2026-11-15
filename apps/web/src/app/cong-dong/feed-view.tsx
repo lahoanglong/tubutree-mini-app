@@ -170,8 +170,19 @@ export function FeedView({ initialPreview, initialConfig }: { initialPreview?: F
       );
     }
     return (
-      <FeedShell>
+      <FeedShell subtitle>
         <CommunityChannels {...(initialConfig ? { initialConfig } : {})} />
+        <section
+          data-testid="community-guest-intro"
+          className="rounded-card border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 [box-shadow:var(--elevation-1)]"
+        >
+          <h2 className="font-display text-lg font-semibold text-[var(--color-text-primary)]">
+            Góc chia sẻ thực tế của các gia đình sống xanh
+          </h2>
+          <p className="mt-1.5 text-sm leading-relaxed text-[var(--color-text-secondary)]">
+            Cùng hỏi đáp mẹo chăm sóc nhà cửa an toàn cho trẻ nhỏ, khoe cây vừa thu hoạch tại Vườn Xanh và chia sẻ hành trình phân loại vỏ chai nhận Điểm Xanh.
+          </p>
+        </section>
         <LoginRequired message="Đăng nhập để xem cộng đồng" returnTo="/cong-dong" />
       </FeedShell>
     );

@@ -295,6 +295,9 @@ function Fullscreen({ props, body }: { props: ProductStoryShowcaseProps; body: J
   return createPortal(
     <div ref={root} role="dialog" aria-modal="true" aria-label={title} className="tubu-story-dialog">
       <div className="tubu-story-dialog-head">
+        <button ref={closeBtn} type="button" data-testid="story-close" aria-label={fillCopy('story.close')} className="tubu-story-close tubu-press tubu-hit-44-square" onClick={onClose}>
+          <Icon icon={X} size="md" />
+        </button>
         {position ? (
           <div className="tubu-reel-heading">
             {heading}
@@ -305,9 +308,6 @@ function Fullscreen({ props, body }: { props: ProductStoryShowcaseProps; body: J
         ) : (
           heading
         )}
-        <button ref={closeBtn} type="button" data-testid="story-close" aria-label={fillCopy('story.close')} className="tubu-story-close tubu-press tubu-hit-44-square" onClick={onClose}>
-          <Icon icon={X} size="md" />
-        </button>
       </div>
       <div data-testid="story-scroll" tabIndex={0} className="tubu-story-scroll">
         {body}

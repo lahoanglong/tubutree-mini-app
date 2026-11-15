@@ -34,112 +34,104 @@ export function badgeBackground(id: string): string {
 
 const n = (v: number) => Math.round(v * 100) / 100;
 
-/** Lục giác đỉnh nhọn lên trên, tâm (cx, cy), bán kính r. */
-function hex(cx: number, cy: number, r: number): string {
-  const w = (Math.sqrt(3) / 2) * r;
-  const pts = [
-    [cx, cy - r],
-    [cx + w, cy - r / 2],
-    [cx + w, cy + r / 2],
-    [cx, cy + r],
-    [cx - w, cy + r / 2],
-    [cx - w, cy - r / 2],
-  ];
-  return `M${pts.map(([x, y]) => `${n(x!)} ${n(y!)}`).join(' L')} Z`;
-}
-
 /** Hình tròn bằng hai cung. */
 function disc(cx: number, cy: number, r: number): string {
   return `M${n(cx - r)} ${n(cy)} a${r} ${r} 0 1 0 ${n(2 * r)} 0 a${r} ${r} 0 1 0 ${n(-2 * r)} 0 Z`;
 }
 
+/** Con dấu thực vật học mảnh bao quanh huy hiệu: vòng mảnh ngoài và cung vòm mảnh bên trong theo phong cách dược thảo hữu cơ. */
+function sealRing(): BadgeShape[] {
+  return [
+    { d: disc(24, 24, 20.5), fill: 'wash', line: { tone: 'light', w: 1 } },
+    { d: 'M9.5 19 A15.5 15.5 0 0 1 38.5 19', fill: 'none', line: { tone: 'light', w: 0.9 } },
+  ];
+}
+
 export const BRAND_BADGES: Record<string, BadgeShape[]> = {
-  // Dứa (thân, vảy, tán lá) và quả bồ hòn.
+  // Fuwa3e (Thanh Hóa): tán lá dứa vươn mảnh, quả dứa khắc gân chéo tinh tế và chùm bồ hòn hữu cơ.
   fuwa3e: [
-    { d: 'M24 6 C21 11 21 14 24 18 C27 14 27 11 24 6 Z', fill: 'deep' },
-    { d: 'M22 18 C17 15 14 11 13 6 C18 8 21 12 22 18 Z', fill: 'deep' },
-    { d: 'M26 18 C31 15 34 11 35 6 C30 8 27 12 26 18 Z', fill: 'deep' },
-    { d: 'M24 17 C32 17 35 25 35 31 C35 39 30 44 24 44 C18 44 13 39 13 31 C13 25 16 17 24 17 Z', fill: 'base' },
-    { d: 'M16 25 L30 39 M14 31 L24 42 M22 19 L33 30 M32 25 L18 39 M34 31 L25 42 M26 19 L15 30', fill: 'none', line: { tone: 'deep', w: 1.3 } },
-    { d: disc(38, 36, 6), fill: 'light', line: { tone: 'deep', w: 1.6 } },
-    { d: disc(36, 34, 1.6), fill: 'wash' },
+    ...sealRing(),
+    { d: 'M24 7 C22 11 22 15 24 18 C26 15 26 11 24 7 Z', fill: 'deep' },
+    { d: 'M22.5 18 C18.5 15 15.5 11.5 14.5 8 C18.5 9.5 21 13 22.5 18 Z', fill: 'base' },
+    { d: 'M25.5 18 C29.5 15 32.5 11.5 33.5 8 C29.5 9.5 27 13 25.5 18 Z', fill: 'base' },
+    { d: 'M24 17.5 C30 17.5 33 23 33 29 C33 35.5 29 40 24 40 C19 40 15 35.5 15 29 C15 23 18 17.5 24 17.5 Z', fill: 'light', line: { tone: 'deep', w: 1.35 } },
+    { d: 'M17.5 24 L29.5 36 M16.5 29.5 L25 38 M21.5 19.5 L31.5 29.5 M30.5 24 L18.5 36 M31.5 29.5 L23 38 M26.5 19.5 L16.5 29.5', fill: 'none', line: { tone: 'deep', w: 1.05 } },
+    { d: disc(35.5, 34.5, 4.2), fill: 'base', line: { tone: 'deep', w: 1.25 } },
+    { d: disc(34.2, 33.2, 1.1), fill: 'wash' },
   ],
-  // Tổ ong sáu ô và một chiếc lá.
+  // BH.Nong (Quảng Nam): nhành trà rừng Trường Sơn đối xứng gân mảnh và giọt mật ong rừng nguyên bản.
   bhnong: [
-    { d: hex(18, 16, 5.6), fill: 'light' },
-    { d: hex(29.3, 16, 5.6), fill: 'wash', line: { tone: 'light', w: 1.2 } },
-    { d: hex(12.4, 25.8, 5.6), fill: 'wash', line: { tone: 'light', w: 1.2 } },
-    { d: hex(23.6, 25.8, 5.6), fill: 'base' },
-    { d: hex(34.9, 25.8, 5.6), fill: 'light' },
-    { d: hex(18, 35.6, 5.6), fill: 'light' },
-    { d: hex(29.3, 35.6, 5.6), fill: 'wash', line: { tone: 'light', w: 1.2 } },
-    { d: 'M33 11 C40 10 44 15 43 22 C36 23 32 18 33 11 Z', fill: 'deep' },
-    { d: 'M34 12 C37 16 40 19 42 21', fill: 'none', line: { tone: 'wash', w: 1.1 } },
+    ...sealRing(),
+    { d: 'M12 37 C17 31 23 23 31 12', fill: 'none', line: { tone: 'deep', w: 1.5 } },
+    { d: 'M20 26 C14 25 11 19 14 13 C20 14 22 20 20 26 Z', fill: 'light', line: { tone: 'deep', w: 1.25 } },
+    { d: 'M15 15 C17 18.5 18.5 22 19.5 25', fill: 'none', line: { tone: 'deep', w: 0.95 } },
+    { d: 'M25 20 C25 14 30 10 36 11 C35 17 31 21 25 20 Z', fill: 'light', line: { tone: 'deep', w: 1.25 } },
+    { d: 'M26 19.5 C29.5 17 32.5 14.5 34.5 12', fill: 'none', line: { tone: 'deep', w: 0.95 } },
+    { d: 'M33 24 C36.5 29 38 32.5 38 35 A5 5 0 0 1 28 35 C28 32.5 29.5 29 33 24 Z', fill: 'base', line: { tone: 'deep', w: 1.3 } },
+    { d: 'M31 34 C31 36 32.2 37.2 33.5 37.5', fill: 'none', line: { tone: 'wash', w: 1.2 } },
   ],
-  // Quả bơ: vỏ, thịt và hạt.
+  // Pơ Lang (Đắk Lắk): trái ca cao bazan bổ dọc lộ múi hạt và chiếc lá gân mảnh.
   polang: [
-    { d: 'M24 4 C30 4 33 11 34 17 C38 21 40 26 40 31 C40 39 33 44 24 44 C15 44 8 39 8 31 C8 26 10 21 14 17 C15 11 18 4 24 4 Z', fill: 'deep' },
-    { d: 'M24 8 C28 8 30 14 31 19 C35 22 36 27 36 31 C36 37 31 40 24 40 C17 40 12 37 12 31 C12 27 13 22 17 19 C18 14 20 8 24 8 Z', fill: 'light' },
-    { d: disc(24, 31, 7), fill: 'base' },
-    { d: disc(21.5, 28.5, 2), fill: 'wash' },
+    ...sealRing(),
+    { d: 'M22 8 C28.5 10 32.5 17 32.5 25.5 C32.5 34 28.5 40 22 41.5 C15.5 40 11.5 34 11.5 25.5 C11.5 17 15.5 10 22 8 Z', fill: 'base', line: { tone: 'deep', w: 1.4 } },
+    { d: 'M22 11.5 C26.2 13.5 28.8 18.8 28.8 25.5 C28.8 32.2 26.2 37 22 38.5 C17.8 37 15.2 32.2 15.2 25.5 C15.2 18.8 17.8 13.5 22 11.5 Z', fill: 'wash', line: { tone: 'deep', w: 1.05 } },
+    { d: 'M22 13 L22 37 M18.5 19.5 L25.5 19.5 M18 25.5 L26 25.5 M18.5 31.5 L25.5 31.5', fill: 'none', line: { tone: 'deep', w: 1.1 } },
+    { d: 'M31 19 C36 16 40 18 40 23.5 C35.5 26 31.5 24 31 19 Z', fill: 'light', line: { tone: 'deep', w: 1.2 } },
+    { d: disc(35.5, 34, 3), fill: 'deep' },
   ],
-  // Sóng biển và rong biển.
+  // Visante (Khánh Hòa): nhánh tảo biển Nha Trang mềm mại, tinh thể muối khoáng và đường thuỷ triều.
   visante: [
-    { d: 'M15 40 C10 32 19 28 15 20 C12 14 17 11 16 6', fill: 'none', line: { tone: 'deep', w: 2.6 } },
-    { d: 'M25 40 C20 31 29 27 25 18 C22 12 27 9 26 5', fill: 'none', line: { tone: 'base', w: 2.6 } },
-    { d: 'M35 40 C31 33 38 30 35 23 C33 18 37 16 36 12', fill: 'none', line: { tone: 'light', w: 2.6 } },
-    { d: 'M5 34 q4.75 -5 9.5 0 t9.5 0 t9.5 0 t9.5 0 L43 44 L5 44 Z', fill: 'wash' },
-    { d: 'M5 34 q4.75 -5 9.5 0 t9.5 0 t9.5 0 t9.5 0', fill: 'none', line: { tone: 'base', w: 2.4 } },
-    { d: 'M5 41 q4.75 -5 9.5 0 t9.5 0 t9.5 0 t9.5 0', fill: 'none', line: { tone: 'light', w: 2.4 } },
+    ...sealRing(),
+    { d: 'M17 37 C14 31 20 26 17 19 C15 14.5 18 11 17.5 8.5', fill: 'none', line: { tone: 'deep', w: 1.7 } },
+    { d: 'M17 28 C13.5 26 12.5 23 14 20.5 M17.5 21 C20.5 19 21.5 16 20 13.5', fill: 'none', line: { tone: 'base', w: 1.3 } },
+    { d: 'M26 37 C23.5 30 28.5 25 25.5 17 C24 13 26.5 10 26 7.5', fill: 'none', line: { tone: 'base', w: 1.6 } },
+    { d: 'M34.5 15 L38.5 19 L34.5 23 L30.5 19 Z', fill: 'light', line: { tone: 'deep', w: 1.25 } },
+    { d: 'M10 36 C14.5 33.5 19 38.5 24 36 C29 33.5 33.5 38.5 38 36', fill: 'none', line: { tone: 'deep', w: 1.4 } },
+    { d: 'M12.5 40 C16.5 38 20.5 41.5 24 39.5 C27.5 38 31.5 41.5 35.5 39.5', fill: 'none', line: { tone: 'light', w: 1.2 } },
   ],
-  // Đông trùng hạ thảo: ba thể quả hình chày mọc từ nền đất.
+  // Hector (Lâm Đồng): ba sợi đông trùng hạ thảo thanh mảnh vươn trên đường vân sương cao nguyên.
   hector: [
-    { d: 'M5 43 C10 35 38 35 43 43 Z', fill: 'light' },
-    { d: 'M14 38 C13 31 15 26 14 20', fill: 'none', line: { tone: 'base', w: 2.2 } },
-    { d: 'M24 37 C23 28 26 22 24 12', fill: 'none', line: { tone: 'base', w: 2.2 } },
-    { d: 'M34 38 C35 32 33 27 34 23', fill: 'none', line: { tone: 'base', w: 2.2 } },
-    { d: 'M14 21 C10.5 18 11 9 14 8 C17 9 17.5 18 14 21 Z', fill: 'deep' },
-    { d: 'M24 13 C20 9.5 20.5 1 24 0 C27.5 1 28 9.5 24 13 Z', fill: 'deep' },
-    { d: 'M34 24 C31 21.5 31.5 14.5 34 13.5 C36.5 14.5 37 21.5 34 24 Z', fill: 'deep' },
-    { d: disc(8, 40, 1.4), fill: 'base' },
-    { d: disc(40, 41, 1.4), fill: 'base' },
+    ...sealRing(),
+    { d: 'M10 37 C16 33.5 32 33.5 38 37', fill: 'none', line: { tone: 'deep', w: 1.35 } },
+    { d: 'M13 39.5 C19 37 29 37 35 39.5', fill: 'none', line: { tone: 'light', w: 1.15 } },
+    { d: 'M16.5 35.5 C15.5 29.5 17 24.5 16 19.5', fill: 'none', line: { tone: 'base', w: 1.6 } },
+    { d: 'M24 35 C23.5 27.5 25.5 21 24 13.5', fill: 'none', line: { tone: 'deep', w: 1.75 } },
+    { d: 'M31.5 35.5 C32.5 30 31 25.5 32 21', fill: 'none', line: { tone: 'base', w: 1.6 } },
+    { d: 'M16 20 C13.8 17.5 14 11.5 16 10.5 C18 11.5 18.2 17.5 16 20 Z', fill: 'base', line: { tone: 'deep', w: 1.15 } },
+    { d: 'M24 14.5 C21.5 11.5 21.8 5.5 24 4.5 C26.2 5.5 26.5 11.5 24 14.5 Z', fill: 'deep' },
+    { d: 'M32 21.5 C30 19.2 30.2 14 32 13 C33.8 14 34 19.2 32 21.5 Z', fill: 'light', line: { tone: 'deep', w: 1.15 } },
   ],
-  // Cành cà phê: hai lá và chùm quả.
+  // Le Plateau (Cầu Đất): nhành cà phê Arabica cao nguyên lá gân mảnh và chùm quả chín mọng.
   leplateau: [
-    { d: 'M7 41 C15 35 28 25 41 9', fill: 'none', line: { tone: 'deep', w: 2.4 } },
-    { d: 'M20 31 C15 24 19 15 28 12 C32 20 28 28 20 31 Z', fill: 'light', line: { tone: 'deep', w: 1.4 } },
-    { d: 'M30 20 C30 12 37 6 44 6 C44 14 38 20 30 20 Z', fill: 'light', line: { tone: 'deep', w: 1.4 } },
-    { d: 'M21 28 C23 24 25 19 27 15', fill: 'none', line: { tone: 'deep', w: 1.1 } },
-    { d: disc(13, 35, 4.4), fill: 'base' },
-    { d: disc(21, 40, 4.4), fill: 'base' },
-    { d: disc(10, 43, 3.4), fill: 'deep' },
-    { d: disc(11.8, 33.2, 1.3), fill: 'wash' },
-    { d: disc(19.8, 38.2, 1.3), fill: 'wash' },
+    ...sealRing(),
+    { d: 'M11 37 C17 31 27 22 37 11', fill: 'none', line: { tone: 'deep', w: 1.65 } },
+    { d: 'M21 27 C15.5 22 18 14 25.5 12 C28.5 18.5 26.5 24.5 21 27 Z', fill: 'light', line: { tone: 'deep', w: 1.25 } },
+    { d: 'M21.5 25.5 C22.5 21.5 23.8 17.5 25 14', fill: 'none', line: { tone: 'deep', w: 0.95 } },
+    { d: 'M28 21 C29.5 14.5 35 10.5 40.5 11.5 C39.5 18 34.5 21.5 28 21 Z', fill: 'wash', line: { tone: 'deep', w: 1.25 } },
+    { d: disc(16.5, 32, 3.6), fill: 'base', line: { tone: 'deep', w: 1.2 } },
+    { d: disc(23, 35.5, 3.4), fill: 'deep' },
+    { d: disc(15.5, 30.8, 1), fill: 'wash' },
   ],
-  // Quả dừa: vỏ, ba mắt và tàu lá.
+  // Cobote (Bến Tre): tàu dừa cong thanh nhã, gáo dừa hữu cơ cắt ngang và giọt dầu dừa ép lạnh.
   cobote: [
-    { d: 'M24 11 C19 5 12 4 7 8', fill: 'none', line: { tone: 'deep', w: 2.4 } },
-    { d: 'M24 11 C29 5 36 4 41 8', fill: 'none', line: { tone: 'deep', w: 2.4 } },
-    { d: 'M24 11 L24 5', fill: 'none', line: { tone: 'deep', w: 2.4 } },
-    { d: disc(24, 28, 15), fill: 'base' },
-    { d: 'M12 24 C13 17 18 13 24 13', fill: 'none', line: { tone: 'light', w: 2 } },
-    { d: disc(19.5, 24, 2.1), fill: 'wash' },
-    { d: disc(28.5, 24, 2.1), fill: 'wash' },
-    { d: disc(24, 31, 2.1), fill: 'wash' },
+    ...sealRing(),
+    { d: 'M12 19 C17 11 27 9 36 14', fill: 'none', line: { tone: 'deep', w: 1.5 } },
+    { d: 'M16 15 L13 11 M21 12.5 L19.5 8 M26.5 11.8 L27 7.5 M31.5 12.8 L34 9', fill: 'none', line: { tone: 'base', w: 1.15 } },
+    { d: 'M12 26 A11 11 0 0 0 34 26 Z', fill: 'base', line: { tone: 'deep', w: 1.4 } },
+    { d: 'M15 26 A8 8 0 0 0 31 26 Z', fill: 'wash', line: { tone: 'deep', w: 1.05 } },
+    { d: 'M36 27 C38.5 31 39.5 33.5 39.5 35.5 A3.5 3.5 0 0 1 32.5 35.5 C32.5 33.5 33.5 31 36 27 Z', fill: 'light', line: { tone: 'deep', w: 1.2 } },
   ],
-  // Hoa dừa: cuống hoa cong, chùm nụ và giọt mật.
+  // Sokfarm (Trà Vinh): mo hoa dừa uốn cong thanh mảnh, chuỗi nụ hoa và giọt mật hoa dừa thu thủ công.
   sokfram: [
-    { d: 'M6 30 C10 18 20 10 28 9', fill: 'none', line: { tone: 'light', w: 2 } },
-    { d: 'M42 30 C38 20 32 14 27 10', fill: 'none', line: { tone: 'light', w: 2 } },
-    { d: 'M13 43 C13 28 20 16 34 11', fill: 'none', line: { tone: 'deep', w: 2.6 } },
-    { d: disc(18, 25, 3), fill: 'base' },
-    { d: disc(22, 19.5, 3), fill: 'base' },
-    { d: disc(27.5, 15.2, 3), fill: 'base' },
-    { d: disc(33.5, 12, 3.2), fill: 'base' },
-    { d: disc(15, 31, 2.5), fill: 'light' },
-    { d: disc(26, 22, 2.5), fill: 'light' },
-    { d: 'M36 28 C40 34 41 37 38.5 40.5 C36 43 32 41 32.5 37 C33 34 35 31 36 28 Z', fill: 'deep' },
-    { d: disc(35, 37, 1.1), fill: 'wash' },
+    ...sealRing(),
+    { d: 'M12 37 C13 25 20 15 33 10', fill: 'none', line: { tone: 'deep', w: 1.7 } },
+    { d: 'M15 29 C19 20 26 15 35 15', fill: 'none', line: { tone: 'base', w: 1.3 } },
+    { d: 'M14 33 C20 27 27 23 35 22', fill: 'none', line: { tone: 'light', w: 1.2 } },
+    { d: disc(21, 20, 2.2), fill: 'base', line: { tone: 'deep', w: 1 } },
+    { d: disc(26.5, 16, 2.2), fill: 'light', line: { tone: 'deep', w: 1 } },
+    { d: disc(32, 13.5, 2.1), fill: 'base', line: { tone: 'deep', w: 1 } },
+    { d: 'M32.5 26.5 C35.5 31 36.8 33.8 36.8 36 A4.3 4.3 0 0 1 28.2 36 C28.2 33.8 29.5 31 32.5 26.5 Z', fill: 'deep' },
+    { d: disc(31.2, 35.2, 1.1), fill: 'wash' },
   ],
 };
 

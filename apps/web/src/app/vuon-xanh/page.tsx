@@ -430,7 +430,7 @@ export default function GamePage() {
   const phase = useAuthPhase();
   return (
     <main className={`${PAGE_WIDE} py-6 pb-24 max-md:pt-0`}>
-      <PageHeader title={TITLE} />
+      <PageHeader title={TITLE} backHref="/" />
       <div className="mt-4">
         {phase === 'loading' && <AuthLoading />}
         {phase === 'unavailable' && <SessionUnavailable />}

@@ -115,7 +115,7 @@ export default function BestSellersView({ initial = null, categories: initialCat
   return (
     <>
       <ListingBreadcrumb trail={[{ label: fillCopy('browse.crumbHome'), href: '/' }, { label: title }]} />
-      <PageHeader title={title} subtitle={bestSellersBasisCopy(products.data?.pages)} parentHref="/" />
+      <PageHeader title={title} subtitle={bestSellersBasisCopy(products.data?.pages)} backHref="/" />
       {/* Hàng tab dính dưới thanh lùi đặc ở điện thoại (`sticky-below-back` đặt top đúng), dưới thanh đầu từ md. Từ md nền lùi đúng đệm khung (24px) mỗi bên: bóng thẻ tràn ra ngoài khung nếu nền hẹp hơn thì lộ thành vệt ở mép phải khi cuộn. */}
       <div className="sticky-below-back sticky top-0 z-[2] -mx-4 bg-[var(--color-bg-canvas)] px-4 py-2 md:top-[var(--header-h)] md:-mx-6 md:px-6">
         <div className="md:w-fit md:max-w-full">

@@ -212,7 +212,7 @@ export const HOME_ECOSYSTEM_PILLARS: readonly HomeEcosystemPillarSpec[] = [
     id: 'recycle',
     title: 'Đổi rác lấy quà',
     subtitle: 'Miễn ship khi gửi kèm đơn',
-    badge: 'Miễn ship kèm đơn',
+    badge: 'Miễn ship',
     tone: 'botanical',
     featured: true,
     webHref: '/doi-rac',

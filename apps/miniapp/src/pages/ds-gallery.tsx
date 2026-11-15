@@ -120,6 +120,7 @@ const byId = (...ids: string[]) => ids.map((id) => GALLERY_VOUCHERS.find((v) => 
 
 export default function DsGalleryPage() {
   const [now] = useState(() => Date.now());
+  if (import.meta.env.PROD) return null;
   const end = (ms: number) => galleryEnd(ms, now);
   const three = galleryCombo(GALLERY_COMBO_ITEMS.slice(0, 3), 10);
   const five = galleryCombo(GALLERY_COMBO_ITEMS, 15);

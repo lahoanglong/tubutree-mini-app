@@ -144,8 +144,16 @@ const RECYCLE: PageCase[] = [
   ['/doi-rac/xong/[id]', () => <RecycleDone id="req-77" />, '/doi-rac/xong/req-77'],
   ['/doi-rac/quay', () => <RecycleDeskPage />, '/doi-rac/quay'],
 ];
-// Nhãn nút đăng nhập hợp lệ: chung của LoginRequired, trang vào Đổi rác của khách và lời mời xem Yêu cầu của tôi.
-const LOGIN_LABELS = ['Đăng nhập với Zalo', 'Đăng nhập để đổi rác', 'Đăng nhập để đổi', 'Đăng nhập'];
+// Nhãn nút đăng nhập hợp lệ: chung của LoginRequired, trang giới thiệu quyền lợi cho khách và trang Đổi rác.
+const LOGIN_LABELS = [
+  'Đăng nhập với Zalo',
+  'Đăng nhập để đổi rác',
+  'Đăng nhập để đổi',
+  'Đăng nhập để đăng ký Đại lý',
+  'Đăng nhập để đăng ký CTV',
+  'Đăng nhập để bắt đầu trồng cây',
+  'Đăng nhập',
+];
 
 const PAGES: PageCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
 

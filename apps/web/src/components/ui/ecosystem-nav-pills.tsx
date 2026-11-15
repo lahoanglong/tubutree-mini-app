@@ -1,11 +1,12 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import Link from 'next/link';
 import { useOptionalPathname } from '@/lib/optional-nav';
 
 export interface EcosystemNavPillItem {
   href: string;
-  label: string;
+  label: ReactNode;
   active: boolean;
 }
 
@@ -16,18 +17,25 @@ export function EcosystemNavPills({
   items: readonly EcosystemNavPillItem[];
   label: string;
 }) {
+  const gridColsClass =
+    items.length === 2
+      ? 'grid-cols-2'
+      : items.length === 3
+        ? 'grid-cols-3'
+        : 'grid-cols-2';
+
   return (
     <nav
       aria-label={label}
       data-testid="ecosystem-nav-pills"
-      className="tubu-scroll-fade flex items-center gap-1.5 overflow-x-auto rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] p-1"
+      className={`grid ${gridColsClass} items-center gap-1 rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] p-1 sm:inline-flex sm:w-auto sm:gap-1.5`}
     >
       {items.map((item) => (
         <Link
           key={item.href}
           href={item.href}
           aria-current={item.active ? 'page' : undefined}
-          className={`inline-flex min-h-11 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-control px-3.5 text-sm font-semibold transition-colors ${
+          className={`inline-flex min-h-11 min-w-0 items-center justify-center whitespace-nowrap rounded-control px-1.5 text-center text-xs font-semibold transition-colors sm:shrink-0 sm:px-3.5 sm:text-sm ${
             item.active
               ? 'bg-[var(--color-bg-surface)] text-[color:var(--color-text-brand)] [box-shadow:var(--elevation-1)]'
               : 'text-[color:var(--color-text-secondary)] hover:text-[color:var(--color-text-primary)]'
@@ -49,17 +57,34 @@ export function RecycleRewardsNavPills() {
       items={[
         {
           href: '/doi-rac',
-          label: '♻️ Đổi rác tích điểm',
+          label: (
+            <>
+              <span aria-hidden="true" className="hidden sm:inline">♻️ </span>
+              Đổi rác
+              <span className="hidden sm:inline">&nbsp;tích điểm</span>
+            </>
+          ),
           active: pathname === '' || pathname === '/doi-rac' || pathname.startsWith('/doi-rac/'),
         },
         {
           href: '/kho-qua',
-          label: '🎁 Kho quà Điểm Xanh',
+          label: (
+            <>
+              <span aria-hidden="true" className="hidden sm:inline">🎁 </span>
+              Kho quà
+              <span className="hidden sm:inline">&nbsp;Điểm Xanh</span>
+            </>
+          ),
           active: pathname === '/kho-qua',
         },
         {
           href: '/kho-qua/cua-toi',
-          label: '🎟️ Quà đã đổi của tôi',
+          label: (
+            <>
+              <span aria-hidden="true" className="hidden sm:inline">🎟️ </span>
+              Quà&nbsp;<span className="hidden sm:inline">đã đổi&nbsp;</span>của tôi
+            </>
+          ),
           active: pathname === '/kho-qua/cua-toi' || pathname.startsWith('/kho-qua/cua-toi/'),
         },
       ]}
@@ -87,17 +112,29 @@ export function GroupCycleDealsNavPills({
       items={[
         {
           href: '/mua-chung',
-          label: 'Mua chung giá kho',
+          label: (
+            <>
+              Mua chung<span className="hidden sm:inline">&nbsp;giá kho</span>
+            </>
+          ),
           active: activeKey === 'group-buy',
         },
         {
           href: '/san-pham?filter=subscription',
-          label: 'Mua xoay vòng (Định kỳ)',
+          label: (
+            <>
+              Mua xoay vòng<span className="hidden sm:inline">&nbsp;(Định kỳ)</span>
+            </>
+          ),
           active: activeKey === 'subscription',
         },
         {
           href: '/uu-dai',
-          label: 'Giờ vàng & Ưu đãi',
+          label: (
+            <>
+              <span className="hidden sm:inline">Giờ vàng &amp;&nbsp;</span>Ưu đãi
+            </>
+          ),
           active: activeKey === 'deals',
         },
       ]}
@@ -110,7 +147,7 @@ export function PartnerEarnNavPills() {
   const pathname = useOptionalPathname() ?? '';
   return (
     <EcosystemNavPills
-      label="Kênh đối tác Tubu Tree"
+      label="Đại lý và Cộng tác viên"
       items={[
         {
           href: '/dai-ly',
@@ -119,7 +156,11 @@ export function PartnerEarnNavPills() {
         },
         {
           href: '/ctv',
-          label: 'Tiếp thị liên kết (CTV)',
+          label: (
+            <>
+              Tiếp thị liên kết<span className="hidden sm:inline">&nbsp;(CTV)</span>
+            </>
+          ),
           active: pathname === '/ctv' || pathname.startsWith('/ctv/'),
         },
       ]}

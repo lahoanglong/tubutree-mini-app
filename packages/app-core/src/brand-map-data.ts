@@ -59,25 +59,110 @@ export interface MapRegion {
   origin: boolean;
 }
 
-/** 14 vùng sơ đồ từ Bắc vào Nam (tên chỉ để đọc mã, không vẽ chữ trong đa giác). */
+/** 14 vùng địa lý Việt Nam từ Bắc vào Nam với đường bao hữu cơ dọc dãy Trường Sơn và bờ biển chữ S. */
 export const MAP_REGIONS: readonly MapRegion[] = [
-  { id: 'tay-bac', origin: false, points: [[125, 35], [75, 60], [95, 95], [138, 78]] },
-  { id: 'dong-bac', origin: false, points: [[138, 78], [125, 35], [175, 35], [215, 55], [195, 92]] },
-  { id: 'son-la', origin: false, points: [[95, 95], [138, 78], [160, 115], [120, 128]] },
-  { id: 'ha-noi', origin: false, points: [[160, 115], [195, 92], [225, 110], [180, 142]] },
-  { id: 'thanh-hoa', origin: true, points: [[120, 128], [180, 142], [165, 178], [125, 158]] },
-  { id: 'nghe-an', origin: false, points: [[125, 158], [165, 178], [192, 195], [145, 215]] },
-  { id: 'hue', origin: false, points: [[145, 215], [192, 195], [215, 240], [175, 252]] },
-  { id: 'quang-nam', origin: true, points: [[175, 252], [215, 240], [255, 275], [208, 290]] },
-  { id: 'gia-lai', origin: false, points: [[208, 290], [255, 275], [240, 338], [195, 320]] },
-  { id: 'dak-lak', origin: true, points: [[195, 320], [240, 338], [268, 382], [212, 375]] },
-  { id: 'khanh-hoa', origin: true, points: [[268, 382], [295, 370], [285, 435], [248, 420]] },
-  { id: 'lam-dong', origin: true, points: [[212, 375], [268, 382], [248, 420], [205, 410]] },
-  { id: 'dong-nam-bo', origin: false, points: [[205, 410], [248, 420], [225, 470], [175, 440]] },
-  { id: 'dbscl', origin: true, points: [[175, 440], [225, 470], [190, 535], [125, 565], [95, 585], [125, 635], [165, 640], [215, 570], [245, 500]] },
+  {
+    id: 'tay-bac',
+    origin: false,
+    points: [[128, 30], [104, 38], [82, 52], [74, 70], [84, 88], [102, 98], [122, 92], [140, 78], [136, 52]],
+  },
+  {
+    id: 'dong-bac',
+    origin: false,
+    points: [[128, 30], [154, 24], [182, 30], [208, 44], [222, 62], [212, 82], [196, 94], [168, 90], [140, 78], [136, 52]],
+  },
+  {
+    id: 'son-la',
+    origin: false,
+    points: [[102, 98], [122, 92], [140, 78], [154, 96], [162, 114], [144, 126], [120, 130], [104, 116]],
+  },
+  {
+    id: 'ha-noi',
+    origin: false,
+    points: [[140, 78], [168, 90], [196, 94], [218, 104], [224, 118], [204, 134], [182, 142], [162, 114], [154, 96]],
+  },
+  {
+    id: 'thanh-hoa',
+    origin: true,
+    points: [[120, 130], [144, 126], [162, 114], [182, 142], [186, 158], [170, 178], [146, 172], [124, 160], [116, 144]],
+  },
+  {
+    id: 'nghe-an',
+    origin: false,
+    points: [[124, 160], [146, 172], [170, 178], [184, 188], [194, 200], [174, 214], [148, 216], [134, 198], [126, 178]],
+  },
+  {
+    id: 'hue',
+    origin: false,
+    points: [[148, 216], [174, 214], [194, 200], [208, 218], [218, 238], [198, 250], [176, 252], [160, 236]],
+  },
+  {
+    id: 'quang-nam',
+    origin: true,
+    points: [[176, 252], [198, 250], [218, 238], [240, 252], [256, 272], [248, 286], [228, 292], [206, 290], [188, 274]],
+  },
+  {
+    id: 'gia-lai',
+    origin: false,
+    points: [[206, 290], [228, 292], [248, 286], [262, 306], [256, 326], [242, 338], [218, 332], [196, 320], [198, 304]],
+  },
+  {
+    id: 'dak-lak',
+    origin: true,
+    points: [[196, 320], [218, 332], [242, 338], [260, 354], [270, 378], [244, 380], [214, 374], [198, 356], [192, 338]],
+  },
+  {
+    id: 'khanh-hoa',
+    origin: true,
+    points: [[270, 378], [286, 368], [298, 382], [300, 406], [292, 428], [276, 438], [250, 422], [258, 400]],
+  },
+  {
+    id: 'lam-dong',
+    origin: true,
+    points: [[214, 374], [244, 380], [270, 378], [266, 398], [250, 422], [226, 418], [202, 410], [200, 390]],
+  },
+  {
+    id: 'dong-nam-bo',
+    origin: false,
+    points: [[202, 410], [226, 418], [250, 422], [258, 444], [244, 466], [224, 474], [196, 458], [174, 440], [184, 422]],
+  },
+  {
+    id: 'dbscl',
+    origin: true,
+    points: [[174, 440], [196, 458], [224, 474], [242, 496], [234, 528], [218, 564], [194, 594], [166, 632], [138, 642], [118, 632], [100, 602], [96, 580], [118, 562], [148, 542], [166, 506], [164, 470]],
+  },
 ];
 
 export const regionPath = (r: MapRegion): string => `M ${r.points.map((p) => `${p[0]} ${p[1]}`).join(' L ')} Z`;
+
+const round2 = (v: number): number => Math.round(v * 100) / 100;
+
+/** Đường bao cong mềm kiểu bản đồ thực vật học (Catmull-Rom khép kín sang Bezier bậc ba), giữ trọn điểm tựa địa lý của vùng. */
+export function smoothRegionPath(r: MapRegion, tension = 0.18): string {
+  const pts = r.points;
+  const len = pts.length;
+  if (len < 3) return regionPath(r);
+  const segs: string[] = [`M ${pts[0]![0]} ${pts[0]![1]}`];
+  for (let i = 0; i < len; i++) {
+    const p0 = pts[(i - 1 + len) % len]!;
+    const p1 = pts[i]!;
+    const p2 = pts[(i + 1) % len]!;
+    const p3 = pts[(i + 2) % len]!;
+    const c1x = round2(p1[0] + (p2[0] - p0[0]) * tension);
+    const c1y = round2(p1[1] + (p2[1] - p0[1]) * tension);
+    const c2x = round2(p2[0] - (p3[0] - p1[0]) * tension);
+    const c2y = round2(p2[1] - (p3[1] - p1[1]) * tension);
+    segs.push(`C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2[0]} ${p2[1]}`);
+  }
+  segs.push('Z');
+  return segs.join(' ');
+}
+
+/** Lưới kinh vĩ tuyến mảnh trong khung bản đồ (đơn vị khung 0..100 x 0..110) tạo chiều sâu bản đồ học cổ điển. */
+export const MAP_GRATICULE = {
+  parallels: [22, 48, 74, 100] as const,
+  meridians: [36, 50, 64] as const,
+};
 
 export interface MapIslandSpec {
   id: 'hoang-sa' | 'truong-sa' | 'phu-quoc';

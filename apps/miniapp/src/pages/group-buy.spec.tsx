@@ -14,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   listGroupBuys: vi.fn(),
   getGroupBuy: vi.fn(),
   joinGroupBuy: vi.fn(),
+  createGroupBuy: vi.fn(),
+  fetchGroupBuyStarterProducts: vi.fn(),
   fetchActiveFlashSales: vi.fn(),
   getPublicConfig: vi.fn(),
   shareWithFallback: vi.fn(),
@@ -38,6 +40,10 @@ vi.mock('../services/groupbuy-api', () => ({
   listGroupBuys: mocks.listGroupBuys,
   getGroupBuy: mocks.getGroupBuy,
   joinGroupBuy: mocks.joinGroupBuy,
+  createGroupBuy: mocks.createGroupBuy,
+}));
+vi.mock('../services/groupbuy-starters', () => ({
+  fetchGroupBuyStarterProducts: mocks.fetchGroupBuyStarterProducts,
 }));
 vi.mock('../services/shop-api', () => ({ fetchActiveFlashSales: mocks.fetchActiveFlashSales, getPublicConfig: mocks.getPublicConfig }));
 vi.mock('../components/share-sheet', () => ({ useShareWithFallback: () => mocks.shareWithFallback }));
@@ -82,6 +88,7 @@ function renderPage() {
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.fetchActiveFlashSales.mockResolvedValue([]);
+  mocks.fetchGroupBuyStarterProducts.mockResolvedValue([]);
   mocks.params = {};
   mocks.cartCount = 0;
   mocks.auth.status = 'authenticated';
@@ -950,5 +957,33 @@ describe('GroupBuyPage — lối thoát nhanh vào Giỏ (W163)', () => {
     expect(cart.style.height).toBe('44px');
     fireEvent.click(cart);
     expect(mocks.navigate).toHaveBeenCalledWith('/cart');
+  });
+});
+
+describe('GroupBuyPage — kệ Mở nhóm Mua chung mới (W173)', () => {
+  it('danh sách trống vẫn hiện kệ Mở nhóm Mua chung mới và bấm Mở nhóm ngay tạo phòng 1 chạm', async () => {
+    mocks.listGroupBuys.mockResolvedValue([]);
+    mocks.fetchGroupBuyStarterProducts.mockResolvedValue([
+      {
+        id: 'p-fuwa',
+        slug: 'nuoc-rua-chen-fuwa3e',
+        brand: 'Fuwa3e',
+        name: 'Nước rửa chén sinh học Fuwa3e',
+        thumbnail: null,
+        basePrice: 125_000,
+        salePrice: 109_000,
+        isFeatured: true,
+        inStock: true,
+      },
+    ]);
+    mocks.createGroupBuy.mockResolvedValue({ id: 'gb-new-1' });
+
+    renderPage();
+    expect(await screen.findByText('Mở nhóm Mua chung mới — Chọn món giá kho')).toBeInTheDocument();
+    expect(screen.getByText('Nước rửa chén sinh học Fuwa3e')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Mở nhóm ngay' }));
+    await waitFor(() => expect(mocks.createGroupBuy).toHaveBeenCalledWith('p-fuwa'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/group-buy/gb-new-1');
   });
 });

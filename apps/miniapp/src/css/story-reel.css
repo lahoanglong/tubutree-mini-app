@@ -141,17 +141,21 @@
 }
 .tubu-reel-wait-head {
   display: flex;
-  justify-content: flex-end;
-  padding: var(--space-stack-xs);
+  align-items: center;
+  justify-content: flex-start;
+  padding: calc(var(--safe-top) + var(--space-stack-xs)) 96px var(--space-stack-xs) var(--space-stack-xs);
 }
 .tubu-reel-wait-close {
+  flex: 0 0 auto;
   width: 44px;
   height: 44px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: none;
-  background: transparent;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--color-border-subtle);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-primary);
   cursor: pointer;
 }
 .tubu-reel-wait-body {

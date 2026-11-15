@@ -5,9 +5,10 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { Share2 } from 'lucide-react';
 import { groupMemberStatus, groupMissing, groupMissingLine, groupPriceLabels, groupRewardLine } from '@tubutree/app-core/group-buy-copy';
-import { getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
+import { createGroupBuy, getGroupBuy, listGroupBuys, joinGroupBuy, type GroupBuy } from '../services/groupbuy-api';
+import { fetchGroupBuyStarterProducts } from '../services/groupbuy-starters';
 import { getErrorMessage, getLoadErrorMessage, isHttpError } from '../services/api';
-import { fetchActiveFlashSales } from '../services/shop-api';
+import { fetchActiveFlashSales, type ProductCard } from '../services/shop-api';
 import { serverNow } from '../utils/server-clock';
 import { settleWithin } from '../utils/settle-within';
 import { formatVnd } from '../utils/format';
@@ -88,6 +89,30 @@ export default function GroupBuyPage() {
   const others = rest.filter((g) => g.status !== 'SUCCESS');
   const done = rest.filter((g) => g.status === 'SUCCESS');
 
+  const startersQ = useQuery({
+    queryKey: ['group-buy-starters'],
+    queryFn: fetchGroupBuyStarterProducts,
+    enabled: !isLoading && !isError && !invitedId,
+    staleTime: 60_000,
+    retry: false,
+  });
+  const starters = startersQ.data ?? [];
+
+  const createM = useLockedMutation(
+    {
+      mutationFn: (productId: string) => createGroupBuy(productId),
+      onSuccess: (created) => {
+        openSnackbar({ text: 'Đã mở nhóm mua chung! Rủ bạn bè tham gia nhé 🛒', type: 'success' });
+        void queryClient.invalidateQueries({ queryKey: ['group-buy'] });
+        navigate(`/group-buy/${created.id}`);
+      },
+      onError: (e: unknown) => {
+        openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      },
+    },
+    (productId) => productId,
+  );
+
   const joinM = useLockedMutation({
     mutationFn: (id: string) => joinGroupBuy(id),
     onSuccess: (r) => {
@@ -161,6 +186,31 @@ export default function GroupBuyPage() {
     await joinSignedIn(id);
   };
 
+  const startRoom = async (productId: string) => {
+    if (!authed) {
+      void login();
+      return;
+    }
+    const current = useAuthStore.getState().user;
+    if (current && isGuestUser(current)) {
+      if (linking.current) return;
+      linking.current = true;
+      let phone: string | null = null;
+      try {
+        phone = await ensurePhone();
+      } catch {
+        phone = null;
+      } finally {
+        linking.current = false;
+      }
+      if (!phone) {
+        openSnackbar({ text: 'Chưa liên kết được số điện thoại Zalo nên chưa mở nhóm được. Bạn thử lại nhé.', type: 'warning' });
+        return;
+      }
+    }
+    createM.mutate(productId);
+  };
+
   // Trả Promise để Button giữ khoá tới khi hộp chia sẻ đóng: chạm đúp không mở hai hộp chia sẻ của Zalo. Có hạn: hộp chia sẻ treo thì nút không chết tới lúc rời trang.
   const share = (g: GroupBuy) =>
     settleWithin(
@@ -224,17 +274,125 @@ export default function GroupBuyPage() {
               {done.map((g) => renderCard(g))}
             </section>
           )}
+          {!invitedId && starters.length > 0 && (
+            <MiniStarterShelf
+              items={starters}
+              authed={authed}
+              creatingId={createM.isPending ? (createM.variables as string) : null}
+              onOpen={(slug) => navigate(`/product/${slug}`)}
+              onStart={(productId) => void startRoom(productId)}
+            />
+          )}
         </div>
       ) : (
-        <EmptyState
-          art="basket"
-          heading="Chưa có nhóm mua chung nào"
-          body="Mở nhóm từ trang sản phẩm để rủ bạn bè mua chung giá tốt!"
-          ctaLabel="Khám phá sản phẩm"
-          onCta={() => goSmart('/browse')}
-        />
+        <>
+          <EmptyState
+            art="basket"
+            heading="Chưa có nhóm mua chung nào"
+            body="Mở nhóm ngay bên dưới hoặc từ trang sản phẩm để rủ bạn bè mua chung giá tốt!"
+            ctaLabel="Khám phá sản phẩm"
+            onCta={() => goSmart('/browse')}
+          />
+          {!invitedId && starters.length > 0 && (
+            <div style={{ padding: '0 var(--space-inset-page) var(--space-inset-page)' }}>
+              <MiniStarterShelf
+                items={starters}
+                authed={authed}
+                creatingId={createM.isPending ? (createM.variables as string) : null}
+                onOpen={(slug) => navigate(`/product/${slug}`)}
+                onStart={(productId) => void startRoom(productId)}
+              />
+            </div>
+          )}
+        </>
       )}
     </Page>
+  );
+}
+
+function MiniStarterShelf({
+  items,
+  authed,
+  creatingId,
+  onOpen,
+  onStart,
+}: {
+  items: readonly ProductCard[];
+  authed: boolean;
+  creatingId: string | null;
+  onOpen: (slug: string) => void;
+  onStart: (productId: string) => void;
+}) {
+  return (
+    <section aria-label="Mở nhóm Mua chung mới — Chọn món giá kho" data-testid="group-buy-starter-shelf">
+      <Card variant="outline">
+        <Text variant="label" tone="brand" as="div">
+          MỞ NHÓM TRỰC TIẾP 1 CHẠM
+        </Text>
+        <Heading variant="title-sm" as="h2" font="ui" style={{ marginTop: 'var(--space-stack-xs)' }}>
+          Mở nhóm Mua chung mới — Chọn món giá kho
+        </Heading>
+        <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
+          Chọn sản phẩm sinh học bán chạy do Tubu giao để mở nhóm ngay và rủ bạn bè cùng nhận Mã giảm giá.
+        </Text>
+        <div style={{ marginTop: 'var(--space-stack-sm)', display: 'flex', flexDirection: 'column', gap: 'var(--space-inline-sm)' }}>
+          {items.map((p) => {
+            const price = p.salePrice ?? p.basePrice;
+            return (
+              <div
+                key={p.id}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 'var(--space-inline-sm)',
+                  padding: 'var(--space-inline-sm)',
+                  borderRadius: 'var(--radius-control)',
+                  border: '1px solid var(--color-border-subtle)',
+                  background: 'var(--color-bg-canvas)',
+                }}
+              >
+                <button
+                  type="button"
+                  onClick={() => onOpen(p.slug)}
+                  className="tubu-press"
+                  aria-label={p.name}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 'var(--space-inline-sm)',
+                    flex: 1,
+                    minWidth: 0,
+                    padding: 0,
+                    border: 'none',
+                    background: 'none',
+                    textAlign: 'left',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <ProductThumb src={p.thumbnail} alt="" size={48} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <Text variant="label" as="div">
+                      {p.name}
+                    </Text>
+                    <Text variant="price-sm" tone="brand" numeric as="div">
+                      {formatVnd(price)}
+                    </Text>
+                  </span>
+                </button>
+                <Button
+                  size="md"
+                  variant="secondary"
+                  loading={creatingId === p.id}
+                  onPress={() => onStart(p.id)}
+                >
+                  {authed ? 'Mở nhóm ngay' : 'Đăng nhập'}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
+    </section>
   );
 }
 

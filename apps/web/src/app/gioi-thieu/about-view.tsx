@@ -39,7 +39,7 @@ const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;
 export function AboutView({ initialFaqs, initialConfig, initialSupport }: { initialFaqs?: FaqItem[]; initialConfig?: PublicConfig; initialSupport?: SupportContact }) {
   return (
     <main className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
-      <PageHeader title="Về Tubu Tree" />
+      <PageHeader title="Về Tubu Tree" backHref="/" />
       <section className="mt-4 rounded-card bg-forest-800 p-5 text-stone-0 shadow-card max-md:mx-4 max-md:mt-3 max-md:bg-[linear-gradient(135deg,var(--color-action-primary-bg),var(--color-action-primary-bg-pressed))] max-md:shadow-none">
         <TreePine className="h-8 w-8 max-md:h-6 max-md:w-6" aria-hidden="true" />
         <h2 className="mt-2 font-display text-xl font-semibold max-md:text-[length:var(--type-title-md-size)] max-md:leading-[var(--type-title-md-lh)]">

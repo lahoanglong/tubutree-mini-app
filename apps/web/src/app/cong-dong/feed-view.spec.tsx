@@ -375,11 +375,11 @@ describe('FeedView — xem trước công khai khi chưa đăng nhập (cờ com
     expect(h1(container)).toBe(1);
   });
 
-  it('bài xem trước không có nút thích/bình luận/mở bài: chỉ có lối đăng nhập', async () => {
+  it('bài xem trước không có nút thích/bình luận/mở bài: chỉ có nút lùi đầu trang và lối đăng nhập', async () => {
     config = { communityPublicPreview: true };
     const { container } = await mount({ initialPreview: [PREVIEW('p1')] });
     expect(container.querySelectorAll('button')).toHaveLength(0);
-    expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(['/dang-nhap?returnTo=%2Fcong-dong']);
+    expect(Array.from(container.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(['/', '/dang-nhap?returnTo=%2Fcong-dong']);
   });
 
   it('server chưa nạp được: tự tải ở trình duyệt, có khung chờ rồi hiện bài', async () => {

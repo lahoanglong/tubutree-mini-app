@@ -29,7 +29,7 @@ export interface HomePickupQuoteView {
   ok: boolean;
 }
 
-const BELOW_MIN_MESSAGE = /cần tối thiểu .* điểm/;
+const BELOW_MIN_MESSAGE = /cần tối thiểu .*[\s\u00A0]điểm/;
 
 /**
  * Chữ và trạng thái của thẻ báo phí. Phí ship luôn trả bằng Điểm Xanh: thiếu điểm thì máy chủ trả `blocked` và nút tạo đơn tắt.
@@ -142,8 +142,8 @@ export function homePickupDetailRows(h: WasteHomePickupDTO): HomePickupDetailRow
   if (h.pickupAddressText) rows.push({ label: d.address, value: h.pickupAddressText });
   if (h.declaredWeightGrams > 0) rows.push({ label: d.weight, value: `${homePickupKgLabel(h.declaredWeightGrams)} kg` });
   rows.push({ label: d.fee, value: vnd(h.shipFeeVnd) });
-  if (h.shipFeePointsUsed > 0) rows.push({ label: d.pointsUsed, value: `${num(h.shipFeePointsUsed)} điểm` });
-  if (h.shipFeePointsRefunded > 0) rows.push({ label: d.pointsRefunded, value: `${num(h.shipFeePointsRefunded)} điểm` });
+  if (h.shipFeePointsUsed > 0) rows.push({ label: d.pointsUsed, value: `${num(h.shipFeePointsUsed)}\u00A0điểm` });
+  if (h.shipFeePointsRefunded > 0) rows.push({ label: d.pointsRefunded, value: `${num(h.shipFeePointsRefunded)}\u00A0điểm` });
   return rows;
 }
 

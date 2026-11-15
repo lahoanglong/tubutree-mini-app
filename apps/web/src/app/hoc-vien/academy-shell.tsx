@@ -6,7 +6,11 @@ import { PAGE_WIDE } from '@/lib/page-frame';
 export function AcademyShell({ children, withSubtitle }: { children: ReactNode; withSubtitle: boolean }) {
   return (
     <main className={`${PAGE_WIDE} py-6 max-md:pt-0`}>
-      <PageHeader title="Học viện CTV" subtitle={withSubtitle ? 'Học kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày' : undefined} />
+      <PageHeader
+        title="Học viện CTV"
+        subtitle={withSubtitle ? 'Học kỹ năng bán hàng, làm CTV giỏi hơn mỗi ngày' : undefined}
+        backHref={withSubtitle ? '/ctv' : '/hoc-vien'}
+      />
       <div className="mt-4">{children}</div>
     </main>
   );

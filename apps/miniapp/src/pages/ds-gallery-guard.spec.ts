@@ -21,4 +21,9 @@ describe('ds-gallery chỉ có ở bản dev (app.tsx)', () => {
   it('không có import tĩnh tới pages/ds-gallery (sẽ vào bundle entry)', () => {
     expect(src).not.toMatch(/^import .* from '..\/pages\/ds-gallery'/m);
   });
+
+  it('pages/ds-gallery.tsx tự chắn import.meta.env.PROD phòng thủ hai lớp', () => {
+    const pageSrc = readFileSync(join(__dirname, './ds-gallery.tsx'), 'utf8');
+    expect(pageSrc).toMatch(/if\s*\(\s*import\.meta\.env\.PROD\s*\)\s*return\s+null/);
+  });
 });

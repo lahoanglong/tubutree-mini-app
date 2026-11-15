@@ -146,6 +146,21 @@ export default function AffiliatePage() {
       <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />
         <PartnerEarnPills active="affiliate" />
+        {phase === 'guest' && (
+          <div style={{ padding: 'var(--space-inset-page) var(--space-inset-page) 0' }}>
+            <Card variant="outline">
+              <Text variant="label" tone="brand" as="div">
+                CỘNG TÁC VIÊN · 0Đ VỐN · KHÔNG ÔM HÀNG
+              </Text>
+              <Heading variant="title-md" font="ui" style={{ marginTop: 'var(--space-stack-xs)' }}>
+                Lan toả sống xanh — nhận hoa hồng mỗi đơn thành công
+              </Heading>
+              <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
+                Mở Gian hàng cá nhân miễn phí, chia sẻ link sản phẩm yêu thích và nhận hoa hồng chuyển thẳng Ví Tubu 1:1.
+              </Text>
+            </Card>
+          </div>
+        )}
         {phase === 'authenticated' ? skeleton : <AuthPhaseView phase={phase} loading={skeleton} />}
       </Page>
     );

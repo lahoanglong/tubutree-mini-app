@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LeafGlyph } from './product-image';
 import { useSizedImage } from '../../utils/image-src';
 
@@ -9,13 +9,18 @@ export interface ProductThumbProps {
 }
 
 /**
- * Ảnh sản phẩm dạng ô vuông cho dòng hàng (giỏ, thanh toán). Sản phẩm chưa có ảnh (hay gặp với hàng Pancake chưa có
+ * Ảnh sản phẩm dạng ô vuông cho dòng hàng (giỏ, thanh toán, vòng Story). Sản phẩm chưa có ảnh (hay gặp với hàng Pancake chưa có
  * thumbnail) hoặc ảnh tải lỗi hiện lá xanh thay cho icon ảnh vỡ kèm chữ alt.
  */
 export function ProductThumb({ src, alt, size = 64 }: ProductThumbProps) {
   const [failed, setFailed] = useState(false);
+  const ref = useRef<HTMLImageElement>(null);
   useEffect(() => setFailed(false), [src]);
   const { img, fallBack } = useSizedImage(src, size);
+  useEffect(() => {
+    const el = ref.current;
+    if (el && el.complete && el.naturalWidth === 0 && !fallBack()) setFailed(true);
+  }, [src, img?.src, fallBack]);
   const showImage = Boolean(img) && !failed;
   return (
     <div
@@ -33,6 +38,7 @@ export function ProductThumb({ src, alt, size = 64 }: ProductThumbProps) {
     >
       {showImage ? (
         <img
+          ref={ref}
           src={img?.src}
           srcSet={img?.srcSet}
           alt={alt}

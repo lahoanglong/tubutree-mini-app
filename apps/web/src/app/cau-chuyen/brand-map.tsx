@@ -2,7 +2,7 @@
 
 import type { CSSProperties } from 'react';
 import { BRAND_ORIGINS, type BrandOrigin } from '@/lib/brand-origins';
-import { MAP_FRAME, MAP_GEO_TRANSFORM, MAP_LAYOUT, MAP_REGIONS, MAP_VIEWBOX, regionPath } from '@tubutree/app-core/brand-map-data';
+import { MAP_FRAME, MAP_GEO_TRANSFORM, MAP_GRATICULE, MAP_LAYOUT, MAP_REGIONS, MAP_VIEWBOX, smoothRegionPath } from '@tubutree/app-core/brand-map-data';
 import './brand-theme.css';
 import './brand-map.css';
 
@@ -14,17 +14,32 @@ const byId = new Map(BRAND_ORIGINS.map((o) => [o.id, o]));
 export const MAP_LABEL = 'Bản đồ vùng nguyên liệu Việt Nam, vẽ sơ đồ';
 
 /**
- * Bản đồ chú thích vùng nguyên liệu Việt Nam (sơ đồ, không theo tỉ lệ): chấm ghim đúng tỉnh xuất xứ (không tương tác) và tên nhãn xếp hai cột hai bên,
- * nối với chấm bằng một đường dẫn. Nhãn là nút thật (Tab tới được, tên truy cập là tên nhãn và tỉnh). `activeId` là nhãn đang chọn; `sheetOpen` cho
- * biết tấm chi tiết đang mở (dưới md chỉ khi đó nhãn chọn mới sáng lên, từ md luôn sáng vì chi tiết nằm cạnh bản đồ). Hình học và vị trí ở app-core.
+ * Bản đồ chú thích vùng nguyên liệu Việt Nam (bản đồ thực vật học hữu cơ): đường kinh vĩ tuyến mảnh, đường bao bờ biển mềm mại, chấm ghim đúng tỉnh
+ * xuất xứ và tên nhãn xếp hai cột hai bên nối với chấm bằng đường dẫn mảnh. Nhãn là nút thật (Tab tới được, tên truy cập là tên nhãn và tỉnh).
  */
 export function BrandMap({ onPick, activeId, sheetOpen }: { onPick: (loc: BrandOrigin) => void; activeId: string; sheetOpen: boolean }) {
   return (
     <div className="brandmap" data-testid="brand-map" data-sheet={sheetOpen ? '' : undefined} style={{ aspectRatio: `${MAP_FRAME.w} / ${MAP_FRAME.h}` }}>
       <svg role="img" aria-label={MAP_LABEL} viewBox={MAP_VIEWBOX} className="brandmap-svg">
+        <g aria-hidden="true" className="brandmap-grid">
+          {MAP_GRATICULE.parallels.map((y) => (
+            <line key={`p-${y}`} x1={0} y1={y} x2={MAP_FRAME.w} y2={y} />
+          ))}
+          {MAP_GRATICULE.meridians.map((x) => (
+            <line key={`m-${x}`} x1={x} y1={0} x2={x} y2={MAP_FRAME.h - 12} />
+          ))}
+        </g>
+        <g aria-hidden="true" className="brandmap-compass" transform="translate(65 9)">
+          <circle cx="0" cy="0" r="3.4" className="brandmap-compass-ring" />
+          <path d="M0 -4.8 L1.1 0 L0 -1 L-1.1 0 Z" className="brandmap-compass-north" />
+          <path d="M0 4.8 L0.9 0 L0 1 L-0.9 0 Z" className="brandmap-compass-south" />
+        </g>
         <g transform={MAP_GEO_TRANSFORM}>
+          {MAP_REGIONS.filter((r) => r.origin).map((r) => (
+            <path key={`halo-${r.id}`} d={smoothRegionPath(r)} className="brandmap-coast-halo" />
+          ))}
           {MAP_REGIONS.map((r) => (
-            <path key={r.id} d={regionPath(r)} className="brandmap-land" data-origin={r.origin ? '' : undefined} />
+            <path key={r.id} d={smoothRegionPath(r)} className="brandmap-land" data-origin={r.origin ? '' : undefined} />
           ))}
         </g>
         {MAP_LAYOUT.labels.map((l) => (

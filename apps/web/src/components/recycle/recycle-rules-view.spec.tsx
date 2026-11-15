@@ -71,13 +71,13 @@ describe('/doi-rac/quy-dinh (§14.2)', () => {
   });
 });
 
-describe('/doi-rac/quy-dinh — khách chưa đăng nhập', () => {
-  it('API trả 401 mà khách chưa có phiên: mời đăng nhập, không nói phiên hết hạn', async () => {
+describe('/doi-rac/quy-dinh — khách chưa đăng nhập (công khai 100%)', () => {
+  it('khách chưa đăng nhập vẫn xem được thể lệ công khai, không chặn cổng đăng nhập /dang-nhap', async () => {
     state.phase = 'guest';
-    state.get.mockRejectedValueOnce(new ApiError('Unauthorized', 401));
+    state.get.mockResolvedValueOnce({ text: 'Rửa sạch vỏ chai nhựa sạch và để khô trước khi gửi.' });
     const c = await mount();
-    expect(c.querySelector('a[href="/dang-nhap?returnTo=%2Fdoi-rac%2Fquy-dinh"]')).not.toBeNull();
-    expect(c.textContent).not.toContain('Phiên đăng nhập đã hết hạn');
+    expect(c.textContent).toContain('Rửa sạch vỏ chai nhựa sạch và để khô trước khi gửi.');
+    expect(c.querySelector('a[href^="/dang-nhap"]')).toBeNull();
   });
 });
 
