@@ -45,10 +45,12 @@ export function ArcadeResultPanel({ run, real, save, local, onRetrySave, onLogin
   const headingId = useId();
   const tip = useMemo(() => endTip(run.gameId, run.stats), [run]);
   const saved = save.result;
+  // Ván mới xin mã khi ván này chưa ghi xong thì mã mới cấp TRƯỚC lúc ván này ghi (lastRunAt) và bị 409: chờ ghi xong mới cho chơi lại. `idle` của người thật là khoảng trước khi lượt gửi bắt đầu.
+  const busy = real && (save.status === 'saving' || save.status === 'idle');
   const best = saved ? { best: saved.bestScore, isNewBest: saved.isNewBest } : real ? null : local;
 
   return (
-    <div className="tubu-arcade-panel" role="region" aria-labelledby={headingId} data-testid="arcade-result">
+    <div className="tubu-arcade-panel" role="region" aria-labelledby={headingId} aria-busy={busy || undefined} data-testid="arcade-result">
       <div className="tubu-arcade-live" aria-live="polite">
         <Heading as="h3" id={headingId} variant="title-sm" font="ui">
           {fillCopy('arcade.result.title')}
@@ -73,6 +75,11 @@ export function ArcadeResultPanel({ run, real, save, local, onRetrySave, onLogin
         {real && save.status === 'invalid' && (
           <Text variant="body-sm" tone="danger" as="p">
             {fillCopy('arcade.result.invalid')}
+          </Text>
+        )}
+        {real && save.status === 'replayed' && (
+          <Text variant="body-sm" tone="secondary" as="p">
+            {fillCopy('arcade.result.replayed')}
           </Text>
         )}
         {saved && <SavedRewards saved={saved} />}
@@ -117,8 +124,7 @@ export function ArcadeResultPanel({ run, real, save, local, onRetrySave, onLogin
       )}
 
       <div className="tubu-arcade-actions">
-        {/* Ván mới xin mã khi ván này chưa ghi xong thì mã mới cấp TRƯỚC lúc ván này ghi (lastRunAt) và bị 409: chờ ghi xong mới cho chơi lại. */}
-        <Button onPress={onPlayAgain} disabled={real && (save.status === 'saving' || save.status === 'idle')}>
+        <Button onPress={onPlayAgain} disabled={busy}>
           {fillCopy('arcade.playAgain')}
         </Button>
         <Button variant="secondary" onPress={onClose}>

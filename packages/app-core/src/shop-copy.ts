@@ -714,6 +714,8 @@ export const SHOP_COPY: Record<string, string> = {
   'arcade.result.error': 'Chưa lưu được ván này. Bạn thử lại nhé.',
   'arcade.result.lowScore': 'Ván này chưa đủ điểm để nhận thưởng. Chơi thêm một ván nhé 🌿',
   'arcade.result.invalid': 'Điểm ván này chưa hợp lệ nên chưa được lưu.',
+  // 409 mã ván đã dùng thường là lần gửi trước đã ghi mà phản hồi bị mất: không phải lỗi của khách, nên không nói "chưa hợp lệ".
+  'arcade.result.replayed': 'Ván này đã được ghi rồi. Giọt nước và Điểm Xanh đã được làm mới.',
   'arcade.guest.login': 'Đăng nhập lưu kỷ lục & nhận ngay {n} Giọt nước vào Vườn',
   'arcade.guest.demo': 'Bạn đang chơi thử, kỷ lục lưu trên máy này',
   'arcade.pending.saved': 'Đã lưu ván vừa chơi: {n} điểm',

@@ -315,7 +315,8 @@ const SAVED = (over: Partial<ArcadeCompleteResult> = {}): ArcadeCompleteResult =
   used: 2, cap: 4, window: null, windowBonus: false, ...over,
 });
 const RUN = { gameId: 'dew_catcher', score: 520, durationMs: 40_000, runId: 'r1.dew_catcher.1700000000000.nonce.sig' };
-const putPending = (over: Record<string, unknown> = {}) => sessionStorage.setItem(ARCADE_PENDING_KEY, JSON.stringify({ ...RUN, endedAt: Date.now() - 60_000, ...over }));
+// Mã cấp lúc bấm Chơi (khoảng 100 giây trước), hết hạn 10 phút sau lúc CẤP: ván xong 60 giây trước còn gần 8 phút.
+const putPending = (over: Record<string, unknown> = {}) => sessionStorage.setItem(ARCADE_PENDING_KEY, JSON.stringify({ ...RUN, endedAt: Date.now() - 60_000, expiresAt: Date.now() + 8 * 60_000, ...over }));
 const pendingRaw = () => sessionStorage.getItem(ARCADE_PENDING_KEY);
 const completes = () => m.post.mock.calls.filter((c) => c[0] === '/game/arcade-complete');
 const retryBtn = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="arcade-pending-error"] button')).find((b) => b.textContent === 'Thử lại') ?? null;
@@ -387,6 +388,15 @@ describe('ArcadeHub: gửi nốt ván khách chơi trước khi đăng nhập', 
     expect(completes()).toHaveLength(0);
     expect(pendingRaw()).toBeNull();
     expect(q('[data-testid="arcade-pending-saved"]')).toBeNull();
+  });
+
+  it('mã ván đã hết hạn theo giờ máy chủ cấp mã (dù ván mới xong chưa tới 10 phút): bỏ và xoá, không gửi, không có dải báo', async () => {
+    putPending({ endedAt: Date.now() - 60_000, expiresAt: Date.now() - 1_000 });
+    await mountHub();
+    expect(completes()).toHaveLength(0);
+    expect(pendingRaw()).toBeNull();
+    expect(q('[data-testid="arcade-pending-saved"]')).toBeNull();
+    expect(q('[data-testid="arcade-pending-error"]')).toBeNull();
   });
 
   it('khách (chưa đăng nhập): không gửi, giữ khoá cho lần đăng nhập sau', async () => {
@@ -469,14 +479,15 @@ describe('ArcadeHub: gửi nốt ván khách chơi trước khi đăng nhập', 
     expect(q('[data-testid="arcade-pending-saved"]')!.textContent).toContain(fillCopy('arcade.result.lowScore'));
   });
 
-  it('lỗi mạng: báo chưa lưu được, ghi lại khoá chờ (giữ mốc giờ gốc), Thử lại gửi lại đúng ván đó một lần rồi xoá khoá', async () => {
+  it('lỗi mạng: báo chưa lưu được, ghi lại khoá chờ (giữ mốc giờ gốc và giờ hết hạn của mã), Thử lại gửi lại đúng ván đó một lần rồi xoá khoá', async () => {
     const endedAt = Date.now() - 120_000;
-    putPending({ endedAt });
+    const expiresAt = Date.now() + 5 * 60_000;
+    putPending({ endedAt, expiresAt });
     m.post.mockRejectedValueOnce(new TypeError('Failed to fetch'));
     await mountHub();
     expect(completes()).toHaveLength(1);
     expect(q('[data-testid="arcade-pending-error"]')!.textContent).toContain(fillCopy('arcade.result.error'));
-    expect(JSON.parse(pendingRaw()!)).toEqual({ ...RUN, endedAt });
+    expect(JSON.parse(pendingRaw()!)).toEqual({ ...RUN, endedAt, expiresAt });
     const retry = retryBtn()!;
     act(() => {
       retry.click();
@@ -524,12 +535,25 @@ describe('ArcadeHub: gửi nốt ván khách chơi trước khi đăng nhập', 
     expect(pendingRaw()).not.toBeNull();
   });
 
-  it('HTTP 409 (mã ván đã dùng): như 400, không nút Thử lại và bỏ hẳn ván', async () => {
+  it('HTTP 409 (mã ván đã dùng): nói ván đã được ghi (thông báo trung tính, không phải lỗi), không nút Thử lại, bỏ hẳn ván và làm mới game, me, loyalty', async () => {
+    const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     putPending();
     m.post.mockRejectedValueOnce(new ApiError('Conflict', 409, 'ARCADE_RUN_USED'));
     await mountHub();
-    expect(q('[data-testid="arcade-pending-error"]')!.textContent).toContain(fillCopy('arcade.result.invalid'));
+    const note = q('[data-testid="arcade-pending-replayed"]')!;
+    expect(note.textContent).toContain(fillCopy('arcade.result.replayed'));
+    expect(note.textContent).not.toContain(fillCopy('arcade.result.invalid'));
+    expect(note.getAttribute('role')).toBe('status');
+    expect(q('[data-testid="arcade-pending-error"]')).toBeNull();
     expect(retryBtn()).toBeNull();
+    expect(pendingRaw()).toBeNull();
+    expect(spy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey[0]).sort()).toEqual(['game', 'loyalty', 'me']);
+  });
+
+  it('ván chờ khoá cũ có mã ván nhưng không có giờ hết hạn của mã bị bỏ, không gửi gì lên máy chủ', async () => {
+    sessionStorage.setItem(ARCADE_PENDING_KEY, JSON.stringify({ ...RUN, endedAt: Date.now() - 60_000 }));
+    await mountHub();
+    expect(completes()).toHaveLength(0);
     expect(pendingRaw()).toBeNull();
   });
 

@@ -15,7 +15,7 @@ import { Heading, Text } from '../ui/text';
 import { saveLocalBest } from './arcade-best';
 import { ArcadeResultPanel } from './arcade-result';
 import { prefersReducedMotion, readArcadeTheme } from './arcade-theme';
-import { useArcadeComplete, type PlayedRun } from './use-arcade-complete';
+import { useArcadeComplete, type PlayedRun, type RunIdPromise } from './use-arcade-complete';
 import '../../css/arcade.css';
 
 type Controller = ReturnType<typeof mountArcade>;
@@ -56,9 +56,9 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
   const controller = useRef<Controller | null>(null);
   const phaseRef = useRef<Phase>('ready');
   const endedRef = useRef(false);
-  // Mã ván của lần bấm Chơi gần nhất; `startToken` tăng mỗi lần để lời đáp muộn của ván cũ không đè mã ván mới.
-  const runIdRef = useRef<string | null>(null);
-  const startToken = useRef(0);
+  // Promise mã ván của lần bấm Chơi gần nhất. Lúc ván kết thúc, `handleEnd` chụp promise của CHÍNH ván đó (kèm vào `run`) nên lời đáp muộn của ván cũ không đè mã ván mới,
+  // và mã về sau lúc kết thúc vẫn được chờ trước khi gửi.
+  const runIdRef = useRef<RunIdPromise>(Promise.resolve(null));
   const realRef = useRef(real);
   realRef.current = real;
   const closeRef = useRef(onClose);
@@ -200,14 +200,10 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     const ctl = controller.current;
     if (!ctl) return;
     endedRef.current = false;
-    runIdRef.current = null;
-    const token = ++startToken.current;
-    // Không chặn vào ván: mã thường về lâu trước khi ván kết thúc. Xin mã lỗi thì ván không có mã và bảng điểm báo không hợp lệ.
-    startArcadeRun(gameId).then(
-      (started) => {
-        if (startToken.current === token) runIdRef.current = started.runId;
-      },
-      () => {},
+    // Không chặn vào ván (ván bắt đầu ở máy khách, máy chủ chỉ đo từ lúc nhận mã): lúc lưu mới chờ mã. Xin mã lỗi thì ván không có mã và bảng điểm báo không hợp lệ.
+    runIdRef.current = startArcadeRun(gameId).then(
+      (started): string | null => started.runId,
+      () => null,
     );
     setRun(null);
     setLocal(null);

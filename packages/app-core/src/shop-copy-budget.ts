@@ -691,6 +691,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'arcade.result.error': 43,
   'arcade.result.lowScore': 65,
   'arcade.result.invalid': 47,
+  'arcade.result.replayed': 68,
   'arcade.guest.login': 59,
   'arcade.guest.demo': 46,
   'arcade.pending.saved': 28,

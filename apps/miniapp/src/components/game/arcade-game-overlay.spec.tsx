@@ -399,7 +399,7 @@ describe('ArcadeGameOverlay: kết quả khi đã đăng nhập', () => {
       retry.click();
       retry.click();
     });
-    expect(mocks.submit).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(2));
     await act(async () => finish(saved()));
     expect(mocks.submit).toHaveBeenCalledTimes(2);
   });
@@ -445,20 +445,21 @@ describe('ArcadeGameOverlay: kết quả khi đã đăng nhập', () => {
     expect(invalidate).not.toHaveBeenCalled();
   });
 
-  it('HTTP 409 (mã ván đã dùng): cũng là ván không hợp lệ, KHÔNG mời Thử lại, không gửi lại và làm mới dữ liệu Vườn', async () => {
+  it('HTTP 409 (mã ván đã dùng): nói ván đã được ghi (không nói điểm chưa hợp lệ), KHÔNG mời Thử lại, không gửi lại và làm mới Vườn, hồ sơ, Điểm Xanh', async () => {
     mocks.submit.mockRejectedValue(httpError(409, 'ARCADE_RUN_USED'));
     const { qc } = mountOverlay();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');
     await playToEnd(dewRun(120));
     const panel = screen.getByTestId('arcade-result');
-    expect(await within(panel).findByText(fillCopy('arcade.result.invalid'))).toBeInTheDocument();
+    expect(await within(panel).findByText(fillCopy('arcade.result.replayed'))).toBeInTheDocument();
+    expect(within(panel).queryByText(fillCopy('arcade.result.invalid'))).toBeNull();
     expect(within(panel).queryByRole('button', { name: 'Thử lại' })).toBeNull();
     expect(within(panel).queryByText(fillCopy('arcade.result.error'))).toBeNull();
     expect(within(panel).getByText(fillCopy('arcade.result.score', { n: 120 }))).toBeInTheDocument();
-    expect(within(panel).getByRole('button', { name: 'Chơi lại' })).toBeInTheDocument();
+    expect((within(panel).getByRole('button', { name: 'Chơi lại' }) as HTMLButtonElement).disabled).toBe(false);
     expect(mocks.submit).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['game'] }));
-    expect(invalidate).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(3));
+    expect(invalidate.mock.calls.map(([filter]) => (filter as { queryKey: string[] }).queryKey[0]).sort()).toEqual(['game', 'loyalty', 'me']);
   });
 
   it.each([500, 503, 429])('HTTP %i và lỗi mạng: vẫn báo "Chưa lưu được" và giữ nút Thử lại', async (status) => {
@@ -722,7 +723,7 @@ describe('ArcadeGameOverlay: mã ván (arcade-start)', () => {
     expect(mocks.submit).toHaveBeenCalledWith({ gameId: 'dew_catcher', score: 60, durationMs: 40_000, runId: 'r2.dew_catcher.2.y.sig' });
   });
 
-  it('lời đáp xin mã của ván cũ về muộn không đè mã ván mới', async () => {
+  it('lời đáp xin mã của ván cũ về muộn không đè mã ván mới: mỗi ván gửi đúng mã của chính nó', async () => {
     let lateFirst!: (value: ReturnType<typeof started>) => void;
     mocks.start
       .mockReturnValueOnce(new Promise((resolve) => (lateFirst = resolve)))
@@ -730,16 +731,73 @@ describe('ArcadeGameOverlay: mã ván (arcade-start)', () => {
     mountOverlay();
     fireEvent.click(await ready());
     act(() => mocks.options!.onEnd(dewRun(50)));
-    await within(await screen.findByTestId('arcade-result')).findByText(fillCopy('arcade.result.invalid'));
+    await screen.findByTestId('arcade-result');
     expect(mocks.submit).not.toHaveBeenCalled();
+    await act(async () => lateFirst(started('r1.dew_catcher.1.late.sig')));
+    await within(screen.getByTestId('arcade-result')).findByText(fillCopy('arcade.result.water', { n: 8 }));
     fireEvent.click(within(screen.getByTestId('arcade-result')).getByRole('button', { name: 'Chơi lại' }));
     await act(async () => {});
-    await act(async () => lateFirst(started('r1.dew_catcher.1.x.sig')));
     act(() => mocks.options!.onEnd(dewRun(60)));
-    await within(await screen.findByTestId('arcade-result')).findByText(fillCopy('arcade.result.water', { n: 8 }));
+    await waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(2));
     expect(mocks.start).toHaveBeenCalledTimes(2);
-    expect(mocks.submit).toHaveBeenCalledTimes(1);
-    expect(mocks.submit).toHaveBeenCalledWith({ gameId: 'dew_catcher', score: 60, durationMs: 40_000, runId: 'r2.dew_catcher.2.y.sig' });
+    expect(mocks.submit.mock.calls.map(([body]) => body.runId)).toEqual(['r1.dew_catcher.1.late.sig', 'r2.dew_catcher.2.y.sig']);
+  });
+
+  describe('mã ván về SAU lúc ván kết thúc', () => {
+    it('bảng điểm ở trạng thái đang lưu (aria-busy, khung chờ), không nháy lỗi, Chơi lại khoá; mã về thì gửi ĐÚNG mã đó rồi mở lại', async () => {
+      let lateStart!: (value: ReturnType<typeof started>) => void;
+      mocks.start.mockReturnValue(new Promise((resolve) => (lateStart = resolve)));
+      mountOverlay();
+      fireEvent.click(await ready());
+      act(() => mocks.options!.onEnd(dewRun(120)));
+      const panel = await screen.findByTestId('arcade-result');
+      await act(async () => {});
+      expect(panel).toHaveAttribute('aria-busy', 'true');
+      expect(screen.getByTestId('arcade-saving')).toBeInTheDocument();
+      expect(within(panel).queryByText(fillCopy('arcade.result.invalid'))).toBeNull();
+      expect(within(panel).queryByText(fillCopy('arcade.result.error'))).toBeNull();
+      expect((within(panel).getByRole('button', { name: 'Chơi lại' }) as HTMLButtonElement).disabled).toBe(true);
+      expect(mocks.submit).not.toHaveBeenCalled();
+      await act(async () => lateStart(started('r1.dew_catcher.1.late.sig')));
+      await within(panel).findByText(fillCopy('arcade.result.water', { n: 8 }));
+      expect(mocks.submit).toHaveBeenCalledTimes(1);
+      expect(mocks.submit).toHaveBeenCalledWith({ gameId: 'dew_catcher', score: 120, durationMs: 40_000, runId: 'r1.dew_catcher.1.late.sig' });
+      expect(panel).not.toHaveAttribute('aria-busy');
+      expect(within(panel).queryByText(fillCopy('arcade.result.invalid'))).toBeNull();
+      expect((within(panel).getByRole('button', { name: 'Chơi lại' }) as HTMLButtonElement).disabled).toBe(false);
+    });
+
+    it('xin mã lỗi muộn thì lúc đó mới báo ván không hợp lệ: không gọi máy chủ lưu, không có Thử lại', async () => {
+      let failStart!: (reason: unknown) => void;
+      mocks.start.mockReturnValue(new Promise((_, reject) => (failStart = reject)));
+      mountOverlay();
+      fireEvent.click(await ready());
+      act(() => mocks.options!.onEnd(dewRun(120)));
+      const panel = await screen.findByTestId('arcade-result');
+      await act(async () => {});
+      expect(panel).toHaveAttribute('aria-busy', 'true');
+      expect(within(panel).queryByText(fillCopy('arcade.result.invalid'))).toBeNull();
+      await act(async () => failStart(new Error('mạng')));
+      expect(await within(panel).findByText(fillCopy('arcade.result.invalid'))).toBeInTheDocument();
+      expect(panel).not.toHaveAttribute('aria-busy');
+      expect(within(panel).queryByRole('button', { name: 'Thử lại' })).toBeNull();
+      expect(mocks.submit).not.toHaveBeenCalled();
+    });
+
+    it('onEnd bắn hai lần trong lúc chờ mã vẫn chỉ gửi một lần', async () => {
+      let lateStart!: (value: ReturnType<typeof started>) => void;
+      mocks.start.mockReturnValue(new Promise((resolve) => (lateStart = resolve)));
+      mountOverlay();
+      fireEvent.click(await ready());
+      const run = dewRun(120);
+      act(() => {
+        mocks.options!.onEnd(run);
+        mocks.options!.onEnd(run);
+      });
+      await screen.findByTestId('arcade-result');
+      await act(async () => lateStart(started()));
+      await waitFor(() => expect(mocks.submit).toHaveBeenCalledTimes(1));
+    });
   });
 
   it.each([['guest'], ['device']] as const)('%s: bấm Chơi thử vẫn xin mã, ván không gửi cho tới khi đăng nhập xong rồi gửi kèm mã lúc bấm Chơi', async (kind) => {

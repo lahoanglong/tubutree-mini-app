@@ -70,6 +70,12 @@ describe('câu chữ theo hợp đồng W164', () => {
     }
   });
 
+  it('mã ván đã dùng (409) nói ván đã được ghi, không nói điểm chưa hợp lệ', () => {
+    expect(fillCopy('arcade.result.replayed')).toBe('Ván này đã được ghi rồi. Giọt nước và Điểm Xanh đã được làm mới.');
+    expect(fillCopy('arcade.result.replayed')).not.toBe(fillCopy('arcade.result.invalid'));
+    expect(SHOP_COPY_MAX['arcade.result.replayed']).toBeGreaterThanOrEqual(SHOP_COPY['arcade.result.replayed']!.length);
+  });
+
   it('nút đăng nhập của khách nêu số Giọt nước nhận được', () => {
     expect(fillCopy('arcade.guest.login', { n: 8 })).toBe('Đăng nhập lưu kỷ lục & nhận ngay 8 Giọt nước vào Vườn');
     expect(fillCopy('arcade.guest.login', { n: 10 })).toContain('10 Giọt nước');

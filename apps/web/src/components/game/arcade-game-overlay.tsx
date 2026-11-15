@@ -18,16 +18,16 @@ import { loginHref } from '@/lib/return-to';
 import { useModalA11y } from '@/lib/use-modal-a11y';
 import { Badge, Button, Chip, Heading, IconButton, Skeleton, Text } from '@/components/mini';
 import { SR_ONLY } from '@/components/mini/sr-only';
-import { rememberPendingArcade } from './arcade-pending';
+import { rememberPendingArcade, type ArcadeRunTicket } from './arcade-pending';
 import { readGuestBest, writeGuestBest } from './arcade-storage';
-import { useArcadeSave, type ArcadeSaveState } from './use-arcade-save';
+import { useArcadeSave, type ArcadeSaveState, type ArcadeTicketPromise } from './use-arcade-save';
 
 type ArcadeControls = ReturnType<typeof mountArcade>;
 type Phase = 'ready' | 'playing' | 'ended';
 interface End {
   result: ArcadeResult;
-  /** Mã ván xin lúc bấm Chơi; null khi `arcade-start` không tới được máy chủ (ván đó không ghi được). */
-  runId: string | null;
+  /** Mã ván xin lúc bấm Chơi (promise của riêng ván này, không bao giờ reject); resolve null khi `arcade-start` không tới được máy chủ (ván đó không ghi được). */
+  ticket: ArcadeTicketPromise;
   guestBest: number;
   guestNew: boolean;
 }
@@ -107,7 +107,9 @@ function summaryLines(end: End, authed: boolean, save: ArcadeSaveState): Line[] 
     if (save.data.isNewBest) lines.push({ text: fillCopy('arcade.newBest'), kind: 'best' });
     lines.push(...plain([fillCopy('arcade.best', { n: save.data.bestScore }), ...rewardLines(save.data)]));
   } else if (save.status === 'error') {
-    lines.push({ text: fillCopy(save.invalid ? 'arcade.result.invalid' : 'arcade.result.error'), kind: 'error' });
+    // Mã đã dùng: ván đã được ghi, nên đây là thông báo trung tính chứ không phải lỗi.
+    if (save.kind === 'replayed') lines.push({ text: fillCopy('arcade.result.replayed') });
+    else lines.push({ text: fillCopy(save.kind === 'invalid' ? 'arcade.result.invalid' : 'arcade.result.error'), kind: 'error' });
   }
   return lines;
 }
@@ -141,10 +143,9 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
   // Mỗi ván một số: `onEnd` bắn lại (hay bắn hai lần) trong cùng ván không ghi kỷ lục và không gửi máy chủ thêm.
   const runId = useRef(0);
   const endedRun = useRef(0);
-  // Mã ván của máy chủ cho ván đang chơi. Xin SONG SONG với lúc vào ván (không chờ: ván bắt đầu ở máy khách, máy chủ chỉ đo từ lúc nhận), `startToken`
-  // để lời đáp muộn của ván trước không ghi đè mã của ván mới.
-  const serverRun = useRef<string | null>(null);
-  const startToken = useRef(0);
+  // Promise mã ván của máy chủ cho ván đang chơi. Xin SONG SONG với lúc vào ván (không chờ: ván bắt đầu ở máy khách, máy chủ chỉ đo từ lúc nhận); lúc ván
+  // kết thúc, `handleEnd` chụp promise của CHÍNH ván đó nên lời đáp muộn của ván trước không ghi đè mã của ván mới, và lời đáp về sau lúc kết thúc vẫn được chờ.
+  const serverRun = useRef<ArcadeTicketPromise>(Promise.resolve(null));
   const phaseRef = useRef<Phase>('ready');
   const pausedRef = useRef(false);
   phaseRef.current = phase;
@@ -156,10 +157,11 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
       endedRun.current = runId.current;
       const prev = authed ? 0 : readGuestBest(gameId);
       if (!authed) writeGuestBest(gameId, result.score);
-      setEnd({ result, runId: serverRun.current, guestBest: Math.max(prev, result.score), guestNew: !authed && result.score > prev });
+      const ticket = serverRun.current;
+      setEnd({ result, ticket, guestBest: Math.max(prev, result.score), guestNew: !authed && result.score > prev });
       setPhase('ended');
       setPaused(false);
-      if (authed) save.begin(result, serverRun.current);
+      if (authed) save.begin(result, ticket);
     },
     [authed, gameId, save],
   );
@@ -232,13 +234,9 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     const ctl = controls.current;
     if (!ctl) return;
     runId.current += 1;
-    const token = ++startToken.current;
-    serverRun.current = null;
-    startArcade(coreHttp, gameId).then(
-      (r) => {
-        if (startToken.current === token) serverRun.current = r.runId;
-      },
-      () => undefined,
+    serverRun.current = startArcade(coreHttp, gameId).then(
+      (r): ArcadeRunTicket => ({ runId: r.runId, expiresAt: Date.parse(r.expiresAt) }),
+      () => null,
     );
     save.reset();
     setEnd(null);
@@ -255,9 +253,14 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     setPaused(!paused);
   };
 
-  // Đăng nhập là rời trang: nhớ ván này để sảnh gửi nốt sau khi quay về (ván chờ tối đa 10 phút).
+  // Đăng nhập là rời trang: nhớ ván này để sảnh gửi nốt sau khi quay về (ván chờ hết hạn theo giờ máy chủ cấp mã, tối đa 10 phút).
+  // Mã chưa về kịp thì ghi ngay khi về (rời sang trang đăng nhập là chuyển trang trong ứng dụng nên lời đáp vẫn tới); xin mã lỗi thì không có gì để ghi.
   const rememberRun = () => {
-    if (end?.runId) rememberPendingArcade({ gameId: end.result.gameId, score: end.result.score, durationMs: end.result.durationMs, runId: end.runId });
+    if (!end) return;
+    const { result } = end;
+    void end.ticket.then((t) => {
+      if (t) rememberPendingArcade({ gameId: result.gameId, score: result.score, durationMs: result.durationMs, runId: t.runId, expiresAt: t.expiresAt });
+    });
   };
 
   const title = fillCopy(`arcade.${k}.title`);
@@ -357,7 +360,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
                 ))}
               </ul>
               {saving && <Skeleton height={56} />}
-              {authed && save.state.status === 'error' && !save.state.invalid && (
+              {authed && save.state.status === 'error' && save.state.kind === 'retry' && (
                 <div>
                   <Button variant="secondary" onPress={save.retry}>
                     {gameNewbieCopy.loadError.retry}

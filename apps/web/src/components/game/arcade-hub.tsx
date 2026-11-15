@@ -30,19 +30,29 @@ function useMinuteClock(): Date {
 
 /**
  * Dải báo ván khách chơi trước khi đăng nhập đã được gửi nốt: điểm, rồi phần thưởng (hoặc lý do không thưởng) đúng như màn kết quả.
- * Chỉ vẽ khi có kết quả để báo, và chính dải mang `role` (status cho đã lưu, alert cho lỗi): không có vùng live rỗng nằm sẵn ở trang Vườn Xanh
+ * Chỉ vẽ khi có kết quả để báo, và chính dải mang `role` (status cho đã lưu và cho ván đã được ghi từ lần gửi trước, alert cho lỗi): không có vùng live rỗng nằm sẵn ở trang Vườn Xanh
  * (trang đã có vùng thông báo riêng, vùng rỗng thứ hai làm công cụ và test lấy nhầm).
  */
 function PendingSaved({ state, retry }: { state: PendingSaveState; retry: () => void }) {
   if (state.status === 'idle' || state.status === 'saving') return null;
   const box = 'flex flex-col items-start gap-1 rounded-card bg-[var(--color-bg-subtle)] p-3';
+  if (state.status === 'error' && state.kind === 'replayed') {
+    // Mã đã dùng: ván đã được ghi từ lần gửi trước, nên là thông báo trung tính chứ không phải lỗi.
+    return (
+      <div data-testid="arcade-pending-replayed" role="status" className={box}>
+        <Text variant="body-sm" tone="secondary" as="p">
+          {fillCopy('arcade.result.replayed')}
+        </Text>
+      </div>
+    );
+  }
   if (state.status === 'error') {
     return (
       <div data-testid="arcade-pending-error" role="alert" className={box}>
         <Text variant="body-sm" tone="danger" as="p">
-          {fillCopy(state.invalid ? 'arcade.result.invalid' : 'arcade.result.error')}
+          {fillCopy(state.kind === 'invalid' ? 'arcade.result.invalid' : 'arcade.result.error')}
         </Text>
-        {!state.invalid && (
+        {state.kind === 'retry' && (
           <Button variant="secondary" onPress={retry}>
             {gameNewbieCopy.loadError.retry}
           </Button>
