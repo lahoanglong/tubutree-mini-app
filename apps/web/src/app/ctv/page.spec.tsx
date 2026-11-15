@@ -167,11 +167,17 @@ afterEach(() => {
 });
 
 describe('/ctv — cổng vào theo phiên', () => {
-  it('khách: nút đăng nhập mang returnTo=/ctv và không gọi API CTV', async () => {
+  it('khách: nút đăng nhập mang returnTo=/ctv, nút quay lại về Trang chủ (/), không link sang /hoc-vien và không gọi API CTV', async () => {
     state.phase = 'guest';
     const { container } = mount();
     await flush();
     expect(container.querySelector('a[href="/dang-nhap?returnTo=%2Fctv"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/"]')?.textContent).toContain('Trang chủ');
+    expect(container.querySelector('a[href="/tai-khoan"]')).toBeNull();
+    expect(container.querySelector('a[href="/hoc-vien"]')).toBeNull();
+    expect(container.querySelector('a[href="#quyen-loi-ctv"]')).not.toBeNull();
+    expect(container.querySelector('#quyen-loi-ctv')).not.toBeNull();
+    expect(container.querySelector('h1')?.closest('header')?.getAttribute('data-back-href')).toBe('/');
     expect(state.calls).toEqual([]);
   });
 

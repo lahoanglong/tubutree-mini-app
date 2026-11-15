@@ -35,13 +35,13 @@
       { "miniapp": "/offers", "web": "/uu-dai", "private": false },
       { "miniapp": "/vouchers", "web": "/ma-giam-gia", "private": false },
       { "miniapp": "/wallet", "web": "/tai-khoan/vi-tubu", "private": true },
-      { "miniapp": "/rewards", "web": "/kho-qua", "private": true },
+      { "miniapp": "/rewards", "web": "/kho-qua", "private": false },
       { "miniapp": "/rewards/mine", "web": "/kho-qua/cua-toi", "private": true },
       { "miniapp": "/cashback", "web": "/hoan-tien", "private": false }
     ]},
     { "lane": "game", "items": [
-      { "miniapp": "/game", "web": "/vuon-xanh", "private": true },
-      { "miniapp": "/ai-advisor", "web": "/tu-van", "private": true }
+      { "miniapp": "/game", "web": "/vuon-xanh", "private": false },
+      { "miniapp": "/ai-advisor", "web": "/tu-van", "private": false }
     ]},
     { "lane": "community", "items": [
       { "miniapp": "/feed", "web": "/cong-dong", "private": false },
@@ -53,11 +53,11 @@
     ]},
     { "lane": "affiliate", "items": [
       { "miniapp": "/s/:slug", "web": "/s/:slug", "private": false },
-      { "miniapp": "/affiliate", "web": "/ctv", "private": true },
+      { "miniapp": "/affiliate", "web": "/ctv", "private": false },
       { "miniapp": "/storefront", "web": "/ctv/gian-hang", "private": true }
     ]},
     { "lane": "pro", "items": [
-      { "miniapp": "/dealer", "web": "/dai-ly", "private": true },
+      { "miniapp": "/dealer", "web": "/dai-ly", "private": false },
       { "miniapp": "/staff", "web": "/nhan-vien", "private": true },
       { "miniapp": "/my-payroll", "web": "/nhan-vien/bang-luong", "private": true },
       { "miniapp": "/brand-owner", "web": "/chu-thuong-hieu", "private": true },
@@ -65,7 +65,7 @@
       { "miniapp": "/admin/community", "web": "/admin?tab=community", "private": true }
     ]},
     { "lane": "recycle", "items": [
-      { "miniapp": "/recycle", "web": "/doi-rac", "private": true },
+      { "miniapp": "/recycle", "web": "/doi-rac", "private": false },
       { "miniapp": "/recycle/rules", "web": "/doi-rac/quy-dinh", "private": false },
       { "miniapp": "/recycle/new", "web": "/doi-rac/tao", "private": true },
       { "miniapp": "/recycle/points", "web": "/doi-rac/diem-nhan", "private": true },
@@ -74,7 +74,7 @@
       { "miniapp": "/recycle/requests", "web": "/doi-rac/yeu-cau", "private": true },
       { "miniapp": "/recycle/done/:id", "web": "/doi-rac/xong/:id", "private": true },
       { "miniapp": "/recycle/desk", "web": "/doi-rac/quay", "private": true },
-      { "miniapp": "/refill", "web": "/doi-rac", "private": true }
+      { "miniapp": "/refill", "web": "/doi-rac", "private": false }
     ]},
     { "lane": "ds", "items": [
       { "miniapp": "/ds-gallery", "web": "/ds-gallery", "private": false }

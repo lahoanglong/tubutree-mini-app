@@ -80,13 +80,22 @@ async function copyToClipboard(text: string): Promise<boolean> {
   }
 }
 
-function Shell({ children, narrow = false }: { children: ReactNode; narrow?: boolean }) {
+function Shell({
+  children,
+  narrow = false,
+  guest = false,
+}: {
+  children: ReactNode;
+  narrow?: boolean;
+  guest?: boolean;
+}) {
+  const backHref = guest ? '/' : '/tai-khoan';
   return (
     <main className={`${narrow ? PAGE_NARROW : PAGE_WIDE} py-6 tabular-nums`}>
-      <BackLink href="/tai-khoan">
-        ← Tài khoản
+      <BackLink href={backHref}>
+        {guest ? '← Trang chủ' : '← Tài khoản'}
       </BackLink>
-      <PageHeader title={TITLE} parentHref="/tai-khoan" className="md:mt-1" />
+      <PageHeader title={TITLE} parentHref={backHref} className="md:mt-1" />
       <div className="mt-3">
         <PartnerEarnNavPills />
       </div>
@@ -154,13 +163,13 @@ function CtvGuestLanding() {
           <Link href="/dang-nhap?returnTo=%2Fctv" className={ui.btnPrimary}>
             Đăng nhập để đăng ký CTV
           </Link>
-          <Link href="/hoc-vien" className={ui.btnSecondary}>
-            Khám phá Học viện CTV
-          </Link>
+          <a href="#quyen-loi-ctv" className={ui.btnSecondary}>
+            Xem quyền lợi & hoa hồng
+          </a>
         </div>
       </section>
 
-      <section aria-label="Quyền lợi Cộng tác viên">
+      <section id="quyen-loi-ctv" aria-label="Quyền lợi Cộng tác viên">
         <h2 className={`${ui.sectionTitle} mb-3`}>Quyền lợi Cộng tác viên Tubu Tree</h2>
         <div className="grid gap-4 md:grid-cols-3">
           {CTV_GUEST_PILLARS.map(({ Icon, title, body }) => (
@@ -219,7 +228,7 @@ export default function CtvPage() {
   }
   if (phase === 'guest') {
     return (
-      <Shell>
+      <Shell guest>
         <CtvGuestLanding />
       </Shell>
     );

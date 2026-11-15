@@ -917,8 +917,8 @@ export class OrderReversalService {
     if (order.userId !== ctvId) {
       customerUserId = order.userId;
     } else if (phone) {
-      const match = await tx.user.findUnique({ where: { phone }, select: { id: true } });
-      customerUserId = match?.id ?? null;
+      const match = await tx.user.findUnique({ where: { phone }, select: { id: true, phoneVerifiedAt: true } });
+      customerUserId = match?.phoneVerifiedAt ? match.id : null;
     }
     if (customerUserId) {
       const customer = await tx.user.findUnique({ where: { id: customerUserId }, select: { isBlocked: true } });

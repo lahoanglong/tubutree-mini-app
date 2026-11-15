@@ -84,4 +84,24 @@ describe('SubscriptionsPage (/subscriptions — W171)', () => {
     expect(screen.getByTestId('subscriptions-panel-mock')).toBeInTheDocument();
     expect(await screen.findByText('Nước rửa chén sinh học')).toBeInTheDocument();
   });
+
+  it('loại bỏ sản phẩm đối tác tự gửi (MERCHANT / UNAVAILABLE) khỏi kệ Mua xoay vòng để mọi món đều hỗ trợ Đặt định kỳ', async () => {
+    const prev = mocks.bestSellers;
+    mocks.bestSellers = {
+      data: [
+        { id: 'p1', slug: 'nuoc-rua-chen', name: 'Nước rửa chén sinh học', price: 89000, thumbnail: null, rating: 4.9, reviewCount: 12, soldCount: 50, fulfiller: { kind: 'TUBU' } } as never,
+        { id: 'p2', slug: 'mat-ong-doi-tac', name: 'Mật ong Đối tác tự gửi', price: 150000, thumbnail: null, rating: 4.8, reviewCount: 4, soldCount: 10, fulfiller: { kind: 'MERCHANT', partnerName: 'Shop A' } } as never,
+        { id: 'p3', slug: 'tam-ngung', name: 'Hàng tạm ngưng đối tác', price: 99000, thumbnail: null, rating: 4.5, reviewCount: 2, soldCount: 3, fulfiller: { kind: 'UNAVAILABLE' } } as never,
+      ],
+      meta: { page: 1, limit: 20, total: 3 },
+    };
+    try {
+      mount();
+      expect(await screen.findByText('Nước rửa chén sinh học')).toBeInTheDocument();
+      expect(screen.queryByText('Mật ong Đối tác tự gửi')).toBeNull();
+      expect(screen.queryByText('Hàng tạm ngưng đối tác')).toBeNull();
+    } finally {
+      mocks.bestSellers = prev;
+    }
+  });
 });

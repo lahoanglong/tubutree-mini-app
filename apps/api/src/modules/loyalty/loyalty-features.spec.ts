@@ -75,7 +75,17 @@ function makeFakeDb(users: Row[], opts: { advisoryLock?: boolean; lockedRows?: L
     users: new Map<string, Row>(
       users.map((u) => [
         u.id,
-        { pointsBalance: 0, role: 'CUSTOMER', isBlocked: false, mergedIntoId: null, tier: null, phone: null, fullName: null, ...u },
+        {
+          pointsBalance: 0,
+          role: 'CUSTOMER',
+          isBlocked: false,
+          mergedIntoId: null,
+          tier: null,
+          phone: null,
+          phoneVerifiedAt: u.phone ? new Date('2026-01-01T00:00:00Z') : null,
+          fullName: null,
+          ...u,
+        },
       ]),
     ),
     checkIns: [] as Row[],
@@ -113,7 +123,10 @@ function makeFakeDb(users: Row[], opts: { advisoryLock?: boolean; lockedRows?: L
           const out = [...db.users.values()].filter((u) =>
             conds.some(
               (c) =>
-                (c.phone !== undefined && typeof c.phone === 'string' && u.phone === c.phone) ||
+                (c.phone !== undefined &&
+                  typeof c.phone === 'string' &&
+                  u.phone === c.phone &&
+                  (c.phoneVerifiedAt?.not === null ? u.phoneVerifiedAt !== null : true)) ||
                 (c.referralCode?.in && c.referralCode.in.includes(u.referralCode)),
             ),
           );
@@ -1228,10 +1241,23 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(findMany.mock.calls[0][0].take).toBe(2);
     });
 
-    it('SĐT dạng 84xxxxxxxxx / +84 được chuẩn hoá về 0xxxxxxxxx và so khớp chính xác', async () => {
-      const { prisma, findMany } = lookupPrisma([{ id: 'm1', referralCode: 'AB12CD34', phone: '0987654321' }]);
+    it('SĐT dạng 84xxxxxxxxx / +84 được chuẩn hoá về 0xxxxxxxxx và so khớp chính xác (chỉ SĐT đã xác minh)', async () => {
+      const { prisma, findMany } = lookupPrisma([
+        { id: 'm1', referralCode: 'AB12CD34', phone: '0987654321', phoneVerifiedAt: new Date('2026-01-01T00:00:00Z') },
+      ]);
       await new LoyaltyService(prisma, makeConfig()).lookupMemberByStaff('staff-1', '+84 987 654 321');
-      expect(findMany.mock.calls[0][0].where.OR).toEqual(expect.arrayContaining([{ phone: '0987654321' }]));
+      expect(findMany.mock.calls[0][0].where.OR).toEqual(
+        expect.arrayContaining([{ phone: '0987654321', phoneVerifiedAt: { not: null } }]),
+      );
+    });
+
+    it('P0-2: POS tra cứu theo SĐT bỏ qua tài khoản Web chưa xác minh SĐT (phoneVerifiedAt === null)', async () => {
+      const db = makeFakeDb([
+        { id: 'staff-1', role: 'STAFF', referralCode: 'STAFF001' },
+        { id: 'squatter', referralCode: 'SQ123456', phone: '0911222333', phoneVerifiedAt: null, fullName: 'Squatter Web' },
+      ]);
+      const svc = new LoyaltyService(db.prisma, makeConfig());
+      await expect(svc.lookupMemberByStaff('staff-1', '0911222333')).rejects.toThrow(NotFoundException);
     });
 
     it('không thấy → NotFound', async () => {

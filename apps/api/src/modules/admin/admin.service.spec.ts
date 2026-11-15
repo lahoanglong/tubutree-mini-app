@@ -567,6 +567,18 @@ describe('AdminService.setUserRole', () => {
     expect((prisma as unknown as { user: { update: jest.Mock } }).user.update).not.toHaveBeenCalled();
   });
 
+  it('P0-2: SĐT chỉ mới tự gõ trên Web (phoneVerifiedAt === null) → BadRequest, KHÔNG nâng quyền kẻ chiếm SĐT', async () => {
+    const update = jest.fn();
+    const prisma = makePrisma({
+      user: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'squatter', phone: '0899625240', role: 'CUSTOMER', phoneVerifiedAt: null }),
+        update,
+      },
+    });
+    await expect(mkAdmin(prisma).setUserRole('admin1', '0899625240', 'STAFF')).rejects.toThrow(/chưa được xác minh trên Mini App Zalo/);
+    expect(update).not.toHaveBeenCalled();
+  });
+
   // R4-ADMIN-10: admin dán SĐT từ Zalo (+84…/84…, có khoảng trắng) — User.phone lưu 0xxxxxxxxx nên tra đúng chuỗi gõ
   // vào báo nhầm "chưa mở Mini App".
   it.each(['+84899625240', '84899625240', '0899 625 240', ' +84 899.625.240 '])(

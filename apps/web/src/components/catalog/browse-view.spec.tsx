@@ -1338,4 +1338,23 @@ describe('BrowseView — kiểu Mini App ở điện thoại', () => {
     for (const b of bar.querySelectorAll<HTMLElement>('button')) expect(parseFloat(b.style.minHeight)).toBeGreaterThanOrEqual(44);
     expect(container.querySelector('[role="group"][aria-label="Đổi danh mục"]')).toBeNull();
   });
+
+  it('filter=subscription: ẩn sản phẩm đối tác tự gửi (MERCHANT / UNAVAILABLE) không hỗ trợ Đặt định kỳ, giữ sản phẩm kho Tubu', async () => {
+    nav.search = 'filter=subscription';
+    routes['/products'] = () =>
+      pageOf(
+        [
+          { ...product(1), name: 'Nước rửa chén Tubu', fulfiller: { kind: 'TUBU' } },
+          { ...product(2), name: 'Mật ong Đối tác tự gửi', fulfiller: { kind: 'MERCHANT', partnerName: 'Shop A' } },
+          { ...product(3), name: 'Hàng tạm ngưng đối tác', fulfiller: { kind: 'UNAVAILABLE' } },
+        ],
+        3,
+      );
+    const { container } = mount();
+    await flush();
+    expect(container.textContent).toContain('Nước rửa chén Tubu');
+    expect(container.textContent).not.toContain('Mật ong Đối tác tự gửi');
+    expect(container.textContent).not.toContain('Hàng tạm ngưng đối tác');
+    expect(container.querySelector('[data-testid="result-count"]')?.textContent).toContain('1');
+  });
 });

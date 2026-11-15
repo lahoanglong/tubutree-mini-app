@@ -117,10 +117,13 @@ afterEach(() => {
 });
 
 describe('/dai-ly — khách, phiên và trạng thái hồ sơ, luôn đúng một h1', () => {
-  it('khách chưa đăng nhập: mời đăng nhập quay lại /dai-ly, không gọi API', async () => {
+  it('khách chưa đăng nhập: mời đăng nhập quay lại /dai-ly, nút quay lại trỏ về Trang chủ (/), không gọi API', async () => {
     m.phase = 'guest';
     const c = await mount();
     expect(c.querySelector<HTMLAnchorElement>('a[href^="/dang-nhap"]')?.getAttribute('href')).toContain(encodeURIComponent('/dai-ly'));
+    expect(c.querySelector('a[href="/"]')?.textContent).toContain('Trang chủ');
+    expect(c.querySelector('a[href="/tai-khoan"]')).toBeNull();
+    expect(c.querySelector('h1')?.closest('header')?.getAttribute('data-back-href')).toBe('/');
     expect(headingProblems(c)).toEqual([]);
     expect(m.calls).toEqual([]);
   });

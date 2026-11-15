@@ -173,7 +173,7 @@ export default function DealerPage() {
   }
   if (phase === 'guest') {
     return (
-      <DealerShell title={TITLE}>
+      <DealerShell title={TITLE} guest>
         <DealerGuestLanding />
       </DealerShell>
     );

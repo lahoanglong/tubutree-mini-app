@@ -31,7 +31,9 @@ export default function SubscriptionsPage() {
   const { hasSubscription } = useHasSubscription(authed);
 
   const products = useInfiniteQuery(bestSellersListQuery(coreHttp, undefined));
-  const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
+  const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []).filter(
+    (p) => p.fulfiller?.kind !== 'MERCHANT' && p.fulfiller?.kind !== 'UNAVAILABLE',
+  );
 
   return (
     <Page className="tubu-subs-page">

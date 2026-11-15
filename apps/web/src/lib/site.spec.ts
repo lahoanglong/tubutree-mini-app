@@ -133,21 +133,33 @@ describe('tenantHostBootScript', () => {
 });
 
 describe('PRIVATE_PATHS và robots từ route map', () => {
-  it('giữ danh sách cũ và thêm tiền tố riêng tư của route map', async () => {
+  it('giữ danh sách riêng tư gốc + nhánh cá nhân, nhưng KHÔNG chặn 6 trang landing tăng trưởng công khai', async () => {
     const { PRIVATE_PATHS } = await loadSite();
     expect(PRIVATE_PATHS).toEqual(
       expect.arrayContaining(['/admin', '/merchant', '/tai-khoan', '/gio-hang', '/thanh-toan', '/dang-nhap']),
     );
-    expect(PRIVATE_PATHS).toEqual(expect.arrayContaining(['/doi-rac', '/kho-qua', '/dai-ly', '/ho-tro/chat']));
+    expect(PRIVATE_PATHS).toEqual(
+      expect.arrayContaining(['/doi-rac/tao', '/doi-rac/yeu-cau', '/kho-qua/cua-toi', '/ctv/gian-hang', '/hoc-vien', '/ho-tro/chat']),
+    );
+    for (const pub of ['/doi-rac', '/kho-qua', '/ctv', '/dai-ly', '/vuon-xanh', '/tu-van']) {
+      expect(PRIVATE_PATHS).not.toContain(pub);
+    }
     expect(new Set(PRIVATE_PATHS).size).toBe(PRIVATE_PATHS.length);
     expect(PRIVATE_PATHS.some((p) => p.includes(':'))).toBe(false);
   });
 
-  it('robots chặn tiền tố mới cả dạng trần lẫn cây con, và mở lại route công khai bên trong', async () => {
+  it('robots chặn các nhánh cá nhân cả dạng trần lẫn cây con, và cho phép lập chỉ mục các landing công khai', async () => {
     const robots = (await import('../app/robots')).default;
     const rule = [robots().rules].flat()[0]!;
-    expect(rule.disallow).toEqual(expect.arrayContaining(['/doi-rac', '/doi-rac/', '/ho-tro/chat', '/ho-tro/chat/']));
-    expect(rule.allow).toEqual(expect.arrayContaining(['/', '/doi-rac/quy-dinh']));
+    const disallow = [rule.disallow].flat();
+    expect(disallow).toEqual(
+      expect.arrayContaining(['/doi-rac/tao', '/doi-rac/tao/', '/kho-qua/cua-toi', '/kho-qua/cua-toi/', '/ctv/gian-hang', '/ho-tro/chat', '/ho-tro/chat/']),
+    );
+    for (const pub of ['/doi-rac', '/kho-qua', '/ctv', '/dai-ly', '/vuon-xanh', '/tu-van', '/doi-rac/quy-dinh']) {
+      expect(disallow).not.toContain(pub);
+      expect(disallow).not.toContain(`${pub}/`);
+    }
+    expect(rule.allow).toEqual(expect.arrayContaining(['/', '/cong-dong']));
     expect([rule.allow].flat().some((a) => a?.includes(':'))).toBe(false);
   });
 });

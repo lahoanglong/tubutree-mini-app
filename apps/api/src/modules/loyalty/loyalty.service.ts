@@ -1549,7 +1549,7 @@ export class LoyaltyService {
   private async resolveMember(raw: string) {
     const { phone, codes } = parseMemberCode(raw);
     const or: Prisma.UserWhereInput[] = [];
-    if (phone) or.push({ phone });
+    if (phone) or.push({ phone, phoneVerifiedAt: { not: null } });
     if (codes.length > 0) or.push({ referralCode: { in: codes } });
 
     const found = await this.prisma.user.findMany({ where: { OR: or }, take: 2, include: { tier: true } });

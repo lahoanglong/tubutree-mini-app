@@ -169,7 +169,13 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   useEffect(() => {
     if (pastLastPage) router.replace(pagedHref(state, lastPageOfTotal, new URLSearchParams(window.location.search)), { scroll: false });
   }, [pastLastPage, lastPageOfTotal, router, state]);
-  const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
+  const rawList = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
+  // Kệ "Mua xoay vòng" chỉ hiển thị sản phẩm do kho Tubu thực hiện (hỗ trợ Đặt định kỳ trên PDP), ẩn hàng đối tác tự gửi (MERCHANT/UNAVAILABLE).
+  const list =
+    state.filter === 'subscription'
+      ? rawList.filter((p) => p.fulfiller?.kind !== 'MERCHANT' && p.fulfiller?.kind !== 'UNAVAILABLE')
+      : rawList;
+  const filteredOutCount = rawList.length - list.length;
   const listLength = list.length;
   const fetchingMore = products.isFetchingNextPage;
   useEffect(() => {
@@ -453,7 +459,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
             </div>
             <ListHeading
               title={listTitle}
-              count={products.isError && list.length === 0 ? undefined : (firstPage?.meta.total ?? 0)}
+              count={products.isError && list.length === 0 ? undefined : Math.max(0, (firstPage?.meta.total ?? 0) - filteredOutCount)}
               isLoading={products.isLoading || pastLastPage}
             />
             {brandSlug && !state.q && (

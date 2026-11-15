@@ -705,6 +705,11 @@ export class AdminService {
       const revoked = await this.rbac.revokeGrantsAbove(normalized, role, tx);
       const user = await tx.user.findUnique({ where: { phone: normalized } });
       if (!user) throw new NotFoundException(`Không tìm thấy người dùng có SĐT ${normalized} (cần mở Mini App Zalo ≥1 lần).`);
+      if (user.phoneVerifiedAt === null) {
+        throw new BadRequestException(
+          `Số điện thoại ${normalized} chưa được xác minh trên Mini App Zalo — nhờ người dùng mở Mini App Zalo xác minh SĐT trước khi gán vai trò.`,
+        );
+      }
       const previousRole = user.role;
       // Hai cách khoá cả tổ chức ra ngoài, trước đây đều không có gì chặn — và khôi phục thì chỉ
       // còn đường vào thẳng DB bằng SQL. Nút "Thu hồi" trong app nằm ngay trên dòng của chính

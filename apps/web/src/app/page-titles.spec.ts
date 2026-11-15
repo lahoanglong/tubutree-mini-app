@@ -94,7 +94,6 @@ const ACCOUNT: TitleCase[] = [
 ];
 const LOYALTY: TitleCase[] = [
   ['/tai-khoan/diem-xanh', points, 'Hạng thành viên & Điểm Xanh — Tubu Tree', [account]],
-  ['/kho-qua', rewards, 'Kho quà Điểm Xanh — Tubu Tree'],
   ['/kho-qua/cua-toi', myRewards, 'Quà của tôi — Tubu Tree', [rewards]],
   ['/hoan-tien', cashback, 'Hoàn tiền — Tubu Tree'],
 ];
@@ -103,21 +102,14 @@ const COMMUNITY: TitleCase[] = [
   ['/cong-dong/[id]', postDetail, 'Bài viết cộng đồng — Tubu Tree'],
 ];
 const AFFILIATE: TitleCase[] = [
-  ['/ctv', ctv, 'Cộng tác viên — Tubu Tree'],
   ['/ctv/gian-hang', ctvStorefront, 'Gian hàng của tôi — Tubu Tree', [ctv]],
 ];
-const GAME: TitleCase[] = [
-  ['/vuon-xanh', game, 'Vườn Xanh — Tubu Tree'],
-  ['/tu-van', advisor, 'Trợ lý AI Tubu — Tubu Tree'],
-];
 const PRO: TitleCase[] = [
-  ['/dai-ly', dealer, 'Kênh đại lý — Tubu Tree'],
   ['/nhan-vien', staff, 'Ca làm của tôi — Tubu Tree'],
   ['/nhan-vien/bang-luong', payroll, 'Lương của tôi — Tubu Tree', [staff]],
   ['/chu-thuong-hieu', brandOwner, 'Quản lý thương hiệu — Tubu Tree'],
 ];
 const RECYCLE: TitleCase[] = [
-  ['/doi-rac', recycle, 'Đổi rác lấy quà — Tubu Tree'],
   ['/doi-rac/yeu-cau', recycleRequests, 'Yêu cầu của tôi — Tubu Tree'],
   ['/doi-rac/tao', recycleNew, 'Tạo yêu cầu đổi rác — Tubu Tree'],
   ['/doi-rac/diem-nhan', recyclePoints, 'Chọn điểm nhận — Tubu Tree'],
@@ -126,16 +118,30 @@ const RECYCLE: TitleCase[] = [
   ['/doi-rac/xong/[id]', recycleDone, 'Kết quả đổi rác — Tubu Tree'],
   ['/doi-rac/quay', recycleDesk, 'Nhận hàng tại điểm — Tubu Tree'],
 ];
-const TITLES: TitleCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...GAME, ...PRO, ...RECYCLE];
+const PUBLIC_GROWTH_LANDINGS: TitleCase[] = [
+  ['/kho-qua', rewards, 'Kho quà Điểm Xanh — Tubu Tree'],
+  ['/ctv', ctv, 'Cộng tác viên — Tubu Tree'],
+  ['/vuon-xanh', game, 'Vườn Xanh — Tubu Tree'],
+  ['/tu-van', advisor, 'Trợ lý AI Tubu — Tubu Tree'],
+  ['/dai-ly', dealer, 'Kênh đại lý — Tubu Tree'],
+  ['/doi-rac', recycle, 'Đổi rác lấy quà — Tubu Tree'],
+];
+const PRIVATE_TITLES: TitleCase[] = [...CORE, ...SHOP, ...ORDER, ...ACCOUNT, ...LOYALTY, ...COMMUNITY, ...AFFILIATE, ...PRO, ...RECYCLE];
+const TITLES: TitleCase[] = [...PRIVATE_TITLES, ...PUBLIC_GROWTH_LANDINGS];
 
 // R3-UI-7: các trang client không có tiêu đề riêng nên mọi tab đều tên "Tubu Tree — Sống xanh An Lành", khó phân biệt
 // trong lịch sử trình duyệt và với trình đọc màn hình.
 // R5-BUYER-5: các trang con của /tai-khoan kế thừa "Tài khoản — Tubu Tree" nên mở nhiều tab (địa chỉ, điểm, ví, đơn)
 // vẫn giống hệt nhau.
 describe('tiêu đề trang khách', () => {
-  it.each(TITLES)('%s có tiêu đề riêng và không lập chỉ mục', (path, meta, title, ancestors = []) => {
-    expect(path === '/doi-rac' ? renderedPage(meta) : rendered(meta, ...ancestors)).toBe(title);
+  it.each(PRIVATE_TITLES)('%s (khu cá nhân/nội bộ) có tiêu đề riêng và không lập chỉ mục', (_path, meta, title, ancestors = []) => {
+    expect(rendered(meta, ...ancestors)).toBe(title);
     expect(meta.robots).toEqual({ index: false, follow: false });
+  });
+
+  it.each(PUBLIC_GROWTH_LANDINGS)('%s (landing tăng trưởng công khai) có tiêu đề riêng và cho phép lập chỉ mục', (path, meta, title, ancestors = []) => {
+    expect(path === '/doi-rac' ? renderedPage(meta) : rendered(meta, ...ancestors)).toBe(title);
+    expect(meta.robots).toBeUndefined();
   });
 
   it('/doi-rac/quy-dinh là trang công khai: có tiêu đề riêng và cho lập chỉ mục', () => {

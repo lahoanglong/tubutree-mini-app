@@ -1007,6 +1007,81 @@ describe('OrderReversalService — nơi nhận tiền hoàn và phần đã tr�
     await service.reverseFinancials(tx as never, order, { restock: false });
     expect(tx.$executeRaw).not.toHaveBeenCalled();
   });
+
+  it('P0-1: đơn CTV lên hộ có SĐT người nhận trùng user Web chưa xác minh SĐT (phoneVerifiedAt=null) → KHÔNG cộng Ví kẻ chiếm SĐT, chuyển MANUAL_TRANSFER chờ admin', async () => {
+    const order = makeOrder({
+      userId: 'ctv1',
+      referrerUserId: 'ctv1',
+      placedForCustomer: true,
+      endCustomerKey: '0909111222',
+      shippingAddress: { recipient: 'Khách Lẻ Thật', phone: '0909111222', street: '1 Đường A' },
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'PAID',
+      status: 'CONFIRMED',
+      total: 250_000,
+    });
+    const tx = makeTx(order);
+    tx.user.findUnique.mockImplementation(async ({ where }: { where: { phone?: string; id?: string } }) => {
+      if (where.phone === '0909111222') return { id: 'squatter-web', phoneVerifiedAt: null };
+      if (where.id === 'squatter-web') return { isBlocked: false, metadata: null };
+      return null;
+    });
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(tx.user.findUnique).toHaveBeenCalledWith({
+      where: { phone: '0909111222' },
+      select: { id: true, phoneVerifiedAt: true },
+    });
+    expect(applyWalletDelta).not.toHaveBeenCalled();
+    expect(tx.orderCustomerRefund.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: 'o1',
+        kind: 'END_CUSTOMER',
+        amount: 250_000,
+        phone: '0909111222',
+        recipientName: 'Khách Lẻ Thật',
+        customerUserId: null,
+        method: 'MANUAL_TRANSFER',
+        status: 'PENDING',
+      }),
+    });
+  });
+
+  it('P0-1: đơn CTV lên hộ có SĐT người nhận trùng user đã xác minh Zalo (phoneVerifiedAt != null) → cộng Ví chủ thật bình thường', async () => {
+    const order = makeOrder({
+      userId: 'ctv1',
+      referrerUserId: 'ctv1',
+      placedForCustomer: true,
+      endCustomerKey: '0909333444',
+      shippingAddress: { recipient: 'Khách Đã Xác Minh', phone: '0909333444', street: '2 Đường B' },
+      paymentMethod: 'BANK_TRANSFER',
+      paymentStatus: 'PAID',
+      status: 'CONFIRMED',
+      total: 180_000,
+    });
+    const tx = makeTx(order);
+    tx.user.findUnique.mockImplementation(async ({ where }: { where: { phone?: string; id?: string } }) => {
+      if (where.phone === '0909333444') return { id: 'verified-buyer', phoneVerifiedAt: new Date('2026-06-01T00:00:00Z') };
+      if (where.id === 'verified-buyer') return { isBlocked: false, metadata: null };
+      return null;
+    });
+
+    await service.reverseFinancials(tx as never, order);
+
+    expect(applyWalletDelta).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({ userId: 'verified-buyer', delta: 180_000, type: 'ORDER_REFUND', refId: 'o1' }),
+    );
+    expect(tx.orderCustomerRefund.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        orderId: 'o1',
+        customerUserId: 'verified-buyer',
+        method: 'WALLET',
+        status: 'COMPLETED',
+      }),
+    });
+  });
 });
 
 describe('OrderReversalService.reversePartialReturn — hoa hồng CTV và nền doanh số mốc (MONEY-2)', () => {

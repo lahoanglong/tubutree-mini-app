@@ -84,11 +84,14 @@ describe('miniappPathFor', () => {
 });
 
 describe('privatePrefixes', () => {
-  it('cắt từ tham số đầu, bỏ query, khử trùng', () => {
+  it('cắt từ tham số đầu, bỏ query, khử trùng — giữ khu cá nhân nhưng không chặn các landing tăng trưởng công khai', () => {
     const p = privatePrefixes();
-    expect(p).toContain('/doi-rac');
-    expect(p).toContain('/tai-khoan');
-    expect(p).toContain('/admin');
+    expect(p).toEqual(
+      expect.arrayContaining(['/doi-rac/tao', '/doi-rac/yeu-cau', '/kho-qua/cua-toi', '/ctv/gian-hang', '/hoc-vien', '/tai-khoan', '/admin']),
+    );
+    for (const pub of ['/doi-rac', '/kho-qua', '/ctv', '/dai-ly', '/vuon-xanh', '/tu-van']) {
+      expect(p).not.toContain(pub);
+    }
     expect(p.filter((x) => x === '/admin')).toHaveLength(1);
     expect(p.every((x) => !x.includes(':') && !x.includes('?'))).toBe(true);
     expect(p.every((x) => x.startsWith('/'))).toBe(true);
@@ -106,15 +109,16 @@ describe('privatePrefixes', () => {
 });
 
 describe('publicStaticRoutes', () => {
-  it('chỉ route công khai, không tham số, không pending, không query', () => {
+  it('chỉ route công khai, không tham số, không pending, không query (gồm cả 6 landing Bento công khai)', () => {
     const r = publicStaticRoutes();
-    expect(r).toContain('/');
+    expect(r).toEqual(
+      expect.arrayContaining(['/', '/gioi-thieu', '/dai-ly', '/ctv', '/vuon-xanh', '/tu-van', '/doi-rac', '/kho-qua', '/doi-rac/quy-dinh']),
+    );
     const pendingPublic = (routeMap.routes as { items: { web?: string; private?: boolean; pending?: boolean }[] }[])
       .flatMap((g) => g.items)
       .filter((i) => i.pending && !i.private && i.web && !i.web.includes(':') && !i.web.includes('?'))
       .map((i) => i.web!);
     for (const w of pendingPublic) expect(r).not.toContain(w);
-    expect(r).toContain('/gioi-thieu');
     expect(r.every((x) => !x.includes(':') && !x.includes('?'))).toBe(true);
     expect(r.every((x) => x.startsWith('/'))).toBe(true);
   });
@@ -159,7 +163,7 @@ describe('lane chỉ ở bản dev (ds)', () => {
 
 describe('publicAllowPaths', () => {
   it('route công khai tĩnh nằm dưới tiền tố riêng tư, kể cả pending', () => {
-    expect(publicAllowPaths(['/doi-rac', '/tai-khoan'])).toEqual(['/doi-rac/quy-dinh']);
+    expect(publicAllowPaths(['/doi-rac', '/tai-khoan'])).toEqual(['/doi-rac', '/doi-rac/quy-dinh']);
   });
 
   it('route công khai trùng đúng tiền tố cũng được cho phép', () => {

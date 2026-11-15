@@ -589,6 +589,8 @@ describe('/kho-qua — trạng thái trang', () => {
     expect(crumbs?.textContent).toContain('Trang chủ');
     expect(crumbs?.textContent).toContain('Kho quà Điểm Xanh');
     expect(crumbs?.textContent).not.toContain('Tài khoản');
+    expect(c.querySelector('h1')?.closest('header')?.getAttribute('data-back-href')).toBe('/');
+    expect(c.querySelector('a[aria-label="Về trang chủ"]')?.getAttribute('href')).toBe('/');
     const pills = c.querySelector('nav[aria-label="Đổi rác và Kho quà"]');
     expect(pills?.querySelector('a[href="/doi-rac"]')).not.toBeNull();
     expect(pills?.querySelector('a[href="/kho-qua"]')?.getAttribute('aria-current')).toBe('page');

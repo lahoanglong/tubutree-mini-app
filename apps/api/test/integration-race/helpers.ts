@@ -25,6 +25,7 @@ export async function createUser(
     data: {
       referralCode: randCode(10),
       fullName: `IT ${randCode(4)}`,
+      ...(data.phone && data.phoneVerifiedAt === undefined ? { phoneVerifiedAt: new Date('2026-01-01T00:00:00Z') } : {}),
       ...data,
     },
   });

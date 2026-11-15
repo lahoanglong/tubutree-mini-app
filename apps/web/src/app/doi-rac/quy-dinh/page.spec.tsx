@@ -48,10 +48,11 @@ describe('/doi-rac/quy-dinh (trang công khai)', () => {
 });
 
 describe('robots cho /doi-rac', () => {
-  it('khoá cây riêng tư nhưng mở lại riêng /doi-rac/quy-dinh', async () => {
+  it('mở lập chỉ mục cho /doi-rac và /doi-rac/quy-dinh nhưng vẫn chặn các nhánh cá nhân /doi-rac/tao, /doi-rac/yeu-cau', async () => {
     const { default: robots } = await import('../../robots');
     const rule = [robots().rules].flat()[0] as { allow: string[]; disallow: string[] };
-    expect(rule.disallow).toContain('/doi-rac');
-    expect(rule.allow).toContain('/doi-rac/quy-dinh');
+    expect(rule.disallow).not.toContain('/doi-rac');
+    expect(rule.disallow).not.toContain('/doi-rac/quy-dinh');
+    expect(rule.disallow).toEqual(expect.arrayContaining(['/doi-rac/tao', '/doi-rac/yeu-cau', '/doi-rac/diem-nhan', '/doi-rac/xong', '/doi-rac/quay']));
   });
 });

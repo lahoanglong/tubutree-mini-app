@@ -229,15 +229,27 @@ describe('AuthService.loginWithZaloMiniApp (phone)', () => {
 
 describe('AuthService.loginWithZaloMiniApp: mốc xác minh SĐT (phoneVerifiedAt) cho điểm đơn chat', () => {
   function mk(existing: Record<string, unknown> | null, owner: Record<string, unknown> | null, zaloPhone: string | null, grant: Record<string, unknown> | null = null) {
+    let currentOwner = owner;
     const update = jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) => ({ ...USER, ...(existing ?? {}), ...data }));
+    const updateMany = jest.fn().mockImplementation(({ data }: { data: Record<string, unknown> }) => {
+      if (data['phone'] === null && currentOwner && currentOwner['phoneVerifiedAt'] === null) {
+        currentOwner = null;
+        return { count: 1 };
+      }
+      return { count: 0 };
+    });
     // Thứ tự findUnique: theo zaloId (user), rồi phoneIfFree tra chủ của SĐT.
-    const findUnique = jest.fn().mockImplementation(({ where }: { where: Record<string, unknown> }) => (where['zaloId'] ? existing : owner));
+    const findUnique = jest.fn().mockImplementation(({ where }: { where: Record<string, unknown> }) => (where['zaloId'] ? existing : currentOwner));
     const roleGrant = { findFirst: jest.fn().mockResolvedValue(grant) };
-    const prisma = { refreshToken: { create: jest.fn().mockResolvedValue({}) }, user: { findUnique, update, create: jest.fn() }, roleGrant } as unknown as PrismaService;
+    const prisma = {
+      refreshToken: { create: jest.fn().mockResolvedValue({}) },
+      user: { findUnique, update, updateMany, create: jest.fn().mockImplementation(({ data }) => ({ ...USER, id: 'new-zalo-user', ...data })) },
+      roleGrant,
+    } as unknown as PrismaService;
     const jwt = { signAsync: jest.fn().mockResolvedValue('access-jwt') } as unknown as JwtService;
     const config = { get: (k: string) => configValues[k] } as unknown as ConfigService<never, true>;
     const zalo = { getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z1', name: 'A' }), resolvePhoneNumber: jest.fn().mockResolvedValue(zaloPhone) } as unknown as ZaloService;
-    return { svc: new AuthService(prisma, jwt, config, zalo, mkRbac()), update, roleGrant };
+    return { svc: new AuthService(prisma, jwt, config, zalo, mkRbac()), update, updateMany, prisma, roleGrant };
   }
 
   it('Zalo trả đúng số đang lưu: chỉ làm mới phoneVerifiedAt', async () => {
@@ -257,6 +269,34 @@ describe('AuthService.loginWithZaloMiniApp: mốc xác minh SĐT (phoneVerifiedA
   it('Zalo trả số đã thuộc tài khoản khác: giữ nguyên số và mốc, không đổi gì', async () => {
     const { svc, update } = mk({ ...USER, fullName: 'A', phone: '0901234567' }, { id: 'other' }, '0987654321');
     await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('P0-3: chủ thật đăng nhập Zalo Mini App với phoneToken chứng thực → giải phóng SĐT bị chiếm trên Web (phoneVerifiedAt: null) và nhận SĐT + phoneVerifiedAt', async () => {
+    const { svc, update, updateMany } = mk(
+      { ...USER, id: 'real-owner', fullName: 'A', phone: null, phoneVerifiedAt: null },
+      { id: 'web-squatter', zaloId: 'z-squatter', phoneVerifiedAt: null },
+      '0987654321',
+    );
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { phone: '0987654321', phoneVerifiedAt: null, id: { not: 'real-owner' } },
+      data: { phone: null },
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: 'real-owner' },
+      data: { phone: '0987654321', phoneVerifiedAt: expect.any(Date) },
+    });
+  });
+
+  it('P0-3: KHÔNG BAO GIỜ giải phóng SĐT của tài khoản đã xác minh Zalo (phoneVerifiedAt != null)', async () => {
+    const { svc, update, updateMany } = mk(
+      { ...USER, id: 'u2', fullName: 'A', phone: null, phoneVerifiedAt: null },
+      { id: 'verified-owner', zaloId: 'z-verified', phoneVerifiedAt: new Date('2026-03-01T00:00:00Z') },
+      '0987654321',
+    );
+    await svc.loginWithZaloMiniApp('c', 'at', 'pt');
+    expect(updateMany).not.toHaveBeenCalled();
     expect(update).not.toHaveBeenCalled();
   });
 

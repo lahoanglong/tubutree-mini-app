@@ -60,6 +60,19 @@ describe('RbacService.applyGrants', () => {
     expect(prisma.user.update).not.toHaveBeenCalled();
   });
 
+  it('P0-2: applyGrantsWith kể cả khi có actorId (admin) vẫn từ chối nâng quyền user có phoneVerifiedAt === null', async () => {
+    const prisma = makePrisma({
+      roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'ADMIN' }]) },
+      user: { update: jest.fn() },
+    });
+    type WithActor = { applyGrantsWith(db: unknown, user: unknown, actorId: string | null): Promise<{ user: User; changed: boolean }> };
+    const svc = new RbacService(prisma) as unknown as WithActor;
+    const squatter = mkUser({ id: 'squatter', phone: '0912345678', phoneVerifiedAt: null });
+    const out = await svc.applyGrantsWith(prisma, squatter, 'admin1');
+    expect(out).toEqual({ user: squatter, changed: false });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
   it('không có grant → giữ nguyên role', async () => {
     const prisma = makePrisma();
     const out = await new RbacService(prisma).applyGrants(mkUser());
@@ -277,6 +290,26 @@ describe('RbacService: lời mời quyền theo SĐT hết hạn (L1-05)', () =>
     );
     await expect(new RbacService(inviteDb()).addGrant('admin1', '0900000002', 'ADMIN')).rejects.toBeInstanceOf(BadRequestException);
     expect(prisma.roleGrant.createMany).not.toHaveBeenCalled();
+  });
+
+  it('P0-2: kẻ chiếm SĐT trước trên Web (phoneVerifiedAt === null) KHÔNG bị nâng lên ADMIN hay STAFF khi admin gọi addGrant', async () => {
+    const squatter = mkUser({ id: 'squatter', phone: '0900000099', phoneVerifiedAt: null });
+    const adminInviteDb = inviteDb({
+      user: { findUnique: jest.fn().mockResolvedValue(squatter), update: jest.fn() },
+    });
+    await expect(new RbacService(adminInviteDb).addGrant('admin1', '0900000099', 'ADMIN')).rejects.toThrow(
+      'Chỉ cấp quyền quản trị cho số điện thoại đã có tài khoản.',
+    );
+    expect(adminInviteDb.roleGrant.createMany).not.toHaveBeenCalled();
+    expect(adminInviteDb.user.update).not.toHaveBeenCalled();
+
+    const staffInviteDb = inviteDb({
+      user: { findUnique: jest.fn().mockResolvedValue(squatter), update: jest.fn() },
+    });
+    const out = await new RbacService(staffInviteDb).addGrant('admin1', '0900000099', 'STAFF', ['KHO']);
+    expect(out).toEqual({ granted: 'STAFF', applied: false, permissionsChanged: false });
+    expect(expiryOf(staffInviteDb)).toBeInstanceOf(Date);
+    expect(staffInviteDb.user.update).not.toHaveBeenCalled();
   });
 
   it('mời STAFF cho SĐT chưa có tài khoản → hạn mặc định 7 ngày', async () => {

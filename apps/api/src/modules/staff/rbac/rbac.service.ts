@@ -75,8 +75,8 @@ export class RbacService {
    */
   private async applyGrantsWith(db: Db, user: User, actorId: string | null, reason?: string): Promise<{ user: User; changed: boolean }> {
     if (!user.phone) return { user, changed: false };
-    // SĐT tự nhập trên web (`phoneVerifiedAt === null`) chỉ dùng cho liên hệ thu gom/giao hàng: không tự nâng quyền theo lời mời SĐT lúc cấp phiên.
-    if (actorId === null && user.phoneVerifiedAt === null) return { user, changed: false };
+    // SĐT tự nhập trên web (`phoneVerifiedAt === null`) chỉ dùng cho liên hệ thu gom/giao hàng: không bao giờ nâng quyền dù qua đăng nhập hay addGrant.
+    if (user.phoneVerifiedAt === null) return { user, changed: false };
     if (!('$transaction' in db)) return this.raiseFromGrants(user, db, actorId, reason);
     const peek = await db.roleGrant.findMany({
       where: { phone: user.phone, ...activeGrantWhere() },
@@ -165,10 +165,13 @@ export class RbacService {
     const result = await this.prisma.$transaction(async (tx) => {
       // Cùng luật với revokeGrant/setUserRole: không tự đổi quyền của chính mình. Thiếu chặn này, admin
       // vừa bị hạ quyền dùng access token cũ tự cấp lại ADMIN vĩnh viễn (ADMINOPS-1).
-      const user = await tx.user.findUnique({ where: { phone: normalized } });
-      if (user && user.id === adminId) {
+      const rawUser = await tx.user.findUnique({ where: { phone: normalized } });
+      if (rawUser && rawUser.id === adminId) {
         throw new BadRequestException('Không thể tự cấp quyền cho chính mình — nhờ một quản trị viên khác thực hiện.');
       }
+      // SĐT tự gõ trên Web (`phoneVerifiedAt === null`) không phải chủ SĐT đã xác minh: coi như chưa có tài khoản xác minh
+      // để kẻ chiếm SĐT trước không bị nâng nhầm lên STAFF/ADMIN khi admin mời nhân sự mới.
+      const user = rawUser && rawUser.phoneVerifiedAt !== null ? rawUser : null;
       // Quyền quản trị là quyền toàn hệ thống: ai sau này đăng nhập bằng số này cũng thành ADMIN nếu lời mời còn treo, nên chỉ cấp cho người đã có tài khoản.
       if (!user && role === 'ADMIN') {
         throw new BadRequestException('Chỉ cấp quyền quản trị cho số điện thoại đã có tài khoản. Nhờ người đó đăng nhập Tubu Tree một lần trước.');

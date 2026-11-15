@@ -391,6 +391,11 @@ export class AuthService {
     if (!zaloPhone) return {};
     const now = new Date();
     if (user.phone === zaloPhone) return { phoneVerifiedAt: now };
+    if (user.phone && (user.role !== 'CUSTOMER' || user.isBlocked)) {
+      const tail = `đuôi ${user.phone.slice(-3)} sang ${zaloPhone.slice(-3)}`;
+      this.logger.warn(`Không đổi SĐT theo Zalo cho user ${user.id} (role=${user.role}, khoá=${user.isBlocked}): ${tail}, cần admin xử lý`);
+      return {};
+    }
     const free = await this.phoneIfFree(zaloPhone, user.id);
     if (!free) {
       this.logger.warn(`Zalo trả SĐT (đuôi ${zaloPhone.slice(-3)}) đang thuộc tài khoản khác, giữ nguyên SĐT của user ${user.id}`);
@@ -398,10 +403,6 @@ export class AuthService {
     }
     if (!user.phone) return { phone: free, phoneVerifiedAt: now };
     const tail = `đuôi ${user.phone.slice(-3)} sang ${zaloPhone.slice(-3)}`;
-    if (user.role !== 'CUSTOMER' || user.isBlocked) {
-      this.logger.warn(`Không đổi SĐT theo Zalo cho user ${user.id} (role=${user.role}, khoá=${user.isBlocked}): ${tail}, cần admin xử lý`);
-      return {};
-    }
     const grants = await this.prisma.roleGrant.findFirst({ where: { phone: { in: [user.phone, zaloPhone] }, ...activeGrantWhere() }, select: { phone: true } });
     if (grants) {
       this.logger.warn(`Không đổi SĐT theo Zalo cho user ${user.id}: ${tail}, một trong hai số đang có grant quyền, cần admin xử lý`);
@@ -884,12 +885,26 @@ export class AuthService {
     throw err;
   }
 
-  /** Trả phone nếu chưa bị tài khoản khác chiếm (phone là @unique) — tránh P2002. */
+  /**
+   * Trả phone nếu chưa bị tài khoản ĐÃ XÁC MINH khác chiếm (phone là @unique) — tránh P2002.
+   * Nếu SĐT đang bị một tài khoản khác giữ ở trạng thái chưa xác minh (`phoneVerifiedAt === null`,
+   * tức SĐT liên hệ tự nhập trên Web), giải phóng SĐT đó để chủ thật vừa chứng minh qua Zalo `phoneToken` nhận lại.
+   */
   private async phoneIfFree(phone: string | null, selfId?: string): Promise<string | undefined> {
     if (!phone) return undefined;
-    const owner = await this.prisma.user.findUnique({ where: { phone }, select: { id: true } });
-    if (owner && owner.id !== selfId) return undefined;
-    return phone;
+    const owner = await this.prisma.user.findUnique({ where: { phone }, select: { id: true, phoneVerifiedAt: true } });
+    if (!owner || owner.id === selfId) return phone;
+    if (owner.phoneVerifiedAt === null) {
+      await this.prisma.user.updateMany({
+        where: { phone, phoneVerifiedAt: null, ...(selfId ? { id: { not: selfId } } : {}) },
+        data: { phone: null },
+      });
+      this.logger.warn(`Giải phóng SĐT chưa xác minh (đuôi ${phone.slice(-3)}) khỏi user ${owner.id} cho chủ Zalo xác minh`);
+      const after = await this.prisma.user.findUnique({ where: { phone }, select: { id: true } });
+      if (after && after.id !== selfId) return undefined;
+      return phone;
+    }
+    return undefined;
   }
 
   /** Luồng đăng nhập web (Zalo Web Login OAuth): đổi code → access token → upsert user → JWT. */
