@@ -7,9 +7,10 @@ import { Pause, Play, X } from 'lucide-react';
 import { arcadeWaterFor, type ArcadeGameId } from '@tubutree/app-core/arcade/arcade-config';
 import type { ArcadeResult, ArcadeTheme, mountArcade } from '@tubutree/app-core/arcade/arcade-canvas';
 import { endTip } from '@tubutree/app-core/arcade/arcade-tips';
-import type { ArcadeCompleteResult } from '@tubutree/app-core/api/game';
+import { startArcade, type ArcadeCompleteResult } from '@tubutree/app-core/api/game';
 import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { coreHttp } from '@/lib/core-http';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { loadErrorText } from '@/lib/error-text';
 import { ui } from '@/lib/guest-ui';
@@ -25,6 +26,8 @@ type ArcadeControls = ReturnType<typeof mountArcade>;
 type Phase = 'ready' | 'playing' | 'ended';
 interface End {
   result: ArcadeResult;
+  /** Mã ván xin lúc bấm Chơi; null khi `arcade-start` không tới được máy chủ (ván đó không ghi được). */
+  runId: string | null;
   guestBest: number;
   guestNew: boolean;
 }
@@ -138,6 +141,10 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
   // Mỗi ván một số: `onEnd` bắn lại (hay bắn hai lần) trong cùng ván không ghi kỷ lục và không gửi máy chủ thêm.
   const runId = useRef(0);
   const endedRun = useRef(0);
+  // Mã ván của máy chủ cho ván đang chơi. Xin SONG SONG với lúc vào ván (không chờ: ván bắt đầu ở máy khách, máy chủ chỉ đo từ lúc nhận), `startToken`
+  // để lời đáp muộn của ván trước không ghi đè mã của ván mới.
+  const serverRun = useRef<string | null>(null);
+  const startToken = useRef(0);
   const phaseRef = useRef<Phase>('ready');
   const pausedRef = useRef(false);
   phaseRef.current = phase;
@@ -149,10 +156,10 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
       endedRun.current = runId.current;
       const prev = authed ? 0 : readGuestBest(gameId);
       if (!authed) writeGuestBest(gameId, result.score);
-      setEnd({ result, guestBest: Math.max(prev, result.score), guestNew: !authed && result.score > prev });
+      setEnd({ result, runId: serverRun.current, guestBest: Math.max(prev, result.score), guestNew: !authed && result.score > prev });
       setPhase('ended');
       setPaused(false);
-      if (authed) save.begin(result);
+      if (authed) save.begin(result, serverRun.current);
     },
     [authed, gameId, save],
   );
@@ -225,6 +232,14 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     const ctl = controls.current;
     if (!ctl) return;
     runId.current += 1;
+    const token = ++startToken.current;
+    serverRun.current = null;
+    startArcade(coreHttp, gameId).then(
+      (r) => {
+        if (startToken.current === token) serverRun.current = r.runId;
+      },
+      () => undefined,
+    );
     save.reset();
     setEnd(null);
     setPaused(false);
@@ -242,7 +257,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
 
   // Đăng nhập là rời trang: nhớ ván này để sảnh gửi nốt sau khi quay về (ván chờ tối đa 10 phút).
   const rememberRun = () => {
-    if (end) rememberPendingArcade({ gameId: end.result.gameId, score: end.result.score, durationMs: end.result.durationMs });
+    if (end?.runId) rememberPendingArcade({ gameId: end.result.gameId, score: end.result.score, durationMs: end.result.durationMs, runId: end.runId });
   };
 
   const title = fillCopy(`arcade.${k}.title`);

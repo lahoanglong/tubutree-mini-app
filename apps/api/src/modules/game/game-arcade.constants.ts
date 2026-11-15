@@ -25,8 +25,14 @@ export const ARCADE_GREAT_SCORE: Record<ArcadeGameId, number> = { dew_catcher: 9
 export const ARCADE_GOOD_WATER_BONUS = 3;
 export const ARCADE_GREAT_WATER_BONUS = 2;
 
-/** Ván mới được bắt đầu sớm hơn lúc ván cũ xong chừng này (độ lệch đồng hồ, bấm chơi lại ngay) mà vẫn tính hợp lệ. */
-export const ARCADE_TOO_FAST_TOLERANCE_MS = 3_000;
+/** Mã ván (`runId`) do `arcade-start` cấp sống tối đa chừng này: quá hạn thì không ghi điểm được nữa. */
+export const ARCADE_RUN_TTL_MS = 10 * 60_000;
+/**
+ * Thời lượng khách khai (`durationMs`) được dài hơn thời gian máy chủ đo từ lúc cấp mã tới lúc nhận kết quả chừng này. Ván bắt đầu ở
+ * máy khách TRƯỚC khi lời gọi `arcade-start` tới máy chủ (độ trễ mạng chiều đi), còn tạm dừng và chiều về chỉ làm thời gian đo dài thêm.
+ * Giữ nhỏ: đây cũng là thời gian tối thiểu bị "cho không" ở ván ngắn nhất.
+ */
+export const ARCADE_RUN_SLACK_MS = 3_000;
 
 /** Lượt thưởng cơ sở mỗi ngày VN mỗi game; mỗi khung giờ thưởng thêm một lượt riêng cho khung đó. */
 export const ARCADE_DAILY_CAP_BASE = 3;

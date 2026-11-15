@@ -328,6 +328,13 @@ export interface ArcadeCompleteBody {
   gameId: ArcadeGameId;
   score: number;
   durationMs: number;
+  /** Mã ván máy chủ cấp ở `startArcade` lúc bấm Chơi; thiếu hoặc quá 10 phút thì máy chủ từ chối (400), dùng lại thì 409. */
+  runId: string;
+}
+export interface ArcadeStartResult {
+  runId: string;
+  startedAt: string;
+  expiresAt: string;
 }
 export interface ArcadeCompleteResult {
   gameId: ArcadeGameId;
@@ -335,7 +342,7 @@ export interface ArcadeCompleteResult {
   bestScore: number;
   isNewBest: boolean;
   rewarded: boolean;
-  /** null khi ván được thưởng. Mọi lý do khác vẫn cập nhật kỷ lục (trừ 'TOO_FAST'). */
+  /** null khi ván được thưởng. Mọi lý do khác vẫn cập nhật kỷ lục. 'TOO_FAST' chỉ còn do máy chủ bản cũ trả: bản mới thay bằng HTTP 409 (mã ván đã dùng). */
   reason: ArcadeReason | null;
   waterEarned: number;
   pointsEarned: number;
@@ -364,12 +371,19 @@ export interface HomeQuizResult {
   alreadyClaimed: boolean;
   totalSeeds: number;
 }
+/** Xin mã ván lúc khách bấm Chơi (công khai: khách chưa đăng nhập cũng xin được, để đăng nhập xong vẫn nhận thưởng ván đó). */
+export const startArcade = (http: HttpClient, gameId: ArcadeGameId) => http.post<ArcadeStartResult>('/game/arcade-start', { gameId });
 /**
- * Mỗi lời gọi là một ván: không có khoá chống gọi đúp, nên nơi gọi phải tự chặn (đúng một lần cho mỗi ván). Chỉ gửi ba trường của hợp đồng,
+ * Mỗi lời gọi là một ván: máy chủ chặn gửi lại cùng `runId` (409), nhưng nơi gọi vẫn nên tự gửi đúng một lần cho mỗi ván. Chỉ gửi bốn trường của hợp đồng,
  * để đưa nguyên kết quả của `mountArcade` vào cũng không mang thêm trường lạ.
  */
 export const completeArcade = (http: HttpClient, body: ArcadeCompleteBody) =>
-  http.post<ArcadeCompleteResult>('/game/arcade-complete', { gameId: body.gameId, score: body.score, durationMs: body.durationMs });
+  http.post<ArcadeCompleteResult>('/game/arcade-complete', {
+    gameId: body.gameId,
+    score: body.score,
+    durationMs: body.durationMs,
+    runId: body.runId,
+  });
 export const getArcadeStatus = (http: HttpClient) => http.get<ArcadeStatus>('/game/arcade/status');
 export const completeHomeQuiz = (http: HttpClient, answers: HomeQuizAnswers) =>
   http.post<HomeQuizResult>('/game/home-quiz/complete', { family: answers.family, worry: answers.worry, format: answers.format });

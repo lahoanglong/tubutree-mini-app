@@ -13,13 +13,17 @@ import { ARCADE_PENDING_KEY } from './arcade-pending';
 const m = vi.hoisted(() => ({
   phase: 'authenticated' as string,
   post: vi.fn(),
+  start: vi.fn(),
   ctl: { start: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), resize: vi.fn() },
   opts: null as ArcadeMountOptions | null,
   mount: vi.fn(),
 }));
 
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => m.phase }));
-vi.mock('@/lib/core-http', () => ({ coreHttp: { get: vi.fn(), post: (...a: unknown[]) => m.post(...a) } }));
+// `arcade-start` (xin mã ván lúc bấm Chơi) tách khỏi `arcade-complete` để các ca gửi kết quả đếm đúng số lần lưu.
+vi.mock('@/lib/core-http', () => ({
+  coreHttp: { get: vi.fn(), post: (...a: unknown[]) => (a[0] === '/game/arcade-start' ? m.start(...a) : m.post(...a)) },
+}));
 // jsdom không có canvas 2D: bộ vẽ thật đã có spec ở app-core, ở đây chỉ kiểm cách lớp phủ gắn và điều khiển nó.
 vi.mock('@tubutree/app-core/arcade/arcade-canvas', () => ({
   mountArcade: (o: ArcadeMountOptions) => {
@@ -34,6 +38,8 @@ import { ArcadeGameOverlay } from './arcade-game-overlay';
 const DEW_STATS = { score: 520, maxCombo: 3, dewCaught: 20, dodgedHazards: 4, heartsLeft: 2, endedBy: 'time' as const, durationMs: 40_000 };
 const RUSH_STATS = { score: 300, correct: 12, wrong: 1, timedOut: 0, maxStreak: 6, feverCount: 1, durationMs: 45_000 };
 const dewRun = (score = 520, over: Partial<typeof DEW_STATS> = {}): ArcadeResult => ({ gameId: 'dew_catcher', score, durationMs: 40_000, stats: { ...DEW_STATS, score, ...over } });
+const RUN_ID = 'r1.dew_catcher.1700000000000.nonce.sig';
+const START = (runId = RUN_ID) => ({ runId, startedAt: '2026-11-15T10:00:00.000Z', expiresAt: '2026-11-15T10:10:00.000Z' });
 const SAVED = (over: Partial<ArcadeCompleteResult> = {}): ArcadeCompleteResult => ({
   gameId: 'dew_catcher', score: 520, bestScore: 520, isNewBest: true, rewarded: true, reason: null, waterEarned: 8, pointsEarned: 1, totalSeeds: 40,
   used: 1, cap: 3, window: null, windowBonus: false, ...over,
@@ -70,6 +76,7 @@ beforeEach(() => {
   m.mount.mockClear();
   Object.values(m.ctl).forEach((f) => f.mockReset());
   m.post.mockReset().mockResolvedValue(SAVED());
+  m.start.mockReset().mockResolvedValue(START());
   onClose = vi.fn();
   localStorage.clear();
   window.history.pushState({}, '', '/vuon-xanh');
@@ -363,7 +370,7 @@ describe('ArcadeGameOverlay: khách (chưa đăng nhập)', () => {
 });
 
 describe('ArcadeGameOverlay: đã đăng nhập, lưu kết quả', () => {
-  it('gửi completeArcade đúng một lần với ba trường của ván, kể cả khi onEnd bắn hai lần', async () => {
+  it('gửi completeArcade đúng một lần với bốn trường của ván (kèm mã ván), kể cả khi onEnd bắn hai lần', async () => {
     await open();
     await play();
     await act(async () => {
@@ -372,7 +379,7 @@ describe('ArcadeGameOverlay: đã đăng nhập, lưu kết quả', () => {
     });
     await flush(4);
     expect(m.post).toHaveBeenCalledTimes(1);
-    expect(m.post).toHaveBeenCalledWith('/game/arcade-complete', { gameId: 'dew_catcher', score: 520, durationMs: 40_000 });
+    expect(m.post).toHaveBeenCalledWith('/game/arcade-complete', { gameId: 'dew_catcher', score: 520, durationMs: 40_000, runId: RUN_ID });
   });
 
   it('không gọi lại khi render lại sau khi lưu xong', async () => {
@@ -485,7 +492,7 @@ describe('ArcadeGameOverlay: đã đăng nhập, lưu kết quả', () => {
     });
     await flush(4);
     expect(m.post).toHaveBeenCalledTimes(2);
-    expect(m.post.mock.calls[1]![1]).toEqual({ gameId: 'dew_catcher', score: 610, durationMs: 40_000 });
+    expect(m.post.mock.calls[1]![1]).toEqual({ gameId: 'dew_catcher', score: 610, durationMs: 40_000, runId: RUN_ID });
   });
 
   it('nút Đóng trên bảng điểm gọi onClose', async () => {
@@ -519,6 +526,7 @@ describe('ArcadeGameOverlay: lỗi máy chủ theo mã HTTP', () => {
     await play();
     await finish(dewRun(640));
     click(btn('Chơi lại'));
+    await flush(1);
     await finish(dewRun(700));
     expect(m.post).toHaveBeenCalledTimes(2);
     expect(text()).toContain('Nhận 8 Giọt nước vào Vườn');
@@ -576,6 +584,107 @@ describe('ArcadeGameOverlay: lỗi máy chủ theo mã HTTP', () => {
   });
 });
 
+describe('ArcadeGameOverlay: mã ván (arcade-start) cho mỗi ván', () => {
+  const retryButton = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="arcade-result"] button')).find((b) => b.textContent === 'Thử lại') ?? null;
+
+  it('bấm Chơi xin mã đúng game một lần và không chặn ván: bộ vẽ chạy ngay dù máy chủ chưa đáp', async () => {
+    m.start.mockImplementation(() => new Promise(() => undefined));
+    await open('refill_rush');
+    await play();
+    expect(m.start).toHaveBeenCalledTimes(1);
+    expect(m.start).toHaveBeenCalledWith('/game/arcade-start', { gameId: 'refill_rush' });
+    expect(m.ctl.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('mở rồi chưa bấm Chơi thì chưa xin mã', async () => {
+    await open();
+    expect(m.start).not.toHaveBeenCalled();
+  });
+
+  it('Chơi lại xin mã MỚI: ván một gửi mã một, ván hai gửi mã hai', async () => {
+    m.start.mockResolvedValueOnce(START('run-one')).mockResolvedValueOnce(START('run-two'));
+    await open();
+    await play();
+    await finish(dewRun(520));
+    click(btn('Chơi lại'));
+    await flush(1);
+    await finish(dewRun(610));
+    expect(m.start).toHaveBeenCalledTimes(2);
+    expect(m.post.mock.calls.map((c) => (c[1] as { runId: string }).runId)).toEqual(['run-one', 'run-two']);
+  });
+
+  it('lời đáp muộn của ván cũ không ghi đè mã của ván mới', async () => {
+    let late!: (v: ReturnType<typeof START>) => void;
+    m.start.mockImplementationOnce(() => new Promise((r) => (late = r))).mockResolvedValueOnce(START('run-two'));
+    await open();
+    await play();
+    await act(async () => m.opts!.onEnd(dewRun(520)));
+    await flush(4);
+    click(btn('Chơi lại'));
+    await flush(2);
+    await act(async () => late(START('run-one-late')));
+    await finish(dewRun(610));
+    expect((m.post.mock.calls.at(-1)![1] as { runId: string }).runId).toBe('run-two');
+  });
+
+  it('không xin được mã (mất mạng lúc bấm Chơi): bảng điểm nói ván không hợp lệ, không có nút Thử lại và không gọi arcade-complete', async () => {
+    m.start.mockRejectedValue(new TypeError('Failed to fetch'));
+    await open();
+    await play();
+    await finish(dewRun(640));
+    expect(text()).toContain('Bạn đạt 640 điểm');
+    expect(text()).toContain(fillCopy('arcade.result.invalid'));
+    expect(retryButton()).toBeNull();
+    expect(m.post).not.toHaveBeenCalled();
+  });
+
+  it('HTTP 409 (mã đã dùng): không mời Thử lại, không tự gửi lại, làm mới game, me, loyalty', async () => {
+    const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
+    m.post.mockRejectedValue(new ApiError('Conflict', 409));
+    await open();
+    await play();
+    await finish(dewRun(640));
+    expect(text()).toContain(fillCopy('arcade.result.invalid'));
+    expect(retryButton()).toBeNull();
+    await flush(4);
+    expect(m.post).toHaveBeenCalledTimes(1);
+    expect(spy.mock.calls.map((c) => (c[0] as { queryKey: unknown[] }).queryKey[0]).sort()).toEqual(['game', 'loyalty', 'me']);
+  });
+
+  it('lỗi mạng ở arcade-complete: Thử lại gửi lại ĐÚNG mã ván cũ', async () => {
+    m.post.mockRejectedValueOnce(new Error('mất mạng'));
+    await open();
+    await play();
+    await finish(dewRun(640));
+    click(retryButton());
+    await flush(4);
+    expect(m.post.mock.calls.map((c) => (c[1] as { runId: string }).runId)).toEqual([RUN_ID, RUN_ID]);
+    expect(m.start).toHaveBeenCalledTimes(1);
+  });
+
+  it('khách: bấm Chơi thử vẫn xin mã, nhưng chưa gửi gì lên arcade-complete', async () => {
+    m.phase = 'guest';
+    await open();
+    await play();
+    await finish(dewRun(520));
+    expect(m.start).toHaveBeenCalledTimes(1);
+    expect(m.post).not.toHaveBeenCalled();
+  });
+
+  it('khách không xin được mã: bấm Đăng nhập không ghi ván chờ (không có mã thì không ai nhận thưởng được)', async () => {
+    m.phase = 'guest';
+    sessionStorage.clear();
+    m.start.mockRejectedValue(new TypeError('Failed to fetch'));
+    await open();
+    await play();
+    await finish(dewRun(520));
+    const link = Array.from(dialog()!.querySelectorAll('a')).find((a) => a.textContent?.includes('Đăng nhập'))!;
+    link.addEventListener('click', (e) => e.preventDefault());
+    click(link);
+    expect(sessionStorage.getItem(ARCADE_PENDING_KEY)).toBeNull();
+  });
+});
+
 describe('ArcadeGameOverlay: khách bấm Đăng nhập thì ván được nhớ qua vòng đăng nhập', () => {
   beforeEach(() => {
     m.phase = 'guest';
@@ -591,7 +700,7 @@ describe('ArcadeGameOverlay: khách bấm Đăng nhập thì ván được nhớ
     expect(sessionStorage.getItem(ARCADE_PENDING_KEY)).toBeNull();
   });
 
-  it('bấm nút đăng nhập: ghi gameId, điểm, thời lượng và mốc giờ vào sessionStorage trước khi chuyển trang', async () => {
+  it('bấm nút đăng nhập: ghi gameId, điểm, thời lượng, mã ván và mốc giờ vào sessionStorage trước khi chuyển trang', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(1_700_000_000_000);
     await open();
     await play();
@@ -599,7 +708,7 @@ describe('ArcadeGameOverlay: khách bấm Đăng nhập thì ván được nhớ
     const link = loginLink();
     link.addEventListener('click', (e) => e.preventDefault());
     click(link);
-    expect(pending()).toEqual({ gameId: 'dew_catcher', score: 520, durationMs: 40_000, endedAt: 1_700_000_000_000 });
+    expect(pending()).toEqual({ gameId: 'dew_catcher', score: 520, durationMs: 40_000, runId: RUN_ID, endedAt: 1_700_000_000_000 });
     expect(link.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fvuon-xanh');
   });
 
@@ -611,6 +720,7 @@ describe('ArcadeGameOverlay: khách bấm Đăng nhập thì ván được nhớ
     click(loginLink());
     expect(pending()).toMatchObject({ gameId: 'refill_rush', score: 300, durationMs: 45_000 });
     click(btn('Chơi lại'));
+    await flush(1);
     await finish({ gameId: 'refill_rush', score: 450, durationMs: 45_000, stats: { ...RUSH_STATS, score: 450 } });
     loginLink().addEventListener('click', (e) => e.preventDefault());
     click(loginLink());

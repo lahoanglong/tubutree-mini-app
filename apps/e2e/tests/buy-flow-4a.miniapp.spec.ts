@@ -22,6 +22,14 @@ async function waitRailSettled(page: Page, api: MockApi): Promise<void> {
   await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
 }
 
+/**
+ * Lưới "Gợi ý hôm nay" nằm cuối Trang chủ và chỉ tải khi khối cách màn hình chưa tới một màn (suggest-feed.tsx); sau khi màn đầu gọn lại
+ * (lối tắt, danh mục một hàng, hành trình, chẩn đoán) nó nằm xa hơn, nên khách phải cuộn tới thì mới có sản phẩm.
+ */
+async function showSuggestFeed(page: Page): Promise<void> {
+  await page.getByRole('region', { name: 'Gợi ý hôm nay' }).scrollIntoViewIfNeeded();
+}
+
 test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
   test('Home: kệ "Mua lại" nằm trên Danh mục; mua lại 1 SP đúng 2 chạm rồi tự sang giỏ', async ({ page, api }) => {
     mockBuyFlowSession(api);
@@ -109,6 +117,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
   test('Khách mới (chưa có đơn giao) → không có kệ Mua lại', async ({ page, api }) => {
     mockBuyFlowSession(api, { purchased: { items: [], nextCursor: null } });
     await page.goto('/');
+    await showSuggestFeed(page);
     await expect(page.getByRole('button', { name: 'Xà Phòng Thảo Mộc Tubu' }).first()).toBeVisible({ timeout: 15_000 });
     await waitRailSettled(page, api);
     await expect(page.getByRole('region', { name: 'Mua lại' })).toHaveCount(0);
@@ -117,6 +126,7 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
   test('API cũ (purchased-items 404) → kệ ẩn im lặng, không có "Thử lại"', async ({ page, api }) => {
     mockBuyFlowSession(api, { purchased: 'not-found' });
     await page.goto('/');
+    await showSuggestFeed(page);
     await expect(page.getByRole('button', { name: 'Xà Phòng Thảo Mộc Tubu' }).first()).toBeVisible({ timeout: 15_000 });
     await waitRailSettled(page, api);
     await expect(page.getByRole('region', { name: 'Mua lại' })).toHaveCount(0);

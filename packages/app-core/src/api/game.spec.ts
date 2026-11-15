@@ -71,10 +71,11 @@ describe('game — đúng route, body, Idempotency-Key', () => {
     ],
     ['getFriends', (h) => g.getFriends(h), { method: 'get', path: '/game/friends' }],
     ['giftWater', (h) => g.giftWater(h, 'u2'), { method: 'post', path: '/game/gift/u2' }],
+    ['startArcade', (h) => g.startArcade(h, 'refill_rush'), { method: 'post', path: '/game/arcade-start', body: { gameId: 'refill_rush' } }],
     [
       'completeArcade',
-      (h) => g.completeArcade(h, { gameId: 'dew_catcher', score: 640, durationMs: 40_000 }),
-      { method: 'post', path: '/game/arcade-complete', body: { gameId: 'dew_catcher', score: 640, durationMs: 40_000 } },
+      (h) => g.completeArcade(h, { gameId: 'dew_catcher', score: 640, durationMs: 40_000, runId: 'r1.run' }),
+      { method: 'post', path: '/game/arcade-complete', body: { gameId: 'dew_catcher', score: 640, durationMs: 40_000, runId: 'r1.run' } },
     ],
     ['getArcadeStatus', (h) => g.getArcadeStatus(h), { method: 'get', path: '/game/arcade/status' }],
     [
@@ -96,11 +97,12 @@ describe('game arcade, chẩn đoán tổ ấm: chỉ gửi đúng trường c�
       gameId: 'refill_rush' as const,
       score: 310,
       durationMs: 45_000,
+      runId: 'r1.run',
       stats: { score: 310, correct: 31, wrong: 0, timedOut: 0, maxStreak: 31, feverCount: 5, durationMs: 45_000 },
     };
     await g.completeArcade(http, result);
-    expect(calls).toEqual([{ method: 'post', path: '/game/arcade-complete', body: { gameId: 'refill_rush', score: 310, durationMs: 45_000 } }]);
-    expect(Object.keys(calls[0]!.body as object).sort()).toEqual(['durationMs', 'gameId', 'score']);
+    expect(calls).toEqual([{ method: 'post', path: '/game/arcade-complete', body: { gameId: 'refill_rush', score: 310, durationMs: 45_000, runId: 'r1.run' } }]);
+    expect(Object.keys(calls[0]!.body as object).sort()).toEqual(['durationMs', 'gameId', 'runId', 'score']);
     expect(calls[0]!.opts).toBeUndefined();
   });
 
@@ -118,6 +120,6 @@ describe('game arcade, chẩn đoán tổ ấm: chỉ gửi đúng trường c�
   it('trả nguyên phản hồi của máy chủ cho nơi gọi', async () => {
     const reply = { gameId: 'dew_catcher', score: 1, bestScore: 1, isNewBest: true, rewarded: true, reason: null, waterEarned: 5, pointsEarned: 1, totalSeeds: 50, used: 1, cap: 3, window: null, windowBonus: false };
     const { http } = fakeHttp(() => reply);
-    await expect(g.completeArcade(http, { gameId: 'dew_catcher', score: 1, durationMs: 5_000 })).resolves.toBe(reply);
+    await expect(g.completeArcade(http, { gameId: 'dew_catcher', score: 1, durationMs: 5_000, runId: 'r1.run' })).resolves.toBe(reply);
   });
 });

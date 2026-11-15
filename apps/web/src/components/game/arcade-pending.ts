@@ -5,11 +5,15 @@ export interface PendingArcade {
   gameId: ArcadeGameId;
   score: number;
   durationMs: number;
+  /** Mã ván lấy lúc khách bấm Chơi (`arcade-start`, công khai nên khách xin được): đăng nhập xong mới có người nhận thưởng. */
+  runId: string;
   endedAt: number;
 }
 
 export const ARCADE_PENDING_KEY = 'tubu.arcade.pending';
 export const ARCADE_PENDING_TTL_MS = 10 * 60_000;
+// Cùng giới hạn của DTO `arcade-complete` ở máy chủ.
+const MAX_RUN_ID_LENGTH = 200;
 // Đồng hồ máy lệch nhẹ vẫn nhận; lệch xa về tương lai là dữ liệu hỏng, không gửi.
 const FUTURE_SKEW_MS = 60_000;
 
@@ -26,13 +30,14 @@ function parse(raw: string | null, now: number): PendingArcade | null {
   try {
     const v = JSON.parse(raw) as Partial<PendingArcade> | null;
     if (!v || typeof v !== 'object') return null;
-    const { gameId, score, durationMs, endedAt } = v;
+    const { gameId, score, durationMs, runId, endedAt } = v;
     if (!ARCADE_GAME_IDS.includes(gameId as ArcadeGameId)) return null;
     if (typeof score !== 'number' || !Number.isInteger(score) || score < 0) return null;
     if (typeof durationMs !== 'number' || !Number.isFinite(durationMs) || durationMs <= 0) return null;
+    if (typeof runId !== 'string' || runId === '' || runId.length > MAX_RUN_ID_LENGTH) return null;
     if (typeof endedAt !== 'number' || !Number.isFinite(endedAt)) return null;
     if (now - endedAt > ARCADE_PENDING_TTL_MS || endedAt - now > FUTURE_SKEW_MS) return null;
-    return { gameId: gameId as ArcadeGameId, score, durationMs, endedAt };
+    return { gameId: gameId as ArcadeGameId, score, durationMs, runId, endedAt };
   } catch {
     return null;
   }
@@ -41,7 +46,7 @@ function parse(raw: string | null, now: number): PendingArcade | null {
 /** Ghi ván chờ trước khi khách rời sang trang đăng nhập; storage hỏng thì bỏ qua (ván vẫn hiện đúng, chỉ không được nhớ qua đăng nhập). */
 export function rememberPendingArcade(run: Omit<PendingArcade, 'endedAt'> & { endedAt?: number }, now = Date.now()): void {
   try {
-    store()?.setItem(ARCADE_PENDING_KEY, JSON.stringify({ gameId: run.gameId, score: run.score, durationMs: run.durationMs, endedAt: run.endedAt ?? now }));
+    store()?.setItem(ARCADE_PENDING_KEY, JSON.stringify({ gameId: run.gameId, score: run.score, durationMs: run.durationMs, runId: run.runId, endedAt: run.endedAt ?? now }));
   } catch {
     /* khách tự chơi lại sau khi đăng nhập */
   }

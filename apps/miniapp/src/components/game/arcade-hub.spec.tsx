@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({
   phase: 'authenticated' as 'authenticated' | 'guest' | 'loading' | 'device',
   status: vi.fn(),
+  start: vi.fn(),
   mount: vi.fn(),
   controller: { start: vi.fn(), pause: vi.fn(), resume: vi.fn(), destroy: vi.fn(), resize: vi.fn() },
 }));
@@ -24,6 +25,7 @@ vi.mock('../../store/auth', () => {
 vi.mock('../../hooks/use-login-notice', () => ({ useLoginWithNotice: () => vi.fn() }));
 vi.mock('../../services/arcade-api', () => ({
   arcadeStatusQuery: { queryKey: ['game', 'arcade'], queryFn: () => mocks.status() },
+  startArcadeRun: (gameId: unknown) => mocks.start(gameId),
   submitArcadeRun: vi.fn(),
   submitHomeQuiz: vi.fn(),
 }));
@@ -59,6 +61,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.phase = 'authenticated';
   mocks.status.mockResolvedValue(STATUS);
+  mocks.start.mockResolvedValue({ runId: 'r1.dew_catcher.1.x.sig', startedAt: '2026-11-15T01:00:00.000Z', expiresAt: '2026-11-15T01:10:00.000Z' });
   window.localStorage.clear();
 });
 afterEach(() => {
@@ -186,6 +189,20 @@ describe('ArcadeHub: mở và đóng lớp phủ', () => {
     expect(dialog.parentElement).toBe(document.body);
     await waitFor(() => expect(mocks.mount).toHaveBeenCalledTimes(1));
     expect(mocks.mount.mock.calls[0]![0].game).toBe('refill_rush');
+  });
+
+  it('bấm Chơi trong lớp phủ xin mã ván cho đúng game đã mở từ sảnh', async () => {
+    renderHub();
+    expect(mocks.start).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Chơi Phân Loại Vỏ Chai Thần Tốc' }));
+    const ready = await screen.findByTestId('arcade-ready');
+    await waitFor(() => expect(mocks.mount).toHaveBeenCalledTimes(1));
+    const play = within(ready).getByRole('button', { name: 'Chơi' });
+    await waitFor(() => expect(play).not.toHaveAttribute('aria-busy'));
+    fireEvent.click(play);
+    expect(mocks.start).toHaveBeenCalledTimes(1);
+    expect(mocks.start).toHaveBeenCalledWith('refill_rush');
+    expect(mocks.controller.start).toHaveBeenCalledTimes(1);
   });
 
   it('Đóng trả về sảnh, huỷ engine; mở game khác thì dựng engine mới cho game đó', async () => {

@@ -3,14 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ARCADE_PENDING_KEY, ARCADE_PENDING_TTL_MS, clearPendingArcade, rememberPendingArcade, takePendingArcade } from './arcade-pending';
 
 const NOW = 1_700_000_000_000;
-const RUN = { gameId: 'dew_catcher' as const, score: 520, durationMs: 40_000 };
+const RUN = { gameId: 'dew_catcher' as const, score: 520, durationMs: 40_000, runId: 'r1.dew_catcher.1700000000000.nonce.sig' };
 const raw = () => sessionStorage.getItem(ARCADE_PENDING_KEY);
 
 beforeEach(() => sessionStorage.clear());
 afterEach(() => vi.restoreAllMocks());
 
 describe('arcade-pending (ván khách chờ qua vòng đăng nhập)', () => {
-  it('ghi rồi lấy lại đủ bốn trường; lấy xong là xoá khoá, lấy lần hai không còn gì', () => {
+  it('ghi rồi lấy lại đủ năm trường (kèm mã ván); lấy xong là xoá khoá, lấy lần hai không còn gì', () => {
     rememberPendingArcade(RUN, NOW);
     expect(JSON.parse(raw()!)).toEqual({ ...RUN, endedAt: NOW });
     expect(takePendingArcade(NOW + 5_000)).toEqual({ ...RUN, endedAt: NOW });
@@ -36,7 +36,11 @@ describe('arcade-pending (ván khách chờ qua vòng đăng nhập)', () => {
   it.each([
     ['không phải JSON', 'abc'],
     ['null', 'null'],
-    ['game lạ', JSON.stringify({ gameId: 'khac', score: 1, durationMs: 1000, endedAt: NOW })],
+    ['game lạ', JSON.stringify({ ...RUN, gameId: 'khac', score: 1, durationMs: 1000, endedAt: NOW })],
+    ['thiếu mã ván (bản cũ)', JSON.stringify({ gameId: 'dew_catcher', score: 520, durationMs: 40_000, endedAt: NOW })],
+    ['mã ván rỗng', JSON.stringify({ ...RUN, runId: '', endedAt: NOW })],
+    ['mã ván không phải chữ', JSON.stringify({ ...RUN, runId: 7, endedAt: NOW })],
+    ['mã ván dài quá 200 ký tự', JSON.stringify({ ...RUN, runId: 'x'.repeat(201), endedAt: NOW })],
     ['điểm âm', JSON.stringify({ ...RUN, score: -1, endedAt: NOW })],
     ['điểm lẻ', JSON.stringify({ ...RUN, score: 1.5, endedAt: NOW })],
     ['điểm là chữ', JSON.stringify({ ...RUN, score: '520', endedAt: NOW })],
