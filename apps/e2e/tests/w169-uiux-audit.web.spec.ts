@@ -36,6 +36,8 @@ for (const size of SIZES) {
       await page.addInitScript(() => {
         try {
           localStorage.setItem('tubu_web_session', '1');
+          // Bóng gợi ý Vườn Xanh hiện 1,5 giây sau khi vẽ và chỉ ở lần đầu trên máy; nếu trùng lúc đo thì liên kết cao 20px bên trong bị tính là vùng chạm nhỏ.
+          localStorage.setItem('tubu_garden_hint_seen', '1');
         } catch {
           // không có localStorage: màn vẫn dựng
         }
