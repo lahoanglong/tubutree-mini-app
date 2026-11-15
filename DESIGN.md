@@ -136,7 +136,7 @@ Khung Reel là `ProductStoryShowcase` với `fullscreen` và `reel`: thanh đáy
 | Cần | Dùng |
 |---|---|
 | đầu trang đơn: trạng thái, một câu, lý do huỷ (đơn huỷ, nguyên văn từ `cancelReason` của API), mốc (ngày giao, hạn trả, hạn đổi/trả), bước kế tiếp | `OrderStatusHero` (chữ từ `orderHeadline` của `packages/app-core/src/commerce/order-tracking.ts`) |
-| hành trình 5 bước có giờ thật, bước hiện tại `aria-current="step"`, mốc hãng gộp dưới "Đang giao" mới nhất trên cùng | `OrderTrack` (dữ liệu từ `orderTrack`) |
+| hành trình 5 bước có giờ thật, bước hiện tại `aria-current="step"`, mốc hãng gộp dưới "Đang giao" mới nhất trên cùng; chỉ vẽ khi `trackAddsDetail` đúng (đơn còn đang đi, hoặc đã giao mà hãng để lại mốc), vì đơn giao xong không có mốc hãng thì chỉ lặp lại thanh 4 bước ngay trên | `OrderTrack` (dữ liệu từ `orderTrack`) |
 | thanh tiến trình gọn 4 bước (Đã tiếp nhận, Đang chuẩn bị, Đang giao hàng, Hoàn tất; đơn huỷ hoặc hoàn trả rẽ nhánh), bước hiện tại `aria-current="step"` có viền sáng nhẹ (giảm chuyển động thì đứng yên), giờ số đều, nút "Sao chép thông tin đơn" | `OrderTimelineTracker` (dữ liệu từ `buildOrderTimelineSteps`, chữ tóm tắt từ `formatOrderShareSummary`, cả hai ở `packages/app-core/src/commerce/order-timeline.ts`) |
 | hãng vận chuyển, mã vận đơn, nút "Chép mã" | `OrderShipping` |
 | thanh nút của đơn: đúng một nút chính theo trạng thái, việc còn lại vào "Thêm thao tác" | `OrderActionBar` (kế hoạch từ `orderActionPlan`; điều kiện từng nút lấy từ cờ API, không đoán) |

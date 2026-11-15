@@ -9,7 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { customerOrderNote, isSubscriptionOrder, openProductSlug } from '@tubutree/app-core/api/orders';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
-import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
+import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, trackAddsDetail, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { useAuth } from '@/lib/auth-context';
@@ -252,7 +252,7 @@ export default function OrderDetailPage() {
           <section data-testid="order-timeline" className={`order-4 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}>
             <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
           </section>
-          {trackView && (
+          {trackView && trackAddsDetail(trackView) && (
             <section aria-labelledby="order-track-title" className={`order-4 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
               <h2 id="order-track-title" className={`${ui.sectionTitle} ${mini.sectionLabel} mb-3`}>
                 Hành trình đơn hàng

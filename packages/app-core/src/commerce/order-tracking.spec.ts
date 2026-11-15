@@ -12,6 +12,7 @@ import {
   returnWindowOpen,
   shippingEvents,
   shortDateTime,
+  trackAddsDetail,
   type OrderStage,
   type TrackOrder,
 } from './order-tracking';
@@ -484,6 +485,24 @@ describe('orderTrack', () => {
   it('đã huỷ hoặc hoàn không có hành trình', () => {
     expect(orderTrack(order({ status: 'CANCELLED' }))).toBeNull();
     expect(orderTrack(order({ status: 'RETURNED' }))).toBeNull();
+  });
+
+  describe('trackAddsDetail: hành trình chỉ vẽ khi thêm điều thanh 4 bước không nói', () => {
+    it('đơn còn đang đi thì vẽ', () => {
+      for (const status of ['CONFIRMED', 'PACKED', 'SHIPPING'] as const) {
+        expect(trackAddsDetail(orderTrack(order({ status }))!)).toBe(true);
+      }
+    });
+
+    it('đã giao không có mốc hãng thì ẩn (chỉ lặp lại thanh 4 bước)', () => {
+      const delivered = orderTrack(order({ status: 'DELIVERED', statusTimes: { CONFIRMED: iso(-9 * HOUR), DELIVERED: iso(-HOUR) } }))!;
+      expect(trackAddsDetail(delivered)).toBe(false);
+    });
+
+    it('đã giao mà hãng còn để lại mốc vận chuyển thì vẫn vẽ', () => {
+      const delivered = orderTrack(order({ status: 'DELIVERED', shippingHistory: [{ at: iso(-7 * HOUR), status: 'Đã lấy hàng' }] }))!;
+      expect(trackAddsDetail(delivered)).toBe(true);
+    });
   });
 });
 

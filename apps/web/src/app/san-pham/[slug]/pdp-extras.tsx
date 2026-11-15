@@ -307,7 +307,7 @@ export function PdpSold({ text, product, slot }: { text: string; product: { vari
   const selected = product.variations.find((v) => v.id === selectedId);
   const isFlash = selected ? variationPricing(selected, flash).isFlash : false;
   if ((slot === 'rating') !== isFlash) return null;
-  return <span className={slot === 'price' ? 'mt-2 text-sm text-stone-500 max-md:ml-auto max-md:text-xs' : 'text-sm text-stone-500 max-md:text-xs'}>{text}</span>;
+  return <span className={slot === 'price' ? 'mt-2 whitespace-nowrap text-sm text-stone-500 max-md:ml-auto max-md:text-xs' : 'whitespace-nowrap text-sm text-stone-500 max-md:text-xs'}>{text}</span>;
 }
 
 interface PdpVariation {

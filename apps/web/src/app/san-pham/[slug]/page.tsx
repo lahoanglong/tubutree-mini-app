@@ -183,7 +183,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 <PdpRating average={product.ratingAvg} count={product.reviewCount} />
                 {soldText && <PdpSold text={soldText} product={product} slot="rating" />}
               </div>
-              <div className="flex flex-wrap items-baseline gap-x-3 empty:hidden max-md:flex-nowrap">
+              <div className="flex flex-wrap items-baseline gap-x-3 empty:hidden">
                 <PdpPrice product={product} />
                 {soldText && <PdpSold text={soldText} product={product} slot="price" />}
               </div>

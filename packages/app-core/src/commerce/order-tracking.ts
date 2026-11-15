@@ -341,6 +341,14 @@ export function orderTrack(o: TrackOrder, ctx: Pick<TrackCtx, 'etaLabel'> = {}):
   return { steps, current };
 }
 
+/**
+ * Hành trình 5 bước chỉ đáng vẽ khi nó thêm điều mà thanh 4 bước ở trên không nói: đơn còn đang đi (bước hiện tại, mốc hãng, ngày giao dự kiến)
+ * hoặc đơn đã giao mà hãng còn để lại mốc vận chuyển. Đơn giao xong và không có mốc hãng thì chỉ lặp lại thanh 4 bước, nên ẩn.
+ */
+export function trackAddsDetail(view: OrderTrackView): boolean {
+  return view.current < view.steps.length || view.steps.some((s) => s.events.length > 0);
+}
+
 export type OrderActionKind = 'pay' | 'cancel' | 'contact' | 'review' | 'reorder' | 'return';
 
 export interface OrderActionPlan {

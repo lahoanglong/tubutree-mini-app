@@ -407,6 +407,24 @@ describe('OrderDetailPage — điểm, mốc giờ, hành trình, đổi/trả, 
     expect(within(screen.getByTestId('status-hero')).getByText('14:45 03/10')).toBeInTheDocument();
   });
 
+  it('đơn đã giao không có mốc hãng: chỉ còn thanh 4 bước, không lặp thêm danh sách Hành trình đơn hàng', async () => {
+    mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'DELIVERED', paymentMethod: 'COD', shippingHistory: [] });
+    renderPage();
+    await screen.findByText('Đã tiếp nhận');
+    expect(screen.queryByRole('list', { name: 'Hành trình đơn hàng' })).toBeNull();
+  });
+
+  it('đơn đã giao mà hãng còn để lại mốc vận chuyển: vẫn có danh sách Hành trình đơn hàng', async () => {
+    mocks.fetchOrder.mockResolvedValue({
+      ...ORDER,
+      status: 'DELIVERED',
+      paymentMethod: 'COD',
+      shippingHistory: [{ at: '2026-10-02T03:00:00.000Z', status: 'Đã lấy hàng', carrier: 'GHN', code: 'GHN001' }],
+    });
+    renderPage();
+    expect(await screen.findByRole('list', { name: 'Hành trình đơn hàng' })).toBeInTheDocument();
+  });
+
   it('đơn COD không có bước "Chờ thanh toán" trong hành trình; chuyển khoản thì có', async () => {
     mocks.fetchOrder.mockResolvedValue({ ...ORDER, status: 'SHIPPING', paymentMethod: 'COD' });
     const cod = renderPage();

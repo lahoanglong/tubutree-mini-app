@@ -127,10 +127,17 @@ describe('chi tiết đơn như Mini App', () => {
   });
 
   it('hành trình: đơn COD bỏ bước chờ thanh toán, nhãn như Mini App', async () => {
-    mocks.order = structuredClone(COD_DELIVERED);
+    mocks.order = { ...structuredClone(COD_DELIVERED), status: 'SHIPPING' };
     const { container } = await mount();
     const steps = [...container.querySelectorAll('ol[aria-label="Hành trình đơn hàng"] > li')].map((li) => li.getAttribute('data-step'));
     expect(steps).toEqual(['Đã xác nhận', 'Đang đóng gói', 'Đang giao', 'Giao thành công']);
+  });
+
+  it('đơn đã giao không có mốc hãng: chỉ còn thanh 4 bước, không lặp thêm danh sách hành trình', async () => {
+    mocks.order = { ...structuredClone(COD_DELIVERED), shippingHistory: [] };
+    const { container } = await mount();
+    expect(container.querySelector('[data-testid="order-timeline"]')).not.toBeNull();
+    expect(container.querySelector('ol[aria-label="Hành trình đơn hàng"]')).toBeNull();
   });
 
   it('hành trình: đơn chuyển khoản mở đầu bằng "Chờ thanh toán"', async () => {

@@ -775,7 +775,8 @@ export default function ProductDetailPage() {
         )}
 
         {!priceView.isFlash && (
-          <Box flex alignItems="baseline" style={{ gap: 8, marginTop: 8 }}>
+          // wrap: ở 320px giá + giá gốc + nhãn % + "Đã bán" không vừa một hàng, giá gốc bị cắt "320.0…" và mất số đã bán.
+          <Box flex alignItems="baseline" style={{ gap: 8, rowGap: 'var(--space-stack-xs)', flexWrap: 'wrap', marginTop: 8 }}>
             <PriceTag value={price} compareAt={originalPrice} size="xl" tone={originalPrice ? 'deal' : 'default'} />
             {flashPct > 0 && (
               <Badge tone="promo" size="sm">
@@ -783,7 +784,7 @@ export default function ProductDetailPage() {
               </Badge>
             )}
             {soldText && (
-              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: 'auto' }}>
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)', marginLeft: 'auto', whiteSpace: 'nowrap' }}>
                 {soldText}
               </Text>
             )}

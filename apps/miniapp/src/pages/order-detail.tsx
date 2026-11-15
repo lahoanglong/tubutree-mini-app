@@ -49,7 +49,7 @@ import { OrderTimelineTracker } from '../components/orders/order-timeline-tracke
 import { buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
 import { OrderShipping } from '../components/orders/order-shipping';
 import { OrderActionBar } from '../components/orders/order-action-bar';
-import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, type OrderActionKind, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
+import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, trackAddsDetail, type OrderActionKind, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
@@ -372,7 +372,7 @@ export default function OrderDetailPage() {
       </Box>
 
       {/* ── Hành trình: bước chuẩn kèm giờ thật, mốc hãng gộp dưới "Đang giao" ── */}
-      {trackView && (
+      {trackView && trackAddsDetail(trackView) && (
         <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           <Text bold size="small" style={{ marginBottom: 12 }}>
             {vi.orders.timeline}
