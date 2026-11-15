@@ -15,7 +15,8 @@ export const OCR_MAX_TOKENS = 1200;
 
 const MSG_TYPE = 'Ảnh chỉ nhận JPEG, PNG hoặc WebP.';
 const DATA_URL_RE = /^data:image\/(png|jpe?g|webp);base64,/;
-const BASE64_BODY_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+// Tìm một ký tự ngoài bảng base64 (quét một lượt, không lùi): mẫu `^[...]+={0,2}$` lùi theo độ dài chuỗi và làm tràn ngăn xếp regex ở ảnh vài MB.
+const BASE64_BAD_CHAR_RE = /[^A-Za-z0-9+/]/;
 
 export type OcrImageCheck = { ok: true; image: AnthropicImageInput; bytes: number } | { ok: false; reason: string };
 
@@ -28,7 +29,9 @@ export function checkOcrImage(value: unknown): OcrImageCheck {
   const head = DATA_URL_RE.exec(value);
   if (!head) return { ok: false, reason: MSG_TYPE };
   const base64 = value.slice(head[0].length);
-  if (!BASE64_BODY_RE.test(base64)) return { ok: false, reason: MSG_TYPE };
+  const padding = base64.endsWith('==') ? 2 : base64.endsWith('=') ? 1 : 0;
+  const body = base64.slice(0, base64.length - padding);
+  if (body.length === 0 || BASE64_BAD_CHAR_RE.test(body)) return { ok: false, reason: MSG_TYPE };
   const bytes = Buffer.byteLength(base64, 'base64');
   if (bytes > OCR_IMAGE_MAX_BYTES) return { ok: false, reason: 'Ảnh quá lớn (tối đa 5 MB).' };
   if (!hasImageSignature(value)) return { ok: false, reason: 'Tệp không phải ảnh JPEG, PNG hoặc WebP hợp lệ.' };
