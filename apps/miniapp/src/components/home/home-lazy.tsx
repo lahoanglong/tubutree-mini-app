@@ -84,6 +84,7 @@ export const HomePurchasedRail = (p: ComponentProps<typeof PurchasedRail>) => <P
 export const HomeBestSellerRail = (p: ComponentProps<typeof BestSellerRail>) => <BestSellerRail {...p} />;
 export const HomeBrandJourney = () => <Block>{(m) => <m.BrandJourney />}</Block>;
 export const HomeCommunityPreview = () => <Block>{(m) => <m.CommunityPreview />}</Block>;
+export const HomeQuiz = () => <Block>{(m) => <m.HomeQuiz />}</Block>;
 export const HomeNewCustomerGift = () => <NewCustomerGift />;
 export const HomeScrollRestoration = (p: ComponentProps<Below['HomeScrollRestoration']>) => <Block>{(m) => <m.HomeScrollRestoration {...p} />}</Block>;
 export const HomeSuggestFeed = (p: ComponentProps<Below['SuggestFeed']>) => <Block>{(m) => <m.SuggestFeed {...p} />}</Block>;

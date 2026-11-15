@@ -39,7 +39,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, user: { id: 'u1' }, login: vi.fn() };
+    const state = { status: mocks.auth.status, user: { id: 'u1', phone: '0900000001' }, login: vi.fn() };
     return sel ? sel(state) : state;
   },
 }));
@@ -58,6 +58,21 @@ vi.mock('../components/wheel', () => ({
 vi.mock('../services/account-api', () => ({
   getLoyalty: () => Promise.resolve({ pointsBalance: 100_000, redeemablePoints: 100_000, redeemableTotal: 100_000 }),
   getDailyCheckInStatus: () => Promise.resolve(null),
+}));
+vi.mock('../services/arcade-api', () => ({
+  arcadeStatusQuery: {
+    queryKey: ['game', 'arcade'],
+    queryFn: () =>
+      Promise.resolve({
+        games: { dew_catcher: { bestScore: 0, plays: 0, used: 0, cap: 5 }, refill_rush: { bestScore: 0, plays: 0, used: 0, cap: 5 } },
+        window: null,
+        windowBonus: false,
+        nextWindowAt: null,
+        quizClaimed: false,
+      }),
+  },
+  submitArcadeRun: vi.fn(),
+  submitHomeQuiz: vi.fn(),
 }));
 vi.mock('../services/game-api', () => ({
   ...mocks.api,
@@ -257,6 +272,22 @@ describe('GamePage — hành động chính nằm đầu trang (C-082)', () => {
     // 3 hành động chính đứng trước mọi khối phụ của tab (vòng quay, đổi vỏ chai).
     expect(follows(missions, screen.getByTestId('wheel'))).toBe(true);
     expect(container.querySelectorAll('[role="tabpanel"]')).toHaveLength(2);
+  });
+
+  it('mini game và Chẩn đoán tổ ấm (W164) đứng ngay dưới thẻ chuỗi, trên Nhiệm vụ, trong tab Hôm nay, mỗi khối một h2', async () => {
+    renderPage();
+    await screen.findByRole('tab', { name: 'Hôm nay' });
+    const today = within(tabPanel('Hôm nay'));
+    const checkIn = today.getByText(/^Chuỗi \d+ ngày$/);
+    const arcade = today.getByRole('heading', { level: 2, name: 'Mini game' });
+    const quiz = today.getByRole('heading', { level: 2, name: 'Chẩn đoán tổ ấm' });
+    const missions = today.getByRole('heading', { name: 'Nhiệm vụ' });
+    const order = [checkIn, arcade, quiz, missions];
+    for (let i = 0; i + 1 < order.length; i += 1) expect(follows(order[i]!, order[i + 1]!)).toBe(true);
+    expect(within(tabPanel('Vườn')).queryByText('Mini game')).toBeNull();
+    expect(today.getByTestId('arcade-game-dew_catcher')).toBeInTheDocument();
+    expect(today.getByTestId('arcade-game-refill_rush')).toBeInTheDocument();
+    expect(today.getByRole('button', { name: 'Bắt đầu Chẩn đoán tổ ấm' })).toBeInTheDocument();
   });
 
   it('chỉ có một nút điểm danh trên trang Vườn (nút chính trên cây), kèm dòng nói rõ nhận giọt nước và Điểm Xanh', async () => {

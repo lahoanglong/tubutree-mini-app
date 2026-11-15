@@ -48,6 +48,7 @@ import { HomeSettlingSkeleton } from './home-settling';
 import { useHomeSettling, useStartedAsNew } from './use-home-settling';
 import { useHomeCustomerKind } from './use-home-customer-kind';
 import { useHomeShelves } from './use-home-shelves';
+import { HomeQuizCard } from '@/components/game/home-quiz-card';
 
 /** Phần công khai server đã tải cho trang ISR: có trong HTML đầu, React Query tiếp quản sau hydrate. */
 export interface HomeInitial {
@@ -204,6 +205,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
       />
     ),
     journey: <BrandJourney initialBrands={initial.brands} />,
+    quiz: <HomeQuizCard />,
     community: <CommunityPreview />,
     suggest: <SuggestFeed initial={initial.suggest} seed={initial.suggestSeed} categories={categories.data ?? []} exclude={shelves.seen} />,
   };

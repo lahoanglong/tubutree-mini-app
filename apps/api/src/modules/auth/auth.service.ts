@@ -685,6 +685,19 @@ export class AuthService {
       //    cấp cây, chuỗi tưới) cần quyết định riêng.
       // Sổ nước thưởng đơn hàng đi theo đơn (đơn đã chuyển sang target ở trên), nên chuyển luôn dù hồ sơ game có chuyển hay không.
       await tx.gameWaterEvent.updateMany({ where: { userId: gid }, data: { userId: tid } });
+      // Kỷ lục arcade đi theo người chơi chứ không theo khu vườn, nên gộp luôn dù hồ sơ game có chuyển hay không. Khoá duy nhất
+      // (userId, gameId): game hai bên cùng có thì giữ điểm cao hơn và cộng số ván, game chỉ khách có thì chuyển nguyên dòng.
+      await tx.$executeRaw`
+        UPDATE "game_arcade_scores" t
+           SET "bestScore" = GREATEST(t."bestScore", g."bestScore"), "plays" = t."plays" + g."plays",
+               "lastRunAt" = GREATEST(t."lastRunAt", g."lastRunAt"), "updatedAt" = now()
+          FROM "game_arcade_scores" g
+         WHERE t."userId" = ${tid} AND g."userId" = ${gid} AND g."gameId" = t."gameId"`;
+      await tx.$executeRaw`
+        DELETE FROM "game_arcade_scores" g
+         WHERE g."userId" = ${gid}
+           AND EXISTS (SELECT 1 FROM "game_arcade_scores" t WHERE t."userId" = ${tid} AND t."gameId" = g."gameId")`;
+      await tx.$executeRaw`UPDATE "game_arcade_scores" SET "userId" = ${tid}, "updatedAt" = now() WHERE "userId" = ${gid}`;
       // Hồ sơ game rỗng của target (do nước theo đơn hay Đổi rác tạo, chưa điểm danh/tưới/thu hoạch/mở lô) không phải "đã chơi":
       // thay bằng hồ sơ khách và cộng số giọt nước của nó vào, để khách không mất vườn chơi thử.
       const targetProfile = await tx.gameProfile.findUnique({ where: { userId: tid } });

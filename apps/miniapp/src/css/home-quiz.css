@@ -1,0 +1,70 @@
+/* Chẩn đoán tổ ấm (W164): thẻ mời ở Trang chủ và Vườn Xanh, sheet ba câu và bộ gợi ý. Số đo đặt ở đây và đi qua token. */
+
+/* Trang chủ: mỗi khối tự đặt đệm ngang (Vườn Xanh có sẵn đệm của cột nên thẻ không tự thêm). */
+.tubu-hqz-gutter {
+  padding: 0 var(--space-inset-page);
+}
+.tubu-hqz-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-stack-xs);
+}
+.tubu-hqz-card > .tubu-btn {
+  margin-top: var(--space-stack-xs);
+}
+.tubu-hqz-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+}
+.tubu-hqz-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-hqz-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-md);
+  width: 100%;
+  min-height: 48px;
+  padding: var(--space-inline-sm) var(--space-inline-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--type-body-md-size);
+  line-height: var(--type-body-md-lh);
+  text-align: left;
+}
+.tubu-hqz-option[aria-pressed='true'] {
+  border-color: var(--color-border-selected);
+  background: var(--color-action-secondary-bg);
+}
+.tubu-hqz-emoji {
+  flex: 0 0 auto;
+  font-size: var(--type-title-lg-size);
+  line-height: 1;
+}
+.tubu-hqz-question {
+  outline: none;
+}
+.tubu-hqz-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Mỗi gợi ý: ảnh + tên + giá chiếm cả hàng, nút thêm giỏ nằm hàng riêng bên dưới (khổ 360px không đủ chỗ cho nút 160px cạnh tên). */
+.tubu-hqz-pick {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+}

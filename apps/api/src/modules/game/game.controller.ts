@@ -13,6 +13,8 @@ import { GameSeasonService } from './game-season.service';
 import { GameGiftService } from './game-gift.service';
 import { GameGardenService } from './game-garden.service';
 import { SeasonPassService } from './season-pass.service';
+import { GameArcadeService } from './game-arcade.service';
+import { ARCADE_GAME_IDS, type ArcadeGameId } from './game-arcade.constants';
 
 class AnswerDto { @IsInt() @Min(0) choice!: number; }
 class WaterDto { @IsInt() @Min(1) drops!: number; }
@@ -29,6 +31,17 @@ class SeasonPassClaimDto {
   @IsIn(['free', 'premium']) track!: 'free' | 'premium';
 }
 
+class ArcadeCompleteDto {
+  @IsIn(ARCADE_GAME_IDS) gameId!: ArcadeGameId;
+  @IsInt() @Min(0) score!: number;
+  @IsInt() durationMs!: number;
+}
+class HomeQuizDto {
+  @IsIn(['baby_pet', 'adult_only']) family!: 'baby_pet' | 'adult_only';
+  @IsIn(['dry_skin', 'strong_scent', 'grease']) worry!: 'dry_skin' | 'strong_scent' | 'grease';
+  @IsIn(['bottle', 'refill']) format!: 'bottle' | 'refill';
+}
+
 @Controller('game')
 export class GameController {
   constructor(
@@ -41,6 +54,7 @@ export class GameController {
     private readonly gift: GameGiftService,
     private readonly garden: GameGardenService,
     private readonly seasonPass: SeasonPassService,
+    private readonly arcade: GameArcadeService,
   ) {}
 
   @Get('profile')
@@ -138,6 +152,20 @@ export class GameController {
   giftWater(@CurrentUser('sub') userId: string, @Param('recipientId') recipientId: string) {
     return this.gift.giftWater(userId, recipientId);
   }
+
+  // Mỗi ván gọi một lần lúc kết thúc; 12 ván/phút là nhiều hơn mức người chơi thật chạm tới (ván ngắn nhất 5 giây).
+  @Throttle({ default: { limit: 12, ttl: 60_000 } })
+  @Post('arcade-complete')
+  arcadeComplete(@CurrentUser('sub') userId: string, @Body() dto: ArcadeCompleteDto) {
+    return this.arcade.complete(userId, dto);
+  }
+
+  @Get('arcade/status')
+  arcadeStatus(@CurrentUser('sub') userId: string) { return this.arcade.status(userId); }
+
+  // Đáp án chỉ để chọn sản phẩm gợi ý ở client; server chỉ thưởng một lần cho mỗi tài khoản.
+  @Post('home-quiz/complete')
+  homeQuizComplete(@CurrentUser('sub') userId: string, @Body() _dto: HomeQuizDto) { return this.arcade.completeHomeQuiz(userId); }
 
   @Public()
   @Get('leaderboard')

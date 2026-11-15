@@ -254,6 +254,10 @@ export class SystemConfigService {
     'game.order_seeds': { min: 0, max: 10_000, note: '💧 thưởng mỗi đơn giao thành công (0 = tắt)', integer: true },
     'game.order_seeds_pending_days': { min: 0, max: 365, note: 'đơn giao khi khách chưa mở game chỉ được cộng 💧 nếu giao trong chừng này ngày (0 = không cộng)', integer: true },
     'game.order_seeds_weekly_cap': { min: 0, max: 100_000, note: 'tối đa 💧 nhận từ đơn hàng mỗi tuần giờ VN, thứ Hai đến Chủ nhật (0 = tắt)', integer: true },
+    'game.arcade_water_base': { min: 0, max: 50, note: '💧 nền thưởng mỗi ván mini-game có thưởng, cộng thêm 3 và 2 khi đạt mốc khá và xuất sắc', integer: true },
+    // Điểm Xanh 1 điểm = 1đ cộng thẳng vào ví mỗi ván: gõ nhầm đơn vị cấp tiền cho mọi lượt chơi.
+    'game.arcade_points_per_run': { min: 0, max: 10, note: 'Điểm Xanh (1 điểm = 1đ) mỗi ván mini-game có thưởng (0 = không cộng điểm)', integer: true },
+    'game.home_quiz_seeds': { min: 0, max: 1_000, note: '💧 thưởng một lần cho thẻ chẩn đoán tổ ấm (0 = không tặng)', integer: true },
     'game.harvest_coupon_monthly_cap': { min: 0, max: 100, note: 'số mã thu hoạch mỗi tháng/người, tính cả lô nhà và lô phụ (0 = không phát)', integer: true },
     'game.quiz_wrong_seeds': { min: 0, max: 1_000, note: '💧 khi trả lời sai câu đố (0 = không tặng)', integer: true },
     'seasonpass.checkin_xp': { min: 0, max: 1000, note: 'XP mỗi lần điểm danh', integer: true },
@@ -348,6 +352,8 @@ export class SystemConfigService {
     [CATALOG_LAUNCH_DATE_KEY]: catalogLaunchDateProblem,
     // Cờ mở cho khách chưa đăng nhập xem trước bài cộng đồng: chỉ nhận boolean để chuỗi "false" không vô tình công khai bài của khách.
     'community.public_preview': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Công tắc thưởng của mini-game: chỉ nhận boolean để giá trị lạ không tắt hay bật thưởng ngoài ý admin.
+    'game.arcade_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Link kênh cộng đồng mở ra ngoài app qua webview: chỉ https và tên miền mạng xã hội đã duyệt.
     ...Object.fromEntries(COMMUNITY_LINK_KEYS.map((k) => [k, communityUrlProblem])),
     // Link nhận mã in trong QR thẻ hộp hàng và link chia sẻ của CTV dựng từ khoá này: sai là thẻ đã in mở ra trang lỗi.

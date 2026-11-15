@@ -921,6 +921,32 @@
       "screens": [
         "/order/:code"
       ]
+    },
+    {
+      "name": "ArcadeHub",
+      "miniapp": "apps/miniapp/src/components/game/arcade-hub.tsx",
+      "web": "apps/web/src/components/game/arcade-hub.tsx",
+      "screens": [
+        "/game"
+      ]
+    },
+    {
+      "name": "ArcadeGameOverlay",
+      "miniapp": "apps/miniapp/src/components/game/arcade-game-overlay.tsx",
+      "web": "apps/web/src/components/game/arcade-game-overlay.tsx",
+      "props": "ArcadeGameOverlayProps",
+      "screens": [
+        "/game"
+      ]
+    },
+    {
+      "name": "HomeQuizCard",
+      "miniapp": "apps/miniapp/src/components/game/home-quiz-card.tsx",
+      "web": "apps/web/src/components/game/home-quiz-card.tsx",
+      "screens": [
+        "/",
+        "/game"
+      ]
     }
   ],
   "webOnly": [

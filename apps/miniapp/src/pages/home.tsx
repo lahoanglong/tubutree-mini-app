@@ -17,6 +17,7 @@ import {
   HomeCommunityPreview,
   HomeNewCustomerGift,
   HomePurchasedRail,
+  HomeQuiz,
   HomeSuggestFeed,
   HomeScrollRestoration,
   loadHomeBelow,
@@ -46,7 +47,7 @@ import { browserStorage } from '../utils/recently-viewed';
 /**
  * Trang chủ (màn đầu gọn, món hàng lên đầu): header dính 56px (logo, ô tìm, chuông, giỏ) → thẻ thành viên một dòng (khách cũ) hoặc dải Quà khách mới
  * → Việc cần làm → banner chiến dịch (ẩn hẳn khi không có) → 4 lối tắt + "Tất cả" → dải Story → Giờ vàng → Mua lại (khách cũ) → Danh mục lưới 2×5 → Bán chạy nhất có hạng → combo
- * → Hành trình nguyên liệu → Cộng đồng (chỉ đọc) → MỘT lưới Gợi ý hôm nay cuộn vô tận. Thứ tự khối ở app-core (`homeBlockOrder`), dùng chung với web;
+ * → Hành trình nguyên liệu → Chẩn đoán tổ ấm (thẻ mời) → Cộng đồng (chỉ đọc) → MỘT lưới Gợi ý hôm nay cuộn vô tận. Thứ tự khối ở app-core (`homeBlockOrder`), dùng chung với web;
  * `useHomeShelves` chống trùng món giữa các kệ hàng. Khối lỗi tải hiện thông báo gọn + "Thử lại" ngay tại chỗ (C-084), độc lập từng khối; kéo để làm mới vẫn dùng được.
  */
 // Chunk các khối dưới màn đầu tải song song với dữ liệu ngay khi mã trang chủ chạy, không đợi tới lúc render. Mã này chạy cả khi app mở thẳng
@@ -164,6 +165,8 @@ export default function HomePage() {
       />
     ),
     journey: <HomeBrandJourney />,
+    // Thẻ mời tĩnh của Chẩn đoán tổ ấm: không gọi API tới khi khách mở sheet, nên khối không có trạng thái chờ và không làm trang nhảy.
+    quiz: <HomeQuiz />,
     community: <HomeCommunityPreview />,
     suggest: <HomeSuggestFeed exclude={shelves.seen} />,
     }), [

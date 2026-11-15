@@ -767,6 +767,29 @@ describe('AuthService.ensurePhoneForCurrentUser (A7-01: không bao giờ âm th�
       );
     });
 
+    it('kỷ lục mini-game của khách được gộp vào target: game hai bên cùng có thì giữ điểm cao hơn và cộng số ván, rồi chuyển dòng còn lại', async () => {
+      const fixture = makeGuestMergeFixture({ guest: GUEST, target: TARGET });
+      const zalo = {
+        getUserInfo: jest.fn().mockResolvedValue({ zaloId: 'z-real-existing', name: 'Người Thật' }),
+        resolvePhoneNumber: jest.fn().mockResolvedValue(null),
+      };
+      const svc = makeEnsurePhoneSvc(fixture, zalo);
+      const executeRaw = (fixture.prisma as unknown as { $executeRaw: jest.Mock }).$executeRaw;
+
+      await svc.ensurePhoneForCurrentUser('guest1', 'code', 'at');
+
+      const arcade = executeRaw.mock.calls
+        .map((c) => ({ sql: (c[0] as string[]).join('?'), values: c.slice(1) as unknown[] }))
+        .filter((c) => c.sql.includes('game_arcade_scores'));
+      expect(arcade).toHaveLength(3);
+      expect(arcade[0]!.sql).toMatch(/UPDATE "game_arcade_scores" t[\s\S]*GREATEST\(t\."bestScore", g\."bestScore"\)[\s\S]*"plays" = t\."plays" \+ g\."plays"/);
+      expect(arcade[0]!.values).toEqual(['target1', 'guest1']);
+      expect(arcade[1]!.sql).toMatch(/DELETE FROM "game_arcade_scores" g[\s\S]*EXISTS/);
+      expect(arcade[1]!.values).toEqual(['guest1', 'target1']);
+      expect(arcade[2]!.sql).toMatch(/UPDATE "game_arcade_scores" SET "userId"/);
+      expect(arcade[2]!.values).toEqual(['target1', 'guest1']);
+    });
+
     it('gộp theo SĐT trùng (target chưa có zaloId — user web cũ) khi chưa ai giữ zaloId đó', async () => {
       const webTarget = { ...TARGET, id: 'web1', zaloId: null, phone: '0944444444' };
       const fixture = makeGuestMergeFixture({ guest: GUEST, target: webTarget });

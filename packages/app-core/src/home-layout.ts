@@ -12,7 +12,7 @@ export type HomeKindState = HomeCustomerKind | 'unknown';
 
 export type HomeBlockId =
   | 'search' | 'member' | 'todo' | 'welcome' | 'banner' | 'shortcuts' | 'stories' | 'purchased' | 'flash' | 'categories' | 'bestSellers' | 'combos'
-  | 'journey' | 'community' | 'suggest';
+  | 'journey' | 'quiz' | 'community' | 'suggest';
 
 /** Header dính của Trang chủ (logo, ô tìm, chuông, giỏ): thay hàng logo 68px và ô tìm 54px cũ. */
 export const HOME_HEADER_HEIGHT = 56;
@@ -23,16 +23,16 @@ export const HOME_HEADER_HEIGHT = 56;
 // nên đổi loại khách không làm các khối dưới nhảy. `banner` và `combos` tự ẩn, không giữ chỗ, tới khi P11/P15 có dữ liệu.
 // `stories` (dải Story, W42A) đứng ngay dưới lối tắt, trên khu vực hàng: tự ẩn khi dưới `REEL_MIN_ITEMS` món, còn trong lúc tải giữ đúng `HOME_SETTLING_HEIGHTS.stories`.
 const RETURNING: readonly HomeBlockId[] = [
-  'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
+  'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'quiz', 'community', 'suggest',
 ];
 const NEW: readonly HomeBlockId[] = [
-  'search', 'welcome', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
+  'search', 'welcome', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'quiz', 'community', 'suggest',
 ];
 
 // Chưa biết loại khách: giữ chỗ thẻ thành viên (khối `member` hiện khung chờ) và bỏ các khối chỉ một loại có (Mua lại, Quà khách mới),
 // để phần đầu trang không đổi hình dạng khi loại khách được xác định. Bán chạy nhất có ở cả hai loại nên ở lại.
 const UNKNOWN: readonly HomeBlockId[] = [
-  'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'community', 'suggest',
+  'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'quiz', 'community', 'suggest',
 ];
 
 /**

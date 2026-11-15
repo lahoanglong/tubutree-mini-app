@@ -1,4 +1,6 @@
 import type { HttpClient } from '../http';
+import type { ArcadeGameId, ArcadeWindowId } from '../arcade/arcade-config';
+import type { HomeQuizAnswers } from '../arcade/home-quiz';
 import type { CheckInResult, PointsBlocked } from './loyalty';
 
 export interface GameProfile {
@@ -320,3 +322,54 @@ export interface Friend {
 export const getFriends = (http: HttpClient) => http.get<Friend[]>('/game/friends');
 export const giftWater = (http: HttpClient, recipientId: string) =>
   http.post<{ amount: number; recipientId: string }>(`/game/gift/${recipientId}`);
+
+export type ArcadeReason = 'DAILY_CAP' | 'TOO_FAST' | 'NOT_REAL_USER' | 'DISABLED' | 'LOW_SCORE';
+export interface ArcadeCompleteBody {
+  gameId: ArcadeGameId;
+  score: number;
+  durationMs: number;
+}
+export interface ArcadeCompleteResult {
+  gameId: ArcadeGameId;
+  score: number;
+  bestScore: number;
+  isNewBest: boolean;
+  rewarded: boolean;
+  /** null khi ván được thưởng. Mọi lý do khác vẫn cập nhật kỷ lục (trừ 'TOO_FAST'). */
+  reason: ArcadeReason | null;
+  waterEarned: number;
+  pointsEarned: number;
+  totalSeeds: number;
+  /** Số lượt thưởng đã dùng hôm nay SAU ván này, và trần tại lúc hoàn thành ván. */
+  used: number;
+  cap: number;
+  window: ArcadeWindowId | null;
+  windowBonus: boolean;
+}
+export interface ArcadeGameStatus {
+  bestScore: number;
+  plays: number;
+  used: number;
+  cap: number;
+}
+export interface ArcadeStatus {
+  games: Record<ArcadeGameId, ArcadeGameStatus>;
+  window: ArcadeWindowId | null;
+  windowBonus: boolean;
+  nextWindowAt: string | null;
+  quizClaimed: boolean;
+}
+export interface HomeQuizResult {
+  granted: number;
+  alreadyClaimed: boolean;
+  totalSeeds: number;
+}
+/**
+ * Mỗi lời gọi là một ván: không có khoá chống gọi đúp, nên nơi gọi phải tự chặn (đúng một lần cho mỗi ván). Chỉ gửi ba trường của hợp đồng,
+ * để đưa nguyên kết quả của `mountArcade` vào cũng không mang thêm trường lạ.
+ */
+export const completeArcade = (http: HttpClient, body: ArcadeCompleteBody) =>
+  http.post<ArcadeCompleteResult>('/game/arcade-complete', { gameId: body.gameId, score: body.score, durationMs: body.durationMs });
+export const getArcadeStatus = (http: HttpClient) => http.get<ArcadeStatus>('/game/arcade/status');
+export const completeHomeQuiz = (http: HttpClient, answers: HomeQuizAnswers) =>
+  http.post<HomeQuizResult>('/game/home-quiz/complete', { family: answers.family, worry: answers.worry, format: answers.format });

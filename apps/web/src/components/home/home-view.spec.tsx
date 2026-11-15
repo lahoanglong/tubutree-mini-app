@@ -196,6 +196,25 @@ describe('HomeView — nội dung các khối', () => {
     expect(productCalls().some((q) => q.category === 'c-goi' && typeof q.seed === 'string')).toBe(true);
   });
 
+  it('khối quiz là thẻ mời tĩnh "Chẩn đoán tổ ấm" ngay trước Cộng đồng: có h2 và nút Bắt đầu, chưa gọi API sản phẩm hay quà', async () => {
+    const c = await mount();
+    const order = blockOrder(c);
+    expect(order.indexOf('quiz')).toBe(order.indexOf('community') - 1);
+    expect(order.indexOf('quiz')).toBe(order.indexOf('journey') + 1);
+    const quiz = block(c, 'quiz');
+    expect(quiz.querySelector('h2')!.textContent).toBe('Chẩn đoán tổ ấm');
+    expect(quiz.querySelector('button')!.textContent).toBe('Bắt đầu');
+    expect(productCalls().some((q) => q.limit === 40)).toBe(false);
+    expect(calls('/game/home-quiz/complete')).toEqual([]);
+  });
+
+  it('khối quiz của người đã đăng nhập không thêm request nào ở Trang chủ (không gọi /game/arcade/status, chỉ đọc bộ nhớ đệm)', async () => {
+    mocks.phase = 'authenticated';
+    await mount();
+    expect(calls('/game/arcade/status')).toEqual([]);
+    expect(mocks.get.mock.calls.filter(([p]) => String(p).startsWith('/game/'))).toEqual([]);
+  });
+
   it('"Bán chạy nhất" có nút Xem tất cả sang /ban-chay', async () => {
     const c = await mount();
     const seeAll = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem tất cả Bán chạy nhất"]');

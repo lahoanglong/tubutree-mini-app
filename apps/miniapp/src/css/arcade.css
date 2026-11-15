@@ -1,0 +1,170 @@
+/* Mini game (W164): sảnh ở Vườn Xanh và lớp phủ toàn màn của ván chơi. Số đo đặt ở đây (bánh cóc px của P17b chỉ đếm TSX) và đi qua token. */
+
+.tubu-arcade-hub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+}
+.tubu-arcade-badge {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+  padding: var(--space-inline-md);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-subtle);
+}
+.tubu-arcade-badge[data-active='true'] {
+  background: var(--color-action-secondary-bg);
+  box-shadow: inset 0 0 0 1px var(--color-action-secondary-border);
+}
+.tubu-arcade-games {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-arcade-game {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-md);
+}
+.tubu-arcade-game-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+  min-width: 0;
+}
+/* Nút Chơi giữ cùng bề rộng ở hai thẻ: hai tên game dài ngắn khác nhau không làm nút lệch. */
+.tubu-arcade-play {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+/* Dòng kỷ lục và lượt thưởng giữ chỗ lúc trạng thái đang tải để thẻ không nhảy khi dữ liệu về. */
+.tubu-arcade-meta {
+  min-height: calc(var(--type-caption-size) * var(--type-caption-lh));
+}
+
+/* ── Lớp phủ toàn màn ── */
+.tubu-arcade {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  padding-top: var(--safe-top);
+  padding-bottom: var(--safe-bottom);
+  background: var(--color-bg-subtle);
+  overscroll-behavior: contain;
+  outline: none;
+}
+/* Nút đóng ở bên trái: chừa góc phải trên cho capsule của Zalo. */
+.tubu-arcade-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-stack-xs);
+  padding: var(--space-stack-xs) var(--space-inline-sm);
+}
+.tubu-arcade-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tubu-arcade-stage {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.tubu-arcade-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.tubu-arcade-canvas:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: -2px;
+}
+.tubu-arcade-cover {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-stack-sm);
+  padding: var(--space-inset-page);
+  text-align: center;
+  background: var(--color-bg-scrim-light);
+}
+.tubu-arcade-cover > p {
+  max-width: 20rem;
+}
+/* Gợi ý phím mũi tên chỉ có nghĩa với bàn phím: màn cảm ứng ẩn khỏi mắt nhưng vẫn ở trong DOM cho trình đọc màn hình. */
+@media (pointer: coarse) {
+  .tubu-arcade-keys {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+  }
+}
+.tubu-arcade-panel {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+  max-height: 100%;
+  padding: var(--space-inset-page);
+  overflow-y: auto;
+  border-radius: var(--radius-sheet) var(--radius-sheet) 0 0;
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-3);
+}
+.tubu-arcade-live {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+}
+.tubu-arcade-best-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+}
+.tubu-arcade-rewards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Chỗ giữ cho phần thưởng lúc chờ máy chủ: bảng điểm không nhảy khi phản hồi về. */
+.tubu-arcade-saving {
+  height: 3.5rem;
+  border-radius: var(--radius-control);
+}
+.tubu-arcade-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-inline-sm);
+}
+.tubu-arcade-actions > * {
+  flex: 1 1 0;
+  min-width: 0;
+}
