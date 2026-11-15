@@ -1194,6 +1194,8 @@ model Order {
   // Thu gom vật liệu tái chế (Gomdon đơn đổi hàng)
   hasRecyclingPickup     Boolean               @default(false)
   recyclingNote          String?
+  /// W168: số gram rác khách đăng ký gửi lại kèm đơn (đã kẹp <= min(cân nặng kiện, 10kg)).
+  recyclingWeightGrams   Int?
   gomdonOrderId          String?
   gomdonPartnerCode      String?
   /// Trạng thái vận đơn Gomdon: mã số Gomdon ("1".."12") HOẶC trạng thái nội bộ
@@ -1264,6 +1266,7 @@ model Order {
   customerRefunds        OrderCustomerRefund[]
   merchantPayoutLines    MerchantPayoutLine[]
   wasteRequest           WasteRequest?
+  attachedGiftRedemptions WasteGiftRedemption[]
   createdAt              DateTime              @default(now())
   updatedAt              DateTime              @updatedAt
 
@@ -3709,6 +3712,8 @@ enum WasteMethod {
   DROP_OFF
   MAIL_IN
   PICKUP
+  /// W168: shipper Gomdon tới nhà khách lấy rác, đơn thu gom độc lập (không kèm đơn mua).
+  HOME_PICKUP
 }
 
 enum WasteRequestStatus {
@@ -3922,6 +3927,18 @@ model WasteRequest {
   reversedByUserId        String?
   reversalReason          String?
   reversalShortfallPoints Int?
+  /// W168 HOME_PICKUP (đơn thu gom độc lập qua Gomdon): vận đơn, phí và Điểm Xanh trừ phí ship.
+  gomdonOrderId           String?
+  gomdonPartnerCode       String?
+  gomdonStatus            String?
+  gomdonStatusAt          DateTime?
+  declaredWeightGrams     Int?
+  shipFeeVnd              Int?
+  shipFeePointsUsed       Int?
+  shipFeeCodVnd           Int?
+  shipFeePointsRefunded   Int?
+  pickupAddress           Json?
+  shippingHistory         Json?
   idempotencyKey          String
   consentAt               DateTime
   consentVersion          String
@@ -3940,6 +3957,8 @@ model WasteRequest {
   @@index([confirmedByUserId, completedAt])
   @@index([pointId, status])
   @@index([status, expiresAt])
+  @@index([gomdonOrderId])
+  @@index([gomdonPartnerCode])
   @@map("waste_requests")
 }
 
@@ -4064,13 +4083,17 @@ model WasteGiftRedemption {
   cancelledByUserId String?
   cancelReason      String?
   refundedPoints    Int?
+  /// W168: đơn mua đang mang quà hiện vật 0đ này (null = chưa gắn đơn nào).
+  attachedOrderId   String?
   createdAt         DateTime                  @default(now())
   user              User                      @relation(fields: [userId], references: [id], onDelete: Restrict)
   gift              WasteGift                 @relation(fields: [giftId], references: [id], onDelete: Restrict)
+  attachedOrder     Order?                    @relation(fields: [attachedOrderId], references: [id], onDelete: SetNull)
 
   @@unique([userId, idempotencyKey])
   @@index([status, claimExpiresAt])
   @@index([userId, createdAt])
+  @@index([attachedOrderId])
   @@map("waste_gift_redemptions")
 }
 
