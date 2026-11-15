@@ -208,6 +208,13 @@ describe('HomeView — nội dung các khối', () => {
     expect(calls('/game/home-quiz/complete')).toEqual([]);
   });
 
+  it('khối quiz của người đã đăng nhập không thêm request nào ở Trang chủ (không gọi /game/arcade/status, chỉ đọc bộ nhớ đệm)', async () => {
+    mocks.phase = 'authenticated';
+    await mount();
+    expect(calls('/game/arcade/status')).toEqual([]);
+    expect(mocks.get.mock.calls.filter(([p]) => String(p).startsWith('/game/'))).toEqual([]);
+  });
+
   it('"Bán chạy nhất" có nút Xem tất cả sang /ban-chay', async () => {
     const c = await mount();
     const seeAll = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem tất cả Bán chạy nhất"]');

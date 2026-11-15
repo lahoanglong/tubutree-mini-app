@@ -28,13 +28,17 @@ function useMinuteClock(): Date {
   return now;
 }
 
-/** Dải báo ván khách chơi trước khi đăng nhập đã được gửi nốt: điểm, rồi phần thưởng (hoặc lý do không thưởng) đúng như màn kết quả. */
+/**
+ * Dải báo ván khách chơi trước khi đăng nhập đã được gửi nốt: điểm, rồi phần thưởng (hoặc lý do không thưởng) đúng như màn kết quả.
+ * Chỉ vẽ khi có kết quả để báo, và chính dải mang `role` (status cho đã lưu, alert cho lỗi): không có vùng live rỗng nằm sẵn ở trang Vườn Xanh
+ * (trang đã có vùng thông báo riêng, vùng rỗng thứ hai làm công cụ và test lấy nhầm).
+ */
 function PendingSaved({ state, retry }: { state: PendingSaveState; retry: () => void }) {
   if (state.status === 'idle' || state.status === 'saving') return null;
   const box = 'flex flex-col items-start gap-1 rounded-card bg-[var(--color-bg-subtle)] p-3';
   if (state.status === 'error') {
     return (
-      <div data-testid="arcade-pending-error" className={box}>
+      <div data-testid="arcade-pending-error" role="alert" className={box}>
         <Text variant="body-sm" tone="danger" as="p">
           {fillCopy(state.invalid ? 'arcade.result.invalid' : 'arcade.result.error')}
         </Text>
@@ -47,7 +51,7 @@ function PendingSaved({ state, retry }: { state: PendingSaveState; retry: () => 
     );
   }
   return (
-    <div data-testid="arcade-pending-saved" className={box}>
+    <div data-testid="arcade-pending-saved" role="status" className={box}>
       <Text variant="body-sm" tone="primary" as="p" numeric style={{ fontWeight: 600 }}>
         {fillCopy('arcade.pending.saved', { n: state.run.score })}
       </Text>
@@ -98,10 +102,7 @@ export function ArcadeHub() {
               {badge.hint}
             </Text>
           </div>
-          {/* Vùng báo luôn có mặt, chỉ đổi phần con: vùng live vừa gắn cùng chữ thường không được đọc ra. */}
-          <div role="status" aria-live="polite" data-testid="arcade-pending">
-            <PendingSaved state={pending.state} retry={pending.retry} />
-          </div>
+          <PendingSaved state={pending.state} retry={pending.retry} />
           {!authed && (
             <Text variant="caption" tone="tertiary" as="p">
               {fillCopy('arcade.guest.demo')}

@@ -308,8 +308,7 @@ const RUN = { gameId: 'dew_catcher', score: 520, durationMs: 40_000 };
 const putPending = (over: Record<string, unknown> = {}) => sessionStorage.setItem(ARCADE_PENDING_KEY, JSON.stringify({ ...RUN, endedAt: Date.now() - 60_000, ...over }));
 const pendingRaw = () => sessionStorage.getItem(ARCADE_PENDING_KEY);
 const completes = () => m.post.mock.calls.filter((c) => c[0] === '/game/arcade-complete');
-const region = () => q('[data-testid="arcade-pending"]')!;
-const retryBtn = () => Array.from(region().querySelectorAll<HTMLButtonElement>('button')).find((b) => b.textContent === 'Thử lại') ?? null;
+const retryBtn = () => Array.from(document.querySelectorAll<HTMLButtonElement>('[data-testid="arcade-pending-error"] button')).find((b) => b.textContent === 'Thử lại') ?? null;
 
 describe('ArcadeHub: gửi nốt ván khách chơi trước khi đăng nhập', () => {
   beforeEach(() => {
@@ -328,7 +327,7 @@ describe('ArcadeHub: gửi nốt ván khách chơi trước khi đăng nhập', 
     expect(banner.textContent).toContain('Nhận 8 Giọt nước vào Vườn');
     expect(banner.textContent).toContain('+1 Điểm Xanh');
     expect(banner.textContent).toContain('Đã dùng 2/4 lượt thưởng hôm nay');
-    expect(region().getAttribute('role')).toBe('status');
+    expect(banner.getAttribute('role')).toBe('status');
   });
 
   it('làm mới game, me, loyalty sau khi gửi', async () => {
@@ -418,11 +417,29 @@ describe('ArcadeHub: gửi nốt ván khách chơi trước khi đăng nhập', 
     expect(completes()).toHaveLength(0);
   });
 
-  it('không có ván chờ: không gửi gì, vùng báo vẫn có mặt và rỗng', async () => {
+  it('không có ván chờ: không gửi gì và KHÔNG vẽ vùng live nào (không role status hay alert rỗng nằm sẵn trong trang)', async () => {
     await mountHub();
     expect(completes()).toHaveLength(0);
-    expect(region().getAttribute('aria-live')).toBe('polite');
-    expect(region().textContent).toBe('');
+    expect(document.querySelector('[role="status"]')).toBeNull();
+    expect(document.querySelector('[role="alert"]')).toBeNull();
+    expect(q('[data-testid="arcade-pending-saved"]')).toBeNull();
+    expect(q('[data-testid="arcade-pending-error"]')).toBeNull();
+  });
+
+  it('đang gửi nốt ván: chưa vẽ vùng live nào', async () => {
+    putPending();
+    m.post.mockReturnValue(new Promise(() => undefined));
+    await mountHub();
+    expect(completes()).toHaveLength(1);
+    expect(document.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('lỗi gửi nốt ván là role="alert" (đọc ngay), đã lưu là role="status"', async () => {
+    putPending();
+    m.post.mockRejectedValueOnce(new TypeError('Failed to fetch'));
+    await mountHub();
+    expect(q('[data-testid="arcade-pending-error"]')!.getAttribute('role')).toBe('alert');
+    expect(document.querySelector('[role="status"]')).toBeNull();
   });
 
   it('ván không được thưởng: dải báo nói lý do (hết lượt), không khoe Giọt nước', async () => {

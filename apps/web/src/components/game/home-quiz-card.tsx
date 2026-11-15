@@ -16,19 +16,22 @@ const HomeQuizSheet = dynamic(() => import('./home-quiz-sheet').then((m) => m.Ho
 const ALREADY_CLAIMED: HomeQuizResult = { granted: 0, alreadyClaimed: true, totalSeeds: 0 };
 
 /**
- * Thẻ mời "Chẩn đoán tổ ấm" (30 giây) ở Vườn Xanh và khối `quiz` của Trang chủ. Khách và người chưa tải xong trạng thái thấy dòng hứa quà;
- * đã đăng nhập mà `quizClaimed` thì dòng đó nói đã nhận quà (không hứa lần nữa). Trạng thái dùng chung khoá `['game','arcade']` với sảnh mini game
- * nên không thêm request ở Vườn Xanh; khách không gọi gì. Dòng quà luôn chiếm chỗ (ẩn bằng `invisible` lúc chờ) nên thẻ không đổi chiều cao.
+ * Thẻ mời "Chẩn đoán tổ ấm" (30 giây) ở Vườn Xanh và khối `quiz` của Trang chủ. Khách thấy dòng hứa quà; đã đăng nhập mà `quizClaimed` thì dòng đó nói
+ * đã nhận quà (không hứa lần nữa). `quizClaimed` chỉ ĐỌC từ bộ nhớ đệm của khoá `['game','arcade']` (`enabled: false`): thẻ không bao giờ tự gọi mạng,
+ * nên Trang chủ không có thêm request; ở Vườn Xanh sảnh mini game nạp cùng khoá và thẻ nhận kết quả ngay. Trong lúc nơi khác đang nạp khoá đó dòng quà ẩn
+ * (`invisible`, vẫn chiếm chỗ) để không hiện lời hứa rồi đổi, và thẻ không đổi chiều cao.
  * Sheet ba câu và danh sách sản phẩm chỉ nạp và chỉ gọi mạng khi khách bấm "Bắt đầu".
  */
 export function HomeQuizCard() {
   const titleId = useId();
   const authed = useAuthPhase() === 'authenticated';
-  const status = useQuery({ ...gameArcadeStatusQuery(coreHttp), enabled: authed });
+  const status = useQuery({ ...gameArcadeStatusQuery(coreHttp), enabled: false });
   const serverClaimed = authed && status.data?.quizClaimed === true;
-  const rewardHidden = authed && status.isPending;
+  const rewardHidden = authed && !status.data && status.fetchStatus === 'fetching';
   const [open, setOpen] = useState(false);
   const [claimed, setClaimed] = useState<HomeQuizResult | null>(null);
+  // Vừa nhận (hay máy chủ báo đã nhận) trong sheet thì thẻ đổi dòng quà ngay, không đợi lượt nạp lại trạng thái.
+  const isClaimed = serverClaimed || (authed && claimed !== null);
   return (
     <section aria-labelledby={titleId} data-testid="home-quiz-card">
       <Card variant="flat" padding={16}>
@@ -41,7 +44,7 @@ export function HomeQuizCard() {
               {fillCopy('homeQuiz.card.sub')}
             </Text>
             <Text variant="caption" tone="tertiary" as="p" className={`mt-1${rewardHidden ? ' invisible' : ''}`}>
-              {fillCopy(serverClaimed ? 'homeQuiz.result.claimed' : 'homeQuiz.card.reward')}
+              {fillCopy(isClaimed ? 'homeQuiz.result.claimed' : 'homeQuiz.card.reward')}
             </Text>
           </div>
           <Button className="flex-none" aria-label={`${fillCopy('homeQuiz.card.cta')} ${fillCopy('homeQuiz.card.title')}`} onPress={() => setOpen(true)}>
