@@ -24,7 +24,7 @@ import { IsUploadedImage } from './uploaded-image';
 import { createValidationPipe } from './validation-pipe';
 
 class Child {
-  @IsInt() qty!: number;
+  @IsInt() unlabeledCount!: number;
 }
 
 class Body {
@@ -71,7 +71,7 @@ describe('createValidationPipe — thông báo kiểm tra dữ liệu bằng ti�
 
   it('thông báo tự viết (đã tiếng Việt) giữ nguyên; lỗi lồng nhau có đường dẫn', async () => {
     expect(await messagesOf({ question: 'q', name: 'x'.repeat(11) })).toEqual(['Tên tối đa 10 ký tự.']);
-    expect(await messagesOf({ question: 'q', child: { qty: 'a' } })).toEqual(['Trường «qty» phải là số nguyên.']);
+    expect(await messagesOf({ question: 'q', child: { unlabeledCount: 'a' } })).toEqual(['Trường «unlabeledCount» phải là số nguyên.']);
   });
 
   it('dữ liệu hợp lệ vẫn qua, transform như cũ', async () => {

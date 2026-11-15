@@ -14,7 +14,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { NoFilesInterceptor } from '@nestjs/platform-express';
-import { createHmac, timingSafeEqual } from 'node:crypto';
+import { createHmac } from 'node:crypto';
 import { SkipThrottle } from '@nestjs/throttler';
 import { safeEqualStrings } from '../../../common/safe-equal';
 import { Public } from '../../../common/decorators/public.decorator';
@@ -145,9 +145,7 @@ export class GomdonWebhookController {
       this.logger.error('Webhook Gomdon có chữ ký nhưng không mang thân thô (req.rawBody): kiểm parser webhook ở common/body-limits.ts.');
       return 'no-raw-body';
     }
-    const expected = Buffer.from(createHmac('sha256', this.hmacSecret).update(`${timestamp}.`).update(rawBody).digest('hex'));
-    const given = Buffer.from(signature.toLowerCase());
-    // Độ dài hex không phải bí mật; timingSafeEqual ném lỗi khi độ dài khác nhau nên so độ dài trước.
-    return given.length === expected.length && timingSafeEqual(given, expected) ? null : 'mismatch';
+    const expected = createHmac('sha256', this.hmacSecret).update(`${timestamp}.`).update(rawBody).digest('hex');
+    return safeEqualStrings(signature.toLowerCase(), expected) ? null : 'mismatch';
   }
 }
