@@ -233,6 +233,90 @@ describe('AdminNav — gom nhóm, gập mở, tìm mục', () => {
   });
 });
 
+describe('AdminNav — mục dẫn sang trang riêng (href)', () => {
+  type LK = K | 'wpImages';
+  const LINK_GROUPS: NavGroup<LK>[] = [
+    {
+      label: 'Bán hàng',
+      items: [
+        { k: 'orders', label: 'Đơn hàng' },
+        { k: 'wpImages', label: 'Bổ sung ảnh hàng loạt', href: '/admin/catalog-wp-images', keywords: 'thiếu ảnh kéo thả wordpress' },
+        { k: 'config', label: 'Cấu hình' },
+      ],
+    },
+  ];
+  const mountLinks = (onSelect: (k: LK) => void = () => {}) => {
+    const r = render(
+      <div className="lg:flex">
+        <AdminNav groups={LINK_GROUPS} active="orders" onSelect={onSelect} />
+        <div>nội dung</div>
+      </div>,
+    );
+    mounted.push(r);
+    return r.container;
+  };
+  const link = (c: HTMLElement) => c.querySelector<HTMLAnchorElement>('nav a[data-nav-item="wpImages"]')!;
+
+  it('vẽ thành liên kết <a> trỏ đúng trang, không phải nút; vùng chạm 44px; không bao giờ "đang xem"', () => {
+    const c = mountLinks();
+    const a = link(c);
+    expect(a.tagName).toBe('A');
+    expect(a.getAttribute('href')).toBe('/admin/catalog-wp-images');
+    expect(a.textContent).toBe('Bổ sung ảnh hàng loạt');
+    expect(a.className).toContain('min-h-[44px]');
+    expect(a.hasAttribute('aria-current')).toBe(false);
+    expect(a.className).not.toContain('bg-forest-100');
+    expect([...c.querySelectorAll('nav button:not([aria-expanded])')].map((b) => b.textContent)).toEqual(['Đơn hàng', 'Cấu hình']);
+  });
+
+  it('bấm liên kết không gọi onSelect (không đổi tab)', () => {
+    const onSelect = vi.fn();
+    const c = mountLinks(onSelect);
+    const a = link(c);
+    a.addEventListener('click', (e) => e.preventDefault());
+    click(a);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('ô tìm thấy mục theo từ khoá ("thiếu ảnh"); Enter ở mục link bấm đúng liên kết đó thay vì gọi onSelect', () => {
+    const onSelect = vi.fn();
+    const c = mountLinks(onSelect);
+    const box = c.querySelector<HTMLInputElement>('input[aria-label="Tìm mục quản trị"]')!;
+    typeInto(box, 'thieu anh');
+    expect([...c.querySelectorAll('nav li')].map((li) => li.textContent)).toEqual(['Bổ sung ảnh hàng loạt']);
+    const clicked = vi.fn((e: Event) => e.preventDefault());
+    link(c).addEventListener('click', clicked);
+    act(() => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    expect(clicked).toHaveBeenCalledTimes(1);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+
+  it('Enter ở mục thường vẫn gọi onSelect với khoá tab', () => {
+    const onSelect = vi.fn();
+    const c = mountLinks(onSelect);
+    const box = c.querySelector<HTMLInputElement>('input[aria-label="Tìm mục quản trị"]')!;
+    typeInto(box, 'cau hinh');
+    act(() => {
+      box.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+    });
+    expect(onSelect).toHaveBeenCalledWith('config');
+  });
+
+  it('điện thoại: mở ngăn kéo vẫn thấy liên kết, bấm không gọi onSelect', () => {
+    const onSelect = vi.fn();
+    const c = mountLinks(onSelect);
+    click(c.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!);
+    const inDrawer = document.body.querySelector<HTMLAnchorElement>('nav[aria-label="Mục quản trị (điện thoại)"] a[data-nav-item="wpImages"]');
+    expect(inDrawer).not.toBeNull();
+    expect(inDrawer!.getAttribute('href')).toBe('/admin/catalog-wp-images');
+    inDrawer!.addEventListener('click', (e) => e.preventDefault());
+    click(inDrawer!);
+    expect(onSelect).not.toHaveBeenCalled();
+  });
+});
+
 // D4: thanh PortalHeader dính đầu trang che thanh "Đổi mục" và đỉnh cột menu nếu chúng cùng dính ở top≈0.
 describe('AdminNav: dính dưới thanh đầu cổng (--portal-header-h)', () => {
   const html = () => renderToStaticMarkup(<AdminNav groups={GROUPS} active="orders" onSelect={() => {}} />);

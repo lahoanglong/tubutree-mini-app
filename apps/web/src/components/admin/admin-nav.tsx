@@ -1,7 +1,8 @@
 'use client';
 
 import { Fragment, useEffect, useRef, useState, type MouseEvent, type ReactNode } from 'react';
-import { ChevronDown, Menu, Search } from 'lucide-react';
+import Link from 'next/link';
+import { ArrowUpRight, ChevronDown, Menu, Search } from 'lucide-react';
 import { SideDrawer } from './side-drawer';
 
 export interface NavItem<K extends string> {
@@ -11,6 +12,8 @@ export interface NavItem<K extends string> {
   keywords?: string;
   /** Mục là tổng của các mục khác (VD "Hôm nay"): không cộng vào huy hiệu ở tên nhóm đang gập, kẻo một việc đếm hai lần. */
   total?: boolean;
+  /** Mục dẫn sang trang riêng (route khác của /admin): vẽ thành liên kết, không chọn tab nên không bao giờ "đang xem" và không gọi `onSelect`. */
+  href?: string;
 }
 export interface NavGroup<K extends string> {
   label: string;
@@ -100,10 +103,11 @@ function NavList<K extends string>({
         .filter((g) => g.items.length > 0)
     : groups;
   const firstMatch = q ? shown[0]?.items[0] : undefined;
+  const listRef = useRef<HTMLDivElement>(null);
   // Mục lặp ở nhiều nhóm (lối tắt "Hay dùng" và nhóm gốc): chỉ nhóm đầu tiên chứa nó được sáng, để một route chỉ có một mục sáng.
   const activeOwner = shown.find((g) => g.items.some((i) => i.k === active))?.label;
   return (
-    <div className="space-y-2">
+    <div ref={listRef} className="space-y-2">
       <div className="relative">
         <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" />
         <input
@@ -113,7 +117,9 @@ function NavList<K extends string>({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && firstMatch) {
               e.preventDefault();
-              onSelect(firstMatch.k);
+              // Mục là liên kết thì bấm đúng liên kết đó: đi theo cùng đường chuyển trang của Next như khi người dùng bấm tay.
+              if (firstMatch.href) listRef.current?.querySelector<HTMLAnchorElement>(`a[data-nav-item="${firstMatch.k}"]`)?.click();
+              else onSelect(firstMatch.k);
             }
           }}
           placeholder="Tìm mục…"
@@ -145,15 +151,22 @@ function NavList<K extends string>({
             <ul className="space-y-0.5">
               {items.map((t) => (
                 <li key={t.k}>
-                  <button
-                    type="button"
-                    aria-current={active === t.k && owns ? 'page' : undefined}
-                    onClick={() => onSelect(t.k)}
-                    className={`${ITEM_CLASS} ${active === t.k && owns ? ITEM_ACTIVE : ITEM_IDLE}`}
-                  >
-                    {t.label}
-                    {badge?.(t.k)}
-                  </button>
+                  {t.href ? (
+                    <Link href={t.href} data-nav-item={t.k} className={`${ITEM_CLASS} ${ITEM_IDLE}`}>
+                      {t.label}
+                      <ArrowUpRight aria-hidden="true" className="h-3.5 w-3.5 shrink-0 text-stone-500" />
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-current={active === t.k && owns ? 'page' : undefined}
+                      onClick={() => onSelect(t.k)}
+                      className={`${ITEM_CLASS} ${active === t.k && owns ? ITEM_ACTIVE : ITEM_IDLE}`}
+                    >
+                      {t.label}
+                      {badge?.(t.k)}
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>

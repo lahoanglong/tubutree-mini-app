@@ -11,13 +11,16 @@ const product = (over: Record<string, unknown> = {}) => ({ id: 'p1', name: 'Sữ
 function make(row: unknown, ocrReply: { readable: boolean; ingredients: string[] } | Error = { readable: true, ingredients: ['Đường', 'Muối'] }) {
   const findUnique = jest.fn(async () => row);
   const update = jest.fn(async () => ({ id: 'p1' }));
-  const prisma = { product: { findUnique, update } } as unknown as PrismaService;
+  const lock = jest.fn(async () => [{ id: 'p1' }]);
+  const tx = { product: { findUnique, update }, $queryRaw: lock };
+  const $transaction = jest.fn(async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx));
+  const prisma = { product: { findUnique, update }, $transaction } as unknown as PrismaService;
   const read = jest.fn(async () => {
     if (ocrReply instanceof Error) throw ocrReply;
     return ocrReply;
   });
   const ocr = { read } as unknown as IngredientOcrService;
-  return { svc: new IngredientEnrichService(prisma, ocr), findUnique, update, read };
+  return { svc: new IngredientEnrichService(prisma, ocr), findUnique, update, read, lock, $transaction };
 }
 
 let warn: jest.SpyInstance;
@@ -128,5 +131,66 @@ describe('IngredientEnrichService.save', () => {
     const { svc, update } = make(product({ ingredients: [{ name: 'Đường' }] }));
     await expect(svc.save('admin1', 'p1', ['đường'])).resolves.toEqual({ id: 'p1', ingredients: ['Đường'], added: 0 });
     expect(update).not.toHaveBeenCalled();
+  });
+
+  it('đọc, nối và ghi nằm trong một $transaction: khoá dòng sản phẩm trước khi đọc, và đọc/ghi đi qua tx chứ không qua prisma gốc', async () => {
+    const order: string[] = [];
+    const { svc, $transaction, lock, findUnique, update } = make(product());
+    lock.mockImplementation(async () => {
+      order.push('lock');
+      return [{ id: 'p1' }];
+    });
+    findUnique.mockImplementation(async () => {
+      order.push('read');
+      return product();
+    });
+    update.mockImplementation(async () => {
+      order.push('write');
+      return { id: 'p1' };
+    });
+    await svc.save('admin1', 'p1', ['Đường']);
+    expect($transaction).toHaveBeenCalledTimes(1);
+    expect(order).toEqual(['lock', 'read', 'write']);
+  });
+
+  it('danh sách sai (rỗng, bị chặn) bị từ chối trước khi mở giao dịch', async () => {
+    const { svc, $transaction } = make(product());
+    await expect(svc.save('admin1', 'p1', ['  '])).rejects.toBeInstanceOf(BadRequestException);
+    expect($transaction).not.toHaveBeenCalled();
+  });
+
+  it(`đã có tên + tên mới vượt trần ${COPY_INGREDIENTS_MAX} sau khi nối: 400 nêu số đã có và số thêm, không ghi`, async () => {
+    const current = Array.from({ length: COPY_INGREDIENTS_MAX - 2 }, (_, i) => ({ name: `Có sẵn ${i}` }));
+    const { svc, update } = make(product({ ingredients: current }));
+    const err = await svc.save('admin1', 'p1', ['Mới 1', 'Mới 2', 'Mới 3']).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(BadRequestException);
+    expect((err as BadRequestException).message).toBe(ENRICH_MSG.overCap(COPY_INGREDIENTS_MAX - 2, 3, COPY_INGREDIENTS_MAX));
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it(`nối vừa đúng trần ${COPY_INGREDIENTS_MAX} thì lưu được`, async () => {
+    const current = Array.from({ length: COPY_INGREDIENTS_MAX - 2 }, (_, i) => ({ name: `Có sẵn ${i}` }));
+    const { svc, update } = make(product({ ingredients: current }));
+    const res = await svc.save('admin1', 'p1', ['Mới 1', 'Mới 2']);
+    expect(res.added).toBe(2);
+    expect(res.ingredients).toHaveLength(COPY_INGREDIENTS_MAX);
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
+  it(`cột cũ đã quá trần ${COPY_INGREDIENTS_MAX} (dữ liệu đồng bộ): không thêm được tên mới, nhưng lưu lại tên đã có thì không lỗi`, async () => {
+    const legacy = Array.from({ length: COPY_INGREDIENTS_MAX + 4 }, (_, i) => ({ name: `Cũ ${i}` }));
+    const over = make(product({ ingredients: legacy }));
+    await expect(over.svc.save('admin1', 'p1', ['Mới'])).rejects.toBeInstanceOf(BadRequestException);
+    expect(over.update).not.toHaveBeenCalled();
+    const same = make(product({ ingredients: legacy }));
+    await expect(same.svc.save('admin1', 'p1', ['cũ 0'])).resolves.toMatchObject({ added: 0 });
+    expect(same.update).not.toHaveBeenCalled();
+  });
+
+  it('lỗi giữa giao dịch (ghi thất bại) đi thẳng ra ngoài, không báo đã lưu', async () => {
+    const { svc, update } = make(product());
+    update.mockRejectedValueOnce(new Error('db down'));
+    await expect(svc.save('admin1', 'p1', ['Đường'])).rejects.toThrow('db down');
+    expect(warn).not.toHaveBeenCalled();
   });
 });

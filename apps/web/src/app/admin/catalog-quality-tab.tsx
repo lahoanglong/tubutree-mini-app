@@ -129,7 +129,8 @@ export function CatalogQualityTab() {
             </span>
           </button>
         </h2>
-        {open && (
+        {/* Thu gọn chỉ ẩn (hidden), không gỡ thân khối khỏi cây: gỡ đi thì bản nháp thành phần, ô đã chọn và duyệt mô tả chưa lưu mất sạch. */}
+        <div hidden={!open}>
           <div id="catalog-quality-body" className="space-y-3 border-t border-stone-200 p-3" aria-busy={running}>
             <p className="max-w-2xl text-sm text-stone-600">
               Tìm sản phẩm thiếu ảnh, ảnh lệch tên, giá hoặc tồn kho sai, biến thể chưa đặt tên và mô tả gốc còn trống, kể cả sản phẩm đang ẩn. Số liệu đọc thẳng từ cơ sở dữ liệu. Sửa giá, tồn và ảnh trong Pancake rồi chờ đồng bộ và bấm Kiểm tra lại; mô tả thì nhờ AI soạn bản nháp rồi duyệt lưu ngay tại đây.
@@ -230,7 +231,7 @@ export function CatalogQualityTab() {
               </>
             )}
           </div>
-        )}
+        </div>
       </section>
       <PancakeZeroPriceCard />
       <AdvisorStatsCard />

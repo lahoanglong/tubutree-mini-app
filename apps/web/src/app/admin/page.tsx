@@ -169,7 +169,7 @@ import {
 import { AdminPagination } from '@/components/admin/admin-pagination';
 import { useToastedMessage } from '@/components/admin/admin-toast';
 import { reportSectionsFor } from '@/components/admin/report-sections';
-import { AdminNav, type NavGroup } from '@/components/admin/admin-nav';
+import { AdminNav, type NavGroup, type NavItem } from '@/components/admin/admin-nav';
 import { InboxBadge, OpsInboxTab, type TodayStatKey } from '@/components/admin/ops-inbox-tab';
 import { seedDealerClaimFilter, seedPayoutFilter } from '@/components/admin/inbox-filter-seeds';
 import { OpsInboxPoller, useOpsInbox } from '@/components/admin/use-ops-inbox';
@@ -386,6 +386,23 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
 ];
 const TABS = NAV_GROUPS.flatMap((g) => g.items);
 const DEFAULT_TAB: Tab = 'inbox';
+
+/** Mục menu dẫn sang trang riêng, không phải tab: nên không nằm trong `Tab`, `NAV_GROUPS` hay `STAFF_TABS` mà chỉ gắn vào menu của ADMIN (xem `adminNavGroups`). */
+type NavKey = Tab | 'catalogWpImages';
+const WP_IMAGES_NAV_ITEM: NavItem<NavKey> = {
+  k: 'catalogWpImages',
+  label: 'Bổ sung ảnh hàng loạt',
+  href: '/admin/catalog-wp-images',
+  keywords: 'ảnh sản phẩm thiếu ảnh kéo thả dán ảnh duyệt ảnh wordpress tubutree.com tải ảnh đại diện',
+};
+
+/** Menu theo quyền: chỉ mục `allowed` mở được; ADMIN có thêm lối vào trang bổ sung ảnh ngay dưới "Kiểm tra catalog" (API ảnh WordPress chỉ nhận ADMIN). */
+function adminNavGroups(allowed: ReadonlySet<Tab>, isAdmin: boolean): NavGroup<NavKey>[] {
+  return NAV_GROUPS.map((g) => ({
+    ...g,
+    items: g.items.filter((i) => allowed.has(i.k)).flatMap((i): NavItem<NavKey>[] => (isAdmin && i.k === 'catalogQuality' ? [i, WP_IMAGES_NAV_ITEM] : [i])),
+  })).filter((g) => g.items.length > 0);
+}
 
 /**
  * Mục nhân viên (STAFF) mở được theo nhóm việc — khớp các route @AllowStaff ở API (staff-permissions.matrix.spec.ts);
@@ -720,7 +737,7 @@ export default function AdminPage() {
 
   const isAdmin = role === 'ADMIN';
   const allowed: ReadonlySet<Tab> = isAdmin ? ALL_TABS : staffTabs(accessQ.data?.staffPermissions ?? []);
-  const groups = NAV_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => allowed.has(i.k)) })).filter((g) => g.items.length > 0);
+  const groups = adminNavGroups(allowed, isAdmin);
   const active: Tab = allowed.has(tab) ? tab : firstAllowedTab(allowed);
   const canReviewReturns = isAdmin || (accessQ.data?.staffPermissions ?? []).includes('CSKH');
   const canReceiveReturns = isAdmin || (accessQ.data?.staffPermissions ?? []).includes('KHO');
@@ -743,9 +760,11 @@ export default function AdminPage() {
         <AdminNav
           groups={groups}
           active={active}
-          onSelect={setTab}
+          onSelect={(k) => {
+            if (k !== 'catalogWpImages') setTab(k);
+          }}
           summaryBadge={<InboxBadge tab="inbox" enabled={allowed.has('inbox')} />}
-          badge={(k) => (k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : <InboxBadge tab={k} enabled={allowed.has('inbox')} />)}
+          badge={(k) => (k === 'catalogWpImages' ? null : k === 'customerRefunds' ? <CustomerRefundsPendingBadge /> : <InboxBadge tab={k} enabled={allowed.has('inbox')} />)}
         />
         <div className="mt-4 min-w-0 flex-1 lg:mt-0">
           <TabErrorBoundary key={active} tabLabel={TABS.find((t) => t.k === active)?.label ?? ''} onGoHome={!allowed.has('inbox') || active === 'inbox' ? undefined : () => setTab('inbox')}>

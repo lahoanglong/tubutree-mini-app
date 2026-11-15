@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -24,6 +24,7 @@ import { BTN_PRIMARY, BTN_SECONDARY, FIELD_CLASS, ListSkeleton, LoadError, Notic
 import { setProductImages } from '../catalog-quality-api';
 import { ImageDropZone } from '../image-drop-zone';
 import { TRIAGE_FILTERS, applyOptimistic, filterCounts, hasSuggestion, imageProgress, matchesFilter, matchesQuery, stillWithoutImage, type TriageAction, type TriageFilter } from './triage-filter';
+import { readUploaded, rememberUploaded } from './uploaded-store';
 
 const KEY = ['admin-wp-image-triage'] as const;
 
@@ -57,7 +58,7 @@ const when = (iso: string | null): string | null => {
  * chưa có gợi ý nào ("Chưa có gợi ý": không có thao tác duyệt, cần ảnh mới). Ô tìm và nhóm lọc cùng áp: số đếm của từng nhóm tính trên kết quả tìm.
  * Thẻ còn rỗng ảnh có ô nhận ảnh (chọn tệp, kéo-thả, dán Ctrl+V): ảnh được nén ở trình duyệt rồi gắn làm ảnh đại diện qua `PATCH admin/catalog-products/:id`,
  * không phải mở từng trang sản phẩm. Thẻ rời bộ lọc ngay khi lưu (như nút Duyệt), nên ảnh vừa chọn hiện ở dải "Ảnh vừa tải trong phiên này" nằm ngoài bộ lọc
- * và ô tìm. Thanh tiến độ "Đã đủ ảnh X/Y" đếm cả sản phẩm vừa được tải ảnh trong phiên mà máy chủ không còn trả về.
+ * và ô tìm. Thanh tiến độ "Đã đủ ảnh X/Y" đếm cả sản phẩm đã được tải ảnh tay mà máy chủ không còn trả về (nhớ ở trình duyệt, sống qua F5).
  */
 export function WpImageTriage() {
   const qc = useQueryClient();
@@ -73,6 +74,12 @@ export function WpImageTriage() {
   const inlineMsg = useToastedMessage(msg);
   // Ref chặn cú chạm thứ hai trong cùng khung hình; state `isPending` chỉ đúng sau lần vẽ kế.
   const inFlight = useRef(false);
+
+  // Sản phẩm đã tải ảnh tay ở phiên trước (kể cả trước lần F5): máy chủ không còn trả chúng nên phải nhớ ở trình duyệt thì thanh tiến độ mới không tụt.
+  useEffect(() => {
+    const earlier = readUploaded();
+    if (earlier.size > 0) setUploaded((prev) => new Set([...prev, ...earlier]));
+  }, []);
 
   const list = useQuery({ queryKey: KEY, queryFn: () => listWpImageCandidates(true), staleTime: 60_000, refetchOnWindowFocus: false });
   const items = list.data?.items ?? [];
@@ -99,7 +106,10 @@ export function WpImageTriage() {
       return { previous };
     },
     onSuccess: (r, { action, row, urls }) => {
-      if (action.kind === 'upload') setUploaded((prev) => new Set(prev).add(row.productId));
+      if (action.kind === 'upload') {
+        setUploaded((prev) => new Set(prev).add(row.productId));
+        rememberUploaded(row.productId);
+      }
       const text =
         action.kind === 'approve'
           ? `Đã lưu ${(r as { appliedCount?: number }).appliedCount ?? urls.length} ảnh vào "${row.name}".`
