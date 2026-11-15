@@ -14,12 +14,30 @@ const item = (id: string, over: Partial<CopyApproveItem> = {}): CopyApproveItem 
 
 const product = (id: string, over: Record<string, unknown> = {}) => ({ id, name: `Sản phẩm ${id}`, storefrontId: null, ...over });
 
-function make(rows: unknown[], tx?: (ops: unknown[]) => Promise<unknown>) {
+type Fresh = { storefrontId: string | null; ingredients: unknown } | null;
+
+/** `fresh`: bản đọc lại SAU khi khoá dòng (khác bản đọc lúc kiểm) theo id, mô phỏng admin khác ghi chen vào giữa. */
+function make(rows: unknown[], opts: { fresh?: Record<string, Fresh>; tx?: (run: (tx: unknown) => Promise<unknown>) => Promise<unknown> } = {}) {
+  const order: string[] = [];
   const findMany = jest.fn(async () => rows);
-  const update = jest.fn((args: { where: { id: string } }) => Promise.resolve({ id: args.where.id }));
-  const transaction = jest.fn(tx ?? (async (ops: unknown[]) => Promise.all(ops)));
-  const prisma = { product: { findMany, update }, $transaction: transaction } as unknown as PrismaService;
-  return { svc: new CopyApproveService(prisma), findMany, update, transaction };
+  const update = jest.fn(async (args: { where: { id: string } }) => {
+    order.push(`update:${args.where.id}`);
+    return { id: args.where.id };
+  });
+  const queryRaw = jest.fn(async (_strings: TemplateStringsArray, id: string) => {
+    order.push(`lock:${id}`);
+    return [];
+  });
+  const findUnique = jest.fn(async (args: { where: { id: string } }): Promise<Fresh> => {
+    const id = args.where.id;
+    if (opts.fresh && id in opts.fresh) return opts.fresh[id]!;
+    const row = (rows as { id: string; storefrontId: string | null; ingredients?: unknown }[]).find((r) => r.id === id);
+    return row ? { storefrontId: row.storefrontId, ingredients: row.ingredients ?? null } : null;
+  });
+  const tx = { $queryRaw: queryRaw, product: { findUnique, update } };
+  const transaction = jest.fn(opts.tx ?? (async (run: (t: unknown) => Promise<unknown>) => run(tx)));
+  const prisma = { product: { findMany }, $transaction: transaction } as unknown as PrismaService;
+  return { svc: new CopyApproveService(prisma), findMany, update, transaction, order, queryRaw, findUnique };
 }
 
 const dataOf = (update: jest.Mock, i = 0) => (update.mock.calls[i] as [{ where: { id: string }; data: Record<string, unknown> }])[0];
@@ -36,7 +54,7 @@ describe('CopyApproveService.approve', () => {
     const res = await svc.approve('admin1', [item('a', { ingredients: ['Bơ tươi', 'Gấc'] }), item('b')]);
     expect(res).toEqual({ saved: ['a', 'b'], rejected: [] });
     expect(transaction).toHaveBeenCalledTimes(1);
-    expect((transaction.mock.calls[0]![0] as unknown[]).length).toBe(2);
+    expect(update).toHaveBeenCalledTimes(2);
     expect(dataOf(update, 0)).toMatchObject({
       where: { id: 'a' },
       data: { description: 'Son dưỡng bơ tươi dạng thỏi, mang theo dễ dàng.', shortDesc: 'Son dưỡng dạng thỏi.', ingredients: [{ name: 'Bơ tươi' }, { name: 'Gấc' }] },
@@ -69,7 +87,7 @@ describe('CopyApproveService.approve', () => {
     expect(res.rejected).toEqual([{ id: 'a', reasons: ['Mô tả có câu bị chặn: "Giúp chữa nứt nẻ môi."'] }]);
     expect(update).toHaveBeenCalledTimes(1);
     expect(dataOf(update).where.id).toBe('b');
-    expect((transaction.mock.calls[0]![0] as unknown[]).length).toBe(1);
+    expect(transaction).toHaveBeenCalledTimes(1);
   });
 
   it('từ chối mô tả ngắn có câu cấm, thành phần có tuyên bố cấm, mô tả rỗng và vượt trần độ dài', async () => {
@@ -102,8 +120,10 @@ describe('CopyApproveService.approve', () => {
   });
 
   it('nguyên tử: $transaction lỗi thì lỗi được ném lên và không trả "saved"', async () => {
-    const { svc } = make([product('a'), product('b')], async () => {
-      throw new Error('deadlock');
+    const { svc } = make([product('a'), product('b')], {
+      tx: async () => {
+        throw new Error('deadlock');
+      },
     });
     await expect(svc.approve('admin1', [item('a'), item('b')])).rejects.toThrow('deadlock');
   });
@@ -111,7 +131,58 @@ describe('CopyApproveService.approve', () => {
   it('chỉ đọc sản phẩm theo id trong yêu cầu; ghi log hành động admin', async () => {
     const { svc, findMany } = make([product('a')]);
     await svc.approve('admin7', [item('a')]);
-    expect(findMany).toHaveBeenCalledWith({ where: { id: { in: ['a'] } }, select: { id: true, name: true, storefrontId: true, ingredients: true } });
+    expect(findMany).toHaveBeenCalledWith({ where: { id: { in: ['a'] } }, select: { id: true, name: true, storefrontId: true } });
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('Admin admin7 duyệt mô tả sản phẩm a (Sản phẩm a)'));
+  });
+
+  describe('đọc-nối-ghi cột ingredients dưới khoá dòng', () => {
+    const names = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `Thành phần ${String.fromCharCode(65 + i)}` }));
+
+    it('khoá dòng products theo thứ tự id rồi mới đọc và ghi, mỗi sản phẩm một lần', async () => {
+      const { svc, order } = make([product('a'), product('b')]);
+      await svc.approve('admin1', [item('b'), item('a')]);
+      expect(order).toEqual(['lock:a', 'update:a', 'lock:b', 'update:b']);
+    });
+
+    it('nối vào cột đọc lại SAU khi khoá, không phải bản đọc lúc kiểm (admin khác vừa thêm Gấc)', async () => {
+      const stale = [{ name: 'Bơ tươi' }];
+      const { svc, update } = make([product('a', { ingredients: stale })], {
+        fresh: { a: { storefrontId: null, ingredients: [...stale, { name: 'Gấc' }] } },
+      });
+      const res = await svc.approve('admin1', [item('a', { ingredients: ['Dầu dừa'] })]);
+      expect(res.saved).toEqual(['a']);
+      expect(dataOf(update).data).toMatchObject({ ingredients: [{ name: 'Bơ tươi' }, { name: 'Gấc' }, { name: 'Dầu dừa' }] });
+    });
+
+    it('trần 8 áp lên cột sau khi nối: 7 tên đã có + 2 tên mới bị từ chối kèm lý do, mục khác trong lô vẫn ghi', async () => {
+      const { svc, update } = make([product('a', { ingredients: names(7) }), product('b')]);
+      const res = await svc.approve('admin1', [item('a', { ingredients: ['Gấc', 'Bơ tươi'] }), item('b')]);
+      expect(res.saved).toEqual(['b']);
+      expect(res.rejected).toEqual([{ id: 'a', reasons: [expect.stringContaining('vượt trần 8')] }]);
+      expect(res.rejected[0]!.reasons[0]).toContain('đã có 7 thành phần, thêm 2 tên mới sẽ thành 9');
+      expect(update).toHaveBeenCalledTimes(1);
+      expect(dataOf(update).where.id).toBe('b');
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('sản phẩm a '));
+    });
+
+    it('7 tên đã có + 1 tên mới = 8 vẫn nhận; cột đã quá trần sẵn nhưng không thêm tên nào thì không bị chặn', async () => {
+      const { svc, update } = make([product('a', { ingredients: names(7) }), product('b', { ingredients: names(9) })]);
+      const res = await svc.approve('admin1', [item('a', { ingredients: ['Gấc'] }), item('b', { ingredients: ['Thành phần A'] })]);
+      expect(res).toEqual({ saved: ['a', 'b'], rejected: [] });
+      expect(update).toHaveBeenCalledTimes(2);
+    });
+
+    it('sản phẩm bị xoá hay chuyển sang đối tác giữa lúc kiểm và lúc khoá thì từ chối, không ghi', async () => {
+      const { svc, update } = make([product('gone'), product('moved'), product('ok')], {
+        fresh: { gone: null, moved: { storefrontId: 'sf1', ingredients: null } },
+      });
+      const res = await svc.approve('admin1', [item('gone'), item('moved'), item('ok')]);
+      expect(res.saved).toEqual(['ok']);
+      expect(res.rejected).toEqual([
+        { id: 'gone', reasons: ['Không tìm thấy sản phẩm.'] },
+        { id: 'moved', reasons: [expect.stringContaining('đối tác')] },
+      ]);
+      expect(update).toHaveBeenCalledTimes(1);
+    });
   });
 });
