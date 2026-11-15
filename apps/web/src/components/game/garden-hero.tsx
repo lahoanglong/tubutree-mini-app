@@ -3,14 +3,16 @@ import { gameNewbieCopy } from '@tubutree/app-core/game-newbie';
 import { treeTitle } from '@tubutree/app-core/tree-title';
 import { formatNumber } from './format';
 import { WaterTank } from './water-tank';
+import { WeekRhythm, type WeekRhythmProps } from './week-rhythm';
 
 const t = gameNewbieCopy.hero;
 
-// Mầm/cành/cây và 💧 🔥 🌳 là nội dung của game (giai đoạn cây, đơn vị giọt nước, chuỗi ngày).
+// Mầm/cành/cây và 💧 🌳 là nội dung của game (giai đoạn cây, đơn vị giọt nước). Chuỗi ngày nằm ở dải Nhịp Sống Xanh dưới thẻ và ở thẻ Điểm danh, không lặp ở dòng chú thích.
 export function GardenHero({
   eco,
   totalSeeds,
   streakDays,
+  rhythm,
   harvestReady = false,
   wilted = false,
   tankCapacity,
@@ -18,6 +20,8 @@ export function GardenHero({
   eco: GameProfile['ecoImpact'] | undefined;
   totalSeeds: number | undefined;
   streakDays: number | undefined;
+  /** Dữ liệu hôm nay cho dải Nhịp Sống Xanh 7 Ngày (xem `WeekRhythm`). */
+  rhythm: Omit<WeekRhythmProps, 'streakDays'>;
   harvestReady?: boolean;
   /** Cây quá hạn chưa tưới: héo nhưng giữ tiến độ. */
   wilted?: boolean;
@@ -48,8 +52,9 @@ export function GardenHero({
       </div>
       <p className="text-sm font-semibold text-stone-0">{wilted ? t.wilted : harvestReady || left === 0 ? t.ready : t.remaining(left)}</p>
       <p className="mt-0.5 text-caption text-stone-0">
-        {formatNumber(progress)}/{formatNumber(eco?.target)}💧 · {t.streak(streakDays ?? 0)} · {t.harvested(eco?.treesPlanted ?? 0)}
+        {formatNumber(progress)}/{formatNumber(eco?.target)}💧 · {t.harvested(eco?.treesPlanted ?? 0)}
       </p>
+      <WeekRhythm streakDays={streakDays} {...rhythm} />
     </div>
   );
 }

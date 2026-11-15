@@ -2,7 +2,7 @@
 
 .tubu-freeship {
   box-sizing: border-box;
-  /* Cao tối thiểu bằng trạng thái chưa đạt (một dòng chữ + thanh): đạt ngưỡng, thanh biến mất thì giỏ không nhảy. */
+  /* Chưa đạt: cao tối thiểu một dòng chữ + thanh. Đạt ngưỡng thì co thành dòng gọn (luật data-reached bên dưới). */
   min-height: 56px;
   display: flex;
   flex-direction: column;
@@ -28,9 +28,14 @@
 .tubu-freeship[data-reached='true'] .tubu-freeship-text {
   color: var(--color-text-success);
 }
-/* Có nút "Mua thêm": dòng chữ và nút chung một hàng; khối cao tối thiểu bằng hàng nút 44px + thanh nên câu một dòng không co lại khi đạt ngưỡng (hết nút, hết thanh). Câu dài (hàng gian hàng tự giao, màn hẹp) xuống ba dòng thì cao hơn mức này và co lại khi đạt. */
+/* Có nút "Mua thêm" (chưa đạt): dòng chữ và nút chung một hàng; khối cao tối thiểu bằng hàng nút 44px + thanh. */
 .tubu-freeship[data-cta='true'] {
   min-height: calc(44px + var(--space-stack-sm) + 6px + 2 * var(--space-inline-md));
+}
+/* Đạt ngưỡng: chỉ còn một dòng chúc mừng (không thanh, không nút) nên thu về dòng gọn 36px (8 + 20 + 8), không giữ chiều cao của trạng thái chưa đạt. Đặt SAU luật data-cta để thắng cùng độ ưu tiên. */
+.tubu-freeship[data-reached='true'] {
+  min-height: 0;
+  padding-block: var(--space-inline-sm);
 }
 .tubu-freeship-head {
   display: flex;
@@ -145,7 +150,7 @@
   width: 100%;
 }
 
-/* Gợi ý mã giảm giá dưới thanh Miễn phí giao hàng (W44B, CartVoucherHintStrip): dòng mời áp mã đã đủ điều kiện (chữ + nút 44px) và dòng sắp mở khoá (chữ + thanh). */
+/* Nhắc mã sắp mở khoá dưới thanh Miễn phí giao hàng (W44B, CartVoucherHintStrip): chữ + thanh (+ nút "Mua thêm" 44px). Nút `.tubu-vhint-cta` cũng dùng cho "Áp dụng" ở hàng mã chân dính. */
 .tubu-vhint {
   display: flex;
   flex-direction: column;
@@ -161,10 +166,6 @@
   border-radius: var(--radius-card);
   box-shadow: var(--elevation-1);
   font-variant-numeric: tabular-nums;
-}
-.tubu-vhint-row[data-kind='apply'] {
-  background: var(--color-status-success-bg);
-  box-shadow: none;
 }
 .tubu-vhint-row--stack {
   flex-direction: column;
@@ -187,19 +188,9 @@
   font-weight: var(--type-label-weight);
   overflow-wrap: anywhere;
 }
-.tubu-vhint-row[data-kind='apply'] .tubu-vhint-text {
-  color: var(--color-text-success);
-}
 .tubu-vhint-cta.zaui-btn {
   flex: 0 0 auto;
   min-width: 0;
   height: 44px;
   padding: 0 var(--space-inline-md);
-}
-.tubu-vhint-error {
-  margin: 0;
-  padding: 0 var(--space-inline-md);
-  color: var(--color-text-danger);
-  font-size: var(--type-caption-size);
-  line-height: var(--type-caption-lh);
 }

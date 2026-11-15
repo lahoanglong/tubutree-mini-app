@@ -187,7 +187,7 @@ describe('css/freeship.css: thanh Miễn phí giao hàng', () => {
     expect(fill).toContain('var(--color-action-primary-bg)');
   });
 
-  it('W51B: có nút thì khối cao tối thiểu theo hàng nút 44px + thanh (không nhảy khi hết nút), nút cao 44px, số đều thừa kế, chữ không tràn hàng', () => {
+  it('W51B: có nút (chưa đạt) thì khối cao tối thiểu theo hàng nút 44px + thanh, nút cao 44px, số đều thừa kế, chữ không tràn hàng', () => {
     expect(rule(".tubu-freeship[data-cta='true']").style.getPropertyValue('min-height')).toMatch(/^calc\(44px\b/);
     expect(rule('.tubu-freeship-cta.zaui-btn').style.getPropertyValue('height')).toBe('44px');
     expect(rule('.tubu-freeship-cta.zaui-btn').style.getPropertyValue('font-variant-numeric')).toBe('inherit');
@@ -199,10 +199,32 @@ describe('css/freeship.css: thanh Miễn phí giao hàng', () => {
     expect(rule('.tubu-freeship-fill').style.getPropertyValue('transition')).toContain('width');
   });
 
-  it('khối giữ chiều cao tối thiểu của trạng thái chưa đạt; trạng thái đạt xanh ngọc theo token success', () => {
+  it('chưa đạt giữ chiều cao tối thiểu 56px; trạng thái đạt xanh ngọc theo token success', () => {
     expect(rule('.tubu-freeship').style.getPropertyValue('min-height')).toBe('56px');
     expect(rule(".tubu-freeship[data-reached='true']").style.getPropertyValue('background')).toBe('var(--color-status-success-bg)');
     expect(rule(".tubu-freeship[data-reached='true'] .tubu-freeship-text").style.getPropertyValue('color')).toBe('var(--color-text-success)');
+  });
+
+  // W166: dòng chúc mừng trước đây giữ min-height của lúc chưa đạt (56px, có nút "Mua thêm" thì ~76px) nên là hộp gần trống đẩy danh sách xuống.
+  it('W166: đạt ngưỡng co thành dòng gọn: min-height 0 và đệm dọc token, đặt SAU luật data-cta (cùng độ ưu tiên, luật sau thắng)', () => {
+    const all = styleRules();
+    const reachedRules = all.filter((r) => r.selectorText === ".tubu-freeship[data-reached='true']");
+    const shrink = reachedRules.find((r) => r.style.getPropertyValue('min-height') === '0px' || r.style.getPropertyValue('min-height') === '0');
+    expect(shrink, 'có luật min-height 0 cho trạng thái đạt').toBeDefined();
+    expect(shrink!.style.getPropertyValue('padding-block')).toBe('var(--space-inline-sm)');
+    const ctaIdx = all.findIndex((r) => r.selectorText === ".tubu-freeship[data-cta='true']");
+    expect(all.indexOf(shrink!)).toBeGreaterThan(ctaIdx);
+  });
+
+  it('W166: dòng chúc mừng cao không quá 40px một dòng: 2 x đệm dọc + một dòng chữ caption tính từ token thật', () => {
+    const tokens = readFileSync(resolve(__dirname, '../../../../../packages/design-tokens/src/tokens.css'), 'utf8');
+    const px = (name: string) => parseFloat(new RegExp(`${name}:\\s*([\\d.]+)px`).exec(tokens)![1]!);
+    const captionLh = parseFloat(/--type-caption-lh:\s*([\d.]+)/.exec(tokens)![1]!);
+    // --space-inline-sm = --p-space-3
+    expect(/--space-inline-sm:\s*var\(--p-space-3\)/.test(tokens)).toBe(true);
+    const height = 2 * px('--p-space-3') + px('--type-caption-size') * captionLh;
+    expect(height).toBeLessThanOrEqual(40);
+    expect(height).toBeGreaterThan(30);
   });
 
   it('shimmer chạy trên phần đã đầy và TẮT khi prefers-reduced-motion: reduce', () => {

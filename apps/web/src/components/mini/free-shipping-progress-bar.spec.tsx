@@ -135,7 +135,7 @@ describe('FreeShippingProgressBar (web)', () => {
       expect(rule('.tubu-freeship-fill::after')).toMatch(/animation:\s*tubu-freeship-shimmer/);
     });
 
-    it('thanh dùng token ngữ nghĩa (rãnh --color-track, chuyển sắc --color-progress-fill-from), số đều, khối không nhảy khi đổi trạng thái (min-height)', () => {
+    it('thanh dùng token ngữ nghĩa (rãnh --color-track, chuyển sắc --color-progress-fill-from), số đều, trạng thái chưa đạt có min-height', () => {
       expect(rule('.tubu-freeship-track')).toContain('var(--color-track)');
       expect(rule('.tubu-freeship-fill')).toContain('var(--color-progress-fill-from)');
       expect(rule('.tubu-freeship-fill')).toContain('var(--color-action-primary-bg)');
@@ -143,12 +143,29 @@ describe('FreeShippingProgressBar (web)', () => {
       expect(rule('.tubu-freeship')).toMatch(/min-height:/);
     });
 
-    it('W51B: có nút thì khối cao tối thiểu theo hàng nút 44px (không nhảy khi hết nút), nút cao 44px, số đều thừa kế, chữ không tràn hàng', () => {
+    it('W51B: có nút (chưa đạt) thì khối cao tối thiểu theo hàng nút 44px, nút cao 44px, số đều thừa kế, chữ không tràn hàng', () => {
       expect(rule(".tubu-freeship[data-cta='true']")).toMatch(/min-height:\s*calc\(44px\b/);
       expect(rule('.tubu-freeship-cta.zaui-btn')).toMatch(/height:\s*44px/);
       expect(rule('.tubu-freeship-cta.zaui-btn')).toMatch(/font-variant-numeric:\s*inherit/);
       expect(rule('.tubu-freeship-head')).toMatch(/display:\s*flex/);
       expect(rule('.tubu-freeship-head .tubu-freeship-text')).toMatch(/min-width:\s*0/);
+    });
+
+    // W166, như Mini (freeship.css): dòng chúc mừng trước đây giữ min-height của lúc chưa đạt nên là hộp gần trống.
+    it('W166: đạt ngưỡng co thành dòng gọn (min-height 0, đệm dọc token), đặt SAU luật data-cta để thắng cùng độ ưu tiên', () => {
+      const shrink = /\.tubu-freeship\[data-reached='true'\]\s*\{\s*min-height:\s*0;\s*padding-block:\s*var\(--space-inline-sm\);\s*\}/.exec(css);
+      expect(shrink, 'có luật min-height 0 cho trạng thái đạt').not.toBeNull();
+      expect(shrink!.index).toBeGreaterThan(css.indexOf(".tubu-freeship[data-cta='true']"));
+    });
+
+    it('W166: dòng chúc mừng cao không quá 40px một dòng: 2 x đệm dọc + một dòng chữ caption tính từ token thật', () => {
+      const tokens = readFileSync(resolve(__dirname, '../../../../../packages/design-tokens/src/tokens.css'), 'utf8');
+      const px = (name: string) => parseFloat(new RegExp(`${name}:\\s*([\\d.]+)px`).exec(tokens)![1]!);
+      const captionLh = parseFloat(/--type-caption-lh:\s*([\d.]+)/.exec(tokens)![1]!);
+      expect(/--space-inline-sm:\s*var\(--p-space-3\)/.test(tokens)).toBe(true);
+      const height = 2 * px('--p-space-3') + px('--type-caption-size') * captionLh;
+      expect(height).toBeLessThanOrEqual(40);
+      expect(height).toBeGreaterThan(30);
     });
   });
 });

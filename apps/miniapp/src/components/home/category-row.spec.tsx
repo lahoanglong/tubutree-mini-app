@@ -6,7 +6,7 @@ import type { CategoryEntry } from '../../hooks/use-categories';
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => vi.fn() }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
-import { CATEGORY_CELL_HEIGHT, CATEGORY_LABEL_GUTTER, CATEGORY_LABEL_HEIGHT, CATEGORY_LABEL_TRACKING } from '@tubutree/app-core/home-layout';
+import { CATEGORY_CELL_HEIGHT, CATEGORY_LABEL_HEIGHT } from '@tubutree/app-core/home-layout';
 import { CategoryRow } from './category-row';
 
 const entries = (n: number): CategoryEntry[] =>
@@ -23,6 +23,7 @@ function renderRow(n: number, over: Partial<React.ComponentProps<typeof Category
 const LONG_NAMES = ['Chăm sóc nhà cửa thiên nhiên', 'Nông sản & đặc sản', 'Thực phẩm hữu cơ'];
 const named = (labels: string[]): CategoryEntry[] => labels.map((label, i) => ({ kind: 'category', key: `n${i}`, label, icon: LayoutGrid, image: null }));
 const labelOf = (name: string) => within(screen.getByRole('button', { name })).getByText(name);
+const grid = () => screen.getByTestId('category-grid');
 
 describe('CategoryRow — nhãn hai dòng cho tên dài (M3)', () => {
   it('tên dài: nhãn căn giữa, tối đa hai dòng (clamp 2), không một dòng nowrap/ellipsis, cao đúng LABEL_HEIGHT, đủ chữ trong DOM', () => {
@@ -45,7 +46,7 @@ describe('CategoryRow — nhãn hai dòng cho tên dài (M3)', () => {
     }
   });
 
-  it('lưới tới 10 ô (cột 20%): nhãn đúng bề rộng ô, không lấn sang ô kề, không siết chữ', () => {
+  it('hàng một dòng 5 cột 20%: nhãn đúng bề rộng ô, không lấn sang ô kề, không siết chữ', () => {
     renderRow(0, { entries: named(LONG_NAMES) });
     const label = labelOf(LONG_NAMES[0]!);
     expect(label.style.width).toBe('100%');
@@ -54,15 +55,13 @@ describe('CategoryRow — nhãn hai dòng cho tên dài (M3)', () => {
     expect(label.style.letterSpacing).toBe('');
   });
 
-  it('lưới cuộn 5,5 cột (cột ~62px): nhãn không lấn sang ô kề: hộp đúng bề rộng ô, chừa CATEGORY_LABEL_GUTTER mỗi bên (hai nhãn kề cách nhau ≥ 2 lần), siết chữ', () => {
+  it('nhiều danh mục (Trang chủ chỉ vẽ 4 ô): nhãn vẫn đúng bề rộng ô 20%, không đệm hai bên, không siết chữ (không còn chế độ cột hẹp 5,5)', () => {
     renderRow(0, { entries: named([...LONG_NAMES, ...entries(9).map((e) => e.label)]) });
     const label = labelOf(LONG_NAMES[0]!);
-    expect(CATEGORY_LABEL_GUTTER).toBeGreaterThanOrEqual(1);
-    expect(label.style.letterSpacing).toBe(CATEGORY_LABEL_TRACKING);
+    expect(label.style.letterSpacing).toBe('');
     expect(label.style.width).toBe('100%');
-    expect(label.style.boxSizing).toBe('border-box');
-    expect(label.style.paddingLeft).toBe(`${CATEGORY_LABEL_GUTTER}px`);
-    expect(label.style.paddingRight).toBe(`${CATEGORY_LABEL_GUTTER}px`);
+    expect(label.style.paddingLeft).toBe('');
+    expect(label.style.paddingRight).toBe('');
     expect(label.style.marginLeft).toBe('0px');
     expect(label.style.marginRight).toBe('0px');
     expect(label).toHaveStyle({ height: `${CATEGORY_LABEL_HEIGHT}px` });
@@ -76,25 +75,27 @@ describe('CategoryRow — nhãn hai dòng cho tên dài (M3)', () => {
   });
 });
 
-describe('CategoryRow — lưới 2 hàng × 5 cột (Q7)', () => {
-  it('vùng tên "Danh mục" với tiêu đề h2; quá 10 ô: lưới xếp theo cột, 2 hàng, mỗi cột 1/5,5 bề rộng (cột thứ 6 ló nửa cột), cuộn ngang', () => {
+describe('CategoryRow — một hàng 5 ô: 4 danh mục + "Tất cả"', () => {
+  it('vùng tên "Danh mục" với tiêu đề h2; 12 danh mục: lưới 5 cột 20% một hàng, không xếp theo cột, không cuộn ngang (không còn vùng "vuốt ngang")', () => {
     renderRow(12);
     const region = screen.getByRole('region', { name: 'Danh mục' });
     expect(within(region).getByRole('heading', { level: 2, name: 'Danh mục' })).toBeInTheDocument();
-    const grid = within(region).getByRole('region', { name: /vuốt ngang/ });
-    expect(grid).toHaveStyle({ display: 'grid', gridAutoFlow: 'column', gridTemplateRows: 'repeat(2, auto)' });
-    expect(grid.style.gridAutoColumns).toMatch(/^calc\((18\.18\d*%|100% \/ 5\.5)\)$/);
+    expect(grid()).toHaveStyle({ display: 'grid', gridTemplateColumns: 'repeat(5, 20%)' });
+    expect(grid().style.gridAutoFlow).toBe('');
+    expect(grid().style.gridTemplateRows).toBe('');
+    expect(within(region).queryByRole('region', { name: /vuốt ngang/ })).toBeNull();
+    expect(grid().className).not.toContain('scroll-x');
   });
 
-  it('quá 10 ô: tiêu đề có "Xem tất cả Danh mục" (onSeeAll); chạm gọi onSeeAll', () => {
+  it('12 danh mục: tiêu đề không có "Xem tất cả Danh mục" (ô "Tất cả" cuối hàng đã làm việc đó); chạm ô "Tất cả" gọi onSeeAll đúng một lần', () => {
     const { onSeeAll } = renderRow(12);
     const header = within(screen.getByRole('region', { name: 'Danh mục' })).getByTestId('section-header');
-    const action = within(header).getByRole('button', { name: 'Xem tất cả Danh mục' });
-    fireEvent.click(action);
+    expect(within(header).queryByRole('button')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Tất cả danh mục' }));
     expect(onSeeAll).toHaveBeenCalledTimes(1);
   });
 
-  it('tới 10 ô (lưới vừa một màn) hoặc không có onSeeAll: tiêu đề không có "Xem tất cả" (ô "Tất cả" cuối lưới đã làm việc đó)', () => {
+  it('mọi số danh mục (kể cả không có onSeeAll): tiêu đề không có nút "Xem tất cả"', () => {
     for (const [n, over] of [[3, {}], [9, {}], [12, { onSeeAll: undefined }]] as const) {
       const { unmount } = renderRow(n, over);
       const header = within(screen.getByRole('region', { name: 'Danh mục' })).getByTestId('section-header');
@@ -103,43 +104,50 @@ describe('CategoryRow — lưới 2 hàng × 5 cột (Q7)', () => {
     }
   });
 
-  it('tới 10 ô (kể cả "Tất cả"): xếp theo hàng, 5 cột 1/5 bề rộng, không xếp theo cột', () => {
-    for (const n of [2, 3, 6, 9]) {
+  it('mọi số danh mục: xếp theo hàng, 5 cột 1/5 bề rộng, không xếp theo cột', () => {
+    for (const n of [2, 3, 4, 6, 9, 12]) {
       const { unmount } = renderRow(n);
-      const grid = screen.getByRole('region', { name: /vuốt ngang/ });
-      expect(grid).toHaveStyle({ display: 'grid', gridTemplateColumns: 'repeat(5, 20%)' });
-      expect(grid.style.gridAutoFlow).toBe('');
-      expect(grid.style.gridTemplateRows).toBe('');
+      expect(grid()).toHaveStyle({ display: 'grid', gridTemplateColumns: 'repeat(5, 20%)' });
+      expect(grid().style.gridAutoFlow).toBe('');
+      expect(grid().style.gridTemplateRows).toBe('');
       unmount();
     }
   });
 
   it('2 danh mục: thứ tự DOM là hai danh mục rồi "Tất cả" ở cuối (cùng hàng, không chen giữa)', () => {
     renderRow(2);
-    const buttons = within(screen.getByRole('region', { name: /vuốt ngang/ })).getAllByRole('button');
+    const buttons = within(grid()).getAllByRole('button');
     expect(buttons.map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Danh mục 0', 'Danh mục 1', 'Tất cả danh mục']);
   });
 
-  it('9 danh mục + "Tất cả" = 10 ô vẫn xếp theo hàng; 10 danh mục + "Tất cả" = 11 ô chuyển sang cột', () => {
-    const nine = renderRow(9);
-    expect(screen.getByRole('region', { name: /vuốt ngang/ }).style.gridAutoFlow).toBe('');
-    nine.unmount();
-    renderRow(10);
-    expect(screen.getByRole('region', { name: /vuốt ngang/ }).style.gridAutoFlow).toBe('column');
+  it('9 hay 10 danh mục: vẫn một hàng 5 ô, không xếp theo cột', () => {
+    for (const n of [9, 10]) {
+      const { unmount } = renderRow(n);
+      expect(grid().style.gridAutoFlow).toBe('');
+      expect(within(grid()).getAllByRole('button')).toHaveLength(5);
+      unmount();
+    }
   });
 
-  it('6 danh mục: 6 ô + "Tất cả" (ô thứ 7), tất cả nằm trong lưới', () => {
+  it('6 danh mục: chỉ 4 danh mục đầu + "Tất cả" (ô thứ 5); danh mục thứ 5 trở đi không vẽ (có ở tab Danh mục)', () => {
     renderRow(6);
-    const grid = screen.getByRole('region', { name: /vuốt ngang/ });
-    const buttons = within(grid).getAllByRole('button');
-    expect(buttons).toHaveLength(7);
-    expect(buttons[6]).toHaveAccessibleName('Tất cả danh mục');
+    const buttons = within(grid()).getAllByRole('button');
+    expect(buttons).toHaveLength(5);
+    expect(buttons.slice(0, 4).map((b) => b.textContent)).toEqual(['Danh mục 0', 'Danh mục 1', 'Danh mục 2', 'Danh mục 3']);
+    expect(buttons[4]).toHaveAccessibleName('Tất cả danh mục');
+    expect(screen.queryByRole('button', { name: 'Danh mục 4' })).toBeNull();
   });
 
-  it('12 danh mục: đủ 12 ô + "Tất cả", cuộn ngang theo cột (không cắt bớt)', () => {
-    renderRow(12);
-    const grid = screen.getByRole('region', { name: /vuốt ngang/ });
-    expect(within(grid).getAllByRole('button')).toHaveLength(13);
+  it('10 danh mục thật: Trang chủ chỉ vẽ 4 ô + "Tất cả", theo đúng thứ tự `entries`', () => {
+    renderRow(10);
+    const buttons = within(grid()).getAllByRole('button');
+    expect(buttons.map((b) => b.getAttribute('aria-label') ?? b.textContent)).toEqual(['Danh mục 0', 'Danh mục 1', 'Danh mục 2', 'Danh mục 3', 'Tất cả danh mục']);
+  });
+
+  it('không có onSeeAll thì không có ô "Tất cả", hàng vẫn tối đa 5 ô', () => {
+    renderRow(12, { onSeeAll: undefined });
+    expect(screen.queryByRole('button', { name: 'Tất cả danh mục' })).toBeNull();
+    expect(within(grid()).getAllByRole('button')).toHaveLength(5);
   });
 
   it('chạm ô gọi onSelect đúng danh mục; chạm "Tất cả" gọi onSeeAll', () => {
@@ -174,7 +182,7 @@ describe('CategoryRow — lưới 2 hàng × 5 cột (Q7)', () => {
     for (const b of screen.getAllByRole('button')) expect(b).toHaveStyle({ minHeight: '44px' });
   });
 
-  it('cột 5,5 hẹp (~62px): ô không đệm ngang để nhãn dùng đủ cột, nhãn chữ nhỏ tối đa hai dòng, cao đúng LABEL_HEIGHT (H3 #5)', () => {
+  it('ô không đệm ngang để nhãn dùng đủ cột 20%, nhãn chữ nhỏ tối đa hai dòng, cao đúng LABEL_HEIGHT (H3 #5)', () => {
     renderRow(12);
     const cell = screen.getByRole('button', { name: 'Danh mục 0' });
     expect(cell.style.paddingLeft).toBe('0px');
@@ -184,23 +192,34 @@ describe('CategoryRow — lưới 2 hàng × 5 cột (Q7)', () => {
     expect(label).toHaveStyle({ height: `${CATEGORY_LABEL_HEIGHT}px` });
   });
 
-  it('cột 5,5 chỉ vừa ~62px: nhãn siết chữ CATEGORY_LABEL_TRACKING; lưới tới 10 ô cột 20% vẫn chữ thường (H3 #5)', () => {
-    const wide = renderRow(12);
-    expect(within(screen.getByRole('button', { name: 'Danh mục 0' })).getByText('Danh mục 0').style.letterSpacing).toBe(CATEGORY_LABEL_TRACKING);
-    wide.unmount();
-    renderRow(6);
-    expect(within(screen.getByRole('button', { name: 'Danh mục 0' })).getByText('Danh mục 0').style.letterSpacing).toBe('');
+  it('nhãn không siết chữ ở mọi số danh mục: cột luôn 20% (không còn cột cuộn 5,5 hẹp ~62px)', () => {
+    for (const n of [6, 12]) {
+      const { unmount } = renderRow(n);
+      expect(within(screen.getByRole('button', { name: 'Danh mục 0' })).getByText('Danh mục 0').style.letterSpacing).toBe('');
+      unmount();
+    }
   });
 
-  it('đang tải: khung chờ 10 ô mặc định; theo số ô nhớ thì ít hơn (cộng ô "Tất cả"), tối đa 10', () => {
+  it('đang tải: khung chờ 5 ô mặc định (một hàng); theo số ô nhớ thì ít hơn (cộng ô "Tất cả"), tối đa 5', () => {
     const first = render(<CategoryRow entries={[]} isLoading onSelect={vi.fn()} />);
-    expect(screen.getAllByTestId('category-row-skeleton')).toHaveLength(10);
-    first.unmount();
-    const second = render(<CategoryRow entries={[]} isLoading onSelect={vi.fn()} placeholderCount={4} />);
     expect(screen.getAllByTestId('category-row-skeleton')).toHaveLength(5);
+    first.unmount();
+    const second = render(<CategoryRow entries={[]} isLoading onSelect={vi.fn()} placeholderCount={2} />);
+    expect(screen.getAllByTestId('category-row-skeleton')).toHaveLength(3);
     second.unmount();
+    const third = render(<CategoryRow entries={[]} isLoading onSelect={vi.fn()} placeholderCount={4} />);
+    expect(screen.getAllByTestId('category-row-skeleton')).toHaveLength(5);
+    third.unmount();
     render(<CategoryRow entries={[]} isLoading onSelect={vi.fn()} placeholderCount={20} />);
-    expect(screen.getAllByTestId('category-row-skeleton')).toHaveLength(10);
+    expect(screen.getAllByTestId('category-row-skeleton')).toHaveLength(5);
+  });
+
+  it('khung chờ và lưới thật dùng cùng một lưới (5 cột 20%, cùng đệm): chiều cao khối bằng nhau nên trang không nhảy khi danh mục về', () => {
+    const loading = render(<CategoryRow entries={[]} isLoading onSelect={vi.fn()} />);
+    const skeletonStyle = { template: grid().style.gridTemplateColumns, padding: grid().style.padding };
+    loading.unmount();
+    renderRow(12);
+    expect({ template: grid().style.gridTemplateColumns, padding: grid().style.padding }).toEqual(skeletonStyle);
   });
 
   it('ô khung chờ cao đúng ô thật (ô 56 + cách 4 + nhãn 32 = 92): khối phía dưới không nhảy khi danh mục về', () => {

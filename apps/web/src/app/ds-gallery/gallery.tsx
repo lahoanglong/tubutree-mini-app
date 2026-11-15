@@ -339,21 +339,14 @@ export function DsGallery() {
         </Group>
 
         <Group name="cart-voucher-hint-strip">
-          <Variant label="mời áp mã đủ điều kiện + nhắc mã sắp mở khoá">
-            <CartVoucherHintStrip hint={GALLERY_VOUCHER_HINT} onApply={() => undefined} />
-          </Variant>
-          <Variant label="chỉ mời áp mã">
-            <CartVoucherHintStrip hint={{ apply: GALLERY_VOUCHER_HINT.apply, unlock: null }} onApply={() => undefined} />
+          <Variant label="có mã dùng được + mã sắp mở khoá: dải chỉ vẽ dòng mở khoá (nút Áp dụng nằm ở hàng Mã giảm giá của chân dính)">
+            <CartVoucherHintStrip hint={GALLERY_VOUCHER_HINT} />
           </Variant>
           <Variant label="chỉ nhắc mở khoá">
-            <CartVoucherHintStrip hint={{ apply: null, unlock: GALLERY_VOUCHER_HINT.unlock }} onApply={() => undefined} />
+            <CartVoucherHintStrip hint={{ apply: null, unlock: GALLERY_VOUCHER_HINT.unlock }} />
           </Variant>
           <Variant label="nhắc mở khoá có nút Mua thêm (một chạm về chọn món)">
-            <CartVoucherHintStrip hint={{ apply: null, unlock: GALLERY_VOUCHER_HINT.unlock }} onApply={() => undefined} onShopMore={() => undefined} />
-          </Variant>
-          <Variant label="đang áp / áp không được">
-            <CartVoucherHintStrip hint={{ apply: GALLERY_VOUCHER_HINT.apply, unlock: null }} onApply={() => undefined} applying />
-            <CartVoucherHintStrip hint={{ apply: GALLERY_VOUCHER_HINT.apply, unlock: null }} onApply={() => undefined} error="Mã giảm giá đã hết lượt dùng." />
+            <CartVoucherHintStrip hint={{ apply: null, unlock: GALLERY_VOUCHER_HINT.unlock }} onShopMore={() => undefined} />
           </Variant>
         </Group>
 

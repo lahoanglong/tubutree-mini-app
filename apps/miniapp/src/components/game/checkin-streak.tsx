@@ -43,8 +43,6 @@ export function CheckInStreak({
   const t = gameNewbieCopy.checkin;
   const freezeCost = profile?.streakFreezeCost ?? 80;
   const freezeShort = profile ? missingDrops(profile.totalSeeds, freezeCost) : 0;
-  const dayReward = (day: number): number | null =>
-    day === 7 ? (profile?.streak7Seeds ?? null) : day === 3 ? STREAK_3_SEEDS : null;
   return (
     <Card padding={16}>
       <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
@@ -58,42 +56,6 @@ export function CheckInStreak({
           </Text>
         </div>
       </div>
-      <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>
-        {Array.from({ length: 7 }, (_, i) => {
-          const day = i + 1;
-          const done = status
-            ? (status.rewards[i]?.claimed ?? false)
-            : (streakDays ?? 0) % 7 === 0 && (streakDays ?? 0) > 0
-              ? true
-              : day <= ((streakDays ?? 0) % 7);
-          const bonus = day === 3 || day === 7;
-          const reward = dayReward(day);
-          return (
-            <div key={i} style={{ flex: 1, textAlign: 'center' }}>
-              <div
-                style={{
-                  height: 32,
-                  borderRadius: 'var(--radius-control)',
-                  background: done ? 'var(--color-action-primary-bg)' : 'var(--stone-100)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: done ? 'var(--color-action-primary-fg)' : 'var(--color-text-tertiary)',
-                  fontSize: 'var(--type-body-sm-size)',
-                }}
-              >
-                {done ? '💧' : bonus ? '🎁' : day}
-              </div>
-              {bonus && reward != null && (
-                <Text variant="label" tone="secondary" as="div" style={{ fontWeight: 700, marginTop: 2 }}>
-                  {t.dayReward(reward)}💧
-                </Text>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
       {statusError && (
         <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <Text variant="caption" tone="danger" as="div" style={{ minWidth: 0 }}>

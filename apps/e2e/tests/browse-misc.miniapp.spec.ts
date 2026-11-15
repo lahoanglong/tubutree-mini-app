@@ -3,7 +3,7 @@ import { test, expect, type MockApi } from './support/mock-api';
 import { mockDiscovery, BINH_SUA, NRC } from './support/discovery-mocks';
 
 /**
- * Mini App 375px — gói G5 (P2 #2, #6): danh mục quá một màn có "Xem tất cả" ở tiêu đề và cột thứ 6 ló nửa cột; thẻ không in lại thương hiệu
+ * Mini App 375px — gói G5 (P2 #2, #6): Trang chủ chỉ một hàng 5 ô (4 danh mục đầu + "Tất cả") dù có bao nhiêu danh mục, hub /browse vẫn có "Xem tất cả" ở tiêu đề khi quá 8 gốc; thẻ không in lại thương hiệu
  * khi tên đã chứa nó mà vẫn giữ khe nên tên và giá thẳng hàng với thẻ bên cạnh. API mock toàn bộ, đo bằng trình duyệt thật (WebKit).
  */
 const root = (i: number) => ({ id: `r${i}`, parentId: null, name: `Gốc ${i}`, slug: `r${i}`, image: null, sortOrder: i, productCount: 5, children: [] });
@@ -19,28 +19,51 @@ const homeCategories = (page: Page) => page.getByRole('region', { name: 'Danh m�
 test.describe('Danh mục quá một màn', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  test('Trang chủ 10 gốc: tiêu đề có "Xem tất cả Danh mục" mở hub, ô "Tất cả danh mục" ló nửa cột ở mép phải', async ({ page, api }) => {
+  test('Trang chủ 10 gốc: chỉ 4 ô + "Tất cả" trong một hàng nằm gọn màn (không cuộn ngang, không "Xem tất cả" ở tiêu đề); "Tất cả danh mục" mở hub /browse', async ({ page, api }) => {
     mockRoots(api, 10);
     await page.goto('/');
     const cats = homeCategories(page);
     await expect(cats.getByRole('button', { name: 'Gốc 1', exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(cats.getByRole('button', { name: 'Gốc 4', exact: true })).toBeVisible();
+    await expect(cats.getByRole('button', { name: 'Gốc 5', exact: true })).toHaveCount(0);
+    await expect(cats.getByRole('button', { name: 'Xem tất cả Danh mục', exact: true })).toHaveCount(0);
+    await expect(cats.getByRole('button')).toHaveCount(5);
     const all = cats.getByRole('button', { name: 'Tất cả danh mục', exact: true });
     const box = (await all.boundingBox())!;
-    expect(box.x, 'cột 6 bắt đầu trong 300–360px').toBeGreaterThanOrEqual(300);
-    expect(box.x).toBeLessThanOrEqual(360);
-    expect(box.x + box.width, 'cột 6 tràn qua mép phải màn').toBeGreaterThan(375);
-    await cats.getByRole('button', { name: 'Xem tất cả Danh mục', exact: true }).click();
+    expect(box.x + box.width, 'ô "Tất cả" nằm gọn trong màn').toBeLessThanOrEqual(375);
+    const grid = cats.getByTestId('category-grid');
+    const { scrollW, clientW } = await grid.evaluate((el) => ({ scrollW: el.scrollWidth, clientW: el.clientWidth }));
+    expect(scrollW, 'hàng không cuộn ngang').toBeLessThanOrEqual(clientW);
+    await all.click();
     await expect(page).toHaveURL(/\/browse$/, { timeout: 15_000 });
   });
 
-  test('Trang chủ 9 gốc (10 ô vừa một màn): không có "Xem tất cả" ở tiêu đề, "Tất cả danh mục" nằm gọn trong màn', async ({ page, api }) => {
-    mockRoots(api, 9);
+  test('Trang chủ 3 gốc: 3 ô + "Tất cả" trong một hàng, không có "Xem tất cả" ở tiêu đề, "Tất cả danh mục" nằm gọn trong màn', async ({ page, api }) => {
+    mockRoots(api, 3);
     await page.goto('/');
     const cats = homeCategories(page);
-    await expect(cats.getByRole('button', { name: 'Gốc 9', exact: true })).toBeVisible({ timeout: 30_000 });
+    await expect(cats.getByRole('button', { name: 'Gốc 3', exact: true })).toBeVisible({ timeout: 30_000 });
     await expect(cats.getByRole('button', { name: 'Xem tất cả Danh mục', exact: true })).toHaveCount(0);
+    await expect(cats.getByRole('button')).toHaveCount(4);
     const box = (await cats.getByRole('button', { name: 'Tất cả danh mục', exact: true }).boundingBox())!;
     expect(box.x + box.width).toBeLessThanOrEqual(375);
+  });
+
+  test('hai ô cuối Trang chủ phân biệt được: "Thêm" (lối tắt) mở hộp thoại và ở lại Trang chủ; "Tất cả" (Danh mục) đi /browse', async ({ page, api }) => {
+    mockRoots(api, 10);
+    await page.goto('/');
+    const shortcuts = page.getByRole('region', { name: 'Lối tắt', exact: true });
+    const more = shortcuts.getByRole('button', { name: 'Thêm lối tắt', exact: true });
+    await expect(more).toBeVisible({ timeout: 30_000 });
+    await expect(more).toHaveText('Thêm');
+    await expect(homeCategories(page).getByRole('button', { name: 'Tất cả danh mục', exact: true })).toHaveText('Tất cả');
+    await more.click();
+    await expect(page.getByRole('dialog', { name: 'Tất cả lối tắt' })).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/$/);
+    await page.getByRole('dialog', { name: 'Tất cả lối tắt' }).getByRole('button', { name: 'Đóng' }).click();
+    await expect(page.getByRole('dialog', { name: 'Tất cả lối tắt' })).toHaveCount(0);
+    await homeCategories(page).getByRole('button', { name: 'Tất cả danh mục', exact: true }).click();
+    await expect(page).toHaveURL(/\/browse$/, { timeout: 15_000 });
   });
 
   test('hub 10 gốc: hiện 8 ô + "Tất cả", tiêu đề có "Xem tất cả Danh mục" dẫn tới danh sách không lọc', async ({ page, api }) => {

@@ -114,7 +114,16 @@ test.describe('Web khách: chân dính giỏ ở 375px', () => {
       const lines = Math.round((await hint.evaluate((el) => el.getBoundingClientRect().height)) / 16);
       expect(lines, `gợi ý chiếm ${lines} dòng`).toBeLessThanOrEqual(1);
       expect(await barHeight(page), 'hàng mã vẫn 44px nên chân dính không cao thêm').toBeLessThanOrEqual(150);
-      await expect(bar(page).getByText('Chọn mã')).toBeVisible();
+      // W166: có mã dùng được thì cuối hàng là nút "Áp dụng" (thay "Chọn mã ›"), như Mini App; nút từ 44px và hàng không cao thêm.
+      const apply = bar(page).getByTestId('cart-voucher-apply-cta');
+      await expect(apply).toHaveText('Áp dụng');
+      await expect(apply).toHaveAccessibleName(/^Áp dụng ngay mã FT\d+$/);
+      await expect(bar(page).getByText('Chọn mã')).toHaveCount(0);
+      const a = (await apply.boundingBox())!;
+      expect(a.height, 'chiều cao nút Áp dụng').toBeGreaterThanOrEqual(44);
+      expect(a.x + a.width, 'nút Áp dụng nằm trong màn hình').toBeLessThanOrEqual(375);
+      const hintBox = (await hint.boundingBox())!;
+      expect(hintBox.x + hintBox.width, 'gợi ý không đè lên nút Áp dụng').toBeLessThanOrEqual(a.x);
     });
   }
 

@@ -58,11 +58,19 @@ test.describe('Giỏ web: hàng mã giảm giá ở 320px', () => {
     expect(f.mids['coupon-placeholder']! - f.mids['coupon-label']!, 'lời mời nằm dưới nhãn (xuống dòng)').toBeGreaterThan(8);
   });
 
-  test('có gợi ý mã: gợi ý một dòng, không "…", hàng vẫn 44px', async ({ page, api }) => {
+  test('có gợi ý mã: gợi ý một dòng, không "…", hàng vẫn 44px, cuối hàng là nút "Áp dụng" từ 44px (W166)', async ({ page, api }) => {
     await openCart(page, api, W320, { hint: HINT });
     const f = await rowFacts(page);
-    expectRowIntact(f);
+    expectRowIntact(f, undefined, { quickApply: true });
     expect(f.lines['coupon-hint'], `gợi ý ${f.lines['coupon-hint']} dòng`).toBe(1);
+    // W166: nút "Áp dụng" cùng hàng, cạnh chữ của hàng, từ 44px và nằm trọn trong màn hình 320px.
+    const apply = page.getByTestId('cart-voucher-apply-cta');
+    await expect(apply).toHaveText('Áp dụng');
+    const a = (await apply.boundingBox())!;
+    expect(a.height, 'chiều cao nút Áp dụng').toBeGreaterThanOrEqual(44);
+    expect(a.width, 'chiều rộng nút Áp dụng').toBeGreaterThanOrEqual(44);
+    expect(a.x + a.width, 'nút Áp dụng trong màn hình').toBeLessThanOrEqual(320);
+    expect(f.boxes['coupon-hint']!.right, 'gợi ý không đè lên nút Áp dụng').toBeLessThanOrEqual(a.x);
   });
 
   test('đã áp mã: mã và số giảm hiện đủ, không "…", hàng vẫn 44px', async ({ page, api }) => {

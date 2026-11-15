@@ -1,0 +1,41 @@
+/* Nhịp Sống Xanh 7 Ngày (W166): dải trong thẻ đầu Vườn Xanh. Tổng cao ≤ 52px (dòng tiêu đề + hàng 7 ô). Số đo đặt ở đây (bánh cóc px chỉ đếm TSX). */
+
+.tubu-rhythm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+  margin-top: var(--space-stack-sm);
+  text-align: left;
+}
+.tubu-rhythm-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-inline-md);
+}
+.tubu-rhythm-days {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: var(--space-stack-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-rhythm-day {
+  display: grid;
+  place-items: center;
+  height: 28px;
+  border-radius: var(--radius-pill);
+  background: var(--forest-800);
+  color: var(--color-text-inverse);
+}
+.tubu-rhythm-day[data-state='done'] {
+  background: var(--color-text-inverse);
+}
+.tubu-rhythm-day[data-state='today-open'] {
+  box-shadow: inset 0 0 0 2px var(--color-text-inverse);
+}
+.tubu-rhythm-day[data-state='upcoming'] {
+  background: transparent;
+  box-shadow: inset 0 0 0 1px var(--forest-800);
+}

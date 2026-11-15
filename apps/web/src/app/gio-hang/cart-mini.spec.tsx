@@ -425,18 +425,124 @@ describe('/gio-hang — nút "Mua thêm" ở dòng sắp mở khoá mã (W50A)',
     expect(state.push).toHaveBeenCalledWith('/');
   });
 
-  it('chỉ có mã dùng được, không có dòng sắp mở khoá: dải hiện "Áp dụng ngay" nhưng không có nút "Mua thêm"', async () => {
+  it('chỉ có mã dùng được, không có dòng sắp mở khoá: thân giỏ không có dải nào và không có nút "Mua thêm"; nút "Áp dụng" nằm ở hàng mã (W166)', async () => {
     state.coupons = [GIAM45];
     state.previews = [{ code: 'GIAM45', eligible: true, discount: 45000 }];
     const c = await mount();
     await settle();
     expect(c.querySelector('[data-testid="cart-voucher-apply-cta"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="cart-voucher-hint"]')).toBeNull();
+    expect(c.querySelector('[data-testid="cart-voucher-apply"]')).toBeNull();
     expect(c.querySelector('[data-testid="cart-voucher-unlock"]')).toBeNull();
     expect(c.querySelector('[data-testid="cart-voucher-unlock-cta"]')).toBeNull();
   });
 });
 
-describe('/gio-hang — "Áp dụng ngay" ở dải gợi ý mã khoá chống chạm đúp (W81B)', () => {
+describe('/gio-hang — chỉ MỘT nút áp mã, ở cuối hàng "Mã giảm giá", như Mini App (W166)', () => {
+  const GIAM45 = { code: 'GIAM45', type: 'AMOUNT', value: 45000, minOrder: null, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' };
+  const USABLE = [{ code: 'GIAM45', eligible: true, discount: 45000 }];
+  const settle = async () => {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 500));
+    });
+    await flush(6);
+  };
+  const asPhone = () =>
+    vi.stubGlobal('matchMedia', (q: string) => ({ matches: q === '(max-width: 767px)', addEventListener: () => {}, removeEventListener: () => {} }));
+  const apply = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="cart-voucher-apply-cta"]');
+
+  it('điện thoại: nút "Áp dụng" là nút cuối hàng mã TRONG thanh dính, thay "Chọn mã", gợi ý "N mã · giảm đến X" giữ nguyên; cả màn chỉ một nút áp mã', async () => {
+    asPhone();
+    state.coupons = [GIAM45];
+    state.previews = USABLE;
+    const c = await mount();
+    await settle();
+    const cta = apply(c)!;
+    expect(cta.closest('[data-testid="sticky-bar"]')).not.toBeNull();
+    expect(cta.textContent).toBe('Áp dụng');
+    expect(cta.getAttribute('aria-label')).toBe('Áp dụng ngay mã GIAM45');
+    expect(c.querySelectorAll('[data-testid="cart-voucher-apply-cta"]')).toHaveLength(1);
+    expect(bar(c).querySelector('[data-testid="coupon-cta"]')).toBeNull();
+    expect(bar(c).textContent).not.toContain('Chọn mã');
+    expect(bar(c).querySelector('[data-testid="coupon-hint"]')!.textContent).toBe('1 mã · giảm đến 45k');
+    expect(c.textContent).not.toContain('Bạn có mã giảm giá');
+    expect(c.querySelector('[data-testid="cart-voucher-hint"]')).toBeNull();
+  });
+
+  it('điện thoại: nút nằm NGOÀI nút mở bảng (không lồng nút trong nút), vùng chạm 44px, cùng hàng với chữ của hàng', async () => {
+    asPhone();
+    state.coupons = [GIAM45];
+    state.previews = USABLE;
+    const c = await mount();
+    await settle();
+    const cta = apply(c)!;
+    const row = bar(c).querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!;
+    expect(row.contains(cta)).toBe(false);
+    expect(row.querySelector('button')).toBeNull();
+    expect(row.parentElement).toBe(cta.parentElement);
+    expect(row.className).toMatch(/\bmin-h-11\b/);
+    expect(cta.style.minHeight).toBe('44px');
+    expect(cta.className).toContain('tubu-vhint-cta');
+    expect(c.querySelectorAll('[aria-haspopup="dialog"]')).toHaveLength(1);
+  });
+
+  it('điện thoại: bấm chữ của hàng vẫn mở bảng chọn mã và KHÔNG áp mã', async () => {
+    asPhone();
+    state.coupons = [GIAM45];
+    state.previews = USABLE;
+    const asked: string[] = [];
+    state.apply = async (code) => {
+      asked.push(code);
+      return state.cart;
+    };
+    const c = await mount();
+    await settle();
+    click(bar(c).querySelector('button[aria-haspopup="dialog"]'));
+    await flush(3);
+    expect(document.querySelector('[role="dialog"]')).not.toBeNull();
+    expect(asked).toEqual([]);
+  });
+
+  it('điện thoại: chỉ có mã sắp mở khoá (chưa đủ điều kiện): hàng giữ "Chọn mã ›", không có nút "Áp dụng"', async () => {
+    asPhone();
+    state.coupons = [{ ...GIAM45, minOrder: 650000 }];
+    state.previews = [{ code: 'GIAM45', eligible: false, discount: 0, reason: 'Đơn tối thiểu 650.000đ để dùng mã này.', shortfall: 72000 }];
+    const c = await mount();
+    await settle();
+    expect(apply(c)).toBeNull();
+    expect(bar(c).querySelector('[data-testid="coupon-cta"]')!.textContent).toBe('Chọn mã');
+    expect(c.querySelector('[data-testid="cart-voucher-unlock-cta"]')).not.toBeNull();
+  });
+
+  it('từ md: nút "Áp dụng" nằm ở hàng mã của khung tóm tắt (không phải thanh dính), thay "Chọn mã", cùng test-id và tên truy cập', async () => {
+    state.coupons = [GIAM45];
+    state.previews = USABLE;
+    const c = await mount();
+    await settle();
+    const cta = apply(c)!;
+    const summary = c.querySelector('[data-testid="cart-summary"]')!;
+    expect(summary.contains(cta)).toBe(true);
+    expect(bar(c).contains(cta)).toBe(false);
+    expect(cta.getAttribute('aria-label')).toBe('Áp dụng ngay mã GIAM45');
+    const row = summary.querySelector<HTMLButtonElement>('[data-testid="coupon-row"]')!;
+    expect(row.contains(cta)).toBe(false);
+    expect(row.querySelector('[data-testid="coupon-cta"]')).toBeNull();
+    expect(c.querySelectorAll('[data-testid="cart-voucher-apply-cta"]')).toHaveLength(1);
+  });
+
+  it('giỏ đã có mã: không có nút "Áp dụng", hàng ghi mã và "Thay đổi"', async () => {
+    asPhone();
+    state.cart = cartOf([line({})], { couponCode: 'XANH10', discount: 5000 });
+    state.coupons = [GIAM45];
+    state.previews = USABLE;
+    const c = await mount();
+    await settle();
+    expect(apply(c)).toBeNull();
+    expect(bar(c).querySelector('[data-testid="coupon-cta"]')!.textContent).toBe('Thay đổi');
+  });
+});
+
+describe('/gio-hang — "Áp dụng" ở hàng mã khoá chống chạm đúp (W81B, chuyển từ dải gợi ý xuống hàng mã ở W166)', () => {
   const GIAM45 = { code: 'GIAM45', type: 'AMOUNT', value: 45000, minOrder: null, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' };
   const settle = async () => {
     await act(async () => {
@@ -446,7 +552,7 @@ describe('/gio-hang — "Áp dụng ngay" ở dải gợi ý mã khoá chống c
   };
   const cta = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="cart-voucher-apply-cta"]');
 
-  it('hai cú chạm sát nhau trong cùng một khung hình chỉ gọi applyCoupon một lần; xong thì dải biến mất và báo "Đã áp dụng mã"', async () => {
+  it('hai cú chạm sát nhau trong cùng một khung hình chỉ gọi applyCoupon một lần; xong thì nút biến mất, hàng đổi sang mã đã áp và có lời "Đã áp dụng mã" cho trình đọc màn hình', async () => {
     state.coupons = [GIAM45];
     state.previews = [{ code: 'GIAM45', eligible: true, discount: 45000 }];
     const asked: string[] = [];

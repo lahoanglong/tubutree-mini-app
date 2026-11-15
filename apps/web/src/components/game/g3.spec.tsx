@@ -10,6 +10,10 @@ import { WaterTank } from './water-tank';
 import { SeasonEmpty } from './season-banner';
 import { WeeklyLeaderboard } from './weekly-leaderboard';
 
+// Dải Nhịp Sống Xanh cần phiên đăng nhập và react-query; thẻ vườn ở đây chỉ kiểm chữ của thẻ (dải có spec riêng: week-rhythm.spec.tsx).
+vi.mock('./week-rhythm', () => ({ WeekRhythm: () => <div data-testid="week-rhythm" /> }));
+const RHYTHM = { lastCheckInAt: null, activeToday: false };
+
 vi.mock('next/link', () => ({ default: ({ href, children, ...p }: { href: string; children: React.ReactNode }) => <a href={href} {...p}>{children}</a> }));
 
 let mounted: Rendered | null = null;
@@ -54,7 +58,7 @@ describe('HarvestCelebration', () => {
 
 describe('GardenHero', () => {
   it('hồ sơ cũ 400/60: không hiện 400, nói đủ nước', () => {
-    mounted = render(<GardenHero eco={{ progress: 400, target: 60, treeType: 'Sồi', treesPlanted: 1 }} totalSeeds={10} streakDays={1} harvestReady />);
+    mounted = render(<GardenHero eco={{ progress: 400, target: 60, treeType: 'Sồi', treesPlanted: 1 }} totalSeeds={10} streakDays={1} rhythm={RHYTHM} harvestReady />);
     expect(mounted.container.textContent).not.toContain('400');
     expect(mounted.container.textContent).toMatch(/thu hoạch ngay/i);
   });
@@ -62,7 +66,7 @@ describe('GardenHero', () => {
     const eco = (treeType: string) => ({ progress: 10, target: 60, treeType, treesPlanted: 0 });
     const title = (e: Parameters<typeof GardenHero>[0]['eco']) => {
       mounted?.unmount();
-      mounted = render(<GardenHero eco={e} totalSeeds={10} streakDays={1} />);
+      mounted = render(<GardenHero eco={e} totalSeeds={10} streakDays={1} rhythm={RHYTHM} />);
       return mounted.container.textContent ?? '';
     };
     expect(title(eco('Sồi'))).toContain('Sồi');

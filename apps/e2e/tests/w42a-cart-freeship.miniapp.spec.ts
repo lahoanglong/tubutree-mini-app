@@ -163,7 +163,7 @@ for (const vp of VIEWPORTS) {
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 
-    test('thêm đủ để đạt ngưỡng: dòng chúc mừng, thanh và dải biến mất, khối không co lại dưới 56px, không tràn ngang', async ({ page, api }) => {
+    test('thêm đủ để đạt ngưỡng: dòng chúc mừng gọn một dòng cao ≤40px (W166), thanh và dải biến mất, không tràn ngang', async ({ page, api }) => {
       mockCart(api);
       await openCart(page);
       const before = (await progress(page).boundingBox())!.height;
@@ -180,7 +180,8 @@ for (const vp of VIEWPORTS) {
       expect(api.callsTo('POST', '/cart/items')).toHaveLength(2);
 
       const after = (await progress(page).boundingBox())!;
-      expect(after.height, 'khối giữ chiều cao tối thiểu khi thanh biến mất').toBeGreaterThanOrEqual(56 - 1);
+      expect(after.height, 'dòng chúc mừng đã gọn, không giữ chiều cao 56px của khối chưa đạt').toBeLessThanOrEqual(40);
+      expect(after.height, 'dòng chúc mừng vẫn đủ một dòng chữ').toBeGreaterThan(20);
       expect(after.x + after.width).toBeLessThanOrEqual(vp.width);
       expect(await noHorizontalScroll(page)).toBe(true);
     });

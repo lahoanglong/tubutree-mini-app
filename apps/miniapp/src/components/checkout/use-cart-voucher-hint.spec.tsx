@@ -75,6 +75,17 @@ describe('useCartVoucherHint (Mini)', () => {
     expect(result.current.hint?.apply).toMatchObject({ code: 'GIAM45', saving: 45_000 });
   });
 
+  it('W166 usable: số mã dùng được và mức giảm cao nhất cho chữ ngắn của hàng "Mã giảm giá"; chưa có xem trước hoặc giỏ đã có mã thì null', () => {
+    h.previews.mockReturnValue({ wallet: [coupon('GIAM45'), coupon('GIAM20')], previews: [usable('GIAM45', 45_000), usable('GIAM20', 20_000)] });
+    const { result } = setup();
+    expect(result.current.usable).toEqual({ count: 2, maxSaving: 45_000 });
+    h.previews.mockReturnValue(null);
+    const none = setup();
+    expect(none.result.current.usable).toBeNull();
+    const held = setup({ ...OPTS, currentCode: 'DACO' });
+    expect(held.result.current.usable).toBeNull();
+  });
+
   it('áp thành công: gọi applyCoupon với mã in hoa, ghi giỏ vào cache, làm mới báo giá, báo "Đã áp dụng mã …"', async () => {
     h.previews.mockReturnValue({ wallet: [coupon('GIAM45')], previews: [usable('GIAM45', 45_000)] });
     const cart = { items: [], couponCode: 'GIAM45' };

@@ -7,10 +7,11 @@ import {
   visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS, HOME_HERO_HEIGHT, HOME_GIFT_HEIGHT,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
-  HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, categoryGridScrolls, CATEGORY_CELL_HEIGHT, CATEGORY_SCROLL_COLUMNS,
+  HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, homeCategoryEntries, CATEGORY_CELL_HEIGHT, CATEGORY_GRID_COLUMNS, CATEGORY_GRID_MAX_CELLS,
   BANNER_HINT_KEY, OFFERS_BANNER_HINT_KEY, readBannerHint, writeBannerHint,
   COLLECT_HINT_KEY, COLLECT_HINT_MAX, collectSkeletonHeight, readCollectHint, writeCollectHint, HOME_BEST_SELLER_LIMIT,
 } from './home-layout';
+import { homeCopy } from './home-copy';
 import { rememberActiveOrder } from './home-todo-rows';
 import type { LoyaltyOverview } from './api/loyalty';
 
@@ -117,21 +118,43 @@ describe('chiều cao khối Danh mục theo số ô', () => {
   it('ô danh mục cao 92 (56 + 4 + nhãn hai dòng 32)', () => {
     expect(CATEGORY_CELL_HEIGHT).toBe(92);
   });
-  it('tới 5 ô một hàng (148), từ 6 ô hai hàng (248); quá 10 ô cuộn ngang vẫn hai hàng; khung chờ chung dùng số hai hàng', () => {
+  it('tới 5 ô một hàng (148), từ 6 ô hai hàng (248) là phép đo chung; Trang chủ chỉ có một hàng nên khung chờ chung dùng số một hàng (148)', () => {
     for (const n of [1, 4, 5]) expect(categoriesBlockHeight(n), `${n} ô`).toBe(148);
     for (const n of [6, 10, 14]) expect(categoriesBlockHeight(n), `${n} ô`).toBe(248);
-    expect(HOME_SETTLING_HEIGHTS.categories).toBe(248);
+    expect(HOME_SETTLING_HEIGHTS.categories).toBe(148);
   });
-  it('số ô khung chờ = số danh mục nhớ + "Tất cả", không quá một màn', () => {
+  it('số ô khung chờ = số danh mục nhớ + "Tất cả", không quá một hàng (5)', () => {
     expect(categorySkeletonCells(3)).toBe(4);
-    expect(categorySkeletonCells(9)).toBe(10);
-    expect(categorySkeletonCells(40)).toBe(10);
+    expect(categorySkeletonCells(4)).toBe(5);
+    expect(categorySkeletonCells(9)).toBe(5);
+    expect(categorySkeletonCells(40)).toBe(5);
   });
-  it('lưới chỉ cuộn khi quá 10 ô (kể cả "Tất cả"); lúc cuộn mỗi cột rộng 1/5,5 để cột thứ 6 ló nửa cột, không chỉ ló đệm 16px dưới lớp mờ', () => {
-    expect(categoryGridScrolls(10)).toBe(false);
-    expect(categoryGridScrolls(11)).toBe(true);
-    expect(categoryGridScrolls(0)).toBe(false);
-    expect(CATEGORY_SCROLL_COLUMNS).toBe(5.5);
+  it('Trang chủ chỉ một hàng 5 ô: 4 danh mục đầu theo thứ tự có sẵn + "Tất cả"; không có ô thứ 6 để xếp hàng hai hay cuộn ngang', () => {
+    expect(CATEGORY_GRID_MAX_CELLS).toBe(CATEGORY_GRID_COLUMNS);
+    expect(CATEGORY_GRID_MAX_CELLS).toBe(5);
+    const ten = Array.from({ length: 10 }, (_, i) => `c${i}`);
+    expect(homeCategoryEntries(ten, true)).toEqual(['c0', 'c1', 'c2', 'c3']);
+    expect(homeCategoryEntries(ten, false)).toEqual(['c0', 'c1', 'c2', 'c3', 'c4']);
+    expect(homeCategoryEntries(['a', 'b'], true)).toEqual(['a', 'b']);
+    expect(homeCategoryEntries([], true)).toEqual([]);
+    // Số ô vẽ (kể cả "Tất cả") luôn vừa một hàng và cao đúng khung chờ chung: trang không nhảy khi danh mục về.
+    for (const n of [0, 1, 4, 5, 10, 40]) {
+      const cells = homeCategoryEntries(Array.from({ length: n }, (_, i) => i), true).length + 1;
+      expect(categoriesBlockHeight(cells), `${n} danh mục`).toBe(HOME_SETTLING_HEIGHTS.categories);
+    }
+  });
+});
+
+describe('hai ô cuối của Trang chủ phân biệt được', () => {
+  it('ô cuối lối tắt ("Thêm", mở sheet) khác ô cuối Danh mục ("Tất cả", đi tab Danh mục) cả nhãn lẫn tên đọc; nhãn lối tắt ≤ 6 ký tự', () => {
+    expect(homeCopy.shortcuts.more).toBe('Thêm');
+    expect(homeCopy.shortcuts.more.length).toBeLessThanOrEqual(6);
+    expect(homeCopy.shortcuts.more).not.toBe(homeCopy.categories.all);
+    expect(homeCopy.shortcuts.moreAria).not.toBe(homeCopy.categories.allAria);
+  });
+  it('tên đọc ô "Thêm" bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3); hộp thoại nó mở vẫn tên "Tất cả lối tắt"', () => {
+    expect(homeCopy.shortcuts.moreAria.startsWith(homeCopy.shortcuts.more)).toBe(true);
+    expect(homeCopy.shortcuts.allAria).toBe('Tất cả lối tắt');
   });
 });
 

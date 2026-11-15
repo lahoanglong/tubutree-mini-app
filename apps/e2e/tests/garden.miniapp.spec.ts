@@ -61,7 +61,8 @@ test.describe('Vườn Xanh', () => {
 
     await expect(page.getByText('Cây Sưa Đỏ').first()).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('progressbar', { name: 'Tiến độ cây' })).toHaveAttribute('aria-valuenow', '40');
-    await expect(page.getByText(/🔥 Chuỗi 5 ngày/)).toBeVisible();
+    await expect(page.getByText(/Chuỗi 5 ngày/).first()).toBeVisible();
+    await expect(page.getByTestId('week-rhythm')).toHaveCount(1);
     await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
 
     await page.getByText('Vườn', { exact: true }).first().click();

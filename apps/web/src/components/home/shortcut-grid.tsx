@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { LayoutGrid } from 'lucide-react';
+import { Ellipsis } from 'lucide-react';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_SETTLING_HEIGHTS, HOME_SHORTCUT_SLOTS, SHORTCUT_TINT_VARS, visibleHomeShortcuts, type HomeShortcutSpec } from '@tubutree/app-core/home-layout';
@@ -52,8 +52,8 @@ const cellStyle = {
 const GRID_BLEED = 'tubu-bleed max-md:px-2 md:hidden';
 
 /**
- * Lối tắt Trang chủ (Q7), bản web của `shortcut-grid.tsx` ở Mini App: 4 ô cố định + ô "Tất cả" trong MỘT hàng 5 cột đều nhau, không cuộn ngang. Phần
- * còn lại nằm trong sheet "Tất cả". Mục có cờ tắt bị ẩn, mục kế lấp chỗ. Mục có route web chưa làm xong bị bỏ TRƯỚC khi chia ô cố định (nên ô cố định
+ * Lối tắt Trang chủ (Q7), bản web của `shortcut-grid.tsx` ở Mini App: 4 ô cố định + ô "Thêm" (dấu ba chấm) trong MỘT hàng 5 cột đều nhau, không cuộn ngang. Phần
+ * còn lại nằm trong sheet "Tất cả lối tắt". Mục có cờ tắt bị ẩn, mục kế lấp chỗ. Mục có route web chưa làm xong bị bỏ TRƯỚC khi chia ô cố định (nên ô cố định
  * luôn đủ 4 khi còn mục). "Tích điểm đơn sàn" chưa có trang web nên không bao giờ hiện. Từ md thanh đầu website (`SiteHeader`) đã hiện hàng điều hướng nên khối ẩn.
  */
 export function ShortcutGrid({ initialConfig }: { initialConfig?: PublicConfig } = {}) {
@@ -104,12 +104,12 @@ export function ShortcutGrid({ initialConfig }: { initialConfig?: PublicConfig }
             </button>
           );
         })}
-        <button type="button" aria-label={homeCopy.shortcuts.allAria} aria-haspopup="dialog" className="tubu-press" onClick={() => setAllOpen(true)} style={cellStyle}>
+        <button type="button" aria-label={homeCopy.shortcuts.moreAria} aria-haspopup="dialog" className="tubu-press" onClick={() => setAllOpen(true)} style={cellStyle}>
           <span aria-hidden style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
-            <Icon icon={LayoutGrid} size="md" tone="current" />
+            <Icon icon={Ellipsis} size="md" tone="current" />
           </span>
           <Text variant="caption" style={labelStyle}>
-            {homeCopy.shortcuts.all}
+            {homeCopy.shortcuts.more}
           </Text>
         </button>
       </div>

@@ -29,7 +29,8 @@ const dialog = (page: Page) => page.getByRole('dialog');
 
 async function openPicker(page: Page): Promise<void> {
   await page.goto('/cart');
-  await page.getByText('Chọn mã', { exact: true }).click();
+  // W166: ví có mã dùng được thì cuối hàng là nút "Áp dụng" (không còn chữ "Chọn mã"); bấm chữ của hàng vẫn mở tấm chọn mã.
+  await page.getByTestId('coupon-row').click();
   await expect(dialog(page).getByRole('heading', { name: 'Chọn mã giảm giá' })).toBeVisible({ timeout: 15_000 });
   await expect(dialog(page).getByTestId('voucher-reason').first()).toBeVisible({ timeout: 15_000 });
 }

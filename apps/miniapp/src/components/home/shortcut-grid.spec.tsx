@@ -23,18 +23,18 @@ import { ShortcutGrid } from './shortcut-grid';
 
 const rows = (dialog: HTMLElement) => within(dialog).getAllByRole('button').filter((b) => b.getAttribute('aria-label') !== 'Đóng');
 
-describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
+describe('ShortcutGrid — 4 ô cố định + "Thêm" (Q7)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.cfg = { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } };
     mocks.openRequests = false;
   });
 
-  it('cờ bật hết: 4 ô cố định (Giờ vàng, Mã giảm giá, Đổi rác, Mua chung) và ô "Tất cả", không cuộn ngang; Giờ vàng là ô đầu tiên', () => {
+  it('cờ bật hết: 4 ô cố định (Giờ vàng, Mã giảm giá, Đổi rác, Mua chung) và ô "Thêm", không cuộn ngang; Giờ vàng là ô đầu tiên', () => {
     render(<ShortcutGrid />);
     const buttons = screen.getAllByRole('button');
     expect(buttons).toHaveLength(5);
-    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Mua chung', 'Tất cả']);
+    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Mua chung', 'Thêm']);
     expect(screen.getByRole('region', { name: 'Lối tắt' }).querySelector('[data-testid="shortcut-grid"]')).toHaveStyle({ display: 'grid' });
     expect(screen.queryByRole('group', { name: /vuốt ngang/ })).toBeNull();
   });
@@ -51,7 +51,7 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
     }
   });
 
-  it('Giờ vàng tới trang Giờ vàng, Mã giảm giá tới trang Mã giảm giá, Đổi rác, Mua chung tới đúng trang; Đổi quà nằm trong "Tất cả"', () => {
+  it('Giờ vàng tới trang Giờ vàng, Mã giảm giá tới trang Mã giảm giá, Đổi rác, Mua chung tới đúng trang; Đổi quà nằm trong hộp thoại của "Thêm"', () => {
     render(<ShortcutGrid />);
     fireEvent.click(screen.getByRole('button', { name: /Giờ vàng/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/flash-sale');
@@ -64,10 +64,10 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(screen.queryByRole('button', { name: /Đổi quà/ })).toBeNull();
   });
 
-  it('"Tất cả" mở hộp thoại liệt kê đủ mục còn hiển thị; chọn mục đóng hộp và điều hướng', async () => {
+  it('"Thêm" mở hộp thoại "Tất cả lối tắt" liệt kê đủ mục còn hiển thị; chọn mục đóng hộp và điều hướng', async () => {
     render(<ShortcutGrid />);
     expect(screen.queryByRole('dialog')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Tất cả lối tắt' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
     expect(rows(dialog)).toHaveLength(9);
     fireEvent.click(within(dialog).getByRole('button', { name: /Đơn hàng/ }));
@@ -77,18 +77,18 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
 
   it('"Kiếm tiền" trong hộp thoại mở bảng chọn thay vì điều hướng', async () => {
     render(<ShortcutGrid />);
-    fireEvent.click(screen.getByRole('button', { name: 'Tất cả lối tắt' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
     mocks.navigate.mockClear();
     fireEvent.click(within(await screen.findByRole('dialog', { name: 'Tất cả lối tắt' })).getByRole('button', { name: /Kiếm tiền cùng Tubu/ }));
     expect(mocks.navigate).not.toHaveBeenCalled();
     expect(await screen.findByRole('dialog', { name: 'Kiếm tiền cùng Tubu' })).toBeInTheDocument();
   });
 
-  it('cờ Đổi rác và Tích điểm đơn sàn tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Tất cả"; hộp thoại còn 7 mục', async () => {
+  it('cờ Đổi rác và Tích điểm đơn sàn tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Thêm"; hộp thoại còn 7 mục', async () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
     render(<ShortcutGrid />);
-    expect(screen.getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Mua chung', 'Đổi quà', 'Tất cả']);
-    fireEvent.click(screen.getByRole('button', { name: 'Tất cả lối tắt' }));
+    expect(screen.getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Mua chung', 'Đổi quà', 'Thêm']);
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
     expect(rows(dialog)).toHaveLength(7);
     expect(within(dialog).queryByRole('button', { name: /Đổi rác/ })).toBeNull();
@@ -125,6 +125,19 @@ describe('ShortcutGrid — 4 ô cố định + "Tất cả" (Q7)', () => {
       expect(button.getAttribute('aria-label')?.toLowerCase()).toContain(visible);
       expect(button).toHaveStyle({ minHeight: '44px' });
     }
+  });
+
+  it('ô cuối lối tắt là "Thêm" với biểu tượng ba chấm (Ellipsis), không phải "Tất cả" + LayoutGrid như ô cuối hàng Danh mục; vẫn mở hộp thoại', async () => {
+    render(<ShortcutGrid />);
+    const more = screen.getByRole('button', { name: 'Thêm lối tắt' });
+    expect(more).toHaveAttribute('aria-haspopup', 'dialog');
+    expect(more.textContent?.trim()).toBe('Thêm');
+    expect(more.textContent?.trim().length).toBeLessThanOrEqual(6);
+    expect(more.querySelector('svg.lucide-ellipsis')).not.toBeNull();
+    expect(more.querySelector('svg.lucide-layout-grid')).toBeNull();
+    expect(screen.queryByText('Tất cả')).toBeNull();
+    fireEvent.click(more);
+    expect(await screen.findByRole('dialog', { name: 'Tất cả lối tắt' })).toBeInTheDocument();
   });
 
   it('cấu hình công khai chưa về: khung trơn cao 84px, không ô bấm được (không dựng ô rồi đổi chỗ khi cờ Đổi rác về)', () => {

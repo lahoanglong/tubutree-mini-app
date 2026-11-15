@@ -33,7 +33,7 @@ describe('HomeSettlingSkeleton', () => {
     expect(screen.getByTestId('home-settling').children).toHaveLength(5);
   });
 
-  it('danh mục theo số ô nhớ: tới 5 ô một hàng (148), từ 6 ô hai hàng (248)', () => {
+  it('danh mục luôn một hàng (148) dù số ô nhớ là bao nhiêu: số ô vượt 5 bị cắt về 5 như khối thật', () => {
     const categoriesHeight = (cells?: number) => {
       const { unmount } = render(<HomeSettlingSkeleton categoryCells={cells} />);
       const h = (screen.getByTestId('home-settling').children[3] as HTMLElement).style.height;
@@ -42,7 +42,8 @@ describe('HomeSettlingSkeleton', () => {
     };
     expect(categoriesHeight(4)).toBe('148px');
     expect(categoriesHeight(5)).toBe('148px');
-    expect(categoriesHeight(6)).toBe('248px');
+    expect(categoriesHeight(6)).toBe('148px');
+    expect(categoriesHeight(40)).toBe('148px');
     expect(categoriesHeight(undefined)).toBe(`${HOME_SETTLING_HEIGHTS.categories}px`);
   });
 });

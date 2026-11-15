@@ -56,12 +56,16 @@ export async function rowFacts(page: Page, rowTestId = 'coupon-row'): Promise<Ro
   });
 }
 
-/** Hàng còn nguyên: cao ≤`maxH` (mặc định 44px, hàng ở chân dính giỏ), không chữ nào bị cắt, không phần tử nào tràn, trang không tràn ngang, nút và nhãn một dòng. */
-export function expectRowIntact(f: RowFacts, maxH = 44.5): void {
+/**
+ * Hàng còn nguyên: cao ≤`maxH` (mặc định 44px, hàng ở chân dính giỏ), không chữ nào bị cắt, không phần tử nào tràn, trang không tràn ngang, nút và nhãn một dòng.
+ * `quickApply`: có mã dùng được thì cuối hàng là nút "Áp dụng" nằm NGOÀI `coupon-row` (W166), nên trong hàng không có `coupon-cta` để đo.
+ */
+export function expectRowIntact(f: RowFacts, maxH = 44.5, opts: { quickApply?: boolean } = {}): void {
   expect(f.rowH, `hàng mã cao ${f.rowH}px`).toBeLessThanOrEqual(maxH);
   expect(f.clipped, `chữ bị cắt: ${JSON.stringify(f.clipped)}`).toEqual([]);
   expect(f.outside, `phần tử tràn ra ngoài hàng: ${JSON.stringify(f.outside)}`).toEqual([]);
   expect(f.pageOverflow, 'trang tràn ngang').toBe(false);
-  expect(f.lines['coupon-cta'], 'nút "Chọn mã" / "Thay đổi" một dòng').toBe(1);
+  if (opts.quickApply) expect(f.lines['coupon-cta'], 'có nút "Áp dụng" thì hàng không còn "Chọn mã ›"').toBeUndefined();
+  else expect(f.lines['coupon-cta'], 'nút "Chọn mã" / "Thay đổi" một dòng').toBe(1);
   expect(f.lines['coupon-label'], 'nhãn "Mã giảm giá" một dòng').toBe(1);
 }

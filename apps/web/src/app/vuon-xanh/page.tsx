@@ -190,6 +190,7 @@ function GameBody() {
           eco={eco}
           totalSeeds={profile?.totalSeeds}
           streakDays={status?.streakDays ?? profile?.streakDays}
+          rhythm={{ lastCheckInAt: profile?.lastCheckInAt, activeToday: checkedInToday || dewToday || (status?.checkedInToday ?? false) }}
           harvestReady={profile?.harvestReady}
           tankCapacity={profile?.tankCapacity}
           wilted={profile?.treeHealth === 'WILTED' || profile?.treeHealth === 'DEAD'}

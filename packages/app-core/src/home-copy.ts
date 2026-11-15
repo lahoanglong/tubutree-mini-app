@@ -34,9 +34,13 @@ export const homeCopy = {
     preparingMany: (n: number) => `${n} đơn đang chuẩn bị`,
     preparingHint: 'Chạm để xem đơn',
   },
-  shortcuts: { title: 'Lối tắt', all: 'Tất cả', allAria: 'Tất cả lối tắt' },
+  /**
+   * `more`/`moreAria`: ô cuối hàng lối tắt mở sheet các lối tắt còn lại (nhãn ≤ 6 ký tự, một dòng ở ô 75px). Khác ô "Tất cả" của hàng Danh mục (đi tới tab Danh mục):
+   * hai ô không được cùng nhãn. Tên đọc bắt đầu bằng chữ nhìn thấy (WCAG 2.5.3). `allAria` là tên hộp thoại của sheet.
+   */
+  shortcuts: { title: 'Lối tắt', more: 'Thêm', moreAria: 'Thêm lối tắt', allAria: 'Tất cả lối tắt' },
   reorder: { buy: 'Mua lại', subscribe: (pct: number) => `Định kỳ -${pct}%`, seeAll: 'Xem đơn hàng' },
-  categories: { title: 'Danh mục', rail: 'Danh mục, vuốt ngang để xem thêm', all: 'Tất cả', allAria: 'Tất cả danh mục' },
+  categories: { title: 'Danh mục', all: 'Tất cả', allAria: 'Tất cả danh mục' },
   journey: {
     title: 'Hành trình nguyên liệu',
     body: (brands: number) => (brands > 0 ? `${brands} thương hiệu Việt, từ nhiều vùng đất` : 'Sản phẩm Tubu từ nhiều vùng đất Việt Nam'),

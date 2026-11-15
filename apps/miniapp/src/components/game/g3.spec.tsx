@@ -89,21 +89,35 @@ describe('HarvestCelebration', () => {
 });
 
 describe('GardenHero', () => {
+  // Thẻ có dải Nhịp Sống Xanh (đọc trạng thái mini game bằng react-query) nên cần QueryClientProvider; mọi lượt vẽ dùng cùng một client.
+  const client = new QueryClient();
+  const RHYTHM = { lastCheckInAt: null, activeToday: false };
+  const hero = (props: Omit<React.ComponentProps<typeof GardenHero>, 'rhythm'>) => (
+    <QueryClientProvider client={client}>
+      <GardenHero rhythm={RHYTHM} {...props} />
+    </QueryClientProvider>
+  );
   it('hồ sơ cũ 400/60: tiến độ không vượt đích và nói đủ nước', () => {
-    render(<GardenHero eco={{ progress: 400, target: 60, treeType: 'Sồi', treesPlanted: 1 }} totalSeeds={10} streakDays={1} harvestReady />);
+    render(hero({ eco: { progress: 400, target: 60, treeType: 'Sồi', treesPlanted: 1 }, totalSeeds: 10, streakDays: 1, harvestReady: true }));
     expect(screen.queryByText(/400/)).toBeNull();
     expect(screen.getByText(/thu hoạch ngay/i)).toBeInTheDocument();
   });
+  it('dòng chú thích không lặp chuỗi ngày (chuỗi nằm ở dải Nhịp Sống Xanh), dải có bảy ô', () => {
+    const { container } = render(hero({ eco: { progress: 10, target: 60, treeType: 'Sồi', treesPlanted: 2 }, totalSeeds: 10, streakDays: 5 }));
+    expect(container.textContent).toContain('10/60💧 · 🌳 Đã thu hoạch 2 cây');
+    expect(container.textContent).not.toContain('Chuỗi 5 ngày');
+    expect(screen.getByTestId('week-rhythm').querySelectorAll('li')).toHaveLength(7);
+  });
   it('tên thẻ: có loài thì hiện loài; loài mặc định hay trống thì "Cây của bạn"; chưa có dữ liệu vườn thì "Vườn của bạn"', () => {
     const eco = (treeType: string) => ({ progress: 10, target: 60, treeType, treesPlanted: 0 });
-    const { rerender } = render(<GardenHero eco={eco('Sồi')} totalSeeds={10} streakDays={1} />);
+    const { rerender } = render(hero({ eco: eco('Sồi'), totalSeeds: 10, streakDays: 1 }));
     expect(screen.getByText('Sồi')).toBeInTheDocument();
-    rerender(<GardenHero eco={eco('Cây Dứa Fuwa3e')} totalSeeds={10} streakDays={1} />);
+    rerender(hero({ eco: eco('Cây Dứa Fuwa3e'), totalSeeds: 10, streakDays: 1 }));
     expect(screen.queryByText(/Fuwa3e/)).toBeNull();
     expect(screen.getByText('Cây của bạn')).toBeInTheDocument();
-    rerender(<GardenHero eco={eco('')} totalSeeds={10} streakDays={1} />);
+    rerender(hero({ eco: eco(''), totalSeeds: 10, streakDays: 1 }));
     expect(screen.getByText('Cây của bạn')).toBeInTheDocument();
-    rerender(<GardenHero eco={undefined} totalSeeds={undefined} streakDays={undefined} />);
+    rerender(hero({ eco: undefined, totalSeeds: undefined, streakDays: undefined }));
     expect(screen.getByText('Vườn của bạn')).toBeInTheDocument();
   });
 });

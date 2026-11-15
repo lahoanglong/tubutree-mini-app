@@ -571,7 +571,7 @@ export const SHOP_COPY: Record<string, string> = {
   'freeship.shopMoreAria': 'Mua thêm: còn thiếu {price} để được Miễn phí giao hàng',
   'freeship.shopMoreAriaTubu': 'Mua thêm: còn thiếu {price} để được Miễn phí giao hàng cho phần hàng Tubu Tree giao',
   'cart.voucherHint.apply': '🎟️ Bạn có mã giảm giá {amount} đủ điều kiện',
-  'cart.voucherHint.applyCta': 'Áp dụng ngay',
+  'cart.voucherHint.applyCta': 'Áp dụng',
   'cart.voucherHint.applyAria': 'Áp dụng ngay mã {code}',
   'cart.voucherHint.applied': 'Đã áp dụng mã {code}',
   'cart.voucherHint.unlockAmount': '🔥 Mua thêm {price} để mở khoá mã giảm giá {amount}',

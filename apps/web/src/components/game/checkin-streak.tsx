@@ -43,7 +43,6 @@ export function CheckInStreak({
   const t = gameNewbieCopy.checkin;
   const freezeCost = profile?.streakFreezeCost ?? 80;
   const freezeShort = profile ? missingDrops(profile.totalSeeds, freezeCost) : 0;
-  const dayReward = (day: number): number | null => (day === 7 ? (profile?.streak7Seeds ?? null) : day === 3 ? STREAK_3_SEEDS : null);
   return (
     <section className={`p-4 tabular-nums ${miniCard}`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
@@ -54,25 +53,6 @@ export function CheckInStreak({
           </h2>
           <p className="text-caption text-stone-600">{(status?.pointsBlocked ? guestCheckInCopy.streakSub : t.sub)(profile?.dailyLoginSeeds ?? null, checkedInToday ? 0 : (profile?.firstCheckinBonus ?? 0))}</p>
         </div>
-      </div>
-      <div className="mt-3 flex gap-1.5">
-        {Array.from({ length: 7 }, (_, i) => {
-          const day = i + 1;
-          const done = status ? (status.rewards[i]?.claimed ?? false) : streakDays % 7 === 0 && streakDays > 0 ? true : day <= streakDays % 7;
-          const bonus = day === 3 || day === 7;
-          const reward = dayReward(day);
-          return (
-            <div key={day} className="flex-1 text-center">
-              <div
-                data-testid="streak-cell"
-                className={`flex h-8 items-center justify-center rounded-control text-sm ${done ? 'bg-forest-600 text-stone-0' : 'bg-stone-100 text-stone-600'}`}
-              >
-                {done ? '💧' : bonus ? '🎁' : day}
-              </div>
-              {bonus && reward != null && <div className="mt-0.5 text-caption font-bold text-stone-700">{t.dayReward(reward)}💧</div>}
-            </div>
-          );
-        })}
       </div>
       {statusError && (
         <div className="mt-2 flex items-center justify-between gap-2">

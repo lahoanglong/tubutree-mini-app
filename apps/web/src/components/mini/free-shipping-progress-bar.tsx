@@ -20,7 +20,7 @@ export interface FreeShippingProgressBarProps {
 
 /**
  * Thanh tiến độ Miễn phí giao hàng ở đầu Giỏ. Chưa đạt: một dòng "Mua thêm … để được Miễn phí giao hàng" và thanh đầy dần (số đo khớp bước tính ở app-core), kèm nút "Mua thêm" nếu có `onShopMore`.
- * Đạt: một dòng chúc mừng màu xanh ngọc, không còn thanh, không còn nút. Khối cao tối thiểu bằng trạng thái chưa đạt (mini.css) nên câu một dòng đổi trạng thái không làm giỏ nhảy.
+ * Đạt: một dòng chúc mừng màu xanh ngọc, không còn thanh, không còn nút. Khối co về dòng gọn cao 36px (mini.css), không giữ chiều cao của trạng thái chưa đạt: một dòng chữ không cần hộp gần trống đẩy danh sách xuống.
  */
 export function FreeShippingProgressBar({ base, threshold, serverReached, tubuOnly = false, onShopMore }: FreeShippingProgressBarProps) {
   const p = freeshipProgress({ base, threshold, serverReached });

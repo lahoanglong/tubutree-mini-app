@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { useState } from 'react';
 import type { CartVoucherHint } from '@tubutree/app-core/commerce/cart-voucher-hint';
 import { describe, expect, it, vi } from 'vitest';
 import { click } from '@/test-utils/dom';
@@ -26,41 +25,39 @@ const both: CartVoucherHint = { apply: APPLY, unlock: UNLOCK };
 const q = (c: ParentNode, id: string) => c.querySelector<HTMLElement>(`[data-testid="${id}"]`);
 
 describe('CartVoucherHintStrip (web)', () => {
-  it('không có gợi ý (null hoặc cả hai rỗng): không vẽ gì', () => {
-    expect(mount(<CartVoucherHintStrip hint={null} onApply={vi.fn()} />).container.innerHTML).toBe('');
-    expect(mount(<CartVoucherHintStrip hint={{ apply: null, unlock: null }} onApply={vi.fn()} />).container.innerHTML).toBe('');
+  it('không có gợi ý (null, cả hai rỗng, hoặc chỉ có mã dùng được mà không có mã sắp mở khoá): không vẽ gì', () => {
+    expect(mount(<CartVoucherHintStrip hint={null} />).container.innerHTML).toBe('');
+    expect(mount(<CartVoucherHintStrip hint={{ apply: null, unlock: null }} />).container.innerHTML).toBe('');
+    // W166: dòng mời áp mã chuyển xuống hàng "Mã giảm giá" (CouponBox), dải chỉ còn vẽ dòng sắp mở khoá.
+    expect(mount(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} onShopMore={vi.fn()} />).container.innerHTML).toBe('');
   });
 
-  it('có mã dùng được: dòng mời áp với chữ của app-core, nút "Áp dụng ngay" có aria-label kèm mã', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} onApply={vi.fn()} />);
-    expect(q(container, 'cart-voucher-apply')!.dataset.kind).toBe('apply');
-    expect(q(container, 'cart-voucher-apply')!.textContent).toContain('🎟️ Bạn có mã giảm giá 45.000đ đủ điều kiện');
-    const cta = q(container, 'cart-voucher-apply-cta') as HTMLButtonElement;
-    expect(cta.textContent).toBe('Áp dụng ngay');
-    expect(cta.getAttribute('aria-label')).toBe('Áp dụng ngay mã GIAM45');
-    expect(q(container, 'cart-voucher-unlock')).toBeNull();
+  it('có mã dùng được và mã sắp mở khoá: dải không còn nút "Áp dụng ngay" (mỗi hành động một nút), chỉ có dòng sắp mở khoá', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={both} />);
+    expect(q(container, 'cart-voucher-apply')).toBeNull();
+    expect(q(container, 'cart-voucher-apply-cta')).toBeNull();
+    expect(container.textContent).not.toContain('Bạn có mã giảm giá');
+    expect(q(container, 'cart-voucher-unlock')).not.toBeNull();
+    expect(container.querySelector('button')).toBeNull();
   });
 
-  it('một chạm "Áp dụng ngay" gọi onApply đúng một lần với mã thật', () => {
-    const onApply = vi.fn();
-    const { container } = mount(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} onApply={onApply} />);
-    click(q(container, 'cart-voucher-apply-cta')!);
-    expect(onApply).toHaveBeenCalledTimes(1);
-    expect(onApply).toHaveBeenCalledWith('GIAM45');
+  it('có onShopMore: nút duy nhất của dải là "Mua thêm", không có nút áp mã dù hint có mã dùng được', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={both} onShopMore={vi.fn()} />);
+    const buttons = container.querySelectorAll('button');
+    expect(buttons).toHaveLength(1);
+    expect(buttons[0]).toBe(q(container, 'cart-voucher-unlock-cta'));
+    expect(Array.from(buttons).some((b) => /Áp dụng/.test(b.textContent ?? '') || /Áp dụng/.test(b.getAttribute('aria-label') ?? ''))).toBe(false);
   });
 
-  it('đang áp: nút giữ nhãn, báo bận (aria-busy) và không gọi onApply lần nữa', () => {
-    const onApply = vi.fn();
-    const { container } = mount(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} onApply={onApply} applying />);
-    const cta = q(container, 'cart-voucher-apply-cta')!;
-    expect(cta.getAttribute('aria-busy')).toBe('true');
-    expect(cta.getAttribute('aria-label')).toBe('Áp dụng ngay mã GIAM45');
-    click(cta);
-    expect(onApply).not.toHaveBeenCalled();
+  it('lệnh áp mã không còn là việc của dải: không aria-busy, không lời báo lỗi (role=alert) ở dải', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={both} onShopMore={vi.fn()} />);
+    expect(q(container, 'cart-voucher-hint')!.getAttribute('aria-busy')).toBeNull();
+    expect(container.querySelector('[role="alert"]')).toBeNull();
+    expect(q(container, 'cart-voucher-error')).toBeNull();
   });
 
   it('mã sắp mở khoá: dòng nhắc đúng chữ, thanh progressbar đúng mức (min 0, max 100) và tên truy cập; không có nút', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={{ apply: null, unlock: UNLOCK }} onApply={vi.fn()} />);
+    const { container } = mount(<CartVoucherHintStrip hint={{ apply: null, unlock: UNLOCK }} />);
     expect(q(container, 'cart-voucher-unlock')!.dataset.kind).toBe('unlock');
     expect(q(container, 'cart-voucher-unlock')!.textContent).toContain('🔥 Mua thêm 30.000đ để mở khoá mã giảm giá 80.000đ');
     const bar = q(container, 'cart-voucher-unlock-bar')!;
@@ -74,29 +71,25 @@ describe('CartVoucherHintStrip (web)', () => {
     expect(container.querySelector('button')).toBeNull();
   });
 
-  it('cả hai cùng có: dòng mời áp đứng trước dòng nhắc mở khoá', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} />);
-    expect(Array.from(q(container, 'cart-voucher-hint')!.children).map((el) => el.getAttribute('data-testid'))).toEqual(['cart-voucher-apply', 'cart-voucher-unlock']);
+  it('cả hai cùng có: dải chỉ còn MỘT dòng con, là dòng sắp mở khoá (dòng mời áp đã chuyển xuống hàng mã)', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={both} />);
+    expect(Array.from(q(container, 'cart-voucher-hint')!.children).map((el) => el.getAttribute('data-testid'))).toEqual(['cart-voucher-unlock']);
   });
 
-  it('lời báo lỗi áp: role=alert ngay dưới dòng mời áp; không có dòng mời áp thì không hiện lỗi', () => {
-    const withBoth = mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} error="Mã đã hết lượt dùng." />);
-    const err = q(withBoth.container, 'cart-voucher-error')!;
-    expect(err.getAttribute('role')).toBe('alert');
-    expect(err.textContent).toBe('Mã đã hết lượt dùng.');
-    expect(err.previousElementSibling).toBe(q(withBoth.container, 'cart-voucher-apply'));
-    const unlockOnly = mount(<CartVoucherHintStrip hint={{ apply: null, unlock: UNLOCK }} onApply={vi.fn()} error="Mã đã hết lượt dùng." />);
-    expect(q(unlockOnly.container, 'cart-voucher-error')).toBeNull();
+  it('có mã dùng được mà không có dòng sắp mở khoá: không dựng khung dải (không để lại khoảng trống)', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} />);
+    expect(container.innerHTML).toBe('');
+    expect(q(container, 'cart-voucher-hint')).toBeNull();
   });
 
   it('không có chữ cấm "voucher" và không dấu chấm than trong chữ khách đọc', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} />);
+    const { container } = mount(<CartVoucherHintStrip hint={both} />);
     expect(container.textContent).not.toMatch(/voucher/i);
     expect(container.textContent).not.toContain('!');
   });
 
   it('chỉ token trong thuộc tính style: phần đầy chỉ đặt bề rộng %, dòng nhắc không có số đo px, không màu thô', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} />);
+    const { container } = mount(<CartVoucherHintStrip hint={both} />);
     // Nút dùng chung `Button` tự đặt minHeight 44 (vùng chạm); phần của dải chỉ có style ở thanh đầy dần.
     expect(q(container, 'cart-voucher-unlock')!.querySelectorAll('[style*="px"]').length).toBe(0);
     expect(q(container, 'cart-voucher-unlock-bar')!.firstElementChild!.getAttribute('style')).toBe('width: 90%;');
@@ -107,11 +100,10 @@ describe('CartVoucherHintStrip (web)', () => {
     const css = readFileSync(resolve(__dirname, 'mini.css'), 'utf8');
     const rule = (sel: string) => new RegExp(`${sel.replace(/[.[\]()']/g, '\\$&')}\\s*\\{([^}]*)\\}`).exec(css)?.[1] ?? '';
 
-    it('số đều trong dòng, nút bấm cao 44px, dòng mời áp theo token success', () => {
+    it('số đều trong dòng, nút bấm cao 44px (dùng chung cho "Mua thêm" và "Áp dụng" ở hàng mã); không còn luật riêng của dòng mời áp', () => {
       expect(rule('.tubu-vhint-row')).toMatch(/font-variant-numeric:\s*tabular-nums/);
       expect(rule('.tubu-vhint-cta.zaui-btn')).toMatch(/height:\s*44px/);
-      expect(rule(".tubu-vhint-row[data-kind='apply']")).toContain('var(--color-status-success-bg)');
-      expect(rule(".tubu-vhint-row[data-kind='apply'] .tubu-vhint-text")).toContain('var(--color-text-success)');
+      expect(css).not.toContain(".tubu-vhint-row[data-kind='apply']");
     });
 
     it('cùng số đo với Mini (freeship.css): chữ phụ cỡ caption đậm label, đệm hàng inline-md, khoảng chữ-thanh do gap (thanh không có lề trên riêng)', () => {
@@ -121,79 +113,49 @@ describe('CartVoucherHintStrip (web)', () => {
       expect(rule('.tubu-vhint-row')).toContain('padding: var(--space-inline-md)');
       expect(rule('.tubu-vhint-row--stack')).toContain('gap: var(--space-stack-sm)');
       expect(rule('.tubu-vhint-row--stack .tubu-freeship-track')).toMatch(/margin-top:\s*0/);
-      expect(rule('.tubu-vhint-error')).toContain('font-size: var(--type-caption-size)');
-      expect(rule('.tubu-vhint-error')).toContain('padding: 0 var(--space-inline-md)');
     });
 
-    it('chữ dài không tràn ngang và lời báo lỗi dùng màu danger', () => {
+    it('chữ dài không tràn ngang; lời báo lỗi áp mã và lời "Đã áp dụng" không còn ở dải (luật .tubu-vhint-error, .tubu-vhint-done đã gỡ)', () => {
       expect(rule('.tubu-vhint-text')).toMatch(/overflow-wrap:\s*anywhere/);
       expect(rule('.tubu-vhint-text')).toMatch(/min-width:\s*0/);
-      expect(rule('.tubu-vhint-error')).toContain('var(--color-text-danger)');
+      expect(css).not.toContain('.tubu-vhint-error');
+      expect(css).not.toContain('.tubu-vhint-done');
     });
   });
 });
 
-describe('CartVoucherHintStrip (web): báo bận và lời báo lỗi cho trình đọc màn hình', () => {
-  const ERROR = 'Mã đã hết lượt dùng.';
-  const stripOf = (c: ParentNode) => q(c, 'cart-voucher-hint')!;
-  const ariaBusy = (props: { applying?: boolean }) => stripOf(mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} {...props} />).container).getAttribute('aria-busy');
-  const applyDescribedBy = (error: string | null) => q(mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} error={error} />).container, 'cart-voucher-apply-cta')!.getAttribute('aria-describedby');
-
-  function Pending({ onShopMore }: { onShopMore: () => void }) {
-    const [applying, setApplying] = useState(true);
-    return (
-      <>
-        <button type="button" data-testid="finish" onClick={() => setApplying(false)} />
-        <CartVoucherHintStrip hint={both} onApply={vi.fn()} onShopMore={onShopMore} applying={applying} />
-      </>
-    );
-  }
-
-  it('applying: cả dải aria-busy="true"; không bận (false hoặc không truyền) thì không có thuộc tính', () => {
-    expect(ariaBusy({ applying: true })).toBe('true');
-    expect(ariaBusy({ applying: false })).toBeNull();
-    expect(ariaBusy({})).toBeNull();
-  });
-
-  it('đang áp: nút "Mua thêm" khoá và không gọi onShopMore; áp xong thì dải hết bận và nút bấm lại được', () => {
+describe('CartVoucherHintStrip (web): "Mua thêm" không phụ thuộc lệnh áp mã ở hàng mã', () => {
+  it('nút "Mua thêm" luôn bấm được: dải không có trạng thái bận (lệnh áp mã chạy ở hàng "Mã giảm giá", không khoá lối về chọn món)', () => {
     const onShopMore = vi.fn();
-    const { container } = mount(<Pending onShopMore={onShopMore} />);
-    const cta = () => q(container, 'cart-voucher-unlock-cta') as HTMLButtonElement;
-    expect(stripOf(container).getAttribute('aria-busy')).toBe('true');
-    expect(cta().disabled).toBe(true);
-    click(cta());
-    expect(onShopMore).not.toHaveBeenCalled();
-    click(q(container, 'finish'));
-    expect(stripOf(container).getAttribute('aria-busy')).toBeNull();
-    expect(cta().disabled).toBe(false);
-    click(cta());
+    const { container } = mount(<CartVoucherHintStrip hint={both} onShopMore={onShopMore} />);
+    const cta = q(container, 'cart-voucher-unlock-cta') as HTMLButtonElement;
+    expect(cta.disabled).toBe(false);
+    expect(cta.getAttribute('aria-busy')).toBeNull();
+    click(cta);
     expect(onShopMore).toHaveBeenCalledTimes(1);
   });
 
-  it('có lỗi: "Áp dụng ngay" trỏ aria-describedby tới đúng phần tử cart-voucher-error; không lỗi thì không có aria-describedby', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} error={ERROR} />);
-    const id = q(container, 'cart-voucher-apply-cta')!.getAttribute('aria-describedby');
-    expect(id).toBeTruthy();
-    const described = container.querySelector(`[id="${id}"]`)!;
-    expect(described).toBe(q(container, 'cart-voucher-error'));
-    expect(described.textContent).toBe(ERROR);
-    expect(applyDescribedBy(null)).toBeNull();
+  it('dải không bao giờ mang aria-busy, cả khi dựng với hint có mã dùng được', () => {
+    expect(q(mount(<CartVoucherHintStrip hint={both} onShopMore={vi.fn()} />).container, 'cart-voucher-hint')!.getAttribute('aria-busy')).toBeNull();
+    expect(q(mount(<CartVoucherHintStrip hint={both} />).container, 'cart-voucher-hint')!.getAttribute('aria-busy')).toBeNull();
   });
 
-  it('chưa có lỗi: dải mời áp không mang id nào', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} onApply={vi.fn()} />);
+  it('"Mua thêm" trỏ aria-describedby tới đúng câu nhắc của mình, không có lời báo lỗi áp mã nào chen vào', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={both} onShopMore={vi.fn()} />);
+    const unlockId = q(container, 'cart-voucher-unlock-cta')!.getAttribute('aria-describedby');
+    expect(unlockId).toBeTruthy();
+    expect(container.querySelector(`[id="${unlockId}"]`)!.textContent).toBe(UNLOCK.text);
+    expect(container.querySelectorAll('[id]')).toHaveLength(1);
+  });
+
+  it('không truyền onShopMore: dải có mã dùng được vẫn không mang id nào (không còn id lời báo lỗi)', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={both} />);
     expect(container.querySelector('[id]')).toBeNull();
   });
 
-  it('id lời báo lỗi khác id câu nhắc "Mua thêm": mỗi nút chỉ trỏ tới câu của mình', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={both} onApply={vi.fn()} onShopMore={vi.fn()} error={ERROR} />);
-    const applyId = q(container, 'cart-voucher-apply-cta')!.getAttribute('aria-describedby');
-    const unlockId = q(container, 'cart-voucher-unlock-cta')!.getAttribute('aria-describedby');
-    expect(applyId).toBeTruthy();
-    expect(unlockId).toBeTruthy();
-    expect(applyId).not.toBe(unlockId);
-    expect(container.querySelector(`[id="${applyId}"]`)!.textContent).toBe(ERROR);
-    expect(container.querySelector(`[id="${unlockId}"]`)!.textContent).toBe(UNLOCK.text);
+  it('có mã dùng được mà dải rỗng: không có vùng nào đọc "Áp dụng ngay" ở thân giỏ', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} onShopMore={vi.fn()} />);
+    expect(container.textContent).toBe('');
   });
 });
 
@@ -201,7 +163,7 @@ describe('CartVoucherHintStrip (web): nút "Mua thêm" ở dòng sắp mở kho�
   const unlockOnly: CartVoucherHint = { apply: null, unlock: UNLOCK };
 
   it('có onShopMore: nút "Mua thêm" nằm ngang hàng với chữ nhắc, phía trên thanh tiến trình', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={vi.fn()} onShopMore={vi.fn()} />);
+    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onShopMore={vi.fn()} />);
     const cta = q(container, 'cart-voucher-unlock-cta') as HTMLButtonElement;
     expect(cta.textContent).toBe('Mua thêm');
     expect(cta.className).toContain('tubu-vhint-cta');
@@ -212,17 +174,15 @@ describe('CartVoucherHintStrip (web): nút "Mua thêm" ở dòng sắp mở kho�
     expect(head.parentElement).toBe(q(container, 'cart-voucher-unlock'));
   });
 
-  it('một chạm "Mua thêm" gọi onShopMore đúng một lần và không gọi onApply', () => {
+  it('một chạm "Mua thêm" gọi onShopMore đúng một lần', () => {
     const onShopMore = vi.fn();
-    const onApply = vi.fn();
-    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={onApply} onShopMore={onShopMore} />);
+    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onShopMore={onShopMore} />);
     click(q(container, 'cart-voucher-unlock-cta')!);
     expect(onShopMore).toHaveBeenCalledTimes(1);
-    expect(onApply).not.toHaveBeenCalled();
   });
 
   it('không truyền onShopMore: giao diện cũ nguyên vẹn (không nút, không khung đầu hàng, chữ và thanh là hai con trực tiếp của dòng)', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={vi.fn()} />);
+    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} />);
     const row = q(container, 'cart-voucher-unlock')!;
     expect(Array.from(row.children).map((el) => el.className)).toEqual(['tubu-vhint-text', 'tubu-freeship-track']);
     expect(row.querySelector('.tubu-vhint-head')).toBeNull();
@@ -230,27 +190,23 @@ describe('CartVoucherHintStrip (web): nút "Mua thêm" ở dòng sắp mở kho�
     expect(container.querySelector('button')).toBeNull();
   });
 
-  it('có onShopMore nhưng không có dòng sắp mở khoá: không có nút "Mua thêm", "Áp dụng ngay" vẫn là nút duy nhất', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} onApply={vi.fn()} onShopMore={vi.fn()} />);
+  it('có onShopMore nhưng không có dòng sắp mở khoá: không có nút nào (mã dùng được không sinh nút ở dải)', () => {
+    const { container } = mount(<CartVoucherHintStrip hint={{ apply: APPLY, unlock: null }} onShopMore={vi.fn()} />);
     expect(q(container, 'cart-voucher-unlock-cta')).toBeNull();
-    expect(container.querySelectorAll('button').length).toBe(1);
+    expect(container.querySelectorAll('button').length).toBe(0);
   });
 
-  it('cả hai dòng: hai nút độc lập, mỗi nút gọi đúng hàm của nó', () => {
-    const onApply = vi.fn();
+  it('có cả mã dùng được và mã sắp mở khoá: chỉ một nút "Mua thêm", bấm gọi đúng onShopMore', () => {
     const onShopMore = vi.fn();
-    const { container } = mount(<CartVoucherHintStrip hint={both} onApply={onApply} onShopMore={onShopMore} />);
-    expect(container.querySelectorAll('button').length).toBe(2);
-    click(q(container, 'cart-voucher-apply-cta')!);
-    expect(onApply).toHaveBeenCalledWith('GIAM45');
-    expect(onShopMore).not.toHaveBeenCalled();
+    const { container } = mount(<CartVoucherHintStrip hint={both} onShopMore={onShopMore} />);
+    expect(container.querySelectorAll('button').length).toBe(1);
+    expect(q(container, 'cart-voucher-apply-cta')).toBeNull();
     click(q(container, 'cart-voucher-unlock-cta')!);
     expect(onShopMore).toHaveBeenCalledTimes(1);
-    expect(onApply).toHaveBeenCalledTimes(1);
   });
 
   it('vùng chạm tối thiểu 44px, chữ không có "voucher" và không dấu chấm than, trong đầu hàng chỉ nút mang style nội tuyến', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={vi.fn()} onShopMore={vi.fn()} />);
+    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onShopMore={vi.fn()} />);
     const cta = q(container, 'cart-voucher-unlock-cta') as HTMLElement;
     expect(cta.style.minHeight).toBe('44px');
     expect(container.textContent).not.toMatch(/voucher/i);
@@ -259,13 +215,13 @@ describe('CartVoucherHintStrip (web): nút "Mua thêm" ở dòng sắp mở kho�
   });
 
   it('nút "Mua thêm" được mô tả bằng đúng câu nhắc của dòng (aria-describedby), không truyền onShopMore thì chữ không mang id', () => {
-    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={vi.fn()} onShopMore={vi.fn()} />);
+    const { container } = mount(<CartVoucherHintStrip hint={unlockOnly} onShopMore={vi.fn()} />);
     const id = q(container, 'cart-voucher-unlock-cta')!.getAttribute('aria-describedby');
     expect(id).toBeTruthy();
     const described = container.querySelector(`[id="${id}"]`)!;
     expect(described.className).toBe('tubu-vhint-text');
     expect(described.textContent).toBe(UNLOCK.text);
-    const plain = mount(<CartVoucherHintStrip hint={unlockOnly} onApply={vi.fn()} />);
+    const plain = mount(<CartVoucherHintStrip hint={unlockOnly} />);
     expect(plain.container.querySelector('[id]')).toBeNull();
   });
 

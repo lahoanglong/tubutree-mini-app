@@ -38,7 +38,7 @@ const mount = (initialConfig?: Record<string, unknown>) => {
   return mounted.container;
 };
 const labels = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).map((b) => b.textContent?.trim());
-const openAll = (c: HTMLElement) => click(c.querySelector('button[aria-label="Tất cả lối tắt"]'));
+const openAll = (c: HTMLElement) => click(c.querySelector('button[aria-label="Thêm lối tắt"]'));
 // BottomSheet thật đặt tên hộp thoại bằng aria-labelledby trỏ tới tiêu đề h2.
 const allSheet = () => Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).find((d) => d.querySelector('h2')?.textContent === 'Tất cả lối tắt') ?? null;
 const sheetRows = () => Array.from(allSheet()?.querySelectorAll<HTMLElement>('[role="button"]') ?? []);
@@ -55,7 +55,7 @@ afterEach(() => {
   mounted = null;
 });
 
-describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
+describe('ShortcutGrid web — 4 ô cố định + "Thêm" (Q7)', () => {
 
   it('nhãn tối đa hai dòng, cao cố định 32px, không nowrap: "Mã giảm giá" xuống dòng chứ không bị cắt "…"; ô vẫn cao 84px', () => {
     const c = mount();
@@ -72,9 +72,9 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
       expect(label.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
     }
   });
-  it('cờ bật hết: 4 ô cố định (Giờ vàng, Mã giảm giá, Đổi rác, Mua chung) và ô "Tất cả", lưới 5 cột không cuộn ngang; Giờ vàng là ô đầu tiên', () => {
+  it('cờ bật hết: 4 ô cố định (Giờ vàng, Mã giảm giá, Đổi rác, Mua chung) và ô "Thêm", lưới 5 cột không cuộn ngang; Giờ vàng là ô đầu tiên', () => {
     const c = mount();
-    expect(labels(c)).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Mua chung', 'Tất cả']);
+    expect(labels(c)).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Mua chung', 'Thêm']);
     expect(c.querySelector<HTMLElement>('[data-testid="shortcut-grid"]')!.style.display).toBe('grid');
     expect(c.querySelector('[role="group"][aria-label*="vuốt ngang"]')).toBeNull();
   });
@@ -98,7 +98,7 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(mocks.push).toHaveBeenLastCalledWith('/mua-chung');
   });
 
-  it('"Tất cả" mở hộp thoại liệt kê đủ mục còn hiển thị (Tích điểm đơn sàn chưa có trang web nên không có); chọn mục đóng hộp và điều hướng', () => {
+  it('"Thêm" mở hộp thoại "Tất cả lối tắt" liệt kê đủ mục còn hiển thị (Tích điểm đơn sàn chưa có trang web nên không có); chọn mục đóng hộp và điều hướng', () => {
     const c = mount();
     expect(allSheet()).toBeNull();
     openAll(c);
@@ -118,10 +118,10 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(document.querySelector('[role="dialog"][aria-label="Kiếm tiền cùng Tubu"]')).not.toBeNull();
   });
 
-  it('cờ Đổi rác tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Tất cả"; hộp thoại còn 7 mục', () => {
+  it('cờ Đổi rác tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Thêm"; hộp thoại còn 7 mục', () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
     const c = mount();
-    expect(labels(c)).toEqual(['Giờ vàng', 'Mã giảm giá', 'Mua chung', 'Đổi quà', 'Tất cả']);
+    expect(labels(c)).toEqual(['Giờ vàng', 'Mã giảm giá', 'Mua chung', 'Đổi quà', 'Thêm']);
     openAll(c);
     expect(sheetRows()).toHaveLength(7);
     expect(byText(document.body, 'button', 'Đổi rác')).toBeNull();
@@ -136,7 +136,7 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
 
   it('route còn pending thì lối tắt ẩn và mục kế lấp chỗ', () => {
     mocks.pending = new Set(['/points/scan', '/mua-chung']);
-    expect(labels(mount())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Đổi quà', 'Tất cả']);
+    expect(labels(mount())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Đổi quà', 'Thêm']);
   });
 
   it('Đổi rác tạm dừng nhưng khách còn yêu cầu đang mở: vẫn hiện ở ô cố định, ghi "Yêu cầu"', () => {
@@ -164,6 +164,19 @@ describe('ShortcutGrid web — 4 ô cố định + "Tất cả" (Q7)', () => {
     expect(cls).toContain('tubu-bleed');
     expect(cls).toContain('max-md:px-2');
     expect(cls).toContain('md:hidden');
+  });
+
+  it('ô cuối lối tắt là "Thêm" với biểu tượng ba chấm (Ellipsis), không phải "Tất cả" + LayoutGrid như ô cuối hàng Danh mục; vẫn mở hộp thoại', () => {
+    const c = mount();
+    const more = c.querySelector<HTMLButtonElement>('button[aria-label="Thêm lối tắt"]')!;
+    expect(more.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(more.textContent?.trim()).toBe('Thêm');
+    expect(more.textContent!.trim().length).toBeLessThanOrEqual(6);
+    expect(more.querySelector('svg.lucide-ellipsis')).not.toBeNull();
+    expect(more.querySelector('svg.lucide-layout-grid')).toBeNull();
+    expect(byText(c, 'button', 'Tất cả')).toBeNull();
+    click(more);
+    expect(allSheet()).not.toBeNull();
   });
 
   it('cấu hình công khai chưa về: khung trơn cao 84px thay lưới, không ô bấm được; lỗi (hết chờ) thì dựng lưới với cờ tắt', () => {

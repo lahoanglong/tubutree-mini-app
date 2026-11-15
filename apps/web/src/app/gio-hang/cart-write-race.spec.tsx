@@ -507,7 +507,7 @@ describe('/gio-hang — lệnh dòng và lệnh món bù chồng nhau, phản h�
     });
   });
 
-  describe('"Áp dụng ngay" (dải gợi ý mã) cùng đường ghi giỏ', () => {
+  describe('"Áp dụng" (nút ở hàng mã, trước là dải gợi ý) cùng đường ghi giỏ', () => {
     const GIAM45 = { code: 'GIAM45', type: 'AMOUNT', value: 45000, minOrder: null, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' };
     const withCoupon = (items: unknown[]) => ({ ...cartOf(items), couponCode: 'GIAM45', discount: 45000 });
     const cta = (c: ParentNode) => c.querySelector<HTMLElement>('[data-testid="cart-voucher-apply-cta"]');

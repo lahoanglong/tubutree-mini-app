@@ -245,7 +245,7 @@ describe('GamePage — vườn và lối tắt', () => {
     const { container } = renderPage();
     expect(await screen.findByText('Sồi')).toBeInTheDocument();
     expect(screen.getByTestId('water-tank')).toHaveTextContent('1.250');
-    expect(container.textContent).toContain('10/50💧 · 🔥 Chuỗi 2 ngày · 🌳 Đã thu hoạch 3 cây');
+    expect(container.textContent).toContain('10/50💧 · 🌳 Đã thu hoạch 3 cây');
   });
 
   it('chưa có ecoImpact: tên mặc định "Vườn của bạn" và số 0', async () => {
@@ -433,26 +433,24 @@ describe('GamePage — điểm danh chuỗi (Vườn)', () => {
     await waitFor(() => expect(btn).toBeEnabled());
   });
 
-  it('tiêu đề chuỗi và 7 ô ngày: chu kỳ 7 ngày, ô thưởng ngày 3 và 7', async () => {
+  it('tiêu đề chuỗi theo hồ sơ; hàng 7 ngày chỉ có MỘT nơi: dải Nhịp Sống Xanh ở thẻ đầu, không còn ô 🎁 chu kỳ trong thẻ Điểm danh', async () => {
     const view = renderPage();
     expect(await screen.findByText('Chuỗi 2 ngày')).toBeInTheDocument();
-    // Ô 💧 đã làm: 2 ngày; ô 🎁: ngày 3 và 7
-    expect(screen.getAllByText('💧')).toHaveLength(2);
-    expect(screen.getAllByText('🎁')).toHaveLength(2);
+    expect(screen.getAllByTestId('week-rhythm')).toHaveLength(1);
+    expect(screen.getByTestId('week-rhythm').querySelectorAll('li')).toHaveLength(7);
+    expect(screen.queryByText('🎁')).not.toBeInTheDocument();
     view.unmount();
 
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, streakDays: 7 });
     const full = renderPage();
     await screen.findByText('Chuỗi 7 ngày');
-    expect(screen.getAllByText('💧')).toHaveLength(7);
-    expect(screen.queryByText('🎁')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('week-rhythm')).toHaveLength(1);
     full.unmount();
 
     mocks.api.getGameProfile.mockResolvedValue({ ...PROFILE, streakDays: 10 });
     renderPage();
     await screen.findByText('Chuỗi 10 ngày');
-    // 10 % 7 = 3 ngày đã làm
-    expect(screen.getAllByText('💧')).toHaveLength(3);
+    expect(screen.getAllByTestId('week-rhythm')).toHaveLength(1);
   });
 });
 

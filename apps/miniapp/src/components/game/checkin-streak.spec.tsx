@@ -42,22 +42,24 @@ describe('CheckInStreak', () => {
   const REWARDS = (claimedThrough: number) => Array.from({ length: 7 }, (_, i) => ({ day: i + 1, points: 1000, claimed: i + 1 <= claimedThrough, isToday: i + 1 === claimedThrough + 1 }));
   const STATUS = (claimedThrough: number, streakDays: number) =>
     ({ checkedInToday: false, streakDays, streakDay: claimedThrough + 1, currentCycleDay: claimedThrough + 1, rewards: REWARDS(claimedThrough) }) as never;
-  const doneCells = (c: HTMLElement) => c.querySelectorAll('div[style*="action-primary-bg"]').length;
+  // Hàng 7 ngày nay là dải "Nhịp Sống Xanh 7 Ngày" ở thẻ đầu trang (week-rhythm.spec.tsx); thẻ này chỉ giữ tiêu đề chuỗi, vé giữ lửa và giọt sương.
+  const dayCells = (c: HTMLElement) => c.querySelectorAll('li, [data-testid="streak-cell"]').length;
 
-  it('lịch 7 ngày theo trạng thái chung (cùng nguồn với Ưu đãi): đã nhận 3 ngày thì 3 ô đầy', () => {
+  it('tiêu đề chuỗi theo trạng thái chung (cùng nguồn với Ưu đãi) và không còn hàng 7 ô thứ hai trong thẻ', () => {
     const { container } = renderStreak({ ...PROFILE, streakDays: 12 } as unknown as GameProfile, { status: STATUS(3, 3) });
-    expect(doneCells(container)).toBe(3);
     expect(screen.getByText(/Chuỗi 3 ngày/)).toBeInTheDocument();
+    expect(dayCells(container)).toBe(0);
   });
 
-  it('chuỗi hôm qua đúng 7 (sang vòng mới): trạng thái chung nói chưa ô nào nhận, không tô cả 7 ô', () => {
+  it('chuỗi hôm qua đúng 7 (sang vòng mới): tiêu đề vẫn nói chuỗi 7 ngày, không dựng hàng ô', () => {
     const { container } = renderStreak({ ...PROFILE, streakDays: 7 } as unknown as GameProfile, { status: STATUS(0, 7) });
-    expect(doneCells(container)).toBe(0);
+    expect(screen.getByText(/Chuỗi 7 ngày/)).toBeInTheDocument();
+    expect(dayCells(container)).toBe(0);
   });
 
-  it('chưa có trạng thái chung: dựng tạm từ hồ sơ Vườn như trước', () => {
-    const { container } = renderStreak({ ...PROFILE, streakDays: 2 } as unknown as GameProfile);
-    expect(doneCells(container)).toBe(2);
+  it('chưa có trạng thái chung: tiêu đề dựng tạm từ hồ sơ Vườn như trước', () => {
+    renderStreak({ ...PROFILE, streakDays: 2 } as unknown as GameProfile);
+    expect(screen.getByText(/Chuỗi 2 ngày/)).toBeInTheDocument();
   });
 
   it('câu phụ: user thật được hứa kèm Điểm Xanh, khách vãng lai (pointsBlocked) chỉ thấy giọt nước', () => {

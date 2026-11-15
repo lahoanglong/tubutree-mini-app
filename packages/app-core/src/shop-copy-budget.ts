@@ -557,7 +557,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'freeship.shopMoreAria': null,
   'freeship.shopMoreAriaTubu': null,
   'cart.voucherHint.apply': 50,
-  'cart.voucherHint.applyCta': 14,
+  'cart.voucherHint.applyCta': 10,
   'cart.voucherHint.applyAria': null,
   'cart.voucherHint.applied': null,
   'cart.voucherHint.unlockAmount': 60,

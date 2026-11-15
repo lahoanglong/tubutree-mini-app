@@ -95,7 +95,7 @@ test.describe('Web khách: Vườn Xanh', () => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh');
     await expect(page.getByRole('heading', { name: 'Vườn Xanh', level: 1 })).toBeVisible();
-    await expect(page.getByText('600/1.000💧 · 🔥 Chuỗi 3 ngày · 🌳 Đã thu hoạch 2 cây')).toBeVisible();
+    await expect(page.getByText('600/1.000💧 · 🌳 Đã thu hoạch 2 cây')).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Hôm nay' })).toHaveAttribute('aria-selected', 'true');
     await expect(page.getByRole('button', { name: /Nhận nước hôm nay/ })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Chuỗi 3 ngày' })).toBeVisible();

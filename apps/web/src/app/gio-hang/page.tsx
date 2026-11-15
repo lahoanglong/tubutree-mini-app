@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ComponentProps } from 'react';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
@@ -490,7 +490,7 @@ export default function CartPage() {
   };
 
   const couponBox = (sheet: boolean) => (
-    <CouponBox
+    <CartCouponBox
       sheet={sheet}
       currentCode={cart!.couponCode}
       appliedDiscount={shownDiscount}
@@ -772,8 +772,8 @@ export default function CartPage() {
 }
 
 /**
- * Gợi ý mã giảm giá dưới thanh Miễn phí giao hàng. Tách thành component riêng để hook xem trước chạy độc lập với phần còn lại của trang, như `CartVoucherHintSection`
- * của Mini App. Khung `aria-live` có sẵn từ lúc dựng (chèn khung cùng chữ thì trình đọc màn hình không đọc): áp xong dòng gợi ý biến mất nên "Đã áp dụng mã …" nằm ở đây.
+ * Nhắc mã sắp mở khoá dưới thanh Miễn phí giao hàng. Tách thành component riêng để hook xem trước chạy độc lập với phần còn lại của trang, như `CartVoucherHintSection`
+ * của Mini App. Mời áp mã đã đủ điều kiện không ở đây mà ở nút "Áp dụng" của `CartCouponBox`: một hành động, một nút.
  */
 function CartVoucherHintSection(props: {
   currentCode: string | null | undefined;
@@ -784,12 +784,32 @@ function CartVoucherHintSection(props: {
 }) {
   const v = useCartVoucherHint(props);
   const router = useRouter();
+  return <CartVoucherHintStrip hint={v.hint} onShopMore={() => router.push('/')} />;
+}
+
+/**
+ * Hộp mã giảm giá của giỏ (thanh dính ở điện thoại, khung tóm tắt từ md): có mã đã đủ điều kiện mà giỏ chưa áp thì nút cuối hàng là "Áp dụng" một chạm
+ * (`CouponBox.quickApply`), nút DUY NHẤT áp mã trên màn giỏ. Lệnh áp, khoá chạm đúp và lời báo lỗi là của `useCartVoucherHint` như trước. Khung `aria-live` có sẵn từ
+ * lúc dựng (chèn khung cùng chữ thì trình đọc màn hình không đọc): áp xong nút biến mất, hàng đổi sang chip mã nên "Đã áp dụng mã …" chỉ cần cho trình đọc màn hình.
+ */
+function CartCouponBox(props: ComponentProps<typeof CouponBox>) {
+  const v = useCartVoucherHint({
+    currentCode: props.currentCode,
+    subtotal: props.subtotal,
+    productIds: props.productIds,
+    preview: props.preview,
+    previewKey: props.previewKey ?? '',
+  });
+  const offer = v.hint?.apply ?? null;
   return (
     <>
-      <CartVoucherHintStrip hint={v.hint} onApply={v.apply} applying={v.applying} error={v.error} onShopMore={() => router.push('/')} />
+      <CouponBox
+        {...props}
+        quickApply={offer ? { ariaLabel: offer.ariaLabel, applying: v.applying, error: v.error, onApply: () => v.apply(offer.code) } : null}
+      />
       <div aria-live="polite">
         {v.appliedNote && (
-          <p data-testid="cart-voucher-applied" className="tubu-vhint-done">
+          <p data-testid="cart-voucher-applied" className="sr-only">
             {v.appliedNote}
           </p>
         )}

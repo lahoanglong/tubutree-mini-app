@@ -598,7 +598,7 @@ export function purchasedSkeletonHeight(hint: PurchasedHint): number {
 /** Chiều cao khối Giờ vàng chưa có dòng suất kế (đo thật Mini 375px: tiêu đề + một hàng thẻ). Khoảng cách tới khối kế do vỏ khối lo nên khung chờ cao đúng bằng số này. */
 export const FLASH_SKELETON_HEIGHT = 276;
 
-/** Lưới Danh mục: ô vuông 56 + cách 4 + nhãn hai dòng 32; 5 cột, tối đa 10 ô một màn (2 hàng), hàng cách nhau 8, đệm trên 4 và dưới 8. */
+/** Lưới Danh mục ở Trang chủ: ô vuông 56 + cách 4 + nhãn hai dòng 32; MỘT hàng 5 cột, đệm trên 4 và dưới 8. Không xếp hai hàng, không cuộn ngang: danh mục còn lại ở tab Danh mục. */
 export const CATEGORY_TILE_SIZE = 56;
 export const CATEGORY_LABEL_HEIGHT = 32;
 export const CATEGORY_CELL_HEIGHT = CATEGORY_TILE_SIZE + 4 + CATEGORY_LABEL_HEIGHT;
@@ -608,34 +608,30 @@ export const CATEGORY_CELL_HEIGHT = CATEGORY_TILE_SIZE + 4 + CATEGORY_LABEL_HEIG
  */
 export const CATEGORY_TILE_GUTTER = 3;
 export const CATEGORY_GRID_COLUMNS = 5;
-export const CATEGORY_GRID_MAX_CELLS = 10;
-/** Lưới cuộn ngang (quá 10 ô): mỗi cột rộng 1/5,5 bề rộng khung nên cột thứ 6 ló gần nửa cột. Cột 1/5 chỉ ló phần đệm 16px, bị lớp mờ mép che hết. */
-export const CATEGORY_SCROLL_COLUMNS = 5.5;
-/**
- * Cột cuộn chỉ rộng ~62,4px (lưới 5 cột: 68,6px). Nhãn ở chế độ cuộn không lấn sang ô kề (lấn làm hai nhãn dài đứng cạnh nhau chạm hoặc đè chữ): mỗi bên chừa `CATEGORY_LABEL_GUTTER` px nên hai nhãn kề luôn cách nhau ít nhất 2 × giá trị này,
- * và siết chữ `CATEGORY_LABEL_TRACKING` để "Mỹ phẩm thiên nhiên" (từ dài nhất 60,4px ở 12px/600) vẫn vừa hai dòng. Tên nào vẫn không vừa hai dòng thì "…" thay vì chạm ô kề.
- */
-export const CATEGORY_LABEL_GUTTER = 1;
-export const CATEGORY_LABEL_TRACKING = '-0.04em';
+/** Số ô tối đa của hàng Danh mục ở Trang chủ, kể cả ô "Tất cả" (4 danh mục đầu + "Tất cả"). */
+export const CATEGORY_GRID_MAX_CELLS = CATEGORY_GRID_COLUMNS;
 
-/** `cells` ô (kể cả "Tất cả") không vừa một màn 2 × 5: lưới xếp theo cột và cuộn ngang. */
-export function categoryGridScrolls(cells: number): boolean {
-  return cells > CATEGORY_GRID_MAX_CELLS;
+/** Danh mục Trang chủ thật sự vẽ: cắt theo thứ tự có sẵn cho vừa một hàng; có ô "Tất cả" (`withSeeAll`) thì nhường cho nó một ô. */
+export function homeCategoryEntries<T>(entries: readonly T[], withSeeAll: boolean): T[] {
+  return entries.slice(0, CATEGORY_GRID_MAX_CELLS - (withSeeAll ? 1 : 0));
 }
 
-/** Số ô khung chờ của Danh mục: số danh mục lần tải trước cộng ô "Tất cả", không quá một màn (10). */
+/** Số ô khung chờ của Danh mục: số danh mục lần tải trước cộng ô "Tất cả", không quá một hàng (5). */
 export function categorySkeletonCells(placeholderCount: number): number {
   return Math.min(placeholderCount + 1, CATEGORY_GRID_MAX_CELLS);
 }
 
-/** Chiều cao khối Danh mục (tiêu đề + lưới) với `cells` ô kể cả "Tất cả": một hàng khi ≤5 ô, hai hàng từ 6 ô (quá 10 ô cuộn ngang vẫn hai hàng). */
+/**
+ * Chiều cao khối Danh mục (tiêu đề + lưới) với `cells` ô kể cả "Tất cả": một hàng khi ≤5 ô, hai hàng từ 6 ô. Trang chủ không bao giờ vẽ quá
+ * `CATEGORY_GRID_MAX_CELLS` ô nên chỉ dùng nhánh một hàng; khung chờ cắt `cells` về mức đó trước khi gọi.
+ */
 export function categoriesBlockHeight(cells: number): number {
   const rows = cells <= CATEGORY_GRID_COLUMNS ? 1 : 2;
   return SECTION_HEADER_HEIGHT + 4 + rows * CATEGORY_CELL_HEIGHT + (rows - 1) * 8 + 8;
 }
 
 /**
- * Chiều cao bốn ô của khung chờ chung Trang chủ (`HomeSettlingSkeleton`): một hàng lối tắt, một khối cỡ Giờ vàng, danh mục lưới 2×5, rồi một kệ Bán chạy nhất.
+ * Chiều cao bốn ô của khung chờ chung Trang chủ (`HomeSettlingSkeleton`): một hàng lối tắt, một khối cỡ Giờ vàng, danh mục một hàng 5 ô, rồi một kệ Bán chạy nhất.
  * Mini App và web dùng chung để khung chờ thay bằng khối thật không làm trang nhảy; đổi chiều cao khối thật thì sửa ở đây (số đo Mini 375px).
  */
 export const HOME_SETTLING_HEIGHTS = {

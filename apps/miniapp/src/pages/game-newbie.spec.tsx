@@ -315,8 +315,8 @@ describe('Vườn Xanh người mới — số hiện trước khi bấm lấy t
     renderPage();
     expect(await screen.findByText('Nhận +17💧 và Điểm Xanh mỗi ngày')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Hứng giọt sương (+11💧)' })).toBeInTheDocument();
-    expect(screen.getByText('+5💧')).toBeInTheDocument();
-    expect(screen.getByText('+40💧')).toBeInTheDocument();
+    // Thưởng ngày 3 và 7 nằm trong câu chú thích của thẻ Điểm danh (hàng ô cũ đã dời sang dải Nhịp Sống Xanh).
+    expect(screen.getByText('Thưởng thêm ngày 3 (+5💧) và ngày 7 (+40💧)')).toBeInTheDocument();
     // Nút chính gộp điểm danh + sương theo đúng hai số đó.
     expect(screen.getByRole('button', { name: 'Nhận nước hôm nay (+28💧)' })).toBeInTheDocument();
   });

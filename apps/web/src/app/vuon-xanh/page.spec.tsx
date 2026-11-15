@@ -218,7 +218,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
   it('thẻ vườn: tên cây, tiến độ và dòng tổng hợp có dấu phân cách nghìn', async () => {
     const c = await mount();
     expect(c.textContent).toContain('Cây Sưa');
-    expect(c.textContent).toContain('600/1.000💧 · 🔥 Chuỗi 3 ngày · 🌳 Đã thu hoạch 2 cây');
+    expect(c.textContent).toContain('600/1.000💧 · 🌳 Đã thu hoạch 2 cây');
     expect(c.querySelector('[role="progressbar"][aria-label="Tiến độ cây"]')!.getAttribute('aria-valuenow')).toBe('60');
   });
 
@@ -226,7 +226,7 @@ describe('Vườn Xanh: khung, tab và thẻ vườn', () => {
     state.data['/game/profile'] = PROFILE({ ecoImpact: null, totalSeeds: undefined, streakDays: undefined });
     const c = await mount();
     expect(c.textContent).toContain('Vườn của bạn');
-    expect(c.textContent).toContain('0/0💧 · 🔥 Chuỗi 0 ngày · 🌳 Đã thu hoạch 0 cây');
+    expect(c.textContent).toContain('0/0💧 · 🌳 Đã thu hoạch 0 cây');
   });
 
   it('giai đoạn cây: <=50% mầm, >50% cành, 100% cây', async () => {
@@ -381,26 +381,28 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     expect(postsOf('/me/daily-check-in')).toHaveLength(2);
   });
 
-  it('chuỗi 3 ngày: tiêu đề, 7 ô theo chu kỳ, ô thưởng ngày 3 và 7', async () => {
+  it('chuỗi 2 ngày: tiêu đề chuỗi theo hồ sơ; hàng 7 ngày chỉ có MỘT nơi (dải Nhịp Sống Xanh ở thẻ đầu), không còn ô 🎁 chu kỳ', async () => {
     state.data['/game/profile'] = PROFILE({ streakDays: 2 });
     const c = await mount();
     expect(c.textContent).toContain('Chuỗi 2 ngày');
-    const cells = Array.from(c.querySelectorAll('[data-testid="streak-cell"]')).map((x) => x.textContent);
-    expect(cells).toEqual(['💧', '💧', '🎁', '4', '5', '6', '🎁']);
+    expect(c.querySelectorAll('[data-testid="week-rhythm"]')).toHaveLength(1);
+    expect(c.querySelectorAll('[data-testid="week-rhythm"] li')).toHaveLength(7);
+    expect(c.querySelectorAll('[data-testid="streak-cell"]')).toHaveLength(0);
   });
 
-  it('lịch theo trạng thái chung (cùng nguồn với Ưu đãi): đã nhận 3 ngày thì 3 ô đầy, hôm qua chuỗi 7 sang vòng mới thì 0 ô', async () => {
+  it('tiêu đề theo trạng thái chung (cùng nguồn với Ưu đãi): chuỗi 3 ngày rồi chuỗi 7 ngày sang vòng mới, không có hàng ô trong thẻ Điểm danh', async () => {
     const rewards = (through: number) => Array.from({ length: 7 }, (_, i) => ({ day: i + 1, points: 1000, claimed: i + 1 <= through, isToday: i + 1 === through + 1 }));
     state.data['/game/profile'] = PROFILE({ streakDays: 7 });
     state.data['/me/daily-check-in'] = { checkedInToday: false, pointsDone: false, waterDone: false, streakDays: 3, streakDay: 4, currentCycleDay: 4, todayPoints: 1000, todayWater: 15, rewards: rewards(3) };
     let c = await mount();
     expect(c.textContent).toContain('Chuỗi 3 ngày');
-    expect(Array.from(c.querySelectorAll('[data-testid="streak-cell"]')).filter((x) => x.textContent === '💧')).toHaveLength(3);
+    expect(c.querySelectorAll('[data-testid="streak-cell"]')).toHaveLength(0);
     mounted.forEach((m) => m.unmount());
     mounted = [];
     state.data['/me/daily-check-in'] = { checkedInToday: false, pointsDone: false, waterDone: false, streakDays: 7, streakDay: 1, currentCycleDay: 1, todayPoints: 1000, todayWater: 10, rewards: rewards(0) };
     c = await mount();
-    expect(Array.from(c.querySelectorAll('[data-testid="streak-cell"]')).filter((x) => x.textContent === '💧')).toHaveLength(0);
+    expect(c.textContent).toContain('Chuỗi 7 ngày');
+    expect(c.querySelectorAll('[data-testid="streak-cell"]')).toHaveLength(0);
   });
 
   it('nút chính hiện số nước từ trạng thái chung (ngày 3: 15 + sương 15 = 30), cùng số với Ưu đãi', async () => {
@@ -410,10 +412,11 @@ describe('Vườn Xanh: điểm danh, sương, vé giữ lửa, hồi sinh chu�
     expect(c.textContent).toContain('Nhận nước hôm nay (+30💧)');
   });
 
-  it('chuỗi chẵn bội 7: đủ 7 ô đã xong', async () => {
+  it('chuỗi chẵn bội 7: tiêu đề chuỗi 7 ngày và vẫn đúng một dải bảy ô', async () => {
     state.data['/game/profile'] = PROFILE({ streakDays: 7 });
     const c = await mount();
-    expect(Array.from(c.querySelectorAll('[data-testid="streak-cell"]')).every((x) => x.textContent === '💧')).toBe(true);
+    expect(c.textContent).toContain('Chuỗi 7 ngày');
+    expect(c.querySelectorAll('[data-testid="week-rhythm"] li')).toHaveLength(7);
   });
 
   it('giọt sương: gọi một lần, báo số giọt nước; đã hứng hôm nay thì tắt và độc lập với điểm danh', async () => {

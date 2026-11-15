@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import type { CouponPreviewRequest } from '@tubutree/shared-types';
 import { cartVoucherHint, type CartVoucherHint } from '@tubutree/app-core/commerce/cart-voucher-hint';
+import { couponHint, type CouponHint } from '@tubutree/app-core/coupon-use';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { applyCoupon } from '../../services/shop-api';
 import { getErrorMessage, isStaleStateError } from '../../services/api';
@@ -16,6 +17,8 @@ import { COUPON_CHANGE_KEY, holdForCouponReload, useCouponPreviews } from './use
 export interface CartVoucherHintState {
   /** Null khi chưa có xem trước của máy chủ, giỏ đã có mã, hoặc không có gì đáng nói. */
   hint: CartVoucherHint | null;
+  /** Số mã dùng được và mức giảm cao nhất của chúng (chữ ngắn của hàng "Mã giảm giá"); null khi chưa có xem trước hoặc giỏ đã có mã. */
+  usable: CouponHint | null;
   apply: (code: string) => void;
   applying: boolean;
   /** Lời báo áp không được, chỉ khi còn đang mời đúng mã đó. */
@@ -23,8 +26,8 @@ export interface CartVoucherHintState {
 }
 
 /**
- * Gợi ý mã giảm giá ở đầu Giỏ: mời áp mã đã đủ điều kiện và nhắc mã sắp mở khoá. Dùng chung MỘT lần hỏi xem trước với dòng mã ở chân dính (cùng khoá
- * truy vấn), nên không thêm lượt gọi máy chủ. Chỉ hỏi khi giỏ chưa có mã. Mã nào, số nào do `cartVoucherHint` (app-core) quyết, giống web.
+ * Gợi ý mã giảm giá ở Giỏ: mời áp mã đã đủ điều kiện (nút "Áp dụng" ở hàng mã chân dính) và nhắc mã sắp mở khoá (dải ở đầu giỏ). Mọi nơi dùng chung cùng khoá
+ * truy vấn xem trước, nên không thêm lượt gọi máy chủ. Chỉ hỏi khi giỏ chưa có mã. Mã nào, số nào do `cartVoucherHint` (app-core) quyết, giống web.
  */
 export function useCartVoucherHint(opts: {
   currentCode: string | null | undefined;
@@ -79,6 +82,7 @@ export function useCartVoucherHint(opts: {
   const offered = hint?.apply?.code ?? null;
   return {
     hint: hint && (hint.apply || hint.unlock) ? hint : null,
+    usable: data ? couponHint(data.previews) : null,
     apply: (code) => mut.mutate(code),
     applying: mut.isPending,
     error: failed && offered && failed.code === offered.trim().toUpperCase() ? failed.text : null,

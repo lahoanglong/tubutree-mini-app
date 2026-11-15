@@ -92,8 +92,9 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['StoryReelStrip (vòng Story)', () => <StoryReelStrip items={[{ slug: 'a', name: 'A', thumbnail: null, seen: false }, { slug: 'b', name: 'B', thumbnail: null, seen: true }]} onOpen={() => {}} />],
     ['FreeshipAddonRail (nút + Thêm)', () => <FreeshipAddonRail items={[{ slug: 'a', name: 'A', thumbnail: null, price: 49000, variationId: 'v' }]} onAdd={() => {}} />],
     ['FreeShippingProgressBar (nút Mua thêm)', () => <FreeShippingProgressBar base={50_000} threshold={200_000} onShopMore={() => {}} />],
-    ['CartVoucherHintStrip (nút Áp dụng ngay)', () => <CartVoucherHintStrip hint={{ apply: { code: 'A', label: 'A', saving: 1000, text: 'B', ariaLabel: 'C' }, unlock: null }} onApply={() => {}} />],
-    ['CartVoucherHintStrip (nút Mua thêm)', () => <CartVoucherHintStrip hint={{ apply: null, unlock: { code: 'A', missing: 1000, pct: 90, text: 'B', barAria: 'C' } }} onApply={() => {}} onShopMore={() => {}} />],
+    // W166: dải chỉ còn nút "Mua thêm" (mã dùng được không sinh nút "Áp dụng ngay" ở dải nữa); vùng chạm của nút "Áp dụng" ở hàng mã chân dính do cart.spec và e2e giỏ giữ.
+    ['CartVoucherHintStrip (có mã dùng được + sắp mở khoá: chỉ nút Mua thêm)', () => <CartVoucherHintStrip hint={{ apply: { code: 'A', label: 'A', saving: 1000, text: 'B', ariaLabel: 'C' }, unlock: { code: 'A', missing: 1000, pct: 90, text: 'B', barAria: 'C' } }} onShopMore={() => {}} />],
+    ['CartVoucherHintStrip (nút Mua thêm)', () => <CartVoucherHintStrip hint={{ apply: null, unlock: { code: 'A', missing: 1000, pct: 90, text: 'B', barAria: 'C' } }} onShopMore={() => {}} />],
     ['ProductTrustStrip (lối xem chính sách)', () => <ProductTrustStrip view={productTrustStrip({ fulfillerKind: 'TUBU', returnWindowDays: 7 })} onOpenPolicy={() => {}} />],
     ['FrequentlyBoughtTogether (dòng tick, nút Thêm)', () => (
       <FrequentlyBoughtTogether

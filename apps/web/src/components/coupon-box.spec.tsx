@@ -731,6 +731,134 @@ describe('CouponBox — gọn một dòng, mở khi bấm', () => {
   });
 });
 
+describe('CouponBox — nút "Áp dụng" ở cuối hàng mã (quickApply, W166)', () => {
+  const quickOf = (over: Partial<{ ariaLabel: string; applying: boolean; error: string | null; onApply: () => void }> = {}) => ({
+    ariaLabel: 'Áp dụng ngay mã GIAM45',
+    applying: false,
+    error: null,
+    onApply: vi.fn(),
+    ...over,
+  });
+  const cta = (root: ParentNode) => root.querySelector<HTMLElement>('[data-testid="cart-voucher-apply-cta"]');
+
+  it('thanh dính (sheet): "Áp dụng" thay "Chọn mã ›", nằm NGOÀI nút mở bảng, hàng vẫn 44px, gợi ý "N mã · giảm đến X" giữ nguyên', async () => {
+    state.coupons = [c('GIAM45', { type: 'AMOUNT', value: 45000, maxDiscount: null })];
+    state.previews.mockResolvedValue([{ code: 'GIAM45', eligible: true, discount: 45000 }]);
+    const quick = quickOf();
+    const r = render(<CouponBox sheet currentCode={null} subtotal={300000} preview={{ itemIds: ['i1'] }} previewKey="k" quickApply={quick} />);
+    mounted.push(r);
+    await flush(8);
+    const row = r.container.querySelector<HTMLButtonElement>('[data-testid="coupon-row"]')!;
+    const button = cta(r.container)!;
+    expect(button.textContent).toBe('Áp dụng');
+    expect(button.getAttribute('aria-label')).toBe('Áp dụng ngay mã GIAM45');
+    expect(row.contains(button)).toBe(false);
+    expect(row.querySelector('button')).toBeNull();
+    expect(row.parentElement).toBe(button.parentElement);
+    expect(r.container.querySelector('[data-testid="coupon-cta"]')).toBeNull();
+    expect(r.container.textContent).not.toContain('Chọn mã');
+    expect(r.container.querySelector('[data-testid="coupon-hint"]')!.textContent).toBe('1 mã · giảm đến 45k');
+    expect(smallTouchTargets(r.container)).toEqual([]);
+    expect(unnamedControls(r.container)).toEqual([]);
+  });
+
+  it('thanh dính: bấm "Áp dụng" gọi onApply đúng một lần và KHÔNG mở bảng; bấm chữ của hàng mở bảng và không gọi onApply', async () => {
+    state.coupons = [c('GIAM45')];
+    const quick = quickOf();
+    const r = render(<CouponBox sheet currentCode={null} subtotal={300000} quickApply={quick} />);
+    mounted.push(r);
+    await flush(6);
+    click(cta(r.container));
+    await flush(3);
+    expect(quick.onApply).toHaveBeenCalledTimes(1);
+    expect(dialog()).toBeNull();
+    click(r.container.querySelector('[data-testid="coupon-row"]'));
+    await flush(3);
+    expect(dialog()).not.toBeNull();
+    expect(quick.onApply).toHaveBeenCalledTimes(1);
+  });
+
+  it('đang áp (applying): nút bận, không bấm thêm được', async () => {
+    const quick = quickOf({ applying: true });
+    const r = render(<CouponBox sheet currentCode={null} subtotal={300000} quickApply={quick} />);
+    mounted.push(r);
+    await flush(4);
+    const button = cta(r.container)!;
+    expect(button.getAttribute('aria-busy')).toBe('true');
+    click(button);
+    await flush(2);
+    expect(quick.onApply).not.toHaveBeenCalled();
+  });
+
+  it('lỗi áp mã: lời báo role=alert nằm dưới hàng, nút trỏ aria-describedby vào đúng lời báo; hết lỗi thì không còn describedby', async () => {
+    const quick = quickOf({ error: 'Mã đã hết lượt dùng.' });
+    const r = render(<CouponBox sheet currentCode={null} subtotal={300000} quickApply={quick} />);
+    mounted.push(r);
+    await flush(4);
+    const alert = r.container.querySelector<HTMLElement>('[data-testid="cart-voucher-error"]')!;
+    expect(alert.getAttribute('role')).toBe('alert');
+    expect(alert.textContent).toBe('Mã đã hết lượt dùng.');
+    expect(cta(r.container)!.getAttribute('aria-describedby')).toBe(alert.id);
+    expect(alert.id).not.toBe('');
+    r.unmount();
+    mounted = mounted.filter((m) => m !== r);
+    const clean = render(<CouponBox sheet currentCode={null} subtotal={300000} quickApply={quickOf()} />);
+    mounted.push(clean);
+    await flush(4);
+    expect(cta(clean.container)!.hasAttribute('aria-describedby')).toBe(false);
+    expect(clean.container.querySelector('[data-testid="cart-voucher-error"]')).toBeNull();
+  });
+
+  it('giỏ đã có mã: bỏ qua quickApply, hàng ghi mã và "Thay đổi"', async () => {
+    const r = render(<CouponBox sheet currentCode="WELCOME30" appliedDiscount={30000} subtotal={300000} quickApply={quickOf()} />);
+    mounted.push(r);
+    await flush(4);
+    expect(cta(r.container)).toBeNull();
+    expect(r.container.querySelector('[data-testid="cart-voucher-error"]')).toBeNull();
+    expect(r.container.querySelector('[data-testid="coupon-cta"]')!.textContent).toContain('Thay đổi');
+  });
+
+  it('không truyền quickApply: hàng giữ "Chọn mã ›", không có nút "Áp dụng" nào ngoài ô nhập', async () => {
+    const r = render(<CouponBox sheet currentCode={null} subtotal={300000} />);
+    mounted.push(r);
+    await flush(4);
+    expect(cta(r.container)).toBeNull();
+    expect(r.container.querySelector('[data-testid="coupon-cta"]')!.textContent).toContain('Chọn mã');
+  });
+
+  it('từ md (hàng tại chỗ): "Áp dụng" thay "Chọn mã", nằm ngoài nút hàng, bấm không bung ô nhập; chữ hàng vẫn bung', async () => {
+    state.coupons = [c('GIAM45')];
+    const quick = quickOf();
+    const r = render(<CouponBox currentCode={null} subtotal={300000} quickApply={quick} />);
+    mounted.push(r);
+    await flush(6);
+    const row = r.container.querySelector<HTMLButtonElement>('[data-testid="coupon-row"]')!;
+    const button = cta(r.container)!;
+    expect(row.contains(button)).toBe(false);
+    expect(row.querySelector('button')).toBeNull();
+    expect(row.querySelector('[data-testid="coupon-cta"]')).toBeNull();
+    click(button);
+    await flush(3);
+    expect(quick.onApply).toHaveBeenCalledTimes(1);
+    expect(row.getAttribute('aria-expanded')).toBe('false');
+    click(row);
+    await flush(3);
+    expect(row.getAttribute('aria-expanded')).toBe('true');
+    expect(quick.onApply).toHaveBeenCalledTimes(1);
+  });
+
+  it('điện thoại (không truyền sheet): cùng nút, cùng test-id; chỉ MỘT nút áp mã trên cả hộp', async () => {
+    phone();
+    state.coupons = [c('GIAM45')];
+    const r = render(<CouponBox currentCode={null} subtotal={300000} quickApply={quickOf({ error: 'Lỗi thử.' })} />);
+    mounted.push(r);
+    await flush(6);
+    expect(r.container.querySelectorAll('[data-testid="cart-voucher-apply-cta"]')).toHaveLength(1);
+    expect(r.container.querySelectorAll('[data-testid="cart-voucher-error"]')).toHaveLength(1);
+    expect(r.container.querySelector('[data-testid="coupon-cta"]')).toBeNull();
+  });
+});
+
 describe('CouponBox — báo mã chưa áp dụng theo lý do máy chủ', () => {
   const REASON = 'Đơn này đã được miễn phí giao hàng.';
   const apply = async (code: string, cart: Record<string, unknown>, pv: Record<string, unknown>[]) => {

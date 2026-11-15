@@ -1143,8 +1143,8 @@
 /* Khung chờ toàn màn của Reel (đang tải chi tiết món): đủ nút đóng 44x44 và ô sân khấu vuông, cùng khung với `ProductStoryShowcase` toàn màn. */
 .tubu-reel-pending-stage { display: block; width: 100%; max-width: 28rem; margin: 0 auto; aspect-ratio: 1 / 1; border-radius: var(--radius-media); }
 
-/* ── Thanh tiến độ Miễn phí giao hàng ở đầu Giỏ (W42A, FreeShippingProgressBar): cao tối thiểu bằng trạng thái chưa đạt (hai dòng chữ + thanh) để đổi sang
-   "đã đạt" không làm giỏ nhảy; phần đã đầy có vệt sáng chạy nhẹ, tắt khi khách chọn giảm chuyển động. ── */
+/* ── Thanh tiến độ Miễn phí giao hàng ở đầu Giỏ (W42A, FreeShippingProgressBar): chưa đạt thì cao tối thiểu bằng hai dòng chữ + thanh; đạt rồi co thành một dòng gọn
+   (xem luật data-reached bên dưới); phần đã đầy có vệt sáng chạy nhẹ, tắt khi khách chọn giảm chuyển động. ── */
 .tubu-freeship {
   box-sizing: border-box; padding: var(--space-inset-card); border-radius: var(--radius-card); background: var(--color-bg-surface); box-shadow: var(--elevation-1);
   min-height: calc(2 * var(--type-caption-size) * var(--type-caption-lh) + var(--p-space-3) + 6px + 2 * var(--space-inset-card));
@@ -1154,8 +1154,10 @@
 .tubu-freeship-text { margin: 0; color: var(--color-text-secondary); font-size: var(--type-caption-size); line-height: var(--type-caption-lh); font-weight: var(--type-label-weight); }
 .tubu-freeship[data-reached='true'] .tubu-freeship-text { color: var(--color-text-success); }
 .tubu-freeship-track { height: 6px; margin-top: var(--p-space-3); border-radius: var(--radius-pill); background: var(--color-track); overflow: hidden; }
-/* Có nút "Mua thêm": dòng chữ và nút chung một hàng; khối cao tối thiểu bằng hàng nút 44px + thanh nên câu một dòng không co lại khi đạt ngưỡng (hết nút, hết thanh), như Mini. Câu dài (hàng gian hàng tự giao, màn hẹp) xuống ba dòng thì cao hơn mức này và co lại khi đạt. */
+/* Có nút "Mua thêm" (chưa đạt): dòng chữ và nút chung một hàng; khối cao tối thiểu bằng hàng nút 44px + thanh, như Mini. */
 .tubu-freeship[data-cta='true'] { min-height: calc(44px + var(--p-space-3) + 6px + 2 * var(--space-inset-card)); }
+/* Đạt ngưỡng: chỉ còn một dòng chúc mừng (không thanh, không nút) nên thu về dòng gọn 36px (8 + 20 + 8), không giữ chiều cao của trạng thái chưa đạt, như Mini. Đặt SAU luật data-cta để thắng cùng độ ưu tiên. */
+.tubu-freeship[data-reached='true'] { min-height: 0; padding-block: var(--space-inline-sm); }
 .tubu-freeship-head { display: flex; align-items: center; gap: var(--space-inline-md); }
 .tubu-freeship-head .tubu-freeship-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 .tubu-freeship-cta.zaui-btn { flex: 0 0 auto; min-width: 0; height: 44px; padding: 0 var(--space-inline-md); font-variant-numeric: inherit; }
@@ -1193,23 +1195,19 @@
   .tubu-freeship-fill::after { animation: none; display: none; }
 }
 
-/* ── Gợi ý mã giảm giá dưới thanh Miễn phí giao hàng (W44B, CartVoucherHintStrip): dòng mời áp mã đã đủ điều kiện (chữ + nút 44px) và dòng sắp mở khoá (chữ + thanh). ── */
+/* ── Nhắc mã sắp mở khoá dưới thanh Miễn phí giao hàng (W44B, CartVoucherHintStrip): chữ + thanh (+ nút "Mua thêm" 44px). Nút `.tubu-vhint-cta` cũng dùng cho "Áp dụng" ở hàng mã chân dính. ── */
 .tubu-vhint { display: flex; flex-direction: column; gap: var(--space-stack-sm); margin-bottom: var(--p-space-3); }
 .tubu-vhint-row {
   box-sizing: border-box; display: flex; align-items: center; gap: var(--space-inline-md); padding: var(--space-inline-md);
   border-radius: var(--radius-card); background: var(--color-bg-surface); box-shadow: var(--elevation-1); font-variant-numeric: tabular-nums;
 }
-.tubu-vhint-row[data-kind='apply'] { background: var(--color-status-success-bg); box-shadow: none; }
 .tubu-vhint-row--stack { flex-direction: column; align-items: stretch; gap: var(--space-stack-sm); }
 /* Thanh Freeship dùng chung có lề trên của chính nó; trong dải gợi ý khoảng cách chữ-thanh do gap quyết, như Mini. */
 .tubu-vhint-row--stack .tubu-freeship-track { margin-top: 0; }
 /* Đầu dòng sắp mở khoá khi có nút "Mua thêm": chữ nhắc và nút chung một hàng, nút cao 44px nên căn giữa theo chiều dọc. */
 .tubu-vhint-head { display: flex; align-items: center; gap: var(--space-inline-md); }
 .tubu-vhint-text { flex: 1 1 auto; min-width: 0; margin: 0; color: var(--color-text-secondary); font-size: var(--type-caption-size); line-height: var(--type-caption-lh); font-weight: var(--type-label-weight); overflow-wrap: anywhere; }
-.tubu-vhint-row[data-kind='apply'] .tubu-vhint-text { color: var(--color-text-success); }
 .tubu-vhint-cta.zaui-btn { flex: 0 0 auto; min-width: 0; height: 44px; padding: 0 var(--space-inline-md); }
-.tubu-vhint-error { margin: 0; padding: 0 var(--space-inline-md); color: var(--color-text-danger); font-size: var(--type-caption-size); line-height: var(--type-caption-lh); }
-.tubu-vhint-done { margin: 0 0 var(--p-space-3); color: var(--color-text-success); font-size: var(--type-body-sm-size); line-height: var(--type-body-sm-lh); font-variant-numeric: tabular-nums; }
 
 /* ── Dải cam kết ở trang chi tiết (W45A, ProductTrustStrip): cùng số đo với apps/miniapp/src/css/product-trust.css. ── */
 /* Điện thoại: dải trắng riêng tràn mép (cách dải trên 8, đệm 16 như Mini App); từ md dải nằm trong cột thông tin: không đệm ngang để chữ thẳng cột, ngăn bằng đường kẻ trên. */

@@ -134,7 +134,7 @@ for (const vp of VIEWPORTS) {
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 
-    test('một chạm "+ Thêm": thanh đổi mức, món vừa thêm rời dải; thêm tiếp đạt ngưỡng thì chúc mừng và dải thu lại', async ({ page, api }) => {
+    test('một chạm "+ Thêm": thanh đổi mức, món vừa thêm rời dải; thêm tiếp đạt ngưỡng thì chúc mừng một dòng ≤40px và dải thu lại', async ({ page, api }) => {
       const shop = mockCart(api);
       await openCart(page);
       const bar = page.getByRole('progressbar');
@@ -156,6 +156,10 @@ for (const vp of VIEWPORTS) {
       await expect(progress(page)).toHaveText('🎉 Đơn hàng đã được Miễn phí giao hàng');
       await expect(page.getByTestId('freeship-bar')).toHaveCount(0);
       await expect(page.getByTestId('freeship-addons')).toHaveCount(0);
+      // W166: dòng chúc mừng gọn một dòng như Mini App, không giữ chiều cao 56px của khối chưa đạt.
+      const reached = (await progress(page).boundingBox())!;
+      expect(reached.height, 'dòng chúc mừng cao ≤40px').toBeLessThanOrEqual(40);
+      expect(reached.height, 'dòng chúc mừng vẫn đủ một dòng chữ').toBeGreaterThan(20);
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 

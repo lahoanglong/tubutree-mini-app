@@ -89,7 +89,8 @@ describe('GamePage — số hiển thị có dấu phân cách nghìn (C-083)', 
     expect(text).toContain('Góp quỹ trồng cây (50 điểm)');
     expect(text).toContain('1.250.000/5.000.000💧');
     expect(text).toContain('Bạn đã góp 89.000💧');
-    expect(text).toContain('12.000/50.000💧 · 🔥 Chuỗi 12 ngày');
+    expect(text).toContain('12.000/50.000💧');
+    expect(text).toContain('Chuỗi 12 ngày');
     expect(text).toContain('Mở lô (1.200💧)');
     expect(text).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])/iu);
     expect(text).not.toMatch(/(^|[^\d.])\d{4,}(?![\d.])/);

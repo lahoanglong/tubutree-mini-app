@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   fetchProducts: vi.fn(),
   addToCart: vi.fn(),
   getCouponPreviews: vi.fn(),
+  applyCoupon: vi.fn(),
   getCoupons: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
@@ -32,6 +33,7 @@ vi.mock('../services/shop-api', () => ({
   addToCart: mocks.addToCart,
   fetchProducts: mocks.fetchProducts,
   getCouponPreviews: mocks.getCouponPreviews,
+  applyCoupon: mocks.applyCoupon,
   fetchActiveFlashSales: vi.fn().mockResolvedValue([]),
 }));
 vi.mock('../services/account-api', async (importOriginal) => ({
@@ -1628,14 +1630,134 @@ describe('CartPage: nút "Mua thêm" ở dòng sắp mở khoá mã (W50A)', () 
     expect(mocks.navigate).toHaveBeenCalledWith('/');
   });
 
-  it('chỉ có mã dùng được, không có dòng sắp mở khoá: dải hiện "Áp dụng ngay" nhưng không có nút "Mua thêm"', async () => {
+  it('chỉ có mã dùng được, không có dòng sắp mở khoá: thân giỏ không có dải nào (không còn "Áp dụng ngay" ở thân) và không có nút "Mua thêm"; nút "Áp dụng" nằm ở hàng mã chân dính (W166)', async () => {
     mocks.getCart.mockResolvedValue(summary({}));
     mocks.getCoupons.mockResolvedValue([GIAM45]);
     mocks.getCouponPreviews.mockResolvedValue([{ code: 'GIAM45', eligible: true, discount: 45_000 }]);
     renderPage();
-    await screen.findByTestId('cart-voucher-apply-cta');
+    const apply = await screen.findByTestId('cart-voucher-apply-cta');
+    expect(apply.closest('[data-testid="sticky-bar"]')).not.toBeNull();
+    expect(screen.queryByTestId('cart-voucher-hint')).toBeNull();
+    expect(screen.queryByTestId('cart-voucher-apply')).toBeNull();
     expect(screen.queryByTestId('cart-voucher-unlock')).toBeNull();
     expect(screen.queryByTestId('cart-voucher-unlock-cta')).toBeNull();
+  });
+});
+
+describe('CartPage: chỉ MỘT nút áp mã, ở cuối hàng "Mã giảm giá" của chân dính (W166)', () => {
+  const GIAM45 = { id: 'c-giam45', code: 'GIAM45', type: 'AMOUNT', value: 45_000, minOrder: 100_000, maxDiscount: null, endAt: '2030-01-01T00:00:00Z' };
+  const USABLE = [{ code: 'GIAM45', eligible: true, discount: 45_000 }];
+  const SAP_MO = { code: 'GIAM45', eligible: false, discount: 0, reason: 'Đơn tối thiểu 100.000đ để dùng mã này.', shortfall: 50_000 };
+  const applied = () => summary({ couponCode: 'GIAM45', discount: 45_000 });
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    useStorefrontContext.getState().clear();
+    mocks.getCart.mockResolvedValue(summary({}));
+    mocks.getCoupons.mockResolvedValue([GIAM45]);
+    mocks.getCouponPreviews.mockResolvedValue(USABLE);
+  });
+
+  it('có mã đủ điều kiện chưa áp: nút "Áp dụng" thay "Chọn mã" ở cuối hàng, gợi ý "N mã · giảm đến X" giữ nguyên, và cả màn chỉ có MỘT nút áp mã', async () => {
+    renderPage();
+    const cta = await screen.findByTestId('cart-voucher-apply-cta');
+    expect(cta).toHaveTextContent('Áp dụng');
+    expect(cta.textContent).toBe('Áp dụng');
+    expect(cta).toHaveAccessibleName('Áp dụng ngay mã GIAM45');
+    expect(screen.getAllByTestId('cart-voucher-apply-cta')).toHaveLength(1);
+    expect(screen.queryByTestId('coupon-cta')).toBeNull();
+    expect(screen.queryByText('Chọn mã')).toBeNull();
+    expect(screen.getByTestId('coupon-hint')).toHaveTextContent('1 mã · giảm đến 45k');
+    expect(screen.queryByText(/Bạn có mã giảm giá/)).toBeNull();
+    expect(screen.getAllByRole('button', { name: /Áp dụng/ })).toHaveLength(1);
+  });
+
+  it('nút nằm NGOÀI vùng bấm mở danh sách (không lồng nút trong nút), vùng chạm 44px, cùng hàng với chữ của hàng', async () => {
+    renderPage();
+    const cta = await screen.findByTestId('cart-voucher-apply-cta');
+    const row = screen.getByTestId('coupon-row');
+    expect(row).not.toContainElement(cta);
+    expect(row.querySelector('button')).toBeNull();
+    expect(row.parentElement).toBe(cta.parentElement);
+    expect(row.style.minHeight).toBe('44px');
+    expect(cta.style.minHeight).toBe('44px');
+    expect(cta.className).toContain('tubu-vhint-cta');
+  });
+
+  it('bấm chữ của hàng vẫn mở tấm chọn mã và KHÔNG áp mã', async () => {
+    renderPage();
+    await screen.findByTestId('cart-voucher-apply-cta');
+    fireEvent.click(screen.getByTestId('coupon-row'));
+    await waitFor(() => expect(mocks.voucherProps.at(-1)).toMatchObject({ visible: true }));
+    expect(mocks.applyCoupon).not.toHaveBeenCalled();
+  });
+
+  it('chỉ có mã sắp mở khoá (chưa đủ điều kiện): hàng giữ "Chọn mã ›", không có nút "Áp dụng"; "Mua thêm" của dải mở khoá vẫn có', async () => {
+    mocks.getCouponPreviews.mockResolvedValue([SAP_MO]);
+    renderPage();
+    await screen.findByTestId('cart-voucher-unlock-cta');
+    expect(screen.getByTestId('coupon-cta').textContent).toBe('Chọn mã');
+    expect(screen.queryByTestId('cart-voucher-apply-cta')).toBeNull();
+  });
+
+  it('giỏ đã có mã: hàng ghi mã và "Thay đổi", không có nút "Áp dụng"', async () => {
+    mocks.getCart.mockResolvedValue(applied());
+    renderPage();
+    expect(await screen.findByTestId('coupon-code')).toHaveTextContent('GIAM45');
+    expect(screen.getByTestId('coupon-cta').textContent).toBe('Thay đổi');
+    expect(screen.queryByTestId('cart-voucher-apply-cta')).toBeNull();
+  });
+
+  it('một chạm: gọi applyCoupon đúng một lần với mã thật; hai cú chạm sát nhau cũng chỉ một lần (khoá chạm đúp), nút báo bận; xong hàng đổi sang mã đã áp', async () => {
+    const d = pending<unknown>();
+    mocks.applyCoupon.mockReturnValue(d.promise);
+    renderPage();
+    const cta = await screen.findByTestId('cart-voucher-apply-cta');
+    act(() => {
+      fireEvent.click(cta);
+      fireEvent.click(cta);
+    });
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(1));
+    await act(async () => {});
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+    expect(mocks.applyCoupon).toHaveBeenCalledWith('GIAM45');
+    await waitFor(() => expect(screen.getByTestId('cart-voucher-apply-cta')).toHaveAttribute('aria-busy', 'true'));
+    expect(screen.getByTestId('cart-voucher-apply-cta')).toHaveAccessibleName('Áp dụng ngay mã GIAM45');
+    await act(async () => d.resolve(applied()));
+    expect(await screen.findByTestId('coupon-code')).toHaveTextContent('GIAM45');
+    expect(screen.queryByTestId('cart-voucher-apply-cta')).toBeNull();
+    expect(screen.getByTestId('coupon-cta').textContent).toBe('Thay đổi');
+    expect(mocks.applyCoupon).toHaveBeenCalledTimes(1);
+  });
+
+  it('áp không được: lời báo role=alert ngay dưới hàng mã, nút được mô tả bằng nó, nhả khoá nên chạm lại gọi lần hai', async () => {
+    mocks.applyCoupon.mockRejectedValue(new HttpError('x', undefined, { status: 400, data: { message: 'Mã giảm giá đã hết lượt dùng.' }, headers: {} }));
+    renderPage();
+    const cta = await screen.findByTestId('cart-voucher-apply-cta');
+    fireEvent.click(cta);
+    const alert = await screen.findByTestId('cart-voucher-error');
+    expect(alert).toHaveAttribute('role', 'alert');
+    expect(alert).toHaveTextContent('Mã giảm giá đã hết lượt dùng.');
+    expect(alert.closest('[data-testid="sticky-bar"]')).not.toBeNull();
+    expect(screen.getByTestId('cart-voucher-apply-cta')).toHaveAccessibleDescription('Mã giảm giá đã hết lượt dùng.');
+    expect(screen.getByTestId('cart-voucher-apply-cta')).not.toHaveAttribute('aria-busy', 'true');
+    fireEvent.click(screen.getByTestId('cart-voucher-apply-cta'));
+    await waitFor(() => expect(mocks.applyCoupon).toHaveBeenCalledTimes(2));
+  });
+
+  it('chưa có lỗi: nút không có aria-describedby và không có lời báo', async () => {
+    renderPage();
+    const cta = await screen.findByTestId('cart-voucher-apply-cta');
+    expect(cta).not.toHaveAttribute('aria-describedby');
+    expect(screen.queryByTestId('cart-voucher-error')).toBeNull();
   });
 });
 

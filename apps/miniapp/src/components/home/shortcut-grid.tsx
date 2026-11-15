@@ -1,6 +1,6 @@
 import { lazy, Suspense, useState } from 'react';
 import { useNavigate } from 'zmp-ui';
-import { LayoutGrid } from 'lucide-react';
+import { Ellipsis } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { HOME_SETTLING_HEIGHTS, SHORTCUT_TINT_VARS, homeShortcutSlots, type HomeShortcutSpec } from '@tubutree/app-core/home-layout';
 import { usePublicConfig } from '../../hooks/use-public-config';
@@ -51,8 +51,8 @@ const cellStyle = {
 } as const;
 
 /**
- * Lối tắt Trang chủ (Q7): 4 ô cố định + ô "Tất cả" trong MỘT hàng 5 cột đều nhau, không cuộn ngang. Phần còn lại (Đổi quà, Đơn hàng,
- * Kiếm tiền, Cộng đồng...) nằm trong sheet "Tất cả". Mục có cờ tắt (Đổi rác, Tích điểm đơn sàn) bị ẩn, mục kế lấp chỗ.
+ * Lối tắt Trang chủ (Q7): 4 ô cố định + ô "Thêm" (dấu ba chấm) trong MỘT hàng 5 cột đều nhau, không cuộn ngang. Phần còn lại (Đổi quà, Đơn hàng,
+ * Kiếm tiền, Cộng đồng...) nằm trong sheet "Tất cả lối tắt". Ô "Thêm" khác ô "Tất cả" của hàng Danh mục ngay dưới (đi tới tab Danh mục): không trùng nhãn, không trùng biểu tượng. Mục có cờ tắt (Đổi rác, Tích điểm đơn sàn) bị ẩn, mục kế lấp chỗ.
  * Nhãn tối đa hai dòng, không cắt chữ ở 375px và 320px; câu đọc đầy đủ nằm ở aria-label.
  */
 export function ShortcutGrid() {
@@ -113,7 +113,7 @@ export function ShortcutGrid() {
           })}
           <button
             type="button"
-            aria-label={homeCopy.shortcuts.allAria}
+            aria-label={homeCopy.shortcuts.moreAria}
             aria-haspopup="dialog"
             className="tubu-press"
             onClick={() => {
@@ -124,10 +124,10 @@ export function ShortcutGrid() {
             style={cellStyle}
           >
             <span aria-hidden style={{ width: CIRCLE, height: CIRCLE, borderRadius: 'var(--radius-pill)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
-              <Icon icon={LayoutGrid} size="md" tone="current" />
+              <Icon icon={Ellipsis} size="md" tone="current" />
             </span>
             <Text variant="caption" style={labelStyle}>
-              {homeCopy.shortcuts.all}
+              {homeCopy.shortcuts.more}
             </Text>
           </button>
         </div>

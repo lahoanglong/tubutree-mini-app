@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ChevronRight, Ticket, X } from 'lucide-react';
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -16,6 +16,7 @@ import { couponNotAppliedNotice } from '@tubutree/app-core/commerce/coupon-notic
 import { pickerRows } from '@tubutree/app-core/commerce/voucher-picker';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
+import { Button } from '@/components/mini/button';
 import { EmptyState } from '@/components/mini/empty-state';
 import { Skeleton } from '@/components/mini/skeleton';
 import { ErrorState } from '@/components/ui/error-state';
@@ -66,6 +67,16 @@ const APPLY_WARNING_MS = 5000;
 /** Khoá mutation dùng chung để trang chứa (thanh toán) biết mã đang được đổi qua `useIsMutating`. */
 export const COUPON_MUTATION_KEY = ['cart-coupon'] as const;
 
+/** Mời áp mã đã đủ điều kiện ở giỏ: hàng mã chuyển nút cuối hàng từ "Chọn mã ›" sang "Áp dụng" (một chạm). Trang chứa giữ lệnh áp, khoá chạm đúp và lời báo lỗi (`useCartVoucherHint`). */
+export interface CouponQuickApply {
+  /** Tên truy cập của nút, nêu mã sẽ được áp. */
+  ariaLabel: string;
+  applying: boolean;
+  /** Lời báo áp không được; hiện ngay dưới hàng, nút được mô tả bằng nó. */
+  error: string | null;
+  onApply: () => void;
+}
+
 /**
  * Chọn/nhập Mã giảm giá cho giỏ hàng — dùng ở giỏ hàng và thanh toán.
  *
@@ -91,7 +102,10 @@ export function CouponBox({
   productIds,
   removedNotice = null,
   onDismissRemoved,
+  quickApply = null,
 }: {
+  /** Giỏ: có mã đủ điều kiện chưa áp thì cuối hàng là nút "Áp dụng" thay cho "Chọn mã ›" (bấm chữ của hàng vẫn mở danh sách). Đã có mã thì bỏ qua. */
+  quickApply?: CouponQuickApply | null;
   /** Lời báo máy chủ vừa gỡ mã khỏi giỏ (đơn tối thiểu, hết hạn, bị tắt). Chỉ hiện khi giỏ chưa có mã; trang giữ trí nhớ và quyết định lúc nào bỏ. */
   removedNotice?: { code: string; text: string } | null;
   /** Khách bấm Đóng ở lời báo gỡ mã; không truyền thì lời báo là chữ thuần, không có nút. */
@@ -136,6 +150,8 @@ export function CouponBox({
   productIds?: string[];
 }) {
   const qc = useQueryClient();
+  const quickErrorId = useId();
+  const quick = currentCode ? null : quickApply;
   // Điện thoại: danh sách mã nằm trong bảng trượt (đúng VoucherSheet của Mini), không bung tại chỗ làm thanh/khối chứa cao thêm.
   const phone = useMediaQuery(MD_DOWN);
   const inSheet = sheet || phone;
@@ -421,52 +437,72 @@ export function CouponBox({
     </>
   );
 
+  // Nút "Áp dụng" nằm NGOÀI nút mở bảng (không lồng nút trong nút), cạnh chữ của hàng: cùng một nút ở hàng thanh dính (điện thoại) và hàng khung tóm tắt (từ md).
+  const quickButton = quick && (
+    <Button
+      variant="secondary"
+      className="tubu-vhint-cta"
+      data-testid="cart-voucher-apply-cta"
+      aria-label={quick.ariaLabel}
+      aria-describedby={quick.error ? quickErrorId : undefined}
+      loading={quick.applying}
+      onPress={quick.onApply}
+    >
+      {fillCopy('cart.voucherHint.applyCta')}
+    </Button>
+  );
+
   // Điện thoại trong thanh dính: đúng CouponRow của Mini (pages/cart.tsx), hàng 44px. Nhãn 14px đậm 500, gợi ý và chữ phải 13px (Text small
   // và xSmall của zmp-ui). Gạch chân là bóng trong như Mini nên dòng không cao thêm 1px vì viền. Hết chỗ thì nội dung xuống dưới nhãn (hai dòng vẫn 44px).
   const sheetRow = (
-    <button
-      type="button"
-      onClick={togglePanel}
-      aria-haspopup="dialog"
-      data-testid="coupon-row"
-      className="tubu-press flex min-h-11 w-full items-center justify-between gap-2 text-left shadow-[inset_0_-1px_0_var(--color-border-subtle)]"
-    >
-      <span className="flex min-w-0 flex-1 items-center gap-2">
-        <Ticket className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
-        {/* Nhãn và nội dung cùng một dòng khi đủ chỗ; máy hẹp (320px) thì nội dung xuống dòng dưới nhãn, thay vì bị cắt "…" hay vỡ ba dòng. Hai dòng vẫn gọn trong 44px. */}
-        <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
-          <span data-testid="coupon-label" className="flex-none text-sm font-medium text-[color:var(--color-text-primary)]">Mã giảm giá</span>
-          {currentCode ? (
-            <span className="flex min-w-0 items-center gap-2">
-              <span
-                data-testid="coupon-code"
-                className="min-w-0 max-w-full rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-label font-bold text-promo-fg [overflow-wrap:anywhere]"
-              >
-                {currentCode}
-              </span>
-              {appliedDiscount > 0 && (
-                <span data-testid="coupon-discount" className="shrink-0 whitespace-nowrap text-caption font-normal text-success-fg">
-                  -{formatVnd(appliedDiscount)}
+    <div className="flex min-h-11 w-full items-center gap-2 shadow-[inset_0_-1px_0_var(--color-border-subtle)]">
+      <button
+        type="button"
+        onClick={togglePanel}
+        aria-haspopup="dialog"
+        data-testid="coupon-row"
+        className="tubu-press flex min-h-11 min-w-0 flex-1 items-center justify-between gap-2 text-left"
+      >
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <Ticket className="h-5 w-5 flex-none text-promo-fg" aria-hidden="true" />
+          {/* Nhãn và nội dung cùng một dòng khi đủ chỗ; máy hẹp (320px) thì nội dung xuống dòng dưới nhãn, thay vì bị cắt "…" hay vỡ ba dòng. Hai dòng vẫn gọn trong 44px. */}
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-2">
+            <span data-testid="coupon-label" className="flex-none text-sm font-medium text-[color:var(--color-text-primary)]">Mã giảm giá</span>
+            {currentCode ? (
+              <span className="flex min-w-0 items-center gap-2">
+                <span
+                  data-testid="coupon-code"
+                  className="min-w-0 max-w-full rounded-control border border-dashed border-promo-solid bg-promo-bg px-1.5 py-0.5 text-label font-bold text-promo-fg [overflow-wrap:anywhere]"
+                >
+                  {currentCode}
                 </span>
-              )}
-            </span>
-          ) : (
-            <span
-              data-testid={hint ? 'coupon-hint' : 'coupon-placeholder'}
-              className={`min-w-0 text-caption font-normal ${
-                hint ? 'text-[color:var(--color-text-brand)] leading-4' : 'leading-4 text-[color:var(--color-text-tertiary)]'
-              }`}
-            >
-              {hint ? couponHintShort(hint) : fillCopy('coupon.rowInvite')}
-            </span>
-          )}
+                {appliedDiscount > 0 && (
+                  <span data-testid="coupon-discount" className="shrink-0 whitespace-nowrap text-caption font-normal text-success-fg">
+                    -{formatVnd(appliedDiscount)}
+                  </span>
+                )}
+              </span>
+            ) : (
+              <span
+                data-testid={hint ? 'coupon-hint' : 'coupon-placeholder'}
+                className={`min-w-0 text-caption font-normal ${
+                  hint ? 'text-[color:var(--color-text-brand)] leading-4' : 'leading-4 text-[color:var(--color-text-tertiary)]'
+                }`}
+              >
+                {hint ? couponHintShort(hint) : fillCopy('coupon.rowInvite')}
+              </span>
+            )}
+          </span>
         </span>
-      </span>
-      <span data-testid="coupon-cta" className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
-        {currentCode ? 'Thay đổi' : actionLabel}
-        <ChevronRight className="h-4 w-4" aria-hidden="true" />
-      </span>
-    </button>
+        {!quick && (
+          <span data-testid="coupon-cta" className="inline-flex shrink-0 items-center gap-0.5 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
+            {currentCode ? 'Thay đổi' : actionLabel}
+            <ChevronRight className="h-4 w-4" aria-hidden="true" />
+          </span>
+        )}
+      </button>
+      {quickButton}
+    </div>
   );
 
   return (
@@ -545,41 +581,51 @@ export function CouponBox({
           </button>
         </>
       ) : (
-        <button
-          type="button"
-          onClick={togglePanel}
-          {...panelAria}
-          data-testid="coupon-row"
-          className="tubu-press flex min-h-11 w-full items-center justify-between gap-2 text-left text-sm font-semibold text-[color:var(--color-text-primary)]"
-        >
-          <span className="inline-flex items-center gap-2 max-md:gap-2.5">
-            <span className="max-md:grid max-md:h-9 max-md:w-9 max-md:flex-none max-md:place-items-center max-md:rounded-control max-md:bg-promo-bg">
-              <Ticket
-                className="h-4 w-4 text-promo-fg max-md:h-5 max-md:w-5 max-md:text-promo-fg"
-                aria-hidden="true"
-              />
+        <div className={quick ? 'flex items-center gap-2' : undefined}>
+          <button
+            type="button"
+            onClick={togglePanel}
+            {...panelAria}
+            data-testid="coupon-row"
+            className={`tubu-press flex min-h-11 items-center justify-between gap-2 text-left text-sm font-semibold text-[color:var(--color-text-primary)] ${quick ? 'min-w-0 flex-1' : 'w-full'}`}
+          >
+            <span className="inline-flex items-center gap-2 max-md:gap-2.5">
+              <span className="max-md:grid max-md:h-9 max-md:w-9 max-md:flex-none max-md:place-items-center max-md:rounded-control max-md:bg-promo-bg">
+                <Ticket
+                  className="h-4 w-4 text-promo-fg max-md:h-5 max-md:w-5 max-md:text-promo-fg"
+                  aria-hidden="true"
+                />
+              </span>
+              <span className="flex flex-col">
+                <span data-testid="coupon-label">Mã giảm giá</span>
+                {hint ? (
+                  <span data-testid="coupon-hint" className="text-caption font-normal text-[color:var(--color-text-brand)]">
+                    {couponHintText(hint, formatVnd)}
+                  </span>
+                ) : (
+                  <span data-testid="coupon-placeholder" className="text-caption font-normal text-[color:var(--color-text-tertiary)]">
+                    {fillCopy('coupon.rowInvite')}
+                  </span>
+                )}
+              </span>
             </span>
-            <span className="flex flex-col">
-              <span data-testid="coupon-label">Mã giảm giá</span>
-              {hint ? (
-                <span data-testid="coupon-hint" className="text-caption font-normal text-[color:var(--color-text-brand)]">
-                  {couponHintText(hint, formatVnd)}
-                </span>
-              ) : (
-                <span data-testid="coupon-placeholder" className="text-caption font-normal text-[color:var(--color-text-tertiary)]">
-                  {fillCopy('coupon.rowInvite')}
-                </span>
-              )}
-            </span>
-          </span>
-          <span data-testid="coupon-cta" className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
-            {actionLabel}
-            <ChevronRight
-              className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
-              aria-hidden="true"
-            />
-          </span>
-        </button>
+            {!quick && (
+              <span data-testid="coupon-cta" className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap text-caption font-medium text-[color:var(--color-text-brand)]">
+                {actionLabel}
+                <ChevronRight
+                  className={`h-4 w-4 transition-transform ${open ? 'rotate-90' : ''}`}
+                  aria-hidden="true"
+                />
+              </span>
+            )}
+          </button>
+          {quickButton}
+        </div>
+      )}
+      {quick?.error && (
+        <p id={quickErrorId} role="alert" data-testid="cart-voucher-error" className="mt-2 text-caption text-danger-fg">
+          {quick.error}
+        </p>
       )}
       {inSheet ? (
         <BottomSheet open={open} onClose={closePanel} title={fillCopy('coupon.pickTitle')} description={fillCopy('coupon.oneCodeHint')}>

@@ -2,9 +2,8 @@ import { memo } from 'react';
 import { LayoutGrid } from 'lucide-react';
 import type { CategoryEntry } from '../../hooks/use-categories';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_GUTTER, CATEGORY_LABEL_HEIGHT, CATEGORY_LABEL_TRACKING, CATEGORY_SCROLL_COLUMNS, CATEGORY_TILE_SIZE, categoryGridScrolls, categorySkeletonCells, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
+import { CATEGORY_GRID_MAX_CELLS, CATEGORY_LABEL_HEIGHT, CATEGORY_TILE_SIZE, categorySkeletonCells, homeCategoryEntries, SHORTCUT_TINT_VARS, type ShortcutTint } from '@tubutree/app-core/home-layout';
 import { Icon } from '../ui/icon';
-import { ScrollRow } from '../ui/scroll-row';
 import { SectionHeader } from '../ui/section-header';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
@@ -12,13 +11,8 @@ import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 const TILE = CATEGORY_TILE_SIZE;
 const LABEL_HEIGHT = CATEGORY_LABEL_HEIGHT;
-/** Khung chờ không bao giờ dài hơn một màn (2 hàng × 5 cột): ô vượt màn chỉ có khi đã có dữ liệu thật. */
-const MAX_SKELETON_CELLS = CATEGORY_GRID_MAX_CELLS;
+const MAX_CELLS = CATEGORY_GRID_MAX_CELLS;
 const TINTS: ShortcutTint[] = ['forest', 'sage', 'clay', 'amber', 'sky', 'rose'];
-
-// Tới 10 ô (kể cả "Tất cả"): xếp theo hàng, đọc trái sang phải như thứ tự đọc của trình đọc màn hình và "Tất cả" luôn ở cuối. Quá 10 ô mới xếp theo cột để cuộn ngang.
-const ROW_FLOW = { gridTemplateColumns: 'repeat(5, 20%)' } as const;
-const COLUMN_FLOW = { gridTemplateRows: 'repeat(2, auto)', gridAutoFlow: 'column', gridAutoColumns: `calc(100% / ${CATEGORY_SCROLL_COLUMNS})` } as const;
 
 export interface CategoryRowProps {
   entries: CategoryEntry[];
@@ -26,7 +20,7 @@ export interface CategoryRowProps {
   onSelect: (entry: CategoryEntry) => void;
   /** Có thì ô cuối lưới là "Tất cả" dẫn vào Danh mục. */
   onSeeAll?: () => void;
-  /** Số danh mục của lần tải trước; khung chờ vẽ số ô này cộng ô "Tất cả" để bằng chiều cao lưới thật. */
+  /** Số danh mục của lần tải trước; khung chờ vẽ số ô này cộng ô "Tất cả" (tối đa một hàng) để bằng chiều cao lưới thật. */
   placeholderCount?: number;
 }
 
@@ -47,16 +41,12 @@ const cellStyle = {
 /**
  * Nhãn nhỏ 12px/600 (token `label`; 13px của `caption` làm "Mỹ phẩm thiên nhiên" và "Nông sản & Thực phẩm" cần ba dòng nên bị "…" ở dòng hai). Tối đa hai dòng, ngắt ở dấu cách,
  * vùng nhãn cao cố định để mọi ô thẳng hàng. `overflowWrap: anywhere` chỉ cứu từ đơn dài hơn cả cột (chữ nước ngoài): cắt bằng overflow thì mất chữ cuối mà không có "…".
- * `scrolls`: cột 5,5 chỉ rộng ~62px nên siết chữ và chừa `CATEGORY_LABEL_GUTTER` mỗi bên để nhãn không chạm nhãn ô kề (số đo ở `home-layout.ts`).
  */
-function Label({ children, scrolls = false }: { children: string; scrolls?: boolean }) {
+function Label({ children }: { children: string }) {
   return (
     <Text
       variant="label"
-      style={{
-        textAlign: 'center', width: '100%', height: LABEL_HEIGHT, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere',
-        ...(scrolls ? { letterSpacing: CATEGORY_LABEL_TRACKING, boxSizing: 'border-box', padding: `0 ${CATEGORY_LABEL_GUTTER}px` } : null),
-      }}
+      style={{ textAlign: 'center', width: '100%', height: LABEL_HEIGHT, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden', overflowWrap: 'anywhere' }}
     >
       {children}
     </Text>
@@ -64,23 +54,18 @@ function Label({ children, scrolls = false }: { children: string; scrolls?: bool
 }
 
 /**
- * Danh mục ở Trang chủ (Q7): lưới 2 hàng × 5 cột, ô vuông bo 56px nền màu xoay vòng (có ảnh thì vẽ ảnh), nhãn tối đa hai dòng. Ô cuối là "Tất cả".
- * Tới 10 ô xếp theo hàng ("Tất cả" luôn cuối); quá 10 ô thì lưới xếp theo cột và cuộn ngang (mỗi cột 1/5,5 bề rộng nên cột thứ 6 ló gần nửa cột để khách biết còn nữa; tiêu đề có "Xem tất cả"), không cắt bớt danh mục.
+ * Danh mục ở Trang chủ: MỘT hàng 5 ô, ô vuông bo 56px nền màu xoay vòng (có ảnh thì vẽ ảnh), nhãn tối đa hai dòng. Bốn danh mục đầu (theo thứ tự `entries`) rồi ô "Tất cả" dẫn vào tab Danh mục,
+ * nơi có đủ danh mục; không xếp hai hàng, không cuộn ngang (lưới đầy đủ đã ở tab Danh mục, một chạm từ thanh đáy). Đọc trái sang phải như thứ tự đọc của trình đọc màn hình, "Tất cả" luôn cuối.
  */
-export const CategoryRow = memo(function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholderCount = MAX_SKELETON_CELLS - 1 }: CategoryRowProps) {
+export const CategoryRow = memo(function CategoryRow({ entries, isLoading, onSelect, onSeeAll, placeholderCount = MAX_CELLS - 1 }: CategoryRowProps) {
   const skeletonCells = categorySkeletonCells(placeholderCount);
-  const cells = isLoading ? skeletonCells : entries.length + (onSeeAll ? 1 : 0);
-  const scrolls = categoryGridScrolls(cells);
-  const flow = scrolls ? COLUMN_FLOW : ROW_FLOW;
+  const shown = homeCategoryEntries(entries, onSeeAll !== undefined);
   return (
     <section aria-label={homeCopy.categories.title}>
       <div style={{ padding: '0 16px' }}>
-        <SectionHeader title={homeCopy.categories.title} action={scrolls && onSeeAll ? { onPress: onSeeAll } : undefined} />
+        <SectionHeader title={homeCopy.categories.title} />
       </div>
-      <ScrollRow
-        label={homeCopy.categories.rail}
-        style={{ display: 'grid', ...flow, rowGap: 8, padding: '4px 16px 8px' }}
-      >
+      <div data-testid="category-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 20%)', padding: '4px 16px 8px' }}>
         {isLoading
           ? Array.from({ length: skeletonCells }, (_, i) => (
               <div key={i} data-testid="category-row-skeleton" aria-hidden="true" style={{ ...cellStyle, cursor: 'default' }}>
@@ -92,7 +77,7 @@ export const CategoryRow = memo(function CategoryRow({ entries, isLoading, onSel
             ))
           : (
             <>
-              {entries.map((e, i) => {
+              {shown.map((e, i) => {
                 const tint = SHORTCUT_TINT_VARS[TINTS[i % TINTS.length]!];
                 return (
                   <button key={`${e.kind}:${e.key}`} type="button" className="tubu-press" onClick={() => onSelect(e)} style={cellStyle}>
@@ -107,7 +92,7 @@ export const CategoryRow = memo(function CategoryRow({ entries, isLoading, onSel
                         <Icon icon={e.icon} size="lg" tone="current" />
                       )}
                     </span>
-                    <Label scrolls={scrolls}>{e.label}</Label>
+                    <Label>{e.label}</Label>
                   </button>
                 );
               })}
@@ -116,12 +101,12 @@ export const CategoryRow = memo(function CategoryRow({ entries, isLoading, onSel
                   <span aria-hidden style={{ width: TILE, height: TILE, borderRadius: 'var(--radius-card)', background: 'var(--color-bg-subtle)', color: 'var(--color-text-secondary)', display: 'grid', placeItems: 'center' }}>
                     <Icon icon={LayoutGrid} size="lg" tone="current" />
                   </span>
-                  <Label scrolls={scrolls}>{homeCopy.categories.all}</Label>
+                  <Label>{homeCopy.categories.all}</Label>
                 </button>
               )}
             </>
           )}
-      </ScrollRow>
+      </div>
     </section>
   );
 });

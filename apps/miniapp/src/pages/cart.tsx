@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Box, Page, Text, useNavigate, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery, useMutation, useQueryClient, type QueryClient, type UseMutationOptions } from '@tanstack/react-query';
@@ -36,7 +36,6 @@ import { PREVIEW_DEBOUNCE_MS, useDebounced } from '../utils/use-debounced';
 import { recompute } from '../utils/cart-rules';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
-import { useCouponHint } from '../components/checkout/use-coupon-hint';
 import { couponHintShort } from '@tubutree/app-core/coupon-use';
 import { couponNoticeText, heldCouponNotice } from '@tubutree/app-core/coupon-min-order';
 import { CouponRemovedNotice } from '../components/checkout/coupon-removed-notice';
@@ -574,6 +573,8 @@ export default function CartPage() {
           coupon={
             <CouponRow
               summary={summary}
+              subtotal={selectedSubtotal}
+              productIds={cartProductIds(selectedItems)}
               previewParams={previewParams}
               previewKey={previewSelection?.key ?? ''}
               onOpen={() => setVoucherOpen(true)}
@@ -613,8 +614,9 @@ export default function CartPage() {
 }
 
 /**
- * Gợi ý mã giảm giá dưới thanh Miễn phí giao hàng. Tách thành component riêng vì hook xem trước phải chạy sau các `return` sớm của trang (giỏ đang tải, lỗi),
- * như `CouponRow`. Cùng khoá truy vấn với dòng mã ở chân dính nên không thêm lượt gọi máy chủ.
+ * Nhắc mã sắp mở khoá dưới thanh Miễn phí giao hàng. Tách thành component riêng vì hook xem trước phải chạy sau các `return` sớm của trang (giỏ đang tải, lỗi),
+ * như `CouponRow`. Cùng khoá truy vấn với dòng mã ở chân dính nên không thêm lượt gọi máy chủ. Mời áp mã đã đủ điều kiện không ở đây mà ở nút "Áp dụng"
+ * của `CouponRow`: một hành động, một nút.
  */
 function CartVoucherHintSection(props: {
   currentCode: string | null | undefined;
@@ -625,10 +627,10 @@ function CartVoucherHintSection(props: {
 }) {
   const v = useCartVoucherHint(props);
   const goSmart = useSmartNavigate();
-  if (!v.hint) return null;
+  if (!v.hint?.unlock) return null;
   return (
     <Box px={3} pt={2}>
-      <CartVoucherHintStrip hint={v.hint} onApply={v.apply} applying={v.applying} error={v.error} onShopMore={() => goSmart('/')} />
+      <CartVoucherHintStrip hint={v.hint} onShopMore={() => goSmart('/')} />
     </Box>
   );
 }
@@ -858,11 +860,16 @@ function CartLineRow({
 
 function CouponRow({
   summary,
+  subtotal,
+  productIds,
   previewParams,
   previewKey,
   onOpen,
 }: {
   summary: CartSummary;
+  /** Tiền hàng đang chọn, đúng số tấm chọn mã dùng để xét đủ điều kiện. */
+  subtotal: number;
+  productIds?: string[];
   /** Món đang chọn (itemIds undefined = cả giỏ) và gian hàng; undefined = chưa chọn món nào. */
   previewParams?: { storefrontSlug?: string; itemIds?: string[] };
   /** Dấu vân tay của các món đang chọn ('' = chưa chọn món nào). */
@@ -870,83 +877,120 @@ function CouponRow({
   /** Mở tấm chọn mã (do trang giữ, ngoài chân dính). */
   onOpen: () => void;
 }) {
-  // Chỉ gợi ý khi giỏ chưa có mã: không tự áp, khách vẫn chọn ở tấm chọn mã.
-  const hint = useCouponHint(!summary.couponCode, previewParams, previewKey);
+  // Chỉ gợi ý khi giỏ chưa có mã: không tự áp, khách bấm "Áp dụng" hoặc chọn ở tấm chọn mã.
+  const v = useCartVoucherHint({ currentCode: summary.couponCode, subtotal, productIds, previewParams, previewKey });
+  const hint = v.usable;
+  // Có mã đủ điều kiện chưa áp: hành động cuối hàng là "Áp dụng" (một chạm, mã giảm nhiều nhất) thay cho "Chọn mã", và là nút DUY NHẤT áp mã trên màn giỏ.
+  // Bấm phần chữ bên trái vẫn mở tấm chọn mã (nút nằm ngoài vùng bấm đó, không lồng nút trong nút).
+  const quick = summary.couponCode ? null : (v.hint?.apply ?? null);
+  const errorId = useId();
 
   return (
     <>
       {/* Hàng gọn nằm trong chân dính (mã là bước cuối trước khi bấm Thanh toán): hàng 44, nội dung xuống dưới nhãn khi hết chỗ. */}
       <Box
-        className="tubu-press"
-        role="button"
-        data-testid="coupon-row"
-        {...rowKeyboardProps()}
-        onClick={() => {
-          haptic('light');
-          onOpen();
-        }}
         style={{
-          minHeight: 44,
           boxSizing: 'border-box',
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 8,
-          cursor: 'pointer',
+          gap: 'var(--space-inline-sm)',
           boxShadow: 'inset 0 -1px 0 var(--color-border-subtle)',
         }}
       >
-        <Box flex alignItems="center" style={{ gap: 8, minWidth: 0, flex: 1 }}>
-          <Ticket size={20} color="var(--clay-700)" aria-hidden style={{ flex: '0 0 auto' }} />
-          {/* Nhãn và nội dung cùng một dòng khi đủ chỗ; máy hẹp (320px) thì nội dung xuống dòng dưới nhãn, thay vì bị cắt "…" hay vỡ ba dòng. Hai dòng vẫn gọn trong 44px. Mã dài bất thường thì xuống dòng ngay trong pill (khách phải đọc đủ mã), hàng cao thêm. */}
-          <Box style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 'var(--space-inline-sm)', rowGap: 'var(--space-inline-xs)', minWidth: 0, flex: 1 }}>
-            <Text size="small" bold data-testid="coupon-label" style={{ color: 'var(--color-text-primary)', flex: '0 0 auto' }}>
-              Mã giảm giá
-            </Text>
-            {summary.couponCode ? (
-              <Box flex alignItems="center" style={{ gap: 8, minWidth: 0 }}>
-                <span
-                  data-testid="coupon-code"
-                  style={{
-                    background: 'var(--clay-50)',
-                    border: '1px dashed var(--clay-500)',
-                    borderRadius: 'var(--radius-control)',
-                    padding: '2px 6px',
-                    color: 'var(--clay-700)',
-                    fontSize: 'var(--type-label-size)',
-                    fontWeight: 700,
-                    minWidth: 0,
-                    maxWidth: '100%',
-                    overflowWrap: 'anywhere',
-                  }}
-                >
-                  {summary.couponCode}
-                </span>
-                {summary.discount > 0 && (
-                  <Text size="xSmall" data-testid="coupon-discount" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
-                    -{formatVnd(summary.discount)}
-                  </Text>
-                )}
-              </Box>
-            ) : hint ? (
-              <Text size="xSmall" data-testid="coupon-hint" style={{ color: 'var(--color-text-brand)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
-                {couponHintShort(hint)}
+        <Box
+          className="tubu-press"
+          role="button"
+          data-testid="coupon-row"
+          {...rowKeyboardProps()}
+          onClick={() => {
+            haptic('light');
+            onOpen();
+          }}
+          style={{
+            minHeight: 44,
+            minWidth: 0,
+            flex: 1,
+            boxSizing: 'border-box',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 8,
+            cursor: 'pointer',
+          }}
+        >
+          <Box flex alignItems="center" style={{ gap: 8, minWidth: 0, flex: 1 }}>
+            <Ticket size={20} color="var(--clay-700)" aria-hidden style={{ flex: '0 0 auto' }} />
+            {/* Nhãn và nội dung cùng một dòng khi đủ chỗ; máy hẹp (320px) thì nội dung xuống dòng dưới nhãn, thay vì bị cắt "…" hay vỡ ba dòng. Hai dòng vẫn gọn trong 44px. Mã dài bất thường thì xuống dòng ngay trong pill (khách phải đọc đủ mã), hàng cao thêm. */}
+            <Box style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 'var(--space-inline-sm)', rowGap: 'var(--space-inline-xs)', minWidth: 0, flex: 1 }}>
+              <Text size="small" bold data-testid="coupon-label" style={{ color: 'var(--color-text-primary)', flex: '0 0 auto' }}>
+                Mã giảm giá
               </Text>
-            ) : (
-              <Text size="xSmall" data-testid="coupon-placeholder" style={{ color: 'var(--color-text-tertiary)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
-                {fillCopy('coupon.rowInvite')}
-              </Text>
-            )}
+              {summary.couponCode ? (
+                <Box flex alignItems="center" style={{ gap: 8, minWidth: 0 }}>
+                  <span
+                    data-testid="coupon-code"
+                    style={{
+                      background: 'var(--clay-50)',
+                      border: '1px dashed var(--clay-500)',
+                      borderRadius: 'var(--radius-control)',
+                      padding: '2px 6px',
+                      color: 'var(--clay-700)',
+                      fontSize: 'var(--type-label-size)',
+                      fontWeight: 700,
+                      minWidth: 0,
+                      maxWidth: '100%',
+                      overflowWrap: 'anywhere',
+                    }}
+                  >
+                    {summary.couponCode}
+                  </span>
+                  {summary.discount > 0 && (
+                    <Text size="xSmall" data-testid="coupon-discount" style={{ color: 'var(--color-text-success)', flexShrink: 0, whiteSpace: 'nowrap' }}>
+                      -{formatVnd(summary.discount)}
+                    </Text>
+                  )}
+                </Box>
+              ) : hint ? (
+                <Text size="xSmall" data-testid="coupon-hint" style={{ color: 'var(--color-text-brand)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
+                  {couponHintShort(hint)}
+                </Text>
+              ) : (
+                <Text size="xSmall" data-testid="coupon-placeholder" style={{ color: 'var(--color-text-tertiary)', minWidth: 0, lineHeight: 'var(--type-label-lh)' }}>
+                  {fillCopy('coupon.rowInvite')}
+                </Text>
+              )}
+            </Box>
           </Box>
+
+          {!quick && (
+            <Box flex alignItems="center" style={{ gap: 2, flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
+              <Text size="xSmall" bold data-testid="coupon-cta" style={{ color: 'var(--color-text-brand)' }}>
+                {summary.couponCode ? 'Thay đổi' : 'Chọn mã'}
+              </Text>
+              <ChevronRight size={16} color="var(--color-text-brand)" aria-hidden />
+            </Box>
+          )}
         </Box>
 
-        <Box flex alignItems="center" style={{ gap: 2, flexShrink: 0, whiteSpace: 'nowrap', color: 'var(--color-text-brand)' }}>
-          <Text size="xSmall" bold data-testid="coupon-cta" style={{ color: 'var(--color-text-brand)' }}>
-            {summary.couponCode ? 'Thay đổi' : 'Chọn mã'}
-          </Text>
-          <ChevronRight size={16} color="var(--color-text-brand)" aria-hidden />
-        </Box>
+        {quick && (
+          <Button
+            variant="secondary"
+            className="tubu-vhint-cta"
+            data-testid="cart-voucher-apply-cta"
+            aria-label={quick.ariaLabel}
+            aria-describedby={v.error ? errorId : undefined}
+            loading={v.applying}
+            onPress={() => v.apply(quick.code)}
+          >
+            {fillCopy('cart.voucherHint.applyCta')}
+          </Button>
+        )}
       </Box>
+      {quick && v.error && (
+        <Text id={errorId} size="xSmall" role="alert" data-testid="cart-voucher-error" style={{ color: 'var(--color-text-danger)', display: 'block' }}>
+          {v.error}
+        </Text>
+      )}
     </>
   );
 }
