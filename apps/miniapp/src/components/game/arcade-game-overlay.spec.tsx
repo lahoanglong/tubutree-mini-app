@@ -445,7 +445,16 @@ describe('ArcadeGameOverlay: kết quả khi đã đăng nhập', () => {
     expect(invalidate).not.toHaveBeenCalled();
   });
 
-  it('HTTP 409 (mã ván đã dùng): nói ván đã được ghi (không nói điểm chưa hợp lệ), KHÔNG mời Thử lại, không gửi lại và làm mới Vườn, hồ sơ, Điểm Xanh', async () => {
+  it('lưu thành công làm mới Vườn, hồ sơ và Điểm Xanh (thẻ hội viên đọc query loyalty)', async () => {
+    const { qc } = mountOverlay();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    await playToEnd(dewRun(120));
+    await within(screen.getByTestId('arcade-result')).findByTestId('arcade-rewards');
+    await waitFor(() => expect(invalidate).toHaveBeenCalledTimes(3));
+    expect(invalidate.mock.calls.map(([filter]) => (filter as { queryKey: string[] }).queryKey[0]).sort()).toEqual(['game', 'loyalty', 'me']);
+  });
+
+  it('HTTP 409 (mã ván đã dùng): báo câu trung tính (không khẳng định đã ghi, không nói điểm chưa hợp lệ), KHÔNG mời Thử lại, không gửi lại và làm mới Vườn, hồ sơ, Điểm Xanh', async () => {
     mocks.submit.mockRejectedValue(httpError(409, 'ARCADE_RUN_USED'));
     const { qc } = mountOverlay();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');

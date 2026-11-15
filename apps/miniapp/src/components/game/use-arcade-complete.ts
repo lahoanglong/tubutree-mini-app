@@ -46,8 +46,8 @@ export function useArcadeComplete(run: PlayedRun | null, authed: boolean) {
         const result = await submitArcadeRun({ gameId: r.gameId, score: r.score, durationMs: r.durationMs, runId });
         // Ván mới bắt đầu trong lúc chờ: phản hồi cũ không được đè bảng điểm mới.
         setSlot((s) => (s?.run === r ? { run: r, status: 'saved', result } : s));
-        // Số Giọt nước ở Vườn và trạng thái lượt thưởng đổi theo ván này.
-        void queryClient.invalidateQueries({ queryKey: ['game'] });
+        // Giọt nước ở Vườn, lượt thưởng, và Điểm Xanh (hồ sơ, thẻ hội viên) đổi theo ván này.
+        for (const queryKey of [['game'], ['me'], ['loyalty']]) void queryClient.invalidateQueries({ queryKey });
       } catch (error) {
         // 400 (mã thiếu, hết hạn hoặc điểm không hợp lệ) hoặc 409 ARCADE_RUN_USED: máy chủ từ chối chính ván này, gửi lại cùng mã vẫn bị từ chối nên không mời thử lại.
         // Mất mạng, 5xx và 409 tạm thời (hồ sơ đang cập nhật, xung đột giao dịch: mã chưa dùng) thì thử lại được.

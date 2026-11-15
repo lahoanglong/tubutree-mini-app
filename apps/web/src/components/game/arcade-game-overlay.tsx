@@ -234,8 +234,11 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
     const ctl = controls.current;
     if (!ctl) return;
     runId.current += 1;
+    // Hạn mã đổi sang đồng hồ máy khách (lúc gửi + TTL máy chủ báo) vì ván chờ sau đăng nhập so nó với `Date.now()`: đồng hồ máy khách lệch vài phút so với
+    // máy chủ mà so thẳng `expiresAt` của máy chủ thì bỏ nhầm ván còn hạn. Lấy mốc lúc gửi nên hạn ước lượng sớm hơn thật chừng độ trễ mạng, phía an toàn.
+    const sentAt = Date.now();
     serverRun.current = startArcade(coreHttp, gameId).then(
-      (r): ArcadeRunTicket => ({ runId: r.runId, expiresAt: Date.parse(r.expiresAt) }),
+      (r): ArcadeRunTicket => ({ runId: r.runId, expiresAt: sentAt + (Date.parse(r.expiresAt) - Date.parse(r.startedAt)) }),
       () => null,
     );
     save.reset();

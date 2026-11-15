@@ -535,7 +535,7 @@ describe('ArcadeHub: gửi nốt ván khách chơi trước khi đăng nhập', 
     expect(pendingRaw()).not.toBeNull();
   });
 
-  it('HTTP 409 (mã ván đã dùng): nói ván đã được ghi (thông báo trung tính, không phải lỗi), không nút Thử lại, bỏ hẳn ván và làm mới game, me, loyalty', async () => {
+  it('HTTP 409 (mã ván đã dùng): thông báo trung tính không khẳng định đã ghi (không phải lỗi), không nút Thử lại, bỏ hẳn ván và làm mới game, me, loyalty', async () => {
     const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
     putPending();
     m.post.mockRejectedValueOnce(new ApiError('Conflict', 409, 'ARCADE_RUN_USED'));
