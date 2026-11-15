@@ -3,6 +3,14 @@ import { dropOffDayLimitText, itemQtyMax } from '@tubutree/app-core/waste-copy';
 import { consentStillValid, WASTE_RULES_UPDATED_NOTE } from '@tubutree/app-core/waste-consent';
 import { sameProvince } from '@tubutree/app-core/waste-province';
 import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
+import {
+  EMPTY_HOME_PICKUP_FORM,
+  homePickupBatteryBlocked,
+  homePickupCreateBody,
+  homePickupEnabled,
+  type HomePickupForm,
+} from '@tubutree/app-core/recycle-home-pickup-state';
+import { homePickupCreateState, homePickupQuoteView, homePickupUnavailableText } from '@tubutree/app-core/recycle-home-pickup-view';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
@@ -33,6 +41,7 @@ import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../serv
 import { settleWithin } from '../utils/settle-within';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useIdempotencyKey } from '../hooks/use-idempotency-key';
+import { useHomePickupQuote } from '../hooks/use-home-pickup-quote';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { SessionUnavailable } from '../components/ui/auth-gate';
 import { Badge } from '../components/ui/badge';
@@ -42,6 +51,7 @@ import { ErrorState } from '../components/ui/empty-state';
 import { Checkbox } from '../components/ui/form';
 import { PageHeader } from '../components/ui/page-header';
 import { WasteItemThumb } from '../components/waste-item-thumb';
+import { HomePickupComposer } from '../components/recycle-home-pickup';
 import { ProgressBar } from '../components/ui/progress-bar';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { Skeleton } from '../components/ui/skeleton';
@@ -56,6 +66,7 @@ import {
   createBlockedHint,
   defaultPointId,
   readLastPointId,
+  homePickupCopy,
   wasteStepCopy,
   writeLastPointId,
 } from '@tubutree/app-core/waste-copy';
@@ -87,6 +98,8 @@ export type WasteWizardDraft = {
   provinceCode: string | null;
   nearby: WastePointDTO[] | null;
   sid?: string;
+  /** Lựa chọn ở khối "Shipper lấy tận nhà" (giữ khi khách mở Thể lệ rồi quay lại). */
+  homePickup?: HomePickupForm;
 };
 export type WastePointsNavState = { returnTo: string; draft: WasteWizardDraft; selectedItemIds: string[] };
 export type WastePointsReturnState = { draft: WasteWizardDraft };
@@ -102,6 +115,7 @@ const METHOD_LINE: Record<WasteMethod, string> = {
   DROP_OFF: 'Miễn phí, nhận điểm khi người ở điểm xác nhận',
   MAIL_IN: 'Tự gửi qua hãng bất kỳ và tự trả phí ship',
   PICKUP: 'Miễn phí, bưu tá lấy khi giao đơn Tubu kế tiếp',
+  HOME_PICKUP: 'Bưu tá tới tận nhà lấy, trừ phí ship bằng Điểm Xanh',
 };
 const browserStore = () => (typeof localStorage === 'undefined' ? undefined : localStorage);
 const PACKAGING_TEXT = 'Tôi đóng gói không lẫn pin, hoá chất, vật nhọn, đồ ướt hoặc bẩn';
@@ -307,15 +321,18 @@ export default function RecycleNewPage() {
   const enabledMethods = useMemo(() => {
     if (!me) return [];
     const shipOk = !me.shipLockedAt;
-    return WASTE_METHODS_BASE.filter((m) => {
+    return [...WASTE_METHODS_BASE, 'HOME_PICKUP' as const].filter((m) => {
       if (m === 'DROP_OFF') return cfg.waste.dropoff && me.laneFlags.dropoff;
       if (m === 'MAIL_IN') return cfg.waste.mailin && me.laneFlags.mailin && shipOk;
+      if (m === 'HOME_PICKUP') return homePickupEnabled({ cfgPickup: cfg.waste.pickup, lanePickup: me.laneFlags.pickup, shipLocked: !shipOk });
       return cfg.waste.pickup && me.laneFlags.pickup && shipOk;
     });
   }, [me, cfg.waste.dropoff, cfg.waste.mailin, cfg.waste.pickup]);
 
+  // Shipper lấy tận nhà có luồng báo phí riêng, không có bản xem trước.
+  const previewMethods = useMemo(() => enabledMethods.filter((m) => m !== 'HOME_PICKUP'), [enabledMethods]);
   const previewQueries = useQueries({
-    queries: enabledMethods.map((method) => {
+    queries: previewMethods.map((method) => {
       const body: WastePreviewRequest = {
         lines: lineInputs,
         method,
@@ -329,11 +346,11 @@ export default function RecycleNewPage() {
       };
     }),
   });
-  const previewFailed = enabledMethods.filter((_, i) => previewQueries[i]?.isError);
+  const previewFailed = previewMethods.filter((_, i) => previewQueries[i]?.isError);
   const previews: Partial<Record<WasteMethod, MethodPreview>> = {};
   // useQueries tạo observer mới mỗi khi khoá đổi nên data về undefined; giữ kết quả cuối riêng cho thứ tự thẻ để thẻ không nhảy chỗ.
   const lastPreview = useRef<Partial<Record<WasteMethod, WastePreviewDTO>>>({});
-  enabledMethods.forEach((m, i) => {
+  previewMethods.forEach((m, i) => {
     const data = previewQueries[i]?.data;
     if (data) lastPreview.current[m] = data;
     previews[m] = { data };
@@ -391,18 +408,43 @@ export default function RecycleNewPage() {
   }, [step, draft.method, draft.lines, draft.nearby, pointsQ.data, enabledMethods, locationSettled, needNearby]);
 
   const selected = draft.method && enabledMethods.includes(draft.method) ? draft.method : null;
-  const keyContent = { method: draft.method, lines: lineInputs, pointId: draft.method === 'DROP_OFF' ? draft.pointId : null };
+  const homePickupForm = draft.homePickup ?? EMPTY_HOME_PICKUP_FORM;
+  const hp = useHomePickupQuote({
+    enabled: selected === 'HOME_PICKUP' && step === 'method' && phase === 'authenticated',
+    form: homePickupForm,
+    lines: lineInputs,
+    items: me?.items ?? [],
+  });
+  const hpBatteryBlocked = selected === 'HOME_PICKUP' && me ? homePickupBatteryBlocked(lineInputs, me.items, hp.address?.province) : false;
+  const hpView = hp.quote ? homePickupQuoteView({ quote: hp.quote, batteryBlocked: hpBatteryBlocked }) : null;
+  const setHomePickup = (patch: Partial<HomePickupForm>) =>
+    setDraft((d) => ({ ...d, homePickup: { ...(d.homePickup ?? EMPTY_HOME_PICKUP_FORM), ...patch } }));
+
+  // Cùng khoá cho các lần bấm lại khi nội dung đơn không đổi; đổi địa chỉ hay số kg thì sang khoá mới (máy chủ trả 409 cho cùng khoá khác nội dung).
+  const keyContent = {
+    method: draft.method,
+    lines: lineInputs,
+    pointId: draft.method === 'DROP_OFF' ? draft.pointId : null,
+    homePickup:
+      draft.method === 'HOME_PICKUP'
+        ? { addressId: hp.effective.addressId, weightGrams: hp.effective.weightGrams }
+        : null,
+  };
   const { key, rotate } = useIdempotencyKey(keyContent);
-  const body: WasteCreateRequest | null = selected
-    ? {
-        method: selected,
-        lines: lineInputs,
-        ...(selected === 'DROP_OFF' ? { pointId: draft.pointId ?? undefined } : {}),
-        consent: true,
-        ...((ackVersion ?? rulesVersion) ? { consentVersion: (ackVersion ?? rulesVersion)! } : {}),
-        ...(selected === 'MAIL_IN' ? { packagingConsent: true, postagePaidConsent: true } : {}),
-      }
-    : null;
+  const consentVersion = ackVersion ?? rulesVersion;
+  const body: WasteCreateRequest | null =
+    selected === 'HOME_PICKUP'
+      ? homePickupCreateBody({ form: hp.effective, lines: lineInputs, consentVersion })
+      : selected
+        ? {
+            method: selected,
+            lines: lineInputs,
+            ...(selected === 'DROP_OFF' ? { pointId: draft.pointId ?? undefined } : {}),
+            consent: true,
+            ...(consentVersion ? { consentVersion } : {}),
+            ...(selected === 'MAIL_IN' ? { packagingConsent: true, postagePaidConsent: true } : {}),
+          }
+        : null;
   const create = useLockedMutation({
     mutationFn: () => {
       if (!body) throw new Error('Chưa chọn cách giao');
@@ -418,7 +460,7 @@ export default function RecycleNewPage() {
     // Máy chủ từ chối kiểu dữ liệu cũ (luật đổi rác đã đổi, không còn nhận loại này, 409 thử lại): trả Promise để khoá giữ tới khi
     // thể lệ, hồ sơ, ước tính và điểm nhận tải lại xong (tối đa `settleWithin`). Lỗi tạm thì chỉ tải lại phiên bản thể lệ và nhả khoá ngay.
     onError: (e) => {
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      openSnackbar({ text: homePickupUnavailableText(e) ?? getErrorMessage(e), type: 'error' });
       const refreshRules = qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'rules-version'] });
       if (!isStaleStateError(e)) return undefined;
       return settleWithin(
@@ -426,6 +468,7 @@ export default function RecycleNewPage() {
           refreshRules,
           qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me }),
           qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'preview'] }),
+          qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'pickup-quote'] }),
           qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.points(null) }),
         ]),
       );
@@ -553,15 +596,17 @@ export default function RecycleNewPage() {
 
   const selectedPreview = selected ? previews[selected]?.data : undefined;
   const consentsOk = consentValid && (selected !== 'MAIL_IN' || (packagingConsent && postageConsent));
+  const hpState = homePickupCreateState({ addressId: hp.effective.addressId, quoteState: hp.quoteState, view: hpView, consentOk: consentValid });
   const canCreate =
-    selected !== null &&
-    !isLocked(selectedPreview) &&
-    consentsOk &&
-    (selected !== 'DROP_OFF' || draft.pointId !== null);
+    selected === 'HOME_PICKUP'
+      ? hpState.ok
+      : selected !== null && !isLocked(selectedPreview) && consentsOk && (selected !== 'DROP_OFF' || draft.pointId !== null);
 
   const blockedHint = canCreate
     ? null
-    : createBlockedHint({ selected: selected !== null, needsPoint: selected === 'DROP_OFF', pointChosen: draft.pointId !== null, consentsOk });
+    : selected === 'HOME_PICKUP'
+      ? hpState.hint
+      : createBlockedHint({ selected: selected !== null, needsPoint: selected === 'DROP_OFF', pointChosen: draft.pointId !== null, consentsOk });
 
   const unlockedOthers = (m: WasteMethod) => order.filter((o) => o !== m && !isLocked(previews[o]?.data));
 
@@ -682,6 +727,22 @@ export default function RecycleNewPage() {
               ))}
             </div>
           )}
+          {m === 'HOME_PICKUP' && checked && (
+            <HomePickupComposer
+              addresses={hp.addresses}
+              addressesStatus={hp.addressesStatus}
+              onRetryAddresses={hp.refetchAddresses}
+              selectedAddressId={hp.effective.addressId}
+              onSelectAddress={(id) => setHomePickup({ addressId: id })}
+              weightGrams={hp.weightGrams}
+              onWeight={(g) => setHomePickup({ weightGrams: g })}
+              quoteState={hp.quoteState}
+              view={hpView}
+              quoteErrorText={hp.quoteErrorText}
+              onRetryQuote={hp.refetchQuote}
+              disabled={create.isPending}
+            />
+          )}
           {m === 'DROP_OFF' && checked && (
             <div style={{ ...COLUMN, gap: 8 }}>
               {draft.pickedPoint && (
@@ -758,7 +819,7 @@ export default function RecycleNewPage() {
       }
       primary={
         <Button fullWidth disabled={!canCreate} loading={create.isPending} onPress={() => create.mutate()}>
-          Tạo yêu cầu
+          {selected === 'HOME_PICKUP' ? homePickupCopy.createButton : 'Tạo yêu cầu'}
         </Button>
       }
     />,

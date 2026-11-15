@@ -40,6 +40,22 @@ describe('nháp Đổi rác trong sessionStorage (thay navigation state của Mi
     window.sessionStorage.setItem('tubu_recycle_draft', JSON.stringify({ ...DRAFT, method: 'FLY' }));
     expect(loadDraft()).toBeNull();
   });
+  it('nháp thu gom tận nhà giữ địa chỉ và số kg; số kg lạ về null, bỏ trường usePoints của nháp cũ', () => {
+    const base = { ...DRAFT, method: 'HOME_PICKUP' as const, pointId: null };
+    window.sessionStorage.setItem('tubu_recycle_draft', JSON.stringify({ ...base, homePickup: { addressId: 'addr-1', weightGrams: 3000 } }));
+    expect(loadDraft()?.homePickup).toEqual({ addressId: 'addr-1', weightGrams: 3000 });
+    window.sessionStorage.setItem('tubu_recycle_draft', JSON.stringify({ ...base, homePickup: { addressId: 'addr-1', weightGrams: 2000, usePoints: false } }));
+    expect(loadDraft()?.homePickup).toEqual({ addressId: 'addr-1', weightGrams: 2000 });
+    window.sessionStorage.setItem('tubu_recycle_draft', JSON.stringify({ ...base, homePickup: { addressId: 7, weightGrams: 1.5 } }));
+    expect(loadDraft()?.homePickup).toEqual({ addressId: null, weightGrams: null });
+    window.sessionStorage.setItem('tubu_recycle_draft', JSON.stringify({ ...base, homePickup: 'x' }));
+    expect(loadDraft()?.homePickup).toBeUndefined();
+  });
+  it('nháp có cách giao HOME_PICKUP vẫn đọc lại được (không bị coi là cách giao lạ)', () => {
+    const draft = { ...DRAFT, method: 'HOME_PICKUP' as const, pointId: null };
+    window.sessionStorage.setItem('tubu_recycle_draft', JSON.stringify(draft));
+    expect(loadDraft()).toEqual(draft);
+  });
   it('sang trang chọn điểm: nav đọc lại được, returnTo ngoài site bị bỏ', () => {
     savePointsNav({ returnTo: '/doi-rac/tao?step=method', draft: DRAFT, selectedItemIds: ['item-carton'] });
     expect(loadPointsNav()).toEqual({ returnTo: '/doi-rac/tao?step=method', draft: DRAFT, selectedItemIds: ['item-carton'] });

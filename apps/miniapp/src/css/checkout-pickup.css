@@ -1,0 +1,155 @@
+/* Thẻ "Đổi rác kèm đơn", tấm chọn món rác và dòng quà 0đ trên Thanh toán. Số đo đặt ở đây (bánh cóc px của P17b chỉ đếm TSX). */
+
+/* Thẻ đóng là đúng một hàng: cột chữ (tiêu đề + huy hiệu, dòng lợi ích) và công tắc 44px. 375px: 343 - 44 - 12 = 287px cho cột chữ, đủ tiêu đề (~135) + huy hiệu (~121) trên một dòng; hẹp hơn thì huy hiệu xuống dòng thay vì tràn ngang. */
+.tubu-pickup {
+  margin-top: var(--space-inline-sm);
+  border-top: 1px solid var(--color-border-subtle);
+  padding-top: var(--space-inline-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-pickup-row {
+  box-sizing: border-box;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+}
+.tubu-pickup-body {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tubu-pickup-body[aria-disabled='true'] {
+  cursor: default;
+}
+.tubu-pickup-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 8px;
+  min-width: 0;
+}
+.tubu-pickup-sub {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Tấm chọn món */
+.tubu-pickup-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-inline-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-pickup-existing {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-inline-sm);
+  min-height: 44px;
+}
+.tubu-pickup-existing > :first-child {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tubu-pickup-item {
+  box-sizing: border-box;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-inline-sm);
+  padding: 4px 0;
+}
+.tubu-pickup-item + .tubu-pickup-item {
+  border-top: 1px solid var(--color-border-subtle);
+}
+.tubu-pickup-item[data-blocked='true'] {
+  opacity: 0.5;
+}
+.tubu-pickup-item-text {
+  flex: 1;
+  min-width: 0;
+}
+.tubu-pickup-item-text > * {
+  overflow-wrap: anywhere;
+}
+.tubu-pickup-note {
+  margin: 8px 0 0;
+}
+.tubu-pickup-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.tubu-pickup-footer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tubu-pickup-footer-reason {
+  text-align: center;
+}
+
+/* Quà đổi điểm tặng kèm 0đ: một hàng cao tối thiểu 44px mỗi quà. */
+.tubu-gift-row {
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-inline-sm);
+  margin-top: var(--space-inline-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-gift-row > :first-child {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tubu-gift-merged {
+  flex: 1;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tubu-gift-note {
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Phí giao được miễn: cột phải của dòng tóm tắt, canh phải; câu lý do không tràn khi hẹp. */
+.tubu-ship-waived {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  min-width: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}

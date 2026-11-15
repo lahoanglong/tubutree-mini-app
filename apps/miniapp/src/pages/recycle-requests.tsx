@@ -2,7 +2,10 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
-import { wasteGuestCopy } from '@tubutree/app-core/waste-copy';
+import { homePickupListMeta } from '@tubutree/app-core/recycle-home-pickup-view';
+import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
+import { homePickupCopy, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useRecycleLogin } from '../hooks/use-recycle-login';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -26,6 +29,7 @@ const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 
 export default function RecycleRequestsPage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const phase = useAuthPhase();
   const [picked, setTab] = useState<'open' | 'closed' | null>(null);
   const q = useQuery({ queryKey: WASTE_QUERY_KEYS.requests, queryFn: listWasteRequests, enabled: phase === 'authenticated' });
@@ -103,16 +107,20 @@ export default function RecycleRequestsPage() {
               shipLockedAt: me.shipLockedAt,
               cfg: { enabled: cfg.waste.enabled, pickup: cfg.waste.pickup, isLoaded: cfg.isLoaded },
             });
+          const shippingPoints = homePickupListMeta(r);
           return (
             <ListRow
               key={r.id}
               title={`${r.code} · ${METHOD_LABELS[r.method]}`}
-              subtitle={`${requestStatusText(r, { blocked: me?.blocked, paused })} · ${formatDate(r.createdAt)}`}
+              subtitle={[requestStatusText(r, { blocked: me?.blocked, paused }), shippingPoints, formatDate(r.createdAt)].filter(Boolean).join(' · ')}
               trailing="chevron"
               onPress={() => navigate(r.status === 'COMPLETED' ? `/recycle/done/${r.id}` : `/recycle/r/${r.id}`)}
             />
           );
         })}
+      </div>
+      <div>
+        <ListRow title={homePickupCopy.list.giftsLink} trailing="chevron" onPress={() => goSmart(offersTabHref('/offers', 'rewards'))} />
       </div>
     </>,
   );

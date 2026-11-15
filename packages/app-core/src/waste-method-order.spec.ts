@@ -24,6 +24,15 @@ describe('orderWasteMethods', () => {
   it('xem trước lỗi vẫn tính là đã có kết quả, thẻ khoá khác vẫn xuống cuối', () => {
     expect(orderWasteMethods(ALL, { DROP_OFF: pv('BELOW_MIN'), PICKUP: undefined, MAIL_IN: pv() }, false, ['PICKUP'])).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']);
   });
+  it('HOME_PICKUP (không có bản xem trước) luôn đứng sau các thẻ khác và không làm kẹt việc xếp thẻ khoá', () => {
+    const enabled = [...ALL, 'HOME_PICKUP'] as const;
+    const open = { DROP_OFF: pv(), PICKUP: pv(), MAIL_IN: pv() };
+    expect(orderWasteMethods(enabled, open, false)).toEqual(['DROP_OFF', 'PICKUP', 'MAIL_IN', 'HOME_PICKUP']);
+    expect(orderWasteMethods(enabled, { ...open, DROP_OFF: pv('BELOW_MIN') }, false)).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF', 'HOME_PICKUP']);
+    expect(orderWasteMethods(enabled, { DROP_OFF: pv('BELOW_MIN'), PICKUP: undefined, MAIL_IN: pv() }, false)).toEqual(['DROP_OFF', 'PICKUP', 'MAIL_IN', 'HOME_PICKUP']);
+    expect(orderWasteMethods(['HOME_PICKUP'], {}, false)).toEqual(['HOME_PICKUP']);
+    expect(orderWasteMethods(ALL, open, false)).toEqual(['DROP_OFF', 'PICKUP', 'MAIL_IN']);
+  });
   it('thẻ đang lỗi không bị xếp cuối theo kết quả cũ của tỉnh khác', () => {
     expect(orderWasteMethods(ALL, { DROP_OFF: pv(), PICKUP: pv(), MAIL_IN: pv('NO_POINT') }, true, ['MAIL_IN'])).toEqual(['MAIL_IN', 'PICKUP', 'DROP_OFF']);
     expect(orderWasteMethods(ALL, { DROP_OFF: pv('BELOW_MIN'), PICKUP: pv(), MAIL_IN: pv('NO_POINT') }, false, ['MAIL_IN'])).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']);

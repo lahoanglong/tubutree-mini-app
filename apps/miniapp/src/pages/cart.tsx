@@ -60,6 +60,7 @@ import { ProductThumb } from '../components/ui/product-thumb';
 import { Countdown } from '../components/ui/countdown';
 import { ConfirmSheet } from '../components/ui/confirm-sheet';
 import { CartComboBlock } from '../components/cart-combo-block';
+import { GiftNote } from '../components/checkout/gift-rows';
 import { FreeShippingProgressBar } from '../components/ui/free-shipping-progress-bar';
 import { FreeshipAddonRail, type FreeshipAddonItem } from '../components/ui/freeship-addon-rail';
 import { CartVoucherHintStrip } from '../components/ui/cart-voucher-hint-strip';
@@ -520,6 +521,11 @@ export default function CartPage() {
               </section>
             );
           })}
+          {(summary.pendingGiftRedemptions?.length ?? 0) > 0 && (
+            <Box px={3}>
+              <GiftNote />
+            </Box>
+          )}
         </>
       )}
 

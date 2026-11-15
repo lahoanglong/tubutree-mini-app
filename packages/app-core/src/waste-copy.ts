@@ -201,3 +201,57 @@ export function dropOffDayLimitText(
   const fmt = (n: number) => n.toLocaleString('vi-VN');
   return `Hôm nay còn nhận được ${fmt(left)} ${item.unitLabel} (tối đa ${fmt(item.dailyCapQty)} ${item.unitLabel} mỗi ngày)`;
 }
+
+/** Câu cố định khi Pin cũ không đi cùng đơn thu gom tận nơi ngoài TP.HCM; trùng chữ với câu máy chủ chặn. */
+export const HOME_PICKUP_BATTERY_TEXT =
+  'Pin cũ cần xử lý an toàn riêng nên hiện chỉ nhận tại điểm thu gom hoặc lấy tận nơi khu vực TP.HCM';
+
+/** Chữ của đường "Shipper lấy tận nhà" (đơn thu gom độc lập), dùng chung Mini App và web. */
+export const homePickupCopy = {
+  createButton: 'Tạo đơn thu gom',
+  creating: 'Đang tạo…',
+  addressTitle: 'Địa chỉ lấy rác',
+  addressAdd: 'Thêm địa chỉ',
+  addressEmpty: 'Bạn chưa có địa chỉ nào, thêm địa chỉ để shipper tới lấy rác',
+  addressFix: 'Sửa địa chỉ này',
+  addressNotOk: 'Chưa giao được tới địa chỉ này, bạn kiểm tra lại giúp Tubu nhé',
+  addressLoadFailed: 'Chưa tải được sổ địa chỉ',
+  addressLoading: 'Đang tải địa chỉ…',
+  retry: 'Thử lại',
+  addressDefault: 'Mặc định',
+  weightTitle: 'Số kg rác ước tính',
+  feeLabel: 'Phí shipper thu gom tận nơi',
+  estimatedTag: 'Ước tính',
+  payFree: 'Phí ship 0đ',
+  payCovered: (usable: string, deduct: string) => `Điểm Xanh dùng được ${usable} · sẽ trừ ${deduct} điểm`,
+  payShort: (usable: string) => `Điểm Xanh dùng được ${usable}`,
+  /** Cùng câu máy chủ trả (503) khi đơn vị vận chuyển chưa báo được phí thật: phí ước tính thì chưa cho đặt. */
+  feeUnavailable: 'Chưa báo được phí shipper lúc này, bạn thử lại sau ít phút nhé',
+  progress: (have: string, min: string) => `Dự kiến ${have} / ${min} điểm`,
+  estimate: (points: string) => `Ước tính ${points} điểm`,
+  quoteLoading: 'Đang tính phí ship…',
+  quoteFailed: 'Chưa tính được phí ship, bạn thử lại nhé',
+  needAddress: 'Chọn địa chỉ lấy rác để tạo đơn thu gom',
+  needConsent: 'Tick ô đồng ý ở trên để tạo đơn thu gom',
+  minPoints: (min: string) => `Tối thiểu ${min} điểm ước tính`,
+  detail: {
+    address: 'Địa chỉ lấy rác',
+    weight: 'Cân nặng ước tính',
+    fee: 'Phí shipper',
+    pointsUsed: 'Đã trừ Điểm Xanh',
+    pointsRefunded: 'Đã hoàn Điểm Xanh',
+    cancel: 'Huỷ đơn thu gom',
+    cancelTitle: 'Huỷ đơn thu gom?',
+    cancelConfirm: 'Xác nhận huỷ',
+    cancelDone: 'Đã huỷ đơn thu gom',
+    cancelBody: (code: string, refundPoints: string | null) =>
+      `Bưu tá sẽ không tới lấy rác của đơn ${code} nữa.${refundPoints ? ` ${refundPoints} điểm đã trừ phí ship sẽ được hoàn lại.` : ''}`,
+    cancelDoneRefund: (points: string) => `Đã huỷ đơn thu gom, hoàn ${points} điểm`,
+  },
+  list: {
+    giftsLink: 'Đổi điểm lấy quà',
+    pointsUsed: (points: string) => `Đã dùng ${points} điểm trừ phí ship`,
+    pointsRefunded: (points: string) => `Đã hoàn ${points} điểm phí ship`,
+    pointsAwarded: (points: string) => `+${points} điểm`,
+  },
+} as const;

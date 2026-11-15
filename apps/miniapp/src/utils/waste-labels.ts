@@ -12,6 +12,7 @@ import type {
   WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { pointAddress } from '@tubutree/app-core/reward-rules';
+import { homePickupShortStatus } from '@tubutree/app-core/recycle-home-pickup-view';
 import { TIMELINE_STEPS, timelineFor } from '@tubutree/app-core/waste-timeline';
 import type { WasteTimeline } from '@tubutree/app-core/waste-timeline';
 import { formatNumber, formatPoints, formatVnd } from './format';
@@ -33,6 +34,7 @@ export const METHOD_LABELS: Record<WasteMethod, string> = {
   DROP_OFF: 'Mang tới điểm nhận',
   MAIL_IN: 'Gửi về kho Tubu HCM',
   PICKUP: 'Thu kèm đơn mua',
+  HOME_PICKUP: 'Shipper lấy tận nhà',
 };
 
 export const REJECTION_LABELS: Record<WasteRejectionReason, string> = {
@@ -160,9 +162,11 @@ export function isRequestPaused(r: Pick<WasteRequestSummaryDTO, 'method' | 'stat
 
 /** Dòng trạng thái của một yêu cầu cho khách (danh sách, thẻ trang chủ, trang chi tiết); tên bước theo §4.6. */
 export function requestStatusText(
-  r: Pick<WasteRequestSummaryDTO, 'method' | 'status' | 'closeReason' | 'orderCode' | 'pointsAwarded'>,
+  r: Pick<WasteRequestSummaryDTO, 'method' | 'status' | 'closeReason' | 'orderCode' | 'pointsAwarded' | 'homePickup'>,
   opts: { blocked?: boolean; paused?: boolean } = {},
 ): string {
+  const shipper = r.method === 'HOME_PICKUP' ? homePickupShortStatus(r) : null;
+  if (shipper) return shipper;
   switch (r.status) {
     case 'OPEN':
       if (opts.paused && (r.method === 'DROP_OFF' || (r.method === 'PICKUP' && !r.orderCode))) return 'Đang tạm dừng';

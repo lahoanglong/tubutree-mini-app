@@ -1,16 +1,15 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { QuotePendingGiftDTO } from '@tubutree/shared-types';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { WasteMeDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
-import { Ticket, ChevronRight, Sprout, AlertCircle, Recycle } from 'lucide-react';
+import { Ticket, ChevronRight, Sprout, AlertCircle } from 'lucide-react';
 import { getAddresses, getCart, checkoutQuote, placeOrder, removeCartItem, updateCartItem, type PlacedOrder } from '../services/shop-api';
 import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
 import { getErrorCode, getErrorMessage, getLoadErrorMessage, isOutcomeUnknown, isStaleStateError } from '../services/api';
 import { isHttpError } from '../services/http';
-import { getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { trackEvent } from '../services/analytics';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
@@ -18,6 +17,9 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useNotify } from '../hooks/use-notify';
 import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
+import { GiftRows } from '../components/checkout/gift-rows';
+import { PickupSection, WaivedShippingValue } from '../components/checkout/pickup-section';
+import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '../components/checkout/use-checkout-pickup';
 import { OrderSuccess } from '../components/checkout/order-success';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { COUPON_CHANGE_KEY, useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
@@ -27,6 +29,8 @@ import { flashLimitNotice, isCartFixableError } from '@tubutree/app-core/commerc
 import { checkoutLineProblems, isPriceChangedError, priceChangedActions, type LineFix } from '@tubutree/app-core/commerce/checkout-issues';
 import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { shippingRowView } from '@tubutree/app-core/checkout-pickup-view';
+import { visibleGifts } from '@tubutree/app-core/checkout-pickup-state';
 import { couponAutoCopy, couponHintText } from '@tubutree/app-core/coupon-use';
 import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
 import { CouponRemovedNotice } from '../components/checkout/coupon-removed-notice';
@@ -36,7 +40,7 @@ import { ReferralCodeBox, effectiveReferralCode } from '../components/checkout/r
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
-import { formatVnd, formatPoints } from '../utils/format';
+import { formatVnd } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { checkoutEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { createOrderKeyRing } from '../utils/idempotency';
@@ -66,7 +70,6 @@ import { vi } from '../i18n/vi';
 import { haptic } from '../utils/haptic';
 import { PolicySheet } from '../components/policy-sheet';
 import type { WebPolicySlug } from '../utils/web-policy';
-import { formatLineQty } from '../utils/waste-labels';
 import { PageHeader } from '../components/ui/page-header';
 import { ProductThumb } from '../components/ui/product-thumb';
 import { BottomSheet } from '../components/ui/bottom-sheet';
@@ -75,9 +78,7 @@ import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
-import { Icon } from '../components/ui/icon';
 import { Text as DsText } from '../components/ui/text';
-import { ListRow } from '../components/ui/list-row';
 import { useCartKey } from '../services/cart-key';
 import { INPUT_LIMITS } from '../utils/input-limits';
 import { variationLabel } from '../utils/variation-label';
@@ -85,12 +86,6 @@ import { variationLabel } from '../utils/variation-label';
 const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
 
 type PlaceBody = Parameters<typeof placeOrder>[0];
-
-/** `undefined` ẩn mục, `null` hiện dòng tạo yêu cầu, còn lại là yêu cầu PICKUP mở chưa gắn đơn để bật công tắc. */
-export function attachablePickup(me: WasteMeDTO | undefined, pickupFlag: boolean): WasteRequestSummaryDTO | null | undefined {
-  if (!pickupFlag || !me || me.blocked || me.shipLockedAt) return undefined;
-  return me.openRequests.find((r) => r.method === 'PICKUP' && r.status === 'OPEN' && r.orderCode == null) ?? null;
-}
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -111,12 +106,7 @@ export default function CheckoutPage() {
   const [payment, setPayment] = useState('COD');
   const [usePoints, setUsePoints] = useState(false);
   const [note, setNote] = useState('');
-  const [attachWaste, setAttachWaste] = useState(false);
-  // Chỉ hiện "Thu kèm rác" khi cờ pickup đã bật thật từ server; chưa tải xong → ẩn, không hứa dịch vụ chưa chắc có.
   const publicConfig = usePublicConfig();
-  const pickupFlag = publicConfig.isLoaded && publicConfig.waste.pickup === true;
-  const wasteMeQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: pickupFlag });
-  const pickupReq = attachablePickup(wasteMeQ.data, pickupFlag);
   const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
   // Mã từ link chỉ khoá ô nhập khi máy chủ đã xác nhận là mã CTV; mã khách thường (nút chia sẻ sản phẩm) bị máy chủ bỏ qua nên
   // không được hiện như "đang mua qua link giới thiệu". Chưa biết (null) vẫn gửi kèm đơn để máy chủ tự quyết: lỗi mạng lúc chạm không được làm CTV mất công.
@@ -223,12 +213,27 @@ export default function CheckoutPage() {
   const pointsToUse = usePoints ? points.usable : 0;
   // Giỏ chưa tải xong hoặc không có món nào thì không báo giá: máy chủ trả 400 cho giỏ rỗng.
   const cartHasItems = (cart.data?.items.length ?? 0) > 0;
-  const quoteEnabled = !!addressId && authed && cartReady && cartHasItems && !selectionDead;
+  // Đổi rác kèm đơn + quà 0đ: lựa chọn của khách đi vào báo giá và đặt đơn; cổng mở/đóng do máy chủ báo trong `quote.pickup`.
+  const pickup = useCheckoutPickup({
+    enabled: authed,
+    addressId,
+    itemIds,
+    onReconciled: () => notify({ text: fillCopy('checkout.pickup.reconciled'), type: 'info' }),
+  });
+  const quoteEnabled = !!addressId && authed && cartReady && cartHasItems && !selectionDead && pickup.ready;
   const quote = useQuery({
-    queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey],
-    queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds),
+    queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey, pickup.fieldsKey],
+    queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds, pickup.fields),
     enabled: quoteEnabled,
   });
+  const { pruneGifts } = pickup;
+  const pendingGifts = quote.data?.pendingGiftRedemptions;
+  useEffect(() => {
+    pruneGifts(pendingGifts);
+  }, [pendingGifts, pruneGifts]);
+  // Báo giá đang tải lại thì quà giữ như lần trước: dòng quà không được biến mất rồi hiện lại mỗi lần khách đổi lựa chọn.
+  const giftsRef = useRef<QuotePendingGiftDTO[]>([]);
+  if (quote.data) giftsRef.current = visibleGifts(quote.data.pendingGiftRedemptions, pickup.excluded);
   // Lời báo của mã đang giữ: báo giá (nếu đã có) thắng giỏ, kèm số cần mua thêm khi mã chỉ thiếu đơn tối thiểu.
   const couponLine = cart.data?.couponCode ? couponNoticeText({ ...(quote.data ?? cart.data), couponCode: cart.data.couponCode }, formatVnd) : null;
 
@@ -350,7 +355,7 @@ export default function CheckoutPage() {
         // Tổng khách đang thấy: giá/phí đổi giữa lúc báo giá và lúc bấm đặt thì BE trả TOTAL_CHANGED thay vì thu số mới.
         ...(quote.data ? { expectedTotal: quote.data.total } : {}),
         note: note.trim() || undefined,
-        ...(attachWaste && pickupReq ? { wasteRequestId: pickupReq.id } : {}),
+        ...pickup.fields,
         invoiceRequest: wantInvoice
           ? {
               taxCode: normalizeTaxCode(invoice.taxCode),
@@ -395,7 +400,10 @@ export default function CheckoutPage() {
       void queryClient.invalidateQueries({ queryKey: ['cart'] });
       void queryClient.invalidateQueries({ queryKey: ['orders'] });
       rememberActiveOrder(browserStorage(), user?.id);
-      if (attachWaste && pickupReq) void queryClient.invalidateQueries({ queryKey: ['waste'] });
+      if (pickup.applied) {
+        void queryClient.invalidateQueries({ queryKey: ['waste'] });
+        void queryClient.invalidateQueries({ queryKey: [PICKUP_OPTIONS_KEY] });
+      }
       // Thanh toán WALLET trừ walletBalance và sử dụng điểm cộng/trừ pointsBalance ở BE;
       // staleTime=60s global → wallet/profile sẽ stale 60s nếu không invalidate → user thấy số cũ.
       void queryClient.invalidateQueries({ queryKey: ['wallet'] });
@@ -440,10 +448,19 @@ export default function CheckoutPage() {
       setMaybePlaced(unknownAttempt.current !== null);
       setUnknownRev(unknownAttempt.current?.rev ?? null);
       setPlaceNotice(isOutcomeUnknown(e) ? 'unknown' : null);
-      // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi
-      // server đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
-      if (attachWaste && !isOutcomeUnknown(e)) {
-        reload(WASTE_QUERY_KEYS.me);
+      // Phần đổi rác đã gửi bị máy chủ từ chối vì phiếu/điều kiện đổi giữa chừng (409 không mã): tải lại báo giá và danh sách món, báo khách.
+      // Lỗi mạng/quá thời gian/5xx có thể đến sau khi server đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
+      const sentBody = (unknownAttempt.current ?? attempt.current)?.body;
+      const sentPickup = !!(sentBody?.wasteRequestId || sentBody?.inlinePickup);
+      if (sentPickup && isStaleStateError(e)) {
+        reload([PICKUP_OPTIONS_KEY]);
+        reload(['quote']);
+        reload(['waste']);
+        // Máy chủ trả 409 không mã khi phiếu thu rác đổi giữa lúc báo giá và lúc đặt; câu của nó bảo "tải lại trang" trong khi màn đã tự tải lại.
+        if (status === 409 && !getErrorCode(e) && /thu rác/i.test(getErrorMessage(e))) {
+          notify({ text: fillCopy('checkout.pickup.changed'), type: 'error' });
+          return hold();
+        }
       }
       // Giữ key: lỗi mạng/quá thời gian/5xx có thể xảy ra sau khi server đã tạo đơn — bấm lại cùng nội dung phải là replay,
       // không phải đơn thứ hai. Khách sửa địa chỉ/thanh toán/món thì keyFor tự ra key mới.
@@ -646,6 +663,9 @@ export default function CheckoutPage() {
   const shipments = quote.data?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((sh) => sh.fulfiller.kind === 'MERCHANT');
   const splitNote = shipmentsNote(shipments);
+  const tubuShipment = shipments.find((sh) => sh.fulfiller.kind === 'TUBU');
+  const tubuShippingFee = quote.data ? (tubuShipment ? tubuShipment.shippingFee : shipments.length === 0 ? quote.data.shippingFee : 0) : undefined;
+  const shipRow = quote.data ? shippingRowView(quote.data) : null;
   // Cùng điều kiện với màn thành công: chưa có cấu hình thì không hứa ngày giao; giỏ chỉ có hàng gian hàng tự giao thì cũng không.
   const etaLabel = publicConfig.isLoaded ? checkoutEtaLabel(publicConfig.shippingEta, shipments.map((sh) => sh.fulfiller.kind)) : null;
 
@@ -789,12 +809,34 @@ export default function CheckoutPage() {
           {grp.shipment && (
             <KeyValueRow
               label="Phí giao"
-              value={grp.shipment.shippingFee === 0 ? vi.common.freeShip : formatVnd(grp.shipment.shippingFee)}
+              value={
+                (grp.shipment.shippingFeeWaived ?? 0) > 0 && quote.data?.shippingFeeWaivedReason === 'RECYCLE_PICKUP' ? (
+                  <WaivedShippingValue originalFee={grp.shipment.shippingFee + (grp.shipment.shippingFeeWaived ?? 0)} note={fillCopy('checkout.shipWaived')} />
+                ) : grp.shipment.shippingFee === 0 ? (
+                  vi.common.freeShip
+                ) : (
+                  formatVnd(grp.shipment.shippingFee)
+                )
+              }
               tone={grp.shipment.shippingFee === 0 ? 'success' : 'primary'}
             />
           )}
           </section>
           ))}
+          <PickupSection
+            pickup={quote.data ? (quote.data.pickup ?? null) : undefined}
+            tubuShippingFee={tubuShippingFee}
+            applied={pickup.applied}
+            options={pickup.options}
+            optionsLoading={pickup.optionsLoading}
+            optionsError={pickup.optionsError}
+            onRetryOptions={() => void pickup.refetchOptions()}
+            open={pickup.sheetOpen}
+            onOpenChange={pickup.setSheetOpen}
+            onApply={chosen(pickup.apply)}
+            onClear={chosen(pickup.clear)}
+          />
+          <GiftRows gifts={giftsRef.current} excluded={pickup.excluded} onToggle={chosen(pickup.toggleGift)} />
         </Box>
         ) : null;
       })()}
@@ -1056,76 +1098,6 @@ export default function CheckoutPage() {
         }} />
       </Box>
 
-      {/* ── Thu kèm rác: gắn yêu cầu PICKUP đang mở vào đơn này (spec §12.2 bước 2) ── */}
-      {pickupReq !== undefined && (
-        <Box id="checkout-waste-pickup" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          {pickupReq === null ? (
-            <ListRow
-              icon={<Icon icon={Recycle} tone="brand" />}
-              title="Thu kèm rác"
-              subtitle="Tạo yêu cầu để bưu tá lấy rác khi giao đơn này"
-              trailing="chevron"
-              onPress={() => navigate('/recycle/new')}
-            />
-          ) : (
-            <>
-              <Box
-                role="checkbox"
-                {...rowKeyboardProps()}
-                aria-label="Thu kèm rác"
-                aria-checked={attachWaste}
-                className="tubu-press"
-                onClick={() => {
-                  haptic('light');
-                  bumpChoice();
-                  setAttachWaste((v) => !v);
-                }}
-                flex
-                alignItems="center"
-                justifyContent="space-between"
-                style={{ minHeight: 44, cursor: 'pointer' }}
-              >
-                <Box flex alignItems="center" style={{ gap: 10 }}>
-                  <Icon icon={Recycle} tone="brand" />
-                  <Text bold size="small" style={{ color: 'var(--color-text-primary)' }}>
-                    Thu kèm rác
-                  </Text>
-                </Box>
-                {/* Checkbox thị giác thuần tuý — logic bật/tắt vẫn ở onClick của Box cha. */}
-                <Checkbox checked={attachWaste} onChange={() => {}} />
-              </Box>
-              <Box
-                p={3}
-                mt={2}
-                style={{ background: 'var(--color-bg-subtle)', borderRadius: 'var(--radius-control)' }}
-              >
-                <Text bold size="small">
-                  {pickupReq.code}
-                </Text>
-                {pickupReq.lines.map((l) => (
-                  <Text key={`${l.itemName}-${l.unitLabel}`} size="xSmall" style={{ color: 'var(--color-text-secondary)', marginTop: 2 }}>
-                    {formatLineQty(l.itemName, l.declaredQty, l.unitLabel)}
-                  </Text>
-                ))}
-                <Text size="xSmall" style={{ color: 'var(--color-text-success)', fontWeight: 600, marginTop: 4 }}>
-                  {`Ước tính ${formatPoints(pickupReq.estimatedPoints)}`}
-                </Text>
-                {attachWaste && (
-                  <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px', marginTop: 4 }}>
-                    Ghi mã lên túi, bưu tá lấy khi giao đơn.
-                  </Text>
-                )}
-                {attachWaste && paymentToSend === 'BANK_TRANSFER' && (
-                  <Text size="xSmall" style={{ color: 'var(--color-text-secondary)', lineHeight: '18px', marginTop: 4 }}>
-                    Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.
-                  </Text>
-                )}
-              </Box>
-            </>
-          )}
-        </Box>
-      )}
-
       {/* ── Hoá đơn VAT (spec §6.3) ── */}
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <Box
@@ -1286,7 +1258,15 @@ export default function CheckoutPage() {
             )}
             <KeyValueRow
               label={vi.checkout.shippingFee}
-              value={quote.data.shippingFee === 0 ? vi.common.freeShip : formatVnd(quote.data.shippingFee)}
+              value={
+                shipRow?.waived ? (
+                  <WaivedShippingValue originalFee={shipRow.originalFee} note={shipRow.note ?? ''} />
+                ) : quote.data.shippingFee === 0 ? (
+                  vi.common.freeShip
+                ) : (
+                  formatVnd(quote.data.shippingFee)
+                )
+              }
               tone={quote.data.shippingFee === 0 ? 'success' : 'primary'}
             />
             {etaLabel && <KeyValueRow label={vi.success.etaLabel} value={etaLabel} />}
@@ -1504,7 +1484,9 @@ export default function CheckoutPage() {
             label="Phí vận chuyển"
             value={
               quote.data
-                ? quote.data.shippingFee === 0
+                ? shipRow?.waived
+                  ? <WaivedShippingValue originalFee={shipRow.originalFee} note={shipRow.note ?? ''} />
+                  : quote.data.shippingFee === 0
                   ? vi.common.freeShip
                   : formatVnd(quote.data.shippingFee)
                 : addressId

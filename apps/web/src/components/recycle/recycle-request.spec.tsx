@@ -5,6 +5,8 @@ import type { WasteRequestDetailDTO } from '@tubutree/shared-types';
 import { byText, click, flush, render, typeInto, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { makeRequestDetail, makeWarehouseContact, makeWasteMe, makeWastePoint } from './recycle-fixtures';
+import { makeHomePickup, makeHomePickupRequest } from './recycle-home-pickup-fixtures';
+import { ApiError } from '@/lib/client-api';
 
 // Chép ý recycle-request.spec.tsx (Mini App, §4.5, §4.5b, §4.6, §15): mã QR, sửa/huỷ, gửi về kho + mã vận đơn, thu kèm đơn,
 // trạng thái đóng, 404. Khác Mini App: thông báo thành công là dòng chữ trong trang, lỗi huỷ nằm trong sheet.
@@ -752,5 +754,92 @@ describe('/doi-rac/yeu-cau/[id]: sheet Huỷ chỉ chặn đóng trong lúc gử
     pressEscape();
     await flush(2);
     expect(dialog()).toBeNull();
+  });
+});
+
+describe('/doi-rac/yeu-cau/[id]: đơn Shipper lấy tận nhà', () => {
+  const TIMELINE = [
+    { at: '2026-10-17T03:00:00.000Z', text: 'Đã tạo đơn thu gom' },
+    { at: '2026-10-17T05:30:00.000Z', text: 'Bưu tá đã lấy rác' },
+  ];
+  it('dải tiến độ 4 bước, bước "Bưu tá lấy rác" đang diễn ra, mốc "Đã tạo đơn" có giờ', async () => {
+    state.request = makeHomePickupRequest();
+    const c = await mount();
+    const tl = c.querySelector('ol[aria-label="Tiến độ yêu cầu"]')!;
+    expect(tl.querySelectorAll('li')).toHaveLength(4);
+    expect(tl.querySelector('[data-step="Bưu tá lấy rác"]')?.getAttribute('aria-current')).toBe('step');
+    expect(tl.querySelector('[data-step="Đã tạo đơn"]')?.textContent).toContain('10:00');
+  });
+  it('kho đã nhận: mốc của máy chủ vào đúng bước, bước cộng điểm kèm câu của máy chủ', async () => {
+    state.request = makeHomePickupRequest({
+      status: 'RECEIVED',
+      cancellable: false,
+      homePickup: makeHomePickup({
+        gomdonStatus: '7',
+        timeline: [...TIMELINE, { at: '2026-10-17T09:00:00.000Z', text: 'Kho Tubu đã nhận rác, đang đếm' }],
+      }),
+    });
+    const c = await mount();
+    const tl = c.querySelector('ol[aria-label="Tiến độ yêu cầu"]')!;
+    expect(tl.querySelector('[data-step="Bưu tá lấy rác"]')?.textContent).toContain('12:30');
+    expect(tl.querySelector('[data-step="Cộng điểm"]')?.textContent).toContain('Kho Tubu đã nhận rác, đang đếm');
+  });
+  it('chi tiết: địa chỉ lấy rác, cân nặng, phí shipper, điểm đã trừ; không có dòng thu hộ / COD', async () => {
+    state.request = makeHomePickupRequest();
+    const c = await mount();
+    const d = c.querySelector('[data-testid="home-pickup-detail"]')!;
+    for (const t of ['Địa chỉ lấy rác', '12 Lê Lợi, Phường Bến Thành, TP. Hồ Chí Minh', 'Cân nặng ước tính', '2 kg', 'Phí shipper', '25.000đ', 'Đã trừ Điểm Xanh', '25.000 điểm']) {
+      expect(d.textContent).toContain(t);
+    }
+    expect(d.textContent).not.toMatch(/thu hộ|COD|tiền mặt/i);
+  });
+  it('editable:false và không phải đơn mang tới điểm: không có Sửa món, Xem mã QR, Đổi điểm nhận', async () => {
+    state.request = makeHomePickupRequest();
+    const c = await mount();
+    expect(byText(c, 'a', 'Sửa món')).toBeNull();
+    expect(button(c, 'Xem mã QR')).toBeNull();
+    expect(button(c, 'Đổi điểm nhận')).toBeNull();
+  });
+  it('cancellable:false thì không có nút huỷ', async () => {
+    state.request = makeHomePickupRequest({ cancellable: false });
+    const c = await mount();
+    expect(button(c, 'Huỷ đơn thu gom')).toBeNull();
+  });
+  it('huỷ: một hộp xác nhận nêu điểm sẽ hoàn, một lệnh huỷ, báo số điểm đã hoàn', async () => {
+    state.request = makeHomePickupRequest();
+    state.cancel = () => makeHomePickupRequest({ status: 'CANCELLED', cancellable: false, homePickup: makeHomePickup({ shipFeePointsRefunded: 25_000 }) });
+    const c = await mount();
+    click(button(c, 'Huỷ đơn thu gom'));
+    await flush(2);
+    expect(dialog()!.querySelector('h2')?.textContent).toBe('Huỷ đơn thu gom?');
+    expect(dialog()!.textContent).toContain('25.000 điểm đã trừ phí ship sẽ được hoàn lại');
+    twice(button(dialog()!, 'Xác nhận huỷ'));
+    await flush(8);
+    expect(cancelCalls()).toHaveLength(1);
+    expect(dialog()).toBeNull();
+    expect(c.textContent).toContain('Đã huỷ đơn thu gom, hoàn 25.000 điểm');
+  });
+  it.each([
+    [409, 'Bưu tá đã lấy rác nên không huỷ được nữa, bạn liên hệ CSKH nếu cần hỗ trợ'],
+    [503, 'Chưa gửi được yêu cầu huỷ tới đơn vị vận chuyển, bạn thử lại sau ít phút nhé'],
+  ])('huỷ bị máy chủ từ chối (%i): hiện đúng câu của máy chủ trong hộp xác nhận, không câu chung "Máy chủ đang bận"', async (status, message) => {
+    state.request = makeHomePickupRequest();
+    state.cancel = () => {
+      throw new ApiError(message, status);
+    };
+    const c = await mount();
+    click(button(c, 'Huỷ đơn thu gom'));
+    await flush(2);
+    click(button(dialog()!, 'Xác nhận huỷ'));
+    await flush(6);
+    expect(dialog()!.querySelector('[role="alert"]')?.textContent).toBe(message);
+    expect(dialog()!.textContent).not.toContain('Máy chủ đang bận');
+  });
+  it('chưa trừ điểm: hộp huỷ không nhắc hoàn điểm', async () => {
+    state.request = makeHomePickupRequest({ homePickup: makeHomePickup({ shipFeePointsUsed: 0 }) });
+    const c = await mount();
+    click(button(c, 'Huỷ đơn thu gom'));
+    await flush(2);
+    expect(dialog()!.textContent).not.toContain('hoàn lại');
   });
 });

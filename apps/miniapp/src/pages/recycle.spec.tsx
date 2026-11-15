@@ -153,6 +153,30 @@ describe('/recycle trang vào (§4.1)', () => {
     expect(await screen.findByText('Gửi về kho Tubu HCM')).toBeInTheDocument();
     expect(screen.queryByText('Thu kèm đơn mua')).toBeNull();
   });
+  it('cờ pickup bật → thẻ Shipper lấy tận nhà đứng sau Thu kèm đơn, nói trừ phí ship bằng Điểm Xanh; cờ tắt hay khoá đường kho thì ẩn', async () => {
+    mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } }));
+    const on = renderPage();
+    expect(await screen.findByText('Shipper lấy tận nhà')).toBeInTheDocument();
+    expect(screen.getByText('Bưu tá tới tận nhà lấy, trừ phí ship bằng Điểm Xanh')).toBeInTheDocument();
+    const names = ['Mang tới điểm nhận', 'Gửi về kho Tubu HCM', 'Thu kèm đơn mua', 'Shipper lấy tận nhà'];
+    const at = (n: string) => on.container.textContent!.indexOf(n);
+    expect(names.map(at)).toEqual([...names.map(at)].sort((a, b) => a - b));
+    on.unmount();
+
+    mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: false };
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: false } }));
+    const off = renderPage();
+    expect(await screen.findByText('Gửi về kho Tubu HCM')).toBeInTheDocument();
+    expect(screen.queryByText('Shipper lấy tận nhà')).toBeNull();
+    off.unmount();
+
+    mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, shipLockedAt: '2026-10-01T00:00:00.000Z' }));
+    renderPage();
+    expect(await screen.findByText('Mang tới điểm nhận')).toBeInTheDocument();
+    expect(screen.queryByText('Shipper lấy tận nhà')).toBeNull();
+  });
   it('danh sách món: quy tắc + chuẩn bị; món sắp nhận mờ, nhãn "Sắp nhận"', async () => {
     renderPage();
     expect(await screen.findByText('1 thùng = 1.000 điểm')).toBeInTheDocument();

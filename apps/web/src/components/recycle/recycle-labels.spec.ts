@@ -132,6 +132,12 @@ describe('trạng thái một dòng và tạm dừng (đồng bộ Mini App)', (
   it.each([
     [{ method: 'DROP_OFF', status: 'OPEN' }, 'Chờ bạn mang tới'],
     [{ method: 'MAIL_IN', status: 'OPEN' }, 'Chờ bạn gửi kiện'],
+    [{ method: 'HOME_PICKUP', status: 'OPEN' }, 'Chờ bưu tá tới lấy rác'],
+    [{ method: 'HOME_PICKUP', status: 'OPEN', homePickup: { gomdonStatus: '3' } }, 'Bưu tá đã lấy rác'],
+    [{ method: 'HOME_PICKUP', status: 'IN_TRANSIT', homePickup: { gomdonStatus: '4' } }, 'Đang về kho Tubu'],
+    [{ method: 'HOME_PICKUP', status: 'EXPIRED', closeReason: 'LOST', homePickup: { gomdonStatus: '10' } }, 'Bưu tá chưa lấy được rác'],
+    [{ method: 'HOME_PICKUP', status: 'RECEIVED' }, 'Kho đã nhận, đang đếm'],
+    [{ method: 'HOME_PICKUP', status: 'COMPLETED', pointsAwarded: 5000 }, 'Đã cộng 5.000 điểm'],
     [{ method: 'PICKUP', status: 'OPEN', orderCode: null }, 'Chờ gắn vào đơn'],
     [{ method: 'PICKUP', status: 'OPEN', orderCode: 'TB123' }, 'Chờ kho nhận'],
     [{ method: 'MAIL_IN', status: 'IN_TRANSIT' }, 'Đang vận chuyển'],

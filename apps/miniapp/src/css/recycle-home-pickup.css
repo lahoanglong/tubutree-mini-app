@@ -1,0 +1,132 @@
+/* Cách "Shipper lấy tận nhà" của Đổi rác: chọn địa chỉ, số kg, thẻ phí ship và dòng tóm tắt ở chi tiết yêu cầu. Số đo đặt ở đây (bánh cóc px của P17b chỉ đếm TSX). */
+
+.tubu-hp {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-hp-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-inline-xs);
+}
+.tubu-hp-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tubu-hp-addr {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 44px;
+  margin: 0;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1.5px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tubu-hp-addr[aria-checked='true'] {
+  border-color: var(--color-border-selected);
+  background: var(--color-bg-subtle);
+}
+.tubu-hp-addr[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.6;
+}
+.tubu-hp-addr-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 6px;
+  min-width: 0;
+}
+.tubu-hp-wrap {
+  overflow-wrap: anywhere;
+}
+.tubu-hp-add {
+  box-sizing: border-box;
+  min-height: 44px;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tubu-hp-add-dot {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1.5px dashed var(--color-action-primary-bg);
+  border-radius: 50%;
+}
+.tubu-hp-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Thẻ phí: một thẻ duy nhất gồm phí, công tắc Điểm Xanh, một dòng kết quả và một dòng lý do chặn. */
+.tubu-hp-fee {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-inline-xs);
+  padding: var(--space-inline-sm);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-subtle);
+}
+.tubu-hp-row {
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-inline-sm);
+}
+.tubu-hp-row > :first-child {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.tubu-hp-fee-value {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.tubu-hp-retry {
+  align-self: flex-start;
+}
+
+/* Chi tiết yêu cầu: nhãn bên trái, giá trị bên phải; địa chỉ dài xuống dòng chứ không đẩy nhãn. */
+.tubu-hp-kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--space-inline-sm);
+  padding: 6px 0;
+  font-variant-numeric: tabular-nums;
+}
+.tubu-hp-kv > :first-child {
+  flex-shrink: 0;
+}
+.tubu-hp-kv > :last-child {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}

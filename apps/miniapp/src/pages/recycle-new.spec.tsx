@@ -257,18 +257,18 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     expect(screen.queryByRole('radiogroup')).toBeNull();
     expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).toBeDisabled();
   });
-  it('một preview cho mỗi cách đang bật, đúng thứ tự Mang tới, Thu kèm, Gửi về kho', async () => {
+  it('một preview cho mỗi cách có xem trước, đúng thứ tự Mang tới, Thu kèm, Gửi về kho; Shipper lấy tận nhà nằm cuối và không có preview', async () => {
     atStep2();
     renderPage();
     const cards = await screen.findAllByRole('radio');
-    expect(cards.map((c) => c.getAttribute('data-method'))).toEqual(['DROP_OFF', 'PICKUP', 'MAIL_IN']);
+    expect(cards.map((c) => c.getAttribute('data-method'))).toEqual(['DROP_OFF', 'PICKUP', 'MAIL_IN', 'HOME_PICKUP']);
     await waitFor(() => expect(mocks.previewWaste).toHaveBeenCalledWith(expect.objectContaining({ method: 'MAIL_IN' })));
   });
   it('tỉnh của khách không có điểm nhận → Gửi về kho và Thu kèm lên đầu', async () => {
     mocks.getWastePoints.mockResolvedValue([makeWastePoint({ provinceCode: '01' })]);
     atStep2();
     renderPage();
-    await waitFor(async () => expect((await screen.findAllByRole('radio')).map((c) => c.getAttribute('data-method'))).toEqual(['MAIL_IN', 'PICKUP', 'DROP_OFF']));
+    await waitFor(async () => expect((await screen.findAllByRole('radio')).map((c) => c.getAttribute('data-method'))).toEqual(['MAIL_IN', 'PICKUP', 'DROP_OFF', 'HOME_PICKUP']));
   });
   it('Gửi về kho: phí là khoảng giá theo bảng niêm yết, gói tối thiểu, dòng giới hạn kiện', async () => {
     atStep2();
@@ -293,7 +293,8 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     atStep2();
     renderPage();
     expect(await screen.findByText('Cần thêm 6.000 điểm')).toBeInTheDocument();
-    await waitFor(() => expect(screen.getAllByRole('radio').every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true));
+    // Thẻ Shipper lấy tận nhà không có preview: lý do chặn của nó đến từ báo phí riêng, nên không nằm trong phép kiểm khoá này.
+    await waitFor(() => expect(screen.getAllByRole('radio').filter((r) => r.getAttribute('data-method') !== 'HOME_PICKUP').every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true));
     expect(screen.getAllByText('Bạn đang có 3 yêu cầu chưa xong').length).toBeGreaterThan(0);
   });
   it('ITEM_DROPOFF_ONLY: thẻ Gửi về kho và Thu kèm đơn khoá kèm lý do, thẻ Mang tới điểm nhận vẫn chọn được', async () => {
@@ -356,11 +357,11 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     atStep2();
     renderPage();
     const order = async () => (await screen.findAllByRole('radio')).map((c) => c.getAttribute('data-method'));
-    await waitFor(async () => expect(await order()).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']));
+    await waitFor(async () => expect(await order()).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF', 'HOME_PICKUP']));
     fireEvent.click(await screen.findByRole('radio', { name: /Gửi về kho/ }));
     fireEvent.change(await screen.findByRole('combobox', { name: 'Chọn tỉnh để ước tính phí ship' }), { target: { value: '01' } });
     await waitFor(() => expect(mocks.previewWaste).toHaveBeenCalledWith(expect.objectContaining({ method: 'MAIL_IN', provinceCode: '01' })));
-    expect(await order()).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']);
+    expect(await order()).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF', 'HOME_PICKUP']);
   });
   it('chưa chọn Gửi về kho: không có ô chọn tỉnh và không có lời nhắc chọn tỉnh; chọn xong thì lời nhắc không dùng màu lỗi', async () => {
     mocks.previewWaste.mockImplementation(async (b: WastePreviewRequest) => preview(b.method === 'MAIL_IN' && !b.provinceCode ? { blocks: [{ code: 'NEED_PROVINCE' }] } : {}));

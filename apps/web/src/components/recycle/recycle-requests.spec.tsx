@@ -7,6 +7,7 @@ import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-util
 import { ApiError } from '@/lib/client-api';
 import { markSubmitted, takeSubmitted } from '@/lib/recycle-wizard';
 import { makeRequestSummary, makeWasteMe } from './recycle-fixtures';
+import { makeHomePickup, makeHomePickupSummary } from './recycle-home-pickup-fixtures';
 
 // Chép ý recycle-requests.spec.tsx (Mini App, §4.6, §16.1): hai tab có số đếm, điều hướng theo trạng thái, ngày giờ VN, rỗng.
 
@@ -305,5 +306,32 @@ describe('/doi-rac/yeu-cau: tab trạng thái là bộ lọc cục bộ, không 
     expect(link(c, '/doi-rac/yeu-cau/r-new-closed')).not.toBeNull();
     expect(link(c, '/doi-rac/yeu-cau/r-new-open')).toBeNull();
     expect(listCalls()).toBe(2);
+  });
+});
+
+describe('/doi-rac/yeu-cau: đơn Shipper lấy tận nhà', () => {
+  it('mã, cách giao, trạng thái vận đơn ngắn và điểm đã dùng trừ phí ship trên một dòng', async () => {
+    state.rows = [makeHomePickupSummary({ status: 'IN_TRANSIT', homePickup: makeHomePickup({ gomdonStatus: '3' }) })];
+    const c = await mount();
+    const row = link(c, '/doi-rac/yeu-cau/r-home')!;
+    expect(row.textContent).toContain('TR-HOME1');
+    expect(row.textContent).toContain('Shipper lấy tận nhà');
+    expect(row.textContent).toContain('Bưu tá đã lấy rác');
+    expect(row.textContent).toContain('Đã dùng 25.000 điểm trừ phí ship');
+  });
+  it('đơn đã huỷ có điểm hoàn: nói số điểm đã hoàn, không nói đã dùng', async () => {
+    state.rows = [makeHomePickupSummary({ status: 'CANCELLED', closeReason: null, homePickup: makeHomePickup({ shipFeePointsRefunded: 25_000 }) })];
+    const c = await mount();
+    click(tab(c, 'Đã đóng')!);
+    await flush(2);
+    const row = link(c, '/doi-rac/yeu-cau/r-home')!;
+    expect(row.textContent).toContain('Đã hoàn 25.000 điểm phí ship');
+    expect(row.textContent).not.toContain('Đã dùng');
+  });
+  it('đúng một lối "Đổi điểm lấy quà" về Ưu đãi mục quà, không thêm lối thứ hai', async () => {
+    const c = await mount();
+    const links = Array.from(c.querySelectorAll('a')).filter((a) => a.textContent?.includes('Đổi điểm lấy quà'));
+    expect(links).toHaveLength(1);
+    expect(links[0]!.getAttribute('href')).toBe('/uu-dai?tab=rewards');
   });
 });

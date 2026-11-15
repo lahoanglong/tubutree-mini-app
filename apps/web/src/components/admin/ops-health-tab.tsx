@@ -134,6 +134,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'GameReminderService.sendDailyReminders': 'Nhắc khách điểm danh và tưới cây mỗi ngày',
   'GroupBuyCron.sweep': 'Đánh dấu nhóm mua chung hết hạn là không thành',
   'GomdonReconcileService.reconcile': 'Đối chiếu Gomdon: chạy lại tin báo, tạo và huỷ vận đơn bị kẹt',
+  'GomdonWasteReconcileService.reconcile': 'Đối chiếu vận đơn thu gom rác tận nhà: xếp lại việc tạo vận đơn bị kẹt',
   'pancake.events-reconcile': 'Cứu tin báo từ Pancake bị kẹt',
   'PancakePushReconcileService.reconcile': 'Đẩy lại đơn chưa sang được Pancake',
   'PancakeSyncService.scheduledSync': 'Đồng bộ danh mục Pancake (15 phút một lần)',

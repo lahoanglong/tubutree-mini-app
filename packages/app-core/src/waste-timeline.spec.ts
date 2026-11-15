@@ -6,11 +6,12 @@ describe('TIMELINE_STEPS', () => {
     expect(TIMELINE_STEPS.MAIL_IN).toEqual(['Gửi kiện', 'Vận chuyển', 'Đã nhận ở kho', 'Cộng điểm']);
     expect(TIMELINE_STEPS.DROP_OFF).toEqual(['Đã tạo', 'Mang tới điểm', 'Điểm nhận đếm', 'Cộng điểm']);
     expect(TIMELINE_STEPS.PICKUP).toEqual(['Đã tạo', 'Gắn vào đơn', 'Kho nhận, đếm', 'Cộng điểm']);
+    expect(TIMELINE_STEPS.HOME_PICKUP).toEqual(['Đã tạo đơn', 'Bưu tá lấy rác', 'Về kho Tubu', 'Cộng điểm']);
   });
 });
 
 describe('timelineFor: current là chỉ số bước đang diễn ra, 4 là xong hết', () => {
-  const t = (method: 'MAIL_IN' | 'DROP_OFF' | 'PICKUP', status: string, orderCode: string | null = null) =>
+  const t = (method: 'MAIL_IN' | 'DROP_OFF' | 'PICKUP' | 'HOME_PICKUP', status: string, orderCode: string | null = null) =>
     timelineFor({ method, status: status as never, orderCode });
 
   it.each([
@@ -25,6 +26,10 @@ describe('timelineFor: current là chỉ số bước đang diễn ra, 4 là xon
     ['PICKUP', 'IN_TRANSIT', 'TUBU123', 2],
     ['PICKUP', 'RECEIVED', 'TUBU123', 3],
     ['PICKUP', 'COMPLETED', 'TUBU123', 4],
+    ['HOME_PICKUP', 'OPEN', null, 1],
+    ['HOME_PICKUP', 'IN_TRANSIT', null, 2],
+    ['HOME_PICKUP', 'RECEIVED', null, 3],
+    ['HOME_PICKUP', 'COMPLETED', null, 4],
   ] as const)('%s %s (đơn %s) -> %i', (method, status, orderCode, current) => {
     expect(t(method, status, orderCode)?.current).toBe(current);
   });
@@ -39,5 +44,6 @@ describe('timelineFor: current là chỉ số bước đang diễn ra, 4 là xon
 
   it.each(['REJECTED', 'EXPIRED', 'CANCELLED', 'REVERSED'])('%s thay timeline bằng nhãn (null)', (status) => {
     expect(t('MAIL_IN', status)).toBeNull();
+    expect(t('HOME_PICKUP', status)).toBeNull();
   });
 });

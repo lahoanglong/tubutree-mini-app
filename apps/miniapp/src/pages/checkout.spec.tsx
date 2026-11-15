@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
   applyCoupon: vi.fn(),
   removeCoupon: vi.fn(),
   getCoupons: vi.fn().mockResolvedValue([]),
-  getWasteMe: vi.fn(),
+  getCheckoutPickupOptions: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
   user: { id: 'u1', fullName: 'Long', phone: '0900000000' as string | null, walletBalance: 0, pointsBalance: 0, pointsConvertedBalance: 0 },
   sfCtx: { slug: null as string | null, referralCode: null as string | null, kind: 'ctv' as 'ctv' | 'brand', referralEligible: null as boolean | null },
@@ -50,6 +50,7 @@ vi.mock('../services/shop-api', () => ({
   applyCoupon: mocks.applyCoupon,
   removeCoupon: mocks.removeCoupon,
   createAddress: mocks.createAddress,
+  getCheckoutPickupOptions: mocks.getCheckoutPickupOptions,
 }));
 vi.mock('../services/account-api', () => ({
   getWallet: mocks.getWallet,
@@ -87,7 +88,6 @@ vi.mock('../store/storefront-context', () => ({
   ),
 }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
-vi.mock('../services/waste-api', async (orig) => ({ ...(await orig<object>()), getWasteMe: mocks.getWasteMe }));
 vi.mock('../components/checkout/voucher-sheet', () => ({
   VoucherSheet: (p: Record<string, unknown>) => {
     mocks.voucherProps.push(p);
@@ -102,9 +102,8 @@ vi.mock('../services/geo-api', () => ({
 }));
 
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
-import CheckoutPage, { attachablePickup } from './checkout';
+import CheckoutPage from './checkout';
 import { recallCheckoutSelection, rememberCheckoutSelection } from '../utils/checkout-selection';
-import { makeRequestSummary, makeWasteMe } from '../services/waste-test-fixtures';
 import { createQueryClient } from '../services/query-client';
 import { COUPON_CHANGE_KEY } from '../components/checkout/use-coupon-hint';
 import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
@@ -522,7 +521,7 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
     expect(await screen.findByText('Dùng 1.000 điểm, giảm 1.000đ')).toBeInTheDocument();
     expect(screen.getByText('trong đó 1.000 điểm không hết hạn, trả tới 100% giá trị hàng')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Dùng 1.000 điểm, giảm 1.000đ'));
-    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 1_000, undefined, undefined));
+    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 1_000, undefined, undefined, {}));
     expect(await screen.findByText('Dùng 1.000 điểm, giảm 1.000.000đ')).toBeInTheDocument();
   });
 
@@ -533,7 +532,7 @@ describe('CheckoutPage — Điểm Xanh hai lô và đơn 0đ (PD-3)', () => {
     renderPage();
     expect(await screen.findByText('Dùng 300 điểm, giảm 300đ')).toBeInTheDocument();
     fireEvent.click(screen.getByText('Dùng 300 điểm, giảm 300đ'));
-    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 300, undefined, undefined));
+    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 300, undefined, undefined, {}));
   });
 
   it('không có điểm quy đổi: không hiện dòng "không hết hạn"', async () => {
@@ -1636,8 +1635,32 @@ describe('CheckoutPage — không báo giá khi chưa có hàng (R5-BUYER-5)', (
   });
 });
 
-describe('CheckoutPage — Thu kèm rác (§12.2 bước 2)', () => {
-  const PICKUP_REQ = makeRequestSummary({ id: 'req-p', code: 'TR-PICK1', method: 'PICKUP', status: 'OPEN', orderCode: null, estimatedPoints: 12_000, pointName: 'Kho Tubu TP.HCM', lines: [{ itemName: 'Thùng carton', unitLabel: 'thùng', declaredQty: 12 }] });
+describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
+  const GATE_QUOTE = { gateOpen: true, eligible: false, reason: null, mode: null, estimatedPoints: 0, minPoints: 3000, freeShip: false, shippingFeeWaived: 0, orderWeightGrams: 3000, maxReturnWeightGrams: 3000, returnWeightGrams: null };
+  const BOTTLE = { id: 'it-b', code: 'BOTTLE', name: 'Vỏ chai', unitLabel: 'chai', unitsPerPoint: 1, pointsPerGroup: 1000, hazardous: false, blockedReason: null, prepInstructions: null };
+  const BATTERY = { id: 'it-p', code: 'BATTERY', name: 'Pin cũ', unitLabel: 'viên', unitsPerPoint: 1, pointsPerGroup: 500, hazardous: true, blockedReason: 'BATTERY_OUT_OF_HCM', prepInstructions: null };
+  const OPTIONS = { gateOpen: true, minPoints: 3000, orderWeightGrams: 3000, maxReturnWeightGrams: 3000, items: [BATTERY, BOTTLE], existingRequest: null };
+  const gift = (id: string, over: Record<string, unknown> = {}) => ({ id, code: `QG-${id}`, giftName: `Hạt giống ${id}`, kind: 'SEED_PACK', pointsCost: 500, included: true, ...over });
+  const CHANGE_NAME = '♻️ Đổi rác kèm đơn — Miễn 100% phí vận chuyển';
+  const lastQuoteArgs = () => mocks.checkoutQuote.mock.calls.at(-1)! as unknown[];
+  const pickupArg = () => lastQuoteArgs()[4] as Record<string, unknown> | undefined;
+
+  /** Báo giá giả theo lựa chọn gửi lên: có chọn đủ thì miễn phí giao 20.000đ. */
+  function quoteFor(pickupFields: Record<string, unknown> | undefined, gifts: unknown[] = []) {
+    const chosen = !!(pickupFields?.inlinePickup || pickupFields?.wasteRequestId);
+    return {
+      ...QUOTE,
+      shippingFee: chosen ? 0 : 20_000,
+      total: chosen ? 50_000 : 70_000,
+      shippingFeeWaived: chosen ? 20_000 : 0,
+      shippingFeeWaivedReason: chosen ? 'RECYCLE_PICKUP' : null,
+      pickup: chosen
+        ? { ...GATE_QUOTE, mode: pickupFields?.wasteRequestId ? 'REQUEST' : 'INLINE', eligible: true, freeShip: true, shippingFeeWaived: 20_000, estimatedPoints: 3000, returnWeightGrams: pickupFields?.returnWeightGrams ?? 500 }
+        : GATE_QUOTE,
+      pendingGiftRedemptions: gifts,
+    };
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
@@ -1649,110 +1672,206 @@ describe('CheckoutPage — Thu kèm rác (§12.2 bước 2)', () => {
     mocks.sfCtx.referralCode = null;
     mocks.getAddresses.mockResolvedValue([ADDRESS]);
     mocks.getCart.mockResolvedValue(CART);
-    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.checkoutQuote.mockImplementation(async (...a: unknown[]) => quoteFor(a[4] as Record<string, unknown> | undefined));
+    mocks.getCheckoutPickupOptions.mockResolvedValue(OPTIONS);
     mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
     mocks.ensurePhone.mockResolvedValue('0900000000');
     mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
-    mocks.publicConfig.waste.pickup = true;
-    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, openRequests: [PICKUP_REQ] }));
   });
-  it('cờ pickup tắt → không có mục, không gọi /waste/me, body không có wasteRequestId', async () => {
-    mocks.publicConfig.waste.pickup = false;
+
+  async function openSheet() {
+    fireEvent.click(await screen.findByRole('button', { name: CHANGE_NAME }));
+    return screen.findByTestId('checkout-pickup-sheet');
+  }
+  async function chooseThreeBottles() {
+    const plus = await screen.findByRole('button', { name: 'Tăng số lượng Vỏ chai' });
+    for (let i = 0; i < 3; i++) fireEvent.click(plus);
+  }
+
+  it('báo giá không có phần thu rác (null hoặc cổng đóng) → không có thẻ, thân đặt đơn không có trường thu rác', async () => {
+    mocks.checkoutQuote.mockResolvedValue({ ...QUOTE, pickup: { ...GATE_QUOTE, gateOpen: false } });
     renderPage();
     const body = await placeOrderClick();
+    expect(screen.queryByTestId('checkout-pickup')).toBeNull();
+    for (const k of ['wasteRequestId', 'inlinePickup', 'returnWeightGrams', 'excludeGiftRedemptionIds']) expect(body).not.toHaveProperty(k);
+  });
+
+  it('thẻ đóng chỉ một hàng: tiêu đề, lợi ích, huy hiệu theo phí giao, công tắc; không còn mục Thu kèm rác cũ', async () => {
+    renderPage();
+    const card = await screen.findByTestId('checkout-pickup');
+    expect(card.querySelectorAll('button, [role="checkbox"]').length).toBeLessThanOrEqual(3);
+    expect(within(card).getByText('♻️ Đổi rác kèm đơn')).toBeInTheDocument();
+    expect(within(card).getByText('Miễn 100% phí vận chuyển')).toBeInTheDocument();
+    expect(within(card).getByText('-20.000đ phí giao')).toBeInTheDocument();
+    expect(within(card).getByRole('button', { name: CHANGE_NAME })).toBeInTheDocument();
+    expect(within(card).getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' })).not.toBeChecked();
     expect(document.querySelector('#checkout-waste-pickup')).toBeNull();
-    expect(screen.queryByRole('checkbox', { name: 'Thu kèm rác' })).toBeNull();
-    expect(mocks.getWasteMe).not.toHaveBeenCalled();
-    expect(body).not.toHaveProperty('wasteRequestId');
-    expect(body).not.toHaveProperty('hasRecyclingPickup');
-    expect(body).not.toHaveProperty('recyclingNote');
+    expect(screen.queryByText('Thu kèm rác')).toBeNull();
+    // Chỉ một thẻ, không nhân đôi, và danh sách món chưa tải khi tấm còn đóng.
+    expect(screen.getAllByText('♻️ Đổi rác kèm đơn')).toHaveLength(1);
+    expect(mocks.getCheckoutPickupOptions).not.toHaveBeenCalled();
   });
-  it('có yêu cầu PICKUP mở chưa gắn đơn → công tắc (mặc định tắt) + thẻ tóm tắt; không bật thì không gửi', async () => {
+
+  it('tấm chọn món: Pin cũ mờ kèm đúng một câu, Xong khoá với một lý do, tiến độ theo ngưỡng máy chủ', async () => {
     renderPage();
-    const toggle = await screen.findByRole('checkbox', { name: 'Thu kèm rác' });
-    expect(toggle).toHaveAttribute('aria-checked', 'false');
-    expect(screen.getByText('TR-PICK1')).toBeInTheDocument();
-    expect(screen.getByText('Thùng carton: 12 thùng')).toBeInTheDocument();
-    expect(screen.getByText('Ước tính 12.000 điểm')).toBeInTheDocument();
-    const PICKUP_NOTE = 'Ghi mã lên túi, bưu tá lấy khi giao đơn.';
-    const PAYMENT_NOTE = 'Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.';
-    fireEvent.click(await screen.findByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
-    expect(screen.queryByText(PICKUP_NOTE)).toBeNull();
-    expect(screen.queryByText(PAYMENT_NOTE)).toBeNull();
+    const sheet = await openSheet();
+    expect(await within(sheet).findByText('Vỏ chai')).toBeInTheDocument();
+    expect(within(sheet).getByText('1 chai = 1.000 điểm')).toBeInTheDocument();
+    const note = 'Pin cũ cần xử lý an toàn riêng nên hiện chỉ nhận tại điểm thu gom hoặc lấy tận nơi khu vực TP.HCM';
+    expect(within(sheet).getAllByText(note)).toHaveLength(1);
+    expect(sheet.querySelector('[data-blocked="true"]')).not.toBeNull();
+    expect(within(sheet).getByRole('progressbar', { name: 'Dự kiến 0 / 3.000 điểm' })).toBeInTheDocument();
+    expect(screen.getByText('Chọn ít nhất một món rác')).toBeInTheDocument();
+    const done = screen.getByRole('button', { name: 'Xong' });
+    expect(done).toBeDisabled();
+    // Chip kg chỉ tới trần theo kiện mua (3 kg), lời nhắc nêu đúng trần.
+    expect(within(sheet).getAllByRole('button', { pressed: false }).map((b) => b.textContent)).toEqual(expect.arrayContaining(['1 kg', '2 kg', '3 kg']));
+    expect(within(sheet).queryByRole('button', { name: '5 kg' })).toBeNull();
+    expect(within(sheet).getByText(/tối đa 3 kg theo kiện mua/)).toBeInTheDocument();
+    await chooseThreeBottles();
+    expect(screen.queryByText('Chọn ít nhất một món rác')).toBeNull();
+    expect(within(sheet).getByRole('progressbar', { name: 'Dự kiến 3.000 / 3.000 điểm' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xong' })).not.toBeDisabled();
+  });
+
+  it('chọn món + kg rồi Xong → báo giá gọi lại với inlinePickup + returnWeightGrams, phí giao gạch kèm câu miễn phí, đặt đơn gửi đúng thân', async () => {
+    renderPage();
+    await openSheet();
+    await chooseThreeBottles();
+    fireEvent.click(screen.getByRole('button', { name: '2 kg' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
+    await waitFor(() => expect(pickupArg()).toEqual({ inlinePickup: { lines: [{ itemId: 'it-b', qty: 3 }] }, returnWeightGrams: 2000 }));
+    expect(await screen.findByText('Gửi lại ~2 kg · +3.000 điểm sau khi kho nhận')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' })).toBeChecked();
+    const ship = (await screen.findAllByTestId('ship-waived'))[0]!;
+    expect(within(ship).getByText('Miễn phí vận chuyển (đổi rác kèm đơn)')).toBeInTheDocument();
+    expect(ship.querySelector('[style*="line-through"]')?.textContent).toBe('20.000đ');
+    await waitFor(() => expect(screen.queryByTestId('checkout-pickup-sheet')).toBeNull());
     const body = await placeOrderClick();
+    expect(body.inlinePickup).toEqual({ lines: [{ itemId: 'it-b', qty: 3 }] });
+    expect(body.returnWeightGrams).toBe(2000);
     expect(body).not.toHaveProperty('wasteRequestId');
-    fireEvent.click(toggle);
-    expect(screen.getByText(PICKUP_NOTE)).toBeInTheDocument();
-    expect(screen.getByText(PAYMENT_NOTE)).toBeInTheDocument();
+    expect(body.expectedTotal).toBe(50_000);
   });
-  it('bật công tắc → body mang wasteRequestId, không mang hai trường cũ', async () => {
+
+  it('đóng tấm bằng X bỏ bản nháp: không áp, báo giá không đổi', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Thu kèm rác' }));
+    await openSheet();
+    await chooseThreeBottles();
+    fireEvent.click(screen.getByRole('button', { name: 'Đóng' }));
+    await waitFor(() => expect(screen.queryByTestId('checkout-pickup-sheet')).toBeNull());
+    expect(pickupArg()).toEqual({});
+    expect(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' })).not.toBeChecked();
+  });
+
+  it('phiếu thu kèm đang mở được chọn sẵn: một dòng tóm tắt + Đổi món; Xong gửi wasteRequestId, không gửi món', async () => {
+    mocks.getCheckoutPickupOptions.mockResolvedValue({
+      ...OPTIONS,
+      existingRequest: { id: 'req-p', code: 'TR-PICK1', estimatedPoints: 3400, lines: [{ itemId: 'it-b', itemName: 'Vỏ chai', unitLabel: 'chai', declaredQty: 3 }] },
+    });
+    renderPage();
+    const sheet = await openSheet();
+    expect(await within(sheet).findByText('Phiếu TR-PICK1 · Vỏ chai ×3 · 3.400 điểm')).toBeInTheDocument();
+    expect(within(sheet).getByRole('button', { name: 'Đổi món' })).toBeInTheDocument();
+    expect(within(sheet).queryByRole('button', { name: 'Tăng số lượng Vỏ chai' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: '1 kg' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
+    await waitFor(() => expect(pickupArg()).toEqual({ wasteRequestId: 'req-p', returnWeightGrams: 1000 }));
     const body = await placeOrderClick();
     expect(body.wasteRequestId).toBe('req-p');
-    expect(body).not.toHaveProperty('hasRecyclingPickup');
+    expect(body).not.toHaveProperty('inlinePickup');
   });
-  it('chưa có yêu cầu → dòng dẫn tới màn Chọn món', async () => {
-    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, openRequests: [] }));
+
+  it('"Đổi món" mở danh sách điền sẵn số lượng cũ; Xong chuyển sang chọn món, bỏ wasteRequestId', async () => {
+    mocks.getCheckoutPickupOptions.mockResolvedValue({
+      ...OPTIONS,
+      existingRequest: { id: 'req-p', code: 'TR-PICK1', estimatedPoints: 3000, lines: [{ itemId: 'it-b', itemName: 'Vỏ chai', unitLabel: 'chai', declaredQty: 3 }] },
+    });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Thu kèm rác/ }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/recycle/new');
+    await openSheet();
+    fireEvent.click(await screen.findByRole('button', { name: 'Đổi món' }));
+    expect((await screen.findByRole('button', { name: 'Tăng số lượng Vỏ chai' })).closest('.tubu-pickup-item')?.textContent).toContain('3');
+    fireEvent.click(screen.getByRole('button', { name: '2 kg' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
+    await waitFor(() => expect(pickupArg()).toEqual({ inlinePickup: { lines: [{ itemId: 'it-b', qty: 3 }] }, returnWeightGrams: 2000 }));
   });
-  it('yêu cầu PICKUP đã gắn đơn khác không tính là gắn được', async () => {
-    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ openRequests: [{ ...PICKUP_REQ, orderCode: 'TUBU999' }] }));
+
+  it('tắt công tắc sau khi áp → thân đặt đơn không còn trường thu rác', async () => {
     renderPage();
-    expect(await screen.findByRole('button', { name: /Thu kèm rác/ })).toBeInTheDocument();
-    expect(screen.queryByRole('checkbox', { name: 'Thu kèm rác' })).toBeNull();
+    await openSheet();
+    await chooseThreeBottles();
+    fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
+    await screen.findByText(/Gửi lại ~0,5 kg/);
+    fireEvent.click(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' }));
+    await waitFor(() => expect(pickupArg()).toEqual({}));
+    const body = await placeOrderClick();
+    expect(body).not.toHaveProperty('inlinePickup');
+    expect(body).not.toHaveProperty('returnWeightGrams');
   });
-  it.each([
-    ['bị khoá', { blocked: true }],
-    ['khoá đường kho', { shipLockedAt: '2026-10-01T00:00:00.000Z' }],
-  ])('%s → không có mục Thu kèm rác', async (_n, over) => {
-    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ openRequests: [PICKUP_REQ], ...over }));
+
+  it('báo giá lại bị 400: hiện nguyên câu của máy chủ, thẻ vẫn còn để tắt', async () => {
     renderPage();
-    await screen.findByText('Xà bông thảo mộc');
-    await waitFor(() => expect(mocks.getWasteMe).toHaveReturned());
-    await act(async () => {});
-    expect(document.querySelector('#checkout-waste-pickup')).toBeNull();
-    expect(screen.queryByRole('checkbox', { name: 'Thu kèm rác' })).toBeNull();
+    await openSheet();
+    await chooseThreeBottles();
+    mocks.checkoutQuote.mockRejectedValue(Object.assign(new Error('x'), { isHttpError: true, response: { status: 400, data: { message: 'Cân nặng gói rác gửi lại không hợp lệ' } } }));
+    fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
+    expect(await screen.findByText('Cân nặng gói rác gửi lại không hợp lệ')).toBeInTheDocument();
+    expect(screen.getByTestId('checkout-pickup')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' })).toBeChecked();
   });
-  it('attachablePickup: ẩn khi bị khoá, khoá đường kho hoặc cờ tắt; null khi chưa có yêu cầu', () => {
-    expect(attachablePickup(makeWasteMe({ openRequests: [PICKUP_REQ], blocked: true }), true)).toBeUndefined();
-    expect(attachablePickup(makeWasteMe({ openRequests: [PICKUP_REQ], shipLockedAt: '2026-10-01T00:00:00.000Z' }), true)).toBeUndefined();
-    expect(attachablePickup(makeWasteMe({ openRequests: [] }), true)).toBeNull();
-    expect(attachablePickup(makeWasteMe({ openRequests: [PICKUP_REQ] }), false)).toBeUndefined();
-    expect(attachablePickup(undefined, true)).toBeUndefined();
-    expect(attachablePickup(makeWasteMe({ openRequests: [PICKUP_REQ] }), true)?.id).toBe('req-p');
-  });
-  it.each([
-    'Yêu cầu thu rác đã hết hạn hoặc đã huỷ',
-    'Thu kèm rác đang tạm dừng với tài khoản của bạn, hãy tắt công tắc để đặt đơn',
-  ])('409 "%s" hiện nguyên văn và tải lại /waste/me', async (msg) => {
-    mocks.placeOrder.mockRejectedValue(Object.assign(new Error(msg), { isHttpError: true, response: { status: 409, data: { message: msg } } }));
+
+  it('409 phiếu thu rác đổi giữa chừng → báo bằng câu của Tubu, tải lại báo giá và danh sách món', async () => {
+    mocks.placeOrder.mockRejectedValue(
+      Object.assign(new Error('x'), { isHttpError: true, response: { status: 409, data: { message: 'Phiếu thu rác vừa thay đổi nên chưa đủ điều kiện miễn phí vận chuyển. Bạn tải lại trang thanh toán nhé.' } } }),
+    );
     renderPage();
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Thu kèm rác' }));
+    await openSheet();
+    await chooseThreeBottles();
+    fireEvent.click(screen.getByRole('button', { name: 'Xong' }));
+    await screen.findByText(/Gửi lại ~0,5 kg/);
+    const quoteCalls = mocks.checkoutQuote.mock.calls.length;
+    const optionCalls = mocks.getCheckoutPickupOptions.mock.calls.length;
     await placeOrderClick();
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: msg })));
-    await waitFor(() => expect(mocks.getWasteMe).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(mocks.checkoutQuote.mock.calls.length).toBeGreaterThan(quoteCalls));
+    expect(mocks.getCheckoutPickupOptions.mock.calls.length).toBeGreaterThan(optionCalls);
   });
-  it('quá thời gian chờ khi đã bật công tắc → không tải lại /waste/me, để bấm lại gửi cùng body và cùng khoá', async () => {
-    mocks.placeOrder.mockRejectedValueOnce(new HttpError('timeout of 15000ms exceeded', 'ECONNABORTED'));
-    renderPage();
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Thu kèm rác' }));
-    await placeOrderClick();
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalled());
-    expect(mocks.getWasteMe).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(screen.getByText(/Thử lại · /).closest('button')).not.toBeDisabled());
-    fireEvent.click(screen.getByText(/Thử lại · /));
-    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(2));
-    expect(mocks.placeOrder.mock.calls[1]).toEqual(mocks.placeOrder.mock.calls[0]);
-    expect((mocks.placeOrder.mock.calls[1]![0] as { wasteRequestId?: string }).wasteRequestId).toBe('req-p');
-  });
-  it('không còn chữ của khối Gomdon cũ', async () => {
-    const { container } = renderPage();
-    await screen.findByRole('checkbox', { name: 'Thu kèm rác' });
-    expect(container.textContent).not.toMatch(/tái chế|quần áo cũ, pin|Thu gom tối đa/);
+
+  describe('quà đổi điểm 0đ', () => {
+    const withGifts = (gifts: unknown[]) =>
+      mocks.checkoutQuote.mockImplementation(async (...a: unknown[]) => quoteFor(a[4] as Record<string, unknown> | undefined, gifts));
+
+    it('mỗi quà một dòng "Quà đổi điểm tặng kèm: tên · 0đ", mặc định đi cùng đơn; tick "Để đơn sau" → báo giá gửi excludeGiftRedemptionIds', async () => {
+      withGifts([gift('g1'), gift('g2')]);
+      renderPage();
+      const rows = await screen.findAllByTestId('checkout-gift-row');
+      expect(rows).toHaveLength(2);
+      expect(rows[0]!.textContent).toContain('🎁 Quà đổi điểm tặng kèm: Hạt giống g1 · 0đ');
+      expect(within(rows[0]!).getByRole('checkbox', { name: 'Để đơn sau' })).not.toBeChecked();
+      expect(pickupArg()).toEqual({});
+      fireEvent.click(within(rows[0]!).getByRole('checkbox', { name: 'Để đơn sau' }));
+      await waitFor(() => expect(pickupArg()).toEqual({ excludeGiftRedemptionIds: ['g1'] }));
+      expect(within((await screen.findAllByTestId('checkout-gift-row'))[0]!).getByRole('checkbox', { name: 'Để đơn sau' })).toBeChecked();
+      const body = await placeOrderClick();
+      expect(body.excludeGiftRedemptionIds).toEqual(['g1']);
+    });
+
+    it('từ 3 quà gộp một dòng "3 quà đổi điểm tặng kèm · 0đ" mở tấm nhỏ liệt kê từng quà', async () => {
+      withGifts([gift('g1'), gift('g2'), gift('g3')]);
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: /3 quà đổi điểm tặng kèm · 0đ/ }));
+      const rows = await screen.findAllByTestId('checkout-gift-row');
+      expect(rows).toHaveLength(3);
+      fireEvent.click(within(rows[2]!).getByRole('checkbox', { name: 'Để đơn sau' }));
+      await waitFor(() => expect(pickupArg()).toEqual({ excludeGiftRedemptionIds: ['g3'] }));
+    });
+
+    it('không có kiện Tubu (mọi quà included=false, chưa bỏ quà nào) → không hiện dòng quà', async () => {
+      withGifts([gift('g1', { included: false })]);
+      renderPage();
+      await placeOrderClick();
+      expect(screen.queryByTestId('checkout-gift-row')).toBeNull();
+    });
   });
 });
 
@@ -1922,7 +2041,6 @@ describe('CheckoutPage — dòng giao dự kiến ở bước thanh toán (D6-20
     mocks.checkoutQuote.mockResolvedValue(QUOTE);
     mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
-    mocks.getWasteMe.mockResolvedValue(makeWasteMe());
   });
   afterEach(() => {
     delete cfg.shippingEta;
@@ -1995,7 +2113,6 @@ describe('CheckoutPage: tự áp mã giảm nhiều nhất, gợi ý khi chưa �
     mocks.checkoutQuote.mockResolvedValue(QUOTE);
     mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
-    mocks.getWasteMe.mockResolvedValue(makeWasteMe());
     mocks.getCoupons.mockResolvedValue([{ id: 'c1', code: 'WELCOME30' }]);
     mocks.getCouponPreviews.mockResolvedValue(PREVIEWS);
     mocks.applyCoupon.mockResolvedValue(APPLIED);
@@ -2767,7 +2884,6 @@ describe('CheckoutPage — khoá chạm đúp dòng sửa nhanh, gỡ mã tự �
     mocks.ensurePhone.mockResolvedValue('0900000000');
     mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
-    mocks.getWasteMe.mockResolvedValue(makeWasteMe());
     mocks.getCoupons.mockResolvedValue([]);
     mocks.getCouponPreviews.mockResolvedValue([]);
     mocks.removeCartItem.mockResolvedValue(CART);
@@ -2937,7 +3053,6 @@ describe('CheckoutPage — khoá chéo Đặt hàng với đổi mã, "Thử l�
     mocks.ensurePhone.mockResolvedValue('0900000000');
     mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
-    mocks.getWasteMe.mockResolvedValue(makeWasteMe());
     mocks.getCoupons.mockResolvedValue([]);
     mocks.getCouponPreviews.mockResolvedValue([]);
   });
@@ -3175,7 +3290,7 @@ describe('CheckoutPage — khoá chéo Đặt hàng với đổi mã, "Thử l�
       mocks.checkoutQuote.mockImplementation((addressId: string) => (addressId === 'a1' ? slow.promise : Promise.resolve({ ...QUOTE, total: 99_000 })));
       mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
       renderPage();
-      await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 0, undefined, undefined));
+      await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 0, undefined, undefined, {}));
       fireEvent.click((await screen.findByText(/9 Hai Bà Trưng/)).closest('[role="radio"]')!);
       expect(await screen.findByText(/Đặt hàng · 99\.000/)).toBeInTheDocument();
       await act(async () => slow.resolve({ ...QUOTE, total: 70_000 }));
@@ -3246,7 +3361,6 @@ describe('CheckoutPage — máy chủ từ chối thì giữ khoá tới khi d�
     mocks.ensurePhone.mockResolvedValue('0900000000');
     mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
-    mocks.getWasteMe.mockResolvedValue(makeWasteMe());
     mocks.getCoupons.mockResolvedValue([]);
     mocks.getCouponPreviews.mockResolvedValue([]);
     mocks.removeCartItem.mockResolvedValue(CART);

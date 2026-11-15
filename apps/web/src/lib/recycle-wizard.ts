@@ -1,4 +1,5 @@
 import type { WasteLineInput, WasteMethod, WastePointDTO } from '@tubutree/shared-types';
+import type { HomePickupForm } from '@tubutree/app-core/recycle-home-pickup-state';
 import { safeReturnPath } from './return-to';
 
 export type WasteWizardDraft = {
@@ -7,6 +8,8 @@ export type WasteWizardDraft = {
   pointId: string | null;
   pickedPoint: WastePointDTO | null;
   provinceCode: string | null;
+  /** Lựa chọn ở khối "Shipper lấy tận nhà" (giữ khi nạp lại trang hoặc mở Thể lệ rồi quay lại). */
+  homePickup?: HomePickupForm;
 };
 export type WastePointsNav = { returnTo: string; draft: WasteWizardDraft; selectedItemIds: string[] };
 
@@ -20,7 +23,7 @@ const RETURN_KEY = 'tubu_recycle_points_return';
 const RESUME_KEY = 'tubu_recycle_resume';
 const SUBMITTED_KEY = 'tubu_recycle_submitted';
 const SUBMITTED_TTL_MS = 30 * 60_000;
-const METHODS: readonly string[] = ['DROP_OFF', 'MAIL_IN', 'PICKUP'];
+const METHODS: readonly string[] = ['DROP_OFF', 'MAIL_IN', 'PICKUP', 'HOME_PICKUP'];
 
 const codeUnitCompare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
@@ -66,6 +69,15 @@ function remove(key: string): void {
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
 
+function parseHomePickup(v: unknown): HomePickupForm | undefined {
+  if (!isRecord(v)) return undefined;
+  const { addressId, weightGrams } = v;
+  return {
+    addressId: typeof addressId === 'string' ? addressId : null,
+    weightGrams: typeof weightGrams === 'number' && Number.isInteger(weightGrams) ? weightGrams : null,
+  };
+}
+
 function parseDraft(v: unknown): WasteWizardDraft | null {
   if (!isRecord(v) || !isRecord(v.lines)) return null;
   const lines: Record<string, number> = {};
@@ -77,12 +89,14 @@ function parseDraft(v: unknown): WasteWizardDraft | null {
   if (v.pointId !== null && typeof v.pointId !== 'string') return null;
   if (v.provinceCode !== null && typeof v.provinceCode !== 'string') return null;
   if (v.pickedPoint !== null && !isRecord(v.pickedPoint)) return null;
+  const homePickup = parseHomePickup(v.homePickup);
   return {
     lines,
     method: v.method as WasteMethod | null,
     pointId: v.pointId as string | null,
     pickedPoint: v.pickedPoint as WastePointDTO | null,
     provinceCode: v.provinceCode as string | null,
+    ...(homePickup ? { homePickup } : {}),
   };
 }
 

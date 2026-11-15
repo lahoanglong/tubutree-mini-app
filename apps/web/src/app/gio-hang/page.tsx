@@ -37,6 +37,7 @@ import type { CouponPreviewParams } from '@/lib/shop-client';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { cartStockNote, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { CartComboBlock } from '@/components/cart-combo-block';
+import { GiftNote } from '@/components/checkout/gift-rows';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
@@ -607,6 +608,7 @@ export default function CartPage() {
                 );
               })}
             </div>
+            {(cart.pendingGiftRedemptions?.length ?? 0) > 0 && <GiftNote />}
           </div>
 
           <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:self-start`}>

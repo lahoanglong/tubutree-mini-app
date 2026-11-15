@@ -369,6 +369,19 @@ describe('LoyaltyPage — hai lô Điểm Xanh sau khi gộp xu', () => {
   });
 });
 
+describe('LoyaltyPage — lịch sử phí shipper thu gom tận nhà', () => {
+  it('dòng trừ và dòng hoàn có nhãn riêng kèm mã yêu cầu, không in chuỗi kỹ thuật', async () => {
+    mocks.getPointsTransactions.mockResolvedValue([
+      { id: 'w1', delta: -25_000, reason: 'WASTE_PICKUP_FEE:TR-8K2M9', createdAt: '2026-10-14T05:00:00.000Z', lot: 'STANDARD' },
+      { id: 'w2', delta: 25_000, reason: 'WASTE_PICKUP_FEE_REFUND:TR-8K2M9', createdAt: '2026-10-15T05:00:00.000Z', lot: 'STANDARD' },
+    ]);
+    renderPage();
+    expect(await screen.findByText('Trừ phí shipper thu gom · TR-8K2M9')).toBeInTheDocument();
+    expect(screen.getByText('Hoàn điểm phí shipper · TR-8K2M9')).toBeInTheDocument();
+    expect(screen.queryByText(/WASTE_PICKUP_FEE/)).toBeNull();
+  });
+});
+
 describe('LoyaltyPage — hạn dùng Điểm Xanh (R2-ENGAGE-8)', () => {
   it('hiện điểm sắp hết hạn gần nhất kèm ngày và chính sách 12 tháng', async () => {
     const soon = new Date(Date.now() + 10 * 864e5);

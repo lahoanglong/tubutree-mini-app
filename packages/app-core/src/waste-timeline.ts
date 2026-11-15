@@ -5,6 +5,7 @@ export const TIMELINE_STEPS: Record<WasteMethod, readonly string[]> = {
   MAIL_IN: ['Gửi kiện', 'Vận chuyển', 'Đã nhận ở kho', 'Cộng điểm'],
   DROP_OFF: ['Đã tạo', 'Mang tới điểm', 'Điểm nhận đếm', 'Cộng điểm'],
   PICKUP: ['Đã tạo', 'Gắn vào đơn', 'Kho nhận, đếm', 'Cộng điểm'],
+  HOME_PICKUP: ['Đã tạo đơn', 'Bưu tá lấy rác', 'Về kho Tubu', 'Cộng điểm'],
 };
 
 export type WasteTimeline = { steps: readonly string[]; current: number };
@@ -20,6 +21,8 @@ export function timelineFor(r: { method: WasteMethod; status: WasteRequestStatus
     return { steps, current: r.status === 'IN_TRANSIT' ? 1 : r.status === 'RECEIVED' ? 2 : 0 };
   }
   if (r.method === 'DROP_OFF') return { steps, current: r.status === 'OPEN' ? 1 : 2 };
+  // Shipper lấy tận nhà: OPEN là chờ bưu tá tới lấy, IN_TRANSIT là rác đang về kho, RECEIVED là kho đã nhận và đang đếm.
+  if (r.method === 'HOME_PICKUP') return { steps, current: r.status === 'OPEN' ? 1 : r.status === 'IN_TRANSIT' ? 2 : 3 };
   // Thu kèm đơn: kho đã nhận (RECEIVED) thì bước "Kho nhận, đếm" đã qua, đang chờ cộng điểm (current = 3).
   if (r.status === 'RECEIVED') return { steps, current: 3 };
   return { steps, current: r.status === 'OPEN' && !r.orderCode ? 1 : 2 };

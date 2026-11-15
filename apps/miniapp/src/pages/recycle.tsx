@@ -51,12 +51,13 @@ export function impactLine(grams: number | null | undefined): string | null {
 
 const BLOCKED_TEXT = 'Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree';
 
-const METHOD_FLAG = { DROP_OFF: 'dropoff', MAIL_IN: 'mailin', PICKUP: 'pickup' } as const;
-const METHOD_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'MAIL_IN', 'PICKUP'];
+const METHOD_FLAG = { DROP_OFF: 'dropoff', MAIL_IN: 'mailin', PICKUP: 'pickup', HOME_PICKUP: 'pickup' } as const;
+const METHOD_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'MAIL_IN', 'PICKUP', 'HOME_PICKUP'];
 const METHOD_LINE: Record<WasteMethod, string> = {
   DROP_OFF: 'Miễn phí, nhận điểm khi người ở điểm xác nhận',
   MAIL_IN: 'Tự gửi qua hãng bất kỳ và tự trả phí ship',
   PICKUP: 'Miễn phí, bưu tá lấy khi giao đơn Tubu kế tiếp',
+  HOME_PICKUP: 'Bưu tá tới tận nhà lấy, trừ phí ship bằng Điểm Xanh',
 };
 
 const SECTION_STYLE = { display: 'flex', flexDirection: 'column', gap: 8 } as const;

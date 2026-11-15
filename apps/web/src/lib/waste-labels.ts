@@ -24,6 +24,7 @@ export const WASTE_METHOD_LABELS: Record<WasteMethod, string> = {
   DROP_OFF: 'Mang tới điểm nhận',
   MAIL_IN: 'Gửi về kho',
   PICKUP: 'Thu kèm đơn',
+  HOME_PICKUP: 'Shipper lấy tận nhà',
 };
 
 export const WASTE_REQUEST_STATUS_LABELS: Record<WasteRequestStatus, string> = {

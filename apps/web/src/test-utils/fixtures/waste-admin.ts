@@ -32,7 +32,7 @@ export function expectNoBannedCopy(text: string | null | undefined): void {
 }
 
 export const wasteMetrics = (over: Partial<WasteMonthMetrics> = {}): WasteMonthMetrics => ({
-  requestsCreatedByMethod: { DROP_OFF: 0, MAIL_IN: 0, PICKUP: 0 },
+  requestsCreatedByMethod: { DROP_OFF: 0, MAIL_IN: 0, PICKUP: 0, HOME_PICKUP: 0 },
   requestsByStatus: { OPEN: 0, IN_TRANSIT: 0, RECEIVED: 0, COMPLETED: 0, REJECTED: 0, CANCELLED: 0, EXPIRED: 0, REVERSED: 0 },
   completeHoursP50: null,
   completeHoursP90: null,
@@ -40,7 +40,7 @@ export const wasteMetrics = (over: Partial<WasteMonthMetrics> = {}): WasteMonthM
   unitsByPoint: [],
   pointsIssued: 0,
   pointsReversed: 0,
-  receivedDeclaredPctByMethod: { DROP_OFF: null, MAIL_IN: null, PICKUP: null },
+  receivedDeclaredPctByMethod: { DROP_OFF: null, MAIL_IN: null, PICKUP: null, HOME_PICKUP: null },
   receivedDeclaredPctByPoint: [],
   rejectionsByReason: { WET: 0, DIRTY: 0, FOREIGN_OBJECT: 0, WRONG_TYPE: 0, DAMAGED: 0, NOT_ACCEPTED: 0, OVERSIZE: 0, HAZARDOUS: 0, UNPAID_POSTAGE: 0, OTHER: 0 },
   expiredCount: 0,

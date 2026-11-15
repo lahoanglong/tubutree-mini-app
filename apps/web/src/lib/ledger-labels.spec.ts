@@ -174,6 +174,14 @@ describe('Đổi rác lấy quà — nhãn sổ Điểm Xanh (10.4)', () => {
     ['GIFT_REFUND:gr1', 'Hoàn điểm quà'],
   ];
 
+  it('phí shipper thu gom tận nhà: trừ và hoàn đều kèm mã phiếu, cả khi phiên khách đã gộp', () => {
+    expect(pointsReasonLabel('WASTE_PICKUP_FEE:TR-8K2M9')).toBe('Trừ phí shipper thu gom · TR-8K2M9');
+    expect(pointsReasonLabel('WASTE_PICKUP_FEE_REFUND:TR-8K2M9')).toBe('Hoàn điểm phí shipper · TR-8K2M9');
+    expect(pointsReasonLabel('MERGED:guest-1:WASTE_PICKUP_FEE:TR-8K2M9')).toBe('Trừ phí shipper thu gom · TR-8K2M9');
+    expect(pointsReasonDetail('WASTE_PICKUP_FEE_REFUND:TR-8K2M9')).toBe('Hoàn điểm phí shipper · TR-8K2M9');
+    expect(pointsReasonLabel('WASTE_PICKUP_FEE:<script>')).toBe('Trừ phí shipper thu gom');
+  });
+
   it('bốn tiền tố mới đúng nhãn, mã đổi mã giảm giá giữ nguyên', () => {
     for (const [reason, label] of NEW_LABELS) expect(pointsReasonLabel(reason)).toBe(label);
     expect(pointsReasonLabel('LOYALTY_REDEEM_VOUCHER:reward-discount-50k')).toBe('Đổi điểm lấy mã giảm giá');

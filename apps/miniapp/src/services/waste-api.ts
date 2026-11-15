@@ -13,6 +13,8 @@ import type {
   WasteNearbyRequest,
   WastePerkSubmitRequest,
   WastePointDTO,
+  WastePickupQuoteRequest,
+  WastePickupQuoteResponse,
   WastePointMonthlyReportDTO,
   WastePreviewDTO,
   WastePreviewRequest,
@@ -48,6 +50,9 @@ export const getNearbyWastePoints = (body: WasteNearbyRequest) =>
   api.post<WastePointDTO[]>('/waste/points/nearby', body).then((r) => r.data);
 export const previewWaste = (body: WastePreviewRequest) =>
   api.post<WastePreviewDTO>('/waste/preview', body).then((r) => r.data);
+/** Báo phí shipper lấy rác tận nhà (HOME_PICKUP): phí thật hoặc ước lượng, Điểm Xanh trừ được, điều kiện chặn. Không ghi gì. */
+export const getWastePickupQuote = (body: WastePickupQuoteRequest) =>
+  api.post<WastePickupQuoteResponse>('/waste/pickup-quote', body).then((r) => r.data);
 export const createWasteRequest = (body: WasteCreateRequest, idempotencyKey: string) =>
   api
     .post<WasteRequestDetailDTO>('/waste/requests', body, { headers: { 'Idempotency-Key': idempotencyKey } })

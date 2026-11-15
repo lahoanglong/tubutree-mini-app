@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, CheckCircle2, ChevronRight, Plus, Recycle, Sprout } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronRight, Plus, Sprout } from 'lucide-react';
 import { useQuery, useMutation, useMutationState, useQueryClient, useIsMutating } from '@tanstack/react-query';
-import { getWasteMe, WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
+import { WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
+import type { QuotePendingGiftDTO } from '@tubutree/shared-types';
 import { useAuth } from '@/lib/auth-context';
 import { rememberActiveOrder } from '@tubutree/app-core/home-todo-rows';
 import { browserStorage } from '@/lib/recently-viewed';
@@ -36,6 +37,8 @@ import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
 import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { shippingRowView } from '@tubutree/app-core/checkout-pickup-view';
+import { visibleGifts } from '@tubutree/app-core/checkout-pickup-state';
 import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
 import { useRemovedCoupon } from '@/lib/use-removed-coupon';
 import { checkoutLineProblems, priceChangedActions, type LineAction, type LineFix, type LineProblem } from '@tubutree/app-core/commerce/checkout-issues';
@@ -64,6 +67,9 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { OrderSuccess } from '@/components/checkout/order-success';
+import { GiftRows } from '@/components/checkout/gift-rows';
+import { PickupSection, WaivedShippingValue } from '@/components/checkout/pickup-section';
+import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '@/components/checkout/use-checkout-pickup';
 import { CheckoutSkeleton } from './checkout-skeleton';
 import { InlineRetry } from './inline-retry';
 import { InvoiceSection } from './invoice-section';
@@ -72,9 +78,7 @@ import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoic
 import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
 import { useCartKey } from '@/lib/cart-key';
 import { createOrderKeyRing } from '@/lib/order-key-ring';
-import { isWebRouteReady } from '@/lib/route-map';
-import { attachablePickup, isOutcomeUnknown } from '@/lib/checkout-waste';
-import { coreHttp } from '@/lib/core-http';
+import { isOutcomeUnknown } from '@/lib/checkout-waste';
 import BackLink from '@/components/back-link';
 import { BackAwareLink } from '@/components/back-aware-link';
 import { pushOrBack } from '@/lib/nav-depth';
@@ -85,7 +89,6 @@ import { EmptyState } from '@/components/mini/empty-state';
 import { CART_EMPTY } from '@tubutree/app-core/cart-copy';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { clearSubmitted } from '@/lib/recycle-wizard';
 import { variationLabel } from '@/lib/variation-label';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
@@ -127,8 +130,9 @@ export default function CheckoutPage() {
   const [invoice, setInvoice] = useState(EMPTY_INVOICE);
   // Mã giới thiệu khách tự nhập ở đây (đã được server xác nhận) khác mã đến từ link gian hàng (sfCtx).
   const [referralApplied, setReferralApplied] = useState<string | null>(null);
-  const [attachWaste, setAttachWaste] = useState(false);
   const [placed, setPlaced] = useState<OrderDTO | null>(null);
+  // Lời báo về phần đổi rác kèm đơn (món bị bỏ vì đổi địa chỉ, phiếu đổi giữa chừng): hiện tới khi khách đổi lựa chọn kế tiếp.
+  const [pickupNotice, setPickupNotice] = useState<string | null>(null);
   // Mã đơn chuyển khoản đã đặt xong, đang chờ router.replace hoàn tất: trang khoá lại, nếu không giỏ nạp lại còn dòng khác thì nút Đặt hàng bật lại và bấm thêm sẽ tạo đơn thứ hai với key mới.
   const [redirectingCode, setRedirectingCode] = useState<string | null>(null);
   // Một key cho một nội dung đơn trong phiên thanh toán: bấm lại sau lỗi mạng gửi lại cùng đơn; đổi nội dung thì key mới.
@@ -145,6 +149,7 @@ export default function CheckoutPage() {
   const bumpChoice = () => {
     choiceRev.current += 1;
     setChoiceTick(choiceRev.current);
+    setPickupNotice(null);
   };
   const bootedRef = useRef(false);
   // Bản sao của cờ đóng băng trong state: giỏ nguyên vẹn nạp lại thành rỗng thì form (và nút Đặt hàng) biến mất, màn giỏ trống phải còn lối gửi lại.
@@ -162,18 +167,8 @@ export default function CheckoutPage() {
   // ở Mini App sẽ thấy đúng số, thay vì chọn được rồi bị từ chối "số dư không đủ".
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: phase === 'authenticated' });
   const walletBalance = meQ.data?.walletBalance ?? user?.walletBalance ?? 0;
-  // Chỉ hiện "Thu kèm rác" khi cờ pickup đã bật thật từ máy chủ; chưa tải xong thì ẩn, không hứa dịch vụ chưa chắc có.
   const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
-  const pickupFlag = configQ.data?.waste?.pickup === true;
   const shippingEta = configQ.data?.shippingEta;
-  const wasteMeQ = useQuery({
-    queryKey: WASTE_QUERY_KEYS.me,
-    queryFn: () => getWasteMe(coreHttp),
-    enabled: phase === 'authenticated' && pickupFlag,
-  });
-  const attachable = attachablePickup(wasteMeQ.data, pickupFlag);
-  // Chưa có yêu cầu thu kèm thì dòng dẫn sang màn tạo yêu cầu; màn đó chưa có trên web thì ẩn dòng, không dẫn khách tới 404.
-  const pickupReq = attachable === null && !isWebRouteReady('/doi-rac/tao') ? undefined : attachable;
 
   // Mua một phần giỏ: giỏ ghi nhớ các dòng đã chọn ở sessionStorage (tải lại trang thanh toán không được âm thầm
   // chuyển sang tính tiền cả giỏ). Chỉ đối chiếu với giỏ thật khi đã tải xong để không xoá nhầm lựa chọn.
@@ -231,12 +226,27 @@ export default function CheckoutPage() {
   // Mã giảm giá đổi trên giỏ nên báo giá đang hiện đã cũ cho tới khi tính lại xong: khoá nút đặt hàng
   // trong lúc đó để khách không bấm đặt khi con số trên màn hình chưa phải con số sẽ bị tính.
   const couponChanging = useIsMutating({ mutationKey: COUPON_MUTATION_KEY }) > 0;
-  const quoteQ = useQuery({
-    queryKey: ['quote', addressId, ctvSlug, usePoints, itemIdsKey],
-    queryFn: () => checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug, itemIds),
-    // Chờ giỏ tải xong: địa chỉ có thể về trước, lúc đó chưa biết giỏ có trống không và báo giá giỏ trống bị 400.
-    enabled: !!addressId && phase === 'authenticated' && cartLoaded && cartReady && !cartEmpty,
+  // Đổi rác kèm đơn + quà 0đ: lựa chọn của khách đi vào báo giá và đặt đơn; cổng mở/đóng do máy chủ báo trong `quote.pickup`.
+  const pickup = useCheckoutPickup({
+    enabled: phase === 'authenticated',
+    addressId,
+    itemIds,
+    onReconciled: () => setPickupNotice(fillCopy('checkout.pickup.reconciled')),
   });
+  const quoteQ = useQuery({
+    queryKey: ['quote', addressId, ctvSlug, usePoints, itemIdsKey, pickup.fieldsKey],
+    queryFn: () => checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug, itemIds, pickup.fields),
+    // Chờ giỏ tải xong: địa chỉ có thể về trước, lúc đó chưa biết giỏ có trống không và báo giá giỏ trống bị 400.
+    enabled: !!addressId && phase === 'authenticated' && cartLoaded && cartReady && !cartEmpty && pickup.ready,
+  });
+  const { pruneGifts } = pickup;
+  const pendingGifts = quoteQ.data?.pendingGiftRedemptions;
+  useEffect(() => {
+    pruneGifts(pendingGifts);
+  }, [pendingGifts, pruneGifts]);
+  // Báo giá đang tải lại thì quà giữ như lần trước: dòng quà không được biến mất rồi hiện lại mỗi lần khách đổi lựa chọn.
+  const giftsRef = useRef<QuotePendingGiftDTO[]>([]);
+  if (quoteQ.data) giftsRef.current = visibleGifts(quoteQ.data.pendingGiftRedemptions, pickup.excluded);
   useEffect(() => {
     // Giữ lại số điểm dùng được của lần quote gần nhất — khi bật "dùng điểm", BE tự kẹp theo trần
     // loyalty.max_redeem_pct nên gửi toàn bộ số dùng được là an toàn.
@@ -266,6 +276,16 @@ export default function CheckoutPage() {
   const shipments = quote?.shipments ?? [];
   const split = shipments.length > 1 || shipments.some((s) => s.fulfiller.kind === 'MERCHANT');
   const splitNote = shipmentsNote(shipments);
+  const tubuShipment = shipments.find((s) => s.fulfiller.kind === 'TUBU');
+  const tubuShippingFee = quote ? (tubuShipment ? tubuShipment.shippingFee : shipments.length === 0 ? quote.shippingFee : 0) : undefined;
+  const shipRow = quote ? shippingRowView(quote) : null;
+  const shippingValue: React.ReactNode = !quote ? (addressId ? '…' : 'Nhập địa chỉ để tính phí') : shipRow?.waived ? (
+    <WaivedShippingValue originalFee={shipRow.originalFee} note={shipRow.note ?? ''} />
+  ) : quote.shippingFee === 0 ? (
+    'Miễn phí'
+  ) : (
+    formatVnd(quote.shippingFee)
+  );
   // Chưa có cấu hình (đang tải, lỗi, API cũ) thì không hứa ngày giao; giỏ chỉ có hàng gian hàng tự giao thì cũng không.
   const etaLabel = checkoutEtaLabel(shippingEta, shipments.map((s) => s.fulfiller.kind));
   // Cách thanh toán dùng được theo báo giá (máy chủ từ chối đặt đúng các cách nó khoá: hạn mức COD từng đơn, giỏ tách đơn D4)
@@ -327,7 +347,7 @@ export default function CheckoutPage() {
         paymentMethod: paymentToSend,
         ...(note.trim() ? { note: note.trim() } : {}),
         ...(itemIds ? { itemIds } : {}),
-        ...(attachWaste && pickupReq ? { wasteRequestId: pickupReq.id } : {}),
+        ...pickup.fields,
         ...(wantInvoice
           ? {
               invoiceRequest: {
@@ -376,7 +396,10 @@ export default function CheckoutPage() {
       void qc.invalidateQueries({ queryKey: ['orders'] });
       rememberActiveOrder(browserStorage(), userId);
       syncHomeHintCookie();
-      if (attachWaste && pickupReq) void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.all });
+      if (pickup.applied) {
+        void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.all });
+        void qc.invalidateQueries({ queryKey: [PICKUP_OPTIONS_KEY] });
+      }
       // Điểm Xanh đã tiêu/tích và tiền ví đã trừ: các số dư và sổ cái đang cache đều cũ.
       invalidateBalances(qc);
       // Chuyển khoản: sang trang VietQR để khách trả ngay (đối soát xong đơn tự xác nhận), như Mini App.
@@ -399,9 +422,17 @@ export default function CheckoutPage() {
       else if (!rejectedBeforeService) unknownAttempt.current = null;
       setMaybePlaced(unknownAttempt.current !== null);
       setUnknownRev(unknownAttempt.current?.rev ?? null);
-      // 4xx cho yêu cầu thu rác đã đóng/bị khoá: tải lại để công tắc biến mất. Lỗi mạng/quá thời gian/5xx có thể đến sau khi máy
-      // chủ đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
-      if (attachWaste && !isOutcomeUnknown(e)) reload(WASTE_QUERY_KEYS.me);
+      // Phần đổi rác đã gửi bị máy chủ từ chối vì phiếu/điều kiện đổi giữa chừng (409 không mã): tải lại báo giá và danh sách món, báo khách.
+      // Lỗi mạng/quá thời gian/5xx có thể đến sau khi máy chủ đã tạo đơn, nên không tải lại: bấm lại phải gửi cùng body, cùng khoá.
+      const sentBody = (unknownAttempt.current ?? attempt.current)?.body;
+      const sentPickup = !!(sentBody?.wasteRequestId || sentBody?.inlinePickup);
+      const pickupChanged = sentPickup && e instanceof ApiError && e.status === 409 && !e.code && /thu rác/i.test(e.message);
+      if (sentPickup && serverRejectedState(e)) {
+        reload([PICKUP_OPTIONS_KEY]);
+        reload(['quote']);
+        reload(WASTE_QUERY_KEYS.me);
+      }
+      if (pickupChanged) setPickupNotice(fillCopy('checkout.pickup.changed'));
       if (e instanceof ApiError && e.code === 'CART_CHANGED') {
         // Giỏ vừa đổi ở nơi khác (hoặc lần bấm trước đã đặt xong): dựng lại giỏ, báo giá và danh sách đơn.
         reload(['cart']);
@@ -729,6 +760,11 @@ export default function CheckoutPage() {
           </div>
         </div>
       )}
+      {pickupNotice && (
+        <p role="status" data-testid="checkout-pickup-notice" className="mb-4 rounded-card bg-warning-bg px-4 py-3 text-sm font-semibold text-warning-fg">
+          {pickupNotice}
+        </p>
+      )}
       {priceAccepted && quote && !quoteStale && !placeFailed && (
         <p
           role="status"
@@ -860,54 +896,6 @@ export default function CheckoutPage() {
             </p>
           </section>
 
-          {pickupReq !== undefined && (
-            <section id="checkout-waste-pickup" data-mini-block="waste" className={`${MINI_BAND} max-md:order-8`}>
-              {pickupReq === null ? (
-                <Link href="/doi-rac/tao" onClick={clearSubmitted} className="flex min-h-11 items-center justify-between gap-3 text-sm">
-                  <span className="flex items-center gap-3">
-                    <Recycle className="h-5 w-5 text-[color:var(--color-text-brand)]" aria-hidden="true" />
-                    <span>
-                      <span className="block font-semibold text-[color:var(--color-text-primary)]">Thu kèm rác</span>
-                      <span className="block text-caption text-[color:var(--color-text-secondary)]">Tạo yêu cầu để bưu tá lấy rác khi giao đơn này</span>
-                    </span>
-                  </span>
-                  <span aria-hidden="true" className="text-[color:var(--color-text-secondary)]">
-                    ›
-                  </span>
-                </Link>
-              ) : (
-                <>
-                  <label className="flex min-h-11 cursor-pointer items-center justify-between gap-3 text-sm font-semibold text-[color:var(--color-text-primary)]">
-                    <span className="flex items-center gap-3">
-                      <Recycle className="h-5 w-5 text-[color:var(--color-text-brand)]" aria-hidden="true" />
-                      Thu kèm rác
-                    </span>
-                    <input
-                      type="checkbox"
-                      checked={attachWaste}
-                      onChange={chosen((e: React.ChangeEvent<HTMLInputElement>) => setAttachWaste(e.target.checked))}
-                      disabled={place.isPending}
-                      className="h-6 w-6 shrink-0 accent-[color:var(--color-action-primary-bg)]"
-                    />
-                  </label>
-                  <div className="mt-2 rounded-control bg-[var(--color-bg-subtle)] p-3 text-caption text-[color:var(--color-text-secondary)]">
-                    <p className="text-sm font-semibold text-[color:var(--color-text-primary)]">{pickupReq.code}</p>
-                    {pickupReq.lines.map((l) => (
-                      <p key={`${l.itemName}-${l.unitLabel}`} className="mt-0.5">
-                        {l.itemName}: {l.declaredQty} {l.unitLabel}
-                      </p>
-                    ))}
-                    <p className="mt-1 font-semibold text-success-fg">Ước tính {new Intl.NumberFormat('vi-VN').format(pickupReq.estimatedPoints)} điểm</p>
-                    {attachWaste && <p className="mt-1">Ghi mã lên túi, bưu tá lấy khi giao đơn.</p>}
-                    {attachWaste && paymentToSend === 'BANK_TRANSFER' && (
-                      <p className="mt-1">Lịch thu gom được đặt sau khi Tubu nhận được thanh toán của đơn.</p>
-                    )}
-                  </div>
-                </>
-              )}
-            </section>
-          )}
-
           <div data-mini-block="referral" className="max-md:order-4 max-md:mt-2">
             <ReferralCodeBox
               linkedCode={linkedReferral}
@@ -953,6 +941,21 @@ export default function CheckoutPage() {
             </p>
           )}
           {splitNote && <p className="mt-2 text-caption text-[color:var(--color-text-secondary)] hidden md:block">{splitNote}</p>}
+          <PickupSection
+            pickup={quote ? (quote.pickup ?? null) : undefined}
+            tubuShippingFee={tubuShippingFee}
+            applied={pickup.applied}
+            options={pickup.options}
+            optionsLoading={pickup.optionsLoading}
+            optionsError={pickup.optionsError}
+            onRetryOptions={() => void pickup.refetchOptions()}
+            open={pickup.sheetOpen}
+            onOpenChange={pickup.setSheetOpen}
+            onApply={chosen(pickup.apply)}
+            onClear={chosen(pickup.clear)}
+            disabled={place.isPending}
+          />
+          <GiftRows gifts={giftsRef.current} excluded={pickup.excluded} onToggle={chosen(pickup.toggleGift)} disabled={place.isPending} />
           </div>
           <div data-mini-block="summary" className="max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4">
           <div className="mb-2.5 hidden items-center justify-between max-md:flex">
@@ -992,11 +995,7 @@ export default function CheckoutPage() {
               green
             />
           )}
-          <Row
-            label="Phí vận chuyển"
-            value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
-            valueGreen={quote?.shippingFee === 0}
-          />
+          <Row label="Phí vận chuyển" value={shippingValue} valueGreen={quote?.shippingFee === 0} />
           {quote && etaLabel && <Row label="Giao dự kiến" value={etaLabel} />}
           </div>
           <BottomSheet
@@ -1015,11 +1014,7 @@ export default function CheckoutPage() {
               {(quote ? (quote.comboDiscount ?? 0) : previewCombo) > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(quote ? quote.comboDiscount! : previewCombo)}`} valueGreen />}
               {(quote ? (quote.tierDiscount ?? 0) : previewTier) > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote ? quote.tierDiscount! : previewTier)}`} valueGreen />}
               {(quote?.pointsDiscount ?? 0) > 0 && <Row label="Giảm giá Điểm Xanh" value={`-${formatVnd(quote!.pointsDiscount)}`} valueGreen />}
-              <Row
-                label="Phí vận chuyển"
-                value={quote ? (quote.shippingFee === 0 ? 'Miễn phí' : formatVnd(quote.shippingFee)) : addressId ? '…' : 'Nhập địa chỉ để tính phí'}
-                valueGreen={quote?.shippingFee === 0}
-              />
+              <Row label="Phí vận chuyển" value={shippingValue} valueGreen={quote?.shippingFee === 0} />
               <div className="my-2 h-px bg-[var(--color-border-subtle)]" />
               <div className="flex justify-between gap-2.5 py-1.5 font-bold text-[color:var(--color-text-primary)]">
                 <span className="text-sm font-normal text-[color:var(--color-text-secondary)]">Tổng thanh toán</span>
@@ -1118,7 +1113,9 @@ export default function CheckoutPage() {
             <p className={`mt-2 ${ui.error}`}>
               {quoteQ.error instanceof ApiError && quoteQ.error.code === 'ADDRESS_OUTDATED'
                 ? `${loadErrorText(quoteQ.error)} Hãy bấm Sửa ở địa chỉ đó để chọn lại tỉnh/phường, hoặc thêm địa chỉ mới.`
-                : 'Không tính được phí ship/tổng tiền.'}{' '}
+                : pickup.applied && quoteQ.error instanceof ApiError && quoteQ.error.status === 400
+                  ? loadErrorText(quoteQ.error)
+                  : 'Không tính được phí ship/tổng tiền.'}{' '}
               <InlineRetry onRetry={() => quoteQ.refetch()} />
             </p>
           )}
@@ -1227,7 +1224,7 @@ export default function CheckoutPage() {
 }
 
 // Dưới md đúng KeyValueRow của Mini: đệm 6px, nhãn 14/400, giá trị 15/600 (cỡ 15px là cỡ thừa kế của Mini, không phải bậc body-sm).
-function Row({ label, value, green, valueGreen, ds }: { label: React.ReactNode; value: string; green?: boolean; valueGreen?: boolean; ds?: string }) {
+function Row({ label, value, green, valueGreen, ds }: { label: React.ReactNode; value: React.ReactNode; green?: boolean; valueGreen?: boolean; ds?: string }) {
   return (
     <div
       data-ds={ds}
@@ -1239,7 +1236,7 @@ function Row({ label, value, green, valueGreen, ds }: { label: React.ReactNode; 
   );
 }
 
-type ShipmentView = { key: string; itemIds: string[]; fulfiller: Parameters<typeof fulfillerLabel>[0]; shippingFee: number };
+type ShipmentView = { key: string; itemIds: string[]; fulfiller: Parameters<typeof fulfillerLabel>[0]; shippingFee: number; shippingFeeWaived?: number };
 
 // Danh sách chữ trong khung "Đơn hàng" từ md (điện thoại dùng MobileItems). Các dòng thấy được cộng với tiền dòng gập ra đúng "Tạm tính".
 function DesktopLines({ items, shipments, fix }: { items: CartLine[]; shipments: ShipmentView[] | null; fix: LineFixView }) {
@@ -1259,7 +1256,11 @@ function DesktopLines({ items, shipments, fix }: { items: CartLine[]; shipments:
                 ))}
               <div className="flex justify-between gap-2 text-caption text-[color:var(--color-text-secondary)]">
                 <span>Phí giao</span>
-                <span className="tabular-nums">{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
+                {(sh.shippingFeeWaived ?? 0) > 0 ? (
+                  <WaivedShippingValue originalFee={sh.shippingFee + (sh.shippingFeeWaived ?? 0)} note={fillCopy('checkout.shipWaived')} />
+                ) : (
+                  <span className="tabular-nums">{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
+                )}
               </div>
             </div>
           ))
@@ -1508,7 +1509,7 @@ function MobileItems({
   fix,
 }: {
   items: CartLine[];
-  shipments: { key: string; itemIds: string[]; fulfiller: Parameters<typeof fulfillerLabel>[0]; shippingFee: number }[] | null;
+  shipments: ShipmentView[] | null;
   splitNote: string | null;
   fix: LineFixView;
 }) {
@@ -1544,9 +1545,13 @@ function MobileItems({
             {g.shipment && (
               <div className="mt-1.5 flex justify-between text-sm">
                 <span className="text-[color:var(--color-text-secondary)]">Phí giao</span>
-                <span className={g.shipment.shippingFee === 0 ? 'text-success-fg' : ''}>
-                  {g.shipment.shippingFee === 0 ? 'Miễn phí' : formatVnd(g.shipment.shippingFee)}
-                </span>
+                {(g.shipment.shippingFeeWaived ?? 0) > 0 ? (
+                  <WaivedShippingValue originalFee={g.shipment.shippingFee + (g.shipment.shippingFeeWaived ?? 0)} note={fillCopy('checkout.shipWaived')} />
+                ) : (
+                  <span className={g.shipment.shippingFee === 0 ? 'text-success-fg' : ''}>
+                    {g.shipment.shippingFee === 0 ? 'Miễn phí' : formatVnd(g.shipment.shippingFee)}
+                  </span>
+                )}
               </div>
             )}
           </section>

@@ -4,6 +4,7 @@ import { takeMeBlock } from './home-feed';
 import type { AddressDTO } from './shop-api';
 import type { CheckInResult, CheckInStatusResponse } from '@tubutree/app-core/api/loyalty';
 import type { LoyaltyRates } from '../utils/loyalty-copy';
+import { wastePickupFeeReasonLabel } from '@tubutree/app-core/waste-points-reason';
 
 /** Loyalty overview (§6.6) — hạng hiện tại, tiến độ lên hạng kế. */
 export interface LoyaltyOverview {
@@ -214,6 +215,8 @@ export const getMemberCard = () => api.get<MemberCardResponse>('/me/loyalty/memb
 export function pointsReasonLabel(rawReason: string): string {
   // Gộp phiên khách vãng lai đổi khoá một số dòng thành `MERGED:<id>:<reason cũ>` (auth.service).
   const reason = rawReason.replace(/^MERGED:[^:]+:/, '');
+  const pickupFee = wastePickupFeeReasonLabel(reason);
+  if (pickupFee) return pickupFee;
   if (reason.startsWith('DAILY_CHECKIN')) return 'Điểm danh hằng ngày';
   if (reason.startsWith('POS_OFFLINE_ORDER')) return 'Tích điểm mua tại cửa hàng';
   if (reason.startsWith('LOYALTY_REDEEM_VOUCHER')) return 'Đổi điểm lấy mã giảm giá';

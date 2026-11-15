@@ -23,6 +23,7 @@ import {
   WASTE_RULES_LINK,
   createBlockedHint,
   defaultPointId,
+  homePickupCopy,
   readLastPointId,
   wasteStepCopy,
   writeLastPointId,
@@ -30,12 +31,21 @@ import {
 import { consentStillValid, WASTE_RULES_UPDATED_NOTE } from '@tubutree/app-core/waste-consent';
 import { sameProvince } from '@tubutree/app-core/waste-province';
 import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
+import {
+  EMPTY_HOME_PICKUP_FORM,
+  homePickupBatteryBlocked,
+  homePickupCreateBody,
+  homePickupEnabled,
+  type HomePickupForm,
+} from '@tubutree/app-core/recycle-home-pickup-state';
+import { homePickupCreateState, homePickupQuoteView, homePickupUnavailableText } from '@tubutree/app-core/recycle-home-pickup-view';
 import { friendlyActionError as actErrText, friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { settleWithin } from '@/lib/settle-within';
 import { useDebounced } from '@/lib/use-debounced';
 import { useIdempotencyKey } from '@/lib/use-idempotency-key';
+import { useHomePickupQuote } from '@/lib/use-home-pickup-quote';
 import { usePublicConfig } from '@/lib/use-public-config';
 import {
   EMPTY_DRAFT,
@@ -63,6 +73,7 @@ import { useRovingGroup } from '@/lib/use-roving-group';
 import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WasteItemStep } from './waste-item-step';
+import { HomePickupComposer } from './recycle-home-pickup';
 import {
   METHOD_LABELS,
   METHOD_LINE,
@@ -247,15 +258,18 @@ export function RecycleNew() {
   const enabledMethods = useMemo(() => {
     if (!me) return [];
     const shipOk = !me.shipLockedAt;
-    return WASTE_METHODS_BASE.filter((m) => {
+    return [...WASTE_METHODS_BASE, 'HOME_PICKUP' as const].filter((m) => {
       if (m === 'DROP_OFF') return cfg.waste.dropoff && me.laneFlags.dropoff;
       if (m === 'MAIL_IN') return cfg.waste.mailin && me.laneFlags.mailin && shipOk;
+      if (m === 'HOME_PICKUP') return homePickupEnabled({ cfgPickup: cfg.waste.pickup, lanePickup: me.laneFlags.pickup, shipLocked: !shipOk });
       return cfg.waste.pickup && me.laneFlags.pickup && shipOk;
     });
   }, [me, cfg.waste.dropoff, cfg.waste.mailin, cfg.waste.pickup]);
 
+  // Shipper lấy tận nhà có luồng báo phí riêng, không có bản xem trước.
+  const previewMethods = useMemo(() => enabledMethods.filter((m) => m !== 'HOME_PICKUP'), [enabledMethods]);
   const previewQueries = useQueries({
-    queries: enabledMethods.map((method) => {
+    queries: previewMethods.map((method) => {
       const body: WastePreviewRequest = {
         lines: lineInputs,
         method,
@@ -269,12 +283,12 @@ export function RecycleNew() {
       };
     }),
   });
-  const previewFailed = enabledMethods.filter((_, i) => previewQueries[i]?.isError);
+  const previewFailed = previewMethods.filter((_, i) => previewQueries[i]?.isError);
   const previews: Partial<Record<WasteMethod, WastePreviewDTO | undefined>> = {};
   // useQueries tạo observer mới mỗi khi khoá đổi nên data về undefined; giữ kết quả cuối riêng cho thứ tự thẻ để thẻ không nhảy chỗ.
   const lastPreview = useRef<Partial<Record<WasteMethod, WastePreviewDTO>>>({});
   const orderPreviews: Partial<Record<WasteMethod, WastePreviewDTO | undefined>> = {};
-  enabledMethods.forEach((m, i) => {
+  previewMethods.forEach((m, i) => {
     const data = previewQueries[i]?.data;
     if (data) lastPreview.current[m] = data;
     previews[m] = data;
@@ -297,18 +311,43 @@ export function RecycleNew() {
   }, [ready, step, draft.method, pointsQ.data, enabledMethods]);
 
   const selected = draft.method && enabledMethods.includes(draft.method) ? draft.method : null;
-  const keyContent = { method: draft.method, lines: lineInputs, pointId: draft.method === 'DROP_OFF' ? draft.pointId : null };
+  const homePickupForm = draft.homePickup ?? EMPTY_HOME_PICKUP_FORM;
+  const hp = useHomePickupQuote({
+    enabled: selected === 'HOME_PICKUP' && step === 'method' && authed,
+    form: homePickupForm,
+    lines: lineInputs,
+    items: me?.items ?? [],
+  });
+  const hpBatteryBlocked = selected === 'HOME_PICKUP' && me ? homePickupBatteryBlocked(lineInputs, me.items, hp.address?.province) : false;
+  const hpView = hp.quote ? homePickupQuoteView({ quote: hp.quote, batteryBlocked: hpBatteryBlocked }) : null;
+  const setHomePickup = (patch: Partial<HomePickupForm>) =>
+    setDraft((d) => ({ ...d, homePickup: { ...(d.homePickup ?? EMPTY_HOME_PICKUP_FORM), ...patch } }));
+
+  // Cùng khoá cho các lần bấm lại khi nội dung đơn không đổi; đổi địa chỉ hay số kg thì sang khoá mới (máy chủ trả 409 cho cùng khoá khác nội dung).
+  const keyContent = {
+    method: draft.method,
+    lines: lineInputs,
+    pointId: draft.method === 'DROP_OFF' ? draft.pointId : null,
+    homePickup:
+      draft.method === 'HOME_PICKUP'
+        ? { addressId: hp.effective.addressId, weightGrams: hp.effective.weightGrams }
+        : null,
+  };
   const { key, rotate } = useIdempotencyKey(keyContent);
-  const body: WasteCreateRequest | null = selected
-    ? {
-        method: selected,
-        lines: lineInputs,
-        ...(selected === 'DROP_OFF' ? { pointId: draft.pointId ?? undefined } : {}),
-        consent: true,
-        ...((ackVersion ?? rulesVersion) ? { consentVersion: (ackVersion ?? rulesVersion)! } : {}),
-        ...(selected === 'MAIL_IN' ? { packagingConsent: true, postagePaidConsent: true } : {}),
-      }
-    : null;
+  const consentVersion = ackVersion ?? rulesVersion;
+  const body: WasteCreateRequest | null =
+    selected === 'HOME_PICKUP'
+      ? homePickupCreateBody({ form: hp.effective, lines: lineInputs, consentVersion })
+      : selected
+        ? {
+            method: selected,
+            lines: lineInputs,
+            ...(selected === 'DROP_OFF' ? { pointId: draft.pointId ?? undefined } : {}),
+            consent: true,
+            ...(consentVersion ? { consentVersion } : {}),
+            ...(selected === 'MAIL_IN' ? { packagingConsent: true, postagePaidConsent: true } : {}),
+          }
+        : null;
   const create = useMutation({
     mutationFn: () => {
       if (!body) throw new Error('Chưa chọn cách giao');
@@ -326,6 +365,7 @@ export function RecycleNew() {
     onError: () => {
       createBusy.current = false;
       void qc.invalidateQueries({ queryKey: wasteRulesVersionQuery(coreHttp).queryKey });
+      void qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'pickup-quote'] });
     },
   });
   const creating = create.isPending || create.isSuccess;
@@ -434,11 +474,16 @@ export function RecycleNew() {
 
   const selectedPreview = selected ? previews[selected] : undefined;
   const consentsOk = consentValid && (selected !== 'MAIL_IN' || (packagingConsent && postageConsent));
+  const hpState = homePickupCreateState({ addressId: hp.effective.addressId, quoteState: hp.quoteState, view: hpView, consentOk: consentValid });
   const canCreate =
-    selected !== null && !isLocked(selectedPreview) && consentsOk && (selected !== 'DROP_OFF' || draft.pointId !== null);
+    selected === 'HOME_PICKUP'
+      ? hpState.ok
+      : selected !== null && !isLocked(selectedPreview) && consentsOk && (selected !== 'DROP_OFF' || draft.pointId !== null);
   const blockedHint = canCreate
     ? null
-    : createBlockedHint({ selected: selected !== null, needsPoint: selected === 'DROP_OFF', pointChosen: draft.pointId !== null, consentsOk });
+    : selected === 'HOME_PICKUP'
+      ? hpState.hint
+      : createBlockedHint({ selected: selected !== null, needsPoint: selected === 'DROP_OFF', pointChosen: draft.pointId !== null, consentsOk });
   const unlockedOthers = (m: WasteMethod) => order.filter((o) => o !== m && !isLocked(previews[o]));
 
   const renderCard = (m: WasteMethod) => {
@@ -450,7 +495,7 @@ export function RecycleNew() {
     const feeProvince = fee ? (provincesQ.data?.find((pr) => pr.code === fee.provinceCode)?.name ?? (fee.provinceName === fee.provinceCode ? null : fee.provinceName)) : null;
     const showProvince = m === 'MAIL_IN' && checked && provincesQ.data && (draft.provinceCode !== null || pv?.blocks.some((b) => b.code === 'NEED_PROVINCE'));
     return (
-      <div key={m} className={`${ui.card} p-4 ${checked ? 'border-2 border-forest-600' : ''}`}>
+      <div key={m} className={`${ui.card} p-4 ${checked ? 'border-2 border-forest-600' : ''} ${m === 'HOME_PICKUP' ? 'md:col-span-3' : ''}`}>
         <button
           type="button"
           role="radio"
@@ -515,6 +560,22 @@ export function RecycleNew() {
               ))}
             </div>
           )}
+          {m === 'HOME_PICKUP' && checked && (
+            <HomePickupComposer
+              addresses={hp.addresses}
+              addressesStatus={hp.addressesStatus}
+              onRetryAddresses={hp.refetchAddresses}
+              selectedAddressId={hp.effective.addressId}
+              onSelectAddress={(id) => setHomePickup({ addressId: id })}
+              weightGrams={hp.weightGrams}
+              onWeight={(g) => setHomePickup({ weightGrams: g })}
+              quoteState={hp.quoteState}
+              view={hpView}
+              quoteErrorText={hp.quoteErrorText}
+              onRetryQuote={hp.refetchQuote}
+              disabled={creating}
+            />
+          )}
           {m === 'DROP_OFF' && checked && (
             <div className="flex flex-col gap-2">
               {draft.pickedPoint && (
@@ -567,7 +628,7 @@ export function RecycleNew() {
       )}
       {create.isError && (
         <p role="alert" className={ui.error}>
-          {actErrText(create.error)}
+          {homePickupUnavailableText(create.error) ?? actErrText(create.error)}
         </p>
       )}
       <Actions label="Tạo yêu cầu đổi rác" summary={blockedHint ? <p className="text-sm text-stone-600">{blockedHint}</p> : undefined}>
@@ -579,7 +640,7 @@ export function RecycleNew() {
           aria-disabled={creating || undefined}
           onClick={createNow}
         >
-          {creating ? 'Đang tạo…' : 'Tạo yêu cầu'}
+          {creating ? homePickupCopy.creating : selected === 'HOME_PICKUP' ? homePickupCopy.createButton : 'Tạo yêu cầu'}
         </button>
       </Actions>
     </>,

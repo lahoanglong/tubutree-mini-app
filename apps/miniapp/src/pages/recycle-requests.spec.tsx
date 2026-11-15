@@ -46,6 +46,7 @@ vi.mock('../services/waste-api', async (orig) => ({
 
 import { HttpError } from '../services/http';
 import RecycleRequestsPage from './recycle-requests';
+import { makeHomePickup } from '../services/waste-home-pickup-fixtures';
 
 function renderPage() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
@@ -195,5 +196,36 @@ describe('/recycle/requests (§4.6, §16.1)', () => {
     expect(await screen.findByText('Chưa có yêu cầu nào')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Đổi rác ngay' })).toBeNull();
     mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
+  });
+  describe('đơn Shipper lấy tận nhà', () => {
+    const HOME = (over: object = {}) => makeRequestSummary({ id: 'r-home', code: 'TR-HOME1', method: 'HOME_PICKUP', status: 'OPEN', pointName: 'Kho Tubu HCM', homePickup: makeHomePickup(), ...over });
+    it('mã, cách giao, trạng thái vận đơn ngắn và điểm đã dùng trừ phí ship trên một dòng', async () => {
+      mocks.listWasteRequests.mockResolvedValue([HOME({ homePickup: makeHomePickup({ gomdonStatus: '3' }), status: 'IN_TRANSIT' })]);
+      renderPage();
+      const row = await screen.findByRole('button', { name: /TR-HOME1/ });
+      expect(row).toHaveTextContent('Shipper lấy tận nhà');
+      expect(row).toHaveTextContent('Bưu tá đã lấy rác');
+      expect(row).toHaveTextContent('Đã dùng 25.000 điểm trừ phí ship');
+    });
+    it('đơn đã huỷ có điểm hoàn: nói số điểm đã hoàn, không nói đã dùng', async () => {
+      mocks.listWasteRequests.mockResolvedValue([HOME({ status: 'CANCELLED', closeReason: null, homePickup: makeHomePickup({ shipFeePointsRefunded: 25_000 }) })]);
+      renderPage();
+      fireEvent.click(await screen.findByRole('tab', { name: /Đã đóng/ }));
+      const row = screen.getByRole('button', { name: /TR-HOME1/ });
+      expect(row).toHaveTextContent('Đã hoàn 25.000 điểm phí ship');
+      expect(row).not.toHaveTextContent('Đã dùng');
+    });
+    it('đơn hoàn tất: dòng báo điểm đã cộng như các cách khác', async () => {
+      mocks.listWasteRequests.mockResolvedValue([HOME({ status: 'COMPLETED', pointsAwarded: 6000, homePickup: makeHomePickup({ gomdonStatus: '7' }) })]);
+      renderPage();
+      expect(await screen.findByRole('button', { name: /TR-HOME1/ })).toHaveTextContent('Đã cộng 6.000 điểm');
+    });
+    it('đúng một lối "Đổi điểm lấy quà" về Ưu đãi, không thêm nút thứ hai', async () => {
+      renderPage();
+      const link = await screen.findByRole('button', { name: 'Đổi điểm lấy quà' });
+      expect(screen.getAllByRole('button', { name: /Đổi điểm lấy quà/ })).toHaveLength(1);
+      fireEvent.click(link);
+      expect(mocks.navigate).toHaveBeenCalledWith('/offers?tab=rewards', expect.anything());
+    });
   });
 });

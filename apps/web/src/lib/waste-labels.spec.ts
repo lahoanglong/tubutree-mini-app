@@ -50,6 +50,11 @@ describe('waste-labels', () => {
     expect(WASTE_STAFF_SECTIONS).toEqual(['requests', 'gifts']);
   });
 
+  it('nhãn bốn cách giao, có shipper lấy tận nhà', () => {
+    expect(WASTE_METHOD_LABELS.HOME_PICKUP).toBe('Shipper lấy tận nhà');
+    expect(Object.keys(WASTE_METHOD_LABELS)).toEqual(['DROP_OFF', 'MAIL_IN', 'PICKUP', 'HOME_PICKUP']);
+  });
+
   it('không nhãn nào chứa chữ cấm', () => {
     const records: Record<string, string>[] = [
       WASTE_METHOD_LABELS,

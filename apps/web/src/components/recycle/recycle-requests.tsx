@@ -11,7 +11,9 @@ import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { loginHref } from '@/lib/return-to';
-import { wasteGuestCopy } from '@tubutree/app-core/waste-copy';
+import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
+import { homePickupListMeta } from '@tubutree/app-core/recycle-home-pickup-view';
+import { homePickupCopy, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
@@ -124,10 +126,13 @@ export function RecycleRequests() {
               key={r.id}
               href={r.status === 'COMPLETED' ? `/doi-rac/xong/${r.id}` : `/doi-rac/yeu-cau/${r.id}`}
               title={`${r.code} · ${METHOD_LABELS[r.method]}`}
-              subtitle={`${requestStatusText(r, { blocked: me?.blocked, paused })} · ${formatDate(r.createdAt)}`}
+              subtitle={[requestStatusText(r, { blocked: me?.blocked, paused }), homePickupListMeta(r), formatDate(r.createdAt)].filter(Boolean).join(' · ')}
             />
           );
         })}
+      </div>
+      <div className={skin.plain}>
+        <RecycleLinkRow bare href={offersTabHref('/uu-dai', 'rewards')} title={homePickupCopy.list.giftsLink} />
       </div>
     </Shell>
   );

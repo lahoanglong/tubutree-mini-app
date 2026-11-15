@@ -381,6 +381,32 @@ describe('CartPage — chia theo nơi giao (D4)', () => {
   });
 });
 
+describe('CartPage — quà đổi điểm tặng kèm 0đ (W168)', () => {
+  const GIFT = { id: 'g1', code: 'QG-1', giftName: 'Hạt giống rau', kind: 'SEED_PACK' as const, pointsCost: 500 };
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('có quà chờ gắn đơn: đúng một dòng chỉ đọc, không nút, không công tắc, không ô "Để đơn sau"', async () => {
+    mocks.getCart.mockResolvedValue(summary({ pendingGiftRedemptions: [GIFT, { ...GIFT, id: 'g2' }] }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    const note = await screen.findByTestId('cart-gift-note');
+    expect(screen.getAllByTestId('cart-gift-note')).toHaveLength(1);
+    expect(note.textContent).toBe('🎁 Quà đổi điểm sẽ tự thêm ở bước thanh toán · 0đ');
+    expect(within(note).queryByRole('button')).toBeNull();
+    expect(within(note).queryByRole('checkbox')).toBeNull();
+    expect(screen.queryByText('Để đơn sau')).toBeNull();
+  });
+
+  it('không có quà (hoặc API cũ chưa trả trường) → không có dòng', async () => {
+    mocks.getCart.mockResolvedValue(summary({ pendingGiftRedemptions: [] }));
+    renderPage();
+    await screen.findByText('Xà bông thảo mộc');
+    expect(screen.queryByTestId('cart-gift-note')).toBeNull();
+  });
+});
+
 describe('CartPage: tham số xem trước mức giảm mã cho VoucherSheet', () => {
   beforeEach(() => {
     vi.clearAllMocks();

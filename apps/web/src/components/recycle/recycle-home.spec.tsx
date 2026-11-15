@@ -490,3 +490,26 @@ describe('/doi-rac — máy tính: hai cột cân đối từ lg', () => {
     expect(c.querySelector('[data-testid="recycle-home-layout"]')).toBeNull();
   });
 });
+
+describe('/doi-rac: thẻ Shipper lấy tận nhà', () => {
+  it('cờ pickup bật: thẻ nằm sau Thu kèm đơn, nói trừ phí ship bằng Điểm Xanh; cờ tắt hay khoá đường kho thì ẩn', async () => {
+    state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
+    state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } });
+    let c = await mount();
+    expect(c.textContent).toContain('Shipper lấy tận nhà');
+    expect(c.textContent).toContain('Bưu tá tới tận nhà lấy, trừ phí ship bằng Điểm Xanh');
+    const at = (n: string) => c.textContent!.indexOf(n);
+    const names = ['Mang tới điểm nhận', 'Gửi về kho Tubu HCM', 'Thu kèm đơn mua', 'Shipper lấy tận nhà'];
+    expect(names.map(at)).toEqual([...names.map(at)].sort((a, b) => a - b));
+
+    state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } };
+    state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: false } });
+    c = await mount();
+    expect(c.textContent).not.toContain('Shipper lấy tận nhà');
+
+    state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
+    state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, shipLockedAt: '2026-10-01T00:00:00.000Z' });
+    c = await mount();
+    expect(c.textContent).not.toContain('Shipper lấy tận nhà');
+  });
+});

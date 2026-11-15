@@ -11,6 +11,8 @@ import type {
   WasteMeDTO,
   WasteNearbyRequest,
   WastePerkSubmitRequest,
+  WastePickupQuoteRequest,
+  WastePickupQuoteResponse,
   WastePointDTO,
   WastePointMonthlyReportDTO,
   WastePreviewDTO,
@@ -51,6 +53,9 @@ export const getWastePoints = (http: HttpClient, provinceCode?: string) =>
 export const getNearbyWastePoints = (http: HttpClient, body: WasteNearbyRequest) =>
   http.post<WastePointDTO[]>('/waste/points/nearby', body);
 export const previewWaste = (http: HttpClient, body: WastePreviewRequest) => http.post<WastePreviewDTO>('/waste/preview', body);
+/** Báo phí shipper lấy rác tận nhà (HOME_PICKUP): phí thật hoặc ước lượng, Điểm Xanh trừ được, điều kiện chặn. Không ghi gì. */
+export const getWastePickupQuote = (http: HttpClient, body: WastePickupQuoteRequest) =>
+  http.post<WastePickupQuoteResponse>('/waste/pickup-quote', body);
 export const createWasteRequest = (http: HttpClient, body: WasteCreateRequest, idempotencyKey: string) =>
   http.post<WasteRequestDetailDTO>('/waste/requests', body, { headers: { 'Idempotency-Key': idempotencyKey } });
 export const editWasteRequest = (http: HttpClient, id: string, body: WasteEditRequest) =>

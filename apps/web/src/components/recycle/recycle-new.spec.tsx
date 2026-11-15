@@ -334,14 +334,14 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
   it('một preview cho mỗi cách đang bật, đúng thứ tự Mang tới, Thu kèm, Gửi về kho', async () => {
     atStep2();
     const c = await mount();
-    expect(methods(c)).toEqual(['DROP_OFF', 'PICKUP', 'MAIL_IN']);
+    expect(methods(c)).toEqual(['DROP_OFF', 'PICKUP', 'MAIL_IN', 'HOME_PICKUP']);
     expect(previewCalls().map((b) => b.method).sort()).toEqual(['DROP_OFF', 'MAIL_IN', 'PICKUP']);
   });
   it('tỉnh của khách không có điểm nhận → Gửi về kho và Thu kèm lên đầu', async () => {
     state.points = [makeWastePoint({ provinceCode: '01' })];
     atStep2();
     const c = await mount();
-    expect(methods(c)).toEqual(['MAIL_IN', 'PICKUP', 'DROP_OFF']);
+    expect(methods(c)).toEqual(['MAIL_IN', 'PICKUP', 'DROP_OFF', 'HOME_PICKUP']);
   });
   it('Gửi về kho: khoảng phí theo bảng niêm yết, gói tối thiểu, giới hạn kiện (một lần cho mỗi cách)', async () => {
     atStep2();
@@ -366,7 +366,7 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     atStep2();
     const c = await mount();
     expect(c.textContent).toContain('Cần thêm 6.000 điểm');
-    expect(Array.from(c.querySelectorAll('[role="radio"]')).every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true);
+    expect(Array.from(c.querySelectorAll('[role="radio"]')).filter((r) => r.getAttribute('data-method') !== 'HOME_PICKUP').every((r) => r.getAttribute('aria-disabled') === 'true')).toBe(true);
     expect(c.textContent).toContain('Bạn đang có 3 yêu cầu chưa xong');
   });
   it('ITEM_DROPOFF_ONLY: thẻ Gửi về kho và Thu kèm đơn khoá kèm lý do, thẻ Mang tới điểm nhận vẫn chọn được', async () => {
@@ -420,13 +420,13 @@ describe('bước 2: chọn cách giao (§4.3)', () => {
     state.points = [makeWastePoint({ provinceCode: '01' })];
     atStep2();
     const c = await mount();
-    expect(methods(c)).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']);
+    expect(methods(c)).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF', 'HOME_PICKUP']);
     click(method(c, 'MAIL_IN'));
     await flush(4);
     selectValue(c.querySelector<HTMLSelectElement>('select[aria-label="Chọn tỉnh để ước tính phí ship"]')!, '01');
     await flush(10);
     expect(previewCalls()).toContainEqual(expect.objectContaining({ method: 'MAIL_IN', provinceCode: '01' }));
-    expect(methods(c)).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF']);
+    expect(methods(c)).toEqual(['PICKUP', 'MAIL_IN', 'DROP_OFF', 'HOME_PICKUP']);
   });
   it('phí ship ước tính ghi tên tỉnh từ danh sách, không ghi mã tỉnh', async () => {
     state.provinces = [{ code: '48', name: 'Đà Nẵng' }];

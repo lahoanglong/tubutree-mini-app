@@ -2,6 +2,8 @@ import type { WasteMethod, WastePreviewDTO } from '@tubutree/shared-types';
 
 const BASE_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'PICKUP', 'MAIL_IN'];
 const MAIL_FIRST_ORDER: readonly WasteMethod[] = ['MAIL_IN', 'PICKUP', 'DROP_OFF'];
+/** Cách có luồng đặt riêng (báo phí shipper, không có bản xem trước): luôn nằm sau các thẻ trên, không tham gia việc xếp thẻ khoá xuống cuối. */
+const TRAILING_METHODS: readonly WasteMethod[] = ['HOME_PICKUP'];
 
 /** Thẻ khoá khi có lý do chặn thật; NEED_PROVINCE chỉ là chưa chọn tỉnh nên không tính. */
 export const isMethodLocked = (preview: WastePreviewDTO | undefined): boolean => preview?.blocks.some((b) => b.code !== 'NEED_PROVINCE') ?? false;
@@ -20,8 +22,9 @@ export function orderWasteMethods(
   failed: readonly WasteMethod[] = [],
 ): WasteMethod[] {
   const base = (noPointInProvince ? MAIL_FIRST_ORDER : BASE_ORDER).filter((m) => enabled.includes(m));
-  if (!base.every((m) => previews[m] !== undefined || failed.includes(m))) return base;
+  const trailing = TRAILING_METHODS.filter((m) => enabled.includes(m));
+  if (!base.every((m) => previews[m] !== undefined || failed.includes(m))) return [...base, ...trailing];
   // Thẻ lỗi bỏ kết quả cũ (có thể của tỉnh khác) để không bị khoá theo nó.
   const locked = (m: WasteMethod) => !failed.includes(m) && isMethodLocked(previews[m]);
-  return [...base].sort((a, b) => Number(locked(a)) - Number(locked(b)));
+  return [...[...base].sort((a, b) => Number(locked(a)) - Number(locked(b))), ...trailing];
 }

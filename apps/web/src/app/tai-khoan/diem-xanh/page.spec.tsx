@@ -456,6 +456,22 @@ describe('/tai-khoan/diem-xanh — lịch sử Điểm Xanh', () => {
     expect(c.textContent).not.toContain('WEIRD_INTERNAL_CODE');
   });
 
+  it('phí shipper thu gom tận nhà: dòng trừ và dòng hoàn có nhãn riêng kèm mã yêu cầu, không in chuỗi kỹ thuật', async () => {
+    state.txns = [
+      { id: 'w1', delta: -25_000, reason: 'WASTE_PICKUP_FEE:TR-8K2M9', expiresAt: null, createdAt: '2026-10-14T05:00:00Z' },
+      { id: 'w2', delta: 25_000, reason: 'WASTE_PICKUP_FEE_REFUND:TR-8K2M9', expiresAt: null, createdAt: '2026-10-15T05:00:00Z' },
+    ];
+    const c = await mount();
+    const rows = Array.from(c.querySelectorAll('section[aria-label="Lịch sử Điểm Xanh"] li')).map((li) => li.textContent ?? '');
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toContain('Trừ phí shipper thu gom · TR-8K2M9');
+    expect(rows[0]).toContain('−25.000');
+    expect(rows[1]).toContain('Hoàn điểm phí shipper · TR-8K2M9');
+    expect(rows[1]).toContain('+25.000');
+    expect(c.textContent).not.toContain('WASTE_PICKUP_FEE');
+    expect(c.textContent).not.toContain('Điều chỉnh Điểm Xanh');
+  });
+
   it('hiện 20 giao dịch gần nhất, "Xem thêm" tải trang kế từ máy chủ (cả dòng cũ hơn 100) cho tới hết', async () => {
     state.txns = Array.from({ length: 145 }, (_, i) => ({
       id: `n${String(i).padStart(3, '0')}`, delta: 1, reason: 'CHECKIN_DAILY:DAY_1', expiresAt: null, createdAt: new Date(Date.UTC(2026, 9, 10, 5, 0, 0) - i * 1000).toISOString(),

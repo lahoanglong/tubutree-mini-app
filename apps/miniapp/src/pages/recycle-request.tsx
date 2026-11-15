@@ -1,4 +1,5 @@
-import { pausedNote } from '@tubutree/app-core/waste-copy';
+import { homePickupCancelCopy, homePickupCancelDone, homePickupTimelineView, homePickupUnavailableText } from '@tubutree/app-core/recycle-home-pickup-view';
+import { homePickupCopy, pausedNote } from '@tubutree/app-core/waste-copy';
 import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -22,6 +23,7 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useSheetSeq } from '../hooks/use-sheet-seq';
 import { useSyncedDraft } from '../hooks/use-synced-draft';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { HomePickupDetail } from '../components/recycle-home-pickup';
 import { QrCode } from '../components/qr-code';
 import { SupportContact } from '../components/support-contact';
 import { SessionUnavailable } from '../components/ui/auth-gate';
@@ -36,7 +38,7 @@ import { Heading, Text } from '../components/ui/text';
 import { Timeline } from '../components/ui/timeline';
 import { openingStatus, todayHoursText } from '@tubutree/app-core/waste-hours';
 import { copyText } from '../utils/clipboard';
-import { formatDate, formatNumber, formatPoints } from '../utils/format';
+import { formatDate, formatDateTime, formatNumber, formatPoints } from '../utils/format';
 import { formatPhoneDisplay } from '../utils/phone';
 import { METHOD_LABELS, SHORTFALL_LABELS, TIMELINE_STEPS, closedLabel, dayMonth, pointAddress, isRequestPaused, requestStatusText, timelineFor } from '../utils/waste-labels';
 import { INPUT_LIMITS } from '../utils/input-limits';
@@ -201,13 +203,13 @@ export default function RecycleRequestPage() {
   const cancel = useLockedMutation<WasteRequestDetailDTO, Error, string, number>({
     mutationFn: (rid: string) => cancelWasteRequest(rid),
     onMutate: () => cancelSeq.mark(),
-    onSuccess: async (_data, _rid, sent) => {
+    onSuccess: async (data, _rid, sent) => {
       await settleWithin(invalidateAfterWasteWrite(qc));
       if (cancelSeq.isCurrent(sent)) setCancelOpen(false);
-      openSnackbar({ text: 'Đã huỷ yêu cầu', type: 'success' });
+      openSnackbar({ text: data.method === 'HOME_PICKUP' ? homePickupCancelDone(data.homePickup) : 'Đã huỷ yêu cầu', type: 'success' });
     },
     onError: (e, rid, sent) => {
-      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+      openSnackbar({ text: homePickupUnavailableText(e) ?? getErrorMessage(e), type: 'error' });
       const held = isStaleStateError(e) ? refreshAfterRejection(qc, rid) : undefined;
       if (!isServerRejection(e)) return held;
       // Tấm huỷ chỉ có nút Xác nhận: máy chủ từ chối hẳn (400/404/409/422) thì bấm lại nhận đúng lỗi đó. Đóng SAU khi yêu cầu mới về để nút báo bận tới lúc đó.
@@ -245,7 +247,9 @@ export default function RecycleRequestPage() {
   const me = meQ.data;
   const open = r.status === 'OPEN';
   const editPath = `/recycle/r/${id}/edit`;
+  const isHome = r.method === 'HOME_PICKUP';
   const canEdit =
+    !isHome &&
     r.editable &&
     cfg.waste.enabled &&
     me?.programmeEnabled !== false &&
@@ -253,6 +257,18 @@ export default function RecycleRequestPage() {
     !(r.method !== 'DROP_OFF' && me?.shipLockedAt);
   const t = timelineFor(r);
   const closed = t ? null : closedLabel(r);
+  const homeTimeline = isHome ? homePickupTimelineView(r) : null;
+  const homeHints = homeTimeline
+    ? Object.fromEntries(
+        Object.entries(homeTimeline.hints).map(([i, h]) => [
+          i,
+          <Text key={i} variant="caption" tone="secondary" as="span" numeric>
+            {[formatDateTime(h.at), h.extra].filter(Boolean).join(' · ')}
+          </Text>,
+        ]),
+      )
+    : undefined;
+  const cancelCopy = isHome ? homePickupCancelCopy(r.code, r.homePickup) : null;
 
   const pauseFacts = {
     programmeEnabled: me?.programmeEnabled,
@@ -272,7 +288,7 @@ export default function RecycleRequestPage() {
 
   const cancelButton = (
     <Button variant="ghost" fullWidth onPress={() => setCancelOpen(true)} style={{ color: 'var(--color-text-danger)' }}>
-      Huỷ yêu cầu
+      {isHome ? homePickupCopy.detail.cancel : 'Huỷ yêu cầu'}
     </Button>
   );
   const changePointButton = canEdit ? (
@@ -381,7 +397,7 @@ export default function RecycleRequestPage() {
         </Text>
       )}
       {t ? (
-        <Timeline steps={TIMELINE_STEPS[r.method]} current={t.current} hints={stepHints} />
+        <Timeline steps={TIMELINE_STEPS[r.method]} current={t.current} hints={homeHints ?? stepHints} />
       ) : (
         closed && (
           <section style={{ ...COLUMN, gap: 4 }}>
@@ -390,7 +406,13 @@ export default function RecycleRequestPage() {
           </section>
         )
       )}
-      {open && (
+      {isHome && r.homePickup && (
+        <section style={BLOCK}>
+          <HomePickupDetail homePickup={r.homePickup} />
+        </section>
+      )}
+      {isHome && r.cancellable && <div>{cancelButton}</div>}
+      {open && !isHome && (
         <div style={{ ...COLUMN, gap: 10 }}>
           {r.method === 'DROP_OFF' &&
             (dropOffPaused ? (
@@ -475,14 +497,14 @@ export default function RecycleRequestPage() {
       <BottomSheet
         open={cancelOpen}
         onClose={() => setCancelOpen(false)}
-        title="Huỷ yêu cầu này?"
+        title={cancelCopy?.title ?? 'Huỷ yêu cầu này?'}
         footer={
           <Button variant="danger" fullWidth loading={cancel.isPending} onPress={() => cancel.mutate(id)}>
-            Xác nhận huỷ
+            {cancelCopy?.confirm ?? 'Xác nhận huỷ'}
           </Button>
         }
       >
-        <Text variant="body-md">{`Mã ${r.code} sẽ hết hiệu lực. Bạn có thể tạo yêu cầu mới bất cứ lúc nào.`}</Text>
+        <Text variant="body-md">{cancelCopy?.body ?? `Mã ${r.code} sẽ hết hiệu lực. Bạn có thể tạo yêu cầu mới bất cứ lúc nào.`}</Text>
       </BottomSheet>
     </>,
     codeBlockShown ? 'Yêu cầu đổi rác' : r.code,

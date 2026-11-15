@@ -1,7 +1,14 @@
 'use client';
 
 import type { CancelReasonBody } from '@tubutree/app-core/cancel-reasons';
-import type { CartComboGroup } from '@tubutree/shared-types';
+import type {
+  CartComboGroup,
+  CheckoutPickupFields,
+  CheckoutPickupQuote,
+  PendingGiftRedemptionDTO,
+  QuotePendingGiftDTO,
+  ShippingFeeWaivedReason,
+} from '@tubutree/shared-types';
 
 import { syncServerClock } from '@tubutree/app-core/server-clock';
 import { fetchActiveFlashSales } from '@tubutree/app-core/api/flash-sale';
@@ -55,6 +62,8 @@ export interface QuoteShipment {
   discount: number;
   shippingFee: number;
   total: number;
+  /** Số tiền phí giao kiện này được miễn nhờ thu rác kèm đơn (0 = không miễn). API cũ chưa trả. */
+  shippingFeeWaived?: number;
 }
 export interface CartSummary {
   items: CartLine[];
@@ -79,6 +88,8 @@ export interface CartSummary {
   itemCount: number;
   /** Dòng có SP đã ngừng bán/chưa duyệt — server không tính tiền, không đặt được. */
   unavailableItems?: { id: string; productName: string; variationName: string; quantity: number }[];
+  /** Quà hiện vật 0đ khách đã đổi và chưa gắn đơn nào (sẽ đi cùng đơn kế tiếp có hàng Tubu giao). API cũ chưa trả → coi như rỗng. */
+  pendingGiftRedemptions?: PendingGiftRedemptionDTO[];
 }
 export interface AddressDTO {
   id: string;
@@ -125,6 +136,14 @@ export interface CheckoutQuote {
   shipments?: QuoteShipment[];
   /** Phương thức không dùng được cho giỏ này → câu giải thích (ví dụ có hàng đối tác tự giao). */
   blockedPaymentMethods?: Record<string, string>;
+  /** Tổng phí giao được miễn nhờ thu rác kèm đơn; API cũ chưa trả → coi như 0. */
+  shippingFeeWaived?: number;
+  /** `RECYCLE_PICKUP` khi có phí giao được miễn vì thu rác kèm đơn; null/thiếu = không. */
+  shippingFeeWaivedReason?: ShippingFeeWaivedReason | null;
+  /** Phần thu rác kèm đơn; null khi giỏ không có kiện Tubu hoặc cổng đóng và khách không chọn. API cũ chưa trả. */
+  pickup?: CheckoutPickupQuote | null;
+  /** Quà hiện vật 0đ chờ gắn đơn; `included` = sẽ đi cùng đơn này. API cũ chưa trả → coi như rỗng. */
+  pendingGiftRedemptions?: QuotePendingGiftDTO[];
 }
 /** Đơn cùng lần đặt bị tách theo nơi giao (kể cả chính đơn này). */
 export interface SplitOrderDTO {
@@ -344,10 +363,10 @@ export const recordReferralTouch = (dto: { referralCode: string; storefrontSlug?
   apiFetch<{ ok: boolean }>('/affiliate/touch', { method: 'POST', body: dto });
 
 // Checkout
-export const checkoutQuote = (addressId: string, pointsToUse?: number, storefrontSlug?: string, itemIds?: string[]) =>
+export const checkoutQuote = (addressId: string, pointsToUse?: number, storefrontSlug?: string, itemIds?: string[], pickup?: CheckoutPickupFields) =>
   apiFetch<CheckoutQuote>('/checkout/quote', {
     method: 'POST',
-    body: { addressId, pointsToUse, storefrontSlug, ...(itemIds ? { itemIds } : {}) },
+    body: { addressId, pointsToUse, storefrontSlug, ...(itemIds ? { itemIds } : {}), ...pickup },
   });
 export interface InvoiceRequestBody {
   taxCode: string;
@@ -370,9 +389,7 @@ export const placeOrder = (
     note?: string;
     storefrontSlug?: string;
     referralCode?: string;
-    /** Yêu cầu thu rác PICKUP đang mở khách bật "Thu kèm rác" để gắn vào đơn này. */
-    wasteRequestId?: string;
-  },
+  } & CheckoutPickupFields,
   idempotencyKey: string,
 ) =>
   apiFetch<OrderDTO>('/checkout/place-order', {

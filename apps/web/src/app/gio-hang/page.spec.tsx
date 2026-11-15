@@ -992,3 +992,27 @@ describe('/gio-hang — W28: đơn tối thiểu của mã khi giỏ đổi', ()
     expect(container.querySelector('[data-testid="coupon-removed-notice"]')).toBeNull();
   });
 });
+
+describe('/gio-hang — quà đổi điểm tặng kèm 0đ (W168)', () => {
+  const GIFT = { id: 'g1', code: 'QG-1', giftName: 'Hạt giống rau', kind: 'SEED_PACK', pointsCost: 500 };
+  const note = (c: HTMLElement) => c.querySelectorAll('[data-testid="cart-gift-note"]');
+
+  it('có quà chờ gắn đơn: đúng một dòng chỉ đọc, không nút, không ô chọn, không "Để đơn sau"', async () => {
+    state.cart = { ...cartOf([line({})]), pendingGiftRedemptions: [GIFT, { ...GIFT, id: 'g2' }] };
+    const { container } = await mount();
+    const found = note(container);
+    expect(found).toHaveLength(1);
+    expect(found[0]!.textContent).toBe('🎁 Quà đổi điểm sẽ tự thêm ở bước thanh toán · 0đ');
+    expect(found[0]!.querySelector('button, input, a')).toBeNull();
+    expect(container.textContent).not.toContain('Để đơn sau');
+  });
+
+  it('không có quà (hoặc API cũ chưa trả trường) → không có dòng', async () => {
+    state.cart = { ...cartOf([line({})]), pendingGiftRedemptions: [] };
+    const { container } = await mount();
+    expect(note(container)).toHaveLength(0);
+    state.cart = cartOf([line({})]);
+    const again = await mount();
+    expect(note(again.container)).toHaveLength(0);
+  });
+});

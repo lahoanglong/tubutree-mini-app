@@ -13,6 +13,7 @@ import type {
   WasteShortfallReason,
 } from '@tubutree/shared-types';
 import { pointAddress } from '@tubutree/app-core/reward-rules';
+import { homePickupShortStatus } from '@tubutree/app-core/recycle-home-pickup-view';
 import { TIMELINE_STEPS, timelineFor } from '@tubutree/app-core/waste-timeline';
 import type { WasteTimeline } from '@tubutree/app-core/waste-timeline';
 import { formatCount } from '@/lib/checkout-points';
@@ -36,17 +37,19 @@ export const METHOD_LABELS: Record<WasteMethod, string> = {
   DROP_OFF: 'Mang tới điểm nhận',
   MAIL_IN: 'Gửi về kho Tubu HCM',
   PICKUP: 'Thu kèm đơn mua',
+  HOME_PICKUP: 'Shipper lấy tận nhà',
 };
 
 export { TIMELINE_STEPS, timelineFor };
 export type { WasteTimeline };
 
-export const METHOD_FLAG = { DROP_OFF: 'dropoff', MAIL_IN: 'mailin', PICKUP: 'pickup' } as const;
-export const METHOD_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'MAIL_IN', 'PICKUP'];
+export const METHOD_FLAG = { DROP_OFF: 'dropoff', MAIL_IN: 'mailin', PICKUP: 'pickup', HOME_PICKUP: 'pickup' } as const;
+export const METHOD_ORDER: readonly WasteMethod[] = ['DROP_OFF', 'MAIL_IN', 'PICKUP', 'HOME_PICKUP'];
 export const METHOD_LINE: Record<WasteMethod, string> = {
   DROP_OFF: 'Miễn phí, nhận điểm khi người ở điểm xác nhận',
   MAIL_IN: 'Tự gửi qua hãng bất kỳ và tự trả phí ship',
   PICKUP: 'Miễn phí, bưu tá lấy khi giao đơn Tubu kế tiếp',
+  HOME_PICKUP: 'Bưu tá tới tận nhà lấy, trừ phí ship bằng Điểm Xanh',
 };
 
 export const REJECTION_LABELS: Record<WasteRejectionReason, string> = {
@@ -116,9 +119,11 @@ export function isRequestPaused(r: Pick<WasteRequestSummaryDTO, 'method' | 'stat
 
 /** Dòng trạng thái của một yêu cầu cho khách (danh sách, thẻ trang chủ, trang chi tiết); tên bước theo §4.6. */
 export function requestStatusText(
-  r: Pick<WasteRequestSummaryDTO, 'method' | 'status' | 'closeReason' | 'orderCode' | 'pointsAwarded'>,
+  r: Pick<WasteRequestSummaryDTO, 'method' | 'status' | 'closeReason' | 'orderCode' | 'pointsAwarded' | 'homePickup'>,
   opts: { blocked?: boolean; paused?: boolean } = {},
 ): string {
+  const shipper = r.method === 'HOME_PICKUP' ? homePickupShortStatus(r) : null;
+  if (shipper) return shipper;
   switch (r.status) {
     case 'OPEN':
       if (opts.paused && (r.method === 'DROP_OFF' || (r.method === 'PICKUP' && !r.orderCode))) return 'Đang tạm dừng';

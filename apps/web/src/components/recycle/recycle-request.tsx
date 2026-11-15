@@ -1,7 +1,8 @@
 'use client';
 
 import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
-import { pausedNote } from '@tubutree/app-core/waste-copy';
+import { homePickupCancelCopy, homePickupCancelDone, homePickupTimelineView, homePickupUnavailableText } from '@tubutree/app-core/recycle-home-pickup-view';
+import { homePickupCopy, pausedNote } from '@tubutree/app-core/waste-copy';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
@@ -16,7 +17,7 @@ import { friendlyActionError as actErrText, friendlyError as errText } from '@/l
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { settleWithin } from '@/lib/settle-within';
-import { formatDate } from '@/lib/format-date';
+import { formatDate, formatDateTime } from '@/lib/format-date';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
@@ -32,6 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DeclaredCountedTable } from './declared-counted-table';
 import { SupportContact } from '@/components/support-contact';
 import { RecycleTimeline } from './recycle-timeline';
+import { HomePickupDetail } from './recycle-home-pickup';
 import {
   METHOD_LABELS,
   TIMELINE_STEPS,
@@ -176,9 +178,9 @@ export function RecycleRequestDetail({ id }: { id: string }) {
   const [sending, setSending] = useState(false);
   const cancel = useMutation({
     mutationFn: () => cancelWasteRequest(coreHttp, id),
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       setSending(false);
-      setNotice({ text: 'Đã huỷ yêu cầu', ok: true });
+      setNotice({ text: data.method === 'HOME_PICKUP' ? homePickupCancelDone(data.homePickup) : 'Đã huỷ yêu cầu', ok: true });
       await refresh();
       setCancelOpen(false);
     },
@@ -210,7 +212,9 @@ export function RecycleRequestDetail({ id }: { id: string }) {
 
   const me = meQ.data;
   const open = r.status === 'OPEN';
+  const isHome = r.method === 'HOME_PICKUP';
   const canEdit =
+    !isHome &&
     r.editable &&
     cfg.waste.enabled &&
     me?.programmeEnabled !== false &&
@@ -218,6 +222,18 @@ export function RecycleRequestDetail({ id }: { id: string }) {
     !(r.method !== 'DROP_OFF' && me?.shipLockedAt);
   const t = timelineFor(r);
   const closed = t ? null : closedLabel(r);
+  const homeTimeline = isHome ? homePickupTimelineView(r) : null;
+  const homeHints = homeTimeline
+    ? Object.fromEntries(
+        Object.entries(homeTimeline.hints).map(([i, h]) => [
+          i,
+          <span key={i} className="text-xs text-stone-600">
+            {[formatDateTime(h.at), h.extra].filter(Boolean).join(' · ')}
+          </span>,
+        ]),
+      )
+    : undefined;
+  const cancelCopy = isHome ? homePickupCancelCopy(r.code, r.homePickup) : null;
 
   const pauseFacts = {
     programmeEnabled: me?.programmeEnabled,
@@ -240,7 +256,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
         setCancelOpen(true);
       }}
     >
-      Huỷ yêu cầu
+      {isHome ? homePickupCopy.detail.cancel : 'Huỷ yêu cầu'}
     </button>
   );
   const changePointLink = canEdit ? (
@@ -361,7 +377,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
             <p className="text-sm text-stone-600">{pausedNote(r, pauseFacts, dayMonth(r.expiresAt ?? r.createdAt))}</p>
           )}
           {t ? (
-            <RecycleTimeline steps={TIMELINE_STEPS[r.method]} current={t.current} hints={stepHints} />
+            <RecycleTimeline steps={TIMELINE_STEPS[r.method]} current={t.current} hints={homeHints ?? stepHints} />
           ) : (
             closed && (
               <section className="flex flex-col gap-1">
@@ -370,7 +386,8 @@ export function RecycleRequestDetail({ id }: { id: string }) {
               </section>
             )
           )}
-          {open && (
+          {isHome && r.cancellable && <div>{cancelButton}</div>}
+          {open && !isHome && (
             <div className="flex flex-col gap-2.5">
               {r.method === 'DROP_OFF' &&
                 (dropOffPaused ? (
@@ -410,6 +427,11 @@ export function RecycleRequestDetail({ id }: { id: string }) {
                     </button>
                   </div>
                 ))}
+            </section>
+          )}
+          {isHome && r.homePickup && (
+            <section className={BLOCK}>
+              <HomePickupDetail homePickup={r.homePickup} />
             </section>
           )}
           <DeclaredCountedTable lines={r.lines} />
@@ -467,7 +489,7 @@ export function RecycleRequestDetail({ id }: { id: string }) {
         open={cancelOpen}
         dismissible={!sending}
         onClose={() => setCancelOpen(false)}
-        title="Huỷ yêu cầu này?"
+        title={cancelCopy?.title ?? 'Huỷ yêu cầu này?'}
         footer={
           <button
             type="button"
@@ -481,14 +503,14 @@ export function RecycleRequestDetail({ id }: { id: string }) {
               cancel.mutate();
             }}
           >
-            Xác nhận huỷ
+            {cancelCopy?.confirm ?? 'Xác nhận huỷ'}
           </button>
         }
       >
-        <p className="text-sm text-stone-800">{`Mã ${r.code} sẽ hết hiệu lực. Bạn có thể tạo yêu cầu mới bất cứ lúc nào.`}</p>
+        <p className="text-sm text-stone-800">{cancelCopy?.body ?? `Mã ${r.code} sẽ hết hiệu lực. Bạn có thể tạo yêu cầu mới bất cứ lúc nào.`}</p>
         {cancel.isError ? (
           <p role="alert" className={ui.error}>
-            {actErrText(cancel.error)}
+            {homePickupUnavailableText(cancel.error) ?? actErrText(cancel.error)}
           </p>
         ) : null}
       </Sheet>

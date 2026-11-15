@@ -1,4 +1,4 @@
-import type { CartComboGroup } from '@tubutree/shared-types';
+import type { CartComboGroup, PendingGiftRedemptionDTO } from '@tubutree/shared-types';
 import type { HttpClient, RequestOptions } from '../http';
 import type { RemovedCoupon } from '../coupon-min-order';
 
@@ -74,6 +74,8 @@ export interface CartSummary {
   /** Ngưỡng freeship từ SystemConfig — cho progress bar khích lệ. */
   freeshipThreshold: number;
   itemCount: number;
+  /** Quà hiện vật 0đ khách đã đổi và chưa gắn đơn nào (sẽ đi cùng đơn kế tiếp có hàng Tubu giao). API cũ chưa trả → coi như rỗng. */
+  pendingGiftRedemptions?: PendingGiftRedemptionDTO[];
 }
 
 export type AddToCartSource = 'pdp' | 'buy_now' | 'repurchase' | 'wishlist' | 'ctv_sheet' | 'reorder_notification';

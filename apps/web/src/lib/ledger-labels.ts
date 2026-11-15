@@ -2,6 +2,7 @@
  * Nhãn tiếng Việt cho sổ Điểm Xanh và sổ Ví Tubu — cùng bảng với Mini App (account-api.ts `pointsReasonLabel`,
  * wallet-rules.ts `walletTxLabel`) để khách đối chiếu số dư ở đâu cũng thấy cùng một câu. Không bao giờ in mã kỹ thuật thô.
  */
+import { wastePickupFeeReasonLabel } from '@tubutree/app-core/waste-points-reason';
 
 type ReasonRef = 'order' | 'day';
 interface ReasonRule {
@@ -110,7 +111,7 @@ function parsePointsReason(reason: string): { rule: ReasonRule | undefined; ref:
 
 /** `reason` của dòng sổ Điểm Xanh có dạng "MÃ:tham-chiếu"; chỉ mã đầu quyết định nhãn. */
 export function pointsReasonLabel(reason: string): string {
-  return parsePointsReason(reason).rule?.label ?? FALLBACK_POINTS_LABEL;
+  return wastePickupFeeReasonLabel(reason) ?? parsePointsReason(reason).rule?.label ?? FALLBACK_POINTS_LABEL;
 }
 
 /** Dòng ghi nợ thu hồi (delta 0): API ghi số điểm còn thiếu ở đoạn cuối reason `MÃ:<tham chiếu>:<số điểm thiếu>`. */
@@ -130,6 +131,8 @@ const ORDER_CODE = /^[A-Za-z0-9_-]{1,40}$/;
  * Phần tham chiếu không đúng dạng thì bỏ, không in chuỗi lạ ra màn hình.
  */
 export function pointsReasonDetail(reason: string): string {
+  const pickupFee = wastePickupFeeReasonLabel(reason);
+  if (pickupFee) return pickupFee;
   const { rule, ref } = parsePointsReason(reason);
   if (!rule) return FALLBACK_POINTS_LABEL;
   const debt = pointsDebtAmount(reason);
