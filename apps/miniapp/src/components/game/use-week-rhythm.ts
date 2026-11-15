@@ -59,7 +59,6 @@ export function useWeekRhythm({ streakDays, lastCheckInAt, activeToday }: { stre
   return useMemo(
     () => weekRhythm({ now: new Date(), streakDays, lastCheckInAt, todayDone, localDays }),
     // dayKey đổi khi qua nửa đêm: buộc tính lại với ngày mới.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [streakDays, lastCheckInAt, todayDone, localDays, dayKey],
   );
 }

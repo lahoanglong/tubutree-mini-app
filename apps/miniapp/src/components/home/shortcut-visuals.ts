@@ -1,4 +1,5 @@
 import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, ScanLine, Ticket, Users, Zap, type LucideIcon } from 'lucide-react';
+import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
 import { liveRoute } from '@tubutree/app-core/merch/route-fallback';
 import type { HomeShortcutId } from '@tubutree/app-core/home-layout';
 
@@ -18,7 +19,7 @@ export const SHORTCUT_ICONS: Record<HomeShortcutId, LucideIcon> = {
 export const SHORTCUT_ROUTES: Record<HomeShortcutId, string | null> = {
   flash: liveRoute('/flash-sale', 'mini'),
   orders: '/orders',
-  rewards: '/rewards',
+  rewards: offersTabHref('/offers', 'rewards'),
   recycle: '/recycle',
   groupBuy: '/group-buy',
   coupons: liveRoute('/vouchers', 'mini'),

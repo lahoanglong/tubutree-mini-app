@@ -64,6 +64,14 @@ describe('ShortcutGrid — 4 ô cố định + "Thêm" (Q7)', () => {
     expect(screen.queryByRole('button', { name: /Đổi quà/ })).toBeNull();
   });
 
+  it('Đổi quà trong hộp thoại của "Thêm" đi thẳng Hub Ưu đãi tab Đổi quà, không qua /rewards', async () => {
+    render(<ShortcutGrid />);
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Đổi quà/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?tab=rewards');
+  });
+
   it('"Thêm" mở hộp thoại "Tất cả lối tắt" liệt kê đủ mục còn hiển thị; chọn mục đóng hộp và điều hướng', async () => {
     render(<ShortcutGrid />);
     expect(screen.queryByRole('dialog')).toBeNull();

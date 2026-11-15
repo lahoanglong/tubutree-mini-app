@@ -54,6 +54,8 @@ const ALLOWED_EMOJI: Record<string, string[]> = {
   'src/components/game/water-tank.tsx': ['💧'],
   'src/components/game/game-utils.ts': ['🌳', '💧', '🌍', '🌬', '🐾', '♻', '⚡', '🌿', '🌟', '💎', '🍃'],
   'src/components/game/checkin-streak.tsx': ['💧', '🎁'],
+  // Dải Nhịp Sống Xanh: 💧 trong ô là dấu "đã chăm vườn" (nội dung của ngày), không phải icon chức năng; dải không có nút.
+  'src/components/game/week-rhythm.tsx': ['💧'],
   'src/components/game/tree-actions.tsx': ['💧'],
   'src/components/game/use-game-actions.ts': ['🧊', '💦', '🎁', '🌳', '🪴'],
   'src/components/game/garden-plots.tsx': ['🌱', '🌿', '🌳', '🥀', '🍂'],
