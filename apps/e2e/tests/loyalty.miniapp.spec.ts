@@ -265,9 +265,9 @@ test.describe('Hạng thành viên — Điểm Xanh', () => {
     mockLoyalty(api);
     await page.goto('/loyalty');
 
-    // Chưa có mã: dòng đầu trang Hạng là "Đổi quà" dẫn tới Kho quà.
+    // Chưa có mã: dòng đầu trang Hạng là "Đổi quà" dẫn tới Kho quà ở tab Đổi quà của hub Ưu đãi.
     await page.getByText('Đổi quà', { exact: true }).click({ timeout: 15_000 });
-    await expect(page).toHaveURL(/\/rewards$/);
+    await expect(page).toHaveURL(/\/offers\?tab=rewards$/);
 
     const card = (name: string) => page.locator('[data-reward]').filter({ hasText: name });
     // 60 điểm < 100 → quà 100 điểm không có nút Đổi.

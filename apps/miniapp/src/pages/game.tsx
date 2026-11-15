@@ -2,7 +2,8 @@ import { useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { MISSION_PATHS } from '@tubutree/app-core/game-mission-paths';
 import { GAME_CHECKIN_ANCHOR, extraPlotsVisible, type MissionTarget, type PrimaryWaterAction, gameNewbieCopy } from '@tubutree/app-core/game-newbie';
-import { Page, useNavigate } from 'zmp-ui';
+import { Page } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import type { HarvestCouponTerms, HarvestSpecies } from '../services/game-api';
 import { SessionUnavailable, useLoginWithNotice } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -58,7 +59,7 @@ export default function GamePage() {
   const phase = useAuthPhase();
   const login = useLoginWithNotice({ sessionErrorShown: true });
   const couponUse = useCouponUse();
-  const navigate = useNavigate();
+  const navigate = useSmartNavigate();
   const publicConfig = usePublicConfig();
   const referralCode = useAuthStore((s) => s.user?.referralCode);
   const authed = phase === 'authenticated';
@@ -115,10 +116,8 @@ export default function GamePage() {
   };
   const claimDaily = (action: Extract<PrimaryWaterAction, { kind: 'claim' }>) =>
     checkInM.mutate(undefined, { onSuccess: () => action.withDew && dewM.mutate() });
-  const goMission = (target: MissionTarget) => {
-    if (target === 'checkin') goTab('today', GAME_CHECKIN_ANCHOR);
-    else navigate(MISSION_PATHS.miniapp[target]);
-  };
+  const goMission = (target: MissionTarget) =>
+    target === 'checkin' ? goTab('today', GAME_CHECKIN_ANCHOR) : navigate(MISSION_PATHS.miniapp[target]);
   const shareHarvest = () => {
     const t = gameNewbieCopy.harvest;
     return shareLink({ title: t.shareTitle, description: shareDescription(t.shareDescription, welcomeOfferOf(publicConfig)), path: withReferral('/game', referralCode) }).catch(() => undefined);

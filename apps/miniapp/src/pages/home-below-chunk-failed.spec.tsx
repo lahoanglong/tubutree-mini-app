@@ -10,6 +10,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ pathname: '/', search: '', hash: '', state: null, key: 'default' }),
 }));
 vi.mock('../services/shop-api', () => ({
   fetchProducts: vi.fn().mockResolvedValue({ data: [], meta: { page: 1, limit: 6, total: 0 } }),

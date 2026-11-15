@@ -398,6 +398,17 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Combo ưu đãi / Mua kèm (PDP) và kệ Combo tiết kiệm (Trang chủ) là công khai và tự ẩn khi rỗng: mặc định không có bộ nào.
       api.fallback('GET', '/bundles/combos', []);
       api.fallback('GET', '/products/:slug/bundles', { combos: [], addons: [] });
+      // Sảnh mini game ở Vườn Xanh (Mini App và web) hỏi trạng thái kỷ lục và lượt thưởng khi đã đăng nhập; mặc định chưa chơi ván nào, ngoài khung giờ thưởng, chưa nhận quà Chẩn đoán.
+      api.fallback('GET', '/game/arcade/status', {
+        games: {
+          dew_catcher: { bestScore: 0, plays: 0, used: 0, cap: 3 },
+          refill_rush: { bestScore: 0, plays: 0, used: 0, cap: 3 },
+        },
+        window: null,
+        windowBonus: false,
+        nextWindowAt: null,
+        quizClaimed: false,
+      });
       // Bán chạy nhất nuôi dải Story của Trang chủ và dải gợi ý bù đơn của Giỏ; cả hai tự ẩn khi rỗng, nên mọi spec chạm Giỏ hay Trang chủ không phải khai riêng: mặc định không có món nào.
       api.fallback('GET', '/products', { data: [], meta: { page: 1, limit: 10, total: 0 }, basis: 'days30' });
       // Cá nhân, Trang chủ, thanh đáy và chuông web đọc mọi số đếm từ MỘT lời gọi /me/summary. Mock gộp này dựng từ các mock lẻ mà spec

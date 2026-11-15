@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
+import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Sprout, Recycle, Check, Gift, Copy, Lightbulb, QrCode as QrCodeIcon, Ticket } from 'lucide-react';
@@ -298,7 +299,7 @@ export default function LoyaltyPage() {
                 title={couponRow.title}
                 subtitle={couponRow.sub}
                 trailing="chevron"
-                onPress={() => goSmart(couponRow.to === 'coupons' ? '/offers?section=coupons' : '/rewards')}
+                onPress={() => goSmart(couponRow.to === 'coupons' ? '/offers?section=coupons' : offersTabHref('/offers', 'rewards'))}
                 style={{ padding: 12 }}
               />
             </Card>
@@ -360,7 +361,7 @@ export default function LoyaltyPage() {
                 title="Kho quà"
                 subtitle="Đổi Điểm Xanh lấy mã giảm giá và quà"
                 trailing="chevron"
-                onPress={() => navigate('/rewards')}
+                onPress={() => goSmart(offersTabHref('/offers', 'rewards'))}
                 style={{ padding: 12, borderTop: '1px solid var(--color-border-subtle)' }}
               />
             )}

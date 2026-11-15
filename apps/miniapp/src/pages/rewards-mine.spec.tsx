@@ -8,7 +8,7 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   keySeq: 0,
   params: {} as Record<string, string>,
-  location: { pathname: '/', search: '', state: null as unknown },
+  location: { pathname: '/rewards/mine', search: '', state: null as unknown },
   auth: { status: 'authenticated' as 'idle' | 'loading' | 'authenticated' | 'error' },
   login: vi.fn(),
   ensurePhone: vi.fn(),
@@ -148,7 +148,7 @@ describe('/rewards/mine (§4.8)', () => {
     mocks.getMyRedemptions.mockResolvedValue([]);
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Đến Kho quà' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/rewards');
+    expect(mocks.navigate).toHaveBeenCalledWith('/offers?tab=rewards');
   });
   it('một PageHeader, không lồng nút', async () => {
     mocks.getMyRedemptions.mockResolvedValue([makeGiftRedemption()]);

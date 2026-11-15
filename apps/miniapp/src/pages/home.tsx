@@ -1,5 +1,6 @@
 import { Fragment, memo, useMemo, useState, type ComponentProps, type CSSProperties, type ReactNode } from 'react';
-import { Page, useNavigate } from 'zmp-ui';
+import { Page } from 'zmp-ui';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useIsFetching, useQuery, useQueryClient } from '@tanstack/react-query';
 import { fetchUpcomingFlashSales } from '../services/shop-api';
 import { useAuthStore } from '../store/auth';
@@ -56,7 +57,7 @@ import { browserStorage } from '../utils/recently-viewed';
 void loadHomeBelow().catch(() => {});
 
 export default function HomePage() {
-  const navigate = useNavigate();
+  const navigate = useSmartNavigate();
   const qc = useQueryClient();
   useHomeFeed();
   const authed = useAuthStore((s) => s.status === 'authenticated');

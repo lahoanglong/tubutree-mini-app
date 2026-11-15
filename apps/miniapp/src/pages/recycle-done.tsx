@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { Page, useNavigate, useParams } from 'zmp-ui';
+import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { useQuery } from '@tanstack/react-query';
 import { Droplet } from 'lucide-react';
 import { WASTE_QUERY_KEYS, getWasteMe, getWasteRequest } from '../services/waste-api';
@@ -26,6 +28,7 @@ const COLUMN = { display: 'flex', flexDirection: 'column' } as const;
 
 export default function RecycleDonePage() {
   const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const { id = '' } = useParams();
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
@@ -93,7 +96,7 @@ export default function RecycleDonePage() {
           <Text variant="caption" tone="tertiary" as="div">Ước tính theo khối lượng trung bình</Text>
         </Card>
       )}
-      <Button fullWidth onPress={() => navigate('/rewards')}>
+      <Button fullWidth onPress={() => goSmart(offersTabHref('/offers', 'rewards'))}>
         Đổi quà ngay
       </Button>
       <Button fullWidth variant="secondary" onPress={() => navigate('/recycle/new')}>

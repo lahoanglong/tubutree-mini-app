@@ -1235,11 +1235,11 @@ describe('GamePage — nhiệm vụ', () => {
     await screen.findByText('Đơn đầu tiên');
     expect(screen.getAllByRole('button', { name: /^Làm ngay: / })).toHaveLength(3);
     fireEvent.click(screen.getByRole('button', { name: 'Làm ngay: Đơn đầu tiên' }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/browse');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/browse', { replace: true });
     fireEvent.click(screen.getByRole('button', { name: 'Làm ngay: Viết 3 đánh giá' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=delivered');
     fireEvent.click(screen.getByRole('button', { name: 'Làm ngay: Mời 3 bạn' }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/profile?section=referral');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/profile?section=referral', { replace: true });
   });
 
   it('nhiệm vụ Chăm chỉ 7 ngày: "Làm ngay" cuộn tới khối điểm danh', async () => {

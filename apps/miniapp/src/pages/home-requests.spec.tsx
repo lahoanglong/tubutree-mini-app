@@ -20,6 +20,7 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div className="zaui-page">{children}</div>,
   useNavigate: () => vi.fn(),
+  useLocation: () => ({ pathname: '/', search: '', hash: '', state: null, key: 'default' }),
 }));
 vi.mock('../store/auth', () => {
   const state = () => ({ status: mocks.status, user: { id: 'u1', phone: '0901234567', zaloId: 'z1' } as Record<string, string> | null });

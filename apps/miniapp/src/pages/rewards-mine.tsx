@@ -1,4 +1,6 @@
-import { Page, useLocation, useNavigate } from 'zmp-ui';
+import { Page, useLocation } from 'zmp-ui';
+import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
+import { useSmartNavigate } from '../lib/smart-nav';
 import { NEW_COUPON_BADGE, NEW_COUPON_PARAM, sortRedemptions } from '@tubutree/app-core/reward-rules';
 import { redemptionCouponLine } from '@tubutree/app-core/redemption-coupon';
 import { couponUseCopy } from '@tubutree/app-core/coupon-use';
@@ -95,7 +97,7 @@ function RedemptionEntry({ r, isNew }: { r: GiftRedemption; isNew?: boolean }) {
 }
 
 function RewardsMineBody() {
-  const navigate = useNavigate();
+  const goSmart = useSmartNavigate();
   const q = useQuery({ queryKey: WASTE_QUERY_KEYS.rewardsMine, queryFn: getMyRedemptions });
   const location = useLocation();
   const newCode = new URLSearchParams(location.search).get(NEW_COUPON_PARAM);
@@ -103,7 +105,7 @@ function RewardsMineBody() {
   if (q.isError) return <ErrorState message={getLoadErrorMessage(q.error)} onRetry={() => q.refetch()} />;
   if (!q.data) return <div style={{ padding: 16 }}><Skeleton height={120} /></div>;
   if (q.data.length === 0) {
-    return <EmptyState art="box" heading="Bạn chưa đổi quà nào" ctaLabel="Đến Kho quà" onCta={() => navigate('/rewards')} />;
+    return <EmptyState art="box" heading="Bạn chưa đổi quà nào" ctaLabel="Đến Kho quà" onCta={() => goSmart(offersTabHref('/offers', 'rewards'))} />;
   }
 
   return (

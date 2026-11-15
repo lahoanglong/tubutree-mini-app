@@ -157,14 +157,14 @@ describe('LoyaltyPage — thẻ hạng', () => {
     expect(container.querySelector('[style*="width: 50%"]')).toBeNull();
   });
 
-  it('các lối tắt dẫn đúng trang: Vườn Xanh → /game, Đổi rác lấy quà → /recycle, Đổi quà (chưa có mã) → /rewards, mua sắm → /browse', async () => {
+  it('các lối tắt dẫn đúng trang: Vườn Xanh → /game, Đổi rác lấy quà → /recycle, Đổi quà (chưa có mã) → /offers?tab=rewards, mua sắm → /browse', async () => {
     renderPage();
     fireEvent.click(await screen.findByText('Vườn Xanh'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/game');
     fireEvent.click(screen.getByText('Đổi rác lấy quà'));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
     fireEvent.click(screen.getByRole('button', { name: /Đổi quà/ }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/rewards');
+    expect(mocks.navigate).toHaveBeenCalledWith('/offers?tab=rewards');
     fireEvent.click(screen.getByText(/Mua sắm để tích thêm Điểm Xanh/));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/browse');
   });
@@ -182,7 +182,7 @@ describe('LoyaltyPage — dòng mã giảm giá: Ví mã hoặc Đổi quà', ()
     expect(screen.queryByText('Giảm 30.000đ')).toBeNull();
     expect(screen.queryByText('Đổi quà')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Kho quà/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/rewards');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?tab=rewards');
   });
 
   it('chưa có mã: dòng "Đổi quà" dẫn tới Kho quà, không lặp thêm dòng "Kho quà"', async () => {

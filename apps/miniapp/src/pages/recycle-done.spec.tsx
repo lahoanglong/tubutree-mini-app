@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   keySeq: 0,
   params: { id: 'req-1' } as Record<string, string>,
-  location: { pathname: '/', search: '', state: null as unknown },
+  location: { pathname: '/recycle/done/req-1', search: '', state: null as unknown },
   auth: { status: 'authenticated' as 'idle' | 'loading' | 'authenticated' | 'error' },
   login: vi.fn(),
   ensurePhone: vi.fn(),
@@ -170,10 +170,10 @@ describe('/recycle/done/:id (§4.7)', () => {
     expect(screen.getByText('Vỏ hộp sữa cần 5 vỏ mới được 1.000 điểm, kho đếm được 3 vỏ')).toBeInTheDocument();
     expect(screen.queryByText(/Đã cộng/)).toBeNull();
   });
-  it('"Đổi quà ngay" → /rewards; "Đổi thêm rác" → /recycle/new', async () => {
+  it('"Đổi quà ngay" → /offers?tab=rewards; "Đổi thêm rác" → /recycle/new', async () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Đổi quà ngay' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/rewards');
+    expect(mocks.navigate).toHaveBeenCalledWith('/offers?tab=rewards');
     fireEvent.click(screen.getByRole('button', { name: 'Đổi thêm rác' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/recycle/new');
   });

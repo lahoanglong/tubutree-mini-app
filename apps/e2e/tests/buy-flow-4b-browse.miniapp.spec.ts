@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { test, expect, type MockApi } from './support/mock-api';
+import { test, expect, makeUser, mockSession, type MockApi } from './support/mock-api';
 import { BINH_SUA, NRC, XA_PHONG, mockDiscovery } from './support/discovery-mocks';
 import { eventsNamed, flushEvents } from './support/events';
 import { expectChipHitArea44 } from './support/hit-area';
@@ -251,11 +251,12 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
   });
 
   test('Mở mới /browse bằng điều hướng thường (không phải Back) luôn bắt đầu từ đầu trang dù đã lưu vị trí cuộn', async ({ page, api }) => {
-    // Lối vào duy nhất từ Trang chủ là ô "Tất cả danh mục" (PUSH tới hub /browse, khoá cuộn rỗng); hub đủ dài để cuộn khi màn thấp.
-    await page.setViewportSize({ width: 375, height: 520 });
+    // Trang chủ → Duyệt là đổi tab (thay mục, W165) nên không còn PUSH; lối PUSH tới hub /browse (khoá cuộn rỗng) là nút "Khám phá ngay" của Giỏ trống. Hub đủ dài để cuộn khi màn thấp.
+    await page.setViewportSize({ width: 375, height: 360 });
     mockDiscovery(api);
-    await page.goto('/');
-    const allCategories = page.getByRole('button', { name: 'Tất cả danh mục' });
+    mockSession(api, makeUser({ id: 'u-empty-cart', fullName: 'Khách giỏ trống' }));
+    await page.goto('/cart');
+    const allCategories = page.getByRole('button', { name: 'Khám phá ngay' });
     await allCategories.click({ timeout: 15_000 });
     await expect(page).toHaveURL(/\/browse$/, { timeout: 15_000 });
     const seeAllProducts = page.getByRole('button', { name: 'Xem tất cả sản phẩm' });
@@ -267,8 +268,8 @@ test.describe('Buy-flow 4b — Danh mục / Tìm kiếm', () => {
     expect(y, 'hub phải đủ dài để cuộn được').toBeGreaterThan(40);
     await expect.poll(() => page.evaluate(() => sessionStorage.getItem('tubu_scroll:')), { timeout: 5_000 }).toBe(String(Math.round(y)));
 
-    await page.goBack(); // về Trang chủ (rời Browse → vị trí được lưu)
-    await expect(page).toHaveURL(/\/$/, { timeout: 15_000 });
+    await page.goBack(); // về Giỏ (rời Browse → vị trí được lưu)
+    await expect(page).toHaveURL(/\/cart$/, { timeout: 15_000 });
     expect(Number(await page.evaluate(() => sessionStorage.getItem('tubu_scroll:')))).toBeGreaterThan(40); // vị trí cũ còn lưu
     // Chạm ngay khi trang Danh mục cũ còn đang trượt ra: zmp-ui dùng lại chính phần tử đó (khoá trang theo pathname), vẫn phải về đầu.
     // dispatchEvent chứ không click(): click() chờ nút Trang chủ đứng yên, tức chờ hết hiệu ứng, và trang cũ đã trượt ra hết nên ca không còn bắt được lỗi.
