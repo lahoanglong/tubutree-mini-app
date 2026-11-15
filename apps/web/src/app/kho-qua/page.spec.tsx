@@ -409,7 +409,9 @@ describe('/kho-qua — quà thừa với hạng, quà nhận tại kho, Dùng ng
     expect(card(c, 'Góp quỹ trồng cây').textContent).not.toContain(LABEL);
     expect(c.textContent).not.toContain('Chỉ nhận tại kho');
     await openConfirm(c, 'Gói hạt giống Tubu');
-    expect(dialog()!.textContent).toContain('Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho: Kho Tubu TP.HCM, 99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM. Bạn vẫn muốn đổi?');
+    const text = dialog()!.textContent ?? '';
+    expect(text).toContain('Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho (địa chỉ ở dưới). Bạn vẫn muốn đổi?');
+    expect(text.split('99 Nguyễn Văn Linh')).toHaveLength(2);
   });
 
   it('đổi mã xong: "Dùng ngay" khi giỏ có hàng → chọn sẵn mã rồi tới giỏ', async () => {

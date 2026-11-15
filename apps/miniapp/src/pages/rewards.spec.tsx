@@ -313,7 +313,8 @@ describe('/rewards Kho quà (§4.8)', () => {
     expect(document.body.textContent).not.toContain('Chỉ nhận tại kho');
     fireEvent.click(within(card('Gói hạt giống Tubu')).getByRole('button', { name: 'Đổi' }));
     const sheet = await screen.findByRole('dialog');
-    expect(within(sheet).getByText(/Quà này sẽ tự động thêm \(0đ\) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho: Kho Tubu TP\.HCM, 99 Nguyễn Văn Linh, Phường Tân Phong, TP\.HCM\. Bạn vẫn muốn đổi\?/)).toBeInTheDocument();
+    expect(within(sheet).getByText('Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho (địa chỉ ở dưới). Bạn vẫn muốn đổi?')).toBeInTheDocument();
+    expect(within(sheet).getAllByText(/99 Nguyễn Văn Linh/)).toHaveLength(1);
   });
   it('đổi mã giảm giá xong: "Dùng ngay" khi giỏ có hàng → chọn sẵn mã rồi tới giỏ', async () => {
     mocks.getCart.mockResolvedValue({ itemCount: 2 });

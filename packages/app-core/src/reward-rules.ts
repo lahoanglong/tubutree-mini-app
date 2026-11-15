@@ -140,10 +140,13 @@ export const WAREHOUSE_ONLY_LABEL = 'Tự động gửi kèm đơn hàng kế ti
 
 type PickupPoint = Pick<NonNullable<RewardCatalogDTO['claimPoint']>, 'name' | 'addressLine' | 'communeName' | 'provinceName'>;
 
-/** Câu hỏi lại ở bước xác nhận đổi: nói rõ quà tự thêm vào đơn kế tiếp, kèm địa chỉ kho nếu khách muốn nhận trực tiếp. */
+/**
+ * Câu hỏi lại ở bước xác nhận đổi: nói rõ quà tự thêm vào đơn kế tiếp, hoặc nhận tại kho. Có điểm nhận thì hộp xác nhận đã in tên, địa chỉ, giờ mở của kho
+ * ngay dưới câu này (cả Mini lẫn web), nên câu chỉ trỏ xuống đó thay vì in lại; không có thì câu tự nêu kho mặc định.
+ */
 export function warehouseConfirmText(point: PickupPoint | null | undefined): string {
-  const where = point ? `${point.name}, ${pointAddress(point)}` : 'kho Tubu TP.HCM';
-  return `Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho: ${where}. Bạn vẫn muốn đổi?`;
+  const where = point ? 'tại kho (địa chỉ ở dưới)' : 'tại kho: kho Tubu TP.HCM';
+  return `Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận ${where}. Bạn vẫn muốn đổi?`;
 }
 
 export const WAREHOUSE_PICKUP_DONE = 'Quà đã lưu vào Ví quà — sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn (hoặc đọc mã QG-… khi ghé kho Tubu)';

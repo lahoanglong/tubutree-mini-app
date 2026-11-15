@@ -141,9 +141,12 @@ describe('quà nhận tại kho (B-60)', () => {
     expect(WAREHOUSE_ONLY_LABEL).not.toContain('Chỉ nhận tại kho');
   });
 
-  it('câu hỏi lại kèm địa chỉ kho từ cấu hình, không có thì nói chung', () => {
+  it('câu hỏi lại trỏ xuống khối kho ngay dưới (không in lại tên và địa chỉ), không có điểm nhận thì tự nêu kho mặc định', () => {
     const point = { name: 'Kho Tubu', addressLine: '99 Nguyễn Văn Linh', communeName: 'Phường Tân Phong', provinceName: 'TP.HCM' };
-    expect(warehouseConfirmText(point)).toBe('Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho: Kho Tubu, 99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM. Bạn vẫn muốn đổi?');
+    const withPoint = warehouseConfirmText(point);
+    expect(withPoint).toBe('Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho (địa chỉ ở dưới). Bạn vẫn muốn đổi?');
+    expect(withPoint).not.toContain(point.name);
+    expect(withPoint).not.toContain(point.addressLine);
     expect(warehouseConfirmText(null)).toBe('Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho: kho Tubu TP.HCM. Bạn vẫn muốn đổi?');
   });
 
