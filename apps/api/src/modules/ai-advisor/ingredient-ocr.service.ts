@@ -43,8 +43,8 @@ export class IngredientOcrService {
       const reply = parseIngredientOcrReply(text);
       if (!reply) {
         this.logger.warn('Đọc ảnh bao bì: Claude trả chữ không dựng được JSON.');
-        // Có mở ngoặc `{` mà JSON không đọc được là bản cụt (proxy không báo stop_reason), khác ảnh không có mục Thành phần.
-        if (text.includes('{')) throw new ServiceUnavailableException(OCR_MSG.truncated);
+        // Có mở ngoặc `{` mà không có `}` nào sau nó là JSON cụt giữa chừng (proxy không báo stop_reason), khác ảnh không có mục Thành phần và khác JSON đủ nhưng sai định dạng.
+        if (text.indexOf('{') >= 0 && text.lastIndexOf('}') < text.indexOf('{')) throw new ServiceUnavailableException(OCR_MSG.truncated);
         return { readable: false, ingredients: [] };
       }
       return reply;

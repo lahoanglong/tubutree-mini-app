@@ -516,9 +516,17 @@ describe('ArcadeHub: gửi nốt ván khách chơi trước khi đăng nhập', 
     expect(completes()).toHaveLength(1);
   });
 
+  it('HTTP 409 tạm thời (không mang mã ARCADE_RUN_USED): giữ ván chờ và vẫn có nút Thử lại', async () => {
+    putPending();
+    m.post.mockRejectedValueOnce(new ApiError('Hồ sơ game đang được cập nhật.', 409));
+    await mountHub();
+    expect(retryBtn()).not.toBeNull();
+    expect(pendingRaw()).not.toBeNull();
+  });
+
   it('HTTP 409 (mã ván đã dùng): như 400, không nút Thử lại và bỏ hẳn ván', async () => {
     putPending();
-    m.post.mockRejectedValueOnce(new ApiError('Conflict', 409));
+    m.post.mockRejectedValueOnce(new ApiError('Conflict', 409, 'ARCADE_RUN_USED'));
     await mountHub();
     expect(q('[data-testid="arcade-pending-error"]')!.textContent).toContain(fillCopy('arcade.result.invalid'));
     expect(retryBtn()).toBeNull();

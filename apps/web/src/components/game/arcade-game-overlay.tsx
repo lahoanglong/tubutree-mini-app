@@ -387,7 +387,7 @@ export function ArcadeGameOverlay({ gameId, onClose }: ArcadeGameOverlayProps) {
                 </div>
               )}
               <div className="mt-auto flex flex-wrap gap-2 pt-2">
-                <Button size="lg" onPress={start}>
+                <Button size="lg" onPress={start} disabled={saving}>
                   {fillCopy('arcade.playAgain')}
                 </Button>
                 <Button size="lg" variant="secondary" onPress={onClose}>

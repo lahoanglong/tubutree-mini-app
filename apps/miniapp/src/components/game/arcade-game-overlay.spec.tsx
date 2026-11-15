@@ -416,7 +416,7 @@ describe('ArcadeGameOverlay: kết quả khi đã đăng nhập', () => {
     expect(phase()).toBe('result');
   });
 
-  const httpError = (status: number) => new HttpError('lỗi', undefined, { status, data: { message: 'lỗi' }, headers: {} });
+  const httpError = (status: number, code?: string) => new HttpError('lỗi', undefined, { status, data: { message: 'lỗi', ...(code ? { code } : {}) }, headers: {} });
 
   it('HTTP 400 (điểm không hợp lệ): nói ván không hợp lệ, KHÔNG mời Thử lại và không gửi lại', async () => {
     mocks.submit.mockRejectedValue(httpError(400));
@@ -433,8 +433,20 @@ describe('ArcadeGameOverlay: kết quả khi đã đăng nhập', () => {
     expect(invalidate).not.toHaveBeenCalled();
   });
 
-  it('HTTP 409 (mã ván đã dùng): cũng là ván không hợp lệ, KHÔNG mời Thử lại, không gửi lại và làm mới dữ liệu Vườn', async () => {
+  it('HTTP 409 tạm thời (hồ sơ đang cập nhật, xung đột giao dịch: không mang mã ARCADE_RUN_USED): vẫn là lỗi mạng, mời Thử lại', async () => {
     mocks.submit.mockRejectedValue(httpError(409));
+    const { qc } = mountOverlay();
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    await playToEnd(dewRun(120));
+    const panel = screen.getByTestId('arcade-result');
+    expect(await within(panel).findByText(fillCopy('arcade.result.error'))).toBeInTheDocument();
+    expect(within(panel).getByRole('button', { name: 'Thử lại' })).toBeInTheDocument();
+    expect(within(panel).queryByText(fillCopy('arcade.result.invalid'))).toBeNull();
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it('HTTP 409 (mã ván đã dùng): cũng là ván không hợp lệ, KHÔNG mời Thử lại, không gửi lại và làm mới dữ liệu Vườn', async () => {
+    mocks.submit.mockRejectedValue(httpError(409, 'ARCADE_RUN_USED'));
     const { qc } = mountOverlay();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');
     await playToEnd(dewRun(120));
@@ -478,6 +490,21 @@ describe('ArcadeGameOverlay: kết quả khi đã đăng nhập', () => {
       expect(await screen.findByText(fillCopy('arcade.result.used', { n: used, m: cap }))).toBeInTheDocument();
       view.unmount();
     }
+  });
+
+  it('Chơi lại khoá trong lúc ván đang lưu (mã ván mới cấp trước lúc ván này ghi sẽ bị 409) và mở lại khi lưu xong', async () => {
+    let release!: (v: ArcadeCompleteResult) => void;
+    mocks.submit.mockImplementationOnce(() => new Promise<ArcadeCompleteResult>((res) => (release = res)));
+    mountOverlay();
+    await playToEnd(dewRun(120));
+    const panel = screen.getByTestId('arcade-result');
+    const again = within(panel).getByRole('button', { name: 'Chơi lại' }) as HTMLButtonElement;
+    expect(again.disabled).toBe(true);
+    fireEvent.click(again);
+    await act(async () => {});
+    expect(mocks.controller.start).toHaveBeenCalledTimes(1);
+    await act(async () => release(saved()));
+    await waitFor(() => expect((within(screen.getByTestId('arcade-result')).getByRole('button', { name: 'Chơi lại' }) as HTMLButtonElement).disabled).toBe(false));
   });
 
   it('Chơi lại: start lần hai, bảng điểm cũ biến mất; ván thứ hai gửi riêng một lần (tổng hai lần, không nhân đôi)', async () => {

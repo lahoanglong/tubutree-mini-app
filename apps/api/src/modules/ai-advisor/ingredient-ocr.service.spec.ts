@@ -89,6 +89,11 @@ describe('IngredientOcrService.read', () => {
     expect(messageOf(err).message).toBe(OCR_MSG.truncated);
   });
 
+  it('JSON có đóng ngoặc nhưng sai định dạng (không phải cụt): trả readable=false như chữ lạ, không nói "nhãn dài quá"', async () => {
+    const bad = make({ reply: '{"readable":true,"ingredients":["Đường"]} ghi chú {thêm}' });
+    await expect(bad.svc.read(IMAGE, 'x')).resolves.toEqual({ readable: false, ingredients: [] });
+  });
+
   it(`tối đa ${OCR_MAX_CONCURRENT} lượt đọc cùng lúc: lượt thừa bị 503 bận ngay, không gọi model; xong thì nhả chỗ (kể cả khi lỗi)`, async () => {
     const releases: (() => void)[] = [];
     const { svc, completeWithImage } = make({ reply: () => new Promise<string>((res) => releases.push(() => res('{"readable":true,"ingredients":["A"]}'))) });

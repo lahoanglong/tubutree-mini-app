@@ -117,7 +117,10 @@ export function ArcadeResultPanel({ run, real, save, local, onRetrySave, onLogin
       )}
 
       <div className="tubu-arcade-actions">
-        <Button onPress={onPlayAgain}>{fillCopy('arcade.playAgain')}</Button>
+        {/* Ván mới xin mã khi ván này chưa ghi xong thì mã mới cấp TRƯỚC lúc ván này ghi (lastRunAt) và bị 409: chờ ghi xong mới cho chơi lại. */}
+        <Button onPress={onPlayAgain} disabled={real && (save.status === 'saving' || save.status === 'idle')}>
+          {fillCopy('arcade.playAgain')}
+        </Button>
         <Button variant="secondary" onPress={onClose}>
           {fillCopy('arcade.close')}
         </Button>

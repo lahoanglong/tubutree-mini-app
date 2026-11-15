@@ -33,6 +33,8 @@ export const ARCADE_RUN_TTL_MS = 10 * 60_000;
  * Giữ nhỏ: đây cũng là thời gian tối thiểu bị "cho không" ở ván ngắn nhất.
  */
 export const ARCADE_RUN_SLACK_MS = 3_000;
+/** Mã lỗi nghiệp vụ của 409 "mã ván đã dùng" (khớp ARCADE_RUN_USED_CODE của packages/app-core/src/api/game.ts): máy khách chỉ coi 409 mang mã này là ván hỏng hẳn, 409 khác (hồ sơ đang cập nhật, xung đột giao dịch) thử lại được. */
+export const ARCADE_RUN_USED_CODE = 'ARCADE_RUN_USED';
 
 /** Lượt thưởng cơ sở mỗi ngày VN mỗi game; mỗi khung giờ thưởng thêm một lượt riêng cho khung đó. */
 export const ARCADE_DAILY_CAP_BASE = 3;

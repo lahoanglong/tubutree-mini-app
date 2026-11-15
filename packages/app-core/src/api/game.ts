@@ -1,4 +1,5 @@
 import type { HttpClient } from '../http';
+import { errorCode, errorStatus } from './error-status';
 import type { ArcadeGameId, ArcadeWindowId } from '../arcade/arcade-config';
 import type { HomeQuizAnswers } from '../arcade/home-quiz';
 import type { CheckInResult, PointsBlocked } from './loyalty';
@@ -372,6 +373,21 @@ export interface HomeQuizResult {
   totalSeeds: number;
 }
 /** Xin mã ván lúc khách bấm Chơi (công khai: khách chưa đăng nhập cũng xin được, để đăng nhập xong vẫn nhận thưởng ván đó). */
+/** Mã lỗi của 409 "mã ván đã dùng" (khớp ARCADE_RUN_USED_CODE của apps/api game-arcade.constants.ts). */
+export const ARCADE_RUN_USED_CODE = 'ARCADE_RUN_USED';
+
+/**
+ * Máy chủ từ chối chính ván này, gửi lại cùng mã vẫn bị từ chối nên không mời thử lại: 400 (điểm, mã thiếu, sai, hết hạn) hoặc 409 mang mã
+ * ARCADE_RUN_USED. 409 khác (hồ sơ game đang cập nhật, xung đột giao dịch) là lỗi tạm: giao dịch đã quay lui, mã chưa dùng, thử lại được.
+ */
+export const isArcadeRunRejected = (err: unknown): boolean => {
+  const status = errorStatus(err);
+  return status === 400 || (status === 409 && errorCode(err) === ARCADE_RUN_USED_CODE);
+};
+
+/** 409 ARCADE_RUN_USED thường là lần gửi trước đã ghi mà phản hồi bị mất: client làm mới Giọt nước và Điểm Xanh. */
+export const isArcadeRunReplayed = (err: unknown): boolean => errorStatus(err) === 409 && errorCode(err) === ARCADE_RUN_USED_CODE;
+
 export const startArcade = (http: HttpClient, gameId: ArcadeGameId) => http.post<ArcadeStartResult>('/game/arcade-start', { gameId });
 /**
  * Mỗi lời gọi là một ván: máy chủ chặn gửi lại cùng `runId` (409), nhưng nơi gọi vẫn nên tự gửi đúng một lần cho mỗi ván. Chỉ gửi bốn trường của hợp đồng,

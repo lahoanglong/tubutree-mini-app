@@ -123,3 +123,33 @@ describe('game arcade, chẩn đoán tổ ấm: chỉ gửi đúng trường c�
     await expect(g.completeArcade(http, { gameId: 'dew_catcher', score: 1, durationMs: 5_000, runId: 'r1.run' })).resolves.toBe(reply);
   });
 });
+
+describe('isArcadeRunRejected / isArcadeRunReplayed', () => {
+  const web = (status: number, code: string | null = null) => ({ status, code });
+  const mini = (status: number, code?: string) => ({ response: { status, data: code ? { code } : {} } });
+
+  it('400 luôn là ván hỏng; 409 chỉ khi mang mã ARCADE_RUN_USED (cả ApiError của web lẫn HttpError của Mini App)', () => {
+    expect(g.isArcadeRunRejected(web(400))).toBe(true);
+    expect(g.isArcadeRunRejected(mini(400))).toBe(true);
+    expect(g.isArcadeRunRejected(web(409, g.ARCADE_RUN_USED_CODE))).toBe(true);
+    expect(g.isArcadeRunRejected(mini(409, g.ARCADE_RUN_USED_CODE))).toBe(true);
+    expect(g.isArcadeRunRejected(web(409))).toBe(false);
+    expect(g.isArcadeRunRejected(mini(409))).toBe(false);
+    expect(g.isArcadeRunRejected(web(409, 'KHAC'))).toBe(false);
+  });
+
+  it('mất mạng, 5xx, 429, 401 và giá trị lạ không phải ván hỏng', () => {
+    for (const e of [web(500), web(503), web(429), web(401), new Error('mạng'), null, undefined, 'x']) expect(g.isArcadeRunRejected(e)).toBe(false);
+  });
+
+  it('chỉ 409 ARCADE_RUN_USED là "đã ghi rồi" (làm mới số dư); 400 và 409 tạm thời thì không', () => {
+    expect(g.isArcadeRunReplayed(web(409, g.ARCADE_RUN_USED_CODE))).toBe(true);
+    expect(g.isArcadeRunReplayed(mini(409, g.ARCADE_RUN_USED_CODE))).toBe(true);
+    expect(g.isArcadeRunReplayed(web(409))).toBe(false);
+    expect(g.isArcadeRunReplayed(web(400))).toBe(false);
+  });
+
+  it('mã khớp hằng của API (game-arcade.constants)', () => {
+    expect(g.ARCADE_RUN_USED_CODE).toBe('ARCADE_RUN_USED');
+  });
+});

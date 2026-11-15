@@ -478,6 +478,22 @@ describe('ArcadeGameOverlay: đã đăng nhập, lưu kết quả', () => {
     expect(m.post).toHaveBeenCalledTimes(2);
   });
 
+  it('Chơi lại khoá trong lúc ván đang lưu (mã ván mới cấp trước lúc ván này ghi sẽ bị 409) và mở lại khi lưu xong', async () => {
+    let release!: (v: ReturnType<typeof SAVED>) => void;
+    m.post.mockImplementationOnce(() => new Promise((res) => (release = res as typeof release)));
+    await open();
+    await play();
+    await finish(dewRun(520));
+    expect(btn('Chơi lại')!.disabled).toBe(true);
+    click(btn('Chơi lại'));
+    await flush(1);
+    expect(m.ctl.start).toHaveBeenCalledTimes(1);
+    expect(m.start).toHaveBeenCalledTimes(1);
+    await act(async () => release(SAVED()));
+    await flush(4);
+    expect(btn('Chơi lại')!.disabled).toBe(false);
+  });
+
   it('Chơi lại: bộ vẽ chạy lại, bảng điểm cũ biến mất và ván mới có lượt gửi riêng (mỗi ván đúng một lần)', async () => {
     await open();
     await play();
@@ -638,9 +654,22 @@ describe('ArcadeGameOverlay: mã ván (arcade-start) cho mỗi ván', () => {
     expect(m.post).not.toHaveBeenCalled();
   });
 
+  it('HTTP 409 tạm thời (hồ sơ đang cập nhật, xung đột giao dịch: không mang mã ARCADE_RUN_USED): vẫn mời Thử lại và gửi lại ĐÚNG mã cũ', async () => {
+    m.post.mockRejectedValueOnce(new ApiError('Hồ sơ game đang được cập nhật.', 409));
+    await open();
+    await play();
+    await finish(dewRun(640));
+    expect(text()).toContain('Chưa lưu được ván này. Bạn thử lại nhé.');
+    expect(text()).not.toContain(fillCopy('arcade.result.invalid'));
+    click(retryButton());
+    await flush(4);
+    expect(m.post.mock.calls.map((c) => (c[1] as { runId: string }).runId)).toEqual([RUN_ID, RUN_ID]);
+    expect(retryButton()).toBeNull();
+  });
+
   it('HTTP 409 (mã đã dùng): không mời Thử lại, không tự gửi lại, làm mới game, me, loyalty', async () => {
     const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries');
-    m.post.mockRejectedValue(new ApiError('Conflict', 409));
+    m.post.mockRejectedValue(new ApiError('Conflict', 409, 'ARCADE_RUN_USED'));
     await open();
     await play();
     await finish(dewRun(640));

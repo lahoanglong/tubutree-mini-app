@@ -19,6 +19,7 @@ import {
   ARCADE_POINTS_REASON_PREFIX,
   ARCADE_RUN_SLACK_MS,
   ARCADE_RUN_TTL_MS,
+  ARCADE_RUN_USED_CODE,
   ARCADE_WATER_BASE_DEFAULT,
   ARCADE_WATER_BASE_MAX,
   ARCADE_WATER_REASONS,
@@ -252,7 +253,7 @@ export class GameArcadeService {
       // hơn `lastRunAt` của người nhận đã được dùng rồi (hoặc đã bị một ván khác vượt mặt). Giữ khoá `users` ở trên nên hai lần gửi song
       // song cùng một mã xếp hàng và lần sau thấy `lastRunAt` của lần trước.
       if (prev?.lastRunAt && issuedAt <= prev.lastRunAt.getTime()) {
-        throw new ConflictException('Ván này đã được ghi rồi. Bạn bấm Chơi để bắt đầu một ván mới nhé.');
+        throw new ConflictException({ statusCode: 409, error: 'Conflict', code: ARCADE_RUN_USED_CODE, message: 'Ván này đã được ghi rồi. Bạn bấm Chơi để bắt đầu một ván mới nhé.' });
       }
       const usage = await readUsage();
       const result = (

@@ -922,7 +922,9 @@ describe('GameArcadeService.start và mã ván (runId)', () => {
     const runId = startAt(w, T0);
     const done = new Date(T0.getTime() + 40_000);
     await expect(w.svc.complete(USER, body(runId, 300), done)).resolves.toMatchObject({ rewarded: true, used: 1 });
-    await expect(w.svc.complete(USER, body(runId, 900), new Date(done.getTime() + 5_000))).rejects.toBeInstanceOf(ConflictException);
+    const replay = await w.svc.complete(USER, body(runId, 900), new Date(done.getTime() + 5_000)).catch((e: unknown) => e);
+    expect(replay).toBeInstanceOf(ConflictException);
+    expect((replay as ConflictException).getResponse()).toMatchObject({ statusCode: 409, code: 'ARCADE_RUN_USED' });
     expect(w.state.events).toHaveLength(1);
     expect(w.state.points).toHaveLength(1);
     expect(w.state.scores[0]).toMatchObject({ bestScore: 300, plays: 1, lastRunAt: done });

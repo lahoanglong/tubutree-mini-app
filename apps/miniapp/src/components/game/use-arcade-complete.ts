@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { ArcadeCompleteResult } from '@tubutree/app-core/api/game';
+import { isArcadeRunRejected, isArcadeRunReplayed, type ArcadeCompleteResult } from '@tubutree/app-core/api/game';
 import type { ArcadeResult } from '@tubutree/app-core/arcade/arcade-canvas';
-import { isHttpError } from '../../services/http';
 import { submitArcadeRun } from '../../services/arcade-api';
 
 export type ArcadeSaveStatus = 'idle' | 'saving' | 'saved' | 'error' | 'invalid';
@@ -45,12 +44,12 @@ export function useArcadeComplete(run: PlayedRun | null, authed: boolean) {
         // Số Giọt nước ở Vườn và trạng thái lượt thưởng đổi theo ván này.
         void queryClient.invalidateQueries({ queryKey: ['game'] });
       } catch (error) {
-        // 400/409: máy chủ từ chối chính ván này (mã thiếu, hết hạn, đã dùng hoặc điểm không hợp lệ), gửi lại cùng mã vẫn 400/409 nên không mời thử lại. Mất mạng, 5xx thì thử lại được.
-        const code = isHttpError(error) ? error.response?.status : undefined;
-        const status = code === 400 || code === 409 ? 'invalid' : 'error';
+        // 400 hoặc 409 ARCADE_RUN_USED: máy chủ từ chối chính ván này (mã thiếu, hết hạn, đã dùng hoặc điểm không hợp lệ), gửi lại cùng mã vẫn bị từ chối nên không mời thử lại.
+        // Mất mạng, 5xx và 409 tạm thời (hồ sơ đang cập nhật, xung đột giao dịch: mã chưa dùng) thì thử lại được.
+        const status = isArcadeRunRejected(error) ? 'invalid' : 'error';
         setSlot((s) => (s?.run === r ? { run: r, status } : s));
-        // 409 có thể do lần gửi trước đã ghi nhưng phản hồi bị mất: làm mới để Giọt nước ở Vườn khớp máy chủ.
-        if (code === 409) void queryClient.invalidateQueries({ queryKey: ['game'] });
+        // Mã đã dùng có thể do lần gửi trước đã ghi nhưng phản hồi bị mất: làm mới để Giọt nước ở Vườn khớp máy chủ.
+        if (isArcadeRunReplayed(error)) void queryClient.invalidateQueries({ queryKey: ['game'] });
       } finally {
         if (inFlight.current === r) inFlight.current = null;
       }

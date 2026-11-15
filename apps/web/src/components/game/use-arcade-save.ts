@@ -2,28 +2,21 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { errorStatus } from '@tubutree/app-core/api/error-status';
-import { completeArcade, type ArcadeCompleteResult } from '@tubutree/app-core/api/game';
+import { completeArcade, isArcadeRunRejected, isArcadeRunReplayed, type ArcadeCompleteResult } from '@tubutree/app-core/api/game';
 import type { ArcadeResult } from '@tubutree/app-core/arcade/arcade-canvas';
 import { coreHttp } from '@/lib/core-http';
 import { clearPendingArcade, rememberPendingArcade, takePendingArcade, type PendingArcade } from './arcade-pending';
 
-/**
- * Máy chủ từ chối chính ván này: 400 (điểm hay mã ván không hợp lệ) hoặc 409 (mã ván đã dùng, hay ván bắt đầu trước khi ván trước xong).
- * Gửi lại cùng mã cũng vậy, nên không mời thử lại. Lỗi mạng và 5xx thì có.
- */
-const isInvalidRun = (e: unknown) => {
-  const status = errorStatus(e);
-  return status === 400 || status === 409;
-};
+/** Máy chủ từ chối chính ván này (400, hoặc 409 mã ván đã dùng): gửi lại cùng mã cũng vậy nên không mời thử lại. Lỗi mạng, 5xx và 409 tạm thời thì có. */
+const isInvalidRun = isArcadeRunRejected;
 
 const refreshAfterSave = (qc: QueryClient) => {
   for (const queryKey of [['game'], ['me'], ['loyalty']]) void qc.invalidateQueries({ queryKey });
 };
 
-/** 409 thường là lần gửi trước đã ghi mà phản hồi bị mất: làm mới Giọt nước và Điểm Xanh để khách thấy đúng số. */
+/** Mã đã dùng thường là lần gửi trước đã ghi mà phản hồi bị mất: làm mới Giọt nước và Điểm Xanh để khách thấy đúng số. */
 const refreshIfReplayed = (qc: QueryClient, e: unknown) => {
-  if (errorStatus(e) === 409) refreshAfterSave(qc);
+  if (isArcadeRunReplayed(e)) refreshAfterSave(qc);
 };
 
 export type ArcadeSaveState =
