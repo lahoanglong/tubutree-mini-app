@@ -31,9 +31,9 @@ const EXPECTED_GIFTS = [
   gift('reward-percent-15pct', 'VOUCHER', 'Giảm 15%', 'Giảm 15% tối đa 80.000đ cho đơn hàng từ 250.000đ', 'Đặc quyền', 75_000, 30, ['PERCENT', 15, 250000, 80000]),
   gift('reward-discount-100k', 'VOUCHER', 'Giảm 100.000đ', 'Giảm ngay 100.000đ cho đơn hàng từ 600.000đ', 'HOT', 100_000, 40, ['AMOUNT', 100000, 600000, null]),
   gift('gift-tree', 'TREE', 'Góp quỹ trồng cây', 'Dùng Điểm Xanh góp vào quỹ trồng cây của Tubu Tree.', null, 0, 50, null),
-  gift('gift-seed-pack', 'SEED_PACK', 'Gói hạt giống rau mầm Xanh', 'Gói hạt giống dễ gieo tại nhà, tự động gửi tặng kèm đơn hàng tiếp theo của bạn.', null, 5_000, 60, null, 200),
-  gift('gift-loofah-pad', 'GIFT', 'Miếng xơ mướp rửa chén tự nhiên', 'Xơ mướp hữu cơ phân huỷ sinh học, tự động gửi tặng kèm đơn hàng tiếp theo.', null, 12_000, 70, null, 100),
-  gift('gift-canvas-bag', 'GIFT', 'Túi vải Canvas Tubu Sống Xanh', 'Túi vải bố dày dặn tái sử dụng nhiều lần, tự động gửi tặng kèm đơn hàng tiếp theo.', null, 35_000, 80, null, 50),
+  gift('gift-seed-pack', 'SEED_PACK', 'Gói hạt giống rau mầm Xanh', 'Gói hạt giống dễ gieo tại nhà.', null, 5_000, 60, null, 200),
+  gift('gift-loofah-pad', 'GIFT', 'Miếng xơ mướp rửa chén tự nhiên', 'Xơ mướp hữu cơ, phân huỷ sinh học.', null, 12_000, 70, null, 100),
+  gift('gift-canvas-bag', 'GIFT', 'Túi vải Canvas Tubu Sống Xanh', 'Túi vải bố dày dặn, dùng lại nhiều lần.', null, 35_000, 80, null, 50),
 ];
 
 const FORBIDDEN = /cây\s+thật|\bmua (1 )?cây\b|CO2|CO₂|hấp thụ|giảm khí thải|tái chế|Mã chứng nhận|PanNature|Rừng Xanh Lên|Voucher|Mã ưu đãi|TubuXu|Cổng đối tác|Kênh Đối Tác|\/merchant|(?<![\p{L}_])xu(?![\p{L}_])/iu;
@@ -82,7 +82,9 @@ describe('waste reference data constants', () => {
     for (const g of physical) {
       expect(g.status).toBe('ACTIVE');
       expect([g.voucherType, g.voucherValue, g.voucherMinOrder, g.voucherMaxDiscount, g.voucherValidDays]).toEqual([null, null, null, null, null]);
-      expect(g.description).toContain('tự động gửi tặng kèm đơn hàng');
+      // Cách nhận quà (tự gửi kèm đơn sau hoặc nhận tại kho) do nhãn của app nói, mô tả chỉ tả món để màn Kho quà không lặp một câu hai lần.
+      expect(g.description).toBeTruthy();
+      expect(g.description).not.toMatch(/gửi tặng kèm|gửi kèm/);
     }
     expect(new Set(WASTE_SEED_GIFTS.map((g) => g.sortOrder)).size).toBe(WASTE_SEED_GIFTS.length);
   });

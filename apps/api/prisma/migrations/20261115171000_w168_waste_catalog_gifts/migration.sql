@@ -3,9 +3,9 @@
 -- gắn mặt hàng bỏ qua cặp đã có. Không tạo điểm nhận nào: kho chưa có thì phần gắn mặt hàng không làm gì.
 -- BEGIN WASTE W168 SEED
 INSERT INTO "waste_gifts" ("id", "kind", "name", "description", "label", "pointsCost", "status", "sortOrder", "stock", "voucherType", "voucherValue", "voucherMinOrder", "voucherMaxDiscount", "voucherValidDays", "updatedAt") VALUES
-  ('gift-seed-pack', 'SEED_PACK', 'Gói hạt giống rau mầm Xanh', 'Gói hạt giống dễ gieo tại nhà, tự động gửi tặng kèm đơn hàng tiếp theo của bạn.', NULL, 5000, 'ACTIVE', 60, 200, NULL, NULL, NULL, NULL, NULL, NOW()),
-  ('gift-loofah-pad', 'GIFT', 'Miếng xơ mướp rửa chén tự nhiên', 'Xơ mướp hữu cơ phân huỷ sinh học, tự động gửi tặng kèm đơn hàng tiếp theo.', NULL, 12000, 'ACTIVE', 70, 100, NULL, NULL, NULL, NULL, NULL, NOW()),
-  ('gift-canvas-bag', 'GIFT', 'Túi vải Canvas Tubu Sống Xanh', 'Túi vải bố dày dặn tái sử dụng nhiều lần, tự động gửi tặng kèm đơn hàng tiếp theo.', NULL, 35000, 'ACTIVE', 80, 50, NULL, NULL, NULL, NULL, NULL, NOW())
+  ('gift-seed-pack', 'SEED_PACK', 'Gói hạt giống rau mầm Xanh', 'Gói hạt giống dễ gieo tại nhà.', NULL, 5000, 'ACTIVE', 60, 200, NULL, NULL, NULL, NULL, NULL, NOW()),
+  ('gift-loofah-pad', 'GIFT', 'Miếng xơ mướp rửa chén tự nhiên', 'Xơ mướp hữu cơ, phân huỷ sinh học.', NULL, 12000, 'ACTIVE', 70, 100, NULL, NULL, NULL, NULL, NULL, NOW()),
+  ('gift-canvas-bag', 'GIFT', 'Túi vải Canvas Tubu Sống Xanh', 'Túi vải bố dày dặn, dùng lại nhiều lần.', NULL, 35000, 'ACTIVE', 80, 50, NULL, NULL, NULL, NULL, NULL, NOW())
 ON CONFLICT ("id") DO NOTHING;
 
 UPDATE "waste_items" SET "status" = 'ACTIVE', "updatedAt" = NOW() WHERE "code" = 'BATTERY' AND "status" = 'COMING_SOON';
