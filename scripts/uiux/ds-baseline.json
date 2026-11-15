@@ -148,7 +148,7 @@
   "apps/web/src/app/mua-chung/group-buy-view.tsx": 11,
   "apps/web/src/app/page.tsx": 1,
   "apps/web/src/app/s/[slug]/page.tsx": 4,
-  "apps/web/src/app/san-pham/[slug]/page.tsx": 36,
+  "apps/web/src/app/san-pham/[slug]/page.tsx": 35,
   "apps/web/src/app/san-pham/[slug]/pdp-extras.tsx": 8,
   "apps/web/src/app/san-pham/[slug]/pdp-feed.tsx": 1,
   "apps/web/src/app/san-pham/[slug]/pdp-rails.tsx": 2,
