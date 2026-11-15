@@ -19,7 +19,7 @@ const T: WasteAlertThresholds = {
 const NOW = new Date('2026-10-08T03:00:00Z');
 
 type VisitOpts = {
-  id: string; code: string; userId: string; pointId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP'; completedAt: Date;
+  id: string; code: string; userId: string; pointId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP' | 'HOME_PICKUP'; completedAt: Date;
   inTransitAt: Date | null; confirmedByUserId: string; pointsAwarded: number; role: 'CUSTOMER' | 'STAFF' | 'ADMIN';
   lines: { declaredQty: number; receivedQty: number | null }[];
 };
@@ -231,6 +231,9 @@ describe('computeWasteAlerts', () => {
 
     const four = setup(rows.slice(1));
     expect(ofKind(await four.run(), 'STAFF_DIRECT')).toEqual([]);
+
+    const home = setup([0, 1, 2, 3, 4].map((i) => direct(i, { method: 'HOME_PICKUP' })));
+    expect(ofKind(await home.run(), 'STAFF_DIRECT')).toHaveLength(1);
 
     const early = setup([0, 1, 2, 3, 4].map((i) => direct(i, { completedAt: new Date('2026-09-28T03:00:00Z') })));
     expect(ofKind(await early.run(new Date('2026-10-03T03:00:00Z')), 'STAFF_DIRECT')).toHaveLength(1);

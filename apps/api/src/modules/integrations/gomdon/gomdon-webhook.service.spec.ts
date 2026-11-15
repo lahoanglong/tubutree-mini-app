@@ -6,6 +6,7 @@ import type { PrismaService } from '../../../prisma/prisma.service';
 import type { PancakeOrderService } from '../pancake/pancake-order.service';
 import type { GomdonAlertService } from './gomdon-alert.service';
 import type { GomdonWebhookPayload } from './gomdon.types';
+import type { WasteHomePickupService } from '../../waste-exchange/home-pickup/waste-home-pickup.service';
 
 const recyclingOrder = {
   id: 'o1',
@@ -40,7 +41,9 @@ function build(opts: { orders?: (Record<string, unknown> | null)[] } = {}) {
       findFirst,
       updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     },
+    wasteRequest: { findFirst: jest.fn().mockResolvedValue(null) },
   };
+  const wasteHomePickup = { applyWebhook: jest.fn().mockResolvedValue({ outcome: 'PROCESSED' }) };
   const orderStatus = { setStatus: jest.fn().mockResolvedValue({}) };
   const alerts = { alert: jest.fn().mockResolvedValue(undefined), resolveKinds: jest.fn().mockResolvedValue(0) };
   const eventsQueue = { getJob: jest.fn().mockResolvedValue(undefined), add: jest.fn().mockResolvedValue({}) };
@@ -53,8 +56,9 @@ function build(opts: { orders?: (Record<string, unknown> | null)[] } = {}) {
     eventsQueue as unknown as Queue,
     pushQueue as unknown as Queue,
     pancakeOrder as unknown as PancakeOrderService,
+    wasteHomePickup as unknown as WasteHomePickupService,
   );
-  return { svc, prisma, orderStatus, alerts, eventsQueue, pushQueue, pancakeOrder };
+  return { svc, prisma, orderStatus, alerts, eventsQueue, pushQueue, pancakeOrder, wasteHomePickup };
 }
 
 /**
@@ -586,4 +590,68 @@ describe('W168: khớp đơn khi Gomdon create chưa trả partner_code (đơn c
     expect(data.status).toBe('PROCESSED');
     expect(ctx.prisma.order.updateMany.mock.calls[0][0].data).toMatchObject({ gomdonOrderId: '1517251', gomdonPartnerCode: '84856413835159' });
   });
+describe('GomdonWebhookService — phiếu shipper lấy rác tận nhà (WR-)', () => {
+  const wasteRow = { id: 'r1', code: 'TR-AAAAA', gomdonOrderId: '900', gomdonPartnerCode: 'BE900', gomdonStatus: '1', status: 'OPEN' };
+
+  it('order_customer_id WR-<mã> khớp phiếu: đi đường phiếu thu gom, KHÔNG chạm bảng đơn mua hàng', async () => {
+    const ctx = build();
+    ctx.prisma.wasteRequest.findFirst.mockResolvedValueOnce(wasteRow);
+    const data = await process(ctx, { event_id: 'w1', status: 3, order_id: 900, order_code: 'BE900', order_customer_id: 'WR-TR-AAAAA', created_time: 1763172000 });
+    expect(data.status).toBe('PROCESSED');
+    expect(ctx.wasteHomePickup.applyWebhook).toHaveBeenCalledWith(wasteRow, expect.objectContaining({ status: 3, gomdonOrderId: '900', partnerCode: 'BE900', eventTime: new Date(1763172000 * 1000) }));
+    expect(ctx.prisma.order.findFirst).not.toHaveBeenCalled();
+    expect(ctx.prisma.order.updateMany).not.toHaveBeenCalled();
+    expect(ctx.orderStatus.setStatus).not.toHaveBeenCalled();
+  });
+
+  it('khớp theo id/mã vận đơn đã lưu trước, rồi mới theo mã WR- (create mất phản hồi); chỉ nhận HOME_PICKUP', async () => {
+    const ctx = build();
+    ctx.prisma.wasteRequest.findFirst.mockResolvedValueOnce(null).mockResolvedValueOnce({ ...wasteRow, gomdonOrderId: null, gomdonPartnerCode: null, gomdonStatus: 'NEEDS_MANUAL_CHECK' });
+    await process(ctx, { event_id: 'w2', status: 3, order_id: 900, order_code: 'BE900', order_customer_id: 'WR-TR-AAAAA', created_time: 1763172000 });
+    const [first, second] = ctx.prisma.wasteRequest.findFirst.mock.calls.map((c) => c[0].where);
+    expect(first).toEqual({ method: 'HOME_PICKUP', OR: [{ gomdonOrderId: '900' }, { gomdonPartnerCode: 'BE900' }] });
+    expect(second).toEqual({ method: 'HOME_PICKUP', code: 'TR-AAAAA' });
+    expect(ctx.wasteHomePickup.applyWebhook).toHaveBeenCalledTimes(1);
+  });
+
+  it('order_customer_id lệch mã phiếu đã khớp theo id: bỏ qua, không áp trạng thái', async () => {
+    const ctx = build();
+    ctx.prisma.wasteRequest.findFirst.mockResolvedValueOnce(wasteRow);
+    const data = await process(ctx, { event_id: 'w3', status: 3, order_id: 900, order_code: 'BE900', order_customer_id: 'WR-TR-ZZZZZ', created_time: 1763172000 });
+    expect(data.status).toBe('IGNORED');
+    expect(ctx.wasteHomePickup.applyWebhook).not.toHaveBeenCalled();
+  });
+
+  it('service báo IGNORED (trùng/stale/đã đóng): event ghi IGNORED kèm lý do', async () => {
+    const ctx = build();
+    ctx.prisma.wasteRequest.findFirst.mockResolvedValueOnce(wasteRow);
+    ctx.wasteHomePickup.applyWebhook.mockResolvedValueOnce({ outcome: 'IGNORED', reason: 'trùng trạng thái 3' });
+    const data = await process(ctx, { event_id: 'w4', status: 3, order_id: 900, order_code: 'BE900', order_customer_id: 'WR-TR-AAAAA', created_time: 1763172000 });
+    expect(data.status).toBe('IGNORED');
+    expect(ctx.alerts.alert).not.toHaveBeenCalled();
+  });
+
+  it('trạng thái cần người xem (vd 8/9/11) kèm alert: báo CSKH theo mã WR-', async () => {
+    const ctx = build();
+    ctx.prisma.wasteRequest.findFirst.mockResolvedValueOnce(wasteRow);
+    ctx.wasteHomePickup.applyWebhook.mockResolvedValueOnce({ outcome: 'PROCESSED', alert: 'Phiếu TR-AAAAA bị hoàn hàng' });
+    await process(ctx, { event_id: 'w5', status: 8, order_id: 900, order_code: 'BE900', order_customer_id: 'WR-TR-AAAAA', created_time: 1763172000 });
+    expect(ctx.alerts.alert).toHaveBeenCalledWith('WR-TR-AAAAA', 'Phiếu TR-AAAAA bị hoàn hàng');
+  });
+
+  it('mã WR- không có phiếu nào: không rơi nhầm xuống đơn mua hàng, ghi IGNORED', async () => {
+    const ctx = build({ orders: [null] });
+    const data = await process(ctx, { event_id: 'w6', status: 3, order_id: 901, order_code: 'BE901', order_customer_id: 'WR-TR-NONE1', created_time: 1763172000 });
+    expect(data.status).toBe('IGNORED');
+    expect(ctx.wasteHomePickup.applyWebhook).not.toHaveBeenCalled();
+    expect(ctx.orderStatus.setStatus).not.toHaveBeenCalled();
+  });
+
+  it('webhook của đơn mua hàng thường (TUBU...) vẫn đi đường cũ khi không khớp phiếu thu gom', async () => {
+    const ctx = build({ orders: [{ status: 'CONFIRMED', gomdonStatus: '1' }] });
+    await process(ctx, { event_id: 'w7', status: 3, order_id: 55, order_code: 'BE55', order_customer_id: 'TUBU1001', created_time: 1763172000 });
+    expect(ctx.wasteHomePickup.applyWebhook).not.toHaveBeenCalled();
+    expect(ctx.prisma.order.updateMany).toHaveBeenCalled();
+  });
+});
 });

@@ -9,6 +9,8 @@ import { QUEUE_GOMDON_EVENTS, QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import type { GomdonWebhookPayload } from './gomdon.types';
 import { GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, GomdonAlertService } from './gomdon-alert.service';
 import { PancakeOrderService, waybillNoteAlert } from '../pancake/pancake-order.service';
+import { HOME_PICKUP_ROW_SELECT, WasteHomePickupService, type HomePickupRow } from '../../waste-exchange/home-pickup/waste-home-pickup.service';
+import { isWasteGomdonCustomerId, wasteCodeFromGomdonCustomerId, wasteGomdonCustomerId } from '../../waste-exchange/home-pickup/waste-home-pickup-text';
 import { GOMDON_JOB_EVENT, addGomdonJob, enqueueGomdonCancel } from './gomdon-queue';
 import {
   GOMDON_CANCEL,
@@ -137,6 +139,7 @@ export class GomdonWebhookService {
     @InjectQueue(QUEUE_GOMDON_EVENTS) private readonly eventsQueue: Queue,
     @InjectQueue(QUEUE_GOMDON_PUSH) private readonly pushQueue: Queue,
     @Optional() private readonly pancakeOrder?: PancakeOrderService,
+    @Optional() private readonly wasteHomePickup?: WasteHomePickupService,
   ) {}
 
   /**
@@ -238,6 +241,44 @@ export class GomdonWebhookService {
     return { status: GOMDON_EVENT_STATUS.IGNORED, reason, orderId };
   }
 
+  /**
+   * Khớp phiếu thu gom theo id/mã vận đơn đã lưu; chưa có mã nào thì khớp theo order_customer_id `WR-<mã phiếu>` (lần tạo mất phản hồi
+   * nhưng Gomdon đã tạo) và điền mã vận đơn. Chỉ nhận phiếu HOME_PICKUP.
+   */
+  private async findWasteRequest(p: ParsedGomdonEvent): Promise<{ row: HomePickupRow } | null> {
+    if (!this.wasteHomePickup) return null;
+    if (p.gomdonOrderId || p.partnerCode) {
+      const or: Prisma.WasteRequestWhereInput[] = [];
+      if (p.gomdonOrderId) or.push({ gomdonOrderId: p.gomdonOrderId });
+      if (p.partnerCode) or.push({ gomdonPartnerCode: p.partnerCode });
+      const row = await this.prisma.wasteRequest.findFirst({ where: { method: 'HOME_PICKUP', OR: or }, select: HOME_PICKUP_ROW_SELECT });
+      if (row) return { row };
+    }
+    if (p.orderCode && isWasteGomdonCustomerId(p.orderCode)) {
+      const row = await this.prisma.wasteRequest.findFirst({
+        where: { method: 'HOME_PICKUP', code: wasteCodeFromGomdonCustomerId(p.orderCode) },
+        select: HOME_PICKUP_ROW_SELECT,
+      });
+      if (row) return { row };
+    }
+    return null;
+  }
+
+  private async applyWaste({ row }: { row: HomePickupRow }, p: ParsedGomdonEvent): Promise<Outcome> {
+    // Đối chiếu chéo: order_customer_id của webhook phải đúng mã phiếu đã khớp.
+    if (p.orderCode && p.orderCode !== wasteGomdonCustomerId(row.code)) {
+      return this.ignored(`order_customer_id ${p.orderCode} lệch mã phiếu thu gom ${row.code}`);
+    }
+    const res = await this.wasteHomePickup!.applyWebhook(row, {
+      status: p.status!,
+      eventTime: p.eventTime,
+      gomdonOrderId: p.gomdonOrderId,
+      partnerCode: p.partnerCode,
+    });
+    if (res.alert) await this.alerts.alert(wasteGomdonCustomerId(row.code), res.alert);
+    return res.outcome === 'PROCESSED' ? { status: GOMDON_EVENT_STATUS.PROCESSED } : this.ignored(res.reason ?? 'bỏ qua', undefined);
+  }
+
   private async findOrder(p: ParsedGomdonEvent): Promise<{ order: Order | null; backfill: boolean }> {
     // Chỉ khớp đơn CÓ thu gom tái chế, theo mã vận đơn đã lưu — không bao giờ khớp đơn bất kỳ theo
     // mã đơn (mã TUBU… đoán được; trước đây ai cũng đẩy được đơn bất kỳ sang DELIVERED).
@@ -268,6 +309,10 @@ export class GomdonWebhookService {
     if (p.status == null) return this.ignored('thiếu status');
     if (!GOMDON_STATUS_TEXT[p.status]) return this.ignored(`status không xác định: ${p.status}`);
     if (!p.gomdonOrderId && !p.partnerCode && !p.orderCode) return this.ignored('thiếu định danh đơn (order_id/order_code/order_customer_id)');
+
+    // Phiếu shipper lấy rác tận nhà (WasteRequest HOME_PICKUP) đi đường riêng: không đụng bảng đơn mua hàng.
+    const waste = await this.findWasteRequest(p);
+    if (waste) return this.applyWaste(waste, p);
 
     const { order, backfill } = await this.findOrder(p);
     if (!order) {

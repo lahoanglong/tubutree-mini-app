@@ -8,6 +8,7 @@ import { checkCaps } from './waste-caps';
 import type { WasteConfigSnapshot } from './waste-config.service';
 import { WasteAccessService } from './waste-access.service';
 import { WASTE_MESSAGES } from './waste-messages';
+import { isHcmProvince } from './waste-pickup-rules';
 
 export type WasteHoldPath = 'CREATE' | 'EDIT' | 'REOPEN';
 export type WasteHoldConfig = Pick<
@@ -21,6 +22,8 @@ export interface WasteHoldInput {
   lines: WasteLineInput[];
   pointId: string | null;
   existing?: { id: string; pointId: string; capDayKey: string; capMonthKey: string };
+  /** Tỉnh/thành của địa chỉ lấy rác (PICKUP kèm đơn, HOME_PICKUP). Thiếu thì hàng nguy hại (Pin cũ) bị chặn: chưa biết có phải TP.HCM. */
+  pickupProvince?: string | null;
   now: Date;
 }
 export interface WasteLineSnapshot {
@@ -77,9 +80,9 @@ export class WasteHoldService {
     db: Prisma.TransactionClient,
     input: WasteHoldInput,
     cfg: WasteHoldConfig,
-  ): Promise<{ result: CheckResult; blocks: WastePreviewBlockDTO[] }> {
+  ): Promise<{ result: CheckResult; blocks: WastePreviewBlockDTO[]; messages: string[] }> {
     const { result, blocks } = await this.check(db, input, cfg, 'COLLECT');
-    return { result, blocks: blocks.map((b) => b.dto) };
+    return { result, blocks: blocks.map((b) => b.dto), messages: blocks.map((b) => b.message) };
   }
 
   async capUsage(
@@ -213,15 +216,14 @@ export class WasteHoldService {
       });
       if (inactive) add({ dto: { code: 'ITEM_NOT_ACTIVE', itemId: inactive.itemId }, message: WASTE_MESSAGES.ITEM_NOT_ACTIVE });
     }
-    // Món cần xử lý riêng (hazardous, như pin) chỉ nhận khi khách mang tới điểm nhận: không đi đường bưu điện hay thu kèm đơn.
+    // Món cần xử lý riêng (hazardous, như pin): nhận khi khách mang tới điểm nhận; đường vận chuyển chỉ khi shipper/bưu tá lấy tận nơi
+    // ở TP.HCM. Gửi bưu cục liên tỉnh (MAIL_IN) hay địa chỉ lấy ngoài TP.HCM thì chặn.
     if (editsPoint && method !== 'DROP_OFF') {
-      const dropOffOnly = input.lines.filter((l) => itemById.get(l.itemId)?.hazardous);
-      const first = dropOffOnly[0];
-      if (first) {
-        add({
-          dto: { code: 'ITEM_DROPOFF_ONLY', itemId: first.itemId },
-          message: WASTE_MESSAGES.ITEM_DROPOFF_ONLY(dropOffOnly.map((l) => itemById.get(l.itemId)!.name)),
-        });
+      const hazardous = input.lines.filter((l) => itemById.get(l.itemId)?.hazardous);
+      const first = hazardous[0];
+      const pickedUpAtHome = method === 'PICKUP' || method === 'HOME_PICKUP';
+      if (first && !(pickedUpAtHome && isHcmProvince(input.pickupProvince))) {
+        add({ dto: { code: 'ITEM_DROPOFF_ONLY', itemId: first.itemId }, message: WASTE_MESSAGES.HAZARDOUS_HCM_ONLY });
       }
     }
 
@@ -275,7 +277,7 @@ export class WasteHoldService {
       add({ dto: { code: v.code, itemId: v.itemId }, message: text(item.name, v.remaining, item.unitLabel) });
     }
 
-    if (editsPoint && (method === 'MAIL_IN' || method === 'PICKUP')) {
+    if (editsPoint && (method === 'MAIL_IN' || method === 'PICKUP' || method === 'HOME_PICKUP')) {
       const min = method === 'MAIL_IN' ? cfg.mailinMinPoints : cfg.pickupMinPoints;
       if (estimatedPoints < min) {
         const capLeft = cfg.customerMonthlyCapPoints - usage.pointsMonth;

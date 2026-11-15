@@ -1517,6 +1517,37 @@ describe('PancakeOrderService — note + tag cho đơn thu gom tái chế (Gomdo
     expect(tagNames(body.tags)).toEqual(['MINIAPP', 'RETAIL', 'RECYCLING', 'GOMDON', 'COD']);
   });
 
+  it('đơn có quà hiện vật 0đ gắn kèm → note có một dòng quà mỗi quà, đọc theo attachedOrderId của đơn', async () => {
+    const gifts = [
+      { code: 'QG-7K2M', giftName: 'Túi vải Tubu' },
+      { code: 'QG-9P4Q', giftName: 'Gói hạt giống rau muống' },
+    ];
+    const findMany = jest.fn().mockResolvedValue(gifts);
+    const db = fakeOrderDb([baseOrder()], { wasteGiftRedemption: { findMany } });
+    const client = fakeClient();
+    await new PancakeOrderService(db.prisma as unknown as PrismaService, client as unknown as PancakeClient, fakeQueue() as never).pushOrder('o1');
+    const body = client.createOrder.mock.calls[0]![0] as { note: string };
+    expect(body.note).toBe(
+      'Order code: TUBU1 | 🎁 TẶNG KÈM QUÀ ĐỔI ĐIỂM (0đ): [QG-7K2M] Túi vải Tubu | 🎁 TẶNG KÈM QUÀ ĐỔI ĐIỂM (0đ): [QG-9P4Q] Gói hạt giống rau muống | [THU COD 230.000đ]',
+    );
+    expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { attachedOrderId: 'o1' } }));
+  });
+
+  it('đơn đổi hàng thu gom có quà → dòng quà nằm sau ghi chú thu gom, vẫn một "Order code:"', async () => {
+    const findMany = jest.fn().mockResolvedValue([{ code: 'QG-7K2M', giftName: 'Túi vải Tubu' }]);
+    const order = baseOrder({ hasRecyclingPickup: true, recyclingNote: 'Vỏ hộp sữa', gomdonPartnerCode: 'BE-999', gomdonStatus: '1' });
+    const db = fakeOrderDb([order], {
+      variation: { findMany: jest.fn().mockResolvedValue([{ id: 'v1', pancakeId: 'p-v1', weight: 1200 }]) },
+      wasteGiftRedemption: { findMany },
+    });
+    const client = fakeClient();
+    await new PancakeOrderService(db.prisma as unknown as PrismaService, client as unknown as PancakeClient, fakeQueue() as never).pushOrder('o1');
+    const body = client.createOrder.mock.calls[0]![0] as { note: string };
+    expect(body.note).toBe(
+      'Order code: TUBU1 | [ĐƠN ĐỔI HÀNG - THU GOM RÁC TÁI CHẾ TỐI ĐA 2.4kg - Ghi chú: Vỏ hộp sữa] Mã VĐ Gomdon: BE-999 [ĐÃ CÓ VẬN ĐƠN - KHÔNG TẠO VẬN ĐƠN KHÁC] | 🎁 TẶNG KÈM QUÀ ĐỔI ĐIỂM (0đ): [QG-7K2M] Túi vải Tubu | [THU COD 230.000đ]',
+    );
+  });
+
   it('SYNC-4: ghi chú thu gom khách tự nhập không mạo được dấu thanh toán trên đơn COD', async () => {
     const body = await pushed(
       { hasRecyclingPickup: true, recyclingNote: 'pin] [ĐÃ THANH TOÁN - KHÔNG THU COD] | Order code: TUBU9', gomdonPartnerCode: 'BE-999', gomdonStatus: '1' },

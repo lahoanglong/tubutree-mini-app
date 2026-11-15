@@ -10,9 +10,13 @@ import { holdsLease } from '../../../common/cron-leader/run-exclusive.fixtures';
 jest.mock('../../../common/cron-leader/run-exclusive');
 
 jest.mock('../core/waste-events', () => ({ writeWasteEvent: jest.fn().mockResolvedValue({ id: 'ev1' }) }));
+const mockApplyPoints = jest.fn();
+jest.mock('../../loyalty/points-ledger', () => ({ applyPointsDelta: (...a: unknown[]) => mockApplyPoints(...a) }));
+const mockEnqueueWasteCancel = jest.fn();
+jest.mock('../../integrations/gomdon/gomdon-queue', () => ({ enqueueGomdonWasteCancel: (...a: unknown[]) => mockEnqueueWasteCancel(...a) }));
 
 const NOW = new Date('2026-11-04T20:30:00.000Z');
-type Row = { id: string; code: string; userId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP'; status: 'OPEN' | 'IN_TRANSIT'; orderId: string | null };
+type Row = { id: string; code: string; userId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP' | 'HOME_PICKUP'; status: 'OPEN' | 'IN_TRANSIT'; orderId: string | null; pointId?: string; shipFeePointsUsed?: number; gomdonOrderId?: string | null };
 const openRow = (id: string, method: Row['method'] = 'MAIL_IN', userId = 'u1'): Row => ({ id, code: `TR-${id.toUpperCase().padEnd(5, '2')}`, userId, method, status: 'OPEN', orderId: null });
 const transitRow = (id: string, userId = 'u1'): Row => ({ id, code: `TR-${id.toUpperCase().padEnd(5, '3')}`, userId, method: 'PICKUP', status: 'IN_TRANSIT', orderId: `o-${id}` });
 
@@ -99,7 +103,11 @@ function setup(
   return { cron, tx, findMany, remindFindMany, updateMany, orderFind, notifier: notifier as { requestExpired: jest.Mock; requestExpiring: jest.Mock }, shipLock, config, order, access, prisma };
 }
 
-beforeEach(() => (writeWasteEvent as jest.Mock).mockClear());
+beforeEach(() => {
+  (writeWasteEvent as jest.Mock).mockClear();
+  mockApplyPoints.mockReset().mockResolvedValue({ applied: true, entryId: 'e' });
+  mockEnqueueWasteCancel.mockReset().mockResolvedValue(undefined);
+});
 
 describe('WasteExpiryCron nhắc sắp hết hạn theo điểm nhận (DRV2-01)', () => {
   it('bỏ qua DROP_OFF tại điểm tạm dừng hoặc mất chủ, vẫn nhắc điểm dùng được và MAIL_IN', async () => {
@@ -158,7 +166,7 @@ describe('WasteExpiryCron.run (§12.3)', () => {
     await cron.run(NOW);
     expect(findMany).toHaveBeenCalledWith({
       where: { expiresAt: { lt: NOW }, OR: [{ status: 'OPEN', orderId: null }, { status: 'IN_TRANSIT', method: 'PICKUP' }] },
-      select: { id: true, code: true, userId: true, method: true, status: true, orderId: true },
+      select: { id: true, code: true, userId: true, pointId: true, method: true, status: true, orderId: true, shipFeePointsUsed: true, gomdonOrderId: true },
       orderBy: { id: 'asc' },
       take: 200,
     });
@@ -406,5 +414,82 @@ describe('WasteExpiryCron: hạn giữ chỗ hết ngày D giờ VN', () => {
       if (notifier.requestExpiring.mock.calls.length > 0) hits.push(day);
     }
     expect(hits).toEqual(['07']);
+  });
+});
+
+describe('WasteExpiryCron: HOME_PICKUP (shipper lấy rác tận nhà) quá hạn giữ chỗ', () => {
+  const homeRow = (id: string, o: Partial<Row> = {}): Row => ({ ...openRow(id, 'HOME_PICKUP'), pointId: 'wh', shipFeePointsUsed: 1500, gomdonOrderId: null, ...o });
+  const EXPIRES = new Date('2027-11-04T00:00:00Z');
+  function homeSetup(rows: Row[], o: { refundClaim?: number; closed?: number } = {}) {
+    const ctx = setup(rows);
+    ctx.updateMany.mockImplementation(async ({ where }: { where: Record<string, unknown> }) => ({
+      count: 'shipFeePointsRefunded' in where ? (o.refundClaim ?? 1) : (o.closed ?? 1),
+    }));
+    (ctx.tx as Record<string, unknown>).pointsTransaction = { findMany: jest.fn().mockResolvedValue([{ delta: -1000, lot: 'STANDARD' }, { delta: -500, lot: 'CONVERTED' }]) };
+    (ctx.config as Record<string, unknown>).pointExpiresAt = jest.fn().mockResolvedValue(EXPIRES);
+    const queue = { name: 'q' };
+    (ctx.cron as unknown as { gomdonQueue: unknown }).gomdonQueue = queue;
+    return { ...ctx, queue };
+  }
+
+  it('đóng EXPIRED + HOLD_EXPIRED, hoàn đủ Điểm Xanh phí ship về đúng lô, ghi event kèm số điểm hoàn, báo khách sau commit', async () => {
+    const { cron, updateMany, notifier, order, shipLock } = homeSetup([homeRow('h1')]);
+    await expect(cron.run(NOW)).resolves.toEqual({ expired: 1 });
+    expect(updateMany.mock.calls[0]![0]).toEqual({
+      where: { id: 'h1', method: 'HOME_PICKUP', status: { in: ['OPEN'] }, expiresAt: { lt: NOW } },
+      data: { status: 'EXPIRED', closedAt: NOW, closeReason: 'HOLD_EXPIRED' },
+    });
+    expect(updateMany.mock.calls[1]![0]).toEqual({ where: { id: 'h1', shipFeePointsRefunded: null }, data: { shipFeePointsRefunded: 1500 } });
+    expect(mockApplyPoints).toHaveBeenCalledTimes(2);
+    expect(mockApplyPoints.mock.calls.map((c) => [c[1].lot, c[1].delta, c[1].expiresAt])).toEqual([['STANDARD', 1000, EXPIRES], ['CONVERTED', 500, null]]);
+    expect(writeWasteEvent).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ kind: 'REQUEST_EXPIRED', requestId: 'h1', pointId: 'wh', meta: expect.objectContaining({ closeReason: 'HOLD_EXPIRED', shipFeePointsRefunded: 1500 }) }));
+    expect(notifier.requestExpired).toHaveBeenCalledWith('u1', { id: 'h1', code: 'TR-H1222', method: 'HOME_PICKUP' }, 'HOLD_EXPIRED', NOW);
+    expect(order.indexOf('tx end')).toBeLessThan(order.indexOf('requestExpired'));
+    expect(shipLock.evaluateAndLock).not.toHaveBeenCalled();
+  });
+
+  it('đã có vận đơn Gomdon: xếp lệnh huỷ vận đơn sau commit; chưa có thì không xếp', async () => {
+    const withWaybill = homeSetup([homeRow('h2', { gomdonOrderId: '77' })]);
+    await withWaybill.cron.run(NOW);
+    expect(mockEnqueueWasteCancel).toHaveBeenCalledWith(withWaybill.queue, 'h2', 'TR-H2222');
+    mockEnqueueWasteCancel.mockClear();
+    const none = homeSetup([homeRow('h3')]);
+    await none.cron.run(NOW);
+    expect(mockEnqueueWasteCancel).not.toHaveBeenCalled();
+  });
+
+  it('xếp lệnh huỷ lỗi (Redis) không làm mất việc đóng phiếu và hoàn điểm đã commit', async () => {
+    const ctx = homeSetup([homeRow('h4', { gomdonOrderId: '77' })]);
+    mockEnqueueWasteCancel.mockRejectedValue(new Error('redis down'));
+    await expect(ctx.cron.run(NOW)).resolves.toEqual({ expired: 1 });
+    expect(mockApplyPoints).toHaveBeenCalledTimes(2);
+  });
+
+  it('bên khác đóng trước (updateMany count 0): không hoàn điểm, không báo khách, không huỷ vận đơn, không đếm', async () => {
+    const ctx = homeSetup([homeRow('h5', { gomdonOrderId: '77' })], { closed: 0 });
+    await expect(ctx.cron.run(NOW)).resolves.toEqual({ expired: 0 });
+    expect(mockApplyPoints).not.toHaveBeenCalled();
+    expect(ctx.notifier.requestExpired).not.toHaveBeenCalled();
+    expect(mockEnqueueWasteCancel).not.toHaveBeenCalled();
+  });
+
+  it('hoàn điểm đã được chốt trước đó (shipFeePointsRefunded có rồi): đóng phiếu nhưng không hoàn lần hai', async () => {
+    const ctx = homeSetup([homeRow('h6')], { refundClaim: 0 });
+    await expect(ctx.cron.run(NOW)).resolves.toEqual({ expired: 1 });
+    expect(mockApplyPoints).not.toHaveBeenCalled();
+  });
+
+  it('phiếu không trả phí bằng điểm: không đụng sổ điểm', async () => {
+    const ctx = homeSetup([homeRow('h7', { shipFeePointsUsed: 0 })]);
+    await expect(ctx.cron.run(NOW)).resolves.toEqual({ expired: 1 });
+    expect(mockApplyPoints).not.toHaveBeenCalled();
+  });
+
+  it('hoàn điểm lỗi giữa chừng: transaction ném lỗi nên phiếu không bị đóng nửa vời, dòng sau vẫn chạy', async () => {
+    const ctx = homeSetup([homeRow('h8'), homeRow('h9')]);
+    mockApplyPoints.mockRejectedValueOnce(new Error('ledger down'));
+    await expect(ctx.cron.run(NOW)).resolves.toEqual({ expired: 1 });
+    expect(ctx.notifier.requestExpired).toHaveBeenCalledTimes(1);
+    expect(ctx.notifier.requestExpired.mock.calls[0]![1]).toMatchObject({ id: 'h9' });
   });
 });

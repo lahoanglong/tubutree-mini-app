@@ -69,7 +69,7 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     await warmPool(prisma);
     checkout = moduleRef.get(CheckoutService);
     cart = moduleRef.get(CartService);
-    cartApi = new CartController(cart);
+    cartApi = new CartController(cart, { listPending: async () => [] } as never);
     await setConfig(prisma, 'shipping.free_threshold', 200_000);
     await setConfig(prisma, 'shipping.flat_fee_below_threshold', 19_000);
     await setConfig(prisma, 'merchant.default_shipping_fee', 25_000);

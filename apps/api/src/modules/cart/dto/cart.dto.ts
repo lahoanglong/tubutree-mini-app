@@ -35,7 +35,7 @@ export class ApplyCouponDto {
 }
 
 /** `?itemIds=a,b` hoặc lặp tham số (`itemIds=a&itemIds=b,c`): tách dấu phẩy ở từng phần tử, bỏ rỗng và trùng. Giá trị lạ để validator từ chối. */
-function splitIds(value: unknown): unknown {
+export function splitIds(value: unknown): unknown {
   const parts = Array.isArray(value) ? value : [value];
   if (!parts.every((p) => typeof p === 'string')) return value;
   return [...new Set((parts as string[]).flatMap((p) => p.split(',')).filter(Boolean))];

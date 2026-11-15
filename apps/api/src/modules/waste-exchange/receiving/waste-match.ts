@@ -37,10 +37,11 @@ export async function evaluateMatch(
   if (req.method === 'PICKUP') {
     return req.orderId ? { ok: true, basis: 'ORDER' } : { ok: false, reason: 'NOT_RECEIVABLE' };
   }
-  if (req.method === 'MAIL_IN') {
+  // HOME_PICKUP mang mã vận đơn của hãng (Gomdon gắn khi bưu tá lấy), đối chiếu như kiện MAIL_IN.
+  if (req.method === 'MAIL_IN' || req.method === 'HOME_PICKUP') {
     if (match?.phoneMatchConfirmed !== true || req.trackingNorm === null) return { ok: false, reason: 'NO_MATCH' };
     const count = await tx.wasteRequest.count({
-      where: { trackingNorm: req.trackingNorm, method: 'MAIL_IN', status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } },
+      where: { trackingNorm: req.trackingNorm, method: { in: ['MAIL_IN', 'HOME_PICKUP'] }, status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } },
     });
     if (count === 1) return { ok: true, basis: 'TRACKING_PHONE' };
     return { ok: false, reason: count === 0 ? 'NO_MATCH' : 'TRACKING_MULTI' };

@@ -75,7 +75,7 @@ describe('Bundle toàn sàn: giỏ = báo giá = đặt đơn (real Postgres)', 
     await warmPool(prisma);
     checkout = moduleRef.get(CheckoutService);
     cart = moduleRef.get(CartService);
-    cartApi = new CartController(cart);
+    cartApi = new CartController(cart, { listPending: async () => [] } as never);
     publicBundles = new BundlesService(prisma, new CatalogService(prisma), moduleRef.get(SystemConfigService));
     await setConfig(prisma, 'shipping.free_threshold', 200_000);
     await setConfig(prisma, 'shipping.flat_fee_below_threshold', 19_000);

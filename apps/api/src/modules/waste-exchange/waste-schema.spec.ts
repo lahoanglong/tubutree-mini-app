@@ -11,7 +11,7 @@ const ENUMS: Record<string, string[]> = {
   WastePointKind: ['WAREHOUSE', 'PARTNER'],
   WastePointStatus: ['ACTIVE', 'PAUSED', 'PENDING'],
   WastePointStaffRole: ['OWNER', 'STAFF'],
-  WasteMethod: ['DROP_OFF', 'MAIL_IN', 'PICKUP'],
+  WasteMethod: ['DROP_OFF', 'MAIL_IN', 'PICKUP', 'HOME_PICKUP'],
   WasteRequestStatus: ['OPEN', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED', 'REJECTED', 'CANCELLED', 'EXPIRED', 'REVERSED'],
   WasteCloseReason: ['HOLD_EXPIRED', 'PICKUP_NO_SHOW', 'PICKUP_NOT_DISPATCHED', 'LOST', 'LOST_AT_WAREHOUSE', 'SHIP_LOCKED', 'ORDER_CANCELLED'],
   WasteRejectionReason: ['WET', 'DIRTY', 'FOREIGN_OBJECT', 'WRONG_TYPE', 'DAMAGED', 'NOT_ACCEPTED', 'OVERSIZE', 'HAZARDOUS', 'UNPAID_POSTAGE', 'OTHER'],
@@ -124,7 +124,7 @@ describe('waste schema (schema.prisma)', () => {
     WastePointItem: ['pointId', 'itemId'],
     WastePointStaff: ['id', 'pointId', 'userId', 'role', 'isActive', 'createdAt', 'updatedAt'],
     WastePointUsage: ['pointId', 'monthKey', 'pointsUsed', 'confirmations'],
-    WasteRequest: ['id', 'code', 'userId', 'method', 'status', 'pointId', 'orderId', 'carrier', 'trackingCode', 'trackingNorm', 'trackingConflict', 'estimatedPoints', 'estimatedDrops', 'capDayKey', 'capMonthKey', 'expiresAt', 'inTransitAt', 'receivedAt', 'completedAt', 'closedAt', 'closeReason', 'confirmedByUserId', 'pointsAwarded', 'dropsAwarded', 'receivedWeightGrams', 'carrierCostVnd', 'rejectionReason', 'rejectionNote', 'reversedAt', 'reversedByUserId', 'reversalReason', 'reversalShortfallPoints', 'idempotencyKey', 'consentAt', 'consentVersion', 'createdAt', 'updatedAt'],
+    WasteRequest: ['id', 'code', 'userId', 'method', 'status', 'pointId', 'orderId', 'carrier', 'trackingCode', 'trackingNorm', 'trackingConflict', 'estimatedPoints', 'estimatedDrops', 'capDayKey', 'capMonthKey', 'expiresAt', 'inTransitAt', 'receivedAt', 'completedAt', 'closedAt', 'closeReason', 'confirmedByUserId', 'pointsAwarded', 'dropsAwarded', 'receivedWeightGrams', 'carrierCostVnd', 'rejectionReason', 'rejectionNote', 'reversedAt', 'reversedByUserId', 'reversalReason', 'reversalShortfallPoints', 'gomdonOrderId', 'gomdonPartnerCode', 'gomdonStatus', 'gomdonStatusAt', 'declaredWeightGrams', 'shipFeeVnd', 'shipFeePointsUsed', 'shipFeeCodVnd', 'shipFeePointsRefunded', 'pickupAddress', 'shippingHistory', 'idempotencyKey', 'consentAt', 'consentVersion', 'createdAt', 'updatedAt'],
     WasteRequestLine: ['id', 'requestId', 'itemId', 'itemCode', 'itemName', 'unitLabel', 'unitsPerPoint', 'pointsPerGroup', 'dropsPerUnit', 'gramsPerUnit', 'declaredQty', 'receivedQty', 'shortfallReason', 'pointsAwarded'],
     WasteEvent: ['id', 'createdAt', 'kind', 'requestId', 'pointId', 'giftRedemptionId', 'actorUserId', 'actorRole', 'meta'],
     WasteUnmatchedParcel: ['id', 'receivedAt', 'createdByUserId', 'carrier', 'trackingCode', 'trackingNorm', 'description', 'reason', 'relatedRequestId', 'status', 'matchedRequestId', 'resolvedByUserId', 'resolvedAt', 'resolveNote'],
@@ -138,9 +138,12 @@ describe('waste schema (schema.prisma)', () => {
   });
 
   it('requests keep only userId and unmatched parcels keep no sender name or phone: no name, phone, address, ID or photo column (spec 14.4)', () => {
+    // pickupAddress là ngoại lệ có chủ đích của W168: ảnh chụp địa chỉ lấy rác tận nhà ở thời điểm tạo phiếu (HOME_PICKUP), bắt buộc phải lưu
+    // trên phiếu để shipper Gomdon biết nhà khách và để phiếu không đổi khi khách sửa/xoá sổ địa chỉ. Chỉ một cột này, và chỉ trên WasteRequest.
+    const allowed: Record<string, string[]> = { WasteRequest: ['pickupAddress'] };
     for (const model of ['WasteRequest', 'WasteRequestLine', 'WasteUnmatchedParcel']) {
       const names = block('model', model).split('\n').map((l) => l.trim().split(/\s+/)[0] ?? '');
-      expect(names.filter((n) => /name$|phone|address|sender|idCard|identity|photo/i.test(n) && n !== 'itemName')).toEqual([]);
+      expect(names.filter((n) => /name$|phone|address|sender|idCard|identity|photo/i.test(n) && n !== 'itemName' && !(allowed[model] ?? []).includes(n))).toEqual([]);
     }
   });
 

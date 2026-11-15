@@ -9,6 +9,7 @@ export * from './external-points';
 export * from './support-chat';
 export * from './cash-wording';
 export * from './cart';
+export * from './checkout-pickup';
 export * from './campaign';
 export * from './price';
 export * from './me-summary';

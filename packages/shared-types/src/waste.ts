@@ -64,11 +64,55 @@ export interface WasteNearbyRequest { provinceCode?: string; locationToken: stri
 export interface WastePreviewRequest { lines: WasteLineInput[]; method?: WasteMethod; pointId?: string; provinceCode?: string }
 export interface WastePreviewBlockDTO { code: WastePreviewBlock; itemId?: string; missingPoints?: number; openCount?: number; pickupRequestCode?: string; pointsRemaining?: number }
 export interface WastePreviewDTO { estimatedPoints: number; estimatedDrops: number; estimatedGrams: number | null; pointsValueVnd: number; blocks: WastePreviewBlockDTO[]; feeEstimate: WasteFeeEstimate | null; itemCaps: { itemId: string; monthRemainingQty: number | null; dayRemainingQty: number | null }[]; pointsMonthRemaining: number }
-export interface WasteCreateRequest { method: WasteMethod; lines: WasteLineInput[]; pointId?: string; consent: true; /** Phiên bản thể lệ khách đã đọc (từ GET /waste/rules); bản cũ không gửi thì máy chủ ghi phiên bản hiện hành. */ consentVersion?: string; packagingConsent?: boolean; postagePaidConsent?: boolean }
+/** Cân nặng gói rác khách khai cho đơn shipper lấy tận nhà (gram). */
+export const WASTE_HOME_PICKUP_MIN_GRAMS = 500;
+export const WASTE_HOME_PICKUP_MAX_GRAMS = 10_000;
+export interface WastePickupQuoteRequest { addressId: string; declaredWeightGrams: number; lines: WasteLineInput[] }
+export interface WastePickupQuoteResponse {
+  /** Phí shipper thu gom tận nơi (VND) theo báo giá Gomdon hoặc ước lượng. */
+  shipFeeVnd: number;
+  /** true = phí ước lượng cố định vì chưa hỏi được Gomdon; phí chốt khi tạo đơn có thể khác. */
+  estimated: boolean;
+  estimatedPoints: number;
+  /** Ngưỡng Điểm Xanh tối thiểu của một đơn shipper lấy tận nhà. */
+  minPoints: number;
+  /** Điểm Xanh khách dùng được ngay (đã trừ phần điểm đơn còn chờ đổi/trả, gồm cả lô quy đổi). */
+  pointsAvailable: number;
+  /** Số điểm trừ được vào phí nếu bật công tắc: min(pointsAvailable, shipFeeVnd). */
+  pointsApplicable: number;
+  /** Phí còn phải trả (thu hộ khi bưu tá lấy rác) nếu trừ hết mức: shipFeeVnd - pointsApplicable. */
+  remainingFeeVnd: number;
+  addressOk: boolean;
+  addressMessage: string | null;
+  /** Câu tiếng Việt khi chưa tạo được đơn (dưới ngưỡng điểm, Pin ngoài TP.HCM, cổng đóng, khoá...), null = tạo được. */
+  blocked: string | null;
+}
+export interface WasteHomePickupTimelineEntry { at: string; text: string }
+/** Thông tin vận đơn shipper Gomdon của yêu cầu HOME_PICKUP. */
+export interface WasteHomePickupDTO {
+  /** Mã trạng thái Gomdon ("1".."12") hoặc trạng thái nội bộ (CREATING, NEEDS_MANUAL_CHECK); null = chưa tạo vận đơn. */
+  gomdonStatus: string | null;
+  statusText: string;
+  shipFeeVnd: number;
+  shipFeePointsUsed: number;
+  shipFeeCodVnd: number;
+  shipFeePointsRefunded: number;
+  declaredWeightGrams: number;
+  /** Đường, phường/xã, tỉnh/thành của địa chỉ lấy rác. */
+  pickupAddressText: string;
+  timeline: WasteHomePickupTimelineEntry[];
+}
+export interface WasteCreateRequest { method: WasteMethod; lines: WasteLineInput[]; pointId?: string; consent: true; /** Phiên bản thể lệ khách đã đọc (từ GET /waste/rules); bản cũ không gửi thì máy chủ ghi phiên bản hiện hành. */ consentVersion?: string; packagingConsent?: boolean; postagePaidConsent?: boolean;
+  /** HOME_PICKUP: địa chỉ trong sổ địa chỉ của khách nơi shipper tới lấy rác (bắt buộc với HOME_PICKUP). */
+  pickupAddressId?: string;
+  /** HOME_PICKUP: cân nặng ước tính của gói rác, gram nguyên, 500 tới 10000 (bắt buộc với HOME_PICKUP). */
+  declaredWeightGrams?: number;
+  /** HOME_PICKUP: true = dùng Điểm Xanh dùng được để trừ phí shipper (1 điểm = 1đ); phần còn lại thu hộ khi bưu tá lấy rác. */
+  usePointsForShipFee?: boolean }
 export interface WasteEditRequest { lines: WasteLineInput[]; pointId?: string }
 export interface WasteTrackingRequest { carrier: string; trackingCode: string }
 export interface WasteRequestLineDTO { itemId: string; itemName: string; unitLabel: string; unitsPerPoint: number; pointsPerGroup: number; dropsPerUnit: number; gramsPerUnit: number | null; declaredQty: number; receivedQty: number | null; shortfallReason: WasteShortfallReason | null; pointsAwarded: number | null }
-export interface WasteRequestSummaryDTO { id: string; code: string; method: WasteMethod; status: WasteRequestStatus; closeReason: WasteCloseReason | null; createdAt: string; expiresAt: string | null; estimatedPoints: number; pointsAwarded: number | null; pointName: string; orderCode: string | null; lines: { itemName: string; unitLabel: string; declaredQty: number }[] }
+export interface WasteRequestSummaryDTO { id: string; code: string; method: WasteMethod; status: WasteRequestStatus; closeReason: WasteCloseReason | null; createdAt: string; expiresAt: string | null; estimatedPoints: number; pointsAwarded: number | null; pointName: string; orderCode: string | null; lines: { itemName: string; unitLabel: string; declaredQty: number }[]; /** Chỉ có ở yêu cầu HOME_PICKUP. */ homePickup?: WasteHomePickupDTO }
 export interface WasteRequestDetailDTO extends WasteRequestSummaryDTO { lines: WasteRequestLineDTO[]; point: WastePointContactDTO | null; pointAvailable: boolean; carrier: string | null; trackingCode: string | null; inTransitAt: string | null; receivedAt: string | null; completedAt: string | null; closedAt: string | null; rejectionReason: WasteRejectionReason | null; rejectionNote: string | null; dropsAwarded: number | null; impactGrams: number | null; reversedPoints: number | null; reversalReason: string | null; editable: boolean; cancellable: boolean; orderId: string | null }
 export interface WasteRulesDTO { text: string | null; /** Phiên bản thể lệ do admin đặt; optional để bản cũ vẫn type-check, API luôn gửi. */ version?: string }
 

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { WasteAlertThresholds, WasteFeeTable } from '@tubutree/shared-types';
+import { DEFAULT_POINT_EXPIRE_MONTHS, pointsExpiryFrom } from '../../loyalty/points-expiry-date';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { WASTE_CONFIG_KEYS, type WasteConfigKey } from '../waste-config.keys';
 
@@ -112,6 +113,11 @@ export class WasteConfigService {
       rulesText: this.checked('waste.rules_text', rulesText, (v): v is string => typeof v === 'string'),
       rulesVersion: this.checked('waste.rules_version', rulesVersion, (v): v is string => typeof v === 'string' && v.trim() !== '' && v.length <= 32),
     };
+  }
+
+  /** Hạn của Điểm Xanh thường được hoàn lại (loyalty.point_expire_months). Đọc TRƯỚC khi mở transaction giữ khoá dòng. */
+  async pointExpiresAt(now: Date = new Date()): Promise<Date> {
+    return pointsExpiryFrom(now, await this.config.get<number>('loyalty.point_expire_months', DEFAULT_POINT_EXPIRE_MONTHS));
   }
 
   async isEnabled(): Promise<boolean> {

@@ -205,7 +205,7 @@ export async function computeWasteAlerts(db: PrismaService, now: Date, t: WasteA
     (v) =>
       v.completedAt !== null &&
       v.completedAt.getTime() >= directFrom &&
-      (v.method === 'MAIL_IN' || v.method === 'PICKUP') &&
+      (v.method === 'MAIL_IN' || v.method === 'PICKUP' || v.method === 'HOME_PICKUP') &&
       v.inTransitAt === null,
   );
   for (const [id, list] of groupBy(directVisits, (v) => v.confirmedByUserId)) {

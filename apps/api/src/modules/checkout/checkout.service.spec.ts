@@ -21,6 +21,7 @@ import type { AffiliateService } from '../affiliate/affiliate.service';
 import type { ComboService } from '../storefront/combo.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
+import { PICKUP_BATTERY_HCM_ONLY_MESSAGE } from '../waste-exchange/core/waste-pickup-rules';
 
 // Sổ cái thật chạy trên Postgres ở test/integration-race/wallet-ledger*.race-spec.ts.
 jest.mock('../wallet/wallet-ledger.service', () => ({
@@ -44,12 +45,15 @@ import {
 const gateMock = readPickupGate as jest.Mock;
 const lockPickupMock = lockPickupRequestForCheckout as jest.Mock;
 const attachMock = attachPickupRequest as jest.Mock;
-const LOCKED_PICKUP = { id: 'r1', code: 'TR-ABC23', lines: [{ itemName: 'Vỏ hộp sữa', unitLabel: 'vỏ', declaredQty: 12 }] };
+const LOCKED_PICKUP = { id: 'r1', code: 'TR-ABC23', estimatedPoints: 5_000, lines: [{ itemName: 'Vỏ hộp sữa', unitLabel: 'vỏ', declaredQty: 12 }] };
 beforeEach(() => {
   gateMock.mockReset().mockResolvedValue(true);
   lockPickupMock.mockReset().mockResolvedValue(LOCKED_PICKUP);
   attachMock.mockReset().mockResolvedValue(undefined);
 });
+
+/** Kết quả `prepareInlinePickup` (cấu hình giữ chỗ đọc ngoài tx): ngưỡng gói thu kèm 3.000 điểm. */
+const PREPARED_INLINE = { holdCfg: { pickupMinPoints: 3_000 }, rulesVersion: 'v-test' };
 
 /** Cửa sổ đổi/trả mà stub `returnWindowDays` trả: khác mặc định 7 để test thấy đúng giá trị này được truyền đi (PF-6a). */
 const WINDOW_DAYS = 9;
@@ -102,6 +106,20 @@ function build(
     storefront?: { id: string; slug: string; subdomain?: string; type: string; ownerUserId: string } | null;
     /** Cấu hình giao của gian hàng đối tác (phí giao, ngưỡng miễn phí, phí sàn). */
     merchantStores?: Array<{ id: string; shippingFee: number | null; freeShipFrom: number | null; commissionPct: number | null }>;
+    /** Vùng đổi rác (thu kèm đơn + quà hiện vật): mặc định món rác chọn ngay được 5.000 điểm, không vi phạm luật nào. */
+    wasteHold?: { evaluate: jest.Mock; validateAndHold: jest.Mock };
+    wasteRequests?: { prepareInlinePickup: jest.Mock; createPickupInTx: jest.Mock };
+    giftAttach?: { listPending: jest.Mock; attachInTx: jest.Mock };
+    /** Quà hiện vật READY chưa gắn đơn mà `giftAttach.listPending` trả. */
+    pendingGifts?: Array<{ id: string; code: string | null; giftName: string; kind: 'GIFT' | 'SEED_PACK'; pointsCost: number }>;
+    /** Cờ tài khoản đổi rác (bị chặn / khoá đường kho). */
+    wasteFlags?: { blockedAt: Date | null; shipLockedAt: Date | null } | null;
+    /** Món rác (hazardous) mà truy vấn Pin của luật HCM đọc cho các id khách chọn ngay. */
+    wasteItems?: Array<Record<string, unknown>>;
+    /** Phiếu thu kèm có sẵn mà báo giá đọc cho `wasteRequestId` (null = phiếu không còn). */
+    requestRow?: Record<string, unknown> | null;
+    /** Dựng service như spec race tối giản: không nạp vùng đổi rác. */
+    omitWaste?: boolean;
   } = {},
 ) {
   const total = opts.total ?? 100;
@@ -111,7 +129,9 @@ function build(
   const executeRaw = opts.executeRaw ?? jest.fn().mockResolvedValue(opts.stockCount ?? 1);
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(null), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }), create: orderCreate },
-    wasteRequest: { findFirst: jest.fn().mockResolvedValue(null) },
+    wasteRequest: { findFirst: jest.fn().mockResolvedValue(opts.requestRow ?? null) },
+    wasteUserFlags: { findUnique: jest.fn().mockResolvedValue(opts.wasteFlags ?? null) },
+    wasteItem: { findMany: jest.fn().mockResolvedValue(opts.wasteItems ?? [{ hazardous: false }]) },
     user: {
       findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, pointsBalance: opts.pointsBalance ?? 1000, pointsConvertedBalance: opts.pointsConvertedBalance ?? 0, tierId: opts.tierId ?? null }),
       findUnique: jest.fn().mockResolvedValue(null),
@@ -229,8 +249,39 @@ function build(
     recordBestEffort: jest.fn().mockResolvedValue(undefined),
   } as unknown as AnalyticsEventsService;
 
-  const svc = new CheckoutService(prisma, cart, coupons, pricing, loyalty, notifications, pancake, gomdon, affiliate, combo, flashSale, analytics, opts.geo as never, opts.systemConfig as never);
-  return { svc, prisma, updateMany, orderCreate, executeRaw, total, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics, affiliate, notifications };
+  const wasteHold = opts.wasteHold ?? {
+    evaluate: jest.fn().mockResolvedValue({ result: { estimatedPoints: 5_000 }, blocks: [], messages: [] }),
+    validateAndHold: jest.fn().mockResolvedValue({}),
+  };
+  const wasteRequests = opts.wasteRequests ?? {
+    prepareInlinePickup: jest.fn().mockResolvedValue(PREPARED_INLINE),
+    createPickupInTx: jest.fn().mockResolvedValue('r-inline'),
+  };
+  const giftAttach = opts.giftAttach ?? {
+    listPending: jest.fn().mockResolvedValue(opts.pendingGifts ?? []),
+    attachInTx: jest.fn().mockResolvedValue(undefined),
+  };
+
+  const svc = new CheckoutService(
+    prisma,
+    cart,
+    coupons,
+    pricing,
+    loyalty,
+    notifications,
+    pancake,
+    gomdon,
+    affiliate,
+    combo,
+    flashSale,
+    analytics,
+    (opts.omitWaste ? undefined : wasteHold) as never,
+    (opts.omitWaste ? undefined : wasteRequests) as never,
+    (opts.omitWaste ? undefined : giftAttach) as never,
+    opts.geo as never,
+    opts.systemConfig as never,
+  );
+  return { svc, prisma, updateMany, orderCreate, executeRaw, total, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics, affiliate, notifications, wasteHold, wasteRequests, giftAttach };
 }
 
 describe('CheckoutService.placeOrder — money safety', () => {
@@ -1053,7 +1104,7 @@ describe('CheckoutService — flash-sale server-authoritative (Task 5)', () => {
           data: expect.objectContaining({ hasRecyclingPickup: true, recyclingNote: 'Thu kèm rác TR-ABC23: Vỏ hộp sữa: 12 vỏ' }),
         }),
       );
-      expect(lockPickupMock).toHaveBeenCalledWith(prisma, 'u1', 'r1');
+      expect(lockPickupMock).toHaveBeenCalledWith(prisma, 'u1', 'r1', 'HN');
       expect(attachMock).toHaveBeenCalledWith(prisma, 'u1', 'r1', 'o1');
       expect((gomdon as unknown as { enqueuePush: jest.Mock }).enqueuePush).toHaveBeenCalledWith('o1');
       expect((pancake as unknown as { enqueuePush: jest.Mock }).enqueuePush).not.toHaveBeenCalled();
@@ -2459,5 +2510,621 @@ describe('CheckoutService.placeOrder: nguồn của đơn (Order.source)', () =>
     const picked = build({ cartData: { items: [{ id: 'i1', variationId: 'v1', productId: 'p1', productName: 'A', variationName: 'VA', unitPrice: 100, quantity: 1, total: 100 }], subtotal: 100, discount: 0, freeship: false, couponCode: null } });
     await picked.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', itemIds: ['i1'] } as never);
     expect(picked.orderCreate.mock.calls[0][0].data.source).toBe('buy_now');
+  });
+});
+
+// W168-C: đổi rác kèm đơn (món rác chọn ngay hoặc phiếu có sẵn) miễn phí giao kiện Tubu, chọn số kg gửi lại, quà hiện vật 0đ đi kèm.
+describe('CheckoutService — đổi rác kèm đơn: miễn phí giao, số kg gửi lại, quà hiện vật 0đ', () => {
+  const HCM = 'Thành phố Hồ Chí Minh';
+  const INLINE = { lines: [{ itemId: 'w1', qty: 3 }] };
+  const SHOP_A = { kind: 'MERCHANT', storefrontId: 'sf-a', name: 'Shop A', ownerUserId: 'u-a' };
+  // 2 chai nặng 1.200g → kiện Tubu 2.400g, trần gói rác gửi lại 2,4 kg.
+  const TUBU_HEAVY = { id: 'i1', variationId: 'v1', productId: 'p1', productName: 'Nước rửa chén', variationName: '5L', unitPrice: 100_000, quantity: 2, total: 200_000, weight: 1200 };
+  const SHOP_ITEM = { id: 'i2', variationId: 'vm', productId: 'pm', productName: 'Mật ong', variationName: '500ml', unitPrice: 200_000, quantity: 1, total: 200_000, fulfiller: SHOP_A };
+  const TUBU_CART = { items: [TUBU_HEAVY], subtotal: 200_000, discount: 0, freeship: false, couponCode: null };
+  const ONLY_SHOP = { items: [SHOP_ITEM], subtotal: 200_000, discount: 0, freeship: false, couponCode: null };
+  const MIXED = { items: [SHOP_ITEM, TUBU_HEAVY], subtotal: 400_000, discount: 0, freeship: false, couponCode: null };
+  const QUOTE = { addressId: 'addr1', inlinePickup: INLINE };
+  const PLACE = { addressId: 'addr1', paymentMethod: 'COD', inlinePickup: INLINE };
+  const GIFTS = [
+    { id: 'g1', code: 'QG-7K2M', giftName: 'Túi vải Tubu', kind: 'GIFT' as const, pointsCost: 500 },
+    { id: 'g2', code: 'QG-9P4Q', giftName: 'Gói hạt giống rau muống', kind: 'SEED_PACK' as const, pointsCost: 300 },
+  ];
+
+  function buildPickup(over: Parameters<typeof build>[0] = {}) {
+    const b = build({ cartData: TUBU_CART, ...over });
+    b.orderCreate.mockImplementation((args: any) => Promise.resolve({ id: `id-${args.data.code}`, ...args.data }));
+    (b.pricing.calcShippingFee as jest.Mock).mockResolvedValue(19_000);
+    return b;
+  }
+  const inHcm = (prisma: PrismaService) =>
+    ((prisma as unknown as { address: { findUnique: jest.Mock } }).address.findUnique).mockResolvedValue({ ...ADDRESS, province: HCM });
+  const belowMin = (estimatedPoints = 1_000) => {
+    const message = 'Còn thiếu 2.000 điểm để thu kèm đơn.';
+    return {
+      message,
+      wasteHold: {
+        evaluate: jest.fn().mockResolvedValue({ result: { estimatedPoints }, blocks: [{ code: 'BELOW_MIN' }], messages: [message] }),
+        validateAndHold: jest.fn().mockRejectedValue(new ConflictException(message)),
+      },
+    };
+  };
+
+  describe('báo giá', () => {
+    it('món rác chọn ngay đủ điểm tối thiểu → phí giao kiện Tubu 19.000đ về 0, lý do RECYCLE_PICKUP, tổng giảm đúng phần phí', async () => {
+      const { svc, wasteHold } = buildPickup();
+      const q = await svc.quote('u1', QUOTE as never);
+      expect(q.shippingFee).toBe(0);
+      expect(q.shippingFeeWaived).toBe(19_000);
+      expect(q.shippingFeeWaivedReason).toBe('RECYCLE_PICKUP');
+      expect(q.total).toBe(200_000);
+      expect(q.shipments[0]).toMatchObject({ shippingFee: 0, shippingFeeWaived: 19_000, total: 200_000 });
+      expect(q.pickup).toEqual({
+        gateOpen: true,
+        eligible: true,
+        reason: null,
+        mode: 'INLINE',
+        estimatedPoints: 5_000,
+        minPoints: 3_000,
+        freeShip: true,
+        shippingFeeWaived: 19_000,
+        orderWeightGrams: 2_400,
+        maxReturnWeightGrams: 2_400,
+        returnWeightGrams: null,
+      });
+      // Báo giá chỉ đọc: tính thử bằng luật giữ chỗ, không tạo phiếu.
+      expect(wasteHold.evaluate).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ method: 'PICKUP', userId: 'u1', lines: [{ itemId: 'w1', declaredQty: 3 }] }),
+        PREPARED_INLINE.holdCfg,
+      );
+    });
+
+    it('chưa đủ điểm tối thiểu → phí giao giữ nguyên, eligible=false kèm câu của luật giữ chỗ, không miễn', async () => {
+      const { message, wasteHold } = belowMin();
+      const { svc } = buildPickup({ wasteHold });
+      const q = await svc.quote('u1', QUOTE as never);
+      expect(q.shippingFee).toBe(19_000);
+      expect(q.shippingFeeWaived).toBe(0);
+      expect(q.shippingFeeWaivedReason).toBeNull();
+      expect(q.total).toBe(219_000);
+      expect(q.pickup).toMatchObject({ eligible: false, freeShip: false, mode: 'INLINE', estimatedPoints: 1_000, minPoints: 3_000, reason: message, shippingFeeWaived: 0 });
+    });
+
+    it('không chọn thu rác → báo giá y như cũ: phí giao giữ, pickup báo cổng mở nhưng chưa chọn, không đọc luật giữ chỗ', async () => {
+      const { svc, wasteHold } = buildPickup();
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(q.shippingFee).toBe(19_000);
+      expect(q.shippingFeeWaived).toBe(0);
+      expect(q.shippingFeeWaivedReason).toBeNull();
+      expect(q.pickup).toMatchObject({ gateOpen: true, eligible: false, mode: null, estimatedPoints: 0, minPoints: 3_000, freeShip: false, reason: null });
+      expect(wasteHold.evaluate).not.toHaveBeenCalled();
+    });
+
+    it('cổng thu kèm đóng, khách không chọn → pickup null và không miễn', async () => {
+      gateMock.mockResolvedValue(false);
+      const { svc, wasteHold } = buildPickup();
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(q.pickup).toBeNull();
+      expect(q.shippingFee).toBe(19_000);
+      expect(wasteHold.evaluate).not.toHaveBeenCalled();
+    });
+
+    it('cổng đóng mà khách vẫn gửi món rác → gateOpen=false, không miễn, lý do nói rõ', async () => {
+      gateMock.mockResolvedValue(false);
+      const { svc } = buildPickup();
+      const q = await svc.quote('u1', QUOTE as never);
+      expect(q.shippingFee).toBe(19_000);
+      expect(q.pickup).toMatchObject({ gateOpen: false, eligible: false, freeShip: false, reason: 'Thu kèm rác hiện chưa mở, bạn tắt công tắc hoặc tải lại trang nhé.' });
+    });
+
+    it.each([
+      ['bị chặn (blockedAt)', { blockedAt: new Date('2026-11-01'), shipLockedAt: null }],
+      ['bị khoá đường kho (shipLockedAt)', { blockedAt: null, shipLockedAt: new Date('2026-11-01') }],
+    ])('tài khoản %s → không miễn phí giao dù món rác đủ điểm', async (_c, flags) => {
+      const { svc } = buildPickup({ wasteFlags: flags });
+      const q = await svc.quote('u1', QUOTE as never);
+      expect(q.shippingFee).toBe(19_000);
+      expect(q.shippingFeeWaived).toBe(0);
+      expect(q.pickup).toMatchObject({ eligible: false, freeShip: false, reason: PICKUP_PAUSED_MESSAGE });
+    });
+
+    it('tài khoản bị khoá nhưng khách không chọn thu rác → pickup nêu lý do tạm dừng để UI ẩn công tắc', async () => {
+      const { svc } = buildPickup({ wasteFlags: { blockedAt: null, shipLockedAt: new Date('2026-11-01') } });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(q.pickup).toMatchObject({ gateOpen: true, eligible: false, mode: null, reason: PICKUP_PAUSED_MESSAGE });
+    });
+
+    it('giỏ không có kiện Tubu → pickup null, phí giao kiện đối tác giữ nguyên', async () => {
+      const { svc } = buildPickup({ cartData: ONLY_SHOP });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(q.pickup).toBeNull();
+      expect(q.shipments).toHaveLength(1);
+      expect(q.shippingFee).toBe(30_000);
+      expect(q.shippingFeeWaived).toBe(0);
+    });
+
+    it('giỏ có cả hàng đối tác: chỉ kiện Tubu được miễn, phí giao kiện đối tác giữ nguyên', async () => {
+      const { svc } = buildPickup({ cartData: MIXED });
+      const q = await svc.quote('u1', QUOTE as never);
+      const [tubu, shop] = q.shipments;
+      expect(shop).toMatchObject({ fulfiller: expect.objectContaining({ kind: 'MERCHANT' }), shippingFee: 30_000, shippingFeeWaived: 0 });
+      expect(tubu).toMatchObject({ fulfiller: expect.objectContaining({ kind: 'TUBU' }), shippingFee: 0, shippingFeeWaived: 19_000 });
+      expect(q.shippingFee).toBe(30_000);
+      expect(q.shippingFeeWaived).toBe(19_000);
+    });
+
+    it('miễn phí giao kể cả khi tiền hàng dưới ngưỡng freeship thường (bất kể giá trị hàng)', async () => {
+      const cheap = { items: [{ ...TUBU_HEAVY, unitPrice: 1_000, total: 2_000 }], subtotal: 2_000, discount: 0, freeship: false, couponCode: null };
+      const { svc } = buildPickup({ cartData: cheap });
+      const q = await svc.quote('u1', QUOTE as never);
+      expect(q.shippingFee).toBe(0);
+      expect(q.shippingFeeWaived).toBe(19_000);
+      expect(q.total).toBe(2_000);
+    });
+
+    it('phí giao vốn đã 0 (đủ ngưỡng freeship thường) → shippingFeeWaived 0, không gắn lý do RECYCLE_PICKUP', async () => {
+      const { svc, pricing } = buildPickup();
+      (pricing.calcShippingFee as jest.Mock).mockResolvedValue(0);
+      const q = await svc.quote('u1', QUOTE as never);
+      expect(q.shippingFee).toBe(0);
+      expect(q.shippingFeeWaived).toBe(0);
+      expect(q.shippingFeeWaivedReason).toBeNull();
+      expect(q.pickup).toMatchObject({ eligible: true, shippingFeeWaived: 0 });
+    });
+
+    it('mã freeship không bị tiêu khi phí giao đã được miễn nhờ đổi rác: báo "giữ cho đơn sau", không redeem', async () => {
+      const { svc, coupons } = buildPickup({
+        cartData: { ...TUBU_CART, couponCode: 'FREESHIP' },
+        validateAndCompute: jest.fn().mockResolvedValue({ discount: 0, freeship: true }),
+      });
+      const q = await svc.quote('u1', QUOTE as never);
+      expect(q.shippingFee).toBe(0);
+      expect(q.couponApplied).toBe(false);
+      expect(q.couponNotice).toContain('Phí giao đã được miễn nhờ đổi rác kèm đơn');
+      await svc.placeOrder('u1', PLACE as never);
+      expect(coupons.redeem).not.toHaveBeenCalled();
+    });
+
+    it('phiếu thu kèm có sẵn đủ điểm → miễn phí giao, mode REQUEST, điểm lấy từ phiếu', async () => {
+      const { svc } = buildPickup({ requestRow: { estimatedPoints: 4_000, lines: [{ item: { hazardous: false } }] } });
+      const q = await svc.quote('u1', { addressId: 'addr1', wasteRequestId: 'r1' } as never);
+      expect(q.shippingFee).toBe(0);
+      expect(q.pickup).toMatchObject({ mode: 'REQUEST', eligible: true, estimatedPoints: 4_000, minPoints: 3_000, freeShip: true });
+    });
+
+    it('phiếu có sẵn chưa đủ điểm tối thiểu → không miễn, câu nêu số điểm còn thiếu', async () => {
+      const { svc } = buildPickup({ requestRow: { estimatedPoints: 2_000, lines: [{ item: { hazardous: false } }] } });
+      const q = await svc.quote('u1', { addressId: 'addr1', wasteRequestId: 'r1' } as never);
+      expect(q.shippingFee).toBe(19_000);
+      expect(q.pickup).toMatchObject({ mode: 'REQUEST', eligible: false, freeShip: false, estimatedPoints: 2_000 });
+      expect(q.pickup!.reason).toContain('1.000');
+    });
+
+    it('phiếu có sẵn không còn (hết hạn/huỷ/đã gắn đơn khác) → không miễn, lý do là câu "yêu cầu không còn"', async () => {
+      const { svc } = buildPickup({ requestRow: null });
+      const q = await svc.quote('u1', { addressId: 'addr1', wasteRequestId: 'r1' } as never);
+      expect(q.shippingFee).toBe(19_000);
+      expect(q.pickup).toMatchObject({ mode: 'REQUEST', eligible: false, reason: PICKUP_REQUEST_GONE_MESSAGE });
+    });
+
+    it('gửi cả wasteRequestId lẫn inlinePickup → 400 nêu việc cần làm', async () => {
+      const { svc } = buildPickup();
+      await expect(svc.quote('u1', { ...QUOTE, wasteRequestId: 'r1' } as never)).rejects.toThrow(
+        new BadRequestException('Chọn một trong hai: phiếu thu rác có sẵn hoặc chọn món rác ngay trên đơn, không gửi cả hai.'),
+      );
+    });
+
+    describe('cân nặng gói rác gửi lại', () => {
+      it('trong khoảng 500g tới cân kiện mua → nhận, pickup.returnWeightGrams ghi lại số khách khai', async () => {
+        const { svc } = buildPickup();
+        const q = await svc.quote('u1', { ...QUOTE, returnWeightGrams: 2_000 } as never);
+        expect(q.pickup).toMatchObject({ returnWeightGrams: 2_000, orderWeightGrams: 2_400, maxReturnWeightGrams: 2_400 });
+      });
+
+      it('cân nặng trong inlinePickup thắng cân nặng cấp trên', async () => {
+        const { svc } = buildPickup();
+        const q = await svc.quote('u1', { addressId: 'addr1', inlinePickup: { ...INLINE, returnWeightGrams: 1_500 }, returnWeightGrams: 2_000 } as never);
+        expect(q.pickup!.returnWeightGrams).toBe(1_500);
+      });
+
+      it('vượt cân kiện mua → 400 nêu trần "tối đa 2.4 kg theo kiện mua"', async () => {
+        const { svc } = buildPickup();
+        const err = await svc.quote('u1', { ...QUOTE, returnWeightGrams: 2_500 } as never).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(BadRequestException);
+        expect((err as BadRequestException).message).toContain('tối đa 2.4 kg theo kiện mua');
+      });
+
+      it('kiện mua nhẹ hơn 500g → trần là sàn 500g (không thể khai ít hơn sàn)', async () => {
+        const light = { items: [{ ...TUBU_HEAVY, quantity: 1, total: 100_000, weight: 100 }], subtotal: 100_000, discount: 0, freeship: false, couponCode: null };
+        const { svc } = buildPickup({ cartData: light });
+        const q = await svc.quote('u1', { ...QUOTE, returnWeightGrams: 500 } as never);
+        expect(q.pickup).toMatchObject({ orderWeightGrams: 100, maxReturnWeightGrams: 500, returnWeightGrams: 500 });
+      });
+
+      it('kiện mua nặng hơn 10 kg → trần chặn ở 10 kg', async () => {
+        const heavy = { items: [{ ...TUBU_HEAVY, quantity: 20, total: 2_000_000, weight: 1_000 }], subtotal: 2_000_000, discount: 0, freeship: false, couponCode: null };
+        const { svc } = buildPickup({ cartData: heavy });
+        const q = await svc.quote('u1', QUOTE as never);
+        expect(q.pickup).toMatchObject({ orderWeightGrams: 20_000, maxReturnWeightGrams: 10_000 });
+        await expect(svc.quote('u1', { ...QUOTE, returnWeightGrams: 10_500 } as never)).rejects.toThrow('tối đa 10.0 kg theo kiện mua');
+      });
+
+      it('dòng thiếu cân dùng cân mặc định 500g', async () => {
+        const noWeight = { items: [{ ...TUBU_HEAVY, quantity: 3, total: 300_000, weight: null }], subtotal: 300_000, discount: 0, freeship: false, couponCode: null };
+        const { svc } = buildPickup({ cartData: noWeight });
+        const q = await svc.quote('u1', QUOTE as never);
+        expect(q.pickup).toMatchObject({ orderWeightGrams: 1_500, maxReturnWeightGrams: 1_500 });
+      });
+    });
+
+    describe('Pin cũ (hazardous) chỉ thu kèm đơn khi giao tới TP.HCM', () => {
+      it('món chọn ngay là Pin, địa chỉ ngoài HCM → 400', async () => {
+        const { svc } = buildPickup({ wasteItems: [{ hazardous: true }] });
+        await expect(svc.quote('u1', QUOTE as never)).rejects.toThrow(PICKUP_BATTERY_HCM_ONLY_MESSAGE);
+      });
+
+      it('món chọn ngay là Pin, địa chỉ TP.HCM → nhận và miễn phí giao', async () => {
+        const { svc, prisma } = buildPickup({ wasteItems: [{ hazardous: true }] });
+        inHcm(prisma);
+        const q = await svc.quote('u1', QUOTE as never);
+        expect(q.shippingFee).toBe(0);
+        expect(q.pickup).toMatchObject({ eligible: true });
+      });
+
+      it('phiếu có sẵn chứa Pin, địa chỉ ngoài HCM → 400', async () => {
+        const { svc } = buildPickup({ requestRow: { estimatedPoints: 4_000, lines: [{ item: { hazardous: true } }] } });
+        await expect(svc.quote('u1', { addressId: 'addr1', wasteRequestId: 'r1' } as never)).rejects.toThrow(PICKUP_BATTERY_HCM_ONLY_MESSAGE);
+      });
+    });
+
+    describe('quà hiện vật 0đ', () => {
+      it('giỏ có kiện Tubu → mọi quà chờ đều included, trừ quà khách bỏ ra', async () => {
+        const { svc } = buildPickup({ pendingGifts: GIFTS });
+        const q = await svc.quote('u1', { addressId: 'addr1', excludeGiftRedemptionIds: ['g2'] } as never);
+        expect(q.pendingGiftRedemptions).toEqual([
+          { ...GIFTS[0], included: true },
+          { ...GIFTS[1], included: false },
+        ]);
+      });
+
+      it('giỏ không có kiện Tubu → quà chờ vẫn hiện nhưng không included (không đơn nào mang quà)', async () => {
+        const { svc } = buildPickup({ cartData: ONLY_SHOP, pendingGifts: GIFTS });
+        const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+        expect(q.pendingGiftRedemptions.map((g) => g.included)).toEqual([false, false]);
+      });
+
+      it('không có quà chờ → mảng rỗng', async () => {
+        const { svc } = buildPickup();
+        expect((await svc.quote('u1', { addressId: 'addr1' } as never)).pendingGiftRedemptions).toEqual([]);
+      });
+    });
+  });
+
+  describe('đặt đơn', () => {
+    it('món rác chọn ngay: phiếu tạo TRONG tx với khoá dẫn xuất từ Idempotency-Key, rồi khoá + gắn như phiếu có sẵn; phí giao 0', async () => {
+      lockPickupMock.mockResolvedValue({ ...LOCKED_PICKUP, id: 'r-inline' });
+      const { svc, prisma, orderCreate, wasteRequests } = buildPickup();
+      await svc.placeOrder('u1', PLACE as never, 'idem-1');
+      expect(wasteRequests.createPickupInTx).toHaveBeenCalledTimes(1);
+      expect(wasteRequests.createPickupInTx).toHaveBeenCalledWith(prisma, 'u1', 'ck:idem-1', [{ itemId: 'w1', declaredQty: 3 }], PREPARED_INLINE, expect.any(String));
+      expect(lockPickupMock).toHaveBeenCalledWith(prisma, 'u1', 'r-inline', 'HN');
+      const data = orderCreate.mock.calls[0][0].data;
+      expect(attachMock).toHaveBeenCalledWith(prisma, 'u1', 'r-inline', `id-${data.code}`);
+      expect(data).toMatchObject({ shippingFee: 0, hasRecyclingPickup: true, total: 200_000 });
+      // Cấu hình giữ chỗ đọc một lần ngoài tx (lúc tính giá), không đọc lại trong tx.
+      expect(wasteRequests.prepareInlinePickup).toHaveBeenCalledTimes(1);
+    });
+
+    it('không có Idempotency-Key → khoá dẫn xuất từ mã đơn đầu tiên', async () => {
+      const { svc, orderCreate, wasteRequests } = buildPickup();
+      await svc.placeOrder('u1', PLACE as never);
+      const code = orderCreate.mock.calls[0][0].data.code;
+      expect((wasteRequests.createPickupInTx as jest.Mock).mock.calls[0]![2]).toBe(`ck:${code}`);
+    });
+
+    it('thứ tự trong tx: khoá giỏ → tạo phiếu → khoá phiếu → giữ kho → tạo đơn → gắn phiếu', async () => {
+      const { svc, cart, wasteRequests, orderCreate, executeRaw } = buildPickup();
+      await svc.placeOrder('u1', PLACE as never, 'idem-1');
+      const at = (m: jest.Mock) => m.mock.invocationCallOrder[0]!;
+      expect(at(cart.lockForCheckout as jest.Mock)).toBeLessThan(at(wasteRequests.createPickupInTx));
+      expect(at(wasteRequests.createPickupInTx)).toBeLessThan(at(lockPickupMock));
+      expect(at(lockPickupMock)).toBeLessThan(at(executeRaw));
+      expect(at(executeRaw)).toBeLessThan(at(orderCreate));
+      expect(at(orderCreate)).toBeLessThan(at(attachMock));
+    });
+
+    it('cân nặng khách chọn lưu vào Order.recyclingWeightGrams và ghi chú "gửi lại ~2.0kg" (server dựng)', async () => {
+      const { svc, orderCreate } = buildPickup();
+      await svc.placeOrder('u1', { ...PLACE, returnWeightGrams: 2_000 } as never, 'idem-1');
+      const data = orderCreate.mock.calls[0][0].data;
+      expect(data.recyclingWeightGrams).toBe(2_000);
+      expect(data.recyclingNote).toBe('Thu kèm rác TR-ABC23: Vỏ hộp sữa: 12 vỏ; gửi lại ~2.0kg');
+    });
+
+    it('không khai cân nặng → recyclingWeightGrams null, ghi chú như cũ', async () => {
+      const { svc, orderCreate } = buildPickup();
+      await svc.placeOrder('u1', PLACE as never, 'idem-1');
+      const data = orderCreate.mock.calls[0][0].data;
+      expect(data.recyclingWeightGrams).toBeNull();
+      expect(data.recyclingNote).toBe('Thu kèm rác TR-ABC23: Vỏ hộp sữa: 12 vỏ');
+    });
+
+    it('đơn không thu rác → recyclingWeightGrams null, không tạo phiếu, không khoá', async () => {
+      const { svc, orderCreate, wasteRequests } = buildPickup();
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+      expect(orderCreate.mock.calls[0][0].data).toMatchObject({ recyclingWeightGrams: null, hasRecyclingPickup: false, shippingFee: 19_000 });
+      expect(wasteRequests.createPickupInTx).not.toHaveBeenCalled();
+      expect(lockPickupMock).not.toHaveBeenCalled();
+    });
+
+    it('cân nặng vượt trần → 400 trước tx: không tạo phiếu, không tạo đơn', async () => {
+      const { svc, prisma, orderCreate, wasteRequests } = buildPickup();
+      await expect(svc.placeOrder('u1', { ...PLACE, returnWeightGrams: 2_500 } as never)).rejects.toThrow('tối đa 2.4 kg theo kiện mua');
+      expect((prisma.$transaction as unknown as jest.Mock)).not.toHaveBeenCalled();
+      expect(wasteRequests.createPickupInTx).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('Pin ngoài TP.HCM → 400 trước tx: không tạo phiếu, không tạo đơn', async () => {
+      const { svc, orderCreate, wasteRequests } = buildPickup({ wasteItems: [{ hazardous: true }] });
+      await expect(svc.placeOrder('u1', PLACE as never)).rejects.toThrow(PICKUP_BATTERY_HCM_ONLY_MESSAGE);
+      expect(wasteRequests.createPickupInTx).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('gửi cả wasteRequestId lẫn inlinePickup → 400, kể cả lần gửi lại cùng Idempotency-Key', async () => {
+      const { svc, prisma, orderCreate } = buildPickup();
+      (prisma.order.findUnique as jest.Mock).mockResolvedValue({ id: 'existing', userId: 'u1', paymentMethod: 'COD' });
+      await expect(svc.placeOrder('u1', { ...PLACE, wasteRequestId: 'r1' } as never, 'key-x')).rejects.toThrow('Chọn một trong hai');
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('cổng đóng → 400 trước tx với món rác chọn ngay, không tạo phiếu', async () => {
+      gateMock.mockResolvedValue(false);
+      const { svc, prisma, wasteRequests } = buildPickup();
+      await expect(svc.placeOrder('u1', PLACE as never)).rejects.toThrow('Thu kèm rác hiện chưa mở');
+      expect((prisma.$transaction as unknown as jest.Mock)).not.toHaveBeenCalled();
+      expect(wasteRequests.createPickupInTx).not.toHaveBeenCalled();
+    });
+
+    it('đơn chỉ có hàng đối tác mà gửi món rác → 400, không tạo phiếu', async () => {
+      const { svc, wasteRequests, orderCreate } = buildPickup({ cartData: ONLY_SHOP });
+      await expect(svc.placeOrder('u1', PLACE as never)).rejects.toThrow(
+        new BadRequestException('Thu kèm rác chỉ đi cùng hàng do Tubu Tree giao. Bạn tắt công tắc thu kèm rác hoặc thêm hàng Tubu Tree vào đơn nhé.'),
+      );
+      expect(wasteRequests.createPickupInTx).not.toHaveBeenCalled();
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
+
+    it('chưa đủ điểm tối thiểu: vẫn đặt được, phiếu vẫn tạo, nhưng phí giao giữ nguyên', async () => {
+      const { wasteHold } = belowMin();
+      const { svc, orderCreate } = buildPickup({ wasteHold });
+      await svc.placeOrder('u1', PLACE as never, 'idem-1');
+      expect(orderCreate.mock.calls[0][0].data).toMatchObject({ shippingFee: 19_000, total: 219_000 });
+    });
+
+    it('tài khoản bị khoá đường kho → phí giao giữ nguyên, đơn vẫn đặt', async () => {
+      const { svc, orderCreate } = buildPickup({ wasteFlags: { blockedAt: null, shipLockedAt: new Date('2026-11-01') } });
+      await svc.placeOrder('u1', PLACE as never, 'idem-1');
+      expect(orderCreate.mock.calls[0][0].data).toMatchObject({ shippingFee: 19_000 });
+    });
+
+    it('phiếu có sẵn bị sửa còn dưới ngưỡng giữa lúc tính giá và lúc khoá → 409, không giao miễn phí cho phiếu thiếu điểm', async () => {
+      lockPickupMock.mockResolvedValue({ ...LOCKED_PICKUP, estimatedPoints: 1_000 });
+      const { svc, orderCreate } = buildPickup({ requestRow: { estimatedPoints: 4_000, lines: [{ item: { hazardous: false } }] } });
+      await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', wasteRequestId: 'r1' } as never)).rejects.toThrow(ConflictException);
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect(attachMock).not.toHaveBeenCalled();
+    });
+
+    it('phiếu có sẵn đủ điểm → phí giao 0, điểm thật dưới khoá đủ ngưỡng nên không báo đổi', async () => {
+      const { svc, orderCreate } = buildPickup({ requestRow: { estimatedPoints: 4_000, lines: [{ item: { hazardous: false } }] } });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', wasteRequestId: 'r1' } as never);
+      expect(orderCreate.mock.calls[0][0].data).toMatchObject({ shippingFee: 0, hasRecyclingPickup: true });
+    });
+
+    it('tạo phiếu trong tx lỗi → cả đơn dừng, không đẩy hàng đợi nào', async () => {
+      const wasteRequests = {
+        prepareInlinePickup: jest.fn().mockResolvedValue(PREPARED_INLINE),
+        createPickupInTx: jest.fn().mockRejectedValue(new ConflictException('Món rác vừa tạm ngưng nhận.')),
+      };
+      const { svc, orderCreate, gomdon, pancake } = buildPickup({ wasteRequests });
+      await expect(svc.placeOrder('u1', PLACE as never, 'idem-1')).rejects.toThrow('Món rác vừa tạm ngưng nhận.');
+      expect(orderCreate).not.toHaveBeenCalled();
+      expect((gomdon as unknown as { enqueuePush: jest.Mock }).enqueuePush).not.toHaveBeenCalled();
+      expect((pancake as unknown as { enqueuePush: jest.Mock }).enqueuePush).not.toHaveBeenCalled();
+    });
+
+    it('Điểm Xanh từ rác chỉ cộng khi kho kiểm nhận: đặt đơn kèm rác không ghi sổ điểm nào', async () => {
+      const { svc, prisma } = buildPickup();
+      await svc.placeOrder('u1', PLACE as never, 'idem-1');
+      expect(prisma.pointsTransaction.create).not.toHaveBeenCalled();
+    });
+
+    it('đơn tách: phiếu và phí giao chỉ áp cho đơn Tubu, đơn đối tác giữ phí giao riêng', async () => {
+      const { svc, orderCreate } = buildPickup({ cartData: MIXED });
+      await svc.placeOrder('u1', PLACE as never, 'idem-1');
+      const [tubu, shop] = orderCreate.mock.calls.map((c) => c[0].data);
+      expect(tubu).toMatchObject({ fulfiller: 'TUBU', shippingFee: 0, hasRecyclingPickup: true });
+      expect(shop).toMatchObject({ fulfiller: 'MERCHANT', shippingFee: 30_000, hasRecyclingPickup: false, recyclingWeightGrams: null });
+      expect(attachMock.mock.calls[0]![3]).toBe(`id-${tubu.code}`);
+    });
+
+    describe('idempotency của món rác chọn ngay', () => {
+      const EXISTING = {
+        id: 'existing', userId: 'u1', paymentMethod: 'COD', checkoutGroup: null,
+        shippingAddress: { recipient: 'A', phone: '09', province: 'HN', district: 'BD', ward: 'W', street: 'S', provinceCode: '84_VN01', districtCode: '2', wardCode: '84_VN01_00003' },
+      };
+
+      it('gửi lại cùng món và số lượng (thứ tự khác) → trả đơn cũ, không tạo phiếu thứ hai', async () => {
+        const { svc, prisma, orderCreate, wasteRequests } = buildPickup();
+        (prisma.order.findUnique as jest.Mock).mockResolvedValue(EXISTING);
+        (prisma as unknown as { wasteRequest: { findFirst: jest.Mock } }).wasteRequest.findFirst.mockResolvedValue({
+          id: 'r-inline',
+          lines: [{ itemId: 'w2', declaredQty: 1 }, { itemId: 'w1', declaredQty: 3 }],
+        });
+        const body = { addressId: 'addr1', paymentMethod: 'COD', inlinePickup: { lines: [{ itemId: 'w1', qty: 3 }, { itemId: 'w2', qty: 1 }] } };
+        await expect(svc.placeOrder('u1', body as never, 'key-r')).resolves.toBeDefined();
+        expect(orderCreate).not.toHaveBeenCalled();
+        expect(wasteRequests.createPickupInTx).not.toHaveBeenCalled();
+      });
+
+      it('gửi lại với món hoặc số lượng khác → 400 "thông tin khác"', async () => {
+        const { svc, prisma, orderCreate } = buildPickup();
+        (prisma.order.findUnique as jest.Mock).mockResolvedValue(EXISTING);
+        (prisma as unknown as { wasteRequest: { findFirst: jest.Mock } }).wasteRequest.findFirst.mockResolvedValue({ id: 'r-inline', lines: [{ itemId: 'w1', declaredQty: 3 }] });
+        await expect(svc.placeOrder('u1', { ...PLACE, inlinePickup: { lines: [{ itemId: 'w1', qty: 4 }] } } as never, 'key-r')).rejects.toThrow('thông tin khác');
+        await expect(svc.placeOrder('u1', { ...PLACE, inlinePickup: { lines: [{ itemId: 'w9', qty: 3 }] } } as never, 'key-r')).rejects.toThrow('thông tin khác');
+        expect(orderCreate).not.toHaveBeenCalled();
+      });
+
+      it('lần trước không gắn phiếu, lần này gửi món rác → 400 "thông tin khác"', async () => {
+        const { svc, prisma } = buildPickup();
+        (prisma.order.findUnique as jest.Mock).mockResolvedValue(EXISTING);
+        await expect(svc.placeOrder('u1', PLACE as never, 'key-r')).rejects.toThrow('thông tin khác');
+      });
+    });
+  });
+
+  describe('quà hiện vật 0đ gắn vào đơn', () => {
+    it('đơn có kiện Tubu → gắn mọi quà chờ vào đơn Tubu, đọc và gắn trong chính tx đặt đơn', async () => {
+      const { svc, prisma, orderCreate, giftAttach } = buildPickup({ pendingGifts: GIFTS });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'idem-1');
+      const code = orderCreate.mock.calls[0][0].data.code;
+      expect(giftAttach.listPending).toHaveBeenCalledWith('u1', prisma);
+      expect(giftAttach.attachInTx).toHaveBeenCalledTimes(1);
+      expect(giftAttach.attachInTx).toHaveBeenCalledWith(prisma, 'u1', ['g1', 'g2'], `id-${code}`);
+    });
+
+    it('quà khách bỏ ra không được gắn, ở lại ví cho đơn sau', async () => {
+      const { svc, prisma, orderCreate, giftAttach } = buildPickup({ pendingGifts: GIFTS });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', excludeGiftRedemptionIds: ['g1'] } as never, 'idem-1');
+      const code = orderCreate.mock.calls[0][0].data.code;
+      expect(giftAttach.attachInTx).toHaveBeenCalledWith(prisma, 'u1', ['g2'], `id-${code}`);
+    });
+
+    it('bỏ ra hết quà → không gọi gắn', async () => {
+      const { svc, giftAttach } = buildPickup({ pendingGifts: GIFTS });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', excludeGiftRedemptionIds: ['g1', 'g2'] } as never, 'idem-1');
+      expect(giftAttach.attachInTx).not.toHaveBeenCalled();
+    });
+
+    it('đơn không có kiện Tubu → không gắn quà (kho Tubu không soạn đơn đó)', async () => {
+      const { svc, giftAttach } = buildPickup({ cartData: ONLY_SHOP, pendingGifts: GIFTS });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+      expect(giftAttach.listPending).not.toHaveBeenCalled();
+      expect(giftAttach.attachInTx).not.toHaveBeenCalled();
+    });
+
+    it('lần đặt bị tách: quà chỉ gắn vào đơn Tubu, không vào đơn đối tác', async () => {
+      const { svc, orderCreate, giftAttach } = buildPickup({ cartData: MIXED, pendingGifts: GIFTS });
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'idem-1');
+      const tubu = orderCreate.mock.calls.map((c) => c[0].data).find((d) => d.fulfiller === 'TUBU');
+      expect(giftAttach.attachInTx).toHaveBeenCalledTimes(1);
+      expect((giftAttach.attachInTx as jest.Mock).mock.calls[0]![3]).toBe(`id-${tubu.code}`);
+    });
+
+    it('không có quà chờ → không gọi gắn', async () => {
+      const { svc, giftAttach } = buildPickup();
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+      expect(giftAttach.attachInTx).not.toHaveBeenCalled();
+    });
+
+    it('gắn quà lỗi (quà vừa bị nhận ở kho) → cả đơn dừng, không đẩy hàng đợi', async () => {
+      const giftAttach = {
+        listPending: jest.fn().mockResolvedValue(GIFTS),
+        attachInTx: jest.fn().mockRejectedValue(new ConflictException('Quà vừa được nhận.')),
+      };
+      const { svc, pancake } = buildPickup({ giftAttach });
+      await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'idem-1')).rejects.toThrow('Quà vừa được nhận.');
+      expect((pancake as unknown as { enqueuePush: jest.Mock }).enqueuePush).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('GET /checkout/pickup-options', () => {
+    const ITEMS = [
+      { id: 'w1', code: 'VO-HOP-SUA', name: 'Vỏ hộp sữa', unitLabel: 'vỏ', unitsPerPoint: 10, pointsPerGroup: 50, hazardous: false, prepInstructions: 'Rửa sạch, ép dẹp.' },
+      { id: 'w2', code: 'PIN-CU', name: 'Pin cũ', unitLabel: 'viên', unitsPerPoint: 1, pointsPerGroup: 100, hazardous: true, prepInstructions: null },
+    ];
+    const withItems = (prisma: PrismaService) => ((prisma as unknown as { wasteItem: { findMany: jest.Mock } }).wasteItem.findMany).mockResolvedValue(ITEMS);
+
+    it('địa chỉ ngoài HCM → Pin hiện nhưng khoá BATTERY_OUT_OF_HCM; kèm ngưỡng điểm và trần cân nặng của kiện Tubu', async () => {
+      const { svc, prisma } = buildPickup();
+      withItems(prisma);
+      const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
+      expect(out).toMatchObject({ gateOpen: true, minPoints: 3_000, orderWeightGrams: 2_400, maxReturnWeightGrams: 2_400, existingRequest: null });
+      expect(out.items.map((i) => [i.code, i.blockedReason])).toEqual([['VO-HOP-SUA', null], ['PIN-CU', 'BATTERY_OUT_OF_HCM']]);
+    });
+
+    it('địa chỉ TP.HCM → không món nào bị khoá', async () => {
+      const { svc, prisma } = buildPickup();
+      withItems(prisma);
+      inHcm(prisma);
+      const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
+      expect(out.items.every((i) => i.blockedReason === null)).toBe(true);
+    });
+
+    it('khách có phiếu thu kèm đang mở → trả existingRequest để UI cho chọn dùng lại', async () => {
+      const existing = {
+        id: 'r9',
+        code: 'TR-XYZ12',
+        estimatedPoints: 4_200,
+        lines: [{ itemId: 'w1', itemName: 'Vỏ hộp sữa', unitLabel: 'vỏ', declaredQty: 20 }],
+      };
+      const { svc, prisma } = buildPickup();
+      withItems(prisma);
+      ((prisma as unknown as { wasteRequest: { findFirst: jest.Mock } }).wasteRequest.findFirst).mockResolvedValue(existing);
+      const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
+      expect(out.existingRequest).toEqual(existing);
+    });
+
+    it('cổng đóng → gateOpen=false, không món nào', async () => {
+      gateMock.mockResolvedValue(false);
+      const { svc, prisma } = buildPickup();
+      withItems(prisma);
+      const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
+      expect(out).toMatchObject({ gateOpen: false, items: [], existingRequest: null });
+    });
+
+    it('phần giỏ đang thanh toán không có kiện Tubu → gateOpen=false', async () => {
+      const { svc, prisma } = buildPickup({ cartData: ONLY_SHOP });
+      withItems(prisma);
+      const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
+      expect(out).toMatchObject({ gateOpen: false, items: [] });
+    });
+
+    it('chỉ tính cân phần giỏ được chọn (itemIds)', async () => {
+      const { svc, prisma } = buildPickup({ cartData: MIXED });
+      withItems(prisma);
+      const out = await svc.pickupOptions('u1', { addressId: 'addr1', itemIds: ['i2'] } as never);
+      expect(out.gateOpen).toBe(false);
+      const both = await svc.pickupOptions('u1', { addressId: 'addr1', itemIds: ['i1'] } as never);
+      expect(both).toMatchObject({ gateOpen: true, orderWeightGrams: 2_400 });
+    });
+
+    it('địa chỉ không phải của khách → 400', async () => {
+      const { svc, prisma } = buildPickup();
+      ((prisma as unknown as { address: { findUnique: jest.Mock } }).address.findUnique).mockResolvedValue({ ...ADDRESS, userId: 'other' });
+      await expect(svc.pickupOptions('u1', { addressId: 'addr1' } as never)).rejects.toThrow('Địa chỉ giao hàng không hợp lệ');
+    });
+  });
+
+  describe('dựng service không nạp vùng đổi rác (spec race tối giản)', () => {
+    it('đặt đơn và báo giá thường vẫn chạy: không quà, không thu rác', async () => {
+      const { svc, orderCreate } = buildPickup({ omitWaste: true });
+      const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+      expect(q.pickup).toBeNull();
+      expect(q.pendingGiftRedemptions).toEqual([]);
+      await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+      expect(orderCreate).toHaveBeenCalledTimes(1);
+    });
+
+    it('khách đòi thu kèm rác mà vùng đổi rác không có → 503 rõ ràng, không tạo đơn', async () => {
+      const { svc, orderCreate } = buildPickup({ omitWaste: true });
+      await expect(svc.placeOrder('u1', PLACE as never)).rejects.toThrow(ServiceUnavailableException);
+      await expect(svc.quote('u1', QUOTE as never)).rejects.toThrow(ServiceUnavailableException);
+      expect(orderCreate).not.toHaveBeenCalled();
+    });
   });
 });

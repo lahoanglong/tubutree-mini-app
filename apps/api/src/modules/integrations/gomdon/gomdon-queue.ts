@@ -9,6 +9,9 @@ import { withQueueTimeout } from '../../../jobs/queue-timeout';
 export const GOMDON_JOB_PUSH = 'push';
 export const GOMDON_JOB_CANCEL = 'cancel';
 export const GOMDON_JOB_EVENT = 'process';
+/** Phiếu thu gom độc lập (WasteRequest HOME_PICKUP) dùng tên job riêng để processor không nhầm với đơn mua hàng. */
+export const GOMDON_JOB_WASTE_PUSH = 'waste-push';
+export const GOMDON_JOB_WASTE_CANCEL = 'waste-cancel';
 
 /**
  * Retry riêng cho job GỌI Gomdon (tạo/huỷ vận đơn): 8 lần, backoff mũ từ 5 giây ≈ 10 phút. Mặc định chung của
@@ -24,6 +27,9 @@ export const GOMDON_OUTBOUND_JOB_OPTIONS = {
 /** jobId KHÔNG được chứa ':' (BullMQ 5 ném "Custom Id cannot contain :"). */
 export const gomdonPushJobId = (orderId: string) => orderId;
 export const gomdonCancelJobId = (orderId: string) => `cancel-${orderId}`;
+/** Mã phiếu (TR-...) ổn định theo phiếu nên tạo hai lần cùng một phiếu chỉ ra một job. */
+export const gomdonWastePushJobId = (code: string) => `wr-push-${code}`;
+export const gomdonWasteCancelJobId = (code: string) => `wr-cancel-${code}`;
 
 /**
  * Xoá job cũ cùng jobId nếu nó đã KẾT THÚC (completed/failed) rồi add lại.
@@ -72,4 +78,12 @@ export function enqueueGomdonPush(queue: Queue, orderId: string): Promise<void> 
 
 export function enqueueGomdonCancel(queue: Queue, orderId: string): Promise<void> {
   return addGomdonJob(queue, GOMDON_JOB_CANCEL, { orderId }, gomdonCancelJobId(orderId), GOMDON_OUTBOUND_JOB_OPTIONS);
+}
+
+export function enqueueGomdonWastePush(queue: Queue, requestId: string, code: string): Promise<void> {
+  return addGomdonJob(queue, GOMDON_JOB_WASTE_PUSH, { requestId }, gomdonWastePushJobId(code), GOMDON_OUTBOUND_JOB_OPTIONS);
+}
+
+export function enqueueGomdonWasteCancel(queue: Queue, requestId: string, code: string): Promise<void> {
+  return addGomdonJob(queue, GOMDON_JOB_WASTE_CANCEL, { requestId }, gomdonWasteCancelJobId(code), GOMDON_OUTBOUND_JOB_OPTIONS);
 }

@@ -51,6 +51,7 @@ function makeDb(rows: Row[], orders: Record<string, string>) {
     });
 
   let beforeUpdate: (() => void) | null = null;
+  const self: { tx: unknown } = { tx: undefined };
   const db = {
     wasteGiftRedemption: {
       findMany: jest.fn(async (a: { where: Where; select?: Record<string, unknown>; orderBy?: unknown; take?: number }) => {
@@ -86,8 +87,9 @@ function makeDb(rows: Row[], orders: Record<string, string>) {
         .sort((a, b) => (a.id < b.id ? -1 : 1))
         .map((r) => ({ id: r.id }));
     }),
-    $transaction: jest.fn(async (cb: (tx: unknown) => unknown) => cb(db)),
+    $transaction: jest.fn(async (cb: (tx: unknown) => unknown) => cb(self.tx)),
   };
+  self.tx = db;
   return { db, rows, orders, onBeforeUpdate: (fn: (() => void) | null) => { beforeUpdate = fn; } };
 }
 

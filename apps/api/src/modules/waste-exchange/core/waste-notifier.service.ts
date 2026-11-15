@@ -31,6 +31,14 @@ export const WASTE_EXPIRED_DETAIL_TEXT: Record<WasteCloseReason, string> = {
  * Khách MAIL_IN có thể đã gửi kiện mà chưa nhập mã vận đơn nên yêu cầu mới hết hạn giữ chỗ; câu này không hứa mở lại hay cộng điểm,
  * chỉ chỉ cho khách đường nhắn CSKH.
  */
+/** Phiếu shipper lấy tận nhà đóng trước khi bưu tá cầm rác: nói rõ điểm trả phí ship (nếu có) đã về lại tài khoản. */
+const HOME_PICKUP_REFUND_TAIL = 'Điểm Xanh dùng để trả phí shipper (nếu có) đã được hoàn lại';
+export const WASTE_HOME_PICKUP_EXPIRED_DETAIL_TEXT: Partial<Record<WasteCloseReason, string>> = {
+  HOLD_EXPIRED: `bưu tá chưa tới lấy rác trong thời hạn giữ chỗ nên Tubu đã đóng yêu cầu. ${HOME_PICKUP_REFUND_TAIL}`,
+  PICKUP_NO_SHOW: `bưu tá không lấy được rác tại địa chỉ của bạn. ${HOME_PICKUP_REFUND_TAIL}`,
+  SHIP_LOCKED: `đường thu gom đang tạm dừng với tài khoản của bạn. ${HOME_PICKUP_REFUND_TAIL}`,
+};
+
 export const WASTE_MAIL_IN_HOLD_EXPIRED_TEXT = 'hết hạn giữ chỗ. Nếu bạn đã gửi kiện, hãy nhắn CSKH kèm mã vận đơn để được hỗ trợ';
 
 /** Việc khách cần làm trước hạn, điền vào mẫu WASTE_REQUEST_EXPIRING. PICKUP không có hạn giữ chỗ nên không nhắc. */
@@ -75,7 +83,16 @@ export class WasteNotifierService {
   }
 
   async requestExpired(userId: string, req: RequestRef & { method?: WasteMethod }, closeReason: WasteCloseReason, closedAt: Date): Promise<void> {
-    const detail = closeReason === 'HOLD_EXPIRED' && req.method === 'MAIL_IN' ? WASTE_MAIL_IN_HOLD_EXPIRED_TEXT : WASTE_EXPIRED_DETAIL_TEXT[closeReason];
+    const detail =
+      (req.method === 'HOME_PICKUP' ? WASTE_HOME_PICKUP_EXPIRED_DETAIL_TEXT[closeReason] : undefined) ??
+      (closeReason === 'HOLD_EXPIRED' && req.method === 'MAIL_IN' ? WASTE_MAIL_IN_HOLD_EXPIRED_TEXT : WASTE_EXPIRED_DETAIL_TEXT[closeReason]);
+    await this.notifications
+      .notify(userId, 'WASTE_REQUEST_EXPIRED', { code: req.code, detail, request_id: req.id }, { dedupeKey: `waste:${req.id}:EXPIRED:${closedAt.toISOString()}` })
+      .catch((e: unknown) => this.logger.warn(`notify WASTE_REQUEST_EXPIRED failed: ${String(e)}`));
+  }
+
+  /** Phiếu HOME_PICKUP tự huỷ (Gomdon từ chối tạo vận đơn, đơn vị vận chuyển huỷ): cùng mẫu "đã đóng", lý do tự điền. */
+  async homePickupClosed(userId: string, req: RequestRef, detail: string, closedAt: Date): Promise<void> {
     await this.notifications
       .notify(userId, 'WASTE_REQUEST_EXPIRED', { code: req.code, detail, request_id: req.id }, { dedupeKey: `waste:${req.id}:EXPIRED:${closedAt.toISOString()}` })
       .catch((e: unknown) => this.logger.warn(`notify WASTE_REQUEST_EXPIRED failed: ${String(e)}`));

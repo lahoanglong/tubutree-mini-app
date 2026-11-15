@@ -2,7 +2,19 @@ import { Body, Controller, Get, Header, Headers, HttpCode, Param, Patch, Post, P
 import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, Equals, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
-import { WASTE_METHOD_VALUES, type WasteCreateRequest, type WasteEditRequest, type WasteLineInput, type WasteMethod, type WasteNearbyRequest, type WastePreviewRequest, type WasteTrackingRequest } from '@tubutree/shared-types';
+import {
+  WASTE_HOME_PICKUP_MAX_GRAMS,
+  WASTE_HOME_PICKUP_MIN_GRAMS,
+  WASTE_METHOD_VALUES,
+  type WasteCreateRequest,
+  type WasteEditRequest,
+  type WasteLineInput,
+  type WasteMethod,
+  type WasteNearbyRequest,
+  type WastePickupQuoteRequest,
+  type WastePreviewRequest,
+  type WasteTrackingRequest,
+} from '@tubutree/shared-types';
 import { Public } from '../../../common/decorators/public.decorator';
 import { CurrentUser } from '../../../common/decorators/current-user.decorator';
 import { OptionalNotNull } from '../../../common/decorators/optional-not-null.decorator';
@@ -75,6 +87,25 @@ export class WastePreviewDto implements WastePreviewRequest {
   provinceCode?: string;
 }
 
+export class WastePickupQuoteDto implements WastePickupQuoteRequest {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  addressId!: string;
+
+  @IsInt()
+  @Min(WASTE_HOME_PICKUP_MIN_GRAMS)
+  @Max(WASTE_HOME_PICKUP_MAX_GRAMS)
+  declaredWeightGrams!: number;
+
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(WASTE_MAX_REQUEST_LINES)
+  @ValidateNested({ each: true })
+  @Type(() => WasteLineDto)
+  lines!: WasteLineDto[];
+}
+
 export class WasteCreateDto implements WasteCreateRequest {
   @IsIn(WASTE_METHOD_VALUES)
   method!: WasteMethod;
@@ -106,6 +137,21 @@ export class WasteCreateDto implements WasteCreateRequest {
   @IsOptional()
   @IsBoolean()
   postagePaidConsent?: boolean;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  pickupAddressId?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(WASTE_HOME_PICKUP_MIN_GRAMS)
+  @Max(WASTE_HOME_PICKUP_MAX_GRAMS)
+  declaredWeightGrams?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  usePointsForShipFee?: boolean;
 }
 
 export class WasteEditDto implements WasteEditRequest {
@@ -202,6 +248,15 @@ export class WasteCustomerController {
   async preview(@CurrentUser('sub') userId: string, @Body() body: WastePreviewDto) {
     await this.gate(userId, 'FULL');
     return this.previews.preview(userId, body);
+  }
+
+  // Báo phí shipper lấy rác tận nhà (phí Gomdon thật hoặc ước lượng), Điểm Xanh trừ được và các điều kiện chặn. Không ghi gì.
+  @Post('pickup-quote')
+  @HttpCode(200)
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  async pickupQuote(@CurrentUser('sub') userId: string, @Body() body: WastePickupQuoteDto) {
+    await this.gate(userId, 'FULL');
+    return this.requests.pickupQuote(userId, body);
   }
 
   @Get('requests')

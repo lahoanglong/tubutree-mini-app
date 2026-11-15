@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
-import { GomdonClient } from './gomdon.client';
+import { GomdonClientModule } from './gomdon-client.module';
 import { GomdonOrderService } from './gomdon-order.service';
 import { GomdonPushProcessor } from './gomdon-push.processor';
 import { GomdonWebhookController } from './gomdon-webhook.controller';
@@ -11,6 +11,9 @@ import { GomdonAlertService } from './gomdon-alert.service';
 import { QUEUE_GOMDON_EVENTS, QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import { PancakeModule } from '../pancake/pancake.module';
 import { OrdersModule } from '../../orders/orders.module';
+import { WasteHomePickupModule } from '../../waste-exchange/home-pickup/waste-home-pickup.module';
+import { GomdonWastePickupService } from './gomdon-waste-pickup.service';
+import { GomdonWasteReconcileService } from './gomdon-waste-reconcile.service';
 
 /**
  * Phụ thuộc MỘT chiều Gomdon → Pancake (đẩy đơn sang kho sau khi có vận đơn). Các module khác
@@ -20,19 +23,22 @@ import { OrdersModule } from '../../orders/orders.module';
 @Module({
   imports: [
     BullModule.registerQueue({ name: QUEUE_GOMDON_PUSH }, { name: QUEUE_GOMDON_EVENTS }),
+    GomdonClientModule,
     PancakeModule,
     OrdersModule,
+    WasteHomePickupModule,
   ],
   controllers: [GomdonWebhookController],
   providers: [
-    GomdonClient,
     GomdonOrderService,
     GomdonPushProcessor,
     GomdonWebhookService,
     GomdonEventsProcessor,
     GomdonReconcileService,
     GomdonAlertService,
+    GomdonWastePickupService,
+    GomdonWasteReconcileService,
   ],
-  exports: [GomdonClient, GomdonOrderService],
+  exports: [GomdonClientModule, GomdonOrderService],
 })
 export class GomdonModule {}

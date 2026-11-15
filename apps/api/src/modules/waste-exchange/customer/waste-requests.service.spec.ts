@@ -1,4 +1,4 @@
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import { WasteRequestsService } from './waste-requests.service';
@@ -371,6 +371,77 @@ describe('WasteRequestsService.cancel (spec 15.2)', () => {
     const call = svc.cancel('u1', 'r1');
     await expect(call).rejects.toThrow(err as Error);
     await expect(call).rejects.toBeInstanceOf((err as Error).constructor);
+    expect(tx.wasteRequest.updateMany).not.toHaveBeenCalled();
+  });
+});
+
+describe('WasteRequestsService: HOME_PICKUP (shipper lấy rác tận nhà) đi đường riêng', () => {
+  const detailRow = { id: 'r9', pointId: 'wh' };
+  function makeHome() {
+    const prisma = { wasteRequest: { findFirst: jest.fn().mockResolvedValue(detailRow), findMany: jest.fn() }, $transaction: jest.fn() };
+    const access = { availablePointIds: jest.fn().mockResolvedValue(new Set(['wh'])) };
+    const homePickup = {
+      quote: jest.fn().mockResolvedValue({ shipFeeVnd: 25_000 }),
+      create: jest.fn().mockResolvedValue('r9'),
+      cancel: jest.fn().mockResolvedValue(undefined),
+      isHomePickup: jest.fn().mockResolvedValue(true),
+    };
+    const svc = new WasteRequestsService(prisma as never, access as never, {} as never, {} as never, {} as never, homePickup as never);
+    return { svc, prisma, homePickup };
+  }
+  const body = { method: 'HOME_PICKUP', lines: [{ itemId: 'carton', declaredQty: 10 }], consent: true, pickupAddressId: 'a1', declaredWeightGrams: 2000, usePointsForShipFee: true } as never;
+  let spy: jest.SpyInstance;
+  beforeEach(() => { spy = jest.spyOn(mapper, 'toRequestDetail').mockReturnValue({ id: 'r9' } as never); });
+  afterEach(() => spy.mockRestore());
+
+  it('create HOME_PICKUP giao cho dịch vụ thu gom tận nhà (một transaction riêng), không đi đường DROP_OFF/MAIL_IN, trả chi tiết phiếu', async () => {
+    const { svc, prisma, homePickup } = makeHome();
+    await expect(svc.create('u1', 'key-12345678', body)).resolves.toEqual({ id: 'r9' });
+    expect(homePickup.create).toHaveBeenCalledWith('u1', 'key-12345678', body);
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect(prisma.wasteRequest.findFirst).toHaveBeenCalledWith({ where: { id: 'r9', userId: 'u1' }, include: WASTE_REQUEST_FULL_INCLUDE });
+  });
+
+  it('pickupQuote giao cho dịch vụ thu gom tận nhà', async () => {
+    const { svc, homePickup } = makeHome();
+    const q = { addressId: 'a1', declaredWeightGrams: 2000, lines: [{ itemId: 'carton', declaredQty: 10 }] };
+    await expect(svc.pickupQuote('u1', q)).resolves.toEqual({ shipFeeVnd: 25_000 });
+    expect(homePickup.quote).toHaveBeenCalledWith('u1', q);
+  });
+
+  it('thiếu dịch vụ thu gom tận nhà (module chưa nối): 503, không rơi sang đường khác', async () => {
+    const prisma = { wasteRequest: {}, $transaction: jest.fn() };
+    const svc = new WasteRequestsService(prisma as never, {} as never, {} as never, {} as never, {} as never);
+    await expect(svc.create('u1', 'key-12345678', body)).rejects.toBeInstanceOf(ServiceUnavailableException);
+    await expect(svc.pickupQuote('u1', { addressId: 'a1', declaredWeightGrams: 2000, lines: [] })).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('cancel phiếu HOME_PICKUP: hoàn điểm + huỷ vận đơn do dịch vụ riêng làm, không chạy câu huỷ thường', async () => {
+    const { svc, prisma, homePickup } = makeHome();
+    await expect(svc.cancel('u1', 'r9')).resolves.toEqual({ id: 'r9' });
+    expect(homePickup.isHomePickup).toHaveBeenCalledWith('u1', 'r9');
+    expect(homePickup.cancel).toHaveBeenCalledWith('u1', 'r9');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('cancel phiếu khác HOME_PICKUP vẫn đi đường cũ (không gọi dịch vụ thu gom tận nhà)', async () => {
+    const { svc, prisma, homePickup } = makeHome();
+    homePickup.isHomePickup.mockResolvedValue(false);
+    prisma.$transaction.mockRejectedValue(new NotFoundException('x'));
+    await expect(svc.cancel('u1', 'r1')).rejects.toBeInstanceOf(NotFoundException);
+    expect(homePickup.cancel).not.toHaveBeenCalled();
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+  });
+
+  it('edit phiếu HOME_PICKUP: không sửa được (địa chỉ, cân nặng, phí đã khoá trên vận đơn)', async () => {
+    const tx = {
+      $queryRaw: jest.fn().mockResolvedValue([{ id: 'r9', method: 'HOME_PICKUP', status: 'OPEN', orderId: null, trackingCode: null, pointId: 'wh', capDayKey: 'd', capMonthKey: 'm' }]),
+      $executeRaw: jest.fn(),
+      wasteRequest: { updateMany: jest.fn() },
+    };
+    const prisma = { $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => fn(tx)) };
+    const svc = new WasteRequestsService(prisma as never, {} as never, {} as never, { snapshot: jest.fn().mockResolvedValue({ ...SNAP }) } as never, {} as never);
+    await expect(svc.edit('u1', 'r9', { lines: [{ itemId: 'carton', declaredQty: 5 }] } as never)).rejects.toThrow(new ConflictException('Yêu cầu này không còn sửa được'));
     expect(tx.wasteRequest.updateMany).not.toHaveBeenCalled();
   });
 });

@@ -94,6 +94,8 @@ export interface PancakeBodyContext {
   onDealerCredit: boolean;
   /** Phần ghi chú thu gom (đơn đổi hàng) — dựng riêng vì cần cân nặng từ DB. */
   recyclingNote?: string | null;
+  /** Dòng quà hiện vật 0đ gắn kèm đơn (xem giftNoteSegment) — dựng riêng vì quà nằm ở bảng đổi quà, không ở dòng đơn. */
+  giftNote?: string | null;
   isPancakeLine?: PancakeLinePredicate;
 }
 
@@ -246,14 +248,38 @@ export function recyclingNoteDetail(note: string | null | undefined): string {
   return clean ? ` - Ghi chú: ${clean}` : '';
 }
 
+export interface PancakeGiftRef {
+  code: string | null;
+  giftName: string;
+}
+
+const GIFT_NAME_MAX = 80;
+const GIFT_CODE_RE = /^[A-Za-z0-9-]{1,32}$/;
+
+/**
+ * Một dòng cho mỗi quà hiện vật 0đ đi kèm đơn, để kho bỏ đúng quà vào thùng và đối chiếu mã QG khi khách hỏi. Tên quà do admin nhập nhưng
+ * vẫn qua bộ lọc chung (không có " | ", ngoặc vuông hay "Order code:") vì webhook đọc mã đơn và dấu hệ thống từ chính ghi chú này. Không có quà → null.
+ */
+export function giftNoteSegment(gifts: readonly PancakeGiftRef[]): string | null {
+  if (gifts.length === 0) return null;
+  return gifts
+    .map((g) => {
+      const name = sanitizeCustomerText(g.giftName, GIFT_NAME_MAX) ?? 'Quà đổi điểm';
+      const code = g.code && GIFT_CODE_RE.test(g.code) ? `[${g.code}] ` : '';
+      return `🎁 TẶNG KÈM QUÀ ĐỔI ĐIỂM (0đ): ${code}${name}`;
+    })
+    .join(' | ');
+}
+
 /** "Order code: <mã>" luôn đứng đầu — webhook Pancake và tra cứu đơn đọc mã từ đây. */
 export function pancakeOrderNote(
   code: string,
   recyclingNote: string | null | undefined,
   paymentNote: string,
   customerNote?: string | null,
+  giftNote?: string | null,
 ): string {
-  return [`Order code: ${code}`, recyclingNote, paymentNote, customerDeliveryNote(customerNote)].filter(Boolean).join(' | ');
+  return [`Order code: ${code}`, recyclingNote, giftNote, paymentNote, customerDeliveryNote(customerNote)].filter(Boolean).join(' | ');
 }
 
 /**
@@ -328,7 +354,7 @@ export function buildPancakeOrderBody(order: PancakePushOrder, ctx: PancakeBodyC
     transfer_money: prepaid,
     cod,
     custom_id: order.code,
-    note: pancakeOrderNote(order.code, ctx.recyclingNote, pancakePaymentNote(state, order.paymentMethod, amountDue, cod), order.note),
+    note: pancakeOrderNote(order.code, ctx.recyclingNote, pancakePaymentNote(state, order.paymentMethod, amountDue, cod), order.note, ctx.giftNote),
     extension: {
       external_order_id: order.code,
       invoice_request: inv

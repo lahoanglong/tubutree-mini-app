@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   ConflictException,
+  ForbiddenException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -8,7 +9,13 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
-import type { CouponPreviewDTO, CouponPreviewsResponse } from '@tubutree/shared-types';
+import {
+  RECYCLE_PICKUP,
+  type CheckoutPickupQuote,
+  type CouponPreviewDTO,
+  type CouponPreviewsResponse,
+  type PickupOptionsResponse,
+} from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { CartService } from '../cart/cart.service';
@@ -27,13 +34,19 @@ import { NotificationsService } from '../notifications/notifications.service';
 import { orderConfirmedData } from '../notifications/order-confirmed-data';
 import { PancakeOrderService } from '../integrations/pancake/pancake-order.service';
 import { GomdonOrderService } from '../integrations/gomdon/gomdon-order.service';
-import { isGomdonRecyclingEnabled } from '../integrations/gomdon/gomdon-config';
+import { DEFAULT_GOMDON_WEIGHT_FALLBACK, isGomdonRecyclingEnabled, loadGomdonConfig } from '../integrations/gomdon/gomdon-config';
 import {
   attachPickupRequest,
   buildPickupRecyclingNote,
   lockPickupRequestForCheckout,
+  PICKUP_REQUEST_GONE_MESSAGE,
   readPickupGate,
 } from '../waste-exchange/pickup/waste-pickup-attach';
+import { WasteGiftAttachService } from '../waste-exchange/catalog/waste-gift-attach.service';
+import { WasteRequestsService, type InlinePickupPrepared } from '../waste-exchange/customer/waste-requests.service';
+import { WasteHoldService } from '../waste-exchange/core/waste-hold.service';
+import { WASTE_MESSAGES } from '../waste-exchange/core/waste-messages';
+import { assertPickupItemsAllowedForProvince, isHcmProvince } from '../waste-exchange/core/waste-pickup-rules';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { ComboService, goodsAfterComboOf } from '../storefront/combo.service';
 import { resolveAttribution } from './attribution';
@@ -46,7 +59,23 @@ import {
 import { isLockBusy, LOCK_BUSY_MESSAGE } from '../../common/lock-busy';
 import { formatPoints } from '../../common/format-points';
 import { formatVndText } from '../../common/format-vnd';
-import { CouponPreviewDto, PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
+import { CouponPreviewDto, PickupOptionsQueryDto, PlaceOrderDto, QuoteDto } from './dto/checkout.dto';
+import {
+  COUPON_FREESHIP_RECYCLE_REASON,
+  COUPON_FREESHIP_TUBU_PART_RECYCLE_REASON,
+  giftIdsToAttach,
+  hasPickupRequest,
+  PICKUP_CHANGED_MESSAGE,
+  PICKUP_GATE_CLOSED,
+  PICKUP_NEEDS_TUBU,
+  pausedReason,
+  pickupInputOf,
+  pickupWeights,
+  quoteGiftLines,
+  returnWeightProblem,
+  sameInlineLines,
+  type PickupRequestInput,
+} from './checkout-pickup';
 import { lockVariationsInIdOrder, reserveVariationStock } from '../catalog/variation-stock';
 import { assertVariationsSellable, productDiscontinuedError } from '../cart/sellable';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -109,9 +138,8 @@ export const STORE_CHANGED_MESSAGE = 'Gian hàng vừa thay đổi, bạn đặt
  */
 const RECENT_ORDER_REPLAY_MS = 2 * 60_000;
 
-const PICKUP_GATE_CLOSED = 'Thu kèm rác hiện chưa mở, bạn tắt công tắc hoặc tải lại trang nhé.';
-const PICKUP_NEEDS_TUBU =
-  'Thu kèm rác chỉ đi cùng hàng do Tubu Tree giao. Bạn tắt công tắc thu kèm rác hoặc thêm hàng Tubu Tree vào đơn nhé.';
+const INLINE_PICKUP_NOT_READY = 'Gói thu kèm đơn chưa đủ điều kiện, bạn chọn lại món rác nhé.';
+const PICKUP_UNAVAILABLE_MESSAGE = 'Thu kèm rác tạm chưa dùng được, bạn bỏ chọn thu kèm rác hoặc thử lại sau nhé.';
 
 /** Giỏ đã bị đổi khi lần đặt này giành được khoá giỏ; `consumed` = dòng định mua đã biến mất (thường do lần đặt trước). */
 class CartChangedError extends Error {
@@ -151,6 +179,17 @@ export interface CheckoutShipment extends GroupAmounts {
   pointsEarned: number;
   /** Phí sàn chốt cho đơn đối tác (phân số); null với kiện Tubu. */
   commissionPct: number | null;
+  /** Phí giao miễn nhờ thu rác kèm đơn (RECYCLE_PICKUP); 0 khi không miễn. */
+  shippingFeeWaived: number;
+}
+
+/** Kết quả đánh giá phần thu rác kèm đơn của một lần tính tiền (báo giá và đặt đơn dùng chung). */
+interface PickupEvaluation {
+  quote: CheckoutPickupQuote | null;
+  freeShip: boolean;
+  returnWeightGrams: number | null;
+  /** Cấu hình giữ chỗ đọc ngoài tx cho đường tạo phiếu ngay trong placeOrder; null khi cổng đóng. */
+  prepared: InlinePickupPrepared | null;
 }
 
 /** Dòng hàng của lần đặt như CartService.getCart trả về. */
@@ -187,6 +226,8 @@ type ShipmentTerm = {
   thresholdFree: number | null;
   /** Phí giao còn thu của kiện gian hàng đối tác (mã freeship không miễn được); 0 với kiện Tubu. */
   partnerFee: number;
+  /** Phí giao kiện Tubu miễn nhờ thu rác kèm đơn, tính trên phần phí còn lại sau freeship đơn đầu và ngưỡng, trước mã freeship. */
+  recycleWaived: number;
 };
 
 /**
@@ -196,6 +237,9 @@ type ShipmentTerm = {
 function shipAlreadyFreeReason(terms: ShipmentTerm[]): string | null {
   // Còn kiện đối tác thu phí giao thì câu "đơn đã được miễn phí giao" sai với số tiền khách thấy: giới hạn câu ở phần hàng Tubu.
   const partnerCharged = terms.some((t) => t.partnerFee > 0);
+  if (terms.some((t) => t.recycleWaived > 0)) {
+    return partnerCharged ? COUPON_FREESHIP_TUBU_PART_RECYCLE_REASON : COUPON_FREESHIP_RECYCLE_REASON;
+  }
   if (terms.some((t) => t.firstOrderWaived > 0)) {
     return partnerCharged ? couponFreeshipTubuPartReason('FIRST_ORDER') : COUPON_FREESHIP_FIRST_ORDER_REASON;
   }
@@ -238,6 +282,11 @@ export class CheckoutService {
     private readonly combo: ComboService,
     private readonly flashSale: FlashSaleService,
     private readonly analytics: AnalyticsEventsService,
+    // Optional: các spec dựng module tối giản không nạp vùng đổi rác; thiếu thì đơn không kèm rác/quà vẫn chạy như trước, còn
+    // khách đòi thu kèm rác thì báo 503 rõ ràng thay vì lỗi null.
+    @Optional() private readonly wasteHold?: WasteHoldService,
+    @Optional() private readonly wasteRequests?: WasteRequestsService,
+    @Optional() private readonly giftAttach?: WasteGiftAttachService,
     @Optional() private readonly geo?: GeoService,
     // Optional: test dựng tay không truyền; thiếu thì hạn thanh toán dùng TTL mặc định như cron tự huỷ, phí/hoa hồng
     // gian hàng tự giao dùng mặc định.
@@ -272,9 +321,17 @@ export class CheckoutService {
   }
 
   private async quoteInner(userId: string, dto: QuoteDto) {
+    const pickupInput = pickupInputOf(dto);
     const { storefront } = await this.resolveAttribution(userId, { storefrontSlug: dto.storefrontSlug });
-    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefront?.slug, dto.itemIds);
+    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefront?.slug, dto.itemIds, pickupInput);
     if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
+    const hasTubuShipment = computed.shipments.some((s) => s.fulfiller.kind === 'TUBU');
+    // Quà hiện vật 0đ chờ gắn đơn: khách thấy quà nào sẽ đi cùng đơn này (đơn có kiện Tubu) và bỏ ra được bằng excludeGiftRedemptionIds.
+    const pendingGiftRedemptions = quoteGiftLines(
+      this.giftAttach ? await this.giftAttach.listPending(userId) : [],
+      hasTubuShipment,
+      pickupInput.excludeGiftIds,
+    );
     const blockedPaymentMethods: Record<string, string> = {};
     for (const method of QUOTED_PAYMENT_METHODS) {
       const reason = paymentMethodBlockReason(computed.shipments, method);
@@ -289,6 +346,7 @@ export class CheckoutService {
         subtotal: s.subtotal,
         discount: s.discount,
         shippingFee: s.shippingFee,
+        shippingFeeWaived: s.shippingFeeWaived,
         total: s.total,
       })),
       blockedPaymentMethods,
@@ -310,6 +368,11 @@ export class CheckoutService {
       shippingFee: computed.shippingFee,
       // Phần phí giao miễn nhờ freeship đơn đầu (D2-08), 0 khi không áp.
       firstOrderShipWaived: computed.firstOrderShipWaived,
+      // Phần phí giao kiện Tubu miễn nhờ thu rác kèm đơn và mã lý do (RECYCLE_PICKUP); 0/null khi không miễn.
+      shippingFeeWaived: computed.recycleShipWaived,
+      shippingFeeWaivedReason: computed.recycleShipWaived > 0 ? RECYCLE_PICKUP : null,
+      pickup: computed.pickup?.quote ?? null,
+      pendingGiftRedemptions,
       total: computed.total,
       pointsEarned: computed.pointsEarned,
       pointsBalance: user.pointsBalance,
@@ -354,6 +417,9 @@ export class CheckoutService {
     idempotencyKey?: string,
     platform: 'miniapp' | 'web' = 'miniapp',
   ) {
+    // Gửi cả phiếu có sẵn lẫn món rác chọn ngay là yêu cầu sai: báo trước mọi việc khác, kể cả lần gửi lại cùng Idempotency-Key.
+    const pickupInput = pickupInputOf(dto);
+    const wantsPickup = hasPickupRequest(pickupInput);
     if (idempotencyKey) {
       const existing = await this.prisma.order.findUnique({ where: { idempotencyKey } });
       if (existing) return this.replayIdempotentOrder(existing, userId, dto);
@@ -365,9 +431,9 @@ export class CheckoutService {
       throw new BadRequestException('Phương thức thanh toán này đã ngừng. Bạn chọn phương thức khác nhé.');
     }
 
-    // Thu kèm rác chỉ nhận khi cổng đang mở (waste.enabled + lane_pickup + Gomdon đã cấu hình) — client gửi wasteRequestId
-    // khi tính năng tắt không được hứa thu gom mà không ai đi thu.
-    if (dto.wasteRequestId && !(await readPickupGate(this.config, () => isGomdonRecyclingEnabled(this.config!).catch(() => false)))) {
+    // Thu kèm rác chỉ nhận khi cổng đang mở (waste.enabled + lane_pickup + Gomdon đã cấu hình) — client gửi wasteRequestId hoặc
+    // inlinePickup khi tính năng tắt không được hứa thu gom mà không ai đi thu.
+    if (wantsPickup && !(await this.pickupGateOpen())) {
       throw new BadRequestException(PICKUP_GATE_CLOSED);
     }
 
@@ -386,6 +452,7 @@ export class CheckoutService {
       dto.pointsToUse,
       storefrontSlug ?? undefined,
       dto.itemIds,
+      wantsPickup ? pickupInput : null,
     );
     if (cart.items.length === 0) {
       const recent = await this.recentlyPlacedOrder(userId, dto);
@@ -424,9 +491,13 @@ export class CheckoutService {
     }
     // Bưu tá thu gom vỏ đi cùng kiện kho Tubu (vận đơn Gomdon đổi hàng) — không có kiện Tubu thì không ai đi thu.
     const tubuShipment = computed.shipments.find((s) => s.fulfiller.kind === 'TUBU');
-    if (dto.wasteRequestId && !tubuShipment) {
+    if (wantsPickup && !tubuShipment) {
       throw new BadRequestException(PICKUP_NEEDS_TUBU);
     }
+    // Cấu hình giữ chỗ của đường tạo phiếu ngay trong đơn đọc NGOÀI tx (compute đã đọc khi cổng mở).
+    const inlinePrepared = pickupInput.inline ? (computed.pickup?.prepared ?? (await this.pickupDeps().wasteRequests.prepareInlinePickup())) : null;
+    const returnWeightGrams = computed.pickup?.returnWeightGrams ?? null;
+    const freeShipMinPoints = computed.pickup?.freeShip ? (computed.pickup.quote?.minPoints ?? 0) : null;
 
     // WALLET thanh toán ngay (đơn CONFIRMED + PAID).
     const paid = paymentMethod === 'WALLET';
@@ -457,7 +528,21 @@ export class CheckoutService {
         // khoá sẽ thấy dòng đã mua biến mất thay vì đặt thêm một đơn từ bản giỏ đã đọc trước đó (R2-MONEY-2).
         const change = cartChangeSince(cart.items, await this.cart.lockForCheckout(tx, userId));
         if (change) throw new CartChangedError(change === 'consumed');
-        const pickup = dto.wasteRequestId ? await lockPickupRequestForCheckout(tx, userId, dto.wasteRequestId) : null;
+        // Món rác chọn ngay: phiếu PICKUP tạo trong chính tx này (lỗi thì cả đơn rollback, không để lại phiếu mồ côi) rồi đi đường khoá + gắn
+        // như phiếu có sẵn. Khoá dẫn xuất từ Idempotency-Key của đơn nên gửi lại cùng khoá không tạo phiếu thứ hai.
+        const pickupRequestId = inlinePrepared
+          ? await this.pickupDeps().wasteRequests.createPickupInTx(
+              tx,
+              userId,
+              `ck:${idempotencyKey ?? codes[0]}`,
+              pickupInput.inline!.lines.map((l) => ({ itemId: l.itemId, declaredQty: l.qty })),
+              inlinePrepared,
+              address.province,
+            )
+          : pickupInput.wasteRequestId;
+        const pickup = pickupRequestId ? await lockPickupRequestForCheckout(tx, userId, pickupRequestId, address.province) : null;
+        // Miễn phí giao đã tính theo điểm đọc trước tx; phiếu có sẵn bị sửa/đổi giữa chừng thì kiểm lại dưới khoá, không giao miễn phí cho phiếu thiếu điểm.
+        if (pickup && freeShipMinPoints !== null && pickup.estimatedPoints < freeShipMinPoints) throw new ConflictException(PICKUP_CHANGED_MESSAGE);
 
         // Giữ chỗ tồn kho ATOMIC từng line — chống oversell khi flash-sale/hàng giới hạn:
         // 2 đơn cùng grab variation cuối → chỉ 1 câu UPDATE sửa được dòng; thua thì throw rollback.
@@ -538,7 +623,8 @@ export class CheckoutService {
                 invoiceStatus: dto.invoiceRequest ? 'REQUESTED' : 'NOT_REQUESTED',
                 note: dto.note,
                 hasRecyclingPickup: withPickup,
-                recyclingNote: withPickup ? buildPickupRecyclingNote(pickup) : null,
+                recyclingNote: withPickup ? buildPickupRecyclingNote(pickup, returnWeightGrams) : null,
+                recyclingWeightGrams: withPickup ? returnWeightGrams : null,
                 items: {
                   // Combo: trừ phần giảm phân bổ vào total từng dòng → hoa hồng (đọc OrderItem.total)
                   // tính trên giá thực trả sau giảm combo (§7.2).
@@ -567,6 +653,12 @@ export class CheckoutService {
         }
 
         if (pickup) await attachPickupRequest(tx, userId, pickup.id, created[computed.shipments.indexOf(tubuShipment!)]!.id);
+
+        // Quà hiện vật 0đ chờ gắn đơn đi cùng kiện Tubu (kho bỏ chung thùng); khách bỏ ra thì quà ở lại ví cho đơn sau. Đơn không có kiện Tubu không gắn.
+        if (tubuShipment && this.giftAttach) {
+          const giftIds = giftIdsToAttach(await this.giftAttach.listPending(userId, tx), pickupInput.excludeGiftIds);
+          if (giftIds.length > 0) await this.giftAttach.attachInTx(tx, userId, giftIds, created[computed.shipments.indexOf(tubuShipment)]!.id);
+        }
 
         if (computed.pointsUsed > 0) {
           // Khoá dòng user (FOR UPDATE) TRƯỚC khi tính phần khoá (creditOrderPoints/reverseOrderPoints/
@@ -859,17 +951,23 @@ export class CheckoutService {
     const forcedCod = existing.paymentMethod === 'COD' && existing.total === 0;
     if (existing.paymentMethod !== dto.paymentMethod && !forcedCod) return false;
     // Gắn yêu cầu thu kèm rác khác (hoặc bật/tắt) giữa 2 lần gửi cũng là "yêu cầu khác" — không trả đơn cũ.
-    if ((await this.attachedWasteRequestId(existing)) !== (dto.wasteRequestId ?? null)) return false;
+    if (!(await this.isSamePickup(existing, dto))) return false;
     const address = await this.prisma.address.findUnique({ where: { id: dto.addressId } });
     return !!address && stableStringify(this.addressSnapshot(address)) === stableStringify(existing.shippingAddress);
   }
 
-  private async attachedWasteRequestId(existing: { id: string; checkoutGroup?: string | null }): Promise<string | null> {
-    const row = await this.prisma.wasteRequest.findFirst({
-      where: existing.checkoutGroup ? { order: { checkoutGroup: existing.checkoutGroup } } : { orderId: existing.id },
-      select: { id: true },
-    });
-    return row?.id ?? null;
+  /**
+   * Phiếu thu kèm gắn trên đơn đã có khớp lần gửi này: gửi `wasteRequestId` thì đúng phiếu đó; gửi `inlinePickup` thì phiếu gắn đơn là phiếu
+   * tạo từ chính lần đặt trước (id mới, nên so theo món và số lượng); không gửi thì đơn cũ phải không gắn phiếu nào.
+   */
+  private async isSamePickup(existing: { id: string; checkoutGroup?: string | null }, dto: PlaceOrderDto): Promise<boolean> {
+    const where = existing.checkoutGroup ? { order: { checkoutGroup: existing.checkoutGroup } } : { orderId: existing.id };
+    if (dto.inlinePickup) {
+      const row = await this.prisma.wasteRequest.findFirst({ where, select: { id: true, lines: { select: { itemId: true, declaredQty: true } } } });
+      return !!row && sameInlineLines(row.lines, dto.inlinePickup.lines);
+    }
+    const row = await this.prisma.wasteRequest.findFirst({ where, select: { id: true } });
+    return (row?.id ?? null) === (dto.wasteRequestId ?? null);
   }
 
   /**
@@ -1074,7 +1172,15 @@ export class CheckoutService {
     return { flashSubtotal, combo, goodsAfterCombo, couponLines };
   }
 
-  private async compute(userId: string, addressId: string, pointsToUse?: number, storefrontSlug?: string, itemIds?: string[]) {
+  private async compute(
+    userId: string,
+    addressId: string,
+    pointsToUse?: number,
+    storefrontSlug?: string,
+    itemIds?: string[],
+    /** Thu rác kèm đơn khách chọn (báo giá luôn truyền để dựng thẻ thu kèm; đặt đơn chỉ truyền khi khách chọn thu kèm). null = không đánh giá. */
+    pickupInput: PickupRequestInput | null = null,
+  ) {
     const cart = await this.checkoutLines(userId, itemIds);
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const address = await this.deliveryAddress(userId, addressId);
@@ -1191,8 +1297,11 @@ export class CheckoutService {
       throw new InternalServerErrorException('Không tính được số tiền của đơn hàng. Bạn thử lại sau hoặc liên hệ Tubu Tree nhé.');
     }
     const firstOrderFrom = await firstOrderFreeShipFrom(this.config, this.prisma, userId);
-    const terms = await this.shipmentTerms(groups, amounts.map((a) => a.subtotal), user.tierId, freeship, firstOrderFrom);
+    // Đánh giá thu rác kèm đơn TRƯỚC phí giao: phí kiện Tubu về 0 là một phần của số tiền báo giá và đặt đơn cùng dùng.
+    const pickup = pickupInput ? await this.evaluatePickup(userId, address, groups, pickupInput) : null;
+    const terms = await this.shipmentTerms(groups, amounts.map((a) => a.subtotal), user.tierId, freeship, firstOrderFrom, pickup?.freeShip === true);
     const firstOrderShipWaived = terms.reduce((s, t) => s + t.firstOrderWaived, 0);
+    const recycleShipWaived = terms.reduce((s, t) => s + t.recycleWaived, 0);
     const alreadyFreeReason = shipAlreadyFreeReason(terms);
     // Mã không có đơn tối thiểu vẫn "hợp lệ" trên base 0đ (giỏ/tập con toàn hàng giờ vàng, combo phủ hết) → giảm 0đ; mã
     // freeship chỉ miễn phí giao kiện Tubu, nên giỏ toàn hàng gian hàng tự giao hoặc kiện Tubu đã miễn phí giao thì không
@@ -1221,6 +1330,7 @@ export class CheckoutService {
         total: a.goodsAfterAll + shipping,
         pointsEarned: await this.pricing.calcPointsEarned(a.goodsAfterAll, multiplier),
         commissionPct: terms[i]!.commissionPct,
+        shippingFeeWaived: terms[i]!.recycleWaived,
       });
     }
     const shippingFee = shipments.reduce((s, x) => s + x.shippingFee, 0);
@@ -1248,10 +1358,194 @@ export class CheckoutService {
         lockedPoints,
         shippingFee,
         firstOrderShipWaived,
+        recycleShipWaived,
         total,
         pointsEarned,
         shipments,
+        pickup: pickup
+          ? { ...pickup, quote: pickup.quote ? { ...pickup.quote, shippingFeeWaived: recycleShipWaived } : null }
+          : null,
       },
+    };
+  }
+
+  private pickupDeps(): { wasteHold: WasteHoldService; wasteRequests: WasteRequestsService } {
+    if (!this.wasteHold || !this.wasteRequests) throw new ServiceUnavailableException(PICKUP_UNAVAILABLE_MESSAGE);
+    return { wasteHold: this.wasteHold, wasteRequests: this.wasteRequests };
+  }
+
+  private async pickupGateOpen(): Promise<boolean> {
+    return readPickupGate(this.config, () => isGomdonRecyclingEnabled(this.config!).catch(() => false));
+  }
+
+  /** Cân nặng mặc định cho dòng thiếu cân (cấu hình Gomdon), cùng nguồn với vận đơn và ghi chú Pancake. */
+  private async weightFallbackGrams(): Promise<number> {
+    if (!this.config) return DEFAULT_GOMDON_WEIGHT_FALLBACK;
+    try {
+      return (await loadGomdonConfig(this.config)).defaultWeightFallback;
+    } catch {
+      return DEFAULT_GOMDON_WEIGHT_FALLBACK;
+    }
+  }
+
+  /**
+   * Phần thu rác kèm đơn của lần tính tiền. Chỉ đọc, không ghi DB: phiếu INLINE chỉ được tạo trong tx đặt đơn (createPickupInTx), ở đây
+   * tính thử bằng đúng luật giữ chỗ (WasteHoldService) để báo giá khớp với điều placeOrder sẽ làm.
+   *
+   * `quote` null = không có kiện Tubu, hoặc cổng đóng mà khách không chọn thu kèm. `freeShip` chỉ true khi phần khách chọn đủ điều kiện:
+   * cổng mở, tài khoản không bị chặn/khoá đường kho, phiếu (có sẵn hoặc chọn ngay) đạt ngưỡng điểm. Sai cân nặng gửi lại và Pin ngoài
+   * TP.HCM là lỗi 400, không phải "chưa đủ điều kiện".
+   */
+  private async evaluatePickup(
+    userId: string,
+    address: { province: string },
+    groups: { fulfiller: LineFulfiller; lines: CheckoutLine[] }[],
+    input: PickupRequestInput,
+  ): Promise<PickupEvaluation> {
+    const none: PickupEvaluation = { quote: null, freeShip: false, returnWeightGrams: null, prepared: null };
+    const tubu = groups.find((g) => g.fulfiller.kind === 'TUBU');
+    if (!tubu) return none;
+    const requested = hasPickupRequest(input);
+    if (!this.wasteHold || !this.wasteRequests) {
+      if (requested) this.pickupDeps();
+      return none;
+    }
+    const { wasteHold, wasteRequests } = this.pickupDeps();
+    const gateOpen = await this.pickupGateOpen();
+    if (!gateOpen && !requested) return none;
+
+    const weights = pickupWeights(tubu.lines, await this.weightFallbackGrams());
+    const base: CheckoutPickupQuote = {
+      gateOpen,
+      eligible: false,
+      reason: null,
+      mode: null,
+      estimatedPoints: 0,
+      minPoints: 0,
+      freeShip: false,
+      shippingFeeWaived: 0,
+      ...weights,
+      returnWeightGrams: null,
+    };
+    if (!gateOpen) return { ...none, quote: { ...base, reason: PICKUP_GATE_CLOSED } };
+
+    const prepared = await wasteRequests.prepareInlinePickup();
+    const minPoints = prepared.holdCfg.pickupMinPoints;
+    const flags = await this.prisma.wasteUserFlags.findUnique({ where: { userId }, select: { blockedAt: true, shipLockedAt: true } });
+    const paused = pausedReason(flags);
+    if (!requested) return { ...none, prepared, quote: { ...base, minPoints, reason: paused } };
+
+    const returnWeightGrams = input.returnWeightGrams;
+    if (returnWeightGrams !== null) {
+      const problem = returnWeightProblem(returnWeightGrams, weights.maxReturnWeightGrams);
+      if (problem) throw new BadRequestException(problem);
+    }
+    const mode = input.wasteRequestId ? 'REQUEST' : 'INLINE';
+    const { estimatedPoints, reason } =
+      mode === 'REQUEST'
+        ? await this.requestPickupStanding(userId, input.wasteRequestId!, address.province, minPoints)
+        : await this.inlinePickupStanding(wasteHold, userId, input.inline!.lines, address.province, prepared);
+    const blocker = paused ?? reason;
+    const eligible = blocker === null;
+    return {
+      quote: { ...base, mode, minPoints, estimatedPoints, eligible, reason: blocker, freeShip: eligible, returnWeightGrams },
+      freeShip: eligible,
+      returnWeightGrams,
+      prepared,
+    };
+  }
+
+  /** Phiếu thu kèm có sẵn: còn mở, của khách, chưa gắn đơn và đủ điểm tối thiểu. Phiếu không còn thì để bước khoá trong tx báo 409. */
+  private async requestPickupStanding(
+    userId: string,
+    wasteRequestId: string,
+    province: string,
+    minPoints: number,
+  ): Promise<{ estimatedPoints: number; reason: string | null }> {
+    const req = await this.prisma.wasteRequest.findFirst({
+      where: { id: wasteRequestId, userId, method: 'PICKUP', status: 'OPEN', orderId: null },
+      select: { estimatedPoints: true, lines: { select: { item: { select: { hazardous: true } } } } },
+    });
+    if (!req) return { estimatedPoints: 0, reason: PICKUP_REQUEST_GONE_MESSAGE };
+    assertPickupItemsAllowedForProvince(req.lines.map((l) => ({ hazardous: l.item.hazardous })), province);
+    const missing = minPoints - req.estimatedPoints;
+    return { estimatedPoints: req.estimatedPoints, reason: missing > 0 ? WASTE_MESSAGES.BELOW_MIN('PICKUP', minPoints, missing) : null };
+  }
+
+  /**
+   * Món rác chọn ngay trên thanh toán: tính điểm và các luật giữ chỗ (trần, ngưỡng, món chưa nhận, phiếu đang chờ, khoá khách) bằng
+   * WasteHoldService ở chế độ chỉ đọc. Vi phạm đầu tiên thành lý do báo khách; Pin ngoài TP.HCM là 400.
+   */
+  private async inlinePickupStanding(
+    wasteHold: WasteHoldService,
+    userId: string,
+    lines: { itemId: string; qty: number }[],
+    province: string,
+    prepared: InlinePickupPrepared,
+  ): Promise<{ estimatedPoints: number; reason: string | null }> {
+    const items = await this.prisma.wasteItem.findMany({ where: { id: { in: lines.map((l) => l.itemId) } }, select: { hazardous: true } });
+    assertPickupItemsAllowedForProvince(items, province);
+    const input = {
+      path: 'CREATE' as const,
+      userId,
+      method: 'PICKUP' as const,
+      lines: lines.map((l) => ({ itemId: l.itemId, declaredQty: l.qty })),
+      pointId: null,
+      now: new Date(),
+    };
+    const refusal = (e: unknown): string | null => (e instanceof ForbiddenException || e instanceof ConflictException ? e.message : null);
+    let estimatedPoints = 0;
+    try {
+      const { result, blocks } = await wasteHold.evaluate(this.prisma, input, prepared.holdCfg);
+      estimatedPoints = result.estimatedPoints;
+      if (blocks.length === 0) return { estimatedPoints, reason: null };
+      // Cùng kiểm tra ở chế độ ném lỗi để lấy đúng câu của vi phạm đầu tiên (khối chỉ mang mã, không mang câu).
+      await wasteHold.validateAndHold(this.prisma, input, prepared.holdCfg);
+      return { estimatedPoints, reason: INLINE_PICKUP_NOT_READY };
+    } catch (e) {
+      const reason = refusal(e);
+      if (reason === null) throw e;
+      return { estimatedPoints, reason };
+    }
+  }
+
+  /**
+   * Dữ liệu dựng ngăn chọn món rác ngay trên thanh toán: món đang nhận (Pin cũ hiện nhưng khoá nếu địa chỉ giao ngoài TP.HCM), ngưỡng
+   * điểm, trần cân nặng gói gửi lại theo kiện Tubu của phần giỏ đang thanh toán, và phiếu thu kèm đang chờ của khách.
+   */
+  async pickupOptions(userId: string, q: PickupOptionsQueryDto): Promise<PickupOptionsResponse> {
+    const cart = await this.checkoutLines(userId, q.itemIds);
+    const address = await this.deliveryAddress(userId, q.addressId);
+    const tubu = groupByFulfiller(cart.items).find((g) => g.fulfiller.kind === 'TUBU');
+    const weights = pickupWeights(tubu?.lines ?? [], await this.weightFallbackGrams());
+    const { holdCfg } = await this.pickupDeps().wasteRequests.prepareInlinePickup();
+    const gateOpen = !!tubu && (await this.pickupGateOpen());
+    if (!gateOpen) return { gateOpen, minPoints: holdCfg.pickupMinPoints, ...weights, items: [], existingRequest: null };
+
+    const hcm = isHcmProvince(address.province);
+    const [items, existing] = await Promise.all([
+      this.prisma.wasteItem.findMany({
+        where: { status: 'ACTIVE' },
+        orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+        select: { id: true, code: true, name: true, unitLabel: true, unitsPerPoint: true, pointsPerGroup: true, hazardous: true, prepInstructions: true },
+      }),
+      this.prisma.wasteRequest.findFirst({
+        where: { userId, method: 'PICKUP', status: 'OPEN', orderId: null },
+        orderBy: { createdAt: 'asc' },
+        select: {
+          id: true,
+          code: true,
+          estimatedPoints: true,
+          lines: { orderBy: { id: 'asc' }, select: { itemId: true, itemName: true, unitLabel: true, declaredQty: true } },
+        },
+      }),
+    ]);
+    return {
+      gateOpen,
+      minPoints: holdCfg.pickupMinPoints,
+      ...weights,
+      items: items.map((i) => ({ ...i, blockedReason: i.hazardous && !hcm ? ('BATTERY_OUT_OF_HCM' as const) : null })),
+      existingRequest: existing,
     };
   }
 
@@ -1268,6 +1562,8 @@ export class CheckoutService {
     freeship: boolean,
     /** Ngưỡng freeship đơn đầu của khách (firstOrderFreeShipFrom), null = không áp. */
     firstOrderFrom: number | null = null,
+    /** Kiện Tubu được miễn phí giao vì có thu rác kèm đơn đủ điều kiện (bất kể tiền hàng). Kiện đối tác không đổi. */
+    recycleFree = false,
   ): Promise<ShipmentTerm[]> {
     const merchantIds = groups.flatMap((g) => (g.fulfiller.kind === 'MERCHANT' ? [g.fulfiller.storefrontId] : []));
     const [stores, defaultFee, defaultPct] = merchantIds.length
@@ -1293,7 +1589,18 @@ export class CheckoutService {
           const t = await freeShipThreshold(this.config, tierId);
           thresholdFree = subtotals[i]! >= t ? t : 0;
         }
-        out.push({ shippingFee: freeship ? 0 : fee, commissionPct: null, freeshipWaived: freeship ? fee : 0, firstOrderWaived: base - fee, thresholdFree, partnerFee: 0 });
+        // Miễn vì đổi rác đi trước mã freeship: phí đã về 0 thì mã không bị tiêu cho đơn này.
+        const recycleWaived = recycleFree ? fee : 0;
+        const left = fee - recycleWaived;
+        out.push({
+          shippingFee: freeship ? 0 : left,
+          commissionPct: null,
+          freeshipWaived: freeship ? left : 0,
+          firstOrderWaived: base - fee,
+          thresholdFree,
+          partnerFee: 0,
+          recycleWaived,
+        });
         continue;
       }
       const sf = byId.get(g.fulfiller.storefrontId);
@@ -1307,6 +1614,7 @@ export class CheckoutService {
         firstOrderWaived: 0,
         thresholdFree: null,
         partnerFee,
+        recycleWaived: 0,
       });
     }
     return out;

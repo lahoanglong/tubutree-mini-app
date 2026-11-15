@@ -1,6 +1,10 @@
 import { formatPoints } from '../../../common/format-points';
+import { PICKUP_BATTERY_HCM_ONLY_MESSAGE } from './waste-pickup-rules';
 
-type MinMethod = 'MAIL_IN' | 'PICKUP';
+type MinMethod = 'MAIL_IN' | 'PICKUP' | 'HOME_PICKUP';
+
+const MIN_LABEL: Record<MinMethod, string> = { MAIL_IN: 'Gói gửi về kho', PICKUP: 'Thu kèm đơn', HOME_PICKUP: 'Đơn shipper lấy tận nhà' };
+const CAP_LABEL: Record<MinMethod, string> = { MAIL_IN: 'gói gửi kho', PICKUP: 'gói thu kèm đơn', HOME_PICKUP: 'đơn shipper lấy tận nhà' };
 
 export const WASTE_MESSAGES = {
   PROGRAMME_OFF: 'Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên.',
@@ -13,9 +17,8 @@ export const WASTE_MESSAGES = {
   RETRY: 'Bạn thử lại nhé',
 
   BELOW_MIN: (method: MinMethod, minPoints: number, missingPoints: number) =>
-    `${method === 'MAIL_IN' ? 'Gói gửi về kho' : 'Thu kèm đơn'} cần tối thiểu ${formatPoints(minPoints)} điểm, bạn cần thêm ${formatPoints(missingPoints)} điểm nữa`,
-  MONTH_CAP_FOR_MIN: (method: MinMethod) =>
-    `Tháng này bạn không đủ trần tháng cho ${method === 'MAIL_IN' ? 'gói gửi kho' : 'gói thu kèm đơn'}`,
+    `${MIN_LABEL[method]} cần tối thiểu ${formatPoints(minPoints)} điểm, bạn cần thêm ${formatPoints(missingPoints)} điểm nữa`,
+  MONTH_CAP_FOR_MIN: (method: MinMethod) => `Tháng này bạn không đủ trần tháng cho ${CAP_LABEL[method]}`,
   ITEM_MONTH_CAP: (itemName: string, remaining: number, unitLabel: string) =>
     `${itemName}: tháng này bạn chỉ còn gửi được ${remaining} ${unitLabel}`,
   ITEM_DAY_CAP: (itemName: string, remaining: number, unitLabel: string) =>
@@ -24,6 +27,7 @@ export const WASTE_MESSAGES = {
   MAX_OPEN: (max: number) => `Bạn đang có ${max} yêu cầu chưa xong, hãy hoàn tất hoặc huỷ bớt trước khi tạo thêm`,
   PICKUP_PENDING: (code: string) => `Bạn đã có yêu cầu thu kèm ${code}, hãy gắn vào đơn kế tiếp`,
   ITEM_DROPOFF_ONLY: (names: string[]) => `${names.join(', ')} không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được`,
+  HAZARDOUS_HCM_ONLY: PICKUP_BATTERY_HCM_ONLY_MESSAGE,
   POINT_MISSING_ITEMS: (names: string[]) => `Điểm nhận này không nhận: ${names.join(', ')}`,
 
   REQUEST_NOT_FOUND: 'Không tìm thấy yêu cầu',
@@ -46,4 +50,19 @@ export const WASTE_MESSAGES = {
   NOT_CANCELLABLE: 'Yêu cầu này không còn huỷ được',
   TRACKING_CLOSED: 'Yêu cầu này không còn nhập mã vận đơn được',
   TRACKING_DUPLICATE_OWN: 'Bạn đã dùng mã vận đơn này cho một yêu cầu khác',
+
+  HOME_PICKUP_UNAVAILABLE: 'Đặt shipper tới lấy rác tạm thời chưa dùng được, bạn chọn cách khác hoặc thử lại sau nhé',
+  HOME_PICKUP_NEED_ADDRESS: 'Hãy chọn địa chỉ để shipper tới lấy rác',
+  HOME_PICKUP_ADDRESS_NOT_FOUND: 'Không tìm thấy địa chỉ này trong sổ địa chỉ của bạn',
+  HOME_PICKUP_WEIGHT: (minGrams: number, maxGrams: number) => `Cân nặng gói rác cần từ ${minGrams / 1000} kg tới ${maxGrams / 1000} kg`,
+  HOME_PICKUP_ADDRESS_UNRECOGNIZED: 'Đơn vị vận chuyển chưa nhận diện được địa chỉ này, hãy sửa lại phường/xã trong sổ địa chỉ',
+  HOME_PICKUP_NEED_POINTS: (shortfallPoints: number) =>
+    `Phí shipper lấy rác cần trả bằng Điểm Xanh, bạn còn thiếu ${shortfallPoints.toLocaleString('vi-VN')} điểm. Hãy chọn mang tới điểm thu gom hoặc đổi rác kèm đơn mua nhé`,
+  HOME_PICKUP_FEE_UNAVAILABLE: 'Chưa báo được phí shipper lúc này, bạn thử lại sau ít phút nhé',
+  HOME_PICKUP_POINTS_CHANGED: 'Số Điểm Xanh dùng được của bạn vừa thay đổi, hãy mở lại màn đặt shipper để xem phí mới',
+  HOME_PICKUP_PICKED_UP: 'Bưu tá đã lấy rác nên không huỷ được nữa',
+  HOME_PICKUP_CREATING: 'Tubu đang tạo vận đơn cho yêu cầu này, bạn thử huỷ lại sau ít phút',
+  HOME_PICKUP_MANUAL_CHECK: 'Tubu đang kiểm tra vận đơn của yêu cầu này, hãy nhắn CSKH nếu bạn muốn huỷ',
+  HOME_PICKUP_CANCEL_REFUSED: 'Đơn vị vận chuyển chưa cho huỷ vận đơn này (có thể bưu tá đã nhận hàng), yêu cầu vẫn được giữ nguyên',
+  HOME_PICKUP_CARRIER_BUSY: 'Chưa liên lạc được đơn vị vận chuyển để huỷ, bạn thử lại sau ít phút',
 } as const;

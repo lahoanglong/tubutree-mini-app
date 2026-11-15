@@ -1,8 +1,9 @@
-import { Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsEmail, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Matches, MaxLength, Min, ValidateNested } from 'class-validator';
+import { Transform, Type } from 'class-transformer';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsBoolean, IsEmail, IsInt, IsNotEmpty, IsObject, IsOptional, IsString, Matches, Max, MaxLength, Min, ValidateNested } from 'class-validator';
 import { PaymentMethod } from '@tubutree/shared-types';
 import { IsIn } from 'class-validator';
 import { Trim } from '../../../common/decorators/trim.decorator';
+import { splitIds } from '../../cart/dto/cart.dto';
 
 /** MST doanh nghiệp 10 số (chi nhánh thêm -3 số); từ 01/07/2025 cá nhân và hộ kinh doanh dùng số CCCD 12 số làm MST. */
 export const TAX_CODE_RE = /^(\d{10}(-\d{3})?|\d{12})$/;
@@ -14,7 +15,47 @@ export class InvoiceRequestDto {
   @Trim() @IsEmail() @MaxLength(254) email!: string; // e-invoice gửi qua email → phải hợp lệ
 }
 
-export class QuoteDto {
+/** Một dòng món rác khách chọn ngay trên thanh toán (đơn vị theo món: thùng, túi, vỏ...). */
+export class InlinePickupLineDto {
+  @IsString() @IsNotEmpty() @MaxLength(64) itemId!: string;
+  @IsInt() @Min(1) @Max(100_000) qty!: number;
+}
+
+/** Cân nặng gói rác gửi lại: sàn 0,5 kg (Gomdon tính tối thiểu) và trần 10 kg một kiện; trần theo kiện mua do máy chủ tính. */
+export const RETURN_WEIGHT_MIN_GRAMS = 500;
+export const RETURN_WEIGHT_MAX_GRAMS = 10_000;
+const RETURN_WEIGHT_MESSAGE = 'Cân nặng gói rác gửi lại phải là số gram nguyên từ 500 tới 10000.';
+
+export class InlinePickupDto {
+  @IsArray() @ArrayMinSize(1) @ArrayMaxSize(50) @ValidateNested({ each: true }) @Type(() => InlinePickupLineDto) lines!: InlinePickupLineDto[];
+  @IsOptional()
+  @IsInt({ message: RETURN_WEIGHT_MESSAGE })
+  @Min(RETURN_WEIGHT_MIN_GRAMS, { message: RETURN_WEIGHT_MESSAGE })
+  @Max(RETURN_WEIGHT_MAX_GRAMS, { message: RETURN_WEIGHT_MESSAGE })
+  returnWeightGrams?: number;
+}
+
+/**
+ * Trường thu rác kèm đơn dùng chung báo giá và đặt đơn. `wasteRequestId` và `inlinePickup` loại trừ nhau (service trả 400 khi gửi cả hai,
+ * để câu báo nêu đúng việc cần làm). Không gửi trường nào thì hành vi như bản app cũ.
+ */
+export abstract class CheckoutPickupFieldsDto {
+  /** Yêu cầu thu kèm rác (PICKUP, OPEN, chưa gắn đơn) của chính khách; server khoá và gắn vào kiện Tubu (§12.2). */
+  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(64) wasteRequestId?: string;
+
+  @IsOptional() @IsObject() @ValidateNested() @Type(() => InlinePickupDto) inlinePickup?: InlinePickupDto;
+
+  @IsOptional()
+  @IsInt({ message: RETURN_WEIGHT_MESSAGE })
+  @Min(RETURN_WEIGHT_MIN_GRAMS, { message: RETURN_WEIGHT_MESSAGE })
+  @Max(RETURN_WEIGHT_MAX_GRAMS, { message: RETURN_WEIGHT_MESSAGE })
+  returnWeightGrams?: number;
+
+  /** Quà hiện vật khách bỏ ra khỏi đơn này; quà đó ở lại ví cho đơn sau. */
+  @IsOptional() @IsArray() @ArrayMaxSize(50) @IsString({ each: true }) @MaxLength(64, { each: true }) excludeGiftRedemptionIds?: string[];
+}
+
+export class QuoteDto extends CheckoutPickupFieldsDto {
   @IsString() addressId!: string;
   @IsOptional() @IsInt() @Min(0) pointsToUse?: number;
   /** Slug gian hàng — để tính giảm combo (nếu mua qua gian hàng). */
@@ -45,7 +86,7 @@ export class CouponPreviewDto {
 // cho đơn cũ.
 const CHECKOUT_PAYMENT_METHODS = ['COD', 'BANK_TRANSFER', 'WALLET', 'ZALOPAY'] as const;
 
-export class PlaceOrderDto {
+export class PlaceOrderDto extends CheckoutPickupFieldsDto {
   @IsString() addressId!: string;
 
   @IsIn(CHECKOUT_PAYMENT_METHODS)
@@ -83,7 +124,15 @@ export class PlaceOrderDto {
   @ValidateNested()
   @Type(() => InvoiceRequestDto)
   invoiceRequest?: InvoiceRequestDto;
+}
 
-  /** Yêu cầu thu kèm rác (PICKUP, OPEN, chưa gắn đơn) của chính khách; server khoá và gắn vào kiện Tubu (§12.2). */
-  @IsOptional() @IsString() @IsNotEmpty() @MaxLength(64) wasteRequestId?: string;
+/** `GET /checkout/pickup-options?addressId=&itemIds=a,b`: cùng địa chỉ và phần giỏ đang thanh toán như báo giá. */
+export class PickupOptionsQueryDto {
+  @IsString() addressId!: string;
+  @IsOptional()
+  @Transform(({ value }: { value: unknown }) => splitIds(value))
+  @IsArray()
+  @ArrayMaxSize(200)
+  @IsString({ each: true })
+  itemIds?: string[];
 }

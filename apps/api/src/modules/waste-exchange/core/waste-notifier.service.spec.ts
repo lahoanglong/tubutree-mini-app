@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Logger } from '@nestjs/common';
 import { WASTE_CLOSE_REASON_VALUES, WASTE_REJECTION_REASON_VALUES } from '@tubutree/shared-types';
-import { WASTE_EXPIRED_DETAIL_TEXT, WASTE_MAIL_IN_HOLD_EXPIRED_TEXT, WASTE_REJECTION_REASON_TEXT, WasteNotifierService, stripTrailingStop } from './waste-notifier.service';
+import { WASTE_EXPIRED_DETAIL_TEXT, WASTE_HOME_PICKUP_EXPIRED_DETAIL_TEXT, WASTE_MAIL_IN_HOLD_EXPIRED_TEXT, WASTE_REJECTION_REASON_TEXT, WasteNotifierService, stripTrailingStop } from './waste-notifier.service';
 import type { NotificationsService } from '../../notifications/notifications.service';
 
 const make = (fail = false) => {
@@ -27,6 +27,10 @@ describe('WasteNotifierService (spec 10.2, 11.6; registry 4.4)', () => {
     ['requestExpired HOLD_EXPIRED DROP_OFF keeps the generic sentence', (s) => s.requestExpired('u1', { ...req, method: 'DROP_OFF' }, 'HOLD_EXPIRED', new Date('2026-10-20T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: 'hết hạn giữ chỗ, phần trần của bạn đã được trả lại', request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-20T03:00:00.000Z'],
     ['requestExpired HOLD_EXPIRED MAIL_IN points to CSKH with the tracking code', (s) => s.requestExpired('u1', { ...req, method: 'MAIL_IN' }, 'HOLD_EXPIRED', new Date('2026-10-20T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: 'hết hạn giữ chỗ. Nếu bạn đã gửi kiện, hãy nhắn CSKH kèm mã vận đơn để được hỗ trợ', request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-20T03:00:00.000Z'],
     ['requestExpired LOST on MAIL_IN is not rewritten', (s) => s.requestExpired('u1', { ...req, method: 'MAIL_IN' }, 'LOST', new Date('2026-10-21T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: 'kiện thất lạc trên đường gửi. Bạn nhắn Tubu Tree để được hỗ trợ', request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-21T03:00:00.000Z'],
+    ['requestExpired HOLD_EXPIRED HOME_PICKUP nói rõ bưu tá chưa tới và điểm ship đã hoàn', (s) => s.requestExpired('u1', { ...req, method: 'HOME_PICKUP' }, 'HOLD_EXPIRED', new Date('2026-10-20T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: WASTE_HOME_PICKUP_EXPIRED_DETAIL_TEXT.HOLD_EXPIRED!, request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-20T03:00:00.000Z'],
+    ['requestExpired PICKUP_NO_SHOW HOME_PICKUP nói bưu tá không lấy được rác', (s) => s.requestExpired('u1', { ...req, method: 'HOME_PICKUP' }, 'PICKUP_NO_SHOW', new Date('2026-10-20T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: WASTE_HOME_PICKUP_EXPIRED_DETAIL_TEXT.PICKUP_NO_SHOW!, request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-20T03:00:00.000Z'],
+    ['requestExpired lý do HOME_PICKUP không có câu riêng (LOST) dùng câu chung', (s) => s.requestExpired('u1', { ...req, method: 'HOME_PICKUP' }, 'LOST', new Date('2026-10-21T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: WASTE_EXPIRED_DETAIL_TEXT.LOST, request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-21T03:00:00.000Z'],
+    ['homePickupClosed dùng lý do do nơi gọi truyền vào', (s) => s.homePickupClosed('u1', req, 'đơn vị vận chuyển không nhận đơn thu gom của bạn. Điểm Xanh trả phí ship đã được hoàn lại', new Date('2026-10-22T03:00:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRED', { code: 'TR-A2C4E', detail: 'đơn vị vận chuyển không nhận đơn thu gom của bạn. Điểm Xanh trả phí ship đã được hoàn lại', request_id: 'r1' }, 'waste:r1:EXPIRED:2026-10-22T03:00:00.000Z'],
     ['requestExpiring DROP_OFF', (s) => s.requestExpiring('u1', req, 'DROP_OFF', new Date('2026-10-20T17:30:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRING', { code: 'TR-A2C4E', until: '21/10/2026', next_step: 'mang rác tới điểm nhận', request_id: 'r1' }, 'waste:r1:EXPIRING'],
     ['requestExpiring MAIL_IN', (s) => s.requestExpiring('u1', req, 'MAIL_IN', new Date('2026-10-20T17:30:00.000Z')), 'u1', 'WASTE_REQUEST_EXPIRING', { code: 'TR-A2C4E', until: '21/10/2026', next_step: 'gửi kiện và nhập mã vận đơn', request_id: 'r1' }, 'waste:r1:EXPIRING'],
     ['pickupStarted', (s) => s.pickupStarted('u1', req, new Date('2026-10-20T17:30:00.000Z')), 'u1', 'WASTE_PICKUP_STARTED', { code: 'TR-A2C4E', until: '21/10/2026', request_id: 'r1' }, 'waste:r1:IN_TRANSIT'],
@@ -60,6 +64,16 @@ describe('WasteNotifierService (spec 10.2, 11.6; registry 4.4)', () => {
       expect(t).not.toContain("'");
       expect(t).not.toMatch(/voucher/i);
       expect(t).not.toMatch(/(?<![\p{L}_])xu(?![\p{L}_])/iu);
+    }
+  });
+
+  it('câu đóng phiếu HOME_PICKUP: không dấu chấm cuối, không nháy đơn, chỉ gồm lý do thật sự xảy ra với shipper', () => {
+    expect(Object.keys(WASTE_HOME_PICKUP_EXPIRED_DETAIL_TEXT).sort()).toEqual(['HOLD_EXPIRED', 'PICKUP_NO_SHOW', 'SHIP_LOCKED']);
+    for (const t of Object.values(WASTE_HOME_PICKUP_EXPIRED_DETAIL_TEXT)) {
+      expect(t!.endsWith('.')).toBe(false);
+      expect(t).not.toContain("'");
+      expect(t).not.toMatch(/voucher/i);
+      expect(t).toContain('Điểm Xanh dùng để trả phí shipper');
     }
   });
 

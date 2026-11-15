@@ -2,7 +2,7 @@ import type { Prisma } from '@prisma/client';
 import { startOfVnDay } from '../../../common/vn-time';
 import { WASTE_OPEN_STATUSES } from '../waste.constants';
 
-export const WASTE_TO_COUNT_WHERE: Prisma.WasteRequestWhereInput = { method: { in: ['MAIL_IN', 'PICKUP'] }, status: 'RECEIVED' };
+export const WASTE_TO_COUNT_WHERE: Prisma.WasteRequestWhereInput = { method: { in: ['MAIL_IN', 'PICKUP', 'HOME_PICKUP'] }, status: 'RECEIVED' };
 
 export const WASTE_EXPIRED_WHERE: Prisma.WasteRequestWhereInput = { status: 'EXPIRED' };
 
@@ -29,7 +29,7 @@ export function wasteOrderNotDeliveredWhere(): Prisma.WasteRequestWhereInput {
 }
 
 export function wasteTransitOverdueWhere(now: Date, reviewDays: number): Prisma.WasteRequestWhereInput {
-  return { method: 'MAIL_IN', status: 'IN_TRANSIT', inTransitAt: { lt: new Date(now.getTime() - reviewDays * 86_400_000) } };
+  return { method: { in: ['MAIL_IN', 'HOME_PICKUP'] }, status: 'IN_TRANSIT', inTransitAt: { lt: new Date(now.getTime() - reviewDays * 86_400_000) } };
 }
 
 export function wasteOrderMismatchWhere(): Prisma.WasteRequestWhereInput {

@@ -121,7 +121,7 @@ export class WasteReverseService {
         this.logger.warn(`pointsReversed failed for ${id}: ${String(e)}`);
       }
     }
-    if (done.method === 'MAIL_IN' || done.method === 'PICKUP') {
+    if (done.method === 'MAIL_IN' || done.method === 'PICKUP' || done.method === 'HOME_PICKUP') {
       try {
         await this.shipLock.evaluateAndLock(done.userId, { shortfallLockPct: cfg.shortfallLockPct, shortfallLockStreak: cfg.shortfallLockStreak });
       } catch (e) {

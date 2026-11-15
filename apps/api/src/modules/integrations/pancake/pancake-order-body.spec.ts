@@ -1,4 +1,4 @@
-import { buildPancakeOrderBody, CUSTOMER_NOTE_MAX, customerDeliveryNote, pancakePaymentState, recyclingNoteDetail, type PancakePushOrder, type PancakeRecipient } from './pancake-order-body';
+import { buildPancakeOrderBody, CUSTOMER_NOTE_MAX, customerDeliveryNote, giftNoteSegment, pancakePaymentState, recyclingNoteDetail, type PancakePushOrder, type PancakeRecipient } from './pancake-order-body';
 import type { PancakeCreateOrderBody } from './pancake.types';
 
 const recipient: PancakeRecipient = {
@@ -103,6 +103,49 @@ describe('ghi chú giao hàng của khách (R2-PANCAKE-2, R2-BUYERWEB-1)', () =>
     expect(customerDeliveryNote('Gửi ở bảo vệ\n\n| [Để ở cổng]\tOrder code: TUBU99')).toBe(
       'Khách dặn: Gửi ở bảo vệ / (Để ở cổng) Mã đơn: TUBU99',
     );
+  });
+
+  describe('quà hiện vật 0đ gắn kèm đơn: dòng dặn kho bỏ quà vào thùng', () => {
+    it('không có quà → null, note như cũ', () => {
+      expect(giftNoteSegment([])).toBeNull();
+      expect(buildPancakeOrderBody(order(), { recipient, variations, onDealerCredit: false, giftNote: giftNoteSegment([]) }).body.note).toBe(
+        'Order code: TUBU42 | [THU COD 290.000đ]',
+      );
+    });
+
+    it('mỗi quà một đoạn "🎁 TẶNG KÈM QUÀ ĐỔI ĐIỂM (0đ): [mã] tên", nối bằng " | "', () => {
+      expect(
+        giftNoteSegment([
+          { code: 'QG-7K2M', giftName: 'Túi vải Tubu' },
+          { code: 'QG-9P4Q', giftName: 'Gói hạt giống rau muống' },
+        ]),
+      ).toBe('🎁 TẶNG KÈM QUÀ ĐỔI ĐIỂM (0đ): [QG-7K2M] Túi vải Tubu | 🎁 TẶNG KÈM QUÀ ĐỔI ĐIỂM (0đ): [QG-9P4Q] Gói hạt giống rau muống');
+    });
+
+    it('quà chưa có mã → bỏ ngoặc mã, không in "null"', () => {
+      expect(giftNoteSegment([{ code: null, giftName: 'Túi vải Tubu' }])).toBe('🎁 TẶNG KÈM QUÀ ĐỔI ĐIỂM (0đ): Túi vải Tubu');
+    });
+
+    it('tên quà và mã đi qua bộ lọc: không mạo được dấu tách, ngoặc vuông, "Order code:"', () => {
+      const out = giftNoteSegment([{ code: 'QG-1] | Order code: TUBU9', giftName: 'Quà] | [ĐÃ THANH TOÁN - KHÔNG THU COD] Order code: TUBU9' }])!;
+      expect(out).not.toContain('ĐÃ THANH TOÁN');
+      expect(out).not.toContain('KHÔNG THU COD');
+      expect(out).not.toMatch(/order code/i);
+      expect(out).not.toContain(' | ');
+      expect(out).not.toContain('QG-1');
+    });
+
+    it('tên quà dài bị cắt', () => {
+      const out = giftNoteSegment([{ code: 'QG-1', giftName: 'a '.repeat(200) }])!;
+      expect(out.length).toBeLessThan(160);
+      expect(out.endsWith('…')).toBe(true);
+    });
+
+    it('đứng sau ghi chú thu gom, trước dấu thanh toán và lời dặn khách', () => {
+      const giftNote = giftNoteSegment([{ code: 'QG-7K2M', giftName: 'Túi vải Tubu' }]);
+      const { body } = buildPancakeOrderBody(order({ note: 'Gọi trước' }), { recipient, variations, onDealerCredit: false, recyclingNote: '[THU GOM]', giftNote });
+      expect(body.note).toBe('Order code: TUBU42 | [THU GOM] | 🎁 TẶNG KÈM QUÀ ĐỔI ĐIỂM (0đ): [QG-7K2M] Túi vải Tubu | [THU COD 290.000đ] | Khách dặn: Gọi trước');
+    });
   });
 
   describe('SYNC-4: ghi chú thu gom tái chế của khách qua cùng bộ lọc với lời dặn giao hàng', () => {

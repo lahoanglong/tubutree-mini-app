@@ -3,7 +3,7 @@ import * as F from './waste-queue-filters';
 describe('waste queue filters (single source for M3.8, M4.3, M4.6, M4.8)', () => {
   const now = new Date('2026-10-17T03:00:00.000Z');
   it('static filters', () => {
-    expect(F.WASTE_TO_COUNT_WHERE).toEqual({ method: { in: ['MAIL_IN', 'PICKUP'] }, status: 'RECEIVED' });
+    expect(F.WASTE_TO_COUNT_WHERE).toEqual({ method: { in: ['MAIL_IN', 'PICKUP', 'HOME_PICKUP'] }, status: 'RECEIVED' });
     expect(F.WASTE_EXPIRED_WHERE).toEqual({ status: 'EXPIRED' });
     expect(F.WASTE_UNMATCHED_OPEN_WHERE).toEqual({ status: 'OPEN' });
     expect(F.WASTE_POINTS_PENDING_WHERE).toEqual({ status: 'PENDING' });
@@ -21,8 +21,8 @@ describe('waste queue filters (single source for M3.8, M4.3, M4.6, M4.8)', () =>
       order: { is: { status: { notIn: ['DELIVERED', 'RETURNED', 'CANCELLED'] } } },
     });
   });
-  it('transit overdue: MAIL_IN IN_TRANSIT older than reviewDays', () => {
-    expect(F.wasteTransitOverdueWhere(now, 30)).toEqual({ method: 'MAIL_IN', status: 'IN_TRANSIT', inTransitAt: { lt: new Date('2026-09-17T03:00:00.000Z') } });
+  it('transit overdue: MAIL_IN and HOME_PICKUP IN_TRANSIT older than reviewDays', () => {
+    expect(F.wasteTransitOverdueWhere(now, 30)).toEqual({ method: { in: ['MAIL_IN', 'HOME_PICKUP'] }, status: 'IN_TRANSIT', inTransitAt: { lt: new Date('2026-09-17T03:00:00.000Z') } });
   });
   it('order mismatch: cancelled order with live request, or delivered/returned order with cancelled request', () => {
     expect(F.wasteOrderMismatchWhere()).toEqual({

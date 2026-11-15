@@ -52,8 +52,20 @@ describe('evaluateMatch', () => {
     const t = tx(null, 1);
     await expect(evaluateMatch(t, R, { phoneMatchConfirmed: true })).resolves.toEqual({ ok: true, basis: 'TRACKING_PHONE' });
     expect(t.wasteRequest.count).toHaveBeenCalledWith({
-      where: { trackingNorm: 'SPX123', method: 'MAIL_IN', status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } },
+      where: { trackingNorm: 'SPX123', method: { in: ['MAIL_IN', 'HOME_PICKUP'] }, status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } },
     });
+  });
+
+  it('HOME_PICKUP đối chiếu như MAIL_IN: mã vận đơn hãng + số điện thoại đã xác nhận, đếm cả hai loại để không nhận nhầm kiện trùng mã', async () => {
+    const home = { ...R, method: 'HOME_PICKUP' as const };
+    const t = tx(null, 1);
+    await expect(evaluateMatch(t, home, { phoneMatchConfirmed: true })).resolves.toEqual({ ok: true, basis: 'TRACKING_PHONE' });
+    expect(t.wasteRequest.count).toHaveBeenCalledWith({
+      where: { trackingNorm: 'SPX123', method: { in: ['MAIL_IN', 'HOME_PICKUP'] }, status: { in: ['OPEN', 'IN_TRANSIT', 'RECEIVED'] } },
+    });
+    await expect(evaluateMatch(tx(null, 2), home, { phoneMatchConfirmed: true })).resolves.toEqual({ ok: false, reason: 'TRACKING_MULTI' });
+    await expect(evaluateMatch(tx(null), home, {})).resolves.toEqual({ ok: false, reason: 'NO_MATCH' });
+    await expect(evaluateMatch(tx(null), { ...home, trackingNorm: null }, { phoneMatchConfirmed: true })).resolves.toEqual({ ok: false, reason: 'NO_MATCH' });
   });
 
   it('reports TRACKING_MULTI for several requests and NO_MATCH for none', async () => {

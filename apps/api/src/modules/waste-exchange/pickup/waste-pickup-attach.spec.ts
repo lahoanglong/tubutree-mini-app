@@ -1,7 +1,8 @@
-import { ConflictException } from '@nestjs/common';
+import { BadRequestException, ConflictException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import type { SystemConfigService } from '../../system-config/system-config.service';
 import { writeWasteEvent } from '../core/waste-events';
+import { PICKUP_BATTERY_HCM_ONLY_MESSAGE } from '../core/waste-pickup-rules';
 import {
   attachPickupRequest,
   buildPickupRecyclingNote,
@@ -18,11 +19,22 @@ const LINES = [
   { itemName: 'Vỏ hộp sữa', unitLabel: 'vỏ', declaredQty: 12 },
   { itemName: 'Thùng carton', unitLabel: 'thùng', declaredQty: 2 },
 ];
+const HCM = 'Thành phố Hồ Chí Minh';
 
-function fakeTx(o: { locked?: { id: string; code: string }[]; flags?: { blockedAt: Date | null; shipLockedAt: Date | null } | null; attachCount?: number } = {}) {
+function fakeTx(
+  o: {
+    locked?: { id: string; code: string; estimatedPoints?: number }[];
+    flags?: { blockedAt: Date | null; shipLockedAt: Date | null } | null;
+    attachCount?: number;
+    /** Phiếu có dòng thuộc món nguy hại (Pin): truy vấn `item: { hazardous: true }` trả dòng này. */
+    hazardous?: boolean;
+  } = {},
+) {
   const tx = {
-    $queryRaw: jest.fn().mockResolvedValue(o.locked ?? [{ id: 'r1', code: 'TR-ABC23' }]),
-    wasteRequestLine: { findMany: jest.fn().mockResolvedValue(LINES) },
+    $queryRaw: jest.fn().mockResolvedValue(o.locked ?? [{ id: 'r1', code: 'TR-ABC23', estimatedPoints: 12_000 }]),
+    wasteRequestLine: {
+      findMany: jest.fn().mockImplementation(async (args: { where: { item?: unknown } }) => (args.where.item ? (o.hazardous ? [{ id: 'l-pin' }] : []) : LINES)),
+    },
     wasteUserFlags: { findUnique: jest.fn().mockResolvedValue(o.flags ?? null) },
     wasteRequest: { updateMany: jest.fn().mockResolvedValue({ count: o.attachCount ?? 1 }) },
   };
@@ -64,7 +76,7 @@ describe('readPickupGate (pre-tx, §12.2 step 2)', () => {
 describe('lockPickupRequestForCheckout (§12.2 step 2 (a) and (b))', () => {
   it('locks the row FOR UPDATE with the five conditions, never by expiresAt, binding only id and userId', async () => {
     const tx = fakeTx();
-    await lockPickupRequestForCheckout(tx, 'u1', 'r1');
+    await lockPickupRequestForCheckout(tx, 'u1', 'r1', HCM);
     const sql = sqlOf(tx.$queryRaw);
     for (const part of ['FROM "waste_requests"', '"id" = ?', '"userId" = ?', `"method" = 'PICKUP'`, `"status" = 'OPEN'`, '"orderId" IS NULL', 'FOR UPDATE']) {
       expect(sql).toContain(part);
@@ -73,10 +85,11 @@ describe('lockPickupRequestForCheckout (§12.2 step 2 (a) and (b))', () => {
     expect(tx.$queryRaw.mock.calls[0]!.slice(1)).toEqual(['r1', 'u1']);
   });
 
-  it('reads lines after the lock, then the flags with tx, and returns id, code and lines', async () => {
+  it('reads lines after the lock, then the flags with tx, and returns id, code, locked estimate and lines', async () => {
     const tx = fakeTx();
-    const res = await lockPickupRequestForCheckout(tx, 'u1', 'r1');
-    expect(res).toEqual({ id: 'r1', code: 'TR-ABC23', lines: LINES });
+    const res = await lockPickupRequestForCheckout(tx, 'u1', 'r1', HCM);
+    expect(res).toEqual({ id: 'r1', code: 'TR-ABC23', estimatedPoints: 12_000, lines: LINES });
+    expect(sqlOf(tx.$queryRaw)).toContain('"estimatedPoints"');
     expect(tx.wasteRequestLine.findMany).toHaveBeenCalledWith({
       where: { requestId: 'r1' },
       orderBy: { id: 'asc' },
@@ -90,7 +103,7 @@ describe('lockPickupRequestForCheckout (§12.2 step 2 (a) and (b))', () => {
 
   it('no matching row → 409 "Yêu cầu thu rác đã hết hạn hoặc đã huỷ", flags not read', async () => {
     const tx = fakeTx({ locked: [] });
-    const err = await lockPickupRequestForCheckout(tx, 'u1', 'r1').catch((e: unknown) => e);
+    const err = await lockPickupRequestForCheckout(tx, 'u1', 'r1', HCM).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ConflictException);
     expect((err as ConflictException).message).toBe('Yêu cầu thu rác đã hết hạn hoặc đã huỷ');
     expect(PICKUP_REQUEST_GONE_MESSAGE).toBe('Yêu cầu thu rác đã hết hạn hoặc đã huỷ');
@@ -101,26 +114,69 @@ describe('lockPickupRequestForCheckout (§12.2 step 2 (a) and (b))', () => {
     ['blockedAt', { blockedAt: new Date('2026-10-01T00:00:00Z'), shipLockedAt: null }],
     ['shipLockedAt', { blockedAt: null, shipLockedAt: new Date('2026-10-01T00:00:00Z') }],
   ])('%s set → 409 with the paused message', async (_k, flags) => {
-    const err = await lockPickupRequestForCheckout(fakeTx({ flags }), 'u1', 'r1').catch((e: unknown) => e);
+    const err = await lockPickupRequestForCheckout(fakeTx({ flags }), 'u1', 'r1', HCM).catch((e: unknown) => e);
     expect(err).toBeInstanceOf(ConflictException);
     expect((err as ConflictException).message).toBe('Thu kèm rác đang tạm dừng với tài khoản của bạn, hãy tắt công tắc để đặt đơn');
     expect(PICKUP_PAUSED_MESSAGE).toBe((err as ConflictException).message);
   });
 
   it('flags row with both null, or no flags row → passes', async () => {
-    await expect(lockPickupRequestForCheckout(fakeTx({ flags: { blockedAt: null, shipLockedAt: null } }), 'u1', 'r1')).resolves.toMatchObject({ id: 'r1' });
-    await expect(lockPickupRequestForCheckout(fakeTx({ flags: null }), 'u1', 'r1')).resolves.toMatchObject({ id: 'r1' });
+    await expect(lockPickupRequestForCheckout(fakeTx({ flags: { blockedAt: null, shipLockedAt: null } }), 'u1', 'r1', HCM)).resolves.toMatchObject({ id: 'r1' });
+    await expect(lockPickupRequestForCheckout(fakeTx({ flags: null }), 'u1', 'r1', HCM)).resolves.toMatchObject({ id: 'r1' });
+  });
+
+  describe('Pin cũ (hazardous) chỉ đi kèm đơn giao tới TP.HCM', () => {
+    const withBattery = { hazardous: true };
+
+    it.each(['Thành phố Hồ Chí Minh', 'TP. Hồ Chí Minh', 'TP.HCM', 'Hồ Chí Minh'])('phiếu có Pin, địa chỉ %s → qua, không cần tra món nguy hại', async (province) => {
+      const tx = fakeTx(withBattery);
+      await expect(lockPickupRequestForCheckout(tx, 'u1', 'r1', province)).resolves.toMatchObject({ id: 'r1' });
+      expect(tx.wasteRequestLine.findMany).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(['Hà Nội', 'Thành phố Đà Nẵng', '', null, undefined])('phiếu có Pin, địa chỉ %j → 400 nêu rõ chỉ nhận khu vực TP.HCM', async (province) => {
+      const err = await lockPickupRequestForCheckout(fakeTx(withBattery), 'u1', 'r1', province).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect((err as BadRequestException).message).toBe(PICKUP_BATTERY_HCM_ONLY_MESSAGE);
+    });
+
+    it('phiếu không có Pin → qua với mọi tỉnh', async () => {
+      const tx = fakeTx();
+      await expect(lockPickupRequestForCheckout(tx, 'u1', 'r1', 'Hà Nội')).resolves.toMatchObject({ id: 'r1' });
+      expect(tx.wasteRequestLine.findMany).toHaveBeenCalledWith({ where: { requestId: 'r1', item: { hazardous: true } }, select: { id: true }, take: 1 });
+    });
+
+    it('khách bị khoá thì báo tạm dừng trước, chưa nói tới Pin', async () => {
+      const flags = { blockedAt: null, shipLockedAt: new Date('2026-10-01T00:00:00Z') };
+      const err = await lockPickupRequestForCheckout(fakeTx({ ...withBattery, flags }), 'u1', 'r1', 'Hà Nội').catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+    });
   });
 });
 
 describe('buildPickupRecyclingNote (§12.2 step 2 (c))', () => {
   it('server-built: TR code then "<item>: N <unit>" lines, no customer text', () => {
-    expect(buildPickupRecyclingNote({ id: 'r1', code: 'TR-ABC23', lines: LINES })).toBe('Thu kèm rác TR-ABC23: Vỏ hộp sữa: 12 vỏ, Thùng carton: 2 thùng');
+    expect(buildPickupRecyclingNote({ code: 'TR-ABC23', lines: LINES })).toBe('Thu kèm rác TR-ABC23: Vỏ hộp sữa: 12 vỏ, Thùng carton: 2 thùng');
+  });
+
+  it('khách khai cân nặng gửi lại → thêm đuôi "; gửi lại ~X.Xkg"; không khai hoặc 0 → không đuôi', () => {
+    expect(buildPickupRecyclingNote({ code: 'TR-ABC23', lines: LINES }, 2000)).toBe('Thu kèm rác TR-ABC23: Vỏ hộp sữa: 12 vỏ, Thùng carton: 2 thùng; gửi lại ~2.0kg');
+    expect(buildPickupRecyclingNote({ code: 'TR-ABC23', lines: LINES }, 500)).toContain('; gửi lại ~0.5kg');
+    expect(buildPickupRecyclingNote({ code: 'TR-ABC23', lines: LINES }, null)).not.toContain('gửi lại');
+    expect(buildPickupRecyclingNote({ code: 'TR-ABC23', lines: LINES }, 0)).not.toContain('gửi lại');
+  });
+
+  it('ghi chú dài bị cắt phần món nhưng giữ nguyên đuôi cân nặng, vẫn <= 500', () => {
+    const many = Array.from({ length: 40 }, (_, i) => ({ itemName: `Món rất dài số ${i} `.repeat(3), unitLabel: 'cái', declaredQty: 99 }));
+    const note = buildPickupRecyclingNote({ code: 'TR-ABC23', lines: many }, 3500);
+    expect(note.length).toBeLessThanOrEqual(PICKUP_NOTE_MAX);
+    expect(note.endsWith('; gửi lại ~3.5kg')).toBe(true);
+    expect(note.startsWith('Thu kèm rác TR-ABC23: ')).toBe(true);
   });
 
   it('never longer than PICKUP_NOTE_MAX (500) and always keeps the code', () => {
     const many = Array.from({ length: 40 }, (_, i) => ({ itemName: `Món rất dài số ${i} `.repeat(3), unitLabel: 'cái', declaredQty: 99 }));
-    const note = buildPickupRecyclingNote({ id: 'r1', code: 'TR-ABC23', lines: many });
+    const note = buildPickupRecyclingNote({ code: 'TR-ABC23', lines: many });
     expect(PICKUP_NOTE_MAX).toBe(500);
     expect(note.length).toBeLessThanOrEqual(500);
     expect(note.startsWith('Thu kèm rác TR-ABC23: ')).toBe(true);

@@ -307,7 +307,7 @@ export class WasteConfirmService {
       } catch (e) {
         this.logger.warn(`Không gửi được tin từ chối của ${done.code}: ${e instanceof Error ? e.message : String(e)}`);
       }
-      if (done.method === 'MAIL_IN' || done.method === 'PICKUP') {
+      if (done.method === 'MAIL_IN' || done.method === 'PICKUP' || done.method === 'HOME_PICKUP') {
         try {
           await this.shipLock.evaluateAndLock(done.userId, { shortfallLockPct: cfg.shortfallLockPct, shortfallLockStreak: cfg.shortfallLockStreak });
         } catch (e) {
@@ -331,9 +331,9 @@ export class WasteConfirmService {
       if (!req) throw new NotFoundException(NOT_FOUND);
 
       const closeReason: WasteCloseReason | null =
-        req.method === 'MAIL_IN' && req.status === 'IN_TRANSIT'
+        (req.method === 'MAIL_IN' || req.method === 'HOME_PICKUP') && req.status === 'IN_TRANSIT'
           ? 'LOST'
-          : (req.method === 'MAIL_IN' || req.method === 'PICKUP') && req.status === 'RECEIVED'
+          : (req.method === 'MAIL_IN' || req.method === 'PICKUP' || req.method === 'HOME_PICKUP') && req.status === 'RECEIVED'
             ? 'LOST_AT_WAREHOUSE'
             : null;
       if (!closeReason) throw new ConflictException('Yêu cầu này không đóng vì thất lạc được');

@@ -69,7 +69,7 @@ function setup(opts: WasteRaceOptions & { request?: Record<string, unknown>; ord
   // Trả số lượng khai báo mà ghi chú thu rác của đơn được dựng từ đó (checkout.service.ts đọc dòng yêu cầu ngay sau khi khoá).
   const checkout = (orderId = 'o1', holdTicks = 6) =>
     prisma.$transaction(async (tx: any) => {
-      const locked = await lockPickupRequestForCheckout(tx, 'u1', 'r1');
+      const locked = await lockPickupRequestForCheckout(tx, 'u1', 'r1', 'Thành phố Hồ Chí Minh');
       await delay(holdTicks);
       await tx.order.create({ data: { id: orderId, code: `TUBU-${orderId}`, userId: 'u1', status: 'PENDING', deliveredAt: null } });
       await attachPickupRequest(tx, 'u1', 'r1', orderId);

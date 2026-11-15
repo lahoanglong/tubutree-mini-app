@@ -36,11 +36,13 @@ export class WastePreviewService {
       maxOpenRequests: snap.maxOpenRequests,
       requestHoldDays: snap.requestHoldDays,
     };
-    if (body.method === 'PICKUP') holdCfg.lanePickup = (await computeWastePublicFlags(this.systemConfig)).pickup;
+    if (body.method === 'PICKUP' || body.method === 'HOME_PICKUP') holdCfg.lanePickup = (await computeWastePublicFlags(this.systemConfig)).pickup;
+    // Shipper lấy tận nhà: Pin cũ chỉ đi được khi địa chỉ lấy ở TP.HCM, nên xem trước cần biết tỉnh/thành (địa chỉ theo mã tỉnh hoặc địa chỉ mặc định).
+    const pickupProvince = body.method === 'HOME_PICKUP' ? ((await this.province(userId, body.provinceCode))?.name ?? null) : null;
 
     const { result, blocks: allBlocks } = await this.hold.evaluate(
       this.prisma,
-      { path: 'CREATE', userId, method: body.method ?? 'DROP_OFF', lines: body.lines, pointId: body.method === 'DROP_OFF' ? (body.pointId ?? null) : null, now },
+      { path: 'CREATE', userId, method: body.method ?? 'DROP_OFF', lines: body.lines, pointId: body.method === 'DROP_OFF' ? (body.pointId ?? null) : null, ...(body.method === 'HOME_PICKUP' ? { pickupProvince } : {}), now },
       holdCfg,
     );
     const blocks: WastePreviewBlockDTO[] = body.method ? allBlocks : allBlocks.filter((b) => METHOD_FREE_BLOCKS.has(b.code));

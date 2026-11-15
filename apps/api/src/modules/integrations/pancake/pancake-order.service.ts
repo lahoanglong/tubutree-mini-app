@@ -21,6 +21,7 @@ import {
   PANCAKE_PAYMENT_TAG,
   pancakePaymentState,
   recyclingNoteDetail,
+  giftNoteSegment,
   type PancakeLinePredicate,
   type PancakeRecipient,
 } from './pancake-order-body';
@@ -383,6 +384,7 @@ export class PancakeOrderService {
       variations,
       onDealerCredit: await this.isOnDealerCredit(order),
       recyclingNote: await this.buildRecyclingNote(order),
+      giftNote: await this.buildGiftNote(order),
       isPancakeLine,
     });
     const tags = await this.client.resolveOrderTags(tagNames);
@@ -756,6 +758,7 @@ export class PancakeOrderService {
       variations,
       onDealerCredit: onCredit,
       recyclingNote: await this.buildRecyclingNote(order),
+      giftNote: await this.buildGiftNote(order),
       isPancakeLine: this.pancakeLinesOf(variations),
     });
     const tags = await this.mergedTags(order, tagNames);
@@ -1172,6 +1175,16 @@ export class PancakeOrderService {
       return `${recyclingTag} [KIỂM TRA GOMDON (mã đơn ${order.code}) TRƯỚC KHI TẠO VẬN ĐƠN TAY]`;
     }
     return `${recyclingTag} [LỖI TẠO GOMDON - CẦN TẠO VẬN ĐƠN BẰNG TAY]`;
+  }
+
+  /** Quà hiện vật 0đ đã gắn vào đơn này (chỉ đơn kiện Tubu có), theo thứ tự khách đổi. */
+  private async buildGiftNote(order: Pick<Order, 'id'>): Promise<string | null> {
+    const gifts = await this.prisma.wasteGiftRedemption.findMany({
+      where: { attachedOrderId: order.id },
+      select: { code: true, giftName: true },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+    return giftNoteSegment(gifts);
   }
 
   private async recyclingWeightFallback(): Promise<number> {

@@ -15,9 +15,9 @@ const THRESHOLDS = {
   avgUnitsFactor: 2, lookupMissCount: 10, lookupMissDays: 1, staffDirectCount: 5, staffDirectDays: 7,
 };
 const DEFAULTS = {
-  enabled: false, laneDropoff: true, laneMailin: true, lanePickup: false, mailinMinPoints: 15_000, pickupMinPoints: 10_000,
+  enabled: false, laneDropoff: true, laneMailin: true, lanePickup: false, mailinMinPoints: 15_000, pickupMinPoints: 3_000,
   customerMonthlyCapPoints: 60_000, maxOpenRequests: 3, requestHoldDays: 7, pickupWaitDays: 14, inTransitReviewDays: 30,
-  mailinMaxWeightKg: 20, mailinMaxEdgeCm: 50, shortfallLockPct: 50, shortfallLockStreak: 3, staffDailyCapPoints: 1_000_000,
+  mailinMaxWeightKg: 20, mailinMaxEdgeCm: 50, shortfallLockPct: 50, shortfallLockStreak: 2, staffDailyCapPoints: 1_000_000,
   giftClaimDays: 60, pointInactiveDays: 60, mailinFeeTable: FEE, alertThresholds: THRESHOLDS, rulesText: '', rulesVersion: '2026-10-17.1',
 };
 
@@ -90,5 +90,18 @@ describe('WasteConfigService.isEnabled', () => {
     const { svc, get } = makeConfig(raw === undefined ? {} : { 'waste.enabled': raw });
     await expect(svc.isEnabled()).resolves.toBe(expected);
     expect(get).toHaveBeenCalledWith('waste.enabled', false);
+  });
+});
+
+describe('WasteConfigService.pointExpiresAt (hạn của Điểm Xanh phí ship được hoàn)', () => {
+  const NOW = new Date('2026-11-15T03:00:00.000Z');
+  it('cộng loyalty.point_expire_months tháng vào lúc hoàn; đọc đúng khoá cấu hình', async () => {
+    const { svc, get } = makeConfig({ 'loyalty.point_expire_months': 6 });
+    await expect(svc.pointExpiresAt(NOW)).resolves.toEqual(new Date('2027-05-15T03:00:00.000Z'));
+    expect(get).toHaveBeenCalledWith('loyalty.point_expire_months', 12);
+  });
+  it.each([[undefined], [0], [-3], ['x'], [Number.NaN]])('cấu hình hỏng (%p) rơi về 12 tháng, không trả ngày trong quá khứ', async (raw) => {
+    const { svc } = makeConfig(raw === undefined ? {} : { 'loyalty.point_expire_months': raw });
+    await expect(svc.pointExpiresAt(NOW)).resolves.toEqual(new Date('2027-11-15T03:00:00.000Z'));
   });
 });

@@ -7,9 +7,12 @@ import { GomdonModule } from '../integrations/gomdon/gomdon.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { StorefrontModule } from '../storefront/storefront.module';
 import { FlashSaleModule } from '../flash-sale/flash-sale.module';
+import { WasteCatalogModule } from '../waste-exchange/catalog/waste-catalog.module';
+import { WasteCoreModule } from '../waste-exchange/core/waste-core.module';
+import { WasteCustomerModule } from '../waste-exchange/customer/waste-customer.module';
 
 @Module({
-  imports: [CartModule, PancakeModule, GomdonModule, WalletModule, StorefrontModule, FlashSaleModule],
+  imports: [CartModule, PancakeModule, GomdonModule, WalletModule, StorefrontModule, FlashSaleModule, WasteCoreModule, WasteCustomerModule, WasteCatalogModule],
   controllers: [CheckoutController],
   providers: [CheckoutService],
 })

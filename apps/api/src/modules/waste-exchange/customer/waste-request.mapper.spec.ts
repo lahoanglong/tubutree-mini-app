@@ -54,4 +54,72 @@ describe('waste request mapper (allow-list, spec 15.1)', () => {
   it('closeReason and pointAvailable pass through (cancel cause: SHIP_LOCKED, ORDER_CANCELLED, null = customer)', () => {
     expect(toRequestDetail(row({ status: 'CANCELLED', closeReason: 'SHIP_LOCKED' }), false)).toMatchObject({ closeReason: 'SHIP_LOCKED', pointAvailable: false });
   });
+  describe('HOME_PICKUP (shipper lấy rác tận nhà)', () => {
+    const home = (o: Record<string, unknown> = {}) =>
+      row({
+        method: 'HOME_PICKUP', status: 'OPEN', carrier: 'BestExpress', trackingCode: 'BE77', gomdonStatus: '1', declaredWeightGrams: 2500,
+        shipFeeVnd: 25_000, shipFeePointsUsed: 10_000, shipFeeCodVnd: 15_000, shipFeePointsRefunded: null, receivedAt: null, completedAt: null, pointsAwarded: null,
+        pickupAddress: { addressId: 'a1', recipient: 'Lan', phone: '0901234567', street: '1 Lê Lợi', ward: 'Phường Bến Nghé', province: 'Thành phố Hồ Chí Minh' },
+        shippingHistory: [
+          { at: '2026-10-17T03:00:05.000Z', status: '1' },
+          { at: '2026-10-17T05:00:00.000Z', status: '3' },
+          { at: '2026-10-17T07:00:00.000Z', status: '4' },
+          { at: '2026-10-17T08:00:00.000Z', status: '5' },
+        ],
+        ...o,
+      });
+
+    it('chi tiết và danh sách có thêm homePickup, các phương thức khác không có khoá này', () => {
+      expect(toRequestDetail(row(), true)).not.toHaveProperty('homePickup');
+      expect(toRequestSummary(row())).not.toHaveProperty('homePickup');
+      expect(toRequestDetail(home(), true).homePickup).toBeDefined();
+      expect(toRequestSummary(home()).homePickup).toBeDefined();
+    });
+
+    it('homePickup chỉ có các khoá cho phép, địa chỉ rút gọn không kèm tên và số điện thoại', () => {
+      const dto = toRequestDetail(home(), true).homePickup!;
+      expect(Object.keys(dto).sort()).toEqual([
+        'declaredWeightGrams', 'gomdonStatus', 'pickupAddressText', 'shipFeeCodVnd', 'shipFeePointsRefunded', 'shipFeePointsUsed', 'shipFeeVnd', 'statusText', 'timeline',
+      ]);
+      expect(dto).toMatchObject({
+        gomdonStatus: '1', statusText: 'Đã tạo đơn, chờ bưu tá tới lấy rác', shipFeeVnd: 25_000, shipFeePointsUsed: 10_000, shipFeeCodVnd: 15_000,
+        shipFeePointsRefunded: 0, declaredWeightGrams: 2500, pickupAddressText: '1 Lê Lợi, Phường Bến Nghé, Thành phố Hồ Chí Minh',
+      });
+      const json = JSON.stringify(toRequestDetail(home(), true));
+      expect(json).not.toContain('Lan');
+      expect(json).not.toContain('0901234567');
+      expect(json).not.toContain('shippingHistory');
+      expect(json).not.toContain('gomdonOrderId');
+    });
+
+    it('timeline: mốc tạo đơn, rồi từng mốc Gomdon; 4 và 5 cùng câu nên chỉ giữ một', () => {
+      const { timeline } = toRequestDetail(home(), true).homePickup!;
+      expect(timeline.map((t) => t.text)).toEqual(['Đã tạo đơn thu gom', 'Bưu tá đã lấy rác', 'Đang về kho Tubu']);
+      expect(timeline[0]!.at).toBe('2026-10-17T03:00:00.000Z');
+    });
+
+    it('timeline cuối: kho nhận rồi cộng điểm khi COMPLETED', () => {
+      const dto = toRequestDetail(home({ status: 'COMPLETED', gomdonStatus: '7', receivedAt: D('2026-10-18T01:00:00Z'), completedAt: D('2026-10-18T02:00:00Z'), pointsAwarded: 6_000 }), true).homePickup!;
+      expect(dto.statusText).toBe('Kho đã kiểm nhận và cộng 6.000 Điểm Xanh');
+      expect(dto.timeline.at(-2)!.text).toBe('Kho Tubu đã nhận rác, đang kiểm đếm');
+      expect(dto.timeline.at(-1)!.text).toBe('Kho đã kiểm nhận và cộng 6.000 Điểm Xanh');
+    });
+
+    it('phiếu huỷ hoặc hết hạn vì bưu tá chưa lấy được: câu trạng thái đúng, số điểm đã hoàn hiện ra', () => {
+      expect(toRequestDetail(home({ status: 'CANCELLED', gomdonStatus: '2', shipFeePointsRefunded: 10_000 }), true).homePickup).toMatchObject({ statusText: 'Đơn thu gom đã huỷ', shipFeePointsRefunded: 10_000 });
+      expect(toRequestDetail(home({ status: 'EXPIRED', gomdonStatus: '10', closeReason: 'PICKUP_NO_SHOW' }), true).homePickup!.statusText).toBe('Bưu tá chưa lấy được rác');
+      expect(toRequestDetail(home({ status: 'EXPIRED', gomdonStatus: null, closeReason: 'HOLD_EXPIRED' }), true).homePickup!.statusText).toBe('Yêu cầu đã đóng');
+    });
+
+    it('chưa có vận đơn hoặc Gomdon báo mã lạ: câu chờ tạo vận đơn, không lộ mã nội bộ', () => {
+      expect(toRequestDetail(home({ gomdonStatus: null, shippingHistory: null }), true).homePickup).toMatchObject({ statusText: 'Đang tạo vận đơn' });
+      expect(toRequestDetail(home({ gomdonStatus: 'NEEDS_MANUAL_CHECK' }), true).homePickup!.statusText).toBe('Tubu đang kiểm tra vận đơn của bạn');
+      expect(toRequestDetail(home({ gomdonStatus: '99' }), true).homePickup!.statusText).toBe('Đang tạo vận đơn');
+    });
+
+    it('không sửa được (cân nặng, địa chỉ, phí đã khoá trên vận đơn), huỷ được khi còn OPEN', () => {
+      expect(toRequestDetail(home({ trackingCode: null }), true)).toMatchObject({ editable: false, cancellable: true });
+      expect(toRequestDetail(home({ status: 'IN_TRANSIT', gomdonStatus: '3' }), true)).toMatchObject({ editable: false, cancellable: false });
+    });
+  });
 });

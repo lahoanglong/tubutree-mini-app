@@ -13,7 +13,7 @@ import { WasteConfirmDto } from '../receiving/waste-receiving.dto';
 import { WasteAccessService } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteCatalogueService } from './waste-catalogue.service';
-import { WasteCreateDto, WasteCustomerController, WasteEditDto, WasteNearbyDto, WastePointsQueryDto, WastePreviewDto, WasteTrackingDto } from './waste-customer.controller';
+import { WasteCreateDto, WasteCustomerController, WasteEditDto, WasteNearbyDto, WastePickupQuoteDto, WastePointsQueryDto, WastePreviewDto, WasteTrackingDto } from './waste-customer.controller';
 import { WasteMeService } from './waste-me.service';
 import { WastePreviewService } from './waste-preview.service';
 import { WasteRequestsService } from './waste-requests.service';
@@ -29,7 +29,7 @@ const svc = <T extends string>(...m: T[]) => Object.fromEntries(m.map((k) => [k,
 async function build(enabled: boolean) {
   const me = svc('me', 'rules', 'openCount');
   const catalogue = svc('listItems', 'listPoints', 'nearbyPoints');
-  const requests = svc('list', 'detail', 'byOrder', 'create', 'edit', 'setTracking', 'cancel');
+  const requests = svc('list', 'detail', 'byOrder', 'create', 'edit', 'setTracking', 'cancel', 'pickupQuote');
   const preview = svc('preview');
   const mod = await Test.createTestingModule({
     controllers: [WasteCustomerController],
@@ -92,7 +92,7 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     expect(Reflect.getMetadata(PATH_METADATA, WasteCustomerController)).toBe('waste');
     const routes = Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).map((k) => [k, Reflect.getMetadata(METHOD_METADATA, (p as never)[k]), Reflect.getMetadata(PATH_METADATA, (p as never)[k])]);
     expect(routes).toEqual([
-      ['me', 0, 'me'], ['openCount', 0, 'me/open-count'], ['rules', 0, 'rules'], ['publicCatalogue', 0, 'catalogue'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'],
+      ['me', 0, 'me'], ['openCount', 0, 'me/open-count'], ['rules', 0, 'rules'], ['publicCatalogue', 0, 'catalogue'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'], ['pickupQuote', 1, 'pickup-quote'],
       ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['create', 1, 'requests'], ['edit', 4, 'requests/:id'],
       ['setTracking', 2, 'requests/:id/tracking'], ['cancel', 1, 'requests/:id/cancel'],
     ]);
@@ -118,6 +118,49 @@ describe('WasteCustomerController.preview (spec 15.2)', () => {
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, p.preview)).toBe(200);
     expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.preview)).toBe(60);
     expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, p.preview)).toBe(60_000);
+  });
+});
+
+describe('WasteCustomerController.pickupQuote (W168 shipper lấy rác tận nhà)', () => {
+  const body = { addressId: 'a1', declaredWeightGrams: 2000, lines: [{ itemId: 'carton', declaredQty: 5 }] };
+  it('FULL gate: chương trình tắt, khách khách/chưa có số điện thoại/bị chặn đều 403 và dịch vụ không được gọi; còn lại body đi thẳng xuống dịch vụ', async () => {
+    const on = await build(true);
+    await expect(on.c.pickupQuote('guest', body)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(on.c.pickupQuote('nophone', body)).rejects.toBeInstanceOf(ForbiddenException);
+    await expect(on.c.pickupQuote('blocked', body)).rejects.toBeInstanceOf(ForbiddenException);
+    const off = await build(false);
+    await expect(off.c.pickupQuote('real', body)).rejects.toThrow(new ForbiddenException(OFF));
+    expect(on.requests.pickupQuote).not.toHaveBeenCalled();
+    expect(off.requests.pickupQuote).not.toHaveBeenCalled();
+    await expect(on.c.pickupQuote('real', body)).resolves.toEqual({ ok: 'pickupQuote' });
+    expect(on.requests.pickupQuote).toHaveBeenCalledWith('real', body);
+  });
+  it('POST pickup-quote trả 200, 30 lần mỗi phút (mỗi lần có thể gọi Gomdon báo phí)', () => {
+    const p = WasteCustomerController.prototype;
+    expect(Reflect.getMetadata(METHOD_METADATA, p.pickupQuote)).toBe(1);
+    expect(Reflect.getMetadata(PATH_METADATA, p.pickupQuote)).toBe('pickup-quote');
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, p.pickupQuote)).toBe(200);
+    expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, p.pickupQuote)).toBe(30);
+    expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, p.pickupQuote)).toBe(60_000);
+  });
+  it.each([
+    [{ addressId: 'a1', declaredWeightGrams: 499, lines: [{ itemId: 'a', declaredQty: 1 }] }],
+    [{ addressId: 'a1', declaredWeightGrams: 10_001, lines: [{ itemId: 'a', declaredQty: 1 }] }],
+    [{ addressId: 'a1', declaredWeightGrams: 1500.5, lines: [{ itemId: 'a', declaredQty: 1 }] }],
+    [{ declaredWeightGrams: 2000, lines: [{ itemId: 'a', declaredQty: 1 }] }],
+    [{ addressId: '', declaredWeightGrams: 2000, lines: [{ itemId: 'a', declaredQty: 1 }] }],
+    [{ addressId: 'a1', declaredWeightGrams: 2000, lines: [] }],
+    [{ addressId: 'a1', declaredWeightGrams: 2000, lines: [{ itemId: 'a', declaredQty: 0 }] }],
+    [{ addressId: 'a1', declaredWeightGrams: 2000, lines: [{ itemId: 'a', declaredQty: 1 }], method: 'HOME_PICKUP' }],
+  ])('DTO từ chối %j', async (bad) => {
+    const pipe = createValidationPipe();
+    await expect(pipe.transform(bad, { type: 'body', metatype: WastePickupQuoteDto as never, data: '' })).rejects.toThrow();
+  });
+  it('DTO nhận body đúng, biên 500 g và 10.000 g', async () => {
+    const pipe = createValidationPipe();
+    for (const w of [500, 2000, 10_000]) {
+      await expect(pipe.transform({ ...body, declaredWeightGrams: w }, { type: 'body', metatype: WastePickupQuoteDto as never, data: '' })).resolves.toBeInstanceOf(WastePickupQuoteDto);
+    }
   });
 });
 
@@ -227,6 +270,14 @@ describe('read DTOs (global ValidationPipe)', () => {
     [{ method: 'MAIL_IN', lines: [{ itemId: 'a', declaredQty: 15 }], consent: true, packagingConsent: 'yes', postagePaidConsent: true }],
   ])('create DTO rejects %j', async (b) => {
     await expect(run(WasteCreateDto, b)).rejects.toThrow();
+  });
+  it('create DTO nhận HOME_PICKUP kèm địa chỉ, cân nặng 500 đến 10.000 g và công tắc trừ điểm; từ chối cân nặng ngoài biên hoặc công tắc không phải boolean', async () => {
+    const ok = { method: 'HOME_PICKUP', lines: [{ itemId: 'a', declaredQty: 15 }], consent: true, pickupAddressId: 'a1', declaredWeightGrams: 2500, usePointsForShipFee: true };
+    await expect(run(WasteCreateDto, ok)).resolves.toBeInstanceOf(WasteCreateDto);
+    await expect(run(WasteCreateDto, { ...ok, declaredWeightGrams: 499 })).rejects.toThrow();
+    await expect(run(WasteCreateDto, { ...ok, declaredWeightGrams: 10_001 })).rejects.toThrow();
+    await expect(run(WasteCreateDto, { ...ok, usePointsForShipFee: 'yes' })).rejects.toThrow();
+    await expect(run(WasteCreateDto, { ...ok, pickupAddressId: 'x'.repeat(65) })).rejects.toThrow();
   });
   it('create DTO accepts a MAIL_IN body with both commitments', async () => {
     await expect(run(WasteCreateDto, { method: 'MAIL_IN', lines: [{ itemId: 'a', declaredQty: 15 }], consent: true, packagingConsent: true, postagePaidConsent: true })).resolves.toBeInstanceOf(WasteCreateDto);

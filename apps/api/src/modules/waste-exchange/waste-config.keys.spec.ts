@@ -9,6 +9,12 @@ import type { PrismaService } from '../../prisma/prisma.service';
 const SEED = readFileSync(join(__dirname, '../../../prisma/seed.ts'), 'utf-8');
 const SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261020000000_waste_exchange/migration.sql'), 'utf-8');
 
+/**
+ * Migration gốc đã áp ở mọi môi trường nên giữ nguyên giá trị nó gieo; hai khoá này đổi mặc định sau đó (hàng đã có chỉ đổi bằng migration
+ * UPDATE riêng, seed và mặc định trong code thì theo bản mới).
+ */
+const MIGRATION_SEEDED_DEFAULTS: Record<string, unknown> = { 'waste.pickup_min_points': 10_000, 'waste.shortfall_lock_streak': 3 };
+
 const OLD_CLAIM_DAYS_KEY = 'waste.gift_claim_days';
 const OLD_CLAIM_DAYS_DESC = 'Số ngày khách được nhận quà bằng mã, quá hạn thì lượt đổi vào danh sách admin xem lại.';
 type Row = { key: string; value: unknown; category?: string; description?: string; createOnly?: boolean };
@@ -30,7 +36,7 @@ const EXPECTED: [key: string, type: string, def: unknown, min?: number, max?: nu
   ['waste.lane_mailin_enabled', 'boolean', true],
   ['waste.lane_pickup_enabled', 'boolean', false],
   ['waste.mailin_min_points', 'int', 15_000, 1, 1_000_000],
-  ['waste.pickup_min_points', 'int', 10_000, 1, 1_000_000],
+  ['waste.pickup_min_points', 'int', 3_000, 1, 1_000_000],
   ['waste.customer_monthly_cap_points', 'int', 60_000, 1, 2_000_000],
   ['waste.max_open_requests', 'int', 3, 1, 20],
   ['waste.request_hold_days', 'int', 7, 1, 60],
@@ -39,7 +45,7 @@ const EXPECTED: [key: string, type: string, def: unknown, min?: number, max?: nu
   ['waste.mailin_max_weight_kg', 'int', 20, 1, 50],
   ['waste.mailin_max_edge_cm', 'int', 50, 10, 200],
   ['waste.shortfall_lock_pct', 'int', 50, 1, 100],
-  ['waste.shortfall_lock_streak', 'int', 3, 2, 10],
+  ['waste.shortfall_lock_streak', 'int', 2, 2, 10],
   ['waste.staff_daily_cap_points', 'int', 1_000_000, 1, 20_000_000],
   ['waste.gift_claim_days', 'int', 60, 7, 365],
   ['waste.point_inactive_days', 'int', 60, 7, 365],
@@ -150,7 +156,7 @@ describe('seed.ts and the migrations carry the same 22 rows', () => {
     expect(tuples.map((m) => m[1])).toEqual(EXPECTED.slice(0, 21).map((e) => e[0]));
     for (const m of tuples) {
       const def = WASTE_CONFIG_KEYS[m[1] as keyof typeof WASTE_CONFIG_KEYS];
-      expect(JSON.parse(m[2]!)).toEqual(def.default);
+      expect(JSON.parse(m[2]!)).toEqual(m[1]! in MIGRATION_SEEDED_DEFAULTS ? MIGRATION_SEEDED_DEFAULTS[m[1]!] : def.default);
       expect(m[3]).toBe(m[1] === OLD_CLAIM_DAYS_KEY ? OLD_CLAIM_DAYS_DESC : def.description);
     }
   });

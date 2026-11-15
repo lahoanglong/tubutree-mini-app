@@ -241,6 +241,14 @@ describe('WasteReverseService.reverse', () => {
     expect(order.indexOf('tx end')).toBeLessThan(order.indexOf('shipLock'));
   });
 
+  it('evaluates the ship lock after the transaction for HOME_PICKUP too', async () => {
+    const { svc, shipLock, order } = setup({ row: row({ method: 'HOME_PICKUP' }) });
+    await svc.reverse('a1', 'r1', BODY);
+    expect(shipLock.evaluateAndLock).toHaveBeenCalledTimes(1);
+    expect(shipLock.evaluateAndLock).toHaveBeenCalledWith('u1', CFG);
+    expect(order.indexOf('tx end')).toBeLessThan(order.indexOf('shipLock'));
+  });
+
   it('does not evaluate the ship lock for DROP_OFF', async () => {
     const { svc, notifier, shipLock } = setup({ row: row({ method: 'DROP_OFF' }) });
     await svc.reverse('a1', 'r1', BODY);

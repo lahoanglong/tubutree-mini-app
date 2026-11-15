@@ -59,7 +59,8 @@ describe('WasteHoldService, warehouse-only items', () => {
 describe('WasteHoldService, pin (hazardous = xử lý riêng, chỉ mang tới điểm)', () => {
   const pin = { ...battery, status: 'ACTIVE', unitsPerPoint: 10, pointsPerGroup: 1_000, dailyCapQty: 20, monthlyCapQty: 50 };
   const pinLines = (declaredQty: number) => [{ itemId: 'pin', declaredQty }];
-  const SHIP_REFUSED = 'Pin đã dùng không gửi qua đường vận chuyển, chỉ mang tới điểm nhận được';
+  const SHIP_REFUSED = 'Pin cũ cần xử lý an toàn riêng nên hiện chỉ nhận tại điểm thu gom hoặc lấy tận nơi khu vực TP.HCM';
+  const HCM = 'Thành phố Hồ Chí Minh';
 
   it('DROP_OFF tới điểm có nhận pin: 25 viên = 2 nhóm = 2.000 điểm', async () => {
     const { svc, tx } = setup({ items: [pin], links: ['pin'] });
@@ -73,7 +74,11 @@ describe('WasteHoldService, pin (hazardous = xử lý riêng, chỉ mang tới �
   });
   it.each([
     ['MAIL_IN', { method: 'MAIL_IN' as const, pointId: null }],
-    ['PICKUP', { method: 'PICKUP' as const, pointId: null }],
+    ['MAIL_IN dù địa chỉ ở TP.HCM', { method: 'MAIL_IN' as const, pointId: null, pickupProvince: HCM }],
+    ['PICKUP chưa biết tỉnh', { method: 'PICKUP' as const, pointId: null }],
+    ['PICKUP ngoài TP.HCM', { method: 'PICKUP' as const, pointId: null, pickupProvince: 'Tỉnh Đồng Nai' }],
+    ['HOME_PICKUP chưa biết tỉnh', { method: 'HOME_PICKUP' as const, pointId: null }],
+    ['HOME_PICKUP ngoài TP.HCM', { method: 'HOME_PICKUP' as const, pointId: null, pickupProvince: 'Thành phố Hà Nội' }],
   ])('%s có pin bị chặn kèm lý do, cả lúc tạo lẫn lúc xem trước', async (_n, over) => {
     const a = setup({ items: [carton, pin], links: [] });
     const lines = [{ itemId: 'carton', declaredQty: 20 }, ...pinLines(10)];
@@ -81,6 +86,24 @@ describe('WasteHoldService, pin (hazardous = xử lý riêng, chỉ mang tới �
     await expect(call).rejects.toThrow(new ConflictException(SHIP_REFUSED));
     const b = setup({ items: [carton, pin], links: [] });
     expect((await b.svc.evaluate(b.tx, input({ ...over, lines }), CFG)).blocks).toContainEqual({ code: 'ITEM_DROPOFF_ONLY', itemId: 'pin' });
+  });
+  it.each([
+    ['PICKUP', { method: 'PICKUP' as const }],
+    ['HOME_PICKUP', { method: 'HOME_PICKUP' as const }],
+  ])('%s lấy tận nơi ở TP.HCM thì nhận pin (mọi cách viết TP.HCM)', async (_n, over) => {
+    for (const province of [HCM, 'TP. Hồ Chí Minh', 'TP.HCM', 'Hồ Chí Minh']) {
+      const a = setup({ items: [carton, pin], links: [] });
+      const lines = [{ itemId: 'carton', declaredQty: 20 }, ...pinLines(10)];
+      await expect(a.svc.validateAndHold(a.tx, input({ ...over, pointId: null, pickupProvince: province, lines }), CFG)).resolves.toMatchObject({ pointId: 'wh' });
+      const b = setup({ items: [carton, pin], links: [] });
+      expect((await b.svc.evaluate(b.tx, input({ ...over, pointId: null, pickupProvince: province, lines }), CFG)).blocks).toEqual([]);
+    }
+  });
+  it('địa chỉ có chữ Hồ Chí Minh lẫn trong tỉnh khác không được tính là TP.HCM', async () => {
+    const { svc, tx } = setup({ items: [carton, pin], links: [] });
+    await expect(
+      svc.validateAndHold(tx, input({ method: 'HOME_PICKUP', pointId: null, pickupProvince: 'Tỉnh Bình Dương, gần Hồ Chí Minh', lines: [{ itemId: 'carton', declaredQty: 20 }, ...pinLines(10)] }), CFG),
+    ).rejects.toThrow(SHIP_REFUSED);
   });
   it('EDIT một yêu cầu gửi kho để thêm pin cũng bị chặn', async () => {
     const { svc, tx } = setup({ items: [carton, pin], links: [] });
@@ -268,5 +291,58 @@ describe('WasteHoldService.evaluate', () => {
     expect((await full.svc.evaluate(full.tx, input(), CFG)).blocks).toEqual([{ code: 'POINT_QUOTA_FULL' }]);
     const missing = setup({ links: [] });
     expect((await missing.svc.evaluate(missing.tx, input(), CFG)).blocks).toEqual([{ code: 'POINT_MISSING_ITEMS', itemId: 'carton' }]);
+  });
+});
+
+describe('WasteHoldService, HOME_PICKUP (shipper lấy rác tận nhà) cùng luật PICKUP', () => {
+  const HP = (over: Partial<WasteHoldInput> = {}) => input({ method: 'HOME_PICKUP', pointId: null, pickupProvince: 'Thành phố Hồ Chí Minh', lines: [{ itemId: 'carton', declaredQty: 10 }], ...over });
+
+  it('ngưỡng điểm tối thiểu dùng pickupMinPoints (10.000), không phải mailinMinPoints (15.000)', async () => {
+    const ok = setup();
+    await expect(ok.svc.validateAndHold(ok.tx, HP(), CFG)).resolves.toMatchObject({ pointId: 'wh', estimatedPoints: 10_000 });
+    const low = setup();
+    await expect(low.svc.validateAndHold(low.tx, HP({ lines: [{ itemId: 'carton', declaredQty: 9 }] }), CFG)).rejects.toThrow(
+      new ConflictException('Đơn shipper lấy tận nhà cần tối thiểu 10.000 điểm, bạn cần thêm 1.000 điểm nữa'),
+    );
+    const pv = setup();
+    expect((await pv.svc.evaluate(pv.tx, HP({ lines: [{ itemId: 'carton', declaredQty: 9 }] }), CFG)).blocks).toEqual([{ code: 'BELOW_MIN', missingPoints: 1_000 }]);
+  });
+
+  it('đi theo công tắc làn pickup: tắt lanePickup thì chặn dù laneMailin còn bật', async () => {
+    const { svc, tx } = setup();
+    await expect(svc.validateAndHold(tx, HP(), { ...CFG, lanePickup: false })).rejects.toThrow(new ConflictException('Cách giao này đang tạm tắt, hãy chọn cách khác'));
+    const on = setup();
+    await expect(on.svc.validateAndHold(on.tx, HP(), { ...CFG, laneMailin: false })).resolves.toMatchObject({ pointId: 'wh' });
+  });
+
+  it('tài khoản bị khoá đường ship (shipLockedAt): bị chặn, kèm block SHIP_LOCKED khi xem trước', async () => {
+    const a = setup({ flags: { blockedAt: null, shipLockedAt: NOW } });
+    await expect(a.svc.validateAndHold(a.tx, HP(), CFG)).rejects.toThrow(
+      new ForbiddenException('Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn, liên hệ CSKH.'),
+    );
+    const b = setup({ flags: { blockedAt: null, shipLockedAt: NOW } });
+    expect((await b.svc.evaluate(b.tx, HP(), CFG)).blocks).toEqual([{ code: 'SHIP_LOCKED' }]);
+  });
+
+  it('tài khoản bị chặn hẳn (blockedAt): ForbiddenException', async () => {
+    const { svc, tx } = setup({ flags: { blockedAt: NOW, shipLockedAt: null } });
+    await expect(svc.validateAndHold(tx, HP(), CFG)).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('DROP_OFF không bị khoá ship chặn (khoá chỉ áp cho đường vận chuyển)', async () => {
+    const { svc, tx } = setup({ flags: { blockedAt: null, shipLockedAt: NOW } });
+    await expect(svc.validateAndHold(tx, input(), CFG)).resolves.toMatchObject({ pointId: 'p1' });
+  });
+
+  it('tính vào trần điểm tháng và số phiếu đang mở như các cách giao khác', async () => {
+    const cap = setup({ usage: { pointsMonth: 55_000 } });
+    await expect(cap.svc.validateAndHold(cap.tx, HP(), CFG)).rejects.toThrow('Tháng này bạn chỉ còn 5.000 Điểm Xanh trong trần đổi rác');
+    const open = setup({ usage: { openCount: 3 } });
+    await expect(open.svc.validateAndHold(open.tx, HP(), CFG)).rejects.toThrow('Bạn đang có 3 yêu cầu chưa xong');
+  });
+
+  it('không dính luật "mỗi khách một phiếu PICKUP chưa gắn đơn" (HOME_PICKUP không gắn vào đơn nào)', async () => {
+    const { svc, tx } = setup({ usage: { pickupPendingCode: 'TR-AAAAA' } });
+    await expect(svc.validateAndHold(tx, HP(), CFG)).resolves.toMatchObject({ pointId: 'wh' });
   });
 });

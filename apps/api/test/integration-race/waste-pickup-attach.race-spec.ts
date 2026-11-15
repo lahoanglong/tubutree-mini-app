@@ -31,6 +31,8 @@ import { WasteNotifierService } from '../../src/modules/waste-exchange/core/wast
 import { WasteShipLockService } from '../../src/modules/waste-exchange/core/waste-ship-lock.service';
 import { WasteAccessService } from '../../src/modules/waste-exchange/core/waste-access.service';
 import { WasteConfigService } from '../../src/modules/waste-exchange/core/waste-config.service';
+import { WasteHoldService } from '../../src/modules/waste-exchange/core/waste-hold.service';
+import { WasteRequestsService } from '../../src/modules/waste-exchange/customer/waste-requests.service';
 import { WasteExpiryCron } from '../../src/modules/waste-exchange/pickup/waste-expiry.cron';
 import { cleanupWaste, createWarehouse, createWasteItem, createWasteRequest, raceWithHold } from './fixtures/waste-fixtures';
 import { createUser, deleteItData, randCode, setConfig, summarize, warmPool } from './helpers';
@@ -88,6 +90,8 @@ describe('Pickup attach at checkout ‖ two-step ship lock ‖ expiry cron (real
         WasteShipLockService,
         WasteConfigService,
         WasteAccessService,
+        WasteHoldService,
+        WasteRequestsService,
         WasteExpiryCron,
         { provide: WasteNotifierService, useValue: notifier },
       ],

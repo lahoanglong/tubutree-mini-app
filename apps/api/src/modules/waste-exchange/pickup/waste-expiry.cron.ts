@@ -1,6 +1,8 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
+import { InjectQueue } from '@nestjs/bullmq';
 import { Cron } from '@nestjs/schedule';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, WasteMethod } from '@prisma/client';
+import type { Queue } from 'bullmq';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { WasteAccessService } from '../core/waste-access.service';
@@ -8,6 +10,9 @@ import { WasteConfigService } from '../core/waste-config.service';
 import { writeWasteEvent } from '../core/waste-events';
 import { WasteNotifierService } from '../core/waste-notifier.service';
 import { WasteShipLockService } from '../core/waste-ship-lock.service';
+import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
+import { enqueueGomdonWasteCancel } from '../../integrations/gomdon/gomdon-queue';
+import { closeHomePickupRequest } from '../home-pickup/waste-home-pickup-ledger';
 import { GOMDON_DISPATCHED_STATUSES } from '../waste.constants';
 import { vnMonthKey } from '../../../common/vn-time';
 import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
@@ -28,7 +33,17 @@ export function expiryCloseReason(row: { status: 'OPEN' | 'IN_TRANSIT'; gomdonSt
   return 'PICKUP_NOT_DISPATCHED';
 }
 
-type Candidate = { id: string; code: string; userId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP'; status: string; orderId: string | null };
+type Candidate = {
+  id: string;
+  code: string;
+  userId: string;
+  pointId?: string;
+  method: WasteMethod;
+  status: string;
+  orderId: string | null;
+  shipFeePointsUsed?: number | null;
+  gomdonOrderId?: string | null;
+};
 
 @Injectable()
 export class WasteExpiryCron {
@@ -41,6 +56,7 @@ export class WasteExpiryCron {
     private readonly notifier: WasteNotifierService,
     private readonly shipLock: WasteShipLockService,
     private readonly access: WasteAccessService,
+    @Optional() @InjectQueue(QUEUE_GOMDON_PUSH) private readonly gomdonQueue?: Queue,
   ) {}
 
   // @Cron không tự bắt lỗi: lỗi ném ra ngoài là unhandledRejection.
@@ -80,7 +96,7 @@ export class WasteExpiryCron {
     for (;;) {
       const page: Candidate[] = await this.prisma.wasteRequest.findMany({
         where: lastId === null ? base : { AND: [base, { id: { gt: lastId } }] },
-        select: { id: true, code: true, userId: true, method: true, status: true, orderId: true },
+        select: { id: true, code: true, userId: true, pointId: true, method: true, status: true, orderId: true, shipFeePointsUsed: true, gomdonOrderId: true },
         orderBy: { id: 'asc' },
         take: PAGE,
       });
@@ -129,7 +145,7 @@ export class WasteExpiryCron {
     try {
       let lastId: string | null = null;
       for (;;) {
-        const page: { id: string; code: string; userId: string; pointId: string; method: 'DROP_OFF' | 'MAIL_IN' | 'PICKUP'; expiresAt: Date | null }[] = await this.prisma.wasteRequest.findMany({
+        const page: { id: string; code: string; userId: string; pointId: string; method: WasteMethod; expiresAt: Date | null }[] = await this.prisma.wasteRequest.findMany({
           where: lastId === null ? base : { AND: [base, { id: { gt: lastId } }] },
           select: { id: true, code: true, userId: true, pointId: true, method: true, expiresAt: true },
           orderBy: { id: 'asc' },
@@ -138,7 +154,7 @@ export class WasteExpiryCron {
         const dropOff = page.filter((r) => r.method === 'DROP_OFF' && r.expiresAt);
         const unusable = await this.unusablePointIds(dropOff.map((r) => r.pointId), now, [...new Set(dropOff.filter((r) => vnMonthKey(r.expiresAt!) === vnMonthKey(now)).map((r) => r.pointId))]);
         for (const row of page) {
-          if (!row.expiresAt || row.method === 'PICKUP') continue;
+          if (!row.expiresAt || row.method === 'PICKUP' || row.method === 'HOME_PICKUP') continue;
           if (row.method === 'DROP_OFF' && (unusable.bad.has(row.pointId) || (unusable.quotaFull.has(row.pointId) && vnMonthKey(row.expiresAt) === vnMonthKey(now)))) continue;
           try {
             await this.notifier.requestExpiring(row.userId, { id: row.id, code: row.code }, row.method, row.expiresAt);
@@ -179,8 +195,38 @@ export class WasteExpiryCron {
     return { bad, quotaFull };
   }
 
+  /**
+   * HOME_PICKUP còn OPEN quá hạn giữ chỗ (bưu tá chưa tới lấy): đóng, hoàn Điểm Xanh trả phí shipper trong cùng transaction rồi huỷ vận đơn Gomdon
+   * (nếu đã có) ngoài transaction. Phiếu đã IN_TRANSIT không có hạn nên không vào đây.
+   */
+  private async closeHomePickupRow(row: Candidate, now: Date): Promise<ExpiryCloseReason | null> {
+    const refundExpiresAt = await this.config.pointExpiresAt(now);
+    const closeReason = expiryCloseReason({ status: 'OPEN', gomdonStatus: null });
+    const closed = await this.prisma.$transaction(async (tx) => {
+      const res = await closeHomePickupRequest(tx, {
+        req: { id: row.id, userId: row.userId, code: row.code, pointId: row.pointId, shipFeePointsUsed: row.shipFeePointsUsed ?? 0 },
+        from: ['OPEN'],
+        to: 'EXPIRED',
+        closeReason,
+        now,
+        refundExpiresAt,
+        where: { expiresAt: { lt: now } },
+        event: { kind: 'REQUEST_EXPIRED', actorUserId: null, actorRole: 'SYSTEM', meta: { closeReason, method: row.method, before: { status: row.status }, after: { status: 'EXPIRED', closeReason } } },
+      });
+      return res.closed;
+    });
+    if (!closed) return null;
+    if (row.gomdonOrderId && this.gomdonQueue) {
+      await enqueueGomdonWasteCancel(this.gomdonQueue, row.id, row.code).catch((err) =>
+        this.logger.error(`Xếp lệnh huỷ vận đơn Gomdon của phiếu hết hạn ${row.code} lỗi: ${err instanceof Error ? err.message : err}`),
+      );
+    }
+    return closeReason;
+  }
+
   /** Một transaction ngắn cho một dòng; không lấy khoá nào khác (rule 15). Trả lý do đóng khi dòng trúng điều kiện. */
-  private closeRow(row: Candidate, now: Date): Promise<ExpiryCloseReason | null> {
+  private async closeRow(row: Candidate, now: Date): Promise<ExpiryCloseReason | null> {
+    if (row.method === 'HOME_PICKUP') return this.closeHomePickupRow(row, now);
     return this.prisma.$transaction(async (tx) => {
       const inTransit = row.status === 'IN_TRANSIT';
       const gomdonStatus =

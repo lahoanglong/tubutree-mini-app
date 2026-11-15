@@ -707,6 +707,14 @@ describe('WasteConfirmService.reject', () => {
     expect(h.order.indexOf('tx end')).toBeLessThan(h.order.indexOf('shipLock'));
   });
 
+  it('f2. a HOME_PICKUP RECEIVED reject (shipper lấy tận nhà) cũng xét khoá ship sau commit', async () => {
+    const h = warehouseCase({ row: whRow({ method: 'HOME_PICKUP' }) });
+    await expect(h.svc.reject(h.call, rejectBody({ rejectionReason: 'WET' }))).resolves.toEqual(expect.objectContaining({ status: 'REJECTED' }));
+    expect(h.shipLock.evaluateAndLock).toHaveBeenCalledTimes(1);
+    expect(h.shipLock.evaluateAndLock).toHaveBeenCalledWith('u1', { shortfallLockPct: 50, shortfallLockStreak: 3 });
+    expect(h.order.indexOf('tx end')).toBeLessThan(h.order.indexOf('shipLock'));
+  });
+
   describe('g. replay', () => {
     it('the same reject by the same caller returns the stored result and writes nothing', async () => {
       const h = setup({ row: rejected() });
@@ -789,6 +797,18 @@ describe('WasteConfirmService.closeLost', () => {
         data: expect.objectContaining({ closeReason: 'LOST_AT_WAREHOUSE' }),
       }),
     );
+  });
+
+  it('h2. a HOME_PICKUP IN_TRANSIT closes as LOST, RECEIVED as LOST_AT_WAREHOUSE, both conditional on the method', async () => {
+    const a = warehouseCase({ row: row({ method: 'HOME_PICKUP', status: 'IN_TRANSIT', pointId: 'wh' }) });
+    await a.svc.closeLost('a1', 'r1', lost);
+    expect(updateArg(a.tx)).toEqual({
+      where: { id: 'r1', status: 'IN_TRANSIT', method: 'HOME_PICKUP' },
+      data: { status: 'EXPIRED', closedAt: expect.any(Date), closeReason: 'LOST' },
+    });
+    const b = warehouseCase({ row: row({ method: 'HOME_PICKUP', status: 'RECEIVED', pointId: 'wh' }) });
+    await b.svc.closeLost('a1', 'r1', lost);
+    expect(updateArg(b.tx)).toEqual(expect.objectContaining({ where: { id: 'r1', status: 'RECEIVED', method: 'HOME_PICKUP' }, data: expect.objectContaining({ closeReason: 'LOST_AT_WAREHOUSE' }) }));
   });
 
   it('j. a DROP_OFF OPEN cannot be closed as lost', async () => {

@@ -50,7 +50,7 @@ export const WASTE_CONFIG_KEYS = {
     description: 'Số Điểm Xanh tối thiểu của một gói gửi kho, không được lớn hơn trần điểm tháng của khách.',
   },
   'waste.pickup_min_points': {
-    default: 10_000,
+    default: 3_000,
     type: 'int',
     category: 'waste',
     min: 1,
@@ -122,7 +122,7 @@ export const WASTE_CONFIG_KEYS = {
     description: 'Yêu cầu hoàn tất mà điểm cộng chưa tới (100 trừ ngần này) phần trăm điểm ước tính thì tính là một lần nhận thiếu.',
   },
   'waste.shortfall_lock_streak': {
-    default: 3,
+    default: 2,
     type: 'int',
     category: 'waste',
     min: 2,

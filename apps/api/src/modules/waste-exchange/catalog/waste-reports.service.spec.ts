@@ -99,7 +99,7 @@ describe('buildWasteMonthMetrics (fixture of October 2026)', () => {
   const { metrics } = fixtureReport;
 
   it('requestsCreatedByMethod counts the created cohort per method', () => {
-    expect(metrics.requestsCreatedByMethod).toEqual({ DROP_OFF: 3, MAIL_IN: 2, PICKUP: 1 });
+    expect(metrics.requestsCreatedByMethod).toEqual({ DROP_OFF: 3, MAIL_IN: 2, PICKUP: 1, HOME_PICKUP: 0 });
   });
 
   it('requestsByStatus is zero-filled over every status', () => {
@@ -137,7 +137,7 @@ describe('buildWasteMonthMetrics (fixture of October 2026)', () => {
   });
 
   it('receivedDeclaredPctByMethod is received over declared per method, one decimal', () => {
-    expect(metrics.receivedDeclaredPctByMethod).toEqual({ DROP_OFF: 86.7, MAIL_IN: 100, PICKUP: 66.7 });
+    expect(metrics.receivedDeclaredPctByMethod).toEqual({ DROP_OFF: 86.7, MAIL_IN: 100, PICKUP: 66.7, HOME_PICKUP: null });
   });
 
   it('receivedDeclaredPctByPoint is received over declared per point', () => {
@@ -213,7 +213,7 @@ describe('buildWasteMonthMetrics edges and month range', () => {
     });
     expect(metrics.completeHoursP50).toBeNull();
     expect(metrics.completeHoursP90).toBeNull();
-    expect(metrics.receivedDeclaredPctByMethod).toEqual({ DROP_OFF: null, MAIL_IN: null, PICKUP: null });
+    expect(metrics.receivedDeclaredPctByMethod).toEqual({ DROP_OFF: null, MAIL_IN: null, PICKUP: null, HOME_PICKUP: null });
     expect(metrics.receivedWeightGrams).toBeNull();
     expect(metrics.estimatedWeightGrams).toBeNull();
     expect(metrics.costVndPer1000PointsIssued).toBeNull();

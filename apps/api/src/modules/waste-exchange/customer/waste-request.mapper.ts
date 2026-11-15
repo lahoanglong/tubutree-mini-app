@@ -1,5 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import type { WasteOpeningHours, WasteRequestDetailDTO, WasteRequestSummaryDTO } from '@tubutree/shared-types';
+import { toHomePickupDto } from '../home-pickup/waste-home-pickup-text';
 
 export const WASTE_REQUEST_SUMMARY_INCLUDE = {
   point: { select: { name: true } },
@@ -32,6 +33,7 @@ export function toRequestSummary(row: WasteRequestWithPoint): WasteRequestSummar
     pointName: row.point.name,
     orderCode: row.order?.code ?? null,
     lines: row.lines.map((l) => ({ itemName: l.itemName, unitLabel: l.unitLabel, declaredQty: l.declaredQty })),
+    ...(row.method === 'HOME_PICKUP' ? { homePickup: toHomePickupDto(row) } : {}),
   };
 }
 
@@ -85,8 +87,10 @@ export function toRequestDetail(row: WasteRequestFull, pointAvailable: boolean):
     impactGrams: weighed ? row.lines.reduce((sum, l) => sum + (l.receivedQty ?? 0) * (l.gramsPerUnit as number), 0) : null,
     reversedPoints: row.status === 'REVERSED' ? (row.pointsAwarded ?? 0) - (row.reversalShortfallPoints ?? 0) : null,
     reversalReason: row.reversalReason,
-    editable: row.status === 'OPEN' && row.orderId === null && row.trackingCode === null,
+    // HOME_PICKUP đã khoá cân nặng, địa chỉ và phí trên vận đơn Gomdon nên không sửa được, chỉ huỷ.
+    editable: row.method !== 'HOME_PICKUP' && row.status === 'OPEN' && row.orderId === null && row.trackingCode === null,
     cancellable: row.status === 'OPEN' && row.orderId === null,
     orderId: row.orderId,
+    ...(row.method === 'HOME_PICKUP' ? { homePickup: toHomePickupDto(row) } : {}),
   };
 }

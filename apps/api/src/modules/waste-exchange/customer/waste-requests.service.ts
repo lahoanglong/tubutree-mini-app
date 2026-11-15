@@ -1,6 +1,15 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, NotFoundException, Optional, ServiceUnavailableException } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
-import type { WasteCreateRequest, WasteEditRequest, WasteMethod, WasteRequestDetailDTO, WasteRequestSummaryDTO, WasteTrackingRequest } from '@tubutree/shared-types';
+import type {
+  WasteCreateRequest,
+  WasteEditRequest,
+  WasteMethod,
+  WastePickupQuoteRequest,
+  WastePickupQuoteResponse,
+  WasteRequestDetailDTO,
+  WasteRequestSummaryDTO,
+  WasteTrackingRequest,
+} from '@tubutree/shared-types';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { WasteAccessService } from '../core/waste-access.service';
@@ -11,6 +20,7 @@ import { WASTE_MESSAGES } from '../core/waste-messages';
 import { computeWastePublicFlags } from '../core/waste-public-config';
 import { generateWasteCode, normalizeTracking } from '../waste-codes';
 import { lockWasteCustomer, lockWasteTracking } from '../waste-locks';
+import { WasteHomePickupCustomerService } from '../home-pickup/waste-home-pickup-customer.service';
 import { WASTE_OPEN_STATUSES } from '../waste.constants';
 import { toRequestDetail, toRequestSummary, WASTE_REQUEST_FULL_INCLUDE, WASTE_REQUEST_SUMMARY_INCLUDE, type WasteRequestFull } from './waste-request.mapper';
 
@@ -29,6 +39,7 @@ export class WasteRequestsService {
     private readonly hold: WasteHoldService,
     private readonly config: WasteConfigService,
     private readonly systemConfig: SystemConfigService,
+    @Optional() private readonly homePickup?: WasteHomePickupCustomerService,
   ) {}
 
   async list(userId: string): Promise<WasteRequestSummaryDTO[]> {
@@ -49,7 +60,16 @@ export class WasteRequestsService {
     return this.loadOwned(this.prisma, { orderId, userId });
   }
 
+  async pickupQuote(userId: string, body: WastePickupQuoteRequest): Promise<WastePickupQuoteResponse> {
+    if (!this.homePickup) throw new ServiceUnavailableException(WASTE_MESSAGES.HOME_PICKUP_UNAVAILABLE);
+    return this.homePickup.quote(userId, body);
+  }
+
   async create(userId: string, idempotencyKey: string, body: WasteCreateRequest): Promise<WasteRequestDetailDTO> {
+    if (body.method === 'HOME_PICKUP') {
+      if (!this.homePickup) throw new ServiceUnavailableException(WASTE_MESSAGES.HOME_PICKUP_UNAVAILABLE);
+      return this.loadDetail(this.prisma, userId, await this.homePickup.create(userId, idempotencyKey, body));
+    }
     const snap = await this.config.snapshot();
     const holdCfg: WasteHoldConfig = {
       laneDropoff: snap.laneDropoff,
@@ -100,15 +120,19 @@ export class WasteRequestsService {
     return { holdCfg, rulesVersion: snap.rulesVersion };
   }
 
-  /** Tạo phiếu thu kèm (PICKUP, OPEN) ngay trong transaction của placeOrder; trần, ngưỡng điểm và khoá khách do `validateAndHold` áp như đường tạo thường. */
+  /**
+   * Tạo phiếu thu kèm (PICKUP, OPEN) ngay trong transaction của placeOrder; trần, ngưỡng điểm và khoá khách do `validateAndHold` áp như đường tạo thường.
+   * `pickupProvince` là tỉnh/thành của địa chỉ giao đơn: thiếu thì hàng nguy hại (Pin cũ) bị chặn vì chưa biết có phải TP.HCM.
+   */
   createPickupInTx(
     tx: Prisma.TransactionClient,
     userId: string,
     idempotencyKey: string,
     lines: WasteCreateRequest['lines'],
     prepared: InlinePickupPrepared,
+    pickupProvince?: string | null,
   ): Promise<string> {
-    return this.createInTx(tx, userId, idempotencyKey, { method: 'PICKUP', lines } as WasteCreateRequest, prepared.holdCfg, prepared.rulesVersion);
+    return this.createInTx(tx, userId, idempotencyKey, { method: 'PICKUP', lines } as WasteCreateRequest, prepared.holdCfg, prepared.rulesVersion, pickupProvince);
   }
 
   async edit(userId: string, id: string, body: WasteEditRequest): Promise<WasteRequestDetailDTO> {
@@ -172,6 +196,10 @@ export class WasteRequestsService {
   }
 
   async cancel(userId: string, id: string): Promise<WasteRequestDetailDTO> {
+    if (this.homePickup && (await this.homePickup.isHomePickup(userId, id))) {
+      await this.homePickup.cancel(userId, id);
+      return this.loadDetail(this.prisma, userId, id);
+    }
     await this.prisma.$transaction(async (tx) => {
       const rows = await tx.$queryRaw<
         { id: string; status: string; orderId: string | null; closeReason: string | null }[]
@@ -204,7 +232,7 @@ export class WasteRequestsService {
     >`SELECT id, method::text AS method, status::text AS status, "orderId", "trackingCode", "pointId", "capDayKey", "capMonthKey" FROM waste_requests WHERE id = ${id} AND "userId" = ${userId} FOR UPDATE`;
     const row = rows[0];
     if (!row) throw new NotFoundException(WASTE_MESSAGES.REQUEST_NOT_FOUND);
-    if (row.status !== 'OPEN' || row.orderId !== null || row.trackingCode !== null) throw new ConflictException(WASTE_MESSAGES.NOT_EDITABLE);
+    if (row.method === 'HOME_PICKUP' || row.status !== 'OPEN' || row.orderId !== null || row.trackingCode !== null) throw new ConflictException(WASTE_MESSAGES.NOT_EDITABLE);
     const result = await this.hold.validateAndHold(
       tx,
       {
@@ -256,7 +284,15 @@ export class WasteRequestsService {
     });
   }
 
-  private async createInTx(tx: Prisma.TransactionClient, userId: string, idempotencyKey: string, body: WasteCreateRequest, holdCfg: WasteHoldConfig, rulesVersion: string): Promise<string> {
+  private async createInTx(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    idempotencyKey: string,
+    body: WasteCreateRequest,
+    holdCfg: WasteHoldConfig,
+    rulesVersion: string,
+    pickupProvince?: string | null,
+  ): Promise<string> {
     await lockWasteCustomer(tx, userId);
     const now = new Date();
     const prior = await tx.wasteRequest.findUnique({ where: { userId_idempotencyKey: { userId, idempotencyKey } }, select: CREATE_PRIOR_SELECT });
@@ -271,7 +307,7 @@ export class WasteRequestsService {
     }
     const result = await this.hold.validateAndHold(
       tx,
-      { path: 'CREATE', userId, method: body.method, lines: body.lines, pointId: body.method === 'DROP_OFF' ? body.pointId ?? null : null, now },
+      { path: 'CREATE', userId, method: body.method, lines: body.lines, pointId: body.method === 'DROP_OFF' ? body.pointId ?? null : null, pickupProvince, now },
       holdCfg,
     );
     let code: string | null = null;

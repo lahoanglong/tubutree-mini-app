@@ -455,9 +455,10 @@ describe('evaluateDb', () => {
     it('ngưỡng bằng trần: PASS', () => {
       expect(W({}, { 'waste.mailin_min_points': 60_000, 'waste.pickup_min_points': 60_000, 'waste.customer_monthly_cap_points': 60_000 }).status).toBe('PASS');
     });
-    it('khoá vắng thì dùng mặc định 15000 / 10000 / 60000', () => {
+    it('khoá vắng thì dùng mặc định 15000 / 3000 / 60000', () => {
       expect(W({}, { 'waste.customer_monthly_cap_points': 12_000 }).detail).toContain('waste.mailin_min_points (15000)');
       expect(W({}, { 'waste.customer_monthly_cap_points': 12_000 }).detail).not.toContain('waste.pickup_min_points');
+      expect(W({}, { 'waste.customer_monthly_cap_points': 2_000 }).detail).toContain('waste.pickup_min_points (3000)');
       expect(W({}, { 'waste.mailin_min_points': 61_000 }).detail).toContain('(60000)');
     });
     it('hai WARN cùng lúc gộp vào một dòng; FAIL thắng WARN', () => {

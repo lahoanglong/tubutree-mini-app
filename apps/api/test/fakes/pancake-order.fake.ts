@@ -94,6 +94,7 @@ export function fakeOrderDb(initial: Row[], extra: Record<string, unknown> = {})
       ),
     },
     dealerCreditLedger: { findFirst: jest.fn().mockResolvedValue(null) },
+    wasteGiftRedemption: { findMany: jest.fn().mockResolvedValue([]) },
     address: { findFirst: jest.fn().mockResolvedValue(null) },
     dealerApplication: { findFirst: jest.fn().mockResolvedValue(null) },
     ...extra,
