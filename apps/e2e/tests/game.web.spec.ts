@@ -106,7 +106,8 @@ test.describe('Web khách: Vườn Xanh', () => {
     await expect(page.getByRole('button', { name: /Góp quỹ trồng cây \(20\.000 điểm\)/ })).toBeVisible();
   });
 
-  // B-80: trước khi sửa, mở trang gọi 13 lần của game (11 lần /game/*, điểm và điểm danh); nay chỉ hồ sơ, câu đố, nhiệm vụ, điểm, điểm danh.
+  // B-80: trước khi sửa, mở trang gọi 13 lần của game (11 lần /game/*, điểm và điểm danh); nay chỉ hồ sơ, câu đố, nhiệm vụ, điểm, điểm danh
+  // và trạng thái lượt mini game (sảnh arcade nằm ngay tab Hôm nay).
   test('mở /vuon-xanh: dữ liệu tab Vườn và Cộng đồng chỉ tải khi mở tab', async ({ page, api }) => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh');
@@ -116,7 +117,14 @@ test.describe('Web khách: Vườn Xanh', () => {
     const gameOwned = /^GET \/(game\/|me\/loyalty$|me\/daily-check-in$)/;
     const opened = api.calls.map((c) => `${c.method} ${c.path}`);
     console.log(`WEB_GAME_CALLS_OPEN ${opened.filter((c) => gameOwned.test(c)).length} (tổng ${opened.length})\n${opened.join('\n')}`);
-    expect(opened.filter((c) => gameOwned.test(c))).toHaveLength(5);
+    expect(opened.filter((c) => gameOwned.test(c)).sort()).toEqual([
+      'GET /game/arcade/status',
+      'GET /game/missions',
+      'GET /game/profile',
+      'GET /game/quiz/today',
+      'GET /me/daily-check-in',
+      'GET /me/loyalty',
+    ]);
     const tabOnly = /game\/(garden|forest|collection|community|season|leaderboard|friends)/;
     expect(opened.some((c) => tabOnly.test(c))).toBe(false);
     const before = opened.length;
