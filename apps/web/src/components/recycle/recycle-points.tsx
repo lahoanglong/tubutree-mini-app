@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { Search } from 'lucide-react';
+import { Loader2, MapPin, Search } from 'lucide-react';
 import type { WasteMethod, WastePointDTO } from '@tubutree/shared-types';
 import { wasteMeQuery, wastePointsQuery } from '@tubutree/app-core/queries/waste';
 import { friendlyError as errText } from '@/lib/friendly-error';
@@ -16,7 +16,6 @@ import { loadPointsNav, saveReturn, type WastePointsNav } from '@/lib/recycle-wi
 import { usePublicConfig } from '@/lib/use-public-config';
 import { includesFolded } from '@/lib/vn-fold';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
-import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { ErrorState } from '@/components/ui/error-state';
 import { wasteStepCopy, warehouseOnlyPointsNote } from '@tubutree/app-core/waste-copy';
@@ -25,9 +24,40 @@ import { SegmentedTabs } from '@/components/ui/segmented-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import { METHOD_LABELS } from './recycle-labels';
 import { WastePointPicker } from './waste-point-picker';
+import { WebRecyclePhoneCard } from './web-recycle-phone-card';
 
 const WIZARD_METHOD_STEP = '/doi-rac/tao?step=method';
 const SWITCH_METHODS: readonly WasteMethod[] = ['MAIL_IN', 'PICKUP'];
+const NEAR_TAB = 'near';
+const EARTH_RADIUS_KM = 6371;
+
+function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const rad = (deg: number) => (deg * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat);
+  const dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * EARTH_RADIUS_KM * Math.asin(Math.sqrt(h));
+}
+
+export function rankPointsByCoords(
+  points: readonly WastePointDTO[],
+  coords: { lat: number; lng: number },
+): WastePointDTO[] {
+  const located: WastePointDTO[] = [];
+  const rest: WastePointDTO[] = [];
+  for (const p of points) {
+    if (p.lat != null && p.lng != null) {
+      located.push({
+        ...p,
+        distanceKm: Math.round(haversineKm(coords, { lat: p.lat, lng: p.lng }) * 10) / 10,
+      });
+    } else {
+      rest.push(p);
+    }
+  }
+  located.sort((a, b) => (a.distanceKm as number) - (b.distanceKm as number));
+  return [...located, ...rest];
+}
 
 /** Khớp không phân biệt hoa thường và dấu trên tên điểm, phường/xã và tên đường. */
 export function filterPointsByText(points: readonly WastePointDTO[], q: string): WastePointDTO[] {
@@ -43,36 +73,77 @@ export function RecyclePoints() {
 
   const [nav, setNav] = useState<WastePointsNav | null>(null);
   const [ready, setReady] = useState(false);
-  // Nav đọc ở client sau khi gắn vào cây: lần render đầu của server và client phải giống nhau.
   useEffect(() => {
     setNav(loadPointsNav());
     setReady(true);
   }, []);
-  // Khách vãng lai về trang Đổi rác (có giới thiệu và nút đăng nhập) như Mini App.
   useEffect(() => {
     if (phase === 'guest') router.replace('/doi-rac');
     else if (ready && !nav && phase !== 'loading') router.replace('/doi-rac/tao');
   }, [ready, nav, phase, router]);
 
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed && !!nav });
-  const pointsQ = useQuery({ ...wastePointsQuery(coreHttp, null), enabled: authed && !!nav });
   const me = meQ.data;
+  const eligible = me?.eligibility === 'OK';
+  const pointsQ = useQuery({
+    ...wastePointsQuery(coreHttp, null),
+    enabled: authed && !!nav && (me === undefined || eligible),
+  });
   const points = pointsQ.data;
-  const leave = me !== undefined && (!me.programmeEnabled || me.blocked);
+  const leave = me !== undefined && (!me.programmeEnabled || me.blocked || me.eligibility === 'GUEST');
   useEffect(() => {
     if (leave) router.replace('/doi-rac');
   }, [leave, router]);
 
+  const [nearby, setNearby] = useState<WastePointDTO[] | null>(null);
   const [tabSel, setTab] = useState<string | null>(null);
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<string | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [geoHint, setGeoHint] = useState<string | null>(null);
+  const locateBusy = useRef(false);
 
   const provinces = useMemo(() => {
     const out: { code: string; name: string }[] = [];
     for (const p of points ?? []) if (!out.some((x) => x.code === p.provinceCode)) out.push({ code: p.provinceCode, name: p.provinceName });
     return out;
   }, [points]);
-  const tab = tabSel ?? provinces[0]?.code ?? '';
+  const hasNear = !!nearby?.length;
+  const wantedTab = tabSel ?? provinces[0]?.code ?? '';
+  const tab = wantedTab === NEAR_TAB && !hasNear ? (provinces[0]?.code ?? '') : wantedTab;
+
+  const findNearby = () => {
+    if (locateBusy.current || !points) return;
+    if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      setGeoHint('Trình duyệt chưa hỗ trợ định vị — bạn chọn tỉnh hoặc gõ tên đường ở ô tìm kiếm nhé.');
+      return;
+    }
+    locateBusy.current = true;
+    setLocating(true);
+    setGeoHint(null);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        locateBusy.current = false;
+        setLocating(false);
+        const ranked = rankPointsByCoords(points, {
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+        });
+        if (ranked.some((p) => p.distanceKm != null)) {
+          setNearby(ranked);
+          setTab(NEAR_TAB);
+        } else {
+          setGeoHint('Đã nhận vị trí — hiện các điểm thu gom đang lọc theo tỉnh bên dưới.');
+        }
+      },
+      () => {
+        locateBusy.current = false;
+        setLocating(false);
+        setGeoHint('Chưa lấy được vị trí trình duyệt — bạn chọn tỉnh hoặc gõ tên đường ở ô tìm kiếm nhé.');
+      },
+      { timeout: 8000, enableHighAccuracy: false },
+    );
+  };
 
   const shell = (content: ReactNode, bar?: ReactNode) => (
     <main className="mx-auto max-w-5xl space-y-4 px-4 py-6 pb-12 tabular-nums">
@@ -93,6 +164,7 @@ export function RecyclePoints() {
   if (phase === 'unavailable') return shell(<SessionUnavailable />);
   if (phase === 'guest') return shell(skeleton);
   if (!ready || !nav) return shell(skeleton);
+  if (me && !leave && me.eligibility !== 'OK') return shell(<WebRecyclePhoneCard />);
   const loadError = (meQ.isError && meQ.error) || (pointsQ.isError && pointsQ.error);
   if (loadError) {
     return shell(
@@ -103,11 +175,13 @@ export function RecyclePoints() {
     );
   }
   if (!me || !points || leave) return shell(skeleton);
-  // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, không có đường lách.
-  if (me.eligibility !== 'OK') return shell(<MiniAppOnlyNotice path="/doi-rac/tao" />);
 
-  const tabItems = provinces.map((x) => ({ key: x.code, label: x.name }));
-  const list = filterPointsByText(points.filter((p) => p.provinceCode === tab), q);
+  const tabItems = [
+    ...(hasNear ? [{ key: NEAR_TAB, label: 'Gần tôi' }] : []),
+    ...provinces.map((x) => ({ key: x.code, label: x.name })),
+  ];
+  const source = tab === NEAR_TAB ? (nearby ?? []) : points.filter((p) => p.provinceCode === tab);
+  const list = filterPointsByText(source, q);
   const warehouseOnlyNames = me.items.filter((i) => nav.selectedItemIds.includes(i.id) && i.warehouseOnly).map((i) => i.name);
   const pickedPoint = list.find((p) => p.id === picked) ?? null;
   const canChoose =
@@ -139,18 +213,40 @@ export function RecyclePoints() {
       {warehouseOnlyNames.length > 0 && (
         <p className="text-sm text-stone-600">{warehouseOnlyPointsNote(warehouseOnlyNames, points.some((p) => p.kind === 'WAREHOUSE'))}</p>
       )}
-      <div className="relative">
-        <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
-        <input
-          type="search"
-          aria-label="Tìm điểm nhận"
-          placeholder="Tên điểm, phường/xã hoặc tên đường"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          className={`${ui.field} pl-9`}
-        />
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-stone-500" aria-hidden="true" />
+          <input
+            type="search"
+            aria-label="Tìm điểm nhận"
+            placeholder="Tên điểm, phường/xã hoặc tên đường"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            className={`${ui.field} pl-9`}
+          />
+        </div>
+        {nearby === null && (
+          <button
+            type="button"
+            aria-busy={locating || undefined}
+            aria-disabled={locating || undefined}
+            onClick={findNearby}
+            className={`${skin.btnSecondary} shrink-0`}
+          >
+            {locating ? (
+              <Loader2 className="mr-1.5 h-4 w-4 animate-spin" aria-hidden="true" />
+            ) : (
+              <MapPin className="mr-1.5 h-4 w-4 text-forest-600" aria-hidden="true" />
+            )}
+            📍 Tìm điểm thu gom gần tôi
+          </button>
+        )}
       </div>
-      <p className="text-xs text-stone-600">Web không dùng vị trí của bạn: chọn tỉnh để xem các điểm nhận. Muốn xem điểm gần bạn, mở Tubu Tree trên Zalo.</p>
+      {geoHint && (
+        <p role="status" className="text-xs text-stone-600">
+          {geoHint}
+        </p>
+      )}
       {tabItems.length > 0 && <SegmentedTabs scroll value={tab} onChange={setTab} items={tabItems} label="Tỉnh" />}
       {list.length > 0 ? (
         <WastePointPicker
@@ -159,6 +255,7 @@ export function RecyclePoints() {
           onChange={setPicked}
           items={me.items.filter((i) => i.status === 'ACTIVE')}
           selectedItemIds={nav.selectedItemIds}
+          showDistance={tab === NEAR_TAB}
         />
       ) : (
         <p className={`${skin.card} p-6 text-center text-sm text-stone-700`}>Không tìm thấy điểm nhận nào</p>

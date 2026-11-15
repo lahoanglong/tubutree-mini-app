@@ -21,7 +21,7 @@ interface BrowseSeoFilter {
 }
 
 /** Tham số URL làm kết quả khác "danh sách gốc" (khách tự lọc/sắp xếp/tìm): trang lọc là bản trùng nên không lập chỉ mục. */
-const NOINDEX_PARAMS = ['segment', 'minPrice', 'maxPrice', 'inStock', 'rating', 'sort', 'all'] as const;
+const NOINDEX_PARAMS = ['segment', 'minPrice', 'maxPrice', 'inStock', 'rating', 'sort', 'all', 'filter'] as const;
 
 /**
  * Noindex theo tham số. `?category=` đứng một mình là trang danh mục (lập chỉ mục, nếu danh mục có thật: việc của `generateMetadata`,

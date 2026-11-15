@@ -1,7 +1,8 @@
-import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
-import type { Prisma } from '@prisma/client';
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { notifyAdmins } from '../../common/notify-admins';
+import { recordUserAdminEvent } from '../../common/user-admin-events';
 import { formatVndText as vnd } from '../../common/format-vnd';
 import { NotificationsService } from '../notifications/notifications.service';
 import { UpdateMeDto } from './dto/update-me.dto';
@@ -9,6 +10,26 @@ import { trimInvisible } from '../../common/text-trim';
 import { CreateAddressDto, NO_HTML, UpdateAddressDto } from './dto/address.dto';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
+
+const VN_CONTACT_MOBILE = /^0[35789]\d{8}$/;
+const PHONE_SEPARATORS = /[\s.()\-\u2010-\u2015\u2212]/g;
+
+export const INVALID_CONTACT_PHONE_MESSAGE =
+  'Số điện thoại không đúng định dạng di động Việt Nam (10 số, đầu 03, 05, 07, 08 hoặc 09).';
+export const GUEST_CONTACT_PHONE_MESSAGE = 'Bạn cần đăng nhập tài khoản thành viên trước khi lưu số điện thoại liên hệ.';
+export const CONTACT_PHONE_ALREADY_SET_MESSAGE =
+  'Tài khoản này đã gắn số điện thoại liên hệ. Bạn liên hệ CSKH Tubu Tree nếu cần cập nhật số mới nhé.';
+export const CONTACT_PHONE_TAKEN_MESSAGE =
+  'Số điện thoại này đã liên kết với một tài khoản khác. Bạn đăng nhập đúng tài khoản đó hoặc dùng số điện thoại nhận hàng khác nhé.';
+
+export function normalizeVnContactPhone(raw: string): string | null {
+  const compact = trimInvisible(raw).normalize('NFKC').replace(PHONE_SEPARATORS, '');
+  let local = compact;
+  if (compact.startsWith('+84')) local = `0${compact.slice(3)}`;
+  else if (compact.startsWith('0084')) local = `0${compact.slice(4)}`;
+  else if (compact.startsWith('84') && compact.length === 11) local = `0${compact.slice(2)}`;
+  return VN_CONTACT_MOBILE.test(local) ? local : null;
+}
 
 /** Trần sổ địa chỉ mỗi khách: GET /me/addresses trả toàn bộ, và mỗi dòng đi theo đơn dưới dạng snapshot. */
 export const MAX_ADDRESSES_PER_USER = 20;
@@ -112,6 +133,75 @@ export class UsersService {
       include: { tier: true },
     });
     return this.serialize(user);
+  }
+
+  /**
+   * Lưu SĐT liên hệ cho thành viên đăng nhập từ Website chưa có `user.phone` (`phone === null`).
+   * Giữ `phoneVerifiedAt = null` (phân biệt với SĐT giải mã từ token Zalo), chặn hoàn toàn chiếm đoạt tài khoản khác
+   * hoặc nhận nhầm lời mời nhân sự (`role_grants`), và mở ngay điều kiện Đổi rác lấy quà (`WasteAccessService`).
+   */
+  async setContactPhone(userId: string, rawPhone: string) {
+    const normalized = normalizeVnContactPhone(rawPhone);
+    if (!normalized) {
+      throw new BadRequestException(INVALID_CONTACT_PHONE_MESSAGE);
+    }
+
+    const current = await this.prisma.user.findUnique({
+      where: { id: userId },
+      include: { tier: true },
+    });
+    if (!current) throw new NotFoundException('Không tìm thấy tài khoản.');
+    if (!current.zaloId || current.zaloId.startsWith('guest_')) {
+      throw new ForbiddenException(GUEST_CONTACT_PHONE_MESSAGE);
+    }
+    if (current.phone === normalized) {
+      return this.serialize(current);
+    }
+    if (current.phone !== null) {
+      throw new ConflictException(CONTACT_PHONE_ALREADY_SET_MESSAGE);
+    }
+
+    try {
+      const updated = await this.prisma.$transaction(async (tx) => {
+        const [owner, grant] = await Promise.all([
+          tx.user.findUnique({ where: { phone: normalized }, select: { id: true } }),
+          tx.roleGrant.findFirst({ where: { phone: normalized, revokedAt: null }, select: { id: true } }),
+        ]);
+        if ((owner && owner.id !== userId) || grant) {
+          throw new ConflictException(CONTACT_PHONE_TAKEN_MESSAGE);
+        }
+
+        const guarded = await tx.user.updateMany({
+          where: { id: userId, phone: null },
+          data: { phone: normalized },
+        });
+        if (guarded.count === 0) {
+          const fresh = await tx.user.findUnique({ where: { id: userId }, include: { tier: true } });
+          if (fresh?.phone === normalized) return fresh;
+          throw new ConflictException(CONTACT_PHONE_ALREADY_SET_MESSAGE);
+        }
+
+        await recordUserAdminEvent(tx, {
+          userId,
+          kind: 'CONTACT_PHONE_SET',
+          from: null,
+          to: normalized,
+          reason: 'Lưu SĐT liên hệ từ Website',
+          actorId: userId,
+        });
+
+        return tx.user.findUniqueOrThrow({
+          where: { id: userId },
+          include: { tier: true },
+        });
+      });
+      return this.serialize(updated);
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException(CONTACT_PHONE_TAKEN_MESSAGE);
+      }
+      throw err;
+    }
   }
 
   listAddresses(userId: string) {

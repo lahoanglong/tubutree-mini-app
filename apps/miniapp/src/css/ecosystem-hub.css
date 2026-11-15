@@ -1,0 +1,254 @@
+/* Hệ sinh thái 6 trụ cột (W171): Bento Hub Trang chủ, hàng lối tắt nhanh, thanh chuyển kênh đối tác và trang Mua xoay vòng.
+ * Toàn bộ màu/cỡ/khoảng cách đi qua token ngữ nghĩa lớp 2 (design-tokens/tokens.css), không dùng primitive và không dùng hex thô. */
+
+.tubu-bento-section {
+  padding: 0 var(--space-inset-page);
+}
+
+.tubu-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-inline-sm);
+}
+
+.tubu-bento-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 86px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 7px 10px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-1);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.tubu-bento-card--featured {
+  border-color: var(--color-action-secondary-border);
+  background: var(--color-bg-subtle);
+}
+
+.tubu-bento-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tubu-bento-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: var(--radius-tag);
+  background: var(--color-action-secondary-bg);
+  color: var(--color-action-secondary-fg);
+}
+
+.tubu-bento-icon--warm {
+  background: var(--color-promo-bg);
+  color: var(--color-promo-fg);
+}
+
+.tubu-bento-tag {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+  background: var(--color-action-secondary-bg);
+  color: var(--color-action-secondary-fg);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: var(--type-label-weight);
+}
+
+.tubu-bento-tag--warm {
+  background: var(--color-promo-bg);
+  color: var(--color-promo-fg);
+}
+
+.tubu-bento-copy {
+  min-width: 0;
+}
+
+.tubu-bento-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: break-word;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.tubu-bento-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: var(--type-label-size);
+  line-height: 16px;
+}
+
+.tubu-quick-pills {
+  margin-top: var(--space-stack-sm);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tubu-quick-pill {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  height: 44px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.tubu-quick-pill--more {
+  flex: 0 0 auto;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  padding: 0 10px;
+}
+
+.tubu-partner-pills-wrap {
+  padding: var(--space-stack-sm) var(--space-inset-page) 0;
+}
+
+.tubu-partner-pills {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-subtle);
+}
+
+.tubu-partner-pill {
+  flex: 1 1 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 12px;
+  border-radius: var(--radius-control);
+  color: var(--color-text-secondary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.tubu-partner-pill[aria-current='page'] {
+  background: var(--color-bg-surface);
+  color: var(--color-text-brand);
+  box-shadow: var(--elevation-1);
+}
+
+.tubu-subs-page {
+  background: var(--color-bg-canvas);
+  padding-bottom: calc(var(--space-section) + var(--safe-bottom));
+}
+
+.tubu-subs-body {
+  padding: var(--space-inline-md) var(--space-inset-page) var(--space-section);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-md);
+}
+
+.tubu-subs-hero {
+  padding: var(--space-inset-page);
+  border: 1px solid var(--color-action-secondary-border);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-subtle);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+}
+
+.tubu-subs-eyebrow {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 2px 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-action-secondary-bg);
+  color: var(--color-action-secondary-fg);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: 600;
+}
+
+.tubu-subs-perks {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tubu-subs-perk {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-inline-sm);
+  color: var(--color-text-primary);
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+}
+
+.tubu-subs-dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  margin-top: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-action-primary-bg);
+}
+
+.tubu-subs-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+}
+
+.tubu-subs-more {
+  display: flex;
+  justify-content: center;
+  padding-top: var(--space-inline-sm);
+}

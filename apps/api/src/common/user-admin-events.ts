@@ -5,7 +5,17 @@ import type { Prisma, PrismaClient } from '@prisma/client';
  * AFFILIATE_REVOKE: dấu thu hồi quyền CTV đổi giá trị (from/to = ISO của dấu, null khi không có dấu); ghi cả khi vai trò không đổi.
  * SESSIONS_REVOKED: admin cắt mọi phiên đăng nhập mà không khoá (reason = lý do admin, to = số refresh token đã thu hồi).
  * STOREFRONT_PARTNER: admin bật/tắt cờ đối tác của gian hàng do người này làm chủ (reason = id gian hàng). */
-export type UserAdminEventKind = 'ROLE' | 'STAFF_PERMISSIONS' | 'BLOCK' | 'UNBLOCK' | 'STOREFRONT_PARTNER' | 'WALLET_FORFEIT' | 'COMMISSION_FORFEIT' | 'AFFILIATE_REVOKE' | 'SESSIONS_REVOKED';
+export type UserAdminEventKind =
+  | 'ROLE'
+  | 'STAFF_PERMISSIONS'
+  | 'BLOCK'
+  | 'UNBLOCK'
+  | 'STOREFRONT_PARTNER'
+  | 'WALLET_FORFEIT'
+  | 'COMMISSION_FORFEIT'
+  | 'AFFILIATE_REVOKE'
+  | 'SESSIONS_REVOKED'
+  | 'CONTACT_PHONE_SET';
 
 type Db = Pick<PrismaClient, 'userAdminEvent'> | Prisma.TransactionClient;
 

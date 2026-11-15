@@ -75,6 +75,8 @@ export class RbacService {
    */
   private async applyGrantsWith(db: Db, user: User, actorId: string | null, reason?: string): Promise<{ user: User; changed: boolean }> {
     if (!user.phone) return { user, changed: false };
+    // SĐT tự nhập trên web (`phoneVerifiedAt === null`) chỉ dùng cho liên hệ thu gom/giao hàng: không tự nâng quyền theo lời mời SĐT lúc cấp phiên.
+    if (actorId === null && user.phoneVerifiedAt === null) return { user, changed: false };
     if (!('$transaction' in db)) return this.raiseFromGrants(user, db, actorId, reason);
     const peek = await db.roleGrant.findMany({
       where: { phone: user.phone, ...activeGrantWhere() },

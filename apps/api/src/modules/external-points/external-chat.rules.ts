@@ -156,11 +156,19 @@ export function verifiedMemberPhone(
 }
 
 /**
- * SĐT của thành viên mà claim được phép GẮN vào (đủ điều kiện làm người nhận), không xét độ mới của mốc xác minh: số cũ vẫn gắn
- * claim vào thành viên đó nhưng chờ nhân viên kiểm (`ChatMemberFacts.phoneStale`), thay vì để claim mất chủ rồi hết hạn giữ.
+ * SĐT của thành viên mà claim được phép GẮN vào (đủ điều kiện làm người nhận), không xét độ mới của mốc xác minh: số đã từng xác minh
+ * qua Zalo (`phoneVerifiedAt != null`) dù cũ vẫn gắn claim vào thành viên đó nhưng chờ nhân viên kiểm (`ChatMemberFacts.phoneStale`),
+ * thay vì để claim mất chủ rồi hết hạn giữ. Số liên hệ khách tự nhập trên Web (`phoneVerifiedAt == null`) KHÔNG được gắn claim đơn chat.
  */
-export function linkableMemberPhone(u: { phone: string | null; zaloId: string | null; isBlocked: boolean; mergedIntoId: string | null }): string | null {
+export function linkableMemberPhone(u: {
+  phone: string | null;
+  phoneVerifiedAt: Date | null;
+  zaloId: string | null;
+  isBlocked: boolean;
+  mergedIntoId: string | null;
+}): string | null {
   if (!u.phone || !LOCAL_MOBILE.test(u.phone)) return null;
+  if (!u.phoneVerifiedAt) return null;
   if (!u.zaloId || u.zaloId.startsWith('guest_')) return null;
   if (u.isBlocked || u.mergedIntoId) return null;
   return u.phone;

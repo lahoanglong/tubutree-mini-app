@@ -403,7 +403,7 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
     api.get('/me', () => USER);
     api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
     // Trang chủ (đích chuyển hướng) tự gọi các API này; test chỉ kiểm địa chỉ.
-    api.allowUnmocked('GET /flash-sales/upcoming', 'GET /me/wishlist/ids', 'GET /products/for-you', 'GET /me/purchased-items', 'GET /me/new-customer-offer');
+    api.allowUnmocked('GET /brands', 'GET /categories', 'GET /flash-sales/upcoming', 'GET /me/wishlist/ids', 'GET /products/for-you', 'GET /me/purchased-items', 'GET /me/new-customer-offer');
     await page.goto('/hoan-tien');
     await expect(page).toHaveURL(/\/$/);
   });
@@ -433,10 +433,10 @@ test.describe('Web khách: khung tài khoản không nhảy ngang khi khôi ph�
     });
   const lefts = (page: import('@playwright/test').Page) => page.evaluate(() => (window as unknown as { __mainLefts: number[] }).__mainLefts);
 
-  for (const path of ['/tai-khoan/vi-tubu', '/kho-qua']) {
+  for (const path of ['/tai-khoan/vi-tubu', '/tai-khoan/diem-xanh']) {
     test(`${path}: có cờ phiên, main giữ một vị trí ngang từ khung hình đầu đến khi phiên về`, async ({ page, api }) => {
       test.skip(test.info().project.name !== 'Web Customer', 'chỉ đo bố cục máy tính');
-      if (path === '/kho-qua') mockRewards(api, { redeemed: false });
+      if (path === '/tai-khoan/diem-xanh') mockLoyalty(api, { done: false });
       else mockWallet(api);
       let release!: () => void;
       const gate = new Promise<void>((r) => (release = r));
@@ -458,6 +458,29 @@ test.describe('Web khách: khung tài khoản không nhảy ngang khi khôi ph�
       expect(seen[0]).toBeGreaterThan(200);
     });
   }
+
+  test('/kho-qua: trang độc lập toàn chiều rộng (không AccountShell), main giữ một vị trí ngang suốt phiên', async ({ page, api }) => {
+    test.skip(test.info().project.name !== 'Web Customer', 'chỉ đo bố cục máy tính');
+    mockRewards(api, { redeemed: false });
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    api.post('/auth/refresh', async () => {
+      await gate;
+      return { accessToken: 'e2e-token', user: USER };
+    });
+    await page.addInitScript(() => localStorage.setItem('tubu_web_session', '1'));
+    await recordMainLeft(page);
+
+    await page.goto('/kho-qua', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByTestId('account-shell-nav')).toHaveCount(0);
+    await expect(page.getByTestId('account-shell-nav-skeleton')).toHaveCount(0);
+    await page.waitForTimeout(400);
+    release();
+    await expect(page.getByRole('heading', { name: 'Kho quà', level: 1 })).toBeVisible();
+    await page.waitForTimeout(400);
+    const seen = await lefts(page);
+    expect(seen, `vị trí main theo từng khung hình: ${seen.join(' → ')}`).toHaveLength(1);
+  });
 
   test('khách vãng lai (không cờ): không có khung khôi phục, main không nhảy', async ({ page, api }) => {
     test.skip(test.info().project.name !== 'Web Customer', 'chỉ đo bố cục máy tính');

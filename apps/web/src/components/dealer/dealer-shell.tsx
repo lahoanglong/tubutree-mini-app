@@ -1,4 +1,5 @@
 import BackLink from '@/components/back-link';
+import { PartnerEarnNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { loadErrorText } from '@/lib/error-text';
@@ -14,6 +15,9 @@ export function DealerShell({ title, children }: { title: string; children: Reac
         ← Tài khoản
       </BackLink>
       <PageHeader title={title} parentHref="/tai-khoan" className="md:mt-1" />
+      <div className="mt-3">
+        <PartnerEarnNavPills />
+      </div>
       <div className="mt-4">{children}</div>
     </main>
   );

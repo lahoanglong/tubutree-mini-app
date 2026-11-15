@@ -47,6 +47,7 @@ import { Card } from '../components/ui/card';
 import { Checkbox } from '../components/ui/form';
 import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
+import { PartnerEarnPills } from '../components/ui/partner-earn-pills';
 import { ProgressBar } from '../components/ui/progress-bar';
 import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
@@ -144,6 +145,7 @@ export default function AffiliatePage() {
     return (
       <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />
+        <PartnerEarnPills active="affiliate" />
         {phase === 'authenticated' ? skeleton : <AuthPhaseView phase={phase} loading={skeleton} />}
       </Page>
     );
@@ -153,6 +155,7 @@ export default function AffiliatePage() {
     return (
       <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
         <PageHeader title={PAGE_TITLE} />
+        <PartnerEarnPills active="affiliate" />
         <ErrorState message={getLoadErrorMessage(meQ.error)} onRetry={() => meQ.refetch()} />
       </Page>
     );
@@ -168,6 +171,7 @@ function CannotRegister() {
   return (
     <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title={PAGE_TITLE} />
+      <PartnerEarnPills active="affiliate" />
       <EmptyState
         art="leaf"
         heading="Tài khoản này không đăng ký CTV được"
@@ -225,6 +229,7 @@ function RegisterGate() {
   return (
     <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title={PAGE_TITLE} />
+      <PartnerEarnPills active="affiliate" />
       <div style={{ padding: 16 }}>
         <div
           style={{
@@ -409,6 +414,7 @@ function Dashboard() {
       <div style={{ position: 'sticky', top: 0, zIndex: 5 }}>
         <PageHeader title={PAGE_TITLE} />
       </div>
+      <PartnerEarnPills active="affiliate" />
 
       {/* Số to là tiền dùng được ngay; hoa hồng đang chờ và số tạm tính tháng là dòng phụ. */}
       <div style={{ padding: 16 }}>

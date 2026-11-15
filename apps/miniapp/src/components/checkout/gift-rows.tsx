@@ -26,7 +26,9 @@ export function GiftRows({ gifts, excluded, onToggle }: GiftRowsProps) {
 
   const rows = view.rows.map((row) => (
     <div key={row.id} className="tubu-gift-row" data-testid="checkout-gift-row">
-      <Text variant="body-sm" as="span">{row.label}</Text>
+      <Text variant="body-sm" tone={row.receive ? 'primary' : 'secondary'} as="span" style={row.receive ? undefined : { opacity: 0.6 }}>
+        {row.label}
+      </Text>
       <Checkbox
         checked={!row.receive}
         onChange={() => {

@@ -8,6 +8,8 @@ export interface BrowseModeInput {
   sort?: string;
   /** Nút "Xem tất cả sản phẩm": danh sách không lọc. */
   all?: boolean;
+  /** Chế độ chuyên đề (vd `subscription` — Mua xoay vòng / Đặt định kỳ): vào thẳng danh sách kèm giải thích quyền lợi. */
+  filter?: 'subscription';
   brands: string[];
   minPrice?: number;
   maxPrice?: number;
@@ -19,7 +21,7 @@ export type BrowseMode = 'hub' | 'list';
 
 /**
  * Gốc không tham số là hub (không lưới sản phẩm); bất kỳ tham số nào làm kết quả khác "mọi sản phẩm" hoặc khách chủ động mở danh
- * sách (`all`, `sort`) thì là danh sách. Tham số lạ (utm, ref) không nằm trong đầu vào nên không đổi chế độ.
+ * sách (`all`, `sort`, `filter`) thì là danh sách. Tham số lạ (utm, ref) không nằm trong đầu vào nên không đổi chế độ.
  */
 export function browseMode(s: BrowseModeInput): BrowseMode {
   const filtered =
@@ -28,6 +30,7 @@ export function browseMode(s: BrowseModeInput): BrowseMode {
     s.segment !== undefined ||
     s.sort !== undefined ||
     s.all === true ||
+    s.filter === 'subscription' ||
     s.brands.length > 0 ||
     s.minPrice !== undefined ||
     s.maxPrice !== undefined ||

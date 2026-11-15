@@ -19,8 +19,8 @@ import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
 import { StickyActionBar } from '@/components/sticky-action-bar';
-import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { Badge } from '@/components/ui/badge';
+import { RecycleRewardsNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -28,6 +28,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { RecycleLinkRow } from './recycle-link-row';
 import { RecycleTimeline } from './recycle-timeline';
 import { WasteItemThumb } from './waste-item-thumb';
+import { WebRecyclePhoneCard } from './web-recycle-phone-card';
 import {
   BLOCKED_TEXT,
   METHOD_FLAG,
@@ -63,6 +64,7 @@ function Shell({ children, showHistory = false }: { children: ReactNode; showHis
           ) : undefined
         }
       />
+      <RecycleRewardsNavPills />
       {children}
     </main>
   );
@@ -201,7 +203,9 @@ export function RecycleHome() {
   const fullPage = me?.programmeEnabled === true && me.eligibility === 'OK' && !me.blocked;
   const rewardsQ = useQuery({ ...rewardsQuery(coreHttp), enabled: phase === 'authenticated' && fullPage });
 
-  const catalogueQ = useQuery({ ...wasteCatalogueQuery(coreHttp), enabled: phase === 'guest' && cfg.waste.enabled });
+  const needCatalogue =
+    cfg.waste.enabled && (phase === 'guest' || (phase === 'authenticated' && me !== undefined && me.programmeEnabled && me.eligibility !== 'OK'));
+  const catalogueQ = useQuery({ ...wasteCatalogueQuery(coreHttp), enabled: needCatalogue });
   const showHistory = me?.eligibility === 'OK';
 
   if (phase === 'loading') {
@@ -266,12 +270,23 @@ export function RecycleHome() {
       </Shell>
     );
   }
-  // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, không có đường lách.
-  if (me.eligibility !== 'OK') {
+  if (me.eligibility === 'GUEST') {
+    const guestItems = catalogueQ.data?.filter((i) => i.status !== 'HIDDEN').sort((a, b) => a.sortOrder - b.sortOrder);
     return (
       <Shell>
         {deskRow && <div className={skin.card}>{deskRow}</div>}
-        <MiniAppOnlyNotice path="/doi-rac" />
+        <GuestOverview items={catalogueQ.isError ? [] : guestItems} />
+        <GuestLogin />
+      </Shell>
+    );
+  }
+  if (me.eligibility !== 'OK') {
+    const publicItems = catalogueQ.data?.filter((i) => i.status !== 'HIDDEN').sort((a, b) => a.sortOrder - b.sortOrder);
+    return (
+      <Shell>
+        {deskRow && <div className={skin.card}>{deskRow}</div>}
+        <WebRecyclePhoneCard />
+        <GuestOverview items={catalogueQ.isError ? [] : publicItems} />
       </Shell>
     );
   }

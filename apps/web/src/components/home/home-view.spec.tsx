@@ -275,9 +275,11 @@ describe('HomeView — HubLayout cho máy tính', () => {
     expect(blockOrder(c)).toContain('banner');
   });
 
-  it('lối tắt 4 ô chỉ ở điện thoại: từ md ẩn (thanh đầu website đã hiện điều hướng)', async () => {
+  it('Bento Hub 6 trụ cột hiện ở cả máy tính lẫn điện thoại (không bị md:hidden che ở md+)', async () => {
     const c = await mount();
-    expect(block(c, 'shortcuts').querySelector('section')?.className).toContain('md:hidden');
+    const section = block(c, 'shortcuts').querySelector('section');
+    expect(section?.className ?? '').not.toContain('md:hidden');
+    expect(block(c, 'shortcuts').querySelectorAll('[data-pillar]')).toHaveLength(6);
   });
 });
 

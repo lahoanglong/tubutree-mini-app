@@ -53,6 +53,12 @@ describe('next.config CSP', () => {
     const media = csp.split('; ').find((d) => d.startsWith('media-src '));
     expect(media?.split(' ')).toEqual(expect.arrayContaining(["'self'", 'blob:', 'https://res.cloudinary.com']));
   });
+
+  it('Permissions-Policy cho phép geolocation=(self) để tìm điểm thu gom rác gần khách trên Web, khoá camera và microphone', async () => {
+    const rules = await nextConfig.headers!();
+    const perm = rules.flatMap((r) => r.headers).find((h) => h.key === 'Permissions-Policy')!.value;
+    expect(perm).toBe('camera=(), microphone=(), geolocation=(self)');
+  });
 });
 
 describe('CSP gửi báo cáo vi phạm về API', () => {

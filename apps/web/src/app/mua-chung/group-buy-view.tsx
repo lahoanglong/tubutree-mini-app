@@ -15,6 +15,7 @@ import { PhoneCartButton } from '@/components/phone-cart-button';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useActiveFlashSales } from '@/lib/use-flash-sales';
 import { Badge } from '@/components/ui/badge';
+import { GroupCycleDealsNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -165,6 +166,9 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
   return (
     <main className={`${PAGE_WIDE} py-6`}>
       <PageHeader title="Mua chung giá tốt" subtitle="Rủ thêm bạn cho đủ nhóm — đủ người, ai cũng nhận mã giảm giá!" actions={<PhoneCartButton />} />
+      <div className="mt-3">
+        <GroupCycleDealsNavPills activeOverride="group-buy" />
+      </div>
 
       {note && (
         <p role={note.error ? 'alert' : 'status'} className={`mt-3 text-sm ${note.error ? 'text-danger-fg' : 'text-success-fg'}`}>

@@ -48,19 +48,30 @@ export function userPhoneWriters(): string[] {
 
 /**
  * Điểm đơn chat tự liên kết theo SĐT chỉ an toàn khi `users.phone` là số đã xác minh (Zalo cấp qua getPhoneNumber). Test này canh
- * nơi GHI cột đó: thêm đường ghi mới (vd khách tự gõ SĐT ở hồ sơ) làm test đỏ để người thêm phải thêm cờ xác minh vào
- * verifiedMemberPhone (external-chat.rules.ts) trước khi bật loyalty.chat_order_points_enabled.
+ * nơi GHI cột đó: thêm đường ghi mới (vd khách tự gõ SĐT liên hệ ở hồ sơ/đổi rác Web) làm test đỏ để người thêm bắt buộc giữ
+ * `phoneVerifiedAt == null` cho số tự nhập và chặn ở cả `linkableMemberPhone`, `verifiedMemberPhone`, `ExternalClaimService` và `RbacService.applyGrants`.
  */
 describe('nguồn của users.phone (điều kiện để tự liên kết điểm đơn chat theo SĐT)', () => {
-  it('chỉ AuthService ghi users.phone (từ số Zalo đã giải mã), xoá tài khoản chỉ xoá số về null', () => {
-    expect(userPhoneWriters()).toEqual(['modules/auth/auth.service.ts', 'modules/users/account-deletion.service.ts']);
+  it('chỉ AuthService ghi SĐT xác minh Zalo, UsersService.saveContactPhone chỉ ghi khi phone=null (giữ phoneVerifiedAt=null), xoá tài khoản chỉ xoá số về null', () => {
+    expect(userPhoneWriters()).toEqual([
+      'modules/auth/auth.service.ts',
+      'modules/users/account-deletion.service.ts',
+      'modules/users/users.service.ts',
+    ]);
     const deletion = readFileSync(join(SRC, 'modules/users/account-deletion.service.ts'), 'utf8');
     expect(deletion).toContain('phone: null,');
     const auth = readFileSync(join(SRC, 'modules/auth/auth.service.ts'), 'utf8');
     expect(auth).toContain('this.zalo.resolvePhoneNumber(phoneToken, accessToken)');
+    const usersSvc = readFileSync(join(SRC, 'modules/users/users.service.ts'), 'utf8');
+    expect(usersSvc).toContain('where: { id: userId, phone: null }');
+    expect(usersSvc).not.toMatch(/phoneVerifiedAt\s*:/);
+    const chatRules = readFileSync(join(SRC, 'modules/external-points/external-chat.rules.ts'), 'utf8');
+    expect(chatRules).toContain('if (!u.phoneVerifiedAt) return null;');
+    const claimSvc = readFileSync(join(SRC, 'modules/external-points/external-claim.service.ts'), 'utf8');
+    expect(claimSvc).toContain('!!user.phoneVerifiedAt');
   });
 
-  it('không có DTO hồ sơ nào cho khách gửi `phone` lên cập nhật tài khoản', () => {
+  it('UpdateMeDto không cho khách gửi `phone`, còn ContactPhoneDto chỉ đi qua saveContactPhone một chiều khi chưa có SĐT', () => {
     const dto = readFileSync(join(SRC, 'modules/users/dto/update-me.dto.ts'), 'utf8');
     expect(dto).not.toMatch(/\bphone\b/);
   });

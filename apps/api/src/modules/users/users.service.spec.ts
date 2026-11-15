@@ -1,5 +1,7 @@
-import { BadRequestException, Logger } from '@nestjs/common';
-import { UsersService } from './users.service';
+import { BadRequestException, ConflictException, ForbiddenException, Logger } from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import { UsersService, normalizeVnContactPhone } from './users.service';
+import { eligibilityOf } from '../waste-exchange/core/waste-access.service';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { NotificationsService } from '../notifications/notifications.service';
 
@@ -646,5 +648,111 @@ describe('UsersService.getMe: Điểm Xanh hai lô (review C1)', () => {
     const findUniqueOrThrow = jest.fn().mockResolvedValue({ ...fakeUser, pointsBalance: 0, pointsConvertedBalance: 1250 });
     const svc = new UsersService({ user: { findUniqueOrThrow } } as unknown as PrismaService);
     expect((await svc.getMe('u1')).pointsTotal).toBe(1250);
+  });
+});
+
+describe('UsersService.setContactPhone (W171 native web recycle)', () => {
+  function buildContactPrisma(opts: {
+    current?: Record<string, unknown> | null;
+    owner?: { id: string } | null;
+    grant?: { id: string } | null;
+    updateManyCount?: number;
+    throwP2002?: boolean;
+  } = {}) {
+    const current =
+      opts.current === undefined
+        ? { ...fakeUser, id: 'u1', zaloId: 'zalo_web_123', phone: null, phoneVerifiedAt: null }
+        : opts.current;
+    const findUnique = jest.fn().mockImplementation(async ({ where }: { where: { id?: string; phone?: string } }) => {
+      if (where.phone) return opts.owner ?? null;
+      return current;
+    });
+    const findUniqueOrThrow = jest.fn().mockImplementation(async () => ({
+      ...(current ?? fakeUser),
+      phone: '0912345678',
+      phoneVerifiedAt: null,
+    }));
+    const updateMany = opts.throwP2002
+      ? jest.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError('Unique constraint failed', { code: 'P2002', clientVersion: '6.0.0' }))
+      : jest.fn().mockResolvedValue({ count: opts.updateManyCount ?? 1 });
+    const roleGrantFindFirst = jest.fn().mockResolvedValue(opts.grant ?? null);
+    const adminEventCreate = jest.fn().mockResolvedValue({});
+    const tx: Record<string, unknown> = {
+      user: { findUnique, findUniqueOrThrow, updateMany },
+      roleGrant: { findFirst: roleGrantFindFirst },
+      userAdminEvent: { create: adminEventCreate },
+    };
+    tx.$transaction = jest.fn((cb: (c: unknown) => unknown) => cb(tx));
+    return {
+      prisma: tx as unknown as PrismaService,
+      svc: new UsersService(tx as unknown as PrismaService),
+      updateMany,
+      adminEventCreate,
+    };
+  }
+
+  it('chuẩn hoá +84 / khoảng trắng / gạch ngang về 0xxxxxxxxx, giữ phoneVerifiedAt=null và mở khoá WasteAccessService.eligibilityOf === OK', async () => {
+    expect(normalizeVnContactPhone('+84 912-345-678')).toBe('0912345678');
+    expect(normalizeVnContactPhone('0084.388.111.222')).toBe('0388111222');
+    expect(normalizeVnContactPhone('0243822111')).toBeNull(); // máy bàn 02x bị từ chối
+
+    const { svc, updateMany, adminEventCreate } = buildContactPrisma();
+    const res = await svc.setContactPhone('u1', '+84 912 345 678');
+
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'u1', phone: null },
+      data: { phone: '0912345678' },
+    });
+    expect(adminEventCreate).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        userId: 'u1',
+        kind: 'CONTACT_PHONE_SET',
+        toValue: '0912345678',
+        actorId: 'u1',
+      }),
+    });
+    expect(res.phone).toBe('0912345678');
+    expect(eligibilityOf({ zaloId: 'zalo_web_123', phone: res.phone })).toBe('OK');
+  });
+
+  it('SĐT sai định dạng di động VN → 400 BadRequestException, không ghi DB', async () => {
+    const { svc, updateMany } = buildContactPrisma();
+    await expect(svc.setContactPhone('u1', '0123456789')).rejects.toBeInstanceOf(BadRequestException);
+    await expect(svc.setContactPhone('u1', '091234567')).rejects.toBeInstanceOf(BadRequestException);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản khách vãng lai (guest_*) → 403 ForbiddenException', async () => {
+    const { svc, updateMany } = buildContactPrisma({
+      current: { ...fakeUser, id: 'u1', zaloId: 'guest_abc', phone: null },
+    });
+    await expect(svc.setContactPhone('u1', '0912345678')).rejects.toBeInstanceOf(ForbiddenException);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('SĐT đã thuộc tài khoản khác → 409 ConflictException chống chiếm đoạt tài khoản, không gộp hay ghi đè', async () => {
+    const { svc, updateMany } = buildContactPrisma({ owner: { id: 'u-other' } });
+    await expect(svc.setContactPhone('u1', '0912345678')).rejects.toBeInstanceOf(ConflictException);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('SĐT đang nằm trong lời mời nhân sự (role_grants) → 409 ConflictException chống leo thang đặc quyền', async () => {
+    const { svc, updateMany } = buildContactPrisma({ grant: { id: 'grant-1' } });
+    await expect(svc.setContactPhone('u1', '0912345678')).rejects.toBeInstanceOf(ConflictException);
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('đua song song vấp P2002 unique → chuyển sạch sang 409 ConflictException', async () => {
+    const { svc } = buildContactPrisma({ throwP2002: true });
+    await expect(svc.setContactPhone('u1', '0912345678')).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it('tài khoản đã gắn SĐT khác từ trước → 409 ConflictException bảo vệ số đã lưu; gửi lại đúng số của mình thì idempotent', async () => {
+    const { svc, updateMany } = buildContactPrisma({
+      current: { ...fakeUser, id: 'u1', zaloId: 'zalo_web_123', phone: '0987654321' },
+    });
+    await expect(svc.setContactPhone('u1', '0912345678')).rejects.toBeInstanceOf(ConflictException);
+    await expect(svc.setContactPhone('u1', '+84 987 654 321')).resolves.toMatchObject({ phone: '0987654321' });
+    expect(updateMany).not.toHaveBeenCalled();
   });
 });

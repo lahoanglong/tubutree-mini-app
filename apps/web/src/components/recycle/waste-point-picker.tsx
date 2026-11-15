@@ -18,6 +18,7 @@ export interface WastePointPickerProps {
   /** Các món đang bật, liệt kê trên từng thẻ. */
   items: readonly { id: string; name: string; warehouseOnly?: boolean }[];
   selectedItemIds: readonly string[];
+  showDistance?: boolean;
   now?: Date;
   /** Đang bận (gửi yêu cầu...): mọi ô chọn báo aria-disabled và không nhận bấm. */
   disabled?: boolean;
@@ -30,11 +31,17 @@ function missingItemIds(p: WastePointDTO, selectedItemIds: readonly string[]): s
   return selectedItemIds.filter((id) => !p.acceptedItemIds.includes(id));
 }
 
-/** Điểm nhận đủ món đã chọn xếp trước, rồi giữ thứ tự đầu vào (web không có khoảng cách vì không dùng vị trí). */
+/** Điểm nhận đủ món đã chọn trước, rồi gần trước xa sau (không có khoảng cách xếp cuối), cuối cùng giữ thứ tự đầu vào. */
 export function sortWastePoints(points: readonly WastePointDTO[], selectedItemIds: readonly string[]): WastePointDTO[] {
   return points
     .map((p, index) => ({ p, index, partial: missingItemIds(p, selectedItemIds).length > 0 }))
-    .sort((a, b) => (a.partial !== b.partial ? (a.partial ? 1 : -1) : a.index - b.index))
+    .sort((a, b) => {
+      if (a.partial !== b.partial) return a.partial ? 1 : -1;
+      const da = a.p.distanceKm ?? Number.POSITIVE_INFINITY;
+      const db = b.p.distanceKm ?? Number.POSITIVE_INFINITY;
+      if (da !== db) return da < db ? -1 : 1;
+      return a.index - b.index;
+    })
     .map((x) => x.p);
 }
 
@@ -42,12 +49,13 @@ export function sortWastePoints(points: readonly WastePointDTO[], selectedItemId
  * Khách chọn điểm nhận. Mỗi điểm là một ô chọn (role=radio) toàn chữ; dòng khoá, ưu đãi riêng và nút gọi, chỉ đường
  * nằm NGOÀI ô chọn vì trình đọc màn hình gộp phần tử con vào radio và bỏ rơi nút.
  */
-export function WastePointPicker({ points, value, onChange, items, selectedItemIds, now, disabled }: WastePointPickerProps) {
+export function WastePointPicker({ points, value, onChange, items, selectedItemIds, showDistance = false, now, disabled }: WastePointPickerProps) {
   const sorted = sortWastePoints(points, selectedItemIds);
   const clock = now ?? new Date();
   const group = useRovingGroup();
   const busy = disabled === true;
   const isLocked = (p: WastePointDTO) => p.quotaFull || missingItemIds(p, selectedItemIds).length > 0;
+  const nearestId = showDistance ? sorted.find((p) => !isLocked(p) && p.distanceKm != null)?.id : undefined;
 
   return (
     <div ref={group.ref} onKeyDown={group.onKeyDown} role="radiogroup" aria-label="Chọn điểm nhận" className="grid gap-2 md:grid-cols-2">
@@ -87,6 +95,16 @@ export function WastePointPicker({ points, value, onChange, items, selectedItemI
                   <Badge tone={p.kind === 'WAREHOUSE' ? 'info' : 'brand'} size="sm">
                     {p.kind === 'WAREHOUSE' ? 'Kho Tubu' : 'Đại lý'}
                   </Badge>
+                  {showDistance && p.distanceKm != null && (
+                    <Badge tone="neutral" size="sm">
+                      {`${p.distanceKm.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} km`}
+                    </Badge>
+                  )}
+                  {nearestId === p.id && (
+                    <Badge tone="success" size="sm">
+                      Gần nhất
+                    </Badge>
+                  )}
                 </span>
                 <span className="flex items-start gap-2">
                   <MapPin className="mt-0.5 h-4 w-4 flex-none text-forest-600" aria-hidden="true" />

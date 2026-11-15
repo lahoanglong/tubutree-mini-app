@@ -27,7 +27,7 @@ const mount = (ui: React.ReactElement) => {
 };
 
 describe('AccountShell (menu tài khoản từ md)', () => {
-  it('đã đăng nhập: có menu nhóm theo mục, đánh dấu mục đang mở, ẩn mục chưa làm xong, menu chỉ từ md', () => {
+  it('đã đăng nhập: có menu nhóm theo mục cá nhân, không chứa các trang ngoài khung (Ưu đãi, Kho quà), menu chỉ từ md', () => {
     const c = mount(
       <AccountShell>
         <main>nội dung</main>
@@ -37,6 +37,8 @@ describe('AccountShell (menu tài khoản từ md)', () => {
     expect(nav.className).toMatch(/\bhidden\b/);
     expect(nav.className).toMatch(/\bmd:block\b/);
     expect(nav.querySelector('a[aria-current="page"]')?.textContent).toBe('Ví Tubu');
+    expect(nav.querySelector('a[href="/uu-dai"]')).toBeNull();
+    expect(nav.querySelector('a[href="/kho-qua"]')).toBeNull();
     expect(nav.querySelector('a[href="/kho-qua/cua-toi"]')).toBeNull();
     expect(nav.querySelector('a[href="/tai-khoan/diem-xanh"]')).not.toBeNull();
     expect(c.querySelector('main')?.textContent).toBe('nội dung');

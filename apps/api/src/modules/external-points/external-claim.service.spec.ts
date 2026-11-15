@@ -16,7 +16,13 @@ function build(opts: { config?: Record<string, unknown>; order?: Record<string, 
       calls.push('rowlock');
       return [];
     }),
-    user: { findUnique: jest.fn(async () => (opts.user === undefined ? { id: 'u1', phone: '0912345678', zaloId: 'z1', isBlocked: false, role: 'CUSTOMER' } : opts.user)) },
+    user: {
+      findUnique: jest.fn(async () =>
+        opts.user === undefined
+          ? { id: 'u1', phone: '0912345678', phoneVerifiedAt: NOW, zaloId: 'z1', isBlocked: false, role: 'CUSTOMER' }
+          : opts.user,
+      ),
+    },
     externalClaimAttempt: {
       findMany: jest.fn(async () => []),
       count: jest.fn(async () => 0),
@@ -166,7 +172,7 @@ describe('ExternalClaimService.submit', () => {
     expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'REJECTED_ALREADY_CLAIMED' }) });
   });
   it('nhân viên tự gửi mã: vào REVIEW, không báo PENDING', async () => {
-    const { svc, notifications } = build({ config: flagOn, order: order(), user: { id: 'u1', phone: '0912345678', zaloId: 'z1', isBlocked: false, role: 'STAFF' } });
+    const { svc, notifications } = build({ config: flagOn, order: order(), user: { id: 'u1', phone: '0912345678', phoneVerifiedAt: NOW, zaloId: 'z1', isBlocked: false, role: 'STAFF' } });
     expect(await svc.submit('u1', 'SPXVN0123456789')).toMatchObject({ status: 'REVIEW' });
     expect(notifications.notify).not.toHaveBeenCalled();
   });
@@ -259,5 +265,14 @@ describe('ExternalClaimService.rematchOne', () => {
       expect(tx.externalClaimAttempt.createMany).toHaveBeenCalledTimes(2);
       expect(attemptCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ result: 'NOT_FOUND' }) });
     });
+  });
+
+  it('SĐT liên hệ tự nhập trên Web (phoneVerifiedAt=null) bị chặn NOT_ELIGIBLE_USER khi gửi mã tích điểm đơn sàn', async () => {
+    const { svc } = build({
+      config: flagOn,
+      order: order(),
+      user: { id: 'u1', phone: '0912345678', phoneVerifiedAt: null, zaloId: 'z1', isBlocked: false, role: 'CUSTOMER' },
+    });
+    expect(await codeOf(svc.submit('u1', 'SPXVN0123456789'))).toBe('NOT_ELIGIBLE_USER');
   });
 });

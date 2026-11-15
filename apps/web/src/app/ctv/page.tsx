@@ -58,6 +58,7 @@ import {
   WITHDRAWING_META,
 } from '@/components/affiliate/ctv-copy';
 import BackLink from '@/components/back-link';
+import { PartnerEarnNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { PageHeader } from '@/components/ui/page-header';
 import { PAGE_NARROW, PAGE_WIDE } from '@/lib/page-frame';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
@@ -86,6 +87,9 @@ function Shell({ children, narrow = false }: { children: ReactNode; narrow?: boo
         ← Tài khoản
       </BackLink>
       <PageHeader title={TITLE} parentHref="/tai-khoan" className="md:mt-1" />
+      <div className="mt-3">
+        <PartnerEarnNavPills />
+      </div>
       <div className="mt-4">{children}</div>
     </main>
   );

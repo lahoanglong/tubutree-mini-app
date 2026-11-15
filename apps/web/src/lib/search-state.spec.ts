@@ -155,7 +155,7 @@ describe('chế độ hub / danh sách (tham số all)', () => {
   it('isBrowseHub: gốc và tham số lạ là hub; link cũ và bộ lọc là danh sách; trang > 1 ở gốc cũng là danh sách', () => {
     expect(isBrowseHub(EMPTY_SEARCH_STATE)).toBe(true);
     expect(isBrowseHub(parse('utm_source=zalo'))).toBe(true);
-    for (const url of ['sort=best_seller', 'segment=eco', 'brand=Tubu', 'inStock=1', 'all=1', 'q=nuoc', 'category=c', 'rating=4', 'minPrice=1']) {
+    for (const url of ['sort=best_seller', 'segment=eco', 'brand=Tubu', 'inStock=1', 'all=1', 'q=nuoc', 'category=c', 'rating=4', 'minPrice=1', 'filter=subscription']) {
       expect(isBrowseHub(parse(url)), url).toBe(false);
     }
     expect(isBrowseHub(EMPTY_SEARCH_STATE, 1)).toBe(true);

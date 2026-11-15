@@ -127,6 +127,8 @@ describe('quà 0đ và dòng phí giao', () => {
   it('từ 3 quà thì gộp một dòng', () => {
     const v = giftSectionView([gift('1'), gift('2'), gift('3')], []);
     expect(v).toMatchObject({ layout: 'merged', mergedLabel: '🎁 3 quà đổi điểm tặng kèm · 0đ' });
+    expect(giftSectionView([gift('1'), gift('2'), gift('3')], ['2']).mergedLabel).toBe('🎁 2 quà đổi điểm tặng kèm · 0đ (để đơn sau 1)');
+    expect(giftSectionView([gift('1'), gift('2'), gift('3')], ['1', '2', '3']).mergedLabel).toBe('🎁 3 quà đổi điểm tặng kèm · 0đ (để đơn sau)');
   });
 
   it('phí giao chỉ đổi dáng khi được miễn vì RECYCLE_PICKUP; phí gốc = phí hiện tại + phần miễn', () => {

@@ -66,7 +66,6 @@ import {
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
-import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { ErrorState } from '@/components/ui/error-state';
 import { useRovingGroup } from '@/lib/use-roving-group';
@@ -74,6 +73,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { Skeleton } from '@/components/ui/skeleton';
 import { WasteItemStep } from './waste-item-step';
 import { HomePickupComposer } from './recycle-home-pickup';
+import { WebRecyclePhoneCard } from './web-recycle-phone-card';
 import {
   METHOD_LABELS,
   METHOD_LINE,
@@ -226,21 +226,22 @@ export function RecycleNew() {
 
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed });
   const me: WasteMeDTO | undefined = meQ.data;
-  const leave = me !== undefined && (!me.programmeEnabled || me.blocked);
+  const leave = me !== undefined && (!me.programmeEnabled || me.blocked || me.eligibility === 'GUEST');
   useEffect(() => {
     if (leave) router.replace('/doi-rac');
   }, [leave, router]);
+  const eligible = me?.eligibility === 'OK';
   const activeIds = useMemo(() => (me ? new Set(me.items.filter((i) => i.status === 'ACTIVE').map((i) => i.id)) : null), [me]);
   // Món bị ẩn hoặc sắp ra mắt sau khi nháp được lưu (nạp lại trang, quay từ trang chọn điểm) thì người dùng không thấy để bỏ, nên cắt khỏi nháp.
   useEffect(() => {
-    if (!activeIds) return;
+    if (!activeIds || !eligible) return;
     setDraft((d) => {
       const kept = Object.fromEntries(Object.entries(d.lines).filter(([id]) => activeIds.has(id)));
       return Object.keys(kept).length === Object.keys(d.lines).length ? d : { ...d, lines: kept };
     });
-  }, [activeIds]);
+  }, [activeIds, eligible]);
   const lineInputs = toLineInputs(draft.lines).filter((l) => !activeIds || activeIds.has(l.itemId));
-  const missingDraft = ready && step === 'method' && lineInputs.length === 0;
+  const missingDraft = ready && eligible && step === 'method' && lineInputs.length === 0;
   useEffect(() => {
     if (missingDraft) router.replace(WIZARD_PATH);
   }, [missingDraft, router]);
@@ -251,9 +252,9 @@ export function RecycleNew() {
   const itemsPreviewQ = useQuery({
     queryKey: [...WASTE_QUERY_KEYS.all, 'preview', debounced],
     queryFn: () => previewWaste(coreHttp, { lines: debounced }),
-    enabled: step === 'items' && debounced.length > 0 && authed && !!me,
+    enabled: step === 'items' && debounced.length > 0 && authed && eligible,
   });
-  const rewardsQ = useQuery({ ...rewardsQuery(coreHttp), enabled: step === 'items' && authed });
+  const rewardsQ = useQuery({ ...rewardsQuery(coreHttp), enabled: step === 'items' && authed && eligible });
 
   const enabledMethods = useMemo(() => {
     if (!me) return [];
@@ -295,8 +296,8 @@ export function RecycleNew() {
     orderPreviews[m] = data ?? lastPreview.current[m];
   });
 
-  const pointsQ = useQuery({ ...wastePointsQuery(coreHttp, null), enabled: step === 'method' && authed });
-  const wantProvinces = step === 'method' && enabledMethods.includes('MAIL_IN');
+  const pointsQ = useQuery({ ...wastePointsQuery(coreHttp, null), enabled: step === 'method' && authed && eligible });
+  const wantProvinces = step === 'method' && eligible && enabledMethods.includes('MAIL_IN');
   const provincesQ = useQuery({ queryKey: ['geo', 'provinces'], queryFn: () => getProvinces(coreHttp), enabled: wantProvinces });
 
   // Chọn sẵn "Mang tới điểm nhận" với điểm lần trước để khách đỡ phải chạm nhiều lần; không có gợi ý thì để khách tự chọn.
@@ -396,8 +397,7 @@ export function RecycleNew() {
   if (phase === 'guest') return shell(skeleton);
   if (meQ.isError) return shell(<ErrorState message={errText(meQ.error)} onRetry={() => meQ.refetch()} />);
   if (!me || leave || !ready || missingDraft) return shell(skeleton);
-  // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, không có đường lách.
-  if (me.eligibility !== 'OK') return shell(<MiniAppOnlyNotice path={WIZARD_PATH} />);
+  if (me.eligibility !== 'OK') return shell(<WebRecyclePhoneCard />);
 
   if (step === 'items') {
     const onChange = (itemId: string, qty: number) =>

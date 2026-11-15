@@ -17,13 +17,16 @@ import { useCouponUse } from '@/lib/use-coupon-use';
 import { EmptyState } from '@/components/mini/empty-state';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { ClaimPointInfo } from '@/components/loyalty/claim-point';
+import BackLink from '@/components/back-link';
 import { Badge } from '@/components/ui/badge';
+import { RecycleRewardsNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { ErrorState } from '@/components/ui/error-state';
+import { PageHeader } from '@/components/ui/page-header';
 import { QrCode } from '@/components/ui/qr-code';
 import { Skeleton } from '@/components/ui/skeleton';
 import { miniOutline } from '@/components/loyalty/mini-surface';
-import { LedgerShell } from '../../tai-khoan/ledger-shell';
 import { loadErrorText } from '@/lib/error-text';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
 const TITLE = 'Quà của tôi';
 
@@ -140,15 +143,31 @@ function RewardsMineBody() {
 export default function RewardsMinePage() {
   const phase = useAuthPhase();
   return (
-    <LedgerShell title={TITLE} wide>
-      {phase === 'loading' && <AuthLoading />}
-      {phase === 'unavailable' && <SessionUnavailable />}
-      {phase === 'guest' && <LoginRequired message="Đăng nhập để xem quà bạn đã đổi." returnTo="/kho-qua/cua-toi" />}
-      {phase === 'authenticated' && (
-        <Suspense fallback={<Skeleton height={120} />}>
-          <RewardsMineBody />
-        </Suspense>
-      )}
-    </LedgerShell>
+    <main className={`${PAGE_WIDE} pb-6 pt-0 md:pt-6 tabular-nums`}>
+      <BackLink
+        href="/kho-qua"
+        crumbs={[
+          { label: 'Trang chủ', href: '/' },
+          { label: 'Kho quà Điểm Xanh', href: '/kho-qua' },
+          { label: TITLE },
+        ]}
+      >
+        ← Kho quà Điểm Xanh
+      </BackLink>
+      <PageHeader title={TITLE} backHref="/kho-qua" backLabel="Quay lại Kho quà" className="md:mt-1" />
+      <div className="mt-3">
+        <RecycleRewardsNavPills />
+      </div>
+      <div className="mt-4">
+        {phase === 'loading' && <AuthLoading />}
+        {phase === 'unavailable' && <SessionUnavailable />}
+        {phase === 'guest' && <LoginRequired message="Đăng nhập để xem quà bạn đã đổi." returnTo="/kho-qua/cua-toi" />}
+        {phase === 'authenticated' && (
+          <Suspense fallback={<Skeleton height={120} />}>
+            <RewardsMineBody />
+          </Suspense>
+        )}
+      </div>
+    </main>
   );
 }

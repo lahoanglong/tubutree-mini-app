@@ -197,10 +197,18 @@ describe('/tai-khoan/ho-so — các ô nhập', () => {
     expect(container.textContent).toContain('Nhận mã giảm giá quà tặng vào tháng sinh nhật.');
   });
 
-  it('chưa có số điện thoại: câu báo rõ', async () => {
+  it('chưa có số điện thoại: câu báo rõ kèm ô nhập + nút Lưu số điện thoại gọi PATCH /me/contact-phone', async () => {
     mocks.get.mockResolvedValue({ ...ME, phone: null });
+    mocks.patch.mockResolvedValueOnce({ ...ME, phone: '0988111222' });
     const { container } = await mount();
     expect(container.textContent).toContain('Chưa có số điện thoại');
+    const phoneField = field(container, 'Số điện thoại liên hệ');
+    expect(phoneField).toBeDefined();
+    typeInto(phoneField, '+84 988 111 222');
+    click(byText(container, 'button', 'Lưu số điện thoại'));
+    await flush(6);
+    expect(mocks.patch).toHaveBeenCalledWith('/me/contact-phone', { phone: '0988111222' });
+    expect(statusText(container)).toContain('Đã lưu số điện thoại liên hệ');
   });
 
   it('email sai sau khi rời ô: báo lỗi, aria-invalid, khoá nút Lưu, không gọi API', async () => {

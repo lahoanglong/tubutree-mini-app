@@ -47,6 +47,19 @@ describe('RbacService.applyGrants', () => {
     expect(prisma.roleGrant.findMany as jest.Mock).not.toHaveBeenCalled();
   });
 
+  it('SĐT liên hệ tự nhập trên web (phoneVerifiedAt === null) → không tự nâng quyền qua applyGrants lúc đăng nhập/refresh', async () => {
+    const prisma = makePrisma({
+      roleGrant: { findMany: jest.fn().mockResolvedValue([{ role: 'STAFF' }]) },
+      user: { update: jest.fn() },
+    });
+    const svc = new RbacService(prisma);
+    const user = mkUser({ phone: '0912345678', phoneVerifiedAt: null });
+    const out = await svc.applyGrants(user);
+    expect(out).toBe(user);
+    expect(prisma.roleGrant.findMany as jest.Mock).not.toHaveBeenCalled();
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
   it('không có grant → giữ nguyên role', async () => {
     const prisma = makePrisma();
     const out = await new RbacService(prisma).applyGrants(mkUser());

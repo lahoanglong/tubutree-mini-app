@@ -72,6 +72,7 @@ const loadCheckout = () => import('../pages/checkout');
 const CheckoutPage = lazy(loadCheckout);
 const BankPaymentPage = lazy(() => import('../pages/bank-payment'));
 const OrdersPage = lazy(() => import('../pages/orders'));
+const SubscriptionsPage = lazy(() => import('../pages/subscriptions'));
 const OrderDetailPage = lazy(() => import('../pages/order-detail'));
 const GamePage = lazy(() => import('../pages/game'));
 const FeedPage = lazy(() => import('../pages/feed'));
@@ -272,8 +273,8 @@ export default function MyApp() {
                     <Route path="/edit-profile" element={<RouteShell><EditProfilePage /></RouteShell>} />
                     <Route path="/settings" element={<RouteShell><SettingsPage /></RouteShell>} />
                     <Route path="/brand-story" element={<RouteShell><BrandStoryPage /></RouteShell>} />
-                    {/* "Đặt định kỳ" nay là tab "Định kỳ" của trang Đơn hàng (spec 4a.2) — giữ route cũ cho link đã lưu. */}
-                    <Route path="/subscriptions" element={<Navigate to="/orders?tab=subscriptions" replace />} />
+                    {/* Trang đích Mua xoay vòng (W171): khách vãng lai xem ngay quyền lợi + sản phẩm đặt định kỳ; quản lý gói vẫn ở cả đây và /orders?tab=subscriptions. */}
+                    <Route path="/subscriptions" element={<RouteShell><SubscriptionsPage /></RouteShell>} />
                     <Route path="/storefront" element={<RouteShell><StorefrontBuilderPage /></RouteShell>} />
                     <Route path="/s/:slug" element={<RouteShell><StorefrontViewPage /></RouteShell>} />
                     <Route path="/brand/:slug" element={<RouteShell><BrandViewPage /></RouteShell>} />

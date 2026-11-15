@@ -183,6 +183,101 @@ export function homeShortcutSlots(flags: HomeFlags): { pinned: HomeShortcutSpec[
   return { pinned: all.slice(0, HOME_SHORTCUT_SLOTS), all };
 }
 
+// ---- Hệ sinh thái 6 trụ cột (W171 Bento Hub) ----
+
+export type HomePillarId = 'garden' | 'recycle' | 'rewards' | 'groupBuy' | 'subscription' | 'partner';
+
+export interface HomeEcosystemPillarSpec {
+  id: HomePillarId;
+  title: string;
+  subtitle: string;
+  badge: string;
+  tone: 'botanical' | 'warm';
+  featured?: boolean;
+  webHref: string;
+  miniRoute: string;
+}
+
+export const HOME_ECOSYSTEM_PILLARS: readonly HomeEcosystemPillarSpec[] = [
+  {
+    id: 'garden',
+    title: 'Vườn Xanh & Game',
+    subtitle: 'Tưới cây mỗi ngày nhận quà thật',
+    badge: 'Quà thật',
+    tone: 'botanical',
+    webHref: '/vuon-xanh',
+    miniRoute: '/game',
+  },
+  {
+    id: 'recycle',
+    title: 'Đổi rác lấy quà',
+    subtitle: 'Miễn ship khi gửi kèm đơn',
+    badge: 'Miễn ship kèm đơn',
+    tone: 'botanical',
+    featured: true,
+    webHref: '/doi-rac',
+    miniRoute: '/recycle',
+  },
+  {
+    id: 'rewards',
+    title: 'Kho quà 0đ',
+    subtitle: 'Đổi Điểm Xanh lấy quà & mã giảm giá',
+    badge: 'Điểm Xanh',
+    tone: 'warm',
+    webHref: '/kho-qua',
+    miniRoute: '/offers?tab=rewards',
+  },
+  {
+    id: 'groupBuy',
+    title: 'Mua chung giá kho',
+    subtitle: 'Rủ bạn đủ nhóm giảm sâu',
+    badge: 'Giá kho',
+    tone: 'warm',
+    webHref: '/mua-chung',
+    miniRoute: '/group-buy',
+  },
+  {
+    id: 'subscription',
+    title: 'Mua xoay vòng',
+    subtitle: 'Đặt định kỳ tiết kiệm tới 17%',
+    badge: 'Định kỳ -17%',
+    tone: 'botanical',
+    webHref: '/san-pham?filter=subscription',
+    miniRoute: '/subscriptions',
+  },
+  {
+    id: 'partner',
+    title: 'Đại lý & Tiếp thị liên kết',
+    subtitle: 'Bảng giá sỉ & hoa hồng CTV',
+    badge: 'Sỉ & CTV',
+    tone: 'warm',
+    webHref: '/dai-ly',
+    miniRoute: '/affiliate',
+  },
+];
+
+/**
+ * 6 trụ cột luôn vẽ ngay từ khung hình đầu (không đổi số ô nên CLS = 0). Khi chương trình Đổi rác tạm dừng mà khách còn yêu cầu mở,
+ * thẻ thứ hai đổi lời mời sang theo dõi yêu cầu đang mở mà giữ nguyên kích thước.
+ */
+export function resolveHomeEcosystemPillars(opts: { wastePausedWithOpenRequests?: boolean } = {}): HomeEcosystemPillarSpec[] {
+  return HOME_ECOSYSTEM_PILLARS.map((p) =>
+    p.id === 'recycle' && opts.wastePausedWithOpenRequests
+      ? {
+          ...p,
+          title: RECYCLE_REQUESTS_LABEL,
+          subtitle: 'Theo dõi yêu cầu đổi rác đang mở',
+          badge: RECYCLE_REQUESTS_SHORTCUT_LABEL,
+          webHref: '/doi-rac/yeu-cau',
+          miniRoute: '/recycle/requests',
+        }
+      : p,
+  );
+}
+
+/** Ba lối tắt nhanh ngay dưới Bento Hub (trước nút "Thêm" mở đầy đủ danh sách). */
+export const HOME_QUICK_SHORTCUT_IDS: readonly HomeShortcutId[] = ['flash', 'coupons', 'community'];
+
 // ---- Thanh đáy ----
 
 export type NavTabId = 'home' | 'browse' | 'garden' | 'offers' | 'profile';
@@ -637,7 +732,8 @@ export function categoriesBlockHeight(cells: number): number {
 export const HOME_SETTLING_HEIGHTS = {
   // Banner tỉ lệ 5:2 (`--banner-ratio`) ở 375px trừ đệm 16 mỗi bên.
   banner: Math.round((375 - 32) / 2.5),
-  shortcuts: 84,
+  // Bento 2x3 (3 hàng x 86 + 2 khe 8 = 274) + khe 8 + hàng lối tắt nhanh 44 = 326.
+  shortcuts: 326,
   // Dải Story: tiêu đề 24 + 8, vòng 72 (ảnh 64 + viền 4 mỗi bên), 6, nhãn hai dòng 32 = 142, làm tròn 144. Khối thật đặt đúng chiều cao này.
   stories: 144,
   flash: FLASH_SKELETON_HEIGHT,

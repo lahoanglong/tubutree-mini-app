@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { byText, click, render, type Rendered } from '@/test-utils/dom';
+import { click, render, type Rendered } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({
   push: vi.fn(),
@@ -22,7 +22,8 @@ vi.mock('@/lib/use-recycle-open-requests', () => ({
   },
 }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
-vi.mock('@/lib/use-public-config', () => ({ usePublicConfig: (...a: unknown[]) => {
+vi.mock('@/lib/use-public-config', () => ({
+  usePublicConfig: (...a: unknown[]) => {
     mocks.cfgArgs = a;
     return mocks.cfg;
   },
@@ -37,9 +38,7 @@ const mount = (initialConfig?: Record<string, unknown>) => {
   mounted = render(<ShortcutGrid initialConfig={initialConfig as never} />);
   return mounted.container;
 };
-const labels = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).map((b) => b.textContent?.trim());
 const openAll = (c: HTMLElement) => click(c.querySelector('button[aria-label="Thêm lối tắt"]'));
-// BottomSheet thật đặt tên hộp thoại bằng aria-labelledby trỏ tới tiêu đề h2.
 const allSheet = () => Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"]')).find((d) => d.querySelector('h2')?.textContent === 'Tất cả lối tắt') ?? null;
 const sheetRows = () => Array.from(allSheet()?.querySelectorAll<HTMLElement>('[role="button"]') ?? []);
 
@@ -55,51 +54,48 @@ afterEach(() => {
   mounted = null;
 });
 
-describe('ShortcutGrid web — 4 ô cố định + "Thêm" (Q7)', () => {
-
-  it('nhãn tối đa hai dòng, cao cố định 32px, không nowrap: "Mã giảm giá" xuống dòng chứ không bị cắt "…"; ô vẫn cao 84px', () => {
+describe('ShortcutGrid web — Bento Hub 6 trụ cột + lối tắt nhanh (W171)', () => {
+  it('hiện xuyên suốt cả máy tính lẫn điện thoại (không md:hidden, không lg:hidden), dựng tĩnh đủ 6 trụ cột ngay từ khung hình đầu', () => {
     const c = mount();
-    const buttons = Array.from(c.querySelectorAll<HTMLElement>('[data-testid="shortcut-grid"] button'));
-    expect(buttons).toHaveLength(5);
-    for (const b of buttons) {
-      expect(b.style.height).toBe('84px');
-      const label = b.lastElementChild as HTMLElement;
-      expect(label.style.height).toBe('32px');
-      expect(label.style.lineHeight).toBe('16px');
-      expect(label.style.overflow).toBe('hidden');
-      expect(label.style.whiteSpace).not.toBe('nowrap');
-      expect(label.style.textOverflow).toBe('');
-      expect(label.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
-    }
-  });
-  it('cờ bật hết: 4 ô cố định (Giờ vàng, Mã giảm giá, Đổi rác, Mua chung) và ô "Thêm", lưới 5 cột không cuộn ngang; Giờ vàng là ô đầu tiên', () => {
-    const c = mount();
-    expect(labels(c)).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Mua chung', 'Thêm']);
-    expect(c.querySelector<HTMLElement>('[data-testid="shortcut-grid"]')!.style.display).toBe('grid');
-    expect(c.querySelector('[role="group"][aria-label*="vuốt ngang"]')).toBeNull();
-  });
+    const section = c.querySelector('section[data-testid="shortcut-grid"]')!;
+    expect(section.className).not.toContain('md:hidden');
+    expect(section.className).not.toContain('lg:hidden');
 
-  it('chỉ ở khổ điện thoại: ẩn từ md vì thanh đầu website (SiteHeader) đã hiện hàng điều hướng', () => {
-    const cls = mount().querySelector('section')!.className;
-    expect(cls).toContain('md:hidden');
-    expect(cls).not.toContain('lg:hidden');
+    const bentoCards = Array.from(c.querySelectorAll<HTMLAnchorElement>('[data-testid="ecosystem-bento-hub"] a[data-pillar]'));
+    expect(bentoCards).toHaveLength(6);
+    expect(bentoCards.map((a) => a.getAttribute('href'))).toEqual([
+      '/vuon-xanh',
+      '/doi-rac',
+      '/kho-qua',
+      '/mua-chung',
+      '/san-pham?filter=subscription',
+      '/dai-ly',
+    ]);
+    expect(bentoCards.map((a) => a.querySelector('[data-pillar-title]')?.textContent)).toEqual([
+      'Vườn Xanh & Game',
+      'Đổi rác lấy quà',
+      'Kho quà 0đ',
+      'Mua chung giá kho',
+      'Mua xoay vòng',
+      'Đại lý & Tiếp thị liên kết',
+    ]);
+    expect(c.querySelector('[data-pillar="recycle"]')?.textContent).toContain('Miễn ship khi gửi kèm đơn');
   });
 
-  it('Giờ vàng tới /gio-vang, Mã giảm giá tới trang Mã giảm giá, Đổi rác và Mua chung đúng route web', () => {
+  it('hàng lối tắt nhanh có Giờ vàng, Mã giảm giá, Cộng đồng và nút "Thêm" mở hộp thoại mọi lối tắt', () => {
     const c = mount();
-    const press = (re: RegExp) => click(Array.from(c.querySelectorAll('button')).find((b) => re.test(b.getAttribute('aria-label') ?? '')) ?? null);
-    press(/Giờ vàng/);
-    expect(mocks.push).toHaveBeenLastCalledWith('/gio-vang');
-    press(/Mã giảm giá/);
-    expect(mocks.push).toHaveBeenLastCalledWith('/ma-giam-gia');
-    press(/Đổi rác/);
-    expect(mocks.push).toHaveBeenLastCalledWith('/doi-rac');
-    press(/Mua chung/);
-    expect(mocks.push).toHaveBeenLastCalledWith('/mua-chung');
-  });
+    const quickLinks = Array.from(c.querySelectorAll<HTMLAnchorElement>('[data-testid="shortcut-quick-pills"] a'));
+    expect(quickLinks.map((a) => [a.textContent?.trim(), a.getAttribute('href')])).toEqual([
+      ['Giờ vàng', '/gio-vang'],
+      ['Mã giảm giá', '/ma-giam-gia'],
+      ['Cộng đồng', '/cong-dong'],
+    ]);
 
-  it('"Thêm" mở hộp thoại "Tất cả lối tắt" liệt kê đủ mục còn hiển thị (Tích điểm đơn sàn chưa có trang web nên không có); chọn mục đóng hộp và điều hướng', () => {
-    const c = mount();
+    const more = c.querySelector<HTMLButtonElement>('button[aria-label="Thêm lối tắt"]')!;
+    expect(more.getAttribute('aria-haspopup')).toBe('dialog');
+    expect(more.textContent?.trim()).toBe('Thêm');
+    expect(more.querySelector('svg.lucide-ellipsis')).not.toBeNull();
+
     expect(allSheet()).toBeNull();
     openAll(c);
     expect(sheetRows()).toHaveLength(8);
@@ -118,85 +114,34 @@ describe('ShortcutGrid web — 4 ô cố định + "Thêm" (Q7)', () => {
     expect(document.querySelector('[role="dialog"][aria-label="Kiếm tiền cùng Tubu"]')).not.toBeNull();
   });
 
-  it('cờ Đổi rác tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Thêm"; hộp thoại còn 7 mục', () => {
-    mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
-    const c = mount();
-    expect(labels(c)).toEqual(['Giờ vàng', 'Mã giảm giá', 'Mua chung', 'Đổi quà', 'Thêm']);
-    openAll(c);
-    expect(sheetRows()).toHaveLength(7);
-    expect(byText(document.body, 'button', 'Đổi rác')).toBeNull();
-  });
-
-  it('cấu hình chưa về: không hiện mục có cờ (đóng khi chưa biết)', () => {
-    mocks.cfg = { isLoaded: false, waste: { enabled: false } };
-    const c = mount();
-    expect(byText(c, 'button', 'Đổi rác')).toBeNull();
-    expect(c.querySelectorAll('button')).toHaveLength(5);
-  });
-
-  it('route còn pending thì lối tắt ẩn và mục kế lấp chỗ', () => {
-    mocks.pending = new Set(['/points/scan', '/mua-chung']);
-    expect(labels(mount())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Đổi quà', 'Thêm']);
-  });
-
-  it('Đổi rác tạm dừng nhưng khách còn yêu cầu đang mở: vẫn hiện ở ô cố định, ghi "Yêu cầu"', () => {
+  it('Đổi rác tạm dừng nhưng khách còn yêu cầu đang mở: thẻ thứ hai đổi sang "Yêu cầu của tôi" mà vẫn giữ đủ 6 ô', () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
     mocks.recycleOpen = true;
     const c = mount();
-    expect(labels(c)).toContain('Yêu cầu');
-    expect(byText(c, 'button', 'Đổi rác')).toBeNull();
+    expect(c.querySelectorAll('[data-pillar]')).toHaveLength(6);
+    expect(c.querySelector('[data-pillar="recycle"] [data-pillar-title]')?.textContent).toBe('Yêu cầu của tôi');
+    expect(c.querySelector('[data-pillar="recycle"]')?.getAttribute('href')).toBe('/doi-rac/yeu-cau');
     expect(mocks.recycleArgs).toEqual([true, true]);
   });
 
-  it('tên truy cập của mỗi ô chứa chữ nhìn thấy (WCAG 2.5.3); nhãn một dòng, vùng chạm ≥44px', () => {
-    const c = mount();
-    for (const b of Array.from(c.querySelectorAll('button'))) {
-      const visible = (b.textContent ?? '').trim().toLowerCase();
-      expect((b.getAttribute('aria-label') ?? '').toLowerCase()).toContain(visible);
-      expect(b.style.minHeight).toBe('44px');
-    }
-  });
-
-  it('điện thoại: lưới tràn mép (.tubu-bleed) rồi đệm 8px (max-md:px-2) để mép lưới cách mép màn 8px như Mini (ô rộng 359/5, không phải 343/5); không lề âm tay', () => {
-    const src = fs.readFileSync(path.join(__dirname, 'shortcut-grid.tsx'), 'utf8');
-    expect(src).not.toMatch(/margin: '0 -16px'|-mx-/);
-    const cls = mount().querySelector('section')!.className;
-    expect(cls).toContain('tubu-bleed');
-    expect(cls).toContain('max-md:px-2');
-    expect(cls).toContain('md:hidden');
-  });
-
-  it('ô cuối lối tắt là "Thêm" với biểu tượng ba chấm (Ellipsis), không phải "Tất cả" + LayoutGrid như ô cuối hàng Danh mục; vẫn mở hộp thoại', () => {
-    const c = mount();
-    const more = c.querySelector<HTMLButtonElement>('button[aria-label="Thêm lối tắt"]')!;
-    expect(more.getAttribute('aria-haspopup')).toBe('dialog');
-    expect(more.textContent?.trim()).toBe('Thêm');
-    expect(more.textContent!.trim().length).toBeLessThanOrEqual(6);
-    expect(more.querySelector('svg.lucide-ellipsis')).not.toBeNull();
-    expect(more.querySelector('svg.lucide-layout-grid')).toBeNull();
-    expect(byText(c, 'button', 'Tất cả')).toBeNull();
-    click(more);
-    expect(allSheet()).not.toBeNull();
-  });
-
-  it('cấu hình công khai chưa về: khung trơn cao 84px thay lưới, không ô bấm được; lỗi (hết chờ) thì dựng lưới với cờ tắt', () => {
-    mocks.cfg = { isLoaded: false, isPending: true, waste: { enabled: false } };
-    const c = mount();
-    expect(c.querySelectorAll('button')).toHaveLength(0);
-    expect(c.querySelector<HTMLElement>('[data-testid="shortcut-grid-pending"] [aria-hidden]')).not.toBeNull();
-    mounted?.unmount();
-    mocks.cfg = { isLoaded: false, isPending: false, waste: { enabled: false } };
-    expect(mount().querySelectorAll('button')).toHaveLength(5);
-  });
-
-  it('có cấu hình dựng sẵn từ server: truyền cho usePublicConfig để lưới dựng đúng ngay từ khung đầu, và khung trơn có cùng lề với lưới thật', () => {
-    const initial = { waste: { enabled: false } };
-    mocks.cfg = { isLoaded: true, isPending: false, waste: { enabled: false } };
+  it('cấu hình dựng sẵn từ server được truyền cho usePublicConfig và cấu hình đang chờ vẫn giữ nguyên 6 trụ cột không đổi chiều cao', () => {
+    const initial = { waste: { enabled: true } };
     mount(initial);
     expect(mocks.cfgArgs[0]).toBe(initial);
     mounted?.unmount();
     mocks.cfg = { isLoaded: false, isPending: true, waste: { enabled: false } };
     const c = mount();
-    expect(c.querySelector('[data-testid="shortcut-grid-pending"]')!.className).toContain('tubu-bleed');
+    expect(c.querySelectorAll('[data-pillar]')).toHaveLength(6);
+  });
+
+  it('không dùng lề âm tay; tên truy cập của mỗi nút/liên kết có aria-label chứa chữ nhìn thấy (WCAG 2.5.3)', () => {
+    const src = fs.readFileSync(path.join(__dirname, 'shortcut-grid.tsx'), 'utf8');
+    expect(src).not.toMatch(/margin: '0 -16px'|-mx-/);
+    const c = mount();
+    for (const el of Array.from(c.querySelectorAll<HTMLElement>('[aria-label]'))) {
+      if (el.tagName === 'SECTION') continue;
+      const visible = (el.textContent ?? '').trim().toLowerCase();
+      expect((el.getAttribute('aria-label') ?? '').toLowerCase()).toContain(visible);
+    }
   });
 });

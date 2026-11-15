@@ -57,7 +57,13 @@ vi.mock('@/lib/core-http', () => ({
         if (state.failProvinces) throw new Error('offline');
         return state.provinces;
       }
+      if (path === '/me/addresses') return [{ id: 'addr-1', phone: '0912345678', isDefault: true }];
       throw new Error(`chưa mock ${path}`);
+    },
+    patch: async (path: string, body: { phone: string }) => {
+      state.calls.push({ path, body });
+      state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } });
+      return { id: 'u1', phone: body.phone };
     },
     post: async (path: string, body: unknown, opts?: { headers?: Record<string, string> }) => {
       state.calls.push({ path, body, headers: opts?.headers });
@@ -287,14 +293,17 @@ describe('bước 1: chọn món (§4.2)', () => {
     await mount();
     expect(state.replace).toHaveBeenCalledWith('/doi-rac');
   });
-  it('chưa đủ điều kiện (thiếu SĐT): chỉ lời chỉ sang Zalo, không có món, không có nút tiếp tục (Q2)', async () => {
+  it('chưa đủ điều kiện (thiếu SĐT): hiện thẻ xác nhận SĐT ngay trên Web, bấm 1 chạm mở thẳng Bước 1 chọn món', async () => {
     state.me = makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null });
     const c = await mount();
-    expect(c.textContent).toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
+    expect(c.querySelector('[data-testid="web-recycle-phone-card"]')).not.toBeNull();
+    expect(c.textContent).not.toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
     expect(c.querySelector('[data-item]')).toBeNull();
     expect(c.querySelector('[data-testid="sticky-bar"]')).toBeNull();
-    expect(c.textContent).not.toMatch(/số điện thoại/i);
     expect(state.replace).not.toHaveBeenCalled();
+    click(byText(c, 'button', 'Xác nhận SĐT & Đổi rác ngay'));
+    await flush(10);
+    expect(c.querySelector('[data-item]')).not.toBeNull();
   });
   it('khách chưa đăng nhập về trang Đổi rác (có giới thiệu và nút đăng nhập), không gọi API', async () => {
     state.phase = 'guest';

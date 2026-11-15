@@ -1,8 +1,10 @@
 import { Body, Controller, Delete, Get, Param, Patch, Post } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import { ArrayMaxSize, IsArray, IsBoolean, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { UsersService } from './users.service';
 import { UpdateMeDto } from './dto/update-me.dto';
+import { ContactPhoneDto } from './dto/contact-phone.dto';
 import { CreateAddressDto, UpdateAddressDto } from './dto/address.dto';
 import { Trim } from '../../common/decorators/trim.decorator';
 
@@ -28,6 +30,12 @@ export class UsersController {
   @Patch('me')
   updateMe(@CurrentUser('sub') userId: string, @Body() dto: UpdateMeDto) {
     return this.users.updateMe(userId, dto);
+  }
+
+  @Patch('me/contact-phone')
+  @Throttle({ default: { ttl: 60_000, limit: 5 } })
+  setContactPhone(@CurrentUser('sub') userId: string, @Body() dto: ContactPhoneDto) {
+    return this.users.setContactPhone(userId, dto.phone);
   }
 
   @Post('me/onboarding')

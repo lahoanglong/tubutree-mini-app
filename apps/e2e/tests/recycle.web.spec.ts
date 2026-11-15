@@ -3,7 +3,7 @@ import { WASTE_RULES_TEXT } from './support/waste-db';
 
 /**
  * Web khách: Đổi rác lấy quà (/doi-rac, /doi-rac/yeu-cau, /doi-rac/quy-dinh, /doi-rac/tao, /doi-rac/diem-nhan, /doi-rac/quay). Mọi lời gọi /api/** đi qua mock (fixture `api`).
- * Khách chưa đủ điều kiện (thiếu SĐT đã xác minh) chỉ thấy lời chỉ sang Zalo, không có lối đổi rác nào trên web.
+ * Khách chưa có SĐT liên hệ (NEED_PHONE) thấy thẻ WebRecyclePhoneCard tự điền từ sổ địa chỉ và mở khoá Đổi rác ngay trên Web (không khoá sang Zalo).
  */
 
 const USER = {
@@ -67,6 +67,7 @@ function mockRecycle(api: MockApi, meBody: Record<string, unknown> = me()) {
   api.get('/cart', { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 200000, itemCount: 0 });
   api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } });
   api.get('/waste/me', () => meBody);
+  api.get('/waste/catalogue', [ITEM]);
   api.get('/me/loyalty/rewards', REWARDS);
   api.get('/waste/requests', () => [
     summary(),
@@ -101,13 +102,27 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await expect(page.getByRole('link', { name: /Thể lệ chương trình/ })).toHaveAttribute('href', '/doi-rac/quy-dinh');
   });
 
-  test('thiếu SĐT đã xác minh: chỉ thấy lời chỉ sang Zalo, không có lối đổi rác', async ({ page, api }) => {
-    mockRecycle(api, me({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null }));
+  test('thiếu SĐT liên hệ: tự điền từ sổ địa chỉ, lưu PATCH /me/contact-phone rồi mở khoá Đổi rác ngay trên Web', async ({ page, api }) => {
+    let hasPhone = false;
+    mockRecycle(api);
+    api.get('/waste/me', () => (hasPhone ? me() : me({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null })));
+    api.get('/me/addresses', [
+      { id: 'addr-1', recipient: 'Nguyễn Văn An', phone: '0987654321', province: 'TP.HCM', district: '', ward: 'Phường Bến Nghé', street: '12 Lê Lợi', isDefault: true },
+    ]);
+    api.patch('/me/contact-phone', ({ call }) => {
+      hasPhone = true;
+      return { ...USER, phone: (call.body as { phone: string }).phone };
+    });
+
     await page.goto('/doi-rac');
-    await expect(page.getByText('Tính năng này cần mở Tubu Tree trên Zalo.')).toBeVisible();
-    await expect(page.getByRole('link', { name: 'Đổi rác ngay' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Yêu cầu của tôi' })).toHaveCount(0);
-    await expect(page.getByText(/số điện thoại/i)).toHaveCount(0);
+    await expect(page.getByText('Tính năng này cần mở Tubu Tree trên Zalo.')).toHaveCount(0);
+    const card = page.getByTestId('web-recycle-phone-card');
+    await expect(card).toBeVisible();
+    await expect(card.getByLabel('Số điện thoại di động')).toHaveValue('0987 654 321');
+    const saved = api.waitForCall('PATCH', '/me/contact-phone');
+    await card.getByRole('button', { name: 'Xác nhận SĐT & Đổi rác ngay' }).click();
+    expect((await saved).body).toEqual({ phone: '0987654321' });
+    await expect(page.getByRole('link', { name: 'Đổi rác ngay' })).toHaveAttribute('href', '/doi-rac/tao');
   });
 
   test('danh sách yêu cầu: hai tab, hoàn tất dẫn tới trang kết quả', async ({ page, api }) => {
@@ -162,7 +177,7 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     await page.getByRole('button', { name: 'Chọn điểm nhận' }).click();
 
     await expect(page.getByRole('heading', { name: 'Chọn điểm nhận', level: 1 })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Dùng vị trí của tôi' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Tìm điểm thu gom gần tôi/ })).toBeVisible();
     await expect(page.getByRole('tab', { name: 'Gần tôi' })).toHaveCount(0);
     await page.getByRole('radio', { name: /Đại lý Cô Ba/ }).click();
     await page.getByRole('button', { name: 'Chọn điểm này' }).click();
@@ -177,12 +192,13 @@ test.describe('Web khách: Đổi rác lấy quà', () => {
     expect(call.headers['idempotency-key']).toMatch(/\S+/);
   });
 
-  test('thiếu SĐT đã xác minh: /doi-rac/tao và /doi-rac/diem-nhan chỉ thấy lời chỉ sang Zalo', async ({ page, api }) => {
+  test('thiếu SĐT liên hệ ở /doi-rac/tao: hiện thẻ xác nhận SĐT ngay trên Web, không đẩy sang Zalo', async ({ page, api }) => {
     mockRecycle(api, me({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null, openRequests: [] }));
+    api.get('/me/addresses', []);
     await page.goto('/doi-rac/tao');
-    await expect(page.getByText('Tính năng này cần mở Tubu Tree trên Zalo.')).toBeVisible();
+    await expect(page.getByText('Tính năng này cần mở Tubu Tree trên Zalo.')).toHaveCount(0);
+    await expect(page.getByTestId('web-recycle-phone-card')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Tiếp tục' })).toHaveCount(0);
-    await expect(page.getByText(/số điện thoại/i)).toHaveCount(0);
   });
 
   test('chi tiết yêu cầu mang tới điểm: timeline, mã QR trong sheet, huỷ có hỏi lại', async ({ page, api }) => {

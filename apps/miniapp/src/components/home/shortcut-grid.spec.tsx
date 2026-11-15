@@ -23,57 +23,45 @@ import { ShortcutGrid } from './shortcut-grid';
 
 const rows = (dialog: HTMLElement) => within(dialog).getAllByRole('button').filter((b) => b.getAttribute('aria-label') !== 'Đóng');
 
-describe('ShortcutGrid — 4 ô cố định + "Thêm" (Q7)', () => {
+describe('ShortcutGrid Mini App — Bento Hub 6 trụ cột + lối tắt nhanh (W171)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.cfg = { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } };
     mocks.openRequests = false;
   });
 
-  it('cờ bật hết: 4 ô cố định (Giờ vàng, Mã giảm giá, Đổi rác, Mua chung) và ô "Thêm", không cuộn ngang; Giờ vàng là ô đầu tiên', () => {
-    render(<ShortcutGrid />);
-    const buttons = screen.getAllByRole('button');
-    expect(buttons).toHaveLength(5);
-    expect(buttons.map((b) => b.textContent?.trim())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Đổi rác', 'Mua chung', 'Thêm']);
-    expect(screen.getByRole('region', { name: 'Lối tắt' }).querySelector('[data-testid="shortcut-grid"]')).toHaveStyle({ display: 'grid' });
-    expect(screen.queryByRole('group', { name: /vuốt ngang/ })).toBeNull();
+  it('dựng tĩnh đủ 6 trụ cột hệ sinh thái và điều hướng đúng route Mini App', () => {
+    const { container } = render(<ShortcutGrid />);
+    const hub = screen.getByTestId('ecosystem-bento-hub');
+    const cards = Array.from(hub.querySelectorAll<HTMLButtonElement>('button[data-pillar]'));
+    expect(cards).toHaveLength(6);
+    expect(cards.map((c) => c.querySelector('[data-pillar-title]')?.textContent)).toEqual([
+      'Vườn Xanh & Game',
+      'Đổi rác lấy quà',
+      'Kho quà 0đ',
+      'Mua chung giá kho',
+      'Mua xoay vòng',
+      'Đại lý & Tiếp thị liên kết',
+    ]);
+    expect(container.querySelector('[data-pillar="recycle"]')?.textContent).toContain('Miễn ship khi gửi kèm đơn');
+
+    const expectedRoutes = ['/game', '/recycle', '/offers?tab=rewards', '/group-buy', '/subscriptions', '/affiliate'];
+    cards.forEach((card, idx) => {
+      fireEvent.click(card);
+      expect(mocks.navigate).toHaveBeenLastCalledWith(expectedRoutes[idx]);
+    });
   });
 
-  it('nhãn tối đa hai dòng, cao cố định 32px, không nowrap: "Mã giảm giá" xuống dòng chứ không bị cắt "…"; ô vẫn cao 84px', () => {
+  it('hàng lối tắt nhanh đi thẳng Giờ vàng (/flash-sale), Mã giảm giá (/vouchers), Cộng đồng (/feed) và nút Thêm mở hộp thoại', async () => {
     render(<ShortcutGrid />);
-    for (const b of screen.getAllByRole('button')) {
-      expect(b).toHaveStyle({ height: '84px' });
-      const label = b.lastElementChild as HTMLElement;
-      expect(label).toHaveStyle({ height: '32px', lineHeight: '16px', overflow: 'hidden' });
-      expect(label.style.whiteSpace).not.toBe('nowrap');
-      expect(label.style.textOverflow).toBe('');
-      expect(label.style.getPropertyValue('-webkit-line-clamp')).toBe('2');
-    }
-  });
-
-  it('Giờ vàng tới trang Giờ vàng, Mã giảm giá tới trang Mã giảm giá, Đổi rác, Mua chung tới đúng trang; Đổi quà nằm trong hộp thoại của "Thêm"', () => {
-    render(<ShortcutGrid />);
-    fireEvent.click(screen.getByRole('button', { name: /Giờ vàng/ }));
+    const pills = screen.getByTestId('shortcut-quick-pills');
+    fireEvent.click(within(pills).getByRole('button', { name: /Giờ vàng/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/flash-sale');
-    fireEvent.click(screen.getByRole('button', { name: /Mã giảm giá/ }));
+    fireEvent.click(within(pills).getByRole('button', { name: /Mã giảm giá/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers');
-    fireEvent.click(screen.getByRole('button', { name: /Đổi rác/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
-    fireEvent.click(screen.getByRole('button', { name: /Mua chung/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/group-buy');
-    expect(screen.queryByRole('button', { name: /Đổi quà/ })).toBeNull();
-  });
+    fireEvent.click(within(pills).getByRole('button', { name: /Cộng đồng/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/feed');
 
-  it('Đổi quà trong hộp thoại của "Thêm" đi thẳng Hub Ưu đãi tab Đổi quà, không qua /rewards', async () => {
-    render(<ShortcutGrid />);
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
-    fireEvent.click(within(dialog).getByRole('button', { name: /Đổi quà/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?tab=rewards');
-  });
-
-  it('"Thêm" mở hộp thoại "Tất cả lối tắt" liệt kê đủ mục còn hiển thị; chọn mục đóng hộp và điều hướng', async () => {
-    render(<ShortcutGrid />);
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
     const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
@@ -92,72 +80,32 @@ describe('ShortcutGrid — 4 ô cố định + "Thêm" (Q7)', () => {
     expect(await screen.findByRole('dialog', { name: 'Kiếm tiền cùng Tubu' })).toBeInTheDocument();
   });
 
-  it('cờ Đổi rác và Tích điểm đơn sàn tắt: ô trống được Đổi quà lấp, vẫn đủ 4 ô + "Thêm"; hộp thoại còn 7 mục', async () => {
-    mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
-    render(<ShortcutGrid />);
-    expect(screen.getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Giờ vàng', 'Mã giảm giá', 'Mua chung', 'Đổi quà', 'Thêm']);
-    fireEvent.click(screen.getByRole('button', { name: 'Thêm lối tắt' }));
-    const dialog = await screen.findByRole('dialog', { name: 'Tất cả lối tắt' });
-    expect(rows(dialog)).toHaveLength(7);
-    expect(within(dialog).queryByRole('button', { name: /Đổi rác/ })).toBeNull();
-    expect(within(dialog).queryByRole('button', { name: /sàn khác/ })).toBeNull();
-  });
-
-  it('cấu hình chưa về: không hiện mục có cờ (đóng khi chưa biết)', () => {
-    mocks.cfg = { isLoaded: false, waste: { enabled: false } };
-    render(<ShortcutGrid />);
-    expect(screen.queryByRole('button', { name: /Đổi rác/ })).toBeNull();
-    expect(screen.getAllByRole('button')).toHaveLength(5);
-  });
-
-  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: vẫn hiện ở ô cố định, ghi "Yêu cầu" và dẫn vào Đổi rác', () => {
+  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: giữ đủ 6 ô, thẻ thứ hai đổi sang "Yêu cầu của tôi" và dẫn vào /recycle/requests', () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
     mocks.openRequests = true;
-    render(<ShortcutGrid />);
+    const { container } = render(<ShortcutGrid />);
     expect(mocks.recycleHook).toHaveBeenCalledWith(true, true);
-    expect(screen.queryByRole('button', { name: /^Đổi rác/ })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Yêu cầu của tôi/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
-    expect(screen.getByText('Yêu cầu')).toBeInTheDocument();
+    const recycleCard = container.querySelector<HTMLButtonElement>('[data-pillar="recycle"]')!;
+    expect(recycleCard.textContent).toContain('Yêu cầu của tôi');
+    fireEvent.click(recycleCard);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/requests');
   });
 
-  it('chương trình đang chạy: không cần hỏi yêu cầu đang mở', () => {
+  it('cấu hình đang chờ vẫn giữ nguyên 6 trụ cột và 4 nút lối tắt nhanh (CLS = 0)', () => {
+    mocks.cfg = { isLoaded: false, isPending: true, waste: { enabled: false } };
+    const { container } = render(<ShortcutGrid />);
+    expect(container.querySelectorAll('[data-pillar]')).toHaveLength(6);
+    expect(screen.getByTestId('shortcut-quick-pills').querySelectorAll('button')).toHaveLength(4);
+  });
+
+  it('chương trình đang chạy: không cần hỏi yêu cầu đang mở; tên đọc của nút có aria-label chứa chữ hiển thị (WCAG 2.5.3)', () => {
     render(<ShortcutGrid />);
     expect(mocks.recycleHook).toHaveBeenCalledWith(true, false);
-  });
-
-  it('tên đọc của mỗi ô chứa chữ đang hiển thị (WCAG 2.5.3); nhãn một dòng, vùng chạm ≥44px', () => {
-    render(<ShortcutGrid />);
     for (const button of screen.getAllByRole('button')) {
+      const aria = button.getAttribute('aria-label');
+      if (!aria) continue;
       const visible = button.textContent?.trim().toLowerCase() ?? '';
-      expect(button.getAttribute('aria-label')?.toLowerCase()).toContain(visible);
-      expect(button).toHaveStyle({ minHeight: '44px' });
+      expect(aria.toLowerCase()).toContain(visible);
     }
-  });
-
-  it('ô cuối lối tắt là "Thêm" với biểu tượng ba chấm (Ellipsis), không phải "Tất cả" + LayoutGrid như ô cuối hàng Danh mục; vẫn mở hộp thoại', async () => {
-    render(<ShortcutGrid />);
-    const more = screen.getByRole('button', { name: 'Thêm lối tắt' });
-    expect(more).toHaveAttribute('aria-haspopup', 'dialog');
-    expect(more.textContent?.trim()).toBe('Thêm');
-    expect(more.textContent?.trim().length).toBeLessThanOrEqual(6);
-    expect(more.querySelector('svg.lucide-ellipsis')).not.toBeNull();
-    expect(more.querySelector('svg.lucide-layout-grid')).toBeNull();
-    expect(screen.queryByText('Tất cả')).toBeNull();
-    fireEvent.click(more);
-    expect(await screen.findByRole('dialog', { name: 'Tất cả lối tắt' })).toBeInTheDocument();
-  });
-
-  it('cấu hình công khai chưa về: khung trơn cao 84px, không ô bấm được (không dựng ô rồi đổi chỗ khi cờ Đổi rác về)', () => {
-    mocks.cfg = { isLoaded: false, isPending: true, waste: { enabled: false } };
-    render(<ShortcutGrid />);
-    expect(screen.queryAllByRole('button')).toHaveLength(0);
-    expect(screen.getByTestId('shortcut-grid-pending').querySelector('.tubu-skeleton')).toHaveStyle({ height: '84px' });
-  });
-
-  it('cấu hình công khai lỗi (hết chờ, không có dữ liệu): vẫn dựng lưới với cờ tắt', () => {
-    mocks.cfg = { isLoaded: false, isPending: false, waste: { enabled: false } };
-    render(<ShortcutGrid />);
-    expect(screen.getAllByRole('button')).toHaveLength(5);
   });
 });

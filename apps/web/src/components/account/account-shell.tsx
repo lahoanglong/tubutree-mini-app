@@ -5,13 +5,11 @@ import Link from 'next/link';
 import {
   BadgeDollarSign,
   Bell,
-  Gift,
   Heart,
   MapPin,
   Package,
   Settings,
   Sprout,
-  Tag,
   User,
   UserRound,
   Wallet,
@@ -40,13 +38,10 @@ const GROUPS: { group: string; items: ShellItem[] }[] = [
     ],
   },
   {
-    group: 'Điểm và quà',
+    group: 'Điểm & Ví',
     items: [
-      { to: '/uu-dai', label: 'Ưu đãi', icon: Tag },
       { to: '/tai-khoan/diem-xanh', label: 'Điểm Xanh và hạng', icon: Sprout },
       { to: '/tai-khoan/vi-tubu', label: 'Ví Tubu', icon: Wallet },
-      { to: '/kho-qua', label: 'Kho quà', icon: Gift },
-      { to: '/kho-qua/cua-toi', label: 'Quà của tôi', icon: Gift },
     ],
   },
   {
@@ -60,10 +55,10 @@ const GROUPS: { group: string; items: ShellItem[] }[] = [
   },
 ];
 
-/** Mục đang mở: khớp đúng đường dẫn, hoặc đường dẫn con của mục (đơn hàng → chi tiết đơn); "Tổng quan" và "Kho quà" chỉ khớp đúng. */
+/** Mục đang mở: khớp đúng đường dẫn, hoặc đường dẫn con của mục (đơn hàng → chi tiết đơn); "Tổng quan" chỉ khớp đúng. */
 function isActive(pathname: string, to: string): boolean {
   if (pathname === to) return true;
-  if (to === '/tai-khoan' || to === '/kho-qua') return false;
+  if (to === '/tai-khoan') return false;
   return pathname.startsWith(`${to}/`);
 }
 

@@ -52,12 +52,18 @@ test.describe('Web khách: tài khoản', () => {
     // Hàng trạng thái đơn ở đầu trang: mỗi ô mở danh sách đơn đã lọc theo trạng thái.
     await expect(page.getByRole('link', { name: /^Chờ thanh toán/ })).toHaveAttribute('href', '/tai-khoan/don-hang?tab=pending_payment');
     await expect(page.getByRole('link', { name: /^Định kỳ/ })).toHaveAttribute('href', '/tai-khoan/don-hang?tab=subscriptions');
-    await expect(page.getByRole('main').getByRole('link', { name: 'Sổ địa chỉ' })).toHaveAttribute('href', '/tai-khoan/dia-chi');
-    // Điện thoại giống Mini App (hub không có khối đơn hàng); máy tính còn danh sách đơn.
+    // Điện thoại giống Mini App (có menu đầy đủ trong main, không có khối đơn hàng); máy tính có cột trái AccountShell nên main không lặp lại menu Tài khoản/Hỗ trợ.
     const narrow = (page.viewportSize()?.width ?? 1280) < 768;
     const orders = page.getByRole('heading', { name: /Đơn hàng của tôi/ });
-    if (narrow) await expect(orders).toBeHidden();
-    else await expect(orders).toBeVisible();
+    if (narrow) {
+      await expect(page.getByRole('main').getByRole('link', { name: 'Sổ địa chỉ' })).toHaveAttribute('href', '/tai-khoan/dia-chi');
+      await expect(orders).toBeHidden();
+    } else {
+      await expect(page.getByTestId('account-shell-nav').getByRole('link', { name: 'Sổ địa chỉ' })).toHaveAttribute('href', '/tai-khoan/dia-chi');
+      await expect(page.getByRole('main').getByRole('link', { name: 'Sổ địa chỉ' })).toHaveCount(0);
+      await expect(page.getByTestId('account-desktop-ecosystem')).toBeVisible();
+      await expect(orders).toBeVisible();
+    }
     // Khách thường không thấy nhóm công việc nội bộ.
     await expect(page.getByRole('heading', { name: 'Công việc', level: 2 })).toHaveCount(0);
     // Cờ ownsBrand=false trên /auth/me: khỏi hỏi /brand/owner/me (chờ /auth/me trả lời rồi mới đếm).

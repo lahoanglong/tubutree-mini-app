@@ -5,6 +5,7 @@ import { shelf } from './merch/shelves';
 import {
   memberCardAriaLabel, offersPointsAriaLabel, clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readTodoRows, writeTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
   visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS, HOME_HERO_HEIGHT, HOME_GIFT_HEIGHT,
+  HOME_ECOSYSTEM_PILLARS, HOME_QUICK_SHORTCUT_IDS, resolveHomeEcosystemPillars,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
   HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, homeCategoryEntries, CATEGORY_CELL_HEIGHT, CATEGORY_GRID_COLUMNS, CATEGORY_GRID_MAX_CELLS,
@@ -111,6 +112,52 @@ describe('homeShortcutSlots (Q7: 4 ô cố định + "Tất cả")', () => {
   it('Đổi rác tắt thì ô trống được mục kế lấp, vẫn đủ 4 ô', () => {
     const { pinned } = homeShortcutSlots({ wasteEnabled: false, claimEnabled: false });
     expect(pinned.map((s) => s.id)).toEqual(['flash', 'coupons', 'groupBuy', 'rewards']);
+  });
+});
+
+describe('HOME_ECOSYSTEM_PILLARS (W171 Bento Hub 6 trụ cột)', () => {
+  it('đủ 6 trụ cột hệ sinh thái theo đúng thứ tự Web và Mini App; Đổi rác nêu rõ Miễn ship khi gửi kèm đơn', () => {
+    expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.id)).toEqual([
+      'garden',
+      'recycle',
+      'rewards',
+      'groupBuy',
+      'subscription',
+      'partner',
+    ]);
+    const recycle = HOME_ECOSYSTEM_PILLARS.find((p) => p.id === 'recycle')!;
+    expect(recycle.subtitle).toContain('Miễn ship khi gửi kèm đơn');
+    expect(recycle.featured).toBe(true);
+    expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.webHref)).toEqual([
+      '/vuon-xanh',
+      '/doi-rac',
+      '/kho-qua',
+      '/mua-chung',
+      '/san-pham?filter=subscription',
+      '/dai-ly',
+    ]);
+    expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.miniRoute)).toEqual([
+      '/game',
+      '/recycle',
+      '/offers?tab=rewards',
+      '/group-buy',
+      '/subscriptions',
+      '/affiliate',
+    ]);
+    expect(HOME_QUICK_SHORTCUT_IDS).toEqual(['flash', 'coupons', 'community']);
+    expect(HOME_SETTLING_HEIGHTS.shortcuts).toBe(326);
+  });
+
+  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: giữ đủ 6 ô, thẻ thứ hai đổi sang Yêu cầu của tôi', () => {
+    const paused = resolveHomeEcosystemPillars({ wastePausedWithOpenRequests: true });
+    expect(paused).toHaveLength(6);
+    expect(paused[1]).toMatchObject({
+      id: 'recycle',
+      title: 'Yêu cầu của tôi',
+      badge: 'Yêu cầu',
+      webHref: '/doi-rac/yeu-cau',
+      miniRoute: '/recycle/requests',
+    });
   });
 });
 

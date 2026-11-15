@@ -177,9 +177,16 @@ describe('verifiedMemberPhone: chỉ SĐT đã xác minh qua Zalo và còn hạn
 });
 
 describe('SĐT xác minh cũ: vẫn là người nhận nhưng chờ kiểm', () => {
-  const u = { phone: '0912345678', zaloId: 'z_real', isBlocked: false, mergedIntoId: null as string | null };
-  it('linkableMemberPhone không xét mốc xác minh, vẫn loại khách vãng lai, khoá, đã gộp, số sai dạng', () => {
+  const u = {
+    phone: '0912345678',
+    phoneVerifiedAt: new Date(NOW.getTime() - 365 * DAY) as Date | null,
+    zaloId: 'z_real',
+    isBlocked: false,
+    mergedIntoId: null as string | null,
+  };
+  it('linkableMemberPhone chấp nhận SĐT đã từng xác minh Zalo dù quá hạn, nhưng chặn SĐT Web chưa xác minh (phoneVerifiedAt=null), khách vãng lai, khoá, đã gộp, số sai dạng', () => {
     expect(linkableMemberPhone(u)).toBe('0912345678');
+    expect(linkableMemberPhone({ ...u, phoneVerifiedAt: null })).toBeNull();
     expect(linkableMemberPhone({ ...u, zaloId: 'guest_a' })).toBeNull();
     expect(linkableMemberPhone({ ...u, isBlocked: true })).toBeNull();
     expect(linkableMemberPhone({ ...u, mergedIntoId: 'x' })).toBeNull();

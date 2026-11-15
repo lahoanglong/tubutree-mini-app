@@ -18,7 +18,10 @@ vi.mock('@tanstack/react-query', () => ({
   }),
 }));
 vi.mock('@/lib/shop-client', () => ({ getCart: vi.fn() }));
-vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: (p: string) => ['/', '/tai-khoan', '/vuon-xanh', '/mua-chung', '/gio-vang', '/ma-giam-gia', '/tai-khoan/thong-bao'].includes(p) }));
+vi.mock('@/lib/route-map', async (orig) => ({
+  ...(await orig<object>()),
+  isWebRouteReady: (p: string) => ['/', '/tai-khoan', '/san-pham', '/vuon-xanh', '/doi-rac', '/mua-chung', '/cau-chuyen', '/tai-khoan/thong-bao'].includes(p),
+}));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => mocks.path }));
 
 import SiteHeader from './site-header';
@@ -121,20 +124,30 @@ describe('SiteHeader', () => {
     expect(out).not.toContain('SỐNG XANH AN LÀNH');
   });
 
-  it('máy tính: điều hướng không lặp logo và nút tài khoản, ẩn mục chưa làm xong, thêm chức năng chương trình', () => {
+  it('máy tính: điều hướng chính gồm đúng 5 mục ổn định từ khung đầu, không cuộn ngang và khớp nhóm đường dẫn con', () => {
     mocks.auth = { user: null, status: 'anonymous', initialized: true, sessionUnavailable: false };
     const out = render();
     const desk = out.match(/<nav[^>]*data-desktop-nav[^>]*>.*?<\/nav>/s)?.[0] ?? '';
+    expect(desk).not.toContain('scroll-x');
     expect(desk).not.toContain('>Trang chủ<');
     expect(desk).not.toContain('>Cá nhân<');
+    expect(desk).toContain('>Sản phẩm<');
     expect(desk).toContain('>Vườn Xanh<');
-    expect(desk).toContain('>Mua chung<');
-    expect(desk).toContain('>Giờ vàng<');
-    expect(desk).toContain('>Mã giảm giá<');
-    expect(desk).toMatch(/href="\/gio-vang"/);
-    expect(desk).toMatch(/href="\/ma-giam-gia"/);
-    expect(desk).not.toContain('>Danh mục<');
-    expect(desk).not.toContain('>Kho quà<');
+    expect(desk).toContain('>Đổi rác &amp; Kho quà<');
+    expect(desk).toContain('>Mua chung &amp; Xoay vòng<');
+    expect(desk).toContain('>Hành trình nguyên liệu<');
+    expect(desk).toMatch(/href="\/san-pham"/);
+    expect(desk).toMatch(/href="\/doi-rac"/);
+    expect(desk).toMatch(/href="\/mua-chung"/);
+    expect(desk).toMatch(/href="\/cau-chuyen"/);
+
+    mocks.path = '/kho-qua/cua-toi';
+    const onRewards = render().match(/<nav[^>]*data-desktop-nav[^>]*>.*?<\/nav>/s)?.[0] ?? '';
+    expect(onRewards).toMatch(/href="\/doi-rac"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/doi-rac"/);
+
+    mocks.path = '/gio-vang';
+    const onFlash = render().match(/<nav[^>]*data-desktop-nav[^>]*>.*?<\/nav>/s)?.[0] ?? '';
+    expect(onFlash).toMatch(/href="\/mua-chung"[^>]*aria-current="page"|aria-current="page"[^>]*href="\/mua-chung"/);
   });
 
   it('thanh đầu một hàng chính cao 64px, chuông thông báo có số chưa đọc cho khách đã đăng nhập', () => {

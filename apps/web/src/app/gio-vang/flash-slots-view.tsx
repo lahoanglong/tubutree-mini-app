@@ -27,6 +27,7 @@ import { addToCart } from '@/lib/shop-client';
 import { Chip, EmptyState, ProductTileSkeleton, Skeleton, SlotTabs, Text, slotTabId } from '@/components/mini';
 import { Countdown } from '@/components/mini/countdown';
 import { ErrorState } from '@/components/ui/error-state';
+import { GroupCycleDealsNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { PageHeader } from '@/components/ui/page-header';
 import { FlashSlotItem } from '@/components/flash/flash-slot-item';
 
@@ -368,6 +369,9 @@ export default function FlashSlotsView() {
   return (
     <main className={`${PAGE_NARROW_UNTIL_LG} py-6 max-md:pt-0`}>
       <PageHeader title={fillCopy('flash.title')} parentHref="/" />
+      <div className="mt-3">
+        <GroupCycleDealsNavPills activeOverride="deals" />
+      </div>
       <div
         role="status"
         className="text-sm"

@@ -34,16 +34,20 @@ async function visibleBlocks(page: Page): Promise<string[]> {
 test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cục', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  test('khách cũ, chưa có banner: Giờ vàng nằm trọn trong màn đầu 375×812', async ({ page, api }) => {
+  test('khách cũ, chưa có banner: Bento Hub 6 trụ cột nằm trọn nửa trên và Giờ vàng hiện ngay trong màn đầu 375×812', async ({ page, api }) => {
     mockDiscovery(api, { returning: true });
     mockFlash(api);
     await page.goto('/');
+    const shortcuts = page.getByTestId('shortcut-grid');
     const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
     await expect(flash).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
     expect(await visibleBlocks(page)).not.toContain('banner');
+    const sBox = (await shortcuts.boundingBox())!;
+    expect(sBox.y + sBox.height, `Bento Hub kết thúc ở ${Math.round(sBox.y + sBox.height)}px`).toBeLessThanOrEqual(520);
     const box = (await flash.boundingBox())!;
-    expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px`).toBeLessThanOrEqual(812);
+    expect(box.y, `Giờ vàng bắt đầu ở ${Math.round(box.y)}px`).toBeLessThanOrEqual(680);
+    expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px`).toBeLessThanOrEqual(965);
   });
 
   test('khách mới: Bán chạy nhất có hạng #1, #2, #3 theo lượt bán 30 ngày, đứng sau Danh mục', async ({ page, api }) => {
@@ -59,12 +63,13 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     expect(blocks).not.toContain('banner');
   });
 
-  test('khách mới có Quà khách mới và Giờ vàng: dải nằm trên lối tắt, Giờ vàng vẫn kết thúc trong màn đầu 375×812', async ({ page, api }) => {
+  test('khách mới có Quà khách mới và Giờ vàng: dải nằm trên Bento Hub, Giờ vàng hiện ngay trong màn đầu 375×812', async ({ page, api }) => {
     mockDiscovery(api);
     api.get('/me/new-customer-offer', { isNewCustomer: true, welcomeVoucher: null });
     mockFlash(api);
     await page.goto('/');
     const welcome = page.getByRole('region', { name: 'Quà khách mới' });
+    const shortcuts = page.getByTestId('shortcut-grid');
     const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
     await expect(welcome).toBeVisible({ timeout: 15_000 });
     await expect(flash).toBeVisible({ timeout: 15_000 });
@@ -75,8 +80,11 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     expect(blocks.indexOf('welcome')).toBeLessThan(blocks.indexOf('shortcuts'));
     expect(blocks.indexOf('shortcuts')).toBeLessThan(blocks.indexOf('flash'));
     expect(blocks.indexOf('flash')).toBeLessThan(blocks.indexOf('categories'));
+    const sBox = (await shortcuts.boundingBox())!;
+    expect(sBox.y + sBox.height, `Bento Hub kết thúc ở ${Math.round(sBox.y + sBox.height)}px`).toBeLessThanOrEqual(525);
     const box = (await flash.boundingBox())!;
-    expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px khi có dải Quà khách mới`).toBeLessThanOrEqual(812);
+    expect(box.y, `Giờ vàng bắt đầu ở ${Math.round(box.y)}px`).toBeLessThanOrEqual(685);
+    expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px khi có dải Quà khách mới`).toBeLessThanOrEqual(965);
   });
 
   test('Mua lại một món: nút "Mua lại" nằm cùng hàng với tên trong dòng cao 88px, trang không tràn ngang', async ({ page, api }) => {
@@ -110,15 +118,17 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
   });
 
   for (const width of [375, 320]) {
-    test(`${width}px: 4 lối tắt cố định đọc đủ nhãn (không bị cắt "…"), ô vẫn cao 84px`, async ({ page, api }) => {
+    test(`${width}px: Bento Hub 6 trụ cột + lối tắt nhanh đọc đủ nhãn, vùng chạm ≥44px`, async ({ page, api }) => {
       mockDiscovery(api, { returning: true });
       await page.setViewportSize({ width, height: 812 });
       await page.goto('/');
       const grid = page.getByTestId('shortcut-grid');
+      await expect(grid.locator('[data-pillar]')).toHaveCount(6, { timeout: 15_000 });
       await expect(grid.getByRole('button', { name: /Mã giảm giá/ })).toBeVisible({ timeout: 15_000 });
       expect(await shortcutLabelProblems(page)).toEqual([]);
       const heights = await grid.getByRole('button').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
-      expect(heights).toEqual([84, 84, 84, 84, 84]);
+      expect(heights).toHaveLength(10);
+      for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
     });
   }
 });

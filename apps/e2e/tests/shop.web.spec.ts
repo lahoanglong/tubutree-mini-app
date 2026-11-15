@@ -347,16 +347,19 @@ test.describe('Web khách: Trang chủ /', () => {
   });
 
   for (const width of [375, 320]) {
-    test(`điện thoại ${width}px: lối tắt đọc đủ nhãn (không bị cắt "…", tối đa hai dòng), mỗi ô cao 84px như Mini`, async ({ page, api }) => {
+    test(`điện thoại ${width}px: Bento Hub 6 trụ cột + lối tắt nhanh không tràn chữ, vùng chạm ≥44px`, async ({ page, api }) => {
       mockHome(api);
       await page.setViewportSize({ width, height: 812 });
       await page.goto('/');
       const grid = page.getByTestId('shortcut-grid');
-      await expect(grid.getByRole('button', { name: /Mã giảm giá/ })).toBeVisible();
+      await expect(grid.locator('[data-pillar]')).toHaveCount(6);
+      await expect(grid.getByRole('link', { name: /Mã giảm giá/ })).toBeVisible();
       expect(await shortcutLabelProblems(page)).toEqual([]);
-      const heights = await grid.getByRole('button').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
-      expect(heights.length).toBeGreaterThanOrEqual(2);
-      expect(new Set(heights)).toEqual(new Set([84]));
+      const heights = await grid.locator('[data-pillar], [data-testid="shortcut-quick-pills"] > *').evaluateAll((els) =>
+        els.map((el) => Math.round(el.getBoundingClientRect().height)),
+      );
+      expect(heights.length).toBe(10);
+      for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
     });
   }
 });
@@ -888,7 +891,7 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     // Cấu hình Đổi rác do test đặt, không phụ thuộc giá trị trong DB gate lúc chạy.
     api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
     await page.goto('/');
-    await expect(page.getByRole('button', { name: /Yêu cầu của tôi/ }).first()).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: /Yêu cầu của tôi/ }).first()).toHaveAttribute('href', '/doi-rac/yeu-cau', { timeout: 15_000 });
     expect(api.callsTo('GET', '/waste/me')).toHaveLength(0);
   });
 

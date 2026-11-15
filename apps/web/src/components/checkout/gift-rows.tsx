@@ -27,7 +27,9 @@ export function GiftRows({ gifts, excluded, onToggle, disabled = false }: GiftRo
 
   const rows = view.rows.map((row) => (
     <div key={row.id} data-testid="checkout-gift-row" className="mt-3 flex min-h-11 items-center justify-between gap-3 tabular-nums first:mt-0">
-      <Text variant="body-sm" as="span" className="min-w-0 flex-1 break-words">{row.label}</Text>
+      <Text variant="body-sm" tone={row.receive ? 'primary' : 'secondary'} as="span" className={`min-w-0 flex-1 break-words ${row.receive ? '' : 'opacity-60'}`}>
+        {row.label}
+      </Text>
       <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-2 text-caption text-[color:var(--color-text-secondary)]">
         <span className={`${miniCheckboxWrap} ${miniCheckboxGutter}`}>
           <input type="checkbox" checked={!row.receive} onChange={() => onToggle(row.id, !row.receive)} disabled={disabled} className={miniCheckbox} />

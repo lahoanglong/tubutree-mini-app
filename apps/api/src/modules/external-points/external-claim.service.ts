@@ -56,6 +56,7 @@ export function rejectionOf(code: ExternalClaimRejectCode): HttpException {
 interface UserRow {
   id: string;
   phone: string | null;
+  phoneVerifiedAt: Date | null;
   zaloId: string | null;
   isBlocked: boolean;
   role: 'CUSTOMER' | 'STAFF' | 'ADMIN' | string;
@@ -135,7 +136,7 @@ export function findExternalOrderByCode(db: Pick<Tx, 'externalOrder'>, code: str
 
 export const advisoryUserLock = (tx: Tx, userId: string) => tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`ext-claim:${userId}`}))`;
 
-export const USER_SELECT = { id: true, phone: true, zaloId: true, isBlocked: true, role: true } as const;
+export const USER_SELECT = { id: true, phone: true, phoneVerifiedAt: true, zaloId: true, isBlocked: true, role: true } as const;
 
 @Injectable()
 export class ExternalClaimService {
@@ -354,7 +355,7 @@ export class ExternalClaimService {
     const facts: ClaimFacts = {
       now,
       cfg,
-      userOk: !!user && isRealUser(user) && !!user.phone && !user.isBlocked,
+      userOk: !!user && isRealUser(user) && !!user.phone && !!user.phoneVerifiedAt && !user.isBlocked,
       userPhoneLast3: last3(user?.phone ?? null),
       userIsStaff: user?.role === 'STAFF' || user?.role === 'ADMIN',
       lockedUntil: lockedUntil(notFound.map((n) => n.createdAt), now),

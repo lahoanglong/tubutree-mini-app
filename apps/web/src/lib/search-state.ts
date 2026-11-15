@@ -22,6 +22,8 @@ export interface SearchState {
   minRating?: number;
   /** Nút "Xem tất cả sản phẩm": danh sách không lọc. Vắng thì gốc không tham số là hub. */
   all?: boolean;
+  /** Chế độ chuyên đề: `subscription` = Mua xoay vòng (Đặt định kỳ). */
+  filter?: 'subscription';
 }
 
 /** Phần trạng thái mà FilterSheet chỉnh (nháp tới khi bấm "Xem n sản phẩm"). */
@@ -43,7 +45,7 @@ export const EMPTY_SEARCH_STATE: SearchState = { q: '', brands: [], inStock: fal
 
 /** "Xoá tìm kiếm & bộ lọc" — giữ cách sắp xếp khách đã chọn. */
 export const CLEAR_SEARCH_PATCH: Partial<SearchState> = {
-  q: '', category: undefined, segment: undefined, brands: [], minPrice: undefined, maxPrice: undefined, inStock: false, minRating: undefined,
+  q: '', category: undefined, segment: undefined, brands: [], minPrice: undefined, maxPrice: undefined, inStock: false, minRating: undefined, filter: undefined,
 };
 
 export const CATALOG_SORTS: readonly CatalogSort[] = ['best_seller', 'newest', 'price_asc', 'price_desc'];
@@ -64,7 +66,7 @@ export const MAX_QUERY_LENGTH = QUERY_LIMIT;
  * Các khoá URL mà `parseSearchState`/`serializeSearchState` sở hữu. Mọi khoá khác (utm, ref…) là
  * "tham số lạ": `useSearchState` giữ nguyên khi ghi lại URL (trừ `focus`, tham số dùng một lần).
  */
-export const SEARCH_PARAM_KEYS: readonly string[] = ['q', 'category', 'segment', 'brand', 'minPrice', 'maxPrice', 'inStock', 'rating', 'sort', 'all'];
+export const SEARCH_PARAM_KEYS: readonly string[] = ['q', 'category', 'segment', 'brand', 'minPrice', 'maxPrice', 'inStock', 'rating', 'sort', 'all', 'filter'];
 
 /** Tham số dùng một lần hoặc chỉ có nghĩa với trạng thái cũ: `focus`, và `page`. */
 const TRANSIENT_KEYS = ['focus', 'page'];
@@ -100,6 +102,7 @@ export function parseSearchState(params: URLSearchParams): SearchState {
     inStock: params.get('inStock') === '1',
     minRating: rating != null && rating >= 1 && rating <= 5 ? rating : undefined,
     all: params.get('all') === '1' ? true : undefined,
+    ...(params.get('filter') === 'subscription' ? { filter: 'subscription' as const } : {}),
   };
 }
 
@@ -116,6 +119,7 @@ export function serializeSearchState(s: SearchState): URLSearchParams {
   if (s.inStock) p.set('inStock', '1');
   if (s.minRating != null) p.set('rating', String(s.minRating));
   if (s.sort) p.set('sort', s.sort);
+  if (s.filter === 'subscription') p.set('filter', 'subscription');
   // `all` chỉ có nghĩa khi không còn gì khác đưa trang vào chế độ danh sách: một trạng thái một URL.
   if (s.all && browseMode({ ...s, all: false }) === 'hub') p.set('all', '1');
   return p;
@@ -161,9 +165,9 @@ export function activeFilterCount(s: Pick<SearchState, 'brands' | 'minPrice' | '
   );
 }
 
-/** Trang Danh mục "gốc": chưa tìm, chưa chọn danh mục/phân khúc, chưa lọc (sắp xếp không tính). */
+/** Trang Danh mục "gốc": chưa tìm, chưa chọn danh mục/phân khúc/chuyên đề, chưa lọc (sắp xếp không tính). */
 export function isBrowseRoot(s: SearchState): boolean {
-  return !s.q && !s.category && !s.segment && activeFilterCount(s) === 0;
+  return !s.q && !s.category && !s.segment && !s.filter && activeFilterCount(s) === 0;
 }
 
 /**
@@ -206,7 +210,7 @@ export interface ActiveFilterChip {
 }
 
 /** Phạm vi đã là tiêu đề của danh sách (hiện đúng một lần), nên không lặp thành chip ngay dưới thanh sắp xếp. */
-export type TitleScope = 'category' | 'segment' | 'brand';
+export type TitleScope = 'category' | 'segment' | 'brand' | 'subscription';
 
 /**
  * Chip "đang lọc" gỡ được từng cái. Danh mục chưa có tên (danh sách chưa tải) thì chưa hiện; caller truyền nhãn dự phòng khi cây đã
@@ -219,6 +223,9 @@ export function activeFilterChips(
   opts: { titleScope?: TitleScope | null } = {},
 ): ActiveFilterChip[] {
   const chips: ActiveFilterChip[] = [];
+  if (opts.titleScope !== 'subscription' && s.filter === 'subscription') {
+    chips.push({ key: 'filter:subscription', label: 'Mua xoay vòng', patch: { filter: undefined } });
+  }
   if (opts.titleScope !== 'category' && s.category && names.categoryName) chips.push({ key: 'category', label: names.categoryName, patch: { category: undefined } });
   if (opts.titleScope !== 'segment' && s.segment) chips.push({ key: 'segment', label: names.segmentName ?? s.segment, patch: { segment: undefined } });
   const brandIsTitle = opts.titleScope === 'brand' && s.brands.length === 1;

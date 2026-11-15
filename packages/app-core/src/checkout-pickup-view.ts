@@ -135,10 +135,19 @@ export interface GiftSectionView {
 
 /** Dòng quà 0đ trên thanh toán: mỗi quà một dòng, từ 3 quà trở lên gộp một dòng. `receive` = quà đi cùng đơn này (chưa bấm "Để đơn sau"). */
 export function giftSectionView(gifts: readonly QuotePendingGiftDTO[], excludedIds: readonly string[]): GiftSectionView {
+  const rows = gifts.map((g) => ({ id: g.id, label: fillCopy('checkout.gift.line', { name: g.giftName }), receive: !excludedIds.includes(g.id) }));
+  const activeCount = rows.filter((r) => r.receive).length;
+  const deferredCount = rows.length - activeCount;
+  const mergedLabel =
+    deferredCount === 0
+      ? fillCopy('checkout.gift.merged', { n: gifts.length })
+      : activeCount === 0
+        ? `${fillCopy('checkout.gift.merged', { n: gifts.length })} (để đơn sau)`
+        : `${fillCopy('checkout.gift.merged', { n: activeCount })} (để đơn sau ${deferredCount})`;
   return {
     layout: giftLayout(gifts.length),
-    rows: gifts.map((g) => ({ id: g.id, label: fillCopy('checkout.gift.line', { name: g.giftName }), receive: !excludedIds.includes(g.id) })),
-    mergedLabel: fillCopy('checkout.gift.merged', { n: gifts.length }),
+    rows,
+    mergedLabel,
     deferLabel: fillCopy('checkout.gift.defer'),
     sheetTitle: fillCopy('checkout.gift.sheetTitle'),
   };

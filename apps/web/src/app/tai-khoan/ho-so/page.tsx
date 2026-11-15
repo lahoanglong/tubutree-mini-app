@@ -6,8 +6,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Camera, Gift, Loader2 } from 'lucide-react';
 import { formatDobDisplay, profileCopy } from '@tubutree/app-core/account-copy';
 import { DOB_PLACEHOLDER, maskDobInput, validateDobVn } from '@tubutree/app-core/dob-input';
+import { parseVnContactPhone } from '@tubutree/app-core/phone-input';
 import { cleanProfileName, profileNameError } from '@tubutree/app-core/profile-name';
-import { updateMe } from '@tubutree/app-core/api/account';
+import { saveContactPhone, updateMe } from '@tubutree/app-core/api/account';
+import { WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import { meQuery } from '@tubutree/app-core/queries/account';
 import { AvatarCropSheet } from '@/components/account/avatar-crop-sheet';
 import { ProfileAvatar } from '@/components/account/profile-avatar';
@@ -69,9 +71,13 @@ export default function EditProfilePage() {
   const [cropSrc, setCropSrc] = useState<string | null>(null);
   const [done, setDone] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [contactPhone, setContactPhone] = useState('');
+  const [contactPhoneTouched, setContactPhoneTouched] = useState(false);
+  const [contactPhoneErr, setContactPhoneErr] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Khoá đồng bộ bằng ref: `isPending`/`uploadingAvatar` chỉ đúng sau lần vẽ kế, hai cú chạm sát nhau vẫn đều thấy "chưa bận".
   const saveBusy = useRef(false);
+  const phoneBusy = useRef(false);
   const avatarBusy = useRef(false);
   const canChangeAvatar = isCloudinaryConfigured();
 
@@ -95,6 +101,46 @@ export default function EditProfilePage() {
   const dobError = dobEditable && (dobTouched || dobText.length === 10) ? dobCheck.error : null;
   const emailInvalid = touched && email.trim() !== '' && !EMAIL.test(email.trim());
   const nameError = touched ? profileNameError(fullName) : null;
+  const parsedContactPhone = parseVnContactPhone(contactPhone);
+  const contactPhoneError =
+    !me?.phone && contactPhoneTouched && !parsedContactPhone
+      ? contactPhone.trim() === ''
+        ? 'Nhập số điện thoại di động 10 số.'
+        : 'Số điện thoại di động chưa đúng định dạng (đầu 03, 05, 07, 08, 09).'
+      : null;
+
+  const savePhone = useMutation({
+    mutationFn: async (normalized: string) => saveContactPhone(coreHttp, normalized),
+    onSuccess: (res) => {
+      setContactPhoneErr(null);
+      if (res) qc.setQueryData(['me'], res);
+      setDone('Đã lưu số điện thoại liên hệ');
+      return settleWithin(
+        Promise.all([
+          qc.invalidateQueries({ queryKey: ['me'] }),
+          qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.all }),
+        ]),
+      );
+    },
+    onError: (e) => {
+      setDone(null);
+      setContactPhoneErr(errorText(e));
+      return settleWithin(qc.invalidateQueries({ queryKey: ['me'] }));
+    },
+    onSettled: () => {
+      phoneBusy.current = false;
+    },
+  });
+
+  const submitContactPhone = () => {
+    setContactPhoneTouched(true);
+    if (phoneBusy.current || saveBusy.current) return;
+    if (!parsedContactPhone) return;
+    phoneBusy.current = true;
+    setDone(null);
+    setContactPhoneErr(null);
+    savePhone.mutate(parsedContactPhone);
+  };
 
   const handleAvatarFile = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -341,11 +387,60 @@ export default function EditProfilePage() {
         </p>
       </div>
 
-      {/* Mini App không có khối số điện thoại ở màn này; từ md giữ để khách thấy số đang đăng nhập. */}
-      <dl className="rounded-control bg-stone-50 px-3 py-2 text-sm max-md:hidden">
-        <dt className="text-xs text-stone-600">Số điện thoại</dt>
-        <dd className="font-medium tabular-nums text-stone-900">{phoneText || 'Chưa có số điện thoại'}</dd>
-      </dl>
+      {phoneText ? (
+        <dl className="rounded-control bg-stone-50 px-3 py-2 text-sm max-md:hidden">
+          <dt className="text-xs text-stone-600">Số điện thoại</dt>
+          <dd className="font-medium tabular-nums text-stone-900">{phoneText}</dd>
+        </dl>
+      ) : (
+        <div className="space-y-2.5 rounded-card border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] p-3.5">
+          <div>
+            <p className="text-xs font-semibold text-[color:var(--color-text-secondary)]">Số điện thoại</p>
+            <p className="text-sm font-medium text-[color:var(--color-text-primary)]">Chưa có số điện thoại</p>
+            <p className="mt-0.5 text-xs text-[color:var(--color-text-secondary)]">
+              Thêm số di động để bưu tá thu gom rác tận nhà và cộng Điểm Xanh ngay trên Web.
+            </p>
+          </div>
+          <Field label="Số điện thoại liên hệ" error={contactPhoneError ?? undefined}>
+            <input
+              type="tel"
+              inputMode="tel"
+              autoComplete="tel"
+              placeholder="0912 345 678"
+              value={contactPhone}
+              readOnly={confirmingDob}
+              onBlur={() => setContactPhoneTouched(true)}
+              onChange={(e) => {
+                setContactPhone(e.target.value);
+                if (contactPhoneErr) setContactPhoneErr(null);
+              }}
+              className={`${contactPhoneError ? ui.fieldError : ui.field} tabular-nums`}
+            />
+          </Field>
+          {contactPhoneErr && (
+            <p role="alert" className={ui.error}>
+              {contactPhoneErr}
+            </p>
+          )}
+          <button
+            type="button"
+            disabled={confirmingDob}
+            aria-busy={savePhone.isPending || undefined}
+            aria-disabled={savePhone.isPending || undefined}
+            onClick={submitContactPhone}
+            className={`${ui.btnSecondary} w-full sm:w-auto`}
+          >
+            {savePhone.isPending ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />
+                Đang lưu số điện thoại…
+              </>
+            ) : (
+              'Lưu số điện thoại'
+            )}
+          </button>
+        </div>
+      )}
 
       <div role="alert">{saveError && <p className={ui.error}>{saveError}</p>}</div>
       <p role="status" className={done ? `text-sm ${done === AVATAR_NOT_SAVED ? 'text-warning-fg' : 'text-success-fg'}` : 'sr-only'}>

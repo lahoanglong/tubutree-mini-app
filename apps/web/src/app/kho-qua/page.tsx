@@ -1,14 +1,26 @@
 'use client';
 
+import BackLink from '@/components/back-link';
 import { RewardsView } from '@/components/rewards/rewards-view';
-import { LedgerShell } from '../tai-khoan/ledger-shell';
+import { RecycleRewardsNavPills } from '@/components/ui/ecosystem-nav-pills';
+import { PageHeader } from '@/components/ui/page-header';
+import { PAGE_WIDE } from '@/lib/page-frame';
 
-const TITLE = 'Kho quà';
+const TITLE = 'Kho quà Điểm Xanh';
 
 export default function RewardsPage() {
   return (
-    <LedgerShell title={TITLE} wide>
-      <RewardsView />
-    </LedgerShell>
+    <main className={`${PAGE_WIDE} pb-6 pt-0 md:pt-6 tabular-nums`}>
+      <BackLink href="/doi-rac" crumbs={[{ label: 'Trang chủ', href: '/' }, { label: TITLE }]}>
+        ← Quay lại
+      </BackLink>
+      <PageHeader title={TITLE} backHref="/doi-rac" backLabel="Quay lại Đổi rác" className="md:mt-1" />
+      <div className="mt-3">
+        <RecycleRewardsNavPills />
+      </div>
+      <div className="mt-4">
+        <RewardsView />
+      </div>
+    </main>
   );
 }

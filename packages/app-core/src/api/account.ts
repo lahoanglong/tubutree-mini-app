@@ -15,6 +15,8 @@ export interface MeProfile {
 export const getMe = (http: HttpClient) => http.get<MeProfile>('/me');
 export const updateMe = (http: HttpClient, data: { fullName?: string; email?: string; avatarUrl?: string; dob?: string }) =>
   http.patch<MeProfile>('/me', data);
+export const saveContactPhone = (http: HttpClient, phone: string) =>
+  http.patch<MeProfile>('/me/contact-phone', { phone });
 export const completeOnboarding = (http: HttpClient, segments: string[]) => http.post<MeProfile>('/me/onboarding', { segments });
 
 /** A1-03: yêu cầu xoá tài khoản (KHÔNG phải xoá thật — CSKH xử lý thủ công, xem UsersService). */

@@ -95,10 +95,18 @@ describe('/doi-rac/yeu-cau (§4.6, §16.1)', () => {
     expect(takeSubmitted()).toBe(false);
   });
 
-  it.each(['GUEST', 'NEED_PHONE'] as const)('eligibility %s: MiniAppOnlyNotice như ba trang đổi rác khác, không gọi /waste/requests (Q2)', async (eligibility) => {
-    state.me = makeWasteMe({ eligibility, balance: null, monthUsage: null });
-    const c = await mount();
-    expect(c.textContent).toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
+  it('eligibility GUEST: mời đăng nhập; NEED_PHONE: hiện thẻ xác nhận SĐT native trên Web, không gọi /waste/requests', async () => {
+    state.me = makeWasteMe({ eligibility: 'GUEST', balance: null, monthUsage: null });
+    let c = await mount();
+    expect(c.textContent).not.toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
+    expect(c.querySelector('a[href*="/dang-nhap"]')).not.toBeNull();
+    expect(state.calls).not.toContain('/waste/requests');
+    mounted.pop()!.unmount();
+
+    state.me = makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null });
+    c = await mount();
+    expect(c.querySelector('[data-testid="web-recycle-phone-card"]')).not.toBeNull();
+    expect(c.textContent).not.toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
     expect(byText(c, 'button', 'Thử lại')).toBeNull();
     expect(state.calls).not.toContain('/waste/requests');
   });

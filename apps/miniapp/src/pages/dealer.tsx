@@ -73,6 +73,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { Icon } from '../components/ui/icon';
 import { PageHeader } from '../components/ui/page-header';
+import { PartnerEarnPills } from '../components/ui/partner-earn-pills';
 import { ProgressBar } from '../components/ui/progress-bar';
 import { QuantitySelector } from '../components/ui/quantity-selector';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
@@ -96,6 +97,7 @@ function DealerShell({ title, children }: { title: string; children: ReactNode }
   return (
     <Page style={{ background: 'var(--color-dealer-bg)' }}>
       <PageHeader title={title} />
+      <PartnerEarnPills active="dealer" />
       {children}
     </Page>
   );

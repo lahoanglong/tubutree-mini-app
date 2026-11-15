@@ -50,8 +50,27 @@ export interface ProgramLinkOptions {
 export const readyProgramLinks = ({ wasteVisible }: ProgramLinkOptions) =>
   WEB_PROGRAM_LINKS.filter((l) => isWebRouteReady(l.path) && (l.path !== '/doi-rac' || wasteVisible));
 
-/** Hàng điều hướng của thanh đầu máy tính: không lặp "Trang chủ" (logo) và "Cá nhân" (nút tài khoản). */
-export const readyDesktopNav = (opts: ProgramLinkOptions): { path: string; label: string }[] => [
-  ...readyNavTabs().filter((t) => t.id !== 'home' && t.id !== 'profile'),
-  ...readyProgramLinks(opts),
+export interface WebDesktopNavItem {
+  path: string;
+  label: string;
+  matchPrefixes: readonly string[];
+}
+
+/**
+ * 5 mục điều hướng ổn định trên thanh đầu máy tính (W171): không cuộn ngang ở 1024px–1440px,
+ * không chờ `useWasteVisible()` chèn muộn gây nhảy bố cục sau hydrate.
+ */
+export const WEB_DESKTOP_NAV: readonly WebDesktopNavItem[] = [
+  { path: '/san-pham', label: 'Sản phẩm', matchPrefixes: ['/san-pham'] },
+  { path: '/vuon-xanh', label: 'Vườn Xanh', matchPrefixes: ['/vuon-xanh'] },
+  { path: '/doi-rac', label: 'Đổi rác & Kho quà', matchPrefixes: ['/doi-rac', '/kho-qua'] },
+  { path: '/mua-chung', label: 'Mua chung & Xoay vòng', matchPrefixes: ['/mua-chung', '/uu-dai', '/gio-vang'] },
+  { path: '/cau-chuyen', label: 'Hành trình nguyên liệu', matchPrefixes: ['/cau-chuyen'] },
 ];
+
+export const isDesktopNavActive = (pathname: string | null | undefined, item: WebDesktopNavItem): boolean =>
+  !!pathname && item.matchPrefixes.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+
+/** Hàng điều hướng của thanh đầu máy tính: 5 trụ cột ổn định, không lặp "Trang chủ" (logo) và "Cá nhân" (nút tài khoản). */
+export const readyDesktopNav = (_opts?: ProgramLinkOptions): WebDesktopNavItem[] =>
+  WEB_DESKTOP_NAV.filter((t) => isWebRouteReady(t.path));

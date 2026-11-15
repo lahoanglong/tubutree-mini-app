@@ -191,3 +191,201 @@ body.has-sticky-bar [data-bottom-nav] {
 .tubu-initial::before {
   content: attr(data-initial);
 }
+
+/* Hệ sinh thái 6 trụ cột (W171): Bento Hub Trang chủ (2x3 ở điện thoại, 3x2 từ md) + hàng lối tắt nhanh.
+   Dùng lớp ngữ nghĩa trong CSS để không thêm số px viết tay hay max-md: vào file TSX. */
+.tubu-bento-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-inline-sm);
+}
+
+.tubu-bento-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  height: 86px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 7px 10px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-1);
+  color: var(--color-text-primary);
+  text-align: left;
+  text-decoration: none;
+  transition: border-color var(--motion-tap), box-shadow var(--motion-tap), transform var(--motion-tap);
+}
+
+.tubu-bento-card:hover {
+  border-color: var(--color-action-secondary-border);
+  box-shadow: var(--elevation-2);
+}
+
+.tubu-bento-card--featured {
+  border-color: var(--color-action-secondary-border);
+  background: var(--color-bg-subtle);
+}
+
+.tubu-bento-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  min-width: 0;
+}
+
+.tubu-bento-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  border-radius: var(--radius-tag);
+  background: var(--color-action-secondary-bg);
+  color: var(--color-action-secondary-fg);
+}
+
+.tubu-bento-icon--warm {
+  background: var(--color-promo-bg);
+  color: var(--color-promo-fg);
+}
+
+.tubu-bento-tag {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-radius: var(--radius-pill);
+  padding: 1px 6px;
+  background: var(--color-action-secondary-bg);
+  color: var(--color-action-secondary-fg);
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: var(--type-label-weight);
+}
+
+.tubu-bento-tag--warm {
+  background: var(--color-promo-bg);
+  color: var(--color-promo-fg);
+}
+
+.tubu-bento-copy {
+  min-width: 0;
+}
+
+.tubu-bento-title {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+  white-space: normal;
+  overflow-wrap: break-word;
+  color: var(--color-text-primary);
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 600;
+}
+
+.tubu-bento-sub {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text-secondary);
+  font-size: var(--type-label-size);
+  line-height: 16px;
+}
+
+.tubu-quick-pills {
+  margin-top: var(--space-stack-sm);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.tubu-quick-pill {
+  flex: 1 1 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  height: 44px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 0 8px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  font-size: var(--type-label-size);
+  line-height: var(--type-label-lh);
+  font-weight: 600;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color var(--motion-tap), background-color var(--motion-tap);
+}
+
+.tubu-quick-pill:hover {
+  border-color: var(--color-action-secondary-border);
+  background: var(--color-bg-subtle);
+}
+
+.tubu-quick-pill--more {
+  flex: 0 0 auto;
+  background: var(--color-bg-subtle);
+  color: var(--color-text-secondary);
+  padding: 0 10px;
+}
+
+@media (min-width: 768px) {
+  .tubu-bento-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: var(--space-inline-md);
+  }
+
+  .tubu-bento-card {
+    height: auto;
+    min-height: 100px;
+    padding: 14px 16px;
+    gap: 10px;
+  }
+
+  .tubu-bento-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: var(--radius-control);
+  }
+
+  .tubu-bento-tag {
+    padding: 2px 9px;
+  }
+
+  .tubu-bento-title {
+    font-family: var(--font-display);
+    font-size: var(--type-title-sm-size);
+    line-height: var(--type-title-sm-lh);
+  }
+
+  .tubu-bento-sub {
+    margin-top: 2px;
+    font-size: var(--type-caption-size);
+    line-height: var(--type-caption-lh);
+  }
+
+  .tubu-quick-pills {
+    margin-top: var(--space-inline-md);
+    gap: var(--space-inline-sm);
+  }
+
+  .tubu-quick-pill {
+    flex: 0 1 auto;
+    padding: 0 14px;
+    font-size: var(--type-caption-size);
+  }
+}

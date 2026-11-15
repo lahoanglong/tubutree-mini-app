@@ -28,6 +28,7 @@ import { useSuggest } from '@/lib/use-suggest';
 import { GRID_PRODUCTS_WITH_FILTER } from '@/lib/product-grid';
 import { PRIORITY_CARDS, ProductGrid, SortBar } from '@/components/mini';
 import { ListingBreadcrumb, ListingLayout, type BreadcrumbItem } from '@/components/layouts/listing-layout';
+import { GroupCycleDealsNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { ErrorState } from '@/components/ui/error-state';
 import { ProductGridSkeleton } from '@/components/ui/skeleton';
 import { BrowsePager, pagedHref } from './browse-pager';
@@ -248,10 +249,19 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
   const segmentName = state.segment ? segmentLabel(state.segment) : undefined;
   const noResults = !products.isLoading && !products.isError && list.length === 0;
   const singleBrand = state.brands.length === 1 ? state.brands[0]! : null;
-  const listTitle = state.q ? null : (categoryName ?? segmentName ?? singleBrand);
+  const subscriptionTitle = state.filter === 'subscription' ? 'Mua xoay vòng (Đặt định kỳ)' : null;
+  const listTitle = state.q ? null : (categoryName ?? segmentName ?? singleBrand ?? subscriptionTitle);
   // Chỉ phạm vi đang làm tiêu đề (hiện đúng một lần) mới không lặp thành chip; có từ khoá thì tiêu đề nhường chỗ cho ô tìm. Danh mục không có
   // trong cây (link cũ, đã xoá) không làm tiêu đề được: cây đã tải xong thì hiện chip "Danh mục" để khách thấy và gỡ được bộ lọc đó.
-  const titleScope: TitleScope | null = !listTitle ? null : categoryName ? 'category' : segmentName ? 'segment' : 'brand';
+  const titleScope: TitleScope | null = !listTitle
+    ? null
+    : categoryName
+      ? 'category'
+      : segmentName
+        ? 'segment'
+        : singleBrand
+          ? 'brand'
+          : 'subscription';
   const chips = activeFilterChips(
     state,
     { categoryName: categoryName ?? (state.category && !categoriesQ.isLoading ? browseText.title : undefined), segmentName },
@@ -396,6 +406,34 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
           </>
         ) : (
           <>
+            {state.filter === 'subscription' && (
+              <div className="mb-4 space-y-3">
+                <GroupCycleDealsNavPills activeOverride="subscription" />
+                <section
+                  data-testid="subscription-browse-banner"
+                  aria-label="Quyền lợi Mua xoay vòng"
+                  className="rounded-card border border-[var(--color-action-secondary-border)] bg-[var(--color-bg-subtle)] p-4 md:p-5"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="inline-flex rounded-full bg-[var(--color-action-secondary-bg)] px-2.5 py-0.5 text-xs font-semibold text-[color:var(--color-action-secondary-fg)]">
+                      Mua xoay vòng · Đặt định kỳ
+                    </span>
+                    <Link
+                      href="/tai-khoan/don-hang?tab=subscriptions"
+                      className="inline-flex min-h-11 items-center text-xs font-semibold text-[color:var(--color-text-brand)] underline"
+                    >
+                      Quản lý lịch định kỳ của tôi →
+                    </Link>
+                  </div>
+                  <p className="mt-1 text-sm text-[color:var(--color-text-primary)]">
+                    Giao tự động sản phẩm tiêu dùng thiết yếu theo chu kỳ 4 · 6 · 8 · 10 tuần — tiết kiệm tới 17% mỗi kỳ, đổi ngày hoặc tạm dừng bất cứ lúc nào.
+                  </p>
+                  <p className="mt-1 text-xs text-[color:var(--color-text-secondary)]">
+                    Chọn món cần dùng bên dưới, mở chi tiết sản phẩm và bấm Đặt định kỳ để nhận giá ưu đãi xoay vòng.
+                  </p>
+                </section>
+              </div>
+            )}
             {/* Dính ở khung bọc, không ở chính SortBar: cha của phần tử dính phải cao bằng cả danh sách. Từ lg cột lọc đã có nên nút Lọc ẩn đi (`!hidden` vì nút có `display` ở style). */}
             <div ref={listTopRef} data-testid="browse-list-top" aria-hidden="true" />
             <div ref={sortStickyRef} className="tubu-bleed sticky top-[var(--sort-bar-top,0px)] z-[2] lg:[&>div>button:last-child]:!hidden">

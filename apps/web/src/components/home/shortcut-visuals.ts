@@ -1,6 +1,6 @@
-import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, ScanLine, Ticket, Users, Zap, type LucideIcon } from 'lucide-react';
+import { Gift, HeartHandshake, MessagesSquare, Package, Recycle, RefreshCw, ScanLine, Sprout, Ticket, Users, Zap, type LucideIcon } from 'lucide-react';
 import { liveRoute } from '@tubutree/app-core/merch/route-fallback';
-import type { HomeShortcutId } from '@tubutree/app-core/home-layout';
+import type { HomePillarId, HomeShortcutId } from '@tubutree/app-core/home-layout';
 
 export const SHORTCUT_ICONS: Record<HomeShortcutId, LucideIcon> = {
   flash: Zap,
@@ -12,6 +12,15 @@ export const SHORTCUT_ICONS: Record<HomeShortcutId, LucideIcon> = {
   claim: ScanLine,
   earn: HeartHandshake,
   community: MessagesSquare,
+};
+
+export const PILLAR_ICONS: Record<HomePillarId, LucideIcon> = {
+  garden: Sprout,
+  recycle: Recycle,
+  rewards: Gift,
+  groupBuy: Users,
+  subscription: RefreshCw,
+  partner: HeartHandshake,
 };
 
 /**

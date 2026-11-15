@@ -33,7 +33,13 @@ vi.mock('@/lib/core-http', () => ({
       if (path === '/waste/me') return state.me;
       if (path === '/me/loyalty/rewards') return state.rewards;
       if (path === '/waste/catalogue') return state.catalogue;
+      if (path === '/me/addresses') return [{ id: 'addr-1', phone: '0987654321', isDefault: true }];
       throw new Error(`chưa mock ${path}`);
+    },
+    patch: async (path: string, body: { phone: string }) => {
+      state.calls.push(`PATCH ${path}:${body.phone}`);
+      state.me = makeWasteMe({ balance: { pointsBalance: 9000, pointsConvertedBalance: 5000, redeemablePoints: 14_000 } });
+      return { id: 'u1', phone: body.phone };
     },
     post: async () => {
       throw new Error('trang này không ghi dữ liệu');
@@ -257,11 +263,18 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     expect(c.textContent).not.toContain('Chờ gắn vào đơn');
   });
 
-  it('NEED_PHONE + chương trình bật + có deskPoints: thông báo Mini App kèm lối vào /doi-rac/quay', async () => {
+  it('NEED_PHONE + chương trình bật + có deskPoints: thẻ lưu SĐT native trên Web (tự điền từ sổ địa chỉ, lưu 1 chạm mở ngay Đổi rác) kèm lối vào /doi-rac/quay', async () => {
     state.me = makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null, deskPoints: [{ id: 'pt-1', name: 'Đại lý Cô Ba', kind: 'PARTNER' }] });
     const c = await mount();
-    expect(c.textContent).toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
+    expect(c.querySelector('[data-testid="web-recycle-phone-card"]')).not.toBeNull();
+    expect(c.textContent).not.toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
     expect(link(c, '/doi-rac/quay')?.textContent).toContain('Nhận hàng tại điểm');
+    const phoneInput = c.querySelector<HTMLInputElement>('input[type="tel"]')!;
+    expect(phoneInput.value).toBe('0987 654 321');
+    click(byText(c, 'button', 'Xác nhận SĐT & Đổi rác ngay'));
+    await flush(10);
+    expect(state.calls).toContain('PATCH /me/contact-phone:0987654321');
+    expect(c.textContent).toContain('Điểm Xanh của bạn');
   });
 
   it('khách bị khoá: thẻ khoá, yêu cầu RECEIVED ghi "Đang chờ Tubu xem lại"', async () => {
@@ -272,15 +285,20 @@ describe('/doi-rac thẻ trạng thái và thứ tự ưu tiên (§4.1)', () => 
     expect(link(c, '/doi-rac/tao')).toBeNull();
   });
 
-  it.each(['GUEST', 'NEED_PHONE'] as const)('eligibility %s: MiniAppOnlyNotice, không hộp chia sẻ SĐT, không lối vào nào (Q2)', async (eligibility) => {
-    state.me = makeWasteMe({ eligibility, balance: null, monthUsage: null });
-    const c = await mount();
-    expect(c.textContent).toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
-    expect(c.textContent).not.toContain('Điểm Xanh của bạn');
-    expect(c.textContent).not.toMatch(/số điện thoại/i);
+  it('eligibility GUEST: hiện tổng quan chương trình + nút đăng nhập, không còn MiniAppOnlyNotice; NEED_PHONE: hiện thẻ xác nhận SĐT native trên Web', async () => {
+    state.me = makeWasteMe({ eligibility: 'GUEST', balance: null, monthUsage: null });
+    let c = await mount();
+    expect(c.textContent).not.toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
+    expect(c.querySelector('a[href*="/dang-nhap"]')).not.toBeNull();
+    expect(state.calls).not.toContain('/me/loyalty/rewards');
+    mounted.pop()!.unmount();
+
+    state.me = makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null });
+    c = await mount();
+    expect(c.querySelector('[data-testid="web-recycle-phone-card"]')).not.toBeNull();
+    expect(c.textContent).not.toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
     expect(link(c, '/doi-rac/yeu-cau')).toBeNull();
     expect(link(c, '/doi-rac/tao')).toBeNull();
-    expect(state.calls).not.toContain('/me/loyalty/rewards');
   });
 
   it('NEED_PHONE + chương trình tắt: chỉ thẻ tạm dừng, không có thông báo Mini App', async () => {
@@ -416,11 +434,13 @@ describe('/doi-rac — diện mạo Mini App ở điện thoại', () => {
     expect(history.className).toContain('whitespace-nowrap');
     const pointsCard = byText(c, 'p', 'Điểm Xanh của bạn')!.parentElement!;
     expect(pointsCard.className).toContain('max-md:border-transparent');
-    const rows = link(c, '/kho-qua')!.parentElement!;
+    const sideCol = c.querySelector<HTMLElement>('[data-recycle-col="side"]')!;
+    const khoRow = link(sideCol, '/kho-qua')!;
+    const rows = khoRow.parentElement!;
     expect(rows.className).toContain('max-md:bg-transparent');
     expect(rows.className).toContain('max-md:shadow-none');
     expect(rows.className).not.toContain('box-shadow:var(--elevation');
-    expect(link(c, '/kho-qua')!.className).toContain('max-md:px-0');
+    expect(khoRow.className).toContain('max-md:px-0');
   });
 
   it('tiêu đề chừa 48px cho nút lùi nổi vì thân trang được kéo lên ngang nút', async () => {
@@ -461,7 +481,7 @@ describe('/doi-rac — máy tính: hai cột cân đối từ lg', () => {
     const points = byText(c, 'p', 'Điểm Xanh của bạn')!;
     const requests = byText(c, 'h2', 'Yêu cầu đang xử lý')!;
     const methods = byText(c, 'h2', 'Cách đổi')!;
-    const kho = link(c, '/kho-qua')!;
+    const kho = link(side!, '/kho-qua')!;
     expect(main!.contains(points) && main!.contains(requests)).toBe(true);
     expect(side!.contains(methods) && side!.contains(kho) && side!.contains(link(c, '/doi-rac/quy-dinh')!)).toBe(true);
     expect(side!.querySelector('[data-item]')).not.toBeNull();

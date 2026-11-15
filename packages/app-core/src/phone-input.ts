@@ -38,3 +38,11 @@ export function normalizeVnPhoneInput(raw: string): string {
 export function normalizeOrderSearchInput(raw: string): string {
   return stripInvisible(raw).replace(/\s+/g, ' ');
 }
+
+const VN_CONTACT_MOBILE = /^0[35789]\d{8}$/;
+
+/** Chuẩn hoá SĐT di động Việt Nam (03/05/07/08/09, 10 số) cho liên hệ thu gom trên Website; sai định dạng trả null. */
+export function parseVnContactPhone(raw: string): string | null {
+  const parsed = parseVnPhoneInput(raw);
+  return parsed && VN_CONTACT_MOBILE.test(parsed) ? parsed : null;
+}

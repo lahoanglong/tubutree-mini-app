@@ -4,7 +4,7 @@ import { Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, Copy, CreditCard, Leaf, MessageCircle, Package, PackageCheck, Pencil, Repeat, Share2, Truck, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Copy, CreditCard, Gift, Leaf, MessageCircle, Package, PackageCheck, Pencil, Recycle, Repeat, Share2, Truck, type LucideIcon } from 'lucide-react';
 import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { STAT_VALUE_LINE_HEIGHT, STAT_VALUE_LOOKS, statValueFits, statValueStart } from '@tubutree/app-core/account-stat';
 import { inviteBody, inviteLink, inviteShareText } from '@tubutree/app-core/commerce/invite-card';
@@ -467,26 +467,74 @@ function AccountContent() {
           </section>
         )}
 
-        {menu.map((section, gi) => (
-          <section key={section.group} aria-labelledby={`account-g${gi}`} className="mx-4 mt-3 md:mx-0 lg:mt-0">
-            <h2 id={`account-g${gi}`} className="mb-1.5 ml-1 text-caption font-semibold uppercase tracking-wide text-[color:var(--color-text-tertiary)]">
-              {section.group}
-            </h2>
-            <ul className="divide-y divide-[var(--color-border-subtle)] overflow-hidden rounded-card bg-[var(--color-bg-surface)] shadow-e1">
-              {section.items.map((item) => {
-                const isNotif = item.to === '/tai-khoan/thong-bao';
-                const isChat = item.to === '/ho-tro/chat';
-                return (
-                  <li key={item.to}>
-                    <Link href={item.to} aria-label={isNotif && unread > 0 ? `${item.label}, ${unread} chưa đọc` : isChat && chatUnread ? `${item.label}, có tin mới` : undefined} className={ROW}>
-                      <RowBody item={item} unread={isNotif ? unread : 0} dot={isChat && chatUnread} />
-                    </Link>
-                  </li>
-                );
-              })}
-            </ul>
-          </section>
-        ))}
+        <section
+          aria-label="Đổi rác & Kho quà Điểm Xanh"
+          data-testid="account-desktop-ecosystem"
+          className="hidden md:block lg:pt-0"
+        >
+          <Card padding={12}>
+            <Heading variant="title-sm" as="h2">
+              Đổi rác & Kho quà Điểm Xanh
+            </Heading>
+            <div className="mt-1">
+              <Text variant="body-sm" tone="secondary" as="p">
+                Gửi vỏ sạch ngay trên web để tích thêm Điểm Xanh (hiện có {points.total.toLocaleString('vi-VN')} điểm) hoặc đổi quà 0đ gửi kèm đơn kế tiếp.
+              </Text>
+            </div>
+            <div className="mt-3 flex flex-col gap-2">
+              <Link
+                href="/doi-rac"
+                className="flex min-h-11 items-center justify-between rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-subtle)] px-3 text-sm font-semibold text-[color:var(--color-text-brand)] transition hover:border-[var(--color-border-brand)]"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Recycle className="h-4 w-4 flex-none" aria-hidden="true" />
+                  Đổi rác lấy quà
+                </span>
+                <ChevronRight className="h-4 w-4 flex-none" aria-hidden="true" />
+              </Link>
+              <Link
+                href="/kho-qua"
+                className="flex min-h-11 items-center justify-between rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] px-3 text-sm font-semibold text-[color:var(--color-text-primary)] transition hover:border-[var(--color-border-brand)]"
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Gift className="h-4 w-4 flex-none text-[color:var(--color-text-brand)]" aria-hidden="true" />
+                  Kho quà 0đ & Quà đã đổi
+                </span>
+                <ChevronRight className="h-4 w-4 flex-none text-[color:var(--color-text-tertiary)]" aria-hidden="true" />
+              </Link>
+            </div>
+          </Card>
+        </section>
+
+        {menu.map((section, gi) => {
+          // Trên máy tính (từ md), cột trái của AccountShell đã hiện đầy đủ menu cá nhân; ẩn nhóm Tài khoản/Hỗ trợ lặp lại bên phải.
+          const desktopDuplicate =
+            section.group === homeCopy.profile.groupAccount || section.group === homeCopy.profile.groupSupport;
+          return (
+            <section
+              key={section.group}
+              aria-labelledby={`account-g${gi}`}
+              className={`mx-4 mt-3 md:mx-0 lg:mt-0 ${desktopDuplicate ? 'md:hidden' : ''}`}
+            >
+              <h2 id={`account-g${gi}`} className="mb-1.5 ml-1 text-caption font-semibold uppercase tracking-wide text-[color:var(--color-text-tertiary)]">
+                {section.group}
+              </h2>
+              <ul className="divide-y divide-[var(--color-border-subtle)] overflow-hidden rounded-card bg-[var(--color-bg-surface)] shadow-e1">
+                {section.items.map((item) => {
+                  const isNotif = item.to === '/tai-khoan/thong-bao';
+                  const isChat = item.to === '/ho-tro/chat';
+                  return (
+                    <li key={item.to}>
+                      <Link href={item.to} aria-label={isNotif && unread > 0 ? `${item.label}, ${unread} chưa đọc` : isChat && chatUnread ? `${item.label}, có tin mới` : undefined} className={ROW}>
+                        <RowBody item={item} unread={isNotif ? unread : 0} dot={isChat && chatUnread} />
+                      </Link>
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          );
+        })}
 
         <div className="max-md:hidden lg:col-span-full">
           <OrdersSection />

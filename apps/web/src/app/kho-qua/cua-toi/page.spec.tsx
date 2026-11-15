@@ -249,13 +249,18 @@ describe('/kho-qua/cua-toi — Quà của tôi', () => {
     expect(state.calls).toHaveLength(0);
   });
 
-  it('một h1, điều khiển đủ tên, vùng chạm đủ lớn', async () => {
+  it('một h1, không gắn đường dẫn Tài khoản, điều khiển đủ tên, vùng chạm đủ lớn', async () => {
     state.mine = [makeGiftRedemption()];
     const c = await mount();
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
     expect(c.querySelector('h1')?.textContent).toBe('Quà của tôi');
+    const crumbs = c.querySelector('nav[aria-label="Đường dẫn"]');
+    expect(crumbs?.textContent).toContain('Kho quà Điểm Xanh');
+    expect(crumbs?.textContent).not.toContain('Tài khoản');
+    const pills = c.querySelector('nav[aria-label="Đổi rác và Kho quà"]');
+    expect(pills?.querySelector('a[href="/kho-qua/cua-toi"]')?.getAttribute('aria-current')).toBe('page');
   });
 });
 

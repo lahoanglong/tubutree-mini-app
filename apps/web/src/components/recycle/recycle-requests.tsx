@@ -21,10 +21,10 @@ import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { SegmentedTabs } from '@/components/ui/segmented-tabs';
 import { Skeleton } from '@/components/ui/skeleton';
-import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { clearSubmitted } from '@/lib/recycle-wizard';
 import { RecycleLinkRow } from './recycle-link-row';
 import { METHOD_LABELS, isRequestPaused, requestStatusText } from './recycle-labels';
+import { WebRecyclePhoneCard } from './web-recycle-phone-card';
 
 const OPEN_STATUSES: readonly string[] = ['OPEN', 'IN_TRANSIT', 'RECEIVED'];
 
@@ -52,7 +52,7 @@ export function RecycleRequests() {
 
   if (phase === 'loading') return <Shell><AuthLoading /></Shell>;
   if (phase === 'unavailable') return <Shell><SessionUnavailable /></Shell>;
-  if (phase === 'guest') {
+  if (phase === 'guest' || me?.eligibility === 'GUEST') {
     return (
       <Shell>
         <div className={`space-y-3 p-4 ${skin.card}`}>
@@ -65,8 +65,7 @@ export function RecycleRequests() {
       </Shell>
     );
   }
-  // Chưa có SĐT đã xác minh thì web không xin được (chỉ Zalo xin được): chỉ chỉ đường sang Mini App, như ba trang đổi rác kia (Q2).
-  if (me && me.eligibility !== 'OK') return <Shell><MiniAppOnlyNotice path="/doi-rac/yeu-cau" /></Shell>;
+  if (me && me.eligibility !== 'OK') return <Shell><WebRecyclePhoneCard /></Shell>;
   if (q.isError) return <Shell><ErrorState message={errText(q.error)} onRetry={isAuthError(q.error) ? undefined : () => q.refetch()} /></Shell>;
   if (q.isPending || !q.data) return <Shell><Skeleton height={120} rounded="rounded-card" /></Shell>;
 

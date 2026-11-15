@@ -30,6 +30,7 @@ import { OffersFlash } from '@/components/offers/offers-flash';
 import { OffersIconTile } from '@/components/offers/offers-icon-tile';
 import { OffersPointsStrip } from '@/components/offers/offers-points-strip';
 import { ErrorState } from '@/components/ui/error-state';
+import { GroupCycleDealsNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { PageHeader } from '@/components/ui/page-header';
 import { Card, EmptyState, GuestLinkCard, ListRow, SegmentedTabs, Skeleton, VoucherTicket } from '@/components/mini';
 import { PAGE_WIDE } from '@/lib/page-frame';
@@ -231,6 +232,9 @@ function OffersContent() {
   return (
     <>
       <PageHeader title={homeCopy.offers.title} />
+      <div className="mt-3">
+        <GroupCycleDealsNavPills activeOverride="deals" />
+      </div>
       {/* Dính dưới đầu trang (Ưu đãi là tab gốc nên không có nút lùi; `sticky-below-back` chỉ có tác dụng ở trang con có nút lùi). Cùng khuôn với Mã giảm giá. */}
       <div className="tubu-bleed sticky-below-back sticky top-[var(--safe-top)] z-[2] bg-[var(--color-bg-canvas)] px-4 pb-1 pt-2 md:top-[var(--header-h)] md:px-0">
         <div className="md:max-w-md">

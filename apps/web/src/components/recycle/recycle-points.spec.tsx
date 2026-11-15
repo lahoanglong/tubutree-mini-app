@@ -112,10 +112,11 @@ describe('/doi-rac/diem-nhan (§4.4)', () => {
     expect(state.replace).not.toHaveBeenCalled();
     expect(state.calls).toEqual([]);
   });
-  it('chưa đủ điều kiện (thiếu SĐT): chỉ lời chỉ sang Zalo', async () => {
+  it('chưa đủ điều kiện (thiếu SĐT): hiện thẻ xác nhận SĐT native trên Web, không còn đẩy sang Zalo', async () => {
     state.me = makeWasteMe({ eligibility: 'NEED_PHONE', balance: null, monthUsage: null });
     const c = await mount();
-    expect(c.textContent).toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
+    expect(c.querySelector('[data-testid="web-recycle-phone-card"]')).not.toBeNull();
+    expect(c.textContent).not.toContain('Tính năng này cần mở Tubu Tree trên Zalo.');
     expect(radios(c)).toHaveLength(0);
   });
   it('tab theo tỉnh có điểm; đổi tab lọc danh sách', async () => {
@@ -139,12 +140,27 @@ describe('/doi-rac/diem-nhan (§4.4)', () => {
     typeInto(c.querySelector('input[type="search"]'), 'zzz');
     expect(c.textContent).toContain('Không tìm thấy điểm nhận nào');
   });
-  it('không có "Gần tôi" và không xin vị trí; có lời giải thích ngắn', async () => {
+  it('nút "📍 Tìm điểm thu gom gần tôi" gọi navigator.geolocation trình duyệt, mở tab Gần tôi và xếp gần trước', async () => {
+    state.points = [
+      { ...HCM, lat: 10.7769, lng: 106.7009 },
+      { ...HN, lat: 21.0285, lng: 105.8542 },
+    ];
+    Object.defineProperty(globalThis.navigator, 'geolocation', {
+      configurable: true,
+      value: {
+        getCurrentPosition: (ok: (pos: { coords: { latitude: number; longitude: number } }) => void) =>
+          ok({ coords: { latitude: 21.029, longitude: 105.854 } }),
+      },
+    });
     const c = await mount();
     expect(tabs(c)).not.toContain('Gần tôi');
-    expect(byText(c, 'button', 'Dùng vị trí của tôi')).toBeNull();
-    expect(c.textContent).toContain('Web không dùng vị trí của bạn');
-    expect(state.calls.some((p) => p.includes('nearby'))).toBe(false);
+    expect(c.textContent).not.toContain('mở Tubu Tree trên Zalo');
+    const geoBtn = byText(c, 'button', 'Tìm điểm thu gom gần tôi')!;
+    click(geoBtn);
+    await flush(4);
+    expect(tabs(c)[0]).toBe('Gần tôi');
+    expect(radios(c)[0]?.textContent).toContain('Đại lý Hồ Gươm');
+    expect(radios(c)[0]?.textContent).toContain('Gần nhất');
   });
   it('"Chọn điểm này" khoá tới khi chọn; chọn → trả nháp về trang gọi bằng replace', async () => {
     const c = await mount();

@@ -139,7 +139,7 @@ describe('/kho-qua — số dư, tab và thẻ quà', () => {
     click(byText(c, 'button', 'Thể lệ')!);
     await flush(2);
     expect(document.body.textContent).toContain('Điểm không hết hạn chỉ dùng khi thanh toán và góp quỹ trồng cây, không dùng để đổi mã giảm giá hay quà.');
-    expect(c.querySelector('a[href="/kho-qua/cua-toi"]')?.textContent).toContain('Quà của tôi');
+    expect(Array.from(c.querySelectorAll('a[href="/kho-qua/cua-toi"]')).at(-1)?.textContent).toContain('Quà của tôi');
   });
 
   it('ghi chú luật dùng điểm từ cấu hình công khai; không hiện khi cấu hình chưa tải', async () => {
@@ -578,13 +578,21 @@ describe('/kho-qua — trạng thái trang', () => {
     expect(c.textContent).toContain('Miễn phí vận chuyển');
   });
 
-  it('một h1, tab và nút đủ tên, vùng chạm đủ lớn', async () => {
+  it('một h1, không gắn đường dẫn Tài khoản, có thanh chuyển Đổi rác / Kho quà / Quà của tôi, vùng chạm đủ lớn', async () => {
     const c = await mount();
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
     expect(c.querySelectorAll('h1')).toHaveLength(1);
-    expect(c.querySelector('h1')?.textContent).toBe('Kho quà');
+    expect(c.querySelector('h1')?.textContent).toBe('Kho quà Điểm Xanh');
+    const crumbs = c.querySelector('nav[aria-label="Đường dẫn"]');
+    expect(crumbs?.textContent).toContain('Trang chủ');
+    expect(crumbs?.textContent).toContain('Kho quà Điểm Xanh');
+    expect(crumbs?.textContent).not.toContain('Tài khoản');
+    const pills = c.querySelector('nav[aria-label="Đổi rác và Kho quà"]');
+    expect(pills?.querySelector('a[href="/doi-rac"]')).not.toBeNull();
+    expect(pills?.querySelector('a[href="/kho-qua"]')?.getAttribute('aria-current')).toBe('page');
+    expect(pills?.querySelector('a[href="/kho-qua/cua-toi"]')).not.toBeNull();
   });
 });
 
@@ -599,7 +607,7 @@ describe('/kho-qua — giao diện điện thoại như Mini App', () => {
 
   it('dòng "Quà của tôi" là hàng phẳng không thẻ, không viền ở điện thoại', async () => {
     const c = await mount();
-    const row = c.querySelector('a[href="/kho-qua/cua-toi"]')!;
+    const row = Array.from(c.querySelectorAll('a[href="/kho-qua/cua-toi"]')).at(-1)!;
     expect(row.className).toContain('max-md:border-0');
     expect(row.className).toContain('max-md:bg-transparent');
     expect(row.className).toContain('max-md:shadow-none');

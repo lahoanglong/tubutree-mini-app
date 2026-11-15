@@ -231,12 +231,12 @@ test.describe('Mini App — Trang chủ dẫn tới Giờ vàng', () => {
     mockFlashSlots(api);
   });
 
-  test('Giờ vàng là ô đầu của lối tắt và mở /flash-sale', async ({ page }) => {
+  test('lối tắt nhanh Giờ vàng ở Trang chủ mở /flash-sale', async ({ page }) => {
     await page.goto('/');
     const grid = page.getByTestId('shortcut-grid');
-    await expect(grid.getByRole('button').first()).toBeVisible({ timeout: 15_000 });
-    await expect(grid.getByRole('button').first()).toHaveAccessibleName(/^Giờ vàng/);
-    await grid.getByRole('button').first().click();
+    const flashBtn = grid.getByRole('button', { name: /^Giờ vàng/ });
+    await expect(flashBtn).toBeVisible({ timeout: 15_000 });
+    await flashBtn.click();
     await expect(page).toHaveURL(/\/flash-sale$/);
     await expect(page.getByRole('heading', { level: 1, name: 'Giờ vàng' })).toBeVisible({ timeout: 15_000 });
   });

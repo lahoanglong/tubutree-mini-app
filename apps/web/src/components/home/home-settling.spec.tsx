@@ -18,12 +18,11 @@ describe('HomeSettlingSkeleton', () => {
     expect(heights).toEqual([h.shortcuts, h.stories, h.flash, h.categories, h.products].map((n) => `${n}px`));
   });
 
-  it('khung chờ lối tắt ẩn từ lg như ShortcutGrid thật: không giữ ~100px mà khối thật không dùng, nên máy tính không nhảy lên khi khối về', () => {
+  it('khung chờ lối tắt hiện ở mọi khổ như Bento Hub thật (không lg:hidden) để máy tính không nhảy khi khối về', () => {
     mounted = render(<HomeSettlingSkeleton />);
     const first = mounted.container.querySelector('[data-testid="home-settling"]')!.children[0] as HTMLElement;
-    expect(first.className).toContain('lg:hidden');
-    expect((first.firstElementChild as HTMLElement).style.height).toBe(`${HOME_SETTLING_HEIGHTS.shortcuts}px`);
-    // Bốn khung còn lại luôn hiện: chỉ khung lối tắt theo điểm gãy của lưới thật.
+    expect(first.className).not.toContain('lg:hidden');
+    expect(first.style.height).toBe(`${HOME_SETTLING_HEIGHTS.shortcuts}px`);
     const rest = Array.from(mounted.container.querySelector('[data-testid="home-settling"]')!.children).slice(1);
     for (const el of rest) expect((el as HTMLElement).className).not.toContain('lg:hidden');
   });
