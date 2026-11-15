@@ -720,6 +720,10 @@ describe('evaluateDb', () => {
       expect(status(dbWith({ configs: { 'shipping.gomdon.config': cfg } }), 'db.gomdon_warehouse')).toBe('WARN');
     });
     it('đủ thì PASS', () => expect(status(GOOD_DB, 'db.gomdon_warehouse')).toBe('PASS'));
+    it('địa chỉ 2 cấp (district rỗng) vẫn PASS', () => {
+      const cfg = { defaultWarehouse: { name: 'Fuwa3e Tubu HCM', phone: '0899149229', address: 'Số 33, đường 1B', ward: 'Phường Long Bình', district: '', province: 'Thành phố Hồ Chí Minh' } };
+      expect(status(dbWith({ configs: { 'shipping.gomdon.config': cfg } }), 'db.gomdon_warehouse')).toBe('PASS');
+    });
   });
 
   describe('hạng thành viên và bậc đại lý (db.membership_tiers, db.dealer_tiers)', () => {

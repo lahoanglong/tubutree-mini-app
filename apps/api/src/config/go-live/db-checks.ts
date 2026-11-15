@@ -609,16 +609,16 @@ function gomdonToggleChecks(s: DbSnapshot, env: Env): CheckResult[] {
   if (on || hasCreds) {
     const cfg = s.configs['shipping.gomdon.config'];
     const wh = (cfg && typeof cfg === 'object' ? (cfg as { defaultWarehouse?: Record<string, unknown> }).defaultWarehouse : undefined) ?? {};
-    const lack = ['name', 'phone', 'address', 'ward', 'district', 'province'].filter((k) => !(typeof wh[k] === 'string' && (wh[k] as string).trim()));
+    const lack = ['name', 'phone', 'address', 'ward', 'province'].filter((k) => !(typeof wh[k] === 'string' && (wh[k] as string).trim()));
     const whTitle = 'Kho lấy hàng gửi Gomdon';
     if (cfg === undefined) {
       out.push(warn(G_DB, 'db.gomdon_warehouse', whTitle, 'chưa có shipping.gomdon.config, mã dùng kho mặc định "Fuwa3e Tubu HCM"', 'Xác nhận đúng kho thật và ghi rõ ở Quản trị, Cấu hình, shipping.gomdon.config.'));
     } else if (lack.length > 0) {
-      out.push(fail(G_DB, 'db.gomdon_warehouse', whTitle, `thiếu ${lack.join(', ')} trong defaultWarehouse`, 'Điền đủ tên, SĐT, địa chỉ, phường, quận, tỉnh; thiếu là Gomdon từ chối tạo vận đơn.'));
+      out.push(fail(G_DB, 'db.gomdon_warehouse', whTitle, `thiếu ${lack.join(', ')} trong defaultWarehouse`, 'Điền đủ tên, SĐT, địa chỉ, phường, tỉnh/thành (địa chỉ 2 cấp, không cần quận); thiếu là Gomdon từ chối tạo vận đơn.'));
     } else if (wh.ward === 'Phường Long Bình' && wh.district === 'Thành phố Thủ Đức') {
       out.push(warn(G_DB, 'db.gomdon_warehouse', whTitle, 'kho vẫn là giá trị mặc định trong seed, địa giới phường/quận theo cách gọi cũ (UAT GOMDON-7)', 'Hỏi Gomdon xem địa chỉ này có được nhận không; sửa ở Quản trị, Cấu hình, shipping.gomdon.config nếu cần.'));
     } else {
-      out.push(pass(G_DB, 'db.gomdon_warehouse', whTitle, 'defaultWarehouse đủ 6 trường'));
+      out.push(pass(G_DB, 'db.gomdon_warehouse', whTitle, 'defaultWarehouse đủ tên, SĐT, địa chỉ, phường, tỉnh/thành'));
     }
   }
   return out;
