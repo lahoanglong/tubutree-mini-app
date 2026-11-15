@@ -67,6 +67,15 @@ describe('getPublicSupport', () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { company: { legalName: null, taxCode: '  ' } })));
     expect((await getPublicSupport()).company).toBeUndefined();
   });
+
+  it('link BCT chỉ nhận online.gov.vn hoặc *.gov.vn: trang lạ, giả hậu tố, có @, rỗng đều bị bỏ', async () => {
+    for (const bad of ['https://example.com/online.gov.vn', 'https://online.gov.vn.evil.com/x', 'https://online.gov.vn@evil.com/x', '', '   ']) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { company: { taxCode: '0312345678', bctNoticeUrl: bad } })));
+      expect((await getPublicSupport()).company).toEqual({ taxCode: '0312345678' });
+    }
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { company: { taxCode: '0312345678', bctNoticeUrl: ' https://tmdt.gov.vn/x ' } })));
+    expect((await getPublicSupport()).company).toEqual({ taxCode: '0312345678', bctNoticeUrl: 'https://tmdt.gov.vn/x' });
+  });
 });
 
 describe('getReturnWindowDays', () => {

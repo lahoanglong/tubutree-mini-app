@@ -409,6 +409,7 @@ export class SystemConfigService {
     'legal.bao-mat': legalDocProblem,
     'legal.doi-tra': legalDocProblem,
     'legal.van-chuyen': legalDocProblem,
+    'legal.thanh-toan': legalDocProblem,
     // Cấp uy tín chỉ có 4 tên (Mầm, Cây non, Cây trưởng thành, Cổ thụ): thêm mốc thứ 5 thì cấp 5 hiện lại tên "Mầm", bớt mốc thì mất cấp.
     // Mốc đầu là 0 để bốn mốc ứng đúng cấp 1 đến 4, và các mốc tăng dần, nếu không cấp nhảy ngược khi điểm tăng.
     'community.rep_thresholds': (value) => {

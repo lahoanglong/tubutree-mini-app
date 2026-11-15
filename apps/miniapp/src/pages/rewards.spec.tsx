@@ -240,7 +240,7 @@ describe('/rewards Kho quà (§4.8)', () => {
     fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Xác nhận đổi' }));
     expect(await screen.findByText('QG-8K2M9P4T')).toBeInTheDocument();
     expect(screen.getByText('Hạn nhận 17/12/2026')).toBeInTheDocument();
-    expect(screen.getByText('Mang mã này tới kho Tubu TP.HCM để nhận quà')).toBeInTheDocument();
+    expect(screen.getByText('Quà đã lưu vào Ví quà — sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn (hoặc đọc mã QG-… khi ghé kho Tubu)')).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/hoặc điểm nhận/);
   });
   it('làm mới danh mục sau khi đổi lỗi → vẫn hiện mã QG- (điểm đã trừ), không thay cả trang bằng ErrorState', async () => {
@@ -303,15 +303,17 @@ describe('/rewards Kho quà (§4.8)', () => {
     renderPage();
     expect(within(await waitFor(() => card('Miễn phí vận chuyển'))).getByRole('button', { name: 'Đổi' })).toBeEnabled();
   });
-  it('quà nhận tại kho: thẻ ghi "Chỉ nhận tại kho TP.HCM"; mã giảm giá thì không; xác nhận hỏi lại kèm địa chỉ kho', async () => {
+  it('quà hiện vật: thẻ ghi tự gửi kèm đơn kế tiếp hoặc nhận tại kho; mã giảm giá thì không; xác nhận hỏi lại kèm địa chỉ kho', async () => {
+    const LABEL = 'Tự động gửi kèm đơn hàng kế tiếp (0đ) hoặc nhận tại kho';
     renderPage();
-    expect(within(await waitFor(() => card('Miễn phí vận chuyển'))).queryByText('Chỉ nhận tại kho TP.HCM')).toBeNull();
+    expect(within(await waitFor(() => card('Miễn phí vận chuyển'))).queryByText(LABEL)).toBeNull();
     fireEvent.click(screen.getByRole('tab', { name: 'Cây và hạt' }));
-    expect(within(card('Gói hạt giống Tubu')).getByText('Chỉ nhận tại kho TP.HCM')).toBeInTheDocument();
-    expect(within(card('Góp quỹ trồng cây')).queryByText('Chỉ nhận tại kho TP.HCM')).toBeNull();
+    expect(within(card('Gói hạt giống Tubu')).getByText(LABEL)).toBeInTheDocument();
+    expect(within(card('Góp quỹ trồng cây')).queryByText(LABEL)).toBeNull();
+    expect(document.body.textContent).not.toContain('Chỉ nhận tại kho');
     fireEvent.click(within(card('Gói hạt giống Tubu')).getByRole('button', { name: 'Đổi' }));
     const sheet = await screen.findByRole('dialog');
-    expect(within(sheet).getByText(/Quà này chỉ nhận tại kho TP\.HCM, không giao tận nhà: Kho Tubu TP\.HCM, 99 Nguyễn Văn Linh, Phường Tân Phong, TP\.HCM\. Bạn vẫn muốn đổi\?/)).toBeInTheDocument();
+    expect(within(sheet).getByText(/Quà này sẽ tự động thêm \(0đ\) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho: Kho Tubu TP\.HCM, 99 Nguyễn Văn Linh, Phường Tân Phong, TP\.HCM\. Bạn vẫn muốn đổi\?/)).toBeInTheDocument();
   });
   it('đổi mã giảm giá xong: "Dùng ngay" khi giỏ có hàng → chọn sẵn mã rồi tới giỏ', async () => {
     mocks.getCart.mockResolvedValue({ itemCount: 2 });

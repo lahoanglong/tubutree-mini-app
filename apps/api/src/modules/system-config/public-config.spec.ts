@@ -66,6 +66,14 @@ describe('buildPublicConfig — đơn vị vận hành', () => {
     expect((await build({ 'company.bct_notice_url': 'javascript:alert(1)' })).company.bctNoticeUrl).toBeNull();
     expect((await build({ 'company.bct_notice_url': 'http://online.gov.vn/x' })).company.bctNoticeUrl).toBeNull();
   });
+
+  it('huy hiệu Bộ Công Thương chỉ bật với link online.gov.vn hoặc *.gov.vn: rỗng, trang lạ, giả hậu tố, có @, cổng lạ đều null', async () => {
+    expect((await build({ 'company.bct_notice_url': 'https://www.online.gov.vn/Home/WebDetails/1' })).company.bctNoticeUrl).toBe('https://www.online.gov.vn/Home/WebDetails/1');
+    expect((await build({ 'company.bct_notice_url': 'https://tmdt.gov.vn/x' })).company.bctNoticeUrl).toBe('https://tmdt.gov.vn/x');
+    for (const bad of ['', 'https://example.com/online.gov.vn', 'https://online.gov.vn.evil.com/x', 'https://evilgov.vn/x', 'https://online.gov.vn@evil.com/x', 'https://online.gov.vn:8443/x']) {
+      expect((await build({ 'company.bct_notice_url': bad })).company.bctNoticeUrl).toBeNull();
+    }
+  });
 });
 
 describe('buildPublicConfig — hệ số hạng', () => {

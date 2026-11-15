@@ -124,6 +124,7 @@ const APPROVED_LOADED_KEYS = [
     'legal.bao-mat',
     'legal.dieu-khoan',
     'legal.doi-tra',
+    'legal.thanh-toan',
     'legal.van-chuyen',
     'loyalty.chat_order_creator_monthly_points',
     'loyalty.chat_order_monthly_points_cap',
@@ -278,9 +279,9 @@ describe('khoá SystemConfig nạp lên DB thật (seed-reference)', () => {
     expect({ message, invisible }).toEqual({ message: '', invisible: [] });
   });
 
-  it('bốn khoá legal.* được nạp với giá trị rỗng, bằng mặc định trong mã (LegalConfigController trả null thì web dùng bản nháp), để admin có chỗ dán nội dung đã duyệt', () => {
+  it('năm khoá legal.* được nạp với giá trị rỗng, bằng mặc định trong mã (LegalConfigController trả null thì web dùng bản nháp), để admin có chỗ dán nội dung đã duyệt', () => {
     const legal = selectReferenceConfigs(SYSTEM_CONFIGS).filter((c) => c.key.startsWith('legal.'));
-    expect(legal.map((c) => c.key).sort()).toEqual(['legal.bao-mat', 'legal.dieu-khoan', 'legal.doi-tra', 'legal.van-chuyen']);
+    expect(legal.map((c) => c.key).sort()).toEqual(['legal.bao-mat', 'legal.dieu-khoan', 'legal.doi-tra', 'legal.thanh-toan', 'legal.van-chuyen']);
     for (const c of legal) expect(c.value).toBe('');
   });
 

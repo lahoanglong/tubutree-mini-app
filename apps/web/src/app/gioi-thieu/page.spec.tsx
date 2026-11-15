@@ -383,7 +383,7 @@ describe('/gioi-thieu: liên hệ hỗ trợ', () => {
 });
 
 describe('/gioi-thieu: chính sách', () => {
-  it('bốn dòng chính sách là link sang trang chính sách đầy đủ', async () => {
+  it('năm dòng chính sách là link sang trang chính sách đầy đủ', async () => {
     const { container } = await mount();
     const hrefs = Array.from(container.querySelectorAll<HTMLAnchorElement>('a[href^="/chinh-sach/"]')).map((a) => [a.textContent, a.getAttribute('href')]);
     expect(hrefs).toEqual([
@@ -391,6 +391,7 @@ describe('/gioi-thieu: chính sách', () => {
       ['Chính sách bảo mật', '/chinh-sach/bao-mat'],
       ['Chính sách đổi trả', '/chinh-sach/doi-tra'],
       ['Chính sách vận chuyển', '/chinh-sach/van-chuyen'],
+      ['Chính sách và hình thức thanh toán', '/chinh-sach/thanh-toan'],
     ]);
   });
 });

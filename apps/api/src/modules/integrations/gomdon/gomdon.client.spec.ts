@@ -1,4 +1,4 @@
-import { ServiceUnavailableException } from '@nestjs/common';
+import { Logger, ServiceUnavailableException } from '@nestjs/common';
 import axios from 'axios';
 import { GomdonClient } from './gomdon.client';
 import { GomdonAmbiguousError, GomdonDuplicateOrderError, GomdonRejectedError } from './gomdon.errors';
@@ -208,6 +208,78 @@ describe('GomdonClient', () => {
       expect(form.get('order_customer_id')).toBe('TUBU1');
     });
 
+    it('địa chỉ 2 cấp: body không có source_district/dest_district → form-data không mang key district', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(CREATE_OK);
+      await c.createOrder({
+        ...body,
+        source_province: 'Thành phố Hồ Chí Minh',
+        source_ward: 'Phường Long Bình',
+        dest_province: 'Hà Nội',
+        dest_ward: 'Phường Ba Đình',
+      });
+      const keys = [...(mockHttp.post.mock.calls[1][1] as FormData).keys()];
+      expect(keys).toEqual(expect.arrayContaining(['source_province', 'source_ward', 'dest_province', 'dest_ward']));
+      expect(keys.some((k) => k.endsWith('_district'))).toBe(false);
+    });
+
+    describe('tài liệu mục 3: trùng order_customer_id → {result:false, duplicate:true, data:{id}} = thành công khi gửi lại', () => {
+      const DUP = (data: unknown) => ({ data: { result: false, duplicate: true, message: 'Đơn hàng đã tồn tại', data } });
+
+      it('có data.id (số) → coi là tạo thành công: id giữ nguyên, partner_code/status lấy mặc định', async () => {
+        const c = makeClient();
+        mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(DUP({ id: 1517251 }));
+        const res = await c.createOrder(body);
+        expect(res.result).toBe(true);
+        expect(res.data).toMatchObject({ id: '1517251', status: 1 });
+        expect(res.data?.partner_code).toBeUndefined();
+        expect(mockHttp.post).toHaveBeenCalledTimes(2); // không gửi lại lần nào
+      });
+
+      it('data.id dạng chuỗi + partner_code/status/phí kèm theo → giữ nguyên các trường đó', async () => {
+        const c = makeClient();
+        mockHttp.post
+          .mockResolvedValueOnce(LOGIN_OK)
+          .mockResolvedValueOnce(DUP({ id: '1517251', partner_code: '84856413835159', status: 3, customer_total_fee: 23000 }));
+        const res = await c.createOrder(body);
+        expect(res.data).toMatchObject({ id: '1517251', partner_code: '84856413835159', status: 3, customer_total_fee: 23000 });
+      });
+
+      it('chỉ có order_code (mã hãng) → dùng làm partner_code', async () => {
+        const c = makeClient();
+        mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(DUP({ id: 9, order_code: '84856413835159' }));
+        const res = await c.createOrder(body);
+        expect(res.data?.partner_code).toBe('84856413835159');
+      });
+
+      it('duplicate nhưng KHÔNG có data.id (thiếu/rỗng/0/null) → GomdonDuplicateOrderError như cũ', async () => {
+        for (const data of [undefined, null, {}, { id: '' }, { id: '  ' }, { id: 0 }, { id: null }]) {
+          const c = makeClient();
+          mockHttp.post.mockReset();
+          mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(DUP(data));
+          const err = await c.createOrder(body).catch((e: unknown) => e);
+          expect(err).toBeInstanceOf(GomdonDuplicateOrderError);
+          expect(err).not.toBeInstanceOf(GomdonRejectedError);
+        }
+      });
+
+      it('result:false KHÔNG có cờ duplicate + thông điệp trùng → vẫn GomdonDuplicateOrderError (nhánh cũ)', async () => {
+        const c = makeClient();
+        mockHttp.post
+          .mockResolvedValueOnce(LOGIN_OK)
+          .mockResolvedValueOnce({ data: { result: false, message: 'Đơn hàng đã tồn tại', data: { id: 5 } } });
+        await expect(c.createOrder(body)).rejects.toBeInstanceOf(GomdonDuplicateOrderError);
+      });
+
+      it('duplicate:false/khác true không được coi là thành công', async () => {
+        const c = makeClient();
+        mockHttp.post
+          .mockResolvedValueOnce(LOGIN_OK)
+          .mockResolvedValueOnce({ data: { result: false, duplicate: false, message: 'The source province field is required.', data: { id: 5 } } });
+        await expect(c.createOrder(body)).rejects.toBeInstanceOf(GomdonRejectedError);
+      });
+    });
+
     it('tài liệu: HTTP 401 {message:"Mã token không đúng", result:false} → đăng nhập lại và gửi lại đúng 1 lần', async () => {
       const c = makeClient();
       mockHttp.post
@@ -372,6 +444,318 @@ describe('GomdonClient', () => {
       expect((await c.cancelOrder('55')).ok).toBe(false);
     });
   });
+  describe('checkAddress — POST /api/v2/order/check-address', () => {
+    const CHECK_OK = { data: { result: true, message: 'Địa chỉ hợp lệ', resolved: { address_level: 2 } } };
+    const T0 = Date.parse('2026-11-15T00:00:00Z');
+    let now = T0;
+    beforeEach(() => {
+      now = T0;
+      jest.spyOn(Date, 'now').mockImplementation(() => now);
+    });
+    afterEach(() => jest.restoreAllMocks());
+
+    it('gửi province + ward (form-data, Bearer), hợp lệ → ok', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(CHECK_OK);
+      expect(await c.checkAddress('Hà Nội', 'Phường Ba Đình')).toEqual({ ok: true, message: 'Địa chỉ hợp lệ' });
+      expect(mockHttp.post).toHaveBeenLastCalledWith('/api/v2/order/check-address', expect.any(FormData), {
+        headers: { Authorization: 'Bearer tok-1' },
+      });
+      const form = mockHttp.post.mock.calls[1][1] as FormData;
+      expect(form.get('province')).toBe('Hà Nội');
+      expect(form.get('ward')).toBe('Phường Ba Đình');
+      expect([...form.keys()].sort()).toEqual(['province', 'ward']);
+    });
+
+    it('kết quả HỢP LỆ được nhớ 24 giờ theo khoá province|ward chuẩn hoá khoảng trắng/hoa thường', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(CHECK_OK);
+      await c.checkAddress('Hà Nội', 'Phường Ba Đình');
+      now = T0 + 23 * 3600_000;
+      expect(await c.checkAddress('  hà   nội ', 'PHƯỜNG  ba đình')).toEqual({ ok: true });
+      expect(mockHttp.post).toHaveBeenCalledTimes(2); // đăng nhập + 1 lần kiểm tra, lần sau lấy từ cache
+
+      now = T0 + 24 * 3600_000 + 1; // hết 24 giờ → hỏi lại Gomdon (token 24 giờ cũng hết → đăng nhập lại)
+      mockHttp.post.mockResolvedValueOnce(loginOk('tok-2')).mockResolvedValueOnce(CHECK_OK);
+      expect((await c.checkAddress('Hà Nội', 'Phường Ba Đình')).ok).toBe(true);
+      expect(mockHttp.post).toHaveBeenCalledTimes(4);
+    });
+
+    it('khác phường → khoá khác → hỏi Gomdon lại', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(CHECK_OK).mockResolvedValueOnce(CHECK_OK);
+      await c.checkAddress('Hà Nội', 'Phường Ba Đình');
+      await c.checkAddress('Hà Nội', 'Phường Cửa Nam');
+      expect(mockHttp.post).toHaveBeenCalledTimes(3);
+    });
+
+    it('result:false (không nhận diện) → ok:false kèm lý do, KHÔNG cache: lần sau hỏi lại', async () => {
+      const c = makeClient();
+      const BAD = { data: { result: false, message: 'Không nhận diện được địa chỉ' } };
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(BAD).mockResolvedValueOnce(CHECK_OK);
+      expect(await c.checkAddress('Hà Nội', 'Phường Không Có')).toEqual({ ok: false, message: 'Không nhận diện được địa chỉ' });
+      // Gomdon sửa danh mục / khách sửa lại tên → lần hỏi sau phải ra kết quả mới, không dính cache sai.
+      expect((await c.checkAddress('Hà Nội', 'Phường Không Có')).ok).toBe(true);
+      expect(mockHttp.post).toHaveBeenCalledTimes(3);
+    });
+
+    it('thiếu tỉnh hoặc phường → ok:false ngay, không gọi Gomdon', async () => {
+      const c = makeClient();
+      expect((await c.checkAddress('', 'Phường Ba Đình')).ok).toBe(false);
+      expect((await c.checkAddress('Hà Nội', '   ')).ok).toBe(false);
+      expect(mockHttp.post).not.toHaveBeenCalled();
+    });
+
+    it('HTTP 422 (Gomdon báo thiếu tỉnh/phường) → ok:false kèm message', async () => {
+      const c = makeClient();
+      mockHttp.post
+        .mockResolvedValueOnce(LOGIN_OK)
+        .mockRejectedValueOnce(axiosErr({ status: 422, data: { message: 'The ward field is required.' } }));
+      expect(await c.checkAddress('Hà Nội', 'x')).toEqual({ ok: false, message: 'The ward field is required.' });
+    });
+
+    it('401 → đăng nhập lại 1 lần rồi kiểm tra lại', async () => {
+      const c = makeClient();
+      mockHttp.post
+        .mockResolvedValueOnce(LOGIN_OK)
+        .mockRejectedValueOnce(axiosErr({ status: 401, data: { message: 'Mã token không đúng', result: false } }))
+        .mockResolvedValueOnce(loginOk('tok-2'))
+        .mockResolvedValueOnce(CHECK_OK);
+      expect((await c.checkAddress('Hà Nội', 'Phường Ba Đình')).ok).toBe(true);
+      expect(mockHttp.post).toHaveBeenLastCalledWith('/api/v2/order/check-address', expect.any(FormData), {
+        headers: { Authorization: 'Bearer tok-2' },
+      });
+    });
+
+    it('lỗi mạng / timeout / 5xx / 429 → KHÔNG chặn khách: ok:true + skipped:true, không ném, không cache', async () => {
+      for (const err of [axiosErr({ code: 'ECONNABORTED' }), axiosErr({ status: 500 }), axiosErr({ status: 503 }), axiosErr({ status: 429 })]) {
+        const c = makeClient();
+        mockHttp.post.mockReset();
+        mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockRejectedValueOnce(err);
+        expect(await c.checkAddress('Hà Nội', 'Phường Ba Đình')).toEqual({ ok: true, skipped: true });
+      }
+      const c = makeClient();
+      mockHttp.post.mockReset();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockRejectedValueOnce(axiosErr({ code: 'ECONNRESET' })).mockResolvedValueOnce(CHECK_OK);
+      await c.checkAddress('Hà Nội', 'Phường Ba Đình');
+      expect(await c.checkAddress('Hà Nội', 'Phường Ba Đình')).toEqual({ ok: true, message: 'Địa chỉ hợp lệ' });
+    });
+
+    it('đăng nhập Gomdon lỗi → vẫn không ném (skipped)', async () => {
+      const c = makeClient();
+      mockHttp.post.mockRejectedValueOnce(axiosErr({ status: 401, data: { result: false, message: 'Sai mật khẩu' } }));
+      expect(await c.checkAddress('Hà Nội', 'Phường Ba Đình')).toEqual({ ok: true, skipped: true });
+    });
+
+    it('chưa cấu hình Gomdon (dev/test) → skipped, không gọi mạng', async () => {
+      process.env.GOMDON_BASE_URL = '';
+      const c = makeClient();
+      expect(await c.checkAddress('Hà Nội', 'Phường Ba Đình')).toEqual({ ok: true, skipped: true });
+      expect(mockHttp.post).not.toHaveBeenCalled();
+    });
+
+    it('giới hạn nội bộ 100 lượt/phút (Gomdon 120): vượt thì skipped thay vì chặn khách; sang phút mới gọi lại được', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValue(CHECK_OK);
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK);
+      for (let i = 0; i < 100; i++) expect((await c.checkAddress('Hà Nội', `Phường ${i}`)).skipped).toBeUndefined();
+      expect(mockHttp.post).toHaveBeenCalledTimes(101); // 1 đăng nhập + 100 kiểm tra
+      expect(await c.checkAddress('Hà Nội', 'Phường 100')).toEqual({ ok: true, skipped: true });
+      expect(mockHttp.post).toHaveBeenCalledTimes(101);
+      // Địa chỉ đã có trong cache không tốn lượt, kể cả lúc đã hết lượt.
+      expect(await c.checkAddress('Hà Nội', 'Phường 7')).toEqual({ ok: true });
+      now = T0 + 61_000;
+      expect((await c.checkAddress('Hà Nội', 'Phường 100')).skipped).toBeUndefined();
+      expect(mockHttp.post).toHaveBeenCalledTimes(102);
+    });
+  });
+
+  describe('quoteShopFee — POST /api/v2/order/shop-fee', () => {
+    const FEE_OK = { data: { result: true, data: 23000 } };
+
+    it('tài liệu: { result:true, data:23000 } → 23000 (không ước lượng); form gồm weight gram, tiền VND, kích thước mm', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce(FEE_OK);
+      const res = await c.quoteShopFeeDetailed({ weight: 2400, collectAmount: 250000, productPrice: 250000, width: 100, height: 200, length: 300 });
+      expect(res).toEqual({ fee: 23000, estimated: false });
+      expect(mockHttp.post).toHaveBeenLastCalledWith('/api/v2/order/shop-fee', expect.any(FormData), {
+        headers: { Authorization: 'Bearer tok-1' },
+      });
+      const form = mockHttp.post.mock.calls[1][1] as FormData;
+      expect(Object.fromEntries(form.entries())).toEqual({
+        weight: '2400',
+        collect_amount: '250000',
+        product_price: '250000',
+        width: '100',
+        height: '200',
+        length: '300',
+      });
+    });
+
+    it('quoteShopFee trả đúng số phí; chỉ gửi trường được truyền', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce({ data: { result: true, data: '31000' } });
+      expect(await c.quoteShopFee({ weight: 1500 })).toBe(31000);
+      expect([...(mockHttp.post.mock.calls[1][1] as FormData).keys()]).toEqual(['weight']);
+    });
+
+    it('401 → đăng nhập lại 1 lần rồi báo phí', async () => {
+      const c = makeClient();
+      mockHttp.post
+        .mockResolvedValueOnce(LOGIN_OK)
+        .mockRejectedValueOnce(axiosErr({ status: 401, data: { message: 'Mã token không đúng', result: false } }))
+        .mockResolvedValueOnce(loginOk('tok-2'))
+        .mockResolvedValueOnce(FEE_OK);
+      expect(await c.quoteShopFeeDetailed({ weight: 1000 })).toEqual({ fee: 23000, estimated: false });
+    });
+
+    it('chưa cấu hình Gomdon (dev/test) → 25.000đ ước lượng, không gọi mạng, không ném', async () => {
+      process.env.GOMDON_BASE_URL = '';
+      const c = makeClient();
+      expect(await c.quoteShopFeeDetailed({ weight: 1000 })).toEqual({ fee: 25000, estimated: true });
+      expect(await c.quoteShopFee({ weight: 1000 })).toBe(25000);
+      expect(mockHttp.post).not.toHaveBeenCalled();
+    });
+
+    it('lỗi mạng / 5xx / timeout → 25.000đ ước lượng, không ném', async () => {
+      for (const err of [axiosErr({ code: 'ECONNABORTED' }), axiosErr({ status: 500 }), axiosErr({ status: 503 }), axiosErr({ code: 'ECONNRESET' })]) {
+        const c = makeClient();
+        mockHttp.post.mockReset();
+        mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockRejectedValueOnce(err);
+        expect(await c.quoteShopFeeDetailed({ weight: 1000 })).toEqual({ fee: 25000, estimated: true });
+      }
+    });
+
+    it('result:false, thiếu data, data không phải số dương → ước lượng', async () => {
+      for (const data of [
+        { result: false, message: 'Địa chỉ không hợp lệ', data: 23000 },
+        { result: true },
+        { result: true, data: 'abc' },
+        { result: true, data: 0 },
+        { result: true, data: -5 },
+        { result: true, data: null },
+      ]) {
+        const c = makeClient();
+        mockHttp.post.mockReset();
+        mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce({ data });
+        expect(await c.quoteShopFeeDetailed({ weight: 1000 })).toEqual({ fee: 25000, estimated: true });
+      }
+    });
+
+    it('đăng nhập Gomdon lỗi → vẫn trả phí ước lượng, không ném', async () => {
+      const c = makeClient();
+      mockHttp.post.mockRejectedValueOnce(axiosErr({ status: 401, data: { result: false, message: 'Sai mật khẩu' } }));
+      expect(await c.quoteShopFeeDetailed({ weight: 1000 })).toEqual({ fee: 25000, estimated: true });
+    });
+
+    it('log cảnh báo khi dùng phí ước lượng và không log dữ liệu khách (cân nặng, tiền thu hộ)', async () => {
+      const warn = jest.spyOn(Logger.prototype, 'warn').mockImplementation(() => undefined);
+      try {
+        const c = makeClient();
+        mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockRejectedValueOnce(axiosErr({ status: 500 }));
+        await c.quoteShopFeeDetailed({ weight: 1234, collectAmount: 987654 });
+        const logged = warn.mock.calls.map((a) => String(a[0])).join('\n');
+        expect(logged).toContain('phí ước lượng');
+        expect(logged).not.toMatch(/1234|987654/);
+      } finally {
+        warn.mockRestore();
+      }
+    });
+  });
+
+  describe('registerWebhookUrl — POST /api/v2/auth/user/update', () => {
+    // Cố ý không chứa chữ "token": looksLikeAuthFailure coi thông điệp có chữ này là lỗi xác thực và đăng nhập lại.
+    const SECRET = 'S3cr3tWebhookValue0123456789abcd';
+    const URL_WITH_SECRET = `https://api.tubutree.com/api/webhooks/gomdon/${SECRET}`;
+    let logs: string[];
+    let spies: jest.SpyInstance[];
+    beforeEach(() => {
+      logs = [];
+      spies = (['log', 'warn', 'error', 'debug', 'verbose'] as const).map((m) =>
+        jest.spyOn(Logger.prototype, m).mockImplementation((...a: unknown[]) => {
+          logs.push(a.map(String).join(' '));
+        }),
+      );
+    });
+    afterEach(() => spies.forEach((s) => s.mockRestore()));
+
+    it('gửi webhook_url (form-data, Bearer) → ok', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce({ data: { result: true, message: 'Cập nhật thành công' } });
+      expect(await c.registerWebhookUrl(URL_WITH_SECRET)).toEqual({ ok: true, message: 'Cập nhật thành công' });
+      expect(mockHttp.post).toHaveBeenLastCalledWith('/api/v2/auth/user/update', expect.any(FormData), {
+        headers: { Authorization: 'Bearer tok-1' },
+      });
+      const form = mockHttp.post.mock.calls[1][1] as FormData;
+      expect(form.get('webhook_url')).toBe(URL_WITH_SECRET);
+      expect([...form.keys()]).toEqual(['webhook_url']);
+    });
+
+    it('log che phần secret cuối đường dẫn: không dòng log nào chứa secret hay nguyên URL', async () => {
+      const c = makeClient();
+      mockHttp.post.mockResolvedValueOnce(LOGIN_OK).mockResolvedValueOnce({ data: { result: true } });
+      await c.registerWebhookUrl(URL_WITH_SECRET);
+      const joined = logs.join('\n');
+      expect(joined).toContain('https://api.tubutree.com/api/webhooks/gomdon/***');
+      expect(joined).not.toContain(SECRET);
+      expect(joined).not.toContain(URL_WITH_SECRET);
+    });
+
+    it('Gomdon từ chối (result:false) kèm thông điệp lặp lại URL → message trả về và log đều đã che secret', async () => {
+      const c = makeClient();
+      mockHttp.post
+        .mockResolvedValueOnce(LOGIN_OK)
+        .mockResolvedValueOnce({ data: { result: false, message: `The webhook url ${URL_WITH_SECRET} is not reachable` } });
+      const res = await c.registerWebhookUrl(URL_WITH_SECRET);
+      expect(res.ok).toBe(false);
+      expect(res.message).toContain('not reachable');
+      expect(res.message).not.toContain(SECRET);
+      expect(logs.join('\n')).not.toContain(SECRET);
+    });
+
+    it('lỗi HTTP/mạng → ok:false, không ném, không lộ secret; token ở query cũng được che', async () => {
+      const c = makeClient();
+      const withQuery = `https://api.tubutree.com/api/webhooks/gomdon?token=${SECRET}`;
+      mockHttp.post
+        .mockResolvedValueOnce(LOGIN_OK)
+        .mockRejectedValueOnce(axiosErr({ status: 500, data: { message: `boom for ${withQuery}` } }));
+      const res = await c.registerWebhookUrl(withQuery);
+      expect(res.ok).toBe(false);
+      expect(JSON.stringify(res)).not.toContain(SECRET);
+      expect(logs.join('\n')).not.toContain(SECRET);
+    });
+
+    it('chỉ nhận https: http, giao thức khác và chuỗi không phải URL → ok:false, không gọi Gomdon', async () => {
+      const c = makeClient();
+      for (const url of ['http://api.tubutree.com/api/webhooks/gomdon/abc', 'ftp://x/y', 'khong-phai-url']) {
+        expect((await c.registerWebhookUrl(url)).ok).toBe(false);
+      }
+      expect(mockHttp.post).not.toHaveBeenCalled();
+      expect(logs.join('\n')).not.toContain('khong-phai-url');
+    });
+
+    it('401 → đăng nhập lại 1 lần rồi đăng ký lại', async () => {
+      const c = makeClient();
+      mockHttp.post
+        .mockResolvedValueOnce(LOGIN_OK)
+        .mockRejectedValueOnce(axiosErr({ status: 401, data: { message: 'Mã token không đúng', result: false } }))
+        .mockResolvedValueOnce(loginOk('tok-2'))
+        .mockResolvedValueOnce({ data: { result: true } });
+      expect((await c.registerWebhookUrl(URL_WITH_SECRET)).ok).toBe(true);
+      expect(mockHttp.post).toHaveBeenLastCalledWith('/api/v2/auth/user/update', expect.any(FormData), {
+        headers: { Authorization: 'Bearer tok-2' },
+      });
+    });
+
+    it('chưa cấu hình Gomdon → ok:false (không ném)', async () => {
+      process.env.GOMDON_BASE_URL = '';
+      const c = makeClient();
+      const res = await c.registerWebhookUrl(URL_WITH_SECRET);
+      expect(res.ok).toBe(false);
+      expect(mockHttp.post).not.toHaveBeenCalled();
+    });
+  });
+
   describe('sức khoẻ kết nối (UAT GOMDON-1: sai mật khẩu mà checkout vẫn mời thu gom)', () => {
     const LOGIN_REJECTED = axiosErr({ status: 401, data: { result: false, message: 'Tài khoản hoặc mật khẩu không đúng', data: null } });
 

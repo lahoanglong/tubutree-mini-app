@@ -1,6 +1,6 @@
 const formatVnd = (n: number): string => `${n.toLocaleString('vi-VN')}đ`;
 
-export const LEGAL_SLUGS = ['dieu-khoan', 'bao-mat', 'doi-tra', 'van-chuyen'] as const;
+export const LEGAL_SLUGS = ['dieu-khoan', 'bao-mat', 'doi-tra', 'van-chuyen', 'thanh-toan'] as const;
 export type LegalSlug = (typeof LEGAL_SLUGS)[number];
 
 export const LEGAL_PAGES: Record<LegalSlug, { title: string; footerLabel: string; description: string }> = {
@@ -24,7 +24,48 @@ export const LEGAL_PAGES: Record<LegalSlug, { title: string; footerLabel: string
     footerLabel: 'Vận chuyển',
     description: 'Phí, thời gian và cách nhận hàng khi mua trên Tubu Tree.',
   },
+  'thanh-toan': {
+    title: 'Chính sách và hình thức thanh toán',
+    footerLabel: 'Thanh toán',
+    description: 'Các hình thức thanh toán, hoàn tiền và bảo mật giao dịch khi mua trên Tubu Tree.',
+  },
 };
+
+/** Thông tin thương nhân theo Giấy chứng nhận đăng ký doanh nghiệp, dùng khi cấu hình company.* chưa có gì. */
+export const TUBU_TREE_MERCHANT = {
+  legalName: 'CÔNG TY TNHH TUBU TREE',
+  taxCode: '0319585995',
+  address: 'Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh',
+} as const;
+
+export interface MerchantIdentityInput {
+  legalName?: string | null;
+  taxCode?: string | null;
+  address?: string | null;
+}
+
+/**
+ * Admin đã nhập bất kỳ trường nào của company.* thì giữ nguyên đúng những gì họ nhập (không trộn với mặc định, tránh ghép
+ * tên công ty này với MST công ty khác); chưa nhập gì thì hiện thông tin thương nhân đã đăng ký của Tubu Tree.
+ */
+export function merchantIdentityOrDefault(company?: MerchantIdentityInput | null): { legalName?: string; taxCode?: string; address?: string } {
+  const clean = (v?: string | null) => (typeof v === 'string' && v.trim() !== '' ? v : undefined);
+  const own = { legalName: clean(company?.legalName), taxCode: clean(company?.taxCode), address: clean(company?.address) };
+  return own.legalName || own.taxCode || own.address ? own : { ...TUBU_TREE_MERCHANT };
+}
+
+/** Link huy hiệu "Đã thông báo Bộ Công Thương" chỉ hợp lệ khi là https tới cổng online.gov.vn hoặc một tên miền *.gov.vn. */
+export function isBctNoticeUrl(value: unknown): value is string {
+  if (typeof value !== 'string' || value.trim() !== value || value === '' || value.length > 500) return false;
+  let u: URL;
+  try {
+    u = new URL(value);
+  } catch {
+    return false;
+  }
+  if (u.protocol !== 'https:' || u.username || u.password || u.port) return false;
+  return u.hostname === 'online.gov.vn' || u.hostname.endsWith('.gov.vn');
+}
 
 export const LEGAL_DRAFT_NOTICE = 'BẢN NHÁP — chờ Tubu Tree duyệt';
 
@@ -50,6 +91,9 @@ export const DEFAULT_LEGAL_VARS: LegalVars = { returnWindowDays: 7, freeshipThre
 
 const DEFAULT_SHIPPING_FLAT_FEE = 19000;
 
+/** Mốc hoàn tiền chung của chính sách đổi trả và thanh toán. */
+const REFUND_WORKING_DAYS = 7;
+
 export interface LegalSupport {
   hotline: string;
   email: string;
@@ -65,6 +109,13 @@ function operator(support: LegalSupport, vars: LegalVars): string {
     `- Hotline: ${support.hotline}`,
     `- Email: ${support.email}`,
   ].join('\n');
+}
+
+/** Câu "thời hạn báo" của mục kiểm hàng, dùng chung cho đổi trả và vận chuyển để hai trang không nói lệch nhau. */
+function inspectionDeadlineText(days: number): string {
+  return days > 0
+    ? `Thời hạn báo: nếu hàng có vấn đề, bạn báo cho Tubu Tree trong vòng ${days} ngày kể từ khi đơn được giao thành công, kèm ảnh hoặc video.`
+    : 'Thời hạn báo: Tubu Tree chưa nhận yêu cầu đổi trả sau khi giao thành công, vì vậy hãy kiểm tra và báo ngay tại thời điểm nhận hàng, kèm ảnh hoặc video.';
 }
 
 function dieuKhoan(vars: LegalVars, support: LegalSupport): string {
@@ -86,6 +137,7 @@ ${operator(support, vars)}
 - Giá hiển thị là giá bán lẻ đã gồm thuế (nếu có), chưa gồm phí vận chuyển. Phí vận chuyển được hiển thị trước khi bạn bấm đặt hàng.
 - Các cách thanh toán: thanh toán khi nhận hàng (COD), chuyển khoản ngân hàng (quét mã QR) và Ví Tubu. Cách khả dụng có thể khác nhau theo từng đơn và được hiển thị ở bước thanh toán.
 - Với chuyển khoản, vui lòng ghi đúng nội dung chuyển khoản được hiển thị để đơn được ghi nhận nhanh.
+- Chi tiết hình thức thanh toán, hoàn tiền và bảo mật giao dịch xem tại [Chính sách và hình thức thanh toán](/chinh-sach/thanh-toan).
 
 ## 4. Khuyến mãi, mã giảm giá và điểm thưởng
 
@@ -189,6 +241,7 @@ function doiTra(vars: LegalVars, support: LegalSupport): string {
     days > 0
       ? `Bạn có thể yêu cầu đổi hoặc trả hàng trong vòng ${days} ngày kể từ khi đơn được giao thành công. Yêu cầu gửi ngay trong mục Đơn hàng của tài khoản.`
       : 'Hiện Tubu Tree chưa nhận yêu cầu đổi trả sau khi giao hàng thành công. Nếu sản phẩm có vấn đề khi nhận, vui lòng liên hệ ngay với chúng tôi qua thông tin ở cuối trang.';
+  const inspectionDeadline = inspectionDeadlineText(days);
   return `## 1. Thời hạn đổi trả
 
 ${window}
@@ -216,16 +269,23 @@ ${window}
 ## 5. Hoàn tiền
 
 - Tubu Tree hoàn tiền vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn sau khi duyệt yêu cầu.
-- Thời gian hoàn tiền: 7 ngày làm việc kể từ khi Tubu Tree nhận lại và kiểm tra sản phẩm.
+- Thời gian hoàn tiền: ${REFUND_WORKING_DAYS} ngày làm việc kể từ khi Tubu Tree nhận lại và kiểm tra sản phẩm.
 - Điểm thưởng hoặc mã giảm giá đã dùng cho đơn được xử lý theo điều kiện của từng chương trình.
 
 ## 6. Chi phí vận chuyển đổi trả
 
 Nếu lỗi thuộc về Tubu Tree hoặc đơn vị vận chuyển, Tubu Tree chịu phí vận chuyển đổi trả. Trường hợp khác, chi phí được thông báo trước khi bạn xác nhận.
 
-Xem thêm [Chính sách vận chuyển](/chinh-sach/van-chuyen).
+Xem thêm [Chính sách vận chuyển](/chinh-sach/van-chuyen) và [Chính sách và hình thức thanh toán](/chinh-sach/thanh-toan).
 
-## 7. Liên hệ
+## 7. Chính sách kiểm hàng khi nhận hàng
+
+- Đồng kiểm: khi nhận hàng, bạn được cùng nhân viên giao hàng (bưu tá) kiểm tra ngoại quan kiện hàng và số lượng sản phẩm trước khi ký nhận hoặc thanh toán (với đơn COD). Đồng kiểm chưa bao gồm mở nắp hay dùng thử sản phẩm.
+- Quay video: bạn nên quay video liên tục từ lúc mở kiện đến khi kiểm xong, thấy rõ nhãn vận đơn. Video giúp Tubu Tree xử lý nhanh với đơn vị vận chuyển khi hàng móp méo, thiếu hoặc sai.
+- ${inspectionDeadline}
+- Hoàn tiền: khi yêu cầu được chấp nhận, Tubu Tree hoàn tiền theo mục 5 ở trên.
+
+## 8. Liên hệ
 
 ${operator(support, vars)}`;
 }
@@ -242,6 +302,7 @@ function vanChuyen(vars: LegalVars, support: LegalSupport): string {
       : fee > 0
         ? `- Phần hàng Tubu Tree giao chưa đạt mức miễn phí (tính trên tiền hàng của riêng phần đó) chịu phí vận chuyển cố định ${formatVnd(fee)}, không phụ thuộc địa chỉ hay khối lượng.`
         : '- Phần hàng Tubu Tree giao chưa đạt mức miễn phí cũng không mất phí vận chuyển.';
+  const inspectionDeadline = inspectionDeadlineText(vars.returnWindowDays);
   return `## 1. Phạm vi giao hàng
 
 Tubu Tree giao hàng tới các khu vực mà đơn vị vận chuyển phục vụ. Nếu địa chỉ của bạn nằm ngoài vùng giao, hệ thống sẽ báo ở bước thanh toán.
@@ -261,11 +322,17 @@ ${flatFee}
 ## 4. Nhận hàng và kiểm tra
 
 - Vui lòng giữ điện thoại để nhân viên giao hàng liên hệ. Giao không thành công quá số lần quy định, đơn có thể bị hoàn về kho.
-- Bạn nên kiểm tra tình trạng bên ngoài của kiện hàng khi nhận. Nếu thấy móp méo, rách hoặc ướt, hãy chụp ảnh (tốt nhất là quay video khi mở hàng) và liên hệ ngay với chúng tôi.
+
+### Chính sách kiểm hàng khi nhận hàng
+
+- Đồng kiểm: khi nhận hàng, bạn được cùng nhân viên giao hàng (bưu tá) kiểm tra ngoại quan kiện hàng và số lượng sản phẩm trước khi ký nhận hoặc thanh toán (với đơn COD). Đồng kiểm chưa bao gồm mở nắp hay dùng thử sản phẩm.
+- Quay video: bạn nên quay video liên tục từ lúc mở kiện đến khi kiểm xong, thấy rõ nhãn vận đơn. Nếu thấy móp méo, rách, ướt, thiếu hoặc sai sản phẩm, hãy chụp ảnh và liên hệ ngay với Tubu Tree.
+- ${inspectionDeadline}
+- Hoàn tiền: khi yêu cầu được chấp nhận, tiền được hoàn vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn, xem [Chính sách đổi trả](/chinh-sach/doi-tra).
 
 ## 5. Thanh toán khi nhận hàng (COD)
 
-Với đơn COD, bạn thanh toán cho nhân viên giao hàng khi nhận. Một số đơn có thể không áp dụng COD (ví dụ đơn giá trị cao), hệ thống sẽ báo ở bước thanh toán.
+Với đơn COD, bạn thanh toán cho nhân viên giao hàng khi nhận. Một số đơn có thể không áp dụng COD (ví dụ đơn giá trị cao), hệ thống sẽ báo ở bước thanh toán. Các hình thức thanh toán khác xem tại [Chính sách và hình thức thanh toán](/chinh-sach/thanh-toan).
 
 ## 6. Theo dõi đơn hàng
 
@@ -280,6 +347,47 @@ Bạn xem trạng thái và mã vận đơn trong mục Đơn hàng của tài k
 ${operator(support, vars)}`;
 }
 
+function thanhToan(vars: LegalVars, support: LegalSupport): string {
+  return `## 1. Phạm vi
+
+Chính sách này nêu các hình thức thanh toán, cách hoàn tiền và cách ${companyName(vars)} ("Tubu Tree") bảo vệ giao dịch của bạn khi mua trên website và mini app Zalo của Tubu Tree.
+
+${operator(support, vars)}
+
+## 2. Các hình thức thanh toán
+
+- Thanh toán khi nhận hàng (COD): bạn trả tiền cho nhân viên giao hàng khi nhận. Một số đơn có thể không áp dụng COD (ví dụ đơn giá trị cao), hệ thống sẽ báo ở bước thanh toán.
+- Chuyển khoản ngân hàng (quét mã VietQR): bạn chuyển đúng số tiền và đúng nội dung chuyển khoản được hiển thị ở bước thanh toán. Đơn được ghi nhận khi Tubu Tree đối soát thấy tiền về tài khoản.
+- Ví Tubu: dùng số dư trong ví để thanh toán đơn hàng.
+- ZaloPay: áp dụng khi hình thức này được hiển thị ở bước thanh toán; nếu không thấy, đơn của bạn chưa thanh toán được bằng ZaloPay.
+- Điểm Xanh: bạn có thể dùng để trừ vào tiền hàng theo điều kiện hiển thị ở bước thanh toán.
+
+Cách thanh toán khả dụng có thể khác nhau theo từng đơn. Số tiền cần trả, gồm cả phí vận chuyển, luôn được hiển thị trước khi bạn bấm đặt hàng.
+
+## 3. Thời điểm thu tiền
+
+- Với đơn COD, Tubu Tree không thu tiền trước khi giao hàng.
+- Chỉ khi bạn chủ động chọn chuyển khoản, Ví Tubu hoặc thanh toán trực tuyến thì khoản tiền mới được thu trước khi giao hàng. Mọi khoản thu này đều được đối soát và ghi nhận minh bạch: bạn xem được trạng thái thanh toán của đơn trong mục Đơn hàng và lịch sử giao dịch trong Ví Tubu.
+- Tubu Tree không yêu cầu bạn chuyển tiền ngoài các hình thức nêu trên. Hãy báo ngay cho Tubu Tree nếu có người nhân danh Tubu Tree đề nghị bạn chuyển tiền theo cách khác.
+
+## 4. Hoàn tiền
+
+- Trường hợp được hoàn: đơn bị huỷ sau khi bạn đã thanh toán trước, đơn bị từ chối do hết hàng hoặc sai giá, hoặc yêu cầu đổi trả đã được duyệt theo [Chính sách đổi trả](/chinh-sach/doi-tra).
+- Hoàn về đâu: vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn. Đơn COD chưa giao chưa phát sinh khoản thu nên không có tiền cần hoàn.
+- Thời gian: ${REFUND_WORKING_DAYS} ngày làm việc kể từ khi Tubu Tree duyệt yêu cầu (với đổi trả là kể từ khi nhận lại và kiểm tra sản phẩm). Thời gian ghi có còn phụ thuộc ngân hàng.
+- Điểm Xanh hoặc mã giảm giá đã dùng cho đơn được xử lý theo điều kiện của từng chương trình.
+
+## 5. Bảo mật giao dịch
+
+- Tubu Tree không lưu số thẻ ngân hàng của bạn.
+- Giao dịch qua cổng hoặc ví điện tử được xác thực tại chính cổng thanh toán đó. Tubu Tree chỉ nhận kết quả thanh toán (thành công hoặc thất bại), không nhận mật khẩu hay mã OTP của bạn.
+- Đường truyền được mã hoá. Cách Tubu Tree xử lý thông tin cá nhân xem tại [Chính sách bảo mật](/chinh-sach/bao-mat).
+
+## 6. Khiếu nại về thanh toán
+
+Nếu bạn bị trừ tiền mà đơn chưa được ghi nhận, bị trừ sai số tiền hoặc chưa nhận được tiền hoàn, hãy liên hệ hotline ${support.hotline} hoặc email ${support.email}, kèm mã đơn và ảnh chụp giao dịch. Tubu Tree tiếp nhận, kiểm tra và phản hồi bạn. Tranh chấp chưa thương lượng được giải quyết theo [Điều khoản sử dụng](/chinh-sach/dieu-khoan).`;
+}
+
 /** Bản nháp dùng khi admin chưa nhập nội dung đã duyệt (SystemConfig legal.<loai>). */
 export function defaultLegalContent(slug: LegalSlug, vars: LegalVars, support: LegalSupport): string {
   switch (slug) {
@@ -291,5 +399,7 @@ export function defaultLegalContent(slug: LegalSlug, vars: LegalVars, support: L
       return doiTra(vars, support);
     case 'van-chuyen':
       return vanChuyen(vars, support);
+    case 'thanh-toan':
+      return thanhToan(vars, support);
   }
 }

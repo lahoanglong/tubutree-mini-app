@@ -1,7 +1,7 @@
 import { resolveServedMedia } from '@tubutree/app-core/served-media';
 import { withProductCopyFallback } from '@tubutree/app-core/commerce/product-copy-fallback';
 import { formatVnd } from './format-vnd';
-import { DEFAULT_LEGAL_VARS, type LegalVars } from './legal';
+import { DEFAULT_LEGAL_VARS, isBctNoticeUrl, type LegalVars } from './legal';
 // API_BASE_URL (server-runtime, ưu tiên) cho phép đổi endpoint khi deploy mà không rebuild;
 // NEXT_PUBLIC_* bị inline lúc build nên chỉ dùng làm fallback.
 const BASE =
@@ -356,11 +356,13 @@ export interface SupportContact {
   zaloOaName?: string;
   /** Kênh cộng đồng của chủ shop; chỉ có khoá nào admin đã nhập link https. */
   community?: { zaloGroupUrl?: string; facebookUrl?: string; tiktokUrl?: string };
-  /** Đơn vị vận hành; chỉ có trường admin đã nhập (BCT chỉ nhận link https). */
+  /** Đơn vị vận hành; chỉ có trường admin đã nhập (BCT chỉ nhận link https tới online.gov.vn hoặc *.gov.vn). */
   company?: { legalName?: string; taxCode?: string; address?: string; bctNoticeUrl?: string };
 }
 
 const trimmed = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
+
+const bctNotice = (v: unknown): string | undefined => (typeof v === 'string' && isBctNoticeUrl(v.trim()) ? v.trim() : undefined);
 
 const httpsOnly = (v: unknown): string | undefined => (typeof v === 'string' && /^https:\/\//.test(v.trim()) ? v.trim() : undefined);
 
@@ -388,7 +390,7 @@ export async function getPublicSupport(): Promise<SupportContact> {
       ...(trimmed(json.company?.legalName) ? { legalName: trimmed(json.company?.legalName) } : {}),
       ...(trimmed(json.company?.taxCode) ? { taxCode: trimmed(json.company?.taxCode) } : {}),
       ...(trimmed(json.company?.address) ? { address: trimmed(json.company?.address) } : {}),
-      ...(httpsOnly(json.company?.bctNoticeUrl) ? { bctNoticeUrl: httpsOnly(json.company?.bctNoticeUrl) } : {}),
+      ...(bctNotice(json.company?.bctNoticeUrl) ? { bctNoticeUrl: bctNotice(json.company?.bctNoticeUrl) } : {}),
     };
     return {
       hotline: json.support?.hotline?.trim() || DEFAULT_SUPPORT.hotline,

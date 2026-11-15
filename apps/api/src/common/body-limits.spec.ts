@@ -339,6 +339,23 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
       expect(body.raw).toBe(exact);
       expect(body.keys).toBe(3);
     });
+    it('webhook Gomdon (cả /gomdon, /gomdon/<token>) giữ nguyên byte ở req.rawBody để kiểm X-Gomdon-Signature', async () => {
+      for (const path of ['/api/webhooks/gomdon', '/api/webhooks/gomdon/abcdef-token', '/api/Webhooks/Gomdon']) {
+        const body = (await bodyOf(await post(path, exact))) as { raw: string | null; keys: number };
+        expect({ path, raw: body.raw }).toEqual({ path, raw: exact });
+        expect(body.keys).toBe(3);
+      }
+    });
+    it('webhook Gomdon: thân form (multipart/urlencoded không qua parser JSON) không có thân thô — chỉ xác thực được bằng token', async () => {
+      const res = await fetch(base + '/api/webhooks/gomdon/abcdef-token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: 'status=7&order_id=55',
+      });
+      const body = (await bodyOf(res)) as { raw: string | null; keys: number };
+      expect(body.keys).toBe(2);
+      expect(body.raw).toBeNull();
+    });
     it('route thường và Pancake không giữ thân gốc', async () => {
       expect(((await bodyOf(await post('/api/cart/coupon', exact))) as { raw: string | null }).raw).toBeNull();
       expect(((await bodyOf(await post('/api/webhooks/pancake', exact))) as { raw: string | null }).raw).toBeNull();

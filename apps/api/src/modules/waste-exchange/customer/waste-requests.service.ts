@@ -14,6 +14,11 @@ import { lockWasteCustomer, lockWasteTracking } from '../waste-locks';
 import { WASTE_OPEN_STATUSES } from '../waste.constants';
 import { toRequestDetail, toRequestSummary, WASTE_REQUEST_FULL_INCLUDE, WASTE_REQUEST_SUMMARY_INCLUDE, type WasteRequestFull } from './waste-request.mapper';
 
+export interface InlinePickupPrepared {
+  holdCfg: WasteHoldConfig;
+  rulesVersion: string;
+}
+
 const CREATE_PRIOR_SELECT = { id: true, method: true, pointId: true, lines: { select: { itemId: true, declaredQty: true } } } as const;
 
 @Injectable()
@@ -74,6 +79,36 @@ export class WasteRequestsService {
         throw e;
       }
     }
+  }
+
+  /**
+   * Đọc cấu hình giữ chỗ NGOÀI transaction của checkout: lần trượt cache cấu hình trong tx xin kết nối pool thứ hai khi tx đang giữ một
+   * (đặt đơn dồn dập lúc cache hết hạn có thể cạn pool).
+   */
+  async prepareInlinePickup(): Promise<InlinePickupPrepared> {
+    const snap = await this.config.snapshot();
+    const holdCfg: WasteHoldConfig = {
+      laneDropoff: snap.laneDropoff,
+      laneMailin: snap.laneMailin,
+      lanePickup: (await computeWastePublicFlags(this.systemConfig)).pickup,
+      mailinMinPoints: snap.mailinMinPoints,
+      pickupMinPoints: snap.pickupMinPoints,
+      customerMonthlyCapPoints: snap.customerMonthlyCapPoints,
+      maxOpenRequests: snap.maxOpenRequests,
+      requestHoldDays: snap.requestHoldDays,
+    };
+    return { holdCfg, rulesVersion: snap.rulesVersion };
+  }
+
+  /** Tạo phiếu thu kèm (PICKUP, OPEN) ngay trong transaction của placeOrder; trần, ngưỡng điểm và khoá khách do `validateAndHold` áp như đường tạo thường. */
+  createPickupInTx(
+    tx: Prisma.TransactionClient,
+    userId: string,
+    idempotencyKey: string,
+    lines: WasteCreateRequest['lines'],
+    prepared: InlinePickupPrepared,
+  ): Promise<string> {
+    return this.createInTx(tx, userId, idempotencyKey, { method: 'PICKUP', lines } as WasteCreateRequest, prepared.holdCfg, prepared.rulesVersion);
   }
 
   async edit(userId: string, id: string, body: WasteEditRequest): Promise<WasteRequestDetailDTO> {

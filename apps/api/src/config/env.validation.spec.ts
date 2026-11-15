@@ -20,7 +20,20 @@ describe('envSchema — Gomdon', () => {
     if (r.success) {
       expect(r.data.GOMDON_BASE_URL).toBe('');
       expect(r.data.GOMDON_WEBHOOK_SECRET).toBe('');
+      expect(r.data.GOMDON_WEBHOOK_HMAC_SECRET).toBe('');
     }
+  });
+
+  it('GOMDON_WEBHOOK_HMAC_SECRET là khoá tuỳ chọn: đặt riêng không làm hỏng boot production', () => {
+    const r = envSchema.safeParse({
+      ...PROD_BASE,
+      GOMDON_PHONE: '0900',
+      GOMDON_PASSWORD: 'pw',
+      GOMDON_WEBHOOK_SECRET: 's'.repeat(32),
+      GOMDON_WEBHOOK_HMAC_SECRET: 'h'.repeat(32),
+    });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.GOMDON_WEBHOOK_HMAC_SECRET).toBe('h'.repeat(32));
   });
 
   it('production đã đặt tài khoản Gomdon mà thiếu GOMDON_WEBHOOK_SECRET → không boot (fail-closed)', () => {

@@ -1,7 +1,7 @@
 import { Page, useLocation } from 'zmp-ui';
 import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
 import { useSmartNavigate } from '../lib/smart-nav';
-import { NEW_COUPON_BADGE, NEW_COUPON_PARAM, sortRedemptions } from '@tubutree/app-core/reward-rules';
+import { GIFT_ATTACH_HINT, NEW_COUPON_BADGE, NEW_COUPON_PARAM, sortRedemptions } from '@tubutree/app-core/reward-rules';
 import { redemptionCouponLine } from '@tubutree/app-core/redemption-coupon';
 import { couponUseCopy } from '@tubutree/app-core/coupon-use';
 import { useQuery } from '@tanstack/react-query';
@@ -36,6 +36,7 @@ function RedemptionStatus({ r }: { r: GiftRedemption }) {
         <div data-testid="qr-center" style={{ display: 'flex', justifyContent: 'center' }}>
           <QrCode value={r.code} size={140} />
         </div>
+        <Text variant="body-sm" as="div">{GIFT_ATTACH_HINT}</Text>
         {cp && (
           <div style={{ ...COLUMN, gap: 2 }}>
             <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>{`Nhận tại ${cp.name}`}</Text>

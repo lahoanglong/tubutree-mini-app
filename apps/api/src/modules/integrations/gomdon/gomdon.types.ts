@@ -38,8 +38,8 @@ export interface GomdonLoginResponse {
 
 /**
  * Body POST /api/v2/order/create (multipart/form-data — mọi giá trị gửi dạng chuỗi). Tên trường và đơn vị
- * đã đối chiếu tài liệu Gomdon (bảng trường của tài liệu ghi nhầm người nhận là district_*; request/response
- * mẫu dùng dest_*). Người gửi và người nhận đều bắt buộc đủ tỉnh/quận/phường/địa chỉ/SĐT/tên.
+ * đã đối chiếu tài liệu Gomdon 27/10/2026. Người gửi và người nhận đều bắt buộc đủ tỉnh/phường/địa chỉ/SĐT/tên
+ * (địa chỉ 2 cấp, không gửi quận/huyện).
  */
 export interface GomdonCreateOrderBody {
   type: number; // 1 - Giao hàng, 2 - Thu hồi, 3 - Đơn đổi hàng (ta dùng 3)
@@ -61,13 +61,14 @@ export interface GomdonCreateOrderBody {
   source_phone: string;
   source_address: string;
   source_ward: string;
-  source_district: string;
+  /** Địa chỉ 2 cấp (sau sáp nhập 2025): tài liệu Gomdon nên bỏ trống quận/huyện → không gửi key này. */
+  source_district?: string;
   source_province: string;
   dest_name: string;
   dest_phone: string;
   dest_address: string;
   dest_ward: string;
-  dest_district: string;
+  dest_district?: string;
   dest_province: string;
 }
 
@@ -79,6 +80,8 @@ export interface GomdonCreateOrderBody {
 export interface GomdonCreateOrderResponse {
   result: boolean;
   message?: string;
+  /** true khi order_customer_id đã có đơn còn hiệu lực: data.id là mã đơn cũ (coi là tạo thành công). */
+  duplicate?: boolean;
   data?: {
     /** Mã số đơn Gomdon (số) — dùng cho /order/cancel/{id}, trùng order_id trong webhook. */
     id?: number | string;
@@ -86,6 +89,8 @@ export interface GomdonCreateOrderResponse {
     code?: string;
     /** Mã vận đơn của hãng (BestExpress) — trùng order_code trong webhook. */
     partner_code?: string | number;
+    /** Một số phản hồi trả mã vận đơn của hãng ở trường này (cùng nghĩa order_code của webhook). */
+    order_code?: string | number;
     /** 1 = Tạo đơn thành công. */
     status?: number;
     /** Unix GIÂY. */
@@ -105,6 +110,8 @@ export interface GomdonCreateOrderResponse {
  * tối đa 3 lần.
  */
 export interface GomdonWebhookPayload {
+  /** Mã sự kiện, giữ nguyên qua các lần gửi lại — dùng để bỏ qua sự kiện đã xử lý. */
+  event_id?: string;
   /** Mã trạng thái 1–12 (GOMDON_STATUS_TEXT). */
   status?: number;
   /** VND. */
@@ -135,3 +142,35 @@ export interface GomdonWebhookPayload {
   [key: string]: unknown;
 }
 
+
+/** Kết quả POST /api/v2/order/check-address. `skipped`: không kiểm được (lỗi mạng, quá tần suất, chưa cấu hình) — không chặn khách. */
+export interface GomdonAddressCheck {
+  ok: boolean;
+  message?: string;
+  skipped?: boolean;
+}
+
+export interface GomdonShopFeeParams {
+  /** Gram. */
+  weight: number;
+  /** VND. */
+  collectAmount?: number;
+  /** VND. */
+  productPrice?: number;
+  /** Mm. */
+  width?: number;
+  height?: number;
+  length?: number;
+}
+
+export interface GomdonShopFeeQuote {
+  /** VND. */
+  fee: number;
+  /** true = phí ước lượng cố định (Gomdon chưa cấu hình / lỗi mạng / phản hồi không dùng được), không phải phí Gomdon báo. */
+  estimated: boolean;
+}
+
+export interface GomdonRegisterWebhookResult {
+  ok: boolean;
+  message?: string;
+}

@@ -185,7 +185,7 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
           {reward.stockRemaining != null && !reward.soldOut && <div className="text-caption text-stone-600">{`Còn ${formatCount(reward.stockRemaining)}`}</div>}
           {reward.claimInstructions && <div className="text-caption text-stone-600">{reward.claimInstructions}</div>}
           {freeNote && <div className="text-caption text-stone-700">{freeNote}</div>}
-          {isWarehousePickup(reward) && <Badge>{WAREHOUSE_ONLY_LABEL}</Badge>}
+          {isWarehousePickup(reward) && <div className="text-caption text-stone-700">{WAREHOUSE_ONLY_LABEL}</div>}
         </div>
       </div>
       <div className="mt-auto flex items-center justify-between gap-2">

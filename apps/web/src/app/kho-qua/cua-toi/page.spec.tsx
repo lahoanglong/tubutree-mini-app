@@ -86,6 +86,7 @@ describe('/kho-qua/cua-toi — Quà của tôi', () => {
     const row = entry(c, 'Gói hạt giống Tubu');
     expect(row.querySelector('p')?.textContent).toBe('QG-8K2M9P4T');
     expect(row.querySelector('[data-testid="qr"]')?.textContent).toBe('QG-8K2M9P4T');
+    expect(row.textContent).toContain('Tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc đọc mã này khi ghé kho Tubu');
     expect(row.textContent).toContain('Nhận tại Kho Tubu TP.HCM');
     expect(row.textContent).toContain('99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM');
     expect(row.textContent).toContain('T2 08:00–17:00');

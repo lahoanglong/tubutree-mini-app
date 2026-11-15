@@ -16,6 +16,7 @@ const writeEvent = writeWasteEvent as unknown as jest.Mock;
 const ALREADY = 'Lượt đổi quà này đã được trao hoặc đã huỷ.';
 const NOT_FOUND_CODE = 'Không tìm thấy mã';
 const OVERDUE = 'Quà đã quá hạn nhận, quầy không trao được nữa. Tubu sẽ xử lý lượt đổi này và báo khách.';
+const ATTACHED = 'Quà này đang gửi kèm một đơn hàng của khách nên quầy chưa trao trực tiếp được. Chờ đơn giao xong hoặc huỷ rồi trao tiếp.';
 
 const ready = {
   id: 'r1',
@@ -104,7 +105,7 @@ describe('WasteGiftRedemptionsService.fulfilAtDesk', () => {
 
     expect(h.prisma.wasteGiftRedemption.findUnique).toHaveBeenCalledWith({ where: { code: 'QG-ABCDEFGH' } });
     expect(h.tx.wasteGiftRedemption.updateMany).toHaveBeenCalledWith({
-      where: { code: 'QG-ABCDEFGH', status: 'READY', OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: expect.any(Date) } }] },
+      where: { code: 'QG-ABCDEFGH', status: 'READY', attachedOrderId: null, OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: expect.any(Date) } }] },
       data: { status: 'FULFILLED', fulfilledAt: expect.any(Date), fulfilledByUserId: 's1', fulfilledPointId: 'wh' },
     });
     expect(writeEvent).toHaveBeenCalledTimes(1);
@@ -151,6 +152,32 @@ describe('WasteGiftRedemptionsService.fulfilAtDesk', () => {
     expect(writeEvent).not.toHaveBeenCalled();
   });
 
+  it('quà đang gắn một đơn mua: quầy bị chặn bằng câu rõ ràng, không mở transaction, không ghi gì (tránh khách nhận hai lần)', async () => {
+    h.prisma.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, attachedOrderId: 'o1' });
+
+    await expect(h.svc.fulfilAtDesk('s1', { code: 'QG-ABCDEFGH', pointId: 'wh' })).rejects.toThrow(new ConflictException(ATTACHED));
+
+    expect(h.prisma.$transaction).not.toHaveBeenCalled();
+    expect(writeEvent).not.toHaveBeenCalled();
+  });
+
+  it('đơn gắn quà chen vào giữa lúc đọc và lúc ghi: updateMany không thắng, câu trả lời vẫn là câu quà đang gắn đơn', async () => {
+    h.tx.wasteGiftRedemption.updateMany.mockResolvedValue({ count: 0 });
+    h.tx.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, attachedOrderId: 'o1' });
+
+    await expect(h.svc.fulfilAtDesk('s1', { code: 'QG-ABCDEFGH', pointId: 'wh' })).rejects.toThrow(new ConflictException(ATTACHED));
+
+    expect(writeEvent).not.toHaveBeenCalled();
+  });
+
+  it('quà đã trao rồi vẫn nhận câu cũ dù còn dấu đơn đã mang nó', async () => {
+    h.prisma.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, status: 'FULFILLED', attachedOrderId: 'o1' });
+    h.tx.wasteGiftRedemption.updateMany.mockResolvedValue({ count: 0 });
+    h.tx.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, status: 'FULFILLED', attachedOrderId: 'o1' });
+
+    await expect(h.svc.fulfilAtDesk('s1', { code: 'QG-ABCDEFGH', pointId: 'wh' })).rejects.toThrow(new ConflictException(ALREADY));
+  });
+
   it('PARTNER point without gift handover: 403, the code is never looked up', async () => {
     h.access.assertPointAccess.mockResolvedValue({ ...warehouseAccess, pointId: 'p1', kind: 'PARTNER', giftHandoverEnabled: false, actorRole: 'POINT_STAFF' });
 
@@ -188,7 +215,7 @@ describe('WasteGiftRedemptionsService.fulfilById', () => {
     await h.svc.fulfilById('s1', 'r1', { code: 'qg-abcdefgh' });
 
     expect(h.tx.wasteGiftRedemption.updateMany).toHaveBeenCalledWith({
-      where: { id: 'r1', status: 'READY', OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: expect.any(Date) } }] },
+      where: { id: 'r1', status: 'READY', attachedOrderId: null, OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: expect.any(Date) } }] },
       data: expect.objectContaining({ fulfilledPointId: 'wh', fulfilledByUserId: 's1' }),
     });
   });
@@ -209,7 +236,7 @@ describe('WasteGiftRedemptionsService.fulfilById', () => {
 
     expect(h.tx.wasteGiftRedemption.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 'r1', status: 'READY', OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: new Date('2026-10-16T17:00:00Z') } }] },
+        where: { id: 'r1', status: 'READY', attachedOrderId: null, OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: new Date('2026-10-16T17:00:00Z') } }] },
       }),
     );
   });
@@ -249,6 +276,14 @@ describe('WasteGiftRedemptionsService.fulfilById', () => {
 
     expect(writeEvent).not.toHaveBeenCalled();
   });
+
+  it('quà đang gắn một đơn mua: cũng bị chặn ở đường trao theo id', async () => {
+    h.prisma.wasteGiftRedemption.findUnique.mockResolvedValue({ ...ready, attachedOrderId: 'o1' });
+
+    await expect(h.svc.fulfilById('s1', 'r1', { code: 'QG-ABCDEFGH' })).rejects.toThrow(new ConflictException(ATTACHED));
+
+    expect(h.prisma.$transaction).not.toHaveBeenCalled();
+  });
 });
 
 describe('WasteGiftRedemptionsService.cancel', () => {
@@ -261,7 +296,7 @@ describe('WasteGiftRedemptionsService.cancel', () => {
 
     expect(h.tx.wasteGiftRedemption.updateMany).toHaveBeenCalledWith({
       where: { id: 'r1', status: 'READY' },
-      data: { status: 'CANCELLED', cancelledAt: expect.any(Date), cancelledByUserId: 'a1', cancelReason: 'Khách đổi ý', refundedPoints: 30_000 },
+      data: { status: 'CANCELLED', cancelledAt: expect.any(Date), cancelledByUserId: 'a1', cancelReason: 'Khách đổi ý', refundedPoints: 30_000, attachedOrderId: null },
     });
     expect(h.rewards.grant).toHaveBeenCalledWith('u1', 30_000, 'GIFT_REFUND:QG-ABCDEFGH', 'GIFT_REFUND', 'r1', h.tx, new Date('2027-10-17T00:00:00Z'));
     expect(h.rewards.expiresAt.mock.invocationCallOrder[0]).toBeLessThan(h.prisma.$transaction.mock.invocationCallOrder[0]!);
@@ -452,9 +487,9 @@ describe('WasteGiftRedemptionsService.expireOverdue', () => {
     const res = await h.svc.expireOverdue(NOW);
 
     expect(res).toEqual({ expired: 1, failed: 0, held: 0 });
-    expect(h.prisma.wasteGiftRedemption.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: wasteGiftOverdueWhere(NOW) }));
+    expect(h.prisma.wasteGiftRedemption.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { ...wasteGiftOverdueWhere(NOW), attachedOrderId: null } }));
     expect(h.tx.wasteGiftRedemption.updateMany).toHaveBeenCalledWith({
-      where: { id: 'r1', status: 'READY', claimExpiresAt: { lt: new Date('2026-11-19T17:00:00Z') } },
+      where: { id: 'r1', status: 'READY', claimExpiresAt: { lt: new Date('2026-11-19T17:00:00Z') }, attachedOrderId: null },
       data: { status: 'CANCELLED', cancelledAt: NOW, cancelledByUserId: null, cancelReason: 'Quá hạn nhận', refundedPoints: 30_000 },
     });
     expect(h.rewards.grant).toHaveBeenCalledWith('u1', 30_000, 'GIFT_REFUND:QG-ABCDEFGH', 'GIFT_REFUND', 'r1', h.tx, expect.any(Date));
@@ -490,6 +525,30 @@ describe('WasteGiftRedemptionsService.expireOverdue', () => {
     expect(h.rewards.grant).not.toHaveBeenCalled();
     expect(writeEvent).not.toHaveBeenCalled();
     expect(h.notifier.giftExpired).not.toHaveBeenCalled();
+  });
+
+  it('quà quá hạn nhưng đang gắn một đơn mua (gắn sau lúc quét danh sách): bỏ qua, không huỷ, không hoàn điểm, không báo khách', async () => {
+    h.prisma.wasteGiftRedemption.findMany.mockResolvedValueOnce([{ id: 'r1' }]);
+    h.tx.wasteGiftRedemption.findUnique.mockResolvedValue({ ...overdueRow, attachedOrderId: 'o1' });
+
+    expect(await h.svc.expireOverdue(NOW)).toEqual({ expired: 0, failed: 0, held: 0 });
+
+    expect(h.tx.wasteGiftRedemption.updateMany).not.toHaveBeenCalled();
+    expect(h.rewards.grant).not.toHaveBeenCalled();
+    expect(writeEvent).not.toHaveBeenCalled();
+    expect(h.notifier.giftExpired).not.toHaveBeenCalled();
+  });
+
+  it('phân trang cũng giữ điều kiện chưa gắn đơn', async () => {
+    const page = Array.from({ length: 200 }, (_, i) => ({ id: `r${String(i).padStart(3, '0')}` }));
+    h.prisma.wasteGiftRedemption.findMany.mockResolvedValueOnce(page).mockResolvedValueOnce([]);
+    h.tx.wasteGiftRedemption.findUnique.mockResolvedValue(null);
+
+    await h.svc.expireOverdue(NOW);
+
+    expect(h.prisma.wasteGiftRedemption.findMany.mock.calls[1]![0].where).toEqual({
+      AND: [{ ...wasteGiftOverdueWhere(NOW), attachedOrderId: null }, { id: { gt: 'r199' } }],
+    });
   });
 
   it('lost the race to the desk (count 0): no refund, no event, no notice', async () => {

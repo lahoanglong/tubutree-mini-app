@@ -280,6 +280,7 @@ describe('Điều khoản & Chính sách hiện trong app, không mở web (Zalo
     ['Chính sách bảo mật', 'bao-mat'],
     ['Chính sách đổi trả', 'doi-tra'],
     ['Chính sách vận chuyển', 'van-chuyen'],
+    ['Chính sách và hình thức thanh toán', 'thanh-toan'],
   ])('"%s": sheet gọi /config/legal/%s, hiện nội dung đã duyệt, không có nút mở web', async (label, slug) => {
     mocks.apiGet.mockImplementation(async (url: string) => {
       if (url === `/config/legal/${slug}`) return { data: { content: `## Mục 1\nNội dung đã duyệt của ${slug}` } };
@@ -298,6 +299,34 @@ describe('Điều khoản & Chính sách hiện trong app, không mở web (Zalo
     fireEvent.click(await screen.findByRole('button', { name: /Chính sách vận chuyển/ }));
     expect(await screen.findByTestId('legal-draft-banner')).toBeInTheDocument();
     expect(screen.getByText('1. Phạm vi giao hàng')).toBeInTheDocument();
+  });
+
+  it('đủ năm mục chính sách, theo thứ tự', async () => {
+    renderPage();
+    await screen.findByText('Điều khoản & Chính sách');
+    const labels = ['Điều khoản sử dụng', 'Chính sách bảo mật', 'Chính sách đổi trả', 'Chính sách vận chuyển', 'Chính sách và hình thức thanh toán'];
+    const rows = labels.map((l) => screen.getByRole('button', { name: new RegExp(l) }));
+    for (let i = 1; i < rows.length; i++) {
+      expect(rows[i - 1]!.compareDocumentPosition(rows[i]!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    }
+  });
+
+  it('bản nháp chính sách thanh toán: nêu COD, VietQR, Ví Tubu và thương nhân đã đăng ký (tên, MST, địa chỉ)', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Chính sách và hình thức thanh toán/ }));
+    expect(await screen.findByTestId('legal-draft-banner')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { level: 2, name: 'Chính sách và hình thức thanh toán' })).toBeInTheDocument();
+    expect(document.body.textContent).toContain('Thanh toán khi nhận hàng (COD)');
+    expect(document.body.textContent).toContain('VietQR');
+    expect(document.body.textContent).toContain('Đơn vị vận hành: CÔNG TY TNHH TUBU TREE');
+    expect(document.body.textContent).toContain('Mã số thuế: 0319585995');
+    expect(document.body.textContent).not.toContain('[Tên công ty]');
+  });
+
+  it('bản nháp chính sách vận chuyển có tiểu mục "Chính sách kiểm hàng khi nhận hàng"', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Chính sách vận chuyển/ }));
+    expect(await screen.findByText('Chính sách kiểm hàng khi nhận hàng')).toBeInTheDocument();
   });
 
   it('liên kết nội bộ /chinh-sach/<loại> trong bản nháp mở popup chính sách đó, không mở web', async () => {
@@ -341,12 +370,33 @@ describe('Đơn vị vận hành trên trang Về Tubu Tree', () => {
     mocks.apiGet.mockResolvedValue({ data: [] });
   });
 
-  it('chưa nhập thì không có dòng vận hành và không có link Bộ Công Thương', async () => {
+  it('chưa nhập thì nêu thương nhân đã đăng ký của Tubu Tree và KHÔNG có huy hiệu Bộ Công Thương', async () => {
     mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT, company: { legalName: null, taxCode: null, address: null, bctNoticeUrl: null } });
     renderPage();
-    await screen.findByText('Điều khoản & Chính sách');
-    expect(document.body.textContent).not.toContain('Đơn vị vận hành');
+    expect(await screen.findByText('Đơn vị vận hành: CÔNG TY TNHH TUBU TREE · MST 0319585995 · Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh')).toBeInTheDocument();
     expect(screen.queryByText('Đã thông báo Bộ Công Thương')).toBeNull();
+  });
+
+  it.each([
+    ['rỗng', ''],
+    ['http không mã hoá', 'http://online.gov.vn/x'],
+    ['tên miền lạ', 'https://example.com/online.gov.vn'],
+    ['giả hậu tố', 'https://online.gov.vn.evil.com/x'],
+    ['có @ lừa host', 'https://online.gov.vn@evil.com/x'],
+  ])('huy hiệu Bộ Công Thương KHÔNG hiện khi link %s', async (_name, url) => {
+    mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT, company: { legalName: 'Công ty TNHH Tubu', taxCode: '0312345678', address: null, bctNoticeUrl: url } });
+    renderPage();
+    await screen.findByText('Đơn vị vận hành: Công ty TNHH Tubu · MST 0312345678');
+    expect(screen.queryByText('Đã thông báo Bộ Công Thương')).toBeNull();
+  });
+
+  it('huy hiệu hiện với link của cổng online.gov.vn và tên miền *.gov.vn', async () => {
+    for (const url of ['https://online.gov.vn/Home/WebDetails/123', 'https://tmdt.gov.vn/xac-nhan']) {
+      mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT, company: { legalName: null, taxCode: '0312345678', address: null, bctNoticeUrl: url } });
+      const { unmount } = renderPage();
+      expect(await screen.findByText('Đã thông báo Bộ Công Thương')).toBeInTheDocument();
+      unmount();
+    }
   });
 
   it('có thông tin thì hiện đúng một dòng "Đơn vị vận hành: tên · MST mã · địa chỉ"', async () => {

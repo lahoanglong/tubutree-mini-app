@@ -191,7 +191,7 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
             )}
             {reward.claimInstructions && <Text variant="caption" tone="tertiary" as="div">{reward.claimInstructions}</Text>}
             {freeNote && <Text variant="caption" tone="secondary" as="div">{freeNote}</Text>}
-            {isWarehousePickup(reward) && <Badge>{WAREHOUSE_ONLY_LABEL}</Badge>}
+            {isWarehousePickup(reward) && <Text variant="caption" tone="secondary" as="div">{WAREHOUSE_ONLY_LABEL}</Text>}
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>

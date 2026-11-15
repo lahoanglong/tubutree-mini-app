@@ -8,9 +8,12 @@ này khi `waste.enabled`, `waste.lane_pickup_enabled` và công tắc Gomdon (`s
 kèm tài khoản Gomdon) cùng bật. Điểm Xanh chỉ được cộng khi kho đếm hàng thu về.
 
 - **Code:** `apps/api/src/modules/integrations/gomdon/`.
-- **Nguồn đối chiếu:** tài liệu Postman công khai "GOMDON API" do chủ shop gửi
-  (`https://documenter.getpostman.com/view/3261770/2s8Z76w9cj`), bản xuất bản ngày 10/01/2023. Đối chiếu
-  ngày 27/09/2026, bằng cách tải bản JSON của collection về đọc.
+- **Nguồn đối chiếu:** bản đầu là tài liệu Postman công khai "GOMDON API" do chủ shop gửi
+  (`https://documenter.getpostman.com/view/3261770/2s8Z76w9cj`), bản xuất bản ngày 10/01/2023, đối chiếu
+  ngày 27/09/2026. Từ W168 (15/11/2026) hợp đồng theo **tài liệu API v2 chính thức ngày 27/10/2026** của
+  Gomdon: địa chỉ 2 cấp (`/order/check-address`), `/order/shop-fee`, `duplicate:true`, webhook ký HMAC
+  (`X-Gomdon-Timestamp`/`X-Gomdon-Signature`, `event_id`) và `/auth/user/update` để đăng ký webhook. Các mục
+  dưới đây nêu rõ chỗ nào đã đổi theo bản này.
 - **Không** gọi thử API thật nào của Gomdon, vì ta chưa có tài khoản và tạo đơn là đặt bưu tá thật. Mọi
   kiểm chứng dưới đây là đọc tài liệu và chạy test có mock.
 - Repo **không** giữ bản sao tài liệu của Gomdon. Muốn xem nguyên văn thì mở link trên.
@@ -26,15 +29,18 @@ Tài liệu mô tả sáu API và một mục webhook:
 | Huỷ đơn | Có |
 | Cập nhật đơn (tên hàng, giá trị, COD, dịch vụ, cân nặng, kích thước) | Chưa dùng |
 | Sửa địa chỉ đơn (gửi, nhận hoặc hoàn) | Chưa dùng |
-| Tạm tính phí vận chuyển | Chưa dùng |
-| Webhook đổi trạng thái (bảng mã, payload, cách gửi lại) | Có |
+| Kiểm tra địa chỉ 2 cấp (`/order/check-address`) | Có: `GomdonClient.checkAddress`, cache hợp lệ 24 giờ, không chặn khách khi lỗi hạ tầng |
+| Tạm tính phí vận chuyển (`/order/shop-fee`) | Có: `GomdonClient.quoteShopFee`/`quoteShopFeeDetailed`, rơi về 25.000đ ước lượng khi không hỏi được |
+| Đăng ký webhook (`/auth/user/update`, trường `webhook_url`) | Có: `GomdonClient.registerWebhookUrl`, chỉ https, log che secret |
+| Webhook đổi trạng thái (bảng mã, payload, chữ ký, cách gửi lại) | Có |
 
 Tài liệu **không có**:
 
 - API xem chi tiết hay tra hành trình một đơn, dù theo mã số Gomdon hay theo `order_customer_id`;
-- môi trường sandbox/test riêng: chỉ có một địa chỉ, `https://admin.gomdon.com.vn`;
-- chữ ký webhook, secret, hay cách tự đăng ký webhook. Tài liệu chỉ ghi là liên hệ quản trị Gomdon để được
-  hỗ trợ tích hợp.
+- môi trường sandbox/test riêng: chỉ có một địa chỉ, `https://admin.gomdon.com.vn`.
+
+Bản 27/10/2026 có thêm chữ ký webhook và API tự đăng ký webhook (mục 3 và 2.7); bản 2023 chỉ ghi "liên hệ
+quản trị Gomdon".
 
 Hệ quả cho thiết kế:
 
@@ -62,7 +68,7 @@ Ghi chú trạng thái:
 | Xác thực | Header `Authorization: Bearer <token>` | `Authorization: Bearer ${token}` | đã khớp |
 | Kiểu body | Postman để kiểu form-data | `FormData` qua axios 1.16, ra `multipart/form-data`. Đã kiểm cục bộ bằng server giả | đã khớp |
 | Định dạng lỗi | Lỗi validate/nghiệp vụ: **HTTP 200** + `result:false` + `message`. Thông điệp validate là câu mặc định của Laravel, tiếng Anh. Token sai hoặc thiếu: **HTTP 401** | `result:false` bị coi là "chắc chắn chưa tạo", được retry. 401 thì đăng nhập lại một lần | đã khớp |
-| Giới hạn tần suất | Header mẫu có `X-RateLimit-Limit: 600`. Tài liệu không ghi khung thời gian | Không chủ động giới hạn. 429 bị coi là "chưa tạo", được retry | tài liệu không nói (khung thời gian) |
+| Giới hạn tần suất | Header mẫu có `X-RateLimit-Limit: 600`. `/order/check-address`: 120 lượt/phút | Tạo đơn: không chủ động giới hạn, 429 bị coi là "chưa tạo", được retry. Check-address: cache kết quả hợp lệ 24 giờ theo `tỉnh|phường` và giới hạn nội bộ 100 lượt/phút, vượt thì bỏ qua bước kiểm tra (`skipped`) thay vì chặn khách | đã khớp (check-address); tạo đơn: tài liệu không nói khung thời gian |
 
 ### 2.2. Đăng nhập: `POST /api/v2/auth/login`
 
@@ -85,11 +91,11 @@ Ghi chú trạng thái:
 | `product_price` | Giá trị gói hàng, VND | `order.total` | đã khớp |
 | `product_number` | Số kiện | `1` | đã khớp |
 | `collect_amount` | Tiền thu hộ, VND. Ví dụ lỗi ở API cập nhật cho thấy COD chỉ nhận từ 0 đến 5.000.000 | COD chưa trả thì gửi `order.total`, còn lại gửi `0`. Checkout chặn COD khi một đơn (một kiện) trên 5 triệu, xét từng đơn sau khi tách theo nơi giao | đã khớp |
-| `weight` | **Gram**, số nguyên | Tổng `Variation.weight` (kiểu Int) nhân số lượng. Thiếu thì lấy 500 g | đã khớp |
+| `weight` | **Gram**, số nguyên | Tổng `Variation.weight` (kiểu Int) nhân số lượng, thiếu thì lấy 500 g, chặn ở trần 10.000 g một kiện (`recyclingParcel` trong `gomdon-weight.ts`) | đã khớp |
 | `width` / `height` / `length` | **Milimét** | `0`, không khai kích thước, giống mẫu | đã khớp |
-| `note` | Ghi chú trên bưu kiện | Do máy chủ dựng (`buildPickupRecyclingNote`): mã `TR-` + "<món>: N <đơn vị>", ví dụ `Thu kèm rác TR-…: Thùng carton cũ: 10 thùng`; không có chữ khách gõ | đã khớp |
-| `source_province/district/ward/address/phone/name` | Cả sáu trường bắt buộc, kể cả quận/huyện | Lấy từ kho `shipping.gomdon.config.defaultWarehouse` | đã khớp |
-| `dest_province/district/ward/address/phone/name` | Cả sáu trường bắt buộc. Bảng trường của tài liệu ghi nhầm là `district_*`, còn request và response mẫu đều dùng `dest_*` | `dest_*`. Địa chỉ hai cấp (không còn quận) thì ô quận lấy tạm tên phường | đã khớp tên trường. Việc Gomdon chấp nhận địa chỉ hai cấp thì tài liệu không nói |
+| `note` | Ghi chú trên bưu kiện | `Đơn đổi hàng thu gom tái chế (~<kg khách khai, không có thì bằng mức tối đa>kg, tối đa <kg>kg)` rồi chi tiết thu gom sau " - " (`recyclingNoteDetail`). Số kg khai lấy từ `Order.recyclingWeightGrams`; "tối đa" là cân hàng của đơn, chặn ở 10 kg | đã khớp |
+| `source_province/ward/address/phone/name` | Địa chỉ 2 cấp sau sáp nhập 2025: tỉnh/thành + phường/xã; quận/huyện không còn bắt buộc và nên bỏ trống | Lấy từ kho `shipping.gomdon.config.defaultWarehouse` (mặc định: Số 33, đường 1B, Phường Long Bình, Thành phố Hồ Chí Minh). **Không gửi** `source_district`; `district` còn trong cấu hình cũ bị bỏ qua | **đã sửa** (W168) |
+| `dest_province/ward/address/phone/name` | Như trên, người nhận | `dest_*` lấy từ ảnh chụp địa chỉ của đơn. **Không gửi** `dest_district` (trước đây gửi tạm tên phường) | **đã sửa** (W168) |
 
 ### 2.4. Kết quả tạo đơn
 
@@ -102,7 +108,8 @@ Ghi chú trạng thái:
 | Lỗi validate | HTTP 200 + `result:false`, ví dụ "The source province field is required." | `GomdonRejectedError`: chắc chắn chưa tạo. Lỗi dữ liệu cố định: thử 3 lần rồi `FAILED`, kho tạo tay | đã khớp |
 | Lỗi tạm trước khi tạo | Tài liệu không nói | Đăng nhập lỗi (kể cả sai tài khoản), HTTP 429/503, lỗi mạng trước khi gửi: `GomdonRejectedError` có cờ `transient`. Job thử 8 lần, backoff 5 giây tăng dần (khoảng 10 phút). Hết lượt mà đơn còn trong 60 phút đầu (tính từ lúc thanh toán được) thì **không** chốt `FAILED`: cron 10 phút xếp lại. Quá 60 phút mới `FAILED` và báo tạo tay | **đã sửa** (UAT GOMDON-1) |
 | Gomdon từ chối tài khoản | Tài liệu không nói | Đăng nhập trả 4xx (trừ 429) hoặc `result:false` thì ghi nhận "từ chối tài khoản" (bộ nhớ của process API). Lựa chọn thu gom ở checkout tự ẩn, không đăng nhập lại trong 60 giây, cron thử lại mỗi 30 phút. Web admin hiện tình trạng kết nối và có nút "Kiểm tra kết nối" (đăng nhập thật, không tạo đơn) | **đã sửa** (UAT GOMDON-1) |
-| Trùng mã đơn | `order_customer_id` dùng để kiểm tra trùng. Tài liệu không in thông điệp lỗi khi trùng | Trước: coi là "chắc chắn chưa tạo". Sau 5 lần retry, đơn thành `FAILED` và báo kho **tạo vận đơn tay**, trong khi Gomdon đã có đơn: giao trùng. Nay: thông điệp dạng "already been taken", "đã tồn tại", "bị trùng"… ra `GomdonDuplicateOrderError`. Đơn chuyển `NEEDS_MANUAL_CHECK`, không retry, báo "ĐÃ CÓ đơn… KHÔNG tạo vận đơn tay" | **đã sửa** (mẫu thông điệp: tài liệu không nói) |
+| Trùng mã đơn, có cờ `duplicate` | Tài liệu 27/10/2026: `order_customer_id` đã có đơn còn hiệu lực → `{result:false, duplicate:true, message:"Đơn hàng đã tồn tại", data:{id}}`; "gửi lại vì mất mạng thì coi là thành công" | `data.id` hợp lệ (số dương hoặc chuỗi khác rỗng/0) → client trả `{result:true, data:{...data, id, partner_code: partner_code ?? order_code, status: status ?? 1}}`, `pushOrder` lưu `gomdonOrderId = String(id)` (mã vận đơn tạm = id, webhook `order_code` nâng cấp sau) và đi tiếp như tạo thành công. `duplicate:true` mà không có id → `GomdonDuplicateOrderError` → `NEEDS_MANUAL_CHECK` như dòng dưới | **đã sửa** (W168) |
+| Trùng mã đơn, thông điệp không kèm cờ | `order_customer_id` dùng để kiểm tra trùng. Bản 2023 không in thông điệp lỗi khi trùng | Trước: coi là "chắc chắn chưa tạo". Sau 5 lần retry, đơn thành `FAILED` và báo kho **tạo vận đơn tay**, trong khi Gomdon đã có đơn: giao trùng. Nay: thông điệp dạng "already been taken", "đã tồn tại", "bị trùng"… ra `GomdonDuplicateOrderError`. Đơn chuyển `NEEDS_MANUAL_CHECK`, không retry, báo "ĐÃ CÓ đơn… KHÔNG tạo vận đơn tay" | **đã sửa** (mẫu thông điệp: tài liệu không nói) |
 | Timeout, 5xx, rớt kết nối | Tài liệu không nói | `GomdonAmbiguousError`, chuyển `NEEDS_MANUAL_CHECK`, không retry | tài liệu không nói |
 
 ### 2.5. Huỷ đơn: `POST /api/v2/order/cancel/{id}`
@@ -123,8 +130,9 @@ Ghi chú trạng thái:
 
 | Hạng mục | Tài liệu | Code | Trạng thái |
 |---|---|---|---|
-| Đăng ký | Liên hệ quản trị Gomdon | Mục 3 | tài liệu không nói (quy trình) |
-| Header, secret, chữ ký | Không nhắc tới | Nhận header `x-webhook-token`, hoặc token trong đường dẫn `/<secret>`, hoặc `?token=`. So bằng `timingSafeEqual`. Production chưa đặt secret thì chặn hết | tài liệu không nói |
+| Đăng ký | `POST /auth/user/update` với `webhook_url` (HTTPS); muốn tắt thì liên hệ Gomdon | `GomdonClient.registerWebhookUrl(url)`: chỉ nhận https, 401 đăng nhập lại 1 lần, log và thông báo lỗi chỉ in URL đã che (`.../gomdon/***`, query thành `?***`). Mục 3 | **đã sửa** (W168) |
+| Chữ ký | Header `X-Gomdon-Timestamp` (unix giây) + `X-Gomdon-Signature` = HMAC-SHA256-hex của `"<timestamp>.<thân thô>"`, khoá là `webhook_secret` Gomdon cấp; từ chối khi sai chữ ký hoặc lệch quá 300 giây | Xác thực KÉP, chấp nhận khi một trong hai hợp lệ: (a) chữ ký, khoá = `GOMDON_WEBHOOK_HMAC_SECRET` (không đặt thì dùng `GOMDON_WEBHOOK_SECRET`), thân thô lấy từ `req.rawBody` do `common/body-limits.ts` giữ cho mọi `/api/webhooks/*` ngoài Pancake; so `timingSafeEqual` sau khi so độ dài; (b) token `x-webhook-token` / `/<secret>` / `?token=` so với `GOMDON_WEBHOOK_SECRET`. Chữ ký sai/lệch giờ mà không có token đúng → 401. Production chưa đặt secret nào → chặn hết. Webhook multipart không có thân thô nên chỉ xác thực được bằng token | **đã sửa** (W168) |
+| `event_id` | Mã sự kiện, giữ nguyên qua các lần gửi lại, dùng để bỏ qua sự kiện đã xử lý | Khoá chống trùng là `event:<event_id>`; không có `event_id` thì giữ khoá cũ `order_id|status|created_time` | **đã sửa** (W168) |
 | Kiểu body | Mẫu là JSON | Nhận JSON, urlencoded và `multipart/form-data` (kiểu Gomdon dùng cho mọi API của họ; không nhận file, tối đa 60 trường × 4 KB). Mọi trường đều ép kiểu từ chuỗi. Token đúng mà body không đọc được (thiếu `status`) thì trả **400** để Gomdon gửi lại, ghi lỗi kết nối và báo động (tối đa 1 lần/10 phút mỗi Content-Type, chỉ ghi tên trường, không ghi giá trị) | tài liệu không nói (Content-Type). **Đã sửa** multipart (UAT GOMDON-6) |
 | Giới hạn tần suất | Không nhắc tới | Hai route webhook **không** bị throttle (`@SkipThrottle`): đã có token chia sẻ, và Gomdon chỉ gửi lại 3 lần nên một lần 429 là mất event | **đã sửa** (UAT GOMDON-5) |
 | `order_id` | Mã số đơn Gomdon | Khớp `gomdonOrderId` | đã khớp |
@@ -168,12 +176,13 @@ Ghi chú trạng thái:
 1. Tạo secret dài, ngẫu nhiên: `openssl rand -hex 32`. Đặt vào `GOMDON_WEBHOOK_SECRET` trong `.env` trên
    VPS, cùng `GOMDON_PHONE` và `GOMDON_PASSWORD`. Production có tài khoản mà thiếu secret thì API không
    khởi động. Tạo lại container api sau khi sửa.
-2. Liên hệ quản trị Gomdon, vì tài liệu không có cách tự đăng ký. Hỏi hai câu: **có cho thêm header tuỳ
-   chỉnh không**, và **webhook gửi từ IP nào**.
-   - **Có header**: URL `https://api.tubutree.com/api/webhooks/gomdon`, kèm header
-     `x-webhook-token: <secret>`. Nên dùng cách này, vì secret không nằm trong URL.
-   - **Chỉ nhập được URL** (nhiều khả năng nhất): `https://api.tubutree.com/api/webhooks/gomdon/<secret>`.
-     Nên dùng dạng đường dẫn thay cho `?token=<secret>`, vì có hệ thống cắt hoặc mã hoá lại query string.
+2. Tự đăng ký URL bằng `GomdonClient.registerWebhookUrl` (API `POST /api/v2/auth/user/update`,
+   trường `webhook_url`, chỉ https), dùng URL có secret ở cuối đường dẫn:
+   `https://api.tubutree.com/api/webhooks/gomdon/<secret>`. Dạng đường dẫn tốt hơn `?token=<secret>`, vì có
+   hệ thống cắt hoặc mã hoá lại query string. Gomdon còn cấp `webhook_secret` để ký `X-Gomdon-Signature`:
+   đặt giá trị đó vào `GOMDON_WEBHOOK_HMAC_SECRET` (tuỳ chọn; trống thì chữ ký được kiểm bằng
+   `GOMDON_WEBHOOK_SECRET`). Chữ ký và token chạy song song nên đơn không rớt event dù Gomdon dùng cách nào.
+   Muốn tắt webhook thì liên hệ Gomdon, API không có thao tác tắt.
 3. Secret nằm trong URL thì log ứng dụng đã che (`apps/api/src/common/filters/redact-url.ts`), nhưng access
    log của Apache vẫn ghi nguyên URL. Hạn chế quyền đọc access log. Nếu log lộ ra ngoài thì đổi secret, và
    báo Gomdon cập nhật URL cùng lúc.
@@ -233,12 +242,13 @@ thường. Chi tiết đơn liệt kê từng báo động với nút "Đã xử
    qua. Nếu Gomdon báo 6/8 **thay cho** 7, CSKH sẽ nhận báo động "chuyển hoàn" nhầm, và đơn không tự
    DELIVERED.
 5. **Mốc cuối và thứ tự chuyển mã.** Bảng bậc chống lùi là suy luận của ta (mục 2.8).
-6. **Tên địa chỉ.** Gomdon nhận tỉnh/quận/phường dạng chữ. Chưa biết có chấp nhận tiền tố "Thành phố" hay
-   "Phường", và có chấp nhận địa chỉ hai cấp sau sáp nhập (ta gửi tên phường vào ô quận) không.
-   **Cách kiểm**: bật `waste.lane_pickup_enabled` (công tắc khách thấy) chỉ trên bản chưa mở cho khách thật, rồi đặt đơn thử T3 bằng địa chỉ hai cấp
-   theo Phần 3 của sổ tay thử đơn (khi công tắc tắt thì không tạo được yêu cầu Thu kèm đơn, nên không có đường nào khác để tạo vận đơn thử). Cập nhật địa
-   chỉ kho mặc định (đang là "Thành phố Thủ Đức", địa giới cũ) theo địa giới mới trước khi bật (UAT GOMDON-7).
-7. **Khung thời gian của giới hạn 600 request**: mỗi phút hay mỗi giờ.
+6. **Tên địa chỉ.** Tài liệu 27/10/2026 nói địa chỉ chỉ cần tỉnh/thành + phường/xã theo danh mục mới (ví dụ
+   "Hà Nội" + "Phường Ba Đình") và `/order/check-address` cho biết Gomdon có nhận diện được không. Code đã bỏ
+   `*_district` và có `checkAddress`, nhưng **chưa gọi thật** nên chưa biết Gomdon có chấp nhận tiền tố
+   "Thành phố"/"Phường" ở mọi địa chỉ khách nhập không. Kho mặc định đã đổi sang địa giới mới (Phường Long Bình);
+   bản ghi `shipping.gomdon.config` trên PROD nếu còn "Thủ Đức" thì bỏ qua `district`, nhưng nên kiểm lại
+   `address/ward/province` (UAT GOMDON-7).
+7. **Khung thời gian của giới hạn 600 request** của API tạo đơn: mỗi phút hay mỗi giờ (check-address đã biết: 120 lượt/phút).
 8. `expires_at` có luôn là `null` không. Token có bị thu hồi khi đăng nhập lại hoặc đổi mật khẩu không.
    Code đã tự đăng nhập lại khi gặp 401, nên chỉ ảnh hưởng số lần đăng nhập.
 9. `partner_code` có luôn có ngay trong response tạo đơn không. Code có đường dùng tạm `id` (mục 2.4).
@@ -259,14 +269,20 @@ thường. Chi tiết đơn liệt kê từng báo động với nút "Đã xử
 Tất cả dùng mock, không gọi Gomdon thật:
 
 - `gomdon.client.spec.ts`: form đăng nhập, `expires_at`, 401 kèm body mẫu, tạo đơn trả `id`/`code`/
-  `partner_code`, validate `result:false` ra Rejected, trùng mã ra Duplicate (không Rejected), huỷ theo id số
-  với form rỗng.
+  `partner_code`, form tạo đơn không có key `*_district`, validate `result:false` ra Rejected, trùng mã ra
+  Duplicate (không Rejected), `duplicate:true` + `data.id` là thành công (không có id thì Duplicate), huỷ theo id
+  số với form rỗng, `checkAddress` (cache 24 giờ bằng đồng hồ giả, không cache kết quả sai, giới hạn 100
+  lượt/phút, lỗi mạng không chặn), `quoteShopFee` (thành công, ước lượng 25.000đ), `registerWebhookUrl` (chỉ
+  https, log và thông báo lỗi không lộ secret).
 - `gomdon-order.service.spec.ts`: body tạo đơn **đủ và chỉ** các trường tài liệu, đơn vị gram/mm, không dùng
   `data.code` làm mã vận đơn, xử lý khi thiếu `partner_code`, trùng mã ra `NEEDS_MANUAL_CHECK` và giữ claim.
 - `gomdon-webhook.service.spec.ts`: payload đúng mẫu (`order_code` dạng số, `created_time` tính giây), không
-  lưu `tracking_link`, thay mã vận đơn tạm.
+  lưu `tracking_link`, thay mã vận đơn tạm, khoá chống trùng theo `event_id`, sự kiện `created_time` cũ hơn
+  không ghi đè, khớp đơn khi create chưa trả `partner_code`.
 - `gomdon-webhook.controller.spec.ts`: cả hai route trả HTTP 200, không bị throttle, nhận multipart thật qua
-  HTTP và từ chối upload file.
+  HTTP và từ chối upload file; xác thực kép (chữ ký đúng/sai/lệch quá 300 giây/độ dài lạ, token đường dẫn,
+  header, `?token=`, cả hai, production không secret) và chữ ký trên byte gốc qua HTTP thật với parser của
+  `common/body-limits.ts`.
 - `gomdon-push.processor.spec.ts`, `gomdon-queue.spec.ts`: lỗi tạm và lỗi cố định, số lần thử của job.
 - `gomdon-alert.service.spec.ts`, `test/integration-race/gomdon.race-spec.ts`: báo động lưu DB, không trùng
   khi báo đồng thời; không tạo vận đơn khi hàng vừa rời kho.

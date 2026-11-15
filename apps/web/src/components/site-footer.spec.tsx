@@ -47,14 +47,14 @@ describe('SiteFooter', () => {
     for (const a of links) expect(a).toContain('min-h-11');
   });
 
-  it('có lối tới bốn trang điều khoản/chính sách (D5-01), đủ vùng chạm 44px', async () => {
+  it('có lối tới năm trang điều khoản/chính sách (D5-01, Bộ Công Thương), đủ vùng chạm 44px', async () => {
     mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
     const out = await html();
     const nav = out.match(/<nav[^>]*aria-label="Chính sách"[^>]*>[\s\S]*?<\/nav>/)?.[0] ?? '';
     expect(nav).not.toBe('');
     const hrefs = [...nav.matchAll(/<a [^>]*href="([^"]+)"/g)].map((m) => m[1]);
-    expect(hrefs).toEqual(['/chinh-sach/dieu-khoan', '/chinh-sach/bao-mat', '/chinh-sach/doi-tra', '/chinh-sach/van-chuyen']);
-    for (const label of ['Điều khoản', 'Bảo mật', 'Đổi trả', 'Vận chuyển']) expect(nav).toContain(label);
+    expect(hrefs).toEqual(['/chinh-sach/dieu-khoan', '/chinh-sach/bao-mat', '/chinh-sach/doi-tra', '/chinh-sach/van-chuyen', '/chinh-sach/thanh-toan']);
+    for (const label of ['Điều khoản', 'Bảo mật', 'Đổi trả', 'Vận chuyển', 'Thanh toán']) expect(nav).toContain(label);
     for (const a of nav.match(/<a [^>]*>/g) ?? []) expect(a).toContain('min-h-11');
   });
 
@@ -79,10 +79,12 @@ describe('SiteFooter', () => {
     const base = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
     const company = { legalName: 'Công ty TNHH Tubu', taxCode: '0312345678', address: '1 Đường A, Quận B', bctNoticeUrl: 'https://online.gov.vn/x' };
 
-    it('chưa nhập gì thì không vẽ dòng nào', async () => {
+    const MERCHANT_LINE = 'Đơn vị vận hành: CÔNG TY TNHH TUBU TREE · MST 0319585995 · Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh';
+
+    it('chưa nhập gì thì nêu thương nhân đã đăng ký (tên, MST, địa chỉ) ở cả chân trang đầy đủ và gọn, và KHÔNG có huy hiệu Bộ Công Thương', async () => {
       mocks.getPublicSupport.mockResolvedValue(base);
       const out = await html();
-      expect(out).not.toContain('Đơn vị vận hành');
+      expect(out.split(MERCHANT_LINE)).toHaveLength(3);
       expect(out).not.toContain('Bộ Công Thương');
     });
 
@@ -109,11 +111,35 @@ describe('SiteFooter', () => {
       expect(out).not.toContain('Bộ Công Thương');
     });
 
-    it('chỉ có link BCT thì vẽ link, không vẽ dòng vận hành', async () => {
+    it('chỉ có link BCT thật thì vẽ huy hiệu, dòng vận hành vẫn là thương nhân đã đăng ký', async () => {
       mocks.getPublicSupport.mockResolvedValue({ ...base, company: { bctNoticeUrl: 'https://online.gov.vn/x' } });
       const out = await html();
-      expect(out).not.toContain('Đơn vị vận hành');
+      expect(out.split(MERCHANT_LINE)).toHaveLength(3);
       expect(out).toContain('Đã thông báo Bộ Công Thương');
+    });
+
+    it.each([
+      ['rỗng', ''],
+      ['http không mã hoá', 'http://online.gov.vn/x'],
+      ['tên miền lạ', 'https://example.com/online.gov.vn'],
+      ['giả hậu tố', 'https://online.gov.vn.evil.com/x'],
+      ['có @ lừa host', 'https://online.gov.vn@evil.com/x'],
+      ['javascript', 'javascript:alert(1)'],
+    ])('huy hiệu Bộ Công Thương KHÔNG hiện khi link %s', async (_name, url) => {
+      mocks.getPublicSupport.mockResolvedValue({ ...base, company: { ...company, bctNoticeUrl: url } });
+      const out = await html();
+      expect(out).not.toContain('Bộ Công Thương');
+      expect(out).not.toContain('evil.com');
+      expect(out).toContain('Đơn vị vận hành: Công ty TNHH Tubu');
+    });
+
+    it('huy hiệu hiện với link của cổng online.gov.vn và với tên miền *.gov.vn', async () => {
+      for (const url of ['https://online.gov.vn/Home/WebDetails/123', 'https://www.online.gov.vn/x', 'https://tmdt.gov.vn/xac-nhan']) {
+        mocks.getPublicSupport.mockResolvedValue({ ...base, company: { ...company, bctNoticeUrl: url } });
+        const out = await html();
+        expect(out).toContain(`href="${url}"`);
+        expect(out.split('Đã thông báo Bộ Công Thương')).toHaveLength(3);
+      }
     });
   });
 

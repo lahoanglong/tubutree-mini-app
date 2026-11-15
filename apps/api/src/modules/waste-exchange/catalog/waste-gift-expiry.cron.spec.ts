@@ -10,8 +10,9 @@ function setup(o: { locked?: boolean } = {}) {
   (runExclusive as jest.Mock).mockImplementation(holdsLease(o.locked ?? true));
   const prisma = {};
   const gifts = { expireOverdue: jest.fn().mockResolvedValue({ expired: 2, failed: 0, held: 0 }) };
-  const cron = new WasteGiftExpiryCron(prisma as never, gifts as never);
-  return { cron, prisma, gifts };
+  const attach = { reconcile: jest.fn().mockResolvedValue({ fulfilled: 0, released: 0 }) };
+  const cron = new WasteGiftExpiryCron(prisma as never, gifts as never, attach as never);
+  return { cron, prisma, gifts, attach };
 }
 
 describe('WasteGiftExpiryCron', () => {
@@ -43,6 +44,26 @@ describe('WasteGiftExpiryCron', () => {
     release();
     await first;
     expect(h.gifts.expireOverdue).toHaveBeenCalledTimes(1);
+  });
+
+  it('quét bù quà gắn đơn chạy trước, rồi mới huỷ quà quá hạn (quà vừa nhả lại chịu hạn như cũ)', async () => {
+    const h = setup();
+    await h.cron.run(NOW);
+    expect(h.attach.reconcile).toHaveBeenCalledTimes(1);
+    expect(h.attach.reconcile.mock.invocationCallOrder[0]).toBeLessThan(h.gifts.expireOverdue.mock.invocationCallOrder[0]!);
+  });
+
+  it('quét bù lỗi không chặn việc huỷ quà quá hạn', async () => {
+    const h = setup();
+    h.attach.reconcile.mockRejectedValue(new Error('db down'));
+    expect(await h.cron.run(NOW)).toEqual({ expired: 2, failed: 0, held: 0 });
+    expect(h.gifts.expireOverdue).toHaveBeenCalledWith(NOW);
+  });
+
+  it('replica khác giữ khoá: không quét bù cũng không huỷ', async () => {
+    const h = setup({ locked: false });
+    await h.cron.run(NOW);
+    expect(h.attach.reconcile).not.toHaveBeenCalled();
   });
 
   it('handleCron swallows a thrown error', async () => {

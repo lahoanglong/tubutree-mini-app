@@ -85,7 +85,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'company.legal_name', value: '', category: 'company', description: 'Tên pháp lý của đơn vị vận hành (theo giấy đăng ký kinh doanh), hiển thị cho khách', createOnly: true },
   { key: 'company.tax_code', value: '', category: 'company', description: 'Mã số thuế của đơn vị vận hành, hiển thị cho khách', createOnly: true },
   { key: 'company.address', value: '', category: 'company', description: 'Địa chỉ trụ sở đã đăng ký, hiển thị cho khách', createOnly: true },
-  { key: 'company.bct_notice_url', value: '', category: 'company', description: 'Link https tới trang đã thông báo với Bộ Công Thương (không bắt buộc). Để trống = ẩn dòng "Đã thông báo Bộ Công Thương"', createOnly: true },
+  { key: 'company.bct_notice_url', value: '', category: 'company', description: 'Link https do cổng online.gov.vn cấp sau khi Bộ Công Thương duyệt thông báo (host online.gov.vn hoặc *.gov.vn). Để trống = ẩn huy hiệu "Đã thông báo Bộ Công Thương"; chỉ điền khi hồ sơ đã được duyệt', createOnly: true },
   {
     key: 'referral.milestones_points',
     value: [
@@ -290,6 +290,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'legal.bao-mat', value: '', category: 'legal', description: 'Nội dung trang Chính sách bảo mật (markdown). Để trống = bản nháp mặc định', createOnly: true },
   { key: 'legal.doi-tra', value: '', category: 'legal', description: 'Nội dung trang Chính sách đổi trả (markdown). Để trống = bản nháp mặc định', createOnly: true },
   { key: 'legal.van-chuyen', value: '', category: 'legal', description: 'Nội dung trang Chính sách vận chuyển (markdown). Để trống = bản nháp mặc định', createOnly: true },
+  { key: 'legal.thanh-toan', value: '', category: 'legal', description: 'Nội dung trang Chính sách và hình thức thanh toán (markdown). Để trống = bản nháp mặc định', createOnly: true },
 
   // Remarketing — nhắc giỏ bỏ quên + voucher sắp hết hạn (cron RemarketingService).
   { key: 'remarketing.cart_abandon_min_hours', value: 6, category: 'remarketing', description: 'Giỏ bỏ quên ít nhất N giờ mới nhắc' },

@@ -4,7 +4,7 @@ import { ExternalLink, Mail, Phone } from 'lucide-react';
 import { getPublicSupport, type SupportContact } from '@/lib/api';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import tubuLogo from '@/assets/tubu-logo.png';
-import { LEGAL_PAGES, LEGAL_SLUGS } from '@/lib/legal';
+import { LEGAL_PAGES, LEGAL_SLUGS, isBctNoticeUrl, merchantIdentityOrDefault } from '@/lib/legal';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { isWebRouteReady } from '@/lib/route-map';
 import { FooterProgramLinks } from '@/components/footer-program-links';
@@ -12,9 +12,13 @@ import { FooterProgramLinks } from '@/components/footer-program-links';
 const LINK =
   'inline-flex min-h-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
 
-/** "Đơn vị vận hành: <tên> · MST <mã> · <địa chỉ>"; ẩn từng phần admin chưa nhập, ẩn cả dòng khi không còn gì. */
+/**
+ * "Đơn vị vận hành: <tên> · MST <mã> · <địa chỉ>". Admin chưa nhập thông tin nào thì hiện thương nhân đã đăng ký của Tubu Tree
+ * (website bán hàng của công ty phải luôn nêu rõ chủ website); đã nhập thì ẩn từng phần để trống.
+ */
 function operatorLine(company: SupportContact['company']): string | null {
-  const parts = [company?.legalName, company?.taxCode ? `MST ${company.taxCode}` : undefined, company?.address].filter(Boolean);
+  const id = merchantIdentityOrDefault(company);
+  const parts = [id.legalName, id.taxCode ? `MST ${id.taxCode}` : undefined, id.address].filter(Boolean);
   return parts.length > 0 ? `Đơn vị vận hành: ${parts.join(' · ')}` : null;
 }
 
@@ -51,12 +55,14 @@ function LinkColumn({ title, links }: { title: string; links: { to: string; labe
 
 function CompanyInfo({ company, className }: { company: SupportContact['company']; className: string }) {
   const line = operatorLine(company);
-  if (!line && !company?.bctNoticeUrl) return null;
+  const bctRaw = company?.bctNoticeUrl;
+  const bctUrl = isBctNoticeUrl(bctRaw) ? bctRaw : null;
+  if (!line && !bctUrl) return null;
   return (
     <div className={className} data-testid="footer-company">
       {line && <p className="text-xs text-stone-600">{line}</p>}
-      {company?.bctNoticeUrl && (
-        <a href={company.bctNoticeUrl} target="_blank" rel="noopener noreferrer" className={LINK}>
+      {bctUrl && (
+        <a href={bctUrl} target="_blank" rel="noopener noreferrer" className={LINK}>
           Đã thông báo Bộ Công Thương
         </a>
       )}

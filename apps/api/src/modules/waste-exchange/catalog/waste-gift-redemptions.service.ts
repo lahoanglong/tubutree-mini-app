@@ -23,11 +23,15 @@ import { canonicalWasteLookup, lookupMissMeta } from '../waste-codes';
 const CODE_NOT_FOUND = 'Không tìm thấy mã';
 const ALREADY_HANDLED = 'Lượt đổi quà này đã được trao hoặc đã huỷ.';
 const CLAIM_OVERDUE = 'Quà đã quá hạn nhận, quầy không trao được nữa. Tubu sẽ xử lý lượt đổi này và báo khách.';
+// Quà đang nằm trong một đơn mua chưa chốt: trao ở quầy thì khách nhận hai lần (quầy và trong thùng hàng), nên chặn thay vì tự nhả gắn.
+const ATTACHED_TO_ORDER = 'Quà này đang gửi kèm một đơn hàng của khách nên quầy chưa trao trực tiếp được. Chờ đơn giao xong hoặc huỷ rồi trao tiếp.';
 export const GIFT_EXPIRED_CANCEL_REASON = 'Quá hạn nhận';
 const EXPIRE_PAGE = 200;
 
 /** Còn trong hạn nhận (hoặc quà không có hạn): điều kiện chung của mọi đường trao quà, đối xứng với wasteGiftOverdueWhere. */
 const claimOpenWhere = (now: Date): Prisma.WasteGiftRedemptionWhereInput => ({ OR: [{ claimExpiresAt: null }, { claimExpiresAt: { gte: startOfVnDay(now) } }] });
+/** Quà gắn đơn đang đi không bị cron huỷ: khách vẫn sắp nhận nó trong thùng hàng. Nhả gắn (đơn huỷ/trả) thì lại chịu hạn như cũ. */
+const expirableWhere = (now: Date): Prisma.WasteGiftRedemptionWhereInput => ({ ...wasteGiftOverdueWhere(now), attachedOrderId: null });
 const isOverdue = (row: { status: string; claimExpiresAt: Date | null }, now: Date) => row.status === 'READY' && row.claimExpiresAt !== null && row.claimExpiresAt < startOfVnDay(now);
 
 @Injectable()
@@ -86,7 +90,7 @@ export class WasteGiftRedemptionsService {
     const dto = await this.prisma.$transaction(async (tx) => {
       const { count } = await tx.wasteGiftRedemption.updateMany({
         where: { id, status: 'READY' },
-        data: { status: 'CANCELLED', cancelledAt: new Date(), cancelledByUserId: admin.id, cancelReason: body.reason, refundedPoints },
+        data: { status: 'CANCELLED', cancelledAt: new Date(), cancelledByUserId: admin.id, cancelReason: body.reason, refundedPoints, attachedOrderId: null },
       });
       if (count !== 1) throw new ConflictException(ALREADY_HANDLED);
       await this.refundAndRestock(tx, row, refund, expiresAt);
@@ -137,7 +141,7 @@ export class WasteGiftRedemptionsService {
     let lastId: string | null = null;
     for (;;) {
       const page: { id: string }[] = await this.prisma.wasteGiftRedemption.findMany({
-        where: lastId === null ? wasteGiftOverdueWhere(now) : { AND: [wasteGiftOverdueWhere(now), { id: { gt: lastId } }] },
+        where: lastId === null ? expirableWhere(now) : { AND: [expirableWhere(now), { id: { gt: lastId } }] },
         select: { id: true },
         orderBy: { id: 'asc' },
         take: EXPIRE_PAGE,
@@ -163,10 +167,10 @@ export class WasteGiftRedemptionsService {
   private expireOne(id: string, now: Date, expiresAt: Date): Promise<WasteGiftRedemption | 'HELD' | null> {
     return this.prisma.$transaction(async (tx) => {
       const row = await tx.wasteGiftRedemption.findUnique({ where: { id } });
-      if (!row || row.status !== 'READY') return null;
+      if (!row || row.status !== 'READY' || row.attachedOrderId) return null;
       if (await this.refundNeedsAdminChoice(tx, row.userId)) return 'HELD';
       const { count } = await tx.wasteGiftRedemption.updateMany({
-        where: { id, ...wasteGiftOverdueWhere(now) },
+        where: { id, ...expirableWhere(now) },
         data: { status: 'CANCELLED', cancelledAt: now, cancelledByUserId: null, cancelReason: GIFT_EXPIRED_CANCEL_REASON, refundedPoints: row.pointsCost },
       });
       if (count !== 1) return null;
@@ -240,14 +244,16 @@ export class WasteGiftRedemptionsService {
     pointId: string,
   ): Promise<GiftRedemptionDTO> {
     const now = new Date();
+    if (row.status === 'READY' && row.attachedOrderId) throw new ConflictException(ATTACHED_TO_ORDER);
     if (isOverdue(row, now)) throw new ConflictException(CLAIM_OVERDUE);
     return this.prisma.$transaction(async (tx) => {
       const { count } = await tx.wasteGiftRedemption.updateMany({
-        where: { ...where, ...claimOpenWhere(now) },
+        where: { ...where, attachedOrderId: null, ...claimOpenWhere(now) },
         data: { status: 'FULFILLED', fulfilledAt: now, fulfilledByUserId: callerUserId, fulfilledPointId: pointId },
       });
       if (count !== 1) {
-        const cur = await tx.wasteGiftRedemption.findUnique({ where: { id: row.id }, select: { status: true, claimExpiresAt: true } });
+        const cur = await tx.wasteGiftRedemption.findUnique({ where: { id: row.id }, select: { status: true, claimExpiresAt: true, attachedOrderId: true } });
+        if (cur && cur.status === 'READY' && cur.attachedOrderId) throw new ConflictException(ATTACHED_TO_ORDER);
         throw new ConflictException(cur && isOverdue(cur, now) ? CLAIM_OVERDUE : ALREADY_HANDLED);
       }
       await writeWasteEvent(tx, {

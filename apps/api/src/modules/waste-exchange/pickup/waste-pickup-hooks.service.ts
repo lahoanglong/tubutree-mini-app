@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { WasteGiftAttachService } from '../catalog/waste-gift-attach.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteNotifierService } from '../core/waste-notifier.service';
 import { writeWasteEvent } from '../core/waste-events';
@@ -18,6 +19,7 @@ export class WastePickupHooks {
     private readonly prisma: PrismaService,
     private readonly config: WasteConfigService,
     private readonly notifier: WasteNotifierService,
+    @Optional() private readonly gifts?: WasteGiftAttachService,
   ) {}
 
   async onOrderDelivered(orderId: string): Promise<void> {
@@ -26,6 +28,7 @@ export class WastePickupHooks {
     } catch (err) {
       this.logger.error(`Hook thu kèm rác lỗi cho đơn ${orderId}: ${err instanceof Error ? err.message : err}`);
     }
+    await this.settleGifts(orderId, 'giao', (g) => g.onOrderDelivered(orderId));
   }
 
   async onOrderCancelled(orderId: string): Promise<void> {
@@ -33,6 +36,17 @@ export class WastePickupHooks {
       await this.applyOrderCancelled(orderId);
     } catch (err) {
       this.logger.error(`Hook thu kèm rác lỗi cho đơn ${orderId}: ${err instanceof Error ? err.message : err}`);
+    }
+    await this.settleGifts(orderId, 'huỷ', (g) => g.onOrderReleased(orderId));
+  }
+
+  /** Quà hiện vật 0đ gắn trong đơn chạy độc lập với yêu cầu thu rác (đơn nào cũng có thể mang quà); lỗi chỉ ghi log, không làm hỏng việc đổi trạng thái đơn. */
+  private async settleGifts(orderId: string, what: string, run: (g: WasteGiftAttachService) => Promise<number>): Promise<void> {
+    if (!this.gifts) return;
+    try {
+      await run(this.gifts);
+    } catch (err) {
+      this.logger.error(`Hook quà đổi điểm gắn đơn (${what}) lỗi cho đơn ${orderId}: ${err instanceof Error ? err.message : err}`);
     }
   }
 

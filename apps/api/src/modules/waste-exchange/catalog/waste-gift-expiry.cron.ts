@@ -3,12 +3,14 @@ import { Cron } from '@nestjs/schedule';
 import { CRON_TZ } from '../../../common/cron-tz';
 import { markCronSkipped, TrackCron } from '../../../common/cron-run/track-cron';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { WasteGiftAttachService } from './waste-gift-attach.service';
 import { WasteGiftRedemptionsService } from './waste-gift-redemptions.service';
 import { runExclusive } from '../../../common/cron-leader/run-exclusive';
 
 /**
  * Mỗi giờ huỷ quà hiện vật đã quá hạn nhận và hoàn điểm cho khách. Chạy bất kể cờ đổi rác: đổi quà và trao quà ở kho không theo cờ đó,
  * nên quà quá hạn phải được huỷ kể cả khi chương trình đang tạm dừng, không thì điểm của khách bị giữ mãi.
+ * Quà đang gắn một đơn mua chưa chốt không bị huỷ; quét bù gắn-đơn chạy trước để quà của đơn đã huỷ/trả được nhả rồi mới xét hạn.
  */
 @Injectable()
 export class WasteGiftExpiryCron {
@@ -18,6 +20,7 @@ export class WasteGiftExpiryCron {
   constructor(
     private readonly prisma: PrismaService,
     private readonly gifts: WasteGiftRedemptionsService,
+    private readonly attach: WasteGiftAttachService,
   ) {}
 
   // @Cron không tự bắt lỗi: lỗi ném ra ngoài là unhandledRejection.
@@ -38,11 +41,24 @@ export class WasteGiftExpiryCron {
     this.running = true;
     try {
       // Khoá lượt chạy (cron_leases), không giữ kết nối DB: nhiều instance cùng lên lịch thì chỉ một chạy.
-      const run = await runExclusive(this.prisma, 'cron:waste.gift_expiry', () => this.gifts.expireOverdue(now));
+      const run = await runExclusive(this.prisma, 'cron:waste.gift_expiry', async () => {
+        await this.reconcileAttached();
+        return this.gifts.expireOverdue(now);
+      });
       if (!run.acquired) { markCronSkipped('LOCKED'); return none; }
       return run.value;
     } finally {
       this.running = false;
+    }
+  }
+
+  // Lỗi quét bù không được chặn việc huỷ quà quá hạn.
+  private async reconcileAttached(): Promise<void> {
+    try {
+      const res = await this.attach.reconcile();
+      if (res.fulfilled > 0 || res.released > 0) this.logger.log(`Quét bù quà gắn đơn: hoàn tất ${res.fulfilled}, nhả ${res.released}.`);
+    } catch (err) {
+      this.logger.error(`Quét bù quà gắn đơn lỗi: ${err instanceof Error ? (err.stack ?? err.message) : err}`);
     }
   }
 }

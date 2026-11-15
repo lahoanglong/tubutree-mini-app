@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { getLegalDoc, getPublicSupport } from '@/lib/api';
-import { LEGAL_DRAFT_NOTICE, LEGAL_PAGES, LEGAL_SLUGS, defaultLegalContent, isLegalSlug } from '@/lib/legal';
+import { LEGAL_DRAFT_NOTICE, LEGAL_PAGES, LEGAL_SLUGS, defaultLegalContent, isLegalSlug, merchantIdentityOrDefault } from '@/lib/legal';
 import { LegalMarkdown } from '@/components/legal-markdown';
 import { PAGE_NARROW } from '@/lib/page-frame';
 
@@ -30,7 +30,7 @@ export default async function LegalPage({ params }: Params) {
   if (!isLegalSlug(loai)) notFound();
   const [doc, support] = await Promise.all([getLegalDoc(loai), getPublicSupport()]);
   const isDraft = doc.content === null;
-  const text = doc.content ?? defaultLegalContent(loai, doc.vars, support);
+  const text = doc.content ?? defaultLegalContent(loai, { ...doc.vars, ...merchantIdentityOrDefault(doc.vars) }, support);
   const others = LEGAL_SLUGS.filter((s) => s !== loai);
 
   return (

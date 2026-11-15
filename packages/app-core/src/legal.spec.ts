@@ -1,5 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_LEGAL_VARS, LEGAL_DRAFT_NOTICE, LEGAL_PAGES, LEGAL_SLUGS, defaultLegalContent, isLegalSlug } from './legal';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import {
+  DEFAULT_LEGAL_SUPPORT,
+  DEFAULT_LEGAL_VARS,
+  LEGAL_DRAFT_NOTICE,
+  LEGAL_PAGES,
+  LEGAL_SLUGS,
+  TUBU_TREE_MERCHANT,
+  defaultLegalContent,
+  isBctNoticeUrl,
+  isLegalSlug,
+  merchantIdentityOrDefault,
+} from './legal';
 
 const VARS = { returnWindowDays: 7, freeshipThreshold: 199000 };
 const SUPPORT = { hotline: '0984 606 774', email: 'tubutree@gmail.com' };
@@ -11,14 +24,16 @@ describe('DEFAULT_LEGAL_VARS (Q12)', () => {
 });
 
 describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
-  it('đúng bốn trang, theo thứ tự hiển thị ở chân trang', () => {
-    expect([...LEGAL_SLUGS]).toEqual(['dieu-khoan', 'bao-mat', 'doi-tra', 'van-chuyen']);
+  it('đúng năm trang, theo thứ tự hiển thị ở chân trang', () => {
+    expect([...LEGAL_SLUGS]).toEqual(['dieu-khoan', 'bao-mat', 'doi-tra', 'van-chuyen', 'thanh-toan']);
     for (const slug of LEGAL_SLUGS) expect(LEGAL_PAGES[slug].title.length).toBeGreaterThan(5);
+    expect(LEGAL_PAGES['thanh-toan'].title).toBe('Chính sách và hình thức thanh toán');
+    expect(LEGAL_PAGES['thanh-toan'].footerLabel).toBe('Thanh toán');
   });
 
-  it('isLegalSlug chỉ nhận bốn mã, kể cả khi đường dẫn là tên thuộc tính của Object', () => {
+  it('isLegalSlug chỉ nhận năm mã, kể cả khi đường dẫn là tên thuộc tính của Object', () => {
     for (const ok of LEGAL_SLUGS) expect(isLegalSlug(ok)).toBe(true);
-    for (const bad of ['', 'constructor', '__proto__', 'toString', 'hasOwnProperty', 'Dieu-Khoan', 'dieu-khoan/', 'admin']) {
+    for (const bad of ['', 'constructor', '__proto__', 'toString', 'hasOwnProperty', 'Dieu-Khoan', 'dieu-khoan/', 'thanh-toan/', 'admin']) {
       expect(isLegalSlug(bad)).toBe(false);
     }
   });
@@ -79,7 +94,7 @@ describe('legal — khung trang điều khoản/chính sách (D5-01)', () => {
 
   it('đổi trả và vận chuyển dẫn chéo nhau, điều khoản dẫn tới bảo mật/đổi trả/vận chuyển bằng đường dẫn nội bộ', () => {
     const dk = defaultLegalContent('dieu-khoan', VARS, SUPPORT);
-    for (const other of ['bao-mat', 'doi-tra', 'van-chuyen']) expect(dk).toContain(`](/chinh-sach/${other})`);
+    for (const other of ['bao-mat', 'doi-tra', 'van-chuyen', 'thanh-toan']) expect(dk).toContain(`](/chinh-sach/${other})`);
     expect(defaultLegalContent('doi-tra', VARS, SUPPORT)).toContain('](/chinh-sach/van-chuyen)');
   });
 
@@ -147,5 +162,163 @@ describe('legal — chính sách đổi trả: tiền hoàn đi đâu', () => {
   it('nói đúng như Mini App và luồng hoàn tiền của API: Ví Tubu hoặc tài khoản ngân hàng khách chọn sau khi duyệt', () => {
     expect(text).toContain('hoàn tiền vào Ví Tubu hoặc tài khoản ngân hàng bạn chọn sau khi duyệt');
     expect(text).not.toContain('theo cách bạn đã thanh toán');
+  });
+});
+
+describe('legal — Chính sách và hình thức thanh toán (thanh-toan)', () => {
+  const text = defaultLegalContent('thanh-toan', VARS, SUPPORT);
+
+  it('nêu đủ các hình thức: COD, chuyển khoản VietQR, Ví Tubu, ZaloPay, Điểm Xanh', () => {
+    for (const phrase of ['Thanh toán khi nhận hàng (COD)', 'Chuyển khoản ngân hàng (quét mã VietQR)', 'Ví Tubu', 'ZaloPay', 'Điểm Xanh']) {
+      expect(text).toContain(phrase);
+    }
+  });
+
+  it('ZaloPay chỉ được hứa khi bước thanh toán đang hiển thị nó (hiện cả hai app đang ẩn ZaloPay)', () => {
+    expect(text).toMatch(/ZaloPay: áp dụng khi hình thức này được hiển thị ở bước thanh toán/);
+  });
+
+  it('không thu tiền trước khi giao, trừ khi khách chủ động chọn trả trước và có đối soát minh bạch', () => {
+    expect(text).toContain('Với đơn COD, Tubu Tree không thu tiền trước khi giao hàng');
+    expect(text).toContain('Chỉ khi bạn chủ động chọn chuyển khoản');
+    expect(text).toContain('đối soát và ghi nhận minh bạch');
+  });
+
+  it('hoàn tiền: trường hợp, về Ví Tubu hoặc tài khoản ngân hàng khách chọn, thời hạn khớp với chính sách đổi trả', () => {
+    expect(text).toContain('Ví Tubu hoặc tài khoản ngân hàng bạn chọn');
+    expect(text).toContain('7 ngày làm việc');
+    expect(text).toContain('](/chinh-sach/doi-tra)');
+    expect(defaultLegalContent('doi-tra', VARS, SUPPORT)).toContain('Thời gian hoàn tiền: 7 ngày làm việc');
+  });
+
+  it('bảo mật giao dịch: không lưu số thẻ, xác thực tại cổng, không nhận OTP', () => {
+    expect(text).toContain('không lưu số thẻ ngân hàng');
+    expect(text).toContain('xác thực tại chính cổng thanh toán');
+    expect(text).toContain('không nhận mật khẩu hay mã OTP');
+  });
+
+  it('đầu mối khiếu nại lấy từ cấu hình hỗ trợ, không bịa số điện thoại hay email mới', () => {
+    const custom = defaultLegalContent('thanh-toan', VARS, { hotline: '0900 111 222', email: 'ho-tro@example.vn' });
+    expect(custom).toContain('hotline 0900 111 222 hoặc email ho-tro@example.vn');
+    expect(custom).not.toContain('0984 606 774');
+    expect(text).toContain(`hotline ${DEFAULT_LEGAL_SUPPORT.hotline} hoặc email ${DEFAULT_LEGAL_SUPPORT.email}`);
+  });
+
+  it('không nhắc cổng thanh toán ngoài danh sách (Visa, MasterCard, MoMo, VNPay)', () => {
+    expect(text).not.toMatch(/Visa|MasterCard|MoMo|VNPay/i);
+  });
+});
+
+describe('legal — tiểu mục "Chính sách kiểm hàng khi nhận hàng"', () => {
+  const HEADING = 'Chính sách kiểm hàng khi nhận hàng';
+
+  it.each(['doi-tra', 'van-chuyen'] as const)('%s: có tiểu mục riêng, nêu đồng kiểm, quay video, thời hạn báo và hoàn tiền', (slug) => {
+    const text = defaultLegalContent(slug, VARS, SUPPORT);
+    expect(text).toMatch(new RegExp(`^#{2,3} (\\d+\\. )?${HEADING}$`, 'm'));
+    const section = text.slice(text.indexOf(HEADING));
+    expect(section).toContain('Đồng kiểm');
+    expect(section).toContain('cùng nhân viên giao hàng (bưu tá) kiểm tra ngoại quan kiện hàng và số lượng');
+    expect(section).toContain('quay video');
+    expect(section).toContain('Thời hạn báo');
+    expect(section).toContain('Hoàn tiền');
+  });
+
+  it('thời hạn báo lấy từ số ngày đổi trả đang chạy, ở cả hai trang', () => {
+    for (const slug of ['doi-tra', 'van-chuyen'] as const) {
+      expect(defaultLegalContent(slug, { ...VARS, returnWindowDays: 10 }, SUPPORT)).toContain('trong vòng 10 ngày kể từ khi đơn được giao thành công, kèm ảnh hoặc video');
+    }
+  });
+
+  it('hạn đổi trả 0 ngày: bảo khách báo ngay lúc nhận, không in "0 ngày"', () => {
+    for (const slug of ['doi-tra', 'van-chuyen'] as const) {
+      const text = defaultLegalContent(slug, { ...VARS, returnWindowDays: 0 }, SUPPORT);
+      expect(text).toContain('báo ngay tại thời điểm nhận hàng');
+      expect(text).not.toContain('0 ngày');
+    }
+  });
+});
+
+describe('legal — bản cập nhật PROD trong migration W168', () => {
+  const sql = readFileSync(resolve(__dirname, '../../../apps/api/prisma/migrations/20261115172000_w168_legal_thanh_toan/migration.sql'), 'utf8');
+
+  it('thêm khoá legal.thanh-toan bằng INSERT ... ON CONFLICT DO NOTHING (không đè bản admin đã sửa)', () => {
+    expect(sql).toMatch(/INSERT INTO "system_configs"[\s\S]*'legal\.thanh-toan'[\s\S]*ON CONFLICT \("key"\) DO NOTHING/);
+  });
+
+  it('nội dung thanh-toan trong migration đủ các ý bắt buộc và đúng thông tin thương nhân', () => {
+    for (const phrase of [
+      'Thanh toán khi nhận hàng (COD)',
+      'VietQR',
+      'Ví Tubu',
+      'ZaloPay',
+      'Điểm Xanh',
+      'không thu tiền trước khi giao hàng',
+      'Hoàn tiền',
+      'không lưu số thẻ ngân hàng',
+      TUBU_TREE_MERCHANT.legalName,
+      TUBU_TREE_MERCHANT.taxCode,
+      TUBU_TREE_MERCHANT.address,
+      DEFAULT_LEGAL_SUPPORT.hotline,
+      DEFAULT_LEGAL_SUPPORT.email,
+    ]) {
+      expect(sql).toContain(phrase);
+    }
+  });
+
+  it('chỉ nối tiểu mục kiểm hàng vào bản PROD đang có nội dung mà CHƯA có chữ "kiểm hàng"', () => {
+    for (const key of ['legal.van-chuyen', 'legal.doi-tra']) expect(sql).toContain(`'${key}'`);
+    expect(sql).toContain(`jsonb_typeof(c."value") = 'string'`);
+    expect(sql).toContain(`btrim(c."value" #>> '{}') <> ''`);
+    expect(sql).toMatch(/NOT ILIKE '%kiểm hàng%'/);
+    expect(sql).toContain('## Chính sách kiểm hàng khi nhận hàng');
+    for (const phrase of ['Đồng kiểm', 'quay video', 'Thời hạn báo', 'Hoàn tiền']) expect(sql).toContain(phrase);
+  });
+});
+
+describe('merchantIdentityOrDefault — thông tin thương nhân ở chân trang', () => {
+  it('chưa nhập gì (rỗng, khoảng trắng, null, undefined) thì dùng thông tin đã đăng ký của Tubu Tree', () => {
+    const expected = { legalName: 'CÔNG TY TNHH TUBU TREE', taxCode: '0319585995', address: 'Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh' };
+    expect(merchantIdentityOrDefault(undefined)).toEqual(expected);
+    expect(merchantIdentityOrDefault(null)).toEqual(expected);
+    expect(merchantIdentityOrDefault({ legalName: null, taxCode: '  ', address: '' })).toEqual(expected);
+  });
+
+  it('admin đã nhập bất kỳ trường nào thì giữ đúng những gì họ nhập, không trộn với mặc định', () => {
+    expect(merchantIdentityOrDefault({ legalName: 'Công ty X', taxCode: null, address: null })).toEqual({ legalName: 'Công ty X', taxCode: undefined, address: undefined });
+    expect(merchantIdentityOrDefault({ taxCode: '0312345678' }).legalName).toBeUndefined();
+  });
+});
+
+describe('isBctNoticeUrl — chỉ link thật của Bộ Công Thương mới được hiện huy hiệu', () => {
+  it.each([
+    'https://online.gov.vn/Home/WebDetails/12345',
+    'https://online.gov.vn',
+    'https://ONLINE.gov.vn/x',
+    'https://www.online.gov.vn/Home/WebDetails/1',
+    'https://tmdt.gov.vn/xac-nhan',
+  ])('nhận %s', (url) => {
+    expect(isBctNoticeUrl(url)).toBe(true);
+  });
+
+  it.each([
+    ['rỗng', ''],
+    ['chỉ khoảng trắng', '   '],
+    ['http không mã hoá', 'http://online.gov.vn/x'],
+    ['tên miền lạ', 'https://example.com/online.gov.vn'],
+    ['giả tên miền bằng hậu tố', 'https://online.gov.vn.evil.com/x'],
+    ['giả tên miền bằng gạch nối', 'https://evilgov.vn/x'],
+    ['có tên đăng nhập (@ lừa host)', 'https://online.gov.vn@evil.com/x'],
+    ['có mật khẩu', 'https://u:p@online.gov.vn/x'],
+    ['cổng lạ', 'https://online.gov.vn:8443/x'],
+    ['javascript', 'javascript:alert(1)'],
+    ['không phải URL', 'online.gov.vn'],
+    ['dài quá 500 ký tự', `https://online.gov.vn/${'a'.repeat(500)}`],
+    ['thừa khoảng trắng', ' https://online.gov.vn/x'],
+  ])('từ chối: %s', (_name, url) => {
+    expect(isBctNoticeUrl(url)).toBe(false);
+  });
+
+  it.each([null, undefined, 5, {}, ['https://online.gov.vn']])('từ chối giá trị không phải chuỗi: %j', (v) => {
+    expect(isBctNoticeUrl(v)).toBe(false);
   });
 });

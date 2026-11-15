@@ -118,6 +118,7 @@ export const GOOD_DB: DbSnapshot = {
     'legal.bao-mat': 'Chính sách bảo mật đã duyệt',
     'legal.doi-tra': 'Chính sách đổi trả đã duyệt',
     'legal.van-chuyen': 'Chính sách vận chuyển đã duyệt',
+    'legal.thanh-toan': 'Chính sách thanh toán đã duyệt',
     'waste.rules_text': 'Thể lệ chương trình đã duyệt',
     'waste.mailin_fee_table': { zones: [{ name: 'TP.HCM', provinceCodes: ['79'], low: 20_000, high: 35_000 }], defaultZone: { name: 'Toàn quốc', low: 30_000, high: 85_000 } },
   },

@@ -5,7 +5,7 @@ import {
   loadGomdonConfig,
   resolveGomdonBaseUrl,
 } from './gomdon-config';
-import { recyclingWeight } from './gomdon-weight';
+import { recyclingParcel, recyclingWeight } from './gomdon-weight';
 import { GOMDON_STATUS_TEXT, gomdonRank, isGomdonPickedUp, isGomdonPayable, isGomdonTerminal } from './gomdon-status';
 import type { SystemConfigService } from '../../system-config/system-config.service';
 
@@ -86,6 +86,28 @@ describe('recyclingWeight (dùng chung Gomdon + Pancake)', () => {
     expect(w.totalGrams).toBe(2900);
     expect(w.maxKg).toBe('2.9');
     expect(recyclingWeight([], new Map(), 500).maxKg).toBe('0.5');
+  });
+});
+
+describe('recyclingParcel (cân nặng kiện + số kg ghi chú, trần 10 kg)', () => {
+  it('chưa khai số kg gửi lại (null/undefined/0/âm) → "khai" bằng mức tối đa', () => {
+    for (const ret of [null, undefined, 0, -300]) {
+      expect(recyclingParcel(2400, ret)).toEqual({ weight: 2400, maxKg: '2.4', declaredKg: '2.4' });
+    }
+  });
+
+  it('đã khai 1500 g → declaredKg theo số khai, maxKg theo cân hàng', () => {
+    expect(recyclingParcel(2400, 1500)).toEqual({ weight: 2400, maxKg: '2.4', declaredKg: '1.5' });
+  });
+
+  it('hàng nặng quá 10 kg → weight và maxKg chặn ở 10.000 g', () => {
+    expect(recyclingParcel(12_000, 4200)).toEqual({ weight: 10_000, maxKg: '10.0', declaredKg: '4.2' });
+    expect(recyclingParcel(10_000, null).weight).toBe(10_000);
+    expect(recyclingParcel(10_001, null).weight).toBe(10_000);
+  });
+
+  it('weight luôn là số nguyên gram không vượt cân hàng', () => {
+    for (const total of [500, 1234, 9999]) expect(recyclingParcel(total, 800).weight).toBe(total);
   });
 });
 

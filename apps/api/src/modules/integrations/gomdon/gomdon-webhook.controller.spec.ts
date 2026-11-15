@@ -1,20 +1,37 @@
 import { type INestApplication, UnauthorizedException } from '@nestjs/common';
+import { createHmac } from 'node:crypto';
 import { HTTP_CODE_METADATA } from '@nestjs/common/constants';
 import { ConfigService } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import { GomdonWebhookController } from './gomdon-webhook.controller';
 import { GomdonWebhookService } from './gomdon-webhook.service';
 import type { Env } from '../../../config/env.validation';
+import { bodyParserErrorHandler, createBodyParsers, requestInputGuard } from '../../../common/body-limits';
 
 const SECRET = 'gomdon-secret-123';
 const body = { order_id: 55, order_code: 'BE55', order_customer_id: 'TUBU1', status: 7 };
 
-function make(secret: string) {
+function make(secret: string, hmacSecret?: string) {
   const webhook = { receive: jest.fn().mockResolvedValue({ result: true }) };
-  const config = { get: jest.fn().mockReturnValue(secret) } as unknown as ConfigService<Env, true>;
+  const config = {
+    get: jest.fn().mockImplementation((key: string) => {
+      if (key === 'GOMDON_WEBHOOK_HMAC_SECRET') return hmacSecret ?? '';
+      return secret;
+    }),
+  } as unknown as ConfigService<Env, true>;
   const controller = new GomdonWebhookController(webhook as unknown as GomdonWebhookService, config);
   return { controller, webhook };
 }
+
+/** HMAC-SHA256-hex của "<timestamp>.<thân thô>" — đúng công thức tài liệu Gomdon mục 4. */
+const sign = (ts: string | number, raw: string, key: string) => createHmac('sha256', key).update(`${ts}.${raw}`).digest('hex');
+const nowSec = () => Math.floor(Date.now() / 1000);
+const RAW = JSON.stringify(body);
+/** Request giả mang thân thô + header chữ ký như Express sau khi qua common/body-limits. */
+const signedReq = (ts: string | number, signature: string, raw: string | null = RAW) => ({
+  rawBody: raw === null ? undefined : Buffer.from(raw),
+  headers: { 'x-gomdon-timestamp': String(ts), 'x-gomdon-signature': signature } as Record<string, string>,
+});
 
 describe('GomdonWebhookController — xác thực token chia sẻ', () => {
   const savedEnv = process.env.NODE_ENV;
@@ -67,6 +84,243 @@ describe('GomdonWebhookController — xác thực token chia sẻ', () => {
     const { controller, webhook } = make('');
     await controller.handle(body, undefined, undefined);
     expect(webhook.receive).toHaveBeenCalled();
+  });
+});
+
+describe('GomdonWebhookController — xác thực kép: chữ ký HMAC (X-Gomdon-Signature) hoặc token', () => {
+  const HMAC = 'gomdon-hmac-secret-456';
+  const savedEnv = process.env.NODE_ENV;
+  afterEach(() => {
+    process.env.NODE_ENV = savedEnv;
+    jest.restoreAllMocks();
+  });
+
+  describe('(a) chữ ký', () => {
+    it('chữ ký đúng + giờ lệch trong 300 giây, KHÔNG có token → nhận (khoá = GOMDON_WEBHOOK_HMAC_SECRET)', async () => {
+      const { controller, webhook } = make(SECRET, HMAC);
+      const ts = nowSec();
+      await expect(controller.handle(body, undefined, undefined, 'application/json', signedReq(ts, sign(ts, RAW, HMAC)))).resolves.toEqual({ result: true });
+      expect(webhook.receive).toHaveBeenCalledWith(body, { contentType: 'application/json' });
+    });
+
+    it('route /:token cũng nhận chữ ký đúng dù token trong đường dẫn sai/tuỳ ý', async () => {
+      const { controller, webhook } = make(SECRET, HMAC);
+      const ts = nowSec();
+      await controller.handleWithPathToken('khong-phai-secret', body, undefined, undefined, signedReq(ts, sign(ts, RAW, HMAC)));
+      expect(webhook.receive).toHaveBeenCalledTimes(1);
+    });
+
+    it('không đặt GOMDON_WEBHOOK_HMAC_SECRET → khoá ký rơi về GOMDON_WEBHOOK_SECRET', async () => {
+      const { controller, webhook } = make(SECRET);
+      const ts = nowSec();
+      await controller.handle(body, undefined, undefined, undefined, signedReq(ts, sign(ts, RAW, SECRET)));
+      expect(webhook.receive).toHaveBeenCalledTimes(1);
+    });
+
+    it('đặt khoá ký riêng thì chữ ký tính bằng token đường dẫn bị từ chối', async () => {
+      const { controller, webhook } = make(SECRET, HMAC);
+      const ts = nowSec();
+      await expect(controller.handle(body, undefined, undefined, undefined, signedReq(ts, sign(ts, RAW, SECRET)))).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(webhook.receive).not.toHaveBeenCalled();
+    });
+
+    it('chữ ký sai / thân bị sửa sau khi ký / timestamp bị sửa → 401', async () => {
+      const { controller, webhook } = make(SECRET, HMAC);
+      const ts = nowSec();
+      const good = sign(ts, RAW, HMAC);
+      const bad = [
+        signedReq(ts, good.replace(/^./, good[0] === 'a' ? 'b' : 'a')),
+        signedReq(ts, good, RAW.replace('55', '56')),
+        signedReq(ts + 1, good),
+      ];
+      for (const req of bad) {
+        await expect(controller.handle(body, undefined, undefined, undefined, req)).rejects.toBeInstanceOf(UnauthorizedException);
+      }
+      expect(webhook.receive).not.toHaveBeenCalled();
+    });
+
+    it('chữ ký độ dài khác / không phải hex / chữ hoa → không ném lỗi lạ: sai thì 401, hex hoa đúng thì nhận', async () => {
+      const { controller, webhook } = make(SECRET, HMAC);
+      const ts = nowSec();
+      const good = sign(ts, RAW, HMAC);
+      for (const sig of ['', 'abc', 'zz'.repeat(32), good + 'ff', good.slice(0, -2)]) {
+        await expect(controller.handle(body, undefined, undefined, undefined, signedReq(ts, sig))).rejects.toBeInstanceOf(UnauthorizedException);
+      }
+      expect(webhook.receive).not.toHaveBeenCalled();
+      await controller.handle(body, undefined, undefined, undefined, signedReq(ts, good.toUpperCase()));
+      expect(webhook.receive).toHaveBeenCalledTimes(1);
+    });
+
+    it('lệch giờ quá 300 giây (cả quá khứ và tương lai) → 401 dù chữ ký đúng; đúng biên 300 giây vẫn nhận', async () => {
+      const fixed = 1_800_000_000;
+      jest.spyOn(Date, 'now').mockReturnValue(fixed * 1000);
+      const { controller, webhook } = make(SECRET, HMAC);
+      for (const ts of [fixed - 301, fixed + 301, fixed - 86_400]) {
+        await expect(controller.handle(body, undefined, undefined, undefined, signedReq(ts, sign(ts, RAW, HMAC)))).rejects.toBeInstanceOf(UnauthorizedException);
+      }
+      expect(webhook.receive).not.toHaveBeenCalled();
+      for (const ts of [fixed - 300, fixed + 300]) {
+        await controller.handle(body, undefined, undefined, undefined, signedReq(ts, sign(ts, RAW, HMAC)));
+      }
+      expect(webhook.receive).toHaveBeenCalledTimes(2);
+    });
+
+    it('timestamp không phải số / thiếu một trong hai header → 401', async () => {
+      const { controller } = make(SECRET, HMAC);
+      const ts = nowSec();
+      const sig = sign(ts, RAW, HMAC);
+      const reqs = [
+        signedReq('abc', sign('abc', RAW, HMAC)),
+        { ...signedReq(ts, sig), headers: { 'x-gomdon-signature': sig } },
+        { ...signedReq(ts, sig), headers: { 'x-gomdon-timestamp': String(ts) } },
+      ];
+      for (const req of reqs) {
+        await expect(controller.handle(body, undefined, undefined, undefined, req)).rejects.toBeInstanceOf(UnauthorizedException);
+      }
+    });
+
+    it('có header chữ ký nhưng không có thân thô (multipart) và không token → 401', async () => {
+      const { controller, webhook } = make(SECRET, HMAC);
+      const ts = nowSec();
+      await expect(controller.handle(body, undefined, undefined, 'multipart/form-data', signedReq(ts, sign(ts, RAW, HMAC), null))).rejects.toBeInstanceOf(
+        UnauthorizedException,
+      );
+      expect(webhook.receive).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('(b) token song song với chữ ký', () => {
+    it('chữ ký SAI nhưng token hợp lệ (header / ?token= / đường dẫn) → vẫn nhận', async () => {
+      const { controller, webhook } = make(SECRET, HMAC);
+      const ts = nowSec();
+      const wrong = signedReq(ts, 'a'.repeat(64));
+      await controller.handle(body, SECRET, undefined, undefined, wrong);
+      await controller.handle(body, undefined, SECRET, undefined, wrong);
+      await controller.handleWithPathToken(SECRET, body, undefined, undefined, wrong);
+      expect(webhook.receive).toHaveBeenCalledTimes(3);
+    });
+
+    it('chữ ký lệch giờ nhưng token đúng → nhận; chữ ký lệch giờ và token sai → 401', async () => {
+      const { controller, webhook } = make(SECRET, HMAC);
+      const old = nowSec() - 3600;
+      const req = signedReq(old, sign(old, RAW, HMAC));
+      await controller.handleWithPathToken(SECRET, body, undefined, undefined, req);
+      expect(webhook.receive).toHaveBeenCalledTimes(1);
+      await expect(controller.handleWithPathToken('sai-token', body, undefined, undefined, req)).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(webhook.receive).toHaveBeenCalledTimes(1);
+    });
+
+    it('cả chữ ký đúng lẫn token đúng → nhận (một lần)', async () => {
+      const { controller, webhook } = make(SECRET, HMAC);
+      const ts = nowSec();
+      await controller.handleWithPathToken(SECRET, body, undefined, undefined, signedReq(ts, sign(ts, RAW, HMAC)));
+      expect(webhook.receive).toHaveBeenCalledTimes(1);
+    });
+
+    it('token header sai nhưng token đường dẫn đúng → nhận (không rớt event vì một nguồn token lệch)', async () => {
+      const { controller, webhook } = make(SECRET, HMAC);
+      await controller.handleWithPathToken(SECRET, body, 'sai', undefined, undefined);
+      expect(webhook.receive).toHaveBeenCalledTimes(1);
+    });
+
+    it('không có chữ ký, không có token → 401', async () => {
+      const { controller, webhook } = make(SECRET, HMAC);
+      await expect(controller.handle(body, undefined, undefined, undefined, { headers: {} })).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(webhook.receive).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('production, fail-closed', () => {
+    it('chưa cấu hình secret nào → 401 mọi request, kể cả có chữ ký (không có khoá để kiểm)', async () => {
+      process.env.NODE_ENV = 'production';
+      const { controller, webhook } = make('', '');
+      const ts = nowSec();
+      await expect(controller.handle(body, 'x', undefined, undefined, signedReq(ts, sign(ts, RAW, 'x')))).rejects.toBeInstanceOf(UnauthorizedException);
+      await expect(controller.handleWithPathToken('x', body, undefined, undefined, undefined)).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(webhook.receive).not.toHaveBeenCalled();
+    });
+
+    it('chỉ có GOMDON_WEBHOOK_HMAC_SECRET: chữ ký đúng nhận, token (không có secret để so) → 401', async () => {
+      process.env.NODE_ENV = 'production';
+      const { controller, webhook } = make('', HMAC);
+      const ts = nowSec();
+      await controller.handle(body, undefined, undefined, undefined, signedReq(ts, sign(ts, RAW, HMAC)));
+      expect(webhook.receive).toHaveBeenCalledTimes(1);
+      await expect(controller.handle(body, HMAC, undefined, undefined, undefined)).rejects.toBeInstanceOf(UnauthorizedException);
+    });
+
+    it('dev/test không có secret nào → vẫn cho qua (để thử nghiệm)', async () => {
+      process.env.NODE_ENV = 'test';
+      const { controller, webhook } = make('', '');
+      await controller.handle(body, undefined, undefined, undefined, { headers: {} });
+      expect(webhook.receive).toHaveBeenCalled();
+    });
+  });
+});
+
+describe('GomdonWebhookController — chữ ký qua HTTP thật, thân thô do common/body-limits giữ', () => {
+  let app: INestApplication;
+  let base: string;
+  const HMAC = 'http-hmac-secret-789';
+  const webhook = { receive: jest.fn().mockResolvedValue({ result: true }) };
+  // Byte gốc có \/ và \uXXXX: JSON.stringify lại thân đã parse sẽ làm lệch chữ ký.
+  const EXACT = '{"status":7,"order_id":55,"reason":"Giao h\\u00e0ng th\\u00e0nh c\\u00f4ng","note":"a\\/b","event_id":"6f1c2a9e-1"}';
+
+  beforeAll(async () => {
+    const moduleRef = await Test.createTestingModule({
+      controllers: [GomdonWebhookController],
+      providers: [
+        { provide: GomdonWebhookService, useValue: webhook },
+        { provide: ConfigService, useValue: { get: (k: string) => (k === 'GOMDON_WEBHOOK_HMAC_SECRET' ? HMAC : SECRET) } },
+      ],
+    }).compile();
+    app = moduleRef.createNestApplication({ bodyParser: false, logger: false });
+    // Đường dẫn thật `/api/webhooks/gomdon*`: common/body-limits chỉ giữ thân thô cho nhóm route này.
+    app.setGlobalPrefix('api');
+    app.use(...createBodyParsers('test-access-secret-0123456789abcdef0123'), bodyParserErrorHandler, requestInputGuard);
+    await app.listen(0, '127.0.0.1');
+    base = await app.getUrl();
+  });
+
+  afterAll(async () => {
+    await app?.close();
+  });
+
+  beforeEach(() => webhook.receive.mockClear());
+
+  const post = (path: string, raw: string, headers: Record<string, string>) =>
+    fetch(`${base}${path}`, { method: 'POST', headers: { 'content-type': 'application/json', ...headers }, body: raw });
+
+  it('chữ ký tính trên byte gốc → 200, body đã parse được chuyển cho service', async () => {
+    const ts = nowSec();
+    const res = await post('/api/webhooks/gomdon', EXACT, {
+      'x-gomdon-timestamp': String(ts),
+      'x-gomdon-signature': sign(ts, EXACT, HMAC),
+    });
+    expect(res.status).toBe(200);
+    expect(webhook.receive).toHaveBeenCalledWith(expect.objectContaining({ status: 7, order_id: 55, note: 'a/b' }), expect.anything());
+  });
+
+  it('chữ ký tính trên bản JSON.stringify lại (không phải byte gốc) → 401', async () => {
+    const ts = nowSec();
+    const res = await post('/api/webhooks/gomdon', EXACT, {
+      'x-gomdon-timestamp': String(ts),
+      'x-gomdon-signature': sign(ts, JSON.stringify(JSON.parse(EXACT)), HMAC),
+    });
+    expect(res.status).toBe(401);
+    expect(webhook.receive).not.toHaveBeenCalled();
+  });
+
+  it('không chữ ký, token đường dẫn đúng → 200 (cơ chế (b) vẫn chạy)', async () => {
+    const res = await post(`/api/webhooks/gomdon/${SECRET}`, EXACT, {});
+    expect(res.status).toBe(200);
+    expect(webhook.receive).toHaveBeenCalledTimes(1);
+  });
+
+  it('không chữ ký, không token → 401', async () => {
+    const res = await post('/api/webhooks/gomdon', EXACT, {});
+    expect(res.status).toBe(401);
+    expect(webhook.receive).not.toHaveBeenCalled();
   });
 });
 

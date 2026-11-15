@@ -36,6 +36,8 @@ export const GOMDON_EVENT_STATUS = {
 } as const;
 
 export interface ParsedGomdonEvent {
+  /** event_id — mã sự kiện, giữ nguyên qua các lần Gomdon gửi lại. */
+  eventId: string | null;
   /** order_id — mã số đơn Gomdon (trùng data.id lúc tạo). */
   gomdonOrderId: string | null;
   /** order_code — mã vận đơn (trùng data.partner_code lúc tạo; JSON mẫu của Gomdon để dạng SỐ). */
@@ -79,6 +81,7 @@ function parseEventTime(v: unknown): Date | null {
 export function parseGomdonPayload(body: GomdonWebhookPayload): ParsedGomdonEvent {
   const statusNum = Number(body.status);
   return {
+    eventId: str(body.event_id),
     gomdonOrderId: str(body.order_id),
     partnerCode: str(body.order_code),
     orderCode: str(body.order_customer_id),
@@ -89,10 +92,12 @@ export function parseGomdonPayload(body: GomdonWebhookPayload): ParsedGomdonEven
 }
 
 /**
- * Khoá chống xử lý trùng: định danh vận đơn + status + created_time. Thiếu created_time → băm
- * payload (redelivery y hệt thì trùng key, sự kiện khác nhau thì không gộp nhầm).
+ * Khoá chống xử lý trùng. Có `event_id` (Gomdon giữ nguyên khi gửi lại) → `event:<event_id>`. Không có → định danh
+ * vận đơn + status + created_time; thiếu created_time → băm payload (redelivery y hệt thì trùng key, sự kiện
+ * khác nhau thì không gộp nhầm).
  */
 export function gomdonDedupeKey(p: ParsedGomdonEvent, body: GomdonWebhookPayload): string {
+  if (p.eventId) return `event:${p.eventId}`.slice(0, 255);
   const who = p.gomdonOrderId ?? p.partnerCode ?? p.orderCode ?? 'unknown';
   const when =
     p.rawCreatedTime ?? `h${createHash('sha256').update(JSON.stringify(body ?? {})).digest('hex').slice(0, 24)}`;

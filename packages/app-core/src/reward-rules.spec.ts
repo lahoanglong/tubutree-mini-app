@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import {
+  GIFT_ATTACH_HINT,
   REWARD_TABS,
   WAREHOUSE_ONLY_LABEL,
+  WAREHOUSE_PICKUP_DONE,
   freeShipCovered,
   rewardFreeShipNote,
   isWarehousePickup,
@@ -135,13 +137,20 @@ describe('quà nhận tại kho (B-60)', () => {
     expect(isWarehousePickup({ kind: 'GIFT' })).toBe(true);
     expect(isWarehousePickup({ kind: 'VOUCHER' })).toBe(false);
     expect(isWarehousePickup({ kind: 'TREE' })).toBe(false);
-    expect(WAREHOUSE_ONLY_LABEL).toBe('Chỉ nhận tại kho TP.HCM');
+    expect(WAREHOUSE_ONLY_LABEL).toBe('Tự động gửi kèm đơn hàng kế tiếp (0đ) hoặc nhận tại kho');
+    expect(WAREHOUSE_ONLY_LABEL).not.toContain('Chỉ nhận tại kho');
   });
 
   it('câu hỏi lại kèm địa chỉ kho từ cấu hình, không có thì nói chung', () => {
     const point = { name: 'Kho Tubu', addressLine: '99 Nguyễn Văn Linh', communeName: 'Phường Tân Phong', provinceName: 'TP.HCM' };
-    expect(warehouseConfirmText(point)).toBe('Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: Kho Tubu, 99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM. Bạn vẫn muốn đổi?');
-    expect(warehouseConfirmText(null)).toBe('Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: kho Tubu TP.HCM. Bạn vẫn muốn đổi?');
+    expect(warehouseConfirmText(point)).toBe('Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho: Kho Tubu, 99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM. Bạn vẫn muốn đổi?');
+    expect(warehouseConfirmText(null)).toBe('Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho: kho Tubu TP.HCM. Bạn vẫn muốn đổi?');
+  });
+
+  it('hướng dẫn sau khi đổi và dòng nhắc trong Quà của tôi nói quà tự thêm 0đ vào đơn kế tiếp, mã QG- dùng khi ghé kho', () => {
+    expect(WAREHOUSE_PICKUP_DONE).toBe('Quà đã lưu vào Ví quà — sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn (hoặc đọc mã QG-… khi ghé kho Tubu)');
+    expect(GIFT_ATTACH_HINT).toContain('Tự động thêm (0đ) vào đơn mua hàng kế tiếp');
+    for (const t of [WAREHOUSE_ONLY_LABEL, WAREHOUSE_PICKUP_DONE, GIFT_ATTACH_HINT, warehouseConfirmText(null)]) expect(t).not.toMatch(/chỉ nhận tại kho|không giao tận nhà/i);
   });
 });
 

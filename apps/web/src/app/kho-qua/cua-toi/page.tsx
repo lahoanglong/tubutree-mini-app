@@ -6,7 +6,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Ticket } from 'lucide-react';
 import type { GiftRedemptionDTO } from '@tubutree/shared-types';
 import { myRedemptionsQuery } from '@tubutree/app-core/queries/loyalty';
-import { NEW_COUPON_BADGE, NEW_COUPON_PARAM, sortRedemptions } from '@tubutree/app-core/reward-rules';
+import { GIFT_ATTACH_HINT, NEW_COUPON_BADGE, NEW_COUPON_PARAM, sortRedemptions } from '@tubutree/app-core/reward-rules';
 import { redemptionCouponLine } from '@tubutree/app-core/redemption-coupon';
 import { couponUseCopy } from '@tubutree/app-core/coupon-use';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -37,6 +37,7 @@ function RedemptionStatus({ r }: { r: GiftRedemptionDTO }) {
         <div data-testid="qr-center" className="flex justify-center">
           <QrCode value={r.code} size={140} />
         </div>
+        <div className="text-sm text-stone-900">{GIFT_ATTACH_HINT}</div>
         {r.claimPoint && <ClaimPointInfo point={r.claimPoint} heading={`Nhận tại ${r.claimPoint.name}`} />}
         {r.claimExpiresAt && <div className="text-sm text-stone-700">{`Hạn nhận ${formatDate(r.claimExpiresAt)}`}</div>}
       </>

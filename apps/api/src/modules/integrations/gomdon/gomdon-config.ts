@@ -17,13 +17,17 @@ export const GOMDON_PRODUCTION_BASE_URL = 'https://admin.gomdon.com.vn';
 export const DEFAULT_GOMDON_WAREHOUSE: GomdonWarehouseConfig = {
   name: 'Fuwa3e Tubu HCM',
   phone: '0899149229',
-  address: 'Golf Park, 1 đường số 2',
+  address: 'Số 33, đường 1B',
   ward: 'Phường Long Bình',
-  district: 'Thành phố Thủ Đức',
+  // Địa chỉ 2 cấp sau sáp nhập 2025: Gomdon nên bỏ trống quận/huyện. Giữ trường để cấu hình cũ trong SystemConfig vẫn đọc được.
+  district: '',
   province: 'Thành phố Hồ Chí Minh',
 };
 
 export const DEFAULT_GOMDON_WEIGHT_FALLBACK = 500;
+
+/** Phí ship ước lượng (VND) khi không hỏi được /order/shop-fee: dev/test chưa cấu hình, Gomdon chập chờn hoặc trả dữ liệu lạ. */
+export const GOMDON_SHOP_FEE_FALLBACK = 25_000;
 
 type RawGomdonConfig = Partial<{
   phone: string;

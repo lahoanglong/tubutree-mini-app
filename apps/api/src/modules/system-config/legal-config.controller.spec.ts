@@ -9,8 +9,8 @@ function makeConfig(values: Record<string, unknown> = {}) {
 }
 
 describe('LegalConfigController.get — nội dung điều khoản/chính sách cho web (D5-01)', () => {
-  it('chỉ nhận bốn loại: điều khoản, bảo mật, đổi trả, vận chuyển', () => {
-    expect(Object.keys(LEGAL_CONFIG_KEYS).sort()).toEqual(['bao-mat', 'dieu-khoan', 'doi-tra', 'van-chuyen']);
+  it('chỉ nhận năm loại: điều khoản, bảo mật, đổi trả, vận chuyển, thanh toán', () => {
+    expect(Object.keys(LEGAL_CONFIG_KEYS).sort()).toEqual(['bao-mat', 'dieu-khoan', 'doi-tra', 'thanh-toan', 'van-chuyen']);
   });
 
   it('loại lạ → 404, không đọc khoá nào (không cho dò khoá cấu hình qua đường dẫn)', async () => {
@@ -31,6 +31,14 @@ describe('LegalConfigController.get — nội dung điều khoản/chính sách 
     const out = await new LegalConfigController(config).get('doi-tra');
     expect(out.content).toBe('# Đổi trả\n\nTrong 7 ngày.');
     expect((config as unknown as { get: jest.Mock }).get).toHaveBeenCalledWith('legal.doi-tra', '');
+  });
+
+  it('chính sách thanh toán đọc đúng khoá legal.thanh-toan', async () => {
+    const config = makeConfig({ 'legal.thanh-toan': '## 1. Phạm vi\n\nCOD, chuyển khoản.' });
+    const out = await new LegalConfigController(config).get('thanh-toan');
+    expect(out.loai).toBe('thanh-toan');
+    expect(out.content).toBe('## 1. Phạm vi\n\nCOD, chuyển khoản.');
+    expect((config as unknown as { get: jest.Mock }).get).toHaveBeenCalledWith('legal.thanh-toan', '');
   });
 
   it('để trống/toàn khoảng trắng hoặc sai kiểu → coi như chưa nhập', async () => {

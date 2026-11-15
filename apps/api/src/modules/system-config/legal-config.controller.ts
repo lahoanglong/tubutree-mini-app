@@ -15,6 +15,7 @@ export const LEGAL_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'bao-mat': 'legal.bao-mat',
   'doi-tra': 'legal.doi-tra',
   'van-chuyen': 'legal.van-chuyen',
+  'thanh-toan': 'legal.thanh-toan',
 };
 
 const DEFAULT_RETURN_WINDOW_DAYS = 7;

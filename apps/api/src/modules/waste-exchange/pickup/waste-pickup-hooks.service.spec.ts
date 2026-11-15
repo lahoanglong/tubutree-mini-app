@@ -1,5 +1,7 @@
 import { writeWasteEvent } from '../core/waste-events';
 import { WasteCoreModule } from '../core/waste-core.module';
+import { WasteCatalogModule } from '../catalog/waste-catalog.module';
+import { WasteGiftAttachService } from '../catalog/waste-gift-attach.service';
 import { OrdersModule } from '../../orders/orders.module';
 import { OrderStatusService } from '../../orders/order-status.service';
 import { OrdersService } from '../../orders/orders.service';
@@ -159,10 +161,12 @@ describe('WastePickupHooks.on* never throw (registry 4.8)', () => {
 });
 
 describe('WastePickupModule wiring (registry 8.2 note 2)', () => {
-  it('provides and exports WastePickupHooks, imports WasteCoreModule only, and OrdersModule imports it', () => {
+  it('provides and exports WastePickupHooks, imports WasteCoreModule and WasteCatalogModule (quà gắn đơn), and OrdersModule imports it', () => {
     expect(Reflect.getMetadata('providers', WastePickupModule)).toContain(WastePickupHooks);
     expect(Reflect.getMetadata('exports', WastePickupModule)).toEqual([WastePickupHooks]);
-    expect(Reflect.getMetadata('imports', WastePickupModule)).toEqual([WasteCoreModule]);
+    expect(Reflect.getMetadata('imports', WastePickupModule)).toEqual([WasteCoreModule, WasteCatalogModule]);
+    expect(Reflect.getMetadata('exports', WasteCatalogModule)).toContain(WasteGiftAttachService);
+    expect(Reflect.getMetadata('design:paramtypes', WastePickupHooks)[3]).toBe(WasteGiftAttachService);
     expect(Reflect.getMetadata('imports', OrdersModule)).toContain(WastePickupModule);
   });
 

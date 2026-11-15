@@ -107,10 +107,13 @@ export const envSchema = z.object({
   // - GOMDON_WEBHOOK_SECRET: token chia sẻ verify webhook (header x-webhook-token hoặc /webhooks/gomdon/<secret>).
   //   Rỗng ở production thì GomdonWebhookController từ chối MỌI request 401 (fail-closed); production
   //   đã đặt GOMDON_PHONE/GOMDON_PASSWORD mà thiếu secret → không boot (superRefine bên dưới).
+  // - GOMDON_WEBHOOK_HMAC_SECRET (tuỳ chọn): webhook_secret Gomdon cấp để ký X-Gomdon-Signature. Trống thì dùng
+  //   GOMDON_WEBHOOK_SECRET làm khoá ký; token đường dẫn/header vẫn chạy song song với chữ ký.
   GOMDON_BASE_URL: z.string().default(''),
   GOMDON_PHONE: z.string().default(''),
   GOMDON_PASSWORD: z.string().default(''),
   GOMDON_WEBHOOK_SECRET: z.string().default(''),
+  GOMDON_WEBHOOK_HMAC_SECRET: z.string().default(''),
 
   // ZaloPay merchant
   ZALOPAY_APP_ID: z.string().default(''),

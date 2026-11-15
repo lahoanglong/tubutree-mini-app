@@ -55,9 +55,32 @@ describe('/chinh-sach/[loai] (D5-01)', () => {
     expect(banner?.textContent).toContain('BẢN NHÁP — chờ Tubu Tree duyệt');
     expect(c.querySelector('main')?.firstElementChild?.contains(banner)).toBe(true);
     expect(c.querySelector('h1')?.textContent).toBe('Chính sách đổi trả');
-    expect(c.textContent).toContain('[Tên công ty]');
+    expect(c.textContent).toContain('Đơn vị vận hành: CÔNG TY TNHH TUBU TREE');
+    expect(c.textContent).toContain('Mã số thuế: 0319585995');
+    expect(c.textContent).toContain('Địa chỉ: Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh');
+    expect(c.textContent).not.toContain('[Tên công ty]');
     expect(c.textContent).toContain('trong vòng 7 ngày');
     expect(c.textContent).toContain('0984 606 774');
+  });
+
+  it('admin đã nhập thông tin công ty ở Cấu hình thì bản nháp dùng đúng thông tin đó, không trộn với thương nhân mặc định', async () => {
+    api.doc = { content: null, vars: { returnWindowDays: 7, freeshipThreshold: 199000, legalName: 'Công ty Khác', taxCode: '0312345678' } as never };
+    const c = await mount('dieu-khoan');
+    expect(c.textContent).toContain('Đơn vị vận hành: Công ty Khác');
+    expect(c.textContent).toContain('Mã số thuế: 0312345678');
+    expect(c.textContent).toContain('Địa chỉ: [Địa chỉ trụ sở]');
+    expect(c.textContent).not.toContain('0319585995');
+  });
+
+  it('chính sách thanh toán: tiêu đề, bản nháp có COD/VietQR/Ví Tubu và đường dẫn tới đổi trả', async () => {
+    const c = await mount('thanh-toan');
+    expect(c.querySelector('h1')?.textContent).toBe('Chính sách và hình thức thanh toán');
+    expect(c.textContent).toContain('Thanh toán khi nhận hàng (COD)');
+    expect(c.textContent).toContain('VietQR');
+    expect(c.textContent).toContain('Ví Tubu');
+    expect(c.querySelector('main a[href="/chinh-sach/doi-tra"]')).not.toBeNull();
+    const meta = await generateMetadata({ params: Promise.resolve({ loai: 'thanh-toan' }) });
+    expect(meta.title).toBe('Chính sách và hình thức thanh toán');
   });
 
   it('admin đã nhập: hiện đúng nội dung đó, không còn biển bản nháp, không còn chỗ trống mẫu', async () => {
@@ -69,16 +92,16 @@ describe('/chinh-sach/[loai] (D5-01)', () => {
     expect(c.textContent).not.toContain('[Tên công ty]');
   });
 
-  it('có điều hướng sang ba trang chính sách còn lại (không có liên kết tới chính trang đang xem)', async () => {
+  it('có điều hướng sang bốn trang chính sách còn lại (không có liên kết tới chính trang đang xem)', async () => {
     const c = await mount('bao-mat');
     const nav = c.querySelector('nav[aria-label="Các chính sách khác"]')!;
     const hrefs = Array.from(nav.querySelectorAll('a')).map((a) => a.getAttribute('href'));
-    expect(hrefs).toEqual(['/chinh-sach/dieu-khoan', '/chinh-sach/doi-tra', '/chinh-sach/van-chuyen']);
+    expect(hrefs).toEqual(['/chinh-sach/dieu-khoan', '/chinh-sach/doi-tra', '/chinh-sach/van-chuyen', '/chinh-sach/thanh-toan']);
     for (const a of Array.from(nav.querySelectorAll('a'))) expect(a.className).toContain('min-h-11');
   });
 
-  it('đúng một h1, heading không nhảy cấp, với cả bốn bản nháp', async () => {
-    for (const loai of ['dieu-khoan', 'bao-mat', 'doi-tra', 'van-chuyen']) {
+  it('đúng một h1, heading không nhảy cấp, với cả năm bản nháp', async () => {
+    for (const loai of ['dieu-khoan', 'bao-mat', 'doi-tra', 'van-chuyen', 'thanh-toan']) {
       const c = await mount(loai);
       expect(headingProblems(c)).toEqual([]);
     }

@@ -30,6 +30,7 @@ const POLICY_LINKS = [
   { label: 'Chính sách bảo mật', slug: 'bao-mat' },
   { label: 'Chính sách đổi trả', slug: 'doi-tra' },
   { label: 'Chính sách vận chuyển', slug: 'van-chuyen' },
+  { label: 'Chính sách và hình thức thanh toán', slug: 'thanh-toan' },
 ] as const;
 
 const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`;

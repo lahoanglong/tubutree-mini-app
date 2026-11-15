@@ -18,7 +18,7 @@ import { QUEUE_GOMDON_PUSH } from '../../../jobs/queues';
 import { GOMDON_ALERT_KIND, GOMDON_ALERT_TEMPLATE, GomdonAlertService } from './gomdon-alert.service';
 import { GomdonDuplicateOrderError, GomdonRejectedError, isTransientGomdonRejection } from './gomdon.errors';
 import { enqueueGomdonCancel, enqueueGomdonPush } from './gomdon-queue';
-import { recyclingWeight } from './gomdon-weight';
+import { recyclingParcel, recyclingWeight } from './gomdon-weight';
 import {
   GOMDON_CANCEL,
   GOMDON_CANCEL_NEEDS_ATTENTION,
@@ -954,11 +954,12 @@ export class GomdonOrderService {
       where: { id: { in: order.items.map((i) => i.variationId) } },
       select: { id: true, weight: true },
     });
-    const { totalGrams, maxKg } = recyclingWeight(
+    const { totalGrams } = recyclingWeight(
       order.items,
       new Map(variations.map((v) => [v.id, v.weight])),
       config.defaultWeightFallback,
     );
+    const { weight, maxKg, declaredKg } = recyclingParcel(totalGrams, order.recyclingWeightGrams);
 
     const addr = (order.shippingAddress as unknown as Partial<ShippingSnapshot>) ?? {};
     const wh = config.defaultWarehouse;
@@ -980,23 +981,20 @@ export class GomdonOrderService {
       product_price: order.total,
       product_number: 1,
       collect_amount: collectAmount,
-      weight: totalGrams,
+      weight,
       width: 0,
       height: 0,
       length: 0,
-      note: `Đơn đổi hàng thu gom tái chế (Tối đa ${maxKg}kg)${recyclingDetail}`,
+      note: `Đơn đổi hàng thu gom tái chế (~${declaredKg}kg, tối đa ${maxKg}kg)${recyclingDetail}`,
       source_name: wh.name,
       source_phone: wh.phone,
       source_address: wh.address,
       source_ward: wh.ward,
-      source_district: wh.district,
       source_province: wh.province,
       dest_name: addr.recipient || `Khách hàng ${order.code}`,
       dest_phone: addr.phone || '',
       dest_address: addr.street || '',
       dest_ward: addr.ward || '',
-      // Hệ địa chỉ 2 cấp không còn quận/huyện — Gomdon bắt buộc trường này nên dùng tạm phường.
-      dest_district: addr.district || addr.ward || addr.province || '',
       dest_province: addr.province || wh.province,
     };
   }

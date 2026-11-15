@@ -15,13 +15,18 @@ function text(v: unknown): string | null {
   return t === '' ? null : t;
 }
 
-/** Link ra ngoài app chỉ nhận https: giá trị sửa tay trong DB không được thành javascript: hay http. */
-function httpsUrl(v: unknown): string | null {
+/**
+ * Link huy hiệu Bộ Công Thương: https tới online.gov.vn hoặc một tên miền *.gov.vn, không tên đăng nhập, không cổng lạ. Giá trị sửa
+ * tay trong DB không được thành javascript:, http hay trang ngoài để khách không thấy huy hiệu khi chưa có xác nhận thật.
+ * Cùng luật với isBctNoticeUrl của app-core (API không phụ thuộc app-core nên giữ một bản ở đây).
+ */
+function bctNoticeUrl(v: unknown): string | null {
   const t = text(v);
   if (!t || t.length > 500) return null;
   try {
     const u = new URL(t);
-    return u.protocol === 'https:' && !u.username && !u.password ? t : null;
+    if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
+    return u.hostname === 'online.gov.vn' || u.hostname.endsWith('.gov.vn') ? t : null;
   } catch {
     return null;
   }
@@ -35,7 +40,7 @@ export interface CompanyIdentity {
 }
 
 export function toCompanyIdentity(raw: { legalName: unknown; taxCode: unknown; address: unknown; bctNoticeUrl: unknown }): CompanyIdentity {
-  return { legalName: text(raw.legalName), taxCode: text(raw.taxCode), address: text(raw.address), bctNoticeUrl: httpsUrl(raw.bctNoticeUrl) };
+  return { legalName: text(raw.legalName), taxCode: text(raw.taxCode), address: text(raw.address), bctNoticeUrl: bctNoticeUrl(raw.bctNoticeUrl) };
 }
 
 export async function readCompanyIdentity(config: SystemConfigService): Promise<CompanyIdentity> {

@@ -15,12 +15,13 @@ const EXPECTED_ITEMS = [
   item('wi-bubble-wrap', 'BUBBLE_WRAP', 'Nilon chống sốc', 'túi lớn', 1, 1000, 0, 10, 60, 'ACTIVE', 'Túi còn nguyên, khô, không dính băng keo hay nhãn.', 20, false),
   item('wi-milk-carton', 'MILK_CARTON', 'Vỏ hộp sữa sạch', 'vỏ', 5, 1000, 0, 50, 300, 'ACTIVE', 'Rửa sạch, để ráo, ép dẹt.', 30, false, true),
   item('wi-tubu-bottle', 'TUBU_BOTTLE', 'Vỏ chai, hộp Tubu Tree', 'vỏ', 1, 2000, 2, null, 20, 'ACTIVE', 'Vỏ chai hoặc hộp Tubu Tree đã dùng hết, rửa sạch, để ráo.', 40, false, true),
-  item('wi-battery', 'BATTERY', 'Pin đã dùng', 'viên', 10, 1000, 0, 20, 50, 'COMING_SOON', 'Dán băng keo hai đầu cực. Không nhận pin phồng, chảy nước, pin xe điện hay ắc quy.', 50, true),
+  item('wi-battery', 'BATTERY', 'Pin đã dùng', 'viên', 10, 1000, 0, 20, 50, 'ACTIVE', 'Dán băng keo hai đầu cực. Không nhận pin phồng, chảy nước, pin xe điện hay ắc quy.', 50, true),
 ];
 
-const gift = (id: string, kind: 'VOUCHER' | 'TREE', name: string, description: string, label: string | null, cost: number, sort: number, v: [ 'FREESHIP' | 'AMOUNT' | 'PERCENT', number, number, number | null ] | null) =>
+const gift = (id: string, kind: 'VOUCHER' | 'TREE' | 'GIFT' | 'SEED_PACK', name: string, description: string, label: string | null, cost: number, sort: number, v: [ 'FREESHIP' | 'AMOUNT' | 'PERCENT', number, number, number | null ] | null, stock?: number) =>
   ({
     id, kind, name, description, label, pointsCost: cost, status: 'ACTIVE' as const, sortOrder: sort,
+    ...(stock !== undefined ? { stock } : {}),
     voucherType: v ? v[0] : null, voucherValue: v ? v[1] : null, voucherMinOrder: v ? v[2] : null, voucherMaxDiscount: v ? v[3] : null, voucherValidDays: v ? 30 : null,
   });
 
@@ -30,6 +31,9 @@ const EXPECTED_GIFTS = [
   gift('reward-percent-15pct', 'VOUCHER', 'Giảm 15%', 'Giảm 15% tối đa 80.000đ cho đơn hàng từ 250.000đ', 'Đặc quyền', 75_000, 30, ['PERCENT', 15, 250000, 80000]),
   gift('reward-discount-100k', 'VOUCHER', 'Giảm 100.000đ', 'Giảm ngay 100.000đ cho đơn hàng từ 600.000đ', 'HOT', 100_000, 40, ['AMOUNT', 100000, 600000, null]),
   gift('gift-tree', 'TREE', 'Góp quỹ trồng cây', 'Dùng Điểm Xanh góp vào quỹ trồng cây của Tubu Tree.', null, 0, 50, null),
+  gift('gift-seed-pack', 'SEED_PACK', 'Gói hạt giống rau mầm Xanh', 'Gói hạt giống dễ gieo tại nhà, tự động gửi tặng kèm đơn hàng tiếp theo của bạn.', null, 5_000, 60, null, 200),
+  gift('gift-loofah-pad', 'GIFT', 'Miếng xơ mướp rửa chén tự nhiên', 'Xơ mướp hữu cơ phân huỷ sinh học, tự động gửi tặng kèm đơn hàng tiếp theo.', null, 12_000, 70, null, 100),
+  gift('gift-canvas-bag', 'GIFT', 'Túi vải Canvas Tubu Sống Xanh', 'Túi vải bố dày dặn tái sử dụng nhiều lần, tự động gửi tặng kèm đơn hàng tiếp theo.', null, 35_000, 80, null, 50),
 ];
 
 const FORBIDDEN = /cây\s+thật|\bmua (1 )?cây\b|CO2|CO₂|hấp thụ|giảm khí thải|tái chế|Mã chứng nhận|PanNature|Rừng Xanh Lên|Voucher|Mã ưu đãi|TubuXu|Cổng đối tác|Kênh Đối Tác|\/merchant|(?<![\p{L}_])xu(?![\p{L}_])/iu;
@@ -68,9 +72,28 @@ describe('waste reference data constants', () => {
     expect(texts.filter((t) => FORBIDDEN.test(t) || FORBIDDEN_LOWERCASE.test(t))).toEqual([]);
     expect(texts.filter((t) => t.includes("'"))).toEqual([]);
   });
+  it('quà hiện vật: 3 món tặng kèm đơn kế tiếp, tồn kho hữu hạn, không có trường mã giảm giá', () => {
+    const physical = WASTE_SEED_GIFTS.filter((g) => g.kind === 'GIFT' || g.kind === 'SEED_PACK');
+    expect(physical.map((g) => [g.id, g.kind, g.pointsCost, g.sortOrder, g.stock])).toEqual([
+      ['gift-seed-pack', 'SEED_PACK', 5_000, 60, 200],
+      ['gift-loofah-pad', 'GIFT', 12_000, 70, 100],
+      ['gift-canvas-bag', 'GIFT', 35_000, 80, 50],
+    ]);
+    for (const g of physical) {
+      expect(g.status).toBe('ACTIVE');
+      expect([g.voucherType, g.voucherValue, g.voucherMinOrder, g.voucherMaxDiscount, g.voucherValidDays]).toEqual([null, null, null, null, null]);
+      expect(g.description).toContain('tự động gửi tặng kèm đơn hàng');
+    }
+    expect(new Set(WASTE_SEED_GIFTS.map((g) => g.sortOrder)).size).toBe(WASTE_SEED_GIFTS.length);
+  });
+  it('pin đã dùng đang nhận (ACTIVE) và vẫn là món nguy hại, không chỉ-kho', () => {
+    const battery = WASTE_SEED_ITEMS.find((i) => i.code === 'BATTERY')!;
+    expect([battery.status, battery.hazardous, battery.warehouseOnly]).toEqual(['ACTIVE', true, false]);
+  });
   it('upsert args never overwrite an existing row', () => {
     expect(wasteItemUpsertArgs(WASTE_SEED_ITEMS[0]!)).toEqual({ where: { id: 'wi-carton' }, update: {}, create: WASTE_SEED_ITEMS[0] });
     expect(wasteGiftUpsertArgs(WASTE_SEED_GIFTS[4]!)).toEqual({ where: { id: 'gift-tree' }, update: {}, create: WASTE_SEED_GIFTS[4] });
+    expect(wasteGiftUpsertArgs(WASTE_SEED_GIFTS[5]!)).toEqual({ where: { id: 'gift-seed-pack' }, update: {}, create: { ...WASTE_SEED_GIFTS[5]!, stock: 200 } });
   });
   it('seeds no receiving point and copies no legacy refill pickup location (spec 11.7, 13.1, 18.2 question 10)', () => {
     expect(SQL).not.toMatch(/INSERT\s+INTO\s+"waste_points"/i);
@@ -93,9 +116,11 @@ function renderItems(): string {
   });
   return `INSERT INTO "waste_items" (${cols(names)}, "updatedAt") VALUES\n${rows.join(',\n')}\nON CONFLICT DO NOTHING;`;
 }
+const W168_GIFT_IDS = ['gift-seed-pack', 'gift-loofah-pad', 'gift-canvas-bag'];
+// Migration gốc chỉ mang 5 quà đầu; 3 quà hiện vật nằm ở migration W168 riêng, nên phần so khớp migration gốc bỏ chúng.
 function renderGifts(): string {
   const names = ['id', 'kind', 'name', 'description', 'label', 'pointsCost', 'status', 'sortOrder', 'voucherType', 'voucherValue', 'voucherMinOrder', 'voucherMaxDiscount', 'voucherValidDays'];
-  const rows = WASTE_SEED_GIFTS.map((g) => `  (${names.map((n) => q((g as unknown as Record<string, string | number | boolean | null>)[n]!)).join(', ')}, NOW())`);
+  const rows = WASTE_SEED_GIFTS.filter((g) => !W168_GIFT_IDS.includes(g.id)).map((g) => `  (${names.map((n) => q((g as unknown as Record<string, string | number | boolean | null>)[n]!)).join(', ')}, NOW())`);
   return `INSERT INTO "waste_gifts" (${cols(names)}, "updatedAt") VALUES\n${rows.join(',\n')}\nON CONFLICT DO NOTHING;`;
 }
 
@@ -117,9 +142,31 @@ describe('waste reference data in the migration and in seed.ts', () => {
     expect(sql).toContain(`WHERE "code" = 'BATTERY' AND "hazardous" = true;`);
     expect(sql.match(/UPDATE/g)).toHaveLength(1);
     expect(sql).not.toMatch(/"status"/);
-    expect(battery.status).toBe('COMING_SOON');
+    // Migration 20261027000000 không đổi status (pin còn Sắp nhận lúc đó); migration W168 mới bật ACTIVE.
+    expect(battery.status).toBe('ACTIVE');
     expect(sql).not.toMatch(/waste_point_items|INSERT/i);
     expect(battery.warehouseOnly).toBe(false);
+  });
+  it('migration W168: quà hiện vật = rendering của hằng số (có cột stock), idempotent, không tạo điểm nhận', () => {
+    const w168 = readFileSync(join(__dirname, '../../../prisma/migrations/20261115171000_w168_waste_catalog_gifts/migration.sql'), 'utf-8');
+    const from = w168.indexOf('-- BEGIN WASTE W168 SEED');
+    const to = w168.indexOf('-- END WASTE W168 SEED');
+    expect(from).toBeGreaterThanOrEqual(0);
+    expect(to).toBeGreaterThan(from);
+    const sql = w168.slice(from, to).split('\n').filter((l) => !l.startsWith('--')).join('\n').trim();
+
+    const names = ['id', 'kind', 'name', 'description', 'label', 'pointsCost', 'status', 'sortOrder', 'stock', 'voucherType', 'voucherValue', 'voucherMinOrder', 'voucherMaxDiscount', 'voucherValidDays'];
+    const rows = WASTE_SEED_GIFTS.filter((g) => W168_GIFT_IDS.includes(g.id)).map((g) => `  (${names.map((n) => q((g as unknown as Record<string, string | number | boolean | null>)[n]!)).join(', ')}, NOW())`);
+    const giftInsert = `INSERT INTO "waste_gifts" (${cols(names)}, "updatedAt") VALUES\n${rows.join(',\n')}\nON CONFLICT ("id") DO NOTHING;`;
+    expect(sql.startsWith(giftInsert)).toBe(true);
+
+    const flat = sql.replace(/\s+/g, ' ');
+    expect(flat).toContain(`UPDATE "waste_items" SET "status" = 'ACTIVE', "updatedAt" = NOW() WHERE "code" = 'BATTERY' AND "status" = 'COMING_SOON';`);
+    expect(flat).toContain(`INSERT INTO "waste_point_items" ("pointId", "itemId") SELECT p."id", i."id" FROM "waste_points" p CROSS JOIN "waste_items" i WHERE p."kind" = 'WAREHOUSE' AND p."status" = 'ACTIVE' AND i."code" IN ('CARTON', 'BUBBLE_WRAP', 'MILK_CARTON', 'TUBU_BOTTLE', 'BATTERY') AND i."status" = 'ACTIVE' ON CONFLICT ("pointId", "itemId") DO NOTHING;`);
+    expect(flat).not.toMatch(/INSERT\s+INTO\s+"waste_points"|DELETE|DROP|TRUNCATE/i);
+    expect(flat.match(/INSERT INTO/g)).toHaveLength(2);
+    expect(flat.match(/ON CONFLICT/g)).toHaveLength(2);
+    expect(flat.match(/UPDATE/g)).toHaveLength(1);
   });
   it('no seed tuple can be mistaken for a notification template tuple by the template spec', () => {
     expect(body.match(/\('[^']+', '([A-Z_]+)', '[A-Z]+', '([^']*)'\)/g)).toBeNull();

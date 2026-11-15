@@ -171,6 +171,7 @@ export const CONFIG_KEYS_OF_INTEREST = [
   'legal.bao-mat',
   'legal.doi-tra',
   'legal.van-chuyen',
+  'legal.thanh-toan',
   'app.miniapp_base_url',
   ...Object.values(OPS_THRESHOLD_KEYS).map((t) => t.key),
 ] as const;
@@ -502,7 +503,7 @@ function bankCheck(s: DbSnapshot): CheckResult {
   return pass(G_DB, 'db.bank_account', title, `BIN ${(bin as string).trim()}, số tài khoản đuôi ${last4}`);
 }
 
-const LEGAL_DOCS = { 'legal.dieu-khoan': 'điều khoản', 'legal.bao-mat': 'bảo mật', 'legal.doi-tra': 'đổi trả', 'legal.van-chuyen': 'vận chuyển' } as const;
+const LEGAL_DOCS = { 'legal.dieu-khoan': 'điều khoản', 'legal.bao-mat': 'bảo mật', 'legal.doi-tra': 'đổi trả', 'legal.van-chuyen': 'vận chuyển', 'legal.thanh-toan': 'thanh toán' } as const;
 
 function legalPoliciesCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
   const title = 'Chính sách hiển thị cho khách';
@@ -512,7 +513,7 @@ function legalPoliciesCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {
     const red = phase === 'pre-deploy' ? warn : fail;
     return red(G_DB, 'db.legal_policies', title, `còn bản nháp: ${draft.map((k) => LEGAL_DOCS[k]).join(', ')}`, 'Duyệt và lưu nội dung từng chính sách ở Quản trị, Cấu hình, nhóm legal; chưa lưu thì khách thấy dòng "BẢN NHÁP — chờ Tubu Tree duyệt".');
   }
-  return pass(G_DB, 'db.legal_policies', title, 'cả 4 chính sách đã được lưu');
+  return pass(G_DB, 'db.legal_policies', title, 'cả 5 chính sách đã được lưu');
 }
 
 function companyIdentityCheck(s: DbSnapshot, phase: GoLivePhase): CheckResult {

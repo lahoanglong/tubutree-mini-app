@@ -620,12 +620,18 @@ describe('evaluateDb', () => {
   });
 
   describe('chính sách (legal.*)', () => {
-    it('đủ 4 bản đã lưu thì PASS', () => expect(status(GOOD_DB, 'db.legal_policies')).toBe('PASS'));
+    it('đủ 5 bản đã lưu thì PASS', () => expect(status(GOOD_DB, 'db.legal_policies')).toBe('PASS'));
     it('còn bản nháp (chưa lưu hoặc trống) thì FAIL, nêu tên bản', () => {
       const r = byId(run(dbWith({ configs: { 'legal.doi-tra': '  ' }, dropConfigs: ['legal.bao-mat'] })), 'db.legal_policies');
       expect(r.status).toBe('FAIL');
       expect(r.detail).toContain('bảo mật');
       expect(r.detail).toContain('đổi trả');
+      expect(r.detail).not.toContain('vận chuyển');
+    });
+    it('thiếu chính sách thanh toán thì FAIL và nêu đúng tên bản', () => {
+      const r = byId(run(dbWith({ dropConfigs: ['legal.thanh-toan'] })), 'db.legal_policies');
+      expect(r.status).toBe('FAIL');
+      expect(r.detail).toContain('thanh toán');
       expect(r.detail).not.toContain('vận chuyển');
     });
     it('bản chỉ có ký tự vô hình hiển thị ra rỗng nên vẫn tính là bản nháp', () => {

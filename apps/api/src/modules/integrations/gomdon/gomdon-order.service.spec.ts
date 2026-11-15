@@ -132,7 +132,7 @@ describe('GomdonOrderService.pushOrder', () => {
     const { note } = client.createOrder.mock.calls[0][0] as { note: string };
     expect(note).not.toMatch(/[[\]|]/);
     expect(note).not.toMatch(/ĐÃ THANH TOÁN|KHÔNG THU COD|order code:/i);
-    expect(note).toContain('Tối đa 2.4kg) - Ghi chú: (');
+    expect(note).toContain('tối đa 2.4kg) - Ghi chú: (');
     expect(note).toContain('pin cũ / Mã đơn: TUBU9');
   });
 
@@ -148,8 +148,11 @@ describe('GomdonOrderService.pushOrder', () => {
 
     const sent = client.createOrder.mock.calls[0][0];
     expect(sent).toMatchObject({ type: 3, pickup_type: 2, order_customer_id: 'TUBU1001', collect_amount: 250000, weight: 2400 });
-    expect(sent.note).toContain('Tối đa 2.4kg');
-    expect(sent.dest_district).toBe('Phường Bến Nghé'); // hệ 2 cấp: quận rỗng → dùng phường
+    expect(sent.note).toContain('(~2.4kg, tối đa 2.4kg)');
+    // Địa chỉ 2 cấp: tài liệu Gomdon nên bỏ trống quận/huyện → không gửi key district nào.
+    expect(sent).not.toHaveProperty('source_district');
+    expect(sent).not.toHaveProperty('dest_district');
+    expect(sent).toMatchObject({ dest_ward: 'Phường Bến Nghé', dest_province: 'Thành phố Hồ Chí Minh' });
 
     const persist = updateMany.mock.calls[1][0];
     expect(persist.where).toEqual({ id: 'o1', gomdonStatus: 'CREATING' });
@@ -184,13 +187,11 @@ describe('GomdonOrderService.pushOrder', () => {
         'length',
         'note',
         'source_province',
-        'source_district',
         'source_ward',
         'source_address',
         'source_phone',
         'source_name',
         'dest_province',
-        'dest_district',
         'dest_ward',
         'dest_address',
         'dest_phone',
@@ -202,8 +203,8 @@ describe('GomdonOrderService.pushOrder', () => {
     // weight: số nguyên gram; width/height/length: mm (không khai kích thước → 0 như mẫu tài liệu).
     expect(Number.isInteger(sent.weight)).toBe(true);
     expect(sent).toMatchObject({ width: 0, height: 0, length: 0 });
-    // Tài liệu bắt buộc đủ tỉnh/quận/phường/địa chỉ/SĐT/tên cho cả người gửi (kho) lẫn người nhận.
-    for (const k of ['province', 'district', 'ward', 'address', 'phone', 'name']) {
+    // Tài liệu bắt buộc đủ tỉnh/phường/địa chỉ/SĐT/tên cho cả người gửi (kho) lẫn người nhận (không còn quận/huyện).
+    for (const k of ['province', 'ward', 'address', 'phone', 'name']) {
       expect(sent[`source_${k}`]).toBeTruthy();
       expect(sent[`dest_${k}`]).toBeTruthy();
     }
@@ -229,6 +230,81 @@ describe('GomdonOrderService.pushOrder', () => {
     expect(await svc.pushOrder('o1')).toBe('900001');
     const persist = updateMany.mock.calls[1][0];
     expect(persist.data).toMatchObject({ gomdonOrderId: '900001', gomdonPartnerCode: '900001', shippingCode: '900001' });
+  });
+
+  it('cấu hình kho cũ trong SystemConfig còn district → bỏ qua, không gửi key district', async () => {
+    const { svc, client } = build();
+    await svc.pushOrder('o1');
+    const sent = client.createOrder.mock.calls[0][0];
+    // Mock getConfig của build() trả kho có district 'D' (như bản ghi cũ) mà body vẫn không mang district.
+    expect(sent).toMatchObject({ source_province: 'P', source_ward: 'W', source_address: 'A' });
+    expect(Object.keys(sent).some((k) => k.endsWith('_district'))).toBe(false);
+  });
+
+  it('Gomdon báo duplicate + có id (client đã coi là thành công) → lưu gomdonOrderId = String(id), đi tiếp như tạo thành công', async () => {
+    const { svc, client, updateMany, pancake } = build();
+    client.createOrder.mockResolvedValueOnce({ result: true, data: { id: '1517251', partner_code: undefined, status: 1 } });
+    expect(await svc.pushOrder('o1')).toBe('1517251');
+    const persist = updateMany.mock.calls[1][0];
+    expect(persist.where).toEqual({ id: 'o1', gomdonStatus: 'CREATING' });
+    expect(persist.data).toMatchObject({
+      gomdonOrderId: '1517251',
+      gomdonPartnerCode: '1517251',
+      gomdonStatus: '1',
+      shippingCode: '1517251',
+      shippingPartner: 'BestExpress',
+    });
+    expect(wroteStatus(updateMany, 'NEEDS_MANUAL_CHECK')).toBe(false);
+    expect(pancake.enqueuePush).toHaveBeenCalledWith('o1');
+  });
+
+  it('duplicate KHÔNG có id → GomdonDuplicateOrderError → NEEDS_MANUAL_CHECK, không ghi mã, không retry', async () => {
+    const { svc, client, updateMany } = build();
+    client.createOrder.mockRejectedValueOnce(
+      new GomdonDuplicateOrderError('Gomdon báo mã đơn (order_customer_id) đã có đơn nhưng không trả id: Đơn hàng đã tồn tại'),
+    );
+    await expect(svc.pushOrder('o1')).resolves.toBeNull();
+    expect(wroteStatus(updateMany, 'NEEDS_MANUAL_CHECK')).toBe(true);
+    expect(updateMany.mock.calls.some(([a]) => a?.data?.gomdonOrderId)).toBe(false);
+  });
+
+  describe('cân nặng + ghi chú đơn đổi hàng kèm rác (recyclingWeightGrams)', () => {
+    const heavy = (extra: Record<string, unknown> = {}) => {
+      const ctx = build(extra);
+      ctx.prisma.variation.findMany.mockResolvedValue([{ id: 'v1', weight: 6000 }]); // 6 kg x 2 = 12 kg
+      return ctx;
+    };
+
+    it('chưa khai số kg gửi lại → "~" lấy theo mức tối đa', async () => {
+      const { svc, client } = build({ recyclingWeightGrams: null });
+      await svc.pushOrder('o1');
+      const sent = client.createOrder.mock.calls[0][0];
+      expect(sent.weight).toBe(2400);
+      expect(sent.note).toContain('Đơn đổi hàng thu gom tái chế (~2.4kg, tối đa 2.4kg)');
+    });
+
+    it('đã khai 1,5 kg → note ghi số khai và mức tối đa, giữ chi tiết sau " - "', async () => {
+      const { svc, client } = build({ recyclingWeightGrams: 1500 });
+      await svc.pushOrder('o1');
+      const sent = client.createOrder.mock.calls[0][0];
+      expect(sent.note.startsWith('Đơn đổi hàng thu gom tái chế (~1.5kg, tối đa 2.4kg) - Ghi chú: ')).toBe(true);
+      expect(sent.weight).toBe(2400);
+    });
+
+    it('hàng nặng 12 kg → trần 10 kg một kiện cho weight và "tối đa"', async () => {
+      const { svc, client } = heavy({ recyclingWeightGrams: 4200 });
+      await svc.pushOrder('o1');
+      const sent = client.createOrder.mock.calls[0][0];
+      expect(sent.weight).toBe(10_000);
+      expect(sent.note).toContain('(~4.2kg, tối đa 10.0kg)');
+      expect(Number.isInteger(sent.weight)).toBe(true);
+    });
+
+    it('type/pickup_type/service_id giữ nguyên cho đơn đổi hàng', async () => {
+      const { svc, client } = heavy({ recyclingWeightGrams: 4200 });
+      await svc.pushOrder('o1');
+      expect(client.createOrder.mock.calls[0][0]).toMatchObject({ type: 3, pickup_type: 2, service_id: 12491 });
+    });
   });
 
   it('chỉ có data.code (không id, không partner_code) → NEEDS_MANUAL_CHECK (webhook tự lành theo mã đơn điền id + mã vận đơn sau)', async () => {

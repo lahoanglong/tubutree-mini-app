@@ -336,7 +336,7 @@ describe('/kho-qua — xác nhận và đổi quà', () => {
     const d = dialog()!;
     expect(d.querySelector('p')?.textContent).toBe('QG-8K2M9P4T');
     expect(d.textContent).toContain('Hạn nhận 17/12/2026');
-    expect(d.textContent).toContain('Mang mã này tới kho Tubu TP.HCM để nhận quà');
+    expect(d.textContent).toContain('Quà đã lưu vào Ví quà — sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn (hoặc đọc mã QG-… khi ghé kho Tubu)');
     expect(d.querySelector('a[href="/kho-qua/cua-toi"]')?.textContent).toContain('Quà của tôi');
     expect(postsOf('/me/loyalty/rewards/gift-seed/redeem')).toHaveLength(1);
   });
@@ -399,15 +399,17 @@ describe('/kho-qua — quà thừa với hạng, quà nhận tại kho, Dùng ng
     expect((byText(card(c, 'Miễn phí vận chuyển'), 'button', 'Đổi') as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it('quà nhận tại kho: thẻ ghi "Chỉ nhận tại kho TP.HCM", mã giảm giá thì không; xác nhận hỏi lại kèm địa chỉ kho', async () => {
+  it('quà hiện vật: thẻ ghi tự gửi kèm đơn kế tiếp hoặc nhận tại kho, mã giảm giá thì không; xác nhận hỏi lại kèm địa chỉ kho', async () => {
+    const LABEL = 'Tự động gửi kèm đơn hàng kế tiếp (0đ) hoặc nhận tại kho';
     const c = await mount();
-    expect(card(c, 'Miễn phí vận chuyển').textContent).not.toContain('Chỉ nhận tại kho TP.HCM');
+    expect(card(c, 'Miễn phí vận chuyển').textContent).not.toContain(LABEL);
     click(tab(c, 'Cây và hạt'));
     await flush(2);
-    expect(card(c, 'Gói hạt giống Tubu').textContent).toContain('Chỉ nhận tại kho TP.HCM');
-    expect(card(c, 'Góp quỹ trồng cây').textContent).not.toContain('Chỉ nhận tại kho TP.HCM');
+    expect(card(c, 'Gói hạt giống Tubu').textContent).toContain(LABEL);
+    expect(card(c, 'Góp quỹ trồng cây').textContent).not.toContain(LABEL);
+    expect(c.textContent).not.toContain('Chỉ nhận tại kho');
     await openConfirm(c, 'Gói hạt giống Tubu');
-    expect(dialog()!.textContent).toContain('Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: Kho Tubu TP.HCM, 99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM. Bạn vẫn muốn đổi?');
+    expect(dialog()!.textContent).toContain('Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho: Kho Tubu TP.HCM, 99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM. Bạn vẫn muốn đổi?');
   });
 
   it('đổi mã xong: "Dùng ngay" khi giỏ có hàng → chọn sẵn mã rồi tới giỏ', async () => {

@@ -147,8 +147,9 @@ export function eventsBodyParser(): RequestHandler {
 }
 
 /**
- * Webhook ký trên byte gốc (Zalo OA: chữ ký tính trên thân như nhận được): giữ buffer ở `req.rawBody` (dạng `RawBodyRequest` của Nest),
- * vì JSON.stringify lại thân đã parse làm mất `\/` và `\uXXXX` nên chữ ký lệch.
+ * Webhook ký trên byte gốc (Zalo OA, Gomdon: chữ ký tính trên thân như nhận được): giữ buffer ở `req.rawBody` (dạng `RawBodyRequest` của Nest),
+ * vì JSON.stringify lại thân đã parse làm mất `\/` và `\uXXXX` nên chữ ký lệch. Áp cho cả nhóm `/api/webhooks/*` ngoài Pancake
+ * (tầng `webhook` bên dưới), gồm `/api/webhooks/gomdon` và `/api/webhooks/gomdon/<token>`; thân form (multipart/urlencoded) không có rawBody.
  */
 function keepRawBody(verify: ReturnType<typeof rawGuard>): ReturnType<typeof rawGuard> {
   return (req, res, buf, encoding) => {

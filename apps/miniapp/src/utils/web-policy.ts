@@ -1,1 +1,1 @@
-export type WebPolicySlug = 'dieu-khoan' | 'bao-mat' | 'doi-tra' | 'van-chuyen';
+export type WebPolicySlug = 'dieu-khoan' | 'bao-mat' | 'doi-tra' | 'van-chuyen' | 'thanh-toan';

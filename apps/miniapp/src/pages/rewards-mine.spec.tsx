@@ -71,6 +71,7 @@ describe('/rewards/mine (§4.8)', () => {
     const row = (await screen.findByText('Gói hạt giống Tubu')).closest('[data-redemption]') as HTMLElement;
     expect(within(row).getByText('QG-8K2M9P4T', { selector: 'p' })).toBeInTheDocument();
     expect(within(row).getByTestId('qr')).toHaveTextContent('QG-8K2M9P4T');
+    expect(within(row).getByText('Tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc đọc mã này khi ghé kho Tubu')).toBeInTheDocument();
     expect(within(row).getByText('Nhận tại Kho Tubu TP.HCM')).toBeInTheDocument();
     expect(within(row).getByText('99 Nguyễn Văn Linh, Phường Tân Phong, TP.HCM')).toBeInTheDocument();
     expect(within(row).getByText('T2 08:00–17:00')).toBeInTheDocument();

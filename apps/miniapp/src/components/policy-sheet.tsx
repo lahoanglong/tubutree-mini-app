@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { DEFAULT_LEGAL_SUPPORT, LEGAL_DRAFT_NOTICE, LEGAL_PAGES, defaultLegalContent } from '@tubutree/app-core/legal';
+import { DEFAULT_LEGAL_SUPPORT, LEGAL_DRAFT_NOTICE, LEGAL_PAGES, defaultLegalContent, merchantIdentityOrDefault } from '@tubutree/app-core/legal';
 import { fetchLegalDoc, type LegalSlug } from '../services/legal-api';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { BottomSheet } from './ui/bottom-sheet';
@@ -16,6 +16,7 @@ export const POLICY_TITLES: Record<LegalSlug, string> = {
   'bao-mat': LEGAL_PAGES['bao-mat'].title,
   'doi-tra': LEGAL_PAGES['doi-tra'].title,
   'van-chuyen': LEGAL_PAGES['van-chuyen'].title,
+  'thanh-toan': LEGAL_PAGES['thanh-toan'].title,
 };
 
 /** Chính sách hiện ngay trong app (popup), không mở trang ngoài. `slug` null = đóng. */
@@ -64,7 +65,7 @@ export function PolicySheet({ slug, onClose }: { slug: LegalSlug | null; onClose
           </div>
           <LegalMarkdown
             onPolicy={setLinked}
-            source={defaultLegalContent(active, q.data.vars, {
+            source={defaultLegalContent(active, { ...q.data.vars, ...merchantIdentityOrDefault(q.data.vars) }, {
               hotline: cfg.support?.hotline?.trim() || DEFAULT_LEGAL_SUPPORT.hotline,
               email: cfg.support?.email?.trim() || DEFAULT_LEGAL_SUPPORT.email,
             })}

@@ -128,24 +128,28 @@ export function rewardCardState(
 }
 
 /**
- * Quà nhận tại kho: hạt giống và quà nhỏ không giao tận nhà, khách đọc mã QG- tại kho TP.HCM (API không có cờ riêng cho việc
- * này, đây là đúng quy tắc mà sheet "Đổi quà thành công" vẫn dùng: mọi quà không phải mã giảm giá hay cây góp quỹ).
+ * Quà hiện vật: hạt giống và quà nhỏ không giao riêng. Mặc định tự thêm 0đ vào đơn mua kế tiếp của khách; khách vẫn có thể đọc mã QG-
+ * tại kho TP.HCM (API không có cờ riêng cho việc này, đây là đúng quy tắc mà sheet "Đổi quà thành công" vẫn dùng: mọi quà không phải
+ * mã giảm giá hay cây góp quỹ). Tên hàm và các hằng WAREHOUSE_* giữ nguyên vì hai app đang import.
  */
 export function isWarehousePickup(r: Pick<RewardItemDTO, 'kind'>): boolean {
   return r.kind === 'SEED_PACK' || r.kind === 'GIFT';
 }
 
-export const WAREHOUSE_ONLY_LABEL = 'Chỉ nhận tại kho TP.HCM';
+export const WAREHOUSE_ONLY_LABEL = 'Tự động gửi kèm đơn hàng kế tiếp (0đ) hoặc nhận tại kho';
 
 type PickupPoint = Pick<NonNullable<RewardCatalogDTO['claimPoint']>, 'name' | 'addressLine' | 'communeName' | 'provinceName'>;
 
-/** Câu hỏi lại ở bước xác nhận đổi: nhắc quà không giao tận nhà, kèm địa chỉ kho nếu cấu hình có. */
+/** Câu hỏi lại ở bước xác nhận đổi: nói rõ quà tự thêm vào đơn kế tiếp, kèm địa chỉ kho nếu khách muốn nhận trực tiếp. */
 export function warehouseConfirmText(point: PickupPoint | null | undefined): string {
   const where = point ? `${point.name}, ${pointAddress(point)}` : 'kho Tubu TP.HCM';
-  return `Quà này chỉ nhận tại kho TP.HCM, không giao tận nhà: ${where}. Bạn vẫn muốn đổi?`;
+  return `Quà này sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc bạn nhận tại kho: ${where}. Bạn vẫn muốn đổi?`;
 }
 
-export const WAREHOUSE_PICKUP_DONE = 'Mang mã này tới kho Tubu TP.HCM để nhận quà';
+export const WAREHOUSE_PICKUP_DONE = 'Quà đã lưu vào Ví quà — sẽ tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn (hoặc đọc mã QG-… khi ghé kho Tubu)';
+
+/** Dòng nhắc dưới mã QG- của quà đang chờ nhận trong Quà của tôi. */
+export const GIFT_ATTACH_HINT = 'Tự động thêm (0đ) vào đơn mua hàng kế tiếp của bạn, hoặc đọc mã này khi ghé kho Tubu';
 
 /** Đầu Kho quà gọn: luật nằm sau nút "Thể lệ"; số dư 0 thì có thẻ chỉ cách kiếm điểm thay vì cả loạt "Cần thêm…". */
 export const rewardsGuideCopy = {

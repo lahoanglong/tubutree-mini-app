@@ -439,3 +439,151 @@ describe('UAT GOMDON-8: webhook của vận đơn tạo lại mang order_custome
     expect(data.status).toBe('IGNORED');
   });
 });
+
+describe('W168: chống trùng theo event_id (tài liệu: event_id giữ nguyên qua các lần gửi lại)', () => {
+  const withEvent = { order_id: 55, order_code: 'BE55', order_customer_id: 'TUBU1001', status: 7, created_time: 1758330000, event_id: '6f1c2a9e-0001' };
+
+  it('payload có event_id → dedupeKey = event:<event_id>, rawPayload giữ nguyên event_id', async () => {
+    const ctx = build();
+    await ctx.svc.receive(withEvent);
+    const data = ctx.prisma.gomdonWebhookEvent.create.mock.calls[0][0].data;
+    expect(data).toMatchObject({ dedupeKey: 'event:6f1c2a9e-0001', gomdonOrderId: '55', gomdonStatus: 7 });
+    expect(data.rawPayload).toMatchObject({ event_id: '6f1c2a9e-0001' });
+  });
+
+  it('cùng event_id gửi lại dù created_time/trường khác đổi → cùng khoá; event_id khác → khoá khác', () => {
+    const key = (p: GomdonWebhookPayload) => gomdonDedupeKey(parseGomdonPayload(p), p);
+    expect(key({ ...withEvent, created_time: 1758339999, reason: 'gửi lại' })).toBe(key(withEvent));
+    expect(key({ ...withEvent, event_id: '6f1c2a9e-0002' })).not.toBe(key(withEvent));
+    expect(key(withEvent)).toBe('event:6f1c2a9e-0001');
+  });
+
+  it('không có event_id (hoặc rỗng) → vẫn khoá cũ order_id|status|created_time', () => {
+    for (const event_id of [undefined, '', '  ']) {
+      const p = { ...withEvent, event_id } as GomdonWebhookPayload;
+      expect(gomdonDedupeKey(parseGomdonPayload(p), p)).toBe('55|7|1758330000');
+    }
+  });
+
+  it('Gomdon gửi lại event_id đã PROCESSED (P2002) → duplicate, KHÔNG enqueue lại', async () => {
+    const ctx = build();
+    ctx.prisma.gomdonWebhookEvent.create.mockRejectedValueOnce({ code: 'P2002' });
+    ctx.prisma.gomdonWebhookEvent.findUnique.mockResolvedValueOnce({ id: 'ev0', status: 'PROCESSED' });
+    await expect(ctx.svc.receive({ ...withEvent, created_time: 1758339999 })).resolves.toEqual({ result: true, duplicate: true });
+    expect(ctx.prisma.gomdonWebhookEvent.findUnique).toHaveBeenCalledWith({ where: { dedupeKey: 'event:6f1c2a9e-0001' } });
+    expect(ctx.eventsQueue.add).not.toHaveBeenCalled();
+  });
+
+  it('khoá event_id dài bất thường vẫn được cắt ≤ 255 ký tự', () => {
+    const p = { ...withEvent, event_id: 'x'.repeat(400) };
+    expect(gomdonDedupeKey(parseGomdonPayload(p), p).length).toBe(255);
+  });
+});
+
+describe('W168: sự kiện created_time cũ hơn không ghi đè trạng thái mới hơn', () => {
+  const T = Date.parse('2026-09-20T01:00:00Z') / 1000; // = gomdonStatusAt của recyclingOrder (đang '5')
+
+  it('đang 5 lúc T, webhook 3 (bậc thấp hơn) tới trễ dù created_time MỚI hơn → bỏ qua, không ghi gì', async () => {
+    const ctx = build();
+    const data = await process(ctx, { order_id: 55, status: 3, created_time: T + 600 });
+    expect(ctx.prisma.order.updateMany).not.toHaveBeenCalled();
+    expect(ctx.orderStatus.setStatus).not.toHaveBeenCalled();
+    expect(data.status).toBe('IGNORED');
+  });
+
+  it('cùng bậc 5 ↔ 11: created_time cũ hơn mốc lưu → bỏ qua; mới hơn → ghi đè', async () => {
+    const older = build();
+    expect((await process(older, { order_id: 55, status: 11, created_time: T - 1 })).status).toBe('IGNORED');
+    expect(older.prisma.order.updateMany).not.toHaveBeenCalled();
+
+    const newer = build();
+    expect((await process(newer, { order_id: 55, status: 11, created_time: T + 1 })).status).toBe('PROCESSED');
+    expect(newer.prisma.order.updateMany.mock.calls[0][0].data).toMatchObject({
+      gomdonStatus: '11',
+      gomdonStatusAt: new Date((T + 1) * 1000),
+    });
+  });
+
+  it('mốc cuối (7) không bị ghi đè bởi sự kiện nào về sau, dù created_time mới hơn', async () => {
+    for (const status of [3, 5, 6, 11]) {
+      const ctx = build({ orders: [{ status: 'DELIVERED', gomdonStatus: '7' }] });
+      expect((await process(ctx, { order_id: 55, status, created_time: T + 10_000 })).status).toBe('IGNORED');
+      expect(ctx.prisma.order.updateMany).not.toHaveBeenCalled();
+    }
+  });
+
+  it('gửi lại cùng trạng thái với created_time cũ → không ghi lại lịch sử hành trình / mốc thời gian', async () => {
+    const ctx = build();
+    await process(ctx, { order_id: 55, status: 5, created_time: T - 3600 });
+    expect(ctx.prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('chuỗi sai thứ tự: 7 tới TRƯỚC 5 → đơn giao xong, sự kiện 5 tới sau bị bỏ, không về lại SHIPPING', async () => {
+    const delivered = build({ orders: [{ status: 'SHIPPING', gomdonStatus: '5' }] });
+    await process(delivered, { order_id: 55, status: 7, created_time: T + 500, event_id: 'e7' });
+    expect(delivered.orderStatus.setStatus).toHaveBeenCalledWith('o1', 'DELIVERED', expect.anything());
+
+    const late = build({ orders: [{ status: 'DELIVERED', gomdonStatus: '7' }] });
+    expect((await process(late, { order_id: 55, status: 5, created_time: T + 100, event_id: 'e5' })).status).toBe('IGNORED');
+    expect(late.orderStatus.setStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('W168: khớp đơn khi Gomdon create chưa trả partner_code (đơn chỉ có id số)', () => {
+  // Trạng thái sau pushOrder: partner_code vắng (hoặc đơn được nhận lại qua duplicate:true) → mã tạm = id số.
+  const tempCodeOrder = {
+    status: 'CONFIRMED',
+    gomdonOrderId: '1517251',
+    gomdonPartnerCode: '1517251',
+    shippingCode: '1517251',
+    gomdonStatus: '1',
+    gomdonStatusAt: new Date('2026-11-15T01:00:00Z'),
+  };
+
+  it('webhook mang order_id + order_code + order_customer_id → khớp theo order_id, nâng mã tạm lên mã hãng (order_code)', async () => {
+    const ctx = build({ orders: [tempCodeOrder] });
+    const data = await process(ctx, {
+      event_id: 'ev-a',
+      status: 3,
+      order_id: 1517251,
+      order_code: '84856413835159',
+      order_customer_id: 'TUBU1001',
+      created_time: Date.parse('2026-11-15T02:00:00Z') / 1000,
+    });
+    expect(data.status).toBe('PROCESSED');
+    expect(ctx.prisma.order.findFirst.mock.calls[0][0].where).toEqual({
+      hasRecyclingPickup: true,
+      OR: [{ gomdonOrderId: '1517251' }, { gomdonPartnerCode: '84856413835159' }],
+    });
+    const upd = ctx.prisma.order.updateMany.mock.calls[0][0].data;
+    expect(upd).toMatchObject({ gomdonPartnerCode: '84856413835159', shippingCode: '84856413835159', gomdonStatus: '3' });
+    expect(upd.gomdonOrderId).toBeUndefined(); // id số đã có, không ghi đè
+  });
+
+  it('sự kiện đầu (status 1) chưa có order_code → giữ mã tạm; sự kiện sau mang order_code mới nâng mã', async () => {
+    const first = build({ orders: [tempCodeOrder] });
+    await process(first, { event_id: 'ev-1', status: 1, order_id: 1517251, order_customer_id: 'TUBU1001', created_time: 1763168400 });
+    const firstData = first.prisma.order.updateMany.mock.calls[0]?.[0]?.data ?? {};
+    expect(firstData.gomdonPartnerCode).toBeUndefined();
+
+    const second = build({ orders: [tempCodeOrder] });
+    await process(second, { event_id: 'ev-2', status: 3, order_id: 1517251, order_code: '84856413835159', order_customer_id: 'TUBU1001', created_time: 1763172000 });
+    expect(second.prisma.order.updateMany.mock.calls[0][0].data.gomdonPartnerCode).toBe('84856413835159');
+  });
+
+  it('chỉ có order_code (không order_id) khớp đơn đã lưu mã hãng thật', async () => {
+    const ctx = build({ orders: [{ status: 'CONFIRMED', gomdonStatus: '1' }] });
+    await process(ctx, { event_id: 'ev-c', status: 3, order_code: 'BE55', order_customer_id: 'TUBU1001', created_time: 1763172000 });
+    expect(ctx.prisma.order.findFirst.mock.calls[0][0].where).toEqual({ hasRecyclingPickup: true, OR: [{ gomdonPartnerCode: 'BE55' }] });
+    expect(ctx.prisma.order.updateMany.mock.calls[0][0].data).toMatchObject({ gomdonStatus: '3' });
+  });
+
+  it('order_customer_id vẫn khớp đơn chưa có mã nào (create mất response) và điền cả id lẫn mã hãng', async () => {
+    const ctx = build({
+      orders: [null, { status: 'CONFIRMED', gomdonOrderId: null, gomdonPartnerCode: null, gomdonStatus: 'NEEDS_MANUAL_CHECK', shippingCode: null, gomdonAttempt: 0 }],
+    });
+    const data = await process(ctx, { event_id: 'ev-d', status: 3, order_id: 1517251, order_code: '84856413835159', order_customer_id: 'TUBU1001', created_time: 1763172000 });
+    expect(data.status).toBe('PROCESSED');
+    expect(ctx.prisma.order.updateMany.mock.calls[0][0].data).toMatchObject({ gomdonOrderId: '1517251', gomdonPartnerCode: '84856413835159' });
+  });
+});

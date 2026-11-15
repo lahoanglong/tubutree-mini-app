@@ -3,15 +3,20 @@ import axios, { type AxiosInstance, type AxiosResponse } from 'axios';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { PrismaService } from '../../../prisma/prisma.service';
 import type {
+  GomdonAddressCheck,
   GomdonConfig,
   GomdonCreateOrderBody,
   GomdonCreateOrderResponse,
   GomdonLoginResponse,
+  GomdonRegisterWebhookResult,
+  GomdonShopFeeParams,
+  GomdonShopFeeQuote,
 } from './gomdon.types';
 import {
   DEFAULT_GOMDON_WAREHOUSE,
   DEFAULT_GOMDON_WEIGHT_FALLBACK,
   GOMDON_CONFIG_KEY,
+  GOMDON_SHOP_FEE_FALLBACK,
   hasGomdonCredentials,
   isGomdonRecyclingEnabled,
   loadGomdonConfig,
@@ -27,6 +32,7 @@ import {
 } from './gomdon.errors';
 import { gomdonHealth, type GomdonHealthSnapshot } from './gomdon-health';
 import { PrismaGomdonHealthStore } from './gomdon-health-store';
+import { maskWebhookUrl, scrubWebhookUrl } from './gomdon-webhook-url';
 
 export { GOMDON_CONFIG_KEY };
 
@@ -40,6 +46,36 @@ const TOKEN_MIN_CACHE_MS = 60_000;
  * đều gọi đăng nhập; gõ sai mật khẩu liên tục có thể làm Gomdon khoá tài khoản).
  */
 const LOGIN_REJECTED_COOLDOWN_MS = 60_000;
+/** Kết quả kiểm tra địa chỉ HỢP LỆ giữ 24 giờ (tài liệu: /order/check-address giới hạn 120 lượt/phút). */
+const ADDRESS_CACHE_MS = 24 * 3600_000;
+const ADDRESS_CACHE_MAX_ENTRIES = 10_000;
+/** Giới hạn nội bộ thấp hơn trần 120/phút của Gomdon: vượt thì bỏ qua bước kiểm tra thay vì chặn khách. */
+const ADDRESS_CHECK_MAX_PER_MINUTE = 100;
+
+/** Khoá cache địa chỉ: bỏ khác biệt khoảng trắng/hoa thường giữa các lần khách nhập. */
+function addressKey(province: string, ward: string): string {
+  const norm = (v: string) => v.normalize('NFC').trim().replace(/\s+/g, ' ').toLowerCase();
+  return `${norm(province)}|${norm(ward)}`;
+}
+
+/** id đơn Gomdon dùng được: số dương hoặc chuỗi khác rỗng/0. */
+function validGomdonId(v: unknown): string | null {
+  if (typeof v === 'number') return Number.isFinite(v) && v > 0 ? String(v) : null;
+  if (typeof v === 'string') {
+    const s = v.trim();
+    return s !== '' && s !== '0' ? s : null;
+  }
+  return null;
+}
+
+/** Mô tả lỗi gọi Gomdon không kèm dữ liệu khách (HTTP status/mã lỗi + message của Gomdon). */
+function describeHttpError(err: unknown): string {
+  if (axios.isAxiosError(err)) {
+    const message = (err.response?.data as { message?: unknown } | undefined)?.message;
+    return `HTTP ${err.response?.status ?? err.code ?? 'ERR'}${typeof message === 'string' ? `: ${message}` : ''}`;
+  }
+  return err instanceof Error ? err.message : String(err);
+}
 
 /** Lỗi đăng nhập mà Gomdon đã trả lời rõ là TỪ CHỐI tài khoản (khác lỗi mạng/quá tải). */
 class GomdonLoginRejectedError extends Error {
@@ -89,6 +125,9 @@ export class GomdonClient implements OnApplicationBootstrap {
   /** Single-flight: nhiều request cùng 401 chỉ đăng nhập 1 lần, không đá token của nhau. */
   private loginInFlight: Promise<string> | null = null;
   private readonly health = gomdonHealth;
+  /** `province|ward` hợp lệ → thời điểm hết hạn cache (ms). Kết quả không hợp lệ không cache. */
+  private readonly addressCache = new Map<string, number>();
+  private addressCheckCalls: number[] = [];
 
   constructor(
     private readonly systemConfig: SystemConfigService,
@@ -349,6 +388,26 @@ export class GomdonClient implements OnApplicationBootstrap {
       }
       if (!res.data?.result) {
         const detail = res.data?.message ?? JSON.stringify(res.data);
+        // Tài liệu: order_customer_id đã có đơn còn hiệu lực → result:false + duplicate:true + data.id (mã đơn cũ).
+        // Gửi lại vì mất mạng thì đây chính là đơn của lần gửi trước → coi là tạo thành công.
+        if (res.data?.duplicate === true) {
+          const existing = res.data.data ?? {};
+          const existingId = validGomdonId(existing.id);
+          if (existingId) {
+            this.logger.warn('Gomdon báo order_customer_id đã có đơn — dùng mã đơn cũ như tạo thành công.');
+            return {
+              result: true,
+              message: res.data.message,
+              data: {
+                ...existing,
+                id: existingId,
+                partner_code: existing.partner_code ?? existing.order_code,
+                status: existing.status ?? 1,
+              },
+            };
+          }
+          throw new GomdonDuplicateOrderError(`Gomdon báo mã đơn (order_customer_id) đã có đơn nhưng không trả id: ${detail}`);
+        }
         // order_customer_id "dùng để check unique" (tài liệu): bị từ chối vì trùng = Gomdon ĐÃ CÓ đơn này.
         if (looksLikeDuplicateOrder(res.data?.message)) {
           throw new GomdonDuplicateOrderError(`Gomdon báo mã đơn (order_customer_id) đã có đơn: ${detail}`);
@@ -399,5 +458,169 @@ export class GomdonClient implements OnApplicationBootstrap {
     // Chỉ coi là huỷ xong khi Gomdon nói rõ result:true — không rõ thì để caller retry rồi báo CSKH
     // (báo nhầm "chưa huỷ được" rẻ hơn nhiều so với để bưu tá tới lấy hàng của đơn đã huỷ).
     return { ok: res.data?.result === true, message: res.data?.message };
+  }
+
+  /**
+   * POST có Bearer cho các API phụ (kiểm tra địa chỉ, báo phí, đăng ký webhook): 401 hoặc result:false kèm thông điệp
+   * token → đăng nhập lại và gửi lại đúng 1 lần. Form dựng lại mỗi lần gửi.
+   */
+  private async postWithRelogin<T extends { result?: boolean; message?: string }>(
+    path: string,
+    buildForm: () => FormData,
+  ): Promise<AxiosResponse<T>> {
+    const send = (token: string) =>
+      this.http.post<T>(path, buildForm(), { headers: { Authorization: `Bearer ${token}` } });
+    let res: AxiosResponse<T>;
+    try {
+      res = await send(await this.getValidToken());
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 401) {
+        this.invalidateToken();
+        res = await send(await this.login());
+      } else {
+        throw err;
+      }
+    }
+    if (res.data?.result === false && looksLikeAuthFailure(res.data.message)) {
+      this.invalidateToken();
+      res = await send(await this.login());
+    }
+    return res;
+  }
+
+  /** Còn lượt gọi check-address trong giới hạn nội bộ (cửa sổ trượt 60 giây)? Còn thì ghi nhận một lượt. */
+  private takeAddressCheckSlot(now: number): boolean {
+    this.addressCheckCalls = this.addressCheckCalls.filter((t) => now - t < 60_000);
+    if (this.addressCheckCalls.length >= ADDRESS_CHECK_MAX_PER_MINUTE) return false;
+    this.addressCheckCalls.push(now);
+    return true;
+  }
+
+  /**
+   * Kiểm tra Gomdon có nhận diện địa chỉ 2 cấp (tỉnh/thành + phường/xã) không — POST /api/v2/order/check-address.
+   * Chỉ cache kết quả HỢP LỆ (24 giờ). Không bao giờ chặn khách vì lỗi phía hạ tầng: chưa cấu hình, lỗi mạng/5xx/429,
+   * vượt giới hạn nội bộ → `{ ok:true, skipped:true }`. Chỉ `ok:false` khi Gomdon nói rõ không nhận diện được.
+   */
+  async checkAddress(province: string, ward: string): Promise<GomdonAddressCheck> {
+    const p = (province ?? '').trim();
+    const w = (ward ?? '').trim();
+    if (!p || !w) return { ok: false, message: 'Thiếu tỉnh/thành hoặc phường/xã.' };
+
+    const key = addressKey(p, w);
+    const now = Date.now();
+    const cachedUntil = this.addressCache.get(key);
+    if (cachedUntil !== undefined) {
+      if (cachedUntil > now) return { ok: true };
+      this.addressCache.delete(key);
+    }
+
+    try {
+      if (!(await this.isConfigured())) return { ok: true, skipped: true };
+      if (!this.takeAddressCheckSlot(now)) {
+        this.logger.warn('Gomdon check-address: vượt giới hạn nội bộ, bỏ qua bước kiểm tra địa chỉ.');
+        return { ok: true, skipped: true };
+      }
+      const res = await this.postWithRelogin<{ result?: boolean; message?: string }>('/api/v2/order/check-address', () => {
+        const form = new FormData();
+        form.append('province', p);
+        form.append('ward', w);
+        return form;
+      });
+      if (res.data?.result === true) {
+        if (this.addressCache.size >= ADDRESS_CACHE_MAX_ENTRIES) this.addressCache.clear();
+        this.addressCache.set(key, now + ADDRESS_CACHE_MS);
+        return { ok: true, message: res.data.message };
+      }
+      if (res.data?.result === false) {
+        return { ok: false, message: res.data.message ?? 'Gomdon không nhận diện được địa chỉ.' };
+      }
+      this.logger.warn('Gomdon check-address trả phản hồi không có result — bỏ qua bước kiểm tra địa chỉ.');
+      return { ok: true, skipped: true };
+    } catch (err) {
+      if (axios.isAxiosError(err) && err.response?.status === 422) {
+        const message = (err.response.data as { message?: string } | undefined)?.message;
+        return { ok: false, message: message ?? 'Thiếu tỉnh/thành hoặc phường/xã.' };
+      }
+      this.logger.warn(`Gomdon check-address lỗi (${describeHttpError(err)}) — bỏ qua bước kiểm tra địa chỉ.`);
+      return { ok: true, skipped: true };
+    }
+  }
+
+  /**
+   * Tạm tính phí vận chuyển — POST /api/v2/order/shop-fee (weight gram, tiền VND, kích thước mm). Không bao giờ ném lỗi:
+   * Gomdon chưa cấu hình, lỗi mạng/5xx/timeout, result:false hoặc phí không phải số dương → phí ước lượng cố định
+   * (`estimated: true`) để checkout vẫn hiển thị được một con số.
+   */
+  async quoteShopFeeDetailed(params: GomdonShopFeeParams): Promise<GomdonShopFeeQuote> {
+    const estimate = (reason: string): GomdonShopFeeQuote => {
+      this.logger.warn(`Gomdon shop-fee: dùng phí ước lượng ${GOMDON_SHOP_FEE_FALLBACK}đ (${reason}).`);
+      return { fee: GOMDON_SHOP_FEE_FALLBACK, estimated: true };
+    };
+    try {
+      if (!(await this.isConfigured())) return estimate('Gomdon chưa cấu hình');
+      const res = await this.postWithRelogin<{ result?: boolean; message?: string; data?: unknown }>(
+        '/api/v2/order/shop-fee',
+        () => {
+          const form = new FormData();
+          const fields: Array<[string, number | undefined]> = [
+            ['weight', params.weight],
+            ['collect_amount', params.collectAmount],
+            ['product_price', params.productPrice],
+            ['width', params.width],
+            ['height', params.height],
+            ['length', params.length],
+          ];
+          for (const [name, value] of fields) {
+            if (typeof value === 'number' && Number.isFinite(value)) form.append(name, String(Math.round(value)));
+          }
+          return form;
+        },
+      );
+      const fee = Number(res.data?.data);
+      if (res.data?.result === true && Number.isFinite(fee) && fee > 0) return { fee, estimated: false };
+      return estimate('phản hồi không dùng được');
+    } catch (err) {
+      return estimate(describeHttpError(err));
+    }
+  }
+
+  async quoteShopFee(params: GomdonShopFeeParams): Promise<number> {
+    return (await this.quoteShopFeeDetailed(params)).fee;
+  }
+
+  /**
+   * Đăng ký URL nhận webhook (POST /api/v2/auth/user/update, trường webhook_url). Chỉ nhận https. URL có thể mang secret
+   * ở cuối đường dẫn nên log/thông báo lỗi chỉ dùng dạng đã che (`.../gomdon/***`). Không ném lỗi — trả `{ ok:false, message }`.
+   */
+  async registerWebhookUrl(webhookUrl: string): Promise<GomdonRegisterWebhookResult> {
+    let parsed: URL;
+    try {
+      parsed = new URL(webhookUrl);
+    } catch {
+      return { ok: false, message: 'URL webhook không hợp lệ.' };
+    }
+    if (parsed.protocol !== 'https:') return { ok: false, message: 'Gomdon chỉ nhận webhook_url dạng https.' };
+
+    const masked = maskWebhookUrl(webhookUrl);
+    try {
+      await this.assertConfigured();
+      this.logger.log(`Đăng ký webhook Gomdon: ${masked}`);
+      const res = await this.postWithRelogin<{ result?: boolean; message?: string }>('/api/v2/auth/user/update', () => {
+        const form = new FormData();
+        form.append('webhook_url', webhookUrl);
+        return form;
+      });
+      const message = res.data?.message ? scrubWebhookUrl(res.data.message, webhookUrl) : undefined;
+      if (res.data?.result === true) {
+        this.logger.log(`Gomdon đã nhận webhook_url ${masked}.`);
+        return { ok: true, message };
+      }
+      this.logger.warn(`Gomdon không nhận webhook_url ${masked}: ${message ?? 'không có thông điệp'}`);
+      return { ok: false, message: message ?? 'Gomdon không xác nhận đăng ký webhook.' };
+    } catch (err) {
+      const message = scrubWebhookUrl(describeHttpError(err), webhookUrl);
+      this.logger.warn(`Đăng ký webhook Gomdon ${masked} lỗi: ${message}`);
+      return { ok: false, message };
+    }
   }
 }

@@ -494,9 +494,9 @@ describe('SystemConfigService.set — mốc bắt đầu đối soát giao hộ 
 });
 
 describe('SystemConfigService.set — nội dung điều khoản/chính sách (D5-01)', () => {
-  const keys = ['legal.dieu-khoan', 'legal.bao-mat', 'legal.doi-tra', 'legal.van-chuyen'];
+  const keys = ['legal.dieu-khoan', 'legal.bao-mat', 'legal.doi-tra', 'legal.van-chuyen', 'legal.thanh-toan'];
 
-  it('hệ thống biết bốn khoá này dù DB chưa có dòng (admin ghi được lần đầu)', () => {
+  it('hệ thống biết năm khoá này dù DB chưa có dòng (admin ghi được lần đầu)', () => {
     for (const key of keys) expect(SystemConfigService.hasWriteRule(key)).toBe(true);
   });
 

@@ -22,3 +22,24 @@ export function recyclingWeight(
     maxKg: (Math.max(totalGrams, fallback) / 1000).toFixed(1),
   };
 }
+
+/** Trần cân nặng một kiện đổi hàng thu gom gửi Gomdon (gram). */
+export const GOMDON_MAX_PARCEL_GRAMS = 10_000;
+
+/**
+ * Cân nặng gửi Gomdon + số kg ghi chú cho đơn đổi hàng kèm rác. `totalGrams`: cân hàng của đơn (recyclingWeight);
+ * `returnGrams`: số gram khách khai gửi lại (null/0 = chưa khai). Cả hai bị chặn ở trần 10 kg của một kiện.
+ */
+export function recyclingParcel(
+  totalGrams: number,
+  returnGrams: number | null | undefined,
+): { weight: number; maxKg: string; declaredKg: string } {
+  const ret = typeof returnGrams === 'number' && returnGrams > 0 ? returnGrams : 0;
+  const cap = Math.min(totalGrams, GOMDON_MAX_PARCEL_GRAMS);
+  const maxKg = (cap / 1000).toFixed(1);
+  return {
+    weight: Math.min(Math.max(totalGrams, ret), cap),
+    maxKg,
+    declaredKg: ret > 0 ? (ret / 1000).toFixed(1) : maxKg,
+  };
+}

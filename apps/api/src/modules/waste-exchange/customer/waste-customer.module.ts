@@ -6,5 +6,5 @@ import { WasteMeService } from './waste-me.service';
 import { WastePreviewService } from './waste-preview.service';
 import { WasteRequestsService } from './waste-requests.service';
 
-@Module({ imports: [WasteCoreModule], controllers: [WasteCustomerController], providers: [WasteRequestsService, WasteCatalogueService, WasteMeService, WastePreviewService] })
+@Module({ imports: [WasteCoreModule], controllers: [WasteCustomerController], providers: [WasteRequestsService, WasteCatalogueService, WasteMeService, WastePreviewService], exports: [WasteRequestsService, WastePreviewService] })
 export class WasteCustomerModule {}

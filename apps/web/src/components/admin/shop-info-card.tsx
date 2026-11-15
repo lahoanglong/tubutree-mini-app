@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
-import { LEGAL_PAGES, LEGAL_SLUGS, type LegalSlug } from '@/lib/legal';
+import { LEGAL_PAGES, LEGAL_SLUGS, isBctNoticeUrl, type LegalSlug } from '@/lib/legal';
 import { LegalMarkdown } from '@/components/legal-markdown';
 import { BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
@@ -14,13 +14,13 @@ const COMPANY_FIELDS = [
   { key: 'company.legal_name', label: 'Tên công ty', hint: 'Đúng tên trên giấy đăng ký kinh doanh. Hiện ở chân trang và các trang chính sách.', placeholder: 'Công ty TNHH ...' },
   { key: 'company.tax_code', label: 'Mã số thuế', hint: 'Hiện cho khách ở chân trang.', placeholder: '0123456789' },
   { key: 'company.address', label: 'Địa chỉ trụ sở', hint: 'Địa chỉ đã đăng ký kinh doanh.', placeholder: 'Số nhà, đường, phường, tỉnh' },
-  { key: 'company.bct_notice_url', label: 'Link thông báo Bộ Công Thương', hint: 'Không bắt buộc. Dán link bắt đầu bằng https://. Để trống thì ẩn dòng "Đã thông báo Bộ Công Thương".', placeholder: 'https://online.gov.vn/...' },
+  { key: 'company.bct_notice_url', label: 'Link thông báo Bộ Công Thương', hint: 'Chỉ dán khi Bộ Công Thương đã duyệt hồ sơ: link https do cổng online.gov.vn cấp. Để trống thì ẩn huy hiệu "Đã thông báo Bộ Công Thương".', placeholder: 'https://online.gov.vn/...' },
 ] as const;
 
 const LEGAL_MAX = 50_000;
 const BCT_URL_MAX = 500;
 
-/** Cùng luật với `httpsUrl` ở API (company-config.ts): link API sẽ bỏ thì không cho lưu. */
+/** Cùng luật với `bctNoticeUrl` ở API (company-config.ts) và isBctNoticeUrl của app-core: link API sẽ bỏ thì không cho lưu. */
 function bctLinkProblem(value: string): string | null {
   if (value.length > BCT_URL_MAX) return `Link dài quá ${BCT_URL_MAX} ký tự.`;
   let u: URL;
@@ -31,6 +31,7 @@ function bctLinkProblem(value: string): string | null {
   }
   if (u.protocol !== 'https:') return 'Link phải bắt đầu bằng https:// và không có khoảng trắng.';
   if (u.username || u.password) return 'Link không được chứa tên đăng nhập hay mật khẩu.';
+  if (!isBctNoticeUrl(value)) return 'Link phải thuộc tên miền online.gov.vn hoặc *.gov.vn (không có cổng riêng, không thừa khoảng trắng) thì huy hiệu mới hiện.';
   return null;
 }
 

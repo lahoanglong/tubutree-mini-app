@@ -20,6 +20,7 @@ const ROWS: ConfigRow[] = [
   { key: 'legal.bao-mat', value: '', description: null, category: 'legal' },
   { key: 'legal.doi-tra', value: '# Đổi trả\n\n- 7 ngày', description: null, category: 'legal' },
   { key: 'legal.van-chuyen', value: '', description: null, category: 'legal' },
+  { key: 'legal.thanh-toan', value: '', description: null, category: 'legal' },
 ];
 
 function setup() {
@@ -78,6 +79,9 @@ describe('ShopInfoCard', () => {
     ['https://user:pass@online.gov.vn/x', 'tên đăng nhập'],
     [`https://online.gov.vn/${'a'.repeat(500)}`, 'dài quá'],
     ['http://online.gov.vn', 'https://'],
+    ['https://example.com/online.gov.vn', 'online.gov.vn hoặc *.gov.vn'],
+    ['https://online.gov.vn.evil.com/x', 'online.gov.vn hoặc *.gov.vn'],
+    ['https://online.gov.vn:8443/x', 'online.gov.vn hoặc *.gov.vn'],
   ])('link Bộ Công Thương bị API bỏ (%#) thì chặn lưu', (url, hint) => {
     const { container } = setup();
     typeInto(container.querySelector('input[type="url"]'), url);
@@ -102,6 +106,6 @@ describe('ShopInfoCard', () => {
     click(byText(doc, 'button', 'Lưu'));
     await flush();
     expect(puts).toEqual([{ key: 'legal.doi-tra', value: '# Đổi trả\n\n- 14 ngày' }]);
-    expect(['dieu-khoan', 'bao-mat', 'doi-tra', 'van-chuyen'].every((s) => container.querySelector(`[data-legal="${s}"]`))).toBe(true);
+    expect(['dieu-khoan', 'bao-mat', 'doi-tra', 'van-chuyen', 'thanh-toan'].every((s) => container.querySelector(`[data-legal="${s}"]`))).toBe(true);
   });
 });

@@ -8,6 +8,7 @@ import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
 import type { PublicConfig } from '../services/shop-api';
 import { callPhone } from '../services/zmp-bridge';
+import { isBctNoticeUrl, merchantIdentityOrDefault } from '@tubutree/app-core/legal';
 import type { WebPolicySlug } from '../utils/web-policy';
 import { PolicySheet } from '../components/policy-sheet';
 import { Card } from '../components/ui/card';
@@ -23,9 +24,13 @@ import { DEFAULT_SUPPORT, fallbackFaq, fetchFaqs, fetchSupportContact } from './
 
 const ALL_CATS = 'Tất cả';
 
-/** "Đơn vị vận hành: tên · MST mã · địa chỉ"; ẩn phần chưa nhập, null khi không còn gì. */
+/**
+ * "Đơn vị vận hành: tên · MST mã · địa chỉ". Admin chưa nhập thông tin nào thì nêu thương nhân đã đăng ký của Tubu Tree; đã nhập
+ * thì ẩn từng phần để trống.
+ */
 function operatorLine(company: PublicConfig['company']): string | null {
-  const parts = [company?.legalName, company?.taxCode ? `MST ${company.taxCode}` : null, company?.address].filter(Boolean);
+  const id = merchantIdentityOrDefault(company);
+  const parts = [id.legalName, id.taxCode ? `MST ${id.taxCode}` : null, id.address].filter(Boolean);
   return parts.length > 0 ? `Đơn vị vận hành: ${parts.join(' · ')}` : null;
 }
 const FAQ_SKELETON_ROWS = 4;
@@ -83,7 +88,8 @@ export default function AboutPage() {
 
   const [policy, setPolicy] = useState<WebPolicySlug | null>(null);
   const operator = operatorLine(publicConfig.company);
-  const bctUrl = publicConfig.company?.bctNoticeUrl ?? null;
+  const bctRaw = publicConfig.company?.bctNoticeUrl;
+  const bctUrl = isBctNoticeUrl(bctRaw) ? bctRaw : null;
   const shownFaq = faq.filter((f) => faqCat === ALL_CATS || f.cat === faqCat);
 
   return (
@@ -216,7 +222,8 @@ export default function AboutPage() {
         <LinkRow label="Điều khoản sử dụng" onClick={() => setPolicy('dieu-khoan')} />
         <LinkRow label="Chính sách bảo mật" onClick={() => setPolicy('bao-mat')} />
         <LinkRow label="Chính sách đổi trả" onClick={() => setPolicy('doi-tra')} />
-        <LinkRow label="Chính sách vận chuyển" onClick={() => setPolicy('van-chuyen')} last={!operator && !bctUrl} />
+        <LinkRow label="Chính sách vận chuyển" onClick={() => setPolicy('van-chuyen')} />
+        <LinkRow label="Chính sách và hình thức thanh toán" onClick={() => setPolicy('thanh-toan')} last={!operator && !bctUrl} />
         {bctUrl && (
           <Text variant="body-sm" tone="secondary" as="p" style={{ margin: '12px 0 0' }}>
             Đã thông báo Bộ Công Thương
