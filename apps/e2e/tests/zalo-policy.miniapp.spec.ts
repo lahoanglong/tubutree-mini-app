@@ -102,7 +102,7 @@ test.describe('Zalo Mini App - Cộng đồng chỉ đọc, không link ngoài',
     await page.getByRole('button', { name: /Chính sách đổi trả/ }).click();
     await expect(page.getByTestId('legal-draft-banner')).toContainText('BẢN NHÁP', { timeout: 15_000 });
     await expect(page.getByText('hư hỏng, đổ vỡ', { exact: false })).toBeVisible();
-    await expect(page.getByText('Đơn vị vận hành: Công ty TNHH Tubu Tree')).toBeVisible();
+    await expect(page.getByTestId('legal-markdown').getByText('Đơn vị vận hành: Công ty TNHH Tubu Tree')).toBeVisible();
     await shot(page, 'policy-sheet');
     await page.getByTestId('legal-markdown').getByRole('button', { name: 'Chính sách vận chuyển' }).click();
     await expect(page.getByRole('heading', { name: 'Chính sách vận chuyển' })).toBeVisible();

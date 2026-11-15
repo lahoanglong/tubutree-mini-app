@@ -218,7 +218,7 @@ test.describe('Web khách: thanh toán', () => {
 
     await page.goto('/gio-hang');
     await page.getByLabel('Chọn Xà phòng thảo mộc để thanh toán').uncheck();
-    await page.getByRole('link', { name: /^Thanh toán/ }).click();
+    await page.getByRole('link', { name: /^Thanh toán \(\d+\)/ }).click();
     await expect(page).toHaveURL(/\/thanh-toan/);
     await expect(page.getByRole('button', { name: 'Đặt hàng' })).toBeEnabled();
 

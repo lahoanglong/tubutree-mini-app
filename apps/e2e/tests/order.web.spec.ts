@@ -2,7 +2,7 @@ import { expect, reply, test, type MockApi } from './support/mock-api';
 import { PURCHASED } from './support/buy-flow-mocks';
 
 /**
- * Web khách, lane đơn hàng (việc giỏ và thanh toán): xoá có hoàn tác, Thu kèm rác, Idempotency-Key theo nội dung đơn,
+ * Web khách, lane đơn hàng (việc giỏ và thanh toán): xoá có hoàn tác, Đổi rác kèm đơn, Idempotency-Key theo nội dung đơn,
  * PRICE_CHANGED. Mọi lời gọi /api/** đi qua mock (fixture `api`); host phải là localhost như các spec web khác.
  */
 
@@ -15,10 +15,22 @@ const LINE = {
   id: 'i1', variationId: 'v1', productName: 'Dầu gội bồ kết hữu cơ', variationName: '500ml', slug: 'dau-goi', thumbnail: null,
   unitPrice: 150000, quantity: 2, stock: 8, total: 300000, fulfiller: TUBU,
 };
-const PICKUP = {
-  id: 'req-p', code: 'TR-PICK1', method: 'PICKUP', status: 'OPEN', orderCode: null, estimatedPoints: 12000,
-  lines: [{ itemName: 'Thùng carton', unitLabel: 'thùng', declaredQty: 12 }],
+const PICKUP_OPTIONS = {
+  gateOpen: true, minPoints: 10000, orderWeightGrams: 3000, maxReturnWeightGrams: 3000,
+  items: [{
+    id: 'it-carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1000,
+    hazardous: false, blockedReason: null, prepInstructions: null,
+  }],
+  existingRequest: {
+    id: 'req-p', code: 'TR-PICK1', estimatedPoints: 12000,
+    lines: [{ itemId: 'it-carton', itemName: 'Thùng carton', unitLabel: 'thùng', declaredQty: 12 }],
+  },
 };
+const pickupQuote = (applied: boolean) => ({
+  gateOpen: true, eligible: applied, reason: null, mode: applied ? 'REQUEST' : null, estimatedPoints: applied ? 12000 : 0,
+  minPoints: 10000, freeShip: applied, shippingFeeWaived: applied ? 30000 : 0, orderWeightGrams: 3000, maxReturnWeightGrams: 3000,
+  returnWeightGrams: applied ? 500 : null,
+});
 const placedOrder = (paymentMethod: string, total: number) => ({
   id: 'n1', code: 'TUBU2026101900001', status: 'CONFIRMED', subtotal: 300000, discount: 0, shippingFee: 30000, total,
   paymentMethod, paymentStatus: 'UNPAID', createdAt: new Date().toISOString(), items: [],
@@ -39,7 +51,6 @@ function mockBuyer(api: MockApi, opts: { pickup?: boolean } = {}) {
     support: { hotline: '0984606774', email: 'tubutree@gmail.com' },
     waste: { enabled: true, dropoff: true, mailin: true, pickup: opts.pickup === true },
   });
-  api.get('/waste/me', { blocked: false, shipLockedAt: null, openRequests: [PICKUP] });
   api.get('/cart', () => {
     const subtotal = lines.reduce((s, l) => s + l.total, 0);
     return { items: lines, couponCode: null, subtotal, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: lines.length };
@@ -52,10 +63,17 @@ function mockBuyer(api: MockApi, opts: { pickup?: boolean } = {}) {
     lines = [LINE];
     return { items: lines, couponCode: null, subtotal: 300000, discount: 0, freeship: false, freeshipThreshold: 500000, itemCount: 1 };
   });
-  api.post('/checkout/quote', {
-    subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000, total: 330000,
-    pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0,
+  api.post('/checkout/quote', ({ call }) => {
+    const applied = typeof (call.body as { wasteRequestId?: string }).wasteRequestId === 'string';
+    const waived = opts.pickup === true && applied ? 30000 : 0;
+    return {
+      subtotal: 300000, discount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 30000 - waived, total: 330000 - waived,
+      pointsEarned: 0, pointsBalance: 0, redeemablePoints: 0,
+      shippingFeeWaived: waived, shippingFeeWaivedReason: waived > 0 ? 'RECYCLE_PICKUP' : null,
+      pickup: opts.pickup === true ? pickupQuote(applied) : null,
+    };
   });
+  api.get('/checkout/pickup-options', PICKUP_OPTIONS);
   api.get('/me/purchased-items', { items: [], nextCursor: null });
   api.get('/orders/me/refunds', []);
   api.get('/orders', { data: [], meta: { page: 1, limit: 20, total: 0 } });
@@ -86,25 +104,36 @@ test.describe('Web khách: giỏ và thanh toán', () => {
     await expect(page.getByText('Dầu gội bồ kết hữu cơ').first()).toBeVisible();
   });
 
-  test('Thu kèm rác: bật công tắc thì đơn mang wasteRequestId', async ({ page, api }) => {
+  test('Đổi rác kèm đơn: bật công tắc, dùng phiếu có sẵn rồi Xong thì đơn mang wasteRequestId và cân nặng gửi lại', async ({ page, api }) => {
     mockBuyer(api, { pickup: true });
     api.post('/checkout/place-order', ({ call }) => placedOrder('COD', (call.body as { expectedTotal: number }).expectedTotal));
 
     await page.goto('/thanh-toan');
-    await expect(page.getByText('TR-PICK1')).toBeVisible();
-    await expect(page.getByText('Thùng carton: 12 thùng')).toBeVisible();
-    await page.getByLabel('Thu kèm rác').check();
+    const card = page.getByTestId('checkout-pickup');
+    await expect(card).toBeVisible();
+    await expect(card.getByRole('switch')).toHaveAttribute('aria-checked', 'false');
+
+    await card.getByRole('switch').click();
+    const sheet = page.getByTestId('checkout-pickup-sheet');
+    await expect(sheet.getByText(/TR-PICK1/)).toBeVisible();
+    await page.getByRole('button', { name: 'Xong' }).click();
+
+    await expect(card.getByRole('switch')).toHaveAttribute('aria-checked', 'true');
+    const placed = api.waitForCall('POST', '/checkout/place-order');
+    await page.getByRole('button', { name: 'Đặt hàng' }).click();
+    expect((await placed).body).toMatchObject({ wasteRequestId: 'req-p', returnWeightGrams: 500, paymentMethod: 'COD' });
+  });
+
+  test('cổng đổi rác kèm đơn đóng: không có thẻ, đơn không mang wasteRequestId', async ({ page, api }) => {
+    mockBuyer(api, { pickup: false });
+    api.post('/checkout/place-order', ({ call }) => placedOrder('COD', (call.body as { expectedTotal: number }).expectedTotal));
+    await page.goto('/thanh-toan');
+    await expect(page.getByRole('button', { name: 'Đặt hàng' })).toBeEnabled();
+    await expect(page.getByTestId('checkout-pickup')).toHaveCount(0);
 
     const placed = api.waitForCall('POST', '/checkout/place-order');
     await page.getByRole('button', { name: 'Đặt hàng' }).click();
-    expect((await placed).body).toMatchObject({ wasteRequestId: 'req-p', paymentMethod: 'COD' });
-  });
-
-  test('cờ pickup tắt: không có mục Thu kèm rác', async ({ page, api }) => {
-    mockBuyer(api, { pickup: false });
-    await page.goto('/thanh-toan');
-    await expect(page.getByRole('button', { name: 'Đặt hàng' })).toBeEnabled();
-    await expect(page.getByText('Thu kèm rác')).toHaveCount(0);
+    expect((await placed).body).not.toHaveProperty('wasteRequestId');
   });
 
   test('lỗi 503 rồi bấm lại cùng nội dung gửi cùng Idempotency-Key; đổi cách trả tiền thì key mới', async ({ page, api }) => {
