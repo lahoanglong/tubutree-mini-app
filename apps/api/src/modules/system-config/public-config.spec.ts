@@ -34,6 +34,23 @@ describe('buildPublicConfig — chat', () => {
   });
 });
 
+describe('buildPublicConfig — shippingFlatFee (phí giao cố định dưới ngưỡng freeship)', () => {
+  it('mặc định 19.000đ khi chưa cấu hình, cùng mặc định với PricingService', async () => {
+    expect((await build({})).shippingFlatFee).toBe(19000);
+  });
+
+  it('số đã cấu hình được trả nguyên văn, kể cả 0 (mọi đơn miễn phí giao)', async () => {
+    expect((await build({ 'shipping.flat_fee_below_threshold': 25000 })).shippingFlatFee).toBe(25000);
+    expect((await build({ 'shipping.flat_fee_below_threshold': 0 })).shippingFlatFee).toBe(0);
+  });
+
+  it('giá trị hỏng (chuỗi, âm, NaN, null) thì về mặc định, không ra con số vô lý cho JSON-LD', async () => {
+    for (const bad of ['19000', -1, Number.NaN, null, Infinity]) {
+      expect((await build({ 'shipping.flat_fee_below_threshold': bad })).shippingFlatFee).toBe(19000);
+    }
+  });
+});
+
 describe('buildPublicConfig — catalogLaunchDate (mốc ngày mở bán)', () => {
   it('mặc định null: client giữ luật 30 ngày', async () => {
     expect((await build({})).catalogLaunchDate).toBeNull();
@@ -48,17 +65,41 @@ describe('buildPublicConfig — catalogLaunchDate (mốc ngày mở bán)', () =
 
 describe('buildPublicConfig — đơn vị vận hành', () => {
   it('mặc định: mọi trường null', async () => {
-    expect((await build({})).company).toEqual({ legalName: null, taxCode: null, address: null, bctNoticeUrl: null });
+    expect((await build({})).company).toEqual({ legalName: null, taxCode: null, address: null, bctNoticeUrl: null, representative: null, registrationNumber: null, registrationDate: null, registrationPlace: null });
   });
 
   it('trường chỉ có ký tự vô hình là null để chân trang ẩn dòng; ký tự vô hình ở hai đầu chữ thật bị cắt', async () => {
     const cfg = await build({ 'company.legal_name': '\u200b\ufeff\u2060', 'company.tax_code': '\u200b0312345678\ufeff', 'company.address': ' \u200b ' });
-    expect(cfg.company).toEqual({ legalName: null, taxCode: '0312345678', address: null, bctNoticeUrl: null });
+    expect(cfg.company).toEqual({ legalName: null, taxCode: '0312345678', address: null, bctNoticeUrl: null, representative: null, registrationNumber: null, registrationDate: null, registrationPlace: null });
   });
 
   it('trả tên, MST, địa chỉ đã cắt khoảng trắng; trường rỗng hoặc sai kiểu là null', async () => {
     const cfg = await build({ 'company.legal_name': ' Công ty A ', 'company.tax_code': '0312345678', 'company.address': '   ', 'company.bct_notice_url': 5 });
-    expect(cfg.company).toEqual({ legalName: 'Công ty A', taxCode: '0312345678', address: null, bctNoticeUrl: null });
+    expect(cfg.company).toEqual({ legalName: 'Công ty A', taxCode: '0312345678', address: null, bctNoticeUrl: null, representative: null, registrationNumber: null, registrationDate: null, registrationPlace: null });
+  });
+
+  it('người đại diện và ĐKDN: trả đã chuẩn hoá; ngày dd/mm/yyyy từ nhiều dạng; ngày vô lý, số lạ, chuỗi quá dài hoặc sai kiểu là null', async () => {
+    const ok = await build({
+      'company.representative': ' Nguyễn Văn A ',
+      'company.business_registration_number': ' 0319585995 ',
+      'company.business_registration_date': '2020-03-02',
+      'company.business_registration_place': 'Sở Tài chính Thành phố Hồ Chí Minh',
+    });
+    expect(ok.company).toMatchObject({
+      representative: 'Nguyễn Văn A',
+      registrationNumber: '0319585995',
+      registrationDate: '02/03/2020',
+      registrationPlace: 'Sở Tài chính Thành phố Hồ Chí Minh',
+    });
+    expect((await build({ 'company.business_registration_date': '2/3/2020' })).company.registrationDate).toBe('02/03/2020');
+    for (const bad of ['31/02/2020', '2099-01-01', '01/01/1980', 'mai', 20200302, null]) {
+      expect((await build({ 'company.business_registration_date': bad })).company.registrationDate).toBeNull();
+    }
+    for (const bad of ['<script>', 'a'.repeat(41), 5, null]) {
+      expect((await build({ 'company.business_registration_number': bad })).company.registrationNumber).toBeNull();
+    }
+    expect((await build({ 'company.representative': 'x'.repeat(201) })).company.representative).toBeNull();
+    expect((await build({ 'company.business_registration_place': '\u200b' })).company.registrationPlace).toBeNull();
   });
 
   it('link Bộ Công Thương chỉ nhận https (không đưa javascript: hoặc http cho khách)', async () => {

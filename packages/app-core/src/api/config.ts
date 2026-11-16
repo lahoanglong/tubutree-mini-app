@@ -8,6 +8,8 @@ export interface ShippingEta {
 }
 export interface PublicConfig {
   freeshipThreshold: number;
+  /** Phí giao cố định (đồng) của phần hàng Tubu Tree giao chưa đạt ngưỡng miễn phí; thiếu khi API cũ. */
+  shippingFlatFee?: number;
   /** Tỉ lệ giảm khi đặt định kỳ, dạng phân số (0.12 = 12%). */
   subscribeDiscountPct: number;
   /** Hệ số khi CTV nhận hoa hồng về Ví Tubu (×1.5). */
@@ -27,7 +29,17 @@ export interface PublicConfig {
   /** Kênh hỗ trợ khách; từng trường null khi admin để trống. */
   support?: { hotline: string | null; email: string | null; zaloOaName: string | null };
   /** Đơn vị vận hành (tên, MST, địa chỉ, link đã thông báo Bộ Công Thương); từng trường null khi admin để trống, thiếu khi API cũ. */
-  company?: { legalName: string | null; taxCode: string | null; address: string | null; bctNoticeUrl: string | null };
+  company?: {
+    legalName: string | null;
+    taxCode: string | null;
+    address: string | null;
+    bctNoticeUrl: string | null;
+    /** Người đại diện theo pháp luật và Giấy chứng nhận ĐKDN (số, ngày cấp dd/mm/yyyy, nơi cấp); thiếu khi API cũ, null khi admin để trống. */
+    representative?: string | null;
+    registrationNumber?: string | null;
+    registrationDate?: string | null;
+    registrationPlace?: string | null;
+  };
   /** Số cho khách mới (D2-07): voucher chào mừng và freeship đơn đầu (mặc định bật từ 199.000đ). Thiếu khi API cũ → không hứa con số. */
   newCustomer?: {
     welcomeVoucher: { amount: number; minOrder: number };

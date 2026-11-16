@@ -50,11 +50,12 @@ describe('SITE_URL', () => {
 
 describe('NEXT_PUBLIC_SITE_URL lúc build', () => {
   // NEXT_PUBLIC_* bị nhúng vào bundle lúc `next build`, nên phải đi qua build arg của Dockerfile.
-  it('docker-compose.vietnix.yml truyền NEXT_PUBLIC_SITE_URL cho web: theo biến cùng tên (đổi sang apex lúc cutover), mặc định app.${WEB_DOMAIN}', () => {
+  it('docker-compose.vietnix.yml truyền NEXT_PUBLIC_SITE_URL cho web theo biến cùng tên và KHÔNG có mặc định host app.* (thiếu biến thì deploy.sh/Dockerfile dừng, canonical không rơi về app.)', () => {
     const compose = repoFile('docker-compose.vietnix.yml');
     const web = compose.slice(compose.indexOf('\n  web:'), compose.indexOf('\nvolumes:'));
-    expect(web).toMatch(/args:[\s\S]*NEXT_PUBLIC_SITE_URL: \$\{NEXT_PUBLIC_SITE_URL:-https:\/\/app\.\$\{WEB_DOMAIN\}\}/);
+    expect(web).toMatch(/args:[\s\S]*NEXT_PUBLIC_SITE_URL: \$\{NEXT_PUBLIC_SITE_URL:-\}/);
     expect(web).not.toMatch(/NEXT_PUBLIC_SITE_URL: https:\/\//);
+    expect(web).not.toMatch(/NEXT_PUBLIC_SITE_URL:-https:\/\/app\./);
   });
 
   it('Dockerfile của web khai báo ARG và ENV NEXT_PUBLIC_SITE_URL trước bước build', () => {
@@ -161,6 +162,19 @@ describe('PRIVATE_PATHS và robots từ route map', () => {
     }
     expect(rule.allow).toEqual(expect.arrayContaining(['/', '/cong-dong']));
     expect([rule.allow].flat().some((a) => a?.includes(':'))).toBe(false);
+  });
+
+  it('không đường dẫn nào nằm ở cả Allow lẫn Disallow (/cong-dong: trang công khai, chỉ chặn cây con /cong-dong/ vì /cong-dong/<id> và /su-kien riêng tư)', async () => {
+    const robots = (await import('../app/robots')).default;
+    const rule = [robots().rules].flat()[0]!;
+    const allow = [rule.allow].flat() as string[];
+    const disallow = [rule.disallow].flat() as string[];
+    expect(allow.filter((a) => disallow.includes(a))).toEqual([]);
+    expect(allow).toContain('/cong-dong');
+    expect(disallow).not.toContain('/cong-dong');
+    expect(disallow).toContain('/cong-dong/');
+    expect(new Set(disallow).size).toBe(disallow.length);
+    expect(disallow).toEqual(expect.arrayContaining(['/admin', '/admin/', '/tai-khoan', '/tai-khoan/', '/gio-hang', '/thanh-toan']));
   });
 });
 

@@ -156,6 +156,24 @@ describe('siteJsonLd', () => {
     expect(JSON.stringify(org)).not.toContain('telephone');
   });
 
+  it('legalName, taxID, address lấy từ cấu hình công ty; chưa nhập gì thì là thương nhân đã đăng ký', () => {
+    const [def] = graph(siteJsonLd(undefined));
+    expect(def).toMatchObject({
+      legalName: 'CÔNG TY TNHH TUBU TREE',
+      taxID: '0319585995',
+      address: { '@type': 'PostalAddress', streetAddress: 'Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh', addressCountry: 'VN' },
+    });
+    const [own] = graph(siteJsonLd({ hotline: '0984 606 774', email: 'a@b.vn', company: { legalName: 'Công ty TNHH Mẫu', taxCode: '0312345678', address: '1 Đường A, Quận B' } }));
+    expect(own).toMatchObject({ legalName: 'Công ty TNHH Mẫu', taxID: '0312345678', address: { streetAddress: '1 Đường A, Quận B', addressCountry: 'VN' } });
+  });
+
+  it('admin chỉ nhập một phần: giữ đúng phần đó, không ghép với thương nhân mặc định', () => {
+    const [org] = graph(siteJsonLd({ hotline: '0984 606 774', email: 'a@b.vn', company: { taxCode: '0312345678' } }));
+    expect(org).toMatchObject({ taxID: '0312345678' });
+    expect(org).not.toHaveProperty('legalName');
+    expect(org).not.toHaveProperty('address');
+  });
+
   it('thiếu dữ liệu thì bỏ trường, không bịa', () => {
     const [org] = graph(siteJsonLd(undefined));
     expect(org).not.toHaveProperty('sameAs');

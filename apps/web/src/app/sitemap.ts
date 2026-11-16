@@ -23,6 +23,19 @@ export const revalidate = 3600;
 const PRODUCTS_PER_PAGE = 100;
 const MAX_PRODUCT_PAGES = 5;
 
+/**
+ * `lastmod` chỉ cho gian hàng CTV, nơi `updatedAt` là ngày sửa thật (người dùng chỉnh gian hàng). Sản phẩm KHÔNG có `lastmod`: `Product.updatedAt` bị
+ * đồng bộ Pancake ban đêm và việc tính lại số đã bán đẩy tiến cho mọi sản phẩm dù nội dung không đổi, mà crawler bỏ qua `lastmod` khi thấy nó không phản ánh
+ * thay đổi thật. Trang chủ, trang tĩnh, nhãn và chính sách cũng không có nguồn ngày thật nên để trống thay vì dùng giờ dựng sitemap.
+ * Ngày hỏng hoặc ở tương lai (lệch đồng hồ quá một ngày) bị bỏ, để sitemap không khai một mốc vô lý.
+ */
+function lastModified(iso: string | null | undefined, now = Date.now()): Date | undefined {
+  if (!iso) return undefined;
+  const at = new Date(iso);
+  const t = at.getTime();
+  return Number.isFinite(t) && t <= now + 24 * 3_600_000 ? at : undefined;
+}
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const base: MetadataRoute.Sitemap = [
     { url: `${SITE_URL}/`, changeFrequency: 'daily', priority: 1 },
@@ -57,9 +70,10 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   }
   const storefronts = await getStorefrontList();
   for (const s of storefronts) {
+    const lastmod = lastModified(s.updatedAt);
     base.push({
       url: `${SITE_URL}/s/${s.slug}`,
-      lastModified: new Date(s.updatedAt),
+      ...(lastmod ? { lastModified: lastmod } : {}),
       changeFrequency: 'weekly',
       priority: 0.6,
     });

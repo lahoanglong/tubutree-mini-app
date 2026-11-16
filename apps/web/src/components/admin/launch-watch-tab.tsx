@@ -15,9 +15,11 @@ import {
   funnelWithPct,
   metricLevel,
   ratioPct,
+  webhookRejectAlerts,
   type AlertLevel,
   type FraudAlert,
   type FraudMetric,
+  type WebhookRejectAlert,
 } from '@/components/admin/launch-watch-format';
 
 const LEVEL_CLASS: Record<AlertLevel, string> = {
@@ -62,12 +64,29 @@ export function LaunchWatchTab() {
         <LoadError message="Không tải được số liệu theo dõi." onRetry={() => q.refetch()} retrying={q.isFetching} />
       ) : (
         <>
+          <WebhookRejectAlerts alerts={webhookRejectAlerts(data.webhookRejects)} />
           <FunnelBlock window={data.windows[win]} />
           <FraudBlock window={data.windows[win]} />
           <SecondOrderBlock secondOrder={data.secondOrder} />
         </>
       )}
     </div>
+  );
+}
+
+/** Chỉ dựng khi có nguồn bị từ chối quá ngưỡng; bình thường không hiện gì. Độc lập với khoảng thời gian chọn ở trên (luôn tính theo 1 giờ gần nhất). */
+function WebhookRejectAlerts({ alerts }: { alerts: readonly WebhookRejectAlert[] }) {
+  if (alerts.length === 0) return null;
+  return (
+    <section aria-label="Cảnh báo webhook" className="space-y-2">
+      {alerts.map((a) => (
+        <Notice key={a.source} tone="danger" role="alert">
+          <strong className="block text-sm font-semibold">{a.title}</strong>
+          <span className="block">{a.counts}</span>
+          <span className="block">{a.hint}</span>
+        </Notice>
+      ))}
+    </section>
   );
 }
 

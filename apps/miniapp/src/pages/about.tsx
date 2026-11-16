@@ -8,7 +8,7 @@ import { haptic } from '../utils/haptic';
 import { formatPhoneDisplay } from '../utils/phone';
 import type { PublicConfig } from '../services/shop-api';
 import { callPhone } from '../services/zmp-bridge';
-import { isBctNoticeUrl, merchantIdentityOrDefault } from '@tubutree/app-core/legal';
+import { companyLegalLine, isBctNoticeUrl, merchantIdentityOrDefault } from '@tubutree/app-core/legal';
 import type { WebPolicySlug } from '../utils/web-policy';
 import { PolicySheet } from '../components/policy-sheet';
 import { Card } from '../components/ui/card';
@@ -88,6 +88,8 @@ export default function AboutPage() {
 
   const [policy, setPolicy] = useState<WebPolicySlug | null>(null);
   const operator = operatorLine(publicConfig.company);
+  // Người đại diện và số/ngày/nơi cấp ĐKDN: chỉ hiện phần admin đã nhập, để trống thì ẩn cả dòng.
+  const legalLine = companyLegalLine(publicConfig.company);
   const bctRaw = publicConfig.company?.bctNoticeUrl;
   const bctUrl = isBctNoticeUrl(bctRaw) ? bctRaw : null;
   const shownFaq = faq.filter((f) => faqCat === ALL_CATS || f.cat === faqCat);
@@ -223,15 +225,17 @@ export default function AboutPage() {
         <LinkRow label="Chính sách bảo mật" onClick={() => setPolicy('bao-mat')} />
         <LinkRow label="Chính sách đổi trả" onClick={() => setPolicy('doi-tra')} />
         <LinkRow label="Chính sách vận chuyển" onClick={() => setPolicy('van-chuyen')} />
-        <LinkRow label="Chính sách và hình thức thanh toán" onClick={() => setPolicy('thanh-toan')} last={!operator && !bctUrl} />
+        <LinkRow label="Chính sách và hình thức thanh toán" onClick={() => setPolicy('thanh-toan')} last={!operator && !legalLine && !bctUrl} />
         {bctUrl && (
           <Text variant="body-sm" tone="secondary" as="p" style={{ margin: '12px 0 0' }}>
             Đã thông báo Bộ Công Thương
           </Text>
         )}
-        {operator && (
+        {(operator || legalLine) && (
           <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
             {operator}
+            {operator && legalLine && <br />}
+            {legalLine && <span data-testid="about-company-legal">{legalLine}</span>}
           </Text>
         )}
       </Section>

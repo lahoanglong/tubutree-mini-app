@@ -56,7 +56,7 @@ jobs:
         run: >-
           docker build -f apps/web/Dockerfile -t tubutree-web:ci
           --build-arg NEXT_PUBLIC_API_BASE_URL=https://api.example.test/api
-          --build-arg NEXT_PUBLIC_SITE_URL=https://app.example.test
+          --build-arg NEXT_PUBLIC_SITE_URL=https://example.test
           --build-arg NEXT_PUBLIC_ZALO_APP_ID=1111111111
           --build-arg NEXT_PUBLIC_ZALO_MINIAPP_ID=2222222222
           .

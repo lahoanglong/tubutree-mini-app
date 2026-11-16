@@ -122,3 +122,36 @@ describe('middleware: hub /san-pham dùng bản ISR', () => {
     expect(rewriteOf(at('/san-pham', 'ctv-an.tubutree.com'))).toBeNull();
   });
 });
+
+describe('middleware: host cũ app.tubutree.com chỉ noindex, không chuyển hướng', () => {
+  const robotsTag = (res: Response) => res.headers.get('x-robots-tag');
+
+  it('mọi loại phản hồi của host app. mang X-Robots-Tag noindex, nofollow: trang thường, trang chủ, robots.txt, 308, 404, rewrite hub', () => {
+    const cases: [string, string][] = [
+      ['trang sản phẩm', '/san-pham/serum-a'],
+      ['trang chủ', '/'],
+      ['robots.txt', '/robots.txt'],
+      ['bỏ dấu / cuối (308)', '/san-pham/'],
+      ['slug vô lý (404)', `/san-pham/${'a'.repeat(300)}`],
+      ['hub (rewrite)', '/san-pham'],
+      ['vào thẳng đường dẫn nội bộ (308)', '/hub-san-pham'],
+      ['asset có dấu chấm', '/icon.png'],
+    ];
+    for (const [label, path] of cases) {
+      expect(robotsTag(visit('app.tubutree.com', path)), label).toBe('noindex, nofollow');
+    }
+  });
+
+  it('host app. có cổng và hoa/thường vẫn nhận header; không bị chuyển hướng sang tên miền gốc', () => {
+    expect(robotsTag(visit('APP.Tubutree.com:443', '/san-pham/serum-a'))).toBe('noindex, nofollow');
+    const res = visit('app.tubutree.com', '/san-pham/serum-a');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('location')).toBeNull();
+  });
+
+  it('host gốc, www, gian hàng CTV và host lạ KHÔNG bị gắn noindex', () => {
+    for (const host of ['tubutree.com', 'www.tubutree.com', 'ctv-an.tubutree.com', 'app.example.com', 'notapp.tubutree.com', 'app.tubutree.com.evil.test', 'localhost:3000']) {
+      expect(robotsTag(visit(host, '/san-pham/serum-a')), host).toBeNull();
+    }
+  });
+});

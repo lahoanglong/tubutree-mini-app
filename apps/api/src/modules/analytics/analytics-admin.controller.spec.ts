@@ -29,7 +29,13 @@ describe('AnalyticsAdminController.retentionDaily', () => {
 
 describe('AnalyticsAdminController.launchWatchSnapshot', () => {
   it('trả nguyên kết quả của LaunchWatchService.getSnapshot', async () => {
-    const dto = { generatedAt: '2026-11-16T12:00:00.000Z' };
+    const dto = {
+      generatedAt: '2026-11-16T12:00:00.000Z',
+      webhookRejects: {
+        thresholdPerHour: 10,
+        sources: [{ source: 'pancake', lastHour: 52, last24h: 600, peakPerHour: 60, lastAt: '2026-11-16T11:55:00.000Z', alert: true }],
+      },
+    };
     const getSnapshot = jest.fn().mockResolvedValue(dto);
     const controller = new AnalyticsAdminController({} as PrismaService, { getSnapshot } as unknown as LaunchWatchService);
     await expect(controller.launchWatchSnapshot()).resolves.toBe(dto);

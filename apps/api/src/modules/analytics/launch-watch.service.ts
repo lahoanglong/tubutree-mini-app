@@ -8,10 +8,14 @@ import {
   type LaunchWatchFunnel,
   type LaunchWatchFunnelRow,
   type LaunchWatchSecondOrder,
+  type LaunchWatchWebhookRejects,
   type LaunchWatchWindow,
   type LaunchWatchWindowDTO,
 } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
+import { SystemConfigService } from '../system-config/system-config.service';
+import { WebhookRejectCounterService } from './webhook-reject-counter.service';
+import { WEBHOOK_REJECT_ALERT_DEFAULT, WEBHOOK_REJECT_ALERT_KEY, normalizeWebhookRejectThreshold } from './webhook-reject-config';
 
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
@@ -82,7 +86,11 @@ const ts = (d: Date): string => d.toISOString();
 export class LaunchWatchService {
   private cache: { at: number; value: Promise<LaunchWatchDTO> } | null = null;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly webhookRejectCounter: WebhookRejectCounterService,
+    private readonly config: SystemConfigService,
+  ) {}
 
   getSnapshot(now: Date = new Date(), rulesSince: Date = ZERO_GIFT_RULES_SINCE): Promise<LaunchWatchDTO> {
     const age = this.cache ? now.getTime() - this.cache.at : -1;
@@ -105,11 +113,20 @@ export class LaunchWatchService {
       windows.push(await this.windowSnapshot(new Date(now.getTime() - WINDOW_MS[w]), rulesSince));
     }
     const secondOrder = await this.secondOrder(now);
+    const webhookRejects = await this.webhookRejects(now);
     return {
       generatedAt: now.toISOString(),
       windows: Object.fromEntries(LAUNCH_WATCH_WINDOWS.map((w, i) => [w, windows[i]])) as Record<LaunchWatchWindow, LaunchWatchWindowDTO>,
       secondOrder,
+      webhookRejects,
     };
+  }
+
+  /** Ngưỡng đọc từ SystemConfig (sai kiểu hoặc ngoài 1 đến 100000 thì dùng mặc định) nên cấu hình hỏng không tắt được cảnh báo. */
+  private async webhookRejects(now: Date): Promise<LaunchWatchWebhookRejects> {
+    const raw = await this.config.get<unknown>(WEBHOOK_REJECT_ALERT_KEY, WEBHOOK_REJECT_ALERT_DEFAULT);
+    const thresholdPerHour = normalizeWebhookRejectThreshold(raw);
+    return { thresholdPerHour, sources: await this.webhookRejectCounter.summary(now, thresholdPerHour) };
   }
 
   private async windowSnapshot(since: Date, rulesSince: Date): Promise<LaunchWatchWindowDTO> {

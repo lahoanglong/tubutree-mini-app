@@ -4,6 +4,7 @@ import { homeText } from './home-text';
 import { SITE_URL } from './site';
 import type { SupportContact } from './api';
 import { trimAtWord, type Crumb } from './product-seo';
+import { merchantIdentityOrDefault } from './legal';
 
 /** Tiêu đề trang chủ: từ khoá của h1 + tên nhãn, ≤ 60 ký tự; `absolute` để template gốc không nối thêm hậu tố. */
 export const HOME_TITLE = `Tubu Tree — ${homeText.seoTitle}`;
@@ -104,10 +105,12 @@ export const toE164 = (phone: string): string | undefined => {
 };
 
 /**
- * Organization + WebSite (một `@graph`) cho trang chủ. Chỉ dùng giá trị đã có trong cấu hình công khai (hotline/email hỗ trợ, link cộng đồng https);
- * thiếu thì bỏ trường, không bịa. Logo là app/icon.png, được Next phục vụ ở /icon.png.
+ * Organization + WebSite (một `@graph`) cho trang chủ. Chỉ dùng giá trị đã có trong cấu hình công khai (hotline/email hỗ trợ, link cộng đồng https,
+ * tên pháp lý, MST và địa chỉ trụ sở); thiếu thì bỏ trường, không bịa. Tên pháp lý, MST, địa chỉ cùng nguồn với dòng "Đơn vị vận hành" ở chân trang
+ * (`merchantIdentityOrDefault`: admin chưa nhập gì thì là thương nhân đã đăng ký của Tubu Tree; nhập một phần thì giữ đúng phần đó).
+ * Logo là app/icon.png, được Next phục vụ ở /icon.png.
  */
-export function siteJsonLd(support: Pick<SupportContact, 'hotline' | 'email' | 'community'> | undefined): Record<string, unknown> {
+export function siteJsonLd(support: Pick<SupportContact, 'hotline' | 'email' | 'community' | 'company'> | undefined): Record<string, unknown> {
   const sameAs = Object.values(support?.community ?? {}).filter((u): u is string => typeof u === 'string' && u !== '');
   const contact: Record<string, string> = {};
   const telephone = support?.hotline ? toE164(support.hotline) : undefined;
@@ -120,6 +123,10 @@ export function siteJsonLd(support: Pick<SupportContact, 'hotline' | 'email' | '
     url: SITE_URL,
     logo: `${SITE_URL}/icon.png`,
   };
+  const identity = merchantIdentityOrDefault(support?.company);
+  if (identity.legalName) organization.legalName = identity.legalName;
+  if (identity.taxCode) organization.taxID = identity.taxCode;
+  if (identity.address) organization.address = { '@type': 'PostalAddress', streetAddress: identity.address, addressCountry: 'VN' };
   if (sameAs.length > 0) organization.sameAs = sameAs;
   if (Object.keys(contact).length > 0) {
     organization.contactPoint = [{ '@type': 'ContactPoint', contactType: 'customer service', areaServed: 'VN', availableLanguage: 'vi', ...contact }];

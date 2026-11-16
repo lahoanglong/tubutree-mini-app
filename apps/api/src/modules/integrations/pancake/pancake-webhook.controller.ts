@@ -15,6 +15,7 @@ import type { Queue } from 'bullmq';
 import { safeEqualStrings } from '../../../common/safe-equal';
 import { Public } from '../../../common/decorators/public.decorator';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { WebhookRejectCounterService } from '../../analytics/webhook-reject-counter.service';
 import type { Env } from '../../../config/env.validation';
 import { QUEUE_PANCAKE_EVENTS } from '../../../jobs/queues';
 import { addGomdonJob } from '../gomdon/gomdon-queue';
@@ -45,6 +46,7 @@ export class PancakeWebhookController {
     private readonly prisma: PrismaService,
     private readonly config: ConfigService<Env, true>,
     @InjectQueue(QUEUE_PANCAKE_EVENTS) private readonly queue: Queue,
+    private readonly rejects: WebhookRejectCounterService,
   ) {
     this.secret = config.get('PANCAKE_WEBHOOK_SECRET', { infer: true });
   }
@@ -60,10 +62,12 @@ export class PancakeWebhookController {
     // Fail-closed ở production: chưa cấu hình secret = từ chối ngay (không log secret).
     if (!this.secret) {
       if (process.env.NODE_ENV === 'production') {
+        this.rejects.record('pancake');
         throw new UnauthorizedException('Webhook chưa cấu hình bí mật ở production.');
       }
       // Dev/test: bỏ qua cho dễ thử nghiệm.
     } else if (!this.verifyToken(token)) {
+      this.rejects.record('pancake');
       throw new UnauthorizedException('Token webhook không hợp lệ.');
     }
     // Pancake POS không gửi field 'event' — suy ra loại từ 'type' (vd 'orders'), mặc định 'order'. Chỉ nhận chuỗi: số/object ở đây

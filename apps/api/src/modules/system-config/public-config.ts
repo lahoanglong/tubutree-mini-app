@@ -21,6 +21,9 @@ const pickHours = (v: { start: string; end: string }) => ({ start: v.start, end:
 /** Trần % giá trị đơn trả được bằng điểm khi chưa cấu hình, khớp mặc định ở getOverview và pricing.service. */
 const LOYALTY_MAX_REDEEM_PCT_DEFAULT = 0.2;
 
+/** Khớp mặc định của PricingService.calcShippingFee và legal-config.controller. */
+const FLAT_SHIPPING_FEE_DEFAULT = 19000;
+
 /** Admin để trống (hoặc lưu sai kiểu) thì trả null để miniapp ẩn dòng, không hiện thông tin giả. */
 function displayText(v: unknown): string | null {
   return typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
@@ -91,6 +94,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     company,
     catalogLaunchDate,
     tierRows,
+    flatShippingFee,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -130,9 +134,12 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     readCompanyIdentity(config),
     config.get<unknown>(CATALOG_LAUNCH_DATE_KEY, ''),
     loadTiers().catch(() => [] as TierRow[]),
+    config.get<unknown>('shipping.flat_fee_below_threshold', FLAT_SHIPPING_FEE_DEFAULT),
   ]);
   return {
     freeshipThreshold,
+    // Phí giao cố định của phần hàng Tubu Tree giao chưa đạt ngưỡng miễn phí (cùng khoá và mặc định với pricing.service); JSON-LD sản phẩm của web đọc số này. Giá trị hỏng thì mặc định.
+    shippingFlatFee: typeof flatShippingFee === 'number' && Number.isFinite(flatShippingFee) && flatShippingFee >= 0 ? flatShippingFee : FLAT_SHIPPING_FEE_DEFAULT,
     subscribeDiscountPct,
     // Luật Ví ×1,5 đã bỏ: rút hoa hồng về Ví Tubu là 1:1 (affiliate.service). Giữ trường (cố định 1) để miniapp
     // đã phát hành không vỡ kiểu dữ liệu; không đọc khoá affiliate.tubu_wallet_multiplier còn sót trong DB.

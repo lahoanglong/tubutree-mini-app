@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { RECYCLE_FUNNEL_STEPS, type LaunchWatchDTO, type LaunchWatchFraud, type LaunchWatchFunnelRow } from '@tubutree/shared-types';
+import { RECYCLE_FUNNEL_STEPS, type LaunchWatchDTO, type LaunchWatchFraud, type LaunchWatchFunnelRow, type LaunchWatchWebhookReject } from '@tubutree/shared-types';
 import { LaunchWatchTab } from './launch-watch-tab';
 import { click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 
@@ -46,8 +46,25 @@ const dto = (over: Partial<LaunchWatchDTO> = {}): LaunchWatchDTO => ({
     },
   },
   secondOrder: { windowDays: 14, matured: { customers: 8, withSecond: 3 }, pending: { customers: 5, withSecond: 2 } },
+  webhookRejects: {
+    thresholdPerHour: 10,
+    sources: [
+      { source: 'pancake', lastHour: 0, last24h: 0, peakPerHour: 0, lastAt: null, alert: false },
+      { source: 'gomdon', lastHour: 0, last24h: 0, peakPerHour: 0, lastAt: null, alert: false },
+    ],
+  },
   ...over,
 });
+
+const rejected = (source: 'pancake' | 'gomdon', lastHour: number, last24h: number, alert: boolean): LaunchWatchWebhookReject => ({
+  source,
+  lastHour,
+  last24h,
+  peakPerHour: lastHour,
+  lastAt: lastHour > 0 ? '2026-11-16T06:55:00.000Z' : null,
+  alert,
+});
+const quiet = (source: 'pancake' | 'gomdon') => rejected(source, 0, 0, false);
 
 const mountWith = async (body: LaunchWatchDTO | null, status = 200) => {
   const api = mockFetch({ '/admin/analytics/launch-watch': { status, body: body ?? { message: 'x' } } });
@@ -228,6 +245,7 @@ describe('LaunchWatchTab', () => {
         ]),
       ) as LaunchWatchDTO['windows'],
       secondOrder: { windowDays: 14, matured: { customers: 0, withSecond: 0 }, pending: { customers: 0, withSecond: 0 } },
+      webhookRejects: { thresholdPerHour: 10, sources: [quiet('pancake'), quiet('gomdon')] },
     };
     const { container } = await mountWith(empty);
     expect(cells(funnelRow(container, 'Vào màn Đổi rác'))).toEqual(['0', '0', '0', '—']);
@@ -274,5 +292,85 @@ describe('LaunchWatchTab', () => {
     const { container } = await mountWith(dto());
     const t = container.textContent ?? '';
     expect(t).not.toMatch(/@|\b0\d{9}\b|userId|cm[a-z0-9]{20,}/);
+  });
+
+  describe('cảnh báo webhook bị từ chối 401 (W184)', () => {
+    const banner = (c: HTMLElement) => c.querySelector<HTMLElement>('section[aria-label="Cảnh báo webhook"]');
+
+    it('Pancake vượt ngưỡng: khối cảnh báo ĐỎ ở đầu tab (trước phễu) với tiêu đề, số lần trong 1 giờ và 24 giờ, gợi ý kiểm token', async () => {
+      const d = dto({ webhookRejects: { thresholdPerHour: 10, sources: [rejected('pancake', 52, 1234, true), quiet('gomdon')] } });
+      const { container } = await mountWith(d);
+      const b = banner(container)!;
+      expect(b).not.toBeNull();
+      const alerts = b.querySelectorAll('[role="alert"]');
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]!.className).toContain('text-danger-fg');
+      expect(alerts[0]!.className).toContain('bg-danger-bg');
+      expect(alerts[0]!.textContent).toContain('Webhook Pancake đang bị từ chối');
+      expect(alerts[0]!.textContent).toContain('52 lần trong 1 giờ qua (24 giờ: 1.234)');
+      expect(alerts[0]!.textContent).toContain('x-webhook-token');
+      expect(alerts[0]!.textContent).toContain('PANCAKE_WEBHOOK_SECRET');
+      // Đứng trước mọi khối số liệu và ngay dưới tiêu đề/nút khoảng thời gian.
+      const funnel = container.querySelector('section[aria-label="Phễu Đổi rác"]')!;
+      expect(b.compareDocumentPosition(funnel) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(container.querySelector('header')!.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('không thêm nút hay đường dẫn mới: khối cảnh báo chỉ là chữ', async () => {
+      const d = dto({ webhookRejects: { thresholdPerHour: 10, sources: [rejected('pancake', 52, 1234, true), quiet('gomdon')] } });
+      const { container } = await mountWith(d);
+      expect(banner(container)!.querySelectorAll('button, a, input')).toHaveLength(0);
+      expect(container.querySelectorAll('button')).toHaveLength(4); // 3 khoảng thời gian + Làm mới, như khi không cảnh báo
+    });
+
+    it('Gomdon vượt ngưỡng: tên nguồn Gomdon và gợi ý kiểm secret hoặc khoá HMAC', async () => {
+      const d = dto({ webhookRejects: { thresholdPerHour: 10, sources: [quiet('pancake'), rejected('gomdon', 11, 11, true)] } });
+      const { container } = await mountWith(d);
+      const alerts = banner(container)!.querySelectorAll('[role="alert"]');
+      expect(alerts).toHaveLength(1);
+      expect(alerts[0]!.textContent).toContain('Webhook Gomdon đang bị từ chối');
+      expect(alerts[0]!.textContent).toContain('11 lần trong 1 giờ qua (24 giờ: 11)');
+      expect(alerts[0]!.textContent).toContain('khoá HMAC');
+      expect(alerts[0]!.textContent).not.toContain('Pancake');
+    });
+
+    it('cả hai nguồn vượt ngưỡng: hai cảnh báo, Pancake trước Gomdon', async () => {
+      const d = dto({ webhookRejects: { thresholdPerHour: 10, sources: [rejected('pancake', 50, 600, true), rejected('gomdon', 30, 90, true)] } });
+      const { container } = await mountWith(d);
+      const titles = Array.from(banner(container)!.querySelectorAll('strong')).map((s) => s.textContent);
+      expect(titles).toEqual(['Webhook Pancake đang bị từ chối', 'Webhook Gomdon đang bị từ chối']);
+    });
+
+    it('không nguồn nào vượt ngưỡng (kể cả có vài lần bị từ chối): không hiện gì thêm, không ô role=alert', async () => {
+      const d = dto({ webhookRejects: { thresholdPerHour: 10, sources: [rejected('pancake', 9, 100, false), rejected('gomdon', 1, 1, false)] } });
+      const { container } = await mountWith(d);
+      expect(banner(container)).toBeNull();
+      expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0);
+      expect(container.textContent).not.toContain('bị từ chối');
+    });
+
+    it('thiếu webhookRejects trong phản hồi (API cũ): tab vẫn dựng bình thường, không cảnh báo', async () => {
+      const old: Partial<LaunchWatchDTO> = dto();
+      delete old.webhookRejects;
+      const { container } = await mountWith(old as LaunchWatchDTO);
+      expect(container.querySelector('table')).not.toBeNull();
+      expect(container.querySelector('h2')?.textContent).toBe('Theo dõi 72h sau launch');
+      expect(banner(container)).toBeNull();
+      expect(container.querySelectorAll('[role="alert"]')).toHaveLength(0);
+    });
+
+    it('cảnh báo không phụ thuộc khoảng thời gian chọn: đổi sang 30 ngày vẫn còn', async () => {
+      const d = dto({ webhookRejects: { thresholdPerHour: 10, sources: [rejected('pancake', 52, 1234, true), quiet('gomdon')] } });
+      const { container } = await mountWith(d);
+      click(windowButton(container, '30 ngày'));
+      await flush();
+      expect(banner(container)!.textContent).toContain('Webhook Pancake đang bị từ chối');
+    });
+
+    it('không lộ bí mật: chỉ có số đếm, tên biến cấu hình và tên header, không giá trị token nào', async () => {
+      const d = dto({ webhookRejects: { thresholdPerHour: 10, sources: [rejected('pancake', 52, 1234, true), rejected('gomdon', 30, 90, true)] } });
+      const { container } = await mountWith(d);
+      expect(banner(container)!.textContent).not.toMatch(/Bearer|sk_|secret=|token=/i);
+    });
   });
 });

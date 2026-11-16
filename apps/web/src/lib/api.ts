@@ -361,7 +361,17 @@ export interface SupportContact {
   /** Kênh cộng đồng của chủ shop; chỉ có khoá nào admin đã nhập link https. */
   community?: { zaloGroupUrl?: string; facebookUrl?: string; tiktokUrl?: string };
   /** Đơn vị vận hành; chỉ có trường admin đã nhập (BCT chỉ nhận link https tới online.gov.vn hoặc *.gov.vn). */
-  company?: { legalName?: string; taxCode?: string; address?: string; bctNoticeUrl?: string };
+  company?: {
+    legalName?: string;
+    taxCode?: string;
+    address?: string;
+    bctNoticeUrl?: string;
+    /** Người đại diện theo pháp luật và Giấy chứng nhận ĐKDN (ngày cấp dd/mm/yyyy); chỉ có trường admin đã nhập. */
+    representative?: string;
+    registrationNumber?: string;
+    registrationDate?: string;
+    registrationPlace?: string;
+  };
 }
 
 const trimmed = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() !== '' ? v.trim() : undefined);
@@ -382,7 +392,7 @@ export async function getPublicSupport(): Promise<SupportContact> {
   try {
     const res = await fetch(`${BASE}/config/public`, serverInit({ revalidate: 3600 }));
     if (!res.ok) return DEFAULT_SUPPORT;
-    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null }; community?: { zaloGroupUrl?: unknown; facebookUrl?: unknown; tiktokUrl?: unknown }; company?: { legalName?: unknown; taxCode?: unknown; address?: unknown; bctNoticeUrl?: unknown } };
+    const json = (await res.json()) as { support?: { hotline?: string | null; email?: string | null; zaloOaName?: string | null }; community?: { zaloGroupUrl?: unknown; facebookUrl?: unknown; tiktokUrl?: unknown }; company?: { legalName?: unknown; taxCode?: unknown; address?: unknown; bctNoticeUrl?: unknown; representative?: unknown; registrationNumber?: unknown; registrationDate?: unknown; registrationPlace?: unknown } };
     const community = Object.fromEntries(
       (['zaloGroupUrl', 'facebookUrl', 'tiktokUrl'] as const).flatMap((k) => {
         const u = httpsOnly(json.community?.[k]);
@@ -395,6 +405,10 @@ export async function getPublicSupport(): Promise<SupportContact> {
       ...(trimmed(json.company?.taxCode) ? { taxCode: trimmed(json.company?.taxCode) } : {}),
       ...(trimmed(json.company?.address) ? { address: trimmed(json.company?.address) } : {}),
       ...(bctNotice(json.company?.bctNoticeUrl) ? { bctNoticeUrl: bctNotice(json.company?.bctNoticeUrl) } : {}),
+      ...(trimmed(json.company?.representative) ? { representative: trimmed(json.company?.representative) } : {}),
+      ...(trimmed(json.company?.registrationNumber) ? { registrationNumber: trimmed(json.company?.registrationNumber) } : {}),
+      ...(trimmed(json.company?.registrationDate) ? { registrationDate: trimmed(json.company?.registrationDate) } : {}),
+      ...(trimmed(json.company?.registrationPlace) ? { registrationPlace: trimmed(json.company?.registrationPlace) } : {}),
     };
     return {
       hotline: json.support?.hotline?.trim() || DEFAULT_SUPPORT.hotline,

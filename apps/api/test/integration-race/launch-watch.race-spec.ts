@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { RECYCLE_FUNNEL_STEPS, type LaunchWatchDTO } from '@tubutree/shared-types';
 import { PrismaService } from '../../src/prisma/prisma.service';
 import { LaunchWatchService } from '../../src/modules/analytics/launch-watch.service';
+import { WebhookRejectCounterService } from '../../src/modules/analytics/webhook-reject-counter.service';
 import { createOrder, createUser, deleteItData } from './helpers';
 import { cleanupWaste, createGiftRedemption, createWarehouse, createWasteGift } from './fixtures/waste-fixtures';
 import './setup-env';
@@ -36,7 +37,7 @@ describe('LaunchWatchService — SQL trên Postgres thật', () => {
   const reg = { pointIds: [] as string[], itemIds: [] as string[], giftIds: [] as string[], storefrontIds: [] as string[] };
   let seq = 0;
 
-  const snapshot = (now: Date, rulesSince?: Date): Promise<LaunchWatchDTO> => new LaunchWatchService(prisma).getSnapshot(now, rulesSince);
+  const snapshot = (now: Date, rulesSince?: Date): Promise<LaunchWatchDTO> => new LaunchWatchService(prisma, new WebhookRejectCounterService(prisma), { get: async (_key: string, fallback: unknown) => fallback } as never).getSnapshot(now, rulesSince);
   const since = (now: Date, ms: number) => ago(now, ms).toISOString();
 
   async function user(verified = true) {

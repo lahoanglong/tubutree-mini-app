@@ -3,6 +3,7 @@ import { PancakeWebhookController } from './pancake-webhook.controller';
 import type { PrismaService } from '../../../prisma/prisma.service';
 import type { Queue } from 'bullmq';
 import { QUEUE_COMMAND_TIMEOUT_MS } from '../../../jobs/queue-timeout';
+import type { WebhookRejectCounterService } from '../../analytics/webhook-reject-counter.service';
 
 const SECRET = 'pancake-webhook-secret';
 const body = { event: 'order.status_updated', data: { id: 'p1', status: 'delivered' } };
@@ -14,7 +15,9 @@ function makeController(secret: string) {
   const prisma = { pancakeWebhookEvent: { create, findUnique } } as unknown as PrismaService;
   const queue = { add, getJob: jest.fn().mockResolvedValue(null) } as unknown as Queue;
   const config = { get: () => secret } as never;
-  return { ctrl: new PancakeWebhookController(prisma, config, queue), create, add, findUnique };
+  const record = jest.fn();
+  const rejects = { record } as unknown as WebhookRejectCounterService;
+  return { ctrl: new PancakeWebhookController(prisma, config, queue, rejects), create, add, findUnique, record };
 }
 
 describe('PancakeWebhookController.handle (verify token tĩnh)', () => {
@@ -131,7 +134,7 @@ describe('PancakeWebhookController.handle — cùng sự kiện bắn trùng li�
     const add = jest.fn(addImpl ?? (async () => undefined));
     const prisma = { pancakeWebhookEvent: { create, findUnique } } as unknown as PrismaService;
     const queue = { add, getJob: jest.fn().mockResolvedValue(null) } as unknown as Queue;
-    const ctrl = new PancakeWebhookController(prisma, { get: () => SECRET } as never, queue);
+    const ctrl = new PancakeWebhookController(prisma, { get: () => SECRET } as never, queue, { record: jest.fn() } as unknown as WebhookRejectCounterService);
     return { ctrl, rows, add };
   }
   const fire = (ctrl: PancakeWebhookController, n: number, payload: object = body) => Promise.all(Array.from({ length: n }, () => ctrl.handle(payload as never, SECRET)));
@@ -183,5 +186,58 @@ describe('PancakeWebhookController.handle — cùng sự kiện bắn trùng li�
     const results = await fire(ctrl, 5);
     expect(results).toEqual(Array.from({ length: 5 }, () => ({ received: true })));
     expect(rows.size).toBe(1);
+  });
+});
+
+describe('PancakeWebhookController.handle — đếm lần bị từ chối 401 (W184)', () => {
+  const savedEnv = process.env.NODE_ENV;
+  afterEach(() => {
+    process.env.NODE_ENV = savedEnv;
+  });
+
+  it('token SAI → vẫn 401 đúng thông điệp cũ và record("pancake") gọi đúng 1 lần', async () => {
+    const { ctrl, record } = makeController(SECRET);
+    await expect(ctrl.handle(body, 'sai-token')).rejects.toThrow(new UnauthorizedException('Token webhook không hợp lệ.'));
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record).toHaveBeenCalledWith('pancake');
+  });
+
+  it('thiếu token → vẫn 401 và record("pancake") gọi đúng 1 lần', async () => {
+    const { ctrl, record } = makeController(SECRET);
+    await expect(ctrl.handle(body, undefined)).rejects.toThrow('Token webhook không hợp lệ.');
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record).toHaveBeenCalledWith('pancake');
+  });
+
+  it('production chưa cấu hình secret → 401 đúng thông điệp cũ và record("pancake") gọi đúng 1 lần', async () => {
+    process.env.NODE_ENV = 'production';
+    const { ctrl, record, create } = makeController('');
+    await expect(ctrl.handle(body, 'bat-ky')).rejects.toThrow(new UnauthorizedException('Webhook chưa cấu hình bí mật ở production.'));
+    expect(record).toHaveBeenCalledTimes(1);
+    expect(record).toHaveBeenCalledWith('pancake');
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('token ĐÚNG → record KHÔNG được gọi', async () => {
+    const { ctrl, record } = makeController(SECRET);
+    await ctrl.handle(body, SECRET);
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('chưa cấu hình secret ở dev → cho qua và record KHÔNG được gọi', async () => {
+    process.env.NODE_ENV = 'test';
+    const { ctrl, record } = makeController('');
+    await ctrl.handle(body, undefined);
+    expect(record).not.toHaveBeenCalled();
+  });
+
+  it('bí mật và token đã gửi không xuất hiện ở bất kỳ đối số nào của record', async () => {
+    const { ctrl, record } = makeController(SECRET);
+    await ctrl.handle(body, 'token-la-gui-len').catch(() => undefined);
+    await ctrl.handle(body, SECRET.slice(0, -1)).catch(() => undefined);
+    const dumped = JSON.stringify(record.mock.calls);
+    expect(dumped).not.toContain(SECRET);
+    expect(dumped).not.toContain('token-la-gui-len');
+    expect(record.mock.calls.every((c) => c.length === 1 && c[0] === 'pancake')).toBe(true);
   });
 });

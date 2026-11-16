@@ -54,6 +54,54 @@ export function merchantIdentityOrDefault(company?: MerchantIdentityInput | null
   return own.legalName || own.taxCode || own.address ? own : { ...TUBU_TREE_MERCHANT };
 }
 
+export interface CompanyRegistrationInput {
+  representative?: string | null;
+  registrationNumber?: string | null;
+  registrationDate?: string | null;
+  registrationPlace?: string | null;
+}
+
+/**
+ * Ngày cấp ĐKDN: nhận dd/mm/yyyy, d/m/yyyy hoặc yyyy-mm-dd, trả dd/mm/yyyy; ngày không có trên lịch, trước 1990 hoặc ở tương lai là null.
+ * Cùng luật với `registrationDate` ở company-config.ts của API (API không phụ thuộc app-core); form admin dùng nó để chặn lưu ngày API sẽ bỏ.
+ */
+export function normalizeRegistrationDate(value: unknown, now: Date = new Date()): string | null {
+  if (typeof value !== 'string') return null;
+  const t = value.trim();
+  const vn = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(t);
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(t);
+  const [d, m, y] = vn ? [Number(vn[1]), Number(vn[2]), Number(vn[3])] : iso ? [Number(iso[3]), Number(iso[2]), Number(iso[1])] : [NaN, NaN, NaN];
+  if (!Number.isInteger(d) || y < 1990) return null;
+  const at = new Date(Date.UTC(y, m - 1, d));
+  if (at.getUTCFullYear() !== y || at.getUTCMonth() !== m - 1 || at.getUTCDate() !== d) return null;
+  if (at.getTime() > now.getTime() + 24 * 3_600_000) return null;
+  return `${String(d).padStart(2, '0')}/${String(m).padStart(2, '0')}/${y}`;
+}
+
+const filled = (v?: string | null): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
+
+/**
+ * Dòng hồ sơ pháp lý ở chân trang web và trang Về Tubu Tree: "Người đại diện theo pháp luật: X · Giấy chứng nhận đăng ký doanh nghiệp số N
+ * do P cấp ngày D". Chỉ nêu phần admin đã nhập (không suy ra số ĐKDN từ MST, không điền mặc định); chưa nhập gì thì null để ẩn cả dòng.
+ */
+export function companyLegalLine(company?: CompanyRegistrationInput | null): string | null {
+  const representative = filled(company?.representative);
+  const number = filled(company?.registrationNumber);
+  const date = filled(company?.registrationDate);
+  const place = filled(company?.registrationPlace);
+  const parts: string[] = [];
+  if (representative) parts.push(`Người đại diện theo pháp luật: ${representative}`);
+  if (number || date || place) {
+    let reg = 'Giấy chứng nhận đăng ký doanh nghiệp';
+    if (number) reg += ` số ${number}`;
+    if (place && date) reg += ` do ${place} cấp ngày ${date}`;
+    else if (place) reg += ` do ${place} cấp`;
+    else if (date) reg += `${number ? ',' : ''} cấp ngày ${date}`;
+    parts.push(reg);
+  }
+  return parts.length > 0 ? parts.join(' · ') : null;
+}
+
 /** Link huy hiệu "Đã thông báo Bộ Công Thương" chỉ hợp lệ khi là https tới cổng online.gov.vn hoặc một tên miền *.gov.vn. */
 export function isBctNoticeUrl(value: unknown): value is string {
   if (typeof value !== 'string' || value.trim() !== value || value === '' || value.length > 500) return false;

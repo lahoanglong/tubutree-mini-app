@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { tenantSubdomain } from './tenant-subdomain';
+import { isLegacyAppHost, tenantSubdomain } from './tenant-subdomain';
 
 describe('tenantSubdomain', () => {
   it.each([
@@ -48,5 +48,23 @@ describe('tenantSubdomain', () => {
     [''],
   ])('%s → null (host thường hoặc subdomain hệ thống)', (host) => {
     expect(tenantSubdomain(host)).toBeNull();
+  });
+});
+
+describe('isLegacyAppHost', () => {
+  it.each(['app.tubutree.com', 'APP.TubuTree.com', 'app.tubutree.com:443', 'app.tubutree.com:3000'])('%s là host cũ app.', (host) => {
+    expect(isLegacyAppHost(host)).toBe(true);
+  });
+
+  it.each(['tubutree.com', 'www.tubutree.com', 'ctv-an.tubutree.com', 'api.tubutree.com', 'notapp.tubutree.com', 'app.tubutree.com.evil.test', 'x.app.tubutree.com', 'app.localhost', 'localhost:3000', ''])(
+    '%s không phải host cũ app.',
+    (host) => {
+      expect(isLegacyAppHost(host)).toBe(false);
+    },
+  );
+
+  it('theo tên miền gốc truyền vào (staging)', () => {
+    expect(isLegacyAppHost('app.staging.tubutree.com', 'staging.tubutree.com')).toBe(true);
+    expect(isLegacyAppHost('app.tubutree.com', 'staging.tubutree.com')).toBe(false);
   });
 });

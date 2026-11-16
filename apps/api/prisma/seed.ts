@@ -86,6 +86,10 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'company.tax_code', value: '', category: 'company', description: 'Mã số thuế của đơn vị vận hành, hiển thị cho khách', createOnly: true },
   { key: 'company.address', value: '', category: 'company', description: 'Địa chỉ trụ sở đã đăng ký, hiển thị cho khách', createOnly: true },
   { key: 'company.bct_notice_url', value: '', category: 'company', description: 'Link https do cổng online.gov.vn cấp sau khi Bộ Công Thương duyệt thông báo (host online.gov.vn hoặc *.gov.vn). Để trống = ẩn huy hiệu "Đã thông báo Bộ Công Thương"; chỉ điền khi hồ sơ đã được duyệt', createOnly: true },
+  { key: 'company.representative', value: '', category: 'company', description: 'Họ tên người đại diện theo pháp luật, hiển thị ở chân trang web và trang Về Tubu Tree. Để trống = ẩn dòng', createOnly: true },
+  { key: 'company.business_registration_number', value: '', category: 'company', description: 'Số Giấy chứng nhận đăng ký doanh nghiệp, hiển thị ở chân trang. Để trống = ẩn (không tự lấy từ mã số thuế)', createOnly: true },
+  { key: 'company.business_registration_date', value: '', category: 'company', description: 'Ngày cấp Giấy chứng nhận đăng ký doanh nghiệp, dạng dd/mm/yyyy. Sai định dạng hoặc ngày không có thật thì chân trang ẩn dòng', createOnly: true },
+  { key: 'company.business_registration_place', value: '', category: 'company', description: 'Nơi cấp Giấy chứng nhận đăng ký doanh nghiệp (vd Sở Tài chính Thành phố Hồ Chí Minh), hiển thị ở chân trang. Để trống = ẩn', createOnly: true },
   {
     key: 'referral.milestones_points',
     value: [
@@ -156,6 +160,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'ops.alert_queue_failed_1h', value: 5, category: 'ops', description: 'Báo động khi một hàng đợi có từ chừng này job lỗi trong 1 giờ qua', createOnly: true },
   { key: 'ops.alert_repeat_hours', value: 6, category: 'ops', description: 'Sự cố chưa hết thì nhắc lại admin sau chừng này giờ', createOnly: true },
   { key: 'ops.alert_gomdon_backlog_minutes', value: 15, category: 'ops', description: 'Đơn thu gom đã thanh toán được mà quá số phút này chưa có vận đơn Gomdon thì báo động', createOnly: true },
+  { key: 'ops.webhook_reject_alert_per_hour', value: 10, category: 'ops', description: 'Tab "Theo dõi 72h" báo đỏ khi một nguồn webhook (Pancake hoặc Gomdon) bị từ chối 401 từ chừng này lần trở lên trong 1 giờ (số nguyên 1 đến 100000; sai thì dùng 10)', createOnly: true },
   { key: 'storefront.identifier_cooldown_days', value: 90, category: 'storefront', description: 'Subdomain/tên miền gian hàng vừa đổi hoặc gỡ chỉ gian hàng khác dùng lại sau chừng này ngày', createOnly: true },
   { key: 'orders.dealer_pending_payment_ttl_hours', value: 72, category: 'orders', description: 'Đơn đại lý trả trước chờ chuyển khoản quá số giờ này thì tự huỷ (hoàn kho). Tối thiểu 1, tối đa 720', createOnly: true },
   { key: 'affiliate.pit_withhold_pct', value: 0.1, category: 'affiliate', description: 'Thuế TNCN khấu trừ khi trả hoa hồng CTV (phân số, 0.1 = 10%; 0 = tắt)', createOnly: true },

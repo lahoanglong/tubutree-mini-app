@@ -4,7 +4,7 @@ import { HUB, isHubQuery } from './lib/browse-hub-route';
 import { HOME_HINT_COOKIE, SESSION_COOKIE, parseHintSlug } from './lib/home-restore-hint';
 import { isLegalSlug } from './lib/legal';
 import { carryLegacyParams, resolveLegacyWpPath, type LegacyResolution } from './lib/legacy-wp-redirects';
-import { tenantSubdomain } from './lib/tenant-subdomain';
+import { isLegacyAppHost, tenantSubdomain } from './lib/tenant-subdomain';
 
 // Trang ISR theo [slug] được Next ghi file cache theo từng đường dẫn lạ, kể cả 404 (~53 KB mỗi đường dẫn, không bao giờ xoá).
 // Chỉ cho vào những đường dẫn có thể là slug thật; còn lại 404 ngay ở middleware, không chạm cache.
@@ -40,7 +40,18 @@ function legacyResponse(request: NextRequest, legacy: LegacyResolution): NextRes
   return redirectTo(request, legacy.status, carryLegacyParams(legacy.location, request.nextUrl.search), { 'cache-control': LEGACY_CACHE_CONTROL });
 }
 
+/**
+ * Host cũ `app.tubutree.com` vẫn phục vụ nội dung (Mini App còn dựng link chia sẻ từ host này) nên không chuyển hướng; mọi phản hồi của nó
+ * (kể cả chuyển hướng, 404, robots.txt) mang `X-Robots-Tag: noindex, nofollow` để công cụ tìm kiếm chỉ giữ bản ở tên miền gốc. Không chặn cào bằng
+ * robots.txt: crawler bị chặn thì không đọc được header này.
+ */
 export function middleware(request: NextRequest) {
+  const response = route(request);
+  if (isLegacyAppHost(request.headers.get('host') ?? '')) response.headers.set('x-robots-tag', 'noindex, nofollow');
+  return response;
+}
+
+function route(request: NextRequest): NextResponse {
   const host = request.headers.get('host') ?? '';
   const url = request.nextUrl;
   const pathname = url.pathname;

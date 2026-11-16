@@ -145,8 +145,54 @@ export function breadcrumbJsonLd(items: readonly Crumb[]): Record<string, unknow
   };
 }
 
-/** Dữ liệu có cấu trúc schema.org/Product để Google hiện giá, tình trạng hàng và đánh giá ở kết quả tìm kiếm. */
-export function productJsonLd(p: ProductDetail & ApprovedSeo, url: string): Record<string, unknown> {
+/**
+ * Chính sách đổi trả và vận chuyển để khai trong Offer. Mỗi phần chỉ được khai khi có số thật từ cấu hình công khai (thiếu thì bỏ phần đó,
+ * không đoán). Trang gọi hàm không truyền gì cho sản phẩm của gian hàng đối tác: họ giao riêng với phí và hạn đổi trả riêng.
+ */
+export interface ProductPolicySeo {
+  /** Số ngày được đổi/trả kể từ khi giao (returns.window_days); 0 = không nhận đổi trả. */
+  returnWindowDays?: number;
+  shipping?: {
+    /** Từ mức tiền hàng này phần hàng Tubu Tree giao được miễn phí vận chuyển. */
+    freeThreshold?: number;
+    /** Phí cố định khi chưa đạt ngưỡng. */
+    flatFee?: number;
+  };
+}
+
+const isMoney = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n) && n >= 0;
+
+/** schema.org/MerchantReturnPolicy trỏ về trang chính sách đổi trả; số ngày không hợp lệ thì không khai gì. */
+function returnPolicyLd(days: number | undefined): Record<string, unknown> | undefined {
+  if (typeof days !== 'number' || !Number.isInteger(days) || days < 0 || days > 365) return undefined;
+  const base = { '@type': 'MerchantReturnPolicy', applicableCountry: 'VN', merchantReturnLink: `${SITE_URL}/chinh-sach/doi-tra` };
+  return days === 0
+    ? { ...base, returnPolicyCategory: 'https://schema.org/MerchantReturnNotPermitted' }
+    : { ...base, returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow', merchantReturnDays: days };
+}
+
+/**
+ * schema.org/OfferShippingDetails cho MỘT đơn vị hàng: giá của mọi phân loại đều đạt ngưỡng thì miễn phí (rate 0), đều dưới ngưỡng thì phí cố định.
+ * Giá nằm hai bên ngưỡng (một sản phẩm nhiều phân loại) thì không khai, vì cùng một Offer không thể vừa miễn phí vừa tính phí. Thiếu ngưỡng hoặc phí thì không khai.
+ * Dựa trên giá niêm yết của trang: giá Giờ vàng là tạm thời và checkout tính ngưỡng trên giá lúc đó, nên một sản phẩm sát ngưỡng có thể bị tính phí trong khung Giờ vàng.
+ * Không khai `deliveryTime`: Google cần cả `handlingTime` lẫn `transitTime`, còn cấu hình công khai chỉ có một khoảng ngày giao dự kiến (tổng, không tách chuẩn bị hàng và vận chuyển).
+ */
+function shippingLd(prices: number[], shipping: ProductPolicySeo['shipping']): Record<string, unknown> | undefined {
+  const free = shipping?.freeThreshold;
+  const fee = shipping?.flatFee;
+  if (!isMoney(free) || !isMoney(fee) || prices.length === 0 || !prices.every(isMoney)) return undefined;
+  const allFree = prices.every((p) => p >= free);
+  const allPaid = prices.every((p) => p < free);
+  if (!allFree && !allPaid) return undefined;
+  return {
+    '@type': 'OfferShippingDetails',
+    shippingRate: { '@type': 'MonetaryAmount', value: allFree ? 0 : fee, currency: 'VND' },
+    shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'VN' },
+  };
+}
+
+/** Dữ liệu có cấu trúc schema.org/Product để Google hiện giá, tình trạng hàng, đổi trả, vận chuyển và đánh giá ở kết quả tìm kiếm. */
+export function productJsonLd(p: ProductDetail & ApprovedSeo, url: string, policy?: ProductPolicySeo): Record<string, unknown> {
   const images = galleryImages(p);
   const prices = p.variations.map((v) => v.salePrice ?? v.retailPrice);
   const availability = productAvailability(p);
@@ -164,6 +210,10 @@ export function productJsonLd(p: ProductDetail & ApprovedSeo, url: string): Reco
   } else {
     offers = { '@type': 'Offer', url, priceCurrency: 'VND', price: prices[0] ?? p.salePrice ?? p.basePrice, availability };
   }
+  const returnPolicy = returnPolicyLd(policy?.returnWindowDays);
+  if (returnPolicy) offers.hasMerchantReturnPolicy = returnPolicy;
+  const shippingDetails = shippingLd(prices.length > 0 ? prices : [p.salePrice ?? p.basePrice], policy?.shipping);
+  if (shippingDetails) offers.shippingDetails = shippingDetails;
 
   const ld: Record<string, unknown> = {
     '@context': 'https://schema.org',

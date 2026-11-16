@@ -163,6 +163,8 @@ export class SystemConfigService {
     // ADMINOPS-3: các khoá tiền/điểm đọc thẳng vào checkout, ví, rút tiền. Phí âm làm tổng đơn nhỏ hơn tiền hàng;
     // Tích điểm là phần trăm tiền hàng nên 100 (thay vì 2) là tích gấp 50 lần. Chặn ngay lúc ghi.
     'shipping.flat_fee_below_threshold': { min: 0, max: 1_000_000, note: 'đồng phí ship cố định', integer: true },
+    // Khớp normalizeWebhookRejectThreshold (analytics/webhook-reject-config.ts): ngoài khoảng này tab Theo dõi 72h bỏ giá trị và dùng mặc định 10.
+    'ops.webhook_reject_alert_per_hour': { min: 1, max: 100_000, note: 'số lần webhook bị từ chối 401 trong 1 giờ thì báo đỏ ở tab Theo dõi 72h', integer: true },
     'shipping.free_threshold': { min: 0, max: 50_000_000, note: 'đồng (đơn từ mức này được freeship)', integer: true },
     'shipping.first_order_free_min_subtotal': { min: 0, max: 50_000_000, note: 'đồng tiền hàng tối thiểu để đơn đầu được freeship (0 = mọi đơn đầu)', integer: true },
     'loyalty.earn_pct': { min: 0.1, max: 20, note: 'phần trăm tiền hàng (sau giảm giá, không gồm ship) tích thành Điểm Xanh (2 = 2%), trước hệ số hạng' },

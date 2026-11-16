@@ -9,6 +9,15 @@ export const SYSTEM_SUBDOMAINS = ['www', 'admin', 'api', 'app', 'blog', 'mail'];
 export const TENANT_ROOT_DOMAIN = (process.env.NEXT_PUBLIC_TENANT_ROOT_DOMAIN ?? '').trim().toLowerCase().replace(/^\.+|\.+$/g, '') || 'tubutree.com';
 
 /**
+ * Host `app.<gốc>` (app.tubutree.com): tên cũ của web trước khi chuyển về tên miền gốc. Vẫn phải phục vụ vì Mini App còn dựng link chia sẻ và ảnh xem
+ * trước từ host này (DEFAULT_WEB_BASE_URL) và CORS của API còn nhận nó, nên không chuyển hướng; chỉ gắn `X-Robots-Tag: noindex` (middleware.ts)
+ * để công cụ tìm kiếm không giữ hai bản của cùng một trang. `host` có thể kèm cổng.
+ */
+export function isLegacyAppHost(host: string, rootDomain: string = TENANT_ROOT_DOMAIN): boolean {
+  return host.split(':')[0]!.toLowerCase() === `app.${rootDomain}`;
+}
+
+/**
  * Tên gian hàng khi khách vào bằng subdomain đúng một nhãn dưới tên miền gốc (`<slug>.tubutree.com`, hoặc `<slug>.localhost` khi
  * chạy máy dev), null nếu là host khác, host gốc hoặc subdomain hệ thống. Dùng chung cho middleware.ts (rewrite trang chủ
  * subdomain sang `/s/<slug>`) và entry-source.ts (nhận ra khách vào gian hàng CTV: trình duyệt vẫn thấy đường dẫn `/` vì rewrite

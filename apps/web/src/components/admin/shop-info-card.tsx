@@ -4,7 +4,7 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { setConfig, type ConfigRow } from '@/lib/admin-client';
-import { LEGAL_PAGES, LEGAL_SLUGS, isBctNoticeUrl, type LegalSlug } from '@/lib/legal';
+import { LEGAL_PAGES, LEGAL_SLUGS, isBctNoticeUrl, normalizeRegistrationDate, type LegalSlug } from '@/lib/legal';
 import { LegalMarkdown } from '@/components/legal-markdown';
 import { BTN_PRIMARY, BTN_SECONDARY, Field, INPUT_CLASS, Notice } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
@@ -14,11 +14,17 @@ const COMPANY_FIELDS = [
   { key: 'company.legal_name', label: 'Tên công ty', hint: 'Đúng tên trên giấy đăng ký kinh doanh. Hiện ở chân trang và các trang chính sách.', placeholder: 'Công ty TNHH ...' },
   { key: 'company.tax_code', label: 'Mã số thuế', hint: 'Hiện cho khách ở chân trang.', placeholder: '0123456789' },
   { key: 'company.address', label: 'Địa chỉ trụ sở', hint: 'Địa chỉ đã đăng ký kinh doanh.', placeholder: 'Số nhà, đường, phường, tỉnh' },
+  { key: 'company.representative', label: 'Người đại diện theo pháp luật', hint: 'Họ tên đúng như trên giấy chứng nhận đăng ký doanh nghiệp. Hiện ở chân trang web và trang Về Tubu Tree; để trống thì ẩn.', placeholder: 'Họ và tên' },
+  { key: 'company.business_registration_number', label: 'Số giấy chứng nhận đăng ký doanh nghiệp', hint: 'Nhập đúng số trên giấy (hệ thống không tự lấy từ mã số thuế). Để trống thì ẩn.', placeholder: 'Số ghi trên giấy chứng nhận' },
+  { key: 'company.business_registration_date', label: 'Ngày cấp giấy chứng nhận', hint: 'Dạng ngày/tháng/năm, ví dụ 12/03/2020. Ngày không có thật hoặc chưa tới thì chân trang ẩn dòng này.', placeholder: 'dd/mm/yyyy' },
+  { key: 'company.business_registration_place', label: 'Nơi cấp giấy chứng nhận', hint: 'Cơ quan đăng ký kinh doanh đã cấp giấy. Để trống thì ẩn.', placeholder: 'Sở Tài chính Thành phố ...' },
   { key: 'company.bct_notice_url', label: 'Link thông báo Bộ Công Thương', hint: 'Chỉ dán khi Bộ Công Thương đã duyệt hồ sơ: link https do cổng online.gov.vn cấp. Để trống thì ẩn huy hiệu "Đã thông báo Bộ Công Thương".', placeholder: 'https://online.gov.vn/...' },
 ] as const;
 
 const LEGAL_MAX = 50_000;
 const BCT_URL_MAX = 500;
+const REG_TEXT_MAX = 200;
+const REG_NUMBER_MAX = 40;
 
 /** Cùng luật với `bctNoticeUrl` ở API (company-config.ts) và isBctNoticeUrl của app-core: link API sẽ bỏ thì không cho lưu. */
 function bctLinkProblem(value: string): string | null {
@@ -32,6 +38,17 @@ function bctLinkProblem(value: string): string | null {
   if (u.protocol !== 'https:') return 'Link phải bắt đầu bằng https:// và không có khoảng trắng.';
   if (u.username || u.password) return 'Link không được chứa tên đăng nhập hay mật khẩu.';
   if (!isBctNoticeUrl(value)) return 'Link phải thuộc tên miền online.gov.vn hoặc *.gov.vn (không có cổng riêng, không thừa khoảng trắng) thì huy hiệu mới hiện.';
+  return null;
+}
+
+/** Cùng luật với company-config.ts của API: giá trị API sẽ bỏ thì không cho lưu, để khách không thấy dòng biến mất mà không biết lý do. */
+function registrationProblem(key: string, value: string): string | null {
+  if (value === '') return null;
+  if (key === 'company.business_registration_date') return normalizeRegistrationDate(value) ? null : 'Ngày cấp phải dạng ngày/tháng/năm (ví dụ 12/03/2020), là ngày có thật, không trước 1990 và chưa tới.';
+  if (key === 'company.business_registration_number') {
+    return value.length <= REG_NUMBER_MAX && /^[0-9A-Za-z./\- ]+$/.test(value) ? null : `Số giấy chứng nhận chỉ gồm chữ số, chữ không dấu, dấu - / . và khoảng trắng, tối đa ${REG_NUMBER_MAX} ký tự.`;
+  }
+  if (key === 'company.representative' || key === 'company.business_registration_place') return value.length <= REG_TEXT_MAX ? null : `Dài quá ${REG_TEXT_MAX} ký tự.`;
   return null;
 }
 
@@ -71,6 +88,7 @@ export function ShopInfoCard({ rows }: { rows: ConfigRow[] | undefined }) {
   const companyDirty = companyKeys.some(dirty);
   const bct = valueOf('company.bct_notice_url').trim();
   const bctProblem = bct === '' ? null : bctLinkProblem(bct);
+  const registrationProblems = companyKeys.map((k) => ({ key: k, problem: registrationProblem(k, savedValueOf(k)) })).filter((p): p is { key: string; problem: string } => p.problem !== null);
 
   return (
     <section aria-labelledby="shop-info-title" data-shop-info className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
@@ -90,8 +108,13 @@ export function ShopInfoCard({ rows }: { rows: ConfigRow[] | undefined }) {
           </Field>
         ))}
         {bctProblem && <Notice tone="warning">{bctProblem}</Notice>}
+        {registrationProblems.map((p) => (
+          <Notice key={p.key} tone="warning">
+            {p.problem}
+          </Notice>
+        ))}
         <div className="flex flex-wrap items-center gap-3">
-          <button type="button" disabled={!companyDirty || save.isPending || !!bctProblem} onClick={() => save.mutate(companyKeys.filter(dirty))} className={BTN_PRIMARY}>
+          <button type="button" disabled={!companyDirty || save.isPending || !!bctProblem || registrationProblems.length > 0} onClick={() => save.mutate(companyKeys.filter(dirty))} className={BTN_PRIMARY}>
             Lưu thông tin cửa hàng
           </button>
           {msg && companyKeys.includes(msg.key) && (

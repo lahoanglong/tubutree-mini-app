@@ -41,6 +41,17 @@ ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 ENV NEXT_PUBLIC_SENTRY_ENVIRONMENT=$NEXT_PUBLIC_SENTRY_ENVIRONMENT
 ENV NEXT_STANDALONE=1
 
+# NEXT_PUBLIC_SITE_URL là gốc của canonical, sitemap, robots, og:url và JSON-LD (nhúng lúc build). Thiếu hoặc trỏ host app.* thì mọi trang
+# khai canonical sai host mà build vẫn xanh, và công cụ tìm kiếm gom về host trùng lặp. Dừng ở đây để lỗi hiện lúc deploy.
+RUN site_url="$(printf '%s' "${NEXT_PUBLIC_SITE_URL%/}" | tr '[:upper:]' '[:lower:]')"; \
+    case "$site_url" in \
+      "") echo "LOI: NEXT_PUBLIC_SITE_URL rong. Dat NEXT_PUBLIC_SITE_URL=https://tubutree.com trong .env roi build lai (canonical, sitemap, og:url khong duoc roi ve host app.)." >&2; exit 1;; \
+      https://app.*) echo "LOI: NEXT_PUBLIC_SITE_URL tro host app. ($NEXT_PUBLIC_SITE_URL). Dat https://tubutree.com (host chinh) roi build lai." >&2; exit 1;; \
+      https://*[!A-Za-z0-9.:-]*) echo "LOI: NEXT_PUBLIC_SITE_URL chi duoc la https://<host>, khong kem duong dan hay dau cach ($NEXT_PUBLIC_SITE_URL)." >&2; exit 1;; \
+      https://*) ;; \
+      *) echo "LOI: NEXT_PUBLIC_SITE_URL phai bat dau bang https:// ($NEXT_PUBLIC_SITE_URL)." >&2; exit 1;; \
+    esac
+
 # Thiếu App ID thì bundle bị nhúng chuỗi rỗng: build vẫn xanh nhưng mọi nút đăng nhập Zalo trên web đều hỏng. Dừng ở đây
 # để lỗi hiện lúc deploy, không đợi tới khi khách không đăng nhập được. Bản thử không dùng Zalo mới đặt
 # ALLOW_EMPTY_ZALO_APP_ID=1 (khi đó web hiện thông báo "chưa cấu hình" thay cho nút đăng nhập, và ẩn nút "Mở trên Zalo").

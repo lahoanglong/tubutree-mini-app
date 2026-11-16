@@ -3452,6 +3452,18 @@ model AnalyticsEvent {
   @@map("analytics_events")
 }
 
+/// Số lần webhook bị từ chối 401 theo nguồn ('pancake' | 'gomdon') và khung 5 phút (UTC). CHỈ số đếm: không lưu token, header, IP hay nội dung.
+/// Ghi dồn từ bộ nhớ mỗi 30 giây (WebhookRejectCounterService); dòng quá 14 ngày bị xoá.
+model WebhookRejectCounter {
+  source      String
+  bucketStart DateTime
+  count       Int
+  updatedAt   DateTime @updatedAt
+
+  @@id([source, bucketStart])
+  @@map("webhook_reject_counters")
+}
+
 model RetentionDailySnapshot {
   date                 DateTime @id
   newBuyers            Int

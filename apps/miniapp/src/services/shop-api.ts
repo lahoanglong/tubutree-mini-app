@@ -302,7 +302,17 @@ export interface PublicConfig {
   /** Ngày mở bán (catalog.launch_date, YYYY-MM-DD giờ Việt Nam): sản phẩm tạo trước ngày này không gắn "Mới". Rỗng/thiếu → luật 30 ngày như cũ. */
   catalogLaunchDate?: string | null;
   /** Đơn vị vận hành (tên, MST, địa chỉ, link đã thông báo Bộ Công Thương); từng trường null khi admin để trống, thiếu khi API cũ. */
-  company?: { legalName: string | null; taxCode: string | null; address: string | null; bctNoticeUrl: string | null };
+  company?: {
+    legalName: string | null;
+    taxCode: string | null;
+    address: string | null;
+    bctNoticeUrl: string | null;
+    /** Người đại diện theo pháp luật và Giấy chứng nhận ĐKDN (số, ngày cấp dd/mm/yyyy, nơi cấp); thiếu khi API cũ, null khi admin để trống. */
+    representative?: string | null;
+    registrationNumber?: string | null;
+    registrationDate?: string | null;
+    registrationPlace?: string | null;
+  };
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);

@@ -7,7 +7,8 @@ import { SYSTEM_SUBDOMAINS, TENANT_ROOT_DOMAIN, tenantSubdomain } from './tenant
  * Thiếu `metadataBase` thì ảnh openGraph khai bằng đường dẫn tương đối không dựng được URL tuyệt
  * đối (Next cảnh báo mỗi lần build, và link chia sẻ mất ảnh).
  *
- * Mặc định app.tubutree.com (Q-20): host đang phục vụ web trên PROD; middleware coi `shop` là
+ * Biến này là host CHÍNH của web (https://tubutree.com trên PROD). Mặc định app.tubutree.com chỉ để chạy local và test: bản build production
+ * không được dùng nó, nên Dockerfile web và tools/deploy/deploy.sh dừng khi biến thiếu hoặc trỏ host app.*. Middleware coi `shop` là
  * subdomain gian hàng CTV nên shop.tubutree.com không dùng được làm gốc.
  */
 // `||` chứ không `??`: ARG/ENV của Dockerfile biến build không truyền arg thành chuỗi rỗng, mà `new URL('')` ném lỗi.

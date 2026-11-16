@@ -79,6 +79,8 @@ exit 0
       FAIL_ON: opts.failOn ?? '',
       DEPLOY_HEALTH_TIMEOUT: '2',
       BACKUP_DIR: join(dir, 'backups'),
+      // deploy.sh dừng khi thiếu NEXT_PUBLIC_SITE_URL hoặc trỏ host app.*: mặc định hợp lệ cho mọi ca không bàn về nó.
+      NEXT_PUBLIC_SITE_URL: 'https://tubutree.com',
       ...opts.env,
     },
   });
@@ -149,6 +151,54 @@ describe('tools/deploy/deploy.sh', () => {
     const { status, calls } = runWithFakeDocker('tools/deploy/deploy.sh', [], { failOn: 'migrate deploy' });
     expect(status).not.toBe(0);
     expect(idx(calls, ' up ')).toBe(-1);
+  });
+});
+
+describe('tools/deploy/deploy.sh: NEXT_PUBLIC_SITE_URL (canonical không được rơi về host app.)', () => {
+  const stoppedBeforeBuild = (r: ReturnType<typeof runWithFakeDocker>) => {
+    expect(r.status).toBe(2);
+    expect(r.calls.filter((c) => c.includes(' build ') || c.includes(' up ') || c.includes('migrate'))).toEqual([]);
+  };
+
+  it('biến môi trường rỗng và .env không có → dừng trước build, nói rõ cách sửa', () => {
+    const r = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { NEXT_PUBLIC_SITE_URL: '' }, dotenv: 'WEB_DOMAIN=tubutree.com\n' });
+    stoppedBeforeBuild(r);
+    expect(r.out).toContain('chưa đặt NEXT_PUBLIC_SITE_URL');
+    expect(r.out).toContain('https://tubutree.com');
+  });
+
+  it.each([
+    ['host app.', 'https://app.tubutree.com', 'host app.*'],
+    ['host app. kèm / cuối', 'https://app.tubutree.com/', 'host app.*'],
+    ['host app. viết hoa', 'https://App.tubutree.com', 'host app.*'],
+    ['không https', 'http://tubutree.com', 'https://'],
+    ['kèm đường dẫn', 'https://tubutree.com/vi', 'đường dẫn'],
+    ['kèm dấu cách', 'https://tubutree.com x', 'dấu cách'],
+  ])('%s → dừng trước build', (_name, value, reason) => {
+    const r = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { NEXT_PUBLIC_SITE_URL: value } });
+    stoppedBeforeBuild(r);
+    expect(r.out).toContain(reason);
+  });
+
+  it('chỉ có trong .env (không có biến môi trường) và hợp lệ → deploy chạy bình thường', () => {
+    const r = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { NEXT_PUBLIC_SITE_URL: '' }, dotenv: 'NEXT_PUBLIC_SITE_URL=https://tubutree.com\n' });
+    expect(r.status).toBe(0);
+    expect(idx(r.calls, ' build api web')).toBeGreaterThan(-1);
+  });
+
+  it('.env trỏ host app.* → dừng dù biến môi trường trống', () => {
+    const r = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { NEXT_PUBLIC_SITE_URL: '' }, dotenv: 'NEXT_PUBLIC_SITE_URL="https://app.tubutree.com"\n' });
+    stoppedBeforeBuild(r);
+  });
+
+  it('dấu / cuối và chữ hoa ở host chính được chấp nhận (web cắt dấu /, host không phân biệt hoa thường)', () => {
+    expect(runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { NEXT_PUBLIC_SITE_URL: 'https://tubutree.com/' } }).status).toBe(0);
+    expect(runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { NEXT_PUBLIC_SITE_URL: 'https://TubuTree.com' } }).status).toBe(0);
+  });
+
+  it('không còn lối bỏ qua kiểm bằng biến môi trường: Dockerfile web kiểm cùng luật nên bỏ ở deploy.sh chỉ làm build hỏng muộn hơn', () => {
+    const r = runWithFakeDocker('tools/deploy/deploy.sh', [], { env: { NEXT_PUBLIC_SITE_URL: '', SKIP_SITE_URL_CHECK: '1' }, dotenv: '' });
+    stoppedBeforeBuild(r);
   });
 });
 

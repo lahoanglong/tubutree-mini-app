@@ -405,6 +405,24 @@ describe('Đơn vị vận hành trên trang Về Tubu Tree', () => {
     expect(await screen.findByText('Đơn vị vận hành: Công ty TNHH Tubu · MST 0312345678 · 1 Đường A, Quận B')).toBeInTheDocument();
   });
 
+  it('chưa nhập người đại diện / ĐKDN thì KHÔNG có dòng hồ sơ pháp lý (không bịa)', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT, company: { legalName: 'Công ty TNHH Tubu', taxCode: '0312345678', address: null, bctNoticeUrl: null, representative: null, registrationNumber: null, registrationDate: null, registrationPlace: null } });
+    renderPage();
+    await screen.findByText('Đơn vị vận hành: Công ty TNHH Tubu · MST 0312345678');
+    expect(screen.queryByTestId('about-company-legal')).toBeNull();
+  });
+
+  it('đã nhập: hiện người đại diện và số, nơi cấp, ngày cấp ĐKDN', async () => {
+    mocks.getPublicConfig.mockResolvedValue({
+      support: SUPPORT,
+      company: { legalName: 'Công ty TNHH Tubu', taxCode: '0312345678', address: null, bctNoticeUrl: null, representative: 'Nguyễn Văn A', registrationNumber: '0312345678', registrationDate: '12/03/2020', registrationPlace: 'Sở Tài chính Thành phố Hồ Chí Minh' },
+    });
+    renderPage();
+    expect(
+      await screen.findByText('Người đại diện theo pháp luật: Nguyễn Văn A · Giấy chứng nhận đăng ký doanh nghiệp số 0312345678 do Sở Tài chính Thành phố Hồ Chí Minh cấp ngày 12/03/2020'),
+    ).toBeInTheDocument();
+  });
+
   it('ẩn phần còn trống; Bộ Công Thương chỉ là chữ, không bấm được và không mở link', async () => {
     mocks.getPublicConfig.mockResolvedValue({ support: SUPPORT, company: { legalName: null, taxCode: '0312345678', address: null, bctNoticeUrl: 'https://online.gov.vn/x' } });
     renderPage();

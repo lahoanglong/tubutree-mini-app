@@ -25,7 +25,7 @@ describe('Pancake webhook dedupe + cứu sự kiện kẹt (real Postgres)', () 
   const queue = mockQueue();
 
   const controller = () =>
-    new PancakeWebhookController(prisma, { get: () => '' } as never, queue as unknown as Queue);
+    new PancakeWebhookController(prisma, { get: () => '' } as never, queue as unknown as Queue, { record: jest.fn() } as never);
 
   beforeAll(async () => {
     prisma = new PrismaService();

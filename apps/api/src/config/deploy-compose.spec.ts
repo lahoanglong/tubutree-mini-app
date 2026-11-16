@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -201,6 +202,24 @@ describe('docker-compose.prod.yml và docker-compose.vietnix.yml không lệch n
   it('NEXT_PUBLIC_APP_URL không còn ở compose nào: web không đọc biến này', () => {
     expect(prod).not.toContain('NEXT_PUBLIC_APP_URL');
     expect(vietnix).not.toContain('NEXT_PUBLIC_APP_URL');
+  });
+
+  it.each(['docker-compose.prod.yml', 'docker-compose.vietnix.yml'])('%s: NEXT_PUBLIC_SITE_URL không có mặc định app.* (thiếu thì Dockerfile web dừng, không im lặng khai canonical sai host)', (file) => {
+    const line = /^ {8}NEXT_PUBLIC_SITE_URL: (.*)$/m.exec(repoFile(file))?.[1];
+    expect(line).toBe('${NEXT_PUBLIC_SITE_URL:-}');
+  });
+
+  it('Dockerfile web dừng khi NEXT_PUBLIC_SITE_URL rỗng, không https hoặc trỏ host app.* (kiểm bằng sh thật trên đúng đoạn lệnh của Dockerfile)', () => {
+    const run = /RUN (site_url=[\s\S]*?esac)\n/.exec(dockerfile)?.[1];
+    expect(run).toBeTruthy();
+    const script = run!.replace(/\\\n/g, '\n');
+    const exit = (value: string) => spawnSync('sh', ['-c', script], { env: { NEXT_PUBLIC_SITE_URL: value, PATH: process.env.PATH }, encoding: 'utf8' });
+    for (const bad of ['', 'https://app.tubutree.com', 'https://app.tubutree.com/', 'http://tubutree.com', 'tubutree.com', 'https://tubutree.com/vi', 'https://tubutree.com x']) {
+      const r = exit(bad);
+      expect({ bad, status: r.status }).toEqual({ bad, status: 1 });
+      expect(r.stderr).toContain('LOI: NEXT_PUBLIC_SITE_URL');
+    }
+    for (const good of ['https://tubutree.com', 'https://tubutree.com/', 'https://localhost:3000']) expect({ good, status: exit(good).status }).toEqual({ good, status: 0 });
   });
 
   it('cùng tập NEXT_PUBLIC_* ở hai compose (canonical, sitemap, gốc gian hàng CTV đúng theo WEB_DOMAIN khi dựng bằng compose prod)', () => {

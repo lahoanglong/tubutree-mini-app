@@ -105,6 +105,13 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const retailOnly = isRetailOnly(product);
   const soldText = formatSold(product.sold);
   const fromStore = product.fulfiller?.kind === 'MERCHANT' || product.fulfiller?.kind === 'UNAVAILABLE';
+  // Đổi trả và vận chuyển khai cho hàng Tubu Tree giao; hàng của gian hàng đối tác có phí và hạn riêng nên không khai thay họ.
+  const productPolicy = fromStore
+    ? undefined
+    : {
+        returnWindowDays: publicConfig?.returnWindowDays,
+        shipping: publicConfig ? { freeThreshold: publicConfig.freeshipThreshold, flatFee: publicConfig.shippingFlatFee } : undefined,
+      };
   // Khối "Gợi ý mua kèm hợp vị" và các dải cuối trang dùng chung một bộ món (hook `useFbt`): chỉ chuyển các trường giá và tồn, không chuyển cả phân loại.
   const fbtHost = {
     name: product.name,
@@ -346,7 +353,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       </PdpSelectionProvider>
       </FlashSalesSeed>
 
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, productUrl)) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: jsonLdScript(productJsonLd(product, productUrl, productPolicy)) }} />
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{

@@ -3,6 +3,8 @@ import {
   RECYCLE_FUNNEL_STEPS,
   type LaunchWatchFraud,
   type LaunchWatchFunnelRow,
+  type LaunchWatchWebhookRejects,
+  type LaunchWatchWebhookSource,
   type LaunchWatchWindow,
   type RecycleFunnelStep,
 } from '@tubutree/shared-types';
@@ -109,4 +111,45 @@ export function metricLevel(alerts: readonly FraudAlert[], metric: FraudMetric):
 export function formatUpdatedAt(iso: string | null | undefined): string {
   const t = formatDateTime(iso);
   return t === '—' ? t : t.slice(0, 5);
+}
+
+/** Tên nguồn webhook hiển thị cho admin. */
+export const WEBHOOK_SOURCE_LABELS: Record<LaunchWatchWebhookSource, string> = { pancake: 'Pancake', gomdon: 'Gomdon' };
+
+/** Việc admin cần làm khi nguồn bị từ chối 401: webhook bị từ chối là mất sự kiện (đơn không đồng bộ, vận đơn không cập nhật) nên phải chỉ rõ chỗ kiểm. */
+const WEBHOOK_SOURCE_HINTS: Record<LaunchWatchWebhookSource, string> = {
+  pancake: 'Kiểm token "x-webhook-token" ở Pancake POS có khớp PANCAKE_WEBHOOK_SECRET không.',
+  gomdon: 'Kiểm secret hoặc khoá HMAC ở Gomdon có khớp GOMDON_WEBHOOK_SECRET / GOMDON_WEBHOOK_HMAC_SECRET không.',
+};
+
+export interface WebhookRejectAlert {
+  source: LaunchWatchWebhookSource;
+  title: string;
+  /** "52 lần trong 1 giờ qua (24 giờ: 600)". */
+  counts: string;
+  hint: string;
+}
+
+const isCount = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
+
+/**
+ * Cảnh báo cho từng nguồn có `alert === true`; rỗng khi không nguồn nào báo (tab không hiện gì thêm).
+ * Phòng thủ với API cũ chưa có `webhookRejects` (hoặc dạng sai): coi như không có cảnh báo, không ném.
+ */
+export function webhookRejectAlerts(rejects: Partial<LaunchWatchWebhookRejects> | null | undefined): WebhookRejectAlert[] {
+  const sources = rejects?.sources;
+  if (!Array.isArray(sources)) return [];
+  const out: WebhookRejectAlert[] = [];
+  for (const s of sources) {
+    if (!s || s.alert !== true || !(s.source in WEBHOOK_SOURCE_LABELS)) continue;
+    const lastHour = isCount(s.lastHour) ? s.lastHour : 0;
+    const last24h = isCount(s.last24h) ? s.last24h : 0;
+    out.push({
+      source: s.source,
+      title: `Webhook ${WEBHOOK_SOURCE_LABELS[s.source]} đang bị từ chối`,
+      counts: `${formatCount(lastHour)} lần trong 1 giờ qua (24 giờ: ${formatCount(last24h)})`,
+      hint: WEBHOOK_SOURCE_HINTS[s.source],
+    });
+  }
+  return out;
 }

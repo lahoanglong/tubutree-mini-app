@@ -1,6 +1,9 @@
 import { GIFT_ATTACH_MIN_NET_GOODS_VND, LAUNCH_WATCH_WINDOWS, RECYCLE_FUNNEL_STEPS } from '@tubutree/shared-types';
+import type { LaunchWatchWebhookReject } from '@tubutree/shared-types';
 import type { PrismaService } from '../../prisma/prisma.service';
+import type { SystemConfigService } from '../system-config/system-config.service';
 import { LaunchWatchService, ZERO_GIFT_RULES_SINCE } from './launch-watch.service';
+import type { WebhookRejectCounterService } from './webhook-reject-counter.service';
 
 const H = 3_600_000;
 const D = 24 * H;
@@ -14,6 +17,26 @@ interface Plan {
   zeroGift?: Row;
   freeShip?: Row;
   secondOrder?: Row;
+  /** Giá trị khoá ops.webhook_reject_alert_per_hour; vắng mặt = chưa cấu hình (service nhận mặc định của lời gọi). */
+  threshold?: unknown;
+  rejects?: LaunchWatchWebhookReject[];
+}
+
+const emptyRejects = (alert = false): LaunchWatchWebhookReject[] => [
+  { source: 'pancake', lastHour: 0, last24h: 0, peakPerHour: 0, lastAt: null, alert },
+  { source: 'gomdon', lastHour: 0, last24h: 0, peakPerHour: 0, lastAt: null, alert: false },
+];
+
+/** Bản giả của WebhookRejectCounterService và SystemConfigService: bộ đếm có spec riêng, ở đây chỉ kiểm cách LaunchWatchService dùng chúng. */
+function fakeCollaborators(plan: Plan = {}) {
+  const summary = jest.fn(async (_now: Date, _threshold: number) => plan.rejects ?? emptyRejects());
+  const configGet = jest.fn(async (_key: string, fallback: unknown) => ('threshold' in plan ? plan.threshold : fallback));
+  return {
+    summary,
+    configGet,
+    rejects: { summary } as unknown as WebhookRejectCounterService,
+    config: { get: configGet } as unknown as SystemConfigService,
+  };
 }
 
 /**
@@ -39,8 +62,9 @@ function fakePrisma(plan: Plan = {}) {
     if (sql.includes('ROW_NUMBER')) return [plan.secondOrder ?? { maturedCustomers: 0n, maturedWithSecond: 0n, pendingCustomers: 0n, pendingWithSecond: 0n }];
     throw new Error(`truy vấn lạ: ${sql}`);
   });
-  const service = new LaunchWatchService({ $queryRaw: queryRaw } as unknown as PrismaService);
-  return { service, queryRaw, calls, stats };
+  const collab = fakeCollaborators(plan);
+  const service = new LaunchWatchService({ $queryRaw: queryRaw } as unknown as PrismaService, collab.rejects, collab.config);
+  return { service, queryRaw, calls, stats, summary: collab.summary, configGet: collab.configGet };
 }
 
 const iso = (ms: number) => new Date(NOW.getTime() - ms).toISOString();
@@ -176,12 +200,52 @@ describe('LaunchWatchService.getSnapshot', () => {
 
   it('generatedAt = now; truy vấn không trả dòng nào thì ra 0 chứ không ném lỗi', async () => {
     const prisma = { $queryRaw: jest.fn(async () => []) } as unknown as PrismaService;
-    const dto = await new LaunchWatchService(prisma).getSnapshot(NOW);
+    const { rejects, config } = fakeCollaborators();
+    const dto = await new LaunchWatchService(prisma, rejects, config).getSnapshot(NOW);
     expect(dto.generatedAt).toBe(NOW.toISOString());
     expect(dto.windows.h72.fraud.freeShipRecycle).toEqual({ orders: 0, users: 0, totalOrders: 0, shareOfOrdersPct: null, withConfirmedWaste: 0 });
     expect(dto.windows.h72.fraud.unverifiedPhone).toEqual({ totalRequests: 0, requests: 0, users: 0, pointsAwarded: 0 });
     expect(dto.windows.d30.funnel.rows).toHaveLength(RECYCLE_FUNNEL_STEPS.length);
     expect(dto.secondOrder.matured).toEqual({ customers: 0, withSecond: 0 });
+  });
+
+  describe('webhook bị từ chối 401 (W184)', () => {
+    it('đọc ngưỡng từ ops.webhook_reject_alert_per_hour (mặc định 10) và đưa vào snapshot cùng số đếm theo nguồn', async () => {
+      const rejects: LaunchWatchWebhookReject[] = [
+        { source: 'pancake', lastHour: 52, last24h: 600, peakPerHour: 60, lastAt: '2026-11-16T11:55:00.000Z', alert: true },
+        { source: 'gomdon', lastHour: 0, last24h: 0, peakPerHour: 0, lastAt: null, alert: false },
+      ];
+      const { service, summary, configGet } = fakePrisma({ rejects });
+      const dto = await service.getSnapshot(NOW);
+      expect(configGet).toHaveBeenCalledWith('ops.webhook_reject_alert_per_hour', 10);
+      expect(summary).toHaveBeenCalledTimes(1);
+      expect(summary).toHaveBeenCalledWith(NOW, 10);
+      expect(dto.webhookRejects).toEqual({ thresholdPerHour: 10, sources: rejects });
+    });
+
+    it('ngưỡng cấu hình hợp lệ được dùng; sai kiểu hoặc ngoài 1 đến 100000 rơi về 10 (cấu hình hỏng không tắt cảnh báo)', async () => {
+      for (const [raw, expected] of [[25, 25], [1, 1], [100000, 100000], ['20', 10], [0, 10], [100001, 10], [2.5, 10], [null, 10], [{ n: 1 }, 10]] as const) {
+        const { service, summary } = fakePrisma({ threshold: raw });
+        const dto = await service.getSnapshot(NOW);
+        expect(dto.webhookRejects.thresholdPerHour).toBe(expected);
+        expect(summary).toHaveBeenCalledWith(NOW, expected);
+      }
+    });
+
+    it('không thêm truy vấn SQL nào vào 16 truy vấn có sẵn (bộ đếm tự đọc bảng của nó qua service)', async () => {
+      const { service, queryRaw } = fakePrisma();
+      await service.getSnapshot(NOW);
+      expect(queryRaw).toHaveBeenCalledTimes(16);
+    });
+
+    it('nằm trong snapshot được giữ đệm 60 giây: gọi lại trong 60 giây không đọc lại bộ đếm', async () => {
+      const { service, summary } = fakePrisma();
+      await service.getSnapshot(NOW);
+      await service.getSnapshot(new Date(NOW.getTime() + 59_000));
+      expect(summary).toHaveBeenCalledTimes(1);
+      await service.getSnapshot(new Date(NOW.getTime() + 60_000));
+      expect(summary).toHaveBeenCalledTimes(2);
+    });
   });
 
   describe('bộ nhớ đệm 60 giây', () => {
@@ -217,7 +281,8 @@ describe('LaunchWatchService.getSnapshot', () => {
         if (fail && strings.join('?').includes('ROW_NUMBER')) throw new Error('db down');
         return [];
       });
-      const service = new LaunchWatchService({ $queryRaw: queryRaw } as unknown as PrismaService);
+      const { rejects, config } = fakeCollaborators();
+      const service = new LaunchWatchService({ $queryRaw: queryRaw } as unknown as PrismaService, rejects, config);
       await expect(service.getSnapshot(NOW)).rejects.toThrow('db down');
       fail = false;
       await expect(service.getSnapshot(new Date(NOW.getTime() + 1_000))).resolves.toMatchObject({ generatedAt: new Date(NOW.getTime() + 1_000).toISOString() });

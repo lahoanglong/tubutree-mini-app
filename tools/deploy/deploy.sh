@@ -37,6 +37,37 @@ env_value() {
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*"; }
 dc() { docker compose -f "$COMPOSE_FILE" "$@"; }
 
+# NEXT_PUBLIC_SITE_URL là biến BUILD của ảnh web: gốc của canonical, sitemap, robots, og:url, JSON-LD. Thiếu hoặc trỏ host app.* thì lần build
+# này khai canonical sai host mà không báo lỗi gì (từng xảy ra khi biến chỉ nằm trong lệnh deploy cũ). Đọc theo thứ tự compose: biến môi trường
+# của lệnh, rồi .env. In lý do nếu sai, in rỗng nếu hợp lệ. Không có lối bỏ qua: Dockerfile web kiểm cùng luật nên bỏ ở đây chỉ làm build hỏng muộn hơn.
+site_url_problem() {
+  local v host rest
+  v="${NEXT_PUBLIC_SITE_URL:-$(env_value NEXT_PUBLIC_SITE_URL)}"
+  v="$(printf '%s' "${v%/}" | tr '[:upper:]' '[:lower:]')"
+  if [ -z "$v" ]; then
+    echo "chưa đặt NEXT_PUBLIC_SITE_URL (đặt NEXT_PUBLIC_SITE_URL=https://tubutree.com trong .env)"
+    return 0
+  fi
+  case "$v" in
+    https://*) ;;
+    *) echo "NEXT_PUBLIC_SITE_URL phải bắt đầu bằng https:// (đang là '$v')"; return 0 ;;
+  esac
+  rest="${v#https://}"
+  host="${rest%%[:/]*}"
+  case "$rest" in
+    */*|*[[:space:]]*) echo "NEXT_PUBLIC_SITE_URL chỉ được là https://<host>, không kèm đường dẫn hay dấu cách (đang là '$v')"; return 0 ;;
+  esac
+  case "$host" in
+    app.*) echo "NEXT_PUBLIC_SITE_URL trỏ host app.* ('$v'): canonical và sitemap sẽ rơi về host trùng lặp; đặt https://tubutree.com"; return 0 ;;
+  esac
+  return 0
+}
+site_url_msg="$(site_url_problem)"
+if [ -n "$site_url_msg" ]; then
+  log "ERROR: $site_url_msg — DỪNG trước khi build, container đang chạy không bị đụng. Sửa /opt/tubutree/.env rồi chạy lại."
+  exit 2
+fi
+
 wait_healthy() {
   local svc="$1" waited=0 id status
   while [ "$waited" -lt "$DEPLOY_HEALTH_TIMEOUT" ]; do

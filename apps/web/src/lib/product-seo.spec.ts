@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SITE_URL } from './site';
 import type { ProductDetail } from './api';
 import { brandMetaDescription, breadcrumbJsonLd, galleryImages, jsonLdScript, plainText, productAvailability, productJsonLd, productMetaDescription, productTitle, trimAtWord } from './product-seo';
 
@@ -117,6 +118,71 @@ describe('productJsonLd — dữ liệu có cấu trúc cho Google (BUYERWEB-16)
   it('mô tả lấy từ bản đã làm sạch, rút gọn 500 ký tự', () => {
     const ld = productJsonLd({ ...BASE, shortDesc: null, description: `<p>${'a'.repeat(900)}</p>` }, URL);
     expect((ld.description as string).length).toBe(500);
+  });
+});
+
+describe('productJsonLd — đổi trả và vận chuyển (W184)', () => {
+  const URL = 'https://tubutree.com/san-pham/dau-goi';
+  const one = (price: number) => ({ ...BASE, variations: [{ id: 'v1', sku: 'a', name: '250ml', retailPrice: price, salePrice: null, stock: 3 }] });
+  const offers = (ld: Record<string, unknown>) => ld.offers as Record<string, unknown>;
+
+  it('không truyền chính sách: Offer không có hasMerchantReturnPolicy và shippingDetails (hàng đối tác, hoặc API lỗi)', () => {
+    const o = offers(productJsonLd(one(150000), URL));
+    expect(o).not.toHaveProperty('hasMerchantReturnPolicy');
+    expect(o).not.toHaveProperty('shippingDetails');
+  });
+
+  it('đổi trả theo số ngày cấu hình, trỏ về trang chính sách trên host chính', () => {
+    const o = offers(productJsonLd(one(150000), URL, { returnWindowDays: 7 }));
+    expect(o.hasMerchantReturnPolicy).toEqual({
+      '@type': 'MerchantReturnPolicy',
+      applicableCountry: 'VN',
+      merchantReturnLink: `${SITE_URL}/chinh-sach/doi-tra`,
+      returnPolicyCategory: 'https://schema.org/MerchantReturnFiniteReturnWindow',
+      merchantReturnDays: 7,
+    });
+  });
+
+  it('0 ngày là không nhận đổi trả; số ngày hỏng thì không khai', () => {
+    const none = offers(productJsonLd(one(150000), URL, { returnWindowDays: 0 })).hasMerchantReturnPolicy as Record<string, unknown>;
+    expect(none.returnPolicyCategory).toBe('https://schema.org/MerchantReturnNotPermitted');
+    expect(none).not.toHaveProperty('merchantReturnDays');
+    for (const bad of [-1, 1.5, 9999, Number.NaN]) expect(offers(productJsonLd(one(150000), URL, { returnWindowDays: bad }))).not.toHaveProperty('hasMerchantReturnPolicy');
+  });
+
+  it('giá đạt ngưỡng: miễn phí (rate 0) tới Việt Nam, không khai deliveryTime (chỉ có tổng ngày giao dự kiến, thiếu handlingTime)', () => {
+    const o = offers(productJsonLd(one(250000), URL, { shipping: { freeThreshold: 199000, flatFee: 19000 } }));
+    expect(o.shippingDetails).toEqual({
+      '@type': 'OfferShippingDetails',
+      shippingRate: { '@type': 'MonetaryAmount', value: 0, currency: 'VND' },
+      shippingDestination: { '@type': 'DefinedRegion', addressCountry: 'VN' },
+    });
+  });
+
+  it('giá dưới ngưỡng: phí cố định; đúng ngưỡng thì miễn phí', () => {
+    const paid = offers(productJsonLd(one(150000), URL, { shipping: { freeThreshold: 199000, flatFee: 19000 } })).shippingDetails as Record<string, unknown>;
+    expect(paid.shippingRate).toEqual({ '@type': 'MonetaryAmount', value: 19000, currency: 'VND' });
+    expect(paid).not.toHaveProperty('deliveryTime');
+    const edge = offers(productJsonLd(one(199000), URL, { shipping: { freeThreshold: 199000, flatFee: 19000 } })).shippingDetails as { shippingRate: { value: number } };
+    expect(edge.shippingRate.value).toBe(0);
+  });
+
+  it('nhiều phân loại nằm hai bên ngưỡng: không khai vận chuyển; cùng một phía thì khai (AggregateOffer)', () => {
+    const variations = (a: number, b: number) => [
+      { id: 'v1', sku: 'a', name: 'S', retailPrice: a, salePrice: null, stock: 1 },
+      { id: 'v2', sku: 'b', name: 'L', retailPrice: b, salePrice: null, stock: 1 },
+    ];
+    const policy = { shipping: { freeThreshold: 199000, flatFee: 19000 } };
+    expect(offers(productJsonLd({ ...BASE, variations: variations(150000, 300000) }, URL, policy))).not.toHaveProperty('shippingDetails');
+    const both = offers(productJsonLd({ ...BASE, variations: variations(250000, 300000) }, URL, policy));
+    expect(both['@type']).toBe('AggregateOffer');
+    expect((both.shippingDetails as { shippingRate: { value: number } }).shippingRate.value).toBe(0);
+  });
+
+  it('thiếu ngưỡng hoặc phí, hoặc số hỏng: không khai vận chuyển (không đoán)', () => {
+    for (const shipping of [{ flatFee: 19000 }, { freeThreshold: 199000 }, { freeThreshold: -1, flatFee: 19000 }, { freeThreshold: Number.NaN, flatFee: 19000 }, {}]) {
+      expect(offers(productJsonLd(one(150000), URL, { shipping }))).not.toHaveProperty('shippingDetails');
+    }
   });
 });
 

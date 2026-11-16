@@ -21,6 +21,7 @@ import { Public } from '../../../common/decorators/public.decorator';
 import type { Env } from '../../../config/env.validation';
 import type { GomdonWebhookPayload } from './gomdon.types';
 import { GomdonWebhookService } from './gomdon-webhook.service';
+import { WebhookRejectCounterService } from '../../analytics/webhook-reject-counter.service';
 
 /** Payload webhook Gomdon chỉ vài chục trường ngắn — chặn form khổng lồ trước khi kiểm token. */
 const WEBHOOK_FORM_LIMITS = { limits: { fields: 60, fieldSize: 4 * 1024, parts: 60 } };
@@ -70,6 +71,7 @@ export class GomdonWebhookController {
   constructor(
     private readonly webhook: GomdonWebhookService,
     config: ConfigService<Env, true>,
+    private readonly rejects: WebhookRejectCounterService,
   ) {
     this.secret = config.get('GOMDON_WEBHOOK_SECRET', { infer: true }) ?? '';
     this.hmacSecret = config.get('GOMDON_WEBHOOK_HMAC_SECRET', { infer: true }) || this.secret;
@@ -113,6 +115,7 @@ export class GomdonWebhookController {
   private assertAuthorized(tokens: Array<string | undefined>, req?: GomdonWebhookRequest): void {
     if (!this.secret && !this.hmacSecret) {
       if (process.env.NODE_ENV === 'production') {
+        this.rejects.record('gomdon');
         throw new UnauthorizedException('Webhook Gomdon chưa cấu hình bí mật ở production.');
       }
       this.logger.warn('Webhook Gomdon nhận request KHÔNG xác thực (GOMDON_WEBHOOK_SECRET trống — chỉ dev/test).');
@@ -124,6 +127,7 @@ export class GomdonWebhookController {
     if (signatureProblem !== 'no-signature') {
       this.logger.warn(`Webhook Gomdon bị từ chối: chữ ký không hợp lệ (${signatureProblem}) và không có token hợp lệ.`);
     }
+    this.rejects.record('gomdon');
     throw new UnauthorizedException('Xác thực webhook không hợp lệ.');
   }
 

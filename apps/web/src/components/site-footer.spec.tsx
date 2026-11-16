@@ -103,6 +103,31 @@ describe('SiteFooter', () => {
       expect(out.split('Đã thông báo Bộ Công Thương')).toHaveLength(3);
     });
 
+    it('chưa nhập người đại diện / ĐKDN thì KHÔNG có dòng hồ sơ pháp lý (không bịa)', async () => {
+      mocks.getPublicSupport.mockResolvedValue({ ...base, company });
+      const out = await html();
+      expect(out).not.toContain('Người đại diện');
+      expect(out).not.toContain('Giấy chứng nhận');
+      expect(out).not.toContain('footer-company-legal');
+    });
+
+    it('đã nhập: dòng người đại diện + số, nơi cấp, ngày cấp ĐKDN ở cả chân trang đầy đủ và gọn', async () => {
+      mocks.getPublicSupport.mockResolvedValue({
+        ...base,
+        company: { ...company, representative: 'Nguyễn Văn A', registrationNumber: '0312345678', registrationDate: '12/03/2020', registrationPlace: 'Sở Tài chính Thành phố Hồ Chí Minh' },
+      });
+      const out = await html();
+      const line = 'Người đại diện theo pháp luật: Nguyễn Văn A · Giấy chứng nhận đăng ký doanh nghiệp số 0312345678 do Sở Tài chính Thành phố Hồ Chí Minh cấp ngày 12/03/2020';
+      expect(out.split(line)).toHaveLength(3);
+    });
+
+    it('chỉ có người đại diện thì chỉ nêu người đại diện', async () => {
+      mocks.getPublicSupport.mockResolvedValue({ ...base, company: { representative: 'Nguyễn Văn A' } });
+      const out = await html();
+      expect(out).toContain('Người đại diện theo pháp luật: Nguyễn Văn A<');
+      expect(out).not.toContain('Giấy chứng nhận');
+    });
+
     it('ẩn từng phần còn trống, không để dấu nối thừa', async () => {
       mocks.getPublicSupport.mockResolvedValue({ ...base, company: { taxCode: '0312345678' } });
       const out = await html();

@@ -9,7 +9,9 @@ describe('/kho-qua (layout)', () => {
     expect(myRewardsMeta.robots).toEqual({ index: false, follow: false });
   });
 
-  it('rời khung Tài khoản: layout trả nguyên children, không thanh menu dọc bao ngoài', () => {
-    expect(renderToStaticMarkup(<RewardsLayout><i id="x" /></RewardsLayout>)).toBe('<i id="x"></i>');
+  it('rời khung Tài khoản: layout trả nguyên children (chỉ thêm khối JSON-LD của landing), không thanh menu dọc bao ngoài', () => {
+    const markup = renderToStaticMarkup(<RewardsLayout><i id="x" /></RewardsLayout>);
+    expect(markup.startsWith('<i id="x"></i><script type="application/ld+json">')).toBe(true);
+    expect(markup.replace(/<script type="application\/ld\+json">[\s\S]*<\/script>$/, '')).toBe('<i id="x"></i>');
   });
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { GIFT_ATTACH_MIN_NET_GOODS_VND, RECYCLE_FUNNEL_STEPS, type LaunchWatchFraud } from '@tubutree/shared-types';
+import { GIFT_ATTACH_MIN_NET_GOODS_VND, RECYCLE_FUNNEL_STEPS, type LaunchWatchFraud, type LaunchWatchWebhookReject } from '@tubutree/shared-types';
 import {
   GIFT_PER_ACCOUNT_AMBER_AT,
   STEP_LABELS,
@@ -12,6 +12,7 @@ import {
   metricLevel,
   ratioPct,
   stepLabel,
+  webhookRejectAlerts,
 } from './launch-watch-format';
 
 const okFraud = (): LaunchWatchFraud => ({
@@ -147,5 +148,59 @@ describe('fraudAlerts', () => {
     const f = okFraud();
     f.freeShipRecycle = { orders: 50, users: 40, totalOrders: 50, shareOfOrdersPct: 100, withConfirmedWaste: 0 };
     expect(fraudAlerts(f)).toEqual([]);
+  });
+});
+
+describe('webhookRejectAlerts (cảnh báo webhook bị từ chối 401)', () => {
+  const src = (over: Partial<LaunchWatchWebhookReject> = {}): LaunchWatchWebhookReject => ({
+    source: 'pancake',
+    lastHour: 52,
+    last24h: 1234,
+    peakPerHour: 60,
+    lastAt: '2026-11-16T11:55:00.000Z',
+    alert: true,
+    ...over,
+  });
+  const gomdon = (over: Partial<LaunchWatchWebhookReject> = {}) => src({ source: 'gomdon', lastHour: 0, last24h: 0, peakPerHour: 0, lastAt: null, alert: false, ...over });
+
+  it('nguồn có alert: tiêu đề theo tên nguồn, số lần trong 1 giờ kèm 24 giờ (dấu chấm nghìn), gợi ý kiểm token Pancake', () => {
+    const out = webhookRejectAlerts({ thresholdPerHour: 10, sources: [src(), gomdon()] });
+    expect(out).toEqual([
+      {
+        source: 'pancake',
+        title: 'Webhook Pancake đang bị từ chối',
+        counts: '52 lần trong 1 giờ qua (24 giờ: 1.234)',
+        hint: 'Kiểm token "x-webhook-token" ở Pancake POS có khớp PANCAKE_WEBHOOK_SECRET không.',
+      },
+    ]);
+  });
+
+  it('Gomdon: tiêu đề Gomdon, gợi ý kiểm secret hoặc khoá HMAC', () => {
+    const [a] = webhookRejectAlerts({ thresholdPerHour: 10, sources: [src({ alert: false }), gomdon({ alert: true, lastHour: 12, last24h: 40 })] });
+    expect(a!.title).toBe('Webhook Gomdon đang bị từ chối');
+    expect(a!.counts).toBe('12 lần trong 1 giờ qua (24 giờ: 40)');
+    expect(a!.hint).toContain('HMAC');
+  });
+
+  it('cả hai nguồn alert: hai cảnh báo theo thứ tự nguồn', () => {
+    const out = webhookRejectAlerts({ thresholdPerHour: 10, sources: [src(), gomdon({ alert: true, lastHour: 11, last24h: 11 })] });
+    expect(out.map((a) => a.source)).toEqual(['pancake', 'gomdon']);
+  });
+
+  it('không nguồn nào alert (kể cả có số đếm dưới ngưỡng): không có cảnh báo nào', () => {
+    expect(webhookRejectAlerts({ thresholdPerHour: 10, sources: [src({ alert: false, lastHour: 9 }), gomdon()] })).toEqual([]);
+  });
+
+  it('API cũ thiếu webhookRejects, hoặc dạng sai: không ném, không cảnh báo', () => {
+    expect(webhookRejectAlerts(undefined)).toEqual([]);
+    expect(webhookRejectAlerts(null)).toEqual([]);
+    expect(webhookRejectAlerts({})).toEqual([]);
+    expect(webhookRejectAlerts({ thresholdPerHour: 10, sources: null as never })).toEqual([]);
+    expect(webhookRejectAlerts({ thresholdPerHour: 10, sources: [null, undefined, { source: 'khac', alert: true }] as never })).toEqual([]);
+  });
+
+  it('số đếm thiếu hoặc không phải số thì hiện 0, không "NaN"', () => {
+    const [a] = webhookRejectAlerts({ thresholdPerHour: 10, sources: [{ source: 'pancake', alert: true } as never] });
+    expect(a!.counts).toBe('0 lần trong 1 giờ qua (24 giờ: 0)');
   });
 });

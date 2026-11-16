@@ -4,7 +4,7 @@ import { ExternalLink, Mail, Phone } from 'lucide-react';
 import { getPublicSupport, type SupportContact } from '@/lib/api';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import tubuLogo from '@/assets/tubu-logo.png';
-import { LEGAL_PAGES, LEGAL_SLUGS, isBctNoticeUrl, merchantIdentityOrDefault } from '@/lib/legal';
+import { LEGAL_PAGES, LEGAL_SLUGS, companyLegalLine, isBctNoticeUrl, merchantIdentityOrDefault } from '@/lib/legal';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { isWebRouteReady } from '@/lib/route-map';
 import { FooterProgramLinks } from '@/components/footer-program-links';
@@ -65,12 +65,19 @@ function LinkColumn({ title, links }: { title: string; links: DiscoverLink[] }) 
 
 function CompanyInfo({ company, className }: { company: SupportContact['company']; className: string }) {
   const line = operatorLine(company);
+  // Người đại diện và số/ngày/nơi cấp ĐKDN: chỉ hiện phần admin đã nhập, để trống thì ẩn cả dòng (không mặc định, không bịa).
+  const legalLine = companyLegalLine(company);
   const bctRaw = company?.bctNoticeUrl;
   const bctUrl = isBctNoticeUrl(bctRaw) ? bctRaw : null;
-  if (!line && !bctUrl) return null;
+  if (!line && !legalLine && !bctUrl) return null;
   return (
     <div className={className} data-testid="footer-company">
       {line && <p className="text-xs text-stone-600">{line}</p>}
+      {legalLine && (
+        <p className="text-xs text-stone-600" data-testid="footer-company-legal">
+          {legalLine}
+        </p>
+      )}
       {bctUrl && (
         <a href={bctUrl} target="_blank" rel="noopener noreferrer" className={LINK}>
           Đã thông báo Bộ Công Thương

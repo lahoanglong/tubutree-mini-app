@@ -26,6 +26,7 @@ import sitemap from './sitemap';
 const API_MAX_LIMIT = 100;
 const products = (from: number, count: number) =>
   Array.from({ length: count }, (_, i) => ({ slug: `sp-${from + i}` }));
+const entryOf = (out: Awaited<ReturnType<typeof sitemap>>, suffix: string) => out.find((e) => e.url.endsWith(suffix));
 const productUrls = (out: Awaited<ReturnType<typeof sitemap>>) => out.filter((e) => e.url.includes('/san-pham/'));
 
 beforeEach(() => {
@@ -116,5 +117,38 @@ describe('sitemap', () => {
   it('API lỗi thì ném lỗi, không trả sitemap rút gọn', async () => {
     mocks.getProducts.mockRejectedValue(new Error('API /products không sẵn sàng'));
     await expect(sitemap()).rejects.toThrow('không sẵn sàng');
+  });
+});
+
+describe('sitemap lastmod', () => {
+  it('sản phẩm KHÔNG có lastModified dù API trả updatedAt: ngày đó bị sync đêm đẩy tiến nên không phản ánh sửa đổi thật', async () => {
+    mocks.getProducts.mockResolvedValueOnce([{ slug: 'sp-a', updatedAt: '2026-11-02T08:30:00.000Z' }, { slug: 'sp-b' }]);
+    const out = await sitemap();
+    for (const slug of ['sp-a', 'sp-b']) {
+      const entry = entryOf(out, `/san-pham/${slug}`);
+      expect(entry, slug).toBeDefined();
+      expect(entry && 'lastModified' in entry, slug).toBe(false);
+    }
+  });
+
+  it('gian hàng CTV: lastModified từ updatedAt, ngày hỏng thì bỏ chứ không ném lỗi Invalid Date', async () => {
+    mocks.getStorefrontList.mockResolvedValue([
+      { slug: 'an', updatedAt: '2026-10-20T03:00:00.000Z' },
+      { slug: 'bi-hong', updatedAt: 'xxx' },
+    ]);
+    const out = await sitemap();
+    expect(entryOf(out, '/s/an')?.lastModified).toEqual(new Date('2026-10-20T03:00:00.000Z'));
+    const broken = entryOf(out, '/s/bi-hong');
+    expect(broken).toBeDefined();
+    expect(broken && 'lastModified' in broken).toBe(false);
+  });
+
+  it('trang chủ, trang tĩnh, nhãn và chính sách không có nguồn ngày thật nên không có lastModified', async () => {
+    routeMocks.publicStaticRoutes.mockReturnValueOnce(['/', '/gioi-thieu']);
+    mocks.getBrands.mockResolvedValue([{ brand: 'A', count: 1, slug: 'nhan-a' }]);
+    mocks.getLegalDoc.mockImplementation(async (slug: string) => ({ content: slug === 'doi-tra' ? '# nội dung' : null, vars: {} }));
+    const out = await sitemap();
+    for (const e of out) expect('lastModified' in e, e.url).toBe(false);
+    expect(out.length).toBeGreaterThanOrEqual(4);
   });
 });

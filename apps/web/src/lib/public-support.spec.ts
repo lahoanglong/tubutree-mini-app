@@ -68,6 +68,18 @@ describe('getPublicSupport', () => {
     expect((await getPublicSupport()).company).toBeUndefined();
   });
 
+  it('đọc người đại diện và số/ngày/nơi cấp ĐKDN: cắt khoảng trắng, bỏ trường rỗng hoặc sai kiểu', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue(
+        res(200, { company: { representative: ' Nguyễn Văn A ', registrationNumber: '0312345678', registrationDate: '12/03/2020', registrationPlace: '', taxCode: null } }),
+      ),
+    );
+    expect((await getPublicSupport()).company).toEqual({ representative: 'Nguyễn Văn A', registrationNumber: '0312345678', registrationDate: '12/03/2020' });
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { company: { representative: 5, registrationNumber: null, registrationDate: '  ', registrationPlace: {} } })));
+    expect((await getPublicSupport()).company).toBeUndefined();
+  });
+
   it('link BCT chỉ nhận online.gov.vn hoặc *.gov.vn: trang lạ, giả hậu tố, có @, rỗng đều bị bỏ', async () => {
     for (const bad of ['https://example.com/online.gov.vn', 'https://online.gov.vn.evil.com/x', 'https://online.gov.vn@evil.com/x', '', '   ']) {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(res(200, { company: { taxCode: '0312345678', bctNoticeUrl: bad } })));

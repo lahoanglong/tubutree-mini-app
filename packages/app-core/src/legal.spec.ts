@@ -11,7 +11,9 @@ import {
   defaultLegalContent,
   isBctNoticeUrl,
   isLegalSlug,
+  companyLegalLine,
   merchantIdentityOrDefault,
+  normalizeRegistrationDate,
 } from './legal';
 
 const VARS = { returnWindowDays: 7, freeshipThreshold: 199000 };
@@ -320,5 +322,44 @@ describe('isBctNoticeUrl — chỉ link thật của Bộ Công Thương mới �
 
   it.each([null, undefined, 5, {}, ['https://online.gov.vn']])('từ chối giá trị không phải chuỗi: %j', (v) => {
     expect(isBctNoticeUrl(v)).toBe(false);
+  });
+});
+
+describe('companyLegalLine — người đại diện và ĐKDN ở chân trang', () => {
+  it('chưa nhập gì (hoặc chỉ khoảng trắng) thì null để ẩn cả dòng, không điền mặc định', () => {
+    expect(companyLegalLine(undefined)).toBeNull();
+    expect(companyLegalLine({})).toBeNull();
+    expect(companyLegalLine({ representative: ' ', registrationNumber: null, registrationDate: '', registrationPlace: '  ' })).toBeNull();
+  });
+
+  it('đủ bốn trường: một dòng, số + nơi cấp + ngày cấp', () => {
+    expect(
+      companyLegalLine({ representative: 'Nguyễn Văn A', registrationNumber: '0319585995', registrationDate: '12/03/2020', registrationPlace: 'Sở Tài chính Thành phố Hồ Chí Minh' }),
+    ).toBe('Người đại diện theo pháp luật: Nguyễn Văn A · Giấy chứng nhận đăng ký doanh nghiệp số 0319585995 do Sở Tài chính Thành phố Hồ Chí Minh cấp ngày 12/03/2020');
+  });
+
+  it('chỉ nêu phần đã nhập: không bịa nơi cấp hay ngày còn thiếu', () => {
+    expect(companyLegalLine({ representative: 'Nguyễn Văn A' })).toBe('Người đại diện theo pháp luật: Nguyễn Văn A');
+    expect(companyLegalLine({ registrationNumber: '0319585995' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp số 0319585995');
+    expect(companyLegalLine({ registrationNumber: '0319585995', registrationDate: '12/03/2020' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp số 0319585995, cấp ngày 12/03/2020');
+    expect(companyLegalLine({ registrationNumber: '0319585995', registrationPlace: 'Sở Tài chính' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp số 0319585995 do Sở Tài chính cấp');
+    expect(companyLegalLine({ registrationDate: '12/03/2020' })).toBe('Giấy chứng nhận đăng ký doanh nghiệp cấp ngày 12/03/2020');
+  });
+});
+
+describe('normalizeRegistrationDate — ngày cấp ĐKDN', () => {
+  const now = new Date('2026-11-16T12:00:00Z');
+  it('nhận dd/mm/yyyy, d/m/yyyy, yyyy-mm-dd và trả dd/mm/yyyy', () => {
+    expect(normalizeRegistrationDate('12/03/2020', now)).toBe('12/03/2020');
+    expect(normalizeRegistrationDate('2/3/2020', now)).toBe('02/03/2020');
+    expect(normalizeRegistrationDate(' 2020-03-12 ', now)).toBe('12/03/2020');
+  });
+  it('ngày không có thật, tương lai, trước 1990 hoặc sai kiểu là null', () => {
+    for (const bad of ['31/02/2020', '2020-02-30', '00/01/2020', '12/13/2020', '18/11/2026', '01/01/1989', 'mai', '', null, 20200312]) {
+      expect(normalizeRegistrationDate(bad, now)).toBeNull();
+    }
+    expect(normalizeRegistrationDate('16/11/2026', now)).toBe('16/11/2026');
+    // Chừa một ngày cho lệch múi giờ (máy chủ UTC, admin ở UTC+7): "ngày mai" theo giờ UTC vẫn là hôm nay ở Việt Nam.
+    expect(normalizeRegistrationDate('17/11/2026', now)).toBe('17/11/2026');
   });
 });

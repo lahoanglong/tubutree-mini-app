@@ -15,6 +15,10 @@ const ROWS: ConfigRow[] = [
   { key: 'company.legal_name', value: '', description: null, category: 'company' },
   { key: 'company.tax_code', value: '', description: null, category: 'company' },
   { key: 'company.address', value: '', description: null, category: 'company' },
+  { key: 'company.representative', value: '', description: null, category: 'company' },
+  { key: 'company.business_registration_number', value: '', description: null, category: 'company' },
+  { key: 'company.business_registration_date', value: '', description: null, category: 'company' },
+  { key: 'company.business_registration_place', value: '', description: null, category: 'company' },
   { key: 'company.bct_notice_url', value: '', description: null, category: 'company' },
   { key: 'legal.dieu-khoan', value: '', description: null, category: 'legal' },
   { key: 'legal.bao-mat', value: '', description: null, category: 'legal' },
@@ -107,5 +111,40 @@ describe('ShopInfoCard', () => {
     await flush();
     expect(puts).toEqual([{ key: 'legal.doi-tra', value: '# Đổi trả\n\n- 14 ngày' }]);
     expect(['dieu-khoan', 'bao-mat', 'doi-tra', 'van-chuyen', 'thanh-toan'].every((s) => container.querySelector(`[data-legal="${s}"]`))).toBe(true);
+  });
+
+  it('người đại diện + ĐKDN: lưu đúng các ô đã sửa; ngày hợp lệ nhiều dạng đều được lưu nguyên văn người gõ', async () => {
+    const { container, puts } = setup();
+    typeInto(container.querySelector('input[placeholder="Họ và tên"]'), ' Nguyễn Văn A ');
+    typeInto(container.querySelector('input[placeholder="Số ghi trên giấy chứng nhận"]'), '0319585995');
+    typeInto(container.querySelector('input[placeholder="dd/mm/yyyy"]'), '12/03/2020');
+    typeInto(container.querySelector('input[placeholder^="Sở Tài chính"]'), 'Sở Tài chính Thành phố Hồ Chí Minh');
+    click(byText(container, 'button', 'Lưu thông tin cửa hàng'));
+    await flush();
+    expect(puts).toEqual([
+      { key: 'company.representative', value: 'Nguyễn Văn A' },
+      { key: 'company.business_registration_number', value: '0319585995' },
+      { key: 'company.business_registration_date', value: '12/03/2020' },
+      { key: 'company.business_registration_place', value: 'Sở Tài chính Thành phố Hồ Chí Minh' },
+    ]);
+  });
+
+  it.each(['31/02/2020', '2099-01-01', 'mai', '12-03-2020'])('ngày cấp "%s" API sẽ bỏ: báo lỗi và khoá nút Lưu', async (bad) => {
+    const { container, puts } = setup();
+    typeInto(container.querySelector('input[placeholder="dd/mm/yyyy"]'), bad);
+    expect(container.textContent).toContain('Ngày cấp phải dạng ngày/tháng/năm');
+    const save = byText(container, 'button', 'Lưu thông tin cửa hàng')!;
+    expect(save.hasAttribute('disabled')).toBe(true);
+    click(save);
+    await flush();
+    expect(puts).toEqual([]);
+  });
+
+  it('số giấy chứng nhận có ký tự lạ bị chặn, ô để trống thì không báo lỗi', async () => {
+    const { container } = setup();
+    expect(container.textContent).not.toContain('chỉ gồm chữ số');
+    typeInto(container.querySelector('input[placeholder="Số ghi trên giấy chứng nhận"]'), '<b>1</b>');
+    expect(container.textContent).toContain('Số giấy chứng nhận chỉ gồm chữ số');
+    expect(byText(container, 'button', 'Lưu thông tin cửa hàng')!.hasAttribute('disabled')).toBe(true);
   });
 });
