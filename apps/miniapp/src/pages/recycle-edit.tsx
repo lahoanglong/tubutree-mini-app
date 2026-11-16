@@ -114,7 +114,7 @@ export default function RecycleEditPage() {
   const shell = (content: ReactNode, subtitle?: string, bar?: ReactNode) => (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title="Sửa yêu cầu" subtitle={subtitle} />
-      <div style={{ ...COLUMN, padding: 16, paddingBottom: 160, gap: 16 }}>{content}</div>
+      <div style={{ ...COLUMN, padding: 16, paddingBottom: 'calc(var(--sticky-bar-h, 9rem) + var(--space-gutter))', gap: 16 }}>{content}</div>
       {bar}
     </Page>
   );

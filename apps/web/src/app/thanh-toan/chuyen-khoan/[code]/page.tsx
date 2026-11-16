@@ -58,7 +58,7 @@ export default function BankPaymentPage() {
     body = <LoginRequired message="Đăng nhập để thanh toán đơn hàng." returnTo={bankPaymentHref(code)} />;
   } else {
     body = (
-      <div className="max-w-md max-md:mx-auto">
+      <div className="mx-auto max-w-md">
         <BankTransferPanel
           order={{ code, paymentMethod: 'BANK_TRANSFER' }}
           onPaid={onPaid}

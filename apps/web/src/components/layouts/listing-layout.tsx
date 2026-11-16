@@ -57,7 +57,7 @@ export function ListingBreadcrumb({ trail }: { trail: BreadcrumbItem[] }) {
           return (
             <li key={`${i}:${item.label}`} className="flex min-w-0 items-center gap-1">
               {item.href && !last ? (
-                <Link href={item.href} className="inline-flex min-h-8 items-center hover:text-forest-700 hover:underline">
+                <Link href={item.href} className="tubu-hit-44 inline-flex min-h-8 items-center hover:text-forest-700 hover:underline">
                   {item.label}
                 </Link>
               ) : (

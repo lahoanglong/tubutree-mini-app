@@ -451,7 +451,7 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
           contentType: 'text/plain',
         });
       }
-      if (testInfo.file.includes('visual-tour')) {
+      if (testInfo.file.includes('visual-tour') || (testInfo.file.includes('w182-acceptance') && process.env.W182_SHOTS)) {
         // Tham quan chỉ chụp ảnh: lời gọi chưa mock được ghi lại để bổ sung mock, không làm đỏ test.
         recordTourUnmocked(testInfo.title, api.unexpectedUnmocked());
         return;

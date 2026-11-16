@@ -86,7 +86,17 @@ export async function probeTapTargets(page: Page, options: TapProbeOptions = {})
         if (ownerOf(cx, cy) !== el) continue;
         const w = extent(el, cx, cy, -1, 0) + extent(el, cx, cy, 1, 0) + 1;
         const h = extent(el, cx, cy, 0, -1) + extent(el, cx, cy, 0, 1) + 1;
-        if (w < min - 0.5 || h < min - 0.5) problems.push(`${label(el)}: vùng chạm ${w}×${h}px (khung nhìn ${Math.round(r.width)}×${Math.round(r.height)}px)`);
+        // Lấy mẫu từng pixel nguyên quanh tâm đã làm tròn: hộp 44px nằm ở toạ độ lẻ đo ra 43, nên dung sai 1px; ca thiếu thật (42px) vẫn bị bắt.
+        if (w < min - 1 || h < min - 1) {
+          // Ghi luôn thứ chặn ở mỗi phía để biết hộp chạm bị cắt bởi điều khiển bên cạnh hay bởi thanh dính che.
+          const stop = (dx: number, dy: number): string => {
+            const n = extent(el, cx, cy, dx, dy);
+            const b = document.elementFromPoint(cx + dx * (n + 1), cy + dy * (n + 1));
+            return b ? `${b.tagName.toLowerCase()}.${(b.getAttribute('class') ?? '').trim().split(/\s+/)[0] ?? ''}` : 'ngoài khung';
+          };
+          const blockers = `trên ${stop(0, -1)}, dưới ${stop(0, 1)}, trái ${stop(-1, 0)}, phải ${stop(1, 0)}`;
+          problems.push(`${label(el)}: vùng chạm ${w}×${h}px (khung nhìn ${Math.round(r.width)}×${Math.round(r.height)}px; chặn: ${blockers})`);
+        }
       }
       return problems;
     },

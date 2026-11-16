@@ -21,11 +21,12 @@ interface QuantitySelectorProps {
 
 /**
  * Bộ chọn số lượng − [n] +, cùng hành vi với Mini App: ở min/max nút chỉ `aria-disabled` và không làm gì (không dùng
- * `disabled` để nút vẫn focus được). `sm` 36px nhưng vùng chạm vẫn 44px nhờ lớp phủ `after:-inset-1`; nút cộng nhanh rộng theo chữ nhưng không dưới 44px (`min-w-11`).
+ * `disabled` để nút vẫn focus được). `sm` 36px nhưng vùng chạm vẫn 44px nhờ `.tubu-hit-44-square` (lớp phủ tuyệt đối tính từ mép đệm, trong viền 1px,
+ * nên `after:-inset-1` chỉ ra 42px); nút cộng nhanh rộng theo chữ nhưng không dưới 44px (`min-w-11`).
  */
 export function QuantitySelector({ value, max, min = 1, size = 'md', onChange, editable, quickSteps, disabled, itemLabel }: QuantitySelectorProps) {
   const named = (base: string) => (itemLabel ? `${base} ${itemLabel}` : base);
-  const side = size === 'md' ? 'h-11 w-11' : 'h-9 w-9 relative after:absolute after:-inset-1 after:content-[""]';
+  const side = size === 'md' ? 'h-11 w-11' : 'h-9 w-9 tubu-hit-44-square';
   const icon = size === 'md' ? 'h-[18px] w-[18px]' : 'h-[15px] w-[15px]';
   const btn = (disabled: boolean) =>
     `${side} inline-flex items-center justify-center rounded-control border border-stone-450 p-0 ${

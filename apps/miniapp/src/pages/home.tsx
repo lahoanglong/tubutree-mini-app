@@ -223,7 +223,9 @@ function PageErrorStrip({ error, watchRetry, onRetry }: { error: unknown; watchR
 }
 
 // Header dính đầu trang khi cuộn (đứng thẳng dưới vùng an toàn); phải là con trực tiếp của trang cuộn nên áp lên chính khối bọc, không phải bên trong.
-const STICKY_HEADER: CSSProperties = { position: 'sticky', top: 'var(--safe-top)', zIndex: 20, background: 'var(--color-bg-canvas)' };
+// `top` của phần tử dính đo từ mép nội dung của vùng cuộn, mà `.page` đã đệm sẵn `--safe-top`: đặt thêm `top: var(--safe-top)` cộng đôi vùng an toàn,
+// header bị đẩy xuống 2× ngay cả khi chưa cuộn và che phần đầu khối kế tiếp (máy có tai thỏ, safe-top 47px che 31px thẻ "Việc cần làm").
+const STICKY_HEADER: CSSProperties = { position: 'sticky', top: 0, zIndex: 20, background: 'var(--color-bg-canvas)' };
 
 // Khoảng cách giữa khối đặt ở vỏ khối (CS-05), khối con không tự đặt đệm trên/dưới. Khối rỗng (không dữ liệu) có lề sập qua nên không để lại khoảng trống.
 const BLOCK_GAP: CSSProperties = { marginTop: 'var(--space-block)' };

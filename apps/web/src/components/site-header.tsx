@@ -60,7 +60,7 @@ export default function SiteHeader() {
               <span
                 key={bumpKey}
                 aria-hidden="true"
-                className={`absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-forest-600 px-1 text-xs font-bold text-stone-0 shadow-card ring-2 ring-stone-0${bumpKey > 0 ? ' cart-badge-bump' : ''}`}
+                className={`absolute -right-1.5 -top-1.5 flex h-5 min-w-5 items-center justify-center rounded-full bg-forest-600 px-1 text-xs font-bold tabular-nums text-stone-0 shadow-card ring-2 ring-stone-0${bumpKey > 0 ? ' cart-badge-bump' : ''}`}
               >
                 {count > 99 ? '99+' : count}
               </span>
@@ -100,7 +100,7 @@ export default function SiteHeader() {
                 <Link
                   href={t.path}
                   aria-current={active ? 'page' : undefined}
-                  className={`flex min-h-9 items-center whitespace-nowrap rounded-control px-3 font-medium transition hover:bg-forest-50 hover:text-forest-700 ${active ? 'text-forest-700 underline decoration-2 underline-offset-8' : 'text-stone-700'}`}
+                  className={`flex min-h-11 min-w-11 items-center justify-center whitespace-nowrap rounded-control px-3 font-medium transition hover:bg-forest-50 hover:text-forest-700 ${active ? 'text-forest-700 underline decoration-2 underline-offset-8' : 'text-stone-700'}`}
                 >
                   {t.label}
                 </Link>

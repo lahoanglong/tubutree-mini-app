@@ -15,14 +15,14 @@ const MAX_CELLS = CATEGORY_GRID_MAX_CELLS;
 /** Điện thoại: hàng tràn ra mép màn như Mini (`.tubu-bleed` lùi lề trang, đệm 16px nằm trong hàng). Chỉ dưới md, từ md hàng nằm trong khung trang nên không tràn ngang. */
 const BLEED = 'tubu-bleed max-md:px-4';
 /**
- * Từ md (một hàng 5 cột): mỗi ô là một thẻ ngang (ô vuông bên trái, nhãn căn trái bên phải, nền sáng, viền nhẹ) cao bằng ô điện thoại (`CATEGORY_CELL_HEIGHT`)
+ * Từ lg (một hàng 5 cột; ở md ô còn ~118px nên nhãn cạnh icon bị cắt, md giữ ô dọc như điện thoại): mỗi ô là một thẻ ngang (ô vuông bên trái, nhãn căn trái bên phải, nền sáng, viền nhẹ) cao bằng ô điện thoại (`CATEGORY_CELL_HEIGHT`)
  * để khối không nhảy khi danh mục về; icon 56px không còn trơ trọi giữa ô rộng 230px. Phải dùng `!` vì số đo điện thoại nằm inline (bản gốc Mini); dưới md không đổi gì.
  */
 const CARD_MD =
-  'md:!min-h-[5.75rem] md:!flex-row md:!gap-3 md:!rounded-card md:!border md:!border-solid md:!border-[var(--color-border-subtle)] md:!bg-[var(--color-bg-surface)] md:!px-4 md:!py-0 md:!text-left md:transition-[box-shadow,border-color] md:hover:!border-[var(--color-border-default)] md:hover:[box-shadow:var(--elevation-1)]';
-const LABEL_MD = 'md:!h-auto md:!w-auto md:!min-w-0 md:!flex-1 md:!text-left md:!text-[length:var(--type-body-sm-size)] md:!leading-[var(--type-body-sm-lh)]';
+  'lg:!min-h-[5.75rem] lg:!flex-row lg:!gap-3 lg:!rounded-card lg:!border lg:!border-solid lg:!border-[var(--color-border-subtle)] lg:!bg-[var(--color-bg-surface)] lg:!px-4 lg:!py-0 lg:!text-left lg:transition-[box-shadow,border-color] lg:hover:!border-[var(--color-border-default)] lg:hover:[box-shadow:var(--elevation-1)]';
+const LABEL_MD = 'lg:!h-auto lg:!w-auto lg:!min-w-0 lg:!flex-1 lg:!text-left lg:!text-[length:var(--type-body-sm-size)] lg:!leading-[var(--type-body-sm-lh)]';
 /** Từ md lưới là 5 cột bằng nhau cách đều 12px (điện thoại: 5 cột 20% sát nhau). */
-const GRID_MD = 'md:!grid-cols-5 md:!gap-x-3';
+const GRID_MD = 'lg:!grid-cols-5 lg:!gap-x-3';
 const TINTS: ShortcutTint[] = ['forest', 'sage', 'clay', 'amber', 'sky', 'rose'];
 
 export interface CategoryRowProps {

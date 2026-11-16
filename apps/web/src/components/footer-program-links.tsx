@@ -7,7 +7,7 @@ import { isWebRouteReady } from '@/lib/route-map';
 import { useWasteVisible } from '@/lib/use-waste-visible';
 
 const LINK =
-  'inline-flex min-h-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
+  'inline-flex min-h-11 min-w-11 items-center gap-2 text-sm font-medium text-forest-700 transition-colors hover:text-forest-800 hover:underline';
 
 const PROGRAM_LINKS = [
   { to: '/vuon-xanh', label: 'Vườn Xanh' },

@@ -167,7 +167,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                     href={`/cau-chuyen?brand=${encodeURIComponent(originLink.id)}`}
                     data-testid="pdp-origin-link"
                     aria-label={originLink.ariaLabel}
-                    className="inline-flex min-h-11 min-w-0 max-w-full items-center gap-1 text-xs text-[var(--color-text-secondary)]"
+                    className="inline-flex min-h-11 min-w-11 max-w-full items-center gap-1 text-xs text-[var(--color-text-secondary)]"
                   >
                     <MapPin className="h-3.5 w-3.5 flex-none text-[color:var(--color-text-brand)]" aria-hidden="true" />
                     <span className="min-w-0 truncate">{originLink.label}</span>

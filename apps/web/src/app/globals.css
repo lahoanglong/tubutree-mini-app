@@ -27,6 +27,8 @@
     padding-right: env(safe-area-inset-right, 0px);
     background: var(--color-bg-canvas);
     color: var(--color-text-primary);
+    /* Số đều mặc định: điểm, tiền, mệnh giá không làm hàng nhảy bề rộng khi giá trị đổi (khớp Mini). */
+    font-variant-numeric: tabular-nums;
     /* Không bật cv02–04/cv11 của Inter: Mini App không bật; chữ "a" một tầng làm nhãn web rộng hơn Mini (lối tắt 320px xuống 3 dòng trên Linux). */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
@@ -450,8 +452,9 @@ body.has-sticky-bar [data-bottom-nav] {
     padding: 10px 16px;
   }
 
+  /* Hai dòng (không một): ở 768px mỗi ô phụ chỉ còn ~110px cho nhãn nên "Mua xoay vòng" bị cắt thành "Mua xoay…"; hàng cao tối thiểu 64px nên chữ hai dòng vẫn vừa. */
   .tubu-chip-label {
-    -webkit-line-clamp: 1;
+    -webkit-line-clamp: 2;
     font-family: var(--font-display);
     font-size: var(--type-body-md-size);
     line-height: var(--type-body-md-lh);

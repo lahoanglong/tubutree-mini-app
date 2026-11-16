@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { useScrollHints } from '@/components/mini/use-scroll-hints';
 
 const ARROW =
-  'absolute top-1/2 z-10 hidden h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full border border-stone-200 bg-stone-0 text-stone-800 shadow-raised transition hover:bg-stone-50 aria-disabled:pointer-events-none aria-disabled:opacity-0 aria-disabled:focus-visible:opacity-40 md:flex';
+  'absolute top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-stone-200 bg-stone-0 text-stone-800 shadow-raised transition hover:bg-stone-50 aria-disabled:pointer-events-none aria-disabled:opacity-0 aria-disabled:focus-visible:opacity-40 md:flex';
 
 /**
  * Nút ‹ › cho hàng ngang từ md: chuột không có vuốt ngang nên thẻ ngoài mép không với tới được. Nút phía hết nội dung chỉ `aria-disabled`, ẩn khỏi mắt và khỏi chuột (đầu kệ mà vẫn hiện ‹ thì nó đè mép thẻ #1), bấm không làm gì; hiện mờ lại khi focus bàn phím (không dùng `disabled` thật hay `display:none`: Chromium đưa tiêu điểm về body khi nút đang focus biến mất; cũng không gỡ khỏi DOM);
