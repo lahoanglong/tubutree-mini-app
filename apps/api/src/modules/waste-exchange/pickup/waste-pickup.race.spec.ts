@@ -62,7 +62,7 @@ function setup(opts: WasteRaceOptions & { request?: Record<string, unknown>; ord
   };
   const editSvc = new WasteRequestsService(prisma, access, hold as never, wasteConfig as never, config as never);
   jest.spyOn(editSvc, 'loadDetail').mockResolvedValue({} as never);
-  const confirmSvc = new WasteConfirmService(prisma, wasteConfig as never, access, new RewardPointsService(prisma, config as never), config as never, notifier as never, shipLock as never);
+  const confirmSvc = new WasteConfirmService(prisma, wasteConfig as never, access, new RewardPointsService(prisma, config as never), config as never, notifier as never, shipLock as never, { recordBestEffort: async () => undefined } as never);
   const cron = new WasteExpiryCron(prisma, wasteConfig as never, notifier as never, shipLock as never, access);
 
   // Giao dịch đặt hàng: khoá yêu cầu, tạo đơn rồi gắn orderId (đúng thứ tự checkout.service.ts); gắn thất bại thì cả đơn rollback.

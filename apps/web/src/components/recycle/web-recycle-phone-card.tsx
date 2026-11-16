@@ -13,6 +13,7 @@ import { friendlyActionError } from '@/lib/friendly-error';
 import { ui } from '@/lib/guest-ui';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { settleWithin } from '@/lib/settle-within';
+import { trackRecycleStep } from '@/lib/recycle-funnel';
 
 function pickSavedPhone(addresses: readonly AddressDTO[] | undefined): string | null {
   if (!addresses?.length) return null;
@@ -73,6 +74,7 @@ export function WebRecyclePhoneCard({
     mutationFn: async (normalized: string) => saveContactPhone(coreHttp, normalized),
     onSuccess: async (res, normalized) => {
       setErrMsg(null);
+      trackRecycleStep('phone_saved');
       if (res) qc.setQueryData(['me'], res);
       await settleWithin(
         Promise.all([

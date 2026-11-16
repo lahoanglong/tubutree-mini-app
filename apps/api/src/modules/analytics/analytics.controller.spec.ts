@@ -69,6 +69,53 @@ describe('AnalyticsController.ingest', () => {
     expect(recordManyBestEffort).toHaveBeenCalledWith([expect.objectContaining({ userId: null })]);
   });
 
+  describe('recycle_funnel_step (W176)', () => {
+    const ev = (props: Record<string, unknown> | undefined, platform: 'web' | 'miniapp' = 'web', i = 0) => ({
+      eventId: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+      eventName: 'recycle_funnel_step',
+      occurredAt: '2026-11-16T00:00:00Z',
+      platform,
+      ...(props ? { props } : {}),
+    });
+
+    it('DTO nhận tên mới của client, và vẫn chặn tên server recycle_confirmed', async () => {
+      await expect(asBody(IngestEventsDto, { events: [ev({ step: 'enter', surface: 'web' })] })).resolves.toBeDefined();
+      await expect(
+        asBody(IngestEventsDto, { events: [{ ...ev({ step: 'enter', surface: 'web' }), eventName: 'recycle_confirmed' }] }),
+      ).rejects.toThrow();
+    });
+
+    it('ghi đủ 5 bước hợp lệ cùng lane, accepted đếm đúng', async () => {
+      const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
+      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+      const steps = ['enter', 'phone_saved', 'geo_granted', 'geo_denied', 'submitted'] as const;
+      const res = await ctrl.ingest(undefined, {
+        events: steps.map((step, i) => ev({ step, surface: 'miniapp', lane: 'DROP_OFF' }, 'miniapp', i)),
+      });
+      expect(res).toEqual({ accepted: 5 });
+      expect(recordManyBestEffort.mock.calls[0]![0]).toHaveLength(5);
+    });
+
+    it('sai khuôn (step lạ, surface lệch platform, lane bẩn, thiếu props) bị bỏ riêng, sự kiện khác trong lô vẫn được ghi, không 400', async () => {
+      const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
+      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+      const res = await ctrl.ingest(undefined, {
+        events: [
+          ev({ step: 'enter', surface: 'web' }, 'web', 0),
+          ev({ step: 'hacked', surface: 'web' }, 'web', 1),
+          ev({ step: 'enter', surface: 'miniapp' }, 'web', 2),
+          ev({ step: 'enter', surface: 'web', lane: '<script>' }, 'web', 3),
+          ev({ step: 'enter', surface: 'web', lane: 7 }, 'web', 4),
+          ev(undefined, 'web', 5),
+          { eventId: '00000000-0000-4000-8000-0000000000aa', eventName: 'app_opened', occurredAt: '2026-11-16T00:00:00Z', platform: 'web' },
+        ],
+      });
+      expect(res).toEqual({ accepted: 2 });
+      const rec = recordManyBestEffort.mock.calls[0]![0] as Array<{ eventName: string }>;
+      expect(rec.map((r) => r.eventName)).toEqual(['recycle_funnel_step', 'app_opened']);
+    });
+  });
+
   describe('ghi cả lô một lần (D9-02)', () => {
     const base = { occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp', eventName: 'screen_viewed' };
     const batch = (n: number) =>

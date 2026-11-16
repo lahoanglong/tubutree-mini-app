@@ -1,6 +1,7 @@
 import { useSnackbar } from 'zmp-ui';
 import { useQueryClient } from '@tanstack/react-query';
 import { getErrorMessage } from '../services/api';
+import { trackRecycleStep } from '../services/recycle-funnel';
 import { useAuthStore } from '../store/auth';
 
 /** Đăng nhập Zalo rồi xin số điện thoại (Đổi rác cần cả hai), xong làm mới dữ liệu đổi rác. */
@@ -18,7 +19,8 @@ export function useRecycleLogin() {
         if (session.error) openSnackbar({ text: session.error, type: 'error' });
         return;
       }
-      await ensurePhoneOrThrow();
+      const phone = await ensurePhoneOrThrow();
+      if (phone) trackRecycleStep('phone_saved');
       await qc.invalidateQueries({ queryKey: ['waste'] });
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });

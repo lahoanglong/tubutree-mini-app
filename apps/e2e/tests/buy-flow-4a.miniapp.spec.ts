@@ -1,6 +1,6 @@
 import { test, expect, makeOrder, reply, type MockApi, type MockHandler } from './support/mock-api';
 import type { Page } from '@playwright/test';
-import { DELIVERED_CODE, PURCHASED, PURCHASED_PAGE, REMINDER, THUMB, mockBuyFlowSession, mockOrdersTab } from './support/buy-flow-mocks';
+import { DELIVERED_CODE, HOME_PRODUCT, PURCHASED, PURCHASED_PAGE, REMINDER, THUMB, mockBuyFlowSession, mockOrdersTab } from './support/buy-flow-mocks';
 import { mockCheckout, publicConfig, ORDER_CODE_COD } from './support/checkout-mocks';
 import { PILOT_PRODUCT, PILOT_SLUG } from './support/pilot-mocks';
 import { eventsNamed, flushEvents } from './support/events';
@@ -186,11 +186,17 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page.getByRole('button', { name: `Đơn ${DELIVERED_CODE}` })).toBeVisible();
   });
 
-  test('/subscriptions (link cũ) → /orders?tab=subscriptions, cờ bật nên mở thẳng tab Định kỳ dù khách chưa có gói', async ({ page, api }) => {
+  test('/subscriptions là trang đích Mua xoay vòng (W171), không còn redirect: khách chưa có gói thấy quyền lợi + kệ sản phẩm; nút "Xem mục Định kỳ" mở thẳng tab Định kỳ', async ({ page, api }) => {
     mockBuyFlowSession(api);
     mockOrdersTab(api);
     api.get('/me/subscriptions', []);
+    api.get('/products/best-sellers', { data: [HOME_PRODUCT], meta: { page: 1, limit: 12, total: 1 } });
     await page.goto('/subscriptions');
+    await expect(page.getByTestId('subscription-hero')).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId('subscription-products')).toBeVisible();
+    await expect(page).toHaveURL(/\/subscriptions$/);
+
+    await page.getByRole('button', { name: 'Xem mục Định kỳ trong Đơn hàng' }).click();
     await expect(page).toHaveURL(/\/orders\?tab=subscriptions$/, { timeout: 15_000 });
     await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
     await expect(page.getByRole('tab', { name: 'Tất cả' })).toHaveAttribute('aria-selected', 'false');
@@ -243,29 +249,28 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await expect(page).toHaveURL(new RegExp(`/order/${DELIVERED_CODE}$`), { timeout: 10_000 });
   });
 
-  test('/subscriptions là redirect thay thế (replace): không vòng lặp, nút Back về trang trước, không về /subscriptions', async ({ page, api }) => {
+  test('/subscriptions là trang đích thật (không redirect): không thêm mục lịch sử nào ngoài lần vào, nút Back về trang trước, không vòng lặp', async ({ page, api }) => {
     mockBuyFlowSession(api);
     mockOrdersTab(api);
     api.get('/me/subscriptions', []);
+    api.get('/products/best-sellers', { data: [HOME_PRODUCT], meta: { page: 1, limit: 12, total: 1 } });
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
 
-    // Mô phỏng điều hướng trong app tới link cũ /subscriptions (react-router lắng nghe popstate).
+    // Mô phỏng điều hướng trong app tới /subscriptions (react-router lắng nghe popstate).
     const historyBefore = await page.evaluate(() => history.length);
     await page.evaluate(() => {
       history.pushState({}, '', '/subscriptions');
       window.dispatchEvent(new PopStateEvent('popstate'));
     });
-    await expect(page).toHaveURL(/\/orders\?tab=subscriptions$/, { timeout: 10_000 });
-    await expect(page.getByRole('tab', { name: 'Định kỳ' })).toHaveAttribute('aria-selected', 'true', { timeout: 15_000 });
-
-    // Redirect là replace: lịch sử chỉ thêm ĐÚNG 1 mục (pushState của chính test), không thêm mục cho /orders.
+    await expect(page.getByTestId('subscription-hero')).toBeVisible({ timeout: 15_000 });
+    await expect(page).toHaveURL(/\/subscriptions$/);
+    // Giữ nguyên URL, không bị chuyển sang /orders; lịch sử chỉ thêm ĐÚNG 1 mục (pushState của chính test).
     expect(await page.evaluate(() => history.length)).toBe(historyBefore + 1);
 
     await page.goBack();
     await expect(page).toHaveURL(/\/$/);
-    // Trang Đơn hàng có thể còn mount trong lúc chuyển cảnh — chờ nó biến mất rồi mới kiểm trang chủ.
-    await expect(page.getByRole('heading', { name: 'Đơn hàng' })).toHaveCount(0);
+    await expect(page.getByTestId('subscription-hero')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Bạn tìm gì hôm nay?' })).toBeVisible();
   });
 

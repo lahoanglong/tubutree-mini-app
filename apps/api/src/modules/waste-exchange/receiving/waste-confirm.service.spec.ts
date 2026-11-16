@@ -149,9 +149,10 @@ function setup(o: Setup = {}) {
     requestExpired: jest.fn(async () => void order.push('notify')),
   };
   const shipLock = { evaluateAndLock: jest.fn(async () => (order.push('shipLock'), { locked: false, shipLockedAt: null, cancelledRequestIds: [] })) };
-  const svc = new WasteConfirmService(prisma as never, config as never, access as never, rewards as never, systemConfig as never, notifier as never, shipLock as never);
+  const analytics = { recordBestEffort: jest.fn(async () => undefined) };
+  const svc = new WasteConfirmService(prisma as never, config as never, access as never, rewards as never, systemConfig as never, notifier as never, shipLock as never, analytics as never);
   const call: WasteStaffCall = { callerUserId: 's1', requestId: 'r1', route: o.route ?? 'DESK', device: { ip: '10.0.0.0', userAgent: 'jest' } };
-  return { svc, tx, prisma, config, access, rewards, systemConfig, notifier, shipLock, order, call, evaluate };
+  return { svc, tx, prisma, config, access, rewards, systemConfig, notifier, shipLock, analytics, order, call, evaluate };
 }
 
 const warehouseCase = (o: Setup = {}) => setup({ route: 'ADMIN', ...o });
@@ -181,6 +182,13 @@ describe('WasteConfirmService.confirm', () => {
     expect(ev.meta.matchBasis).toBeNull();
     expect(Object.keys(ev.meta).filter((k) => /phone/i.test(k))).toEqual([]);
     expect(h.notifier.pointsCredited).toHaveBeenCalledTimes(1);
+    expect(h.analytics.recordBestEffort).toHaveBeenCalledTimes(1);
+    expect(h.analytics.recordBestEffort).toHaveBeenCalledWith({
+      eventName: 'recycle_confirmed',
+      userId: 'u1',
+      platform: 'system',
+      props: { requestId: 'r1', code: 'TR-ABCDE', method: 'DROP_OFF', route: 'DESK', pointKind: 'PARTNER', pointsAwarded: 10_000, dropsAwarded: 0, lineCount: 1 },
+    });
     expect(h.shipLock.evaluateAndLock).toHaveBeenCalledTimes(1);
     expect(h.shipLock.evaluateAndLock).toHaveBeenCalledWith('u1', { shortfallLockPct: 50, shortfallLockStreak: 3 });
     expect(pointUsage).not.toHaveBeenCalled();
@@ -241,6 +249,7 @@ describe('WasteConfirmService.confirm', () => {
       for (const f of [writeWasteEvent, incrementPointUsage]) expect(f).not.toHaveBeenCalled();
       expect(h.rewards.grant).not.toHaveBeenCalled();
       expect(h.notifier.pointsCredited).not.toHaveBeenCalled();
+      expect(h.analytics.recordBestEffort).not.toHaveBeenCalled();
       expect(h.shipLock.evaluateAndLock).not.toHaveBeenCalled();
       expect(h.order).not.toContain('notify');
     });
@@ -369,6 +378,7 @@ describe('WasteConfirmService.confirm', () => {
     await expect(h.svc.confirm(h.call, body())).rejects.toBeInstanceOf(InternalServerErrorException);
     expect(errorSpy).toHaveBeenCalled();
     expect(h.notifier.pointsCredited).not.toHaveBeenCalled();
+    expect(h.analytics.recordBestEffort).not.toHaveBeenCalled();
   });
 
   describe('13. point ceilings', () => {

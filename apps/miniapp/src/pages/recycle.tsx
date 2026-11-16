@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
@@ -9,6 +10,7 @@ import { getLoyaltyRewards } from '../services/account-api';
 import { getErrorMessage, getLoadErrorMessage } from '../services/api';
 import { useAuthStore } from '../store/auth';
 import { useRecycleLogin } from '../hooks/use-recycle-login';
+import { trackRecycleStep } from '../services/recycle-funnel';
 import { WasteItemThumb } from '../components/waste-item-thumb';
 import { RecyclePageSkeleton } from '../components/recycle-page-skeleton';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
@@ -194,6 +196,10 @@ export default function RecyclePage() {
   const cfg = usePublicConfig();
   const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
 
+  useEffect(() => {
+    trackRecycleStep('enter');
+  }, []);
+
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: phase === 'authenticated' });
   const me = meQ.data;
   const fullPage = me?.programmeEnabled === true && me.eligibility === 'OK' && !me.blocked;
@@ -207,7 +213,10 @@ export default function RecyclePage() {
   const sharePhone = async () => {
     try {
       const phone = await ensurePhoneOrThrow();
-      if (phone) await qc.invalidateQueries({ queryKey: ['waste'] });
+      if (phone) {
+        trackRecycleStep('phone_saved');
+        await qc.invalidateQueries({ queryKey: ['waste'] });
+      }
     } catch (e) {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
     }

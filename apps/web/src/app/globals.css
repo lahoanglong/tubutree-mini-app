@@ -287,6 +287,7 @@ body.has-sticky-bar [data-bottom-nav] {
   font-size: 13px;
   line-height: 16px;
   font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .tubu-bento-sub {

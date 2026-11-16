@@ -5,6 +5,7 @@ import { MapPin } from 'lucide-react';
 import type { WasteMethod, WastePointDTO } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, getNearbyWastePoints, getWasteMe, getWastePoints } from '../services/waste-api';
 import { getZaloAccessToken, requestZaloLocation } from '../services/zmp-bridge';
+import { trackRecycleStep } from '../services/recycle-funnel';
 import { getLoadErrorMessage } from '../services/api';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { usePublicConfig } from '../hooks/use-public-config';
@@ -88,7 +89,11 @@ export default function RecyclePointsPage() {
     setLocating(true);
     try {
       const loc = await requestZaloLocation();
-      if (!loc) return;
+      if (!loc) {
+        trackRecycleStep('geo_denied');
+        return;
+      }
+      trackRecycleStep('geo_granted');
       const { accessToken } = await getZaloAccessToken();
       const r = await getNearbyWastePoints({ locationToken: loc.token, zaloAccessToken: accessToken });
       // No distance at all means the server could not resolve the location (spec 4.4): same as a refusal.

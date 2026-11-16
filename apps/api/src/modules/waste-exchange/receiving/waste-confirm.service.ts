@@ -22,6 +22,7 @@ import { assertActiveAdmin } from '../../../common/staff-access';
 import { formatPoints } from '../../../common/format-points';
 import { vnMonthKey } from '../../../common/vn-time';
 import { PrismaService } from '../../../prisma/prisma.service';
+import { AnalyticsEventsService } from '../../analytics/analytics-events.service';
 import { RewardPointsService } from '../../wallet/reward-points.service';
 import { SystemConfigService } from '../../system-config/system-config.service';
 import { initialEcoImpact } from '../../game/game-profile';
@@ -61,7 +62,7 @@ const CONFIRM_INCLUDE = {
   order: { select: { status: true } },
 } satisfies Prisma.WasteRequestInclude;
 type WasteConfirmRow = Prisma.WasteRequestGetPayload<{ include: typeof CONFIRM_INCLUDE }>;
-type TxResult = { replay: boolean; result: WasteConfirmResultDTO; userId: string; code: string };
+type TxResult = { replay: boolean; result: WasteConfirmResultDTO; userId: string; code: string; method: string; pointKind: string | null; lineCount: number };
 
 const NOT_FOUND = 'Không tìm thấy mã';
 const RETRY = 'Bạn thử lại nhé';
@@ -85,6 +86,7 @@ export class WasteConfirmService {
     private readonly systemConfig: SystemConfigService,
     private readonly notifier: WasteNotifierService,
     private readonly shipLock: WasteShipLockService,
+    private readonly analytics: AnalyticsEventsService,
   ) {}
 
   async confirm(call: WasteStaffCall, body: WasteConfirmRequest): Promise<WasteConfirmResultDTO> {
@@ -106,7 +108,7 @@ export class WasteConfirmService {
         if (checked.replay) {
           const req = checked.req;
           if (!this.sameAsStored(req, caller, body.lines)) throw new ConflictException(DIFFERENT_FIGURES);
-          return { replay: true, result: await this.storedResult(tx, req, caller, now, cfg), userId: req.userId, code: req.code };
+          return { replay: true, result: await this.storedResult(tx, req, caller, now, cfg), userId: req.userId, code: req.code, method: req.method, pointKind: null, lineCount: req.lines.length };
         }
         const { req, actorRole, pointKind, quota, m } = checked;
 
@@ -227,7 +229,7 @@ export class WasteConfirmService {
           quota: pointKind === 'PARTNER' ? { limit: quota as number, used: pointUsed, remaining: Math.max(0, (quota as number) - pointUsed) } : null,
           staffDailyCapRemaining: Math.max(0, cfg.staffDailyCapPoints - staffUsed - points),
         };
-        return { replay: false, result, userId: req.userId, code: req.code };
+        return { replay: false, result, userId: req.userId, code: req.code, method: req.method, pointKind, lineCount: lines.length };
       });
     } catch (e) {
       if (!isUniqueViolation(e)) throw e;
@@ -239,6 +241,22 @@ export class WasteConfirmService {
     }
 
     if (!done.replay) {
+      // Số "đã nhận rác thật" của phễu Đổi rác chỉ đến từ đây (kho/quầy/admin xác nhận), client không tự ghi được. Best-effort, ngoài giao dịch.
+      await this.analytics.recordBestEffort({
+        eventName: 'recycle_confirmed',
+        userId: done.userId,
+        platform: 'system',
+        props: {
+          requestId: id,
+          code: done.code,
+          method: done.method,
+          route: call.route,
+          pointKind: done.pointKind,
+          pointsAwarded: done.result.pointsAwarded,
+          dropsAwarded: done.result.dropsAwarded,
+          lineCount: done.lineCount,
+        },
+      });
       try {
         await this.notifier.pointsCredited(done.userId, { id, code: done.code }, done.result.pointsAwarded, done.result.dropsAwarded);
       } catch (e) {

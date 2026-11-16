@@ -49,7 +49,7 @@ export const CART_AFTER_ADD: CartSummary = {
   itemCount: 2,
 };
 
-const HOME_PRODUCT: ProductCard = {
+export const HOME_PRODUCT: ProductCard = {
   id: 'prod-9', slug: 'xa-phong-tubu', brand: 'Tubu', name: 'Xà Phòng Thảo Mộc Tubu', thumbnail: null,
   basePrice: 45000, salePrice: null, isFeatured: true, inStock: true, sold: 10,
 };

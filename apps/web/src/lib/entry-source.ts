@@ -4,7 +4,7 @@
  * ENTRY_TOKEN_PATTERN. Khuôn dùng chung với API (apps/api/src/common/attribution.ts) và miniapp (utils/entry-source.ts):
  * sửa một nơi phải sửa cả ba. Tham số bẩn bị bỏ im lặng.
  *
- * Web chưa có analytics phía client nên chỉ giữ CHẠM ĐẦU: cookie 30 ngày, gửi kèm đăng nhập Zalo để API ghi vào tài khoản MỚI.
+ * Web chỉ giữ CHẠM ĐẦU: cookie 30 ngày, gửi kèm đăng nhập Zalo để API ghi vào tài khoản MỚI; `lib/analytics.ts` (phễu Đổi rác) cũng đọc cookie này.
  */
 import { tenantSubdomain } from './tenant-subdomain';
 

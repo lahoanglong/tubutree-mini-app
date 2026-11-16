@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { METHOD_LABELS } from './recycle-labels';
 import { WastePointPicker } from './waste-point-picker';
 import { WebRecyclePhoneCard } from './web-recycle-phone-card';
+import { trackRecycleStep } from '@/lib/recycle-funnel';
 
 const WIZARD_METHOD_STEP = '/doi-rac/tao?step=method';
 const SWITCH_METHODS: readonly WasteMethod[] = ['MAIL_IN', 'PICKUP'];
@@ -115,6 +116,7 @@ export function RecyclePoints() {
   const findNearby = () => {
     if (locateBusy.current || !points) return;
     if (typeof navigator === 'undefined' || !navigator.geolocation) {
+      trackRecycleStep('geo_denied');
       setGeoHint('Trình duyệt chưa hỗ trợ định vị — bạn chọn tỉnh hoặc gõ tên đường ở ô tìm kiếm nhé.');
       return;
     }
@@ -125,6 +127,7 @@ export function RecyclePoints() {
       (pos) => {
         locateBusy.current = false;
         setLocating(false);
+        trackRecycleStep('geo_granted');
         const ranked = rankPointsByCoords(points, {
           lat: pos.coords.latitude,
           lng: pos.coords.longitude,
@@ -139,6 +142,7 @@ export function RecyclePoints() {
       () => {
         locateBusy.current = false;
         setLocating(false);
+        trackRecycleStep('geo_denied');
         setGeoHint('Chưa lấy được vị trí trình duyệt — bạn chọn tỉnh hoặc gõ tên đường ở ô tìm kiếm nhé.');
       },
       { timeout: 8000, enableHighAccuracy: false },

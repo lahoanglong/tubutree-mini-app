@@ -37,6 +37,7 @@ import {
 import { getLoyaltyRewards } from '../services/account-api';
 import { getProvinces } from '../services/geo-api';
 import { getZaloAccessToken, requestZaloLocation } from '../services/zmp-bridge';
+import { trackRecycleStep } from '../services/recycle-funnel';
 import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { settleWithin } from '../utils/settle-within';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -377,7 +378,11 @@ export default function RecycleNewPage() {
     void (async () => {
       try {
         const loc = await requestZaloLocation();
-        if (!loc) return;
+        if (!loc) {
+          trackRecycleStep('geo_denied');
+          return;
+        }
+        trackRecycleStep('geo_granted');
         const { accessToken } = await getZaloAccessToken();
         const nearby = await getNearbyWastePoints({ locationToken: loc.token, zaloAccessToken: accessToken });
         // Without any distance the server could not resolve the location (spec 4.4): treat as no location.
@@ -454,6 +459,7 @@ export default function RecycleNewPage() {
       rotate();
       if (r.method === 'DROP_OFF' && draft.pointId) writeLastPointId(browserStore(), draft.pointId);
       if (draft.sid) submittedSids.add(draft.sid);
+      trackRecycleStep('submitted', r.method);
       await invalidateAfterWasteWrite(qc);
       navigate(`/recycle/r/${r.id}`, { replace: true });
     },

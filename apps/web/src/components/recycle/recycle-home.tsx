@@ -15,6 +15,7 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { pointsSummary } from '@/lib/checkout-points';
 import { loginHref } from '@/lib/return-to';
 import { clearSubmitted } from '@/lib/recycle-wizard';
+import { trackRecycleStep } from '@/lib/recycle-funnel';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
@@ -196,6 +197,9 @@ function RequestsBlock({ me, stacked = false }: { me: WasteMeDTO; stacked?: bool
 export function RecycleHome() {
   const phase = useAuthPhase();
   useEffect(() => clearSubmitted(), []);
+  useEffect(() => {
+    trackRecycleStep('enter');
+  }, []);
   const cfg = usePublicConfig();
 
   const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: phase === 'authenticated' });

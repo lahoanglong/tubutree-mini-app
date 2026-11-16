@@ -74,6 +74,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { WasteItemStep } from './waste-item-step';
 import { HomePickupComposer } from './recycle-home-pickup';
 import { WebRecyclePhoneCard } from './web-recycle-phone-card';
+import { trackRecycleStep } from '@/lib/recycle-funnel';
 import {
   METHOD_LABELS,
   METHOD_LINE,
@@ -358,6 +359,7 @@ export function RecycleNew() {
       rotate();
       if (r.method === 'DROP_OFF' && draft.pointId) writeLastPointId(browserStore(), draft.pointId);
       submitted.current = true;
+      trackRecycleStep('submitted', r.method);
       clearWizardStorage();
       markSubmitted();
       await settleWithin(Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey }))));

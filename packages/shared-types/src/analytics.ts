@@ -19,9 +19,25 @@ export const CLIENT_EVENT_NAMES = [
   'ext_claim_scan',
   'ext_claim_phone',
   'oa_follow_result',
+  'recycle_funnel_step',
 ] as const;
 
 export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];
+
+/**
+ * Phễu Đổi rác phía khách (`recycle_funnel_step`, `props.step`). Chỉ đo hành vi trên màn hình; "đã nhận rác thật" là sự kiện server
+ * `recycle_confirmed`, client không tự ghi được (xem SERVER_EVENT_NAMES).
+ */
+export const RECYCLE_FUNNEL_STEPS = ['enter', 'phone_saved', 'geo_granted', 'geo_denied', 'submitted'] as const;
+export type RecycleFunnelStep = (typeof RECYCLE_FUNNEL_STEPS)[number];
+export type RecycleFunnelSurface = 'web' | 'miniapp';
+
+export interface RecycleFunnelProps {
+  step: RecycleFunnelStep;
+  surface: RecycleFunnelSurface;
+  /** Đường giao khách đang chọn ở bước đó (DROP_OFF, MAIL_IN, HOME_PICKUP...). Bỏ trống khi chưa chọn. */
+  lane?: string;
+}
 
 export const SERVER_EVENT_NAMES = [
   'add_to_cart',
@@ -34,6 +50,7 @@ export const SERVER_EVENT_NAMES = [
   'order_place_failed',
   'order_placed',
   'order_status_changed',
+  'recycle_confirmed',
   'referral_touched',
   'subscription_changed',
 ] as const;

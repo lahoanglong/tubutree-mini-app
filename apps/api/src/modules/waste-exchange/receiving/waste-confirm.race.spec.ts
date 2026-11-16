@@ -57,7 +57,7 @@ function setup(opts: WasteRaceOptions & { cfg?: Partial<typeof CFG>; request?: R
   const shipLock = { evaluateAndLock: jest.fn().mockResolvedValue({ locked: false, shipLockedAt: null, cancelledRequestIds: [] }) };
   const access = new WasteAccessService(prisma);
   const rewards = new RewardPointsService(prisma, config as never);
-  const confirmSvc = new WasteConfirmService(prisma, { snapshot: async () => cfg } as never, access, rewards, config as never, notifier as never, shipLock as never);
+  const confirmSvc = new WasteConfirmService(prisma, { snapshot: async () => cfg } as never, access, rewards, config as never, notifier as never, shipLock as never, { recordBestEffort: async () => undefined } as never);
   const reverseSvc = new WasteReverseService(prisma, { snapshot: async () => cfg } as never, notifier as never, shipLock as never);
   const requestsSvc = new WasteRequestsService(prisma, access, {} as never, {} as never, config as never);
   jest.spyOn(requestsSvc, 'loadDetail').mockResolvedValue({} as never);
