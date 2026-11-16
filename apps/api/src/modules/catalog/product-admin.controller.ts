@@ -4,14 +4,14 @@ import { ArrayMaxSize, IsArray, IsBoolean, IsObject, IsOptional, IsString, MaxLe
 import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
-import { PRODUCT_CATEGORIES_MAX, PRODUCT_IMAGES_MAX, ProductAdminService } from './product-admin.service';
+import { PRODUCT_CATEGORIES_MAX, PRODUCT_IMAGES_HARD_MAX, ProductAdminService } from './product-admin.service';
 import { Trim } from '../../common/decorators/trim.decorator';
 
 // Ảnh base64 nén tới ~1,5 triệu ký tự (cùng trần ảnh gian hàng); trần body 10 MB ở main.ts đủ cho 8 ảnh nén.
 const IMAGE_MAX = 1_500_000;
 
 export class UpdateProductDto {
-  @OptionalNotNull() @IsArray() @ArrayMaxSize(PRODUCT_IMAGES_MAX) @IsString({ each: true }) @MaxLength(IMAGE_MAX, { each: true }) images?: string[];
+  @OptionalNotNull() @IsArray() @ArrayMaxSize(PRODUCT_IMAGES_HARD_MAX) @IsString({ each: true }) @MaxLength(IMAGE_MAX, { each: true }) images?: string[];
   /** Chỉ ghi `images` khi sản phẩm chưa có ảnh; đã có thì 409 (xem ProductPatch.ifImagesEmpty). */
   @OptionalNotNull() @IsBoolean() ifImagesEmpty?: boolean;
   @OptionalNotNull() @Trim() @IsString() @MaxLength(6000) description?: string;

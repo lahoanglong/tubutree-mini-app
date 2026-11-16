@@ -35,10 +35,16 @@ function makeStore(initial: Row | null) {
   let row: Row | null = initial ? { ...initial } : null;
   const productApi = {
     update: jest.fn(async ({ data }: { data: Row }) => {
-      Object.assign(row as Row, data);
+      Object.assign(row as Row, data, { updatedAt: new Date(Number((row as Row).updatedAt ?? 0) + 1) });
       return { ...(row as Row) };
     }),
-    updateMany: jest.fn(async () => ({ count: 1 })),
+    // Chỉ lệnh ghi ảnh (có điều kiện `updatedAt`) được áp dụng thật; các lệnh có điều kiện khác (mô tả, danh mục, nhãn) không liên quan tới spec này.
+    updateMany: jest.fn(async ({ where, data }: { where: Row; data: Row }) => {
+      if (!('updatedAt' in where)) return { count: 1 };
+      if (!row || Number(row.updatedAt ?? 0) !== Number(where.updatedAt ?? 0)) return { count: 0 };
+      Object.assign(row, data, { updatedAt: new Date(Number(row.updatedAt ?? 0) + 1) });
+      return { count: 1 };
+    }),
   };
   const prisma = {
     product: {
@@ -80,6 +86,7 @@ const EXISTING: Row = {
   pancakeImages: [],
   videos: [],
   thumbnail: null,
+  updatedAt: new Date(1),
   basePrice: 1000,
   isActive: true,
   pancakeHold: null,
@@ -121,22 +128,45 @@ describe('W181: gộp ảnh Pancake, không ghi đè', () => {
     expect(row()).toMatchObject({ images: [C, ADMIN], pancakeImages: [C], thumbnail: C });
   });
 
-  it('Pancake không còn ảnh nào: chỉ ảnh admin còn lại, thumbnail theo ảnh đó', async () => {
-    const start = { ...EXISTING, images: [A, ADMIN], pancakeImages: [A], thumbnail: A };
-    const { row } = await sync(start, [product([variation('v1', { images: [] })])]);
-    expect(row()).toMatchObject({ images: [ADMIN], pancakeImages: [], thumbnail: ADMIN });
-  });
-
-  it('Pancake không còn ảnh và sản phẩm không có ảnh admin: ảnh rỗng, thumbnail rỗng', async () => {
-    const start = { ...EXISTING, images: [A], pancakeImages: [A], thumbnail: A };
-    const { row } = await sync(start, [product([variation('v1', { images: [] })])]);
-    expect(row()).toMatchObject({ images: [], pancakeImages: [], thumbnail: null });
-  });
-
   it('dữ liệu có từ trước khi có cột pancakeImages: ảnh đang lưu mà Pancake không có đều giữ (không mất ảnh nào)', async () => {
     const start = { ...EXISTING, images: [A, ADMIN], pancakeImages: undefined, thumbnail: A };
     const { row } = await sync(start, [product([variation('v1', { images: [A, B] })])]);
     expect(row().images).toEqual([A, B, ADMIN]);
+  });
+
+  it('Pancake không gửi ảnh nào (thiếu trường hoặc danh sách rỗng): giữ nguyên ảnh, thumbnail và pancakeImages, không xoá gì', async () => {
+    const start = { ...EXISTING, images: [A, B, ADMIN], pancakeImages: [A, B], thumbnail: A };
+    const { row } = await sync(start, [product([variation('v1', { images: undefined })])], [product([variation('v1', { images: [] })])]);
+    expect(row()).toMatchObject({ images: [A, B, ADMIN], pancakeImages: [A, B], thumbnail: A });
+  });
+
+  it('ảnh ở máy chủ ảnh của Pancake mà nay Pancake không gửi cũng gỡ kể cả khi chưa có pancakeImages (hàng cũ); ảnh admin giữ', async () => {
+    const start = { ...EXISTING, images: [C, ADMIN], pancakeImages: undefined, thumbnail: C };
+    const { row } = await sync(start, [product([variation('v1', { images: [A] })])]);
+    expect(row()).toMatchObject({ images: [A, ADMIN], pancakeImages: [A], thumbnail: A });
+  });
+
+  it('admin lưu ảnh xen giữa lúc đồng bộ: lệnh ghi ảnh không khớp dòng nào, ảnh admin còn nguyên, các cột Pancake khác vẫn ghi', async () => {
+    const store = makeStore({ ...EXISTING, images: [A], pancakeImages: [A], thumbnail: A });
+    store.raw.product.findUnique.mockImplementationOnce(async () => {
+      const snapshot = { ...store.row() };
+      Object.assign(store.row(), { images: [A, ADMIN], updatedAt: new Date(2) });
+      return snapshot;
+    });
+    const markStale = jest.fn();
+    await new PancakeSyncService(store.prisma, makeClient([[product([variation('v1', { images: [A, B], videos: [V1] })])]]), lifecycle, undefined, undefined, { markStale } as never).syncProducts();
+    expect(store.row().images).toEqual([A, ADMIN]);
+    expect(store.row().pancakeImages).toEqual([A, B]);
+    expect(store.row().videos).toEqual([V1]);
+    expect(markStale).not.toHaveBeenCalled();
+  });
+
+  it('ảnh đổi và không ai xen vào: ghi ảnh và đánh dấu nạp lại ảnh đúng một lần', async () => {
+    const store = makeStore({ ...EXISTING, images: [A], pancakeImages: [A], thumbnail: A });
+    const markStale = jest.fn();
+    await new PancakeSyncService(store.prisma, makeClient([[product([variation('v1', { images: [A, B] })])]]), lifecycle, undefined, undefined, { markStale } as never).syncProducts();
+    expect(store.row().images).toEqual([A, B]);
+    expect(markStale).toHaveBeenCalledTimes(1);
   });
 
   it('ảnh y nguyên thì không đổi gì (thứ tự, thumbnail)', async () => {

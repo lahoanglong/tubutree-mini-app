@@ -46,8 +46,21 @@ export function pancakeImageList(p: { images?: unknown; image?: unknown }, varia
 }
 
 /**
+ * Ảnh lưu ở máy chủ ảnh của Pancake (`pancake.vn`, `*.pancake.vn`). Admin tải lên Tubu Tree đi qua kho ảnh khác (Cloudinary, data URL, `/public-image`),
+ * nên ảnh ở đây là ảnh Pancake kể cả khi cột `pancakeImages` chưa có (hàng sinh ra trước khi có cột đó).
+ */
+export function isPancakeHostedImage(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return host === 'pancake.vn' || host.endsWith('.pancake.vn');
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Gộp ảnh, không ghi đè: ảnh Pancake đi trước theo thứ tự Pancake, sau đó là ảnh đang lưu mà Pancake không có và cũng không phải ảnh Pancake
- * từng gửi (`previous`) — tức ảnh admin thêm trên Tubu Tree. Ảnh Pancake từng gửi mà nay Pancake không gửi nữa thì bị gỡ.
+ * (từng gửi: `previous`, hoặc nằm ở máy chủ ảnh Pancake) — tức ảnh admin thêm trên Tubu Tree. Ảnh Pancake mà nay Pancake không gửi nữa thì bị gỡ.
  * `adminKept` là số ảnh admin được giữ lại.
  */
 export function mergePancakeImages(
@@ -59,7 +72,7 @@ export function mergePancakeImages(
   const wasPancake = new Set(previous);
   const admin: string[] = [];
   for (const img of current) {
-    if (img && !fromPancake.has(img) && !wasPancake.has(img) && !admin.includes(img)) admin.push(img);
+    if (img && !fromPancake.has(img) && !wasPancake.has(img) && !isPancakeHostedImage(img) && !admin.includes(img)) admin.push(img);
   }
   return { images: [...incoming, ...admin], adminKept: admin.length };
 }

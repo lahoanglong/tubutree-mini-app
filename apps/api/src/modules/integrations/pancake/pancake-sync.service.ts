@@ -518,17 +518,21 @@ export class PancakeSyncService implements OnModuleInit {
     // Ảnh: ảnh Pancake (sản phẩm, rồi từng variation) đi trước; ảnh admin đã thêm trên Tubu Tree mà Pancake không có thì giữ, ảnh Pancake từng gửi mà
     // nay không còn thì gỡ (`existing.pancakeImages` là danh sách Pancake gửi lần trước). Xem `mergePancakeImages`.
     const imgs = pancakeImageList(p, variations);
-    const merged = mergePancakeImages(imgs, existing?.pancakeImages ?? [], existing?.images ?? []);
+    // Pancake không gửi ảnh nào (thiếu trường hoặc danh sách rỗng) thì không biết là "đã xoá hết" hay "trả thiếu": giữ nguyên ảnh, ảnh đại diện và danh sách ảnh
+    // Pancake đã lưu, như trước W181 — một lần Pancake trả rỗng tạm thời không được xoá sạch ảnh cả cửa hàng. Gỡ ảnh Pancake chỉ khi Pancake còn gửi ít nhất một ảnh.
+    const imagesReported = imgs.length > 0;
+    const merged = imagesReported
+      ? mergePancakeImages(imgs, existing?.pancakeImages ?? [], existing?.images ?? [])
+      : { images: existing?.images ?? [], adminKept: 0 };
     if (merged.adminKept > 0) this.logger.debug(`Giữ ${merged.adminKept} ảnh admin thêm của sản phẩm Pancake ${pancakeId}.`);
     // Video: chỉ ghi khi Pancake có nói về video (trường `videos` có ở ít nhất một biến thể); không thì giữ video đang lưu.
     const vids = pancakeVideos(variations);
-    const mergedThumb = merged.images.length
+    // Có ảnh Pancake: ảnh đại diện là ảnh đầu sau khi gộp. Không có: giữ ảnh đại diện đang lưu.
+    const mergedThumb = imagesReported
       ? existing
-        ? storedThumbnailFor(existing.id, merged.images[0])
-        : merged.images[0]
-      : (existing?.images?.length ?? 0) === 0
-        ? (existing?.thumbnail ?? null)
-        : null;
+        ? storedThumbnailFor(existing.id, merged.images[0]!)
+        : merged.images[0]!
+      : (existing?.thumbnail ?? null);
 
     // `<p></p>`, `<br>` và `&nbsp;` là cách trình soạn của Pancake lưu ô mô tả để trống: coi như trống, kẻo xoá mô tả admin đã duyệt mỗi 15 phút.
     const incomingDescription = typeof p.description === 'string' && !isBlankHtmlText(p.description) ? p.description : null;
@@ -539,12 +543,14 @@ export class PancakeSyncService implements OnModuleInit {
     if (keepDescription) this.logger.debug(`Giữ mô tả đã có của sản phẩm Pancake ${pancakeId}: mô tả TubuTree đã đạt chuẩn giàu từ 80 ký tự, hoặc chữ Pancake gửi tới ngắn hơn 40 ký tự / chỉ chép tên sản phẩm.`);
     const description = keepDescription ? null : incomingDescription;
     const sellable = variations.filter((v) => !payloadRemoved(v.is_removed) && positivePrice(v.retail_price) !== null);
+    // `images` và `thumbnail` là hai cột admin cũng sửa tay: với hàng đã có chúng KHÔNG đi cùng lệnh update dưới đây mà ghi bằng lệnh có điều kiện
+    // "hàng chưa đổi từ lúc đọc" (xem `mediaPatch`), kẻo ảnh admin vừa lưu xen giữa bị đè bằng bản gộp tính từ ảnh đọc trước đó. `pancakeImages`
+    // và `videos` chỉ đồng bộ Pancake ghi nên đi thẳng.
+    const mediaPatch = { images: merged.images, thumbnail: mergedThumb };
     const baseData = {
       name,
-      images: merged.images,
-      pancakeImages: imgs,
+      pancakeImages: imagesReported ? imgs : (existing?.pancakeImages ?? []),
       videos: vids.reported ? vids.videos : (existing?.videos ?? []),
-      thumbnail: mergedThumb,
       basePrice: positivePrice(sellable[0]?.retail_price) ?? existing?.basePrice ?? 0,
     };
     // Chưa biến thể nào có giá (và sản phẩm chưa từng bán có giá) → chưa mở bán, kẻo hiện "0đ" ngoài danh mục.
@@ -565,7 +571,7 @@ export class PancakeSyncService implements OnModuleInit {
 
     // Chỉ đánh dấu khi ảnh thật sự đổi, và đánh dấu SAU khi ghi xong: đánh dấu trước thì một /img xen giữa nạp lại, xoá cờ mà DB
     // chưa thấy ảnh mới. Có /img xen giữa thì một lượt đồng bộ có thể gây vài lần nạp nối tiếp, mỗi lần một truy vấn rẻ.
-    const imagesChanged = !existing || baseData.thumbnail !== (existing.thumbnail ?? null) || JSON.stringify(baseData.images) !== JSON.stringify(existing.images ?? []);
+    const imagesChanged = !existing || mediaPatch.thumbnail !== (existing.thumbnail ?? null) || JSON.stringify(mediaPatch.images) !== JSON.stringify(existing.images ?? []);
 
     // Pancake không có cột thương hiệu: nhãn đọc từ tên. Chỉ khi sản phẩm chưa có nhãn thật (rỗng hoặc "Tubu Tree"); nhãn Admin đã gán thì giữ.
     const slug = existing?.slug ?? this.slugify(name, pancakeId);
@@ -575,12 +581,20 @@ export class PancakeSyncService implements OnModuleInit {
     // không còn cảnh tên/giá đã ghi mà mô tả, danh mục hay nhãn chưa tới. Biến thể ở dưới cố ý KHÔNG vào giao dịch này: mỗi biến thể được cô lập lỗi riêng.
     let product: Product;
     let descriptionSkipped = false;
+    let mediaSkipped = false;
     // Giao dịch hàng sản phẩm hỏng (khoá chết, hết hạn giao dịch...) thì biến thể của nó VẪN được đồng bộ giá/tồn dưới `existing.id`, lỗi ném sau cùng: lượt 15 phút
     // chỉ lấy sản phẩm Pancake vừa sửa nên không tự đọc lại sản phẩm này, nếu bỏ biến thể thì giá/tồn của nó cũ tới lượt quét đêm.
     let productError: unknown = null;
     if (existing) {
       try {
-        ({ product, descriptionSkipped } = await this.prisma.$transaction(async (tx) => {
+        ({ product, descriptionSkipped, mediaSkipped } = await this.prisma.$transaction(async (tx) => {
+          // Lệnh đầu tiên của giao dịch, trước `update` (vì `update` đổi `updatedAt`): ảnh chỉ ghi khi hàng vẫn đúng bản đã đọc. Admin lưu ảnh xen giữa thì lệnh
+          // không khớp dòng nào, ảnh của admin còn nguyên và lượt đồng bộ sau tính lại.
+          let mediaMissed = false;
+          if (imagesChanged) {
+            const cas = await tx.product.updateMany({ where: { id: existing.id, updatedAt: existing.updatedAt }, data: mediaPatch });
+            mediaMissed = cas?.count === 0;
+          }
           const updated = await tx.product.update({
             where: { id: existing.id },
             data: {
@@ -608,7 +622,7 @@ export class PancakeSyncService implements OnModuleInit {
           if (inferredBrand) {
             await tx.product.updateMany({ where: { id: existing.id, brand: { in: [...GENERIC_CATALOG_BRANDS] } }, data: { brand: inferredBrand } });
           }
-          return { product: updated, descriptionSkipped: skipped };
+          return { product: updated, descriptionSkipped: skipped, mediaSkipped: mediaMissed };
         }));
       } catch (err) {
         productError = err;
@@ -619,6 +633,7 @@ export class PancakeSyncService implements OnModuleInit {
       product = await this.prisma.product.create({
         data: {
           ...baseData,
+          ...mediaPatch,
           description: description ?? '',
           ...productHold,
           pancakeId,
@@ -632,7 +647,10 @@ export class PancakeSyncService implements OnModuleInit {
     if (descriptionSkipped) {
       this.logger.log(`Bỏ qua mô tả Pancake của sản phẩm ${pancakeId}: mô tả vừa được đổi trong lúc đồng bộ nên giữ bản mới, bản Pancake chờ lượt quét sau.`);
     }
-    if (imagesChanged && productError === null) this.imageStale?.markStale();
+    if (mediaSkipped) {
+      this.logger.log(`Bỏ qua ảnh Pancake của sản phẩm ${pancakeId}: hàng vừa được đổi trong lúc đồng bộ nên giữ bản mới, ảnh chờ lượt quét sau.`);
+    }
+    if (imagesChanged && productError === null && !mediaSkipped) this.imageStale?.markStale();
 
     // Biến thể giảm sâu nhất theo % — giá cũ/mới của nó đi vào nội dung thông báo và để xét ngưỡng giảm tối thiểu.
     let bestDrop: { oldPrice: number; newPrice: number } | null = null;

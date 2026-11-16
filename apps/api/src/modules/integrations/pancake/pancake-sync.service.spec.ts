@@ -285,6 +285,7 @@ describe('PancakeSyncService — tồn kho không còn ghi đè tuyệt đối',
         findUnique: jest.fn().mockResolvedValue({ id: 'existing', pancakeId: 'a' }),
         create: jest.fn(),
         update: jest.fn().mockResolvedValue({ id: 'existing', name: 'Tinh dầu' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     });
   }
@@ -637,7 +638,10 @@ describe('PANCAKE-12: biến thể thiếu giá không bao giờ thành hàng 0�
     await new PancakeSyncService(empty, makeClient([[{ ...noImg, description: '   ' }]]), lifecycle).syncProducts('2026-10-13T00:00:00.000Z');
     const kept = mk(empty).product.update.mock.calls[0][0].data;
     expect(kept).not.toHaveProperty('description');
-    expect(kept).toMatchObject({ images: ['https://mine/a.jpg'], thumbnail: 'https://mine/a.jpg' });
+    // Ảnh admin còn nguyên: không lệnh nào ghi lại ảnh hay ảnh đại diện (ảnh chỉ ghi khi đổi, bằng lệnh có điều kiện).
+    expect(kept).not.toHaveProperty('images');
+    expect(kept).not.toHaveProperty('thumbnail');
+    expect(mk(empty).product.updateMany.mock.calls.filter(([a]) => 'images' in a.data)).toEqual([]);
 
     const real = makePrisma({ product: { findUnique: jest.fn().mockResolvedValue(mine) } });
     await new PancakeSyncService(real, makeClient([[{ ...noImg, description: 'Mô tả từ Pancake' }]]), lifecycle).syncProducts('2026-10-13T00:00:00.000Z');
@@ -797,7 +801,7 @@ describe('PancakeSyncService — ánh xạ nhóm hàng Pancake sang danh mục T
     const svc = new PancakeSyncService(prisma, makeClient([[withCats('a', [11])]]), lifecycle, undefined, config({ '11': 'catA' }));
     await svc.syncProducts();
     expect((prisma.product.update as jest.Mock).mock.calls[0][0].data).not.toHaveProperty('categoryIds');
-    expect(prisma.product.updateMany).not.toHaveBeenCalled();
+    expect((prisma.product.updateMany as jest.Mock).mock.calls.filter(([a]) => 'categoryIds' in a.data)).toEqual([]);
   });
 
   it('sản phẩm có sẵn nhưng chưa có danh mục được điền bằng lệnh có điều kiện "vẫn còn rỗng", update thường không mang categoryIds', async () => {
@@ -814,7 +818,7 @@ describe('PancakeSyncService — ánh xạ nhóm hàng Pancake sang danh mục T
     expect((p2.product.create as jest.Mock).mock.calls[0][0].data.categoryIds).toEqual([]);
     const p3 = catPrisma({ product: { findUnique: jest.fn().mockResolvedValue({ id: 'e', categoryIds: [], forSegment: ['x'] }) } });
     await new PancakeSyncService(p3, makeClient([[withCats('a', [11])]]), lifecycle, undefined, config({})).syncProducts();
-    expect(p3.product.updateMany).not.toHaveBeenCalled();
+    expect((p3.product.updateMany as jest.Mock).mock.calls.filter(([a]) => 'categoryIds' in a.data)).toEqual([]);
   });
 
   it('bản đồ trỏ vào danh mục có mục con bị bỏ qua (chỉ gán vào lá); trỏ vào mục con thì ghi', async () => {
@@ -842,6 +846,7 @@ describe('PancakeSyncService — ảnh mới vào danh sách ảnh được đ�
         findUnique: jest.fn().mockResolvedValue({ id: 'existing', slug: 's', brand: 'b', images, thumbnail, categoryIds: ['c'], forSegment: ['x'] }),
         create: jest.fn(),
         update: jest.fn().mockResolvedValue({ id: 'existing', name: 'Tinh dầu' }),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
       },
     });
 
@@ -914,12 +919,15 @@ describe('PancakeSyncService + ImageResizeService — tích hợp (R-182)', () =
     const prisma = makePrisma({
       product: {
         findUnique: jest.fn().mockResolvedValue({ id: 'e', slug: 's', brand: 'b', images: ['https://content.pancake.vn/old.jpg'], thumbnail: 'https://content.pancake.vn/old.jpg', categoryIds: ['c'], forSegment: ['x'], basePrice: 1000, pancakeHold: null, isActive: true, description: 'd' }),
-        update: jest.fn().mockImplementation(async ({ data }) => {
+        // Ảnh ghi bằng lệnh có điều kiện (đầu giao dịch): giữ nó chưa chốt để một /img xen vào đúng lúc đó.
+        updateMany: jest.fn().mockImplementation(async ({ data }) => {
+          if (!('images' in data)) return { count: 0 };
           updateStarted();
           await updateGate;
           written = true;
-          return { id: 'e', ...data };
+          return { count: 1 };
         }),
+        update: jest.fn().mockImplementation(async ({ data }) => ({ id: 'e', ...data })),
       },
     });
     const registryDb = { $queryRaw: jest.fn(async () => (written ? [{ u: url }] : [])) };

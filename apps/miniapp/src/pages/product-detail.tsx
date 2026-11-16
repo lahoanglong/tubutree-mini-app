@@ -680,8 +680,8 @@ export default function ProductDetailPage() {
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
 
       <StorefrontContextBar />
-      {/* `selectedId` chỉ có sau khi khách tự chọn phân loại: lúc mở trang (phân loại mặc định) thư viện không nhảy, ảnh đầu vẫn là ảnh LCP. */}
-      <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} videos={p.videos} alt={p.name} focusSrc={selectedId ? selected?.imageUrl : null} />
+      {/* `selectedId` chỉ có sau khi khách tự chọn phân loại (chỉ có từ 2 phân loại): lúc mở trang (phân loại mặc định) thư viện không nhảy, ảnh đầu vẫn là ảnh LCP. */}
+      <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} videos={p.videos} alt={p.name} focusSrc={selectedId && variations.length > 1 ? selected?.imageUrl : null} />
       {flashItem && priceView.isFlash && (
         <FlashPriceBar
           price={price}

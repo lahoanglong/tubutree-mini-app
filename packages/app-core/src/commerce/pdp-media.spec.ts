@@ -5,7 +5,11 @@ describe('pdpVideoUrls', () => {
   it('chỉ nhận http(s), bỏ trùng, bỏ mục không phải chuỗi và scheme nguy hiểm', () => {
     expect(
       pdpVideoUrls(['https://c/a.mp4', 'http://c/b.mp4', 'https://c/a.mp4', 'javascript:alert(1)', 'data:video/mp4;base64,AAA', '/rel.mp4', '  ', 5, null, { url: 'https://c/x.mp4' }]),
-    ).toEqual(['https://c/a.mp4', 'http://c/b.mp4']);
+    ).toEqual(['https://c/a.mp4', 'https://c/b.mp4']);
+  });
+
+  it('nâng http: thành https: và bỏ trùng sau khi nâng', () => {
+    expect(pdpVideoUrls(['http://c/a.mp4', 'https://c/a.mp4', 'HTTP://c/b.mp4'])).toEqual(['https://c/a.mp4', 'https://c/b.mp4']);
   });
 
   it('thiếu hoặc không phải mảng (API cũ) → không video', () => {

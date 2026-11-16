@@ -111,7 +111,9 @@ const VISUAL_TOUR = process.env.VISUAL_DIR ? [] : [/visual-tour\./];
 // Chạy riêng một tệp: thêm `--project="<tên project>" --no-deps`, nếu không Playwright chạy cả hai project web khách trước.
 const FLASH_DB_SPEC = /pdp-flash-cls\.web\.spec\.ts/;
 const THUMBS_DB_SPEC = /lcp-priority-db\.web\.spec\.ts/;
-const DB_SPECS = [FLASH_DB_SPEC, THUMBS_DB_SPEC];
+// W181: gieo ảnh/video/ảnh phân loại vào một sản phẩm (từ vị trí 20 của danh sách) để E2E thư viện media PDP bằng dữ liệu API thật; trả lại sau spec.
+const MEDIA_DB_SPEC = /w181-pdp-media-db\.web\.spec\.ts/;
+const DB_SPECS = [FLASH_DB_SPEC, THUMBS_DB_SPEC, MEDIA_DB_SPEC];
 
 const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
   {
@@ -154,6 +156,13 @@ const allProjects: NonNullable<PlaywrightTestConfig['projects']> = [
     use: { ...devices['Pixel 7'], baseURL: WEB_URL },
     testMatch: THUMBS_DB_SPEC,
     dependencies: ['Web Customer Flash DB'],
+  },
+  {
+    // Sau project Ảnh gán tạm (không chồng nhau: spec này ghi ảnh/video của một sản phẩm vào DB tạm).
+    name: 'Web Customer Media DB',
+    use: { ...devices['Desktop Chrome'], baseURL: WEB_URL },
+    testMatch: MEDIA_DB_SPEC,
+    dependencies: ['Web Customer Thumbs DB'],
   },
   {
     name: 'Zalo Mini App',

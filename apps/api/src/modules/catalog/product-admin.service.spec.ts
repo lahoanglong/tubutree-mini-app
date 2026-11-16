@@ -115,6 +115,15 @@ describe('ProductAdminService — sửa sản phẩm', () => {
     expect(update).not.toHaveBeenCalled();
   });
 
+  it('sản phẩm đã có hơn 8 ảnh (đồng bộ Pancake gộp ảnh): lưu lại được số ảnh đó, không thêm lên nữa', async () => {
+    const ten = Array.from({ length: 10 }, (_, i) => `https://x/${i}.jpg`);
+    const { svc, update } = setup(row({ images: ten }));
+    await svc.update('a1', 'p1', { images: [...ten].reverse() });
+    expect(update.mock.calls[0][0].data).toMatchObject({ images: [...ten].reverse(), thumbnail: 'https://x/9.jpg' });
+    await expect(svc.update('a1', 'p1', { images: [...ten, 'https://x/10.jpg'] })).rejects.toThrow('Tối đa 10 ảnh');
+    expect(update).toHaveBeenCalledTimes(1);
+  });
+
   it('mô tả, mô tả ngắn, nổi bật và danh mục: cắt khoảng trắng, bỏ trùng, kiểm danh mục tồn tại', async () => {
     const { svc, update, prisma } = setup();
     await svc.update('a1', 'p1', { description: '  Mô tả mới  ', shortDesc: '   ', isFeatured: true, categoryIds: ['c1', 'c1'] });
@@ -289,7 +298,7 @@ describe('UpdateProductDto', () => {
   it.each([
     ['description không phải chuỗi', { description: 5 }],
     ['isActive không phải boolean', { isActive: 'yes' }],
-    ['quá 8 ảnh', { images: Array.from({ length: 9 }, () => 'https://x/a.jpg') }],
+    ['quá 40 ảnh', { images: Array.from({ length: 41 }, () => 'https://x/a.jpg') }],
     ['mô tả quá dài', { description: 'x'.repeat(6001) }],
     ['images null', { images: null }],
   ])('từ chối: %s', (_l, b) => expect(bad(b)).toBeGreaterThan(0));

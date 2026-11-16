@@ -9,6 +9,8 @@ import { parseStoryConfig } from '@tubutree/shared-types';
 import { ImageResizeService } from './image-resize.service';
 
 export const PRODUCT_IMAGES_MAX = 8;
+/** Trần cứng của DTO: đồng bộ Pancake gộp ảnh của cả các phân loại nên một sản phẩm có thể có hơn 8 ảnh; admin vẫn lưu lại được (xem `update`) nhưng không thêm tới mức vô hạn. */
+export const PRODUCT_IMAGES_HARD_MAX = 40;
 export const PRODUCT_CATEGORIES_MAX = 10;
 
 export interface ProductPatch {
@@ -88,7 +90,9 @@ export class ProductAdminService {
     const data: Record<string, unknown> = {};
     if (patch.images !== undefined) {
       const images = patch.images.map((i) => i.trim());
-      if (images.length > PRODUCT_IMAGES_MAX) throw new BadRequestException(`Tối đa ${PRODUCT_IMAGES_MAX} ảnh cho một sản phẩm.`);
+      // Sản phẩm đã có hơn 8 ảnh (đồng bộ Pancake gộp ảnh các phân loại) vẫn lưu lại được số ảnh đó, nhưng không thêm lên nữa.
+      const imagesMax = Math.max(PRODUCT_IMAGES_MAX, current.images.length);
+      if (images.length > imagesMax) throw new BadRequestException(`Tối đa ${imagesMax} ảnh cho một sản phẩm.`);
       if (images.some((i) => i === '' || !isStorefrontImageValue(i))) {
         throw new BadRequestException('Ảnh chỉ nhận ảnh tải lên (png, jpeg, webp, gif) hoặc link https.');
       }

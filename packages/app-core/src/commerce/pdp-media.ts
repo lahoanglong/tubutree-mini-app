@@ -9,12 +9,15 @@ export const PDP_VIDEOS_MAX = 6;
 
 const HTTP_URL = /^https?:\/\//i;
 
-/** Video hợp lệ để phát: URL http(s), bỏ trùng và mục không phải chuỗi. `javascript:`/`data:` không bao giờ vào thẻ video. */
+/**
+ * Video hợp lệ để phát: URL http(s), bỏ trùng và mục không phải chuỗi. `javascript:`/`data:` không bao giờ vào thẻ video. `http:` nâng thành `https:`:
+ * trang và webview Zalo chạy https nên trình duyệt chặn video http (mixed content), và nguồn video Pancake đều có https.
+ */
 export function pdpVideoUrls(videos: readonly unknown[] | null | undefined): string[] {
   const out = new Set<string>();
   for (const v of Array.isArray(videos) ? videos : []) {
     const url = typeof v === 'string' ? v.trim() : '';
-    if (HTTP_URL.test(url)) out.add(url);
+    if (HTTP_URL.test(url)) out.add(url.replace(/^http:/i, 'https:'));
     if (out.size >= PDP_VIDEOS_MAX) break;
   }
   return [...out];
