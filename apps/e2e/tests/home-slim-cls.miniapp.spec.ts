@@ -38,8 +38,13 @@ async function homeMetrics(page: Page) {
       const plus = Array.from(tile.querySelectorAll('button[aria-label$=" vào giỏ"]')).find(shown);
       if (!plus) continue;
       const pr = plus.getBoundingClientRect();
+      // Ảnh thay thế (chữ cái và tên hãng vẽ trong khung ảnh, aria-hidden) là ảnh: nút ＋ nằm đè góc ảnh theo thiết kế, như đè lên ảnh thật.
       const texts = Array.from(tile.querySelectorAll('*')).filter(
-        (el) => !plus.contains(el) && shown(el) && Array.from(el.childNodes).some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== ''),
+        (el) =>
+          !plus.contains(el) &&
+          !el.closest('[data-testid="product-image-fallback"]') &&
+          shown(el) &&
+          Array.from(el.childNodes).some((n) => n.nodeType === Node.TEXT_NODE && (n.textContent ?? '').trim() !== ''),
       );
       if (texts.some((el) => hits(pr, el.getBoundingClientRect()))) plusOverText.push(plus.getAttribute('aria-label') ?? '');
     }

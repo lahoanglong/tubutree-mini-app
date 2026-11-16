@@ -341,7 +341,7 @@ describe('useHomeShelves (web)', () => {
       });
       const renders: { combos: number; best: string }[] = [];
       function Initial() {
-        latest = useHomeShelves('returning', { combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')] as never, bestSellers: sixProducts });
+        latest = useHomeShelves('returning', { flash: [], combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')] as never, bestSellers: sixProducts });
         renders.push({ combos: latest.combos.length, best: latest.bestSellers.map((p) => p.slug).join() });
         return null;
       }
@@ -357,7 +357,7 @@ describe('useHomeShelves (web)', () => {
 
     it('combo dựng sẵn ở máy chủ có ngay ở lần vẽ đầu: kệ combo và Bán chạy nhất đã bỏ món trùng trong HTML đầu, không hỏi lại /bundles/combos', async () => {
       function Initial() {
-        latest = useHomeShelves('new', { combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')] as never, bestSellers: sixProducts });
+        latest = useHomeShelves('new', { flash: [], combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')] as never, bestSellers: sixProducts });
         return null;
       }
       mounted = render(<Initial />);
@@ -370,7 +370,7 @@ describe('useHomeShelves (web)', () => {
     it('HTML ISR cũ hơn hạn tươi (combosAt quá 60 giây): hydrate hỏi lại ngay, combo đã tắt rời kệ và món của nó trở về Bán chạy nhất; còn tươi thì không hỏi', async () => {
       withCombosAndSix([]);
       function Initial({ combosAt }: { combosAt: number }) {
-        latest = useHomeShelves('new', { combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')] as never, combosAt, bestSellers: sixProducts });
+        latest = useHomeShelves('new', { flash: [], combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')] as never, combosAt, bestSellers: sixProducts });
         return null;
       }
       mounted = render(<Initial combosAt={Date.now() - 2 * 60_000} />);
@@ -391,7 +391,7 @@ describe('useHomeShelves (web)', () => {
       const gone = new Date(Date.now() - 1000).toISOString();
       mocks.hydrated = false;
       function Initial() {
-        latest = useHomeShelves('new', { combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z', gone)] as never, bestSellers: sixProducts });
+        latest = useHomeShelves('new', { flash: [], combos: [comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z', gone)] as never, bestSellers: sixProducts });
         return null;
       }
       mounted = render(<Initial />);

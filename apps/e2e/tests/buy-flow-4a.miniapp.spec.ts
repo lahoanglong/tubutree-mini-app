@@ -1,6 +1,6 @@
 import { test, expect, makeOrder, reply, type MockApi, type MockHandler } from './support/mock-api';
 import type { Page } from '@playwright/test';
-import { DELIVERED_CODE, HOME_PRODUCT, PURCHASED, PURCHASED_PAGE, REMINDER, THUMB, mockBuyFlowSession, mockOrdersTab } from './support/buy-flow-mocks';
+import { DELIVERED_CODE, HOME_PRODUCT, PURCHASED, PURCHASED_PAGE, REMINDER, THUMB, mockBuyFlowSession, mockHomeBestSellers, mockOrdersTab } from './support/buy-flow-mocks';
 import { mockCheckout, publicConfig, ORDER_CODE_COD } from './support/checkout-mocks';
 import { PILOT_PRODUCT, PILOT_SLUG } from './support/pilot-mocks';
 import { eventsNamed, flushEvents } from './support/events';
@@ -31,19 +31,23 @@ async function showSuggestFeed(page: Page): Promise<void> {
 }
 
 test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
-  test('Home: kệ "Mua lại" nằm trên Danh mục; mua lại 1 SP đúng 2 chạm rồi tự sang giỏ', async ({ page, api }) => {
+  test('Home: kệ "Mua lại" nằm dưới Bán chạy nhất và trên lối tắt; mua lại 1 SP đúng 2 chạm rồi tự sang giỏ', async ({ page, api }) => {
     mockBuyFlowSession(api);
+    mockHomeBestSellers(api);
     await page.goto('/');
 
     const rail = page.getByRole('region', { name: 'Mua lại' });
     await expect(rail).toBeVisible({ timeout: 15_000 });
-    const [searchBox, railBox, categoriesBox] = await Promise.all([
+    const [searchBox, categoriesBox, bestBox, railBox, shortcutsBox] = await Promise.all([
       page.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }).boundingBox(),
-      rail.boundingBox(),
       page.getByRole('region', { name: 'Danh mục', exact: true }).boundingBox(),
+      page.getByRole('region', { name: 'Bán chạy nhất', exact: true }).boundingBox(),
+      rail.boundingBox(),
+      page.locator('[data-home-block="shortcuts"]').boundingBox(),
     ]);
-    expect(railBox!.y).toBeGreaterThan(searchBox!.y);
-    expect(railBox!.y).toBeLessThan(categoriesBox!.y);
+    expect(categoriesBox!.y).toBeGreaterThan(searchBox!.y);
+    expect(railBox!.y).toBeGreaterThan(bestBox!.y);
+    expect(railBox!.y).toBeLessThan(shortcutsBox!.y);
 
     const added = api.waitForCall('POST', '/cart/items');
     await rail.getByRole('button', { name: 'Mua lại', exact: true }).first().click(); // chạm 1
@@ -72,21 +76,21 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     const skeleton = page.getByTestId('purchased-rail-loading');
     await expect(skeleton).toBeVisible({ timeout: 15_000 });
     const skeletonBox = await skeleton.boundingBox();
-    const belowBefore = await page.getByRole('region', { name: 'Danh mục', exact: true }).boundingBox();
+    const belowBefore = await page.locator('[data-home-block="shortcuts"]').boundingBox();
     release();
 
     const rail = page.getByRole('region', { name: 'Mua lại' });
     await expect(rail).toBeVisible({ timeout: 15_000 });
     await expect(skeleton).toHaveCount(0);
     const railBox = await rail.boundingBox();
-    const belowAfter = await page.getByRole('region', { name: 'Danh mục', exact: true }).boundingBox();
+    const belowAfter = await page.locator('[data-home-block="shortcuts"]').boundingBox();
 
     expect(Math.abs(skeletonBox!.height - railBox!.height), `skeleton ${skeletonBox!.height}px vs kệ ${railBox!.height}px`).toBeLessThanOrEqual(16);
-    // Hệ quả người dùng thấy: khối bên dưới (Danh mục) gần như không nhảy vị trí.
+    // Hệ quả người dùng thấy: khối bên dưới (lối tắt) gần như không nhảy vị trí.
     expect(Math.abs(belowAfter!.y - belowBefore!.y), 'khối bên dưới bị đẩy').toBeLessThanOrEqual(16);
   });
 
-  test('Home: khách cũ đã nhớ loại — Danh mục không xê dịch khi purchased-items về (thứ tự khối đúng ngay từ đầu)', async ({ page, api }) => {
+  test('Home: khách cũ đã nhớ loại — lối tắt (khối dưới Mua lại) không xê dịch khi purchased-items về (thứ tự khối đúng ngay từ đầu)', async ({ page, api }) => {
     await page.setViewportSize({ width: 375, height: 800 });
     mockBuyFlowSession(api);
     let release: () => void = () => {};
@@ -102,16 +106,16 @@ test.describe('Buy-flow 4a — mua lại, tab Đơn hàng', () => {
     await page.goto('/');
 
     const member = page.getByRole('region', { name: 'Thẻ thành viên' });
-    const categories = page.getByRole('region', { name: 'Danh mục', exact: true });
+    const below = page.locator('[data-home-block="shortcuts"]');
     await expect(member).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('purchased-rail-loading')).toBeVisible(); // purchased-items vẫn đang chờ
-    const before = await categories.boundingBox();
+    const before = await below.boundingBox();
 
     release();
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
-    const after = await categories.boundingBox();
-    expect(Math.abs(after!.y - before!.y), `Danh mục bị đẩy ${Math.abs(after!.y - before!.y)}px khi purchased-items về`).toBeLessThanOrEqual(2);
+    const after = await below.boundingBox();
+    expect(Math.abs(after!.y - before!.y), `Lối tắt bị đẩy ${Math.abs(after!.y - before!.y)}px khi purchased-items về`).toBeLessThanOrEqual(2);
   });
 
   test('Khách mới (chưa có đơn giao) → không có kệ Mua lại', async ({ page, api }) => {

@@ -123,7 +123,7 @@ export default function HomePage() {
 
   // Còn Giờ vàng nào không: chưa biết (chưa tải xong suất đang chạy hay suất sắp tới) thì giữ cả thẻ lẫn lối tắt Giờ vàng, không rút rồi đổi hình.
   const flashQuery = shelves.flashQuery;
-  const flashKnown = !flashQuery.isLoading && !(flashQuery.isError && flashQuery.data === undefined) && !upcoming.isPending;
+  const flashKnown = !flashQuery.isLoading && !(flashQuery.isError && flashQuery.data === undefined) && !upcoming.isPending && !(upcoming.isError && upcoming.data === undefined);
   const flashLive = flashKnown ? shelves.flash.length > 0 || (upcoming.data?.length ?? 0) > 0 : undefined;
   // Khối Giờ vàng chỉ gắn khi là ô khuyến mãi được chọn nên không ghi "không có" thay được: không ghi thì lần mở sau giữ khung chờ cho một Giờ vàng đã hết.
   const flashSettledEmpty = !flashQuery.isLoading && !flashQuery.isError && shelves.flash.length === 0;

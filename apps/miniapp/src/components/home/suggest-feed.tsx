@@ -90,7 +90,12 @@ export function SuggestFeed({ exclude, interleave }: SuggestFeedProps) {
   useEffect(() => {
     const el = section.current;
     if (near || !el) return;
-    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setNear(true), { rootMargin: '100% 0px' });
+    // Trang Mini cuộn trong `.zaui-page` (khung cắt nội dung): với gốc mặc định là khung nhìn, lề 100% không với tới phần bị khung cuộn cắt, nên lưới chỉ tải khi đã
+    // lộ ra. Lấy chính khung cuộn làm gốc để "cách một màn hình" đúng nghĩa.
+    const io = new IntersectionObserver((entries) => entries.some((e) => e.isIntersecting) && setNear(true), {
+      root: el.closest('.zaui-page'),
+      rootMargin: '100% 0px',
+    });
     io.observe(el);
     return () => io.disconnect();
   }, [near]);

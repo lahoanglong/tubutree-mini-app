@@ -42,7 +42,7 @@ for (const vp of VIEWPORTS) {
   test.describe(`Mini App ${vp.width}px: dải Story và Reel Trang chủ`, () => {
     test.use({ viewport: vp });
 
-    test('dải đứng ngay dưới lối tắt, trên khu vực hàng, cao đúng 144px, mọi vòng từ 44px, không tràn ngang', async ({ page, api }) => {
+    test('dải đứng ngay dưới lối tắt (sau Danh mục và Bán chạy nhất), cao đúng 144px, mọi vòng từ 44px, không tràn ngang', async ({ page, api }) => {
       mockDiscovery(api);
       await openHome(page);
 
@@ -63,9 +63,10 @@ for (const vp of VIEWPORTS) {
       expect(await noHorizontalScroll(page)).toBe(true);
 
       const order = await blocks(page);
-      expect(order).toEqual(expect.arrayContaining(['shortcuts', 'stories', 'categories']));
-      expect(order.indexOf('stories')).toBeGreaterThan(order.indexOf('shortcuts'));
-      expect(order.indexOf('stories')).toBeLessThan(order.indexOf('categories'));
+      expect(order).toEqual(expect.arrayContaining(['categories', 'bestSellers', 'shortcuts', 'stories']));
+      expect(order.indexOf('stories'), 'dải Story ngay sau lối tắt').toBe(order.indexOf('shortcuts') + 1);
+      expect(order.indexOf('stories')).toBeGreaterThan(order.indexOf('categories'));
+      expect(order.indexOf('stories')).toBeGreaterThan(order.indexOf('bestSellers'));
     });
 
     test('chạm vòng mở Reel toàn màn, đóng lại thì vòng đổi xám; phím Esc cũng đóng', async ({ page, api }) => {

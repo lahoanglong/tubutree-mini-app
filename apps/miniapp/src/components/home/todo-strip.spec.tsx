@@ -34,7 +34,7 @@ import type { HomeTodo } from '../../services/shop-api';
 import { TodoStrip, useHomeTodoQueries } from './todo-strip';
 
 const FUTURE = new Date(Date.now() + 3 * 3600_000).toISOString();
-const pendingOrder = { code: 'TUBU1', total: 250000, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PENDING', paymentDeadline: FUTURE };
+const pendingOrder = { code: 'TUBU1', total: 250000, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: FUTURE };
 const shippingOrder = { code: 'TUBU2', total: 100000, status: 'SHIPPING' };
 const prepOrder = { code: 'TUBU3', total: 90000, status: 'CONFIRMED' };
 const todo = (o: Partial<Record<'pending' | 'shipping' | 'processing', { order: object; total: number } | null>>): HomeTodo =>
@@ -61,14 +61,21 @@ describe('TodoStrip — dải ngữ cảnh một dòng', () => {
     expect(screen.queryByRole('button', { name: /việc khác/ })).toBeNull();
   });
 
-  it('chờ chuyển khoản + đang giao: dòng chỉ nói về đơn chờ chuyển khoản, đơn giao thành "+1 việc khác" và mũi tên mở danh sách đơn', () => {
+  it('chờ chuyển khoản + đang giao: dòng chỉ nói về đơn chờ chuyển khoản, chữ phụ giữ hạn chuyển khoản kèm "+1 việc khác", không thêm mũi tên cạnh nút "Thanh toán"', () => {
     renderStrip(todo({ pending: { order: pendingOrder, total: 1 }, shipping: { order: shippingOrder, total: 1 } }));
     expect(screen.queryByText(/TUBU2/)).toBeNull();
-    expect(screen.getByText('+1 việc khác')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Xem 1 việc khác trong Đơn hàng' }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/orders');
+    expect(screen.getByText(/^Còn .+ · \+1 việc khác$/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /việc khác/ })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: /Thanh toán ngay đơn TUBU1/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/bank-payment/TUBU1');
+  });
+
+  it('đơn chờ chuyển khoản đã quá hạn (không còn nút "Thanh toán") + đang giao: mũi tên "việc khác" mở danh sách đơn', () => {
+    const overdue = { ...pendingOrder, paymentStatus: 'FAILED', paymentDeadline: new Date(Date.now() - 3600_000).toISOString() };
+    renderStrip(todo({ pending: { order: overdue, total: 1 }, shipping: { order: shippingOrder, total: 1 } }));
+    expect(screen.queryByRole('button', { name: /Thanh toán ngay/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem 1 việc khác trong Đơn hàng' }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/orders');
   });
 
   it('đơn đang giao dẫn đầu: chạm dòng mở chi tiết đơn đó; đủ ba loại thì "+2 việc khác"', () => {
@@ -80,8 +87,7 @@ describe('TodoStrip — dải ngữ cảnh một dòng', () => {
 
   it('đủ ba loại và đơn đang giao có thêm đơn thứ hai: đếm cả hai vào số việc khác', () => {
     renderStrip(todo({ pending: { order: pendingOrder, total: 1 }, shipping: { order: shippingOrder, total: 2 }, processing: { order: prepOrder, total: 1 } }));
-    expect(screen.getByText('+3 việc khác')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Xem 3 việc khác trong Đơn hàng' })).toBeInTheDocument();
+    expect(screen.getByText(/\+3 việc khác$/)).toBeInTheDocument();
   });
 
   it('đơn COD vừa đặt (Đang chuẩn bị) dẫn đầu khi không có việc nào hơn: chạm mở chi tiết đơn', () => {

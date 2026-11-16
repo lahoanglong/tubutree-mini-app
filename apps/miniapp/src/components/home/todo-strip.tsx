@@ -27,12 +27,13 @@ const ONE_LINE: CSSProperties = { display: 'block', overflow: 'hidden', textOver
 // Mũi tên bên phải chỉ có khi còn việc khác: hàng nhường lề phải cho vùng chạm 44px của nó.
 const rowStyle = (hasMore: boolean): CSSProperties => ({ height: ROW_HEIGHT, padding: hasMore ? '0 0 0 var(--space-inline-sm)' : '0 var(--space-inline-md) 0 var(--space-inline-sm)', boxSizing: 'border-box' });
 
-/** Đơn chuyển khoản chờ tiền: giờ còn lại và nút "Thanh toán" mở thẳng trang chuyển khoản. `note` thay dòng giờ còn lại khi dải phải nói "còn việc khác". */
+/** Đơn chuyển khoản chờ tiền: giờ còn lại (kèm "+N việc khác" khi còn việc) và nút "Thanh toán" mở thẳng trang chuyển khoản. */
 function PendingPaymentRow({ order, note, hasMore }: { order: OrderView; note?: string; hasMore: boolean }) {
   const navigate = useNavigate();
   const remaining = useRemaining(showsPaymentDeadline(order) ? order.paymentDeadline : null);
   const payable = canPayOrderNow(order);
-  const detail = note ?? (remaining.expired ? homeCopy.todo.payOverdue : remaining.text);
+  // Hạn chuyển khoản là lý do dòng này đứng đầu nên không nhường chỗ cho "+N việc khác".
+  const detail = [remaining.expired ? homeCopy.todo.payOverdue : remaining.text, note].filter(Boolean).join(' · ');
   return (
     <ListRow
       icon={<Icon icon={AlertTriangle} tone="current" style={{ color: 'var(--color-text-warning)' }} />}
@@ -96,8 +97,10 @@ export function TodoStrip({ data }: { data: HomeTodo | undefined }) {
   const navigate = useNavigate();
   const lead = homeTodoLead(data);
   if (!data || !lead) return null;
-  const hasMore = lead.more > 0;
-  const note = hasMore ? fillCopy('home.todo.more', { n: lead.more }) : undefined;
+  const note = lead.more > 0 ? fillCopy('home.todo.more', { n: lead.more }) : undefined;
+  // Dòng chờ chuyển khoản đã có nút "Thanh toán": thêm mũi tên thì tên dòng bị cắt ở 360px; "+N việc khác" vẫn ghi ở chữ phụ, danh sách đơn ở thanh đáy.
+  const payNow = lead.kind === 'pending' && data.pending ? canPayOrderNow(data.pending.order) : false;
+  const hasMore = lead.more > 0 && !payNow;
   const ship = data.shipping?.order;
   const prep = data.processing?.order;
 

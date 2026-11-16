@@ -28,7 +28,7 @@ const subscribeNothing = () => () => {};
 export interface HomeShelves {
   /** Suất Giờ vàng đã chống trùng (≤8; rỗng khi dưới 3 nên khối ẩn). */
   flash: FlashSaleActiveItem[];
-  /** Ô khuyến mãi duy nhất dưới kệ Bán chạy nhất (`homePromoPick`); `null` thì không vẽ ô nào. */
+  /** Ô khuyến mãi duy nhất ngay trên lưới Gợi ý (`homePromoPick`); `null` thì không vẽ ô nào. */
   promo: HomePromoKind | null;
   /** Combo toàn sàn đang chạy (2–4; rỗng khi dưới 2 nên khối ẩn, và rỗng khi ô khuyến mãi không phải combo: combo ẩn thì không được chiếm món của Bán chạy nhất). Combo là đơn vị nguyên: chiếm slug các món của nó cho Bán chạy nhất và Gợi ý hôm nay, nhưng không bị Giờ vàng/Mua lại loại (Mua lại về sau cùng `/home/me`, loại theo nó thì kệ hiện rồi biến mất). */
   combos: ComboView[];

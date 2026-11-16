@@ -54,6 +54,18 @@ export const HOME_PRODUCT: ProductCard = {
   basePrice: 45000, salePrice: null, isFeatured: true, inStock: true, sold: 10,
 };
 
+/**
+ * Kệ Bán chạy nhất của Trang chủ chỉ hiện từ 3 món (minItems của `home.bestSellers`) mà `mockBuyFlowSession` chỉ có 1 món: ghi đè `/products` bằng `count`
+ * món khác nhau, không trùng món đã mua (kệ Mua lại chiếm món trước). Gọi SAU `mockBuyFlowSession`.
+ */
+export function mockHomeBestSellers(api: MockApi, count = 4): void {
+  const cards: ProductCard[] = Array.from({ length: count }, (_, i) => ({
+    ...HOME_PRODUCT, id: `prod-bs-${i + 1}`, slug: `ban-chay-${i + 1}`, name: `Món bán chạy ${i + 1}`, thumbnail: THUMB, sold: 100 - i,
+  }));
+  const page: PageResponse<ProductCard> = { data: cards, meta: { page: 1, limit: count, total: count } };
+  api.get('/products', page);
+}
+
 /** Phiên + mọi khối của trang chủ (như miniapp.spec.ts) + kệ Mua lại + badge. */
 export function mockBuyFlowSession(
   api: MockApi,

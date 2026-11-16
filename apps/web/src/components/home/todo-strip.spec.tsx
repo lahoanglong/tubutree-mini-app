@@ -18,7 +18,7 @@ function Harness() {
 }
 
 const FUTURE = new Date(Date.now() + 3 * 3600_000).toISOString();
-const pendingOrder = { code: 'TUBU1', total: 250000, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PENDING', paymentDeadline: FUTURE };
+const pendingOrder = { code: 'TUBU1', total: 250000, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'UNPAID', paymentDeadline: FUTURE };
 const shippingOrder = { code: 'TUBU2', total: 100000, status: 'SHIPPING' };
 const page = (rows: object[], total = rows.length) => ({ data: rows, meta: { page: 1, limit: 1, total } });
 
@@ -78,17 +78,15 @@ describe('TodoStrip web — Việc cần làm (một dòng trong dải ngữ c�
     expect(orderCalls()).toHaveLength(0);
   });
 
-  it('chờ chuyển khoản + đang giao: chỉ vẽ việc dẫn đầu (chờ chuyển khoản), nút "Thanh toán" mở trang chuyển khoản, chữ phụ "+1 việc khác" và mũi tên mở danh sách đơn', async () => {
+  it('chờ chuyển khoản + đang giao: chỉ vẽ việc dẫn đầu (chờ chuyển khoản), nút "Thanh toán" mở trang chuyển khoản, chữ phụ giữ hạn chuyển khoản kèm "+1 việc khác", không thêm mũi tên cạnh nút', async () => {
     const c = await mount();
     expect(c.querySelectorAll('[data-todo-row]')).toHaveLength(1);
     expect(c.textContent).not.toContain('TUBU2');
     expect(c.textContent).toContain('Chờ chuyển khoản 250.000');
-    expect(c.textContent).toContain('+1 việc khác');
+    expect(c.textContent).toMatch(/Còn .+ · \+1 việc khác/);
     click(c.querySelector('button[aria-label^="Thanh toán ngay"]'));
     expect(mocks.push).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/TUBU1');
-    const arrow = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem 1 việc khác trong Đơn hàng"]')!;
-    expect(arrow.getAttribute('href')).toBe('/tai-khoan/don-hang');
-    expect(arrow.className).toMatch(/\bh-11\b.*\bw-11\b|\bw-11\b.*\bh-11\b/);
+    expect(c.querySelector('a[aria-label*="việc khác"]')).toBeNull();
   });
 
   it('chỉ có đơn đang giao: dòng mở chi tiết đơn, mũi tên chevron của dòng (không có mũi tên "việc khác") và chữ phụ hướng dẫn', async () => {
@@ -106,7 +104,9 @@ describe('TodoStrip web — Việc cần làm (một dòng trong dải ngữ c�
     const c = await mount();
     expect(c.textContent).toContain('Đơn TUBU2 đang giao');
     expect(c.textContent).toContain('+2 việc khác');
-    expect(c.querySelector('a[aria-label="Xem 2 việc khác trong Đơn hàng"]')).not.toBeNull();
+    const arrow = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem 2 việc khác trong Đơn hàng"]')!;
+    expect(arrow.getAttribute('href')).toBe('/tai-khoan/don-hang');
+    expect(arrow.className).toMatch(/\bh-11\b.*\bw-11\b|\bw-11\b.*\bh-11\b/);
   });
 
   it('chỉ có đơn đang chuẩn bị (COD vừa đặt): một dòng mở chi tiết đơn', async () => {

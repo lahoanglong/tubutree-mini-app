@@ -33,12 +33,13 @@ const ONE_LINE: CSSProperties = { display: 'block', overflow: 'hidden', textOver
 
 type TodoOrder = HomeTodoPart['order'];
 
-/** Đơn chuyển khoản chờ tiền: giờ còn lại (hoặc "+N việc khác") và nút "Thanh toán" mở thẳng trang chuyển khoản. */
+/** Đơn chuyển khoản chờ tiền: giờ còn lại (kèm "+N việc khác" khi còn việc) và nút "Thanh toán" mở thẳng trang chuyển khoản. */
 function PendingPaymentRow({ order, moreText, arrow }: { order: TodoOrder; moreText?: string; arrow: boolean }) {
   const router = useRouter();
   const remaining = useRemaining(showsPaymentDeadline(order) ? order.paymentDeadline : null);
   const payable = canPayNow(order);
-  const detail = moreText ?? (remaining.expired ? homeCopy.todo.payOverdue : remaining.text);
+  // Hạn chuyển khoản là lý do dòng này đứng đầu nên không nhường chỗ cho "+N việc khác".
+  const detail = [remaining.expired ? homeCopy.todo.payOverdue : remaining.text, moreText].filter(Boolean).join(' · ');
   return (
     <ListRow
       icon={<Icon icon={AlertTriangle} tone="current" style={{ color: 'var(--color-text-warning)' }} />}
@@ -107,9 +108,10 @@ export function TodoStrip({ data }: { data: HomeTodo | undefined }) {
   const router = useRouter();
   const lead = homeTodoLead(data);
   if (!data || !lead) return null;
-  const arrow = lead.more > 0;
-  const moreText = arrow ? fillCopy('home.todo.more', { n: lead.more }) : undefined;
+  const moreText = lead.more > 0 ? fillCopy('home.todo.more', { n: lead.more }) : undefined;
   const payOrder = data.pending?.order;
+  // Dòng chờ chuyển khoản đã có nút "Thanh toán": thêm mũi tên thì tên dòng bị cắt ở 360px; "+N việc khác" vẫn ghi ở chữ phụ, danh sách đơn ở menu tài khoản.
+  const arrow = lead.more > 0 && !(lead.kind === 'pending' && payOrder && canPayNow(payOrder));
   const shipOrder = data.shipping?.order;
   const prepOrder = data.processing?.order;
 

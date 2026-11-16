@@ -52,6 +52,8 @@ beforeEach(() => {
       return pageOf([card('f1', 'Dầu gội bồ kết')]);
     }
     if (path === '/bundles/combos') return combos;
+    if (path === '/flash-sales/active') return [];
+    if (path === '/campaigns') return [];
     if (path === '/categories') return CATEGORIES;
     if (path === '/brands') return [{ brand: 'Tubu', count: 3 }];
     if (path === '/config/public') return { freeshipThreshold: 350000, subscribeDiscountPct: 0.17, affiliateWalletMultiplier: 1, cashbackHoldDays: 30 };

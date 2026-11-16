@@ -4,12 +4,12 @@ import { ApiError, NetworkError } from '@/lib/client-api';
 import { HOME_QUERY_PREFIXES, customerKind, dedupeAgainst, homeBlockOrder, isEndpointMissing, refreshHomeQueries } from './home-blocks';
 
 describe('homeBlockOrder (nguồn ở app-core, web chỉ re-export)', () => {
-  it('khách cũ: dải ngữ cảnh, danh mục, bán chạy nhất, ô khuyến mãi, Mua lại, lối tắt, dải Story, một lưới gợi ý (9 khối)', () => {
-    expect(homeBlockOrder('returning')).toEqual(['search', 'context', 'categories', 'bestSellers', 'promo', 'purchased', 'shortcuts', 'stories', 'suggest']);
+  it('khách cũ: dải ngữ cảnh, danh mục, bán chạy nhất, Mua lại, lối tắt, dải Story, ô khuyến mãi, một lưới gợi ý (9 khối)', () => {
+    expect(homeBlockOrder('returning')).toEqual(['search', 'context', 'categories', 'bestSellers', 'purchased', 'shortcuts', 'stories', 'promo', 'suggest']);
   });
 
   it('khách mới và chưa biết loại: cùng thứ tự, không có Mua lại', () => {
-    expect(homeBlockOrder('new')).toEqual(['search', 'context', 'categories', 'bestSellers', 'promo', 'shortcuts', 'stories', 'suggest']);
+    expect(homeBlockOrder('new')).toEqual(['search', 'context', 'categories', 'bestSellers', 'shortcuts', 'stories', 'promo', 'suggest']);
     expect(homeBlockOrder('unknown')).toEqual(homeBlockOrder('new'));
   });
 

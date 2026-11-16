@@ -3,12 +3,12 @@ import type { QueryClient } from '@tanstack/react-query';
 import { HOME_QUERY_PREFIXES, customerKind, dedupeAgainst, homeBlockOrder, refreshHomeQueries } from './home-blocks';
 
 describe('homeBlockOrder (nguồn ở app-core, Mini App chỉ re-export)', () => {
-  it('khách cũ: dải ngữ cảnh, danh mục, Bán chạy nhất, ô khuyến mãi, Mua lại, lối vào, dải Story, một lưới gợi ý (9 khối)', () => {
-    expect(homeBlockOrder('returning')).toEqual(['search', 'context', 'categories', 'bestSellers', 'promo', 'purchased', 'shortcuts', 'stories', 'suggest']);
+  it('khách cũ: dải ngữ cảnh, danh mục, Bán chạy nhất, Mua lại, lối vào, dải Story, ô khuyến mãi, một lưới gợi ý (9 khối)', () => {
+    expect(homeBlockOrder('returning')).toEqual(['search', 'context', 'categories', 'bestSellers', 'purchased', 'shortcuts', 'stories', 'promo', 'suggest']);
   });
 
   it('khách mới và chưa biết loại: cùng thứ tự, không có Mua lại (khối Hành trình, Chẩn đoán, Cộng đồng, combo, Giờ vàng riêng không còn là khối)', () => {
-    const NEW = ['search', 'context', 'categories', 'bestSellers', 'promo', 'shortcuts', 'stories', 'suggest'];
+    const NEW = ['search', 'context', 'categories', 'bestSellers', 'shortcuts', 'stories', 'promo', 'suggest'];
     expect(homeBlockOrder('new')).toEqual(NEW);
     expect(homeBlockOrder('unknown')).toEqual(NEW);
     for (const gone of ['member', 'todo', 'welcome', 'banner', 'flash', 'combos', 'journey', 'quiz', 'community']) expect(homeBlockOrder('returning')).not.toContain(gone);

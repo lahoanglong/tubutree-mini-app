@@ -31,21 +31,28 @@ const BEST: ProductCard[] = [
   card('b5', 'Ống hút tre', { ratingAvg: 4.9, sold: 1_234 }),
 ];
 
-function mockHome(api: MockApi): void {
+/**
+ * Ô khuyến mãi của Trang chủ chỉ có MỘT khối (Giờ vàng > banner > combo): `promo: 'flash'` (mặc định) mock Giờ vàng đang chạy, `promo: 'combos'` chỉ mock combo
+ * (không Giờ vàng, không banner) để khối combo mới hiện.
+ */
+function mockHome(api: MockApi, opts: { promo?: 'flash' | 'combos' } = {}): void {
+  const promo = opts.promo ?? 'flash';
   mockDiscovery(api, { returning: true });
   // Đăng ký SAU mockDiscovery để thắng mặc định; lời gọi khác vẫn qua bộ lọc danh mục giả.
   const catalog = catalogHandler();
   api.get('/products', (ctx): PageResponse<ProductCard> | ReturnType<typeof catalog> =>
     ctx.call.query.get('sort') === 'best_seller_30d' ? { data: BEST, meta: { page: 1, limit: 12, total: BEST.length } } : catalog(ctx));
-  api.get('/flash-sales/active', () => {
-    const now = Date.now();
-    const names = [LONG_NAME, 'Xà phòng', 'Nước rửa bình sữa cho bé hương dịu nhẹ an toàn', 'Khăn ướt không cồn Bé Na'];
-    return names.map((name, i) => ({
-      itemId: `fi-${i}`, variationId: `v-fi-${i}`, productSlug: `gv-${i}`, productName: name, variationName: i === 0 ? 'Gói 80 tờ' : null, thumbnail: THUMB,
-      flashPrice: 59_000 + i * 1_000, retailPrice: 100_000, salePrice: null, soldCount: 10 + i, quota: 50,
-      endAt: new Date(now + 3 * HOUR).toISOString(), serverNow: new Date(now).toISOString(),
-    }));
-  });
+  if (promo === 'flash') {
+    api.get('/flash-sales/active', () => {
+      const now = Date.now();
+      const names = [LONG_NAME, 'Xà phòng', 'Nước rửa bình sữa cho bé hương dịu nhẹ an toàn', 'Khăn ướt không cồn Bé Na'];
+      return names.map((name, i) => ({
+        itemId: `fi-${i}`, variationId: `v-fi-${i}`, productSlug: `gv-${i}`, productName: name, variationName: i === 0 ? 'Gói 80 tờ' : null, thumbnail: THUMB,
+        flashPrice: 59_000 + i * 1_000, retailPrice: 100_000, salePrice: null, soldCount: 10 + i, quota: 50,
+        endAt: new Date(now + 3 * HOUR).toISOString(), serverNow: new Date(now).toISOString(),
+      }));
+    });
+  }
   mockHomeCombos(api, homeCombos());
 }
 
@@ -80,27 +87,39 @@ async function metaCells(root: Locator): Promise<MetaCell[]> {
 
 const describeCell = (c: MetaCell) => `${c.variant} "${c.text}" ${c.width}px${c.clipped ? ' bị cắt' : ''}`;
 
-async function openHome(page: Page): Promise<void> {
+async function openHome(page: Page, promo: 'flash' | 'combos' = 'flash'): Promise<void> {
   await page.goto('/');
-  await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(promo === 'flash' ? page.getByRole('region', { name: 'Giờ vàng', exact: true }) : page.getByTestId('home-combos')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole('region', { name: 'Bán chạy nhất', exact: true }).locator('[data-ds="product-tile"]')).toHaveCount(BEST.length, { timeout: 15_000 });
-  await expect(page.getByTestId('home-combos')).toBeVisible({ timeout: 15_000 });
+  // Một ô khuyến mãi: có Giờ vàng thì không combo, có combo thì không Giờ vàng.
+  if (promo === 'flash') await expect(page.getByTestId('home-combos')).toHaveCount(0);
+  else await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toHaveCount(0);
 }
 
 test.describe('Mini 375px: thẻ và hàng cuộn của Trang chủ', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  test('Trang chủ có Giờ vàng, Bán chạy, Combo, Mua lại: trang không tràn ngang', async ({ page, api }) => {
-    mockHome(api);
-    await openHome(page);
-    await shot(page.getByRole('region', { name: 'Giờ vàng', exact: true }), 'home-flash');
-    await shot(page.getByTestId('home-combos'), 'home-combos');
+  async function expectNoHorizontalOverflow(page: Page): Promise<void> {
     const overflow = await page.evaluate(() => {
       const scroller = document.querySelector('.zaui-page') as HTMLElement | null;
       return { page: scroller ? scroller.scrollWidth - scroller.clientWidth : 0, doc: document.documentElement.scrollWidth - 375 };
     });
     expect(overflow.page, 'Trang chủ tràn ngang').toBeLessThanOrEqual(0);
     expect(overflow.doc, 'tài liệu tràn ngang').toBeLessThanOrEqual(0);
+  }
+
+  test('Trang chủ có Giờ vàng, Bán chạy, Mua lại: trang không tràn ngang', async ({ page, api }) => {
+    mockHome(api);
+    await openHome(page);
+    await shot(page.getByRole('region', { name: 'Giờ vàng', exact: true }), 'home-flash');
+    await expectNoHorizontalOverflow(page);
+  });
+
+  test('Trang chủ không Giờ vàng, không banner: ô khuyến mãi là Combo, cùng Bán chạy và Mua lại, trang không tràn ngang', async ({ page, api }) => {
+    mockHome(api, { promo: 'combos' });
+    await openHome(page, 'combos');
+    await shot(page.getByTestId('home-combos'), 'home-combos');
+    await expectNoHorizontalOverflow(page);
   });
 
   test('thẻ Giờ vàng: tên một dòng dù tên dài có dấu, mọi thẻ cùng kệ cao bằng nhau', async ({ page, api }) => {

@@ -5,8 +5,9 @@ import { homeHierarchyProblems } from './support/home-hierarchy';
 import { shortcutLabelProblems } from './support/shortcut-labels';
 
 /**
- * Zalo Mini App E2E — Trang chủ theo thiết kế mới (gói P6): màn đầu 375×812 có Giờ vàng khi chưa có banner, Bán chạy nhất có hạng cho cả hai loại khách,
- * dòng Mua lại không tràn ngang, Giờ vàng một đồng hồ. API mock toàn bộ; không dùng waitForTimeout. CLS ở home-p6-cls.miniapp.spec.ts.
+ * Zalo Mini App E2E — Trang chủ (gói P6, bố cục gọn): màn đầu 375×812 có thẻ sản phẩm đầu tiên (kệ Bán chạy nhất) và thứ tự khối đúng (Giờ vàng là ô khuyến mãi
+ * đứng trên lưới Gợi ý, dưới màn đầu), Bán chạy nhất có hạng cho cả hai loại khách, dòng Mua lại không tràn ngang, Giờ vàng một đồng hồ. API mock toàn bộ;
+ * không dùng waitForTimeout. CLS ở home-p6-cls.miniapp.spec.ts.
  */
 
 const HOUR = 3_600_000;
@@ -32,23 +33,47 @@ async function visibleBlocks(page: Page): Promise<string[]> {
   );
 }
 
+/** Thẻ sản phẩm đầu tiên đang hiện trong các khối Trang chủ: đỉnh thẻ và đỉnh thanh đáy (mép dưới của khung nhìn đầu). */
+async function firstCardAndNavTop(page: Page): Promise<{ cardTop: number | null; navTop: number }> {
+  return page.evaluate(() => {
+    const shown = (el: Element) => {
+      const r = el.getBoundingClientRect();
+      return r.width > 0 && r.height > 0 && getComputedStyle(el).visibility !== 'hidden';
+    };
+    const card = Array.from(document.querySelectorAll('[data-home-block] [data-ds="product-tile"]')).find(shown);
+    const nav = Array.from(document.querySelectorAll('nav, [role="navigation"]')).find(
+      (n) => getComputedStyle(n).position === 'fixed' && n.getBoundingClientRect().bottom >= window.innerHeight - 1 && shown(n),
+    );
+    return { cardTop: card ? Math.round(card.getBoundingClientRect().top) : null, navTop: Math.round(nav ? nav.getBoundingClientRect().top : window.innerHeight) };
+  });
+}
+
+/** Thẻ sản phẩm đầu tiên lộ trong màn đầu: còn thấy ít nhất chừng này px phía trên thanh đáy. */
+const CARD_VISIBLE_MIN = 48;
+
 test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cục', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  test('khách cũ, chưa có banner: khối 6 lối vào (2 thẻ chính + 4 ô phụ) nằm trọn nửa trên và Giờ vàng hiện ngay trong màn đầu 375×812', async ({ page, api }) => {
+  test('khách cũ, có Giờ vàng: thẻ sản phẩm đầu tiên lộ trong màn đầu 375×812 và thứ tự khối đúng (Giờ vàng dưới lối tắt, trên Gợi ý)', async ({ page, api }) => {
     mockDiscovery(api, { returning: true });
     mockFlash(api);
     await page.goto('/');
-    const shortcuts = page.getByTestId('shortcut-grid');
     const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
     await expect(flash).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
-    expect(await visibleBlocks(page)).not.toContain('banner');
-    const sBox = (await shortcuts.boundingBox())!;
-    expect(sBox.y + sBox.height, `khối lối vào kết thúc ở ${Math.round(sBox.y + sBox.height)}px`).toBeLessThanOrEqual(520);
+    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 15_000 });
+    const blocks = await visibleBlocks(page);
+    // Ô khuyến mãi chỉ có MỘT khối: Giờ vàng đang chạy thì không banner, không combo.
+    expect(blocks).not.toContain('banner');
+    expect(blocks).not.toContain('combos');
+    const order = ['search', 'member', 'categories', 'bestSellers', 'purchased', 'shortcuts', 'flash', 'suggest'];
+    expect(blocks.filter((b) => order.includes(b))).toEqual(order);
+    const { cardTop, navTop } = await firstCardAndNavTop(page);
+    expect(cardTop, 'có thẻ sản phẩm').not.toBeNull();
+    expect(cardTop!, `thẻ sản phẩm đầu tiên ở ${cardTop}px, thanh đáy ở ${navTop}px`).toBeLessThanOrEqual(navTop - CARD_VISIBLE_MIN);
+    // Giờ vàng nằm dưới thẻ sản phẩm đầu tiên (không còn là khối của màn đầu).
     const box = (await flash.boundingBox())!;
-    expect(box.y, `Giờ vàng bắt đầu ở ${Math.round(box.y)}px`).toBeLessThanOrEqual(680);
-    expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px`).toBeLessThanOrEqual(965);
+    expect(box.y, 'Giờ vàng đứng dưới thẻ sản phẩm đầu tiên').toBeGreaterThan(cardTop!);
   });
 
   test('khách mới: Bán chạy nhất có hạng #1, #2, #3 theo lượt bán 30 ngày, đứng sau Danh mục', async ({ page, api }) => {
@@ -64,28 +89,26 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     expect(blocks).not.toContain('banner');
   });
 
-  test('khách mới có Quà khách mới và Giờ vàng: dải nằm trên khối lối vào, Giờ vàng hiện ngay trong màn đầu 375×812', async ({ page, api }) => {
+  test('khách mới có Quà khách mới và Giờ vàng: dải ngữ cảnh ngay dưới ô tìm, thẻ sản phẩm đầu tiên lộ trong màn đầu 375×812, Giờ vàng dưới lối tắt', async ({ page, api }) => {
     mockDiscovery(api);
     api.get('/me/new-customer-offer', { isNewCustomer: true, welcomeVoucher: null });
     mockFlash(api);
     await page.goto('/');
     const welcome = page.getByRole('region', { name: 'Quà khách mới' });
-    const shortcuts = page.getByTestId('shortcut-grid');
     const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
     await expect(welcome).toBeVisible({ timeout: 15_000 });
     await expect(flash).toBeVisible({ timeout: 15_000 });
-    await expect.poll(() => visibleBlocks(page), { timeout: 15_000 }).toEqual(expect.arrayContaining(['welcome', 'shortcuts', 'flash', 'categories', 'bestSellers']));
+    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 15_000 });
     const blocks = await visibleBlocks(page);
     expect(blocks).not.toContain('member');
     expect(blocks).not.toContain('purchased');
-    expect(blocks.indexOf('welcome')).toBeLessThan(blocks.indexOf('shortcuts'));
-    expect(blocks.indexOf('shortcuts')).toBeLessThan(blocks.indexOf('flash'));
-    expect(blocks.indexOf('flash')).toBeLessThan(blocks.indexOf('categories'));
-    const sBox = (await shortcuts.boundingBox())!;
-    expect(sBox.y + sBox.height, `khối lối vào kết thúc ở ${Math.round(sBox.y + sBox.height)}px`).toBeLessThanOrEqual(525);
+    const order = ['search', 'welcome', 'categories', 'bestSellers', 'shortcuts', 'flash', 'suggest'];
+    expect(blocks.filter((b) => order.includes(b))).toEqual(order);
+    const { cardTop, navTop } = await firstCardAndNavTop(page);
+    expect(cardTop, 'có thẻ sản phẩm').not.toBeNull();
+    expect(cardTop!, `thẻ sản phẩm đầu tiên ở ${cardTop}px khi có dải Quà khách mới, thanh đáy ở ${navTop}px`).toBeLessThanOrEqual(navTop - CARD_VISIBLE_MIN);
     const box = (await flash.boundingBox())!;
-    expect(box.y, `Giờ vàng bắt đầu ở ${Math.round(box.y)}px`).toBeLessThanOrEqual(685);
-    expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px khi có dải Quà khách mới`).toBeLessThanOrEqual(965);
+    expect(box.y, 'Giờ vàng đứng dưới thẻ sản phẩm đầu tiên').toBeGreaterThan(cardTop!);
   });
 
   test('Mua lại một món: nút "Mua lại" nằm cùng hàng với tên trong dòng cao 88px, trang không tràn ngang', async ({ page, api }) => {
@@ -119,8 +142,10 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
   });
 
   for (const width of [375, 360, 320]) {
-    test(`${width}px: 2 thẻ chính + 4 ô phụ + lối tắt nhanh đọc đủ nhãn, vùng chạm ≥44px, không tràn ngang`, async ({ page, api }) => {
+    test(`${width}px: có Giờ vàng thì 2 thẻ chính + 4 ô phụ + lối tắt nhanh đọc đủ nhãn, vùng chạm ≥44px, không tràn ngang`, async ({ page, api }) => {
       mockDiscovery(api, { returning: true });
+      // Thẻ "Mua lẻ · Giờ vàng" chỉ hiện khi có suất Giờ vàng đang chạy hay sắp tới: không mock thì khối lối tắt chỉ còn 5 lối vào.
+      mockFlash(api);
       await page.setViewportSize({ width, height: 812 });
       await page.goto('/');
       const grid = page.getByTestId('shortcut-grid');
@@ -142,4 +167,16 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
       expect(overflow, `Trang chủ tràn ngang ở ${width}px`).toBeLessThanOrEqual(0);
     });
   }
+
+  test('375px: không có Giờ vàng (đang chạy lẫn sắp tới) thì khối lối vào còn 5 lối, không thẻ "Giờ vàng", vùng chạm ≥44px', async ({ page, api }) => {
+    mockDiscovery(api, { returning: true });
+    await page.goto('/');
+    const grid = page.getByTestId('shortcut-grid');
+    await expect(grid.locator('[data-pillar]')).toHaveCount(5, { timeout: 15_000 });
+    await expect(grid.locator('[data-pillar="retail"]')).toHaveCount(0);
+    await expect(grid.getByRole('button', { name: /Giờ vàng/ })).toHaveCount(0);
+    expect(await shortcutLabelProblems(page)).toEqual([]);
+    const heights = await grid.getByRole('button').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
+    for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
+  });
 });

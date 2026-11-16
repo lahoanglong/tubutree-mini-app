@@ -24,7 +24,7 @@ export interface HomePromoInput {
 const NO_PROMO_INPUT: HomePromoInput = { bannerSlides: 0, bannerPending: false, bannerRemembered: false, flashRemembered: false };
 
 export interface HomeShelves {
-  /** MỘT ô khuyến mãi dưới kệ Bán chạy nhất: Giờ vàng > banner > combo; `null` thì ô ẩn hẳn. Combo chỉ chiếm món khi là ô được chọn. */
+  /** MỘT ô khuyến mãi ngay trên lưới Gợi ý: Giờ vàng > banner > combo; `null` thì ô ẩn hẳn. Combo chỉ chiếm món khi là ô được chọn. */
   promo: HomePromoKind | null;
   /** Suất Giờ vàng đã chống trùng (≤8; rỗng khi dưới 3 nên khối ẩn). */
   flash: FlashSaleActiveItem[];

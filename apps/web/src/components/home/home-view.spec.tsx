@@ -363,12 +363,12 @@ describe('HomeView — banner chiến dịch (P11)', () => {
     expect(calledCampaigns()).toHaveLength(0);
   });
 
-  it('có banner: banner là ô khuyến mãi đứng ngay dưới Bán chạy nhất (mọi độ rộng, không còn cột banner của HubLayout); hero giới thiệu vẫn ở cạnh aside từ md', async () => {
+  it('có banner: banner là ô khuyến mãi đứng ngay trên lưới Gợi ý (mọi độ rộng, không còn cột banner của HubLayout); hero giới thiệu vẫn ở cạnh aside từ md', async () => {
     const c = await mount(<HomeView initial={{ campaigns: [campaign('a')] }} />);
     expect(hubPart(c, 'banner')).toBeNull();
     expect(hubPart(c, 'rest')!.contains(block(c, 'banner'))).toBe(true);
     expect(blockOrder(c)).toEqual(named(homeBlockOrder('new'), 'welcome', 'banner'));
-    expect(blockOrder(c).indexOf('banner')).toBe(blockOrder(c).indexOf('bestSellers') + 1);
+    expect(blockOrder(c).indexOf('banner')).toBe(blockOrder(c).indexOf('suggest') - 1);
     expect(hubPart(c, 'aside')!.className).toContain('lg:col-span-4');
     expect(hubPart(c, 'hero')).not.toBeNull();
   });

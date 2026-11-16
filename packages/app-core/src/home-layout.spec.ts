@@ -31,11 +31,11 @@ describe('homeBlockOrder', () => {
     return homeBlockOrder(kind).filter((id) => id !== 'promo' || pick !== null);
   };
 
-  it('khách cũ: header, dải ngữ cảnh, Danh mục, Bán chạy nhất, ô khuyến mãi, Mua lại, lối vào, dải Story, rồi một lưới Gợi ý', () => {
-    expect(homeBlockOrder('returning')).toEqual(['search', 'context', 'categories', 'bestSellers', 'promo', 'purchased', 'shortcuts', 'stories', 'suggest']);
+  it('khách cũ: header, dải ngữ cảnh, Danh mục, Bán chạy nhất, Mua lại, lối vào, dải Story, ô khuyến mãi, rồi một lưới Gợi ý', () => {
+    expect(homeBlockOrder('returning')).toEqual(['search', 'context', 'categories', 'bestSellers', 'purchased', 'shortcuts', 'stories', 'promo', 'suggest']);
   });
   it('khách mới và chưa biết loại khách: cùng thứ tự, không Mua lại', () => {
-    expect(homeBlockOrder('new')).toEqual(['search', 'context', 'categories', 'bestSellers', 'promo', 'shortcuts', 'stories', 'suggest']);
+    expect(homeBlockOrder('new')).toEqual(['search', 'context', 'categories', 'bestSellers', 'shortcuts', 'stories', 'promo', 'suggest']);
     expect(homeBlockOrder('unknown')).toEqual(homeBlockOrder('new'));
   });
   it('mọi tổ hợp loại khách × có/không Giờ vàng, banner, combo: tối đa 9 khối, kệ Bán chạy nhất là khối hàng đầu tiên', () => {
@@ -47,6 +47,13 @@ describe('homeBlockOrder', () => {
         expect(new Set(order).size).toBe(order.length);
         expect(order.at(-1)).toBe('suggest');
       }
+    }
+  });
+  it('ô khuyến mãi (về muộn nhất) đứng ngay trên lưới Gợi ý, dưới mọi khối của màn đầu: lúc hiện ra chỉ đẩy lưới Gợi ý', () => {
+    for (const kind of KINDS) {
+      const order = homeBlockOrder(kind);
+      expect(order.indexOf('promo')).toBe(order.indexOf('suggest') - 1);
+      expect(order.indexOf('promo')).toBeGreaterThan(order.indexOf('stories'));
     }
   });
   it('không còn khối riêng cho Hành trình, Chẩn đoán tổ ấm, Cộng đồng, combo hay Giờ vàng: Chẩn đoán và Cộng đồng là thẻ chen trong Gợi ý', () => {
@@ -115,8 +122,14 @@ describe('homePromoPick', () => {
   });
   it('đang tải: chỉ giữ chỗ cho khối máy đã nhớ là có; không nhớ thì chờ im lặng', () => {
     expect(homePromoPick({ ...none, flashPending: true, flashRemembered: true })).toBe('flash');
-    expect(homePromoPick({ ...none, flashPending: true, bannerPending: true, bannerRemembered: true })).toBe('banner');
+    expect(homePromoPick({ ...none, bannerPending: true, bannerRemembered: true })).toBe('banner');
     expect(homePromoPick({ ...none, flashPending: true, bannerPending: true })).toBeNull();
+  });
+  it('nguồn ưu tiên cao hơn còn tải thì không chọn nguồn thấp hơn rồi đổi khối (banner rồi Giờ vàng, combo rồi banner)', () => {
+    expect(homePromoPick({ ...none, flashPending: true, bannerSlides: 1, combos: 2 })).toBeNull();
+    expect(homePromoPick({ ...none, flashPending: true, bannerPending: true, bannerRemembered: true })).toBeNull();
+    expect(homePromoPick({ ...none, bannerPending: true, combos: 2 })).toBeNull();
+    expect(homePromoPick({ ...none, bannerPending: true, bannerRemembered: true, combos: 2 })).toBe('banner');
   });
 });
 
@@ -653,9 +666,9 @@ describe('homeRenderOrder / homeSettling', () => {
     expect(kept.at(-1)).toBe('suggest');
     expect(kept).not.toContain('purchased');
   });
-  it('giữ nội dung đã dựng rồi biết là khách cũ: Mua lại chen ngay trên Gợi ý (dưới màn đầu), các khối đã vẽ không bị đẩy xuống', () => {
+  it('giữ nội dung đã dựng rồi biết là khách cũ: Mua lại chen ngay trên ô khuyến mãi và Gợi ý (dưới màn đầu), các khối đã vẽ không bị đẩy xuống', () => {
     const kept = homeKeptOrder('unknown');
-    const at = kept.indexOf('suggest');
+    const at = kept.indexOf('promo');
     expect(homeKeptOrder('returning')).toEqual([...kept.slice(0, at), 'purchased', ...kept.slice(at)]);
     expect(homeKeptOrder('returning').length).toBeLessThanOrEqual(HOME_MAX_BLOCKS);
   });

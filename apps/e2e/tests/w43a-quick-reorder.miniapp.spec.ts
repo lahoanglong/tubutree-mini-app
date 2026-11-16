@@ -1,7 +1,7 @@
 import type { Locator, Page } from '@playwright/test';
 import type { PurchasedItem } from '../../miniapp/src/services/shop-api';
 import { test, expect, reply, type MockApi } from './support/mock-api';
-import { mockBuyFlowSession, PURCHASED, THUMB } from './support/buy-flow-mocks';
+import { mockBuyFlowSession, mockHomeBestSellers, PURCHASED, THUMB } from './support/buy-flow-mocks';
 
 /**
  * W43A, Mini App: dải "Mua lại món quen" ở Trang chủ. API mock toàn bộ; khách cũ đã được nhớ là "returning" (khối chỉ có chỗ khi đó).
@@ -64,8 +64,9 @@ for (const vp of VIEWPORTS) {
   test.describe(`Mini App ${vp.width}px: dải Mua lại món quen`, () => {
     test.use({ viewport: vp });
 
-    test('dải thế chỗ kệ Mua lại (trên Danh mục), chỉ món còn hàng, mọi nút từ 44px, không tràn ngang', async ({ page, api }) => {
+    test('dải thế chỗ kệ Mua lại (dưới Bán chạy nhất, trên lối tắt), chỉ món còn hàng, mọi nút từ 44px, không tràn ngang', async ({ page, api }) => {
       mockHome(api);
+      mockHomeBestSellers(api);
       await openHome(page);
 
       await expect(page.getByRole('heading', { level: 2, name: 'Mua lại món quen' })).toBeVisible();
@@ -76,10 +77,12 @@ for (const vp of VIEWPORTS) {
       await expect(cards(page).first()).toContainText('Đã mua 5 lần');
 
       const box = (await strip(page).boundingBox())!;
-      const categories = (await page.getByRole('region', { name: 'Danh mục', exact: true }).boundingBox())!;
+      const best = (await page.getByRole('region', { name: 'Bán chạy nhất', exact: true }).boundingBox())!;
+      const shortcuts = (await page.locator('[data-home-block="shortcuts"]').boundingBox())!;
       const search = (await page.getByRole('button', { name: 'Bạn tìm gì hôm nay?' }).boundingBox())!;
       expect(box.y).toBeGreaterThan(search.y);
-      expect(box.y + box.height).toBeLessThanOrEqual(categories.y + 1);
+      expect(box.y, 'dải Mua lại nằm dưới kệ Bán chạy nhất').toBeGreaterThanOrEqual(best.y + best.height - 1);
+      expect(box.y + box.height, 'dải Mua lại nằm trên lối tắt').toBeLessThanOrEqual(shortcuts.y + 1);
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width).toBeLessThanOrEqual(vp.width);
 
@@ -98,7 +101,7 @@ for (const vp of VIEWPORTS) {
 test.describe('Mini App 375px: dải Mua lại món quen, thao tác', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  test('khung chờ cao đúng dải thật (292px) nên dữ liệu về không đẩy Danh mục', async ({ page, api }) => {
+  test('khung chờ cao đúng dải thật (292px) nên dữ liệu về không đẩy khối dưới (lối tắt)', async ({ page, api }) => {
     mockHome(api);
     let release: () => void = () => {};
     const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -115,18 +118,18 @@ test.describe('Mini App 375px: dải Mua lại món quen, thao tác', () => {
     const skeleton = page.getByTestId('purchased-rail-loading');
     await expect(skeleton).toBeVisible({ timeout: 15_000 });
     const skeletonBox = (await skeleton.boundingBox())!;
-    const belowBefore = (await page.getByRole('region', { name: 'Danh mục', exact: true }).boundingBox())!;
+    const belowBefore = (await page.locator('[data-home-block="shortcuts"]').boundingBox())!;
     release();
 
     await expect(strip(page)).toBeVisible({ timeout: 15_000 });
     await expect(skeleton).toHaveCount(0);
     const stripBox = (await strip(page).boundingBox())!;
-    const belowAfter = (await page.getByRole('region', { name: 'Danh mục', exact: true }).boundingBox())!;
+    const belowAfter = (await page.locator('[data-home-block="shortcuts"]').boundingBox())!;
 
     // Số đo thật của dải, để báo lại cho người duyệt.
     console.log(`W43A strip height ${stripBox.height}px, skeleton ${skeletonBox.height}px`);
     expect(Math.abs(skeletonBox.height - stripBox.height), `khung chờ ${skeletonBox.height}px vs dải ${stripBox.height}px`).toBeLessThanOrEqual(2);
-    expect(Math.abs(belowAfter.y - belowBefore.y), 'Danh mục bị đẩy khi dải về').toBeLessThanOrEqual(2);
+    expect(Math.abs(belowAfter.y - belowBefore.y), 'lối tắt bị đẩy khi dải về').toBeLessThanOrEqual(2);
   });
 
   test('"+ Thêm" một chạm: đúng một lệnh POST /cart/items cho đúng phân loại, ở lại Trang chủ, nút mở lại', async ({ page, api }) => {

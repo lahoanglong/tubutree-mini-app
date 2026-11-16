@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useLayoutEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
+import { Fragment, useEffect, useLayoutEffect, useMemo, useState, type CSSProperties, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWindowScrollRestore } from '@/lib/use-window-scroll-restore';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -13,7 +13,7 @@ import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import { meSummaryQuery } from '@tubutree/app-core/api/me-summary';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
 import { flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
-import { HOME_CONTEXT_HEIGHT, homeContextBlockName, homeInterleaveCard, homeKeptOrder, homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
+import { HOME_CONTEXT_HEIGHT, homeContextBlockName, homeInterleaveCard, homeKeptOrder, homeRenderOrder, writeFlashHint, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
 import { vnDateSeed } from '@tubutree/app-core/home-suggest';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { categoryEntries } from '@/lib/browse-categories';
@@ -22,6 +22,7 @@ import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { armHomeFeed, disarmHomeFeed } from '@/lib/home-feed';
 import { HomeRestoreHintContext } from '@/lib/home-restore-context';
+import { browserStorage } from '@/lib/recently-viewed';
 import type { HomeRestoreHint } from '@/lib/home-restore-hint';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
 import { HomeBanner } from '@/components/campaign/home-banner';
@@ -149,6 +150,11 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   // Còn suất Giờ vàng nào có món (đang chạy hay sắp tới) không: chưa biết (đang tải hay lỗi) thì `undefined`, lối vào Giờ vàng giữ nguyên thay vì chớp rồi mất.
   const flashKnown = !shelves.flashQuery.isLoading && !shelves.flashQuery.isError && !upcoming.isPending && !upcoming.isError;
   const flashLive = flashKnown ? shelves.flash.length > 0 || (upcoming.data?.length ?? 0) > 0 : undefined;
+  // Khối Giờ vàng chỉ gắn khi là ô khuyến mãi được chọn nên không tự ghi "không có" được: không ghi thì lần mở sau giữ khung chờ cho một Giờ vàng đã hết.
+  const flashSettledEmpty = !shelves.flashQuery.isLoading && !shelves.flashQuery.isError && shelves.flash.length === 0;
+  useEffect(() => {
+    if (flashSettledEmpty) writeFlashHint(browserStorage(), false);
+  }, [flashSettledEmpty]);
   // Chốt một lần mỗi lần mở, cùng hạt giống mà lưới Gợi ý dùng: thẻ chen không đổi giữa chừng khi qua nửa đêm.
   const [daySeed] = useState(() => initial.suggestSeed ?? vnDateSeed(serverNow()));
 

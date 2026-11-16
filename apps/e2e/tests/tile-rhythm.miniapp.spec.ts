@@ -57,12 +57,16 @@ interface RowMetrics {
   names: string[];
 }
 
-/** Gom thẻ trong lưới theo hàng (cùng `top`) và đo trong trang, để mọi số lấy từ cùng một khung hình. */
+/**
+ * Gom thẻ trong lưới theo hàng (cùng `top`) và đo trong trang, để mọi số lấy từ cùng một khung hình. Bỏ qua `li` không có thẻ sản phẩm
+ * (thẻ chen Chẩn đoán tổ ấm / Cộng đồng của lưới Gợi ý).
+ */
 async function rowsOf(grid: Locator): Promise<RowMetrics[]> {
   return grid.evaluate((el) => {
     const byTop = new Map<number, HTMLElement[]>();
     for (const li of Array.from(el.querySelectorAll<HTMLElement>(':scope > li'))) {
-      const tile = li.querySelector<HTMLElement>('[data-ds="product-tile"]')!;
+      const tile = li.querySelector<HTMLElement>('[data-ds="product-tile"]');
+      if (!tile) continue;
       const top = Math.round(tile.getBoundingClientRect().top);
       byTop.set(top, [...(byTop.get(top) ?? []), tile]);
     }

@@ -6,7 +6,7 @@ import { expectChipHitArea44 } from './support/hit-area';
 import { hubTab, mockRewardsCatalog } from './support/offers-mocks';
 
 /**
- * Zalo Mini App E2E — gói H sau review: không nhảy bố cục ở Trang chủ, chấm đỏ Ưu đãi nhớ đã xem, Cộng đồng, vùng chạm chip.
+ * Zalo Mini App E2E — gói H sau review: không nhảy bố cục ở Trang chủ, chấm đỏ Ưu đãi nhớ đã xem, vùng chạm chip.
  * API mock toàn bộ; không dùng waitForTimeout.
  */
 
@@ -141,21 +141,24 @@ test.describe('Trang chủ — khôi phục phiên chậm', () => {
     await expect(categories).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('member-card-loading')).toBeVisible();
     await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Việc cần làm' })).toHaveCount(0);
     const before = (await categories.boundingBox())!.y;
-    await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toBeVisible({ timeout: 15_000 });
+    // Mock có đơn đang giao: dải ngữ cảnh (một khối 64px) đổi từ khung chờ sang "Việc cần làm", không phải thẻ thành viên.
+    await expect(page.getByRole('region', { name: 'Việc cần làm' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('todo-strip-loading')).toHaveCount(0);
+    await expect(page.getByTestId('member-card-loading')).toHaveCount(0);
     const after = (await categories.boundingBox())!.y;
     expect(Math.abs(after - before), `Danh mục ${before}px → ${after}px`).toBeLessThanOrEqual(2);
   });
 });
 
-test.describe('Trang chủ — chấm đỏ Ưu đãi và Cộng đồng', () => {
-  test('chưa điểm danh + mã sắp hết hạn: có chấm đỏ và khối Cộng đồng; mở tab Mã của tôi thì mã đã xem nhưng chưa điểm danh vẫn còn chấm', async ({ page, api }) => {
+test.describe('Trang chủ — chấm đỏ Ưu đãi', () => {
+  test('chưa điểm danh + mã sắp hết hạn: có chấm đỏ; mở tab Mã của tôi thì mã đã xem nhưng chưa điểm danh vẫn còn chấm', async ({ page, api }) => {
     mockDiscovery(api, { returning: true });
     mockHomeEngagement(api, { checkedIn: false, expiringInDays: 2 });
     await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Cộng đồng' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Bán chạy nhất', exact: true })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('offers-dot')).toBeVisible({ timeout: 15_000 });
     await page.getByRole('button', { name: /^Ưu đãi/ }).click();
     await expect(page.getByRole('heading', { name: /Ưu đãi/ }).first()).toBeVisible({ timeout: 15_000 });
@@ -179,22 +182,20 @@ test.describe('Trang chủ — chấm đỏ Ưu đãi và Cộng đồng', () =>
     await expect(page.getByRole('group', { name: /Giảm 10%/ }).getByText('Còn 2 ngày')).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
     await page.goto('/');
-    await expect(page.getByRole('region', { name: 'Cộng đồng' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('region', { name: 'Bán chạy nhất', exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: /^Ưu đãi/ })).toBeVisible();
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
   });
 });
 
 test.describe('Trang chủ — vùng chạm 44px', () => {
-  test('chip dải thương hiệu và chip danh mục của Gợi ý hôm nay có vùng chạm 44px quanh tâm (chip nhìn cao 36px)', async ({ page, api }) => {
+  test('chip danh mục của Gợi ý hôm nay có vùng chạm 44px quanh tâm (chip nhìn cao 36px)', async ({ page, api }) => {
     await page.setViewportSize({ width: 375, height: 812 });
     mockDiscovery(api, { returning: true, forYou: [toCard(BINH_SUA)] });
     await page.goto('/');
-    const journey = page.getByRole('region', { name: 'Hành trình nguyên liệu' });
-    await expect(journey).toBeVisible({ timeout: 15_000 });
-    const brandChip = journey.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('button').first();
-    await brandChip.scrollIntoViewIfNeeded();
-    await expectChipHitArea44(brandChip);
-    const chip = page.getByRole('region', { name: 'Lọc gợi ý theo danh mục' }).getByRole('button').first();
+    const chips = page.getByRole('region', { name: 'Lọc gợi ý theo danh mục' });
+    await expect(chips).toBeAttached({ timeout: 15_000 });
+    const chip = chips.getByRole('button').first();
     await chip.scrollIntoViewIfNeeded();
     await expectChipHitArea44(chip);
   });

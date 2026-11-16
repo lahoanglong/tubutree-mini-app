@@ -280,7 +280,17 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
       mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2')]);
       const { result } = setup('returning', undefined, { bannerSlides: 0, bannerPending: true, bannerRemembered: true, flashRemembered: false });
       await waitFor(() => expect(mocks.fetchCombos).toHaveBeenCalled());
+      await waitFor(() => expect(result.current.flashQuery.isLoading).toBe(false));
       expect(result.current.promo).toBe('banner');
+      expect(result.current.combos).toEqual([]);
+    });
+
+    it('Giờ vàng còn tải và máy không nhớ có Giờ vàng: chưa chọn banner hay combo (chọn rồi đổi sang Giờ vàng là đổi khối)', async () => {
+      mocks.fetchFlash.mockReturnValue(new Promise(() => {}));
+      mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2')]);
+      const { result } = setup('returning', undefined, { bannerSlides: 1, bannerPending: false, bannerRemembered: true, flashRemembered: false });
+      await waitFor(() => expect(mocks.fetchCombos).toHaveBeenCalled());
+      expect(result.current.promo).toBeNull();
       expect(result.current.combos).toEqual([]);
     });
 

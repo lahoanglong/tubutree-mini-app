@@ -26,11 +26,11 @@ async function waitHomeSettled(page: Page, api: MockApi): Promise<void> {
   await expect(page.getByTestId('purchased-rail-loading')).toHaveCount(0);
   await expect(page.getByTestId('category-grid-loading')).toHaveCount(0);
   await expect(page.getByTestId('catalog-grid-skeleton')).toHaveCount(0);
-  await expect(page.getByTestId('todo-strip-loading')).toHaveCount(0);
+  await expect(page.getByTestId('member-card-loading')).toHaveCount(0);
 }
 
 test.describe('Buy-flow 4b — Trang chủ', () => {
-  test('Khách cũ: tìm → thẻ thành viên → Việc cần làm → lối tắt → Mua lại → Danh mục → Bán chạy nhất → Gợi ý hôm nay', async ({ page, api }) => {
+  test('Khách cũ có đơn đang giao: tìm → dải Việc cần làm (thay thẻ thành viên) → Danh mục → Bán chạy nhất → Mua lại → lối tắt → Gợi ý hôm nay', async ({ page, api }) => {
     mockDiscovery(api, { returning: true, shipping: true, subscription: true, forYou: [toCard(BINH_SUA)] });
     await page.goto('/');
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
@@ -39,12 +39,14 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     await waitHomeSettled(page, api);
 
     const blocks = await visibleBlocks(page);
-    const order = ['search', 'member', 'todo', 'shortcuts', 'purchased', 'categories', 'bestSellers', 'suggest'];
+    const order = ['search', 'todo', 'categories', 'bestSellers', 'purchased', 'shortcuts', 'suggest'];
     expect(blocks.filter((b) => order.includes(b))).toEqual(order);
+    // Dải ngữ cảnh chỉ có MỘT biến thể mỗi lúc: Việc cần làm thế chỗ thẻ thành viên và Quà khách mới.
+    expect(blocks).not.toContain('member');
     expect(blocks).not.toContain('welcome');
   });
 
-  test('Khách mới: không thẻ thành viên / Mua lại / Việc cần làm; Danh mục rồi Bán chạy nhất (theo lượt bán 30 ngày) đứng trước Gợi ý hôm nay', async ({ page, api }) => {
+  test('Khách mới: dải Quà khách mới (không Mua lại / Việc cần làm); Danh mục, Bán chạy nhất (theo lượt bán 30 ngày), lối tắt rồi Gợi ý hôm nay', async ({ page, api }) => {
     mockDiscovery(api, { forYou: [toCard(BINH_SUA)] });
     await page.goto('/');
     const best = page.getByRole('region', { name: 'Bán chạy nhất', exact: true });
@@ -53,9 +55,10 @@ test.describe('Buy-flow 4b — Trang chủ', () => {
     await waitHomeSettled(page, api);
 
     const blocks = await visibleBlocks(page);
-    const order = ['search', 'shortcuts', 'categories', 'bestSellers', 'suggest'];
+    const order = ['search', 'welcome', 'categories', 'bestSellers', 'shortcuts', 'suggest'];
     expect(blocks.filter((b) => order.includes(b))).toEqual(order);
     expect(blocks).not.toContain('member');
+    expect(blocks).not.toContain('todo');
     await expect(page.getByRole('region', { name: 'Mua lại' })).toHaveCount(0);
     await expect(page.getByRole('region', { name: 'Việc cần làm' })).toHaveCount(0);
     expect(api.callsTo('GET', '/orders/home-todo')).toEqual([]);
@@ -284,7 +287,7 @@ test.describe('Buy-flow 4b — bố cục 320/375/390, vùng chạm, khung chờ
     expect(Math.abs(skel2H - tile2H), `Danh mục: khung chờ ${skel2H}px vs thẻ ${tile2H}px`).toBeLessThanOrEqual(16);
   });
 
-  test('375px: khung chờ "Việc cần làm" cao xấp xỉ khối thật có một dòng đang giao (≤ 8px)', async ({ page, api }) => {
+  test('375px: khung chờ của dải ngữ cảnh cao xấp xỉ dải "Việc cần làm" thật có một dòng đang giao (cùng 64px, ≤ 8px)', async ({ page, api }) => {
     await page.setViewportSize({ width: 375, height: 800 });
     mockDiscovery(api, { returning: true, shipping: true });
     const gate = gateOf();
@@ -292,19 +295,20 @@ test.describe('Buy-flow 4b — bố cục 320/375/390, vùng chạm, khung chờ
       await gate.promise;
       return { pending: null, shipping: { order: makeOrder({ code: SHIPPING_CODE, status: 'SHIPPING', paymentStatus: 'PAID' }), total: 1 }, processing: null };
     });
-    // Khung chờ chỉ dựng khi lần mở trước của tài khoản này có việc (use-home-customer-kind / todo-strip nhớ số dòng).
+    // Khung chờ chỉ dựng khi lần mở trước của tài khoản này có việc (use-home-customer-kind / todo-strip nhớ số dòng); dải ngữ cảnh dùng khung chờ của thẻ thành viên.
     await page.addInitScript(() => {
       localStorage.setItem('tubu_home_todo_rows', JSON.stringify({ userId: 'user-4b', rows: 1 }));
     });
     await page.goto('/');
-    const skel = page.getByTestId('todo-strip-loading');
+    const skel = page.getByTestId('member-card-loading');
     await expect(skel).toBeVisible({ timeout: 15_000 });
     const skelH = (await skel.boundingBox())!.height;
     gate.open();
     const todo = page.getByRole('region', { name: 'Việc cần làm' });
     await expect(todo).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('todo-strip-loading')).toHaveCount(0);
+    await expect(page.getByTestId('member-card-loading')).toHaveCount(0);
     const todoH = (await todo.boundingBox())!.height;
-    expect(Math.abs(skelH - todoH), `Việc cần làm: khung chờ ${skelH}px vs khối thật ${todoH}px`).toBeLessThanOrEqual(8);
+    expect(Math.abs(skelH - todoH), `Dải ngữ cảnh: khung chờ ${skelH}px vs Việc cần làm ${todoH}px`).toBeLessThanOrEqual(8);
+    expect(skelH, 'dải ngữ cảnh cao đúng 64px').toBeCloseTo(64, 0);
   });
 });

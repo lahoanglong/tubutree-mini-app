@@ -24,10 +24,11 @@ export const HOME_HEADER_HEIGHT = 56;
 /** Trần số khối Trang chủ ở mọi tổ hợp (loại khách, có/không Giờ vàng, banner, combo). */
 export const HOME_MAX_BLOCKS = 9;
 
-// Món hàng lên màn đầu: header, dải ngữ cảnh 64px, Danh mục một hàng, rồi kệ Bán chạy nhất (thẻ đầu lộ ở 360×640 và 390×844). Ô khuyến mãi (tự ẩn khi không có
-// gì) và Mua lại (khách cũ) đứng ngay dưới kệ đầu; hai thẻ trụ cột + bốn ô phụ (W177) và dải Story xuống dưới, cuối cùng là MỘT lưới Gợi ý cuộn vô tận.
-const NEW: readonly HomeBlockId[] = ['search', 'context', 'categories', 'bestSellers', 'promo', 'shortcuts', 'stories', 'suggest'];
-const RETURNING: readonly HomeBlockId[] = ['search', 'context', 'categories', 'bestSellers', 'promo', 'purchased', 'shortcuts', 'stories', 'suggest'];
+// Món hàng lên màn đầu: header, dải ngữ cảnh 64px, Danh mục một hàng, rồi kệ Bán chạy nhất (thẻ đầu lộ ở 360×640 và 390×844). Mua lại (khách cũ) ngay dưới kệ
+// đầu, rồi hai thẻ trụ cột + bốn ô phụ (W177) và dải Story. Ô khuyến mãi đứng ngay trên lưới Gợi ý: nó chỉ biết có hay không khi Giờ vàng, banner và combo đã về
+// (trễ hơn các khối khác), nên phải nằm dưới màn đầu để lúc hiện ra chỉ đẩy lưới Gợi ý, không đẩy nội dung khách đang nhìn.
+const NEW: readonly HomeBlockId[] = ['search', 'context', 'categories', 'bestSellers', 'shortcuts', 'stories', 'promo', 'suggest'];
+const RETURNING: readonly HomeBlockId[] = ['search', 'context', 'categories', 'bestSellers', 'purchased', 'shortcuts', 'stories', 'promo', 'suggest'];
 
 /**
  * Chiều cao cố định của dải ngữ cảnh ở mọi biến thể (Quà khách mới, Việc cần làm một dòng, thẻ thành viên gọn, khung chờ): dữ liệu về muộn chỉ đổi nội dung
@@ -60,12 +61,12 @@ export function homeRenderOrder(kind: HomeKindState, settling: boolean): readonl
 /**
  * Thứ tự dựng khi máy chủ đã dựng bố cục khách mới (web: HTML đầu luôn là khách vãng lai) rồi khôi phục phiên mới cho biết đây là khách có tài khoản mà
  * máy chưa nhớ loại. Giữ các khối đã vẽ thay vì thay hết bằng khung chờ: dải ngữ cảnh đổi nội dung tại chỗ (cùng chiều cao). Biết là khách cũ thì Mua lại
- * chen ngay trên lưới Gợi ý, dưới màn đầu: chen dưới kệ Bán chạy nhất như `RETURNING` đẩy lối vào đang nằm trong màn đầu 390×844 xuống. Chỉ lần mở đầu trên
- * máy chưa nhớ loại khách; lần sau máy đã nhớ, dựng đúng `RETURNING`.
+ * chen ngay trên ô khuyến mãi và lưới Gợi ý, dưới màn đầu: chen dưới kệ Bán chạy nhất như `RETURNING` đẩy lối vào đang nằm trong màn đầu 390×844 xuống. Chỉ
+ * lần mở đầu trên máy chưa nhớ loại khách; lần sau máy đã nhớ, dựng đúng `RETURNING`.
  */
 export function homeKeptOrder(kind: HomeKindState): readonly HomeBlockId[] {
   if (kind !== 'returning') return NEW;
-  const at = NEW.indexOf('suggest');
+  const at = NEW.indexOf('promo');
   return [...NEW.slice(0, at), 'purchased', ...NEW.slice(at)];
 }
 
@@ -124,8 +125,9 @@ export function homeTodoLead(data: HomeTodoData | null | undefined): { kind: 'pe
 export type HomePromoKind = 'flash' | 'banner' | 'combos';
 
 /**
- * MỘT ô khuyến mãi dưới kệ Bán chạy nhất, ưu tiên: Giờ vàng đang chạy (có hạn giờ) > banner chiến dịch > combo. Đang tải mà lần mở trước có (gợi ý nhớ) thì
- * giữ chỗ cho đúng khối đó; không nhớ thì chờ im lặng. Không có gì thì ô ẩn hẳn, không giữ chỗ.
+ * MỘT ô khuyến mãi ngay trên lưới Gợi ý, ưu tiên: Giờ vàng đang chạy (có hạn giờ) > banner chiến dịch > combo. Nguồn ưu tiên cao hơn còn đang tải thì không chọn
+ * nguồn thấp hơn (chọn rồi đổi là đổi khối, đổi chiều cao): lần mở trước có nó (gợi ý nhớ) thì giữ chỗ cho đúng khối đó, không nhớ thì chờ im lặng. Không có gì
+ * thì ô ẩn hẳn, không giữ chỗ.
  */
 export function homePromoPick(o: {
   flashItems: number;
@@ -136,8 +138,10 @@ export function homePromoPick(o: {
   bannerRemembered: boolean;
   combos: number;
 }): HomePromoKind | null {
-  if (o.flashItems > 0 || (o.flashPending && o.flashRemembered)) return 'flash';
-  if (o.bannerSlides > 0 || (o.bannerPending && o.bannerRemembered)) return 'banner';
+  if (o.flashItems > 0) return 'flash';
+  if (o.flashPending) return o.flashRemembered ? 'flash' : null;
+  if (o.bannerSlides > 0) return 'banner';
+  if (o.bannerPending) return o.bannerRemembered ? 'banner' : null;
   if (o.combos > 0) return 'combos';
   return null;
 }

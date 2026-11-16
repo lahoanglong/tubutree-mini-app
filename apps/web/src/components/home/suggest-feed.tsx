@@ -49,8 +49,9 @@ export interface SuggestFeedProps {
 function SuggestGrid({ items, interleave }: { items: readonly ProductCardData[]; interleave?: ReactNode }) {
   const sizes = gridImageSizes(GRID_PRODUCTS);
   const chenAt = interleave && items.length >= HOME_INTERLEAVE_AFTER ? HOME_INTERLEAVE_AFTER - 1 : -1;
+  // Từ md lưới 3–6 cột nên 8 thẻ trước thẻ chen để lại ô trống ở hàng cuối; xếp dày để thẻ sau thẻ chen lấp vào.
   return (
-    <ul role="list" data-testid="catalog-grid" className={GRID_PRODUCTS} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+    <ul role="list" data-testid="catalog-grid" className={`${GRID_PRODUCTS} md:grid-flow-row-dense`} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
       {items.flatMap((p, i) => {
         const card = (
           <li key={`${p.id}:${i}`} style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
