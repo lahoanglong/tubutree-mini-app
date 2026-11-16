@@ -1,5 +1,5 @@
 import { test, expect, type MockApi } from './support/mock-api';
-import { RECYCLE_FUNNEL_STEPS, type LaunchWatchDTO, type LaunchWatchFraud } from '@tubutree/shared-types';
+import { PURCHASE_FUNNEL_STEPS, RECYCLE_FUNNEL_STEPS, type LaunchWatchDTO, type LaunchWatchFraud, type PurchaseFunnelDTO } from '@tubutree/shared-types';
 
 /**
  * Admin — tab "Theo dõi 72h sau launch": phễu Đổi rác, chống gian lận, tỉ lệ đơn thứ hai. Mock mọi lệnh gọi /api/ nên KHÔNG cần API/DB.
@@ -50,6 +50,15 @@ const SNAPSHOT: LaunchWatchDTO = {
   },
 };
 
+const purchaseWindow = (scale: number) => ({
+  rows: PURCHASE_FUNNEL_STEPS.map((step, i) => ({ step, web: (5 - i) * scale, miniapp: (4 - i) * scale, total: (9 - 2 * i) * scale })),
+  sessions: { web: 12 * scale, miniapp: 8 * scale, total: 20 * scale },
+});
+const PURCHASE_FUNNEL: PurchaseFunnelDTO = {
+  generatedAt: '2026-11-16T07:05:00.000Z',
+  windows: { h72: purchaseWindow(1), d7: purchaseWindow(10), d30: purchaseWindow(100) },
+};
+
 test.describe('Admin — Theo dõi 72h sau launch', () => {
   test.beforeEach(async ({ page, api }) => {
     mockAdminSession(api);
@@ -59,6 +68,7 @@ test.describe('Admin — Theo dõi 72h sau launch', () => {
     api.get('/admin/customer-refunds', { data: [], meta: { page: 1, limit: 1, total: 0 } });
     api.get('/admin/config', []);
     api.get('/admin/analytics/launch-watch', SNAPSHOT);
+    api.get('/admin/analytics/purchase-funnel', PURCHASE_FUNNEL);
   });
 
   test('mở tab: phễu, chống gian lận, đơn thứ hai; đổi cửa sổ sang 7 ngày thì hiện cảnh báo đỏ', async ({ page }) => {
@@ -76,8 +86,13 @@ test.describe('Admin — Theo dõi 72h sau launch', () => {
     await expect(webhookAlerts).toContainText('52 lần trong 1 giờ qua (24 giờ: 600)');
     await expect(webhookAlerts).not.toContainText('Gomdon');
 
+    const purchase = page.getByRole('region', { name: 'Phễu mua', exact: true });
+    await expect(purchase.getByRole('row', { name: /Xem trang sản phẩm/ })).toContainText('9');
+    await expect(purchase).toContainText('Tổng số phiên: 20 (web 12 · Mini App 8)');
+
     await page.getByRole('button', { name: '7 ngày' }).click();
     await expect(giftAlerts).toContainText('1 đơn mang hơn 1 quà 0đ');
+    await expect(purchase).toContainText('Tổng số phiên: 200 (web 120 · Mini App 80)');
   });
 
   test('375px: không tràn ngang cả trang; bảng phễu cuộn trong khung riêng', async ({ page }) => {

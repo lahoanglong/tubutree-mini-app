@@ -247,9 +247,10 @@
         ],
         "webOnly": [
           "priority",
-          "imageSizes"
+          "imageSizes",
+          "shelf"
         ],
-        "reason": "state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; priority: ảnh ưu tiên tải ngay cho thẻ ở màn đầu (ứng viên LCP khi render server); chỉ web cần; `sizes` của srcset w theo cột lưới web; Mini chạy một khổ"
+        "reason": "state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; priority: ảnh ưu tiên tải ngay cho thẻ ở màn đầu (ứng viên LCP khi render server); chỉ web cần; `sizes` của srcset w theo cột lưới web; Mini chạy một khổ; shelf: tên kệ của sự kiện product_card_click trên web, Mini lấy tên kệ từ listSource sẵn có"
       },
       "screens": [
         "/",
@@ -277,9 +278,10 @@
         ],
         "webOnly": [
           "className",
-          "priorityCount"
+          "priorityCount",
+          "shelf"
         ],
-        "reason": "Mini chọn một cột cho hàng thẻ line bằng columns, web chọn lưới bằng className (LINE_GRID, GRID_PRODUCTS_WITH_FILTER); listSource: state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; priorityCount: ảnh ưu tiên tải ngay cho thẻ ở màn đầu (ứng viên LCP khi render server); chỉ web cần"
+        "reason": "Mini chọn một cột cho hàng thẻ line bằng columns, web chọn lưới bằng className (LINE_GRID, GRID_PRODUCTS_WITH_FILTER); listSource: state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; priorityCount: ảnh ưu tiên tải ngay cho thẻ ở màn đầu (ứng viên LCP khi render server); chỉ web cần; shelf: tên kệ của sự kiện product_card_click trên web, Mini lấy tên kệ từ listSource sẵn có"
       },
       "screens": [
         "/",
@@ -318,9 +320,10 @@
           "listSource"
         ],
         "webOnly": [
-          "priorityCount"
+          "priorityCount",
+          "shelf"
         ],
-        "reason": "listSource: state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; priorityCount: ảnh ưu tiên tải ngay cho thẻ ở màn đầu (ứng viên LCP khi render server); chỉ web cần"
+        "reason": "listSource: state điều hướng của Mini (listSource thành product_viewed.listSource, variationId suất Giờ vàng, phân loại ghim); web không có listSource hay navState ở bất kỳ đâu; priorityCount: ảnh ưu tiên tải ngay cho thẻ ở màn đầu (ứng viên LCP khi render server); chỉ web cần; shelf: tên kệ của sự kiện product_card_click trên web, Mini lấy tên kệ từ listSource sẵn có"
       },
       "screens": [
         "/",
@@ -791,12 +794,14 @@
       "web": "apps/web/src/components/catalog/wishlist-heart.tsx",
       "propsDiff": {
         "miniOnly": [
-          "size"
+          "size",
+          "onLike"
         ],
         "webOnly": [
-          "className"
+          "className",
+          "pdpSlug"
         ],
-        "reason": "Mini đổi cỡ icon tim bằng size; web cố định cỡ icon theo vùng chạm 44px và cho cha thêm lớp (className) để đặt vị trí trong khuôn"
+        "reason": "Mini đổi cỡ icon tim bằng size; web cố định cỡ icon theo vùng chạm 44px và cho cha thêm lớp (className) để đặt vị trí trong khuôn; onLike (Mini) và pdpSlug (web) cùng đếm lần thích ở trang sản phẩm vào phễu mua: trang sản phẩm web là server component nên chỉ truyền được slug, không truyền được hàm"
       },
       "screens": [
         "/",

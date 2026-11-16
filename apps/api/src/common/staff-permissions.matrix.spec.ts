@@ -40,6 +40,7 @@ const EXPECTED: Record<string, Access> = {
   'GET /admin/account-deletion-requests': ADMIN_ONLY,
   'POST /admin/account-deletion-requests/:id/process': ADMIN_ONLY,
   'GET /admin/analytics/launch-watch': ADMIN_ONLY,
+  'GET /admin/analytics/purchase-funnel': ADMIN_ONLY,
   'GET /admin/analytics/retention-daily': ADMIN_ONLY,
   'GET /admin/attendance/live': ADMIN_ONLY,
   'POST /admin/attendance/manual-checkout': ADMIN_ONLY,
