@@ -86,6 +86,7 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261105130200_hd1_notification_inapp_indexes', ordersLock: false },
   { name: '20261105130300_hd1_points_history_index', ordersLock: false },
   { name: '20261105180000_hg_zns_stuck_logs_index', ordersLock: false },
+  { name: '20261117013746_mss_foundation', ordersLock: true },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;

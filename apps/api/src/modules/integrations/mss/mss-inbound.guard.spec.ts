@@ -88,7 +88,8 @@ describe('MssInboundGuard (đơn vị)', () => {
 
   it('đổi 1 byte thân: 401', () => {
     const tampered = Buffer.from(ORDER_EVENT);
-    tampered[tampered.length - 3] ^= 0x01;
+    const at = tampered.length - 3;
+    tampered[at] = tampered[at]! ^ 0x01;
     expect401(() => guard().canActivate(ctxOf(signedReq({ body: tampered }))));
   });
 

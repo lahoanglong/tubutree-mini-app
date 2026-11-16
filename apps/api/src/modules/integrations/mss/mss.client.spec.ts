@@ -58,8 +58,8 @@ describe('MssClient', () => {
     now = Date.parse('2026-11-17T01:00:00Z');
     jest.spyOn(Date, 'now').mockImplementation(() => now);
     for (const level of ['log', 'warn', 'error', 'debug', 'verbose'] as const) {
-      jest.spyOn(Logger.prototype, level).mockImplementation((m: unknown) => {
-        logs.push(String(m));
+      jest.spyOn(Logger.prototype, level).mockImplementation((...args: unknown[]) => {
+        logs.push(String(args[0]));
       });
     }
   });

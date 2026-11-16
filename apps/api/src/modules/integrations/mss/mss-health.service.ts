@@ -1,6 +1,7 @@
 import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
 import { CRON_TZ } from '../../../common/cron-tz';
+import { markCronSkipped, noteCronError, TrackCron } from '../../../common/cron-run/track-cron';
 import { notifyAdmins } from '../../../common/notify-admins';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
@@ -9,7 +10,7 @@ import { MSS_SHARED_STORE, type MssCircuitSnapshot, type MssSharedStore } from '
 import { MSS_FLAG_CAPABILITY, MSS_FLAG_KEYS, MSS_FLAGS, MssFlagsService, type MssCatalogSource, type MssFlag } from './mss-flags';
 import { MssClient, MssRequestError } from './mss.client';
 
-/** Đọc `/health` của MSS 5 phút một lần, chỉ khi có ít nhất một cờ MSS bật và đủ biến (cờ tắt: không gọi MSS, không ghi gì). */
+/** Đọc `/health` của MSS 5 phút một lần, chỉ khi có ít nhất một cờ MSS bật và đủ biến (cờ tắt: không gọi MSS, chỉ ghi lượt bỏ qua vào cron_runs như mọi cron). */
 export const MSS_HEALTH_POLL_CRON = '0 */5 * * * *';
 /** Kết quả dò cũ hơn chừng này (3 lượt dò liên tiếp không có) coi như chưa biết năng lực: mọi cờ coi như tắt. */
 export const MSS_HEALTH_STALE_MS = 15 * 60_000;
@@ -82,12 +83,19 @@ export class MssHealthService {
   ) {}
 
   @Cron(MSS_HEALTH_POLL_CRON, { timeZone: CRON_TZ })
+  @TrackCron({ alertAfter: 2 })
   async poll(): Promise<void> {
     try {
-      if (!(await this.flags.anyRequested())) return;
-      await this.refresh();
+      if (!(await this.flags.anyRequested())) {
+        markCronSkipped('NOT_CONFIGURED');
+        return;
+      }
+      const state = await this.refresh();
+      if (!state.ok) noteCronError(`MSS /health không đạt: ${state.error ?? 'không rõ'}`);
     } catch (err) {
-      this.logger.error(`Dò sức khoẻ MSS lỗi: ${err instanceof Error ? err.message : err}`);
+      const msg = `Dò sức khoẻ MSS lỗi: ${err instanceof Error ? err.message : err}`;
+      noteCronError(msg);
+      this.logger.error(msg);
     }
   }
 
