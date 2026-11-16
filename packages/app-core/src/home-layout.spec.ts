@@ -2,10 +2,11 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { shelf } from './merch/shelves';
+import { liveRoute } from './merch/route-fallback';
 import {
   memberCardAriaLabel, offersPointsAriaLabel, clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readTodoRows, writeTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
   visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS, HOME_HERO_HEIGHT, HOME_GIFT_HEIGHT,
-  HOME_ECOSYSTEM_PILLARS, HOME_QUICK_SHORTCUT_IDS, resolveHomeEcosystemPillars,
+  HOME_ECOSYSTEM_PILLARS, HOME_QUICK_SHORTCUT_IDS, resolveHomeEcosystemPillars, splitHomeEcosystemPillars,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
   HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, homeCategoryEntries, CATEGORY_CELL_HEIGHT, CATEGORY_GRID_COLUMNS, CATEGORY_GRID_MAX_CELLS,
@@ -115,42 +116,73 @@ describe('homeShortcutSlots (Q7: 4 ô cố định + "Tất cả")', () => {
   });
 });
 
-describe('HOME_ECOSYSTEM_PILLARS (W171 Bento Hub 6 trụ cột)', () => {
-  it('đủ 6 trụ cột hệ sinh thái theo đúng thứ tự Web và Mini App; Đổi rác nêu rõ Miễn ship khi gửi kèm đơn', () => {
-    expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.id)).toEqual([
-      'garden',
-      'recycle',
-      'rewards',
-      'groupBuy',
-      'subscription',
-      'partner',
+describe('HOME_ECOSYSTEM_PILLARS (W177: 2 thẻ chính + 4 ô phụ)', () => {
+  it('đủ 6 lối vào theo thứ tự vẽ: hai thẻ chính (Mua lẻ · Giờ vàng, Đổi rác miễn ship đơn sau) rồi bốn ô phụ', () => {
+    expect(HOME_ECOSYSTEM_PILLARS.map((p) => [p.id, p.tier])).toEqual([
+      ['retail', 'hero'],
+      ['recycle', 'hero'],
+      ['groupBuy', 'chip'],
+      ['subscription', 'chip'],
+      ['garden', 'chip'],
+      ['rewards', 'chip'],
     ]);
-    const recycle = HOME_ECOSYSTEM_PILLARS.find((p) => p.id === 'recycle')!;
-    expect(recycle.subtitle).toContain('Miễn ship khi gửi kèm đơn');
-    expect(recycle.featured).toBe(true);
+    expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.title)).toEqual([
+      'Mua lẻ · Giờ vàng',
+      'Đổi rác — Miễn ship đơn sau',
+      'Mua chung',
+      'Mua xoay vòng',
+      'Vườn Xanh',
+      'Kho quà 0đ',
+    ]);
     expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.webHref)).toEqual([
-      '/vuon-xanh',
+      '/gio-vang',
       '/doi-rac',
-      '/kho-qua',
       '/mua-chung',
       '/san-pham?filter=subscription',
-      '/dai-ly',
+      '/vuon-xanh',
+      '/kho-qua',
     ]);
     expect(HOME_ECOSYSTEM_PILLARS.map((p) => p.miniRoute)).toEqual([
-      '/game',
+      '/flash-sale',
       '/recycle',
-      '/offers?tab=rewards',
       '/group-buy',
       '/subscriptions',
-      '/affiliate',
+      '/game',
+      '/offers?tab=rewards',
     ]);
-    expect(HOME_QUICK_SHORTCUT_IDS).toEqual(['flash', 'coupons', 'community']);
-    expect(HOME_SETTLING_HEIGHTS.shortcuts).toBe(326);
   });
 
-  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: giữ đủ 6 ô, thẻ thứ hai đổi sang Yêu cầu của tôi', () => {
+  it('đích thẻ chính khớp bảng route-fallback: route nào chuyển sang chờ thì spec này đỏ để thẻ chính đi qua liveRoute như lối tắt', () => {
+    for (const p of HOME_ECOSYSTEM_PILLARS) {
+      expect(liveRoute(p.miniRoute, 'mini'), `${p.id} miniRoute`).toBe(p.miniRoute);
+      // Route lạ (không có trong bảng) được trả nguyên; chỉ route có trong bảng mới phải khớp webHref.
+      const web = liveRoute(p.miniRoute, 'web');
+      if (web !== p.miniRoute) expect(web, `${p.id} webHref`).toBe(p.webHref);
+    }
+    expect(liveRoute('/flash-sale', 'web')).toBe(HOME_ECOSYSTEM_PILLARS[0]!.webHref);
+  });
+
+  it('Giờ vàng chỉ có một nút trên màn (thẻ chính), không lặp ở hàng lối tắt nhanh; Mã giảm giá và Cộng đồng còn ở hàng đó', () => {
+    expect(HOME_QUICK_SHORTCUT_IDS).toEqual(['coupons', 'community']);
+    expect(HOME_QUICK_SHORTCUT_IDS).not.toContain('flash');
+    // Mọi lối tắt vẫn còn trong hộp thoại "Thêm".
+    expect(visibleHomeShortcuts({ wasteEnabled: true, claimEnabled: true }).map((s) => s.id)).toContain('flash');
+  });
+
+  it('chiều cao khung chờ khối lối vào = hàng 1 (96) + khe 8 + hàng 2 (64) + khe 8 + hàng lối tắt nhanh (44)', () => {
+    expect(HOME_SETTLING_HEIGHTS.shortcuts).toBe(96 + 8 + 64 + 8 + 44);
+  });
+
+  it('splitHomeEcosystemPillars: 2 thẻ chính và 4 ô phụ, giữ thứ tự', () => {
+    const { heroes, chips } = splitHomeEcosystemPillars(HOME_ECOSYSTEM_PILLARS);
+    expect(heroes.map((p) => p.id)).toEqual(['retail', 'recycle']);
+    expect(chips.map((p) => p.id)).toEqual(['groupBuy', 'subscription', 'garden', 'rewards']);
+  });
+
+  it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: giữ đủ 6 ô, thẻ chính thứ hai đổi sang Yêu cầu của tôi', () => {
     const paused = resolveHomeEcosystemPillars({ wastePausedWithOpenRequests: true });
     expect(paused).toHaveLength(6);
+    expect(paused.filter((p) => p.tier === 'hero')).toHaveLength(2);
     expect(paused[1]).toMatchObject({
       id: 'recycle',
       title: 'Yêu cầu của tôi',

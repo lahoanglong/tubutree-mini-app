@@ -192,8 +192,14 @@ body.has-sticky-bar [data-bottom-nav] {
   content: attr(data-initial);
 }
 
-/* Hệ sinh thái 6 trụ cột (W171): Bento Hub Trang chủ (2x3 ở điện thoại, 3x2 từ md) + hàng lối tắt nhanh.
+/* Hệ sinh thái 6 lối vào (W171, W177): Bento Hub Trang chủ, hàng 1 hai thẻ chính, hàng 2 bốn ô phụ ở mọi cỡ màn + hàng lối tắt nhanh.
    Dùng lớp ngữ nghĩa trong CSS để không thêm số px viết tay hay max-md: vào file TSX. */
+.tubu-bento-hub {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-inline-sm);
+}
+
 .tubu-bento-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -222,11 +228,6 @@ body.has-sticky-bar [data-bottom-nav] {
 .tubu-bento-card:hover {
   border-color: var(--color-action-secondary-border);
   box-shadow: var(--elevation-2);
-}
-
-.tubu-bento-card--featured {
-  border-color: var(--color-action-secondary-border);
-  background: var(--color-bg-subtle);
 }
 
 .tubu-bento-head {
@@ -300,6 +301,64 @@ body.has-sticky-bar [data-bottom-nav] {
   line-height: 16px;
 }
 
+/* Hàng 1 (W177): hai thẻ chính. Cao cố định như trước để CLS = 0; tên được phép hai dòng nên "Đổi rác — Miễn ship đơn sau" không bị cắt ở 320px. */
+.tubu-bento-card--hero {
+  height: 96px;
+  padding: 10px 12px;
+}
+
+.tubu-bento-card--hero .tubu-bento-title {
+  font-size: 15px;
+  line-height: 18px;
+}
+
+/* Hàng 2 (W177): bốn ô phụ, mỗi ô cao cố định 64px (>= 44px chạm), biểu tượng trên tên, tên tối đa hai dòng, số đều. */
+.tubu-chip-row {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: var(--space-stack-xs);
+}
+
+.tubu-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  height: 64px;
+  min-height: 44px;
+  min-width: 0;
+  padding: 5px 2px;
+  box-sizing: border-box;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: border-color var(--motion-tap), background-color var(--motion-tap);
+}
+
+.tubu-chip:hover {
+  border-color: var(--color-action-secondary-border);
+  background: var(--color-bg-subtle);
+}
+
+.tubu-chip-label {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  max-width: 100%;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  text-align: center;
+  font-size: var(--type-label-size);
+  line-height: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
 .tubu-quick-pills {
   margin-top: var(--space-stack-sm);
   display: flex;
@@ -352,8 +411,11 @@ body.has-sticky-bar [data-bottom-nav] {
 }
 
 @media (min-width: 768px) {
+  .tubu-bento-hub {
+    gap: var(--space-inline-md);
+  }
+
   .tubu-bento-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--space-inline-md);
   }
 
@@ -362,6 +424,37 @@ body.has-sticky-bar [data-bottom-nav] {
     min-height: 100px;
     padding: 14px 16px;
     gap: 10px;
+  }
+
+  .tubu-bento-card--hero {
+    height: auto;
+    min-height: 120px;
+    padding: 16px 20px;
+  }
+
+  .tubu-bento-card--hero .tubu-bento-title {
+    font-size: var(--type-title-md-size);
+    line-height: var(--type-title-md-lh);
+  }
+
+  .tubu-chip-row {
+    gap: var(--space-inline-md);
+  }
+
+  .tubu-chip {
+    flex-direction: row;
+    justify-content: center;
+    gap: 10px;
+    height: auto;
+    min-height: 64px;
+    padding: 10px 16px;
+  }
+
+  .tubu-chip-label {
+    -webkit-line-clamp: 1;
+    font-family: var(--font-display);
+    font-size: var(--type-body-md-size);
+    line-height: var(--type-body-md-lh);
   }
 
   .tubu-bento-icon {

@@ -70,7 +70,6 @@ describe('ds-shop-guard (Mini App)', () => {
       'components/product/variation-chip.tsx', // tên phân loại hết hàng gạch ngang, không phải giá gạch
       'pages/product-detail.tsx', // khối giá lớn của trang chi tiết
       'pages/cart.tsx', // dòng giỏ hàng
-      'pages/dealer.tsx', // bảng giá đại lý
       'pages/external-points.tsx', // số điểm cũ bị gạch
     ];
     expect(hits(/line-through/, NOT_A_CARD)).toEqual([]);

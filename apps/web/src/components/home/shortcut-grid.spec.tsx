@@ -54,39 +54,52 @@ afterEach(() => {
   mounted = null;
 });
 
-describe('ShortcutGrid web — Bento Hub 6 trụ cột + lối tắt nhanh (W171)', () => {
-  it('hiện xuyên suốt cả máy tính lẫn điện thoại (không md:hidden, không lg:hidden), dựng tĩnh đủ 6 trụ cột ngay từ khung hình đầu', () => {
+describe('ShortcutGrid web — 2 thẻ chính + 4 ô phụ + lối tắt nhanh (W177)', () => {
+  it('hiện xuyên suốt cả máy tính lẫn điện thoại (không md:hidden, không lg:hidden), dựng tĩnh đủ 6 lối vào ngay từ khung hình đầu', () => {
     const c = mount();
     const section = c.querySelector('section[data-testid="shortcut-grid"]')!;
     expect(section.className).not.toContain('md:hidden');
     expect(section.className).not.toContain('lg:hidden');
 
-    const bentoCards = Array.from(c.querySelectorAll<HTMLAnchorElement>('[data-testid="ecosystem-bento-hub"] a[data-pillar]'));
-    expect(bentoCards).toHaveLength(6);
-    expect(bentoCards.map((a) => a.getAttribute('href'))).toEqual([
-      '/vuon-xanh',
+    const cards = Array.from(c.querySelectorAll<HTMLAnchorElement>('[data-testid="ecosystem-bento-hub"] a[data-pillar]'));
+    expect(cards).toHaveLength(6);
+    expect(cards.map((a) => [a.dataset.pillar, a.dataset.tier])).toEqual([
+      ['retail', 'hero'],
+      ['recycle', 'hero'],
+      ['groupBuy', 'chip'],
+      ['subscription', 'chip'],
+      ['garden', 'chip'],
+      ['rewards', 'chip'],
+    ]);
+    expect(cards.map((a) => a.getAttribute('href'))).toEqual([
+      '/gio-vang',
       '/doi-rac',
-      '/kho-qua',
       '/mua-chung',
       '/san-pham?filter=subscription',
-      '/dai-ly',
+      '/vuon-xanh',
+      '/kho-qua',
     ]);
-    expect(bentoCards.map((a) => a.querySelector('[data-pillar-title]')?.textContent)).toEqual([
-      'Vườn Xanh & Game',
-      'Đổi rác lấy quà',
-      'Kho quà 0đ',
-      'Mua chung giá kho',
+    expect(cards.map((a) => a.querySelector('[data-pillar-title]')?.textContent)).toEqual([
+      'Mua lẻ · Giờ vàng',
+      'Đổi rác — Miễn ship đơn sau',
+      'Mua chung',
       'Mua xoay vòng',
-      'Đại lý & Tiếp thị liên kết',
+      'Vườn Xanh',
+      'Kho quà 0đ',
     ]);
-    expect(c.querySelector('[data-pillar="recycle"]')?.textContent).toContain('Miễn ship khi gửi kèm đơn');
+    expect(c.querySelectorAll('.tubu-bento-card--hero')).toHaveLength(2);
+    expect(c.querySelectorAll('.tubu-chip-row > .tubu-chip')).toHaveLength(4);
+    for (const chip of Array.from(c.querySelectorAll('.tubu-chip'))) {
+      expect(chip.querySelector('[data-pillar-sub], [data-pillar-tag]')).toBeNull();
+    }
+    expect(c.querySelector('[data-pillar="recycle"]')?.textContent).toContain('Nhận Điểm Xanh');
+    expect(c.querySelector('[data-pillar="groupBuy"]')?.getAttribute('aria-label')).toBe('Mua chung. Rủ bạn đủ nhóm giảm sâu');
   });
 
-  it('hàng lối tắt nhanh có Giờ vàng, Mã giảm giá, Cộng đồng và nút "Thêm" mở hộp thoại mọi lối tắt', () => {
+  it('hàng lối tắt nhanh chỉ còn Mã giảm giá, Cộng đồng và nút "Thêm" (Giờ vàng đã là thẻ chính); hộp thoại mọi lối tắt vẫn có Giờ vàng', () => {
     const c = mount();
     const quickLinks = Array.from(c.querySelectorAll<HTMLAnchorElement>('[data-testid="shortcut-quick-pills"] a'));
     expect(quickLinks.map((a) => [a.textContent?.trim(), a.getAttribute('href')])).toEqual([
-      ['Giờ vàng', '/gio-vang'],
       ['Mã giảm giá', '/ma-giam-gia'],
       ['Cộng đồng', '/cong-dong'],
     ]);
@@ -99,6 +112,7 @@ describe('ShortcutGrid web — Bento Hub 6 trụ cột + lối tắt nhanh (W171
     expect(allSheet()).toBeNull();
     openAll(c);
     expect(sheetRows()).toHaveLength(8);
+    expect(sheetRows().some((b) => /Giờ vàng/.test(b.textContent ?? ''))).toBe(true);
     expect(document.body.textContent).not.toContain('sàn khác');
     click(sheetRows().find((b) => /Đơn hàng/.test(b.textContent ?? '')) ?? null);
     expect(mocks.push).toHaveBeenLastCalledWith('/tai-khoan/don-hang');
@@ -114,7 +128,7 @@ describe('ShortcutGrid web — Bento Hub 6 trụ cột + lối tắt nhanh (W171
     expect(document.querySelector('[role="dialog"][aria-label="Kiếm tiền cùng Tubu"]')).not.toBeNull();
   });
 
-  it('Đổi rác tạm dừng nhưng khách còn yêu cầu đang mở: thẻ thứ hai đổi sang "Yêu cầu của tôi" mà vẫn giữ đủ 6 ô', () => {
+  it('Đổi rác tạm dừng nhưng khách còn yêu cầu đang mở: thẻ chính thứ hai đổi sang "Yêu cầu của tôi" mà vẫn giữ đủ 6 ô', () => {
     mocks.cfg = { isLoaded: true, waste: { enabled: false }, loyalty: { marketplaceClaimEnabled: false } };
     mocks.recycleOpen = true;
     const c = mount();
@@ -124,7 +138,7 @@ describe('ShortcutGrid web — Bento Hub 6 trụ cột + lối tắt nhanh (W171
     expect(mocks.recycleArgs).toEqual([true, true]);
   });
 
-  it('cấu hình dựng sẵn từ server được truyền cho usePublicConfig và cấu hình đang chờ vẫn giữ nguyên 6 trụ cột không đổi chiều cao', () => {
+  it('cấu hình dựng sẵn từ server được truyền cho usePublicConfig và cấu hình đang chờ vẫn giữ nguyên 6 lối vào không đổi chiều cao', () => {
     const initial = { waste: { enabled: true } };
     mount(initial);
     expect(mocks.cfgArgs[0]).toBe(initial);

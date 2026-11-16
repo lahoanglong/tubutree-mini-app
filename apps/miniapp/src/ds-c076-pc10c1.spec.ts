@@ -17,7 +17,6 @@ const FILES = [
   'src/pages/post-detail.tsx',
   'src/pages/group-buy.tsx',
   'src/pages/community-events.tsx',
-  'src/pages/community-moderation.tsx',
   'src/pages/ai-advisor.tsx',
   'src/pages/academy.tsx',
   'src/components/ui/timeline.tsx',
@@ -30,8 +29,6 @@ const FILES = [
   'src/pages/recycle-edit.tsx',
   'src/pages/recycle-requests.tsx',
   'src/pages/recycle-done.tsx',
-  'src/pages/recycle-desk.tsx',
-  'src/components/waste-desk-perk.tsx',
   'src/pages/rewards.tsx',
   'src/pages/rewards-mine.tsx',
 ];

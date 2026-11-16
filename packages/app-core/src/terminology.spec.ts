@@ -157,10 +157,7 @@ const REASON = {
 } as const;
 
 const EXEMPT: Exemption[] = [
-  { file: 'apps/miniapp/src/components/waste-desk-perk.tsx', use: USE.store, max: 2, reason: REASON.STORE_PHYSICAL },
   { file: 'apps/miniapp/src/components/waste-point-picker.tsx', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
-  { file: 'apps/miniapp/src/pages/dealer.tsx', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
-  { file: 'apps/miniapp/src/pages/recycle-desk.tsx', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
   { file: 'apps/miniapp/src/services/account-api.ts', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
   { file: 'apps/web/src/components/dealer/dealer-apply.tsx', use: USE.store, max: 1, reason: REASON.STORE_PHYSICAL },
   { file: 'apps/web/src/components/recycle/recycle-desk-perk.tsx', use: USE.store, max: 2, reason: REASON.STORE_PHYSICAL },

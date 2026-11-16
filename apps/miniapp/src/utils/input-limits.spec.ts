@@ -3,7 +3,7 @@ import { resolve } from 'node:path';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
 import { isTaxCodeValid } from '@tubutree/app-core/commerce/tax-code';
-import { ADDRESS_INPUT_LIMIT, INPUT_LIMITS, STAFF_REASON_MIN } from './input-limits';
+import { ADDRESS_INPUT_LIMIT, INPUT_LIMITS } from './input-limits';
 
 const ROOT = resolve(__dirname, '../../../..');
 const read = (p: string) => readFileSync(resolve(ROOT, p), 'utf8');
@@ -26,50 +26,21 @@ const MA = 'apps/miniapp/src/';
 /** Ô nhập → DTO nhận giá trị → `@MaxLength`. Thêm ô nhập mới thì thêm dòng ở đây. */
 const DTO_ROWS: DtoRow[] = [
   { key: 'reviewComment', file: 'apps/api/src/modules/reviews/dto/review.dto.ts', cls: 'CreateReviewDto', prop: 'comment', value: 'comment', uses: ['components/reviews-section.tsx'] },
-  { key: 'dealerBusinessName', file: 'apps/api/src/modules/dealer/dto/dealer.dto.ts', cls: 'ApplyDealerDto', prop: 'businessName', value: 'form.businessName', uses: ['pages/dealer.tsx'] },
-  { key: 'dealerOwnerName', file: 'apps/api/src/modules/dealer/dto/dealer.dto.ts', cls: 'ApplyDealerDto', prop: 'ownerName', value: 'form.ownerName', uses: ['pages/dealer.tsx'] },
-  { key: 'dealerPhone', file: 'apps/api/src/modules/dealer/dto/dealer.dto.ts', cls: 'ApplyDealerDto', prop: 'phone', value: 'form.phone', uses: ['pages/dealer.tsx'] },
-  { key: 'dealerAddress', file: 'apps/api/src/modules/dealer/dto/dealer.dto.ts', cls: 'ApplyDealerDto', prop: 'address', value: 'form.address', uses: ['pages/dealer.tsx'] },
-  { key: 'dealerTemplateName', file: 'apps/api/src/modules/dealer/dealer.controller.ts', cls: 'SaveTemplateDto', prop: 'name', value: 'tplName', uses: ['pages/dealer.tsx'] },
   { key: 'addressRecipient', file: 'apps/api/src/modules/users/dto/address.dto.ts', cls: 'CreateAddressDto', prop: 'recipient', value: 'form[k]', uses: ['components/address-form.tsx'], maxAttr: 'ADDRESS_INPUT_LIMIT[k]', addrField: 'recipient' },
   { key: 'addressPhone', file: 'apps/api/src/modules/users/dto/address.dto.ts', cls: 'CreateAddressDto', prop: 'phone', value: 'form[k]', uses: ['components/address-form.tsx'], maxAttr: 'ADDRESS_INPUT_LIMIT[k]', addrField: 'phone' },
   { key: 'addressStreet', file: 'apps/api/src/modules/users/dto/address.dto.ts', cls: 'CreateAddressDto', prop: 'street', value: 'form[k]', uses: ['components/address-form.tsx'], maxAttr: 'ADDRESS_INPUT_LIMIT[k]', addrField: 'street' },
   { key: 'invoiceCompanyName', file: 'apps/api/src/modules/checkout/dto/checkout.dto.ts', cls: 'InvoiceRequestDto', prop: 'companyName', value: 'invoice.companyName', uses: ['pages/checkout.tsx'] },
   { key: 'invoiceAddress', file: 'apps/api/src/modules/checkout/dto/checkout.dto.ts', cls: 'InvoiceRequestDto', prop: 'address', value: 'invoice.address', uses: ['pages/checkout.tsx'] },
   { key: 'invoiceEmail', file: 'apps/api/src/modules/checkout/dto/checkout.dto.ts', cls: 'InvoiceRequestDto', prop: 'email', value: 'invoice.email', uses: ['pages/checkout.tsx'] },
-  { key: 'storefrontTitle', file: 'apps/api/src/modules/storefront/storefront.controller.ts', cls: 'UpdateStorefrontDto', prop: 'title', value: 'form.title', uses: ['components/storefront-builder/config-sheet.tsx'] },
-  { key: 'storefrontWarehouseAddress', file: 'apps/api/src/modules/storefront/storefront.controller.ts', cls: 'UpdateStorefrontDto', prop: 'warehouseAddress', value: 'form.warehouseAddress', uses: ['components/storefront-builder/config-sheet.tsx'] },
-  { key: 'storefrontWarehouseCity', file: 'apps/api/src/modules/storefront/storefront.controller.ts', cls: 'UpdateStorefrontDto', prop: 'warehouseCity', value: 'form.warehouseCity', uses: ['components/storefront-builder/config-sheet.tsx'] },
-  { key: 'storefrontWarehousePhone', file: 'apps/api/src/modules/storefront/storefront.controller.ts', cls: 'UpdateStorefrontDto', prop: 'warehousePhone', value: 'form.warehousePhone', uses: ['components/storefront-builder/config-sheet.tsx'] },
-  { key: 'collectionTitle', file: 'apps/api/src/modules/storefront/storefront.controller.ts', cls: 'UpdateCollectionDto', prop: 'title', value: 'renaming.title', uses: ['pages/storefront-builder.tsx'] },
-  { key: 'brandTagline', file: 'apps/api/src/modules/brand/dto/brand.dto.ts', cls: 'UpdateOwnedBrandDto', prop: 'tagline', value: 'f.tagline', uses: ['pages/brand-owner.tsx'] },
-  { key: 'brandOrigin', file: 'apps/api/src/modules/brand/dto/brand.dto.ts', cls: 'UpdateOwnedBrandDto', prop: 'origin', value: 'f.origin', uses: ['pages/brand-owner.tsx'] },
-  { key: 'brandStory', file: 'apps/api/src/modules/brand/dto/brand.dto.ts', cls: 'UpdateOwnedBrandDto', prop: 'story', value: 'f.story', uses: ['pages/brand-owner.tsx'] },
-  { key: 'promoTitle', file: 'apps/api/src/modules/brand/dto/brand.dto.ts', cls: 'PromotionDto', prop: 'title', value: 'promo.title', uses: ['pages/brand-owner.tsx'] },
-  { key: 'promoSubtitle', file: 'apps/api/src/modules/brand/dto/brand.dto.ts', cls: 'PromotionDto', prop: 'subtitle', value: 'promo.subtitle', uses: ['pages/brand-owner.tsx'] },
-  { key: 'promoCouponCode', file: 'apps/api/src/modules/brand/dto/brand.dto.ts', cls: 'PromotionDto', prop: 'couponCode', value: 'promo.couponCode', uses: ['pages/brand-owner.tsx'] },
-  { key: 'shiftTemplateName', file: 'apps/api/src/modules/staff/shifts/dto/shift.dto.ts', cls: 'ShiftTemplateDto', prop: 'name', value: 'name', uses: ['pages/admin.tsx'] },
-  { key: 'shiftRejectReason', file: 'apps/api/src/modules/staff/shifts/dto/shift.dto.ts', cls: 'RejectShiftDto', prop: 'reason', value: 'rejectReason', uses: ['pages/admin.tsx'] },
-  { key: 'shiftCancelReason', file: 'apps/api/src/modules/staff/shifts/dto/shift.dto.ts', cls: 'CancelShiftDto', prop: 'reason', value: 'cancelReason', uses: ['pages/staff.tsx'] },
-  { key: 'payrollNote', file: 'apps/api/src/modules/staff/payroll/payroll.dto.ts', cls: 'MarkPaidDto', prop: 'note', value: 'note', uses: ['pages/admin.tsx'] },
-  { key: 'bankAccountNo', file: 'apps/api/src/modules/staff/payroll/payroll.dto.ts', cls: 'UpdateBankDto', prop: 'bankAccountNo', value: 'accNo', uses: ['pages/my-payroll.tsx'] },
-  { key: 'bankAccountName', file: 'apps/api/src/modules/staff/payroll/payroll.dto.ts', cls: 'UpdateBankDto', prop: 'bankAccountName', value: 'accName', uses: ['pages/my-payroll.tsx'] },
   { key: 'recycleCarrier', file: 'apps/api/src/modules/waste-exchange/customer/waste-customer.controller.ts', cls: 'WasteTrackingDto', prop: 'carrier', value: 'carrier', uses: ['pages/recycle-request.tsx'] },
   { key: 'recycleTrackingCode', file: 'apps/api/src/modules/waste-exchange/customer/waste-customer.controller.ts', cls: 'WasteTrackingDto', prop: 'trackingCode', value: 'code', uses: ['pages/recycle-request.tsx'] },
-  { key: 'recycleDeskCode', file: 'apps/api/src/modules/waste-exchange/receiving/waste-admin-requests.controller.ts', cls: 'WasteLookupQueryDto', prop: 'code', value: 'code', uses: ['pages/recycle-desk.tsx'] },
-  { key: 'recycleRejectNote', file: 'apps/api/src/modules/waste-exchange/receiving/waste-receiving.dto.ts', cls: 'WasteRejectDto', prop: 'rejectionNote', value: 'note', uses: ['pages/recycle-desk.tsx'] },
-  { key: 'staffReason', file: 'apps/api/src/modules/staff/dto/grant-role.dto.ts', cls: 'GrantRoleDto', prop: 'reason', value: 'grantReason', uses: ['pages/admin.tsx'] },
-  { key: 'staffReason', file: 'apps/api/src/modules/staff/dto/revoke-role.dto.ts', cls: 'RevokeRoleDto', prop: 'reason', value: 'revokeReason', uses: ['pages/admin.tsx'] },
   { key: 'externalPointsCode', file: 'apps/api/src/modules/external-points/external-claims.controller.ts', cls: 'SubmitExternalClaimDto', prop: 'code', value: 'code', uses: ['pages/external-points.tsx'] },
   { key: 'voucherCode', file: 'apps/api/src/modules/admin/admin.controller.ts', cls: 'CreateCouponDto', prop: 'code', value: 'customCode', uses: ['components/checkout/voucher-sheet.tsx'] },
 ];
 
 /** Ô mà DTO giới hạn bằng regex: trần là độ dài chuỗi dài nhất regex còn nhận. */
 const REGEX_ROWS: RegexRow[] = [
-  { key: 'dealerTaxCode', file: 'apps/api/src/modules/checkout/dto/checkout.dto.ts', re: 'TAX_CODE_RE', longest: '1234567890-123', value: "form.taxCode ?? ''", dto: { file: 'apps/api/src/modules/dealer/dto/dealer.dto.ts', cls: 'ApplyDealerDto', prop: 'taxCode' }, uses: ['pages/dealer.tsx'] },
-  { key: 'storefrontSubdomain', file: 'apps/api/src/modules/storefront/identifier-validation.ts', re: 'SUBDOMAIN_RE', longest: 'a'.repeat(30), value: 'form.subdomain', serviceFn: 'normalizeSubdomain', uses: ['components/storefront-builder/config-sheet.tsx'] },
   { key: 'affiliateTaxId', file: 'apps/api/src/modules/affiliate/affiliate.service.ts', re: 'PERSONAL_TAX_ID_PATTERN', longest: '1234567890-123', value: 'taxId', dto: { file: 'apps/api/src/modules/affiliate/affiliate.controller.ts', cls: 'PayoutDto', prop: 'taxId' }, uses: ['pages/affiliate.tsx'] },
-  { key: 'bankBin', file: 'apps/api/src/modules/staff/payroll/payroll.dto.ts', cls: 'UpdateBankDto', prop: 'bankBin', re: '', longest: '970407', value: 'bin', uses: ['pages/my-payroll.tsx'] },
 ];
 
 /**
@@ -214,12 +185,6 @@ describe('ô nhập Mini App: maxLength bằng trần DTO', () => {
       expect(p.length, `${p} dài hơn trần ô`).toBeLessThanOrEqual(INPUT_LIMITS[row.key]);
     }
     for (const f of row.uses) expect(usesLimit(f, `INPUT_LIMITS.${row.key}`, row.value)).toBe(true);
-  });
-
-  it('lý do tối thiểu bằng @MinLength của DTO', () => {
-    for (const f of ['grant-role', 'revoke-role']) {
-      expect(new RegExp(`MinLength\\(${STAFF_REASON_MIN},`).test(read(`apps/api/src/modules/staff/dto/${f}.dto.ts`))).toBe(true);
-    }
   });
 
   it('không có khoá thừa trong bảng', () => {

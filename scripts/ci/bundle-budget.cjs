@@ -4,7 +4,7 @@
 //
 // Ngưỡng là ngưỡng cảnh báo của dự án, KHÔNG phải giới hạn của Zalo (giới hạn dung lượng gói hiện hành của Zalo chưa kiểm).
 //   MINIAPP_ENTRY_WARN_KB  file JS lớn nhất (entry), raw, mặc định 700. Mục tiêu trong docs/2026-10-review/03-perf.md A3-013: dưới 450.
-//   MINIAPP_TOTAL_WARN_KB  tổng mọi file của bản build (JS + CSS + font/ảnh), raw, mặc định 2500 (W176 hạ từ 2560 sau khi W175B đưa bản dựng về 2464 KB, để wave sau không đẩy tổng quay lại trên 2500).
+//   MINIAPP_TOTAL_WARN_KB  tổng mọi file của bản build (JS + CSS + font/ảnh), raw, mặc định 2350 (W177 hạ từ 2500 sau khi chuyển 8 màn quản trị/đối tác/nhân sự sang cổng web đưa bản dựng về 2237 KB, để wave sau không đẩy tổng quay lại trên 2350).
 // Đặt hai biến repo cùng tên (Settings > Variables) để chỉnh ngưỡng mà không sửa workflow.
 const fs = require('fs');
 const path = require('path');
@@ -36,7 +36,7 @@ function main() {
   const dir = path.resolve(process.argv[2] || 'apps/miniapp/www');
   const strict = process.env.BUNDLE_BUDGET_STRICT === '1';
   const entryWarnKb = threshold('MINIAPP_ENTRY_WARN_KB', 700);
-  const totalWarnKb = threshold('MINIAPP_TOTAL_WARN_KB', 2500);
+  const totalWarnKb = threshold('MINIAPP_TOTAL_WARN_KB', 2350);
 
   if (!fs.existsSync(dir)) {
     console.log(`::warning title=Bundle miniapp::không thấy thư mục ${dir}: bản build đổi chỗ đầu ra hoặc build chưa chạy, nên chưa đo được kích thước.`);

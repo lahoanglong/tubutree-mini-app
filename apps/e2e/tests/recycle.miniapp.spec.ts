@@ -1,10 +1,9 @@
 import type { Page } from '@playwright/test';
-import type { WasteDeskPointDTO, WasteRequestDetailDTO } from '@tubutree/shared-types';
+import type { WasteRequestDetailDTO } from '@tubutree/shared-types';
 import type { createWasteRequest } from '../../miniapp/src/services/waste-api';
 import { test, expect, makeUser, mockSession } from './support/mock-api';
 import {
   expectNoOverflow,
-  mockDeskStaff,
   mockWasteCustomer,
   wasteDetail,
   wastePoint,
@@ -29,18 +28,6 @@ async function toPointsStep(page: Page): Promise<void> {
   await expect(page.getByRole('searchbox', { name: 'Tìm điểm nhận' })).toBeVisible();
 }
 
-const DESK_POINT: WasteDeskPointDTO = {
-  id: 'wp-q1',
-  kind: 'PARTNER',
-  name: 'Tạp hoá Cô Ba',
-  giftHandoverEnabled: false,
-  myRole: 'OWNER',
-  quota: { limit: 100_000, used: 0, remaining: 100_000 },
-  perkText: null,
-  perkPendingText: null,
-  staffDailyCapRemaining: 1_000_000,
-};
-
 test.describe('Đổi rác lấy quà — khách', () => {
   test('pin: chọn pin ở bước món rồi sang bước cách giao, Gửi về kho bị khoá kèm lý do, Mang tới điểm nhận vẫn chọn được', async ({ page, api }) => {
     mockSession(api, makeUser({ id: 'u-wx' }));
@@ -64,7 +51,7 @@ test.describe('Đổi rác lấy quà — khách', () => {
     await expect(page).toHaveURL(/\/recycle$/);
   });
 
-  test('golden: tạo yêu cầu mang tới điểm → nhân viên xác nhận → khách thấy điểm', async ({ page, api }) => {
+  test('golden: tạo yêu cầu mang tới điểm → điểm nhận xác nhận trên web → khách thấy điểm', async ({ page, api }) => {
     const customer = makeUser({ id: 'u-wx' });
     mockSession(api, customer);
     const request: { current: WasteRequestDetailDTO } = {
@@ -95,60 +82,8 @@ test.describe('Đổi rác lấy quà — khách', () => {
     expect(created?.body).toEqual(expected);
     expect(created?.headers['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{8,128}$/);
 
-    mockSession(api, makeUser({ id: 'u-staff', fullName: 'Chủ điểm Cô Ba' }));
-    mockDeskStaff(api, {
-      points: [DESK_POINT],
-      lookup: {
-        type: 'REQUEST',
-        request: {
-          id: 'wr-e2e-1',
-          code: 'TR-7K3QP',
-          method: 'DROP_OFF',
-          status: 'OPEN',
-          pointId: 'wp-q1',
-          customerName: 'K*** E2E',
-          customerPhone: '090****567',
-          estimatedPoints: 3000,
-          lines: [
-            {
-              itemId: 'wi-carton',
-              itemName: 'Thùng carton cũ',
-              unitLabel: 'thùng',
-              unitsPerPoint: 1,
-              pointsPerGroup: 1000,
-              declaredQty: 3,
-              receivedQty: null,
-              hazardous: false,
-            },
-          ],
-        },
-      },
-    });
-    api.post('/waste/desk/requests/:id/confirm', () => {
-      request.current = { ...request.current, status: 'COMPLETED', pointsAwarded: 3000, completedAt: '2026-10-17T06:00:00.000Z', editable: false, cancellable: false };
-      return {
-        requestId: 'wr-e2e-1',
-        code: 'TR-7K3QP',
-        status: 'COMPLETED',
-        pointsAwarded: 3000,
-        dropsAwarded: 0,
-        quota: { limit: 100_000, used: 3000, remaining: 97_000 },
-        staffDailyCapRemaining: 997_000,
-      };
-    });
-
-    await page.goto('/recycle/desk');
-    await page.getByRole('textbox').first().fill('TR-7K3QP');
-    await page.getByRole('button', { name: 'Tra mã' }).click();
-    const line = page.locator('[data-line]').filter({ hasText: 'Thùng carton cũ' });
-    await expect(line).toBeVisible();
-    await expect(page.getByText('Điểm Tubu sẽ cộng cho khách: 3.000 điểm')).toBeVisible();
-    await page.getByRole('button', { name: 'Xác nhận đã nhận' }).click();
-    await expect(page.getByText('Tubu sẽ cộng 3.000 điểm cho khách', { exact: true })).toBeVisible();
-    await expect(page.getByText('Đã ghi nhận. Tubu sẽ cộng 3.000 điểm cho khách', { exact: true })).toBeVisible();
-    const [confirmed] = api.callsTo('POST', '/waste/desk/requests/:id/confirm');
-    expect(confirmed?.path).toBe('/waste/desk/requests/wr-e2e-1/confirm');
-    expect(confirmed?.body).toEqual({ lines: [{ itemId: 'wi-carton', declaredQty: 3, receivedQty: 3 }] });
+    // Điểm nhận xác nhận trên web (quầy nhận không còn ở Mini App từ W177): máy chủ ghi hoàn tất và cộng điểm, khách mở lại thấy kết quả.
+    request.current = { ...request.current, status: 'COMPLETED', pointsAwarded: 3000, completedAt: '2026-10-17T06:00:00.000Z', editable: false, cancellable: false };
 
     mockSession(api, customer);
     mockWasteCustomer(api, { points: [wastePoint({ id: 'wp-q1' })], requests: [request.current] });

@@ -44,6 +44,8 @@ import {
   openExternal,
   openAffiliateLink,
   isAllowedExternalUrl,
+  isWebPortalUrl,
+  openWebPortal,
 } from './zmp-bridge';
 
 const mockedZmpFollowOA = vi.mocked(zmpFollowOA);
@@ -285,5 +287,47 @@ describe('openExternal — Mini App không điều hướng ra link ngoài Zalo 
   it('openAffiliateLink cũng bị chặn với link sàn ngoài', async () => {
     await openAffiliateLink('https://shopee.vn/deeplink');
     expect(openWebview).not.toHaveBeenCalled();
+  });
+});
+
+describe('openWebPortal — chỉ mở cổng web Tubu Tree (W177), không bao giờ ném lỗi, không đổi location', () => {
+  it('chỉ nhận https://tubutree.com, host khác và http bị từ chối', () => {
+    expect(isWebPortalUrl('https://tubutree.com/admin')).toBe(true);
+    expect(isWebPortalUrl('https://tubutree.com/admin?tab=community')).toBe(true);
+    for (const url of [
+      'http://tubutree.com/admin',
+      'https://app.tubutree.com/admin',
+      'https://tubutree.com.evil.example/admin',
+      'https://evil.example/?u=https://tubutree.com',
+      'javascript:alert(1)',
+      'not a url',
+      '',
+    ]) {
+      expect(isWebPortalUrl(url)).toBe(false);
+    }
+  });
+
+  it('URL hợp lệ: gọi openWebview đúng một lần với url đó và trả true', async () => {
+    vi.mocked(openWebview).mockResolvedValue(undefined as never);
+    await expect(openWebPortal('https://tubutree.com/dai-ly')).resolves.toBe(true);
+    expect(openWebview).toHaveBeenCalledTimes(1);
+    expect(openWebview).toHaveBeenCalledWith({ url: 'https://tubutree.com/dai-ly' });
+  });
+
+  it('URL ngoài cổng web: không gọi SDK, trả false', async () => {
+    await expect(openWebPortal('https://evil.example/admin')).resolves.toBe(false);
+    expect(openWebview).not.toHaveBeenCalled();
+  });
+
+  it('SDK từ chối (ngoài Zalo, lỗi -2000...): trả false, không ném, không tự điều hướng ra ngoài', async () => {
+    vi.mocked(openWebview).mockRejectedValue(new Error('-2000'));
+    const location = { href: 'https://app.tubutree.com/' };
+    vi.stubGlobal('window', { location });
+    try {
+      await expect(openWebPortal('https://tubutree.com/admin')).resolves.toBe(false);
+      expect(location.href).toBe('https://app.tubutree.com/');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });

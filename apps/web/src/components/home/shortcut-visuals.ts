@@ -15,12 +15,12 @@ export const SHORTCUT_ICONS: Record<HomeShortcutId, LucideIcon> = {
 };
 
 export const PILLAR_ICONS: Record<HomePillarId, LucideIcon> = {
-  garden: Sprout,
+  retail: Zap,
   recycle: Recycle,
-  rewards: Gift,
   groupBuy: Users,
   subscription: RefreshCw,
-  partner: HeartHandshake,
+  garden: Sprout,
+  rewards: Gift,
 };
 
 /**

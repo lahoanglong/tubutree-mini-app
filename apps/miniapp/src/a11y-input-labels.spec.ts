@@ -14,7 +14,6 @@ const FILES = [
   'components/affiliate/ctv-order-sheet.tsx',
   'components/reviews-section.tsx',
   'components/avatar-crop-modal.tsx',
-  'pages/storefront-builder.tsx',
   'pages/checkout.tsx',
 ];
 

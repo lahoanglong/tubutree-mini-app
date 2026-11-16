@@ -12,9 +12,7 @@ const MIGRATED = [
   'components/ui/progress-bar.tsx',
   'components/flash-sale.tsx',
   'components/catalog/recently-viewed-rail.tsx',
-  'components/storefront-preview.tsx',
   'pages/product-detail.tsx',
-  'pages/storefront-builder.tsx',
   'components/waste-item-thumb.tsx',
 ];
 

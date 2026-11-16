@@ -5,6 +5,7 @@ import { hubTab } from './support/offers-mocks';
 import { mockCollectable } from './support/voucher-mocks';
 import { assertSeededOnCi, firstPublicBrandSlug, seedShopScreens } from './support/a11y-db';
 import { expectChipHitArea44 } from './support/hit-area';
+import { homeHierarchyProblems } from './support/home-hierarchy';
 import { shortcutLabelProblems } from './support/shortcut-labels';
 
 /**
@@ -347,7 +348,7 @@ test.describe('Web khách: Trang chủ /', () => {
   });
 
   for (const width of [375, 320]) {
-    test(`điện thoại ${width}px: Bento Hub 6 trụ cột + lối tắt nhanh không tràn chữ, vùng chạm ≥44px`, async ({ page, api }) => {
+    test(`điện thoại ${width}px: 2 thẻ chính + 4 ô phụ + lối tắt nhanh không tràn chữ, vùng chạm ≥44px`, async ({ page, api }) => {
       mockHome(api);
       await page.setViewportSize({ width, height: 812 });
       await page.goto('/');
@@ -355,10 +356,11 @@ test.describe('Web khách: Trang chủ /', () => {
       await expect(grid.locator('[data-pillar]')).toHaveCount(6);
       await expect(grid.getByRole('link', { name: /Mã giảm giá/ })).toBeVisible();
       expect(await shortcutLabelProblems(page)).toEqual([]);
+      expect(await homeHierarchyProblems(page)).toEqual([]);
       const heights = await grid.locator('[data-pillar], [data-testid="shortcut-quick-pills"] > *').evaluateAll((els) =>
         els.map((el) => Math.round(el.getBoundingClientRect().height)),
       );
-      expect(heights.length).toBe(10);
+      expect(heights.length).toBe(9);
       for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
     });
   }

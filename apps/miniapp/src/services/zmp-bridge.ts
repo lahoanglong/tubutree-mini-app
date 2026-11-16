@@ -181,6 +181,33 @@ export async function openExternal(url: string) {
   }
 }
 
+/** Cổng web của Tubu Tree: chỉ đúng host này (https) mới mở được qua `openWebPortal`, mọi host khác vẫn bị chặn như `openExternal`. */
+export const WEB_PORTAL_HOST = 'tubutree.com';
+
+export function isWebPortalUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && u.hostname.toLowerCase() === WEB_PORTAL_HOST;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Mở màn quản trị / đối tác / nhân sự trên website trong webview Zalo. Trả `false` khi không mở được
+ * (URL ngoài cổng web, chạy ngoài Zalo, SDK từ chối): không đổi `location` và không ném lỗi, để màn gọi
+ * hiện lời hướng dẫn "Sao chép liên kết" thay vì đưa khách ra trang ngoài.
+ */
+export async function openWebPortal(url: string): Promise<boolean> {
+  if (!isWebPortalUrl(url)) return false;
+  try {
+    await openWebview({ url });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** Mở link hoàn tiền sàn ngoài (Shopee, Lazada...) trực tiếp sang native app / trình duyệt ngoài. */
 export async function openAffiliateLink(url: string) {
   if (!isAllowedExternalUrl(url)) return blockedExternal(url);

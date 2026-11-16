@@ -16,12 +16,12 @@ export const SHORTCUT_ICONS: Record<HomeShortcutId, LucideIcon> = {
 };
 
 export const PILLAR_ICONS: Record<HomePillarId, LucideIcon> = {
-  garden: Sprout,
+  retail: Zap,
   recycle: Recycle,
-  rewards: Gift,
   groupBuy: Users,
   subscription: RefreshCw,
-  partner: HeartHandshake,
+  garden: Sprout,
+  rewards: Gift,
 };
 
 /** Đích điều hướng của lối tắt; `null` = mở sheet thay vì sang trang (Kiếm tiền). Giờ vàng và Mã giảm giá đi qua `liveRoute` cùng nguồn với "Xem tất cả" của khối tương ứng. */

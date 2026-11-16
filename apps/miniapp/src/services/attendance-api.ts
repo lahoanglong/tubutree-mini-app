@@ -1,6 +1,5 @@
 import { api } from './api';
 import { requestZaloLocationStrict, getZaloAccessToken } from './zmp-bridge';
-import type { Shift } from './shifts-api';
 
 export interface OpenSession {
   id: string;
@@ -12,8 +11,17 @@ export interface OpenSession {
   lastHeartbeatAt: string;
 }
 
+/** Ca đã duyệt trong ngày, đúng các trường thẻ chấm công hiển thị. */
+export interface AttendanceShift {
+  id: string;
+  startAt: string;
+  endAt: string;
+  approvedStart: string | null;
+  approvedEnd: string | null;
+}
+
 export interface AttendanceStatus {
-  shifts: Shift[];
+  shifts: AttendanceShift[];
   openSession: OpenSession | null;
 }
 
@@ -120,19 +128,3 @@ export const heartbeat = (payload: LocationPayload) =>
       noteRawCoordsRefusal(payload, e);
       throw e;
     });
-
-export interface SessionHistory {
-  id: string;
-  shiftId: string;
-  checkinAt: string;
-  checkoutAt: string | null;
-  isLate: boolean;
-  closeReason: string | null;
-}
-
-export const getHistory = (fromISO: string, toISO: string) =>
-  api.get<SessionHistory[]>('/staff/attendance/history', { params: { from: fromISO, to: toISO } }).then((r) => r.data);
-
-// ── Admin sửa/thêm phiên ──
-export const adminEditSession = (id: string, patch: { checkinAt?: string; checkoutAt?: string }) =>
-  api.post<{ updated: boolean }>(`/admin/attendance/session/${id}/edit`, patch).then((r) => r.data);

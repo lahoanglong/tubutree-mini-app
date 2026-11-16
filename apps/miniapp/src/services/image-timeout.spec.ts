@@ -13,8 +13,6 @@ import { applyDealer } from './dealer-api';
 import { updateMe } from './account-api';
 import { updateOwnedBrand } from './brand-owner-api';
 import { updateStorefront } from './storefront-api';
-import { updateBank, markPaid } from './payroll-api';
-import { cancelShift } from './shifts-api';
 import { createPost, editPost, createEvent } from './feed-api';
 import { sendSupportChat } from './support-chat-api';
 
@@ -30,9 +28,6 @@ const CALLS: { name: string; method: 'post' | 'put' | 'patch'; withImage: () => 
   { name: 'updateMe', method: 'patch', withImage: () => updateMe({ avatarUrl: IMG }), textOnly: () => updateMe({ fullName: 'An' }) },
   { name: 'updateOwnedBrand', method: 'patch', withImage: () => updateOwnedBrand({ logoUrl: IMG }), textOnly: () => updateOwnedBrand({ tagline: 'x' }) },
   { name: 'updateStorefront', method: 'patch', withImage: () => updateStorefront({ avatarUrl: IMG }), textOnly: () => updateStorefront({ title: 'x' }) },
-  { name: 'updateBank', method: 'put', withImage: () => updateBank({ qrImageUrl: IMG }), textOnly: () => updateBank({ bankAccountNo: '123' }) },
-  { name: 'markPaid', method: 'post', withImage: () => markPaid('s', { year: 2026, month: 10, proofImageUrl: IMG }), textOnly: () => markPaid('s', { year: 2026, month: 10, proofImageUrl: 'https://img/p.png' }) },
-  { name: 'cancelShift', method: 'post', withImage: () => cancelShift('i', { reason: 'abc', evidenceUrl: IMG }), textOnly: () => cancelShift('i', { reason: 'abc' }) },
   { name: 'createPost', method: 'post', withImage: () => createPost({ title: 't', body: 'b', images: [IMG] } as never), textOnly: () => createPost({ title: 't', body: 'b' } as never) },
   { name: 'editPost', method: 'patch', withImage: () => editPost('p', { images: [IMG] }), textOnly: () => editPost('p', { title: 'x' }) },
   { name: 'createEvent', method: 'post', withImage: () => createEvent({ title: 't', coverUrl: IMG } as never), textOnly: () => createEvent({ title: 't' } as never) },

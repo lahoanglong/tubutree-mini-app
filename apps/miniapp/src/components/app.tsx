@@ -88,7 +88,6 @@ const RecycleRequestPage = lazy(() => import('../pages/recycle-request'));
 const RecycleEditPage = lazy(() => import('../pages/recycle-edit'));
 const RecycleRequestsPage = lazy(() => import('../pages/recycle-requests'));
 const RecycleDonePage = lazy(() => import('../pages/recycle-done'));
-const RecycleDeskPage = lazy(() => import('../pages/recycle-desk'));
 const RewardsPage = lazy(() => import('../pages/rewards'));
 const RewardsMinePage = lazy(() => import('../pages/rewards-mine'));
 const ProfilePage = lazy(() => import('../pages/profile'));
@@ -102,21 +101,17 @@ const NotificationsPage = lazy(() => import('../pages/notifications'));
 const AffiliatePage = lazy(() => import('../pages/affiliate'));
 const AcademyPage = lazy(() => import('../pages/academy'));
 const CashbackPage = lazy(() => import('../pages/cashback'));
-const DealerPage = lazy(() => import('../pages/dealer'));
 const AboutPage = lazy(() => import('../pages/about'));
 const WishlistPage = lazy(() => import('../pages/wishlist'));
 const SupportChatPage = lazy(() => import('../pages/support-chat'));
 const EditProfilePage = lazy(() => import('../pages/edit-profile'));
 const SettingsPage = lazy(() => import('../pages/settings'));
 const BrandStoryPage = lazy(() => import('../pages/brand-story'));
-const StorefrontBuilderPage = lazy(() => import('../pages/storefront-builder'));
 const StorefrontViewPage = lazy(() => import('../pages/storefront-view'));
 const BrandViewPage = lazy(() => import('../pages/brand-view'));
-const BrandOwnerPage = lazy(() => import('../pages/brand-owner'));
-const AdminPage = lazy(() => import('../pages/admin'));
-const CommunityModerationPage = lazy(() => import('../pages/community-moderation'));
-const StaffPage = lazy(() => import('../pages/staff'));
-const MyPayrollPage = lazy(() => import('../pages/my-payroll'));
+// Quản trị, đối tác và nhân sự làm đầy đủ trên website (W177): 8 đường dẫn giữ nguyên, cùng một thẻ chuyển sang web.
+const WebPortalRedirectPage = lazy(() => import('../pages/web-portal-redirect'));
+const StaffPortalPage = lazy(() => import('../pages/staff-portal'));
 const NotFoundPage = lazy(() => import('../pages/not-found'));
 // Chỉ bản dev: `import.meta.env.DEV` là hằng lúc build nên nhánh import bị bỏ, bản build không có chunk ds-gallery (ds-gallery-guard.spec).
 const DsGalleryPage: ComponentType = import.meta.env.DEV ? lazy(() => import('../pages/ds-gallery')) : () => null;
@@ -249,7 +244,7 @@ export default function MyApp() {
                     <Route path="/recycle/r/:id/edit" element={<RouteShell><RecycleEditPage /></RouteShell>} />
                     <Route path="/recycle/requests" element={<RouteShell><RecycleRequestsPage /></RouteShell>} />
                     <Route path="/recycle/done/:id" element={<RouteShell><RecycleDonePage /></RouteShell>} />
-                    <Route path="/recycle/desk" element={<RouteShell><RecycleDeskPage /></RouteShell>} />
+                    <Route path="/recycle/desk" element={<RouteShell><WebPortalRedirectPage screen="/recycle/desk" /></RouteShell>} />
                     <Route path="/rewards" element={<RouteShell><RewardsPage /></RouteShell>} />
                     <Route path="/rewards/mine" element={<RouteShell><RewardsMinePage /></RouteShell>} />
                     <Route path="/profile" element={<RouteShell><ProfilePage /></RouteShell>} />
@@ -266,7 +261,7 @@ export default function MyApp() {
                         hẳn Học viện, và CTV gửi được link thẳng tới một khoá cho đội của mình. */}
                     <Route path="/academy/:courseId" element={<RouteShell><AcademyPage /></RouteShell>} />
                     <Route path="/cashback" element={CASHBACK_ENABLED ? <RouteShell><CashbackPage /></RouteShell> : <Navigate to="/" replace />} />
-                    <Route path="/dealer" element={<RouteShell><DealerPage /></RouteShell>} />
+                    <Route path="/dealer" element={<RouteShell><WebPortalRedirectPage screen="/dealer" /></RouteShell>} />
                     <Route path="/about" element={<RouteShell><AboutPage /></RouteShell>} />
                     <Route path="/wishlist" element={<RouteShell><WishlistPage /></RouteShell>} />
                     <Route path="/chat" element={<RouteShell><SupportChatPage /></RouteShell>} />
@@ -275,14 +270,14 @@ export default function MyApp() {
                     <Route path="/brand-story" element={<RouteShell><BrandStoryPage /></RouteShell>} />
                     {/* Trang đích Mua xoay vòng (W171): khách vãng lai xem ngay quyền lợi + sản phẩm đặt định kỳ; quản lý gói vẫn ở cả đây và /orders?tab=subscriptions. */}
                     <Route path="/subscriptions" element={<RouteShell><SubscriptionsPage /></RouteShell>} />
-                    <Route path="/storefront" element={<RouteShell><StorefrontBuilderPage /></RouteShell>} />
+                    <Route path="/storefront" element={<RouteShell><WebPortalRedirectPage screen="/storefront" /></RouteShell>} />
                     <Route path="/s/:slug" element={<RouteShell><StorefrontViewPage /></RouteShell>} />
                     <Route path="/brand/:slug" element={<RouteShell><BrandViewPage /></RouteShell>} />
-                    <Route path="/brand-owner" element={<RouteShell><BrandOwnerPage /></RouteShell>} />
-                    <Route path="/admin" element={<RouteShell><AdminPage /></RouteShell>} />
-                    <Route path="/admin/community" element={<RouteShell><CommunityModerationPage /></RouteShell>} />
-                    <Route path="/staff" element={<RouteShell><StaffPage /></RouteShell>} />
-                    <Route path="/my-payroll" element={<RouteShell><MyPayrollPage /></RouteShell>} />
+                    <Route path="/brand-owner" element={<RouteShell><WebPortalRedirectPage screen="/brand-owner" /></RouteShell>} />
+                    <Route path="/admin" element={<RouteShell><WebPortalRedirectPage screen="/admin" /></RouteShell>} />
+                    <Route path="/admin/community" element={<RouteShell><WebPortalRedirectPage screen="/admin/community" /></RouteShell>} />
+                    <Route path="/staff" element={<RouteShell><StaffPortalPage /></RouteShell>} />
+                    <Route path="/my-payroll" element={<RouteShell><WebPortalRedirectPage screen="/my-payroll" /></RouteShell>} />
                     {import.meta.env.DEV && <Route path="/ds-gallery" element={<RouteShell><DsGalleryPage /></RouteShell>} />}
                     <Route path="*" element={<RouteShell><NotFoundPage /></RouteShell>} />
                   </AnimationRoutes>

@@ -17,13 +17,10 @@ const FILES_PC10B = [
   'src/pages/affiliate.tsx',
   'src/components/affiliate/ctv-order-sheet.tsx',
   'src/components/affiliate/choice-card.tsx',
-  'src/pages/dealer.tsx',
   'src/components/storefront-context-bar.tsx',
   'src/components/share-sheet.tsx',
   'src/components/content-kit-sheet.tsx',
-  'src/pages/storefront-builder.tsx',
   'src/pages/brand-story.tsx',
-  'src/pages/brand-owner.tsx',
   'src/pages/brand-view.tsx',
   'src/utils/brands.ts',
   'src/utils/brand-origins.ts',
@@ -38,10 +35,7 @@ const ZAUI_ALLOWED = new Set(['Page', 'Sheet', 'Input', 'useSnackbar', 'useNavig
 /** Mỗi TRANG phải có đúng một h1: PageHeader (h1 thật) ở mọi nhánh render. */
 const PAGES_WITH_PAGE_HEADER = [
   'src/pages/affiliate.tsx',
-  'src/pages/dealer.tsx',
-  'src/pages/storefront-builder.tsx',
   'src/pages/brand-story.tsx',
-  'src/pages/brand-owner.tsx',
   'src/pages/brand-view.tsx',
 ];
 

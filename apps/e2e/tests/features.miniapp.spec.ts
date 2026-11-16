@@ -1,7 +1,6 @@
 import type { LoyaltyOverview, WalletSummary } from '../../miniapp/src/services/account-api';
 import type { OwnedBrand } from '../../miniapp/src/services/brand-owner-api';
 import type { DealerMe } from '../../miniapp/src/services/dealer-api';
-import type { QuestList, StorefrontEdit, StorefrontStats } from '../../miniapp/src/services/storefront-api';
 import { test, expect, makeUser, mockSession, type MockApi } from './support/mock-api';
 import { mockAffiliateDashboard } from './support/affiliate-mocks';
 
@@ -72,10 +71,10 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
     await expect(page.getByText('Quản lý thương hiệu')).toBeVisible({ timeout: 15_000 });
     await page.getByText('Quản lý thương hiệu').click();
 
-    // .first(): trang /profile trước đó vẫn còn "Tubu Official" (hint menu) trong DOM lúc chuyển
-    // màn (AnimationRoutes của zmp-ui).
+    // Màn quản lý thương hiệu làm đầy đủ trên web (W177): Mini App giữ đường dẫn và hiện thẻ chuyển sang website.
     await expect(page).toHaveURL(/\/brand-owner/);
-    await expect(page.getByText('Tubu Official').first()).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Quản lý thương hiệu' })).toBeVisible();
+    await expect(page.getByText('https://tubutree.com/chu-thuong-hieu')).toBeVisible();
 
     await page.screenshot({ path: testInfo.outputPath('brand-owner-view.png') });
   });
@@ -88,25 +87,6 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
     // Dashboard CTV (isAffiliate:true để vào Dashboard thay vì RegisterGate) + /affiliate/tiers +
     // /affiliate/milestones (WIP bậc CTV & thưởng mốc).
     mockAffiliateDashboard(api);
-
-    const storefront: StorefrontEdit = {
-      id: 'sf-1',
-      slug: 'shop-aff-1',
-      type: 'CTV',
-      title: 'Cửa hàng Xanh của Affiliate 1',
-      headerNote: 'Mua hàng ủng hộ mình nhé',
-      avatarUrl: null,
-      coverUrl: null,
-      theme: 'default',
-      isPublished: false,
-      collections: [],
-    };
-    const quests: QuestList = { quests: [], totalEarnedPoints: 0, level: 0, levelMax: 5 };
-    api.get('/storefront/me', storefront);
-    api.get('/storefront/me/quests', quests);
-    api.get('/storefront/me/products', []);
-    const stats: StorefrontStats = { orders7d: 0, orders30d: 0, revenue30d: 0, commission30d: 0, byProduct: [] };
-    api.get('/storefront/me/stats', stats);
 
     await page.goto('/profile');
 
@@ -126,8 +106,10 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
     await expect(storefrontShortcut).toBeVisible();
     await storefrontShortcut.click();
 
+    // Dựng gian hàng làm đầy đủ trên web (W177): Mini App giữ đường dẫn và hiện thẻ chuyển sang website.
     await expect(page).toHaveURL(/\/storefront/);
-    await expect(page.getByText('Cửa hàng Xanh của Affiliate 1').first()).toBeVisible();
+    await expect(page.getByRole('heading', { level: 1, name: 'Gian hàng của tôi' })).toBeVisible();
+    await expect(page.getByText('https://tubutree.com/ctv/gian-hang')).toBeVisible();
 
     await page.screenshot({ path: testInfo.outputPath('storefront-builder-view.png') });
   });

@@ -1,6 +1,7 @@
 import type { Page } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
 import { CATALOG, mockDiscovery } from './support/discovery-mocks';
+import { homeHierarchyProblems } from './support/home-hierarchy';
 import { shortcutLabelProblems } from './support/shortcut-labels';
 
 /**
@@ -34,7 +35,7 @@ async function visibleBlocks(page: Page): Promise<string[]> {
 test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cục', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  test('khách cũ, chưa có banner: Bento Hub 6 trụ cột nằm trọn nửa trên và Giờ vàng hiện ngay trong màn đầu 375×812', async ({ page, api }) => {
+  test('khách cũ, chưa có banner: khối 6 lối vào (2 thẻ chính + 4 ô phụ) nằm trọn nửa trên và Giờ vàng hiện ngay trong màn đầu 375×812', async ({ page, api }) => {
     mockDiscovery(api, { returning: true });
     mockFlash(api);
     await page.goto('/');
@@ -44,7 +45,7 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
     expect(await visibleBlocks(page)).not.toContain('banner');
     const sBox = (await shortcuts.boundingBox())!;
-    expect(sBox.y + sBox.height, `Bento Hub kết thúc ở ${Math.round(sBox.y + sBox.height)}px`).toBeLessThanOrEqual(520);
+    expect(sBox.y + sBox.height, `khối lối vào kết thúc ở ${Math.round(sBox.y + sBox.height)}px`).toBeLessThanOrEqual(520);
     const box = (await flash.boundingBox())!;
     expect(box.y, `Giờ vàng bắt đầu ở ${Math.round(box.y)}px`).toBeLessThanOrEqual(680);
     expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px`).toBeLessThanOrEqual(965);
@@ -63,7 +64,7 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     expect(blocks).not.toContain('banner');
   });
 
-  test('khách mới có Quà khách mới và Giờ vàng: dải nằm trên Bento Hub, Giờ vàng hiện ngay trong màn đầu 375×812', async ({ page, api }) => {
+  test('khách mới có Quà khách mới và Giờ vàng: dải nằm trên khối lối vào, Giờ vàng hiện ngay trong màn đầu 375×812', async ({ page, api }) => {
     mockDiscovery(api);
     api.get('/me/new-customer-offer', { isNewCustomer: true, welcomeVoucher: null });
     mockFlash(api);
@@ -81,7 +82,7 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     expect(blocks.indexOf('shortcuts')).toBeLessThan(blocks.indexOf('flash'));
     expect(blocks.indexOf('flash')).toBeLessThan(blocks.indexOf('categories'));
     const sBox = (await shortcuts.boundingBox())!;
-    expect(sBox.y + sBox.height, `Bento Hub kết thúc ở ${Math.round(sBox.y + sBox.height)}px`).toBeLessThanOrEqual(525);
+    expect(sBox.y + sBox.height, `khối lối vào kết thúc ở ${Math.round(sBox.y + sBox.height)}px`).toBeLessThanOrEqual(525);
     const box = (await flash.boundingBox())!;
     expect(box.y, `Giờ vàng bắt đầu ở ${Math.round(box.y)}px`).toBeLessThanOrEqual(685);
     expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px khi có dải Quà khách mới`).toBeLessThanOrEqual(965);
@@ -117,8 +118,8 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
     expect(clock.y, 'đồng hồ nằm trên hàng thẻ').toBeLessThan(first.y);
   });
 
-  for (const width of [375, 320]) {
-    test(`${width}px: Bento Hub 6 trụ cột + lối tắt nhanh đọc đủ nhãn, vùng chạm ≥44px`, async ({ page, api }) => {
+  for (const width of [375, 360, 320]) {
+    test(`${width}px: 2 thẻ chính + 4 ô phụ + lối tắt nhanh đọc đủ nhãn, vùng chạm ≥44px, không tràn ngang`, async ({ page, api }) => {
       mockDiscovery(api, { returning: true });
       await page.setViewportSize({ width, height: 812 });
       await page.goto('/');
@@ -126,9 +127,19 @@ test.describe('Trang chủ Mini — màn đầu và độ ổn định bố cụ
       await expect(grid.locator('[data-pillar]')).toHaveCount(6, { timeout: 15_000 });
       await expect(grid.getByRole('button', { name: /Mã giảm giá/ })).toBeVisible({ timeout: 15_000 });
       expect(await shortcutLabelProblems(page)).toEqual([]);
+      expect(await homeHierarchyProblems(page)).toEqual([]);
+      // 6 lối vào + Mã giảm giá + Cộng đồng + Thêm: Giờ vàng chỉ còn ở thẻ chính, không lặp ở hàng lối tắt.
+      const goldenHour = grid.getByRole('button', { name: /Giờ vàng/ });
+      await expect(goldenHour).toHaveCount(1);
+      await expect(goldenHour).toHaveAttribute('data-pillar', 'retail');
       const heights = await grid.getByRole('button').evaluateAll((els) => els.map((el) => Math.round(el.getBoundingClientRect().height)));
-      expect(heights).toHaveLength(10);
+      expect(heights).toHaveLength(9);
       for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
+      const overflow = await page.evaluate(() => {
+        const scroller = document.querySelector('.zaui-page') as HTMLElement | null;
+        return Math.max(document.documentElement.scrollWidth - document.documentElement.clientWidth, scroller ? scroller.scrollWidth - scroller.clientWidth : 0);
+      });
+      expect(overflow, `Trang chủ tràn ngang ở ${width}px`).toBeLessThanOrEqual(0);
     });
   }
 });

@@ -27,10 +27,7 @@ const TOKEN_DEFINITION_LINE = /^\s*--[\w-]+\s*:/;
  * (`--color-brand-*: #...`, `--color-bg-scrim: rgba(...)`) là chỗ DUY NHẤT được giữ màu thô nên không
  * cần liệt kê ở đây; chỉ liệt kê file mà màu thô nằm ngoài kiểu đó hoặc cần tách bạch lý do.
  */
-const RAW_COLOR_EXCEPTIONS: Record<string, string> = {
-  // Bảng màu cửa hàng do CTV chọn: mã hex là DỮ LIỆU gửi lên API và lưu ở DB, không phải màu của DS.
-  'utils/storefront-theme.ts': 'mã màu cửa hàng CTV chọn (dữ liệu, lưu ở backend)',
-};
+const RAW_COLOR_EXCEPTIONS: Record<string, string> = {};
 
 const walk = (dir: string, out: string[] = []): string[] => {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
