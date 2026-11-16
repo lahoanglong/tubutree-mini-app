@@ -46,7 +46,7 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261105200000_product_story_config',
   '20261105230000_w5_variation_name_repair',
   '20261106010000_w7_drop_zns_failed_sentat_index',
-  '20261117013746_mss_foundation',
+  '20261117040000_mss_foundation',
 ];
 
 /**
@@ -88,7 +88,7 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261105130200_hd1_notification_inapp_indexes', ordersLock: false },
   { name: '20261105130300_hd1_points_history_index', ordersLock: false },
   { name: '20261105180000_hg_zns_stuck_logs_index', ordersLock: false },
-  { name: '20261117013746_mss_foundation', ordersLock: true },
+  { name: '20261117040000_mss_foundation', ordersLock: true },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;

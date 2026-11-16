@@ -55,7 +55,7 @@ export const EXCLUDED_CONFIG_PREFIXES: Readonly<Record<string, string>> = {
   'shipping.gomdon': 'thuộc gói đổi rác/Gomdon (phiên khác); migration 20260926100000 đã tạo dòng',
   web: 'cờ tính năng của website (web.guest_cart_enabled): migration 20261117030000_web_guest_cart_flag đã tạo dòng bằng mặc định trong mã (false, ON CONFLICT DO NOTHING), bật tắt ở thẻ Bật/tắt tính năng',
   waste: 'thuộc gói Đổi rác lấy quà; migration 20261020000000_waste_exchange đã tạo 21 dòng và migration 20261030100001_waste_rules_version tạo thêm waste.rules_version, đều bằng giá trị mặc định (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
-  mss: 'cờ kết nối MSS; migration 20261117013746_mss_foundation đã tạo 10 dòng, đều TẮT và bằng giá trị mặc định trong mã (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
+  mss: 'cờ kết nối MSS; migration 20261117040000_mss_foundation đã tạo 10 dòng, đều TẮT và bằng giá trị mặc định trong mã (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
 };
 
 /** Khoá cố ý không nạp (nằm trong tiền tố được nạp), kèm lý do. */
