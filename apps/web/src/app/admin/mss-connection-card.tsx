@@ -170,8 +170,14 @@ function MssCardBody({ mss }: { mss: MssOpsCard }) {
             <div className="flex shrink-0 flex-wrap items-center gap-1">
               <ToneBadge tone={f.enabled ? 'info' : 'neutral'}>{f.enabled ? 'Admin bật' : 'Tắt'}</ToneBadge>
               {f.enabled && (
-                <ToneBadge tone={f.effective ? 'success' : 'warning'}>
-                  {f.effective ? 'Có hiệu lực' : f.capabilityPublished === false ? `MSS chưa có "${f.capability}"` : 'Chưa có hiệu lực'}
+                <ToneBadge tone={f.effective ? (circuit.state === 'closed' ? 'success' : 'danger') : 'warning'}>
+                  {f.effective
+                    ? circuit.state === 'closed'
+                      ? 'Có hiệu lực'
+                      : 'Có hiệu lực, cầu dao ngắt'
+                    : f.capabilityPublished === false
+                      ? `MSS chưa có "${f.capability}"`
+                      : 'Chưa có hiệu lực'}
                 </ToneBadge>
               )}
             </div>

@@ -151,24 +151,26 @@ export class MssClient {
 
   /**
    * `GET /health` có ký. Đây cũng là lần dò của cầu dao: luôn được gửi kể cả khi cầu dao đang ngắt, MSS trả `ok: true` thì đóng
-   * cầu dao. Người gọi định kỳ là MssHealthService (5 phút một lần, chỉ khi có cờ MSS bật).
+   * cầu dao. Người gọi định kỳ là MssHealthService (5 phút một lần, chỉ khi có cờ MSS bật). Khi cầu dao đang đóng, kết quả
+   * `/health` không vào bộ đếm lỗi liên tiếp: bộ đếm chỉ phản ánh lời gọi nghiệp vụ, `/health` tốt không được xoá lỗi 5xx của chúng.
    */
   async health(): Promise<MssHealthDoc> {
     if (!this.isConfigured()) throw new MssRequestError('not_configured', 'MSS chưa cấu hình đủ biến môi trường');
+    const probe = this.circuit.isTripped();
     let res: MssResponse<unknown>;
     try {
       // Cầu dao do chính hàm này ghi: lần dò mà MSS trả 401/4xx vẫn là dò hỏng, không được đóng cầu dao.
       res = await this.send<unknown>('GET', '/health', { op: 'GET health' }, false);
     } catch (err) {
-      this.circuit.recordFailure(err instanceof MssRequestError ? err.kind : 'internal');
+      if (probe) this.circuit.recordFailure(err instanceof MssRequestError ? err.kind : 'internal');
       throw err;
     }
     const doc = parseHealthDoc(res.data);
     if (!doc || !doc.ok) {
-      this.circuit.recordFailure('invalid_response');
+      if (probe) this.circuit.recordFailure('invalid_response');
       throw new MssRequestError('invalid_response', 'MSS /health không trả ok', { status: res.status });
     }
-    this.circuit.recordSuccess();
+    if (probe) this.circuit.recordSuccess();
     return doc;
   }
 

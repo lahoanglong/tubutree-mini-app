@@ -769,7 +769,7 @@ describe('docs/launch/deploy-rollback-runbook.md: bảng 1.0 và ví dụ cửa 
     expect(section('### 3.1 ')).toContain(`tối đa ${ordersHeavy}`);
     const step = section('### 3.2 ');
     expect(step).toContain(`${ordersHeavy} × 10 giây = ${ordersHeavy * 10} giây`);
-    expect(step).not.toContain('4 × 10 giây');
+    expect(step).not.toMatch(/(^|\D)4 × 10 giây/);
   });
 });
 

@@ -213,6 +213,20 @@ describe('MssClient', () => {
       expect(c.circuit.snapshot()).toMatchObject({ state: 'closed', consecutiveFailures: 0, openUntil: null });
     });
 
+    it('cầu dao đang đóng: /health định kỳ (tốt hay hỏng) không xoá và không cộng chuỗi lỗi của lời gọi nghiệp vụ', async () => {
+      const f = jest.fn<ReturnType<MssFetch>, Parameters<MssFetch>>().mockImplementation(async () => json(500, 'boom'));
+      const c = make(f);
+      for (let i = 0; i < MSS_CIRCUIT_THRESHOLD - 1; i++) await c.request('POST', '/order-events', { body: {} }).catch(() => undefined);
+      f.mockResolvedValueOnce(new Response(fixture('health.ok.json'), { status: 200 }));
+      await c.health();
+      expect(c.circuit.snapshot()).toMatchObject({ state: 'closed', consecutiveFailures: MSS_CIRCUIT_THRESHOLD - 1 });
+      f.mockResolvedValueOnce(json(401, { error: 'unauthorized' }));
+      await expect(c.health()).rejects.toMatchObject({ kind: 'unauthorized' });
+      expect(c.circuit.snapshot()).toMatchObject({ state: 'closed', consecutiveFailures: MSS_CIRCUIT_THRESHOLD - 1 });
+      await c.request('POST', '/order-events', { body: {} }).catch(() => undefined);
+      expect(c.circuit.snapshot().state).toBe('open');
+    });
+
     it('dò /health hỏng (kể cả 401 hay ok:false) thì ngắt thêm một chu kỳ, lời gọi không được gửi', async () => {
       const f = jest.fn<ReturnType<MssFetch>, Parameters<MssFetch>>().mockImplementation(async () => json(500, 'boom'));
       const c = make(f);

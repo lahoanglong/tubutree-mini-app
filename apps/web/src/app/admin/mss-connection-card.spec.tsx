@@ -132,6 +132,20 @@ describe('MssConnectionCard', () => {
     expect(text).not.toContain('Năng lực MSS công bố');
   });
 
+  it('cờ có hiệu lực mà cầu dao đang ngắt: nhãn cờ nói rõ cầu dao ngắt, không chỉ "Có hiệu lực"', async () => {
+    const card = offCard();
+    card.configured = true;
+    card.polling = true;
+    card.health = { checkedAt: '2026-11-17T01:00:00.000Z', ok: true, capabilities: ['order_events'], contract: null, error: null };
+    card.flags = card.flags.map((f) => (f.flag === 'orderEvents' ? { ...f, enabled: true, capabilityPublished: true, effective: true } : f));
+    card.circuit = { state: 'open', consecutiveFailures: 10, openUntil: '2026-11-17T01:05:00.000Z', lastFailureAt: '2026-11-17T01:00:00.000Z', lastFailureKind: 'timeout', sharedStore: 'ok' };
+    stub(card);
+    const r = mount();
+    await flush(10);
+    const row = [...r.container.querySelectorAll('ul[aria-label="Cờ MSS"] li')].find((li) => li.textContent!.includes('mss.order_events_enabled'))!;
+    expect(row.textContent).toContain('Có hiệu lực, cầu dao ngắt');
+  });
+
   it('máy chủ không đọc được trạng thái (mss: null): báo riêng, không làm hỏng thẻ', async () => {
     stub(null);
     const r = mount();

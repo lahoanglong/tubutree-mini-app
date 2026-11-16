@@ -181,12 +181,22 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
       '/api/webhooks/zalo-oa',
       '/api/webhooks/gomdon',
       '/api/webhooks/gomdon/mot-token',
+      '/api/integrations/mss/order-events',
     ])('webhook sự kiện nhỏ %s: thân 65 KB → 413 JSON, thân 60 KB và thân nhỏ vẫn qua', async (path) => {
       const res = await post(path, { pad: 'x'.repeat(65 * 1024) });
       expect(res.status).toBe(413);
       expect(await bodyOf(res)).toMatchObject({ statusCode: 413, message: BODY_TOO_LARGE_MESSAGE });
       expect((await post(path, { pad: 'x'.repeat(60 * 1024) })).status).toBe(200);
       expect((await post(path, { data: '{"amount":1}', mac: 'abc', type: 1 })).status).toBe(200);
+    });
+    it('route MSS dùng hình dạng thân của webhook (lô 600 phần tử, lồng 12 tầng) chứ không phải hình dạng route thường', async () => {
+      const batch = { events: Array.from({ length: 600 }, (_, i) => ({ i })) };
+      let deep: unknown = { v: 1 };
+      for (let i = 0; i < 12; i++) deep = { n: deep };
+      expect((await post('/api/integrations/mss/order-events', batch)).status).toBe(200);
+      expect((await post('/api/integrations/mss/order-events', { deep })).status).toBe(200);
+      expect((await post('/api/cart/coupon', batch)).status).toBe(400);
+      expect((await post('/api/cart/coupon', { deep })).status).toBe(400);
     });
     it('webhook sự kiện nhỏ: thân 65 KB gửi dạng gzip cũng 413 (trần áp sau giải nén)', async () => {
       const gz = gzipSync(JSON.stringify({ pad: 'x'.repeat(65 * 1024) }));

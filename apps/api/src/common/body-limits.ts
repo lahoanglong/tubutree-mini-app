@@ -274,7 +274,7 @@ export const requestInputGuard: RequestHandler = (req: Request, res: Response, n
   if (NUL_IN_URL.test(req.url)) return reject(res, 400, NUL_CHAR_MESSAGE);
   const violation = PANCAKE_WEBHOOK_ROUTE.test(req.path)
     ? inspectBody(req.body, MAX_PANCAKE_WEBHOOK_BODY_NODES, PANCAKE_SHAPE)
-    : WEBHOOK_ROUTE.test(req.path)
+    : WEBHOOK_ROUTE.test(req.path) || MSS_INTEGRATION_ROUTE.test(req.path)
       ? inspectBody(req.body, MAX_WEBHOOK_BODY_NODES, WEBHOOK_SHAPE)
       : inspectBody(req.body, MAX_BODY_NODES);
   if (violation === 'nul') return reject(res, 400, NUL_CHAR_MESSAGE);

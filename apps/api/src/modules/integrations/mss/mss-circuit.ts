@@ -118,6 +118,11 @@ export class MssCircuitBreaker {
     return 'probe';
   }
 
+  /** Đang ngắt hoặc đang dò (chưa đóng lại sau lần ngắt gần nhất). */
+  isTripped(): boolean {
+    return this.openUntil !== 0;
+  }
+
   recordSuccess(): void {
     const wasOpen = this.openUntil !== 0;
     this.failures = 0;
