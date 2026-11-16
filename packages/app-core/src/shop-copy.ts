@@ -357,6 +357,35 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.reviews': 'Đánh giá',
   'pdp.reviewsAll': 'Xem tất cả ({n})',
   'pdp.reviewsMore': 'Xem thêm đánh giá',
+  // Đánh giá rỗng: một dòng, nút viết chỉ khi khách đã mua và còn lần mua chưa đánh giá.
+  'pdp.reviewsEmpty': 'Chưa có đánh giá',
+  'pdp.reviewWrite': 'Viết đánh giá',
+  // Dòng mua lại (khách đã có đơn đã giao chứa sản phẩm): thay chỗ dòng Đặt định kỳ; bấm là thêm đúng phân loại lần trước.
+  'pdp.rebuyLine': 'Bạn đã mua ngày {date}',
+  'pdp.rebuyCta': 'Mua lại',
+  'pdp.rebuySpoken': 'Mua lại phân loại {name} đã mua ngày {date}',
+  // Dòng Đặt định kỳ: số % đọc từ cấu hình; cấu hình thiếu thì không nêu số.
+  'pdp.subscribeSave': 'Đặt định kỳ — tiết kiệm {pct}%',
+  'pdp.subscribeSaveNoPct': 'Đặt định kỳ — tiết kiệm mỗi kỳ',
+  // Thành phần mở sẵn 3 dòng.
+  'pdp.ingredients': 'Thành phần',
+  'pdp.ingredientsMore': 'Xem đủ ({n})',
+  'pdp.ingredientsLess': 'Thu gọn',
+  // So với món tương tự (cờ catalog.pdp_compare_enabled): bảng 3 cột.
+  'pdp.compareTitle': 'So với món tương tự',
+  'pdp.compareThis': 'Món này',
+  'pdp.comparePrice': 'Giá',
+  'pdp.compareUnit100ml': 'Giá/100ml',
+  'pdp.compareUnit100g': 'Giá/100g',
+  'pdp.compareSize': 'Dung tích',
+  'pdp.compareIngredients': 'Thành phần chính',
+  'pdp.compareView': 'Xem',
+  'pdp.compareViewSpoken': 'Xem {name}',
+  // Trang Mua xoay vòng: số % đọc từ cấu hình như dòng Đặt định kỳ ở trang sản phẩm.
+  'subs.heroEyebrow': 'Đặt định kỳ · Tiết kiệm {pct}%',
+  'subs.heroEyebrowNoPct': 'Đặt định kỳ · Tiết kiệm mỗi kỳ',
+  'subs.perkDiscount': 'Giảm {pct}% cho mỗi kỳ giao.',
+  'subs.perkDiscountNoPct': 'Giảm giá cho mỗi kỳ giao.',
   // Video sản phẩm trong thư viện ảnh PDP (PdpVideoSlide): nút phát trên ô poster, nhãn đọc, nút ở dải ảnh nhỏ (web), câu khi không phát được.
   'pdp.videoPlay': 'Phát video',
   'pdp.videoPlayAria': 'Phát video của {name}',

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { clampPickerQty, needsVariationPicker, pickerStartId, pickerStockText } from './variation-picker';
+import { clampPickerQty, needsVariationPicker, pickerStartId, pickerStockText, shouldOpenVariationPicker } from './variation-picker';
 
 const v = (id: string, retailPrice: number, stock: number, salePrice: number | null = null) => ({ id, sku: id, retailPrice, salePrice, stock });
 
@@ -8,6 +8,29 @@ describe('needsVariationPicker', () => {
     expect(needsVariationPicker([])).toBe(false);
     expect(needsVariationPicker([v('a', 100, 5)])).toBe(false);
     expect(needsVariationPicker([v('a', 100, 5), v('b', 200, 0)])).toBe(true);
+  });
+});
+
+describe('shouldOpenVariationPicker', () => {
+  const list = [v('a', 100, 5), v('b', 200, 0), v('c', 150, 2)];
+  it('đã chọn chip còn hàng: không mở bảng, nút dùng luôn lựa chọn', () => {
+    expect(shouldOpenVariationPicker(list, 'a')).toBe(false);
+    expect(shouldOpenVariationPicker(list, 'c')).toBe(false);
+  });
+  it('chưa chọn chip: mở bảng', () => {
+    expect(shouldOpenVariationPicker(list, null)).toBe(true);
+    expect(shouldOpenVariationPicker(list, undefined)).toBe(true);
+    expect(shouldOpenVariationPicker(list, '')).toBe(true);
+  });
+  it('chip đã chọn hết hàng: mở bảng', () => {
+    expect(shouldOpenVariationPicker(list, 'b')).toBe(true);
+  });
+  it('id không còn trong danh sách: mở bảng', () => {
+    expect(shouldOpenVariationPicker(list, 'zz')).toBe(true);
+  });
+  it('một phân loại thì không bao giờ mở', () => {
+    expect(shouldOpenVariationPicker([v('a', 100, 5)], null)).toBe(false);
+    expect(shouldOpenVariationPicker([], null)).toBe(false);
   });
 });
 

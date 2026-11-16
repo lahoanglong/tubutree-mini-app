@@ -8,6 +8,18 @@ export function needsVariationPicker(variations: readonly unknown[]): boolean {
   return variations.length >= 2;
 }
 
+/**
+ * Bấm "Thêm vào giỏ"/"Mua ngay" có phải mở bảng chọn không. Khách đã tự bấm chip (`pickedId`) và phân loại đó còn hàng thì nút dùng luôn lựa chọn ấy;
+ * chưa bấm chip (trang chỉ chọn sẵn phân loại mặc định), chip đã hết hàng, hay id không còn trong danh sách thì vẫn hỏi.
+ */
+export function shouldOpenVariationPicker(
+  variations: readonly { id: string; stock: number }[],
+  pickedId: string | null | undefined,
+): boolean {
+  if (!needsVariationPicker(variations)) return false;
+  return !(pickedId && variations.some((v) => v.id === pickedId && v.stock > 0));
+}
+
 /** Phân loại mở sẵn trong bảng chọn: giữ cái đang chọn nếu còn hàng, không thì phân loại còn hàng theo luật mặc định của thẻ. */
 export function pickerStartId(variations: readonly PickerVariation[], preferredId: string | null | undefined): string | null {
   const preferred = preferredId ? variations.find((v) => v.id === preferredId && v.stock > 0) : undefined;
