@@ -12,6 +12,7 @@ import {
   WAREHOUSE_ONLY_LABEL,
   WAREHOUSE_PICKUP_DONE,
   freeShipConfirmText,
+  rewardPhoneVerifyCopy,
   rewardsGuideCopy,
   NEW_COUPON_PARAM,
   rewardFreeShipNote,
@@ -22,9 +23,10 @@ import {
 } from '@tubutree/app-core/reward-rules';
 import { getLoyalty, getLoyaltyRewards, lockedPointsNote, redeemLoyaltyReward, rewardCardState } from '../services/account-api';
 import { buyTree } from '../services/game-api';
-import { getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
+import { getErrorCode, getErrorMessage, getLoadErrorMessage, isServerRejection, isStaleStateError } from '../services/api';
 import { coreHttp } from '../services/core-http';
 import { WASTE_QUERY_KEYS, invalidateAfterRedeem } from '../services/waste-api';
+import { useAuthStore } from '../store/auth';
 import { usePublicConfig } from '../hooks/use-public-config';
 import { useCouponUse } from '../hooks/use-coupon-use';
 import { useIdempotencyKey } from '../hooks/use-idempotency-key';
@@ -73,9 +75,10 @@ interface RedeemConfirmProps {
   onRedeemed: () => void;
   onDone: (outcome: RedeemOutcome) => void;
   onCancel: () => void;
+  onPhoneNotVerified?: () => void;
 }
 
-function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel }: RedeemConfirmProps) {
+function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel, onPhoneNotVerified }: RedeemConfirmProps) {
   const qc = useQueryClient();
   const { openSnackbar } = useSnackbar();
   const busyRef = useRef(false);
@@ -102,6 +105,12 @@ function RedeemConfirm({ reward, catalog, idemKey, onRedeemed, onDone, onCancel 
     onError: async (e) => {
       openSnackbar({ text: getErrorMessage(e), type: 'error' });
       const refresh = qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards });
+      if (getErrorCode(e) === 'PHONE_NOT_VERIFIED') {
+        await settleWithin(refresh);
+        onCancel();
+        onPhoneNotVerified?.();
+        return;
+      }
       if (isStaleStateError(e)) await settleWithin(refresh);
       // Lệnh bị từ chối hẳn (400/404/409/422) thì bấm lại đúng lệnh đó nhận đúng lỗi đó: đóng khung xác nhận, khách chọn lại trên danh mục mới. Lỗi mạng/5xx/401 giữ khung mở để thử lại.
       if (isServerRejection(e)) onCancel();
@@ -197,6 +206,7 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
           <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>{formatPoints(reward.pointsCost)}</Text>
           {!preview && s.kind === 'redeem' && <Button style={{ minWidth: 88 }} onPress={onRedeem}>Đổi</Button>}
+          {!preview && s.kind === 'needPhoneVerify' && <Button disabled>Đổi</Button>}
           {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
           {!preview && s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
           {!preview && s.kind === 'need' && <Text variant="caption" tone="secondary" as="div">{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>}
@@ -238,6 +248,11 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
 
 function RewardsBody() {
   const navigate = useNavigate();
+  const { openSnackbar } = useSnackbar();
+  const qc = useQueryClient();
+  const ensurePhoneOrThrow = useAuthStore((s) => s.ensurePhoneOrThrow);
+  const verifyBannerRef = useRef<HTMLDivElement | null>(null);
+  const [verifyingPhone, setVerifyingPhone] = useState(false);
   const rewardsQ = useQuery({ queryKey: WASTE_QUERY_KEYS.rewards, queryFn: getLoyaltyRewards });
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty });
   const cfg = usePublicConfig();
@@ -256,9 +271,34 @@ function RewardsBody() {
 
   const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
   const shown = orderRewards(c.rewards.filter((r) => kinds.includes(r.kind)), c);
+  const showPhoneBanner = c.phoneVerified === false && shown.some(isWarehousePickup);
   const total = pointsSummary(c).total;
   const rulesNote = cfg.isLoaded ? pointsRulesNote(cfg.loyalty) : null;
   const lockedNote = loyaltyQ.data ? lockedPointsNote(loyaltyQ.data) : null;
+
+  const scrollToVerifyBanner = () => {
+    requestAnimationFrame(() => {
+      verifyBannerRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    });
+  };
+
+  const verifyPhone = async () => {
+    if (verifyingPhone) return;
+    setVerifyingPhone(true);
+    try {
+      const phone = await ensurePhoneOrThrow();
+      if (phone) {
+        await Promise.all([
+          qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards }),
+          qc.invalidateQueries({ queryKey: ['loyalty'] }),
+        ]);
+      }
+    } catch (e) {
+      openSnackbar({ text: getErrorMessage(e), type: 'error' });
+    } finally {
+      setVerifyingPhone(false);
+    }
+  };
 
   return (
     <div style={{ ...COLUMN, padding: 16, paddingBottom: 48, gap: 16 }}>
@@ -295,6 +335,20 @@ function RewardsBody() {
       </BottomSheet>
       <ListRow icon={<Icon icon={Gift} tone="brand" />} title="Quà của tôi" trailing="chevron" onPress={() => navigate('/rewards/mine')} />
       <SegmentedTabs value={tab} onChange={setTab} items={REWARD_TABS.map((t) => ({ key: t.key, label: t.label }))} />
+      {showPhoneBanner && (
+        <div ref={verifyBannerRef} data-testid="rewards-phone-verify-banner">
+          <Card variant="outline">
+            <div style={{ ...COLUMN, gap: 'var(--space-inline-sm)' }}>
+              <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+                {rewardPhoneVerifyCopy.notice}
+              </Text>
+              <Button variant="secondary" fullWidth loading={verifyingPhone} onPress={verifyPhone}>
+                {rewardPhoneVerifyCopy.miniCta}
+              </Button>
+            </div>
+          </Card>
+        </div>
+      )}
       {shown.length === 0 ? (
         <Text variant="body-sm" tone="secondary" as="div">Chưa có quà trong mục này</Text>
       ) : (
@@ -323,6 +377,7 @@ function RewardsBody() {
               setResult(outcome);
             }}
             onCancel={() => setConfirmReward(null)}
+            onPhoneNotVerified={scrollToVerifyBanner}
           />
         )}
       </BottomSheet>

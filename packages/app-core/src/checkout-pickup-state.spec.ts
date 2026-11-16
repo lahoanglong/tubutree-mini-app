@@ -15,6 +15,7 @@ import {
   pruneExcludedGifts,
   reconcileDraft,
   returnWeightChips,
+  selectGiftForOrder,
   setItemQty,
   toggleExcludedGift,
   visibleGifts,
@@ -186,10 +187,19 @@ describe('reconcileDraft (đổi địa chỉ, phiếu bị dùng nơi khác)', 
 describe('quà 0đ', () => {
   const gift = (id: string, included: boolean): QuotePendingGiftDTO => ({ id, code: `QG-${id}`, giftName: `Quà ${id}`, kind: 'GIFT', pointsCost: 100, included });
 
-  it('hiện quà đi cùng đơn và quà vừa bấm Để đơn sau; không có kiện Tubu (included=false hết, chưa bấm) thì ẩn', () => {
+  it('hiện quà đi cùng đơn, quà bị chặn bởi W179-C, và quà vừa bấm Để đơn sau; không có kiện Tubu (included=false, blockedReason=null, chưa bấm) thì ẩn', () => {
     expect(visibleGifts([gift('a', true), gift('b', false)], [])).toHaveLength(1);
+    expect(visibleGifts([{ ...gift('a', false), blockedReason: 'MIN_ORDER' }, { ...gift('b', false), blockedReason: null }], [])).toHaveLength(1);
     expect(visibleGifts([gift('a', false), gift('b', false)], ['b'])).toEqual([gift('b', false)]);
     expect(visibleGifts(undefined, [])).toEqual([]);
+  });
+
+  it('selectGiftForOrder (W179-C): chọn quà sau tự đưa các quà trước nó vào danh sách bỏ (hành vi radio), chọn lại quà đầu thì danh sách bỏ rỗng', () => {
+    const list = [gift('1', true), { ...gift('2', false), blockedReason: 'ONE_PER_ORDER' as const }, { ...gift('3', false), blockedReason: 'ONE_PER_ORDER' as const }];
+    expect(selectGiftForOrder(list, [], '3', true)).toEqual(['1', '2']);
+    expect(selectGiftForOrder(list, ['1', '2'], '2', true)).toEqual(['1']);
+    expect(selectGiftForOrder(list, ['1'], '1', true)).toEqual([]);
+    expect(selectGiftForOrder(list, [], '1', false)).toEqual(['1']);
   });
 
   it('bật/tắt và dọn mã không còn trong ví', () => {

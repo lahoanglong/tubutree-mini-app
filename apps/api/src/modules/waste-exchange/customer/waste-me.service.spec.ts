@@ -4,11 +4,16 @@ const NOW = new Date('2026-10-17T03:00:00.000Z');
 const SNAP = { enabled: true, mailinMinPoints: 15_000, pickupMinPoints: 10_000, maxOpenRequests: 3, customerMonthlyCapPoints: 60_000, mailinMaxWeightKg: 20, mailinMaxEdgeCm: 50, rulesText: '', rulesVersion: '2026-10-17.1' };
 const ITEM = { id: 'carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1_000, dropsPerUnit: 2, dailyCapQty: 20, monthlyCapQty: 60, status: 'ACTIVE', prepInstructions: null, imageUrl: null, gramsPerUnit: 300, hazardous: false, sortOrder: 1 };
 const WH_DESK = [{ pointId: 'wh', name: 'Kho Tubu', kind: 'WAREHOUSE' }];
-function setup(user: unknown, o: { snap?: Partial<typeof SNAP>; completed?: unknown[]; desk?: unknown[]; recent?: unknown } = {}) {
+function setup(user: unknown, o: { snap?: Partial<typeof SNAP>; completed?: unknown[]; open?: unknown[]; desk?: unknown[]; recent?: unknown } = {}) {
   const prisma = {
     user: { findUnique: jest.fn().mockResolvedValue(user) },
     wasteItem: { findMany: jest.fn().mockResolvedValue([ITEM]) },
-    wasteRequest: { findFirst: jest.fn().mockResolvedValue(o.recent ?? null), findMany: jest.fn().mockImplementation(({ where }: { where: { status: unknown } }) => Promise.resolve(where.status === 'COMPLETED' ? (o.completed ?? []) : [])) },
+    wasteRequest: {
+      findFirst: jest.fn().mockResolvedValue(o.recent ?? null),
+      findMany: jest.fn().mockImplementation(({ where }: { where: { status: unknown } }) =>
+        Promise.resolve(where.status === 'COMPLETED' ? (o.completed ?? []) : (o.open ?? [])),
+      ),
+    },
   };
   const deps = {
     config: { snapshot: jest.fn().mockResolvedValue({ ...SNAP, ...o.snap }) },
@@ -102,6 +107,38 @@ describe('WasteMeService.me (spec 15.1 read exception, 15.2 row)', () => {
     ];
     const { svc } = setup(base, { completed });
     expect((await svc.me('u1')).impactGrams).toBe(2500);
+  });
+  it('W179 pendingPoints: cộng estimatedPoints của 0, 1, 2 phiếu đang mở, không thêm truy vấn và KHÔNG cộng vào balance', async () => {
+    const openRow = (id: string, estimatedPoints: number) => ({
+      id,
+      code: `TR-${id.toUpperCase()}`,
+      method: 'DROP_OFF',
+      status: 'OPEN',
+      closeReason: null,
+      createdAt: new Date('2026-10-16T00:00:00Z'),
+      expiresAt: null,
+      estimatedPoints,
+      pointsAwarded: null,
+      point: { name: 'Kho Tubu' },
+      order: null,
+      lines: [],
+    });
+    const zero = await setup(base, { open: [] }).svc.me('u1');
+    expect(zero.pendingPoints).toBe(0);
+    expect(zero.balance).toEqual({ pointsBalance: 100_000, pointsConvertedBalance: 20_000, redeemablePoints: 70_000 });
+
+    const one = await setup(base, { open: [openRow('r1', 4_000)] }).svc.me('u1');
+    expect(one.pendingPoints).toBe(4_000);
+    expect(one.balance).toEqual({ pointsBalance: 100_000, pointsConvertedBalance: 20_000, redeemablePoints: 70_000 });
+
+    const twoSetup = setup(base, {
+      open: [openRow('r1', 4_000), openRow('r2', 8_500)],
+      recent: { ...openRow('r0', 9_000), status: 'COMPLETED', pointsAwarded: 9_000 },
+    });
+    const two = await twoSetup.svc.me('u1');
+    expect(two.pendingPoints).toBe(12_500);
+    expect(two.balance).toEqual({ pointsBalance: 100_000, pointsConvertedBalance: 20_000, redeemablePoints: 70_000 });
+    expect(twoSetup.prisma.wasteRequest.findMany).toHaveBeenCalledTimes(2);
   });
 });
 

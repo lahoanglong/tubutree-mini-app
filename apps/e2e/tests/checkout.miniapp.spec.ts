@@ -178,4 +178,80 @@ test.describe('Zalo Mini App E2E - Luồng Thanh toán & Đặt hàng (Checkout 
     await expect(page.getByText(BANK_QR.bank.accountNo).first()).toBeVisible();
     await expect(page.getByText(ORDER_CODE_BANK).first()).toBeVisible();
   });
+
+  test('W179-C quà hiện vật 0đ: dưới 99.000đ hiện lý do thiếu ngưỡng; từ 99.000đ trở lên gắn tối đa 1 quà và đổi quà theo hành vi radio', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    // Pha 1: đơn dưới ngưỡng (75.000đ hàng Tubu -> thiếu 24.000đ)
+    api.post('/checkout/quote', () => ({
+      ...CHECKOUT_QUOTE,
+      subtotal: 75_000,
+      total: 94_000,
+      giftMinNetGoodsVnd: 99_000,
+      giftShortfallVnd: 24_000,
+      pendingGiftRedemptions: [
+        {
+          id: 'rg-1',
+          code: 'QG-11111111',
+          giftName: 'Gói hạt giống húng quế',
+          kind: 'SEED_PACK',
+          pointsCost: 15_000,
+          included: false,
+          blockedReason: 'MIN_ORDER',
+        },
+      ],
+    }));
+
+    await page.goto('/checkout');
+    const rowBelow = page.getByTestId('checkout-gift-row');
+    await expect(rowBelow).toBeVisible({ timeout: 15_000 });
+    await expect(rowBelow).toContainText('Mua thêm 24.000đ để nhận quà này');
+    await expect(rowBelow.locator('input[type="checkbox"]')).toHaveCount(0);
+
+    // Pha 2: đơn >= 99.000đ với 2 quà chờ -> quà 1 được gắn, quà 2 giữ cho đơn sau; bấm đổi sang quà 2 gửi excludeGiftRedemptionIds=['rg-1']
+    api.post('/checkout/quote', ({ call }) => {
+      const ex = ((call.body as { excludeGiftRedemptionIds?: string[] } | null)?.excludeGiftRedemptionIds) ?? [];
+      const g1In = !ex.includes('rg-1');
+      const g2In = !g1In && !ex.includes('rg-2');
+      return {
+        ...CHECKOUT_QUOTE,
+        giftMinNetGoodsVnd: 99_000,
+        giftShortfallVnd: 0,
+        pendingGiftRedemptions: [
+          {
+            id: 'rg-1',
+            code: 'QG-11111111',
+            giftName: 'Gói hạt giống húng quế',
+            kind: 'SEED_PACK',
+            pointsCost: 15_000,
+            included: g1In,
+            blockedReason: null,
+          },
+          {
+            id: 'rg-2',
+            code: 'QG-22222222',
+            giftName: 'Túi vải sống xanh',
+            kind: 'GIFT',
+            pointsCost: 30_000,
+            included: g2In,
+            blockedReason: g1In ? 'ONE_PER_ORDER' : null,
+          },
+        ],
+      };
+    });
+
+    await page.reload();
+    const rows = page.getByTestId('checkout-gift-row');
+    await expect(rows).toHaveCount(2, { timeout: 15_000 });
+    await expect(rows.nth(1)).toContainText('Mỗi đơn nhận 1 quà, quà này giữ cho đơn sau');
+
+    // Chuyển sang nhận quà thứ 2 (Túi vải sống xanh)
+    await rows.nth(1).getByText('Để đơn sau').click();
+    await expect(rows.nth(0)).toContainText('Mỗi đơn nhận 1 quà, quà này giữ cho đơn sau');
+
+    const placed = api.waitForCall('POST', '/checkout/place-order');
+    await page.getByRole('button', { name: /Đặt hàng · 149\.000đ/ }).click();
+    const call = await placed;
+    expect(call.body).toMatchObject({ excludeGiftRedemptionIds: ['rg-1'] });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+  });
 });

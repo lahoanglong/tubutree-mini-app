@@ -19,11 +19,15 @@ import { wasteMeQuery, wastePointsQuery, wasteRulesVersionQuery } from '@tubutre
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
 import {
   ITEMS_NEXT_HINT,
+  MAX_OPEN_VIEW_CTA,
   WASTE_CONSENT_TEXT,
+  WASTE_PENDING_POINTS_SUBNOTE,
   WASTE_RULES_LINK,
   createBlockedHint,
   defaultPointId,
   homePickupCopy,
+  maxOpenNotice,
+  pendingPointsText,
   readLastPointId,
   wasteStepCopy,
   writeLastPointId,
@@ -374,6 +378,7 @@ export function RecycleNew() {
             ...(selected === 'MAIL_IN' ? { packagingConsent: true, postagePaidConsent: true } : {}),
           }
         : null;
+  const [maxOpenHit, setMaxOpenHit] = useState<number | null>(null);
   const create = useMutation({
     mutationFn: () => {
       if (!body) throw new Error('Chưa chọn cách giao');
@@ -392,6 +397,9 @@ export function RecycleNew() {
     onError: (e) => {
       createBusy.current = false;
       const code = errorCode(e);
+      if (code === 'WASTE_MAX_OPEN') {
+        setMaxOpenHit(me?.thresholds.maxOpenRequests ?? 2);
+      }
       if (code === 'WASTE_FEE_BANK_DISABLED' || (selected === 'HOME_PICKUP' && hp.effective.payment === 'WALLET' && code !== 'WASTE_FEE_CHANGED')) {
         setHomePickup({ payment: null });
       }
@@ -431,6 +439,26 @@ export function RecycleNew() {
   if (!me || leave || !ready || missingDraft) return shell(skeleton);
   if (me.eligibility !== 'OK') return shell(<WebRecyclePhoneCard />);
 
+  // W179-B: chặn sớm khi đã đủ trần yêu cầu mở (hoặc đua thiết bị nhận WASTE_MAX_OPEN) — đúng 1 thông báo và 1 nút dẫn tới danh sách.
+  const maxOpenReached = me.openRequests.length >= me.thresholds.maxOpenRequests || maxOpenHit !== null;
+  if (maxOpenReached) {
+    const maxLimit = maxOpenHit ?? me.thresholds.maxOpenRequests;
+    return shell(
+      <>
+        <div className={`${skin.card} p-4`}>
+          <p data-testid="waste-max-open-notice" className="text-sm font-semibold text-stone-900">
+            {maxOpenNotice(maxLimit)}
+          </p>
+        </div>
+        <Actions label="Xem yêu cầu đang mở">
+          <Link href="/doi-rac/yeu-cau" className={`${ui.btnPrimary} w-full`}>
+            {MAX_OPEN_VIEW_CTA}
+          </Link>
+        </Actions>
+      </>,
+    );
+  }
+
   if (step === 'items') {
     const onChange = (itemId: string, qty: number) =>
       setDraft((d) => {
@@ -458,8 +486,9 @@ export function RecycleNew() {
           {blockMessage(capBlock, { items: me.items, maxOpenRequests: me.thresholds.maxOpenRequests, itemCaps: p.itemCaps })}
         </p>
       ) : (
-        <div>
-          <p className="text-sm font-semibold text-stone-900">{`Ước tính ${formatPoints(p.estimatedPoints)}`}</p>
+        <div className="tabular-nums">
+          <p className="text-sm font-semibold text-stone-900">{pendingPointsText(formatPoints(p.estimatedPoints))}</p>
+          <p className="text-xs text-stone-600">{WASTE_PENDING_POINTS_SUBNOTE}</p>
           <p className="text-xs text-stone-600">{`Dùng như ${formatVnd(p.pointsValueVnd)} khi mua sắm`}</p>
           {reward && <p className="text-xs text-stone-600">{`Còn ${formatPoints(reward.missing)} tới ${reward.rewardName}`}</p>}
         </div>
@@ -548,7 +577,7 @@ export function RecycleNew() {
           <span className={`flex flex-col gap-1 ${locked ? 'opacity-60' : ''}`}>
           <span className="text-sm font-semibold text-stone-900">{METHOD_LABELS[m]}</span>
           <span className="text-xs text-stone-600">{METHOD_LINE[m]}</span>
-          {pv && <span className="text-sm font-semibold text-stone-900">{`Ước tính ${formatPoints(pv.estimatedPoints)}`}</span>}
+          {pv && <span className="text-sm font-semibold tabular-nums text-stone-900">{pendingPointsText(formatPoints(pv.estimatedPoints))}</span>}
           {fee && (
             <span className="text-xs text-stone-600">{`Phí ship ước tính${feeProvince ? ` từ ${feeProvince}` : ''}: ${feeRangeText(fee)}, ước tính theo bảng giá niêm yết`}</span>
           )}

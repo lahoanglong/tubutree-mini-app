@@ -1,5 +1,26 @@
 import { describe, expect, it } from 'vitest';
-import { createBlockedHint, createdTodayVn, dropOffDayLimitText, itemQtyMax, defaultPointId, missingItemsReason, pausedNote, warehouseOnlyPointsNote, parseQtyInput, readLastPointId, timelineCaption, wasteIntroCopy, wasteItemIconKey, writeLastPointId } from './waste-copy';
+import {
+  MAX_OPEN_VIEW_CTA,
+  WASTE_PENDING_POINTS_SUBNOTE,
+  createBlockedHint,
+  createdTodayVn,
+  dropOffDayLimitText,
+  itemQtyMax,
+  defaultPointId,
+  maxOpenNotice,
+  missingItemsReason,
+  pausedNote,
+  pendingPointsBalanceLine,
+  pendingPointsText,
+  requestListPendingPoints,
+  warehouseOnlyPointsNote,
+  parseQtyInput,
+  readLastPointId,
+  timelineCaption,
+  wasteIntroCopy,
+  wasteItemIconKey,
+  writeLastPointId,
+} from './waste-copy';
 
 describe('parseQtyInput', () => {
   it('chỉ giữ chữ số và kẹp vào khoảng', () => {
@@ -152,5 +173,22 @@ describe('wasteIntroCopy', () => {
   it('tắt cả hai: câu trung tính, không nhắc điểm nhận hay kho', () => {
     const c = wasteIntroCopy({ dropoff: false, mailin: false });
     expect(`${c.intro} ${c.steps.join(' ')}`).not.toMatch(/điểm nhận|kho/);
+  });
+});
+
+describe('W179 Điểm tạm tính & Trần 2 yêu cầu mở', () => {
+  it('chuẩn hoá nhãn Điểm tạm tính, câu phụ xác nhận kho, dòng thẻ số dư và dòng phụ danh sách', () => {
+    expect(pendingPointsText('6.000 điểm')).toBe('Điểm tạm tính 6.000 điểm');
+    expect(WASTE_PENDING_POINTS_SUBNOTE).toBe('Chỉ cộng khi kho Tubu xác nhận');
+    expect(pendingPointsBalanceLine(0)).toBeNull();
+    expect(pendingPointsBalanceLine(null)).toBeNull();
+    expect(pendingPointsBalanceLine(12_000)).toBe('Điểm tạm tính 12.000 · chưa dùng được');
+    expect(requestListPendingPoints({ status: 'OPEN', estimatedPoints: 5000 })).toBe('Điểm tạm tính 5.000 điểm');
+    expect(requestListPendingPoints({ status: 'COMPLETED', estimatedPoints: 5000 })).toBeNull();
+  });
+
+  it('thông báo và nút khi đạt trần yêu cầu mở', () => {
+    expect(maxOpenNotice(2)).toBe('Bạn đang có 2 yêu cầu đổi rác chưa xong. Hãy hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới.');
+    expect(MAX_OPEN_VIEW_CTA).toBe('Xem yêu cầu đang mở');
   });
 });

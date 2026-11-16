@@ -342,7 +342,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'waste.mailin_min_points', value: 15_000, category: 'waste', description: 'Số Điểm Xanh tối thiểu của một gói gửi kho, không được lớn hơn trần điểm tháng của khách.', createOnly: true },
   { key: 'waste.pickup_min_points', value: 3_000, category: 'waste', description: 'Số Điểm Xanh tối thiểu của một gói thu kèm đơn, không được lớn hơn trần điểm tháng của khách.', createOnly: true },
   { key: 'waste.customer_monthly_cap_points', value: 60_000, category: 'waste', description: 'Trần Điểm Xanh mỗi khách được cộng từ đổi rác trong một tháng.', createOnly: true },
-  { key: 'waste.max_open_requests', value: 3, category: 'waste', description: 'Số yêu cầu đổi rác một khách được mở cùng lúc.', createOnly: true },
+  { key: 'waste.max_open_requests', value: 2, category: 'waste', description: 'Số yêu cầu đổi rác một khách được mở cùng lúc.', createOnly: true },
   { key: 'waste.request_hold_days', value: 7, category: 'waste', description: 'Số ngày giữ chỗ một yêu cầu và chờ khách nhập mã vận đơn.', createOnly: true },
   { key: 'waste.pickup_wait_days', value: 14, category: 'waste', description: 'Số ngày chờ hàng thu kèm về kho sau khi đơn mua đã giao.', createOnly: true },
   { key: 'waste.in_transit_review_days', value: 30, category: 'waste', description: 'Yêu cầu gửi kho đang vận chuyển quá ngần này ngày thì vào danh sách admin xem lại.', createOnly: true },

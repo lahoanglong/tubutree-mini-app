@@ -109,23 +109,34 @@ export function orderRewards<T extends Pick<RewardItemDTO, 'kind' | 'voucher' | 
 export type RewardCardState =
   | { kind: 'redeem' }
   | { kind: 'soldOut' }
+  | { kind: 'needPhoneVerify' }
   | { kind: 'locked' }
   | { kind: 'need'; missing: number };
 
 /**
  * Trạng thái thẻ quà theo số máy chủ trả. Quà TREE đi qua `buyTree` nên tiêu cả hai lô; "Cần thêm" của nó phải tính
  * cùng tổng với `canRedeem`. Hết hàng đứng trước nên thẻ hết không bao giờ hiện "Cần thêm".
+ * W179-C: quà vật lý (`SEED_PACK`, `GIFT`) khi `phoneVerified === false` trả `{ kind: 'needPhoneVerify' }` để khoá nút Đổi
+ * mà không lặp lại nút xác minh trên từng thẻ (đã có đúng 1 thẻ thông báo ở đầu danh sách).
  */
 export function rewardCardState(
   r: Pick<RewardItemDTO, 'kind' | 'pointsCost' | 'canRedeem' | 'soldOut'>,
-  c: Pick<RewardCatalogDTO, 'redeemablePoints' | 'pointsConvertedBalance'>,
+  c: Pick<RewardCatalogDTO, 'redeemablePoints' | 'pointsConvertedBalance'> & { phoneVerified?: boolean },
 ): RewardCardState {
   if (r.soldOut) return { kind: 'soldOut' };
   if (r.canRedeem) return { kind: 'redeem' };
+  if (c.phoneVerified === false && isWarehousePickup(r)) return { kind: 'needPhoneVerify' };
   const spendable = r.kind === 'TREE' ? c.redeemablePoints + c.pointsConvertedBalance : c.redeemablePoints;
   const missing = r.pointsCost - spendable;
   return missing > 0 ? { kind: 'need', missing } : { kind: 'locked' };
 }
+
+/** W179-C: chữ của thẻ thông báo xác minh SĐT duy nhất ở đầu danh sách quà hiện vật. */
+export const rewardPhoneVerifyCopy = {
+  notice: 'Xác minh số điện thoại qua Zalo để đổi quà hiện vật',
+  miniCta: 'Xác minh số điện thoại',
+  webCta: 'Mở Zalo Mini App để xác minh',
+} as const;
 
 /**
  * Quà hiện vật: hạt giống và quà nhỏ không giao riêng. Mặc định tự thêm 0đ vào đơn mua kế tiếp của khách; khách vẫn có thể đọc mã QG-

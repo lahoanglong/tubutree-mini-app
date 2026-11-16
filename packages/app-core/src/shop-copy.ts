@@ -437,12 +437,16 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.pickup.loadFailed': 'Chưa tải được danh sách món rác',
   'checkout.pickup.changed': 'Phần đổi rác kèm đơn vừa thay đổi, Tubu đã cập nhật lại giá',
   'checkout.pickup.reconciled': 'Đã bỏ món rác không nhận được ở địa chỉ này',
+  'checkout.pickup.maxOpenLink': 'Xem yêu cầu đang mở',
   'checkout.shipWaived': 'Miễn phí vận chuyển (đổi rác kèm đơn)',
   // Quà đổi điểm tặng kèm 0đ
   'checkout.gift.line': '🎁 Quà đổi điểm tặng kèm: {name} · 0đ',
   'checkout.gift.defer': 'Để đơn sau',
   'checkout.gift.merged': '🎁 {n} quà đổi điểm tặng kèm · 0đ',
   'checkout.gift.sheetTitle': 'Quà đổi điểm tặng kèm',
+  'checkout.gift.blockedMinOrder': 'Mua thêm {amount} để nhận quà này',
+  'checkout.gift.blockedOnePerOrder': 'Mỗi đơn nhận 1 quà, quà này giữ cho đơn sau',
+  'checkout.gift.blockedPhone': 'Xác minh số điện thoại để nhận quà',
   'cart.giftNote': '🎁 Quà đổi điểm sẽ tự thêm ở bước thanh toán · 0đ',
   'coupon.autoApplied': 'Tubu đã tự áp mã tốt nhất',
   // Giỏ gom món của combo (K5): đầu nhóm, nhắc chọn đủ món, hộp báo trước khi bỏ món làm bộ mất giảm. Nút xác nhận không ghi "Xoá" để khỏi lặp nhãn thùng rác.

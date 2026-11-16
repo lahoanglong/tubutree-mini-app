@@ -14,6 +14,8 @@ import { WasteConfigService } from '../../src/modules/waste-exchange/core/waste-
 import { WasteAccessService } from '../../src/modules/waste-exchange/core/waste-access.service';
 import { WasteHoldService } from '../../src/modules/waste-exchange/core/waste-hold.service';
 import { WasteRequestsService } from '../../src/modules/waste-exchange/customer/waste-requests.service';
+import { WasteHomePickupCustomerService } from '../../src/modules/waste-exchange/home-pickup/waste-home-pickup-customer.service';
+import { WasteHomePickupService } from '../../src/modules/waste-exchange/home-pickup/waste-home-pickup.service';
 import { createUser as createItUser, deleteItData, randCode, setConfig, warmPool } from './helpers';
 import { cleanupWaste, createWarehouse, createWasteItem, createWastePoint, createWasteRequest, raceWithHold } from './fixtures/waste-fixtures';
 
@@ -112,16 +114,17 @@ describe('waste create races (real Postgres, spec 17.3)', () => {
       expect(reasonOf(rs[1])).toBe('Tháng này bạn chỉ còn 20.000 Điểm Xanh trong trần đổi rác');
       expect(await prisma.wasteRequest.count({ where: { userId: u.id } })).toBe(1);
     });
-    it(`open cap: create x create at 2 open (${label})`, async () => {
+    it(`open cap: create x create at 1 open (${label}) -> max 2 open, loser gets 409 WASTE_MAX_OPEN`, async () => {
       const { u, item, point } = await scene(free);
-      await openFixture(u, item, point);
       await openFixture(u, item, point);
       const lines = [{ itemId: item.id, declaredQty: 1 }];
       const rs = await race(u, () => create(u, randKey(), lines, 'DROP_OFF', point.id), () => create(u, randKey(), lines, 'DROP_OFF', point.id));
       expect(errorsOf(rs).join()).not.toMatch(/40P01|P2034/);
       expect(rs.map((r) => r.status)).toEqual(['fulfilled', 'rejected']);
-      expect(reasonOf(rs[1])).toBe('Bạn đang có 3 yêu cầu chưa xong, hãy hoàn tất hoặc huỷ bớt trước khi tạo thêm');
-      expect(await prisma.wasteRequest.count({ where: { userId: u.id, status: 'OPEN' } })).toBe(3);
+      expect(reasonOf(rs[1])).toBe('Bạn đang có 2 yêu cầu chưa xong, hãy hoàn tất hoặc huỷ bớt trước khi tạo thêm');
+      const rejResp = ((rs[1] as PromiseRejectedResult).reason as { getResponse?: () => unknown }).getResponse?.();
+      expect(rejResp).toMatchObject({ statusCode: 409, code: 'WASTE_MAX_OPEN', openCount: 2, max: 2 });
+      expect(await prisma.wasteRequest.count({ where: { userId: u.id, status: 'OPEN' } })).toBe(2);
     });
     it(`PICKUP create x create (${label}) -> one row`, async () => {
       const { u, item } = await scene(free);
@@ -145,17 +148,83 @@ describe('waste create races (real Postgres, spec 17.3)', () => {
       expect(await prisma.wasteEvent.count({ where: { requestId: ids[0], kind: 'REQUEST_CREATED' } })).toBe(1);
     });
   }
-  it('MAIL_IN and PICKUP replays at max open ignore pointId and return the request just created, no new event', async () => {
-    const { u, item, point } = await scene(free);
-    await openFixture(u, item, point);
+  it('MAIL_IN and PICKUP replays at max open (2) ignore pointId and return the request just created, no new event', async () => {
+    const { u, item } = await scene(free);
     const k1 = randKey();
     const k2 = randKey();
     const mail = await create(u, k1, [{ itemId: item.id, declaredQty: 15 }], 'MAIL_IN', 'x1');
     const pick = await create(u, k2, [{ itemId: item.id, declaredQty: 10 }], 'PICKUP', 'x1');
-    expect(await prisma.wasteRequest.count({ where: { userId: u.id, status: 'OPEN' } })).toBe(3);
+    expect(await prisma.wasteRequest.count({ where: { userId: u.id, status: 'OPEN' } })).toBe(2);
     await expect(create(u, k1, [{ itemId: item.id, declaredQty: 15 }], 'MAIL_IN', 'x2')).resolves.toMatchObject({ id: mail.id });
     await expect(create(u, k2, [{ itemId: item.id, declaredQty: 10 }], 'PICKUP', 'x2')).resolves.toMatchObject({ id: pick.id });
     expect(await prisma.wasteEvent.count({ where: { requestId: { in: [mail.id, pick.id] }, kind: 'REQUEST_CREATED' } })).toBe(2);
+  });
+  it('W179-B cross-method race: HOME_PICKUP create × checkout createPickupInTx (inlinePickup) at 1 open -> exactly one succeeds, total OPEN = 2', async () => {
+    const { u, item, point } = await scene(free);
+    await openFixture(u, item, point);
+    await prisma.user.update({ where: { id: u.id }, data: { pointsBalance: 30_000 } });
+    const addr = await prisma.address.create({
+      data: {
+        userId: u.id,
+        recipient: 'Lan IT',
+        phone: u.phone!,
+        province: 'Thành phố Hồ Chí Minh',
+        district: '',
+        ward: 'Phường Bến Nghé',
+        street: '1 Lê Lợi',
+        provinceCode: '79',
+        districtCode: '',
+        wardCode: '26734',
+      },
+    });
+    const configSvc = moduleRef.get(WasteConfigService);
+    const sysCfg = moduleRef.get(SystemConfigService);
+    const holdSvc = moduleRef.get(WasteHoldService);
+    const homeLifecycle = new WasteHomePickupService(prisma, configSvc, { homePickupClosed: async () => undefined } as never, { evaluateAndLock: async () => ({ locked: false, shipLockedAt: null, cancelledRequestIds: [] }) } as never);
+    const homeCustomer = new WasteHomePickupCustomerService(
+      prisma,
+      configSvc,
+      holdSvc,
+      sysCfg,
+      {
+        checkAddress: async () => ({ ok: true }),
+        isConfigured: async () => true,
+        quoteShopFeeDetailed: async () => ({ fee: 20_000, estimated: false }),
+      } as never,
+      {
+        returnWindowDays: async () => 7,
+        lockedOrderPoints: async () => ({ locked: 0, lockedReturn: 0, lockedUntil: null }),
+      } as never,
+      homeLifecycle,
+    );
+    const prepared = await svc.prepareInlinePickup();
+    const lines = [{ itemId: item.id, declaredQty: 10 }];
+
+    const rs = await raceWithHold(
+      prisma,
+      customerLock(u),
+      () =>
+        homeCustomer.create(u.id, randKey(), {
+          method: 'HOME_PICKUP',
+          lines,
+          consent: true,
+          pickupAddressId: addr.id,
+          declaredWeightGrams: 2000,
+          usePointsForShipFee: true,
+        }),
+      () => prisma.$transaction((tx) => svc.createPickupInTx(tx, u.id, randKey(), lines, prepared, 'Thành phố Hồ Chí Minh')),
+    );
+    expect(errorsOf(rs).join()).not.toMatch(/40P01|P2034/);
+    expect(rs.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(rs.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    const loser = rs.find((r) => r.status === 'rejected') as PromiseRejectedResult;
+    expect((loser.reason as { getResponse?: () => unknown }).getResponse?.()).toMatchObject({
+      statusCode: 409,
+      code: 'WASTE_MAX_OPEN',
+      openCount: 2,
+      max: 2,
+    });
+    expect(await prisma.wasteRequest.count({ where: { userId: u.id, status: 'OPEN' } })).toBe(2);
   });
   it('a different body under the same key is 409 and writes nothing', async () => {
     const { u, item, point } = await scene(free);

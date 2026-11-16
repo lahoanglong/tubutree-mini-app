@@ -456,6 +456,9 @@ export default function CheckoutPage() {
         reload([PICKUP_OPTIONS_KEY]);
         reload(['quote']);
         reload(['waste']);
+        if (getErrorCode(e) === 'WASTE_MAX_OPEN') {
+          pickup.setMaxOpenError(getErrorMessage(e));
+        }
         // Máy chủ trả 409 không mã khi phiếu thu rác đổi giữa lúc báo giá và lúc đặt; câu của nó bảo "tải lại trang" trong khi màn đã tự tải lại.
         if (status === 409 && !getErrorCode(e) && /thu rác/i.test(getErrorMessage(e))) {
           notify({ text: fillCopy('checkout.pickup.changed'), type: 'error' });
@@ -835,8 +838,15 @@ export default function CheckoutPage() {
             onOpenChange={pickup.setSheetOpen}
             onApply={chosen(pickup.apply)}
             onClear={chosen(pickup.clear)}
+            maxOpenError={pickup.maxOpenError}
+            onOpenRequests={() => navigate('/recycle/requests')}
           />
-          <GiftRows gifts={giftsRef.current} excluded={pickup.excluded} onToggle={chosen(pickup.toggleGift)} />
+          <GiftRows
+            gifts={giftsRef.current}
+            excluded={pickup.excluded}
+            onToggle={chosen(pickup.toggleGift)}
+            shortfallVnd={quote.data?.giftShortfallVnd ?? 0}
+          />
         </Box>
         ) : null;
       })()}

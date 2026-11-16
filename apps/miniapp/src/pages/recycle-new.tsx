@@ -65,12 +65,16 @@ import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Text } from '../components/ui/text';
 import {
   ITEMS_NEXT_HINT,
+  MAX_OPEN_VIEW_CTA,
   QUICK_QTY_STEPS,
   WAREHOUSE_ONLY_TEXT,
   WASTE_CONSENT_TEXT,
+  WASTE_PENDING_POINTS_SUBNOTE,
   WASTE_RULES_LINK,
   createBlockedHint,
   defaultPointId,
+  maxOpenNotice,
+  pendingPointsText,
   readLastPointId,
   homePickupCopy,
   wasteStepCopy,
@@ -473,6 +477,7 @@ export default function RecycleNewPage() {
             ...(selected === 'MAIL_IN' ? { packagingConsent: true, postagePaidConsent: true } : {}),
           }
         : null;
+  const [maxOpenHit, setMaxOpenHit] = useState<number | null>(null);
   const create = useLockedMutation({
     mutationFn: () => {
       if (!body) throw new Error('Chưa chọn cách giao');
@@ -491,6 +496,9 @@ export default function RecycleNewPage() {
     onError: (e) => {
       openSnackbar({ text: homePickupUnavailableText(e) ?? getErrorMessage(e), type: 'error' });
       const code = getErrorCode(e);
+      if (code === 'WASTE_MAX_OPEN') {
+        setMaxOpenHit(me?.thresholds.maxOpenRequests ?? 2);
+      }
       if (code === 'WASTE_FEE_BANK_DISABLED' || (selected === 'HOME_PICKUP' && hp.effective.payment === 'WALLET' && !isStaleStateError(e))) {
         setHomePickup({ payment: null });
       }
@@ -534,6 +542,27 @@ export default function RecycleNewPage() {
     );
   }
 
+  // W179-B: chặn sớm khi đã đủ trần yêu cầu mở (hoặc đua thiết bị nhận WASTE_MAX_OPEN) — đúng 1 thông báo và 1 nút dẫn tới danh sách.
+  const maxOpenReached = me.openRequests.length >= me.thresholds.maxOpenRequests || maxOpenHit !== null;
+  if (maxOpenReached) {
+    const maxLimit = maxOpenHit ?? me.thresholds.maxOpenRequests;
+    return shell(
+      <Card variant="outline">
+        <Text variant="body-md" as="div" data-testid="waste-max-open-notice" style={{ fontWeight: 600 }}>
+          {maxOpenNotice(maxLimit)}
+        </Text>
+      </Card>,
+      subtitle,
+      <StickyActionBar
+        primary={
+          <Button fullWidth onPress={() => navigate('/recycle/requests')}>
+            {MAX_OPEN_VIEW_CTA}
+          </Button>
+        }
+      />,
+    );
+  }
+
   if (step === 'items') {
     const onChange = (itemId: string, qty: number) =>
       setDraft((d) => {
@@ -564,8 +593,11 @@ export default function RecycleNewPage() {
         </Text>
       ) : (
         <div>
-          <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>
-            {`Ước tính ${formatPoints(p.estimatedPoints)}`}
+          <Text variant="body-md" as="div" numeric style={{ fontWeight: 600 }}>
+            {pendingPointsText(formatPoints(p.estimatedPoints))}
+          </Text>
+          <Text variant="caption" tone="tertiary" as="div">
+            {WASTE_PENDING_POINTS_SUBNOTE}
           </Text>
           <Text variant="caption" tone="secondary" as="div">
             {`Dùng như ${formatVnd(p.pointsValueVnd)} khi mua sắm`}
@@ -699,8 +731,8 @@ export default function RecycleNewPage() {
             {METHOD_LINE[m]}
           </Text>
           {pv && (
-            <Text variant="body-sm" as="span" style={{ fontWeight: 600 }}>
-              {`Ước tính ${formatPoints(pv.estimatedPoints)}`}
+            <Text variant="body-sm" as="span" numeric style={{ fontWeight: 600 }}>
+              {pendingPointsText(formatPoints(pv.estimatedPoints))}
             </Text>
           )}
           {fee && (

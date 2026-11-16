@@ -152,9 +152,13 @@ export function reconcileDraft(draft: PickupDraft, options: PickupOptionsRespons
   return { draft: next, changed: dropped || weightChanged };
 }
 
-/** Quà hiện trên thanh toán: quà đi cùng đơn (có kiện Tubu), cộng quà khách đã bấm "Để đơn sau" (còn hiện để bật lại). */
+/**
+ * Quà hiện trên thanh toán: quà đi cùng đơn (có kiện Tubu), quà bị chặn bởi W179-C (`blockedReason != null`: dưới ngưỡng 99.000đ,
+ * mỗi đơn 1 quà, chưa xác minh SĐT), cộng quà khách đã bấm "Để đơn sau" (còn hiện để bật lại). Đơn chỉ có hàng đối tác (`included=false`,
+ * `blockedReason=null`) vẫn ẩn.
+ */
 export function visibleGifts(pending: readonly QuotePendingGiftDTO[] | undefined, excludedIds: readonly string[]): QuotePendingGiftDTO[] {
-  return (pending ?? []).filter((g) => g.included || excludedIds.includes(g.id));
+  return (pending ?? []).filter((g) => g.included || g.blockedReason != null || excludedIds.includes(g.id));
 }
 
 /** Giữ lại các mã quà để lại chỉ khi quà còn trong ví chờ gắn đơn (quà đã gắn đơn khác thì không còn gì để bỏ). */
@@ -167,6 +171,25 @@ export function pruneExcludedGifts(excludedIds: readonly string[], pending: read
 export function toggleExcludedGift(excludedIds: readonly string[], id: string, receive: boolean): string[] {
   const rest = excludedIds.filter((x) => x !== id);
   return receive ? rest : [...rest, id];
+}
+
+/**
+ * W179-C: chọn quà cho đơn này theo hành vi radio (tối đa 1 quà/đơn).
+ * - `receive=true` (khách chọn nhận quà `id` ở đơn này): các quà đứng TRƯỚC `id` trong `pending` tự vào `excludeGiftRedemptionIds`
+ *   để `id` trở thành ứng viên đầu tiên mà máy chủ gắn; các quà đứng sau `id` tự được giữ cho đơn sau nhờ trần 1 quà.
+ * - `receive=false` (khách bấm "Để đơn sau" trên `id`): thêm `id` vào danh sách bỏ.
+ */
+export function selectGiftForOrder(
+  pending: readonly Pick<QuotePendingGiftDTO, 'id'>[] | undefined,
+  excludedIds: readonly string[],
+  id: string,
+  receive: boolean,
+): string[] {
+  if (!receive) return toggleExcludedGift(excludedIds, id, false);
+  if (!pending || pending.length === 0) return toggleExcludedGift(excludedIds, id, true);
+  const idx = pending.findIndex((g) => g.id === id);
+  if (idx < 0) return toggleExcludedGift(excludedIds, id, true);
+  return pending.slice(0, idx).map((g) => g.id);
 }
 
 /** Một dòng cho mỗi quà, hoặc gộp thành một dòng mở tấm nhỏ khi từ `GIFT_MERGE_THRESHOLD` quà trở lên. */

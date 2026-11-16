@@ -11,32 +11,42 @@ import '../../css/checkout-pickup.css';
 interface GiftRowsProps {
   gifts: readonly QuotePendingGiftDTO[];
   excluded: readonly string[];
-  /** `receive=false` là để quà lại cho đơn sau (mã quà vào `excludeGiftRedemptionIds`). */
-  onToggle: (id: string, receive: boolean) => void;
+  /** `receive=false` là để quà lại cho đơn sau; `receive=true` chọn quà này cho đơn hiện tại (hành vi radio khi có nhiều quà). */
+  onToggle: (id: string, receive: boolean, pending?: readonly QuotePendingGiftDTO[]) => void;
+  shortfallVnd?: number;
 }
 
 /**
  * Quà hiện vật 0đ đi kèm đơn: mỗi quà một dòng, từ 3 quà trở lên gộp một dòng mở tấm nhỏ. Mặc định quà đi cùng đơn;
  * ô "Để đơn sau" chỉ là lối bỏ, không phải nút hành động của màn.
  */
-export function GiftRows({ gifts, excluded, onToggle }: GiftRowsProps) {
+export function GiftRows({ gifts, excluded, onToggle, shortfallVnd = 0 }: GiftRowsProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const view = giftSectionView(gifts, excluded);
+  const view = giftSectionView(gifts, excluded, shortfallVnd);
   if (view.layout === 'none') return null;
 
   const rows = view.rows.map((row) => (
     <div key={row.id} className="tubu-gift-row" data-testid="checkout-gift-row">
-      <Text variant="body-sm" tone={row.receive ? 'primary' : 'secondary'} as="span" style={row.receive ? undefined : { opacity: 0.6 }}>
-        {row.label}
-      </Text>
-      <Checkbox
-        checked={!row.receive}
-        onChange={() => {
-          haptic('light');
-          onToggle(row.id, !row.receive);
-        }}
-        label={view.deferLabel}
-      />
+      <div className="tubu-gift-col" data-dim={row.receive ? undefined : 'true'}>
+        <Text variant="body-sm" tone={row.receive ? 'primary' : 'secondary'} as="span" numeric>
+          {row.label}
+        </Text>
+        {row.reason && (
+          <Text variant="caption" tone="secondary" as="span" numeric>
+            {row.reason}
+          </Text>
+        )}
+      </div>
+      {row.canToggle && (
+        <Checkbox
+          checked={!row.receive}
+          onChange={() => {
+            haptic('light');
+            onToggle(row.id, !row.receive, gifts);
+          }}
+          label={view.deferLabel}
+        />
+      )}
     </div>
   ));
   if (view.layout === 'rows') return <>{rows}</>;

@@ -59,12 +59,23 @@ export interface WasteCapUsage {
 
 type Mode = 'THROW' | 'COLLECT';
 type CheckResult = Omit<WasteHoldResult, 'expiresAt'>;
-interface Block { dto: WastePreviewBlockDTO; forbidden?: boolean; message: string }
+interface Block { dto: WastePreviewBlockDTO; forbidden?: boolean; message: string; max?: number }
 
 const DAY_MS = 86_400_000;
 
 function toException(b: Block): ForbiddenException | ConflictException {
-  return b.forbidden ? new ForbiddenException(b.message) : new ConflictException(b.message);
+  if (b.forbidden) return new ForbiddenException(b.message);
+  if (b.dto.code === 'MAX_OPEN') {
+    return new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      code: 'WASTE_MAX_OPEN',
+      message: b.message,
+      openCount: b.dto.openCount,
+      max: b.max,
+    });
+  }
+  return new ConflictException(b.message);
 }
 
 @Injectable()
@@ -205,7 +216,7 @@ export class WasteHoldService {
       const laneOn = method === 'DROP_OFF' ? cfg.laneDropoff : method === 'MAIL_IN' ? cfg.laneMailin : cfg.lanePickup;
       if (!laneOn) add({ dto: { code: 'LANE_DISABLED' }, message: WASTE_MESSAGES.LANE_DISABLED });
       if (usage.openCount >= cfg.maxOpenRequests) {
-        add({ dto: { code: 'MAX_OPEN', openCount: usage.openCount }, message: WASTE_MESSAGES.MAX_OPEN(cfg.maxOpenRequests) });
+        add({ dto: { code: 'MAX_OPEN', openCount: usage.openCount }, message: WASTE_MESSAGES.MAX_OPEN(cfg.maxOpenRequests), max: cfg.maxOpenRequests });
       }
       if (method === 'PICKUP' && usage.pickupPendingCode !== null) {
         add({ dto: { code: 'PICKUP_PENDING', pickupRequestCode: usage.pickupPendingCode }, message: WASTE_MESSAGES.PICKUP_PENDING(usage.pickupPendingCode) });

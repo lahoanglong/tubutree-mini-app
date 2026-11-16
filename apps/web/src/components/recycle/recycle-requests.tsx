@@ -13,7 +13,7 @@ import { usePublicConfig } from '@/lib/use-public-config';
 import { loginHref } from '@/lib/return-to';
 import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
 import { homePickupListMeta } from '@tubutree/app-core/recycle-home-pickup-view';
-import { homePickupCopy, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
+import { homePickupCopy, requestListPendingPoints, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
 import { ui } from '@/lib/guest-ui';
 import { skin } from '@/components/pro-shared/mini-skin';
 import { AuthLoading, SessionUnavailable } from '@/components/login-required';
@@ -125,7 +125,7 @@ export function RecycleRequests() {
               key={r.id}
               href={r.status === 'COMPLETED' ? `/doi-rac/xong/${r.id}` : `/doi-rac/yeu-cau/${r.id}`}
               title={`${r.code} · ${METHOD_LABELS[r.method]}`}
-              subtitle={[requestStatusText(r, { blocked: me?.blocked, paused }), homePickupListMeta(r), formatDate(r.createdAt)].filter(Boolean).join(' · ')}
+              subtitle={[requestStatusText(r, { blocked: me?.blocked, paused }), requestListPendingPoints(r), homePickupListMeta(r), formatDate(r.createdAt)].filter(Boolean).join(' · ')}
             />
           );
         })}

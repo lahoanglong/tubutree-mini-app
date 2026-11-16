@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Page, useNavigate, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
-import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy, wasteIntroCopy } from '@tubutree/app-core/waste-copy';
+import { WAREHOUSE_ONLY_TEXT, pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy } from '@tubutree/app-core/waste-copy';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
 import { getWasteCatalogue, getWasteMe, WASTE_QUERY_KEYS } from '../services/waste-api';
@@ -331,6 +331,7 @@ export default function RecyclePage() {
   }
 
   const total = me.balance ? pointsSummary(me.balance).total : 0;
+  const pendingLine = pendingPointsBalanceLine(me.pendingPoints);
   const items = [...me.items].sort((a, b) => a.sortOrder - b.sortOrder);
   const firstActive = items.find((i) => i.status === 'ACTIVE');
   const progress = nextRewardProgress(rewardsQ.data);
@@ -355,6 +356,11 @@ export default function RecyclePage() {
           {total > 0 && (
             <Text variant="body-sm" tone="secondary" as="div">
               {`Dùng như ${formatVnd(total * POINT_VALUE_VND)} khi mua sắm`}
+            </Text>
+          )}
+          {pendingLine && (
+            <Text variant="caption" tone="secondary" as="div" numeric>
+              {pendingLine}
             </Text>
           )}
           {impact && (

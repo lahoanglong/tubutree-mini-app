@@ -387,4 +387,27 @@ test.describe('W178 — Shipper lấy tận nhà khi thiếu Điểm Xanh', () =
       expectedCashVnd: 17_000,
     });
   });
+
+  test('W179-B trần 2 yêu cầu đang mở: chặn sớm ở /recycle/new với nút "Xem yêu cầu đang mở", và xử lý WASTE_MAX_OPEN ở thanh toán', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockSession(api, makeUser({ id: 'user-w179' }));
+    const openA = wasteDetail({ id: 'wr-1', code: 'TR-OPEN1', method: 'DROP_OFF', status: 'OPEN' });
+    const openB = wasteDetail({ id: 'wr-2', code: 'TR-OPEN2', method: 'MAIL_IN', status: 'IN_TRANSIT' });
+    mockWasteCustomer(api, {
+      me: {
+        thresholds: { mailinMinPoints: 15_000, pickupMinPoints: 3_000, maxOpenRequests: 2 },
+        pendingPoints: 6_000,
+        openRequests: [openA, openB],
+      },
+      requests: [openA, openB],
+    });
+    api.get('/config/public', publicConfig({ waste: { enabled: true, dropoff: true, mailin: true, pickup: true } }));
+
+    await page.goto('/recycle/new');
+    await expect(page.getByTestId('waste-max-open-notice')).toHaveText(
+      'Bạn đang có 2 yêu cầu đổi rác chưa xong. Hãy hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới.',
+    );
+    await page.getByRole('button', { name: 'Xem yêu cầu đang mở' }).click();
+    await expect(page).toHaveURL(/\/recycle\/requests/);
+  });
 });

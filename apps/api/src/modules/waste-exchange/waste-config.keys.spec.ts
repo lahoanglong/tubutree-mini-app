@@ -13,7 +13,11 @@ const SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261020000
  * Migration gốc đã áp ở mọi môi trường nên giữ nguyên giá trị nó gieo; hai khoá này đổi mặc định sau đó (hàng đã có chỉ đổi bằng migration
  * UPDATE riêng, seed và mặc định trong code thì theo bản mới).
  */
-const MIGRATION_SEEDED_DEFAULTS: Record<string, unknown> = { 'waste.pickup_min_points': 10_000, 'waste.shortfall_lock_streak': 3 };
+const MIGRATION_SEEDED_DEFAULTS: Record<string, unknown> = {
+  'waste.pickup_min_points': 10_000,
+  'waste.shortfall_lock_streak': 3,
+  'waste.max_open_requests': 3,
+};
 
 const OLD_CLAIM_DAYS_KEY = 'waste.gift_claim_days';
 const OLD_CLAIM_DAYS_DESC = 'Số ngày khách được nhận quà bằng mã, quá hạn thì lượt đổi vào danh sách admin xem lại.';
@@ -38,7 +42,7 @@ const EXPECTED: [key: string, type: string, def: unknown, min?: number, max?: nu
   ['waste.mailin_min_points', 'int', 15_000, 1, 1_000_000],
   ['waste.pickup_min_points', 'int', 3_000, 1, 1_000_000],
   ['waste.customer_monthly_cap_points', 'int', 60_000, 1, 2_000_000],
-  ['waste.max_open_requests', 'int', 3, 1, 20],
+  ['waste.max_open_requests', 'int', 2, 1, 2],
   ['waste.request_hold_days', 'int', 7, 1, 60],
   ['waste.pickup_wait_days', 'int', 14, 1, 90],
   ['waste.in_transit_review_days', 'int', 30, 7, 180],
@@ -252,14 +256,18 @@ describe('write rules (SystemConfigService.set and the admin form rules)', () =>
       expect(await accepts('waste.alert_thresholds', { ...THRESHOLDS, [k]: v })).toBe(false);
     }
   });
-  it('a change to a waste.* key is recorded in system_config_history like every config key (spec 9)', async () => {
+  it('a change to a waste.* key is recorded in system_config_history like every config key, and setting waste.max_open_requests > 2 (e.g. 5) is rejected (spec 9, W179-B)', async () => {
     const tx = {
-      systemConfig: { findUnique: jest.fn().mockResolvedValue({ key: 'waste.max_open_requests', value: 3 }), upsert: jest.fn() },
+      systemConfig: { findUnique: jest.fn().mockResolvedValue({ key: 'waste.max_open_requests', value: 2 }), upsert: jest.fn() },
       systemConfigHistory: { create: jest.fn() },
     };
     const prisma = { $transaction: jest.fn((fn: (t: typeof tx) => unknown) => fn(tx)) } as unknown as PrismaService;
-    await new SystemConfigService(prisma).set('waste.max_open_requests', 5, 'admin-it');
-    expect(tx.systemConfigHistory.create).toHaveBeenCalledWith({ data: { key: 'waste.max_open_requests', oldValue: 3, newValue: 5, changedBy: 'admin-it' } });
+    const svc = new SystemConfigService(prisma);
+    await expect(svc.set('waste.max_open_requests', 5, 'admin-it')).rejects.toBeInstanceOf(BadRequestException);
+    expect(tx.systemConfigHistory.create).not.toHaveBeenCalled();
+
+    await svc.set('waste.max_open_requests', 1, 'admin-it');
+    expect(tx.systemConfigHistory.create).toHaveBeenCalledWith({ data: { key: 'waste.max_open_requests', oldValue: 2, newValue: 1, changedBy: 'admin-it' } });
   });
   it('waste.rules_text', async () => {
     expect(await accepts('waste.rules_text', '')).toBe(true);

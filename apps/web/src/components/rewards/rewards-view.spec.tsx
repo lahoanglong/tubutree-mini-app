@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { byText, flush, render, type Rendered } from '@/test-utils/dom';
+import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { makeRewardCatalog, makeRewardItem } from '@/components/loyalty/reward-fixtures';
 
 // RewardsView là thân Kho quà dùng chung cho /kho-qua và tab Đổi quà của /uu-dai: tự đọc phiên, KHÔNG mang theo khung trang (không h1, không main),
@@ -105,5 +105,25 @@ describe('RewardsView (thân Kho quà dùng chung)', () => {
     const c = await mount();
     const login = c.querySelector<HTMLAnchorElement>('a[href^="/dang-nhap"]');
     expect(login?.getAttribute('href')).toBe('/dang-nhap?returnTo=%2Fkho-qua');
+  });
+
+  it('W179-C: phoneVerified=false hiện đúng 1 thẻ thông báo mở Zalo Mini App ở tab quà vật lý (1 nút), khoá nút Đổi trên thẻ quà vật lý', async () => {
+    const base = makeRewardCatalog();
+    state.rewards = {
+      ...base,
+      phoneVerified: false,
+      rewards: base.rewards.map((r) => (r.kind === 'SEED_PACK' || r.kind === 'GIFT' ? { ...r, canRedeem: false } : r)),
+    };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="rewards-phone-verify-banner"]')).toBeNull();
+    expect((byText(c, 'button', 'Đổi') as HTMLButtonElement).disabled).toBe(false);
+
+    click(byText(c, '[role="tab"]', 'Cây và hạt')!);
+    await flush(2);
+    const banner = c.querySelector<HTMLElement>('[data-testid="rewards-phone-verify-banner"]');
+    expect(banner?.textContent).toContain('Xác minh số điện thoại qua Zalo để đổi quà hiện vật');
+    expect(banner?.querySelector<HTMLAnchorElement>('a[href*="zalo.me/s/"]')?.textContent).toBe('Mở Zalo Mini App để xác minh');
+    const seedCard = Array.from(c.querySelectorAll<HTMLElement>('[data-reward]')).find((el) => el.textContent?.includes('Gói hạt giống Tubu'))!;
+    expect((byText(seedCard, 'button', 'Đổi') as HTMLButtonElement).disabled).toBe(true);
   });
 });

@@ -8,7 +8,7 @@ import {
   pickupFieldsOf,
   pruneExcludedGifts,
   reconcileDraft,
-  toggleExcludedGift,
+  selectGiftForOrder,
   type PickupDraft,
 } from '@tubutree/app-core/checkout-pickup-state';
 import { coreHttp } from '@/lib/core-http';
@@ -25,6 +25,7 @@ export function useCheckoutPickup(args: { enabled: boolean; addressId: string | 
   const [applied, setApplied] = useState<PickupDraft | null>(null);
   const [excluded, setExcluded] = useState<string[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
+  const [maxOpenError, setMaxOpenError] = useState<string | null>(null);
   const itemIdsKey = itemIds ? itemIds.join(',') : '';
 
   const optionsQ = useQuery({
@@ -48,7 +49,11 @@ export function useCheckoutPickup(args: { enabled: boolean; addressId: string | 
   // Có lựa chọn cần đối chiếu mà danh sách chưa về: chưa báo giá, kẻo báo giá với món có thể bị máy chủ từ chối (400).
   const ready = applied === null || optionsQ.isSuccess || optionsQ.isError;
 
-  const toggleGift = useCallback((id: string, receive: boolean) => setExcluded((prev) => toggleExcludedGift(prev, id, receive)), []);
+  const toggleGift = useCallback(
+    (id: string, receive: boolean, pending?: readonly QuotePendingGiftDTO[]) =>
+      setExcluded((prev) => selectGiftForOrder(pending, prev, id, receive)),
+    [],
+  );
   const pruneGifts = useCallback((pending: readonly QuotePendingGiftDTO[] | undefined) => {
     setExcluded((prev) => {
       const next = pruneExcludedGifts(prev, pending);
@@ -56,10 +61,21 @@ export function useCheckoutPickup(args: { enabled: boolean; addressId: string | 
     });
   }, []);
 
+  const apply = useCallback((draft: PickupDraft | null) => {
+    setMaxOpenError(null);
+    setApplied(draft);
+  }, []);
+  const clear = useCallback(() => {
+    setMaxOpenError(null);
+    setApplied(null);
+  }, []);
+
   return {
     applied: effective,
-    apply: setApplied,
-    clear: useCallback(() => setApplied(null), []),
+    apply,
+    clear,
+    maxOpenError,
+    setMaxOpenError,
     excluded,
     toggleGift,
     pruneGifts,

@@ -118,6 +118,8 @@ function build(
     wasteItems?: Array<Record<string, unknown>>;
     /** Phiếu thu kèm có sẵn mà báo giá đọc cho `wasteRequestId` (null = phiếu không còn). */
     requestRow?: Record<string, unknown> | null;
+    /** SĐT khách đã xác minh Zalo (mặc định true cho các test hiện có; false để kiểm cổng W179-C). */
+    phoneVerified?: boolean;
     /** Dựng service như spec race tối giản: không nạp vùng đổi rác. */
     omitWaste?: boolean;
   } = {},
@@ -127,14 +129,17 @@ function build(
   const orderCreate = jest.fn().mockImplementation((args: any) => Promise.resolve({ id: 'o1', ...(args?.data ?? {}) }));
   // Giữ chỗ tồn kho đi bằng SQL thô (catalog/variation-stock.ts) — trả SỐ DÒNG bị sửa.
   const executeRaw = opts.executeRaw ?? jest.fn().mockResolvedValue(opts.stockCount ?? 1);
+  const verifiedAt = opts.phoneVerified === false ? null : new Date('2026-10-01T00:00:00Z');
   const prisma = {
     order: { findUnique: jest.fn().mockResolvedValue(null), findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'o1', items: [] }), create: orderCreate },
     wasteRequest: { findFirst: jest.fn().mockResolvedValue(opts.requestRow ?? null) },
     wasteUserFlags: { findUnique: jest.fn().mockResolvedValue(opts.wasteFlags ?? null) },
     wasteItem: { findMany: jest.fn().mockResolvedValue(opts.wasteItems ?? [{ hazardous: false }]) },
     user: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, pointsBalance: opts.pointsBalance ?? 1000, pointsConvertedBalance: opts.pointsConvertedBalance ?? 0, tierId: opts.tierId ?? null }),
-      findUnique: jest.fn().mockResolvedValue(null),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', walletBalance: opts.walletBalance ?? 1000, pointsBalance: opts.pointsBalance ?? 1000, pointsConvertedBalance: opts.pointsConvertedBalance ?? 0, phoneVerifiedAt: verifiedAt, tierId: opts.tierId ?? null }),
+      findUnique: jest.fn().mockImplementation(async (args?: { select?: Record<string, boolean> }) =>
+        args?.select?.phoneVerifiedAt ? { phoneVerifiedAt: verifiedAt } : null,
+      ),
       findFirst: jest.fn().mockResolvedValue(null),
       updateMany,
     },
@@ -2779,12 +2784,48 @@ describe('CheckoutService — đổi rác kèm đơn: miễn phí giao, số kg 
     });
 
     describe('quà hiện vật 0đ', () => {
-      it('giỏ có kiện Tubu → mọi quà chờ đều included, trừ quà khách bỏ ra', async () => {
+      it('giỏ có kiện Tubu >= 99k & SĐT đã xác minh → gắn tối đa 1 quà đầu tiên, quà thứ 2 báo ONE_PER_ORDER, quà khách bỏ có blockedReason=null', async () => {
         const { svc } = buildPickup({ pendingGifts: GIFTS });
-        const q = await svc.quote('u1', { addressId: 'addr1', excludeGiftRedemptionIds: ['g2'] } as never);
-        expect(q.pendingGiftRedemptions).toEqual([
-          { ...GIFTS[0], included: true },
-          { ...GIFTS[1], included: false },
+        const qAll = await svc.quote('u1', { addressId: 'addr1' } as never);
+        expect(qAll.pendingGiftRedemptions).toEqual([
+          { ...GIFTS[0], included: true, blockedReason: null },
+          { ...GIFTS[1], included: false, blockedReason: 'ONE_PER_ORDER' },
+        ]);
+
+        const qSkip2 = await svc.quote('u1', { addressId: 'addr1', excludeGiftRedemptionIds: ['g2'] } as never);
+        expect(qSkip2.pendingGiftRedemptions).toEqual([
+          { ...GIFTS[0], included: true, blockedReason: null },
+          { ...GIFTS[1], included: false, blockedReason: null },
+        ]);
+      });
+
+      it('W179-C: mã giảm hoặc Điểm Xanh kéo tiền hàng ròng của kiện Tubu xuống dưới 99.000đ (kể cả phí giao 19.000đ đẩy tổng > 99.000đ) → không gắn quà, báo MIN_ORDER + giftShortfallVnd', async () => {
+        const SMALL_CART = {
+          items: [{ id: 'ci1', variationId: 'v1', productId: 'p1', productName: 'Bánh xà bông', variationName: '100g', slug: 'xa-bong', unitPrice: 120_000, quantity: 1, total: 120_000, weight: 800, stock: 10, isFlash: false }],
+          subtotal: 120_000,
+          couponCode: 'GIAM30K',
+        };
+        const { svc } = buildPickup({
+          cartData: SMALL_CART,
+          pendingGifts: GIFTS,
+          validateAndCompute: jest.fn().mockResolvedValue({ discount: 30_000, freeship: false }),
+        });
+        const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+        // subtotal 120k - discount 30k = 90k < 99k (dù cộng phí giao 19k thì total = 109k)
+        expect(q.total).toBe(109_000);
+        expect(q.giftShortfallVnd).toBe(9_000);
+        expect(q.pendingGiftRedemptions.map((g) => [g.included, g.blockedReason])).toEqual([
+          [false, 'MIN_ORDER'],
+          [false, 'MIN_ORDER'],
+        ]);
+      });
+
+      it('W179-C: khách chưa xác minh SĐT (phoneVerifiedAt=null) → quà READY giữ ở kho, báo PHONE_NOT_VERIFIED', async () => {
+        const { svc } = buildPickup({ pendingGifts: GIFTS, phoneVerified: false });
+        const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+        expect(q.pendingGiftRedemptions.map((g) => [g.included, g.blockedReason])).toEqual([
+          [false, 'PHONE_NOT_VERIFIED'],
+          [false, 'PHONE_NOT_VERIFIED'],
         ]);
       });
 
@@ -2988,13 +3029,28 @@ describe('CheckoutService — đổi rác kèm đơn: miễn phí giao, số kg 
   });
 
   describe('quà hiện vật 0đ gắn vào đơn', () => {
-    it('đơn có kiện Tubu → gắn mọi quà chờ vào đơn Tubu, đọc và gắn trong chính tx đặt đơn', async () => {
+    it('đơn có kiện Tubu >= 99k & SĐT đã xác minh → chỉ gắn ĐÚNG 1 quà đầu tiên vào đơn Tubu trong chính tx đặt đơn', async () => {
       const { svc, prisma, orderCreate, giftAttach } = buildPickup({ pendingGifts: GIFTS });
       await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'idem-1');
       const code = orderCreate.mock.calls[0][0].data.code;
       expect(giftAttach.listPending).toHaveBeenCalledWith('u1', prisma);
       expect(giftAttach.attachInTx).toHaveBeenCalledTimes(1);
-      expect(giftAttach.attachInTx).toHaveBeenCalledWith(prisma, 'u1', ['g1', 'g2'], `id-${code}`);
+      expect(giftAttach.attachInTx).toHaveBeenCalledWith(prisma, 'u1', ['g1'], `id-${code}`);
+    });
+
+    it('W179-C: đơn dưới 99.000đ ròng hoặc khách chưa xác minh SĐT → đơn vẫn đặt thành công, quà ở lại kho (không gọi attachInTx)', async () => {
+      const LOW_CART = {
+        items: [{ id: 'ci1', variationId: 'v1', productId: 'p1', productName: 'Xà bông', variationName: '100g', slug: 'xa-bong', unitPrice: 85_000, quantity: 1, total: 85_000, weight: 800, stock: 10, isFlash: false }],
+        subtotal: 85_000,
+        couponCode: null,
+      };
+      const low = buildPickup({ cartData: LOW_CART, pendingGifts: GIFTS });
+      await low.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'idem-low');
+      expect(low.giftAttach.attachInTx).not.toHaveBeenCalled();
+
+      const unv = buildPickup({ pendingGifts: GIFTS, phoneVerified: false });
+      await unv.svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never, 'idem-unv');
+      expect(unv.giftAttach.attachInTx).not.toHaveBeenCalled();
     });
 
     it('quà khách bỏ ra không được gắn, ở lại ví cho đơn sau', async () => {

@@ -59,6 +59,14 @@ export interface CheckoutPickupQuote {
   returnWeightGrams: number | null;
 }
 
+/** Sàn tiền hàng ròng (`subtotal - discount` của kiện Tubu, không tính phí giao) để gắn quà hiện vật 0đ vào đơn. */
+export const GIFT_ATTACH_MIN_NET_GOODS_VND = 99_000;
+/** Số quà hiện vật 0đ tối đa được gắn vào một đơn mua. */
+export const GIFT_ATTACH_MAX_PER_ORDER = 1;
+
+export const GIFT_ATTACH_BLOCKED_REASON_VALUES = ['PHONE_NOT_VERIFIED', 'MIN_ORDER', 'ONE_PER_ORDER'] as const;
+export type GiftAttachBlockedReason = (typeof GIFT_ATTACH_BLOCKED_REASON_VALUES)[number];
+
 /** Quà hiện vật 0đ khách đã đổi và chưa gắn đơn nào. */
 export interface PendingGiftRedemptionDTO {
   id: string;
@@ -69,9 +77,11 @@ export interface PendingGiftRedemptionDTO {
   pointsCost: number;
 }
 
-/** Dòng quà trong báo giá: `included` = đơn có kiện Tubu và khách không bỏ quà này ra. */
+/** Dòng quà trong báo giá: `included` = đơn đủ điều kiện nhận quà này và khách không bỏ quà ra. */
 export interface QuotePendingGiftDTO extends PendingGiftRedemptionDTO {
   included: boolean;
+  /** Vì sao quà chưa gắn vào đơn này; null khi quà được gắn, khách tự bỏ, hoặc giỏ không có kiện Tubu. */
+  blockedReason?: GiftAttachBlockedReason | null;
 }
 
 export type PickupBlockedReason = 'BATTERY_OUT_OF_HCM';

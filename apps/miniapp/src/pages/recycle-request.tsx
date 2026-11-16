@@ -1,5 +1,5 @@
 import { homePickupCancelCopy, homePickupCancelDone, homePickupTimelineView, homePickupUnavailableText } from '@tubutree/app-core/recycle-home-pickup-view';
-import { homePickupCopy, pausedNote } from '@tubutree/app-core/waste-copy';
+import { WASTE_PENDING_POINTS_SUBNOTE, homePickupCopy, pausedNote, pendingPointsText } from '@tubutree/app-core/waste-copy';
 import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties, ReactNode } from 'react';
@@ -454,7 +454,14 @@ export default function RecycleRequestPage() {
       )}
       <DeclaredCountedTable lines={r.lines} />
       {t && r.status !== 'COMPLETED' && r.estimatedPoints > 0 && (
-        <Text variant="body-md" as="div" style={{ fontWeight: 600, textAlign: 'right' }}>{`Ước tính ${formatPoints(r.estimatedPoints)}`}</Text>
+        <div style={{ textAlign: 'right' }}>
+          <Text variant="body-md" as="div" numeric style={{ fontWeight: 600 }}>
+            {pendingPointsText(formatPoints(r.estimatedPoints))}
+          </Text>
+          <Text variant="caption" tone="secondary" as="div">
+            {WASTE_PENDING_POINTS_SUBNOTE}
+          </Text>
+        </div>
       )}
       {r.status === 'COMPLETED' && (
         <Button fullWidth onPress={() => navigate(`/recycle/done/${id}`)}>Xem kết quả cộng điểm</Button>

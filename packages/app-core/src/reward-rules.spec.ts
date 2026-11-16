@@ -73,6 +73,15 @@ describe('rewardCardState (dùng số máy chủ trả)', () => {
   ] as const)('%o → %o', (r, want) => {
     expect(rewardCardState(r, c)).toEqual(want);
   });
+
+  it('W179-C: phoneVerified=false chỉ khoá quà vật lý (SEED_PACK, GIFT) thành needPhoneVerify; VOUCHER và TREE không đổi; soldOut vẫn ưu tiên trước', () => {
+    const unverified = { ...c, phoneVerified: false };
+    expect(rewardCardState({ kind: 'GIFT', pointsCost: 10_000, canRedeem: false, soldOut: false }, unverified)).toEqual({ kind: 'needPhoneVerify' });
+    expect(rewardCardState({ kind: 'SEED_PACK', pointsCost: 10_000, canRedeem: false, soldOut: false }, unverified)).toEqual({ kind: 'needPhoneVerify' });
+    expect(rewardCardState({ kind: 'GIFT', pointsCost: 10_000, canRedeem: false, soldOut: true }, unverified)).toEqual({ kind: 'soldOut' });
+    expect(rewardCardState({ kind: 'VOUCHER', pointsCost: 10_000, canRedeem: true, soldOut: false }, unverified)).toEqual({ kind: 'redeem' });
+    expect(rewardCardState({ kind: 'TREE', pointsCost: 60_000, canRedeem: false, soldOut: false }, unverified)).toEqual({ kind: 'need', missing: 6000 });
+  });
 });
 
 describe('quà miễn phí giao hàng và hạng đã có quyền lợi này (B-22)', () => {

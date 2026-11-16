@@ -43,6 +43,33 @@ export const ITEMS_NEXT_HINT = 'Chọn ít nhất 1 món để tiếp tục';
 export const WASTE_CONSENT_TEXT = 'Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này';
 export const WASTE_RULES_LINK = 'Xem Thể lệ';
 
+/** W179-A: một thuật ngữ duy nhất cho điểm rác chưa được kho xác nhận (không bao giờ cộng chung với số dư dùng được). */
+export const WASTE_PENDING_POINTS_SUBNOTE = 'Chỉ cộng khi kho Tubu xác nhận';
+
+export function pendingPointsText(formattedPoints: string): string {
+  return `Điểm tạm tính ${formattedPoints}`;
+}
+
+export function pendingPointsBalanceLine(pendingPoints: number | null | undefined): string | null {
+  const n = Number(pendingPoints ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `Điểm tạm tính ${(n + 0).toLocaleString('vi-VN')} · chưa dùng được`;
+}
+
+export function requestListPendingPoints(r: { status: string; estimatedPoints?: number | null }): string | null {
+  if (!['OPEN', 'IN_TRANSIT', 'RECEIVED'].includes(r.status)) return null;
+  const n = Number(r.estimatedPoints ?? 0);
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `Điểm tạm tính ${(n + 0).toLocaleString('vi-VN')} điểm`;
+}
+
+/** W179-B: câu thông báo và nhãn nút duy nhất khi khách đã mở đủ trần yêu cầu đổi rác. */
+export function maxOpenNotice(max: number): string {
+  return `Bạn đang có ${(max + 0).toLocaleString('vi-VN')} yêu cầu đổi rác chưa xong. Hãy hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới.`;
+}
+
+export const MAX_OPEN_VIEW_CTA = 'Xem yêu cầu đang mở';
+
 /** Số lượng nhập nhanh: nút cộng thêm cho món tính theo gói. */
 export const QUICK_QTY_STEPS = [5, 10] as const;
 
@@ -227,8 +254,8 @@ export const homePickupCopy = {
   payShort: (usable: string) => `Điểm Xanh dùng được ${usable}`,
   /** Cùng câu máy chủ trả (503) khi đơn vị vận chuyển chưa báo được phí thật: phí ước tính thì chưa cho đặt. */
   feeUnavailable: 'Chưa báo được phí shipper lúc này, bạn thử lại sau ít phút nhé',
-  progress: (have: string, min: string) => `Dự kiến ${have} / ${min} điểm`,
-  estimate: (points: string) => `Ước tính ${points} điểm`,
+  progress: (have: string, min: string) => `Điểm tạm tính ${have} / ${min} điểm`,
+  estimate: (points: string) => `Điểm tạm tính ${points} điểm`,
   quoteLoading: 'Đang tính phí ship…',
   quoteFailed: 'Chưa tính được phí ship, bạn thử lại nhé',
   needAddress: 'Chọn địa chỉ lấy rác để tạo đơn thu gom',

@@ -140,10 +140,9 @@ describe('WasteGiftAttachService.listPending', () => {
 });
 
 describe('WasteGiftAttachService.attachInTx', () => {
-  it('gắn đúng các quà hợp lệ, bỏ qua id sai chủ, đã gắn đơn khác, đã trao/huỷ, quá hạn hoặc không phải hàng hiện vật, không ném lỗi', async () => {
+  it('gắn đúng 1 quà hợp lệ, bỏ qua id sai chủ, đã gắn đơn khác, đã trao/huỷ, quá hạn hoặc không phải hàng hiện vật, không ném lỗi', async () => {
     const rows = [
       row('ok1', { createdAt: new Date('2026-11-02T00:00:00Z') }),
-      row('ok2', { giftKind: 'SEED_PACK', createdAt: new Date('2026-11-03T00:00:00Z') }),
       row('other-user', { userId: 'u2' }),
       row('taken', { attachedOrderId: 'o-other' }),
       row('fulfilled', { status: 'FULFILLED' }),
@@ -154,11 +153,13 @@ describe('WasteGiftAttachService.attachInTx', () => {
     ];
     const h = setup(rows, { 'o-other': 'CONFIRMED' });
 
-    const res = await h.svc.attachInTx(h.db as never, 'u1', ['ok2', 'ok1', 'other-user', 'taken', 'fulfilled', 'cancelled', 'expired', 'voucher', 'khong-ton-tai'], 'o-new');
+    const res = await h.svc.attachInTx(h.db as never, 'u1', ['ok1'], 'o-new');
+    expect(res).toEqual([{ id: 'ok1', code: 'QG-OK1', giftName: 'Quà ok1', kind: 'GIFT', pointsCost: 12_000 }]);
+    expect(rows.filter((r) => r.attachedOrderId === 'o-new').map((r) => r.id)).toEqual(['ok1']);
 
-    expect(res.map((r) => r.id)).toEqual(['ok1', 'ok2']);
-    expect(res[1]).toEqual({ id: 'ok2', code: 'QG-OK2', giftName: 'Quà ok2', kind: 'SEED_PACK', pointsCost: 12_000 });
-    expect(rows.filter((r) => r.attachedOrderId === 'o-new').map((r) => r.id).sort()).toEqual(['ok1', 'ok2']);
+    for (const badId of ['other-user', 'taken', 'fulfilled', 'cancelled', 'expired', 'voucher', 'khong-ton-tai']) {
+      await expect(h.svc.attachInTx(h.db as never, 'u1', [badId], `o-bad-${badId}`)).resolves.toEqual([]);
+    }
     expect(byId(rows, 'other-user').attachedOrderId).toBeNull();
     expect(byId(rows, 'taken').attachedOrderId).toBe('o-other');
     expect(byId(rows, 'fulfilled').attachedOrderId).toBeNull();
@@ -166,13 +167,20 @@ describe('WasteGiftAttachService.attachInTx', () => {
     expect(byId(rows, 'expired').attachedOrderId).toBeNull();
     expect(byId(rows, 'voucher').attachedOrderId).toBeNull();
     expect(byId(rows, 'untouched').attachedOrderId).toBeNull();
-    // Quà gắn rồi vẫn READY: chỉ giao đơn thành công mới chuyển FULFILLED.
     expect(byId(rows, 'ok1').status).toBe('READY');
   });
 
+  it('W179-C phòng thủ: ném ConflictException nếu truyền > 1 mã quà hoặc đơn đích đã có quà gắn kèm', async () => {
+    const h = setup([row('a'), row('b')], { o1: 'CONFIRMED' });
+    await expect(h.svc.attachInTx(h.db as never, 'u1', ['a', 'b'], 'o1')).rejects.toThrow(/tối đa 1 quà/);
+
+    await h.svc.attachInTx(h.db as never, 'u1', ['a'], 'o1');
+    await expect(h.svc.attachInTx(h.db as never, 'u1', ['b'], 'o1')).rejects.toThrow(/đã có quà hiện vật gắn kèm/);
+  });
+
   it('khoá hàng bằng SELECT ... FOR UPDATE theo id trước khi ghi, đúng chủ và danh sách id', async () => {
-    const h = setup([row('a'), row('b')]);
-    await h.svc.attachInTx(h.db as never, 'u1', ['b', 'a'], 'o1');
+    const h = setup([row('a')]);
+    await h.svc.attachInTx(h.db as never, 'u1', ['a'], 'o1');
 
     const sql = h.db.$queryRaw.mock.calls[0]![0] as unknown as { strings: string[]; values: unknown[] };
     const text = sql.strings.join('?');
@@ -180,7 +188,7 @@ describe('WasteGiftAttachService.attachInTx', () => {
     expect(text).toContain('"attachedOrderId" IS NULL');
     expect(text).toContain(`"status" = 'READY'`);
     expect(text).toMatch(/ORDER BY "id"\s+FOR UPDATE/);
-    expect(sql.values).toEqual(['u1', 'b', 'a', new Date('2026-11-19T17:00:00Z')]);
+    expect(sql.values).toEqual(['u1', 'a', new Date('2026-11-19T17:00:00Z')]);
     expect(h.db.$queryRaw.mock.invocationCallOrder[0]).toBeLessThan(h.db.wasteGiftRedemption.updateMany.mock.invocationCallOrder[0]!);
   });
 

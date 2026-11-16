@@ -111,6 +111,14 @@ function installHandlers(db: RaceDb, selectForUpdate: boolean, advisoryLocks: bo
       },
     },
     {
+      match: /SELECT "id", "phoneVerifiedAt" FROM "users" WHERE "id" = \?/,
+      run: async (c) => {
+        await lockIf(c, 'user', c.params[0] as string);
+        const u = c.rows('user').find((x) => x.id === c.params[0]);
+        return u ? [{ id: u.id, phoneVerifiedAt: u.phoneVerifiedAt ?? null }] : [];
+      },
+    },
+    {
       match: /SELECT "id" FROM "users" WHERE "id" = \?/,
       run: async (c) => {
         await lockIf(c, 'user', c.params[0] as string);
@@ -140,6 +148,18 @@ function installHandlers(db: RaceDb, selectForUpdate: boolean, advisoryLocks: bo
     {
       match: /UPDATE "waste_gifts" SET "stock" = "stock" \+ 1/,
       run: async (c) => (await c.client.wasteGift.updateMany({ where: { id: c.params[0], stock: { not: null } }, data: { stock: { increment: 1 } } })).count,
+    },
+    {
+      match: /UPDATE "waste_gifts" SET "stock" = CASE WHEN "stock" IS NULL THEN NULL ELSE "stock" - 1 END/,
+      run: async (c) => {
+        const id = c.params[0] as string;
+        await lockIf(c, 'wasteGift', id);
+        const g = c.rows('wasteGift').find((r) => r.id === id);
+        if (!g || g.status !== 'ACTIVE') return 0;
+        if (g.stock === null || g.stock === undefined) return 1;
+        if (g.stock < 1) return 0;
+        return (await c.client.wasteGift.updateMany({ where: { id, status: 'ACTIVE', stock: { gte: 1 } }, data: { stock: { decrement: 1 } } })).count;
+      },
     },
   );
 }

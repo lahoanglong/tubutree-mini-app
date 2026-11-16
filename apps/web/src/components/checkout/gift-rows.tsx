@@ -11,8 +11,9 @@ import { CheckMark, miniCheckbox, miniCheckboxGutter, miniCheckboxWrap } from '@
 interface GiftRowsProps {
   gifts: readonly QuotePendingGiftDTO[];
   excluded: readonly string[];
-  /** `receive=false` là để quà lại cho đơn sau (mã quà vào `excludeGiftRedemptionIds`). */
-  onToggle: (id: string, receive: boolean) => void;
+  /** `receive=false` là để quà lại cho đơn sau; `receive=true` chọn quà này cho đơn hiện tại (hành vi radio khi có nhiều quà). */
+  onToggle: (id: string, receive: boolean, pending?: readonly QuotePendingGiftDTO[]) => void;
+  shortfallVnd?: number;
   disabled?: boolean;
 }
 
@@ -20,23 +21,32 @@ interface GiftRowsProps {
  * Quà hiện vật 0đ đi kèm đơn: mỗi quà một dòng, từ 3 quà trở lên gộp một dòng mở tấm nhỏ. Mặc định quà đi cùng đơn;
  * ô "Để đơn sau" chỉ là lối bỏ, không phải nút hành động của màn. Cùng luật với Mini App.
  */
-export function GiftRows({ gifts, excluded, onToggle, disabled = false }: GiftRowsProps) {
+export function GiftRows({ gifts, excluded, onToggle, shortfallVnd = 0, disabled = false }: GiftRowsProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
-  const view = giftSectionView(gifts, excluded);
+  const view = giftSectionView(gifts, excluded, shortfallVnd);
   if (view.layout === 'none') return null;
 
   const rows = view.rows.map((row) => (
     <div key={row.id} data-testid="checkout-gift-row" className="mt-3 flex min-h-11 items-center justify-between gap-3 tabular-nums first:mt-0">
-      <Text variant="body-sm" tone={row.receive ? 'primary' : 'secondary'} as="span" className={`min-w-0 flex-1 break-words ${row.receive ? '' : 'opacity-60'}`}>
-        {row.label}
-      </Text>
-      <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-2 text-caption text-[color:var(--color-text-secondary)]">
-        <span className={`${miniCheckboxWrap} ${miniCheckboxGutter}`}>
-          <input type="checkbox" checked={!row.receive} onChange={() => onToggle(row.id, !row.receive)} disabled={disabled} className={miniCheckbox} />
-          <CheckMark />
-        </span>
-        {view.deferLabel}
-      </label>
+      <div className={`flex min-w-0 flex-1 flex-col gap-0.5 break-words ${row.receive ? '' : 'opacity-60'}`}>
+        <Text variant="body-sm" tone={row.receive ? 'primary' : 'secondary'} as="span" numeric>
+          {row.label}
+        </Text>
+        {row.reason && (
+          <Text variant="caption" tone="secondary" as="span" numeric>
+            {row.reason}
+          </Text>
+        )}
+      </div>
+      {row.canToggle && (
+        <label className="flex min-h-11 shrink-0 cursor-pointer items-center gap-2 text-caption text-[color:var(--color-text-secondary)]">
+          <span className={`${miniCheckboxWrap} ${miniCheckboxGutter}`}>
+            <input type="checkbox" checked={!row.receive} onChange={() => onToggle(row.id, !row.receive, gifts)} disabled={disabled} className={miniCheckbox} />
+            <CheckMark />
+          </span>
+          {view.deferLabel}
+        </label>
+      )}
     </div>
   ));
   if (view.layout === 'rows') return <div className="mt-3">{rows}</div>;

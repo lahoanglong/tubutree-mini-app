@@ -4,7 +4,7 @@ import { Page, useNavigate } from 'zmp-ui';
 import { useQuery } from '@tanstack/react-query';
 import { homePickupListMeta } from '@tubutree/app-core/recycle-home-pickup-view';
 import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
-import { homePickupCopy, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
+import { homePickupCopy, requestListPendingPoints, wasteGuestCopy } from '@tubutree/app-core/waste-copy';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useRecycleLogin } from '../hooks/use-recycle-login';
 import { Button } from '../components/ui/button';
@@ -112,7 +112,7 @@ export default function RecycleRequestsPage() {
             <ListRow
               key={r.id}
               title={`${r.code} · ${METHOD_LABELS[r.method]}`}
-              subtitle={[requestStatusText(r, { blocked: me?.blocked, paused }), shippingPoints, formatDate(r.createdAt)].filter(Boolean).join(' · ')}
+              subtitle={[requestStatusText(r, { blocked: me?.blocked, paused }), requestListPendingPoints(r), shippingPoints, formatDate(r.createdAt)].filter(Boolean).join(' · ')}
               trailing="chevron"
               onPress={() => navigate(r.status === 'COMPLETED' ? `/recycle/done/${r.id}` : `/recycle/r/${r.id}`)}
             />

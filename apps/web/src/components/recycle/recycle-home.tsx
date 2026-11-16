@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { WasteItemDTO, WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
 import { wasteCatalogueQuery, wasteMeQuery } from '@tubutree/app-core/queries/waste';
-import { WAREHOUSE_ONLY_TEXT, timelineCaption, wasteGuestCopy, wasteIntroCopy } from '@tubutree/app-core/waste-copy';
+import { WAREHOUSE_ONLY_TEXT, pendingPointsBalanceLine, timelineCaption, wasteGuestCopy, wasteIntroCopy } from '@tubutree/app-core/waste-copy';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
 import { friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -305,6 +305,7 @@ export function RecycleHome() {
   }
 
   const total = me.balance ? pointsSummary(me.balance).total : 0;
+  const pendingLine = pendingPointsBalanceLine(me.pendingPoints);
   const items = [...me.items].sort((a, b) => a.sortOrder - b.sortOrder);
   const firstActive = items.find((i) => i.status === 'ACTIVE');
   const progress = nextRewardProgress(rewardsQ.data);
@@ -326,6 +327,7 @@ export function RecycleHome() {
             <p className="text-xs text-stone-600">Điểm Xanh của bạn</p>
             <p className="font-display text-3xl font-semibold tabular-nums text-stone-900">{formatPoints(total)}</p>
             {total > 0 && <p className="text-sm text-stone-700">{`Dùng như ${formatVnd(total * POINT_VALUE_VND)} khi mua sắm`}</p>}
+            {pendingLine && <p className="text-xs tabular-nums text-stone-600">{pendingLine}</p>}
             {impact && (
               <div>
                 <p className="text-sm text-stone-900">{impact}</p>

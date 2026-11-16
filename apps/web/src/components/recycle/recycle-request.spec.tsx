@@ -471,7 +471,8 @@ describe('/doi-rac/yeu-cau/[id]: trạng thái, ước tính, tiêu đề', () =
     expect(step2(c).textContent).toContain('Mang tới Đại lý Cô Ba đến hết 25/10');
     expect(step2(c).textContent).toContain('12 Lê Lợi');
     expect(c.textContent).toContain('Chờ bạn mang tới');
-    expect(c.textContent).toContain('Ước tính 5.000 điểm');
+    expect(c.textContent).toContain('Điểm tạm tính 5.000 điểm');
+    expect(c.textContent).toContain('Chỉ cộng khi kho Tubu xác nhận');
   });
   it('điểm nhận tạm ngừng: bước 2 không dặn mang tới điểm đó', async () => {
     state.request = makeRequestDetail({ pointAvailable: false });
@@ -491,19 +492,19 @@ describe('/doi-rac/yeu-cau/[id]: trạng thái, ước tính, tiêu đề', () =
     const c = await mount();
     expect(step2(c).textContent).not.toContain('Mang tới Đại lý Cô Ba');
   });
-  it('REJECTED và COMPLETED: không còn dòng "Ước tính"', async () => {
+  it('REJECTED và COMPLETED: không còn dòng "Điểm tạm tính"', async () => {
     state.request = makeRequestDetail({ status: 'REJECTED', rejectionReason: 'WET', editable: false, cancellable: false });
     let c = await mount();
-    expect(c.textContent).not.toContain('Ước tính');
+    expect(c.textContent).not.toContain('Điểm tạm tính');
     mounted.pop()!.unmount();
     state.request = makeRequestDetail({ status: 'COMPLETED', pointsAwarded: 2000, editable: false, cancellable: false });
     c = await mount();
-    expect(c.textContent).not.toContain('Ước tính');
+    expect(c.textContent).not.toContain('Điểm tạm tính');
   });
-  it('Gửi về kho + OPEN: có dòng "Ước tính", số điện thoại người nhận nhóm 4-3-3, tiêu đề trang không lặp mã', async () => {
+  it('Gửi về kho + OPEN: có dòng "Điểm tạm tính", số điện thoại người nhận nhóm 4-3-3, tiêu đề trang không lặp mã', async () => {
     state.request = MAIL({ point: makeWarehouseContact({ phone: '0984606774' }) });
     const c = await mount();
-    expect(c.textContent).toContain('Ước tính 5.000 điểm');
+    expect(c.textContent).toContain('Điểm tạm tính 5.000 điểm');
     expect(c.textContent).toContain('0984 606 774');
     expect(c.querySelector('h1')?.textContent).toContain('Yêu cầu đổi rác');
     expect(c.textContent?.match(/TR-8K2M9/g)).toHaveLength(1);

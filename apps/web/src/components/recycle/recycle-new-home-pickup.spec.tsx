@@ -162,9 +162,9 @@ describe('Shipper lấy tận nhà (web): báo phí', () => {
     const c = await mount();
     expect(testid(c, 'home-pickup-fee-value')?.textContent).toBe('25.000đ');
     expect(testid(c, 'home-pickup-pay')?.textContent).toBe('Điểm Xanh dùng được 40.000 · sẽ trừ 25.000 điểm');
-    expect(testid(c, 'home-pickup-points')?.textContent).toBe('Ước tính 6.000 điểm');
+    expect(testid(c, 'home-pickup-points')?.textContent).toBe('Điểm tạm tính 6.000 điểm');
     expect(c.querySelector('[role="switch"]')).toBeNull();
-    expect(testid(c, 'home-pickup-fee')!.textContent).not.toContain('Ước tính 6.000 điểm Ước tính');
+    expect(testid(c, 'home-pickup-fee')!.textContent).not.toContain('Điểm tạm tính 6.000 điểm Ước tính');
     expect(testid(c, 'home-pickup-notice')).toBeNull();
   });
 
@@ -217,11 +217,11 @@ describe('Shipper lấy tận nhà (web): báo phí', () => {
     expect(createBtn(c).disabled).toBe(false);
   });
 
-  it('dưới ngưỡng điểm: "Dự kiến X / Y điểm", nút khoá, không lặp câu "cần tối thiểu" của máy chủ', async () => {
+  it('dưới ngưỡng điểm: "Điểm tạm tính X / Y điểm", nút khoá, không lặp câu "cần tối thiểu" của máy chủ', async () => {
     state.quote = () => makeQuote({ estimatedPoints: 3000, minPoints: 5000, blocked: 'Đơn thu gom cần tối thiểu 5.000 điểm ước tính' });
     atStep2();
     const c = await mount();
-    expect(testid(c, 'home-pickup-points')?.textContent).toBe('Dự kiến 3.000 / 5.000 điểm');
+    expect(testid(c, 'home-pickup-points')?.textContent).toBe('Điểm tạm tính 3.000 / 5.000 điểm');
     expect(testid(c, 'home-pickup-notice')).toBeNull();
     click(check(c));
     await flush(3);

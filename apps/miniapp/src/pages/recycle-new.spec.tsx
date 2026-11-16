@@ -161,7 +161,8 @@ describe('bước 1: chọn món (§4.2)', () => {
     fireEvent.click(plus); fireEvent.click(plus); fireEvent.click(plus);
     await waitFor(() => expect(mocks.previewWaste).toHaveBeenCalledTimes(1));
     expect(mocks.previewWaste).toHaveBeenCalledWith({ lines: [{ itemId: 'item-carton', declaredQty: 3 }] });
-    expect(await screen.findByText('Ước tính 6.000 điểm')).toBeInTheDocument();
+    expect(await screen.findByText('Điểm tạm tính 6.000 điểm')).toBeInTheDocument();
+    expect(screen.getByText('Chỉ cộng khi kho Tubu xác nhận')).toBeInTheDocument();
     expect(screen.getByText(/6\.000đ/)).toBeInTheDocument();
     // redeemablePoints 14.000 + 6.000 ước tính = 20.000 → Miễn phí vận chuyển (20.000) đã đủ, quà kế tiếp là Gói hạt giống Tubu (25.000)
     expect(screen.getByText('Còn 5.000 điểm tới Gói hạt giống Tubu')).toBeInTheDocument();
@@ -176,16 +177,16 @@ describe('bước 1: chọn món (§4.2)', () => {
     const carton = (await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement;
     const plus = within(carton).getByRole('button', { name: 'Tăng số lượng' });
     fireEvent.click(plus);
-    expect(await screen.findByText('Ước tính 6.000 điểm')).toBeInTheDocument();
+    expect(await screen.findByText('Điểm tạm tính 6.000 điểm')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tiếp tục' })).not.toBeDisabled();
     fireEvent.click(plus);
     expect(await screen.findByText('Tháng này Thùng carton còn 1 thùng')).toBeInTheDocument();
-    expect(screen.queryByText(/Ước tính/)).toBeNull();
+    expect(screen.queryByText(/Điểm tạm tính/)).toBeNull();
     expect(screen.queryByText(/Còn .* tới/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
     fireEvent.click(plus);
     expect(await screen.findByText('Tháng này bạn còn 60.000 điểm trong trần tháng')).toBeInTheDocument();
-    expect(screen.queryByText(/Ước tính/)).toBeNull();
+    expect(screen.queryByText(/Điểm tạm tính/)).toBeNull();
     expect(screen.queryByText(/Dùng như/)).toBeNull();
     expect(screen.queryByText(/Còn .* tới/)).toBeNull();
     expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
@@ -199,7 +200,7 @@ describe('bước 1: chọn món (§4.2)', () => {
     const carton = (await screen.findByText('Thùng carton')).closest('[data-item]') as HTMLElement;
     const plus = within(carton).getByRole('button', { name: 'Tăng số lượng' });
     fireEvent.click(plus);
-    expect(await screen.findByText('Ước tính 6.000 điểm')).toBeInTheDocument();
+    expect(await screen.findByText('Điểm tạm tính 6.000 điểm')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Tiếp tục' })).not.toBeDisabled();
     fireEvent.click(plus);
     expect(screen.getByRole('button', { name: 'Tiếp tục' })).toBeDisabled();
@@ -240,6 +241,24 @@ describe('bước 1: chọn món (§4.2)', () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true }));
     renderPage();
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/recycle', { replace: true }));
+  });
+  it('W179-B: đã có đủ 2 yêu cầu mở → chặn sớm bằng 1 thông báo và 1 nút "Xem yêu cầu đang mở" dẫn tới /recycle/requests', async () => {
+    mocks.getWasteMe.mockResolvedValue(
+      makeWasteMe({
+        thresholds: { mailinMinPoints: 15_000, pickupMinPoints: 10_000, maxOpenRequests: 2 },
+        openRequests: [
+          { id: 'r1', code: 'TR-1', method: 'DROP_OFF', status: 'OPEN', pointName: 'Kho', estimatedPoints: 3000, pointsAwarded: null, orderCode: null, closeReason: null, expiresAt: null, createdAt: '2026-10-20T00:00:00Z', lines: [] },
+          { id: 'r2', code: 'TR-2', method: 'MAIL_IN', status: 'IN_TRANSIT', pointName: 'Kho', estimatedPoints: 4000, pointsAwarded: null, orderCode: null, closeReason: null, expiresAt: null, createdAt: '2026-10-21T00:00:00Z', lines: [] },
+        ],
+      }),
+    );
+    renderPage();
+    expect(await screen.findByTestId('waste-max-open-notice')).toHaveTextContent(
+      'Bạn đang có 2 yêu cầu đổi rác chưa xong. Hãy hoàn tất hoặc huỷ bớt rồi tạo yêu cầu mới.',
+    );
+    const cta = screen.getByRole('button', { name: 'Xem yêu cầu đang mở' });
+    fireEvent.click(cta);
+    expect(mocks.navigate).toHaveBeenCalledWith('/recycle/requests');
   });
 });
 

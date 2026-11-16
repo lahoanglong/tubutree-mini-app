@@ -278,7 +278,8 @@ function makeFakeDb(users: Row[], opts: { advisoryLock?: boolean; lockedRows?: L
           const id = String(values[0]);
           if (!rowLocks.has(id)) rowLocks.set(id, new Mutex());
           ctx.releases.push(await rowLocks.get(id)!.acquire());
-          return db.users.has(id) ? [{ id }] : [];
+          const u = db.users.get(id);
+          return u ? [{ id, phoneVerifiedAt: u.phoneVerifiedAt ?? null }] : [];
         }
         if (/ORDER_DELIVERED/.test(sql)) return db.lockedRows.map((r) => ({ ...r }));
         throw new Error(`fake $queryRaw không hỗ trợ: ${sql}`);
@@ -354,10 +355,17 @@ const TREE = giftRow({ id: 'gift-tree', kind: 'TREE', name: 'Góp quỹ trồng 
 const SEEDED_GIFTS = [FREESHIP, D50K, P15, D100K, TREE];
 const WAREHOUSE = { name: 'Kho Tubu HCM', addressLine: '1 Đường A', communeName: 'Phường B', provinceName: 'TP.HCM', openingHours: { MON: [{ open: '08:00', close: '17:00' }] } };
 
-function catalogPrisma(o: { balance: number; converted?: number; locked?: LockedRow[]; gifts?: GiftRow[]; warehouse?: unknown; tier?: { id: string; name: string } }) {
+function catalogPrisma(o: { balance: number; converted?: number; locked?: LockedRow[]; gifts?: GiftRow[]; warehouse?: unknown; tier?: { id: string; name: string }; phoneVerified?: boolean }) {
   return {
     user: {
-      findUniqueOrThrow: jest.fn().mockResolvedValue({ id: 'u1', pointsBalance: o.balance, pointsConvertedBalance: o.converted ?? 0, tierId: o.tier?.id ?? null, tier: o.tier ? { name: o.tier.name } : null }),
+      findUniqueOrThrow: jest.fn().mockResolvedValue({
+        id: 'u1',
+        pointsBalance: o.balance,
+        pointsConvertedBalance: o.converted ?? 0,
+        phoneVerifiedAt: o.phoneVerified === false ? null : new Date('2026-10-01T00:00:00Z'),
+        tierId: o.tier?.id ?? null,
+        tier: o.tier ? { name: o.tier.name } : null,
+      }),
     },
     $queryRaw: jest.fn().mockResolvedValue(o.locked ?? []),
     wasteGift: { findMany: jest.fn().mockResolvedValue(o.gifts ?? SEEDED_GIFTS) },
@@ -463,6 +471,25 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
     it('getRewardCatalog chạy cả khi waste.enabled tắt (§8: route quà không bị cờ đổi rác chặn)', async () => {
       const res = await new LoyaltyService(catalogPrisma({ balance: 100_000 }), makeConfig({ 'waste.enabled': false })).getRewardCatalog('u1');
       expect(res.rewards).toHaveLength(5);
+    });
+
+    it('W179-C (G1): chưa xác minh SĐT (phoneVerifiedAt=null) → phoneVerified=false, quà vật lý SEED_PACK/GIFT canRedeem=false, voucher & cây không bị ảnh hưởng', async () => {
+      const gifts = [
+        FREESHIP,
+        TREE,
+        giftRow({ id: 'g-bag', kind: 'GIFT', name: 'Túi vải', pointsCost: 10_000, stock: 5 }),
+        giftRow({ id: 'g-seed', kind: 'SEED_PACK', name: 'Hạt giống', pointsCost: 5_000, stock: 5 }),
+      ];
+      const res = await new LoyaltyService(
+        catalogPrisma({ balance: 100_000, gifts, phoneVerified: false }),
+        makeConfig({ 'game.tree_points_price': 50_000 }),
+      ).getRewardCatalog('u1');
+      expect(res.phoneVerified).toBe(false);
+      const byId = new Map(res.rewards.map((r) => [r.id, r.canRedeem]));
+      expect(byId.get('reward-freeship')).toBe(true);
+      expect(byId.get('gift-tree')).toBe(true);
+      expect(byId.get('g-bag')).toBe(false);
+      expect(byId.get('g-seed')).toBe(false);
     });
 
     const redemptionRow = (over: GiftRow = {}) => ({
@@ -770,6 +797,38 @@ describe('LoyaltyService — tính năng CNV Loyalty Parity', () => {
       expect(db.users.get('u1')!.pointsBalance).toBe(100_000);
       expect(db.gifts.get('g1')!.stock).toBe(2);
       expect(db.ledger).toHaveLength(0);
+    });
+    it.each(['GIFT', 'SEED_PACK'] as const)(
+      'W179-C: tài khoản thật chưa xác minh SĐT (phoneVerifiedAt=null) đổi %s → 403 PHONE_NOT_VERIFIED trước khi đụng tồn kho/điểm',
+      async (kind) => {
+        const { db, prisma } = makeFakeDb(
+          [{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111', zaloId: 'z-real-1', phone: null, phoneVerifiedAt: null }],
+          { gifts: [giftRow({ kind, stock: 2 })] },
+        );
+        const err = await new LoyaltyService(prisma, makeConfig())
+          .redeemReward('u1', 'g1', 'key-w179-unverified')
+          .catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(ForbiddenException);
+        expect((err as ForbiddenException).getResponse()).toMatchObject({
+          statusCode: 403,
+          error: 'Forbidden',
+          code: 'PHONE_NOT_VERIFIED',
+          message: 'Xác minh số điện thoại qua Zalo để đổi quà hiện vật.',
+        });
+        expect(db.users.get('u1')!.pointsBalance).toBe(100_000);
+        expect(db.gifts.get('g1')!.stock).toBe(2);
+        expect(db.redemptions).toHaveLength(0);
+        expect(db.ledger).toHaveLength(0);
+      },
+    );
+    it('W179-C: tài khoản chưa xác minh SĐT (phoneVerifiedAt=null) vẫn đổi được VOUCHER bình thường', async () => {
+      const { db, prisma } = makeFakeDb([
+        { id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111', zaloId: 'z-real-1', phone: null, phoneVerifiedAt: null },
+      ]);
+      const res = await new LoyaltyService(prisma, makeConfig()).redeemReward('u1', 'reward-freeship', 'key-w179-voucher');
+      expect(res.success).toBe(true);
+      expect(db.users.get('u1')!.pointsBalance).toBe(80_000);
+      expect(db.coupons).toHaveLength(1);
     });
     it('người dùng thật đổi GIFT → READY, mã QG-, hạn nhận theo waste.gift_claim_days, trừ tồn kho, sổ GIFT_REDEEM', async () => {
       const { db, prisma } = makeFakeDb([{ id: 'u1', pointsBalance: 100_000, referralCode: 'AAAA1111', ...realUser }], { gifts: [giftRow({ stock: 2 })] });

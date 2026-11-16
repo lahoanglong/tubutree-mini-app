@@ -62,7 +62,7 @@ function installHandlers(db: RaceDb, userLock: boolean): void {
         const id = c.params[0] as string;
         await lockUserIf(c, id);
         const u = c.rows('user').find((r) => r.id === id);
-        return u ? [{ id: u.id, pointsBalance: u.pointsBalance }] : [];
+        return u ? [{ id: u.id, pointsBalance: u.pointsBalance, phoneVerifiedAt: u.phoneVerifiedAt ?? null }] : [];
       },
     },
     {
@@ -191,18 +191,22 @@ export function createRedeemWorld(opts: RedeemWorldOptions = {}): RedeemWorld {
   };
 }
 
-export const userRow = (id: string, pointsBalance: number, over: Record<string, unknown> = {}) => ({
-  id,
-  role: 'CUSTOMER',
-  phone: `09${id.replace(/\D/g, '').padStart(8, '0')}`,
-  zaloId: null,
-  isBlocked: false,
-  mergedIntoId: null,
-  pointsBalance,
-  pointsConvertedBalance: 0,
-  tierId: null,
-  ...over,
-});
+export const userRow = (id: string, pointsBalance: number, over: Record<string, unknown> = {}) => {
+  const phone = over.phone === undefined ? `09${id.replace(/\D/g, '').padStart(8, '0')}` : over.phone;
+  return {
+    id,
+    role: 'CUSTOMER',
+    phone,
+    phoneVerifiedAt: phone ? new Date(CLOCK_BASE - DAY_MS) : null,
+    zaloId: null,
+    isBlocked: false,
+    mergedIntoId: null,
+    pointsBalance,
+    pointsConvertedBalance: 0,
+    tierId: null,
+    ...over,
+  };
+};
 
 export const giftRow = (id: string, over: Record<string, unknown> = {}) => ({
   id,

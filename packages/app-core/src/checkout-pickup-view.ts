@@ -1,9 +1,11 @@
-import type {
-  CheckoutPickupQuote,
-  PickupOptionItem,
-  PickupOptionsExistingRequest,
-  QuotePendingGiftDTO,
-  ShippingFeeWaivedReason,
+import {
+  GIFT_ATTACH_MIN_NET_GOODS_VND,
+  type CheckoutPickupQuote,
+  type GiftAttachBlockedReason,
+  type PickupOptionItem,
+  type PickupOptionsExistingRequest,
+  type QuotePendingGiftDTO,
+  type ShippingFeeWaivedReason,
 } from '@tubutree/shared-types';
 import { formatVnNumber } from './number-format';
 import { fillCopy } from './shop-copy';
@@ -125,25 +127,73 @@ export function pickupConfirmReasonLabel(state: PickupConfirmState): string | nu
   }
 }
 
+export interface GiftRowView {
+  id: string;
+  label: string;
+  receive: boolean;
+  /** W179-C: đúng một dòng lý do khi quà không được gắn vào đơn này; null khi quà đang đi cùng đơn hoặc chỉ có 1 quà mà khách tự để đơn sau. */
+  reason: string | null;
+  /** Bị khoá cứng bởi `MIN_ORDER` hoặc `PHONE_NOT_VERIFIED` thì không có ô chọn (bật cũng không nhận được). */
+  canToggle: boolean;
+}
+
 export interface GiftSectionView {
   layout: 'none' | 'rows' | 'merged';
-  rows: { id: string; label: string; receive: boolean }[];
+  rows: GiftRowView[];
   mergedLabel: string;
   deferLabel: string;
   sheetTitle: string;
 }
 
-/** Dòng quà 0đ trên thanh toán: mỗi quà một dòng, từ 3 quà trở lên gộp một dòng. `receive` = quà đi cùng đơn này (chưa bấm "Để đơn sau"). */
-export function giftSectionView(gifts: readonly QuotePendingGiftDTO[], excludedIds: readonly string[]): GiftSectionView {
-  const rows = gifts.map((g) => ({ id: g.id, label: fillCopy('checkout.gift.line', { name: g.giftName }), receive: !excludedIds.includes(g.id) }));
+function giftBlockedReasonText(reason: GiftAttachBlockedReason | null | undefined, shortfallVnd: number): string | null {
+  switch (reason) {
+    case 'PHONE_NOT_VERIFIED':
+      return fillCopy('checkout.gift.blockedPhone');
+    case 'MIN_ORDER':
+      return fillCopy('checkout.gift.blockedMinOrder', {
+        amount: vnd(shortfallVnd > 0 ? shortfallVnd : GIFT_ATTACH_MIN_NET_GOODS_VND),
+      });
+    case 'ONE_PER_ORDER':
+      return fillCopy('checkout.gift.blockedOnePerOrder');
+    default:
+      return null;
+  }
+}
+
+/** Dòng quà 0đ trên thanh toán: mỗi quà một dòng, từ 3 quà trở lên gộp một dòng. `receive` = quà đi cùng đơn này. */
+export function giftSectionView(
+  gifts: readonly QuotePendingGiftDTO[],
+  excludedIds: readonly string[],
+  shortfallVnd = 0,
+): GiftSectionView {
+  const hasActive = gifts.some((g) => g.included && !excludedIds.includes(g.id));
+  const rows: GiftRowView[] = gifts.map((g) => {
+    const receive = g.included && !excludedIds.includes(g.id);
+    const hardBlocked = g.blockedReason === 'MIN_ORDER' || g.blockedReason === 'PHONE_NOT_VERIFIED';
+    const reason = receive
+      ? null
+      : giftBlockedReasonText(g.blockedReason, shortfallVnd) ??
+        (excludedIds.includes(g.id) && hasActive ? fillCopy('checkout.gift.blockedOnePerOrder') : null);
+    return {
+      id: g.id,
+      label: fillCopy('checkout.gift.line', { name: g.giftName }),
+      receive,
+      reason,
+      canToggle: !hardBlocked,
+    };
+  });
   const activeCount = rows.filter((r) => r.receive).length;
   const deferredCount = rows.length - activeCount;
+  const hardBlockedAll = activeCount === 0 && rows.length > 0 && rows.every((r) => !r.canToggle);
+  const firstReason = rows.find((r) => r.reason)?.reason ?? null;
   const mergedLabel =
     deferredCount === 0
       ? fillCopy('checkout.gift.merged', { n: gifts.length })
-      : activeCount === 0
-        ? `${fillCopy('checkout.gift.merged', { n: gifts.length })} (để đơn sau)`
-        : `${fillCopy('checkout.gift.merged', { n: activeCount })} (để đơn sau ${deferredCount})`;
+      : hardBlockedAll && firstReason
+        ? `${fillCopy('checkout.gift.merged', { n: gifts.length })} — ${firstReason}`
+        : activeCount === 0
+          ? `${fillCopy('checkout.gift.merged', { n: gifts.length })} (để đơn sau)`
+          : `${fillCopy('checkout.gift.merged', { n: activeCount })} (để đơn sau ${deferredCount})`;
   return {
     layout: giftLayout(gifts.length),
     rows,

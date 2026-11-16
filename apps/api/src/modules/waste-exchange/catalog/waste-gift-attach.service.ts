@@ -1,5 +1,6 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { Prisma, type WasteGiftKind } from '@prisma/client';
+import { GIFT_ATTACH_MAX_PER_ORDER } from '@tubutree/shared-types';
 import { startOfVnDay } from '../../../common/vn-time';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { writeWasteEvent } from '../core/waste-events';
@@ -59,6 +60,17 @@ export class WasteGiftAttachService {
   async attachInTx(tx: Prisma.TransactionClient, userId: string, ids: string[], orderId: string): Promise<PendingGiftRedemption[]> {
     const unique = [...new Set(ids)];
     if (unique.length === 0) return [];
+    if (unique.length > GIFT_ATTACH_MAX_PER_ORDER) {
+      throw new ConflictException(`Mỗi đơn chỉ được gắn tối đa ${GIFT_ATTACH_MAX_PER_ORDER} quà hiện vật.`);
+    }
+    const existingOnOrder = await tx.wasteGiftRedemption.findMany({
+      where: { attachedOrderId: orderId, status: { in: ['READY', 'FULFILLED'] } },
+      select: { id: true },
+      take: 1,
+    });
+    if (existingOnOrder.length > 0) {
+      throw new ConflictException('Đơn này đã có quà hiện vật gắn kèm.');
+    }
     const now = new Date();
     const locked = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
       SELECT "id" FROM "waste_gift_redemptions"

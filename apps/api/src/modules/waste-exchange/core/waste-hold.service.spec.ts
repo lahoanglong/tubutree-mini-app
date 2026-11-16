@@ -3,7 +3,7 @@ import { formatVnDate } from '../../../common/vn-time';
 import { WasteHoldService, type WasteCapUsage, type WasteHoldInput } from './waste-hold.service';
 
 const NOW = new Date('2026-10-17T03:00:00.000Z');
-const CFG = { laneDropoff: true, laneMailin: true, lanePickup: true, mailinMinPoints: 15_000, pickupMinPoints: 10_000, customerMonthlyCapPoints: 60_000, maxOpenRequests: 3, requestHoldDays: 7 };
+const CFG = { laneDropoff: true, laneMailin: true, lanePickup: true, mailinMinPoints: 15_000, pickupMinPoints: 10_000, customerMonthlyCapPoints: 60_000, maxOpenRequests: 2, requestHoldDays: 7 };
 const carton = { id: 'carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', unitsPerPoint: 1, pointsPerGroup: 1_000, dropsPerUnit: 2, gramsPerUnit: 300, dailyCapQty: 20, monthlyCapQty: 60, status: 'ACTIVE', hazardous: false, warehouseOnly: false };
 const milk = { ...carton, id: 'milk', code: 'MILK_CARTON', name: 'Vỏ hộp sữa', unitLabel: 'vỏ', unitsPerPoint: 5, dailyCapQty: null, monthlyCapQty: null, warehouseOnly: true };
 const battery = { ...carton, id: 'pin', code: 'PIN', name: 'Pin đã dùng', unitLabel: 'viên', status: 'COMING_SOON', hazardous: true };
@@ -155,7 +155,7 @@ describe('WasteHoldService.validateAndHold', () => {
     ['blockedAt', { flags: { blockedAt: NOW, shipLockedAt: null } }, {}, new ForbiddenException('Tài khoản của bạn tạm không tham gia Đổi rác, liên hệ Tubu Tree.')],
     ['ship-locked MAIL_IN', { flags: { blockedAt: null, shipLockedAt: NOW } }, { method: 'MAIL_IN', lines: [{ itemId: 'carton', declaredQty: 15 }] }, new ForbiddenException('Đường gửi kho và thu kèm đơn đang tạm dừng với tài khoản của bạn, liên hệ CSKH.')],
     ['lane off', {}, {}, new ConflictException('Cách giao này đang tạm tắt, hãy chọn cách khác')],
-    ['max open', { usage: { openCount: 3 } }, {}, new ConflictException('Bạn đang có 3 yêu cầu chưa xong, hãy hoàn tất hoặc huỷ bớt trước khi tạo thêm')],
+    ['max open', { usage: { openCount: 2 } }, {}, new ConflictException('Bạn đang có 2 yêu cầu chưa xong, hãy hoàn tất hoặc huỷ bớt trước khi tạo thêm')],
     ['second unattached PICKUP', { usage: { pickupPendingCode: 'TR-AAAAA' } }, { method: 'PICKUP', lines: [{ itemId: 'carton', declaredQty: 10 }] }, new ConflictException('Bạn đã có yêu cầu thu kèm TR-AAAAA, hãy gắn vào đơn kế tiếp')],
     ['battery line while still COMING_SOON', { items: [carton, battery], links: ['carton', 'pin'] }, { lines: [{ itemId: 'carton', declaredQty: 1 }, { itemId: 'pin', declaredQty: 1 }] }, new ConflictException('Món này hiện chưa nhận, hãy bỏ khỏi danh sách')],
     ['unknown item id', { items: [] }, { lines: [{ itemId: 'gone', declaredQty: 1 }] }, new ConflictException('Món này hiện chưa nhận, hãy bỏ khỏi danh sách')],
@@ -337,8 +337,16 @@ describe('WasteHoldService, HOME_PICKUP (shipper lấy rác tận nhà) cùng lu
   it('tính vào trần điểm tháng và số phiếu đang mở như các cách giao khác', async () => {
     const cap = setup({ usage: { pointsMonth: 55_000 } });
     await expect(cap.svc.validateAndHold(cap.tx, HP(), CFG)).rejects.toThrow('Tháng này bạn chỉ còn 5.000 Điểm Xanh trong trần đổi rác');
-    const open = setup({ usage: { openCount: 3 } });
-    await expect(open.svc.validateAndHold(open.tx, HP(), CFG)).rejects.toThrow('Bạn đang có 3 yêu cầu chưa xong');
+    const open = setup({ usage: { openCount: 2 } });
+    await expect(open.svc.validateAndHold(open.tx, HP(), CFG)).rejects.toMatchObject({
+      response: {
+        statusCode: 409,
+        code: 'WASTE_MAX_OPEN',
+        openCount: 2,
+        max: 2,
+        message: expect.stringContaining('Bạn đang có 2 yêu cầu chưa xong'),
+      },
+    });
   });
 
   it('không dính luật "mỗi khách một phiếu PICKUP chưa gắn đơn" (HOME_PICKUP không gắn vào đơn nào)', async () => {

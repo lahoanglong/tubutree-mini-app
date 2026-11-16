@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import type { CheckoutPickupQuote, PickupOptionsResponse } from '@tubutree/shared-types';
 import {
   PICKUP_QTY_MAX,
@@ -38,6 +39,8 @@ interface PickupSectionProps {
   onOpenChange: (open: boolean) => void;
   onApply: (draft: PickupDraft) => void;
   onClear: () => void;
+  maxOpenError?: string | null;
+  openRequestsHref?: string;
   disabled?: boolean;
 }
 
@@ -57,6 +60,8 @@ export function PickupSection({
   onOpenChange,
   onApply,
   onClear,
+  maxOpenError,
+  openRequestsHref = '/doi-rac/yeu-cau',
   disabled = false,
 }: PickupSectionProps) {
   const lastPickup = useRef<CheckoutPickupQuote | null>(null);
@@ -122,6 +127,16 @@ export function PickupSection({
           </span>
         </button>
       </div>
+      {maxOpenError && (
+        <div role="alert" data-testid="checkout-pickup-max-open" className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <Text variant="caption" tone="danger" as="span">
+            {maxOpenError}
+          </Text>
+          <Link href={openRequestsHref} className="inline-flex min-h-11 items-center text-caption font-semibold text-forest-700 underline">
+            {fillCopy('checkout.pickup.maxOpenLink')}
+          </Link>
+        </div>
+      )}
       <BottomSheet
         open={open}
         onClose={() => onOpenChange(false)}

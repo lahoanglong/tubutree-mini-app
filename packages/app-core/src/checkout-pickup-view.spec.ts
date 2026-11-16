@@ -118,10 +118,28 @@ describe('quà 0đ và dòng phí giao', () => {
     const v = giftSectionView([gift('1'), gift('2')], ['2']);
     expect(v.layout).toBe('rows');
     expect(v.rows).toEqual([
-      { id: '1', label: '🎁 Quà đổi điểm tặng kèm: Hạt giống 1 · 0đ', receive: true },
-      { id: '2', label: '🎁 Quà đổi điểm tặng kèm: Hạt giống 2 · 0đ', receive: false },
+      { id: '1', label: '🎁 Quà đổi điểm tặng kèm: Hạt giống 1 · 0đ', receive: true, reason: null, canToggle: true },
+      {
+        id: '2',
+        label: '🎁 Quà đổi điểm tặng kèm: Hạt giống 2 · 0đ',
+        receive: false,
+        reason: 'Mỗi đơn nhận 1 quà, quà này giữ cho đơn sau',
+        canToggle: true,
+      },
     ]);
     expect(v.deferLabel).toBe('Để đơn sau');
+  });
+
+  it('W179-C: quà bị chặn bởi MIN_ORDER, ONE_PER_ORDER, PHONE_NOT_VERIFIED hiện đúng 1 dòng lý do; MIN_ORDER / PHONE_NOT_VERIFIED khoá ô chọn', () => {
+    const minOrder = giftSectionView([{ ...gift('1'), included: false, blockedReason: 'MIN_ORDER' }], [], 24_000);
+    expect(minOrder.rows[0]).toMatchObject({ receive: false, reason: 'Mua thêm 24.000đ để nhận quà này', canToggle: false });
+
+    const unverified = giftSectionView([{ ...gift('1'), included: false, blockedReason: 'PHONE_NOT_VERIFIED' }], []);
+    expect(unverified.rows[0]).toMatchObject({ receive: false, reason: 'Xác minh số điện thoại để nhận quà', canToggle: false });
+
+    const onePer = giftSectionView([gift('1'), { ...gift('2'), included: false, blockedReason: 'ONE_PER_ORDER' }], []);
+    expect(onePer.rows[0]).toMatchObject({ receive: true, reason: null, canToggle: true });
+    expect(onePer.rows[1]).toMatchObject({ receive: false, reason: 'Mỗi đơn nhận 1 quà, quà này giữ cho đơn sau', canToggle: true });
   });
 
   it('từ 3 quà thì gộp một dòng', () => {

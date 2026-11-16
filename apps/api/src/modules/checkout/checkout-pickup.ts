@@ -1,5 +1,11 @@
 import { BadRequestException } from '@nestjs/common';
-import type { PendingGiftRedemptionDTO, QuotePendingGiftDTO } from '@tubutree/shared-types';
+import {
+  GIFT_ATTACH_MAX_PER_ORDER,
+  GIFT_ATTACH_MIN_NET_GOODS_VND,
+  type GiftAttachBlockedReason,
+  type PendingGiftRedemptionDTO,
+  type QuotePendingGiftDTO,
+} from '@tubutree/shared-types';
 import { GOMDON_MAX_PARCEL_GRAMS, recyclingWeight } from '../integrations/gomdon/gomdon-weight';
 import { PICKUP_PAUSED_MESSAGE } from '../waste-exchange/pickup/waste-pickup-attach';
 import type { CheckoutPickupFieldsDto } from './dto/checkout.dto';
@@ -69,14 +75,51 @@ export function pausedReason(flags: { blockedAt: Date | null; shipLockedAt: Date
   return flags?.blockedAt || flags?.shipLockedAt ? PICKUP_PAUSED_MESSAGE : null;
 }
 
-/** Quà hiện vật trong báo giá: vào đơn khi đơn có kiện Tubu giao và khách không bỏ quà ra. */
-export function quoteGiftLines(pending: PendingGiftRedemptionDTO[], hasTubuShipment: boolean, excluded: ReadonlySet<string>): QuotePendingGiftDTO[] {
-  return pending.map((g) => ({ ...g, included: hasTubuShipment && !excluded.has(g.id) }));
+export interface GiftAttachDecisionInput<T extends PendingGiftRedemptionDTO = PendingGiftRedemptionDTO> {
+  hasTubuShipment: boolean;
+  phoneVerified: boolean;
+  /** Tiền hàng ròng của kiện Tubu (`subtotal - discount`, không tính phí giao; trả bằng Ví không trừ). */
+  netGoodsVnd: number;
+  pending: readonly T[];
+  excludedIds: ReadonlySet<string>;
 }
 
-/** Id quà gắn vào đơn: quà chờ trừ quà khách bỏ ra. */
-export function giftIdsToAttach(pending: { id: string }[], excluded: ReadonlySet<string>): string[] {
-  return pending.filter((g) => !excluded.has(g.id)).map((g) => g.id);
+export interface GiftAttachDecisionResult {
+  /** Tối đa `GIFT_ATTACH_MAX_PER_ORDER` (1) mã quà được gắn vào đơn này. */
+  attachIds: string[];
+  lines: QuotePendingGiftDTO[];
+  minNetGoodsVnd: number;
+  shortfallVnd: number;
+}
+
+/**
+ * W179-C (G2): Một hàm thuần duy nhất quyết định quà hiện vật 0đ được gắn vào kiện Tubu cho CẢ báo giá lẫn đặt đơn.
+ * - Phải có kiện Tubu giao.
+ * - SĐT khách phải xác minh Zalo (`phoneVerified = true`).
+ * - Tiền hàng ròng của kiện Tubu (`subtotal - discount`) >= 99.000đ.
+ * - Mỗi đơn gắn tối đa 1 quà (phần tử đầu tiên không nằm trong `excludedIds`).
+ */
+export function giftAttachDecision(input: GiftAttachDecisionInput): GiftAttachDecisionResult {
+  const { hasTubuShipment, phoneVerified, netGoodsVnd, pending, excludedIds } = input;
+  const shortfallVnd = hasTubuShipment ? Math.max(0, GIFT_ATTACH_MIN_NET_GOODS_VND - netGoodsVnd) : 0;
+  const attachIds: string[] = [];
+  const lines: QuotePendingGiftDTO[] = pending.map((g) => {
+    if (!hasTubuShipment || excludedIds.has(g.id)) {
+      return { ...g, included: false, blockedReason: null };
+    }
+    if (!phoneVerified) {
+      return { ...g, included: false, blockedReason: 'PHONE_NOT_VERIFIED' as GiftAttachBlockedReason };
+    }
+    if (netGoodsVnd < GIFT_ATTACH_MIN_NET_GOODS_VND) {
+      return { ...g, included: false, blockedReason: 'MIN_ORDER' as GiftAttachBlockedReason };
+    }
+    if (attachIds.length < GIFT_ATTACH_MAX_PER_ORDER) {
+      attachIds.push(g.id);
+      return { ...g, included: true, blockedReason: null };
+    }
+    return { ...g, included: false, blockedReason: 'ONE_PER_ORDER' as GiftAttachBlockedReason };
+  });
+  return { attachIds, lines, minNetGoodsVnd: GIFT_ATTACH_MIN_NET_GOODS_VND, shortfallVnd };
 }
 
 /** Một dòng giống nhau giữa hai danh sách món (cùng món, cùng số lượng, bất kể thứ tự) — nhận lại đơn đã đặt khi khách gửi lại. */

@@ -66,11 +66,11 @@ export const WASTE_CONFIG_KEYS = {
     description: 'Trần Điểm Xanh mỗi khách được cộng từ đổi rác trong một tháng.',
   },
   'waste.max_open_requests': {
-    default: 3,
+    default: 2,
     type: 'int',
     category: 'waste',
     min: 1,
-    max: 20,
+    max: 2,
     description: 'Số yêu cầu đổi rác một khách được mở cùng lúc.',
   },
   'waste.request_hold_days': {

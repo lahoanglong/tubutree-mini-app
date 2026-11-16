@@ -2,7 +2,7 @@
 
 import { wasteRequestRefetchMs } from '@tubutree/app-core/waste-request-poll';
 import { homePickupCancelCopy, homePickupCancelDone, homePickupTimelineView, homePickupUnavailableText } from '@tubutree/app-core/recycle-home-pickup-view';
-import { homePickupCopy, pausedNote } from '@tubutree/app-core/waste-copy';
+import { WASTE_PENDING_POINTS_SUBNOTE, homePickupCopy, pausedNote, pendingPointsText } from '@tubutree/app-core/waste-copy';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import Link from 'next/link';
@@ -441,7 +441,10 @@ export function RecycleRequestDetail({ id }: { id: string }) {
           )}
           <DeclaredCountedTable lines={r.lines} />
           {t && r.status !== 'COMPLETED' && r.estimatedPoints > 0 && (
-            <p className="text-right text-base font-semibold text-stone-900">{`Ước tính ${formatPoints(r.estimatedPoints)}`}</p>
+            <div className="text-right tabular-nums">
+              <p className="text-base font-semibold text-stone-900">{pendingPointsText(formatPoints(r.estimatedPoints))}</p>
+              <p className="text-xs text-stone-600">{WASTE_PENDING_POINTS_SUBNOTE}</p>
+            </div>
           )}
           {r.status === 'COMPLETED' && (
             <Link href={`/doi-rac/xong/${id}`} className={`${ui.btnPrimary} w-full`}>

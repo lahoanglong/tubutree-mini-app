@@ -230,6 +230,10 @@ export interface CheckoutQuote {
   pickup?: CheckoutPickupQuote | null;
   /** Quà hiện vật 0đ chờ gắn đơn; `included` = sẽ đi cùng đơn này. API cũ chưa trả → coi như rỗng. */
   pendingGiftRedemptions?: QuotePendingGiftDTO[];
+  /** W179-C: giá trị hàng Tubu sau giảm giá tối thiểu để được gắn quà 0đ (99.000đ). */
+  giftMinNetGoodsVnd?: number;
+  /** W179-C: số tiền hàng Tubu còn thiếu để nhận quà 0đ (0 khi đủ ngưỡng). */
+  giftShortfallVnd?: number;
 }
 
 export interface AddressDTO {

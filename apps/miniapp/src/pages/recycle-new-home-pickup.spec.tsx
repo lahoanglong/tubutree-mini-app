@@ -166,7 +166,7 @@ describe('Shipper lấy tận nhà: báo phí', () => {
     expect(await screen.findByTestId('home-pickup-fee-value')).toHaveTextContent('25.000đ');
     expect(screen.getByTestId('home-pickup-pay')).toHaveTextContent('Điểm Xanh dùng được 40.000 · sẽ trừ 25.000 điểm');
     expect(screen.queryByRole('checkbox', { name: /Điểm Xanh/ })).toBeNull();
-    expect(screen.getByTestId('home-pickup-points')).toHaveTextContent('Ước tính 6.000 điểm');
+    expect(screen.getByTestId('home-pickup-points')).toHaveTextContent('Điểm tạm tính 6.000 điểm');
     expect(within(screen.getByTestId('home-pickup-fee')).queryByText('Ước tính')).toBeNull();
     expect(screen.queryByTestId('home-pickup-notice')).toBeNull();
   });
@@ -238,11 +238,11 @@ describe('Shipper lấy tận nhà: báo phí', () => {
     expect(await createButton()).toBeDisabled();
   });
 
-  it('dưới ngưỡng điểm: "Dự kiến X / Y điểm", nút khoá, không lặp câu "cần tối thiểu" của máy chủ', async () => {
+  it('dưới ngưỡng điểm: "Điểm tạm tính X / Y điểm", nút khoá, không lặp câu "cần tối thiểu" của máy chủ', async () => {
     mocks.getWastePickupQuote.mockResolvedValue(makeQuote({ estimatedPoints: 3000, minPoints: 5000, blocked: 'Đơn thu gom cần tối thiểu 5.000 điểm ước tính' }));
     atStep2();
     renderPage();
-    expect(await screen.findByTestId('home-pickup-points')).toHaveTextContent('Dự kiến 3.000 / 5.000 điểm');
+    expect(await screen.findByTestId('home-pickup-points')).toHaveTextContent('Điểm tạm tính 3.000 / 5.000 điểm');
     expect(screen.queryByTestId('home-pickup-notice')).toBeNull();
     (await consentBox()).click();
     expect(await createButton()).toBeDisabled();

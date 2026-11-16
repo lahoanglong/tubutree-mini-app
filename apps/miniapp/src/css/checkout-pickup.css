@@ -47,6 +47,27 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.tubu-pickup-max-open {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin-top: 4px;
+}
+.tubu-pickup-link {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--color-text-brand);
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
 
 /* Tấm chọn món */
 .tubu-pickup-sheet {
@@ -122,6 +143,16 @@
   flex: 1;
   min-width: 0;
   overflow-wrap: anywhere;
+}
+.tubu-gift-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+.tubu-gift-col[data-dim='true'] {
+  opacity: 0.6;
 }
 .tubu-gift-merged {
   flex: 1;

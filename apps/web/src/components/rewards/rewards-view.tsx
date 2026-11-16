@@ -8,6 +8,7 @@ import { ChevronRight, Gift, Info, Leaf, Sprout, Ticket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { RedeemRewardResultDTO, RewardCatalogDTO, RewardItemDTO } from '@tubutree/shared-types';
 import { redeemLoyaltyReward } from '@tubutree/app-core/api/loyalty';
+import { errorCode } from '@tubutree/app-core/api/error-status';
 import { buyTree } from '@tubutree/app-core/api/game';
 import { WASTE_QUERY_KEYS, WASTE_REDEEM_INVALIDATE_KEYS } from '@tubutree/app-core/api/waste';
 import { loyaltyPreviewQuery, loyaltyQuery, rewardsQuery } from '@tubutree/app-core/queries/loyalty';
@@ -18,6 +19,7 @@ import {
   WAREHOUSE_ONLY_LABEL,
   WAREHOUSE_PICKUP_DONE,
   freeShipConfirmText,
+  rewardPhoneVerifyCopy,
   rewardsGuideCopy,
   NEW_COUPON_PARAM,
   rewardFreeShipNote,
@@ -29,6 +31,7 @@ import {
 } from '@tubutree/app-core/reward-rules';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
+import { miniAppPathLink } from '@/lib/zalo-mini-app';
 import { useIdempotencyKey } from '@/lib/use-idempotency-key';
 import { formatCount, pointsSummary } from '@/lib/checkout-points';
 import { formatDate } from '@/lib/format-date';
@@ -75,9 +78,10 @@ interface RedeemConfirmProps {
   onRedeemed: () => void;
   onDone: (outcome: RedeemOutcome) => void;
   onCancel: () => void;
+  onPhoneNotVerified?: () => void;
 }
 
-function RedeemConfirm({ reward, catalog, idemKey, posting, onPosting, onRedeemed, onDone, onCancel }: RedeemConfirmProps) {
+function RedeemConfirm({ reward, catalog, idemKey, posting, onPosting, onRedeemed, onDone, onCancel, onPhoneNotVerified }: RedeemConfirmProps) {
   const qc = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   // `isPending` chỉ đúng sau lần render kế: hai cú bấm trong cùng khung hình vẫn gọi mutate hai lần.
@@ -107,7 +111,14 @@ function RedeemConfirm({ reward, catalog, idemKey, posting, onPosting, onRedeeme
     // Khoá NÚT trong khung này (khung đóng được ngay khi POST xong): trả Promise làm mới để khung còn mở thì nút không gửi lại trên danh sách cũ, có hạn để mạng chậm không giữ nút mãi.
     onError: (e) => {
       setError(actErrText(e));
-      return settleWithin(qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards }));
+      const refresh = settleWithin(qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.rewards }));
+      if (errorCode(e) === 'PHONE_NOT_VERIFIED') {
+        return refresh.then(() => {
+          onCancel();
+          onPhoneNotVerified?.();
+        });
+      }
+      return refresh;
     },
     onSettled: () => {
       busyRef.current = false;
@@ -195,6 +206,11 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
             Đổi
           </button>
         )}
+        {!preview && s.kind === 'needPhoneVerify' && (
+          <button type="button" disabled className={ui.btnPrimary}>
+            Đổi
+          </button>
+        )}
         {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
         {!preview && s.kind === 'locked' && (
           <button type="button" disabled className={ui.btnPrimary}>
@@ -260,6 +276,7 @@ function RewardResult({ outcome, onClose }: { outcome: RedeemOutcome | null; onC
 }
 
 function RewardsBody() {
+  const verifyBannerRef = useRef<HTMLDivElement | null>(null);
   const rewardsQ = useQuery(rewardsQuery(coreHttp));
   const loyaltyQ = useQuery(loyaltyQuery(coreHttp));
   const cfg = usePublicConfig();
@@ -277,9 +294,15 @@ function RewardsBody() {
 
   const kinds: readonly string[] = REWARD_TABS.find((t) => t.key === tab)?.kinds ?? [];
   const shown = orderRewards(c.rewards.filter((r) => kinds.includes(r.kind)), c);
+  const showPhoneBanner = c.phoneVerified === false && shown.some(isWarehousePickup);
   const total = pointsSummary(c).total;
   const rulesNote = cfg.isLoaded ? pointsRulesNote(cfg.loyalty) : null;
   const lockedNote = loyaltyQ.data ? lockedPointsNote(loyaltyQ.data) : null;
+  const scrollToVerifyBanner = () => {
+    requestAnimationFrame(() => {
+      verifyBannerRef.current?.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+    });
+  };
 
   return (
     <div className="space-y-4 pb-12">
@@ -323,6 +346,14 @@ function RewardsBody() {
         <ChevronRight className="h-4 w-4 flex-none text-stone-500" aria-hidden="true" />
       </Link>
       <SegmentedTabs value={tab} onChange={setTab} items={REWARD_TABS.map((t) => ({ key: t.key, label: t.label }))} label="Loại quà" />
+      {showPhoneBanner && (
+        <div ref={verifyBannerRef} data-testid="rewards-phone-verify-banner" className={`space-y-3 p-4 ${ui.card}`}>
+          <p className="text-sm font-semibold text-stone-900">{rewardPhoneVerifyCopy.notice}</p>
+          <a href={miniAppPathLink('/rewards')} className={`${miniBtnSecondary} w-full sm:w-auto`}>
+            {rewardPhoneVerifyCopy.webCta}
+          </a>
+        </div>
+      )}
       {shown.length === 0 ? (
         <p className="text-sm text-stone-700">Chưa có quà trong mục này</p>
       ) : (
@@ -347,6 +378,7 @@ function RewardsBody() {
               setResult(outcome);
             }}
             onCancel={() => setConfirmReward(null)}
+            onPhoneNotVerified={scrollToVerifyBanner}
           />
         )}
       </Sheet>

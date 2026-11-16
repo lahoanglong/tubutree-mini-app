@@ -6,8 +6,8 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { Check, ChevronRight, Copy, Gift, Lightbulb, QrCode as QrCodeIcon, Recycle, Sprout, Ticket } from 'lucide-react';
 import { couponsQuery, loyaltyQuery, memberCardQuery, pointsTxnPagesQuery } from '@tubutree/app-core/queries/loyalty';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
-import { wasteRequestsQuery } from '@tubutree/app-core/queries/waste';
-import { wasteHistoryMenu } from '@tubutree/app-core/waste-copy';
+import { wasteMeQuery, wasteRequestsQuery } from '@tubutree/app-core/queries/waste';
+import { pendingPointsBalanceLine, wasteHistoryMenu } from '@tubutree/app-core/waste-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -63,6 +63,8 @@ export default function LoyaltyPage() {
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
   const txnQ = useInfiniteQuery({ ...pointsTxnPagesQuery(coreHttp), enabled: authed });
   const configQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
+  const wasteEnabled = configQ.data?.waste?.enabled === true;
+  const wasteMeQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed && wasteEnabled, retry: false });
   // Chương trình tắt mà khách từng có yêu cầu thì vẫn cho xem lại (không tạo mới được).
   const wasteOff = configQ.data != null && configQ.data.waste?.enabled !== true;
   const wasteHistoryQ = useQuery({ ...wasteRequestsQuery(coreHttp), enabled: authed && wasteOff, retry: false });
@@ -139,6 +141,7 @@ export default function LoyaltyPage() {
   const rates = data.rates;
   const progress = tierProgressPercent(data);
   const lots = pointsSummary(data);
+  const pendingWasteLine = pendingPointsBalanceLine(wasteMeQ.data?.pendingPoints);
   const expiring = expiringPointsNote(data.expiringPoints);
   const expiryPolicy = pointExpiryPolicyNote(data.pointExpireMonths);
   const wasteOn = configQ.data?.waste?.enabled === true;
@@ -167,6 +170,7 @@ export default function LoyaltyPage() {
               Tích điểm ×{formatMultiplier(data.tier?.multiplier ?? 1)} · {formatCount(lots.total)} Điểm Xanh
             </p>
             {lots.convertedNote && <p className="mt-0.5 text-caption text-stone-600">{lots.convertedNote}</p>}
+            {pendingWasteLine && <p className="mt-0.5 text-caption tabular-nums text-stone-600">{pendingWasteLine}</p>}
             {expiring && <p className={`mt-1.5 text-caption ${expiring.urgent ? 'font-semibold text-warning-fg' : 'text-stone-600'}`}>{expiring.text}</p>}
             {expiryPolicy && <p className="mt-0.5 text-caption text-stone-600">{expiryPolicy}</p>}
 

@@ -40,7 +40,7 @@ vi.mock('../services/api', async (importOriginal) => ({
 }));
 vi.mock('../store/auth', () => ({
   useAuthStore: (sel?: (s: unknown) => unknown) => {
-    const state = { status: mocks.auth.status, login: mocks.login, ensurePhone: mocks.ensurePhone };
+    const state = { status: mocks.auth.status, login: mocks.login, ensurePhone: mocks.ensurePhone, ensurePhoneOrThrow: mocks.ensurePhone };
     return sel ? sel(state) : state;
   },
 }));
@@ -170,6 +170,27 @@ describe('/rewards Kho quà (§4.8)', () => {
     fireEvent.click(await screen.findByRole('tab', { name: 'Cây và hạt' }));
     expect(within(card('Gói hạt giống Tubu')).getByText('Còn 3')).toBeInTheDocument();
     expect(within(card('Gói hạt giống Tubu')).getByText('Nhận tại kho Tubu TP.HCM')).toBeInTheDocument();
+  });
+  it('W179-C: phoneVerified=false hiện đúng 1 thẻ thông báo xác minh SĐT trên tab quà vật lý (1 nút), khoá nút Đổi trên thẻ quà vật lý, không ảnh hưởng Mã giảm giá', async () => {
+    const base = makeRewardCatalog();
+    mocks.getLoyaltyRewards.mockResolvedValue({
+      ...base,
+      phoneVerified: false,
+      rewards: base.rewards.map((r) => (r.kind === 'SEED_PACK' || r.kind === 'GIFT' ? { ...r, canRedeem: false } : r)),
+    });
+    mocks.ensurePhone.mockResolvedValue('0901234567');
+    renderPage();
+    await waitFor(() => card('Miễn phí vận chuyển'));
+    expect(screen.queryByTestId('rewards-phone-verify-banner')).toBeNull();
+    expect(within(card('Miễn phí vận chuyển')).getByRole('button', { name: 'Đổi' })).toBeEnabled();
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Cây và hạt' }));
+    const banner = await screen.findByTestId('rewards-phone-verify-banner');
+    expect(banner).toHaveTextContent('Xác minh số điện thoại qua Zalo để đổi quà hiện vật');
+    expect(within(card('Gói hạt giống Tubu')).getByRole('button', { name: 'Đổi' })).toBeDisabled();
+    expect(screen.getAllByRole('button', { name: 'Xác minh số điện thoại' })).toHaveLength(1);
+    fireEvent.click(within(banner).getByRole('button', { name: 'Xác minh số điện thoại' }));
+    await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalledTimes(1));
   });
   it('xác nhận: điểm còn lại sau đổi; quà nhận ở kho kèm địa chỉ, giờ mở, hạn nhận 60 ngày', async () => {
     renderPage();

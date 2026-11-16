@@ -63,7 +63,7 @@ import { CouponPreviewDto, PickupOptionsQueryDto, PlaceOrderDto, QuoteDto } from
 import {
   COUPON_FREESHIP_RECYCLE_REASON,
   COUPON_FREESHIP_TUBU_PART_RECYCLE_REASON,
-  giftIdsToAttach,
+  giftAttachDecision,
   hasPickupRequest,
   PICKUP_CHANGED_MESSAGE,
   PICKUP_GATE_CLOSED,
@@ -71,7 +71,6 @@ import {
   pausedReason,
   pickupInputOf,
   pickupWeights,
-  quoteGiftLines,
   returnWeightProblem,
   sameInlineLines,
   type PickupRequestInput,
@@ -325,13 +324,16 @@ export class CheckoutService {
     const { storefront } = await this.resolveAttribution(userId, { storefrontSlug: dto.storefrontSlug });
     const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefront?.slug, dto.itemIds, pickupInput);
     if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
-    const hasTubuShipment = computed.shipments.some((s) => s.fulfiller.kind === 'TUBU');
-    // Quà hiện vật 0đ chờ gắn đơn: khách thấy quà nào sẽ đi cùng đơn này (đơn có kiện Tubu) và bỏ ra được bằng excludeGiftRedemptionIds.
-    const pendingGiftRedemptions = quoteGiftLines(
-      this.giftAttach ? await this.giftAttach.listPending(userId) : [],
-      hasTubuShipment,
-      pickupInput.excludeGiftIds,
-    );
+    const tubuShipment = computed.shipments.find((s) => s.fulfiller.kind === 'TUBU') ?? null;
+    // W179-C (G2): cùng hàm thuần giftAttachDecision cho cả báo giá lẫn đặt đơn (SĐT xác minh Zalo, kiện Tubu >= 99.000đ ròng, tối đa 1 quà/đơn).
+    const giftDecision = giftAttachDecision({
+      hasTubuShipment: tubuShipment !== null,
+      phoneVerified: (user as { phoneVerifiedAt?: Date | null }).phoneVerifiedAt != null,
+      netGoodsVnd: tubuShipment ? Math.max(0, tubuShipment.subtotal - tubuShipment.discount) : 0,
+      pending: this.giftAttach ? await this.giftAttach.listPending(userId) : [],
+      excludedIds: pickupInput.excludeGiftIds,
+    });
+    const pendingGiftRedemptions = giftDecision.lines;
     const blockedPaymentMethods: Record<string, string> = {};
     for (const method of QUOTED_PAYMENT_METHODS) {
       const reason = paymentMethodBlockReason(computed.shipments, method);
@@ -373,6 +375,8 @@ export class CheckoutService {
       shippingFeeWaivedReason: computed.recycleShipWaived > 0 ? RECYCLE_PICKUP : null,
       pickup: computed.pickup?.quote ?? null,
       pendingGiftRedemptions,
+      giftMinNetGoodsVnd: giftDecision.minNetGoodsVnd,
+      giftShortfallVnd: giftDecision.shortfallVnd,
       total: computed.total,
       pointsEarned: computed.pointsEarned,
       pointsBalance: user.pointsBalance,
@@ -654,10 +658,22 @@ export class CheckoutService {
 
         if (pickup) await attachPickupRequest(tx, userId, pickup.id, created[computed.shipments.indexOf(tubuShipment!)]!.id);
 
-        // Quà hiện vật 0đ chờ gắn đơn đi cùng kiện Tubu (kho bỏ chung thùng); khách bỏ ra thì quà ở lại ví cho đơn sau. Đơn không có kiện Tubu không gắn.
+        // W179-C (G2): gắn tối đa 1 quà hiện vật 0đ khi kiện Tubu >= 99.000đ ròng và SĐT đã xác minh (đọc trong tx TRƯỚC users FOR UPDATE để giữ thứ tự khoá).
         if (tubuShipment && this.giftAttach) {
-          const giftIds = giftIdsToAttach(await this.giftAttach.listPending(userId, tx), pickupInput.excludeGiftIds);
-          if (giftIds.length > 0) await this.giftAttach.attachInTx(tx, userId, giftIds, created[computed.shipments.indexOf(tubuShipment)]!.id);
+          const pending = await this.giftAttach.listPending(userId, tx);
+          if (pending.length > 0) {
+            const uRow = await tx.user.findUnique({ where: { id: userId }, select: { phoneVerifiedAt: true } });
+            const { attachIds } = giftAttachDecision({
+              hasTubuShipment: true,
+              phoneVerified: uRow?.phoneVerifiedAt != null,
+              netGoodsVnd: Math.max(0, tubuShipment.subtotal - tubuShipment.discount),
+              pending,
+              excludedIds: pickupInput.excludeGiftIds,
+            });
+            if (attachIds.length > 0) {
+              await this.giftAttach.attachInTx(tx, userId, attachIds, created[computed.shipments.indexOf(tubuShipment)]!.id);
+            }
+          }
         }
 
         if (computed.pointsUsed > 0) {

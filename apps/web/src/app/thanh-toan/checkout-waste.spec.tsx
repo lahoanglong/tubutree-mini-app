@@ -329,6 +329,35 @@ describe('/thanh-toan — Quà đổi điểm tặng kèm 0đ (W168)', () => {
     const r = await mount();
     expect(rows(r)).toHaveLength(0);
   });
+
+  it('W179-C: quà dưới ngưỡng 99.000đ (MIN_ORDER) hiện mờ kèm "Mua thêm Xđ để nhận quà này" và không có ô chọn; ONE_PER_ORDER đổi quà theo hành vi radio', async () => {
+    m.quote.mockImplementation(async (...a: unknown[]) => ({
+      ...(await quoteFor(a[4] as Record<string, unknown> | undefined, [gift('g1', { included: false, blockedReason: 'MIN_ORDER' })])),
+      giftShortfallVnd: 24_000,
+    }));
+    let r = await mount();
+    expect(rows(r)).toHaveLength(1);
+    expect(rows(r)[0]!.textContent).toContain('Mua thêm 24.000đ để nhận quà này');
+    expect(checkbox(rows(r)[0]!)).toBeNull();
+    r.unmount();
+
+    m.quote.mockImplementation(async (...a: unknown[]) => {
+      const f = a[4] as Record<string, unknown> | undefined;
+      const ex = (f?.excludeGiftRedemptionIds as string[] | undefined) ?? [];
+      const g1In = !ex.includes('g1');
+      const g2In = !g1In && !ex.includes('g2');
+      return quoteFor(f, [
+        gift('g1', { included: g1In, blockedReason: null }),
+        gift('g2', { included: g2In, blockedReason: g1In ? 'ONE_PER_ORDER' : null }),
+      ]);
+    });
+    r = await mount();
+    expect(rows(r)).toHaveLength(2);
+    expect(rows(r)[1]!.textContent).toContain('Mỗi đơn nhận 1 quà, quà này giữ cho đơn sau');
+    click(checkbox(rows(r)[1]!));
+    await flush(6);
+    expect(lastQuoteFields()).toEqual({ excludeGiftRedemptionIds: ['g1'] });
+  });
 });
 
 describe('/thanh-toan — dòng phí giao khi được miễn (W168)', () => {

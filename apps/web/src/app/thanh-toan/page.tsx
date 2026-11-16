@@ -431,6 +431,9 @@ export default function CheckoutPage() {
         reload([PICKUP_OPTIONS_KEY]);
         reload(['quote']);
         reload(WASTE_QUERY_KEYS.me);
+        if (e instanceof ApiError && e.code === 'WASTE_MAX_OPEN') {
+          pickup.setMaxOpenError(e.message);
+        }
       }
       if (pickupChanged) setPickupNotice(fillCopy('checkout.pickup.changed'));
       if (e instanceof ApiError && e.code === 'CART_CHANGED') {
@@ -953,9 +956,16 @@ export default function CheckoutPage() {
             onOpenChange={pickup.setSheetOpen}
             onApply={chosen(pickup.apply)}
             onClear={chosen(pickup.clear)}
+            maxOpenError={pickup.maxOpenError}
             disabled={place.isPending}
           />
-          <GiftRows gifts={giftsRef.current} excluded={pickup.excluded} onToggle={chosen(pickup.toggleGift)} disabled={place.isPending} />
+          <GiftRows
+            gifts={giftsRef.current}
+            excluded={pickup.excluded}
+            onToggle={chosen(pickup.toggleGift)}
+            shortfallVnd={quote?.giftShortfallVnd ?? 0}
+            disabled={place.isPending}
+          />
           </div>
           <div data-mini-block="summary" className="max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4">
           <div className="mb-2.5 hidden items-center justify-between max-md:flex">

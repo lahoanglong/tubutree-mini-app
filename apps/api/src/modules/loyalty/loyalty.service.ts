@@ -999,10 +999,11 @@ export class LoyaltyService {
   async getRewardCatalog(userId: string): Promise<RewardCatalogDTO> {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { pointsBalance: true, pointsConvertedBalance: true, tierId: true, tier: { select: { name: true } } },
+      select: { pointsBalance: true, pointsConvertedBalance: true, phoneVerifiedAt: true, tierId: true, tier: { select: { name: true } } },
     });
+    const phoneVerified = user.phoneVerifiedAt != null;
     // canRedeem theo điểm DÙNG ĐƯỢC (cùng quy tắc guard của redeemReward), không theo số dư —
-    // không thì nút "Đổi ngay" sáng mà bấm vào bị từ chối.
+    // không thì nút "Đổi ngay" sáng mà bấm vào bị từ chối. Quà vật lý còn đòi hỏi số điện thoại đã xác minh Zalo (W179-C G1).
     const lock = await this.lockedOrderPoints(userId, new Date());
     const treePrice = Number(await this.config.get<number>('game.tree_points_price', 50_000));
     const giftClaimDays = Number(await this.config.get<number>('waste.gift_claim_days', 60));
@@ -1013,12 +1014,13 @@ export class LoyaltyService {
     const claimPoint = await this.claimPointOf(this.prisma);
     const redeemable = Math.max(0, user.pointsBalance - lock.locked);
     const rewards = gifts.map((row) =>
-      this.rewardItemOf(row, treePrice, (soldOut, isTree) =>
-        !soldOut &&
-        (isTree
-          ? Number.isSafeInteger(treePrice) && treePrice > 0 && redeemable + user.pointsConvertedBalance >= treePrice
-          : redeemable >= row.pointsCost),
-      ),
+      this.rewardItemOf(row, treePrice, (soldOut, isTree) => {
+        if (soldOut) return false;
+        if (isTree) return Number.isSafeInteger(treePrice) && treePrice > 0 && redeemable + user.pointsConvertedBalance >= treePrice;
+        const physical = row.kind === 'SEED_PACK' || row.kind === 'GIFT';
+        if (physical && !phoneVerified) return false;
+        return redeemable >= row.pointsCost;
+      }),
     );
     return {
       pointsBalance: user.pointsBalance,
@@ -1028,6 +1030,7 @@ export class LoyaltyService {
       giftClaimDays,
       claimPoint,
       rewards,
+      phoneVerified,
       tierFreeShip: user.tierId
         ? { tierName: user.tier?.name ?? user.tierId, freeFrom: await freeShipThreshold(this.config, user.tierId) }
         : null,
@@ -1184,10 +1187,20 @@ export class LoyaltyService {
     claimPoint: RewardCatalogDTO['claimPoint'],
   ): Promise<RedeemRewardResultDTO> {
     const isVoucher = gift.kind === 'VOUCHER';
+    const physical = gift.kind === 'SEED_PACK' || gift.kind === 'GIFT';
     return this.prisma.$transaction(async (tx) => {
-      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      const lockedUsers = await tx.$queryRaw<{ id: string; phoneVerifiedAt?: Date | null }[]>`SELECT "id", "phoneVerifiedAt" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
       const prior = await tx.wasteGiftRedemption.findUnique({ where: { userId_idempotencyKey: { userId, idempotencyKey } } });
       if (prior) return this.replayOrConflict(tx, prior, gift.id);
+
+      if (physical && lockedUsers[0]?.phoneVerifiedAt == null) {
+        throw new ForbiddenException({
+          statusCode: 403,
+          error: 'Forbidden',
+          code: 'PHONE_NOT_VERIFIED',
+          message: 'Xác minh số điện thoại qua Zalo để đổi quà hiện vật.',
+        });
+      }
 
       const now = new Date();
       const lock = await this.lockedOrderPoints(userId, now, tx, windowDays);

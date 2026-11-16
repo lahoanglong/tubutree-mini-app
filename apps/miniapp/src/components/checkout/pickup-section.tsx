@@ -47,13 +47,29 @@ interface PickupSectionProps {
   onOpenChange: (open: boolean) => void;
   onApply: (draft: PickupDraft) => void;
   onClear: () => void;
+  maxOpenError?: string | null;
+  onOpenRequests?: () => void;
 }
 
 /**
  * Một thẻ duy nhất cho "Đổi rác kèm đơn": đóng là một hàng (chữ + công tắc), mở ra tấm chọn món/kg với đúng một nút Xong.
  * Thay luôn mục "Thu kèm rác" cũ (gắn phiếu có sẵn): phiếu mở có sẵn được chọn sẵn trong tấm qua `existingRequest`.
  */
-export function PickupSection({ pickup, tubuShippingFee, applied, options, optionsLoading, optionsError, onRetryOptions, open, onOpenChange, onApply, onClear }: PickupSectionProps) {
+export function PickupSection({
+  pickup,
+  tubuShippingFee,
+  applied,
+  options,
+  optionsLoading,
+  optionsError,
+  onRetryOptions,
+  open,
+  onOpenChange,
+  onApply,
+  onClear,
+  maxOpenError,
+  onOpenRequests,
+}: PickupSectionProps) {
   const lastPickup = useRef<CheckoutPickupQuote | null>(null);
   const lastFee = useRef(0);
   if (pickup !== undefined) lastPickup.current = pickup;
@@ -106,6 +122,18 @@ export function PickupSection({ pickup, tubuShippingFee, applied, options, optio
           }}
         />
       </div>
+      {maxOpenError && (
+        <div className="tubu-pickup-max-open" role="alert" data-testid="checkout-pickup-max-open">
+          <Text variant="caption" tone="danger" as="span">
+            {maxOpenError}
+          </Text>
+          {onOpenRequests && (
+            <button type="button" className="tubu-pickup-link" onClick={onOpenRequests}>
+              {fillCopy('checkout.pickup.maxOpenLink')}
+            </button>
+          )}
+        </div>
+      )}
       <BottomSheet
         open={open}
         onClose={() => onOpenChange(false)}

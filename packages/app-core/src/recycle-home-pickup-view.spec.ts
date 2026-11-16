@@ -38,7 +38,7 @@ describe('homePickupQuoteView', () => {
     expect(v.pointsUsed).toBe(25_000);
     expect(v.remainingFeeVnd).toBe(0);
     expect(v.payLine).toBe('Điểm Xanh dùng được 40.000 · sẽ trừ 25.000 điểm');
-    expect(v.pointsLine).toBe('Ước tính 6.000 điểm');
+    expect(v.pointsLine).toBe('Điểm tạm tính 6.000 điểm');
     expect(v.belowMin).toBe(false);
     expect(v.notice).toBeNull();
     expect(v.ok).toBe(true);
@@ -83,9 +83,9 @@ describe('homePickupQuoteView', () => {
     expect(v.payLine).toBe('Phí ship 0đ');
     expect(v.ok).toBe(true);
   });
-  it('dưới ngưỡng điểm: dòng "Dự kiến X / Y điểm", chặn, và không lặp câu "cần tối thiểu" của máy chủ', () => {
+  it('dưới ngưỡng điểm: dòng "Điểm tạm tính X / Y điểm", chặn, và không lặp câu "cần tối thiểu" của máy chủ', () => {
     const v = view(quote({ estimatedPoints: 3000, blocked: 'Đơn shipper lấy tận nhà cần tối thiểu 5.000 điểm, bạn cần thêm 2.000 điểm nữa' }));
-    expect(v.pointsLine).toBe('Dự kiến 3.000 / 5.000 điểm');
+    expect(v.pointsLine).toBe('Điểm tạm tính 3.000 / 5.000 điểm');
     expect(v.belowMin).toBe(true);
     expect(v.ok).toBe(false);
     expect(v.notice).toBeNull();

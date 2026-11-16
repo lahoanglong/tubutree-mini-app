@@ -26,7 +26,7 @@ export const WASTE_CONFIG_FIELDS: readonly WasteConfigField[] = [
   { key: 'waste.mailin_min_points', label: 'Gói gửi kho tối thiểu (điểm)', kind: 'int', fallback: 15_000, min: 1, max: 1_000_000 },
   { key: 'waste.pickup_min_points', label: 'Gói thu kèm đơn tối thiểu (điểm)', kind: 'int', fallback: 3_000, min: 1, max: 1_000_000 },
   { key: 'waste.customer_monthly_cap_points', label: 'Trần điểm mỗi khách mỗi tháng', kind: 'int', fallback: 60_000, min: 1, max: 2_000_000 },
-  { key: 'waste.max_open_requests', label: 'Số yêu cầu mở cùng lúc', kind: 'int', fallback: 3, min: 1, max: 20 },
+  { key: 'waste.max_open_requests', label: 'Số yêu cầu mở cùng lúc', kind: 'int', fallback: 2, min: 1, max: 2 },
   { key: 'waste.request_hold_days', label: 'Số ngày giữ chỗ', kind: 'int', fallback: 7, min: 1, max: 60 },
   { key: 'waste.pickup_wait_days', label: 'Số ngày chờ hàng thu kèm về kho', kind: 'int', fallback: 14, min: 1, max: 90 },
   { key: 'waste.in_transit_review_days', label: 'Số ngày đang gửi trước khi vào danh sách xem lại', kind: 'int', fallback: 30, min: 7, max: 180 },

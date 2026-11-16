@@ -72,7 +72,7 @@ export class WasteMeService {
 
     if (!user || eligibility !== 'OK') {
       const items: WasteMeItemDTO[] = itemRows.map((i) => ({ ...toWasteItemDTO(i), monthRemainingQty: i.monthlyCapQty, dayRemainingQty: i.dailyCapQty }));
-      return { ...common, balance: null, monthUsage: null, impactGrams: null, items, openRequests: [] };
+      return { ...common, balance: null, pendingPoints: 0, monthUsage: null, impactGrams: null, items, openRequests: [] };
     }
 
     const monthKey = vnMonthKey(now);
@@ -105,6 +105,7 @@ export class WasteMeService {
       dayRemainingQty: remainingQty(i.dailyCapQty, usage.itemDay.get(i.id) ?? 0),
     }));
     const openRequests: WasteRequestSummaryDTO[] = openRows.map(toRequestSummary);
+    const pendingPoints = openRows.reduce((sum, r) => sum + r.estimatedPoints, 0);
     return {
       ...common,
       balance: {
@@ -112,6 +113,7 @@ export class WasteMeService {
         pointsConvertedBalance: user.pointsConvertedBalance,
         redeemablePoints: Math.max(0, user.pointsBalance - locked),
       },
+      pendingPoints,
       monthUsage: { capMonthKey: monthKey, pointsUsed: usage.pointsMonth, pointsCap: snapshot.customerMonthlyCapPoints },
       impactGrams,
       items,

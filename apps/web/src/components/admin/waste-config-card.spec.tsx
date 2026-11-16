@@ -78,7 +78,7 @@ describe('WasteConfigCard', () => {
 
   it('khoá chưa seed hiện mặc định của 11.5', () => {
     const { c } = mount();
-    expect(field(c, 'waste.max_open_requests').querySelector<HTMLInputElement>('input')!.value).toBe('3');
+    expect(field(c, 'waste.max_open_requests').querySelector<HTMLInputElement>('input')!.value).toBe('2');
     expect(field(c, 'waste.lane_pickup_enabled').querySelector<HTMLInputElement>('input[role="switch"]')!.checked).toBe(false);
     expect(field(c, 'waste.lane_mailin_enabled').querySelector<HTMLInputElement>('input[role="switch"]')!.checked).toBe(true);
   });

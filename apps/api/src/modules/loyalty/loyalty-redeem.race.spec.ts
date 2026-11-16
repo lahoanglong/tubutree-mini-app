@@ -665,5 +665,33 @@ describe('Đổi Điểm Xanh lấy quà — thông báo từ chối bằng ti�
     const after = await w.loyalty.getRewardCatalog('u1');
     is('sau khi đổi', [after.pointsBalance, after.redeemablePoints, after.rewards.find((r) => r.id === 'fit')?.canRedeem], [50, 0, false]);
   });
+
+  it('W179-C (G1): khách có SĐT tự gõ nhưng phoneVerifiedAt=null đổi quà vật lý (GIFT / SEED_PACK) → 403 PHONE_NOT_VERIFIED, tồn kho và điểm KHÔNG đổi; đổi VOUCHER vẫn được', async () => {
+    const w = createRedeemWorld();
+    seedUser(w, 'u-unverified', 5000, { phone: '0909998887', zaloId: 'z-unv', phoneVerifiedAt: null });
+    seedGifts(
+      w,
+      giftRow('bag', { kind: 'GIFT', pointsCost: 100, stock: 3 }),
+      giftRow('seed', { kind: 'SEED_PACK', pointsCost: 100, stock: 2 }),
+      voucherGiftRow('vc', { pointsCost: 100, stock: 2 }),
+    );
+    w.db.seed('wastePoint', [warehouseRow]);
+
+    for (const [idx, gId] of ['bag', 'seed'].entries()) {
+      const [res] = await Promise.allSettled([w.loyalty.redeemReward('u-unverified', gId, key(`unv-${idx}`))]);
+      const err = failure(res);
+      expect(err.getStatus()).toBe(403);
+      expect(err.getResponse()).toMatchObject({ statusCode: 403, code: 'PHONE_NOT_VERIFIED' });
+    }
+    expect(balance(w, 'u-unverified')).toBe(5000);
+    expect(stock(w, 'bag')).toBe(3);
+    expect(stock(w, 'seed')).toBe(2);
+    expect(redemptions(w)).toHaveLength(0);
+
+    const [vcRes] = await Promise.allSettled([w.loyalty.redeemReward('u-unverified', 'vc', key('unv-vc'))]);
+    expect(vcRes.status).toBe('fulfilled');
+    expect(balance(w, 'u-unverified')).toBe(4900);
+    consistent(w, 'unverified-phone-gate');
+  });
 });
 

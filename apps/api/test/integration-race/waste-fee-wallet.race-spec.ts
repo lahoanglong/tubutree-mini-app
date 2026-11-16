@@ -99,7 +99,7 @@ describe('W178 home pickup wallet fee races (real Postgres)', () => {
     await setConfig(prisma, 'waste.enabled', true);
     await setConfig(prisma, 'waste.lane_pickup_enabled', true);
     await setConfig(prisma, 'waste.pickup_min_points', 3_000);
-    await setConfig(prisma, 'waste.max_open_requests', 5);
+    await setConfig(prisma, 'waste.max_open_requests', 2);
     (moduleRef.get(SystemConfigService) as unknown as { cache: Map<string, unknown> }).cache.clear();
 
     await createWarehouse(prisma);
