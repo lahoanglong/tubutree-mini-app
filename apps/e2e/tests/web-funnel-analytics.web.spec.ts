@@ -64,6 +64,7 @@ function isSubsequence(needle: string[], hay: string[]): boolean {
 
 function mockGuestPages(api: MockApi, p: PdpProduct): void {
   api.get('/flash-sales/active', []);
+  api.get('/flash-sales/upcoming', []);
   api.get(`/products/${p.slug}`, { variations: p.variations });
   api.get(`/products/${p.slug}/related`, []);
   api.get(`/products/${p.slug}/bought-together`, []);

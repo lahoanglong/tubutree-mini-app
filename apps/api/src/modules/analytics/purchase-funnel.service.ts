@@ -41,8 +41,9 @@ const ts = (d: Date): string => d.toISOString();
 /**
  * Phễu mua theo PHIÊN (`sessionId`), tách web/Mini App: mỗi bước đếm số phiên có sự kiện của bước đó trong cửa sổ, không buộc phải qua
  * bước trước (Giờ vàng mua thẳng không qua trang sản phẩm). `order_placed` là sự kiện máy chủ không có `sessionId`, nên ghép theo tài khoản:
- * phiên có userId (từ bất kỳ sự kiện nào trong phiên) và có `order_placed` cùng tài khoản, cùng nền tảng, trong khoảng phiên đó. Chỉ trả
- * số đếm, không trả định danh nào.
+ * phiên có bấm Đặt hàng, có userId (từ bất kỳ sự kiện nào trong phiên) và có `order_placed` cùng tài khoản, cùng nền tảng, trong khoảng
+ * phiên đó. Buộc có bấm Đặt hàng để phiên chỉ xem hàng (Mini App mở lại sinh phiên mới) hay đơn CTV đặt hộ khách không được tính là đặt đơn.
+ * Chỉ trả số đếm, không trả định danh nào.
  */
 @Injectable()
 export class PurchaseFunnelService {
@@ -95,7 +96,8 @@ export class PurchaseFunnelService {
              count(*) FILTER (WHERE s.cs) AS checkout_started,
              count(*) FILTER (WHERE s.poc) AS place_order_click,
              count(*) FILTER (
-               WHERE s.user_id IS NOT NULL
+               WHERE s.poc
+                 AND s.user_id IS NOT NULL
                  AND EXISTS (
                    SELECT 1 FROM "analytics_events" o
                     WHERE o."eventName" = 'order_placed'

@@ -112,11 +112,4 @@ describe('ProductDetailPage — sự kiện phễu mua', () => {
     const toCheckout = mocks.navigate.mock.calls.findIndex((c) => c[0] === '/checkout');
     expect(mocks.setCheckoutEntry.mock.invocationCallOrder[0]!).toBeLessThan(mocks.navigate.mock.invocationCallOrder[toCheckout]!);
   });
-
-  it('bấm phát video trong thư viện ảnh: pdp_action video_play', async () => {
-    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
-    renderPdp();
-    fireEvent.click(await screen.findByTestId('pdp-video-play'));
-    expect(events('pdp_action')).toEqual([{ action: 'video_play', productSlug: 'xa-phong' }]);
-  });
 });

@@ -218,7 +218,7 @@ export default function CartPage() {
     const c = cart.data;
     if (!c || cartViewed.current) return;
     cartViewed.current = true;
-    trackEvent('cart_viewed', 'miniapp', { itemCount: Math.min(c.items.length, 500), subtotalBucket: subtotalBucket(c.subtotal) });
+    trackEvent('cart_viewed', 'miniapp', { itemCount: c.items.length, subtotalBucket: subtotalBucket(c.subtotal) });
   }, [cart.data]);
   // Giỏ về trống (làm mới giỏ khi tấm đang mở): tấm gỡ theo, không để nó bật lại khi giỏ có hàng lần sau.
   const noItems = (cart.data?.items.length ?? 0) === 0;

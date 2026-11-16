@@ -229,9 +229,15 @@ describe('WishlistHeart: tên theo sản phẩm (a11y A6)', () => {
 describe('WishlistHeart onLike', () => {
   it('chỉ chạy khi lần chạm thật sự thêm vào yêu thích, không chạy khi bỏ thích', async () => {
     auth.status = 'authenticated';
-    api.getWishlistIds.mockResolvedValue([]);
-    api.addWishlist.mockResolvedValue(undefined);
-    api.removeWishlist.mockResolvedValue(undefined);
+    // Máy chủ giả nhớ trạng thái: sau lệnh thêm, lần tải lại danh sách phải thấy p1, nếu không cú chạm thứ hai lại là "thêm".
+    let ids: string[] = [];
+    api.getWishlistIds.mockImplementation(async () => ids);
+    api.addWishlist.mockImplementation(async () => {
+      ids = ['p1'];
+    });
+    api.removeWishlist.mockImplementation(async () => {
+      ids = [];
+    });
     const onLike = vi.fn();
     const qc = new QueryClient();
     qc.setQueryData(['wishlist-ids'], []);

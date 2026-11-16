@@ -11,6 +11,7 @@ import { normalizeEntryToken } from '../../common/attribution';
 import { IngestEventsDto, WebBeaconDto, WebIngestEventsDto, type EventEnvelopeDto } from './dto/ingest-events.dto';
 import { hashDeviceId } from '../auth/device-id';
 import { checkEventProps } from './event-props';
+import { BODY_TOO_COMPLEX_MESSAGE, MAX_BODY_NODES, inspectBody } from '../../common/body-limits';
 
 const RECYCLE_LANE_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -35,6 +36,13 @@ export function isAcceptedClientEvent(e: { eventName: string; platform: string; 
 }
 
 const uuidOrNull = (v: string | undefined): string | null => (v && UUID_PATTERN.test(v) ? v : null);
+
+/**
+ * Trần của khách ẩn danh: bộ đếm toàn cục chạy trước OptionalJwtAuthGuard nên mọi lời gọi web đều đếm theo IP. Một trình duyệt gửi tối đa
+ * 12 lô/phút (5 giây một lô) cộng vài beacon lúc ẩn trang; trần cao hơn chỉ để người gửi giả ghi thêm hàng vào bảng sự kiện.
+ */
+const WEB_EVENTS_PER_MINUTE = 60;
+const WEB_BEACONS_PER_MINUTE = 30;
 
 @Controller('events')
 export class AnalyticsController {
@@ -65,7 +73,7 @@ export class AnalyticsController {
    */
   @Public()
   @UseGuards(OptionalJwtAuthGuard)
-  @Throttle({ default: { ttl: 60_000, limit: 120 } })
+  @Throttle({ default: { ttl: 60_000, limit: WEB_EVENTS_PER_MINUTE } })
   @Post('web')
   async ingestWeb(@CurrentUser() user: JwtPayload | undefined, @Body() dto: WebIngestEventsDto): Promise<{ accepted: number }> {
     return this.recordWeb(user?.sub ?? null, dto.events);
@@ -76,7 +84,7 @@ export class AnalyticsController {
    * gửi được Authorization), nên luôn ghi như khách ẩn danh; phiên nối với tài khoản qua các sự kiện khác cùng `sessionId`.
    */
   @Public()
-  @Throttle({ default: { ttl: 60_000, limit: 120 } })
+  @Throttle({ default: { ttl: 60_000, limit: WEB_BEACONS_PER_MINUTE } })
   @Post('web/beacon')
   @HttpCode(204)
   async ingestWebBeacon(@Body() dto: WebBeaconDto): Promise<void> {
@@ -86,6 +94,9 @@ export class AnalyticsController {
     } catch {
       throw new BadRequestException('payload không phải JSON');
     }
+    // Bộ chặn thân request chỉ thấy một chuỗi trong form: kiểm số nút/độ sâu của JSON bên trong trước khi class-transformer dựng đối tượng
+    // (chi phí tăng gần bình phương theo số khoá).
+    if (inspectBody(parsed, MAX_BODY_NODES)) throw new BadRequestException(BODY_TOO_COMPLEX_MESSAGE);
     const body = plainToInstance(WebIngestEventsDto, parsed);
     const errors = await validate(body, { whitelist: true, forbidNonWhitelisted: true });
     if (errors.length > 0) throw new BadRequestException('payload sai khuôn');
@@ -94,7 +105,16 @@ export class AnalyticsController {
 
   private async recordWeb(userId: string | null, events: EventEnvelopeDto[]): Promise<{ accepted: number }> {
     const ok = events.filter((e) => e.platform === 'web' && isAcceptedClientEvent(e));
-    await this.analytics.recordManyBestEffort(ok.map((e) => this.toInput(e, userId, uuidOrNull(e.anonymousId), uuidOrNull(e.sessionId))));
+    // Web không gửi appVersion/notificationId/refCode/storefrontSlug: không lưu chuỗi tự do của người gửi ẩn danh vào các cột đó.
+    await this.analytics.recordManyBestEffort(
+      ok.map((e) => ({
+        ...this.toInput(e, userId, uuidOrNull(e.anonymousId), uuidOrNull(e.sessionId)),
+        appVersion: null,
+        notificationId: null,
+        refCode: null,
+        storefrontSlug: null,
+      })),
+    );
     return { accepted: ok.length };
   }
 

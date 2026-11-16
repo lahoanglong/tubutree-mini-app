@@ -172,17 +172,32 @@ export class LaunchWatchService {
     };
   }
 
-  /** Đếm khách khác nhau theo bước và nền tảng; dòng platform NULL là tổng khách khác nhau trên cả hai nền tảng (không bằng web + miniapp vì một khách có thể dùng cả hai). */
+  /**
+   * Đếm khách khác nhau theo bước và nền tảng; dòng platform NULL là tổng khách khác nhau trên cả hai nền tảng (không bằng web + miniapp vì một khách có thể dùng cả hai).
+   * Sự kiện web gửi lúc ẩn trang (beacon) không mang userId: quy về tài khoản của cùng phiên nếu phiên đó có sự kiện đã đăng nhập, để một khách không thành hai.
+   */
   private async funnelRows(since: Date): Promise<LaunchWatchFunnelRow[]> {
     const raw = await this.prisma.$queryRaw<FunnelQueryRow[]>`
-      SELECT e.props->>'step' AS step,
-             e.platform AS platform,
-             count(DISTINCT COALESCE(e."userId", e."anonymousId", e."sessionId")) AS actors
-        FROM "analytics_events" e
-       WHERE e."eventName" = 'recycle_funnel_step'
-         AND e."receivedAt" >= ${ts(since)}::timestamp
-         AND e.platform IN ('web', 'miniapp')
-       GROUP BY GROUPING SETS ((e.props->>'step', e.platform), (e.props->>'step'))`;
+      WITH r AS (
+        SELECT e.props->>'step' AS step, e.platform, e."userId", e."anonymousId", e."sessionId"
+          FROM "analytics_events" e
+         WHERE e."eventName" = 'recycle_funnel_step'
+           AND e."receivedAt" >= ${ts(since)}::timestamp
+           AND e.platform IN ('web', 'miniapp')
+      ), su AS (
+        SELECT s."sessionId" AS sid, max(s."userId") AS user_id
+          FROM "analytics_events" s
+         WHERE s."receivedAt" >= ${ts(since)}::timestamp
+           AND s."userId" IS NOT NULL
+           AND s."sessionId" IN (SELECT r."sessionId" FROM r WHERE r."sessionId" IS NOT NULL)
+         GROUP BY s."sessionId"
+      )
+      SELECT r.step AS step,
+             r.platform AS platform,
+             count(DISTINCT COALESCE(r."userId", su.user_id, r."anonymousId", r."sessionId")) AS actors
+        FROM r
+        LEFT JOIN su ON su.sid = r."sessionId"
+       GROUP BY GROUPING SETS ((r.step, r.platform), (r.step))`;
     const bySlot = new Map<string, number>();
     for (const r of raw) bySlot.set(`${r.step}|${r.platform ?? '*'}`, num(r.actors));
     return RECYCLE_FUNNEL_STEPS.map((step) => ({

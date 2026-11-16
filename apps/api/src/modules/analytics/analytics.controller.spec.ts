@@ -10,6 +10,7 @@ import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guar
 import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { SERVER_EVENT_NAMES } from '@tubutree/shared-types';
 import { THROTTLER_LIMIT, THROTTLER_TRACKER, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
+import { BODY_TOO_COMPLEX_MESSAGE } from '../../common/body-limits';
 
 const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
 const asBody = (metatype: new () => object, value: Record<string, unknown>) =>
@@ -310,10 +311,13 @@ describe('Sự kiện website (khách ẩn danh được gửi)', () => {
   };
   const rows = (m: jest.Mock) => m.mock.calls[0]![0] as Array<Record<string, unknown>>;
 
-  it('route web là @Public, gắn OptionalJwtAuthGuard; beacon @Public, cả hai giữ trần 120/phút', () => {
-    for (const h of [AnalyticsController.prototype.ingestWeb, AnalyticsController.prototype.ingestWebBeacon]) {
+  it('route web là @Public, gắn OptionalJwtAuthGuard; beacon @Public; trần ẩn danh 60 lô/phút và 30 beacon/phút', () => {
+    for (const [h, limit] of [
+      [AnalyticsController.prototype.ingestWeb, 60],
+      [AnalyticsController.prototype.ingestWebBeacon, 30],
+    ] as const) {
       expect(Reflect.getMetadata(IS_PUBLIC_KEY, h)).toBe(true);
-      expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, h)).toBe(120);
+      expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, h)).toBe(limit);
       expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, h)).toBe(60_000);
     }
     expect(Reflect.getMetadata(GUARDS_METADATA, AnalyticsController.prototype.ingestWeb)).toEqual([OptionalJwtAuthGuard]);
@@ -344,6 +348,14 @@ describe('Sự kiện website (khách ẩn danh được gửi)', () => {
     expect(rows(recordManyBestEffort)[0]).toMatchObject({ eventId: ev(4).eventId, sessionId: null, anonymousId: null });
   });
 
+  it('không lưu appVersion/notificationId/refCode/storefrontSlug do web gửi', async () => {
+    const { ctrl, recordManyBestEffort } = setup();
+    await ctrl.ingestWeb(undefined, {
+      events: [ev(1, { appVersion: 'x'.repeat(64), notificationId: 'n1', refCode: 'r'.repeat(64), storefrontSlug: 'shop' })],
+    } as WebIngestEventsDto);
+    expect(rows(recordManyBestEffort)[0]).toMatchObject({ appVersion: null, notificationId: null, refCode: null, storefrontSlug: null });
+  });
+
   it('DTO web: tối đa 20 sự kiện mỗi lô', async () => {
     await expect(asBody(WebIngestEventsDto, { events: Array.from({ length: 20 }, (_, i) => ev(i)) })).resolves.toBeDefined();
     await expect(asBody(WebIngestEventsDto, { events: Array.from({ length: 21 }, (_, i) => ev(i)) })).rejects.toThrow();
@@ -367,6 +379,17 @@ describe('Sự kiện website (khách ẩn danh được gửi)', () => {
     await expect(ctrl.ingestWebBeacon({ payload: JSON.stringify({ events: [ev(1)], extra: 1 }) })).rejects.toThrow('payload sai khuôn');
     await expect(ctrl.ingestWebBeacon({ payload: JSON.stringify({ events: Array.from({ length: 21 }, (_, i) => ev(i)) }) })).rejects.toThrow('payload sai khuôn');
     expect(recordManyBestEffort).not.toHaveBeenCalled();
+  });
+
+  it('beacon: JSON nhiều khoá hoặc lồng sâu bị từ chối trước khi dựng DTO; payload quá 32 KB không qua DTO', async () => {
+    const { ctrl, recordManyBestEffort } = setup();
+    const wide = Object.fromEntries(Array.from({ length: 300 }, (_, i) => [`a${i}`, 0]));
+    await expect(ctrl.ingestWebBeacon({ payload: JSON.stringify({ events: [ev(1, { props: wide })] }) })).rejects.toThrow(BODY_TOO_COMPLEX_MESSAGE);
+    let deep: unknown = 0;
+    for (let i = 0; i < 12; i++) deep = { d: deep };
+    await expect(ctrl.ingestWebBeacon({ payload: JSON.stringify({ events: [ev(1, { props: { x: deep } })] }) })).rejects.toThrow(BODY_TOO_COMPLEX_MESSAGE);
+    expect(recordManyBestEffort).not.toHaveBeenCalled();
+    await expect(asBody(WebBeaconDto, { payload: 'x'.repeat(32_001) })).rejects.toThrow();
   });
 });
 

@@ -135,6 +135,11 @@ describe('LaunchWatchService — SQL trên Postgres thật', () => {
       await event({ name: 'recycle_confirmed', platform: 'system', userId: 'it-c2', receivedAt: ago(N, 71 * H) });
       await event({ name: 'recycle_confirmed', platform: 'system', userId: 'it-c3', receivedAt: ago(N, 80 * H) });
       await event({ name: 'recycle_confirmed', platform: 'system', userId: 'it-c4', receivedAt: ago(N, 10 * D) });
+      // Beacon web (lúc ẩn trang) không mang userId: quy về tài khoản của cùng phiên. Phiên S1 có một sự kiện đã đăng nhập và một beacon ẩn danh
+      // → một khách; phiên S2 chỉ ẩn danh → khách riêng.
+      await event({ platform: 'web', step: 'fee_short_shown', userId: 'it-s1-user', anonymousId: 'anon-S1', sessionId: `s1-${runTag}`, receivedAt: ago(N, 2 * H) });
+      await event({ platform: 'web', step: 'fee_short_shown', anonymousId: 'anon-S1', sessionId: `s1-${runTag}`, receivedAt: ago(N, 2 * H - 60_000) });
+      await event({ platform: 'web', step: 'fee_short_shown', anonymousId: 'anon-S2', sessionId: `s2-${runTag}`, receivedAt: ago(N, 3 * H) });
       snap = await snapshot(N);
     });
 
@@ -151,6 +156,10 @@ describe('LaunchWatchService — SQL trên Postgres thật', () => {
     it('enter: tách web/Mini App, total là khách khác nhau (A dùng cả hai nền tảng chỉ tính một lần)', () => {
       expect(row('h72', 'enter')).toEqual({ step: 'enter', web: 2, miniapp: 2, total: 3 });
       expect(row('d30', 'enter')).toEqual({ step: 'enter', web: 2, miniapp: 2, total: 3 });
+    });
+
+    it('sự kiện ẩn danh của phiên có đăng nhập tính chung một khách với tài khoản đó', () => {
+      expect(row('h72', 'fee_short_shown')).toEqual({ step: 'fee_short_shown', web: 2, miniapp: 0, total: 2 });
     });
 
     it('biên 72 giờ tính theo receivedAt, đúng mốc thì có, trước 1ms thì chỉ có ở 7 ngày', () => {

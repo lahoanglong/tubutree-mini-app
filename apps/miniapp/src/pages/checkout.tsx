@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { CHECKOUT_STEPS, type CheckoutLastStep, type CheckoutStep, type QuotePendingGiftDTO } from '@tubutree/shared-types';
+import type { CheckoutLastStep, CheckoutStep, QuotePendingGiftDTO } from '@tubutree/shared-types';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -320,11 +320,15 @@ export default function CheckoutPage() {
   }, [payment, quote.data, walletBalanceLive]);
 
   // Phễu thanh toán: `last` là bước xa nhất đã tới (như web), quay lại sửa địa chỉ sau khi đã bấm đặt vẫn tính là bỏ dở ở bước đặt.
-  const funnel = useRef({ started: false, done: false, last: 'started' as CheckoutLastStep });
-  const funnelStep = (step: CheckoutStep, paymentMethod?: string) => {
+  // `rank` là vị trí của bước trong CHECKOUT_STEPS (0 address_saved … 3 place_order_click), truyền thẳng số để gói Mini App không mang thêm mảng.
+  const funnel = useRef({ started: false, done: false, last: 'started' as CheckoutLastStep, rank: -1 });
+  const funnelStep = (step: CheckoutStep, rank: number, paymentMethod?: string) => {
     const f = funnel.current;
     if (f.done) return;
-    if (CHECKOUT_STEPS.indexOf(step) > CHECKOUT_STEPS.indexOf(f.last as CheckoutStep)) f.last = step;
+    if (rank > f.rank) {
+      f.rank = rank;
+      f.last = step;
+    }
     trackEvent('checkout_step', 'miniapp', { step, paymentMethod });
   };
   // Khoá đồng bộ "Thử lại" báo giá: lỗi báo giá giữ nguyên dòng báo trong lúc tải lại nên khách không thấy gì xảy ra và chạm tiếp,
@@ -339,11 +343,11 @@ export default function CheckoutPage() {
     const entry = takeCheckoutEntry();
     trackEvent('checkout_started', 'miniapp', {
       entry: entry !== 'unknown' ? entry : itemIds ? 'cart_subset' : 'cart',
-      itemCount: Math.min(itemIds?.length ?? cart.data?.items.length ?? 0, 500),
+      itemCount: itemIds?.length ?? cart.data?.items.length ?? 0,
     });
     // Báo giá cần địa chỉ: đây là lần đầu đơn có địa chỉ (chọn sẵn, hoặc khách vừa lưu địa chỉ đầu tiên) và lần đầu khách thấy phí giao.
-    funnelStep('address_saved');
-    funnelStep('shipping_quote_shown');
+    funnelStep('address_saved', 0);
+    funnelStep('shipping_quote_shown', 1);
   }, [quote.isSuccess]);
   useEffect(() => {
     const f = funnel.current;
@@ -749,7 +753,7 @@ export default function CheckoutPage() {
           selectedId={addressId}
           onSelect={chosen(setAddressId)}
           // Địa chỉ lưu trước báo giá đầu đã được tính ở `checkout_started`, không đếm hai lần.
-          onSaved={() => funnel.current.started && funnelStep('address_saved')}
+          onSaved={() => funnel.current.started && funnelStep('address_saved', 0)}
           quoteOutdated={addressOutdated && !quote.isFetching}
         />
       </div>
@@ -1018,7 +1022,7 @@ export default function CheckoutPage() {
               haptic('light');
               // Chạm lại đúng cách đang chọn không phải là đổi lựa chọn: không được mở băng của lần đặt chưa rõ kết quả.
               if (m.value !== payment) {
-                funnelStep('payment_method_selected', m.value);
+                funnelStep('payment_method_selected', 2, m.value);
                 chosen(setPayment)(m.value);
               }
             }}
@@ -1387,7 +1391,7 @@ export default function CheckoutPage() {
                 return;
               }
               setSubmitting(true);
-              funnelStep('place_order_click');
+              funnelStep('place_order_click', 3);
               try {
                 // Xin SĐT đúng lúc đặt hàng (như Homefarm) nếu tài khoản chưa có — không chặn nếu user từ chối.
                 await useAuthStore.getState().ensurePhone().catch(() => undefined);

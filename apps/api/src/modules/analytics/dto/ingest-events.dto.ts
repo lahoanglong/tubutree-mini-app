@@ -61,8 +61,8 @@ export class IngestEventsDto {
 
 /** Website gửi lô nhỏ hơn Mini App: route này mở cho khách ẩn danh nên trần mỗi request thấp hơn. */
 export const MAX_WEB_EVENTS_PER_BATCH = 20;
-/** 20 sự kiện × trần props 4 KB + phong bì, đã mã hoá form. */
-export const MAX_WEB_BEACON_PAYLOAD = 100_000;
+/** Lô 20 sự kiện thật của web chưa tới 10 KB; trần thấp để máy chủ không phải dựng đối tượng từ chuỗi lớn của người gửi ẩn danh. */
+export const MAX_WEB_BEACON_PAYLOAD = 32_000;
 
 export class WebIngestEventsDto {
   @IsArray()

@@ -86,6 +86,11 @@ describe('PurchaseFunnelService — SQL trên Postgres thật', () => {
     await ev({ name: 'checkout_step', platform: 'web', sid: P, at: ago(20 * D), userId: uOld, props: { step: 'place_order_click' } });
     await ev({ name: 'order_placed', platform: 'web', sid: null, at: ago(20 * D - 2 * H), userId: uOld });
 
+    // Phiên Q (20 ngày trước) chỉ xem sản phẩm; đơn cùng tài khoản 5 phút sau (Mini mở lại thành phiên khác, hoặc đơn CTV đặt hộ) không ghép vì phiên không bấm Đặt hàng.
+    const Q = randomUUID();
+    await ev({ name: 'product_viewed', platform: 'web', sid: Q, at: ago(20 * D + H), userId: uOld, props: { productSlug: 'q' } });
+    await ev({ name: 'order_placed', platform: 'web', sid: null, at: ago(20 * D + H - 300_000), userId: uOld });
+
     // Sự kiện sau mốc now không được đếm.
     await ev({ name: 'product_viewed', platform: 'web', sid: randomUUID(), at: new Date(NOW.getTime() + H) });
   });
@@ -111,12 +116,13 @@ describe('PurchaseFunnelService — SQL trên Postgres thật', () => {
     });
   });
 
-  it('7 ngày và 30 ngày: thêm phiên cũ, đơn khác nền tảng hoặc quá 30 phút sau phiên không được ghép', async () => {
+  it('7 ngày và 30 ngày: thêm phiên cũ; đơn khác nền tảng, quá 30 phút sau phiên, hoặc của phiên không bấm Đặt hàng không được ghép', async () => {
     const dto = await new PurchaseFunnelService(prisma).getSnapshot(NOW);
     expect(dto.windows.d7.sessions).toEqual({ web: 4, miniapp: 1, total: 5 });
     expect(counts(dto.windows.d7.rows).product_viewed).toEqual([3, 1, 4]);
     expect(counts(dto.windows.d7.rows).order_placed).toEqual([1, 1, 2]);
-    expect(dto.windows.d30.sessions).toEqual({ web: 5, miniapp: 1, total: 6 });
+    expect(dto.windows.d30.sessions).toEqual({ web: 6, miniapp: 1, total: 7 });
+    expect(counts(dto.windows.d30.rows).product_viewed).toEqual([4, 1, 5]);
     expect(counts(dto.windows.d30.rows).place_order_click).toEqual([3, 1, 4]);
     expect(counts(dto.windows.d30.rows).order_placed).toEqual([1, 1, 2]);
   });

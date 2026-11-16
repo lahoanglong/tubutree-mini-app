@@ -84,14 +84,3 @@ describe('css/pdp-video.css: số đo', () => {
     expect(rule).toMatch(/min-height:\s*44px/);
   });
 });
-
-describe('PdpVideoSlide onPlay', () => {
-  it('chạy một lần khi khách bấm nút phát', () => {
-    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined);
-    const onPlay = vi.fn();
-    render(<PdpVideoSlide src={VIDEO} poster={null} name="Tiêu đen" active onPlay={onPlay} />);
-    expect(onPlay).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByTestId('pdp-video-play'));
-    expect(onPlay).toHaveBeenCalledTimes(1);
-  });
-});

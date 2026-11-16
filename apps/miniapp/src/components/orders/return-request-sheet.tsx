@@ -11,7 +11,6 @@ import { MultiImageUpload } from '../image-upload';
 import { useLockedMutation } from '../game/use-locked-mutation';
 import { RefundDestinationPicker } from './refund-destination-picker';
 import { estimateReturn, fetchRefundBank, requestReturn, type OrderView, type ReturnRequestDTO } from '../../services/shop-api';
-import { trackEvent } from '../../services/analytics';
 import { getErrorMessage, isStaleStateError } from '../../services/api';
 import { LOCK_REFRESH_WAIT_MS, settleWithin } from '../../utils/settle-within';
 import { haptic } from '../../utils/haptic';
@@ -121,7 +120,6 @@ export function ReturnRequestSheet({ open, onClose, order, returns, returnDays }
         ...(showsMoney && bankAllowed ? destinationBody(method, bank) : {}),
       }),
     onSuccess: () => {
-      trackEvent('return_requested', 'miniapp', { orderAgeDays: Math.min(Math.max(Math.floor((Date.now() - Date.parse(order.createdAt)) / 864e5), 0), 3650) });
       haptic('medium');
       setReason('');
       setImages([]);

@@ -35,7 +35,7 @@ export function PurchaseFunnelBlock({ win }: { win: keyof PurchaseFunnelDTO['win
       <h3 className="text-base font-semibold text-stone-900">Phễu mua</h3>
       <p className="mt-0.5 text-xs text-stone-500">
         Số phiên có từng bước (phiên đổi sau 30 phút không thao tác). Một phiên có thể bỏ qua bước trước, ví dụ Mua ngay ở Giờ vàng không qua trang sản phẩm.
-        Khách bật Do Not Track trên web không được đếm.
+        Khách bật Do Not Track trên web không được đếm. Cột Mini App chỉ có số từ bản Mini App có mã phiên; bản cũ còn trên Zalo không được đếm.
       </p>
       <div className="mt-2">
         {q.isLoading ? (

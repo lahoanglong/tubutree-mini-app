@@ -305,7 +305,7 @@ export default function ProductDetailPage() {
     void trackEvent('product_viewed', 'miniapp', {
       productSlug: product.data.slug,
       hasVideo: !!product.data.videos?.length,
-      imageCount: Math.min(product.data.images.length, 100),
+      imageCount: product.data.images.length,
       productId: product.data.id,
       variationId: selected.id,
       price: viewPrice,
@@ -692,7 +692,7 @@ export default function ProductDetailPage() {
 
       <StorefrontContextBar />
       {/* `selectedId` chỉ có sau khi khách tự chọn phân loại (chỉ có từ 2 phân loại): lúc mở trang (phân loại mặc định) thư viện không nhảy, ảnh đầu vẫn là ảnh LCP. */}
-      <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} videos={p.videos} alt={p.name} focusSrc={selectedId && variations.length > 1 ? selected?.imageUrl : null} onVideoPlay={() => pdpAction('video_play')} />
+      <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} videos={p.videos} alt={p.name} focusSrc={selectedId && variations.length > 1 ? selected?.imageUrl : null} />
       {flashItem && priceView.isFlash && (
         <FlashPriceBar
           price={price}
@@ -1354,7 +1354,7 @@ export function GallerySlide({ src, alt, eager }: { src: string; alt: string; ea
 }
 
 /** Carousel ảnh và video scroll-snap + dots — không cần lib ngoài. `focusSrc`: ảnh của phân loại khách vừa chọn, cuộn tới ô ảnh đó. */
-export function Gallery({ images, videos, alt, focusSrc, onVideoPlay }: { images: string[]; videos?: string[]; alt: string; focusSrc?: string | null; onVideoPlay?: () => void }) {
+export function Gallery({ images, videos, alt, focusSrc }: { images: string[]; videos?: string[]; alt: string; focusSrc?: string | null }) {
   const [index, setIndex] = useState(0);
   // Ảnh không bấm được nên vùng cuộn phải tự focus được khi tràn, nếu không bàn phím không lật ảnh được (axe scrollable-region-focusable).
   const track = useScrollHints<HTMLDivElement>();
@@ -1409,7 +1409,7 @@ export function Gallery({ images, videos, alt, focusSrc, onVideoPlay }: { images
       >
         {media.map((m, i) =>
           m.kind === 'video' ? (
-            <PdpVideoSlide key={`video:${m.src}`} src={m.src} poster={m.poster} name={alt} active={i === index} onPlay={onVideoPlay} />
+            <PdpVideoSlide key={`video:${m.src}`} src={m.src} poster={m.poster} name={alt} active={i === index} />
           ) : (
             <GallerySlide key={m.src} src={m.src} alt={`${alt} — ảnh ${i + 1}`} eager={i === 0} />
           ),

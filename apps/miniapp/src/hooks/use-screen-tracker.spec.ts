@@ -5,7 +5,10 @@ import { createElement, type ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { act, renderHook } from '@testing-library/react';
 import { MemoryRouter, useNavigate } from 'react-router-dom';
-import { useScreenTracker } from './use-screen-tracker';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { toRouteTemplate } from '@tubutree/shared-types';
+import { MINI_DYNAMIC_ROUTES, miniRouteTemplate, useScreenTracker } from './use-screen-tracker';
 
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
 import { trackEvent } from '../services/analytics';
@@ -57,5 +60,29 @@ describe('useScreenTracker', () => {
       ['/recycle/r/:id/edit', '/feed/events'],
     ]);
     expect(calls.every((p) => !('prevRoute' in p))).toBe(true);
+  });
+});
+
+describe('miniRouteTemplate', () => {
+  const appRoutes = [...readFileSync(resolve(__dirname, '../components/app.tsx'), 'utf8').matchAll(/<Route path="([^"]+)"/g)]
+    .map((m) => m[1]!)
+    .filter((p) => p !== '*');
+
+  it('mọi route có tham số của app.tsx đều nằm trong MINI_DYNAMIC_ROUTES', () => {
+    const dynamic = appRoutes.filter((p) => p.includes(':'));
+    expect(dynamic.length).toBeGreaterThan(10);
+    expect(dynamic.filter((p) => !MINI_DYNAMIC_ROUTES.includes(p))).toEqual([]);
+  });
+
+  it('cho cùng kết quả với toRouteTemplate của shared-types trên mọi route của app và đường dẫn lạ', () => {
+    const samples = [
+      ...appRoutes.map((p) => p.replace(/:[A-Za-z]+/g, 'TB2611-AbC_9')),
+      '/product/nuoc-rua-chen',
+      '/khong-co/ABC123/xyz',
+      '/feed/events',
+      '/feed/leaderboard',
+      '/',
+    ];
+    for (const path of samples) expect([path, miniRouteTemplate(path)]).toEqual([path, toRouteTemplate(path, MINI_DYNAMIC_ROUTES)]);
   });
 });
