@@ -455,4 +455,59 @@ describe('Shipper lấy tận nhà: tạo đơn thu gom', () => {
     expect(screen.getByRole('button', { name: '5 kg' })).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByTestId('home-pickup-pay')).toHaveTextContent('Điểm Xanh dùng được 40.000 · sẽ trừ 25.000 điểm');
   });
+
+  it('W178 thiếu Điểm Xanh (NEED_FEE_PAYMENT): hiện "Miễn phí lấy rác 100%", một chạm đổi sang PICKUP / DROP_OFF giữ nguyên món, và trả phần thiếu bằng Ví Tubu', async () => {
+    mocks.getWastePickupQuote.mockResolvedValue(
+      short({
+        pointsAvailable: 8_000,
+        pointsApplicable: 8_000,
+        remainingFeeVnd: 17_000,
+        cashDueVnd: 17_000,
+        blockedCode: 'NEED_FEE_PAYMENT',
+        feePaths: {
+          wallet: { balance: 40_000, enough: true },
+          bankTransfer: { enabled: false },
+          attachNextOrder: { available: true, reason: null, existingRequestId: null },
+        },
+      }),
+    );
+    atStep2();
+    const { unmount } = renderPage();
+    const block = await screen.findByTestId('home-pickup-fee-short');
+    expect(block).toHaveTextContent('Miễn phí lấy rác 100%');
+    expect(block).toHaveTextContent('Khuyên dùng');
+    expect(screen.getByTestId('home-pickup-cash-due')).toHaveTextContent('17.000đ');
+    (await consentBox()).click();
+
+    // Chưa chọn cách trả -> nút dính đáy duy nhất hiện "Chọn cách trả phí" và bị khoá
+    const pickBtn = await screen.findByRole('button', { name: 'Chọn cách trả phí' });
+    expect(pickBtn).toBeDisabled();
+
+    // Chọn trả bằng Ví -> nhãn nút đổi thành "Trả 17.000đ từ Ví và đặt lấy rác", gửi kèm shipFeePayment + expectedCashVnd
+    fireEvent.click(screen.getByRole('radio', { name: /Trả 17.000đ bằng Ví Tubu/ }));
+    const payBtn = await screen.findByRole('button', { name: 'Trả 17.000đ từ Ví và đặt lấy rác' });
+    await waitFor(() => expect(payBtn).toBeEnabled());
+    fireEvent.click(payBtn);
+    await waitFor(() =>
+      expect(mocks.createWasteRequest).toHaveBeenCalledWith(
+        expect.objectContaining({
+          method: 'HOME_PICKUP',
+          usePointsForShipFee: true,
+          shipFeePayment: 'WALLET',
+          expectedCashVnd: 17_000,
+        }),
+        expect.stringMatching(/^key-\d+$/),
+      ),
+    );
+    unmount();
+
+    // Một chạm "Gửi kèm đơn mua kế tiếp" đổi phương thức sang PICKUP, khối thiếu phí biến mất
+    mocks.createWasteRequest.mockClear();
+    atStep2();
+    renderPage();
+    fireEvent.click(await screen.findByTestId('fee-path-attach'));
+    expect(screen.queryByTestId('home-pickup-fee-short')).toBeNull();
+    expect(screen.getByRole('radio', { name: /Thu kèm đơn mua/ })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.getByRole('button', { name: 'Tạo yêu cầu' })).toBeInTheDocument();
+  });
 });

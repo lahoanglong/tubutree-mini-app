@@ -191,6 +191,20 @@ export const WASTE_CONFIG_KEYS = {
     maxLength: RULES_VERSION_MAX_LENGTH,
     description: 'Số phiên bản thể lệ, tối đa 32 ký tự. Đổi số này khi sửa nội dung thể lệ để khách đồng ý lại.',
   },
+  'waste.home_pickup_bank_transfer_enabled': {
+    default: false,
+    type: 'boolean',
+    category: 'waste',
+    description: 'Bật cách chuyển khoản VietQR cho phần phí lấy rác tận nhà còn thiếu sau khi trừ Điểm Xanh, xác nhận tay bởi kế toán.',
+  },
+  'waste.fee_payment_ttl_hours': {
+    default: 24,
+    type: 'int',
+    category: 'waste',
+    min: 1,
+    max: 72,
+    description: 'Số giờ giữ yêu cầu lấy rác tận nhà chờ khách chuyển khoản phí còn thiếu, quá hạn thì tự đóng.',
+  },
 } as const satisfies Record<string, WasteConfigKeyDef>;
 
 export type WasteConfigKey = keyof typeof WASTE_CONFIG_KEYS;

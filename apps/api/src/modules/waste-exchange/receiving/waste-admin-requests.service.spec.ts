@@ -184,6 +184,7 @@ describe('WasteAdminRequestsService.reopen', () => {
     ['an OPEN request', { status: 'OPEN' }],
     ['a DROP_OFF request', { method: 'DROP_OFF' }],
     ['an unattached PICKUP request', { method: 'PICKUP', orderId: null }],
+    ['a FEE_UNPAID HOME_PICKUP request', { method: 'HOME_PICKUP', closeReason: 'FEE_UNPAID' }],
   ])('rejects %s', async (_name, patch) => {
     const { service, hold, notifier } = setup({ row: request(patch) });
     await expect(service.reopen('a1', 'r1', { reason: 'kiện đến muộn' })).rejects.toThrow(NOT_REOPENABLE);

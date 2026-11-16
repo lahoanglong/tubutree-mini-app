@@ -15,6 +15,7 @@ import {
   WasteAdminRequestsController,
   WasteCloseLostDto,
   WasteCostDto,
+  WasteFeeBankConfirmDto,
   WasteLookupQueryDto,
   WasteReceiveDto,
   WasteReopenDto,
@@ -41,6 +42,7 @@ const table: [string, string, string, string[], number | undefined][] = [
   ['setCost', 'PATCH', 'requests/:id/cost', A, 30],
   ['closeLost', 'POST', 'requests/:id/close-lost', A, 10],
   ['reopen', 'POST', 'requests/:id/reopen', A, 10],
+  ['confirmFeePaid', 'POST', 'requests/:id/confirm-fee-paid', A, 20],
   ['listUnmatched', 'GET', 'unmatched', SA, undefined],
   ['createUnmatched', 'POST', 'unmatched', SA, 30],
   ['resolveUnmatched', 'POST', 'unmatched/:id/resolve', SA, 30],
@@ -56,9 +58,9 @@ const rows = Object.getOwnPropertyNames(proto)
   ]);
 
 describe('WasteAdminRequestsController routes', () => {
-  it('exposes exactly the fifteen admin routes of registry 5', () => {
+  it('exposes the sixteen admin routes (registry 5 + W178 confirm-fee-paid)', () => {
     expect(Reflect.getMetadata(PATH_METADATA, WasteAdminRequestsController)).toBe('admin/waste');
-    expect(rows).toHaveLength(15);
+    expect(rows).toHaveLength(16);
     expect(rows).toEqual(expect.arrayContaining(table.map(([, method, path]) => [method, 'admin/waste/' + path])));
   });
 
@@ -75,9 +77,12 @@ describe('WasteAdminRequestsController routes', () => {
     for (const [handler] of table) expect(Reflect.getMetadata(STAFF_PERMISSIONS_KEY, (proto as never)[handler])).toBeUndefined();
   });
 
-  it('answers receive with 200 and no other handler overrides the status', () => {
+  it('answers receive and confirmFeePaid with 200 and no other handler overrides the status', () => {
     expect(Reflect.getMetadata(HTTP_CODE_METADATA, proto.receive)).toBe(200);
-    for (const [handler] of table.filter(([h]) => h !== 'receive')) expect(Reflect.getMetadata(HTTP_CODE_METADATA, (proto as never)[handler])).toBeUndefined();
+    expect(Reflect.getMetadata(HTTP_CODE_METADATA, proto.confirmFeePaid)).toBe(200);
+    for (const [handler] of table.filter(([h]) => h !== 'receive' && h !== 'confirmFeePaid')) {
+      expect(Reflect.getMetadata(HTTP_CODE_METADATA, (proto as never)[handler])).toBeUndefined();
+    }
   });
 
   it('declares lookup before detail so requests/lookup is not read as an id', () => {
@@ -107,7 +112,8 @@ describe('WasteAdminRequestsController handlers', () => {
   };
   const confirm = { confirm: jest.fn().mockResolvedValue('c'), reject: jest.fn().mockResolvedValue('r'), closeLost: jest.fn().mockResolvedValue('lost') };
   const reverse = { reverse: jest.fn().mockResolvedValue('rev') };
-  const controller = new WasteAdminRequestsController(admin as never, receive as never, confirm as never, reverse as never);
+  const feeBank = { confirmFeeBankPaid: jest.fn().mockResolvedValue('feePaid') };
+  const controller = new WasteAdminRequestsController(admin as never, receive as never, confirm as never, reverse as never, feeBank as never);
 
   beforeEach(() => jest.clearAllMocks());
 
@@ -132,6 +138,7 @@ describe('WasteAdminRequestsController handlers', () => {
     await controller.setCost('u1', 'r1', { carrierCostVnd: 5 });
     await controller.closeLost('u1', 'r1', { reason: 'x' });
     await controller.reopen('u1', 'r1', { reason: 'x', unmatchedId: 'um1' });
+    await controller.confirmFeePaid('u1', 'r1', { amount: 17000, bankRef: 'FT1' });
     await controller.listUnmatched('u1', { status: 'OPEN' });
     await controller.createUnmatched('u1', { description: 'd' });
     await controller.resolveUnmatched('u1', 'um1', { action: 'CLOSE', note: 'n' });
@@ -145,6 +152,7 @@ describe('WasteAdminRequestsController handlers', () => {
     expect(admin.setCost).toHaveBeenCalledWith('u1', 'r1', { carrierCostVnd: 5 });
     expect(confirm.closeLost).toHaveBeenCalledWith('u1', 'r1', { reason: 'x' });
     expect(admin.reopen).toHaveBeenCalledWith('u1', 'r1', { reason: 'x', unmatchedId: 'um1' });
+    expect(feeBank.confirmFeeBankPaid).toHaveBeenCalledWith('r1', { amount: 17000, bankRef: 'FT1', actorId: 'u1' });
     expect(receive.listUnmatched).toHaveBeenCalledWith('u1', { status: 'OPEN' });
     expect(receive.createUnmatched).toHaveBeenCalledWith('u1', { description: 'd' });
     expect(receive.resolveUnmatched).toHaveBeenCalledWith('u1', 'um1', { action: 'CLOSE', note: 'n' });
@@ -181,6 +189,8 @@ describe('WasteAdminRequestsController validation', () => {
     ['receive weight 0', WasteReceiveDto, { receivedWeightGrams: 0 }],
     ['receive weight 100001', WasteReceiveDto, { receivedWeightGrams: 100001 }],
     ['receive match parcelCode not a string', WasteReceiveDto, { match: { parcelCode: 5 } }],
+    ['confirm-fee amount 0', WasteFeeBankConfirmDto, { amount: 0, bankRef: 'FT1' }],
+    ['confirm-fee blank bankRef', WasteFeeBankConfirmDto, { amount: 1000, bankRef: '   ' }],
   ])('rejects %s with 400', async (_name, cls, body) => {
     await expect(bad('body', cls, body)).resolves.toBe(true);
   });
@@ -191,6 +201,7 @@ describe('WasteAdminRequestsController validation', () => {
     await expect(bad('body', WasteUnmatchedResolveDto, { action: 'MATCH', requestId: 'r1', note: 'x' })).resolves.toBe(false);
     await expect(bad('body', WasteUnmatchedResolveDto, { action: 'CLOSE', note: 'x' })).resolves.toBe(false);
     await expect(bad('body', WasteReceiveDto, { match: { parcelCode: 'TR-1' }, receivedWeightGrams: 100000 })).resolves.toBe(false);
+    await expect(bad('body', WasteFeeBankConfirmDto, { amount: 17000, bankRef: ' FT123 ' })).resolves.toBe(false);
   });
 
   it('validates the query DTOs', async () => {

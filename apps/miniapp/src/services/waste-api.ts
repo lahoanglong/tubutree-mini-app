@@ -25,6 +25,8 @@ import type {
   WasteRulesDTO,
   WasteTrackingRequest,
 } from '@tubutree/shared-types';
+import type { BankQr } from '@tubutree/app-core/api/payment';
+import { syncServerClock } from '@tubutree/app-core/server-clock';
 import { api } from './api';
 
 const enc = encodeURIComponent;
@@ -36,6 +38,7 @@ export const WASTE_QUERY_KEYS = {
   points: (province: string | null) => ['waste', 'points', province] as const,
   requests: ['waste', 'requests'],
   request: (id: string) => ['waste', 'request', id] as const,
+  feeQr: (id: string) => ['waste', 'fee-qr', id] as const,
   desk: ['waste', 'desk'],
   rewards: ['loyalty-rewards'],
   rewardsMine: ['loyalty-rewards', 'mine'],
@@ -66,6 +69,11 @@ export const cancelWasteRequest = (id: string) =>
 export const listWasteRequests = () => api.get<WasteRequestSummaryDTO[]>('/waste/requests').then((r) => r.data);
 export const getWasteRequest = (id: string) =>
   api.get<WasteRequestDetailDTO>(`/waste/requests/${enc(id)}`).then((r) => r.data);
+export const getWasteFeeQr = (id: string) =>
+  api.get<BankQr>(`/waste/requests/${enc(id)}/fee-qr`).then((r) => {
+    syncServerClock(r.data?.serverNow);
+    return r.data;
+  });
 export const getWasteRequestByOrder = (orderId: string) =>
   api.get<WasteRequestDetailDTO>(`/waste/requests/by-order/${enc(orderId)}`).then((r) => r.data);
 export const getWasteRules = () => api.get<WasteRulesDTO>('/waste/rules').then((r) => r.data);
@@ -85,7 +93,7 @@ export const getDeskPointReport = (pointId: string, month: string) =>
 export const submitDeskPerk = (pointId: string, body: WastePerkSubmitRequest) =>
   api.put<WasteDeskPointDTO>(`/waste/desk/points/${enc(pointId)}/perk`, body).then((r) => r.data);
 
-const WRITE_KEYS = [['waste'], ['loyalty'], ['points-txn'], ['game']] as const;
+const WRITE_KEYS = [['waste'], ['loyalty'], ['points-txn'], ['game'], ['wallet']] as const;
 
 export async function invalidateAfterWasteWrite(qc: QueryClient): Promise<void> {
   await Promise.all(WRITE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey })));

@@ -23,6 +23,7 @@ describe('waste — đúng route, body, header (bảng của spec Mini App)', ()
     ['cancelWasteRequest', (h: HttpClient) => w.cancelWasteRequest(h, 'req-1'), { method: 'post', path: '/waste/requests/req-1/cancel' }],
     ['listWasteRequests', (h: HttpClient) => w.listWasteRequests(h), { method: 'get', path: '/waste/requests' }],
     ['getWasteRequest', (h: HttpClient) => w.getWasteRequest(h, 'req-1'), { method: 'get', path: '/waste/requests/req-1' }],
+    ['getWasteFeeQr', (h: HttpClient) => w.getWasteFeeQr(h, 'req-1'), { method: 'get', path: '/waste/requests/req-1/fee-qr' }],
     ['getWasteRequestByOrder', (h: HttpClient) => w.getWasteRequestByOrder(h, 'ord-1'), { method: 'get', path: '/waste/requests/by-order/ord-1' }],
     ['getWasteRules', (h: HttpClient) => w.getWasteRules(h), { method: 'get', path: '/waste/rules' }],
     ['getDeskPoints', (h: HttpClient) => w.getDeskPoints(h), { method: 'get', path: '/waste/desk/points' }],
@@ -58,12 +59,12 @@ describe('waste — đúng route, body, header (bảng của spec Mini App)', ()
 });
 
 describe('waste — tập khoá phải làm mới sau khi ghi', () => {
-  it('ghi đổi rác làm mới waste, loyalty, points-txn, game', () => {
-    expect(w.WASTE_WRITE_INVALIDATE_KEYS).toEqual([['waste'], ['loyalty'], ['points-txn'], ['game']]);
+  it('ghi đổi rác làm mới waste, loyalty, points-txn, game, wallet', () => {
+    expect(w.WASTE_WRITE_INVALIDATE_KEYS).toEqual([['waste'], ['loyalty'], ['points-txn'], ['game'], ['wallet']]);
   });
   it('đổi quà làm mới thêm loyalty-rewards và coupons', () => {
     expect(w.WASTE_REDEEM_INVALIDATE_KEYS).toEqual([
-      ['waste'], ['loyalty'], ['points-txn'], ['game'], ['loyalty-rewards'], ['coupons'],
+      ['waste'], ['loyalty'], ['points-txn'], ['game'], ['wallet'], ['loyalty-rewards'], ['coupons'],
     ]);
   });
 });

@@ -2296,6 +2296,11 @@ export const closeLostWasteRequest = (id: string, body: WasteCloseLostRequest) =
   apiFetch<WasteRequestAdminDetailDTO>(`/admin/waste/requests/${encodeURIComponent(id)}/close-lost`, { method: 'POST', body });
 export const reopenWasteRequest = (id: string, body: WasteReopenRequest) =>
   apiFetch<WasteRequestAdminDetailDTO>(`/admin/waste/requests/${encodeURIComponent(id)}/reopen`, { method: 'POST', body });
+export const confirmWasteFeeBankPaid = (id: string, body: import('@tubutree/shared-types').WasteFeeBankConfirmRequest) =>
+  apiFetch<import('@tubutree/shared-types').WasteFeeBankConfirmResultDTO>(
+    `/admin/waste/requests/${encodeURIComponent(id)}/confirm-fee-paid`,
+    { method: 'POST', body },
+  );
 
 export const listWasteUnmatched = (status?: WasteUnmatchedStatus) =>
   apiFetch<WasteUnmatchedDTO[]>(`/admin/waste/unmatched${wasteQuery({ status })}`);

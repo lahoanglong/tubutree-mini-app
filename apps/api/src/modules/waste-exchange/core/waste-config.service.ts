@@ -27,6 +27,8 @@ export interface WasteConfigSnapshot {
   alertThresholds: WasteAlertThresholds;
   rulesText: string;
   rulesVersion: string;
+  homePickupBankTransferEnabled: boolean;
+  feePaymentTtlHours: number;
 }
 
 const THRESHOLD_FIELDS: readonly (keyof WasteAlertThresholds)[] = [
@@ -63,7 +65,7 @@ export class WasteConfigService {
       enabled, laneDropoff, laneMailin, lanePickup, mailinMinPoints, pickupMinPoints, customerMonthlyCapPoints,
       maxOpenRequests, requestHoldDays, pickupWaitDays, inTransitReviewDays, mailinMaxWeightKg, mailinMaxEdgeCm,
       shortfallLockPct, shortfallLockStreak, staffDailyCapPoints, giftClaimDays, pointInactiveDays,
-      mailinFeeTable, alertThresholds, rulesText, rulesVersion,
+      mailinFeeTable, alertThresholds, rulesText, rulesVersion, homePickupBankTransferEnabled, feePaymentTtlHours,
     ] = await Promise.all([
       this.config.get<unknown>('waste.enabled', WASTE_CONFIG_KEYS['waste.enabled'].default),
       this.config.get<unknown>('waste.lane_dropoff_enabled', WASTE_CONFIG_KEYS['waste.lane_dropoff_enabled'].default),
@@ -87,6 +89,8 @@ export class WasteConfigService {
       this.config.get<unknown>('waste.alert_thresholds', WASTE_CONFIG_KEYS['waste.alert_thresholds'].default),
       this.config.get<unknown>('waste.rules_text', WASTE_CONFIG_KEYS['waste.rules_text'].default),
       this.config.get<unknown>('waste.rules_version', WASTE_CONFIG_KEYS['waste.rules_version'].default),
+      this.config.get<unknown>('waste.home_pickup_bank_transfer_enabled', WASTE_CONFIG_KEYS['waste.home_pickup_bank_transfer_enabled'].default),
+      this.config.get<unknown>('waste.fee_payment_ttl_hours', WASTE_CONFIG_KEYS['waste.fee_payment_ttl_hours'].default),
     ]);
 
     return {
@@ -112,6 +116,8 @@ export class WasteConfigService {
       alertThresholds: this.checked('waste.alert_thresholds', alertThresholds, isThresholds),
       rulesText: this.checked('waste.rules_text', rulesText, (v): v is string => typeof v === 'string'),
       rulesVersion: this.checked('waste.rules_version', rulesVersion, (v): v is string => typeof v === 'string' && v.trim() !== '' && v.length <= 32),
+      homePickupBankTransferEnabled: this.bool('waste.home_pickup_bank_transfer_enabled', homePickupBankTransferEnabled),
+      feePaymentTtlHours: this.int('waste.fee_payment_ttl_hours', feePaymentTtlHours),
     };
   }
 

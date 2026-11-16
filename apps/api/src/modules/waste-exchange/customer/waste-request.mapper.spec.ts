@@ -79,17 +79,20 @@ describe('waste request mapper (allow-list, spec 15.1)', () => {
     it('homePickup chỉ có các khoá cho phép, địa chỉ rút gọn không kèm tên và số điện thoại', () => {
       const dto = toRequestDetail(home(), true).homePickup!;
       expect(Object.keys(dto).sort()).toEqual([
-        'declaredWeightGrams', 'gomdonStatus', 'pickupAddressText', 'shipFeeCodVnd', 'shipFeePointsRefunded', 'shipFeePointsUsed', 'shipFeeVnd', 'statusText', 'timeline',
+        'declaredWeightGrams', 'gomdonStatus', 'pickupAddressText', 'shipFeeCashMethod', 'shipFeeCashPaid', 'shipFeeCashRefundedVnd', 'shipFeeCashVnd', 'shipFeeCodVnd', 'shipFeePointsRefunded', 'shipFeePointsUsed', 'shipFeeVnd', 'statusText', 'timeline',
       ]);
       expect(dto).toMatchObject({
-        gomdonStatus: '1', statusText: 'Đã tạo đơn, chờ bưu tá tới lấy rác', shipFeeVnd: 25_000, shipFeePointsUsed: 10_000, shipFeeCodVnd: 15_000,
+        gomdonStatus: '1', statusText: 'Đã tạo đơn, chờ bưu tá tới lấy rác', shipFeeVnd: 25_000, shipFeePointsUsed: 10_000, shipFeeCashVnd: 0, shipFeeCashMethod: null,
+        shipFeeCashPaid: false, shipFeeCashRefundedVnd: 0, shipFeeCodVnd: 15_000,
         shipFeePointsRefunded: 0, declaredWeightGrams: 2500, pickupAddressText: '1 Lê Lợi, Phường Bến Nghé, Thành phố Hồ Chí Minh',
       });
-      const json = JSON.stringify(toRequestDetail(home(), true));
+      const json = JSON.stringify(toRequestDetail(home({ shipFeeBankRef: 'FT999' }), true));
       expect(json).not.toContain('Lan');
       expect(json).not.toContain('0901234567');
       expect(json).not.toContain('shippingHistory');
       expect(json).not.toContain('gomdonOrderId');
+      expect(json).not.toContain('shipFeeBankRef');
+      expect(json).not.toContain('FT999');
     });
 
     it('timeline: mốc tạo đơn, rồi từng mốc Gomdon; 4 và 5 cùng câu nên chỉ giữ một', () => {
@@ -109,6 +112,13 @@ describe('waste request mapper (allow-list, spec 15.1)', () => {
       expect(toRequestDetail(home({ status: 'CANCELLED', gomdonStatus: '2', shipFeePointsRefunded: 10_000 }), true).homePickup).toMatchObject({ statusText: 'Đơn thu gom đã huỷ', shipFeePointsRefunded: 10_000 });
       expect(toRequestDetail(home({ status: 'EXPIRED', gomdonStatus: '10', closeReason: 'PICKUP_NO_SHOW' }), true).homePickup!.statusText).toBe('Bưu tá chưa lấy được rác');
       expect(toRequestDetail(home({ status: 'EXPIRED', gomdonStatus: null, closeReason: 'HOLD_EXPIRED' }), true).homePickup!.statusText).toBe('Yêu cầu đã đóng');
+      expect(toRequestDetail(home({ status: 'EXPIRED', gomdonStatus: null, closeReason: 'FEE_UNPAID' }), true).homePickup!.statusText).toBe('Quá hạn chuyển khoản phí lấy rác');
+      expect(toRequestDetail(home({ status: 'OPEN', gomdonStatus: null, shippingHistory: null, shipFeeCashVnd: 17_000, shipFeeCashMethod: 'BANK_TRANSFER', shipFeeCashPaidAt: null }), true).homePickup).toMatchObject({
+        statusText: 'Chờ bạn chuyển khoản phí lấy rác',
+        shipFeeCashVnd: 17_000,
+        shipFeeCashMethod: 'BANK_TRANSFER',
+        shipFeeCashPaid: false,
+      });
     });
 
     it('chưa có vận đơn hoặc Gomdon báo mã lạ: câu chờ tạo vận đơn, không lộ mã nội bộ', () => {

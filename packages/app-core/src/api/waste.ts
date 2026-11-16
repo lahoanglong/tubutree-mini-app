@@ -25,6 +25,8 @@ import type {
   WasteTrackingRequest,
 } from '@tubutree/shared-types';
 import type { HttpClient } from '../http';
+import { syncServerClock } from '../server-clock';
+import type { BankQr } from './payment';
 
 const enc = encodeURIComponent;
 
@@ -35,13 +37,14 @@ export const WASTE_QUERY_KEYS = {
   points: (province: string | null) => ['waste', 'points', province] as const,
   requests: ['waste', 'requests'],
   request: (id: string) => ['waste', 'request', id] as const,
+  feeQr: (id: string) => ['waste', 'fee-qr', id] as const,
   desk: ['waste', 'desk'],
   rewards: ['loyalty-rewards'],
   rewardsMine: ['loyalty-rewards', 'mine'],
 } as const;
 
-/** Khoá cần làm mới sau khi ghi đổi rác; đổi quà làm mới thêm điểm thưởng và mã giảm giá, nếu thiếu thì số dư Điểm Xanh cũ. */
-export const WASTE_WRITE_INVALIDATE_KEYS = [['waste'], ['loyalty'], ['points-txn'], ['game']] as const;
+/** Khoá cần làm mới sau khi ghi đổi rác; đổi quà làm mới thêm điểm thưởng và mã giảm giá, nếu thiếu thì số dư Điểm Xanh / Ví cũ. */
+export const WASTE_WRITE_INVALIDATE_KEYS = [['waste'], ['loyalty'], ['points-txn'], ['game'], ['wallet']] as const;
 export const WASTE_REDEEM_INVALIDATE_KEYS = [...WASTE_WRITE_INVALIDATE_KEYS, ['loyalty-rewards'], ['coupons']] as const;
 
 export const getWasteMe = (http: HttpClient) => http.get<WasteMeDTO>('/waste/me');
@@ -65,6 +68,11 @@ export const setWasteTracking = (http: HttpClient, id: string, body: WasteTracki
 export const cancelWasteRequest = (http: HttpClient, id: string) => http.post<WasteRequestDetailDTO>(`/waste/requests/${enc(id)}/cancel`);
 export const listWasteRequests = (http: HttpClient) => http.get<WasteRequestSummaryDTO[]>('/waste/requests');
 export const getWasteRequest = (http: HttpClient, id: string) => http.get<WasteRequestDetailDTO>(`/waste/requests/${enc(id)}`);
+export const getWasteFeeQr = async (http: HttpClient, id: string) => {
+  const qr = await http.get<BankQr>(`/waste/requests/${enc(id)}/fee-qr`);
+  syncServerClock(qr?.serverNow);
+  return qr;
+};
 export const getWasteRequestByOrder = (http: HttpClient, orderId: string) =>
   http.get<WasteRequestDetailDTO>(`/waste/requests/by-order/${enc(orderId)}`);
 export const getWasteRules = (http: HttpClient) => http.get<WasteRulesDTO>('/waste/rules');

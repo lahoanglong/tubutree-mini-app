@@ -25,6 +25,7 @@ export const WASTE_EXPIRED_DETAIL_TEXT: Record<WasteCloseReason, string> = {
   LOST_AT_WAREHOUSE: 'kiện bị thất lạc tại kho Tubu, xin lỗi bạn. Bạn nhắn Tubu Tree để được hỗ trợ',
   SHIP_LOCKED: 'đường gửi kho và thu kèm đơn đang tạm dừng',
   ORDER_CANCELLED: 'đơn mua gắn kèm đã bị huỷ',
+  FEE_UNPAID: 'quá hạn chuyển khoản phần phí lấy rác còn thiếu',
 };
 
 /**
@@ -37,6 +38,7 @@ export const WASTE_HOME_PICKUP_EXPIRED_DETAIL_TEXT: Partial<Record<WasteCloseRea
   HOLD_EXPIRED: `bưu tá chưa tới lấy rác trong thời hạn giữ chỗ nên Tubu đã đóng yêu cầu. ${HOME_PICKUP_REFUND_TAIL}`,
   PICKUP_NO_SHOW: `bưu tá không lấy được rác tại địa chỉ của bạn. ${HOME_PICKUP_REFUND_TAIL}`,
   SHIP_LOCKED: `đường thu gom đang tạm dừng với tài khoản của bạn. ${HOME_PICKUP_REFUND_TAIL}`,
+  FEE_UNPAID: `quá hạn chuyển khoản phần phí lấy rác còn thiếu nên Tubu đã đóng yêu cầu. ${HOME_PICKUP_REFUND_TAIL}`,
 };
 
 export const WASTE_MAIL_IN_HOLD_EXPIRED_TEXT = 'hết hạn giữ chỗ. Nếu bạn đã gửi kiện, hãy nhắn CSKH kèm mã vận đơn để được hỗ trợ';

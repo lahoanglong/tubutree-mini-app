@@ -19,6 +19,8 @@ const row = (over: Partial<HomePickupRow> = {}): HomePickupRow => ({
   gomdonStatus: '1',
   gomdonStatusAt: AT(0),
   shipFeePointsUsed: 1500,
+  shipFeeCashVnd: null,
+  shipFeeCashPaidAt: null,
   shippingHistory: [{ at: AT(0).toISOString(), status: '1', carrier: 'BestExpress', code: 'BE123' }],
   ...over,
 });
@@ -201,11 +203,15 @@ describe('WasteHomePickupService.applyWebhook', () => {
     expect(prisma.wasteRequest.updateMany).not.toHaveBeenCalled();
   });
 
-  it.each([6, 8, 9, 11, 12])('%i: chỉ ghi và báo người xử lý, không đổi trạng thái phiếu, không hoàn điểm', async (status) => {
+  it.each([6, 8, 9, 11, 12])('%i: chỉ ghi và báo người xử lý kèm tiền phí đã thu (I7), không đổi trạng thái phiếu, không tự hoàn', async (status) => {
     const { svc, prisma } = setup();
-    const res = await svc.applyWebhook(row({ status: 'IN_TRANSIT', gomdonStatus: '5' }), ev(status));
+    const res = await svc.applyWebhook(
+      row({ status: 'IN_TRANSIT', gomdonStatus: '5', shipFeeCashVnd: 17000, shipFeeCashPaidAt: AT(0) }),
+      ev(status),
+    );
     expect(res.outcome).toBe('PROCESSED');
     expect(res.alert).toMatch(/KHÔNG tự hoàn/);
+    expect(res.alert).toContain('17.000đ phí đã thu');
     expect(prisma.wasteRequest.updateMany.mock.calls[0]![0].data.status).toBeUndefined();
     expect(mockClose).not.toHaveBeenCalled();
   });

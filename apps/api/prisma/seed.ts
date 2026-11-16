@@ -357,6 +357,8 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'waste.alert_thresholds', value: { quotaPacePct: 60, quotaPaceDays: 10, fullMatchPct: 95, fullMatchMinSample: 10, repeatCustomerCount: 3, repeatCustomerDays: 7, avgUnitsFactor: 2, lookupMissCount: 10, lookupMissDays: 1, staffDirectCount: 5, staffDirectDays: 7 }, category: 'waste', description: 'Ngưỡng cảnh báo bất thường về điểm nhận và người xác nhận, chỉ để admin xem, không tự khoá ai.', createOnly: true },
   { key: 'waste.rules_text', value: '', category: 'waste', description: 'Thể lệ công khai của chương trình, tối đa 8000 ký tự, để trống thì mục Thể lệ hiện ghi chú sắp có.', createOnly: true },
   { key: 'waste.rules_version', value: '2026-10-17.1', category: 'waste', description: 'Số phiên bản thể lệ, tối đa 32 ký tự. Đổi số này khi sửa nội dung thể lệ để khách đồng ý lại.', createOnly: true },
+  { key: 'waste.home_pickup_bank_transfer_enabled', value: false, category: 'waste', description: 'Bật cách chuyển khoản VietQR cho phần phí lấy rác tận nhà còn thiếu sau khi trừ Điểm Xanh, xác nhận tay bởi kế toán.', createOnly: true },
+  { key: 'waste.fee_payment_ttl_hours', value: 24, category: 'waste', description: 'Số giờ giữ yêu cầu lấy rác tận nhà chờ khách chuyển khoản phí còn thiếu, quá hạn thì tự đóng.', createOnly: true },
 ];
 assertWasteConfigSeedRows(SYSTEM_CONFIGS);
 

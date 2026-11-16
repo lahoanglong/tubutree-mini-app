@@ -5,6 +5,8 @@ import { WasteHomePickupCustomerService } from './waste-home-pickup-customer.ser
 
 const mockApply = jest.fn();
 jest.mock('../../loyalty/points-ledger', () => ({ applyPointsDelta: (...a: unknown[]) => mockApply(...a) }));
+const mockApplyWallet = jest.fn();
+jest.mock('../../wallet/wallet-ledger.service', () => ({ applyWalletDelta: (...a: unknown[]) => mockApplyWallet(...a) }));
 const mockEvent = jest.fn();
 jest.mock('../core/waste-events', () => ({ writeWasteEvent: (...a: unknown[]) => mockEvent(...a) }));
 jest.mock('../core/waste-public-config', () => ({ computeWastePublicFlags: jest.fn().mockResolvedValue({ pickup: true }) }));
@@ -18,13 +20,25 @@ const LINES = [{ itemId: 'item-carton', declaredQty: 5 }];
 const SNAP = {
   laneDropoff: true, laneMailin: true, lanePickup: true, mailinMinPoints: 3000, pickupMinPoints: 3000,
   customerMonthlyCapPoints: 50000, maxOpenRequests: 5, requestHoldDays: 7, rulesVersion: 'v1',
+  homePickupBankTransferEnabled: false, feePaymentTtlHours: 24,
 };
 const HELD = {
   pointId: 'wh', capDayKey: '2026-11-15', capMonthKey: '2026-11', expiresAt: new Date('2026-11-22T16:59:59Z'), estimatedPoints: 3500, estimatedDrops: 0,
   lines: [{ itemId: 'item-carton', itemCode: 'CARTON', itemName: 'Thùng carton', unitLabel: 'kg', unitsPerPoint: 1, pointsPerGroup: 700, dropsPerUnit: 0, gramsPerUnit: 1000, declaredQty: 5, hazardous: false }],
 };
 
-function setup(over: { balance?: number; converted?: number; locked?: number; fee?: number; estimated?: boolean } = {}) {
+function setup(
+  over: {
+    balance?: number;
+    converted?: number;
+    walletBalance?: number;
+    locked?: number;
+    fee?: number;
+    estimated?: boolean;
+    bankTransferEnabled?: boolean;
+    feePaymentTtlHours?: number;
+  } = {},
+) {
   const calls: string[] = [];
   const tx = {
     $executeRaw: jest.fn(),
@@ -33,17 +47,35 @@ function setup(over: { balance?: number; converted?: number; locked?: number; fe
       findUnique: jest.fn().mockResolvedValue(null),
       create: jest.fn().mockImplementation(async () => { calls.push('create'); return { id: 'r1' }; }),
     },
-    user: { findUnique: jest.fn().mockResolvedValue({ pointsBalance: over.balance ?? 0, pointsConvertedBalance: over.converted ?? 0 }) },
+    user: {
+      findUnique: jest.fn().mockResolvedValue({
+        pointsBalance: over.balance ?? 0,
+        pointsConvertedBalance: over.converted ?? 0,
+        walletBalance: over.walletBalance ?? 0,
+      }),
+    },
   };
   const prisma = {
     address: { findFirst: jest.fn().mockResolvedValue(ADDRESS) },
-    user: { findUnique: jest.fn().mockResolvedValue({ pointsBalance: over.balance ?? 0, pointsConvertedBalance: over.converted ?? 0 }) },
+    user: {
+      findUnique: jest.fn().mockResolvedValue({
+        pointsBalance: over.balance ?? 0,
+        pointsConvertedBalance: over.converted ?? 0,
+        walletBalance: over.walletBalance ?? 0,
+      }),
+    },
     wasteRequest: { findFirst: jest.fn(), findUnique: jest.fn() },
     $transaction: jest.fn(async (fn: (t: typeof tx) => unknown) => { calls.push('tx'); return fn(tx); }),
   };
-  const config = { snapshot: jest.fn().mockResolvedValue(SNAP) };
+  const config = {
+    snapshot: jest.fn().mockResolvedValue({
+      ...SNAP,
+      ...(over.bankTransferEnabled !== undefined ? { homePickupBankTransferEnabled: over.bankTransferEnabled } : {}),
+      ...(over.feePaymentTtlHours !== undefined ? { feePaymentTtlHours: over.feePaymentTtlHours } : {}),
+    }),
+  };
   const hold = {
-    evaluate: jest.fn().mockResolvedValue({ result: { estimatedPoints: 3500 }, blocks: [], messages: [] }),
+    evaluate: jest.fn().mockResolvedValue({ result: { estimatedPoints: 3500 }, blocks: [], messages: [], pickupPendingId: null }),
     validateAndHold: jest.fn().mockResolvedValue(HELD),
   };
   const gomdon = {
@@ -68,6 +100,7 @@ const create = (over: Partial<WasteCreateRequest> = {}): WasteCreateRequest => (
 
 beforeEach(() => {
   mockApply.mockReset().mockResolvedValue({ applied: true, entryId: 'e' });
+  mockApplyWallet.mockReset().mockResolvedValue({ applied: true, balanceAfter: 20000, entryId: 'wt-1' });
   mockEvent.mockReset().mockResolvedValue({ id: 'ev' });
   mockEnqueue.mockReset().mockResolvedValue(undefined);
 });
@@ -75,14 +108,39 @@ beforeEach(() => {
 describe('WasteHomePickupCustomerService.quote', () => {
   const body = { addressId: 'a1', declaredWeightGrams: 2000, lines: LINES };
 
-  it('phí Gomdon thật, điểm dùng được = điểm thường trừ phần khoá + lô quy đổi (cùng luật checkout)', async () => {
-    const { svc, loyalty } = setup({ balance: 5000, locked: 1000, converted: 300 });
+  it('phí Gomdon thật, thiếu điểm: trả blockedCode NEED_FEE_PAYMENT, cashDueVnd và feePaths (Ví, VietQR, Gửi kèm đơn)', async () => {
+    const { svc, loyalty } = setup({ balance: 5000, locked: 1000, converted: 300, walletBalance: 40000 });
     const q = await svc.quote('u1', body);
     expect(loyalty.lockedOrderPoints).toHaveBeenCalledWith('u1', expect.any(Date));
     expect(q).toEqual({
       shipFeeVnd: 25000, estimated: false, estimatedPoints: 3500, minPoints: 3000,
       pointsAvailable: 4300, pointsApplicable: 4300, remainingFeeVnd: 20700,
       addressOk: true, addressMessage: null, blocked: WASTE_MESSAGES.HOME_PICKUP_NEED_POINTS(20700),
+      blockedCode: 'NEED_FEE_PAYMENT',
+      cashDueVnd: 20700,
+      feePaths: {
+        wallet: { balance: 40000, enough: true },
+        bankTransfer: { enabled: false },
+        attachNextOrder: { available: true, reason: null, existingRequestId: null },
+      },
+    });
+  });
+
+  it('đã có phiếu PICKUP chờ gắn đơn: attachNextOrder trả available:false kèm existingRequestId để khách chạm mở lại', async () => {
+    const { svc, hold } = setup({ balance: 0, walletBalance: 10000, bankTransferEnabled: true });
+    hold.evaluate
+      .mockResolvedValueOnce({ result: { estimatedPoints: 3500 }, blocks: [], messages: [], pickupPendingId: null })
+      .mockResolvedValueOnce({
+        result: { estimatedPoints: 3500 },
+        blocks: [{ code: 'PICKUP_PENDING', pickupRequestCode: 'TR-PEND1' }],
+        messages: ['Bạn đang có yêu cầu TR-PEND1 chờ gắn đơn'],
+        pickupPendingId: 'req-pend-1',
+      });
+    const q = await svc.quote('u1', body);
+    expect(q.feePaths).toEqual({
+      wallet: { balance: 10000, enough: false },
+      bankTransfer: { enabled: true },
+      attachNextOrder: { available: false, reason: 'Bạn đang có yêu cầu TR-PEND1 chờ gắn đơn', existingRequestId: 'req-pend-1' },
     });
   });
 
@@ -149,12 +207,107 @@ describe('WasteHomePickupCustomerService.create', () => {
     expect(calls.indexOf('quote')).toBeLessThan(calls.indexOf('tx'));
   });
 
-  it('Điểm Xanh chưa đủ trả hết phí: chưa bật thu hộ nên 400, không tạo phiếu, không trừ điểm, không xếp job Gomdon', async () => {
+  it('Điểm Xanh chưa đủ trả hết phí và chưa chọn phương thức trả: 400 mang code WASTE_FEE_NEED_PAYMENT + cashDueVnd, không tạo phiếu, không trừ điểm, không xếp job Gomdon', async () => {
     const { svc, tx } = setup({ balance: 10000 });
-    await expect(svc.create('u1', 'key-1', create())).rejects.toThrow(WASTE_MESSAGES.HOME_PICKUP_NEED_POINTS(15000));
+    await expect(svc.create('u1', 'key-1', create())).rejects.toMatchObject({
+      response: expect.objectContaining({
+        code: 'WASTE_FEE_NEED_PAYMENT',
+        message: WASTE_MESSAGES.HOME_PICKUP_NEED_POINTS(15000),
+        cashDueVnd: 15000,
+      }),
+    });
     expect(tx.wasteRequest.create).not.toHaveBeenCalled();
     expect(mockApply).not.toHaveBeenCalled();
+    expect(mockApplyWallet).not.toHaveBeenCalled();
     expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  it('trả phần thiếu bằng Ví Tubu (WALLET): trừ điểm + trừ Ví trong cùng tx, shipFeeCodVnd = 0, shipFeeCashPaidAt có ngay, đẩy Gomdon sau commit', async () => {
+    const { svc, tx } = setup({ balance: 8000, walletBalance: 40000, fee: 25000 });
+    await expect(svc.create('u1', 'key-w', create({ shipFeePayment: 'WALLET', expectedCashVnd: 17000 }))).resolves.toBe('r1');
+    expect(tx.wasteRequest.create.mock.calls[0]![0].data).toMatchObject({
+      shipFeeVnd: 25000,
+      shipFeePointsUsed: 8000,
+      shipFeeCodVnd: 0,
+      shipFeeCashVnd: 17000,
+      shipFeeCashMethod: 'WALLET',
+      shipFeeCashPaidAt: expect.any(Date),
+    });
+    expect(mockApply).toHaveBeenCalledWith(tx, expect.objectContaining({ delta: -8000, lot: 'STANDARD' }));
+    expect(mockApplyWallet).toHaveBeenCalledWith(
+      tx,
+      expect.objectContaining({
+        userId: 'u1',
+        delta: -17000,
+        type: 'WASTE_FEE_PAY',
+        refType: 'WASTE_REQUEST',
+        refId: 'r1',
+      }),
+    );
+    expect(mockEnqueue).toHaveBeenCalledWith({ name: 'q' }, 'r1', 'TR-AAAAA');
+  });
+
+  it('Ví không đủ tiền: applyWalletDelta ném 400 trong tx nên rollback cả phiếu và điểm, không đẩy Gomdon', async () => {
+    const { svc } = setup({ balance: 8000, walletBalance: 5000, fee: 25000 });
+    mockApplyWallet.mockRejectedValueOnce(new BadRequestException('Số dư Ví không đủ'));
+    await expect(svc.create('u1', 'key-w', create({ shipFeePayment: 'WALLET' }))).rejects.toThrow(BadRequestException);
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  it('expectedCashVnd thấp hơn số server tính (phí tăng / điểm vừa giảm): 409 WASTE_FEE_CHANGED kèm cashDueVnd mới, không tạo phiếu', async () => {
+    const { svc, tx } = setup({ balance: 8000, walletBalance: 40000, fee: 25000 });
+    await expect(svc.create('u1', 'key-w', create({ shipFeePayment: 'WALLET', expectedCashVnd: 15000 }))).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'WASTE_FEE_CHANGED', cashDueVnd: 17000 }),
+    });
+    expect(tx.wasteRequest.create).not.toHaveBeenCalled();
+    expect(mockApplyWallet).not.toHaveBeenCalled();
+  });
+
+  it('expectedCashVnd cao hơn số server tính: thu đúng số server (I2), không bao giờ thu theo số client', async () => {
+    const { svc } = setup({ balance: 8000, walletBalance: 40000, fee: 25000 });
+    await expect(svc.create('u1', 'key-w', create({ shipFeePayment: 'WALLET', expectedCashVnd: 99999 }))).resolves.toBe('r1');
+    expect(mockApplyWallet).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ delta: -17000 }));
+  });
+
+  it('BANK_TRANSFER khi cờ tắt: 400 WASTE_FEE_BANK_DISABLED; khi cờ bật: tạo phiếu AWAITING (PaidAt null) và KHÔNG xếp job Gomdon', async () => {
+    const off = setup({ balance: 8000, fee: 25000, bankTransferEnabled: false });
+    await expect(off.svc.create('u1', 'key-b', create({ shipFeePayment: 'BANK_TRANSFER' }))).rejects.toMatchObject({
+      response: expect.objectContaining({ code: 'WASTE_FEE_BANK_DISABLED' }),
+    });
+    expect(off.tx.wasteRequest.create).not.toHaveBeenCalled();
+
+    const on = setup({ balance: 8000, fee: 25000, bankTransferEnabled: true, feePaymentTtlHours: 24 });
+    await expect(on.svc.create('u1', 'key-b2', create({ shipFeePayment: 'BANK_TRANSFER' }))).resolves.toBe('r1');
+    expect(on.tx.wasteRequest.create.mock.calls[0]![0].data).toMatchObject({
+      shipFeeVnd: 25000,
+      shipFeePointsUsed: 8000,
+      shipFeeCodVnd: 0,
+      shipFeeCashVnd: 17000,
+      shipFeeCashMethod: 'BANK_TRANSFER',
+      shipFeeCashPaidAt: null,
+    });
+    expect(mockApplyWallet).not.toHaveBeenCalled();
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  it('phát lại cùng khoá idempotency cho phiếu AWAITING BANK_TRANSFER: vẫn không đẩy Gomdon; đổi shipFeePayment cùng khoá -> 409', async () => {
+    const { svc, tx } = setup({ balance: 8000, fee: 25000, bankTransferEnabled: true });
+    tx.wasteRequest.findUnique.mockResolvedValueOnce({
+      id: 'old-bank', code: 'TR-OLDBK', method: 'HOME_PICKUP', status: 'OPEN', pointId: 'wh',
+      gomdonOrderId: null, gomdonStatus: null, declaredWeightGrams: 2000,
+      shipFeeCashVnd: 17000, shipFeeCashMethod: 'BANK_TRANSFER', shipFeeCashPaidAt: null,
+      pickupAddress: { addressId: 'a1', requestedPayment: 'BANK_TRANSFER' }, lines: [{ itemId: 'item-carton', declaredQty: 5 }],
+    });
+    await expect(svc.create('u1', 'key-b', create({ shipFeePayment: 'BANK_TRANSFER' }))).resolves.toBe('old-bank');
+    expect(mockEnqueue).not.toHaveBeenCalled();
+
+    tx.wasteRequest.findUnique.mockResolvedValueOnce({
+      id: 'old-bank', code: 'TR-OLDBK', method: 'HOME_PICKUP', status: 'OPEN', pointId: 'wh',
+      gomdonOrderId: null, gomdonStatus: null, declaredWeightGrams: 2000,
+      shipFeeCashVnd: 17000, shipFeeCashMethod: 'BANK_TRANSFER', shipFeeCashPaidAt: null,
+      pickupAddress: { addressId: 'a1', requestedPayment: 'BANK_TRANSFER' }, lines: [{ itemId: 'item-carton', declaredQty: 5 }],
+    });
+    await expect(svc.create('u1', 'key-b', create({ shipFeePayment: 'WALLET' }))).rejects.toThrow(ConflictException);
   });
 
   it('không bật công tắc trừ điểm: phí nằm hết ở phần thu hộ nên 400, không đụng sổ điểm', async () => {

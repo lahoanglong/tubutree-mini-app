@@ -158,6 +158,7 @@ const EXPIRED_LABELS: Partial<Record<string, string>> = {
   PICKUP_NOT_DISPATCHED: 'Tubu chưa sắp xếp được người đến lấy rác thu kèm đơn, xin lỗi bạn',
   LOST: 'Đã đóng vì thất lạc',
   LOST_AT_WAREHOUSE: 'Kiện bị thất lạc tại kho Tubu, xin lỗi bạn',
+  FEE_UNPAID: 'Quá hạn chuyển khoản phí lấy rác',
 };
 
 const CANCELLED_REASONS: Partial<Record<string, string>> = {

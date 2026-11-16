@@ -43,6 +43,7 @@ const ROWS: Row[] = [
   ['setWasteRequestCost', () => A.setWasteRequestCost('r1', { carrierCostVnd: 32000 }), 'PATCH', '/admin/waste/requests/r1/cost', { carrierCostVnd: 32000 }],
   ['closeLostWasteRequest', () => A.closeLostWasteRequest('r1', { reason: 'Hãng báo thất lạc' }), 'POST', '/admin/waste/requests/r1/close-lost', { reason: 'Hãng báo thất lạc' }],
   ['reopenWasteRequest', () => A.reopenWasteRequest('r1', { reason: 'Kiện về muộn', unmatchedId: 'un1' }), 'POST', '/admin/waste/requests/r1/reopen', { reason: 'Kiện về muộn', unmatchedId: 'un1' }],
+  ['confirmWasteFeeBankPaid', () => A.confirmWasteFeeBankPaid('r1', { amount: 17000, bankRef: 'FT99' }), 'POST', '/admin/waste/requests/r1/confirm-fee-paid', { amount: 17000, bankRef: 'FT99' }],
   ['listWasteUnmatched()', () => A.listWasteUnmatched(), 'GET', '/admin/waste/unmatched', undefined],
   ['listWasteUnmatched(RESOLVED)', () => A.listWasteUnmatched('RESOLVED'), 'GET', '/admin/waste/unmatched?status=RESOLVED', undefined],
   ['createWasteUnmatched', () => A.createWasteUnmatched({ carrier: 'GHN', trackingCode: 'GHN123', description: 'Thùng carton, băng keo xanh' }), 'POST', '/admin/waste/unmatched', { carrier: 'GHN', trackingCode: 'GHN123', description: 'Thùng carton, băng keo xanh' }],

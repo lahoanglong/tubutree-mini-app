@@ -18,7 +18,7 @@ function setup(o: { items?: unknown[]; storedLines?: unknown[]; flags?: unknown;
   };
   const access = { availablePointIds: jest.fn(async (_db: unknown, ids: string[]) => new Set(o.available === false ? [] : ids)), warehousePoint: jest.fn().mockResolvedValue({ id: 'wh' }) };
   const svc = new WasteHoldService(access as never);
-  jest.spyOn(svc, 'capUsage').mockResolvedValue({ itemDay: new Map(), itemMonth: new Map(), pointsMonth: 0, openCount: 0, pickupPendingCode: null, ...o.usage });
+  jest.spyOn(svc, 'capUsage').mockResolvedValue({ itemDay: new Map(), itemMonth: new Map(), pointsMonth: 0, openCount: 0, pickupPendingCode: null, pickupPendingId: null, ...o.usage });
   return { svc, tx: tx as never, access, raw: tx };
 }
 const input = (o: Partial<WasteHoldInput> = {}): WasteHoldInput => ({ path: 'CREATE', userId: 'u1', method: 'DROP_OFF', lines: [{ itemId: 'carton', declaredQty: 5 }], pointId: 'p1', now: NOW, ...o });

@@ -31,7 +31,7 @@ export function toAdminRequestDetail(
     lines: base.lines.map((l, i) => ({ ...l, hazardous: row.lines[i]!.item.hazardous })),
     customerName: v.name,
     customerPhone: v.phone,
-    ...(viewerIsAdmin ? { userId: row.userId } : {}),
+    ...(viewerIsAdmin ? { userId: row.userId, shipFeeBankRef: row.shipFeeBankRef } : {}),
     trackingConflict: row.trackingConflict,
     confirmedByUserId: row.confirmedByUserId,
     receivedWeightGrams: row.receivedWeightGrams,

@@ -19,6 +19,8 @@ describe('walletTxLabel (sao kê Ví)', () => {
     expect(walletTxLabel('OPENING')).toBe('Số dư đầu kỳ');
     expect(walletTxLabel('ORDER_PAY')).toBe('Thanh toán đơn');
     expect(walletTxLabel('ORDER_REFUND')).toBe('Hoàn tiền đơn hàng');
+    expect(walletTxLabel('WASTE_FEE_PAY')).toBe('Trả phí lấy rác');
+    expect(walletTxLabel('WASTE_FEE_REFUND')).toBe('Hoàn phí lấy rác');
     expect(walletTxLabel('WITHDRAW')).toBe('Rút về ngân hàng');
     expect(walletTxLabel('WITHDRAW_REFUND')).toBe('Hoàn lệnh rút bị từ chối');
     expect(walletTxLabel('PIT_REFUND')).toBe('Hoàn thuế TNCN giữ dư');

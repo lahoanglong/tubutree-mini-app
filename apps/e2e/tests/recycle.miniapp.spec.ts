@@ -1,7 +1,8 @@
 import type { Page } from '@playwright/test';
-import type { WasteRequestDetailDTO } from '@tubutree/shared-types';
+import type { WastePickupQuoteResponse, WasteRequestDetailDTO } from '@tubutree/shared-types';
 import type { createWasteRequest } from '../../miniapp/src/services/waste-api';
-import { test, expect, makeUser, mockSession } from './support/mock-api';
+import { test, expect, makeUser, mockSession, publicConfig } from './support/mock-api';
+import { CHECKOUT_ADDRESS } from './support/checkout-mocks';
 import {
   expectNoOverflow,
   mockWasteCustomer,
@@ -217,5 +218,108 @@ test.describe('Đổi rác lấy quà — khách', () => {
     expect(await fits()).toBe(true);
     await page.evaluate(() => document.documentElement.setAttribute('data-font-scale', 'large'));
     expect(await fits()).toBe(true);
+  });
+
+  test('W178 shipper lấy tận nhà thiếu Điểm Xanh: 1 chạm chuyển sang Thu kèm đơn, hoặc trả phần thiếu bằng Ví Tubu (375 px không tràn ngang)', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockSession(api, makeUser({ id: 'u-wx' }));
+    const createdReq = wasteDetail({
+      id: 'wr-hp-wallet',
+      code: 'TR-W178K',
+      method: 'HOME_PICKUP',
+      status: 'OPEN',
+      pointName: 'Kho Tubu TP.HCM',
+      homePickup: {
+        gomdonStatus: '1',
+        statusText: 'Đã tạo đơn, chờ bưu tá tới lấy rác',
+        shipFeeVnd: 25_000,
+        shipFeePointsUsed: 8_000,
+        shipFeeCodVnd: 0,
+        shipFeePointsRefunded: 0,
+        shipFeeCashVnd: 17_000,
+        shipFeeCashMethod: 'WALLET',
+        shipFeeCashPaid: true,
+        shipFeeCashRefundedVnd: 0,
+        declaredWeightGrams: 2000,
+        pickupAddressText: '123 Lê Lợi, Phường Sài Gòn, TP. Hồ Chí Minh',
+        timeline: [{ at: '2026-11-16T03:00:00.000Z', text: 'Đã tạo đơn thu gom' }],
+      },
+    });
+    mockWasteCustomer(api, {
+      me: {
+        laneFlags: { dropoff: true, mailin: true, pickup: true },
+        balance: { pointsBalance: 8_000, pointsConvertedBalance: 0, redeemablePoints: 8_000 },
+      },
+      points: [wastePoint({ id: 'wp-q1' })],
+      requests: [createdReq],
+    });
+    api.get('/config/public', publicConfig({ waste: { enabled: true, dropoff: true, mailin: true, pickup: true } }));
+    api.get('/me/addresses', [CHECKOUT_ADDRESS]);
+    api.post('/events', { accepted: 1 });
+    const shortQuote: WastePickupQuoteResponse = {
+      shipFeeVnd: 25_000,
+      estimated: false,
+      estimatedPoints: 5_000,
+      minPoints: 3_000,
+      pointsAvailable: 8_000,
+      pointsApplicable: 8_000,
+      remainingFeeVnd: 17_000,
+      addressOk: true,
+      addressMessage: null,
+      blocked: 'Phí shipper lấy rác cần trả bằng Điểm Xanh, bạn còn thiếu 17.000 điểm. Hãy chọn mang tới điểm thu gom hoặc đổi rác kèm đơn mua nhé',
+      blockedCode: 'NEED_FEE_PAYMENT',
+      cashDueVnd: 17_000,
+      feePaths: {
+        wallet: { balance: 40_000, enough: true },
+        bankTransfer: { enabled: false },
+        attachNextOrder: { available: true, reason: null, existingRequestId: null },
+      },
+    };
+    api.post('/waste/pickup-quote', () => shortQuote);
+    api.post('/waste/requests', () => createdReq);
+    api.get('/waste/requests/:id', () => createdReq);
+
+    await page.goto('/recycle/new');
+    const card = page.locator('[data-item]').filter({ hasText: 'Thùng carton cũ' });
+    for (let i = 0; i < 5; i++) await card.getByRole('button', { name: 'Tăng số lượng' }).click();
+    await page.getByRole('button', { name: 'Tiếp tục' }).click();
+    await page.getByRole('radio', { name: /Shipper lấy tận nhà/ }).click();
+
+    const shortBlock = page.getByTestId('home-pickup-fee-short');
+    await expect(shortBlock).toBeVisible();
+    await expect(shortBlock.getByText('Miễn phí lấy rác 100%')).toBeVisible();
+    await expect(shortBlock.getByText('Khuyên dùng')).toBeVisible();
+    await expect(page.getByTestId('home-pickup-cash-due')).toHaveText('17.000đ');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+
+    const attachBox = await page.getByTestId('fee-path-attach').boundingBox();
+    expect(attachBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+    const walletBox = await page.getByTestId('fee-path-wallet').boundingBox();
+    expect(walletBox?.height ?? 0).toBeGreaterThanOrEqual(44);
+
+    // 1 chạm chuyển sang Thu kèm đơn mua kế tiếp -> giữ nguyên món, đổi phương thức
+    await page.getByTestId('fee-path-attach').click();
+    await expect(page.getByTestId('home-pickup-fee-short')).toHaveCount(0);
+    await expect(page.getByRole('radio', { name: /Thu kèm đơn mua/ })).toHaveAttribute('aria-checked', 'true');
+
+    // Quay lại Shipper lấy tận nhà -> chọn trả 17.000đ bằng Ví Tubu
+    await page.getByRole('radio', { name: /Shipper lấy tận nhà/ }).click();
+    await expect(page.getByTestId('home-pickup-fee-short')).toBeVisible();
+    await page.getByText('Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này').click();
+    await expect(page.getByRole('button', { name: 'Chọn cách trả phí' })).toBeDisabled();
+    await page.getByTestId('fee-path-wallet').click();
+    const payBtn = page.getByRole('button', { name: 'Trả 17.000đ từ Ví và đặt lấy rác' });
+    await expect(payBtn).toBeEnabled();
+    await payBtn.click();
+
+    await expect(page.getByText('TR-W178K').first()).toBeVisible();
+    await expect(page.getByText('Đã trả từ Ví')).toBeVisible();
+    const [created] = api.callsTo('POST', '/waste/requests');
+    expect(created?.body).toMatchObject({
+      method: 'HOME_PICKUP',
+      usePointsForShipFee: true,
+      shipFeePayment: 'WALLET',
+      expectedCashVnd: 17_000,
+    });
   });
 });

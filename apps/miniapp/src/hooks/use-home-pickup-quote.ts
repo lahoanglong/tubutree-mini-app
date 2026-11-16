@@ -45,7 +45,7 @@ export function useHomePickupQuote(args: {
   const addresses = addressesQ.data ?? [];
   const address = pickHomePickupAddress(addresses, form.addressId);
   const weightGrams = form.weightGrams ?? defaultHomePickupWeight(estimateLinesGrams(lines, items));
-  const effective: HomePickupForm = { addressId: address?.id ?? null, weightGrams };
+  const effective: HomePickupForm = { addressId: address?.id ?? null, weightGrams, payment: form.payment ?? null };
 
   const requestKey = JSON.stringify(homePickupQuoteRequest(effective, lines));
   const debouncedKey = useDebounced(requestKey, HOME_PICKUP_QUOTE_DEBOUNCE_MS);

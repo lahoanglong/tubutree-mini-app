@@ -1,6 +1,6 @@
 import type { CouponType } from './enums';
 
-// Closed lists; the first fourteen mirror the Prisma enums and are checked against @prisma/client by waste-contract.spec.ts.
+// Closed lists; the first fifteen mirror the Prisma enums and are checked against @prisma/client by waste-contract.spec.ts.
 export const WASTE_ITEM_STATUS_VALUES = ['ACTIVE', 'COMING_SOON', 'HIDDEN'] as const;
 export type WasteItemStatus = (typeof WASTE_ITEM_STATUS_VALUES)[number];
 export const WASTE_POINT_KIND_VALUES = ['WAREHOUSE', 'PARTNER'] as const;
@@ -191,7 +191,7 @@ export interface WastePointStaffAddRequest { userId: string; role: WastePointSta
 export interface WastePerkReviewRequest { expectedPendingText: string }
 export interface AdminWasteRequestQuery { method?: WasteMethod; status?: WasteRequestStatus; filter?: WasteRequestQueueFilter; userId?: string; pointId?: string; cursor?: string; limit?: number }
 export interface AdminWasteRequestRowDTO { id: string; code: string; method: WasteMethod; status: WasteRequestStatus; closeReason: WasteCloseReason | null; createdAt: string; expiresAt: string | null; inTransitAt: string | null; receivedAt: string | null; completedAt: string | null; estimatedPoints: number; pointsAwarded: number | null; pointId: string; pointName: string; customerName: string; customerPhone: string | null; userId?: string; carrier: string | null; trackingCode: string | null; trackingConflict: boolean; orderCode: string | null; waitingReason: 'CUSTOMER_BLOCKED' | 'ORDER_NOT_DELIVERED' | null }
-export interface WasteRequestAdminDetailDTO extends WasteRequestDetailDTO { lines: (WasteRequestLineDTO & { hazardous: boolean })[]; customerName: string; customerPhone: string | null; userId?: string; trackingConflict: boolean; confirmedByUserId: string | null; receivedWeightGrams: number | null; carrierCostVnd: number | null; reversedAt: string | null; reversedByUserId: string | null; reversalShortfallPoints: number | null; capDayKey: string; capMonthKey: string; consentAt: string; consentVersion: string; /** Chỉ admin, yêu cầu COMPLETED: số dư hiện tại và số điểm Thu hồi sẽ trừ nếu bấm lúc này. */ reversePreview?: { pointsBalance: number; expectedTake: number }; events?: AdminWasteEventDTO[] }
+export interface WasteRequestAdminDetailDTO extends WasteRequestDetailDTO { lines: (WasteRequestLineDTO & { hazardous: boolean })[]; customerName: string; customerPhone: string | null; userId?: string; shipFeeBankRef?: string | null; trackingConflict: boolean; confirmedByUserId: string | null; receivedWeightGrams: number | null; carrierCostVnd: number | null; reversedAt: string | null; reversedByUserId: string | null; reversalShortfallPoints: number | null; capDayKey: string; capMonthKey: string; consentAt: string; consentVersion: string; /** Chỉ admin, yêu cầu COMPLETED: số dư hiện tại và số điểm Thu hồi sẽ trừ nếu bấm lúc này. */ reversePreview?: { pointsBalance: number; expectedTake: number }; events?: AdminWasteEventDTO[] }
 export interface AdminWasteEventDTO { id: string; createdAt: string; kind: string; actorUserId: string | null; actorRole: WasteActorRole; requestId: string | null; pointId: string | null; giftRedemptionId: string | null; meta: Record<string, unknown> | null }
 export interface WasteReceiveRequest { match?: WasteMatchInput; receivedWeightGrams?: number /* integer 1..100000, outside the replay comparison (spec 15.3) */ }
 export type WasteReceiveResultDTO = { outcome: 'RECEIVED'; requestId: string; receivedAt: string } | { outcome: 'ALREADY_RECEIVED'; receivedAt: string } | { outcome: 'UNMATCHED'; unmatchedId: string; reason: WasteUnmatchedReason };
@@ -203,6 +203,8 @@ export interface WasteReverseResultDTO { requestId: string; status: 'REVERSED'; 
 export interface WasteCostRequest { carrierCostVnd?: number; receivedWeightGrams?: number /* integer 1..100000, outside the replay comparison (spec 15.3) */ }
 export interface WasteCloseLostRequest { reason: string }
 export interface WasteReopenRequest { reason: string; unmatchedId?: string }
+export interface WasteFeeBankConfirmRequest { amount: number; bankRef: string }
+export interface WasteFeeBankConfirmResultDTO { outcome: 'PAID' | 'ALREADY_PAID' | 'CREDITED_LATE_TO_WALLET'; request: WasteRequestAdminDetailDTO }
 export interface WasteUserFlagsDTO { userId: string; shipLockedAt: string | null; shipUnlockedAt: string | null; blockedAt: string | null; reason: string | null; setByUserId: string | null; updatedAt: string | null }
 export interface WasteUserFlagsUpdateRequest { shipLocked?: boolean; blocked?: boolean; reason: string }
 export interface AdminWasteGiftDTO { id: string; kind: WasteGiftKind; name: string; description: string | null; label: string | null; pointsCost: number; status: WasteGiftStatus; sortOrder: number; imageUrl: string | null; stock: number | null; claimInstructions: string | null; voucher: WasteVoucherSpec | null; redemptionCount: number; fundTreeTotal?: number; treePointsPrice?: number }

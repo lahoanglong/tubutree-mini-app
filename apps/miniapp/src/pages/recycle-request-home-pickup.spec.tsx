@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   auth: { status: 'authenticated' as const },
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
   getWasteRequest: vi.fn(),
+  getWasteFeeQr: vi.fn(),
   getWasteMe: vi.fn(),
   getWastePoints: vi.fn(),
   cancelWasteRequest: vi.fn(),
@@ -35,6 +36,7 @@ vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publ
 vi.mock('../services/waste-api', async (orig) => ({
   ...(await orig<object>()),
   getWasteRequest: mocks.getWasteRequest,
+  getWasteFeeQr: mocks.getWasteFeeQr,
   getWasteMe: mocks.getWasteMe,
   getWastePoints: mocks.getWastePoints,
   cancelWasteRequest: mocks.cancelWasteRequest,
@@ -168,5 +170,36 @@ describe('/recycle/r/:id: đơn Shipper lấy tận nhà', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Huỷ đơn thu gom' }));
     expect(await screen.findByRole('dialog')).not.toHaveTextContent('hoàn lại');
+  });
+
+  it('W178-E: phiếu OPEN chọn BANK_TRANSFER chưa thanh toán hiện mã VietQR ngay trong trang chi tiết, không mở route mới', async () => {
+    mocks.getWasteRequest.mockResolvedValue(
+      makeHomePickupRequest({
+        homePickup: makeHomePickup({
+          gomdonStatus: null,
+          shipFeePointsUsed: 8_000,
+          shipFeeCashVnd: 17_000,
+          shipFeeCashMethod: 'BANK_TRANSFER',
+          shipFeeCashPaid: false,
+        }),
+      }),
+    );
+    mocks.getWasteFeeQr.mockResolvedValue({
+      orderCode: 'TR-8K2M9',
+      amount: 17_000,
+      paymentStatus: 'UNPAID',
+      paymentDeadline: '2026-12-01T10:00:00.000Z',
+      serverNow: '2026-12-01T09:00:00.000Z',
+      bank: { bin: '970422', name: 'MB Bank', accountNo: '0123456789', accountName: 'TUBU TREE' },
+      memo: 'WRTR8K2M9',
+      qrString: '000201...',
+      qrImageUrl: 'https://img.vietqr.io/image/970422-0123456789-compact2.png',
+    });
+    renderPage();
+    const qr = await screen.findByTestId('home-pickup-fee-qr');
+    expect(qr).toHaveTextContent('Chuyển khoản phí lấy rác');
+    await waitFor(() => expect(qr).toHaveTextContent('WRTR8K2M9'));
+    expect(qr).toHaveTextContent('0123456789');
+    expect(screen.getByTestId('home-pickup-detail')).toHaveTextContent('Còn chờ chuyển khoản');
   });
 });

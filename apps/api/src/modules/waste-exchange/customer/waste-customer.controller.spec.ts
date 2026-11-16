@@ -29,7 +29,7 @@ const svc = <T extends string>(...m: T[]) => Object.fromEntries(m.map((k) => [k,
 async function build(enabled: boolean) {
   const me = svc('me', 'rules', 'openCount');
   const catalogue = svc('listItems', 'listPoints', 'nearbyPoints');
-  const requests = svc('list', 'detail', 'byOrder', 'create', 'edit', 'setTracking', 'cancel', 'pickupQuote');
+  const requests = svc('list', 'detail', 'feeQr', 'byOrder', 'create', 'edit', 'setTracking', 'cancel', 'pickupQuote');
   const preview = svc('preview');
   const mod = await Test.createTestingModule({
     controllers: [WasteCustomerController],
@@ -82,8 +82,10 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     const { c, requests } = await build(false);
     await expect(c.list('blocked')).resolves.toEqual({ ok: 'list' });
     await expect(c.detail('blocked', 'r1')).resolves.toEqual({ ok: 'detail' });
+    await expect(c.feeQr('blocked', 'r1')).resolves.toEqual({ ok: 'feeQr' });
     await expect(c.byOrder('real', 'o1')).resolves.toEqual({ ok: 'byOrder' });
     expect(requests.detail).toHaveBeenCalledWith('blocked', 'r1');
+    expect(requests.feeQr).toHaveBeenCalledWith('blocked', 'r1');
     expect(requests.byOrder).toHaveBeenCalledWith('real', 'o1');
     await expect(c.list('guest')).rejects.toThrow('Ưu đãi này chỉ dành cho tài khoản đã đăng nhập Zalo. Bạn đăng nhập bằng Zalo rồi thử lại nhé.');
   });
@@ -93,7 +95,7 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     const routes = Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).map((k) => [k, Reflect.getMetadata(METHOD_METADATA, (p as never)[k]), Reflect.getMetadata(PATH_METADATA, (p as never)[k])]);
     expect(routes).toEqual([
       ['me', 0, 'me'], ['openCount', 0, 'me/open-count'], ['rules', 0, 'rules'], ['publicCatalogue', 0, 'catalogue'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'], ['pickupQuote', 1, 'pickup-quote'],
-      ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['create', 1, 'requests'], ['edit', 4, 'requests/:id'],
+      ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['feeQr', 0, 'requests/:id/fee-qr'], ['create', 1, 'requests'], ['edit', 4, 'requests/:id'],
       ['setTracking', 2, 'requests/:id/tracking'], ['cancel', 1, 'requests/:id/cancel'],
     ]);
     expect(Reflect.getMetadata('__headers__', p.publicCatalogue)).toEqual([{ name: 'Cache-Control', value: 'public, max-age=60' }]);
@@ -271,9 +273,14 @@ describe('read DTOs (global ValidationPipe)', () => {
   ])('create DTO rejects %j', async (b) => {
     await expect(run(WasteCreateDto, b)).rejects.toThrow();
   });
-  it('create DTO nhận HOME_PICKUP kèm địa chỉ, cân nặng 500 đến 10.000 g và công tắc trừ điểm; từ chối cân nặng ngoài biên hoặc công tắc không phải boolean', async () => {
+  it('create DTO nhận HOME_PICKUP kèm địa chỉ, cân nặng 500 đến 10.000 g, công tắc trừ điểm, shipFeePayment và expectedCashVnd; từ chối giá trị ngoài biên', async () => {
     const ok = { method: 'HOME_PICKUP', lines: [{ itemId: 'a', declaredQty: 15 }], consent: true, pickupAddressId: 'a1', declaredWeightGrams: 2500, usePointsForShipFee: true };
     await expect(run(WasteCreateDto, ok)).resolves.toBeInstanceOf(WasteCreateDto);
+    await expect(run(WasteCreateDto, { ...ok, shipFeePayment: 'WALLET', expectedCashVnd: 17000 })).resolves.toBeInstanceOf(WasteCreateDto);
+    await expect(run(WasteCreateDto, { ...ok, shipFeePayment: 'BANK_TRANSFER', expectedCashVnd: 0 })).resolves.toBeInstanceOf(WasteCreateDto);
+    await expect(run(WasteCreateDto, { ...ok, shipFeePayment: 'COD' })).rejects.toThrow();
+    await expect(run(WasteCreateDto, { ...ok, expectedCashVnd: -1 })).rejects.toThrow();
+    await expect(run(WasteCreateDto, { ...ok, expectedCashVnd: 10_000_001 })).rejects.toThrow();
     await expect(run(WasteCreateDto, { ...ok, declaredWeightGrams: 499 })).rejects.toThrow();
     await expect(run(WasteCreateDto, { ...ok, declaredWeightGrams: 10_001 })).rejects.toThrow();
     await expect(run(WasteCreateDto, { ...ok, usePointsForShipFee: 'yes' })).rejects.toThrow();

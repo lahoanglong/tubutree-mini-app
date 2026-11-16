@@ -47,6 +47,8 @@ export interface HomePickupRow {
   gomdonStatus: string | null;
   gomdonStatusAt: Date | null;
   shipFeePointsUsed: number | null;
+  shipFeeCashVnd?: number | null;
+  shipFeeCashPaidAt?: Date | null;
   shippingHistory: unknown;
 }
 
@@ -61,6 +63,8 @@ export const HOME_PICKUP_ROW_SELECT = {
   gomdonStatus: true,
   gomdonStatusAt: true,
   shipFeePointsUsed: true,
+  shipFeeCashVnd: true,
+  shipFeeCashPaidAt: true,
   shippingHistory: true,
 } as const;
 
@@ -97,6 +101,7 @@ export interface CloseOpenArgs {
 export interface CloseOpenResult {
   closed: boolean;
   refunded: number;
+  refundedCashVnd?: number;
 }
 
 const asHistory = (v: unknown): unknown[] => (Array.isArray(v) ? v : []);
@@ -258,14 +263,16 @@ export class WasteHomePickupService {
   }
 
   private alertFor(req: HomePickupRow, status: number, name: string): string | undefined {
+    const paidCash = (req.shipFeeCashVnd ?? 0) > 0 && req.shipFeeCashPaidAt != null ? req.shipFeeCashVnd! : 0;
+    const cashClause = paidCash > 0 ? ` và ${paidCash.toLocaleString('vi-VN')}đ phí đã thu` : '';
     if ([6, 8, 9, 11, 12].includes(status)) {
-      return `Gomdon báo "${name}" cho phiếu thu gom ${req.code} (Điểm Xanh phí ship KHÔNG tự hoàn). Kiểm tra với Gomdon/BestExpress và liên hệ khách.`;
+      return `Gomdon báo "${name}" cho phiếu thu gom ${req.code} (Điểm Xanh phí ship${cashClause} KHÔNG tự hoàn). Kiểm tra với Gomdon/BestExpress và liên hệ khách.`;
     }
     if ((status === 2 || status === 10) && req.status !== 'CANCELLED' && req.status !== 'EXPIRED') {
-      return `Gomdon báo "${name}" cho phiếu thu gom ${req.code} nhưng phiếu đang ${req.status}${gomdonRank(req.gomdonStatus) >= PICKED_UP_RANK ? ' và bưu tá đã lấy rác' : ''}: Điểm Xanh phí ship KHÔNG tự hoàn, cần người kiểm tra.`;
+      return `Gomdon báo "${name}" cho phiếu thu gom ${req.code} nhưng phiếu đang ${req.status}${gomdonRank(req.gomdonStatus) >= PICKED_UP_RANK ? ' và bưu tá đã lấy rác' : ''}: Điểm Xanh phí ship${cashClause} KHÔNG tự hoàn, cần người kiểm tra.`;
     }
     if ([3, 4, 5, 7].includes(status) && (req.status === 'CANCELLED' || req.status === 'EXPIRED')) {
-      return `Gomdon báo "${name}" cho phiếu thu gom ${req.code} nhưng phiếu đã đóng (${req.status}) và điểm phí ship đã hoàn: kiểm tra rác đang về kho với khách.`;
+      return `Gomdon báo "${name}" cho phiếu thu gom ${req.code} nhưng phiếu đã đóng (${req.status}) và điểm phí ship${cashClause ? ' / phí đã thu' : ''} đã hoàn: kiểm tra rác đang về kho với khách.`;
     }
     return undefined;
   }

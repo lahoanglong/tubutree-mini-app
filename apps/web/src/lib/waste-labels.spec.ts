@@ -76,6 +76,12 @@ describe('waste-labels', () => {
 
   it('nhật ký sự kiện: nhãn có chữ, kind lạ là "Sự kiện khác", meta chỉ ra câu đã biết', () => {
     expect(wasteEventKindLabel('REQUEST_CONFIRMED')).toBe('Xác nhận và cộng điểm');
+    expect(wasteEventKindLabel('FEE_BANK_PAID')).toBe('Xác nhận chuyển khoản phí lấy rác');
+    expect(wasteEventMetaLines('FEE_BANK_PAID', { amount: 17000, bankRef: 'FT99', lateRefundedToWallet: true })).toEqual([
+      'Số tiền: 17.000đ',
+      'Mã GD: FT99',
+      'Phiếu đã đóng nên hoàn thẳng vào Ví Tubu',
+    ]);
     expect(wasteEventKindLabel('NOPE')).toBe('Sự kiện khác');
     expect(wasteEventKindLabel('toString')).toBe('Sự kiện khác');
     expect(wasteActorRoleLabel('SYSTEM')).toBe('Hệ thống');

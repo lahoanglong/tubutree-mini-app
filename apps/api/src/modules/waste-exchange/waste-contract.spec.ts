@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import * as ST from '@tubutree/shared-types';
 import {
-  WasteActorRole, WasteCloseReason, WasteGiftKind, WasteGiftRedemptionStatus, WasteGiftStatus, WasteItemStatus, WasteMethod,
+  WasteActorRole, WasteCloseReason, WasteFeeCashMethod, WasteGiftKind, WasteGiftRedemptionStatus, WasteGiftStatus, WasteItemStatus, WasteMethod,
   WastePointKind, WastePointStaffRole, WastePointStatus, WasteRejectionReason, WasteRequestStatus, WasteShortfallReason, WasteUnmatchedStatus,
 } from '@prisma/client';
 
@@ -16,6 +16,7 @@ const PRISMA_BACKED: [string, readonly string[], Record<string, string>][] = [
   ['WASTE_CLOSE_REASON_VALUES', ST.WASTE_CLOSE_REASON_VALUES, WasteCloseReason],
   ['WASTE_REJECTION_REASON_VALUES', ST.WASTE_REJECTION_REASON_VALUES, WasteRejectionReason],
   ['WASTE_SHORTFALL_REASON_VALUES', ST.WASTE_SHORTFALL_REASON_VALUES, WasteShortfallReason],
+  ['WASTE_FEE_CASH_METHOD_VALUES', ST.WASTE_FEE_CASH_METHOD_VALUES, WasteFeeCashMethod],
   ['WASTE_ACTOR_ROLE_VALUES', ST.WASTE_ACTOR_ROLE_VALUES, WasteActorRole],
   ['WASTE_UNMATCHED_STATUS_VALUES', ST.WASTE_UNMATCHED_STATUS_VALUES, WasteUnmatchedStatus],
   ['WASTE_GIFT_KIND_VALUES', ST.WASTE_GIFT_KIND_VALUES, WasteGiftKind],
@@ -31,6 +32,7 @@ const PURE: [string, readonly string[], string[]][] = [
   ['WASTE_PREVIEW_BLOCK_VALUES', ST.WASTE_PREVIEW_BLOCK_VALUES, ['BELOW_MIN', 'MONTH_CAP_FOR_MIN', 'ITEM_MONTH_CAP', 'ITEM_DAY_CAP', 'POINTS_MONTH_CAP', 'POINT_QUOTA_FULL', 'POINT_UNAVAILABLE', 'ITEM_NOT_ACTIVE', 'ITEM_DROPOFF_ONLY', 'POINT_MISSING_ITEMS', 'LANE_DISABLED', 'SHIP_LOCKED', 'MAX_OPEN', 'PICKUP_PENDING', 'NEED_PROVINCE']],
   ['WASTE_ALERT_KIND_VALUES', ST.WASTE_ALERT_KIND_VALUES, ['QUOTA_PACE', 'FULL_MATCH', 'FULL_MATCH_CONFIRMER', 'AVG_UNITS', 'AVG_UNITS_CONFIRMER', 'REPEAT_CUSTOMER', 'LOOKUP_MISS', 'STAFF_ACCOUNT_CONFIRMED', 'STAFF_DIRECT']],
   ['WASTE_REQUEST_QUEUE_FILTER_VALUES', ST.WASTE_REQUEST_QUEUE_FILTER_VALUES, ['TO_COUNT', 'EXPIRED', 'CUSTOMER_BLOCKED', 'ORDER_NOT_DELIVERED', 'TRANSIT_OVERDUE', 'ORDER_MISMATCH']],
+  ['WASTE_FEE_ERROR_CODES', ST.WASTE_FEE_ERROR_CODES, ['WASTE_FEE_NEED_PAYMENT', 'WASTE_FEE_CHANGED', 'WASTE_FEE_BANK_DISABLED']],
 ];
 
 describe('shared-types waste unions', () => {
@@ -47,9 +49,9 @@ describe('shared-types waste unions', () => {
 
 const WASTE_TS = readFileSync(join(__dirname, '../../../../../packages/shared-types/src/waste.ts'), 'utf-8');
 const EXPORTED_NAMES = [
-  // unions (21)
+  // unions (23)
   'WasteRequestStatus', 'WasteMethod', 'WasteItemStatus', 'WastePointKind', 'WastePointStatus', 'WastePointStaffRole', 'WasteShortfallReason',
-  'WasteRejectionReason', 'WasteCloseReason', 'WasteActorRole', 'WasteMatchBasis', 'WasteUnmatchedStatus', 'WasteUnmatchedReason', 'WasteGiftKind',
+  'WasteRejectionReason', 'WasteCloseReason', 'WasteFeeCashMethod', 'WasteFeeErrorCode', 'WasteActorRole', 'WasteMatchBasis', 'WasteUnmatchedStatus', 'WasteUnmatchedReason', 'WasteGiftKind',
   'WasteGiftStatus', 'WasteGiftRedemptionStatus', 'WasteEligibility', 'WasteWeekday', 'WastePreviewBlock', 'WasteAlertKind', 'WasteRequestQueueFilter',
   // config shapes (7)
   'WasteFeeTable', 'WasteFeeEstimate', 'WasteAlertThresholds', 'WastePublicFlags', 'WasteOpeningHours', 'WasteLaneFlags', 'WasteParcelLimits',
@@ -63,18 +65,18 @@ const EXPORTED_NAMES = [
   'WasteDeskPointDTO', 'WasteDeskLookupRequest', 'WasteDeskRequestDTO', 'WasteDeskGiftDTO', 'WasteDeskLookupDTO', 'WasteMatchInput', 'WasteConfirmLineInput',
   'WasteConfirmRequest', 'WasteRejectRequest', 'WasteConfirmResultDTO', 'WasteRejectResultDTO', 'WasteDeskGiftFulfilRequest', 'WastePerkSubmitRequest',
   'WastePointMonthlyReportDTO',
-  // admin (32)
+  // admin (34)
   'AdminWasteItemDTO', 'WasteItemUpsertRequest', 'AdminWastePointDTO', 'AdminWastePointQuery', 'WastePointUpsertRequest', 'WastePointStaffDTO',
   'WastePointStaffAddRequest', 'AdminWasteRequestQuery', 'AdminWasteRequestRowDTO', 'WasteRequestAdminDetailDTO', 'AdminWasteEventDTO', 'WasteReceiveRequest',
   'WasteReceiveResultDTO', 'WasteUnmatchedDTO', 'WasteUnmatchedCreateRequest', 'WasteUnmatchedResolveRequest', 'WasteReverseRequest', 'WasteReverseResultDTO',
-  'WasteCostRequest', 'WasteCloseLostRequest', 'WasteReopenRequest', 'WasteUserFlagsDTO', 'WasteUserFlagsUpdateRequest', 'AdminWasteGiftDTO',
+  'WasteCostRequest', 'WasteCloseLostRequest', 'WasteReopenRequest', 'WasteFeeBankConfirmRequest', 'WasteFeeBankConfirmResultDTO', 'WasteUserFlagsDTO', 'WasteUserFlagsUpdateRequest', 'AdminWasteGiftDTO',
   'WasteGiftUpsertRequest', 'GiftRedemptionsQuery', 'AdminGiftRedemptionRowDTO', 'WasteGiftCancelRequest', 'WasteReorderRequest', 'WasteMonthMetrics',
   'WasteAlertDTO', 'WasteOverviewDTO',
 ];
 
 describe('st/waste.ts exports the full registry 4.9 name set', () => {
-  it('lists 97 distinct names', () => {
-    expect(new Set(EXPORTED_NAMES).size).toBe(97);
+  it('lists 101 distinct names', () => {
+    expect(new Set(EXPORTED_NAMES).size).toBe(101);
   });
   it.each(EXPORTED_NAMES)('exports %s as an interface or type', (name) => {
     expect(WASTE_TS).toMatch(new RegExp(`^export (?:interface|type) ${name}\\b`, 'm'));

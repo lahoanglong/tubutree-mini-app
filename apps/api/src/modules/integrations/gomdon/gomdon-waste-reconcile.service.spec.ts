@@ -20,7 +20,7 @@ beforeEach(() => {
 afterEach(() => jest.useRealTimers());
 
 describe('GomdonWasteReconcileService.redrivePushes', () => {
-  it('chỉ lấy phiếu HOME_PICKUP còn OPEN, chưa có vận đơn nào, chưa từng claim, tạo quá 15 phút, cũ nhất trước, tối đa 50', async () => {
+  it('chỉ lấy phiếu HOME_PICKUP còn OPEN, đã thu đủ phí (loại AWAITING), chưa có vận đơn nào, chưa từng claim, tạo quá 15 phút, cũ nhất trước, tối đa 50', async () => {
     const { svc, findMany } = build();
     await svc.redrivePushes();
     expect(findMany).toHaveBeenCalledWith({
@@ -30,6 +30,7 @@ describe('GomdonWasteReconcileService.redrivePushes', () => {
         gomdonOrderId: null,
         gomdonPartnerCode: null,
         gomdonStatus: null,
+        OR: [{ shipFeeCashVnd: null }, { shipFeeCashVnd: { lte: 0 } }, { shipFeeCashPaidAt: { not: null } }],
         createdAt: { lt: new Date('2026-11-15T09:45:00.000Z') },
       },
       select: { id: true, code: true },

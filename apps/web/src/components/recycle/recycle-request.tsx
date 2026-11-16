@@ -33,7 +33,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { DeclaredCountedTable } from './declared-counted-table';
 import { SupportContact } from '@/components/support-contact';
 import { RecycleTimeline } from './recycle-timeline';
-import { HomePickupDetail } from './recycle-home-pickup';
+import { HomePickupDetail, HomePickupFeeQrCard } from './recycle-home-pickup';
 import {
   METHOD_LABELS,
   TIMELINE_STEPS,
@@ -427,6 +427,11 @@ export function RecycleRequestDetail({ id }: { id: string }) {
                     </button>
                   </div>
                 ))}
+            </section>
+          )}
+          {isHome && open && r.homePickup?.shipFeeCashMethod === 'BANK_TRANSFER' && !r.homePickup.shipFeeCashPaid && (
+            <section className={BLOCK}>
+              <HomePickupFeeQrCard requestId={r.id} />
             </section>
           )}
           {isHome && r.homePickup && (

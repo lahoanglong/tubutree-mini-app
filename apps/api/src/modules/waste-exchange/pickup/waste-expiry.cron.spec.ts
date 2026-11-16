@@ -73,7 +73,14 @@ function setup(
   });
   const orderFind = jest.fn(async ({ where }: { where: { id: string } }) => ({ gomdonStatus: o.gomdon?.[where.id] ?? null }));
   (runExclusive as jest.Mock).mockImplementation(holdsLease(o.locked ?? true));
-  const tx = { wasteRequest: { updateMany }, order: { findUnique: orderFind } };
+  const tx = {
+    wasteRequest: {
+      updateMany,
+      findUnique: jest.fn(async () => ({ shipFeeCashVnd: null, shipFeeCashPaidAt: null, shipFeeCashRefundedVnd: null })),
+      update: jest.fn(async () => ({})),
+    },
+    order: { findUnique: orderFind },
+  };
   const order: string[] = [];
   const access = { availablePointIds: jest.fn(async (_db: unknown, ids: string[]) => new Set(ids.filter((id) => !o.unavailablePoints?.includes(id)))) };
   const quotaOf = o.quota ?? {};
@@ -166,7 +173,7 @@ describe('WasteExpiryCron.run (§12.3)', () => {
     await cron.run(NOW);
     expect(findMany).toHaveBeenCalledWith({
       where: { expiresAt: { lt: NOW }, OR: [{ status: 'OPEN', orderId: null }, { status: 'IN_TRANSIT', method: 'PICKUP' }] },
-      select: { id: true, code: true, userId: true, pointId: true, method: true, status: true, orderId: true, shipFeePointsUsed: true, gomdonOrderId: true },
+      select: { id: true, code: true, userId: true, pointId: true, method: true, status: true, orderId: true, shipFeePointsUsed: true, shipFeeCashVnd: true, shipFeeCashPaidAt: true, gomdonOrderId: true },
       orderBy: { id: 'asc' },
       take: 200,
     });

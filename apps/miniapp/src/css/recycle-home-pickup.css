@@ -130,3 +130,115 @@
   text-align: right;
   overflow-wrap: anywhere;
 }
+
+/* W178: khối chọn cách xử lý khi Điểm Xanh chưa đủ trả hết phí lấy rác (mọi hàng >= 44px, tabular-nums). */
+.tubu-hp-short-row {
+  box-sizing: border-box;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-inline-sm);
+  font-variant-numeric: tabular-nums;
+}
+.tubu-hp-sep {
+  border: 0;
+  border-top: 1px solid var(--color-border-subtle);
+  margin: 4px 0;
+}
+.tubu-hp-opts {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.tubu-hp-opt {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 48px;
+  margin: 0;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border: 1.5px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+.tubu-hp-opt[aria-checked='true'] {
+  border-color: var(--color-border-selected);
+  background: var(--color-bg-subtle);
+}
+.tubu-hp-opt-recommend {
+  border-color: var(--color-action-primary-bg);
+}
+.tubu-hp-opt[aria-disabled='true'],
+.tubu-hp-opt:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.tubu-hp-opt-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.tubu-hp-link {
+  box-sizing: border-box;
+  min-height: 44px;
+  margin: 0;
+  padding: 4px 0;
+  display: inline-flex;
+  align-items: center;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--color-action-primary-bg);
+  text-align: left;
+  cursor: pointer;
+}
+
+/* W178-E: thẻ VietQR ngay trong trang chi tiết phiếu đang chờ chuyển khoản phí lấy rác. */
+.tubu-hp-qr {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-variant-numeric: tabular-nums;
+}
+.tubu-hp-qr-img {
+  width: 200px;
+  height: 200px;
+  align-self: center;
+  object-fit: contain;
+  border-radius: var(--radius-control);
+  background: #fff;
+  padding: 6px;
+}
+.tubu-hp-qr-row {
+  box-sizing: border-box;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border-top: 1px solid var(--color-border-subtle);
+  padding: 6px 0;
+}
+.tubu-hp-qr-copy {
+  box-sizing: border-box;
+  min-height: 44px;
+  padding: 0 10px;
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  font: inherit;
+  color: var(--color-action-primary-bg);
+  cursor: pointer;
+  flex-shrink: 0;
+}

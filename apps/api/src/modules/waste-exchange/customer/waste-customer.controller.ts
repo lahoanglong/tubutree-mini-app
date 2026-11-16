@@ -3,11 +3,13 @@ import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
 import { ArrayMaxSize, ArrayMinSize, Equals, IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateNested } from 'class-validator';
 import {
+  WASTE_FEE_CASH_METHOD_VALUES,
   WASTE_HOME_PICKUP_MAX_GRAMS,
   WASTE_HOME_PICKUP_MIN_GRAMS,
   WASTE_METHOD_VALUES,
   type WasteCreateRequest,
   type WasteEditRequest,
+  type WasteFeeCashMethod,
   type WasteLineInput,
   type WasteMethod,
   type WasteNearbyRequest,
@@ -152,6 +154,16 @@ export class WasteCreateDto implements WasteCreateRequest {
   @IsOptional()
   @IsBoolean()
   usePointsForShipFee?: boolean;
+
+  @IsOptional()
+  @IsIn(WASTE_FEE_CASH_METHOD_VALUES)
+  shipFeePayment?: WasteFeeCashMethod;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(10_000_000)
+  expectedCashVnd?: number;
 }
 
 export class WasteEditDto implements WasteEditRequest {
@@ -275,6 +287,13 @@ export class WasteCustomerController {
   async detail(@CurrentUser('sub') userId: string, @Param('id') id: string) {
     await this.gate(userId, 'OWN');
     return this.requests.detail(userId, id);
+  }
+
+  @Get('requests/:id/fee-qr')
+  @Throttle({ default: { ttl: 60_000, limit: 30 } })
+  async feeQr(@CurrentUser('sub') userId: string, @Param('id') id: string) {
+    await this.gate(userId, 'OWN');
+    return this.requests.feeQr(userId, id);
   }
 
   @Post('requests')

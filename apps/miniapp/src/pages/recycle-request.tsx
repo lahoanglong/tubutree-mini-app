@@ -23,7 +23,7 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useSheetSeq } from '../hooks/use-sheet-seq';
 import { useSyncedDraft } from '../hooks/use-synced-draft';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { HomePickupDetail } from '../components/recycle-home-pickup';
+import { HomePickupDetail, HomePickupFeeQrCard } from '../components/recycle-home-pickup';
 import { QrCode } from '../components/qr-code';
 import { SupportContact } from '../components/support-contact';
 import { SessionUnavailable } from '../components/ui/auth-gate';
@@ -405,6 +405,11 @@ export default function RecycleRequestPage() {
             {closed.reason && <Text variant="body-sm" tone="secondary">{closed.reason}</Text>}
           </section>
         )
+      )}
+      {isHome && open && r.homePickup?.shipFeeCashMethod === 'BANK_TRANSFER' && !r.homePickup.shipFeeCashPaid && (
+        <section style={BLOCK}>
+          <HomePickupFeeQrCard requestId={r.id} />
+        </section>
       )}
       {isHome && r.homePickup && (
         <section style={BLOCK}>

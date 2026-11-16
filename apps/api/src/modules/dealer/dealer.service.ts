@@ -37,7 +37,7 @@ import { isPartnerOwnedVariation, partnerGoodsError, TUBU_OWNED_VARIATION_WHERE 
 import { forBuyer } from '../orders/buyer-order-fields';
 import { canonicalUserId } from '../external-points/external-claim-audit';
 import { isStaffOwnOrder } from '../../common/staff-own-order';
-import { assertBankRefUnusedByOrder, bankRefUsedByOrderMessage, findOrderUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
+import { assertBankRefUnusedByOrder, bankRefUsedByOrderMessage, bankRefUsedByWasteMessage, findOrderUsingBankRef, findWasteRequestUsingBankRef, isBankRefOnPayment, lockBankRef } from '../../common/bank-ref';
 import { isRealUser } from '../../common/real-user';
 import { formatVndDigits } from '../../common/format-vnd';
 import {
@@ -1456,6 +1456,10 @@ export class DealerService {
     }
     if (await isBankRefOnPayment(this.prisma, bankRef, own)) {
       throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+    }
+    const usedWaste = await findWasteRequestUsingBankRef(this.prisma, bankRef);
+    if (usedWaste) {
+      throw new ConflictException(bankRefUsedByWasteMessage(bankRef, usedWaste));
     }
   }
 

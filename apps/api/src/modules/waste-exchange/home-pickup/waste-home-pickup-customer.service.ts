@@ -17,6 +17,7 @@ import { GOMDON_STATE, isGomdonPickedUp } from '../../integrations/gomdon/gomdon
 import { LoyaltyService } from '../../loyalty/loyalty.service';
 import { applyPointsDelta } from '../../loyalty/points-ledger';
 import { SystemConfigService } from '../../system-config/system-config.service';
+import { applyWalletDelta } from '../../wallet/wallet-ledger.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { writeWasteEvent } from '../core/waste-events';
 import { WasteHoldService, type WasteHoldConfig } from '../core/waste-hold.service';
@@ -24,7 +25,7 @@ import { WASTE_MESSAGES } from '../core/waste-messages';
 import { computeWastePublicFlags } from '../core/waste-public-config';
 import { generateWasteCode } from '../waste-codes';
 import { lockWasteCustomer } from '../waste-locks';
-import { WASTE_PICKUP_FEE_REF_TYPE, wastePickupFeeReason } from './waste-home-pickup-ledger';
+import { WASTE_PICKUP_FEE_REF_TYPE, wastePickupFeeCashPayReason, wastePickupFeeReason } from './waste-home-pickup-ledger';
 import { HOME_PICKUP_CARRIER, HOME_PICKUP_ROW_SELECT, WasteHomePickupService } from './waste-home-pickup.service';
 
 const PRIOR_SELECT = {
@@ -36,6 +37,9 @@ const PRIOR_SELECT = {
   gomdonOrderId: true,
   gomdonStatus: true,
   declaredWeightGrams: true,
+  shipFeeCashVnd: true,
+  shipFeeCashMethod: true,
+  shipFeeCashPaidAt: true,
   pickupAddress: true,
   lines: { select: { itemId: true, declaredQty: true } },
 } as const;
@@ -49,6 +53,8 @@ interface Prepared {
   holdCfg: WasteHoldConfig;
   rulesVersion: string;
   windowDays: number | null;
+  bankTransferEnabled: boolean;
+  feePaymentTtlHours: number;
 }
 
 /**
@@ -97,14 +103,34 @@ export class WasteHomePickupCustomerService {
     const fee = await this.gomdon.quoteShopFeeDetailed({ weight: body.declaredWeightGrams, productPrice: 0 });
     const snap = await this.config.snapshot();
     const holdCfg = await this.holdConfig(snap);
+    const now = new Date();
     const evaluated = await this.hold.evaluate(
       this.prisma,
-      { path: 'CREATE', userId, method: 'HOME_PICKUP', lines: body.lines, pointId: null, pickupProvince: address.province, now: new Date() },
+      { path: 'CREATE', userId, method: 'HOME_PICKUP', lines: body.lines, pointId: null, pickupProvince: address.province, now },
       holdCfg,
     );
-    const pointsAvailable = await this.usablePoints(userId);
+    const { pointsAvailable, walletBalance } = await this.usableBalances(userId);
     const pointsApplicable = Math.min(fee.fee, pointsAvailable);
     const shortfall = fee.fee - pointsApplicable;
+    const needFeePayment = check.ok && !fee.estimated && evaluated.messages.length === 0 && !HOME_PICKUP_COD_ENABLED && shortfall > 0;
+    let feePaths: WastePickupQuoteResponse['feePaths'];
+    if (needFeePayment) {
+      const pickupEval = await this.hold.evaluate(
+        this.prisma,
+        { path: 'CREATE', userId, method: 'PICKUP', lines: body.lines, pointId: null, pickupProvince: null, now },
+        holdCfg,
+      );
+      const hasPendingPickup = pickupEval.blocks.some((b) => b.code === 'PICKUP_PENDING');
+      feePaths = {
+        wallet: { balance: walletBalance, enough: walletBalance >= shortfall },
+        bankTransfer: { enabled: snap.homePickupBankTransferEnabled === true },
+        attachNextOrder: {
+          available: pickupEval.blocks.length === 0,
+          reason: pickupEval.messages[0] ?? null,
+          existingRequestId: hasPendingPickup ? (pickupEval.pickupPendingId ?? null) : null,
+        },
+      };
+    }
     return {
       shipFeeVnd: fee.fee,
       estimated: fee.estimated,
@@ -116,6 +142,8 @@ export class WasteHomePickupCustomerService {
       addressOk: check.ok,
       addressMessage: check.ok ? null : check.message ?? WASTE_MESSAGES.HOME_PICKUP_ADDRESS_UNRECOGNIZED,
       blocked: evaluated.messages[0] ?? (!HOME_PICKUP_COD_ENABLED && shortfall > 0 ? WASTE_MESSAGES.HOME_PICKUP_NEED_POINTS(shortfall) : null),
+      blockedCode: needFeePayment ? 'NEED_FEE_PAYMENT' : null,
+      ...(needFeePayment ? { cashDueVnd: shortfall, feePaths } : {}),
     };
   }
 
@@ -233,6 +261,8 @@ export class WasteHomePickupCustomerService {
       rulesVersion: snap.rulesVersion,
       // Đọc ngoài transaction: lần trượt cache cấu hình trong tx xin kết nối pool thứ hai khi tx đang giữ một.
       windowDays: body.usePointsForShipFee === true ? await this.loyalty.returnWindowDays() : null,
+      bankTransferEnabled: snap.homePickupBankTransferEnabled === true,
+      feePaymentTtlHours: snap.feePaymentTtlHours ?? 24,
     };
   }
 
@@ -258,12 +288,18 @@ export class WasteHomePickupCustomerService {
     return address;
   }
 
-  /** Điểm Xanh dùng được để trả phí ship: điểm thường trừ phần còn khoá chờ đổi/trả (cùng luật checkout), cộng lô quy đổi không hết hạn. */
-  private async usablePoints(userId: string): Promise<number> {
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { pointsBalance: true, pointsConvertedBalance: true } });
-    if (!user) return 0;
+  /** Điểm Xanh dùng được để trả phí ship (trừ phần khoá đổi/trả, cộng lô quy đổi) và số dư Ví Tubu hiện có. */
+  private async usableBalances(userId: string): Promise<{ pointsAvailable: number; walletBalance: number }> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { pointsBalance: true, pointsConvertedBalance: true, walletBalance: true },
+    });
+    if (!user) return { pointsAvailable: 0, walletBalance: 0 };
     const locked = user.pointsBalance > 0 ? (await this.loyalty.lockedOrderPoints(userId, new Date())).locked : 0;
-    return Math.max(0, user.pointsBalance - locked) + user.pointsConvertedBalance;
+    return {
+      pointsAvailable: Math.max(0, user.pointsBalance - locked) + user.pointsConvertedBalance,
+      walletBalance: user.walletBalance ?? 0,
+    };
   }
 
   private async createInTx(
@@ -281,6 +317,9 @@ export class WasteHomePickupCustomerService {
       return { id: prior.id, code: prior.code, shouldPush: this.needsPush(prior) };
     }
     if (body.consentVersion !== undefined && body.consentVersion !== p.rulesVersion) throw new BadRequestException(WASTE_MESSAGES.RULES_UPDATED);
+    if (body.shipFeePayment === 'BANK_TRANSFER' && !p.bankTransferEnabled) {
+      throw new BadRequestException({ statusCode: 400, error: 'Bad Request', code: 'WASTE_FEE_BANK_DISABLED', message: WASTE_MESSAGES.HOME_PICKUP_BANK_DISABLED });
+    }
     const result = await this.hold.validateAndHold(
       tx,
       { path: 'CREATE', userId, method: 'HOME_PICKUP', lines: body.lines, pointId: null, pickupProvince: p.address.province, now },
@@ -290,17 +329,40 @@ export class WasteHomePickupCustomerService {
     const fee = p.shipFeeVnd;
     let standardUse = 0;
     let convertedUse = 0;
-    if (body.usePointsForShipFee === true && fee > 0 && p.windowDays !== null) {
-      // Khoá dòng khách rồi mới tính phần dùng được: hai lần tạo phiếu / đặt đơn song song không cùng tiêu một số điểm.
+    const lockUserRow = (body.usePointsForShipFee === true && fee > 0 && p.windowDays !== null) || body.shipFeePayment === 'WALLET';
+    if (lockUserRow) {
+      // Khoá dòng khách rồi mới tính phần dùng được: hai lần tạo phiếu / đặt đơn song song không cùng tiêu một số điểm hay một số dư Ví.
       await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+    }
+    if (body.usePointsForShipFee === true && fee > 0 && p.windowDays !== null) {
       const user = await tx.user.findUnique({ where: { id: userId }, select: { pointsBalance: true, pointsConvertedBalance: true } });
       const lock = await this.loyalty.lockedOrderPoints(userId, now, tx, p.windowDays);
       standardUse = Math.min(fee, Math.max(0, (user?.pointsBalance ?? 0) - lock.locked));
       convertedUse = Math.min(fee - standardUse, user?.pointsConvertedBalance ?? 0);
     }
     const pointsUsed = standardUse + convertedUse;
-    const codVnd = fee - pointsUsed;
-    if (!HOME_PICKUP_COD_ENABLED && codVnd > 0) throw new BadRequestException(WASTE_MESSAGES.HOME_PICKUP_NEED_POINTS(codVnd));
+    const cashVnd = fee - pointsUsed;
+    const codVnd = 0;
+    if (!HOME_PICKUP_COD_ENABLED && cashVnd > 0) {
+      if (!body.shipFeePayment) {
+        throw new BadRequestException({
+          statusCode: 400,
+          error: 'Bad Request',
+          code: 'WASTE_FEE_NEED_PAYMENT',
+          message: WASTE_MESSAGES.HOME_PICKUP_NEED_POINTS(cashVnd),
+          cashDueVnd: cashVnd,
+        });
+      }
+      if (body.expectedCashVnd !== undefined && cashVnd > body.expectedCashVnd) {
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          code: 'WASTE_FEE_CHANGED',
+          message: WASTE_MESSAGES.HOME_PICKUP_FEE_CHANGED(cashVnd),
+          cashDueVnd: cashVnd,
+        });
+      }
+    }
 
     let code: string | null = null;
     for (let i = 0; i < 5 && code === null; i++) {
@@ -310,6 +372,8 @@ export class WasteHomePickupCustomerService {
     if (code === null) throw new ConflictException(WASTE_MESSAGES.RETRY);
 
     const a = p.address;
+    const awaitingBank = cashVnd > 0 && body.shipFeePayment === 'BANK_TRANSFER';
+    const expiresAt = awaitingBank ? new Date(now.getTime() + p.feePaymentTtlHours * 3_600_000) : result.expiresAt;
     const created = await tx.wasteRequest.create({
       data: {
         code,
@@ -321,7 +385,7 @@ export class WasteHomePickupCustomerService {
         estimatedDrops: result.estimatedDrops,
         capDayKey: result.capDayKey,
         capMonthKey: result.capMonthKey,
-        expiresAt: result.expiresAt,
+        expiresAt,
         idempotencyKey,
         consentAt: now,
         consentVersion: p.rulesVersion,
@@ -329,6 +393,13 @@ export class WasteHomePickupCustomerService {
         shipFeeVnd: fee,
         shipFeePointsUsed: pointsUsed,
         shipFeeCodVnd: codVnd,
+        ...(cashVnd > 0
+          ? {
+              shipFeeCashVnd: cashVnd,
+              shipFeeCashMethod: body.shipFeePayment!,
+              shipFeeCashPaidAt: body.shipFeePayment === 'WALLET' ? now : null,
+            }
+          : {}),
         pickupAddress: {
           addressId: a.id,
           recipient: a.recipient,
@@ -338,6 +409,7 @@ export class WasteHomePickupCustomerService {
           province: a.province,
           provinceCode: a.provinceCode,
           wardCode: a.wardCode,
+          ...(body.shipFeePayment ? { requestedPayment: body.shipFeePayment } : {}),
         },
         lines: {
           create: result.lines.map((l) => ({
@@ -369,6 +441,19 @@ export class WasteHomePickupCustomerService {
       if (!applied.applied) throw new ConflictException(WASTE_MESSAGES.HOME_PICKUP_POINTS_CHANGED);
     }
 
+    if (cashVnd > 0 && body.shipFeePayment === 'WALLET') {
+      const debited = await applyWalletDelta(tx, {
+        userId,
+        delta: -cashVnd,
+        type: 'WASTE_FEE_PAY',
+        refType: WASTE_PICKUP_FEE_REF_TYPE,
+        refId: created.id,
+        reason: wastePickupFeeCashPayReason(code),
+        insufficientMessage: WASTE_MESSAGES.HOME_PICKUP_WALLET_INSUFFICIENT,
+      });
+      if (!debited.applied) throw new ConflictException(WASTE_MESSAGES.RETRY);
+    }
+
     await writeWasteEvent(tx, {
       kind: 'REQUEST_CREATED',
       actorUserId: userId,
@@ -385,19 +470,22 @@ export class WasteHomePickupCustomerService {
           shipFeeVnd: fee,
           shipFeePointsUsed: pointsUsed,
           shipFeeCodVnd: codVnd,
+          ...(cashVnd > 0 ? { shipFeeCashVnd: cashVnd, shipFeeCashMethod: body.shipFeePayment! } : {}),
           lines: body.lines.map((l) => ({ itemId: l.itemId, declaredQty: l.declaredQty })),
         },
       },
     });
-    return { id: created.id, code, shouldPush: true };
+    return { id: created.id, code, shouldPush: !awaitingBank };
   }
 
-  /** Cùng khoá idempotency phải cùng nội dung: cùng món và số lượng, cùng địa chỉ lấy, cùng cân nặng khai. */
+  /** Cùng khoá idempotency phải cùng nội dung: cùng món và số lượng, cùng địa chỉ lấy, cùng cân nặng khai và cùng cách trả phí. */
   private sameContent(prior: Prior, body: WasteCreateRequest): boolean {
     if (prior.method !== 'HOME_PICKUP') return false;
     const snapshot = isRecord(prior.pickupAddress) ? prior.pickupAddress : {};
     if (snapshot.addressId !== body.pickupAddressId) return false;
     if (prior.declaredWeightGrams !== (body.declaredWeightGrams ?? null)) return false;
+    const priorPayment = (typeof snapshot.requestedPayment === 'string' ? snapshot.requestedPayment : prior.shipFeeCashMethod) ?? null;
+    if (priorPayment !== (body.shipFeePayment ?? null)) return false;
     const key = (l: { itemId: string; declaredQty: number }) => `${l.itemId}:${l.declaredQty}`;
     const a = prior.lines.map(key).sort();
     const b = body.lines.map(key).sort();
@@ -405,7 +493,8 @@ export class WasteHomePickupCustomerService {
   }
 
   private needsPush(prior: Prior): boolean {
-    return prior.status === 'OPEN' && prior.gomdonOrderId === null && prior.gomdonStatus === null;
+    const awaitingCash = (prior.shipFeeCashVnd ?? 0) > 0 && prior.shipFeeCashPaidAt == null;
+    return prior.status === 'OPEN' && prior.gomdonOrderId === null && prior.gomdonStatus === null && !awaitingCash;
   }
 
   /** Job có jobId ổn định theo mã phiếu và tự bỏ qua phiếu đã có vận đơn nên xếp lại là an toàn; lỗi xếp hàng chỉ ghi log, cron cứu hộ xếp lại. */

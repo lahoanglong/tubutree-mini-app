@@ -53,6 +53,8 @@ const EXPECTED: [key: string, type: string, def: unknown, min?: number, max?: nu
   ['waste.alert_thresholds', 'json', THRESHOLDS],
   ['waste.rules_text', 'string', ''],
   ['waste.rules_version', 'string', '2026-10-17.1'],
+  ['waste.home_pickup_bank_transfer_enabled', 'boolean', false],
+  ['waste.fee_payment_ttl_hours', 'int', 24, 1, 72],
 ];
 const DESC: Record<string, string> = {
   'waste.enabled': 'Cờ tổng của chương trình Đổi rác lấy quà, tắt thì khách không tạo được yêu cầu mới và bàn đại lý bị chặn, kho vẫn xử lý yêu cầu đã có.',
@@ -77,6 +79,8 @@ const DESC: Record<string, string> = {
   'waste.alert_thresholds': 'Ngưỡng cảnh báo bất thường về điểm nhận và người xác nhận, chỉ để admin xem, không tự khoá ai.',
   'waste.rules_text': 'Thể lệ công khai của chương trình, tối đa 8000 ký tự, để trống thì mục Thể lệ hiện ghi chú sắp có.',
   'waste.rules_version': 'Số phiên bản thể lệ, tối đa 32 ký tự. Đổi số này khi sửa nội dung thể lệ để khách đồng ý lại.',
+  'waste.home_pickup_bank_transfer_enabled': 'Bật cách chuyển khoản VietQR cho phần phí lấy rác tận nhà còn thiếu sau khi trừ Điểm Xanh, xác nhận tay bởi kế toán.',
+  'waste.fee_payment_ttl_hours': 'Số giờ giữ yêu cầu lấy rác tận nhà chờ khách chuyển khoản phí còn thiếu, quá hạn thì tự đóng.',
 };
 const INTS = EXPECTED.filter((e) => e[1] === 'int') as [string, string, number, number, number][];
 const BOOLS = EXPECTED.filter((e) => e[1] === 'boolean').map((e) => e[0]);

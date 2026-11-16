@@ -1,13 +1,15 @@
-import { useState } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus } from 'lucide-react';
-import type { WasteHomePickupDTO } from '@tubutree/shared-types';
+import type { WasteFeeCashMethod, WasteHomePickupDTO } from '@tubutree/shared-types';
 import { HOME_PICKUP_WEIGHT_CHIPS_GRAMS, homePickupKgLabel } from '@tubutree/app-core/recycle-home-pickup-state';
 import { homePickupDetailRows, type HomePickupQuoteState, type HomePickupQuoteView } from '@tubutree/app-core/recycle-home-pickup-view';
 import { homePickupCopy } from '@tubutree/app-core/waste-copy';
-import { WASTE_QUERY_KEYS } from '../services/waste-api';
+import { WASTE_QUERY_KEYS, getWasteFeeQr, invalidateAfterWasteWrite } from '../services/waste-api';
 import type { AddressDTO } from '../services/shop-api';
-import { addressLine } from '../utils/format';
+import { useRemaining } from '../hooks/use-remaining';
+import { copyText } from '../utils/clipboard';
+import { addressLine, formatVnd } from '../utils/format';
 import { haptic } from '../utils/haptic';
 import { AddressForm } from './address-form';
 import { Badge } from './ui/badge';
@@ -33,6 +35,11 @@ export interface HomePickupComposerProps {
   /** Câu của máy chủ khi báo phí lỗi 503; không có thì dùng câu chung "Chưa tính được phí ship". */
   quoteErrorText?: string | null;
   onRetryQuote: () => void;
+  selectedPayment?: WasteFeeCashMethod | null;
+  onSelectPayment?: (method: WasteFeeCashMethod) => void;
+  onAttachNextOrder?: () => void;
+  onOpenExistingPickup?: (requestId: string) => void;
+  onSwitchDropOff?: () => void;
   /** Đang gửi đơn: khoá mọi ô chọn để nội dung không đổi giữa chừng. */
   disabled?: boolean;
 }
@@ -41,7 +48,16 @@ type AddressMode = 'list' | 'add' | 'edit';
 
 /** Phần mở ra khi khách chọn "Shipper lấy tận nhà": địa chỉ lấy rác, số kg, và một thẻ phí ship duy nhất. */
 export function HomePickupComposer(props: HomePickupComposerProps) {
-  const { addresses, addressesStatus, selectedAddressId, weightGrams, quoteState, view, disabled = false } = props;
+  const {
+    addresses,
+    addressesStatus,
+    selectedAddressId,
+    weightGrams,
+    quoteState,
+    view,
+    selectedPayment = null,
+    disabled = false,
+  } = props;
   const qc = useQueryClient();
   const [mode, setMode] = useState<AddressMode>('list');
   const selected = addresses.find((a) => a.id === selectedAddressId) ?? null;
@@ -54,6 +70,9 @@ export function HomePickupComposer(props: HomePickupComposerProps) {
     props.onSelectAddress(a.id);
     setMode('list');
   };
+
+  const fs = copy.feeShort;
+  const opts = view?.needFeePayment ? view.feeOptions : null;
 
   return (
     <div className="tubu-hp" data-testid="home-pickup">
@@ -164,7 +183,7 @@ export function HomePickupComposer(props: HomePickupComposerProps) {
               </Button>
             </>
           )}
-          {quoteState === 'ready' && view && (
+          {quoteState === 'ready' && view && !opts && (
             <>
               <div className="tubu-hp-row">
                 <Text variant="body-sm" tone="secondary" as="span">
@@ -199,13 +218,172 @@ export function HomePickupComposer(props: HomePickupComposerProps) {
               )}
             </>
           )}
+          {quoteState === 'ready' && view && opts && (
+            <div data-testid="home-pickup-fee-short">
+              <div className="tubu-hp-short-row">
+                <Text variant="body-sm" tone="secondary" as="span">
+                  {fs.feeRowLabel}
+                </Text>
+                <Text variant="body-sm" style={BOLD} as="span" numeric data-testid="home-pickup-fee-value">
+                  {view.feeText}
+                </Text>
+              </div>
+              <div className="tubu-hp-short-row">
+                <Text variant="body-sm" tone="secondary" as="span">
+                  {fs.pointsRowLabel}
+                </Text>
+                <Text variant="body-sm" tone="secondary" as="span" numeric data-testid="home-pickup-pay">
+                  {view.pointsDeductText}
+                </Text>
+              </div>
+              <div className="tubu-hp-short-row">
+                <Text variant="body-sm" style={BOLD} as="span">
+                  {fs.shortRowLabel}
+                </Text>
+                <Text variant="body-md" style={BOLD} as="span" numeric data-testid="home-pickup-cash-due">
+                  {view.cashDueText}
+                </Text>
+              </div>
+              <Text variant="caption" tone="secondary" as="div" numeric data-testid="home-pickup-points">
+                {view.pointsLine}
+              </Text>
+              <hr className="tubu-hp-sep" />
+              <div className="tubu-hp-opts">
+                {opts.attachNextOrder.available && props.onAttachNextOrder ? (
+                  <button
+                    type="button"
+                    data-testid="fee-path-attach"
+                    disabled={disabled}
+                    className="tubu-hp-opt tubu-hp-opt-recommend tubu-press"
+                    onClick={() => {
+                      if (disabled) return;
+                      haptic('light');
+                      props.onAttachNextOrder?.();
+                    }}
+                  >
+                    <span className="tubu-hp-opt-head">
+                      <Text variant="body-sm" style={BOLD} className="tubu-hp-wrap">
+                        {`› ${fs.attachTitle}`}
+                      </Text>
+                      {opts.attachNextOrder.badge && <Badge tone="brand" size="sm">{opts.attachNextOrder.badge}</Badge>}
+                    </span>
+                    <Text variant="caption" tone="secondary" as="span" className="tubu-hp-wrap">
+                      {opts.attachNextOrder.subtitle}
+                    </Text>
+                  </button>
+                ) : opts.attachNextOrder.existingRequestId && props.onOpenExistingPickup ? (
+                  <button
+                    type="button"
+                    data-testid="fee-path-attach-existing"
+                    disabled={disabled}
+                    className="tubu-hp-opt tubu-press"
+                    onClick={() => {
+                      if (disabled || !opts.attachNextOrder.existingRequestId) return;
+                      haptic('light');
+                      props.onOpenExistingPickup?.(opts.attachNextOrder.existingRequestId);
+                    }}
+                  >
+                    <span className="tubu-hp-opt-head">
+                      <Text variant="body-sm" style={BOLD} className="tubu-hp-wrap">
+                        {`› ${fs.attachTitle}`}
+                      </Text>
+                      <Text variant="caption" tone="brand" style={BOLD}>
+                        {fs.attachOpenExisting}
+                      </Text>
+                    </span>
+                    <Text variant="caption" tone="secondary" as="span" className="tubu-hp-wrap">
+                      {opts.attachNextOrder.subtitle}
+                    </Text>
+                  </button>
+                ) : (
+                  <div className="tubu-hp-opt" aria-disabled="true" data-testid="fee-path-attach-disabled">
+                    <Text variant="body-sm" style={BOLD} className="tubu-hp-wrap">
+                      {fs.attachTitle}
+                    </Text>
+                    <Text variant="caption" tone="secondary" as="span" className="tubu-hp-wrap">
+                      {opts.attachNextOrder.subtitle}
+                    </Text>
+                  </div>
+                )}
+
+                {(opts.wallet || opts.bankTransfer) && (
+                  <div role="radiogroup" aria-label={fs.paymentGroupAria} className="tubu-hp-opts">
+                    {opts.wallet && (
+                      <button
+                        type="button"
+                        role="radio"
+                        data-testid="fee-path-wallet"
+                        data-payment="WALLET"
+                        aria-checked={selectedPayment === 'WALLET'}
+                        aria-disabled={!opts.wallet.enough || disabled || undefined}
+                        className="tubu-hp-opt tubu-press"
+                        onClick={() => {
+                          if (!opts.wallet?.enough || disabled) return;
+                          haptic('light');
+                          props.onSelectPayment?.('WALLET');
+                        }}
+                      >
+                        <Text variant="body-sm" style={BOLD} className="tubu-hp-wrap">
+                          {opts.wallet.title}
+                        </Text>
+                        <Text variant="caption" tone={opts.wallet.enough ? 'secondary' : 'warning'} as="span" className="tubu-hp-wrap">
+                          {opts.wallet.subtitle}
+                        </Text>
+                      </button>
+                    )}
+                    {opts.bankTransfer && (
+                      <button
+                        type="button"
+                        role="radio"
+                        data-testid="fee-path-bank"
+                        data-payment="BANK_TRANSFER"
+                        aria-checked={selectedPayment === 'BANK_TRANSFER'}
+                        aria-disabled={disabled || undefined}
+                        className="tubu-hp-opt tubu-press"
+                        onClick={() => {
+                          if (disabled) return;
+                          haptic('light');
+                          props.onSelectPayment?.('BANK_TRANSFER');
+                        }}
+                      >
+                        <Text variant="body-sm" style={BOLD} className="tubu-hp-wrap">
+                          {opts.bankTransfer.title}
+                        </Text>
+                        <Text variant="caption" tone="secondary" as="span" className="tubu-hp-wrap">
+                          {opts.bankTransfer.subtitle}
+                        </Text>
+                      </button>
+                    )}
+                  </div>
+                )}
+
+                {props.onSwitchDropOff && (
+                  <button
+                    type="button"
+                    data-testid="fee-path-dropoff"
+                    disabled={disabled}
+                    className="tubu-hp-link tubu-press"
+                    onClick={() => {
+                      if (disabled) return;
+                      haptic('light');
+                      props.onSwitchDropOff?.();
+                    }}
+                  >
+                    <Text variant="body-sm" tone="brand" style={BOLD}>
+                      {fs.dropOffLink}
+                    </Text>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-/** Các dòng tóm tắt của yêu cầu HOME_PICKUP ở trang chi tiết: địa chỉ, cân nặng, phí shipper, điểm đã trừ/hoàn. */
+/** Các dòng tóm tắt của yêu cầu HOME_PICKUP ở trang chi tiết: địa chỉ, cân nặng, phí shipper, điểm và phí tiền đã trừ/hoàn. */
 export function HomePickupDetail({ homePickup }: { homePickup: WasteHomePickupDTO }) {
   return (
     <div data-testid="home-pickup-detail">
@@ -219,6 +397,122 @@ export function HomePickupDetail({ homePickup }: { homePickup: WasteHomePickupDT
           </Text>
         </div>
       ))}
+    </div>
+  );
+}
+
+/** Gói 178-E: thẻ VietQR nhúng thẳng trong chi tiết phiếu đang chờ chuyển khoản phí lấy rác (poll 4s, không thêm route). */
+export function HomePickupFeeQrCard({ requestId, onPaid }: { requestId: string; onPaid?: () => void }) {
+  const qc = useQueryClient();
+  const d = copy.detail;
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
+  const qrQ = useQuery({
+    queryKey: WASTE_QUERY_KEYS.feeQr(requestId),
+    queryFn: () => getWasteFeeQr(requestId),
+    refetchInterval: (q) => (q.state.data && q.state.data.paymentStatus !== 'UNPAID' ? false : 4000),
+  });
+  const qr = qrQ.data;
+  const remaining = useRemaining(qr?.paymentDeadline);
+
+  useEffect(() => {
+    if (qr && qr.paymentStatus !== 'UNPAID') {
+      void invalidateAfterWasteWrite(qc);
+      onPaid?.();
+    }
+  }, [qr, qc, onPaid]);
+
+  const handleCopy = async (key: string, value: string) => {
+    haptic('light');
+    if (await copyText(value)) {
+      setCopiedKey(key);
+    }
+  };
+
+  const handleManualCheck = async () => {
+    haptic('medium');
+    setChecking(true);
+    try {
+      const res = await qrQ.refetch();
+      if (res.data && res.data.paymentStatus !== 'UNPAID') {
+        await invalidateAfterWasteWrite(qc);
+      }
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  return (
+    <div className="tubu-hp-qr" data-testid="home-pickup-fee-qr">
+      <Text variant="body-md" style={BOLD} as="div">
+        {d.qrTitle}
+      </Text>
+      <Text variant="caption" tone="secondary" as="div" className="tubu-hp-wrap">
+        {d.qrHint}
+      </Text>
+      {qrQ.isPending && (
+        <Text variant="caption" tone="secondary" as="div">
+          {d.qrLoading}
+        </Text>
+      )}
+      {qrQ.isError && (
+        <>
+          <Text variant="caption" tone="danger" as="div">
+            {d.qrError}
+          </Text>
+          <Button variant="secondary" onPress={() => void qrQ.refetch()}>
+            {copy.retry}
+          </Button>
+        </>
+      )}
+      {qr && qr.paymentStatus === 'UNPAID' && (
+        <>
+          {qr.qrImageUrl && <img src={qr.qrImageUrl} alt={d.qrTitle} className="tubu-hp-qr-img" />}
+          {remaining && (
+            <Text variant="caption" tone={remaining.expired ? 'danger' : 'secondary'} as="div" numeric>
+              {remaining.expired ? d.qrExpired : d.qrDeadline(remaining.text)}
+            </Text>
+          )}
+          <div className="tubu-hp-qr-row">
+            <div>
+              <Text variant="caption" tone="secondary" as="div">{d.qrBankLabel}</Text>
+              <Text variant="body-sm" style={BOLD} as="div">{qr.bank.name || qr.bank.bin}</Text>
+            </div>
+            <Text variant="caption" tone="secondary" as="span">{qr.bank.accountName}</Text>
+          </div>
+          <div className="tubu-hp-qr-row">
+            <div>
+              <Text variant="caption" tone="secondary" as="div">{d.qrAccountLabel}</Text>
+              <Text variant="body-sm" style={BOLD} as="div" numeric>{qr.bank.accountNo}</Text>
+            </div>
+            <button type="button" className="tubu-hp-qr-copy" onClick={() => void handleCopy('acc', qr.bank.accountNo)}>
+              {copiedKey === 'acc' ? d.qrCopied : d.qrCopy}
+            </button>
+          </div>
+          <div className="tubu-hp-qr-row">
+            <div>
+              <Text variant="caption" tone="secondary" as="div">{d.qrAmountLabel}</Text>
+              <Text variant="body-sm" style={BOLD} as="div" numeric>{formatVnd(qr.amount)}</Text>
+            </div>
+            <button type="button" className="tubu-hp-qr-copy" onClick={() => void handleCopy('amt', String(qr.amount))}>
+              {copiedKey === 'amt' ? d.qrCopied : d.qrCopy}
+            </button>
+          </div>
+          <div className="tubu-hp-qr-row">
+            <div>
+              <Text variant="caption" tone="secondary" as="div">{d.qrMemoLabel}</Text>
+              <Text variant="body-sm" style={BOLD} as="div">{qr.memo}</Text>
+              <Text variant="caption" tone="warning" as="div">{d.qrMemoWarn}</Text>
+            </div>
+            <button type="button" className="tubu-hp-qr-copy" onClick={() => void handleCopy('memo', qr.memo)}>
+              {copiedKey === 'memo' ? d.qrCopied : d.qrCopy}
+            </button>
+          </div>
+          <Button variant="secondary" fullWidth loading={checking} onPress={() => void handleManualCheck()}>
+            {checking ? d.qrRefreshing : d.qrRefresh}
+          </Button>
+        </>
+      )}
     </div>
   );
 }

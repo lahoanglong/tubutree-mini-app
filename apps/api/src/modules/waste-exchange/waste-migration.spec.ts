@@ -98,3 +98,26 @@ describe('waste migration, warehouse-only items', () => {
     expect(text).toContain(`UPDATE "waste_items" SET "warehouseOnly" = true WHERE "code" IN ('MILK_CARTON', 'TUBU_BOTTLE');`);
   });
 });
+
+describe('waste migration, w178 home pickup cash fee', () => {
+  const W178_SQL = readFileSync(join(__dirname, '../../../prisma/migrations/20261116120000_w178_waste_fee_cash/migration.sql'), 'utf-8');
+  const text = squash(withoutComments(W178_SQL));
+
+  it('is additive only: adds enum values, WasteFeeCashMethod, nullable columns, NOT VALID check constraints, and config defaults', () => {
+    expect(W178_SQL.split('\n')[1]).toContain('Chỉ THÊM');
+    expect(W178_SQL).not.toMatch(/\bDROP\b/i);
+    expect(text).toContain(`ALTER TYPE "WalletTxType" ADD VALUE IF NOT EXISTS 'WASTE_FEE_PAY';`);
+    expect(text).toContain(`ALTER TYPE "WalletTxType" ADD VALUE IF NOT EXISTS 'WASTE_FEE_REFUND';`);
+    expect(text).toContain(`ALTER TYPE "WasteCloseReason" ADD VALUE IF NOT EXISTS 'FEE_UNPAID';`);
+    expect(text).toContain(`CREATE TYPE "WasteFeeCashMethod" AS ENUM ('WALLET', 'BANK_TRANSFER');`);
+    for (const col of ['"shipFeeCashVnd" INTEGER', '"shipFeeCashMethod" "WasteFeeCashMethod"', '"shipFeeCashPaidAt" TIMESTAMP(3)', '"shipFeeCashRefundedVnd" INTEGER', '"shipFeeBankRef" TEXT']) {
+      expect(text).toContain(col);
+    }
+    for (const ck of ['waste_fee_split_ck', 'waste_fee_cash_refund_ck', 'waste_fee_cod_zero_ck']) {
+      expect(text).toContain(`ADD CONSTRAINT "${ck}" CHECK`);
+    }
+    expect(W178_SQL.match(/NOT VALID;/g)).toHaveLength(3);
+    expect(text).toContain(`'waste.home_pickup_bank_transfer_enabled', 'false'::jsonb`);
+    expect(text).toContain(`'waste.fee_payment_ttl_hours', '24'::jsonb`);
+  });
+});

@@ -38,7 +38,13 @@ import {
   homePickupEnabled,
   type HomePickupForm,
 } from '@tubutree/app-core/recycle-home-pickup-state';
-import { homePickupCreateState, homePickupQuoteView, homePickupUnavailableText } from '@tubutree/app-core/recycle-home-pickup-view';
+import { errorCode } from '@tubutree/app-core/api/error-status';
+import {
+  homePickupCreateState,
+  homePickupQuoteView,
+  homePickupSubmitLabel,
+  homePickupUnavailableText,
+} from '@tubutree/app-core/recycle-home-pickup-view';
 import { friendlyActionError as actErrText, friendlyError as errText } from '@/lib/friendly-error';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -325,21 +331,39 @@ export function RecycleNew() {
   const setHomePickup = (patch: Partial<HomePickupForm>) =>
     setDraft((d) => ({ ...d, homePickup: { ...(d.homePickup ?? EMPTY_HOME_PICKUP_FORM), ...patch } }));
 
-  // Cùng khoá cho các lần bấm lại khi nội dung đơn không đổi; đổi địa chỉ hay số kg thì sang khoá mới (máy chủ trả 409 cho cùng khoá khác nội dung).
+  const feeShortTrackedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hpView?.needFeePayment || !hp.effective.addressId) return;
+    const sig = `${hp.effective.addressId}:${hp.effective.weightGrams}:${hpView.cashDueVnd}`;
+    if (feeShortTrackedRef.current === sig) return;
+    feeShortTrackedRef.current = sig;
+    trackRecycleStep('fee_short_shown', 'HOME_PICKUP');
+  }, [hpView?.needFeePayment, hpView?.cashDueVnd, hp.effective.addressId, hp.effective.weightGrams]);
+
+  // Cùng khoá cho các lần bấm lại khi nội dung đơn không đổi; đổi địa chỉ, số kg hay cách trả thì sang khoá mới (máy chủ trả 409 cho cùng khoá khác nội dung).
   const keyContent = {
     method: draft.method,
     lines: lineInputs,
     pointId: draft.method === 'DROP_OFF' ? draft.pointId : null,
     homePickup:
       draft.method === 'HOME_PICKUP'
-        ? { addressId: hp.effective.addressId, weightGrams: hp.effective.weightGrams }
+        ? {
+            addressId: hp.effective.addressId,
+            weightGrams: hp.effective.weightGrams,
+            ...(hpView?.needFeePayment && hp.effective.payment ? { payment: hp.effective.payment } : {}),
+          }
         : null,
   };
   const { key, rotate } = useIdempotencyKey(keyContent);
   const consentVersion = ackVersion ?? rulesVersion;
   const body: WasteCreateRequest | null =
     selected === 'HOME_PICKUP'
-      ? homePickupCreateBody({ form: hp.effective, lines: lineInputs, consentVersion })
+      ? homePickupCreateBody({
+          form: hpView?.needFeePayment ? hp.effective : { ...hp.effective, payment: null },
+          lines: lineInputs,
+          consentVersion,
+          expectedCashVnd: hpView?.needFeePayment ? hpView.cashDueVnd : null,
+        })
       : selected
         ? {
             method: selected,
@@ -365,10 +389,16 @@ export function RecycleNew() {
       await settleWithin(Promise.all(WASTE_WRITE_INVALIDATE_KEYS.map((queryKey) => qc.invalidateQueries({ queryKey }))));
       router.replace(`/doi-rac/yeu-cau/${r.id}`);
     },
-    onError: () => {
+    onError: (e) => {
       createBusy.current = false;
+      const code = errorCode(e);
+      if (code === 'WASTE_FEE_BANK_DISABLED' || (selected === 'HOME_PICKUP' && hp.effective.payment === 'WALLET' && code !== 'WASTE_FEE_CHANGED')) {
+        setHomePickup({ payment: null });
+      }
       void qc.invalidateQueries({ queryKey: wasteRulesVersionQuery(coreHttp).queryKey });
       void qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'pickup-quote'] });
+      void qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.me });
+      void qc.invalidateQueries({ queryKey: ['wallet'] });
     },
   });
   const creating = create.isPending || create.isSuccess;
@@ -461,7 +491,7 @@ export function RecycleNew() {
 
   const selectMethod = (m: WasteMethod) => {
     if (m === draft.method) return;
-    setDraft((d) => ({ ...d, method: m }));
+    setDraft((d) => ({ ...d, method: m, ...(m !== 'HOME_PICKUP' ? { homePickup: undefined } : {}) }));
     setConsent(false);
     setPackagingConsent(false);
     setPostageConsent(false);
@@ -476,7 +506,13 @@ export function RecycleNew() {
 
   const selectedPreview = selected ? previews[selected] : undefined;
   const consentsOk = consentValid && (selected !== 'MAIL_IN' || (packagingConsent && postageConsent));
-  const hpState = homePickupCreateState({ addressId: hp.effective.addressId, quoteState: hp.quoteState, view: hpView, consentOk: consentValid });
+  const hpState = homePickupCreateState({
+    addressId: hp.effective.addressId,
+    quoteState: hp.quoteState,
+    view: hpView,
+    consentOk: consentValid,
+    payment: hp.effective.payment,
+  });
   const canCreate =
     selected === 'HOME_PICKUP'
       ? hpState.ok
@@ -575,6 +611,31 @@ export function RecycleNew() {
               view={hpView}
               quoteErrorText={hp.quoteErrorText}
               onRetryQuote={hp.refetchQuote}
+              selectedPayment={hp.effective.payment ?? null}
+              onSelectPayment={(pay) => {
+                trackRecycleStep(pay === 'WALLET' ? 'fee_path_wallet' : 'fee_path_bank', 'HOME_PICKUP');
+                setHomePickup({ payment: pay });
+              }}
+              onAttachNextOrder={
+                enabledMethods.includes('PICKUP')
+                  ? () => {
+                      trackRecycleStep('fee_path_attach', 'PICKUP');
+                      selectMethod('PICKUP');
+                    }
+                  : undefined
+              }
+              onOpenExistingPickup={(reqId) => {
+                trackRecycleStep('fee_path_attach', 'PICKUP');
+                router.push(`/doi-rac/yeu-cau/${reqId}`);
+              }}
+              onSwitchDropOff={
+                enabledMethods.includes('DROP_OFF') && !isLocked(previews.DROP_OFF)
+                  ? () => {
+                      trackRecycleStep('fee_path_dropoff', 'DROP_OFF');
+                      selectMethod('DROP_OFF');
+                    }
+                  : undefined
+              }
               disabled={creating}
             />
           )}
@@ -642,7 +703,7 @@ export function RecycleNew() {
           aria-disabled={creating || undefined}
           onClick={createNow}
         >
-          {creating ? homePickupCopy.creating : selected === 'HOME_PICKUP' ? homePickupCopy.createButton : 'Tạo yêu cầu'}
+          {creating ? homePickupCopy.creating : selected === 'HOME_PICKUP' ? homePickupSubmitLabel(hpView, hp.effective.payment) : 'Tạo yêu cầu'}
         </button>
       </Actions>
     </>,

@@ -37,6 +37,14 @@ export function wasteRaceTables(ledgerUnique = true): Record<string, TableSpec> 
       defaults: { lot: 'STANDARD', createdAt: CREATED },
       unique: ledgerUnique ? [ledgerKey('RECYCLE'), ledgerKey('RECYCLE_REVERSED'), ledgerKey('GIFT_REFUND')] : [],
     },
+    walletTransaction: {
+      defaults: { createdAt: CREATED },
+      unique: ledgerUnique
+        ? [{ fields: ['userId', 'type', 'refId'], when: (r: Record<string, any>) => r.refId != null }]
+        : [],
+    },
+    address: {},
+    wasteItem: {},
     coinTransaction: {},
     wasteGift: {},
     wasteGiftRedemption: { unique: [{ fields: ['code'] }, { fields: ['userId', 'idempotencyKey'] }] },
@@ -102,6 +110,30 @@ function installHandlers(db: RaceDb, selectForUpdate: boolean, advisoryLocks: bo
         return [{ pointsBalance: c.rows('user').find((u) => u.id === c.params[0])?.pointsBalance ?? 0 }];
       },
     },
+    {
+      match: /SELECT "id" FROM "users" WHERE "id" = \?/,
+      run: async (c) => {
+        await lockIf(c, 'user', c.params[0] as string);
+        const u = c.rows('user').find((x) => x.id === c.params[0]);
+        return u ? [{ id: u.id }] : [];
+      },
+    },
+    {
+      match: /SELECT "walletBalance" FROM "users" WHERE "id" = \?/,
+      run: async (c) => {
+        await lockIf(c, 'user', c.params[0] as string);
+        const u = c.rows('user').find((x) => x.id === c.params[0]);
+        return u ? [{ walletBalance: u.walletBalance ?? 0 }] : [];
+      },
+    },
+    {
+      match: /SELECT "metadata" FROM "users" WHERE "id" = \?/,
+      run: async (c) => {
+        await lockIf(c, 'user', c.params[0] as string);
+        const u = c.rows('user').find((x) => x.id === c.params[0]);
+        return u ? [{ metadata: u.metadata ?? null }] : [];
+      },
+    },
     // Đánh dấu trùng mã vận đơn giữa hai khách: các test này không có yêu cầu của khách khác nên không dòng nào bị đổi.
     { match: /UPDATE waste_requests r SET "trackingConflict"/, run: () => 0 },
     { match: /pg_advisory_xact_lock/, run: (c) => (advisoryLocks ? c.lockKey(`${c.sql.replace(/\s+/g, ' ')}|${c.params.join('|')}`) : Promise.resolve()).then(() => 1) },
@@ -142,10 +174,27 @@ export function adaptClient(client: any, counter = { n: 0 }): any {
     },
     wasteRequest: {
       ...client.wasteRequest,
+      create: async (args: any) => {
+        const nestedLines = args?.data?.lines?.create as Record<string, any>[] | undefined;
+        const { lines: _omit, ...restData } = args?.data ?? {};
+        const created = await client.wasteRequest.create({ ...args, data: restData, select: undefined });
+        if (Array.isArray(nestedLines)) {
+          for (const line of nestedLines) {
+            await client.wasteRequestLine.create({ data: { id: `wrl-${++counter.n}`, requestId: created.id, ...line } });
+          }
+        }
+        return args?.select ? client.wasteRequest.findUnique({ where: { id: created.id }, select: args.select }) : created;
+      },
       findUnique: async (args: any) => {
-        const row = await client.wasteRequest.findUnique(args);
+        const wantsLinesSelect = Boolean(args?.select?.lines);
+        const cleanArgs = wantsLinesSelect ? { ...args, select: { ...args.select, lines: undefined } } : args;
+        if (cleanArgs?.select) delete cleanArgs.select.lines;
+        const row = await client.wasteRequest.findUnique(cleanArgs);
         if (row && args?.include?.lines) {
           row.lines = (await linesOf(client, row, args)).map((l: any) => ({ ...l, item: { warehouseOnly: false, hazardous: false } }));
+        } else if (row && wantsLinesSelect) {
+          const ls = await client.wasteRequestLine.findMany({ where: { requestId: row.id } });
+          row.lines = ls.map((l: any) => ({ itemId: l.itemId, declaredQty: l.declaredQty }));
         }
         return row;
       },
@@ -168,6 +217,8 @@ export const user = (id: string, phone: string, over: Record<string, unknown> = 
   isBlocked: false,
   mergedIntoId: null,
   pointsBalance: 0,
+  pointsConvertedBalance: 0,
+  walletBalance: 0,
   metadata: null,
   ...over,
 });

@@ -9,8 +9,8 @@ import {
 import { WASTE_CONFIG_KEYS } from '../../src/modules/waste-exchange/waste-config.keys';
 
 const MIGRATION = 'prisma/migrations/20261020000000_waste_exchange/migration.sql';
-// Trạng thái BATTERY mà migration 20261027000000 đặt khi migrate deploy; đổi ở đây nếu chủ chọn khác.
-const BATTERY_STATUS_AFTER_MIGRATE = 'COMING_SOON';
+// Trạng thái BATTERY sau khi áp hết chuỗi migration (20261115171000_w168_waste_catalog_gifts mở thành ACTIVE).
+const BATTERY_STATUS_AFTER_MIGRATE = 'ACTIVE';
 // Spec 11.4 (lines 306-312) with $3 and $4 cast to int; M3.1a incrementPointUsage uses this exact text.
 const QUOTA_SQL = `INSERT INTO waste_point_usage ("pointId", "monthKey", "pointsUsed", confirmations) VALUES ($1, $2, $3::int, 1) ON CONFLICT ("pointId", "monthKey") DO UPDATE SET "pointsUsed" = waste_point_usage."pointsUsed" + EXCLUDED."pointsUsed", confirmations = waste_point_usage.confirmations + 1 WHERE waste_point_usage."pointsUsed" + EXCLUDED."pointsUsed" <= $4::int RETURNING "pointsUsed"`;
 
@@ -109,6 +109,38 @@ describe('waste DB constraints (real Postgres)', () => {
       'waste_point_usage_points_chk',
     );
     await exec(`UPDATE "waste_point_usage" SET "pointsUsed" = 0 WHERE "pointId" = $1 AND "monthKey" = '2026-10'`, partner.id);
+  });
+
+  it('W178 waste_fee_split_ck, waste_fee_cash_refund_ck, waste_fee_cod_zero_ck validate cleanly and reject broken fee splits', async () => {
+    for (const ck of ['waste_fee_split_ck', 'waste_fee_cash_refund_ck', 'waste_fee_cod_zero_ck']) {
+      await exec(`ALTER TABLE "waste_requests" VALIDATE CONSTRAINT "${ck}"`);
+    }
+    const user = await createUser(prisma);
+    userIds.push(user.id);
+    const item = await createWasteItem(prisma, { unitsPerPoint: 1 });
+    reg.itemIds.push(item.id);
+    const warehouse = await createWarehouse(prisma);
+    const hp = await createWasteRequest(prisma, {
+      userId: user.id,
+      method: 'HOME_PICKUP',
+      status: 'OPEN',
+      pointId: warehouse.id,
+      lines: [{ itemId: item.id, declaredQty: 5 }],
+    });
+    const set = (c: string) => setRow('waste_requests', hp.id, c);
+    await violates(
+      set(`"shipFeeVnd" = 25000, "shipFeePointsUsed" = 8000, "shipFeeCashVnd" = 10000, "shipFeeCodVnd" = 0`),
+      'waste_fee_split_ck',
+    );
+    await set(`"shipFeeVnd" = 25000, "shipFeePointsUsed" = 8000, "shipFeeCashVnd" = 17000, "shipFeeCashMethod" = 'WALLET', "shipFeeCodVnd" = 0`);
+    await violates(set(`"shipFeeCashRefundedVnd" = 17000`), 'waste_fee_cash_refund_ck');
+    await set(`"shipFeeCashPaidAt" = now(), "shipFeeCashRefundedVnd" = 17000`);
+    await violates(set(`"shipFeeCashRefundedVnd" = 15000`), 'waste_fee_cash_refund_ck');
+    await set(`"shipFeeCashRefundedVnd" = NULL`);
+    await violates(
+      set(`"shipFeeVnd" = 25000, "shipFeePointsUsed" = 8000, "shipFeeCashVnd" = 0, "shipFeeCodVnd" = 17000`),
+      'waste_fee_cod_zero_ck',
+    );
   });
 
   it('waste_gifts and waste_gift_redemptions checks', async () => {
@@ -298,7 +330,7 @@ describe('seeded reference data after migrate deploy', () => {
     for (const s of splitSqlStatements(section)) await prisma.$executeRawUnsafe(s);
     expect(await prisma.wasteGift.findMany({ where: { id: { startsWith: 'reward-' } }, orderBy: { id: 'asc' } })).toEqual(before);
   });
-  it('the 22 waste.* config rows exist after migrate deploy (prod never runs seed.ts)', async () => {
+  it('the 24 waste.* config rows exist after migrate deploy (prod never runs seed.ts)', async () => {
     const rows = await prisma.systemConfig.findMany({ where: { key: { startsWith: 'waste.' } }, orderBy: { key: 'asc' } });
     expect(rows.map((r) => r.key)).toEqual(Object.keys(WASTE_CONFIG_KEYS).sort());
     for (const r of rows) {

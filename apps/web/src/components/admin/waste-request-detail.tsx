@@ -15,6 +15,7 @@ import type {
 } from '@tubutree/shared-types';
 import {
   closeLostWasteRequest,
+  confirmWasteFeeBankPaid,
   confirmWasteRequest,
   getWasteRequest,
   listWasteUnmatched,
@@ -121,6 +122,18 @@ function Header({ r, isAdmin }: { r: WasteRequestAdminDetailDTO; isAdmin: boolea
     ],
     ['Lý do từ chối', r.rejectionReason ? `${WASTE_REJECTION_REASON_LABELS[r.rejectionReason]}${r.rejectionNote ? `: ${r.rejectionNote}` : ''}` : null],
     ['Cân nặng thực nhận', r.receivedWeightGrams !== null ? `${formatCount(r.receivedWeightGrams)} gram` : null],
+    [
+      'Phí lấy rác trả thêm',
+      (r.homePickup?.shipFeeCashVnd ?? 0) > 0
+        ? `${formatCount(r.homePickup!.shipFeeCashVnd!)}đ (${r.homePickup!.shipFeeCashMethod === 'WALLET' ? 'Ví Tubu' : 'VietQR'} · ${
+            (r.homePickup!.shipFeeCashRefundedVnd ?? 0) > 0
+              ? 'đã hoàn về Ví'
+              : r.homePickup!.shipFeeCashPaid
+                ? 'đã thu'
+                : 'chờ xác nhận CK'
+          }${r.shipFeeBankRef ? ` · Mã GD ${r.shipFeeBankRef}` : ''})`
+        : null,
+    ],
   ];
   return (
     <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
@@ -397,7 +410,13 @@ const canReverse = (r: WasteRequestAdminDetailDTO) => r.status === 'COMPLETED';
 const canCloseLost = (r: WasteRequestAdminDetailDTO) =>
   (r.method === 'MAIL_IN' && r.status === 'IN_TRANSIT') || ((r.method === 'MAIL_IN' || r.method === 'PICKUP') && r.status === 'RECEIVED');
 const canReopen = (r: WasteRequestAdminDetailDTO) =>
-  r.status === 'EXPIRED' && (r.method === 'MAIL_IN' || (r.method === 'PICKUP' && r.orderId !== null));
+  r.status === 'EXPIRED' && r.closeReason !== 'FEE_UNPAID' && (r.method === 'MAIL_IN' || (r.method === 'PICKUP' && r.orderId !== null));
+const canConfirmFeeBank = (r: WasteRequestAdminDetailDTO) =>
+  r.method === 'HOME_PICKUP' &&
+  r.homePickup?.shipFeeCashMethod === 'BANK_TRANSFER' &&
+  !r.homePickup.shipFeeCashPaid &&
+  (r.homePickup.shipFeeCashVnd ?? 0) > 0 &&
+  (r.status === 'OPEN' || r.status === 'CANCELLED' || r.status === 'EXPIRED');
 
 function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: (m: string | null) => void }) {
   const qc = useQueryClient();
@@ -472,7 +491,8 @@ function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: 
   };
 
   const showCost = r.method !== 'DROP_OFF';
-  if (!canReverse(r) && !canCloseLost(r) && !canReopen(r) && !showCost) return null;
+  const showFeeBank = canConfirmFeeBank(r);
+  if (!canReverse(r) && !canCloseLost(r) && !canReopen(r) && !showCost && !showFeeBank) return null;
 
   return (
     <div data-admin-actions className="space-y-3 border-t border-stone-200 pt-4">
@@ -505,6 +525,7 @@ function AdminActions({ r, onFlash }: { r: WasteRequestAdminDetailDTO; onFlash: 
         )}
       </div>
       {reopening && <ReopenPanel requestId={r.id} busy={reopen.isPending} onSubmit={submitReopen} onCancel={() => setReopening(false)} />}
+      {showFeeBank && <FeeBankConfirmForm key={r.id} r={r} onFlash={onFlash} onDone={refresh} />}
       {showCost && <CostForm key={r.carrierCostVnd ?? 'none'} r={r} onFlash={onFlash} onDone={refresh} />}
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
       {dialog}
@@ -607,6 +628,78 @@ function CostForm({ r, onFlash, onDone }: { r: WasteRequestAdminDetailDTO; onFla
         <button type="button" className={BTN_SECONDARY} disabled={!valid || save.isPending} onClick={submit}>Lưu phí ship</button>
       </div>
       {trim !== '' && !valid && <p className="text-xs text-danger-fg">Phí ship là số nguyên không âm</p>}
+      {err && <Notice tone="danger" role="alert">{err}</Notice>}
+    </div>
+  );
+}
+
+function FeeBankConfirmForm({ r, onFlash, onDone }: { r: WasteRequestAdminDetailDTO; onFlash: (m: string | null) => void; onDone: () => void }) {
+  const due = r.homePickup?.shipFeeCashVnd ?? 0;
+  const [amount, setAmount] = useState(String(due));
+  const [bankRef, setBankRef] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const inFlight = useRef(false);
+  const save = useMutation({
+    mutationFn: (body: { amount: number; bankRef: string }) => confirmWasteFeeBankPaid(r.id, body),
+    onSuccess: (res) => {
+      onFlash(
+        res.outcome === 'CREDITED_LATE_TO_WALLET'
+          ? 'Phiếu đã đóng nên khoản chuyển khoản muộn đã được cộng thẳng vào Ví Tubu của khách.'
+          : 'Đã xác nhận nhận phí chuyển khoản và xếp hàng tạo vận đơn Gomdon.',
+      );
+      onDone();
+    },
+    onError: (e) => setErr(errText(e)),
+    onSettled: () => {
+      inFlight.current = false;
+    },
+  });
+  const amtTrim = amount.trim();
+  const refTrim = bankRef.trim();
+  const amtNum = /^\d+$/.test(amtTrim) ? Number(amtTrim) : NaN;
+  const valid = Number.isSafeInteger(amtNum) && amtNum > 0 && refTrim.length > 0 && refTrim.length <= 64;
+  const submit = () => {
+    if (inFlight.current || save.isPending || !valid) return;
+    inFlight.current = true;
+    setErr(null);
+    onFlash(null);
+    save.mutate({ amount: amtNum, bankRef: refTrim });
+  };
+  return (
+    <div data-fee-bank-form className={PANEL}>
+      <h4 className="text-xs font-semibold text-stone-900">
+        {r.status === 'OPEN'
+          ? `Xác nhận khách đã chuyển khoản phí lấy rác (${formatCount(due)}đ)`
+          : `Ghi nhận chuyển khoản về muộn cho phiếu đã đóng (${formatCount(due)}đ → hoàn vào Ví Tubu)`}
+      </h4>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="block text-xs">
+          <span className="font-medium text-stone-700">Số tiền nhận (đồng) *</span>
+          <input
+            name="feeAmount"
+            type="text"
+            inputMode="numeric"
+            className={`${FIELD_CLASS} mt-1 block w-36 tabular-nums`}
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+          />
+        </label>
+        <label className="block text-xs">
+          <span className="font-medium text-stone-700">Mã giao dịch ngân hàng *</span>
+          <input
+            name="feeBankRef"
+            type="text"
+            maxLength={64}
+            placeholder="FT..."
+            className={`${FIELD_CLASS} mt-1 block w-48`}
+            value={bankRef}
+            onChange={(e) => setBankRef(e.target.value)}
+          />
+        </label>
+        <button type="button" className={BTN_PRIMARY} disabled={!valid || save.isPending} onClick={submit}>
+          Đã nhận tiền phí
+        </button>
+      </div>
       {err && <Notice tone="danger" role="alert">{err}</Notice>}
     </div>
   );

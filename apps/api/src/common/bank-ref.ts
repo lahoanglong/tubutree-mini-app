@@ -69,9 +69,26 @@ export async function isBankRefOnPayment(db: Db, bankRef: string, own?: { userId
   );
 }
 
+/** Mã giao dịch đã dùng để xác nhận phí thu gom tận nhà (waste_requests.shipFeeBankRef), khác `exceptRequestId`. */
+export async function findWasteRequestUsingBankRef(db: Db, bankRef: string, exceptRequestId?: string): Promise<{ code: string } | null> {
+  const findFirst = (db as { wasteRequest?: { findFirst?: PrismaService['wasteRequest']['findFirst'] } }).wasteRequest?.findFirst;
+  if (typeof findFirst !== 'function') return null;
+  const row = await findFirst.call((db as PrismaService).wasteRequest, {
+    where: {
+      shipFeeBankRef: { equals: bankRef, mode: 'insensitive' },
+      ...(exceptRequestId ? { id: { not: exceptRequestId } } : {}),
+    },
+    select: { code: true },
+  });
+  return row ? { code: row.code } : null;
+}
+
+export const bankRefUsedByWasteMessage = (bankRef: string, used: { code: string }) =>
+  `Mã giao dịch ${bankRef} đã dùng cho phí thu gom ${used.code}. Kiểm tra lại mã hoặc bỏ trống ô mã.`;
+
 /**
  * Một khoản chuyển khoản chỉ xác nhận được MỘT lần: mã giao dịch (bỏ khoảng trắng, không phân biệt hoa thường) đã ghi ở đơn
- * khác (lẻ hay đại lý) hoặc ở một khoản trả nợ thì 409 kèm mã đơn đã dùng. Mã chỉ nằm trong ghi chú lịch sử nên không có ràng buộc DB;
+ * khác (lẻ hay đại lý), ở một khoản trả nợ, hoặc ở một phiếu thu gom rác thì 409 kèm mã đã dùng. Mã chỉ nằm trong ghi chú lịch sử nên không có ràng buộc DB;
  * khoá advisory theo mã giữ tới hết transaction của `tx`, nên bên gọi PHẢI chạy hàm này trong cùng transaction với lần ghi PAID.
  * Transaction Read Committed nên mỗi câu đọc thấy dữ liệu mới nhất sau khi chờ khoá.
  */
@@ -83,5 +100,25 @@ export async function assertBankRefUnusedByOrder(tx: Prisma.TransactionClient, b
   }
   if (await isBankRefOnPayment(tx, bankRef)) {
     throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ đại lý. Kiểm tra lại mã hoặc bỏ trống ô mã.`);
+  }
+  const usedWaste = await findWasteRequestUsingBankRef(tx, bankRef);
+  if (usedWaste) {
+    throw new ConflictException(bankRefUsedByWasteMessage(bankRef, usedWaste));
+  }
+}
+
+/** Cùng không gian khoá `lockBankRef` với đơn hàng và công nợ đại lý cho xác nhận chuyển khoản phí lấy rác tận nhà (W178). */
+export async function assertBankRefUnusedByWasteFee(tx: Prisma.TransactionClient, bankRef: string, requestId: string) {
+  await lockBankRef(tx, bankRef);
+  const usedOrder = await findOrderUsingBankRef(tx, bankRef);
+  if (usedOrder) {
+    throw new ConflictException(bankRefUsedByOrderMessage(bankRef, usedOrder));
+  }
+  if (await isBankRefOnPayment(tx, bankRef)) {
+    throw new ConflictException(`Mã giao dịch ${bankRef} đã dùng để ghi giảm công nợ đại lý. Kiểm tra lại mã.`);
+  }
+  const usedWaste = await findWasteRequestUsingBankRef(tx, bankRef, requestId);
+  if (usedWaste) {
+    throw new ConflictException(bankRefUsedByWasteMessage(bankRef, usedWaste));
   }
 }

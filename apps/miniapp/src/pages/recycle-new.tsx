@@ -10,7 +10,12 @@ import {
   homePickupEnabled,
   type HomePickupForm,
 } from '@tubutree/app-core/recycle-home-pickup-state';
-import { homePickupCreateState, homePickupQuoteView, homePickupUnavailableText } from '@tubutree/app-core/recycle-home-pickup-view';
+import {
+  homePickupCreateState,
+  homePickupQuoteView,
+  homePickupSubmitLabel,
+  homePickupUnavailableText,
+} from '@tubutree/app-core/recycle-home-pickup-view';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
 import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
@@ -38,7 +43,7 @@ import { getLoyaltyRewards } from '../services/account-api';
 import { getProvinces } from '../services/geo-api';
 import { getZaloAccessToken, requestZaloLocation } from '../services/zmp-bridge';
 import { trackRecycleStep } from '../services/recycle-funnel';
-import { getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
+import { getErrorCode, getErrorMessage, getLoadErrorMessage, isStaleStateError } from '../services/api';
 import { settleWithin } from '../utils/settle-within';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useIdempotencyKey } from '../hooks/use-idempotency-key';
@@ -425,21 +430,39 @@ export default function RecycleNewPage() {
   const setHomePickup = (patch: Partial<HomePickupForm>) =>
     setDraft((d) => ({ ...d, homePickup: { ...(d.homePickup ?? EMPTY_HOME_PICKUP_FORM), ...patch } }));
 
-  // Cùng khoá cho các lần bấm lại khi nội dung đơn không đổi; đổi địa chỉ hay số kg thì sang khoá mới (máy chủ trả 409 cho cùng khoá khác nội dung).
+  const feeShortTrackedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!hpView?.needFeePayment || !hp.effective.addressId) return;
+    const sig = `${hp.effective.addressId}:${hp.effective.weightGrams}:${hpView.cashDueVnd}`;
+    if (feeShortTrackedRef.current === sig) return;
+    feeShortTrackedRef.current = sig;
+    trackRecycleStep('fee_short_shown', 'HOME_PICKUP');
+  }, [hpView?.needFeePayment, hpView?.cashDueVnd, hp.effective.addressId, hp.effective.weightGrams]);
+
+  // Cùng khoá cho các lần bấm lại khi nội dung đơn không đổi; đổi địa chỉ, số kg hay cách trả thì sang khoá mới (máy chủ trả 409 cho cùng khoá khác nội dung).
   const keyContent = {
     method: draft.method,
     lines: lineInputs,
     pointId: draft.method === 'DROP_OFF' ? draft.pointId : null,
     homePickup:
       draft.method === 'HOME_PICKUP'
-        ? { addressId: hp.effective.addressId, weightGrams: hp.effective.weightGrams }
+        ? {
+            addressId: hp.effective.addressId,
+            weightGrams: hp.effective.weightGrams,
+            ...(hpView?.needFeePayment && hp.effective.payment ? { payment: hp.effective.payment } : {}),
+          }
         : null,
   };
   const { key, rotate } = useIdempotencyKey(keyContent);
   const consentVersion = ackVersion ?? rulesVersion;
   const body: WasteCreateRequest | null =
     selected === 'HOME_PICKUP'
-      ? homePickupCreateBody({ form: hp.effective, lines: lineInputs, consentVersion })
+      ? homePickupCreateBody({
+          form: hpView?.needFeePayment ? hp.effective : { ...hp.effective, payment: null },
+          lines: lineInputs,
+          consentVersion,
+          expectedCashVnd: hpView?.needFeePayment ? hpView.cashDueVnd : null,
+        })
       : selected
         ? {
             method: selected,
@@ -467,8 +490,13 @@ export default function RecycleNewPage() {
     // thể lệ, hồ sơ, ước tính và điểm nhận tải lại xong (tối đa `settleWithin`). Lỗi tạm thì chỉ tải lại phiên bản thể lệ và nhả khoá ngay.
     onError: (e) => {
       openSnackbar({ text: homePickupUnavailableText(e) ?? getErrorMessage(e), type: 'error' });
+      const code = getErrorCode(e);
+      if (code === 'WASTE_FEE_BANK_DISABLED' || (selected === 'HOME_PICKUP' && hp.effective.payment === 'WALLET' && !isStaleStateError(e))) {
+        setHomePickup({ payment: null });
+      }
       const refreshRules = qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'rules-version'] });
-      if (!isStaleStateError(e)) return undefined;
+      const feeError = code === 'WASTE_FEE_CHANGED' || code === 'WASTE_FEE_NEED_PAYMENT' || code === 'WASTE_FEE_BANK_DISABLED' || hp.effective.payment === 'WALLET';
+      if (!isStaleStateError(e) && !feeError) return undefined;
       return settleWithin(
         Promise.all([
           refreshRules,
@@ -476,6 +504,7 @@ export default function RecycleNewPage() {
           qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'preview'] }),
           qc.invalidateQueries({ queryKey: [...WASTE_QUERY_KEYS.all, 'pickup-quote'] }),
           qc.invalidateQueries({ queryKey: WASTE_QUERY_KEYS.points(null) }),
+          qc.invalidateQueries({ queryKey: ['wallet'] }),
         ]),
       );
     },
@@ -586,7 +615,7 @@ export default function RecycleNewPage() {
 
   const selectMethod = (m: WasteMethod) => {
     if (m === draft.method) return;
-    setDraft((d) => ({ ...d, method: m }));
+    setDraft((d) => ({ ...d, method: m, ...(m !== 'HOME_PICKUP' ? { homePickup: undefined } : {}) }));
     setConsent(false);
     setPackagingConsent(false);
     setPostageConsent(false);
@@ -602,7 +631,13 @@ export default function RecycleNewPage() {
 
   const selectedPreview = selected ? previews[selected]?.data : undefined;
   const consentsOk = consentValid && (selected !== 'MAIL_IN' || (packagingConsent && postageConsent));
-  const hpState = homePickupCreateState({ addressId: hp.effective.addressId, quoteState: hp.quoteState, view: hpView, consentOk: consentValid });
+  const hpState = homePickupCreateState({
+    addressId: hp.effective.addressId,
+    quoteState: hp.quoteState,
+    view: hpView,
+    consentOk: consentValid,
+    payment: hp.effective.payment,
+  });
   const canCreate =
     selected === 'HOME_PICKUP'
       ? hpState.ok
@@ -746,6 +781,31 @@ export default function RecycleNewPage() {
               view={hpView}
               quoteErrorText={hp.quoteErrorText}
               onRetryQuote={hp.refetchQuote}
+              selectedPayment={hp.effective.payment ?? null}
+              onSelectPayment={(pay) => {
+                trackRecycleStep(pay === 'WALLET' ? 'fee_path_wallet' : 'fee_path_bank', 'HOME_PICKUP');
+                setHomePickup({ payment: pay });
+              }}
+              onAttachNextOrder={
+                enabledMethods.includes('PICKUP')
+                  ? () => {
+                      trackRecycleStep('fee_path_attach', 'PICKUP');
+                      selectMethod('PICKUP');
+                    }
+                  : undefined
+              }
+              onOpenExistingPickup={(reqId) => {
+                trackRecycleStep('fee_path_attach', 'PICKUP');
+                navigate(`/recycle/r/${reqId}`);
+              }}
+              onSwitchDropOff={
+                enabledMethods.includes('DROP_OFF') && !isLocked(previews.DROP_OFF?.data)
+                  ? () => {
+                      trackRecycleStep('fee_path_dropoff', 'DROP_OFF');
+                      selectMethod('DROP_OFF');
+                    }
+                  : undefined
+              }
               disabled={create.isPending}
             />
           )}
@@ -825,7 +885,7 @@ export default function RecycleNewPage() {
       }
       primary={
         <Button fullWidth disabled={!canCreate} loading={create.isPending} onPress={() => create.mutate()}>
-          {selected === 'HOME_PICKUP' ? homePickupCopy.createButton : 'Tạo yêu cầu'}
+          {selected === 'HOME_PICKUP' ? homePickupSubmitLabel(hpView, hp.effective.payment) : 'Tạo yêu cầu'}
         </Button>
       }
     />,

@@ -21,6 +21,7 @@ import { computeWastePublicFlags } from '../core/waste-public-config';
 import { generateWasteCode, normalizeTracking } from '../waste-codes';
 import { lockWasteCustomer, lockWasteTracking } from '../waste-locks';
 import { WasteHomePickupCustomerService } from '../home-pickup/waste-home-pickup-customer.service';
+import { WasteFeeBankService, type WasteFeeBankQrResponse } from '../home-pickup/waste-fee-bank.service';
 import { WASTE_OPEN_STATUSES } from '../waste.constants';
 import { toRequestDetail, toRequestSummary, WASTE_REQUEST_FULL_INCLUDE, WASTE_REQUEST_SUMMARY_INCLUDE, type WasteRequestFull } from './waste-request.mapper';
 
@@ -40,6 +41,7 @@ export class WasteRequestsService {
     private readonly config: WasteConfigService,
     private readonly systemConfig: SystemConfigService,
     @Optional() private readonly homePickup?: WasteHomePickupCustomerService,
+    @Optional() private readonly feeBank?: WasteFeeBankService,
   ) {}
 
   async list(userId: string): Promise<WasteRequestSummaryDTO[]> {
@@ -63,6 +65,11 @@ export class WasteRequestsService {
   async pickupQuote(userId: string, body: WastePickupQuoteRequest): Promise<WastePickupQuoteResponse> {
     if (!this.homePickup) throw new ServiceUnavailableException(WASTE_MESSAGES.HOME_PICKUP_UNAVAILABLE);
     return this.homePickup.quote(userId, body);
+  }
+
+  async feeQr(userId: string, id: string): Promise<WasteFeeBankQrResponse> {
+    if (!this.feeBank) throw new ServiceUnavailableException(WASTE_MESSAGES.HOME_PICKUP_UNAVAILABLE);
+    return this.feeBank.getFeeQr(userId, id);
   }
 
   async create(userId: string, idempotencyKey: string, body: WasteCreateRequest): Promise<WasteRequestDetailDTO> {

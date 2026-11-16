@@ -109,8 +109,17 @@ describe('thân báo phí và thân tạo đơn', () => {
     expect(homePickupCreateBody({ form, lines })).not.toHaveProperty('consentVersion');
     expect(homePickupCreateBody({ form: { ...form, addressId: null }, lines })).toBeNull();
   });
-  it('phí ship chỉ trả bằng Điểm Xanh: luôn gửi usePointsForShipFee true, không có ô chọn cách trả', () => {
+  it('luôn gửi usePointsForShipFee true; khi chọn cách trả phần thiếu (WALLET / BANK_TRANSFER) thì kèm shipFeePayment và expectedCashVnd', () => {
     expect(homePickupCreateBody({ form, lines })?.usePointsForShipFee).toBe(true);
     expect(homePickupCreateBody({ form: { ...form, weightGrams: 500 }, lines })?.usePointsForShipFee).toBe(true);
+    expect(homePickupCreateBody({ form: { ...form, payment: 'WALLET' }, lines, expectedCashVnd: 17_000 })).toMatchObject({
+      usePointsForShipFee: true,
+      shipFeePayment: 'WALLET',
+      expectedCashVnd: 17_000,
+    });
+    expect(homePickupCreateBody({ form: { ...form, payment: 'BANK_TRANSFER' }, lines, expectedCashVnd: 0 })).toMatchObject({
+      shipFeePayment: 'BANK_TRANSFER',
+    });
+    expect(homePickupCreateBody({ form: { ...form, payment: null }, lines, expectedCashVnd: 17_000 })).not.toHaveProperty('shipFeePayment');
   });
 });

@@ -13,7 +13,8 @@ const ENUMS: Record<string, string[]> = {
   WastePointStaffRole: ['OWNER', 'STAFF'],
   WasteMethod: ['DROP_OFF', 'MAIL_IN', 'PICKUP', 'HOME_PICKUP'],
   WasteRequestStatus: ['OPEN', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED', 'REJECTED', 'CANCELLED', 'EXPIRED', 'REVERSED'],
-  WasteCloseReason: ['HOLD_EXPIRED', 'PICKUP_NO_SHOW', 'PICKUP_NOT_DISPATCHED', 'LOST', 'LOST_AT_WAREHOUSE', 'SHIP_LOCKED', 'ORDER_CANCELLED'],
+  WasteCloseReason: ['HOLD_EXPIRED', 'PICKUP_NO_SHOW', 'PICKUP_NOT_DISPATCHED', 'LOST', 'LOST_AT_WAREHOUSE', 'SHIP_LOCKED', 'ORDER_CANCELLED', 'FEE_UNPAID'],
+  WasteFeeCashMethod: ['WALLET', 'BANK_TRANSFER'],
   WasteRejectionReason: ['WET', 'DIRTY', 'FOREIGN_OBJECT', 'WRONG_TYPE', 'DAMAGED', 'NOT_ACCEPTED', 'OVERSIZE', 'HAZARDOUS', 'UNPAID_POSTAGE', 'OTHER'],
   WasteShortfallReason: ['WET', 'DIRTY', 'FOREIGN_OBJECT', 'WRONG_TYPE', 'DAMAGED', 'NOT_ACCEPTED', 'OTHER'],
   WasteActorRole: ['CUSTOMER', 'POINT_STAFF', 'STAFF', 'ADMIN', 'SYSTEM'],
@@ -124,7 +125,7 @@ describe('waste schema (schema.prisma)', () => {
     WastePointItem: ['pointId', 'itemId'],
     WastePointStaff: ['id', 'pointId', 'userId', 'role', 'isActive', 'createdAt', 'updatedAt'],
     WastePointUsage: ['pointId', 'monthKey', 'pointsUsed', 'confirmations'],
-    WasteRequest: ['id', 'code', 'userId', 'method', 'status', 'pointId', 'orderId', 'carrier', 'trackingCode', 'trackingNorm', 'trackingConflict', 'estimatedPoints', 'estimatedDrops', 'capDayKey', 'capMonthKey', 'expiresAt', 'inTransitAt', 'receivedAt', 'completedAt', 'closedAt', 'closeReason', 'confirmedByUserId', 'pointsAwarded', 'dropsAwarded', 'receivedWeightGrams', 'carrierCostVnd', 'rejectionReason', 'rejectionNote', 'reversedAt', 'reversedByUserId', 'reversalReason', 'reversalShortfallPoints', 'gomdonOrderId', 'gomdonPartnerCode', 'gomdonStatus', 'gomdonStatusAt', 'declaredWeightGrams', 'shipFeeVnd', 'shipFeePointsUsed', 'shipFeeCodVnd', 'shipFeePointsRefunded', 'pickupAddress', 'shippingHistory', 'idempotencyKey', 'consentAt', 'consentVersion', 'createdAt', 'updatedAt'],
+    WasteRequest: ['id', 'code', 'userId', 'method', 'status', 'pointId', 'orderId', 'carrier', 'trackingCode', 'trackingNorm', 'trackingConflict', 'estimatedPoints', 'estimatedDrops', 'capDayKey', 'capMonthKey', 'expiresAt', 'inTransitAt', 'receivedAt', 'completedAt', 'closedAt', 'closeReason', 'confirmedByUserId', 'pointsAwarded', 'dropsAwarded', 'receivedWeightGrams', 'carrierCostVnd', 'rejectionReason', 'rejectionNote', 'reversedAt', 'reversedByUserId', 'reversalReason', 'reversalShortfallPoints', 'gomdonOrderId', 'gomdonPartnerCode', 'gomdonStatus', 'gomdonStatusAt', 'declaredWeightGrams', 'shipFeeVnd', 'shipFeePointsUsed', 'shipFeeCashVnd', 'shipFeeCashMethod', 'shipFeeCashPaidAt', 'shipFeeCashRefundedVnd', 'shipFeeBankRef', 'shipFeeCodVnd', 'shipFeePointsRefunded', 'pickupAddress', 'shippingHistory', 'idempotencyKey', 'consentAt', 'consentVersion', 'createdAt', 'updatedAt'],
     WasteRequestLine: ['id', 'requestId', 'itemId', 'itemCode', 'itemName', 'unitLabel', 'unitsPerPoint', 'pointsPerGroup', 'dropsPerUnit', 'gramsPerUnit', 'declaredQty', 'receivedQty', 'shortfallReason', 'pointsAwarded'],
     WasteEvent: ['id', 'createdAt', 'kind', 'requestId', 'pointId', 'giftRedemptionId', 'actorUserId', 'actorRole', 'meta'],
     WasteUnmatchedParcel: ['id', 'receivedAt', 'createdByUserId', 'carrier', 'trackingCode', 'trackingNorm', 'description', 'reason', 'relatedRequestId', 'status', 'matchedRequestId', 'resolvedByUserId', 'resolvedAt', 'resolveNote'],
@@ -201,7 +202,7 @@ describe('waste migration folder (generated DDL part)', () => {
 
   it('creates the 14 enums and the 12 tables, and nothing else is altered or dropped', () => {
     const types = [...SQL.matchAll(/CREATE TYPE "(Waste\w+)" AS ENUM/g)].map((m) => m[1]!).sort();
-    expect(types).toEqual(Object.keys(ENUMS).sort());
+    expect(types).toEqual(Object.keys(ENUMS).filter((e) => e !== 'WasteFeeCashMethod').sort());
     const tables = [...SQL.matchAll(/CREATE TABLE "(\w+)"/g)].map((m) => m[1]!).sort();
     expect(tables).toEqual(Object.values(MODELS).sort());
     const altered = [...SQL.matchAll(/ALTER TABLE "(\w+)"/g)].map((m) => m[1]!);

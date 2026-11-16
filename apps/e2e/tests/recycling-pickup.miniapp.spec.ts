@@ -1,8 +1,8 @@
-import type { CheckoutPickupQuote, PickupOptionItem, PickupOptionsResponse } from '@tubutree/shared-types';
-import { test, expect, makeOrder, mockSession, makeUser, reply } from './support/mock-api';
+import type { CheckoutPickupQuote, PickupOptionItem, PickupOptionsResponse, WastePickupQuoteResponse } from '@tubutree/shared-types';
+import { test, expect, makeOrder, mockSession, makeUser, publicConfig, reply } from './support/mock-api';
 import type { MockApi } from './support/mock-api';
-import { CHECKOUT_QUOTE, mockCheckout } from './support/checkout-mocks';
-import { wasteDetail } from './support/waste-mocks';
+import { CHECKOUT_ADDRESS, CHECKOUT_QUOTE, mockCheckout } from './support/checkout-mocks';
+import { mockWasteCustomer, wasteDetail, wastePoint } from './support/waste-mocks';
 
 /**
  * Zalo Mini App E2E — Đổi rác kèm đơn (thu rác gắn vào đơn đổi hàng).
@@ -296,5 +296,95 @@ test.describe('Chi tiết đơn — yêu cầu thu rác gắn kèm', () => {
     await expect.poll(() => api.callsTo('GET', '/waste/requests/by-order/:orderId').length).toBeGreaterThan(0);
     await expect(page.getByText(/Yêu cầu thu rác/)).toHaveCount(0);
     await expect(page.getByText(/Không tìm thấy mã/)).toHaveCount(0);
+  });
+});
+
+test.describe('W178 — Shipper lấy tận nhà khi thiếu Điểm Xanh', () => {
+  test('thiếu Điểm Xanh: 1 chạm chuyển sang Gửi kèm đơn mua (PICKUP) giữ nguyên món, và trả phần thiếu bằng Ví Tubu', async ({ page, api }) => {
+    await page.setViewportSize({ width: 375, height: 812 });
+    mockSession(api, makeUser({ id: 'user-w178' }));
+    const createdHome = wasteDetail({
+      id: 'wr-hp-1',
+      code: 'TR-HP178',
+      method: 'HOME_PICKUP',
+      status: 'OPEN',
+      pointName: 'Kho Tubu TP.HCM',
+      homePickup: {
+        gomdonStatus: '1',
+        statusText: 'Đã tạo đơn, chờ bưu tá tới lấy rác',
+        shipFeeVnd: 25_000,
+        shipFeePointsUsed: 8_000,
+        shipFeeCodVnd: 0,
+        shipFeePointsRefunded: 0,
+        shipFeeCashVnd: 17_000,
+        shipFeeCashMethod: 'WALLET',
+        shipFeeCashPaid: true,
+        shipFeeCashRefundedVnd: 0,
+        declaredWeightGrams: 2000,
+        pickupAddressText: '123 Lê Lợi, Phường Sài Gòn, TP. Hồ Chí Minh',
+        timeline: [{ at: '2026-11-16T03:00:00.000Z', text: 'Đã tạo đơn thu gom' }],
+      },
+    });
+    mockWasteCustomer(api, {
+      me: {
+        laneFlags: { dropoff: true, mailin: true, pickup: true },
+        balance: { pointsBalance: 8_000, pointsConvertedBalance: 0, redeemablePoints: 8_000 },
+      },
+      points: [wastePoint({ id: 'wp-q1' })],
+      requests: [createdHome],
+    });
+    api.get('/config/public', publicConfig({ waste: { enabled: true, dropoff: true, mailin: true, pickup: true } }));
+    api.get('/me/addresses', [CHECKOUT_ADDRESS]);
+    api.post('/events', { accepted: 1 });
+    const quote: WastePickupQuoteResponse = {
+      shipFeeVnd: 25_000,
+      estimated: false,
+      estimatedPoints: 5_000,
+      minPoints: 3_000,
+      pointsAvailable: 8_000,
+      pointsApplicable: 8_000,
+      remainingFeeVnd: 17_000,
+      addressOk: true,
+      addressMessage: null,
+      blocked: 'Phí shipper lấy rác cần trả bằng Điểm Xanh, bạn còn thiếu 17.000 điểm. Hãy chọn mang tới điểm thu gom hoặc đổi rác kèm đơn mua nhé',
+      blockedCode: 'NEED_FEE_PAYMENT',
+      cashDueVnd: 17_000,
+      feePaths: {
+        wallet: { balance: 40_000, enough: true },
+        bankTransfer: { enabled: false },
+        attachNextOrder: { available: true, reason: null, existingRequestId: null },
+      },
+    };
+    api.post('/waste/pickup-quote', () => quote);
+    api.post('/waste/requests', () => createdHome);
+    api.get('/waste/requests/:id', () => createdHome);
+
+    await page.goto('/recycle/new');
+    const card = page.locator('[data-item]').filter({ hasText: 'Thùng carton cũ' });
+    for (let i = 0; i < 5; i++) await card.getByRole('button', { name: 'Tăng số lượng' }).click();
+    await page.getByRole('button', { name: 'Tiếp tục' }).click();
+    await page.getByRole('radio', { name: /Shipper lấy tận nhà/ }).click();
+
+    await expect(page.getByTestId('home-pickup-fee-short')).toBeVisible();
+    await expect(page.getByText('Miễn phí lấy rác 100%')).toBeVisible();
+
+    // Path 1: 1 chạm chuyển sang Gửi kèm đơn mua kế tiếp
+    await page.getByTestId('fee-path-attach').click();
+    await expect(page.getByRole('radio', { name: /Thu kèm đơn mua/ })).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByTestId('home-pickup-fee-short')).toHaveCount(0);
+
+    // Path 2: quay lại Shipper lấy tận nhà, trả 17.000đ bằng Ví Tubu
+    await page.getByRole('radio', { name: /Shipper lấy tận nhà/ }).click();
+    await page.getByText('Tôi đồng ý với Thể lệ Đổi rác và để Tubu Tree xử lý yêu cầu này').click();
+    await page.getByTestId('fee-path-wallet').click();
+    await page.getByRole('button', { name: 'Trả 17.000đ từ Ví và đặt lấy rác' }).click();
+    await expect(page.getByText('TR-HP178').first()).toBeVisible();
+    const [created] = api.callsTo('POST', '/waste/requests');
+    expect(created?.body).toMatchObject({
+      method: 'HOME_PICKUP',
+      usePointsForShipFee: true,
+      shipFeePayment: 'WALLET',
+      expectedCashVnd: 17_000,
+    });
   });
 });

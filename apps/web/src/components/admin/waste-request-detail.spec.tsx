@@ -470,6 +470,8 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     expect(btn(pickupTransit.c, 'Đóng vì thất lạc')).toBeNull();
     const dropExpired = await mount({ isAdmin: true, detail: wasteRequestDetail({ method: 'DROP_OFF', status: 'EXPIRED' }) });
     expect(btn(dropExpired.c, 'Mở lại yêu cầu')).toBeNull();
+    const feeUnpaidExpired = await mount({ isAdmin: true, detail: wasteRequestDetail({ method: 'HOME_PICKUP', status: 'EXPIRED', closeReason: 'FEE_UNPAID' }) });
+    expect(btn(feeUnpaidExpired.c, 'Mở lại yêu cầu')).toBeNull();
     const pickupNoOrder = await mount({ isAdmin: true, detail: wasteRequestDetail({ method: 'PICKUP', status: 'EXPIRED', orderId: null }) });
     expect(btn(pickupNoOrder.c, 'Mở lại yêu cầu')).toBeNull();
     const completed = await mount({ isAdmin: true, detail: wasteRequestDetail({ status: 'COMPLETED', pointsAwarded: 17_000 }) });
@@ -477,6 +479,50 @@ describe('WasteRequestDetail: thao tác chỉ admin, nhật ký', () => {
     const mailTransit = await mount({ isAdmin: true, detail: wasteRequestDetail({ method: 'MAIL_IN', status: 'IN_TRANSIT' }) });
     expect(btn(mailTransit.c, 'Đóng vì thất lạc')).not.toBeNull();
     expect(btn(mailTransit.c, 'Từ chối cả yêu cầu')).toBeNull();
+  });
+
+  it('W178 xác nhận nhận phí chuyển khoản (178-E): gửi đúng amount + bankRef tới /confirm-fee-paid', async () => {
+    const awaiting = wasteRequestDetail({
+      method: 'HOME_PICKUP',
+      status: 'OPEN',
+      homePickup: {
+        gomdonStatus: null,
+        statusText: 'Chờ bạn chuyển khoản phí lấy rác',
+        shipFeeVnd: 25_000,
+        shipFeePointsUsed: 8_000,
+        shipFeeCashVnd: 17_000,
+        shipFeeCashMethod: 'BANK_TRANSFER',
+        shipFeeCashPaid: false,
+        shipFeeCashRefundedVnd: 0,
+        shipFeeCodVnd: 0,
+        shipFeePointsRefunded: 0,
+        declaredWeightGrams: 2000,
+        pickupAddressText: '1 Lê Lợi, Q1, TP.HCM',
+        timeline: [],
+      },
+    });
+    const api = mockFetch({
+      '/admin/waste/requests/r1/confirm-fee-paid': {
+        body: { outcome: 'PAID', request: awaiting },
+      },
+      '/admin/waste/requests/r1': { body: awaiting },
+      '/admin/waste/unmatched': { body: [] },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const r = render(<WasteRequestDetail id="r1" isAdmin={true} onClose={vi.fn()} />);
+    mounted.push(r);
+    await flush();
+    const form = r.container.querySelector('[data-fee-bank-form]')!;
+    expect(form.textContent).toContain('17.000đ');
+    const submitBtn = btn(form, 'Đã nhận tiền phí') as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(true);
+    typeInto(input(form, 'feeBankRef')!, 'FT998877');
+    expect(submitBtn.disabled).toBe(false);
+    click(submitBtn);
+    await flush();
+    const calls = post(api, '/admin/waste/requests/r1/confirm-fee-paid');
+    expect(calls).toHaveLength(1);
+    expect(bodyOf(calls[0])).toEqual({ amount: 17_000, bankRef: 'FT998877' });
   });
 
   it('không có chữ cấm', async () => {

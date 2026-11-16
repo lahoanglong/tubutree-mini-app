@@ -48,6 +48,8 @@ export const WASTE_CONFIG_FIELDS: readonly WasteConfigField[] = [
     maxLength: 32,
     hint: 'Đổi số này khi sửa nội dung thể lệ để khách đồng ý lại',
   },
+  { key: 'waste.home_pickup_bank_transfer_enabled', label: 'Cho phép chuyển khoản VietQR phần phí lấy rác còn thiếu', kind: 'boolean', fallback: false },
+  { key: 'waste.fee_payment_ttl_hours', label: 'Số giờ giữ yêu cầu chờ chuyển khoản phí lấy rác', kind: 'int', fallback: 24, min: 1, max: 72 },
 ];
 
 const MAILIN_MIN = 'waste.mailin_min_points';

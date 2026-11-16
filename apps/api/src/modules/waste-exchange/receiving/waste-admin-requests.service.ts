@@ -136,7 +136,12 @@ export class WasteAdminRequestsService {
       if (!req) throw new NotFoundException(NOT_FOUND);
       // An account merge moved the request to another customer after the unlocked pre-read.
       if (req.userId !== pre.userId) throw new ConflictException(RETRY);
-      if (req.status !== 'EXPIRED' || req.method === 'DROP_OFF' || (req.method === 'PICKUP' && req.orderId === null)) {
+      if (
+        req.status !== 'EXPIRED' ||
+        req.method === 'DROP_OFF' ||
+        (req.method === 'PICKUP' && req.orderId === null) ||
+        req.closeReason === 'FEE_UNPAID'
+      ) {
         throw new ConflictException(NOT_REOPENABLE);
       }
 

@@ -54,6 +54,7 @@ export interface WasteCapUsage {
   pointsMonth: number;
   openCount: number;
   pickupPendingCode: string | null;
+  pickupPendingId?: string | null;
 }
 
 type Mode = 'THROW' | 'COLLECT';
@@ -80,9 +81,9 @@ export class WasteHoldService {
     db: Prisma.TransactionClient,
     input: WasteHoldInput,
     cfg: WasteHoldConfig,
-  ): Promise<{ result: CheckResult; blocks: WastePreviewBlockDTO[]; messages: string[] }> {
-    const { result, blocks } = await this.check(db, input, cfg, 'COLLECT');
-    return { result, blocks: blocks.map((b) => b.dto), messages: blocks.map((b) => b.message) };
+  ): Promise<{ result: CheckResult; blocks: WastePreviewBlockDTO[]; messages: string[]; pickupPendingId: string | null }> {
+    const { result, blocks, pickupPendingId } = await this.check(db, input, cfg, 'COLLECT');
+    return { result, blocks: blocks.map((b) => b.dto), messages: blocks.map((b) => b.message), pickupPendingId };
   }
 
   async capUsage(
@@ -111,7 +112,7 @@ export class WasteHoldService {
     const openCount = await db.wasteRequest.count({ where: { userId, status: { in: [...WASTE_OPEN_STATUSES] } } });
     const pending = await db.wasteRequest.findFirst({
       where: { userId, method: 'PICKUP', status: 'OPEN', orderId: null },
-      select: { code: true },
+      select: { id: true, code: true },
       orderBy: { createdAt: 'asc' },
     });
     return {
@@ -120,6 +121,7 @@ export class WasteHoldService {
       pointsMonth: points?.points ?? 0,
       openCount,
       pickupPendingCode: pending?.code ?? null,
+      pickupPendingId: pending?.id ?? null,
     };
   }
 
@@ -128,7 +130,7 @@ export class WasteHoldService {
     input: WasteHoldInput,
     cfg: WasteHoldConfig,
     mode: Mode,
-  ): Promise<{ result: CheckResult; blocks: Block[] }> {
+  ): Promise<{ result: CheckResult; blocks: Block[]; pickupPendingId: string | null }> {
     const { path, userId, method, now } = input;
     const ids = input.lines.map((l) => l.itemId);
     if (new Set(ids).size !== ids.length) throw new BadRequestException(WASTE_MESSAGES.DUPLICATE_LINE);
@@ -293,6 +295,7 @@ export class WasteHoldService {
     return {
       result: { pointId: pointId ?? '', capDayKey, capMonthKey, lines: priced.map((p) => p.snapshot), estimatedPoints, estimatedDrops: totals.drops },
       blocks,
+      pickupPendingId: usage.pickupPendingId ?? null,
     };
   }
 }

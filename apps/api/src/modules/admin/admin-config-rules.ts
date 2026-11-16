@@ -213,6 +213,7 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'waste.lane_dropoff_enabled': assertBoolean,
   'waste.lane_mailin_enabled': assertBoolean,
   'waste.lane_pickup_enabled': assertBoolean,
+  'waste.home_pickup_bank_transfer_enabled': assertBoolean,
 };
 
 /** Khoá có luật ghi ở đây (form riêng trong web admin): được ghi kể cả khi DB chưa có dòng. */

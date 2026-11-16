@@ -1,4 +1,4 @@
-import type { WasteHomePickupDTO, WasteHomePickupTimelineEntry } from '@tubutree/shared-types';
+import type { WasteFeeCashMethod, WasteHomePickupDTO, WasteHomePickupTimelineEntry } from '@tubutree/shared-types';
 import { formatPoints } from '../../../common/format-points';
 
 /** order_customer_id gửi Gomdon của phiếu thu gom độc lập: tiền tố WR- tách khỏi mã đơn mua (TUBU...). */
@@ -35,11 +35,16 @@ export function homePickupGomdonText(gomdonStatus: string | null | undefined): s
 
 type RowForDto = {
   status: string;
+  closeReason?: string | null;
   gomdonStatus: string | null;
   shipFeeVnd: number | null;
   shipFeePointsUsed: number | null;
   shipFeeCodVnd: number | null;
   shipFeePointsRefunded: number | null;
+  shipFeeCashVnd?: number | null;
+  shipFeeCashMethod?: WasteFeeCashMethod | null;
+  shipFeeCashPaidAt?: Date | null;
+  shipFeeCashRefundedVnd?: number | null;
   declaredWeightGrams: number | null;
   pickupAddress: unknown;
   shippingHistory: unknown;
@@ -87,11 +92,18 @@ function homePickupStatusText(row: RowForDto): string {
   if (row.status === 'CANCELLED') return 'Đơn thu gom đã huỷ';
   if (row.status === 'REJECTED') return 'Kho Tubu không nhận kiện này';
   if (row.status === 'REVERSED') return 'Tubu đã thu hồi Điểm Xanh của yêu cầu này';
-  if (row.status === 'EXPIRED') return row.gomdonStatus === '10' ? homePickupGomdonText('10') : 'Yêu cầu đã đóng';
+  if (row.status === 'EXPIRED') {
+    if (row.closeReason === 'FEE_UNPAID') return 'Quá hạn chuyển khoản phí lấy rác';
+    return row.gomdonStatus === '10' ? homePickupGomdonText('10') : 'Yêu cầu đã đóng';
+  }
+  if (row.status === 'OPEN' && (row.shipFeeCashVnd ?? 0) > 0 && !row.shipFeeCashPaidAt) {
+    return 'Chờ bạn chuyển khoản phí lấy rác';
+  }
   return homePickupGomdonText(row.gomdonStatus);
 }
 
 export function toHomePickupDto(row: RowForDto): WasteHomePickupDTO {
+  const cashVnd = row.shipFeeCashVnd ?? 0;
   return {
     gomdonStatus: row.gomdonStatus,
     statusText: homePickupStatusText(row),
@@ -99,6 +111,10 @@ export function toHomePickupDto(row: RowForDto): WasteHomePickupDTO {
     shipFeePointsUsed: row.shipFeePointsUsed ?? 0,
     shipFeeCodVnd: row.shipFeeCodVnd ?? 0,
     shipFeePointsRefunded: row.shipFeePointsRefunded ?? 0,
+    shipFeeCashVnd: cashVnd,
+    shipFeeCashMethod: cashVnd > 0 ? (row.shipFeeCashMethod ?? null) : null,
+    shipFeeCashPaid: cashVnd > 0 && row.shipFeeCashPaidAt != null,
+    shipFeeCashRefundedVnd: row.shipFeeCashRefundedVnd ?? 0,
     declaredWeightGrams: row.declaredWeightGrams ?? 0,
     pickupAddressText: pickupAddressText(row.pickupAddress),
     timeline: homePickupTimeline(row),

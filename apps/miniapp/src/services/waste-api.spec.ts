@@ -22,6 +22,7 @@ describe('waste-api — đúng route, body, header (registry §5)', () => {
     ['cancelWasteRequest', () => w.cancelWasteRequest('req-1'), 'post', ['/waste/requests/req-1/cancel']],
     ['listWasteRequests', () => w.listWasteRequests(), 'get', ['/waste/requests']],
     ['getWasteRequest', () => w.getWasteRequest('req-1'), 'get', ['/waste/requests/req-1']],
+    ['getWasteFeeQr', () => w.getWasteFeeQr('req-1'), 'get', ['/waste/requests/req-1/fee-qr']],
     ['getWasteRequestByOrder', () => w.getWasteRequestByOrder('ord-1'), 'get', ['/waste/requests/by-order/ord-1']],
     ['getWasteRules', () => w.getWasteRules(), 'get', ['/waste/rules']],
     ['getDeskPoints', () => w.getDeskPoints(), 'get', ['/waste/desk/points']],
@@ -44,15 +45,15 @@ describe('waste-api — đúng route, body, header (registry §5)', () => {
 });
 
 describe('invalidate helpers (§16.1: từng khoá một)', () => {
-  it('invalidateAfterWasteWrite: waste, loyalty, points-txn, game', async () => {
+  it('invalidateAfterWasteWrite: waste, loyalty, points-txn, game, wallet', async () => {
     const qc = { invalidateQueries: vi.fn().mockResolvedValue(undefined) };
     await w.invalidateAfterWasteWrite(qc as never);
-    expect(qc.invalidateQueries.mock.calls.map((c) => c[0].queryKey)).toEqual([['waste'], ['loyalty'], ['points-txn'], ['game']]);
+    expect(qc.invalidateQueries.mock.calls.map((c) => c[0].queryKey)).toEqual([['waste'], ['loyalty'], ['points-txn'], ['game'], ['wallet']]);
   });
   it('invalidateAfterRedeem: thêm loyalty-rewards và coupons', async () => {
     const qc = { invalidateQueries: vi.fn().mockResolvedValue(undefined) };
     await w.invalidateAfterRedeem(qc as never);
-    expect(qc.invalidateQueries.mock.calls.map((c) => c[0].queryKey)).toEqual([['waste'], ['loyalty'], ['points-txn'], ['game'], ['loyalty-rewards'], ['coupons']]);
+    expect(qc.invalidateQueries.mock.calls.map((c) => c[0].queryKey)).toEqual([['waste'], ['loyalty'], ['points-txn'], ['game'], ['wallet'], ['loyalty-rewards'], ['coupons']]);
   });
   it('query keys giữ đúng hình registry §4.11', () => {
     expect(w.WASTE_QUERY_KEYS.me).toEqual(['waste', 'me']);

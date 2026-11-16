@@ -1,30 +1,61 @@
-import { closeHomePickupRequest, refundShipFeePoints, wastePickupFeeRefundReason, wastePickupFeeReason, WASTE_PICKUP_FEE_REF_TYPE } from './waste-home-pickup-ledger';
+import {
+  closeHomePickupRequest,
+  refundShipFeeCash,
+  refundShipFeePoints,
+  wastePickupFeeCashPayReason,
+  wastePickupFeeCashRefundReason,
+  wastePickupFeeRefundReason,
+  wastePickupFeeReason,
+  WASTE_PICKUP_FEE_REF_TYPE,
+} from './waste-home-pickup-ledger';
 
 const mockApply = jest.fn();
 jest.mock('../../loyalty/points-ledger', () => ({ applyPointsDelta: (...a: unknown[]) => mockApply(...a) }));
+const mockCreditWallet = jest.fn();
+jest.mock('../../wallet/wallet-anonymized-guard', () => ({ creditWalletUnlessAnonymized: (...a: unknown[]) => mockCreditWallet(...a) }));
 const mockEvent = jest.fn();
 jest.mock('../core/waste-events', () => ({ writeWasteEvent: (...a: unknown[]) => mockEvent(...a) }));
 
 const EXPIRES = new Date('2027-11-15T00:00:00Z');
 const req = { id: 'r1', userId: 'u1', code: 'TR-AAAAA', shipFeePointsUsed: 1500 };
 
-function fakeTx(over: { claim?: number; entries?: Array<{ delta: number; lot: 'STANDARD' | 'CONVERTED' }>; closed?: number } = {}) {
+function fakeTx(
+  over: {
+    claim?: number;
+    cashClaim?: number;
+    cashRow?: { shipFeeCashVnd: number | null; shipFeeCashPaidAt: Date | null; shipFeeCashRefundedVnd: number | null } | null;
+    entries?: Array<{ delta: number; lot: 'STANDARD' | 'CONVERTED' }>;
+    closed?: number;
+  } = {},
+) {
   const updateMany = jest.fn(async (args: { where: Record<string, unknown> }) => ({
-    count: 'shipFeePointsRefunded' in args.where ? (over.claim ?? 1) : (over.closed ?? 1),
+    count:
+      'shipFeePointsRefunded' in args.where
+        ? (over.claim ?? 1)
+        : 'shipFeeCashRefundedVnd' in args.where
+          ? (over.cashClaim ?? 1)
+          : (over.closed ?? 1),
   }));
+  const findUnique = jest.fn().mockResolvedValue(
+    over.cashRow === undefined ? { shipFeeCashVnd: null, shipFeeCashPaidAt: null, shipFeeCashRefundedVnd: null } : over.cashRow,
+  );
+  const update = jest.fn().mockResolvedValue({});
   const findMany = jest.fn().mockResolvedValue(over.entries ?? [{ delta: -1000, lot: 'STANDARD' }, { delta: -500, lot: 'CONVERTED' }]);
-  return { tx: { wasteRequest: { updateMany }, pointsTransaction: { findMany } } as never, updateMany, findMany };
+  return { tx: { wasteRequest: { updateMany, findUnique, update }, pointsTransaction: { findMany } } as never, updateMany, findUnique, update, findMany };
 }
 
 beforeEach(() => {
   mockApply.mockReset().mockResolvedValue({ applied: true, entryId: 'e' });
+  mockCreditWallet.mockReset().mockResolvedValue({ credited: true, balanceAfter: 25000, anonymizedAt: null });
   mockEvent.mockReset().mockResolvedValue({ id: 'ev' });
 });
 
-describe('reason của sổ điểm phí shipper', () => {
+describe('reason của sổ điểm và sổ Ví phí shipper', () => {
   it('mang mã phiếu để tra và để hoàn đúng lô', () => {
     expect(wastePickupFeeReason('TR-AAAAA')).toBe('WASTE_PICKUP_FEE:TR-AAAAA');
     expect(wastePickupFeeRefundReason('TR-AAAAA')).toBe('WASTE_PICKUP_FEE_REFUND:TR-AAAAA');
+    expect(wastePickupFeeCashPayReason('TR-AAAAA')).toBe('Phí lấy rác tận nhà · TR-AAAAA');
+    expect(wastePickupFeeCashRefundReason('TR-AAAAA')).toBe('Hoàn phí lấy rác tận nhà · TR-AAAAA');
     expect(WASTE_PICKUP_FEE_REF_TYPE).toBe('WASTE_REQUEST');
   });
 });
@@ -74,7 +105,7 @@ describe('closeHomePickupRequest', () => {
 
   it('đóng phiếu, hoàn điểm và ghi sự kiện trong cùng transaction', async () => {
     const { tx, updateMany } = fakeTx();
-    await expect(closeHomePickupRequest(tx, args({ where: { gomdonStatus: '1' } }))).resolves.toEqual({ closed: true, refunded: 1500 });
+    await expect(closeHomePickupRequest(tx, args({ where: { gomdonStatus: '1' } }))).resolves.toEqual({ closed: true, refunded: 1500, refundedCashVnd: 0 });
     expect(updateMany.mock.calls[0]![0]).toEqual({
       where: { id: 'r1', method: 'HOME_PICKUP', status: { in: ['OPEN'] }, gomdonStatus: '1' },
       data: expect.objectContaining({ status: 'CANCELLED', closeReason: null }),
@@ -83,16 +114,53 @@ describe('closeHomePickupRequest', () => {
     expect(mockEvent.mock.calls[0]![1]).toMatchObject({ kind: 'REQUEST_CANCELLED', requestId: 'r1', pointId: 'wh', meta: { cause: 'test', shipFeePointsRefunded: 1500 } });
   });
 
-  it('bên khác đóng trước (updateMany count 0): không hoàn điểm, không ghi sự kiện', async () => {
+  it('hoàn cả Điểm Xanh lẫn tiền phí đã thu về Ví Tubu đúng một lần, ghi shipFeeCashRefundedVnd vào sự kiện', async () => {
+    const { tx, updateMany } = fakeTx({ cashRow: { shipFeeCashVnd: 17000, shipFeeCashPaidAt: new Date('2026-11-15T00:00:00Z'), shipFeeCashRefundedVnd: null } });
+    await expect(closeHomePickupRequest(tx, args())).resolves.toEqual({ closed: true, refunded: 1500, refundedCashVnd: 17000 });
+    expect(updateMany).toHaveBeenCalledWith({
+      where: { id: 'r1', shipFeeCashPaidAt: { not: null }, shipFeeCashRefundedVnd: null, shipFeeCashVnd: { gt: 0 } },
+      data: { shipFeeCashRefundedVnd: 17000 },
+    });
+    expect(mockCreditWallet).toHaveBeenCalledWith(tx, {
+      userId: 'u1',
+      delta: 17000,
+      type: 'WASTE_FEE_REFUND',
+      refType: 'WASTE_REQUEST',
+      refId: 'r1',
+      reason: 'Hoàn phí lấy rác tận nhà · TR-AAAAA',
+    });
+    expect(mockEvent.mock.calls[0]![1].meta).toMatchObject({ shipFeePointsRefunded: 1500, shipFeeCashRefundedVnd: 17000 });
+  });
+
+  it('phiếu AWAITING chưa thu tiền (shipFeeCashPaidAt = null) hoặc đã hoàn tiền trước đó: không cộng Ví', async () => {
+    const awaiting = fakeTx({ cashRow: { shipFeeCashVnd: 17000, shipFeeCashPaidAt: null, shipFeeCashRefundedVnd: null } });
+    await expect(refundShipFeeCash(awaiting.tx, req)).resolves.toEqual({ refundedCashVnd: 0, anonymizedAt: null });
+    const already = fakeTx({ cashRow: { shipFeeCashVnd: 17000, shipFeeCashPaidAt: new Date(), shipFeeCashRefundedVnd: 17000 } });
+    await expect(refundShipFeeCash(already.tx, req)).resolves.toEqual({ refundedCashVnd: 0, anonymizedAt: null });
+    const lostClaim = fakeTx({ cashRow: { shipFeeCashVnd: 17000, shipFeeCashPaidAt: new Date(), shipFeeCashRefundedVnd: null }, cashClaim: 0 });
+    await expect(refundShipFeeCash(lostClaim.tx, req)).resolves.toEqual({ refundedCashVnd: 0, anonymizedAt: null });
+    expect(mockCreditWallet).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản đã ẩn danh: không cộng Ví, trả lại cột shipFeeCashRefundedVnd về null để không vi phạm bất biến hoàn tiền', async () => {
+    mockCreditWallet.mockResolvedValueOnce({ credited: false, balanceAfter: null, anonymizedAt: '2026-11-10T00:00:00.000Z' });
+    const { tx, update } = fakeTx({ cashRow: { shipFeeCashVnd: 17000, shipFeeCashPaidAt: new Date(), shipFeeCashRefundedVnd: null } });
+    await expect(closeHomePickupRequest(tx, args())).resolves.toEqual({ closed: true, refunded: 1500, refundedCashVnd: 0 });
+    expect(update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { shipFeeCashRefundedVnd: null } });
+    expect(mockEvent.mock.calls[0]![1].meta).toMatchObject({ cashRefundSkippedAnonymized: '2026-11-10T00:00:00.000Z' });
+  });
+
+  it('bên khác đóng trước (updateMany count 0): không hoàn điểm, không hoàn Ví, không ghi sự kiện', async () => {
     const { tx } = fakeTx({ closed: 0 });
-    await expect(closeHomePickupRequest(tx, args())).resolves.toEqual({ closed: false, refunded: 0 });
+    await expect(closeHomePickupRequest(tx, args())).resolves.toEqual({ closed: false, refunded: 0, refundedCashVnd: 0 });
     expect(mockApply).not.toHaveBeenCalled();
+    expect(mockCreditWallet).not.toHaveBeenCalled();
     expect(mockEvent).not.toHaveBeenCalled();
   });
 
   it('đóng hai lần: lần hai thắng được dòng phiếu nhưng cột hoàn đã chốt thì không hoàn lại', async () => {
     const { tx } = fakeTx({ claim: 0 });
-    await expect(closeHomePickupRequest(tx, args())).resolves.toEqual({ closed: true, refunded: 0 });
+    await expect(closeHomePickupRequest(tx, args())).resolves.toEqual({ closed: true, refunded: 0, refundedCashVnd: 0 });
     expect(mockApply).not.toHaveBeenCalled();
   });
 });

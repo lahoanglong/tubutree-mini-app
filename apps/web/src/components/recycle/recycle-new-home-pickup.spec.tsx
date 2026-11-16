@@ -398,4 +398,56 @@ describe('Shipper lấy tận nhà (web): tạo đơn thu gom', () => {
     expect(quoteCalls()[0]!.body).toEqual(quoteBody({ declaredWeightGrams: 5000 }));
     expect(kg(c, '5 kg').getAttribute('aria-pressed')).toBe('true');
   });
+
+  it('W178 thiếu Điểm Xanh (NEED_FEE_PAYMENT): hiện "Miễn phí lấy rác 100%", trả phần thiếu bằng Ví Tubu, hoặc một chạm đổi sang PICKUP giữ nguyên món', async () => {
+    state.quote = () =>
+      short({
+        pointsAvailable: 8_000,
+        pointsApplicable: 8_000,
+        remainingFeeVnd: 17_000,
+        cashDueVnd: 17_000,
+        blockedCode: 'NEED_FEE_PAYMENT',
+        feePaths: {
+          wallet: { balance: 40_000, enough: true },
+          bankTransfer: { enabled: false },
+          attachNextOrder: { available: true, reason: null, existingRequestId: null },
+        },
+      });
+    atStep2();
+    let c = await mount();
+    const block = testid(c, 'home-pickup-fee-short')!;
+    expect(block.textContent).toContain('Miễn phí lấy rác 100%');
+    expect(block.textContent).toContain('Khuyên dùng');
+    expect(testid(c, 'home-pickup-cash-due')?.textContent).toBe('17.000đ');
+    click(check(c));
+    await flush(3);
+
+    const pickBtn = byText(bar(c), 'button', 'Chọn cách trả phí') as HTMLButtonElement;
+    expect(pickBtn.disabled).toBe(true);
+
+    click(c.querySelector('[data-testid="fee-path-wallet"]'));
+    await flush(3);
+    const payBtn = byText(bar(c), 'button', 'Trả 17.000đ từ Ví và đặt lấy rác') as HTMLButtonElement;
+    expect(payBtn.disabled).toBe(false);
+    click(payBtn);
+    await flush(10);
+    expect(createCalls()).toHaveLength(1);
+    expect(createCalls()[0]!.body).toMatchObject({
+      method: 'HOME_PICKUP',
+      usePointsForShipFee: true,
+      shipFeePayment: 'WALLET',
+      expectedCashVnd: 17_000,
+    });
+    mounted.pop()!.unmount();
+
+    // Một chạm "Gửi kèm đơn mua kế tiếp" đổi phương thức sang PICKUP, giữ nguyên món trong nháp
+    state.calls = [];
+    atStep2();
+    c = await mount();
+    click(testid(c, 'fee-path-attach'));
+    await flush(4);
+    expect(testid(c, 'home-pickup-fee-short')).toBeNull();
+    expect(c.querySelector('[data-method="PICKUP"]')?.getAttribute('aria-checked')).toBe('true');
+    expect(byText(bar(c), 'button', 'Tạo yêu cầu')).not.toBeNull();
+  });
 });

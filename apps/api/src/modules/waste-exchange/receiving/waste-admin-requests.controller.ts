@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, Patch, Post, Put, Query, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Optional, Param, Patch, Post, Put, Query, Req, ServiceUnavailableException } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
 import { Type } from 'class-transformer';
 import { IsBoolean, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, MinLength, ValidateIf, ValidateNested } from 'class-validator';
@@ -8,6 +8,7 @@ import {
   WASTE_REQUEST_QUEUE_FILTER_VALUES,
   WASTE_REQUEST_STATUS_VALUES,
   WASTE_UNMATCHED_STATUS_VALUES,
+  type WasteFeeBankConfirmRequest,
   type WasteMethod,
   type WasteRequestQueueFilter,
   type WasteRequestStatus,
@@ -19,6 +20,8 @@ import { OptionalNotNull } from '../../../common/decorators/optional-not-null.de
 import { Roles } from '../../../common/decorators/roles.decorator';
 import { Trim } from '../../../common/decorators/trim.decorator';
 import { deviceMetaOf } from '../core/waste-events';
+import { WASTE_MESSAGES } from '../core/waste-messages';
+import { WasteFeeBankService } from '../home-pickup/waste-fee-bank.service';
 import { WasteAdminRequestsService } from './waste-admin-requests.service';
 import { WasteConfirmService } from './waste-confirm.service';
 import { WasteReceiveService } from './waste-receive.service';
@@ -84,6 +87,11 @@ export class WasteUserFlagsDto {
   @Trim() @IsString() @IsNotEmpty() @MaxLength(500) reason!: string;
 }
 
+export class WasteFeeBankConfirmDto implements WasteFeeBankConfirmRequest {
+  @IsInt() @Min(1) @Max(10_000_000) amount!: number;
+  @Trim() @IsString() @IsNotEmpty() @MaxLength(64) bankRef!: string;
+}
+
 @Controller('admin/waste')
 export class WasteAdminRequestsController {
   constructor(
@@ -91,6 +99,7 @@ export class WasteAdminRequestsController {
     private readonly receiveService: WasteReceiveService,
     private readonly confirmService: WasteConfirmService,
     private readonly reverseService: WasteReverseService,
+    @Optional() private readonly feeBank?: WasteFeeBankService,
   ) {}
 
   @Get('requests')
@@ -160,6 +169,15 @@ export class WasteAdminRequestsController {
   @Throttle({ default: { ttl: 60_000, limit: 10 } })
   reopen(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() body: WasteReopenDto) {
     return this.admin.reopen(userId, id, body);
+  }
+
+  @Post('requests/:id/confirm-fee-paid')
+  @Roles('ADMIN')
+  @HttpCode(200)
+  @Throttle({ default: { ttl: 60_000, limit: 20 } })
+  confirmFeePaid(@CurrentUser('sub') userId: string, @Param('id') id: string, @Body() body: WasteFeeBankConfirmDto) {
+    if (!this.feeBank) throw new ServiceUnavailableException(WASTE_MESSAGES.HOME_PICKUP_UNAVAILABLE);
+    return this.feeBank.confirmFeeBankPaid(id, { amount: body.amount, bankRef: body.bankRef, actorId: userId });
   }
 
   @Get('unmatched')

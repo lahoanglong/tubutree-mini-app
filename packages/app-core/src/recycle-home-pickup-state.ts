@@ -1,4 +1,4 @@
-import type { WasteCreateRequest, WasteLineInput, WastePickupQuoteRequest } from '@tubutree/shared-types';
+import type { WasteCreateRequest, WasteFeeCashMethod, WasteLineInput, WastePickupQuoteRequest } from '@tubutree/shared-types';
 import { formatVnNumber } from './number-format';
 
 /** Chờ khách ngừng đổi địa chỉ / món / số kg rồi mới xin báo phí, để nhiều lần bấm nhanh chỉ tốn một lời gọi. */
@@ -60,13 +60,14 @@ export function homePickupBatteryBlocked(
   return lines.some((l) => items.find((i) => i.id === l.itemId)?.hazardous === true);
 }
 
-/** Lựa chọn của khách ở khối thu gom tận nhà. Phí ship luôn trả bằng Điểm Xanh nên không có ô chọn cách trả. */
+/** Lựa chọn của khách ở khối thu gom tận nhà: địa chỉ, mức cân ước tính và cách trả phần phí thiếu (nếu Điểm Xanh chưa đủ). */
 export interface HomePickupForm {
   addressId: string | null;
   weightGrams: number | null;
+  payment?: WasteFeeCashMethod | null;
 }
 
-export const EMPTY_HOME_PICKUP_FORM: HomePickupForm = { addressId: null, weightGrams: null };
+export const EMPTY_HOME_PICKUP_FORM: HomePickupForm = { addressId: null, weightGrams: null, payment: null };
 
 /** Địa chỉ được chọn: đúng cái khách chọn nếu còn trong sổ, không thì địa chỉ mặc định, rồi cái đầu tiên. */
 export function pickHomePickupAddress<A extends { id: string; isDefault?: boolean }>(addresses: readonly A[], chosenId: string | null): A | null {
@@ -80,13 +81,14 @@ export function homePickupQuoteRequest(form: HomePickupForm, lines: readonly Was
   return { addressId: form.addressId, declaredWeightGrams: form.weightGrams, lines: sorted };
 }
 
-/** Thân tạo đơn. Phí ship chỉ trả bằng Điểm Xanh nên luôn gửi `usePointsForShipFee: true`; máy chủ tính lại số điểm lúc tạo và từ chối khi không đủ. */
+/** Thân tạo đơn. Luôn gửi `usePointsForShipFee: true`; khi thiếu điểm khách chọn `payment` (Ví Tubu / VietQR) và gửi trần `expectedCashVnd`. */
 export function homePickupCreateBody(args: {
   form: HomePickupForm;
   lines: readonly WasteLineInput[];
   consentVersion?: string | null;
+  expectedCashVnd?: number | null;
 }): WasteCreateRequest | null {
-  const { form, lines, consentVersion } = args;
+  const { form, lines, consentVersion, expectedCashVnd } = args;
   if (!form.addressId || form.weightGrams === null || lines.length === 0) return null;
   const sorted = [...lines].sort((a, b) => (a.itemId < b.itemId ? -1 : a.itemId > b.itemId ? 1 : 0));
   return {
@@ -97,5 +99,7 @@ export function homePickupCreateBody(args: {
     pickupAddressId: form.addressId,
     declaredWeightGrams: form.weightGrams,
     usePointsForShipFee: true,
+    ...(form.payment ? { shipFeePayment: form.payment } : {}),
+    ...(form.payment && expectedCashVnd != null && expectedCashVnd > 0 ? { expectedCashVnd } : {}),
   };
 }

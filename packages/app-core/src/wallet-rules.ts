@@ -2,6 +2,8 @@ const WALLET_TX_LABELS: Record<string, string> = {
   OPENING: 'Số dư đầu kỳ',
   ORDER_PAY: 'Thanh toán đơn',
   ORDER_REFUND: 'Hoàn tiền đơn hàng',
+  WASTE_FEE_PAY: 'Trả phí lấy rác',
+  WASTE_FEE_REFUND: 'Hoàn phí lấy rác',
   COMMISSION_PAYOUT: 'Hoa hồng CTV về Ví',
   COMMISSION_REVERSAL: 'Thu hồi hoa hồng',
   CASHBACK: 'Hoàn tiền sàn ngoài',

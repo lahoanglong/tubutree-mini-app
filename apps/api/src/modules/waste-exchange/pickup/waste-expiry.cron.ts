@@ -24,11 +24,11 @@ const HOUR_MS = 3_600_000;
 const REMIND_FROM_HOURS = 24;
 const REMIND_TO_HOURS = 48;
 
-type ExpiryCloseReason = 'HOLD_EXPIRED' | 'PICKUP_NO_SHOW' | 'PICKUP_NOT_DISPATCHED';
+type ExpiryCloseReason = 'HOLD_EXPIRED' | 'PICKUP_NO_SHOW' | 'PICKUP_NOT_DISPATCHED' | 'FEE_UNPAID';
 
 /** §12.2 bước 4: chỉ vận đơn đã tới tay bưu tá (3, 4, 5, 7) mới là khách không giao; không phân loại theo gomdonOrderId. */
-export function expiryCloseReason(row: { status: 'OPEN' | 'IN_TRANSIT'; gomdonStatus: string | null }): ExpiryCloseReason {
-  if (row.status === 'OPEN') return 'HOLD_EXPIRED';
+export function expiryCloseReason(row: { status: 'OPEN' | 'IN_TRANSIT'; gomdonStatus: string | null; awaitingFeePayment?: boolean }): ExpiryCloseReason {
+  if (row.status === 'OPEN') return row.awaitingFeePayment ? 'FEE_UNPAID' : 'HOLD_EXPIRED';
   if (row.gomdonStatus !== null && (GOMDON_DISPATCHED_STATUSES as readonly string[]).includes(row.gomdonStatus)) return 'PICKUP_NO_SHOW';
   return 'PICKUP_NOT_DISPATCHED';
 }
@@ -42,6 +42,8 @@ type Candidate = {
   status: string;
   orderId: string | null;
   shipFeePointsUsed?: number | null;
+  shipFeeCashVnd?: number | null;
+  shipFeeCashPaidAt?: Date | null;
   gomdonOrderId?: string | null;
 };
 
@@ -96,7 +98,7 @@ export class WasteExpiryCron {
     for (;;) {
       const page: Candidate[] = await this.prisma.wasteRequest.findMany({
         where: lastId === null ? base : { AND: [base, { id: { gt: lastId } }] },
-        select: { id: true, code: true, userId: true, pointId: true, method: true, status: true, orderId: true, shipFeePointsUsed: true, gomdonOrderId: true },
+        select: { id: true, code: true, userId: true, pointId: true, method: true, status: true, orderId: true, shipFeePointsUsed: true, shipFeeCashVnd: true, shipFeeCashPaidAt: true, gomdonOrderId: true },
         orderBy: { id: 'asc' },
         take: PAGE,
       });
@@ -201,7 +203,8 @@ export class WasteExpiryCron {
    */
   private async closeHomePickupRow(row: Candidate, now: Date): Promise<ExpiryCloseReason | null> {
     const refundExpiresAt = await this.config.pointExpiresAt(now);
-    const closeReason = expiryCloseReason({ status: 'OPEN', gomdonStatus: null });
+    const awaitingFeePayment = (row.shipFeeCashVnd ?? 0) > 0 && row.shipFeeCashPaidAt == null;
+    const closeReason = expiryCloseReason({ status: 'OPEN', gomdonStatus: null, awaitingFeePayment });
     const closed = await this.prisma.$transaction(async (tx) => {
       const res = await closeHomePickupRequest(tx, {
         req: { id: row.id, userId: row.userId, code: row.code, pointId: row.pointId, shipFeePointsUsed: row.shipFeePointsUsed ?? 0 },

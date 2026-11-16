@@ -46,6 +46,7 @@ export const WASTE_CLOSE_REASON_LABELS: Record<WasteCloseReason, string> = {
   LOST_AT_WAREHOUSE: 'Thất lạc tại kho',
   SHIP_LOCKED: 'Đang bị khoá gửi kho',
   ORDER_CANCELLED: 'Đơn kèm bị huỷ',
+  FEE_UNPAID: 'Quá hạn chuyển khoản phí lấy rác',
 };
 
 export const WASTE_SHORTFALL_REASON_LABELS: Record<WasteShortfallReason, string> = {
@@ -142,7 +143,7 @@ const WASTE_EVENT_KIND_KEYS = [
   'UNMATCHED_RECORDED', 'UNMATCHED_RESOLVED', 'UNMATCHED_CLOSED', 'REQUEST_CONFIRMED', 'REQUEST_REJECTED', 'LOOKUP_MISS', 'POINTS_REVERSED',
   'REQUEST_CLOSED_LOST', 'REQUEST_REOPENED', 'REQUEST_COST_UPDATED', 'PERK_SUBMITTED', 'PERK_APPROVED', 'PERK_REJECTED', 'ITEM_CREATED',
   'ITEM_UPDATED', 'ITEMS_REORDERED', 'POINT_CREATED', 'POINT_UPDATED', 'POINTS_REORDERED', 'POINT_STAFF_ADDED', 'POINT_STAFF_REMOVED',
-  'GIFT_CREATED', 'GIFT_UPDATED', 'GIFTS_REORDERED', 'GIFT_FULFILLED', 'GIFT_CANCELLED', 'GIFT_EXPIRED', 'USER_FLAGS_UPDATED',
+  'GIFT_CREATED', 'GIFT_UPDATED', 'GIFTS_REORDERED', 'GIFT_FULFILLED', 'GIFT_CANCELLED', 'GIFT_EXPIRED', 'USER_FLAGS_UPDATED', 'FEE_BANK_PAID',
 ] as const;
 export type WasteEventKindKey = (typeof WASTE_EVENT_KIND_KEYS)[number];
 
@@ -189,6 +190,7 @@ export const WASTE_EVENT_KIND_LABELS: Record<WasteEventKindKey, string> = {
   GIFT_CANCELLED: 'Huỷ quà',
   GIFT_EXPIRED: 'Quà quá hạn nhận, tự huỷ',
   USER_FLAGS_UPDATED: 'Đổi cờ của khách',
+  FEE_BANK_PAID: 'Xác nhận chuyển khoản phí lấy rác',
 };
 
 export const WASTE_EVENT_OTHER_LABEL = 'Sự kiện khác';
@@ -243,6 +245,12 @@ export function wasteEventMetaLines(kind: string, meta: Record<string, unknown> 
     if (to !== '' && changed) lines.push(typeof before.trackingCode === 'string' && before.trackingCode !== '' ? `Mã vận đơn: ${from} → ${to}` : `Mã vận đơn: ${to}`);
   }
   if (kind === 'PARCEL_RECEIVED' && meta.trackingMismatch === true) lines.push('Mã vận đơn trên kiện khác mã khách nhập');
+  if (kind === 'FEE_BANK_PAID') {
+    const amt = num(meta.amount);
+    if (amt !== null) lines.push(`Số tiền: ${formatCount(amt)}đ`);
+    if (typeof meta.bankRef === 'string' && meta.bankRef.trim() !== '') lines.push(`Mã GD: ${meta.bankRef.trim()}`);
+    if (meta.lateRefundedToWallet === true) lines.push('Phiếu đã đóng nên hoàn thẳng vào Ví Tubu');
+  }
   return lines;
 }
 

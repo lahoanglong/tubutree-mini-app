@@ -1,4 +1,4 @@
-import type { WasteHomePickupDTO, WasteMethod, WastePickupQuoteResponse, WasteRequestStatus } from '@tubutree/shared-types';
+import type { WasteCloseReason, WasteFeeCashMethod, WasteHomePickupDTO, WasteMethod, WastePickupQuoteResponse, WasteRequestStatus } from '@tubutree/shared-types';
 import { errorStatus } from './api/error-status';
 import { formatVnNumber } from './number-format';
 import { HOME_PICKUP_BATTERY_TEXT, homePickupCopy } from './waste-copy';
@@ -8,14 +8,36 @@ import { timelineFor } from './waste-timeline';
 const vnd = (n: number) => `${formatVnNumber(n)}đ`;
 const num = (n: number) => formatVnNumber(n);
 
+export interface HomePickupFeeOptionsView {
+  attachNextOrder: {
+    available: boolean;
+    subtitle: string;
+    badge: string | null;
+    existingRequestId: string | null;
+  };
+  /** null khi Ví 0đ (không hiện hàng bị khoá cho khách Ví 0đ). */
+  wallet: {
+    title: string;
+    subtitle: string;
+    enough: boolean;
+  } | null;
+  bankTransfer: {
+    title: string;
+    subtitle: string;
+  } | null;
+}
+
 export interface HomePickupQuoteView {
   feeText: string;
   /** Phí ước lượng cố định (chưa hỏi được đơn vị vận chuyển): hiện nhãn "Ước tính" cạnh phí và chưa cho đặt. */
   estimated: boolean;
-  /** Điểm Xanh sẽ trừ cho phí ship khi đơn đặt được (0 khi chưa đủ điểm hoặc phí 0đ). */
+  /** Điểm Xanh sẽ trừ cho phí ship khi đơn đặt được. */
   pointsUsed: number;
-  /** Phần phí Điểm Xanh chưa trả đủ (máy chủ đã chặn bằng câu `blocked`). */
+  pointsDeductText: string;
+  /** Phần phí Điểm Xanh chưa trả đủ. */
   remainingFeeVnd: number;
+  cashDueVnd: number;
+  cashDueText: string;
   /** Một dòng trả phí: điểm dùng được và điểm sẽ trừ. */
   payLine: string;
   /** Dòng điểm ước tính; dưới ngưỡng thì thành "Dự kiến X / Y điểm". */
@@ -23,24 +45,39 @@ export interface HomePickupQuoteView {
   belowMin: boolean;
   /** Máy chủ nói địa chỉ không giao/lấy được: màn hiện lối "Sửa địa chỉ này" cạnh lý do. */
   addressOk: boolean;
-  /** Đúng một lý do đang chặn (địa chỉ, Pin ngoài TP.HCM, máy chủ, phí ước tính), null khi không có. */
+  /** Đúng một lý do đang chặn (địa chỉ, Pin ngoài TP.HCM, máy chủ, phí ước tính), null khi không có hoặc khi hiện khối chọn cách trả phí. */
   notice: string | null;
-  /** Không có gì chặn ở phía báo phí (khách còn cần tick đồng ý). */
+  /** Bị thiếu Điểm Xanh là lý do duy nhất: hiện khối gửi kèm đơn / trả bằng Ví / VietQR thay vì câu chặn. */
+  needFeePayment: boolean;
+  feeOptions: HomePickupFeeOptionsView | null;
+  /** Không có gì chặn ở phía báo phí (còn cần chọn cách trả nếu needFeePayment, và tick đồng ý). */
   ok: boolean;
 }
 
 const BELOW_MIN_MESSAGE = /cần tối thiểu .*[\s\u00A0]điểm/;
 
 /**
- * Chữ và trạng thái của thẻ báo phí. Phí ship luôn trả bằng Điểm Xanh: thiếu điểm thì máy chủ trả `blocked` và nút tạo đơn tắt.
- * Chỉ một dòng lý do: địa chỉ không giao được, rồi Pin ngoài TP.HCM, rồi lý do máy chủ (bỏ câu "cần tối thiểu" vì dòng điểm đã nói), rồi phí ước tính.
+ * Chữ và trạng thái của thẻ báo phí.
+ * - Đủ Điểm Xanh: như trước (`ok: true`, `needFeePayment: false`).
+ * - Lý do duy nhất là thiếu Điểm Xanh (`blockedCode === 'NEED_FEE_PAYMENT'` kèm `feePaths`): bật `needFeePayment = true`,
+ *   dựng sẵn `feeOptions` (Gửi kèm đơn / Ví Tubu khi số dư > 0 / VietQR khi bật cờ), không hiện câu `notice` đỏ.
  */
 export function homePickupQuoteView(args: { quote: WastePickupQuoteResponse; batteryBlocked: boolean }): HomePickupQuoteView {
   const { quote, batteryBlocked } = args;
   const fee = Math.max(0, quote.shipFeeVnd);
   const belowMin = quote.estimatedPoints < quote.minPoints;
   const covered = quote.remainingFeeVnd <= 0;
-  const pointsUsed = covered ? Math.min(quote.pointsApplicable, fee) : 0;
+  const needFeePayment =
+    quote.addressOk &&
+    !batteryBlocked &&
+    !belowMin &&
+    !quote.estimated &&
+    quote.blockedCode === 'NEED_FEE_PAYMENT' &&
+    Boolean(quote.feePaths) &&
+    (quote.cashDueVnd ?? quote.remainingFeeVnd) > 0;
+  const cashDueVnd = needFeePayment ? Math.max(0, quote.cashDueVnd ?? quote.remainingFeeVnd) : Math.max(0, quote.remainingFeeVnd);
+  const cashDueText = vnd(cashDueVnd);
+  const pointsUsed = covered || needFeePayment ? Math.min(quote.pointsApplicable, fee) : 0;
 
   let payLine: string;
   if (fee <= 0) payLine = homePickupCopy.payFree;
@@ -50,20 +87,54 @@ export function homePickupQuoteView(args: { quote: WastePickupQuoteResponse; bat
   let notice: string | null = null;
   if (!quote.addressOk) notice = quote.addressMessage ?? homePickupCopy.addressNotOk;
   else if (batteryBlocked) notice = HOME_PICKUP_BATTERY_TEXT;
+  else if (needFeePayment) notice = null;
   else if (quote.blocked && !(belowMin && BELOW_MIN_MESSAGE.test(quote.blocked))) notice = quote.blocked;
   else if (quote.estimated) notice = homePickupCopy.feeUnavailable;
+
+  let feeOptions: HomePickupFeeOptionsView | null = null;
+  if (needFeePayment && quote.feePaths) {
+    const fs = homePickupCopy.feeShort;
+    const { wallet, bankTransfer, attachNextOrder } = quote.feePaths;
+    feeOptions = {
+      attachNextOrder: {
+        available: attachNextOrder.available,
+        subtitle: attachNextOrder.available ? fs.attachSub : (attachNextOrder.reason ?? fs.attachSub),
+        badge: attachNextOrder.available ? fs.attachBadge : null,
+        existingRequestId: attachNextOrder.existingRequestId,
+      },
+      wallet:
+        wallet.balance > 0
+          ? {
+              title: fs.walletTitle(cashDueText),
+              subtitle: wallet.enough ? fs.walletEnoughSub(vnd(wallet.balance)) : fs.walletShortSub(vnd(wallet.balance)),
+              enough: wallet.enough,
+            }
+          : null,
+      bankTransfer: bankTransfer.enabled
+        ? {
+            title: fs.bankTitle(cashDueText),
+            subtitle: fs.bankSub,
+          }
+        : null,
+    };
+  }
 
   return {
     feeText: vnd(fee),
     estimated: quote.estimated,
     pointsUsed,
+    pointsDeductText: homePickupCopy.feeShort.pointsDeductValue(num(pointsUsed)),
     remainingFeeVnd: quote.remainingFeeVnd,
+    cashDueVnd,
+    cashDueText,
     payLine,
     pointsLine: belowMin ? homePickupCopy.progress(num(quote.estimatedPoints), num(quote.minPoints)) : homePickupCopy.estimate(num(quote.estimatedPoints)),
     belowMin,
     addressOk: quote.addressOk,
     notice,
-    ok: quote.addressOk && !batteryBlocked && !quote.blocked && !belowMin && !quote.estimated,
+    needFeePayment,
+    feeOptions,
+    ok: quote.addressOk && !batteryBlocked && (needFeePayment || !quote.blocked) && !belowMin && !quote.estimated,
   };
 }
 
@@ -81,17 +152,40 @@ export function homePickupUnavailableText(error: unknown): string | null {
 
 export type HomePickupQuoteState = 'idle' | 'loading' | 'error' | 'ready';
 
-/** Nút "Tạo đơn thu gom" bấm được hay không và câu nhắc ở thanh đáy (null khi lý do đã hiện ngay trong thẻ báo phí). */
+export function isHomePickupPaymentUsable(
+  view: Pick<HomePickupQuoteView, 'needFeePayment' | 'feeOptions'> | null,
+  payment?: WasteFeeCashMethod | null,
+): boolean {
+  if (!view?.needFeePayment) return true;
+  if (payment === 'WALLET') return view.feeOptions?.wallet?.enough === true;
+  if (payment === 'BANK_TRANSFER') return Boolean(view.feeOptions?.bankTransfer);
+  return false;
+}
+
+/** Nhãn nút gửi duy nhất ở thanh đáy theo trạng thái thiếu phí và cách trả khách chọn. */
+export function homePickupSubmitLabel(
+  view: Pick<HomePickupQuoteView, 'needFeePayment' | 'cashDueText'> | null,
+  payment?: WasteFeeCashMethod | null,
+): string {
+  if (!view?.needFeePayment) return homePickupCopy.createButton;
+  if (payment === 'WALLET') return homePickupCopy.feeShort.ctaWallet(view.cashDueText);
+  if (payment === 'BANK_TRANSFER') return homePickupCopy.feeShort.ctaBank;
+  return homePickupCopy.feeShort.ctaPick;
+}
+
+/** Nút gửi bấm được hay không và câu nhắc ở thanh đáy (null khi lý do đã hiện ngay trong thẻ báo phí). */
 export function homePickupCreateState(args: {
   addressId: string | null;
   quoteState: HomePickupQuoteState;
   view: HomePickupQuoteView | null;
   consentOk: boolean;
+  payment?: WasteFeeCashMethod | null;
 }): { ok: boolean; hint: string | null } {
-  const { addressId, quoteState, view, consentOk } = args;
+  const { addressId, quoteState, view, consentOk, payment } = args;
   if (!addressId) return { ok: false, hint: homePickupCopy.needAddress };
   // Đang tính phí, báo phí lỗi hay có lý do chặn: câu đã hiện ngay trong thẻ phí, thanh đáy không lặp lại.
   if (quoteState !== 'ready' || !view || !view.ok) return { ok: false, hint: null };
+  if (!isHomePickupPaymentUsable(view, payment)) return { ok: false, hint: null };
   if (!consentOk) return { ok: false, hint: homePickupCopy.needConsent };
   return { ok: true, hint: null };
 }
@@ -99,15 +193,26 @@ export function homePickupCreateState(args: {
 type StatusFacts = {
   method: WasteMethod;
   status: WasteRequestStatus;
+  closeReason?: WasteCloseReason | null;
   pointsAwarded?: number | null;
-  homePickup?: Pick<WasteHomePickupDTO, 'gomdonStatus'>;
+  homePickup?: {
+    gomdonStatus: string | null;
+    shipFeeCashMethod?: WasteHomePickupDTO['shipFeeCashMethod'];
+    shipFeeCashPaid?: boolean;
+  };
 };
 
 /** Trạng thái vận đơn ngắn gọn (vừa một huy hiệu 375px) của đơn đang chạy; null khi trạng thái phiếu đã đủ nghĩa (hoàn tất, huỷ...). */
 export function homePickupShortStatus(r: StatusFacts): string | null {
   const g = r.homePickup?.gomdonStatus ?? null;
-  if (r.status === 'EXPIRED') return g === '10' ? 'Bưu tá chưa lấy được rác' : null;
+  if (r.status === 'EXPIRED') {
+    if (r.closeReason === 'FEE_UNPAID') return 'Quá hạn chuyển khoản phí';
+    return g === '10' ? 'Bưu tá chưa lấy được rác' : null;
+  }
   if (r.status !== 'OPEN' && r.status !== 'IN_TRANSIT') return null;
+  if (r.status === 'OPEN' && r.homePickup?.shipFeeCashMethod === 'BANK_TRANSFER' && r.homePickup.shipFeeCashPaid === false) {
+    return 'Chờ chuyển khoản phí';
+  }
   switch (g) {
     case '3':
       return 'Bưu tá đã lấy rác';
@@ -135,7 +240,7 @@ export interface HomePickupDetailRow {
   value: string;
 }
 
-/** Các dòng tóm tắt phí ở chi tiết phiếu: địa chỉ, cân nặng, phí shipper, điểm đã trừ/hoàn. */
+/** Các dòng tóm tắt phí ở chi tiết phiếu: địa chỉ, cân nặng, phí shipper, điểm đã trừ/hoàn, và phần phí trả bằng Ví / VietQR. */
 export function homePickupDetailRows(h: WasteHomePickupDTO): HomePickupDetailRow[] {
   const d = homePickupCopy.detail;
   const rows: HomePickupDetailRow[] = [];
@@ -143,23 +248,41 @@ export function homePickupDetailRows(h: WasteHomePickupDTO): HomePickupDetailRow
   if (h.declaredWeightGrams > 0) rows.push({ label: d.weight, value: `${homePickupKgLabel(h.declaredWeightGrams)} kg` });
   rows.push({ label: d.fee, value: vnd(h.shipFeeVnd) });
   if (h.shipFeePointsUsed > 0) rows.push({ label: d.pointsUsed, value: `${num(h.shipFeePointsUsed)}\u00A0điểm` });
+  const cashVnd = h.shipFeeCashVnd ?? 0;
+  if (cashVnd > 0) {
+    if (h.shipFeeCashMethod === 'WALLET' && h.shipFeeCashPaid) rows.push({ label: d.cashPaidWallet, value: vnd(cashVnd) });
+    else if (h.shipFeeCashMethod === 'BANK_TRANSFER' && h.shipFeeCashPaid) rows.push({ label: d.cashPaidBank, value: vnd(cashVnd) });
+    else if (h.shipFeeCashMethod === 'BANK_TRANSFER' && !h.shipFeeCashPaid) rows.push({ label: d.cashAwaitingBank, value: vnd(cashVnd) });
+  }
   if (h.shipFeePointsRefunded > 0) rows.push({ label: d.pointsRefunded, value: `${num(h.shipFeePointsRefunded)}\u00A0điểm` });
+  const cashRefunded = h.shipFeeCashRefundedVnd ?? 0;
+  if (cashRefunded > 0) rows.push({ label: d.cashRefunded, value: vnd(cashRefunded) });
   return rows;
 }
 
-/** Chữ hộp xác nhận huỷ: nêu điểm sẽ được hoàn khi đơn đã trừ Điểm Xanh phí ship. */
-export function homePickupCancelCopy(code: string, h: Pick<WasteHomePickupDTO, 'shipFeePointsUsed'> | undefined) {
+/** Chữ hộp xác nhận huỷ: nêu điểm và/hoặc khoản tiền đã trả sẽ được hoàn về Ví Tubu. */
+export function homePickupCancelCopy(
+  code: string,
+  h: { shipFeePointsUsed: number; shipFeeCashVnd?: number; shipFeeCashPaid?: boolean } | undefined,
+) {
   const used = h?.shipFeePointsUsed ?? 0;
+  const cashPaid = h?.shipFeeCashPaid && (h.shipFeeCashVnd ?? 0) > 0 ? vnd(h.shipFeeCashVnd!) : null;
   return {
     title: homePickupCopy.detail.cancelTitle,
-    body: homePickupCopy.detail.cancelBody(code, used > 0 ? num(used) : null),
+    body: homePickupCopy.detail.cancelBody(code, used > 0 ? num(used) : null, cashPaid),
     confirm: homePickupCopy.detail.cancelConfirm,
   };
 }
 
-/** Thông báo sau khi huỷ xong: nói số điểm đã hoàn nếu có. */
-export function homePickupCancelDone(h: Pick<WasteHomePickupDTO, 'shipFeePointsRefunded'> | undefined): string {
+/** Thông báo sau khi huỷ xong: nói số điểm và/hoặc khoản phí hoàn về Ví nếu có. */
+export function homePickupCancelDone(
+  h: { shipFeePointsRefunded: number; shipFeeCashRefundedVnd?: number } | undefined,
+): string {
   const refunded = h?.shipFeePointsRefunded ?? 0;
+  const cashRefunded = h?.shipFeeCashRefundedVnd ?? 0;
+  if (cashRefunded > 0) {
+    return homePickupCopy.detail.cancelDoneRefundCash(refunded > 0 ? num(refunded) : null, vnd(cashRefunded));
+  }
   return refunded > 0 ? homePickupCopy.detail.cancelDoneRefund(num(refunded)) : homePickupCopy.detail.cancelDone;
 }
 

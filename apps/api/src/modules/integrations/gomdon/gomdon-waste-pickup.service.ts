@@ -35,6 +35,9 @@ const REQUEST_SELECT = {
   gomdonStatus: true,
   declaredWeightGrams: true,
   shipFeeCodVnd: true,
+  shipFeeCashVnd: true,
+  shipFeeCashMethod: true,
+  shipFeeCashPaidAt: true,
   pickupAddress: true,
   shippingHistory: true,
   updatedAt: true,
@@ -83,11 +86,23 @@ export class GomdonWastePickupService {
       this.logger.log(`Phiếu ${req.code} đã ${req.status}, không tạo vận đơn Gomdon.`);
       return null;
     }
+    if ((req.shipFeeCashVnd ?? 0) > 0 && req.shipFeeCashPaidAt == null) {
+      this.logger.log(`Phiếu ${req.code} đang chờ chuyển khoản phí lấy rác, chưa tạo vận đơn Gomdon.`);
+      return null;
+    }
 
     // Dựng body TRƯỚC khi claim: dữ liệu hỏng không được bị hiểu nhầm là "không rõ đã tạo".
     const body = await this.buildBody(req);
     const claim = await this.prisma.wasteRequest.updateMany({
-      where: { id: req.id, method: 'HOME_PICKUP', status: 'OPEN', gomdonOrderId: null, gomdonPartnerCode: null, gomdonStatus: null },
+      where: {
+        id: req.id,
+        method: 'HOME_PICKUP',
+        status: 'OPEN',
+        gomdonOrderId: null,
+        gomdonPartnerCode: null,
+        gomdonStatus: null,
+        OR: [{ shipFeeCashVnd: null }, { shipFeeCashVnd: 0 }, { shipFeeCashPaidAt: { not: null } }],
+      },
       data: { gomdonStatus: HOME_PICKUP_STATE.CREATING },
     });
     if (claim.count === 0) {
@@ -141,6 +156,7 @@ export class GomdonWastePickupService {
     const req = await this.prisma.wasteRequest.findUnique({ where: { id: requestId }, select: REQUEST_SELECT });
     if (!req || req.method !== 'HOME_PICKUP') return;
     if (req.gomdonOrderId || req.gomdonPartnerCode || req.status !== 'OPEN') return;
+    if ((req.shipFeeCashVnd ?? 0) > 0 && req.shipFeeCashPaidAt == null) return;
     const reason = lastError instanceof Error ? lastError.message : String(lastError);
     if (req.gomdonStatus === HOME_PICKUP_STATE.CREATING) {
       // CREATING lúc này nghĩa là không rõ đã tạo chưa: không hoàn điểm, không huỷ phiếu.
@@ -150,9 +166,10 @@ export class GomdonWastePickupService {
     if (req.gomdonStatus !== null) return;
     const res = await this.lifecycle.failAfterRejected(req.id, `Gomdon từ chối tạo vận đơn: ${reason}`);
     if (!res.closed) return;
+    const cashNote = (res.refundedCashVnd ?? 0) > 0 ? `, hoàn ${res.refundedCashVnd!.toLocaleString('vi-VN')}đ về Ví` : '';
     await this.alerts.alert(
       wasteGomdonCustomerId(req.code),
-      `Không tạo được vận đơn Gomdon cho phiếu thu gom ${req.code} (${reason}). Hệ thống đã huỷ phiếu, hoàn ${res.refunded} Điểm Xanh phí ship và báo khách.`,
+      `Không tạo được vận đơn Gomdon cho phiếu thu gom ${req.code} (${reason}). Hệ thống đã huỷ phiếu, hoàn ${res.refunded} Điểm Xanh phí ship${cashNote} và báo khách.`,
       GOMDON_ALERT_TEMPLATE,
     );
   }
@@ -295,7 +312,8 @@ export class GomdonWastePickupService {
       product_name: `Rác tái chế ${req.code}`,
       product_price: 0,
       product_number: 1,
-      collect_amount: req.shipFeeCodVnd ?? 0,
+      // W178 I1: vận đơn lấy rác có người nhận là kho Tubu nên collect_amount luôn bằng 0 (không bao giờ thu hộ COD).
+      collect_amount: 0,
       weight,
       width: 0,
       height: 0,

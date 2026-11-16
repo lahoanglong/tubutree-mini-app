@@ -54,6 +54,7 @@ export class GomdonWasteReconcileService {
         gomdonOrderId: null,
         gomdonPartnerCode: null,
         gomdonStatus: null,
+        OR: [{ shipFeeCashVnd: null }, { shipFeeCashVnd: { lte: 0 } }, { shipFeeCashPaidAt: { not: null } }],
         createdAt: { lt: this.minutesAgo(GomdonWasteReconcileService.PUSH_STALE_MINUTES) },
       },
       select: { id: true, code: true },

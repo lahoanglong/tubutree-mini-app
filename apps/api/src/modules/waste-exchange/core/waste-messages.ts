@@ -58,6 +58,10 @@ export const WASTE_MESSAGES = {
   HOME_PICKUP_ADDRESS_UNRECOGNIZED: 'Đơn vị vận chuyển chưa nhận diện được địa chỉ này, hãy sửa lại phường/xã trong sổ địa chỉ',
   HOME_PICKUP_NEED_POINTS: (shortfallPoints: number) =>
     `Phí shipper lấy rác cần trả bằng Điểm Xanh, bạn còn thiếu ${shortfallPoints.toLocaleString('vi-VN')} điểm. Hãy chọn mang tới điểm thu gom hoặc đổi rác kèm đơn mua nhé`,
+  HOME_PICKUP_FEE_CHANGED: (cashDueVnd: number) =>
+    `Số tiền phí còn phải trả vừa đổi thành ${cashDueVnd.toLocaleString('vi-VN')}đ, bạn kiểm tra lại báo phí trước khi đặt nhé`,
+  HOME_PICKUP_BANK_DISABLED: 'Chuyển khoản phí lấy rác hiện chưa mở, bạn chọn cách khác nhé',
+  HOME_PICKUP_WALLET_INSUFFICIENT: 'Số dư Ví Tubu không đủ để trả phần phí lấy rác còn thiếu',
   HOME_PICKUP_FEE_UNAVAILABLE: 'Chưa báo được phí shipper lúc này, bạn thử lại sau ít phút nhé',
   HOME_PICKUP_POINTS_CHANGED: 'Số Điểm Xanh dùng được của bạn vừa thay đổi, hãy mở lại màn đặt shipper để xem phí mới',
   HOME_PICKUP_PICKED_UP: 'Bưu tá đã lấy rác nên không huỷ được nữa',

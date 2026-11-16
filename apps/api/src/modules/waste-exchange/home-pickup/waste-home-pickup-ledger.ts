@@ -1,11 +1,14 @@
 import type { Prisma, WasteCloseReason } from '@prisma/client';
 import { applyPointsDelta } from '../../loyalty/points-ledger';
+import { creditWalletUnlessAnonymized } from '../../wallet/wallet-anonymized-guard';
 import { writeWasteEvent, type WasteEventInput } from '../core/waste-events';
 
-/** Sổ điểm trừ phí shipper: refType chung của phiếu đổi rác, reason gắn mã phiếu để tra và để hoàn đúng lô. */
+/** Sổ điểm và sổ Ví của phí shipper: refType chung của phiếu đổi rác, reason gắn mã phiếu để tra và để hoàn đúng lô. */
 export const WASTE_PICKUP_FEE_REF_TYPE = 'WASTE_REQUEST';
 export const wastePickupFeeReason = (code: string): string => `WASTE_PICKUP_FEE:${code}`;
 export const wastePickupFeeRefundReason = (code: string): string => `WASTE_PICKUP_FEE_REFUND:${code}`;
+export const wastePickupFeeCashPayReason = (code: string): string => `Phí lấy rác tận nhà · ${code}`;
+export const wastePickupFeeCashRefundReason = (code: string): string => `Hoàn phí lấy rác tận nhà · ${code}`;
 
 type RefundRequest = { id: string; userId: string; code: string; shipFeePointsUsed: number | null };
 
@@ -59,21 +62,67 @@ export interface HomePickupCloseArgs {
 }
 
 /**
- * Đóng phiếu HOME_PICKUP chưa có hàng tới kho (huỷ, hết hạn, bưu tá không lấy được) và hoàn Điểm Xanh phí shipper trong CÙNG transaction.
+ * Hoàn phần phí lấy rác đã thu bằng tiền (Ví Tubu hoặc chuyển khoản đã xác nhận) về Ví Tubu đúng một lần:
+ * ba lớp chống hoàn trùng (CAS đóng phiếu của caller, CAS cột shipFeeCashRefundedVnd IS NULL, unique sổ Ví theo (userId, WASTE_FEE_REFUND, refId)).
+ * Phiếu chưa thu tiền (AWAITING chuyển khoản) có shipFeeCashPaidAt = null nên không hoàn. Tài khoản đã ẩn danh không được cộng Ví.
+ */
+export async function refundShipFeeCash(
+  tx: Prisma.TransactionClient,
+  req: { id: string; userId: string; code: string },
+): Promise<{ refundedCashVnd: number; anonymizedAt: string | null }> {
+  const row = await tx.wasteRequest.findUnique({
+    where: { id: req.id },
+    select: { shipFeeCashVnd: true, shipFeeCashPaidAt: true, shipFeeCashRefundedVnd: true },
+  });
+  const cash = row?.shipFeeCashVnd ?? 0;
+  if (cash <= 0 || !row?.shipFeeCashPaidAt || row.shipFeeCashRefundedVnd !== null) {
+    return { refundedCashVnd: 0, anonymizedAt: null };
+  }
+  const claimed = await tx.wasteRequest.updateMany({
+    where: { id: req.id, shipFeeCashPaidAt: { not: null }, shipFeeCashRefundedVnd: null, shipFeeCashVnd: { gt: 0 } },
+    data: { shipFeeCashRefundedVnd: cash },
+  });
+  if (claimed.count !== 1) return { refundedCashVnd: 0, anonymizedAt: null };
+  const credit = await creditWalletUnlessAnonymized(tx, {
+    userId: req.userId,
+    delta: cash,
+    type: 'WASTE_FEE_REFUND',
+    refType: WASTE_PICKUP_FEE_REF_TYPE,
+    refId: req.id,
+    reason: wastePickupFeeCashRefundReason(req.code),
+  });
+  if (!credit.credited) {
+    await tx.wasteRequest.update({ where: { id: req.id }, data: { shipFeeCashRefundedVnd: null } });
+    return { refundedCashVnd: 0, anonymizedAt: credit.anonymizedAt };
+  }
+  return { refundedCashVnd: cash, anonymizedAt: null };
+}
+
+/**
+ * Đóng phiếu HOME_PICKUP chưa có hàng tới kho (huỷ, hết hạn, bưu tá không lấy được) và hoàn Điểm Xanh + tiền phí đã thu trong CÙNG transaction.
  * `closed:false` = phiếu đã sang trạng thái khác (bên khác thắng), không ghi gì thêm.
  */
-export async function closeHomePickupRequest(tx: Prisma.TransactionClient, a: HomePickupCloseArgs): Promise<{ closed: boolean; refunded: number }> {
+export async function closeHomePickupRequest(
+  tx: Prisma.TransactionClient,
+  a: HomePickupCloseArgs,
+): Promise<{ closed: boolean; refunded: number; refundedCashVnd: number }> {
   const { count } = await tx.wasteRequest.updateMany({
     where: { id: a.req.id, method: 'HOME_PICKUP', status: { in: [...a.from] }, ...(a.where ?? {}) },
     data: { status: a.to, closedAt: a.now, closeReason: a.closeReason, ...(a.data ?? {}) },
   });
-  if (count !== 1) return { closed: false, refunded: 0 };
+  if (count !== 1) return { closed: false, refunded: 0, refundedCashVnd: 0 };
   const refunded = await refundShipFeePoints(tx, a.req, a.refundExpiresAt);
+  const cashRefund = await refundShipFeeCash(tx, a.req);
   await writeWasteEvent(tx, {
     ...a.event,
     requestId: a.req.id,
     pointId: a.req.pointId ?? null,
-    meta: { ...(a.event.meta ?? {}), shipFeePointsRefunded: refunded },
+    meta: {
+      ...(a.event.meta ?? {}),
+      shipFeePointsRefunded: refunded,
+      ...(cashRefund.refundedCashVnd > 0 ? { shipFeeCashRefundedVnd: cashRefund.refundedCashVnd } : {}),
+      ...(cashRefund.anonymizedAt ? { cashRefundSkippedAnonymized: cashRefund.anonymizedAt } : {}),
+    },
   });
-  return { closed: true, refunded };
+  return { closed: true, refunded, refundedCashVnd: cashRefund.refundedCashVnd };
 }

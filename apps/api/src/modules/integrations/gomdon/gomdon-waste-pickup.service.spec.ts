@@ -19,6 +19,8 @@ const baseReq = {
   gomdonPartnerCode: null as string | null,
   gomdonStatus: null as string | null,
   declaredWeightGrams: 2500,
+  shipFeeCashVnd: null as number | null,
+  shipFeeCashPaidAt: null as Date | null,
   shipFeeCodVnd: 15000,
   pickupAddress: { addressId: 'a1', recipient: 'Lan', phone: '0901234567', street: '1 Lê Lợi', ward: 'Phường Bến Nghé', province: 'Thành phố Hồ Chí Minh' },
   shippingHistory: null as unknown,
@@ -59,7 +61,7 @@ function build(req: Record<string, unknown> | null = {}, opts: { claim?: number;
 beforeEach(() => mockEnqueueCancel.mockReset().mockResolvedValue(undefined));
 
 describe('GomdonWastePickupService.pushRequest', () => {
-  it('body Gomdon: giao hàng 12491, bưu tá lấy tận nhà, nguồn là nhà khách, đích là kho, thu hộ đúng phần chưa trả bằng điểm', async () => {
+  it('body Gomdon: giao hàng 12491, bưu tá lấy tận nhà, nguồn là nhà khách, đích là kho, collect_amount luôn 0 (I1: cấm COD cả khi dữ liệu cũ còn shipFeeCodVnd)', async () => {
     const { svc, client } = build();
     await expect(svc.pushRequest('r1')).resolves.toBe('BE77');
     expect(client.createOrder).toHaveBeenCalledTimes(1);
@@ -71,7 +73,7 @@ describe('GomdonWastePickupService.pushRequest', () => {
       product_name: 'Rác tái chế TR-AAAAA',
       product_price: 0,
       product_number: 1,
-      collect_amount: 15000,
+      collect_amount: 0,
       weight: 2500,
       width: 0,
       height: 0,
@@ -91,19 +93,34 @@ describe('GomdonWastePickupService.pushRequest', () => {
     expect(client.createOrder.mock.calls[0]![0]).not.toHaveProperty('source_district');
   });
 
-  it('phí trả hết bằng điểm: collect_amount 0; cân nặng vượt trần Gomdon thì cắt về trần', async () => {
-    const { svc, client } = build({ shipFeeCodVnd: 0, declaredWeightGrams: 9_999_999 });
+  it('phí trả hết bằng điểm hoặc tiền trả trước: collect_amount 0; cân nặng vượt trần Gomdon thì cắt về trần', async () => {
+    const { svc, client } = build({ shipFeeCodVnd: 0, shipFeeCashVnd: 17000, shipFeeCashPaidAt: new Date(), declaredWeightGrams: 9_999_999 });
     await svc.pushRequest('r1');
     const body = client.createOrder.mock.calls[0]![0];
     expect(body.collect_amount).toBe(0);
     expect(body.weight).toBeLessThanOrEqual(10_000);
   });
 
-  it('thành công: claim CREATING rồi ghi id, mã vận đơn, trạng thái 1, hãng BestExpress, tracking = mã vận đơn, lịch sử', async () => {
+  it('phiếu AWAITING chuyển khoản (shipFeeCashVnd > 0, shipFeeCashPaidAt = null): KHÔNG tạo vận đơn, KHÔNG claim CREATING', async () => {
+    const { svc, client, updateMany } = build({ shipFeeCashVnd: 17000, shipFeeCashPaidAt: null });
+    await expect(svc.pushRequest('r1')).resolves.toBeNull();
+    expect(client.createOrder).not.toHaveBeenCalled();
+    expect(updateMany).not.toHaveBeenCalled();
+  });
+
+  it('thành công: claim CREATING (chặn AWAITING trong mệnh đề OR) rồi ghi id, mã vận đơn, trạng thái 1, hãng BestExpress, tracking = mã vận đơn, lịch sử', async () => {
     const { svc, updateMany } = build();
     await svc.pushRequest('r1');
     expect(updateMany.mock.calls[0]![0]).toEqual({
-      where: { id: 'r1', method: 'HOME_PICKUP', status: 'OPEN', gomdonOrderId: null, gomdonPartnerCode: null, gomdonStatus: null },
+      where: {
+        id: 'r1',
+        method: 'HOME_PICKUP',
+        status: 'OPEN',
+        gomdonOrderId: null,
+        gomdonPartnerCode: null,
+        gomdonStatus: null,
+        OR: [{ shipFeeCashVnd: null }, { shipFeeCashVnd: 0 }, { shipFeeCashPaidAt: { not: null } }],
+      },
       data: { gomdonStatus: 'CREATING' },
     });
     const save = updateMany.mock.calls[1]![0];
@@ -264,8 +281,13 @@ describe('GomdonWastePickupService.markFinalPushFailure', () => {
     expect(updateMany.mock.calls[0]![0].data).toEqual({ gomdonStatus: 'NEEDS_MANUAL_CHECK' });
   });
 
-  it('đã có vận đơn / không còn OPEN / đã NEEDS_MANUAL_CHECK: không làm gì', async () => {
-    for (const over of [{ gomdonOrderId: '77', gomdonPartnerCode: 'BE77', gomdonStatus: '1' }, { status: 'CANCELLED' }, { gomdonStatus: 'NEEDS_MANUAL_CHECK' }]) {
+  it('đã có vận đơn / không còn OPEN / đã NEEDS_MANUAL_CHECK / đang AWAITING chuyển khoản: không làm gì', async () => {
+    for (const over of [
+      { gomdonOrderId: '77', gomdonPartnerCode: 'BE77', gomdonStatus: '1' },
+      { status: 'CANCELLED' },
+      { gomdonStatus: 'NEEDS_MANUAL_CHECK' },
+      { shipFeeCashVnd: 17000, shipFeeCashPaidAt: null },
+    ]) {
       const { svc, lifecycle, alerts } = build(over);
       await svc.markFinalPushFailure('r1', new Error('x'));
       expect(lifecycle.failAfterRejected).not.toHaveBeenCalled();

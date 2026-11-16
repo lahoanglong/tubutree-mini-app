@@ -8,6 +8,7 @@ import {
   homePickupListMeta,
   homePickupQuoteView,
   homePickupShortStatus,
+  homePickupSubmitLabel,
   homePickupTimelineView,
   homePickupUnavailableText,
 } from './recycle-home-pickup-view';
@@ -109,6 +110,89 @@ describe('homePickupQuoteView', () => {
     const v = view(quote({ estimatedPoints: 100, blocked: 'Tháng này bạn chỉ còn 50 Điểm Xanh trong trần đổi rác' }));
     expect(v.notice).toBe('Tháng này bạn chỉ còn 50 Điểm Xanh trong trần đổi rác');
   });
+
+  it('W178 thiếu điểm (NEED_FEE_PAYMENT + feePaths): 4 tổ hợp (ví đủ, ví 0đ ẩn hàng ví, ví thiếu khoá hàng, không gửi kèm được)', () => {
+    const baseShort = {
+      pointsAvailable: 8_000,
+      pointsApplicable: 8_000,
+      remainingFeeVnd: 17_000,
+      cashDueVnd: 17_000,
+      blocked: SHORT_SENTENCE,
+      blockedCode: 'NEED_FEE_PAYMENT' as const,
+    };
+
+    const enoughWallet = view(
+      quote({
+        ...baseShort,
+        feePaths: {
+          wallet: { balance: 40_000, enough: true },
+          bankTransfer: { enabled: false },
+          attachNextOrder: { available: true, reason: null, existingRequestId: null },
+        },
+      }),
+    );
+    expect(enoughWallet).toMatchObject({
+      needFeePayment: true,
+      ok: true,
+      notice: null,
+      pointsUsed: 8_000,
+      pointsDeductText: '−8.000 điểm',
+      cashDueVnd: 17_000,
+      cashDueText: '17.000đ',
+    });
+    expect(enoughWallet.feeOptions).toEqual({
+      attachNextOrder: {
+        available: true,
+        subtitle: 'Miễn phí lấy rác 100%. Shipper giao đơn nhận rác. Giữ 7 ngày.',
+        badge: 'Khuyên dùng',
+        existingRequestId: null,
+      },
+      wallet: {
+        title: 'Trả 17.000đ bằng Ví Tubu',
+        subtitle: 'Số dư 40.000đ · Hoàn về ví nếu huỷ hoặc bưu tá không lấy được',
+        enough: true,
+      },
+      bankTransfer: null,
+    });
+
+    const zeroWallet = view(
+      quote({
+        ...baseShort,
+        feePaths: {
+          wallet: { balance: 0, enough: false },
+          bankTransfer: { enabled: true },
+          attachNextOrder: { available: true, reason: null, existingRequestId: null },
+        },
+      }),
+    );
+    expect(zeroWallet.feeOptions?.wallet).toBeNull();
+    expect(zeroWallet.feeOptions?.bankTransfer).toEqual({
+      title: 'Chuyển khoản VietQR 17.000đ',
+      subtitle: 'Hoàn về Ví Tubu nếu huỷ hoặc bưu tá không lấy được',
+    });
+
+    const shortWalletAndPendingPickup = view(
+      quote({
+        ...baseShort,
+        feePaths: {
+          wallet: { balance: 5_000, enough: false },
+          bankTransfer: { enabled: false },
+          attachNextOrder: { available: false, reason: 'Bạn đang có yêu cầu TR-PEND1 chờ gắn đơn', existingRequestId: 'req-pend-1' },
+        },
+      }),
+    );
+    expect(shortWalletAndPendingPickup.feeOptions?.wallet).toEqual({
+      title: 'Trả 17.000đ bằng Ví Tubu',
+      subtitle: 'Số dư 5.000đ, chưa đủ',
+      enough: false,
+    });
+    expect(shortWalletAndPendingPickup.feeOptions?.attachNextOrder).toEqual({
+      available: false,
+      subtitle: 'Bạn đang có yêu cầu TR-PEND1 chờ gắn đơn',
+      badge: null,
+      existingRequestId: 'req-pend-1',
+    });
+  });
 });
 
 describe('homePickupCreateState', () => {
@@ -128,6 +212,30 @@ describe('homePickupCreateState', () => {
     expect(homePickupCreateState({ addressId: 'a', quoteState: 'ready', view: ready, consentOk: false })).toEqual({ ok: false, hint: 'Tick ô đồng ý ở trên để tạo đơn thu gom' });
     expect(homePickupCreateState({ addressId: 'a', quoteState: 'ready', view: ready, consentOk: true })).toEqual({ ok: true, hint: null });
   });
+  it('khi thiếu điểm (needFeePayment): chưa chọn cách trả thì khoá nút và hiện "Chọn cách trả phí"; chọn Ví/VietQR hợp lệ thì mở', () => {
+    const shortView = view(
+      quote({
+        pointsAvailable: 8_000,
+        pointsApplicable: 8_000,
+        remainingFeeVnd: 17_000,
+        cashDueVnd: 17_000,
+        blocked: SHORT_SENTENCE,
+        blockedCode: 'NEED_FEE_PAYMENT',
+        feePaths: {
+          wallet: { balance: 40_000, enough: true },
+          bankTransfer: { enabled: true },
+          attachNextOrder: { available: true, reason: null, existingRequestId: null },
+        },
+      }),
+    );
+    expect(homePickupSubmitLabel(ready, null)).toBe('Tạo đơn thu gom');
+    expect(homePickupSubmitLabel(shortView, null)).toBe('Chọn cách trả phí');
+    expect(homePickupSubmitLabel(shortView, 'WALLET')).toBe('Trả 17.000đ từ Ví và đặt lấy rác');
+    expect(homePickupSubmitLabel(shortView, 'BANK_TRANSFER')).toBe('Tạo yêu cầu và chuyển khoản');
+    expect(homePickupCreateState({ addressId: 'a', quoteState: 'ready', view: shortView, consentOk: true, payment: null })).toEqual({ ok: false, hint: null });
+    expect(homePickupCreateState({ addressId: 'a', quoteState: 'ready', view: shortView, consentOk: true, payment: 'WALLET' })).toEqual({ ok: true, hint: null });
+    expect(homePickupCreateState({ addressId: 'a', quoteState: 'ready', view: shortView, consentOk: true, payment: 'BANK_TRANSFER' })).toEqual({ ok: true, hint: null });
+  });
 });
 
 const homePickup = (over: Partial<WasteHomePickupDTO> = {}): WasteHomePickupDTO => ({
@@ -137,6 +245,10 @@ const homePickup = (over: Partial<WasteHomePickupDTO> = {}): WasteHomePickupDTO 
   shipFeePointsUsed: 20_000,
   shipFeeCodVnd: 0,
   shipFeePointsRefunded: 0,
+  shipFeeCashVnd: 0,
+  shipFeeCashMethod: null,
+  shipFeeCashPaid: false,
+  shipFeeCashRefundedVnd: 0,
   declaredWeightGrams: 2000,
   pickupAddressText: '12 Lê Lợi, Phường Bến Nghé, Thành phố Hồ Chí Minh',
   timeline: [{ at: '2026-11-15T02:00:00.000Z', text: 'Đã tạo đơn thu gom' }],
@@ -180,10 +292,23 @@ describe('homePickupDetailRows', () => {
     expect(rows.map((r) => r.label)).toEqual(['Cân nặng ước tính', 'Phí shipper']);
     expect(rows[0]!.value).toBe('0,5 kg');
   });
-  it('đã huỷ và hoàn điểm: có dòng hoàn', () => {
+  it('đã huỷ và hoàn điểm / hoàn Ví: có dòng trả từ Ví và dòng hoàn về Ví', () => {
     const rows = homePickupDetailRows(homePickup({ shipFeePointsRefunded: 20_000 }));
     expect(rows.map((r) => r.label)).toEqual(['Địa chỉ lấy rác', 'Cân nặng ước tính', 'Phí shipper', 'Đã trừ Điểm Xanh', 'Đã hoàn Điểm Xanh']);
     expect(rows.at(-1)?.value).toBe('20.000\u00A0điểm');
+
+    const cashRows = homePickupDetailRows(
+      homePickup({
+        shipFeePointsUsed: 8_000,
+        shipFeePointsRefunded: 8_000,
+        shipFeeCashVnd: 17_000,
+        shipFeeCashMethod: 'WALLET',
+        shipFeeCashPaid: true,
+        shipFeeCashRefundedVnd: 17_000,
+      }),
+    );
+    expect(cashRows.map((r) => [r.label, r.value])).toContainEqual(['Đã trả từ Ví', '17.000đ']);
+    expect(cashRows.map((r) => [r.label, r.value])).toContainEqual(['Đã hoàn về Ví', '17.000đ']);
   });
 });
 
@@ -198,8 +323,12 @@ describe('huỷ đơn thu gom', () => {
     expect(homePickupCancelCopy('TR-8K2M9', { shipFeePointsUsed: 0 }).body).toBe('Bưu tá sẽ không tới lấy rác của đơn TR-8K2M9 nữa.');
     expect(homePickupCancelCopy('TR-8K2M9', undefined).body).not.toMatch(/hoàn/);
   });
-  it('thông báo sau khi huỷ nói số điểm đã hoàn', () => {
+  it('thông báo sau khi huỷ nói số điểm và/hoặc khoản phí hoàn về Ví', () => {
     expect(homePickupCancelDone({ shipFeePointsRefunded: 20_000 })).toBe('Đã huỷ đơn thu gom, hoàn 20.000 điểm');
+    expect(homePickupCancelDone({ shipFeePointsRefunded: 8_000, shipFeeCashRefundedVnd: 17_000 })).toBe(
+      'Đã huỷ đơn thu gom, hoàn 8.000 điểm và 17.000đ về Ví',
+    );
+    expect(homePickupCancelDone({ shipFeePointsRefunded: 0, shipFeeCashRefundedVnd: 17_000 })).toBe('Đã huỷ đơn thu gom, hoàn 17.000đ về Ví');
     expect(homePickupCancelDone({ shipFeePointsRefunded: 0 })).toBe('Đã huỷ đơn thu gom');
     expect(homePickupCancelDone(undefined)).toBe('Đã huỷ đơn thu gom');
   });

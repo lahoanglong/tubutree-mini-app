@@ -19,6 +19,7 @@ const DEFAULTS = {
   customerMonthlyCapPoints: 60_000, maxOpenRequests: 3, requestHoldDays: 7, pickupWaitDays: 14, inTransitReviewDays: 30,
   mailinMaxWeightKg: 20, mailinMaxEdgeCm: 50, shortfallLockPct: 50, shortfallLockStreak: 2, staffDailyCapPoints: 1_000_000,
   giftClaimDays: 60, pointInactiveDays: 60, mailinFeeTable: FEE, alertThresholds: THRESHOLDS, rulesText: '', rulesVersion: '2026-10-17.1',
+  homePickupBankTransferEnabled: false, feePaymentTtlHours: 24,
 };
 
 describe('WasteConfigService.snapshot', () => {
@@ -44,12 +45,14 @@ describe('WasteConfigService.snapshot', () => {
       'waste.request_hold_days': 15, 'waste.pickup_wait_days': 16, 'waste.in_transit_review_days': 17, 'waste.mailin_max_weight_kg': 18,
       'waste.mailin_max_edge_cm': 19, 'waste.shortfall_lock_pct': 20, 'waste.shortfall_lock_streak': 4, 'waste.staff_daily_cap_points': 22,
       'waste.gift_claim_days': 23, 'waste.point_inactive_days': 24, 'waste.rules_version': '2026-11-05.2',
+      'waste.home_pickup_bank_transfer_enabled': true, 'waste.fee_payment_ttl_hours': 36,
     });
     expect(await svc.snapshot()).toEqual({
       ...DEFAULTS, enabled: true, laneDropoff: false, laneMailin: true, lanePickup: true, mailinMinPoints: 11, pickupMinPoints: 12,
       customerMonthlyCapPoints: 13, maxOpenRequests: 14, requestHoldDays: 15, pickupWaitDays: 16, inTransitReviewDays: 17,
       mailinMaxWeightKg: 18, mailinMaxEdgeCm: 19, shortfallLockPct: 20, shortfallLockStreak: 4, staffDailyCapPoints: 22,
       giftClaimDays: 23, pointInactiveDays: 24, rulesVersion: '2026-11-05.2',
+      homePickupBankTransferEnabled: true, feePaymentTtlHours: 36,
     });
   });
 

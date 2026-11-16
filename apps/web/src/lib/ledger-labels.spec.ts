@@ -159,6 +159,8 @@ describe('walletTxLabel', () => {
   it('nhãn theo loại biến động, loại chưa biết vẫn hiện được', () => {
     expect(walletTxLabel('ORDER_PAY')).toBe('Thanh toán đơn hàng');
     expect(walletTxLabel('ORDER_REFUND')).toBe('Hoàn tiền đơn hàng');
+    expect(walletTxLabel('WASTE_FEE_PAY')).toBe('Trả phí lấy rác');
+    expect(walletTxLabel('WASTE_FEE_REFUND')).toBe('Hoàn phí lấy rác');
     expect(walletTxLabel('WITHDRAW')).toBe('Rút về ngân hàng');
     expect(walletTxLabel('PIT_REFUND')).toBe('Hoàn thuế TNCN giữ dư');
     expect(walletTxLabel('COMMISSION_REVERSAL')).toBe('Thu hồi hoa hồng');

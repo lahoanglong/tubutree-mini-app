@@ -48,6 +48,7 @@ import { WasteConfirmService, type WasteStaffCall } from '../../src/modules/wast
 import { WasteDeskService } from '../../src/modules/waste-exchange/receiving/waste-desk.service';
 import { WasteReceiveService } from '../../src/modules/waste-exchange/receiving/waste-receive.service';
 import { WasteReverseService } from '../../src/modules/waste-exchange/receiving/waste-reverse.service';
+import { WasteFeeBankService } from '../../src/modules/waste-exchange/home-pickup/waste-fee-bank.service';
 import { WASTE_EVENT_KINDS, type WasteEventKind } from '../../src/modules/waste-exchange/waste.constants';
 import {
   cleanupWaste,
@@ -97,6 +98,7 @@ let adminItems: WasteAdminItemsService;
 let adminPoints: WasteAdminPointsService;
 let adminGifts: WasteAdminGiftsService;
 let redemptions: WasteGiftRedemptionsService;
+let feeBank: WasteFeeBankService;
 let checkout: CheckoutService;
 let cart: CartService;
 let wh: Awaited<ReturnType<typeof createWarehouse>>;
@@ -637,6 +639,36 @@ const SWEEP: ReadonlyArray<SweepRow> = [
     (red) => ({ giftRedemptionId: red.id }),
     () => redemptions.expireOverdue(),
   ),
+  sweepRow(
+    'FEE_BANK_PAID',
+    async () => {
+      const customer = await newUser();
+      const admin = await newAdmin();
+      const r = await createWasteRequest(prisma, {
+        userId: customer.id,
+        method: 'HOME_PICKUP',
+        status: 'OPEN',
+        pointId: wh.id,
+        lines: lines(5),
+      });
+      await prisma.wasteRequest.update({
+        where: { id: r.id },
+        data: {
+          shipFeeVnd: 25_000,
+          shipFeePointsUsed: 8_000,
+          shipFeeCashVnd: 17_000,
+          shipFeeCashMethod: 'BANK_TRANSFER',
+          shipFeeCashPaidAt: null,
+          shipFeeCodVnd: 0,
+        },
+      });
+      const bankRef = `IT-FEE-${randCode(8)}`;
+      return { admin, r, bankRef };
+    },
+    (c) => feeBank.confirmFeeBankPaid(c.r.id, { amount: 17_000, bankRef: c.bankRef, actorId: c.admin.id }),
+    (c) => ({ requestId: c.r.id }),
+    (c) => feeBank.confirmFeeBankPaid(c.r.id, { amount: 17_000, bankRef: c.bankRef, actorId: c.admin.id }),
+  ),
 ];
 
 const NOTIFIER_STUB = {
@@ -696,6 +728,7 @@ beforeAll(async () => {
       WasteAdminPointsService,
       WasteAdminGiftsService,
       WasteGiftRedemptionsService,
+      WasteFeeBankService,
     ],
   }).compile();
   await moduleRef.init();
@@ -714,6 +747,7 @@ beforeAll(async () => {
   adminPoints = moduleRef.get(WasteAdminPointsService);
   adminGifts = moduleRef.get(WasteAdminGiftsService);
   redemptions = moduleRef.get(WasteGiftRedemptionsService);
+  feeBank = moduleRef.get(WasteFeeBankService);
   checkout = moduleRef.get(CheckoutService);
   cart = moduleRef.get(CartService);
 

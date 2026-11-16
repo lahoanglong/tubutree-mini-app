@@ -47,6 +47,8 @@ const KEYS = [
   'waste.alert_thresholds',
   'waste.rules_text',
   'waste.rules_version',
+  'waste.home_pickup_bank_transfer_enabled',
+  'waste.fee_payment_ttl_hours',
 ];
 
 function mount() {
@@ -67,8 +69,8 @@ const field = (c: HTMLElement, key: string) => c.querySelector<HTMLElement>(`[da
 const save = (c: HTMLElement, key: string) => byText(field(c, key), 'button', 'Lưu') as HTMLButtonElement;
 
 describe('WasteConfigCard', () => {
-  it('đủ 22 khoá waste.* theo thứ tự 11.5 và thêm số phiên bản thể lệ', () => {
-    expect(WASTE_CONFIG_FIELDS).toHaveLength(22);
+  it('đủ 24 khoá waste.* theo thứ tự 11.5, số phiên bản thể lệ và 2 khoá phí lấy rác W178', () => {
+    expect(WASTE_CONFIG_FIELDS).toHaveLength(24);
     expect(WASTE_CONFIG_FIELDS.map((f) => f.key)).toEqual(KEYS);
     const { c } = mount();
     for (const k of KEYS) expect(field(c, k), k).not.toBeNull();

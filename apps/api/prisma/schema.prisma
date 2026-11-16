@@ -1511,6 +1511,8 @@ enum WalletTxType {
   ADJUST // điều chỉnh tay của admin
   PIT_REFUND // hoàn thuế TNCN giữ dư khi admin từ chối một lệnh rút hoa hồng cùng tháng
   COMMISSION_REVERSAL // thu hồi hoa hồng đã vào ví của đơn bị trả (số dư được phép âm)
+  WASTE_FEE_PAY // trả phần phí lấy rác tận nhà còn thiếu từ Ví Tubu (W178)
+  WASTE_FEE_REFUND // hoàn phần phí lấy rác tận nhà đã thu về Ví Tubu (W178)
 }
 
 model WalletTransaction {
@@ -3735,6 +3737,12 @@ enum WasteCloseReason {
   LOST_AT_WAREHOUSE
   SHIP_LOCKED
   ORDER_CANCELLED
+  FEE_UNPAID
+}
+
+enum WasteFeeCashMethod {
+  WALLET
+  BANK_TRANSFER
 }
 
 enum WasteRejectionReason {
@@ -3937,6 +3945,11 @@ model WasteRequest {
   shipFeePointsUsed       Int?
   shipFeeCodVnd           Int?
   shipFeePointsRefunded   Int?
+  shipFeeCashVnd          Int?
+  shipFeeCashMethod       WasteFeeCashMethod?
+  shipFeeCashPaidAt       DateTime?
+  shipFeeCashRefundedVnd  Int?
+  shipFeeBankRef          String?
   pickupAddress           Json?
   shippingHistory         Json?
   idempotencyKey          String
