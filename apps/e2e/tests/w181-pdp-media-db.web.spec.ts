@@ -1,12 +1,13 @@
 import type { Page } from '@playwright/test';
 import { test, expect, type MockApi } from './support/mock-api';
 import { observeCls, readClsTotal } from './support/cls-observer';
+import { assertSeededOnCi } from './support/a11y-db';
 import { MEDIA_IMAGES, MEDIA_VIDEO, restoreMediaPdp, seedMediaPdp, type MediaPdp } from './support/pdp-media-db';
 
 /**
  * W181, web ở 375×812 và 1280×800: thư viện media của trang chi tiết dựng từ dữ liệu THẬT của API (phần server của Next): ảnh, ô video cuối dải
  * (poster + nút phát, preload none, không tự phát, không tải video cho tới khi bấm), nút phát từ 44px, không làm trang nhảy (CLS), và chọn phân loại
- * có ảnh riêng thì dải nhảy tới ảnh đó. DB tạm được gieo ảnh/video vào một sản phẩm từ vị trí 20 của danh sách (xem support/pdp-media-db.ts) rồi trả lại.
+ * có ảnh riêng thì dải nhảy tới ảnh đó. DB tạm được gieo ảnh/video vào một sản phẩm 2 phân loại (xem support/pdp-media-db.ts) rồi trả lại.
  * Mọi lời gọi từ trình duyệt đi qua mock; ảnh và video đi qua page.route. Tệp chỉ thuộc project "Web Customer Media DB" (playwright.config.ts).
  */
 const CLS_MAX = 0.02;
@@ -19,6 +20,7 @@ test.beforeAll(async ({ request }, testInfo) => {
   test.setTimeout(240_000);
   if (testInfo.project.name !== 'Web Customer Media DB') return;
   media = await seedMediaPdp(request);
+  assertSeededOnCi(media !== null);
   if (!media) return;
   // Trang dựng sẵn có thể giữ bản cũ tới 60 giây (revalidate): hỏi chính trang tới khi HTML có ô video.
   const deadline = Date.now() + 200_000;

@@ -4,9 +4,6 @@ import { seedDatabaseUrl } from './a11y-db';
 import { writableTempDb } from './waste-db';
 
 const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
-/** Bỏ qua 20 sản phẩm đầu của danh sách: các spec web khác dùng sản phẩm đầu danh sách, và đợt Giờ vàng gieo ở `pdp-flash-db` lấy từ cuối. */
-const SKIP_FIRST = 20;
-
 export const MEDIA_IMAGES = ['https://img.test/w181-a.svg', 'https://img.test/w181-b.svg', 'https://img.test/w181-c.svg'];
 export const MEDIA_VIDEO = 'https://cdn.test/w181-clip.mp4';
 
@@ -39,25 +36,32 @@ function client(url: string): Prisma {
 }
 
 /**
- * Gieo ảnh (3), một video và ảnh riêng cho phân loại thứ hai vào MỘT sản phẩm có từ 2 phân loại còn hàng (từ vị trí 20 của danh sách), trong DB tạm
+ * Gieo ảnh (3), một video và ảnh riêng cho phân loại thứ hai vào MỘT sản phẩm có từ 2 phân loại còn hàng (cuối danh sách 50 sản phẩm đầu), trong DB tạm
  * (writableTempDb); `null` khi không ghi được hay không có sản phẩm hợp. `restoreMediaPdp` trả lại như cũ.
  */
 export async function seedMediaPdp(request: APIRequestContext): Promise<MediaPdp | null> {
   const url = seedDatabaseUrl();
-  if (!writableTempDb(url)) return null;
+  if (!writableTempDb(url)) {
+    console.warn('[w181-media] bỏ qua: DATABASE_URL không phải DB tạm của web-gate/CI');
+    return null;
+  }
   const list = await request.get(`${API_ORIGIN}/api/products?limit=50`).catch(() => null);
-  if (!list?.ok()) return null;
+  if (!list?.ok()) {
+    console.warn(`[w181-media] bỏ qua: GET /api/products?limit=50 lỗi (${list?.status() ?? 'không kết nối'})`);
+    return null;
+  }
   const slugs = ((await list.json()) as { data?: { slug: string }[] }).data?.map((x) => x.slug) ?? [];
+  // Sản phẩm CUỐI danh sách có từ 2 phân loại còn hàng: các spec PDP khác lấy sản phẩm đầu danh sách, nên ít chồng lên nhau nhất.
   let found: Detail | null = null;
-  for (const slug of slugs.slice(SKIP_FIRST)) {
+  for (const slug of slugs) {
     const res = await request.get(`${API_ORIGIN}/api/products/${encodeURIComponent(slug)}`).catch(() => null);
     const d = res?.ok() ? ((await res.json()) as Detail) : null;
-    if (d && d.variations.filter((v) => v.stock > 0).length >= 2) {
-      found = d;
-      break;
-    }
+    if (d && d.variations.filter((v) => v.stock > 0).length >= 2) found = d;
   }
-  if (!found) return null;
+  if (!found) {
+    console.warn(`[w181-media] bỏ qua: không có sản phẩm 2 phân loại còn hàng trong ${slugs.length} sản phẩm đầu danh sách`);
+    return null;
+  }
   const prisma = client(url);
   try {
     const row = await prisma.product.findUnique({ where: { id: found.id }, select: { images: true, thumbnail: true, videos: true } });
