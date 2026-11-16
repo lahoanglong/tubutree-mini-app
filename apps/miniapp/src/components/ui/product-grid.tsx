@@ -33,7 +33,7 @@ type GridCardProps = Omit<ProductCardProps, 'onOpen' | 'rank'> & { index: number
 const GridCard = memo(function GridCard({ index, rankFrom, onOpen, ...rest }: GridCardProps) {
   const { product } = rest;
   const open = useCallback(() => onOpen?.(product, index), [onOpen, product, index]);
-  return <ProductCard {...rest} rank={rankFrom === undefined ? undefined : rankFrom + index} onOpen={onOpen ? open : undefined} />;
+  return <ProductCard {...rest} position={index + 1} rank={rankFrom === undefined ? undefined : rankFrom + index} onOpen={onOpen ? open : undefined} />;
 });
 
 /** Lưới 2 cột; `loading` vẽ khung chờ cùng số đo với thẻ thật nên trang không nhảy khi dữ liệu về. */

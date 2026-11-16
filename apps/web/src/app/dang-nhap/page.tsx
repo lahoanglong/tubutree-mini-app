@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
@@ -14,6 +14,7 @@ import { useAuth } from '@/lib/auth-context';
 import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
 import { loginFailureMessage } from '@/lib/login-errors';
 import { rememberReturnTo, safeReturnPath } from '@/lib/return-to';
+import { routeTemplate, trackPurchase } from '@/lib/analytics';
 import { ui } from '@/lib/guest-ui';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { miniAppLink } from '@/lib/zalo-mini-app';
@@ -44,12 +45,17 @@ function LoginInner() {
       ? `${homeText.newGift.title}: ${homeText.newGift.voucherAmount(formatVnd(welcome.amount))}${welcome.minOrder > 0 ? `, ${homeText.newGift.voucherMinOrder(formatVnd(welcome.minOrder)).toLowerCase()}` : ''}.`
       : null;
   const miniAppUrl = miniAppLink(returnTo);
+  const loginTracked = useRef(false);
 
   useEffect(() => {
     if (status === 'authenticated') router.replace(returnTo ?? '/');
   }, [status, router, returnTo]);
 
   const onLogin = async () => {
+    if (!loginTracked.current) {
+      loginTracked.current = true;
+      trackPurchase('login_started', { from: routeTemplate(returnTo ?? '/') });
+    }
     setError(null);
     setBusy(true);
     // Ghi (hoặc xoá) trước khi rời trang: callback đọc lại sau vòng chuyển hướng Zalo.

@@ -16,11 +16,13 @@ interface AddressSectionProps {
   addresses: AddressDTO[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** Khách vừa lưu một địa chỉ (thêm mới hoặc sửa) và địa chỉ đó được chọn cho đơn. */
+  onSaved?: () => void;
   /** Máy chủ từ chối báo giá cho địa chỉ đang chọn với mã ADDRESS_OUTDATED (vd phường không thuộc tỉnh) dù mã đã theo địa giới mới. */
   quoteOutdated?: boolean;
 }
 
-export function AddressSection({ addresses, selectedId, onSelect, quoteOutdated = false }: AddressSectionProps) {
+export function AddressSection({ addresses, selectedId, onSelect, onSaved, quoteOutdated = false }: AddressSectionProps) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
@@ -33,6 +35,7 @@ export function AddressSection({ addresses, selectedId, onSelect, quoteOutdated 
     );
     void queryClient.invalidateQueries({ queryKey: ['addresses'] });
     onSelect(a.id);
+    onSaved?.();
   };
 
   return (

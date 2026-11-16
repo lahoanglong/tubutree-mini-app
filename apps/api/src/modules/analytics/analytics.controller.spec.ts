@@ -4,7 +4,10 @@ import type { JwtPayload } from '@tubutree/shared-types';
 import { AnalyticsController } from './analytics.controller';
 import { AnalyticsEventsService } from './analytics-events.service';
 import type { PrismaService } from '../../prisma/prisma.service';
-import { IngestEventsDto } from './dto/ingest-events.dto';
+import { IngestEventsDto, WebBeaconDto, WebIngestEventsDto } from './dto/ingest-events.dto';
+import { IS_PUBLIC_KEY } from '../../common/decorators/public.decorator';
+import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
+import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { SERVER_EVENT_NAMES } from '@tubutree/shared-types';
 import { THROTTLER_LIMIT, THROTTLER_TRACKER, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 
@@ -129,7 +132,7 @@ describe('AnalyticsController.ingest', () => {
   describe('ghi cả lô một lần (D9-02)', () => {
     const base = { occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp', eventName: 'screen_viewed' };
     const batch = (n: number) =>
-      Array.from({ length: n }, (_, i) => ({ ...base, eventId: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, props: { i } }));
+      Array.from({ length: n }, (_, i) => ({ ...base, eventId: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, props: { route: '/', msToContent: i } }));
     const setup = (createMany: jest.Mock, create: jest.Mock = jest.fn().mockResolvedValue(undefined)) => {
       const prisma = { analyticsEvent: { createMany, create } } as unknown as PrismaService;
       return { ctrl: new AnalyticsController(new AnalyticsEventsService(prisma)), create };
@@ -145,7 +148,7 @@ describe('AnalyticsController.ingest', () => {
       const arg = createMany.mock.calls[0][0];
       expect(arg.data).toHaveLength(50);
       expect(arg.skipDuplicates).toBe(true);
-      expect(arg.data[0]).toMatchObject({ eventName: 'screen_viewed', userId: 'u1', anonymousId: createHash('sha256').update('dev-1').digest('hex').slice(0, 32), platform: 'miniapp', props: { i: 0 } });
+      expect(arg.data[0]).toMatchObject({ eventName: 'screen_viewed', userId: 'u1', anonymousId: createHash('sha256').update('dev-1').digest('hex').slice(0, 32), platform: 'miniapp', props: { route: '/', msToContent: 0 } });
       expect(arg.data[0].occurredAt).toEqual(new Date('2026-09-27T00:00:00Z'));
     });
 
@@ -285,5 +288,101 @@ describe('AnalyticsController.ingest', () => {
       expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, handler)).toBe(60_000);
       expect(Reflect.getMetadata(`${THROTTLER_TRACKER}default`, handler)).toBeUndefined();
     });
+  });
+});
+
+describe('Sự kiện website (khách ẩn danh được gửi)', () => {
+  const SID = '0b9c2f4e-1d2a-4c3b-9e8f-7a6b5c4d3e2f';
+  const AID = '5e4d3c2b-1a09-4f8e-8d7c-6b5a49382716';
+  const ev = (i: number, over: Record<string, unknown> = {}) => ({
+    eventId: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+    eventName: 'pdp_action',
+    occurredAt: '2026-11-16T15:00:00Z',
+    platform: 'web',
+    anonymousId: AID,
+    sessionId: SID,
+    props: { action: 'add_to_cart', productSlug: 'nuoc-rua-chen-fuwa3e' },
+    ...over,
+  });
+  const setup = () => {
+    const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
+    return { ctrl: new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService), recordManyBestEffort };
+  };
+  const rows = (m: jest.Mock) => m.mock.calls[0]![0] as Array<Record<string, unknown>>;
+
+  it('route web là @Public, gắn OptionalJwtAuthGuard; beacon @Public, cả hai giữ trần 120/phút', () => {
+    for (const h of [AnalyticsController.prototype.ingestWeb, AnalyticsController.prototype.ingestWebBeacon]) {
+      expect(Reflect.getMetadata(IS_PUBLIC_KEY, h)).toBe(true);
+      expect(Reflect.getMetadata(`${THROTTLER_LIMIT}default`, h)).toBe(120);
+      expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, h)).toBe(60_000);
+    }
+    expect(Reflect.getMetadata(GUARDS_METADATA, AnalyticsController.prototype.ingestWeb)).toEqual([OptionalJwtAuthGuard]);
+    expect(Reflect.getMetadata(IS_PUBLIC_KEY, AnalyticsController.prototype.ingest)).toBeUndefined();
+  });
+
+  it('khách ẩn danh: ghi userId null, giữ anonymousId và sessionId; có JWT thì gắn userId', async () => {
+    const a = setup();
+    await expect(a.ctrl.ingestWeb(undefined, { events: [ev(1)] } as WebIngestEventsDto)).resolves.toEqual({ accepted: 1 });
+    expect(rows(a.recordManyBestEffort)[0]).toMatchObject({ userId: null, anonymousId: AID, sessionId: SID, platform: 'web', eventName: 'pdp_action' });
+    const b = setup();
+    await b.ctrl.ingestWeb({ sub: 'u9', role: 'CUSTOMER' } as JwtPayload, { events: [ev(1)] } as WebIngestEventsDto);
+    expect(rows(b.recordManyBestEffort)[0]).toMatchObject({ userId: 'u9' });
+  });
+
+  it('bỏ riêng sự kiện platform miniapp, props lạ, chuỗi giống SĐT; mã phiên/ẩn danh không phải UUID thành null', async () => {
+    const { ctrl, recordManyBestEffort } = setup();
+    const res = await ctrl.ingestWeb(undefined, {
+      events: [
+        ev(1, { platform: 'miniapp' }),
+        ev(2, { props: { action: 'share', productSlug: 'a', email: 'x' } }),
+        ev(3, { eventName: 'search_performed', props: { q: '0912345678', resultsCount: 0 } }),
+        ev(4, { sessionId: 'not-a-uuid', anonymousId: 'abc' }),
+      ],
+    } as WebIngestEventsDto);
+    expect(res).toEqual({ accepted: 1 });
+    expect(rows(recordManyBestEffort)).toHaveLength(1);
+    expect(rows(recordManyBestEffort)[0]).toMatchObject({ eventId: ev(4).eventId, sessionId: null, anonymousId: null });
+  });
+
+  it('DTO web: tối đa 20 sự kiện mỗi lô', async () => {
+    await expect(asBody(WebIngestEventsDto, { events: Array.from({ length: 20 }, (_, i) => ev(i)) })).resolves.toBeDefined();
+    await expect(asBody(WebIngestEventsDto, { events: Array.from({ length: 21 }, (_, i) => ev(i)) })).rejects.toThrow();
+  });
+
+  it('beacon: đọc payload JSON trong thân form, ghi như khách ẩn danh, trả 204', async () => {
+    const { ctrl, recordManyBestEffort } = setup();
+    const dto = (await asBody(WebBeaconDto, { payload: JSON.stringify({ events: [ev(1), ev(2, { eventName: 'checkout_abandoned', props: { lastStep: 'started' } })] }) })) as WebBeaconDto;
+    await expect(ctrl.ingestWebBeacon(dto)).resolves.toBeUndefined();
+    expect(rows(recordManyBestEffort).map((r) => [r.eventName, r.userId])).toEqual([
+      ['pdp_action', null],
+      ['checkout_abandoned', null],
+    ]);
+    expect(Reflect.getMetadata('__httpCode__', AnalyticsController.prototype.ingestWebBeacon)).toBe(204);
+  });
+
+  it('beacon: payload hỏng, sai khuôn hoặc tên sự kiện máy chủ → 400, không ghi gì', async () => {
+    const { ctrl, recordManyBestEffort } = setup();
+    await expect(ctrl.ingestWebBeacon({ payload: '{not json' })).rejects.toThrow('payload không phải JSON');
+    await expect(ctrl.ingestWebBeacon({ payload: JSON.stringify({ events: [ev(1, { eventName: 'order_placed' })] }) })).rejects.toThrow('payload sai khuôn');
+    await expect(ctrl.ingestWebBeacon({ payload: JSON.stringify({ events: [ev(1)], extra: 1 }) })).rejects.toThrow('payload sai khuôn');
+    await expect(ctrl.ingestWebBeacon({ payload: JSON.stringify({ events: Array.from({ length: 21 }, (_, i) => ev(i)) }) })).rejects.toThrow('payload sai khuôn');
+    expect(recordManyBestEffort).not.toHaveBeenCalled();
+  });
+});
+
+describe('/events (Mini App) áp danh sách trắng props', () => {
+  it('bỏ sự kiện có khoá lạ hoặc chuỗi giống email, giữ sự kiện đúng', async () => {
+    const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
+    const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+    const base = { occurredAt: '2026-11-16T15:00:00Z', platform: 'miniapp' as const };
+    const res = await ctrl.ingest({ sub: 'u1', role: 'CUSTOMER' } as JwtPayload, {
+      events: [
+        { ...base, eventId: 'a', eventName: 'cart_viewed', props: { itemCount: 1, subtotalBucket: '0-99k' } },
+        { ...base, eventId: 'b', eventName: 'cart_viewed', props: { itemCount: 1, subtotalBucket: '0-99k', address: 'x' } },
+        { ...base, eventId: 'c', eventName: 'search_performed', props: { q: 'an@gmail.com', resultsCount: 1 } },
+      ],
+    } as IngestEventsDto);
+    expect(res).toEqual({ accepted: 1 });
+    expect((recordManyBestEffort.mock.calls[0]![0] as Array<{ eventId: string }>).map((r) => r.eventId)).toEqual(['a']);
   });
 });

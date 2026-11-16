@@ -44,12 +44,15 @@ export function WishlistHeart({
   size = 22,
   floating = false,
   productName,
+  onLike,
 }: {
   productId: string;
   size?: number;
   floating?: boolean;
   /** Tên sản phẩm để nhãn nút phân biệt được 20 tim trong một lưới (a11y A6). Thiếu thì giữ nhãn cũ đổi theo trạng thái (trang chi tiết chưa truyền, thuộc gói PDP). */
   productName?: string;
+  /** Chạy khi lần chạm thật sự thêm vào yêu thích (không chạy khi bỏ thích hay khi chạm chỉ mở đăng nhập). */
+  onLike?: () => void;
 }) {
   const status = useAuthStore((s) => s.status);
   const login = useLoginWithNotice();
@@ -74,6 +77,7 @@ export function WishlistHeart({
     const current = qc.getQueryData<string[]>(IDS_KEY) ?? [];
     const want = !current.includes(productId);
     setPopping(want);
+    if (want) onLike?.();
     qc.setQueryData<string[]>(IDS_KEY, want ? [...current, productId] : current.filter((id) => id !== productId));
     sendToggle(qc, productId, want);
   };

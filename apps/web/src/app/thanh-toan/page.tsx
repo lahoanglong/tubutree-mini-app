@@ -70,6 +70,7 @@ import { OrderSuccess } from '@/components/checkout/order-success';
 import { GiftRows } from '@/components/checkout/gift-rows';
 import { PickupSection, WaivedShippingValue } from '@/components/checkout/pickup-section';
 import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '@/components/checkout/use-checkout-pickup';
+import { useCheckoutFunnel } from '@/components/analytics/use-checkout-funnel';
 import { CheckoutSkeleton } from './checkout-skeleton';
 import { InlineRetry } from './inline-retry';
 import { InvoiceSection } from './invoice-section';
@@ -257,6 +258,7 @@ export default function CheckoutPage() {
   // Refetch lỗi vẫn giữ `data` của lần trước (React Query v5): không coi đó là báo giá hiện hành, nếu không
   // khách thấy số cũ trong khi server đã tính theo mã mới và nút Đặt hàng vẫn bật.
   const quote = quoteQ.isError ? undefined : quoteQ.data;
+  const funnel = useCheckoutFunnel({ quoteReady: quoteQ.isSuccess, itemCount: checkoutItems.length, addressId });
   // Giỏ có hàng của gian hàng đối tác: Điểm Xanh chỉ trả cho hàng Tubu (trần của đơn + câu giải thích; giỏ chỉ hàng đối tác thì tắt).
   const partnerPoints = pointsCapState(quote, usablePoints);
   const convertedLine = convertedPointsLine(pointsOffer, partnerPoints);
@@ -382,6 +384,7 @@ export default function CheckoutPage() {
       return placeOrder(body, key);
     },
     onSuccess: (order) => {
+      funnel.ordered();
       orderKeys.current.reset();
       unknownAttempt.current = null;
       setUnknownRev(null);
@@ -709,6 +712,7 @@ export default function CheckoutPage() {
       setFocusTick((n) => n + 1);
       return;
     }
+    if (!placingRef.current) funnel.step('place_order_click');
     startPlace();
   };
   const totalText = checkoutTotalText({ total: quote?.total ?? null, hasAddress: !!addressId }, formatVnd);
@@ -818,6 +822,7 @@ export default function CheckoutPage() {
               onCreated={(a) => {
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
                 chosen(setAddressId)(a.id);
+                funnel.step('address_saved');
               }}
               onUpdated={() => {
                 bumpChoice();
@@ -848,7 +853,10 @@ export default function CheckoutPage() {
                           type="radio"
                           name="pay"
                           checked={payment === p.k}
-                          onChange={chosen(() => setPayment(p.k))}
+                          onChange={chosen(() => {
+                            setPayment(p.k);
+                            funnel.step('payment_method_selected', p.k);
+                          })}
                           disabled={!!reason || place.isPending}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
                           className={`${miniRadio} ${miniRadioGutter} ${reason ? 'opacity-[0.45] md:opacity-60' : ''}`}

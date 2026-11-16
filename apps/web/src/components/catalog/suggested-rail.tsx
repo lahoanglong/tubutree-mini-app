@@ -19,7 +19,7 @@ export function SuggestedRail({ flush = false }: { flush?: boolean } = {}) {
       <Heading variant="title-sm" as="h2" style={{ marginBottom: 8 }}>
         Có thể bạn thích
       </Heading>
-      <ProductGrid items={items} variant="grid" />
+      <ProductGrid items={items} variant="grid" shelf="suggested" />
     </section>
   );
 }

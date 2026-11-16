@@ -12,6 +12,7 @@ import BottomNav from '@/components/bottom-nav';
 import BackButton from '@/components/mini/back-button';
 import { ErrorReporter } from '@/components/error-reporter';
 import { EntrySourceCapture } from '@/components/entry-source-capture';
+import { ScreenTracker } from '@/components/analytics/screen-tracker';
 import { PdpNavSkeleton } from '@/components/skeletons/pdp-nav-skeleton';
 import { SkipLink } from '@/components/skip-link';
 import { apiImageOrigin } from '@/lib/image-origin';
@@ -62,6 +63,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           {/* Link CTV chia sẻ thường trỏ thẳng tới trang sản phẩm kèm ?ref= — bắt ở mọi trang. */}
           <ReferralCapture />
           <EntrySourceCapture />
+          <ScreenTracker />
           <ErrorReporter />
           <AppGates />
           <PdpNavSkeleton />

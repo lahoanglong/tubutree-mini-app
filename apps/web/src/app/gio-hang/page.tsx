@@ -23,6 +23,8 @@ import { StickyActionBar } from '@/components/sticky-action-bar';
 import { ui, uiBar } from '@/lib/guest-ui';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '@/lib/shipments';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
+import { markCheckoutEntry, trackPurchase } from '@/lib/analytics';
+import { subtotalBucket } from '@tubutree/shared-types';
 import { ctvSlugFor, getStorefrontContext } from '@/lib/storefront-context';
 import { useCartKey } from '@/lib/cart-key';
 import BackLink from '@/components/back-link';
@@ -121,6 +123,14 @@ export default function CartPage() {
   const router = useRouter();
   const cartKeyNow = useCartKey();
   const cartQ = useQuery({ queryKey: cartKeyNow, queryFn: getCart, enabled: phase === 'authenticated' });
+  // `cart_viewed` một lần mỗi lần mở giỏ, khi dữ liệu giỏ có lần đầu (kể cả bản trong bộ nhớ đệm); tải lại giỏ sau đó không phát thêm.
+  const cartViewed = useRef(false);
+  useEffect(() => {
+    const c = cartQ.data;
+    if (!c || cartViewed.current) return;
+    cartViewed.current = true;
+    trackPurchase('cart_viewed', { itemCount: Math.min(500, c.items.length), subtotalBucket: subtotalBucket(c.subtotal) });
+  }, [cartQ.data]);
   // Máy chủ gỡ mã khi giỏ rơi dưới đơn tối thiểu và chỉ báo đúng một lần: nhớ để khách thấy mã nào mất và cần mua thêm bao nhiêu.
   const removedCoupon = useRemovedCoupon(cartQ.data, formatVnd);
   // Chọn món để thanh toán một phần giỏ: nhớ tập ĐÃ BỎ CHỌN nên món mới thêm tự được chọn và món đã xoá tự biến mất.
@@ -333,7 +343,10 @@ export default function CartPage() {
   const totalLabel = cartTotalLabel(shownCombo + shownDiscount + shownTier);
   // Tiết kiệm = giá gạch của dòng mua được đang chọn + giảm combo đang hiện (chỉ hiển thị; tiền thật do máy chủ tính). Mã giảm giá và hạng đã có dòng riêng nên không cộng.
   const saving = cartSaving(buyableSelected, shownCombo);
-  const onPay = () => rememberCheckoutSelection(allSelected ? null : selectedItems.map((it) => it.id));
+  const onPay = () => {
+    rememberCheckoutSelection(allSelected ? null : selectedItems.map((it) => it.id));
+    markCheckoutEntry(allSelected ? 'cart' : 'cart_subset');
+  };
   // Lý do nút Thanh toán đang khoá (lời giải thích đầy đủ nằm ở khung tóm tắt; thanh dính đáy nhắc lại ngay cạnh nút).
   const payHint =
     selectedItems.length === 0

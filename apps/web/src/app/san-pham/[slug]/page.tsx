@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { AlertCircle, Check, ChevronRight, MapPin } from 'lucide-react';
 import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
 import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
+import { pdpVideoUrls } from '@tubutree/app-core/commerce/pdp-media';
 import { fetchActiveFlashSalesNoSync, toFlashSeed } from '@/lib/server-flash';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { formatSold, getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
@@ -25,6 +26,7 @@ import { ogBase, withBrand } from '@/lib/og';
 import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
 import { RecordRecentlyViewed } from './record-recently-viewed';
+import { ProductViewTracker } from './product-view-tracker';
 import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpLowStock, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow, PdpTrustStrip } from './pdp-extras';
 import { PdpBundles } from './pdp-bundles';
 import { PdpQuickReviews } from './pdp-quick-reviews';
@@ -133,12 +135,18 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         ← Về trang chủ
       </BackLink>
       <RecordRecentlyViewed slug={product.slug} name={product.name} thumbnail={product.thumbnail ?? product.images[0] ?? null} />
+      <ProductViewTracker
+        slug={product.slug}
+        hasVideo={pdpVideoUrls(product.videos).length > 0}
+        imageCount={images.length}
+        inStock={!unavailableText && product.variations.some((v) => v.stock > 0)}
+      />
       <FlashSalesSeed items={flash} now={generatedAt}>
       <PdpSelectionProvider initialId={initialVariation?.id ?? ''}>
         <PdpLayout
           gallery={
             <div className="min-w-0">
-              <ProductGallery images={images} videos={product.videos} name={product.name} variationImages={variationImages} />
+              <ProductGallery images={images} videos={product.videos} name={product.name} variationImages={variationImages} pdpSlug={product.slug} />
               {/* Giờ vàng: giá deal nằm ngay dưới ảnh (đồng hồ, đã bán, giới hạn mua); hết giờ thì thanh biến mất, giá thường quay lại. */}
               <PdpFlashBar product={product} />
             </div>
@@ -182,8 +190,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                 )}
                 </div>
                 <div className="flex flex-none items-center">
-                  <WishlistHeart productId={product.id} />
-                  <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} description={shortDesc} />
+                  <WishlistHeart productId={product.id} pdpSlug={product.slug} />
+                  <ShareButton title={product.name} path={`/san-pham/${encodeURIComponent(product.slug)}`} description={shortDesc} pdpSlug={product.slug} />
                 </div>
               </div>
               <h1 className="font-display text-2xl font-semibold text-stone-900 max-md:font-[family-name:var(--font-ui)] max-md:text-lg max-md:leading-[1.44] sm:text-3xl max-md:sm:text-lg">{product.name}</h1>
@@ -263,7 +271,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               */}
               {product.variations.length > 0 && (
                 <div className="max-md:contents">
-                  <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} />
+                  <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} pdpSlug={product.slug} />
                 </div>
               )}
               {product.certifications.length > 0 && (

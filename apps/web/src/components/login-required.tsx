@@ -1,15 +1,22 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { Clock, LogIn, WifiOff } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { loginHref } from '@/lib/return-to';
 import { ui } from '@/lib/guest-ui';
 import { RouteSkeleton } from '@/components/skeletons/route-skeleton';
+import { routeTemplate, trackPurchase } from '@/lib/analytics';
 
 /** Khối "cần đăng nhập" dùng chung cho giỏ hàng, thanh toán, tài khoản, chi tiết đơn. */
 export function LoginRequired({ message, returnTo }: { message: string; returnTo: string }) {
+  const shown = useRef(false);
+  useEffect(() => {
+    if (shown.current) return;
+    shown.current = true;
+    trackPurchase('login_wall_shown', { from: routeTemplate(returnTo) });
+  }, [returnTo]);
   return (
     <div className="py-16 text-center">
       <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-card bg-forest-50 text-forest-600 shadow-card">

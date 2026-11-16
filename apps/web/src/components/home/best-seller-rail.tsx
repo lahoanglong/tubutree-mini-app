@@ -56,7 +56,7 @@ export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, r
       <SectionHeader title={title} subtitle={bestSellersBasisCopy([{ basis }])} action={seeAll ? { to: seeAll } : undefined} />
       {/* Hai bản, mỗi bản `display:none` ở một khổ (như `ShopSection`): kệ vuốt ngang của Mini App dưới lg, lưới 5×2 từ lg. Ảnh ưu tiên chỉ cấp cho kệ: bản lưới nằm ẩn ở điện thoại. */}
       <div data-testid="best-seller-rail" className="lg:hidden">
-        <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={plain} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={priorityCount} />
+        <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={plain} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={priorityCount} shelf="bestSellers" />
       </div>
       <div data-testid="best-seller-grid" className="hidden lg:block">
         {loading ? (
@@ -69,7 +69,7 @@ export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, r
           <ul role="list" className={GRID_RANK_LG} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
             {items.map((p, i) => (
               <li key={p.id} className="min-w-0">
-                <ProductCard product={p} variant="rank" rank={ranks?.[i] ?? i + 1} rankPlain={plain} imageSizes={GRID_RANK_IMAGE_SIZES} />
+                <ProductCard product={p} variant="rank" rank={ranks?.[i] ?? i + 1} rankPlain={plain} imageSizes={GRID_RANK_IMAGE_SIZES} shelf="bestSellers" position={i + 1} />
               </li>
             ))}
           </ul>

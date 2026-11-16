@@ -28,6 +28,8 @@ export interface ProductGridProps {
   /** Ghi chú trong thẻ (dưới giá). Có ít nhất một thẻ có ghi chú thì thẻ còn lại giữ chỗ dòng đó, cùng hàng vẫn thẳng giá. */
   noteOf?: (product: ProductCardType, index: number) => string | undefined;
   onOpen?: (product: ProductCardType, index: number) => void;
+  /** Tên danh sách cho `product_card_click`; thẻ mang vị trí theo thứ tự trong lưới (từ 1). */
+  shelf?: string;
 }
 
 /** Lưới thẻ: 2 cột điện thoại, nhiều cột hơn từ md; `loading` vẽ khung chờ cùng số đo với thẻ thật nên trang không nhảy khi dữ liệu về. */
@@ -45,6 +47,7 @@ export function ProductGrid({
   renderAfter,
   noteOf,
   onOpen,
+  shelf,
 }: ProductGridProps) {
   if (loading) {
     return (
@@ -75,6 +78,8 @@ export function ProductGrid({
               note={notes?.[i] || (reserveNote ? '' : undefined)}
               imageOverlay={renderImageOverlay?.(p, i)}
               onOpen={onOpen ? () => onOpen(p, i) : undefined}
+              shelf={shelf}
+              position={i + 1}
             />
           </div>
           {renderAfter?.(p, i)}

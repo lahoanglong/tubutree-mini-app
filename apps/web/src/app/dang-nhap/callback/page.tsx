@@ -6,6 +6,7 @@ import { AlertCircle } from 'lucide-react';
 import { useAuth } from '@/lib/auth-context';
 import { isTransientLoginFailure, loginFailureMessage, oauthErrorMessage } from '@/lib/login-errors';
 import { loginHref, takeReturnTo } from '@/lib/return-to';
+import { routeTemplate, trackPurchase } from '@/lib/analytics';
 import { ui } from '@/lib/guest-ui';
 
 interface Failure {
@@ -42,7 +43,11 @@ function CallbackInner() {
       return;
     }
     handleCallback(code, params.get('state'))
-      .then(() => router.replace(takeReturnTo() ?? '/'))
+      .then(() => {
+        const to = takeReturnTo() ?? '/';
+        trackPurchase('login_completed', { from: routeTemplate(to) });
+        router.replace(to);
+      })
       .catch((e) => fail(loginFailureMessage(e), e, isTransientLoginFailure(e)));
   }, [params, handleCallback, router]);
 

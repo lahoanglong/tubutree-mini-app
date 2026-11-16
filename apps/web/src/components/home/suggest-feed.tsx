@@ -114,7 +114,7 @@ export function SuggestFeed({ initial, seed: serverSeed, categories, exclude }: 
       ) : (
         <>
           {/* Khối cuối trang chủ, nằm dưới màn đầu: tải lười, không đặt ảnh ưu tiên. */}
-          <ProductGrid items={items} variant="grid" />
+          <ProductGrid items={items} variant="grid" shelf="suggest" />
           <div ref={sentinel} aria-hidden style={{ height: 1 }} />
           {canLoadMore ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>

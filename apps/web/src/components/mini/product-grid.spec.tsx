@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { flush, render, type Rendered } from '@/test-utils/dom';
+import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { resetFlashSales } from '@/lib/use-flash-sales';
+
+const analytics = vi.hoisted(() => ({ trackCardClick: vi.fn() }));
+vi.mock('@/components/analytics/funnel', () => ({ trackCardClick: analytics.trackCardClick, trackPdpAction: vi.fn() }));
 
 vi.mock('@/lib/shop-client', () => ({ getActiveFlashSales: async () => [] }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest' }));
@@ -120,5 +123,33 @@ describe('ProductRail', () => {
     const c = await mount(<ProductRail items={[]} variant="rail-md" label="Sản phẩm bán chạy" loading skeletonCount={3} />);
     expect(c.querySelector('[role="region"]')!.getAttribute('aria-label')).toBe('Sản phẩm bán chạy');
     expect(c.querySelectorAll('[data-testid="catalog-tile-skeleton"]').length).toBe(3);
+  });
+});
+
+describe('product_card_click', () => {
+  const openCard = (c: HTMLElement, n: number) => {
+    const a = c.querySelectorAll<HTMLElement>('a[href^="/san-pham/"]')[n]!;
+    a.addEventListener('click', (e) => e.preventDefault(), { once: true });
+    click(a);
+  };
+  beforeEach(() => analytics.trackCardClick.mockClear());
+
+  it('lưới có tên kệ: chạm thẻ thứ 3 gửi đúng kệ, vị trí đếm từ 1 và slug; vẫn gọi onOpen của nơi gọi', async () => {
+    const onOpen = vi.fn();
+    const c = await mount(<ProductGrid items={ITEMS} variant="grid" shelf="suggest" onOpen={onOpen} />);
+    openCard(c, 2);
+    expect(analytics.trackCardClick).toHaveBeenCalledTimes(1);
+    expect(analytics.trackCardClick).toHaveBeenCalledWith('suggest', 3, 'sp-3');
+    expect(onOpen).toHaveBeenCalledWith(ITEMS[2], 2);
+  });
+
+  it('kệ ngang có tên kệ cũng đếm; danh sách không có tên kệ thì không gửi gì', async () => {
+    const rail = await mount(<ProductRail items={ITEMS} variant="rail-md" label="Kệ" shelf="pdpBrand" />);
+    openCard(rail, 0);
+    expect(analytics.trackCardClick).toHaveBeenCalledWith('pdpBrand', 1, 'sp-1');
+    analytics.trackCardClick.mockClear();
+    const plain = await mount(<ProductGrid items={ITEMS} variant="grid" />);
+    openCard(plain, 0);
+    expect(analytics.trackCardClick).not.toHaveBeenCalled();
   });
 });

@@ -306,7 +306,7 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
       ) : (
         <RailShell label="Sản phẩm đã mua">
           {/* Có món mua nhiều lần thì mọi thẻ giữ dòng ghi chú ('' giữ chỗ), không thì giá lệch 16px giữa thẻ có và không có ghi chú. */}
-          {shown.map((p) => (
+          {shown.map((p, i) => (
             <RailCell key={p.variationId} variant="rail-md">
               <ProductCard
                 product={toCardProduct(p)}
@@ -315,6 +315,8 @@ export function PurchasedRail({ source = 'orders_tab', restoring = false, exclud
                 note={p.timesBought > 1 ? reorderText.timesBought(p.timesBought) : shown.some((x) => x.timesBought > 1) ? '' : undefined}
                 addLabel={reorderText.cardCta}
                 onAdd={p.inStock !== false && p.stock > 0 ? () => setTarget(itemReorderTarget(p)) : undefined}
+                shelf="purchased"
+                position={i + 1}
               />
             </RailCell>
           ))}

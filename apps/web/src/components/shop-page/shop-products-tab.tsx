@@ -61,14 +61,14 @@ function LocalList({ products, sort, showBrand, wide, onPage }: { products: Prod
     const cur = Math.min(page, pages);
     return (
       <>
-        <ProductGrid items={sorted.slice((cur - 1) * SHOP_PAGE_SIZE, cur * SHOP_PAGE_SIZE)} variant="grid" showBrand={showBrand} />
+        <ProductGrid items={sorted.slice((cur - 1) * SHOP_PAGE_SIZE, cur * SHOP_PAGE_SIZE)} variant="grid" showBrand={showBrand} shelf="storefront" />
         <ShopPager page={cur} pages={pages} onChange={(n) => { setPage(n); onPage(); }} />
       </>
     );
   }
   return (
     <>
-      <ProductGrid items={sorted.slice(0, shown)} variant="grid" showBrand={showBrand} />
+      <ProductGrid items={sorted.slice(0, shown)} variant="grid" showBrand={showBrand} shelf="storefront" />
       {shown < sorted.length && <MoreButton onPress={() => setShown((n) => n + SHOP_PAGE_SIZE)} />}
     </>
   );
@@ -99,7 +99,7 @@ function BrandInfinite({ slug, sort, showBrand }: { slug: string; sort: ShopSort
   if (items.length === 0) return <EmptyState variant="inline" art="basket" heading={fillCopy('shop.emptyProducts')} />;
   return (
     <>
-      <ProductGrid items={items} variant="grid" showBrand={showBrand} />
+      <ProductGrid items={items} variant="grid" showBrand={showBrand} shelf="brand" />
       {q.isFetchNextPageError && <ErrorState variant="inline" message={loadErrorText(q.error)} onRetry={() => q.fetchNextPage()} />}
       {q.hasNextPage && !q.isFetchNextPageError && <MoreButton loading={q.isFetchingNextPage} onPress={() => q.fetchNextPage()} />}
     </>
@@ -115,7 +115,7 @@ function BrandPaged({ slug, sort, showBrand, onPage }: { slug: string; sort: Sho
   if (items.length === 0 && page === 1) return <EmptyState variant="inline" art="basket" heading={fillCopy('shop.emptyProducts')} />;
   return (
     <>
-      <ProductGrid items={items} variant="grid" showBrand={showBrand} />
+      <ProductGrid items={items} variant="grid" showBrand={showBrand} shelf="brand" />
       <ShopPager page={page} pages={Math.ceil(q.data.meta.total / SHOP_PAGE_SIZE)} onChange={(n) => { setPage(n); onPage(); }} />
     </>
   );

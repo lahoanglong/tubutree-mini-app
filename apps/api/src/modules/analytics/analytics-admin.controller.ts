@@ -2,6 +2,7 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
 import { LaunchWatchService } from './launch-watch.service';
+import { PurchaseFunnelService } from './purchase-funnel.service';
 
 @Roles('ADMIN')
 @Controller('admin/analytics')
@@ -9,12 +10,19 @@ export class AnalyticsAdminController {
   constructor(
     private readonly prisma: PrismaService,
     private readonly launchWatch: LaunchWatchService,
+    private readonly purchaseFunnel: PurchaseFunnelService,
   ) {}
 
   /** Chỉ số tổng hợp (không có thông tin cá nhân) để theo dõi tuần đầu sau launch: phễu Đổi rác, chống gian lận, đơn thứ hai. */
   @Get('launch-watch')
   launchWatchSnapshot() {
     return this.launchWatch.getSnapshot();
+  }
+
+  /** Phễu mua theo phiên (web và Mini App) cho 72 giờ / 7 ngày / 30 ngày: chỉ số đếm, không có định danh khách. */
+  @Get('purchase-funnel')
+  purchaseFunnelSnapshot() {
+    return this.purchaseFunnel.getSnapshot();
   }
 
   @Get('retention-daily')

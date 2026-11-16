@@ -509,6 +509,9 @@ function shellDefaults(api: MockApi): void {
   api.fallback('GET', '/me/subscriptions', []);
   // Chuông ở thanh đầu máy tính hỏi thông báo ở mọi trang khi đã đăng nhập.
   api.fallback('GET', '/me/notifications', []);
+  // Web gửi sự kiện phễu mua ở mọi trang, kể cả khách chưa đăng nhập (lô thường mỗi 5 giây, beacon khi rời trang): mặc định nhận hết.
+  api.fallback('POST', '/events/web', { accepted: 0 });
+  api.fallback('POST', '/events/web/beacon', replyEmptyBody(204));
 }
 
 /** Khung trang quản trị gọi hộp việc (huy hiệu menu) và cờ tích điểm tại quầy ở mọi tab; mặc định không có việc nào và quầy đang bật. */

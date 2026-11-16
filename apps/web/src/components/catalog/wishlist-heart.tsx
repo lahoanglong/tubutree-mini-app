@@ -9,6 +9,7 @@ import { wishlistIdsQuery } from '@tubutree/app-core/queries/wishlist';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { loginHref } from '@/lib/return-to';
+import { trackPdpAction } from '@/components/analytics/funnel';
 
 const IDS_KEY = wishlistIdsQuery(coreHttp).queryKey;
 
@@ -49,6 +50,7 @@ export function WishlistHeart({
   className = '',
   floating = false,
   productName,
+  pdpSlug,
 }: {
   productId: string;
   className?: string;
@@ -56,6 +58,8 @@ export function WishlistHeart({
   productName?: string;
   /** Nổi trên góc ảnh thẻ như Mini App: vùng chạm 44px bọc vòng trắng 32px; đặt ở cha có `position: relative`. */
   floating?: boolean;
+  /** Tim của chính trang sản phẩm: lần thích được đếm vào phễu mua (`pdp_action`). */
+  pdpSlug?: string;
 }) {
   const phase = useAuthPhase();
   const router = useRouter();
@@ -74,6 +78,7 @@ export function WishlistHeart({
     setPopping(want);
     qc.setQueryData<string[]>(IDS_KEY, want ? [...current, productId] : current.filter((id) => id !== productId));
     sendToggle(qc, productId, want);
+    if (want && pdpSlug) trackPdpAction('wishlist_add', pdpSlug);
   };
   const toLogin = () => router.push(loginHref(`${window.location.pathname}${window.location.search}`));
 

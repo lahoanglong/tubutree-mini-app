@@ -17,7 +17,7 @@ import { useFbt, type FbtHostArgs } from './use-fbt';
 const FIVE_MIN = 5 * 60_000;
 
 /** `label` là tên đọc của dải khi khác tiêu đề nhìn thấy (dải thương hiệu: tiêu đề bỏ tên, nhãn đọc giữ tên). */
-function Rail({ title, label = title, icon, products, loading }: { title: string; label?: string; icon?: boolean; products: CoreProductCard[] | undefined; loading: boolean }) {
+function Rail({ title, label = title, icon, products, loading, shelf }: { title: string; label?: string; icon?: boolean; products: CoreProductCard[] | undefined; loading: boolean; shelf: string }) {
   if (loading) {
     return (
       <section aria-busy="true" className="mt-8 max-md:mt-4">
@@ -37,7 +37,7 @@ function Rail({ title, label = title, icon, products, loading }: { title: string
         {title}
       </h2>
       <div className="mt-3">
-        <ProductRail items={products} variant="rail-md" label={label} />
+        <ProductRail items={products} variant="rail-md" label={label} shelf={shelf} />
       </div>
     </section>
   );
@@ -82,8 +82,8 @@ export function PdpRails({
   const shelves = pdpShelves({ currentId: productId, boughtTogether: together.data ?? [], brand: related.data ?? [], feed: feed ?? [], claimed });
   return (
     <>
-      <Rail title={fillCopy('pdp.boughtTogether')} icon products={shelves.boughtTogether} loading={together.isPending} />
-      <Rail title={fillCopy('pdp.brandShelf')} label={fillCopy('pdp.brandShelfLabel', { brand })} products={shelves.brand} loading={related.isPending} />
+      <Rail title={fillCopy('pdp.boughtTogether')} icon products={shelves.boughtTogether} loading={together.isPending} shelf="pdpTogether" />
+      <Rail title={fillCopy('pdp.brandShelf')} label={fillCopy('pdp.brandShelfLabel', { brand })} products={shelves.brand} loading={related.isPending} shelf="pdpBrand" />
       <PdpFeed items={shelves.feed} />
     </>
   );

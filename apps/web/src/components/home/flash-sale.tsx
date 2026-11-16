@@ -29,6 +29,7 @@ import { Countdown } from '@/components/mini/countdown';
 import { FlashSoldBar } from '@/components/mini/flash-sold-bar';
 import { ProductTile } from '@/components/mini/product-tile';
 import { RailCell, RailShell } from '@/components/mini/product-rail';
+import { trackCardClick } from '@/components/analytics/funnel';
 import { HomeBlockError } from './home-block-error';
 
 const TITLE = 'flex items-center gap-1.5 font-display text-lg font-semibold text-promo-fg';
@@ -146,7 +147,7 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
         {live.map((item, i) => (
           <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} priority={i < FLASH_PRIORITY_CARDS} />
+            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} priority={i < FLASH_PRIORITY_CARDS} shelf="flash" position={i + 1} />
           </RailCell>
         ))}
       </RailShell>
@@ -207,7 +208,20 @@ const FLASH_PRIORITY_CARDS = 2;
  * dù danh sách chưa tải lại. Danh sách dựng sẵn (ISR) có thể cũ hơn giờ trình duyệt: trước hydrate coi suất còn giờ (đúng như HTML máy chủ đã vẽ),
  * sau hydrate tính theo giờ máy chủ thật.
  */
-export function ActiveFlashCard({ item, reserveVariation, priority = false }: { item: FlashSaleActiveItem; reserveVariation: boolean; priority?: boolean }) {
+export function ActiveFlashCard({
+  item,
+  reserveVariation,
+  priority = false,
+  shelf,
+  position,
+}: {
+  item: FlashSaleActiveItem;
+  reserveVariation: boolean;
+  priority?: boolean;
+  /** Kệ và vị trí (từ 1) cho `product_card_click`; thiếu thì chạm thẻ không được đếm. */
+  shelf?: string;
+  position?: number;
+}) {
   const hydrated = useHydrated();
   useFlashExpiry(item.endAt);
   const end = Date.parse(item.endAt);
@@ -223,6 +237,7 @@ export function ActiveFlashCard({ item, reserveVariation, priority = false }: { 
       // mở ra là giá thường, không nhãn, không đếm ngược. `?v=` mở đúng phân loại có suất (chỉ khi suất thật sự rẻ hơn).
       href={productHref(encodeURIComponent(item.productSlug), view.isFlash ? item.variationId : null)}
       note={reserveVariation ? (variationLabel(item.variationName) ?? '') : undefined}
+      onOpen={shelf && position ? () => trackCardClick(shelf, position, item.productSlug) : undefined}
       footerHeight={SOLD_FOOTER_HEIGHT}
       footer={
         <div style={{ height: SOLD_FOOTER_HEIGHT, paddingTop: 4, boxSizing: 'border-box' }}>

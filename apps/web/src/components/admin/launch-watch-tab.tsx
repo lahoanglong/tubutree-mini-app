@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { LaunchWatchSecondOrder, LaunchWatchWindow, LaunchWatchWindowDTO } from '@tubutree/shared-types';
 import { getLaunchWatch } from '@/lib/admin-client';
 import { formatDateTime } from '@/lib/format-date';
@@ -21,6 +21,7 @@ import {
   type FraudMetric,
   type WebhookRejectAlert,
 } from '@/components/admin/launch-watch-format';
+import { PurchaseFunnelBlock } from '@/components/admin/purchase-funnel-block';
 
 const LEVEL_CLASS: Record<AlertLevel, string> = {
   ok: 'text-stone-900',
@@ -31,6 +32,7 @@ const LEVEL_CLASS: Record<AlertLevel, string> = {
 export function LaunchWatchTab() {
   const [win, setWin] = useState<LaunchWatchWindow>('h72');
   const q = useQuery({ queryKey: ['admin-launch-watch'], queryFn: getLaunchWatch });
+  const qc = useQueryClient();
   const data = q.data;
 
   return (
@@ -47,7 +49,9 @@ export function LaunchWatchTab() {
         <button
           type="button"
           onClick={() => {
-            if (!q.isFetching) void q.refetch();
+            if (q.isFetching) return;
+            void q.refetch();
+            void qc.invalidateQueries({ queryKey: ['admin-purchase-funnel'] });
           }}
           aria-disabled={q.isFetching || undefined}
           aria-busy={q.isFetching || undefined}
@@ -65,6 +69,7 @@ export function LaunchWatchTab() {
       ) : (
         <>
           <WebhookRejectAlerts alerts={webhookRejectAlerts(data.webhookRejects)} />
+          <PurchaseFunnelBlock win={win} />
           <FunnelBlock window={data.windows[win]} />
           <FraudBlock window={data.windows[win]} />
           <SecondOrderBlock secondOrder={data.secondOrder} />

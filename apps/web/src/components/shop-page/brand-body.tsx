@@ -192,7 +192,7 @@ export function BrandBody({ brand: b, mapOriginId, originFallback = null }: Bran
                             : undefined
                         }
                       />
-                      <ProductRail items={featured} variant="rail-md" label="Sản phẩm nổi bật" showBrand={false} />
+                      <ProductRail items={featured} variant="rail-md" label="Sản phẩm nổi bật" showBrand={false} shelf="brand" />
                     </div>
                   )}
 

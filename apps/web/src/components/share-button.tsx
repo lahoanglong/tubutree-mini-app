@@ -6,6 +6,7 @@ import { shareDescription } from '@tubutree/app-core/commerce/share-offer';
 import { useAuth } from '@/lib/auth-context';
 import { usePressLock } from '@/lib/use-press-lock';
 import { useWelcomeOffer } from '@/lib/use-welcome-offer';
+import { trackPdpAction } from '@/components/analytics/funnel';
 
 type Note = { text: string; error: boolean } | null;
 
@@ -14,12 +15,13 @@ type Note = { text: string; error: boolean } | null;
  * Khách đã đăng nhập thì link kèm mã giới thiệu của chính họ (?ref=), cùng cách Mini App chia sẻ; khách chưa đăng nhập
  * chia sẻ link thường để không đứng tên mã của người khác. Lời kèm theo mở bằng ưu đãi khách mới (mã chào mừng thật, hoặc câu không số).
  */
-export default function ShareButton({ title, path, description }: { title: string; path: string; description?: string | null }) {
+export default function ShareButton({ title, path, description, pdpSlug }: { title: string; path: string; description?: string | null; pdpSlug?: string }) {
   const { user } = useAuth();
   const offer = useWelcomeOffer();
   const [note, setNote] = useState<Note>(null);
 
   const onShare = async () => {
+    if (pdpSlug) trackPdpAction('share', pdpSlug);
     const ref = user?.referralCode;
     const url = `${window.location.origin}${path}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`;
     if (typeof navigator.share === 'function') {

@@ -47,9 +47,11 @@ vi.mock('../image-upload', () => ({
   ),
 }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../../services/analytics', () => ({ trackEvent: vi.fn() }));
 
 import { HttpError } from '../../services/http';
 import { ReturnRequestSheet } from './return-request-sheet';
+import { trackEvent } from '../../services/analytics';
 
 const ORDER = {
   id: 'o1',
@@ -620,5 +622,41 @@ describe('ReturnRequestSheet: tài khoản hoàn tiền mặc định nạp tố
     await settle();
     expect(mocks.fetchRefundBank).toHaveBeenCalledTimes(1);
     for (const label of LABELS) expect(fieldValue(label)).toBe('');
+  });
+});
+
+describe('ReturnRequestSheet — return_requested', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchRefundBank.mockResolvedValue(null);
+    mocks.estimateReturn.mockResolvedValue({ refund: 0, goods: 0, shipping: 0, isFull: false, moneyRefundable: true, pointsUsedBack: 0, lines: [] });
+  });
+
+  const submit = () => {
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Trả Nước giặt Chai 1L' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Sản phẩm lỗi, hỏng' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Gửi yêu cầu' }));
+  };
+
+  it('gửi thành công → một return_requested với số ngày tròn kể từ lúc đặt đơn, không kèm mã đơn', async () => {
+    mocks.requestReturn.mockResolvedValue({ id: 'r1' });
+    const createdAt = new Date(Date.now() - 3.5 * 86_400_000).toISOString();
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <ReturnRequestSheet open onClose={vi.fn()} order={{ ...(ORDER as object), createdAt } as never} returns={[]} returnDays={7} />
+      </QueryClientProvider>,
+    );
+    submit();
+    await waitFor(() => expect(trackEvent).toHaveBeenCalledTimes(1));
+    expect(trackEvent).toHaveBeenCalledWith('return_requested', 'miniapp', { orderAgeDays: 3 });
+  });
+
+  it('gửi lỗi → không phát', async () => {
+    mocks.requestReturn.mockRejectedValue(new Error('Lỗi mạng'));
+    renderSheet();
+    submit();
+    await waitFor(() => expect(mocks.requestReturn).toHaveBeenCalledTimes(1));
+    expect(trackEvent).not.toHaveBeenCalled();
   });
 });

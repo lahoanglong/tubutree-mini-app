@@ -1,10 +1,11 @@
-import { render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, expect, it, vi } from 'vitest';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 
 vi.mock('zmp-ui', async (orig) => ({ ...(await orig<Record<string, unknown>>()), useNavigate: () => vi.fn() }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../../services/analytics', () => ({ trackEvent: vi.fn() }));
 vi.mock('../../services/shop-api', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   fetchActiveFlashSales: vi.fn(() => new Promise(() => {})),
@@ -13,6 +14,7 @@ vi.mock('../../services/shop-api', async (orig) => ({
 
 import { ProductGrid } from './product-grid';
 import { ProductRail } from './product-rail';
+import { trackEvent } from '../../services/analytics';
 
 const item = (n: number): ProductCardData => ({
   id: `p${n}`, slug: `sp-${n}`, name: `Sản phẩm ${n}`, brand: 'Tubu', thumbnail: null,
@@ -111,5 +113,17 @@ describe('ProductRail', () => {
     wrap(<ProductRail items={[{ ...item(1), isFeatured: true }]} variant="rail-sm" label="Đã xem" />);
     expect(screen.queryByText('Tubu chọn')).toBeNull();
     expect(screen.queryByRole('button', { name: /Yêu thích/ })).toBeNull();
+  });
+});
+
+describe('product_card_click theo vị trí trong lưới/kệ', () => {
+  it.each([
+    ['ProductGrid', (on: string) => <ProductGrid items={items} variant="grid" listSource={on} />],
+    ['ProductRail', (on: string) => <ProductRail items={items} variant="rail-md" label="Kệ" listSource={on} />],
+  ])('%s: vị trí 1-based theo thứ tự thẻ', (_name, ui) => {
+    vi.mocked(trackEvent).mockClear();
+    wrap(ui('browse'));
+    fireEvent.click(screen.getByRole('button', { name: 'Sản phẩm 2' }));
+    expect(trackEvent).toHaveBeenCalledWith('product_card_click', 'miniapp', { shelf: 'browse', position: 2, productSlug: 'sp-2' });
   });
 });

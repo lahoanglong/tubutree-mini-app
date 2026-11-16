@@ -7,6 +7,8 @@ import { estimateReturn, formatVnd, requestReturn, type OrderDetailDTO, type Ret
 import { formatVnNumber } from '@tubutree/app-core/number-format';
 import { ui } from '@/lib/guest-ui';
 import { EvidenceUpload } from '@/components/evidence-upload';
+import { trackPurchase } from '@/lib/analytics';
+import { orderAgeDays } from '@/components/analytics/funnel';
 import {
   EMPTY_BANK,
   RETURN_REASONS,
@@ -130,6 +132,8 @@ export function ReturnRequestForm({
       onError?.(null);
     },
     onSuccess: () => {
+      const age = orderAgeDays(o.createdAt);
+      if (age !== null) trackPurchase('return_requested', { orderAgeDays: age });
       void qc.invalidateQueries({ queryKey: ['my-returns'] });
       onDone();
     },

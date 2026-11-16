@@ -32,7 +32,8 @@ import { WishlistHeart } from '../components/wishlist-heart';
 import { SubscribeSheet } from '../components/subscribe-sheet';
 import { VariationSheet, type VariationSheetMode } from '../components/variation-sheet';
 import { fetchReviews } from '../services/shop-api';
-import { trackEvent } from '../services/analytics';
+import type { PdpAction } from '@tubutree/shared-types';
+import { setCheckoutEntry, trackEvent } from '../services/analytics';
 import { Skeleton } from '../components/ui/skeleton';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { settleWithin } from '../utils/settle-within';
@@ -302,6 +303,9 @@ export default function ProductDetailPage() {
     const view = variationPricing(selected, runningFlash(flashQ.data));
     const viewPrice = view.price;
     void trackEvent('product_viewed', 'miniapp', {
+      productSlug: product.data.slug,
+      hasVideo: !!product.data.videos?.length,
+      imageCount: Math.min(product.data.images.length, 100),
       productId: product.data.id,
       variationId: selected.id,
       price: viewPrice,
@@ -339,9 +343,12 @@ export default function ProductDetailPage() {
   const releaseCartWrite = () => {
     cartWrite.current = false;
   };
-  const writeCart = (run: () => void) => {
+  const pdpAction = (action: PdpAction) => trackEvent('pdp_action', 'miniapp', { action, productSlug: product.data?.slug ?? slug });
+  // Đếm thêm giỏ/Mua ngay ở đây (sau khoá ghi giỏ): chạm đúp hay lối vào thứ hai của cùng một nút không thành hai lần bấm.
+  const writeCart = (action: PdpAction, run: () => void) => {
     if (cartWrite.current) return;
     cartWrite.current = true;
+    pdpAction(action);
     run();
   };
 
@@ -412,6 +419,7 @@ export default function ProductDetailPage() {
       // "Mua ngay" chỉ thanh toán đúng dòng vừa thêm; ghi nhớ để tải lại trang không tính cả giỏ.
       const itemIds = line ? [line.id] : null;
       rememberCheckoutSelection(itemIds);
+      setCheckoutEntry('buy_now');
       navigate('/checkout', { state: { itemIds } });
     },
     onError: (e: unknown) => {
@@ -502,7 +510,7 @@ export default function ProductDetailPage() {
       }
       const mode = sheetMode;
       // Cả nhóm lệnh trong khoá: lối khác giành khoá lúc khách đang đăng nhập thì bảng giữ nguyên, không đóng bảng mà không ghi gì.
-      writeCart(() => {
+      writeCart(mode === 'buy' ? 'buy_now' : 'add_to_cart', () => {
         setSheetMode(null);
         setSelectedId(variation.id);
         setQuantity(qty);
@@ -516,6 +524,7 @@ export default function ProductDetailPage() {
 
   const handleAdd = async () => {
     if (needsVariationPicker(variations)) {
+      pdpAction('open_variant_sheet');
       setSheetMode('add');
       return;
     }
@@ -524,7 +533,7 @@ export default function ProductDetailPage() {
       if (useAuthStore.getState().status !== 'authenticated') return;
     }
     if (selected && inStock) {
-      writeCart(() => {
+      writeCart('add_to_cart', () => {
         // Bấm mua là đã chọn: danh sách Giờ vàng về muộn không được đổi phân loại dưới tay khách sau khi bấm.
         setSelectedId(selected.id);
         addMutation.mutate({ variation: selected, qty: quantity });
@@ -534,6 +543,7 @@ export default function ProductDetailPage() {
 
   const handleBuyNow = async () => {
     if (needsVariationPicker(variations)) {
+      pdpAction('open_variant_sheet');
       setSheetMode('buy');
       return;
     }
@@ -542,7 +552,7 @@ export default function ProductDetailPage() {
       if (useAuthStore.getState().status !== 'authenticated') return;
     }
     if (selected && inStock) {
-      writeCart(() => {
+      writeCart('buy_now', () => {
         setSelectedId(selected.id);
         buyNowMutation.mutate({ variation: selected, qty: quantity });
       });
@@ -599,6 +609,7 @@ export default function ProductDetailPage() {
   const handleShare = async () => {
     if (sharing.current) return;
     sharing.current = true;
+    pdpAction('share');
     try {
       haptic('light');
       const code = user?.referralCode;
@@ -681,7 +692,7 @@ export default function ProductDetailPage() {
 
       <StorefrontContextBar />
       {/* `selectedId` chỉ có sau khi khách tự chọn phân loại (chỉ có từ 2 phân loại): lúc mở trang (phân loại mặc định) thư viện không nhảy, ảnh đầu vẫn là ảnh LCP. */}
-      <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} videos={p.videos} alt={p.name} focusSrc={selectedId && variations.length > 1 ? selected?.imageUrl : null} />
+      <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} videos={p.videos} alt={p.name} focusSrc={selectedId && variations.length > 1 ? selected?.imageUrl : null} onVideoPlay={() => pdpAction('video_play')} />
       {flashItem && priceView.isFlash && (
         <FlashPriceBar
           price={price}
@@ -734,7 +745,7 @@ export default function ProductDetailPage() {
           )}
           </div>
           <Box style={{ marginLeft: 'auto', flexShrink: 0 }}>
-            <WishlistHeart productId={p.id} size={22} />
+            <WishlistHeart productId={p.id} size={22} onLike={() => pdpAction('wishlist_add')} />
           </Box>
           <Box
             role="button"
@@ -1343,7 +1354,7 @@ export function GallerySlide({ src, alt, eager }: { src: string; alt: string; ea
 }
 
 /** Carousel ảnh và video scroll-snap + dots — không cần lib ngoài. `focusSrc`: ảnh của phân loại khách vừa chọn, cuộn tới ô ảnh đó. */
-export function Gallery({ images, videos, alt, focusSrc }: { images: string[]; videos?: string[]; alt: string; focusSrc?: string | null }) {
+export function Gallery({ images, videos, alt, focusSrc, onVideoPlay }: { images: string[]; videos?: string[]; alt: string; focusSrc?: string | null; onVideoPlay?: () => void }) {
   const [index, setIndex] = useState(0);
   // Ảnh không bấm được nên vùng cuộn phải tự focus được khi tràn, nếu không bàn phím không lật ảnh được (axe scrollable-region-focusable).
   const track = useScrollHints<HTMLDivElement>();
@@ -1398,7 +1409,7 @@ export function Gallery({ images, videos, alt, focusSrc }: { images: string[]; v
       >
         {media.map((m, i) =>
           m.kind === 'video' ? (
-            <PdpVideoSlide key={`video:${m.src}`} src={m.src} poster={m.poster} name={alt} active={i === index} />
+            <PdpVideoSlide key={`video:${m.src}`} src={m.src} poster={m.poster} name={alt} active={i === index} onPlay={onVideoPlay} />
           ) : (
             <GallerySlide key={m.src} src={m.src} alt={`${alt} — ảnh ${i + 1}`} eager={i === 0} />
           ),

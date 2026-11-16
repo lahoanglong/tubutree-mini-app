@@ -65,9 +65,11 @@ export interface ProductRailProps {
   /** Ghi chú trong thẻ (dưới giá); thẻ còn lại của kệ giữ chỗ dòng đó nên giá vẫn thẳng hàng. */
   noteOf?: (product: ProductCardType, index: number) => string | undefined;
   onOpen?: (product: ProductCardType, index: number) => void;
+  /** Tên kệ cho `product_card_click`; thẻ mang vị trí theo thứ tự trong kệ (từ 1). */
+  shelf?: string;
 }
 
-export function ProductRail({ items, variant, rankFrom, ranks, rankPlain, label, showBrand, showWishlist, loading = false, skeletonCount = 6, priorityCount = 0, noteOf, onOpen }: ProductRailProps) {
+export function ProductRail({ items, variant, rankFrom, ranks, rankPlain, label, showBrand, showWishlist, loading = false, skeletonCount = 6, priorityCount = 0, noteOf, onOpen, shelf }: ProductRailProps) {
   const notes = noteOf ? items.map((p, i) => noteOf(p, i)) : null;
   const reserveNote = notes?.some((n) => !!n) ?? false;
   return (
@@ -90,6 +92,8 @@ export function ProductRail({ items, variant, rankFrom, ranks, rankPlain, label,
                 priority={i < priorityCount}
                 note={notes?.[i] || (reserveNote ? '' : undefined)}
                 onOpen={onOpen ? () => onOpen(p, i) : undefined}
+                shelf={shelf}
+                position={i + 1}
               />
             </RailCell>
           ))}

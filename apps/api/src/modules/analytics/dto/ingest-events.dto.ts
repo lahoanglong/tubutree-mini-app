@@ -58,3 +58,21 @@ export class IngestEventsDto {
   @Type(() => EventEnvelopeDto)
   events!: EventEnvelopeDto[];
 }
+
+/** Website gửi lô nhỏ hơn Mini App: route này mở cho khách ẩn danh nên trần mỗi request thấp hơn. */
+export const MAX_WEB_EVENTS_PER_BATCH = 20;
+/** 20 sự kiện × trần props 4 KB + phong bì, đã mã hoá form. */
+export const MAX_WEB_BEACON_PAYLOAD = 100_000;
+
+export class WebIngestEventsDto {
+  @IsArray()
+  @ArrayMinSize(1)
+  @ArrayMaxSize(MAX_WEB_EVENTS_PER_BATCH)
+  @ValidateNested({ each: true })
+  @Type(() => EventEnvelopeDto)
+  events!: EventEnvelopeDto[];
+}
+
+export class WebBeaconDto {
+  @IsString() @MaxLength(MAX_WEB_BEACON_PAYLOAD) payload!: string;
+}

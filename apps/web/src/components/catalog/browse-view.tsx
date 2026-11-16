@@ -502,7 +502,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
               ) : (
                 <>
                   <div ref={gridRef}>
-                    <ProductGrid items={list} variant="grid" className={GRID_PRODUCTS_WITH_FILTER} priorityCount={PRIORITY_CARDS} />
+                    <ProductGrid items={list} variant="grid" className={GRID_PRODUCTS_WITH_FILTER} priorityCount={PRIORITY_CARDS} shelf={state.q ? 'search' : 'browse'} />
                   </div>
                   {/* Lỗi khi ĐÃ có dữ liệu ("Xem thêm" hoặc làm mới nền thất bại): giữ nguyên danh sách, báo và thử lại tại chỗ. */}
                   {products.isError && (

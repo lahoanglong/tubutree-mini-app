@@ -9,7 +9,7 @@ import '../../css/pdp-video.css';
  * `preload="none"` nên không tải một byte video nào; không tự phát; `playsInline` để phát ngay trong trang. Cuộn sang ô khác (`active` = false)
  * thì tạm dừng. Dùng thẻ video của trình duyệt, không thêm thư viện (gói Mini App giữ dưới ngưỡng).
  */
-export function PdpVideoSlide({ src, poster, name, active }: { src: string; poster: string | null; name: string; active: boolean }) {
+export function PdpVideoSlide({ src, poster, name, active, onPlay }: { src: string; poster: string | null; name: string; active: boolean; onPlay?: () => void }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [started, setStarted] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -36,6 +36,7 @@ export function PdpVideoSlide({ src, poster, name, active }: { src: string; post
     if (!el) return;
     playedRef.current = true;
     setStarted(true);
+    onPlay?.();
     // play() trả Promise (trình duyệt cũ thì không): định dạng không hỗ trợ thì báo hỏng, bị chặn/ngắt giữa chừng thì chỉ giữ thanh điều khiển.
     const p = el.play() as Promise<void> | undefined;
     p?.catch((e: unknown) => {

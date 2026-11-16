@@ -42,6 +42,8 @@ import { CouponRemovedNotice } from '../components/checkout/coupon-removed-notic
 import { useRemovedCoupon } from '../hooks/use-removed-coupon';
 import { useStorefrontContext } from '../store/storefront-context';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
+import { subtotalBucket } from '@tubutree/shared-types';
+import { setCheckoutEntry, trackEvent } from '../services/analytics';
 import { PageHeader } from '../components/ui/page-header';
 import { Checkbox } from '../components/ui/form';
 import { SR_ONLY } from '../components/ui/sr-only';
@@ -210,6 +212,14 @@ export default function CartPage() {
   useEffect(() => () => {
     if (undoTimer.current) clearTimeout(undoTimer.current);
   }, []);
+  // Một lần mỗi lần mở giỏ, khi dữ liệu giỏ có lần đầu (kể cả bản trong bộ nhớ đệm); giỏ tải lại sau đó không phát thêm.
+  const cartViewed = useRef(false);
+  useEffect(() => {
+    const c = cart.data;
+    if (!c || cartViewed.current) return;
+    cartViewed.current = true;
+    trackEvent('cart_viewed', 'miniapp', { itemCount: Math.min(c.items.length, 500), subtotalBucket: subtotalBucket(c.subtotal) });
+  }, [cart.data]);
   // Giỏ về trống (làm mới giỏ khi tấm đang mở): tấm gỡ theo, không để nó bật lại khi giỏ có hàng lần sau.
   const noItems = (cart.data?.items.length ?? 0) === 0;
   useEffect(() => {
@@ -421,6 +431,7 @@ export default function CartPage() {
     // âm thầm chuyển từ "1 món đã chọn" sang "cả giỏ".
     const itemIds = allSelected ? null : selectedItems.map((l) => l.id);
     rememberCheckoutSelection(itemIds);
+    setCheckoutEntry(itemIds ? 'cart_subset' : 'cart');
     navigate('/checkout', { state: { itemIds } });
   };
 

@@ -77,6 +77,7 @@ export function ProductRail({ items, variant, rankFrom, ranks, rankPlain, label,
                 rank={ranks?.[i] ?? (rankFrom === undefined ? undefined : rankFrom + i)}
                 rankPlain={rankPlain}
                 listSource={listSource}
+                position={i + 1}
                 showBrand={showBrand}
                 showWishlist={showWishlist}
                 note={notes?.[i] || (reserveNote ? '' : undefined)}

@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { RECYCLE_FUNNEL_STEPS, type LaunchWatchDTO, type LaunchWatchFraud, type LaunchWatchFunnelRow, type LaunchWatchWebhookReject } from '@tubutree/shared-types';
+import {
+  PURCHASE_FUNNEL_STEPS,
+  RECYCLE_FUNNEL_STEPS,
+  type LaunchWatchDTO,
+  type LaunchWatchFraud,
+  type LaunchWatchFunnelRow,
+  type LaunchWatchWebhookReject,
+  type PurchaseFunnelDTO,
+} from '@tubutree/shared-types';
 import { LaunchWatchTab } from './launch-watch-tab';
 import { click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 
@@ -65,9 +73,23 @@ const rejected = (source: 'pancake' | 'gomdon', lastHour: number, last24h: numbe
   alert,
 });
 const quiet = (source: 'pancake' | 'gomdon') => rejected(source, 0, 0, false);
+const purchase = (scale: number) => ({
+  rows: PURCHASE_FUNNEL_STEPS.map((step, i) => ({ step, web: (5 - i) * scale, miniapp: (4 - i) * scale, total: (9 - 2 * i) * scale })),
+  sessions: { web: 12 * scale, miniapp: 8 * scale, total: 20 * scale },
+});
+const funnelDto: PurchaseFunnelDTO = { generatedAt: '2026-11-16T07:05:00.000Z', windows: { h72: purchase(1), d7: purchase(10), d30: purchase(100) } };
+const FUNNEL_ROUTE = { '/admin/analytics/purchase-funnel': { body: funnelDto } };
+/** Bảng Phễu mua gọi API riêng: trả số mẫu cho nó, mọi URL khác đi qua `fn` của ca kiểm. */
+const withFunnel = (fn: (url: string, init?: RequestInit) => Promise<Response>) =>
+  vi.fn(async (url: string, init?: RequestInit) =>
+    url.includes('/admin/analytics/purchase-funnel')
+      ? new Response(JSON.stringify(funnelDto), { status: 200, headers: { 'Content-Type': 'application/json' } })
+      : fn(url, init),
+  );
+const lwCalls = (calls: { url: string }[]) => calls.filter((c) => c.url.includes('/admin/analytics/launch-watch'));
 
 const mountWith = async (body: LaunchWatchDTO | null, status = 200) => {
-  const api = mockFetch({ '/admin/analytics/launch-watch': { status, body: body ?? { message: 'x' } } });
+  const api = mockFetch({ '/admin/analytics/launch-watch': { status, body: body ?? { message: 'x' } }, ...FUNNEL_ROUTE });
   vi.stubGlobal('fetch', vi.fn(api.fn));
   const r = mount(<LaunchWatchTab />);
   await flush();
@@ -75,15 +97,17 @@ const mountWith = async (body: LaunchWatchDTO | null, status = 200) => {
 };
 
 const group = (c: HTMLElement, name: string) => c.querySelector<HTMLElement>(`[role="group"][aria-label="${name}"]`)!;
+const recycle = (c: HTMLElement) => c.querySelector<HTMLElement>('section[aria-label="Phễu Đổi rác"]')!;
+const buy = (c: HTMLElement) => c.querySelector<HTMLElement>('section[aria-label="Phễu mua"]')!;
 const funnelRow = (c: HTMLElement, label: string) =>
-  Array.from(c.querySelectorAll('tbody tr')).find((tr) => tr.querySelector('th')?.textContent === label)!;
+  Array.from(recycle(c).querySelectorAll('tbody tr')).find((tr) => tr.querySelector('th')?.textContent === label)!;
 const cells = (tr: Element) => Array.from(tr.querySelectorAll('td')).map((td) => td.textContent);
 const windowButton = (c: HTMLElement, label: string) =>
   Array.from(c.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Khoảng thời gian"] button')).find((b) => b.textContent === label)!;
 
 describe('LaunchWatchTab', () => {
   it('đang tải: hiện khung xương, chưa có bảng', async () => {
-    const api = mockFetch({ '/admin/analytics/launch-watch': { body: dto() } });
+    const api = mockFetch({ '/admin/analytics/launch-watch': { body: dto() }, ...FUNNEL_ROUTE });
     vi.stubGlobal('fetch', vi.fn(api.fn));
     const { container } = mount(<LaunchWatchTab />);
     expect(container.querySelector('[aria-busy="true"][aria-label="Đang tải số liệu theo dõi"]')).not.toBeNull();
@@ -94,7 +118,7 @@ describe('LaunchWatchTab', () => {
 
   it('lỗi tải: câu thông báo tiếng Việt kèm nút Thử lại, tải lại được', async () => {
     const calls: number[] = [];
-    const fn = vi.fn(async () => {
+    const fn = withFunnel(async () => {
       calls.push(1);
       return calls.length === 1
         ? new Response(JSON.stringify({ message: 'x' }), { status: 500, headers: { 'Content-Type': 'application/json' } })
@@ -115,7 +139,7 @@ describe('LaunchWatchTab', () => {
 
   it('đầu trang: tiêu đề, ba nút khoảng thời gian (mặc định 72 giờ, aria-pressed), nút Làm mới, giờ cập nhật theo giờ Việt Nam', async () => {
     const { container, api } = await mountWith(dto());
-    expect(api.calls).toHaveLength(1);
+    expect(lwCalls(api.calls)).toHaveLength(1);
     expect(container.querySelector('h2')?.textContent).toBe('Theo dõi 72h sau launch');
     const buttons = Array.from(container.querySelectorAll<HTMLButtonElement>('[role="group"][aria-label="Khoảng thời gian"] button'));
     expect(buttons.map((b) => [b.textContent, b.getAttribute('aria-pressed')])).toEqual([
@@ -130,14 +154,14 @@ describe('LaunchWatchTab', () => {
 
   it('phễu: mỗi bước một hàng (nhãn tiếng Việt, Web, Mini App, Tổng, % so với bước vào) và dòng kho đã nhận rác thật', async () => {
     const { container } = await mountWith(dto());
-    expect(container.querySelectorAll('tbody tr')).toHaveLength(RECYCLE_FUNNEL_STEPS.length);
-    expect(Array.from(container.querySelectorAll('thead th')).map((th) => th.textContent)).toEqual(['Bước', 'Web', 'Mini App', 'Tổng', 'So với bước vào']);
+    expect(recycle(container).querySelectorAll('tbody tr')).toHaveLength(RECYCLE_FUNNEL_STEPS.length);
+    expect(Array.from(recycle(container).querySelectorAll('thead th')).map((th) => th.textContent)).toEqual(['Bước', 'Web', 'Mini App', 'Tổng', 'So với bước vào']);
     expect(cells(funnelRow(container, 'Vào màn Đổi rác'))).toEqual(['6', '5', '8', '100%']);
     expect(cells(funnelRow(container, 'Đã gửi yêu cầu'))).toEqual(['2', '2', '3', '37,5%']);
     expect(cells(funnelRow(container, 'Từ chối vị trí'))).toEqual(['0', '0', '0', '0%']);
     expect(container.textContent).toContain('Kho đã nhận rác thật: 3 yêu cầu · 2 khách');
-    expect(container.querySelector('table')?.parentElement?.className).toContain('overflow-x-auto');
-    expect(container.querySelector('table')?.className).toContain('tabular-nums');
+    expect(recycle(container).querySelector('table')?.parentElement?.className).toContain('overflow-x-auto');
+    expect(recycle(container).querySelector('table')?.className).toContain('tabular-nums');
   });
 
   it('một nút khoảng thời gian đổi cả phễu lẫn chống gian lận, còn khối đơn thứ 2 giữ nguyên', async () => {
@@ -145,7 +169,7 @@ describe('LaunchWatchTab', () => {
     const secondBefore = container.querySelector('section[aria-label="Khách đặt đơn thứ 2 trong 14 ngày"]')?.textContent;
     click(windowButton(container, '7 ngày'));
     await flush();
-    expect(api.calls).toHaveLength(1); // đổi cửa sổ chỉ chọn lại số liệu đã tải, không gọi API lại
+    expect(lwCalls(api.calls)).toHaveLength(1); // đổi cửa sổ chỉ chọn lại số liệu đã tải, không gọi API lại
     expect(windowButton(container, '7 ngày').getAttribute('aria-pressed')).toBe('true');
     expect(windowButton(container, '72 giờ').getAttribute('aria-pressed')).toBe('false');
     expect(cells(funnelRow(container, 'Vào màn Đổi rác'))).toEqual(['60', '50', '80', '100%']);
@@ -265,13 +289,13 @@ describe('LaunchWatchTab', () => {
   it('Làm mới gọi lại API một lần và cập nhật giờ; đang tải thì bấm tiếp không gọi thêm', async () => {
     let n = 0;
     let release: (() => void) | undefined;
-    const fn = vi.fn(async () => {
+    const fn = vi.fn(async (_url?: string) => {
       n++;
       const body = dto({ generatedAt: n === 1 ? '2026-11-16T07:05:00.000Z' : '2026-11-16T07:09:00.000Z' });
       if (n === 2) await new Promise<void>((r) => (release = r));
       return new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
     });
-    vi.stubGlobal('fetch', fn);
+    vi.stubGlobal('fetch', withFunnel(fn));
     const { container } = mount(<LaunchWatchTab />);
     await flush();
     const refresh = Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Làm mới')!;
@@ -372,5 +396,38 @@ describe('LaunchWatchTab', () => {
       const { container } = await mountWith(d);
       expect(banner(container)!.textContent).not.toMatch(/Bearer|sk_|secret=|token=/i);
     });
+  });
+
+  it('phễu mua: bảng riêng trên phễu Đổi rác, 5 bước theo nhãn tiếng Việt, đổi theo nút khoảng thời gian, Làm mới tải lại cả phễu mua', async () => {
+    const { container, api } = await mountWith(dto());
+    const sections = Array.from(container.querySelectorAll('section[aria-label]')).map((s) => s.getAttribute('aria-label'));
+    expect(sections.indexOf('Phễu mua')).toBeLessThan(sections.indexOf('Phễu Đổi rác'));
+    const rowsOf = () => Array.from(buy(container).querySelectorAll('tbody tr')).map((tr) => [tr.querySelector('th')?.textContent, ...cells(tr)]);
+    expect(rowsOf()).toEqual([
+      ['Xem trang sản phẩm', '5', '4', '9', '100%'],
+      ['Bấm Thêm vào giỏ hoặc Mua ngay', '4', '3', '7', '77,8%'],
+      ['Vào thanh toán', '3', '2', '5', '55,6%'],
+      ['Bấm Đặt hàng', '2', '1', '3', '33,3%'],
+      ['Đặt đơn thành công', '1', '0', '1', '11,1%'],
+    ]);
+    expect(buy(container).textContent).toContain('Tổng số phiên: 20 (web 12 · Mini App 8)');
+    click(windowButton(container, '30 ngày'));
+    await flush();
+    expect(rowsOf()[0]).toEqual(['Xem trang sản phẩm', '500', '400', '900', '100%']);
+    const funnelCalls = () => api.calls.filter((c) => c.url.includes('/admin/analytics/purchase-funnel')).length;
+    expect(funnelCalls()).toBe(1);
+    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent === 'Làm mới')!);
+    await flush();
+    expect(funnelCalls()).toBe(2);
+  });
+
+  it('phễu mua lỗi tải: chỉ khối đó báo lỗi, các khối khác vẫn hiện', async () => {
+    const api = mockFetch({ '/admin/analytics/launch-watch': { body: dto() }, '/admin/analytics/purchase-funnel': { status: 500, body: { message: 'x' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<LaunchWatchTab />);
+    await flush();
+    await flush();
+    expect(buy(container).textContent).toContain('Không tải được phễu mua.');
+    expect(recycle(container).querySelector('table')).not.toBeNull();
   });
 });

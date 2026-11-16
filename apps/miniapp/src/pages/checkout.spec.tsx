@@ -62,7 +62,10 @@ vi.mock('../components/policy-sheet', () => ({
   PolicySheet: ({ slug }: { slug: string | null }) => (slug ? <div data-testid="policy-sheet">{slug}</div> : null),
 }));
 vi.mock('../services/affiliate-api', () => ({ recordReferralTouch: mocks.recordReferralTouch }));
-vi.mock('../services/analytics', () => ({ trackEvent: vi.fn().mockResolvedValue(undefined) }));
+vi.mock('../services/analytics', async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  trackEvent: vi.fn().mockResolvedValue(undefined),
+}));
 vi.mock('../services/zalo-profile', () => ({
   requestZaloProfile: mocks.requestZaloProfile,
   usableProfileName: (n?: string | null) => ((n ?? '').trim().toLowerCase() === 'khách' ? '' : (n ?? '').trim()),
@@ -108,6 +111,7 @@ import { createQueryClient } from '../services/query-client';
 import { COUPON_CHANGE_KEY } from '../components/checkout/use-coupon-hint';
 import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { vi as viCopy } from '../i18n/vi';
+import { setCheckoutEntry, takeCheckoutEntry, trackEvent } from '../services/analytics';
 
 const ADDRESS = {
   id: 'a1', recipient: 'Ánh', phone: '0911111111', street: '1 Lê Lợi', province: 'TP. Hồ Chí Minh', provinceCode: '84_VN79',
@@ -3629,5 +3633,118 @@ describe('CheckoutPage — phân loại không có tên (86/154 phân loại tr�
     expect((await columnTexts({ name: 'Sả' }))[1]).toBe('Sả');
     expect((await columnTexts({ name: '' }))[1]).toBe('50.000đ × 1');
     expect((await columnTexts({}))[1]).toBe('50.000đ × 1');
+  });
+});
+
+describe('CheckoutPage — phễu mua (checkout_started, checkout_step, checkout_abandoned)', () => {
+  const TWO_LINES = {
+    ...CART,
+    items: [CART.items[0]!, { ...CART.items[0]!, id: 'ci2', variationId: 'v2', productName: 'Nước rửa chén' }],
+    subtotal: 100_000,
+    itemCount: 2,
+  };
+  const events = (name: string) => vi.mocked(trackEvent).mock.calls.filter((c) => c[0] === name).map((c) => c[2]);
+  const started = async () => {
+    await waitFor(() => expect(events('checkout_started')).toHaveLength(1));
+    return events('checkout_started')[0];
+  };
+
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    takeCheckoutEntry();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.kind = 'ctv';
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.referralEligible = null;
+    mocks.user.phone = '0900000000';
+    mocks.locState = null;
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(TWO_LINES);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+  });
+  afterEach(() => {
+    mocks.locState = null;
+  });
+
+  it.each([
+    ['buy_now', { itemIds: ['ci1'] }, 1],
+    ['cart_subset', { itemIds: ['ci2'] }, 1],
+    ['cart', { itemIds: null }, 2],
+    ['flash', { itemIds: ['ci1'] }, 1],
+  ] as const)('nơi bấm ghi dấu %s → checkout_started mang đúng entry, một lần', async (entry, state, itemCount) => {
+    setCheckoutEntry(entry);
+    mocks.locState = state;
+    renderPage();
+    expect(await started()).toEqual({ entry, itemCount });
+    expect(takeCheckoutEntry()).toBe('unknown');
+  });
+
+  it('không có dấu nơi bấm (tải lại trang): có lựa chọn món → cart_subset, không có → cart', async () => {
+    mocks.locState = { itemIds: ['ci1'] };
+    const a = renderPage();
+    expect(await started()).toEqual({ entry: 'cart_subset', itemCount: 1 });
+    a.unmount();
+    vi.mocked(trackEvent).mockClear();
+    mocks.locState = { itemIds: null };
+    renderPage();
+    expect(await started()).toEqual({ entry: 'cart', itemCount: 2 });
+  });
+
+  it('các bước: địa chỉ có sẵn và báo giá đầu phát ngay sau checkout_started; đổi cách thanh toán và bấm Đặt hàng phát theo thao tác', async () => {
+    renderPage();
+    await started();
+    fireEvent.click(await screen.findByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    await placeOrderClick();
+    const funnel = vi.mocked(trackEvent).mock.calls.filter((c) => c[0] === 'checkout_started' || c[0] === 'checkout_step').map((c) => [c[0], c[2]]);
+    expect(funnel).toEqual([
+      ['checkout_started', { entry: 'cart', itemCount: 2 }],
+      ['checkout_step', { step: 'address_saved' }],
+      ['checkout_step', { step: 'shipping_quote_shown' }],
+      ['checkout_step', { step: 'payment_method_selected', paymentMethod: 'BANK_TRANSFER' }],
+      ['checkout_step', { step: 'place_order_click' }],
+    ]);
+  });
+
+  it('rời màn khi chưa đặt được đơn → checkout_abandoned đúng một lần, lastStep là bước xa nhất đã tới', async () => {
+    const view = renderPage();
+    await started();
+    fireEvent.click(await screen.findByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    view.unmount();
+    expect(events('checkout_abandoned')).toEqual([{ lastStep: 'payment_method_selected' }]);
+  });
+
+  it('đặt đơn thành công rồi rời màn → không có checkout_abandoned', async () => {
+    const view = renderPage();
+    await placeOrderClick();
+    await screen.findByTestId('order-success');
+    view.unmount();
+    expect(events('checkout_abandoned')).toEqual([]);
+  });
+
+  it('chuyển khoản: đơn tạo xong sang màn QR → không có checkout_abandoned', async () => {
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001', paymentMethod: 'BANK_TRANSFER' });
+    const view = renderPage();
+    fireEvent.click(await screen.findByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    await placeOrderClick();
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TT001', { replace: true }));
+    view.unmount();
+    expect(events('checkout_abandoned')).toEqual([]);
+  });
+
+  it('chưa có checkout_started (báo giá chưa về) mà rời màn → không có gì để bỏ dở', async () => {
+    mocks.checkoutQuote.mockReturnValue(new Promise(() => {}));
+    const view = renderPage();
+    await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalled());
+    view.unmount();
+    expect(events('checkout_started')).toEqual([]);
+    expect(events('checkout_abandoned')).toEqual([]);
   });
 });

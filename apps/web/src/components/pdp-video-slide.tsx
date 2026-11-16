@@ -5,13 +5,14 @@ import { Play } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useSizedImage } from '@/lib/image-src';
 import { PDP_MAIN_IMAGE_SIZES } from '@/lib/image-sizes';
+import { trackPdpAction } from '@/components/analytics/funnel';
 
 /**
  * Ô video của thư viện ảnh PDP. Cùng khung vuông với ảnh nên không làm trang nhảy. Chưa bấm thì chỉ có poster và nút phát: thẻ video
  * `preload="none"` nên không tải một byte video nào; không tự phát; `playsInline` để iOS phát ngay trong trang chứ không bật toàn màn hình.
  * Cuộn sang ô khác (`active` = false) thì tạm dừng.
  */
-export default function PdpVideoSlide({ src, poster, name, active }: { src: string; poster: string | null; name: string; active: boolean }) {
+export default function PdpVideoSlide({ src, poster, name, active, pdpSlug }: { src: string; poster: string | null; name: string; active: boolean; pdpSlug?: string }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [started, setStarted] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -36,6 +37,7 @@ export default function PdpVideoSlide({ src, poster, name, active }: { src: stri
   const play = () => {
     const el = ref.current;
     if (!el) return;
+    if (pdpSlug) trackPdpAction('video_play', pdpSlug);
     playedRef.current = true;
     setStarted(true);
     // play() trả Promise (trình duyệt cũ thì không): trình duyệt không hiểu định dạng thì báo hỏng, chặn autoplay hay bị ngắt giữa chừng thì chỉ giữ thanh điều khiển.

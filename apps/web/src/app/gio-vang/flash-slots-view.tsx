@@ -16,6 +16,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { cartKey } from '@/lib/cart-key';
 import { rememberCheckoutSelection } from '@/lib/checkout-selection';
+import { markCheckoutEntry } from '@/lib/analytics';
 import { coreHttp } from '@/lib/core-http';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { PAGE_NARROW_UNTIL_LG } from '@/lib/page-frame';
@@ -152,6 +153,7 @@ export default function FlashSlotsView() {
       // Chỉ thanh toán đúng dòng vừa Mua ngay: các món khác trong giỏ không bị tính theo. Không thấy dòng (API trả giỏ thiếu) thì null = cả giỏ.
       const bought = (cart.items ?? []).filter((l) => l.variationId === variationId).map((l) => l.id);
       rememberCheckoutSelection(bought.length > 0 ? bought : null);
+      markCheckoutEntry('flash');
       router.push('/thanh-toan');
     },
     onError: (e: unknown) => {

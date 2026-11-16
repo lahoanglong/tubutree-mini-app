@@ -18,6 +18,7 @@ import { useLoginWithNotice } from '../components/ui/auth-gate';
 import { useCategories } from '../hooks/use-categories';
 import { useNotify } from '../hooks/use-notify';
 import { rememberCheckoutSelection } from '../utils/checkout-selection';
+import { setCheckoutEntry } from '../services/analytics';
 import { haptic } from '../utils/haptic';
 import { serverNow } from '../utils/server-clock';
 import { settleWithin } from '../utils/settle-within';
@@ -126,6 +127,7 @@ export default function FlashSalePage() {
       const line = cart.items.find((l) => l.variationId === variationId);
       const itemIds = line ? [line.id] : null;
       rememberCheckoutSelection(itemIds);
+      setCheckoutEntry('flash');
       navigate('/checkout', { state: { itemIds } });
     },
     // Máy chủ từ chối vì suất đã đổi (hết suất, hết giờ, vượt giới hạn mỗi khách): tải lại khung giờ và món, giữ khoá tới khi dữ liệu mới về

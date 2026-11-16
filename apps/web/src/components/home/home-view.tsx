@@ -49,6 +49,7 @@ import { useHomeSettling, useStartedAsNew } from './use-home-settling';
 import { useHomeCustomerKind } from './use-home-customer-kind';
 import { useHomeShelves } from './use-home-shelves';
 import { HomeQuizCard } from '@/components/game/home-quiz-card';
+import { HomeBlockTracker } from '@/components/analytics/home-block-tracker';
 
 /** Phần công khai server đã tải cho trang ISR: có trong HTML đầu, React Query tiếp quản sau hydrate. */
 export interface HomeInitial {
@@ -85,6 +86,7 @@ export default function HomeView({ initial = {}, restoreHint = null }: { initial
   return (
     <HomeRestoreHintContext.Provider value={restoreHint}>
       <HomeViewBody initial={initial} />
+      <HomeBlockTracker />
     </HomeRestoreHintContext.Provider>
   );
 }

@@ -39,6 +39,8 @@ import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { firstMeasurable, playCartFeedback } from '@/lib/cart-feedback';
 import { onPdpQuickAdd } from '@/lib/pdp-quick-add';
+import { markCheckoutEntry } from '@/lib/analytics';
+import { trackPdpAction } from '@/components/analytics/funnel';
 
 // Bảng chỉ dùng ở khổ điện thoại khi khách bấm mua: tách khỏi First Load của trang sản phẩm.
 const VariationSheet = dynamic(() => import('./variation-sheet').then((m) => m.VariationSheet), { ssr: false });
@@ -80,6 +82,7 @@ export default function AddToCart({
   blockedReason = null,
   productName = '',
   thumbnail = null,
+  pdpSlug,
 }: {
   slug: string;
   productName?: string;
@@ -87,6 +90,8 @@ export default function AddToCart({
   variations: Variation[];
   /** Gian hàng tạm nghỉ/ngừng bán (R3-MERCHANT-3): khách xem được trang nhưng chưa mua được. */
   blockedReason?: string | null;
+  /** Có khi khối mua nằm trên trang sản phẩm: các nút bấm được đếm vào phễu mua (`pdp_action`). */
+  pdpSlug?: string;
 }) {
   const router = useRouter();
   const qc = useQueryClient();
@@ -279,6 +284,7 @@ export default function AddToCart({
           if (JSON.stringify(recallCheckoutSelection()) === JSON.stringify(remembered)) clearCheckoutSelection();
           return;
         }
+        markCheckoutEntry('buy_now');
         router.push('/thanh-toan');
         return;
       }
@@ -322,10 +328,13 @@ export default function AddToCart({
     if (phase === 'loading' || blockedReason || busy) return;
     // Điện thoại: từ 2 phân loại thì hỏi chọn trong bảng như Mini App. Máy tính đã có ô chọn ngay cạnh nút.
     if (!chosen && needsVariationPicker(variations) && isPhoneWidth()) {
+      if (pdpSlug) trackPdpAction('open_variant_sheet', pdpSlug);
       setSheetOpened(true);
       setSheetMode(buyNow ? 'buy' : 'add');
       return;
     }
+    // Chạm mở bảng chọn đã đếm ở trên; lần xác nhận trong bảng mới là lần thêm giỏ/mua thật.
+    if (pdpSlug) trackPdpAction(buyNow ? 'buy_now' : 'add_to_cart', pdpSlug);
     if (phase === 'unavailable') {
       setSuccess(false);
       setWarn(null);

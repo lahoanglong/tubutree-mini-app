@@ -7,6 +7,7 @@ import { useCatalogLaunchDate } from '../../hooks/use-catalog-launch-date';
 import { useFlashExpiry } from '../../hooks/use-flash-expiry';
 import { useFreeShipThreshold } from '../../hooks/use-free-ship-threshold';
 import { fetchActiveFlashSales } from '../../services/shop-api';
+import { trackEvent } from '../../services/analytics';
 import { serverNow } from '../../utils/server-clock';
 import { WishlistHeart } from '../wishlist-heart';
 import { ProductTile } from './product-tile';
@@ -22,8 +23,10 @@ export interface ProductCardProps {
   inCombo?: boolean;
   showBrand?: boolean;
   note?: string;
-  /** Ghi vào state điều hướng, thành `product_viewed.listSource` ở trang chi tiết. */
+  /** Ghi vào state điều hướng, thành `product_viewed.listSource` ở trang chi tiết; cũng là `shelf` của `product_card_click`. */
   listSource?: string;
+  /** Vị trí 1-based của thẻ trong kệ/lưới; thiếu thì không phát `product_card_click` (không đoán vị trí). */
+  position?: number;
   /** Mặc định có tim ở thẻ đủ rộng (grid, rail-md, rank); gian hàng xem trước tắt vì khách chưa đăng nhập vào đó. */
   showWishlist?: boolean;
   imageOverlay?: ReactNode;
@@ -54,6 +57,7 @@ export const ProductCard = memo(function ProductCard({
   showBrand,
   note,
   listSource,
+  position,
   showWishlist = true,
   imageOverlay,
   onAdd,
@@ -98,7 +102,10 @@ export const ProductCard = memo(function ProductCard({
       addLabel={addLabel}
       hidePrice={hidePrice}
       navState={Object.keys(navState).length > 0 ? navState : undefined}
-      onOpen={onOpen}
+      onOpen={() => {
+        if (listSource && position) trackEvent('product_card_click', 'miniapp', { shelf: listSource, position, productSlug: product.slug });
+        onOpen?.();
+      }}
       imageOverlay={imageOverlay}
       wishlist={showWishlist && HEART_VARIANTS.has(variant) ? <WishlistHeart productId={product.id} productName={product.name} floating size={18} /> : undefined}
     />

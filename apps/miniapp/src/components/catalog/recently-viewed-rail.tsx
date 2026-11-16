@@ -57,7 +57,7 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
         <SectionHeader title={title} />
       </div>
       <RailShell label={title}>
-        {items.map((it) => {
+        {items.map((it, i) => {
           const product = live.get(it.slug);
           return (
             <RailCell key={it.slug} variant="rail-sm">
@@ -78,6 +78,7 @@ export function RecentlyViewedRail({ title = vi.browse.recentlyViewed }: { title
                 }}
                 variant="rail-sm"
                 listSource="recently_viewed"
+                position={i + 1}
                 hidePrice={!product}
               />
             </RailCell>

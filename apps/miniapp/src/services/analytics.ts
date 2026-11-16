@@ -1,4 +1,4 @@
-import type { ClientEventName } from '@tubutree/shared-types';
+import type { CheckoutEntry, ClientEventName } from '@tubutree/shared-types';
 import { api } from './api';
 import { getSessionAttribution, sessionEntrySource } from '../utils/entry-source';
 
@@ -7,6 +7,7 @@ interface QueuedEvent {
   eventName: ClientEventName;
   occurredAt: string;
   platform: 'miniapp';
+  sessionId: string;
   props: Record<string, unknown>;
   entrySource?: string;
   campaign?: string;
@@ -17,13 +18,39 @@ interface QueuedEvent {
 
 const MAX_BATCH = 50;
 const FLUSH_INTERVAL_MS = 10_000;
+export const SESSION_IDLE_MS = 30 * 60_000;
 let queue: QueuedEvent[] = [];
 let timer: ReturnType<typeof setInterval> | null = null;
+let sid = '';
+let lastAt = 0;
+let checkoutEntry: CheckoutEntry = 'unknown';
 
-function newEventId(): string {
+// Máy chủ chỉ nhận eventId/sessionId dạng UUID: máy cũ không có randomUUID vẫn phải ra chuỗi dạng UUID v4.
+function newId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
-    : `evt_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    : '10000000-1000-4000-8000-100000000000'.replace(/[018]/g, (c) => (+c ^ ((Math.random() * 16) >> (+c / 4))).toString(16));
+}
+
+/** Mã phiên chỉ trong bộ nhớ: 30 phút không có sự kiện nào thì sang mã mới. Đọc mã không gia hạn phiên, chỉ `trackEvent` gia hạn. */
+export function getSessionId(): string {
+  const now = Date.now();
+  if (!sid || now - lastAt >= SESSION_IDLE_MS) {
+    sid = newId();
+    lastAt = now;
+  }
+  return sid;
+}
+
+/** Nơi khách bấm vào thanh toán, ghi ngay trước khi chuyển sang trang thanh toán; `checkout_started` lấy ra đúng một lần. */
+export function setCheckoutEntry(entry: CheckoutEntry): void {
+  checkoutEntry = entry;
+}
+
+export function takeCheckoutEntry(): CheckoutEntry {
+  const entry = checkoutEntry;
+  checkoutEntry = 'unknown';
+  return entry;
 }
 
 export function trackEvent(
@@ -34,11 +61,14 @@ export function trackEvent(
 ): void {
   // Nguồn của phiên (link/QR/thẻ mở app) đi kèm MỌI sự kiện để báo cáo cắt được theo kênh; nơi gọi truyền `extra` thì ưu tiên.
   const campaign = getSessionAttribution()?.campaign;
+  const sessionId = getSessionId();
+  lastAt = Date.now();
   queue.push({
-    eventId: newEventId(),
+    eventId: newId(),
     eventName,
     occurredAt: new Date().toISOString(),
     platform,
+    sessionId,
     props,
     entrySource: sessionEntrySource(),
     ...(campaign ? { campaign } : {}),
@@ -88,6 +118,8 @@ export function flushEventQueueOnHide(): void {
 
 export function __resetQueueForTest(): void {
   queue = [];
+  sid = '';
+  checkoutEntry = 'unknown';
   if (timer) clearInterval(timer);
   timer = null;
 }

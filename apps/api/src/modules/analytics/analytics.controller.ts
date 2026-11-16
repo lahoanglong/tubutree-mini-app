@@ -1,13 +1,19 @@
-import { Body, Controller, Headers, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Headers, HttpCode, Post, UseGuards } from '@nestjs/common';
 import { Throttle } from '@nestjs/throttler';
+import { plainToInstance } from 'class-transformer';
+import { validate } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { Public } from '../../common/decorators/public.decorator';
+import { OptionalJwtAuthGuard } from '../../common/guards/optional-jwt-auth.guard';
 import { RECYCLE_FUNNEL_STEPS, type JwtPayload } from '@tubutree/shared-types';
 import { AnalyticsEventsService } from './analytics-events.service';
 import { normalizeEntryToken } from '../../common/attribution';
-import { IngestEventsDto } from './dto/ingest-events.dto';
+import { IngestEventsDto, WebBeaconDto, WebIngestEventsDto, type EventEnvelopeDto } from './dto/ingest-events.dto';
 import { hashDeviceId } from '../auth/device-id';
+import { checkEventProps } from './event-props';
 
 const RECYCLE_LANE_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
  * Phễu Đổi rác chỉ có nghĩa khi `props.step`/`surface`/`lane` đúng khuôn. Sự kiện sai khuôn bị bỏ riêng lẻ (không trả 400) để một
@@ -22,6 +28,13 @@ export function isValidRecycleFunnelEvent(e: { eventName: string; platform: stri
   if (p.lane !== undefined && (typeof p.lane !== 'string' || !RECYCLE_LANE_PATTERN.test(p.lane))) return false;
   return true;
 }
+
+/** Sự kiện được ghi: đúng luật phễu Đổi rác và `props` qua danh sách trắng (không khoá lạ, không chuỗi giống SĐT/email). */
+export function isAcceptedClientEvent(e: { eventName: string; platform: string; props?: Record<string, unknown> }): boolean {
+  return isValidRecycleFunnelEvent(e) && checkEventProps(e.eventName, e.props) === 'ok';
+}
+
+const uuidOrNull = (v: string | undefined): string | null => (v && UUID_PATTERN.test(v) ? v : null);
 
 @Controller('events')
 export class AnalyticsController {
@@ -38,25 +51,69 @@ export class AnalyticsController {
   ): Promise<{ accepted: number }> {
     // deviceId thô là khoá đăng nhập tài khoản khách: bảng sự kiện (xem được ở báo cáo) chỉ giữ bản băm.
     const anonymousFromDevice = deviceId ? hashDeviceId(deviceId).slice(0, 32) : null;
-    const events = dto.events.filter(isValidRecycleFunnelEvent);
+    const events = dto.events.filter(isAcceptedClientEvent);
     await this.analytics.recordManyBestEffort(
-      events.map((e) => ({
-        eventId: e.eventId,
-        eventName: e.eventName,
-        occurredAt: new Date(e.occurredAt),
-        userId: user?.sub ?? null,
-        anonymousId: e.anonymousId ?? anonymousFromDevice,
-        sessionId: e.sessionId ?? null,
-        platform: e.platform,
-        appVersion: e.appVersion ?? null,
-        entrySource: normalizeEntryToken(e.entrySource),
-        campaign: normalizeEntryToken(e.campaign),
-        notificationId: e.notificationId ?? null,
-        refCode: e.refCode ?? null,
-        storefrontSlug: e.storefrontSlug ?? null,
-        props: e.props ?? {},
-      })),
+      events.map((e) => this.toInput(e, user?.sub ?? null, e.anonymousId ?? anonymousFromDevice, e.sessionId ?? null)),
     );
     return { accepted: events.length };
+  }
+
+  /**
+   * Sự kiện của website, khách chưa đăng nhập cũng gửi được: đây là kênh ra mắt mà phần lớn lượt xem là khách ẩn danh. Có Bearer hợp lệ
+   * thì gắn userId; Bearer hết hạn không làm 401 (khách vẫn được đếm theo phiên). Chỉ nhận `platform: 'web'`, mã ẩn danh và mã phiên
+   * phải là UUID (máy chủ không nhận chuỗi tự do vào hai cột này).
+   */
+  @Public()
+  @UseGuards(OptionalJwtAuthGuard)
+  @Throttle({ default: { ttl: 60_000, limit: 120 } })
+  @Post('web')
+  async ingestWeb(@CurrentUser() user: JwtPayload | undefined, @Body() dto: WebIngestEventsDto): Promise<{ accepted: number }> {
+    return this.recordWeb(user?.sub ?? null, dto.events);
+  }
+
+  /**
+   * Bản gửi lúc rời trang (sendBeacon / fetch keepalive): thân form `payload=<json>` để là request "đơn giản" (không preflight CORS, không
+   * gửi được Authorization), nên luôn ghi như khách ẩn danh; phiên nối với tài khoản qua các sự kiện khác cùng `sessionId`.
+   */
+  @Public()
+  @Throttle({ default: { ttl: 60_000, limit: 120 } })
+  @Post('web/beacon')
+  @HttpCode(204)
+  async ingestWebBeacon(@Body() dto: WebBeaconDto): Promise<void> {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(dto.payload);
+    } catch {
+      throw new BadRequestException('payload không phải JSON');
+    }
+    const body = plainToInstance(WebIngestEventsDto, parsed);
+    const errors = await validate(body, { whitelist: true, forbidNonWhitelisted: true });
+    if (errors.length > 0) throw new BadRequestException('payload sai khuôn');
+    await this.recordWeb(null, body.events);
+  }
+
+  private async recordWeb(userId: string | null, events: EventEnvelopeDto[]): Promise<{ accepted: number }> {
+    const ok = events.filter((e) => e.platform === 'web' && isAcceptedClientEvent(e));
+    await this.analytics.recordManyBestEffort(ok.map((e) => this.toInput(e, userId, uuidOrNull(e.anonymousId), uuidOrNull(e.sessionId))));
+    return { accepted: ok.length };
+  }
+
+  private toInput(e: EventEnvelopeDto, userId: string | null, anonymousId: string | null, sessionId: string | null) {
+    return {
+      eventId: e.eventId,
+      eventName: e.eventName,
+      occurredAt: new Date(e.occurredAt),
+      userId,
+      anonymousId,
+      sessionId,
+      platform: e.platform,
+      appVersion: e.appVersion ?? null,
+      entrySource: normalizeEntryToken(e.entrySource),
+      campaign: normalizeEntryToken(e.campaign),
+      notificationId: e.notificationId ?? null,
+      refCode: e.refCode ?? null,
+      storefrontSlug: e.storefrontSlug ?? null,
+      props: e.props ?? {},
+    };
   }
 }

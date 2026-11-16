@@ -6,6 +6,7 @@ import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/cata
 const navigate = vi.hoisted(() => vi.fn());
 vi.mock('zmp-ui', async (orig) => ({ ...(await orig<Record<string, unknown>>()), useNavigate: () => navigate }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../../services/analytics', () => ({ trackEvent: vi.fn() }));
 vi.mock('../../services/shop-api', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   fetchActiveFlashSales: vi.fn(() => new Promise(() => {})),
@@ -13,6 +14,7 @@ vi.mock('../../services/shop-api', async (orig) => ({
 }));
 
 import { ProductCard } from './product-card';
+import { trackEvent } from '../../services/analytics';
 
 const DAY = 86_400_000;
 const PRODUCT: ProductCardData = {
@@ -36,7 +38,10 @@ function setup(seed: { flash?: unknown[]; config?: Record<string, unknown> } = {
   return { qc, ui };
 }
 
-beforeEach(() => navigate.mockClear());
+beforeEach(() => {
+  navigate.mockClear();
+  vi.mocked(trackEvent).mockClear();
+});
 afterEach(() => vi.useRealTimers());
 
 describe('ProductCard: giá Giờ vàng và điều hướng', () => {
@@ -182,5 +187,29 @@ describe('ProductCard: luật giá thẻ (chuyển từ thẻ Yêu thích cũ)',
     render(ui({ product: { ...SALE, salePrice: null } }));
     expect(screen.getByText('150.000đ')).toBeInTheDocument();
     expect(screen.queryByText(/^-\d+%$/)).toBeNull();
+  });
+});
+
+describe('ProductCard: product_card_click', () => {
+  it('chạm thẻ có kệ và vị trí → phát đúng một product_card_click (shelf, position, productSlug) rồi mở chi tiết', () => {
+    const { ui } = setup({ flash: [], config: { catalogLaunchDate: null } });
+    const onOpen = vi.fn();
+    render(ui({ listSource: 'home_suggest', position: 3, onOpen }));
+    fireEvent.click(screen.getByRole('button', { name: 'Serum Bã Trầu' }));
+    expect(trackEvent).toHaveBeenCalledTimes(1);
+    expect(trackEvent).toHaveBeenCalledWith('product_card_click', 'miniapp', { shelf: 'home_suggest', position: 3, productSlug: 'serum-x' });
+    expect(onOpen).toHaveBeenCalledTimes(1);
+    expect(navigate).toHaveBeenCalledWith('/product/serum-x', { state: { listSource: 'home_suggest' } });
+  });
+
+  it('không biết vị trí hoặc không có kệ → không phát (không đoán vị trí), thẻ vẫn mở chi tiết', () => {
+    const { ui } = setup({ flash: [], config: { catalogLaunchDate: null } });
+    const a = render(ui({ listSource: 'home_quiz' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Serum Bã Trầu' }));
+    a.unmount();
+    render(ui({ position: 2 }));
+    fireEvent.click(screen.getByRole('button', { name: 'Serum Bã Trầu' }));
+    expect(trackEvent).not.toHaveBeenCalled();
+    expect(navigate).toHaveBeenCalledTimes(2);
   });
 });

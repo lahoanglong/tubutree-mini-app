@@ -24,7 +24,7 @@ vi.mock('../services/shop-api', () => ({
 vi.mock('../services/account-api', () => ({ getCoupons: vi.fn().mockResolvedValue([]) }));
 vi.mock('../services/groupbuy-api', () => ({ createGroupBuy: vi.fn() }));
 vi.mock('../services/affiliate-api', () => ({ getAffiliateMe: vi.fn().mockResolvedValue({ isAffiliate: false }) }));
-vi.mock('../services/analytics', () => ({ trackEvent: vi.fn() }));
+vi.mock('../services/analytics', () => ({ trackEvent: vi.fn(), setCheckoutEntry: vi.fn() }));
 vi.mock('../services/zmp-bridge', () => ({ shareLink: vi.fn(), hasOA: false, openOAChat: vi.fn() }));
 // Có selector thì áp selector (useAuthPhase đọc `s.status`), không thì trả cả store (trang chi tiết destructure).
 vi.mock('../store/auth', () => ({

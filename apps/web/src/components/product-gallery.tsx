@@ -65,11 +65,14 @@ export default function ProductGallery({
   videos,
   name,
   variationImages,
+  pdpSlug,
 }: {
   images: string[];
   videos?: string[];
   name: string;
   variationImages?: Record<string, string>;
+  /** Lần bấm phát video được đếm vào phễu mua (`pdp_action`). */
+  pdpSlug?: string;
 }) {
   const [active, setActive] = useState(0);
   const [broken, setBroken] = useState<ReadonlySet<number>>(new Set());
@@ -137,7 +140,7 @@ export default function ProductGallery({
               className="flex h-full w-full flex-none snap-center items-center justify-center"
             >
               {m.kind === 'video' ? (
-                <PdpVideoSlide src={m.src} poster={m.poster} name={name} active={i === active} />
+                <PdpVideoSlide src={m.src} poster={m.poster} name={name} active={i === active} pdpSlug={pdpSlug} />
               ) : broken.has(i) ? (
                 <LeafGlyph size={80} />
               ) : (

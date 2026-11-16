@@ -20,21 +20,20 @@ describe('useScreenTracker', () => {
   });
 
 
-  it('phát screen_viewed với route hiện tại khi mount', () => {
+  it('phát screen_viewed với route hiện tại khi mount, chưa có referrerRoute', () => {
     renderHook(() => useScreenTracker(), { wrapper });
 
     expect(trackEvent).toHaveBeenCalledTimes(1);
-    expect(trackEvent).toHaveBeenCalledWith(
-      'screen_viewed',
-      'miniapp',
-      expect.objectContaining({ route: '/home', prevRoute: null }),
-    );
+    expect(trackEvent).toHaveBeenCalledWith('screen_viewed', 'miniapp', {
+      route: '/home',
+      referrerRoute: null,
+      msToContent: expect.any(Number),
+    });
   });
 
-  it('phát lại screen_viewed ở MỖI lần đổi route, kèm prevRoute là route trước đó', () => {
-    // Hook kết hợp useNavigate() + useScreenTracker() để mô phỏng điều hướng thật (không chỉ
-    // re-render) — đây là cách duy nhất chứng minh effect chạy lại theo location.pathname
-    // thay vì chỉ chạy 1 lần lúc mount.
+  it('mỗi lần đổi route phát lại, route và referrerRoute là mẫu route (không mang slug, mã đơn thật)', () => {
+    // Hook kết hợp useNavigate() + useScreenTracker() để mô phỏng điều hướng thật (không chỉ re-render): chứng minh effect chạy lại theo
+    // location.pathname thay vì chỉ chạy 1 lần lúc mount.
     const { result } = renderHook(
       () => {
         const navigate = useNavigate();
@@ -44,28 +43,19 @@ describe('useScreenTracker', () => {
       { wrapper },
     );
 
-    expect(trackEvent).toHaveBeenCalledTimes(1);
+    act(() => result.current('/product/nuoc-rua-chen-bo-ket'));
+    act(() => result.current('/order/TB2611ABC'));
+    act(() => result.current('/feed/events'));
+    act(() => result.current('/recycle/r/abc123/edit'));
 
-    act(() => {
-      result.current('/cart');
-    });
-    expect(trackEvent).toHaveBeenCalledTimes(2);
-    expect(trackEvent).toHaveBeenNthCalledWith(
-      2,
-      'screen_viewed',
-      'miniapp',
-      expect.objectContaining({ route: '/cart', prevRoute: '/home' }),
-    );
-
-    act(() => {
-      result.current('/checkout');
-    });
-    expect(trackEvent).toHaveBeenCalledTimes(3);
-    expect(trackEvent).toHaveBeenNthCalledWith(
-      3,
-      'screen_viewed',
-      'miniapp',
-      expect.objectContaining({ route: '/checkout', prevRoute: '/cart' }),
-    );
+    const calls = vi.mocked(trackEvent).mock.calls.map((c) => c[2]);
+    expect(calls.map((p) => [p.route, p.referrerRoute])).toEqual([
+      ['/home', null],
+      ['/product/:slug', '/home'],
+      ['/order/:code', '/product/:slug'],
+      ['/feed/events', '/order/:code'],
+      ['/recycle/r/:id/edit', '/feed/events'],
+    ]);
+    expect(calls.every((p) => !('prevRoute' in p))).toBe(true);
   });
 });

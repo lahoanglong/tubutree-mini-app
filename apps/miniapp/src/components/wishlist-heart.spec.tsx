@@ -225,3 +225,36 @@ describe('WishlistHeart: tên theo sản phẩm (a11y A6)', () => {
     await waitFor(() => expect(btn.querySelector('svg')!.getAttribute('class') ?? '').not.toContain('tubu-heart-pop'));
   });
 });
+
+describe('WishlistHeart onLike', () => {
+  it('chỉ chạy khi lần chạm thật sự thêm vào yêu thích, không chạy khi bỏ thích', async () => {
+    auth.status = 'authenticated';
+    api.getWishlistIds.mockResolvedValue([]);
+    api.addWishlist.mockResolvedValue(undefined);
+    api.removeWishlist.mockResolvedValue(undefined);
+    const onLike = vi.fn();
+    const qc = new QueryClient();
+    qc.setQueryData(['wishlist-ids'], []);
+    render(
+      <QueryClientProvider client={qc}>
+        <WishlistHeart productId="p1" onLike={onLike} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm yêu thích' }));
+    expect(onLike).toHaveBeenCalledTimes(1);
+    fireEvent.click(await screen.findByRole('button', { name: 'Bỏ yêu thích' }));
+    expect(onLike).toHaveBeenCalledTimes(1);
+  });
+
+  it('chưa đăng nhập: chạm chỉ mở đăng nhập, không tính là thêm yêu thích', () => {
+    const onLike = vi.fn();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <WishlistHeart productId="p1" onLike={onLike} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Thêm yêu thích' }));
+    expect(login).toHaveBeenCalledTimes(1);
+    expect(onLike).not.toHaveBeenCalled();
+  });
+});

@@ -67,6 +67,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 import FlashSalePage from './flash-sale';
 import { HttpError } from '../services/http';
 import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
+import { takeCheckoutEntry } from '../services/analytics';
 
 const NOW = new Date('2026-11-01T06:00:00Z'); // 13:00 giờ VN
 const iso = (h: number) => new Date(NOW.getTime() + h * 3_600_000).toISOString();
@@ -514,6 +515,8 @@ describe('Trang Giờ vàng: Mua ngay', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Mua ngay Sản phẩm a' }));
     await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v-a', 1, 'buy_now'));
     await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/checkout', { state: { itemIds: ['line-x'] } }));
+    // Trang thanh toán đọc dấu này cho `checkout_started.entry`.
+    expect(takeCheckoutEntry()).toBe('flash');
   });
 
   it('thêm giỏ lỗi (hết suất giữa chừng): báo lỗi, ở lại trang, không sang thanh toán', async () => {

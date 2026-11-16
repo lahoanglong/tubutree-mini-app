@@ -53,11 +53,13 @@ vi.mock('../components/checkout/voucher-sheet', () => ({
   },
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../services/analytics', () => ({ trackEvent: vi.fn(), setCheckoutEntry: vi.fn() }));
 
 import CartPage from './cart';
 import { useStorefrontContext } from '../store/storefront-context';
 import { HttpError } from '../services/http';
 import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
+import { setCheckoutEntry, trackEvent } from '../services/analytics';
 
 const GONE = {
   id: 'ci-gone',
@@ -2330,5 +2332,35 @@ describe('CartPage: máy chủ từ chối thì giữ khoá tới khi giỏ làm
       await settle();
       expect(filters(invalidate)).toEqual([]);
     });
+  });
+});
+
+describe('CartPage — sự kiện phễu mua', () => {
+  const LINE_B = { ...OK_LINE, id: 'ci-b', variationId: 'v-b', productName: 'Dầu gội', slug: 'dg', unitPrice: 100_000, total: 100_000 };
+  const cartViewed = () => vi.mocked(trackEvent).mock.calls.filter((c) => c[0] === 'cart_viewed').map((c) => c[2]);
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCartSelection.mockResolvedValue(summary({ items: [LINE_B], subtotal: 100_000, itemCount: 1 }));
+  });
+
+  it('cart_viewed một lần khi giỏ có dữ liệu lần đầu: số dòng và nhóm tiền hàng, giỏ tải lại không phát thêm', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [OK_LINE, LINE_B], subtotal: 150_000, itemCount: 2 }));
+    renderPage();
+    await screen.findByRole('button', { name: 'Thanh toán (2)' });
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+    await screen.findByRole('button', { name: 'Thanh toán (1)' });
+    expect(cartViewed()).toEqual([{ itemCount: 2, subtotalBucket: '100-199k' }]);
+  });
+
+  it('Thanh toán cả giỏ → dấu cart; bỏ chọn một món → dấu cart_subset (ghi trước khi chuyển trang)', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [OK_LINE, LINE_B], subtotal: 150_000, itemCount: 2 }));
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Thanh toán (2)' }));
+    expect(setCheckoutEntry).toHaveBeenLastCalledWith('cart');
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Chọn Xà bông thảo mộc' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Thanh toán (1)' }));
+    expect(setCheckoutEntry).toHaveBeenLastCalledWith('cart_subset');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/checkout', { state: { itemIds: ['ci-b'] } });
+    expect(vi.mocked(setCheckoutEntry).mock.invocationCallOrder[1]!).toBeLessThan(mocks.navigate.mock.invocationCallOrder.at(-1)!);
   });
 });

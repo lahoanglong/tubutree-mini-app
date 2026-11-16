@@ -91,6 +91,8 @@ export function RecentlyViewedRail({ title = browseText.recentlyViewed, reserve 
                 priority={index < priorityCount}
                 variant="rail-sm"
                 hidePrice={!product}
+                shelf="recent"
+                position={index + 1}
               />
             </RailCell>
           );

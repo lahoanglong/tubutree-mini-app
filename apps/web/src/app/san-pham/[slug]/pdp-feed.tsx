@@ -14,7 +14,7 @@ export function PdpFeed({ items }: { items: readonly CoreProductCard[] }) {
         {fillCopy('pdp.alsoLike')}
       </h2>
       <div className="mt-3">
-        <ProductGrid items={items} variant="grid" />
+        <ProductGrid items={items} variant="grid" shelf="pdpFeed" />
       </div>
     </section>
   );

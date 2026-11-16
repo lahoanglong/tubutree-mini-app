@@ -2,7 +2,17 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 vi.mock('./api', () => ({ api: { post: vi.fn().mockResolvedValue({ data: { accepted: 1 } }) } }));
 
-import { trackEvent, trackAppOpened, flushEventQueue, flushEventQueueOnHide, __resetQueueForTest } from './analytics';
+import {
+  trackEvent,
+  trackAppOpened,
+  flushEventQueue,
+  flushEventQueueOnHide,
+  getSessionId,
+  setCheckoutEntry,
+  takeCheckoutEntry,
+  SESSION_IDLE_MS,
+  __resetQueueForTest,
+} from './analytics';
 import { __resetEntrySourceForTest } from '../utils/entry-source';
 import { api } from './api';
 
@@ -134,5 +144,80 @@ describe('flushEventQueueOnHide', () => {
     const calls = (api.post as ReturnType<typeof vi.fn>).mock.calls;
     const totalSent = calls.reduce((sum, call) => sum + call[1].events.length, 0);
     expect(totalSent).toBe(75);
+  });
+});
+
+describe('sessionId trên phong bì sự kiện', () => {
+  const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+  const sessionIds = async () => {
+    await flushEventQueue();
+    return (api.post as ReturnType<typeof vi.fn>).mock.calls.flatMap((c) => c[1].events.map((e: { sessionId: string }) => e.sessionId));
+  };
+
+  beforeEach(() => {
+    __resetQueueForTest();
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-16T08:00:00Z'));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it('mọi sự kiện trong phiên mang cùng một sessionId dạng UUID v4', async () => {
+    trackEvent('screen_viewed', 'miniapp', { route: '/' });
+    vi.setSystemTime(new Date('2026-11-16T08:20:00Z'));
+    trackEvent('cart_viewed', 'miniapp', { itemCount: 1, subtotalBucket: '0-99k' });
+    vi.setSystemTime(new Date('2026-11-16T08:45:00Z'));
+    trackEvent('screen_viewed', 'miniapp', { route: '/cart' });
+    const ids = await sessionIds();
+    expect(ids).toHaveLength(3);
+    expect(ids[0]).toMatch(UUID_V4);
+    expect(new Set(ids).size).toBe(1);
+  });
+
+  it('30 phút không có sự kiện nào → sang mã phiên mới', async () => {
+    trackEvent('screen_viewed', 'miniapp', { route: '/' });
+    vi.setSystemTime(Date.now() + SESSION_IDLE_MS - 1);
+    trackEvent('screen_viewed', 'miniapp', { route: '/cart' });
+    vi.setSystemTime(Date.now() + SESSION_IDLE_MS);
+    trackEvent('screen_viewed', 'miniapp', { route: '/' });
+    const [a, b, c] = await sessionIds();
+    expect(a).toBe(b);
+    expect(c).not.toBe(b);
+    expect(c).toMatch(UUID_V4);
+  });
+
+  it('đọc mã phiên (getSessionId) không gia hạn phiên, chỉ sự kiện mới gia hạn', async () => {
+    trackEvent('screen_viewed', 'miniapp', { route: '/' });
+    const first = getSessionId();
+    vi.setSystemTime(Date.now() + SESSION_IDLE_MS - 1000);
+    expect(getSessionId()).toBe(first);
+    vi.setSystemTime(Date.now() + 1000);
+    expect(getSessionId()).not.toBe(first);
+  });
+
+  it('máy không có crypto.randomUUID vẫn sinh eventId và sessionId dạng UUID v4', async () => {
+    vi.stubGlobal('crypto', {});
+    trackEvent('screen_viewed', 'miniapp', { route: '/' });
+    await flushEventQueue();
+    const e = (api.post as ReturnType<typeof vi.fn>).mock.calls[0]![1].events[0];
+    expect(e.eventId).toMatch(UUID_V4);
+    expect(e.sessionId).toMatch(UUID_V4);
+  });
+});
+
+describe('dấu nơi vào thanh toán', () => {
+  beforeEach(() => __resetQueueForTest());
+
+  it('lấy ra đúng một lần rồi về unknown', () => {
+    setCheckoutEntry('buy_now');
+    expect(takeCheckoutEntry()).toBe('buy_now');
+    expect(takeCheckoutEntry()).toBe('unknown');
+  });
+
+  it('chưa ghi dấu → unknown', () => {
+    expect(takeCheckoutEntry()).toBe('unknown');
   });
 });

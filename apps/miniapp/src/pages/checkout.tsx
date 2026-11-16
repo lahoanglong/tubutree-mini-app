@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { QuotePendingGiftDTO } from '@tubutree/shared-types';
+import { CHECKOUT_STEPS, type CheckoutLastStep, type CheckoutStep, type QuotePendingGiftDTO } from '@tubutree/shared-types';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -10,7 +10,7 @@ import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
 import { getErrorCode, getErrorMessage, getLoadErrorMessage, isOutcomeUnknown, isStaleStateError } from '../services/api';
 import { isHttpError } from '../services/http';
-import { trackEvent } from '../services/analytics';
+import { takeCheckoutEntry, trackEvent } from '../services/analytics';
 import { useAuthStore } from '../store/auth';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
@@ -319,29 +319,40 @@ export default function CheckoutPage() {
     if (next !== payment) setPayment(next);
   }, [payment, quote.data, walletBalanceLive]);
 
-  // Phát 'checkout_started' đúng 1 LẦN cho lần quote thành công đầu tiên (không phát lại mỗi
-  // khi quote refetch — vd đổi địa chỉ/mã giảm giá làm quote chạy lại nhiều lần trong 1 phiên).
-  const trackedCheckoutStarted = useRef(false);
+  // Phễu thanh toán: `last` là bước xa nhất đã tới (như web), quay lại sửa địa chỉ sau khi đã bấm đặt vẫn tính là bỏ dở ở bước đặt.
+  const funnel = useRef({ started: false, done: false, last: 'started' as CheckoutLastStep });
+  const funnelStep = (step: CheckoutStep, paymentMethod?: string) => {
+    const f = funnel.current;
+    if (f.done) return;
+    if (CHECKOUT_STEPS.indexOf(step) > CHECKOUT_STEPS.indexOf(f.last as CheckoutStep)) f.last = step;
+    trackEvent('checkout_step', 'miniapp', { step, paymentMethod });
+  };
   // Khoá đồng bộ "Thử lại" báo giá: lỗi báo giá giữ nguyên dòng báo trong lúc tải lại nên khách không thấy gì xảy ra và chạm tiếp,
   // mà báo giá đã có số cũ thì mỗi `refetch()` huỷ lần trước rồi hỏi lại.
   const quoteRetrying = useRef(false);
+  // `checkout_started` một lần cho báo giá thành công đầu tiên (báo giá chạy lại khi đổi địa chỉ/mã không phát thêm).
   useEffect(() => {
-    if (!quote.isSuccess || trackedCheckoutStarted.current) return;
-    trackedCheckoutStarted.current = true;
-    void trackEvent('checkout_started', 'miniapp', {
-      itemCount: itemIds?.length ?? cart.data?.items?.length ?? 0,
-      subtotal: quote.data?.subtotal ?? 0,
-      // Hạn chế đã biết (review 2026-09-28, CHẤP NHẬN cho MVP): `entry` không phân biệt được
-      // "Mua ngay" (PDP) với "checkout MỘT PHẦN giỏ" (trang Giỏ bỏ chọn vài món) — cả 2 đều có
-      // `itemIds` nên đều bị gắn nhãn 'buy_now'. Phân biệt đúng cần thêm cờ `checkoutEntry`
-      // truyền qua navigation state ở CẢ product-detail.tsx lẫn cart.tsx + mở rộng
-      // utils/checkout-selection.ts để sống sót qua reload — phạm vi rộng hơn task này, để dành
-      // cho whole-branch review. `isSubset` là bước trung gian rẻ tiền: tối thiểu phân biệt
-      // được "có chọn tập con" hay không.
-      entry: itemIds ? 'buy_now' : 'cart',
-      isSubset: !!itemIds,
+    const f = funnel.current;
+    if (!quote.isSuccess || f.started) return;
+    f.started = true;
+    // Nơi bấm (Giỏ, Mua ngay, Giờ vàng) ghi dấu ngay trước khi chuyển trang; không có dấu (tải lại trang) thì suy từ lựa chọn còn nhớ.
+    const entry = takeCheckoutEntry();
+    trackEvent('checkout_started', 'miniapp', {
+      entry: entry !== 'unknown' ? entry : itemIds ? 'cart_subset' : 'cart',
+      itemCount: Math.min(itemIds?.length ?? cart.data?.items.length ?? 0, 500),
     });
+    // Báo giá cần địa chỉ: đây là lần đầu đơn có địa chỉ (chọn sẵn, hoặc khách vừa lưu địa chỉ đầu tiên) và lần đầu khách thấy phí giao.
+    funnelStep('address_saved');
+    funnelStep('shipping_quote_shown');
   }, [quote.isSuccess]);
+  useEffect(() => {
+    const f = funnel.current;
+    return () => {
+      if (!f.started || f.done) return;
+      f.done = true;
+      trackEvent('checkout_abandoned', 'miniapp', { lastStep: f.last });
+    };
+  }, []);
 
   const order = useLockedMutation({
     mutationFn: () => {
@@ -385,6 +396,7 @@ export default function CheckoutPage() {
       return placeOrder(body, key);
     },
     onSuccess: (o) => {
+      funnel.current.done = true;
       unknownAttempt.current = null;
       setUnknownRev(null);
       setMaybePlaced(false);
@@ -736,6 +748,8 @@ export default function CheckoutPage() {
           addresses={addresses.data ?? []}
           selectedId={addressId}
           onSelect={chosen(setAddressId)}
+          // Địa chỉ lưu trước báo giá đầu đã được tính ở `checkout_started`, không đếm hai lần.
+          onSaved={() => funnel.current.started && funnelStep('address_saved')}
           quoteOutdated={addressOutdated && !quote.isFetching}
         />
       </div>
@@ -1003,7 +1017,10 @@ export default function CheckoutPage() {
               if (m.disabled) return;
               haptic('light');
               // Chạm lại đúng cách đang chọn không phải là đổi lựa chọn: không được mở băng của lần đặt chưa rõ kết quả.
-              if (m.value !== payment) chosen(setPayment)(m.value);
+              if (m.value !== payment) {
+                funnelStep('payment_method_selected', m.value);
+                chosen(setPayment)(m.value);
+              }
             }}
             flex
             alignItems="center"
@@ -1370,6 +1387,7 @@ export default function CheckoutPage() {
                 return;
               }
               setSubmitting(true);
+              funnelStep('place_order_click');
               try {
                 // Xin SĐT đúng lúc đặt hàng (như Homefarm) nếu tài khoản chưa có — không chặn nếu user từ chối.
                 await useAuthStore.getState().ensurePhone().catch(() => undefined);

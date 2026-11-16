@@ -9,6 +9,8 @@ import { Check, Loader2, Play, Star, Video } from 'lucide-react';
 import { reviewMediaItems } from '@tubutree/app-core/commerce/review-media';
 import { ReviewMediaLightbox } from '@/components/review-media-lightbox';
 import { canPdpQuickAdd, requestPdpQuickAdd } from '@/lib/pdp-quick-add';
+import { trackPurchase } from '@/lib/analytics';
+import { orderAgeDays } from '@/components/analytics/funnel';
 import { REVIEW_NEEDS_PURCHASE } from '@tubutree/app-core/review-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useHydrated } from '@/lib/use-hydrated';
@@ -104,7 +106,7 @@ function ListFailed({ onRetry }: { onRetry: () => void | PromiseLike<unknown> })
  * chủ hiểu lần gửi không kèm đơn (bản app cũ) là sửa đánh giá mới nhất khi mọi lần mua đã có đánh giá.
  */
 type FormTarget =
-  | { kind: 'new'; orderId: string; orderCode: string | null }
+  | { kind: 'new'; orderId: string; orderCode: string | null; deliveredAt: string | null }
   | { kind: 'edit'; reviewId: string; orderId: string; orderCode: string | null };
 
 /**
@@ -205,9 +207,18 @@ export function ProductReviews({ slug }: { slug: string }) {
     setNotice(null);
     setTarget(t);
   };
-  const newTarget = (o: ReviewableOrder): FormTarget => ({ kind: 'new', orderId: o.orderId, orderCode: o.code });
+  const newTarget = (o: ReviewableOrder): FormTarget => ({ kind: 'new', orderId: o.orderId, orderCode: o.code, deliveredAt: o.deliveredAt });
   const editTarget = (r: MyReviewRef): FormTarget => ({ kind: 'edit', reviewId: r.id, orderId: r.orderId, orderCode: r.orderCode });
   const openEdit = (r: MyReviewRef) => openForm(editTarget(r));
+
+  // `review_started` mỗi lần mở form viết đánh giá mới (nút hay liên kết từ chi tiết đơn); sửa đánh giá cũ không tính.
+  const startedTarget = useRef<FormTarget | null>(null);
+  useEffect(() => {
+    if (target?.kind !== 'new' || startedTarget.current === target) return;
+    startedTarget.current = target;
+    const age = orderAgeDays(target.deliveredAt);
+    if (age !== null) trackPurchase('review_started', { orderAgeDays: age });
+  }, [target]);
 
   const deepLinked = useRef(false);
   useEffect(() => {
@@ -565,6 +576,7 @@ function ReviewEditor({
       initial={myQ.data}
       orderId={target.orderId}
       orderCode={target.orderCode}
+      deliveredAt={target.kind === 'new' ? target.deliveredAt : null}
       {...rest}
     />
   );
@@ -576,6 +588,7 @@ function ReviewForm({
   initial,
   orderId,
   orderCode,
+  deliveredAt,
   purchaseCount,
   rewardAvailable,
   hidden,
@@ -587,6 +600,8 @@ function ReviewForm({
   initial?: MyReview;
   orderId: string;
   orderCode: string | null;
+  /** Mốc giao của lần mua đang đánh giá (chỉ đánh giá mới): tuổi đơn của `review_submitted`. */
+  deliveredAt: string | null;
   purchaseCount: number;
   rewardAvailable: boolean;
   /** Đánh giá đang sửa bị Tubu ẩn: lưu không làm nó hiện lại, nên không được báo như thể đã đổi được gì. */
@@ -640,6 +655,8 @@ function ReviewForm({
       void qc.invalidateQueries({ queryKey: ['order'] });
       // Đánh giá đầu tiên của sản phẩm cộng Điểm Xanh: trang Điểm Xanh, ví và Thanh toán đọc số dư từ ['loyalty'].
       void qc.invalidateQueries({ queryKey: ['loyalty'] });
+      const age = isEdit ? null : orderAgeDays(deliveredAt);
+      if (age !== null) trackPurchase('review_submitted', { orderAgeDays: age });
       onSaved(savedMessage(res, hidden || initial?.isVisible === false));
     },
     onSettled: () => {

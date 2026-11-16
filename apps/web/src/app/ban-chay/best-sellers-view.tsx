@@ -132,7 +132,7 @@ export default function BestSellersView({ initial = null, categories: initialCat
         ) : (
           <>
             <div ref={gridRef}>
-              <ProductGrid items={list} variant="rank" rankFrom={bestSellersRankFrom(startPage)} className={GRID_RANK} priorityCount={PRIORITY_CARDS} />
+              <ProductGrid items={list} variant="rank" rankFrom={bestSellersRankFrom(startPage)} className={GRID_RANK} priorityCount={PRIORITY_CARDS} shelf="bestSellersPage" />
             </div>
             {/* Lỗi khi ĐÃ có dữ liệu ("Xem thêm" hoặc làm mới nền thất bại): giữ nguyên danh sách, báo và thử lại tại chỗ. */}
             {products.isError && (

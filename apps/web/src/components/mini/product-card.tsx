@@ -14,6 +14,7 @@ import { useFlashNow } from '@/lib/flash-now';
 import { useFlashExpiry } from '@/lib/use-flash-expiry';
 import { useFreeShipThreshold } from '@/lib/use-free-ship-threshold';
 import { useHydrated } from '@/lib/use-hydrated';
+import { trackCardClick } from '@/components/analytics/funnel';
 import { ProductTile } from './product-tile';
 
 /** Số thẻ đầu trên màn hình đầu (hai hàng trên mobile, một hàng từ md): ảnh của chúng là ứng viên LCP nên tải ngay. */
@@ -44,6 +45,9 @@ export interface ProductCardProps {
   /** Chưa biết giá thật (Đã xem gần đây đang tải): không in giá, vẫn giữ chỗ. */
   hidePrice?: boolean;
   onOpen?: () => void;
+  /** Kệ/danh sách chứa thẻ (`product_card_click.shelf`, vd. `bestSellers`) và vị trí đếm từ 1 trong đó; thiếu một trong hai thì chạm thẻ không được đếm. */
+  shelf?: string;
+  position?: number;
 }
 
 const HEART_VARIANTS: ReadonlySet<CardVariant> = new Set(['grid', 'rail-md', 'rank']);
@@ -73,6 +77,8 @@ export function ProductCard({
   addLabel,
   hidePrice,
   onOpen,
+  shelf,
+  position,
 }: ProductCardProps) {
   const hydrated = useHydrated();
   const activeFlash = useActiveFlashSales();
@@ -81,6 +87,14 @@ export function ProductCard({
   const now = useFlashNow();
   const flash = flashProp !== undefined ? flashProp : pickCardFlash(product, activeFlash, now);
   useFlashExpiry(flash?.endAt);
+
+  const open =
+    shelf && position
+      ? () => {
+          trackCardClick(shelf, position, product.slug);
+          onOpen?.();
+        }
+      : onOpen;
 
   const knownLaunch = hydrated && launchDate !== undefined;
   const view = productCardView({
@@ -107,7 +121,7 @@ export function ProductCard({
       onAdd={onAdd}
       addLabel={addLabel}
       hidePrice={hidePrice}
-      onOpen={onOpen}
+      onOpen={open}
       imageOverlay={view.stock === 'out' ? undefined : imageOverlay}
       wishlist={showWishlist && HEART_VARIANTS.has(variant) ? <WishlistHeart productId={product.id} productName={product.name} floating /> : undefined}
     />
