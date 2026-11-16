@@ -14,17 +14,20 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getProductStock: m.getProductStock,
 }));
 
-import { takeReturnTo } from '@/lib/return-to';
-import { GUEST_MERGE_NOTE_KEY, mergeGuestCartAfterLogin, takeGuestMergeNote } from './after-login';
+import { ApiError, NetworkError } from '@/lib/client-api';
+import { rememberReturnTo, takeReturnTo } from '@/lib/return-to';
+import { GUEST_MERGE_NOTE_KEY, mergeGuestCartAfterLogin, runGuestMerge, takeGuestMergeNote } from './after-login';
 import { guestCartFlagNow, guestCartOn } from './flag';
 import { resetGuestMergeForTest } from './merge';
 import { addGuestLine, readGuestCart } from './store';
 
+const CONFIG = { freeshipThreshold: 199_000 };
 const clientWith = (cfg: Record<string, unknown> | null) => {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  if (cfg) qc.setQueryData(['public-config'], { freeshipThreshold: 199_000, ...cfg });
+  if (cfg) qc.setQueryData(['public-config'], { ...CONFIG, ...cfg });
   return qc;
 };
+const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
 
 const deferred = <T,>() => {
   let resolve!: (v: T) => void;
@@ -43,6 +46,7 @@ beforeEach(() => {
   m.getProductStock.mockReset().mockResolvedValue({ v1: 5, v2: 5 });
 });
 afterEach(() => {
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -61,6 +65,13 @@ describe('mergeGuestCartAfterLogin', () => {
     expect(readGuestCart()).toBe(before);
     expect(takeReturnTo()).toBeNull();
     expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  it.each(['/', '/uu-dai'])('cờ tắt: returnTo đã lưu (%s) không bị đổi', async (stored) => {
+    addGuestLine({ variationId: 'v1', slug: 'sp-1', quantity: 2 });
+    rememberReturnTo(stored);
+    await mergeGuestCartAfterLogin(clientWith({ webGuestCartEnabled: false }));
+    expect(takeReturnTo()).toBe(stored);
   });
 
   it('API cũ không trả cờ: coi như tắt', async () => {
@@ -90,15 +101,38 @@ describe('mergeGuestCartAfterLogin', () => {
     expect(takeGuestMergeNote()).toBeNull();
   });
 
-  it('có dòng hỏng hay bị giảm: để lời báo; takeGuestMergeNote đọc một lần rồi null', async () => {
+  it.each([
+    [null, '/gio-hang'],
+    ['/', '/gio-hang'],
+    ['/gio-hang', '/gio-hang'],
+    ['/uu-dai', '/uu-dai'],
+    ['/san-pham/dau-goi', '/san-pham/dau-goi'],
+  ])('cờ bật: returnTo đã lưu %s → %s (chỉ Trang chủ, giỏ hay chưa có mới đổi sang giỏ)', async (stored, expected) => {
+    addGuestLine({ variationId: 'v1', slug: 'sp-1', quantity: 1 });
+    if (stored) rememberReturnTo(stored);
+    await mergeGuestCartAfterLogin(clientWith({ webGuestCartEnabled: true }));
+    expect(takeReturnTo()).toBe(expected);
+    expect(m.addToCart).toHaveBeenCalledTimes(1);
+  });
+
+  it('có dòng hỏng, bị giảm hay chưa gộp được: để lời báo đủ ba số; takeGuestMergeNote đọc một lần rồi null', async () => {
     addGuestLine({ variationId: 'v1', slug: 'sp-1', quantity: 4 });
     addGuestLine({ variationId: 'v2', slug: 'sp-2', quantity: 1 });
-    m.getProductStock.mockImplementation(async (slug: string) => (slug === 'sp-1' ? { v1: 2 } : { v2: 0 }));
+    addGuestLine({ variationId: 'v3', slug: 'sp-3', quantity: 1 });
+    m.getProductStock.mockImplementation(async (slug: string) => ({ 'sp-1': { v1: 2 }, 'sp-2': { v2: 0 }, 'sp-3': { v3: 5 } })[slug]);
+    m.addToCart.mockImplementation(async (variationId: string, quantity: number) => {
+      if (variationId === 'v3') throw new ApiError('Bảo trì', 503);
+      return { items: [{ variationId, quantity }] };
+    });
 
     await mergeGuestCartAfterLogin(clientWith({ webGuestCartEnabled: true }));
 
-    expect(m.addToCart.mock.calls).toEqual([['v1', 2]]);
-    expect(takeGuestMergeNote()).toEqual({ failedLines: 1, reduced: 1 });
+    expect(m.addToCart.mock.calls).toEqual([
+      ['v1', 2],
+      ['v3', 1],
+    ]);
+    expect(readGuestCart().map((l) => l.variationId)).toEqual(['v3']);
+    expect(takeGuestMergeNote()).toEqual({ failedLines: 1, reduced: 1, kept: 1 });
     expect(takeGuestMergeNote()).toBeNull();
     expect(sessionStorage.getItem(GUEST_MERGE_NOTE_KEY)).toBeNull();
   });
@@ -112,13 +146,23 @@ describe('mergeGuestCartAfterLogin', () => {
     expect(takeReturnTo()).toBeNull();
   });
 
-  it('không bao giờ ném: mọi lời gọi mạng đều lỗi thì vẫn xong, dòng lỗi được báo', async () => {
+  it('không bao giờ ném: không tải được giỏ máy chủ thì giữ cả giỏ khách và báo "chưa chuyển được"', async () => {
     addGuestLine({ variationId: 'v1', slug: 'sp-1', quantity: 1 });
-    m.getCart.mockRejectedValue(new Error('network'));
-    m.getProductStock.mockRejectedValue(new Error('network'));
-    m.addToCart.mockRejectedValue(new Error('500'));
+    m.getCart.mockRejectedValue(new NetworkError(false));
     await expect(mergeGuestCartAfterLogin(clientWith({ webGuestCartEnabled: true }))).resolves.toBeUndefined();
-    expect(takeGuestMergeNote()).toEqual({ failedLines: 1, reduced: 0 });
+    expect(m.addToCart).not.toHaveBeenCalled();
+    expect(readGuestCart().map((l) => l.variationId)).toEqual(['v1']);
+    expect(takeGuestMergeNote()).toEqual({ failedLines: 0, reduced: 0, kept: 1 });
+  });
+
+  it('không bao giờ ném: QueryClient ném khi đọc cờ', async () => {
+    addGuestLine({ variationId: 'v1', slug: 'sp-1', quantity: 1 });
+    const qc = clientWith(null);
+    vi.spyOn(qc, 'getQueryData').mockImplementation(() => {
+      throw new Error('hỏng');
+    });
+    await expect(mergeGuestCartAfterLogin(qc)).resolves.toBeUndefined();
+    expect(readGuestCart()).toHaveLength(1);
   });
 
   it('gộp chậm hơn waitMs: trả về đúng hạn (không chặn đăng nhập); gộp xong sau đó vẫn tải lại giỏ', async () => {
@@ -136,6 +180,73 @@ describe('mergeGuestCartAfterLogin', () => {
     slow.resolve({ items: [{ variationId: 'v1', quantity: 1 }] });
     await vi.waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['cart'] }));
   });
+
+  it('cấu hình chưa có trong cache (trang callback mới tải): chờ cờ tới waitMs, không bỏ cuộc sau 1,5 giây', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    addGuestLine({ variationId: 'v1', slug: 'sp-1', quantity: 1 });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        String(url).includes('/config/public')
+          ? new Promise<Response>((resolve) => setTimeout(() => resolve(json({ ...CONFIG, webGuestCartEnabled: true })), 3_000))
+          : Promise.resolve(json({})),
+      ),
+    );
+
+    const done = mergeGuestCartAfterLogin(clientWith(null));
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(m.getCart).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1_100);
+    await done;
+
+    expect(m.addToCart.mock.calls).toEqual([['v1', 1]]);
+    expect(takeReturnTo()).toBe('/gio-hang');
+  });
+
+  it('cờ không về trong waitMs: không gộp, không đổi returnTo, giỏ khách còn nguyên cho trang giỏ gộp sau', async () => {
+    addGuestLine({ variationId: 'v1', slug: 'sp-1', quantity: 1 });
+    let answer: (r: Response) => void = () => {};
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        String(url).includes('/config/public')
+          ? new Promise<Response>((resolve) => {
+              answer = resolve;
+            })
+          : Promise.resolve(json({})),
+      ),
+    );
+
+    await mergeGuestCartAfterLogin(clientWith(null), 60);
+    expect(m.getCart).not.toHaveBeenCalled();
+    expect(takeReturnTo()).toBeNull();
+
+    answer(json({ ...CONFIG, webGuestCartEnabled: true }));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(m.getCart).not.toHaveBeenCalled();
+    expect(takeReturnTo()).toBeNull();
+    expect(readGuestCart().map((l) => l.variationId)).toEqual(['v1']);
+  });
+});
+
+describe('runGuestMerge', () => {
+  it('gộp, ghi lời báo khi có dòng chưa đủ, tải lại giỏ; trả kết quả', async () => {
+    addGuestLine({ variationId: 'v1', slug: 'sp-1', quantity: 9 });
+    const qc = clientWith(null);
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    expect(await runGuestMerge(qc)).toEqual({ lines: 1, merged: 1, reduced: 1, failedLines: 0, kept: 0 });
+    expect(m.addToCart.mock.calls).toEqual([['v1', 5]]);
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['cart'] });
+    expect(takeGuestMergeNote()).toEqual({ failedLines: 0, reduced: 1, kept: 0 });
+  });
+
+  it('không có gì để gộp: null, không tải lại giỏ, không lời báo', async () => {
+    const qc = clientWith(null);
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    expect(await runGuestMerge(qc)).toBeNull();
+    expect(invalidate).not.toHaveBeenCalled();
+    expect(takeGuestMergeNote()).toBeNull();
+  });
 });
 
 describe('takeGuestMergeNote', () => {
@@ -143,27 +254,31 @@ describe('takeGuestMergeNote', () => {
   const NOW = 1_800_000_000_000;
 
   it('lời báo quá 10 phút, có mốc ở tương lai, hỏng hay không có số nào: null và đã xoá', () => {
-    put({ failedLines: 1, reduced: 0, at: NOW - 10 * 60_000 - 1 });
+    put({ failedLines: 1, reduced: 0, kept: 0, at: NOW - 10 * 60_000 - 1 });
     expect(takeGuestMergeNote(NOW)).toBeNull();
     expect(sessionStorage.getItem(GUEST_MERGE_NOTE_KEY)).toBeNull();
 
-    put({ failedLines: 1, reduced: 0, at: NOW + 1 });
+    put({ failedLines: 1, reduced: 0, kept: 0, at: NOW + 1 });
     expect(takeGuestMergeNote(NOW)).toBeNull();
 
     put('{hỏng');
     expect(takeGuestMergeNote(NOW)).toBeNull();
     expect(sessionStorage.getItem(GUEST_MERGE_NOTE_KEY)).toBeNull();
 
-    put({ failedLines: 0, reduced: -2, at: NOW });
+    put({ failedLines: 0, reduced: -2, kept: 0, at: NOW });
     expect(takeGuestMergeNote(NOW)).toBeNull();
 
-    put({ failedLines: 2, reduced: 1 });
+    put({ failedLines: 2, reduced: 1, kept: 1 });
     expect(takeGuestMergeNote(NOW)).toBeNull();
   });
 
-  it('lời báo còn hạn: đọc đúng số, bỏ số không phải nguyên dương', () => {
-    put({ failedLines: 2, reduced: 1.5, at: NOW - 60_000 });
-    expect(takeGuestMergeNote(NOW)).toEqual({ failedLines: 2, reduced: 0 });
+  it('lời báo còn hạn: đọc đúng số, bỏ số không phải nguyên dương; lời báo cũ thiếu kept thì kept 0', () => {
+    put({ failedLines: 2, reduced: 1.5, kept: 3, at: NOW - 60_000 });
+    expect(takeGuestMergeNote(NOW)).toEqual({ failedLines: 2, reduced: 0, kept: 3 });
+    put({ failedLines: 0, reduced: 1, at: NOW });
+    expect(takeGuestMergeNote(NOW)).toEqual({ failedLines: 0, reduced: 1, kept: 0 });
+    put({ failedLines: 0, reduced: 0, kept: 1, at: NOW });
+    expect(takeGuestMergeNote(NOW)).toEqual({ failedLines: 0, reduced: 0, kept: 1 });
   });
 });
 
@@ -177,7 +292,7 @@ describe('guestCartFlagNow / guestCartOn', () => {
   });
 
   it('chưa có cấu hình trong cache: hỏi máy chủ, bật khi máy chủ trả true', async () => {
-    const fetchMock = vi.fn(async () => new Response(JSON.stringify({ freeshipThreshold: 1, webGuestCartEnabled: true }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
+    const fetchMock = vi.fn(async () => json({ ...CONFIG, webGuestCartEnabled: true }));
     vi.stubGlobal('fetch', fetchMock);
     const qc = clientWith(null);
     expect(await guestCartFlagNow(qc, 1_000)).toBe(true);
@@ -186,7 +301,7 @@ describe('guestCartFlagNow / guestCartOn', () => {
   });
 
   it('máy chủ lỗi: tắt', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ message: 'x' }), { status: 500, headers: { 'Content-Type': 'application/json' } })));
+    vi.stubGlobal('fetch', vi.fn(async () => json({ message: 'x' }, 500)));
     expect(await guestCartFlagNow(clientWith(null), 1_000)).toBe(false);
   });
 

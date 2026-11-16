@@ -14,6 +14,11 @@ export interface GuestCartLine {
   slug: string;
   quantity: number;
   addedAt: number;
+  /**
+   * Số lượng phân loại này trong giỏ máy chủ lúc bắt đầu gộp dòng (đặt ngay trước khi gửi). Lần gộp sau thấy mốc này thì nhắm tới
+   * min(tồn, mốc + khách) chứ không cộng thêm lần nữa: lần trước mất mạng sau khi máy chủ đã nhận cũng không thành gấp đôi.
+   */
+  mergeBase?: { inCart: number; at: number };
 }
 
 export type GuestAddResult =
@@ -34,6 +39,19 @@ function storage(): Storage | null {
 
 const clampQty = (n: number) => Math.min(GUEST_CART_MAX_QTY, Math.max(1, Math.floor(n)));
 
+function parseMergeBase(v: unknown): GuestCartLine['mergeBase'] | null {
+  if (!v || typeof v !== 'object') return null;
+  const { inCart, at } = v as Record<string, unknown>;
+  if (typeof inCart !== 'number' || !Number.isInteger(inCart) || inCart < 0 || inCart > 9_999) return null;
+  if (typeof at !== 'number' || !Number.isFinite(at)) return null;
+  return { inCart, at };
+}
+
+/** Dòng khách tự đổi số lượng là ý định mới: bỏ mốc gộp cũ. */
+function withoutBase({ mergeBase: _drop, ...line }: GuestCartLine): GuestCartLine {
+  return line;
+}
+
 /** Đọc mảng đã lưu, bỏ dòng sai dạng, gộp dòng trùng phân loại, kẹp số lượng và số dòng về trần. */
 export function parseGuestCart(raw: string | null): readonly GuestCartLine[] {
   if (!raw) return EMPTY;
@@ -52,9 +70,10 @@ export function parseGuestCart(raw: string | null): readonly GuestCartLine[] {
     if (typeof slug !== 'string' || !SLUG_RE.test(slug)) continue;
     if (typeof quantity !== 'number' || !Number.isFinite(quantity) || quantity < 1) continue;
     const at = typeof addedAt === 'number' && Number.isFinite(addedAt) ? addedAt : 0;
+    const base = parseMergeBase((item as Record<string, unknown>).mergeBase);
     const prev = byId.get(variationId);
     if (prev) prev.quantity = clampQty(prev.quantity + quantity);
-    else if (byId.size < GUEST_CART_MAX_LINES) byId.set(variationId, { variationId, slug, quantity: clampQty(quantity), addedAt: at });
+    else if (byId.size < GUEST_CART_MAX_LINES) byId.set(variationId, { variationId, slug, quantity: clampQty(quantity), addedAt: at, ...(base ? { mergeBase: base } : {}) });
   }
   return byId.size === 0 ? EMPTY : Object.freeze([...byId.values()]);
 }
@@ -111,7 +130,7 @@ export function addGuestLine(
   if (quantity <= have) return { ok: false, reason: 'max' };
   if (!prev && lines.length >= GUEST_CART_MAX_LINES) return { ok: false, reason: 'full' };
   const next = prev
-    ? lines.map((l) => (l === prev ? { ...l, quantity } : l))
+    ? lines.map((l) => (l === prev ? { ...withoutBase(l), quantity } : l))
     : [...lines, { variationId: input.variationId, slug: input.slug, quantity, addedAt: now }];
   if (!write(next)) return { ok: false, reason: 'storage' };
   return { ok: true, added: quantity - have, quantity };
@@ -121,7 +140,14 @@ export function addGuestLine(
 export function setGuestQuantity(variationId: string, quantity: number): boolean {
   const lines = readGuestCart();
   if (!lines.some((l) => l.variationId === variationId) || !Number.isFinite(quantity)) return false;
-  return write(lines.map((l) => (l.variationId === variationId ? { ...l, quantity: clampQty(quantity) } : l)));
+  return write(lines.map((l) => (l.variationId === variationId ? { ...withoutBase(l), quantity: clampQty(quantity) } : l)));
+}
+
+/** Ghi mốc giỏ máy chủ của một dòng ngay trước khi gửi phần gộp (xem `GuestCartLine.mergeBase`). */
+export function markGuestMergeBase(variationId: string, inCart: number, now: number = Date.now()): boolean {
+  const lines = readGuestCart();
+  if (!lines.some((l) => l.variationId === variationId)) return false;
+  return write(lines.map((l) => (l.variationId === variationId ? { ...l, mergeBase: { inCart, at: now } } : l)));
 }
 
 export function removeGuestLine(variationId: string): boolean {

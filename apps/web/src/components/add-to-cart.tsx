@@ -41,7 +41,7 @@ import { firstMeasurable, playCartFeedback } from '@/lib/cart-feedback';
 import { onPdpQuickAdd } from '@/lib/pdp-quick-add';
 import { markCheckoutEntry } from '@/lib/analytics';
 import { trackPdpAction } from '@/components/analytics/funnel';
-import { guestCartFlagNow, useGuestCartFlag } from '@/lib/guest-cart/flag';
+import { useGuestCartFlag } from '@/lib/guest-cart/flag';
 import { addGuestLine, GUEST_CART_MAX_LINES as GUEST_CART_LINE_CAP, guestCartCount, type GuestAddResult } from '@/lib/guest-cart/store';
 import { useGuestCartLines } from '@/lib/guest-cart/use-guest-cart';
 
@@ -380,22 +380,8 @@ export default function AddToCart({
       if (cartWrite.current) return;
       const pick = chosen ?? (selected && available ? { id: selected.id, quantity: qty } : null);
       const target = pick ? variations.find((v) => v.id === pick.id) : undefined;
-      // Cờ đã biết (tải xong hoặc lỗi) thì quyết ngay như trước; chỉ khi cấu hình đang tải lần đầu mới chờ, có hạn. Trong lúc chờ giữ khoá
-      // để chạm thêm không cộng lần hai, và khách đã rời trang thì thôi không đẩy đi đâu.
-      let guestOn = false;
-      if (target && target.stock > 0) {
-        if (guestFlag.pending) {
-          cartWrite.current = true;
-          try {
-            guestOn = await guestCartFlagNow(qc);
-          } finally {
-            cartWrite.current = false;
-          }
-          if (!alive.current) return;
-        } else {
-          guestOn = guestFlag.enabled;
-        }
-      }
+      // Cờ chưa về (cấu hình đang tải lần đầu) thì đi lối cũ ngay, không bắt khách chờ: cờ tắt thì bấm mua vẫn như trước.
+      const guestOn = !guestFlag.pending && guestFlag.enabled && !!target && target.stock > 0;
       if (guestOn && target) {
         userPicked.current = true;
         if (addToGuestCart(target, Math.min(pick!.quantity, qtyPickMax(target.stock)), buyNow)) return;

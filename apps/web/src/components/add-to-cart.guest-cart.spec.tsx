@@ -123,29 +123,29 @@ describe('AddToCart — giỏ khách (cờ bật)', () => {
     expect(guestQty()).toBe(1);
   });
 
-  it('cấu hình công khai chưa về lúc bấm: chạm lần hai trong lúc chờ cờ không cộng thêm', async () => {
-    let answer: (r: Response) => void = () => {};
+  it('cấu hình công khai chưa về lúc bấm (lần tải đầu): đi lối cũ ngay, không chờ cờ, không ghi giỏ khách', async () => {
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (url: string) => {
-        if (String(url).includes('/config/public')) {
-          return new Promise<Response>((resolve) => {
-            answer = resolve;
-          });
-        }
-        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
-      }),
+      vi.fn(async (url: string) =>
+        String(url).includes('/config/public')
+          ? new Promise<Response>(() => {})
+          : new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } }),
+      ),
     );
     const { container } = await mount(clientWith(null));
     await tap(addBtn(container));
-    await flush(1);
-    await tap(addBtn(container));
-    await flush(1);
-    await act(async () => {
-      answer(new Response(JSON.stringify({ ...PUBLIC_CONFIG_FALLBACK, webGuestCartEnabled: true }), { status: 200, headers: { 'Content-Type': 'application/json' } }));
-    });
+
+    expect(mocks.push).toHaveBeenCalledTimes(1);
+    expect(mocks.push).toHaveBeenCalledWith('/dang-nhap?returnTo=%2Fsan-pham%2Fdau-goi');
+    expect(JSON.parse(sessionStorage.getItem(PENDING_ADD_KEY)!)).toMatchObject({ variationId: 'v1', quantity: 1 });
+    expect(readGuestCart()).toEqual([]);
+
+    await tap(buyBtn(container));
+    expect(mocks.push).toHaveBeenCalledTimes(2);
+    expect(JSON.parse(sessionStorage.getItem(PENDING_ADD_KEY)!)).toMatchObject({ variationId: 'v1', quantity: 1, buyNow: true });
     await flush();
-    expect(guestQty()).toBe(1);
+    expect(readGuestCart()).toEqual([]);
+    expect(mocks.push).toHaveBeenCalledTimes(2);
   });
 
   it('"Mua ngay": món vào giỏ khách rồi sang /gio-hang (đặt hàng cần đăng nhập ở đó)', async () => {

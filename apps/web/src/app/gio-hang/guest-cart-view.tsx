@@ -103,7 +103,8 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
 // Dòng giỏ khách dựng từ khuôn Mini App (thẻ nổi, giá, bộ chọn số lượng sm, nút xoá biểu tượng) ở mọi khổ: không có trạng thái chọn món hay hoàn tác
 // như giỏ tài khoản, nên không cần bản dòng riêng cho máy tính.
 function GuestLine({ row, retry }: { row: GuestCartRow; retry: { status: string; refetch?: () => void } | undefined }) {
-  const name = row.productName ?? fillCopy('guestCart.gone');
+  // Chưa tải được sản phẩm thì chưa biết tên: gọi trung tính, không gọi là ngừng bán kẻo khách xoá món vẫn đang bán.
+  const name = row.productName ?? fillCopy(row.state === 'gone' ? 'guestCart.gone' : 'guestCart.itemFallback');
   const buyable = row.state === 'ok';
   const stockNote = buyable ? cartStockNote(row.quantity, row.stock) : null;
   const lineVariation = row.variationName ? variationLabel(row.variationName) : null;

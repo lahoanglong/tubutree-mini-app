@@ -5,7 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
-import { useQuery, useMutationState } from '@tanstack/react-query';
+import { useQuery, useQueryClient, useMutationState } from '@tanstack/react-query';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } from '@tubutree/app-core/cart-copy';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
@@ -50,7 +50,8 @@ import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 import { FreeshipAddons } from './freeship-addons';
 import { GuestCartView } from './guest-cart-view';
 import { useGuestCartFlag } from '@/lib/guest-cart/flag';
-import { takeGuestMergeNote, type GuestMergeNote } from '@/lib/guest-cart/after-login';
+import { runGuestMerge, takeGuestMergeNote, type GuestMergeNote } from '@/lib/guest-cart/after-login';
+import { readGuestCart } from '@/lib/guest-cart/store';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 // 10 giây: người dùng bàn phím/đọc màn hình cần đủ thời gian tới nút "Hoàn tác" (WCAG 2.2.1); đồng hồ còn dừng khi trỏ/focus đang ở trên thanh.
@@ -124,9 +125,22 @@ export default function CartPage() {
   const guestCart = useGuestCartFlag();
   // Món chọn lúc chưa đăng nhập vừa chuyển vào giỏ tài khoản mà có món không chuyển đủ: báo một lần ở đầu giỏ.
   const [mergeNote, setMergeNote] = useState<GuestMergeNote | null>(null);
+  const queryClient = useQueryClient();
   useEffect(() => {
     if (phase === 'authenticated') setMergeNote(takeGuestMergeNote());
   }, [phase]);
+  // Món chưa chuyển được lúc đăng nhập (cấu hình về chậm, mạng chập chờn) thì gộp nốt mỗi lần mở giỏ.
+  useEffect(() => {
+    if (phase !== 'authenticated' || !guestCart.enabled || readGuestCart().length === 0) return;
+    let live = true;
+    void runGuestMerge(queryClient).then(() => {
+      const note = takeGuestMergeNote();
+      if (live && note) setMergeNote(note);
+    });
+    return () => {
+      live = false;
+    };
+  }, [phase, guestCart.enabled, queryClient]);
   // Điện thoại: hàng mã giảm giá nằm trong thanh dính đáy (như Mini App); khổ lớn hơn: trong khung tóm tắt. Một thẻ duy nhất, nên chọn chỗ bằng JS.
   const phoneCoupon = useMediaQuery('(max-width: 767px)');
   const router = useRouter();
@@ -298,8 +312,9 @@ export default function CartPage() {
   }
 
   if (phase === 'guest') {
-    // Cờ đang tải lần đầu: chờ, kẻo tường đăng nhập chớp lên rồi đổi sang giỏ khách.
-    if (guestCart.pending) {
+    // Cờ đang tải lần đầu mà giỏ khách có món (cờ từng bật): chờ, kẻo tường đăng nhập chớp lên rồi đổi sang giỏ khách. Giỏ khách trống thì
+    // hiện tường đăng nhập ngay như khi chưa có giỏ khách.
+    if (guestCart.pending && readGuestCart().length > 0) {
       return (
         <Shell>
           <AuthLoading />
@@ -551,6 +566,7 @@ export default function CartPage() {
         <div role="status" data-testid="guest-merge-note" className="mb-3 space-y-0.5 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
           {mergeNote.failedLines > 0 && <p>{fillCopy('guestCart.mergeFailed', { n: mergeNote.failedLines })}</p>}
           {mergeNote.reduced > 0 && <p>{fillCopy('guestCart.mergeReduced', { n: mergeNote.reduced })}</p>}
+          {mergeNote.kept > 0 && <p>{fillCopy('guestCart.mergeKept', { n: mergeNote.kept })}</p>}
         </div>
       )}
       {cart && (cart.unavailableItems?.length ?? 0) > 0 && (

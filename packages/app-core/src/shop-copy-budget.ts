@@ -382,6 +382,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'guestCart.removeAria': null,
   'guestCart.mergeFailed': 80,
   'guestCart.mergeReduced': 80,
+  'guestCart.mergeKept': 80,
+  'guestCart.itemFallback': 24,
   'cart.subtotalNet': 20,
   'reorder.qtyReduced': 48,
   'reorder.qtyCapped': 48,

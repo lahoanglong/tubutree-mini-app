@@ -8,6 +8,7 @@ import {
   GUEST_CART_MAX_LINES,
   GUEST_CART_MAX_QTY,
   guestCartCount,
+  markGuestMergeBase,
   parseGuestCart,
   readGuestCart,
   removeGuestLine,
@@ -222,5 +223,58 @@ describe('giỏ khách: ảnh chụp và lắng nghe cho useSyncExternalStore', 
     const after = readGuestCart();
     expect(after).not.toBe(before);
     expect(after.map((l) => l.variationId)).toEqual(['v9']);
+  });
+});
+
+describe('giỏ khách: mốc gộp (mergeBase)', () => {
+  const lineOf = (id: string) => readGuestCart().find((l) => l.variationId === id);
+
+  it('markGuestMergeBase ghi mốc lên đúng dòng; dòng không có thì false', () => {
+    addGuestLine({ variationId: 'v1', slug: 'dau-goi', quantity: 2 });
+    addGuestLine({ variationId: 'v2', slug: 'xa-phong', quantity: 1 });
+    expect(markGuestMergeBase('v1', 3, 1000)).toBe(true);
+    expect(lineOf('v1')).toMatchObject({ quantity: 2, mergeBase: { inCart: 3, at: 1000 } });
+    expect(lineOf('v2')!.mergeBase).toBeUndefined();
+    expect(markGuestMergeBase('khong-co', 1, 1000)).toBe(false);
+  });
+
+  it('parseGuestCart giữ mốc hợp lệ, bỏ mốc sai dạng nhưng vẫn giữ dòng', () => {
+    const row = (id: string, mergeBase: unknown) => ({ variationId: id, slug: 'sp', quantity: 1, addedAt: 0, mergeBase });
+    const lines = parseGuestCart(
+      JSON.stringify([
+        row('ok', { inCart: 0, at: 5 }),
+        row('am', { inCart: -1, at: 5 }),
+        row('le', { inCart: 1.5, at: 5 }),
+        row('qua-lon', { inCart: 10_000, at: 5 }),
+        row('chuoi', { inCart: '2', at: 5 }),
+        row('khong-at', { inCart: 2 }),
+        row('at-chuoi', { inCart: 2, at: 'x' }),
+        row('khong-phai-object', 3),
+      ]),
+    );
+    expect(lines.map((l) => l.variationId)).toEqual(['ok', 'am', 'le', 'qua-lon', 'chuoi', 'khong-at', 'at-chuoi', 'khong-phai-object']);
+    expect(lines[0]!.mergeBase).toEqual({ inCart: 0, at: 5 });
+    for (const l of lines.slice(1)) expect(l).not.toHaveProperty('mergeBase');
+  });
+
+  it('khách tự thêm hay đổi số lượng là ý định mới: addGuestLine và setGuestQuantity bỏ mốc', () => {
+    addGuestLine({ variationId: 'v1', slug: 'dau-goi', quantity: 1 });
+    markGuestMergeBase('v1', 2, 1000);
+    addGuestLine({ variationId: 'v1', slug: 'dau-goi', quantity: 1 });
+    expect(lineOf('v1')).toEqual({ variationId: 'v1', slug: 'dau-goi', quantity: 2, addedAt: expect.any(Number) });
+
+    markGuestMergeBase('v1', 2, 1000);
+    setGuestQuantity('v1', 5);
+    expect(lineOf('v1')).not.toHaveProperty('mergeBase');
+    expect(lineOf('v1')!.quantity).toBe(5);
+  });
+
+  it('thêm món khác hay xoá dòng khác không đụng mốc của dòng đang có mốc', () => {
+    addGuestLine({ variationId: 'v1', slug: 'dau-goi', quantity: 1 });
+    addGuestLine({ variationId: 'v2', slug: 'xa-phong', quantity: 1 });
+    markGuestMergeBase('v1', 2, 1000);
+    addGuestLine({ variationId: 'v3', slug: 'nuoc-rua', quantity: 1 });
+    removeGuestLine('v2');
+    expect(lineOf('v1')!.mergeBase).toEqual({ inCart: 2, at: 1000 });
   });
 });

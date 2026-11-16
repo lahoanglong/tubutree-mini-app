@@ -13,6 +13,8 @@ const state = vi.hoisted(() => ({
   auth: { user: null, status: 'idle', initialized: true } as Record<string, unknown>,
   track: vi.fn(),
   cart: null as unknown,
+  addToCart: vi.fn(),
+  getProductStock: vi.fn(),
 }));
 vi.mock('next/navigation', async (importOriginal) => ({
   ...(await importOriginal<typeof import('next/navigation')>()),
@@ -27,6 +29,8 @@ vi.mock('@/lib/analytics', async (importOriginal) => ({
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getCart: async () => state.cart,
+  addToCart: (variationId: string, quantity: number) => state.addToCart(variationId, quantity),
+  getProductStock: (slug: string) => state.getProductStock(slug),
   getMyCoupons: async () => [],
   getCouponPreviews: async () => [],
   getCartSelection: async () => {
@@ -41,6 +45,7 @@ import { resetFlashSales } from '@/lib/use-flash-sales';
 import { PUBLIC_CONFIG_FALLBACK } from '@/lib/use-public-config';
 import { GUEST_CART_KEY } from '@/lib/guest-cart/store';
 import { GUEST_MERGE_NOTE_KEY } from '@/lib/guest-cart/after-login';
+import { GUEST_MERGE_CLAIM_KEY, resetGuestMergeForTest } from '@/lib/guest-cart/merge';
 
 const PRODUCT = {
   id: 'p1',
@@ -70,7 +75,8 @@ let calls: URL[] = [];
 let configHangs = false;
 
 const clientWith = (flag: boolean | null) => {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+  // retryDelay 0: giá sản phẩm giỏ khách tự thử lại một lần (products.ts), không để test chờ 1 giây.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false, retryDelay: 0 }, mutations: { retry: false } } });
   if (flag !== null) qc.setQueryData(['public-config'], { ...PUBLIC_CONFIG_FALLBACK, webGuestCartEnabled: flag });
   return qc;
 };
@@ -94,6 +100,9 @@ beforeEach(() => {
   state.auth = { user: null, status: 'idle', initialized: true };
   state.track.mockReset();
   state.cart = null;
+  state.addToCart.mockReset().mockImplementation(async () => state.cart);
+  state.getProductStock.mockReset().mockResolvedValue({});
+  resetGuestMergeForTest();
   calls = [];
   configHangs = false;
   vi.stubGlobal(
@@ -108,6 +117,7 @@ beforeEach(() => {
       if (u.pathname.endsWith('/products/dau-goi')) return json(PRODUCT);
       if (u.pathname.endsWith('/products/het-hang')) return json(SOLD_OUT);
       if (u.pathname.endsWith('/products/da-go')) return json({ message: 'Không tìm thấy' }, 404);
+      if (u.pathname.endsWith('/products/loi')) return json({ message: 'Lỗi máy chủ' }, 500);
       if (u.pathname.endsWith('/products')) return json({ data: [], meta: { page: 1, limit: 4, total: 0 } });
       if (u.pathname.endsWith('/flash-sales/active')) return json([]);
       if (u.pathname.includes('/wishlist')) return json([]);
@@ -187,13 +197,24 @@ describe('/gio-hang — khách chưa đăng nhập, cờ giỏ khách bật', ()
     expect(named('login_wall_shown')).toHaveLength(0);
   });
 
-  it('cờ đang tải lần đầu: khung chờ, không chớp tường đăng nhập', async () => {
+  it('cờ đang tải lần đầu mà giỏ khách có món: khung chờ, không chớp tường đăng nhập', async () => {
     configHangs = true;
     putGuestLines([{ variationId: 'v1', slug: 'dau-goi', quantity: 1 }]);
     const c = await mount(clientWith(null), () => false);
     expect(c.querySelector('[aria-busy="true"]')).not.toBeNull();
     expect(c.textContent).not.toContain('Đăng nhập để xem giỏ hàng của bạn.');
     expect(c.querySelector('[data-testid="guest-cart"]')).toBeNull();
+  });
+
+  it('cờ đang tải lần đầu mà giỏ khách trống: hiện tường đăng nhập ngay, không chờ cấu hình', async () => {
+    configHangs = true;
+    const qc = clientWith(null);
+    const r = render(<CartPage />, qc);
+    mounted.push(r);
+    await flush(2);
+    expect(qc.getQueryState(['public-config'])?.status).toBe('pending');
+    expect(r.container.textContent).toContain('Đăng nhập để xem giỏ hàng của bạn.');
+    expect(r.container.querySelector('[aria-busy="true"]')).toBeNull();
   });
 });
 
@@ -239,6 +260,41 @@ describe('/gio-hang — đã đăng nhập, lời báo gộp giỏ khách', () =
   it('không có lời báo: không có khối báo', async () => {
     const c = await mount(clientWith(true), (el) => !!el.querySelector('[data-testid="cart-line"]'));
     expect(c.querySelector('[data-testid="guest-merge-note"]')).toBeNull();
+    expect(state.addToCart).not.toHaveBeenCalled();
+  });
+
+  it('cờ bật mà giỏ khách còn món (lúc đăng nhập chưa gộp được): mở giỏ thì gộp nốt và báo món không chuyển được', async () => {
+    putGuestLines([
+      { variationId: 'v8', slug: 'con-hang', quantity: 2 },
+      { variationId: 'v9', slug: 'het-hang', quantity: 1 },
+    ]);
+    state.getProductStock.mockImplementation(async (slug: string) => (slug === 'con-hang' ? { v8: 10 } : { v9: 0 }));
+    const c = await mount(clientWith(true), (el) => !!el.querySelector('[data-testid="guest-merge-note"]'));
+
+    expect(state.addToCart.mock.calls).toEqual([['v8', 2]]);
+    expect(localStorage.getItem(GUEST_CART_KEY)).toBeNull();
+    expect(sessionStorage.getItem(GUEST_MERGE_CLAIM_KEY)).toBeNull();
+    const note = c.querySelector('[data-testid="guest-merge-note"]')!;
+    expect(note.textContent).toContain(fillCopy('guestCart.mergeFailed', { n: 1 }));
+    expect(sessionStorage.getItem(GUEST_MERGE_NOTE_KEY)).toBeNull();
+  });
+
+  it('gộp nốt gặp lỗi tạm: món ở lại giỏ khách và báo "chưa chuyển được"', async () => {
+    putGuestLines([{ variationId: 'v8', slug: 'con-hang', quantity: 1 }]);
+    state.getProductStock.mockResolvedValue({ v8: 10 });
+    state.addToCart.mockRejectedValue(Object.assign(new Error('Bảo trì'), { status: 503 }));
+    const c = await mount(clientWith(true), (el) => !!el.querySelector('[data-testid="guest-merge-note"]'));
+    expect(c.querySelector('[data-testid="guest-merge-note"]')!.textContent).toContain(fillCopy('guestCart.mergeKept', { n: 1 }));
+    expect(JSON.parse(localStorage.getItem(GUEST_CART_KEY)!).map((l: { variationId: string }) => l.variationId)).toEqual(['v8']);
+  });
+
+  it('cờ tắt: không gộp giỏ khách khi mở giỏ', async () => {
+    putGuestLines([{ variationId: 'v8', slug: 'con-hang', quantity: 1 }]);
+    const c = await mount(clientWith(false), (el) => !!el.querySelector('[data-testid="cart-line"]'));
+    expect(state.addToCart).not.toHaveBeenCalled();
+    expect(state.getProductStock).not.toHaveBeenCalled();
+    expect(c.querySelector('[data-testid="guest-merge-note"]')).toBeNull();
+    expect(localStorage.getItem(GUEST_CART_KEY)).not.toBeNull();
   });
 });
 
@@ -310,5 +366,26 @@ describe('GuestCartView — dòng giỏ khách (khuôn Mini)', () => {
     click(soldOut!.querySelector('button[aria-label="Xoá Xà phòng thảo mộc khỏi giỏ hàng"]'));
     await flush(1);
     expect(JSON.parse(localStorage.getItem(GUEST_CART_KEY)!).map((l: { variationId: string }) => l.variationId)).toEqual(['v1', 'v3']);
+  });
+});
+
+describe('GuestCartView — tiêu đề dòng khi chưa có tên sản phẩm', () => {
+  it('tải giá lỗi: tiêu đề "Sản phẩm trong giỏ", có nút Thử lại; sản phẩm đã gỡ vẫn ghi "Sản phẩm đã ngừng bán"', async () => {
+    putGuestLines([
+      { variationId: 'v4', slug: 'loi', quantity: 1 },
+      { variationId: 'v3', slug: 'da-go', quantity: 1 },
+    ]);
+    const r = render(<GuestCartView empty={null} gridClassName="grid" />, clientWith(true));
+    mounted.push(r);
+    const c = r.container;
+    const settled = () => c.querySelectorAll('[data-testid="cart-line"][data-state="error"], [data-testid="cart-line"][data-state="gone"]').length === 2;
+    for (let i = 0; i < 100 && !settled(); i++) await flush(1);
+
+    const title = (slug: string) => c.querySelector(`a[href="/san-pham/${slug}"]:not([aria-hidden])`)!.textContent;
+    expect(title('loi')).toBe(fillCopy('guestCart.itemFallback'));
+    expect(title('loi')).toBe('Sản phẩm trong giỏ');
+    expect(c.querySelector('[data-state="error"]')!.textContent).toContain(fillCopy('guestCart.loadFailed'));
+    expect(c.querySelector('[data-state="error"]')!.textContent).toContain(fillCopy('guestCart.retry'));
+    expect(title('da-go')).toBe('Sản phẩm đã ngừng bán');
   });
 });

@@ -392,6 +392,8 @@ export const SHOP_COPY: Record<string, string> = {
   // Trang giỏ sau khi đăng nhập: món chọn lúc chưa đăng nhập đã chuyển vào giỏ tài khoản, chỉ báo khi có món không chuyển đủ.
   'guestCart.mergeFailed': '{n} món chọn trước khi đăng nhập không thêm được vì hết hàng hoặc ngừng bán.',
   'guestCart.mergeReduced': '{n} món chọn trước khi đăng nhập đã giảm số lượng cho khớp số hàng còn.',
+  'guestCart.mergeKept': '{n} món chọn trước khi đăng nhập chưa chuyển được vào giỏ. Mở lại giỏ để thử lại.',
+  'guestCart.itemFallback': 'Sản phẩm trong giỏ',
   // Mua lại đơn cũ: câu dưới từng dòng và câu đầu sheet (web và Mini App)
   'reorder.qtyReduced': 'Không đủ {old} như đơn trước, đã giảm số lượng',
   'reorder.qtyCapped': 'Mua lại tối đa {n} mỗi món, đã giảm số lượng',
