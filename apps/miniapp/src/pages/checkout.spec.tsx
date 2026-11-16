@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   removeCartItem: vi.fn(),
   recordReferralTouch: vi.fn(),
   ensurePhone: vi.fn(),
+  ensurePhoneOrThrow: vi.fn(),
+  shipEstimate: vi.fn((_base: number | null): { estimate: unknown; stale: boolean } => ({ estimate: undefined, stale: false })),
   requestZaloProfile: vi.fn(),
   getWallet: vi.fn(),
   getLoyalty: vi.fn(),
@@ -70,6 +72,7 @@ vi.mock('../services/zalo-profile', () => ({
   requestZaloProfile: mocks.requestZaloProfile,
   usableProfileName: (n?: string | null) => ((n ?? '').trim().toLowerCase() === 'khách' ? '' : (n ?? '').trim()),
 }));
+vi.mock('../components/checkout/use-shipping-estimate', () => ({ useShippingEstimate: mocks.shipEstimate }));
 vi.mock('../store/auth', () => {
   const state = {
     get user() {
@@ -77,6 +80,7 @@ vi.mock('../store/auth', () => {
     },
     status: 'authenticated',
     ensurePhone: mocks.ensurePhone,
+    ensurePhoneOrThrow: mocks.ensurePhoneOrThrow,
     restore: vi.fn().mockResolvedValue(undefined),
   };
   const useAuthStore = Object.assign((sel?: (s: typeof state) => unknown) => (sel ? sel(state) : state), {
@@ -197,18 +201,16 @@ describe('CheckoutPage — mã giới thiệu CTV (C-020)', () => {
     await waitFor(() => expect(trigger).toBeDisabled());
   });
 
-  it('đang xin SĐT trước khi gửi đơn (placeOrder chưa chạy) → nút Nhập mã đã khoá (W59B)', async () => {
+  it('chạm Đặt hàng không mở tấm xin số điện thoại: gửi đơn ngay (địa chỉ đã có số người nhận)', async () => {
     mocks.ensurePhone.mockReturnValue(new Promise(() => {}));
+    mocks.user.phone = null;
     renderPage();
-    const trigger = (await screen.findByText('Nhập mã')).closest('button')!;
-    expect(trigger).toBeEnabled();
-
     const place = await screen.findByText(/(Đặt hàng|Thử lại) · /);
     await waitFor(() => expect(place.closest('button')).not.toBeDisabled());
     fireEvent.click(place);
-    await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(trigger).toBeDisabled());
-    expect(mocks.placeOrder).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
+    expect(mocks.ensurePhone).not.toHaveBeenCalled();
+    expect(mocks.ensurePhoneOrThrow).not.toHaveBeenCalled();
   });
 
   it('đặt đơn xong: nhớ có Việc cần làm cho lần mở Trang chủ sau (khung chờ giữ chỗ từ khung hình đầu)', async () => {
@@ -783,6 +785,20 @@ describe('CheckoutPage — tóm tắt tạm khi chưa có địa chỉ: các dò
     expect(screen.queryByText('41.000đ')).toBeNull();
     expect(screen.getAllByText('50.000đ').length).toBeGreaterThan(0);
     expect(screen.getByText(/tính lại ở bước thanh toán/)).toBeInTheDocument();
+  });
+
+  it('chưa có địa chỉ mà đã ước tính được phí kiện Tubu: dòng phí ghi "19.000đ (ước tính)", tổng vẫn chưa tính', async () => {
+    mocks.shipEstimate.mockImplementation((base) => ({
+      estimate: base ? { fee: 19_000, feeMin: 19_000, feeMax: 19_000, freeshipThreshold: 200_000, missingForFreeship: 100_000, isEstimate: true, provinceCode: null, provinceName: null } : undefined,
+      stale: false,
+    }));
+    mocks.getCart.mockResolvedValue({ ...TWO, comboDiscount: undefined });
+    renderPage();
+    expect((await screen.findAllByText('19.000đ (ước tính)')).length).toBeGreaterThan(0);
+    expect(mocks.shipEstimate).toHaveBeenLastCalledWith(100_000);
+    expect(screen.queryByText('Nhập địa chỉ để tính phí')).toBeNull();
+    expect(totalRow().textContent).toContain('Chưa tính');
+    mocks.shipEstimate.mockImplementation(() => ({ estimate: undefined, stale: false }));
   });
 
   it('không có combo (0 hoặc API cũ): tổng như cũ', async () => {
@@ -1868,6 +1884,19 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
       expect(rows).toHaveLength(3);
       fireEvent.click(within(rows[2]!).getByRole('checkbox', { name: 'Để đơn sau' }));
       await waitFor(() => expect(pickupArg()).toEqual({ excludeGiftRedemptionIds: ['g3'] }));
+    });
+
+    it('quà chờ số đã xác minh: "Xác minh ngay" ngay ở dòng quà xin số Zalo rồi báo giá lại; dòng khác không có nút này', async () => {
+      withGifts([gift('g1', { included: false, blockedReason: 'PHONE_NOT_VERIFIED' }), gift('g2')]);
+      mocks.ensurePhoneOrThrow.mockResolvedValue('0900000000');
+      renderPage();
+      const verify = await screen.findByTestId('checkout-gift-verify-phone');
+      expect(verify).toHaveTextContent('Xác minh ngay');
+      expect(screen.getAllByTestId('checkout-gift-verify-phone')).toHaveLength(1);
+      const before = mocks.checkoutQuote.mock.calls.length;
+      fireEvent.click(verify);
+      await waitFor(() => expect(mocks.ensurePhoneOrThrow).toHaveBeenCalledTimes(1));
+      await waitFor(() => expect(mocks.checkoutQuote.mock.calls.length).toBeGreaterThan(before));
     });
 
     it('không có kiện Tubu (mọi quà included=false, chưa bỏ quà nào) → không hiện dòng quà', async () => {
@@ -3062,10 +3091,8 @@ describe('CheckoutPage — khoá chéo Đặt hàng với đổi mã, "Thử l�
   });
 
   describe('đơn đang gửi thì không đổi mã giữa chừng', () => {
-    it('xin SĐT rồi gửi đơn: tấm chọn mã nhận busy suốt từ lúc chạm Đặt hàng, nhả khi đơn xong', async () => {
-      const phone = pending<string>();
+    it('tấm chọn mã nhận busy suốt từ lúc chạm Đặt hàng, nhả khi đơn xong', async () => {
       const place = pending<{ id: string; code: string }>();
-      mocks.ensurePhone.mockReturnValue(phone.promise);
       mocks.placeOrder.mockReturnValue(place.promise);
       renderPage();
       const button = await placeButton();
@@ -3073,8 +3100,6 @@ describe('CheckoutPage — khoá chéo Đặt hàng với đổi mã, "Thử l�
       expect(voucherBusy()).toBe(false);
       fireEvent.click(button);
       await waitFor(() => expect(voucherBusy()).toBe(true));
-      expect(mocks.placeOrder).not.toHaveBeenCalled();
-      await act(async () => phone.resolve('0900000000'));
       await waitFor(() => expect(mocks.placeOrder).toHaveBeenCalledTimes(1));
       expect(voucherBusy()).toBe(true);
       await act(async () => place.reject(new Error('Hết hàng')));

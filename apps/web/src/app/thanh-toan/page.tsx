@@ -68,6 +68,8 @@ import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { OrderSuccess } from '@/components/checkout/order-success';
 import { GiftRows } from '@/components/checkout/gift-rows';
+import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
+import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { PickupSection, WaivedShippingValue } from '@/components/checkout/pickup-section';
 import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '@/components/checkout/use-checkout-pickup';
 import { useCheckoutFunnel } from '@/components/analytics/use-checkout-funnel';
@@ -281,7 +283,14 @@ export default function CheckoutPage() {
   const tubuShipment = shipments.find((s) => s.fulfiller.kind === 'TUBU');
   const tubuShippingFee = quote ? (tubuShipment ? tubuShipment.shippingFee : shipments.length === 0 ? quote.shippingFee : 0) : undefined;
   const shipRow = quote ? shippingRowView(quote) : null;
-  const shippingValue: React.ReactNode = !quote ? (addressId ? '…' : 'Nhập địa chỉ để tính phí') : shipRow?.waived ? (
+  // Chưa chọn địa chỉ: phí kiện Tubu ước tính thay vì chỉ "Nhập địa chỉ để tính phí". Có hàng gian hàng tự giao thì giữ câu cũ.
+  const shipEstimateBase =
+    !addressId && checkoutItems.length > 0 && !checkoutItems.some((it) => it.fulfiller?.kind === 'MERCHANT')
+      ? checkoutItems.filter((it) => it.stock > 0).reduce((sum, it) => sum + it.total, 0)
+      : null;
+  const shipEstimate = cartShippingView(useShippingEstimate(shipEstimateBase).estimate, { goodsNet: 0, freeshipReached: false });
+  const noAddressShipText = shipEstimate ? fillCopy('checkout.shipEstimateValue', { fee: shipEstimate.feeText }) : fillCopy('checkout.shipNeedsAddress');
+  const shippingValue: React.ReactNode = !quote ? (addressId ? '…' : noAddressShipText) : shipRow?.waived ? (
     <WaivedShippingValue originalFee={shipRow.originalFee} note={shipRow.note ?? ''} />
   ) : quote.shippingFee === 0 ? (
     'Miễn phí'
@@ -817,6 +826,7 @@ export default function CheckoutPage() {
               selectedId={addressId}
               quoteOutdated={addressOutdated}
               loadFailed={addrQ.isError}
+              autoOpen={addrQ.isSuccess && addrQ.data.length === 0}
               userId={user?.id}
               onSelect={chosen(setAddressId)}
               onCreated={(a) => {
@@ -1360,6 +1370,7 @@ function AddressPicker({
   selectedId,
   quoteOutdated,
   loadFailed,
+  autoOpen = false,
   userId,
   onSelect,
   onCreated,
@@ -1370,6 +1381,8 @@ function AddressPicker({
   quoteOutdated: boolean;
   /** Danh sách không tải được: đã có dòng lỗi riêng, không được nói "chưa thêm địa chỉ". */
   loadFailed: boolean;
+  /** Sổ địa chỉ đã tải xong và trống: mở sẵn form một lần (như Mini App). Đang tải thì false, kẻo mở nhầm khi sổ có địa chỉ. */
+  autoOpen?: boolean;
   userId?: string;
   onSelect: (id: string) => void;
   onCreated: (a: AddressDTO) => void;
@@ -1377,6 +1390,12 @@ function AddressPicker({
 }) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (!autoOpen || autoOpened.current) return;
+    autoOpened.current = true;
+    setAdding(true);
+  }, [autoOpen]);
 
   return (
     <div className="mt-2 space-y-2">

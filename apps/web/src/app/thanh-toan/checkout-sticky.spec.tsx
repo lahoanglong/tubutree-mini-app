@@ -144,19 +144,23 @@ describe('/thanh-toan — lý do khoá nút theo Mini (K2)', () => {
     expect(red?.textContent).toBe('Địa chỉ giao không hợp lệ.');
   });
 
-  it('khối địa chỉ trống ghi "Bạn chưa thêm địa chỉ" như Mini; có địa chỉ hoặc tải lỗi thì không', async () => {
+  it('sổ địa chỉ trống: form "Thêm địa chỉ" mở sẵn như Mini (bớt một chạm); có địa chỉ hoặc tải lỗi thì không mở', async () => {
+    const addForm = (c: HTMLElement) => c.querySelector('form[aria-label="Thêm địa chỉ"]');
     state.noAddress = true;
     const empty = await mount();
-    expect(empty.querySelector('[data-testid="address-empty"]')!.textContent).toBe('Bạn chưa thêm địa chỉ');
+    expect(addForm(empty)).not.toBeNull();
+    expect(empty.querySelector('[data-testid="address-empty"]')).toBeNull();
     mounted.forEach((m) => m.unmount());
     mounted = [];
     state.noAddress = false;
     const filled = await mount();
+    expect(addForm(filled)).toBeNull();
     expect(filled.querySelector('[data-testid="address-empty"]')).toBeNull();
     mounted.forEach((m) => m.unmount());
     mounted = [];
     state.addrError = true;
     const failed = await mount();
+    expect(addForm(failed)).toBeNull();
     expect(failed.querySelector('[data-testid="address-empty"]')).toBeNull();
   });
 });

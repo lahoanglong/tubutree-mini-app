@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Plus } from 'lucide-react';
 import type { AddressDTO } from '../../services/shop-api';
@@ -20,12 +20,20 @@ interface AddressSectionProps {
   onSaved?: () => void;
   /** Máy chủ từ chối báo giá cho địa chỉ đang chọn với mã ADDRESS_OUTDATED (vd phường không thuộc tỉnh) dù mã đã theo địa giới mới. */
   quoteOutdated?: boolean;
+  /** Sổ địa chỉ đã tải xong và trống: mở sẵn form một lần, khỏi bắt khách tìm nút "Thêm địa chỉ". Đang tải thì false, kẻo mở nhầm khi sổ có địa chỉ. */
+  autoOpen?: boolean;
 }
 
-export function AddressSection({ addresses, selectedId, onSelect, onSaved, quoteOutdated = false }: AddressSectionProps) {
+export function AddressSection({ addresses, selectedId, onSelect, onSaved, quoteOutdated = false, autoOpen = false }: AddressSectionProps) {
   const [adding, setAdding] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const autoOpened = useRef(false);
+  useEffect(() => {
+    if (!autoOpen || autoOpened.current) return;
+    autoOpened.current = true;
+    setAdding(true);
+  }, [autoOpen]);
   const editing = addresses.find((a) => a.id === editingId) ?? null;
   // Đưa địa chỉ vừa lưu vào danh sách trước khi chọn: danh sách tải lại về sau, mà trang thanh toán thấy id đang chọn không có trong danh sách
   // thì chọn lại địa chỉ mặc định, đơn đi về địa chỉ cũ.

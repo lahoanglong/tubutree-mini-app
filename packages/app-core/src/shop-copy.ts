@@ -414,6 +414,8 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.addressFix': 'Sửa địa chỉ giao hàng rồi đặt hàng.',
   'checkout.totalPending': 'Chưa tính',
   'checkout.shipNeedsAddress': 'Nhập địa chỉ để tính phí',
+  // Chưa có địa chỉ mà đã ước tính được phí kiện Tubu (cùng hàm tính phí của báo giá).
+  'checkout.shipEstimateValue': '{fee} (ước tính)',
   'checkout.calculating': 'Đang tính…',
   'checkout.priceChangedHint': 'Giá ưu đãi đã thay đổi. Bạn cập nhật giá mới rồi đặt tiếp nhé.',
   'checkout.priceChangedBody': 'Vài sản phẩm Giờ vàng vừa hết suất hoặc hết giờ nên giá đã đổi. Bạn cập nhật giá mới rồi đặt tiếp nhé.',

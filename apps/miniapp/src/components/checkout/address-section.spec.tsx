@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { act, render, screen, fireEvent, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -7,7 +7,7 @@ import type { AddressDTO } from '../../services/shop-api';
 
 const mocks = vi.hoisted(() => ({ formProps: vi.fn() }));
 vi.mock('../address-form', () => ({
-  AddressForm: (props: { askZaloProfile?: boolean }) => {
+  AddressForm: (props: { askZaloProfile?: boolean; onCancel?: () => void }) => {
     mocks.formProps(props);
     return <div data-testid="address-form" />;
   },
@@ -44,6 +44,34 @@ describe('AddressSection — xin tên + SĐT Zalo chỉ ở đơn đầu (C-065,
     renderSection([ADDR]);
     fireEvent.click(screen.getByText('Thêm địa chỉ mới'));
     expect(mocks.formProps).toHaveBeenLastCalledWith(expect.objectContaining({ askZaloProfile: false }));
+  });
+});
+
+describe('AddressSection — sổ trống thì mở sẵn form (bớt một chạm ở đơn đầu)', () => {
+  beforeEach(() => vi.clearAllMocks());
+  const mount = (addresses: AddressDTO[], autoOpen: boolean) => (
+    <QueryClientProvider client={new QueryClient()}>
+      <AddressSection addresses={addresses} selectedId={null} onSelect={() => {}} autoOpen={autoOpen} />
+    </QueryClientProvider>
+  );
+
+  it('sổ đã tải và trống → form thêm địa chỉ mở sẵn, có xin Zalo; không còn câu "chưa có địa chỉ"', () => {
+    render(mount([], true));
+    expect(screen.getByTestId('address-form')).toBeInTheDocument();
+    expect(mocks.formProps).toHaveBeenLastCalledWith(expect.objectContaining({ askZaloProfile: true }));
+    expect(screen.queryByText(viCopy.checkout.addressEmpty)).toBeNull();
+  });
+
+  it('sổ đang tải (autoOpen chưa bật) → chưa mở; khách đóng form tự mở thì không tự mở lại', () => {
+    const { rerender } = render(mount([], false));
+    expect(screen.queryByTestId('address-form')).toBeNull();
+    rerender(mount([], true));
+    expect(screen.getByTestId('address-form')).toBeInTheDocument();
+    const cancel = mocks.formProps.mock.calls.at(-1)![0] as { onCancel: () => void };
+    act(() => cancel.onCancel());
+    rerender(mount([], true));
+    expect(screen.queryByTestId('address-form')).toBeNull();
+    expect(screen.getByText('Thêm địa chỉ mới')).toBeInTheDocument();
   });
 });
 

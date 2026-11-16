@@ -402,6 +402,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'checkout.addressFix': null,
   'checkout.totalPending': 10,
   'checkout.shipNeedsAddress': 28,
+  'checkout.shipEstimateValue': 28,
   'checkout.calculating': 12,
   'checkout.priceChangedHint': null,
   'checkout.priceChangedBody': null,

@@ -13,6 +13,14 @@ const mocks = vi.hoisted(() => ({
   placeImpl: null as null | (() => Promise<unknown>),
   updateAddress: vi.fn(),
   quoteCalls: 0,
+  ship: null as unknown,
+  shipBase: undefined as number | null | undefined,
+}));
+vi.mock('@/components/checkout/use-shipping-estimate', () => ({
+  useShippingEstimate: (base: number | null) => {
+    mocks.shipBase = base;
+    return { estimate: base ? (mocks.ship ?? undefined) : undefined, stale: false };
+  },
 }));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
@@ -69,6 +77,8 @@ beforeEach(() => {
   mocks.placeCalls = [];
   mocks.placeImpl = null;
   mocks.quoteCalls = 0;
+  mocks.ship = null;
+  mocks.shipBase = undefined;
   mocks.updateAddress.mockReset().mockResolvedValue(ADDR);
 });
 afterEach(() => {
@@ -84,6 +94,21 @@ describe('/thanh-toan — khách chưa có địa chỉ (BUYERWEB-20)', () => {
     expect(c.textContent).toContain('Chưa tính');
     expect(c.textContent).not.toContain('…');
     expect(btn(c, 'Đặt hàng')!.disabled).toBe(false);
+  });
+
+  it('chưa có địa chỉ mà đã ước tính được phí: dòng phí ghi số ước tính (cùng hàm tính phí của báo giá), tổng vẫn "Chưa tính"', async () => {
+    mocks.addresses = [];
+    mocks.ship = { fee: 19000, feeMin: 19000, feeMax: 19000, freeshipThreshold: 500000, missingForFreeship: 200000, isEstimate: true, provinceCode: null, provinceName: null };
+    const c = await mount();
+    expect(mocks.shipBase).toBe(SUBTOTAL);
+    expect(rowValue(c, 'Phí vận chuyển')).toBe('19.000đ (ước tính)');
+    expect(c.textContent).toContain('Chưa tính');
+  });
+
+  it('có địa chỉ: không hỏi ước tính', async () => {
+    mocks.ship = { fee: 19000, feeMin: 19000, feeMax: 19000, freeshipThreshold: 500000, missingForFreeship: 200000, isEstimate: true, provinceCode: null, provinceName: null };
+    await mount();
+    expect(mocks.shipBase).toBeNull();
   });
 
   it('có địa chỉ: hiện phí ship và tổng thật', async () => {

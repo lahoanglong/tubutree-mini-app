@@ -18,6 +18,8 @@ import { useNotify } from '../hooks/use-notify';
 import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
 import { GiftRows } from '../components/checkout/gift-rows';
+import { useShippingEstimate } from '../components/checkout/use-shipping-estimate';
+import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { PickupSection, WaivedShippingValue } from '../components/checkout/pickup-section';
 import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '../components/checkout/use-checkout-pickup';
 import { OrderSuccess } from '../components/checkout/order-success';
@@ -161,6 +163,18 @@ export default function CheckoutPage() {
     bumpChoice();
     fn(...args);
   };
+  // Quà chờ số đã xác minh: xin số Zalo ngay tại dòng quà rồi báo giá lại để quà đi cùng đơn. Từ chối thì quà để đơn sau, đơn vẫn đặt được.
+  const [verifyingPhone, setVerifyingPhone] = useState(false);
+  const verifyPhone = () => {
+    if (verifyingPhone) return;
+    setVerifyingPhone(true);
+    useAuthStore
+      .getState()
+      .ensurePhoneOrThrow()
+      .then((phone) => (phone ? queryClient.invalidateQueries({ queryKey: ['quote'] }) : undefined))
+      .catch((e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }))
+      .finally(() => setVerifyingPhone(false));
+  };
 
   // Guard auth: tránh gọi /cart, /me/addresses khi chưa silent-login xong (deeplink → 401).
   const cart = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: authed });
@@ -257,6 +271,13 @@ export default function CheckoutPage() {
   // mã dùng được. Cùng tham số xem trước với VoucherSheet.
   const couponPreviewParams = checkoutItems.length > 0 ? { ...(addressId ? { addressId } : {}), storefrontSlug: ctvSlug, itemIds } : undefined;
   const couponPreviewKey = cartPreviewKey(checkoutItems);
+  // Chưa chọn địa chỉ: dòng phí nói phí kiện Tubu ước tính thay vì chỉ "Nhập địa chỉ để tính phí". Có hàng gian hàng tự giao thì giữ câu cũ.
+  const shipEstimateBase =
+    !addressId && checkoutItems.length > 0 && !checkoutItems.some((it) => it.fulfiller?.kind === 'MERCHANT')
+      ? checkoutItems.filter((it) => it.stock > 0).reduce((s, it) => s + it.total, 0)
+      : null;
+  const shipEstimate = cartShippingView(useShippingEstimate(shipEstimateBase).estimate, { goodsNet: 0, freeshipReached: false });
+  const noAddressShipText = shipEstimate ? fillCopy('checkout.shipEstimateValue', { fee: shipEstimate.feeText }) : fillCopy('checkout.shipNeedsAddress');
   const couponReady = authed && !addresses.isLoading && cartHasItems && !!cart.data && !cart.data.couponCode;
   const wholeCart = !itemIds || itemIds.length === (cart.data?.items.length ?? 0);
   const autoCoupon = useCheckoutCoupon({
@@ -755,6 +776,7 @@ export default function CheckoutPage() {
           // Địa chỉ lưu trước báo giá đầu đã được tính ở `checkout_started`, không đếm hai lần.
           onSaved={() => funnel.current.started && funnelStep('address_saved', 0)}
           quoteOutdated={addressOutdated && !quote.isFetching}
+          autoOpen={addresses.isSuccess && addresses.data.length === 0}
         />
       </div>
       {placeAttempted && !addressId && (
@@ -864,6 +886,8 @@ export default function CheckoutPage() {
             excluded={pickup.excluded}
             onToggle={chosen(pickup.toggleGift)}
             shortfallVnd={quote.data?.giftShortfallVnd ?? 0}
+            onVerifyPhone={verifyPhone}
+            verifyingPhone={verifyingPhone}
           />
         </Box>
         ) : null;
@@ -1331,7 +1355,7 @@ export default function CheckoutPage() {
             )}
             <KeyValueRow
               label={vi.checkout.shippingFee}
-              value={addressId ? fillCopy('checkout.calculating') : fillCopy('checkout.shipNeedsAddress')}
+              value={addressId ? fillCopy('checkout.calculating') : noAddressShipText}
             />
             <KeyValueRow dataDs="checkout-summary-total" label={vi.checkout.total} value={checkoutTotalText({ total: null, hasAddress: !!addressId }, formatVnd)} emphasis />
           </>
@@ -1382,7 +1406,7 @@ export default function CheckoutPage() {
             fullWidth
             loading={orderBusy}
             disabled={placeLocked}
-            onPress={async () => {
+            onPress={() => {
               if (submitting) return;
               if (formBlocked) {
                 setPlaceAttempted(true);
@@ -1392,13 +1416,8 @@ export default function CheckoutPage() {
               }
               setSubmitting(true);
               funnelStep('place_order_click', 3);
-              try {
-                // Xin SĐT đúng lúc đặt hàng (như Homefarm) nếu tài khoản chưa có — không chặn nếu user từ chối.
-                await useAuthStore.getState().ensurePhone().catch(() => undefined);
-                order.mutate();
-              } catch {
-                setSubmitting(false);
-              }
+              // Không hỏi số điện thoại ở bước này: địa chỉ giao đã có số người nhận, COD không cần số đã xác minh. Quà cần số thì hỏi ngay ở dòng quà.
+              order.mutate();
             }}
           >
             {order.isPending
@@ -1523,7 +1542,7 @@ export default function CheckoutPage() {
                   : formatVnd(quote.data.shippingFee)
                 : addressId
                   ? fillCopy('checkout.calculating')
-                  : fillCopy('checkout.shipNeedsAddress')
+                  : noAddressShipText
             }
             tone={quote.data?.shippingFee === 0 ? 'success' : 'primary'}
           />

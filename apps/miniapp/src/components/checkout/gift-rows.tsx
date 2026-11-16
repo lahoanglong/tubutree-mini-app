@@ -14,16 +14,20 @@ interface GiftRowsProps {
   /** `receive=false` là để quà lại cho đơn sau; `receive=true` chọn quà này cho đơn hiện tại (hành vi radio khi có nhiều quà). */
   onToggle: (id: string, receive: boolean, pending?: readonly QuotePendingGiftDTO[]) => void;
   shortfallVnd?: number;
+  /** Quà chỉ chờ số điện thoại đã xác minh: hỏi số ngay ở dòng quà (đặt hàng không còn hỏi số). Không truyền thì như cũ. */
+  onVerifyPhone?: () => void;
+  verifyingPhone?: boolean;
 }
 
 /**
  * Quà hiện vật 0đ đi kèm đơn: mỗi quà một dòng, từ 3 quà trở lên gộp một dòng mở tấm nhỏ. Mặc định quà đi cùng đơn;
  * ô "Để đơn sau" chỉ là lối bỏ, không phải nút hành động của màn.
  */
-export function GiftRows({ gifts, excluded, onToggle, shortfallVnd = 0 }: GiftRowsProps) {
+export function GiftRows({ gifts, excluded, onToggle, shortfallVnd = 0, onVerifyPhone, verifyingPhone = false }: GiftRowsProps) {
   const [sheetOpen, setSheetOpen] = useState(false);
   const view = giftSectionView(gifts, excluded, shortfallVnd);
   if (view.layout === 'none') return null;
+  const needsPhone = new Set(gifts.filter((g) => g.blockedReason === 'PHONE_NOT_VERIFIED').map((g) => g.id));
 
   const rows = view.rows.map((row) => (
     <div key={row.id} className="tubu-gift-row" data-testid="checkout-gift-row">
@@ -35,6 +39,22 @@ export function GiftRows({ gifts, excluded, onToggle, shortfallVnd = 0 }: GiftRo
           <Text variant="caption" tone="secondary" as="span" numeric>
             {row.reason}
           </Text>
+        )}
+        {onVerifyPhone && !row.receive && needsPhone.has(row.id) && (
+          <button
+            type="button"
+            className="tubu-press tubu-hit-44"
+            data-testid="checkout-gift-verify-phone"
+            disabled={verifyingPhone}
+            aria-busy={verifyingPhone || undefined}
+            onClick={() => {
+              haptic('light');
+              onVerifyPhone();
+            }}
+            style={{ alignSelf: 'flex-start', background: 'none', border: 0, padding: 0, color: 'var(--color-text-brand)', fontWeight: 600, fontSize: 'var(--type-caption-size)' }}
+          >
+            {fillCopy('checkout.gift.verifyPhone')}
+          </button>
         )}
       </div>
       {row.canToggle && (

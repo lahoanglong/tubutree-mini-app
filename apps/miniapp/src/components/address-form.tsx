@@ -9,6 +9,7 @@ import { getErrorMessage, isStaleStateError } from '../services/api';
 import { isHttpError } from '../services/http';
 import { requestZaloProfile } from '../services/zalo-profile';
 import { usableProfileName } from '@tubutree/app-core/profile-name';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { normalizeVnPhoneInput, parseVnPhoneInput } from '@tubutree/app-core/phone-input';
 import { validateAddressFields, type AddressField } from '@tubutree/app-core/commerce/checkout-form';
 import { useAuthStore } from '../store/auth';
@@ -204,7 +205,7 @@ export function AddressForm({ initial, askZaloProfile = false, onCancel, onSaved
     <div ref={rootRef} style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       {!initial && (!form.recipient.trim() || !form.phone.trim()) && (
         <Button variant="secondary" icon={UserRound} loading={askingZalo} onPress={() => fillFromZalo(true)}>
-          Điền nhanh từ Zalo
+          {form.recipient.trim() ? fillCopy('checkout.useZaloPhone') : 'Điền nhanh từ Zalo'}
         </Button>
       )}
       {renderField('recipient')}

@@ -170,6 +170,18 @@ describe('AddressForm', () => {
       expect(mocks.requestZaloProfile).not.toHaveBeenCalled();
     });
 
+    it('đã có tên từ hồ sơ, chỉ thiếu số → nút ghi "Dùng số Zalo của tôi", bấm thì điền số', async () => {
+      mocks.user.current = { id: 'u9', fullName: 'Long', phone: null };
+      localStorage.setItem(`${ZALO_PREFILL_ASKED_KEY}:u9`, '1');
+      mocks.requestZaloProfile.mockResolvedValue({ name: 'Long Zalo', phone: '0901234567' });
+      renderForm(<AddressForm initial={null} askZaloProfile onCancel={() => {}} onSaved={() => {}} />);
+      expect(inputNear('Người nhận')).toHaveValue('Long');
+      expect(screen.queryByText('Điền nhanh từ Zalo')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByText('Dùng số Zalo của tôi'));
+      await waitFor(() => expect(inputNear('Số điện thoại')).toHaveValue('0901234567'));
+      expect(inputNear('Người nhận')).toHaveValue('Long');
+    });
+
     it('tài khoản đã có đủ tên + SĐT → không xin gì, không hiện nút điền nhanh', () => {
       mocks.user.current = { fullName: 'Long', phone: '0900000000' };
       renderForm(<AddressForm initial={null} askZaloProfile onCancel={() => {}} onSaved={() => {}} />);
