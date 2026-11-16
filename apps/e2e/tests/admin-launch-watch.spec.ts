@@ -41,6 +41,13 @@ const SNAPSHOT: LaunchWatchDTO = {
     d30: { funnel: funnel([600, 500, 1234], [200, 200, 400]), fraud: fraud() },
   },
   secondOrder: { windowDays: 14, matured: { customers: 8, withSecond: 3 }, pending: { customers: 5, withSecond: 2 } },
+  webhookRejects: {
+    thresholdPerHour: 10,
+    sources: [
+      { source: 'pancake', lastHour: 52, last24h: 600, peakPerHour: 52, lastAt: '2026-11-16T07:00:00.000Z', alert: true },
+      { source: 'gomdon', lastHour: 0, last24h: 0, peakPerHour: 0, lastAt: null, alert: false },
+    ],
+  },
 };
 
 test.describe('Admin — Theo dõi 72h sau launch', () => {
@@ -63,6 +70,11 @@ test.describe('Admin — Theo dõi 72h sau launch', () => {
     await expect(page.getByRole('heading', { name: /Khách đặt đơn thứ 2 trong 14 ngày/ })).toBeVisible();
     const giftAlerts = page.locator('[role="alert"]').filter({ hasText: 'quà 0đ' });
     await expect(giftAlerts).toHaveCount(0);
+
+    const webhookAlerts = page.getByRole('region', { name: 'Cảnh báo webhook' });
+    await expect(webhookAlerts).toContainText('Webhook Pancake đang bị từ chối');
+    await expect(webhookAlerts).toContainText('52 lần trong 1 giờ qua (24 giờ: 600)');
+    await expect(webhookAlerts).not.toContainText('Gomdon');
 
     await page.getByRole('button', { name: '7 ngày' }).click();
     await expect(giftAlerts).toContainText('1 đơn mang hơn 1 quà 0đ');
