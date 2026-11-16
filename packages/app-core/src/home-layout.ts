@@ -1,5 +1,6 @@
 import type { CheckInStatusResponse, CouponDTO, LoyaltyOverview } from './api/loyalty';
 import { decimalVi, tierProgressPercent } from './loyalty-copy';
+import { fillCopy } from './shop-copy';
 
 /**
  * Bố cục Trang chủ, thanh đáy, Ưu đãi và hàng trạng thái đơn của trang Cá nhân. Một nguồn cho Mini App và web khổ điện thoại:
@@ -10,70 +11,148 @@ export type HomeCustomerKind = 'returning' | 'new';
 /** Lần mở đầu của khách đã đăng nhập mà app chưa nhớ loại và danh sách đã mua còn đang tải: chưa biết cũ hay mới. */
 export type HomeKindState = HomeCustomerKind | 'unknown';
 
-export type HomeBlockId =
-  | 'search' | 'member' | 'todo' | 'welcome' | 'banner' | 'shortcuts' | 'stories' | 'purchased' | 'flash' | 'categories' | 'bestSellers' | 'combos'
-  | 'journey' | 'quiz' | 'community' | 'suggest';
+/**
+ * Khối của Trang chủ. `context` là MỘT dải ngữ cảnh cao cố định (Quà khách mới, Việc cần làm hay thẻ thành viên, xem `homeContextVariant`); `promo` là MỘT ô
+ * khuyến mãi (Giờ vàng đang chạy, banner chiến dịch hay combo, xem `homePromoPick`). Chẩn đoán tổ ấm và Cộng đồng không còn là khối: chúng là thẻ chen trong
+ * lưới Gợi ý (`homeInterleaveCard`).
+ */
+export type HomeBlockId = 'search' | 'context' | 'categories' | 'bestSellers' | 'promo' | 'purchased' | 'shortcuts' | 'stories' | 'suggest';
 
 /** Header dính của Trang chủ (logo, ô tìm, chuông, giỏ): thay hàng logo 68px và ô tìm 54px cũ. */
 export const HOME_HEADER_HEIGHT = 56;
 
-// "Việc cần làm" có ở cả hai thứ tự: khách chưa có đơn đã giao vẫn có thể đang giữ một đơn chờ chuyển khoản, và khối tự rỗng khi không có việc.
-// Màn đầu gọn: header dính, thẻ thành viên (hoặc dải quà) một dòng, banner (tự ẩn khi không có chiến dịch), lối tắt, rồi tới món hàng:
-// Giờ vàng đứng TRƯỚC Mua lại để deal nằm trong màn đầu cả với khách cũ (Q6). Thẻ thành viên và dải quà cao bằng nhau (`HOME_HERO_HEIGHT` = `HOME_GIFT_HEIGHT`)
-// nên đổi loại khách không làm các khối dưới nhảy. `banner` và `combos` tự ẩn, không giữ chỗ, tới khi P11/P15 có dữ liệu.
-// `stories` (dải Story, W42A) đứng ngay dưới lối tắt, trên khu vực hàng: tự ẩn khi dưới `REEL_MIN_ITEMS` món, còn trong lúc tải giữ đúng `HOME_SETTLING_HEIGHTS.stories`.
-const RETURNING: readonly HomeBlockId[] = [
-  'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'quiz', 'community', 'suggest',
-];
-const NEW: readonly HomeBlockId[] = [
-  'search', 'welcome', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'quiz', 'community', 'suggest',
-];
+/** Trần số khối Trang chủ ở mọi tổ hợp (loại khách, có/không Giờ vàng, banner, combo). */
+export const HOME_MAX_BLOCKS = 9;
 
-// Chưa biết loại khách: giữ chỗ thẻ thành viên (khối `member` hiện khung chờ) và bỏ các khối chỉ một loại có (Mua lại, Quà khách mới),
-// để phần đầu trang không đổi hình dạng khi loại khách được xác định. Bán chạy nhất có ở cả hai loại nên ở lại.
-const UNKNOWN: readonly HomeBlockId[] = [
-  'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'quiz', 'community', 'suggest',
-];
+// Món hàng lên màn đầu: header, dải ngữ cảnh 64px, Danh mục một hàng, rồi kệ Bán chạy nhất (thẻ đầu lộ ở 360×640 và 390×844). Ô khuyến mãi (tự ẩn khi không có
+// gì) và Mua lại (khách cũ) đứng ngay dưới kệ đầu; hai thẻ trụ cột + bốn ô phụ (W177) và dải Story xuống dưới, cuối cùng là MỘT lưới Gợi ý cuộn vô tận.
+const NEW: readonly HomeBlockId[] = ['search', 'context', 'categories', 'bestSellers', 'promo', 'shortcuts', 'stories', 'suggest'];
+const RETURNING: readonly HomeBlockId[] = ['search', 'context', 'categories', 'bestSellers', 'promo', 'purchased', 'shortcuts', 'stories', 'suggest'];
 
 /**
- * Dải quà khách mới (thu gọn): hàng tiêu đề + nút (44) rồi câu lợi ích chiếm cả bề ngang (một dòng ở 375px; câu dài hai dòng cao hơn khoảng 20).
- * Nút nằm cùng hàng với tiêu đề nên câu không bị bóp thành cột 13 chữ rồi cắt mất điều kiện số tiền.
+ * Chiều cao cố định của dải ngữ cảnh ở mọi biến thể (Quà khách mới, Việc cần làm một dòng, thẻ thành viên gọn, khung chờ): dữ liệu về muộn chỉ đổi nội dung
+ * trong dải, không đẩy các khối dưới.
  */
-export const HOME_GIFT_HEIGHT = 84;
+export const HOME_CONTEXT_HEIGHT = 64;
+/** Dải Quà khách mới thu gọn. */
+export const HOME_GIFT_HEIGHT = HOME_CONTEXT_HEIGHT;
+/** Thẻ thành viên gọn và khung chờ của nó. */
+export const HOME_HERO_HEIGHT = HOME_CONTEXT_HEIGHT;
 
-/** Chiều cao cố định của thẻ thành viên và khung chờ của nó: bằng dải quà khách mới để hai khối thay chỗ nhau (unknown sang new, new sang returning) không làm trang nhảy. */
-export const HOME_HERO_HEIGHT = HOME_GIFT_HEIGHT;
-
+/** Chưa biết loại khách thì dùng thứ tự khách mới: dải ngữ cảnh hiện khung chờ, Mua lại chỉ chen vào khi biết là khách cũ. */
 export function homeBlockOrder(kind: HomeKindState): readonly HomeBlockId[] {
-  return kind === 'returning' ? RETURNING : kind === 'new' ? NEW : UNKNOWN;
+  return kind === 'returning' ? RETURNING : NEW;
 }
 
-/** Khoảng trống giữ chỗ cho mọi khối dưới thẻ thành viên trong lúc loại khách và dữ liệu quyết định chúng chưa về. */
+/** Khoảng trống giữ chỗ cho mọi khối dưới dải ngữ cảnh trong lúc loại khách và dữ liệu quyết định chúng chưa về. */
 export type HomeRenderBlock = HomeBlockId | 'settling';
 
 /**
- * Thứ tự dựng thật. Khi `settling`, mọi khối dưới thẻ thành viên được thay bằng MỘT khung chờ và chỉ hiện cùng lúc khi dữ liệu đã chốt:
- * dựng từng khối ngay khi dữ liệu của nó về thì khối nào chen vào cũng đẩy các khối đã vẽ xuống (loại khách đổi, Giờ vàng, Mua lại, Việc cần làm).
+ * Thứ tự dựng thật. Khi `settling`, mọi khối dưới dải ngữ cảnh được thay bằng MỘT khung chờ và chỉ hiện cùng lúc khi dữ liệu đã chốt:
+ * dựng từng khối ngay khi dữ liệu của nó về thì khối nào chen vào cũng đẩy các khối đã vẽ xuống (loại khách đổi, Giờ vàng, Mua lại).
  */
 export function homeRenderOrder(kind: HomeKindState, settling: boolean): readonly HomeRenderBlock[] {
   const order = homeBlockOrder(kind);
   if (!settling) return order;
-  const hero = order.findIndex((id) => id === 'member' || id === 'welcome');
-  return [...order.slice(0, hero + 1), 'settling'];
+  return [...order.slice(0, order.indexOf('context') + 1), 'settling'];
 }
 
 /**
  * Thứ tự dựng khi máy chủ đã dựng bố cục khách mới (web: HTML đầu luôn là khách vãng lai) rồi khôi phục phiên mới cho biết đây là khách có tài khoản mà
- * máy chưa nhớ loại. Giữ các khối đã vẽ (Giờ vàng, Bán chạy, Gợi ý...) thay vì thay hết bằng khung chờ: chỉ dải quà khách mới đổi thành khung giữ
- * chỗ của thẻ thành viên (cùng chiều cao `HOME_HERO_HEIGHT`), khối riêng của khách cũ. Thứ tự khối là của khách mới, không xáo trộn.
- * Biết là khách cũ thì Mua lại chen SAU Bán chạy nhất, không phải trước Danh mục như `RETURNING`: chen lên đó đẩy Danh mục và Bán chạy đang trong
- * màn đầu xuống 148px (CLS ~0,12). Chỉ lần mở đầu trên máy chưa nhớ loại khách; lần sau máy đã nhớ, dựng đúng `RETURNING`.
+ * máy chưa nhớ loại. Giữ các khối đã vẽ thay vì thay hết bằng khung chờ: dải ngữ cảnh đổi nội dung tại chỗ (cùng chiều cao). Biết là khách cũ thì Mua lại
+ * chen ngay trên lưới Gợi ý, dưới màn đầu: chen dưới kệ Bán chạy nhất như `RETURNING` đẩy lối vào đang nằm trong màn đầu 390×844 xuống. Chỉ lần mở đầu trên
+ * máy chưa nhớ loại khách; lần sau máy đã nhớ, dựng đúng `RETURNING`.
  */
 export function homeKeptOrder(kind: HomeKindState): readonly HomeBlockId[] {
-  const kept = NEW.map((id) => (id === 'welcome' && kind !== 'new' ? 'member' : id));
-  if (kind !== 'returning') return kept;
-  const at = kept.indexOf('bestSellers') + 1;
-  return [...kept.slice(0, at), 'purchased', ...kept.slice(at)];
+  if (kind !== 'returning') return NEW;
+  const at = NEW.indexOf('suggest');
+  return [...NEW.slice(0, at), 'purchased', ...NEW.slice(at)];
+}
+
+// ---- Dải ngữ cảnh ----
+
+export type HomeContextVariant = 'skeleton' | 'todo' | 'gift' | 'member';
+
+/**
+ * Biến thể của dải ngữ cảnh. Chưa biết loại khách: khung chờ. Có việc (đơn chờ chuyển khoản, đang giao, đang chuẩn bị): Việc cần làm, kể cả khách mới (đơn chờ
+ * tiền gấp hơn quà). Việc còn đang tải mà lần mở trước của tài khoản này có việc (`todoRemembered`): khung chờ thay vì vẽ quà hay thẻ rồi đổi. Còn lại: khách
+ * mới thấy Quà khách mới, khách cũ thấy thẻ thành viên gọn. Biến thể nào cũng cao `HOME_CONTEXT_HEIGHT`.
+ */
+export function homeContextVariant(o: { kind: HomeKindState; todoCount: number; todoPending: boolean; todoRemembered: boolean }): HomeContextVariant {
+  if (o.kind === 'unknown') return 'skeleton';
+  if (o.todoCount > 0) return 'todo';
+  if (o.todoPending && o.todoRemembered) return 'skeleton';
+  return o.kind === 'new' ? 'gift' : 'member';
+}
+
+/** Tên khối ghi ở `data-home-block` (đo xem khối, chọn trong test): giữ tên cũ của ba khối đã gộp để số đo trước và sau so được với nhau. */
+export function homeContextBlockName(variant: HomeContextVariant): 'welcome' | 'todo' | 'member' {
+  return variant === 'gift' ? 'welcome' : variant === 'todo' ? 'todo' : 'member';
+}
+
+interface HomeTodoData {
+  pending?: { order: unknown } | null;
+  shipping?: { order: unknown; total?: number } | null;
+  processing?: { order: unknown; total?: number } | null;
+}
+
+/** Số loại việc đang có (chờ chuyển khoản, đang giao, đang chuẩn bị). Chưa có dữ liệu → 0. */
+export function homeTodoCount(data: HomeTodoData | null | undefined): number {
+  if (!data) return 0;
+  return (data.pending?.order ? 1 : 0) + (data.shipping?.order ? 1 : 0) + (data.processing?.order ? 1 : 0);
+}
+
+/**
+ * Việc hiện ở dải (một dòng): chờ chuyển khoản trước, rồi đang giao, rồi đang chuẩn bị. `more` = còn bao nhiêu việc khác (mỗi loại tính một, cộng đơn thứ hai
+ * trở đi cùng loại), để dòng nói "và N việc khác" và mũi tên mở danh sách đơn.
+ */
+export function homeTodoLead(data: HomeTodoData | null | undefined): { kind: 'pending' | 'shipping' | 'processing'; more: number } | null {
+  if (!data) return null;
+  const extra = (s: { total?: number } | null | undefined) => Math.max(0, (s?.total ?? 1) - 1);
+  const kinds = [
+    data.pending?.order ? { kind: 'pending' as const, extra: 0 } : null,
+    data.shipping?.order ? { kind: 'shipping' as const, extra: extra(data.shipping) } : null,
+    data.processing?.order ? { kind: 'processing' as const, extra: extra(data.processing) } : null,
+  ].filter((x): x is NonNullable<typeof x> => x !== null);
+  const lead = kinds[0];
+  if (!lead) return null;
+  return { kind: lead.kind, more: kinds.length - 1 + kinds.reduce((n, k) => n + k.extra, 0) };
+}
+
+// ---- Ô khuyến mãi ----
+
+export type HomePromoKind = 'flash' | 'banner' | 'combos';
+
+/**
+ * MỘT ô khuyến mãi dưới kệ Bán chạy nhất, ưu tiên: Giờ vàng đang chạy (có hạn giờ) > banner chiến dịch > combo. Đang tải mà lần mở trước có (gợi ý nhớ) thì
+ * giữ chỗ cho đúng khối đó; không nhớ thì chờ im lặng. Không có gì thì ô ẩn hẳn, không giữ chỗ.
+ */
+export function homePromoPick(o: {
+  flashItems: number;
+  flashPending: boolean;
+  flashRemembered: boolean;
+  bannerSlides: number;
+  bannerPending: boolean;
+  bannerRemembered: boolean;
+  combos: number;
+}): HomePromoKind | null {
+  if (o.flashItems > 0 || (o.flashPending && o.flashRemembered)) return 'flash';
+  if (o.bannerSlides > 0 || (o.bannerPending && o.bannerRemembered)) return 'banner';
+  if (o.combos > 0) return 'combos';
+  return null;
+}
+
+// ---- Thẻ chen trong lưới Gợi ý ----
+
+/** Thẻ chen đứng sau chừng này thẻ đầu của lưới Gợi ý (bốn hàng hai cột). */
+export const HOME_INTERLEAVE_AFTER = 8;
+
+export type HomeInterleaveCard = 'quiz' | 'community';
+
+/** Chẩn đoán tổ ấm và Cộng đồng luân phiên theo ngày (hạt giống ngày Việt Nam `YYYY-MM-DD` của lưới Gợi ý): ngày chẵn Chẩn đoán, ngày lẻ Cộng đồng. */
+export function homeInterleaveCard(daySeed: string): HomeInterleaveCard {
+  const day = Number(daySeed.slice(-2));
+  return Number.isFinite(day) && day % 2 === 1 ? 'community' : 'quiz';
 }
 
 /** Giữ khung chờ tối đa chừng này: mạng chậm hay API lỗi không được giữ trắng cả trang. */
@@ -140,6 +219,8 @@ export interface HomeFlags {
   claimEnabled: boolean;
   /** Khách còn yêu cầu đổi rác đang mở: mục Đổi rác vẫn hiện (ghi "Yêu cầu") dù chương trình tạm dừng. */
   recycleOpenRequests?: boolean;
+  /** `false` = đã biết không có suất Giờ vàng nào (đang chạy hay sắp tới) có món: bỏ lối vào Giờ vàng thay vì dẫn tới trang trống. Chưa biết thì giữ. */
+  flashLive?: boolean;
 }
 
 export const RECYCLE_REQUESTS_LABEL = 'Yêu cầu của tôi';
@@ -170,6 +251,7 @@ export function visibleHomeShortcuts(flags: HomeFlags): HomeShortcutSpec[] {
       return flags.recycleOpenRequests ? [{ ...s, label: RECYCLE_REQUESTS_SHORTCUT_LABEL, ariaLabel: 'Yêu cầu của tôi về đổi rác' }] : [];
     }
     if (s.flag === 'claim') return flags.claimEnabled ? [s] : [];
+    if (s.id === 'flash' && flags.flashLive === false) return [];
     return [s];
   });
 }
@@ -238,8 +320,8 @@ export const HOME_ECOSYSTEM_PILLARS: readonly HomeEcosystemPillarSpec[] = [
     id: 'subscription',
     tier: 'chip',
     title: 'Mua xoay vòng',
-    subtitle: 'Đặt định kỳ tiết kiệm tới 17%',
-    badge: 'Định kỳ -17%',
+    subtitle: fillCopy('home.pillar.subscribe.subtitle'),
+    badge: fillCopy('home.pillar.subscribe.badge'),
     tone: 'botanical',
     webHref: '/san-pham?filter=subscription',
     miniRoute: '/subscriptions',
@@ -266,23 +348,39 @@ export const HOME_ECOSYSTEM_PILLARS: readonly HomeEcosystemPillarSpec[] = [
   },
 ];
 
+export interface HomePillarOptions {
+  wastePausedWithOpenRequests?: boolean;
+  /** Tỉ lệ giảm của đơn định kỳ do máy chủ cấu hình (0,12 = 12%). Chưa có cấu hình thật thì không hứa con số nào. */
+  subscribeDiscountPct?: number | null;
+  /** `false` = đã biết không có suất Giờ vàng nào có món: bỏ thẻ "Mua lẻ · Giờ vàng", thẻ Đổi rác giãn hết hàng (cùng chiều cao, không làm trang nhảy). */
+  flashLive?: boolean;
+}
+
 /**
- * Sáu lối vào luôn vẽ ngay từ khung hình đầu (không đổi số ô nên CLS = 0). Khi chương trình Đổi rác tạm dừng mà khách còn yêu cầu mở,
- * thẻ Đổi rác đổi lời mời sang theo dõi yêu cầu đang mở mà giữ nguyên kích thước.
+ * Lối vào vẽ ngay từ khung hình đầu. Khi chương trình Đổi rác tạm dừng mà khách còn yêu cầu mở, thẻ Đổi rác đổi lời mời sang theo dõi yêu cầu đang mở
+ * mà giữ nguyên kích thước. Thẻ Mua xoay vòng chỉ nói con số tiết kiệm lấy từ cấu hình.
  */
-export function resolveHomeEcosystemPillars(opts: { wastePausedWithOpenRequests?: boolean } = {}): HomeEcosystemPillarSpec[] {
-  return HOME_ECOSYSTEM_PILLARS.map((p) =>
-    p.id === 'recycle' && opts.wastePausedWithOpenRequests
-      ? {
+export function resolveHomeEcosystemPillars(opts: HomePillarOptions = {}): HomeEcosystemPillarSpec[] {
+  const pct = opts.subscribeDiscountPct != null && opts.subscribeDiscountPct > 0 ? Math.round(opts.subscribeDiscountPct * 100) : null;
+  return HOME_ECOSYSTEM_PILLARS.flatMap((p): HomeEcosystemPillarSpec[] => {
+    if (p.id === 'retail' && opts.flashLive === false) return [];
+    if (p.id === 'recycle' && opts.wastePausedWithOpenRequests) {
+      return [
+        {
           ...p,
           title: RECYCLE_REQUESTS_LABEL,
           subtitle: 'Theo dõi yêu cầu đổi rác đang mở',
           badge: RECYCLE_REQUESTS_SHORTCUT_LABEL,
           webHref: '/doi-rac/yeu-cau',
           miniRoute: '/recycle/requests',
-        }
-      : p,
-  );
+        },
+      ];
+    }
+    if (p.id === 'subscription' && pct !== null) {
+      return [{ ...p, subtitle: fillCopy('home.pillar.subscribe.subtitlePct', { pct }), badge: fillCopy('home.pillar.subscribe.badgePct', { pct }) }];
+    }
+    return [p];
+  });
 }
 
 /** Tách theo thứ bậc để hai app vẽ cùng một cấu trúc: `heroes` ở hàng 1, `chips` ở hàng 2. */
@@ -750,7 +848,7 @@ export function categoriesBlockHeight(cells: number): number {
 }
 
 /**
- * Chiều cao bốn ô của khung chờ chung Trang chủ (`HomeSettlingSkeleton`): một hàng lối tắt, một khối cỡ Giờ vàng, danh mục một hàng 5 ô, rồi một kệ Bán chạy nhất.
+ * Chiều cao các ô của khung chờ chung Trang chủ (`HomeSettlingSkeleton`), theo thứ tự khối dưới dải ngữ cảnh: danh mục một hàng 5 ô, kệ Bán chạy nhất, lối vào, dải Story.
  * Mini App và web dùng chung để khung chờ thay bằng khối thật không làm trang nhảy; đổi chiều cao khối thật thì sửa ở đây (số đo Mini 375px).
  */
 export const HOME_SETTLING_HEIGHTS = {

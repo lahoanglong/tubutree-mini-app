@@ -39,13 +39,15 @@ beforeEach(() => {
 });
 
 describe('Trang chủ dựng sẵn cho khách đã có cookie phiên (HTML đầu, chưa hydrate)', () => {
-  it('khách cũ: thẻ thành viên, Việc cần làm và Mua lại đã ở dạng khung chờ trong HTML server; Bán chạy nhất đứng sau Danh mục như khách mới', async () => {
+  it('khách cũ: dải ngữ cảnh (thẻ thành viên hay Việc cần làm) là MỘT khung chờ 64px trong HTML server; Danh mục rồi Bán chạy nhất, Mua lại nằm dưới kệ đầu', async () => {
     const html = await render('returning-2');
     expect(html).toContain('data-testid="member-card-loading"');
-    expect(html).toContain('data-testid="todo-strip-loading"');
-    expect(blocks(html)).toEqual(expect.arrayContaining(['member', 'purchased']));
-    expect(blocks(html).indexOf('purchased')).toBeLessThan(blocks(html).indexOf('categories'));
-    expect(blocks(html).indexOf('categories')).toBeLessThan(blocks(html).indexOf('bestSellers'));
+    expect(html).not.toContain('data-testid="todo-strip-loading"');
+    const order = blocks(html);
+    expect(order).toContain('member');
+    expect(order.indexOf('member')).toBeLessThan(order.indexOf('categories'));
+    expect(order.indexOf('categories')).toBeLessThan(order.indexOf('bestSellers'));
+    if (order.includes('purchased')) expect(order.indexOf('bestSellers')).toBeLessThan(order.indexOf('purchased'));
   });
 
   it('khách cũ không có việc cần làm lần trước: không dựng khung Việc cần làm', async () => {

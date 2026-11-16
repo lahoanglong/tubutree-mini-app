@@ -134,3 +134,57 @@ describe('ShortcutGrid Mini App — 2 thẻ chính + 4 ô phụ + lối tắt nh
     }
   });
 });
+
+describe('ShortcutGrid Mini App — Giờ vàng đã biết và con số tiết kiệm lấy từ cấu hình', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.cfg = { isLoaded: true, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } };
+    mocks.openRequests = false;
+  });
+
+  it('flashLive=false (đã biết không có Giờ vàng): bỏ thẻ "Mua lẻ · Giờ vàng", thẻ Đổi rác trải hết hàng 1 và các ô phụ không đổi', () => {
+    const { container } = render(<ShortcutGrid flashLive={false} />);
+    expect(container.querySelector('[data-pillar="retail"]')).toBeNull();
+    const heroes = Array.from(container.querySelectorAll<HTMLElement>('[data-tier="hero"]'));
+    expect(heroes.map((h) => h.dataset.pillar)).toEqual(['recycle']);
+    expect(heroes[0]!.style.gridColumn).toBe('1 / -1');
+    expect(container.querySelectorAll('[data-tier="chip"]')).toHaveLength(4);
+  });
+
+  it('flashLive=false: lối tắt nhanh cũng không có Giờ vàng, và hộp thoại "Thêm" không liệt kê Giờ vàng', () => {
+    render(<ShortcutGrid flashLive={false} />);
+    const pills = screen.getByTestId('shortcut-quick-pills');
+    expect(within(pills).queryByRole('button', { name: /Giờ vàng/ })).toBeNull();
+    fireEvent.click(within(pills).getByRole('button', { name: /Thêm/ }));
+    const dialog = screen.getByRole('dialog');
+    expect(rows(dialog).some((b) => /Giờ vàng/.test(b.textContent ?? ''))).toBe(false);
+  });
+
+  it('flashLive=true hay chưa biết (undefined): giữ đủ 2 thẻ chính, mỗi thẻ ở nửa hàng (không trải hết hàng)', () => {
+    for (const flashLive of [true, undefined]) {
+      const { container, unmount } = render(<ShortcutGrid flashLive={flashLive} />);
+      const heroes = Array.from(container.querySelectorAll<HTMLElement>('[data-tier="hero"]'));
+      expect(heroes.map((h) => h.dataset.pillar)).toEqual(['retail', 'recycle']);
+      for (const h of heroes) expect(h.style.gridColumn).toBe('');
+      unmount();
+    }
+  });
+
+  it('Mua xoay vòng nói con số tiết kiệm CHỈ khi cấu hình đã về: 0,17 → 17% từ máy chủ, không còn số cố định trong mã', () => {
+    mocks.cfg = { isLoaded: true, subscribeDiscountPct: 0.12, waste: { enabled: true }, loyalty: { marketplaceClaimEnabled: true } };
+    const first = render(<ShortcutGrid />);
+    const label = (c: HTMLElement) => c.querySelector('[data-pillar="subscription"]')!.getAttribute('aria-label') ?? '';
+    expect(label(first.container)).toContain('12%');
+    expect(label(first.container)).not.toContain('17%');
+    first.unmount();
+
+    mocks.cfg = { isLoaded: false, isPending: true, subscribeDiscountPct: 0.17, waste: { enabled: false } };
+    const loading = render(<ShortcutGrid />);
+    expect(label(loading.container)).not.toMatch(/\d+%/);
+    loading.unmount();
+
+    mocks.cfg = { isLoaded: true, subscribeDiscountPct: 0, waste: { enabled: true } };
+    const zero = render(<ShortcutGrid />);
+    expect(label(zero.container)).not.toMatch(/\d+%/);
+  });
+});

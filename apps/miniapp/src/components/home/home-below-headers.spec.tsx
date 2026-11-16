@@ -1,28 +1,16 @@
-import { fireEvent, render, screen, within } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
 import type * as ZmpUi from 'zmp-ui';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ navigate: vi.fn(), haptic: vi.fn() }));
+const mocks = vi.hoisted(() => ({ navigate: vi.fn(), haptic: vi.fn(), getFeed: vi.fn() }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
 vi.mock('../../utils/haptic', () => ({ haptic: mocks.haptic }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string }) => unknown) => sel({ status: 'authenticated' }) }));
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ communityPublicPreview: false, isLoaded: true }) }));
-vi.mock('../../services/shop-api', () => ({
-  fetchBrands: vi.fn().mockResolvedValue([
-    { brand: 'Tubu', count: 4, slug: 'tubu' },
-    { brand: 'Nhà Vườn', count: 2, slug: null },
-  ]),
-}));
-vi.mock('../../services/feed-api', () => ({
-  getFeed: vi.fn().mockResolvedValue({
-    posts: [{ id: 'p1', title: 'Lá cúc bị vàng', body: 'x', author: 'An', createdAt: new Date().toISOString(), commentCount: 2 }],
-  }),
-  getFeedPublicPreview: vi.fn(),
-}));
+vi.mock('../../services/feed-api', () => ({ getFeed: mocks.getFeed, getFeedPublicPreview: vi.fn() }));
 
-import { BrandJourney } from './brand-journey';
 import { CommunityPreview } from './community-preview';
 
 function wrap(ui: ReactNode) {
@@ -30,46 +18,15 @@ function wrap(ui: ReactNode) {
   return render(<QueryClientProvider client={qc}>{ui}</QueryClientProvider>);
 }
 
-beforeEach(() => vi.clearAllMocks());
+const POST = { id: 'p1', title: 'Lá cúc bị vàng', body: 'x', author: 'An', createdAt: new Date().toISOString(), commentCount: 2 };
 
-describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng SectionHeader (P2 #5)', () => {
-  it('Hành trình nguyên liệu: một SectionHeader, tiêu đề h2 chữ Inter, nút "Xem bản đồ" mở /brand-story', async () => {
-    wrap(<BrandJourney />);
-    const header = screen.getByTestId('section-header');
-    const title = within(header).getByRole('heading', { level: 2, name: 'Hành trình nguyên liệu' });
-    expect(title).toHaveStyle({ fontFamily: 'var(--font-ui)', fontWeight: '700' });
-    expect(screen.getAllByRole('heading', { level: 2 })).toHaveLength(1);
-    fireEvent.click(within(header).getByRole('button', { name: 'Xem bản đồ Hành trình nguyên liệu' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/brand-story');
-  });
+beforeEach(() => {
+  vi.clearAllMocks();
+  mocks.getFeed.mockResolvedValue({ posts: [POST] });
+});
 
-  it('Hành trình nguyên liệu: chip nhãn bấm được, nút "Xem bản đồ" ở tiêu đề là điều khiển đọc được duy nhất của trang bản đồ', async () => {
-    wrap(<BrandJourney />);
-    fireEvent.click(await screen.findByRole('button', { name: 'Tubu' }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/brand/tubu');
-    expect(screen.getAllByRole('button', { name: /bản đồ/i })).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Xem bản đồ Hành trình nguyên liệu' })).toBeTruthy();
-  });
-
-  it('Hành trình nguyên liệu: thẻ bản đồ ẩn khỏi trình đọc và khỏi Tab (aria-hidden + tabIndex -1) nhưng chạm vẫn mở bản đồ (H3 #3)', async () => {
-    const { container } = wrap(<BrandJourney />);
-    await screen.findByRole('button', { name: 'Tubu' });
-    const card = Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('thương hiệu Việt'))!;
-    expect(card.getAttribute('aria-hidden')).toBe('true');
-    expect(card.tabIndex).toBe(-1);
-    fireEvent.click(card);
-    expect(mocks.navigate).toHaveBeenCalledWith('/brand-story');
-  });
-
-  it('Hành trình nguyên liệu: câu mô tả số nhãn vẫn đọc được đúng một lần dù thẻ bản đồ aria-hidden (H3 review)', async () => {
-    const { container } = wrap(<BrandJourney />);
-    await screen.findByRole('button', { name: 'Tubu' });
-    const spokenCopy = Array.from(container.querySelectorAll('span')).filter((e) => e.children.length === 0 && /thương hiệu Việt/.test(e.textContent ?? '') && !e.closest('[aria-hidden="true"]'));
-    expect(spokenCopy).toHaveLength(1);
-    expect(spokenCopy[0]!.closest('button')).toBeNull();
-  });
-
-  it('Cộng đồng hỏi đáp: một SectionHeader, tiêu đề h2 chữ Inter, nút "Xem tất cả" mở /feed', async () => {
+describe('Cộng đồng hỏi đáp, thẻ chen trong lưới Gợi ý', () => {
+  it('một SectionHeader, tiêu đề h2 chữ Inter, nút "Xem tất cả" mở /feed', async () => {
     wrap(<CommunityPreview />);
     await screen.findByText('Lá cúc bị vàng');
     const header = screen.getByTestId('section-header');
@@ -77,5 +34,35 @@ describe('Hành trình nguyên liệu và Cộng đồng hỏi đáp dùng Secti
     expect(title).toHaveStyle({ fontFamily: 'var(--font-ui)', fontWeight: '700' });
     fireEvent.click(within(header).getByRole('button', { name: 'Xem tất cả Cộng đồng hỏi đáp' }));
     expect(mocks.navigate).toHaveBeenCalledWith('/feed');
+  });
+
+  it('thẻ chen nằm trong cột của lưới nên không tự đặt đệm ngang (đệm đôi làm thẻ hẹp hơn lưới 32px)', async () => {
+    const { container } = wrap(<CommunityPreview />);
+    await screen.findByText('Lá cúc bị vàng');
+    expect((container.querySelector('section') as HTMLElement).style.padding).toBe('');
+  });
+
+  it('đang tải: khung chờ cao đúng bằng thẻ có hai bài (không đẩy thẻ sản phẩm phía dưới), có tiêu đề; tải xong thì bài thay vào cùng chiều cao', async () => {
+    let resolve!: (v: unknown) => void;
+    mocks.getFeed.mockReturnValue(new Promise((r) => { resolve = r; }));
+    const { container } = wrap(<CommunityPreview />);
+    const loading = screen.getByTestId('community-preview-loading');
+    expect(loading).toHaveAttribute('aria-busy', 'true');
+    const skeletonHeight = (loading.querySelector('.tubu-skeleton') as HTMLElement).style.height;
+    expect(skeletonHeight).toBe('138px');
+    resolve({ posts: [POST, { ...POST, id: 'p2', title: 'Tưới cây lúc nào' }] });
+    await screen.findByText('Tưới cây lúc nào');
+    expect(container.querySelector('[data-testid="community-preview-loading"]')).toBeNull();
+    const card = container.querySelector('section > div:last-child') as HTMLElement;
+    // Mỗi dòng cao cố định 68 (viền trên của dòng thứ hai tính trong đó) + viền hai mép: 2 × 68 + 2 = 138.
+    expect(card.style.minHeight).toBe(skeletonHeight);
+    expect(Array.from(container.querySelectorAll<HTMLElement>('[role="button"]')).map((r) => r.style.height)).toEqual(['68px', '68px']);
+  });
+
+  it('không có bài hay lỗi: không vẽ gì (không để lại tiêu đề trơ)', async () => {
+    mocks.getFeed.mockResolvedValue({ posts: [] });
+    const { container } = wrap(<CommunityPreview />);
+    await waitFor(() => expect(mocks.getFeed).toHaveBeenCalled());
+    await waitFor(() => expect(container).toBeEmptyDOMElement());
   });
 });

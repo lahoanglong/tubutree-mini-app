@@ -1,10 +1,6 @@
 import { HomeQuizCard } from '../game/home-quiz-card';
 
-/** Khối `quiz` của Trang chủ: thẻ mời tĩnh của Chẩn đoán tổ ấm với đệm ngang của khối (Vườn Xanh dùng cùng thẻ, đệm do cột của trang lo). */
+/** Thẻ chen Chẩn đoán tổ ấm trong lưới Gợi ý của Trang chủ: thẻ mời tĩnh, không gọi API tới khi khách mở sheet (lưới đã lo đệm ngang; Vườn Xanh dùng cùng thẻ, đệm do cột của trang lo). */
 export function HomeQuiz() {
-  return (
-    <div className="tubu-hqz-gutter">
-      <HomeQuizCard />
-    </div>
-  );
+  return <HomeQuizCard />;
 }

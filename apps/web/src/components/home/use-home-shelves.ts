@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { BestSellersBasis, BestSellersPage } from '@tubutree/app-core/api/browse';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
@@ -8,13 +8,14 @@ import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import type { BundleDTO } from '@tubutree/app-core/api/bundle';
 import { comboView, type ComboView } from '@tubutree/app-core/commerce/bundle-view';
 import { quickReorderShelfItems } from '@tubutree/app-core/commerce/quick-reorder';
-import type { HomeKindState } from '@tubutree/app-core/home-layout';
+import { homePromoPick, readFlashHint, type HomeKindState, type HomePromoKind } from '@tubutree/app-core/home-layout';
 import { comboShelfEntry, composeHomeShelves, flashExcludedVariations, flashShelfEntry, imageFirst, purchasedShelfEntry } from '@tubutree/app-core/merch/home-shelves';
 import { homeCombosQuery } from '@tubutree/app-core/queries/bundle';
 import { flashActiveQuery } from '@tubutree/app-core/queries/flash-sale';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { coreHttp } from '@/lib/core-http';
+import { browserStorage } from '@/lib/recently-viewed';
 import { loadActiveFlashSales } from '@/lib/use-flash-sales';
 import { useHydrated } from '@/lib/use-hydrated';
 import { PURCHASED_RAIL_LIMIT } from '@/components/reorder/purchased-rail';
@@ -22,11 +23,14 @@ import { usePurchasedItems } from '@/components/reorder/use-purchased-items';
 import { useBlockQuery, type BlockQuery } from './use-block-query';
 
 const STALE = 60_000;
+const subscribeNothing = () => () => {};
 
 export interface HomeShelves {
   /** Suất Giờ vàng đã chống trùng (≤8; rỗng khi dưới 3 nên khối ẩn). */
   flash: FlashSaleActiveItem[];
-  /** Combo toàn sàn đang chạy (2–4; rỗng khi dưới 2 nên khối ẩn). Combo là đơn vị nguyên: chiếm slug các món của nó cho Bán chạy nhất và Gợi ý hôm nay, nhưng không bị Giờ vàng/Mua lại loại (Mua lại về sau cùng `/home/me`, loại theo nó thì kệ hiện rồi biến mất). */
+  /** Ô khuyến mãi duy nhất dưới kệ Bán chạy nhất (`homePromoPick`); `null` thì không vẽ ô nào. */
+  promo: HomePromoKind | null;
+  /** Combo toàn sàn đang chạy (2–4; rỗng khi dưới 2 nên khối ẩn, và rỗng khi ô khuyến mãi không phải combo: combo ẩn thì không được chiếm món của Bán chạy nhất). Combo là đơn vị nguyên: chiếm slug các món của nó cho Bán chạy nhất và Gợi ý hôm nay, nhưng không bị Giờ vàng/Mua lại loại (Mua lại về sau cùng `/home/me`, loại theo nó thì kệ hiện rồi biến mất). */
   combos: ComboView[];
   /** Bán chạy nhất đã bỏ món trùng các kệ trên (≤10; rỗng khi dưới 3). */
   bestSellers: ProductCard[];
@@ -43,6 +47,15 @@ export interface HomeShelves {
   /** Khối Giờ vàng gọi khi đồng hồ về 0: suất hết giờ rời kệ và thôi chiếm món, món đó trở lại các kệ dưới. */
   onFlashEnd: () => void;
 }
+
+/** Banner chiến dịch của Trang chủ (`useHomeBanners`): ô khuyến mãi chọn giữa Giờ vàng, banner và combo nên cần biết banner có hiện không. */
+export interface HomeShelvesBanner {
+  slides: number;
+  pending: boolean;
+  remembered: boolean;
+}
+
+const NO_BANNER: HomeShelvesBanner = { slides: 0, pending: false, remembered: false };
 
 export interface HomeShelvesInitial {
   /** Suất Giờ vàng server dựng sẵn trong HTML đầu. */
@@ -62,8 +75,9 @@ export interface HomeShelvesInitial {
  * "chờ combo" để giữ khung như Mini App; chỉ khi máy chủ hụt combo mới tải ở trình duyệt (đi chung request gộp `/home`) và Bán chạy nhất có thể mất món lúc đó. Giờ vàng vẫn hỏi lại ngay vì giá và số suất còn là của lúc dựng trang.
  * Suất đã quá `endAt` không vào chống trùng (khối Giờ vàng cũng không vẽ chúng; nếu để lại, chúng chiếm món và tính vào mức tối thiểu của kệ mà kệ thì
  * ẩn, nên món đó không hiện ở đâu cả). Trước hydrate mọi suất và mọi combo coi là còn giờ, đúng như HTML máy chủ và khối Giờ vàng, để hai bên hydrate cùng một kết quả.
+ * Ô khuyến mãi (`promo`) chỉ vẽ MỘT trong Giờ vàng, banner, combo: combo không được chọn thì kệ combo ẩn nên `combos` rỗng và nó không chiếm món của Bán chạy nhất.
  */
-export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial = {}): HomeShelves {
+export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial = {}, banner: HomeShelvesBanner = NO_BANNER): HomeShelves {
   const flashQuery = useBlockQuery(
     useQuery({
       queryKey: flashActiveQuery(coreHttp).queryKey,
@@ -84,6 +98,9 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
   const [expiredTick, setExpiredTick] = useState(0);
   const onFlashEnd = useCallback(() => setExpiredTick((n) => n + 1), []);
 
+  // Đọc bằng useSyncExternalStore: HTML server không có kho nên bản server là "chưa nhớ", sau hydrate mới đọc thật (như khối Giờ vàng).
+  const flashRemembered = useSyncExternalStore(subscribeNothing, () => readFlashHint(browserStorage()), () => false);
+  const flashPending = flashQuery.isLoading;
   const flashData = flashQuery.data;
   const purchasedData = purchased.data?.items;
   const bestData = bestSellerQuery.data?.data;
@@ -94,11 +111,10 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
     const now = serverNow();
     // Danh sách gốc còn hạn, trước khi chống trùng theo slug: mỗi sản phẩm chỉ một thẻ ở kệ Giờ vàng nhưng MỌI phân loại của nó đang giảm giá.
     const liveFlash = (flashData ?? []).filter((item) => !hydrated || Date.parse(item.endAt) > now);
-    const composed = composeHomeShelves({
+    const build = (combos: ComboView[]) => ({
       flash: liveFlash.map(flashShelfEntry),
       purchased: kind === 'returning' ? quickReorderShelfItems(purchasedData ?? []).map(purchasedShelfEntry) : [],
-      // Trước hydrate không kiểm hạn combo (`liveAt` -∞): HTML dựng sẵn đã lọc theo giờ máy chủ lúc dựng, nên hydrate vẽ đúng các combo đó rồi mới kiểm hạn thật.
-      combos: (combosData ?? []).flatMap((b) => comboView(b, now, hydrated ? now : Number.NEGATIVE_INFINITY) ?? []).map(comboShelfEntry),
+      combos: combos.map(comboShelfEntry),
       // Hạng đi cùng món qua bước chống trùng: kệ chỉ vẽ món còn lại nhưng thẻ phải ghi hạng thật, không phải số thứ tự trong kệ đã cắt.
       // Hạng gắn TRƯỚC khi xếp món có ảnh lên đầu (ô lá thay thế không nằm giữa màn đầu): hạng hụt thì thẻ chỉ ghi "Bán chạy" (`ranksAreSequential`).
       bestSellers: imageFirst(
@@ -106,7 +122,22 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
         (x) => Boolean(x.product.thumbnail?.trim()),
       ).map((x) => ({ id: x.product.slug, item: x })),
     });
+    // Trước hydrate không kiểm hạn combo (`liveAt` -∞): HTML dựng sẵn đã lọc theo giờ máy chủ lúc dựng, nên hydrate vẽ đúng các combo đó rồi mới kiểm hạn thật.
+    const liveCombos = (combosData ?? []).flatMap((b) => comboView(b, now, hydrated ? now : Number.NEGATIVE_INFINITY) ?? []);
+    let composed = composeHomeShelves(build(liveCombos));
+    // Giờ vàng đứng đầu thứ tự ưu tiên nên không phụ thuộc combo: chọn ô trước, rồi chỉ giữ combo khi nó là ô được vẽ.
+    const promo = homePromoPick({
+      flashItems: composed.flash.length,
+      flashPending,
+      flashRemembered,
+      bannerSlides: banner.slides,
+      bannerPending: banner.pending,
+      bannerRemembered: banner.remembered,
+      combos: composed.combos.length,
+    });
+    if (promo !== 'combos' && composed.combos.length > 0) composed = composeHomeShelves(build([]));
     return {
+      promo,
       flash: composed.flash,
       combos: composed.combos,
       bestSellers: composed.bestSellers.map((x) => x.product),
@@ -115,6 +146,6 @@ export function useHomeShelves(kind: HomeKindState, initial: HomeShelvesInitial 
       seen: composed.seen,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- `expiredTick` chỉ để tính lại `serverNow()`.
-  }, [kind, flashData, purchasedData, bestData, combosData, hydrated, expiredTick]);
+  }, [kind, flashData, purchasedData, bestData, combosData, hydrated, expiredTick, flashPending, flashRemembered, banner.slides, banner.pending, banner.remembered]);
   return { ...shelves, bestSellerBasis, flashQuery, bestSellerQuery, onFlashEnd };
 }

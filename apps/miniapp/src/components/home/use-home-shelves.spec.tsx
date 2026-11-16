@@ -14,7 +14,7 @@ vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: { status: string })
 
 import { HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
 import { COMBO_HOLD_MS } from '@tubutree/app-core/merch/home-shelves';
-import { useHomeShelves } from './use-home-shelves';
+import { useHomeShelves, type HomePromoInput } from './use-home-shelves';
 
 const flashEnding = (slug: string, endAt: string) => ({ itemId: `i-${slug}`, variationId: `v-${slug}`, productSlug: slug, productName: slug, thumbnail: null, flashPrice: 1, retailPrice: 2, soldCount: 0, quota: 5, endAt });
 const flash = (slug: string) => flashEnding(slug, '2099-01-01T00:00:00.000Z');
@@ -23,11 +23,11 @@ const card = (slug: string) => ({ id: `id-${slug}`, slug, brand: '', name: slug,
 const page = (slugs: string[]) => ({ data: slugs.map(card), meta: { page: 1, limit: 12, total: slugs.length } });
 const slugsOf = (xs: { slug: string }[]) => xs.map((x) => x.slug);
 
-function setup(kind: 'returning' | 'new' | 'unknown', onRender?: (shelves: ReturnType<typeof useHomeShelves>) => void) {
+function setup(kind: 'returning' | 'new' | 'unknown', onRender?: (shelves: ReturnType<typeof useHomeShelves>) => void, promoInput?: HomePromoInput) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
   return renderHook(() => {
-    const shelves = useHomeShelves(kind);
+    const shelves = useHomeShelves(kind, promoInput);
     onRender?.(shelves);
     return shelves;
   }, { wrapper });
@@ -223,24 +223,79 @@ describe('useHomeShelves — chống trùng bốn kệ hàng của Trang chủ',
     });
   });
 
-  describe('combo toàn sàn', () => {
-    it('hai combo đang chạy lên kệ combos và chiếm món của mình: p1 rời Bán chạy nhất (hạng thật các món sau không đổi), `seen` có p1', async () => {
+  describe('combo toàn sàn (chỉ khi combo là ô khuyến mãi: không có Giờ vàng, không có banner)', () => {
+    // Không Giờ vàng thì combo mới là ô được chọn; bảng bán chạy đặt x (Mua lại) và p1 (món của combo) lên đầu để hạng thật dễ đọc.
+    beforeEach(() => {
+      mocks.fetchFlash.mockResolvedValue([]);
+      mocks.fetchProducts.mockResolvedValue(page(['x', 'p1', 'p2', 'p3', 'p4']));
+    });
+
+    it('hai combo đang chạy: promo là combos, lên kệ combos và chiếm món của mình: p1 rời Bán chạy nhất (hạng thật các món sau không đổi), `seen` có p1', async () => {
       mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2')]);
       const { result } = setup('returning');
       await waitFor(() => expect(result.current.combos.map((v) => v.id)).toEqual(['c1', 'c2']));
+      expect(result.current.promo).toBe('combos');
       await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p2', 'p3', 'p4']));
-      expect(result.current.bestSellerRanks).toEqual([4, 5, 6]);
+      expect(result.current.bestSellerRanks).toEqual([3, 4, 5]);
       expect(result.current.seen.has('p1')).toBe(true);
     });
 
-    it('combo chứa món đang ở Giờ vàng vẫn hiện (Giờ vàng giữ p1, combo không bị loại): Bán chạy nhất vẫn bỏ p1', async () => {
-      mocks.fetchFlash.mockResolvedValue(['a', 'b', 'p1'].map(flash));
+    it('Giờ vàng đang chạy thì ô là Giờ vàng: combo bị ẩn nên KHÔNG chiếm món, p1 vẫn ở Bán chạy nhất và không giữ khung chờ chờ combo chậm', async () => {
+      mocks.fetchFlash.mockResolvedValue(['a', 'b', 'c'].map(flash));
+      mocks.fetchProducts.mockResolvedValue(page(['p1', 'p2', 'p3', 'p4']));
+      mocks.fetchCombos.mockReturnValue(new Promise(() => {}));
+      const { result } = setup('returning');
+      await waitFor(() => expect(result.current.flash).toHaveLength(3));
+      expect(result.current.promo).toBe('flash');
+      await waitFor(() => expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3', 'p4']));
+      expect(result.current.bestSellerQuery.isLoading).toBe(false);
+      expect(result.current.combos).toEqual([]);
+    });
+
+    it('Giờ vàng đang chạy và combo về đủ: combo vẫn ẩn và không lấy p1 của Bán chạy nhất', async () => {
+      mocks.fetchFlash.mockResolvedValue(['a', 'b', 'c'].map(flash));
+      mocks.fetchProducts.mockResolvedValue(page(['p1', 'p2', 'p3', 'p4']));
       mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2')]);
       const { result } = setup('returning');
       await waitFor(() => expect(result.current.flash).toHaveLength(3));
+      await waitFor(() => expect(mocks.fetchCombos).toHaveBeenCalled());
       await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
-      expect(result.current.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
-      expect(slugsOf(result.current.bestSellers)).toEqual(['p2', 'p3', 'p4']);
+      expect(result.current.promo).toBe('flash');
+      expect(result.current.combos).toEqual([]);
+      expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3', 'p4']);
+      expect(result.current.seen.has('c1')).toBe(false);
+    });
+
+    it('banner chiến dịch thắng combo: promo là banner, combo ẩn và không chiếm món', async () => {
+      mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2')]);
+      const { result } = setup('returning', undefined, { bannerSlides: 2, bannerPending: false, bannerRemembered: false, flashRemembered: false });
+      await waitFor(() => expect(mocks.fetchCombos).toHaveBeenCalled());
+      await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
+      expect(result.current.promo).toBe('banner');
+      expect(result.current.combos).toEqual([]);
+      expect(slugsOf(result.current.bestSellers)).toEqual(['p1', 'p2', 'p3', 'p4']);
+    });
+
+    it('banner còn tải mà lần mở trước có banner: giữ chỗ cho banner (promo banner), không nhảy sang combo', async () => {
+      mocks.fetchCombos.mockResolvedValue([bundleOf('c1'), bundleOf('c2')]);
+      const { result } = setup('returning', undefined, { bannerSlides: 0, bannerPending: true, bannerRemembered: true, flashRemembered: false });
+      await waitFor(() => expect(mocks.fetchCombos).toHaveBeenCalled());
+      expect(result.current.promo).toBe('banner');
+      expect(result.current.combos).toEqual([]);
+    });
+
+    it('Giờ vàng còn tải mà lần mở trước có Giờ vàng: giữ chỗ cho Giờ vàng (promo flash)', async () => {
+      mocks.fetchFlash.mockReturnValue(new Promise(() => {}));
+      const { result } = setup('returning', undefined, { bannerSlides: 0, bannerPending: false, bannerRemembered: false, flashRemembered: true });
+      expect(result.current.promo).toBe('flash');
+    });
+
+    it('không Giờ vàng, không banner, không combo: promo null (ô ẩn hẳn, không giữ chỗ)', async () => {
+      const { result } = setup('returning');
+      await waitFor(() => expect(result.current.flashQuery.isLoading).toBe(false));
+      await waitFor(() => expect(result.current.bestSellerQuery.isLoading).toBe(false));
+      expect(result.current.promo).toBeNull();
+      expect(result.current.combos).toEqual([]);
     });
 
     it('Mua lại về sau combo và giữ chính món của combo (p1): kệ combos không biến mất ở bất kỳ lần vẽ nào, Bán chạy nhất không đổi', async () => {

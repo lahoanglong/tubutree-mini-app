@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -52,11 +53,11 @@ const CONFIG = {
 const VOUCHER = { code: 'WELCOME-U1', type: 'AMOUNT' as const, value: 25_000, minOrder: 150_000, endAt: '2026-11-17T10:00:00.000Z' };
 const OFFER = { isNewCustomer: true, welcomeVoucher: VOUCHER };
 
-function renderGift() {
+function renderGift(fallback?: ReactNode) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
-      <NewCustomerGift />
+      <NewCustomerGift fallback={fallback} />
     </QueryClientProvider>,
   );
 }
@@ -87,14 +88,31 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(region).not.toHaveTextContent('Đặt định kỳ giảm 17% mỗi đơn');
   });
 
-  it('câu lợi ích chiếm cả bề ngang dưới hàng tiêu đề + nút (không bị bóp thành cột hẹp rồi cắt mất điều kiện), thẻ cao HOME_GIFT_HEIGHT', async () => {
+  it('thu gọn là MỘT hàng cao đúng HOME_GIFT_HEIGHT (64): biểu tượng, tiêu đề, câu lợi ích cắt "…" một dòng và nút cùng hàng; không dòng thứ ba', async () => {
     renderGift();
     const region = await section();
     const headline = Array.from(region.querySelectorAll<HTMLElement>('div')).find((d) => d.textContent === 'Mã 25.000đ · cho đơn từ 150.000đ')!;
     const cta = Array.from(region.querySelectorAll('button')).find((b) => b.textContent?.includes('Chọn sản phẩm'))!;
-    expect(headline.style.getPropertyValue('-webkit-line-clamp') || headline.style.webkitLineClamp).toBe('2');
-    expect(cta.parentElement!.contains(headline)).toBe(false);
-    expect((region.querySelector('[style*="min-height"]') as HTMLElement).style.minHeight).toBe(`${HOME_GIFT_HEIGHT}px`);
+    expect(HOME_GIFT_HEIGHT).toBe(64);
+    expect(headline).toHaveStyle({ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' });
+    expect(headline.style.getPropertyValue('-webkit-line-clamp')).toBe('');
+    // Nút nằm cùng hàng với chữ: cha chung là hàng cao cố định 64, không phải khối chữ.
+    const row = cta.parentElement as HTMLElement;
+    expect(row.contains(headline)).toBe(true);
+    expect(row.style.height).toBe(`${HOME_GIFT_HEIGHT}px`);
+    expect(row.style.boxSizing).toBe('border-box');
+    expect(region.querySelector('[style*="min-height: 64"]')).toBeNull();
+  });
+
+  it('nút bật mở chi tiết vẫn có vùng chạm cao 44 và thu gọn không đổi chiều cao hàng', async () => {
+    renderGift();
+    const region = await section();
+    const toggle = within(region).getByRole('button', { name: /Xem quyền lợi/ });
+    expect(toggle.style.minHeight).toBe('44px');
+    const row = toggle.parentElement as HTMLElement;
+    await userEvent.click(toggle);
+    expect(row.style.height).toBe(`${HOME_GIFT_HEIGHT}px`);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('khách chưa có đơn + có voucher: hiện voucher (mức, đơn tối thiểu, hạn) và các lợi ích mua trực tiếp, kể cả Đặt định kỳ vì Mini App đã bật định kỳ; số đọc từ cấu hình', async () => {
@@ -251,6 +269,34 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     await waitFor(() => expect(mocks.fetchHasAnyOrder).toHaveBeenCalled());
     expect(screen.getByTestId('new-customer-gift-loading')).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
+  });
+
+  it('khách không còn ưu đãi (đã có đơn, lỗi tải ưu đãi, lỗi cấu hình): vẽ fallback thay vì để dải trống; đang tải thì vẫn là khung chờ, chưa vẽ fallback', async () => {
+    const fb = <section aria-label="Thẻ thành viên" />;
+    mocks.getNewCustomerOffer.mockResolvedValue({ isNewCustomer: false, welcomeVoucher: null });
+    const a = renderGift(fb);
+    expect(screen.getByTestId('new-customer-gift-loading')).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Thẻ thành viên' })).toBeNull();
+    expect(await screen.findByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
+    expect(screen.queryByRole('region', { name: 'Quà khách mới' })).toBeNull();
+    a.unmount();
+
+    mocks.getNewCustomerOffer.mockRejectedValue(new Error('boom'));
+    const b = renderGift(fb);
+    expect(await screen.findByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
+    b.unmount();
+
+    mocks.getNewCustomerOffer.mockResolvedValue(OFFER);
+    mocks.getPublicConfig.mockRejectedValue(new Error('boom'));
+    renderGift(fb);
+    expect(await screen.findByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
+  });
+
+  it('tài khoản khách đã có đơn: cũng vẽ fallback', async () => {
+    mocks.guest = true;
+    mocks.fetchHasAnyOrder.mockResolvedValue(true);
+    renderGift(<section aria-label="Thẻ thành viên" />);
+    expect(await screen.findByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
   });
 
   it('nút "Chọn sản phẩm" mở trang mua sắm', async () => {

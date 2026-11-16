@@ -4,7 +4,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
-  ordersFor: vi.fn(),
   fetchOrders: vi.fn(),
   fetchHomeTodo: vi.fn(),
   fetchActive: vi.fn(),
@@ -31,148 +30,193 @@ vi.mock('../../store/auth', () => ({
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import { TODO_ROWS_KEY } from '@tubutree/app-core/home-layout';
-import { TodoStrip } from './todo-strip';
+import type { HomeTodo } from '../../services/shop-api';
+import { TodoStrip, useHomeTodoQueries } from './todo-strip';
 
 const FUTURE = new Date(Date.now() + 3 * 3600_000).toISOString();
 const pendingOrder = { code: 'TUBU1', total: 250000, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PENDING', paymentDeadline: FUTURE };
 const shippingOrder = { code: 'TUBU2', total: 100000, status: 'SHIPPING' };
-const page = (rows: object[]) => ({ data: rows, meta: { page: 1, limit: 1, total: rows.length } });
+const prepOrder = { code: 'TUBU3', total: 90000, status: 'CONFIRMED' };
+const todo = (o: Partial<Record<'pending' | 'shipping' | 'processing', { order: object; total: number } | null>>): HomeTodo =>
+  ({ pending: null, shipping: null, processing: null, ...o }) as unknown as HomeTodo;
 
-function renderStrip() {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={qc}><TodoStrip /></QueryClientProvider>);
+function renderStrip(data: HomeTodo | undefined) {
+  return render(<TodoStrip data={data} />);
 }
 
-describe('TodoStrip — Việc cần làm', () => {
+describe('TodoStrip — dải ngữ cảnh một dòng', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('không có dữ liệu hay hai danh sách rỗng → không vẽ gì (khung chờ và biến thể do HomeContextStrip lo)', () => {
+    expect(renderStrip(undefined).container).toBeEmptyDOMElement();
+    expect(renderStrip(todo({})).container).toBeEmptyDOMElement();
+  });
+
+  it('chỉ một đơn chờ chuyển khoản: nút "Thanh toán" mở trang chuyển khoản, không có mũi tên "việc khác"', () => {
+    renderStrip(todo({ pending: { order: pendingOrder, total: 1 } }));
+    fireEvent.click(screen.getByRole('button', { name: /Thanh toán ngay đơn TUBU1/ }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TUBU1');
+    expect(screen.queryByRole('button', { name: /việc khác/ })).toBeNull();
+  });
+
+  it('chờ chuyển khoản + đang giao: dòng chỉ nói về đơn chờ chuyển khoản, đơn giao thành "+1 việc khác" và mũi tên mở danh sách đơn', () => {
+    renderStrip(todo({ pending: { order: pendingOrder, total: 1 }, shipping: { order: shippingOrder, total: 1 } }));
+    expect(screen.queryByText(/TUBU2/)).toBeNull();
+    expect(screen.getByText('+1 việc khác')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem 1 việc khác trong Đơn hàng' }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/orders');
+    fireEvent.click(screen.getByRole('button', { name: /Thanh toán ngay đơn TUBU1/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/bank-payment/TUBU1');
+  });
+
+  it('đơn đang giao dẫn đầu: chạm dòng mở chi tiết đơn đó; đủ ba loại thì "+2 việc khác"', () => {
+    renderStrip(todo({ shipping: { order: shippingOrder, total: 1 }, processing: { order: prepOrder, total: 1 } }));
+    expect(screen.getByText('+1 việc khác')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('Đơn TUBU2 đang giao'));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/order/TUBU2');
+  });
+
+  it('đủ ba loại và đơn đang giao có thêm đơn thứ hai: đếm cả hai vào số việc khác', () => {
+    renderStrip(todo({ pending: { order: pendingOrder, total: 1 }, shipping: { order: shippingOrder, total: 2 }, processing: { order: prepOrder, total: 1 } }));
+    expect(screen.getByText('+3 việc khác')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Xem 3 việc khác trong Đơn hàng' })).toBeInTheDocument();
+  });
+
+  it('đơn COD vừa đặt (Đang chuẩn bị) dẫn đầu khi không có việc nào hơn: chạm mở chi tiết đơn', () => {
+    renderStrip(todo({ processing: { order: prepOrder, total: 1 } }));
+    fireEvent.click(screen.getByText('Đơn TUBU3 đang chuẩn bị'));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/order/TUBU3');
+  });
+
+  it('một dòng cao 64px, thẻ có viền trái cảnh báo 3px, mũi tên "việc khác" có vùng chạm 44×44 và nằm cùng dòng', () => {
+    renderStrip(todo({ shipping: { order: shippingOrder, total: 1 }, processing: { order: prepOrder, total: 1 } }));
+    const region = screen.getByRole('region', { name: 'Việc cần làm' });
+    const rows = region.querySelectorAll<HTMLElement>('[data-todo-row]');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.style.height).toBe('64px');
+    expect((region.firstElementChild as HTMLElement).style.borderLeft).toContain('3px');
+    expect(region.style.padding).toBe('0px 16px');
+    const arrow = screen.getByRole('button', { name: /^Xem \d+ việc khác/ });
+    expect(rows[0]!.contains(arrow)).toBe(true);
+    expect(arrow).toHaveClass('tubu-hit-44-square');
+  });
+
+  it('tiêu đề và dòng phụ cắt "…" một dòng để tên đơn/số tiền dài không làm dòng cao thêm', () => {
+    renderStrip(todo({ shipping: { order: shippingOrder, total: 1 }, processing: { order: prepOrder, total: 1 } }));
+    expect(screen.getByText('Đơn TUBU2 đang giao')).toHaveStyle({ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' });
+    expect(screen.getByText('+1 việc khác')).toHaveStyle({ whiteSpace: 'nowrap', textOverflow: 'ellipsis', overflow: 'hidden' });
+  });
+});
+
+function Probe() {
+  const q = useHomeTodoQueries();
+  return (
+    <output
+      data-testid="probe"
+      data-loading={String(q.loading)}
+      data-pending={String(q.pending)}
+      data-remembered={String(q.remembered)}
+      data-enabled={String(q.enabled)}
+      data-has={String(q.todoQ.data ? 1 : 0)}
+    />
+  );
+}
+
+function renderProbe() {
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(<QueryClientProvider client={qc}><Probe /></QueryClientProvider>);
+}
+const probe = () => screen.getByTestId('probe');
+const stored = () => JSON.parse(localStorage.getItem(TODO_ROWS_KEY)!);
+
+describe('useHomeTodoQueries — dữ liệu và gợi ý khung chờ của dải ngữ cảnh', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.status = 'authenticated';
     localStorage.clear();
     mocks.fetchActive.mockResolvedValue(2);
-    mocks.fetchHomeTodo.mockImplementation(async () => {
-      const part = async (f: object) => {
-        const res = (await mocks.ordersFor(f, 1, 1)) as { data: object[]; meta: { total: number } };
-        return res.data[0] ? { order: res.data[0], total: res.meta.total } : null;
-      };
-      const [pending, shipping, processing] = await Promise.all([part({ status: 'PENDING_PAYMENT' }), part({ status: 'SHIPPING' }), part({ group: 'processing' })]);
-      return { pending, shipping, processing };
-    });
-    mocks.ordersFor.mockImplementation(async (f: { status?: string }) => page(f.status === 'PENDING_PAYMENT' ? [pendingOrder] : f.status === 'SHIPPING' ? [shippingOrder] : []));
+    mocks.fetchHomeTodo.mockResolvedValue(todo({ shipping: { order: shippingOrder, total: 1 } }));
   });
 
-  it('không có đơn đang xử lý: không vẽ gì và không gọi danh sách đơn', async () => {
+  it('không có đơn đang xử lý: không gọi danh sách việc, chốt loading=false và ghi 0 để lần sau không giữ chỗ', async () => {
+    localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'u1', rows: 1 }));
     mocks.fetchActive.mockResolvedValue(0);
-    const { container } = renderStrip();
-    await waitFor(() => expect(mocks.fetchActive).toHaveBeenCalled());
-    expect(container).toBeEmptyDOMElement();
+    renderProbe();
+    await waitFor(() => expect(stored()).toEqual({ userId: 'u1', rows: 0 }));
+    expect(probe()).toHaveAttribute('data-loading', 'false');
+    expect(probe()).toHaveAttribute('data-enabled', 'false');
     expect(mocks.fetchHomeTodo).not.toHaveBeenCalled();
   });
 
-  it('có đơn chờ thanh toán: nút "Thanh toán ngay" mở trang chuyển khoản; có đơn đang giao: dòng mở chi tiết đơn', async () => {
-    renderStrip();
-    const pay = await screen.findByRole('button', { name: /Thanh toán ngay đơn TUBU1/ });
-    fireEvent.click(pay);
-    expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TUBU1');
-    fireEvent.click(await screen.findByText(/TUBU2/));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/order/TUBU2');
-  });
-
-  it('đơn COD vừa đặt (Đã xác nhận, Đang đóng gói) hiện dòng "đang chuẩn bị": một đơn mở chi tiết, nhiều đơn mở tab Đang xử lý', async () => {
-    const prep = { code: 'TUBU3', total: 90000, status: 'CONFIRMED' };
-    mocks.ordersFor.mockImplementation(async (f: { status?: string; group?: string }) =>
-      f.group === 'processing' ? page([prep]) : page([]),
-    );
-    const first = renderStrip();
-    fireEvent.click(await screen.findByText('Đơn TUBU3 đang chuẩn bị'));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/order/TUBU3');
-    first.unmount();
-    mocks.ordersFor.mockImplementation(async (f: { group?: string }) => (f.group === 'processing' ? { data: [prep], meta: { page: 1, limit: 1, total: 2 } } : page([])));
-    renderStrip();
-    fireEvent.click(await screen.findByText('2 đơn đang chuẩn bị'));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=processing');
-  });
-
-  it('đủ ba loại đơn thì chỉ hai dòng (chờ thanh toán, đang giao): khối vẫn gọn', async () => {
-    mocks.ordersFor.mockImplementation(async (f: { status?: string; group?: string }) =>
-      page(f.status === 'PENDING_PAYMENT' ? [pendingOrder] : f.status === 'SHIPPING' ? [shippingOrder] : f.group === 'processing' ? [{ code: 'TUBU3', total: 1, status: 'CONFIRMED' }] : []),
-    );
-    renderStrip();
-    await screen.findByText(/TUBU2/);
-    expect(screen.queryByText(/TUBU3/)).toBeNull();
-  });
-
-  it('một lời home-todo thay ba lời /orders lọc theo trạng thái', async () => {
-    renderStrip();
-    await screen.findByText(/TUBU2/);
+  it('có việc: MỘT lời home-todo (không gọi /orders lọc theo trạng thái) và ghi 1', async () => {
+    renderProbe();
+    await waitFor(() => expect(stored()).toEqual({ userId: 'u1', rows: 1 }));
+    expect(probe()).toHaveAttribute('data-has', '1');
     expect(mocks.fetchHomeTodo).toHaveBeenCalledTimes(1);
     expect(mocks.fetchOrders).not.toHaveBeenCalled();
   });
 
-  it('không có việc (hai danh sách rỗng) → ẩn hẳn', async () => {
-    mocks.ordersFor.mockResolvedValue(page([]));
-    const { container } = renderStrip();
-    await waitFor(() => expect(mocks.fetchHomeTodo).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(container).toBeEmptyDOMElement());
-  });
-
-  it('lỗi tải đơn → ẩn, không thẻ lỗi', async () => {
-    mocks.ordersFor.mockRejectedValue(new Error('boom'));
-    const { container } = renderStrip();
-    await waitFor(() => expect(mocks.fetchHomeTodo).toHaveBeenCalled());
-    await waitFor(() => expect(container).toBeEmptyDOMElement());
-  });
-
-  it('lần đầu chưa nhớ gì nhưng tổng quan báo có đơn đang xử lý: giữ chỗ một dòng (không chèn dải đẩy trang), có việc thì khối hiện', async () => {
-    let release: (v: unknown) => void = () => {};
-    mocks.fetchHomeTodo.mockImplementation(() => new Promise((r) => { release = r; }));
-    const { container } = renderStrip();
-    await waitFor(() => expect(mocks.fetchHomeTodo).toHaveBeenCalled());
-    expect(screen.getByTestId('todo-strip-loading')).toHaveStyle({ padding: '0px 16px' });
-    expect(container.querySelector('.tubu-skeleton')).toHaveStyle({ height: '64px' });
-    release({ pending: null, shipping: { order: shippingOrder, total: 1 }, processing: null });
-    await screen.findByText(/TUBU2/);
-  });
-
-  it('một lời con lỗi (partial): dòng còn lại vẫn hiện nhưng không ghi số dòng, để khung chờ lần sau không sai', async () => {
+  it('nhiều việc vẫn chỉ ghi 1 (dải luôn một dòng), không ghi 2 như khối hai dòng cũ', async () => {
+    mocks.fetchHomeTodo.mockResolvedValue(todo({ pending: { order: pendingOrder, total: 1 }, shipping: { order: shippingOrder, total: 1 } }));
     localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
-    mocks.fetchHomeTodo.mockResolvedValue({ pending: null, shipping: { order: shippingOrder, total: 1 }, processing: null, partial: true });
-    renderStrip();
-    await screen.findByText(/TUBU2/);
-    expect(JSON.parse(localStorage.getItem(TODO_ROWS_KEY)!)).toEqual({ userId: 'u1', rows: 2 });
+    renderProbe();
+    await waitFor(() => expect(stored()).toEqual({ userId: 'u1', rows: 1 }));
   });
 
-  it('lần mở trước có 1 dòng việc: có khung chờ giữ chỗ; xong thì ghi lại số dòng mới', async () => {
+  it('đang chờ danh sách việc: loading=true và pending=true; chưa ghi gợi ý nào', async () => {
+    mocks.fetchHomeTodo.mockReturnValue(new Promise(() => undefined));
+    renderProbe();
+    await waitFor(() => expect(mocks.fetchHomeTodo).toHaveBeenCalled());
+    expect(probe()).toHaveAttribute('data-loading', 'true');
+    expect(probe()).toHaveAttribute('data-pending', 'true');
+    expect(localStorage.getItem(TODO_ROWS_KEY)).toBeNull();
+  });
+
+  it('lỗi tải việc: không ghi gợi ý (lỗi tạm thời không được làm khung chờ lần sau sai)', async () => {
     localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'u1', rows: 1 }));
-    renderStrip();
-    expect(await screen.findByTestId('todo-strip-loading')).toBeInTheDocument();
-    await screen.findByText(/TUBU2/);
-    expect(JSON.parse(localStorage.getItem(TODO_ROWS_KEY)!)).toEqual({ userId: 'u1', rows: 2 });
+    mocks.fetchHomeTodo.mockRejectedValue(new Error('boom'));
+    renderProbe();
+    await waitFor(() => expect(probe()).toHaveAttribute('data-loading', 'false'));
+    expect(stored()).toEqual({ userId: 'u1', rows: 1 });
   });
 
-  it('khách hết việc: ghi 0 dòng để lần sau không giữ chỗ', async () => {
-    localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
-    mocks.fetchActive.mockResolvedValue(0);
-    renderStrip();
-    await waitFor(() => expect(JSON.parse(localStorage.getItem(TODO_ROWS_KEY)!)).toEqual({ userId: 'u1', rows: 0 }));
+  it('một lời con lỗi (partial): không ghi gợi ý', async () => {
+    localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'u1', rows: 1 }));
+    mocks.fetchHomeTodo.mockResolvedValue({ ...todo({}), partial: true });
+    renderProbe();
+    await waitFor(() => expect(probe()).toHaveAttribute('data-loading', 'false'));
+    expect(stored()).toEqual({ userId: 'u1', rows: 1 });
   });
 
-  it('mỗi việc là MỘT dòng cao 64px, thẻ có viền trái cảnh báo 3px và không đệm dọc (khoảng cách do vỏ khối giữ)', async () => {
-    renderStrip();
-    const region = await screen.findByRole('region', { name: 'Việc cần làm' });
-    const rows = region.querySelectorAll<HTMLElement>('[data-todo-row]');
-    expect(rows).toHaveLength(2);
-    for (const r of rows) expect(r.style.height).toBe('64px');
-    const card = region.firstElementChild as HTMLElement;
-    expect(card.style.borderLeft).toContain('3px');
-    expect(region.style.padding).toBe('0px 16px');
-  });
-
-  it('khung chờ cao đúng số dòng nhớ × 64px', async () => {
-    localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
+  it('remembered: lần mở trước của chính tài khoản này có việc → true; tài khoản khác hay chưa có → false', async () => {
+    localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'u1', rows: 1 }));
     mocks.fetchActive.mockReturnValue(new Promise(() => undefined));
-    renderStrip();
-    const sk = await screen.findByTestId('todo-strip-loading');
-    expect(sk.firstElementChild).toHaveStyle({ height: '128px' });
+    const a = renderProbe();
+    expect(probe()).toHaveAttribute('data-remembered', 'true');
+    a.unmount();
+    localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'khac', rows: 1 }));
+    renderProbe();
+    expect(probe()).toHaveAttribute('data-remembered', 'false');
+  });
+
+  it('đang khôi phục phiên: pending=true và remembered theo tài khoản dùng gần nhất (chưa biết là ai)', () => {
+    mocks.status = 'loading';
+    localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'ai-do', rows: 1 }));
+    renderProbe();
+    expect(probe()).toHaveAttribute('data-pending', 'true');
+    expect(probe()).toHaveAttribute('data-remembered', 'true');
+    expect(mocks.fetchActive).not.toHaveBeenCalled();
+  });
+
+  it('khách chưa đăng nhập: không gọi gì, không pending, không remembered', () => {
+    mocks.status = 'unauthenticated';
+    localStorage.setItem(TODO_ROWS_KEY, JSON.stringify({ userId: 'u1', rows: 1 }));
+    renderProbe();
+    expect(probe()).toHaveAttribute('data-pending', 'false');
+    expect(probe()).toHaveAttribute('data-remembered', 'false');
+    expect(mocks.fetchActive).not.toHaveBeenCalled();
+    expect(mocks.fetchHomeTodo).not.toHaveBeenCalled();
   });
 });
-

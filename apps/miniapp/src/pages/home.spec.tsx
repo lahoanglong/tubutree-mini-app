@@ -65,11 +65,13 @@ vi.mock('../components/home/member-card', () => ({
   MemberCardSkeleton: () => <div data-testid="member-card-loading" />,
   MemberCardUnavailable: ({ onRetry }: { onRetry: () => void }) => <button data-testid="member-card-unavailable" onClick={onRetry}>Thử lại</button>,
 }));
-vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
+vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false, pending: false, remembered: false, todoQ: { data: undefined } }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => <section aria-label="Lối tắt" /> }));
-vi.mock('../components/home/brand-journey', () => ({ BrandJourney: () => null }));
-vi.mock('../components/home/community-preview', () => ({ CommunityPreview: () => null }));
-vi.mock('../components/home/suggest-feed', () => ({ SuggestFeed: () => <section aria-label="Gợi ý cho bạn" /> }));
+vi.mock('../components/home/community-preview', () => ({ CommunityPreview: () => <section aria-label="Cộng đồng" /> }));
+// Lưới Gợi ý thật có test riêng; ở đây chỉ cần thấy Trang chủ truyền xuống đúng thẻ chen (Chẩn đoán tổ ấm hoặc Cộng đồng).
+vi.mock('../components/home/suggest-feed', () => ({
+  SuggestFeed: ({ interleave }: { interleave?: ReactNode }) => <section aria-label="Gợi ý cho bạn">{interleave}</section>,
+}));
 vi.mock('../components/home/new-customer-gift', () => ({ NewCustomerGift: () => <section aria-label="Quà khách mới" /> }));
 vi.mock('../components/cart-button', () => ({ CartButton: () => null }));
 vi.mock('../components/pull-to-refresh', () => ({
@@ -84,7 +86,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 import HomePage from './home';
 import { TubuQueryClient } from '../services/query-client';
 import { homeBlockOrder } from '../components/home/home-blocks';
-import { HOME_BEST_SELLER_LIMIT, homeRenderOrder } from '@tubutree/app-core/home-layout';
+import { HOME_BEST_SELLER_LIMIT, HOME_MAX_BLOCKS, homeRenderOrder } from '@tubutree/app-core/home-layout';
 import { HOME_KIND_KEY } from '../hooks/use-home-customer-kind';
 import { loadHomeBelow } from '../components/home/home-lazy';
 
@@ -114,10 +116,13 @@ const settled = (qc: QueryClient, key: unknown[]) => {
   const s = qc.getQueryState(key)?.status;
   return s === 'success' || s === 'error';
 };
-const RETURNING = [...homeBlockOrder('returning')];
-const NEW = [...homeBlockOrder('new')];
-// Chưa biết loại khách thì mọi khối dưới thẻ thành viên là MỘT khung chờ chung, chỉ hiện cùng lúc khi dữ liệu đã chốt.
-const UNKNOWN = [...homeRenderOrder('unknown', true)];
+// `data-home-block` ghi biến thể đang vẽ: context → welcome/todo/member, promo → flash/banner/combos; không có ô khuyến mãi thì vỏ khối không có mặt.
+const named = (order: readonly string[], context: 'welcome' | 'todo' | 'member', promo?: 'flash' | 'banner' | 'combos') =>
+  order.flatMap((id) => (id === 'context' ? [context] : id === 'promo' ? (promo ? [promo] : []) : [id]));
+const RETURNING = named(homeBlockOrder('returning'), 'member');
+const NEW = named(homeBlockOrder('new'), 'welcome');
+// Chưa biết loại khách thì mọi khối dưới dải ngữ cảnh là MỘT khung chờ chung, chỉ hiện cùng lúc khi dữ liệu đã chốt.
+const UNKNOWN = named(homeRenderOrder('unknown', true), 'member');
 
 describe('HomePage (phương án A, 9 khối)', () => {
   beforeEach(() => {
@@ -149,32 +154,51 @@ describe('HomePage (phương án A, 9 khối)', () => {
     mocks.fetchFlash.mockResolvedValue([f('a', 'v-a-1l'), f('b', 'v-b'), f('c', 'v-c'), f('a', 'v-a-5l')]);
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v-a-5l', slug: 'a' }], nextCursor: null });
     renderHome();
-    await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
+    await waitFor(() => expect(blockOrder()).toEqual(named(homeBlockOrder('returning'), 'member', 'flash')));
     await waitFor(() => expect(screen.getByRole('region', { name: 'Mua lại' })).toHaveAttribute('data-excluded', 'v-a-1l,v-a-5l,v-b,v-c'));
   });
 
-  it('khách cũ: thẻ thành viên, Việc cần làm, lối tắt, Mua lại, Giờ vàng, Danh mục, ... lưới gợi ý cuối', async () => {
+  it('khách cũ: ĐÚNG 8 khối từ header tới lưới Gợi ý cuối (không có ô khuyến mãi thì không vỏ rỗng), thẻ thành viên gọn ở dải ngữ cảnh, Mua lại đứng dưới kệ Bán chạy nhất', async () => {
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
     renderHome();
     await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
-    // Dải Story đứng ngay dưới lối tắt (W42A); Giờ vàng đứng TRƯỚC Mua lại (Q6); Bán chạy nhất có ở cả hai loại khách (Q18).
-    expect(RETURNING.slice(0, 7)).toEqual(['search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash']);
-    expect(RETURNING.indexOf('flash')).toBeLessThan(RETURNING.indexOf('purchased'));
-    expect(RETURNING).toContain('bestSellers');
+    expect(RETURNING).toEqual(['search', 'member', 'categories', 'bestSellers', 'purchased', 'shortcuts', 'stories', 'suggest']);
     expect(screen.getByRole('region', { name: 'Thẻ thành viên' })).toBeInTheDocument();
+    expect(blockOrder().length).toBeLessThanOrEqual(HOME_MAX_BLOCKS);
   });
 
-  it('khối Chẩn đoán tổ ấm (W164): đứng ngay sau Hành trình ở cả hai loại khách, là thẻ tĩnh có h2, không gọi API tới khi khách mở sheet', async () => {
+  it('tối đa 9 khối ở mọi tổ hợp: ô khuyến mãi tối đa MỘT (Giờ vàng thắng banner và combo), Chẩn đoán tổ ấm và Cộng đồng không còn là khối', async () => {
+    localStorage.setItem(HOME_KIND_KEY, JSON.stringify({ userId: 'u1', kind: 'returning' }));
     mocks.fetchPurchasedItems.mockResolvedValue({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null });
+    mocks.fetchFlash.mockResolvedValue(['a', 'b', 'c'].map((s) => ({ itemId: `i-${s}`, variationId: `v-${s}`, productSlug: s, productName: s, thumbnail: null, flashPrice: 1, retailPrice: 2, soldCount: 0, quota: 5, endAt: '2099-01-01T00:00:00.000Z' })));
     renderHome();
-    await waitFor(() => expect(blockOrder()).toEqual(RETURNING));
-    for (const order of [RETURNING, NEW]) expect(order[order.indexOf('journey') + 1]).toBe('quiz');
-    const quiz = block('quiz');
-    expect(within(quiz).getByRole('heading', { level: 2, name: 'Chẩn đoán tổ ấm' })).toBeInTheDocument();
-    expect(within(quiz).getByRole('button', { name: /Bắt đầu Chẩn đoán tổ ấm/ })).toBeInTheDocument();
-    await screen.findByRole('region', { name: 'Bán chạy nhất' });
+    await waitFor(() => expect(blockOrder()).toEqual(named(homeBlockOrder('returning'), 'member', 'flash')));
+    expect(blockOrder()).toHaveLength(HOME_MAX_BLOCKS);
+    expect(blockOrder().filter((id) => id === 'flash' || id === 'banner' || id === 'combos')).toHaveLength(1);
+    expect(blockOrder()).not.toContain('quiz');
+    expect(blockOrder()).not.toContain('journey');
+    expect(blockOrder()).not.toContain('community');
+  });
+
+  it('Chẩn đoán tổ ấm / Cộng đồng là thẻ chen của lưới Gợi ý, luân phiên theo ngày Việt Nam: ngày chẵn Chẩn đoán (thẻ tĩnh có h2), ngày lẻ Cộng đồng', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      vi.setSystemTime(new Date('2026-11-18T05:00:00.000Z'));
+      const even = renderHome();
+      const suggest = await screen.findByRole('region', { name: 'Gợi ý cho bạn' });
+      expect(await within(suggest).findByRole('heading', { level: 2, name: 'Chẩn đoán tổ ấm' })).toBeInTheDocument();
+      expect(within(suggest).queryByRole('region', { name: 'Cộng đồng' })).toBeNull();
+      even.unmount();
+
+      vi.setSystemTime(new Date('2026-11-19T05:00:00.000Z'));
+      renderHome();
+      const odd = await screen.findByRole('region', { name: 'Gợi ý cho bạn' });
+      expect(await within(odd).findByRole('region', { name: 'Cộng đồng' })).toBeInTheDocument();
+      expect(within(odd).queryByRole('heading', { level: 2, name: 'Chẩn đoán tổ ấm' })).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
     expect(mocks.coreGet.mock.calls.map(([path]) => String(path)).filter((path) => path.startsWith('/game'))).toEqual([]);
-    expect(mocks.fetchProducts.mock.calls.filter(([q]) => q?.limit === 40)).toEqual([]);
   });
 
   it('"Bán chạy nhất" lấy HOME_BEST_SELLER_LIMIT món theo 30 ngày, có hạng, và "Xem tất cả" mở trang Bán chạy nhất (cùng thước đo 30 ngày)', async () => {

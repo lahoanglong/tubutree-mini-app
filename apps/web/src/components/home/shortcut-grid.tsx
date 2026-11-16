@@ -23,11 +23,11 @@ import { PILLAR_ICONS, SHORTCUT_ICONS, SHORTCUT_ROUTES } from './shortcut-visual
 import { ShortcutsSheet } from './shortcuts-sheet';
 
 /**
- * Hệ sinh thái 6 lối vào ở Trang chủ web (W177): hàng 1 hai thẻ chính (Mua lẻ · Giờ vàng, Đổi rác), hàng 2 bốn ô phụ
+ * Hệ sinh thái 6 lối vào ở Trang chủ web (W177): hàng 1 hai thẻ chính (Mua lẻ · Giờ vàng, Đổi rác; không có suất Giờ vàng thì còn một thẻ Đổi rác trải hết hàng), hàng 2 bốn ô phụ
  * (Mua chung, Mua xoay vòng, Vườn Xanh, Kho quà 0đ), cùng cấu trúc ở điện thoại lẫn máy tính, dựng tĩnh ngay từ khung hình đầu nên CLS = 0.
  * - Phía dưới là hàng lối tắt nhanh (Mã giảm giá · Cộng đồng) cùng nút "Thêm" mở hộp thoại mọi lối tắt (có cả Giờ vàng).
  */
-export function ShortcutGrid({ initialConfig }: { initialConfig?: PublicConfig } = {}) {
+export function ShortcutGrid({ initialConfig, flashLive }: { initialConfig?: PublicConfig; /** `false` = đã biết không có suất Giờ vàng nào có món: bỏ thẻ "Mua lẻ" và lối tắt Giờ vàng. `undefined` = chưa biết (giữ). */ flashLive?: boolean } = {}) {
   const router = useRouter();
   const cfg = usePublicConfig(initialConfig);
   const [earnOpen, setEarnOpen] = useState(false);
@@ -39,6 +39,9 @@ export function ShortcutGrid({ initialConfig }: { initialConfig?: PublicConfig }
   const { heroes, chips } = splitHomeEcosystemPillars(
     resolveHomeEcosystemPillars({
       wastePausedWithOpenRequests: wastePaused && recycleOpenRequests,
+      // Chưa có cấu hình thật thì không hứa con số tiết kiệm của đơn định kỳ.
+      subscribeDiscountPct: cfg.isLoaded ? cfg.subscribeDiscountPct : null,
+      flashLive,
     }),
   );
 
@@ -46,6 +49,7 @@ export function ShortcutGrid({ initialConfig }: { initialConfig?: PublicConfig }
     recycleOpenRequests,
     wasteEnabled: !cfg.isLoaded || cfg.waste.enabled,
     claimEnabled: cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true,
+    flashLive,
   }).filter((s) => {
     const to = SHORTCUT_ROUTES[s.id];
     return to === null || isWebRouteReady(to.split('?')[0]!);
@@ -74,6 +78,8 @@ export function ShortcutGrid({ initialConfig }: { initialConfig?: PublicConfig }
               data-pillar={p.id}
               data-tier="hero"
               className="tubu-bento-card tubu-bento-card--hero tubu-press"
+              // Còn MỘT thẻ chính thì nó trải hết hàng; chiều cao do CSS của thẻ giữ nên hàng không đổi cao.
+              style={heroes.length === 1 ? { gridColumn: '1 / -1' } : undefined}
             >
               <div className="tubu-bento-head">
                 <span aria-hidden="true" className={`tubu-bento-icon${p.tone === 'warm' ? ' tubu-bento-icon--warm' : ''}`}>

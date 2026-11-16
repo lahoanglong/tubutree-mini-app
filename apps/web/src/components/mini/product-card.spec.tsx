@@ -4,6 +4,7 @@ import { act, type ReactElement } from 'react';
 import { renderToStaticMarkup as renderStatic } from 'react-dom/server';
 import { hydrateRoot } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { flush, render, type Rendered } from '@/test-utils/dom';
 import type { FlashItem } from '@/lib/flash-price';
 import { FlashSalesSeed, resetFlashSales } from '@/lib/use-flash-sales';
@@ -15,6 +16,7 @@ vi.mock('@/lib/core-http', () => ({ coreHttp: { get: async (url: string) => (Str
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: () => undefined }) }));
 
 import { ProductCard, PRIORITY_CARDS } from './product-card';
+import { ProductCardQuickAddContext, type ProductCardQuickAdd } from './product-card-quick-add';
 
 const staticHtml = (ui: ReactElement) => renderStatic(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>);
 
@@ -269,6 +271,70 @@ describe('ProductCard: nút nổi trên ảnh (imageOverlay)', () => {
 
   it('hết hàng không vẽ nút nổi', async () => {
     expect((await mount({ product: { ...PRODUCT, inStock: false }, imageOverlay: BTN })).querySelector('button[aria-label="Thêm vào giỏ"]')).toBeNull();
+  });
+});
+
+describe('ProductCard: nút ＋ thêm nhanh (chỉ khi Trang chủ cấp đường thêm)', () => {
+  const plusLabel = fillCopy('card.quickAdd', { name: PRODUCT.name });
+  const plus = (c: HTMLElement) => c.querySelector<HTMLButtonElement>(`button[aria-label="${plusLabel}"]`);
+  const mountWith = async (ctx: ProductCardQuickAdd | null, props: Partial<React.ComponentProps<typeof ProductCard>> = {}) => {
+    const r = render(
+      <ProductCardQuickAddContext.Provider value={ctx}>
+        <ProductCard product={PRODUCT} variant="grid" {...props} />
+      </ProductCardQuickAddContext.Provider>,
+    );
+    mounted.push(r);
+    await flush();
+    return r.container;
+  };
+
+  it('không có đường thêm (mọi trang ngoài Trang chủ): không có nút ＋', async () => {
+    expect(plus(await mountWith(null))).toBeNull();
+  });
+
+  it('có đường thêm: nút ＋ nằm ngoài liên kết sản phẩm, chạm gọi add đúng sản phẩm với phần tử nút làm điểm bay', async () => {
+    const add = vi.fn();
+    const c = await mountWith({ add, busyId: null });
+    const btn = plus(c)!;
+    expect(btn.closest('a')).toBeNull();
+    expect(btn.className).toContain('h-11');
+    expect(btn.className).toContain('w-11');
+    act(() => btn.click());
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(add).toHaveBeenCalledWith(PRODUCT, btn);
+  });
+
+  it('sản phẩm này đang được thêm: nút báo bận (aria-busy, aria-disabled) và chạm không gọi add; thẻ khác không bận', async () => {
+    const add = vi.fn();
+    const c = await mountWith({ add, busyId: PRODUCT.id });
+    const btn = plus(c)!;
+    expect(btn.getAttribute('aria-busy')).toBe('true');
+    expect(btn.getAttribute('aria-disabled')).toBe('true');
+    expect(btn.disabled).toBe(false);
+    act(() => btn.click());
+    expect(add).not.toHaveBeenCalled();
+    mounted.pop()!.unmount();
+    const other = await mountWith({ add, busyId: 'p-khac' });
+    expect(plus(other)!.getAttribute('aria-busy')).toBe('false');
+  });
+
+  it('hết hàng: không có nút ＋', async () => {
+    expect(plus(await mountWith({ add: vi.fn(), busyId: null }, { product: { ...PRODUCT, inStock: false } }))).toBeNull();
+  });
+
+  it('nơi gọi tự đưa nút nổi hay onAdd thì giữ nút của nơi gọi, không chồng thêm nút ＋', async () => {
+    const BTN = <button type="button" aria-label="Nút riêng">+</button>;
+    const withOverlay = await mountWith({ add: vi.fn(), busyId: null }, { imageOverlay: BTN });
+    expect(plus(withOverlay)).toBeNull();
+    expect(withOverlay.querySelector('button[aria-label="Nút riêng"]')).not.toBeNull();
+    const withAdd = await mountWith({ add: vi.fn(), busyId: null }, { onAdd: vi.fn() });
+    expect(plus(withAdd)).toBeNull();
+  });
+
+  it('chỉ biến thể đủ rộng (grid, rail-md, rank) có nút ＋; kệ nhỏ và thẻ dòng không có', async () => {
+    const ctx = { add: vi.fn(), busyId: null };
+    for (const variant of ['grid', 'rail-md', 'rank'] as const) expect(plus(await mountWith(ctx, { variant })), variant).not.toBeNull();
+    for (const variant of ['rail-sm', 'line'] as const) expect(plus(await mountWith(ctx, { variant })), variant).toBeNull();
   });
 });
 

@@ -84,6 +84,24 @@ for (const size of SIZES) {
       expect(p.textOverlap, 'chữ đè nhau').toEqual([]);
       expect(p.floating.filter((f) => f.overlaps.length > 0), 'nút nổi đè nội dung').toEqual([]);
       expect(p.ellipsizedCta, 'nhãn nút bị cắt thành …').toEqual([]);
+      if (entry.key === '/' && size.width < 768) {
+        // Header dính của Trang chủ (điện thoại) không được che khối kế tiếp ở đầu trang, và khi cuộn vẫn bám đỉnh khung nhìn.
+        const geo = await page.evaluate(() => {
+          const blocks = Array.from(document.querySelectorAll<HTMLElement>('[data-home-block]'));
+          const header = blocks.find((b) => b.dataset.homeBlock === 'search');
+          if (!header) return null;
+          const headerBottom = header.getBoundingClientRect().bottom;
+          const next = blocks.find((b) => b !== header && b.getBoundingClientRect().height > 0 && b.getBoundingClientRect().top >= header.getBoundingClientRect().top);
+          const nextTop = next ? next.getBoundingClientRect().top : null;
+          window.scrollTo(0, 600);
+          const stuckTop = header.getBoundingClientRect().top;
+          window.scrollTo(0, 0);
+          return { headerBottom, nextTop, stuckTop };
+        });
+        expect(geo, 'Trang chủ có khối search').not.toBeNull();
+        if (geo && geo.nextTop !== null) expect(geo.nextTop, 'header dính không che khối kế tiếp').toBeGreaterThanOrEqual(geo.headerBottom - 0.5);
+        if (geo) expect(Math.abs(geo.stuckTop), 'header bám đỉnh khi cuộn').toBeLessThanOrEqual(1);
+      }
       // CLS của web đã có bộ giữ riêng (home-cls.web.spec: trần 0,1 khi máy mới, 0,02 khi đã nhớ hoặc tổng quan về nhanh); ở đây chỉ chặn PDP ở mức "tốt" của Core Web Vitals.
       if (cls && entry.key === '/product/:slug') expect(cls.cls, `CLS ${cls.sources.join(' ; ')}`).toBeLessThanOrEqual(0.1);
     });

@@ -750,4 +750,11 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'homeQuiz.result.browse': 16,
   'homeQuiz.result.shop': 12,
   'homeQuiz.result.cart': 12,
+  'home.pillar.subscribe.subtitle': 32,
+  'home.pillar.subscribe.badge': 12,
+  'home.pillar.subscribe.subtitlePct': 34,
+  'home.pillar.subscribe.badgePct': 14,
+  'home.todo.more': 16,
+  'home.todo.moreAria': null,
+  'card.quickAdd': null,
 };

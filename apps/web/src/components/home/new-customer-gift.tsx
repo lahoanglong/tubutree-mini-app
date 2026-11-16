@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { CalendarClock, ChevronDown, ChevronUp, Gift, Leaf, Ticket, Truck, type LucideIcon } from 'lucide-react';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { homeCopy } from '@tubutree/app-core/home-copy';
@@ -54,12 +54,13 @@ function voucherTitle(v: NonNullable<NewCustomerOffer['welcomeVoucher']>): strin
 }
 
 /**
- * Khối "Quà khách mới" ở Trang chủ (D2-07b): voucher chào mừng của khách (nếu có) và 3 lợi ích mua trực tiếp. Chỉ khách chưa có
+ * Quà khách mới trong dải ngữ cảnh của Trang chủ (D2-07b): voucher chào mừng của khách (nếu có) và 3 lợi ích mua trực tiếp. Chỉ khách chưa có
  * đơn theo định nghĩa đơn đầu của API (GET /me/new-customer-offer); khách chưa đăng nhập thì chỉ thấy phần lợi ích.
- * Dải gọn một dòng (cao bằng thẻ thành viên), chi tiết mở bằng "Xem quyền lợi". Đang tải: khung chờ cùng chiều cao; lỗi tải hay thiếu cấu hình: thu lại,
- * không hiện số suy đoán. Khách chưa đăng nhập được hứa mã chào mừng theo cấu hình công khai và nút "Nhận quà" dẫn tới đăng nhập (như Mini App).
+ * Thu gọn đúng `HOME_GIFT_HEIGHT` (64px) ở điện thoại: icon + tiêu đề một dòng + câu lợi ích một dòng (cắt "…") + nút hành động 44px cùng hàng; chi tiết mở bằng nút gập.
+ * Đang tải: khung chờ cùng chiều cao; lỗi tải hay thiếu cấu hình, hay khách không còn ưu đãi: vẽ `fallback` (thẻ thành viên) để dải không trống.
+ * Khách chưa đăng nhập được hứa mã chào mừng theo cấu hình công khai và nút "Nhận quà" dẫn tới đăng nhập (như Mini App).
  */
-export function NewCustomerGift({ initialConfig, holdWhile = false }: { initialConfig?: PublicConfig; /** Giữ khung chờ thay vì thu khối lại: khối sắp biến mất (không phải khách mới) nhưng "Việc cần làm" chưa biết có hiện hay không, để hai thay đổi cùng một khung hình (xem `HomeViewBody`). */ holdWhile?: boolean } = {}) {
+export function NewCustomerGift({ initialConfig, fallback }: { initialConfig?: PublicConfig; fallback?: ReactNode } = {}) {
   const [expanded, setExpanded] = useState(false);
   const phase = useAuthPhase();
   const restoring = useAuthRestoring();
@@ -74,10 +75,10 @@ export function NewCustomerGift({ initialConfig, holdWhile = false }: { initialC
   // Mất mạng lúc khôi phục phiên: chưa biết là ai nên không hứa gì. Đang khôi phục một phiên đã có, hay chưa biết có phải khách mới:
   // giữ chỗ bằng khung chờ cao bằng dải thật (cũng là chiều cao thẻ thành viên) để trang không nhảy. 'loading' mà không có cờ phiên là
   // khách vãng lai thật (HTML server dựng sẵn bản này nên Danh mục không nhảy sau hydrate).
-  if (phase === 'unavailable') return null;
-  if (cfgQ.isError || (authed && offerQ.isError)) return null;
+  if (phase === 'unavailable') return fallback ?? null;
+  if (cfgQ.isError || (authed && offerQ.isError)) return fallback ?? null;
   if (restoring || cfgQ.isPending || (authed && offerQ.isPending)) return <NewCustomerGiftSkeleton />;
-  if (authed && offerQ.data?.isNewCustomer !== true) return holdWhile ? <NewCustomerGiftSkeleton /> : null;
+  if (authed && offerQ.data?.isNewCustomer !== true) return fallback ?? null;
 
   const voucher = authed ? (offerQ.data?.welcomeVoucher ?? null) : null;
   // Khách chưa đăng nhập chưa có mã riêng: nói mệnh giá mã chào mừng từ cấu hình công khai (thiếu thì không hứa số), kèm nút đăng nhập để nhận.
@@ -98,31 +99,36 @@ export function NewCustomerGift({ initialConfig, holdWhile = false }: { initialC
   return (
     <section aria-label={homeText.newGift.title}>
       <Card variant="flat" padding={0}>
-        <div style={{ minHeight: HOME_GIFT_HEIGHT, boxSizing: 'border-box', padding: '0 12px 0 16px', paddingBlock: '0.5rem 0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {/* Điện thoại: nút gập (Mini App). Từ md chi tiết luôn mở sẵn nên nút ẩn hẳn (không còn trong cây trợ năng) và tiêu đề là chữ tĩnh. */}
-          <div className="min-w-0 flex-1 md:hidden">
-            <button
-              type="button"
-              aria-expanded={expanded}
-              aria-label={`${homeText.newGift.title}: ${headline}. ${expanded ? homeText.newGift.collapse : homeText.newGift.expand}`}
-              className="tubu-press"
-              onClick={() => setExpanded((v) => !v)}
-              style={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 8, padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}
-            >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-inline-sm)', height: HOME_GIFT_HEIGHT, boxSizing: 'border-box', padding: '0 var(--space-inline-md) 0 var(--space-inline-lg)' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {/* Điện thoại: nút gập (Mini App). Từ md chi tiết luôn mở sẵn nên nút ẩn hẳn (không còn trong cây trợ năng) và tiêu đề là chữ tĩnh. */}
+            <div className="md:hidden">
+              <button
+                type="button"
+                aria-expanded={expanded}
+                aria-label={`${homeText.newGift.title}: ${headline}. ${expanded ? homeText.newGift.collapse : homeText.newGift.expand}`}
+                className="tubu-press"
+                onClick={() => setExpanded((v) => !v)}
+                style={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 'var(--space-inline-sm)', padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}
+              >
+                <Icon icon={Gift} tone="brand" />
+                <span style={{ flex: 1, minWidth: 0 }}>
+                  <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {homeText.newGift.title}
+                  </Text>
+                </span>
+                <Icon icon={expanded ? ChevronUp : ChevronDown} size="sm" tone="muted" />
+              </button>
+            </div>
+            <div className="hidden min-h-11 min-w-0 items-center gap-2 md:flex">
               <Icon icon={Gift} tone="brand" />
-              <span style={{ flex: 1, minWidth: 0 }}>
-                <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {homeText.newGift.title}
-                </Text>
-              </span>
-              <Icon icon={expanded ? ChevronUp : ChevronDown} size="sm" tone="muted" />
-            </button>
-          </div>
-          <div className="hidden min-h-11 min-w-0 flex-1 items-center gap-2 md:flex">
-            <Icon icon={Gift} tone="brand" />
-            <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {homeText.newGift.title}
+              <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {homeText.newGift.title}
+              </Text>
+            </div>
+            {/* Dòng lợi ích cao 16px cố định: nút gập 44 + 16 = 60 nằm gọn trong 64, câu dài cắt "…" chứ không xuống dòng làm dải cao thêm. */}
+            <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: '16px' }}>
+              {headline}
             </Text>
           </div>
           {promised && promised.amount > 0 ? (
@@ -134,10 +140,6 @@ export function NewCustomerGift({ initialConfig, holdWhile = false }: { initialC
               <span>{homeText.newGift.cta}</span>
             </Link>
           )}
-          </div>
-          <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-            {headline}
-          </Text>
         </div>
         {/* Điện thoại: mở bằng nút gập. Từ md luôn mở: bề ngang đủ chỗ cho quyền lợi, không bắt khách bấm mũi tên để thấy mã và ba lợi ích. */}
         <div data-testid="new-customer-gift-details" className={expanded ? undefined : 'hidden md:block'}>

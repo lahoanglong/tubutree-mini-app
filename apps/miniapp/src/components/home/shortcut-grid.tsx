@@ -21,13 +21,19 @@ import '../../css/ecosystem-hub.css';
 const EarnSheet = lazy(() => import('./earn-sheet').then((m) => ({ default: m.EarnSheet })));
 const ShortcutsSheet = lazy(() => import('./shortcuts-sheet').then((m) => ({ default: m.ShortcutsSheet })));
 
+export interface ShortcutGridProps {
+  /** `false` = đã biết không có suất Giờ vàng nào có món: bỏ thẻ "Mua lẻ · Giờ vàng" và lối tắt Giờ vàng. Chưa biết (`undefined`) thì giữ cả hai. */
+  flashLive?: boolean;
+}
+
 /**
  * Hệ sinh thái 6 lối vào ở Trang chủ Mini App (W177): hàng 1 hai thẻ chính (Mua lẻ · Giờ vàng, Đổi rác), hàng 2 bốn ô phụ
  * (Mua chung, Mua xoay vòng, Vườn Xanh, Kho quà 0đ), rồi hàng lối tắt nhanh.
- * - Dựng tĩnh cả sáu ngay từ khung hình đầu (CLS = 0, vùng chạm ≥ 44px).
+ * - Dựng tĩnh ngay từ khung hình đầu (CLS = 0, vùng chạm ≥ 44px). Không có Giờ vàng thì thẻ Đổi rác trải hết hàng 1, cùng chiều cao 96.
+ * - Con số tiết kiệm của Mua xoay vòng chỉ nói khi cấu hình đã về từ máy chủ.
  * - Hàng dưới giữ nhanh Mã giảm giá · Cộng đồng và nút "Thêm" mở hộp thoại mọi lối tắt (Giờ vàng, Đơn hàng, Tích điểm đơn sàn...).
  */
-export function ShortcutGrid() {
+export function ShortcutGrid({ flashLive }: ShortcutGridProps) {
   const navigate = useNavigate();
   const cfg = usePublicConfig();
   const [earnOpen, setEarnOpen] = useState(false);
@@ -41,6 +47,8 @@ export function ShortcutGrid() {
   const { heroes, chips } = splitHomeEcosystemPillars(
     resolveHomeEcosystemPillars({
       wastePausedWithOpenRequests: wastePaused && recycleOpenRequests,
+      subscribeDiscountPct: cfg.isLoaded ? cfg.subscribeDiscountPct : null,
+      flashLive,
     }),
   );
 
@@ -48,6 +56,7 @@ export function ShortcutGrid() {
     recycleOpenRequests,
     wasteEnabled: !cfg.isLoaded || cfg.waste.enabled,
     claimEnabled: cfg.isLoaded && cfg.loyalty?.marketplaceClaimEnabled === true,
+    flashLive,
   });
 
   const quickItems = HOME_QUICK_SHORTCUT_IDS.flatMap((id) => {
@@ -76,6 +85,7 @@ export function ShortcutGrid() {
               data-pillar={p.id}
               data-tier="hero"
               className="tubu-bento-card tubu-bento-card--hero tubu-press"
+              style={heroes.length === 1 ? { gridColumn: '1 / -1' } : undefined}
               onClick={() => {
                 haptic('light');
                 navigate(p.miniRoute);

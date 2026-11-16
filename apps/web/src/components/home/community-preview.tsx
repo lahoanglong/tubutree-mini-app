@@ -11,9 +11,14 @@ import { coreHttp } from '@/lib/core-http';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { timeAgo } from '@/components/community/post-parts';
-import { Card, Icon, ListRow, SectionHeader, Text } from '@/components/mini';
+import { Card, Icon, ListRow, SectionHeader, Skeleton, Text } from '@/components/mini';
 
 const PREVIEW_COUNT = 2;
+
+// Mỗi dòng cao cố định: tiêu đề tối đa hai dòng (2 x 22) + dòng phụ (2 + 20) + đệm 12 mỗi phía = 90. Khung bao ngoài cao `COMMUNITY_HEIGHT` (tiêu đề khối + hai dòng + viền thẻ + 2px dư)
+// dù có bài hay chưa, để bài về muộn không đẩy các thẻ sản phẩm phía dưới trong lưới Gợi ý.
+const ROW_HEIGHT = 90;
+const COMMUNITY_HEIGHT = `calc(var(--section-header-h) + ${PREVIEW_COUNT * ROW_HEIGHT + 4}px)`;
 
 interface Row {
   id: string;
@@ -25,8 +30,8 @@ interface Row {
 }
 
 /**
- * Cộng đồng hỏi đáp ở Trang chủ (bản web của `community-preview.tsx` ở Mini App): hai bài mới nhất. Khách đã đăng nhập mở được bài;
- * khách chưa đăng nhập chỉ thấy phần xem trước công khai khi cờ bật, chỉ có nút "Xem tất cả". Không có bài hay lỗi thì ẩn.
+ * Cộng đồng hỏi đáp, một trong hai thẻ chen trong lưới Gợi ý của Trang chủ (bản web của `community-preview.tsx` ở Mini App): hai bài mới nhất. Khách đã đăng nhập mở được bài;
+ * khách chưa đăng nhập chỉ thấy phần xem trước công khai khi cờ bật, chỉ có nút "Xem tất cả". Không có bài hay lỗi thì ẩn. Bài còn đang tải thì giữ khung chờ đúng chiều cao `COMMUNITY_HEIGHT`.
  */
 export function CommunityPreview() {
   const router = useRouter();
@@ -57,9 +62,16 @@ export function CommunityPreview() {
         commentCount: p.commentCount,
         openable: false,
       }));
-  if (rows.length === 0) return null;
+  const loading = authed ? feed.isLoading : cfg.isLoaded && cfg.communityPublicPreview === true && preview.isLoading;
+  if (rows.length === 0) {
+    return loading ? (
+      <div data-testid="community-loading" aria-hidden="true" style={{ height: COMMUNITY_HEIGHT }}>
+        <Skeleton height="100%" radius="var(--radius-card)" />
+      </div>
+    ) : null;
+  }
   return (
-    <section aria-label={homeCopy.community.title}>
+    <section aria-label={homeCopy.community.title} style={{ height: COMMUNITY_HEIGHT }}>
       <SectionHeader title={homeCopy.community.title} action={{ label: homeCopy.community.seeAll, to: '/cong-dong' }} />
       <Card variant="outline" padding={0}>
         {rows.map((r, i) => (
@@ -74,7 +86,7 @@ export function CommunityPreview() {
             subtitle={`${r.author} · ${timeAgo(r.createdAt)} · ${r.commentCount > 0 ? homeCopy.community.comments(r.commentCount) : homeCopy.community.noComments}`}
             trailing={r.openable ? 'chevron' : undefined}
             onPress={r.openable ? () => router.push(`/cong-dong/${encodeURIComponent(r.id)}`) : undefined}
-            style={{ padding: 12, borderTop: i === 0 ? 'none' : '1px solid var(--color-border-subtle)' }}
+            style={{ height: ROW_HEIGHT, boxSizing: 'border-box', overflow: 'hidden', padding: 12, borderTop: i === 0 ? 'none' : '1px solid var(--color-border-subtle)' }}
           />
         ))}
       </Card>

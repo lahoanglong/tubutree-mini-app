@@ -8,7 +8,14 @@ vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get } }));
 
-import { TodoStrip } from './todo-strip';
+import { TodoStrip, useHomeTodoHint, useHomeTodoQueries } from './todo-strip';
+
+/** Trang chủ gọi ba thứ này ở cấp trang rồi đưa dữ liệu cho dải ngữ cảnh: dựng lại đúng cách đó. */
+function Harness() {
+  const todo = useHomeTodoQueries();
+  useHomeTodoHint(todo, 'u1');
+  return <TodoStrip data={todo.todoQ.data} />;
+}
 
 const FUTURE = new Date(Date.now() + 3 * 3600_000).toISOString();
 const pendingOrder = { code: 'TUBU1', total: 250000, status: 'PENDING_PAYMENT', paymentMethod: 'BANK_TRANSFER', paymentStatus: 'PENDING', paymentDeadline: FUTURE };
@@ -18,7 +25,7 @@ const page = (rows: object[], total = rows.length) => ({ data: rows, meta: { pag
 let ordersFor: (status: string | undefined) => unknown;
 let mounted: Rendered | null = null;
 const mount = async () => {
-  mounted = render(<TodoStrip />);
+  mounted = render(<Harness />);
   await flush(8);
   return mounted.container;
 };
@@ -49,7 +56,7 @@ afterEach(() => {
   mounted = null;
 });
 
-describe('TodoStrip web — Việc cần làm', () => {
+describe('TodoStrip web — Việc cần làm (một dòng trong dải ngữ cảnh)', () => {
   it('chưa đăng nhập: không vẽ gì và không gọi API', async () => {
     mocks.phase = 'guest';
     const c = await mount();
@@ -71,21 +78,43 @@ describe('TodoStrip web — Việc cần làm', () => {
     expect(orderCalls()).toHaveLength(0);
   });
 
-  it('đơn chờ thanh toán: nút "Thanh toán ngay" mở trang chuyển khoản; đơn đang giao: dòng mở chi tiết đơn', async () => {
+  it('chờ chuyển khoản + đang giao: chỉ vẽ việc dẫn đầu (chờ chuyển khoản), nút "Thanh toán" mở trang chuyển khoản, chữ phụ "+1 việc khác" và mũi tên mở danh sách đơn', async () => {
     const c = await mount();
+    expect(c.querySelectorAll('[data-todo-row]')).toHaveLength(1);
+    expect(c.textContent).not.toContain('TUBU2');
+    expect(c.textContent).toContain('Chờ chuyển khoản 250.000');
+    expect(c.textContent).toContain('+1 việc khác');
     click(c.querySelector('button[aria-label^="Thanh toán ngay"]'));
     expect(mocks.push).toHaveBeenCalledWith('/thanh-toan/chuyen-khoan/TUBU1');
+    const arrow = c.querySelector<HTMLAnchorElement>('a[aria-label="Xem 1 việc khác trong Đơn hàng"]')!;
+    expect(arrow.getAttribute('href')).toBe('/tai-khoan/don-hang');
+    expect(arrow.className).toMatch(/\bh-11\b.*\bw-11\b|\bw-11\b.*\bh-11\b/);
+  });
+
+  it('chỉ có đơn đang giao: dòng mở chi tiết đơn, mũi tên chevron của dòng (không có mũi tên "việc khác") và chữ phụ hướng dẫn', async () => {
+    ordersFor = (status) => page(status === 'SHIPPING' ? [shippingOrder] : []);
+    const c = await mount();
     const ship = Array.from(c.querySelectorAll<HTMLElement>('[role="button"]')).find((r) => r.textContent?.includes('TUBU2'))!;
+    expect(ship.textContent).toContain('Chạm để theo dõi đơn');
+    expect(c.querySelector('a[aria-label*="việc khác"]')).toBeNull();
     click(ship);
     expect(mocks.push).toHaveBeenLastCalledWith('/tai-khoan/don-hang/TUBU2');
   });
 
-  it('nhiều đơn đang giao: một dòng gộp mở danh sách đã lọc Đang giao', async () => {
+  it('nhiều đơn đang giao: dòng nói đơn dẫn đầu, các đơn còn lại tính vào "+N việc khác" và mũi tên mở danh sách đơn', async () => {
     ordersFor = (status) => (status === 'SHIPPING' ? page([shippingOrder], 3) : page([]));
     const c = await mount();
-    const row = Array.from(c.querySelectorAll<HTMLElement>('[role="button"]')).find((r) => r.textContent?.includes('3'))!;
+    expect(c.textContent).toContain('Đơn TUBU2 đang giao');
+    expect(c.textContent).toContain('+2 việc khác');
+    expect(c.querySelector('a[aria-label="Xem 2 việc khác trong Đơn hàng"]')).not.toBeNull();
+  });
+
+  it('chỉ có đơn đang chuẩn bị (COD vừa đặt): một dòng mở chi tiết đơn', async () => {
+    ordersFor = (status) => (status === undefined ? page([{ code: 'TUBU3', total: 90000, status: 'PROCESSING' }]) : page([]));
+    const c = await mount();
+    const row = Array.from(c.querySelectorAll<HTMLElement>('[role="button"]')).find((r) => r.textContent?.includes('TUBU3'))!;
     click(row);
-    expect(mocks.push).toHaveBeenCalledWith('/tai-khoan/don-hang?tab=shipping');
+    expect(mocks.push).toHaveBeenCalledWith('/tai-khoan/don-hang/TUBU3');
   });
 
   it('không có việc hoặc lỗi tải đơn: ẩn hẳn, không thẻ lỗi', async () => {
@@ -99,66 +128,42 @@ describe('TodoStrip web — Việc cần làm', () => {
     expect((await mount()).textContent).toBe('');
   });
 
-  describe('trí nhớ số dòng (không chớp khung chờ rồi sụp)', () => {
+  it('dòng cao đúng 64px (bằng dải ngữ cảnh), thẻ có viền trái cảnh báo 3px và không đệm dọc; chữ dài cắt một dòng bằng "…", không xuống dòng', async () => {
+    const c = await mount();
+    const region = c.querySelector<HTMLElement>('section[aria-label="Việc cần làm"]')!;
+    const row = region.querySelector<HTMLElement>('[data-todo-row]')!;
+    expect(row.style.height).toBe('64px');
+    expect((region.firstElementChild as HTMLElement).style.borderLeft).toContain('3px');
+    expect(region.style.padding).toBe('');
+    const title = Array.from(region.querySelectorAll<HTMLElement>('span')).find((x) => x.textContent?.startsWith('Chờ chuyển khoản'))!;
+    expect(title.style.whiteSpace).toBe('nowrap');
+    expect(title.style.textOverflow).toBe('ellipsis');
+  });
+
+  describe('trí nhớ "có việc cần làm" (không chớp khung chờ rồi sụp)', () => {
     const KEY = 'tubu_home_todo_rows';
-    const hold = () => {
-      let release: (v: unknown) => void = () => {};
-      mocks.get.mockImplementation(async (path: string, opts?: { query?: { status?: string } }) => {
-        if (path === '/me/summary') return { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 2 }, unreadNotifications: 0, activeSubscriptions: 0 };
-        await new Promise((r) => { release = r; });
-        return homeTodo();
-      });
-      return () => release(undefined);
-    };
 
-    it('lần đầu chưa nhớ gì nhưng tổng quan báo có đơn đang xử lý: giữ chỗ một dòng 64px, không chèn dải đẩy trang', async () => {
-      hold();
-      const c = await mount();
-      expect(c.querySelector('[data-testid="todo-strip-loading"]')).not.toBeNull();
-      expect(c.querySelector<HTMLElement>('[data-testid="todo-strip-loading"] [aria-hidden]')?.style.height).toBe('64px');
+    it('có việc: ghi 1 để lần sau dải giữ khung chờ', async () => {
+      await mount();
+      expect(JSON.parse(window.localStorage.getItem(KEY)!)).toEqual({ userId: 'u1', rows: 1 });
     });
 
-    it('lần trước có hai dòng: khung chờ đúng chiều cao 2 dòng; xong thì ghi lại số dòng thật', async () => {
-      window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
-      const c = await mount();
-      expect(c.querySelectorAll('[role="button"], button').length).toBeGreaterThan(0);
-      expect(JSON.parse(window.localStorage.getItem(KEY)!)).toEqual({ userId: 'u1', rows: 2 });
-    });
-
-    it('một lời con lỗi (partial): dòng còn lại vẫn hiện, không ghi số dòng sai', async () => {
-      window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
+    it('một lời con lỗi (partial): dòng còn lại vẫn hiện, không ghi đè dấu nhớ cũ', async () => {
+      window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u1', rows: 1 }));
       mocks.get.mockImplementation(async (path: string) => {
         if (path === '/me/summary') return { orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 2 }, unreadNotifications: 0, activeSubscriptions: 0 };
         return { pending: null, shipping: { order: shippingOrder, total: 1 }, processing: null, partial: true };
       });
       const c = await mount();
       expect(c.textContent).toContain('TUBU2');
-      expect(JSON.parse(window.localStorage.getItem(KEY)!)).toEqual({ userId: 'u1', rows: 2 });
+      expect(JSON.parse(window.localStorage.getItem(KEY)!)).toEqual({ userId: 'u1', rows: 1 });
     });
 
     it('không còn việc: ghi 0 để lần sau không dựng khung chờ', async () => {
-      window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u1', rows: 2 }));
+      window.localStorage.setItem(KEY, JSON.stringify({ userId: 'u1', rows: 1 }));
       mocks.active = 0;
       await mount();
       expect(JSON.parse(window.localStorage.getItem(KEY)!)).toEqual({ userId: 'u1', rows: 0 });
     });
-  });
-
-  it('mỗi việc là MỘT dòng cao 64px, thẻ có viền trái cảnh báo 3px và không đệm dọc (khoảng cách do vỏ khối giữ)', async () => {
-    const c = await mount();
-    const region = c.querySelector<HTMLElement>('section[aria-label="Việc cần làm"]')!;
-    const rows = region.querySelectorAll<HTMLElement>('[data-todo-row]');
-    expect(rows).toHaveLength(2);
-    for (const r of Array.from(rows)) expect(r.style.height).toBe('64px');
-    expect((region.firstElementChild as HTMLElement).style.borderLeft).toContain('3px');
-    expect(region.style.padding).toBe('');
-  });
-
-  it('khung chờ cao đúng số dòng nhớ × 64px', async () => {
-    window.localStorage.setItem('tubu_home_todo_rows', JSON.stringify({ userId: 'u1', rows: 2 }));
-    mocks.get.mockImplementation(() => new Promise(() => undefined));
-    const c = await mount();
-    const sk = c.querySelector<HTMLElement>('[data-testid="todo-strip-loading"]')!;
-    expect((sk.firstElementChild as HTMLElement).style.height).toBe('128px');
   });
 });

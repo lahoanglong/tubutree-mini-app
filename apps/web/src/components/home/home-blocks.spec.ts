@@ -4,16 +4,13 @@ import { ApiError, NetworkError } from '@/lib/client-api';
 import { HOME_QUERY_PREFIXES, customerKind, dedupeAgainst, homeBlockOrder, isEndpointMissing, refreshHomeQueries } from './home-blocks';
 
 describe('homeBlockOrder (nguồn ở app-core, web chỉ re-export)', () => {
-  it('khách cũ: thẻ thành viên, việc cần làm, banner, lối tắt, dải Story, Giờ vàng TRƯỚC mua lại, danh mục, bán chạy nhất, combo, hành trình, Chẩn đoán tổ ấm, cộng đồng, một lưới gợi ý', () => {
-    expect(homeBlockOrder('returning')).toEqual([
-      'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'quiz', 'community', 'suggest',
-    ]);
+  it('khách cũ: dải ngữ cảnh, danh mục, bán chạy nhất, ô khuyến mãi, Mua lại, lối tắt, dải Story, một lưới gợi ý (9 khối)', () => {
+    expect(homeBlockOrder('returning')).toEqual(['search', 'context', 'categories', 'bestSellers', 'promo', 'purchased', 'shortcuts', 'stories', 'suggest']);
   });
 
-  it('khách mới: Quà khách mới thay thẻ thành viên, không có Mua lại', () => {
-    expect(homeBlockOrder('new')).toEqual([
-      'search', 'welcome', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'quiz', 'community', 'suggest',
-    ]);
+  it('khách mới và chưa biết loại: cùng thứ tự, không có Mua lại', () => {
+    expect(homeBlockOrder('new')).toEqual(['search', 'context', 'categories', 'bestSellers', 'promo', 'shortcuts', 'stories', 'suggest']);
+    expect(homeBlockOrder('unknown')).toEqual(homeBlockOrder('new'));
   });
 
   it('customerKind: ≥1 SP đã nhận → khách cũ; 0 / chưa biết (đang tải, 404 API cũ) → khách mới', () => {

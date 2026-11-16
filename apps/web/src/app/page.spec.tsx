@@ -82,14 +82,14 @@ describe('HomePage — server render phần công khai', () => {
     expect([before, after]).toContain(suggest.seed);
   });
 
-  it('HTML đầu đã có sản phẩm của kệ Bán chạy và lưới gợi ý, hàng danh mục (ẩn danh mục rỗng) và dải thương hiệu', async () => {
+  it('HTML đầu đã có sản phẩm của kệ Bán chạy và lưới gợi ý, hàng danh mục (ẩn danh mục rỗng); Hành trình nguyên liệu không còn trên Trang chủ', async () => {
     const out = await render();
     expect(out).toContain('Bán chạy nhất');
     expect(out).toContain('Sữa rửa mặt bán chạy');
     expect(out).toContain('Dầu gội bồ kết');
     expect(out).toContain('Dầu gội');
     expect(out).not.toContain('Danh mục trống');
-    expect(out).toContain(homeCopy.journey.title);
+    expect(out).not.toContain(homeCopy.journey.title);
   });
 
   it('kệ Bán chạy nhất có hạng #1..#3 ngay trong HTML đầu (công cụ tìm kiếm thấy thứ hạng)', async () => {
@@ -140,6 +140,21 @@ describe('HomePage — server render phần công khai', () => {
     expect(out.indexOf('Quà khách mới')).toBeLessThan(out.indexOf('Danh mục'));
   });
 
+  it('dải ngữ cảnh của khách vãng lai cao đúng 64px ngay trong HTML đầu (vỏ khối và hàng quà), tên khối giữ "welcome"; không có khối Giờ vàng/banner/combo riêng khi không có gì để vẽ', async () => {
+    const out = await render();
+    expect(out).toMatch(/data-home-block="welcome"[^>]*style="[^"]*min-height:64px/);
+    const gift = out.slice(out.indexOf('aria-label="Quà khách mới"'));
+    expect(gift).toMatch(/style="[^"]*height:64px/);
+    expect(out).not.toContain('data-home-block="promo"');
+    for (const gone of ['data-home-block="flash"', 'data-home-block="banner"', 'data-home-block="combos"', 'data-home-block="journey"', 'data-home-block="quiz"', 'data-home-block="community"']) expect(out).not.toContain(gone);
+  });
+
+  it('thẻ sản phẩm còn hàng có nút ＋ thêm nhanh ngay trong HTML đầu (kệ Bán chạy và lưới gợi ý)', async () => {
+    const out = await render();
+    expect(out).toContain('aria-label="Thêm Sữa rửa mặt bán chạy vào giỏ"');
+    expect(out).toContain('aria-label="Thêm Dầu gội bồ kết vào giỏ"');
+  });
+
   it('cấu hình công khai lỗi: bỏ khối Quà khách mới (không bịa số), phần còn lại vẫn dựng', async () => {
     failing = ['/config/public'];
     const out = await render();
@@ -160,10 +175,7 @@ describe('HomePage — server render phần công khai', () => {
     const out = await render();
     expect(out).toContain('Bán chạy nhất');
     expect(out).not.toContain('brand=Tubu');
-    expect(out).toContain(homeCopy.journey.title);
-    expect(out).toContain('Dải thương hiệu');
-    expect(out).toContain(homeCopy.journey.body(8));
-    expect(out).toContain('/san-pham?q=Fuwa3e');
+    expect(out).not.toContain(homeCopy.journey.title);
   });
 
   it('cả ba lưới sản phẩm lỗi lúc Next dựng lại trang: ném để Next giữ bản đã render, không lưu trang rỗng', async () => {

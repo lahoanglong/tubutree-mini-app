@@ -39,9 +39,8 @@ vi.mock('../store/auth', () => ({
 }));
 vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => null }));
 vi.mock('../components/home/member-card', () => ({ MemberCard: () => null, MemberCardSkeleton: () => <div data-testid="member-card-loading" /> }));
-vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
+vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false, pending: false, remembered: false, todoQ: { data: undefined } }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => null }));
-vi.mock('../components/home/brand-journey', () => ({ BrandJourney: () => null }));
 vi.mock('../components/home/community-preview', () => ({ CommunityPreview: () => null }));
 vi.mock('../components/home/suggest-feed', () => ({ SuggestFeed: () => null }));
 vi.mock('../components/home/new-customer-gift', () => ({ NewCustomerGift: () => null }));
@@ -67,6 +66,8 @@ const deferred = <T,>() => {
   return { promise, resolve, reject };
 };
 const blockOrder = () => Array.from(document.querySelectorAll<HTMLElement>('[data-home-block]')).map((el) => el.dataset.homeBlock);
+// `data-home-block` ghi biến thể đang vẽ của dải ngữ cảnh (welcome/todo/member); ô khuyến mãi không có gì thì vỏ khối không có mặt.
+const named = (order: readonly string[], context: 'welcome' | 'todo' | 'member') => order.flatMap((id) => (id === 'context' ? [context] : id === 'promo' ? [] : [id]));
 // React Query báo kết quả qua setTimeout(0) rồi React mới vẽ lại: sau khi tiến giờ, chạy thêm vài vòng không tốn giờ để mọi cập nhật nối đuôi nhau xong.
 const settle = async (ms = 0) => {
   await act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
@@ -114,48 +115,41 @@ describe('HomePage — khung chờ chung (cấp trang)', () => {
     mocks.fetchActiveFlashSales.mockReturnValue(flash.promise);
     renderHome();
     await settle();
-    expect(blockOrder()).toEqual([...homeRenderOrder('unknown', true)]);
+    expect(blockOrder()).toEqual(named(homeRenderOrder('unknown', true), 'member'));
 
     // Biết là khách cũ nhưng Giờ vàng chưa về: vẫn giữ.
     await act(async () => purchased.resolve({ items: [{ variationId: 'v1', slug: 'da-mua' }], nextCursor: null }));
     await settle();
-    expect(blockOrder()).toEqual([...homeRenderOrder('returning', true)]);
+    expect(blockOrder()).toEqual(named(homeRenderOrder('returning', true), 'member'));
 
     await act(async () => flash.reject(new Error('mất mạng')));
     await settle();
-    expect(blockOrder()).toEqual([...homeBlockOrder('returning')]);
-    expect(screen.getByTestId('home-block-error')).toBeInTheDocument();
-    const retry = screen.getByRole('button', { name: /Thử lại/ });
-    mocks.fetchActiveFlashSales.mockResolvedValue([]);
-    const before = mocks.fetchActiveFlashSales.mock.calls.length;
-    await act(async () => {
-      retry.click();
-    });
-    await settle();
-    expect(mocks.fetchActiveFlashSales.mock.calls.length).toBe(before + 1);
+    // Giờ vàng là ô khuyến mãi: lỗi tải thì ô ẩn hẳn (không vỏ rỗng, không thẻ lỗi), khung chờ vẫn được thả.
+    expect(blockOrder()).toEqual(named(homeBlockOrder('returning'), 'member'));
     expect(screen.queryByTestId('home-block-error')).toBeNull();
+    expect(screen.queryByTestId('home-settling')).toBeNull();
   });
 
-  it('lần mở trước có banner: khung chờ chung có thêm ô banner đứng đầu; chưa nhớ thì chỉ năm ô (đã gồm dải Story)', async () => {
+  it('khung chờ chung luôn đúng bốn ô theo thứ tự khối thật (danh mục, kệ Bán chạy, lối tắt, dải Story), kể cả khi lần mở trước có banner: ô khuyến mãi không giữ chỗ trong khung chờ', async () => {
     renderHome();
     await settle();
-    expect(screen.getByTestId('home-settling').children).toHaveLength(5);
+    expect(screen.getByTestId('home-settling').children).toHaveLength(4);
     localStorage.setItem(BANNER_HINT_KEY, '1');
     renderHome();
     await settle();
     const [withBanner] = screen.getAllByTestId('home-settling').slice(-1);
-    expect(withBanner?.children).toHaveLength(6);
-    expect(withBanner?.firstElementChild).toHaveStyle({ aspectRatio: 'var(--banner-ratio)' });
+    expect(withBanner?.children).toHaveLength(4);
+    expect(withBanner?.firstElementChild).not.toHaveStyle({ aspectRatio: 'var(--banner-ratio)' });
   });
 
   it('hẹn giờ 4,5 giây (StrictMode, giờ giả): mạng chậm, chưa biết loại khách và dữ liệu chưa về thì nhả đúng lúc, không sớm hơn', async () => {
     renderHome();
     await settle();
-    expect(blockOrder()).toEqual([...homeRenderOrder('unknown', true)]);
+    expect(blockOrder()).toEqual(named(homeRenderOrder('unknown', true), 'member'));
     await settle(HOME_SETTLE_MAX_MS - 100);
-    expect(blockOrder()).toEqual([...homeRenderOrder('unknown', true)]);
+    expect(blockOrder()).toEqual(named(homeRenderOrder('unknown', true), 'member'));
     await settle(200);
-    expect(blockOrder()).toEqual([...homeBlockOrder('unknown')]);
+    expect(blockOrder()).toEqual(named(homeBlockOrder('unknown'), 'member'));
   });
 
   it('đang khôi phục phiên (giữ khung chờ chung) rồi phiên lỗi (status error): nhả ngay, không chờ 4,5 giây hay dữ liệu', async () => {
@@ -163,7 +157,7 @@ describe('HomePage — khung chờ chung (cấp trang)', () => {
     mocks.auth.user = null;
     const view = renderHome();
     await settle(1000);
-    expect(blockOrder()).toEqual([...homeRenderOrder('unknown', true)]);
+    expect(blockOrder()).toEqual(named(homeRenderOrder('unknown', true), 'member'));
     mocks.auth.status = 'error';
     view.rerender(
       <StrictMode>
@@ -173,7 +167,7 @@ describe('HomePage — khung chờ chung (cấp trang)', () => {
       </StrictMode>,
     );
     await settle();
-    expect(blockOrder()).toEqual([...homeBlockOrder('new')]);
+    expect(blockOrder()).toEqual(named(homeBlockOrder('new'), 'welcome'));
   });
 
   it('khôi phục phiên (status loading) chưa nhớ gì: giữ khung chờ chung, chưa tới hạn thì chưa nhả', async () => {
@@ -181,6 +175,6 @@ describe('HomePage — khung chờ chung (cấp trang)', () => {
     mocks.auth.user = null;
     renderHome();
     await settle(HOME_SETTLE_MAX_MS - 100);
-    expect(blockOrder()).toEqual([...homeRenderOrder('unknown', true)]);
+    expect(blockOrder()).toEqual(named(homeRenderOrder('unknown', true), 'member'));
   });
 });

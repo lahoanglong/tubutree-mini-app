@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { homeCopy } from '@tubutree/app-core/home-copy';
@@ -10,13 +10,14 @@ import { fetchCatalog, fetchForYou } from '../../services/shop-api';
 import { useAuthStore } from '../../store/auth';
 import { haptic } from '../../utils/haptic';
 import { serverNow } from '../../utils/server-clock';
-import { CatalogGrid, CatalogGridSkeleton } from '../catalog/catalog-grid';
+import { CatalogGridSkeleton } from '../catalog/catalog-grid';
 import { Button } from '../ui/button';
 import { Chip } from '../ui/chip';
 import { ScrollRow } from '../ui/scroll-row';
 import { SectionHeader } from '../ui/section-header';
 import { Text } from '../ui/text';
 import { HomeBlockError } from './home-block-error';
+import { SuggestGrid } from './suggest-grid';
 
 // Hàng chip dính ngay dưới header dính của Trang chủ (cao `HOME_HEADER_HEIGHT`), dưới z-index của header (20). `top` đo từ mép nội dung của `.page`, mà `.page` đã
 // đệm sẵn `--safe-top` và header dính ở `top: 0`: chỉ cộng chiều cao header, không cộng thêm vùng an toàn.
@@ -50,6 +51,8 @@ function saveChip(key: string): void {
 export interface SuggestFeedProps {
   /** Slug món đã nằm ở các kệ hàng phía trên: lưới không lặp lại chúng. */
   exclude: ReadonlySet<string>;
+  /** Thẻ chen sau `HOME_INTERLEAVE_AFTER` thẻ đầu (Chẩn đoán tổ ấm hay Cộng đồng, trang chọn theo ngày). Lưới ngắn hơn thì không chen. */
+  interleave?: ReactNode;
 }
 
 /**
@@ -57,7 +60,7 @@ export interface SuggestFeedProps {
  * (`seed`): cuộn, quay lại, mở lại app trong ngày không xáo lưới, sang ngày khác thì đổi. Khách đã đăng nhập thấy gợi ý cá nhân lên đầu ở chip "Tất cả".
  * Dừng ở `SUGGEST_MAX` món rồi mời vào Danh mục: cuộn vô tận không có đáy làm khách mất đường tới chân trang và thanh đáy.
  */
-export function SuggestFeed({ exclude }: SuggestFeedProps) {
+export function SuggestFeed({ exclude, interleave }: SuggestFeedProps) {
   const navigate = useNavigate();
   const navType = useNavigationType();
   const authed = useAuthStore((s) => s.status === 'authenticated');
@@ -159,7 +162,7 @@ export function SuggestFeed({ exclude }: SuggestFeedProps) {
           pages.isError ? <HomeBlockError title={homeCopy.suggest.title} error={pages.error} onRetry={pages.refetch} retrying={pages.isFetching} /> : null
         ) : (
           <>
-            <CatalogGrid products={items} listSource="home_suggest" />
+            <SuggestGrid products={items} listSource="home_suggest" interleave={interleave} />
             <div ref={sentinel} aria-hidden style={{ height: 1 }} />
             {canLoadMore ? (
               <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>

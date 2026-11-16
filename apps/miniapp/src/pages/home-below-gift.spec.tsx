@@ -42,9 +42,8 @@ vi.mock('../components/flash-sale', () => ({ FlashSale: () => null, UpcomingFlas
 vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => null }));
 vi.mock('../components/home/best-seller-rail', () => ({ BEST_SELLER_LIMIT: 6, BestSellerRail: () => null }));
 vi.mock('../components/home/member-card', () => ({ MemberCard: () => null, MemberCardSkeleton: () => null }));
-vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
+vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false, pending: false, remembered: false, todoQ: { data: undefined } }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => null }));
-vi.mock('../components/home/brand-journey', () => ({ BrandJourney: () => null }));
 vi.mock('../components/home/community-preview', () => ({ CommunityPreview: () => null }));
 vi.mock('../components/home/suggest-feed', () => ({ SuggestFeed: () => null }));
 vi.mock('../components/cart-button', () => ({ CartButton: () => null }));

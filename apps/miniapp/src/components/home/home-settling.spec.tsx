@@ -3,40 +3,32 @@ import { describe, expect, it } from 'vitest';
 import { HOME_SETTLING_HEIGHTS } from '@tubutree/app-core/home-layout';
 import { HomeSettlingSkeleton } from './home-settling';
 
+const heights = () => Array.from(screen.getByTestId('home-settling').children).map((el) => (el as HTMLElement).style.height);
+
 describe('HomeSettlingSkeleton', () => {
-  it('năm ô theo chiều cao chung ở app-core (lối tắt, dải Story, Giờ vàng, danh mục, hai hàng thẻ hàng)', () => {
+  it('bốn ô theo thứ tự khối thật và chiều cao chung ở app-core: danh mục, kệ Bán chạy nhất, lối vào, dải Story', () => {
     render(<HomeSettlingSkeleton />);
-    const heights = Array.from(screen.getByTestId('home-settling').children).map((el) => (el as HTMLElement).style.height);
     const h = HOME_SETTLING_HEIGHTS;
-    expect(heights).toEqual([h.shortcuts, h.stories, h.flash, h.categories, h.products].map((n) => `${n}px`));
+    expect(heights()).toEqual([h.categories, h.products, h.shortcuts, h.stories].map((n) => `${n}px`));
   });
 
-  it('có banner (lần mở trước có): banner đứng đầu, cao đúng tỉ lệ khung banner, các ô sau giữ nguyên', () => {
-    render(<HomeSettlingSkeleton banner />);
-    const children = Array.from(screen.getByTestId('home-settling').children) as HTMLElement[];
-    expect(children).toHaveLength(6);
-    expect(children[0]).toHaveStyle({ aspectRatio: 'var(--banner-ratio)' });
-    const h = HOME_SETTLING_HEIGHTS;
-    expect(children.slice(1).map((el) => el.style.height)).toEqual([h.shortcuts, h.stories, h.flash, h.categories, h.products].map((n) => `${n}px`));
-  });
-
-  it('dải Story đứng đúng giữa lối tắt và Giờ vàng, cao 144 như khối thật (không nhảy khi dải hiện)', () => {
+  it('không còn ô banner hay Giờ vàng ở đầu khung chờ (hai khối này nằm dưới kệ đầu và tự ẩn khi không có gì)', () => {
     render(<HomeSettlingSkeleton />);
     const children = Array.from(screen.getByTestId('home-settling').children) as HTMLElement[];
-    expect(children[1]!.style.height).toBe('144px');
-    expect(children[0]!.style.height).toBe(`${HOME_SETTLING_HEIGHTS.shortcuts}px`);
-    expect(children[2]!.style.height).toBe(`${HOME_SETTLING_HEIGHTS.flash}px`);
+    expect(children).toHaveLength(4);
+    expect(children.some((el) => el.style.aspectRatio !== '')).toBe(false);
+    expect(heights()).not.toContain(`${HOME_SETTLING_HEIGHTS.flash}px`);
   });
 
-  it('không có banner (mặc định): không thêm ô nào', () => {
-    render(<HomeSettlingSkeleton banner={false} />);
-    expect(screen.getByTestId('home-settling').children).toHaveLength(5);
+  it('dải Story ở cuối cao 144 như khối thật (không nhảy khi dải hiện)', () => {
+    render(<HomeSettlingSkeleton />);
+    expect(heights()[3]).toBe('144px');
   });
 
   it('danh mục luôn một hàng (148) dù số ô nhớ là bao nhiêu: số ô vượt 5 bị cắt về 5 như khối thật', () => {
     const categoriesHeight = (cells?: number) => {
       const { unmount } = render(<HomeSettlingSkeleton categoryCells={cells} />);
-      const h = (screen.getByTestId('home-settling').children[3] as HTMLElement).style.height;
+      const h = heights()[0];
       unmount();
       return h;
     };

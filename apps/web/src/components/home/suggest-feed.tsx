@@ -1,17 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { mergeSuggestions, SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
+import { HOME_INTERLEAVE_AFTER, mergeSuggestions, SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
 import { suggestChips, suggestLimit, vnDateSeed } from '@tubutree/app-core/home-suggest';
 import { fetchCatalog, fetchForYou, type CategoryDTO, type PageResponse, type ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
-import { Button, Chip, ProductGrid, ScrollRow, SectionHeader, Text } from '@/components/mini';
+import { Button, Chip, ProductCard, ProductGrid, ScrollRow, SectionHeader, Text } from '@/components/mini';
+import { GRID_PRODUCTS, gridImageSizes } from '@/lib/product-grid';
 import { HomeBlockError } from './home-block-error';
 
 // Từ lg lưới 5–6 cột và có thanh đầu trang đủ lối vào Danh mục: dừng ở 48 món (đủ 8 hàng 6 cột) rồi mời "Xem thêm" ở trang sản phẩm.
@@ -37,6 +38,32 @@ export interface SuggestFeedProps {
   categories: CategoryDTO[];
   /** Slug món đã nằm ở các kệ hàng phía trên: lưới không lặp lại chúng. */
   exclude: ReadonlySet<string>;
+  /** Thẻ chen (Chẩn đoán tổ ấm hoặc Cộng đồng) trải hết bề ngang lưới, đứng sau `HOME_INTERLEAVE_AFTER` thẻ đầu. Lưới ít thẻ hơn mức đó thì không chen. */
+  interleave?: ReactNode;
+}
+
+/**
+ * Lưới thẻ của `ProductGrid` có thể chen một thẻ trải hết bề ngang: vị trí `position` của các thẻ sau thẻ chen vẫn đếm tiếp từ thẻ đầu (không đếm lại từ 1),
+ * nên số đo `product_card_click` của lưới không lệch.
+ */
+function SuggestGrid({ items, interleave }: { items: readonly ProductCardData[]; interleave?: ReactNode }) {
+  const sizes = gridImageSizes(GRID_PRODUCTS);
+  const chenAt = interleave && items.length >= HOME_INTERLEAVE_AFTER ? HOME_INTERLEAVE_AFTER - 1 : -1;
+  return (
+    <ul role="list" data-testid="catalog-grid" className={GRID_PRODUCTS} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+      {items.flatMap((p, i) => {
+        const card = (
+          <li key={`${p.id}:${i}`} style={{ minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            <div style={{ flex: '1 1 auto', minWidth: 0 }}>
+              <ProductCard product={p} variant="grid" imageSizes={sizes} shelf="suggest" position={i + 1} />
+            </div>
+          </li>
+        );
+        // Thẻ chen không vẽ gì (Cộng đồng chưa có bài) thì ô bị ẩn hẳn, không để lại một hàng trống giữa lưới.
+        return i === chenAt ? [card, <li key="interleave" data-testid="suggest-interleave" className="empty:hidden" style={{ gridColumn: '1 / -1', minWidth: 0 }}>{interleave}</li>] : [card];
+      })}
+    </ul>
+  );
 }
 
 /**
@@ -44,7 +71,7 @@ export interface SuggestFeedProps {
  * Thứ tự xoay theo ngày Việt Nam (`seed`): cuộn, quay lại, mở lại trong ngày không xáo lưới, sang ngày khác thì đổi. Khách đã đăng nhập thấy gợi ý cá nhân lên
  * đầu ở chip "Tất cả". Dừng ở `SUGGEST_MAX` món (máy tính `SUGGEST_MAX_DESKTOP`) rồi mời vào trang sản phẩm: cuộn vô tận không có đáy làm khách mất đường tới chân trang.
  */
-export function SuggestFeed({ initial, seed: serverSeed, categories, exclude }: SuggestFeedProps) {
+export function SuggestFeed({ initial, seed: serverSeed, categories, exclude, interleave }: SuggestFeedProps) {
   const router = useRouter();
   const authed = useAuthPhase() === 'authenticated';
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
@@ -114,7 +141,7 @@ export function SuggestFeed({ initial, seed: serverSeed, categories, exclude }: 
       ) : (
         <>
           {/* Khối cuối trang chủ, nằm dưới màn đầu: tải lười, không đặt ảnh ưu tiên. */}
-          <ProductGrid items={items} variant="grid" shelf="suggest" />
+          <SuggestGrid items={items} interleave={interleave} />
           <div ref={sentinel} aria-hidden style={{ height: 1 }} />
           {canLoadMore ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>

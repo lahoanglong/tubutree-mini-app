@@ -10,27 +10,27 @@ afterEach(() => {
   mounted = null;
 });
 
+const heightsOf = (root: HTMLElement) =>
+  Array.from(root.querySelector('[data-testid="home-settling"]')!.children).map((el) => ((el.firstElementChild ?? el) as HTMLElement).style.height);
+
 describe('HomeSettlingSkeleton', () => {
-  it('năm ô theo chiều cao chung ở app-core, giống Mini App (lối tắt, dải Story, Giờ vàng, danh mục, hai hàng thẻ hàng)', () => {
+  it('bốn ô đúng thứ tự khối thật dưới dải ngữ cảnh: danh mục, kệ Bán chạy nhất, lối vào, dải Story; không giữ chỗ banner hay Giờ vàng', () => {
     mounted = render(<HomeSettlingSkeleton />);
-    const heights = Array.from(mounted.container.querySelector('[data-testid="home-settling"]')!.children).map((el) => ((el.firstElementChild ?? el) as HTMLElement).style.height);
     const h = HOME_SETTLING_HEIGHTS;
-    expect(heights).toEqual([h.shortcuts, h.stories, h.flash, h.categories, h.products].map((n) => `${n}px`));
+    expect(heightsOf(mounted.container)).toEqual([h.categories, h.products, h.shortcuts, h.stories].map((n) => `${n}px`));
   });
 
   it('khung chờ lối tắt hiện ở mọi khổ như Bento Hub thật (không lg:hidden) để máy tính không nhảy khi khối về', () => {
     mounted = render(<HomeSettlingSkeleton />);
-    const first = mounted.container.querySelector('[data-testid="home-settling"]')!.children[0] as HTMLElement;
-    expect(first.className).not.toContain('lg:hidden');
-    expect(first.style.height).toBe(`${HOME_SETTLING_HEIGHTS.shortcuts}px`);
-    const rest = Array.from(mounted.container.querySelector('[data-testid="home-settling"]')!.children).slice(1);
-    for (const el of rest) expect((el as HTMLElement).className).not.toContain('lg:hidden');
+    const kids = Array.from(mounted.container.querySelector('[data-testid="home-settling"]')!.children) as HTMLElement[];
+    expect(kids[2]!.style.height).toBe(`${HOME_SETTLING_HEIGHTS.shortcuts}px`);
+    for (const el of kids) expect(el.className).not.toContain('hidden');
   });
 
   it('danh mục luôn một hàng (148) dù số ô nhớ là bao nhiêu: số ô vượt 5 bị cắt về 5 như khối thật', () => {
     const categoriesHeight = (cells?: number) => {
       const r = render(<HomeSettlingSkeleton categoryCells={cells} />);
-      const h = (r.container.querySelector('[data-testid="home-settling"]')!.children[3] as HTMLElement).style.height;
+      const h = heightsOf(r.container)[0];
       r.unmount();
       return h;
     };
@@ -41,27 +41,10 @@ describe('HomeSettlingSkeleton', () => {
     expect(categoriesHeight(undefined)).toBe(`${HOME_SETTLING_HEIGHTS.categories}px`);
   });
 
-  it('banner=true (lần mở trước máy này có banner): thêm khung đầu tiên đúng tỉ lệ banner, chiều cao theo bề rộng; từ lg ẩn như lối tắt vì banner thật nằm cạnh thẻ thành viên', () => {
-    mounted = render(<HomeSettlingSkeleton banner />);
-    const kids = Array.from(mounted.container.querySelector('[data-testid="home-settling"]')!.children) as HTMLElement[];
-    expect(kids).toHaveLength(6);
-    expect(kids[0]!.className).toContain('lg:hidden');
-    expect((kids[0]!.firstElementChild as HTMLElement).style.aspectRatio).toBe('var(--banner-ratio)');
-    expect((kids[0]!.firstElementChild as HTMLElement).style.height).toBe('auto');
-  });
-
-  it('không có banner thì không giữ chỗ (mặc định): trang không có chiến dịch không thừa khoảng trống', () => {
-    mounted = render(<HomeSettlingSkeleton />);
-    expect(mounted.container.querySelector('[data-testid="home-settling"]')!.children).toHaveLength(5);
-  });
-
-  it('dải Story đứng đúng giữa lối tắt và Giờ vàng, cao 144 như khối thật (không nhảy khi dải hiện), hiện ở mọi khổ', () => {
+  it('dải Story ở cuối, cao 144 như khối thật (không nhảy khi dải hiện), hiện ở mọi khổ', () => {
     mounted = render(<HomeSettlingSkeleton />);
     const kids = Array.from(mounted.container.querySelector('[data-testid="home-settling"]')!.children) as HTMLElement[];
-    const heightOf = (el: HTMLElement) => ((el.firstElementChild ?? el) as HTMLElement).style.height;
-    expect(heightOf(kids[1]!)).toBe('144px');
-    expect(kids[1]!.className).not.toContain('hidden');
-    expect(heightOf(kids[0]!)).toBe(`${HOME_SETTLING_HEIGHTS.shortcuts}px`);
-    expect(heightOf(kids[2]!)).toBe(`${HOME_SETTLING_HEIGHTS.flash}px`);
+    expect(heightsOf(mounted.container)[3]).toBe('144px');
+    expect(kids[3]!.className).not.toContain('hidden');
   });
 });

@@ -43,9 +43,8 @@ vi.mock('../store/auth', () => ({
 }));
 vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => null }));
 vi.mock('../components/home/member-card', () => ({ MemberCard: () => null, MemberCardSkeleton: () => <div data-testid="member-card-loading" /> }));
-vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
+vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false, pending: false, remembered: false, todoQ: { data: undefined } }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => null }));
-vi.mock('../components/home/brand-journey', () => ({ BrandJourney: () => null }));
 vi.mock('../components/home/community-preview', () => ({ CommunityPreview: () => null }));
 vi.mock('../components/home/suggest-feed', () => ({ SuggestFeed: () => null }));
 vi.mock('../components/home/new-customer-gift', () => ({ NewCustomerGift: () => null }));
@@ -56,7 +55,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 vi.mock('../components/home/home-below', async () => {
   await chunk.gate;
-  return { FlashSale: () => null, UpcomingFlashSales: () => null, PurchasedRail: () => null, BestSellerRail: () => null, BrandJourney: () => null, HomeQuiz: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null, HomeScrollRestoration: () => null };
+  return { FlashSale: () => null, UpcomingFlashSales: () => null, PurchasedRail: () => null, BestSellerRail: () => null, HomeQuiz: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null, HomeScrollRestoration: () => null };
 });
 
 import HomePage from './home';

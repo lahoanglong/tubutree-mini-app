@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'zmp-ui';
 import { CalendarClock, ChevronDown, ChevronUp, Gift, Leaf, Ticket, Truck, type LucideIcon } from 'lucide-react';
@@ -21,6 +21,7 @@ import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 
 const SECTION_PAD = '0 16px';
+const ONE_LINE: CSSProperties = { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
 interface Benefit {
   icon: LucideIcon;
@@ -64,12 +65,18 @@ function voucherTitle(v: NonNullable<NewCustomerOffer['welcomeVoucher']>): strin
   return vi.home.newGift.voucherAmount(formatVnd(v.value));
 }
 
+export interface NewCustomerGiftProps {
+  /** Vẽ thay khi khách không còn ưu đãi này (đã có đơn, lỗi tải, thiếu cấu hình): dải ngữ cảnh không để trống. */
+  fallback?: ReactNode;
+}
+
 /**
  * Khối "Quà khách mới" ở Trang chủ (D2-07b): voucher chào mừng của khách (nếu có) và các lợi ích mua trực tiếp. Chỉ khách chưa có
  * đơn theo định nghĩa đơn đầu của API (GET /me/new-customer-offer); khách chưa đăng nhập thì chỉ thấy phần lợi ích.
- * Đang tải, lỗi tải hay thiếu cấu hình → không vẽ gì: đây là khối quảng bá phụ, không đáng một khung chờ hay thẻ lỗi và không được hiện số suy đoán.
+ * Thu gọn là MỘT dòng cao đúng `HOME_GIFT_HEIGHT` (biểu tượng, tiêu đề, câu lợi ích cắt "…", nút); phần chi tiết chỉ mở khi khách chạm.
+ * Đang tải: khung chờ cùng chiều cao. Lỗi tải hay thiếu cấu hình không được hiện số suy đoán: vẽ `fallback` (không có thì không vẽ gì).
  */
-export function NewCustomerGift() {
+export function NewCustomerGift({ fallback }: NewCustomerGiftProps) {
   const navigate = useNavigate();
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const userId = useAuthStore((s) => s.user?.id);
@@ -97,10 +104,10 @@ export function NewCustomerGift() {
 
   // Chưa biết có phải khách mới: giữ chỗ bằng khung chờ cao bằng dải thật (cũng là chiều cao thẻ thành viên) để trang không nhảy.
   // Lỗi tải hay thiếu cấu hình thì thu lại: khối quảng bá phụ, không đáng một thẻ lỗi và không được hiện số suy đoán.
-  if (cfgQ.isError || (authed && !guestAccount && offerQ.isError) || (guestAccount && ordersQ.isError)) return null;
+  if (cfgQ.isError || (authed && !guestAccount && offerQ.isError) || (guestAccount && ordersQ.isError)) return fallback ?? null;
   if (cfgQ.isPending || (authed && !guestAccount && offerQ.isPending) || (guestAccount && ordersQ.isPending)) return <NewCustomerGiftSkeleton />;
-  if (guestAccount && guestHasOrders) return null;
-  if (authed && !guestAccount && offerQ.data?.isNewCustomer !== true) return null;
+  if (guestAccount && guestHasOrders) return fallback ?? null;
+  if (authed && !guestAccount && offerQ.data?.isNewCustomer !== true) return fallback ?? null;
 
   const voucher = authed && !guestAccount ? (offerQ.data?.welcomeVoucher ?? null) : null;
   // Khách chưa có mã riêng: nói mệnh giá mã chào mừng từ cấu hình công khai (thiếu thì không hứa số).
@@ -134,8 +141,7 @@ export function NewCustomerGift() {
   return (
     <section aria-label={vi.home.newGift.title} style={{ padding: SECTION_PAD }}>
       <Card variant="flat" padding={0}>
-        <div style={{ minHeight: HOME_GIFT_HEIGHT, boxSizing: 'border-box', padding: '0 12px 0 16px', paddingBlock: '0.5rem 0.75rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <div style={{ height: HOME_GIFT_HEIGHT, boxSizing: 'border-box', padding: '0 var(--space-inline-md) 0 var(--space-inline-lg)', display: 'flex', alignItems: 'center', gap: 'var(--space-inline-sm)' }}>
           <button
             type="button"
             aria-expanded={expanded}
@@ -147,13 +153,18 @@ export function NewCustomerGift() {
             }}
             style={{ flex: 1, minWidth: 0, minHeight: 44, display: 'flex', alignItems: 'center', gap: 8, padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}
           >
-            <Icon icon={Gift} tone="brand" />
+            <Icon icon={Gift} tone="brand" style={{ flex: '0 0 auto' }} />
             <span style={{ flex: 1, minWidth: 0 }}>
-              <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {vi.home.newGift.title}
+              <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-inline-xs)', minWidth: 0 }}>
+                <Text variant="label" as="div" style={{ ...ONE_LINE, minWidth: 0 }}>
+                  {vi.home.newGift.title}
+                </Text>
+                <Icon icon={expanded ? ChevronUp : ChevronDown} size="sm" tone="muted" style={{ flex: '0 0 auto' }} />
+              </span>
+              <Text variant="caption" tone="secondary" as="div" style={ONE_LINE}>
+                {headline}
               </Text>
             </span>
-            <Icon icon={expanded ? ChevronUp : ChevronDown} size="sm" tone="muted" />
           </button>
           {guestAccount ? (
             <Button
@@ -179,10 +190,6 @@ export function NewCustomerGift() {
               {vi.home.newGift.cta}
             </Button>
           )}
-          </div>
-          <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-            {headline}
-          </Text>
         </div>
         {linking === 'failed' && (
           <Text variant="caption" tone="danger" as="p" style={{ margin: 0, padding: '0 16px 8px' }}>

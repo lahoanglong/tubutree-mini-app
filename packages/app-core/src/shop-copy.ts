@@ -781,6 +781,14 @@ export const SHOP_COPY: Record<string, string> = {
   'homeQuiz.result.browse': 'Xem sản phẩm',
   'homeQuiz.result.shop': 'Xem sản phẩm',
   'homeQuiz.result.cart': 'Xem giỏ hàng',
+  // Trang chủ gọn: thẻ Mua xoay vòng chỉ nêu con số tiết kiệm khi máy chủ đã gửi cấu hình; dải Việc cần làm một dòng; nút ＋ thêm nhanh trên thẻ sản phẩm.
+  'home.pillar.subscribe.subtitle': 'Đặt định kỳ, khỏi lo hết hàng',
+  'home.pillar.subscribe.badge': 'Định kỳ',
+  'home.pillar.subscribe.subtitlePct': 'Đặt định kỳ tiết kiệm tới {pct}%',
+  'home.pillar.subscribe.badgePct': 'Định kỳ -{pct}%',
+  'home.todo.more': '+{n} việc khác',
+  'home.todo.moreAria': 'Xem {n} việc khác trong Đơn hàng',
+  'card.quickAdd': 'Thêm {name} vào giỏ',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

@@ -74,13 +74,24 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(text).not.toMatch(/30\.000|199\.000|10\.000đ|12%/);
   });
 
-  it('câu lợi ích chiếm cả bề ngang dưới hàng tiêu đề + nút (không bị bóp thành cột hẹp rồi cắt mất điều kiện), thẻ cao HOME_GIFT_HEIGHT', async () => {
+  it('thu gọn đúng HOME_GIFT_HEIGHT: icon, tiêu đề, câu lợi ích MỘT dòng cắt "…" và nút hành động cùng một hàng cao cố định 64px (không xuống dòng làm dải cao thêm)', async () => {
     const r = region(await mount())!;
     const headline = Array.from(r.querySelectorAll<HTMLElement>('div')).find((d) => d.textContent === 'Mã 25.000đ · cho đơn từ 150.000đ')!;
     const cta = Array.from(r.querySelectorAll('a')).find((a) => a.textContent?.includes('Chọn sản phẩm') || a.textContent?.includes('Nhận'))!;
-    expect(headline.style.getPropertyValue('-webkit-line-clamp') || headline.style.webkitLineClamp).toBe('2');
-    expect(cta.parentElement!.contains(headline)).toBe(false);
-    expect((r.querySelector('[style*="min-height"]') as HTMLElement).style.minHeight).toBe(`${HOME_GIFT_HEIGHT}px`);
+    expect(headline.style.whiteSpace).toBe('nowrap');
+    expect(headline.style.textOverflow).toBe('ellipsis');
+    const row = cta.parentElement!;
+    expect(row.contains(headline)).toBe(true);
+    expect(row.style.height).toBe(`${HOME_GIFT_HEIGHT}px`);
+    expect(HOME_GIFT_HEIGHT).toBe(64);
+  });
+
+  it('có `fallback`: khách đã đăng nhập không còn ưu đãi khách mới thì vẽ nó (thẻ thành viên) thay vì trả về trống', async () => {
+    offer = { isNewCustomer: false, welcomeVoucher: null };
+    mounted = render(<NewCustomerGift fallback={<div data-testid="gift-fallback" />} />);
+    await flush(8);
+    expect(mounted.container.querySelector('[data-testid="gift-fallback"]')).not.toBeNull();
+    expect(region(mounted.container)).toBeNull();
   });
 
   it('dải gọn: tóm tắt mã chào mừng trên một dòng; chi tiết còn gập ở điện thoại (ẩn bằng CSS, vẫn có trong HTML cho md trở lên)', async () => {
@@ -146,25 +157,6 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     const c = await mount();
     expect(paths()).toContain('/me/new-customer-offer');
     expect(c.textContent).toBe('');
-  });
-
-  it('khách đã có đơn nhưng Trang chủ còn chờ tổng quan đơn (holdWhile): giữ khung chờ thay vì thu lại, thu lại khi hết chờ', async () => {
-    offer = { isNewCustomer: false, welcomeVoucher: null };
-    mounted = render(<NewCustomerGift holdWhile />);
-    await flush(8);
-    expect(mounted.container.querySelector('[data-testid="new-customer-gift-loading"]')).not.toBeNull();
-    mounted.unmount();
-    mounted = render(<NewCustomerGift holdWhile={false} />);
-    await flush(8);
-    expect(mounted.container.querySelector('[data-testid="new-customer-gift-loading"]')).toBeNull();
-    expect(mounted.container.textContent).toBe('');
-  });
-
-  it('khách mới thật + holdWhile: vẫn hiện dải quà (giữ khung chờ chỉ áp cho khối sắp biến mất)', async () => {
-    mounted = render(<NewCustomerGift holdWhile />);
-    await flush(8);
-    expect(region(mounted.container)).not.toBeNull();
-    expect(mounted.container.querySelector('[data-testid="new-customer-gift-loading"]')).toBeNull();
   });
 
   it('đang tải ưu đãi hoặc cấu hình: giữ chỗ bằng khung chờ cao bằng dải thật, không hiện số', async () => {

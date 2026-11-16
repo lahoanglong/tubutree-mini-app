@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from 'react';
+import { memo, useContext, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import type { FlashPriceItem } from '@tubutree/app-core/flash-price';
@@ -10,6 +10,7 @@ import { fetchActiveFlashSales } from '../../services/shop-api';
 import { trackEvent } from '../../services/analytics';
 import { serverNow } from '../../utils/server-clock';
 import { WishlistHeart } from '../wishlist-heart';
+import { ProductCardQuickAddContext, QuickAddButton } from './product-card-quick-add';
 import { ProductTile } from './product-tile';
 
 export interface ProductCardProps {
@@ -39,6 +40,8 @@ export interface ProductCardProps {
 }
 
 const HEART_VARIANTS: ReadonlySet<CardVariant> = new Set(['grid', 'rail-md', 'rank']);
+// Thẻ đủ rộng để nút ＋ ở góc dưới ảnh không che tên/giá và không chồng tim ở góc trên.
+const QUICK_ADD_VARIANTS = HEART_VARIANTS;
 
 /**
  * Thẻ sản phẩm nối dữ liệu thật vào `ProductTile`: chọn suất Giờ vàng, mốc ngày mở bán và ngưỡng miễn phí giao rồi để `productCardView`
@@ -65,6 +68,7 @@ export const ProductCard = memo(function ProductCard({
   hidePrice,
   onOpen,
 }: ProductCardProps) {
+  const quickAdd = useContext(ProductCardQuickAddContext);
   const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 });
   const launchDate = useCatalogLaunchDate();
   const freeShipThreshold = useFreeShipThreshold();
@@ -91,6 +95,14 @@ export const ProductCard = memo(function ProductCard({
     ...(product.pinnedVariationId ? { pinnedVariationId: product.pinnedVariationId } : variationId ? { variationId } : null),
   };
 
+  // Nơi gọi đã đặt nút nổi hay nút phụ thì nhường họ: mỗi thẻ chỉ một nút thêm giỏ.
+  const overlay =
+    quickAdd && !imageOverlay && !onAdd && QUICK_ADD_VARIANTS.has(variant) && product.inStock !== false && view.stock !== 'out' ? (
+      <QuickAddButton name={product.name} busy={quickAdd.busyId === product.id} onPress={(origin) => quickAdd.add(product, origin)} />
+    ) : (
+      imageOverlay
+    );
+
   return (
     <ProductTile
       view={view}
@@ -106,7 +118,7 @@ export const ProductCard = memo(function ProductCard({
         if (listSource && position) trackEvent('product_card_click', 'miniapp', { shelf: listSource, position, productSlug: product.slug });
         onOpen?.();
       }}
-      imageOverlay={imageOverlay}
+      imageOverlay={overlay}
       wishlist={showWishlist && HEART_VARIANTS.has(variant) ? <WishlistHeart productId={product.id} productName={product.name} floating size={18} /> : undefined}
     />
   );

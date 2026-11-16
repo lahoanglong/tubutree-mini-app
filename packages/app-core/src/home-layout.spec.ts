@@ -6,7 +6,7 @@ import { liveRoute } from './merch/route-fallback';
 import {
   memberCardAriaLabel, offersPointsAriaLabel, clearHomeHints, customerKind, dropForeignHomeHints, HOME_KIND_KEY, HOME_SHORTCUTS, TODO_ROWS_KEY, OFFERS_SEEN_KEY, readLastTodoRows, readTodoRows, writeTodoRows, readSeenCoupons, writeSeenCoupons, homeBlockOrder, isCouponExpiring, memberCardView, mergeSeenCouponIds, resolveHomeKind, mergeSuggestions, NAV_TAB_SPECS, offersDotReason, ORDER_STATUS_ROW,
   visibleHomeShortcuts, homeRenderOrder, homeKeptOrder, homeSettling, homeShortcutSlots, HOME_HEADER_HEIGHT, HOME_SHORTCUT_SLOTS, HOME_HERO_HEIGHT, HOME_GIFT_HEIGHT,
-  HOME_ECOSYSTEM_PILLARS, HOME_QUICK_SHORTCUT_IDS, resolveHomeEcosystemPillars, splitHomeEcosystemPillars,
+  HOME_ECOSYSTEM_PILLARS, HOME_QUICK_SHORTCUT_IDS, HOME_MAX_BLOCKS, HOME_CONTEXT_HEIGHT, HOME_INTERLEAVE_AFTER, homeContextVariant, homeContextBlockName, homeInterleaveCard, homePromoPick, homeTodoCount, homeTodoLead, resolveHomeEcosystemPillars, splitHomeEcosystemPillars,
   readPurchasedHint, writePurchasedHint, PURCHASED_HINT_KEY, purchasedSkeletonHeight, todoSkeletonHeight,
   readFlashHint, readFlashSlotHint, writeFlashHint, FLASH_HINT_KEY, FLASH_NEXT_SLOT_HEIGHT,
   HOME_SETTLING_HEIGHTS, categoriesBlockHeight, categorySkeletonCells, homeCategoryEntries, CATEGORY_CELL_HEIGHT, CATEGORY_GRID_COLUMNS, CATEGORY_GRID_MAX_CELLS,
@@ -18,42 +18,114 @@ import { rememberActiveOrder } from './home-todo-rows';
 import type { LoyaltyOverview } from './api/loyalty';
 
 describe('homeBlockOrder', () => {
-  it('khách cũ: header, thẻ thành viên, việc cần làm, banner, lối tắt, dải Story, Giờ vàng trước Mua lại, Danh mục, Bán chạy nhất, combos, rồi một lưới gợi ý', () => {
-    expect(homeBlockOrder('returning')).toEqual([
-      'search', 'member', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'purchased', 'categories', 'bestSellers', 'combos', 'journey', 'quiz', 'community', 'suggest',
-    ]);
+  const KINDS = ['returning', 'new', 'unknown'] as const;
+  const PROMOS = [
+    { flashItems: 3, bannerSlides: 0, combos: 0 },
+    { flashItems: 0, bannerSlides: 2, combos: 0 },
+    { flashItems: 0, bannerSlides: 0, combos: 2 },
+    { flashItems: 3, bannerSlides: 2, combos: 2 },
+    { flashItems: 0, bannerSlides: 0, combos: 0 },
+  ];
+  const visible = (kind: (typeof KINDS)[number], promo: (typeof PROMOS)[number]) => {
+    const pick = homePromoPick({ ...promo, flashPending: false, flashRemembered: false, bannerPending: false, bannerRemembered: false });
+    return homeBlockOrder(kind).filter((id) => id !== 'promo' || pick !== null);
+  };
+
+  it('khách cũ: header, dải ngữ cảnh, Danh mục, Bán chạy nhất, ô khuyến mãi, Mua lại, lối vào, dải Story, rồi một lưới Gợi ý', () => {
+    expect(homeBlockOrder('returning')).toEqual(['search', 'context', 'categories', 'bestSellers', 'promo', 'purchased', 'shortcuts', 'stories', 'suggest']);
   });
-  it('khách mới: Quà khách mới thay thẻ thành viên, không Mua lại, Danh mục đứng trước Bán chạy nhất', () => {
-    expect(homeBlockOrder('new')).toEqual([
-      'search', 'welcome', 'todo', 'banner', 'shortcuts', 'stories', 'flash', 'categories', 'bestSellers', 'combos', 'journey', 'quiz', 'community', 'suggest',
-    ]);
+  it('khách mới và chưa biết loại khách: cùng thứ tự, không Mua lại', () => {
+    expect(homeBlockOrder('new')).toEqual(['search', 'context', 'categories', 'bestSellers', 'promo', 'shortcuts', 'stories', 'suggest']);
+    expect(homeBlockOrder('unknown')).toEqual(homeBlockOrder('new'));
   });
-  it('dải Story (W42A) đứng ngay dưới lối tắt ở mọi loại khách và giữ chỗ đúng chiều cao khi chờ', () => {
-    for (const k of ['returning', 'new', 'unknown'] as const) {
+  it('mọi tổ hợp loại khách × có/không Giờ vàng, banner, combo: tối đa 9 khối, kệ Bán chạy nhất là khối hàng đầu tiên', () => {
+    for (const kind of KINDS) {
+      for (const promo of PROMOS) {
+        const order = visible(kind, promo);
+        expect(order.length, `${kind} ${JSON.stringify(promo)}`).toBeLessThanOrEqual(HOME_MAX_BLOCKS);
+        expect(order.slice(0, 4)).toEqual(['search', 'context', 'categories', 'bestSellers']);
+        expect(new Set(order).size).toBe(order.length);
+        expect(order.at(-1)).toBe('suggest');
+      }
+    }
+  });
+  it('không còn khối riêng cho Hành trình, Chẩn đoán tổ ấm, Cộng đồng, combo hay Giờ vàng: Chẩn đoán và Cộng đồng là thẻ chen trong Gợi ý', () => {
+    for (const kind of KINDS) {
+      for (const gone of ['journey', 'quiz', 'community', 'combos', 'flash', 'banner', 'member', 'welcome', 'todo']) expect(homeBlockOrder(kind) as readonly string[]).not.toContain(gone);
+    }
+  });
+  it('dải Story ngay dưới lối vào, giữ chỗ đúng chiều cao khi chờ', () => {
+    for (const k of KINDS) {
       const order = homeBlockOrder(k);
       expect(order[order.indexOf('shortcuts') + 1]).toBe('stories');
-      expect(order.filter((b) => b === 'stories')).toHaveLength(1);
     }
-    expect(homeKeptOrder('new').indexOf('stories')).toBe(homeKeptOrder('new').indexOf('shortcuts') + 1);
     expect(HOME_SETTLING_HEIGHTS.stories).toBe(144);
   });
-  it('chưa biết loại khách: giữ chỗ thẻ thành viên, không có khối riêng của khách cũ (Mua lại) hay khách mới (Quà)', () => {
-    const order = homeBlockOrder('unknown');
-    expect(order[1]).toBe('member');
-    expect(order).not.toContain('purchased');
-    expect(order).not.toContain('welcome');
-    expect(order).toContain('bestSellers');
+  it('dải ngữ cảnh luôn cao 64px ở mọi biến thể (quà, việc cần làm, thẻ thành viên, khung chờ)', () => {
+    expect(HOME_CONTEXT_HEIGHT).toBe(64);
+    expect(HOME_GIFT_HEIGHT).toBe(HOME_CONTEXT_HEIGHT);
+    expect(HOME_HERO_HEIGHT).toBe(HOME_CONTEXT_HEIGHT);
   });
-  it('Bán chạy nhất có ở cả hai loại khách; mỗi thứ tự có đúng một lưới gợi ý, ở cuối', () => {
-    for (const k of ['returning', 'new'] as const) {
-      expect(homeBlockOrder(k)).toContain('bestSellers');
-      expect(homeBlockOrder(k).filter((b) => b === 'suggest')).toHaveLength(1);
-      expect(homeBlockOrder(k).at(-1)).toBe('suggest');
-    }
+});
+
+describe('homeContextVariant', () => {
+  const base = { todoCount: 0, todoPending: false, todoRemembered: false };
+  it('chưa biết loại khách: khung chờ', () => {
+    expect(homeContextVariant({ ...base, kind: 'unknown', todoCount: 2 })).toBe('skeleton');
   });
-  it('tối đa 4 khối hàng (Giờ vàng, Mua lại, Bán chạy nhất, combos) cộng lưới gợi ý (luật shelves.spec)', () => {
-    const rows = ['flash', 'purchased', 'bestSellers', 'combos'];
-    for (const k of ['returning', 'new'] as const) expect(homeBlockOrder(k).filter((b) => rows.includes(b)).length).toBeLessThanOrEqual(4);
+  it('có việc thì Việc cần làm, kể cả khách mới (đơn chờ chuyển khoản gấp hơn quà)', () => {
+    expect(homeContextVariant({ ...base, kind: 'new', todoCount: 1 })).toBe('todo');
+    expect(homeContextVariant({ ...base, kind: 'returning', todoCount: 3 })).toBe('todo');
+  });
+  it('việc đang tải mà lần trước có việc: khung chờ; lần trước không có: vẽ ngay quà hoặc thẻ', () => {
+    expect(homeContextVariant({ ...base, kind: 'returning', todoPending: true, todoRemembered: true })).toBe('skeleton');
+    expect(homeContextVariant({ ...base, kind: 'returning', todoPending: true })).toBe('member');
+    expect(homeContextVariant({ ...base, kind: 'new', todoPending: true })).toBe('gift');
+  });
+  it('tên khối giữ tên cũ để số đo trước/sau so được', () => {
+    expect(homeContextBlockName('gift')).toBe('welcome');
+    expect(homeContextBlockName('todo')).toBe('todo');
+    expect(homeContextBlockName('member')).toBe('member');
+    expect(homeContextBlockName('skeleton')).toBe('member');
+  });
+});
+
+describe('homeTodoLead / homeTodoCount', () => {
+  const o = { order: { id: 'x' } };
+  it('chưa có dữ liệu hay không có việc: không có dòng', () => {
+    expect(homeTodoLead(undefined)).toBeNull();
+    expect(homeTodoLead({ pending: null, shipping: null, processing: null })).toBeNull();
+    expect(homeTodoCount(null)).toBe(0);
+  });
+  it('chờ chuyển khoản trước, rồi đang giao, rồi đang chuẩn bị; "còn N việc" đếm loại khác và đơn thứ hai trở đi', () => {
+    expect(homeTodoLead({ pending: o, shipping: { ...o, total: 2 }, processing: o })).toEqual({ kind: 'pending', more: 3 });
+    expect(homeTodoLead({ pending: null, shipping: { ...o, total: 1 }, processing: { ...o, total: 3 } })).toEqual({ kind: 'shipping', more: 3 });
+    expect(homeTodoLead({ pending: null, shipping: null, processing: { ...o, total: 1 } })).toEqual({ kind: 'processing', more: 0 });
+    expect(homeTodoCount({ pending: o, shipping: null, processing: o })).toBe(2);
+  });
+});
+
+describe('homePromoPick', () => {
+  const none = { flashItems: 0, flashPending: false, flashRemembered: false, bannerSlides: 0, bannerPending: false, bannerRemembered: false, combos: 0 };
+  it('Giờ vàng > banner > combo; không có gì thì ẩn ô (PROD hiện 0 combo, 0 suất)', () => {
+    expect(homePromoPick({ ...none, flashItems: 2, bannerSlides: 1, combos: 1 })).toBe('flash');
+    expect(homePromoPick({ ...none, bannerSlides: 1, combos: 1 })).toBe('banner');
+    expect(homePromoPick({ ...none, combos: 1 })).toBe('combos');
+    expect(homePromoPick(none)).toBeNull();
+  });
+  it('đang tải: chỉ giữ chỗ cho khối máy đã nhớ là có; không nhớ thì chờ im lặng', () => {
+    expect(homePromoPick({ ...none, flashPending: true, flashRemembered: true })).toBe('flash');
+    expect(homePromoPick({ ...none, flashPending: true, bannerPending: true, bannerRemembered: true })).toBe('banner');
+    expect(homePromoPick({ ...none, flashPending: true, bannerPending: true })).toBeNull();
+  });
+});
+
+describe('homeInterleaveCard', () => {
+  it('chen sau 8 thẻ Gợi ý; ngày chẵn Chẩn đoán tổ ấm, ngày lẻ Cộng đồng', () => {
+    expect(HOME_INTERLEAVE_AFTER).toBe(8);
+    expect(homeInterleaveCard('2026-11-16')).toBe('quiz');
+    expect(homeInterleaveCard('2026-11-17')).toBe('community');
+    expect(homeInterleaveCard('')).toBe('quiz');
   });
   it('customerKind', () => {
     expect(customerKind(0)).toBe('new');
@@ -69,9 +141,11 @@ describe('visibleHomeShortcuts', () => {
     expect(ids).toEqual(['flash', 'coupons', 'recycle', 'groupBuy', 'rewards', 'orders', 'claim', 'earn', 'community']);
     expect(ids).not.toContain('garden');
   });
-  it('ô Giờ vàng luôn hiện (trang /flash-sale đã có), không phụ thuộc cờ nào', () => {
+  it('ô Giờ vàng hiện khi chưa biết hay có suất, không phụ thuộc cờ nào; biết chắc không có suất nào thì bỏ', () => {
     for (const wasteEnabled of [false, true]) for (const claimEnabled of [false, true]) {
       expect(visibleHomeShortcuts({ wasteEnabled, claimEnabled })[0]!.id).toBe('flash');
+      expect(visibleHomeShortcuts({ wasteEnabled, claimEnabled, flashLive: true })[0]!.id).toBe('flash');
+      expect(visibleHomeShortcuts({ wasteEnabled, claimEnabled, flashLive: false }).map((x) => x.id)).not.toContain('flash');
     }
   });
   it('nhãn mọi lối tắt vừa MỘT dòng ở ô 5 cột (≤11 ký tự): nhãn xuống dòng làm hàng cao hơn khung chờ và đẩy cả trang (R-184); nhãn đầy đủ nằm ở ariaLabel', () => {
@@ -177,6 +251,24 @@ describe('HOME_ECOSYSTEM_PILLARS (W177: 2 thẻ chính + 4 ô phụ)', () => {
     const { heroes, chips } = splitHomeEcosystemPillars(HOME_ECOSYSTEM_PILLARS);
     expect(heroes.map((p) => p.id)).toEqual(['retail', 'recycle']);
     expect(chips.map((p) => p.id)).toEqual(['groupBuy', 'subscription', 'garden', 'rewards']);
+  });
+
+  it('Mua xoay vòng nói đúng % của cấu hình; chưa có cấu hình thì không nêu con số nào (không còn 17% viết cứng)', () => {
+    const sub = (pct?: number | null) => resolveHomeEcosystemPillars({ subscribeDiscountPct: pct }).find((p) => p.id === 'subscription')!;
+    expect(sub(0.12)).toMatchObject({ subtitle: 'Đặt định kỳ tiết kiệm tới 12%', badge: 'Định kỳ -12%' });
+    expect(sub(0.15)).toMatchObject({ subtitle: 'Đặt định kỳ tiết kiệm tới 15%', badge: 'Định kỳ -15%' });
+    for (const missing of [undefined, null, 0]) {
+      const p = sub(missing);
+      expect(`${p.subtitle} ${p.badge}`).not.toMatch(/\d/);
+    }
+    expect(JSON.stringify(HOME_ECOSYSTEM_PILLARS)).not.toContain('17%');
+  });
+
+  it('biết chắc không có suất Giờ vàng: bỏ thẻ "Mua lẻ · Giờ vàng", còn một thẻ chính (Đổi rác giãn hết hàng); chưa biết thì giữ', () => {
+    const off = splitHomeEcosystemPillars(resolveHomeEcosystemPillars({ flashLive: false }));
+    expect(off.heroes.map((p) => p.id)).toEqual(['recycle']);
+    expect(off.chips).toHaveLength(4);
+    expect(splitHomeEcosystemPillars(resolveHomeEcosystemPillars({})).heroes.map((p) => p.id)).toEqual(['retail', 'recycle']);
   });
 
   it('Đổi rác tạm dừng mà khách còn yêu cầu đang mở: giữ đủ 6 ô, thẻ chính thứ hai đổi sang Yêu cầu của tôi', () => {
@@ -457,10 +549,10 @@ describe('resolveHomeKind', () => {
     expect(resolveHomeKind({ ...pendingAuth, unknownWhenUnremembered: true })).toBe('unknown');
     expect(resolveHomeKind({ ...pendingAuth, stored: 'returning', unknownWhenUnremembered: true })).toBe('returning');
   });
-  it('thứ tự khối của "chưa biết" giữ chỗ thẻ thành viên và không có khối riêng của một loại', () => {
+  it('thứ tự khối của "chưa biết" có dải ngữ cảnh (khung chờ) và không có Mua lại', () => {
     const order = homeBlockOrder('unknown');
-    expect(order).toContain('member');
-    for (const id of ['purchased', 'welcome'] as const) expect(order).not.toContain(id);
+    expect(order).toContain('context');
+    expect(order).not.toContain('purchased');
   });
 });
 
@@ -552,24 +644,20 @@ describe('homeRenderOrder / homeSettling', () => {
   it('không giữ chỗ thì đúng thứ tự khối', () => {
     for (const k of ['returning', 'new', 'unknown'] as const) expect(homeRenderOrder(k, false)).toEqual(homeBlockOrder(k));
   });
-  it('đang giữ chỗ: chỉ còn tìm kiếm, thẻ thành viên và một khung chờ chung', () => {
-    expect(homeRenderOrder('unknown', true)).toEqual(['search', 'member', 'settling']);
-    expect(homeRenderOrder('returning', true)).toEqual(['search', 'member', 'settling']);
+  it('đang giữ chỗ: chỉ còn tìm kiếm, dải ngữ cảnh và một khung chờ chung, ở mọi loại khách', () => {
+    for (const k of ['returning', 'new', 'unknown'] as const) expect(homeRenderOrder(k, true)).toEqual(['search', 'context', 'settling']);
   });
-  it('khách mới đang giữ chỗ (dải quà thay thẻ thành viên) cũng gọn về một khung chờ', () => {
-    expect(homeRenderOrder('new', true)).toEqual(['search', 'welcome', 'settling']);
-  });
-  it('giữ nội dung khách mới đã dựng: thứ tự khách mới, chỉ dải quà đổi thành khung giữ chỗ thẻ thành viên, Bán chạy và Gợi ý còn nguyên', () => {
+  it('giữ nội dung khách mới đã dựng: thứ tự khách mới, Bán chạy và Gợi ý còn nguyên', () => {
     const kept = homeKeptOrder('unknown');
-    expect(kept).toEqual(homeBlockOrder('new').map((id) => (id === 'welcome' ? 'member' : id)));
-    expect(kept).toContain('bestSellers');
+    expect(kept).toEqual(homeBlockOrder('new'));
     expect(kept.at(-1)).toBe('suggest');
     expect(kept).not.toContain('purchased');
   });
-  it('giữ nội dung đã dựng rồi biết là khách cũ: Mua lại chen SAU Bán chạy nhất (dưới màn đầu), các khối đã vẽ không bị đẩy xuống', () => {
+  it('giữ nội dung đã dựng rồi biết là khách cũ: Mua lại chen ngay trên Gợi ý (dưới màn đầu), các khối đã vẽ không bị đẩy xuống', () => {
     const kept = homeKeptOrder('unknown');
-    const at = kept.indexOf('bestSellers') + 1;
+    const at = kept.indexOf('suggest');
     expect(homeKeptOrder('returning')).toEqual([...kept.slice(0, at), 'purchased', ...kept.slice(at)]);
+    expect(homeKeptOrder('returning').length).toBeLessThanOrEqual(HOME_MAX_BLOCKS);
   });
   it('giữ nội dung đã dựng mà đã biết là khách mới: đúng bố cục khách mới, giữ dải quà', () => {
     expect(homeKeptOrder('new')).toEqual(homeBlockOrder('new'));

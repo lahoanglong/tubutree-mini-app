@@ -40,9 +40,8 @@ vi.mock('../store/auth', () => ({
 vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => null }));
 vi.mock('../components/home/best-seller-rail', () => ({ BEST_SELLER_LIMIT: 6, BestSellerRail: () => <section data-testid="best-rail" /> }));
 vi.mock('../components/home/member-card', () => ({ MemberCard: () => null, MemberCardSkeleton: () => <div data-testid="member-card-loading" /> }));
-vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
+vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false, pending: false, remembered: false, todoQ: { data: undefined } }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => null }));
-vi.mock('../components/home/brand-journey', () => ({ BrandJourney: () => null }));
 vi.mock('../components/home/community-preview', () => ({ CommunityPreview: () => null }));
 vi.mock('../components/home/suggest-feed', () => ({ SuggestFeed: () => null }));
 vi.mock('../components/home/new-customer-gift', () => ({ NewCustomerGift: () => null }));
@@ -56,7 +55,7 @@ vi.mock('../components/home/home-below', () => {
     chunk.failures -= 1;
     throw new Error(chunk.message);
   }
-  return { BrandJourney: () => null, HomeQuiz: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null, HomeScrollRestoration: () => null };
+  return { HomeQuiz: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null, HomeScrollRestoration: () => null };
 });
 
 import HomePage from './home';

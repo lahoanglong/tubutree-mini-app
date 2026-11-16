@@ -42,9 +42,8 @@ vi.mock('../components/flash-sale', () => ({ FlashSale: () => <div data-testid="
 vi.mock('../components/reorder/purchased-rail', () => ({ PURCHASED_RAIL_LIMIT: 10, PurchasedRail: () => <div data-testid="purchased-rail-real" /> }));
 vi.mock('../components/home/best-seller-rail', () => ({ BEST_SELLER_LIMIT: 6, BestSellerRail: () => <div data-testid="best-seller-rail-real" /> }));
 vi.mock('../components/home/member-card', () => ({ MemberCard: () => null, MemberCardSkeleton: () => <div data-testid="member-card-loading" /> }));
-vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
+vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false, pending: false, remembered: false, todoQ: { data: undefined } }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => null }));
-vi.mock('../components/home/brand-journey', () => ({ BrandJourney: () => null }));
 vi.mock('../components/home/community-preview', () => ({ CommunityPreview: () => null }));
 vi.mock('../components/home/suggest-feed', () => ({ SuggestFeed: () => null }));
 vi.mock('../components/home/new-customer-gift', () => ({ NewCustomerGift: () => null }));
@@ -55,7 +54,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 vi.mock('../components/home/home-below', async () => {
   await chunk.gate;
-  return { BrandJourney: () => null, CommunityPreview: () => null, SuggestFeed: () => null, HomeScrollRestoration: () => null };
+  return { CommunityPreview: () => null, SuggestFeed: () => null, HomeScrollRestoration: () => null };
 });
 
 import HomePage from './home';
@@ -95,16 +94,14 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-// Máy đã nhớ loại khách: không giữ khung chờ chung. Khối chưa có chunk (Hành trình, Cộng đồng, Gợi ý) không vẽ gì; chúng là các khối cuối
-// trang nên chunk về không đẩy khối nào đang hiện.
+// Máy đã nhớ loại khách: không giữ khung chờ chung. Khối chưa có chunk (lưới Gợi ý) không vẽ gì; nó là khối cuối trang nên chunk về không đẩy khối nào đang hiện.
 describe('HomePage — mở lại khi máy đã nhớ loại khách, chunk khối dưới chưa về', () => {
-  it('không có khung chờ chung; Giờ vàng chỉ có FlashSale thật và Cộng đồng không có phần tử nào; Mua lại chỉ có kệ thật', async () => {
+  it('không có khung chờ chung; chưa nhớ Giờ vàng thì ô khuyến mãi không có vỏ khối (không giữ chỗ cho thứ có thể không có); Mua lại chỉ có kệ thật', async () => {
     renderHome();
     await settle(100);
     expect(document.querySelector('[data-testid="home-settling"]')).toBeNull();
-    expect(testIdsIn('flash')).toEqual(['flash-sale-real']);
-    expect(blockEl('community')).not.toBeNull();
-    expect(blockEl('community')!.innerHTML).toBe('');
+    expect(blockEl('flash')).toBeNull();
+    expect(blockEl('community')).toBeNull();
     expect(testIdsIn('purchased')).toEqual(['purchased-rail-real']);
   });
 

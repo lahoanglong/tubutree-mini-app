@@ -1,73 +1,78 @@
 'use client';
 
-import { useContext, useEffect, useMemo, useSyncExternalStore, type CSSProperties } from 'react';
+import { useEffect, type CSSProperties } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
-import { AlertTriangle, PackageCheck, Truck } from 'lucide-react';
+import { AlertTriangle, ChevronRight, PackageCheck, Truck } from 'lucide-react';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { readLastTodoRows, readTodoRows, todoSkeletonHeight, writeTodoRows } from '@tubutree/app-core/home-layout';
-import type { HomeTodoPart } from '@tubutree/app-core/api/orders';
+import { HOME_CONTEXT_HEIGHT, homeTodoCount, homeTodoLead, writeTodoRows } from '@tubutree/app-core/home-layout';
+import type { HomeTodo, HomeTodoPart } from '@tubutree/app-core/api/orders';
 import { meSummaryQuery } from '@tubutree/app-core/api/me-summary';
 import { ordersHomeTodoQuery } from '@tubutree/app-core/queries/orders';
-import { useAuth } from '@/lib/auth-context';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { syncHomeHintCookie } from './use-home-customer-kind';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
-import { HomeRestoreHintContext, subscribeStorageEvent } from '@/lib/home-restore-context';
 import { browserStorage } from '@/lib/recently-viewed';
 import { useRemaining } from '@/lib/use-remaining';
 import { canPayNow, showsPaymentDeadline } from '@/components/orders/order-rules';
-import { Button, Card, Icon, ListRow, Skeleton } from '@/components/mini';
+import { Button, Card, Icon, ListRow } from '@/components/mini';
 
-/** Mỗi việc đúng một dòng 64px (HM-06): `todoSkeletonHeight` cũng tính theo số này. Đường kẻ giữa hai dòng là bóng trong, không cộng chiều cao. */
-const ROW_HEIGHT = 64;
-const rowStyle = (divider: boolean): CSSProperties => ({
+/** Dải một dòng đúng `HOME_CONTEXT_HEIGHT`: `ListRow` cao bằng đó và nút mũi tên 44 nằm gọn trong đó. */
+const ROW_HEIGHT = HOME_CONTEXT_HEIGHT;
+const rowStyle = (arrow: boolean): CSSProperties => ({
   height: ROW_HEIGHT,
-  padding: '0 12px 0 8px',
+  padding: arrow ? '0 0 0 var(--space-inline-sm)' : '0 var(--space-inline-md) 0 var(--space-inline-sm)',
   boxSizing: 'border-box',
-  ...(divider ? { boxShadow: 'inset 0 1px 0 var(--color-border-subtle)' } : {}),
 });
 // Viền trái 3px màu cảnh báo là dấu hiệu "việc cần làm"; viền ngoài là bóng trong để thẻ không cao thêm 2px so với khung chờ.
 const CARD_STYLE: CSSProperties = { border: 'none', borderLeft: '3px solid var(--color-status-warning-fg)', boxShadow: 'inset 0 0 0 1px var(--color-border-subtle)', overflow: 'hidden' };
+const ONE_LINE: CSSProperties = { display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' };
 
 type TodoOrder = HomeTodoPart['order'];
 
-/** Đơn chuyển khoản chờ tiền: giờ còn lại và nút "Thanh toán ngay" mở thẳng trang chuyển khoản. */
-function PendingPaymentRow({ order }: { order: TodoOrder }) {
+/** Đơn chuyển khoản chờ tiền: giờ còn lại (hoặc "+N việc khác") và nút "Thanh toán" mở thẳng trang chuyển khoản. */
+function PendingPaymentRow({ order, moreText, arrow }: { order: TodoOrder; moreText?: string; arrow: boolean }) {
   const router = useRouter();
   const remaining = useRemaining(showsPaymentDeadline(order) ? order.paymentDeadline : null);
   const payable = canPayNow(order);
-  const detail = remaining.expired ? homeCopy.todo.payOverdue : remaining.text;
+  const detail = moreText ?? (remaining.expired ? homeCopy.todo.payOverdue : remaining.text);
   return (
     <ListRow
       icon={<Icon icon={AlertTriangle} tone="current" style={{ color: 'var(--color-text-warning)' }} />}
-      title={homeCopy.todo.payTitle(formatVnd(order.total))}
-      subtitle={detail || undefined}
+      title={<span style={ONE_LINE}>{homeCopy.todo.payTitle(formatVnd(order.total))}</span>}
+      subtitle={detail ? <span style={ONE_LINE}>{detail}</span> : undefined}
       trailing={
         payable ? (
           <Button aria-label={homeCopy.todo.payNowLabel(order.code)} onPress={() => router.push(`/thanh-toan/chuyen-khoan/${encodeURIComponent(order.code)}`)} style={{ minWidth: 0, flex: '0 0 auto' }}>
             {homeCopy.todo.payNow}
           </Button>
-        ) : (
+        ) : arrow ? undefined : (
           'chevron'
         )
       }
       onPress={payable ? undefined : () => router.push(`/tai-khoan/don-hang/${encodeURIComponent(order.code)}`)}
-      style={rowStyle(false)}
+      style={rowStyle(arrow)}
     />
   );
 }
 
-function TodoSkeleton({ rows }: { rows: number }) {
+/** Mũi tên cuối dòng mở danh sách đơn khi còn việc khác ngoài việc đang hiện. */
+function MoreOrdersLink({ n }: { n: number }) {
   return (
-    <div data-testid="todo-strip-loading" aria-hidden="true">
-      <Skeleton height={todoSkeletonHeight(rows)} radius="var(--radius-card)" />
-    </div>
+    <Link
+      href="/tai-khoan/don-hang"
+      aria-label={fillCopy('home.todo.moreAria', { n })}
+      className="tubu-press mr-1 inline-flex h-11 w-11 flex-none items-center justify-center"
+    >
+      <Icon icon={ChevronRight} size="sm" tone="muted" />
+    </Link>
   );
 }
 
-/** Dữ liệu của "Việc cần làm"; Trang chủ dùng riêng `loading` để biết khối đã chốt chưa (cùng query nên không thêm request). */
+/** Dữ liệu của "Việc cần làm"; Trang chủ dùng riêng `loading` để biết dải ngữ cảnh đã chốt chưa (cùng query nên không thêm request). */
 export function useHomeTodoQueries() {
   const authed = useAuthPhase() === 'authenticated';
   const count = useQuery({ ...meSummaryQuery(coreHttp), select: (s) => s.orders.active, enabled: authed, staleTime: 30_000, retry: false });
@@ -78,81 +83,65 @@ export function useHomeTodoQueries() {
 }
 
 /**
- * "Việc cần làm" ở Trang chủ (bản web của `todo-strip.tsx` ở Mini App): đơn chờ chuyển khoản (giờ hết hạn, nút Thanh toán ngay) rồi
- * tới đơn đang giao và đơn đang chuẩn bị (COD vừa đặt), tối đa hai dòng. Chỉ hiện khi có việc. Danh sách đơn chỉ tải khi số đơn đang xử lý (cùng query với thanh đáy)
- * lớn hơn 0; chưa đăng nhập, không có việc hay lỗi thì ẩn. Khung chờ chỉ hiện khi lần mở trước của tài khoản này có việc (nhớ số dòng).
+ * Nhớ "lần mở này có việc cần làm không" (1 hoặc 0) cho tài khoản này, để lần mở sau dải ngữ cảnh giữ khung chờ thay vì vẽ quà hay thẻ thành viên rồi đổi.
+ * Chỉ ghi khi dữ liệu đã chốt: lỗi hay trả thiếu (`partial`) thì không ghi, kẻo xoá dấu nhớ đúng.
  */
-export function TodoStrip({ restoring = false }: { restoring?: boolean }) {
-  const router = useRouter();
-  const { authed, count, enabled, todoQ, loading } = useHomeTodoQueries();
-  const userId = useAuth().user?.id;
-  const rememberedRows = useMemo(() => (authed ? readTodoRows(browserStorage(), userId) : 0), [authed, userId]);
-  // Số dòng của lần mở trước (bất kể tài khoản) cho khung chờ lúc khôi phục phiên; lần hydrate đầu dùng gợi ý của bản server.
-  const prebuilt = useContext(HomeRestoreHintContext);
-  const lastRows = useSyncExternalStore(subscribeStorageEvent, () => readLastTodoRows(browserStorage()), () => prebuilt?.rows ?? 0);
-  const payOrder = todoQ.data?.pending?.order;
-  const shipOrder = todoQ.data?.shipping?.order;
-  const shipTotal = todoQ.data?.shipping?.total ?? 0;
-  const prepOrder = todoQ.data?.processing?.order;
-  const prepTotal = todoQ.data?.processing?.total ?? 0;
-  // Tối đa hai dòng để khối gọn: đơn chờ thanh toán, đơn đang giao, rồi đơn đang chuẩn bị theo thứ tự đó.
-  const showShip = Boolean(shipOrder);
-  const showPrep = Boolean(prepOrder) && (payOrder ? 1 : 0) + (shipOrder ? 1 : 0) < 2;
-  const rows = (payOrder ? 1 : 0) + (showShip ? 1 : 0) + (showPrep ? 1 : 0);
-  const settled =
-    authed &&
-    (enabled
-      ? !todoQ.isLoading && !todoQ.isError && !todoQ.data?.partial
-      : count.isSuccess);
+export function useHomeTodoHint(todo: ReturnType<typeof useHomeTodoQueries>, userId: string | undefined): void {
+  const { authed, enabled, count, todoQ } = todo;
+  const rows = homeTodoCount(todoQ.data) > 0 ? 1 : 0;
+  const settled = authed && (enabled ? !todoQ.isLoading && !todoQ.isError && !todoQ.data?.partial : count.isSuccess);
   useEffect(() => {
     if (settled && userId) {
       writeTodoRows(browserStorage(), userId, rows);
       syncHomeHintCookie();
     }
   }, [settled, userId, rows]);
-  if (restoring) return lastRows > 0 ? <TodoSkeleton rows={lastRows} /> : null;
-  if (!authed) return null;
+}
 
-  // Khung chờ khi lần mở trước có việc thật, hoặc khi tổng quan báo có đơn đang xử lý mà máy chưa nhớ số dòng (máy mới, đơn đầu tiên): giữ chỗ một dòng
-  // thay vì chèn dải vào làm cả Trang chủ nhảy xuống. Không thì chờ im lặng, khối hiện khi có việc.
-  if (loading) {
-    const pending = rememberedRows > 0 ? rememberedRows : enabled ? 1 : 0;
-    return pending > 0 ? <TodoSkeleton rows={pending} /> : null;
-  }
-  if (rows === 0) return null;
+/**
+ * "Việc cần làm" trong dải ngữ cảnh (bản web của `todo-strip.tsx` ở Mini App): MỘT dòng cao 64px cho việc dẫn đầu (`homeTodoLead`: chờ chuyển khoản, rồi đang giao,
+ * rồi đang chuẩn bị). Còn việc khác thì chữ phụ nói "+N việc khác" và mũi tên cuối dòng mở danh sách đơn. Chỉ vẽ khi có việc: biến thể nào của dải
+ * được hiện là do `homeContextVariant` quyết, nên component này không tự chờ dữ liệu.
+ */
+export function TodoStrip({ data }: { data: HomeTodo | undefined }) {
+  const router = useRouter();
+  const lead = homeTodoLead(data);
+  if (!data || !lead) return null;
+  const arrow = lead.more > 0;
+  const moreText = arrow ? fillCopy('home.todo.more', { n: lead.more }) : undefined;
+  const payOrder = data.pending?.order;
+  const shipOrder = data.shipping?.order;
+  const prepOrder = data.processing?.order;
 
   return (
     <section aria-label={homeCopy.todo.title}>
       <Card variant="outline" padding={0} style={CARD_STYLE}>
-        {payOrder && (
-          <div data-todo-row style={{ height: ROW_HEIGHT }}>
-            <PendingPaymentRow order={payOrder} />
+        <div data-todo-row style={{ display: 'flex', alignItems: 'center', height: ROW_HEIGHT }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            {lead.kind === 'pending' && payOrder && <PendingPaymentRow order={payOrder} moreText={moreText} arrow={arrow} />}
+            {lead.kind === 'shipping' && shipOrder && (
+              <ListRow
+                icon={<Icon icon={Truck} tone="brand" />}
+                title={<span style={ONE_LINE}>{homeCopy.todo.shipping(shipOrder.code)}</span>}
+                subtitle={<span style={ONE_LINE}>{moreText ?? homeCopy.todo.shippingHint}</span>}
+                trailing={arrow ? undefined : 'chevron'}
+                onPress={() => router.push(`/tai-khoan/don-hang/${encodeURIComponent(shipOrder.code)}`)}
+                style={rowStyle(arrow)}
+              />
+            )}
+            {lead.kind === 'processing' && prepOrder && (
+              <ListRow
+                icon={<Icon icon={PackageCheck} tone="brand" />}
+                title={<span style={ONE_LINE}>{homeCopy.todo.preparing(prepOrder.code)}</span>}
+                subtitle={<span style={ONE_LINE}>{moreText ?? homeCopy.todo.preparingHint}</span>}
+                trailing={arrow ? undefined : 'chevron'}
+                onPress={() => router.push(`/tai-khoan/don-hang/${encodeURIComponent(prepOrder.code)}`)}
+                style={rowStyle(arrow)}
+              />
+            )}
           </div>
-        )}
-        {showShip && shipOrder && (
-          <div data-todo-row style={{ height: ROW_HEIGHT }}>
-            <ListRow
-              icon={<Icon icon={Truck} tone="brand" />}
-              title={shipTotal > 1 ? homeCopy.todo.shippingMany(shipTotal) : homeCopy.todo.shipping(shipOrder.code)}
-              subtitle={homeCopy.todo.shippingHint}
-              trailing="chevron"
-              onPress={() => router.push(shipTotal > 1 ? '/tai-khoan/don-hang?tab=shipping' : `/tai-khoan/don-hang/${encodeURIComponent(shipOrder.code)}`)}
-              style={rowStyle(Boolean(payOrder))}
-            />
-          </div>
-        )}
-        {showPrep && prepOrder && (
-          <div data-todo-row style={{ height: ROW_HEIGHT }}>
-            <ListRow
-              icon={<Icon icon={PackageCheck} tone="brand" />}
-              title={prepTotal > 1 ? homeCopy.todo.preparingMany(prepTotal) : homeCopy.todo.preparing(prepOrder.code)}
-              subtitle={homeCopy.todo.preparingHint}
-              trailing="chevron"
-              onPress={() => router.push(prepTotal > 1 ? '/tai-khoan/don-hang?tab=processing' : `/tai-khoan/don-hang/${encodeURIComponent(prepOrder.code)}`)}
-              style={rowStyle(Boolean(payOrder || showShip))}
-            />
-          </div>
-        )}
+          {arrow && <MoreOrdersLink n={lead.more} />}
+        </div>
       </Card>
     </section>
   );

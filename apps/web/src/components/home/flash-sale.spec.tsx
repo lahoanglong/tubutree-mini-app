@@ -650,12 +650,12 @@ describe('FlashSale — khổ máy tính', () => {
     expect(cell.style.flex).toBe('0 0 auto');
   });
 
-  it('ảnh ưu tiên: hai thẻ đầu eager + fetchpriority=high, thẻ thứ ba lazy', async () => {
+  it('Giờ vàng đứng dưới kệ Bán chạy nhất (khối ảnh đầu tiên giữ ảnh ưu tiên): mọi thẻ tải lười, không tranh băng thông với ảnh LCP', async () => {
     activeResult = async () => [0, 1, 2].map((i) => active({ itemId: `i${i}`, variationId: `v${i}`, productSlug: `sp-${i}`, productName: `SP ${i}`, thumbnail: `https://cdn.example/${i}.jpg` }));
     const c = await mount(<FlashSale />);
     const imgs = Array.from(c.querySelectorAll('img'));
-    expect(imgs.map((i) => i.getAttribute('loading'))).toEqual(['eager', 'eager', 'lazy']);
-    expect(imgs.map((i) => i.getAttribute('fetchpriority'))).toEqual(['high', 'high', null]);
+    expect(imgs.map((i) => i.getAttribute('loading'))).toEqual(['lazy', 'lazy', 'lazy']);
+    expect(imgs.map((i) => i.getAttribute('fetchpriority'))).toEqual([null, null, null]);
   });
 
   it('thẻ chưa có ảnh dùng ô thay thế hình lá như thẻ sản phẩm', async () => {

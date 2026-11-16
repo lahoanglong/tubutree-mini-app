@@ -10,7 +10,7 @@ vi.mock('@/lib/use-hydrated', () => ({ useHydrated: () => mocks.hydrated }));
 
 import { HOME_BEST_SELLER_LIMIT, type HomeKindState } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
-import { useHomeShelves, type HomeShelves } from './use-home-shelves';
+import { useHomeShelves, type HomeShelves, type HomeShelvesBanner } from './use-home-shelves';
 
 const HOUR = 3_600_000;
 const flashEnding = (slug: string, i: number, endAt: string) => ({
@@ -25,14 +25,14 @@ const purchased = (slug: string) => ({
 });
 
 let latest: HomeShelves | null = null;
-function Probe({ kind }: { kind: HomeKindState }) {
-  latest = useHomeShelves(kind);
+function Probe({ kind, banner }: { kind: HomeKindState; banner?: HomeShelvesBanner }) {
+  latest = useHomeShelves(kind, {}, banner);
   return null;
 }
 
 let mounted: Rendered | null = null;
-async function mount(kind: HomeKindState) {
-  mounted = render(<Probe kind={kind} />);
+async function mount(kind: HomeKindState, banner?: HomeShelvesBanner) {
+  mounted = render(<Probe kind={kind} banner={banner} />);
   await flush(8);
   return latest!;
 }
@@ -280,7 +280,7 @@ describe('useHomeShelves (web)', () => {
       expect(s.bestSellers).toEqual([]);
     });
 
-    it('combo chứa món đang ở Giờ vàng vẫn hiện (không bị Giờ vàng loại) và vẫn chiếm món của Bán chạy nhất; Giờ vàng giữ a', async () => {
+    it('Giờ vàng đang chạy thì ô khuyến mãi là Giờ vàng: kệ combo ẩn (`combos` rỗng) nên combo không chiếm món của Bán chạy nhất', async () => {
       mocks.get.mockImplementation(async (path: string) => {
         if (path === '/flash-sales/active') return ['a', 'b', 'c'].map(flashItem);
         if (path === '/bundles/combos') return [comboDto('c1', 'a', 'y'), comboDto('c2', 'a', 'z')];
@@ -288,9 +288,44 @@ describe('useHomeShelves (web)', () => {
         return [];
       });
       const s = await mount('new');
+      expect(s.promo).toBe('flash');
       expect(s.flash.map((f) => f.productSlug)).toEqual(['a', 'b', 'c']);
-      expect(s.combos.map((v) => v.id)).toEqual(['c1', 'c2']);
-      expect(s.bestSellers.map((p) => p.slug)).toEqual(['x', 'w', 'v', 'u']);
+      expect(s.combos).toEqual([]);
+      expect(s.bestSellers.map((p) => p.slug)).toEqual(SIX);
+    });
+
+    it('banner chiến dịch đang hiện (hay đang tải mà lần mở trước có) thì ô khuyến mãi là banner: combo ẩn và không chiếm món; không có Giờ vàng', async () => {
+      withCombosAndSix([comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')]);
+      const s = await mount('new', { slides: 1, pending: false, remembered: false });
+      expect(s.promo).toBe('banner');
+      expect(s.combos).toEqual([]);
+      expect(s.bestSellers.map((p) => p.slug)).toEqual(SIX);
+      mounted!.unmount();
+      resetFlashSales();
+      expect((await mount('new', { slides: 0, pending: true, remembered: true })).promo).toBe('banner');
+    });
+
+    it('chỉ còn combo thì ô khuyến mãi là combo (và combo chiếm món); không có gì thì không có ô nào (`promo` null)', async () => {
+      withCombosAndSix([comboDto('c1', 'x', 'y'), comboDto('c2', 'x', 'z')]);
+      const s = await mount('new');
+      expect(s.promo).toBe('combos');
+      expect(s.combos).toHaveLength(2);
+      mounted!.unmount();
+      resetFlashSales();
+      withCombosAndSix([]);
+      const none = await mount('new');
+      expect(none.promo).toBeNull();
+      expect(none.combos).toEqual([]);
+    });
+
+    it('Giờ vàng còn đang tải mà lần mở trước máy này có Giờ vàng: ô khuyến mãi giữ chỗ cho Giờ vàng; chưa nhớ thì chờ im lặng (null)', async () => {
+      mocks.get.mockImplementation((path: string) => (path === '/flash-sales/active' ? new Promise(() => undefined) : Promise.resolve([])));
+      window.localStorage.setItem('tubu_home_flash', '1');
+      expect((await mount('new')).promo).toBe('flash');
+      mounted!.unmount();
+      resetFlashSales();
+      window.localStorage.removeItem('tubu_home_flash');
+      expect((await mount('new')).promo).toBeNull();
     });
 
     it('Mua lại về sau HTML đầu và giữ chính món của combo (x): kệ combo không biến mất ở lần vẽ nào, Bán chạy nhất không đổi', async () => {

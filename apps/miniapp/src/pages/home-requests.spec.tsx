@@ -107,7 +107,8 @@ describe('Trang chủ gộp request (C-037)', () => {
     localStorage.clear();
     mocks.status = 'authenticated';
     mocks.routes = {};
-    // Lưới gợi ý cuối trang (trang 1) và xem trước Cộng đồng không nằm trong request gộp: hai request riêng. Lưới chỉ tải khi sắp vào màn.
+    // Lưới gợi ý cuối trang (trang 1) không nằm trong request gộp: request riêng, chỉ tải khi sắp vào màn. Cộng đồng chỉ là thẻ chen trong lưới đó (chỉ ngày lẻ)
+    // nên /feed không còn nằm trong lần mở Trang chủ.
     mocks.routes['/products'] = () => ({ data: PAGE([card('f2', 'Chỉ nổi bật')]) });
     mocks.routes['/feed'] = () => ({ data: { posts: [] } });
     // Chuông chỉ đếm bằng một lời gọi nhỏ (cả hộp thư, không dừng ở 50 tin của khối gộp): request riêng của khách đã đăng nhập.
@@ -121,7 +122,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     });
   });
 
-  it('đã đăng nhập: dữ liệu Home đến từ 2 request gộp (/home + /home/me) cộng Cộng đồng và /me/summary (số tin chưa đọc, đơn đang xử lý), vẽ đủ khối; lưới gợi ý cuối trang chưa tải khi chưa tới gần', async () => {
+  it('đã đăng nhập: dữ liệu Home đến từ 2 request gộp (/home + /home/me) cộng /me/summary (số tin chưa đọc, đơn đang xử lý), vẽ đủ khối; lưới gợi ý cuối trang chưa tải khi chưa tới gần', async () => {
     keepSuggestOffScreen();
     mocks.routes['/home'] = () => ({ data: PUBLIC_FEED });
     mocks.routes['/home/me'] = () => ({ data: ME_FEED });
@@ -132,7 +133,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     // Gợi ý cá nhân (khối forYou của /home/me) đứng đầu lưới cuối trang nên cũng chờ lưới tới gần màn.
     expect(screen.queryByText('Gợi ý riêng')).toBeNull();
     // Lưới "Gợi ý hôm nay" (request riêng, xáo theo ngày) chưa tải vì còn ở xa màn; số yêu cầu đổi rác đang mở lấy từ /home/me (không gọi /waste/me).
-    expect(paths().sort()).toEqual(['/feed', '/home', '/home/me', '/me/summary']);
+    expect(paths().sort()).toEqual(['/home', '/home/me', '/me/summary']);
     expect(mocks.get.mock.calls.find(([u]) => u === '/home/me')?.[1]).toMatchObject({ params: { purchasedLimit: 10 } });
   });
 
@@ -169,7 +170,7 @@ describe('Trang chủ gộp request (C-037)', () => {
     renderHome();
     expect(await screen.findByText(/^Mã 25\.000đ/)).toBeInTheDocument();
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/config/public', '/feed', '/home', '/home/me', '/me/new-customer-offer', '/me/summary']);
+    expect(paths().sort()).toEqual(['/config/public', '/home', '/home/me', '/me/new-customer-offer', '/me/summary']);
   });
 
   it('banner chiến dịch đến từ khối gộp /home: hiện slide, không thêm request /campaigns', async () => {
@@ -234,18 +235,18 @@ describe('Trang chủ gộp request (C-037)', () => {
     mocks.routes['/me/subscriptions'] = () => ({ data: [] });
     renderHome();
     expect(await screen.findByText('Gợi ý lẻ')).toBeInTheDocument();
-    await waitFor(() => expect(paths()).toEqual(expect.arrayContaining(['/home', '/home/me', '/products', '/products/for-you', '/categories', '/brands'])));
+    await waitFor(() => expect(paths()).toEqual(expect.arrayContaining(['/home', '/home/me', '/products', '/products/for-you', '/categories'])));
   });
 
   it('khối null phía server: chỉ khối đó gọi lẻ, khối khác vẫn lấy từ gộp', async () => {
     keepSuggestOffScreen();
-    mocks.routes['/home'] = () => ({ data: { ...PUBLIC_FEED, brands: null } });
+    mocks.routes['/home'] = () => ({ data: { ...PUBLIC_FEED, categories: null } });
     mocks.routes['/home/me'] = () => ({ data: ME_FEED });
-    mocks.routes['/brands'] = () => ({ data: [{ brand: 'LẻBrand', count: 1 }] });
+    mocks.routes['/categories'] = () => ({ data: [{ id: 'c1', parentId: null, name: 'LẻDanhMục', slug: 'le-danh-muc', image: null, sortOrder: 1, productCount: 5 }] });
     renderHome();
-    expect(await screen.findByText('LẻBrand')).toBeInTheDocument();
+    expect((await screen.findAllByRole('button', { name: 'LẻDanhMục' })).length).toBeGreaterThan(0);
     await new Promise((r) => setTimeout(r, 50));
-    expect(paths().sort()).toEqual(['/brands', '/feed', '/home', '/home/me', '/me/summary']);
+    expect(paths().sort()).toEqual(['/categories', '/home', '/home/me', '/me/summary']);
   });
 
   it('kéo để làm mới: khối gộp được tải lại bằng request gộp, không bắn request lẻ', async () => {

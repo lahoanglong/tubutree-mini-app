@@ -65,9 +65,8 @@ vi.mock('../components/home/member-card', () => ({
   MemberCardSkeleton: () => <div data-testid="member-card-loading" />,
   MemberCardUnavailable: ({ onRetry }: { onRetry: () => void }) => <button data-testid="member-card-unavailable" onClick={onRetry}>Thử lại</button>,
 }));
-vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false }) }));
+vi.mock('../components/home/todo-strip', () => ({ TodoStrip: () => null, useHomeTodoQueries: () => ({ loading: false, pending: false, remembered: false, todoQ: { data: undefined } }) }));
 vi.mock('../components/home/shortcut-grid', () => ({ ShortcutGrid: () => <section aria-label="Lối tắt" /> }));
-vi.mock('../components/home/brand-journey', () => ({ BrandJourney: () => null }));
 vi.mock('../components/home/community-preview', () => ({ CommunityPreview: () => null }));
 vi.mock('../components/home/suggest-feed', () => ({ SuggestFeed: () => <section aria-label="Gợi ý cho bạn" /> }));
 vi.mock('../components/home/new-customer-gift', () => ({ NewCustomerGift: () => <section aria-label="Quà khách mới" /> }));

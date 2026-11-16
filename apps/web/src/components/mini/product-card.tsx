@@ -1,7 +1,7 @@
 'use client';
 
 // Nguồn: apps/miniapp/src/components/ui/product-card.tsx
-import type { ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
 import { pickCardFlash, productCardView, type CardVariant } from '@tubutree/app-core/commerce/product-card-view';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { WishlistHeart } from '@/components/catalog/wishlist-heart';
@@ -15,6 +15,7 @@ import { useFlashExpiry } from '@/lib/use-flash-expiry';
 import { useFreeShipThreshold } from '@/lib/use-free-ship-threshold';
 import { useHydrated } from '@/lib/use-hydrated';
 import { trackCardClick } from '@/components/analytics/funnel';
+import { ProductCardQuickAddContext, QuickAddButton } from './product-card-quick-add';
 import { ProductTile } from './product-tile';
 
 /** Số thẻ đầu trên màn hình đầu (hai hàng trên mobile, một hàng từ md): ảnh của chúng là ứng viên LCP nên tải ngay. */
@@ -51,6 +52,8 @@ export interface ProductCardProps {
 }
 
 const HEART_VARIANTS: ReadonlySet<CardVariant> = new Set(['grid', 'rail-md', 'rank']);
+/** Biến thể đủ rộng để chứa nút ＋ ở góc dưới ảnh (thẻ Giờ vàng và thẻ dòng có nút riêng, kệ nhỏ quá chật). */
+const QUICK_ADD_VARIANTS = HEART_VARIANTS;
 
 /**
  * Thẻ sản phẩm nối dữ liệu thật vào `ProductTile`: chọn suất Giờ vàng, mốc ngày mở bán và ngưỡng miễn phí giao rồi để `productCardView`
@@ -59,6 +62,8 @@ const HEART_VARIANTS: ReadonlySet<CardVariant> = new Set(['grid', 'rail-md', 'ra
  * HTML dựng sẵn (ISR) và lần hydrate đầu phải khớp nhau: trước `useHydrated()` không có nhãn theo giờ máy khách ("Mới", "Miễn phí giao
  * hàng"); kho Giờ vàng ở máy chủ rỗng nên giá cũng là giá thường. Sau đó nhãn chỉ hiện khi dữ kiện đã về, không hứa rồi rút. Thẻ tự vẽ lại
  * đúng mốc hết giờ của suất đang áp (`useFlashExpiry`).
+ *
+ * Nút ＋ thêm nhanh: chỉ khi nơi dựng trang cấp `ProductCardQuickAddContext` (Trang chủ), nơi gọi không tự đưa `imageOverlay` hay `onAdd`, thẻ thuộc biến thể đủ rộng và còn hàng.
  */
 export function ProductCard({
   product,
@@ -80,6 +85,7 @@ export function ProductCard({
   shelf,
   position,
 }: ProductCardProps) {
+  const quickAdd = useContext(ProductCardQuickAddContext);
   const hydrated = useHydrated();
   const activeFlash = useActiveFlashSales();
   const launchDate = useCatalogLaunchDate();
@@ -109,6 +115,12 @@ export function ProductCard({
     launchDate: knownLaunch ? launchDate : null,
   });
 
+  const overlay =
+    imageOverlay ??
+    (quickAdd && !onAdd && QUICK_ADD_VARIANTS.has(variant) && product.inStock !== false ? (
+      <QuickAddButton name={product.name} busy={quickAdd.busyId === product.id} onPress={(origin) => quickAdd.add(product, origin)} />
+    ) : undefined);
+
   return (
     <ProductTile
       view={view}
@@ -122,7 +134,7 @@ export function ProductCard({
       addLabel={addLabel}
       hidePrice={hidePrice}
       onOpen={open}
-      imageOverlay={view.stock === 'out' ? undefined : imageOverlay}
+      imageOverlay={view.stock === 'out' ? undefined : overlay}
       wishlist={showWishlist && HEART_VARIANTS.has(variant) ? <WishlistHeart productId={product.id} productName={product.name} floating /> : undefined}
     />
   );

@@ -97,6 +97,17 @@ describe('thẻ thành viên nền sáng (HM-05)', () => {
     expect(card).toHaveStyle({ height: `${HOME_GIFT_HEIGHT}px` });
   });
 
+  it('thẻ thật và khung chờ cùng cao đúng 64px (dải ngữ cảnh của Trang chủ): đổi giữa chúng không đẩy các khối dưới', () => {
+    mocks.fullName = 'Nguyễn Thị Quay Lại';
+    expect(HOME_GIFT_HEIGHT).toBe(64);
+    const real = render(<MemberCard />);
+    const card = screen.getByRole('region').firstElementChild as HTMLElement;
+    expect(card).toHaveStyle({ height: '64px' });
+    real.unmount();
+    const { container } = render(<MemberCardSkeleton />);
+    expect(container.querySelector('.tubu-skeleton')).toHaveStyle({ height: '64px' });
+  });
+
   it('khung chờ không có đệm dưới (vỏ khối giữ khoảng cách)', () => {
     render(<MemberCardSkeleton />);
     expect(screen.getByTestId('member-card-loading').style.padding).toBe('0px 16px');

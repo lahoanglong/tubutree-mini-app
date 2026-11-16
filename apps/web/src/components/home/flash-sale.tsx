@@ -147,7 +147,7 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
         {live.map((item, i) => (
           <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} priority={i < FLASH_PRIORITY_CARDS} shelf="flash" position={i + 1} />
+            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} shelf="flash" position={i + 1} />
           </RailCell>
         ))}
       </RailShell>
@@ -199,9 +199,6 @@ function NextSlotLine({ slot, href }: { slot: NextFlashSlot; href: string | null
     </Link>
   );
 }
-
-/** Giờ vàng đứng sát màn đầu (dưới banner và lối tắt): hai thẻ đầu, vừa trong 375px, là ứng viên LCP. */
-const FLASH_PRIORITY_CARDS = 2;
 
 /**
  * Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" có chữ ở cuối (luôn có, kể cả chưa bán suất nào: "Vừa mở bán"). Về giá thường đúng mốc `endAt`

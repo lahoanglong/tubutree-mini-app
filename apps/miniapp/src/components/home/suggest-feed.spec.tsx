@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import type * as ZmpUi from 'zmp-ui';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
@@ -268,5 +269,36 @@ describe('SuggestFeed — Gợi ý hôm nay (Q9)', () => {
     mount();
     expect(await screen.findByRole('button', { name: /Thử lại/ })).toBeInTheDocument();
     expect(screen.getByTestId('home-block-error')).toBeInTheDocument();
+  });
+  describe('thẻ chen (Chẩn đoán tổ ấm / Cộng đồng)', () => {
+    const mountWith = (interleave: ReactNode) =>
+      render(
+        <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+          <SuggestFeed exclude={new Set()} interleave={<section aria-label="Thẻ chen">{interleave}</section>} />
+        </QueryClientProvider>,
+      );
+
+    it('đủ 8 thẻ trở lên: thẻ chen nằm TRONG lưới, ngay sau thẻ thứ 8', async () => {
+      mocks.fetchCatalog.mockResolvedValue(page(cards(1, 12)));
+      mountWith('chen');
+      const slot = await screen.findByTestId('suggest-interleave');
+      expect(screen.getByTestId('catalog-grid')).toContainElement(slot);
+      expect(Array.from(slot.parentElement!.children).indexOf(slot)).toBe(8);
+      expect(screen.getByRole('region', { name: 'Thẻ chen' })).toBeInTheDocument();
+    });
+
+    it('lưới dưới 8 thẻ: không chen, không có thẻ chen nào trên trang', async () => {
+      mocks.fetchCatalog.mockResolvedValue(page(cards(1, 5)));
+      mountWith('chen');
+      await screen.findByTestId('catalog-grid');
+      expect(screen.queryByTestId('suggest-interleave')).toBeNull();
+      expect(screen.queryByRole('region', { name: 'Thẻ chen' })).toBeNull();
+    });
+
+    it('đang tải: chưa có thẻ chen (khung chờ lưới không mang nó, nên không gọi API của thẻ chen sớm)', () => {
+      mocks.fetchCatalog.mockReturnValue(new Promise(() => undefined));
+      mountWith('chen');
+      expect(screen.queryByRole('region', { name: 'Thẻ chen' })).toBeNull();
+    });
   });
 });
