@@ -8,6 +8,7 @@ import { WASTE_QUERY_KEYS, WASTE_WRITE_INVALIDATE_KEYS, getWasteFeeQr } from '@t
 import { HOME_PICKUP_WEIGHT_CHIPS_GRAMS, homePickupKgLabel } from '@tubutree/app-core/recycle-home-pickup-state';
 import { homePickupDetailRows, type HomePickupQuoteState, type HomePickupQuoteView } from '@tubutree/app-core/recycle-home-pickup-view';
 import { homePickupCopy } from '@tubutree/app-core/waste-copy';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { AddressForm } from '@/components/address-form';
 import { Chip } from '@/components/mini/chip';
 import { Badge } from '@/components/ui/badge';
@@ -399,7 +400,7 @@ export function HomePickupFeeQrCard({ requestId }: { requestId: string }) {
       {qr && qr.paymentStatus === 'UNPAID' && (
         <>
           {qr.qrImageUrl && (
-            <img src={qr.qrImageUrl} alt={d.qrTitle} className="h-48 w-48 self-center rounded-control bg-stone-0 object-contain p-1.5" />
+            <img src={qr.qrImageUrl} alt={d.qrTitle} className="h-48 w-48 self-center rounded-control bg-stone-0 object-contain p-1.5" onError={hideBrokenImage} />
           )}
           {remaining && (
             <p className={`text-xs ${remaining.expired ? 'text-danger-fg' : 'text-stone-600'}`}>

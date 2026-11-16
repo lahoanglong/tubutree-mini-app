@@ -243,6 +243,23 @@ describe('bước 1: chọn món (§4.2)', () => {
     expect(loadDraft()).toEqual({ ...EMPTY_DRAFT, lines: { 'item-carton': 1 } });
     expect(state.push).toHaveBeenCalledWith('/doi-rac/tao?step=method');
   });
+  it('W180: mở với ?method=PICKUP (thẻ ở chi tiết đơn đã giao) → nháp mang sẵn PICKUP sang bước 2', async () => {
+    state.search = 'method=PICKUP';
+    const c = await mount();
+    click(stepper(c, 'Thùng carton', 'Tăng số lượng'));
+    await flush(10);
+    click(barButton(c, 'Tiếp tục'));
+    expect(loadDraft()).toEqual({ ...EMPTY_DRAFT, method: 'PICKUP', lines: { 'item-carton': 1 } });
+    expect(state.push).toHaveBeenCalledWith('/doi-rac/tao?step=method');
+  });
+  it('W180: ?method= khác PICKUP (kể cả cách giao hợp lệ khác) bị bỏ, nháp vẫn chưa chọn cách giao', async () => {
+    state.search = 'method=MAIL_IN';
+    const c = await mount();
+    click(stepper(c, 'Thùng carton', 'Tăng số lượng'));
+    await flush(10);
+    click(barButton(c, 'Tiếp tục'));
+    expect(loadDraft()).toEqual({ ...EMPTY_DRAFT, lines: { 'item-carton': 1 } });
+  });
   it('quay lại bước 1 từ bước 2 (đã bấm Tiếp tục) giữ nguyên số lượng đã chọn', async () => {
     saveDraft({ ...EMPTY_DRAFT, lines: { 'item-carton': 7 } });
     markResume();

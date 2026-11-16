@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { dropOffDayLimitText, itemQtyMax } from '@tubutree/app-core/waste-copy';
 import { consentStillValid, WASTE_RULES_UPDATED_NOTE } from '@tubutree/app-core/waste-consent';
 import { sameProvince } from '@tubutree/app-core/waste-province';
+import { preferredWasteMethodFromSearch } from '@tubutree/app-core/second-order-invite';
 import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
 import {
   EMPTY_HOME_PICKUP_FORM,
@@ -76,7 +77,6 @@ import {
   maxOpenNotice,
   pendingPointsText,
   readLastPointId,
-  homePickupCopy,
   wasteStepCopy,
   writeLastPointId,
 } from '@tubutree/app-core/waste-copy';
@@ -266,7 +266,9 @@ export default function RecycleNewPage() {
 
   const step = new URLSearchParams(location.search).get('step') === 'method' ? 'method' : 'items';
   const stateDraft = (location.state as { draft?: WasteWizardDraft } | null)?.draft;
-  const [draft, setDraft] = useState<WasteWizardDraft>(stateDraft ?? EMPTY_DRAFT);
+  // Thẻ "Giữ bao bì gửi kèm đơn sau" ở chi tiết đơn mở màn này với ?method=PICKUP: chọn sẵn đường kèm đơn thay vì điểm nhận gần nhất.
+  const preferredMethod = preferredWasteMethodFromSearch(location.search);
+  const [draft, setDraft] = useState<WasteWizardDraft>(stateDraft ?? (preferredMethod ? { ...EMPTY_DRAFT, method: preferredMethod } : EMPTY_DRAFT));
   useEffect(() => {
     if (stateDraft) setDraft(stateDraft);
   }, [stateDraft]);

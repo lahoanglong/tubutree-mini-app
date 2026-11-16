@@ -62,6 +62,20 @@ for (const width of WIDTHS) {
 test.describe('Thẻ chuyển sang website — hành vi nút', () => {
   test.use({ viewport: { width: 375, height: 700 } });
 
+  // W180: query của link cũ đi theo qua router thật, khoá nhạy cảm bị lọc trước khi link hiện trên màn.
+  test('giữ query vô hại của link cũ, bỏ token/code/session', async ({ page, api }) => {
+    mockSession(api, makeUser({ id: 'u-portal' }));
+    await page.goto('/storefront?khoi=gian-hang-moi&token=abc123&code=zz&session=s1');
+    await expect(page.getByRole('heading', { level: 1, name: 'Gian hàng của tôi' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText('https://tubutree.com/ctv/gian-hang?khoi=gian-hang-moi', { exact: true })).toBeVisible();
+  });
+
+  test('/admin/community giữ tab=community, tab ngoài không ghi đè', async ({ page, api }) => {
+    mockSession(api, makeUser({ id: 'u-portal' }));
+    await page.goto('/admin/community?tab=orders&khoi=x');
+    await expect(page.getByText('https://tubutree.com/admin?tab=community&khoi=x', { exact: true })).toBeVisible({ timeout: 15_000 });
+  });
+
   test('Sao chép liên kết: chép đúng link vào clipboard và báo "Đã sao chép liên kết"', async ({ page, api, context }) => {
     await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => undefined);
     mockSession(api, makeUser({ id: 'u-portal' }));

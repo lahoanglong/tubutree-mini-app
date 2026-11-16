@@ -7,7 +7,9 @@ vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
   useSnackbar: () => ({ openSnackbar }),
+  useLocation: () => ({ search: routerSearch.value }),
 }));
+const routerSearch = vi.hoisted(() => ({ value: '' }));
 const openWebPortal = vi.hoisted(() => vi.fn());
 vi.mock('../services/zmp-bridge', () => ({ openWebPortal }));
 const copyText = vi.hoisted(() => vi.fn());
@@ -19,6 +21,7 @@ import { WEB_PORTAL_SCREENS, webPortalUrl, type WebPortalScreenKey } from './web
 const KEYS = Object.keys(WEB_PORTAL_SCREENS) as WebPortalScreenKey[];
 
 beforeEach(() => {
+  routerSearch.value = '';
   openWebPortal.mockReset().mockResolvedValue(true);
   copyText.mockReset().mockResolvedValue(true);
   openSnackbar.mockReset();
@@ -93,5 +96,22 @@ describe('WebPortalRedirectPage — thẻ chuyển sang website', () => {
     const shown = openSnackbar.mock.calls[0]?.[0] as { type: string; text: string };
     expect(shown.type).toBe('error');
     expect(shown.text).not.toMatch(/Đã sao chép/);
+  });
+
+  it('query vô hại của link cũ đi theo sang link web (hiện, mở và chép cùng một link), khoá nhạy cảm bị bỏ', async () => {
+    routerSearch.value = '?khoi=gian-hang-moi&token=abc&code=1';
+    const expected = 'https://tubutree.com/ctv/gian-hang?khoi=gian-hang-moi';
+    render(<WebPortalRedirectPage screen="/storefront" />);
+    expect(screen.getByText(expected)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Mở trên website' }));
+    await waitFor(() => expect(openWebPortal).toHaveBeenCalledWith(expected));
+    fireEvent.click(screen.getByRole('button', { name: 'Sao chép liên kết' }));
+    await waitFor(() => expect(copyText).toHaveBeenCalledWith(expected));
+  });
+
+  it('/admin/community giữ tab=community của đích, tab từ link ngoài không ghi đè', () => {
+    routerSearch.value = '?tab=orders&khoi=x';
+    render(<WebPortalRedirectPage screen="/admin/community" />);
+    expect(screen.getByText('https://tubutree.com/admin?tab=community&khoi=x')).toBeInTheDocument();
   });
 });

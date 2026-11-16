@@ -132,7 +132,7 @@ export function PickupSection({
           <Text variant="caption" tone="danger" as="span">
             {maxOpenError}
           </Text>
-          <Link href={openRequestsHref} className="inline-flex min-h-11 items-center text-caption font-semibold text-forest-700 underline">
+          <Link href={openRequestsHref} className="inline-flex min-h-11 items-center text-caption font-semibold text-[var(--color-text-link)] underline">
             {fillCopy('checkout.pickup.maxOpenLink')}
           </Link>
         </div>

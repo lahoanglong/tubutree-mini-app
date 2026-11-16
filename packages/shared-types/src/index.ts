@@ -3,6 +3,7 @@ export * from './auth';
 export * from './catalog';
 export * from './order';
 export * from './analytics';
+export * from './launch-watch';
 export * from './waste';
 export * from './waste-province';
 export * from './external-points';

@@ -237,6 +237,26 @@ describe('bước 1: chọn món (§4.2)', () => {
     const sids = mocks.navigate.mock.calls.map((c) => (c[1] as { state: { draft: WasteWizardDraft } }).state.draft.sid);
     expect(sids[0]).toBe(sids[1]);
   });
+  it('W180: mở với ?method=PICKUP (thẻ ở chi tiết đơn đã giao) → nháp mang sẵn PICKUP sang bước 2, không tự chọn điểm nhận', async () => {
+    mocks.location.search = '?method=PICKUP';
+    renderPage();
+    const next = await screen.findByRole('button', { name: 'Tiếp tục' });
+    const carton = screen.getByText('Thùng carton').closest('[data-item]') as HTMLElement;
+    fireEvent.click(within(carton).getByRole('button', { name: 'Tăng số lượng' }));
+    await waitFor(() => expect(next).toBeEnabled());
+    fireEvent.click(next);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/new?step=method', { state: { draft: expect.objectContaining({ method: 'PICKUP', lines: { 'item-carton': 1 } }) } });
+  });
+  it('W180: ?method= khác PICKUP (kể cả cách giao hợp lệ khác) bị bỏ, nháp vẫn chưa chọn cách giao', async () => {
+    mocks.location.search = '?method=MAIL_IN';
+    renderPage();
+    const next = await screen.findByRole('button', { name: 'Tiếp tục' });
+    const carton = screen.getByText('Thùng carton').closest('[data-item]') as HTMLElement;
+    fireEvent.click(within(carton).getByRole('button', { name: 'Tăng số lượng' }));
+    await waitFor(() => expect(next).toBeEnabled());
+    fireEvent.click(next);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/new?step=method', { state: { draft: expect.objectContaining({ method: null }) } });
+  });
   it('chương trình tắt, chưa đủ điều kiện hoặc bị khoá → về /recycle', async () => {
     mocks.getWasteMe.mockResolvedValue(makeWasteMe({ blocked: true }));
     renderPage();

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { Page, useSnackbar } from 'zmp-ui';
+import { Page, useLocation, useSnackbar } from 'zmp-ui';
 import { Button } from '../components/ui/button';
 import { PageHeader } from '../components/ui/page-header';
 import { Text } from '../components/ui/text';
@@ -15,9 +15,10 @@ import { WEB_PORTAL_SCREENS, webPortalUrl, type WebPortalScreenKey } from './web
  */
 export default function WebPortalRedirectPage({ screen, children }: { screen: WebPortalScreenKey; children?: ReactNode }) {
   const { openSnackbar } = useSnackbar();
+  const { search } = useLocation();
   const [openFailed, setOpenFailed] = useState(false);
   const { title, audience } = WEB_PORTAL_SCREENS[screen];
-  const url = webPortalUrl(screen);
+  const url = webPortalUrl(screen, search);
 
   const open = async () => {
     const ok = await openWebPortal(url);

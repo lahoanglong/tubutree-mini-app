@@ -5,6 +5,7 @@ import type { WasteFeeCashMethod, WasteHomePickupDTO } from '@tubutree/shared-ty
 import { HOME_PICKUP_WEIGHT_CHIPS_GRAMS, homePickupKgLabel } from '@tubutree/app-core/recycle-home-pickup-state';
 import { homePickupDetailRows, type HomePickupQuoteState, type HomePickupQuoteView } from '@tubutree/app-core/recycle-home-pickup-view';
 import { homePickupCopy } from '@tubutree/app-core/waste-copy';
+import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 import { WASTE_QUERY_KEYS, getWasteFeeQr, invalidateAfterWasteWrite } from '../services/waste-api';
 import type { AddressDTO } from '../services/shop-api';
 import { useRemaining } from '../hooks/use-remaining';
@@ -467,7 +468,7 @@ export function HomePickupFeeQrCard({ requestId, onPaid }: { requestId: string; 
       )}
       {qr && qr.paymentStatus === 'UNPAID' && (
         <>
-          {qr.qrImageUrl && <img src={qr.qrImageUrl} alt={d.qrTitle} className="tubu-hp-qr-img" />}
+          {qr.qrImageUrl && <img src={qr.qrImageUrl} alt={d.qrTitle} className="tubu-hp-qr-img" onError={hideBrokenImage} />}
           {remaining && (
             <Text variant="caption" tone={remaining.expired ? 'danger' : 'secondary'} as="div" numeric>
               {remaining.expired ? d.qrExpired : d.qrDeadline(remaining.text)}

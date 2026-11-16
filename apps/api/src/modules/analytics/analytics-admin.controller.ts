@@ -1,11 +1,21 @@
 import { Controller, Get, Query } from '@nestjs/common';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { PrismaService } from '../../prisma/prisma.service';
+import { LaunchWatchService } from './launch-watch.service';
 
 @Roles('ADMIN')
 @Controller('admin/analytics')
 export class AnalyticsAdminController {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly launchWatch: LaunchWatchService,
+  ) {}
+
+  /** Chỉ số tổng hợp (không có thông tin cá nhân) để theo dõi tuần đầu sau launch: phễu Đổi rác, chống gian lận, đơn thứ hai. */
+  @Get('launch-watch')
+  launchWatchSnapshot() {
+    return this.launchWatch.getSnapshot();
+  }
 
   @Get('retention-daily')
   async retentionDaily(@Query('days') days = '30') {

@@ -98,6 +98,8 @@ export const FIELD_LABELS: Record<string, string> = {
   returnWeightGrams: 'Cân nặng rác gửi lại',
   pickupAddressId: 'Địa chỉ lấy rác',
   usePointsForShipFee: 'Dùng Điểm Xanh trả phí ship',
+  shipFeePayment: 'Cách trả phần phí ship còn thiếu',
+  expectedCashVnd: 'Số tiền phí ship cần trả thêm',
   inlinePickup: 'Rác đổi kèm đơn',
   excludeGiftRedemptionIds: 'Quà để đơn sau',
   qty: 'Số lượng',

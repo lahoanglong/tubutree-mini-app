@@ -236,6 +236,7 @@ type Tab =
   | 'reviews'
   | 'subscriptions'
   | 'analytics'
+  | 'launchWatch'
   | 'catalogQuality'
   | 'reports';
 // Mọi tab có tệp riêng trừ trang vào mặc định (Việc cần xử lý) tải khi mở tab: gói đầu của /admin không chứa mã của cả 60 tab.
@@ -267,6 +268,7 @@ const CampaignsTab = dynamic(() => import('@/components/admin/campaigns-tab').th
 const BundlesTab = dynamic(() => import('@/components/admin/bundles-tab').then((m) => m.BundlesTab), { loading: tabLoading });
 const NotificationTemplatesTab = dynamic(() => import('@/components/admin/notification-templates-tab').then((m) => m.NotificationTemplatesTab), { loading: tabLoading });
 const AnalyticsTab = dynamic(() => import('./analytics-tab').then((m) => m.AnalyticsTab), { loading: tabLoading });
+const LaunchWatchTab = dynamic(() => import('@/components/admin/launch-watch-tab').then((m) => m.LaunchWatchTab), { loading: tabLoading });
 const CatalogQualityTab = dynamic(() => import('./catalog-quality-tab').then((m) => m.CatalogQualityTab), { loading: tabLoading });
 const ReportsTab = dynamic(() => import('@/components/admin/reports-tab').then((m) => m.ReportsTab), { loading: tabLoading });
 const WasteTab = dynamic(() => import('@/components/admin/waste-tab').then((m) => m.WasteTab), { loading: tabLoading });
@@ -299,6 +301,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     items: [
       { k: 'dashboard', label: 'Tổng quan chỉ số' },
       { k: 'analytics', label: 'Giữ chân khách & chỉ số chính' },
+      { k: 'launchWatch', label: 'Theo dõi 72h sau launch', keywords: 'launch phễu đổi rác gian lận đơn thứ hai 72 giờ' },
       { k: 'reports', label: 'Báo cáo' },
     ],
   },
@@ -841,6 +844,7 @@ export default function AdminPage() {
           {active === 'quickReplies' && <QuickReplyTab />}
           {active === 'notificationTemplates' && <NotificationTemplatesTab canEditAll={isAdmin} />}
           {active === 'analytics' && <AnalyticsTab onOpenReports={allowed.has('reports') ? () => setTab('reports') : undefined} />}
+          {active === 'launchWatch' && <LaunchWatchTab />}
           {active === 'catalogQuality' && <CatalogQualityTab />}
           {active === 'reports' && <ReportsTab key={reportsSeed} initialPreset={reportsSeed > 0 ? 'today' : undefined} sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
           </TabErrorBoundary>

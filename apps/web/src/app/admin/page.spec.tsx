@@ -52,6 +52,7 @@ beforeAll(async () => {
     import('@/components/admin/notification-templates-tab'),
     import('@/components/admin/reports-tab'),
     import('./analytics-tab'),
+    import('@/components/admin/launch-watch-tab'),
   ]);
 }, 60_000);
 
@@ -535,7 +536,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cài đặt',
     ]);
     const items = [...nav.querySelectorAll('button:not([aria-expanded])')];
-    expect(items).toHaveLength(54);
+    expect(items).toHaveLength(55);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button:not([aria-expanded])')].map(navLabel);
@@ -549,6 +550,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     expect(group('Đổi rác và game')).toEqual(['Đổi rác', 'Nhiệm vụ']);
     expect(group('Nhân sự')).toEqual(['Nhân sự & quyền', 'Duyệt ca', 'Lương', 'Chấm công']);
     expect(group('Tổng quan')).toContain('Báo cáo');
+    expect(group('Tổng quan')).toContain('Theo dõi 72h sau launch');
     expect(group('Khách hàng')).toContain('Cộng đồng');
     expect(group('Khách hàng')).toContain('Chat CSKH');
     expect(items.map(navLabel)).not.toContain('Đổi vỏ chai');
@@ -3069,6 +3071,33 @@ describe('admin/page — nhân viên theo nhóm việc (ADMINOPS-10)', () => {
     expect(navItems(container)).not.toContain('Kiểm tra catalog');
     expect(container.textContent).not.toContain('Kiểm tra chất lượng Catalog');
     expect(api.calls.some((c) => c.url.includes('/admin/catalog-quality') || c.url.includes('/admin/ai-advisor'))).toBe(false);
+  });
+
+  it('ADMIN mở ?tab=launchWatch: tab Theo dõi 72h sau launch gọi đúng API chỉ-ADMIN và vẽ phễu', async () => {
+    window.history.replaceState(null, '', '/admin?tab=launchWatch');
+    const zero = { funnel: { rows: [], confirmedRequests: 0, confirmedUsers: 0 }, fraud: { unverifiedPhone: { totalRequests: 0, requests: 0, users: 0, pointsAwarded: 0 }, zeroGift: { attached: 0, accounts: 0, maxPerAccount: 0, ordersOverOne: 0, ordersBelowMin: 0, countedSince: '2026-11-16T08:17:00.000Z' }, freeShipRecycle: { orders: 0, users: 0, totalOrders: 0, shareOfOrdersPct: null, withConfirmedWaste: 0 } } };
+    const api = mockFetch({
+      '/admin/analytics/launch-watch': {
+        body: { generatedAt: '2026-11-16T07:05:00.000Z', windows: { h72: zero, d7: zero, d30: zero }, secondOrder: { windowDays: 14, matured: { customers: 0, withSecond: 0 }, pending: { customers: 0, withSecond: 0 } } },
+      },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    await waitFor(() => container.textContent?.includes('Phễu Đổi rác') ?? false);
+    expect(container.querySelector('h2')?.textContent).toBe('Theo dõi 72h sau launch');
+    expect(api.calls.filter((c) => c.url.includes('/admin/analytics/launch-watch'))).toHaveLength(1);
+  });
+
+  it('nhân viên đủ mọi nhóm việc không thấy Theo dõi 72h sau launch (API chỉ ADMIN): link ?tab=launchWatch rơi về mục đầu và không gọi gì', async () => {
+    mocks.auth = { user: { role: 'STAFF' }, status: 'authenticated', initialized: true };
+    mocks.access = { role: 'STAFF', staffPermissions: ['CSKH', 'KHO', 'MARKETING', 'KE_TOAN'] };
+    window.history.replaceState(null, '', '/admin?tab=launchWatch');
+    const api = mockFetch({});
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = await mount();
+    expect(navItems(container)).not.toContain('Theo dõi 72h sau launch');
+    expect(container.textContent).not.toContain('Phễu Đổi rác');
+    expect(api.calls.some((c) => c.url.includes('/admin/analytics/launch-watch'))).toBe(false);
   });
 
   it('Chat CSKH: chỉ nhân viên CSKH và ADMIN thấy; KHO thì không và URL ?tab=supportChat rơi về tab đầu được phép', async () => {

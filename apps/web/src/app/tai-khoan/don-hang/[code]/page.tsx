@@ -61,6 +61,7 @@ import { ProductThumb } from '@/components/mini';
 const FollowOaPrompt = dynamic(() => import('./order-extras').then((m) => m.FollowOaPrompt), { ssr: false });
 const OrderInvoice = dynamic(() => import('./order-extras').then((m) => m.OrderInvoice), { ssr: false });
 const OrderWasteLink = dynamic(() => import('./order-extras').then((m) => m.OrderWasteLink), { ssr: false });
+const OrderSecondOrderInvite = dynamic(() => import('./order-extras').then((m) => m.OrderSecondOrderInvite), { ssr: false });
 
 /** STATUS_COLOR của Mini App (utils/order-status.ts): dải trạng thái đầu trang chi tiết đơn. */
 const STATUS_COLOR: Record<string, { bg: string; fg: string }> = {
@@ -409,6 +410,7 @@ export default function OrderDetailPage() {
           <div className="order-10 max-md:px-4 max-md:empty:hidden">
             <OrderInvoice order={o} />
             <OrderWasteLink order={o} />
+            <OrderSecondOrderInvite order={o} />
           </div>
           <div className="order-11">
             <AddressSection order={o} />

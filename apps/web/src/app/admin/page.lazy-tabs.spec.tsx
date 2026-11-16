@@ -135,6 +135,10 @@ vi.mock('./analytics-tab', () => {
   loaded.push('analytics-tab');
   return { AnalyticsTab: () => <div data-tab="AnalyticsTab" /> };
 });
+vi.mock('@/components/admin/launch-watch-tab', () => {
+  loaded.push('launch-watch-tab');
+  return { LaunchWatchTab: () => <div data-tab="LaunchWatchTab" /> };
+});
 
 describe('admin/page — tab tải lười (F5)', () => {
   beforeEach(() => {

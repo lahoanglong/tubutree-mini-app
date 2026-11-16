@@ -7,12 +7,16 @@ import { ChevronRight, Recycle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { WASTE_QUERY_KEYS, getWasteRequestByOrder } from '@tubutree/app-core/api/waste';
+import { wasteMeQuery } from '@tubutree/app-core/queries/waste';
+import { SECOND_ORDER_METHOD, secondOrderInviteCopy, secondOrderInviteDecision, secondOrderOrderGate } from '@tubutree/app-core/second-order-invite';
 import { coreHttp } from '@/lib/core-http';
 import { fetchOrdersPage, type OrderDetailDTO } from '@/lib/shop-client';
 import { safeHttpUrl } from '@/lib/order-view';
 import { getOaPromptState, setOaPromptState, shouldShowFollowOaPrompt } from '@/lib/oa-prompt';
 import { isWebRouteReady } from '@/lib/route-map';
 import { platformBridge } from '@/lib/platform-bridge';
+import { trackRecycleStep } from '@/lib/recycle-funnel';
+import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 import { mini } from '@/components/order-mobile/mobile-ui';
 
@@ -60,6 +64,47 @@ export function OrderWasteLink({ order: o }: { order: OrderDetailDTO }) {
       <span className="min-w-0 flex-1">
         <span className="block text-sm font-semibold text-stone-900">Yêu cầu thu rác {q.data.code}</span>
         <span className="block text-xs text-stone-600">Xem tiến độ thu rác kèm đơn</span>
+      </span>
+      <ChevronRight className="h-4 w-4 flex-none text-stone-600" aria-hidden="true" />
+    </Link>
+  );
+}
+
+/**
+ * Đơn đã giao: một thẻ mời giữ bao bì gửi kèm đơn kế tiếp (miễn ship 100%, tích Điểm Xanh). Luật hiện/ẩn ở app-core, gồm trần yêu cầu mở của W179;
+ * chung với Mini App (`components/orders/second-order-invite.tsx`). Cả thẻ là một liên kết, không có CTA thứ hai trên trang.
+ */
+export function OrderSecondOrderInvite({ order: o }: { order: OrderDetailDTO }) {
+  // Cổng đơn đứng ngoài để đơn đang giao, đã huỷ hay quá 14 ngày không kéo thêm lời gọi /config/public nào.
+  if (secondOrderOrderGate(o) !== null) return null;
+  return <SecondOrderInviteCard order={o} />;
+}
+
+function SecondOrderInviteCard({ order: o }: { order: OrderDetailDTO }) {
+  const cfg = usePublicConfig();
+  const ready = isWebRouteReady('/doi-rac/tao');
+  // Chỉ hỏi /waste/me khi đơn đủ điều kiện và đường kèm đơn đang bật: đơn đang giao, đã kèm rác hay cổng đóng không tốn thêm lời gọi nào.
+  const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: ready && cfg.isLoaded && cfg.waste.pickup && secondOrderOrderGate(o) === null });
+  const visible = ready && secondOrderInviteDecision({ order: o, cfgPickup: cfg.waste.pickup, me: meQ.data }).show;
+  const shown = useRef(false);
+  useEffect(() => {
+    if (!visible || shown.current) return;
+    shown.current = true;
+    trackRecycleStep('second_order_shown', SECOND_ORDER_METHOD);
+  }, [visible]);
+  if (!visible) return null;
+  return (
+    <Link
+      id="order-second-order-invite"
+      href={`/doi-rac/tao?method=${SECOND_ORDER_METHOD}`}
+      aria-label={secondOrderInviteCopy.aria}
+      onClick={() => trackRecycleStep('second_order_click', SECOND_ORDER_METHOD)}
+      className={`mt-4 flex min-h-11 items-center gap-3 p-4 ${ui.card}`}
+    >
+      <Recycle className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        <span className="block text-sm font-semibold text-stone-900">{secondOrderInviteCopy.title}</span>
+        <span className="block text-xs text-stone-600">{secondOrderInviteCopy.subtitle}</span>
       </span>
       <ChevronRight className="h-4 w-4 flex-none text-stone-600" aria-hidden="true" />
     </Link>

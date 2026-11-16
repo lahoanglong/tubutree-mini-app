@@ -96,6 +96,16 @@ describe('AnalyticsController.ingest', () => {
       expect(recordManyBestEffort.mock.calls[0]![0]).toHaveLength(5);
     });
 
+    it('W180: nhận hai bước của thẻ mời đơn sau (second_order_shown, second_order_click) với lane PICKUP', async () => {
+      const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
+      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+      const res = await ctrl.ingest(undefined, {
+        events: [ev({ step: 'second_order_shown', surface: 'web', lane: 'PICKUP' }, 'web', 0), ev({ step: 'second_order_click', surface: 'miniapp', lane: 'PICKUP' }, 'miniapp', 1)],
+      });
+      expect(res).toEqual({ accepted: 2 });
+      expect(recordManyBestEffort.mock.calls[0]![0].map((e: { props: { step: string } }) => e.props.step)).toEqual(['second_order_shown', 'second_order_click']);
+    });
+
     it('sai khuôn (step lạ, surface lệch platform, lane bẩn, thiếu props) bị bỏ riêng, sự kiện khác trong lô vẫn được ghi, không 400', async () => {
       const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
       const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);

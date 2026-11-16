@@ -63,6 +63,7 @@ import { orderReorderTarget, type ReorderTarget } from '../components/reorder/re
 import { ReturnRequestSheet } from '../components/orders/return-request-sheet';
 import { RefundDestinationPicker } from '../components/orders/refund-destination-picker';
 import { OrderRefunds } from '../components/orders/order-refunds';
+import { SecondOrderInvite } from '../components/orders/second-order-invite';
 import {
   EMPTY_BANK,
   cancelRefundMode,
@@ -591,6 +592,9 @@ export default function OrderDetailPage() {
           />
         </Box>
       )}
+
+      {/* ── Mời giữ bao bì gửi kèm đơn kế tiếp (đơn đã giao, chưa kèm rác) ── */}
+      <SecondOrderInvite order={o} />
 
       {/* ── Địa chỉ nhận ── */}
       {/* Đơn đại lý không có địa chỉ khách lẻ (giao theo hợp đồng) — snapshot chỉ có `note`.

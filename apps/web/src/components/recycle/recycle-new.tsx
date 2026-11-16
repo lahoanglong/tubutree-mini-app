@@ -34,6 +34,7 @@ import {
 } from '@tubutree/app-core/waste-copy';
 import { consentStillValid, WASTE_RULES_UPDATED_NOTE } from '@tubutree/app-core/waste-consent';
 import { sameProvince } from '@tubutree/app-core/waste-province';
+import { preferredWasteMethodFromSearch } from '@tubutree/app-core/second-order-invite';
 import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
 import {
   EMPTY_HOME_PICKUP_FORM,
@@ -169,7 +170,9 @@ export function RecycleNew() {
     const next = back ?? (resume ? loadDraft() : null);
     if (!next && step === 'items') clearDraft();
     // Hàm cập nhật giữ giá trị đã đọc khi effect chạy lần hai (StrictMode), vì cờ đã bị xoá ở lần đầu.
-    setDraft((prev) => (prev !== EMPTY_DRAFT ? prev : (next ?? EMPTY_DRAFT)));
+    // Thẻ "Giữ bao bì gửi kèm đơn sau" ở chi tiết đơn mở trang này với ?method=PICKUP: chọn sẵn đường kèm đơn thay vì điểm nhận gần nhất.
+    const preferred = preferredWasteMethodFromSearch(params.toString());
+    setDraft((prev) => (prev !== EMPTY_DRAFT ? prev : (next ?? (preferred ? { ...EMPTY_DRAFT, method: preferred } : EMPTY_DRAFT))));
     setReady(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

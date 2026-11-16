@@ -217,7 +217,7 @@
   align-self: center;
   object-fit: contain;
   border-radius: var(--radius-control);
-  background: #fff;
+  background: var(--stone-0);
   padding: 6px;
 }
 .tubu-hp-qr-row {

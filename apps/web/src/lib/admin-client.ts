@@ -23,6 +23,7 @@ import type {
   AdminReverseClaimResponse,
   ExternalClaimState,
   ZaloBridgeState,
+  LaunchWatchDTO,
 } from '@tubutree/shared-types';
 
 export interface DealerApp {
@@ -1734,6 +1735,9 @@ export interface RetentionDailyRow {
 }
 export const getRetentionDaily = (days = 30) =>
   apiFetch<RetentionDailyRow[]>(`/admin/analytics/retention-daily?days=${days}`);
+
+/** Bảng theo dõi sau launch (chỉ ADMIN): phễu Đổi rác, chống gian lận, đơn thứ hai; API giữ kết quả 60 giây. */
+export const getLaunchWatch = () => apiFetch<LaunchWatchDTO>('/admin/analytics/launch-watch');
 
 // ── Ô chọn (khách / sản phẩm / bậc đại lý), duyệt đánh giá, gói định kỳ (C-092) ──
 export interface AdminVariationHit {

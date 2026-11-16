@@ -168,6 +168,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'VouchersService.secondOrderVouchers': 'Tặng mã khuyến khích đơn thứ hai',
   'wallet.referral-notice-reconcile': 'Gửi bù tin báo thưởng giới thiệu bị sót',
   'waste.expiry': 'Đóng yêu cầu đổi rác quá hạn giữ chỗ hoặc lỡ hẹn thu gom',
+  'waste.fee-unpaid': 'Đóng phiếu lấy rác tận nhà quá hạn chuyển khoản phí',
   'waste.gift-expiry': 'Huỷ quà đổi rác quá hạn nhận, hoàn điểm và báo khách',
   'waste.pickup-sweep': 'Quét bù yêu cầu thu gom rác còn mở khi đơn đã giao, huỷ hoặc trả',
   'ZnsStuckLogCron.sweepStuckZnsLogs': 'Đóng tin ZNS kẹt chờ gửi hoặc chờ gửi lại quá 1 giờ: ghi nốt tin đã gửi, đánh dấu ca chưa rõ cần đối soát tay',
