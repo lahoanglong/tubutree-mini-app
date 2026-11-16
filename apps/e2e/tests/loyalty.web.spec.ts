@@ -23,6 +23,8 @@ function mockLoyalty(api: MockApi, checkIn: { done: boolean }, opts: { tall?: bo
     : TIERS;
   api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
   api.get('/me', () => USER);
+  // Khi bật vùng đổi rác, trang Điểm Xanh hỏi thêm số điểm đang chờ; 404 làm khối đó ẩn như khi không có điểm chờ.
+  api.allowUnmocked('GET /waste/me');
   api.get('/config/public', { freeshipThreshold: 500000, waste: { enabled: !!opts.tall, dropoff: !!opts.tall, mailin: false, pickup: false } });
   api.get('/me/loyalty', {
     pointsBalance: 1681, pointsConvertedBalance: 119,

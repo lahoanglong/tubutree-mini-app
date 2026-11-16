@@ -358,7 +358,7 @@ export default function CartPage() {
     const lineVariation = variationLabel(it.variationName);
     return (
       <div key={it.id} data-testid="cart-line" data-variation-id={it.variationId} className="flex gap-3 p-3 max-md:relative max-md:items-center max-md:rounded-card max-md:bg-[var(--color-bg-surface)] max-md:shadow-[var(--elevation-1)]">
-        <label className="tubu-hit-flush relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center md:-mx-1 md:min-w-11">
+        <label className="tubu-hit-flush relative flex h-11 w-9 flex-none cursor-pointer items-center justify-center md:max-lg:-mx-1 md:max-lg:min-w-11">
           <span className={miniCheckboxWrap}>
             <input
               type="checkbox"

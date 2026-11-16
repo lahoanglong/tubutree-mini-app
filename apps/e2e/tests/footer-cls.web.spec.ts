@@ -33,6 +33,7 @@ const ROUTES: Route[] = [
         nextTier: { id: 't2', name: 'Lộc Biếc', minPoints: 200, minSpending: 4_000_000, pointsToGo: 120, spendingToGo: 2_500_000 },
         tiers, spent12m: 1_500_000, tierPoints: 80, rates: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1000, maxRedeemPct: 0.5 },
       });
+      api.get('/waste/me', wasteMe);
       api.get('/waste/requests', []);
       api.get('/me/coupons', []);
       api.get('/me/points/transactions', []);
