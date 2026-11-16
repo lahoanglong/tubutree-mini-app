@@ -66,8 +66,6 @@ body {
   background: var(--color-bg-canvas);
   color: var(--color-text-primary);
   -webkit-font-smoothing: antialiased;
-  /* Số đều mặc định: điểm, tiền, mệnh giá không làm hàng nhảy bề rộng khi giá trị đổi. */
-  font-variant-numeric: tabular-nums;
 }
 
 /*

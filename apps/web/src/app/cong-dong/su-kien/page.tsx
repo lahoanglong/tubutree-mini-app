@@ -63,7 +63,7 @@ function EventMeta({ event, rewardPrefix }: { event: CommunityEvent; rewardPrefi
     <span className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs">
       <span className="text-stone-600">Kết thúc: {formatDate(event.endAt)}</span>
       {event.rewardPoints > 0 && (
-        <span className="inline-flex items-center gap-1 font-semibold text-forest-700">
+        <span className="inline-flex items-center gap-1 font-semibold tabular-nums text-forest-700">
           {rewardPrefix}
           <Gift className="h-3.5 w-3.5" aria-hidden="true" />
           {formatPoints(event.rewardPoints)}

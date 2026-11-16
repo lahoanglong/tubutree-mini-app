@@ -16,7 +16,7 @@ export const PHASE = process.env.W182_PHASE ?? 'before';
 const SKIPPED = new Set(['/admin', '/admin/community', '/staff', '/my-payroll', '/brand-owner', '/recycle/desk', '/feed/leaderboard', '/refill']);
 
 /** Màn chính của hành trình mua: guard chạy trên các màn này. */
-const MAIN = new Set([
+export const MAIN = new Set([
   '/',
   '/browse',
   '/product/:slug',

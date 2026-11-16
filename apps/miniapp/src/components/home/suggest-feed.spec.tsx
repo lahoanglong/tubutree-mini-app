@@ -185,7 +185,7 @@ describe('SuggestFeed — Gợi ý hôm nay (Q9)', () => {
   it('hàng chip dính ngay dưới header 56px khi lưới cuộn tới', async () => {
     mount();
     const chips = await screen.findByRole('region', { name: 'Lọc gợi ý theo danh mục' });
-    expect(chips).toHaveStyle({ position: 'sticky', top: 'calc(var(--safe-top) + 56px)' });
+    expect(chips).toHaveStyle({ position: 'sticky', top: '56px' });
   });
 
   it('món có slug trong exclude (đã nằm ở kệ trên) không vẽ ở lưới', async () => {

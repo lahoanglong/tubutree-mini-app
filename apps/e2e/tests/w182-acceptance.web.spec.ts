@@ -5,7 +5,7 @@ import { observeCls, readClsTotal } from './support/cls-observer';
 import { solidPng } from './support/noise-png';
 import { seedTourPublicData } from './support/tour-db';
 import { mockTourWorld, tourUser } from './support/tour-world';
-import { SHOTS, WEB_SIZES_AUDIT, WEB_SIZES_GUARD, auditEntries, measuresCls, record, recordFailure, shootJpeg, shotPath } from './support/w182-audit';
+import { MAIN, SHOTS, WEB_SIZES_AUDIT, WEB_SIZES_GUARD, auditEntries, measuresCls, record, recordFailure, shootJpeg, shotPath } from './support/w182-audit';
 import { probeW182 } from './support/w182-probe';
 
 /**
@@ -14,6 +14,13 @@ import { probeW182 } from './support/w182-probe';
  * mọi khổ kiểm tràn ngang, chữ đè nhau và nút nổi đè nội dung. Có W182_SHOTS thì chỉ ghi nhật ký + ảnh để lập bảng kiểm toán.
  */
 const SIZES = SHOTS ? WEB_SIZES_AUDIT : WEB_SIZES_GUARD;
+
+// Guard lọc theo danh sách MAIN: một màn đổi tên trong route-map.json sẽ lặng lẽ rơi khỏi guard nếu không kiểm số lượng.
+if (!SHOTS) {
+  test('w182 guard phủ đủ các màn chính của web', () => {
+    expect(auditEntries().map((e) => e.key).sort()).toEqual([...MAIN].sort());
+  });
+}
 
 // Ba worker cùng seed một cơ sở dữ liệu có thể đụng deadlock Postgres (40P01); seed là idempotent nên thử lại vài lần.
 test.beforeAll(async () => {
@@ -45,6 +52,8 @@ for (const size of SIZES) {
       });
       mockTourWorld(api, tourUser(entry.role));
       entry.setup?.(api);
+      // Các màn này gọi vài đường mà bản tham quan không mock; 404 là trạng thái đã đo ở bước kiểm toán, không phải lỗi của guard hình học.
+      api.allowUnmocked('GET /auth/me', 'GET /waste/requests', 'POST /cart/coupon');
       await page.route(isServedImage, (route) => route.fulfill({ contentType: 'image/png', body: IMAGE_PNG }));
       if (measuresCls(entry.key)) await observeCls(page);
       await page.setViewportSize({ width: size.width, height: size.height });

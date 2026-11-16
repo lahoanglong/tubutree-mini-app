@@ -27,8 +27,6 @@
     padding-right: env(safe-area-inset-right, 0px);
     background: var(--color-bg-canvas);
     color: var(--color-text-primary);
-    /* Số đều mặc định: điểm, tiền, mệnh giá không làm hàng nhảy bề rộng khi giá trị đổi (khớp Mini). */
-    font-variant-numeric: tabular-nums;
     /* Không bật cv02–04/cv11 của Inter: Mini App không bật; chữ "a" một tầng làm nhãn web rộng hơn Mini (lối tắt 320px xuống 3 dòng trên Linux). */
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;

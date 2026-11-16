@@ -208,6 +208,41 @@ describe('coupon-discount không dùng số đều (tabular-nums) ở web và Mi
     expect(offending(sites).map((s) => `${file}:${s.line}`), 'CouponBox đang nằm trong thẻ có số đều').toEqual([]);
   });
 
+  describe('luật số đều đặt ở gốc cây (body, html, :root, *)', () => {
+    /** Bộ chọn có khối chọn cuối là gốc cây hay `*`: số đều kế thừa xuống hàng mã mà cổng theo tên class không thấy được. */
+    const rootSelectors = (css: string): string[] => {
+      const out: string[] = [];
+      const rule = /([^{}]+)\{([^{}]*)\}/g;
+      for (const m of css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(rule)) {
+        if (!/font-variant-numeric\s*:[^;}]*tabular-nums/.test(m[2]!)) continue;
+        for (const selector of m[1]!.split(',')) {
+          const last = selector.trim().split(/[\s>+~]+/).pop() ?? '';
+          if (/^(?:body|html|:root|\*)(?:[:[].*)?$/.test(last)) out.push(selector.trim());
+        }
+      }
+      return out;
+    };
+
+    it('không có tệp CSS nào của web hay Mini App đặt số đều ở gốc cây', () => {
+      const found: string[] = [];
+      for (const dir of CSS_ROOTS) {
+        for (const rel of readdirSync(join(root, dir), { recursive: true, encoding: 'utf8' })) {
+          if (!rel.endsWith('.css') || rel.includes('node_modules')) continue;
+          for (const sel of rootSelectors(readFileSync(join(root, dir, rel), 'utf8'))) found.push(`${dir}/${rel}: ${sel}`);
+        }
+      }
+      expect(found, 'số đều ở gốc cây kế thừa vào ô coupon-discount (lỗi đã lặp ở W38A, W71A, W130): đặt `tabular-nums` trên từng ô tiền').toEqual([]);
+    });
+
+    it('nhận ra body/html/:root/* nhưng bỏ qua class và luật không phải số đều', () => {
+      expect(rootSelectors('body { font-variant-numeric: tabular-nums; }')).toEqual(['body']);
+      expect(rootSelectors('html, :root { font-variant-numeric: tabular-nums }')).toEqual(['html', ':root']);
+      expect(rootSelectors('.page * { font-variant-numeric: tabular-nums; }')).toEqual(['.page *']);
+      expect(rootSelectors('.tubu-nums { font-variant-numeric: tabular-nums; }')).toEqual([]);
+      expect(rootSelectors('body { font-variant-numeric: normal; }')).toEqual([]);
+    });
+  });
+
   describe('danh sách class số đều đọc từ CSS', () => {
     it('đọc đúng luật tabular-nums, bỏ luật inherit, chịu được @media và bộ chọn nhiều tầng', () => {
       const css = `

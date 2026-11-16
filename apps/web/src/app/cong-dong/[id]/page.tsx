@@ -390,7 +390,7 @@ export default function PostDetailPage() {
             aria-disabled={react.isPending || undefined}
             // Mỗi lần chạm là một lời gọi bật/tắt tim: chồng nhau thì hai lời gọi trái chiều. Khoá nhả khi số tim mới về.
             onClick={() => react.mutate()}
-            className={`inline-flex min-h-11 min-w-11 items-center gap-1.5 ${p.liked ? 'font-semibold text-forest-700' : ''} ${react.isPending ? 'opacity-60' : ''}`}
+            className={`inline-flex min-h-11 min-w-11 items-center gap-1.5 tabular-nums ${p.liked ? 'font-semibold text-forest-700' : ''} ${react.isPending ? 'opacity-60' : ''}`}
           >
             <Heart className="h-5 w-5" aria-hidden="true" style={p.liked ? { fill: 'currentColor' } : undefined} />
             <span className="sr-only">Lượt thích: </span>

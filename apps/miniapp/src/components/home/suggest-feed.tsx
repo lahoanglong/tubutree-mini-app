@@ -18,12 +18,13 @@ import { SectionHeader } from '../ui/section-header';
 import { Text } from '../ui/text';
 import { HomeBlockError } from './home-block-error';
 
-// Hàng chip dính ngay dưới header dính của Trang chủ (cao `HOME_HEADER_HEIGHT`, đứng ở `--safe-top`), dưới z-index của header (20).
+// Hàng chip dính ngay dưới header dính của Trang chủ (cao `HOME_HEADER_HEIGHT`), dưới z-index của header (20). `top` đo từ mép nội dung của `.page`, mà `.page` đã
+// đệm sẵn `--safe-top` và header dính ở `top: 0`: chỉ cộng chiều cao header, không cộng thêm vùng an toàn.
 const CHIPS_STYLE = {
   gap: 8,
   padding: '8px 16px',
   position: 'sticky',
-  top: `calc(var(--safe-top) + ${HOME_HEADER_HEIGHT}px)`,
+  top: `${HOME_HEADER_HEIGHT}px`,
   zIndex: 10,
   background: 'var(--color-bg-canvas)',
 } as const;
