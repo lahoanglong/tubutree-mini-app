@@ -251,9 +251,12 @@ function normalizePath(pathname: string): string | null {
 const own = (table: Readonly<Record<string, string>>, key: string): string | undefined => (Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined);
 const underPrefix = (path: string, prefix: string): boolean => path === prefix || path.startsWith(`${prefix}/`);
 
+// Dòng PDP của bảng (người đã duyệt) thắng bản đồ ngay ở đây, không chỉ nhờ bộ sinh loại slug đó: sửa tay một dòng mà quên sinh lại bản đồ vẫn đúng.
 function productDestination(slug: string): string | undefined {
+  const table = own(LEGACY_PRODUCT_REDIRECTS, slug);
+  if (table?.startsWith('/san-pham/')) return table;
   const mapped = own(LEGACY_WP_PRODUCT_MAP, slug);
-  return mapped ? pdp(mapped) : own(LEGACY_PRODUCT_REDIRECTS, slug);
+  return mapped ? pdp(mapped) : table;
 }
 
 function categoryDestination(slugPath: string): string {

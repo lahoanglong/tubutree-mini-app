@@ -43,6 +43,9 @@ const STOP = new Set(['refill', 'can', 'x', 'va']);
 // Chữ mô tả mà tên mới thường bỏ: không bắt slug cũ phải có chúng ở tên mới.
 const SLUG_FILLER = new Set(['organic', 'huu', 'co', 'size', 'big', 'nho', 'lon', 'sinh', 'hoc', 'tu', 'thien', 'nhien', 'an', 'vat', 'nguyen', 'chat']);
 const VOLUME = /(\d+(?:[.,]\d+)?)\s*(ml|lit|l|kg|gram|gam|gr|g)(?![a-z0-9])/g;
+// So theo code point, không theo locale: thứ tự khoá của bản đồ phải như nhau trên mọi máy thì `--check` mới có nghĩa.
+const byText = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+const ownValue = (obj, key) => (Object.hasOwn(obj, key) ? obj[key] : undefined);
 
 export function fold(text) {
   return String(text).normalize('NFD').replace(/\p{M}/gu, '').replace(/[đĐ]/g, 'd').toLowerCase();
@@ -173,7 +176,7 @@ export function buildProductMap({ wpProducts, catalog, extraSlugs = [], curated 
 
   const map = {};
   const decisions = [];
-  for (const old of [...olds.values()].sort((a, b) => a.slug.localeCompare(b.slug))) {
+  for (const old of [...olds.values()].sort((a, b) => byText(a.slug, b.slug))) {
     const ev = oldEvidence(old);
     const oldName = tokens(old.name ?? '');
     const oldVols = volumes(old.name ?? '');
@@ -183,7 +186,7 @@ export function buildProductMap({ wpProducts, catalog, extraSlugs = [], curated 
         const s = scoreCandidate(ev, p);
         return s ? [{ product: p, ...s }] : [];
       })
-      .sort((a, b) => b.score - a.score || a.product.slug.localeCompare(b.product.slug));
+      .sort((a, b) => b.score - a.score || byText(a.product.slug, b.product.slug));
 
     let decision;
     if (exact.length === 1) decision = { kind: 'exact', score: 1, product: exact[0], rule: 'trùng tên hoặc slug' };
@@ -205,7 +208,7 @@ export function buildProductMap({ wpProducts, catalog, extraSlugs = [], curated 
     if (auto && !curatedTarget) map[old.slug] = auto;
     decisions.push({ slug: old.slug, title: old.name ?? '', ...decision, product: auto, curated: curatedTarget, candidates });
   }
-  const sorted = Object.fromEntries(Object.entries(map).sort(([a], [b]) => a.localeCompare(b)));
+  const sorted = Object.fromEntries(Object.entries(map).sort(([a], [b]) => byText(a, b)));
   return { map: sorted, decisions };
 }
 
@@ -214,9 +217,12 @@ export function classifyHits(hits, map, curated) {
   const rows = [];
   for (const [path, count] of Object.entries(hits)) {
     const slug = path.split('/')[0]?.toLowerCase() ?? '';
-    const target = map[slug] ? `/san-pham/${map[slug]}` : curated[slug];
+    // Cùng thứ tự với productDestination ở legacy-wp-redirects.ts: dòng PDP của bảng, rồi bản đồ, rồi dòng tìm kiếm/cả kệ của bảng.
+    const table = ownValue(curated, slug);
+    const mapped = table?.startsWith('/san-pham/') ? undefined : ownValue(map, slug);
+    const target = mapped ? `/san-pham/${mapped}` : table;
     const kind = !target ? 'none' : target.startsWith('/san-pham/') ? 'pdp' : target.startsWith('/san-pham?') ? 'search' : 'all';
-    rows.push({ path, slug, count, kind, target: target ?? null, via: map[slug] ? 'map' : target ? 'table' : null });
+    rows.push({ path, slug, count, kind, target: target ?? null, via: mapped ? 'map' : target ? 'table' : null });
   }
   const total = rows.reduce((s, r) => s + r.count, 0);
   const by = (k) => rows.filter((r) => r.kind === k).reduce((s, r) => s + r.count, 0);
@@ -245,7 +251,7 @@ function renderReport({ decisions, coverage, map, autoMin, reviewMin }) {
   lines.push(`- Lượt /product/* ngày ${HITS_DAY}: ${coverage.total}; về PDP ${coverage.pdp} (${pct(coverage.pdp)}), về tìm kiếm ${coverage.search} (${pct(coverage.search)}), về cả kệ ${coverage.all} (${pct(coverage.all)}), không có luật ${coverage.none} (${pct(coverage.none)}).`, '');
   const section = (title, rows, fmt) => {
     lines.push(`## ${title} (${rows.length})`, '');
-    for (const d of rows.sort((a, b) => (hitsBySlug.get(b.slug) ?? 0) - (hitsBySlug.get(a.slug) ?? 0) || a.slug.localeCompare(b.slug))) lines.push(fmt(d));
+    for (const d of rows.sort((a, b) => (hitsBySlug.get(b.slug) ?? 0) - (hitsBySlug.get(a.slug) ?? 0) || byText(a.slug, b.slug))) lines.push(fmt(d));
     lines.push('');
   };
   const cand = (d) => d.candidates.map((c) => `\`${c.slug}\` ${c.score}${c.priceMatch ? ' (trùng giá)' : ''}${c.volumeUnverified ? ' (trang cũ không ghi dung tích)' : ''}`).join('; ') || '—';
@@ -297,7 +303,7 @@ async function fetchCatalog(file) {
     const detail = await getJson(`https://api.tubutree.com/api/products/${encodeURIComponent(p.slug)}`);
     p.variations = (detail.variations ?? []).map((v) => ({ name: v.name ?? '', price: v.salePrice ?? v.retailPrice }));
   }
-  products.sort((a, b) => a.slug.localeCompare(b.slug));
+  products.sort((a, b) => byText(a.slug, b.slug));
   writeFileSync(file, `${JSON.stringify({ source: 'GET https://api.tubutree.com/api/products', fetchedAt: new Date().toISOString().slice(0, 10), products }, null, 1)}\n`);
 }
 
@@ -325,7 +331,7 @@ async function fetchWp(file) {
       variations,
     });
   }
-  products.sort((a, b) => a.slug.localeCompare(b.slug));
+  products.sort((a, b) => byText(a.slug, b.slug));
   writeFileSync(file, `${JSON.stringify({ source: `GET ${base}?per_page=100 (+ /products/<variation id>)`, fetchedAt: new Date().toISOString().slice(0, 10), products }, null, 1)}\n`);
 }
 

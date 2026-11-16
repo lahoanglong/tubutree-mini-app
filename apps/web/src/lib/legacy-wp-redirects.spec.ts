@@ -312,6 +312,23 @@ describe('scripts/ops/build-legacy-wp-product-map.mjs: hàm thuần', () => {
     expect(slugsFromHits({ 'a-b/feed': 1, 'Th%C3%A0nh%20Ph%E1%BA%A7n': 2, '1280': 1 }, { 'a-b': 1, 'c-1': 1 })).toEqual(['a-b', 'c-1']);
   });
 
+  it('classifyHits theo đúng thứ tự runtime (dòng PDP của bảng, bản đồ, rồi dòng tìm kiếm/cả kệ) và không đọc khoá từ prototype', () => {
+    const r = classifyHits({ a: 1, 'b/feed': 2, c: 3, constructor: 4 }, { a: 'map-a', b: 'map-b' }, { a: '/san-pham/table-a', b: '/san-pham?q=b', c: '/san-pham' });
+    expect(r.rows.map((x) => [x.slug, x.kind, x.target, x.via])).toEqual([
+      ['a', 'pdp', '/san-pham/table-a', 'table'],
+      ['b', 'pdp', '/san-pham/map-b', 'map'],
+      ['c', 'all', '/san-pham', 'table'],
+      ['constructor', 'none', null, null],
+    ]);
+  });
+
+  it('khoá bản đồ xếp theo code point, không theo locale của máy sinh', () => {
+    const keys = Object.keys(LEGACY_WP_PRODUCT_MAP);
+    expect(keys).toEqual([...keys].sort());
+    const { map } = buildProductMap({ wpProducts: [], catalog: ['b-x', 'ab-x', 'aa-x'].map((s) => product(`${s}-aaaaaa`, s)), extraSlugs: ['b-x', 'ab-x', 'aa-x'] });
+    expect(Object.keys(map)).toEqual(['aa-x', 'ab-x', 'b-x']);
+  });
+
   it('parseArgs: mặc định, đủ tuỳ chọn, và lỗi tham số', () => {
     expect(parseMapArgs([])).toMatchObject({ write: false, check: false, report: '' });
     expect(parseMapArgs(['--write', '--report', 'r.md', '--catalog', 'c.json'])).toMatchObject({ write: true, report: 'r.md', catalog: 'c.json' });
