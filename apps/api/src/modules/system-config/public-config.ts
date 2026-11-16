@@ -15,6 +15,9 @@ import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-con
 import { readCompanyIdentity } from './company-config';
 import { CATALOG_LAUNCH_DATE_KEY, publicCatalogLaunchDate } from '../catalog/catalog-launch-date';
 
+/** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
+export const WEB_GUEST_CART_ENABLED_KEY = 'web.guest_cart_enabled';
+
 /** Chỉ hai trường công khai, để khoá phụ lưu thêm trong cấu hình không lọt ra endpoint công khai. */
 const pickHours = (v: { start: string; end: string }) => ({ start: v.start, end: v.end });
 
@@ -95,6 +98,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     catalogLaunchDate,
     tierRows,
     flatShippingFee,
+    webGuestCart,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -135,6 +139,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(CATALOG_LAUNCH_DATE_KEY, ''),
     loadTiers().catch(() => [] as TierRow[]),
     config.get<unknown>('shipping.flat_fee_below_threshold', FLAT_SHIPPING_FEE_DEFAULT),
+    config.get<unknown>(WEB_GUEST_CART_ENABLED_KEY, false),
   ]);
   return {
     freeshipThreshold,
@@ -198,6 +203,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
       enabled: chatEnabled === true,
       hours: chatHoursProblem(chatHours) === null ? pickHours(chatHours as { start: string; end: string }) : { ...DEFAULT_CHAT_HOURS },
     },
+    // Chỉ boolean true thật mới bật: cờ gõ nhầm (chuỗi "false") không được mở giỏ khách trên web.
+    webGuestCartEnabled: webGuestCart === true,
   };
 }
 

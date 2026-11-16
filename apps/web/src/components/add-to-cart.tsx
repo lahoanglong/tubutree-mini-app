@@ -41,6 +41,9 @@ import { firstMeasurable, playCartFeedback } from '@/lib/cart-feedback';
 import { onPdpQuickAdd } from '@/lib/pdp-quick-add';
 import { markCheckoutEntry } from '@/lib/analytics';
 import { trackPdpAction } from '@/components/analytics/funnel';
+import { guestCartFlagNow, useGuestCartFlag } from '@/lib/guest-cart/flag';
+import { addGuestLine, GUEST_CART_MAX_LINES as GUEST_CART_LINE_CAP, guestCartCount, type GuestAddResult } from '@/lib/guest-cart/store';
+import { useGuestCartLines } from '@/lib/guest-cart/use-guest-cart';
 
 // Bảng chỉ dùng ở khổ điện thoại khi khách bấm mua: tách khỏi First Load của trang sản phẩm.
 const VariationSheet = dynamic(() => import('./variation-sheet').then((m) => m.VariationSheet), { ssr: false });
@@ -65,6 +68,8 @@ function isPhoneWidth(): boolean {
 const GROUP_COUPON_CODE = /^GBUY-[A-Z0-9-]+$/;
 /** Thời gian giữ câu báo trên màn trước khi sang thanh toán: đủ đọc một câu ngắn (cùng mức với "Dùng ngay" ở thẻ mã). */
 const NOTICE_HOLD_MS = 1800;
+/** Thêm vào giỏ khách là việc đồng bộ: giữ khoá chừng này để chạm đúp không cộng hai lần (như khoá chờ mạng của khách đã đăng nhập). */
+const GUEST_ADD_LOCK_MS = 400;
 
 /** Gỡ `?ma=` khỏi mục lịch sử hiện tại sau khi đã thử áp: cùng cách với `?danh-gia=` ở khối đánh giá, không dựng lại trang. */
 function forgetCouponParam() {
@@ -140,8 +145,12 @@ export default function AddToCart({
 
   // Số món ở nút giỏ của thanh dính (như Mini App); cùng khoá và cùng GET /cart với giỏ ở thanh đầu.
   const cartData = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' }).data;
-  const cartCount = cartData?.itemCount ?? 0;
-  const cartLines = buyFreeze ? buyFreeze.lines : cartData?.items;
+  // Khách chưa đăng nhập khi cờ giỏ khách bật: số món và ghi chú "Giỏ đã có n" đọc giỏ khách trong trình duyệt.
+  const guestFlag = useGuestCartFlag();
+  const guestLines = useGuestCartLines();
+  const onGuestCart = phase === 'guest' && guestFlag.enabled;
+  const cartCount = onGuestCart ? guestCartCount(guestLines) : (cartData?.itemCount ?? 0);
+  const cartLines = buyFreeze ? buyFreeze.lines : onGuestCart ? guestLines : cartData?.items;
   const { flash } = useRunningFlash();
   // Hết giờ khi khách đang xem: vẽ lại đúng mốc để chip và nút về giá thường, không chờ lần tải lại danh sách.
   useFlashListExpiry(flash);
@@ -323,6 +332,30 @@ export default function AddToCart({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- chạy đúng một lần khi vừa có phiên
   }, [phase]);
 
+  // Giỏ khách: ghi vào trình duyệt ngay, phản hồi như khách đã đăng nhập. "Mua ngay" thêm rồi sang giỏ (đặt hàng cần đăng nhập ở đó).
+  // Trình duyệt chặn bộ nhớ thì trả false để đi lối cũ (nhớ món rồi sang đăng nhập).
+  const addToGuestCart = (target: Variation, quantity: number, buyNow: boolean): boolean => {
+    const res: GuestAddResult = addGuestLine({ variationId: target.id, slug, quantity, maxQty: target.stock });
+    if (!res.ok && res.reason === 'storage') return false;
+    cartWrite.current = true;
+    setBusy(true);
+    setBuying(buyNow);
+    setWarn(null);
+    // Mua ngay mà giỏ khách đã có đủ số còn hàng: món đã nằm trong giỏ, vẫn sang giỏ để đặt.
+    if (buyNow && (res.ok || res.reason === 'max')) {
+      router.push('/gio-hang');
+      return true;
+    }
+    setSuccess(res.ok);
+    setMsg(res.ok ? 'Đã thêm vào giỏ!' : res.reason === 'full' ? fillCopy('guestCart.full', { n: GUEST_CART_LINE_CAP }) : fillCopy('guestCart.atMax'));
+    if (res.ok) playCartFeedback(addSource.current?.isConnected ? addSource.current : firstMeasurable('[data-testid="pdp-add-to-cart"]'));
+    window.setTimeout(() => {
+      cartWrite.current = false;
+      if (alive.current) setBusy(false);
+    }, GUEST_ADD_LOCK_MS);
+    return true;
+  };
+
   // Thêm giỏ và Mua ngay chung cửa kiểm tra phiên: chưa đăng nhập thì nhớ món + ý định rồi sang đăng nhập, quay lại làm nốt.
   const submit = async (buyNow: boolean, chosen?: { id: string; quantity: number }) => {
     if (phase === 'loading' || blockedReason || busy) return;
@@ -344,7 +377,29 @@ export default function AddToCart({
       return;
     }
     if (phase === 'guest') {
+      if (cartWrite.current) return;
       const pick = chosen ?? (selected && available ? { id: selected.id, quantity: qty } : null);
+      const target = pick ? variations.find((v) => v.id === pick.id) : undefined;
+      // Cờ đã biết (tải xong hoặc lỗi) thì quyết ngay như trước; chỉ khi cấu hình đang tải lần đầu mới chờ, có hạn. Trong lúc chờ giữ khoá
+      // để chạm thêm không cộng lần hai, và khách đã rời trang thì thôi không đẩy đi đâu.
+      let guestOn = false;
+      if (target && target.stock > 0) {
+        if (guestFlag.pending) {
+          cartWrite.current = true;
+          try {
+            guestOn = await guestCartFlagNow(qc);
+          } finally {
+            cartWrite.current = false;
+          }
+          if (!alive.current) return;
+        } else {
+          guestOn = guestFlag.enabled;
+        }
+      }
+      if (guestOn && target) {
+        userPicked.current = true;
+        if (addToGuestCart(target, Math.min(pick!.quantity, qtyPickMax(target.stock)), buyNow)) return;
+      }
       if (pick) rememberPendingAdd({ variationId: pick.id, quantity: pick.quantity, ...(buyNow ? { buyNow: true } : {}) });
       router.push(loginHref(`/san-pham/${encodeURIComponent(slug)}`));
       return;
@@ -498,7 +553,7 @@ export default function AddToCart({
           initialQty={qty}
           busy={busy}
           cartLines={cartLines}
-          // Khách chưa đăng nhập không bao giờ có giỏ: bảng Mua ngay không giữ dải ghi chú trống. Đang khôi phục phiên hay mất mạng tạm thời thì giỏ vẫn có thể về.
+          // Khách chưa đăng nhập chỉ có giỏ khách (đã có ngay, không chờ mạng): bảng Mua ngay không giữ dải ghi chú trống. Đang khôi phục phiên hay mất mạng tạm thời thì giỏ vẫn có thể về.
           cartMayArrive={phase !== 'guest'}
           onConfirm={(v, quantity) => confirmVariation(v.id, quantity)}
         />

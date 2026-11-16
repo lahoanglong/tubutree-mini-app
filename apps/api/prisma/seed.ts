@@ -340,6 +340,8 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'chat.hours', value: { start: '08:00', end: '21:00' }, category: 'chat', description: 'Giờ nhân viên trả lời chat (giờ VN, dạng HH:MM). Ngoài giờ khách nhận lời nhắn tự động một lần mỗi ngày.', createOnly: true },
   { key: 'chat.off_hours_text', value: 'Tubu Tree trả lời từ 8:00 đến 21:00 mỗi ngày. Tin của bạn đã được ghi lại, nhân viên sẽ trả lời khi vào giờ.', category: 'chat', description: 'Lời nhắn tự động gửi khách khi nhắn ngoài giờ.', createOnly: true },
   { key: 'retention.support_chat_days', value: 365, category: 'retention', description: 'Giữ tin chat CSKH và lần chuyển sang Zalo bao nhiêu ngày (sàn 90)', createOnly: true },
+  // Giỏ khách trên web. createOnly: admin bật rồi thì seed không tắt lại; migration 20261117030000_web_guest_cart_flag tạo cùng dòng cho PROD.
+  { key: 'web.guest_cart_enabled', value: false, category: 'web', description: 'Khách chưa đăng nhập trên web được thêm món vào giỏ và xem giỏ (giá, tạm tính, Miễn phí giao hàng); đăng nhập vẫn bắt buộc ở bước đặt hàng. Tắt thì khách bấm mua là sang trang đăng nhập như cũ.', createOnly: true },
   { key: 'waste.enabled', value: false, category: 'waste', description: 'Cờ tổng của chương trình Đổi rác lấy quà, tắt thì khách không tạo được yêu cầu mới và bàn đại lý bị chặn, kho vẫn xử lý yêu cầu đã có.', createOnly: true },
   { key: 'waste.lane_dropoff_enabled', value: true, category: 'waste', description: 'Bật cách giao Mang tới điểm nhận cho yêu cầu mới.', createOnly: true },
   { key: 'waste.lane_mailin_enabled', value: true, category: 'waste', description: 'Bật cách giao Gửi về kho cho yêu cầu mới.', createOnly: true },

@@ -83,4 +83,12 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     fallback: true,
     offWarning: 'Khách chưa đăng nhập không còn thấy bài nào, phải đăng nhập mới xem được Cộng đồng.',
   },
+  {
+    key: 'web.guest_cart_enabled',
+    label: 'Giỏ hàng cho khách chưa đăng nhập trên web',
+    description: 'Khách chưa đăng nhập trên website thêm được món vào giỏ và xem giỏ (giá, tạm tính, Miễn phí giao hàng). Đặt hàng vẫn phải đăng nhập; đăng nhập xong các món tự chuyển vào giỏ tài khoản. Mini App không đổi.',
+    fallback: false,
+    onWarning: 'Khách chưa đăng nhập trên web bấm Thêm vào giỏ hay Mua ngay sẽ vào giỏ ngay, không bị đưa sang trang đăng nhập.',
+    offWarning: 'Khách chưa đăng nhập bấm mua lại bị đưa sang trang đăng nhập như trước. Món khách đã chọn vẫn nằm trong trình duyệt của họ và hiện lại khi bạn bật lại.',
+  },
 ];

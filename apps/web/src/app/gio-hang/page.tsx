@@ -48,6 +48,9 @@ import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 import { FreeshipAddons } from './freeship-addons';
+import { GuestCartView } from './guest-cart-view';
+import { useGuestCartFlag } from '@/lib/guest-cart/flag';
+import { takeGuestMergeNote, type GuestMergeNote } from '@/lib/guest-cart/after-login';
 
 // Sau khi xoá một dòng, khách có chừng này để hoàn tác (thêm lại đúng phân loại và số lượng).
 // 10 giây: người dùng bàn phím/đọc màn hình cần đủ thời gian tới nút "Hoàn tác" (WCAG 2.2.1); đồng hồ còn dừng khi trỏ/focus đang ở trên thanh.
@@ -118,6 +121,12 @@ const clampPercent = (pct: number) => (Number.isFinite(pct) ? Math.min(100, Math
 
 export default function CartPage() {
   const phase = useAuthPhase();
+  const guestCart = useGuestCartFlag();
+  // Món chọn lúc chưa đăng nhập vừa chuyển vào giỏ tài khoản mà có món không chuyển đủ: báo một lần ở đầu giỏ.
+  const [mergeNote, setMergeNote] = useState<GuestMergeNote | null>(null);
+  useEffect(() => {
+    if (phase === 'authenticated') setMergeNote(takeGuestMergeNote());
+  }, [phase]);
   // Điện thoại: hàng mã giảm giá nằm trong thanh dính đáy (như Mini App); khổ lớn hơn: trong khung tóm tắt. Một thẻ duy nhất, nên chọn chỗ bằng JS.
   const phoneCoupon = useMediaQuery('(max-width: 767px)');
   const router = useRouter();
@@ -289,9 +298,21 @@ export default function CartPage() {
   }
 
   if (phase === 'guest') {
+    // Cờ đang tải lần đầu: chờ, kẻo tường đăng nhập chớp lên rồi đổi sang giỏ khách.
+    if (guestCart.pending) {
+      return (
+        <Shell>
+          <AuthLoading />
+        </Shell>
+      );
+    }
     return (
       <Shell>
-        <LoginRequired message="Đăng nhập để xem giỏ hàng của bạn." returnTo="/gio-hang" />
+        {guestCart.enabled ? (
+          <GuestCartView empty={<EmptyCart />} gridClassName={CART_GRID} />
+        ) : (
+          <LoginRequired message="Đăng nhập để xem giỏ hàng của bạn." returnTo="/gio-hang" />
+        )}
       </Shell>
     );
   }
@@ -526,6 +547,12 @@ export default function CartPage() {
 
   return (
     <Shell>
+      {mergeNote && (
+        <div role="status" data-testid="guest-merge-note" className="mb-3 space-y-0.5 rounded-card border border-warning-fg bg-warning-bg px-4 py-3 text-sm text-warning-fg">
+          {mergeNote.failedLines > 0 && <p>{fillCopy('guestCart.mergeFailed', { n: mergeNote.failedLines })}</p>}
+          {mergeNote.reduced > 0 && <p>{fillCopy('guestCart.mergeReduced', { n: mergeNote.reduced })}</p>}
+        </div>
+      )}
       {cart && (cart.unavailableItems?.length ?? 0) > 0 && (
         <div
           role="status"

@@ -20,6 +20,7 @@ import { clearCtvTouched } from './storefront-context';
 import { readFirstTouchCookie } from './entry-source';
 import { forgetRecentSearchesOfSignedOutUser, scopeRecentSearchesToUser } from './recent-searches';
 import { browserStorage } from './recently-viewed';
+import { readGuestCart } from './guest-cart/store';
 
 export interface WebUser {
   id: string;
@@ -209,6 +210,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       setAccessToken(res.accessToken);
       setSessionMarker();
+      // Trước khi báo đã đăng nhập: trang giỏ mở ra sau đó tải giỏ tài khoản đã có đủ món khách chọn lúc chưa đăng nhập.
+      // Tải mã gộp chỉ khi giỏ khách có món (giữ gói đầu của mọi trang nhỏ); gộp hỏng không được chặn đăng nhập.
+      if (readGuestCart().length > 0) {
+        await import('./guest-cart/after-login').then((m) => m.mergeGuestCartAfterLogin(qc)).catch(() => undefined);
+      }
       setUser(res.user);
       setStatus('authenticated');
       setSessionUnavailable(false);
@@ -222,7 +228,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } finally {
       sessionStorage.removeItem(PKCE_KEY);
     }
-  }, []);
+  }, [qc]);
 
   const logout = useCallback(async () => {
     // Gọi kể cả khi không thấy cờ: cookie thật có thể còn sống (cờ bị xoá nhầm/hết hạn lệch),

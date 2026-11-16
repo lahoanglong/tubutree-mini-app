@@ -62,6 +62,8 @@ export interface PublicConfig {
   catalogLaunchDate?: string | null;
   /** Chat CSKH: bật/tắt và giờ làm việc (HH:MM). Thiếu khi API cũ → coi như tắt. */
   chat?: { enabled: boolean; hours: { start: string; end: string } };
+  /** Giỏ cho khách chưa đăng nhập trên web (`web.guest_cart_enabled`). Thiếu khi API cũ → tắt, khách bấm mua thì sang đăng nhập như cũ. */
+  webGuestCartEnabled?: boolean;
 }
 
 export const getPublicConfig = (http: HttpClient) => http.get<PublicConfig>('/config/public');

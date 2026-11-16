@@ -381,6 +381,17 @@ export const SHOP_COPY: Record<string, string> = {
   'cart.saving': 'Tiết kiệm {x}',
   'cart.subtotal': 'Tạm tính',
   'cart.subtotalNet': 'Tạm tính (đã giảm)',
+  // Giỏ khách trên web (cờ web.guest_cart_enabled): một nút chính, không mã giảm giá, không điểm (cần tài khoản).
+  'guestCart.loginCta': 'Đăng nhập để đặt hàng',
+  'guestCart.full': 'Giỏ chưa đăng nhập giữ tối đa {n} món. Đăng nhập để thêm tiếp.',
+  'guestCart.atMax': 'Giỏ đã có đủ số hàng còn lại của phân loại này.',
+  'guestCart.gone': 'Sản phẩm đã ngừng bán',
+  'guestCart.loadFailed': 'Chưa tải được giá của món này.',
+  'guestCart.retry': 'Thử lại',
+  'guestCart.removeAria': 'Xoá {name} khỏi giỏ hàng',
+  // Trang giỏ sau khi đăng nhập: món chọn lúc chưa đăng nhập đã chuyển vào giỏ tài khoản, chỉ báo khi có món không chuyển đủ.
+  'guestCart.mergeFailed': '{n} món chọn trước khi đăng nhập không thêm được vì hết hàng hoặc ngừng bán.',
+  'guestCart.mergeReduced': '{n} món chọn trước khi đăng nhập đã giảm số lượng cho khớp số hàng còn.',
   // Mua lại đơn cũ: câu dưới từng dòng và câu đầu sheet (web và Mini App)
   'reorder.qtyReduced': 'Không đủ {old} như đơn trước, đã giảm số lượng',
   'reorder.qtyCapped': 'Mua lại tối đa {n} mỗi món, đã giảm số lượng',
