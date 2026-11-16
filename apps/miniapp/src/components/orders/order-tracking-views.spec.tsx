@@ -348,8 +348,8 @@ describe('OrderActionBar', () => {
     const onAction = vi.fn();
     const plan = orderActionPlan(order({ status: 'DELIVERED', deliveredAt: '2026-11-04T05:00:00Z', items: [{ id: 'l1', productSlug: 'a' }] }), { now: NOW });
     render(<OrderActionBar plan={plan} onAction={onAction} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Đánh giá sản phẩm' }));
-    expect(onAction).toHaveBeenLastCalledWith('review');
+    fireEvent.click(screen.getByRole('button', { name: 'Mua lại đơn này' }));
+    expect(onAction).toHaveBeenLastCalledWith('reorder');
     fireEvent.click(screen.getByRole('button', { name: 'Thêm thao tác' }));
     fireEvent.click(screen.getByRole('button', { name: 'Yêu cầu đổi/trả' }));
     expect(onAction).toHaveBeenLastCalledWith('return');

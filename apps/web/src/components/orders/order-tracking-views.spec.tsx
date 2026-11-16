@@ -324,12 +324,12 @@ describe('OrderActionBar (web)', () => {
     const onAction = vi.fn();
     const plan = orderActionPlan(order({ status: 'DELIVERED', deliveredAt: '2026-11-04T05:00:00Z', items: [{ id: 'l1', productSlug: 'a' }] }), { now: NOW });
     const { container } = mount(<OrderActionBar plan={plan} onAction={onAction} />);
-    click(byText(container, 'button', 'Đánh giá sản phẩm'));
-    expect(onAction).toHaveBeenLastCalledWith('review');
+    click(byText(container, 'button', 'Mua lại đơn này'));
+    expect(onAction).toHaveBeenLastCalledWith('reorder');
     click(container.querySelector('button[aria-label="Thêm thao tác"]'));
     const rows = Array.from(document.body.querySelectorAll('[role="group"] [role="button"]'));
-    expect(rows.map((r) => r.textContent?.trim())).toEqual(['Mua lại đơn này', 'Yêu cầu đổi/trả', 'Liên hệ Tubu']);
-    click(rows[1] ?? null);
+    expect(rows.map((r) => r.textContent?.trim())).toEqual(['Yêu cầu đổi/trả', 'Liên hệ Tubu']);
+    click(rows[0] ?? null);
     expect(onAction).toHaveBeenLastCalledWith('return');
   });
 

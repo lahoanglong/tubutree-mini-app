@@ -528,42 +528,46 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
   });
 
   const CART = { items: [], couponCode: null, subtotal: 0, discount: 0, freeship: false, freeshipThreshold: 199000, itemCount: 2 };
-  const sheetCta = () => Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find((b) => /^Thêm vào giỏ \(\d+\)$/.test(b.textContent ?? ''));
   const SETTLE = { timeout: 5_000, interval: 20 };
-  /** Chờ tới khi điều kiện đúng thay vì đếm nhịp: giỏ và mutation xong sau số nhịp thay đổi theo tải máy, nên số nhịp cố định lúc đỏ lúc xanh. */
+  /** Chờ tới khi điều kiện đúng thay vì đếm nhịp: mutation xong sau số nhịp thay đổi theo tải máy, nên số nhịp cố định lúc đỏ lúc xanh. */
   const settled = (check: () => void) =>
     vi.waitFor(async () => {
       await flush(1);
       check();
     }, SETTLE);
-  /** Mở sheet rồi chờ nút thêm hết khoá (giỏ tải xong): bấm khi nút còn khoá bị bỏ qua, nên không thể bấm ngay sau khi sheet hiện chữ. */
-  const openSheet = async (container: HTMLElement) => {
-    click(btn(container, 'Mua lại đơn này')!);
-    await settled(() => {
-      expect(sheetCta(), 'nút "Thêm vào giỏ (n)" của sheet').toBeDefined();
-      expect(sheetCta()!.disabled).toBe(false);
-    });
+  const TWO_LINES = {
+    ...delivered,
+    items: [
+      { id: 'i1', productName: 'Dầu gội', variationName: '500ml', unitPrice: 150000, quantity: 2, total: 300000, thumbnail: null },
+      { id: 'i2', productName: 'Nước rửa chén', variationName: '1L', unitPrice: 60000, quantity: 1, total: 60000, thumbnail: null },
+    ],
   };
 
-  it('"Mua lại đơn này" mở sheet chọn dòng (như Mini App), chưa gọi API', async () => {
-    mocks.order = delivered;
-    const { container } = await mount();
-    await openSheet(container);
-    expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Từ đơn TB-9');
-    expect(sheetCta()!.textContent).toBe('Thêm vào giỏ (2)');
-    expect(mocks.corePost).not.toHaveBeenCalled();
-  });
-
-  it('thêm đủ: gửi repurchase đúng dòng đã chọn rồi chuyển sang giỏ hàng', async () => {
+  it('một chạm: gửi cả đơn ngay (không mở sheet chọn dòng) rồi chuyển sang giỏ hàng', async () => {
     mocks.order = delivered;
     mocks.corePost.mockResolvedValue({ cart: CART, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
     const { container } = await mount();
-    await openSheet(container);
-    click(sheetCta()!);
+    click(btn(container, 'Mua lại đơn này')!);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
     await settled(() => {
       expect(mocks.corePost).toHaveBeenCalledWith('/orders/TB-9/repurchase', { items: [{ orderItemId: 'i1', quantity: 2 }], addSource: 'repurchase' });
       expect(mocks.push).toHaveBeenCalledWith('/gio-hang');
     });
+  });
+
+  it('bấm đúp: chỉ một yêu cầu, không cộng đôi vào giỏ', async () => {
+    mocks.order = delivered;
+    let release!: (v: unknown) => void;
+    mocks.corePost.mockReturnValue(new Promise((r) => (release = r)));
+    const { container } = await mount();
+    const b = btn(container, 'Mua lại đơn này')!;
+    click(b);
+    click(b);
+    await flush(2);
+    click(btn(container, 'Mua lại đơn này') ?? b);
+    release({ cart: CART, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
+    await settled(() => expect(mocks.push).toHaveBeenCalledWith('/gio-hang'));
+    expect(mocks.corePost).toHaveBeenCalledTimes(1);
   });
 
   it('mua lại: tải lại giỏ thay vì ghi giỏ không kèm gian hàng (không combo) vào cache', async () => {
@@ -572,23 +576,44 @@ describe('chi tiết đơn — mua lại (BUYERWEB-13)', () => {
     mocks.order = delivered;
     mocks.corePost.mockResolvedValue({ cart: CART, results: [{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }] });
     const { container } = await mount();
-    await openSheet(container);
-    click(sheetCta()!);
+    click(btn(container, 'Mua lại đơn này')!);
     await settled(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['cart'] }));
     expect(setData.mock.calls.some(([key]) => Array.isArray(key) && key[0] === 'cart')).toBe(false);
     invalidate.mockRestore();
     setData.mockRestore();
   });
 
-  it('không thêm được dòng nào: sheet ở lại, nêu tên món và lý do, không chuyển trang', async () => {
+  it('một món hết hàng: món còn hàng vào giỏ, nêu tên món hết và có lối "Xem giỏ"', async () => {
+    mocks.order = TWO_LINES;
+    mocks.corePost.mockResolvedValue({
+      cart: CART,
+      results: [
+        { orderItemId: 'i1', status: 'added', addedQuantity: 2 },
+        { orderItemId: 'i2', status: 'skipped', reason: 'OUT_OF_STOCK', addedQuantity: 0 },
+      ],
+    });
+    const { container } = await mount();
+    click(btn(container, 'Mua lại đơn này')!);
+    await settled(() => expect(container.textContent).toContain('Nước rửa chén (hết hàng)'));
+    expect(mocks.corePost).toHaveBeenCalledWith('/orders/TB-9/repurchase', {
+      items: [
+        { orderItemId: 'i1', quantity: 2 },
+        { orderItemId: 'i2', quantity: 1 },
+      ],
+      addSource: 'repurchase',
+    });
+    expect(container.querySelector('a[href="/gio-hang"]')?.textContent).toBe('Xem giỏ');
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+
+  it('không thêm được dòng nào: nêu tên món và lý do, không chuyển trang, không mời xem giỏ', async () => {
     mocks.order = delivered;
     mocks.corePost.mockResolvedValue({ cart: CART, results: [{ orderItemId: 'i1', status: 'skipped', reason: 'INACTIVE', addedQuantity: 0 }] });
     const { container } = await mount();
-    await openSheet(container);
-    click(sheetCta()!);
-    await settled(() => expect(document.querySelector('[role="dialog"]')?.textContent).toContain('Dầu gội (ngừng bán)'));
+    click(btn(container, 'Mua lại đơn này')!);
+    await settled(() => expect(container.textContent).toContain('Dầu gội (ngừng bán)'));
     expect(mocks.push).not.toHaveBeenCalled();
-    expect(document.querySelector('a[href="/gio-hang"]')).not.toBeNull();
+    expect(container.querySelector('a[href="/gio-hang"]')).toBeNull();
   });
 });
 

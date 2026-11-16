@@ -39,8 +39,10 @@ import {
   type RefundMethodChoice,
 } from '@/lib/refund-rules';
 import type { OrderItemView } from '@tubutree/app-core/api/orders';
-import { ReorderSheet } from '@/components/reorder/reorder-sheet';
-import { orderReorderTarget, type ReorderTarget } from '@/components/reorder/reorder-types';
+import Link from 'next/link';
+import { useReorder } from '@/components/reorder/use-reorder';
+import { orderReorderTarget, targetLines } from '@/components/reorder/reorder-types';
+import { reorderText } from '@/lib/home-text';
 import { RefundDestinationPicker } from './refund-destination-picker';
 import { RefundDestinationControl } from './order-refunds';
 import { ReturnRequestForm } from './return-request-form';
@@ -78,8 +80,10 @@ export function OrderActions({
   // Lời máy chủ từ chối yêu cầu đổi/trả. Form tự hiện lời này; ở đây giữ thêm một bản để còn trên màn khi form bị gỡ (đơn vừa sang RETURNED).
   const [returnError, setReturnError] = useState<string | null>(null);
   const [contactOpen, setContactOpen] = useState(false);
-  // State ổn định (không dựng target trong JSX): ReorderSheet khởi tạo lại lựa chọn theo danh tính của target.
-  const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
+  const reorder = useReorder({ navigateToCart: true });
+  const reorderTap = useRef(false);
+  // Thêm đủ thì hook đã sang giỏ; còn món không thêm được thì ở lại đây nêu tên món đó.
+  const [reorderNotice, setReorderNotice] = useState<{ text: string; added: boolean } | null>(null);
   const [cancelMethod, setCancelMethod] = useState<RefundMethodChoice>('WALLET');
   const [cancelBank, setCancelBank] = useState<RefundBankInput>(EMPTY_BANK);
   const [cancelTouched, setCancelTouched] = useState(false);
@@ -159,8 +163,24 @@ export function OrderActions({
   const primary = plan.primary && hide(plan.primary) ? (more.shift() ?? null) : plan.primary;
   const shownPlan: OrderActionPlan = { ...plan, primary, more };
   // Lời từ chối hủy của BE và kết quả hủy phải còn trên màn dù đơn tải lại không còn việc gì để bấm.
-  if (!primary && !showsReturns && !cancelError && !cancel.isSuccess && !returnError) return null;
+  if (!primary && !showsReturns && !cancelError && !cancel.isSuccess && !returnError && !reorderNotice) return null;
   const returnMore = orderReturns.some((r) => r.status === 'APPROVED');
+  const reorderAll = () => {
+    if (reorderTap.current) return;
+    reorderTap.current = true;
+    setReorderNotice(null);
+    const target = orderReorderTarget({ code: o.code, items: o.items as OrderItemView[] });
+    const picks = targetLines(target).map((l) => ({ key: l.key, variationId: l.variationId, quantity: l.defaultQuantity }));
+    void reorder
+      .submit(target, picks)
+      .then((s) => {
+        if (s.hasProblems) setReorderNotice({ text: s.message, added: s.addedUnits > 0 });
+      })
+      .catch((e: unknown) => setReorderNotice({ text: actionErrorText(e), added: false }))
+      .finally(() => {
+        reorderTap.current = false;
+      });
+  };
   const onAction = (kind: OrderActionKind) => {
     setReturnError(null);
     if (kind === 'pay') {
@@ -177,7 +197,7 @@ export function OrderActions({
       setCancelError(null);
       setConfirmCancel(true);
     } else if (kind === 'contact') setContactOpen(true);
-    else if (kind === 'reorder') setReorderTarget(orderReorderTarget({ code: o.code, items: o.items as OrderItemView[] }));
+    else if (kind === 'reorder') reorderAll();
     else if (kind === 'return') {
       setReturnKey((k) => k + 1);
       setReturnOpen(true);
@@ -275,7 +295,7 @@ export function OrderActions({
           </div>
         </div>
       ) : (
-        shownPlan.primary && <OrderActionBar plan={shownPlan} returnMore={returnMore} note={note} busy={cancel.isPending} onAction={onAction} focusRef={barFocusRef} />
+        shownPlan.primary && <OrderActionBar plan={shownPlan} returnMore={returnMore} note={note} busy={cancel.isPending || reorder.isPending} onAction={onAction} focusRef={barFocusRef} />
       )}
 
       {isPhone && (
@@ -308,6 +328,19 @@ export function OrderActions({
           Đã gửi yêu cầu đổi/trả. Tubu sẽ phản hồi trong 24 giờ.
         </p>
       )}
+      {reorderNotice && (
+        <p role="status" className="mt-3 text-sm text-stone-700">
+          {reorderNotice.text}
+          {reorderNotice.added && (
+            <>
+              {' '}
+              <Link href="/gio-hang" className="font-semibold text-forest-700 underline">
+                {reorderText.viewCart}
+              </Link>
+            </>
+          )}
+        </p>
+      )}
 
       {returnError && !(delivered && returnOpen) && (
         <p role="alert" className={`mt-3 ${ui.error}`}>
@@ -330,7 +363,6 @@ export function OrderActions({
           }}
         />
       )}
-      <ReorderSheet target={reorderTarget} navigateToCart onClose={() => setReorderTarget(null)} />
       <BottomSheet open={contactOpen} onClose={() => setContactOpen(false)} title={fillCopy('order.action.contact')}>
         <SupportContact orderCode={o.code} />
       </BottomSheet>

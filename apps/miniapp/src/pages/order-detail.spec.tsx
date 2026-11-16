@@ -1232,3 +1232,48 @@ describe('OrderDetailPage: tài khoản hoàn tiền mặc định của tấm h
     expect(fieldValue('Số tài khoản')).toBe('');
   });
 });
+
+describe('OrderDetailPage — Mua lại một chạm (đơn đã giao)', () => {
+  const TWO = {
+    ...ORDER,
+    items: [
+      ...ORDER.items,
+      { id: 'oi2', productName: 'Nước rửa chén', variationName: '1L', productSlug: 'nuoc-rua-chen', quantity: 1, total: 60_000, backorderedQty: 0 },
+    ],
+  };
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchOrder.mockResolvedValue(TWO);
+    mocks.fetchMyReturns.mockResolvedValue([]);
+  });
+
+  it('chạm một lần: thêm món còn hàng, mở giỏ, nêu tên món hết; bấm đúp không gửi hai lần', async () => {
+    const { repurchaseOrder } = await import('../services/shop-api');
+    let release!: (v: unknown) => void;
+    vi.mocked(repurchaseOrder).mockReturnValue(new Promise((r) => (release = r)) as ReturnType<typeof repurchaseOrder>);
+    renderPage();
+    const btn = await screen.findByRole('button', { name: 'Mua lại đơn này' });
+    fireEvent.click(btn);
+    fireEvent.click(btn);
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await act(async () => {
+      release({
+        cart: { items: [] },
+        results: [
+          { orderItemId: 'oi1', status: 'added', addedQuantity: 2 },
+          { orderItemId: 'oi2', status: 'skipped', reason: 'OUT_OF_STOCK', addedQuantity: 0 },
+        ],
+      });
+    });
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/cart'));
+    expect(repurchaseOrder).toHaveBeenCalledTimes(1);
+    expect(repurchaseOrder).toHaveBeenCalledWith('TT001', {
+      items: [
+        { orderItemId: 'oi1', quantity: 2 },
+        { orderItemId: 'oi2', quantity: 1 },
+      ],
+      addSource: 'repurchase',
+    });
+    expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ text: expect.stringContaining('Nước rửa chén (hết hàng)') }));
+  });
+});

@@ -41,7 +41,8 @@ import { Button } from '../components/ui/button';
 import { BottomSheet } from '../components/ui/bottom-sheet';
 import { ListRow } from '../components/ui/list-row';
 import { ProductThumb } from '../components/ui/product-thumb';
-import { ReorderSheet } from '../components/reorder/reorder-sheet';
+import { useReorder } from '../hooks/use-reorder';
+import { trackReorderClicked } from '../services/buy-flow-events';
 import { CancelReasonPicker } from '../components/orders/cancel-reason-picker';
 import { OrderStatusHero } from '../components/orders/order-status-hero';
 import { OrderTrack } from '../components/orders/order-track';
@@ -59,7 +60,7 @@ import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
 import { SupportContact } from '../components/support-contact';
 import { usePublicConfig } from '../hooks/use-public-config';
-import { orderReorderTarget, type ReorderTarget } from '../components/reorder/reorder-types';
+import { orderReorderTarget, targetLines } from '../components/reorder/reorder-types';
 import { ReturnRequestSheet } from '../components/orders/return-request-sheet';
 import { RefundDestinationPicker } from '../components/orders/refund-destination-picker';
 import { OrderRefunds } from '../components/orders/order-refunds';
@@ -95,8 +96,8 @@ export default function OrderDetailPage() {
   const [cancelTouched, setCancelTouched] = useState(false);
   const [cancelReason, setCancelReason] = useState<CancelReasonCode | null>(null);
   const [cancelReasonText, setCancelReasonText] = useState('');
-  // State ổn định (không dựng target trong JSX) — ReorderSheet reset lựa chọn theo identity của target.
-  const [reorderTarget, setReorderTarget] = useState<ReorderTarget | null>(null);
+  const reorder = useReorder('order_detail', { navigateToCart: true });
+  const reorderTap = useRef(false);
   const phase = useAuthPhase();
   const meId = useAuthStore((s) => s.user?.id);
 
@@ -217,7 +218,7 @@ export default function OrderDetailPage() {
       cancelOrder(code!, choose ? destinationBody(cancelMethod, cancelBank) : undefined, cancelReasonBody(reason, cancelReasonText)),
     onSuccess: (cancelled) => {
       // Gộp phản hồi huỷ vào cache NGAY (trạng thái mới → ẩn "Hủy đơn"/"Thanh toán ngay" tức thì) nhưng GIỮ
-      // `items` cũ: phản hồi huỷ không kèm ảnh/tồn kho các dòng nên ghi đè cả object sẽ làm ReorderSheet
+      // `items` cũ: phản hồi huỷ không kèm ảnh/tồn kho các dòng nên ghi đè cả object sẽ làm Mua lại
       // coi mọi dòng còn hàng. Sau đó refetch để có đủ dữ liệu.
       queryClient.setQueryData<OrderView>(['order', code], (old) => (old ? { ...old, ...cancelled, items: old.items } : old));
       void queryClient.invalidateQueries({ queryKey: ['order', code] });
@@ -318,13 +319,29 @@ export default function OrderDetailPage() {
   const historyEvents = trackView ? [] : shippingEvents(o.shippingHistory);
   const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
 
+  // Mua lại một chạm: gửi mọi dòng của đơn với số lượng cũ, máy chủ thêm phần còn hàng (kẹp theo tồn) và trả lý do từng dòng bị bỏ, nên câu báo nêu
+  // đúng tên món thiếu; xong thì mở giỏ. Chạm lại khi lần trước chưa xong thì bỏ qua (useReorder cũng gộp lời gọi đang bay).
+  const reorderAll = () => {
+    if (reorderTap.current) return;
+    reorderTap.current = true;
+    const target = orderReorderTarget(o);
+    trackReorderClicked({ source: 'order_detail', orderCode: o.code });
+    const picks = targetLines(target).map((l) => ({ key: l.key, variationId: l.variationId, quantity: l.defaultQuantity }));
+    void reorder
+      .submit(target, picks)
+      .catch(() => undefined)
+      .finally(() => {
+        reorderTap.current = false;
+      });
+  };
+
   const onAction = (kind: OrderActionKind) => {
     haptic('light');
     if (kind === 'pay') navigate(`/bank-payment/${o.code}`);
     else if (kind === 'cancel') {
       if (!cancel.isPending) setConfirmCancel(true);
     } else if (kind === 'contact') setContactOpen(true);
-    else if (kind === 'reorder') setReorderTarget(orderReorderTarget(o));
+    else if (kind === 'reorder') reorderAll();
     else if (kind === 'return') {
       setReturnKey((k) => k + 1);
       setReturnOpen(true);
@@ -692,7 +709,7 @@ export default function OrderDetailPage() {
         <SupportContact orderCode={o.code} />
       </Box>
 
-      <OrderActionBar plan={plan} returnMore={orderReturns.some((r) => r.status === 'APPROVED')} note={payNote} busy={cancel.isPending} onAction={onAction} />
+      <OrderActionBar plan={plan} returnMore={orderReturns.some((r) => r.status === 'APPROVED')} note={payNote} busy={cancel.isPending || reorder.isPending} onAction={onAction} />
 
       <BottomSheet open={contactOpen} onClose={() => setContactOpen(false)} title={fillCopy('order.action.contact')}>
         <SupportContact orderCode={o.code} />
@@ -772,7 +789,6 @@ export default function OrderDetailPage() {
       />
 
       {/* Mua lại cả đơn qua sheet dùng chung (spec §3.3) — chọn dòng, dòng hết hàng bị khoá. */}
-      <ReorderSheet target={reorderTarget} source="order_detail" navigateToCart onClose={() => setReorderTarget(null)} />
     </Page>
   );
 }

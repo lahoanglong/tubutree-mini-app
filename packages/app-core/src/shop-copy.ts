@@ -381,6 +381,11 @@ export const SHOP_COPY: Record<string, string> = {
   'cart.saving': 'Tiết kiệm {x}',
   'cart.subtotal': 'Tạm tính',
   'cart.subtotalNet': 'Tạm tính (đã giảm)',
+  // Phí giao ước tính ngay ở giỏ (GET /checkout/shipping-estimate), dưới Tạm tính; giá trị "Miễn phí" ngắn để không lặp câu của thanh Miễn phí giao hàng.
+  'cart.shipEstimate': 'Phí giao (ước tính)',
+  'cart.shipEstimateFree': 'Miễn phí',
+  'cart.shipEstimateRange': '{min}–{max}',
+  'cart.totalEstimate': 'Tổng tạm tính',
   // Giỏ khách trên web (cờ web.guest_cart_enabled): một nút chính, không mã giảm giá, không điểm (cần tài khoản).
   'guestCart.loginCta': 'Đăng nhập để đặt hàng',
   'guestCart.full': 'Giỏ chưa đăng nhập giữ tối đa {n} món. Đăng nhập để thêm tiếp.',
@@ -465,6 +470,9 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.gift.blockedMinOrder': 'Mua thêm {amount} để nhận quà này',
   'checkout.gift.blockedOnePerOrder': 'Mỗi đơn nhận 1 quà, quà này giữ cho đơn sau',
   'checkout.gift.blockedPhone': 'Xác minh số điện thoại để nhận quà',
+  // Mini App: lối xác minh SĐT nằm ngay trên dòng quà (không mở sheet lúc bấm Đặt hàng).
+  'checkout.gift.verifyPhone': 'Xác minh ngay',
+  'checkout.useZaloPhone': 'Dùng số Zalo của tôi',
   'cart.giftNote': '🎁 Quà đổi điểm sẽ tự thêm ở bước thanh toán · 0đ',
   'coupon.autoApplied': 'Tubu đã tự áp mã tốt nhất',
   // Giỏ gom món của combo (K5): đầu nhóm, nhắc chọn đủ món, hộp báo trước khi bỏ món làm bộ mất giảm. Nút xác nhận không ghi "Xoá" để khỏi lặp nhãn thùng rác.

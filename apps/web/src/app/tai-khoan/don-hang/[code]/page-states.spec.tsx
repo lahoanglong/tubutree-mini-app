@@ -108,9 +108,9 @@ const ROWS: Row[] = [
   {
     name: 'đã giao, còn dòng chưa đánh giá',
     order: { status: 'DELIVERED', deliveredAt: hoursFromNow(-24), items: UNREVIEWED },
-    primary: 'Đánh giá sản phẩm',
-    menu: ['Mua lại đơn này', 'Yêu cầu đổi/trả', 'Liên hệ Tubu'],
-    absent: ['Huỷ đơn', 'Thanh toán ngay'],
+    primary: 'Mua lại đơn này',
+    menu: ['Yêu cầu đổi/trả', 'Liên hệ Tubu'],
+    absent: ['Huỷ đơn', 'Thanh toán ngay', 'Đánh giá sản phẩm'],
   },
   {
     name: 'đã giao, đã đánh giá hết',

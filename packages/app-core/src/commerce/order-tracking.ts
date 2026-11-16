@@ -357,14 +357,14 @@ export interface OrderActionPlan {
   primary: OrderActionKind | null;
   /** Nút phụ, vào menu "Thêm thao tác". */
   more: OrderActionKind[];
-  /** Dòng cần đánh giá khi nút chính là "Đánh giá sản phẩm". */
+  /** Đơn đã giao: dòng đầu tiên còn chờ đánh giá (lối đánh giá nằm trên từng món, không phải nút của thanh). */
   reviewItemId: string | null;
 }
 
 /**
  * Nút nào hiện ở trạng thái nào. Nút chính:
- * chờ thanh toán là Thanh toán ngay; trước bàn giao vận chuyển là Huỷ đơn; đang giao là Liên hệ; đã giao là Đánh giá (còn dòng chưa
- * đánh giá) hoặc Mua lại; đã huỷ hoặc hoàn là Mua lại. Mọi nút cấm (huỷ khi hàng đã giao hãng, trả tiền khi Tubu xử lý tay, đổi/trả
+ * chờ thanh toán là Thanh toán ngay; trước bàn giao vận chuyển là Huỷ đơn; đang giao là Liên hệ; đã giao, đã huỷ hoặc hoàn là Mua lại
+ * (đổi/trả của đơn đã giao ở menu). Mọi nút cấm (huỷ khi hàng đã giao hãng, trả tiền khi Tubu xử lý tay, đổi/trả
  * quá hạn hoặc đã có yêu cầu chờ) không bao giờ có trong kế hoạch.
  */
 export function orderActionPlan(o: TrackOrder, ctx: TrackCtx = {}): OrderActionPlan {
@@ -394,10 +394,9 @@ export function orderActionPlan(o: TrackOrder, ctx: TrackCtx = {}): OrderActionP
       if (cancel) more.push('contact');
       break;
     case 'DELIVERED': {
-      const review = pendingReviewItem(o);
-      reviewItemId = review?.id ?? null;
-      primary = review ? 'review' : 'reorder';
-      if (review) more.push('reorder');
+      // "Mua lại" luôn là nút chính: đánh giá đã có lối trên từng món của đơn, nên không chiếm nút chính hay đẩy "Mua lại" vào menu.
+      primary = 'reorder';
+      reviewItemId = pendingReviewItem(o)?.id ?? null;
       if (!ctx.pendingReturn && ctx.returnableLeft !== false && returnWindowOpen(o, ctx.returnDays ?? 7, now)) more.push('return');
       more.push('contact');
       break;

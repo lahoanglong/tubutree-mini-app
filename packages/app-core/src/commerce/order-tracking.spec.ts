@@ -125,12 +125,20 @@ const ROWS: Row[] = [
     more: [],
   },
   {
-    name: 'đã giao, còn dòng chưa đánh giá, trong hạn đổi/trả',
+    name: 'đã giao, còn dòng chưa đánh giá, trong hạn đổi/trả: Mua lại vẫn là nút chính, đổi/trả ở menu',
     order: order({ status: 'DELIVERED', deliveredAt: iso(-24 * HOUR) }),
     stage: 'DELIVERED',
     sentence: 'Đơn đã giao thành công.',
-    primary: 'review',
-    more: ['reorder', 'return', 'contact'],
+    primary: 'reorder',
+    more: ['return', 'contact'],
+  },
+  {
+    name: 'đã giao, còn dòng chưa đánh giá, quá hạn đổi/trả',
+    order: order({ status: 'DELIVERED', deliveredAt: iso(-10 * 24 * HOUR) }),
+    stage: 'DELIVERED',
+    sentence: 'Đơn đã giao thành công.',
+    primary: 'reorder',
+    more: ['contact'],
   },
   {
     name: 'đã giao, đã đánh giá hết, trong hạn',
@@ -218,10 +226,9 @@ describe('orderActionPlan và orderHeadline theo trạng thái', () => {
       const all = [plan.primary, ...plan.more];
       if (!['PENDING_PAYMENT', 'CONFIRMED', 'PACKED'].includes(row.order.status)) expect(all).not.toContain('cancel');
       if (row.order.status !== 'PENDING_PAYMENT' || row.stage !== 'PAY_WAIT') expect(all).not.toContain('pay');
-      if (row.order.status !== 'DELIVERED') {
-        expect(all).not.toContain('return');
-        expect(all).not.toContain('review');
-      }
+      if (row.order.status !== 'DELIVERED') expect(all).not.toContain('return');
+      // Đánh giá là liên kết trên từng món của đơn, không bao giờ là nút của thanh hành động.
+      expect(all).not.toContain('review');
       if (row.order.canCancel === false) expect(all).not.toContain('cancel');
     }
   });
@@ -364,6 +371,7 @@ describe('điều kiện từng nút', () => {
     });
     expect(pendingReviewItem(o)?.id).toBe('e');
     expect(pendingReviewItem({ ...o, status: 'SHIPPING' })).toBeNull();
+    expect(orderActionPlan(o, { now: NOW })).toMatchObject({ primary: 'reorder', reviewItemId: 'e' });
   });
 
   it('nhãn nút', () => {
