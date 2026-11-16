@@ -41,6 +41,8 @@ export interface VariationDetail {
   retailPrice: number;
   salePrice: number | null;
   stock: number;
+  /** Ảnh đầu của biến thể (nằm trong `ProductDetail.images`); API cũ chưa trả thì thiếu. */
+  imageUrl?: string | null;
 }
 
 export interface ProductDetail {
@@ -51,6 +53,8 @@ export interface ProductDetail {
   shortDesc: string | null;
   description: string;
   images: string[];
+  /** Video sản phẩm (URL http/https từ Pancake); thiếu hoặc API cũ → không có video. */
+  videos?: string[];
   thumbnail: string | null;
   basePrice: number;
   salePrice: number | null;

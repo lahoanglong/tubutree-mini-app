@@ -36,7 +36,8 @@ export function buildCsp({ apiBaseUrl, sentryConnect = '', dev = false }) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "media-src 'self' blob: https://res.cloudinary.com",
+    // https: cho video sản phẩm đồng bộ từ Pancake (host CDN của Pancake, như img-src); Cloudinary nêu riêng vì video đánh giá của khách.
+    "media-src 'self' blob: https://res.cloudinary.com https:",
     `connect-src 'self'${apiOrigin && apiOrigin !== 'null' ? ` ${apiOrigin}` : ''} https://api.cloudinary.com${sentryConnect ? ` ${sentryConnect}` : ''}`,
     ...(reportUrl ? [`report-uri ${reportUrl}`, `report-to ${CSP_REPORT_GROUP}`] : []),
   ];

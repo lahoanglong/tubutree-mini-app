@@ -92,6 +92,8 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   const initialVariation = (hasFlash ? defaultVariationFor({ slug: product.slug }, product.variations, runningFlash(flash ?? [], generatedAt), generatedAt) : undefined) ?? product.variations.find((v) => v.stock > 0) ?? product.variations[0];
 
   const images = galleryImages(product);
+  // Ảnh đầu của từng biến thể (Pancake): chọn biến thể thì thư viện ảnh nhảy tới ảnh đó.
+  const variationImages = Object.fromEntries(product.variations.flatMap((v) => (v.imageUrl ? [[v.id, v.imageUrl.trim()] as const] : [])));
   const description = plainText(product.description);
   const shortDesc = plainText(product.shortDesc);
   const productUrl = `${SITE_URL}/san-pham/${encodeURIComponent(product.slug)}`;
@@ -129,7 +131,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
         <PdpLayout
           gallery={
             <div className="min-w-0">
-              <ProductGallery images={images} name={product.name} />
+              <ProductGallery images={images} videos={product.videos} name={product.name} variationImages={variationImages} />
               {/* Giờ vàng: giá deal nằm ngay dưới ảnh (đồng hồ, đã bán, giới hạn mua); hết giờ thì thanh biến mất, giá thường quay lại. */}
               <PdpFlashBar product={product} />
             </div>

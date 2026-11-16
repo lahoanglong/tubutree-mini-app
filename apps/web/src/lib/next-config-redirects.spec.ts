@@ -47,11 +47,11 @@ describe('next.config CSP', () => {
     expect(connect.split(' ')).toContain('https://api.cloudinary.com');
   });
 
-  it('media-src cho video Cloudinary và blob: (xem trước, đo độ dài video trên máy), không rơi về default-src', async () => {
+  it('media-src cho video Cloudinary, video sản phẩm Pancake (https) và blob: (xem trước, đo độ dài video trên máy), không rơi về default-src', async () => {
     const rules = await nextConfig.headers!();
     const csp = rules.flatMap((r) => r.headers).find((h) => h.key === 'Content-Security-Policy-Report-Only')!.value;
     const media = csp.split('; ').find((d) => d.startsWith('media-src '));
-    expect(media?.split(' ')).toEqual(expect.arrayContaining(["'self'", 'blob:', 'https://res.cloudinary.com']));
+    expect(media?.split(' ')).toEqual(expect.arrayContaining(["'self'", 'blob:', 'https://res.cloudinary.com', 'https:']));
   });
 
   it('Permissions-Policy cho phép geolocation=(self) để tìm điểm thu gom rác gần khách trên Web, khoá camera và microphone', async () => {

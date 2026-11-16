@@ -15,6 +15,8 @@ export interface VariationDTO {
   stock: number;
   isActive: boolean;
   weight?: number | null;
+  /** Ảnh đầu của biến thể (cũng nằm trong `ProductDTO.images`); chọn biến thể thì thư viện ảnh nhảy tới ảnh này. */
+  imageUrl?: string | null;
 }
 
 export interface ProductDTO {
@@ -25,6 +27,8 @@ export interface ProductDTO {
   shortDesc?: string | null;
   description: string;
   images: string[];
+  /** Video sản phẩm (URL http/https) đồng bộ từ Pancake; chỉ phát khi khách bấm. API cũ chưa trả thì thiếu. */
+  videos?: string[];
   thumbnail?: string | null;
   tags: string[];
   isActive: boolean;

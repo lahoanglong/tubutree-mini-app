@@ -4,6 +4,7 @@ import type { PrismaService } from '../../prisma/prisma.service';
 import { Prisma } from '@prisma/client';
 import { LIKE_ESCAPE } from './search-text';
 import { CARD_PRODUCT_SELECT } from './card-select';
+import { toPublicProductDetail } from './catalog-public';
 
 /** Câu xếp hạng chọn vài cột nhỏ; câu lấy thẻ chọn CARD_PRODUCT_SELECT (có `variations`). */
 const isRank = (args: { select?: unknown }) => Boolean(args.select) && !('variations' in (args.select as object));
@@ -2008,7 +2009,7 @@ describe('CatalogService.getBySlug — select tường minh (L3-01)', () => {
     expect(arg.include).toBeUndefined();
     const scalars = Object.keys(arg.select).filter((k) => arg.select[k] === true);
     const all = Object.values(Prisma.ProductScalarFieldEnum) as string[];
-    expect(all.filter((c) => !scalars.includes(c)).sort()).toEqual(['affiliateBlocked', 'approvedAt', 'nameSearch', 'pancakeHold', 'pancakeId', 'pancakeLinkCode', 'rejectReason', 'soldApp30d']);
+    expect(all.filter((c) => !scalars.includes(c)).sort()).toEqual(['affiliateBlocked', 'approvedAt', 'nameSearch', 'pancakeHold', 'pancakeId', 'pancakeImages', 'pancakeLinkCode', 'rejectReason', 'soldApp30d']);
     expect(scalars.filter((c) => !all.includes(c))).toEqual([]);
     for (const rel of ['variations', 'brandRef', 'reviews', 'storefront']) expect(arg.select).toHaveProperty(rel);
   });
@@ -2025,5 +2026,24 @@ describe('CatalogService.getBySlug — select tường minh (L3-01)', () => {
     expect(r.images[1]).toMatch(/^\/public-image\/product\/p1\/1\?v=[0-9a-f]{16}$/);
     expect(r.thumbnail).toBe('https://cdn/x.jpg');
     expect(r.sold).toBe(3);
+  });
+
+  it('W181: PDP trả video và ảnh đầu của biến thể; danh sách ảnh Pancake nội bộ không ra công khai', async () => {
+    const findUnique = jest.fn().mockResolvedValue({
+      id: 'p1', slug: 'tinh-dau', isActive: true, approvalStatus: 'APPROVED', soldExternal: 0, soldApp: 0, fulfilment: 'TUBU', storefrontId: null,
+      images: ['https://cdn/x.jpg'], videos: ['https://cdn/v.mp4'], pancakeImages: ['https://cdn/x.jpg'], thumbnail: null,
+      variations: [{ id: 'v1', sku: 's', name: '10ml', attributes: {}, retailPrice: 1000, salePrice: null, stock: 3, weight: null, imageUrl: 'https://cdn/x.jpg' }],
+      brandRef: null, storefront: null, reviews: [],
+    });
+    const prisma = { product: { findUnique } } as unknown as PrismaService;
+    const r = (await new CatalogService(prisma).getBySlug('tinh-dau')) as Record<string, unknown> & { variations: { imageUrl: string }[] };
+    const select = (findUnique.mock.calls[0]![0] as { select: { videos: boolean; pancakeImages?: boolean; variations: { select: Record<string, boolean> } } }).select;
+    expect(select.videos).toBe(true);
+    expect(select.pancakeImages).toBeUndefined();
+    expect(select.variations.select.imageUrl).toBe(true);
+    expect(r.videos).toEqual(['https://cdn/v.mp4']);
+    expect(r.variations[0]!.imageUrl).toBe('https://cdn/x.jpg');
+    expect(toPublicProductDetail(r)).toHaveProperty('videos', ['https://cdn/v.mp4']);
+    expect(toPublicProductDetail({ ...r, pancakeImages: ['x'] })).not.toHaveProperty('pancakeImages');
   });
 });

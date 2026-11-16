@@ -14,6 +14,8 @@ import { CRON_TZ } from '../../../common/cron-tz';
 import { LEGACY_FAKE_PANCAKE_PREFIX } from './pancake-fulfilment';
 import { pancakeProductSlug } from './pancake-product-slug';
 import { payloadId, payloadNonNegInt, payloadPrice, payloadQuantity, payloadRemoved, payloadText, payloadTextList } from './pancake-payload';
+import { mergePancakeImages, pancakeImageList, pancakeVideos } from './pancake-media';
+import { storedThumbnailFor } from '../../../common/public-image';
 import { BROKEN_VARIANT_NAME_MARKER, isBrokenVariantName, variantAttributes, variantLabel } from './pancake-variant-fields';
 import { CronLeaderService } from '../../../common/cron-leader/cron-leader.service';
 import { RunLease } from '../../../common/cron-leader/run-lease';
@@ -513,12 +515,20 @@ export class PancakeSyncService implements OnModuleInit {
     const variations = variationsOf(p);
     const existing = await this.prisma.product.findUnique({ where: { pancakeId } });
 
-    // Ảnh: ưu tiên ảnh sản phẩm, rồi ảnh variation đầu tiên (Pancake hay để ảnh ở variation).
-    const imgs = [
-      ...payloadTextList(p.images),
-      ...payloadTextList(p.image),
-      ...variations.flatMap((v) => payloadTextList(v.images)),
-    ];
+    // Ảnh: ảnh Pancake (sản phẩm, rồi từng variation) đi trước; ảnh admin đã thêm trên Tubu Tree mà Pancake không có thì giữ, ảnh Pancake từng gửi mà
+    // nay không còn thì gỡ (`existing.pancakeImages` là danh sách Pancake gửi lần trước). Xem `mergePancakeImages`.
+    const imgs = pancakeImageList(p, variations);
+    const merged = mergePancakeImages(imgs, existing?.pancakeImages ?? [], existing?.images ?? []);
+    if (merged.adminKept > 0) this.logger.debug(`Giữ ${merged.adminKept} ảnh admin thêm của sản phẩm Pancake ${pancakeId}.`);
+    // Video: chỉ ghi khi Pancake có nói về video (trường `videos` có ở ít nhất một biến thể); không thì giữ video đang lưu.
+    const vids = pancakeVideos(variations);
+    const mergedThumb = merged.images.length
+      ? existing
+        ? storedThumbnailFor(existing.id, merged.images[0])
+        : merged.images[0]
+      : (existing?.images?.length ?? 0) === 0
+        ? (existing?.thumbnail ?? null)
+        : null;
 
     // `<p></p>`, `<br>` và `&nbsp;` là cách trình soạn của Pancake lưu ô mô tả để trống: coi như trống, kẻo xoá mô tả admin đã duyệt mỗi 15 phút.
     const incomingDescription = typeof p.description === 'string' && !isBlankHtmlText(p.description) ? p.description : null;
@@ -531,8 +541,10 @@ export class PancakeSyncService implements OnModuleInit {
     const sellable = variations.filter((v) => !payloadRemoved(v.is_removed) && positivePrice(v.retail_price) !== null);
     const baseData = {
       name,
-      images: imgs.length ? imgs : (existing?.images ?? []),
-      thumbnail: imgs[0] ?? existing?.thumbnail ?? null,
+      images: merged.images,
+      pancakeImages: imgs,
+      videos: vids.reported ? vids.videos : (existing?.videos ?? []),
+      thumbnail: mergedThumb,
       basePrice: positivePrice(sellable[0]?.retail_price) ?? existing?.basePrice ?? 0,
     };
     // Chưa biến thể nào có giá (và sản phẩm chưa từng bán có giá) → chưa mở bán, kẻo hiện "0đ" ngoài danh mục.
@@ -686,6 +698,8 @@ export class PancakeSyncService implements OnModuleInit {
     }
     // Cột `weight` là Int: chuỗi làm Prisma ném và hỏng cả sản phẩm; số lẻ bỏ phần lẻ (đúng giá trị Prisma vẫn ghi trước đây); âm/rác là không biết.
     const weight = payloadNonNegInt(v.weight, { trunc: true });
+    // Ảnh đầu của biến thể (cũng nằm trong ảnh sản phẩm): PDP nhảy tới ảnh này khi khách chọn biến thể. Pancake không gửi ảnh thì không có.
+    const imageUrl = payloadTextList(v.images)[0] ?? null;
     const label = variantLabel(v.fields) ?? productName;
     // `remain_quantity` vắng mặt hoặc không đọc được = Pancake KHÔNG nói gì về tồn kho lần này (không phải "hết hàng").
     // Số âm (POS cho bán lố kho) là hết hàng: tồn bán được không âm.
@@ -702,6 +716,7 @@ export class PancakeSyncService implements OnModuleInit {
         ...prices,
         ...hold,
         weight,
+        imageUrl,
         // KHÔNG ghi `stock` ở đây: tồn kho đi qua applyPancakeStock ngay dưới, vì nó phải đọc
         // giá trị cũ của chính hàng đó (chênh lệch + giữ chỗ) trong MỘT câu UPDATE nguyên tử.
       },
@@ -717,6 +732,7 @@ export class PancakeSyncService implements OnModuleInit {
         stock: remain ?? 0,
         pancakeStock: remain ?? 0,
         weight,
+        imageUrl,
       },
     });
     // Tên chỉ ghi lúc tạo, nên dòng đã ghi hỏng thì lành ở đây. Câu UPDATE tự kiểm lại tên VẪN còn dấu hiệu hỏng: admin sửa

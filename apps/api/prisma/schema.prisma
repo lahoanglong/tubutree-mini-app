@@ -478,6 +478,10 @@ model Product {
   description      String                @db.Text
   shortDesc        String?
   images           String[]
+  /// Ảnh nhận từ Pancake ở lần đồng bộ gần nhất (đúng thứ tự Pancake). Phân biệt nguồn: ảnh trong `images` mà không nằm ở đây và Pancake không gửi là ảnh admin thêm trên Tubu Tree, đồng bộ không được gỡ.
+  pancakeImages    String[]              @default([])
+  /// Video sản phẩm (URL http/https) đồng bộ từ `variations[].videos` của Pancake. Chỉ phát khi khách bấm, xem `PdpMediaGallery`.
+  videos           String[]              @default([])
   thumbnail        String?
   categoryIds      String[]              @default([])
   tags             String[]
@@ -948,6 +952,8 @@ model Variation {
   /// đồng bộ không được tự bật lại.
   pancakeHold                   String?
   weight                        Int?
+  /// Ảnh đầu tiên Pancake gắn cho biến thể (cũng nằm trong `products.images`): chọn biến thể thì thư viện ảnh PDP nhảy tới ảnh này. NULL = Pancake không gửi ảnh cho biến thể.
+  imageUrl                      String?
 
   cartItems          CartItem[]
   dealerPriceHistory DealerPriceHistory[]

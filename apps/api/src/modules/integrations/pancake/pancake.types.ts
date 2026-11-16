@@ -12,6 +12,8 @@ export interface PancakeVariationDTO {
   remain_quantity?: number;
   weight?: number;
   images?: string[];
+  /** Video của biến thể: chuỗi URL hoặc object có `url` (đọc phòng thủ bằng `pancakeVideos`, chỉ nhận http/https). */
+  videos?: Array<string | { url?: string }> | string | null;
   /** Pancake POS: biến thể đã bị xoá (vẫn có thể còn trong danh sách trả về). */
   is_removed?: boolean;
   /** Pancake POS: ẩn trên website StoreCake — KHÔNG dùng để ngừng bán trên Tubu. */

@@ -62,6 +62,8 @@ import { withProductCopyFallback } from '@tubutree/app-core/commerce/product-cop
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { pdpMedia, pdpMediaIndexOfImage } from '@tubutree/app-core/commerce/pdp-media';
+import { PdpVideoSlide } from '../components/product/pdp-video-slide';
 import { resolveStoryConfig } from '@tubutree/app-core/commerce/product-story';
 import { returnsPromise } from '@tubutree/app-core/returns-copy';
 import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
@@ -678,7 +680,8 @@ export default function ProductDetailPage() {
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
 
       <StorefrontContextBar />
-      <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} alt={p.name} />
+      {/* `selectedId` chỉ có sau khi khách tự chọn phân loại: lúc mở trang (phân loại mặc định) thư viện không nhảy, ảnh đầu vẫn là ảnh LCP. */}
+      <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} videos={p.videos} alt={p.name} focusSrc={selectedId ? selected?.imageUrl : null} />
       {flashItem && priceView.isFlash && (
         <FlashPriceBar
           price={price}
@@ -1339,13 +1342,23 @@ export function GallerySlide({ src, alt, eager }: { src: string; alt: string; ea
   return <img src={img.src} srcSet={img.srcSet} alt={alt} width={GALLERY_IMAGE_WIDTH} height={GALLERY_IMAGE_WIDTH} loading={eager ? 'eager' : 'lazy'} decoding={eager ? 'auto' : 'async'} onError={() => fallBack() || setFailed(true)} style={{ ...frame, objectFit: 'cover' }} />;
 }
 
-/** Carousel ảnh scroll-snap + dots — không cần lib ngoài. */
-function Gallery({ images, alt }: { images: string[]; alt: string }) {
+/** Carousel ảnh và video scroll-snap + dots — không cần lib ngoài. `focusSrc`: ảnh của phân loại khách vừa chọn, cuộn tới ô ảnh đó. */
+export function Gallery({ images, videos, alt, focusSrc }: { images: string[]; videos?: string[]; alt: string; focusSrc?: string | null }) {
   const [index, setIndex] = useState(0);
   // Ảnh không bấm được nên vùng cuộn phải tự focus được khi tràn, nếu không bàn phím không lật ảnh được (axe scrollable-region-focusable).
   const track = useScrollHints<HTMLDivElement>();
+  const media = pdpMedia(images, videos);
+  const jumpTo = pdpMediaIndexOfImage(media, focusSrc);
+  const trackEl = track.ref;
+  useEffect(() => {
+    const el = trackEl.current;
+    if (jumpTo < 0 || !el || el.clientWidth === 0) return;
+    const reduce = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (typeof el.scrollTo === 'function') el.scrollTo({ left: jumpTo * el.clientWidth, behavior: reduce ? 'auto' : 'smooth' });
+    else el.scrollLeft = jumpTo * el.clientWidth;
+  }, [jumpTo, focusSrc, trackEl]);
 
-  if (images.length === 0) {
+  if (media.length === 0) {
     return (
       <Box
         style={{
@@ -1383,11 +1396,15 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
           WebkitOverflowScrolling: 'touch',
         }}
       >
-        {images.map((src, i) => (
-          <GallerySlide key={src} src={src} alt={`${alt} — ảnh ${i + 1}`} eager={i === 0} />
-        ))}
+        {media.map((m, i) =>
+          m.kind === 'video' ? (
+            <PdpVideoSlide key={`video:${m.src}`} src={m.src} poster={m.poster} name={alt} active={i === index} />
+          ) : (
+            <GallerySlide key={m.src} src={m.src} alt={`${alt} — ảnh ${i + 1}`} eager={i === 0} />
+          ),
+        )}
       </div>
-      {images.length > 1 && (
+      {media.length > 1 && (
         <Box
           aria-hidden
           style={{
@@ -1400,7 +1417,7 @@ function Gallery({ images, alt }: { images: string[]; alt: string }) {
             gap: 5,
           }}
         >
-          {images.map((_, i) => (
+          {media.map((_, i) => (
             <span
               key={i}
               style={{

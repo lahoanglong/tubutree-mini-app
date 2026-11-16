@@ -357,6 +357,11 @@ export const SHOP_COPY: Record<string, string> = {
   'pdp.reviews': 'Đánh giá',
   'pdp.reviewsAll': 'Xem tất cả ({n})',
   'pdp.reviewsMore': 'Xem thêm đánh giá',
+  // Video sản phẩm trong thư viện ảnh PDP (PdpVideoSlide): nút phát trên ô poster, nhãn đọc, nút ở dải ảnh nhỏ (web), câu khi không phát được.
+  'pdp.videoPlay': 'Phát video',
+  'pdp.videoPlayAria': 'Phát video của {name}',
+  'pdp.videoThumb': 'Xem video',
+  'pdp.videoFailed': 'Không phát được video này.',
   // Xem ảnh/video đánh giá toàn màn hình (ReviewMediaLightbox): nhãn đọc của nút mở, nút trước/sau, nhãn người mua, nút thêm giỏ ở chân.
   'review.mediaOpenImage': 'Xem ảnh đánh giá {n}',
   'review.mediaOpenVideo': 'Xem video đánh giá',

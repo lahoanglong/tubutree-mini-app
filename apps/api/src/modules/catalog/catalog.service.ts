@@ -209,6 +209,7 @@ export class CatalogService {
     description: true,
     shortDesc: true,
     images: true,
+    videos: true,
     thumbnail: true,
     categoryIds: true,
     tags: true,
@@ -242,6 +243,7 @@ export class CatalogService {
     salePrice: true,
     stock: true,
     weight: true,
+    imageUrl: true,
   } satisfies Prisma.VariationSelect;
 
   // Không có images: ảnh đánh giá có thể là base64 tới ~700 nghìn ký tự/ảnh, app đọc đánh giá qua GET /products/:slug/reviews.

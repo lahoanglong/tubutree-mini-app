@@ -1,8 +1,12 @@
 'use client';
 
-import { useRef, useState } from 'react';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
+import { pdpMedia, pdpMediaIndexOfImage } from '@tubutree/app-core/commerce/pdp-media';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { LeafGlyph } from '@/components/mini/product-image';
+import PdpVideoSlide from '@/components/pdp-video-slide';
+import { usePdpSelection } from '@/components/pdp-selection';
 import { useSizedImage } from '@/lib/image-src';
 import { PDP_MAIN_IMAGE_SIZES } from '@/lib/image-sizes';
 
@@ -50,23 +54,31 @@ function ThumbImage({ src, onBroken }: { src: string; onBroken: () => void }) {
 }
 
 /**
- * Thư viện ảnh sản phẩm: vuốt ngang trên điện thoại (cuộn bám mép), mũi tên và dải ảnh nhỏ cho chuột/bàn phím.
+ * Thư viện ảnh và video sản phẩm: vuốt ngang trên điện thoại (cuộn bám mép), mũi tên và dải ảnh nhỏ cho chuột/bàn phím.
  * Ảnh dùng object-contain để nhãn thành phần không bị cắt. Chưa dùng next/image vì ảnh đến từ host tuỳ ý
  * (Pancake/Cloudinary/…) — bật optimizer cho mọi host là biến nó thành proxy ảnh mở; cần chốt danh sách host trước.
+ * Video là ô cuối dải, cùng khung vuông (xem `PdpVideoSlide`). `variationImages` (id biến thể → ảnh đầu của nó): khách chọn biến thể thì
+ * dải nhảy tới ảnh đó; lúc mở trang (biến thể mặc định) không nhảy, để ảnh đầu vẫn là ảnh LCP.
  */
-export default function ProductGallery({ images, name }: { images: string[]; name: string }) {
+export default function ProductGallery({
+  images,
+  videos,
+  name,
+  variationImages,
+}: {
+  images: string[];
+  videos?: string[];
+  name: string;
+  variationImages?: Record<string, string>;
+}) {
   const [active, setActive] = useState(0);
   const [broken, setBroken] = useState<ReadonlySet<number>>(new Set());
   const trackRef = useRef<HTMLDivElement>(null);
-  const count = images.length;
-
-  if (count === 0) {
-    return (
-      <div className={`${FRAME} flex items-center justify-center text-forest-600`}>
-        <LeafGlyph size={80} />
-      </div>
-    );
-  }
+  const media = pdpMedia(images, videos);
+  const count = media.length;
+  const selection = usePdpSelection();
+  const selectedId = selection?.selectedId;
+  const selectedImage = selectedId ? variationImages?.[selectedId] : undefined;
 
   const go = (to: number) => {
     const next = Math.min(Math.max(to, 0), count - 1);
@@ -83,6 +95,21 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
   };
   const markBroken = (i: number) => setBroken((s) => new Set(s).add(i));
 
+  // Chỉ khi KHÁCH chọn biến thể (chip, bảng chọn): biến thể mặc định lúc mở trang, hay đổi do tồn kho/Giờ vàng về muộn, không kéo dải đi.
+  const jumpTo = pdpMediaIndexOfImage(media, selectedImage);
+  useEffect(() => {
+    if (jumpTo >= 0 && selection?.userPicked.current) go(jumpTo);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy khi biến thể đang chọn đổi
+  }, [selectedId]);
+
+  if (count === 0) {
+    return (
+      <div className={`${FRAME} flex items-center justify-center text-forest-600`}>
+        <LeafGlyph size={80} />
+      </div>
+    );
+  }
+
   return (
     <div className="min-w-0">
       <div className={FRAME} role="group" aria-roledescription="carousel" aria-label={`Ảnh sản phẩm ${name}`}>
@@ -92,6 +119,8 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
           tabIndex={count > 1 ? 0 : undefined}
           aria-label={count > 1 ? 'Vuốt hoặc dùng phím mũi tên để xem thêm ảnh' : undefined}
           onKeyDown={(e) => {
+            // Phím mũi tên khi tiêu điểm đang ở thanh điều khiển video là để tua/chỉnh âm, không lật ô.
+            if (e.target !== e.currentTarget) return;
             if (e.key === 'ArrowRight') go(active + 1);
             else if (e.key === 'ArrowLeft') go(active - 1);
             else return;
@@ -99,19 +128,21 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
           }}
           className="flex h-full snap-x snap-mandatory overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         >
-          {images.map((src, i) => (
+          {media.map((m, i) => (
             <div
-              key={src}
+              key={`${m.kind}:${m.src}`}
               role="group"
               aria-roledescription="slide"
-              aria-label={`Ảnh ${i + 1} trên ${count}`}
+              aria-label={m.kind === 'video' ? `Video ${i + 1} trên ${count}` : `Ảnh ${i + 1} trên ${count}`}
               className="flex h-full w-full flex-none snap-center items-center justify-center"
             >
-              {broken.has(i) ? (
+              {m.kind === 'video' ? (
+                <PdpVideoSlide src={m.src} poster={m.poster} name={name} active={i === active} />
+              ) : broken.has(i) ? (
                 <LeafGlyph size={80} />
               ) : (
                 <SlideImage
-                  src={src}
+                  src={m.src}
                   alt={count > 1 ? `${name} — ảnh ${i + 1}` : name}
                   eager={i === 0}
                   onBroken={() => markBroken(i)}
@@ -136,9 +167,9 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
             </p>
             {/* Điện thoại: chấm tròn như Mini App thay cho số trang. */}
             <div data-testid="gallery-dots" aria-hidden="true" className="absolute inset-x-0 bottom-2.5 flex justify-center gap-1.5 md:hidden">
-              {images.map((src, i) => (
+              {media.map((m, i) => (
                 <span
-                  key={src}
+                  key={`${m.kind}:${m.src}`}
                   className={`h-1.5 rounded-full transition-all ${i === active ? 'w-4 bg-stone-0' : 'w-1.5 bg-stone-0/60'}`}
                 />
               ))}
@@ -149,21 +180,28 @@ export default function ProductGallery({ images, name }: { images: string[]; nam
 
       {count > 1 && (
         <ul className="mt-3 flex gap-2 overflow-x-auto pb-1 max-md:hidden" aria-label="Chọn ảnh">
-          {images.map((src, i) => (
-            <li key={src} className="flex-none">
+          {media.map((m, i) => (
+            <li key={`${m.kind}:${m.src}`} className="flex-none">
               <button
                 type="button"
                 onClick={() => go(i)}
-                aria-label={`Xem ảnh ${i + 1}`}
+                aria-label={m.kind === 'video' ? fillCopy('pdp.videoThumb') : `Xem ảnh ${i + 1}`}
                 aria-pressed={i === active}
-                className={`flex h-14 min-h-11 w-14 min-w-11 items-center justify-center overflow-hidden rounded-control border-2 bg-stone-0 ${
+                className={`relative flex h-14 min-h-11 w-14 min-w-11 items-center justify-center overflow-hidden rounded-control border-2 bg-stone-0 ${
                   i === active ? 'border-forest-600' : 'border-stone-200'
                 }`}
               >
-                {broken.has(i) ? (
+                {m.kind === 'video' ? (
+                  <>
+                    {m.poster && !broken.has(i) ? <ThumbImage src={m.poster} onBroken={() => markBroken(i)} /> : <LeafGlyph size={24} />}
+                    <span aria-hidden="true" className="absolute inset-0 flex items-center justify-center bg-stone-900/30 text-stone-0">
+                      <Play className="h-5 w-5" fill="currentColor" />
+                    </span>
+                  </>
+                ) : broken.has(i) ? (
                   <LeafGlyph size={24} />
                 ) : (
-                  <ThumbImage src={src} onBroken={() => markBroken(i)} />
+                  <ThumbImage src={m.src} onBroken={() => markBroken(i)} />
                 )}
               </button>
             </li>

@@ -11,6 +11,7 @@ const PUBLIC_PRODUCT_DETAIL_KEYS = [
   'shortDesc',
   'description',
   'images',
+  'videos',
   'thumbnail',
   'basePrice',
   'salePrice',
