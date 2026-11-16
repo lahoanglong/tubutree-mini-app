@@ -1249,8 +1249,8 @@ describe('OrderDetailPage — Mua lại một chạm (đơn đã giao)', () => {
 
   it('chạm một lần: thêm món còn hàng, mở giỏ, nêu tên món hết; bấm đúp không gửi hai lần', async () => {
     const { repurchaseOrder } = await import('../services/shop-api');
-    let release!: (v: unknown) => void;
-    vi.mocked(repurchaseOrder).mockReturnValue(new Promise((r) => (release = r)) as ReturnType<typeof repurchaseOrder>);
+    let release!: (v: Awaited<ReturnType<typeof repurchaseOrder>>) => void;
+    vi.mocked(repurchaseOrder).mockReturnValue(new Promise((r) => (release = r)));
     renderPage();
     const btn = await screen.findByRole('button', { name: 'Mua lại đơn này' });
     fireEvent.click(btn);
@@ -1258,7 +1258,8 @@ describe('OrderDetailPage — Mua lại một chạm (đơn đã giao)', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     await act(async () => {
       release({
-        cart: { items: [] },
+        cart: { items: [] } as never,
+        legacy: false,
         results: [
           { orderItemId: 'oi1', status: 'added', addedQuantity: 2 },
           { orderItemId: 'oi2', status: 'skipped', reason: 'OUT_OF_STOCK', addedQuantity: 0 },

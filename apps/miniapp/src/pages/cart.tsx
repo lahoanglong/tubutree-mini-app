@@ -5,6 +5,7 @@ import { useQuery, useMutation, useQueryClient, type QueryClient, type UseMutati
 import { Trash2, Ticket, ChevronRight, AlertTriangle, Zap } from 'lucide-react';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
+import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { cartStockNote, isLowStock, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { freeshipProgress, pickFreeshipAddons } from '@tubutree/app-core/commerce/freeship-progress';
@@ -67,6 +68,7 @@ import { FreeShippingProgressBar } from '../components/ui/free-shipping-progress
 import { FreeshipAddonRail, type FreeshipAddonItem } from '../components/ui/freeship-addon-rail';
 import { CartVoucherHintStrip } from '../components/ui/cart-voucher-hint-strip';
 import { useCartVoucherHint } from '../components/checkout/use-cart-voucher-hint';
+import { useShippingEstimate } from '../components/checkout/use-shipping-estimate';
 import { homeBestSellerQuery } from '../components/home/home-best-seller-query';
 import { cardAddTarget } from '../utils/card-add-target';
 import { serverNow } from '../utils/server-clock';
@@ -585,6 +587,8 @@ export default function CartPage() {
           overStock={overStockSelected}
           outOfStockNames={outOfStockSelected.map((l) => l.productName)}
           onCheckout={goCheckout}
+          shipBase={hasMerchant ? null : freeshipBase}
+          freeshipReached={freeship.reached}
           savingLines={buyableSelected}
           removedNotice={<CouponRemovedNotice notice={removedCoupon.notice} onDismiss={removedCoupon.dismiss} />}
           coupon={
@@ -1025,10 +1029,16 @@ function StickySummary({
   overStock,
   outOfStockNames,
   onCheckout,
+  shipBase,
+  freeshipReached,
   savingLines,
   coupon,
   removedNotice,
 }: {
+  /** Tiền hàng kiện Tubu đang chọn để ước tính phí giao; null khi có hàng gian hàng tự giao (phí từng gian hàng chỉ biết ở Thanh toán). */
+  shipBase: number | null;
+  /** Thanh Miễn phí giao hàng đang báo đã đạt: dòng phí nói cùng một điều. */
+  freeshipReached: boolean;
   /** Lời báo mã vừa bị máy chủ gỡ (đơn tối thiểu, hết hạn, bị tắt); tự không dựng gì khi không có. */
   removedNotice: ReactNode;
   summary: CartSummary;
@@ -1060,6 +1070,9 @@ function StickySummary({
   // ở 320px); phần chọn nói cả câu của máy chủ về mã đã áp (vd Giờ vàng không giảm thêm) như trước.
   const couponSrc = shown?.couponCode ? shown : null;
   const couponLine = allSelected ? heldCouponNotice(couponSrc, formatVnd) : couponNoticeText(couponSrc, formatVnd);
+  const goodsNet = Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount);
+  const { estimate, stale } = useShippingEstimate(selectedCount > 0 ? shipBase : null);
+  const ship = cartShippingView(estimate, { goodsNet, freeshipReached, stale });
 
   return (
     <StickyActionBar
@@ -1074,6 +1087,7 @@ function StickySummary({
             <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" style={COMPACT_ROW} />
           )}
           {tierDiscount > 0 && <KeyValueRow label={vi.cart.tierDiscount} value={`-${formatVnd(tierDiscount)}`} tone="success" style={COMPACT_ROW} />}
+          {ship && <KeyValueRow label={ship.feeLabel} value={ship.feeText} tone={ship.free ? 'success' : 'primary'} style={COMPACT_ROW} dataDs="cart-ship-estimate" />}
           {couponLine && (
             <Text size="xSmall" role="status" data-testid="coupon-notice" style={{ color: 'var(--color-text-warning)' }}>
               {couponLine}
@@ -1100,17 +1114,16 @@ function StickySummary({
       }
       lead={
         <>
-          {/* Con số này ĐÃ trừ giảm giá và CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán
-              là tiền hàng gộp chưa trừ gì — cùng một nhãn, hai số khác nhau, khách tưởng bị đội
-              giá (P2-4 audit mạch lạc). Nói rõ ngay trên nhãn, nhưng chỉ khi thật sự có giảm. */}
+          {/* Có phí giao ước tính: "Tổng tạm tính" = tiền hàng đã giảm + phí đó. Chưa có (đang hỏi, lỗi, có hàng gian hàng tự giao): số đã trừ giảm giá,
+              CHƯA gồm ship, trong khi "Tạm tính" ở màn Thanh toán là tiền hàng gộp chưa trừ gì — nên nhãn ghi "(đã giảm)" khi thật sự có giảm (P2-4). */}
           <div style={{ fontSize: 'var(--type-label-size)', lineHeight: 'var(--type-label-lh)', color: 'var(--color-text-secondary)', whiteSpace: 'nowrap' }}>
-            {cartTotalLabel(comboDiscount + discount + tierDiscount)}
+            {ship?.totalLabel ?? cartTotalLabel(comboDiscount + discount + tierDiscount)}
           </div>
           <div
             data-testid="cart-total-value"
             style={{ fontSize: 'var(--type-title-md-size)', lineHeight: 'var(--type-title-md-lh)', fontWeight: 700, color: 'var(--color-text-primary)', whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}
           >
-            {formatVnd(Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount))}
+            {formatVnd(ship?.total ?? goodsNet)}
           </div>
           {saving > 0 && (
             // Cùng màu deal và độ đậm với dòng "Tiết kiệm" của PDP (một màu cho mọi khoản giảm giá, DESIGN.md). Được xuống dòng tại khoảng trắng

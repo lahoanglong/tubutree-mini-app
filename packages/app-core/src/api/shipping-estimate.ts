@@ -46,12 +46,16 @@ export interface CartShippingView {
 /**
  * Dòng "Phí giao (ước tính)" và "Tổng tạm tính" dưới Tạm tính của giỏ. `freeshipReached` là trạng thái của thanh Miễn phí giao hàng đang
  * hiện (ngưỡng hoặc mã miễn phí giao của giỏ), để dòng phí không nói khác thanh. Chưa có ước tính thì null: giỏ giữ cách hiện cũ.
+ * `stale`: số của tiền hàng trước (đang hỏi lại sau khi đổi số lượng). Phí dưới ngưỡng là phí phẳng nên số cũ vẫn đúng, trừ khi số cũ là
+ * "miễn phí" mà thanh đã hết miễn phí: lúc đó chưa biết phí, không hiện dòng.
  */
 export function cartShippingView(
   est: ShippingEstimate | null | undefined,
-  opts: { goodsNet: number; freeshipReached: boolean },
+  opts: { goodsNet: number; freeshipReached: boolean; stale?: boolean },
 ): CartShippingView | null {
-  if (!est) return null;
+  // Phản hồi thiếu số (máy chủ cũ, proxy trả trang lỗi 200) thì coi như chưa có ước tính, không cộng ra "NaNđ".
+  if (!est || ![est.fee, est.feeMin, est.feeMax].every((n) => Number.isFinite(n) && n >= 0)) return null;
+  if (opts.stale && !opts.freeshipReached && est.feeMax === 0) return null;
   const free = opts.freeshipReached || est.feeMax === 0;
   const range = !free && est.feeMin !== est.feeMax;
   const fee = free ? 0 : est.fee;

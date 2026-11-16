@@ -70,7 +70,19 @@ describe('cartShippingView', () => {
     expect(v.total).toBeNull();
   });
 
+  it('phản hồi thiếu số hoặc số âm: coi như chưa có ước tính', () => {
+    expect(cartShippingView({ slug: 'x' } as never, { goodsNet: 100_000, freeshipReached: false })).toBeNull();
+    expect(cartShippingView(est({ fee: -1 }), { goodsNet: 100_000, freeshipReached: false })).toBeNull();
+  });
+
   it('tiền hàng âm (giảm vượt) không làm tổng âm', () => {
     expect(cartShippingView(est(), { goodsNet: -5, freeshipReached: false })!.total).toBe(19_000);
+  });
+
+  it('số cũ trong lúc hỏi lại: phí phẳng vẫn hiện; số cũ "miễn phí" mà thanh đã hết miễn phí thì ẩn dòng', () => {
+    expect(cartShippingView(est(), { goodsNet: 100_000, freeshipReached: false, stale: true })!.feeText).toBe('19.000đ');
+    const free = est({ fee: 0, feeMin: 0, feeMax: 0, missingForFreeship: 0 });
+    expect(cartShippingView(free, { goodsNet: 100_000, freeshipReached: false, stale: true })).toBeNull();
+    expect(cartShippingView(free, { goodsNet: 250_000, freeshipReached: true, stale: true })!.feeText).toBe('Miễn phí');
   });
 });

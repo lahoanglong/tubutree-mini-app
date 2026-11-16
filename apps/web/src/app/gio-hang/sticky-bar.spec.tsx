@@ -6,7 +6,13 @@ import { recallCheckoutSelection } from '@/lib/checkout-selection';
 
 // D7 việc 4: giỏ hàng trên điện thoại có thanh dính đáy (tạm tính đã giảm + "Thanh toán (N)" như Mini App), checkbox ≥ 24px.
 
-const state = vi.hoisted(() => ({ cart: null as unknown }));
+const state = vi.hoisted(() => ({ cart: null as unknown, ship: null as unknown, shipBase: undefined as number | null | undefined }));
+vi.mock('@/components/checkout/use-shipping-estimate', () => ({
+  useShippingEstimate: (base: number | null) => {
+    state.shipBase = base;
+    return { estimate: base ? (state.ship ?? undefined) : undefined, stale: false };
+  },
+}));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), usePathname: () => '/gio-hang' }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
@@ -41,6 +47,8 @@ const bar = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="stic
 beforeEach(() => {
   sessionStorage.clear();
   state.cart = cartOf([line({})]);
+  state.ship = null;
+  state.shipBase = undefined;
 });
 afterEach(() => {
   mounted.forEach((m) => m.unmount());
@@ -255,5 +263,41 @@ describe('/gio-hang — checkbox đủ lớn (≥ 24px)', () => {
     const boxes = Array.from(c.querySelectorAll<HTMLInputElement>('input[type="checkbox"]'));
     expect(boxes.length).toBe(2);
     expect(boxes.filter((b) => !/\bh-6\b/.test(b.className) || !/\bw-6\b/.test(b.className))).toEqual([]);
+  });
+});
+
+describe('/gio-hang — phí giao ước tính dưới Tạm tính', () => {
+  const est = (over: Record<string, unknown> = {}) => ({
+    fee: 19000, feeMin: 19000, feeMax: 19000, freeshipThreshold: 500000, missingForFreeship: 200000, isEstimate: true, provinceCode: null, provinceName: null, ...over,
+  });
+
+  it('dưới ngưỡng: thanh dính có một dòng phí và "Tổng tạm tính" cộng phí; khung md có Tạm tính, Phí giao, Tổng; không thêm nút', async () => {
+    const before = bar(await mount())!.querySelectorAll('button, a').length;
+    state.ship = est();
+    const c = await mount();
+    expect(state.shipBase).toBe(300000);
+    expect(bar(c)!.textContent).toContain('Phí giao (ước tính)19.000đ');
+    expect(bar(c)!.textContent).toContain('Tổng tạm tính319.000đ');
+    expect(bar(c)!.querySelectorAll('button, a')).toHaveLength(before);
+    const rows = c.querySelector<HTMLElement>('[data-testid="cart-summary-rows"]')!;
+    expect(rows.textContent).toContain('Tạm tính300.000đ');
+    expect(c.querySelector('[data-testid="cart-ship-estimate"]')!.textContent).toBe('Phí giao (ước tính)19.000đ');
+  });
+
+  it('đã đạt Miễn phí giao hàng: dòng phí "Miễn phí", tổng bằng tiền hàng', async () => {
+    state.cart = cartOf([line({})], { freeship: true, freeshipThreshold: 200000 });
+    state.ship = est({ fee: 0, feeMin: 0, feeMax: 0, missingForFreeship: 0 });
+    const c = await mount();
+    expect(bar(c)!.textContent).toContain('Phí giao (ước tính)Miễn phí');
+    expect(bar(c)!.textContent).toContain('Tổng tạm tính300.000đ');
+  });
+
+  it('có hàng gian hàng tự giao: không hỏi ước tính, giữ "Tạm tính" như cũ', async () => {
+    state.ship = est();
+    state.cart = cartOf([line({}), line({ id: 'i2', variationId: 'v2', fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' } })]);
+    const c = await mount();
+    expect(state.shipBase).toBeNull();
+    expect(bar(c)!.textContent).toContain('Tạm tính');
+    expect(bar(c)!.textContent).not.toContain('Phí giao (ước tính)');
   });
 });

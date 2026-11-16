@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
   getCouponPreviews: vi.fn(),
   applyCoupon: vi.fn(),
   getCoupons: vi.fn().mockResolvedValue([]),
+  shipEstimate: vi.fn((_base: number | null): { estimate: unknown; stale: boolean } => ({ estimate: undefined, stale: false })),
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
@@ -53,6 +54,7 @@ vi.mock('../components/checkout/voucher-sheet', () => ({
   },
 }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../components/checkout/use-shipping-estimate', () => ({ useShippingEstimate: mocks.shipEstimate }));
 vi.mock('../services/analytics', () => ({ trackEvent: vi.fn(), setCheckoutEntry: vi.fn() }));
 
 import CartPage from './cart';
@@ -784,6 +786,50 @@ describe('CartPage: nhãn tổng chỉ ghi "(đã giảm)" khi có giảm', () =
     mocks.getCart.mockResolvedValue(summary(over));
     renderPage();
     expect(await screen.findByText('Tạm tính (đã giảm)')).toBeInTheDocument();
+  });
+});
+
+describe('CartPage: phí giao ước tính và tổng tạm tính dưới Tạm tính', () => {
+  const est = (over: object = {}) => ({
+    fee: 19_000, feeMin: 19_000, feeMax: 19_000, freeshipThreshold: 200_000, missingForFreeship: 150_000, isEstimate: true, provinceCode: null, provinceName: null, ...over,
+  });
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.shipEstimate.mockImplementation(() => ({ estimate: undefined, stale: false }));
+  });
+
+  it('dưới ngưỡng: một dòng "Phí giao (ước tính)" và tổng tạm tính cộng phí; không thêm nút', async () => {
+    mocks.shipEstimate.mockImplementation(() => ({ estimate: est(), stale: false }));
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    expect(await screen.findByText('Phí giao (ước tính)')).toBeInTheDocument();
+    expect(screen.getByText('19.000đ')).toBeInTheDocument();
+    expect(screen.getByText('Tổng tạm tính')).toBeInTheDocument();
+    expect(screen.getByTestId('cart-total-value')).toHaveTextContent('69.000đ');
+    expect(mocks.shipEstimate).toHaveBeenLastCalledWith(50_000);
+  });
+
+  it('thanh Miễn phí giao hàng đã đạt: dòng phí ghi "Miễn phí", tổng bằng tiền hàng', async () => {
+    mocks.shipEstimate.mockImplementation(() => ({ estimate: est({ fee: 0, feeMin: 0, feeMax: 0, missingForFreeship: 0 }), stale: false }));
+    mocks.getCart.mockResolvedValue(summary({ items: [{ ...OK_LINE, quantity: 5, total: 250_000 }], subtotal: 250_000, freeship: true }));
+    renderPage();
+    expect(await screen.findByText('Miễn phí')).toBeInTheDocument();
+    expect(screen.getByTestId('cart-total-value')).toHaveTextContent('250.000đ');
+  });
+
+  it('chưa có ước tính (đang hỏi, lỗi): giữ "Tạm tính" như cũ, không dòng phí', async () => {
+    mocks.getCart.mockResolvedValue(summary({}));
+    renderPage();
+    expect(await screen.findByText('Tạm tính')).toBeInTheDocument();
+    expect(screen.queryByText('Phí giao (ước tính)')).toBeNull();
+  });
+
+  it('có hàng gian hàng tự giao: không hỏi ước tính (phí từng gian hàng chỉ biết ở Thanh toán)', async () => {
+    mocks.getCart.mockResolvedValue(summary({ items: [OK_LINE, { ...OK_LINE, id: 'ci-m', variationId: 'v-m', fulfiller: { kind: 'MERCHANT', storefrontId: 'sf1', name: 'Mật ong Linh' } }] }));
+    renderPage();
+    await screen.findByTestId('cart-total-value');
+    expect(mocks.shipEstimate).toHaveBeenLastCalledWith(null);
   });
 });
 

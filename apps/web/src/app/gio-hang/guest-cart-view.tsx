@@ -6,6 +6,9 @@ import { AlertTriangle, Trash2, Zap } from 'lucide-react';
 import { subtotalBucket } from '@tubutree/shared-types';
 import { CART_OUT_OF_STOCK } from '@tubutree/app-core/cart-copy';
 import { cartStockNote } from '@tubutree/app-core/commerce/stock-text';
+import { freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
+import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
+import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { Badge, Card, FreeShippingProgressBar, IconButton, PriceTag, ProductThumb, QuantitySelector } from '@/components/mini';
 import { StickyActionBar } from '@/components/sticky-action-bar';
@@ -39,6 +42,8 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
   useFlashListExpiry(flash);
   const view = guestCartView(lines, products, flash);
   const threshold = useFreeShipThreshold();
+  // Khách chưa đăng nhập: phí theo mức chung (không hạng, không ưu đãi đơn đầu), hỏi không kèm phiên. Có hàng gian hàng tự giao thì không ước tính.
+  const shipQ = useShippingEstimate(view.settled && !view.hasMerchant ? view.subtotal : null, { anonymous: true });
 
   // Cùng sự kiện với giỏ đã đăng nhập; khách chưa đăng nhập phân biệt bằng sự kiện không có tài khoản. Một lần mỗi lần mở giỏ, khi mọi dòng đã có giá.
   const viewed = useRef(false);
@@ -55,6 +60,10 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
   const showFreeship = view.settled && threshold !== null && (!view.hasMerchant || freeshipBase > 0);
   const subtotalLabel = fillCopy('cart.subtotal');
   const cta = fillCopy('guestCart.loginCta');
+  const freeshipReached = threshold !== null && freeshipProgress({ base: freeshipBase, threshold }).reached;
+  const ship = cartShippingView(shipQ.estimate, { goodsNet: view.subtotal, freeshipReached, stale: shipQ.stale });
+  const totalLabel = ship?.totalLabel ?? subtotalLabel;
+  const total = ship?.total ?? view.subtotal;
 
   return (
     <>
@@ -71,9 +80,21 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
         </div>
 
         <div data-testid="cart-summary" className={`hidden h-fit p-4 ${ui.card} lg:sticky lg:top-[calc(var(--header-h)+theme(spacing.4))] lg:block lg:self-start`}>
-          <div className="mb-3 flex justify-between font-bold text-stone-900">
-            <span>{subtotalLabel}</span>
-            <span className="tabular-nums">{formatVnd(view.subtotal)}</span>
+          {ship && (
+            <>
+              <div className="flex justify-between text-sm">
+                <span className="text-stone-600">{subtotalLabel}</span>
+                <span className="tabular-nums text-stone-900">{formatVnd(view.subtotal)}</span>
+              </div>
+              <div data-testid="cart-ship-estimate" className="mt-1 flex justify-between text-sm">
+                <span className="text-stone-600">{ship.feeLabel}</span>
+                <span className={`tabular-nums ${ship.free ? 'text-success-fg' : 'text-stone-900'}`}>{ship.feeText}</span>
+              </div>
+            </>
+          )}
+          <div className={`mb-3 flex justify-between font-bold text-stone-900 ${ship ? 'mt-3 border-t border-stone-200 pt-3' : ''}`}>
+            <span>{totalLabel}</span>
+            <span className="tabular-nums">{formatVnd(total)}</span>
           </div>
           <Link href={LOGIN_TO_ORDER} data-testid="guest-cart-login" className={`${ui.btnPrimary} w-full`}>
             {cta}
@@ -83,11 +104,17 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
 
       <StickyActionBar label="Đặt hàng" hideFrom="lg">
         <div className="md:mx-auto md:max-w-2xl">
+          {ship && (
+            <div className="mb-1 flex justify-between text-sm" data-ds="cart-ship-estimate">
+              <span className="text-stone-600">{ship.feeLabel}</span>
+              <span className={`font-semibold tabular-nums ${ship.free ? 'text-success-fg' : 'text-stone-900'}`}>{ship.feeText}</span>
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
             <div className="flex-[1000_1_0%]">
-              <div className="whitespace-nowrap text-label text-stone-600">{subtotalLabel}</div>
+              <div className="whitespace-nowrap text-label text-stone-600">{totalLabel}</div>
               <div data-testid="cart-total-value" className="whitespace-nowrap text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-stone-900">
-                {formatVnd(view.subtotal)}
+                {formatVnd(total)}
               </div>
             </div>
             <Link href={LOGIN_TO_ORDER} data-testid="guest-cart-login" className={`${uiBar.primary} flex-[1_0_auto] whitespace-nowrap`}>

@@ -9,6 +9,8 @@ import { useQuery, useQueryClient, useMutationState } from '@tanstack/react-quer
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } from '@tubutree/app-core/cart-copy';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
+import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
+import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -295,6 +297,15 @@ export default function CartPage() {
       });
   };
 
+  // Phí giao ước tính chỉ khi phần chọn toàn hàng Tubu giao (gian hàng tự giao có phí riêng, chỉ biết ở Thanh toán); tiền hàng như thanh Miễn phí giao hàng.
+  // Gọi trước các `return` theo phiên đăng nhập bên dưới.
+  const estSelected = (cartQ.data?.items ?? []).filter((it) => !deselected.has(it.id));
+  const estBase =
+    phase === 'authenticated' && estSelected.length > 0 && !estSelected.some((it) => it.fulfiller?.kind === 'MERCHANT')
+      ? estSelected.filter((it) => it.stock > 0).reduce((sum, it) => sum + it.total, 0)
+      : null;
+  const shipQ = useShippingEstimate(estBase);
+
   if (phase === 'loading') {
     return (
       <Shell>
@@ -374,9 +385,12 @@ export default function CartPage() {
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
   const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
   const payTotal = Math.max(0, shownSubtotal - shownCombo - shownDiscount - shownTier);
-  // Một nhãn cho số `payTotal` ở chân dính (375) và khung tóm tắt (md, lg), cùng chữ với Mini App; số này chưa gồm phí giao nên không ghi "Tổng".
   const hasDiscount = shownCombo + shownDiscount + shownTier > 0;
-  const totalLabel = cartTotalLabel(shownCombo + shownDiscount + shownTier);
+  // Có phí giao ước tính: "Tổng tạm tính" = tiền hàng đã giảm + phí. Chưa có thì như cũ: `payTotal` chưa gồm phí giao nên không ghi "Tổng".
+  // Một nhãn và một số cho chân dính (375) và khung tóm tắt (md, lg), cùng chữ với Mini App.
+  const ship = cartShippingView(shipQ.estimate, { goodsNet: payTotal, freeshipReached: !!freeship?.reached, stale: shipQ.stale });
+  const totalLabel = ship?.totalLabel ?? cartTotalLabel(shownCombo + shownDiscount + shownTier);
+  const shownTotal = ship?.total ?? payTotal;
   // Tiết kiệm = giá gạch của dòng mua được đang chọn + giảm combo đang hiện (chỉ hiển thị; tiền thật do máy chủ tính). Mã giảm giá và hạng đã có dòng riêng nên không cộng.
   const saving = cartSaving(buyableSelected, shownCombo);
   const onPay = () => {
@@ -669,8 +683,8 @@ export default function CartPage() {
 
           <div data-testid="cart-summary" className={`h-fit p-4 ${ui.card} max-md:contents lg:pb-0 lg:sticky lg:top-[calc(var(--header-h)+16px)] lg:self-start`}>
             <div data-testid="cart-summary-rows" className="max-md:hidden">
-            {/* Có giảm thì hàng này là tiền hàng chưa trừ, hàng cuối là số đã giảm; chưa giảm thì hai số bằng nhau nên chỉ giữ hàng cuối. */}
-            {hasDiscount && (
+            {/* Có giảm hay có phí giao thì hàng này là tiền hàng chưa trừ, hàng cuối là tổng; không có gì xen giữa thì hai số bằng nhau nên chỉ giữ hàng cuối. */}
+            {(hasDiscount || ship) && (
               <div className="flex justify-between text-sm">
                 <span className="text-stone-600">{cartTotalLabel(0)}</span>
                 <span className="text-stone-900">{formatVnd(shownSubtotal)}</span>
@@ -694,6 +708,12 @@ export default function CartPage() {
                 <span>-{formatVnd(shownTier)}</span>
               </div>
             )}
+            {ship && (
+              <div data-testid="cart-ship-estimate" className="mt-1 flex justify-between text-sm">
+                <span className="text-stone-600">{ship.feeLabel}</span>
+                <span className={ship.free ? 'text-success-fg' : 'text-stone-900'}>{ship.feeText}</span>
+              </div>
+            )}
             {saving > 0 && (
               <div data-testid="cart-saving" className="mt-1 text-right text-caption font-semibold text-[color:var(--color-text-price-deal)]">
                 {fillCopy('cart.saving', { x: formatVnd(saving) })}
@@ -706,13 +726,13 @@ export default function CartPage() {
             )}
             <div className="mt-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900 max-md:hidden lg:hidden">
               <span>{totalLabel}</span>
-              <span>{formatVnd(payTotal)}</span>
+              <span>{formatVnd(shownTotal)}</span>
             </div>
             {/* Dưới lg nút và lời giải thích nằm ở thanh dính đáy (cuối trang); từ lg giữ ở khung tóm tắt dính bên phải. */}
             <div className="hidden lg:sticky lg:bottom-0 lg:block lg:bg-stone-0 lg:py-4">
               <div className="mb-3 flex justify-between border-t border-stone-200 pt-3 font-bold text-stone-900">
                 <span>{totalLabel}</span>
-                <span>{formatVnd(payTotal)}</span>
+                <span>{formatVnd(shownTotal)}</span>
               </div>
               {selectedItems.length === 0 ? (
                 <>
@@ -790,11 +810,12 @@ export default function CartPage() {
             {phoneCoupon && couponBox(true)}
             <div className="mt-1 space-y-1">
               {/* Từ md khung tóm tắt trong thân trang đã ghi các khoản giảm và "Tiết kiệm": thanh dính chỉ giữ tổng + nút, không lặp lại. */}
-              {(shownCombo > 0 || shownDiscount > 0 || shownTier > 0) && (
+              {(shownCombo > 0 || shownDiscount > 0 || shownTier > 0 || ship) && (
                 <div className="space-y-1 md:hidden">
                   {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" style={{ padding: 0 }} />}
                   {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" style={{ padding: 0 }} />}
                   {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" style={{ padding: 0 }} />}
+                  {ship && <KeyValueRow label={ship.feeLabel} value={ship.feeText} tone={ship.free ? 'success' : 'primary'} style={{ padding: 0 }} dataDs="cart-ship-estimate" />}
                 </div>
               )}
               {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App). Khối tổng grow 1000 và không min-w-0, nên hàng chỉ xuống dòng khi số tiền (không ngắt được)
@@ -803,7 +824,7 @@ export default function CartPage() {
                 <div className="flex-[1000_1_0%]">
                   <div className="whitespace-nowrap text-label text-stone-600">{totalLabel}</div>
                   <div data-testid="cart-total-value" className="whitespace-nowrap text-[length:var(--type-title-md-size)] font-bold leading-[var(--type-title-md-lh)] tabular-nums text-stone-900">
-                    {formatVnd(payTotal)}
+                    {formatVnd(shownTotal)}
                   </div>
                   {saving > 0 && (
                     <div data-testid="cart-saving" className="text-caption font-semibold text-[color:var(--color-text-price-deal)] md:hidden">
