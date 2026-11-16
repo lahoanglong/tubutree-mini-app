@@ -49,6 +49,7 @@ export function NewbieGuide({
             <li key={step.title} aria-current={current ? 'step' : undefined} style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
               <span
                 aria-hidden
+                className="tubu-nums"
                 style={{
                   flexShrink: 0,
                   width: 24,

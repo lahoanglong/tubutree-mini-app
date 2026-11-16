@@ -50,6 +50,9 @@ for (const size of SIZES) {
           // không có localStorage: màn vẫn dựng
         }
       });
+      // client-api.ts ghi cờ phiên cả vào localStorage lẫn cookie `tubu_web_session`; middleware dùng cookie để chuyển "/" sang bản dựng sẵn khung chờ (khoi-phuc).
+      // Chỉ localStorage mà thiếu cookie không xảy ra trên máy thật (trừ khi cookie bị xoá riêng), nên đo Trang chủ với đủ cả hai như một máy mới đã đăng nhập.
+      if (entry.key === '/') await page.context().addCookies([{ name: 'tubu_web_session', value: '1', domain: 'localhost', path: '/' }]);
       mockTourWorld(api, tourUser(entry.role));
       entry.setup?.(api);
       // Các màn này gọi vài đường mà bản tham quan không mock; 404 là trạng thái đã đo ở bước kiểm toán, không phải lỗi của guard hình học.
@@ -62,6 +65,8 @@ for (const size of SIZES) {
       await page.evaluate(() => document.fonts.ready.then(() => undefined)).catch(() => {});
       await page.waitForTimeout(900);
 
+      // CLS đọc TRƯỚC bộ dò: bộ dò cuộn từng điều khiển vào tầm nhìn, làm lưới gợi ý vô tận tải thêm trang và dịch chân trang, không phải dịch của người dùng.
+      const cls = measuresCls(entry.key) ? await readClsTotal(page) : undefined;
       let p;
       try {
         p = await probeW182(page, { touch: size.width <= 768, capsule: false });
@@ -69,7 +74,6 @@ for (const size of SIZES) {
         recordFailure('web', entry, size, String(e));
         throw e;
       }
-      const cls = measuresCls(entry.key) ? await readClsTotal(page) : undefined;
       if (SHOTS) {
         await shootJpeg(page, shotPath('web', entry.key, size, ''), true);
         record('web', entry, size, p, cls);
@@ -79,7 +83,8 @@ for (const size of SIZES) {
       if (size.width <= 768) expect(p.small, `vùng chạm nhỏ ${JSON.stringify(p.small)}`).toEqual([]);
       expect(p.textOverlap, 'chữ đè nhau').toEqual([]);
       expect(p.floating.filter((f) => f.overlaps.length > 0), 'nút nổi đè nội dung').toEqual([]);
-      // CLS của web đã có bộ giữ riêng (home-cls.web.spec: trần 0,2 khi máy mới, 0,02 khi đã nhớ); ở đây chỉ chặn PDP ở mức "tốt" của Core Web Vitals.
+      expect(p.ellipsizedCta, 'nhãn nút bị cắt thành …').toEqual([]);
+      // CLS của web đã có bộ giữ riêng (home-cls.web.spec: trần 0,1 khi máy mới, 0,02 khi đã nhớ hoặc tổng quan về nhanh); ở đây chỉ chặn PDP ở mức "tốt" của Core Web Vitals.
       if (cls && entry.key === '/product/:slug') expect(cls.cls, `CLS ${cls.sources.join(' ; ')}`).toBeLessThanOrEqual(0.1);
     });
   }

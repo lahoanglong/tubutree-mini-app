@@ -125,7 +125,7 @@ test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
     });
   }
 
-  test('800px: mục "Đổi rác" chèn vào hàng điều hướng sau khi focus đã ở "Cộng đồng" thì "Cộng đồng" vẫn nằm trọn trong khung', async ({ page, api }) => {
+  test('800px: cấu hình công khai về muộn không đổi hàng điều hướng (5 mục cố định) nên mục đang focus không bị đẩy ra ngoài khung', async ({ page, api }) => {
     mockBuyer(api, { lines: 2 });
     let release!: () => void;
     const configGate = new Promise<void>((resolve) => {
@@ -138,15 +138,18 @@ test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
     await page.setViewportSize({ width: 800, height: 720 });
     await page.goto('/gio-hang');
     const navItems = page.locator('[data-desktop-nav] li');
-    await expect(navItems).toHaveCount(8, { timeout: 20_000 });
-    const community = page.getByRole('navigation', { name: 'Điều hướng chính' }).getByRole('link', { name: 'Cộng đồng' });
-    for (let i = 0; i < 20 && !(await community.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab');
-    await expect(community).toBeFocused();
+    await expect(navItems).toHaveCount(5, { timeout: 20_000 });
+    const last = page.getByRole('navigation', { name: 'Điều hướng chính' }).getByRole('link', { name: 'Hành trình nguyên liệu' });
+    for (let i = 0; i < 20 && !(await last.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press('Tab');
+    await expect(last).toBeFocused();
+    const configLoaded = page.waitForResponse((r) => new URL(r.url()).pathname.endsWith('/config/public'));
     release();
-    await expect(navItems).toHaveCount(9);
+    await configLoaded;
+    await page.evaluate(() => new Promise<void>((done) => requestAnimationFrame(() => requestAnimationFrame(() => done()))));
+    await expect(navItems).toHaveCount(5);
     await expect
       .poll(() =>
-        community.evaluate((el) => {
+        last.evaluate((el) => {
           const b = el.getBoundingClientRect();
           const top = document.elementFromPoint(b.left + b.width / 2, b.top + b.height / 2);
           return b.left >= 0 && b.right <= window.innerWidth && !!top && (el === top || el.contains(top));

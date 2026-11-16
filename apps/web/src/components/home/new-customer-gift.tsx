@@ -59,7 +59,7 @@ function voucherTitle(v: NonNullable<NewCustomerOffer['welcomeVoucher']>): strin
  * Dải gọn một dòng (cao bằng thẻ thành viên), chi tiết mở bằng "Xem quyền lợi". Đang tải: khung chờ cùng chiều cao; lỗi tải hay thiếu cấu hình: thu lại,
  * không hiện số suy đoán. Khách chưa đăng nhập được hứa mã chào mừng theo cấu hình công khai và nút "Nhận quà" dẫn tới đăng nhập (như Mini App).
  */
-export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfig } = {}) {
+export function NewCustomerGift({ initialConfig, holdWhile = false }: { initialConfig?: PublicConfig; /** Giữ khung chờ thay vì thu khối lại: khối sắp biến mất (không phải khách mới) nhưng "Việc cần làm" chưa biết có hiện hay không, để hai thay đổi cùng một khung hình (xem `HomeViewBody`). */ holdWhile?: boolean } = {}) {
   const [expanded, setExpanded] = useState(false);
   const phase = useAuthPhase();
   const restoring = useAuthRestoring();
@@ -77,7 +77,7 @@ export function NewCustomerGift({ initialConfig }: { initialConfig?: PublicConfi
   if (phase === 'unavailable') return null;
   if (cfgQ.isError || (authed && offerQ.isError)) return null;
   if (restoring || cfgQ.isPending || (authed && offerQ.isPending)) return <NewCustomerGiftSkeleton />;
-  if (authed && offerQ.data?.isNewCustomer !== true) return null;
+  if (authed && offerQ.data?.isNewCustomer !== true) return holdWhile ? <NewCustomerGiftSkeleton /> : null;
 
   const voucher = authed ? (offerQ.data?.welcomeVoucher ?? null) : null;
   // Khách chưa đăng nhập chưa có mã riêng: nói mệnh giá mã chào mừng từ cấu hình công khai (thiếu thì không hứa số), kèm nút đăng nhập để nhận.

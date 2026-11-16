@@ -62,7 +62,7 @@ function EventMeta({ event }: { event: CommunityEvent }) {
           {vi.community.eventEnds}: {formatDate(event.endAt)}
         </Text>
         {event.rewardPoints > 0 && (
-          <Text variant="caption" tone="tertiary" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+          <Text variant="caption" tone="tertiary" numeric style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
             <Icon icon={Gift} size="sm" tone="muted" />
             {formatPoints(event.rewardPoints)}
           </Text>

@@ -355,7 +355,7 @@ function AccountContent() {
         </div>
        </div>
 
-        <section aria-label={homeCopy.profile.ordersTitle} className="px-4 pt-3 md:px-0 lg:pt-0 xl:col-span-2">
+        <section aria-label={homeCopy.profile.ordersTitle} className="px-4 pt-3 md:px-0 lg:col-span-full lg:pt-0 xl:col-span-2">
           <Card padding={12}>
             <div className="mb-2 flex items-center justify-between">
               <Heading variant="title-sm" as="h2">
@@ -416,7 +416,7 @@ function AccountContent() {
         </section>
 
         {code && (
-          <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={fillCopy('invite.title')} className="px-4 pt-3 md:px-0 lg:pt-0">
+          <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={fillCopy('invite.title')} className="px-4 pt-3 md:px-0 lg:col-start-1 lg:row-span-2 lg:row-start-3 lg:pt-0 xl:col-start-3 xl:row-start-2">
             <Card padding={12}>
               <Heading variant="title-sm" as="h2">
                 {fillCopy('invite.title')}

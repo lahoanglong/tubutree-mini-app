@@ -64,6 +64,7 @@ export function MissionsCard({
                 <Text
                   variant="body-sm"
                   tone={m.claimed ? 'tertiary' : 'primary'}
+                  numeric
                   style={{ fontWeight: m.claimed ? 400 : 600, display: 'inline-flex', alignItems: 'center', gap: 4 }}
                 >
                   {m.claimed && <Icon icon={Check} size="sm" tone="brand" />}
@@ -71,7 +72,7 @@ export function MissionsCard({
                   {m.claimed && <span style={SR_ONLY}> (đã nhận thưởng)</span>}
                 </Text>
                 {!m.pointsBlocked && (
-                  <Text variant="caption" tone="brand" style={{ whiteSpace: 'nowrap' }}>
+                  <Text variant="caption" tone="brand" numeric style={{ whiteSpace: 'nowrap' }}>
                     +{formatNumber(m.rewardPoints)} Điểm Xanh
                   </Text>
                 )}

@@ -191,7 +191,7 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
           </span>
           <div style={{ ...COLUMN, gap: 4, flex: 1, minWidth: 0 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, justifyContent: 'space-between' }}>
-              <Text variant="body-md" as="div" style={{ fontWeight: 600 }}>{reward.name}</Text>
+              <Text variant="body-md" as="div" numeric style={{ fontWeight: 600 }}>{reward.name}</Text>
               {reward.label && !freeNote && <Badge tone="brand">{reward.label}</Badge>}
             </div>
             {reward.description && <Text variant="caption" tone="secondary" as="div">{reward.description}</Text>}
@@ -204,12 +204,12 @@ function RewardCard({ reward, catalog, onRedeem, preview = false }: { reward: Re
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <Text variant="body-sm" tone="brand" as="div" style={{ fontWeight: 600 }}>{formatPoints(reward.pointsCost)}</Text>
+          <Text variant="body-sm" tone="brand" as="div" numeric style={{ fontWeight: 600 }}>{formatPoints(reward.pointsCost)}</Text>
           {!preview && s.kind === 'redeem' && <Button style={{ minWidth: 88 }} onPress={onRedeem}>Đổi</Button>}
           {!preview && s.kind === 'needPhoneVerify' && <Button disabled>Đổi</Button>}
           {s.kind === 'soldOut' && <Badge>Đã hết</Badge>}
           {!preview && s.kind === 'locked' && <Button disabled>Chờ mở khoá điểm</Button>}
-          {!preview && s.kind === 'need' && <Text variant="caption" tone="secondary" as="div">{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>}
+          {!preview && s.kind === 'need' && <Text variant="caption" tone="secondary" as="div" numeric>{`Cần thêm ${formatNumber(s.missing)} điểm`}</Text>}
         </div>
         {!preview && s.kind === 'need' && <ProgressBar value={reward.pointsCost - s.missing} max={reward.pointsCost} ariaLabel={`${reward.name}: điểm đang có so với điểm cần để đổi`} />}
       </div>
@@ -304,7 +304,7 @@ function RewardsBody() {
     <div style={{ ...COLUMN, padding: 16, paddingBottom: 48, gap: 16 }}>
       <div style={{ ...COLUMN, gap: 4 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-          <Heading variant="display-md" as="div">{formatPoints(total)}</Heading>
+          <Heading variant="display-md" as="div" className="tubu-nums">{formatPoints(total)}</Heading>
           <Button variant="ghost" icon={Info} onPress={() => setRulesOpen(true)} style={{ flexShrink: 0 }}>{rewardsGuideCopy.rulesButton}</Button>
         </div>
         {c.redeemablePoints !== total && (

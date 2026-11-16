@@ -30,6 +30,8 @@ export const MAIN = new Set([
   '/rewards',
   '/recycle',
   '/game',
+  '/group-buy',
+  '/group-buy/:id',
   '/loyalty',
   '/wallet',
 ]);

@@ -453,10 +453,10 @@ function GroupCard({
             {g.product.name}
           </Text>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Text variant="body-sm" tone="brand" style={{ fontWeight: 600 }}>{prices.group}</Text>
+            <Text variant="body-sm" tone="brand" numeric style={{ fontWeight: 600 }}>{prices.group}</Text>
             <Badge tone="promo" size="sm">−{g.discountPct}%</Badge>
           </div>
-          <Text variant="caption" tone="tertiary" as="div">{prices.solo}</Text>
+          <Text variant="caption" tone="tertiary" as="div" numeric>{prices.solo}</Text>
           <Text variant="caption" tone="tertiary" as="div">
             {g.currentSize}/{g.targetSize} người · {g.status === 'SUCCESS' ? 'đã đủ nhóm' : timeLeft(g.expiresAt)}
           </Text>

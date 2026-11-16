@@ -19,6 +19,7 @@ const LOGO_WIDTH = 83;
 // chữ bắt đầu ở cột 63: 20px (= cột 60) cắt đúng khe trống; rộng hơn sẽ lộ một dải chữ "T"/"S" bên phải.
 const LOGO_MARK_WIDTH = 20;
 // Chừa vùng viên thuốc 96px thì ô tìm còn ~116px ở 360 (chữ gợi ý chỉ lọt ~60px, thành "Bạn tì…"): từ khổ này trở xuống chỉ giữ biểu tượng kính lúp, tên truy cập vẫn là aria-label.
+// Ở 375 ô tìm còn ~131px (chữ lọt ~77px, một dòng cần ~115px): chữ xuống hai dòng cân nhau ("Bạn tìm gì" / "hôm nay?", 2 × 22px + viền 1px ≈ 46px, vẫn lọt header 56px; `WebkitLineClamp: 2` chặn khi chữ phóng to) thay vì cắt thành "Bạn tìm gì hôm…".
 const COMPACT_SEARCH_MAX_WIDTH = 360;
 const COMPACT_SEARCH_QUERY = `(max-width: ${COMPACT_SEARCH_MAX_WIDTH}px)`;
 
@@ -83,7 +84,7 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
       >
         <Icon icon={Search} size="sm" tone="muted" />
         {!compactSearch && (
-          <Text variant="body-sm" tone="tertiary" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <Text variant="body-sm" tone="tertiary" style={{ minWidth: 0, textWrap: 'balance', display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2, overflow: 'hidden' }}>
             {vi.home.searchPlaceholder}
           </Text>
         )}

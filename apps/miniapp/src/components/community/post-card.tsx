@@ -169,7 +169,7 @@ export default function PostCard({ post, onClick }: { post: FeedItem; onClick: (
         </div>
       )}
       <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
-        <Text variant="body-sm" tone="secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+        <Text variant="body-sm" tone="secondary" numeric style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
           <Icon icon={MessageCircle} size="sm" tone="muted" />
           {post.commentCount}
         </Text>

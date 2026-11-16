@@ -66,7 +66,7 @@ export default function RecycleDonePage() {
   return shell(
     <>
       {awarded > 0 ? (
-        <Heading variant="display-md" as="h2">{`Đã cộng ${formatPoints(awarded)}`}</Heading>
+        <Heading variant="display-md" as="h2" className="tubu-nums">{`Đã cộng ${formatPoints(awarded)}`}</Heading>
       ) : (
         <div style={{ ...COLUMN, gap: 6 }}>
           <Heading variant="display-md" as="h2">Lượt này chưa đủ để cộng điểm</Heading>
@@ -80,7 +80,7 @@ export default function RecycleDonePage() {
       <DeclaredCountedTable lines={r.lines} />
       {me && (
         <div style={{ ...COLUMN, gap: 8 }}>
-          <Text variant="body-md" as="div">{`Số dư mới ${formatPoints(pointsSummary(me.balance ?? { pointsBalance: 0 }).total)}`}</Text>
+          <Text variant="body-md" as="div" numeric>{`Số dư mới ${formatPoints(pointsSummary(me.balance ?? { pointsBalance: 0 }).total)}`}</Text>
           {p && <ProgressBar value={p.have} max={p.cost} label={`Còn ${formatPoints(p.missing)} tới ${p.rewardName}`} />}
         </div>
       )}

@@ -293,6 +293,21 @@
   line-height: var(--type-body-sm-lh);
 }
 
+/* Nhãn dài của nút trong thẻ giới thiệu (hẹp 254px ở 320): xuống hai dòng thay vì "…"; cao tự giãn, tối thiểu 44px. Bộ chọn dài hơn luật rút gọn nhãn của `.tubu-btn` nên thắng bất kể thứ tự nạp. */
+.tubu-subs-hero .tubu-subs-cta {
+  height: auto;
+  padding: 8px 16px;
+  white-space: normal;
+}
+.tubu-subs-hero .tubu-subs-cta .zaui-btn-container > span:not(.zaui-btn-icon):not(.zaui-btn-loading-container) {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+  text-wrap: balance;
+  padding-block: 0;
+  margin-block: 0;
+}
+
 .tubu-subs-dot {
   flex: 0 0 auto;
   width: 6px;

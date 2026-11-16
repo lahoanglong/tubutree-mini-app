@@ -76,7 +76,7 @@ export function CheckInStreak({
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between', gap: 8, marginTop: 8 }}>
           <Text variant="body-sm" tone="secondary" style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}>
             <Icon icon={Snowflake} size="sm" tone="muted" />
-            Vé giữ lửa: <span style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{profile?.streakFreezes ?? 0}</span>
+            Vé giữ lửa: <span className="tubu-nums" style={{ fontWeight: 700, color: 'var(--color-text-primary)' }}>{profile?.streakFreezes ?? 0}</span>
           </Text>
           <Button
             variant="secondary"

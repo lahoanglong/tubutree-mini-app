@@ -148,6 +148,25 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(c.textContent).toBe('');
   });
 
+  it('khách đã có đơn nhưng Trang chủ còn chờ tổng quan đơn (holdWhile): giữ khung chờ thay vì thu lại, thu lại khi hết chờ', async () => {
+    offer = { isNewCustomer: false, welcomeVoucher: null };
+    mounted = render(<NewCustomerGift holdWhile />);
+    await flush(8);
+    expect(mounted.container.querySelector('[data-testid="new-customer-gift-loading"]')).not.toBeNull();
+    mounted.unmount();
+    mounted = render(<NewCustomerGift holdWhile={false} />);
+    await flush(8);
+    expect(mounted.container.querySelector('[data-testid="new-customer-gift-loading"]')).toBeNull();
+    expect(mounted.container.textContent).toBe('');
+  });
+
+  it('khách mới thật + holdWhile: vẫn hiện dải quà (giữ khung chờ chỉ áp cho khối sắp biến mất)', async () => {
+    mounted = render(<NewCustomerGift holdWhile />);
+    await flush(8);
+    expect(region(mounted.container)).not.toBeNull();
+    expect(mounted.container.querySelector('[data-testid="new-customer-gift-loading"]')).toBeNull();
+  });
+
   it('đang tải ưu đãi hoặc cấu hình: giữ chỗ bằng khung chờ cao bằng dải thật, không hiện số', async () => {
     offer = never;
     let c = await mount();

@@ -104,6 +104,7 @@ export default function BrandStoryPage() {
               }}
             >
               <span
+                className="tubu-nums"
                 style={{
                   display: 'block',
                   fontFamily: 'var(--font-display)',

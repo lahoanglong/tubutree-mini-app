@@ -350,7 +350,7 @@ export default function RecyclePage() {
           <Text variant="caption" tone="tertiary" as="div">
             Điểm Xanh của bạn
           </Text>
-          <Heading variant="display-md" as="p">
+          <Heading variant="display-md" as="p" className="tubu-nums">
             {formatPoints(total)}
           </Heading>
           {total > 0 && (

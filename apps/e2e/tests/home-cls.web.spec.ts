@@ -5,18 +5,26 @@ const USER = {
   id: 'u-cls', fullName: 'Nguyễn Văn An', referralCode: 'AN123', phone: '0912345678', role: 'CUSTOMER',
   pointsBalance: 60, pointsConvertedBalance: 0, walletBalance: 0,
 };
-/** Ngưỡng theo số đo thật (home-r3a.md): máy đã nhớ 0,0004 (375) / 0,0074 (1280); máy mới 0,076 (375) vì HIEUNANG-03 còn hoãn (summary về muộn chèn dòng Việc cần làm). Chặn hồi quy, không phải mục tiêu. */
+/** Ngưỡng theo số đo thật: máy đã nhớ 0,0004 (375) / 0,0074 (1280). Máy mới mà tổng quan đơn về RẤT chậm (sau khung chờ chung 4,5 giây) thì dòng Việc cần làm chen vào một lần, 0,078 (375): trần 0,1 là mức "tốt" của Core Web Vitals. Tổng quan về nhanh thì khung chờ chung che hết, gần như 0. */
 const CLS_REMEMBERED_MAX = 0.02;
-const CLS_FRESH_MAX = 0.2;
+const CLS_FRESH_MAX = 0.1;
+const CLS_FRESH_FAST_MAX = 0.02;
 const SHOT_DIR = process.env.HOME_SHOT_DIR;
 
-/** Web: Trang chủ khách cũ khi /me/summary về muộn báo có đơn đang xử lý. Ghi CLS; ngưỡng chỉ chặn hồi quy lớn, số thật đọc ở annotation. */
+/** Ba tình huống máy; `slow` = /me/summary giữ lại tới sau khi trang dựng xong. */
+const VARIANTS = [
+  { remembered: false, slow: true, title: 'máy mới chưa nhớ gì, tổng quan đơn về rất chậm', max: CLS_FRESH_MAX, tag: 'chua-nho' },
+  { remembered: false, slow: false, title: 'máy mới chưa nhớ gì, tổng quan đơn về nhanh', max: CLS_FRESH_FAST_MAX, tag: 'chua-nho-nhanh' },
+  { remembered: true, slow: true, title: 'máy đã nhớ loại khách và số dòng việc', max: CLS_REMEMBERED_MAX, tag: 'nho' },
+];
+/** Web: Trang chủ khi /me/summary về muộn báo có đơn đang xử lý. Ghi CLS; ngưỡng chỉ chặn hồi quy lớn, số thật đọc ở annotation. */
 for (const vp of [{ name: 'web375', width: 375, height: 812 }, { name: 'web1280', width: 1280, height: 800 }]) {
-  for (const remembered of [false, true]) {
-    test(`CLS Trang chủ ${vp.name}, ${remembered ? 'máy đã nhớ loại khách và số dòng việc' : 'máy mới chưa nhớ gì'}`, async ({ page, api }) => {
+  for (const { remembered, slow, title, max, tag } of VARIANTS) {
+    test(`CLS Trang chủ ${vp.name}, ${title}`, async ({ page, api }) => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       let release!: () => void;
       const hold = new Promise<void>((resolve) => { release = resolve; });
+      if (!slow) release();
       // Bản server dựng khung chờ theo cookie gợi ý (middleware rewrite "/" sang /khoi-phuc/<slug>).
       await page.context().addCookies([
         { name: 'tubu_web_session', value: '1', domain: 'localhost', path: '/' },
@@ -69,9 +77,9 @@ for (const vp of [{ name: 'web375', width: 375, height: 812 }, { name: 'web1280'
       const cls = await page.evaluate(() => (window as unknown as { __cls: number }).__cls);
       test.info().annotations.push({ type: 'CLS', description: cls.toFixed(4) });
       console.log((await page.evaluate(() => (window as unknown as { __src: string[] }).__src)).map((x) => `  shift ${x}`).join('\n'));
-      console.log(`CLS ${vp.name} ${remembered ? 'nho' : 'chua-nho'} = ${cls.toFixed(4)}`);
-      if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/${vp.name}-${remembered ? 'nho' : 'chua-nho'}.png` });
-      expect(cls).toBeLessThan(remembered ? CLS_REMEMBERED_MAX : CLS_FRESH_MAX);
+      console.log(`CLS ${vp.name} ${tag} = ${cls.toFixed(4)}`);
+      if (SHOT_DIR) await page.screenshot({ path: `${SHOT_DIR}/${vp.name}-${tag}.png` });
+      expect(cls).toBeLessThan(max);
     });
   }
 }

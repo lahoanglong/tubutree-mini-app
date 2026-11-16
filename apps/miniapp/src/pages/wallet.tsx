@@ -73,7 +73,7 @@ export default function WalletPage() {
   );
 
   return (
-    <Page style={{ background: 'var(--color-bg-canvas)' }}>
+    <Page className="tubu-nums" style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title={vi.profile.wallet} />
       {phase !== 'authenticated' ? (
         <AuthPhaseView phase={phase} loading={pageSkeleton} />

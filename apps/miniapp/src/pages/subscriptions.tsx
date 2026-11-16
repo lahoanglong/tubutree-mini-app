@@ -63,7 +63,7 @@ export default function SubscriptionsPage() {
           </Text>
           {authed && !hasSubscription && (
             <div>
-              <Button variant="secondary" size="md" onPress={() => goSmart('/orders?tab=subscriptions')}>
+              <Button variant="secondary" size="md" className="tubu-subs-cta" onPress={() => goSmart('/orders?tab=subscriptions')}>
                 Xem mục Định kỳ trong Đơn hàng
               </Button>
             </div>

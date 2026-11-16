@@ -100,7 +100,9 @@ export async function probeW182(page: Page, options: ProbeOptions): Promise<W182
         return null;
       };
       // `lines`: từng dòng chữ riêng (đã cắt theo vùng ẩn tràn); hộp bao `r` của link xuống dòng phủ cả chỗ chữ khác nên chỉ so từng dòng với nhau.
-      const textBoxes: { el: Element; r: DOMRect; text: string; clip: Element | null; lines: DOMRect[] }[] = [];
+      // Chữ nằm hoàn toàn ngoài vùng cuộn (không còn dòng nào sau khi cắt): chỉ dùng cho phép đo khoảng trống dọc.
+      const rawOnly: { el: Element; raw: [number, number] }[] = [];
+      const textBoxes: { el: Element; r: DOMRect; raw: [number, number]; text: string; clip: Element | null; lines: DOMRect[] }[] = [];
       for (const el of all) {
         if (hidden(el) || !shown(el)) continue;
         // Chữ chỉ dành cho trình đọc màn hình (sr-only: hộp 1×1px, bị cắt) không phải chữ nhìn thấy.
@@ -114,6 +116,9 @@ export async function probeW182(page: Page, options: ProbeOptions): Promise<W182
         let x2 = -Infinity;
         let y2 = -Infinity;
         const lines: DOMRect[] = [];
+        // `raw`: khoảng y của chữ CHƯA cắt theo vùng cuộn (Mini cuộn trong `.zaui-page`: chữ dưới nếp gập bị cắt khỏi `lines` nhưng vẫn là nội dung của trang, cần cho phép đo khoảng trống dọc).
+        let rawY1 = Infinity;
+        let rawY2 = -Infinity;
         // Chữ bị cắt bởi chính phần tử (line-clamp, truncate) hay bởi cha cuộn/ẩn tràn không nhìn thấy được: chỉ tính phần nằm trong mọi vùng cắt,
         // nếu không dòng bị ẩn của đoạn rút gọn sẽ bị coi là đè lên chữ bên dưới.
         const clips: DOMRect[] = [];
@@ -124,6 +129,10 @@ export async function probeW182(page: Page, options: ProbeOptions): Promise<W182
         for (const n of own) {
           range.selectNodeContents(n);
           for (const rr of Array.from(range.getClientRects())) {
+            if (rr.width > 1 && rr.height > 1) {
+              rawY1 = Math.min(rawY1, rr.top);
+              rawY2 = Math.max(rawY2, rr.bottom);
+            }
             let left = rr.left;
             let top = rr.top;
             let right = rr.right;
@@ -142,8 +151,11 @@ export async function probeW182(page: Page, options: ProbeOptions): Promise<W182
             y2 = Math.max(y2, bottom);
           }
         }
-        if (!Number.isFinite(x1)) continue;
-        textBoxes.push({ el, r: new DOMRect(x1, y1 + window.scrollY, x2 - x1, y2 - y1), text: own.map((n) => n.textContent ?? '').join(' ').trim().replace(/\s+/g, ' ').slice(0, 24), clip: clipperOf(el), lines });
+        if (!Number.isFinite(x1)) {
+          if (Number.isFinite(rawY1)) rawOnly.push({ el, raw: [rawY1 + window.scrollY, rawY2 + window.scrollY] });
+          continue;
+        }
+        textBoxes.push({ el, r: new DOMRect(x1, y1 + window.scrollY, x2 - x1, y2 - y1), raw: [rawY1 + window.scrollY, rawY2 + window.scrollY], text: own.map((n) => n.textContent ?? '').join(' ').trim().replace(/\s+/g, ' ').slice(0, 24), clip: clipperOf(el), lines });
       }
 
       // Chữ bị cắt không có dấu hiệu (không ellipsis, không line-clamp).
@@ -205,6 +217,8 @@ export async function probeW182(page: Page, options: ProbeOptions): Promise<W182
           continue;
         }
         if (getComputedStyle(el).pointerEvents === 'none' || (r.width < 6 && r.height < 6)) continue;
+        // Nút Quay lại của web (BackButton): khi trang đã cuộn nó đi cùng thanh nền đặc cao 56px phủ ngang nên đè nội dung đã cuộn qua là thiết kế (trang có tự cuộn xuống tin mới như /chat). Ở đầu trang vẫn kiểm.
+        if (el.getAttribute('aria-label') === 'Quay lại' && window.scrollY > 8) continue;
         const overlaps: string[] = [];
         for (const c of contentLeaves) {
           if (el.contains(c)) continue;
@@ -248,23 +262,38 @@ export async function probeW182(page: Page, options: ProbeOptions): Promise<W182
       }
       grids.sort((a, b) => b.kids - a.kids);
 
-      // Khoảng trống dọc: hợp các khoảng y của lá nội dung, tìm khe lớn nhất bên trong trang.
-      const spans: [number, number][] = textBoxes
-        .filter(({ el }) => !fixedAncestor(el))
-        .map(({ r }) => [r.top, r.bottom] as [number, number])
+      // Khoảng trống dọc: hợp các khoảng y của lá nội dung, tìm khe lớn nhất bên trong trang. Phần tử `sticky` (thanh điều hướng tài khoản) là nội dung thật nên tính vào;
+      // chỉ `fixed` mới bị loại. Trang ngắn hơn khung nhìn thì chân trang bị đẩy xuống đáy (`flex-1` ở layout.tsx): khe giữa nội dung và chân trang là thiết kế, không tính.
+      const fixedOnly = (el: Element): boolean => {
+        for (let n: Element | null = el; n && n !== document.documentElement; n = n.parentElement) if (getComputedStyle(n).position === 'fixed') return true;
+        return false;
+      };
+      const docHeight = Math.max(document.documentElement.scrollHeight, document.body.scrollHeight);
+      const inFooter = (el: Element): boolean => !!el.closest('footer');
+      const spans: [number, number, boolean][] = [...textBoxes, ...rawOnly]
+        .filter(({ el }) => !fixedOnly(el))
+        .map(({ el, raw }) => [raw[0], raw[1], inFooter(el)] as [number, number, boolean])
         .concat(
           all
-            .filter((el) => !hidden(el) && shown(el) && !fixedAncestor(el) && el.matches('img, svg, video, canvas, input, select, textarea, button'))
+            .filter(
+              (el) =>
+                !hidden(el) &&
+                shown(el) &&
+                !fixedOnly(el) &&
+                // Thẻ ảnh dựng bằng nền CSS (ảnh thương hiệu thay ảnh sản phẩm) là nội dung thật dù không có chữ trong DOM.
+                (el.matches('img, svg, video, canvas, input, select, textarea, button') || (getComputedStyle(el).backgroundImage !== 'none' && el.getBoundingClientRect().height >= 40)),
+            )
             .map((el) => {
               const r = el.getBoundingClientRect();
-              return [r.top + window.scrollY, r.bottom + window.scrollY] as [number, number];
+              return [r.top + window.scrollY, r.bottom + window.scrollY, inFooter(el)] as [number, number, boolean];
             }),
         )
         .sort((a, b) => a[0] - b[0]);
       let maxGap = { y: 0, h: 0 };
       let reach = spans[0]?.[1] ?? 0;
-      for (const [t, b] of spans) {
-        if (t - reach > maxGap.h) maxGap = { y: Math.round(reach), h: Math.round(t - reach) };
+      for (const [t, b, footer] of spans) {
+        const byDesign = footer && docHeight <= vh + 2;
+        if (!byDesign && t - reach > maxGap.h) maxGap = { y: Math.round(reach), h: Math.round(t - reach) };
         reach = Math.max(reach, b);
       }
 
@@ -295,7 +324,7 @@ export async function probeW182(page: Page, options: ProbeOptions): Promise<W182
     },
     { capsule: options.capsule },
   );
-  const layout = await probeLayout(page);
+  const layout = await probeLayout(page, { ignoreNumeric: ['[data-testid="coupon-discount"]'] });
   // Cuối cùng vì probeTapTargets cuộn từng điều khiển vào giữa khung nhìn.
   const small = options.touch ? await probeTapTargets(page) : [];
   return { ...base, small, notTabular: layout.notTabular, stickyBar: layout.stickyBar };

@@ -201,11 +201,12 @@ async function seedAll(): Promise<void> {
     await prisma.feedPost.deleteMany({ where: { id: { startsWith: W9 } } });
     await prisma.product.deleteMany({ where: { id: { startsWith: W9 } } });
 
+    // API chỉ gán vai trò cho SĐT đã xác minh trên Mini App (`phoneVerifiedAt`), nên người dùng mẫu có SĐT thì coi như đã xác minh.
     const user = (id: string, zalo: string, fullName: string, phone: string | null, refCode: string, role = 'CUSTOMER') =>
       prisma.user.upsert({
         where: { id },
-        update: { role, isBlocked: false, blockedReason: null, fullName, phone },
-        create: { id, zaloId: zalo, role, fullName, phone, referralCode: refCode },
+        update: { role, isBlocked: false, blockedReason: null, fullName, phone, phoneVerifiedAt: phone ? new Date() : null },
+        create: { id, zaloId: zalo, role, fullName, phone, phoneVerifiedAt: phone ? new Date() : null, referralCode: refCode },
       });
     await user(ADMIN_ID, `${W9}admin-zalo`, 'W9 Admin', null, 'E2EW9AD1', 'ADMIN');
     await user(CUSTOMER.id, `${W9}cust-zalo`, CUSTOMER.name, CUSTOMER.phone, 'E2EW9CU1');
@@ -330,7 +331,8 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
     const title1 = studio.getByLabel('Tiêu đề bước 1');
     await title1.fill('W9 Bước đầu tiên');
     await luu.click();
-    await expect(drawer.getByRole('status').filter({ hasText: 'Đã lưu.' })).toBeVisible();
+    // "Đã lưu." hiện ở toast nổi của khu quản trị, nằm ngoài ngăn kéo.
+    await expect(page.locator('[data-admin-toast="success"]').filter({ hasText: 'Đã lưu.' })).toBeVisible();
     await shot(page, 'san-pham', 'da-luu');
 
     const saved = await withDb((prisma) => prisma.product.findUnique({ where: { id: PRODUCT.id }, select: { storyConfig: true } }));
@@ -343,7 +345,8 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
     expect(viaApi.ok()).toBe(true);
     expect(JSON.stringify((await viaApi.json()).storyConfig)).toContain('W9 Bước đầu tiên');
 
-    await drawer.locator('form').getByRole('button', { name: 'Đóng', exact: true }).click();
+    // Nút Đóng ở chân dính của ngăn kéo (ngoài <form>); nút X ở đầu ngăn cũng tên "Đóng" nên phải khoanh vùng chân.
+    await drawer.locator('[data-drawer-footer]').getByRole('button', { name: 'Đóng', exact: true }).click();
     await expect(drawer).toHaveCount(0);
 
     // Trang sản phẩm web hiện dải câu chuyện với chữ vừa lưu.
@@ -734,7 +737,8 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
       await expect(dialog).toBeVisible();
     };
     const accept = () => dialog.getByRole('button', { name: 'Khoá tài khoản', exact: true });
-    const status = () => page.locator('p[role="status"]').first();
+    // Thông báo thành công của khu quản trị hiện ở toast nổi, không phải dòng trong trang.
+    const toast = (text: string) => page.locator('[data-admin-toast="success"]').filter({ hasText: text });
 
     // (a) trống / chỉ dấu cách
     await openBlock();
@@ -765,7 +769,7 @@ test.describe('Admin UAT 1440x900 với API và DB thật', () => {
     await paste(reasonBox, 'Săn mã giảm giá nhiều tài khoản (W9)');
     const blocked = await submitAndRead(page, () => accept().click(), /\/admin\/users\/[^/]+\/block$/);
     expect(blocked.status).toBe(200);
-    await expect(status()).toContainText(`Đã khoá ${VICTIM.name}`);
+    await expect(toast(`Đã khoá ${VICTIM.name}`)).toBeVisible();
     expect(await victim()).toMatchObject({ isBlocked: true, blockedReason: 'Săn mã giảm giá nhiều tài khoản (W9)' });
     // Sau khi khoá, dòng phải đổi sang "Đã khoá" + nút "Mở khoá" mà không cần tải lại trang.
     const unblockBtn = row.getByRole('button', { name: `Mở khoá ${VICTIM.name}` });

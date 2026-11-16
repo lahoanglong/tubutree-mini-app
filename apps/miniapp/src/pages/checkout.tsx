@@ -1083,7 +1083,7 @@ export default function CheckoutPage() {
               <Text bold size="small">
                 {vi.checkout.points}
               </Text>
-              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+              <Text size="xSmall" className="tubu-nums" style={{ color: 'var(--color-text-tertiary)' }}>
                 {pointsUsable
                   ? pointsOfferText(points.usable, quote.data, usePoints && quote.data ? quote.data : null, publicConfig.loyalty?.vndPerPointRedeem)
                   : partnerPoints.disabled && points.usable > 0

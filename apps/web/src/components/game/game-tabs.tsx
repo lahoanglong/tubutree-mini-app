@@ -19,13 +19,13 @@ export const GAME_TAB_KEYS: readonly string[] = GAME_TABS.map((t) => t.key);
  * mất khi khách đổi tab.
  *
  * Từ lg: `split` chia cố định hai cột (việc chính 2/3, phụ 1/3 do `GameCol` đánh dấu), không để lưới tự chảy rồi
- * chừa hố trắng; `columns` xếp thẻ thành hai cột đều không hố (thẻ không bị cắt giữa chừng). Dưới lg luôn là một cột như Mini App.
+ * chừa hố trắng (hàng 2 là `1fr` để phần cao dư của cột phụ dồn xuống cuối hàng 2, không chia đều làm hàng 1 phình ra dưới khối trên); `columns` xếp thẻ thành hai cột đều không hố (thẻ không bị cắt giữa chừng). Dưới lg luôn là một cột như Mini App.
  */
 export function GameTabPanel({ tab, active, children, layout = 'columns' }: { tab: GameTabKey; active: boolean; children: ReactNode; layout?: 'split' | 'columns' }) {
   const label = ALL_GAME_TABS.find((t) => t.key === tab)?.label;
   const wide =
     layout === 'split'
-      ? 'lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start'
+      ? 'lg:grid lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:grid-rows-[auto_1fr] lg:items-start'
       : 'lg:block lg:columns-2 lg:gap-3 lg:space-y-0 lg:[&>*]:mb-3 lg:[&>*]:break-inside-avoid';
   return (
     <div role="tabpanel" aria-label={label} hidden={!active} className={active ? `flex flex-col gap-3 ${wide}` : 'hidden'}>

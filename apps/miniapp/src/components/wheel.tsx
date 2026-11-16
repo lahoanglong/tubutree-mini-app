@@ -54,7 +54,7 @@ export function WheelOfFortune({
   const short = points != null && points < cost && !!onEarnPoints;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
+    <div className="tubu-nums" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
       <div style={{ position: 'relative', width: 240, height: 240 }}>
         {/* Kim chỉ */}
         <div

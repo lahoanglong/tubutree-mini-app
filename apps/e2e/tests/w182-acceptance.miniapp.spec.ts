@@ -90,6 +90,9 @@ for (const size of SIZES) {
       expect(p.small, `vùng chạm nhỏ ${JSON.stringify(p.small)}`).toEqual([]);
       expect(p.textOverlap, 'chữ đè nhau').toEqual([]);
       expect(p.floating.filter((f) => f.overlaps.length > 0), 'nút nổi đè nội dung').toEqual([]);
+      expect(p.ellipsizedCta, 'nhãn nút bị cắt thành …').toEqual([]);
+      // Số tiền/điểm/số lượng phải đều (tabular-nums) theo TỪNG phần tử; đặt ở body bị cấm vì kế thừa vào ô giảm giá (coupon-discount-no-tabular.spec).
+      expect(p.notTabular, 'số thiếu tabular-nums').toEqual([]);
       if (entry.key === '/') {
         // Header dính của Trang chủ không được che khối kế tiếp ở đầu trang (`top` đo từ mép nội dung của `.page`, đã đệm `--safe-top`): ép safe-top 47px ở trên
         // mới lộ lỗi cộng đôi vùng an toàn. Hàng chip Gợi ý khi đã dính phải khít dưới header, không hở một khe để thẻ sản phẩm trôi lộ ra.

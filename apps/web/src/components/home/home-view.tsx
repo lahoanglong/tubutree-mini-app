@@ -12,6 +12,7 @@ import type { PublicConfig } from '@tubutree/app-core/api/config';
 import type { FlashSaleActiveItem } from '@tubutree/app-core/api/flash-sale';
 import { meSummaryQuery } from '@tubutree/app-core/api/me-summary';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
+import { newCustomerOfferQuery } from '@tubutree/app-core/queries/loyalty';
 import { flashUpcomingQuery } from '@tubutree/app-core/queries/flash-sale';
 import { homeKeptOrder, homeRenderOrder, type HomeRenderBlock } from '@tubutree/app-core/home-layout';
 import { categoryEntries } from '@/lib/browse-categories';
@@ -131,9 +132,12 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const todo = useHomeTodoQueries();
   // Cùng khoá query với khối banner (không thêm request): khung chờ chung phải chờ cả banner, vì khối thật chưa mount trong lúc giữ khung chờ.
   const banners = useHomeBanners(kind, initial.campaigns);
+  // Tài khoản đã có đơn mà chưa nhận hàng (chưa là khách cũ) không còn là khách mới: dải "Quà khách mới" (cùng khoá query với khối, không thêm request) sẽ thu lại khi ưu đãi về.
+  // Nếu khung chờ chung nhả trước lúc đó thì cả trang trượt lên bằng chiều cao dải (CLS ~0,15 ở 320px); chờ nốt nó để dải thu lại cùng lúc khung chờ nhả.
+  const giftOffer = useQuery({ ...newCustomerOfferQuery(coreHttp, userId), enabled: authed && kind === 'new', retry: false });
   const settling = useHomeSettling(
     kind,
-    todo.loading || shelves.flashQuery.isLoading || upcoming.isLoading || categories.isLoading || banners.loading,
+    todo.loading || shelves.flashQuery.isLoading || upcoming.isLoading || categories.isLoading || banners.loading || giftOffer.isLoading,
     unavailable,
   );
   const entries = useMemo(() => categoryEntries(categories.data), [categories.data]);
@@ -166,7 +170,9 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
       ) : null,
     todo: <TodoStrip restoring={restoring} />,
     // Khách cũ không bao giờ thấy khối này nên không gọi API ưu đãi khách mới.
-    welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} /> : null,
+    // Máy chưa nhớ gì: khối thu lại (tài khoản đã có đơn) và "Việc cần làm" chen vào là hai lần nhảy khi chúng về lệch nhau. Giữ khung của khối tới khi tổng quan đơn về
+    // để hai thay đổi vào cùng một khung hình, chỉ còn chênh lệch chiều cao của chúng.
+    welcome: kind === 'new' ? <NewCustomerGift initialConfig={initial.publicConfig} holdWhile={(startedNew || settling) && todo.authed && todo.count.isPending} /> : null,
     banner: bannerShown ? <HomeBanner slides={banners.slides} /> : null,
     // Dưới 2 combo còn hạn thì rỗng: ẩn hẳn, không giữ chỗ (đứng dưới Bán chạy nhất nên không đẩy nội dung màn đầu).
     combos: <HomeCombos views={shelves.combos} />,

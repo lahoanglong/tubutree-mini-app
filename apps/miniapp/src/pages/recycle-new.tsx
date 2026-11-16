@@ -523,7 +523,7 @@ export default function RecycleNewPage() {
   const shell = (content: React.ReactNode, subtitle: string, bar?: React.ReactNode) => (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       <PageHeader title="Đổi rác" subtitle={subtitle} />
-      <div style={{ ...COLUMN, padding: 16, paddingBottom: 160, gap: 16 }}>{content}</div>
+      <div style={{ ...COLUMN, padding: 16, paddingBottom: bar ? 'calc(var(--sticky-bar-h, 9rem) + var(--space-gutter))' : 'calc(var(--space-gutter) + var(--safe-bottom))', gap: 16 }}>{content}</div>
       {bar}
     </Page>
   );

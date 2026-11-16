@@ -95,6 +95,7 @@ export function VoucherTicket({ voucher: v, variant, primary, onDetail, reason, 
     <span
       id={`${uid}-meta`}
       data-testid="voucher-meta"
+      className="tubu-nums"
       style={{ display: 'block', minWidth: 0, ...captionStyle, color: 'var(--color-text-tertiary)', ...(variant === 'chip' ? TITLE_CLAMP : null) }}
     >
       {metaParts.map((part, i) => (

@@ -280,7 +280,7 @@ export default function PostDetailPage() {
         <div style={{ display: 'flex', alignItems: 'center', gap: 20, marginTop: 14 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Icon icon={MessageCircle} size="md" tone="muted" />
-            <Text variant="body-lg" tone="secondary">{p.commentCount}</Text>
+            <Text variant="body-lg" tone="secondary" numeric>{p.commentCount}</Text>
           </div>
         </div>
       </div>
