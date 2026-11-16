@@ -87,7 +87,9 @@ test.describe('Giỏ khách trên web, cờ bật', () => {
     const add = visibleAdd(page);
     await expect(add).toBeEnabled({ timeout: 30_000 });
     await add.click();
-    await expect(page.getByText('Đã thêm vào giỏ!').first()).toBeVisible({ timeout: 10_000 });
+    // Câu "Đã thêm vào giỏ!" nằm ở khối mua trên máy tính; ở điện thoại phản hồi là huy hiệu giỏ của thanh dính đáy.
+    if (!mobile) await expect(page.getByText('Đã thêm vào giỏ!').first()).toBeVisible({ timeout: 10_000 });
+    await expect.poll(() => page.evaluate(() => localStorage.getItem('tubu.guestCart.v1')), { timeout: 10_000 }).not.toBeNull();
     expect(new URL(page.url()).pathname).toBe(`/san-pham/${d!.slug}`);
     expect(api.callsTo('POST', '/cart/items')).toHaveLength(0);
     const stored = await page.evaluate(() => localStorage.getItem('tubu.guestCart.v1'));
@@ -100,7 +102,8 @@ test.describe('Giỏ khách trên web, cờ bật', () => {
     const login = visibleLogin(page);
     await expect(login).toHaveText('Đăng nhập để đặt hàng');
     await expect(login).toHaveAttribute('href', '/dang-nhap?returnTo=%2Fgio-hang');
-    await expect(page.getByText('Mã giảm giá')).toHaveCount(0);
+    // Chân trang có lối "Mã giảm giá"; giỏ khách thì không có ô mã.
+    await expect(page.getByTestId('guest-cart').getByText('Mã giảm giá')).toHaveCount(0);
     if (mobile) await shoot(page, 'after-guest-cart-390');
 
     // Đăng nhập giả lập: trang callback nhận mã + state khớp, máy chủ trả tài khoản; giỏ tài khoản đang trống.
