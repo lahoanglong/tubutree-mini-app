@@ -28,7 +28,7 @@ export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];
  * Phễu Đổi rác phía khách (`recycle_funnel_step`, `props.step`). Chỉ đo hành vi trên màn hình; "đã nhận rác thật" là sự kiện server
  * `recycle_confirmed`, client không tự ghi được (xem SERVER_EVENT_NAMES).
  */
-export const RECYCLE_FUNNEL_STEPS = ['enter', 'phone_saved', 'geo_granted', 'geo_denied', 'submitted'] as const;
+export const RECYCLE_FUNNEL_STEPS = ['enter', 'phone_saved', 'geo_granted', 'geo_denied', 'submitted', 'fee_short_shown', 'fee_path_attach', 'fee_path_wallet', 'fee_path_bank', 'fee_path_dropoff'] as const;
 export type RecycleFunnelStep = (typeof RECYCLE_FUNNEL_STEPS)[number];
 export type RecycleFunnelSurface = 'web' | 'miniapp';
 

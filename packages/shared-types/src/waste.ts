@@ -13,12 +13,18 @@ export const WASTE_METHOD_VALUES = ['DROP_OFF', 'MAIL_IN', 'PICKUP', 'HOME_PICKU
 export type WasteMethod = (typeof WASTE_METHOD_VALUES)[number];
 export const WASTE_REQUEST_STATUS_VALUES = ['OPEN', 'IN_TRANSIT', 'RECEIVED', 'COMPLETED', 'REJECTED', 'CANCELLED', 'EXPIRED', 'REVERSED'] as const;
 export type WasteRequestStatus = (typeof WASTE_REQUEST_STATUS_VALUES)[number];
-export const WASTE_CLOSE_REASON_VALUES = ['HOLD_EXPIRED', 'PICKUP_NO_SHOW', 'PICKUP_NOT_DISPATCHED', 'LOST', 'LOST_AT_WAREHOUSE', 'SHIP_LOCKED', 'ORDER_CANCELLED'] as const;
+export const WASTE_CLOSE_REASON_VALUES = ['HOLD_EXPIRED', 'PICKUP_NO_SHOW', 'PICKUP_NOT_DISPATCHED', 'LOST', 'LOST_AT_WAREHOUSE', 'SHIP_LOCKED', 'ORDER_CANCELLED', 'FEE_UNPAID'] as const;
 export type WasteCloseReason = (typeof WASTE_CLOSE_REASON_VALUES)[number];
 export const WASTE_REJECTION_REASON_VALUES = ['WET', 'DIRTY', 'FOREIGN_OBJECT', 'WRONG_TYPE', 'DAMAGED', 'NOT_ACCEPTED', 'OVERSIZE', 'HAZARDOUS', 'UNPAID_POSTAGE', 'OTHER'] as const;
 export type WasteRejectionReason = (typeof WASTE_REJECTION_REASON_VALUES)[number];
 export const WASTE_SHORTFALL_REASON_VALUES = ['WET', 'DIRTY', 'FOREIGN_OBJECT', 'WRONG_TYPE', 'DAMAGED', 'NOT_ACCEPTED', 'OTHER'] as const;
 export type WasteShortfallReason = (typeof WASTE_SHORTFALL_REASON_VALUES)[number];
+/** Cách trả phần phí lấy rác còn thiếu sau khi trừ Điểm Xanh (W178); phản chiếu enum Prisma WasteFeeCashMethod. */
+export const WASTE_FEE_CASH_METHOD_VALUES = ['WALLET', 'BANK_TRANSFER'] as const;
+export type WasteFeeCashMethod = (typeof WASTE_FEE_CASH_METHOD_VALUES)[number];
+/** Mã lỗi máy đọc của luồng trả phí lấy rác (trường `code` trong body lỗi 4xx). */
+export const WASTE_FEE_ERROR_CODES = ['WASTE_FEE_NEED_PAYMENT', 'WASTE_FEE_CHANGED', 'WASTE_FEE_BANK_DISABLED'] as const;
+export type WasteFeeErrorCode = (typeof WASTE_FEE_ERROR_CODES)[number];
 export const WASTE_ACTOR_ROLE_VALUES = ['CUSTOMER', 'POINT_STAFF', 'STAFF', 'ADMIN', 'SYSTEM'] as const;
 export type WasteActorRole = (typeof WASTE_ACTOR_ROLE_VALUES)[number];
 export const WASTE_UNMATCHED_STATUS_VALUES = ['OPEN', 'RESOLVED'] as const;
@@ -86,6 +92,16 @@ export interface WastePickupQuoteResponse {
   addressMessage: string | null;
   /** Câu tiếng Việt khi chưa tạo được đơn (dưới ngưỡng điểm, Pin ngoài TP.HCM, cổng đóng, khoá...), null = tạo được. */
   blocked: string | null;
+  /** Chỉ đặt khi lý do chặn DUY NHẤT là thiếu phí (thiếu Điểm Xanh để trả đủ phí lấy rác). Bản app cũ bỏ qua và vẫn đọc `blocked`. */
+  blockedCode?: 'NEED_FEE_PAYMENT' | null;
+  /** Số tiền phải trả bằng tiền thật khi chọn Ví/VietQR = remainingFeeVnd. */
+  cashDueVnd?: number;
+  /** Các lối đi cho phần phí còn thiếu; chỉ có khi blockedCode = NEED_FEE_PAYMENT. */
+  feePaths?: {
+    wallet: { balance: number; enough: boolean };
+    bankTransfer: { enabled: boolean };
+    attachNextOrder: { available: boolean; reason: string | null; existingRequestId: string | null };
+  };
 }
 export interface WasteHomePickupTimelineEntry { at: string; text: string }
 /** Thông tin vận đơn shipper Gomdon của yêu cầu HOME_PICKUP. */
@@ -97,6 +113,13 @@ export interface WasteHomePickupDTO {
   shipFeePointsUsed: number;
   shipFeeCodVnd: number;
   shipFeePointsRefunded: number;
+  /** Phần phí trả bằng tiền (Ví Tubu hoặc chuyển khoản); 0 khi Điểm Xanh trả đủ. */
+  shipFeeCashVnd: number;
+  shipFeeCashMethod: WasteFeeCashMethod | null;
+  /** true = tiền đã thu (Ví trừ xong, hoặc kế toán đã xác nhận chuyển khoản); false = chưa thu. */
+  shipFeeCashPaid: boolean;
+  /** Số tiền đã hoàn về Ví Tubu; 0 = chưa hoàn. */
+  shipFeeCashRefundedVnd: number;
   declaredWeightGrams: number;
   /** Đường, phường/xã, tỉnh/thành của địa chỉ lấy rác. */
   pickupAddressText: string;
@@ -108,7 +131,11 @@ export interface WasteCreateRequest { method: WasteMethod; lines: WasteLineInput
   /** HOME_PICKUP: cân nặng ước tính của gói rác, gram nguyên, 500 tới 10000 (bắt buộc với HOME_PICKUP). */
   declaredWeightGrams?: number;
   /** HOME_PICKUP: true = dùng Điểm Xanh dùng được để trừ phí shipper (1 điểm = 1đ); phần còn lại thu hộ khi bưu tá lấy rác. */
-  usePointsForShipFee?: boolean }
+  usePointsForShipFee?: boolean;
+  /** HOME_PICKUP, thiếu Điểm Xanh: cách trả phần phí còn thiếu. Bỏ trống mà còn thiếu thì máy chủ trả 400 WASTE_FEE_NEED_PAYMENT. */
+  shipFeePayment?: WasteFeeCashMethod;
+  /** HOME_PICKUP: trần số tiền khách đã thấy trên báo giá; máy chủ tính ra lớn hơn thì trả 409 WASTE_FEE_CHANGED. Không bao giờ là nguồn số tiền. */
+  expectedCashVnd?: number }
 export interface WasteEditRequest { lines: WasteLineInput[]; pointId?: string }
 export interface WasteTrackingRequest { carrier: string; trackingCode: string }
 export interface WasteRequestLineDTO { itemId: string; itemName: string; unitLabel: string; unitsPerPoint: number; pointsPerGroup: number; dropsPerUnit: number; gramsPerUnit: number | null; declaredQty: number; receivedQty: number | null; shortfallReason: WasteShortfallReason | null; pointsAwarded: number | null }
