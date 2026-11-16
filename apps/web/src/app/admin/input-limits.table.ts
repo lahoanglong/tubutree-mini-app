@@ -210,6 +210,7 @@ export const EXEMPT_INPUTS: Record<string, string> = {
   "app/admin/page.tsx::search": "ô lọc khoá cấu hình ngay trên trình duyệt, không gửi lên API",
   "components/admin/admin-nav.tsx::query": "ô lọc menu ngay trên trình duyệt, không gửi lên API",
   "app/admin/catalog-seo-bulk.tsx::query": "ô tìm chỉ lọc danh sách đã tải ngay trên trình duyệt, không gửi lên API",
+  "app/admin/catalog-category-bulk.tsx::query": "ô tìm chỉ lọc danh sách đã tải ngay trên trình duyệt, không gửi lên API",
   "app/admin/catalog-wp-images/wp-image-triage.tsx::query": "ô tìm chỉ lọc danh sách đã tải ngay trên trình duyệt, không gửi lên API",
   "components/admin/community-events-panel.tsx::startAt": "ô ngày giờ định dạng cố định, kiểm bằng bộ chọn thời gian",
   "components/admin/community-events-panel.tsx::endAt": "ô ngày giờ định dạng cố định, kiểm bằng bộ chọn thời gian",

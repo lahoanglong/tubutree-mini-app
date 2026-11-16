@@ -18,6 +18,7 @@ import { ApiError } from '@/lib/client-api';
 import { loadErrorText } from '@/lib/admin-error-text';
 import { BTN_SECONDARY, LoadError, Notice } from '@/components/admin/ui';
 import { AdvisorStatsCard } from './advisor-stats-card';
+import { CatalogCategoryBulk } from './catalog-category-bulk';
 import { CatalogCopyReview, type CurrentCopy } from './catalog-copy-review';
 import { CatalogIngredientsFill } from './catalog-ingredients-fill';
 import { CatalogIssueList } from './catalog-issue-list';
@@ -233,6 +234,7 @@ export function CatalogQualityTab() {
           </div>
         </div>
       </section>
+      <CatalogCategoryBulk />
       <PancakeZeroPriceCard />
       <AdvisorStatsCard />
     </div>

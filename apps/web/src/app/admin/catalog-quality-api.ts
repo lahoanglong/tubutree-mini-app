@@ -78,6 +78,50 @@ export const getCatalogSeo = () => apiFetch<CatalogSeoResponse>('/admin/catalog-
 /** Ghi SEO admin đã duyệt: máy chủ kiểm lại trống, độ dài, mã HTML, tuyên bố ngoài tên sản phẩm và ghi cả lô trong một giao dịch. */
 export const postSeoApply = (items: readonly SeoApplyItem[]) => apiFetch<SeoApplyResponse>('/admin/catalog-quality/seo/apply', { method: 'POST', body: { items } });
 
+/** Một dòng của `GET /admin/catalog/category-suggestions` (apps/api: CategorySuggestionRow): sản phẩm chưa có danh mục kèm gợi ý. */
+export interface CategorySuggestionRow {
+  id: string;
+  name: string;
+  slug: string;
+  brand: string;
+  thumbnail: string | null;
+  hasImage: boolean;
+  onSale: boolean;
+  /** Gửi lại nguyên văn khi áp dụng: máy chủ trả 409 nếu sản phẩm đã đổi từ lúc đọc. */
+  updatedAt: string;
+  suggestion: {
+    categoryIds: string[];
+    confidence: number;
+    matches: Array<{ categoryId: string; confidence: number; ruleId: string; rule: string }>;
+  };
+}
+
+export interface CategorySuggestionList {
+  /** Chỉ danh mục lá (gán được). */
+  categories: Array<{ id: string; name: string }>;
+  items: CategorySuggestionRow[];
+  autoMin: number;
+  summary: { total: number; onSale: number; autoReady: number; needsReview: number; autoReadyOnSale: number; needsReviewOnSale: number };
+  truncated: boolean;
+}
+
+export interface CategoryApplyItem {
+  productId: string;
+  categoryIds: string[];
+  expectedUpdatedAt: string;
+}
+
+export interface CategoryApplyResponse {
+  applied: number;
+  items: Array<{ productId: string; categoryIds: string[] }>;
+}
+
+export const getCategorySuggestions = () => apiFetch<CategorySuggestionList>('/admin/catalog/category-suggestions', { cache: 'no-store' });
+
+/** Ghi cả lô hoặc không ghi gì: sản phẩm nào đã có danh mục hay vừa bị sửa thì máy chủ trả 409 (CATEGORY_APPLY_STALE) cho cả lô. */
+export const postCategoryApply = (items: readonly CategoryApplyItem[]) =>
+  apiFetch<CategoryApplyResponse>('/admin/catalog/category-suggestions/apply', { method: 'POST', body: { items } });
+
 export const getAdvisorStats = () => apiFetch<AdvisorStatsDto>('/admin/ai-advisor/stats', { cache: 'no-store' });
 
 export type PancakeZeroPriceKind = 'PRICE_KEPT' | 'NEW_AT_ZERO';

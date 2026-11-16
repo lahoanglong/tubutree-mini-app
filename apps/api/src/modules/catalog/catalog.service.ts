@@ -30,6 +30,7 @@ import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImages, publicProductThumb } from '../../common/public-image';
 import { publicImage } from '../../common/public-image';
 import { seedHash, seededOrder } from './catalog-seed';
+import { MERCH_RANK_SELECT, arrangeByMerchTier, merchTier, withImageFlags, type MerchRankFields } from './merch-rank';
 import { childrenByParent, expandCategoryScope } from './category-scope';
 import { CATALOG_LOVED_KEYS, DEFAULT_LOVED_THRESHOLDS, LOVED_THRESHOLD_MAX, isLoved, sanitizeLovedThreshold, type LovedThresholds } from './catalog-loved';
 
@@ -279,6 +280,7 @@ export class CatalogService {
     if (sort === 'best_seller') return this.listBestSellers(where, page, limit, price);
     if (sort === 'best_seller_30d') return this.listBestSellers30d(where, page, limit, price);
     if (sort === 'price_asc' || sort === 'price_desc') return this.listByStandingPrice(where, page, limit, sort === 'price_asc' ? 'asc' : 'desc', price);
+    if (!sort) return this.listFeatured(where, page, limit, price);
     if (price) return this.listRanked<{ id: string }>(where, page, limit, { id: true }, null, price, [this.orderBy(sort), { id: 'asc' }]);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
@@ -295,21 +297,44 @@ export class CatalogService {
   }
 
   /**
-   * Thứ tự mặc định xoay theo ngày (`seededOrder`): cùng đường xếp hạng và bộ nhớ 60 giây với Bán chạy, nên cuộn nhiều trang trong ngày
-   * không quét lại catalog. Khoá nhớ mang theo `seed` để ngày mới không dùng nhầm thứ tự hôm qua.
+   * Thứ tự mặc định khi không xoay theo ngày: tầng trưng bày (`merch-rank.ts`: có ảnh và còn hàng trước, chưa ảnh sau, hết hàng cuối),
+   * trong tầng thì nổi bật trước, hoà thì id tăng dần như trước. Tầng là biểu thức nên đi đường xếp hạng (nhớ 60 giây) thay vì `orderBy` của DB.
    */
-  private listSeeded(where: Prisma.ProductWhereInput, page: number, limit: number, seed: string, price?: PriceBounds) {
-    return this.listRanked<{ id: string; brandId: string | null }>(
+  private listFeatured(where: Prisma.ProductWhereInput, page: number, limit: number, price?: PriceBounds) {
+    return this.listRanked<{ id: string; isFeatured: boolean } & MerchRankFields>(
       where,
       page,
       limit,
-      { id: true, brandId: true },
+      { id: true, isFeatured: true, ...MERCH_RANK_SELECT },
+      (x, y) => merchTier(x) - merchTier(y) || Number(y.isFeatured) - Number(x.isFeatured),
+      price,
+      undefined,
+      false,
+      undefined,
+      '',
+      true,
+      true,
+    );
+  }
+
+  /**
+   * Thứ tự mặc định xoay theo ngày (`seededOrder`): cùng đường xếp hạng và bộ nhớ 60 giây với Bán chạy, nên cuộn nhiều trang trong ngày
+   * không quét lại catalog. Khoá nhớ mang theo `seed` để ngày mới không dùng nhầm thứ tự hôm qua. Xoay trong từng tầng trưng bày.
+   */
+  private listSeeded(where: Prisma.ProductWhereInput, page: number, limit: number, seed: string, price?: PriceBounds) {
+    return this.listRanked<{ id: string; brandId: string | null } & MerchRankFields>(
+      where,
+      page,
+      limit,
+      { id: true, brandId: true, ...MERCH_RANK_SELECT },
       null,
       price,
       [{ id: 'asc' }],
       Boolean(price),
-      (rows) => seededOrder(rows, seed),
+      (rows) => arrangeByMerchTier(rows, (tier) => seededOrder(tier, seed)),
       `seed:${seed}`,
+      true,
+      true,
     );
   }
 
@@ -406,8 +431,9 @@ export class CatalogService {
     arrange?: (rows: (T & PricedFields)[]) => (T & PricedFields)[],
     cacheTag = '',
     cacheable = true,
+    merch = false,
   ) {
-    const rankedIds = await this.rankedIds<T>(where, select, compare, price, orderBy, needsPrice, arrange, cacheTag, cacheable);
+    const rankedIds = await this.rankedIds<T>(where, select, compare, price, orderBy, needsPrice, arrange, cacheTag, cacheable, merch);
     const { skip, take } = skipTake(page, limit);
     const pageIds = rankedIds.slice(skip, skip + take);
     if (pageIds.length === 0) return paginated([], page, limit, rankedIds.length);
@@ -435,10 +461,11 @@ export class CatalogService {
     arrange?: (rows: (T & PricedFields)[]) => (T & PricedFields)[],
     cacheTag = '',
     allowCache = true,
+    merch = false,
   ): Promise<string[]> {
     // Thứ hạng phụ thuộc giá (xếp giá, lọc giá) đổi ngay khi Giờ vàng bắt đầu/hết hoặc giá sửa nên không nhớ.
     const cacheable = allowCache && !needsPrice && !price;
-    const key = cacheable ? JSON.stringify({ where, select, price, orderBy, needsPrice, cacheTag }) : '';
+    const key = cacheable ? JSON.stringify({ where, select, price, orderBy, needsPrice, cacheTag, merch }) : '';
     const now = Date.now();
     const hit = cacheable && key.length <= 2000 ? this.rankCache.get(key) : undefined;
     if (hit && hit.expiresAt > now) return hit.ids;
@@ -449,6 +476,8 @@ export class CatalogService {
       ...(orderBy ? { orderBy } : {}),
       select: priced ? { ...select, basePrice: true, salePrice: true, variations: { where: { isActive: true }, select: CARD_VARIATION_SELECT } } : select,
     })) as unknown as Priced[];
+    // Tầng trưng bày (`merch-rank.ts`) cần biết hàng có ảnh: hỏi DB riêng thay vì chọn cột ảnh nặng của cả catalog.
+    if (merch) ranked = await withImageFlags(this.prisma, ranked);
     const offers = priced ? await this.activeFlashOffers() : new Map<string, FlashOffer[]>();
     if (price) ranked = ranked.filter((r) => inPriceRange(standingOf(r, offers), price));
     if (compare) {
@@ -908,6 +937,8 @@ export class CatalogService {
   invalidateCategoryCache(): void {
     this.categoriesCache = null;
     this.categoryChildrenCache = null;
+    // Thứ tự đã nhớ của `?category=` (danh sách mặc định, Bán chạy) vừa lệch với danh mục mới gán.
+    this.rankCache.clear();
   }
 
   /**
