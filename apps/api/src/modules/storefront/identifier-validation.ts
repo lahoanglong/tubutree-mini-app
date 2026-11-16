@@ -12,7 +12,7 @@ import { DEFAULT_IDENTIFIER_COOLDOWN_DAYS } from '../merchant/merchant-config';
  * ghi để trần validate không bao giờ lệch nhau.
  */
 export const RESERVED_STOREFRONT_IDENTIFIERS = new Set([
-  'admin', 'api', 'www', 'app', 'mail', 'staging', 'dev', 'static', 'cdn',
+  'admin', 'api', 'www', 'app', 'blog', 'mail', 'staging', 'dev', 'static', 'cdn',
   'auth', 'shop', 'tubutree', 'tubu', 'root', 'system', 'dashboard', 'demo',
   // Tên kênh hỗ trợ và nền tảng: link `cskh.tubutree.com` hay `zalo.tubutree.com` của một CTV trông như kênh chính thức của Tubu Tree.
   'cskh', 'hotro', 'support', 'help', 'hello', 'khuyenmai', 'official', 'chinhhang', 'chodeli',

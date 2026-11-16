@@ -143,12 +143,19 @@ describe('SiteFooter', () => {
     });
   });
 
-  it('máy tính: 4 cột, có lối vào Vườn Xanh, Đổi rác, Kho quà, Cộng tác viên, Đại lý, Câu chuyện thương hiệu (trước đây bị giấu)', async () => {
+  it('máy tính: 4 cột, có lối vào Vườn Xanh, Đổi rác, Kho quà, Cộng tác viên, Đại lý, Câu chuyện thương hiệu, Blog (mở https://blog.tubutree.com)', async () => {
     mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
     const out = await html();
     expect(out).toMatch(/<div class="[^"]*lg:grid-cols-4/);
-    for (const to of ['/vuon-xanh', '/doi-rac', '/kho-qua', '/ctv', '/dai-ly', '/hoc-vien', '/cau-chuyen', '/gioi-thieu', '/mua-chung']) {
+    for (const to of ['/vuon-xanh', '/doi-rac', '/kho-qua', '/ctv', '/dai-ly', '/hoc-vien', '/cau-chuyen', '/gioi-thieu', '/mua-chung', 'https://blog.tubutree.com']) {
       expect(out).toContain(`href="${to}"`);
+    }
+    const blogLinks = out.match(/<a [^>]*href="https:\/\/blog\.tubutree\.com"[^>]*>/g) ?? [];
+    expect(blogLinks).toHaveLength(2);
+    for (const a of blogLinks) {
+      expect(a).toContain('target="_blank"');
+      expect(a).toContain('rel="noopener noreferrer"');
+      expect(a).toContain('min-h-11');
     }
   });
 

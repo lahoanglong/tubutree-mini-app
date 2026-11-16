@@ -12,8 +12,8 @@ Tài liệu này không phải tư vấn pháp lý. Mức phạt, thời hạn x
 | Mã số thuế | `0319585995` |
 | Địa chỉ trụ sở | `Số 33, đường 1B, phường Long Bình, Thành phố Hồ Chí Minh, Việt Nam` |
 | Loại hình | Thương nhân sở hữu website thương mại điện tử bán hàng (thông báo website TMĐT bán hàng) |
-| Tên miền website | `app.tubutree.com` (website bán hàng); `tubutree.com` khai thêm khi đã trỏ về cùng website (xem lưu ý 1) |
-| Địa chỉ trang chủ | `https://app.tubutree.com` |
+| Tên miền website | `tubutree.com` (ngay sau khi chuyển DNS về VPS Vietnix; hiện tại có thể khai `app.tubutree.com` hoặc chờ đổi DNS xong khai thẳng `tubutree.com`, xem lưu ý 1) |
+| Địa chỉ trang chủ | `https://tubutree.com` (hoặc `https://app.tubutree.com` nếu nộp trước khi đổi DNS) |
 | Tên ứng dụng di động (nếu khai kèm) | `Tubu Tree` - Zalo Mini App (App ID `2070857098114207963`, nền tảng Zalo; xem lưu ý 2) |
 | Ngành hàng kinh doanh | Mỹ phẩm và đồ tiêu dùng thiên nhiên tuyển chọn từ các thương hiệu Việt (chủ đối chiếu với ngành nghề ghi trên Giấy chứng nhận ĐKDN, xem lưu ý 3) |
 | Đơn vị cung cấp hosting / hạ tầng | VPS Vietnix (Việt Nam), địa chỉ IP `14.225.207.177` |
@@ -22,7 +22,7 @@ Tài liệu này không phải tư vấn pháp lý. Mức phạt, thời hạn x
 
 Lưu ý:
 
-1. `tubutree.com` (không có `app.`) ở thời điểm soạn vẫn là WordPress cũ chạy ở nhà cung cấp khác; việc chuyển về VPS (`ops/cutover-apex-apply.sh`) chưa chạy, chỉ chạy khi chủ duyệt rõ (xem `docs/launch/apex-cutover-rehearsal-2026-11-14.md`). Chỉ khai `tubutree.com` khi nó đã mở đúng website này, để hồ sơ không khai một tên miền mà chuyên viên vào thấy một trang khác.
+1. Kiến trúc tên miền đã chốt: website bán hàng chính đặt tại `tubutree.com` trên VPS Vietnix (`14.225.207.177`), còn chuyên trang bài viết WordPress cũ được tách riêng sang `blog.tubutree.com` trên máy chủ ZenCloud (`42.1.122.84`, toàn bộ đường dẫn mua hàng cũ trên `blog.tubutree.com` đều chuyển hướng 301 về `https://tubutree.com`, không có chức năng đặt hàng trên `blog.tubutree.com`). Nếu nộp hồ sơ sau khi đã đổi DNS (`ops/cutover-apex-apply.sh` hoặc `ops/cutover-apex-http01.sh` trên Vietnix và `finalize-blog-cutover.sh` trên ZenCloud), khai thẳng `tubutree.com` và thay 5 link chính sách ở mục 2 thành `https://tubutree.com/chinh-sach/...`; không cần khai `blog.tubutree.com` ở cổng TMĐT vì đó chỉ là trang tin tức nội dung. Nếu nộp trước khi đổi DNS thì chỉ khai `app.tubutree.com` để chuyên viên mở thấy đúng website bán hàng.
 2. Mini App chưa từng gửi duyệt với Zalo. Chỉ khai kèm ứng dụng di động khi Mini App đã được Zalo duyệt và phát hành; chưa thì bỏ trống ô này, không ảnh hưởng hồ sơ website.
 3. Ngành hàng phải khớp ngành nghề đăng ký kinh doanh. Chương trình Đổi rác lấy quà là chương trình tích điểm cho khách, không phải hàng hoá bán ra nên không khai ở ô ngành hàng.
 

@@ -11,8 +11,8 @@
 # Điều kiện kiểm trước khi đụng Apache (thiếu cái nào thì thoát mã 2, chưa đổi gì): root; Apache configtest sạch; thư mục backup có manifest khớp sha256;
 # ảnh uploads đủ tệp và khớp sha256; đĩa dưới 80%; chứng chỉ phủ tubutree.com + www.tubutree.com, còn >= 14 ngày, khớp khoá; web trả 200 cho Host tubutree.com;
 # sitemap web ra https://tubutree.com (NEXT_PUBLIC_SITE_URL); API chấp nhận Origin https://tubutree.com cho đăng nhập/làm mới phiên (CORS_ORIGINS);
-# diễn tập trên Next qua cổng 14000 (Host: tubutree.com) đạt 0 FAIL; origin ZenCloud trả 200 cho khối proxy blog.
-# Sau khi cài: configtest, graceful, rồi `check-cutover-redirects.mjs --blog proxy` trên TOÀN BỘ URL WordPress đang index (kèm mẫu ảnh uploads) qua HTTPS thật của vhost mới
+# diễn tập trên Next qua cổng 14000 (Host: tubutree.com) đạt 0 FAIL (gồm cả 301 blog sang https://blog.tubutree.com).
+# Sau khi cài: configtest, graceful, rồi `check-cutover-redirects.mjs --blog proxy` trên TOÀN BỘ URL WordPress đang index (301 sản phẩm/trang, 301 blog sang blog.tubutree.com, 200 ảnh uploads từ đĩa) qua HTTPS thật của vhost mới
 # (--resolve-ip 127.0.0.1), và app/api vẫn trả đúng mã như trước khi cài. Mã thoát: 0 xong, 1 hỏng sau khi cài (đã tự quay lại), 2 chưa đủ điều kiện, 3 sai tham số.
 #
 # Biến môi trường (mặc định trong ngoặc) dùng để diễn tập trên Apache riêng, không dùng khi cài thật:
@@ -193,8 +193,18 @@ else
   esac
 fi
 
-code="$(http_code --resolve "tubutree.com:443:$ORIGIN_IP" https://tubutree.com/wp-json/)"
-[ "$code" = 200 ] && pass "origin ZenCloud $ORIGIN_IP trả 200 cho khối proxy blog" || fail "origin ZenCloud $ORIGIN_IP trả $code (khối proxy blog sẽ 502)"
+if grep -Eq '^[[:space:]]*RewriteRule .*https://blog\.tubutree\.com/' "$VHOST_SRC"; then
+  pass "vhost nguồn chuyển hướng 301 đường dẫn blog sang https://blog.tubutree.com"
+else
+  fail "vhost nguồn thiếu luật chuyển hướng 301 đường dẫn blog sang https://blog.tubutree.com"
+fi
+blog_code="$(http_code --resolve "blog.tubutree.com:443:$ORIGIN_IP" https://blog.tubutree.com/)"
+if [ "$blog_code" = 200 ]; then
+  pass "blog.tubutree.com trên ZenCloud ($ORIGIN_IP:443) đã trả 200 OK"
+else
+  blog_http="$(http_code --resolve "blog.tubutree.com:80:$ORIGIN_IP" http://blog.tubutree.com/)"
+  info "blog.tubutree.com trên ZenCloud ($ORIGIN_IP): https=$blog_code http=$blog_http (chạy finalize-blog-cutover.sh trên ZenCloud ngay khi trỏ A record blog.tubutree.com)"
+fi
 
 APP_BEFORE="$(http_code --resolve "app.tubutree.com:443:127.0.0.1" https://app.tubutree.com/)"
 API_BEFORE="$(http_code --resolve "api.tubutree.com:443:127.0.0.1" https://api.tubutree.com/api/home)"

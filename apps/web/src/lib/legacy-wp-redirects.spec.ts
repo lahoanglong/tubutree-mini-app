@@ -14,6 +14,7 @@ import { LEGAL_SLUGS } from '@/lib/legal';
 import { middleware } from '../middleware';
 import { MINIAPP_PERMANENT_SOURCES, buildMiniappRedirects } from './miniapp-redirects.mjs';
 import {
+  BLOG_ORIGIN,
   LEGACY_FILE_REDIRECTS,
   LEGACY_GONE_EXACT,
   LEGACY_GONE_PREFIXES,
@@ -21,6 +22,7 @@ import {
   LEGACY_PRODUCT_REDIRECTS,
   carryLegacyParams,
   isWpBlogPath,
+  isWpUploadPath,
   resolveLegacyWpPath,
 } from './legacy-wp-redirects';
 
@@ -272,9 +274,37 @@ describe('resolveLegacyWpPath: chuẩn hoá và an toàn', () => {
     }
   });
 
-  it('bài blog, danh mục bài và ảnh WordPress không bị chuyển hướng (giai đoạn 1 để reverse proxy)', () => {
-    for (const path of ['/2021/10/16/nuoc-rua-chen-organic/', '/blog/', '/wp-content/uploads/2021/10/a.jpg', ...WP_CATEGORY_PATHS]) {
-      expect(resolveLegacyWpPath(path), path).toBeNull();
+  it('bài blog, danh mục bài, thẻ, tác giả, feed chuyển 301 sang https://blog.tubutree.com/...; riêng ảnh /wp-content/uploads/* giữ nguyên (null) để Apache phục vụ 200 từ đĩa', () => {
+    expect(BLOG_ORIGIN).toBe('https://blog.tubutree.com');
+    expect(resolveLegacyWpPath('/2021/10/16/nuoc-rua-chen-organic/')).toEqual({
+      kind: 'redirect',
+      status: 301,
+      location: 'https://blog.tubutree.com/2021/10/16/nuoc-rua-chen-organic/',
+    });
+    expect(resolveLegacyWpPath('/2021/10/16/nuoc-rua-chen-organic')).toEqual({
+      kind: 'redirect',
+      status: 301,
+      location: 'https://blog.tubutree.com/2021/10/16/nuoc-rua-chen-organic/',
+    });
+    expect(resolveLegacyWpPath('/blog/')).toEqual({ kind: 'redirect', status: 301, location: 'https://blog.tubutree.com/blog/' });
+    expect(resolveLegacyWpPath('/tag/nuoc-rua-chen/')).toEqual({ kind: 'redirect', status: 301, location: 'https://blog.tubutree.com/tag/nuoc-rua-chen/' });
+    expect(resolveLegacyWpPath('/author/admin/')).toEqual({ kind: 'redirect', status: 301, location: 'https://blog.tubutree.com/author/admin/' });
+    expect(resolveLegacyWpPath('/feed/')).toEqual({ kind: 'redirect', status: 301, location: 'https://blog.tubutree.com/feed/' });
+    expect(resolveLegacyWpPath('/comments/feed/')).toEqual({ kind: 'redirect', status: 301, location: 'https://blog.tubutree.com/comments/feed/' });
+    expect(resolveLegacyWpPath('/wp-json')).toEqual({ kind: 'redirect', status: 301, location: 'https://blog.tubutree.com/wp-json/' });
+    expect(resolveLegacyWpPath('/wp-json/wp/v2/posts')).toEqual({ kind: 'redirect', status: 301, location: 'https://blog.tubutree.com/wp-json/wp/v2/posts' });
+    expect(resolveLegacyWpPath('/wp-includes/js/x.js')).toEqual({ kind: 'redirect', status: 301, location: 'https://blog.tubutree.com/wp-includes/js/x.js' });
+    expect(resolveLegacyWpPath('/wp-content/themes/flatsome/style.css')).toEqual({
+      kind: 'redirect',
+      status: 301,
+      location: 'https://blog.tubutree.com/wp-content/themes/flatsome/style.css',
+    });
+    for (const cat of WP_CATEGORY_PATHS) {
+      expect(resolveLegacyWpPath(cat), cat).toEqual({ kind: 'redirect', status: 301, location: `https://blog.tubutree.com${cat}` });
+    }
+    for (const upload of ['/wp-content/uploads', '/wp-content/uploads/', '/wp-content/uploads/2021/10/a.jpg']) {
+      expect(resolveLegacyWpPath(upload), upload).toBeNull();
+      expect(isWpUploadPath(upload), upload).toBe(true);
     }
   });
 });
@@ -296,16 +326,22 @@ describe('carryLegacyParams', () => {
   });
 });
 
-describe('isWpBlogPath', () => {
-  it('nhận bài viết theo ngày, /blog, danh mục bài, ảnh và API của WordPress', () => {
-    for (const path of ['/2021/10/16/nuoc-rua-chen-organic/', '/2026/03/01/bai-moi', '/blog', '/blog/trang-2/', '/tag/eco/', '/author/admin/', '/wp-content/uploads/a.jpg', '/wp-includes/js/x.js', '/wp-json/wp/v2/posts', '/feed/', '/comments/feed/', ...WP_CATEGORY_PATHS]) {
+describe('isWpBlogPath và isWpUploadPath', () => {
+  it('isWpBlogPath nhận bài viết theo ngày, /blog, danh mục bài, thẻ, tác giả, feed và API/theme của WordPress, nhưng KHÔNG nhận /wp-content/uploads/*', () => {
+    for (const path of ['/2021/10/16/nuoc-rua-chen-organic/', '/2026/03/01/bai-moi', '/blog', '/blog/trang-2/', '/tag/eco/', '/author/admin/', '/wp-content/themes/flatsome/style.css', '/wp-includes/js/x.js', '/wp-json/wp/v2/posts', '/feed/', '/comments/feed/', ...WP_CATEGORY_PATHS]) {
       expect(isWpBlogPath(path), path).toBe(true);
+      expect(isWpUploadPath(path), path).toBe(false);
+    }
+    for (const upload of ['/wp-content/uploads/a.jpg', '/wp-content/uploads/2025/05/banner.webp']) {
+      expect(isWpBlogPath(upload), upload).toBe(false);
+      expect(isWpUploadPath(upload), upload).toBe(true);
     }
   });
 
-  it('không nhận đường dẫn của web mới hay của bảng chuyển hướng', () => {
+  it('không nhận đường dẫn của web mới hay của bảng chuyển hướng sản phẩm/trang', () => {
     for (const path of ['/', '/san-pham', '/product/nap-diem/', '/shop/', '/cau-chuyen', '/2021', '/2021/10/16', '/categories', '/feedback', '/blogger']) {
       expect(isWpBlogPath(path), path).toBe(false);
+      expect(isWpUploadPath(path), path).toBe(false);
     }
   });
 });
@@ -441,6 +477,13 @@ describe('middleware: URL WordPress cũ', () => {
     }
   });
 
+  it('bài blog WordPress qua middleware chuyển 301 thẳng sang https://blog.tubutree.com/... (giữ utm/ref, không qua chặng 308)', () => {
+    const res = visit('tubutree.com', '/2021/10/16/nuoc-rua-chen-organic/?utm_source=fb&s=rac&ref=CTV1');
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://blog.tubutree.com/2021/10/16/nuoc-rua-chen-organic/?utm_source=fb&ref=CTV1');
+    expect(visit('ctv-an.tubutree.com', '/blog').status).toBe(200);
+  });
+
   it('slug mới của route /product/[slug] (link CTV, Mini App) và trang web mới đi thẳng', () => {
     for (const path of ['/product/xit-tram-cho-be-pineboo-150ml-b70d1d', '/san-pham', '/gio-hang', '/tai-khoan', '/']) {
       const res = visit('tubutree.com', path);
@@ -456,41 +499,45 @@ describe('cấu hình cutover', () => {
     expect(read('.env.production.example')).toContain('NEXT_PUBLIC_SITE_URL=');
   });
 
-  it('vhost apex: HTTPS có HSTS không includeSubDomains/preload, www và http về apex, khối proxy blog nằm trước `ProxyPass /`', () => {
+  it('vhost apex: HTTPS có HSTS không includeSubDomains/preload, cổng 80 giữ đường HTTP-01 acme-challenge, www và http về apex, khối 301 blog nằm trước `ProxyPass /`', () => {
     const vhost = read('ops/vietnix-vhost-apex.conf.cutover');
     expect(vhost).toContain('ServerName tubutree.com');
     expect(vhost).toContain('ServerName www.tubutree.com');
+    expect(vhost).toContain('Alias /.well-known/acme-challenge/ /var/www/certbot/.well-known/acme-challenge/');
+    expect(vhost).toContain('RewriteCond %{REQUEST_URI} !^/\\.well-known/acme-challenge/');
     expect(vhost).toContain('RewriteRule ^(.*)$ https://tubutree.com$1 [L,R=301]');
     expect(vhost).toContain('Strict-Transport-Security "max-age=31536000"');
     const activeLines = vhost.split('\n').filter((line) => !line.trimStart().startsWith('#'));
     expect(activeLines.some((line) => /includeSubDomains|preload/.test(line))).toBe(false);
     expect(vhost).toContain('ProxyPass / http://127.0.0.1:14000/ ttl=30');
-    const blogAt = vhost.indexOf('ProxyPassMatch "^/([0-9]{4}/[0-9]{2}/[0-9]{2}/');
+    const blogAt = vhost.indexOf('RewriteRule ^/([0-9]{4}/[0-9]{2}/[0-9]{2}/');
     expect(blogAt).toBeGreaterThan(-1);
     expect(blogAt).toBeLessThan(vhost.indexOf('ProxyPass / http://127.0.0.1:14000/'));
   });
 
-  it('vhost apex: khối proxy blog phủ đúng nhóm đường dẫn mà isWpBlogPath coi là blog, và đang BẬT (dòng thật, không phải comment)', () => {
+  it('vhost apex: khối chuyển hướng blog 301 sang https://blog.tubutree.com phủ đúng nhóm đường dẫn của isWpBlogPath và không còn reverse proxy về 42.1.122.84', () => {
     const vhost = read('ops/vietnix-vhost-apex.conf.cutover');
+    const activeLines = vhost.split('\n').filter((line) => !line.trimStart().startsWith('#'));
+    const active = activeLines.join('\n');
     for (const prefix of ['blog', 'category', 'tag', 'author', 'wp-content', 'wp-includes', 'wp-json', 'feed']) {
-      expect(vhost, prefix).toMatch(new RegExp(`\\(\\?:[a-z|\\-/]*\\b${prefix}\\b`));
+      expect(active, prefix).toMatch(new RegExp(`\\b${prefix}\\b`));
     }
-    const active = vhost.split('\n').filter((line) => !line.trimStart().startsWith('#'));
-    expect(active.some((line) => /^\s*ProxyPassMatch /.test(line))).toBe(true);
-    expect(active.some((line) => /^\s*SSLProxyEngine On/.test(line))).toBe(true);
+    expect(activeLines.some((line) => /^\s*RewriteRule .*https:\/\/blog\.tubutree\.com\/.*\[R=301,L\]/.test(line))).toBe(true);
+    expect(activeLines.some((line) => /42\.1\.122\.84|SSLProxyEngine|ProxyPassMatch/.test(line))).toBe(false);
   });
 
-  it('vhost apex: /wp-content/uploads/ phục vụ thẳng từ đĩa, chỉ đọc, chặn thực thi, và đứng TRƯỚC mọi ProxyPass (Apache lấy luật khớp đầu tiên)', () => {
+  it('vhost apex: /wp-content/uploads/ phục vụ thẳng từ đĩa, chỉ đọc, chặn thực thi, không bị chuyển hướng sang blog, và đứng TRƯỚC `ProxyPass /`', () => {
     const vhost = read('ops/vietnix-vhost-apex.conf.cutover');
     const active = vhost.split('\n').filter((line) => !line.trimStart().startsWith('#')).join('\n');
     const exclude = active.indexOf('ProxyPass /wp-content/uploads/ !');
-    const blogMatch = active.indexOf('ProxyPassMatch "^/((?:blog|category|tag|author|wp-content');
-    const dateMatch = active.indexOf('ProxyPassMatch "^/([0-9]{4}');
+    const dateMatch = active.indexOf('RewriteRule ^/([0-9]{4}');
+    const wpContentRule = active.indexOf('RewriteRule ^/((?:wp-content|wp-includes)/');
     const next = active.indexOf('ProxyPass / http://127.0.0.1:14000/');
     expect(exclude).toBeGreaterThan(-1);
     expect(exclude).toBeLessThan(dateMatch);
-    expect(exclude).toBeLessThan(blogMatch);
-    expect(blogMatch).toBeLessThan(next);
+    expect(exclude).toBeLessThan(wpContentRule);
+    expect(wpContentRule).toBeLessThan(next);
+    expect(active).toContain('RewriteCond %{REQUEST_URI} !^/wp-content/uploads(?:/|$)');
     expect(active).toContain('Alias /wp-content/uploads/ /www/wwwroot/tubutree.com/wp-content/uploads/');
     const dir = /<Directory "\/www\/wwwroot\/tubutree\.com\/wp-content\/uploads\/">([\s\S]*?)<\/Directory>/.exec(active)?.[1] ?? '';
     expect(dir).toContain('-Indexes');
@@ -516,27 +563,33 @@ describe('cấu hình cutover', () => {
   });
 });
 
-describe('ops/cutover-apex-apply.sh và cutover-apex-rollback.sh (chỉ đọc mã, KHÔNG chạy)', () => {
+describe('ops/cutover-apex-apply.sh, cutover-apex-http01.sh và cutover-apex-rollback.sh (chỉ đọc mã, KHÔNG chạy)', () => {
   const apply = read('ops/cutover-apex-apply.sh');
+  const http01 = read('ops/cutover-apex-http01.sh');
+  const phase1 = read('ops/vietnix-vhost-apex.conf.phase1');
   const rollback = read('ops/cutover-apex-rollback.sh');
   const code = (text: string) => text.split('\n').filter((line) => !line.trimStart().startsWith('#')).join('\n');
 
-  it('cả hai chạy được (bit thực thi) và cú pháp bash hợp lệ', () => {
-    for (const file of ['ops/cutover-apex-apply.sh', 'ops/cutover-apex-rollback.sh', 'scripts/ops/wp-public-export.mjs']) {
+  it('cả ba chạy được (bit thực thi) và cú pháp bash hợp lệ', () => {
+    for (const file of ['ops/cutover-apex-apply.sh', 'ops/cutover-apex-http01.sh', 'ops/cutover-apex-rollback.sh', 'scripts/ops/wp-public-export.mjs']) {
       expect(statSync(`${REPO}${file}`).mode & 0o111, file).not.toBe(0);
     }
-    for (const file of ['ops/cutover-apex-apply.sh', 'ops/cutover-apex-rollback.sh']) {
+    for (const file of ['ops/cutover-apex-apply.sh', 'ops/cutover-apex-http01.sh', 'ops/cutover-apex-rollback.sh']) {
       expect(() => execFileSync('bash', ['-n', `${REPO}${file}`]), file).not.toThrow();
     }
   });
 
   it('không bao giờ restart/stop Apache dùng chung với ChoDeli: chỉ configtest rồi graceful, và configtest đứng trước graceful', () => {
-    for (const [name, text] of [['apply', apply], ['rollback', rollback]] as const) {
+    for (const [name, text] of [['apply', apply], ['http01', http01], ['rollback', rollback]] as const) {
       const body = code(text);
       expect(body, name).not.toMatch(/apachectl[^\n]*\b(restart|stop|start)\b|systemctl|service\s+(httpd|apache)|httpd\s+-k\s+(stop|restart)|killall|pkill/i);
       expect(body.indexOf('-t 2>&1'), name).toBeGreaterThan(-1);
       expect(body.indexOf('-t 2>&1'), name).toBeLessThan(body.indexOf('-k graceful'));
     }
+    expect(phase1).toContain('Alias /.well-known/acme-challenge/ /var/www/certbot/.well-known/acme-challenge/');
+    expect(phase1).toContain('ProxyPass /wp-content/uploads/ !');
+    expect(code(http01)).toContain('--webroot');
+    expect(code(http01)).toContain('cutover-apex-apply.sh');
   });
 
   it('apply: mặc định chỉ kiểm, phải có --apply mới cài; kiểm đủ điều kiện trước khi đụng Apache; hỏng thì tự gọi rollback', () => {
@@ -603,17 +656,17 @@ describe('danh mục URL WordPress đang index (scripts/ops/data/wp-live-urls-20
     .filter((line) => line.trim() && !line.startsWith('#'));
   const OWN_PATHS = new Set(['/', '/gio-hang/', '/tai-khoan/', '/thanh-toan/']);
 
-  it('459 đường dẫn không trùng; mỗi URL hoặc là blog/ảnh (proxy), hoặc có luật 301/410, hoặc là trang của web mới', () => {
+  it('459 đường dẫn không trùng; mỗi URL hoặc có luật 301/410 (gồm cả 221 URL blog -> blog.tubutree.com), hoặc là trang của web mới', () => {
     expect(inventory).toHaveLength(459);
     expect(new Set(inventory).size).toBe(459);
     const unexplained = inventory.filter((line) => {
       const path = toPathAndSearch(line)?.path ?? '';
-      return !isWpBlogPath(path) && !resolveLegacyWpPath(path) && !OWN_PATHS.has(path);
+      return !resolveLegacyWpPath(path) && !OWN_PATHS.has(path);
     });
     expect(unexplained).toEqual([]);
   });
 
-  it('đi theo từng URL không phải blog bằng bộ kiểm thật: PASS hết, đúng một chặng nội dung, 0 vòng lặp, 0 chuỗi 2 chặng', async () => {
+  it('đi theo TOÀN BỘ 459 URL bằng bộ kiểm thật: PASS hết (gồm 221 URL blog 301 sang https://blog.tubutree.com/...), đúng một chặng nội dung, 0 vòng lặp, 0 chuỗi 2 chặng', async () => {
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? '/', 'https://tubutree.com');
       const out = middleware(new NextRequest(`https://tubutree.com${url.pathname}${url.search}`, { headers: { host: 'tubutree.com' } }));
@@ -626,18 +679,20 @@ describe('danh mục URL WordPress đang index (scripts/ops/data/wp-live-urls-20
     try {
       const failures: string[] = [];
       let checked = 0;
+      let blogRedirected = 0;
       for (const line of inventory) {
         const target = toPathAndSearch(line);
-        if (!target || isWpBlogPath(target.path)) continue;
+        if (!target) continue;
         const expected = expectedFor(resolveLegacyWpPath(target.path));
         const { steps, flags } = await walk({ base: `http://127.0.0.1:${port}`, path: target.path, search: target.search, timeout: 5000 });
         const verdict = classifyChain({ expected, steps, flags });
         checked += 1;
+        if (isWpBlogPath(target.path)) blogRedirected += 1;
         if (verdict.verdict !== 'PASS') failures.push(`${line}: ${verdict.verdict} ${verdict.reason}`);
         if (expected.kind === 'redirect' && steps.filter((st) => st.next && st.status === 301).length !== 1) failures.push(`${line}: không đúng một chặng 301`);
       }
-      expect(checked).toBe(inventory.length - inventory.filter((line) => isWpBlogPath(toPathAndSearch(line)?.path ?? '')).length);
-      expect(checked).toBe(238);
+      expect(checked).toBe(459);
+      expect(blogRedirected).toBe(221);
       expect(failures).toEqual([]);
     } finally {
       await new Promise<void>((done) => server.close(() => done()));

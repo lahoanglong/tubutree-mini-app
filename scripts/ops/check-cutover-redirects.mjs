@@ -71,14 +71,44 @@ export function classifyChain({ expected, steps, flags = {} }) {
   const last = steps[steps.length - 1];
   if (!last || last.status === 0) return { verdict: 'FAIL', reason: 'lỗi mạng hoặc quá thời gian chờ', notes: [] };
   if (flags.loop) return { verdict: 'FAIL', reason: 'vòng lặp chuyển hướng', notes: [] };
-  if (flags.external) return { verdict: 'FAIL', reason: `chuyển sang origin khác: ${last.next?.origin ?? '?'}`, notes: [] };
   if (flags.tooMany) return { verdict: 'FAIL', reason: `quá ${MAX_HOPS} chặng`, notes: [] };
+
+  let expectedExternalUrl = null;
+  if (expected.kind === 'redirect' && /^https?:\/\//i.test(expected.location)) {
+    try {
+      expectedExternalUrl = new URL(expected.location);
+    } catch {
+      expectedExternalUrl = null;
+    }
+  }
+  if (!expectedExternalUrl && flags.external) return { verdict: 'FAIL', reason: `chuyển sang origin khác: ${last.next?.origin ?? '?'}`, notes: [] };
 
   const notes = [];
   const slashHops = steps.filter(isSlashHop).length;
   if (slashHops) notes.push(`${slashHops} chặng bỏ dấu /`);
   const contentHops = steps.filter((s) => s.next && isRedirectStatus(s.status) && !isSlashHop(s));
   const ok2xx = last.status >= 200 && last.status < 300;
+
+  if (expectedExternalUrl) {
+    const first = contentHops[0];
+    if (!first) return { verdict: 'FAIL', reason: `không chuyển hướng (nhận ${last.status})`, notes };
+    if (contentHops.length > 1) return { verdict: 'FAIL', reason: `chuỗi ${contentHops.length} chặng nội dung`, notes };
+    if (slashHops) return { verdict: 'FAIL', reason: 'chuỗi 2 chặng: bỏ dấu / cuối rồi mới chuyển hướng (cần chuyển hướng thẳng một chặng)', notes };
+    if (
+      !first.next ||
+      first.next.origin !== expectedExternalUrl.origin ||
+      first.next.path !== expectedExternalUrl.pathname ||
+      first.next.search !== expectedExternalUrl.search
+    ) {
+      return {
+        verdict: 'FAIL',
+        reason: `sai đích: ${first.next ? first.next.origin + first.next.path + first.next.search : '?'} (mong ${expected.location})`,
+        notes,
+      };
+    }
+    if (!PERMANENT_STATUSES.has(first.status)) return { verdict: 'WARN', reason: `chuyển hướng tạm thời (${first.status})`, notes };
+    return { verdict: 'PASS', reason: String(first.status), notes };
+  }
 
   if (expected.kind === 'gone') {
     if (contentHops.length) return { verdict: 'FAIL', reason: 'mong 410 nhưng bị chuyển hướng', notes };
@@ -236,6 +266,9 @@ export function defaultInventory(table) {
     '/blocks/shop-header',
     '/featured_item/magazine',
     ...table.LEGACY_GONE_EXACT,
+    ...(table.BLOG_ORIGIN
+      ? ['/blog', '/2021/10/16/nuoc-rua-chen-organic', '/category/tin-tuc', '/tag/nuoc-rua-chen', '/author/admin', '/feed', '/comments/feed', '/wp-json']
+      : []),
   ];
   return paths.map((p) => ({ path: `${p}/`, search: '' }));
 }
@@ -245,12 +278,24 @@ export function defaultInventory(table) {
  * false khi URL do người dùng đưa (không có luật là bình thường: web xử lý bằng route riêng). Trả các dòng cùng dạng với bộ kiểm có mạng.
  */
 export function checkRuleTableOffline(table, inputs, { requireRule = false } = {}) {
+  const blogOrigin = table.BLOG_ORIGIN ?? 'https://blog.tubutree.com';
   return inputs.map((input) => {
     const resolution = table.resolveLegacyWpPath(input.path);
     const expected = expectedFor(resolution);
     const row = (verdict, reason, kind = expected) => ({ ...input, expected: kind, steps: [], notes: [], verdict, reason });
+    if (table.isWpUploadPath?.(input.path)) {
+      return resolution
+        ? row('FAIL', 'ảnh uploads (/wp-content/uploads/) phải phục vụ thẳng 200 từ đĩa, không được có luật chuyển hướng')
+        : row('SKIP', 'ảnh WordPress (/wp-content/uploads/, phục vụ thẳng từ đĩa)', { kind: 'upload' });
+    }
     if (table.isWpBlogPath(input.path)) {
-      return resolution ? row('FAIL', 'vừa có luật chuyển hướng vừa là đường dẫn blog (đang reverse proxy)') : row('SKIP', 'blog/ảnh WordPress (reverse proxy, không có luật)', { kind: 'blog' });
+      if (!resolution || resolution.kind !== 'redirect') {
+        return row('FAIL', `đường dẫn blog WordPress phải chuyển hướng 301 sang ${blogOrigin}`);
+      }
+      if (!resolution.location.startsWith(`${blogOrigin}/`)) {
+        return row('FAIL', `đường dẫn blog phải trỏ sang ${blogOrigin}/..., nhận: ${resolution.location}`);
+      }
+      return row('PASS', String(resolution.status));
     }
     if (!resolution) return requireRule ? row('FAIL', 'không còn luật cho URL dựng từ bảng') : row('PASS', 'không có luật (route của web xử lý)');
     if (resolution.kind === 'gone') return row('PASS', '410');
@@ -259,7 +304,9 @@ export function checkRuleTableOffline(table, inputs, { requireRule = false } = {
     const target = toPathAndSearch(location);
     if (!target) return row('FAIL', `đích không đọc được: ${location}`);
     if (trimSlash(target.path) === trimSlash(input.path)) return row('FAIL', 'đích trỏ lại chính URL nguồn (vòng lặp)');
-    if (table.isWpBlogPath(target.path)) return row('FAIL', `đích là đường dẫn blog đang reverse proxy về WordPress: ${target.path}`);
+    if (table.isWpBlogPath(target.path) || table.isWpUploadPath?.(target.path)) {
+      return row('FAIL', `đích là đường dẫn blog/uploads WordPress cũ: ${target.path}`);
+    }
     if (table.resolveLegacyWpPath(target.path)) return row('FAIL', `đích ${target.path} vẫn còn luật chuyển hướng: chuỗi 2 chặng`);
     return row('PASS', String(resolution.status));
   });
@@ -313,9 +360,11 @@ async function main() {
   const rows = opts.offline
     ? checkRuleTableOffline(table, inputs, { requireRule: !opts.sitemaps.length && !opts.urls })
     : await mapPool(inputs, opts.concurrency, async (input) => {
-        const isBlog = table.isWpBlogPath(input.path);
-        if (isBlog && opts.blog === 'skip') return { ...input, verdict: 'SKIP', reason: 'blog/ảnh WordPress (--blog skip)', notes: [], expected: { kind: 'blog' }, steps: [] };
-        const expected = isBlog ? { kind: 'none' } : expectedFor(table.resolveLegacyWpPath(input.path));
+        const isUpload = table.isWpUploadPath?.(input.path) ?? false;
+        if (isUpload && opts.blog === 'skip') {
+          return { ...input, verdict: 'SKIP', reason: 'ảnh WordPress (/wp-content/uploads/, --blog skip)', notes: [], expected: { kind: 'upload' }, steps: [] };
+        }
+        const expected = isUpload ? { kind: 'none' } : expectedFor(table.resolveLegacyWpPath(input.path));
         const { steps, flags } = await walk({ base: opts.base, resolveIp: opts.resolveIp, hostHeader: opts.hostHeader, path: input.path, search: input.search, method: opts.method, timeout: opts.timeout });
         return { ...input, expected, steps, ...classifyChain({ expected, steps, flags }) };
       });

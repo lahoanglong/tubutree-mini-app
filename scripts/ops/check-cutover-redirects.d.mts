@@ -41,17 +41,19 @@ export function walk(input: { base: string; resolveIp?: string; hostHeader?: str
 export function expectedFor(resolution: { kind: 'redirect'; location: string } | { kind: 'gone' } | null): ExpectedOutcome;
 export function parseArgs(argv: string[]): CliOptions;
 export interface OfflineTable {
+  BLOG_ORIGIN?: string;
   resolveLegacyWpPath(pathname: string): { kind: 'redirect'; status: 301; location: string } | { kind: 'gone'; status: 410 } | null;
   isWpBlogPath(pathname: string): boolean;
+  isWpUploadPath?(pathname: string): boolean;
 }
 export interface OfflineRow {
   path: string;
   search: string;
-  expected: ExpectedOutcome | { kind: 'blog' };
+  expected: ExpectedOutcome | { kind: 'blog' } | { kind: 'upload' };
   steps: ChainStep[];
   notes: string[];
   verdict: 'PASS' | 'WARN' | 'FAIL' | 'SKIP';
   reason: string;
 }
-export function defaultInventory(table: { LEGACY_PAGE_REDIRECTS: Record<string, string>; LEGACY_FILE_REDIRECTS: Record<string, string>; LEGACY_PRODUCT_REDIRECTS: Record<string, string>; LEGACY_GONE_EXACT: readonly string[] }): { path: string; search: string }[];
+export function defaultInventory(table: { BLOG_ORIGIN?: string; LEGACY_PAGE_REDIRECTS: Record<string, string>; LEGACY_FILE_REDIRECTS: Record<string, string>; LEGACY_PRODUCT_REDIRECTS: Record<string, string>; LEGACY_GONE_EXACT: readonly string[] }): { path: string; search: string }[];
 export function checkRuleTableOffline(table: OfflineTable, inputs: { path: string; search: string }[], options?: { requireRule?: boolean }): OfflineRow[];

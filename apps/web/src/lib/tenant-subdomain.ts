@@ -1,5 +1,5 @@
 /** Subdomain hệ thống, không phải gian hàng. */
-export const SYSTEM_SUBDOMAINS = ['www', 'admin', 'api', 'app', 'mail'];
+export const SYSTEM_SUBDOMAINS = ['www', 'admin', 'api', 'app', 'blog', 'mail'];
 
 /**
  * Tên miền gốc mà `<tên>.<gốc>` mới là gian hàng. Khoá cứng theo tên miền (không đoán từ số nhãn của host) để host của nơi

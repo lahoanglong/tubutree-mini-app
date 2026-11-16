@@ -75,10 +75,11 @@ describe('assertIdentifierAvailable', () => {
 });
 
 describe('RESERVED_STOREFRONT_IDENTIFIERS', () => {
-  it('gộp đủ từ khóa của cả 2 danh sách cũ (merchant.service + storefront.service)', () => {
-    for (const kw of ['admin', 'api', 'www', 'app', 'mail', 'staging', 'dev', 'static', 'cdn', 'auth', 'shop', 'tubutree', 'tubu', 'root', 'system', 'dashboard', 'demo']) {
+  it('gộp đủ từ khóa của cả 2 danh sách cũ (merchant.service + storefront.service) và khóa cả subdomain blog chính thức', () => {
+    for (const kw of ['admin', 'api', 'www', 'app', 'blog', 'mail', 'staging', 'dev', 'static', 'cdn', 'auth', 'shop', 'tubutree', 'tubu', 'root', 'system', 'dashboard', 'demo']) {
       expect(RESERVED_STOREFRONT_IDENTIFIERS.has(kw)).toBe(true);
     }
+    expect(() => normalizeSubdomain('blog')).toThrow(BadRequestException);
   });
 });
 

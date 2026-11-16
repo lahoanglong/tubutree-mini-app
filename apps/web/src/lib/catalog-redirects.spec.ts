@@ -22,6 +22,7 @@ describe('buildCatalogRedirects', () => {
       expect(re.test('tubutree.com')).toBe(false);
       expect(re.test('www.tubutree.com')).toBe(false);
       expect(re.test('app.tubutree.com')).toBe(false);
+      expect(re.test('blog.tubutree.com')).toBe(false);
       expect(re.test('localhost')).toBe(false);
       expect(re.test('du-an.vercel.app')).toBe(false);
       expect(re.test('a.b.tubutree.com')).toBe(false);

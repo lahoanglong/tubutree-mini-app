@@ -5,7 +5,7 @@
  * Là .mjs thuần vì `next.config.mjs` không nạp được TypeScript.
  */
 const LEGACY_HOME_KEYS = ['q', 'category', 'brand', 'page'];
-const SYSTEM_SUBDOMAINS = ['www', 'admin', 'api', 'app', 'mail'];
+const SYSTEM_SUBDOMAINS = ['www', 'admin', 'api', 'app', 'blog', 'mail'];
 const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**

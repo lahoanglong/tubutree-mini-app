@@ -94,12 +94,12 @@ describe('isPortalPath', () => {
 
 describe('tenantSubdomainOf', () => {
   // Phải khớp middleware.ts: subdomain nào không thuộc hệ thống thì "/" được rewrite sang /s/{subdomain}.
-  it('nhận subdomain gian hàng, bỏ qua host gốc, www/app/admin/api/mail và localhost', async () => {
+  it('nhận subdomain gian hàng, bỏ qua host gốc, www/app/admin/api/blog/mail và localhost', async () => {
     const { tenantSubdomainOf } = await loadSite();
     expect(tenantSubdomainOf('ctv-an.tubutree.com')).toBe('ctv-an');
     expect(tenantSubdomainOf('Ctv-An.tubutree.com:3000')).toBe('ctv-an');
     expect(tenantSubdomainOf('ctv-an.localhost:3000')).toBe('ctv-an');
-    for (const h of ['tubutree.com', 'app.tubutree.com', 'www.tubutree.com', 'admin.tubutree.com', 'api.tubutree.com', 'mail.tubutree.com', 'localhost:3000', 'localhost', 'tubutree-web-git-main-x.vercel.app', 'ctv-an.example.com', '', null, undefined]) {
+    for (const h of ['tubutree.com', 'app.tubutree.com', 'blog.tubutree.com', 'www.tubutree.com', 'admin.tubutree.com', 'api.tubutree.com', 'mail.tubutree.com', 'localhost:3000', 'localhost', 'tubutree-web-git-main-x.vercel.app', 'ctv-an.example.com', '', null, undefined]) {
       expect(tenantSubdomainOf(h), String(h)).toBeNull();
     }
   });

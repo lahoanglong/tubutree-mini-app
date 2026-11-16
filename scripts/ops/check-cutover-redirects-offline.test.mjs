@@ -11,8 +11,9 @@ const SCRIPT = fileURLToPath(new URL('./check-cutover-redirects.mjs', import.met
 const [major = 0, minor = 0] = process.versions.node.split('.').map(Number);
 const HAS_TS = major > 22 || (major === 22 && minor >= 18);
 
-/** Bảng giả: `rules` = đường dẫn đã bỏ dấu "/" cuối -> `{ to }` (301) hoặc `{ gone: true }`; `blog` = các đường dẫn blog. */
-const fakeTable = (rules, blog = []) => ({
+/** Bảng giả: `rules` = đường dẫn đã bỏ dấu "/" cuối -> `{ to }` (301) hoặc `{ gone: true }`; `blog` = đường dẫn blog; `uploads` = ảnh tĩnh trên đĩa. */
+const fakeTable = (rules, blog = [], uploads = []) => ({
+  BLOG_ORIGIN: 'https://blog.tubutree.com',
   resolveLegacyWpPath(pathname) {
     const key = pathname.length > 1 ? pathname.replace(/\/+$/, '') : pathname;
     const rule = rules[key];
@@ -20,6 +21,7 @@ const fakeTable = (rules, blog = []) => ({
     return rule.gone ? { kind: 'gone', status: 410 } : { kind: 'redirect', status: 301, location: rule.to };
   },
   isWpBlogPath: (pathname) => blog.includes(pathname.replace(/\/+$/, '')),
+  isWpUploadPath: (pathname) => uploads.includes(pathname.replace(/\/+$/, '')),
 });
 const verdictOf = (table, path, opts) => checkRuleTableOffline(table, [{ path, search: '' }], opts)[0];
 
@@ -59,17 +61,31 @@ test('đích vẫn còn luật → FAIL chuỗi 2 chặng', () => {
   assert.equal(verdictOf(t, '/b/').verdict, 'PASS');
 });
 
-test('đích là đường dẫn blog (reverse proxy) → FAIL', () => {
-  const t = fakeTable({ '/a': { to: '/blog' } }, ['/blog']);
+test('đích trên web mới lại trùng đường dẫn blog/uploads WordPress cũ → FAIL', () => {
+  const t = fakeTable({ '/a': { to: '/blog' }, '/b': { to: '/wp-content/uploads/a.jpg' } }, ['/blog'], ['/wp-content/uploads/a.jpg']);
   assert.match(verdictOf(t, '/a/').reason, /blog/);
+  assert.match(verdictOf(t, '/b/').reason, /uploads/);
 });
 
-test('URL blog: không có luật → SKIP; vừa có luật vừa là blog → FAIL', () => {
-  const t = fakeTable({ '/blog-a': { to: '/san-pham' } }, ['/blog-a', '/blog-b']);
-  assert.equal(verdictOf(t, '/blog-b/').verdict, 'SKIP');
-  const conflict = verdictOf(t, '/blog-a/');
-  assert.equal(conflict.verdict, 'FAIL');
-  assert.match(conflict.reason, /vừa có luật/);
+test('URL blog: 301 sang https://blog.tubutree.com/... → PASS; thiếu luật hoặc sai origin → FAIL', () => {
+  const t = fakeTable(
+    { '/blog': { to: 'https://blog.tubutree.com/blog/' }, '/blog-sai': { to: '/san-pham' } },
+    ['/blog', '/blog-sai', '/blog-thieu'],
+  );
+  assert.equal(verdictOf(t, '/blog/').verdict, 'PASS');
+  assert.equal(verdictOf(t, '/blog-sai/').verdict, 'FAIL');
+  assert.match(verdictOf(t, '/blog-sai/').reason, /blog\.tubutree\.com/);
+  assert.equal(verdictOf(t, '/blog-thieu/').verdict, 'FAIL');
+});
+
+test('URL ảnh uploads (/wp-content/uploads/*): không có luật → SKIP (phục vụ thẳng từ đĩa); có luật → FAIL', () => {
+  const t = fakeTable(
+    { '/wp-content/uploads/bad.jpg': { to: 'https://blog.tubutree.com/wp-content/uploads/bad.jpg' } },
+    [],
+    ['/wp-content/uploads/ok.jpg', '/wp-content/uploads/bad.jpg'],
+  );
+  assert.equal(verdictOf(t, '/wp-content/uploads/ok.jpg').verdict, 'SKIP');
+  assert.equal(verdictOf(t, '/wp-content/uploads/bad.jpg').verdict, 'FAIL');
 });
 
 test('URL không có luật: requireRule=true → FAIL (URL dựng từ bảng phải còn luật); false → PASS', () => {

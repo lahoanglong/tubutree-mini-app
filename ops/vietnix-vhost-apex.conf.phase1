@@ -1,0 +1,55 @@
+# PHASE 1 (HTTP-01 webroot) — vhost cổng 80 tạm cho tubutree.com và www.tubutree.com khi xin chứng chỉ Let's Encrypt
+# bằng phương án HTTP-01 webroot (không cần Cloudflare API token). Do `ops/cutover-apex-http01.sh --apply` cài tạm trong
+# vài giây để chạy `certbot certonly --webroot -w /var/www/certbot`, sau đó được nâng cấp ngay lên `vietnix-vhost-apex.conf.cutover`.
+<VirtualHost *:80>
+    ServerName tubutree.com
+    ServerAlias www.tubutree.com
+    ErrorLog "/www/wwwlogs/tubutree.com-error_log"
+    CustomLog "/www/wwwlogs/tubutree.com-access_log" combined
+
+    Alias /.well-known/acme-challenge/ /var/www/certbot/.well-known/acme-challenge/
+    <Directory "/var/www/certbot/.well-known/acme-challenge/">
+        Options None
+        AllowOverride None
+        Require all granted
+    </Directory>
+
+    ProxyPass /.well-known/acme-challenge/ !
+    ProxyPass /wp-content/uploads/ !
+    Alias /wp-content/uploads/ /www/wwwroot/tubutree.com/wp-content/uploads/
+    <Directory "/www/wwwroot/tubutree.com/wp-content/uploads/">
+        Options -Indexes -ExecCGI -Includes +SymLinksIfOwnerMatch
+        AllowOverride None
+        Require all granted
+        RemoveHandler .php .phtml .phar .pl .py .cgi
+        <FilesMatch "(?i)\.(php[0-9]?|phtml|phar|pl|py|cgi|sh|shtml)$">
+            Require all denied
+        </FilesMatch>
+        <IfModule mod_headers.c>
+            Header always set X-Content-Type-Options "nosniff"
+            Header always set Cache-Control "public, max-age=2592000"
+        </IfModule>
+    </Directory>
+
+    RewriteEngine On
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteCond %{REQUEST_URI} !^/wp-content/uploads(?:/|$)
+    RewriteRule ^/([0-9]{4}/[0-9]{2}/[0-9]{2}/[^/]+(?:/.*[^/])?)/*$ https://blog.tubutree.com/$1/ [R=301,L]
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^/((?:blog|feed|comments/feed)(?:/.*[^/])?)/*$ https://blog.tubutree.com/$1/ [R=301,L]
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^/((?:category|tag|author)/(?:.*[^/]))/*$ https://blog.tubutree.com/$1/ [R=301,L]
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^/wp-json/*$ https://blog.tubutree.com/wp-json/ [R=301,L]
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteRule ^/(wp-json/(?:.*[^/]))/*$ https://blog.tubutree.com/$1 [R=301,L]
+    RewriteCond %{REQUEST_URI} !^/\.well-known/acme-challenge/
+    RewriteCond %{REQUEST_URI} !^/wp-content/uploads(?:/|$)
+    RewriteRule ^/((?:wp-content|wp-includes)/.+)$ https://blog.tubutree.com/$1 [R=301,L]
+
+    ProxyPreserveHost On
+    ProxyRequests Off
+    RequestHeader set X-Forwarded-Proto "http"
+    ProxyPass / http://127.0.0.1:14000/ ttl=30
+    ProxyPassReverse / http://127.0.0.1:14000/
+</VirtualHost>

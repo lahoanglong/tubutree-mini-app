@@ -2,9 +2,11 @@
  * Bảng chuyển hướng từ URL WordPress/WooCommerce cũ của tubutree.com sang web mới (giai đoạn chuẩn bị cutover, chưa đổi DNS).
  *
  * Nguồn số liệu: sitemap Rank Math công khai đo ngày 13/11/2026: 91 sản phẩm `/product/<slug>/`, 40 trang thật, 67 trang demo của theme
- * (`/elements/*`, `/demos/*`), cộng `/blocks/*` và `/featured_item/*` cũng là nội dung mẫu của theme. 200 bài blog `/YYYY/MM/DD/<slug>/` và ảnh
- * `/wp-content/*` KHÔNG nằm ở đây: web mới không có blog, phương án giai đoạn 1 là reverse proxy các đường dẫn đó về origin WordPress
- * (ops/vietnix-vhost-apex.conf.cutover); `isWpBlogPath` chỉ để script kiểm và spec biết nhóm này không phải chuyển hướng.
+ * (`/elements/*`, `/demos/*`), cộng `/blocks/*` và `/featured_item/*` cũng là nội dung mẫu của theme.
+ * - 200+ bài blog `/YYYY/MM/DD/<slug>/`, chuyên mục `/category/*`, thẻ `/tag/*`, tác giả `/author/*`, `/blog/*`, `/feed/*`, `/wp-json/*` được chuyển hướng
+ *   vĩnh viễn 301 sang `https://blog.tubutree.com/...` (nơi WordPress cũ tiếp tục vận hành như chuyên trang nội dung độc lập).
+ * - Riêng kho ảnh tĩnh `/wp-content/uploads/*` KHÔNG chuyển hướng ở đây (`resolveLegacyWpPath` trả `null`, `isWpUploadPath` trả `true`): Apache trên VPS Vietnix
+ *   (`ops/vietnix-vhost-apex.conf.cutover`) phục vụ thẳng từ đĩa `/www/wwwroot/tubutree.com/wp-content/uploads/` để mọi link ảnh sản phẩm/bài chia sẻ cũ giữ 200 OK vĩnh viễn.
  *
  * Quy ước:
  * - Không bao giờ để một URL sản phẩm WordPress rơi vào 404: slug khớp rõ thì sang `/san-pham/<slug mới>`, không khớp rõ thì sang
@@ -244,8 +246,46 @@ function categoryDestination(slugPath: string): string {
   return hit ? q(hit[1]) : ALL;
 }
 
+export const BLOG_ORIGIN = 'https://blog.tubutree.com';
+
 function redirect(location: string): LegacyResolution {
   return { kind: 'redirect', status: 301, location };
+}
+
+/** Kho ảnh tĩnh `/wp-content/uploads/*` được Apache phục vụ thẳng 200 OK từ đĩa trên VPS Vietnix, KHÔNG chuyển hướng sang blog. */
+export function isWpUploadPath(pathname: string): boolean {
+  const path = normalizePath(pathname);
+  return path !== null && (path === '/wp-content/uploads' || path.startsWith('/wp-content/uploads/'));
+}
+
+/** Đường dẫn bài viết, chuyên mục, thẻ, tác giả, feed, REST API và tài nguyên giao diện WordPress cũ chuyển 301 sang `blog.tubutree.com`. */
+const WP_BLOG_PATTERNS: readonly RegExp[] = [
+  /^\/blog(?:\/|$)/,
+  /^\/\d{4}\/\d{2}\/\d{2}\/[^/]+(?:\/|$)/,
+  /^\/category\/./,
+  /^\/tag\/./,
+  /^\/author\/./,
+  /^\/wp-content\/(?!uploads(?:\/|$)).+/,
+  /^\/wp-includes\/./,
+  /^\/wp-json(?:\/|$)/,
+  /^\/(?:comments\/)?feed(?:\/|$)/,
+];
+
+export function isWpBlogPath(pathname: string): boolean {
+  const path = normalizePath(pathname);
+  return path !== null && !isWpUploadPath(path) && WP_BLOG_PATTERNS.some((re) => re.test(path));
+}
+
+function blogDestination(path: string): string {
+  const encoded = encodeURI(path);
+  if (path.startsWith('/wp-content/') || path.startsWith('/wp-includes/') || path.startsWith('/wp-json/')) {
+    return `${BLOG_ORIGIN}${encoded}`;
+  }
+  const lastSegment = path.slice(path.lastIndexOf('/') + 1);
+  if (lastSegment.includes('.')) {
+    return `${BLOG_ORIGIN}${encoded}`;
+  }
+  return `${BLOG_ORIGIN}${encoded}/`;
 }
 
 /**
@@ -254,7 +294,7 @@ function redirect(location: string): LegacyResolution {
  */
 export function resolveLegacyWpPath(pathname: string): LegacyResolution | null {
   const path = normalizePath(pathname);
-  if (path === null || path === '/') return null;
+  if (path === null || path === '/' || isWpUploadPath(path)) return null;
 
   const file = own(LEGACY_FILE_REDIRECTS, path);
   if (file) return redirect(file);
@@ -275,7 +315,11 @@ export function resolveLegacyWpPath(pathname: string): LegacyResolution | null {
   if (page) return redirect(page);
 
   const prefix = LEGACY_PREFIX_REDIRECTS.find(([p]) => underPrefix(path, p));
-  return prefix ? redirect(prefix[1]) : null;
+  if (prefix) return redirect(prefix[1]);
+
+  if (WP_BLOG_PATTERNS.some((re) => re.test(path))) return redirect(blogDestination(path));
+
+  return null;
 }
 
 /** Ghép tham số theo dõi (utm_*, gclid, fbclid, ref) của URL gốc vào đích; tham số đã có sẵn trong đích được giữ nguyên. */
@@ -288,22 +332,4 @@ export function carryLegacyParams(location: string, search: string): string {
   }
   const query = merged.toString().replace(/%2B/g, '+');
   return query ? `${path}?${query}` : path;
-}
-
-/** Đường dẫn blog/ảnh/feed của WordPress mà giai đoạn 1 để reverse proxy về origin cũ (không phải chuyển hướng, web mới không có). */
-const WP_BLOG_PATTERNS: readonly RegExp[] = [
-  /^\/blog(?:\/|$)/,
-  /^\/\d{4}\/\d{2}\/\d{2}\/[^/]+$/,
-  /^\/category\/./,
-  /^\/tag\/./,
-  /^\/author\/./,
-  /^\/wp-content\//,
-  /^\/wp-includes\//,
-  /^\/wp-json(?:\/|$)/,
-  /^\/(?:comments\/)?feed(?:\/|$)/,
-];
-
-export function isWpBlogPath(pathname: string): boolean {
-  const path = normalizePath(pathname);
-  return path !== null && WP_BLOG_PATTERNS.some((re) => re.test(path));
 }
