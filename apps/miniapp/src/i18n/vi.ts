@@ -8,7 +8,7 @@ import { orderCopy } from '@tubutree/app-core/account-copy';
 import { CART_EMPTY, CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } from '@tubutree/app-core/cart-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { stockText } from '@tubutree/app-core/commerce/stock-text';
-import { formatDrops, formatNumber, formatPoints, formatVnd } from '../utils/format';
+import { formatDrops, formatNumber, formatPoints } from '../utils/format';
 
 export const vi = {
   common: {
@@ -583,13 +583,6 @@ export const vi = {
     },
   },
 
-  wallet: {
-    referralPromise: (minOrder: number, windowDays: number) =>
-      `Bạn bè vào app bằng mã của bạn và có đơn thứ hai từ ${formatVnd(minOrder)} giao thành công trong ${windowDays} ngày kể từ đơn đầu → bạn nhận Điểm Xanh thưởng.`,
-    referralMilestoneProgress: (remaining: number, bonusFormatted: string) =>
-      `Mời thêm ${remaining} bạn để nhận ${bonusFormatted}`,
-  },
-
   storefront: {
     publicTitle: STOREFRONT_PUBLIC_TITLE,
     notFound: STOREFRONT_NOT_FOUND,
@@ -734,26 +727,6 @@ export const vi = {
     agree: 'Tôi đã đọc và đồng ý với điều khoản hoa hồng & thuế của CTV Tubu Tree',
     mustAgree: 'Chọn ô đồng ý điều khoản để đăng ký',
     needZalo: 'Cần liên kết Zalo để nhận hoa hồng. Bấm Đăng ký lại và chọn cho phép dùng số điện thoại nhé.',
-  },
-
-  dealerApply: {
-    pendingBody: (hours: number) => `Đội ngũ Tubu sẽ xét duyệt trong vòng ${hours} giờ và liên hệ lại với bạn qua Zalo.`,
-    pendingBodyGeneric: 'Đội ngũ Tubu sẽ xét duyệt và liên hệ lại với bạn qua Zalo.',
-  },
-
-  dealerOrder: {
-    outOfStockPreorder: 'Hết hàng — được đặt trước',
-    preorderLine: (n: number) => `Đặt trước ${n}, giao khi hàng về`,
-    preorderNote: (lines: number) =>
-      `${lines} mặt hàng đặt vượt tồn: cả đơn sẽ giao khi đủ hàng, giữ giá hôm nay. Đơn trả trước vẫn thanh toán đủ ngay.`,
-    createdWithPreorder: 'Đã tạo đơn đại lý — đơn sẽ giao khi đủ hàng, giữ giá hôm nay.',
-    created: 'Đã tạo đơn đại lý!',
-    createdEarlier: (code: string) =>
-      `Đơn ${code} đã được tạo ở lần đặt trước (mạng lỗi). Giỏ hiện tại chưa đặt, kiểm tra mục Đơn hàng trước khi đặt lại.`,
-    createdEarlierMethod: (code: string, method: 'CREDIT' | 'PREPAID') =>
-      method === 'CREDIT'
-        ? `Đơn ${code} đã tạo ở lần trước theo hình thức Ghi công nợ, không cần chuyển khoản.`
-        : `Đơn ${code} đã tạo ở lần trước theo hình thức Trả trước, cần chuyển khoản để đơn được giao.`,
   },
 
   shareFallback: {

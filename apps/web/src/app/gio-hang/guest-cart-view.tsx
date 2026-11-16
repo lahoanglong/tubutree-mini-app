@@ -83,16 +83,16 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
           {ship && (
             <>
               <div className="flex justify-between text-sm">
-                <span className="text-stone-600">{subtotalLabel}</span>
-                <span className="tabular-nums text-stone-900">{formatVnd(view.subtotal)}</span>
+                <span className="text-[var(--color-text-secondary)]">{subtotalLabel}</span>
+                <span className="tabular-nums text-[var(--color-text-primary)]">{formatVnd(view.subtotal)}</span>
               </div>
               <div data-testid="cart-ship-estimate" className="mt-1 flex justify-between text-sm">
-                <span className="text-stone-600">{ship.feeLabel}</span>
-                <span className={`tabular-nums ${ship.free ? 'text-success-fg' : 'text-stone-900'}`}>{ship.feeText}</span>
+                <span className="text-[var(--color-text-secondary)]">{ship.feeLabel}</span>
+                <span className={`tabular-nums ${ship.free ? 'text-success-fg' : 'text-[var(--color-text-primary)]'}`}>{ship.feeText}</span>
               </div>
             </>
           )}
-          <div className={`mb-3 flex justify-between font-bold text-stone-900 ${ship ? 'mt-3 border-t border-stone-200 pt-3' : ''}`}>
+          <div className={`mb-3 flex justify-between font-bold text-[var(--color-text-primary)] ${ship ? 'mt-3 border-t border-[var(--color-border-subtle)] pt-3' : ''}`}>
             <span>{totalLabel}</span>
             <span className="tabular-nums">{formatVnd(total)}</span>
           </div>
@@ -106,8 +106,8 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
         <div className="md:mx-auto md:max-w-2xl">
           {ship && (
             <div className="mb-1 flex justify-between text-sm" data-ds="cart-ship-estimate">
-              <span className="text-stone-600">{ship.feeLabel}</span>
-              <span className={`font-semibold tabular-nums ${ship.free ? 'text-success-fg' : 'text-stone-900'}`}>{ship.feeText}</span>
+              <span className="text-[var(--color-text-secondary)]">{ship.feeLabel}</span>
+              <span className={`font-semibold tabular-nums ${ship.free ? 'text-success-fg' : 'text-[var(--color-text-primary)]'}`}>{ship.feeText}</span>
             </div>
           )}
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">

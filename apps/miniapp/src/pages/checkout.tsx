@@ -124,8 +124,7 @@ export default function CheckoutPage() {
   const [totalChanged, setTotalChanged] = useState<string | null>(null);
   // Lỗi đặt đơn chỉ sửa được ở giỏ (hết tồn, vượt suất giờ vàng): giữ trên màn kèm đường về giỏ, không để toast trôi mất.
   const [cartIssue, setCartIssue] = useState<string | null>(null);
-  // Khoá tap nhanh 2 lần: ensurePhone() mở native sheet, nếu không khoá thì
-  // 2 sheet số điện thoại + 2 mutate song song (BE chống đơn đôi nhưng UX hỏng).
+  // Khoá tap nhanh 2 lần: order.isPending chỉ đổi sau một lần vẽ lại, hai chạm sát nhau sẽ gọi mutate song song (BE chống đơn đôi nhưng UX hỏng).
   const [submitting, setSubmitting] = useState(false);
   // Hoá đơn VAT (spec §6.3) — nhớ thông tin cho lần sau (localStorage).
   const [wantInvoice, setWantInvoice] = useState(false);
@@ -172,7 +171,7 @@ export default function CheckoutPage() {
       .getState()
       .ensurePhoneOrThrow()
       .then((phone) => (phone ? queryClient.invalidateQueries({ queryKey: ['quote'] }) : undefined))
-      .catch((e: unknown) => openSnackbar({ text: getErrorMessage(e), type: 'error' }))
+      .catch((e: unknown) => notify({ text: getErrorMessage(e), type: 'error' }))
       .finally(() => setVerifyingPhone(false));
   };
 

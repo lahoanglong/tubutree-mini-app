@@ -710,8 +710,8 @@ export default function CartPage() {
             )}
             {ship && (
               <div data-testid="cart-ship-estimate" className="mt-1 flex justify-between text-sm">
-                <span className="text-stone-600">{ship.feeLabel}</span>
-                <span className={ship.free ? 'text-success-fg' : 'text-stone-900'}>{ship.feeText}</span>
+                <span className="text-[var(--color-text-secondary)]">{ship.feeLabel}</span>
+                <span className={ship.free ? 'text-success-fg' : 'text-[var(--color-text-primary)]'}>{ship.feeText}</span>
               </div>
             )}
             {saving > 0 && (

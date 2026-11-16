@@ -46,6 +46,7 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'support.hotline': { phone: '0984 606 774' },
   'support.orderContext': { code: 'TUBU20261015001' },
   'invite.copyFailed': { code: 'TUBU1234567890' },
+  'checkout.shipEstimateValue': { fee: '999.999đ–999.999đ' },
 };
 
 const hit = (text: string) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.use);
