@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { BullModule } from '@nestjs/bullmq';
 import { PancakeSyncService } from './pancake-sync.service';
 import { PancakeOrderService } from './pancake-order.service';
+import { PancakeDirectBackend } from './pancake-direct.backend';
 import { PancakeProcessor } from './pancake.processor';
 import { PancakePushProcessor } from './pancake-push.processor';
 import { PancakePushReconcileService } from './pancake-push-reconcile.service';
@@ -36,6 +37,7 @@ import { CronLeaderModule } from '../../../common/cron-leader/cron-leader.module
   providers: [
     PancakeSyncService,
     PancakeOrderService,
+    PancakeDirectBackend,
     PancakeProcessor,
     PancakePushProcessor,
     PancakePushReconcileService,
@@ -43,6 +45,6 @@ import { CronLeaderModule } from '../../../common/cron-leader/cron-leader.module
     GeoService,
     GomdonAlertService,
   ],
-  exports: [PancakeSyncHooksModule, PancakeSyncService, PancakeOrderService, GeoService],
+  exports: [PancakeSyncHooksModule, PancakeSyncService, PancakeOrderService, PancakeDirectBackend, GeoService],
 })
 export class PancakeModule {}

@@ -18,6 +18,7 @@ import { PUSH_ERROR_KIND } from '../integrations/pancake/pancake-push-error';
 import { pushRetryGateDecision } from '../integrations/pancake/pancake-order.service';
 import { GOMDON_EVENT_STATUS } from '../integrations/gomdon/gomdon-webhook.service';
 import { GOMDON_STATE } from '../integrations/gomdon/gomdon-status';
+import { MssHealthService, type MssOpsCard } from '../integrations/mss/mss-health.service';
 import { pancakeUnsyncedWhere, recyclingAttentionWhere } from '../admin/admin-order-filter';
 import {
   DELIVERED_EFFECTS_GRACE_MINUTES,
@@ -218,7 +219,18 @@ export class OpsHealthService {
     @Optional() @Inject(OPS_FETCH) private readonly fetchImpl?: FetchLike,
     @Optional() private readonly email?: OpsEmailService,
     @Optional() private readonly cronRuns?: CronRunService,
+    @Optional() private readonly mss?: MssHealthService,
   ) {}
+
+  /** Thẻ "Kết nối MSS". Chỉ để hiển thị: lỗi đọc không được làm hỏng cả màn sức khoẻ. */
+  async mssCard(): Promise<MssOpsCard | null> {
+    try {
+      return (await this.mss?.opsCard()) ?? null;
+    } catch (err) {
+      this.logger.warn(`Không đọc được trạng thái kết nối MSS: ${err instanceof Error ? err.message : err}`);
+      return null;
+    }
+  }
 
   async thresholds(): Promise<OpsThresholds> {
     const entries = await Promise.all(
@@ -243,7 +255,7 @@ export class OpsHealthService {
 
   async snapshot(now = new Date()) {
     const t = await this.thresholds();
-    const [pancake, gomdon, queues, emailChannel, orders, webhookChannel, cronJobs, zaloProblems, zns] = await Promise.all([
+    const [pancake, gomdon, queues, emailChannel, orders, webhookChannel, cronJobs, zaloProblems, zns, mss] = await Promise.all([
       this.pancakeHealth(now, t),
       this.gomdonHealth(now, t),
       this.queueHealth(now),
@@ -253,6 +265,7 @@ export class OpsHealthService {
       this.cronJobs(),
       this.zaloTokenProblems(now),
       this.znsHealth(now),
+      this.mssCard(),
     ]);
     const problems = opsProblems(
       {
@@ -282,7 +295,7 @@ export class OpsHealthService {
       },
       t,
     ).concat(zaloProblems);
-    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, orders, alertChannels: { email: emailChannel, webhook: webhookChannel }, cronJobs, zns, problems };
+    return { generatedAt: now.toISOString(), thresholds: t, pancake, gomdon, queues, orders, alertChannels: { email: emailChannel, webhook: webhookChannel }, cronJobs, zns, mss, problems };
   }
 
   /**

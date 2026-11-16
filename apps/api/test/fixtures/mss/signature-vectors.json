@@ -1,0 +1,12 @@
+{
+  "_note": "Tự dựng từ ví dụ JSON của hợp đồng tubu-mss-order-events mục 3.3 (chưa có /tmp/contracts/fixtures/commerce-v0.9/). Chữ ký tính bằng openssl dgst -sha256 -hmac trên đúng byte của file, độc lập với code. Bí mật chỉ dùng cho test.",
+  "secret": "test-secret-not-for-prod-0123456789abcdef",
+  "previousSecret": "test-prev-secret-not-for-prod-0123456789ab",
+  "keyId": "mss-test-key",
+  "timestamp": 1794839400,
+  "cases": [
+    { "name": "POST thân sự kiện đơn (byte nguyên văn của order-event.json)", "bodyFile": "order-event.json", "secret": "current", "signature": "v1=ba41610b761fc11f49caae4142ff53cdeb8bb94f9d269e4ddc44ab238edf7142" },
+    { "name": "POST cùng thân, ký bằng bí mật trước (đang xoay khoá)", "bodyFile": "order-event.json", "secret": "previous", "signature": "v1=b6523e5b6ba2f8a075171998cab79147acd2895160d95bb443811a6376c65c6e" },
+    { "name": "GET thân rỗng ký chuỗi \"<timestamp>.\"", "bodyFile": null, "secret": "current", "signature": "v1=787ecbe7f4a3661ede3963f653f3b244a679e3f779c3940b9986bde202b876b9" }
+  ]
+}

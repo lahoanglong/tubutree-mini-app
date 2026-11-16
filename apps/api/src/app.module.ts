@@ -42,6 +42,7 @@ import { DealerModule } from './modules/dealer/dealer.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { PancakeModule } from './modules/integrations/pancake/pancake.module';
 import { GomdonModule } from './modules/integrations/gomdon/gomdon.module';
+import { MssModule } from './modules/integrations/mss/mss.module';
 import { PaymentModule } from './modules/integrations/payment/payment.module';
 import { StorefrontModule } from './modules/storefront/storefront.module';
 import { MerchantModule } from './modules/merchant/merchant.module';
@@ -108,6 +109,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     AdminModule,
     PancakeModule,
     GomdonModule,
+    MssModule,
     PaymentModule,
     StorefrontModule,
     MerchantModule,

@@ -38,6 +38,8 @@ const LARGE_BODY_ROUTES: readonly RegExp[] = [
 // Cờ i: Express định tuyến không phân biệt hoa thường, /api/Admin/... vẫn tới controller admin.
 const WEBHOOK_ROUTE = /^\/api\/webhooks(\/|$)/i;
 const PANCAKE_WEBHOOK_ROUTE = /^\/api\/webhooks\/pancake(\/|$)/i;
+/** MSS gọi vào Tubu (hợp đồng commerce v0.9): ký HMAC trên byte gốc nên đi tầng webhook (giữ rawBody, trần 64 KB). */
+const MSS_INTEGRATION_ROUTE = /^\/api\/integrations\/mss(\/|$)/i;
 /** Đúng route của controller (Express không phân biệt hoa thường, cho phép dấu / cuối): đường dẫn con quét dò không được đếm vào nguồn Pancake. */
 const PANCAKE_WEBHOOK_EXACT_ROUTE = /^\/api\/webhooks\/pancake\/?$/i;
 
@@ -61,7 +63,7 @@ type BodyTier = 'default' | 'webhook' | 'pancake' | 'large';
 function tierFor(path: string): BodyTier {
   if (PANCAKE_WEBHOOK_ROUTE.test(path)) return 'pancake';
   if (LARGE_BODY_ROUTES.some((re) => re.test(path))) return 'large';
-  if (WEBHOOK_ROUTE.test(path)) return 'webhook';
+  if (WEBHOOK_ROUTE.test(path) || MSS_INTEGRATION_ROUTE.test(path)) return 'webhook';
   return 'default';
 }
 
@@ -151,7 +153,8 @@ export function eventsBodyParser(): RequestHandler {
 /**
  * Webhook ký trên byte gốc (Zalo OA, Gomdon: chữ ký tính trên thân như nhận được): giữ buffer ở `req.rawBody` (dạng `RawBodyRequest` của Nest),
  * vì JSON.stringify lại thân đã parse làm mất `\/` và `\uXXXX` nên chữ ký lệch. Áp cho cả nhóm `/api/webhooks/*` ngoài Pancake
- * (tầng `webhook` bên dưới), gồm `/api/webhooks/gomdon` và `/api/webhooks/gomdon/<token>`; thân form (multipart/urlencoded) không có rawBody.
+ * (tầng `webhook` bên dưới), gồm `/api/webhooks/gomdon` và `/api/webhooks/gomdon/<token>`, và nhóm `/api/integrations/mss/*`; thân form
+ * (multipart/urlencoded) không có rawBody.
  */
 function keepRawBody(verify: ReturnType<typeof rawGuard>): ReturnType<typeof rawGuard> {
   return (req, res, buf, encoding) => {

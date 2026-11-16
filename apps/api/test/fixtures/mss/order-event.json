@@ -1,0 +1,28 @@
+{
+  "event_id": "01JCX9Z7Q4M8T2K5V6W3Y0ABCD",
+  "event_type": "order.shipping",
+  "occurred_at": "2026-11-16T14:05:09+07:00",
+  "sequence": 3,
+  "sender": "tubutree",
+  "order": {
+    "code": "TB-261116-0412",
+    "total_vnd": 385000,
+    "payment_method": "COD",
+    "channel": "miniapp",
+    "item_count": 3,
+    "first_item_name": "Nước giặt sinh học Fuwa3e 2L",
+    "carrier": "GHN",
+    "tracking_code": "GHN8X2K9",
+    "tracking_url": "https:\/\/tubutree.com\/t\/8X2K9"
+  },
+  "recipient": {
+    "phone": "0901234567",
+    "phone_source": "account_verified",
+    "name": "Lan"
+  },
+  "consent": {
+    "order_updates_zalo": true,
+    "captured_at": "2026-11-16T13:58:40+07:00",
+    "source": "checkout"
+  }
+}

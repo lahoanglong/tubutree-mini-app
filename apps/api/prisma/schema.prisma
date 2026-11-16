@@ -1192,7 +1192,10 @@ model Order {
   commission             Int                   @default(0)
   source                 String? // checkout | buy_now | storefront | ctv_assisted | subscription | dealer
   platform               String? // miniapp | web — null cho đơn cũ trước migration này
-  paidAt                 DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
+  /// Đường phía sau của đơn: PANCAKE_DIRECT | MSS (hợp đồng MSS commerce v0.9 mục 0.5). Ghi lúc tạo, không bao giờ đổi
+  /// (CHECK + trigger chặn UPDATE ở DB): lật cờ MSS chỉ ảnh hưởng đơn mới, không đơn nào bị đẩy hai đường.
+  backendRoute           String                @default("PANCAKE_DIRECT")
+  paidAt              DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
   subscriptionId         String? // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
   endCustomerKey         String? // SĐT người nhận dạng nội địa 0xxxxxxxxx (lưu rõ, KHÔNG hash) — CHỈ set khi placedForCustomer = true
   couponCode             String?

@@ -13,6 +13,7 @@ import {
   QUEUE_ZALO_OA_EVENTS,
 } from '../../jobs/queues';
 import { GomdonModule } from '../integrations/gomdon/gomdon.module';
+import { MssModule } from '../integrations/mss/mss.module';
 import { MerchantModule } from '../merchant/merchant.module';
 import { CronRunService } from './cron-run.service';
 import { LedgerDriftCron } from './ledger-drift.cron';
@@ -25,7 +26,7 @@ import { OpsWebhookEventsService } from './ops-webhook-events.service';
 const QUEUES = [QUEUE_PANCAKE_PUSH, QUEUE_PANCAKE_EVENTS, QUEUE_GOMDON_PUSH, QUEUE_GOMDON_EVENTS, QUEUE_NOTIFICATIONS, QUEUE_NOTIFICATIONS_INAPP_RETRY, QUEUE_ZALO_OA_EVENTS, QUEUE_SUPPORT_CHAT_FORWARD, QUEUE_SUPPORT_CHAT_NOTIFY];
 
 @Module({
-  imports: [GomdonModule, MerchantModule],
+  imports: [GomdonModule, MerchantModule, MssModule],
   controllers: [OpsController],
   providers: [
     { provide: OPS_QUEUES, inject: QUEUES.map((q) => getQueueToken(q)), useFactory: (...queues: Queue[]) => queues },

@@ -15,6 +15,7 @@ import { AFFILIATE_AUTO_WALLET_TRANSFER_KEY } from '../affiliate/affiliate-auto-
 import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } from '../storefront/storefront-config';
 import { DEALER_BONUS_TIERS_KEY, dealerBonusTiersProblem } from './dealer-bonus-tiers-rule';
 import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.keys';
+import { MSS_CONFIG_RANGES, MSS_JSON_RULES } from '../integrations/mss/mss-flag-keys';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY, CHAT_HOURS_KEY, CHAT_OFF_HOURS_TEXT_KEY, CHAT_RETENTION_KEY, chatGroupIdProblem, chatHoursProblem, offHoursTextProblem } from '../support-chat/support-chat.config';
 import { CATALOG_LAUNCH_DATE_KEY, catalogLaunchDateProblem } from '../catalog/catalog-launch-date';
 import { FLASH_SLOTS_KEY, flashSlotsProblem } from '../flash-sale/flash-slots';
@@ -288,6 +289,7 @@ export class SystemConfigService {
     'retention.cashback_clicks_days': { min: 60, max: 3650, note: 'số ngày giữ lượt bấm hoàn tiền mua sắm (tối thiểu 60)', integer: true },
     [CHAT_RETENTION_KEY]: { min: 90, max: 3650, note: 'số ngày giữ tin chat CSKH (tối thiểu 90)', integer: true },
     ...WASTE_RANGES,
+    ...MSS_CONFIG_RANGES,
   };
 
   /** Khoá mà null có nghĩa ("chưa đặt" — ETA giao hàng null = ẩn dòng "Giao dự kiến"): admin được đặt lại null. */
@@ -466,6 +468,7 @@ export class SystemConfigService {
     // Lưới khung mặc định của nút "Tạo khung giờ" ở tab Giờ vàng: mốc sai thì nút sinh ra đợt lệch giờ.
     [FLASH_SLOTS_KEY]: flashSlotsProblem,
     ...WASTE_JSON_RULES,
+    ...MSS_JSON_RULES,
   };
 
   /** Khoá có luật ghi riêng (biên số hoặc luật JSON): hệ thống biết khoá này, dù DB chưa có dòng. */
