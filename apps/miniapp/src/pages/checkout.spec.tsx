@@ -373,13 +373,14 @@ describe('CheckoutPage — đơn đầu: xin tên + SĐT Zalo để điền sẵ
     mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
   });
 
-  it('chưa có địa chỉ → mở form thêm địa chỉ thì xin quyền Zalo 1 lần và điền sẵn tên + SĐT', async () => {
+  it('chưa có địa chỉ → form mở sẵn nhưng không tự bật tấm xin quyền Zalo; khách bấm lấy từ Zalo thì xin 1 lần và điền sẵn SĐT', async () => {
     mocks.getAddresses.mockResolvedValue([]);
     mocks.requestZaloProfile.mockResolvedValue({ name: 'Lã Hoàng Long', phone: '0901234567' });
     renderPage();
-    fireEvent.click(await screen.findByText('Thêm địa chỉ mới'));
-    await waitFor(() => expect(screen.getByDisplayValue('Lã Hoàng Long')).toBeInTheDocument());
-    expect(screen.getByDisplayValue('0901234567')).toBeInTheDocument();
+    await screen.findByText('Lưu');
+    expect(mocks.requestZaloProfile).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: /Điền nhanh từ Zalo|Dùng số Zalo của tôi/ }));
+    await waitFor(() => expect(screen.getByDisplayValue('0901234567')).toBeInTheDocument());
     expect(mocks.requestZaloProfile).toHaveBeenCalledTimes(1);
   });
 
@@ -1886,7 +1887,15 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
       await waitFor(() => expect(pickupArg()).toEqual({ excludeGiftRedemptionIds: ['g3'] }));
     });
 
+    it('tài khoản đã có số (chưa xác minh) → không hiện "Xác minh ngay": nút đó chỉ trả lại số cũ, quà vẫn bị chặn', async () => {
+      withGifts([gift('g1', { included: false, blockedReason: 'PHONE_NOT_VERIFIED' }), gift('g2')]);
+      renderPage();
+      await screen.findAllByTestId('checkout-gift-row');
+      expect(screen.queryByTestId('checkout-gift-verify-phone')).toBeNull();
+    });
+
     it('quà chờ số đã xác minh: "Xác minh ngay" ngay ở dòng quà xin số Zalo rồi báo giá lại; dòng khác không có nút này', async () => {
+      mocks.user.phone = null;
       withGifts([gift('g1', { included: false, blockedReason: 'PHONE_NOT_VERIFIED' }), gift('g2')]);
       mocks.ensurePhoneOrThrow.mockResolvedValue('0900000000');
       renderPage();

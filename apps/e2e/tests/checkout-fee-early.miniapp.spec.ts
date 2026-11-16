@@ -7,7 +7,8 @@ import { shippingEstimate } from './support/shipping-estimate-mocks';
 
 /**
  * Mini App 360px, gói "phí giao sớm": giỏ có dòng "Phí giao (ước tính)" và "Tổng tạm tính" trong chân dính (không thêm khối, không thêm nút),
- * Đặt hàng không mở tấm xin số điện thoại, và khách chưa có địa chỉ đi từ trang sản phẩm tới Đặt hàng trong ≤ 8 chạm (màn của Zalo không tính).
+ * và khách chưa có địa chỉ đi từ trang sản phẩm tới Đặt hàng trong ≤ 8 chạm (màn của Zalo không tính). Việc không mở tấm xin số (ở Đặt hàng và
+ * khi form tự mở) kiểm ở test đơn vị checkout.spec / address-section.spec: ngoài Zalo không có tấm đó để nhìn thấy.
  * API mock toàn bộ.
  */
 test.use({ viewport: { width: 360, height: 780 } });
@@ -95,7 +96,7 @@ function mockFirstOrder(api: MockApi): void {
   api.allowUnmocked('GET /me/coupons', 'POST /checkout/coupon-previews', 'GET /payments/bank-qr/:code');
 }
 
-test('khách chưa có địa chỉ: trang sản phẩm → Đặt hàng ≤ 8 chạm, form địa chỉ mở sẵn, phí ước tính trước khi có địa chỉ, không tấm xin số', async ({ page, api }) => {
+test('khách chưa có địa chỉ: trang sản phẩm → Đặt hàng ≤ 8 chạm, form địa chỉ mở sẵn, phí ước tính trước khi có địa chỉ', async ({ page, api }) => {
   mockFirstOrder(api);
   const t = tapCounter();
   await page.goto(`/product/${PILOT_SLUG}`);

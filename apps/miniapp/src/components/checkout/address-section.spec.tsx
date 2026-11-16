@@ -55,11 +55,19 @@ describe('AddressSection — sổ trống thì mở sẵn form (bớt một ch�
     </QueryClientProvider>
   );
 
-  it('sổ đã tải và trống → form thêm địa chỉ mở sẵn, có xin Zalo; không còn câu "chưa có địa chỉ"', () => {
+  it('sổ đã tải và trống → form thêm địa chỉ mở sẵn nhưng KHÔNG tự xin Zalo (khách chưa chạm gì); không còn câu "chưa có địa chỉ"', () => {
     render(mount([], true));
     expect(screen.getByTestId('address-form')).toBeInTheDocument();
-    expect(mocks.formProps).toHaveBeenLastCalledWith(expect.objectContaining({ askZaloProfile: true }));
+    expect(mocks.formProps).toHaveBeenLastCalledWith(expect.objectContaining({ askZaloProfile: false }));
     expect(screen.queryByText(viCopy.checkout.addressEmpty)).toBeNull();
+  });
+
+  it('khách tự bấm "Thêm địa chỉ mới" sau khi đóng form tự mở → lúc đó mới xin Zalo', () => {
+    render(mount([], true));
+    const cancel = mocks.formProps.mock.calls.at(-1)![0] as { onCancel: () => void };
+    act(() => cancel.onCancel());
+    fireEvent.click(screen.getByText('Thêm địa chỉ mới'));
+    expect(mocks.formProps).toHaveBeenLastCalledWith(expect.objectContaining({ askZaloProfile: true }));
   });
 
   it('sổ đang tải (autoOpen chưa bật) → chưa mở; khách đóng form tự mở thì không tự mở lại', () => {

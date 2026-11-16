@@ -100,7 +100,8 @@ describe('GET /checkout/shipping-estimate', () => {
     expect(Reflect.getMetadata(`${THROTTLER_TTL}default`, handler)).toBe(60_000);
     const headers = Reflect.getMetadata(HEADERS_METADATA, handler) as { name: string; value: string }[];
     expect(headers.find((h) => h.name === 'Cache-Control')?.value).toBe('private, max-age=300');
-    expect(headers.find((h) => h.name === 'Vary')?.value).toBe('Authorization');
+    // @Header ghi đè Vary mà middleware CORS đã đặt: phải giữ Origin, kẻo bản giữ cho www trả cho apex rồi bị CORS chặn.
+    expect(headers.find((h) => h.name === 'Vary')?.value).toBe('Origin, Authorization');
   });
 
   it('chuyển người gọi (hoặc không ai) và đúng tham số sang service', async () => {

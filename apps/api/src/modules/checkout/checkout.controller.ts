@@ -23,7 +23,7 @@ export class CheckoutController {
   @UseGuards(OptionalJwtAuthGuard)
   @Throttle({ default: { ttl: 60_000, limit: 60 } })
   @Header('Cache-Control', 'private, max-age=300')
-  @Header('Vary', 'Authorization')
+  @Header('Vary', 'Origin, Authorization')
   @Get('shipping-estimate')
   estimateShipping(@Query() q: ShippingEstimateQueryDto, @CurrentUser('sub') userId?: string) {
     return this.shippingEstimate.estimate(userId, { subtotal: q.subtotal, provinceCode: q.provinceCode });

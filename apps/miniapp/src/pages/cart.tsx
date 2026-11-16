@@ -587,7 +587,7 @@ export default function CartPage() {
           overStock={overStockSelected}
           outOfStockNames={outOfStockSelected.map((l) => l.productName)}
           onCheckout={goCheckout}
-          shipBase={hasMerchant ? null : freeshipBase}
+          shipBase={selectedItems.some((l) => l.fulfiller?.kind === 'MERCHANT') ? null : tubuSubtotal(buyableSelected)}
           freeshipReached={freeship.reached}
           savingLines={buyableSelected}
           removedNotice={<CouponRemovedNotice notice={removedCoupon.notice} onDismiss={removedCoupon.dismiss} />}

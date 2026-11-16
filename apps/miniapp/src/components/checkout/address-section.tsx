@@ -25,14 +25,16 @@ interface AddressSectionProps {
 }
 
 export function AddressSection({ addresses, selectedId, onSelect, onSaved, quoteOutdated = false, autoOpen = false }: AddressSectionProps) {
-  const [adding, setAdding] = useState(false);
+  // 'auto': form tự mở vì sổ trống. Lúc đó KHÔNG tự xin tên/SĐT Zalo: tấm xin quyền của Zalo không được bật lên khi khách chưa chạm gì;
+  // khách vẫn lấy nhanh được bằng nút "Điền nhanh từ Zalo" trong form.
+  const [adding, setAdding] = useState<false | 'auto' | 'tap'>(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const autoOpened = useRef(false);
   useEffect(() => {
     if (!autoOpen || autoOpened.current) return;
     autoOpened.current = true;
-    setAdding(true);
+    setAdding('auto');
   }, [autoOpen]);
   const editing = addresses.find((a) => a.id === editingId) ?? null;
   // Đưa địa chỉ vừa lưu vào danh sách trước khi chọn: danh sách tải lại về sau, mà trang thanh toán thấy id đang chọn không có trong danh sách
@@ -96,7 +98,7 @@ export function AddressSection({ addresses, selectedId, onSelect, onSaved, quote
         <div style={{ marginTop: 8 }}>
           <AddressForm
             initial={null}
-            askZaloProfile={addresses.length === 0}
+            askZaloProfile={adding === 'tap' && addresses.length === 0}
             onCancel={() => setAdding(false)}
             onSaved={(a) => {
               keepSaved(a);
@@ -111,7 +113,7 @@ export function AddressSection({ addresses, selectedId, onSelect, onSaved, quote
           onClick={() => {
             haptic('light');
             setEditingId(null);
-            setAdding(true);
+            setAdding('tap');
           }}
           style={{
             display: 'flex',

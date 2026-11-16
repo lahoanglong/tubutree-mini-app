@@ -787,8 +787,6 @@ export default function OrderDetailPage() {
         returns={orderReturns}
         returnDays={returnDays}
       />
-
-      {/* Mua lại cả đơn qua sheet dùng chung (spec §3.3) — chọn dòng, dòng hết hàng bị khoá. */}
     </Page>
   );
 }

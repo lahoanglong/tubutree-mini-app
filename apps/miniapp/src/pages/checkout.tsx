@@ -885,7 +885,7 @@ export default function CheckoutPage() {
             excluded={pickup.excluded}
             onToggle={chosen(pickup.toggleGift)}
             shortfallVnd={quote.data?.giftShortfallVnd ?? 0}
-            onVerifyPhone={verifyPhone}
+            onVerifyPhone={user?.phone ? undefined : verifyPhone}
             verifyingPhone={verifyingPhone}
           />
         </Box>
