@@ -38,6 +38,8 @@ const LARGE_BODY_ROUTES: readonly RegExp[] = [
 // Cờ i: Express định tuyến không phân biệt hoa thường, /api/Admin/... vẫn tới controller admin.
 const WEBHOOK_ROUTE = /^\/api\/webhooks(\/|$)/i;
 const PANCAKE_WEBHOOK_ROUTE = /^\/api\/webhooks\/pancake(\/|$)/i;
+/** Đúng route của controller (Express không phân biệt hoa thường, cho phép dấu / cuối): đường dẫn con quét dò không được đếm vào nguồn Pancake. */
+const PANCAKE_WEBHOOK_EXACT_ROUTE = /^\/api\/webhooks\/pancake\/?$/i;
 
 export const MAX_BODY_DEPTH = 10;
 export const MAX_KEYS_PER_OBJECT = 200;
@@ -284,19 +286,36 @@ export const PANCAKE_TOKEN_INVALID_MESSAGE = 'Token webhook không hợp lệ.';
  * Kiểm token webhook Pancake TRƯỚC body parser: thân tới 10 MB / 200 000 nút chỉ được parse khi đúng token, nên người ẩn danh
  * không bắt server parse 10 MB. Cùng nguồn và cùng hành vi với PancakeWebhookController (controller vẫn kiểm lại, phòng thủ hai lớp).
  */
-export const pancakeWebhookTokenGuard: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
-  // Mọi method: trần 10 MB xếp theo đường dẫn, nên PUT/PATCH/DELETE không token cũng phải dừng ở đây (controller chỉ có POST).
-  if (!PANCAKE_WEBHOOK_ROUTE.test(req.path)) return next();
-  const secret = process.env.PANCAKE_WEBHOOK_SECRET ?? '';
-  if (!secret) {
-    if (process.env.NODE_ENV === 'production') return reject(res, 401, PANCAKE_TOKEN_MISSING_SECRET_MESSAGE);
-    return next(); // dev/test: bỏ qua như controller
-  }
-  const header = req.headers['x-webhook-token'];
-  const token = Array.isArray(header) ? header[0] : header;
-  if (!token || !safeEqualStrings(token, secret)) return reject(res, 401, PANCAKE_TOKEN_INVALID_MESSAGE);
-  next();
-};
+export function createPancakeWebhookTokenGuard(onReject?: () => void): RequestHandler {
+  // Request bị chặn ở đây không bao giờ tới PancakeWebhookController, nên bộ đếm 401 phải được gọi từ chính lớp này; lỗi đếm không được
+  // đổi phản hồi 401. Chỉ đếm POST vào đúng route webhook: đó là cách Pancake gọi, còn GET/PUT hay đường dẫn con quét dò không nên làm nhảy
+  // ngưỡng cảnh báo.
+  const rejectWith = (req: Request, res: Response, message: string): void => {
+    if (req.method === 'POST' && PANCAKE_WEBHOOK_EXACT_ROUTE.test(req.path)) {
+      try {
+        onReject?.();
+      } catch {
+        // cố ý nuốt: bộ đếm chỉ là chỉ báo phụ.
+      }
+    }
+    reject(res, 401, message);
+  };
+  return (req: Request, res: Response, next: NextFunction) => {
+    // Mọi method: trần 10 MB xếp theo đường dẫn, nên PUT/PATCH/DELETE không token cũng phải dừng ở đây (controller chỉ có POST).
+    if (!PANCAKE_WEBHOOK_ROUTE.test(req.path)) return next();
+    const secret = process.env.PANCAKE_WEBHOOK_SECRET ?? '';
+    if (!secret) {
+      if (process.env.NODE_ENV === 'production') return rejectWith(req, res, PANCAKE_TOKEN_MISSING_SECRET_MESSAGE);
+      return next(); // dev/test: bỏ qua như controller
+    }
+    const header = req.headers['x-webhook-token'];
+    const token = Array.isArray(header) ? header[0] : header;
+    if (!token || !safeEqualStrings(token, secret)) return rejectWith(req, res, PANCAKE_TOKEN_INVALID_MESSAGE);
+    next();
+  };
+}
+
+export const pancakeWebhookTokenGuard: RequestHandler = createPancakeWebhookTokenGuard();
 
 /** body-parser ném PayloadTooLargeError (413) / lỗi JSON (400): trả JSON cùng dạng với lỗi Nest thay vì trang HTML của Express. */
 export const bodyParserErrorHandler: ErrorRequestHandler = (err: unknown, _req, res, next) => {

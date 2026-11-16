@@ -4,13 +4,14 @@ import { Logger, type NestApplicationOptions, type Type } from '@nestjs/common';
 import { HttpAdapterHost, NestFactory } from '@nestjs/core';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import helmet from 'helmet';
-import { bodyParserErrorHandler, createBodyParsers, cspReportBodyParsers, eventsBodyParser, pancakeWebhookTokenGuard, privateNoStoreForAuthenticated, requestInputGuard } from './common/body-limits';
+import { bodyParserErrorHandler, createBodyParsers, createPancakeWebhookTokenGuard, cspReportBodyParsers, eventsBodyParser, privateNoStoreForAuthenticated, requestInputGuard } from './common/body-limits';
 import { buildCorsPolicy, cookieAuthOriginGuard, FALLBACK_WEB_ORIGINS } from './common/cors';
 import { CronLeaderService } from './common/cron-leader/cron-leader.service';
 import { SentryExceptionFilter } from './common/filters/sentry-exception.filter';
 import { PrismaExceptionFilter } from './common/filters/prisma-exception.filter';
 import { createValidationPipe } from './common/validation-pipe';
 import { isSentryOn } from './config/sentry';
+import { WebhookRejectCounterService } from './modules/analytics/webhook-reject-counter.service';
 import { applyHttpTimeouts } from './config/http-timeouts';
 
 /** Dọn app khởi động hỏng tối đa chừng này rồi vẫn thoát — đóng hàng đợi/Redis treo không được giữ process lại. */
@@ -108,8 +109,8 @@ async function createApp(rootModule: Type<unknown>, opts: BootstrapOptions): Pro
   app.use('/api/events', eventsBodyParser());
   // Báo cáo CSP của trình duyệt: hai content-type riêng, trần 32kb.
   app.use('/api/csp-report', ...cspReportBodyParsers());
-  // Webhook Pancake (thân tới 10mb): kiểm token trước khi parse.
-  app.use(pancakeWebhookTokenGuard);
+  // Webhook Pancake (thân tới 10mb): kiểm token trước khi parse. Request sai token dừng ở đây, không tới controller, nên đếm 401 ở đây.
+  app.use(createPancakeWebhookTokenGuard(() => app.get(WebhookRejectCounterService).record('pancake')));
   // Secret đọc từ process.env: ConfigModule đã nạp .env vào đó và JwtStrategy dùng cùng giá trị.
   // Trần theo nhóm route (mặc định 256kb; ảnh base64/CSV 10mb; webhook sự kiện nhỏ 64kb, Pancake 10mb), rồi duyệt khoá/phần tử/NUL trước ValidationPipe.
   app.use(...createBodyParsers(process.env.JWT_ACCESS_SECRET ?? '', Number(process.env.JWT_REFRESH_TTL_DAYS) || 30), bodyParserErrorHandler, requestInputGuard);
