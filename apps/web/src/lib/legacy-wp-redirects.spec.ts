@@ -10,6 +10,19 @@ import routeMap from '@tubutree/app-core/route-map.json';
 import { PROD_CATALOG_2026_11_12 } from '@tubutree/app-core/commerce/prod-catalog-full.fixture';
 import { classifyChain, expectedFor, parseArgs, parseSitemapLocs, toPathAndSearch, walk, type ChainStep } from '../../../../scripts/ops/check-cutover-redirects.mjs';
 import { collectUploadPaths, parseArgs as parseExportArgs, safeUploadPath } from '../../../../scripts/ops/wp-public-export.mjs';
+import {
+  AUTO_MIN,
+  DEFAULT_PATHS,
+  HITS_DAY,
+  REVIEW_MIN,
+  buildProductMap,
+  classifyHits,
+  loadInputs,
+  parseArgs as parseMapArgs,
+  slugsFromHits,
+  tokens,
+  volumes,
+} from '../../../../scripts/ops/build-legacy-wp-product-map.mjs';
 import { LEGAL_SLUGS } from '@/lib/legal';
 import { middleware } from '../middleware';
 import { MINIAPP_PERMANENT_SOURCES, buildMiniappRedirects } from './miniapp-redirects.mjs';
@@ -20,6 +33,7 @@ import {
   LEGACY_GONE_PREFIXES,
   LEGACY_PAGE_REDIRECTS,
   LEGACY_PRODUCT_REDIRECTS,
+  LEGACY_WP_PRODUCT_MAP,
   carryLegacyParams,
   isWpBlogPath,
   isWpUploadPath,
@@ -146,6 +160,171 @@ describe('chuyển hướng sản phẩm WordPress /product/<slug>', () => {
   });
 });
 
+describe('bản đồ sản phẩm WordPress sinh tự động (legacy-wp-product-map.json)', () => {
+  const inputs = loadInputs(DEFAULT_PATHS);
+  const SNAPSHOT_SLUGS = new Set(inputs.catalog.map((p) => p.slug));
+  const WP_SNAPSHOT_SLUGS = new Set(inputs.wpProducts.map((p) => p.slug));
+  const LOG_SLUGS = new Set(slugsFromHits(...Object.values(JSON.parse(read('scripts/ops/data/legacy-product-hits-20261116.json')).hits as Record<string, Record<string, number>>)));
+  const mapEntries = Object.entries(LEGACY_WP_PRODUCT_MAP);
+
+  it('sinh lại từ ảnh chụp đi kèm ra đúng tệp đang commit (không ai sửa tay bản đồ)', () => {
+    const { map } = buildProductMap({ ...inputs, curated: LEGACY_PRODUCT_REDIRECTS });
+    expect(map).toEqual(LEGACY_WP_PRODUCT_MAP);
+    expect(read('apps/web/src/lib/legacy-wp-product-map.json')).toBe(`${JSON.stringify(map, null, 2)}\n`);
+  });
+
+  it('ảnh chụp catalog đi kèm trùng ảnh chụp PROD 12/11/2026 về tập slug', () => {
+    expect([...SNAPSHOT_SLUGS].sort()).toEqual([...CATALOG_SLUGS].sort());
+  });
+
+  it('mọi đích là slug có thật trong ảnh chụp catalog; mọi nguồn là slug WordPress (Store API cũ hoặc log), không phải slug mới', () => {
+    expect(mapEntries.length).toBeGreaterThanOrEqual(12);
+    for (const [wp, slug] of mapEntries) {
+      expect(SNAPSHOT_SLUGS.has(slug), `${wp} -> ${slug}`).toBe(true);
+      expect(CATALOG_SLUGS.has(slug), `${wp} -> ${slug}`).toBe(true);
+      expect(WP_SNAPSHOT_SLUGS.has(wp) || LOG_SLUGS.has(wp), wp).toBe(true);
+      expect(CATALOG_SLUGS.has(wp), wp).toBe(false);
+    }
+  });
+
+  it('không đè cặp PDP người đã duyệt trong LEGACY_PRODUCT_REDIRECTS', () => {
+    for (const [wp] of mapEntries) {
+      expect(LEGACY_PRODUCT_REDIRECTS[wp]?.startsWith('/san-pham/') ?? false, wp).toBe(false);
+    }
+  });
+
+  it('/product/<slug>/, /product/<slug>, chữ hoa và đường con /feed, /embed đều ra cùng một 301 tới PDP của bản đồ', () => {
+    for (const [wp, slug] of mapEntries) {
+      for (const path of [`/product/${wp}/`, `/product/${wp}`, `/Product/${wp.toUpperCase()}/`, `/product/${wp}/feed/`, `/product/${wp}/embed`]) {
+        expect(resolveLegacyWpPath(path), path).toEqual({ kind: 'redirect', status: 301, location: `/san-pham/${slug}` });
+      }
+    }
+  });
+
+  it('đường con của slug lạ hoặc slug mới vẫn không bị bắt (route /product/[slug] giữ nguyên)', () => {
+    for (const path of ['/product/khong-co/feed', '/product/xit-tram-cho-be-pineboo-150ml-b70d1d/x', '/product/a/b/c']) {
+      expect(resolveLegacyWpPath(path), path).toBeNull();
+    }
+  });
+
+  it('đường con /feed và /&gsessionid=... của slug ở bảng tay về đích của bảng', () => {
+    expect(locationOf('/product/thanh-gao-lut-rong-bien-an-vat-bh-nong-180g/feed/')).toBe('/san-pham/thanh-gao-lut-rong-bien-bh-nong-180g-da009b');
+    expect(locationOf('/product/son-duong-moi-co-mau-bo-tuoi-po-lang/&gsessionid=X')).toBe('/san-pham/son-duong-co-mau-po-lang-a01-a03-a04-a05-ef066b');
+    expect(locationOf('/product/giam-mat-hoa-dua-huu-co-sokfarm-256ml/feed')).toBe('/san-pham?q=sokfarm');
+  });
+
+  it('các cặp có bằng chứng rõ (tên trang cũ, giá biến thể) về đúng sản phẩm', () => {
+    expect(locationOf('/product/nuoc-nam-dong-trung-ha-thao/')).toBe('/san-pham/nuoc-dong-trung-ha-thao-hector-collagen-plus-dep-da-chong-lao-hoa-70ml-x-10-chai-d0c0e1');
+    expect(locationOf('/product/nuoc-giat-fuwa3e-10l/')).toBe('/san-pham/refill-nuoc-giat-cam-fuwa3e-10l-dc4433');
+    expect(locationOf('/product/nuoc-tuong-mat-hoa-dua-organic-sokfarm/')).toBe('/san-pham/nuoc-tuong-mat-hoa-dua-sokfarm-cham-034cc1');
+    expect(locationOf('/product/nuoc-tuong-mat-hoa-dua-organic-sokfarm-5l/')).toBe('/san-pham/nuoc-tuong-mat-hoa-dua-sokfarm-nau-2dc907');
+    expect(locationOf('/product/nuoc-rua-chen-fuwa3e-size-nho/')).toBe('/san-pham/nuoc-rua-chen-fuwa3e-500ml-185d77');
+    expect(locationOf('/product/nuoc-rua-chen-fuwa3e-sinh-hoc/')).toBe('/san-pham/nuoc-rua-chen-fuwa3e-3-8l-ef3979');
+  });
+
+  it(`lượt /product/* ngày ${HITS_DAY} qua bộ luật thật: lượt nào cũng 301, không giảm số lượt về PDP (136/171)`, () => {
+    let pdpHits = 0;
+    let total = 0;
+    for (const [path, count] of Object.entries(inputs.hits)) {
+      const hit = resolveLegacyWpPath(`/product/${path}/`);
+      expect(hit, path).toMatchObject({ kind: 'redirect', status: 301 });
+      total += count;
+      if (hit?.kind === 'redirect' && hit.location.startsWith('/san-pham/')) pdpHits += count;
+    }
+    expect(total).toBe(171);
+    expect(pdpHits).toBeGreaterThanOrEqual(136);
+    expect(classifyHits(inputs.hits, LEGACY_WP_PRODUCT_MAP, LEGACY_PRODUCT_REDIRECTS).pdp).toBe(pdpHits);
+  });
+
+  it('middleware: 301 một chặng tới PDP của bản đồ, giữ utm/gclid/fbclid/ref, bỏ tham số riêng của WordPress', () => {
+    const res = middleware(new NextRequest('https://tubutree.com/product/nuoc-giat-fuwa3e-10l/?utm_source=zalo&fbclid=F1&orderby=price&ref=CTV2', { headers: { host: 'tubutree.com' } }));
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://tubutree.com/san-pham/refill-nuoc-giat-cam-fuwa3e-10l-dc4433?utm_source=zalo&fbclid=F1&ref=CTV2');
+    const feed = middleware(new NextRequest('https://tubutree.com/product/nuoc-nam-dong-trung-ha-thao/feed/', { headers: { host: 'tubutree.com' } }));
+    expect(feed.status).toBe(301);
+    expect(new URL(feed.headers.get('location')!).pathname).toBe('/san-pham/nuoc-dong-trung-ha-thao-hector-collagen-plus-dep-da-chong-lao-hoa-70ml-x-10-chai-d0c0e1');
+  });
+});
+
+describe('scripts/ops/build-legacy-wp-product-map.mjs: hàm thuần', () => {
+  const product = (slug: string, name: string, price = 100000) => ({ slug, name, basePrice: price, salePrice: null });
+
+  it('volumes quy về ml/g, nhận dấu phẩy thập phân và số dính chữ; tokens bỏ dấu và chữ đóng gói', () => {
+    expect(volumes('Nước rửa chén Fuwa3e 3,8L')).toEqual(['3800ml']);
+    expect(volumes('sả chanh1L đuổi muỗi')).toEqual(['1000ml']);
+    expect(volumes('Mật hoa dừa 1,4KG, 250G và 25gr, 30gam')).toEqual(['1400g', '250g', '25g', '30g']);
+    expect(volumes('Nước giặt 500ml/ 100ml')).toEqual(['500ml', '100ml']);
+    expect(volumes('Fuwa3e A01 3in1')).toEqual([]);
+    expect(tokens('[Can 10L] Refill Nước giặt Bạc hà Fuwa3e')).toEqual(['nuoc', 'giat', 'bac', 'ha', 'fuwa3e']);
+  });
+
+  it('khớp chính xác theo tên hoặc slug bỏ hậu tố băm', () => {
+    const catalog = [product('xit-tram-pineboo-150ml-abc123', 'Xịt tràm Pineboo 150ml'), product('ca-phe-muoi-c-sea-hop-16g-def456', 'Cà Phê Muối C&Sea Hộp 16g')];
+    const { map, decisions } = buildProductMap({
+      wpProducts: [{ slug: 'xit-tram-pineboo-150ml', name: 'Khác hẳn' }, { slug: 'ca-phe-muoi-csea', name: 'Cà Phê Muối C&Sea Hộp 16g' }],
+      catalog,
+    });
+    expect(map).toEqual({ 'ca-phe-muoi-csea': 'ca-phe-muoi-c-sea-hop-16g-def456', 'xit-tram-pineboo-150ml': 'xit-tram-pineboo-150ml-abc123' });
+    expect(decisions.every((d) => d.kind === 'exact')).toBe(true);
+  });
+
+  it(`điểm ${REVIEW_MIN}–${AUTO_MIN} chỉ vào danh sách cần duyệt, không vào bản đồ; sai dung tích hoặc khác loại sản phẩm bị loại`, () => {
+    const catalog = [product('nuoc-rua-chen-x-300ml-aaaaaa', 'Nước rửa chén X 300ml'), product('nuoc-rua-tay-dang-gel-x-300ml-bbbbbb', 'Nước rửa tay dạng gel X 300ml'), product('xit-rua-tay-x-500ml-cccccc', 'Xịt rửa tay X 500ml')];
+    const { map, decisions } = buildProductMap({ wpProducts: [{ slug: 'nuoc-rua-tay-x', name: 'Nước rửa tay X 300ml' }], catalog });
+    expect(map).toEqual({});
+    const d = decisions[0]!;
+    expect(d.kind).toBe('review');
+    expect(d.candidates.map((c) => c.slug)).not.toContain('xit-rua-tay-x-500ml-cccccc');
+  });
+
+  it('dòng PDP người đã duyệt không bị bản đồ ghi đè, kể cả khi tự động chọn khác', () => {
+    const catalog = [product('nuoc-x-500ml-aaaaaa', 'Nước X 500ml'), product('nuoc-x-3-8l-bbbbbb', 'Nước X 3,8L')];
+    const { map, decisions } = buildProductMap({ wpProducts: [{ slug: 'nuoc-x', name: 'Nước X 3.8L' }], catalog, curated: { 'nuoc-x': '/san-pham/nuoc-x-500ml-aaaaaa' } });
+    expect(map).toEqual({});
+    expect(decisions[0]).toMatchObject({ product: 'nuoc-x-3-8l-bbbbbb', curated: 'nuoc-x-500ml-aaaaaa' });
+  });
+
+  it('biến thể bị tách trang: tên cũ nhắc trước thắng; không nhắc thì giá trùng; không phân được thì cần người duyệt', () => {
+    const scents = [product('refill-nuoc-giat-bac-ha-x-10l-aaaaaa', 'Refill nước giặt Bạc hà X 10L', 990000), product('refill-nuoc-giat-cam-x-10l-bbbbbb', 'Refill nước giặt Cam X 10L', 940000)];
+    const byTitle = buildProductMap({ wpProducts: [{ slug: 'nuoc-giat-x-10l', name: '[Can 10L] Nước giặt X 10L hương cam/ bạc hà', attributes: [{ name: 'HƯƠNG', terms: ['BẠC HÀ', 'CAM'] }] }], catalog: scents });
+    expect(byTitle.map).toEqual({ 'nuoc-giat-x-10l': 'refill-nuoc-giat-cam-x-10l-bbbbbb' });
+    const byAttr = buildProductMap({ wpProducts: [{ slug: 'nuoc-giat-x-10l', name: 'Nước giặt X 10L', attributes: [{ name: 'HƯƠNG', terms: ['CAM', 'BẠC HÀ'] }] }], catalog: scents });
+    expect(byAttr.map).toEqual({ 'nuoc-giat-x-10l': 'refill-nuoc-giat-cam-x-10l-bbbbbb' });
+    const sauces = [
+      { ...product('nuoc-tuong-mat-hoa-dua-zeta-cham-aaaaaa', 'Nước tương mật hoa dừa Zeta (chấm)', 86000), variations: [{ name: '5L', price: 820000 }] },
+      { ...product('nuoc-tuong-mat-hoa-dua-zeta-nau-bbbbbb', 'Nước tương mật hoa dừa Zeta (nấu)', 110000), variations: [{ name: '5L', price: 710000 }] },
+    ];
+    const byPrice = buildProductMap({ wpProducts: [{ slug: 'nuoc-tuong-mat-hoa-dua-zeta-5l', name: 'Nước tương mật hoa dừa Zeta can 5L', price: 710000 }], catalog: sauces });
+    expect(byPrice.map).toEqual({ 'nuoc-tuong-mat-hoa-dua-zeta-5l': 'nuoc-tuong-mat-hoa-dua-zeta-nau-bbbbbb' });
+    expect(byPrice.decisions[0]).toMatchObject({ kind: 'variant', rule: 'giá trùng trang cũ' });
+    const unresolved = buildProductMap({ wpProducts: [{ slug: 'nuoc-tuong-mat-hoa-dua-zeta-5l', name: 'Nước tương mật hoa dừa Zeta can 5L', price: 1 }], catalog: sauces });
+    expect(unresolved.map).toEqual({});
+    expect(unresolved.decisions[0]!.kind).toBe('tie');
+  });
+
+  it('slug chỉ thấy trong log (không có tên trang cũ) không tự vào bản đồ khi sản phẩm mới ghi dung tích', () => {
+    const { map, decisions } = buildProductMap({ wpProducts: [], catalog: [product('lau-noi-that-o-to-x-300ml-aaaaaa', 'Lau nội thất ô tô X 300ml')], extraSlugs: ['lau-noi-that-o-to-x'] });
+    expect(map).toEqual({});
+    expect(decisions[0]).toMatchObject({ kind: 'review', candidates: [{ slug: 'lau-noi-that-o-to-x-300ml-aaaaaa', volumeUnverified: true }] });
+  });
+
+  it('slugsFromHits lấy phần đầu đường dẫn, bỏ đường dẫn kiểu tiêu đề mã hoá % và số trần', () => {
+    expect(slugsFromHits({ 'a-b/feed': 1, 'Th%C3%A0nh%20Ph%E1%BA%A7n': 2, '1280': 1 }, { 'a-b': 1, 'c-1': 1 })).toEqual(['a-b', 'c-1']);
+  });
+
+  it('parseArgs: mặc định, đủ tuỳ chọn, và lỗi tham số', () => {
+    expect(parseMapArgs([])).toMatchObject({ write: false, check: false, report: '' });
+    expect(parseMapArgs(['--write', '--report', 'r.md', '--catalog', 'c.json'])).toMatchObject({ write: true, report: 'r.md', catalog: 'c.json' });
+    expect(() => parseMapArgs(['--write', '--check'])).toThrow(/không dùng cùng/);
+    expect(() => parseMapArgs(['--report'])).toThrow(/cần một giá trị/);
+    expect(() => parseMapArgs(['--lạ'])).toThrow(/Tham số lạ/);
+  });
+
+  it('CLI --check thoát 0 trên bản đồ đang commit', () => {
+    expect(() => execFileSync(process.execPath, [`${REPO}scripts/ops/build-legacy-wp-product-map.mjs`, '--check'], { stdio: 'pipe' })).not.toThrow();
+  });
+});
+
 describe('chuyển hướng trang WordPress', () => {
   it('40 trang thật của sitemap: hoặc có luật, hoặc nằm trong danh sách trùng đường dẫn/đã có chủ', () => {
     expect(new Set(WP_PAGE_PATHS).size).toBe(40);
@@ -178,7 +357,8 @@ describe('chuyển hướng trang WordPress', () => {
   });
 
   it('không có chuỗi chuyển hướng: đích không phải nguồn của bảng này, của Mini App hay của danh mục', () => {
-    for (const to of [...Object.values(LEGACY_PAGE_REDIRECTS), ...Object.values(LEGACY_PRODUCT_REDIRECTS)]) {
+    const mapped = Object.values(LEGACY_WP_PRODUCT_MAP).map((slug) => `/san-pham/${slug}`);
+    for (const to of [...Object.values(LEGACY_PAGE_REDIRECTS), ...Object.values(LEGACY_PRODUCT_REDIRECTS), ...mapped]) {
       const path = targetUrl(to).pathname;
       expect(resolveLegacyWpPath(path), to).toBeNull();
       expect(MINIAPP_REDIRECT_SOURCES.has(path), to).toBe(false);

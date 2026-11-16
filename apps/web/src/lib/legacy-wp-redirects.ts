@@ -11,6 +11,9 @@
  * Quy ước:
  * - Không bao giờ để một URL sản phẩm WordPress rơi vào 404: slug khớp rõ thì sang `/san-pham/<slug mới>`, không khớp rõ thì sang
  *   `/san-pham?q=<từ khoá>` (tìm không dấu của API), sản phẩm đã ngừng hẳn thì sang `/san-pham`.
+ * - Sản phẩm: `legacy-wp-product-map.json` (sinh bằng `scripts/ops/build-legacy-wp-product-map.mjs` từ tên, thuộc tính, giá trang WooCommerce cũ
+ *   và catalog mới) được xét trước; không có dòng ở đó thì dùng `LEGACY_PRODUCT_REDIRECTS` (dòng PDP ở bảng này là cặp người đã duyệt, bản đồ
+ *   không bao giờ chứa slug đó; dòng `q()`/`ALL` là đường lui khi bản đồ chưa có cặp tin cậy).
  * - Chỉ khớp slug khi cùng dòng sản phẩm, cùng thương hiệu và không mơ hồ về quy cách/mùi hương; còn lại để người duyệt tay (ma trận trong
  *   `legacy-wp-redirects.spec.ts` kiểm từng đích có thật trong ảnh chụp catalog 12/11/2026).
  * - Các trang trùng đúng đường dẫn web mới (`/gio-hang`, `/thanh-toan`, `/tai-khoan`) không có dòng ở đây: middleware bỏ dấu `/` cuối bằng 308.
@@ -19,8 +22,14 @@
  * - `/sitemap_index.xml` (Rank Math) có dòng trong `LEGACY_FILE_REDIRECTS` để Search Console không gặp 404 sau cutover; middleware phải xét nó
  *   TRƯỚC luật bỏ qua đường dẫn có dấu chấm.
  *
- * Tệp này cố ý không import gì và chỉ dùng cú pháp TypeScript xoá được, để `scripts/ops/check-cutover-redirects.mjs` nạp thẳng bằng Node.
+ * Tệp này chỉ import bản đồ JSON (có `with { type: 'json' }`, Node bắt buộc) và chỉ dùng cú pháp TypeScript xoá được, để
+ * `scripts/ops/check-cutover-redirects.mjs` và `build-legacy-wp-product-map.mjs` nạp thẳng bằng Node.
  */
+
+import LEGACY_WP_PRODUCT_MAP_JSON from './legacy-wp-product-map.json' with { type: 'json' };
+
+/** Slug sản phẩm WordPress -> slug sản phẩm mới, sinh tự động (xem đầu tệp). */
+export const LEGACY_WP_PRODUCT_MAP: Readonly<Record<string, string>> = LEGACY_WP_PRODUCT_MAP_JSON;
 
 export type LegacyResolution = { kind: 'redirect'; status: 301; location: string } | { kind: 'gone'; status: 410 };
 
@@ -122,7 +131,8 @@ export const LEGACY_PRODUCT_REDIRECTS: Readonly<Record<string, string>> = {
   'nuoc-ngam-rua-thuc-pham-fuwa3e-big-size': pdp('nuoc-ngam-rua-thuc-pham-fuwa3e-3-8l-7ececb'),
   'nuoc-ngam-rua-thuc-pham-fuwa3e-size-nho': q('nuoc ngam rua thuc pham'),
   'nuoc-rua-chen-fuwa3e-10l': pdp('refill-nuoc-rua-chen-fuwa3e-10l-69f244'),
-  'nuoc-rua-chen-fuwa3e-sinh-hoc': pdp('nuoc-rua-chen-fuwa3e-500ml-185d77'),
+  // Tên trang cũ là "Nước rửa chén Fuwa3e 3.8L enzyme sinh học dứa" và giá 385.000đ, trùng chai 3,8L chứ không phải 500ml.
+  'nuoc-rua-chen-fuwa3e-sinh-hoc': pdp('nuoc-rua-chen-fuwa3e-3-8l-ef3979'),
   'nuoc-rua-chen-fuwa3e-size-nho': q('nuoc rua chen fuwa3e'),
   'nuoc-rua-tay-fuwa3e-big-size': q('nuoc rua tay fuwa3e'),
   'nuoc-giat-fuwa3e-10l': q('refill nuoc giat'),
@@ -241,6 +251,11 @@ function normalizePath(pathname: string): string | null {
 const own = (table: Readonly<Record<string, string>>, key: string): string | undefined => (Object.prototype.hasOwnProperty.call(table, key) ? table[key] : undefined);
 const underPrefix = (path: string, prefix: string): boolean => path === prefix || path.startsWith(`${prefix}/`);
 
+function productDestination(slug: string): string | undefined {
+  const mapped = own(LEGACY_WP_PRODUCT_MAP, slug);
+  return mapped ? pdp(mapped) : own(LEGACY_PRODUCT_REDIRECTS, slug);
+}
+
 function categoryDestination(slugPath: string): string {
   const hit = CATEGORY_KEYWORDS.find(([needle]) => slugPath.includes(needle));
   return hit ? q(hit[1]) : ALL;
@@ -301,9 +316,10 @@ export function resolveLegacyWpPath(pathname: string): LegacyResolution | null {
 
   if (LEGACY_GONE_EXACT.includes(path) || LEGACY_GONE_PREFIXES.some((prefix) => underPrefix(path, prefix))) return { kind: 'gone', status: 410 };
 
-  const product = /^\/product\/([^/]+)$/.exec(path);
+  // Đường con (`/feed`, `/embed`, `/&gsessionid=...`) của một slug WordPress đã biết cũng về sản phẩm đó.
+  const product = /^\/product\/([^/]+)(?:\/.*)?$/.exec(path);
   if (product) {
-    const target = own(LEGACY_PRODUCT_REDIRECTS, product[1] ?? '');
+    const target = productDestination(product[1] ?? '');
     // Slug lạ rơi xuống route /product/[slug] đã có (link CTV và Mini App dạng /product/<slug mới>).
     return target ? redirect(target) : null;
   }
