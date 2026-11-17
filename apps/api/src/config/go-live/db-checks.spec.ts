@@ -226,6 +226,13 @@ describe('evaluateDb', () => {
       expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
     });
 
+    it('mss_catalog_enrichment: hai bảng mới nằm trong danh sách tương thích image, không phải migration nặng', () => {
+      const name = '20261117100000_mss_catalog_enrichment';
+      expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);
+      expect(HEAVY_MIGRATIONS.map((m) => m.name)).not.toContain(name);
+      expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
+    });
+
     it('game_mini_core: bảng mới và chỉ mục một phần GAME_MINI nằm trong danh sách tương thích image, nặng vì dựng chỉ mục trên points_transactions (không khoá orders)', () => {
       const name = '20261117083000_game_mini_core';
       expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);

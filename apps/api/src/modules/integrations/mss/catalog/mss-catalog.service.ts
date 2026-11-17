@@ -288,17 +288,21 @@ export class MssCatalogService {
    */
   private upsert(productId: string, doc: MssParsedDoc, payload: MssEnrichmentPayload, sha: string): Promise<number> {
     const c = enrichmentColumns(doc.state, payload);
+    // Cột là `timestamp` không múi giờ, Prisma đọc như UTC. Tham số Date của SQL thô đi dạng timestamptz và bị đổi theo TimeZone của phiên,
+    // nên mốc giờ gửi bằng chuỗi ISO rồi quy về UTC ngay trong câu: máy chủ Postgres đặt giờ địa phương vẫn ghi đúng.
+    const mssUpdatedAt = doc.updatedAt.toISOString();
     return this.prisma.$executeRaw`
       INSERT INTO "product_mss_enrichment" ("productId", "pancakeProductId", "mssProductId", "state", "payload", "contentVersion", "mssUpdatedAt",
         "fetchedAt", "sha256", "title", "imagesOverride", "coverImage", "categoryOverride", "categoryIds", "mediaUrls", "createdAt", "updatedAt")
-      VALUES (${productId}, ${doc.pancakeProductId}, ${doc.mssProductId}, ${doc.state}, ${JSON.stringify(payload)}::jsonb, ${doc.version}, ${doc.updatedAt},
-        now(), ${sha}, ${c.title}, ${c.imagesOverride}, ${c.coverImage}, ${c.categoryOverride}, ${c.categoryIds}::text[], ${c.mediaUrls}::text[], now(), now())
+      VALUES (${productId}, ${doc.pancakeProductId}, ${doc.mssProductId}, ${doc.state}, ${JSON.stringify(payload)}::jsonb, ${doc.version},
+        (${mssUpdatedAt}::timestamptz AT TIME ZONE 'UTC'), (now() AT TIME ZONE 'UTC'), ${sha}, ${c.title}, ${c.imagesOverride}, ${c.coverImage},
+        ${c.categoryOverride}, ${c.categoryIds}::text[], ${c.mediaUrls}::text[], (now() AT TIME ZONE 'UTC'), (now() AT TIME ZONE 'UTC'))
       ON CONFLICT ("productId") DO UPDATE SET
         "pancakeProductId" = EXCLUDED."pancakeProductId", "mssProductId" = EXCLUDED."mssProductId", "state" = EXCLUDED."state",
         "payload" = EXCLUDED."payload", "contentVersion" = EXCLUDED."contentVersion", "mssUpdatedAt" = EXCLUDED."mssUpdatedAt",
         "fetchedAt" = EXCLUDED."fetchedAt", "sha256" = EXCLUDED."sha256", "title" = EXCLUDED."title", "imagesOverride" = EXCLUDED."imagesOverride",
         "coverImage" = EXCLUDED."coverImage", "categoryOverride" = EXCLUDED."categoryOverride", "categoryIds" = EXCLUDED."categoryIds",
-        "mediaUrls" = EXCLUDED."mediaUrls", "updatedAt" = now()
+        "mediaUrls" = EXCLUDED."mediaUrls", "updatedAt" = (now() AT TIME ZONE 'UTC')
       WHERE "product_mss_enrichment"."contentVersion" < EXCLUDED."contentVersion"
         OR ("product_mss_enrichment"."contentVersion" = EXCLUDED."contentVersion" AND "product_mss_enrichment"."mssUpdatedAt" < EXCLUDED."mssUpdatedAt")
         OR ("product_mss_enrichment"."contentVersion" = EXCLUDED."contentVersion" AND "product_mss_enrichment"."mssUpdatedAt" = EXCLUDED."mssUpdatedAt"

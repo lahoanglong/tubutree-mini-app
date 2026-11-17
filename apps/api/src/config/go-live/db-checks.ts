@@ -53,6 +53,8 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261117070000_pdp_compare_flag',
   '20261117083000_game_mini_core',
   '20261117090000_notify_cap_restock',
+  // Hai bảng mới (nội dung bổ sung MSS, trạng thái kéo) mà image cũ không đọc; FK trỏ về products chỉ khoá ngắn lúc thêm vì bảng mới rỗng.
+  '20261117100000_mss_catalog_enrichment',
 ];
 
 /**
