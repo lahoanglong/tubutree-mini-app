@@ -440,6 +440,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
         quizPending: false,
       });
       api.fallback('GET', '/game/badges', { enabled: false, badges: [] });
+      // Lối vào Chọn Chuẩn Xanh (Chơi hôm nay, Tư vấn, Trợ lý đang nghỉ, giỏ trống) hỏi cờ game.matcher_enabled; mặc định tắt như PROD nên màn vẽ như trước.
+      api.fallback('GET', '/game/matcher/status', { enabled: false });
       // Bán chạy nhất nuôi dải Story của Trang chủ và dải gợi ý bù đơn của Giỏ; cả hai tự ẩn khi rỗng, nên mọi spec chạm Giỏ hay Trang chủ không phải khai riêng: mặc định không có món nào.
       api.fallback('GET', '/products', { data: [], meta: { page: 1, limit: 10, total: 0 }, basis: 'days30' });
       // Cá nhân, Trang chủ, thanh đáy và chuông web đọc mọi số đếm từ MỘT lời gọi /me/summary. Mock gộp này dựng từ các mock lẻ mà spec

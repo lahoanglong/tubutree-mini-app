@@ -1,6 +1,7 @@
 /**
- * Nạp nội dung giáo dục có nguồn của 5 game mini (Đúng Thùng, Đố Xanh, Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc) từ
- * `reference-data/game-mini/*.json` vào `game_content_items`, và gắn link nguồn cho vài câu đố cũ (`game_quizzes`) đã kiểm được.
+ * Nạp nội dung giáo dục có nguồn của 5 game mini (Đúng Thùng, Đố Xanh, Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc) và của Chọn Chuẩn Xanh
+ * (`matcher.json`: câu nhu cầu, câu đố xen giữa, bộ sản phẩm) từ `reference-data/game-mini/*.json` vào `game_content_items`, và gắn link
+ * nguồn cho vài câu đố cũ (`game_quizzes`) đã kiểm được. Mục Chọn Chuẩn Xanh luôn nạp ở trạng thái tắt: chuyên gia duyệt rồi bật trong admin.
  *
  *  - Mục mới: tạo theo `id` ổn định (INSERT ... ON CONFLICT DO NOTHING), nên chạy lại hay hai tiến trình chạy cùng lúc đều không nhân đôi.
  *  - Mục đã có: chỉ cập nhật khi `version` trong JSON LỚN HƠN `version` trong DB. Admin sửa nội dung thì `version` DB tăng, nên seed
@@ -15,12 +16,26 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { Prisma, PrismaClient } from '@prisma/client';
-import { MINI_BASKET_PICK, MINI_GAME_IDS, MINI_MIN_ACTIVE_ITEMS, type MiniGameId } from '@tubutree/shared-types';
+import { MINI_BASKET_PICK, MINI_GAME_IDS, MINI_MIN_ACTIVE_ITEMS, claimsIn, type MiniGameId } from '@tubutree/shared-types';
 import { MINI_GAMES } from '../src/modules/game/mini/games';
 import { SLUG_RE } from '../src/modules/game/mini/games/game-def';
 import { readBasketPayload } from '../src/modules/game/mini/games/basket';
 import { readChoicePayload } from '../src/modules/game/mini/games/choice';
 import { MINI_CONTENT_KIND, MINI_EXPLANATION_MAX } from '../src/modules/game/mini/game-mini-admin.service';
+import {
+  MATCHER_GAME,
+  MATCHER_TRIVIA_PER_RUN,
+  isMatcherKind,
+  matcherContentGaps,
+  matcherPayloadError,
+  outcomeSlugs,
+  readMatcherOutcome,
+  readMatcherQuestion,
+  readMatcherTrivia,
+  type MatcherKind,
+  type MatcherOutcome,
+  type MatcherQuestion,
+} from '../src/modules/game/mini/matcher/matcher.rules';
 import { QUIZZES, type SeedQuiz } from './seed-game-quiz';
 
 export const GAME_MINI_DATA_DIR = join(__dirname, 'reference-data', 'game-mini');
@@ -32,6 +47,9 @@ export const GAME_MINI_FILES: Record<MiniGameId, string> = {
   origin: 'origin.json',
   basket: 'basket.json',
 };
+
+export const GAME_MATCHER_FILE = 'matcher.json';
+const MATCHER_ID_PREFIX = 'gm-matcher-';
 
 const ID_PREFIX: Record<MiniGameId, string> = {
   sort: 'gm-sort-',
@@ -62,6 +80,10 @@ export interface GameMiniItem {
   inactiveReason?: string;
 }
 
+export interface GameMatcherItem extends GameMiniItem {
+  kind: MatcherKind;
+}
+
 export interface GameMiniSource {
   code: string;
   url: string;
@@ -86,6 +108,8 @@ export interface ProductSnapshotEntry {
 
 export interface GameMiniPack {
   games: Record<MiniGameId, GameMiniItem[]>;
+  /** Chọn Chuẩn Xanh: câu nhu cầu, câu đố xen giữa, bộ sản phẩm (`matcher.json`). */
+  matcher: GameMatcherItem[];
   legacy: LegacyQuizSource[];
   sources: GameMiniSource[];
   /** Danh sách sản phẩm công khai chụp lúc soạn (slug, tên, còn hàng). */
@@ -103,8 +127,11 @@ export function loadGameMiniPack(dir: string = GAME_MINI_DATA_DIR): GameMiniPack
     if (file.game !== game) throw new Error(`${GAME_MINI_FILES[game]}: trường "game" là "${file.game}", phải là "${game}"`);
     games[game] = file.items;
   }
+  const matcher = readJson<{ game: string; items: GameMatcherItem[] }>(dir, GAME_MATCHER_FILE);
+  if (matcher.game !== MATCHER_GAME) throw new Error(`${GAME_MATCHER_FILE}: trường "game" là "${matcher.game}", phải là "${MATCHER_GAME}"`);
   return {
     games,
+    matcher: matcher.items,
     legacy: readJson<{ items: LegacyQuizSource[] }>(dir, 'legacy-quiz-sources.json').items,
     sources: readJson<{ sources: GameMiniSource[] }>(dir, 'sources.json').sources,
     products: readJson<{ products: ProductSnapshotEntry[] }>(dir, 'products-snapshot.json').products,
@@ -195,6 +222,22 @@ export function visibleTexts(item: Pick<GameMiniItem, 'payload' | 'explanation'>
     }
   };
   walk(item.payload);
+  return out;
+}
+
+/** Chữ người chơi thấy của một mục Chọn Chuẩn Xanh: lời hỏi, nhãn lựa chọn, tên bộ, câu "vì sao hợp", lời giải thích. Mã và nhãn máy bỏ qua. */
+export function matcherVisibleTexts(item: Pick<GameMatcherItem, 'kind' | 'payload' | 'explanation'>): string[] {
+  const out: string[] = [item.explanation];
+  if (item.kind === 'question') {
+    const q = readMatcherQuestion(item.payload);
+    if (q) out.push(q.prompt, ...q.options.map((o) => o.label));
+  } else if (item.kind === 'trivia') {
+    const t = readMatcherTrivia(item.payload);
+    if (t) out.push(t.prompt, ...t.options);
+  } else {
+    const o = readMatcherOutcome(item.payload);
+    if (o) out.push(o.title, ...o.slots.flatMap((s) => s.why.map((w) => w.text)));
+  }
   return out;
 }
 
@@ -294,6 +337,8 @@ export function validateGameMiniPack(pack: GameMiniPack, quizzes: readonly SeedQ
     }
   }
 
+  errors.push(...validateMatcherItems(pack, seen, products, sourceUrls, labelSource));
+
   const linkedQuiz = pack.games.daily_quiz.filter((i) => i.active && i.productSlug).length;
   if (linkedQuiz > 0 && linkedQuiz < MIN_LINKED_DAILY_QUIZ) {
     errors.push(
@@ -325,6 +370,81 @@ export function validateGameMiniPack(pack: GameMiniPack, quizzes: readonly SeedQ
   return errors;
 }
 
+/**
+ * Luật riêng của `matcher.json`: luôn tắt, payload theo loại, câu đố dẫn nguồn khoa học trong sources.json, câu nhu cầu và bộ kết quả
+ * dẫn trang sản phẩm Tubu, chữ qua cụm cấm và bộ chặn tuyên bố (mức strict), slug có trong ảnh chụp và còn hàng, mọi nhánh đáp án có bộ.
+ */
+function validateMatcherItems(
+  pack: GameMiniPack,
+  seen: Set<string>,
+  products: ReadonlyMap<string, ProductSnapshotEntry>,
+  sourceUrls: ReadonlySet<string>,
+  labelSource: GameMiniSource | undefined,
+): string[] {
+  const errors: string[] = [];
+  const questions: MatcherQuestion[] = [];
+  const outcomes: MatcherOutcome[] = [];
+  let trivia = 0;
+  for (const item of pack.matcher) {
+    const at = `${GAME_MATCHER_FILE} ${item.id ?? '(thiếu id)'}`;
+    if (typeof item.id !== 'string' || !ID_RE.test(item.id) || !item.id.startsWith(MATCHER_ID_PREFIX) || item.id.length > 100) {
+      errors.push(`${at}: id phải dạng ${MATCHER_ID_PREFIX}<chữ-thường-gạch-nối>`);
+    }
+    if (seen.has(item.id)) errors.push(`${at}: trùng id`);
+    seen.add(item.id);
+    if (item.active !== false) errors.push(`${at}: mục Chọn Chuẩn Xanh nạp ở trạng thái tắt, chuyên gia duyệt rồi bật trong admin`);
+    if (!(typeof item.inactiveReason === 'string' && item.inactiveReason.trim().length > 0)) errors.push(`${at}: mục tắt phải ghi inactiveReason`);
+    if (!Number.isInteger(item.version) || item.version < 1) errors.push(`${at}: version phải là số nguyên ≥ 1`);
+    if (!isMatcherKind(item.kind)) {
+      errors.push(`${at}: kind phải là question, trivia hoặc outcome`);
+      continue;
+    }
+    const payloadError = matcherPayloadError(item.kind, item.payload);
+    if (payloadError) errors.push(`${at}: ${payloadError}`);
+    if (JSON.stringify(item.payload ?? null).length > PAYLOAD_JSON_MAX) errors.push(`${at}: payload quá ${PAYLOAD_JSON_MAX} ký tự`);
+    const explanation = typeof item.explanation === 'string' ? item.explanation.trim() : '';
+    if (explanation.length < 1 || explanation.length > MINI_EXPLANATION_MAX || explanation !== item.explanation) {
+      errors.push(`${at}: giải thích phải 1–${MINI_EXPLANATION_MAX} ký tự, không thừa khoảng trắng (đang ${explanation.length})`);
+    }
+    const urlError = sourceUrlError(item.sourceUrl);
+    if (urlError) errors.push(`${at}: ${urlError}`);
+    else if (item.kind === 'trivia') {
+      if (isTubuHost(item.sourceUrl)) errors.push(`${at}: không dùng trang Tubu làm nguồn cho khẳng định khoa học`);
+      if (!sourceUrls.has(item.sourceUrl)) errors.push(`${at}: sourceUrl chưa có trong sources.json`);
+    } else if (!labelSource || !item.sourceUrl.startsWith(labelSource.url)) {
+      errors.push(`${at}: câu nhu cầu và bộ kết quả dẫn trang sản phẩm Tubu`);
+    }
+    if (typeof item.sourceRef !== 'string' || item.sourceRef.trim().length === 0) errors.push(`${at}: thiếu sourceRef`);
+    if (!isValidDay(item.sourceCheckedAt)) errors.push(`${at}: sourceCheckedAt phải là YYYY-MM-DD`);
+    if (item.productSlug != null) errors.push(`${at}: Chọn Chuẩn Xanh không dùng productSlug, slug nằm trong payload bộ kết quả`);
+    for (const text of matcherVisibleTexts(item)) {
+      for (const label of findBannedPhrases(text)) errors.push(`${at}: cụm cấm "${label}" trong "${text}"`);
+      for (const claim of claimsIn(text, 'strict')) errors.push(`${at}: lời tuyên bố (${claim}) trong "${text}"`);
+    }
+    if (item.kind === 'question') {
+      const q = readMatcherQuestion(item.payload);
+      if (q) questions.push(q);
+    } else if (item.kind === 'trivia') {
+      if (readMatcherTrivia(item.payload)) trivia++;
+    } else {
+      const o = readMatcherOutcome(item.payload);
+      if (!o) continue;
+      outcomes.push(o);
+      for (const slug of outcomeSlugs(o)) {
+        const snap = products.get(slug);
+        if (!snap) errors.push(`${at}: slug ${slug} không có trong ảnh chụp sản phẩm`);
+        else if (!snap.inStock) errors.push(`${at}: slug ${slug} hết hàng lúc chụp`);
+      }
+    }
+  }
+  const dupes = (codes: string[]) => codes.filter((c, i) => codes.indexOf(c) !== i);
+  for (const c of dupes(questions.map((q) => q.code))) errors.push(`${GAME_MATCHER_FILE}: trùng mã câu nhu cầu ${c}`);
+  for (const c of dupes(outcomes.map((o) => o.code))) errors.push(`${GAME_MATCHER_FILE}: trùng mã bộ kết quả ${c}`);
+  if (trivia < MATCHER_TRIVIA_PER_RUN) errors.push(`${GAME_MATCHER_FILE}: cần ít nhất ${MATCHER_TRIVIA_PER_RUN} câu đố xen giữa`);
+  for (const gap of matcherContentGaps(questions, outcomes)) errors.push(`${GAME_MATCHER_FILE}: ${gap}`);
+  return errors;
+}
+
 /** Số mục bật của từng game và game nào chưa đủ `MINI_MIN_ACTIVE_ITEMS` (sẽ tự ẩn). */
 export function activeCounts(pack: GameMiniPack): Record<MiniGameId, { total: number; active: number; belowMinimum: boolean }> {
   const out = {} as Record<MiniGameId, { total: number; active: number; belowMinimum: boolean }>;
@@ -339,6 +459,12 @@ export function activeCounts(pack: GameMiniPack): Record<MiniGameId, { total: nu
 
 export interface GameMiniSeedResult {
   game: MiniGameId;
+  total: number;
+  created: number;
+  updated: number;
+}
+
+export interface GameMatcherSeedResult {
   total: number;
   created: number;
   updated: number;
@@ -366,10 +492,23 @@ function contentData(game: MiniGameId, item: GameMiniItem) {
   };
 }
 
+function matcherData(item: GameMatcherItem) {
+  return {
+    game: MATCHER_GAME,
+    kind: item.kind,
+    payload: item.payload as Prisma.InputJsonValue,
+    explanation: item.explanation,
+    sourceUrl: item.sourceUrl,
+    sourceCheckedAt: new Date(`${item.sourceCheckedAt}T00:00:00Z`),
+    productSlug: null,
+    version: item.version,
+  };
+}
+
 export async function seedGameMini(
   prisma: PrismaClient,
   pack: GameMiniPack = loadGameMiniPack(),
-): Promise<{ games: GameMiniSeedResult[]; legacy: LegacySeedResult }> {
+): Promise<{ games: GameMiniSeedResult[]; matcher: GameMatcherSeedResult; legacy: LegacySeedResult }> {
   const errors = validateGameMiniPack(pack);
   if (errors.length > 0) throw new Error(`seed-game-mini: gói nội dung có ${errors.length} lỗi, không ghi gì:\n- ${errors.join('\n- ')}`);
 
@@ -390,6 +529,21 @@ export async function seedGameMini(
     }
     games.push({ game, total: items.length, created, updated });
   }
+
+  // Nội dung mới hay nâng version đều về trạng thái tắt: chữ đổi thì chuyên gia phải duyệt lại trước khi bật.
+  const { count: matcherCreated } = await prisma.gameContentItem.createMany({
+    data: pack.matcher.map((item) => ({ id: item.id, ...matcherData(item), active: false })),
+    skipDuplicates: true,
+  });
+  let matcherUpdated = 0;
+  for (const item of pack.matcher) {
+    const { count } = await prisma.gameContentItem.updateMany({
+      where: { id: item.id, game: MATCHER_GAME, version: { lt: item.version } },
+      data: { ...matcherData(item), active: false },
+    });
+    matcherUpdated += count;
+  }
+  const matcher: GameMatcherSeedResult = { total: pack.matcher.length, created: matcherCreated, updated: matcherUpdated };
 
   // Nguồn chỉ khớp chữ đã đối chiếu: câu admin đã sửa (chữ khác bản trong seed-game-quiz.ts) thì không gắn.
   const quizById = new Map(QUIZZES.map((q) => [q.id, q]));
@@ -421,13 +575,15 @@ export async function seedGameMini(
       return p.question !== q.question || p.correct !== q.correct || p.explanation !== q.explanation || JSON.stringify(p.options) !== JSON.stringify(q.options);
     })
     .map((p) => p.id);
-  return { games, legacy: { total: pack.legacy.length, filled, missing, changed } };
+  return { games, matcher, legacy: { total: pack.legacy.length, filled, missing, changed } };
 }
 
-export function formatGameMiniResults(result: { games: GameMiniSeedResult[]; legacy: LegacySeedResult }): string[] {
+export function formatGameMiniResults(result: { games: GameMiniSeedResult[]; matcher: GameMatcherSeedResult; legacy: LegacySeedResult }): string[] {
   const lines = result.games.map(
     (r) => `[seed-game-mini] ${r.game}: +${r.created} mới, ${r.updated} cập nhật theo version, ${r.total - r.created - r.updated} giữ nguyên`,
   );
+  const m = result.matcher;
+  lines.push(`[seed-game-mini] matcher: +${m.created} mới (tắt), ${m.updated} cập nhật theo version (tắt lại), ${m.total - m.created - m.updated} giữ nguyên`);
   const missing = result.legacy.missing.length > 0 ? `; không có trong DB: ${result.legacy.missing.join(', ')}` : '';
   const changed = result.legacy.changed.length > 0 ? `; chữ đã bị sửa nên không gắn: ${result.legacy.changed.join(', ')}` : '';
   lines.push(`[seed-game-mini] game_quizzes: gắn nguồn ${result.legacy.filled}/${result.legacy.total} câu cũ${missing}${changed}`);

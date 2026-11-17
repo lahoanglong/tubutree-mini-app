@@ -9,6 +9,7 @@ import { GameMiniContentService, LEGACY_QUIZ_PREFIX } from './game-mini-content.
 import { readMiniSettings } from './game-mini.settings';
 import { MINI_GAMES, type MiniContentRow } from './games';
 import { SLUG_RE, isRecord } from './games/game-def';
+import { MATCHER_GAME, matcherPayloadError } from './matcher/matcher.rules';
 
 /** Loại mục do máy chủ đặt theo game (cột `kind`), admin không gửi. */
 export const MINI_CONTENT_KIND: Record<MiniGameId, string> = {
@@ -37,8 +38,11 @@ export interface MiniContentCreateInput {
 
 export type MiniContentUpdateInput = Partial<Omit<MiniContentCreateInput, 'game'>>;
 
+/** Game được lọc ở màn duyệt: 5 game mini và "Chọn Chuẩn Xanh" (nội dung `game = 'matcher'`, chỉ bật/tắt và sửa, không thêm từ admin). */
+export type MiniContentGameFilter = MiniGameId | typeof MATCHER_GAME;
+
 export interface MiniContentListQuery {
-  game?: MiniGameId;
+  game?: MiniContentGameFilter;
   active?: boolean;
   page: number;
   limit: number;
@@ -92,10 +96,18 @@ function checkPayload(game: MiniGameId, payload: unknown): Prisma.InputJsonValue
   return payload as Prisma.InputJsonValue;
 }
 
+function checkMatcherPayload(kind: string, payload: unknown): Prisma.InputJsonValue {
+  if (!isRecord(payload)) throw bad('Nội dung mục phải là một đối tượng JSON.');
+  if (JSON.stringify(payload).length > PAYLOAD_JSON_MAX) throw bad(`Nội dung mục quá dài (tối đa ${PAYLOAD_JSON_MAX} ký tự JSON).`);
+  const err = matcherPayloadError(kind, payload);
+  if (err) throw bad(err);
+  return payload as Prisma.InputJsonValue;
+}
+
 /** Nhãn ngắn để bảng số đọc được: câu hỏi, tên vật, nguyên liệu hoặc đề giỏ. */
 function labelOf(payload: unknown): string {
   if (!isRecord(payload)) return '';
-  for (const key of ['prompt', 'label', 'ingredient', 'task'] as const) {
+  for (const key of ['prompt', 'label', 'ingredient', 'task', 'title'] as const) {
     const v = payload[key];
     if (typeof v === 'string') return v.slice(0, 120);
   }
@@ -127,6 +139,10 @@ export class GameMiniAdminService {
     const products = await this.content.products(slugs);
     const ctx = { rng: Math.random, dayKey: vnDateKey(), products };
     return rows.map((r) => {
+      if (r.game === MATCHER_GAME) {
+        const payloadError = matcherPayloadError(r.kind, r.payload);
+        return { ...r, payloadError, usableToday: payloadError === null };
+      }
       const def = MINI_GAMES[r.game as MiniGameId];
       return {
         ...r,
@@ -175,17 +191,19 @@ export class GameMiniAdminService {
     const current = await this.prisma.gameContentItem.findUnique({ where: { id } });
     if (!current) throw new NotFoundException('Không tìm thấy mục nội dung này.');
     const game = current.game as MiniGameId;
-    if (!MINI_GAMES[game]) throw bad('Game của mục này không còn tồn tại.');
+    const matcher = current.game === MATCHER_GAME;
+    if (!matcher && !MINI_GAMES[game]) throw bad('Game của mục này không còn tồn tại.');
+    const check = (payload: unknown) => (matcher ? checkMatcherPayload(current.kind, payload) : checkPayload(game, payload));
 
     const data: Prisma.GameContentItemUpdateInput = {};
-    if (input.payload !== undefined) data.payload = checkPayload(game, input.payload);
+    if (input.payload !== undefined) data.payload = check(input.payload);
     if (input.explanation !== undefined) data.explanation = checkExplanation(input.explanation);
     if (input.sourceUrl !== undefined) data.sourceUrl = checkSourceUrl(input.sourceUrl);
     if (input.sourceCheckedAt !== undefined) data.sourceCheckedAt = checkCheckedAt(input.sourceCheckedAt);
     if (input.productSlug !== undefined) data.productSlug = checkProductSlug(input.productSlug);
     if (input.active !== undefined) {
       // Mục nhập trước khi luật đổi có thể không còn hợp lệ: không bật mục máy chủ không chấm được.
-      if (input.active && input.payload === undefined) checkPayload(game, current.payload);
+      if (input.active && input.payload === undefined) check(current.payload);
       data.active = input.active;
     }
     const contentChanged = (['payload', 'explanation', 'sourceUrl', 'productSlug'] as const).some((k) => data[k] !== undefined);
@@ -205,6 +223,8 @@ export class GameMiniAdminService {
     const from = vnDateKey(new Date(now.getTime() - (days - 1) * 86_400_000));
     const settings = await readMiniSettings(this.config);
 
+    // Chọn Chuẩn Xanh chỉ ghi lượt có thưởng (đăng nhập, game mini bật, có mã thiết bị) và để `submittedAt` trống: không tính vào số ván game
+    // mini theo ngày; ở bảng theo game thì mỗi dòng của nó là một lượt có thưởng.
     const [perDay, perGame, global, items, pools] = await Promise.all([
       this.prisma.$queryRaw<Array<{ dayKey: string; players: bigint; rounds: bigint; submitted: bigint; rewarded: bigint }>>`
         SELECT "dayKey",
@@ -212,26 +232,27 @@ export class GameMiniAdminService {
                COUNT(*) AS rounds,
                COUNT(*) FILTER (WHERE "submittedAt" IS NOT NULL) AS submitted,
                COUNT(*) FILTER (WHERE "submittedAt" IS NOT NULL AND "slot" IS NOT NULL) AS rewarded
-          FROM "game_play_rounds" WHERE "dayKey" >= ${from} AND "dayKey" <= ${today}
+          FROM "game_play_rounds" WHERE "dayKey" >= ${from} AND "dayKey" <= ${today} AND "game" <> ${MATCHER_GAME}
          GROUP BY "dayKey" ORDER BY "dayKey" DESC`,
       this.prisma.$queryRaw<
         Array<{ dayKey: string; game: string; players: bigint; submitted: bigint; water: bigint | null; points: bigint | null; capped: bigint }>
       >`
         SELECT "dayKey", "game",
-               COUNT(DISTINCT "userId") FILTER (WHERE "submittedAt" IS NOT NULL) AS players,
-               COUNT(*) FILTER (WHERE "submittedAt" IS NOT NULL) AS submitted,
+               COUNT(DISTINCT "userId") FILTER (WHERE "submittedAt" IS NOT NULL OR "game" = ${MATCHER_GAME}) AS players,
+               COUNT(*) FILTER (WHERE "submittedAt" IS NOT NULL OR "game" = ${MATCHER_GAME}) AS submitted,
                SUM("waterAwarded") AS water,
                SUM("pointsAwarded") AS points,
                COUNT(*) FILTER (WHERE "cappedBy" IS NOT NULL) AS capped
           FROM "game_play_rounds" WHERE "dayKey" >= ${from} AND "dayKey" <= ${today}
          GROUP BY "dayKey", "game" ORDER BY "dayKey" DESC, "game"`,
       this.prisma.gameGlobalDaily.findMany({ where: { dayKey: { gte: from, lte: today } }, orderBy: { dayKey: 'desc' } }),
+      // Ván Chọn Chuẩn Xanh không có đáp án đúng (contentIds là mã bộ kết quả): tính vào thì tỉ lệ đúng của bộ luôn là 0.
       this.prisma.$queryRaw<Array<{ contentId: string; game: string; shown: bigint; correct: bigint }>>`
         SELECT c."contentId", r."game",
                COUNT(*) AS shown,
                COUNT(*) FILTER (WHERE c."contentId" = ANY(r."correctIds")) AS correct
           FROM "game_play_rounds" r CROSS JOIN LATERAL unnest(r."contentIds") AS c("contentId")
-         WHERE r."submittedAt" IS NOT NULL AND r."dayKey" >= ${from} AND r."dayKey" <= ${today}
+         WHERE r."submittedAt" IS NOT NULL AND r."dayKey" >= ${from} AND r."dayKey" <= ${today} AND r."game" <> ${MATCHER_GAME}
          GROUP BY c."contentId", r."game"
          ORDER BY COUNT(*) DESC, c."contentId"
          LIMIT ${STATS_ITEMS_MAX}`,

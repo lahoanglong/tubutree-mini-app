@@ -35,7 +35,7 @@ const clientFor = (url: string) => new PrismaClient({ datasources: { db: { url }
 const GAMES: MiniGameId[] = ['sort', 'daily_quiz', 'match', 'origin', 'basket'];
 const pack = loadGameMiniPack();
 const clone = (): GameMiniPack => JSON.parse(JSON.stringify(pack)) as GameMiniPack;
-const totalItems = GAMES.reduce((n, g) => n + pack.games[g].length, 0);
+const totalItems = GAMES.reduce((n, g) => n + pack.games[g].length, 0) + pack.matcher.length;
 const DAY = '2026-11-18';
 
 function seeded(seed: number): () => number {
@@ -105,11 +105,12 @@ describe('seed-game-mini trên DB vừa migrate (real Postgres)', () => {
       expect(res.stderr).not.toMatch(/Error/);
       expect(res.status).toBe(0);
       expect(res.stdout).toContain(`[seed-game-mini] sort: +${pack.games.sort.length} mới, 0 cập nhật theo version, 0 giữ nguyên`);
+      expect(res.stdout).toContain(`[seed-game-mini] matcher: +${pack.matcher.length} mới (tắt), 0 cập nhật theo version (tắt lại), 0 giữ nguyên`);
       expect(res.stdout).toContain(`[seed-game-mini] game_quizzes: gắn nguồn ${pack.legacy.length - 1}/${pack.legacy.length} câu cũ`);
       expect(await rowsByGame(pa)).toEqual(expectedRows);
 
       const inactive = await pa.gameContentItem.findMany({ where: { active: false }, select: { id: true }, orderBy: { id: 'asc' } });
-      const expectedInactive = GAMES.flatMap((g) => pack.games[g].filter((i) => !i.active).map((i) => i.id)).sort();
+      const expectedInactive = [...GAMES.flatMap((g) => pack.games[g].filter((i) => !i.active).map((i) => i.id)), ...pack.matcher.map((i) => i.id)].sort();
       expect(inactive.map((r) => r.id).sort()).toEqual(expectedInactive);
 
       const legacy = await pa.gameQuiz.findMany({ where: { id: { in: pack.legacy.map((l) => l.id) } }, select: { id: true, sourceUrl: true } });
@@ -138,6 +139,7 @@ describe('seed-game-mini trên DB vừa migrate (real Postgres)', () => {
       const before = await pa.gameContentItem.findMany({ orderBy: { id: 'asc' } });
       const result = await seedGameMini(pa);
       expect(result.games.map((g) => [g.game, g.created, g.updated])).toEqual(GAMES.map((g) => [g, 0, 0]));
+      expect(result.matcher).toMatchObject({ created: 0, updated: 0 });
       expect(result.legacy.filled).toBe(0);
       expect(await pa.gameContentItem.findMany({ orderBy: { id: 'asc' } })).toEqual(before);
     });
@@ -238,7 +240,7 @@ describe('seed-game-mini trên DB vừa migrate (real Postgres)', () => {
   describe('DB B: hai lần seed song song, rồi chơi trên kho thật', () => {
     it('cùng lúc hai kết nối: không lỗi, không trùng, tổng mới đúng bằng số mục, câu cũ gắn đúng một lần', async () => {
       const [r1, r2] = await Promise.all([seedGameMini(pb), seedGameMini(pb2)]);
-      const created = (r: typeof r1) => r.games.reduce((n, g) => n + g.created, 0);
+      const created = (r: typeof r1) => r.games.reduce((n, g) => n + g.created, 0) + r.matcher.created;
       expect(created(r1) + created(r2)).toBe(totalItems);
       expect(r1.legacy.filled + r2.legacy.filled).toBe(pack.legacy.length);
       expect(await pb.gameContentItem.count()).toBe(totalItems);

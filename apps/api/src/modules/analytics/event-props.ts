@@ -3,6 +3,7 @@ import {
   CHECKOUT_LAST_STEPS,
   CHECKOUT_STEPS,
   ECO_FACT_KIND_NAMES,
+  MATCHER_ENTRIES,
   ORDER_ZALO_FRIEND_FROM,
   PDP_ACTIONS,
   RECYCLE_FUNNEL_STEPS,
@@ -101,6 +102,14 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   invite_landing_viewed: { props: {} },
   invite_landing_cta: { props: {} },
   invite_progress_viewed: { props: {} },
+  matcher_started: { props: { entry: oneOf(MATCHER_ENTRIES) }, required: ['entry'] },
+  matcher_question_answered: { props: { index: int(1, 5) }, required: ['index'] },
+  matcher_completed: {
+    props: { outcomeId: ID, fallback: bool, seconds: (v) => int(0, 3600)(v) && (v as number) % 5 === 0 },
+    required: ['outcomeId', 'fallback', 'seconds'],
+  },
+  matcher_add_all: { props: { itemCount: int(1, 4) }, required: ['itemCount'] },
+  matcher_item_opened: { props: { productSlug: SLUG }, required: ['productSlug'] },
 };
 
 /**

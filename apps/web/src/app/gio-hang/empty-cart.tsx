@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { CART_EMPTY } from '@tubutree/app-core/cart-copy';
 import { SuggestedRail } from '@/components/catalog/suggested-rail';
 import { EmptyState } from '@/components/mini/empty-state';
+import { MatcherEntryLink } from '@/components/game/matcher/matcher-entry-link';
 
 /**
  * Giỏ trống như Mini App: minh hoạ + lời mời + nút, rồi kệ gợi ý. Tải lười vì chỉ khách giỏ trống mới cần. Ở điện thoại khung
@@ -20,6 +21,9 @@ export default function EmptyCart() {
         ctaLabel={CART_EMPTY.cta}
         onCta={() => router.push('/san-pham')}
       />
+      <div className="flex justify-center px-4">
+        <MatcherEntryLink from="empty_cart" />
+      </div>
       <SuggestedRail />
     </div>
   );

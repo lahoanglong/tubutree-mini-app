@@ -64,9 +64,13 @@ export function miniAppToday(today: MiniTodayResponse | undefined): {
   };
 }
 
-/** Dòng "Ghép Cặp, Giỏ Đúng Việc: chơi trên tubutree.com"; null khi không có game nào chỉ phát ở web. */
-export function miniWebOnlyLine(games: readonly PlayableMiniGame[]): string | null {
-  return games.length > 0 ? gameCopy('entry.webOnly', { names: games.map((g) => miniGameTitle(g)).join(', ') }) : null;
+/**
+ * Dòng "Ghép Cặp, Giỏ Đúng Việc: chơi trên tubutree.com"; null khi không có game nào chỉ phát ở web. `extra`: tên các màn chỉ có trên web
+ * nhưng không phải ván game mini (Chọn Chuẩn Xanh), đứng sau các game.
+ */
+export function miniWebOnlyLine(games: readonly PlayableMiniGame[], extra: readonly string[] = []): string | null {
+  const names = [...games.map((g) => miniGameTitle(g)), ...extra];
+  return names.length > 0 ? gameCopy('entry.webOnly', { names: names.join(', ') }) : null;
 }
 
 export const miniGameTitle = (game: PlayableMiniGame) => gameCopy(`game.${game}.title`);

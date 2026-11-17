@@ -4,6 +4,7 @@ import { ChevronRight, CircleHelp, Recycle, type LucideIcon } from 'lucide-react
 import type { MiniTodayResponse } from '@tubutree/shared-types';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniTodayQuery } from '@tubutree/app-core/game-mini/today';
+import { matcherOn, matcherStatusQuery } from '@tubutree/app-core/game-mini/matcher-status';
 import {
   miniAppToday,
   miniEarnQuizLeft,
@@ -49,7 +50,9 @@ export function PlayTodayCard({ today, inset = false }: { today: MiniTodayRespon
   const titleId = useId();
   const navigate = useSmartNavigate();
   const { rows: games, webOnly } = miniAppToday(today);
-  const webLine = miniWebOnlyLine(webOnly);
+  // Chọn Chuẩn Xanh chỉ có trên web (route-map.json gap `matcher-web-only`): bật cờ thì tên nó nối vào cùng dòng "chơi trên tubutree.com".
+  const matcher = matcherOn(useQuery(matcherStatusQuery(coreHttp)).data);
+  const webLine = miniWebOnlyLine(webOnly, matcher ? [gameCopy('game.matcher.title')] : []);
   return (
     <section
       aria-labelledby={titleId}

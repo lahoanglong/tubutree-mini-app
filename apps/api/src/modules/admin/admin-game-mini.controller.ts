@@ -6,12 +6,13 @@ import { MINI_GAME_IDS, type MiniGameId } from '@tubutree/shared-types';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { OptionalNotNull } from '../../common/decorators/optional-not-null.decorator';
 import { PaginationQuery } from '../../common/pagination';
-import { GameMiniAdminService, MINI_EXPLANATION_MAX } from '../game/mini/game-mini-admin.service';
+import { GameMiniAdminService, MINI_EXPLANATION_MAX, type MiniContentGameFilter } from '../game/mini/game-mini-admin.service';
+import { MATCHER_GAME } from '../game/mini/matcher/matcher.rules';
 
 const queryBool = ({ value }: { value: unknown }) => (value === 'true' ? true : value === 'false' ? false : value);
 
 export class MiniContentListQueryDto extends PaginationQuery {
-  @IsOptional() @IsIn(MINI_GAME_IDS) game?: MiniGameId;
+  @IsOptional() @IsIn([...MINI_GAME_IDS, MATCHER_GAME]) game?: MiniContentGameFilter;
   @IsOptional() @Transform(queryBool) @IsBoolean() active?: boolean;
 }
 

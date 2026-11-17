@@ -25,6 +25,7 @@ export const GAME_MINI_COPY = {
   'game.origin.rules': '5 lượt, mỗi lượt 12 giây. Chọn một trong 4 vùng rồi bấm Lượt tiếp. Lượt cuối là một sản phẩm đang bán.',
   'game.basket.title': 'Giỏ Đúng Việc',
   'game.basket.desc': 'Chọn đúng 3 món cho một việc nhà',
+  'game.matcher.title': 'Chọn Chuẩn Xanh',
   'game.basket.rules': 'Đọc đề, chọn đúng 3 trong 6 sản phẩm rồi bấm Xong. 45 giây. Không có thưởng thêm khi bạn mua.',
   'row.left': 'Còn {n} lượt thưởng',
   'row.full': 'Đã nhận đủ hôm nay',
@@ -138,7 +139,7 @@ export type GameMiniCopyKey = keyof typeof GAME_MINI_COPY;
 /** Số ký tự tối đa của từng khoá (sau khi điền biến với giá trị thường gặp): chặn câu dài làm vỡ dòng gọn ở 360px. */
 export const GAME_MINI_COPY_MAX: Partial<Record<GameMiniCopyKey, number>> = {
   'entry.title': 20,
-  'entry.webOnly': 64,
+  'entry.webOnly': 80,
   'game.daily_quiz.title': 24,
   'game.sort.title': 24,
   'game.daily_quiz.desc': 48,
@@ -146,6 +147,7 @@ export const GAME_MINI_COPY_MAX: Partial<Record<GameMiniCopyKey, number>> = {
   'game.match.title': 24,
   'game.origin.title': 24,
   'game.basket.title': 24,
+  'game.matcher.title': 24,
   'game.match.desc': 48,
   'game.origin.desc': 48,
   'game.basket.desc': 48,

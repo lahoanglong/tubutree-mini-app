@@ -20,6 +20,7 @@ import { GameNoticeBar, useGameNotice } from '@/components/game/game-notice';
 import { PageHeader } from '@/components/ui/page-header';
 import { miniBtnSecondary, miniOutline } from '@/components/loyalty/mini-surface';
 import { PAGE_WIDE } from '@/lib/page-frame';
+import { MatcherEntryLink } from '@/components/game/matcher/matcher-entry-link';
 import { ProductThumb } from '@/components/mini';
 import { loadErrorText } from '@/lib/error-text';
 
@@ -260,6 +261,7 @@ export default function AdvisorPage() {
                   </div>
                 </section>
                 <LoginRequired message="Đăng nhập để hỏi Trợ lý AI" returnTo="/tu-van" />
+                <MatcherEntryLink from="tu_van" />
               </div>
             )}
             {phase === 'authenticated' && <Advisor userId={user?.id ?? ''} />}

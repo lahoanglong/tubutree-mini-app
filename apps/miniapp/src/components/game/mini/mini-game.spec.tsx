@@ -62,7 +62,8 @@ afterEach(() => vi.useRealTimers());
 
 describe('PlayTodayCard', () => {
   it('chỉ liệt kê game phát ở Mini App, mỗi dòng ghi lượt thưởng thật và mở màn chơi; game chỉ phát ở web gom vào một dòng chữ', () => {
-    render(<PlayTodayCard today={today()} />);
+    mocks.get.mockResolvedValue({ enabled: false });
+    render(wrap(<PlayTodayCard today={today()} />));
     expect(screen.getByTestId('mini-play-row-sort')).toBeInTheDocument();
     expect(screen.getByTestId('mini-play-row-daily_quiz')).toBeInTheDocument();
     expect(screen.queryByTestId('mini-play-row-match')).toBeNull();
@@ -72,6 +73,15 @@ describe('PlayTodayCard', () => {
     expect(screen.getByTestId('mini-play-status-daily_quiz')).toHaveTextContent(gameCopy('row.full'));
     fireEvent.click(screen.getByTestId('mini-play-row-sort'));
     expect(mocks.navigate).toHaveBeenCalledWith('/game/play/sort');
+  });
+
+  it('Chọn Chuẩn Xanh chỉ có trên web: cờ bật thì tên nối vào cùng dòng chữ, không thành dòng chơi hay nút', async () => {
+    mocks.get.mockImplementation((path: string) => Promise.resolve(path === '/game/matcher/status' ? { enabled: true } : undefined));
+    render(wrap(<PlayTodayCard today={today()} />));
+    const names = `${gameCopy('game.match.title')}, ${gameCopy('game.matcher.title')}`;
+    await waitFor(() => expect(screen.getByTestId('mini-play-web-only')).toHaveTextContent(gameCopy('entry.webOnly', { names })));
+    expect(screen.queryByTestId('mini-play-row-matcher')).toBeNull();
+    expect(screen.getByTestId('mini-play-web-only').closest('button, a')).toBeNull();
   });
 });
 

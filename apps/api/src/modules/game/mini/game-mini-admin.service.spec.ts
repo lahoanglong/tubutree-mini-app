@@ -394,3 +394,43 @@ describe('GameMiniAdminService.update', () => {
     });
   });
 });
+
+describe('GameMiniAdminService: nội dung Chọn Chuẩn Xanh (game = matcher)', () => {
+  const TRIVIA = { prompt: 'Vết máu là vết gì?', options: ['Vết đạm', 'Vết dầu'], answer: 0 };
+  const matcherRow = (over: Record<string, unknown> = {}) => ({ ...stored('sort'), game: 'matcher', kind: 'trivia', payload: TRIVIA, ...over });
+
+  it('lọc danh sách theo game matcher; payloadError theo luật matcher', async () => {
+    const m = makeSvc();
+    m.prisma.gameContentItem.findMany.mockResolvedValue([matcherRow(), matcherRow({ id: 'item-2', payload: { prompt: 'x' } })]);
+    m.prisma.gameContentItem.count.mockResolvedValue(2);
+    const res = await m.svc.list({ game: 'matcher', page: 1, limit: 20 });
+    expect(m.prisma.gameContentItem.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { game: 'matcher' } }));
+    expect(res.data.map((r) => [r.payloadError === null, r.usableToday])).toEqual([
+      [true, true],
+      [false, false],
+    ]);
+  });
+
+  it('bật mục matcher hợp lệ được; payload hỏng thì 400, không ghi DB', async () => {
+    const m = makeSvc();
+    // Mock của makeSvc gõ `game` theo 5 game mini; dòng matcher là game thứ sáu nên ép kiểu ở đây.
+    m.prisma.gameContentItem.update.mockImplementation((async ({ where, data }: { where: { id: string }; data: Record<string, unknown> }) => ({ ...matcherRow(), id: where.id, ...data })) as never);
+    m.prisma.gameContentItem.findUnique.mockResolvedValue(matcherRow());
+    await m.svc.update('item-1', { active: true });
+    expect(updatedData(m)).toEqual({ active: true });
+
+    const bad = makeSvc();
+    bad.prisma.gameContentItem.findUnique.mockResolvedValue(matcherRow({ payload: { prompt: 'x', options: ['A'], answer: 0 } }));
+    await expect(bad.svc.update('item-1', { active: true })).rejects.toBeInstanceOf(BadRequestException);
+    expect(bad.prisma.gameContentItem.update).not.toHaveBeenCalled();
+  });
+
+  it('sửa payload matcher theo đúng loại mục (câu đố không nhận payload của bộ kết quả)', async () => {
+    const m = makeSvc();
+    m.prisma.gameContentItem.findUnique.mockResolvedValue(matcherRow());
+    await expect(m.svc.update('item-1', { payload: { code: 'x', title: 'Bộ', need: 'a', require: [], slots: [], fallbackCategory: 'c' } })).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
+    expect(m.prisma.gameContentItem.update).not.toHaveBeenCalled();
+  });
+});

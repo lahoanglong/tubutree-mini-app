@@ -106,6 +106,7 @@ const APPROVED_LOADED_KEYS = [
     'game.harvest_coupon_min_order',
     'game.harvest_coupon_monthly_cap',
     'game.home_quiz_seeds',
+    'game.matcher_enabled',
     'game.max_plots',
     'game.mini.accounts_per_device_per_day',
     'game.mini.basket.enabled',

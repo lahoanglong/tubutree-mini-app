@@ -9,6 +9,7 @@ import { Heading, Text } from '@/components/mini';
 import { coreHttp } from '@/lib/core-http';
 import { ui } from '@/lib/guest-ui';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
+import { MatcherEntryLink } from '@/components/game/matcher/matcher-entry-link';
 import { formatPhoneDisplay } from '@/lib/phone-display';
 import { usePublicConfig } from '@/lib/use-public-config';
 
@@ -39,6 +40,7 @@ export function AdvisorPaused() {
           </a>
         )
       )}
+      <MatcherEntryLink from="advisor_paused" />
       <Link href="/" className={`${miniBtnSecondary} w-full max-md:min-h-12`}>
         {copy.home}
       </Link>

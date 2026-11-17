@@ -1,0 +1,1629 @@
+{
+  "game": "matcher",
+  "items": [
+    {
+      "id": "gm-matcher-q-need",
+      "kind": "question",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "need",
+        "step": 1,
+        "prompt": "Bạn muốn bắt đầu đổi sang đồ xanh ở góc nào trong nhà?",
+        "options": [
+          {
+            "value": "laundry",
+            "label": "Giặt giũ",
+            "tags": [
+              "laundry"
+            ]
+          },
+          {
+            "value": "kitchen",
+            "label": "Bếp và rửa chén",
+            "tags": [
+              "kitchen"
+            ]
+          },
+          {
+            "value": "floor",
+            "label": "Lau nhà, nhà tắm",
+            "tags": [
+              "floor"
+            ]
+          },
+          {
+            "value": "baby",
+            "label": "Đồ dùng cho bé",
+            "tags": [
+              "baby"
+            ]
+          },
+          {
+            "value": "personal",
+            "label": "Tắm gội, rửa tay",
+            "tags": [
+              "personal"
+            ]
+          }
+        ]
+      },
+      "explanation": "Câu hỏi nhu cầu, không có đáp án đúng sai; đáp án chỉ dùng để chọn bộ sản phẩm.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Câu nhu cầu, không cần nguồn khoa học",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-q-laundry-who",
+      "kind": "question",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "laundry_who",
+        "step": 2,
+        "prompt": "Nhà bạn hay giặt gì nhất?",
+        "options": [
+          {
+            "value": "family",
+            "label": "Quần áo cả nhà",
+            "tags": [
+              "adult"
+            ]
+          },
+          {
+            "value": "kids",
+            "label": "Có cả đồ của bé",
+            "tags": [
+              "kids"
+            ]
+          },
+          {
+            "value": "delicate",
+            "label": "Đồ lót, đồ mỏng giặt tay",
+            "tags": [
+              "delicate"
+            ]
+          }
+        ],
+        "when": [
+          "laundry"
+        ]
+      },
+      "explanation": "Câu hỏi nhu cầu, không có đáp án đúng sai; đáp án chỉ dùng để chọn bộ sản phẩm.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Câu nhu cầu, không cần nguồn khoa học",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-q-kitchen-how",
+      "kind": "question",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "kitchen_how",
+        "step": 2,
+        "prompt": "Nhà bạn rửa chén thế nào?",
+        "options": [
+          {
+            "value": "hand",
+            "label": "Rửa tay ở bồn",
+            "tags": [
+              "hand"
+            ]
+          },
+          {
+            "value": "machine",
+            "label": "Có máy rửa chén",
+            "tags": [
+              "machine"
+            ]
+          },
+          {
+            "value": "produce",
+            "label": "Rửa tay, hay ngâm rau quả",
+            "tags": [
+              "hand",
+              "produce"
+            ]
+          }
+        ],
+        "when": [
+          "kitchen"
+        ]
+      },
+      "explanation": "Câu hỏi nhu cầu, không có đáp án đúng sai; đáp án chỉ dùng để chọn bộ sản phẩm.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Câu nhu cầu, không cần nguồn khoa học",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-q-floor-where",
+      "kind": "question",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "floor_where",
+        "step": 2,
+        "prompt": "Bạn muốn lo chỗ nào trước?",
+        "options": [
+          {
+            "value": "floor",
+            "label": "Sàn nhà",
+            "tags": [
+              "floor_main"
+            ]
+          },
+          {
+            "value": "bath",
+            "label": "Nhà tắm, bồn cầu",
+            "tags": [
+              "bath"
+            ]
+          },
+          {
+            "value": "surface",
+            "label": "Bàn bếp, mặt bàn",
+            "tags": [
+              "surface"
+            ]
+          }
+        ],
+        "when": [
+          "floor"
+        ]
+      },
+      "explanation": "Câu hỏi nhu cầu, không có đáp án đúng sai; đáp án chỉ dùng để chọn bộ sản phẩm.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Câu nhu cầu, không cần nguồn khoa học",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-q-baby-focus",
+      "kind": "question",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "baby_focus",
+        "step": 2,
+        "prompt": "Bạn đang cần đồ cho bé việc gì nhất?",
+        "options": [
+          {
+            "value": "clothes",
+            "label": "Giặt quần áo của bé",
+            "tags": [
+              "baby_clothes"
+            ]
+          },
+          {
+            "value": "bottle",
+            "label": "Rửa bình sữa",
+            "tags": [
+              "bottle"
+            ]
+          },
+          {
+            "value": "bath",
+            "label": "Tắm gội cho bé",
+            "tags": [
+              "baby_bath"
+            ]
+          }
+        ],
+        "when": [
+          "baby"
+        ]
+      },
+      "explanation": "Câu hỏi nhu cầu, không có đáp án đúng sai; đáp án chỉ dùng để chọn bộ sản phẩm.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Câu nhu cầu, không cần nguồn khoa học",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-q-personal-focus",
+      "kind": "question",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "personal_focus",
+        "step": 2,
+        "prompt": "Bạn muốn đổi món nào trước?",
+        "options": [
+          {
+            "value": "hands",
+            "label": "Nước rửa tay",
+            "tags": [
+              "hands"
+            ]
+          },
+          {
+            "value": "hair",
+            "label": "Dầu gội",
+            "tags": [
+              "hair"
+            ]
+          },
+          {
+            "value": "face",
+            "label": "Rửa mặt",
+            "tags": [
+              "face"
+            ]
+          }
+        ],
+        "when": [
+          "personal"
+        ]
+      },
+      "explanation": "Câu hỏi nhu cầu, không có đáp án đúng sai; đáp án chỉ dùng để chọn bộ sản phẩm.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Câu nhu cầu, không cần nguồn khoa học",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-q-size-home",
+      "kind": "question",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "size_home",
+        "step": 3,
+        "prompt": "Bạn thường mua cỡ nào?",
+        "options": [
+          {
+            "value": "small",
+            "label": "Chai nhỏ, dùng thử trước",
+            "tags": [
+              "small"
+            ]
+          },
+          {
+            "value": "large",
+            "label": "Chai lớn, dùng lâu",
+            "tags": [
+              "large"
+            ]
+          },
+          {
+            "value": "refill",
+            "label": "Can refill, đổ vào chai cũ",
+            "tags": [
+              "refill"
+            ]
+          }
+        ],
+        "when": [
+          "laundry",
+          "kitchen",
+          "floor"
+        ]
+      },
+      "explanation": "Câu hỏi nhu cầu, không có đáp án đúng sai; đáp án chỉ dùng để chọn bộ sản phẩm.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Câu nhu cầu, không cần nguồn khoa học",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-q-size-care",
+      "kind": "question",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "size_care",
+        "step": 3,
+        "prompt": "Bạn muốn mua thế nào?",
+        "options": [
+          {
+            "value": "small",
+            "label": "Dùng thử một chai trước",
+            "tags": [
+              "small"
+            ]
+          },
+          {
+            "value": "large",
+            "label": "Mua cỡ lớn nếu có",
+            "tags": [
+              "large"
+            ]
+          }
+        ],
+        "when": [
+          "baby",
+          "personal"
+        ]
+      },
+      "explanation": "Câu hỏi nhu cầu, không có đáp án đúng sai; đáp án chỉ dùng để chọn bộ sản phẩm.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Câu nhu cầu, không cần nguồn khoa học",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-enzyme-protease",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Vết máu, vết trứng trên áo là loại vết bẩn nào?",
+        "options": [
+          "Vết tinh bột",
+          "Vết đạm",
+          "Vết dầu mỡ"
+        ],
+        "answer": 1
+      },
+      "explanation": "Bài tổng quan năm 2024 xếp máu, trứng, mồ hôi vào nhóm vết đạm; nước giặt có enzyme protease nhắm vào nhóm vết này.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ bảng 4 (protease)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-enzyme-amylase",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Enzyme nào trong nước giặt lo vết cơm, mì, khoai?",
+        "options": [
+          "Lipase",
+          "Cellulase",
+          "Amylase"
+        ],
+        "answer": 2
+      },
+      "explanation": "Theo bài tổng quan năm 2024, amylase xử lý vết bẩn gốc tinh bột như cơm, mì, khoai, đồ ăn dặm.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ bảng 4 (amylase)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-enzyme-lipase",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Vết dầu ăn trên áo là việc của enzyme nào?",
+        "options": [
+          "Lipase",
+          "Amylase",
+          "Protease"
+        ],
+        "answer": 0
+      },
+      "explanation": "Theo bài tổng quan năm 2024, lipase xử lý vết dầu mỡ như bơ, dầu trộn salad, dầu trên da.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ bảng 4 (lipase)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-photphat-eu",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Châu Âu đã làm gì với photphat vô cơ trong nước giặt gia dụng?",
+        "options": [
+          "Bắt buộc phải thêm",
+          "Cấm dùng",
+          "Chưa có quy định"
+        ],
+        "answer": 1
+      },
+      "explanation": "Quy định (EU) 259/2012 cấm photphat vô cơ trong chất giặt và chất rửa bát máy gia dụng, để hạn chế phú dưỡng sông hồ.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ mục quy định",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-phu-duong",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Photphat chảy ra sông hồ quá nhiều thì sao?",
+        "options": [
+          "Nước trong hơn",
+          "Cá lớn nhanh hơn",
+          "Tảo phát triển quá mức, nước thiếu oxy"
+        ],
+        "answer": 2
+      },
+      "explanation": "Photphat từ bột giặt kiểu cũ góp phần gây phú dưỡng: tảo phát triển quá mức, nước thiếu oxy.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Eutrophication",
+      "sourceRef": "S12 mục Detergents",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-citric-can-voi",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Axit citric (có nhiều trong chanh) hay được dùng làm gì trong nhà?",
+        "options": [
+          "Tẩy cặn vôi, cặn nước cứng",
+          "Làm mềm vải",
+          "Tạo mùi bạc hà"
+        ],
+        "answer": 0
+      },
+      "explanation": "Axit citric kết hợp với khoáng chất trong cặn nước cứng nên giúp tẩy cặn vôi. Dạng đậm đặc có thể gây cay mắt, xót da.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Citric_acid",
+      "sourceRef": "S9 mục Cleaning and chelating agent",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-giam-mat-da",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Không nên lau giấm lên bề mặt nào?",
+        "options": [
+          "Mặt kính cửa sổ",
+          "Mặt bàn đá",
+          "Ly thuỷ tinh"
+        ],
+        "answer": 1
+      },
+      "explanation": "Giấm có tính axit, có thể làm hỏng mặt bàn đá, lưỡi dao và đồ cao su.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Vinegar",
+      "sourceRef": "S11 mục Cleaning agent",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-baking-soda-kiem",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Baking soda hoà vào nước có tính gì?",
+        "options": [
+          "Axit mạnh",
+          "Kiềm mạnh",
+          "Kiềm nhẹ"
+        ],
+        "answer": 2
+      },
+      "explanation": "Dung dịch baking soda (natri bicarbonat) trong nước có tính kiềm nhẹ.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sodium_bicarbonate",
+      "sourceRef": "S8 mục Chemistry",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-baking-soda-giam",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Trộn baking soda với giấm thì thấy gì?",
+        "options": [
+          "Sủi bọt khí CO₂",
+          "Bốc khói màu vàng",
+          "Đông đặc lại"
+        ],
+        "answer": 0
+      },
+      "explanation": "Axit trong giấm gặp baking soda tạo bọt khí CO₂, còn lại nước và natri axetat.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sodium_bicarbonate",
+      "sourceRef": "S8 mục Chemistry (phản ứng với axit)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-limonene",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Mùi cam trong nhiều đồ tẩy rửa thường đến từ chất nào?",
+        "options": [
+          "Menthol",
+          "Limonene",
+          "Saponin"
+        ],
+        "answer": 1
+      },
+      "explanation": "Limonene là thành phần chính trong tinh dầu vỏ cam quýt, dùng làm dung môi trong đồ tẩy rửa và hương liệu. Có thể gây mẫn cảm da.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Limonene",
+      "sourceRef": "S10 phần mở đầu, mục Uses",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-menthol",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Cảm giác mát của bạc hà đến từ chất nào?",
+        "options": [
+          "Limonene",
+          "Saponin",
+          "Menthol"
+        ],
+        "answer": 2
+      },
+      "explanation": "Tinh dầu bạc hà chứa nhiều menthol, chất tạo cảm giác mát khi chạm vào da.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Peppermint",
+      "sourceRef": "S16 mục Constituents",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-saponin",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Quả bồ hòn tạo bọt khi giặt nhờ chất nào?",
+        "options": [
+          "Saponin",
+          "Muối ăn",
+          "Tinh bột"
+        ],
+        "answer": 0
+      },
+      "explanation": "Saponin làm giảm sức căng bề mặt của nước và tạo bọt, nên quả bồ hòn được dùng giặt rửa từ lâu.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9502486/",
+      "sourceRef": "S4 phần mở đầu",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-bo-hon-sds",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Trong một thử nghiệm tẩy dầu, dịch bồ hòn so với chất tạo bọt tổng hợp SDS thì sao?",
+        "options": [
+          "Tẩy được nhiều dầu hơn",
+          "Tẩy được ít dầu hơn",
+          "Như nhau"
+        ],
+        "answer": 1
+      },
+      "explanation": "Bài tổng quan năm 2022 ghi nhận dịch bồ hòn tẩy dầu kém SDS. Có gốc thực vật không có nghĩa là tẩy mạnh hơn.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9502486/",
+      "sourceRef": "S4 mục tẩy dầu trên da",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-xa-phong-nuoc-cung",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Trong nước cứng, xà phòng thường thế nào?",
+        "options": [
+          "Nhiều bọt hơn",
+          "Đổi màu xanh",
+          "Ít bọt và để lại cặn"
+        ],
+        "answer": 2
+      },
+      "explanation": "Khoáng chất trong nước cứng kết hợp với xà phòng, nên xà phòng ít bọt và để lại cặn.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Soap",
+      "sourceRef": "S18 mục Hard water",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-xa-phong-dau",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Xà phòng làm sạch dầu bẩn bằng cách nào?",
+        "options": [
+          "Bao lấy dầu để nước cuốn đi",
+          "Làm dầu bay hơi",
+          "Làm dầu đông lại"
+        ],
+        "answer": 0
+      },
+      "explanation": "Phân tử xà phòng có đầu ưa nước, đầu ưa dầu, bao lấy dầu bẩn để nước cuốn đi.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Soap",
+      "sourceRef": "S18 mục Mechanism of cleaning",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-apg",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Chất tạo bọt APG (alkyl polyglycoside) được làm từ gì?",
+        "options": [
+          "Cát và vôi",
+          "Đường và cồn béo",
+          "Muối và giấm"
+        ],
+        "answer": 1
+      },
+      "explanation": "APG được làm từ đường glucose và cồn béo, dùng trong nhiều sản phẩm gia dụng, mỹ phẩm và chăm sóc cá nhân.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Alkyl_polyglycoside",
+      "sourceRef": "S19 phần mở đầu",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-eco-enzyme",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Eco-enzyme được làm bằng cách ủ lên men những gì?",
+        "options": [
+          "Muối, giấm và xà phòng",
+          "Dầu ăn và baking soda",
+          "Vỏ trái cây, đường và nước"
+        ],
+        "answer": 2
+      },
+      "explanation": "Một nghiên cứu năm 2023 ủ đường nâu, vỏ cam, vỏ dưa và nước để làm eco-enzyme.",
+      "sourceUrl": "https://jurnal.polinema.ac.id/index.php/distilat/article/download/4176/3264",
+      "sourceRef": "S20 tóm tắt",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-ma-nhua",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Con số trong hình tam giác trên chai nhựa cho biết gì?",
+        "options": [
+          "Loại nhựa làm ra chai",
+          "Chắc chắn tái chế được",
+          "Hạn dùng của chai"
+        ],
+        "answer": 0
+      },
+      "explanation": "Theo Cơ quan Bảo vệ Môi trường Mỹ (EPA), mã nhựa chỉ cho biết loại nhựa; có mã không bảo đảm món đó tái chế được ở nơi bạn ở.",
+      "sourceUrl": "https://www.epa.gov/recycle/frequent-questions-recycling",
+      "sourceRef": "S22 câu hỏi về mã nhựa",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-vi-nhua",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Vi nhựa là mảnh nhựa cỡ nào?",
+        "options": [
+          "Cỡ nắp chai",
+          "Nhỏ hơn 5 mm",
+          "Lớn hơn 1 cm"
+        ],
+        "answer": 1
+      },
+      "explanation": "Theo NOAA (Mỹ), vi nhựa là mảnh nhựa dài dưới 5 mm, cỡ cục tẩy ở đầu bút chì.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/microplastics.html",
+      "sourceRef": "S7 đoạn đầu",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-t-chai-dau-goi",
+      "kind": "trivia",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Chai dầu gội bằng nhựa đã dùng hết thuộc nhóm rác nào?",
+        "options": [
+          "Rác thực phẩm",
+          "Rác nguy hại",
+          "Rác tái chế"
+        ],
+        "answer": 2
+      },
+      "explanation": "Theo hướng dẫn của Bộ TN&MT, bao bì nhựa đựng mỹ phẩm thuộc nhóm tái chế. Lấy hết phần còn lại bên trong rồi thu gọn.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-o-laundry-family",
+      "kind": "outcome",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "laundry_family",
+        "title": "Bộ giặt giũ cho cả nhà",
+        "need": "laundry",
+        "require": [],
+        "slots": [
+          {
+            "pick": {
+              "small": [
+                "nuoc-giat-huong-bac-ha-fuwa3e-100ml-a53262",
+                "nuoc-giat-huong-cam-fuwa3e-100ml-c8b221"
+              ],
+              "large": [
+                "nuoc-giat-huong-bac-ha-fuwa3e-3-5l-1aa0a7",
+                "nuoc-giat-huong-cam-fuwa3e-3-5l-a0090c",
+                "nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754",
+                "nuoc-giat-huong-cam-fuwa3e-500ml-2d5635"
+              ],
+              "refill": [
+                "refill-nuoc-giat-bac-ha-fuwa3e-10l-a5ea8f",
+                "refill-nuoc-giat-cam-fuwa3e-10l-dc4433"
+              ],
+              "any": [
+                "nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754",
+                "nuoc-giat-huong-cam-fuwa3e-500ml-2d5635"
+              ]
+            },
+            "why": [
+              {
+                "tag": "small",
+                "text": "Bạn chọn dùng thử: chai nhỏ để quen mùi và cách dùng trước khi mua lớn."
+              },
+              {
+                "tag": "large",
+                "text": "Bạn chọn cỡ lớn: chai to cho nhà dùng hằng ngày, ít phải mua lại."
+              },
+              {
+                "tag": "refill",
+                "text": "Bạn chọn refill: can lớn đổ vào chai cũ, không cần mua thêm vỏ chai."
+              },
+              {
+                "tag": null,
+                "text": "Nước giặt chính cho quần áo cả nhà."
+              }
+            ]
+          },
+          {
+            "pick": {
+              "any": [
+                "nuoc-giat-do-lot-fuwa3e-500ml-3e76e4"
+              ]
+            },
+            "why": [
+              {
+                "tag": null,
+                "text": "Thêm một chai riêng cho đồ lót, đồ mỏng giặt tay."
+              }
+            ]
+          }
+        ],
+        "fallbackCategory": "tay-rua-sinh-hoc"
+      },
+      "explanation": "Bộ gợi ý theo đáp án của khách; giá, biến thể và tồn kho lấy lúc khách xem, món hết hàng tự bỏ.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Slug lấy từ trang sản phẩm Tubu (ảnh chụp catalog 12/11)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-o-laundry-kids",
+      "kind": "outcome",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "laundry_kids",
+        "title": "Bộ giặt giũ cho nhà có bé",
+        "need": "laundry",
+        "require": [
+          "kids"
+        ],
+        "slots": [
+          {
+            "pick": {
+              "small": [
+                "nuoc-giat-cho-be-pineboo-500ml-3952e8"
+              ],
+              "large": [
+                "nuoc-giat-cho-be-pineboo-2-1l-22a73c"
+              ],
+              "any": [
+                "nuoc-giat-cho-be-pineboo-500ml-3952e8",
+                "nuoc-giat-cho-be-pineboo-2-1l-22a73c"
+              ]
+            },
+            "why": [
+              {
+                "tag": "kids",
+                "text": "Nhà có bé: giặt riêng quần áo của bé bằng chai này."
+              },
+              {
+                "tag": null,
+                "text": "Nước giặt riêng cho quần áo của bé."
+              }
+            ],
+            "lead": "kids"
+          },
+          {
+            "pick": {
+              "small": [
+                "nuoc-giat-huong-bac-ha-fuwa3e-100ml-a53262",
+                "nuoc-giat-huong-cam-fuwa3e-100ml-c8b221"
+              ],
+              "large": [
+                "nuoc-giat-huong-bac-ha-fuwa3e-3-5l-1aa0a7",
+                "nuoc-giat-huong-cam-fuwa3e-3-5l-a0090c",
+                "nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754",
+                "nuoc-giat-huong-cam-fuwa3e-500ml-2d5635"
+              ],
+              "refill": [
+                "refill-nuoc-giat-bac-ha-fuwa3e-10l-a5ea8f",
+                "refill-nuoc-giat-cam-fuwa3e-10l-dc4433"
+              ],
+              "any": [
+                "nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754",
+                "nuoc-giat-huong-cam-fuwa3e-500ml-2d5635"
+              ]
+            },
+            "why": [
+              {
+                "tag": "small",
+                "text": "Bạn chọn dùng thử: chai nhỏ để quen mùi và cách dùng trước khi mua lớn."
+              },
+              {
+                "tag": "large",
+                "text": "Bạn chọn cỡ lớn: chai to cho nhà dùng hằng ngày, ít phải mua lại."
+              },
+              {
+                "tag": "refill",
+                "text": "Bạn chọn refill: can lớn đổ vào chai cũ, không cần mua thêm vỏ chai."
+              },
+              {
+                "tag": null,
+                "text": "Nước giặt chính cho quần áo người lớn."
+              }
+            ]
+          },
+          {
+            "pick": {
+              "any": [
+                "nuoc-giat-do-lot-fuwa3e-500ml-3e76e4"
+              ]
+            },
+            "why": [
+              {
+                "tag": null,
+                "text": "Thêm một chai riêng cho đồ lót, đồ mỏng giặt tay."
+              }
+            ]
+          }
+        ],
+        "fallbackCategory": "tay-rua-sinh-hoc"
+      },
+      "explanation": "Bộ gợi ý theo đáp án của khách; giá, biến thể và tồn kho lấy lúc khách xem, món hết hàng tự bỏ.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Slug lấy từ trang sản phẩm Tubu (ảnh chụp catalog 12/11)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-o-laundry-delicate",
+      "kind": "outcome",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "laundry_delicate",
+        "title": "Bộ giặt đồ lót, đồ mỏng",
+        "need": "laundry",
+        "require": [
+          "delicate"
+        ],
+        "slots": [
+          {
+            "pick": {
+              "any": [
+                "nuoc-giat-do-lot-fuwa3e-500ml-3e76e4"
+              ]
+            },
+            "why": [
+              {
+                "tag": "delicate",
+                "text": "Bạn hay giặt đồ lót, đồ mỏng: chai này dành riêng cho việc đó."
+              },
+              {
+                "tag": null,
+                "text": "Nước giặt riêng cho đồ lót, đồ mỏng."
+              }
+            ]
+          },
+          {
+            "pick": {
+              "small": [
+                "nuoc-giat-huong-bac-ha-fuwa3e-100ml-a53262",
+                "nuoc-giat-huong-cam-fuwa3e-100ml-c8b221"
+              ],
+              "large": [
+                "nuoc-giat-huong-bac-ha-fuwa3e-3-5l-1aa0a7",
+                "nuoc-giat-huong-cam-fuwa3e-3-5l-a0090c",
+                "nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754",
+                "nuoc-giat-huong-cam-fuwa3e-500ml-2d5635"
+              ],
+              "refill": [
+                "refill-nuoc-giat-bac-ha-fuwa3e-10l-a5ea8f",
+                "refill-nuoc-giat-cam-fuwa3e-10l-dc4433"
+              ],
+              "any": [
+                "nuoc-giat-huong-bac-ha-fuwa3e-500ml-751754",
+                "nuoc-giat-huong-cam-fuwa3e-500ml-2d5635"
+              ]
+            },
+            "why": [
+              {
+                "tag": "small",
+                "text": "Bạn chọn dùng thử: chai nhỏ để quen mùi và cách dùng trước khi mua lớn."
+              },
+              {
+                "tag": "large",
+                "text": "Bạn chọn cỡ lớn: chai to cho nhà dùng hằng ngày, ít phải mua lại."
+              },
+              {
+                "tag": "refill",
+                "text": "Bạn chọn refill: can lớn đổ vào chai cũ, không cần mua thêm vỏ chai."
+              },
+              {
+                "tag": null,
+                "text": "Nước giặt chính cho phần quần áo còn lại."
+              }
+            ]
+          }
+        ],
+        "fallbackCategory": "tay-rua-sinh-hoc"
+      },
+      "explanation": "Bộ gợi ý theo đáp án của khách; giá, biến thể và tồn kho lấy lúc khách xem, món hết hàng tự bỏ.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Slug lấy từ trang sản phẩm Tubu (ảnh chụp catalog 12/11)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-o-kitchen-hand",
+      "kind": "outcome",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "kitchen_hand",
+        "title": "Bộ bếp gọn cho nhà rửa chén tay",
+        "need": "kitchen",
+        "require": [
+          "hand"
+        ],
+        "slots": [
+          {
+            "pick": {
+              "small": [
+                "nuoc-ngam-rua-thuc-pham-fuwa3e-100ml-8b4cd8"
+              ],
+              "large": [
+                "nuoc-ngam-rua-thuc-pham-fuwa3e-3-8l-7ececb",
+                "nuoc-ngam-rua-thuc-pham-fuwa3e-1l-809601"
+              ],
+              "refill": [
+                "refill-nuoc-ngam-rua-thuc-pham-fuwa3e-10l-fbbea5"
+              ],
+              "any": [
+                "nuoc-ngam-rua-thuc-pham-fuwa3e-1l-809601"
+              ]
+            },
+            "why": [
+              {
+                "tag": "produce",
+                "text": "Bạn hay ngâm rau quả: chai này dùng để ngâm rửa trước khi nấu."
+              },
+              {
+                "tag": null,
+                "text": "Ngâm rửa rau quả trước khi nấu."
+              }
+            ],
+            "when": "produce",
+            "lead": "produce"
+          },
+          {
+            "pick": {
+              "small": [
+                "nuoc-rua-chen-fuwa3e-100ml-c1337b"
+              ],
+              "large": [
+                "nuoc-rua-chen-fuwa3e-3-8l-ef3979",
+                "nuoc-rua-chen-fuwa3e-500ml-185d77"
+              ],
+              "refill": [
+                "refill-nuoc-rua-chen-fuwa3e-10l-69f244"
+              ],
+              "any": [
+                "nuoc-rua-chen-fuwa3e-500ml-185d77"
+              ]
+            },
+            "why": [
+              {
+                "tag": "small",
+                "text": "Bạn chọn dùng thử: chai nhỏ để quen mùi và cách dùng trước khi mua lớn."
+              },
+              {
+                "tag": "large",
+                "text": "Bạn chọn cỡ lớn: chai to cho nhà dùng hằng ngày, ít phải mua lại."
+              },
+              {
+                "tag": "refill",
+                "text": "Bạn chọn refill: can lớn đổ vào chai cũ, không cần mua thêm vỏ chai."
+              },
+              {
+                "tag": null,
+                "text": "Nước rửa chén cho bồn rửa mỗi ngày."
+              }
+            ]
+          },
+          {
+            "pick": {
+              "large": [
+                "lau-da-nang-fuwa3e-2l-9aa0ed"
+              ],
+              "refill": [
+                "refill-lau-da-nang-fuwa3e-10l-a08433"
+              ],
+              "any": [
+                "nuoc-lau-da-nang-fuwa3e-500ml-cbb309",
+                "lau-da-nang-fuwa3e-2l-9aa0ed"
+              ]
+            },
+            "why": [
+              {
+                "tag": null,
+                "text": "Lau bàn bếp, mặt bếp sau khi nấu."
+              }
+            ]
+          }
+        ],
+        "fallbackCategory": "tay-rua-sinh-hoc"
+      },
+      "explanation": "Bộ gợi ý theo đáp án của khách; giá, biến thể và tồn kho lấy lúc khách xem, món hết hàng tự bỏ.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Slug lấy từ trang sản phẩm Tubu (ảnh chụp catalog 12/11)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-o-kitchen-machine",
+      "kind": "outcome",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "kitchen_machine",
+        "title": "Bộ cho máy rửa chén",
+        "need": "kitchen",
+        "require": [
+          "machine"
+        ],
+        "slots": [
+          {
+            "pick": {
+              "small": [
+                "gel-rua-chen-cho-may-fuwa3e-100ml-e1aa04"
+              ],
+              "large": [
+                "gel-rua-chen-cho-may-fuwa3e-500ml-f9915e"
+              ],
+              "refill": [
+                "refill-gel-rua-chen-cho-may-fuwa3e-10l-13467d"
+              ],
+              "any": [
+                "gel-rua-chen-cho-may-fuwa3e-500ml-f9915e"
+              ]
+            },
+            "why": [
+              {
+                "tag": "machine",
+                "text": "Nhà bạn có máy rửa chén: gel này dùng cho máy, không phải cho rửa tay."
+              },
+              {
+                "tag": null,
+                "text": "Gel rửa chén dùng cho máy."
+              }
+            ]
+          },
+          {
+            "pick": {
+              "any": [
+                "muoi-rua-chen-cho-may-fuwa3e-2kg-484ca1"
+              ]
+            },
+            "why": [
+              {
+                "tag": null,
+                "text": "Muối cho ngăn chứa muối của máy rửa chén."
+              }
+            ]
+          },
+          {
+            "pick": {
+              "any": [
+                "nuoc-ho-tro-xa-lam-bong-fuwa3e-500ml-fb40eb"
+              ]
+            },
+            "why": [
+              {
+                "tag": null,
+                "text": "Nước hỗ trợ xả, cho vào ngăn nước xả của máy."
+              }
+            ]
+          }
+        ],
+        "fallbackCategory": "tay-rua-sinh-hoc"
+      },
+      "explanation": "Bộ gợi ý theo đáp án của khách; giá, biến thể và tồn kho lấy lúc khách xem, món hết hàng tự bỏ.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Slug lấy từ trang sản phẩm Tubu (ảnh chụp catalog 12/11)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-o-floor-home",
+      "kind": "outcome",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "floor_home",
+        "title": "Bộ lau dọn nhà cửa",
+        "need": "floor",
+        "require": [],
+        "slots": [
+          {
+            "pick": {
+              "large": [
+                "lau-da-nang-fuwa3e-2l-9aa0ed"
+              ],
+              "refill": [
+                "refill-lau-da-nang-fuwa3e-10l-a08433"
+              ],
+              "any": [
+                "nuoc-lau-da-nang-fuwa3e-500ml-cbb309",
+                "lau-da-nang-fuwa3e-2l-9aa0ed"
+              ]
+            },
+            "why": [
+              {
+                "tag": "surface",
+                "text": "Bạn muốn lo bàn bếp, mặt bàn trước: chai lau đa năng lo việc này."
+              },
+              {
+                "tag": null,
+                "text": "Lau bàn bếp, mặt bàn hằng ngày."
+              }
+            ],
+            "lead": "surface"
+          },
+          {
+            "pick": {
+              "small": [
+                "nuoc-lau-san-sa-chanh-fuwa3e-100ml-d10bec"
+              ],
+              "large": [
+                "nuoc-lau-san-sa-chanh-fuwa3e-1l-51b16f"
+              ],
+              "refill": [
+                "refill-nuoc-lau-san-sa-chanh-fuwa3e-10l-b63811",
+                "refill-nuoc-lau-san-que-fuwa3e-10l-fe82e8"
+              ],
+              "any": [
+                "nuoc-lau-san-sa-chanh-fuwa3e-1l-51b16f"
+              ]
+            },
+            "why": [
+              {
+                "tag": "small",
+                "text": "Bạn chọn dùng thử: chai nhỏ để quen mùi và cách dùng trước khi mua lớn."
+              },
+              {
+                "tag": "large",
+                "text": "Bạn chọn cỡ lớn: chai to cho nhà dùng hằng ngày, ít phải mua lại."
+              },
+              {
+                "tag": "refill",
+                "text": "Bạn chọn refill: can lớn đổ vào chai cũ, không cần mua thêm vỏ chai."
+              },
+              {
+                "tag": null,
+                "text": "Nước lau sàn hương sả chanh cho lau nhà hằng ngày."
+              }
+            ],
+            "lead": "floor_main"
+          },
+          {
+            "pick": {
+              "small": [
+                "ve-sinh-nha-tam-va-toilet-fuwa3e-100ml-d45131"
+              ],
+              "large": [
+                "ve-sinh-nha-tam-va-toilet-fuwa3e-2l-4e8488",
+                "ve-sinh-nha-tam-va-toilet-fuwa3e-500ml-b6da92"
+              ],
+              "refill": [
+                "refill-ve-sinh-bon-cau-fuwa3e-10l-9a032c"
+              ],
+              "any": [
+                "ve-sinh-nha-tam-va-toilet-fuwa3e-500ml-b6da92"
+              ]
+            },
+            "why": [
+              {
+                "tag": null,
+                "text": "Thêm một chai cho nhà tắm, bồn cầu."
+              }
+            ],
+            "when": "surface"
+          }
+        ],
+        "fallbackCategory": "tay-rua-sinh-hoc"
+      },
+      "explanation": "Bộ gợi ý theo đáp án của khách; giá, biến thể và tồn kho lấy lúc khách xem, món hết hàng tự bỏ.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Slug lấy từ trang sản phẩm Tubu (ảnh chụp catalog 12/11)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-o-floor-bath",
+      "kind": "outcome",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "floor_bath",
+        "title": "Bộ nhà tắm sạch thơm",
+        "need": "floor",
+        "require": [
+          "bath"
+        ],
+        "slots": [
+          {
+            "pick": {
+              "small": [
+                "ve-sinh-nha-tam-va-toilet-fuwa3e-100ml-d45131"
+              ],
+              "large": [
+                "ve-sinh-nha-tam-va-toilet-fuwa3e-2l-4e8488",
+                "ve-sinh-nha-tam-va-toilet-fuwa3e-500ml-b6da92"
+              ],
+              "refill": [
+                "refill-ve-sinh-bon-cau-fuwa3e-10l-9a032c"
+              ],
+              "any": [
+                "ve-sinh-nha-tam-va-toilet-fuwa3e-500ml-b6da92"
+              ]
+            },
+            "why": [
+              {
+                "tag": "bath",
+                "text": "Bạn muốn lo nhà tắm trước: chai này dùng cho bồn rửa, bồn cầu."
+              },
+              {
+                "tag": null,
+                "text": "Dùng cho bồn rửa, sàn nhà tắm và bồn cầu."
+              }
+            ]
+          },
+          {
+            "pick": {
+              "small": [
+                "nuoc-lau-san-sa-chanh-fuwa3e-100ml-d10bec"
+              ],
+              "large": [
+                "nuoc-lau-san-sa-chanh-fuwa3e-1l-51b16f"
+              ],
+              "refill": [
+                "refill-nuoc-lau-san-sa-chanh-fuwa3e-10l-b63811",
+                "refill-nuoc-lau-san-que-fuwa3e-10l-fe82e8"
+              ],
+              "any": [
+                "nuoc-lau-san-sa-chanh-fuwa3e-1l-51b16f"
+              ]
+            },
+            "why": [
+              {
+                "tag": "small",
+                "text": "Bạn chọn dùng thử: chai nhỏ để quen mùi và cách dùng trước khi mua lớn."
+              },
+              {
+                "tag": "large",
+                "text": "Bạn chọn cỡ lớn: chai to cho nhà dùng hằng ngày, ít phải mua lại."
+              },
+              {
+                "tag": "refill",
+                "text": "Bạn chọn refill: can lớn đổ vào chai cũ, không cần mua thêm vỏ chai."
+              },
+              {
+                "tag": null,
+                "text": "Nước lau sàn hương sả chanh cho các phòng còn lại."
+              }
+            ]
+          },
+          {
+            "pick": {
+              "small": [
+                "nuoc-rua-tay-dang-bot-fuwa3e-300ml-fdf345"
+              ],
+              "large": [
+                "nuoc-rua-tay-dang-bot-fuwa3e-3-8l-948cc5"
+              ],
+              "any": [
+                "nuoc-rua-tay-dang-bot-fuwa3e-300ml-fdf345"
+              ]
+            },
+            "why": [
+              {
+                "tag": null,
+                "text": "Nước rửa tay dạng bọt để ở bồn rửa nhà tắm."
+              }
+            ]
+          }
+        ],
+        "fallbackCategory": "tay-rua-sinh-hoc"
+      },
+      "explanation": "Bộ gợi ý theo đáp án của khách; giá, biến thể và tồn kho lấy lúc khách xem, món hết hàng tự bỏ.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Slug lấy từ trang sản phẩm Tubu (ảnh chụp catalog 12/11)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-o-baby-care",
+      "kind": "outcome",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "baby_care",
+        "title": "Bộ đồ dùng cho bé",
+        "need": "baby",
+        "require": [],
+        "slots": [
+          {
+            "pick": {
+              "small": [
+                "nuoc-giat-cho-be-pineboo-500ml-3952e8"
+              ],
+              "large": [
+                "nuoc-giat-cho-be-pineboo-2-1l-22a73c"
+              ],
+              "any": [
+                "nuoc-giat-cho-be-pineboo-500ml-3952e8",
+                "nuoc-giat-cho-be-pineboo-2-1l-22a73c"
+              ]
+            },
+            "why": [
+              {
+                "tag": "baby_clothes",
+                "text": "Bạn cần giặt đồ cho bé: món này đứng đầu bộ."
+              },
+              {
+                "tag": null,
+                "text": "Nước giặt riêng cho quần áo của bé."
+              }
+            ],
+            "lead": "baby_clothes"
+          },
+          {
+            "pick": {
+              "any": [
+                "bot-rua-binh-sua-cho-be-pineboo-500ml-91e8c5"
+              ]
+            },
+            "why": [
+              {
+                "tag": "bottle",
+                "text": "Bạn cần rửa bình sữa: bọt rửa dành cho bình, núm ti."
+              },
+              {
+                "tag": null,
+                "text": "Bọt rửa bình sữa, núm ti của bé."
+              }
+            ],
+            "lead": "bottle"
+          },
+          {
+            "pick": {
+              "any": [
+                "bot-tam-goi-cho-be-pineboo-500ml-47e6e4"
+              ]
+            },
+            "why": [
+              {
+                "tag": "baby_bath",
+                "text": "Bạn cần tắm gội cho bé: món này đứng đầu bộ."
+              },
+              {
+                "tag": null,
+                "text": "Bọt tắm gội cho bé, một chai cho cả tóc và người."
+              }
+            ],
+            "lead": "baby_bath"
+          },
+          {
+            "pick": {
+              "any": [
+                "bot-rua-tay-cho-be-pineboo-300ml-de31c8"
+              ]
+            },
+            "why": [
+              {
+                "tag": null,
+                "text": "Bọt rửa tay chai nhỏ để bé tự rửa tay."
+              }
+            ]
+          }
+        ],
+        "fallbackCategory": "cho-be"
+      },
+      "explanation": "Bộ gợi ý theo đáp án của khách; giá, biến thể và tồn kho lấy lúc khách xem, món hết hàng tự bỏ.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Slug lấy từ trang sản phẩm Tubu (ảnh chụp catalog 12/11)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-o-personal-care",
+      "kind": "outcome",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "personal_care",
+        "title": "Bộ tắm gội, rửa tay cho cả nhà",
+        "need": "personal",
+        "require": [],
+        "slots": [
+          {
+            "pick": {
+              "small": [
+                "nuoc-rua-tay-dang-bot-fuwa3e-300ml-fdf345"
+              ],
+              "large": [
+                "nuoc-rua-tay-dang-bot-fuwa3e-3-8l-948cc5"
+              ],
+              "any": [
+                "nuoc-rua-tay-dang-bot-fuwa3e-300ml-fdf345"
+              ]
+            },
+            "why": [
+              {
+                "tag": "hands",
+                "text": "Bạn muốn đổi nước rửa tay trước: món này đứng đầu bộ."
+              },
+              {
+                "tag": null,
+                "text": "Nước rửa tay dạng bọt cho bồn rửa trong nhà."
+              }
+            ],
+            "lead": "hands"
+          },
+          {
+            "pick": {
+              "any": [
+                "dau-goi-dau-xa-qua-bo-po-lang-300g-bef378"
+              ]
+            },
+            "why": [
+              {
+                "tag": "hair",
+                "text": "Bạn muốn đổi dầu gội trước: món này đứng đầu bộ."
+              },
+              {
+                "tag": null,
+                "text": "Dầu gội, dầu xả quả bơ Pơ Lang."
+              }
+            ],
+            "lead": "hair"
+          },
+          {
+            "pick": {
+              "small": [
+                "nuoc-rua-tay-dang-gel-fuwa3e-300ml-37dfc0"
+              ],
+              "large": [
+                "nuoc-rua-tay-dang-gel-fuwa3e-3-8l-74a392"
+              ],
+              "any": [
+                "nuoc-rua-tay-dang-gel-fuwa3e-300ml-37dfc0"
+              ]
+            },
+            "why": [
+              {
+                "tag": null,
+                "text": "Nước rửa tay dạng gel để ở bếp."
+              }
+            ]
+          }
+        ],
+        "fallbackCategory": "cham-soc-ca-nhan"
+      },
+      "explanation": "Bộ gợi ý theo đáp án của khách; giá, biến thể và tồn kho lấy lúc khách xem, món hết hàng tự bỏ.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Slug lấy từ trang sản phẩm Tubu (ảnh chụp catalog 12/11)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    },
+    {
+      "id": "gm-matcher-o-personal-face",
+      "kind": "outcome",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "code": "personal_face",
+        "title": "Bộ rửa mặt dịu nhẹ",
+        "need": "personal",
+        "require": [
+          "face"
+        ],
+        "slots": [
+          {
+            "pick": {
+              "any": [
+                "dau-rua-mat-po-lang-100ml-55ml-8478ee"
+              ]
+            },
+            "why": [
+              {
+                "tag": "face",
+                "text": "Bạn muốn đổi đồ rửa mặt trước: món này đứng đầu bộ."
+              },
+              {
+                "tag": null,
+                "text": "Dầu rửa mặt Pơ Lang."
+              }
+            ]
+          },
+          {
+            "pick": {
+              "any": [
+                "mat-na-bo-tuoi-po-lang-e3ccce"
+              ]
+            },
+            "why": [
+              {
+                "tag": null,
+                "text": "Mặt nạ bơ tươi Pơ Lang cho những ngày muốn chăm da kỹ hơn."
+              }
+            ]
+          },
+          {
+            "pick": {
+              "any": [
+                "dau-goi-dau-xa-qua-bo-po-lang-300g-bef378"
+              ]
+            },
+            "why": [
+              {
+                "tag": null,
+                "text": "Dầu gội, dầu xả quả bơ cùng hãng, nếu bạn muốn đổi luôn."
+              }
+            ]
+          }
+        ],
+        "fallbackCategory": "cham-soc-ca-nhan"
+      },
+      "explanation": "Bộ gợi ý theo đáp án của khách; giá, biến thể và tồn kho lấy lúc khách xem, món hết hàng tự bỏ.",
+      "sourceUrl": "https://tubutree.com/san-pham/",
+      "sourceRef": "Slug lấy từ trang sản phẩm Tubu (ảnh chụp catalog 12/11)",
+      "sourceCheckedAt": "2026-11-18",
+      "inactiveReason": "Chờ chuyên gia duyệt câu chữ, nguồn và bộ sản phẩm trước khi bật Chọn Chuẩn Xanh (cờ game.matcher_enabled)."
+    }
+  ]
+}

@@ -65,6 +65,27 @@ export interface MiniMissionSettleResult extends MiniCreditResult {
   bonus: boolean;
 }
 
+/** Lượt "Chọn Chuẩn Xanh" có thưởng nằm trong `game_play_rounds` với game này (ô slot 1 của ngày là khoá "một lần mỗi ngày"). */
+export const MATCHER_ROUND_GAME = 'matcher';
+export const MATCHER_WATER_REASON = 'MINI_MATCHER';
+
+export interface MatcherSettleInput {
+  userId: string;
+  dayKey: string;
+  now: Date;
+  /** Id mục bộ kết quả đã trả cho khách (ghi vào `contentIds` để bảng số admin đếm theo bộ). */
+  outcomeId: string;
+  /** 💧 trước trần. Lượt này không bao giờ cộng Điểm Xanh. */
+  water: number;
+  deviceHash: string | null;
+  settings: MiniCapSettings;
+}
+
+export interface MatcherSettleResult extends MiniCreditResult {
+  /** false = tài khoản đã có lượt có thưởng hôm nay (lần bấm đúp, hai yêu cầu song song, lượt thứ hai trong ngày). */
+  rewarded: boolean;
+}
+
 export interface MiniSettleInput {
   roundId: string;
   userId: string;
@@ -164,6 +185,60 @@ export class GameMiniRewardService {
         data: { waterAwarded: credited.water, pointsAwarded: credited.points, cappedBy },
       });
       return { slot, ...credited };
+    }, MINI_TX_OPTIONS);
+  }
+
+  /**
+   * Thưởng lượt "Chọn Chuẩn Xanh" đầu tiên trong ngày của một tài khoản: chỉ 💧, qua đúng `credit` (cùng trần ngày, thiết bị, bình) như
+   * ván game mini. Khoá `users` trước rồi mới xem tài khoản đã có lượt có thưởng hôm nay chưa, nên hai yêu cầu song song xếp hàng và chỉ
+   * yêu cầu đầu ghi lượt; chỉ mục duy nhất một phần (userId, game, dayKey, slot) là lớp chặn sau, kể cả khi trần hạ 💧 về 0: lượt có thưởng
+   * của ngày vẫn là lượt này. `submittedAt` để trống có chủ ý: nhiệm vụ "Chơi một game" (DAILY_PLAY) và thống kê ván game mini đếm lượt đã nộp,
+   * mà Chọn Chuẩn Xanh không phải ván game mini (không có bước bắt đầu, không bấm giờ) nên không được mở khoá nhiệm vụ có Điểm Xanh thưởng.
+   * Lấy lại ô của ván bỏ dở chỉ chạy cho đúng game mini đang bắt đầu ván, nên ô của lượt này không bị trả lại.
+   */
+  async settleMatcher(input: MatcherSettleInput): Promise<MatcherSettleResult> {
+    const { userId, dayKey, now } = input;
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      const taken = await tx.gamePlayRound.findFirst({
+        where: { userId, game: MATCHER_ROUND_GAME, dayKey, slot: { not: null } },
+        select: { id: true },
+      });
+      if (taken) return { rewarded: false, water: 0, points: 0, capped: [], totalSeeds: null };
+      const round = await tx.gamePlayRound.create({
+        data: {
+          userId,
+          game: MATCHER_ROUND_GAME,
+          dayKey,
+          slot: 1,
+          contentIds: [input.outcomeId],
+          issuedAt: now,
+          expiresAt: now,
+          deviceHash: input.deviceHash,
+        },
+        select: { id: true },
+      });
+      const credited: MiniCreditResult =
+        input.water > 0
+          ? await this.credit(tx, {
+              userId,
+              dayKey,
+              now,
+              base: { water: input.water, points: 0 },
+              deviceHash: input.deviceHash,
+              settings: input.settings,
+              pointsExpiresAt: null,
+              water: { reason: MATCHER_WATER_REASON, refId: round.id },
+              points: { reason: `${GAME_MINI_REF_TYPE}:${MATCHER_ROUND_GAME}`, refId: round.id },
+              countsAsRound: true,
+              label: `lượt Chọn Chuẩn Xanh ${round.id}`,
+            })
+          : { water: 0, points: 0, capped: [], totalSeeds: null };
+      await tx.gamePlayRound.update({
+        where: { id: round.id },
+        data: { waterAwarded: credited.water, cappedBy: credited.capped.length > 0 ? credited.capped.join(',') : null },
+      });
+      return { rewarded: true, ...credited };
     }, MINI_TX_OPTIONS);
   }
 

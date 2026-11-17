@@ -43,9 +43,18 @@ export const CLIENT_EVENT_NAMES = [
   'invite_landing_viewed',
   'invite_landing_cta',
   'invite_progress_viewed',
+  'matcher_started',
+  'matcher_question_answered',
+  'matcher_completed',
+  'matcher_add_all',
+  'matcher_item_opened',
 ] as const;
 
 export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];
+
+/** Lối khách vào Chọn Chuẩn Xanh (`matcher_started.entry`). */
+export const MATCHER_ENTRIES = ['play_today', 'tu_van', 'advisor_paused', 'empty_cart', 'direct'] as const;
+export type MatcherEntry = (typeof MATCHER_ENTRIES)[number];
 
 /** Nơi khách bấm "Mở Zalo Tubu Tree" (`order_zalo_friend_click.from`). */
 export const ORDER_ZALO_FRIEND_FROM = ['success', 'order_detail'] as const;
