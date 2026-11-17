@@ -72,11 +72,11 @@
       "version": 1,
       "payload": {
         "ingredient": "Giấm ăn",
-        "use": "Hoà tan cặn khoáng"
+        "use": "Muối chua rau củ, pha nước trộn"
       },
-      "explanation": "Giấm có 5–8% axit axetic nên hoà tan được cặn khoáng; không dùng trên mặt đá tự nhiên, đồ cao su vì dễ làm hỏng.",
+      "explanation": "Giấm ăn có 5–8% axit axetic, dùng làm gia vị, muối chua rau củ, pha nước trộn salad. Không lau giấm lên mặt đá tự nhiên, đồ cao su vì dễ làm hỏng.",
       "sourceUrl": "https://en.wikipedia.org/wiki/Vinegar",
-      "sourceRef": "05 cặp 6",
+      "sourceRef": "S11 mục Culinary uses (pickling, salad dressing) và mục Cleaning (hư đá, cao su)",
       "sourceCheckedAt": "2026-11-17"
     },
     {
@@ -116,8 +116,7 @@
       "explanation": "Tinh dầu tràm có tới 60% 1,8-cineole, được thêm vào xà phòng, mỹ phẩm để tạo hương. Dạng đậm đặc có thể gây kích ứng da.",
       "sourceUrl": "https://en.wikipedia.org/wiki/Melaleuca_cajuputi",
       "sourceRef": "05 cặp 9",
-      "sourceCheckedAt": "2026-11-17",
-      "productSlug": "xit-tram-cho-be-pineboo-150ml-b70d1d"
+      "sourceCheckedAt": "2026-11-17"
     },
     {
       "id": "gm-match-bac-ha",
@@ -143,8 +142,7 @@
       "explanation": "Một nghiên cứu năm 2023 đo eco-enzyme có pH 3,5–4 và thấy hoạt tính enzyme cắt đạm trong mẫu thử; kết quả tuỳ mẫu và cách ủ.",
       "sourceUrl": "https://jurnal.polinema.ac.id/index.php/distilat/article/download/4176/3264",
       "sourceRef": "05 cặp 11",
-      "sourceCheckedAt": "2026-11-17",
-      "productSlug": "nuoc-lau-da-nang-fuwa3e-500ml-cbb309"
+      "sourceCheckedAt": "2026-11-17"
     },
     {
       "id": "gm-match-apg",
@@ -217,9 +215,9 @@
       "version": 1,
       "payload": {
         "ingredient": "Lipase",
-        "use": "Xử lý vết dầu mỡ: bơ, nước sốt"
+        "use": "Xử lý vết dầu mỡ: bơ, dầu trộn salad"
       },
-      "explanation": "Theo bài tổng quan năm 2024, lipase trong nước giặt xử lý vết dầu mỡ như bơ, dầu trộn salad, nước sốt.",
+      "explanation": "Theo bài tổng quan năm 2024, lipase trong nước giặt xử lý vết dầu mỡ như bơ, dầu trộn salad, dầu trên da.",
       "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
       "sourceRef": "ENZ bảng 4",
       "sourceCheckedAt": "2026-11-17"
@@ -243,9 +241,9 @@
       "version": 1,
       "payload": {
         "ingredient": "Mannanase",
-        "use": "Xử lý vết sốt BBQ, kem, sô-cô-la"
+        "use": "Xử lý vết sô-cô-la, kem, kem đánh răng"
       },
-      "explanation": "Theo bài tổng quan năm 2024, mannanase xử lý vết bẩn như sốt BBQ, sô-cô-la, kem.",
+      "explanation": "Theo bài tổng quan năm 2024, mannanase xử lý vết bẩn như sô-cô-la, kem, kem đánh răng, sốt BBQ.",
       "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
       "sourceRef": "ENZ bảng 4",
       "sourceCheckedAt": "2026-11-17"

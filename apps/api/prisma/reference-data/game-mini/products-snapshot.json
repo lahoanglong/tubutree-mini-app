@@ -1,6 +1,6 @@
 {
  "fetchedAt": "2026-11-17",
- "source": "https://api.tubutree.com/api/products (danh sách công khai, chỉ đọc)",
+ "source": "https://api.tubutree.com/api/products (danh sách công khai, chỉ đọc); tên sản phẩm đổi sang kiểu đặt dấu mới (Q13, \"hoà\", \"thuỷ\"), chữ giữ nguyên",
  "products": [
   {
    "slug": "banh-mam-hat-rong-bien-bh-nong-d93d32",
@@ -54,7 +54,7 @@
   },
   {
    "slug": "ca-phe-sua-dua-hoa-tan-kafedua-le-plateau-thom-beo-16g-x-10-goi-7aecb7",
-   "name": "Cà Phê Sữa Dừa Hòa Tan KAFEDUA Le Plateau Thơm Béo 16g x 10 Gói",
+   "name": "Cà Phê Sữa Dừa Hoà Tan KAFEDUA Le Plateau Thơm Béo 16g x 10 Gói",
    "inStock": false
   },
   {
@@ -64,7 +64,7 @@
   },
   {
    "slug": "cho-be-duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-64ec0b",
-   "name": "[CHO BÉ] Đường hoa dừa Sokfarm - Hủ thủy tinh 150g",
+   "name": "[CHO BÉ] Đường hoa dừa Sokfarm - Hủ thuỷ tinh 150g",
    "inStock": false
   },
   {
@@ -134,7 +134,7 @@
   },
   {
    "slug": "duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-b67af3",
-   "name": "Đường hoa dừa Sokfarm - Hủ thủy tinh 150g",
+   "name": "Đường hoa dừa Sokfarm - Hủ thuỷ tinh 150g",
    "inStock": true
   },
   {
@@ -214,17 +214,17 @@
   },
   {
    "slug": "nuoc-dong-trung-ha-thao-hector-collagen-plus-dep-da-chong-lao-hoa-70ml-x-10-chai-d0c0e1",
-   "name": "Nước Đông Trùng Hạ Thảo HECTOR Collagen Plus Đẹp Da Chống Lão Hóa 70ml x 10 Chai",
+   "name": "Nước Đông Trùng Hạ Thảo HECTOR Collagen Plus Đẹp Da Chống Lão Hoá 70ml x 10 Chai",
    "inStock": false
   },
   {
    "slug": "nuoc-dong-trung-ha-thao-hector-lite-thanh-loc-co-the-70ml-x-10-chai-dieu-hoa-duong-huyet-db096e",
-   "name": "Nước Đông Trùng Hạ Thảo HECTOR Lite Thanh Lọc Cơ Thể 70ml x 10 Chai - điều hòa đường huyết",
+   "name": "Nước Đông Trùng Hạ Thảo HECTOR Lite Thanh Lọc Cơ Thể 70ml x 10 Chai - điều hoà đường huyết",
    "inStock": false
   },
   {
    "slug": "nuoc-dong-trung-ha-thao-hector-sam-tang-cuong-suc-khoe-70ml-x-10-chai-192b87",
-   "name": "Nước Đông Trùng Hạ Thảo HECTOR Sâm Tăng Cường Sức Khỏe 70ml x 10 Chai",
+   "name": "Nước Đông Trùng Hạ Thảo HECTOR Sâm Tăng Cường Sức Khoẻ 70ml x 10 Chai",
    "inStock": false
   },
   {
@@ -454,7 +454,7 @@
   },
   {
    "slug": "socola-hoa-tan-uong-lien-choco-oke-4d912d",
-   "name": "Socola Hòa Tan Uống liền CHOCO-OKE",
+   "name": "Socola Hoà Tan Uống liền CHOCO-OKE",
    "inStock": false
   },
   {

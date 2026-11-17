@@ -102,11 +102,11 @@ describe('gói nội dung game mini', () => {
   it('số mục bật mỗi game đúng như đã duyệt, game nào cũng đủ ngưỡng hiện', () => {
     const counts = activeCounts(pack);
     expect(counts).toEqual({
-      sort: { total: 90, active: 85, belowMinimum: false },
-      daily_quiz: { total: 48, active: 48, belowMinimum: false },
+      sort: { total: 90, active: 84, belowMinimum: false },
+      daily_quiz: { total: 51, active: 49, belowMinimum: false },
       match: { total: 23, active: 22, belowMinimum: false },
       origin: { total: 32, active: 32, belowMinimum: false },
-      basket: { total: 13, active: 13, belowMinimum: false },
+      basket: { total: 13, active: 12, belowMinimum: false },
     });
     for (const game of GAMES) expect(counts[game].active).toBeGreaterThanOrEqual(MINI_MIN_ACTIVE_ITEMS);
     expect(pack.games.daily_quiz.filter((i) => i.active).length + pack.legacy.length).toBe(counts.daily_quiz.active);
@@ -132,9 +132,17 @@ describe('gói nội dung game mini', () => {
 
   it('mục tắt đều ghi lý do; mục bật không mang lý do tắt', () => {
     const inactive = allItems().filter((i) => !i.active);
-    expect(inactive.map((i) => i.game).sort()).toEqual(['daily_quiz', 'daily_quiz', 'daily_quiz', 'match', 'sort', 'sort', 'sort', 'sort', 'sort']);
+    expect(inactive.map((i) => i.game).sort()).toEqual(['basket', 'daily_quiz', 'daily_quiz', 'match', 'sort', 'sort', 'sort', 'sort', 'sort', 'sort']);
     for (const i of inactive) expect(i.inactiveReason?.trim().length ?? 0).toBeGreaterThan(10);
     expect(allItems().filter((i) => i.active && i.inactiveReason).map((i) => i.id)).toEqual([]);
+  });
+
+  it.each(['daily_quiz', 'origin'] as const)('%s: vị trí đáp án đúng rải đều (lựa chọn phát đúng thứ tự lưu, không xáo)', (game) => {
+    const active = pack.games[game].filter((i) => i.active).map((i) => readChoicePayload(i.payload)!);
+    const byIndex = new Map<number, number>();
+    for (const p of active) byIndex.set(p.answer, (byIndex.get(p.answer) ?? 0) + 1);
+    expect([...byIndex.keys()].sort()).toEqual([0, 1, 2, 3]);
+    for (const n of byIndex.values()) expect(n / active.length).toBeLessThanOrEqual(0.4);
   });
 
   it('đáp án nằm trong tập lựa chọn của từng game', () => {
@@ -158,9 +166,7 @@ describe('gói nội dung game mini', () => {
 
   it('productSlug và slug của đề Giỏ Đúng Việc đều có trong ảnh chụp danh sách sản phẩm', () => {
     const snapshot = new Set(pack.products.map((p) => p.slug));
-    const linked = allItems().filter((i) => i.productSlug);
-    expect(linked.length).toBeGreaterThan(0);
-    for (const i of linked) expect(snapshot.has(i.productSlug!)).toBe(true);
+    for (const i of allItems().filter((x) => x.productSlug)) expect(snapshot.has(i.productSlug!)).toBe(true);
     for (const i of pack.games.basket) {
       const p = readBasketPayload(i.payload)!;
       for (const s of [...p.correct, ...p.wrong.map((w) => w.slug)]) expect(`${i.id} ${s} ${snapshot.has(s)}`).toBe(`${i.id} ${s} true`);
@@ -234,6 +240,23 @@ describe('cụm cấm', () => {
     ['nhựa 1, 2, 5', 'nhựa số 1, 2, 5 tái chế được'],
     ['CMC bồ hòn', 'CMC 0,032'],
     ['axit axetic eco-enzyme', 'axit axetic 1,08%'],
+    ['khử khuẩn', 'nước rửa tay khử khuẩn'],
+    ['sát trùng', 'giúp sát trùng vết xước'],
+    ['tẩy trùng', 'tẩy trùng bồn cầu'],
+    ['diệt sạch vi khuẩn', 'diệt sạch vi khuẩn'],
+    ['diệt được vi khuẩn', 'diệt được vi khuẩn'],
+    ['diệt 99% vi khuẩn', 'diệt 99% vi khuẩn'],
+    ['99,99%', 'loại 99,99% vi khuẩn'],
+    ['100% từ thiên nhiên', 'chiết xuất 100% từ thiên nhiên'],
+    ['100% nguồn gốc tự nhiên', '100% nguồn gốc tự nhiên'],
+    ['hoàn toàn tự nhiên', 'thành phần hoàn toàn tự nhiên'],
+    ['tự nhiên 100%', 'tự nhiên 100%'],
+    ['tự phân hủy 100%', 'túi tự phân hủy 100%'],
+    ['0% hoá chất', '0% hoá chất'],
+    ['không chứa chất hoá học', 'không chứa chất hoá học'],
+    ['điều trị an toàn', 'điều trị an toàn cho da'],
+    ['phòng dịch bệnh', 'phòng dịch bệnh mùa mưa'],
+    ['chữ dựng sẵn (NFD)', 'diệt khuẩn'.normalize('NFD')],
   ])('bắt: %s', (_label, text) => {
     expect(findBannedPhrases(text).length).toBeGreaterThan(0);
   });
@@ -250,6 +273,12 @@ describe('cụm cấm', () => {
     ['an toàn khi dùng đúng nhãn', 'an toàn khi dùng đúng hướng dẫn trên nhãn'],
     ['hoá chất nói trung tính', 'Pin chứa hoá chất nên bỏ thùng nguy hại'],
     ['thuỷ tinh', 'Thuỷ tinh tái chế được nhiều lần'],
+    ['chữa cháy', 'Bình chữa cháy mini đã hết hạn'],
+    ['hồ Trị An', 'nước hồ Trị An'],
+    ['phòng dịch vụ', 'phòng dịch vụ khách hàng'],
+    ['giá có 0.81 ở giữa', 'giá 150.810đ'],
+    ['10,81', 'chiếm 10,81%'],
+    ['diệt nhưng không nói vi sinh vật', 'Diệt sâu hại trong đất'],
   ])('không bắt: %s', (_label, text) => {
     expect(findBannedPhrases(text)).toEqual([]);
   });
@@ -304,6 +333,23 @@ describe('bộ kiểm gói bắt lỗi', () => {
     expect(errors.join('\n')).toMatch(expected);
   });
 
+  it('Đố Xanh có 1–2 câu bật gắn sản phẩm: lỗi (câu thứ 3 sẽ lặp mỗi ngày)', () => {
+    const p = clone();
+    const slug = p.products.find((x) => x.inStock)!.slug;
+    p.games.daily_quiz.filter((i) => i.active).slice(0, 2).forEach((i) => (i.productSlug = slug));
+    expect(validateGameMiniPack(p).join('\n')).toMatch(/gắn sản phẩm; cần 0 hoặc ít nhất 3/);
+    p.games.daily_quiz.filter((i) => i.active)[2]!.productSlug = slug;
+    expect(validateGameMiniPack(p)).toEqual([]);
+  });
+
+  it('câu cũ gắn nguồn: phải có trong seed-game-quiz.ts và chữ không mang cụm cấm', () => {
+    const base = QUIZZES.filter((q) => pack.legacy.some((l) => l.id === q.id));
+    expect(validateGameMiniPack(pack, base)).toEqual([]);
+    expect(validateGameMiniPack(pack, base.slice(1)).join('\n')).toMatch(/không có trong seed-game-quiz\.ts/);
+    const dirty = base.map((q, i) => (i === 0 ? { ...q, explanation: `${q.explanation} Phân huỷ hoàn toàn trong 400 năm.` } : q));
+    expect(validateGameMiniPack(pack, dirty).join('\n')).toMatch(/legacy-quiz-sources\.json .*cụm cấm "phân huỷ hoàn toàn"/);
+  });
+
   it('lệnh seed không nhận tham số', () => {
     expect(() => parseGameMiniArgs([])).not.toThrow();
     expect(() => parseGameMiniArgs(['--'])).not.toThrow();
@@ -354,25 +400,19 @@ describe('mỗi game chơi trọn một ván bằng nội dung thật', () => {
     if (game !== 'daily_quiz') expect(seen.size).toBeGreaterThan(Math.min(pool.length, 20) / 2);
   });
 
-  it('Đố Xanh: 90 ngày liền không ngày nào trống, câu thứ 3 luôn là câu gắn sản phẩm còn hàng', () => {
+  it('Đố Xanh: 90 ngày liền ngày nào cũng đủ 3 câu khác nhau, hai ngày liền không trùng bộ, mọi câu đều được ra', () => {
     const pool = poolOf('daily_quiz');
+    const shown = new Set<string>();
+    let previous = '';
     for (const dayKey of days) {
       const rows = MINI_GAMES.daily_quiz.pick(pool, buildCtx(seeded(1), dayKey, false))!;
       expect(rows).toHaveLength(MINI_GAME_RULES.daily_quiz.items);
-      const last = rows[rows.length - 1]!;
-      expect(last.productSlug).not.toBeNull();
-      expect(products.get(last.productSlug!)?.inStock).toBe(true);
+      expect(new Set(rows.map((r) => r.id)).size).toBe(rows.length);
+      const key = rows.map((r) => r.id).join('|');
+      expect(key).not.toBe(previous);
+      previous = key;
+      rows.forEach((r) => shown.add(r.id));
     }
-  });
-
-  it('Đoán Xuất Xứ: lượt cuối dẫn sang sản phẩm khi kho có câu gắn sản phẩm', () => {
-    const pool = poolOf('origin');
-    const linked = pool.filter((r) => r.productSlug && products.has(r.productSlug));
-    for (let seed = 1; seed <= 20; seed++) {
-      const rows = MINI_GAMES.origin.pick(pool, buildCtx(seeded(seed), days[0]!, false))!;
-      const last = rows[rows.length - 1]!;
-      if (linked.length > 0) expect(last.productSlug).not.toBeNull();
-      else expect(rows).toHaveLength(MINI_GAME_RULES.origin.items);
-    }
+    expect(pool.filter((r) => !shown.has(r.id)).map((r) => r.id)).toEqual([]);
   });
 });

@@ -44,6 +44,13 @@ Một mục:
   - Giỏ Đúng Việc `{ task, correct: [3 slug], wrong: [3 { slug, reason }] }`.
 - `sourceRef` ghi mã nguồn trong `sources.json` và chỗ đã đối chiếu (mục, bảng, câu), để người duyệt mở đúng chỗ.
 - `sourceCheckedAt` là ngày mở trang nguồn và thấy trang còn nói đúng điều mục khẳng định.
+- Đố Xanh và Đoán Xuất Xứ phát lựa chọn **đúng thứ tự lưu**, không xáo. Đặt đáp án đúng ở các vị trí khác nhau: mỗi vị trí tối đa
+  40% số mục bật của game, và vị trí nào cũng có (spec chặn). Đáp án luôn ở lựa chọn đầu thì người chơi bấm bừa lựa chọn đầu là
+  ăn trọn thưởng.
+- `productSlug` (gắn sản phẩm) chỉ khi câu nói về chính sản phẩm đó mà không ngụ ý công dụng (ví dụ cách bỏ bao bì của nó). Không
+  gắn sản phẩm tẩy rửa vào câu về thành phần hay hoạt tính (eco-enzyme, enzyme, tinh dầu): người chơi sẽ hiểu là sản phẩm có tác dụng
+  đó. Đố Xanh cần **0 hoặc ít nhất 3** câu bật gắn sản phẩm, vì câu thứ 3 mỗi ngày xoay vòng trong nhóm này; ít hơn thì ngày nào cũng
+  lặp một câu.
 
 ## 2. Hạng nguồn
 
@@ -75,22 +82,23 @@ Không dùng các cụm sau, trừ khi nguồn là giấy phép hoặc nhãn đ�
 
 | Cụm cấm | Vì sao |
 |---|---|
-| "diệt khuẩn", "diệt virus", "diệt côn trùng", "diệt nấm" | Điều 20 khoản 4 điểm c: cần giấy chứng nhận đăng ký lưu hành của Bộ Y tế |
-| "99,9%" | Thường đi kèm "diệt khuẩn"; không có nguồn đo độc lập |
-| "chữa", "trị", "điều trị" | Điều 20 khoản 4 điểm a: công dụng thuốc. Cho phép "sửa chữa", "giá trị", "quản trị", "trị số" |
-| "ngừa bệnh", "phòng bệnh", "phòng dịch" | Công dụng y tế |
+| "diệt khuẩn", "diệt sạch vi khuẩn", "diệt 99% vi khuẩn", "diệt virus", "diệt côn trùng", "diệt nấm" | Điều 20 khoản 4 điểm c: cần giấy chứng nhận đăng ký lưu hành của Bộ Y tế |
+| "99,9%", "99,99%" | Thường đi kèm "diệt khuẩn"; không có nguồn đo độc lập |
+| "chữa", "trị", "điều trị" | Điều 20 khoản 4 điểm a: công dụng thuốc. Cho phép "sửa chữa", "chữa cháy", "giá trị", "quản trị", "trị số", "hồ Trị An" |
+| "ngừa bệnh", "phòng bệnh", "phòng dịch" | Công dụng y tế. Cho phép "phòng dịch vụ" |
 | "an toàn tuyệt đối", "an toàn 100%", "an toàn hoàn toàn" | Điều 8 khoản 9; S4, S9, S10 cho thấy nguyên liệu thực vật vẫn có cảnh báo |
-| "không hoá chất", "không chứa hoá chất" | Mọi thành phần, kể cả nước, đều là hoá chất |
-| "100% tự nhiên", "100% thiên nhiên", "100% hữu cơ" | Không kiểm chứng được |
-| "kháng khuẩn", "sát khuẩn", "khử trùng", "kháng viêm", "kháng nấm" | Công dụng y tế; S4 chỉ thấy in vitro |
+| "không hoá chất", "không chứa hoá chất", "không chứa chất hoá học", "0% hoá chất" | Mọi thành phần, kể cả nước, đều là hoá chất |
+| "100% tự nhiên", "100% từ thiên nhiên", "100% nguồn gốc tự nhiên", "tự nhiên 100%", "hoàn toàn tự nhiên", "100% hữu cơ" | Không kiểm chứng được |
+| "kháng khuẩn", "sát khuẩn", "khử khuẩn", "khử trùng", "sát trùng", "tẩy trùng", "kháng viêm", "kháng nấm" | Công dụng y tế, cần giấy phép (Điều 20 khoản 4); S4 chỉ thấy in vitro |
 | "vô hại" | S4: một số saponin có hại với cá; S10: limonene độc với sinh vật dưới nước |
 | "chống muỗi", "đuổi muỗi", "xua côn trùng" | Chế phẩm diệt côn trùng cần giấy phép |
 | "thân thiện (với) môi trường" | Không kèm giới hạn là tuyên bố xanh gây hiểu lầm |
-| "phân huỷ (sinh học) hoàn toàn" | Không kèm điều kiện là tuyên bố xanh gây hiểu lầm |
+| "phân huỷ (sinh học) hoàn toàn", "tự phân huỷ 100%" | Không kèm điều kiện là tuyên bố xanh gây hiểu lầm |
 | "tốt nhất", "an toàn nhất", "xanh nhất", "duy nhất", "số một" | Điều 8 khoản 11 |
 
-Bộ lọc so trên chữ thường, chuẩn hoá Unicode, chấp nhận cả hai kiểu đặt dấu ("hoá"/"hóa", "thuỷ"/"thủy"). Danh sách đầy đủ ở
-`BANNED_PHRASES` trong `apps/api/prisma/seed-game-mini.ts`; thêm cụm mới thì thêm cả ca thử ở spec.
+Bộ lọc so trên chữ thường, chuẩn hoá Unicode (NFC), chấp nhận cả hai kiểu đặt dấu ("hoá"/"hóa", "thuỷ"/"thủy"). Bộ lọc là lưới an
+toàn, không thay người duyệt: cách nói vòng khác vẫn có thể lọt. Danh sách đầy đủ ở `BANNED_PHRASES` trong
+`apps/api/prisma/seed-game-mini.ts`; thêm cụm mới thì thêm cả ca thử ở spec.
 
 Nên dùng: "gốc thực vật", "thành phần từ…", "theo [nguồn]…", "tuỳ điều kiện", "đọc nhãn trước khi dùng".
 
@@ -141,8 +149,10 @@ Lệnh không nhận tham số. Lệnh kiểm cả gói trước; gói có lỗi
    `version` mỗi lần sửa, nên chạy lại seed không đè sửa tay.
 3. Khi cập nhật theo `version`: mục trong file đang bật thì **giữ nguyên** trạng thái bật/tắt trong DB (admin đã tắt thì vẫn tắt); mục
    trong file đang tắt thì DB tắt theo.
-4. Câu cũ `game_quizzes`: chỉ gắn `sourceUrl` khi cột còn trống. Không sửa câu, không xoá câu. Câu không có nguồn không vào Đố Xanh
-   (lõi chỉ lấy câu có `sourceUrl` https).
+4. Câu cũ `game_quizzes`: chỉ gắn `sourceUrl` khi cột còn trống **và** chữ câu (lời hỏi, lựa chọn, đáp án, giải thích) còn đúng bản
+   trong `seed-game-quiz.ts` đã đối chiếu nguồn; câu admin đã sửa chữ thì không gắn và lệnh in ra id. Câu được gắn nguồn cũng phải qua
+   luật trắc nghiệm và cụm cấm. Không sửa câu, không xoá câu. Câu không có nguồn không vào Đố Xanh (lõi chỉ lấy câu có `sourceUrl`
+   https).
 
 Lưu ý khi nâng `version` trong file: nếu admin đã sửa mục đó ít lần hơn số bạn nâng (ví dụ admin sửa một lần thành `version` 2, file
 nâng lên 3), seed sẽ **đè** bản admin. Trước khi nâng `version`, xem mục đó trong DB (`version`, `updatedAt`) và hỏi người duyệt.
@@ -163,7 +173,9 @@ cd /opt/tubutree && docker compose -f docker-compose.vietnix.yml run --rm --no-d
    (đủ các trang) và kiểm slug còn bán.
 5. Sửa mục đã nạp: sửa trong file **và** nâng `version` (xem lưu ý ở mục 5), hoặc sửa trên màn admin.
 6. Bỏ mục: đặt `active: false`, ghi `inactiveReason`, nâng `version`. Không xoá mục khỏi file (giữ lịch sử, giữ ván đã phát chấm được).
-7. Chạy kiểm:
+7. Bật lại mục đã tắt trong DB: bấm bật trên **màn admin**. Seed không bao giờ bật mục đã tắt, kể cả khi file ghi `active: true` và
+   `version` cao hơn; trong file chỉ cần đổi `active: true`, bỏ `inactiveReason` để hai nơi khớp nhau.
+8. Chạy kiểm:
 
 ```bash
 cd apps/api
@@ -180,9 +192,11 @@ phải sửa số trong spec), và mỗi game chơi trọn một ván bằng n�
 Người có chuyên môn (môi trường, hoá học tiêu dùng, pháp chế quảng cáo) duyệt:
 
 1. Mọi mục bật có nguồn hạng C (Wikipedia): giữ, sửa sang nguồn A/B, hay tắt.
-2. Mọi mục đang tắt và lý do tắt: có nguồn thay thế thì bật lại (nâng `version`).
+2. Mọi mục đang tắt và lý do tắt: có nguồn thay thế thì sửa nguồn trong file (nâng `version`), rồi bật lại trên màn admin.
 3. Lời giải thích các mục Đúng Thùng dễ gây tranh cãi theo quy định địa phương.
 4. Lý do sai của từng đề Giỏ Đúng Việc so với nhãn sản phẩm hiện tại.
+5. Đề Giỏ Đúng Việc có mỹ phẩm (chăm da, son dưỡng, dầu gội): mỗi sản phẩm phải có phiếu công bố sản phẩm mỹ phẩm (Luật Quảng cáo
+   Điều 20 khoản 4 điểm b); thiếu thì tắt đề.
 
 Sau khi duyệt, PO bật từng game bằng cờ `game.mini.<game>.enabled` (`sort`, `daily_quiz`, `match`, `origin`, `basket`) và cờ tổng
 `game.mini.enabled` trên màn admin.

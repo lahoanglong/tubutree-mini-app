@@ -17,7 +17,7 @@
     },
     {
       "id": "gm-sort-vo-chai-nuoc-rua-chen",
-      "active": true,
+      "active": false,
       "version": 1,
       "payload": {
         "label": "Vỏ chai nước rửa chén đã dùng hết",
@@ -27,7 +27,8 @@
       "explanation": "Bao bì nhựa đồ gia dụng thuộc nhóm tái chế. Riêng bao bì chất tẩy rửa có thành phần nguy hại thì thuộc nhóm nguy hại, nên xem nhãn.",
       "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
       "sourceRef": "S1 mục 1.2.1",
-      "sourceCheckedAt": "2026-11-17"
+      "sourceCheckedAt": "2026-11-17",
+      "inactiveReason": "S1 xếp chai chất tẩy rửa có thành phần nguy hại vào rác nguy hại; đáp án tuỳ nhãn từng sản phẩm (cùng lý do với gm-sort-chai-axit-tay-bon-cau)."
     },
     {
       "id": "gm-sort-chai-dau-goi",

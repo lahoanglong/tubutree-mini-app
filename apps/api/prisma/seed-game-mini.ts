@@ -19,7 +19,9 @@ import { MINI_BASKET_PICK, MINI_GAME_IDS, MINI_MIN_ACTIVE_ITEMS, type MiniGameId
 import { MINI_GAMES } from '../src/modules/game/mini/games';
 import { SLUG_RE } from '../src/modules/game/mini/games/game-def';
 import { readBasketPayload } from '../src/modules/game/mini/games/basket';
+import { readChoicePayload } from '../src/modules/game/mini/games/choice';
 import { MINI_CONTENT_KIND, MINI_EXPLANATION_MAX } from '../src/modules/game/mini/game-mini-admin.service';
+import { QUIZZES, type SeedQuiz } from './seed-game-quiz';
 
 export const GAME_MINI_DATA_DIR = join(__dirname, 'reference-data', 'game-mini');
 
@@ -43,6 +45,7 @@ const SOURCE_URL_MAX = 500;
 const PAYLOAD_JSON_MAX = 4_000;
 const ID_RE = /^gm-[a-z]+-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const MIN_LINKED_DAILY_QUIZ = 3;
 
 export interface GameMiniItem {
   id: string;
@@ -132,35 +135,45 @@ export function normalizeForPhraseCheck(text: string): string {
  */
 const L = '(?<![\\p{L}\\p{N}])';
 const R = '(?![\\p{L}\\p{N}])';
+/** Thân mẫu đi qua cùng phép chuẩn hoá với chữ cần soi (cả chữ thường), nên không dùng lối tắt viết hoa như `\S`, `\p{L}`. */
 const word = (body: string) => new RegExp(`${L}(?:${normalizeForPhraseCheck(body)})${R}`, 'u');
 const near = (num: string, context: string) => {
   const n = `(?<![\\d,.])${num}\\s?%`;
   return new RegExp(`${n}[^.]{0,60}(?:${context})|(?:${context})[^.]{0,60}${n}`, 'u');
 };
+const NUM = '(?<![\\d,.])';
+const NATURAL = 'tự nhiên|thiên nhiên|hữu cơ|organic';
+const KILL_TARGET = '(?:vi )?(?:khuẩn|trùng|virus|vi rút|côn trùng|muỗi|nấm|mầm bệnh|vi sinh vật)';
 
 export const BANNED_PHRASES: { label: string; pattern: RegExp }[] = [
-  { label: 'diệt khuẩn / diệt virus / diệt côn trùng', pattern: word('diệt (?:vi )?(?:khuẩn|trùng|virus|vi rút|côn trùng|muỗi|nấm|mầm bệnh)') },
-  { label: '99,9%', pattern: /99[,.]9\s?%/u },
-  { label: 'chữa (bệnh)', pattern: word('(?<!sửa )chữa') },
-  { label: 'trị / điều trị', pattern: word('(?<!(?:giá|quản|chính|cai|thống|địa|bình) )trị(?! (?:giá|số))') },
-  { label: 'ngừa / phòng bệnh', pattern: word('(?:ngừa|phòng|phòng ngừa) (?:các )?(?:bệnh|dịch)') },
+  { label: 'diệt khuẩn / diệt virus / diệt côn trùng', pattern: word(`diệt(?: [^ ]+){0,2} ${KILL_TARGET}`) },
+  { label: '99,9%', pattern: /99[,.]9+\s?%/u },
+  { label: 'chữa (bệnh)', pattern: word('(?<!sửa )chữa(?! cháy)') },
+  { label: 'trị / điều trị', pattern: word('(?<!(?:giá|quản|chính|cai|thống|địa|bình|hồ|thuỷ điện) )trị(?! (?:giá|số))') },
+  { label: 'ngừa / phòng bệnh', pattern: word('(?:ngừa|phòng|phòng ngừa) (?:các )?(?:bệnh|dịch(?! vụ))') },
   { label: 'an toàn tuyệt đối', pattern: word('an toàn (?:tuyệt đối|100\\s?%|hoàn toàn)') },
-  { label: 'không hoá chất', pattern: word('không (?:chứa |có |dùng )?hoá chất') },
-  { label: '100% tự nhiên', pattern: /100\s?%\s?(?:tự nhiên|thiên nhiên|hữu cơ|organic)/u },
-  { label: 'kháng khuẩn / sát khuẩn / khử trùng', pattern: word('kháng khuẩn|sát khuẩn|khử trùng|kháng viêm|kháng nấm') },
+  { label: 'không hoá chất', pattern: word('không (?:chứa |có |dùng )?(?:hoá chất|chất hoá học)|0\\s?% (?:hoá chất|chất hoá học)') },
+  {
+    label: '100% tự nhiên',
+    pattern: new RegExp(`${NUM}100\\s?%[^.]{0,25}?(?:${NATURAL})|(?:${NATURAL})\\s?100\\s?%|${L}hoàn toàn (?:${NATURAL})${R}`, 'u'),
+  },
+  {
+    label: 'kháng khuẩn / sát khuẩn / khử trùng',
+    pattern: word('kháng khuẩn|sát khuẩn|khử khuẩn|khử trùng|sát trùng|tẩy trùng|kháng viêm|kháng nấm'),
+  },
   { label: 'vô hại', pattern: word('vô hại') },
   { label: 'chống / đuổi muỗi', pattern: word('(?:chống|đuổi|xua) (?:muỗi|côn trùng)') },
   { label: 'thân thiện môi trường', pattern: word('thân thiện (?:với )?môi trường') },
-  { label: 'phân huỷ hoàn toàn', pattern: word('phân huỷ (?:sinh học )?hoàn toàn') },
+  { label: 'phân huỷ hoàn toàn', pattern: word('(?:tự )?phân huỷ (?:sinh học )?(?:hoàn toàn|100\\s?%)') },
   { label: 'so sánh tuyệt đối (nhất, duy nhất, số một)', pattern: word('(?:tốt|an toàn|xanh|sạch|lành|hiệu quả|mạnh) nhất|duy nhất|số một|hàng đầu thế giới') },
-  { label: 'số yếu: nhựa phân huỷ 450 năm', pattern: /450\s?năm/u },
-  { label: 'số yếu: 3,9 triệu tấn / 33% tái chế', pattern: /3[,.]9 triệu tấn/u },
+  { label: 'số yếu: nhựa phân huỷ 450 năm', pattern: new RegExp(`${NUM}450\\s?năm`, 'u') },
+  { label: 'số yếu: 3,9 triệu tấn / 33% tái chế', pattern: new RegExp(`${NUM}3[,.]9 triệu tấn`, 'u') },
   { label: 'số yếu: 3,9 triệu tấn / 33% tái chế', pattern: near('33', 'tái chế|nhựa') },
   { label: 'số yếu: refill giảm 44% / 90%', pattern: near('(?:44|90)', 'refill|bao bì|nhựa|giảm') },
   { label: 'số yếu: EPR 22%', pattern: near('22', 'epr|tái chế|pet') },
   { label: 'số yếu: nhựa số 1, 2, 5 tái chế được', pattern: /nhựa (?:số )?1\s?,\s?2\s?(?:,|và)\s?5/u },
-  { label: 'số yếu: CMC bồ hòn', pattern: /0[,.]032|1[,.]7\s?wt/u },
-  { label: 'số yếu: axit axetic eco-enzyme', pattern: /0[,.]81|1[,.]08\s?%|3[,.]32\s?%|4[,.]8\s?g\/ml/u },
+  { label: 'số yếu: CMC bồ hòn', pattern: new RegExp(`${NUM}(?:0[,.]032|1[,.]7\\s?wt)`, 'u') },
+  { label: 'số yếu: axit axetic eco-enzyme', pattern: new RegExp(`${NUM}(?:0[,.]81|1[,.]08\\s?%|3[,.]32\\s?%|4[,.]8\\s?g/ml)`, 'u') },
 ];
 
 /** Nhãn các cụm cấm có trong đoạn chữ (rỗng là sạch). */
@@ -213,9 +226,10 @@ const isTubuHost = (url: string) => {
 };
 
 /**
- * Lỗi của cả gói (rỗng là hợp lệ). Dùng chung cho seed (chặn trước khi ghi) và spec nội dung.
+ * Lỗi của cả gói (rỗng là hợp lệ). Dùng chung cho seed (chặn trước khi ghi) và spec nội dung. `quizzes` là chữ gốc của câu đố cũ
+ * (`seed-game-quiz.ts`): câu được gắn nguồn cũng phải qua luật trắc nghiệm và cụm cấm, vì gắn nguồn là đưa câu vào Đố Xanh.
  */
-export function validateGameMiniPack(pack: GameMiniPack): string[] {
+export function validateGameMiniPack(pack: GameMiniPack, quizzes: readonly SeedQuiz[] = QUIZZES): string[] {
   const errors: string[] = [];
   const seen = new Set<string>();
   const products = new Map(pack.products.map((p) => [p.slug, p]));
@@ -280,13 +294,33 @@ export function validateGameMiniPack(pack: GameMiniPack): string[] {
     }
   }
 
+  const linkedQuiz = pack.games.daily_quiz.filter((i) => i.active && i.productSlug).length;
+  if (linkedQuiz > 0 && linkedQuiz < MIN_LINKED_DAILY_QUIZ) {
+    errors.push(
+      `${GAME_MINI_FILES.daily_quiz}: ${linkedQuiz} câu bật gắn sản phẩm; cần 0 hoặc ít nhất ${MIN_LINKED_DAILY_QUIZ} (câu thứ 3 mỗi ngày xoay vòng trong nhóm này, ít quá thì ngày nào cũng lặp)`,
+    );
+  }
+
+  const quizById = new Map(quizzes.map((q) => [q.id, q]));
   const legacySeen = new Set<string>();
   for (const l of pack.legacy) {
-    if (legacySeen.has(l.id)) errors.push(`legacy-quiz-sources.json ${l.id}: trùng id`);
+    const at = `legacy-quiz-sources.json ${l.id}`;
+    if (legacySeen.has(l.id)) errors.push(`${at}: trùng id`);
     legacySeen.add(l.id);
     const e = sourceUrlError(l.sourceUrl);
-    if (e) errors.push(`legacy-quiz-sources.json ${l.id}: ${e}`);
-    else if (!sourceUrls.has(l.sourceUrl)) errors.push(`legacy-quiz-sources.json ${l.id}: sourceUrl chưa có trong sources.json`);
+    if (e) errors.push(`${at}: ${e}`);
+    else if (!sourceUrls.has(l.sourceUrl)) errors.push(`${at}: sourceUrl chưa có trong sources.json`);
+    const q = quizById.get(l.id);
+    if (!q) {
+      errors.push(`${at}: không có trong seed-game-quiz.ts, không biết chữ của câu để đối chiếu nguồn`);
+      continue;
+    }
+    if (!readChoicePayload({ prompt: q.question, options: q.options, answer: q.correct })) {
+      errors.push(`${at}: câu cũ không qua luật trắc nghiệm của Đố Xanh (lời hỏi ≤ 300, 2–4 lựa chọn ≤ 120 ký tự, không trùng)`);
+    }
+    for (const text of [q.question, ...q.options, q.explanation]) {
+      for (const label of findBannedPhrases(text)) errors.push(`${at}: cụm cấm "${label}" trong "${text}"`);
+    }
   }
   return errors;
 }
@@ -296,8 +330,9 @@ export function activeCounts(pack: GameMiniPack): Record<MiniGameId, { total: nu
   const out = {} as Record<MiniGameId, { total: number; active: number; belowMinimum: boolean }>;
   for (const game of MINI_GAME_IDS) {
     const items = pack.games[game];
-    const active = items.filter((i) => i.active).length + (game === 'daily_quiz' ? pack.legacy.length : 0);
-    out[game] = { total: items.length, active, belowMinimum: active < MINI_MIN_ACTIVE_ITEMS };
+    const legacy = game === 'daily_quiz' ? pack.legacy.length : 0;
+    const active = items.filter((i) => i.active).length + legacy;
+    out[game] = { total: items.length + legacy, active, belowMinimum: active < MINI_MIN_ACTIVE_ITEMS };
   }
   return out;
 }
@@ -314,6 +349,8 @@ export interface LegacySeedResult {
   filled: number;
   /** Câu cũ không có trong DB (bỏ qua). */
   missing: string[];
+  /** Câu cũ có trong DB nhưng chữ đã khác bản đã đối chiếu nguồn (không gắn nguồn). */
+  changed: string[];
 }
 
 function contentData(game: MiniGameId, item: GameMiniItem) {
@@ -354,17 +391,37 @@ export async function seedGameMini(
     games.push({ game, total: items.length, created, updated });
   }
 
+  // Nguồn chỉ khớp chữ đã đối chiếu: câu admin đã sửa (chữ khác bản trong seed-game-quiz.ts) thì không gắn.
+  const quizById = new Map(QUIZZES.map((q) => [q.id, q]));
   let filled = 0;
   for (const l of pack.legacy) {
+    const q = quizById.get(l.id)!;
     const { count } = await prisma.gameQuiz.updateMany({
-      where: { id: l.id, OR: [{ sourceUrl: null }, { sourceUrl: '' }] },
+      where: {
+        id: l.id,
+        question: q.question,
+        options: { equals: q.options },
+        correct: q.correct,
+        explanation: q.explanation,
+        OR: [{ sourceUrl: null }, { sourceUrl: '' }],
+      },
       data: { sourceUrl: l.sourceUrl },
     });
     filled += count;
   }
-  const present = await prisma.gameQuiz.findMany({ where: { id: { in: pack.legacy.map((l) => l.id) } }, select: { id: true } });
-  const missing = pack.legacy.map((l) => l.id).filter((id) => !present.some((p) => p.id === id));
-  return { games, legacy: { total: pack.legacy.length, filled, missing } };
+  const ids = pack.legacy.map((l) => l.id);
+  const present = await prisma.gameQuiz.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, question: true, options: true, correct: true, explanation: true },
+  });
+  const missing = ids.filter((id) => !present.some((p) => p.id === id));
+  const changed = present
+    .filter((p) => {
+      const q = quizById.get(p.id)!;
+      return p.question !== q.question || p.correct !== q.correct || p.explanation !== q.explanation || JSON.stringify(p.options) !== JSON.stringify(q.options);
+    })
+    .map((p) => p.id);
+  return { games, legacy: { total: pack.legacy.length, filled, missing, changed } };
 }
 
 export function formatGameMiniResults(result: { games: GameMiniSeedResult[]; legacy: LegacySeedResult }): string[] {
@@ -372,7 +429,8 @@ export function formatGameMiniResults(result: { games: GameMiniSeedResult[]; leg
     (r) => `[seed-game-mini] ${r.game}: +${r.created} mới, ${r.updated} cập nhật theo version, ${r.total - r.created - r.updated} giữ nguyên`,
   );
   const missing = result.legacy.missing.length > 0 ? `; không có trong DB: ${result.legacy.missing.join(', ')}` : '';
-  lines.push(`[seed-game-mini] game_quizzes: gắn nguồn ${result.legacy.filled}/${result.legacy.total} câu cũ${missing}`);
+  const changed = result.legacy.changed.length > 0 ? `; chữ đã bị sửa nên không gắn: ${result.legacy.changed.join(', ')}` : '';
+  lines.push(`[seed-game-mini] game_quizzes: gắn nguồn ${result.legacy.filled}/${result.legacy.total} câu cũ${missing}${changed}`);
   return lines;
 }
 

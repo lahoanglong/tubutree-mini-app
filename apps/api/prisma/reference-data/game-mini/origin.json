@@ -8,12 +8,12 @@
       "payload": {
         "prompt": "Vỏ quế có chỉ dẫn địa lý được EU bảo hộ theo EVFTA mang tên vùng nào dưới đây?",
         "options": [
-          "Văn Yên",
           "Bạc Liêu",
           "Hạ Long",
-          "Phan Thiết"
+          "Phan Thiết",
+          "Văn Yên"
         ],
-        "answer": 0
+        "answer": 3
       },
       "explanation": "\"Vỏ quế Văn Yên\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -27,12 +27,12 @@
       "payload": {
         "prompt": "Quế được mệnh danh \"Cao sơn ngọc quế\" của Quảng Nam mang tên vùng nào?",
         "options": [
-          "Trà My",
           "Phú Quốc",
           "Bạc Liêu",
-          "Hạ Long"
+          "Hạ Long",
+          "Trà My"
         ],
-        "answer": 0
+        "answer": 3
       },
       "explanation": "Quế Trà My được cấp chỉ dẫn địa lý tháng 10/2011; vỏ quế có khi chứa 6–8% tinh dầu và được ví là \"Cao sơn ngọc quế\".",
       "sourceUrl": "https://moit.gov.vn/tu-hao-hang-viet-nam/thom-lung-huong-que-tra-my.html",
@@ -46,12 +46,12 @@
       "payload": {
         "prompt": "Bưởi da xanh được cấp chỉ dẫn địa lý năm 2018 thuộc tỉnh nào?",
         "options": [
-          "Bến Tre",
           "Lạng Sơn",
+          "Bến Tre",
           "Cao Bằng",
           "Sơn La"
         ],
-        "answer": 0
+        "answer": 1
       },
       "explanation": "Bưởi da xanh Bến Tre được Cục Sở hữu trí tuệ cấp chỉ dẫn địa lý theo Quyết định 297-QĐ/SHTT ngày 26/01/2018.",
       "sourceUrl": "https://tctph.vinhlong.gov.vn/bentre/sites/default/files/2024-03/tai_lieu_tuyen_truyen_chi_dan_dia_ly_sua.pdf",
@@ -84,12 +84,12 @@
       "payload": {
         "prompt": "Theo Tạp chí Công Thương (2014), nước mắm vùng nào khi đó đã được bảo hộ chỉ dẫn địa lý ở châu Âu?",
         "options": [
-          "Phú Quốc",
           "Mộc Châu",
+          "Phú Quốc",
           "Trùng Khánh",
           "Cao Phong"
         ],
-        "answer": 0
+        "answer": 1
       },
       "explanation": "Bài năm 2014 cho biết khi đó cả nước mới có nước mắm Phú Quốc được bảo hộ chỉ dẫn địa lý ở châu Âu.",
       "sourceUrl": "https://tapchicongthuong.vn/viet-nam-da-co-38-san-pham-duoc-bao-ho-chi-dan-dia-ly-37824.htm",
@@ -103,12 +103,12 @@
       "payload": {
         "prompt": "Hạt cà phê có chỉ dẫn địa lý được EU bảo hộ theo EVFTA mang tên vùng nào?",
         "options": [
-          "Buôn Ma Thuột",
           "Bạc Liêu",
           "Hạ Long",
-          "Nga Sơn"
+          "Nga Sơn",
+          "Buôn Ma Thuột"
         ],
-        "answer": 0
+        "answer": 3
       },
       "explanation": "\"Hạt cà phê Buôn Ma Thuột\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -122,12 +122,12 @@
       "payload": {
         "prompt": "Ngoài Phú Quốc, nước mắm vùng nào cũng có chỉ dẫn địa lý được EU bảo hộ theo EVFTA?",
         "options": [
-          "Phan Thiết",
           "Mộc Châu",
           "Mèo Vạc",
+          "Phan Thiết",
           "Trùng Khánh"
         ],
-        "answer": 0
+        "answer": 2
       },
       "explanation": "\"Nước mắm Phan Thiết\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -141,12 +141,12 @@
       "payload": {
         "prompt": "Vải thiều có chỉ dẫn địa lý mang tên vùng nào ở Bắc Giang?",
         "options": [
-          "Lục Ngạn",
           "Bạc Liêu",
+          "Lục Ngạn",
           "Phan Thiết",
           "Hậu Lộc"
         ],
-        "answer": 0
+        "answer": 1
       },
       "explanation": "Theo Vietnam News (2024), sau khi có chỉ dẫn địa lý, giá vải Lục Ngạn (Bắc Giang) tăng từ dưới 10.000 lên hơn 35.000 đồng/kg.",
       "sourceUrl": "https://bizhub.vietnamnews.vn/geographical-indication-certificates-help-increase-value-of-vietnamese-farm-produce-post357751.html",
@@ -160,12 +160,12 @@
       "payload": {
         "prompt": "Ngoài Lục Ngạn, vải của vùng nào cũng có chỉ dẫn địa lý được EU bảo hộ theo EVFTA?",
         "options": [
-          "Thanh Hà",
           "Bạc Liêu",
           "Hạ Long",
+          "Thanh Hà",
           "Phú Quốc"
         ],
-        "answer": 0
+        "answer": 2
       },
       "explanation": "\"Vải Thanh Hà\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -179,12 +179,12 @@
       "payload": {
         "prompt": "Mật ong bạc hà có chỉ dẫn địa lý mang tên vùng nào ở Hà Giang?",
         "options": [
-          "Mèo Vạc",
           "Bạc Liêu",
           "Phan Thiết",
+          "Mèo Vạc",
           "Vĩnh Kim"
         ],
-        "answer": 0
+        "answer": 2
       },
       "explanation": "Theo Vietnam News (2024), giá mật ong bạc hà Mèo Vạc (Hà Giang) tăng gấp đôi sau khi được bảo hộ chỉ dẫn địa lý.",
       "sourceUrl": "https://bizhub.vietnamnews.vn/geographical-indication-certificates-help-increase-value-of-vietnamese-farm-produce-post357751.html",
@@ -198,12 +198,12 @@
       "payload": {
         "prompt": "Bưởi của vùng nào dưới đây có chỉ dẫn địa lý được EU bảo hộ theo EVFTA?",
         "options": [
-          "Phúc Trạch",
           "Bạc Liêu",
           "Hạ Long",
+          "Phúc Trạch",
           "Trùng Khánh"
         ],
-        "answer": 0
+        "answer": 2
       },
       "explanation": "\"Bưởi Phúc Trạch\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -217,12 +217,12 @@
       "payload": {
         "prompt": "Cam của vùng nào dưới đây có chỉ dẫn địa lý được EU bảo hộ theo EVFTA?",
         "options": [
-          "Cao Phong",
           "Bạc Liêu",
           "Hạ Long",
+          "Cao Phong",
           "Hậu Lộc"
         ],
-        "answer": 0
+        "answer": 2
       },
       "explanation": "\"Cam Cao Phong\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -236,12 +236,12 @@
       "payload": {
         "prompt": "Ngoài Cao Phong, cam của vùng nào cũng có chỉ dẫn địa lý được EU bảo hộ theo EVFTA?",
         "options": [
-          "Vinh",
           "Bạc Liêu",
           "Phú Quốc",
-          "Hạ Long"
+          "Hạ Long",
+          "Vinh"
         ],
-        "answer": 0
+        "answer": 3
       },
       "explanation": "\"Cam Vinh\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -255,12 +255,12 @@
       "payload": {
         "prompt": "Nghêu Bến Tre được cấp chỉ dẫn địa lý vào năm nào?",
         "options": [
-          "2024",
           "2004",
+          "2024",
           "1994",
           "1984"
         ],
-        "answer": 0
+        "answer": 1
       },
       "explanation": "Ngày 03/06/2024, Cục Sở hữu trí tuệ cấp giấy chứng nhận chỉ dẫn địa lý cho sản phẩm nghêu của tỉnh Bến Tre.",
       "sourceUrl": "https://bizhub.vietnamnews.vn/geographical-indication-certificates-help-increase-value-of-vietnamese-farm-produce-post357751.html",
@@ -312,12 +312,12 @@
       "payload": {
         "prompt": "Thanh long có chỉ dẫn địa lý được EU bảo hộ theo EVFTA mang tên vùng nào?",
         "options": [
-          "Bình Thuận",
           "Trùng Khánh",
           "Mèo Vạc",
-          "Hạ Long"
+          "Hạ Long",
+          "Bình Thuận"
         ],
-        "answer": 0
+        "answer": 3
       },
       "explanation": "\"Thanh long Bình Thuận\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -350,14 +350,14 @@
       "payload": {
         "prompt": "Xoài của vùng nào dưới đây có chỉ dẫn địa lý được EU bảo hộ theo EVFTA?",
         "options": [
-          "Hòa Lộc",
           "Mèo Vạc",
+          "Hoà Lộc",
           "Trùng Khánh",
           "Hạ Long"
         ],
-        "answer": 0
+        "answer": 1
       },
-      "explanation": "\"Xoài Hòa Lộc\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
+      "explanation": "\"Xoài Hoà Lộc\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
       "sourceRef": "WTO bảng, số 14",
       "sourceCheckedAt": "2026-11-17"
@@ -369,12 +369,12 @@
       "payload": {
         "prompt": "Chuối có chỉ dẫn địa lý được EU bảo hộ theo EVFTA mang tên vùng nào?",
         "options": [
-          "Đại Hoàng",
           "Mèo Vạc",
+          "Đại Hoàng",
           "Bạc Liêu",
           "Hạ Long"
         ],
-        "answer": 0
+        "answer": 1
       },
       "explanation": "\"Chuối Đại Hoàng\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -407,12 +407,12 @@
       "payload": {
         "prompt": "Hạt dẻ có chỉ dẫn địa lý được EU bảo hộ theo EVFTA mang tên vùng nào?",
         "options": [
-          "Trùng Khánh",
           "Bạc Liêu",
+          "Trùng Khánh",
           "Phú Quốc",
           "Vĩnh Kim"
         ],
-        "answer": 0
+        "answer": 1
       },
       "explanation": "\"Hạt dẻ Trùng Khánh\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -426,12 +426,12 @@
       "payload": {
         "prompt": "Cói khô (nguyên liệu dệt chiếu) có chỉ dẫn địa lý được EU bảo hộ mang tên vùng nào?",
         "options": [
-          "Nga Sơn",
           "Mèo Vạc",
+          "Nga Sơn",
           "Mộc Châu",
           "Trùng Khánh"
         ],
-        "answer": 0
+        "answer": 1
       },
       "explanation": "\"Cói khô Nga Sơn\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -445,12 +445,12 @@
       "payload": {
         "prompt": "Mãng cầu có chỉ dẫn địa lý được EU bảo hộ theo EVFTA mang tên vùng nào?",
         "options": [
-          "Bà Đen",
           "Mèo Vạc",
           "Hạ Long",
-          "Trùng Khánh"
+          "Trùng Khánh",
+          "Bà Đen"
         ],
-        "answer": 0
+        "answer": 3
       },
       "explanation": "\"Mãng cầu Bà Đen\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -483,12 +483,12 @@
       "payload": {
         "prompt": "Nho có chỉ dẫn địa lý được EU bảo hộ theo EVFTA mang tên vùng nào?",
         "options": [
-          "Ninh Thuận",
           "Hạ Long",
           "Bạc Liêu",
+          "Ninh Thuận",
           "Trùng Khánh"
         ],
-        "answer": 0
+        "answer": 2
       },
       "explanation": "\"Nho Ninh Thuận\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -502,12 +502,12 @@
       "payload": {
         "prompt": "Vú sữa có chỉ dẫn địa lý được EU bảo hộ theo EVFTA mang tên vùng nào?",
         "options": [
-          "Vĩnh Kim",
           "Mèo Vạc",
           "Mộc Châu",
+          "Vĩnh Kim",
           "Hạ Long"
         ],
-        "answer": 0
+        "answer": 2
       },
       "explanation": "\"Vú sữa Vĩnh Kim\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -521,12 +521,12 @@
       "payload": {
         "prompt": "Mực nướng xắt miếng có chỉ dẫn địa lý được EU bảo hộ theo EVFTA mang tên vùng nào?",
         "options": [
-          "Hạ Long",
           "Mộc Châu",
           "Mèo Vạc",
-          "Trùng Khánh"
+          "Trùng Khánh",
+          "Hạ Long"
         ],
-        "answer": 0
+        "answer": 3
       },
       "explanation": "\"Mực nướng xắt miếng Hạ Long\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -578,12 +578,12 @@
       "payload": {
         "prompt": "Bưởi của vùng nào dưới đây có chỉ dẫn địa lý được EU bảo hộ theo EVFTA?",
         "options": [
-          "Đoan Hùng",
           "Mèo Vạc",
           "Hạ Long",
-          "Bạc Liêu"
+          "Bạc Liêu",
+          "Đoan Hùng"
         ],
-        "answer": 0
+        "answer": 3
       },
       "explanation": "\"Bưởi Đoan Hùng\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",
@@ -597,12 +597,12 @@
       "payload": {
         "prompt": "Quýt có chỉ dẫn địa lý được EU bảo hộ theo EVFTA mang tên vùng nào?",
         "options": [
-          "Bắc Kạn",
           "Bạc Liêu",
           "Phú Quốc",
+          "Bắc Kạn",
           "Hạ Long"
         ],
-        "answer": 0
+        "answer": 2
       },
       "explanation": "\"Quýt Bắc Kạn\" nằm trong 39 chỉ dẫn địa lý của Việt Nam được EU bảo hộ theo Hiệp định EVFTA (Phụ lục 12-A).",
       "sourceUrl": "https://trungtamwto.vn/download/23570/tom-tat-chuong-12-evfta.pdf",

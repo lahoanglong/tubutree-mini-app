@@ -197,6 +197,36 @@ describe('seed-game-mini trên DB vừa migrate (real Postgres)', () => {
       expect(await pa.gameContentItem.findUniqueOrThrow({ where: { id: target.id } })).toMatchObject({ active: false, version: 3 });
     });
 
+    it('admin chỉ tắt mục (màn admin không tăng version khi đổi bật/tắt), gói nâng version 2 với active=true: nội dung mới, vẫn tắt', async () => {
+      const target = pack.games.origin.filter((i) => i.active)[1]!;
+      await pa.gameContentItem.update({ where: { id: target.id }, data: { active: false } });
+      const next = clone();
+      const item = next.games.origin.find((i) => i.id === target.id)!;
+      item.version = 2;
+      item.explanation = `${item.explanation.slice(0, 150)} (bản 2)`;
+
+      const result = await seedGameMini(pa, next);
+
+      expect(result.games.find((g) => g.game === 'origin')).toMatchObject({ updated: 1 });
+      expect(await pa.gameContentItem.findUniqueOrThrow({ where: { id: target.id } })).toMatchObject({
+        active: false,
+        version: 2,
+        explanation: expect.stringContaining('(bản 2)'),
+      });
+    });
+
+    it('câu cũ admin đã sửa chữ: không gắn nguồn, báo trong `changed`; câu chưa sửa vẫn gắn', async () => {
+      const [edited, untouched] = pack.legacy;
+      await pa.gameQuiz.update({ where: { id: edited!.id }, data: { sourceUrl: null, question: 'Câu admin đã viết lại?' } });
+      await pa.gameQuiz.update({ where: { id: untouched!.id }, data: { sourceUrl: null } });
+
+      const result = await seedGameMini(pa);
+
+      expect(result.legacy).toMatchObject({ filled: 1, missing: [], changed: [edited!.id] });
+      expect((await pa.gameQuiz.findUniqueOrThrow({ where: { id: edited!.id } })).sourceUrl).toBeNull();
+      expect((await pa.gameQuiz.findUniqueOrThrow({ where: { id: untouched!.id } })).sourceUrl).toBe(untouched!.sourceUrl);
+    });
+
     it('gói có lỗi: không ghi dòng nào', async () => {
       const bad = clone();
       bad.games.sort.push({ ...bad.games.sort[0]!, id: 'gm-sort-moi-loi', explanation: 'Diệt khuẩn 99,9%.' });

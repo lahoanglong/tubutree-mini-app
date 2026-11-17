@@ -344,7 +344,7 @@
     },
     {
       "id": "gm-basket-di-choi-cung-be",
-      "active": true,
+      "active": false,
       "version": 1,
       "payload": {
         "task": "Soạn túi đồ cho bé đi chơi công viên: chọn 3 món mang theo.",
@@ -371,7 +371,8 @@
       "explanation": "Xịt tràm cho bé (dùng bên ngoài cơ thể), bọt rửa tay cho bé và một gói granola tiện lợi hợp với buổi đi chơi.",
       "sourceUrl": "https://tubutree.com/san-pham/xit-tram-cho-be-pineboo-150ml-b70d1d",
       "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
-      "sourceCheckedAt": "2026-11-17"
+      "sourceCheckedAt": "2026-11-17",
+      "inactiveReason": "Xếp xịt tràm vào túi đi chơi công viên ngầm ý dùng chống côn trùng (cần giấy phép, Luật Quảng cáo Điều 20 khoản 4 điểm c) và khuyến khích trẻ dùng tinh dầu (Điều 8 khoản 14); hai lý do sai không lấy từ nhãn."
     },
     {
       "id": "gm-basket-mua-refill",
