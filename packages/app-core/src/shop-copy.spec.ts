@@ -47,6 +47,9 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'support.orderContext': { code: 'TUBU20261015001' },
   'invite.copyFailed': { code: 'TUBU1234567890' },
   'checkout.shipEstimateValue': { fee: '999.999đ–999.999đ' },
+  'checkout.orderZalo.phone': { phone: '090•••4567' },
+  'order.zaloFriend.body': { code: 'TUBU2026111557909' },
+  'order.zaloFriend.blocked': { phone: '0899149229' },
 };
 
 const hit = (text: string) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.use);
@@ -108,6 +111,17 @@ describe('SHOP_COPY', () => {
   it('dải thương hiệu ở PDP: tiêu đề không kèm tên (ux-copy UC-01), tên đi vào nhãn đọc', () => {
     expect(SHOP_COPY['pdp.brandShelf']).toBe('Cùng thương hiệu');
     expect(fillCopy('pdp.brandShelfLabel', { brand: 'Cô Lan' })).toBe('Cùng thương hiệu Cô Lan');
+  });
+});
+
+describe('chữ đồng ý nhận hành trình đơn qua Zalo (quyết định PO số 3)', () => {
+  it('câu dưới ô tick giữ nguyên cụm PO duyệt', () => {
+    expect(SHOP_COPY['checkout.orderZalo.body']!.toLowerCase()).toContain('sẽ có tin nhắn nhắc xác nhận hành trình đơn hàng qua zalo này');
+  });
+
+  it('lời mời kết bạn nêu mã đơn, nút nói rõ mở Zalo của Tubu Tree', () => {
+    expect(fillCopy('order.zaloFriend.body', { code: 'TUBU2026111557909' })).toContain('TUBU2026111557909');
+    expect(SHOP_COPY['order.zaloFriend.cta']).toBe('Mở Zalo Tubu Tree');
   });
 });
 

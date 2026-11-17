@@ -393,6 +393,8 @@ export const placeOrder = (
     note?: string;
     storefrontSlug?: string;
     referralCode?: string;
+    /** Ô "Nhận hành trình đơn hàng qua Zalo"; thiếu khi ô không hiện thì máy chủ dùng lựa chọn đã nhớ. */
+    orderZaloConsent?: boolean;
   } & CheckoutPickupFields,
   idempotencyKey: string,
 ) =>

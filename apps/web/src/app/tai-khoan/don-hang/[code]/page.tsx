@@ -49,6 +49,8 @@ import { OrderTrack } from '@/components/orders/order-track';
 import { OrderTimelineTracker } from '@/components/orders/order-timeline-tracker';
 import { buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
 import { OrderShipping } from '@/components/orders/order-shipping';
+import { OrderZaloFriend } from '@/components/checkout/order-zalo';
+import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
@@ -252,6 +254,11 @@ export default function OrderDetailPage() {
           <div className="order-3 max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
           <section data-testid="order-timeline" className={`order-4 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}>
             <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
+            {showOrderZaloFriend(cfgQ.data?.orderZaloEnabled, o) && (
+              <div className="mt-3">
+                <OrderZaloFriend code={o.code} from="order_detail" />
+              </div>
+            )}
           </section>
           {trackView && trackAddsDetail(trackView) && (
             <section aria-labelledby="order-track-title" className={`order-4 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>

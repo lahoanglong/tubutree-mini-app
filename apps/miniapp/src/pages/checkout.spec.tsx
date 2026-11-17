@@ -29,7 +29,8 @@ const mocks = vi.hoisted(() => ({
   removeCoupon: vi.fn(),
   getCoupons: vi.fn().mockResolvedValue([]),
   getCheckoutPickupOptions: vi.fn(),
-  publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false } },
+  coreGet: vi.fn(),
+  publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false }, orderZaloEnabled: false as boolean },
   user: { id: 'u1', fullName: 'Long', phone: '0900000000' as string | null, walletBalance: 0, pointsBalance: 0, pointsConvertedBalance: 0 },
   sfCtx: { slug: null as string | null, referralCode: null as string | null, kind: 'ctv' as 'ctv' | 'brand', referralEligible: null as boolean | null },
 }));
@@ -95,6 +96,7 @@ vi.mock('../store/storefront-context', () => ({
   ),
 }));
 vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publicConfig }));
+vi.mock('../services/core-http', () => ({ coreHttp: { get: (...a: unknown[]) => mocks.coreGet(...a), patch: vi.fn() } }));
 vi.mock('../components/checkout/voucher-sheet', () => ({
   VoucherSheet: (p: Record<string, unknown>) => {
     mocks.voucherProps.push(p);
@@ -3780,5 +3782,93 @@ describe('CheckoutPage — phễu mua (checkout_started, checkout_step, checkout
     view.unmount();
     expect(events('checkout_started')).toEqual([]);
     expect(events('checkout_abandoned')).toEqual([]);
+  });
+});
+
+describe('CheckoutPage — ô nhận hành trình đơn qua Zalo (wave tubu-mss-consent-ui)', () => {
+  const STATUS = { enabled: true, prechecked: false, choice: null, phoneMasked: '090•••4567', tubuZaloPhone: '0899149229' };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.publicConfig.waste.pickup = false;
+    mocks.publicConfig.orderZaloEnabled = false;
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.referralEligible = null;
+    mocks.user.phone = '0900000000';
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.getAddresses.mockResolvedValue([ADDRESS]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.coreGet.mockResolvedValue(STATUS);
+  });
+  afterEach(() => {
+    mocks.publicConfig.orderZaloEnabled = false;
+  });
+
+  it('cờ tắt: không hỏi máy chủ, không có ô, thân đơn không có orderZaloConsent', async () => {
+    renderPage();
+    const body = await placeOrderClick();
+    expect(screen.queryByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toBeNull();
+    expect(mocks.coreGet).not.toHaveBeenCalled();
+    expect('orderZaloConsent' in body).toBe(false);
+  });
+
+  it('cờ bật: ô ngay trên dòng điều khoản, không tick sẵn, có câu PO và số đã che; đặt luôn thì gửi false', async () => {
+    mocks.publicConfig.orderZaloEnabled = true;
+    renderPage();
+    const row = await screen.findByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ });
+    expect(mocks.coreGet).toHaveBeenCalledWith('/config/order-zalo');
+    expect(row).toHaveAttribute('aria-checked', 'false');
+    expect(row).toHaveTextContent('Nhận hành trình đơn hàng qua Zalo');
+    expect(row).toHaveTextContent('Sẽ có tin nhắn nhắc xác nhận hành trình đơn hàng qua Zalo này.');
+    expect(row).toHaveTextContent('Số nhận: 090•••4567');
+    expect(row.compareDocumentPosition(screen.getByTestId('order-consent')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(trackEvent).toHaveBeenCalledWith('order_zalo_consent_shown', 'miniapp', {});
+    const body = await placeOrderClick();
+    expect(body.orderZaloConsent).toBe(false);
+  });
+
+  it('tick ô (chạm hoặc phím Space) → thân place-order có orderZaloConsent: true, đo sự kiện checked', async () => {
+    mocks.publicConfig.orderZaloEnabled = true;
+    renderPage();
+    const row = await screen.findByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ });
+    fireEvent.keyDown(row, { key: ' ' });
+    expect(row).toHaveAttribute('aria-checked', 'true');
+    expect(trackEvent).toHaveBeenCalledWith('order_zalo_consent_checked', 'miniapp', { checked: true });
+    const body = await placeOrderClick();
+    expect(body.orderZaloConsent).toBe(true);
+  });
+
+  it('lần sau nhớ lựa chọn đã bật: ô tick sẵn theo lựa chọn của khách', async () => {
+    mocks.publicConfig.orderZaloEnabled = true;
+    mocks.coreGet.mockResolvedValue({ ...STATUS, choice: true });
+    renderPage();
+    expect(await screen.findByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('không có số đã xác minh: không hiện ô, không gửi trường', async () => {
+    mocks.publicConfig.orderZaloEnabled = true;
+    mocks.coreGet.mockResolvedValue({ ...STATUS, phoneMasked: null });
+    renderPage();
+    await waitFor(() => expect(mocks.coreGet).toHaveBeenCalled());
+    const body = await placeOrderClick();
+    expect(screen.queryByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toBeNull();
+    expect('orderZaloConsent' in body).toBe(false);
+  });
+
+  it('lỗi tải trạng thái Zalo: vẫn đặt được hàng, không gửi trường (máy chủ dùng lựa chọn đã nhớ)', async () => {
+    mocks.publicConfig.orderZaloEnabled = true;
+    mocks.coreGet.mockRejectedValue(new Error('mạng'));
+    renderPage();
+    await waitFor(() => expect(mocks.coreGet).toHaveBeenCalled());
+    const body = await placeOrderClick();
+    expect(screen.queryByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toBeNull();
+    expect('orderZaloConsent' in body).toBe(false);
   });
 });

@@ -14,6 +14,7 @@ import { syncHomeHintCookie } from '@/lib/home-hint-cookie';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { AddressForm } from '@/components/address-form';
 import { OrderConsent } from '@/components/order-consent';
+import { OrderZaloConsentRow, useOrderZaloConsent } from '@/components/checkout/order-zalo';
 import { addressToForm, isLegacyGeo } from '@/lib/address-form';
 import {
   getCart,
@@ -171,6 +172,7 @@ export default function CheckoutPage() {
   const meQ = useQuery({ queryKey: ['me'], queryFn: getMe, enabled: phase === 'authenticated' });
   const walletBalance = meQ.data?.walletBalance ?? user?.walletBalance ?? 0;
   const configQ = useQuery({ queryKey: ['public-config'], queryFn: getPublicConfig, staleTime: 5 * 60_000 });
+  const zalo = useOrderZaloConsent();
   const shippingEta = configQ.data?.shippingEta;
 
   // Mua một phần giỏ: giỏ ghi nhớ các dòng đã chọn ở sessionStorage (tải lại trang thanh toán không được âm thầm
@@ -377,6 +379,7 @@ export default function CheckoutPage() {
         pointsToUse: usePoints ? usablePoints : 0,
         storefrontSlug: ctvSlug,
         referralCode: effectiveReferralCode(referralApplied, orderLinkReferral),
+        ...(zalo.checked !== undefined ? { orderZaloConsent: zalo.checked } : {}),
       };
       const frozen = unknownAttempt.current;
       if (frozen) {
@@ -1162,6 +1165,7 @@ export default function CheckoutPage() {
             <span>Tổng cộng</span>
             <span className="tabular-nums">{totalText}</span>
           </div>
+          {zalo.view && <OrderZaloConsentRow phone={zalo.view.phone} checked={zalo.checked === true} onChange={zalo.setPicked} />}
           <OrderConsent className="hidden lg:block" />
           <button
             ref={placeButtonRef}

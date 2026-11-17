@@ -1,8 +1,9 @@
-import { Controller, Get } from '@nestjs/common';
+import { Controller, Get, Optional } from '@nestjs/common';
 import { Public } from '../../common/decorators/public.decorator';
 import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { SystemConfigService } from './system-config.service';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
 import { buildPublicConfig, tierLoaderOf } from './public-config';
 
 /**
@@ -15,12 +16,13 @@ export class SystemConfigController {
   constructor(
     private readonly config: SystemConfigService,
     private readonly prisma: PrismaService,
+    @Optional() private readonly mssEvents?: MssOrderEventRecorder,
   ) {}
 
   @Get('public')
   @PublicCache('STATIC')
   /** Tham số nghiệp vụ FE cần để hiển thị đúng; xem buildPublicConfig. */
   publicConfig() {
-    return buildPublicConfig(this.config, tierLoaderOf(this.prisma));
+    return buildPublicConfig(this.config, tierLoaderOf(this.prisma), () => this.mssEvents?.gate());
   }
 }

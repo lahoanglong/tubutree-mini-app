@@ -65,6 +65,8 @@ import { ReturnRequestSheet } from '../components/orders/return-request-sheet';
 import { RefundDestinationPicker } from '../components/orders/refund-destination-picker';
 import { OrderRefunds } from '../components/orders/order-refunds';
 import { SecondOrderInvite } from '../components/orders/second-order-invite';
+import { OrderZaloFriend } from '../components/checkout/order-zalo';
+import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
 import {
   EMPTY_BANK,
   cancelRefundMode,
@@ -387,6 +389,11 @@ export default function OrderDetailPage() {
       {/* ── Tiến trình 4 bước nhìn một cái là biết đơn đang ở đâu, kèm nút chép thông tin đơn ── */}
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
         <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
+        {showOrderZaloFriend(publicConfig.orderZaloEnabled, o) && (
+          <div style={{ marginTop: 'var(--space-stack-sm)' }}>
+            <OrderZaloFriend code={o.code} from="order_detail" />
+          </div>
+        )}
       </Box>
 
       {/* ── Hành trình: bước chuẩn kèm giờ thật, mốc hãng gộp dưới "Đang giao" ── */}

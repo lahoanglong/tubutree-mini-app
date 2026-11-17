@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { fetchNotifyPrefs, saveNotifyPrefs, type NotifyPrefs } from '@tubutree/app-core/api/account';
+import { orderZaloConsentView, saveOrderZaloChoice } from '@tubutree/app-core/order-zalo';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { ORDER_ZALO_KEY, useOrderZaloStatus } from '@/components/checkout/order-zalo';
 import { LogoutAllSection } from '@/components/account/logout-all-section';
 import { AccountDeletionSection } from '@/components/account/account-deletion-section';
 import { applyFontScale, readFontScale, saveFontScale, type FontScale } from '@/components/account/font-scale';
@@ -46,6 +49,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [saveError, setSaveError] = useState(false);
+  const zalo = useOrderZaloStatus().data;
+  const [zaloSaving, setZaloSaving] = useState(false);
   const [fontScale, setFontScale] = useState<FontScale>('normal');
   // Mỗi lần `logout()` là một lệnh POST /auth/logout và một lượt xoá cache: hai cú chạm cùng khung hình chỉ được chạy một.
   const logoutLock = usePressLock(() => logout());
@@ -95,6 +100,23 @@ export default function SettingsPage() {
     }
   };
 
+  // Công tắc riêng của tin hành trình đơn qua Zalo: máy chủ ghi nguồn `account_settings`, hiệu lực cho đơn sau.
+  const toggleZalo = async (s: NonNullable<typeof zalo>) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setZaloSaving(true);
+    setSaveError(false);
+    try {
+      const r = await saveOrderZaloChoice(coreHttp, s.choice !== true);
+      qc.setQueryData(ORDER_ZALO_KEY, { ...s, choice: r.enabled });
+    } catch {
+      setSaveError(true);
+    } finally {
+      savingRef.current = false;
+      setZaloSaving(false);
+    }
+  };
+
   const chooseFont = (scale: FontScale) => {
     setFontScale(scale);
     applyFontScale(scale);
@@ -121,6 +143,9 @@ export default function SettingsPage() {
           <p className="text-sm text-stone-900 max-md:font-semibold">Cập nhật đơn hàng</p>
           <p className="text-xs text-stone-600 max-md:text-sm">Luôn bật để bạn không lỡ tin giao hàng, hoàn tiền</p>
         </div>
+        {zalo && orderZaloConsentView(zalo) && (
+          <SwitchRow label={fillCopy('settings.orderZalo')} on={zalo.choice === true} disabled={zaloSaving} onToggle={() => void toggleZalo(zalo)} />
+        )}
         {prefsQ.isLoading && <Skeleton height={44} style={{ marginTop: 8 }} />}
         <SwitchRow label="Khuyến mãi & mã giảm giá" on={notify?.notifyPromo ?? false} disabled={switchesLocked} onToggle={() => void toggle('notifyPromo')} />
         <SwitchRow

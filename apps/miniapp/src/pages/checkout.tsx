@@ -23,6 +23,7 @@ import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { PickupSection, WaivedShippingValue } from '../components/checkout/pickup-section';
 import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '../components/checkout/use-checkout-pickup';
 import { OrderSuccess } from '../components/checkout/order-success';
+import { OrderZaloConsentRow, useOrderZaloConsent } from '../components/checkout/order-zalo';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { COUPON_CHANGE_KEY, useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
 import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
@@ -109,6 +110,7 @@ export default function CheckoutPage() {
   const [usePoints, setUsePoints] = useState(false);
   const [note, setNote] = useState('');
   const publicConfig = usePublicConfig();
+  const zalo = useOrderZaloConsent();
   const [voucherSheetOpen, setVoucherSheetOpen] = useState(false);
   // Mã từ link chỉ khoá ô nhập khi máy chủ đã xác nhận là mã CTV; mã khách thường (nút chia sẻ sản phẩm) bị máy chủ bỏ qua nên
   // không được hiện như "đang mua qua link giới thiệu". Chưa biết (null) vẫn gửi kèm đơn để máy chủ tự quyết: lỗi mạng lúc chạm không được làm CTV mất công.
@@ -402,6 +404,7 @@ export default function CheckoutPage() {
         referralCode: effectiveReferralCode(referralApplied, orderLinkReferral),
         storefrontSlug: ctvSlug,
         itemIds,
+        ...(zalo.checked !== undefined ? { orderZaloConsent: zalo.checked } : {}),
       };
       const frozen = unknownAttempt.current;
       if (frozen) {
@@ -1379,6 +1382,8 @@ export default function CheckoutPage() {
           </Button>
         </Box>
       )}
+
+      {zalo.view && <OrderZaloConsentRow phone={zalo.view.phone} checked={zalo.checked === true} onChange={zalo.setPicked} />}
 
       <Text size="xSmall" data-testid="order-consent" style={{ display: 'block', padding: '12px 16px 0', color: 'var(--color-text-secondary)' }}>
         Bằng việc đặt hàng, bạn đồng ý với <ConsentLink onPress={() => setPolicy('dieu-khoan')}>Điều khoản</ConsentLink> và{' '}

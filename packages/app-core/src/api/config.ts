@@ -64,6 +64,14 @@ export interface PublicConfig {
   chat?: { enabled: boolean; hours: { start: string; end: string } };
   /** Giỏ cho khách chưa đăng nhập trên web (`web.guest_cart_enabled`). Thiếu khi API cũ → tắt, khách bấm mua thì sang đăng nhập như cũ. */
   webGuestCartEnabled?: boolean;
+  /**
+   * Tin hành trình đơn qua Zalo đang chạy cho một phần khách (`mss.order_events_enabled`, MSS nhận sự kiện, tỉ lệ > 0). Chỉ khi true
+   * client mới hỏi GET /config/order-zalo. Thiếu khi API cũ → tắt.
+   */
+  orderZaloEnabled?: boolean;
+  orderZaloPrechecked?: boolean;
+  /** Số Zalo Tubu Tree cho nút kết bạn (`https://zalo.me/<số>`). */
+  tubuZaloPhone?: string;
 }
 
 export const getPublicConfig = (http: HttpClient) => http.get<PublicConfig>('/config/public');

@@ -308,3 +308,31 @@ describe('OrderSuccess (DS v2, spec 4a.5)', () => {
     expect(screen.queryByRole('region', { name: 'Đơn cùng lần đặt' })).toBeNull();
   });
 });
+
+describe('OrderSuccess — lời mời kết bạn Zalo (wave tubu-mss-consent-ui)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.fetchProduct.mockResolvedValue(PRODUCT(0));
+  });
+
+  it('cờ bật và đơn có đồng ý: câu mời kèm mã đơn, nút phụ nằm sau "Theo dõi đơn" (không tranh nút chính)', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ ...CONFIG, orderZaloEnabled: true, tubuZaloPhone: '0899149229' });
+    renderSuccess({ order: { ...ORDER, orderZaloConsent: true } as unknown as OrderDTO });
+    const open = await screen.findByRole('button', { name: 'Mở Zalo Tubu Tree' });
+    expect(screen.getByText('Kết bạn Zalo với Tubu Tree để nhận hành trình đơn TUBU-COD-12345.')).toBeInTheDocument();
+    const track = screen.getByRole('button', { name: 'Theo dõi đơn' });
+    expect(track.compareDocumentPosition(open) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it('cờ tắt, hoặc đơn không đồng ý: không có lời mời', async () => {
+    mocks.getPublicConfig.mockResolvedValue({ ...CONFIG, orderZaloEnabled: false });
+    const a = renderSuccess({ order: { ...ORDER, orderZaloConsent: true } as unknown as OrderDTO });
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: 'Mở Zalo Tubu Tree' })).toBeNull();
+    a.unmount();
+    mocks.getPublicConfig.mockResolvedValue({ ...CONFIG, orderZaloEnabled: true });
+    renderSuccess({ order: { ...ORDER, orderZaloConsent: false } as unknown as OrderDTO });
+    await screen.findByText('TUBU-COD-12345');
+    expect(screen.queryByRole('button', { name: 'Mở Zalo Tubu Tree' })).toBeNull();
+  });
+});

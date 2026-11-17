@@ -313,6 +313,10 @@ export interface PublicConfig {
     registrationDate?: string | null;
     registrationPlace?: string | null;
   };
+  /** Ô đồng ý tin hành trình đơn qua Zalo đang chạy (cờ MSS + rollout > 0); thiếu khi API cũ → tắt. */
+  orderZaloEnabled?: boolean;
+  orderZaloPrechecked?: boolean;
+  tubuZaloPhone?: string;
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);
@@ -604,6 +608,8 @@ export const placeOrder = (
     referralCode?: string;
     storefrontSlug?: string;
     itemIds?: string[];
+    /** Ô "Nhận hành trình đơn hàng qua Zalo"; thiếu khi ô không hiện thì máy chủ dùng lựa chọn đã nhớ. */
+    orderZaloConsent?: boolean;
   } & CheckoutPickupFields,
   idempotencyKey: string,
 ) =>

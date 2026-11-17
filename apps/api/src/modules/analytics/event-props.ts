@@ -2,6 +2,7 @@ import {
   CHECKOUT_ENTRIES,
   CHECKOUT_LAST_STEPS,
   CHECKOUT_STEPS,
+  ORDER_ZALO_FRIEND_FROM,
   PDP_ACTIONS,
   RECYCLE_FUNNEL_STEPS,
   SUBTOTAL_BUCKETS,
@@ -87,6 +88,9 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   review_started: { props: { orderAgeDays: AGE_DAYS }, required: ['orderAgeDays'] },
   review_submitted: { props: { orderAgeDays: AGE_DAYS }, required: ['orderAgeDays'] },
   return_requested: { props: { orderAgeDays: AGE_DAYS }, required: ['orderAgeDays'] },
+  order_zalo_consent_shown: { props: {} },
+  order_zalo_consent_checked: { props: { checked: bool }, required: ['checked'] },
+  order_zalo_friend_click: { props: { from: oneOf(ORDER_ZALO_FRIEND_FROM) }, required: ['from'] },
 };
 
 /**

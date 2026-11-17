@@ -124,7 +124,7 @@ describe('/tai-khoan/cai-dat: thông báo lưu trên server', () => {
     const { container } = await mount();
     click(radios(container)[2]!);
     await flush(4);
-    expect(mocks.get).toHaveBeenCalledTimes(1);
+    expect(mocks.get.mock.calls.filter(([path]) => path === '/me/notifications/prefs')).toHaveLength(1);
   });
 
   it('lưu lỗi: trả công tắc về như cũ và báo lỗi', async () => {

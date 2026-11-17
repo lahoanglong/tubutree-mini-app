@@ -22,7 +22,15 @@ const mocks = vi.hoisted(() => ({
   requestAccountDeletion: vi.fn(),
   getWallet: vi.fn(),
   apiPost: vi.fn(),
+  orderZaloEnabled: false,
+  coreGet: vi.fn(),
+  corePatch: vi.fn(),
 }));
+vi.mock('../hooks/use-public-config', async (importOriginal) => {
+  const orig = await importOriginal<{ usePublicConfig: () => Record<string, unknown> }>();
+  return { ...orig, usePublicConfig: () => ({ ...orig.usePublicConfig(), orderZaloEnabled: mocks.orderZaloEnabled }) };
+});
+vi.mock('../services/core-http', () => ({ coreHttp: { get: mocks.coreGet, patch: mocks.corePatch } }));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
@@ -597,5 +605,50 @@ describe('Cài đặt thông báo: lưu bị từ chối thì tải lại tuỳ 
     await waitFor(() => expect(promoSwitch()).not.toHaveAttribute('aria-disabled'));
     expect(promoSwitch()).toHaveAttribute('aria-checked', 'true');
     expect(errorToasts()).toBe(1);
+  });
+});
+
+describe('Cài đặt: công tắc "Hành trình đơn hàng qua Zalo" (wave tubu-mss-consent-ui)', () => {
+  const STATUS = { enabled: true, prechecked: false, choice: null, phoneMasked: '090•••4567', tubuZaloPhone: '0899149229' };
+  const zaloSwitch = () => screen.findByRole('switch', { name: 'Hành trình đơn hàng qua Zalo' });
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mocks.stored = undefined;
+    mocks.storageReads = 0;
+    mocks.orderZaloEnabled = false;
+    mocks.fetchNotifyPrefs.mockResolvedValue({ notifyPromo: true, notifyGarden: true });
+    mocks.coreGet.mockResolvedValue(STATUS);
+  });
+
+  it('cờ tắt: không hỏi máy chủ, không có công tắc mới', async () => {
+    render(<SettingsPage />);
+    await waitFor(() => expect(promoSwitch()).toBeInTheDocument());
+    expect(mocks.coreGet).not.toHaveBeenCalled();
+    expect(screen.queryByRole('switch', { name: 'Hành trình đơn hàng qua Zalo' })).toBeNull();
+  });
+
+  it('cờ bật: công tắc riêng, tách khỏi Khuyến mãi; bật → PATCH /me/order-zalo-updates {enabled:true}', async () => {
+    mocks.orderZaloEnabled = true;
+    mocks.corePatch.mockResolvedValue({ enabled: true, updatedAt: '2026-11-17T01:00:00.000Z', source: 'account_settings' });
+    render(<SettingsPage />);
+    const sw = await zaloSwitch();
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    fireEvent.click(sw);
+    await waitFor(() => expect(sw).toHaveAttribute('aria-checked', 'true'));
+    expect(mocks.corePatch).toHaveBeenCalledWith('/me/order-zalo-updates', { enabled: true });
+    expect(mocks.saveNotifyPrefs).not.toHaveBeenCalled();
+  });
+
+  it('lưu lỗi: giữ trạng thái cũ, báo lỗi, nhả khoá', async () => {
+    mocks.orderZaloEnabled = true;
+    mocks.coreGet.mockResolvedValue({ ...STATUS, choice: true });
+    mocks.corePatch.mockRejectedValue(new Error('mạng'));
+    render(<SettingsPage />);
+    const sw = await zaloSwitch();
+    fireEvent.click(sw);
+    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
+    expect(sw).toHaveAttribute('aria-checked', 'true');
+    await waitFor(() => expect(sw).not.toHaveAttribute('aria-disabled'));
   });
 });

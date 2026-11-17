@@ -10,6 +10,8 @@ import { copyText } from '../../utils/clipboard';
 import { formatVnd } from '../../utils/format';
 import { isRetailOnly } from '../../utils/retail-only';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
+import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
+import { OrderZaloFriend } from './order-zalo';
 import { vi } from '../../i18n/vi';
 import { SubscribeSheet } from '../subscribe-sheet';
 import { SUBSCRIPTIONS_IN_MINIAPP } from '../../utils/features';
@@ -243,6 +245,8 @@ export function OrderSuccess({
           {vi.success.keepShopping}
         </Button>
       </div>
+
+      {showOrderZaloFriend(cfg.orderZaloEnabled, order) && <OrderZaloFriend code={order.code} from="success" />}
 
       {candidate && (
         <Card variant="flat" padding={12}>

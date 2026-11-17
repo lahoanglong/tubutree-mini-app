@@ -19,6 +19,13 @@ import { applyFontScale } from '../utils/font-scale';
 import { isStaleStateError } from '../services/api';
 import { settleWithin } from '../utils/settle-within';
 import { fetchNotifyPrefs, legacyOptOuts, saveNotifyPrefs, type NotifyPrefs } from './settings-notify-prefs';
+import { useQueryClient } from '@tanstack/react-query';
+import { ORDER_ZALO_KEY, useOrderZaloStatus } from '../components/checkout/order-zalo';
+import { orderZaloConsentView, saveOrderZaloChoice } from '@tubutree/app-core/order-zalo';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { coreHttp } from '../services/core-http';
+
+const SAVE_FAILED = 'Chưa lưu được cài đặt. Kiểm tra mạng rồi thử lại.';
 
 const PREFS_KEY = 'tubu_prefs';
 
@@ -49,6 +56,9 @@ export default function SettingsPage() {
   const openSnackbarRef = useRef(openSnackbar);
   openSnackbarRef.current = openSnackbar;
   const { logout, user } = useAuthStore();
+  const zalo = useOrderZaloStatus().data;
+  const qc = useQueryClient();
+  const [zaloSaving, setZaloSaving] = useState(false);
   // Tài khoản khách tạm không có mật khẩu hay Zalo để đăng nhập lại, đăng xuất là mất đơn và điểm.
   const canLogout = !!user && !isGuestUser(user);
   const [local, setLocal] = useState<LocalPrefs>(DEFAULT_LOCAL);
@@ -103,7 +113,7 @@ export default function SettingsPage() {
       setNotify(await saveNotifyPrefs({ [key]: !before[key] }));
     } catch (e) {
       setNotify(before);
-      openSnackbar({ type: 'error', text: 'Chưa lưu được cài đặt. Kiểm tra mạng rồi thử lại.' });
+      openSnackbar({ type: 'error', text: SAVE_FAILED });
       // Máy chủ từ chối vì tuỳ chọn trên màn đã cũ (400/404/409): tải lại đúng bằng hàm lúc mở màn và giữ khoá tới khi về (tối đa `settleWithin`), kẻo bấm lại trên
       // số cũ nhận đúng lỗi đó. Mất mạng, quá hạn, 401, 5xx không nói gì về trạng thái thật: không tải lại, nhả ngay. Kết quả về muộn (quá hạn chờ) không được đè lên lần lưu mới hơn.
       if (isStaleStateError(e)) {
@@ -116,6 +126,22 @@ export default function SettingsPage() {
     } finally {
       savingRef.current = false;
       setSaving(false);
+    }
+  };
+
+  // Công tắc riêng của tin hành trình đơn qua Zalo: máy chủ ghi nguồn `account_settings`, hiệu lực cho đơn sau.
+  const toggleZalo = async (s: NonNullable<typeof zalo>) => {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setZaloSaving(true);
+    try {
+      const r = await saveOrderZaloChoice(coreHttp, s.choice !== true);
+      qc.setQueryData(ORDER_ZALO_KEY, { ...s, choice: r.enabled });
+    } catch {
+      openSnackbar({ type: 'error', text: SAVE_FAILED });
+    } finally {
+      savingRef.current = false;
+      setZaloSaving(false);
     }
   };
 
@@ -140,6 +166,7 @@ export default function SettingsPage() {
           subtitle="Luôn bật để bạn không lỡ tin giao hàng, hoàn tiền"
           style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
         />
+        {zalo && orderZaloConsentView(zalo) && <Toggle label={fillCopy('settings.orderZalo')} on={zalo.choice === true} disabled={zaloSaving} onToggle={() => void toggleZalo(zalo)} />}
         <Toggle
           label="Khuyến mãi & mã giảm giá"
           on={notify?.notifyPromo ?? false}

@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { LoyaltyService } from '../loyalty/loyalty.service';
@@ -10,6 +10,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { BundlesService, type BundleDTO } from '../bundles/bundles.service';
 import { listLiveBanners, type CampaignBannerDTO } from '../campaigns/campaign-public';
 import { PrismaService } from '../../prisma/prisma.service';
+import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
 import { WASTE_OPEN_STATUSES } from '../waste-exchange/waste.constants';
 import { CatalogService } from './catalog.service';
 import { vnDateSeed } from './catalog-seed';
@@ -69,6 +70,7 @@ export class HomeService {
     private readonly config: SystemConfigService,
     private readonly loyalty: LoyaltyService,
     private readonly prisma: PrismaService,
+    @Optional() private readonly mssEvents?: MssOrderEventRecorder,
   ) {
     this.bundles = new BundlesService(prisma, catalog, config);
   }
@@ -140,7 +142,8 @@ export class HomeService {
       this.block('categories', () => this.catalog.categories()),
       this.block('brands', () => this.catalog.brands()),
       // Khối "Quà khách mới" cần số công khai: gộp vào đây để mở Trang chủ không tốn thêm request /config/public.
-      this.block('publicConfig', () => buildPublicConfig(this.config, tierLoaderOf(this.prisma))),
+      // Mini App lấy cấu hình công khai từ khối này ở lần đầu: thiếu cổng MSS thì ô đồng ý Zalo không bao giờ hiện trên Mini.
+      this.block('publicConfig', () => buildPublicConfig(this.config, tierLoaderOf(this.prisma), () => this.mssEvents?.gate())),
       // Banner đầu Trang chủ: không lọc đối tượng ở đây vì blob dùng chung cho mọi khách; app-core lọc NEW/RETURNING theo loại khách.
       this.block('campaigns', () => listLiveBanners(this.prisma, 'HOME_TOP')),
       // Kệ combo toàn sàn: cùng dữ liệu `GET /bundles/combos?limit=4`, gộp vào đây để Trang chủ không tốn thêm request.

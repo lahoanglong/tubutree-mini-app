@@ -1,0 +1,75 @@
+import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { openWebview } from 'zmp-sdk/apis';
+import type { OrderZaloFriendFrom } from '@tubutree/shared-types';
+import { fetchOrderZaloStatus, orderZaloConsentView, tubuZaloNumber } from '@tubutree/app-core/order-zalo';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { coreHttp } from '../../services/core-http';
+import { trackEvent } from '../../services/analytics';
+import { usePublicConfig } from '../../hooks/use-public-config';
+import { useNotify } from '../../hooks/use-notify';
+import { copyText } from '../../utils/clipboard';
+import { Checkbox } from '../ui/form';
+import { rowKeyboardProps } from '../ui/row-keyboard';
+import { Button } from '../ui/button';
+import { Text } from '../ui/text';
+
+export const ORDER_ZALO_KEY = ['order-zalo'];
+
+/**
+ * Chỉ hỏi máy chủ khi cờ chung bật: cờ tắt thì màn không có request hay phần tử nào mới. Lỗi tải = không hiện ô, đơn vẫn đặt được.
+ * Giữ cả tệp dưới 2 KB sau khi gói để Rollup gộp vào chunk sẵn có (`experimentalMinChunkSize`), khỏi tốn đầu import và mục preload riêng.
+ */
+export function useOrderZaloStatus() {
+  return useQuery({ queryKey: ORDER_ZALO_KEY, queryFn: () => fetchOrderZaloStatus(coreHttp), enabled: usePublicConfig().orderZaloEnabled === true, staleTime: 60_000, retry: false });
+}
+
+/** `checked` là giá trị gửi kèm đơn; undefined khi ô không hiện (máy chủ dùng lựa chọn đã nhớ). */
+export function useOrderZaloConsent() {
+  const view = orderZaloConsentView(useOrderZaloStatus().data);
+  const [picked, setPicked] = useState<boolean | null>(null);
+  return { view, checked: view ? picked ?? view.checked : undefined, setPicked };
+}
+
+export function OrderZaloConsentRow({ phone, checked, onChange }: { phone: string; checked: boolean; onChange: (v: boolean) => void }) {
+  useEffect(() => void trackEvent('order_zalo_consent_shown', 'miniapp', {}), []);
+  const toggle = () => {
+    onChange(!checked);
+    void trackEvent('order_zalo_consent_checked', 'miniapp', { checked: !checked });
+  };
+  return (
+    <div role="checkbox" aria-checked={checked} {...rowKeyboardProps()} onClick={toggle} style={{ display: 'flex', gap: 'var(--space-inline-md)', alignItems: 'flex-start', padding: 'var(--space-inset-card) var(--space-gutter) 0' }}>
+      <Checkbox checked={checked} onChange={() => {}} flush />
+      <div>
+        <Text variant="body-sm" as="div" style={{ fontWeight: 600 }}>
+          {fillCopy('checkout.orderZalo.label')}
+        </Text>
+        <Text variant="caption" tone="secondary" as="div">
+          {fillCopy('checkout.orderZalo.body')} {fillCopy('checkout.orderZalo.phone', { phone })}
+        </Text>
+      </div>
+    </div>
+  );
+}
+
+/** Lời mời kết bạn Zalo Tubu Tree. Webview Zalo có thể chặn mở liên kết: khi đó hiện số để khách tự tìm, kèm nút chép. */
+export function OrderZaloFriend({ code, from }: { code: string; from: OrderZaloFriendFrom }) {
+  const phone = tubuZaloNumber(usePublicConfig().tubuZaloPhone);
+  const [blocked, setBlocked] = useState(false);
+  const { notify } = useNotify();
+  const press = () => {
+    if (blocked) return void copyText(phone).then((ok) => ok && notify({ text: fillCopy('order.zaloFriend.copied'), type: 'success' }));
+    void trackEvent('order_zalo_friend_click', 'miniapp', { from });
+    openWebview({ url: `https://zalo.me/${phone}` }).catch(() => setBlocked(true));
+  };
+  return (
+    <div>
+      <Text variant="body-sm" as="p" style={{ marginBottom: 'var(--space-stack-sm)' }}>
+        {fillCopy(blocked ? 'order.zaloFriend.blocked' : 'order.zaloFriend.body', { code, phone })}
+      </Text>
+      <Button variant="secondary" onPress={press}>
+        {fillCopy(blocked ? 'order.zaloFriend.copy' : 'order.zaloFriend.cta')}
+      </Button>
+    </div>
+  );
+}

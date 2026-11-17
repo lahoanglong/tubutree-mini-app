@@ -493,6 +493,18 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.pickup.reconciled': 'Đã bỏ món rác không nhận được ở địa chỉ này',
   'checkout.pickup.maxOpenLink': 'Xem yêu cầu đang mở',
   'checkout.shipWaived': 'Miễn phí vận chuyển (đổi rác kèm đơn)',
+  // Đồng ý nhận tin hành trình đơn qua Zalo (quyết định PO số 3). Câu `body` phải giữ nguyên cụm PO duyệt; đổi chữ thì đổi
+  // ORDER_ZALO_CONSENT_TEXT_VERSION (app-core order-zalo.ts và API mss-order-event-types.ts).
+  'checkout.orderZalo.label': 'Nhận hành trình đơn hàng qua Zalo',
+  'checkout.orderZalo.body': 'Sẽ có tin nhắn nhắc xác nhận hành trình đơn hàng qua Zalo này.',
+  'checkout.orderZalo.phone': 'Số nhận: {phone}',
+  'settings.orderZalo': 'Hành trình đơn hàng qua Zalo',
+  // Lời mời kết bạn Zalo Tubu Tree ở màn đặt xong và chi tiết đơn (chỉ đơn có đồng ý).
+  'order.zaloFriend.body': 'Kết bạn Zalo với Tubu Tree để nhận hành trình đơn {code}.',
+  'order.zaloFriend.cta': 'Mở Zalo Tubu Tree',
+  'order.zaloFriend.blocked': 'Chưa mở được Zalo. Tìm số {phone} trên Zalo để kết bạn.',
+  'order.zaloFriend.copy': 'Chép số',
+  'order.zaloFriend.copied': 'Đã chép số',
   // Quà đổi điểm tặng kèm 0đ
   'checkout.gift.line': '🎁 Quà đổi điểm tặng kèm: {name} · 0đ',
   'checkout.gift.defer': 'Để đơn sau',

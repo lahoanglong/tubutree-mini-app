@@ -16,6 +16,8 @@ import { ui } from '@/lib/guest-ui';
 import { orderDetailHref } from '@/lib/order-view';
 import { isRetailOnly } from '@/lib/pdp-logic';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
+import { OrderZaloFriend } from './order-zalo';
 import { SubscribeSheet } from '@/app/san-pham/[slug]/subscribe-sheet';
 import type { ProductDetail } from '@/lib/api';
 
@@ -130,6 +132,8 @@ export function OrderSuccess({ order, etaLabel, continueHref }: { order: OrderDT
   const candidate = useSubscribeCandidate(order);
   const [subscribeOpen, setSubscribeOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const cfg = usePublicConfig();
+  const friend = showOrderZaloFriend(cfg.orderZaloEnabled, order) && <OrderZaloFriend code={order.code} from="success" />;
   const subscribe = candidate && (
     <>
       <SubscribeCard candidate={candidate} onOpen={() => setSubscribeOpen(true)} />
@@ -144,11 +148,11 @@ export function OrderSuccess({ order, etaLabel, continueHref }: { order: OrderDT
     <>
       <MobileSuccess
         order={order} etaLabel={etaLabel} split={split} codes={codes} grandTotal={grandTotal} pointsEarned={pointsEarned}
-        continueHref={continueHref} subscribe={subscribe}
+        continueHref={continueHref} subscribe={subscribe} friend={friend}
       />
       <DesktopSuccess
         order={order} etaLabel={etaLabel} split={split} codes={codes} grandTotal={grandTotal} pointsEarned={pointsEarned}
-        continueHref={continueHref} subscribe={subscribe}
+        continueHref={continueHref} subscribe={subscribe} friend={friend}
       />
       {candidate && (
         <SubscribeSheet
@@ -172,6 +176,8 @@ interface View {
   pointsEarned: number;
   continueHref: string;
   subscribe: React.ReactNode;
+  /** Lời mời kết bạn Zalo (liên kết phụ, chỉ khi cờ bật và đơn có đồng ý); đặt sau các nút để không tranh vai nút chính. */
+  friend: React.ReactNode;
 }
 
 // Chép cả danh sách mã (đơn tách thì mọi mã, không chỉ mã đầu); báo kết quả bằng role="status" để trình đọc màn hình đọc lên.
@@ -219,7 +225,7 @@ function NextSteps() {
   );
 }
 
-function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe }: View) {
+function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe, friend }: View) {
   const router = useRouter();
   const codesText = codes.join(', ');
   const { copyNote, copyCode } = useCopyCodes(codesText);
@@ -324,12 +330,13 @@ function MobileSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned
           {t.keepShopping}
         </Button>
       </div>
+      {friend}
       {subscribe}
     </div>
   );
 }
 
-function DesktopSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe }: View) {
+function DesktopSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarned, continueHref, subscribe, friend }: View) {
   const codesText = codes.join(', ');
   const { copyNote, copyCode } = useCopyCodes(codesText);
   return (
@@ -400,6 +407,7 @@ function DesktopSuccess({ order, etaLabel, split, codes, grandTotal, pointsEarne
           {t.keepShopping}
         </Link>
       </div>
+      {friend && <div className="mx-auto mt-6 max-w-md text-left">{friend}</div>}
       <div className="mx-auto mt-6 flex max-w-md flex-col gap-2 text-left">{subscribe}</div>
     </div>
   );

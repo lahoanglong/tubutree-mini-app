@@ -14,6 +14,7 @@ import { CHAT_ENABLED_KEY, CHAT_HOURS_KEY, DEFAULT_CHAT_HOURS, chatHoursProblem 
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 import { readCompanyIdentity } from './company-config';
 import { CATALOG_LAUNCH_DATE_KEY, publicCatalogLaunchDate } from '../catalog/catalog-launch-date';
+import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PHONE_KEY, orderZaloGateOpen, tubuZaloPhoneOf, type OrderZaloGate } from './order-zalo-config';
 
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
 export const WEB_GUEST_CART_ENABLED_KEY = 'web.guest_cart_enabled';
@@ -59,7 +60,8 @@ function tierTables(rows: TierRow[]) {
   return { tierMultipliers, tierNames };
 }
 
-export async function buildPublicConfig(config: SystemConfigService, loadTiers: TierLoader = async () => []) {
+/** `orderZaloGate`: cổng tin đơn qua MSS đọc trong bộ nhớ (`MssOrderEventRecorder.gate`); không truyền thì `orderZaloEnabled` là false. */
+export async function buildPublicConfig(config: SystemConfigService, loadTiers: TierLoader = async () => [], orderZaloGate?: () => OrderZaloGate | null | undefined) {
   const [
     freeshipThreshold,
     subscribeDiscountPct,
@@ -99,6 +101,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     tierRows,
     flatShippingFee,
     webGuestCart,
+    orderZaloPrechecked,
+    tubuZaloPhone,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -140,6 +144,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     loadTiers().catch(() => [] as TierRow[]),
     config.get<unknown>('shipping.flat_fee_below_threshold', FLAT_SHIPPING_FEE_DEFAULT),
     config.get<unknown>(WEB_GUEST_CART_ENABLED_KEY, false),
+    config.get<unknown>(MSS_ORDER_CONSENT_PRECHECKED_KEY, false),
+    config.get<unknown>(TUBU_ZALO_PHONE_KEY, TUBU_ZALO_PHONE_DEFAULT),
   ]);
   return {
     freeshipThreshold,
@@ -205,6 +211,11 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     },
     // Chỉ boolean true thật mới bật: cờ gõ nhầm (chuỗi "false") không được mở giỏ khách trên web.
     webGuestCartEnabled: webGuestCart === true,
+    // Ô đồng ý nhận hành trình đơn qua Zalo: cờ chung (cờ bật, MSS nhận sự kiện, tỉ lệ > 0). Tỉ lệ theo từng khách và số đã xác minh
+    // ở GET /config/order-zalo, client chỉ gọi khi cờ chung bật.
+    orderZaloEnabled: orderZaloGateOpen(orderZaloGate?.()),
+    orderZaloPrechecked: orderZaloPrechecked === true,
+    tubuZaloPhone: tubuZaloPhoneOf(tubuZaloPhone),
   };
 }
 
