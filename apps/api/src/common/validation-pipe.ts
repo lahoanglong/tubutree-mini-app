@@ -218,6 +218,7 @@ export const FIELD_LABELS: Record<string, string> = {
   story: 'Câu chuyện',
   subdomain: 'Tên miền phụ',
   subtitle: 'Phụ đề',
+  subtotal: 'Tiền hàng',
   tagline: 'Khẩu hiệu',
   tags: 'Thẻ',
   take: 'Số dòng mỗi trang',
