@@ -68,3 +68,12 @@ describe('OrdersController', () => {
     expect(estimate).toHaveBeenCalledWith('u1', 'A', dto);
   });
 });
+
+describe('OrdersController POST :code/order-zalo-consent', () => {
+  it('gọi enableOrderZalo với người đang đăng nhập và mã đơn', async () => {
+    const enableOrderZalo = jest.fn().mockResolvedValue({ orderZaloConsent: true });
+    const ctrl = new OrdersController({ enableOrderZalo } as unknown as OrdersService, {} as never, {} as never, {} as never);
+    await expect(ctrl.enableOrderZalo('u1', 'TUBU1')).resolves.toEqual({ orderZaloConsent: true });
+    expect(enableOrderZalo).toHaveBeenCalledWith('u1', 'TUBU1');
+  });
+});

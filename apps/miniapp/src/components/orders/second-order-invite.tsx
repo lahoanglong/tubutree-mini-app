@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Recycle } from 'lucide-react';
 import { Box, useNavigate } from 'zmp-ui';
@@ -13,8 +13,9 @@ import { ListRow } from '../ui/list-row';
 /**
  * Chi tiết đơn đã giao: một thẻ mời giữ bao bì gửi kèm đơn kế tiếp (miễn ship 100%, tích Điểm Xanh). Luật hiện/ẩn ở app-core
  * (`secondOrderInviteDecision`), gồm trần yêu cầu mở của W179. Cả thẻ là một nút, không có CTA thứ hai trên màn.
+ * `fallback` hiện ở chỗ thẻ khi đã biết chắc thẻ không hiện (cấu hình và /waste/me đã về), để màn không nhảy từ dòng thay thế sang thẻ.
  */
-export function SecondOrderInvite({ order }: { order: SecondOrderInviteOrder }) {
+export function SecondOrderInvite({ order, fallback }: { order: SecondOrderInviteOrder; fallback?: ReactNode }) {
   const navigate = useNavigate();
   const cfg = usePublicConfig();
   // Chỉ hỏi /waste/me khi đơn đủ điều kiện và đường kèm đơn đang bật: đơn đang giao, đã kèm rác hay cổng đóng không tốn thêm lời gọi nào.
@@ -26,7 +27,7 @@ export function SecondOrderInvite({ order }: { order: SecondOrderInviteOrder }) 
     shown.current = true;
     trackRecycleStep('second_order_shown', SECOND_ORDER_METHOD);
   }, [decision.show]);
-  if (!decision.show) return null;
+  if (!decision.show) return cfg.isLoaded && !meQ.isLoading ? (fallback ?? null) : null;
 
   return (
     <Box id="order-second-order-invite" mt={2} p={4} style={{ background: 'var(--color-bg-surface)' }}>

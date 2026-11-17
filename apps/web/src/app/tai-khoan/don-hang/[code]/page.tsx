@@ -1,12 +1,12 @@
 'use client';
 
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Leaf, Star } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { customerOrderNote, isSubscriptionOrder, openProductSlug } from '@tubutree/app-core/api/orders';
+import { customerOrderNote, isSubscriptionOrder, openProductSlug, type OrderView } from '@tubutree/app-core/api/orders';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, trackAddsDetail, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
@@ -47,10 +47,12 @@ import { returnedByLine, remainingByLine, showsRefundPanel } from '@/lib/refund-
 import { OrderStatusHero } from '@/components/orders/order-status-hero';
 import { OrderTrack } from '@/components/orders/order-track';
 import { OrderTimelineTracker } from '@/components/orders/order-timeline-tracker';
-import { buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
+import { buildOrderJourney, buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
 import { OrderShipping } from '@/components/orders/order-shipping';
-import { OrderZaloFriend } from '@/components/checkout/order-zalo';
-import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
+import { OrderZaloDetail } from '@/components/checkout/order-zalo';
+import { inviteLandingOn } from '@tubutree/app-core/commerce/invite-card';
+import { MISSION_PATHS } from '@tubutree/app-core/game-mission-paths';
+import { trackWebEvent } from '@/lib/analytics';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
 import { ErrorState } from '@/components/ui/error-state';
@@ -216,6 +218,8 @@ export default function OrderDetailPage() {
   const plan = orderActionPlan(trackOrder, ctx);
   const trackView = orderTrack(trackOrder, { etaLabel });
   const timelineSteps = buildOrderTimelineSteps(o.status, orderTimelineStamps(trackOrder));
+  const journeyOrder: OrderDetailDTO & Pick<OrderView, 'timelineV2' | 'notices' | 'trackingStaleHours'> = o;
+  const journey = journeyOrder.timelineV2 === true ? buildOrderJourney(journeyOrder, { etaLabel, now: ctx.now }) : null;
   const shareText = formatOrderShareSummary({
     code: o.code,
     items: o.items.map((it) => {
@@ -252,21 +256,26 @@ export default function OrderDetailPage() {
       )}
 
           <div className="order-3 max-md:px-4 max-md:empty:hidden"><FollowOaPrompt /></div>
-          <section data-testid="order-timeline" className={`order-4 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}>
-            <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
-            {showOrderZaloFriend(cfgQ.data?.orderZaloEnabled, o) && (
-              <div className="mt-3">
-                <OrderZaloFriend code={o.code} from="order_detail" />
-              </div>
-            )}
-          </section>
-          {trackView && trackAddsDetail(trackView) && (
-            <section aria-labelledby="order-track-title" className={`order-4 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
-              <h2 id="order-track-title" className={`${ui.sectionTitle} ${mini.sectionLabel} mb-3`}>
-                Hành trình đơn hàng
-              </h2>
-              <OrderTrack track={trackView} now={ctx.now} />
-            </section>
+          {journey ? (
+            <OrderJourneySection status={o.status} hasCarrierEvents={journey.hasCarrierEvents}>
+              <OrderTimelineTracker steps={journey.steps} layout="journey" now={ctx.now} shareText={shareText} />
+              <OrderZaloDetail order={o} />
+            </OrderJourneySection>
+          ) : (
+            <>
+              <section data-testid="order-timeline" className={`order-4 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}>
+                <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
+                <OrderZaloDetail order={o} />
+              </section>
+              {trackView && trackAddsDetail(trackView) && (
+                <section aria-labelledby="order-track-title" className={`order-4 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
+                  <h2 id="order-track-title" className={`${ui.sectionTitle} ${mini.sectionLabel} mb-3`}>
+                    Hành trình đơn hàng
+                  </h2>
+                  <OrderTrack track={trackView} now={ctx.now} />
+                </section>
+              )}
+            </>
           )}
           {(o.shippingPartner || o.shippingCode || tracking || historyEvents.length > 0) && (
             <section className={`order-5 mt-4 p-4 max-md:mt-2 ${ui.card} ${mini.band}`}>
@@ -275,7 +284,7 @@ export default function OrderDetailPage() {
                 code={o.shippingCode}
                 status={shippingEventLabel(o.shippingStatus)}
                 trackingHref={tracking}
-                events={trackView ? undefined : historyEvents}
+                events={trackView || journey ? undefined : historyEvents}
               />
             </section>
           )}
@@ -417,7 +426,19 @@ export default function OrderDetailPage() {
           <div className="order-10 max-md:px-4 max-md:empty:hidden">
             <OrderInvoice order={o} />
             <OrderWasteLink order={o} />
-            <OrderSecondOrderInvite order={o} />
+            <OrderSecondOrderInvite
+              order={o}
+              fallback={
+                o.status === 'DELIVERED' && inviteLandingOn(cfgQ.data) ? (
+                  <p className={`mt-4 p-4 text-sm ${ui.card}`}>
+                    {fillCopy('order.journey.inviteLead')}{' '}
+                    <Link href={MISSION_PATHS.web.invite} className="inline-flex min-h-11 items-center font-semibold text-[color:var(--color-text-brand)] underline">
+                      {fillCopy('invite.title')}
+                    </Link>
+                  </p>
+                ) : null
+              }
+            />
           </div>
           <div className="order-11">
             <AddressSection order={o} />
@@ -494,5 +515,20 @@ function Shell({ title, subtitle, children }: { title: string; subtitle?: string
       <PageHeader title={title} subtitle={subtitle} subtitleClassName="md:text-sm" backHref="/tai-khoan/don-hang" backLabel="Đơn hàng của tôi" />
       <div className="mt-3 max-md:mt-0 max-md:flex max-md:flex-col max-md:pb-6">{children}</div>
     </main>
+  );
+}
+
+/** Dòng thời gian một khối (cờ orders.timeline_v2_enabled) thay thanh 4 bước và khối hành trình; báo `order_timeline_viewed` mỗi lần đơn đổi trạng thái. */
+function OrderJourneySection({ status, hasCarrierEvents, children }: { status: string; hasCarrierEvents: boolean; children: ReactNode }) {
+  useEffect(() => {
+    trackWebEvent('order_timeline_viewed', { status, hasCarrierEvents });
+  }, [status, hasCarrierEvents]);
+  return (
+    <section data-testid="order-journey" aria-labelledby="order-journey-title" className={`order-4 mt-2 p-4 md:mt-4 ${ui.card} ${mini.band}`}>
+      <h2 id="order-journey-title" className={`${ui.sectionTitle} ${mini.sectionLabel} mb-3`}>
+        {fillCopy('order.timeline.title')}
+      </h2>
+      {children}
+    </section>
   );
 }

@@ -265,7 +265,7 @@ describe('PD-3 T16 (c) (d) (e): chặn lúc chạy', () => {
         aggregate: jest.fn().mockResolvedValue({ _sum: { delta: null } }),
         count: jest.fn().mockResolvedValue(0),
       },
-      user: { update: jest.fn(), findUniqueOrThrow: jest.fn().mockResolvedValue({ referralCode: 'R' }) },
+      user: { update: jest.fn(), findUniqueOrThrow: jest.fn().mockResolvedValue({ referralCode: 'R' }), count: jest.fn().mockResolvedValue(0) },
       $transaction: jest.fn(),
     };
     prisma.$transaction.mockImplementation(async (cb: (t: unknown) => unknown) => cb(prisma));

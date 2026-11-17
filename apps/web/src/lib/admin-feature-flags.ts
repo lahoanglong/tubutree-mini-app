@@ -100,6 +100,22 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     offWarning: 'Bảng so sánh biến mất khỏi trang sản phẩm trong vòng khoảng 10 phút. Không dữ liệu nào bị xoá.',
   },
   {
+    key: 'orders.timeline_v2_enabled',
+    label: 'Một dòng thời gian ở chi tiết đơn',
+    description: 'Chi tiết đơn (Mini App và web) gộp thanh tiến trình và khối hành trình thành một: 4 bước kèm giờ, ngày giao dự kiến, mốc hãng vận chuyển gập dưới "Đang giao hàng", dòng "Đã báo qua Zalo" khi tin hành trình đã tới khách.',
+    fallback: false,
+    onWarning: 'Khách mở chi tiết đơn chỉ còn một dòng thời gian. Đơn đang giao quá số giờ ở "orders.tracking_stale_hours" mà hãng không có mốc mới thì ghi "Đang chờ hãng vận chuyển cập nhật".',
+    offWarning: 'Chi tiết đơn về lại hai khối cũ (thanh tiến trình và hành trình 5 bước). Không dữ liệu nào bị xoá.',
+  },
+  {
+    key: 'referral.share_card_enabled',
+    label: 'Trang đích link "Mời bạn sống xanh"',
+    description: 'Link mời trong khối "Mời bạn sống xanh" trỏ tubutree.com/moi/<mã>: lời chào chung, quà cho bạn mới, ảnh xem trước riêng, nút "Bắt đầu mua sắm". Khối mời hiện thêm tiến độ: số bạn đã nhận mã, đã mua đơn đầu, đã đủ điều kiện. Không đổi thưởng.',
+    fallback: false,
+    onWarning: 'Link mời mới khách chép hay chia sẻ từ lúc này trỏ trang đích. Link cũ (/?ref=) vẫn chạy.',
+    offWarning: 'Trang đích /moi/<mã> trả "Không tìm thấy", khối mời về lại link cũ. Link trang đích đã gửi đi sẽ không mở được tới khi bật lại.',
+  },
+  {
     key: 'catalog.restock_alert_enabled',
     label: 'Nút "Báo tôi khi có hàng" trên trang sản phẩm',
     description: 'Biến thể hết hàng: nút chính đổi từ "Tạm hết hàng" thành "Báo tôi khi có hàng". Hàng về thì mỗi khách đã bấm nhận đúng một tin, tối đa 100 tin mỗi phút.',

@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { buildOrderTimelineSteps } from '@tubutree/app-core/commerce/order-timeline';
+import { buildOrderJourney, buildOrderTimelineSteps } from '@tubutree/app-core/commerce/order-timeline';
 import { byText, click, flush } from '@/test-utils/dom';
 import { smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { mount } from '@/components/mini/harness';
@@ -109,6 +109,68 @@ describe('OrderTimelineTracker (web)', () => {
   });
 });
 
+const HISTORY = [
+  { status: 'picked', at: '2026-10-02T03:00:00.000Z' },
+  { status: 'transporting', at: '2026-10-02T06:00:00.000Z' },
+  { status: 'sorting', at: '2026-10-02T09:00:00.000Z' },
+  { status: 'delivering', at: '2026-10-03T01:00:00.000Z' },
+];
+const shippingOrder = {
+  status: 'SHIPPING',
+  createdAt: STAMPS.createdAt,
+  statusTimes: { CONFIRMED: STAMPS.confirmedAt, SHIPPING: STAMPS.shippingAt },
+  shippingHistory: HISTORY,
+  notices: [{ event: 'order.shipping', channel: 'ZALO', at: '2026-10-02T07:02:00.000Z' }],
+};
+
+describe('OrderTimelineTracker layout="journey" (web, cờ orders.timeline_v2_enabled)', () => {
+  it('một danh sách dọc 4 bước; mốc hãng nằm dưới "Đang giao hàng", mở sẵn 2 mốc mới nhất, nút "Xem đủ 4 mốc vận chuyển"', async () => {
+    const { steps: js } = buildOrderJourney(shippingOrder, { now: NOW });
+    const { container } = mount(<OrderTimelineTracker steps={js} layout="journey" now={NOW} />);
+    expect(container.querySelector('ol.order-timeline--journey')).not.toBeNull();
+    const shipping = steps(container).find((li) => li.dataset.step === 'shipping')!;
+    expect(shipping.getAttribute('aria-current')).toBe('step');
+    expect(shipping.querySelectorAll('ul[aria-label="Mốc vận chuyển"] li')).toHaveLength(2);
+    const toggle = shipping.querySelector<HTMLButtonElement>('[data-testid="track-events-toggle"]')!;
+    expect(toggle.textContent).toBe('Xem đủ 4 mốc vận chuyển');
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    await act(async () => {
+      click(toggle);
+    });
+    expect(shipping.querySelectorAll('ul[aria-label="Mốc vận chuyển"] li')).toHaveLength(4);
+    expect(steps(container).filter((li) => li.dataset.step !== 'shipping').every((li) => !li.querySelector('ul'))).toBe(true);
+  });
+
+  it('dòng "Đã báo qua Zalo · 14:02" dưới bước đã báo; dự kiến giao ở bước hiện tại', () => {
+    const { steps: js } = buildOrderJourney(shippingOrder, { now: NOW, etaLabel: '04/10 – 06/10' });
+    const { container } = mount(<OrderTimelineTracker steps={js} layout="journey" now={NOW} />);
+    const shipping = steps(container).find((li) => li.dataset.step === 'shipping')!;
+    expect(shipping.textContent).toContain('Đã báo qua Zalo · 14:02');
+    expect(shipping.textContent).toContain('04/10 – 06/10');
+    expect(steps(container).find((li) => li.dataset.step === 'received')!.textContent).not.toContain('Đã báo qua');
+  });
+
+  it('hãng im quá số giờ cấu hình: dòng "Đang chờ hãng vận chuyển cập nhật", không thêm nút', () => {
+    const { steps: js } = buildOrderJourney({ ...shippingOrder, trackingStaleHours: 24 }, { now: Date.parse('2026-10-05T05:00:00Z') });
+    const { container } = mount(<OrderTimelineTracker steps={js} layout="journey" now={NOW} />);
+    expect(container.textContent).toContain('Đang chờ hãng vận chuyển cập nhật');
+    expect(container.querySelectorAll('button')).toHaveLength(1);
+  });
+
+  it('bản thanh ngang (cờ tắt) giữ đúng cấu trúc cũ: chữ và giờ nằm thẳng trong bước, không có lớp journey hay khối body', () => {
+    const { container } = mount(<OrderTimelineTracker steps={buildOrderTimelineSteps('SHIPPING', STAMPS)} now={NOW} />);
+    expect(container.querySelector('.order-timeline--journey, .order-timeline__body')).toBeNull();
+    expect(steps(container)[0]!.children).toHaveLength(3);
+  });
+
+  it('nút trong bản dọc có tên và đủ vùng chạm 44px', () => {
+    const { steps: js } = buildOrderJourney(shippingOrder, { now: NOW });
+    const { container } = mount(<OrderTimelineTracker steps={js} layout="journey" now={NOW} shareText="x" />);
+    expect(unnamedControls(container)).toEqual([]);
+    expect(smallTouchTargets(container)).toEqual([]);
+  });
+});
+
 describe('thanh tiến trình web: CSS', () => {
   const css = readFileSync(resolve(__dirname, '../mini/mini.css'), 'utf8');
 
@@ -119,5 +181,10 @@ describe('thanh tiến trình web: CSS', () => {
     expect(before.lastIndexOf('@media (prefers-reduced-motion: no-preference)')).toBeGreaterThan(before.lastIndexOf('}\n}'));
     expect(css.match(/animation: order-step-glow/g)).toHaveLength(1);
     expect(css).toMatch(/\.order-timeline__step\[data-state='current'\] \.order-timeline__dot \{[^}]*box-shadow: 0 0 0 4px/);
+  });
+
+  it('bản dọc: vạch nối chạy từ đáy chấm xuống bước sau, bước cuối không có vạch', () => {
+    expect(css).toMatch(/\.order-timeline--journey \{[^}]*flex-direction: column/);
+    expect(css).toMatch(/\.order-timeline--journey \.order-timeline__step:last-child::before \{[^}]*display: none/);
   });
 });

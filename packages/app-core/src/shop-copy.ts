@@ -509,6 +509,18 @@ export const SHOP_COPY: Record<string, string> = {
   'order.zaloFriend.blocked': 'Chưa mở được Zalo. Tìm số {phone} trên Zalo để kết bạn.',
   'order.zaloFriend.copy': 'Chép số',
   'order.zaloFriend.copied': 'Đã chép số',
+  // Bật tin hành trình qua Zalo cho một đơn đang đi, ngay ở chi tiết đơn. Chỉ hiện khi máy chủ cho phép (đơn chưa có đồng ý,
+  // còn đang đi, số đã xác minh); tắt thì dẫn sang Cài đặt, không có công tắc thứ hai ở đây.
+  'order.zaloDetail.cta': 'Nhận thông báo Zalo cho đơn này',
+  'order.zaloDetail.on': 'Sẽ báo qua Zalo số {phone}',
+  'order.zaloDetail.settings': 'Tắt trong Cài đặt',
+  'order.zaloDetail.done': 'Đã bật thông báo Zalo cho đơn này',
+  // Một dòng thời gian ở chi tiết đơn (cờ orders.timeline_v2_enabled, commerce/order-timeline.ts `buildOrderJourney`).
+  'order.journey.noticeZalo': 'Đã báo qua Zalo · {time}',
+  'order.journey.noticeZns': 'Đã báo qua ZNS · {time}',
+  'order.journey.stale': 'Đang chờ hãng vận chuyển cập nhật',
+  'order.journey.eventsAll': 'Xem đủ {n} mốc vận chuyển',
+  'order.journey.inviteLead': 'Thích Tubu Tree?',
   // Quà đổi điểm tặng kèm 0đ
   'checkout.gift.line': '🎁 Quà đổi điểm tặng kèm: {name} · 0đ',
   'checkout.gift.defer': 'Để đơn sau',
@@ -664,6 +676,12 @@ export const SHOP_COPY: Record<string, string> = {
   'invite.copyFailed': 'Không sao chép được. Mã của bạn: {code}',
   'invite.shareTitle': 'Tubu Tree: trồng cây, nhận quà',
   'invite.shareText': 'Sống xanh cùng mình nhé, vào Tubu Tree bằng link này: {url}',
+  // Trang đích của link mời và tiến độ mời (cờ referral.share_card_enabled). Không nêu tên, ảnh hay số của người mời.
+  'invite.landing.title': 'Mời bạn sống xanh cùng Tubu Tree',
+  'invite.landing.body': 'Một người bạn đã mời bạn ghé Tubu Tree.',
+  'invite.landing.cta': 'Bắt đầu mua sắm',
+  'invite.progress': '{a} bạn đã nhận mã · {b} bạn đã mua đơn đầu · {c} bạn đã đủ điều kiện, bạn nhận {points} Điểm Xanh',
+  'invite.progressNoPoints': '{a} bạn đã nhận mã · {b} bạn đã mua đơn đầu',
   // Thanh tiến độ Miễn phí giao hàng và dải gợi ý mua thêm ở đầu Giỏ (W42A)
   'freeship.progress': 'Mua thêm {price} để được Miễn phí giao hàng 🚚',
   'freeship.progressTubu': 'Mua thêm {price} để được Miễn phí giao hàng cho phần hàng Tubu Tree giao 🚚',

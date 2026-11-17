@@ -47,7 +47,7 @@ import { CancelReasonPicker } from '../components/orders/cancel-reason-picker';
 import { OrderStatusHero } from '../components/orders/order-status-hero';
 import { OrderTrack } from '../components/orders/order-track';
 import { OrderTimelineTracker } from '../components/orders/order-timeline-tracker';
-import { buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
+import { buildOrderJourney, buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from '@tubutree/app-core/commerce/order-timeline';
 import { OrderShipping } from '../components/orders/order-shipping';
 import { OrderActionBar } from '../components/orders/order-action-bar';
 import { orderActionPlan, orderHeadline, orderTrack, shippingEvents, trackAddsDetail, type OrderActionKind, type TrackOrder } from '@tubutree/app-core/commerce/order-tracking';
@@ -55,7 +55,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useCountdown } from '../hooks/use-countdown';
 import { serverNow } from '../utils/server-clock';
 import { joinVariationLine, variationLabel } from '../utils/variation-label';
-import { customerOrderNote, isSubscriptionOrder, openProductSlug } from '@tubutree/app-core/api/orders';
+import { customerOrderNote, isSubscriptionOrder, openProductSlug, type OrderView as CoreOrderView } from '@tubutree/app-core/api/orders';
 import { orderDeliveryEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { cancelReasonBody, type CancelReasonCode } from '@tubutree/app-core/cancel-reasons';
 import { SupportContact } from '../components/support-contact';
@@ -65,8 +65,10 @@ import { ReturnRequestSheet } from '../components/orders/return-request-sheet';
 import { RefundDestinationPicker } from '../components/orders/refund-destination-picker';
 import { OrderRefunds } from '../components/orders/order-refunds';
 import { SecondOrderInvite } from '../components/orders/second-order-invite';
-import { OrderZaloFriend } from '../components/checkout/order-zalo';
-import { showOrderZaloFriend } from '@tubutree/app-core/order-zalo';
+import { OrderZaloDetail } from '../components/checkout/order-zalo';
+import { inviteLandingOn } from '@tubutree/app-core/commerce/invite-card';
+import { MISSION_PATHS } from '@tubutree/app-core/game-mission-paths';
+import { trackEvent } from '../services/analytics';
 import {
   EMPTY_BANK,
   cancelRefundMode,
@@ -309,6 +311,8 @@ export default function OrderDetailPage() {
   const plan = orderActionPlan(tOrder, ctx);
   const trackView = orderTrack(tOrder, { etaLabel });
   const timelineSteps = buildOrderTimelineSteps(o.status, orderTimelineStamps(tOrder));
+  const journeyOrder: TrackOrder & Pick<CoreOrderView, 'timelineV2' | 'notices' | 'trackingStaleHours'> = tOrder;
+  const journey = journeyOrder.timelineV2 === true ? buildOrderJourney(journeyOrder, { etaLabel, now: ctx.now }) : null;
   const shareText = formatOrderShareSummary({
     code: o.code,
     items: o.items.map((it) => {
@@ -319,6 +323,11 @@ export default function OrderDetailPage() {
   });
   // Đơn không có hành trình 5 bước (huỷ/hoàn) mới in mốc hãng riêng; lịch sử toàn dòng rác thì không dựng khung trống.
   const historyEvents = trackView ? [] : shippingEvents(o.shippingHistory);
+  const timelineTitle = (
+    <Text bold size="small" style={{ marginBottom: 12 }}>
+      {vi.orders.timeline}
+    </Text>
+  );
   const payNote = plan.primary === 'pay' && deadlineLeft ? fillCopy('order.action.payLeft', { t: deadlineLeft }) : null;
 
   // Mua lại một chạm: gửi mọi dòng của đơn với số lượng cũ, máy chủ thêm phần còn hàng (kẹp theo tồn) và trả lý do từng dòng bị bỏ, nên câu báo nêu
@@ -386,24 +395,29 @@ export default function OrderDetailPage() {
         </Box>
       )}
 
-      {/* ── Tiến trình 4 bước nhìn một cái là biết đơn đang ở đâu, kèm nút chép thông tin đơn ── */}
-      <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-        <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
-        {showOrderZaloFriend(publicConfig.orderZaloEnabled, o) && (
-          <div style={{ marginTop: 'var(--space-stack-sm)' }}>
-            <OrderZaloFriend code={o.code} from="order_detail" />
-          </div>
-        )}
-      </Box>
-
-      {/* ── Hành trình: bước chuẩn kèm giờ thật, mốc hãng gộp dưới "Đang giao" ── */}
-      {trackView && trackAddsDetail(trackView) && (
-        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <Text bold size="small" style={{ marginBottom: 12 }}>
-            {vi.orders.timeline}
-          </Text>
-          <OrderTrack track={trackView} now={ctx.now} />
+      {journey ? (
+        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }} data-testid="order-journey">
+          {timelineTitle}
+          <OrderTimelineTracker steps={journey.steps} layout="journey" now={ctx.now} shareText={shareText} />
+          <OrderZaloDetail order={o} />
+          <TimelineViewed status={o.status} hasCarrierEvents={journey.hasCarrierEvents} />
         </Box>
+      ) : (
+        <>
+          {/* ── Tiến trình 4 bước nhìn một cái là biết đơn đang ở đâu, kèm nút chép thông tin đơn ── */}
+          <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+            <OrderTimelineTracker steps={timelineSteps} now={ctx.now} shareText={shareText} />
+            <OrderZaloDetail order={o} />
+          </Box>
+
+          {/* ── Hành trình: bước chuẩn kèm giờ thật, mốc hãng gộp dưới "Đang giao" ── */}
+          {trackView && trackAddsDetail(trackView) && (
+            <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+              {timelineTitle}
+              <OrderTrack track={trackView} now={ctx.now} />
+            </Box>
+          )}
+        </>
       )}
 
       {(o.shippingPartner || o.shippingCode || historyEvents.length > 0) && (
@@ -412,7 +426,7 @@ export default function OrderDetailPage() {
             partner={o.shippingPartner}
             code={o.shippingCode}
             status={o.shippingStatus ? shippingEventLabel(o.shippingStatus) : null}
-            events={trackView ? undefined : historyEvents}
+            events={trackView || journey ? undefined : historyEvents}
           />
         </Box>
       )}
@@ -618,7 +632,21 @@ export default function OrderDetailPage() {
       )}
 
       {/* ── Mời giữ bao bì gửi kèm đơn kế tiếp (đơn đã giao, chưa kèm rác) ── */}
-      <SecondOrderInvite order={o} />
+      <SecondOrderInvite
+        order={o}
+        fallback={
+          o.status === 'DELIVERED' && inviteLandingOn(publicConfig) ? (
+            <Box mt={2} p={4} style={{ background: 'var(--color-bg-surface)' }}>
+              <Text size="small">
+                {fillCopy('order.journey.inviteLead')}{' '}
+                <button type="button" className="tubu-press tubu-hit-44" onClick={() => navigate(MISSION_PATHS.miniapp.invite)} style={INVITE_LINK}>
+                  {fillCopy('invite.title')}
+                </button>
+              </Text>
+            </Box>
+          ) : null
+        }
+      />
 
       {/* ── Địa chỉ nhận ── */}
       {/* Đơn đại lý không có địa chỉ khách lẻ (giao theo hợp đồng) — snapshot chỉ có `note`.
@@ -805,4 +833,12 @@ function Shell({ children }: { children: React.ReactNode }) {
       {children}
     </Page>
   );
+}
+
+const INVITE_LINK = { padding: 0, border: 0, background: 'none', font: 'inherit', fontWeight: 600, color: 'var(--color-text-brand)', textDecoration: 'underline' } as const;
+
+/** Dòng thời gian một khối (cờ orders.timeline_v2_enabled) thay thanh 4 bước và khối hành trình: báo `order_timeline_viewed` mỗi lần đơn đổi trạng thái. */
+function TimelineViewed({ status, hasCarrierEvents }: { status: string; hasCarrierEvents: boolean }) {
+  useEffect(() => void trackEvent('order_timeline_viewed', 'miniapp', { status, hasCarrierEvents }), [status, hasCarrierEvents]);
+  return null;
 }

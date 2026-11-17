@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { SHOP_COPY } from '../shop-copy';
-import { buildOrderTimelineSteps, formatOrderShareSummary, orderTimelineStamps } from './order-timeline';
+import { buildOrderJourney, buildOrderTimelineSteps, formatOrderShareSummary, orderNoticeStep, orderNotices, orderTimelineStamps, trackingStale } from './order-timeline';
 
 const T = {
   createdAt: '2026-11-05T01:00:00.000Z',
@@ -197,5 +197,141 @@ describe('formatOrderShareSummary', () => {
   it('bỏ dòng món có số lượng không hợp lệ hoặc tên trống', () => {
     const text = formatOrderShareSummary({ ...order, items: [{ name: '', quantity: 1 }, { name: 'Hợp lệ', quantity: 0 }, { name: 'Tốt', quantity: 2 }], trackingUrl: undefined });
     expect(text).toBe('Đơn hàng Tubu Tree TUBU20261105001\nTốt × 2\nTổng tiền: 1.234.500đ');
+  });
+});
+
+describe('dòng thời gian một khối (buildOrderJourney)', () => {
+  const NOW = Date.parse('2026-11-08T05:00:00.000Z');
+  const shippingOrder = {
+    status: 'SHIPPING',
+    createdAt: T.createdAt,
+    paymentMethod: 'COD',
+    statusTimes: { CONFIRMED: T.confirmedAt, SHIPPING: T.shippingAt },
+    shippingHistory: [
+      { at: '2026-11-06T04:00:00.000Z', status: 'picked' },
+      { at: '2026-11-07T01:00:00.000Z', status: 'delivering' },
+      { at: '2026-11-06T09:00:00.000Z', status: 'transporting' },
+    ],
+  };
+
+  it('ánh xạ sự kiện đơn của MSS sang đúng bước, sự kiện lạ không có bước', () => {
+    expect(orderNoticeStep('order.created')).toBe('received');
+    expect(orderNoticeStep('order.payment_confirmed')).toBe('preparing');
+    expect(orderNoticeStep('order.shipping')).toBe('shipping');
+    expect(orderNoticeStep('order.delivered')).toBe('delivered');
+    expect(orderNoticeStep('order.cancelled')).toBe('cancelled');
+    expect(orderNoticeStep('order.refunded')).toBeNull();
+    expect(orderNoticeStep('toString')).toBeNull();
+    expect(orderNoticeStep(undefined)).toBeNull();
+  });
+
+  it('bốn bước như thanh tiến trình; mốc hãng chỉ nằm dưới Đang giao hàng, mới nhất trên cùng', () => {
+    const j = buildOrderJourney(shippingOrder, { now: NOW });
+    expect(j.steps.map((s) => s.key)).toEqual(['received', 'preparing', 'shipping', 'delivered']);
+    expect(j.steps.map((s) => s.state)).toEqual(['completed', 'completed', 'current', 'upcoming']);
+    expect(j.steps[2]!.events.map((e) => e.at)).toEqual(['2026-11-07T01:00:00.000Z', '2026-11-06T09:00:00.000Z', '2026-11-06T04:00:00.000Z']);
+    expect(j.steps.filter((s) => s.events.length > 0)).toHaveLength(1);
+    expect(j.hasCarrierEvents).toBe(true);
+  });
+
+  it('ngày dự kiến chỉ ở bước đang diễn ra', () => {
+    const j = buildOrderJourney(shippingOrder, { now: NOW, etaLabel: '09/11 – 10/11' });
+    expect(j.steps.map((s) => s.eta)).toEqual([null, null, 'Dự kiến giao 09/11 – 10/11', null]);
+  });
+
+  it('dòng kênh: Zalo khi MSS gửi xong, ZNS khi đường lui; chỉ dưới bước đã tới; giờ Việt Nam', () => {
+    const j = buildOrderJourney(
+      {
+        ...shippingOrder,
+        notices: [
+          { event: 'order.created', channel: 'ZALO', at: '2026-11-05T07:02:00.000Z' },
+          { event: 'order.shipping', channel: 'ZNS', at: '2026-11-06T03:05:00.000Z' },
+          { event: 'order.delivered', channel: 'ZALO', at: '2026-11-07T03:05:00.000Z' },
+        ],
+      },
+      { now: NOW },
+    );
+    expect(j.steps.map((s) => s.notice)).toEqual(['Đã báo qua Zalo · 14:02 05/11', null, 'Đã báo qua ZNS · 10:05 06/11', null]);
+  });
+
+  it('notices từ API: bỏ dòng có kênh lạ, giờ hỏng, sự kiện không có bước hay trường nội bộ thay kênh; API cũ không trả thì không có dòng', () => {
+    expect(
+      orderNotices([
+        { event: 'order.created', channel: 'IN_APP_ONLY', at: T.createdAt },
+        { event: 'order.created', channel: 'ZALO', at: 'không phải giờ' },
+        { event: 'order.lost', channel: 'ZALO', at: T.createdAt },
+        { event: 'order.created', status: 'RESULT_FAILED', at: T.createdAt },
+        null,
+        { event: 'order.created', channel: 'ZALO', at: T.createdAt },
+      ]),
+    ).toEqual([{ event: 'order.created', channel: 'ZALO', at: T.createdAt }]);
+    expect(orderNotices(undefined)).toEqual([]);
+    expect(buildOrderJourney({ status: 'CONFIRMED', createdAt: T.createdAt }, { now: NOW }).steps.every((s) => s.notice === null)).toBe(true);
+  });
+
+  it('đứng yên: đang giao quá số giờ cấu hình mà không có mốc mới thì báo chờ hãng, không tự chuyển bước', () => {
+    const lastScan = Date.parse('2026-11-07T01:00:00.000Z');
+    const fresh = buildOrderJourney({ ...shippingOrder, trackingStaleHours: 72 }, { now: lastScan + 71 * 3_600_000 });
+    expect(fresh.steps[2]!.stale).toBe(false);
+    const stale = buildOrderJourney({ ...shippingOrder, trackingStaleHours: 72 }, { now: lastScan + 73 * 3_600_000 });
+    expect(stale.steps.map((s) => s.stale)).toEqual([false, false, true, false]);
+    expect(stale.steps.map((s) => s.state)).toEqual(['completed', 'completed', 'current', 'upcoming']);
+  });
+
+  it('đứng yên tính từ giờ chuyển Đang giao khi hãng chưa có mốc; thiếu số giờ hoặc không có mốc nào thì không kết luận', () => {
+    const noScan = { status: 'SHIPPING', statusTimes: { SHIPPING: T.shippingAt } };
+    expect(trackingStale(noScan, [], 72, Date.parse(T.shippingAt) + 73 * 3_600_000)).toBe(true);
+    expect(trackingStale(noScan, [], undefined, Date.parse(T.shippingAt) + 999 * 3_600_000)).toBe(false);
+    expect(trackingStale(noScan, [], 0, Date.parse(T.shippingAt) + 999 * 3_600_000)).toBe(false);
+    expect(trackingStale({ status: 'SHIPPING' }, [], 72, NOW)).toBe(false);
+    expect(trackingStale({ ...noScan, status: 'DELIVERED' }, [], 72, Date.parse(T.shippingAt) + 999 * 3_600_000)).toBe(false);
+  });
+
+  it('đơn huỷ trước khi giao: rẽ nhánh như thanh 4 bước, dòng kênh của sự kiện huỷ nằm dưới bước Đã huỷ, mốc hãng (nếu có) cũng ở đó', () => {
+    const j = buildOrderJourney(
+      {
+        status: 'CANCELLED',
+        createdAt: T.createdAt,
+        paymentMethod: 'BANK_TRANSFER',
+        statusTimes: { CANCELLED: T.cancelledAt },
+        shippingHistory: [{ at: T.cancelledAt, status: 'cancel' }],
+        notices: [{ event: 'order.cancelled', channel: 'ZALO', at: T.cancelledAt }],
+      },
+      { now: NOW, etaLabel: '09/11' },
+    );
+    expect(j.steps.map((s) => s.key)).toEqual(['received', 'cancelled']);
+    expect(j.steps[1]!.notice).toBe('Đã báo qua Zalo · 12:00 05/11');
+    expect(j.steps[1]!.events).toHaveLength(1);
+    expect(j.steps.every((s) => s.eta === null)).toBe(true);
+  });
+
+  it('đơn đã giao và đơn hoàn trả: mốc hãng vẫn dưới Đang giao hàng, nhánh Đã hoàn trả giữ như lõi', () => {
+    const delivered = buildOrderJourney({ ...shippingOrder, status: 'DELIVERED', deliveredAt: T.deliveredAt }, { now: NOW });
+    expect(delivered.steps.map((s) => s.state)).toEqual(['completed', 'completed', 'completed', 'completed']);
+    expect(delivered.steps[2]!.events).toHaveLength(3);
+    const returned = buildOrderJourney({ ...shippingOrder, status: 'RETURNED', statusTimes: { ...shippingOrder.statusTimes, RETURNED: T.deliveredAt } }, { now: NOW });
+    expect(returned.steps.map((s) => s.key)).toEqual(['received', 'preparing', 'shipping', 'delivered', 'returned']);
+    expect(returned.steps[2]!.events).toHaveLength(3);
+  });
+
+  it('hãng quét trước khi đơn chuyển Đang giao: mốc nằm dưới bước đang diễn ra', () => {
+    const j = buildOrderJourney({ status: 'PACKED', createdAt: T.createdAt, paymentMethod: 'COD', shippingHistory: [{ at: T.confirmedAt, status: 'picking' }] }, { now: NOW });
+    expect(j.steps[1]!.state).toBe('current');
+    expect(j.steps[1]!.events).toHaveLength(1);
+    expect(j.steps[2]!.events).toHaveLength(0);
+  });
+
+  it('hai tin cùng một bước: giữ tin mới nhất', () => {
+    const j = buildOrderJourney(
+      {
+        ...shippingOrder,
+        notices: [
+          { event: 'order.shipping', channel: 'ZNS', at: '2026-11-06T03:05:00.000Z' },
+          { event: 'order.shipping', channel: 'ZALO', at: '2026-11-06T04:10:00.000Z' },
+        ],
+      },
+      { now: NOW },
+    );
+    expect(j.steps[2]!.notice).toBe('Đã báo qua Zalo · 11:10 06/11');
   });
 });

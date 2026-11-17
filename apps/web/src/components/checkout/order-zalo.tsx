@@ -1,15 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { OrderZaloFriendFrom } from '@tubutree/shared-types';
-import { fetchOrderZaloStatus, orderZaloConsentView, tubuZaloNumber } from '@tubutree/app-core/order-zalo';
+import { enableOrderZaloForOrder, fetchOrderZaloStatus, orderZaloConsentView, orderZaloDetailView, showOrderZaloFriend, tubuZaloNumber } from '@tubutree/app-core/order-zalo';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '@/lib/core-http';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { usePublicConfig } from '@/lib/use-public-config';
 import { trackWebEvent } from '@/lib/analytics';
+import { actionErrorText } from '@/lib/error-text';
 import { ui } from '@/lib/guest-ui';
 import { CheckMark, miniCheckbox, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
 
@@ -78,6 +80,75 @@ export function OrderZaloFriend({ code, from }: { code: string; from: OrderZaloF
       >
         {fillCopy('order.zaloFriend.cta')}
       </a>
+    </div>
+  );
+}
+
+type OrderZaloDetailOrder = { code: string; status: string; orderZaloConsent?: unknown; orderZaloAvailable?: unknown; orderZaloOn?: unknown };
+
+/**
+ * Khối Zalo ở chi tiết đơn. Đơn chưa nhận tin hành trình (khách bỏ tick lúc đặt) mà máy chủ báo còn bật được thì có nút bật cho riêng đơn
+ * này, đứng sau đúng câu đồng ý và số nhận của ô ở thanh toán (máy chủ ghi cùng phiên bản câu chữ): chỉ các sự kiện sau lúc bật mới được báo,
+ * không gửi bù. Tin đang thật sự được gửi thì ghi số sẽ nhận tin, lối tắt sang Cài đặt và lời mời kết bạn. Cờ MSS tắt thì không hỏi máy chủ,
+ * giữ đúng lời mời kết bạn như cũ. Cùng luật với Mini App (`components/checkout/order-zalo.tsx`).
+ */
+export function OrderZaloDetail({ order }: { order: OrderZaloDetailOrder }) {
+  const enabled = usePublicConfig().orderZaloEnabled;
+  const view = orderZaloDetailView(useOrderZaloStatus(), order);
+  const qc = useQueryClient();
+  const lock = useRef(false);
+  const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null);
+  const enable = async () => {
+    if (lock.current) return;
+    lock.current = true;
+    setBusy(true);
+    setNote(null);
+    try {
+      await enableOrderZaloForOrder(coreHttp, order.code);
+      trackWebEvent('order_zalo_consent_from_detail', {});
+      qc.setQueryData<OrderZaloDetailOrder>(['order', order.code], (o) => o && { ...o, orderZaloConsent: true, orderZaloAvailable: false, orderZaloOn: true });
+      setNote({ ok: true, text: fillCopy('order.zaloDetail.done') });
+    } catch (e) {
+      setNote({ ok: false, text: actionErrorText(e) });
+    } finally {
+      await Promise.all([qc.invalidateQueries({ queryKey: ['order', order.code] }), qc.invalidateQueries({ queryKey: ORDER_ZALO_KEY })]);
+      lock.current = false;
+      setBusy(false);
+    }
+  };
+  const status = note && (
+    <p role={note.ok ? 'status' : 'alert'} className={note.ok ? 'sr-only' : `mt-2 ${ui.error}`}>
+      {note.text}
+    </p>
+  );
+  if (view?.kind === 'offer') {
+    return (
+      <div className="mt-3">
+        <p className="mb-2 text-caption text-[color:var(--color-text-secondary)]">
+          {fillCopy('checkout.orderZalo.body')} {fillCopy('checkout.orderZalo.phone', { phone: view.phone })}
+        </p>
+        <button type="button" className={`${ui.btnSecondary} w-full`} disabled={busy} aria-busy={busy || undefined} onClick={() => void enable()}>
+          {fillCopy('order.zaloDetail.cta')}
+        </button>
+        {status}
+      </div>
+    );
+  }
+  if (!view && !showOrderZaloFriend(enabled, order)) return null;
+  return (
+    <div className="mt-3 flex flex-col items-start gap-2">
+      {view && (
+        <p data-testid="order-zalo-on" className="text-caption text-[color:var(--color-text-secondary)]">
+          {fillCopy('order.zaloDetail.on', { phone: view.phone })}
+          {' · '}
+          <Link href="/tai-khoan/cai-dat" className="inline-flex min-h-11 items-center font-semibold text-[color:var(--color-text-brand)] underline">
+            {fillCopy('order.zaloDetail.settings')}
+          </Link>
+        </p>
+      )}
+      {status}
+      <OrderZaloFriend code={order.code} from="order_detail" />
     </div>
   );
 }

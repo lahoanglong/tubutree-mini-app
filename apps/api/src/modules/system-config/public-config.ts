@@ -19,6 +19,9 @@ import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PH
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
 export const WEB_GUEST_CART_ENABLED_KEY = 'web.guest_cart_enabled';
 
+/** Trang đích link mời và tiến độ mời; mặc định tắt (seed createOnly + migration 20261118015753). */
+export const REFERRAL_SHARE_CARD_KEY = 'referral.share_card_enabled';
+
 /** Chỉ hai trường công khai, để khoá phụ lưu thêm trong cấu hình không lọt ra endpoint công khai. */
 const pickHours = (v: { start: string; end: string }) => ({ start: v.start, end: v.end });
 
@@ -103,6 +106,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     webGuestCart,
     orderZaloPrechecked,
     tubuZaloPhone,
+    referralShareCard,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -146,6 +150,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(WEB_GUEST_CART_ENABLED_KEY, false),
     config.get<unknown>(MSS_ORDER_CONSENT_PRECHECKED_KEY, false),
     config.get<unknown>(TUBU_ZALO_PHONE_KEY, TUBU_ZALO_PHONE_DEFAULT),
+    config.get<unknown>(REFERRAL_SHARE_CARD_KEY, false),
   ]);
   return {
     freeshipThreshold,
@@ -216,6 +221,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     orderZaloEnabled: orderZaloGateOpen(orderZaloGate?.()),
     orderZaloPrechecked: orderZaloPrechecked === true,
     tubuZaloPhone: tubuZaloPhoneOf(tubuZaloPhone),
+    // Link mời trỏ trang đích /moi/<mã> (web dựng trang và ảnh xem trước; cờ tắt thì trang trả 404), khối mời hiện tiến độ.
+    referralShareCardEnabled: referralShareCard === true,
   };
 }
 

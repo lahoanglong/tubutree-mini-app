@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { Prisma } from '@prisma/client';
@@ -36,6 +36,7 @@ import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligib
 import { publicProductThumb } from '../../common/public-image';
 import { withCoverImages } from '../catalog/card-select';
 import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
+import { buyerOrderNotices, lateConsentBlock, ORDER_ZALO_ACTIVE_STATUSES, ORDER_ZALO_CONSENT_TEXT_VERSION, type BuyerOrderNotice } from '../integrations/mss/mss-order-event-types';
 
 export type CancelOrderInput = RefundDestinationInput & { cancelReasonCode?: string; cancelReasonText?: string };
 
@@ -136,7 +137,27 @@ export type OrderView = Omit<OrderListRow, 'items' | BuyerHiddenOrderField> & {
    * App/web thay hạn thanh toán, nút trả tiền và nút huỷ bằng câu trung tính "Tubu đang xử lý đơn này" (R5-SYNC-1).
    */
   manualHandling: boolean;
+  /** Chỉ chi tiết đơn: cờ `orders.timeline_v2_enabled` (một dòng thời gian thay hai khối). */
+  timelineV2?: boolean;
+  /** Chỉ chi tiết đơn: `orders.tracking_stale_hours`. */
+  trackingStaleHours?: number;
+  /** Chỉ chi tiết đơn: tin đã tới khách qua Zalo (MSS) hoặc ZNS đường lui; rỗng khi cờ MSS hay cờ dòng thời gian tắt. */
+  notices?: BuyerOrderNotice[];
+  /** Chỉ chi tiết đơn: bật được tin hành trình qua Zalo cho đơn này ngay ở chi tiết đơn (lateConsentBlock null). */
+  orderZaloAvailable?: boolean;
+  /** Chỉ chi tiết đơn: tin hành trình của đơn này đang được gửi qua Zalo thật (đơn có đồng ý, khách chưa tắt, không có lý do bỏ qua). */
+  orderZaloOn?: boolean;
 };
+
+export const ORDER_TIMELINE_V2_KEY = 'orders.timeline_v2_enabled';
+const NO_ORDER_ZALO = { available: false, on: false } as const;
+export const ORDER_TRACKING_STALE_HOURS_KEY = 'orders.tracking_stale_hours';
+export const ORDER_TRACKING_STALE_HOURS_DEFAULT = 72;
+
+/** Giờ đứng yên hợp lệ 1..720; admin lưu sai kiểu thì dùng mặc định. */
+export function trackingStaleHoursOf(raw: unknown): number {
+  return typeof raw === 'number' && Number.isInteger(raw) && raw >= 1 && raw <= 720 ? raw : ORDER_TRACKING_STALE_HOURS_DEFAULT;
+}
 
 const MISSING_MEDIA: OrderItemMedia = {
   thumbnail: null, stock: 0, available: false, productPublic: false, discontinued: true, currentPrice: null, flashActive: false, flashPrice: null, flashAllowance: null,
@@ -304,13 +325,14 @@ export class OrdersService {
    * (cancel/repurchase/requestReturn) dùng detail() thô, không tốn thêm truy vấn; đơn trả ra cho khách vẫn qua forBuyer. */
   async detailView(userId: string, code: string): Promise<OrderView> {
     const order = await this.detail(userId, code);
-    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes, cancelReason] = await Promise.all([
+    const [[view], fulfilment, reviewOf, pointsReturnReversed, statusTimes, cancelReason, journey] = await Promise.all([
       this.attachItemMedia([order], userId),
       this.fulfilmentOf(order),
       orderLineReviews(this.prisma, order),
       order.status === 'DELIVERED' || order.status === 'RETURNED' ? returnPointsTaken(this.prisma, order) : undefined,
       this.statusTimesOf(order),
       this.cancelReasonOf(order),
+      this.journeyOf(order),
     ]);
     return {
       ...view!,
@@ -319,7 +341,90 @@ export class OrdersService {
       items: view!.items.map((it) => ({ ...it, ...reviewOf(it.id) })),
       ...fulfilment,
       pointsReturnReversed,
+      ...journey,
     };
+  }
+
+  /**
+   * Phần dòng thời gian một khối của chi tiết đơn: cờ, số giờ đứng yên, tin đã báo ngoài ứng dụng, và đơn có bật được Zalo
+   * từ chi tiết đơn không. Cờ MSS tắt thì không đọc outbox hay người dùng: không thêm truy vấn nào ngoài hai khoá cấu hình (có đệm).
+   */
+  private async journeyOf(order: {
+    id: string;
+    userId: string;
+    status: string;
+    type: string;
+    platform: string | null;
+    placedForCustomer: boolean;
+    orderZaloConsent: boolean | null;
+    shippingAddress: Prisma.JsonValue;
+  }): Promise<Pick<OrderView, 'timelineV2' | 'trackingStaleHours' | 'notices' | 'orderZaloAvailable' | 'orderZaloOn'>> {
+    const [v2, staleRaw] = await Promise.all([this.config.get<unknown>(ORDER_TIMELINE_V2_KEY, false), this.config.get<unknown>(ORDER_TRACKING_STALE_HOURS_KEY, ORDER_TRACKING_STALE_HOURS_DEFAULT)]);
+    const timelineV2 = v2 === true;
+    const gate = this.mssOrderEvents?.gate();
+    const mssOn = !!gate?.enabled;
+    const [notices, zalo] = await Promise.all([timelineV2 && mssOn ? this.noticesOf(order.id) : [], mssOn ? this.orderZaloStateOf(order, gate) : NO_ORDER_ZALO]);
+    return { timelineV2, trackingStaleHours: trackingStaleHoursOf(staleRaw), notices, orderZaloAvailable: zalo.available, orderZaloOn: zalo.on };
+  }
+
+  private async noticesOf(orderId: string): Promise<BuyerOrderNotice[]> {
+    const rows = await this.prisma.mssOrderEventOutbox.findMany({
+      where: { orderId, OR: [{ status: 'RESULT_SENT' }, { fallbackChannel: 'ZNS', fallbackAt: { not: null } }] },
+      orderBy: { occurredAt: 'asc' },
+      select: { eventType: true, status: true, resultAt: true, deliveredAt: true, occurredAt: true, fallbackChannel: true, fallbackAt: true },
+    });
+    return buyerOrderNotices(rows);
+  }
+
+  /**
+   * Nút bật Zalo (`available`) và dòng "Sẽ báo qua Zalo" (`on`) theo đúng luật bỏ qua của bộ ghi sự kiện, để màn không hứa tin máy chủ sẽ không gửi:
+   * `on` chỉ khi đơn có đồng ý VÀ lựa chọn gần nhất của khách còn bật (tắt ở Cài đặt hay nhắn dừng trên Zalo đều làm bộ ghi bỏ qua) VÀ không có lý do
+   * bỏ qua nào (đơn tặng người khác, SĐT chưa xác minh, ngoài tỉ lệ thử...).
+   */
+  private async orderZaloStateOf(order: Parameters<typeof lateConsentBlock>[0]['order'], gate: Parameters<typeof lateConsentBlock>[0]['gate']): Promise<{ available: boolean; on: boolean }> {
+    const asks = { ...order, orderZaloConsent: false };
+    // Chặn sớm những lý do không cần đọc người dùng (đơn đã đóng, cổng đóng, đặt hộ...) để đơn cũ không tốn thêm truy vấn.
+    if (lateConsentBlock({ order: asks, gate, user: { phone: null, phoneVerifiedAt: null } }) !== 'no_verified_phone') return NO_ORDER_ZALO;
+    const user = await this.prisma.user.findUnique({ where: { id: order.userId }, select: { phone: true, phoneVerifiedAt: true, notifyOrderZalo: true } });
+    if (!user || lateConsentBlock({ order: asks, gate, user }) !== null) return NO_ORDER_ZALO;
+    return order.orderZaloConsent === true ? { available: false, on: user.notifyOrderZalo === true } : { available: true, on: false };
+  }
+
+  /**
+   * Khách bật tin hành trình qua Zalo cho một đơn đang đi, từ chi tiết đơn. Idempotent: bấm đúp hay hai yêu cầu cùng lúc chỉ ghi một lần (UPDATE có
+   * điều kiện `orderZaloConsent` chưa true), lần sau trả cùng kết quả. Ghi đồng ý của đơn và lựa chọn gần nhất của khách (nguồn `order_detail`, phiên bản
+   * câu chữ) trong một transaction. Không ghi outbox: chỉ sự kiện xảy ra sau lúc này mới được báo, không gửi bù, không gửi tin "đã bật".
+   */
+  async enableOrderZalo(userId: string, code: string): Promise<{ orderZaloConsent: true }> {
+    const gate = this.mssOrderEvents?.gate();
+    if (!gate?.enabled) throw new NotFoundException('Không tìm thấy đơn hàng.');
+    return this.prisma.$transaction(async (tx) => {
+      const order = await tx.order.findUnique({
+        where: { code },
+        select: { id: true, userId: true, status: true, type: true, platform: true, placedForCustomer: true, orderZaloConsent: true, shippingAddress: true },
+      });
+      if (!order || order.userId !== userId) throw new NotFoundException('Không tìm thấy đơn hàng.');
+      const user = await tx.user.findUniqueOrThrow({ where: { id: userId }, select: { phone: true, phoneVerifiedAt: true } });
+      const block = lateConsentBlock({ order, gate, user });
+      if (block === 'already') return { orderZaloConsent: true as const };
+      if (block === 'not_active') throw new ConflictException('Đơn này đã kết thúc nên không còn tin hành trình để báo qua Zalo.');
+      if (block) throw new ConflictException('Đơn này chưa nhận được tin hành trình qua Zalo.');
+      const now = new Date();
+      const updated = await tx.order.updateMany({
+        where: { id: order.id, userId, status: { in: ORDER_ZALO_ACTIVE_STATUSES as OrderStatus[] }, OR: [{ orderZaloConsent: null }, { orderZaloConsent: false }] },
+        data: { orderZaloConsent: true, orderZaloConsentAt: now, orderZaloConsentSource: 'order_detail' },
+      });
+      if (updated.count === 0) {
+        const fresh = await tx.order.findUniqueOrThrow({ where: { id: order.id }, select: { orderZaloConsent: true } });
+        if (fresh.orderZaloConsent === true) return { orderZaloConsent: true as const };
+        throw new ConflictException('Đơn này đã kết thúc nên không còn tin hành trình để báo qua Zalo.');
+      }
+      await tx.user.update({
+        where: { id: userId },
+        data: { notifyOrderZalo: true, notifyOrderZaloAt: now, notifyOrderZaloSource: 'order_detail', notifyOrderZaloTextVersion: ORDER_ZALO_CONSENT_TEXT_VERSION },
+      });
+      return { orderZaloConsent: true as const };
+    });
   }
 
   /** Lý do huỷ cho khách: chỉ đơn đã huỷ mới đọc sổ lịch sử (có ghi chú), và chỉ đưa ra câu đã qua customerCancelReason. */

@@ -7,7 +7,8 @@ import { useQuery } from '@tanstack/react-query';
 import { ChevronDown, ChevronRight, Copy, CreditCard, Leaf, Package, PackageCheck, Share2, Truck, type LucideIcon } from 'lucide-react';
 import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { STAT_VALUE_LINE_HEIGHT, STAT_VALUE_LOOKS, statValueFits, statValueStart } from '@tubutree/app-core/account-stat';
-import { inviteBody, inviteLink, inviteShareText } from '@tubutree/app-core/commerce/invite-card';
+import { inviteBody, inviteLandingOn, inviteProgressLine, inviteShareLink, inviteShareText } from '@tubutree/app-core/commerce/invite-card';
+import { trackWebEvent } from '@/lib/analytics';
 import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -51,6 +52,14 @@ const ROW_BOX =
 const ROW = `${ROW_BOX} px-3`;
 // Mục con của dòng mở tại chỗ thụt vào để đọc ra là thuộc dòng trên.
 const CHILD_ROW = `${ROW_BOX} border-t border-[var(--color-border-subtle)] pl-6 pr-3`;
+
+/** Mỗi lần khối mời mở và có dòng tiến độ (chỉ số đếm, không tên) thì báo `invite_progress_viewed`. Cùng luật với Mini App (`pages/profile.tsx`). */
+function InviteProgressViewed() {
+  useEffect(() => {
+    trackWebEvent('invite_progress_viewed', {});
+  }, []);
+  return null;
+}
 
 function RowBody({ icon: Icon, label, hint, dot, expanded }: { icon: LucideIcon; label: string; hint?: string; dot?: 'chat' | 'support'; expanded?: boolean }) {
   return (
@@ -234,6 +243,10 @@ function AccountContent() {
   const earnsPoints = user.role !== 'AFFILIATE';
   const welcomeOffer = welcomeOfferOf(cfgQ.data);
   const referralRules = { referrerPoints: referral?.referrerRewardPoints, minOrderAmount: referral?.minOrderAmount, windowDays: referral?.windowDays };
+  // Cờ referral.share_card_enabled: link chép và chia sẻ trỏ trang đích /moi/<mã> của chính trang web này.
+  const landing = inviteLandingOn(cfgQ.data);
+  const progress = landing ? inviteProgressLine(referral, earnsPoints) : null;
+  const shareUrl = (c: string) => inviteShareLink({ landing, baseUrl: window.location.origin, referralCode: c, landingOrigin: window.location.origin });
 
   const menu = buildAccountMenu({
     role: user.role,
@@ -266,7 +279,7 @@ function AccountContent() {
     if (!code) return;
     void referralLock.run('copy', async () => {
       try {
-        await navigator.clipboard.writeText(inviteLink(window.location.origin, code));
+        await navigator.clipboard.writeText(shareUrl(code));
         setCopyMsg(fillCopy('invite.copied'));
       } catch {
         setCopyMsg(fillCopy('invite.copyFailed', { code }));
@@ -276,7 +289,7 @@ function AccountContent() {
   const shareReferral = () => {
     if (!code) return;
     void referralLock.run('share', async () => {
-      const url = inviteLink(window.location.origin, code);
+      const url = shareUrl(code);
       if (typeof navigator.share === 'function') {
         try {
           await navigator.share({ title: fillCopy('invite.shareTitle'), text: shareDescription(null, welcomeOffer), url });
@@ -446,11 +459,12 @@ function AccountContent() {
                         <Text variant="body-sm" tone="secondary" as="p">
                           {inviteBody(welcomeOffer, referralRules, earnsPoints)}
                         </Text>
-                        {referral && earnsPoints && (referral.successCount > 0 || referral.earnedPoints > 0) && (
-                          <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }}>
-                            {homeCopy.profile.referralStats(referral.successCount, `${formatCount(referral.earnedPoints)} điểm`)}
+                        {(progress || (referral && earnsPoints && (referral.successCount > 0 || referral.earnedPoints > 0))) && (
+                          <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }} data-testid={progress ? 'invite-progress' : undefined}>
+                            {progress ?? (referral ? homeCopy.profile.referralStats(referral.successCount, `${formatCount(referral.earnedPoints)} điểm`) : null)}
                           </Text>
                         )}
+                        {progress && <InviteProgressViewed />}
                         {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
                         {referral?.nextMilestone && earnsPoints && referral.nextMilestone.count > referral.successCount && (
                           <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>

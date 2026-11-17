@@ -17,15 +17,18 @@ export interface TrackEventsListProps {
   now?: number;
   /** Cách dòng trên khi danh sách nằm dưới giờ của bước hành trình. */
   spaced?: boolean;
+  /** Số mốc mở sẵn ở dòng thời gian một khối; có thì nút mở ghi "Xem đủ N mốc vận chuyển" (N là tổng số mốc). */
+  open?: number;
 }
 
 /** Mốc hãng vận chuyển: từ mốc thứ 4 trở đi có nút "Xem thêm N mốc vận chuyển" / "Thu gọn mốc vận chuyển". */
-export function TrackEventsList({ events, now, spaced }: TrackEventsListProps) {
+export function TrackEventsList({ events, now, spaced, open }: TrackEventsListProps) {
   const [expanded, setExpanded] = useState(false);
   const listId = useId();
   if (events.length === 0) return null;
-  const collapsible = events.length > TRACK_EVENTS_COLLAPSED;
-  const shown = collapsible && !expanded ? events.slice(0, TRACK_EVENTS_COLLAPSED) : events;
+  const limit = open ?? TRACK_EVENTS_COLLAPSED;
+  const collapsible = events.length > limit;
+  const shown = collapsible && !expanded ? events.slice(0, limit) : events;
   return (
     <>
       <ul
@@ -56,7 +59,11 @@ export function TrackEventsList({ events, now, spaced }: TrackEventsListProps) {
           className={`${ui.btnText} -ml-2 self-start text-[color:var(--color-text-brand)]`}
           style={{ fontVariantNumeric: 'tabular-nums', fontSize: 'var(--type-caption-size)' }}
         >
-          {expanded ? fillCopy('order.shipping.eventsLess') : fillCopy('order.shipping.eventsMore', { n: events.length - TRACK_EVENTS_COLLAPSED })}
+          {expanded
+            ? fillCopy('order.shipping.eventsLess')
+            : open
+              ? fillCopy('order.journey.eventsAll', { n: events.length })
+              : fillCopy('order.shipping.eventsMore', { n: events.length - limit })}
         </button>
       )}
     </>

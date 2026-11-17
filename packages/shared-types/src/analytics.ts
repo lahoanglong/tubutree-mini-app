@@ -38,6 +38,11 @@ export const CLIENT_EVENT_NAMES = [
   'eco_badge_opened',
   'eco_passport_viewed',
   'eco_passport_shared',
+  'order_timeline_viewed',
+  'order_zalo_consent_from_detail',
+  'invite_landing_viewed',
+  'invite_landing_cta',
+  'invite_progress_viewed',
 ] as const;
 
 export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];

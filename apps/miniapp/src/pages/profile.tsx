@@ -8,7 +8,8 @@ import {
 import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { STAT_VALUE_LINE_HEIGHT, STAT_VALUE_LOOKS, statValueFits, statValueStart } from '@tubutree/app-core/account-stat';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { inviteBody, inviteLink, inviteShareText } from '@tubutree/app-core/commerce/invite-card';
+import { inviteBody, inviteLandingOn, inviteProgressLine, inviteShareLink, inviteShareText } from '@tubutree/app-core/commerce/invite-card';
+import { trackEvent } from '../services/analytics';
 import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { buildProfileMenu, PROFILE_MENU_COPY, PROFILE_ORDER_ROW, type ProfileLinkKey, type ProfileMenuLink, type ProfileRowKey } from '@tubutree/app-core/profile-menu';
@@ -83,6 +84,12 @@ const ORDER_ROW_ICON: Record<string, LucideIcon> = {
 };
 
 const DIVIDER = '1px solid var(--color-border-subtle)';
+
+/** Mỗi lần khối mời mở và có dòng tiến độ (chỉ số đếm, không tên) thì báo `invite_progress_viewed`. */
+function InviteProgressViewed() {
+  useEffect(() => void trackEvent('invite_progress_viewed', 'miniapp', {}), []);
+  return null;
+}
 
 function RowIcon({ icon }: { icon: LucideIcon }) {
   return (
@@ -201,7 +208,10 @@ export default function ProfilePage() {
   const earnsPoints = user.role !== 'AFFILIATE';
   const welcomeOffer = welcomeOfferOf(cfg);
   const referralRules = { referrerPoints: referral?.referrerRewardPoints, minOrderAmount: referral?.minOrderAmount, windowDays: referral?.windowDays };
-  const inviteUrl = code ? inviteLink(miniAppLink('/'), code) : '';
+  // Cờ referral.share_card_enabled: link chép và chữ chia sẻ trỏ trang đích tubutree.com/moi/<mã>; nút "Chia sẻ qua Zalo" vẫn mở thẳng Mini App.
+  const landing = inviteLandingOn(cfg);
+  const inviteUrl = code ? inviteShareLink({ landing, baseUrl: miniAppLink('/'), referralCode: code }) : '';
+  const progress = landing ? inviteProgressLine(referral, earnsPoints) : null;
 
   const rows = buildProfileMenu({
     role: user.role,
@@ -286,11 +296,12 @@ export default function ProfilePage() {
       <Text variant="body-sm" tone="secondary" as="p">
         {inviteBody(welcomeOffer, referralRules, earnsPoints)}
       </Text>
-      {referral && earnsPoints && (referral.successCount > 0 || referral.earnedPoints > 0) && (
-        <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }}>
-          {homeCopy.profile.referralStats(referral.successCount, formatPoints(referral.earnedPoints))}
+      {(progress || (referral && earnsPoints && (referral.successCount > 0 || referral.earnedPoints > 0))) && (
+        <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }} data-testid={progress ? 'invite-progress' : undefined}>
+          {progress ?? (referral ? homeCopy.profile.referralStats(referral.successCount, formatPoints(referral.earnedPoints)) : null)}
         </Text>
       )}
+      {progress && <InviteProgressViewed />}
       {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
       {referral?.nextMilestone && earnsPoints && referral.nextMilestone.count > referral.successCount && (
         <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>

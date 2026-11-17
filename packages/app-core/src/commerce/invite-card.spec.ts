@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { inviteBody, inviteFriendGiftLine, inviteLink, inviteRewardLine, inviteShareText } from './invite-card';
+import {
+  inviteBody,
+  inviteFriendGiftLine,
+  inviteLandingLink,
+  inviteLandingOn,
+  inviteLandingTarget,
+  inviteLink,
+  inviteProgressLine,
+  inviteRewardLine,
+  inviteShareLink,
+  inviteShareText,
+} from './invite-card';
 import { FORBIDDEN_TERMS } from '../shop-copy';
 
 const PROD = { amount: 30_000, minOrder: 199_000 };
@@ -68,5 +79,45 @@ describe('inviteLink', () => {
 describe('inviteShareText', () => {
   it('lời chia sẻ có link', () => {
     expect(inviteShareText('https://tubutree.com/?ref=A1')).toContain('https://tubutree.com/?ref=A1');
+  });
+});
+
+describe('trang đích link mời và tiến độ (cờ referral.share_card_enabled)', () => {
+  it('cờ chỉ bật khi cấu hình công khai có boolean true thật', () => {
+    expect(inviteLandingOn({ referralShareCardEnabled: true })).toBe(true);
+    for (const off of [{ referralShareCardEnabled: false }, { referralShareCardEnabled: 'true' }, { referralShareCardEnabled: 1 }, {}, null, undefined, 'x']) {
+      expect(inviteLandingOn(off)).toBe(false);
+    }
+  });
+
+  it('link trang đích /moi/<mã>; mã sai khuôn thì trang chủ trơn', () => {
+    expect(inviteLandingLink('ABC123')).toBe('https://tubutree.com/moi/ABC123');
+    expect(inviteLandingLink('ABC123', 'http://localhost:3000/')).toBe('http://localhost:3000/moi/ABC123');
+    expect(inviteLandingLink('a b<script>')).toBe('https://tubutree.com/');
+    expect(inviteLandingLink('')).toBe('https://tubutree.com/');
+  });
+
+  it('cờ tắt giữ link cũ, cờ bật đổi sang trang đích', () => {
+    expect(inviteShareLink({ landing: false, baseUrl: 'https://zalo.me/s/123', referralCode: 'ABC123' })).toBe('https://zalo.me/s/123/?ref=ABC123');
+    expect(inviteShareLink({ landing: true, baseUrl: 'https://zalo.me/s/123', referralCode: 'ABC123' })).toBe('https://tubutree.com/moi/ABC123');
+  });
+
+  it('nút Bắt đầu mua sắm về Trang chủ kèm ?ref= (ghi nhận lượt giới thiệu như link cũ); mã sai khuôn thì không kèm', () => {
+    expect(inviteLandingTarget('ABC123')).toBe('/?ref=ABC123');
+    expect(inviteLandingTarget('../x')).toBe('/');
+  });
+
+  it('tiến độ: chỉ số đếm; CTV không thấy phần điểm; API cũ thiếu số thì không có dòng', () => {
+    const r = { invitedCount: 4, firstOrderCount: 2, successCount: 1, earnedPoints: 5000 };
+    expect(inviteProgressLine(r, true)).toBe('4 bạn đã nhận mã · 2 bạn đã mua đơn đầu · 1 bạn đã đủ điều kiện, bạn nhận 5.000 Điểm Xanh');
+    expect(inviteProgressLine(r, false)).toBe('4 bạn đã nhận mã · 2 bạn đã mua đơn đầu');
+    expect(inviteProgressLine({ successCount: 1, earnedPoints: 5000 }, true)).toBeNull();
+    expect(inviteProgressLine({ ...r, invitedCount: -1 }, true)).toBeNull();
+    expect(inviteProgressLine(null, true)).toBeNull();
+  });
+
+  it('chữ trang đích và tiến độ không dùng thuật ngữ cấm', () => {
+    const texts = [inviteProgressLine({ invitedCount: 1, firstOrderCount: 1, successCount: 1, earnedPoints: 1 }, true)!];
+    for (const t of texts) expect(FORBIDDEN_TERMS.filter((f) => f.pattern.test(t))).toEqual([]);
   });
 });

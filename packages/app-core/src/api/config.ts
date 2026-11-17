@@ -64,6 +64,8 @@ export interface PublicConfig {
   chat?: { enabled: boolean; hours: { start: string; end: string } };
   /** Giỏ cho khách chưa đăng nhập trên web (`web.guest_cart_enabled`). Thiếu khi API cũ → tắt, khách bấm mua thì sang đăng nhập như cũ. */
   webGuestCartEnabled?: boolean;
+  /** Cờ `referral.share_card_enabled`: link mời trỏ trang đích `/moi/<mã>` và khối mời hiện tiến độ. API cũ chưa trả. */
+  referralShareCardEnabled?: boolean;
   /**
    * Tin hành trình đơn qua Zalo đang chạy cho một phần khách (`mss.order_events_enabled`, MSS nhận sự kiện, tỉ lệ > 0). Chỉ khi true
    * client mới hỏi GET /config/order-zalo. Thiếu khi API cũ → tắt.

@@ -41,7 +41,7 @@ function makePrisma(opts: {
       where.id === 'referee1' ? { referredById: opts.referredById ?? null } : { role: opts.referrerRole ?? 'CUSTOMER', isBlocked: opts.referrerBlocked ?? false, metadata: opts.referrerMetadata ?? null },
     );
   const prisma = {
-    user: { findUnique, update: userUpdate, findUniqueOrThrow: jest.fn().mockResolvedValue({ referralCode: 'ABC123' }) },
+    user: { findUnique, update: userUpdate, findUniqueOrThrow: jest.fn().mockResolvedValue({ referralCode: 'ABC123' }), count: jest.fn().mockResolvedValue(0) },
     order: { findMany: jest.fn().mockResolvedValue(opts.orders ?? []) },
     // Không có yêu cầu trả một phần đã duyệt: cấp thưởng không thu hồi gì thêm (đường đó kiểm ở race referral-partial-return).
     returnRequest: { findMany: jest.fn().mockResolvedValue([]) },
@@ -393,6 +393,17 @@ describe('RewardPointsService.getReferralOverview (GET /me/referral)', () => {
     expect(custom.referrerRewardPoints).toBe(7000);
     const off = await new RewardPointsService(overview(0), cfg({ 'referral.referrer_reward_points': 0 })).getReferralOverview('u1');
     expect(off.referrerRewardPoints).toBe(0);
+  });
+
+  it('tiến độ mời: số bạn đã nhận mã (đăng ký bằng mã, không tính tài khoản đã gộp) và số bạn đã có đơn giao xong; chỉ số đếm', async () => {
+    const prisma = overview(1);
+    const count = (prisma as unknown as { user: { count: jest.Mock } }).user.count;
+    count.mockImplementation(async (args: { where: Record<string, unknown> }) => ('orders' in args.where ? 2 : 5));
+    const r = await new RewardPointsService(prisma, cfg()).getReferralOverview('u1');
+    expect(r).toMatchObject({ invitedCount: 5, firstOrderCount: 2, successCount: 1 });
+    expect(count).toHaveBeenCalledWith({ where: { referredById: 'u1', mergedIntoId: null } });
+    expect(count).toHaveBeenCalledWith({ where: { referredById: 'u1', mergedIntoId: null, orders: { some: { status: 'DELIVERED' } } } });
+    expect(JSON.stringify(r)).not.toMatch(/fullName|phone|avatar/);
   });
 
   it('không cấu hình mốc → mảng rỗng, nextMilestone null, chưa có thưởng → 0', async () => {

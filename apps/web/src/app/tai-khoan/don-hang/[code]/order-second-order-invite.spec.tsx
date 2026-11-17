@@ -152,3 +152,40 @@ describe('OrderSecondOrderInvite — thẻ mời ở chi tiết đơn đã giao 
     view.unmount();
   });
 });
+
+describe('OrderSecondOrderInvite — dòng thay thế khi thẻ không hiện (web)', () => {
+  const fallback = <p data-testid="fb">dòng mời bạn</p>;
+
+  it('thẻ hiện thì không có dòng thay thế', async () => {
+    const view = render(<OrderSecondOrderInvite order={delivered} fallback={fallback} />);
+    await flush();
+    expect(view.container.textContent).toContain('Giữ bao bì gửi kèm đơn sau');
+    expect(view.container.querySelector('[data-testid="fb"]')).toBeNull();
+    view.unmount();
+  });
+
+  it('đơn ngoài cổng (đang giao) hoặc đường kèm đơn tắt: dòng thay thế ở chỗ thẻ', async () => {
+    const shipping = render(<OrderSecondOrderInvite order={{ ...delivered, status: 'SHIPPING' }} fallback={fallback} />);
+    expect(shipping.container.querySelector('[data-testid="fb"]')).not.toBeNull();
+    shipping.unmount();
+    mocks.cfg = { ...mocks.cfg, waste: { ...mocks.cfg.waste, pickup: false } };
+    const off = render(<OrderSecondOrderInvite order={delivered} fallback={fallback} />);
+    await flush();
+    expect(off.container.querySelector('[data-testid="fb"]')).not.toBeNull();
+    off.unmount();
+  });
+
+  it('cấu hình chưa về hoặc /waste/me đang tải: chưa hiện gì', async () => {
+    mocks.cfg = { ...mocks.cfg, isLoaded: false };
+    const a = render(<OrderSecondOrderInvite order={delivered} fallback={fallback} />);
+    await flush();
+    expect(a.container.innerHTML).toBe('');
+    a.unmount();
+    mocks.cfg = { ...mocks.cfg, isLoaded: true };
+    mocks.getWasteMe.mockReturnValue(new Promise(() => undefined));
+    const b = render(<OrderSecondOrderInvite order={delivered} fallback={fallback} />);
+    await flush();
+    expect(b.container.innerHTML).toBe('');
+    b.unmount();
+  });
+});

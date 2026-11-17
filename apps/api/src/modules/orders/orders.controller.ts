@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, Post, Query } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Param, Post, Query } from '@nestjs/common';
 import { IsOptional, IsString, MaxLength } from 'class-validator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { OrderListQuery, RepurchaseDto } from './dto/orders.dto';
@@ -49,6 +49,13 @@ export class OrdersController {
   @Get(':code')
   detail(@CurrentUser('sub') userId: string, @Param('code') code: string) {
     return this.orders.detailView(userId, code);
+  }
+
+  /** Bật tin hành trình qua Zalo cho đơn đang đi, từ chi tiết đơn (chủ đơn, idempotent). Cờ MSS tắt hoặc đơn của người khác: 404. */
+  @Post(':code/order-zalo-consent')
+  @HttpCode(200)
+  enableOrderZalo(@CurrentUser('sub') userId: string, @Param('code') code: string) {
+    return this.orders.enableOrderZalo(userId, code);
   }
 
   /** Body tuỳ chọn: nơi nhận tiền hoàn của đơn trả trước đã thanh toán (D2). Không gửi = Ví Tubu. */

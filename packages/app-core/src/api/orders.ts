@@ -89,6 +89,16 @@ export type OrderView = Omit<OrderDTO, 'items'> & {
   siblings?: { code: string; status: string; total: number; fulfillerName: string }[];
   /** Lý do huỷ viết sẵn cho khách đọc (API đã lọc); API cũ chưa trả. */
   cancelReason?: string | null;
+  /** Cờ `orders.timeline_v2_enabled`: chi tiết đơn vẽ một dòng thời gian (`buildOrderJourney`) thay hai khối. API cũ chưa trả. */
+  timelineV2?: boolean;
+  /** `orders.tracking_stale_hours`: đơn đang giao quá chừng này giờ không có mốc mới thì báo đang chờ hãng cập nhật. */
+  trackingStaleHours?: number;
+  /** Tin đã tới khách ngoài ứng dụng (Zalo qua MSS hoặc ZNS đường lui), chỉ sự kiện, kênh và giờ; cờ MSS tắt thì rỗng. */
+  notices?: { event: string; channel: 'ZALO' | 'ZNS'; at: string }[];
+  /** Đơn này bật được tin hành trình qua Zalo ngay ở chi tiết đơn (`orderZaloDetailView`). */
+  orderZaloAvailable?: boolean;
+  /** Chỉ chi tiết đơn: tin hành trình của đơn này đang thật sự được gửi qua Zalo (máy chủ áp đủ luật bỏ qua của bộ ghi sự kiện). */
+  orderZaloOn?: boolean;
 };
 
 /** Response place-order: đơn chính, kèm danh sách đơn con khi lần đặt bị tách theo nơi giao. */

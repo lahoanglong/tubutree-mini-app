@@ -52,6 +52,9 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'order.zaloFriend.blocked': { phone: '0899149229' },
   'eco.badgePlastic': { g: '1000,0kg' },
   'eco.plastic': { g: '1000,0 kg' },
+  'order.zaloDetail.on': { phone: '090•••4567' },
+  'invite.progress': { a: '999', b: '999', c: '999' },
+  'invite.progressNoPoints': { a: '999', b: '999' },
 };
 
 const hit = (text: string) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.use);

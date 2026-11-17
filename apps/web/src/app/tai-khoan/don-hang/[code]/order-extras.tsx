@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { INVOICE_ISSUE_FAILED } from '@tubutree/app-core/client-copy';
 import Link from 'next/link';
 import { ChevronRight, Recycle } from 'lucide-react';
@@ -74,13 +74,14 @@ export function OrderWasteLink({ order: o }: { order: OrderDetailDTO }) {
  * Đơn đã giao: một thẻ mời giữ bao bì gửi kèm đơn kế tiếp (miễn ship 100%, tích Điểm Xanh). Luật hiện/ẩn ở app-core, gồm trần yêu cầu mở của W179;
  * chung với Mini App (`components/orders/second-order-invite.tsx`). Cả thẻ là một liên kết, không có CTA thứ hai trên trang.
  */
-export function OrderSecondOrderInvite({ order: o }: { order: OrderDetailDTO }) {
+export function OrderSecondOrderInvite({ order: o, fallback }: { order: OrderDetailDTO; fallback?: ReactNode }) {
   // Cổng đơn đứng ngoài để đơn đang giao, đã huỷ hay quá 14 ngày không kéo thêm lời gọi /config/public nào.
-  if (secondOrderOrderGate(o) !== null) return null;
-  return <SecondOrderInviteCard order={o} />;
+  if (secondOrderOrderGate(o) !== null) return fallback ?? null;
+  return <SecondOrderInviteCard order={o} fallback={fallback} />;
 }
 
-function SecondOrderInviteCard({ order: o }: { order: OrderDetailDTO }) {
+/** `fallback` thay chỗ thẻ khi đã biết chắc thẻ không hiện (cấu hình và /waste/me đã về), để trang không nhảy từ dòng thay thế sang thẻ. */
+function SecondOrderInviteCard({ order: o, fallback }: { order: OrderDetailDTO; fallback?: ReactNode }) {
   const cfg = usePublicConfig();
   const ready = isWebRouteReady('/doi-rac/tao');
   // Chỉ hỏi /waste/me khi đơn đủ điều kiện và đường kèm đơn đang bật: đơn đang giao, đã kèm rác hay cổng đóng không tốn thêm lời gọi nào.
@@ -92,7 +93,7 @@ function SecondOrderInviteCard({ order: o }: { order: OrderDetailDTO }) {
     shown.current = true;
     trackRecycleStep('second_order_shown', SECOND_ORDER_METHOD);
   }, [visible]);
-  if (!visible) return null;
+  if (!visible) return cfg.isLoaded && !meQ.isLoading ? (fallback ?? null) : null;
   return (
     <Link
       id="order-second-order-invite"

@@ -218,6 +218,9 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'waste.home_pickup_bank_transfer_enabled': assertBoolean,
   'web.guest_cart_enabled': assertBoolean,
   'catalog.pdp_compare_enabled': assertBoolean,
+  'orders.timeline_v2_enabled': assertBoolean,
+  'orders.tracking_stale_hours': (k, v) => assertIntInRange(k, v, 1, 720, 'giờ'),
+  'referral.share_card_enabled': assertBoolean,
   [MINI_ENABLED_KEY]: assertBoolean,
   ...Object.fromEntries(MINI_GAME_IDS.map((g) => [miniGameFlagKey(g), assertBoolean])),
   // Cùng biên máy chủ kẹp khi đọc (game-mini.settings.ts): admin không lưu được giá trị mà máy chủ sẽ lặng lẽ đổi.

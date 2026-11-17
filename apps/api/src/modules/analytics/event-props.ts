@@ -95,6 +95,12 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   eco_badge_opened: { props: { productSlug: SLUG, kind: oneOf(ECO_FACT_KIND_NAMES) }, required: ['productSlug', 'kind'] },
   eco_passport_viewed: { props: { hasData: bool }, required: ['hasData'] },
   eco_passport_shared: { props: {} },
+  // Dòng thời gian một khối, bật Zalo từ chi tiết đơn, trang đích link mời. Không mang mã đơn hay mã mời (mã mời chỉ ra người mời).
+  order_timeline_viewed: { props: { status: str(/^[A-Z_]{2,32}$/), hasCarrierEvents: bool }, required: ['status', 'hasCarrierEvents'] },
+  order_zalo_consent_from_detail: { props: {} },
+  invite_landing_viewed: { props: {} },
+  invite_landing_cta: { props: {} },
+  invite_progress_viewed: { props: {} },
 };
 
 /**

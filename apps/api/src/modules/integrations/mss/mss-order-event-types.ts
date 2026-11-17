@@ -60,7 +60,46 @@ export const MSS_ORDER_EVENT_JOB = 'deliver';
 
 /** Phiên bản câu chữ đồng ý (mục 7 hợp đồng, quyết định PO số 3) lưu kèm lựa chọn của khách làm bằng chứng. */
 export const ORDER_ZALO_CONSENT_TEXT_VERSION = 'order-zalo-v1-2026-11-17';
-export type OrderZaloConsentSource = 'checkout' | 'account_settings' | 'mss_opt_out';
+export type OrderZaloConsentSource = 'checkout' | 'account_settings' | 'mss_opt_out' | 'order_detail';
+
+/** Đơn còn hành trình để báo: chưa giao, chưa huỷ, chưa trả. */
+export const ORDER_ZALO_ACTIVE_STATUSES: readonly string[] = ['PENDING_PAYMENT', 'CONFIRMED', 'PACKED', 'SHIPPING'];
+
+export type LateConsentBlock =
+  | 'gate_closed'
+  | 'rollout'
+  | 'not_active'
+  | 'already'
+  | 'platform_null'
+  | 'placed_for_customer'
+  | 'dealer_order'
+  | 'no_verified_phone'
+  | 'gift_recipient';
+
+/**
+ * Bật tin hành trình qua Zalo cho một đơn đang đi, từ chi tiết đơn. Cùng điều kiện mà `MssOrderEventRecorder.record` dùng để bỏ qua
+ * sự kiện, để nút không hứa tin mà máy chủ sẽ không gửi. Trả lý do chặn, hoặc null khi bật được. `already` = đơn đã có đồng ý.
+ */
+export function lateConsentBlock(input: {
+  gate: { enabled: boolean; open: boolean; rolloutPct: number } | null | undefined;
+  order: { userId: string; status: string; type: string; platform: string | null; placedForCustomer: boolean; orderZaloConsent: boolean | null; shippingAddress: unknown };
+  user: { phone: string | null; phoneVerifiedAt: Date | null };
+}): LateConsentBlock | null {
+  const { gate, order, user } = input;
+  if (!gate?.enabled || !gate.open) return 'gate_closed';
+  if (!inRollout(order.userId, gate.rolloutPct)) return 'rollout';
+  if (!ORDER_ZALO_ACTIVE_STATUSES.includes(order.status)) return 'not_active';
+  if (order.orderZaloConsent === true) return 'already';
+  if (order.platform !== 'web' && order.platform !== 'miniapp') return 'platform_null';
+  if (order.placedForCustomer) return 'placed_for_customer';
+  if (order.type !== 'RETAIL') return 'dealer_order';
+  const phone = user.phoneVerifiedAt ? normalizeVnPhone(user.phone) : null;
+  if (!phone) return 'no_verified_phone';
+  const address = order.shippingAddress;
+  const recipient = address && typeof address === 'object' && !Array.isArray(address) ? (address as Record<string, unknown>).phone : null;
+  if (normalizeVnPhone(typeof recipient === 'string' ? recipient : null) !== phone) return 'gift_recipient';
+  return null;
+}
 
 export type MssCancelReason = 'CUSTOMER' | 'OUT_OF_STOCK' | 'PAYMENT_TIMEOUT' | 'OTHER';
 
@@ -175,3 +214,26 @@ export function fallbackDecision(status: MssOutboxStatus, reason: string | null,
 
 /** Trạng thái cuối cần chạy đường lui (một lần, cột fallbackAt). */
 export const MSS_FALLBACK_STATUSES: readonly MssOutboxStatus[] = ['RESULT_SKIPPED', 'RESULT_FAILED', 'RESULT_UNKNOWN', 'DEAD', 'EXPIRED', 'CANCELLED'];
+
+export interface BuyerOrderNotice {
+  event: MssOrderEventType;
+  channel: 'ZALO' | 'ZNS';
+  at: string;
+}
+
+/**
+ * Tin đã tới khách ngoài ứng dụng, cho dòng phụ "Đã báo qua Zalo/ZNS" ở chi tiết đơn của chính khách: MSS báo gửi xong (`RESULT_SENT`), hoặc đường
+ * lui đã gửi ZNS (`fallbackChannel = ZNS`). Chỉ ba trường; không trả trạng thái nội bộ, lý do lỗi, mã sự kiện hay thân tin.
+ */
+export function buyerOrderNotices(
+  rows: readonly { eventType: string; status: string; resultAt: Date | null; deliveredAt: Date | null; occurredAt: Date; fallbackChannel: string | null; fallbackAt: Date | null }[],
+): BuyerOrderNotice[] {
+  const out: BuyerOrderNotice[] = [];
+  for (const r of rows) {
+    if (!(MSS_ORDER_EVENT_TYPES as readonly string[]).includes(r.eventType)) continue;
+    const event = r.eventType as MssOrderEventType;
+    if (r.status === 'RESULT_SENT') out.push({ event, channel: 'ZALO', at: (r.resultAt ?? r.deliveredAt ?? r.occurredAt).toISOString() });
+    else if (r.fallbackChannel === 'ZNS' && r.fallbackAt) out.push({ event, channel: 'ZNS', at: r.fallbackAt.toISOString() });
+  }
+  return out;
+}

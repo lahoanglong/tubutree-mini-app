@@ -113,3 +113,38 @@ describe('SecondOrderInvite — thẻ mời ở chi tiết đơn đã giao (Mini
     expect(container.textContent).toBe('');
   });
 });
+
+describe('SecondOrderInvite — dòng thay thế khi thẻ không hiện', () => {
+  const renderWith = (order: Parameters<typeof SecondOrderInvite>[0]['order']) =>
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <SecondOrderInvite order={order} fallback={<p>dòng mời bạn</p>} />
+      </QueryClientProvider>,
+    );
+
+  it('thẻ hiện thì không có dòng thay thế', async () => {
+    renderWith(delivered);
+    expect(await screen.findByText('Giữ bao bì gửi kèm đơn sau')).toBeInTheDocument();
+    expect(screen.queryByText('dòng mời bạn')).toBeNull();
+  });
+
+  it('thẻ không hiện (đường kèm đơn tắt): dòng thay thế hiện ở chỗ thẻ', async () => {
+    mocks.cfg = { ...mocks.cfg, waste: { ...mocks.cfg.waste, pickup: false } };
+    renderWith(delivered);
+    expect(await screen.findByText('dòng mời bạn')).toBeInTheDocument();
+  });
+
+  it('chưa biết chắc (cấu hình chưa về hoặc /waste/me đang tải): chưa hiện gì, tránh nhảy từ dòng sang thẻ', async () => {
+    mocks.cfg = { ...mocks.cfg, isLoaded: false };
+    const first = renderWith(delivered);
+    expect(screen.queryByText('dòng mời bạn')).toBeNull();
+    first.unmount();
+    mocks.cfg = { ...mocks.cfg, isLoaded: true };
+    let resolve: (v: WasteMeDTO) => void = () => undefined;
+    mocks.getWasteMe.mockReturnValue(new Promise<WasteMeDTO>((r) => (resolve = r)));
+    renderWith(delivered);
+    expect(screen.queryByText('dòng mời bạn')).toBeNull();
+    resolve(me({ blocked: true } as Partial<WasteMeDTO>));
+    await waitFor(() => expect(screen.getByText('dòng mời bạn')).toBeInTheDocument());
+  });
+});

@@ -22,6 +22,9 @@ export const saveOrderZaloChoice = (http: HttpClient, enabled: boolean) =>
 
 export const TUBU_ZALO_PHONE = '0899149229';
 
+/** Đơn còn hành trình để báo: chưa giao, chưa huỷ, chưa trả. */
+const ORDER_ZALO_ACTIVE = /^(PENDING_PAYMENT|CONFIRMED|PACKED|SHIPPING)$/;
+
 /** Có hiện ô không (null = không) và trạng thái tick ban đầu: lần đầu theo cấu hình, sau đó theo lựa chọn gần nhất. */
 export function orderZaloConsentView(s: OrderZaloStatus | null | undefined): { checked: boolean; phone: string } | null {
   if (!s?.enabled || !s.phoneMasked) return null;
@@ -41,5 +44,30 @@ export function tubuZaloUrl(phone: string | null | undefined): string {
  * hành trình nào để nhận. `orderZaloConsent` có trong GET /orders/:code và place-order nhưng chưa khai ở kiểu đơn chung.
  */
 export function showOrderZaloFriend(enabled: boolean | undefined, order: { status: string; orderZaloConsent?: unknown }): boolean {
-  return enabled === true && order.orderZaloConsent === true && /^(PENDING_PAYMENT|CONFIRMED|PACKED|SHIPPING)$/.test(order.status);
+  return enabled === true && order.orderZaloConsent === true && ORDER_ZALO_ACTIVE.test(order.status);
+}
+
+
+/**
+ * Bật tin hành trình qua Zalo cho một đơn đang đi (nút ở chi tiết đơn). Máy chủ ghi đồng ý của đơn (nguồn `order_detail`, phiên bản câu chữ) và
+ * lựa chọn gần nhất của khách; chỉ sự kiện xảy ra sau đó mới được báo. Gọi lại khi đã bật trả cùng kết quả.
+ */
+export const enableOrderZaloForOrder = (http: HttpClient, code: string) =>
+  http.post<{ orderZaloConsent: true }>(`/orders/${encodeURIComponent(code)}/order-zalo-consent`);
+
+export type OrderZaloDetailView = { kind: 'offer'; phone: string } | { kind: 'on'; phone: string } | null;
+
+/**
+ * Dòng Zalo trong khối hành trình ở chi tiết đơn: nút "Nhận thông báo Zalo cho đơn này" (kèm đúng câu đồng ý và số nhận như ô ở thanh toán, vì máy chủ
+ * ghi cùng phiên bản câu chữ) khi cờ chung bật, có số đã xác minh, đơn còn đang đi, chưa có đồng ý và máy chủ báo đơn nhắn được (`orderZaloAvailable`).
+ * Dòng "Sẽ báo qua Zalo số …" chỉ khi máy chủ báo tin đang thật sự được gửi (`orderZaloOn`): đơn có đồng ý mà khách đã tắt ở Cài đặt, nhắn dừng
+ * trên Zalo, hay đơn giao tới số khác thì bộ ghi sự kiện bỏ qua, màn không được hứa. API cũ không trả hai trường này thì không có gì.
+ */
+export function orderZaloDetailView(
+  s: OrderZaloStatus | null | undefined,
+  order: { status: string; orderZaloConsent?: unknown; orderZaloAvailable?: unknown; orderZaloOn?: unknown },
+): OrderZaloDetailView {
+  if (!s?.enabled || !s.phoneMasked || !ORDER_ZALO_ACTIVE.test(order.status)) return null;
+  if (order.orderZaloOn === true) return { kind: 'on', phone: s.phoneMasked };
+  return order.orderZaloAvailable === true && order.orderZaloConsent !== true ? { kind: 'offer', phone: s.phoneMasked } : null;
 }

@@ -139,3 +139,12 @@ describe('buildPublicConfig — hệ số hạng', () => {
     expect(r.loyalty.earnPct).toBeGreaterThan(0);
   });
 });
+
+describe('buildPublicConfig — referralShareCardEnabled (trang đích link mời)', () => {
+  it('mặc định tắt; chỉ boolean true thật mới bật', async () => {
+    expect((await build({})).referralShareCardEnabled).toBe(false);
+    expect((await build({ 'referral.share_card_enabled': true })).referralShareCardEnabled).toBe(true);
+    expect((await build({ 'referral.share_card_enabled': 'true' })).referralShareCardEnabled).toBe(false);
+    expect((await build({ 'referral.share_card_enabled': 1 })).referralShareCardEnabled).toBe(false);
+  });
+});

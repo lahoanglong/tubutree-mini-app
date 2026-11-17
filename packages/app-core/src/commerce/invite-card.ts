@@ -63,3 +63,51 @@ export function inviteLink(baseUrl: string, referralCode: string): string {
 export function inviteShareText(url: string): string {
   return fillCopy('invite.shareText', { url });
 }
+
+/** Gốc trang đích của link mời (chỉ có ở web); Mini App cũng chép link này để người nhận ngoài Zalo mở được. */
+export const INVITE_LANDING_ORIGIN = 'https://tubutree.com';
+
+export function isInviteCode(code: unknown): code is string {
+  return typeof code === 'string' && REF_CODE_PATTERN.test(code);
+}
+
+/** Link trang đích `/moi/<mã>` (cờ `referral.share_card_enabled`). Mã sai khuôn thì trang chủ trơn, không đưa chuỗi lạ vào URL. */
+export function inviteLandingLink(referralCode: string, origin: string = INVITE_LANDING_ORIGIN): string {
+  const base = origin.replace(/\/+$/, '');
+  return isInviteCode(referralCode) ? `${base}/moi/${referralCode}` : `${base}/`;
+}
+
+/** Link mời mà khối "Mời bạn sống xanh" chép và chia sẻ: trang đích khi cờ bật, link cũ `/?ref=` khi tắt. */
+export function inviteShareLink(opts: { landing: boolean; baseUrl: string; referralCode: string; landingOrigin?: string }): string {
+  return opts.landing ? inviteLandingLink(opts.referralCode, opts.landingOrigin) : inviteLink(opts.baseUrl, opts.referralCode);
+}
+
+/** Đích nút "Bắt đầu mua sắm" của trang đích: Trang chủ kèm `?ref=` để cơ chế ghi nhận lượt giới thiệu sẵn có (chạm giới thiệu) chạy như link cũ. */
+export function inviteLandingTarget(referralCode: string): string {
+  return isInviteCode(referralCode) ? `/?ref=${referralCode}` : '/';
+}
+
+const count = (n: unknown): number | null => (typeof n === 'number' && Number.isInteger(n) && n >= 0 ? n : null);
+
+/**
+ * Dòng tiến độ dưới nút chia sẻ: chỉ số đếm, không tên. Số lấy từ `GET /me/referral` (`invitedCount`, `firstOrderCount`, `successCount`, `earnedPoints`);
+ * API cũ thiếu số nào thì không có dòng. CTV không nhận Điểm Xanh giới thiệu nên không thấy phần đủ điều kiện và điểm (cùng luật `inviteRewardLine`).
+ */
+export function inviteProgressLine(
+  r: { successCount?: unknown; earnedPoints?: unknown; invitedCount?: unknown; firstOrderCount?: unknown } | null | undefined,
+  earnsPoints: boolean,
+): string | null {
+  const a = count(r?.invitedCount);
+  const b = count(r?.firstOrderCount);
+  if (a === null || b === null) return null;
+  if (!earnsPoints) return fillCopy('invite.progressNoPoints', { a, b });
+  const c = count(r?.successCount);
+  const pts = count(r?.earnedPoints);
+  if (c === null || pts === null) return null;
+  return fillCopy('invite.progress', { a, b, c, points: points(pts) });
+}
+
+/** Cờ `referral.share_card_enabled` từ cấu hình công khai (Mini App và web có kiểu cấu hình riêng; chỉ boolean true thật mới bật). */
+export function inviteLandingOn(cfg: unknown): boolean {
+  return typeof cfg === 'object' && cfg !== null && (cfg as Record<string, unknown>).referralShareCardEnabled === true;
+}

@@ -184,7 +184,7 @@ export class RewardPointsService {
    * nhận từ giới thiệu (thưởng xu cũ quy ra ceil(xu/1000)), mốc và mốc kế tiếp.
    */
   async getReferralOverview(userId: string) {
-    const [user, pointsAgg, coinAgg, successCount, milestones, rules, referrerRewardPoints] = await Promise.all([
+    const [user, pointsAgg, coinAgg, successCount, milestones, rules, referrerRewardPoints, invitedCount, firstOrderCount] = await Promise.all([
       this.prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { referralCode: true } }),
       this.prisma.pointsTransaction.aggregate({ where: { userId, refType: 'REFERRAL' }, _sum: { delta: true } }),
       this.prisma.coinTransaction.aggregate({ where: { userId, refType: 'REFERRAL' }, _sum: { delta: true } }),
@@ -192,9 +192,14 @@ export class RewardPointsService {
       this.referralMilestones(),
       this.referralOrderRules(),
       this.config.get<number>('referral.referrer_reward_points', REFERRER_REWARD_POINTS_DEFAULT),
+      // Tiến độ mời: chỉ số đếm, không tên. Tài khoản đã gộp vào tài khoản khác không tính hai lần.
+      this.prisma.user.count({ where: { referredById: userId, mergedIntoId: null } }),
+      this.prisma.user.count({ where: { referredById: userId, mergedIntoId: null, orders: { some: { status: 'DELIVERED' } } } }),
     ]);
     return {
       referralCode: user.referralCode,
+      invitedCount,
+      firstOrderCount,
       successCount,
       earnedPoints: (pointsAgg._sum.delta ?? 0) + legacyXuToPoints(coinAgg._sum.delta ?? 0),
       milestones,

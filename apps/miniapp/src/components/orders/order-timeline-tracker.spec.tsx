@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import { buildOrderTimelineSteps } from '@tubutree/app-core/commerce/order-timeline';
+import { buildOrderJourney, buildOrderTimelineSteps } from '@tubutree/app-core/commerce/order-timeline';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({ copyText: vi.fn() }));
@@ -95,6 +95,52 @@ describe('OrderTimelineTracker', () => {
   });
 });
 
+const shippingOrder = {
+  status: 'SHIPPING',
+  createdAt: STAMPS.createdAt,
+  statusTimes: { CONFIRMED: STAMPS.confirmedAt, SHIPPING: STAMPS.shippingAt },
+  shippingHistory: [
+    { status: 'picked', at: '2026-10-02T03:00:00.000Z' },
+    { status: 'transporting', at: '2026-10-02T06:00:00.000Z' },
+    { status: 'sorting', at: '2026-10-02T09:00:00.000Z' },
+    { status: 'delivering', at: '2026-10-03T01:00:00.000Z' },
+  ],
+  notices: [{ event: 'order.shipping', channel: 'ZALO', at: '2026-10-02T07:02:00.000Z' }],
+};
+const stepOf = (key: string) => items().find((li) => li.getAttribute('data-step') === key)!;
+
+describe('OrderTimelineTracker layout="journey" (cờ orders.timeline_v2_enabled)', () => {
+  it('danh sách dọc 4 bước; mốc hãng dưới "Đang giao hàng", mở sẵn 2 mốc mới nhất, nút "Xem đủ 4 mốc vận chuyển"', () => {
+    const { container } = render(<OrderTimelineTracker steps={buildOrderJourney(shippingOrder, { now: NOW }).steps} layout="journey" now={NOW} />);
+    expect(container.querySelector('ol.order-timeline--journey')).not.toBeNull();
+    const shipping = stepOf('shipping');
+    expect(shipping.getAttribute('aria-current')).toBe('step');
+    expect(shipping.querySelectorAll('ul[aria-label="Mốc vận chuyển"] li')).toHaveLength(2);
+    const toggle = screen.getByTestId('track-events-toggle');
+    expect(toggle).toHaveTextContent('Xem đủ 4 mốc vận chuyển');
+    fireEvent.click(toggle);
+    expect(shipping.querySelectorAll('ul[aria-label="Mốc vận chuyển"] li')).toHaveLength(4);
+  });
+
+  it('dòng "Đã báo qua Zalo · 14:02" dưới bước đã báo; dự kiến giao ở bước hiện tại', () => {
+    render(<OrderTimelineTracker steps={buildOrderJourney(shippingOrder, { now: NOW, etaLabel: '04/10 – 06/10' }).steps} layout="journey" now={NOW} />);
+    expect(stepOf('shipping')).toHaveTextContent('Đã báo qua Zalo · 14:02');
+    expect(stepOf('shipping')).toHaveTextContent('04/10 – 06/10');
+    expect(stepOf('received')).not.toHaveTextContent('Đã báo qua');
+  });
+
+  it('hãng im quá số giờ cấu hình: dòng "Đang chờ hãng vận chuyển cập nhật"', () => {
+    render(<OrderTimelineTracker steps={buildOrderJourney({ ...shippingOrder, trackingStaleHours: 24 }, { now: NOW }).steps} layout="journey" now={NOW} />);
+    expect(stepOf('shipping')).toHaveTextContent('Đang chờ hãng vận chuyển cập nhật');
+  });
+
+  it('bản thanh ngang (cờ tắt) giữ đúng cấu trúc cũ: không có lớp journey hay khối body', () => {
+    const { container } = render(<OrderTimelineTracker steps={buildOrderTimelineSteps('SHIPPING', STAMPS)} now={NOW} />);
+    expect(container.querySelector('.order-timeline--journey, .order-timeline__body')).toBeNull();
+    expect(items()[0]!.children).toHaveLength(3);
+  });
+});
+
 describe('thanh tiến trình: CSS', () => {
   const css = readFileSync(resolve(__dirname, '../../css/tokens.css'), 'utf8');
 
@@ -105,5 +151,10 @@ describe('thanh tiến trình: CSS', () => {
     expect(before.lastIndexOf('@media (prefers-reduced-motion: no-preference)')).toBeGreaterThan(before.lastIndexOf('}\n}'));
     expect(css.match(/animation: order-step-glow/g)).toHaveLength(1);
     expect(css).toMatch(/\.order-timeline__step\[data-state='current'\] \.order-timeline__dot \{[^}]*box-shadow: 0 0 0 4px/);
+  });
+
+  it('bản dọc: vạch nối chạy từ đáy chấm xuống bước sau, bước cuối không có vạch', () => {
+    expect(css).toMatch(/\.order-timeline--journey \{[^}]*flex-direction: column/);
+    expect(css).toMatch(/\.order-timeline--journey \.order-timeline__step:last-child::before \{[^}]*display: none/);
   });
 });

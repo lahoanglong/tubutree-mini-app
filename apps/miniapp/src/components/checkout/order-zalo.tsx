@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useNavigate } from 'zmp-ui';
 import { openWebview } from 'zmp-sdk/apis';
 import type { OrderZaloFriendFrom } from '@tubutree/shared-types';
-import { fetchOrderZaloStatus, orderZaloConsentView, tubuZaloNumber } from '@tubutree/app-core/order-zalo';
+import { enableOrderZaloForOrder, fetchOrderZaloStatus, orderZaloConsentView, orderZaloDetailView, showOrderZaloFriend, tubuZaloNumber } from '@tubutree/app-core/order-zalo';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '../../services/core-http';
 import { trackEvent } from '../../services/analytics';
+import { getErrorMessage } from '../../services/api';
 import { usePublicConfig } from '../../hooks/use-public-config';
 import { useNotify } from '../../hooks/use-notify';
 import { copyText } from '../../utils/clipboard';
@@ -75,3 +77,72 @@ export function OrderZaloFriend({ code, from }: { code: string; from: OrderZaloF
     </div>
   );
 }
+
+type OrderZaloDetailOrder = { code: string; status: string; orderZaloConsent?: unknown; orderZaloAvailable?: unknown; orderZaloOn?: unknown };
+
+/**
+ * Khối Zalo ở chi tiết đơn. Đơn chưa nhận tin hành trình (khách bỏ tick lúc đặt) mà máy chủ báo còn bật được thì có nút bật cho riêng đơn
+ * này, đứng sau đúng câu đồng ý và số nhận của ô ở thanh toán (máy chủ ghi cùng phiên bản câu chữ): chỉ các sự kiện sau lúc bật mới được báo,
+ * không gửi bù. Tin đang thật sự được gửi thì ghi số sẽ nhận tin, lối tắt sang Cài đặt và lời mời kết bạn. Cờ MSS tắt thì không hỏi máy chủ,
+ * giữ đúng lời mời kết bạn như cũ.
+ */
+export function OrderZaloDetail({ order }: { order: OrderZaloDetailOrder }) {
+  const enabled = usePublicConfig().orderZaloEnabled;
+  const view = orderZaloDetailView(useOrderZaloStatus(), order);
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+  const { notify } = useNotify();
+  const [busy, setBusy] = useState(false);
+  const enable = async () => {
+    setBusy(true);
+    try {
+      await enableOrderZaloForOrder(coreHttp, order.code);
+      void trackEvent('order_zalo_consent_from_detail', 'miniapp', {});
+      queryClient.setQueryData<OrderZaloDetailOrder>(['order', order.code], (o) => o && { ...o, orderZaloConsent: true, orderZaloAvailable: false, orderZaloOn: true });
+      notify({ text: fillCopy('order.zaloDetail.done'), type: 'success' });
+    } catch (e) {
+      notify({ text: getErrorMessage(e), type: 'error' });
+    } finally {
+      await Promise.all([queryClient.invalidateQueries({ queryKey: ['order', order.code] }), queryClient.invalidateQueries({ queryKey: ORDER_ZALO_KEY })]);
+      setBusy(false);
+    }
+  };
+  if (view?.kind === 'offer') {
+    return (
+      <div style={GAP_TOP}>
+        <Text variant="caption" tone="secondary" as="p" style={{ marginBottom: 'var(--space-stack-sm)' }}>
+          {fillCopy('checkout.orderZalo.body')} {fillCopy('checkout.orderZalo.phone', { phone: view.phone })}
+        </Text>
+        <Button variant="secondary" fullWidth loading={busy} onPress={enable}>
+          {fillCopy('order.zaloDetail.cta')}
+        </Button>
+      </div>
+    );
+  }
+  if (!view && !showOrderZaloFriend(enabled, order)) return null;
+  return (
+    <div style={GAP_TOP}>
+      {view && (
+        <Text variant="caption" tone="secondary" as="p" data-testid="order-zalo-on">
+          {fillCopy('order.zaloDetail.on', { phone: view.phone })}
+          {' · '}
+          <button type="button" className="tubu-press min-h-11" onClick={() => navigate('/settings')} style={INLINE_LINK}>
+            {fillCopy('order.zaloDetail.settings')}
+          </button>
+        </Text>
+      )}
+      <OrderZaloFriend code={order.code} from="order_detail" />
+    </div>
+  );
+}
+
+const GAP_TOP = { marginTop: 'var(--space-stack-sm)' } as const;
+const INLINE_LINK = {
+  padding: 0,
+  border: 0,
+  background: 'none',
+  font: 'inherit',
+  fontWeight: 600,
+  color: 'var(--color-text-brand)',
+  textDecoration: 'underline',
+} as const;
