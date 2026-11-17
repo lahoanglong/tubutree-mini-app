@@ -404,6 +404,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Trang sản phẩm: bảng So sánh như trên PROD khi cờ catalog.pdp_compare_enabled tắt (404 → khối ẩn), và khách chưa mua món nào (không có dòng Mua lại).
       api.fallback('GET', '/products/:slug/compare', reply(404, { statusCode: 404, message: 'Not Found' }));
       api.fallback('GET', '/me/purchased-items', { items: [], nextCursor: null });
+      // PDP có phân loại hết hàng hỏi trạng thái "Báo tôi khi có hàng": mặc định như PROD khi cờ catalog.restock_alert_enabled tắt (nút xám "Tạm hết hàng").
+      api.fallback('GET', '/restock-alerts', { enabled: false, variationIds: [] });
       // Sảnh mini game ở Vườn Xanh (Mini App và web) hỏi trạng thái kỷ lục và lượt thưởng khi đã đăng nhập; mặc định chưa chơi ván nào, ngoài khung giờ thưởng, chưa nhận quà Chẩn đoán.
       api.fallback('GET', '/game/arcade/status', {
         games: {

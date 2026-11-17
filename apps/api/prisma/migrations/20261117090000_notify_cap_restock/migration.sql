@@ -19,6 +19,25 @@ ADD COLUMN     "notifySocialTextVersion" TEXT;
 UPDATE "users" SET "notifySocial" = "notifyGarden"
  WHERE "notifySocialAt" IS NULL AND "notifySocial" IS DISTINCT FROM "notifyGarden";
 
+-- Ảnh cũ (trước wave) chỉ biết công tắc gộp và chỉ ghi "notifyGarden" (rollback ảnh, hoặc quãng ảnh cũ còn chạy sau migration): giữ
+-- "notifySocial" cùng giá trị như công tắc gộp khách thấy. Ảnh mới luôn ghi kèm "notifyGardenAt" khi đổi "notifyGarden" nên không bị đụng.
+CREATE OR REPLACE FUNCTION users_notify_social_follow_legacy() RETURNS trigger
+LANGUAGE plpgsql
+SET search_path FROM CURRENT
+AS $fn$
+BEGIN
+  IF NEW."notifyGarden" IS DISTINCT FROM OLD."notifyGarden" AND NEW."notifyGardenAt" IS NOT DISTINCT FROM OLD."notifyGardenAt" THEN
+    NEW."notifySocial" := NEW."notifyGarden";
+  END IF;
+  RETURN NEW;
+END
+$fn$;
+
+DROP TRIGGER IF EXISTS users_notify_social_follow_legacy ON "users";
+CREATE TRIGGER users_notify_social_follow_legacy
+BEFORE UPDATE OF "notifyGarden" ON "users"
+FOR EACH ROW EXECUTE FUNCTION users_notify_social_follow_legacy();
+
 ALTER TABLE "users" ADD CONSTRAINT "users_notify_consent_source_check" CHECK (
   ("notifyPromoSource" IS NULL OR "notifyPromoSource" IN ('settings', 'onboarding', 'unsubscribe_link'))
   AND ("notifyGardenSource" IS NULL OR "notifyGardenSource" IN ('settings', 'onboarding', 'unsubscribe_link'))
@@ -57,6 +76,8 @@ CREATE TABLE "notification_proactive_counters" (
 CREATE INDEX "restock_alerts_variationId_notifiedAt_createdAt_idx" ON "restock_alerts"("variationId", "notifiedAt", "createdAt");
 
 CREATE INDEX "restock_alerts_userId_notifiedAt_idx" ON "restock_alerts"("userId", "notifiedAt");
+
+CREATE INDEX "restock_alerts_notifiedAt_idx" ON "restock_alerts"("notifiedAt");
 
 -- Một đăng ký đang chờ cho mỗi (khách, biến thể); đăng ký đã gửi tin không chặn lần đăng ký sau. Prisma không biểu diễn được WHERE.
 CREATE UNIQUE INDEX "restock_alerts_pending_user_variation_key" ON "restock_alerts"("userId", "variationId") WHERE "notifiedAt" IS NULL;

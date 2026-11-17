@@ -833,7 +833,7 @@ export const SHOP_COPY: Record<string, string> = {
   // Báo hàng về: nút chính của thanh mua khi phân loại đang chọn hết hàng (cờ catalog.restock_alert_enabled). Đã đăng ký thì bấm lại là huỷ.
   'restock.notifyMe': 'Báo tôi khi có hàng',
   'restock.subscribed': 'Đã đăng ký báo hàng · Huỷ',
-  'restock.subscribedToast': 'Có hàng là Tubu báo bạn ngay.',
+  'restock.subscribedToast': 'Có hàng Tubu sẽ báo bạn ở mục Thông báo.',
   'restock.cancelledToast': 'Đã huỷ báo hàng về.',
   'restock.offline': 'Chưa kết nối được tới Tubu Tree nên chưa đăng ký được. Bạn kiểm tra mạng rồi bấm lại nhé.',
   // Cài đặt thông báo: hai công tắc tách từ công tắc gộp cũ. Đổi chữ ở đây thì đổi cả NOTIFY_PREFS_TEXT_VERSION (api/account.ts).

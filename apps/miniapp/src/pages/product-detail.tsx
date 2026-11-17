@@ -66,7 +66,7 @@ import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { pdpMedia, pdpMediaIndexOfImage } from '@tubutree/app-core/commerce/pdp-media';
 import { PdpVideoSlide } from '../components/product/pdp-video-slide';
-import { PdpRestockButton } from '../components/product/pdp-restock-button';
+import { PdpRestockButton, useRestockStatus } from '../components/product/pdp-restock-button';
 import { hasOwnStory, resolveStoryConfig } from '@tubutree/app-core/commerce/product-story';
 import { needsVariationPicker, shouldOpenVariationPicker } from '@tubutree/app-core/variation-picker';
 import {
@@ -296,6 +296,8 @@ export default function ProductDetailPage() {
     () => variations.find((v) => v.id === selectedId) ?? variations.find((v) => v.id === autoId) ?? pickDefaultVariation(variations),
     [selectedId, autoId, variations],
   );
+  // Cờ báo hàng về bật thì chip phân loại hết hàng chọn được, để khách đăng ký đúng phân loại mình cần (cùng cache với nút ở thanh mua).
+  const restockOn = useRestockStatus(product.data?.id, variations.some((v) => v.stock <= 0)).data?.enabled === true;
 
   // Số suất Giờ vàng khách còn mua được (đã trừ các đơn trước): một request cho các suất của sản phẩm này, chỉ khi đã đăng nhập; chỉ nút, tổng và ghi chú đọc nó.
   const flashWithAllowance = useFlashAllowance(flashQ.data, variations.map((v) => v.id));
@@ -929,6 +931,7 @@ export default function ProductDetailPage() {
                 variation={v}
                 pricing={variationPricing(v, flashList)}
                 active={selected?.id === v.id}
+                outSelectable={restockOn}
                 onClick={() => {
                   haptic('light');
                   setSelectedId(v.id);

@@ -52,6 +52,21 @@ describe('VariationChip web: nhãn tiết kiệm của phân loại đang giảm
     expect(b.disabled).toBe(true);
   });
 
+  it('hết hàng nhưng cờ báo hàng về bật (outSelectable): bấm được để chọn, vẫn ghi "Tạm hết hàng", không mờ, không gạch', () => {
+    let clicks = 0;
+    const r = render(
+      <VariationChip variation={{ name: 'Chai 1L', stock: 0 }} pricing={{ price: 85_000, isFlash: false }} active={false} onClick={() => (clicks += 1)} outSelectable />,
+    );
+    mounted.push(r);
+    const b = r.container.querySelector('button') as HTMLButtonElement;
+    expect(b.disabled).toBe(false);
+    expect(b.textContent).toContain('Tạm hết hàng');
+    expect(b.className).not.toContain('opacity-60');
+    expect(b.innerHTML).not.toContain('line-through');
+    b.click();
+    expect(clicks).toBe(1);
+  });
+
   it('đang chọn: aria-pressed true và nhãn tiết kiệm vẫn hiện', () => {
     const b = chip({ salePct: 20, active: true });
     expect(b.getAttribute('aria-pressed')).toBe('true');

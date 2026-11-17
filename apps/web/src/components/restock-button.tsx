@@ -25,6 +25,8 @@ interface ToggleVars {
 }
 
 export interface RestockControl {
+  /** Cờ catalog.restock_alert_enabled bật (đã biết từ máy chủ): chip phân loại hết hàng chọn được. */
+  enabled: boolean;
   view: RestockButtonView;
   pending: boolean;
   press: () => void;
@@ -60,6 +62,8 @@ export function useRestock({
     queryFn: () => fetchRestockStatus(coreHttp, productId!, { anonymous: !authed }),
     enabled: !!productId && anyOut && phase !== 'loading',
     staleTime: 30_000,
+    // Lỗi hay API chưa có đường này: giữ nút xám như trước, không gọi lại.
+    retry: false,
   });
 
   const toggle = useLockedMutation(
@@ -119,7 +123,7 @@ export function useRestock({
     }
     toggle.mutate({ variationId: selectedId, subscribed: view.kind === 'subscribed' });
   };
-  return { view, pending: toggle.isPending, press };
+  return { enabled: statusQ.data?.enabled === true, view, pending: toggle.isPending, press };
 }
 
 /** Nút chính khi phân loại đang chọn hết hàng: đặc khi chưa đăng ký, viền khi đã đăng ký (bấm lại để huỷ). */

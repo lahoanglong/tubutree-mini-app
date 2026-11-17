@@ -24,6 +24,21 @@ interface ToggleVars {
 }
 
 /**
+ * Trạng thái "Báo tôi khi có hàng" của sản phẩm cho khách đang xem; dùng chung khoá cache cho nút và chip phân loại. Chỉ hỏi khi sản phẩm có
+ * phân loại hết hàng. Không thử lại: lỗi hay API chưa có đường này thì giữ nút xám như trước.
+ */
+export function useRestockStatus(productId: string | undefined, anyOut: boolean) {
+  const authed = useAuthStore((s) => s.status === 'authenticated');
+  return useQuery({
+    queryKey: restockStatusKey(productId ?? '', authed),
+    queryFn: () => fetchRestockStatus(coreHttp, productId!, { anonymous: !authed }),
+    enabled: !!productId && anyOut,
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+/**
  * Nút chính của thanh mua khi phân loại đang chọn hết hàng. Cờ catalog.restock_alert_enabled tắt (hoặc trạng thái chưa về) thì vẫn là
  * nút xám "Tạm hết hàng" như trước; bật thì "Báo tôi khi có hàng", bấm lại để huỷ. Khách chưa đăng nhập thì đăng nhập rồi đăng ký luôn.
  */
@@ -32,12 +47,7 @@ export function PdpRestockButton({ productId, variationId }: { productId: string
   const authed = useAuthStore((s) => s.status === 'authenticated');
   const loginWithNotice = useLoginWithNotice();
   const { notify } = useNotify();
-  const key = restockStatusKey(productId, authed);
-  const statusQ = useQuery({
-    queryKey: key,
-    queryFn: () => fetchRestockStatus(coreHttp, productId, { anonymous: !authed }),
-    staleTime: 30_000,
-  });
+  const statusQ = useRestockStatus(productId, true);
 
   const toggle = useLockedMutation(
     {

@@ -96,6 +96,29 @@ describe('AddToCart — Báo tôi khi có hàng', () => {
     expect(container.querySelector('[data-testid="buy-now"]')).not.toBeNull();
   });
 
+  it('cờ bật: chip phân loại hết hàng chọn được, chọn nó thì nút chính thành "Báo tôi khi có hàng" và đăng ký đúng phân loại đó', async () => {
+    authed();
+    const { container } = mount(MIXED);
+    await flush();
+    const outChip = [...container.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.startsWith('250ml'))!;
+    expect(outChip.disabled).toBe(false);
+    click(outChip);
+    await flush();
+    expect(restockButton(container)!.textContent).toBe('Báo tôi khi có hàng');
+    click(restockButton(container));
+    await flush();
+    expect(mocks.subscribeRestock).toHaveBeenCalledWith(expect.anything(), 'v1');
+  });
+
+  it('cờ tắt: chip phân loại hết hàng vẫn khoá như trước', async () => {
+    authed();
+    mocks.fetchRestockStatus.mockResolvedValue({ enabled: false, variationIds: [] });
+    const { container } = mount(MIXED);
+    await flush();
+    const outChip = [...container.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent?.startsWith('250ml'))!;
+    expect(outChip.disabled).toBe(true);
+  });
+
   it('đã đăng nhập: bấm "Báo tôi khi có hàng" thì đăng ký, nút thành "Đã đăng ký báo hàng · Huỷ"; bấm lại thì huỷ', async () => {
     authed();
     const { container } = mount();
@@ -110,7 +133,7 @@ describe('AddToCart — Báo tôi khi có hàng', () => {
     expect(mocks.subscribeRestock).toHaveBeenCalledWith(expect.anything(), 'v1');
     expect(restockButton(container)!.textContent).toBe('Đã đăng ký báo hàng · Huỷ');
     expect(restockButton(container)!.getAttribute('aria-pressed')).toBe('true');
-    expect(container.textContent).toContain('Có hàng là Tubu báo bạn ngay.');
+    expect(container.textContent).toContain('Có hàng Tubu sẽ báo bạn ở mục Thông báo.');
     mocks.fetchRestockStatus.mockResolvedValue({ enabled: true, variationIds: [] });
     click(restockButton(container));
     await flush();

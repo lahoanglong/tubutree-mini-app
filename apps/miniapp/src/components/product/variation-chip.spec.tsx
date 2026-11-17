@@ -44,6 +44,27 @@ describe('VariationChip Mini: nhãn tiết kiệm của phân loại đang giả
     expect(b.getAttribute('aria-disabled')).toBe('true');
   });
 
+  it('hết hàng nhưng cờ báo hàng về bật (outSelectable): bấm được để chọn, vẫn ghi "Tạm hết hàng", không mờ, không gạch', () => {
+    const onClick = vi.fn();
+    const { container } = render(
+      <VariationChip variation={{ name: 'Chai 1L', stock: 0 }} pricing={{ price: 85_000, isFlash: false }} active={false} onClick={onClick} outSelectable />,
+    );
+    const b = container.querySelector('[role="button"]') as HTMLElement;
+    expect(b.getAttribute('aria-disabled')).toBe('false');
+    expect(b.textContent).toContain('Tạm hết hàng');
+    expect(b.style.opacity).toBe('1');
+    expect(b.innerHTML).not.toContain('line-through');
+    b.click();
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it('hết hàng, không outSelectable: bấm không gọi onClick', () => {
+    const onClick = vi.fn();
+    const { container } = render(<VariationChip variation={{ name: 'Chai 1L', stock: 0 }} pricing={{ price: 85_000, isFlash: false }} active={false} onClick={onClick} />);
+    (container.querySelector('[role="button"]') as HTMLElement).click();
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
   it('đang chọn: aria-pressed true và nhãn tiết kiệm vẫn hiện', () => {
     const b = chip({ salePct: 20, active: true });
     expect(b.getAttribute('aria-pressed')).toBe('true');

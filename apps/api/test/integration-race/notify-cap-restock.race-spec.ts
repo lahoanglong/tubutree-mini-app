@@ -7,7 +7,7 @@ import type { ZnsClient } from '../../src/modules/integrations/zns/zns.client';
 import type { AnalyticsEventsService } from '../../src/modules/analytics/analytics-events.service';
 import type { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { RestockAlertsService } from '../../src/modules/restock-alerts/restock-alerts.service';
-import { RESTOCK_ROUND_COOLDOWN_MS, RestockAlertsDispatcher } from '../../src/modules/restock-alerts/restock-alerts.dispatcher';
+import { RESTOCK_ROUND_COOLDOWN_MS, RESTOCK_STALE_CLAIM_MS, RestockAlertsDispatcher } from '../../src/modules/restock-alerts/restock-alerts.dispatcher';
 import { createUser, deleteItData, randCode, uniquePhone, warmPool } from './helpers';
 
 /**
@@ -284,6 +284,63 @@ describe('notify cap + restock alerts (real Postgres)', () => {
       expect(await inAppCount(u.id, 'RESTOCK_AVAILABLE')).toBe(1);
     });
 
+    /** Dòng đã nhận lúc `at` trong một đợt, như lượt cron dừng ngay sau bước nhận (container bị thay giữa lượt). */
+    async function claimedAt(userId: string, variationId: string, at: Date) {
+      const round = await prisma.restockAlertRound.create({ data: { variationId, startedAt: at, stockAtStart: 1 } });
+      return prisma.restockAlert.update({
+        where: { id: (await prisma.restockAlert.findFirstOrThrow({ where: { userId, variationId, notifiedAt: null } })).id },
+        data: { notifiedAt: at, roundId: round.id },
+      });
+    }
+
+    it('lượt trước dừng sau khi nhận dòng: lượt sau cứu và gửi đúng một tin, lượt kế không gửi lại', async () => {
+      const [v] = await outOfStockVariations(1);
+      const u = await customer();
+      await restock.subscribe(u.id, v!);
+      await setStock(v!, 3);
+      const now = tick();
+      const row = await claimedAt(u.id, v!, new Date(now.getTime() - RESTOCK_STALE_CLAIM_MS - 60_000));
+      expect(await dispatcher.dispatchOnce(now)).toBe(1);
+      expect(await inAppCount(u.id, 'RESTOCK_AVAILABLE')).toBe(1);
+      expect(await prisma.restockAlert.findUniqueOrThrow({ where: { id: row.id } })).toMatchObject({ notifiedAt: row.notifiedAt, roundId: row.roundId });
+      expect(await dispatcher.dispatchOnce(new Date(now.getTime() + 60_000))).toBe(0);
+      expect(await inAppCount(u.id, 'RESTOCK_AVAILABLE')).toBe(1);
+    });
+
+    it('dòng nhận dở chưa quá hạn cứu thì chưa đụng tới (lượt khác có thể đang gửi)', async () => {
+      const [v] = await outOfStockVariations(1);
+      const u = await customer();
+      await restock.subscribe(u.id, v!);
+      await setStock(v!, 3);
+      const now = tick();
+      await claimedAt(u.id, v!, new Date(now.getTime() - 60_000));
+      expect(await dispatcher.dispatchOnce(now)).toBe(0);
+      expect(await inAppCount(u.id, 'RESTOCK_AVAILABLE')).toBe(0);
+    });
+
+    it('dòng nhận dở mà hàng đã hết lại: trả về chờ, không gửi', async () => {
+      const [v] = await outOfStockVariations(1);
+      const u = await customer();
+      await restock.subscribe(u.id, v!);
+      const now = tick();
+      await claimedAt(u.id, v!, new Date(now.getTime() - RESTOCK_STALE_CLAIM_MS - 60_000));
+      expect(await dispatcher.dispatchOnce(now)).toBe(0);
+      expect(await prisma.restockAlert.count({ where: { userId: u.id, variationId: v!, notifiedAt: null } })).toBe(1);
+      expect(await inAppCount(u.id, 'RESTOCK_AVAILABLE')).toBe(0);
+    });
+
+    it('dòng nhận dở, hàng đã hết và khách đã đăng ký lại: dòng cũ bị bỏ, còn đúng một đăng ký chờ (không vỡ vì trùng)', async () => {
+      const [v] = await outOfStockVariations(1);
+      const u = await customer();
+      await restock.subscribe(u.id, v!);
+      const now = tick();
+      const old = await claimedAt(u.id, v!, new Date(now.getTime() - RESTOCK_STALE_CLAIM_MS - 60_000));
+      await restock.subscribe(u.id, v!);
+      expect(await dispatcher.dispatchOnce(now)).toBe(0);
+      expect(await prisma.restockAlert.findUnique({ where: { id: old.id } })).toBeNull();
+      expect(await prisma.restockAlert.count({ where: { userId: u.id, variationId: v!, notifiedAt: null } })).toBe(1);
+    });
+
     it('cờ tắt: không nhận đăng ký mới', async () => {
       values['catalog.restock_alert_enabled'] = false;
       try {
@@ -313,6 +370,21 @@ describe('notify cap + restock alerts (real Postgres)', () => {
       expect(await read()).toEqual([false, true, true]);
       expect(await prisma.$executeRawUnsafe(fill!.replace(';', ` AND "id" IN ('${legacyOff.id}', '${chose.id}', '${legacyOn.id}');`))).toBe(0);
       expect(await read()).toEqual([false, true, true]);
+    });
+
+    it('ảnh cũ (chỉ ghi notifyGarden) đổi công tắc gộp: notifySocial theo; ảnh mới đổi Nhắc Vườn Xanh: notifySocial giữ nguyên', async () => {
+      const legacy = await customer({ notifyGarden: true, notifySocial: true });
+      await prisma.user.update({ where: { id: legacy.id }, data: { notifyGarden: false } });
+      expect(await prisma.user.findUniqueOrThrow({ where: { id: legacy.id }, select: { notifyGarden: true, notifySocial: true } })).toEqual({ notifyGarden: false, notifySocial: false });
+      await prisma.user.update({ where: { id: legacy.id }, data: { notifyGarden: true } });
+      expect(await prisma.user.findUniqueOrThrow({ where: { id: legacy.id }, select: { notifySocial: true } })).toEqual({ notifySocial: true });
+
+      const current = await customer({ notifyGarden: true, notifySocial: true });
+      await notifications.updatePrefs(current.id, { notifyGarden: false, source: 'settings', textVersion: 'notify-prefs-v2-2026-11-17' });
+      expect(await prisma.user.findUniqueOrThrow({ where: { id: current.id }, select: { notifyGarden: true, notifySocial: true } })).toEqual({ notifyGarden: false, notifySocial: true });
+      await notifications.updatePrefs(current.id, { notifyGarden: true, source: 'settings', textVersion: 'notify-prefs-v2-2026-11-17' });
+      await notifications.updatePrefs(current.id, { notifySocial: false, source: 'settings', textVersion: 'notify-prefs-v2-2026-11-17' });
+      expect(await prisma.user.findUniqueOrThrow({ where: { id: current.id }, select: { notifyGarden: true, notifySocial: true } })).toEqual({ notifyGarden: true, notifySocial: false });
     });
 
     it('ràng buộc nguồn đồng ý: nguồn lạ bị DB từ chối', async () => {

@@ -15,6 +15,8 @@ export interface VariationChipProps {
   pricing: { price: number; isFlash: boolean; salePct?: number };
   active: boolean;
   onClick: () => void;
+  /** Hết hàng mà vẫn chọn được: cờ báo hàng về bật, khách chọn đúng phân loại rồi bấm "Báo tôi khi có hàng". Mặc định khoá như trước. */
+  outSelectable?: boolean;
 }
 
 /**
@@ -23,8 +25,9 @@ export interface VariationChipProps {
  * nên chip hai app cao bằng nhau. Không ghi chiều cao tuyệt đối: viền 1,5px làm tròn theo mật độ điểm ảnh của từng thiết bị (xem `apps/e2e/tests/support/variation-chip.ts`). Từ md giữ "tên · giá" một
  * dòng để nút mua còn trong 1280×800.
  */
-export function VariationChip({ variation, siblingCount = 2, pricing, active, onClick }: VariationChipProps) {
+export function VariationChip({ variation, siblingCount = 2, pricing, active, onClick, outSelectable = false }: VariationChipProps) {
   const out = variation.stock <= 0;
+  const locked = out && !outSelectable;
   const label = variationLabel(variation.name, siblingCount);
   // Giờ vàng đã có dấu riêng; ở đây chỉ phân loại đang giảm giá thường (giá gạch cao hơn giá bán) mới ghi phần trăm tiết kiệm.
   const savePct = !out && !pricing.isFlash && (pricing.salePct ?? 0) > 0 ? pricing.salePct! : 0;
@@ -34,17 +37,17 @@ export function VariationChip({ variation, siblingCount = 2, pricing, active, on
       aria-pressed={active}
       // Hết hàng thì khoá hẳn như chip của Mini App: không chọn được (chọn xong nút mua chỉ đổi thành "Tạm hết hàng", khó hiểu) và control
       // đang khoá được miễn luật tương phản, nên chữ mờ "Tạm hết hàng" không bị tính là chữ nhạt đang tương tác.
-      disabled={out}
-      onClick={out ? undefined : onClick}
+      disabled={locked}
+      onClick={locked ? undefined : onClick}
       className={`min-h-11 rounded-control border px-4 text-sm transition max-md:flex max-md:flex-col max-md:items-start max-md:border-[1.5px] max-md:px-3.5 max-md:py-2 max-md:text-left ${
         active
           ? 'border-[var(--color-border-selected)] bg-[var(--color-action-secondary-bg)] font-semibold text-[var(--color-text-brand)]'
           : 'border-[var(--color-border-strong)] bg-[var(--color-bg-surface)] text-[var(--color-text-primary)] hover:bg-[var(--color-bg-subtle)] max-md:border-[var(--color-border-subtle)]'
-      } ${out ? 'opacity-60 max-md:opacity-[0.55]' : ''}`}
+      } ${locked ? 'opacity-60 max-md:opacity-[0.55]' : ''}`}
     >
       {label && (
         <>
-          <span className={`${active ? 'max-md:font-semibold' : 'max-md:font-normal'} ${out ? 'line-through' : ''} ${phoneBodySm}`}>{label}</span>
+          <span className={`${active ? 'max-md:font-semibold' : 'max-md:font-normal'} ${locked ? 'line-through' : ''} ${phoneBodySm}`}>{label}</span>
           <span aria-hidden="true" className="max-md:hidden">
             {' · '}
           </span>
@@ -52,11 +55,11 @@ export function VariationChip({ variation, siblingCount = 2, pricing, active, on
       )}
       <span
         className={`inline-flex items-center gap-0.5 tabular-nums ${phoneCaption} max-md:font-normal ${
-          out
+          locked
             ? 'max-md:text-[var(--color-text-disabled)]'
-            : pricing.isFlash
+            : pricing.isFlash && !out
               ? 'max-md:text-[var(--color-text-price-deal)]'
-              : active
+              : active && !out
                 ? 'max-md:text-[var(--color-text-brand)]'
                 : 'max-md:text-[var(--color-text-secondary)]'
         }`}

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
@@ -11,6 +12,10 @@ import { RestockAlertsService } from './restock-alerts.service';
 export const RESTOCK_SENDS_PER_TICK = 100;
 /** Chống tồn dao động (về rồi hết rồi về): một biến thể mở tối đa một đợt báo trong chừng này. */
 export const RESTOCK_ROUND_COOLDOWN_MS = 24 * 3_600_000;
+/** Dòng đã nhận mà quá chừng này vẫn chưa có tin trong app: lượt trước dừng giữa chừng (container bị thay lúc deploy, lỗi DB). */
+export const RESTOCK_STALE_CLAIM_MS = 10 * 60_000;
+/** Chỉ cứu dòng nhận trong chừng này: xa hơn thì log tin có thể đã bị dọn, cứu nữa là gửi lại tin khách đã nhận. */
+const RESTOCK_RECOVER_WINDOW_MS = 24 * 3_600_000;
 const VARIATIONS_PER_TICK = 200;
 const RUN_TTL_MS = 110_000;
 
@@ -55,8 +60,9 @@ export class RestockAlertsDispatcher {
 
   /** Một lượt: trả số tin đã gửi được. Tách khỏi cron để test gọi thẳng với mốc giờ tự chọn. */
   async dispatchOnce(now: Date): Promise<number> {
-    let budget = RESTOCK_SENDS_PER_TICK;
-    let sent = 0;
+    const recovered = await this.recoverStale(now, RESTOCK_SENDS_PER_TICK);
+    let budget = RESTOCK_SENDS_PER_TICK - recovered.attempted;
+    let sent = recovered.sent;
     const variations = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT v."id"
         FROM "variations" v
@@ -70,12 +76,69 @@ export class RestockAlertsDispatcher {
       const claimed = await this.claim(id, budget, now);
       budget -= claimed.length;
       if (claimed.length === 0) continue;
-      const data = await this.messageData(id);
-      for (const alert of claimed) {
-        if (await this.send(alert, data)) sent++;
-      }
+      sent += await this.deliver(id, claimed);
     }
     return sent;
+  }
+
+  /** Gửi các dòng vừa nhận của một biến thể. Lỗi giữa chừng không làm mất dòng chưa gửi: dòng được trả về chờ. */
+  private async deliver(variationId: string, claimed: ClaimedAlert[]): Promise<number> {
+    let data: Record<string, string>;
+    try {
+      data = await this.messageData(variationId);
+    } catch (err) {
+      this.logger.error(`Không đọc được tên biến thể ${variationId} để báo hàng về: ${err instanceof Error ? err.message : String(err)}`);
+      for (const alert of claimed) await this.release(alert);
+      return 0;
+    }
+    let sent = 0;
+    for (const alert of claimed) {
+      if (await this.send(alert, data)) sent++;
+    }
+    return sent;
+  }
+
+  /**
+   * Cứu dòng đã nhận quá RESTOCK_STALE_CLAIM_MS mà khách chưa có tin trong app (`dedupeKey` `restock:<id>`): lượt trước dừng giữa chừng.
+   * Biến thể còn bán và còn hàng thì gửi lại (khoá chống trùng giữ đúng một tin nếu tin thật ra đã lưu); hết hàng rồi thì trả về chờ.
+   */
+  private async recoverStale(now: Date, limit: number): Promise<{ attempted: number; sent: number }> {
+    const rows = await this.prisma.$queryRaw<Array<ClaimedAlert & { variationId: string; inStock: boolean }>>`
+      SELECT ra."id", ra."userId", ra."roundId", ra."variationId",
+             (v."stock" > 0 AND v."isActive" AND p."isActive" AND p."approvalStatus" = 'APPROVED') AS "inStock"
+        FROM "restock_alerts" ra
+        JOIN "variations" v ON v."id" = ra."variationId"
+        JOIN "products" p ON p."id" = v."productId"
+       WHERE ra."notifiedAt" < ${new Date(now.getTime() - RESTOCK_STALE_CLAIM_MS)}
+         AND ra."notifiedAt" > ${new Date(now.getTime() - RESTOCK_RECOVER_WINDOW_MS)}
+         AND ra."roundId" IS NOT NULL
+         AND NOT EXISTS (
+               SELECT 1 FROM "notification_logs" nl
+                WHERE nl."userId" = ra."userId" AND nl."channel" = 'INAPP' AND nl."templateCode" = 'RESTOCK_AVAILABLE'
+                  AND nl."payload"->>'dedupeKey' = 'restock:' || ra."id")
+       ORDER BY ra."notifiedAt", ra."id"
+       LIMIT ${limit}`;
+    let sent = 0;
+    const names = new Map<string, Record<string, string>>();
+    for (const row of rows) {
+      if (!row.inStock) {
+        await this.release(row);
+        continue;
+      }
+      let data = names.get(row.variationId);
+      if (!data) {
+        try {
+          data = await this.messageData(row.variationId);
+        } catch (err) {
+          this.logger.warn(`Chưa cứu được đăng ký báo hàng ${row.id}: ${err instanceof Error ? err.message : String(err)}`);
+          continue;
+        }
+        names.set(row.variationId, data);
+      }
+      if (await this.send(row, data)) sent++;
+    }
+    if (rows.length > 0) this.logger.warn(`Cứu ${rows.length} đăng ký báo hàng đã nhận mà chưa gửi (lượt trước dừng giữa chừng), gửi được ${sent}.`);
+    return { attempted: rows.length, sent };
   }
 
   /** Mở đợt (nếu biến thể không có đợt nào trong 24 giờ) và nhận tối đa `limit` đăng ký của đợt đang mở, dưới khoá advisory theo biến thể. */
@@ -116,7 +179,23 @@ export class RestockAlertsDispatcher {
   private async send(alert: ClaimedAlert, data: Record<string, string>): Promise<boolean> {
     const ok = await this.notifications.notifySafe(alert.userId, 'RESTOCK_AVAILABLE', data, { dedupeKey: `restock:${alert.id}` }, `restock=${alert.id}`);
     if (ok) return true;
-    await this.prisma.restockAlert.updateMany({ where: { id: alert.id, roundId: alert.roundId }, data: { notifiedAt: null, roundId: null } });
+    await this.release(alert);
     return false;
+  }
+
+  /**
+   * Trả dòng đã nhận về chờ. Khách đã đăng ký lại cùng biến thể trong lúc đó thì partial unique báo P2002: dòng mới thay dòng này, xoá dòng
+   * cũ. Lỗi khác chỉ ghi log, dòng ở lại trạng thái đã nhận và bước cứu ở đầu lượt sau xử lý.
+   */
+  private async release(alert: ClaimedAlert): Promise<void> {
+    try {
+      await this.prisma.restockAlert.updateMany({ where: { id: alert.id, roundId: alert.roundId }, data: { notifiedAt: null, roundId: null } });
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        await this.prisma.restockAlert.deleteMany({ where: { id: alert.id, roundId: alert.roundId } }).catch(() => undefined);
+        return;
+      }
+      this.logger.warn(`Không trả được đăng ký báo hàng ${alert.id} về chờ: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }

@@ -15,14 +15,17 @@ export interface VariationChipProps {
   pricing: { price: number; isFlash: boolean; salePct?: number };
   active: boolean;
   onClick: () => void;
+  /** Hết hàng mà vẫn chọn được: cờ báo hàng về bật, khách chọn đúng phân loại rồi bấm "Báo tôi khi có hàng". Mặc định khoá như trước. */
+  outSelectable?: boolean;
 }
 
 /**
  * Chip phân loại 2 dòng: tên + giá khách thật sự trả (đã áp Giờ vàng). Dùng chung ở trang chi tiết và bảng chọn phân loại để hai nơi ghi
- * cùng giá, cùng dấu Giờ vàng và cùng chữ hết hàng ("Tạm hết hàng", không chỉ gạch ngang). Hết hàng = mờ + gạch nhưng vẫn xem được, không chọn được.
+ * cùng giá, cùng dấu Giờ vàng và cùng chữ hết hàng ("Tạm hết hàng", không chỉ gạch ngang). Hết hàng = mờ + gạch nhưng vẫn xem được, không chọn được (trừ khi `outSelectable`).
  */
-export function VariationChip({ variation, siblingCount = 2, pricing, active, onClick }: VariationChipProps) {
+export function VariationChip({ variation, siblingCount = 2, pricing, active, onClick, outSelectable = false }: VariationChipProps) {
   const out = variation.stock <= 0;
+  const locked = out && !outSelectable;
   const label = variationLabel(variation.name, siblingCount);
   // Giờ vàng đã có dấu riêng; ở đây chỉ phân loại đang giảm giá thường (giá gạch cao hơn giá bán) mới ghi phần trăm tiết kiệm.
   const savePct = !out && !pricing.isFlash && (pricing.salePct ?? 0) > 0 ? pricing.salePct! : 0;
@@ -30,11 +33,11 @@ export function VariationChip({ variation, siblingCount = 2, pricing, active, on
     <div
       role="button"
       aria-pressed={active}
-      aria-disabled={out}
-      {...(out ? null : rowKeyboardProps())}
-      className={out ? 'tubu-var-chip' : 'tubu-var-chip tubu-press'}
-      onClick={out ? undefined : onClick}
-      style={{ opacity: out ? 0.55 : 1 }}
+      aria-disabled={locked}
+      {...(locked ? null : rowKeyboardProps())}
+      className={locked ? 'tubu-var-chip' : 'tubu-var-chip tubu-press'}
+      onClick={locked ? undefined : onClick}
+      style={{ opacity: locked ? 0.55 : 1 }}
     >
       {label && (
         <Text
@@ -42,7 +45,7 @@ export function VariationChip({ variation, siblingCount = 2, pricing, active, on
           as="div"
           style={{
             color: active ? 'var(--color-text-brand)' : 'var(--color-text-primary)',
-            textDecoration: out ? 'line-through' : 'none',
+            textDecoration: locked ? 'line-through' : 'none',
             fontWeight: active ? 600 : 400,
           }}
         >
@@ -54,7 +57,7 @@ export function VariationChip({ variation, siblingCount = 2, pricing, active, on
         as="div"
         numeric
         style={{
-          color: out ? 'var(--color-text-disabled)' : pricing.isFlash ? 'var(--color-text-price-deal)' : active ? 'var(--color-text-brand)' : 'var(--color-text-secondary)',
+          color: locked ? 'var(--color-text-disabled)' : out ? 'var(--color-text-secondary)' : pricing.isFlash ? 'var(--color-text-price-deal)' : active ? 'var(--color-text-brand)' : 'var(--color-text-secondary)',
           display: 'inline-flex',
           alignItems: 'center',
           gap: 'var(--space-inline-xs)',

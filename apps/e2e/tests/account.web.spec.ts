@@ -1,3 +1,4 @@
+import { NOTIFY_PREFS_TEXT_VERSION } from '../../../packages/app-core/src/api/account';
 import { expect, reply, test, type MockApi } from './support/mock-api';
 
 /**
@@ -155,7 +156,7 @@ test.describe('Web khách: tài khoản', () => {
     await expect(promo).toHaveAttribute('aria-checked', 'true');
     const saved = api.waitForCall('PATCH', '/me/notifications/prefs');
     await promo.click();
-    expect((await saved).body).toEqual({ notifyPromo: false });
+    expect((await saved).body).toEqual({ notifyPromo: false, source: 'settings', textVersion: NOTIFY_PREFS_TEXT_VERSION });
     await expect(promo).toHaveAttribute('aria-checked', 'false');
 
     await page.getByRole('radio', { name: /Lớn/ }).click();
@@ -164,6 +165,28 @@ test.describe('Web khách: tài khoản', () => {
     await page.reload();
     await expect(page.locator('html')).toHaveCSS('font-size', '18px');
     await expect(page.getByRole('main').getByRole('link', { name: /Sổ địa chỉ/ })).toHaveAttribute('href', '/tai-khoan/dia-chi');
+  });
+
+  test('cài đặt 360px: hai công tắc tách "Nhắc Vườn Xanh" và "Tương tác bài viết"; tắt Tương tác bài viết chỉ gửi công tắc đó', async ({ page, api }) => {
+    mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
+    api.get('/me/notifications/prefs', { notifyPromo: true, notifyGarden: true, notifySocial: true });
+    api.patch('/me/notifications/prefs', ({ call }) => ({ notifyPromo: true, notifyGarden: true, notifySocial: true, ...(call.body as object) }));
+    await page.setViewportSize({ width: 360, height: 780 });
+    await page.goto('/tai-khoan/cai-dat');
+
+    const garden = page.getByRole('switch', { name: 'Nhắc Vườn Xanh' });
+    const social = page.getByRole('switch', { name: 'Tương tác bài viết' });
+    await expect(garden).toHaveAttribute('aria-checked', 'true');
+    await expect(social).toHaveAttribute('aria-checked', 'true');
+    await expect(page.getByText('Nhắc nhở Vườn Xanh & tương tác bài viết')).toHaveCount(0);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    if (process.env.RESTOCK_SHOTS) await page.screenshot({ path: `${process.env.RESTOCK_SHOTS}/web-360-settings-switches-${test.info().project.name.replace(/\W+/g, '-')}.png` });
+
+    const saved = api.waitForCall('PATCH', '/me/notifications/prefs');
+    await social.click();
+    expect((await saved).body).toEqual({ notifySocial: false, source: 'settings', textVersion: NOTIFY_PREFS_TEXT_VERSION });
+    await expect(social).toHaveAttribute('aria-checked', 'false');
+    await expect(garden).toHaveAttribute('aria-checked', 'true');
   });
 
   test('cài đặt: lưu lỗi thì công tắc trở về như cũ và báo lỗi', async ({ page, api }) => {

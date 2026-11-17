@@ -272,6 +272,7 @@ model User {
   notifyPromo            Boolean         @default(true)
   notifyGarden           Boolean         @default(true)
   /// Tin "bài của bạn có người thích, bình luận, trả lời". Tách khỏi notifyGarden; migration 20261117090000 điền bằng notifyGarden của từng khách.
+  /// Trigger users_notify_social_follow_legacy (chỉ có trong migration SQL): ảnh cũ đổi notifyGarden mà không ghi notifyGardenAt thì cột này theo.
   notifySocial           Boolean         @default(true)
   /// Bằng chứng đồng ý của từng công tắc: lúc khách đổi, nguồn (settings | onboarding | unsubscribe_link), phiên bản câu chữ khách thấy.
   /// NULL = khách chưa đổi kể từ khi có cột; không điền lùi cho dữ liệu cũ.
@@ -3460,6 +3461,8 @@ model RestockAlert {
 
   @@index([variationId, notifiedAt, createdAt])
   @@index([userId, notifiedAt])
+  /// Cron cứu dòng đã nhận mà chưa gửi (lượt trước dừng giữa chừng).
+  @@index([notifiedAt])
   @@map("restock_alerts")
 }
 

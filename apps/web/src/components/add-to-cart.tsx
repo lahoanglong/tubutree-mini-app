@@ -498,6 +498,7 @@ export default function AddToCart({
                 variation={v}
                 pricing={variationPricing(v, flash)}
                 active={v.id === selectedId}
+                outSelectable={restock.enabled}
                 onClick={() => {
                   userPicked.current = true;
                   setSelectedId(v.id);
