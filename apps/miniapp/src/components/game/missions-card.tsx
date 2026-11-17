@@ -6,7 +6,8 @@ import type { DailyMissionId, DailyMissionsResponse } from '@tubutree/shared-typ
 import { gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
 import { collapseMissions, gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import { DAILY_MISSIONS_KEY, claimDailyMission, classifyDailyClaimError, dailyClaimErrorCopy, dailyMissionsQuery } from '@tubutree/app-core/engagement/api';
-import { dailyBonusLine, dailyClaimToast, dailyProgress, dailyRows, gameDeviceId } from '@tubutree/app-core/engagement/view';
+import { dailyBonusLine, dailyClaimToast, dailyProgress, dailyRows } from '@tubutree/app-core/engagement/view';
+import { miniDeviceId } from '@tubutree/app-core/game-mini/api';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { MissionItem } from '../../services/game-api';
 import { coreHttp } from '../../services/core-http';
@@ -161,7 +162,7 @@ function DailySection({ data, onGo }: { data: DailyMissionsResponse; onGo?: (tar
   const bonus = dailyBonusLine(data);
   const claim = useMutation({
     mutationFn: (id: DailyMissionId) =>
-      claimDailyMission(coreHttp, id, gameDeviceId(browserStorage(), (n) => crypto.getRandomValues(new Uint8Array(n)))),
+      claimDailyMission(coreHttp, id, miniDeviceId(browserStorage(), (n) => crypto.getRandomValues(new Uint8Array(n)))),
     onSuccess: (res) => {
       haptic('medium');
       openSnackbar({ text: dailyClaimToast(res), type: res.water > 0 || res.points > 0 ? 'success' : 'warning' });

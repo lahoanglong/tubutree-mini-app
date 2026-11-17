@@ -2,37 +2,6 @@ import type { BadgesResponse, DailyMissionClaimResponse, DailyMissionId, DailyMi
 import type { MissionTarget } from '../game-newbie';
 import { fillCopy } from '../shop-copy';
 
-/**
- * Mã thiết bị gửi kèm lần nhận thưởng nhiệm vụ ngày: máy chủ băm rồi đếm số tài khoản nhận thưởng game mini trên một máy. Cùng khoá
- * lưu với ván game mini (`tubu.game-mini.device`) để một máy chỉ có một mã cho cả hai đường thưởng. Mã riêng của game, KHÔNG dùng lại
- * mã thiết bị đăng nhập khách của Mini App (thứ đó là bí mật xác thực). Không lưu được thì giữ trong bộ nhớ của phiên.
- */
-export const GAME_DEVICE_KEY = 'tubu.game-mini.device';
-
-export interface GameDeviceStorage {
-  getItem(key: string): string | null;
-  setItem(key: string, value: string): void;
-}
-
-let memoryDeviceId: string | null = null;
-
-export function gameDeviceId(storage: GameDeviceStorage | null, randomBytes: (n: number) => Uint8Array): string {
-  try {
-    const saved = storage?.getItem(GAME_DEVICE_KEY);
-    if (saved && /^[0-9a-f]{32}$/.test(saved)) return saved;
-  } catch {
-    /* đọc bị chặn: tạo mã mới bên dưới */
-  }
-  const id = memoryDeviceId ?? Array.from(randomBytes(16), (b) => b.toString(16).padStart(2, '0')).join('');
-  memoryDeviceId = id;
-  try {
-    storage?.setItem(GAME_DEVICE_KEY, id);
-  } catch {
-    /* ghi bị chặn: dùng mã trong bộ nhớ */
-  }
-  return id;
-}
-
 /** Đích của nút "Làm": việc trong Vườn Xanh cuộn về khối điểm danh và tưới; việc ở gian hàng mở danh mục. */
 const DAILY_TARGETS: Record<DailyMissionId, MissionTarget> = {
   DAILY_QUIZ: 'checkin',

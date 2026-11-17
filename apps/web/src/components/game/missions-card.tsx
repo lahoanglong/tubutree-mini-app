@@ -6,7 +6,8 @@ import type { MissionItem } from '@tubutree/app-core/api/game';
 import { gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
 import { collapseMissions, gameMoreCopy } from '@tubutree/app-core/game-more-copy';
 import { DAILY_MISSIONS_KEY, claimDailyMission, classifyDailyClaimError, dailyClaimErrorCopy, dailyMissionsQuery } from '@tubutree/app-core/engagement/api';
-import { dailyBonusLine, dailyClaimToast, dailyProgress, dailyRows, gameDeviceId } from '@tubutree/app-core/engagement/view';
+import { dailyBonusLine, dailyClaimToast, dailyProgress, dailyRows } from '@tubutree/app-core/engagement/view';
+import { miniDeviceId } from '@tubutree/app-core/game-mini/api';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { ui, uiBar } from '@/lib/guest-ui';
@@ -143,7 +144,7 @@ function DailySection({ data, onGo }: { data: DailyMissionsResponse; onGo?: (tar
   const bonus = dailyBonusLine(data);
   const claim = useMutation({
     mutationFn: (id: DailyMissionId) =>
-      claimDailyMission(coreHttp, id, gameDeviceId(browserStorage(), (n) => crypto.getRandomValues(new Uint8Array(n)))),
+      claimDailyMission(coreHttp, id, miniDeviceId(browserStorage(), (n) => crypto.getRandomValues(new Uint8Array(n)))),
     onSuccess: (res) => {
       notify(dailyClaimToast(res), res.water > 0 || res.points > 0 ? 'success' : 'info');
       void qc.invalidateQueries({ queryKey: ['loyalty'] });

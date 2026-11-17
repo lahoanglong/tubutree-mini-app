@@ -2,7 +2,6 @@ import { describe, expect, it } from 'vitest';
 import { BADGE_IDS, type DailyMissionsResponse } from '@tubutree/shared-types';
 import { DAILY_OFF, classifyDailyClaimError, parseBadges, parseDailyMissions } from './api';
 import {
-  GAME_DEVICE_KEY,
   badgeChips,
   badgeCount,
   checkInDotMovesToGarden,
@@ -10,7 +9,6 @@ import {
   dailyClaimToast,
   dailyProgress,
   dailyRows,
-  gameDeviceId,
   gardenDotOn,
   profileDotOn,
 } from './view';
@@ -151,31 +149,5 @@ describe('hàng huy hiệu', () => {
   it('cờ tắt: không có hàng', () => {
     expect(badgeChips({ enabled: false, badges: [] })).toEqual([]);
     expect(badgeCount(undefined)).toBe('');
-  });
-});
-
-describe('gameDeviceId', () => {
-  const bytes = (n: number) => Uint8Array.from({ length: n }, (_, i) => i + 1);
-  it('dùng mã đã lưu nếu đúng dạng, không thì tạo, lưu và giữ trong phiên', () => {
-    const data = new Map<string, string>();
-    const storage = { getItem: (k: string) => data.get(k) ?? null, setItem: (k: string, v: string) => void data.set(k, v) };
-    const id = gameDeviceId(storage, bytes);
-    expect(id).toMatch(/^[0-9a-f]{32}$/);
-    expect(data.get(GAME_DEVICE_KEY)).toBe(id);
-    data.set(GAME_DEVICE_KEY, 'ab'.repeat(16));
-    expect(gameDeviceId(storage, bytes)).toBe('ab'.repeat(16));
-  });
-  it('kho bị chặn: vẫn trả mã trong bộ nhớ, ổn định giữa các lần gọi', () => {
-    const blocked = {
-      getItem: () => {
-        throw new Error('blocked');
-      },
-      setItem: () => {
-        throw new Error('blocked');
-      },
-    };
-    const a = gameDeviceId(blocked, bytes);
-    expect(gameDeviceId(blocked, bytes)).toBe(a);
-    expect(gameDeviceId(null, bytes)).toBe(a);
   });
 });

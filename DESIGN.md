@@ -182,7 +182,7 @@ Logic ở `packages/app-core/src/arcade/`: engine thuần không DOM (`dew-catch
 | hàng huy hiệu cuộn ngang ở Cá nhân (một thẻ, "n/8", đã đạt đứng trước, chưa đạt mờ kèm biểu tượng khoá, chạm thì báo điều kiện) | `BadgeRow` (không props; cờ `engagement.badges_enabled` bật thì thay dòng "Câu chuyện thương hiệu" trong menu) |
 | chấm nhắc 8px ở tab Vườn Xanh (chưa chơi Đố Xanh hoặc chưa điểm danh) và tab Cá nhân (có thông báo chưa đọc, nhường số đơn đang xử lý) | `RemindDot` trong `BottomNav` của mỗi app; đứng yên, không nhấp nháy, nghĩa nằm ở `aria-label` của tab (`nav.gardenDot`, `nav.profileDot`) |
 
-Logic ở `packages/app-core/src/engagement/` (`api.ts` đọc và kiểm dạng phản hồi, `view.ts` dựng dòng, chữ, chấm, mã thiết bị game); chữ ở `daily.*`, `badges.*`, `nav.*Dot` của `shop-copy.ts`. Điểm danh chỉ nhắc một chỗ: khi chấm Vườn Xanh bật, tab Ưu đãi bỏ lý do "chưa điểm danh", chỉ còn mã sắp hết hạn. Trên web khổ điện thoại, chuông ở đầu Trang chủ (`home-header.tsx`) như Mini App; chấm tab Cá nhân báo thông báo chưa đọc ở mọi màn gốc nên không thêm chuông thứ hai vào thanh đầu trang.
+Logic ở `packages/app-core/src/engagement/` (`api.ts` đọc và kiểm dạng phản hồi, `view.ts` dựng dòng, chữ, chấm; mã thiết bị dùng chung `miniDeviceId` của `game-mini/api.ts`); chữ ở `daily.*`, `badges.*`, `nav.*Dot` của `shop-copy.ts`. Điểm danh chỉ nhắc một chỗ: khi chấm Vườn Xanh bật, tab Ưu đãi bỏ lý do "chưa điểm danh", chỉ còn mã sắp hết hạn. Trên web khổ điện thoại, chuông ở đầu Trang chủ (`home-header.tsx`) như Mini App; chấm tab Cá nhân báo thông báo chưa đọc ở mọi màn gốc nên không thêm chuông thứ hai vào thanh đầu trang.
 
 ### Khuôn trang web (chỉ web)
 

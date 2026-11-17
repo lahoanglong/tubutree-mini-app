@@ -5,7 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const mocks = vi.hoisted(() => ({ status: 'authenticated' as string, get: vi.fn(), snack: vi.fn() }));
 vi.mock('../../store/auth', () => ({ useAuthStore: (sel: (s: unknown) => unknown) => sel({ status: mocks.status }) }));
 vi.mock('../../services/core-http', () => ({ coreHttp: { get: mocks.get } }));
-vi.mock('zmp-ui', async (orig) => ({ ...(await orig<typeof import('zmp-ui')>()), useSnackbar: () => ({ openSnackbar: mocks.snack }) }));
+vi.mock('zmp-ui', async (orig) => ({ ...(await orig<Record<string, unknown>>()), useSnackbar: () => ({ openSnackbar: mocks.snack }) }));
 
 import { BadgeRow } from './badge-row';
 

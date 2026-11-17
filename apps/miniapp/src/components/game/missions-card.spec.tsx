@@ -10,7 +10,7 @@ vi.mock('../../store/auth', () => ({
   useAuthStore: (sel: (s: unknown) => unknown) => sel({ ensurePhoneOrThrow: mocks.ensurePhone, status: mocks.status }),
 }));
 vi.mock('../../services/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
-vi.mock('zmp-ui', async (orig) => ({ ...(await orig<typeof import('zmp-ui')>()), useSnackbar: () => ({ openSnackbar: mocks.snack }) }));
+vi.mock('zmp-ui', async (orig) => ({ ...(await orig<Record<string, unknown>>()), useSnackbar: () => ({ openSnackbar: mocks.snack }) }));
 
 import { MissionsCard } from './missions-card';
 
