@@ -14,6 +14,8 @@ import {
   STAFF_COUPON_MAX_PERCENT_KEY,
   STAFF_COUPON_MAX_USAGE_KEY,
 } from './coupon-input-rules';
+import { MINI_ENABLED_KEY, MINI_NUMERIC_SETTINGS, miniGameFlagKey } from '../game/mini/game-mini.settings';
+import { MINI_GAME_IDS } from '@tubutree/shared-types';
 
 /**
  * Luật ghi cho những khoá có FORM riêng trong web admin (Gomdon, tích điểm). SystemConfigService.set
@@ -216,6 +218,15 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   'waste.home_pickup_bank_transfer_enabled': assertBoolean,
   'web.guest_cart_enabled': assertBoolean,
   'catalog.pdp_compare_enabled': assertBoolean,
+  [MINI_ENABLED_KEY]: assertBoolean,
+  ...Object.fromEntries(MINI_GAME_IDS.map((g) => [miniGameFlagKey(g), assertBoolean])),
+  // Cùng biên máy chủ kẹp khi đọc (game-mini.settings.ts): admin không lưu được giá trị mà máy chủ sẽ lặng lẽ đổi.
+  [MINI_NUMERIC_SETTINGS.roundsPerGame.key]: (k, v) => assertIntInRange(k, v, MINI_NUMERIC_SETTINGS.roundsPerGame.min, MINI_NUMERIC_SETTINGS.roundsPerGame.max, 'ván/game/ngày'),
+  [MINI_NUMERIC_SETTINGS.waterCap.key]: (k, v) => assertIntInRange(k, v, MINI_NUMERIC_SETTINGS.waterCap.min, MINI_NUMERIC_SETTINGS.waterCap.max, '💧/ngày'),
+  [MINI_NUMERIC_SETTINGS.pointsCap.key]: (k, v) => assertIntInRange(k, v, MINI_NUMERIC_SETTINGS.pointsCap.min, MINI_NUMERIC_SETTINGS.pointsCap.max, 'Điểm Xanh/ngày'),
+  [MINI_NUMERIC_SETTINGS.accountsPerDevice.key]: (k, v) => assertIntInRange(k, v, MINI_NUMERIC_SETTINGS.accountsPerDevice.min, MINI_NUMERIC_SETTINGS.accountsPerDevice.max, 'tài khoản/thiết bị/ngày'),
+  [MINI_NUMERIC_SETTINGS.globalBudget.key]: (k, v) => assertIntInRange(k, v, MINI_NUMERIC_SETTINGS.globalBudget.min, MINI_NUMERIC_SETTINGS.globalBudget.max, 'Điểm Xanh/ngày'),
+  [MINI_NUMERIC_SETTINGS.minAccountAgeHours.key]: (k, v) => assertIntInRange(k, v, MINI_NUMERIC_SETTINGS.minAccountAgeHours.min, MINI_NUMERIC_SETTINGS.minAccountAgeHours.max, 'giờ'),
 };
 
 /** Khoá có luật ghi ở đây (form riêng trong web admin): được ghi kể cả khi DB chưa có dòng. */

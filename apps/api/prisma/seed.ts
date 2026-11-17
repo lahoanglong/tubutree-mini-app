@@ -208,6 +208,20 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.order_seeds_weekly_cap', value: 300, category: 'game', description: 'Tối đa 💧 nhận từ đơn hàng mỗi tuần giờ VN, thứ Hai đến Chủ nhật (0 = tắt)' },
   { key: 'game.harvest_coupon_monthly_cap', value: 4, category: 'game', description: 'Trần số mã thu hoạch/tháng/user (lô nhà + lô phụ, tính từ đầu tháng giờ VN)' },
   { key: 'game.quiz_wrong_seeds', value: 2, category: 'game', description: '💧 khi trả lời sai câu đố' },
+  // 5 game mini (game/mini): cờ mặc định TẮT, trần theo tài khoản/thiết bị/toàn hệ thống. createOnly: deploy lại không đổi giá trị admin đã đặt.
+  // Trùng dòng INSERT của migration 20261117083000_game_mini_core; máy chủ kẹp biên khi đọc (game-mini.settings.ts).
+  { key: 'game.mini.enabled', value: false, category: 'game', description: 'Bật 5 game mini có thưởng (Đúng Thùng, Đố Xanh, Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc). Tắt thì API trả 404 GAME_DISABLED và lối vào ẩn.', createOnly: true },
+  { key: 'game.mini.sort.enabled', value: false, category: 'game', description: 'Bật game Đúng Thùng (phân loại rác); cần thêm game.mini.enabled.', createOnly: true },
+  { key: 'game.mini.daily_quiz.enabled', value: false, category: 'game', description: 'Bật game Đố Xanh Mỗi Ngày; làm xong tính là điểm danh của ngày. Cần thêm game.mini.enabled.', createOnly: true },
+  { key: 'game.mini.match.enabled', value: false, category: 'game', description: 'Bật game Ghép Cặp Nguyên Liệu – Công Dụng; cần thêm game.mini.enabled.', createOnly: true },
+  { key: 'game.mini.origin.enabled', value: false, category: 'game', description: 'Bật game Đoán Xuất Xứ; cần thêm game.mini.enabled.', createOnly: true },
+  { key: 'game.mini.basket.enabled', value: false, category: 'game', description: 'Bật game Giỏ Đúng Việc; cần thêm game.mini.enabled.', createOnly: true },
+  { key: 'game.mini.rounds_per_game_per_day', value: 2, category: 'game', description: 'Số ván có thưởng mỗi game mỗi ngày (Đố Xanh tối đa 1 vì cùng bộ câu cả ngày); chơi tiếp vẫn được, không thưởng. 0–10.', createOnly: true },
+  { key: 'game.mini.water_daily_cap', value: 40, category: 'game', description: 'Tổng 💧 từ 5 game mini mỗi tài khoản mỗi ngày. 0–200.', createOnly: true },
+  { key: 'game.mini.points_daily_cap', value: 100, category: 'game', description: 'Tổng Điểm Xanh từ 5 game mini mỗi tài khoản mỗi ngày (1 điểm = 1đ). 0–500.', createOnly: true },
+  { key: 'game.mini.accounts_per_device_per_day', value: 2, category: 'game', description: 'Số tài khoản được thưởng game mini trên cùng một thiết bị mỗi ngày (lớp ma sát: mã thiết bị do ứng dụng gửi). 1–10.', createOnly: true },
+  { key: 'game.mini.global_points_daily_budget', value: 200_000, category: 'game', description: 'Tổng Điểm Xanh game mini phát cho mọi tài khoản mỗi ngày; chạm trần thì các ván sau chỉ nhận 💧. 0–1.000.000.', createOnly: true },
+  { key: 'game.mini.min_account_age_hours', value: 0, category: 'game', description: 'Tài khoản tạo chưa đủ số giờ này thì chơi game mini không có thưởng (0 = không chặn). 0–720.', createOnly: true },
   { key: 'seasonpass.checkin_xp', value: 10, category: 'game', description: 'XP season pass mỗi lần điểm danh' },
   {
     key: 'seasonpass.tiers',

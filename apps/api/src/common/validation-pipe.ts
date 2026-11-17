@@ -258,6 +258,12 @@ export const FIELD_LABELS: Record<string, string> = {
   worry: 'Câu trả lời về nỗi lo',
   format: 'Câu trả lời về dạng sản phẩm',
   orderZaloConsent: 'Đồng ý nhận tin đơn hàng qua Zalo',
+  roundId: 'Mã ván chơi',
+  token: 'Mã ván chơi',
+  answers: 'Bài làm',
+  game: 'Trò chơi',
+  sourceUrl: 'Link nguồn',
+  sourceCheckedAt: 'Ngày kiểm nguồn',
 };
 
 /** Nhãn riêng của một trường trong một DTO, khi chữ trên màn hình khác nhãn toàn cục (cùng tên `category` mà là "Nhóm", "Chủ đề" hay "Danh mục"). */

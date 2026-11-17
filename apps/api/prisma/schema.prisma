@@ -308,6 +308,9 @@ model User {
   gameProfile            GameProfile?
   gameWaterEvents        GameWaterEvent[]
   gameArcadeScores       GameArcadeScore[]
+  gamePlayRounds         GamePlayRound[]
+  gameDailyLedgers       GameDailyLedger[]
+  gameDeviceDailies      GameDeviceDaily[]
   reviews                Review[]
   refreshTokens          RefreshToken[]
   plantedTrees           PlantedTree[]
@@ -3065,6 +3068,10 @@ model GameQuiz {
   difficulty  Int     @default(1)
   explanation String?
   waterReward Int     @default(8)
+  /// Trang gốc (https) kiểm được điều câu hỏi khẳng định. Đố Xanh (game mini daily_quiz) chỉ dùng câu có nguồn.
+  sourceUrl   String?
+  /// Sản phẩm đang bán gắn với câu (thẻ sản phẩm sau lời giải thích của Đố Xanh).
+  productSlug String?
 
   @@map("game_quizzes")
 }
@@ -3085,6 +3092,90 @@ model GameQuizAttempt {
   // @@index([userId]) cũ bị xoá (redundant, mỗi insert phải ghi thêm 1 btree index vô ích).
   @@unique([userId, quizId, dayKey])
   @@map("game_quiz_attempts")
+}
+
+/// Một ván của 5 game mini (game.mini.*). `slot` khác NULL = ván có thưởng thứ `slot` của (user, game, ngày VN); NULL = ván không
+/// thưởng. Partial unique "game_play_rounds_reward_slot_key" (userId, game, dayKey, slot) WHERE slot IS NOT NULL chỉ có trong SQL
+/// (migration 20261117090000_game_mini_core). `contentIds` là nội dung máy chủ đã phát, chấm bài chỉ theo danh sách này.
+model GamePlayRound {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  game          String
+  /// Ngày VN 'YYYY-MM-DD' lúc phát ván.
+  dayKey        String
+  slot          Int?
+  contentIds    String[]
+  issuedAt      DateTime  @default(now())
+  expiresAt     DateTime
+  submittedAt   DateTime?
+  correct       Int?
+  total         Int?
+  /// Mục khách làm đúng (con của contentIds), để admin xem tỉ lệ đúng theo mục.
+  correctIds    String[]  @default([])
+  waterAwarded  Int       @default(0)
+  pointsAwarded Int       @default(0)
+  /// Trần đã hạ thưởng của ván, cách nhau dấu phẩy (account_water, account_points, device, global, tank).
+  cappedBy      String?
+  deviceHash    String?
+
+  @@index([userId, dayKey, game])
+  @@index([game, dayKey])
+  @@map("game_play_rounds")
+}
+
+/// Nội dung giáo dục của 5 game mini, admin sửa được. `payload` theo loại game (game-mini/games/*.ts kiểm hình dạng).
+model GameContentItem {
+  id              String    @id @default(cuid())
+  game            String
+  kind            String
+  payload         Json
+  explanation     String
+  sourceUrl       String
+  sourceCheckedAt DateTime? @db.Date
+  productSlug     String?
+  active          Boolean   @default(false)
+  version         Int       @default(1)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@index([game, active])
+  @@map("game_content_items")
+}
+
+/// Bộ đếm thưởng game mini của một tài khoản trong một ngày VN: trần chặn bằng một UPDATE có điều kiện.
+model GameDailyLedger {
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dayKey          String
+  waterFromGames  Int      @default(0)
+  pointsFromGames Int      @default(0)
+  rewardedRounds  Int      @default(0)
+  updatedAt       DateTime @default(now()) @updatedAt
+
+  @@id([userId, dayKey])
+  @@map("game_daily_ledger")
+}
+
+/// Tài khoản đã nhận thưởng game mini trên một thiết bị trong một ngày VN (đếm số tài khoản khác nhau theo deviceHash).
+model GameDeviceDaily {
+  deviceHash String
+  dayKey     String
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt  DateTime @default(now())
+
+  @@id([deviceHash, dayKey, userId])
+  @@map("game_device_daily")
+}
+
+/// Tổng Điểm Xanh game mini đã phát cho mọi tài khoản trong một ngày VN (ngân sách toàn hệ thống).
+model GameGlobalDaily {
+  dayKey       String   @id
+  pointsMinted Int      @default(0)
+  updatedAt    DateTime @default(now()) @updatedAt
+
+  @@map("game_global_daily")
 }
 
 model Mission {

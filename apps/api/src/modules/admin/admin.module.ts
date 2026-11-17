@@ -10,6 +10,9 @@ import { AdminGameSeasonController } from './admin-game-season.controller';
 import { AdminGameSeasonService } from './admin-game-season.service';
 import { AdminGameQuizController } from './admin-game-quiz.controller';
 import { GameQuizService } from '../game/game-quiz.service';
+import { AdminGameMiniController } from './admin-game-mini.controller';
+import { GameMiniAdminService } from '../game/mini/game-mini-admin.service';
+import { GameMiniContentService } from '../game/mini/game-mini-content.service';
 import { AdminCouponBatchController } from './admin-coupon-batch.controller';
 import { AdminCouponBatchService } from './admin-coupon-batch.service';
 import { AdminReportsController } from './admin-reports.controller';
@@ -24,7 +27,7 @@ import { GomdonModule } from '../integrations/gomdon/gomdon.module';
 
 @Module({
   imports: [ImageRegistryModule, CatalogModule, OrdersModule, StaffModule, GomdonModule, MerchantModule],
-  controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminGameSeasonController, AdminGameQuizController, AdminCouponBatchController, AdminReportsController],
-  providers: [AdminService, UserBlockService, AdminEngagementService, AdminGameSeasonService, GameQuizService, AdminCouponBatchService, AdminReportsService],
+  controllers: [AdminController, AdminUsersController, AdminEngagementController, AdminGameSeasonController, AdminGameQuizController, AdminGameMiniController, AdminCouponBatchController, AdminReportsController],
+  providers: [AdminService, UserBlockService, AdminEngagementService, AdminGameSeasonService, GameQuizService, GameMiniAdminService, GameMiniContentService, AdminCouponBatchService, AdminReportsService],
 })
 export class AdminModule {}

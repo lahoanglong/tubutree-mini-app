@@ -12,13 +12,18 @@ import { GameGardenService } from './game-garden.service';
 import { GameOrderWaterService } from './game-order-water.service';
 import { SeasonPassService } from './season-pass.service';
 import { GameArcadeService } from './game-arcade.service';
+import { GameMiniController } from './mini/game-mini.controller';
+import { GameMiniService } from './mini/game-mini.service';
+import { GameMiniContentService } from './mini/game-mini-content.service';
+import { GameMiniRewardService } from './mini/game-mini-reward.service';
+import { DailyCheckInService } from '../daily-check-in/daily-check-in.service';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { WalletModule } from '../wallet/wallet.module';
 import { FeedModule } from '../feed/feed.module';
 
 @Module({
   imports: [NotificationsModule, WalletModule, FeedModule],
-  controllers: [GameController],
+  controllers: [GameController, GameMiniController],
   providers: [
     GameService,
     GameEconomyService,
@@ -32,6 +37,11 @@ import { FeedModule } from '../feed/feed.module';
     GameOrderWaterService,
     SeasonPassService,
     GameArcadeService,
+    GameMiniService,
+    GameMiniContentService,
+    GameMiniRewardService,
+    // Đố Xanh xong là điểm danh: dùng lại đúng luồng điểm danh gộp (không trạng thái, phụ thuộc đều có trong module này hoặc global).
+    DailyCheckInService,
   ],
   exports: [GameService, GameEconomyService, GameOrderWaterService],
 })
