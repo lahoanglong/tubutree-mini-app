@@ -26,7 +26,7 @@ export function BadgeRow() {
   if (!q.data?.enabled) return null;
   const chips = badgeChips(q.data);
   return (
-    <section aria-label={fillCopy('badges.title')} data-testid="badge-row" className="px-4 pt-3 md:px-0 lg:pt-0">
+    <section aria-label={fillCopy('badges.title')} data-testid="badge-row" className="px-4 pt-3 md:px-0 lg:pt-0 xl:col-start-3 xl:row-start-3">
       <Card padding={12}>
         <div className="flex items-center justify-between">
           <Heading variant="title-sm" as="h2">

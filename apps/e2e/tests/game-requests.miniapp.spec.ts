@@ -6,10 +6,11 @@ import { mockNewbieGame } from './support/game-newbie-states';
  * mở; lần gọi của vỏ app (phiên, cấu hình, giỏ, số đơn…) không thuộc trang game nên không tính vào trần.
  * Sảnh mini game (W164) thêm đúng một lần GET /game/arcade/status cho khách thật: 5 → 6.
  * "Chơi hôm nay" (game mini) thêm một lần GET /game/mini/today để biết cờ game.mini.enabled (cấu hình công khai không có cờ này): 6 → 7.
+ * Phần Hôm nay của thẻ Nhiệm vụ (nhiệm vụ hằng ngày) thêm một lần GET /game/daily, dùng chung với chấm nhắc ở thanh đáy: 7 → 8.
  */
 const GAME_OWNED = /^GET \/(game\/|me\/loyalty$|me\/daily-check-in$)/;
 
-test('mở /game: tối đa 7 lần gọi API của game, tab Vườn tải khi mở', async ({ page, api }) => {
+test('mở /game: tối đa 8 lần gọi API của game, tab Vườn tải khi mở', async ({ page, api }) => {
   mockSession(api, makeUser({ id: 'u-newbie', fullName: 'Khách mới', pointsBalance: 0 }));
   mockNewbieGame(api, 'new');
   await page.goto('/game');
@@ -18,7 +19,8 @@ test('mở /game: tối đa 7 lần gọi API của game, tab Vườn tải khi 
   await page.waitForTimeout(800);
   const opened = api.calls.map((c) => `${c.method} ${c.path}`);
   console.log(`GAME_CALLS_OPEN ${opened.length}\n${opened.join('\n')}`);
-  expect(opened.filter((c) => GAME_OWNED.test(c))).toHaveLength(7);
+  expect(opened.filter((c) => GAME_OWNED.test(c))).toHaveLength(8);
+  expect(opened.filter((c) => c === 'GET /game/daily')).toHaveLength(1);
   expect(opened.some((c) => /game\/(garden|forest|collection|community|season)/.test(c))).toBe(false);
   const before = opened.length;
   await page.getByRole('tab', { name: 'Vườn' }).click();

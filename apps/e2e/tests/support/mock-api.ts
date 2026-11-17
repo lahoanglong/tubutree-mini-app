@@ -425,6 +425,21 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
         startedAt: '2026-11-15T10:00:00.000Z',
         expiresAt: '2026-11-15T10:10:00.000Z',
       });
+      // Nhiệm vụ hằng ngày (thanh đáy ở mọi trang gốc, thẻ Nhiệm vụ của Vườn Xanh) và huy hiệu (Cá nhân) hỏi khi đã đăng nhập; mặc định cả hai cờ tắt như PROD,
+      // nên màn vẽ như trước. Spec kiểm gói retention-daily tự mock (support/retention-daily.ts).
+      api.fallback('GET', '/game/daily', {
+        enabled: false,
+        dayKey: null,
+        missions: [],
+        water: 0,
+        bonusPoints: 0,
+        bonusClaimed: false,
+        pointsBlocked: false,
+        waterLeft: 0,
+        pointsLeft: 0,
+        quizPending: false,
+      });
+      api.fallback('GET', '/game/badges', { enabled: false, badges: [] });
       // Bán chạy nhất nuôi dải Story của Trang chủ và dải gợi ý bù đơn của Giỏ; cả hai tự ẩn khi rỗng, nên mọi spec chạm Giỏ hay Trang chủ không phải khai riêng: mặc định không có món nào.
       api.fallback('GET', '/products', { data: [], meta: { page: 1, limit: 10, total: 0 }, basis: 'days30' });
       // Cá nhân, Trang chủ, thanh đáy và chuông web đọc mọi số đếm từ MỘT lời gọi /me/summary. Mock gộp này dựng từ các mock lẻ mà spec
