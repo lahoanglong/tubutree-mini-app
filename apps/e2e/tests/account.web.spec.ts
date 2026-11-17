@@ -180,7 +180,7 @@ test.describe('Web khách: tài khoản', () => {
     await expect(social).toHaveAttribute('aria-checked', 'true');
     await expect(page.getByText('Nhắc nhở Vườn Xanh & tương tác bài viết')).toHaveCount(0);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-    if (process.env.RESTOCK_SHOTS) await page.screenshot({ path: `${process.env.RESTOCK_SHOTS}/web-360-settings-switches-${test.info().project.name.replace(/\W+/g, '-')}.png` });
+    if (process.env.RESTOCK_SHOTS) await page.screenshot({ path: `${process.env.RESTOCK_SHOTS}/web-360-settings-switches-${test.info().project.name.replace(/\W+/g, '-')}.png`, animations: 'disabled' });
 
     const saved = api.waitForCall('PATCH', '/me/notifications/prefs');
     await social.click();

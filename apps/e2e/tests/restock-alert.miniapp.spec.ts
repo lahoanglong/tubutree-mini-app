@@ -58,7 +58,7 @@ test.describe('Mini App 360px: Báo tôi khi có hàng', () => {
     await expect(grey).toBeVisible();
     await expect(grey).toBeDisabled();
     await expect(stickyBar(page).getByRole('button', { name: 'Báo tôi khi có hàng' })).toHaveCount(0);
-    if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-360-pdp-out-flag-off.png` });
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-360-pdp-out-flag-off.png`, animations: 'disabled' });
   });
 
   test('cờ bật: một nút chính thay nút xám, bấm đăng ký rồi bấm lại huỷ', async ({ page, api }) => {
@@ -74,7 +74,7 @@ test.describe('Mini App 360px: Báo tôi khi có hàng', () => {
     expect(await noHorizontalScroll(page)).toBe(true);
     const box = await notifyMe.boundingBox();
     expect(box && box.height).toBeGreaterThanOrEqual(44);
-    if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-360-pdp-out-flag-on.png` });
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-360-pdp-out-flag-on.png`, animations: 'disabled' });
 
     const sub = api.waitForCall('POST', '/me/restock-alerts');
     await notifyMe.click();
@@ -86,7 +86,7 @@ test.describe('Mini App 360px: Báo tôi khi có hàng', () => {
     await expect(cancel).toBeVisible();
     await expect(cancel).toHaveAttribute('aria-pressed', 'true');
     await expect(page.getByText('Có hàng Tubu sẽ báo bạn ở mục Thông báo.')).toBeVisible();
-    if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-360-pdp-out-subscribed.png` });
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-360-pdp-out-subscribed.png`, animations: 'disabled' });
 
     const unsub = api.waitForCall('DELETE', '/me/restock-alerts/:variationId');
     await cancel.click();
@@ -106,7 +106,7 @@ test.describe('Mini App 360px: chọn phân loại hết hàng khi cờ báo hà
     await chip.click();
     const notifyMe = stickyBar(page).getByRole('button', { name: 'Báo tôi khi có hàng' });
     await expect(notifyMe).toBeVisible();
-    if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-360-pdp-mixed-out-chip.png` });
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-360-pdp-mixed-out-chip.png`, animations: 'disabled' });
     const sub = api.waitForCall('POST', '/me/restock-alerts');
     await notifyMe.click();
     expect((await sub).body).toEqual({ variationId: 'var-2l' });
@@ -137,7 +137,7 @@ test.describe('Mini App 360px: Cài đặt thông báo tách công tắc', () =>
     await expect(page.getByText('Nhắc nhở Vườn Xanh & tương tác bài viết')).toHaveCount(0);
     await expect(social).toHaveAttribute('aria-checked', 'true');
     expect(await noHorizontalScroll(page)).toBe(true);
-    if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-360-settings-switches.png` });
+    if (SHOTS) await page.screenshot({ path: `${SHOTS}/mini-360-settings-switches.png`, animations: 'disabled' });
 
     const saved = api.waitForCall('PATCH', '/me/notifications/prefs');
     await social.click();

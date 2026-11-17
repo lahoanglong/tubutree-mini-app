@@ -100,7 +100,7 @@ test('cờ tắt: phân loại hết hàng giữ nút xám "Tạm hết hàng", 
   await expect(grey).toBeVisible({ timeout: 30_000 });
   await expect(grey).toBeDisabled();
   await expect(page.getByTestId('pdp-restock')).toHaveCount(0);
-  if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-360-pdp-out-flag-off.png` });
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-360-pdp-out-flag-off.png`, animations: 'disabled' });
 });
 
 test('cờ bật, đã đăng nhập: một nút chính "Báo tôi khi có hàng", bấm đăng ký rồi bấm lại huỷ', async ({ page, api }) => {
@@ -116,7 +116,7 @@ test('cờ bật, đã đăng nhập: một nút chính "Báo tôi khi có hàng
   expect(await noHorizontalScroll(page)).toBe(true);
   const box = await button.boundingBox();
   expect(box && box.height).toBeGreaterThanOrEqual(44);
-  if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-360-pdp-out-flag-on.png` });
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-360-pdp-out-flag-on.png`, animations: 'disabled' });
 
   const sub = api.waitForCall('POST', '/me/restock-alerts');
   await button.click();
@@ -125,7 +125,7 @@ test('cờ bật, đã đăng nhập: một nút chính "Báo tôi khi có hàng
   await expect(button).toHaveText('Đã đăng ký báo hàng · Huỷ');
   await expect(button).toHaveAttribute('aria-pressed', 'true');
   expect(state.subscribed.has(subscribedId)).toBe(true);
-  if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-360-pdp-out-subscribed.png` });
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-360-pdp-out-subscribed.png`, animations: 'disabled' });
 
   const unsub = api.waitForCall('DELETE', '/me/restock-alerts/:variationId');
   await button.click();
@@ -176,7 +176,7 @@ test('cờ bật: chip phân loại hết hàng chọn được, chọn nó thì
   await chip.click();
   const button = stickyBar(page).getByTestId('pdp-restock');
   await expect(button).toHaveText('Báo tôi khi có hàng');
-  if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-360-pdp-mixed-out-chip.png` });
+  if (SHOTS) await page.screenshot({ path: `${SHOTS}/web-360-pdp-mixed-out-chip.png`, animations: 'disabled' });
   const sub = api.waitForCall('POST', '/me/restock-alerts');
   await button.click();
   expect(((await sub).body as { variationId: string }).variationId).toBe(target);
