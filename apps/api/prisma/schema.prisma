@@ -546,6 +546,7 @@ model Product {
   pancakeLinkedOut MerchantPancakeLink[] @relation("PancakeLinkOrigin")
   /// Bản sửa nội dung đang chờ duyệt của sản phẩm đang bán (R3-MERCHANT-4); sản phẩm vẫn bán với nội dung của chính dòng này.
   editDraft        ProductEditDraft?
+  mssEnrichment    ProductMssEnrichment?
   campaignLinks    CampaignProduct[]
   bundleItems      BundleItem[]
   bundleAnchors    Bundle[]              @relation("BundleAnchor")
@@ -4479,4 +4480,56 @@ model SupportBridgeAction {
 
   @@index([createdAt])
   @@map("support_bridge_actions")
+}
+
+/// Nội dung bổ sung MSS đã xuất bản cho một sản phẩm (hợp đồng commerce v0.9 mục 1.2). Lưu riêng, KHÔNG ghi đè cột của `products`:
+/// cờ `mss.catalog_enrichment_enabled` bật thì lúc đọc, mỗi trường MSS khác null thay giá trị Tubu; tắt cờ là về nội dung cũ ngay, không
+/// cần khôi phục dữ liệu, và đồng bộ Pancake không đụng bảng này.
+model ProductMssEnrichment {
+  productId        String   @id
+  product          Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  pancakeProductId String
+  mssProductId     String?
+  /// published | unpublished | removed. Chỉ `published` được ghép; hai trạng thái kia giữ dòng để Ops đếm và để chặn bản cũ đến muộn.
+  state            String
+  /// Phần bổ sung đã kiểm lược đồ và lọc (MssEnrichmentPayload). Không có giá/tồn.
+  payload          Json
+  /// Phiên bản xuất bản cao nhất đã nhận: bản đến muộn có phiên bản thấp hơn không ghi đè.
+  contentVersion   Int
+  mssUpdatedAt     DateTime
+  fetchedAt        DateTime @default(now())
+  sha256           String
+  /// Cột rút gọn cho thẻ sản phẩm và bộ lọc danh mục, để danh sách không phải đọc cả `payload`.
+  title            String?
+  imagesOverride   Boolean  @default(false)
+  coverImage       String?
+  categoryOverride Boolean  @default(false)
+  categoryIds      String[] @default([])
+  /// URL ảnh/video của bản đã xuất bản, cho danh sách nguồn mà GET /img chịu đổi cỡ.
+  mediaUrls        String[] @default([])
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now())
+
+  @@index([state])
+  @@index([categoryIds], type: Gin, map: "product_mss_enrichment_categoryIds_gin")
+  @@map("product_mss_enrichment")
+}
+
+/// Trạng thái kéo nội dung bổ sung từ MSS: một dòng `id = 'catalog'`. `watermark` là `server_time` của lần kéo thành công gần nhất.
+model MssCatalogSyncState {
+  id             String    @id
+  watermark      DateTime?
+  lastRunAt      DateTime?
+  lastFinishedAt DateTime?
+  lastFullAt     DateTime?
+  /// ok | partial | failed | skipped
+  lastStatus     String?
+  /// cron | full | doorbell | admin
+  lastTrigger    String?
+  /// Đếm của lần chạy gần nhất (MssCatalogRunStats): nhận, ghép, không đổi, bỏ qua theo lý do.
+  lastStats      Json?
+  lastError      String?
+  updatedAt      DateTime  @default(now())
+
+  @@map("mss_catalog_sync_state")
 }
