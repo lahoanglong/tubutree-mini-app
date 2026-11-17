@@ -1069,3 +1069,10 @@ video.review-lightbox__media {
 .tubu-daily-row + .tubu-daily-row {
   border-top: 1px solid var(--color-border-subtle);
 }
+/* Nút Làm/Nhận trong dòng nhiệm vụ ngày: gọn như nút web (`uiBar` px-3, min-h-11), bỏ rộng tối thiểu 120px của ZaUI để tên nhiệm vụ có chỗ. */
+.tubu-daily-row .tubu-btn {
+  min-width: 0;
+  height: 44px;
+  padding-left: 12px;
+  padding-right: 12px;
+}
