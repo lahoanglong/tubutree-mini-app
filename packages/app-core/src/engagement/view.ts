@@ -1,0 +1,134 @@
+import type { BadgesResponse, DailyMissionClaimResponse, DailyMissionId, DailyMissionsResponse } from '@tubutree/shared-types';
+import type { MissionTarget } from '../game-newbie';
+import { fillCopy } from '../shop-copy';
+
+/**
+ * Mã thiết bị gửi kèm lần nhận thưởng nhiệm vụ ngày: máy chủ băm rồi đếm số tài khoản nhận thưởng game mini trên một máy. Cùng khoá
+ * lưu với ván game mini (`tubu.game-mini.device`) để một máy chỉ có một mã cho cả hai đường thưởng. Mã riêng của game, KHÔNG dùng lại
+ * mã thiết bị đăng nhập khách của Mini App (thứ đó là bí mật xác thực). Không lưu được thì giữ trong bộ nhớ của phiên.
+ */
+export const GAME_DEVICE_KEY = 'tubu.game-mini.device';
+
+export interface GameDeviceStorage {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+let memoryDeviceId: string | null = null;
+
+export function gameDeviceId(storage: GameDeviceStorage | null, randomBytes: (n: number) => Uint8Array): string {
+  try {
+    const saved = storage?.getItem(GAME_DEVICE_KEY);
+    if (saved && /^[0-9a-f]{32}$/.test(saved)) return saved;
+  } catch {
+    /* đọc bị chặn: tạo mã mới bên dưới */
+  }
+  const id = memoryDeviceId ?? Array.from(randomBytes(16), (b) => b.toString(16).padStart(2, '0')).join('');
+  memoryDeviceId = id;
+  try {
+    storage?.setItem(GAME_DEVICE_KEY, id);
+  } catch {
+    /* ghi bị chặn: dùng mã trong bộ nhớ */
+  }
+  return id;
+}
+
+/** Đích của nút "Làm": việc trong Vườn Xanh cuộn về khối điểm danh và tưới; việc ở gian hàng mở danh mục. */
+const DAILY_TARGETS: Record<DailyMissionId, MissionTarget> = {
+  DAILY_QUIZ: 'checkin',
+  DAILY_PLAY: 'checkin',
+  DAILY_WATER: 'checkin',
+  DAILY_STORY: 'catalog',
+  DAILY_WISHLIST: 'catalog',
+};
+
+export type DailyRowState = 'todo' | 'claimable' | 'claimed' | 'done';
+
+export interface DailyRowView {
+  id: DailyMissionId;
+  title: string;
+  /** "+5 💧"; khách vãng lai không được hứa thưởng nên rỗng. */
+  reward: string;
+  /** todo: chưa làm (nút Làm); claimable: đã làm, chưa nhận (nút Nhận); claimed: đã nhận; done: đã làm nhưng khách vãng lai không nhận được. */
+  state: DailyRowState;
+  target: MissionTarget;
+  aria: string;
+}
+
+export function dailyRows(res: DailyMissionsResponse | undefined): DailyRowView[] {
+  if (!res?.enabled) return [];
+  return res.missions.map((m) => {
+    const title = fillCopy(`daily.mission.${m.id}`);
+    const state: DailyRowState = m.claimed ? 'claimed' : !m.done ? 'todo' : res.pointsBlocked ? 'done' : 'claimable';
+    const aria =
+      state === 'claimed'
+        ? fillCopy('daily.claimedAria', { title })
+        : state === 'claimable'
+          ? fillCopy('daily.claimAria', { title })
+          : state === 'done'
+            ? fillCopy('daily.doneAria', { title })
+            : fillCopy('daily.goAria', { title });
+    return { id: m.id, title, reward: res.pointsBlocked ? '' : fillCopy('daily.water', { n: res.water }), state, target: DAILY_TARGETS[m.id], aria };
+  });
+}
+
+/** "2/3" của phần Hôm nay: số nhiệm vụ đã làm (đã nhận hoặc chưa). */
+export function dailyProgress(res: DailyMissionsResponse | undefined): string {
+  if (!res?.enabled) return '';
+  return fillCopy('daily.progress', { n: res.missions.filter((m) => m.done || m.claimed).length, total: res.missions.length });
+}
+
+/** Dòng thưởng ngày dưới 3 nhiệm vụ. Khách vãng lai không được hứa Điểm Xanh nên không có dòng. */
+export function dailyBonusLine(res: DailyMissionsResponse | undefined): string | null {
+  if (!res?.enabled || res.pointsBlocked || res.bonusPoints <= 0) return null;
+  return fillCopy(res.bonusClaimed ? 'daily.bonusDone' : 'daily.bonus', { points: res.bonusPoints });
+}
+
+/** Chữ báo sau khi nhận: thưởng thật sau trần (có thể 0 khi Vườn Xanh đã trao đủ hôm nay). */
+export function dailyClaimToast(r: Pick<DailyMissionClaimResponse, 'water' | 'points'>): string {
+  if (r.water <= 0 && r.points <= 0) return fillCopy('daily.toastCapped');
+  if (r.points > 0) return fillCopy('daily.toastBonus', { n: r.water, points: r.points });
+  return fillCopy('daily.toastWater', { n: r.water });
+}
+
+/**
+ * Chấm ở tab Vườn Xanh: hôm nay chưa làm Đố Xanh (khi Đố Xanh đang bật, máy chủ tính sẵn `quizPending`) hoặc chưa điểm danh. Chỉ khi
+ * nhiệm vụ hằng ngày bật; dữ liệu chưa về thì không chấm (không nháy lên rồi tắt).
+ */
+export function gardenDotOn(daily: DailyMissionsResponse | undefined, checkIn: { checkedInToday: boolean } | null | undefined): boolean {
+  if (!daily?.enabled) return false;
+  return daily.quizPending || checkIn?.checkedInToday === false;
+}
+
+/** Nhiệm vụ hằng ngày bật thì lý do "chưa điểm danh" chuyển sang chấm Vườn Xanh, tab Ưu đãi chỉ còn lý do mã sắp hết hạn. */
+export const checkInDotMovesToGarden = (daily: DailyMissionsResponse | undefined): boolean => daily?.enabled === true;
+
+/** Chấm ở tab Cá nhân: có thông báo chưa đọc. Tab đã mang số đơn đang xử lý thì số thắng, không vẽ cả hai. */
+export function profileDotOn(daily: DailyMissionsResponse | undefined, unread: number | undefined, activeOrders: number): boolean {
+  return daily?.enabled === true && (unread ?? 0) > 0 && activeOrders <= 0;
+}
+
+export interface BadgeChipView {
+  id: string;
+  name: string;
+  earned: boolean;
+  /** Điều kiện đạt, hiện khi khách chạm huy hiệu chưa đạt. */
+  how: string;
+  aria: string;
+}
+
+/** Hàng huy hiệu: đã đạt đứng trước (theo thứ tự gốc), chưa đạt mờ đi và kèm điều kiện. */
+export function badgeChips(res: BadgesResponse | undefined): BadgeChipView[] {
+  if (!res?.enabled) return [];
+  const views = res.badges.map((b) => {
+    const name = fillCopy(`badges.name.${b.id}`);
+    const how = fillCopy(`badges.how.${b.id}`);
+    return { id: b.id, name, earned: b.earned, how, aria: b.earned ? fillCopy('badges.earnedAria', { name }) : fillCopy('badges.lockedAria', { name, how }) };
+  });
+  return [...views.filter((v) => v.earned), ...views.filter((v) => !v.earned)];
+}
+
+export function badgeCount(res: BadgesResponse | undefined): string {
+  if (!res?.enabled) return '';
+  return fillCopy('badges.count', { n: res.badges.filter((b) => b.earned).length, total: res.badges.length });
+}

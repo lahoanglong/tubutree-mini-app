@@ -1,23 +1,33 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MissionItem } from '@tubutree/app-core/api/game';
+import type { DailyMissionsResponse } from '@tubutree/shared-types';
 
-const mocks = vi.hoisted(() => ({ ensurePhone: vi.fn() }));
+const mocks = vi.hoisted(() => ({ ensurePhone: vi.fn(), status: 'unauthenticated' as string, get: vi.fn(), post: vi.fn(), snack: vi.fn() }));
 vi.mock('../../store/auth', () => ({
-  useAuthStore: (sel: (s: unknown) => unknown) => sel({ ensurePhoneOrThrow: mocks.ensurePhone }),
+  useAuthStore: (sel: (s: unknown) => unknown) => sel({ ensurePhoneOrThrow: mocks.ensurePhone, status: mocks.status }),
 }));
+vi.mock('../../services/core-http', () => ({ coreHttp: { get: mocks.get, post: mocks.post } }));
+vi.mock('zmp-ui', async (orig) => ({ ...(await orig<typeof import('zmp-ui')>()), useSnackbar: () => ({ openSnackbar: mocks.snack }) }));
 
 import { MissionsCard } from './missions-card';
+
+const wrap = (ui: ReactNode) => <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{ui}</QueryClientProvider>;
 
 const DONE: MissionItem = { code: 'FIRST_ORDER', title: 'Đơn hàng đầu tiên', rewardPoints: 20_000, progress: 1, goal: 1, completed: true, claimed: false };
 const OPEN: MissionItem = { code: 'REVIEW_3', title: 'Nhà phê bình', rewardPoints: 15_000, progress: 1, goal: 3, completed: false, claimed: false };
 
 function card(missions: MissionItem[], onClaim = vi.fn()) {
-  return render(<MissionsCard missions={missions} streakDays={0} claimPending={false} claimVariables={undefined} onClaim={onClaim} />);
+  return render(wrap(<MissionsCard missions={missions} streakDays={0} claimPending={false} claimVariables={undefined} onClaim={onClaim} onGo={vi.fn()} />));
 }
 
 describe('MissionsCard: khách vãng lai không được hứa Điểm Xanh', () => {
-  beforeEach(() => mocks.ensurePhone.mockReset());
+  beforeEach(() => {
+    mocks.ensurePhone.mockReset();
+    mocks.status = 'unauthenticated';
+  });
 
   it('user thật: có "+N Điểm Xanh" và nút Nhận thưởng khi đủ điều kiện, không có câu mời đăng nhập', () => {
     const onClaim = vi.fn();
@@ -44,5 +54,72 @@ describe('MissionsCard: khách vãng lai không được hứa Điểm Xanh', ()
     fireEvent.click(screen.getByRole('button', { name: 'Đăng nhập Zalo' }));
     await waitFor(() => expect(mocks.ensurePhone).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Đăng nhập Zalo' })).toBeEnabled());
+  });
+});
+
+const DAILY: DailyMissionsResponse = {
+  enabled: true,
+  dayKey: '2026-11-17',
+  missions: [
+    { id: 'DAILY_QUIZ', done: true, claimed: true },
+    { id: 'DAILY_STORY', done: true, claimed: false },
+    { id: 'DAILY_WATER', done: false, claimed: false },
+  ],
+  water: 5,
+  bonusPoints: 10,
+  bonusClaimed: false,
+  pointsBlocked: false,
+  waterLeft: 35,
+  pointsLeft: 100,
+  quizPending: false,
+};
+
+describe('MissionsCard: phần Hôm nay (nhiệm vụ hằng ngày)', () => {
+  beforeEach(() => {
+    mocks.status = 'authenticated';
+    mocks.get.mockReset();
+    mocks.post.mockReset();
+    mocks.snack.mockReset();
+  });
+
+  it('cờ tắt: thẻ như cũ, không có phần Hôm nay, nhiệm vụ một lần hiện ngay', async () => {
+    mocks.get.mockResolvedValue({ enabled: false });
+    card([DONE, OPEN]);
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledWith('/game/daily'));
+    expect(screen.queryByTestId('daily-missions')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nhận thưởng' })).toBeInTheDocument();
+  });
+
+  it('API cũ (404): thẻ như cũ', async () => {
+    mocks.get.mockRejectedValue(Object.assign(new Error('404'), { status: 404 }));
+    card([DONE, OPEN]);
+    await waitFor(() => expect(mocks.get).toHaveBeenCalled());
+    expect(screen.queryByTestId('daily-missions')).not.toBeInTheDocument();
+    expect(screen.getByText('Đơn hàng đầu tiên')).toBeInTheDocument();
+  });
+
+  it('cờ bật: 3 dòng Hôm nay đứng đầu, nhiệm vụ một lần thu sau một nút', async () => {
+    mocks.get.mockResolvedValue(DAILY);
+    card([DONE, OPEN]);
+    expect(await screen.findByTestId('daily-missions')).toBeInTheDocument();
+    expect(screen.getByText('2/3')).toBeInTheDocument();
+    expect(screen.getByText('Xong cả 3 nhiệm vụ: +10 Điểm Xanh')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nhận thưởng: Đọc câu chuyện một sản phẩm' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Làm nhiệm vụ: Tưới cây' })).toBeInTheDocument();
+    expect(screen.queryByText('Đơn hàng đầu tiên')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Xem nhiệm vụ một lần (2)' }));
+    expect(screen.getByText('Đơn hàng đầu tiên')).toBeInTheDocument();
+  });
+
+  it('nhận thưởng: gửi mã thiết bị game 32 ký tự, báo thưởng thật', async () => {
+    mocks.get.mockResolvedValue(DAILY);
+    mocks.post.mockResolvedValue({ id: 'DAILY_STORY', water: 5, points: 0, bonus: false, capped: [], totalSeeds: 105 });
+    card([DONE]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhận thưởng: Đọc câu chuyện một sản phẩm' }));
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
+    const [path, body] = mocks.post.mock.calls[0]!;
+    expect(path).toBe('/game/daily/DAILY_STORY/claim');
+    expect((body as { deviceId: string }).deviceId).toMatch(/^[0-9a-f]{32}$/);
+    await waitFor(() => expect(mocks.snack).toHaveBeenCalledWith({ text: 'Đã nhận +5 💧', type: 'success' }));
   });
 });

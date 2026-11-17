@@ -1,7 +1,15 @@
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { act, render, screen, fireEvent, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ navigate: vi.fn(), pathname: '/', count: 0, dot: null as null | 'check-in' | 'coupon-expiring' }));
+const mocks = vi.hoisted(() => ({
+  navigate: vi.fn(),
+  pathname: '/',
+  count: 0,
+  dot: null as null | 'check-in' | 'coupon-expiring',
+  reminders: { garden: false, profile: false, checkInElsewhere: false },
+}));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   useNavigate: () => mocks.navigate,
@@ -9,6 +17,9 @@ vi.mock('zmp-ui', async (importOriginal) => ({
 }));
 vi.mock('../hooks/use-active-order-count', () => ({ useActiveOrderCount: (enabled: boolean) => (enabled ? mocks.count : 0) }));
 vi.mock('../hooks/use-offers-dot', () => ({ useOffersDot: (enabled: boolean) => (enabled ? mocks.dot : null) }));
+vi.mock('../hooks/use-engagement-dots', () => ({
+  useEngagementDots: (enabled: boolean) => (enabled ? mocks.reminders : { garden: false, profile: false, checkInElsewhere: false }),
+}));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 import BottomNav from './bottom-nav';
@@ -25,6 +36,7 @@ describe('BottomNav', () => {
     mocks.pathname = '/';
     mocks.count = 0;
     mocks.dot = null;
+    mocks.reminders = { garden: false, profile: false, checkInElsewhere: false };
     localStorage.clear();
   });
 
@@ -98,6 +110,29 @@ describe('BottomNav', () => {
     render(<BottomNav />);
     expect(screen.getByTestId('offers-dot')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Ưu đãi, có việc cần làm' })).toBeInTheDocument();
+  });
+
+  it('chấm nhắc nhiệm vụ hằng ngày: tắt thì không có; bật thì chấm 8px ở Vườn Xanh và Cá nhân kèm nhãn đọc, không nhấp nháy', () => {
+    const none = render(<BottomNav />);
+    expect(screen.queryByTestId('garden-dot')).toBeNull();
+    expect(screen.queryByTestId('profile-dot')).toBeNull();
+    none.unmount();
+    mocks.reminders = { garden: true, profile: true, checkInElsewhere: true };
+    render(<BottomNav />);
+    expect(screen.getByTestId('garden-dot')).toHaveClass('tubu-remind-dot', 'tubu-remind-dot--center');
+    expect(screen.getByTestId('profile-dot')).toHaveClass('tubu-remind-dot');
+    const rule = /\.tubu-remind-dot\s*\{([^}]*)\}/.exec(readFileSync(join(__dirname, '../css/tokens.css'), 'utf8'))![1]!;
+    expect(rule).toMatch(/width:\s*8px;[\s\S]*height:\s*8px;/);
+    expect(rule).not.toMatch(/animation|transition/);
+    expect(screen.getByRole('button', { name: 'Vườn Xanh, có việc hôm nay' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cá nhân, có thông báo chưa đọc' })).toBeInTheDocument();
+  });
+
+  it('tab Cá nhân đang mang số đơn thì số thắng, không thêm chấm', () => {
+    mocks.count = 2;
+    mocks.reminders = { garden: false, profile: false, checkInElsewhere: true };
+    render(<BottomNav />);
+    expect(screen.queryByTestId('profile-dot')).toBeNull();
   });
 
   it('bấm tab khác → navigate; tab đang mở có aria-current=page', () => {

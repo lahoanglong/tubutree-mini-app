@@ -16,9 +16,10 @@ const readSeen = (userId: string | null | undefined) => readSeenCoupons(browserS
 /**
  * Lý do tab "Ưu đãi" có chấm đỏ: chưa điểm danh hôm nay (giữ đến khi điểm danh), hoặc có mã sắp hết hạn mà khách chưa thấy khi mở
  * trang Ưu đãi (`useMarkExpiringSeen`). Dùng chung khoá ['loyalty-checkin'] và ['coupons'] với trang Ưu đãi/Điểm Xanh nên mở trang đó
- * không tốn thêm request. Lỗi hay chưa tải thì không chấm.
+ * không tốn thêm request. Lỗi hay chưa tải thì không chấm. `checkInElsewhere`: chấm Vườn Xanh của nhiệm vụ hằng ngày đã nhắc điểm danh,
+ * tab này chỉ còn lý do mã sắp hết hạn (một lời nhắc, một chỗ).
  */
-export function useOffersDot(enabled: boolean): OffersDotReason | null {
+export function useOffersDot(enabled: boolean, checkInElsewhere = false): OffersDotReason | null {
   const authed = useAuthPhase() === 'authenticated';
   const on = enabled && authed;
   const userId = useAuth().user?.id;
@@ -26,7 +27,7 @@ export function useOffersDot(enabled: boolean): OffersDotReason | null {
   const coupons = useQuery({ ...couponsQuery(coreHttp), enabled: on, staleTime: 60_000, retry: false });
   const seen = useQuery({ queryKey: seenQueryKey(userId), queryFn: async () => readSeen(userId), initialData: () => readSeen(userId), staleTime: Infinity, gcTime: Infinity });
   if (!on) return null;
-  return offersDotReason({ checkIn: checkIn.data, coupons: coupons.data, seenExpiringIds: seen.data }, Date.now());
+  return offersDotReason({ checkIn: checkInElsewhere ? null : checkIn.data, coupons: coupons.data, seenExpiringIds: seen.data }, Date.now());
 }
 
 /** Khách mở trang Ưu đãi và thấy danh sách mã: nhớ các mã sắp hết hạn đã xem để chấm đỏ tắt, chỉ bật lại khi có mã mới sắp hết hạn. */

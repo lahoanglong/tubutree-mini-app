@@ -35,6 +35,7 @@ import { buildAccountMenu, type AccountMenuItem } from '@/components/account/acc
 import { Button, Card, Heading, Text } from '@/components/mini';
 import { CASHBACK_ENABLED } from '@tubutree/app-core/features';
 import { OrdersSection } from './orders-section';
+import { BadgeRow, useBadges } from '@/components/game/badge-row';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
 
@@ -159,6 +160,7 @@ function AccountContent() {
   const couponsQ = useQuery({ ...couponsQuery(coreHttp), enabled: authed });
   const summaryQ = useMeSummary();
   const referralQ = useQuery({ ...referralQuery(coreHttp), enabled: authed });
+  const badgesQ = useBadges();
   const referralRef = useRef<HTMLElement>(null);
   const wantsReferral = useSearchParams()?.get('section') === PROFILE_REFERRAL_SECTION;
   const referralReady = referralQ.isSuccess || referralQ.isError;
@@ -228,6 +230,8 @@ function AccountContent() {
   const welcomeOffer = welcomeOfferOf(cfgQ.data);
   const referralRules = { referrerPoints: referral?.referrerRewardPoints, minOrderAmount: referral?.minOrderAmount, windowDays: referral?.windowDays };
 
+  // Hàng huy hiệu bật thì nhường chỗ bằng dòng "Câu chuyện thương hiệu" (vẫn vào được từ trang sản phẩm, trang thương hiệu), như Mini App.
+  const badgesOn = badgesQ.data?.enabled === true;
   const menu = buildAccountMenu({
     role: user.role,
     aiEnabled: cfgQ.data?.aiAdvisorEnabled === true,
@@ -238,7 +242,7 @@ function AccountContent() {
     ownedBrandName: ownsBrandQ.data === false ? undefined : ownedBrandQ.data?.name,
     deskPointNames: deskQ.data?.map((p) => p.name),
     isReady: isWebRouteReady,
-  });
+  }).map((g) => (badgesOn ? { ...g, items: g.items.filter((it) => it.to !== '/cau-chuyen') } : g));
 
   const countsFailed = summaryQ.isError;
   const reloadCounts = () => {
@@ -414,6 +418,8 @@ function AccountContent() {
             )}
           </Card>
         </section>
+
+        <BadgeRow />
 
         {code && (
           <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={fillCopy('invite.title')} className="px-4 pt-3 md:px-0 lg:col-start-1 lg:row-span-2 lg:row-start-3 lg:pt-0 xl:col-start-3 xl:row-start-2">

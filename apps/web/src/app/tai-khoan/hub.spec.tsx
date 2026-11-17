@@ -880,3 +880,28 @@ describe('hub /tai-khoan — khoá chạm đúp (W78B)', () => {
   });
 });
 
+
+describe('hub /tai-khoan — hàng huy hiệu (cờ engagement.badges_enabled)', () => {
+  it('cờ bật: hàng huy hiệu thay dòng Câu chuyện thương hiệu; chạm huy hiệu chưa đạt thì báo điều kiện', async () => {
+    mocks.routes['/game/badges'] = () => ({ enabled: true, badges: [{ id: 'FIRST_ORDER', earned: true, earnedAt: '2026-11-17T00:00:00.000Z' }] });
+    const c = await mount();
+    const row = c.querySelector('[data-testid="badge-row"]')!;
+    expect(row).not.toBeNull();
+    expect(row.textContent).toContain('1/8');
+    const chips = Array.from(row.querySelectorAll('button'));
+    expect(chips).toHaveLength(8);
+    expect(chips[0]!.getAttribute('aria-label')).toBe('Đơn đầu tiên, đã đạt');
+    expect(link(c, '/cau-chuyen')).toBeNull();
+    click(chips[1]!);
+    const statuses = Array.from(document.body.querySelectorAll('[role="status"]')).map((n) => n.textContent);
+    expect(statuses).toContain(chips[1]!.getAttribute('aria-label')!.split('. ').slice(1).join('. '));
+  });
+
+  it('cờ tắt hoặc API cũ: không có hàng huy hiệu, dòng Câu chuyện thương hiệu còn', async () => {
+    mocks.routes['/game/badges'] = () => ({ enabled: false, badges: [] });
+    const c = await mount();
+    expect(mocks.calls).toContain('/game/badges');
+    expect(c.querySelector('[data-testid="badge-row"]')).toBeNull();
+    expect(link(c, '/cau-chuyen')).not.toBeNull();
+  });
+});

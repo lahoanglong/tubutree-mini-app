@@ -1,8 +1,10 @@
 import { useNavigate, useLocation } from 'zmp-ui';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { haptic } from '../utils/haptic';
 import { vi } from '../i18n/vi';
 import { useActiveOrderCount } from '../hooks/use-active-order-count';
 import { useOffersDot } from '../hooks/use-offers-dot';
+import { useEngagementDots } from '../hooks/use-engagement-dots';
 import { NAV_TABS, isRootPath, type NavTab } from './nav-config';
 import { Icon } from './ui/icon';
 import { Text } from './ui/text';
@@ -29,7 +31,10 @@ export default function BottomNav() {
   const { pathname } = useLocation();
   const isRoot = isRootPath(pathname);
   const activeOrders = useActiveOrderCount(isRoot);
-  const offersDot = useOffersDot(isRoot);
+  const reminders = useEngagementDots(isRoot, activeOrders);
+  const offersDot = useOffersDot(isRoot, reminders.checkInElsewhere);
+  const gardenDot = reminders.garden;
+  const profileDot = reminders.profile;
   if (!isRoot) return null;
 
   const go = (t: NavTab) => {
@@ -64,11 +69,20 @@ export default function BottomNav() {
         const active = pathname === t.path;
         const count = t.badge === 'active-orders' ? activeOrders : 0;
         const dot = t.badge === 'offers-dot' && offersDot !== null;
+        const remind = (t.center === true && gardenDot) || (t.badge === 'active-orders' && profileDot);
+        const label =
+          count > 0
+            ? vi.nav.tabWithActiveOrders(t.label, count)
+            : dot
+              ? vi.nav.tabWithOffersDot(t.label)
+              : remind
+                ? fillCopy(t.center ? 'nav.gardenDot' : 'nav.profileDot', { name: t.label })
+                : t.label;
         return (
           <button
             key={t.path}
             type="button"
-            aria-label={count > 0 ? vi.nav.tabWithActiveOrders(t.label, count) : dot ? vi.nav.tabWithOffersDot(t.label) : t.label}
+            aria-label={label}
             aria-current={active ? 'page' : undefined}
             className="tubu-press"
             onClick={() => go(t)}
@@ -109,12 +123,14 @@ export default function BottomNav() {
                   }}
                 >
                   <Icon icon={t.Icon} size="lg" tone="inverse" />
+                  {remind && <RemindDot testId="garden-dot" center />}
                 </span>
               </>
             ) : (
               <span aria-hidden className={active ? 'tubu-tab-pop' : undefined} style={{ position: 'relative', display: 'grid', placeItems: 'center' }}>
                 <Icon icon={t.Icon} size="lg" tone={active ? 'brand' : 'muted'} filled={active} />
                 <CountBadge count={count} label={vi.nav.activeOrders(count)} />
+                {remind && <RemindDot testId="profile-dot" />}
                 {dot && (
                   <span
                     data-testid="offers-dot"
@@ -142,4 +158,9 @@ export default function BottomNav() {
       })}
     </nav>
   );
+}
+
+/** Chấm nhắc 8px của nhiệm vụ hằng ngày (Vườn Xanh, Cá nhân): đứng yên, không nhấp nháy; nghĩa nằm ở aria-label của tab. */
+function RemindDot({ testId, center = false }: { testId: string; center?: boolean }) {
+  return <span data-testid={testId} aria-hidden className={center ? 'tubu-remind-dot tubu-remind-dot--center' : 'tubu-remind-dot'} />;
 }

@@ -1,7 +1,7 @@
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { ReactNode } from 'react';
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   cashback: false,
   subscriptions: true,
   activeSubs: 1,
+  badges: null as unknown,
 }));
 vi.mock('../utils/features', () => ({
   get CASHBACK_ENABLED() {
@@ -53,6 +54,7 @@ vi.mock('../services/core-http', () => ({
           activeSubscriptions: mocks.activeSubs,
         }));
       }
+      if (path === '/game/badges' && mocks.badges) return Promise.resolve(mocks.badges);
       return Promise.reject(new Error(`không mock ${path}`));
     },
   },
@@ -947,5 +949,28 @@ describe('Cá nhân: chạm đúp cùng nhịp không gọi lặp (W78A)', () =>
     await waitFor(() => expect(screen.queryByText('Chưa tải được hạng và điểm')).toBeNull());
     expect(vi.mocked(getLoyalty).mock.calls.length).toBe(loyaltyBefore + 1);
     expect(mocks.orderCounts.mock.calls.length).toBe(summaryBefore + 1);
+  });
+});
+
+describe('ProfilePage: hàng huy hiệu (cờ engagement.badges_enabled)', () => {
+  afterEach(() => {
+    mocks.badges = null;
+  });
+
+  it('cờ bật: hàng huy hiệu thay dòng Câu chuyện thương hiệu, các dòng khác giữ nguyên', async () => {
+    mocks.badges = { enabled: true, badges: [{ id: 'FIRST_ORDER', earned: true, earnedAt: '2026-11-17T00:00:00.000Z' }] };
+    renderPage();
+    expect(await screen.findByTestId('badge-row')).toBeInTheDocument();
+    expect(screen.getByText('1/8')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Đơn đầu tiên, đã đạt' })).toBeInTheDocument();
+    expect(screen.queryByText('Câu chuyện thương hiệu')).toBeNull();
+  });
+
+  it('cờ tắt: không có hàng huy hiệu, dòng Câu chuyện thương hiệu còn', async () => {
+    mocks.badges = { enabled: false, badges: [] };
+    renderPage();
+    expect(await screen.findByText('Câu chuyện thương hiệu')).toBeInTheDocument();
+    await waitFor(() => expect(mocks.coreGet).toHaveBeenCalledWith('/game/badges'));
+    expect(screen.queryByTestId('badge-row')).toBeNull();
   });
 });

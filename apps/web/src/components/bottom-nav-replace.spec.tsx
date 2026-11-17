@@ -12,6 +12,7 @@ vi.mock('next/navigation', () => ({ usePathname: () => '/', useRouter: () => ({ 
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ status: 'authenticated' }) }));
 vi.mock('@/lib/route-map', async (orig) => ({ ...(await orig<object>()), isWebRouteReady: () => true }));
 vi.mock('@/lib/use-offers-dot', () => ({ useOffersDot: () => null }));
+vi.mock('@/lib/use-engagement-dots', () => ({ useEngagementDots: () => ({ garden: false, profile: false, checkInElsewhere: false }) }));
 vi.mock('@tanstack/react-query', () => ({ useQuery: () => ({ data: 0 }) }));
 
 import BottomNav from './bottom-nav';

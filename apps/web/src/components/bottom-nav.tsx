@@ -7,7 +7,9 @@ import { useAuth } from '@/lib/auth-context';
 import { meSummaryQuery } from '@tubutree/app-core/api/me-summary';
 import { coreHttp } from '@/lib/core-http';
 import { isWebRootPath, readyNavTabs } from '@/lib/web-nav';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { useOffersDot } from '@/lib/use-offers-dot';
+import { useEngagementDots } from '@/lib/use-engagement-dots';
 import { GardenHintBubble } from './garden-hint-bubble';
 import { CountBadge } from './mini/badge';
 import { useShellPathname } from '@/lib/shell-pathname';
@@ -36,9 +38,10 @@ export default function BottomNav() {
     staleTime: 30_000,
     retry: false,
   });
-  const offersDot = useOffersDot(isRoot && tabs.some((t) => t.badge === 'offers-dot'));
-  if (!isRoot) return null;
   const activeOrders = activeQ.data ?? 0;
+  const reminders = useEngagementDots(isRoot, activeOrders);
+  const offersDot = useOffersDot(isRoot && tabs.some((t) => t.badge === 'offers-dot'), reminders.checkInElsewhere);
+  if (!isRoot) return null;
 
   return (
     <div data-bottom-nav className="md:hidden">
@@ -53,12 +56,21 @@ export default function BottomNav() {
           const active = pathname === t.path;
           const count = t.badge === 'active-orders' ? activeOrders : 0;
           const dot = t.badge === 'offers-dot' && offersDot !== null;
+          const remind = (t.center === true && reminders.garden) || (t.badge === 'active-orders' && reminders.profile);
+          const label =
+            count > 0
+              ? `${t.label}, ${count} đơn đang xử lý`
+              : dot
+                ? `${t.label}, có việc cần làm`
+                : remind
+                  ? fillCopy(t.center ? 'nav.gardenDot' : 'nav.profileDot', { name: t.label })
+                  : t.label;
           return (
             <Link
               key={t.path}
               href={t.path}
               replace
-              aria-label={count > 0 ? `${t.label}, ${count} đơn đang xử lý` : dot ? `${t.label}, có việc cần làm` : t.label}
+              aria-label={label}
               aria-current={active ? 'page' : undefined}
               data-center={t.center ? 'true' : undefined}
               onClick={(e) => {
@@ -76,12 +88,14 @@ export default function BottomNav() {
                     className="absolute left-1/2 top-[-22px] grid h-[54px] w-[54px] -translate-x-1/2 place-items-center rounded-full border-[3px] border-stone-0 bg-forest-600 text-stone-0 shadow-card"
                   >
                     <t.Icon className="h-6 w-6" />
+                    {remind && <RemindDot testId="garden-dot" center />}
                   </span>
                 </>
               ) : (
                 <span aria-hidden="true" className={`relative grid place-items-center${active ? ' tubu-tab-pop' : ''}`}>
                   <t.Icon className="h-6 w-6" {...(active ? { fill: 'currentColor', fillOpacity: 0.16, strokeWidth: 2 } : null)} />
                   <CountBadge count={count} />
+                  {remind && <RemindDot testId="profile-dot" />}
                   {dot && (
                     <span
                       data-testid="offers-dot"
@@ -98,4 +112,9 @@ export default function BottomNav() {
       </nav>
     </div>
   );
+}
+
+/** Chấm nhắc 8px của nhiệm vụ hằng ngày (Vườn Xanh, Cá nhân): đứng yên, không nhấp nháy; nghĩa nằm ở aria-label của tab. */
+function RemindDot({ testId, center = false }: { testId: string; center?: boolean }) {
+  return <span data-testid={testId} aria-hidden="true" className={center ? 'tubu-remind-dot tubu-remind-dot--center' : 'tubu-remind-dot'} />;
 }

@@ -27,6 +27,7 @@ import { AuthPhaseView, useBlockedMessage } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
 import { Icon } from '../components/ui/icon';
 import { ListRow } from '../components/ui/list-row';
+import { BadgeRow, useBadges } from '../components/game/badge-row';
 import { rowKeyboardProps } from '../components/ui/row-keyboard';
 import { Skeleton } from '../components/ui/skeleton';
 import { SR_ONLY } from '../components/ui/sr-only';
@@ -114,6 +115,7 @@ export default function ProfilePage() {
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
+  const badgesQ = useBadges();
   const referralRef = useRef<HTMLElement>(null);
   const wantsReferral = new URLSearchParams(location.search).get('section') === PROFILE_REFERRAL_SECTION;
   const referralReady = referralQ.isSuccess || referralQ.isError;
@@ -157,10 +159,12 @@ export default function ProfilePage() {
   const ownedBrand = ownsBrandQ.data === false ? null : ownedBrandQ.data;
   const ctvEntry = ctvMenuEntry(user?.role, ctvAccessQ.data);
 
+  // Hàng huy hiệu thay chỗ dòng Câu chuyện thương hiệu (vẫn mở được từ trang sản phẩm và trang thương hiệu) để Cá nhân không dài thêm.
+  const badgesOn = badgesQ.data?.enabled === true;
   const baseMenu = MENU.map((s) => ({
     ...s,
     items: s.items
-      .filter((it) => (aiEnabled || it.to !== '/ai-advisor') && (chatEnabled || it.to !== '/chat') && (canSeeAcademy(user?.role) || it.to !== '/academy'))
+      .filter((it) => (aiEnabled || it.to !== '/ai-advisor') && (chatEnabled || it.to !== '/chat') && (canSeeAcademy(user?.role) || it.to !== '/academy') && (!badgesOn || it.to !== '/brand-story'))
       .map((it) => {
         if (it.to === '/dealer') return dealerItem;
         if (it.to === '/affiliate') return ctvEntry ? { ...it, label: ctvEntry.label, hint: ctvEntry.hint } : null;
@@ -420,6 +424,8 @@ export default function ProfilePage() {
           )}
         </Card>
       </section>
+
+      <BadgeRow />
 
       {code && (
         <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={fillCopy('invite.title')} style={{ padding: '12px 16px 0' }}>

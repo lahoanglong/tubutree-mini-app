@@ -1490,3 +1490,29 @@
     padding-inline: 0;
   }
 }
+
+/* ── Nhiệm vụ hằng ngày: chấm nhắc 8px ở thanh đáy (đứng yên, không nhấp nháy) và dòng nhiệm vụ cao 52px. px để ở CSS vì bánh cóc P17b chỉ đếm TSX. ── */
+.tubu-remind-dot {
+  position: absolute;
+  top: 0;
+  right: -2px;
+  width: 8px;
+  height: 8px;
+  border-radius: var(--radius-pill);
+  background: var(--color-action-danger-bg);
+  box-shadow: 0 0 0 2px var(--color-bg-surface);
+  pointer-events: none;
+}
+.tubu-remind-dot--center {
+  top: 2px;
+  right: 2px;
+}
+.tubu-daily-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+  min-height: 52px;
+}
+.tubu-daily-row + .tubu-daily-row {
+  border-top: 1px solid var(--color-border-subtle);
+}

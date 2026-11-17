@@ -1,10 +1,20 @@
 import { useState } from 'react';
 import { Check, Target } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSnackbar } from 'zmp-ui';
+import type { DailyMissionId, DailyMissionsResponse } from '@tubutree/shared-types';
 import { gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
 import { collapseMissions, gameMoreCopy } from '@tubutree/app-core/game-more-copy';
+import { DAILY_MISSIONS_KEY, claimDailyMission, classifyDailyClaimError, dailyMissionsQuery } from '@tubutree/app-core/engagement/api';
+import { dailyBonusLine, dailyClaimToast, dailyProgress, dailyRows, gameDeviceId } from '@tubutree/app-core/engagement/view';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { MissionItem } from '../../services/game-api';
+import { coreHttp } from '../../services/core-http';
+import { useAuthStore } from '../../store/auth';
 import { vi } from '../../i18n/vi';
 import { formatNumber } from '../../utils/format';
+import { haptic } from '../../utils/haptic';
+import { browserStorage } from '../../utils/recently-viewed';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { ProgressBar } from '../ui/progress-bar';
@@ -30,13 +40,25 @@ export function MissionsCard({
   onGo?: (target: MissionTarget) => void;
 }) {
   const [showAll, setShowAll] = useState(false);
+  const [showOneTime, setShowOneTime] = useState(false);
   const { items, collapsible } = collapseMissions(missions ?? [], showAll);
+  const authed = useAuthStore((s) => s.status === 'authenticated');
+  const dailyQ = useQuery({ ...dailyMissionsQuery(coreHttp), enabled: authed });
+  const daily = dailyQ.data?.enabled ? dailyQ.data : undefined;
   // Khách vãng lai: tiến độ vẫn tính nhưng không hứa điểm và không có nút nhận thưởng; một câu mời đăng nhập cho cả thẻ.
-  const guest = (missions ?? []).some((m) => m.pointsBlocked);
+  const guest = (missions ?? []).some((m) => m.pointsBlocked) || daily?.pointsBlocked === true;
+  // Nhiệm vụ hằng ngày bật: phần Hôm nay đứng đầu, nhiệm vụ một lần thu lại sau một nút để thẻ không dài thêm.
+  const oneTimeOpen = !daily || showOneTime;
   return (
     <GameCard title="Nhiệm vụ" icon={Target}>
       {guest && <GuestPointsNote margin="0 0 4px" />}
-      {missions && missions.length > 0 ? (
+      {daily && <DailySection data={daily} onGo={onGo} />}
+      {daily && missions && missions.length > 0 && (
+        <Button fullWidth variant="ghost" aria-expanded={showOneTime} onPress={() => setShowOneTime((v) => !v)} style={{ marginTop: 'var(--space-stack-xs)' }}>
+          {showOneTime ? fillCopy('daily.oneTimeHide') : fillCopy('daily.oneTimeShow', { n: missions.length })}
+        </Button>
+      )}
+      {!oneTimeOpen ? null : missions && missions.length > 0 ? (
         items.map((m: MissionItem, idx) => {
           const defaultGoal = { CHECKIN_7: 7, REVIEW_3: 3, INVITE_3: 3, FIRST_ORDER: 1 }[m.code] ?? 1;
           // BE Mission.goal mặc định = 1 (schema @default(1)) — "> 1" từng loại bỏ nhầm mọi
@@ -111,16 +133,96 @@ export function MissionsCard({
             </div>
           );
         })
-      ) : (
+      ) : daily ? null : (
         <Text variant="body-sm" tone="tertiary" as="div">
           Chưa có nhiệm vụ.
         </Text>
       )}
-      {(collapsible || showAll) && missions && missions.length > 0 && (
+      {oneTimeOpen && (collapsible || showAll) && missions && missions.length > 0 && (
         <Button fullWidth variant="ghost" onPress={() => setShowAll((v) => !v)} style={{ marginTop: 4 }}>
           {showAll ? gameMoreCopy.missionsShowLess : gameMoreCopy.missionsShowAll(missions.length)}
         </Button>
       )}
     </GameCard>
+  );
+}
+
+/**
+ * Phần "Hôm nay" của thẻ Nhiệm vụ (cờ engagement.daily_missions_enabled): 3 dòng gọn, mỗi dòng một nút (Làm hoặc Nhận), dòng thưởng ngày
+ * bên dưới. Nhận thưởng gửi mã thiết bị game; thưởng thật sau trần chung của game mini báo bằng snackbar.
+ */
+function DailySection({ data, onGo }: { data: DailyMissionsResponse; onGo?: (target: MissionTarget) => void }) {
+  const qc = useQueryClient();
+  const { openSnackbar } = useSnackbar();
+  const rows = dailyRows(data);
+  const bonus = dailyBonusLine(data);
+  const claim = useMutation({
+    mutationFn: (id: DailyMissionId) =>
+      claimDailyMission(coreHttp, id, gameDeviceId(browserStorage(), (n) => crypto.getRandomValues(new Uint8Array(n)))),
+    onSuccess: (res) => {
+      haptic('medium');
+      openSnackbar({ text: dailyClaimToast(res), type: res.water > 0 || res.points > 0 ? 'success' : 'warning' });
+      void qc.invalidateQueries({ queryKey: ['game'] });
+      void qc.invalidateQueries({ queryKey: ['loyalty'] });
+      void qc.invalidateQueries({ queryKey: ['points-txn'] });
+    },
+    onError: (err) => {
+      const kind = classifyDailyClaimError(err);
+      openSnackbar({ text: fillCopy(kind === 'stale' ? 'daily.toastStale' : 'daily.toastError'), type: kind === 'stale' ? 'warning' : 'error' });
+      void qc.invalidateQueries({ queryKey: DAILY_MISSIONS_KEY });
+    },
+  });
+  return (
+    <section aria-label={fillCopy('daily.today')} data-testid="daily-missions" style={{ marginBottom: 'var(--space-stack-xs)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Text variant="label" tone="tertiary" as="h3">
+          {fillCopy('daily.today')}
+        </Text>
+        <Text variant="caption" tone="secondary" numeric>
+          {dailyProgress(data)}
+        </Text>
+      </div>
+      {rows.map((r) => (
+        <div key={r.id} data-testid={`daily-row-${r.id}`} className="tubu-daily-row">
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <Text
+              variant="body-sm"
+              tone={r.state === 'claimed' ? 'tertiary' : 'primary'}
+              as="div"
+              style={{ fontWeight: r.state === 'claimed' ? 400 : 600, display: 'flex', alignItems: 'center', gap: 'var(--space-stack-xs)' }}
+            >
+              {(r.state === 'claimed' || r.state === 'done') && <Icon icon={Check} size="sm" tone="brand" />}
+              {r.title}
+            </Text>
+            {r.reward && (
+              <Text variant="caption" tone="brand" numeric as="div">
+                {r.reward}
+              </Text>
+            )}
+          </div>
+          {r.state === 'claimable' && (
+            <Button
+              aria-label={r.aria}
+              loading={claim.isPending && claim.variables === r.id}
+              disabled={claim.isPending}
+              onPress={() => claim.mutate(r.id)}
+            >
+              {fillCopy('daily.claim')}
+            </Button>
+          )}
+          {r.state === 'todo' && onGo && (
+            <Button variant="secondary" aria-label={r.aria} onPress={() => onGo(r.target)}>
+              {fillCopy('daily.go')}
+            </Button>
+          )}
+          {(r.state === 'claimed' || r.state === 'done') && <span style={SR_ONLY}>{r.aria}</span>}
+        </div>
+      ))}
+      {bonus && (
+        <Text variant="caption" tone={data.bonusClaimed ? 'tertiary' : 'brand'} as="p" style={{ marginTop: 'var(--space-stack-xs)' }}>
+          {bonus}
+        </Text>
+      )}
+    </section>
   );
 }

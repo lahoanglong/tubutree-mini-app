@@ -28,7 +28,9 @@ vi.mock('../services/core-http', () => ({
     get: (path: string) =>
       path === '/me/summary'
         ? Promise.resolve({ orders: { pending_payment: 0, processing: 0, shipping: 0, delivered: 0, closed: 0, active: 0 }, unreadNotifications: 0, activeSubscriptions: 0 })
-        : Promise.reject(new Error(`không mock ${path}`)),
+        : path === '/game/badges'
+          ? Promise.resolve({ enabled: false, badges: [] })
+          : Promise.reject(new Error(`không mock ${path}`)),
   },
 }));
 vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: vi.fn().mockResolvedValue([]) }));

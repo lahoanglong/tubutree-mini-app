@@ -174,6 +174,16 @@ Máy tính (từ `lg`): hai cột gọn ở `/tai-khoan/don-hang/:code`, trái t
 
 Logic ở `packages/app-core/src/arcade/`: engine thuần không DOM (`dew-catcher.ts`, `refill-rush.ts`, toạ độ chuẩn hoá 0..1, `rng` tiêm vào để test), bộ vẽ và nhập liệu `arcade-canvas.ts` (nhận canvas qua giao diện cấu trúc tối thiểu, `raf/caf/now` tiêm vào, màu qua `theme` do app đọc từ token ngữ nghĩa nên không có hex), khung giờ thưởng giờ VN `arcade-config.ts`, `badge.ts`, `home-quiz.ts` (`pickKitProducts`), tip `arcade-tips.ts`. Tổng mã `arcade/` (không tính spec) dưới 30KB, `arcade-guard.spec` canh. Số liệu thưởng và trần chống cày ở máy chủ (`game-arcade.constants.ts`, `POST /game/arcade-complete`): 3 lượt thưởng mỗi ngày mỗi game, thêm 1 lượt khi ván xong trong khung `06:30–09:00` hoặc `20:00–22:00` giờ VN; hết lượt vẫn chơi và phá kỷ lục. Khách chưa đăng nhập chơi trọn vẹn, chỉ không lưu và không nhận thưởng. Chữ ở `arcade.*` và `homeQuiz.*` của `shop-copy.ts`. Hai câu hứa sản phẩm trong Tip (Bồ Hòn 0% Paraben & SLS; giữ vỏ chai TubuTree đổi Điểm Xanh & Quà tặng) là nguyên văn spec W164, các câu khác chỉ là lời khuyên sống xanh.
 
+### Nhiệm vụ hằng ngày, huy hiệu, chấm nhắc thanh đáy
+
+| Cần | Dùng |
+|---|---|
+| 3 nhiệm vụ trong ngày (mỗi việc +5 💧, xong cả 3 thêm Điểm Xanh) đứng đầu thẻ Nhiệm vụ ở Vườn Xanh; nhiệm vụ một lần thu lại sau một nút | `MissionsCard` (tự tải `GET /game/daily`; cờ `engagement.daily_missions_enabled` tắt hay API cũ thì thẻ như trước) |
+| hàng huy hiệu cuộn ngang ở Cá nhân (một thẻ, "n/8", đã đạt đứng trước, chưa đạt mờ kèm biểu tượng khoá, chạm thì báo điều kiện) | `BadgeRow` (không props; cờ `engagement.badges_enabled` bật thì thay dòng "Câu chuyện thương hiệu" trong menu) |
+| chấm nhắc 8px ở tab Vườn Xanh (chưa chơi Đố Xanh hoặc chưa điểm danh) và tab Cá nhân (có thông báo chưa đọc, nhường số đơn đang xử lý) | `RemindDot` trong `BottomNav` của mỗi app; đứng yên, không nhấp nháy, nghĩa nằm ở `aria-label` của tab (`nav.gardenDot`, `nav.profileDot`) |
+
+Logic ở `packages/app-core/src/engagement/` (`api.ts` đọc và kiểm dạng phản hồi, `view.ts` dựng dòng, chữ, chấm, mã thiết bị game); chữ ở `daily.*`, `badges.*`, `nav.*Dot` của `shop-copy.ts`. Điểm danh chỉ nhắc một chỗ: khi chấm Vườn Xanh bật, tab Ưu đãi bỏ lý do "chưa điểm danh", chỉ còn mã sắp hết hạn. Trên web khổ điện thoại, chuông ở đầu Trang chủ (`home-header.tsx`) như Mini App; chấm tab Cá nhân báo thông báo chưa đọc ở mọi màn gốc nên không thêm chuông thứ hai vào thanh đầu trang.
+
 ### Khuôn trang web (chỉ web)
 
 `HubLayout`, `ListingLayout`, `PdpLayout`, `StoreLayout` ở `apps/web/src/components/layouts/`. Chi tiết ở mục Khuôn trang web máy tính. `HomeEditorialHero` (`apps/web/src/components/home/`, chỉ web): khối giới thiệu mặc định của Trang chủ từ md khi không có banner chiến dịch, đứng ở slot `hero` của `HubLayout` (cùng tỉ lệ `--banner-ratio` nên chiến dịch về muộn không làm trang nhảy; điện thoại ẩn hẳn, chữ ở `homeCopy.hero`).

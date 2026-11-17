@@ -20,6 +20,13 @@ vi.mock('@/lib/use-offers-dot', () => ({
     return enabled ? offers.dot : null;
   },
 }));
+const reminders = vi.hoisted(() => ({ garden: false, profile: false, checkInElsewhere: false, args: [] as [boolean, number][] }));
+vi.mock('@/lib/use-engagement-dots', () => ({
+  useEngagementDots: (enabled: boolean, activeOrders: number) => {
+    reminders.args.push([enabled, activeOrders]);
+    return { garden: reminders.garden, profile: reminders.profile, checkInElsewhere: reminders.checkInElsewhere };
+  },
+}));
 vi.mock('@tanstack/react-query', () => ({
   useQuery: (opts: unknown) => {
     mocks.query(opts);
@@ -41,6 +48,10 @@ beforeEach(() => {
   mocks.query.mockReset();
   offers.dot = null;
   offers.enabled = [];
+  reminders.garden = false;
+  reminders.profile = false;
+  reminders.checkInElsewhere = false;
+  reminders.args = [];
 });
 
 describe('BottomNav (điện thoại)', () => {
@@ -176,5 +187,33 @@ describe('BottomNav (điện thoại)', () => {
   it('globals.css ẩn thanh khi có sticky-action-bar', () => {
     const css = readFileSync(fileURLToPath(new URL('../app/globals.css', import.meta.url)), 'utf8');
     expect(css).toMatch(/body\.has-sticky-bar\s+\[data-bottom-nav\]\s*\{[^}]*display:\s*none/);
+  });
+
+  it('chấm nhắc nhiệm vụ hằng ngày: 8px, đứng yên, nghĩa ở aria-label; số đơn thắng chấm ở tab Cá nhân', () => {
+    mocks.ready = () => true;
+    reminders.garden = true;
+    reminders.profile = true;
+    let out = render('/');
+    expect(out).toMatch(/data-testid="garden-dot"[^>]*class="tubu-remind-dot tubu-remind-dot--center"/);
+    expect(out).toMatch(/data-testid="profile-dot"[^>]*class="tubu-remind-dot"/);
+    expect(out).not.toMatch(/animate-/);
+    const rule = /\.tubu-remind-dot\s*\{([^}]*)\}/.exec(readFileSync(fileURLToPath(new URL('./mini/mini.css', import.meta.url)), 'utf8'))![1]!;
+    expect(rule).toMatch(/width:\s*8px;[\s\S]*height:\s*8px;/);
+    expect(rule).not.toMatch(/animation|transition/);
+    expect(out).toContain('aria-label="Vườn Xanh, có việc hôm nay"');
+    expect(out).toContain('aria-label="Cá nhân, có thông báo chưa đọc"');
+    expect(reminders.args.at(-1)).toEqual([true, 0]);
+    mocks.count = 2;
+    reminders.profile = false;
+    out = render('/');
+    expect(out).not.toContain('data-testid="profile-dot"');
+    expect(reminders.args.at(-1)).toEqual([true, 2]);
+  });
+
+  it('cờ tắt: không chấm nhắc, tab Ưu đãi giữ lý do điểm danh', () => {
+    mocks.ready = () => true;
+    const out = render('/');
+    expect(out).not.toContain('garden-dot');
+    expect(out).not.toContain('profile-dot');
   });
 });

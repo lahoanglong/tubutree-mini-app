@@ -133,6 +133,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'FlashSaleService.notifyWishlistOfStartedSales': 'Báo khách đã thả tim sản phẩm khi sản phẩm vào giờ vàng',
   'RestockAlertsDispatcher.dispatchRestocked': 'Báo khách đã bấm "Báo tôi khi có hàng" khi hàng về',
   'GameReminderService.sendDailyReminders': 'Nhắc khách điểm danh và tưới cây mỗi ngày',
+  'BadgesService.grantNightly': 'Trao huy hiệu khách đã đạt (cờ engagement.badges_enabled, không gửi tin)',
   'GroupBuyCron.sweep': 'Đánh dấu nhóm mua chung hết hạn là không thành',
   'GomdonReconcileService.reconcile': 'Đối chiếu Gomdon: chạy lại tin báo, tạo và huỷ vận đơn bị kẹt',
   'GomdonWasteReconcileService.reconcile': 'Đối chiếu vận đơn thu gom rác tận nhà: xếp lại việc tạo vận đơn bị kẹt',

@@ -952,6 +952,22 @@
         "/",
         "/game"
       ]
+    },
+    {
+      "name": "BadgeRow",
+      "miniapp": "apps/miniapp/src/components/game/badge-row.tsx",
+      "web": "apps/web/src/components/game/badge-row.tsx",
+      "screens": [
+        "/profile"
+      ]
+    },
+    {
+      "name": "MissionsCard",
+      "miniapp": "apps/miniapp/src/components/game/missions-card.tsx",
+      "web": "apps/web/src/components/game/missions-card.tsx",
+      "screens": [
+        "/game"
+      ]
     }
   ],
   "webOnly": [
