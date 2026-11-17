@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-11-17",
+  "items": [
+    {
+      "id": "nq_nuoc_5",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/drinksw.html",
+      "note": "NOAA: thận không thải được nước tiểu mặn hơn nước biển nên càng uống càng mất nước; khớp đáp án và giải thích."
+    },
+    {
+      "id": "nq_dat_3",
+      "sourceUrl": "https://www.epa.gov/recycle/composting-home",
+      "note": "EPA: compost cải thiện cấu trúc đất, giữ ẩm và dưỡng chất, thu hút sinh vật có lợi; khớp đáp án và giải thích."
+    },
+    {
+      "id": "nq_nang_luong_3",
+      "sourceUrl": "https://www.energy.gov/sites/prod/files/guide_to_energy_efficient_lighting.pdf",
+      "note": "DOE: LED dùng ít hơn ít nhất 75% điện so với bóng sợi đốt và bền gấp 25 lần; khớp đáp án ~75-80% và giải thích."
+    }
+  ]
+}

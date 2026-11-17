@@ -1,0 +1,408 @@
+{
+  "game": "basket",
+  "items": [
+    {
+      "id": "gm-basket-may-rua-chen",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Nhà mới mua máy rửa chén: chọn 3 món dùng cho máy.",
+        "correct": [
+          "gel-rua-chen-cho-may-fuwa3e-500ml-f9915e",
+          "muoi-rua-chen-cho-may-fuwa3e-2kg-484ca1",
+          "nuoc-ho-tro-xa-lam-bong-fuwa3e-500ml-fb40eb"
+        ],
+        "wrong": [
+          {
+            "slug": "nuoc-giat-huong-cam-fuwa3e-500ml-2d5635",
+            "reason": "Nhãn ghi là nước giặt quần áo, không phải đồ dùng cho máy rửa chén."
+          },
+          {
+            "slug": "nuoc-lau-san-sa-chanh-fuwa3e-1l-51b16f",
+            "reason": "Nhãn ghi là nước lau sàn nhà."
+          },
+          {
+            "slug": "nuoc-rua-tay-dang-gel-fuwa3e-300ml-37dfc0",
+            "reason": "Nhãn ghi là nước rửa tay."
+          }
+        ]
+      },
+      "explanation": "Ba món đúng đều ghi trên nhãn là dùng cho máy rửa chén: gel rửa, muối và nước hỗ trợ xả, làm bóng.",
+      "sourceUrl": "https://tubutree.com/san-pham/gel-rua-chen-cho-may-fuwa3e-500ml-f9915e",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-be-tam-rua-giat",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Chuẩn bị đồ cho bé: tắm gội, rửa tay và giặt áo quần của bé.",
+        "correct": [
+          "bot-tam-goi-cho-be-pineboo-500ml-47e6e4",
+          "bot-rua-tay-cho-be-pineboo-300ml-de31c8",
+          "nuoc-giat-cho-be-pineboo-500ml-3952e8"
+        ],
+        "wrong": [
+          {
+            "slug": "nuoc-lau-da-nang-fuwa3e-500ml-cbb309",
+            "reason": "Nhãn ghi là nước lau đa năng cho bề mặt, không dùng cho người."
+          },
+          {
+            "slug": "xit-khu-mui-o-to-fuwa3e-150ml-f33f4a",
+            "reason": "Nhãn ghi là xịt khử mùi dùng trong xe ô tô."
+          },
+          {
+            "slug": "muoi-rua-chen-cho-may-fuwa3e-2kg-484ca1",
+            "reason": "Nhãn ghi là muối dùng cho máy rửa chén, không phải đồ tắm giặt."
+          }
+        ]
+      },
+      "explanation": "Ba món Pineboo đúng đều ghi trên nhãn là dành cho bé: bọt tắm gội, bọt rửa tay và nước giặt cho bé.",
+      "sourceUrl": "https://tubutree.com/san-pham/bot-tam-goi-cho-be-pineboo-500ml-47e6e4",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-an-dam",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Bé bắt đầu ăn dặm: rửa rau củ, rửa chén bát và rửa bình sữa.",
+        "correct": [
+          "nuoc-ngam-rua-thuc-pham-fuwa3e-1l-809601",
+          "nuoc-rua-chen-fuwa3e-500ml-185d77",
+          "bot-rua-binh-sua-cho-be-pineboo-500ml-91e8c5"
+        ],
+        "wrong": [
+          {
+            "slug": "nuoc-giat-cho-be-pineboo-500ml-3952e8",
+            "reason": "Nhãn ghi là nước giặt quần áo của bé, không dùng rửa đồ ăn."
+          },
+          {
+            "slug": "ve-sinh-nha-tam-va-toilet-fuwa3e-500ml-b6da92",
+            "reason": "Nhãn ghi là nước vệ sinh nhà tắm và toilet."
+          },
+          {
+            "slug": "nuoc-lau-ban-tho-fuwa3e-500ml-2a9b22",
+            "reason": "Nhãn ghi là nước lau bàn thờ."
+          }
+        ]
+      },
+      "explanation": "Món đúng khớp từng việc theo nhãn: nước ngâm rửa thực phẩm cho rau củ, nước rửa chén cho chén bát, bọt rửa bình sữa cho bình của bé.",
+      "sourceUrl": "https://tubutree.com/san-pham/nuoc-ngam-rua-thuc-pham-fuwa3e-1l-809601",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-bua-com-gia-dinh",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Bữa cơm gia đình: rửa rau, rửa bát rồi lau bàn ăn.",
+        "correct": [
+          "nuoc-ngam-rua-thuc-pham-fuwa3e-3-8l-7ececb",
+          "nuoc-rua-chen-fuwa3e-100ml-c1337b",
+          "nuoc-lau-da-nang-fuwa3e-500ml-cbb309"
+        ],
+        "wrong": [
+          {
+            "slug": "nuoc-giat-do-lot-fuwa3e-500ml-3e76e4",
+            "reason": "Nhãn ghi là nước giặt đồ lót."
+          },
+          {
+            "slug": "dau-goi-dau-xa-qua-bo-po-lang-300g-bef378",
+            "reason": "Đây là dầu gội, dầu xả dùng cho tóc."
+          },
+          {
+            "slug": "lau-noi-that-o-to-fuwa3e-300ml-b202d9",
+            "reason": "Nhãn ghi là dùng lau nội thất xe ô tô."
+          }
+        ]
+      },
+      "explanation": "Nước ngâm rửa thực phẩm cho rau, nước rửa chén cho bát đĩa, nước lau đa năng cho mặt bàn: đúng công dụng ghi trên nhãn.",
+      "sourceUrl": "https://tubutree.com/san-pham/nuoc-ngam-rua-thuc-pham-fuwa3e-3-8l-7ececb",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-tong-ve-sinh",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Tổng vệ sinh cuối tuần: lau sàn, cọ nhà tắm, toilet và lau các bề mặt.",
+        "correct": [
+          "nuoc-lau-san-sa-chanh-fuwa3e-1l-51b16f",
+          "ve-sinh-nha-tam-va-toilet-fuwa3e-2l-4e8488",
+          "lau-da-nang-fuwa3e-2l-9aa0ed"
+        ],
+        "wrong": [
+          {
+            "slug": "granola-mix-nuts-tui-tien-loi-bh-nong-3b8792",
+            "reason": "Đây là granola trộn hạt, món ăn nhẹ."
+          },
+          {
+            "slug": "mat-na-bo-tuoi-po-lang-e3ccce",
+            "reason": "Đây là mặt nạ bơ đắp mặt."
+          },
+          {
+            "slug": "bot-rua-binh-sua-cho-be-pineboo-500ml-91e8c5",
+            "reason": "Nhãn ghi là bọt rửa bình sữa của bé."
+          }
+        ]
+      },
+      "explanation": "Ba món đúng là nước lau sàn, nước vệ sinh nhà tắm và toilet, nước lau đa năng: đều là đồ làm sạch nhà theo nhãn.",
+      "sourceUrl": "https://tubutree.com/san-pham/nuoc-lau-san-sa-chanh-fuwa3e-1l-51b16f",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-giat-ca-nha",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Ngày giặt đồ cả nhà: quần áo người lớn, đồ lót và quần áo của bé.",
+        "correct": [
+          "nuoc-giat-huong-bac-ha-fuwa3e-3-5l-1aa0a7",
+          "nuoc-giat-do-lot-fuwa3e-500ml-3e76e4",
+          "nuoc-giat-cho-be-pineboo-2-1l-22a73c"
+        ],
+        "wrong": [
+          {
+            "slug": "nuoc-rua-chen-fuwa3e-500ml-185d77",
+            "reason": "Nhãn ghi là nước rửa chén."
+          },
+          {
+            "slug": "nuoc-lau-ban-tho-fuwa3e-500ml-2a9b22",
+            "reason": "Nhãn ghi là nước lau bàn thờ."
+          },
+          {
+            "slug": "nuoc-ngam-rua-thuc-pham-fuwa3e-1l-809601",
+            "reason": "Nhãn ghi là nước ngâm rửa thực phẩm."
+          }
+        ]
+      },
+      "explanation": "Ba món đúng đều là nước giặt theo nhãn: nước giặt thường, nước giặt đồ lót và nước giặt cho bé.",
+      "sourceUrl": "https://tubutree.com/san-pham/nuoc-giat-huong-bac-ha-fuwa3e-3-5l-1aa0a7",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-bua-sang-nhanh",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Bữa sáng 5 phút không cần nấu: chọn 3 món ăn được.",
+        "correct": [
+          "granola-mix-nuts-tui-tien-loi-bh-nong-3b8792",
+          "banh-mam-hat-yen-mach-bh-nong-ec5325",
+          "bot-hat-cu-qua-bh-nong-lon-400g-9495bf"
+        ],
+        "wrong": [
+          {
+            "slug": "muoi-rua-chen-cho-may-fuwa3e-2kg-484ca1",
+            "reason": "Không phải muối ăn: nhãn ghi là muối dùng cho máy rửa chén."
+          },
+          {
+            "slug": "nuoc-ngam-rua-thuc-pham-fuwa3e-100ml-8b4cd8",
+            "reason": "Nhãn ghi là nước để ngâm rửa thực phẩm, không phải đồ ăn uống."
+          },
+          {
+            "slug": "dau-rua-mat-po-lang-100ml-55ml-8478ee",
+            "reason": "Đây là dầu rửa mặt."
+          }
+        ]
+      },
+      "explanation": "Granola trộn hạt, bánh mầm hạt yến mạch và bột hạt củ quả đều là đồ ăn theo mô tả sản phẩm.",
+      "sourceUrl": "https://tubutree.com/san-pham/granola-mix-nuts-tui-tien-loi-bh-nong-3b8792",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-an-vat-di-lam",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Mang theo đồ ăn vặt đi làm: chọn 3 món ăn được.",
+        "correct": [
+          "banh-mam-hat-rong-bien-bh-nong-d93d32",
+          "banh-mam-hat-yen-mach-bh-nong-ec5325",
+          "granola-mix-nuts-tui-tien-loi-bh-nong-3b8792"
+        ],
+        "wrong": [
+          {
+            "slug": "gel-rua-chen-cho-may-fuwa3e-100ml-e1aa04",
+            "reason": "Nhãn ghi là gel rửa chén cho máy rửa chén."
+          },
+          {
+            "slug": "combo-son-duong-po-lang-1-thoi-co-mau-1-thoi-khong-mau-4de7da",
+            "reason": "Đây là son dưỡng môi."
+          },
+          {
+            "slug": "xit-tram-cho-be-pineboo-150ml-b70d1d",
+            "reason": "Nhãn ghi là bình xịt dùng bên ngoài cơ thể."
+          }
+        ]
+      },
+      "explanation": "Hai loại bánh mầm hạt và granola trộn hạt đều là món ăn nhẹ theo mô tả sản phẩm.",
+      "sourceUrl": "https://tubutree.com/san-pham/banh-mam-hat-rong-bien-bh-nong-d93d32",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-gia-vi-hoa-dua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Nấu ăn với nguyên liệu từ hoa dừa: chọn 3 món dùng trong bếp.",
+        "correct": [
+          "duong-hoa-dua-sokfarm-d6c685",
+          "duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-b67af3",
+          "nuoc-tuong-mat-hoa-dua-sokfarm-cham-034cc1"
+        ],
+        "wrong": [
+          {
+            "slug": "muoi-rua-chen-cho-may-fuwa3e-2kg-484ca1",
+            "reason": "Không phải muối ăn: nhãn ghi là muối dùng cho máy rửa chén."
+          },
+          {
+            "slug": "nuoc-giat-huong-cam-fuwa3e-500ml-2d5635",
+            "reason": "Nhãn ghi là nước giặt quần áo."
+          },
+          {
+            "slug": "mat-na-bo-tuoi-po-lang-e3ccce",
+            "reason": "Đây là mặt nạ bơ đắp mặt."
+          }
+        ]
+      },
+      "explanation": "Hai loại đường hoa dừa và nước tương mật hoa dừa Sokfarm đều là thực phẩm dùng trong bếp.",
+      "sourceUrl": "https://tubutree.com/san-pham/duong-hoa-dua-sokfarm-d6c685",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-rua-tay-ca-nha",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Đặt ở bồn rửa tay cho cả nhà, cả bé: chọn 3 món rửa tay.",
+        "correct": [
+          "nuoc-rua-tay-dang-bot-fuwa3e-300ml-fdf345",
+          "nuoc-rua-tay-dang-gel-fuwa3e-300ml-37dfc0",
+          "bot-rua-tay-cho-be-pineboo-300ml-de31c8"
+        ],
+        "wrong": [
+          {
+            "slug": "nuoc-rua-chen-fuwa3e-100ml-c1337b",
+            "reason": "Nhãn ghi là nước rửa chén bát, không phải nước rửa tay."
+          },
+          {
+            "slug": "nuoc-lau-san-sa-chanh-fuwa3e-100ml-d10bec",
+            "reason": "Nhãn ghi là nước lau sàn nhà."
+          },
+          {
+            "slug": "nuoc-giat-huong-bac-ha-fuwa3e-100ml-a53262",
+            "reason": "Nhãn ghi là nước giặt quần áo."
+          }
+        ]
+      },
+      "explanation": "Nước rửa tay dạng bọt, dạng gel và bọt rửa tay cho bé đều ghi trên nhãn là để rửa tay.",
+      "sourceUrl": "https://tubutree.com/san-pham/nuoc-rua-tay-dang-bot-fuwa3e-300ml-fdf345",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-cham-da-buoi-toi",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Chăm sóc da mặt và môi buổi tối: chọn 3 món.",
+        "correct": [
+          "dau-rua-mat-po-lang-100ml-55ml-8478ee",
+          "mat-na-bo-tuoi-po-lang-e3ccce",
+          "combo-son-duong-po-lang-1-thoi-co-mau-1-thoi-khong-mau-4de7da"
+        ],
+        "wrong": [
+          {
+            "slug": "ve-sinh-nha-tam-va-toilet-fuwa3e-100ml-d45131",
+            "reason": "Nhãn ghi là nước vệ sinh nhà tắm và toilet."
+          },
+          {
+            "slug": "nuoc-rua-tay-dang-bot-fuwa3e-300ml-fdf345",
+            "reason": "Nhãn ghi là nước rửa tay, không phải đồ rửa mặt."
+          },
+          {
+            "slug": "lau-noi-that-o-to-fuwa3e-300ml-b202d9",
+            "reason": "Nhãn ghi là dùng lau nội thất xe ô tô."
+          }
+        ]
+      },
+      "explanation": "Dầu rửa mặt, mặt nạ bơ và son dưỡng Pơ Lang là ba món dành cho mặt và môi theo mô tả sản phẩm.",
+      "sourceUrl": "https://tubutree.com/san-pham/dau-rua-mat-po-lang-100ml-55ml-8478ee",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-di-choi-cung-be",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Soạn túi đồ cho bé đi chơi công viên: chọn 3 món mang theo.",
+        "correct": [
+          "xit-tram-cho-be-pineboo-150ml-b70d1d",
+          "bot-rua-tay-cho-be-pineboo-300ml-de31c8",
+          "granola-mix-nuts-tui-tien-loi-bh-nong-3b8792"
+        ],
+        "wrong": [
+          {
+            "slug": "muoi-rua-chen-cho-may-fuwa3e-2kg-484ca1",
+            "reason": "Nhãn ghi là muối dùng cho máy rửa chén, chỉ dùng ở nhà."
+          },
+          {
+            "slug": "nuoc-lau-ban-tho-fuwa3e-500ml-2a9b22",
+            "reason": "Nhãn ghi là nước lau bàn thờ."
+          },
+          {
+            "slug": "ve-sinh-nha-tam-va-toilet-fuwa3e-2l-4e8488",
+            "reason": "Nhãn ghi là nước vệ sinh nhà tắm và toilet, chai 2 lít."
+          }
+        ]
+      },
+      "explanation": "Xịt tràm cho bé (dùng bên ngoài cơ thể), bọt rửa tay cho bé và một gói granola tiện lợi hợp với buổi đi chơi.",
+      "sourceUrl": "https://tubutree.com/san-pham/xit-tram-cho-be-pineboo-150ml-b70d1d",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-basket-mua-refill",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "task": "Mua bản refill 10 lít để rót lại vào chai cũ ở nhà: chọn 3 món.",
+        "correct": [
+          "refill-nuoc-rua-chen-fuwa3e-10l-69f244",
+          "refill-nuoc-giat-cam-fuwa3e-10l-dc4433",
+          "refill-nuoc-lau-san-sa-chanh-fuwa3e-10l-b63811"
+        ],
+        "wrong": [
+          {
+            "slug": "nuoc-rua-chen-fuwa3e-100ml-c1337b",
+            "reason": "Đây là chai 100ml, không phải bản refill."
+          },
+          {
+            "slug": "nuoc-giat-huong-cam-fuwa3e-100ml-c8b221",
+            "reason": "Đây là chai 100ml, không phải bản refill."
+          },
+          {
+            "slug": "nuoc-lau-san-sa-chanh-fuwa3e-100ml-d10bec",
+            "reason": "Đây là chai 100ml, không phải bản refill."
+          }
+        ]
+      },
+      "explanation": "Ba món đúng là bản refill 10 lít của nước rửa chén, nước giặt và nước lau sàn, dùng để rót lại vào chai sẵn có.",
+      "sourceUrl": "https://tubutree.com/san-pham/refill-nuoc-rua-chen-fuwa3e-10l-69f244",
+      "sourceRef": "Nhãn sản phẩm (trang bán hàng)",
+      "sourceCheckedAt": "2026-11-17"
+    }
+  ]
+}

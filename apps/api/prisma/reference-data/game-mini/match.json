@@ -1,0 +1,307 @@
+{
+  "game": "match",
+  "items": [
+    {
+      "id": "gm-match-bo-hon",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Bồ hòn",
+        "use": "Tạo bọt, giặt rửa nhờ saponin"
+      },
+      "explanation": "Vỏ quả bồ hòn có saponin tạo bọt, làm giảm sức căng bề mặt nước; nhưng thử nghiệm cho thấy tẩy dầu kém chất tạo bọt tổng hợp SDS.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9502486/",
+      "sourceRef": "05 cặp 1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-axit-citric",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Axit citric (có nhiều trong chanh)",
+        "use": "Tẩy cặn vôi, cặn nước cứng"
+      },
+      "explanation": "Axit citric kết hợp với khoáng chất trong cặn nước cứng nên giúp tẩy cặn vôi. Dạng đậm đặc có thể gây cay mắt, xót da.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Citric_acid",
+      "sourceRef": "05 cặp 2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-limonene",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Limonene (từ tinh dầu vỏ cam)",
+        "use": "Dung môi hoà tan dầu mỡ, tạo mùi cam"
+      },
+      "explanation": "Limonene là thành phần chính trong tinh dầu vỏ cam quýt, dùng làm dung môi trong đồ tẩy rửa và hương liệu. Có thể gây mẫn cảm da.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Limonene",
+      "sourceRef": "05 cặp 3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-dau-dua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Dầu dừa",
+        "use": "Nguyên liệu nấu xà phòng"
+      },
+      "explanation": "Dầu dừa giàu axit lauric (khoảng 48%); xà phòng từ dầu dừa dễ tạo bọt cả trong nước cứng, nước mặn.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Coconut_oil",
+      "sourceRef": "05 cặp 4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-baking-soda",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Baking soda",
+        "use": "Làm bánh nở khi nướng"
+      },
+      "explanation": "Trên khoảng 80 °C baking soda nhả khí CO₂ nên làm bánh nở. Việc để hộp baking soda trong tủ lạnh để khử mùi thì còn ít bằng chứng.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sodium_bicarbonate",
+      "sourceRef": "05 cặp 5 (đổi công dụng theo trang nguồn)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-giam-an",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Giấm ăn",
+        "use": "Hoà tan cặn khoáng"
+      },
+      "explanation": "Giấm có 5–8% axit axetic nên hoà tan được cặn khoáng; không dùng trên mặt đá tự nhiên, đồ cao su vì dễ làm hỏng.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Vinegar",
+      "sourceRef": "05 cặp 6",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-baking-soda-giam",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Baking soda trộn giấm",
+        "use": "Sủi bọt khí CO₂ ngay khi trộn"
+      },
+      "explanation": "Axit trong giấm gặp baking soda tạo bọt khí CO₂, còn lại nước và natri axetat.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sodium_bicarbonate",
+      "sourceRef": "05 cặp 7",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-que",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Quế",
+        "use": "Gia vị, tạo mùi thơm ấm"
+      },
+      "explanation": "Mùi thơm của quế chủ yếu đến từ chất cinnamaldehyde, chiếm khoảng 90% tinh dầu vỏ quế.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Cinnamon",
+      "sourceRef": "05 cặp 8",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-tinh-dau-tram",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Tinh dầu tràm",
+        "use": "Tạo hương cho xà phòng, mỹ phẩm"
+      },
+      "explanation": "Tinh dầu tràm có tới 60% 1,8-cineole, được thêm vào xà phòng, mỹ phẩm để tạo hương. Dạng đậm đặc có thể gây kích ứng da.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Melaleuca_cajuputi",
+      "sourceRef": "05 cặp 9",
+      "sourceCheckedAt": "2026-11-17",
+      "productSlug": "xit-tram-cho-be-pineboo-150ml-b70d1d"
+    },
+    {
+      "id": "gm-match-bac-ha",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Bạc hà",
+        "use": "Cảm giác mát nhờ menthol"
+      },
+      "explanation": "Tinh dầu bạc hà chứa khoảng 41% menthol, tạo cảm giác mát. Không bôi tinh dầu lên mặt, ngực trẻ nhỏ.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Peppermint",
+      "sourceRef": "05 cặp 10",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-eco-enzyme",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Eco-enzyme (vỏ trái cây ủ với đường)",
+        "use": "Dịch lên men hơi chua"
+      },
+      "explanation": "Một nghiên cứu năm 2023 đo eco-enzyme có pH 3,5–4 và thấy hoạt tính enzyme cắt đạm trong mẫu thử; kết quả tuỳ mẫu và cách ủ.",
+      "sourceUrl": "https://jurnal.polinema.ac.id/index.php/distilat/article/download/4176/3264",
+      "sourceRef": "05 cặp 11",
+      "sourceCheckedAt": "2026-11-17",
+      "productSlug": "nuoc-lau-da-nang-fuwa3e-500ml-cbb309"
+    },
+    {
+      "id": "gm-match-apg",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Alkyl polyglycoside (APG)",
+        "use": "Chất tạo bọt làm từ đường và cồn béo"
+      },
+      "explanation": "APG được làm từ đường glucose và cồn béo, dùng trong nhiều sản phẩm gia dụng, mỹ phẩm và chăm sóc cá nhân.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Alkyl_polyglycoside",
+      "sourceRef": "05 cặp 12",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-xa-phong",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Xà phòng",
+        "use": "Gom dầu bẩn để nước cuốn đi"
+      },
+      "explanation": "Phân tử xà phòng có đầu ưa nước, đầu ưa dầu, bao lấy dầu bẩn để nước cuốn đi. Trong nước cứng, xà phòng ít bọt và tạo cặn.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Soap",
+      "sourceRef": "05 cặp 13",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-natri-triphotphat",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Natri triphotphat",
+        "use": "Chất trợ giặt cũ, gây phú dưỡng"
+      },
+      "explanation": "Chất này từng có trong nhiều bột giặt, nhưng photphat chảy ra sông hồ góp phần lớn gây phú dưỡng (tảo phát triển quá mức).",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Eutrophication",
+      "sourceRef": "05 cặp 14",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-protease",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Protease",
+        "use": "Xử lý vết đạm: máu, trứng, cỏ"
+      },
+      "explanation": "Theo bài tổng quan năm 2024, protease trong nước giặt xử lý vết bẩn gốc đạm như cỏ, máu, trứng, mồ hôi.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ bảng 4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-amylase",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Amylase",
+        "use": "Xử lý vết tinh bột: cơm, mì, khoai"
+      },
+      "explanation": "Theo bài tổng quan năm 2024, amylase trong nước giặt xử lý vết bẩn gốc tinh bột như mì, khoai, cơm, đồ ăn dặm.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ bảng 4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-lipase",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Lipase",
+        "use": "Xử lý vết dầu mỡ: bơ, nước sốt"
+      },
+      "explanation": "Theo bài tổng quan năm 2024, lipase trong nước giặt xử lý vết dầu mỡ như bơ, dầu trộn salad, nước sốt.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ bảng 4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-cellulase",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Cellulase",
+        "use": "Chăm sợi vải, giữ màu vải"
+      },
+      "explanation": "Theo bài tổng quan năm 2024, cellulase giúp chăm sợi vải và giữ màu, đồng thời gỡ bụi bẩn như muội than, đất sét.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ bảng 4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-mannanase",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Mannanase",
+        "use": "Xử lý vết sốt BBQ, kem, sô-cô-la"
+      },
+      "explanation": "Theo bài tổng quan năm 2024, mannanase xử lý vết bẩn như sốt BBQ, sô-cô-la, kem.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ bảng 4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-pectate-lyase",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Pectate lyase",
+        "use": "Xử lý vết trái cây, rau, mứt"
+      },
+      "explanation": "Theo bài tổng quan năm 2024, pectate lyase xử lý vết bẩn từ trái cây, rau, mứt.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ bảng 4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-hat-vi-nhua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Hạt vi nhựa (microbeads)",
+        "use": "Hạt chà trong một số sữa rửa mặt"
+      },
+      "explanation": "NOAA cho biết hạt vi nhựa từng được thêm vào một số sữa rửa mặt, kem đánh răng để chà; Mỹ cấm trong mỹ phẩm từ cuối năm 2015.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/microplastics.html",
+      "sourceRef": "S7",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-hat-nhua-nguyen-lieu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "ingredient": "Hạt nhựa nguyên liệu",
+        "use": "Nguyên liệu để sản xuất đồ nhựa"
+      },
+      "explanation": "NOAA cho biết hạt nhựa dùng để sản xuất đồ nhựa cũng là một nguồn vi nhựa trong đại dương.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/microplastics.html",
+      "sourceRef": "S7",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-match-bo-ket",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "ingredient": "Bồ kết",
+        "use": "Gội đầu, giặt rửa kiểu truyền thống"
+      },
+      "explanation": "Quả bồ kết có saponin, được dùng giặt rửa từ lâu đời.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC8622515/",
+      "sourceRef": "BOKET",
+      "sourceCheckedAt": "2026-11-17",
+      "inactiveReason": "Bài bình duyệt nói về Gleditsia sinensis (bồ kết Trung Quốc), khác loài bồ kết phổ biến ở Việt Nam (Gleditsia fera); chưa có nguồn cho đúng loài."
+    }
+  ]
+}

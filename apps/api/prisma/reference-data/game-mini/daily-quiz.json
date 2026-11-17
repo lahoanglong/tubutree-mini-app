@@ -1,0 +1,923 @@
+{
+  "game": "daily_quiz",
+  "items": [
+    {
+      "id": "gm-quiz-so-nhom-rac",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Theo hướng dẫn kỹ thuật của Bộ TN&MT (2023), rác sinh hoạt hộ gia đình chia thành mấy nhóm chính?",
+        "options": [
+          "2 nhóm",
+          "3 nhóm",
+          "4 nhóm",
+          "5 nhóm"
+        ],
+        "answer": 1
+      },
+      "explanation": "3 nhóm: rác tái sử dụng, tái chế; rác thực phẩm; và rác sinh hoạt khác (gồm cả rác nguy hại, rác cồng kềnh).",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 phần mở đầu; 05 câu 1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-ba-ca-phe",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Bã cà phê thuộc nhóm nào theo hướng dẫn phân loại rác của Bộ TN&MT?",
+        "options": [
+          "Rác thực phẩm",
+          "Rác tái chế",
+          "Rác sinh hoạt khác",
+          "Rác nguy hại"
+        ],
+        "answer": 2
+      },
+      "explanation": "Hướng dẫn xếp bã các loại (cà phê, trà, bã mía) vào nhóm rác khác, không phải rác thực phẩm.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.1; 05 câu 2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-pin-da-dung",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Pin đã dùng được xếp vào loại rác nào?",
+        "options": [
+          "Rác tái chế",
+          "Rác nguy hại",
+          "Rác thực phẩm",
+          "Rác cồng kềnh"
+        ],
+        "answer": 1
+      },
+      "explanation": "Pin, ắc quy thải là rác nguy hại. Hướng dẫn dặn giữ nguyên hình dạng, không tự tháo ra.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.3; 05 câu 3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-huynh-quang-vo",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Lỡ làm vỡ bóng đèn huỳnh quang, nên làm gì?",
+        "options": [
+          "Bỏ chung với rác thực phẩm",
+          "Gom giữ cẩn thận để thuỷ ngân không phát tán",
+          "Đốt cùng lá khô",
+          "Đổ xuống cống"
+        ],
+        "answer": 1
+      },
+      "explanation": "Bóng huỳnh quang là rác nguy hại. Không đập vỡ; nếu vỡ thì lưu giữ an toàn, tránh phát tán thuỷ ngân.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.2; 05 câu 4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-giay-an-da-dung",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Giấy ăn đã dùng thuộc nhóm nào?",
+        "options": [
+          "Giấy tái chế",
+          "Rác sinh hoạt khác",
+          "Rác thực phẩm",
+          "Rác nguy hại"
+        ],
+        "answer": 1
+      },
+      "explanation": "Giấy ăn, giấy vệ sinh, giấy ướt đã dùng thuộc nhóm rác khác, không phải giấy tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3; 05 câu 5",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-hop-xop",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Hộp xốp đựng đồ ăn thuộc nhóm nào?",
+        "options": [
+          "Rác tái chế",
+          "Rác thực phẩm",
+          "Rác sinh hoạt khác",
+          "Rác nguy hại"
+        ],
+        "answer": 2
+      },
+      "explanation": "Hộp xốp và đồ nhựa dùng một lần được xếp vào nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3; 05 câu 6",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-vo-tom-cua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Vỏ tôm, mai cua cứng thuộc nhóm nào?",
+        "options": [
+          "Rác thực phẩm",
+          "Rác sinh hoạt khác",
+          "Rác tái chế",
+          "Rác nguy hại"
+        ],
+        "answer": 1
+      },
+      "explanation": "Vỏ cứng của thuỷ, hải sản thuộc nhóm rác khác; còn phần thịt hải sản bỏ đi là rác thực phẩm.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.5; 05 câu 7",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-den-led-hong",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Bóng đèn LED hỏng được hướng dẫn xếp vào đâu?",
+        "options": [
+          "Rác nguy hại",
+          "Thiết bị điện tử nhỏ (tái chế)",
+          "Rác thực phẩm",
+          "Rác cồng kềnh"
+        ],
+        "answer": 1
+      },
+      "explanation": "Hướng dẫn liệt kê đèn LED, đèn halogen trong thiết bị điện tử nhỏ thuộc nhóm tái chế; bóng huỳnh quang mới là rác nguy hại.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.8.1; 05 câu 8",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-muc-phat",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Hộ gia đình không phân loại rác sinh hoạt có thể bị phạt bao nhiêu theo Điều 26 Nghị định 45/2022?",
+        "options": [
+          "100–200 nghìn đồng",
+          "500 nghìn – 1 triệu đồng",
+          "5–10 triệu đồng",
+          "Không bị phạt"
+        ],
+        "answer": 1
+      },
+      "explanation": "Theo bài báo pháp lý, mức phạt là 500.000–1.000.000 đồng; thời điểm áp dụng tuỳ lộ trình từng địa phương.",
+      "sourceUrl": "https://luatvietnam.vn/tin-van-ban-moi/khong-phan-loai-rac-sinh-hoat-186-90533-article.html",
+      "sourceRef": "05 câu 9",
+      "sourceCheckedAt": "2026-11-17",
+      "inactiveReason": "Nguồn là bài báo pháp lý, chưa mở được văn bản gốc NĐ 45/2022; S1 không nêu mức phạt; 05 khuyên không đưa mức phạt vào game."
+    },
+    {
+      "id": "gm-quiz-ma-nhua-so-1",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Trong mã nhận diện nhựa, số 1 là loại nhựa nào?",
+        "options": [
+          "HDPE",
+          "PET",
+          "PVC",
+          "PS"
+        ],
+        "answer": 1
+      },
+      "explanation": "Số 1 là PET (hay dùng làm chai nước ngọt), số 2 là HDPE. Con số chỉ cho biết loại nhựa.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Recycling_codes",
+      "sourceRef": "05 câu 10",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-hdpe-ma-2",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Nhựa HDPE (thường làm can, chai sữa) mang mã số mấy?",
+        "options": [
+          "1",
+          "2",
+          "5",
+          "7"
+        ],
+        "answer": 1
+      },
+      "explanation": "HDPE mang mã 2. Mã số giúp nhận ra loại nhựa, không phải lời hứa sẽ được tái chế.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Recycling_codes",
+      "sourceRef": "05 câu 11",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-tam-giac-nhua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Con số trong hình tam giác trên đồ nhựa cho biết điều gì?",
+        "options": [
+          "Chắc chắn tái chế được",
+          "Loại nhựa làm ra món đồ",
+          "Độ an toàn khi đựng thức ăn",
+          "Tuổi thọ của món đồ"
+        ],
+        "answer": 1
+      },
+      "explanation": "Theo Cơ quan Bảo vệ Môi trường Mỹ (EPA), có mã nhựa trên sản phẩm không bảo đảm món đó tái chế được ở nơi bạn ở.",
+      "sourceUrl": "https://www.epa.gov/recycle/frequent-questions-recycling",
+      "sourceRef": "05 câu 12; S22",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-astm-d7611",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Mã nhận diện nhựa hiện nay theo tiêu chuẩn nào?",
+        "options": [
+          "ISO 9001",
+          "ASTM D7611",
+          "TCVN 5502",
+          "ISO 14001"
+        ],
+        "answer": 1
+      },
+      "explanation": "Mã nhận diện nhựa do tổ chức tiêu chuẩn ASTM quản lý, theo tiêu chuẩn ASTM D7611.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Resin_identification_code",
+      "sourceRef": "05 câu 13",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-vi-nhua-kich-thuoc",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Vi nhựa là những mảnh nhựa có kích thước thế nào?",
+        "options": [
+          "Nhỏ hơn 5 mm",
+          "Lớn hơn 1 cm",
+          "Lớn hơn 5 cm",
+          "Bằng nắp chai"
+        ],
+        "answer": 0
+      },
+      "explanation": "Theo NOAA (Mỹ), vi nhựa là mảnh nhựa dài dưới 5 mm, cỡ cục tẩy ở đầu bút chì.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/microplastics.html",
+      "sourceRef": "05 câu 14",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-hat-vi-nhua-my-pham",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Hạt vi nhựa (microbeads) từng được thêm vào sản phẩm nào?",
+        "options": [
+          "Một số sữa rửa mặt, kem đánh răng",
+          "Giấy ăn",
+          "Gạo",
+          "Muối ăn"
+        ],
+        "answer": 0
+      },
+      "explanation": "NOAA cho biết hạt vi nhựa từng được thêm vào một số sữa rửa mặt, kem đánh răng để chà; Mỹ cấm trong mỹ phẩm từ cuối năm 2015.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/microplastics.html",
+      "sourceRef": "05 câu 15",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-saponin-tao-bot",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Saponin trong quả bồ hòn có đặc điểm gì?",
+        "options": [
+          "Là khoáng chất",
+          "Tạo bọt khi gặp nước",
+          "Là chất béo",
+          "Là enzyme"
+        ],
+        "answer": 1
+      },
+      "explanation": "Saponin làm giảm sức căng bề mặt của nước và tạo bọt, nên quả bồ hòn được người dân dùng để giặt rửa từ lâu.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9502486/",
+      "sourceRef": "05 câu 16; S4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-ho-bo-hon",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Cây bồ hòn (Sapindus mukorossi) thuộc họ thực vật nào?",
+        "options": [
+          "Họ Bồ hòn (Sapindaceae)",
+          "Họ Cam (Rutaceae)",
+          "Họ Long não (Lauraceae)",
+          "Họ Lúa (Poaceae)"
+        ],
+        "answer": 0
+      },
+      "explanation": "Theo một bài tổng quan khoa học năm 2022, bồ hòn là cây vùng nhiệt đới thuộc họ Bồ hòn (Sapindaceae).",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9502486/",
+      "sourceRef": "05 câu 17",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-saponin-ty-le",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Vỏ quả bồ hòn chứa khoảng bao nhiêu phần trăm saponin?",
+        "options": [
+          "~1%",
+          "~10–11,5%",
+          "~50%",
+          "~90%"
+        ],
+        "answer": 1
+      },
+      "explanation": "Bài tổng quan nêu khoảng 10,1–11,5% trong quả; con số khác nhau tuỳ bộ phận và nghiên cứu.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9502486/",
+      "sourceRef": "05 câu 18",
+      "sourceCheckedAt": "2026-11-17",
+      "inactiveReason": "Con số saponin khác nhau giữa các phần của bài tổng quan (10,1–11,5% so với 56,5% ở chỗ khác); đáp án không chắc."
+    },
+    {
+      "id": "gm-quiz-suc-cang-be-mat",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Thêm dịch chiết bồ hòn 0,5% vào nước thì sức căng bề mặt của nước thay đổi thế nào?",
+        "options": [
+          "Giảm xuống",
+          "Tăng lên",
+          "Giữ nguyên",
+          "Nước đông lại"
+        ],
+        "answer": 0
+      },
+      "explanation": "Một nghiên cứu đo được sức căng bề mặt giảm từ khoảng 72 xuống 51,7 mN/m khi có dịch chiết bồ hòn 0,5%.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9502486/",
+      "sourceRef": "05 câu 19 (đổi cách hỏi)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-bo-hon-so-sds",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Trong một thử nghiệm tẩy dầu da, dịch bồ hòn so với chất tạo bọt tổng hợp SDS thì sao?",
+        "options": [
+          "Tẩy được nhiều hơn",
+          "Tẩy được ít hơn",
+          "Như nhau",
+          "Chưa ai thử"
+        ],
+        "answer": 1
+      },
+      "explanation": "Bài tổng quan 2022 ghi nhận dịch bồ hòn loại bỏ khoảng 60% dầu, còn SDS khoảng 90,4%. Gốc thực vật không có nghĩa là tẩy mạnh hơn.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9502486/",
+      "sourceRef": "05 câu 20",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-saponin-sinh-vat-nuoc",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Theo bài tổng quan khoa học về bồ hòn, một số saponin có thể gây hại cho nhóm sinh vật nào?",
+        "options": [
+          "Cá và sinh vật dưới nước",
+          "Chó, mèo",
+          "Cây xanh",
+          "Nấm men"
+        ],
+        "answer": 0
+      },
+      "explanation": "Kết quả tính toán trên máy được bài tổng quan 2022 nêu: 4 saponin bồ hòn ít nhất là có hại với cá và bọ nước nhỏ; cần đánh giá thêm.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9502486/",
+      "sourceRef": "05 câu 21; S4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-axit-lauric",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Dầu dừa chứa khoảng bao nhiêu phần trăm axit lauric?",
+        "options": [
+          "~5%",
+          "~15%",
+          "~48%",
+          "~90%"
+        ],
+        "answer": 2
+      },
+      "explanation": "Axit lauric chiếm khoảng 48% axit béo trong dầu dừa; xà phòng từ dầu dừa dễ tạo bọt cả trong nước cứng, nước mặn.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Coconut_oil",
+      "sourceRef": "05 câu 22",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-dau-dua-tan-chay",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Dầu dừa nguyên chất bắt đầu tan chảy ở khoảng bao nhiêu độ?",
+        "options": [
+          "5 °C",
+          "24 °C",
+          "60 °C",
+          "100 °C"
+        ],
+        "answer": 1
+      },
+      "explanation": "Dầu dừa tan chảy ở khoảng 24 °C, nên trời lạnh dầu đông lại trong chai.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Coconut_oil",
+      "sourceRef": "05 câu 23",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-dau-dua-viet-nam",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Theo bảng FAOSTAT năm 2023, Việt Nam đứng thứ mấy về sản lượng dầu dừa trong 5 nước được liệt kê?",
+        "options": [
+          "Thứ 1",
+          "Thứ 2",
+          "Thứ 4",
+          "Thứ 5"
+        ],
+        "answer": 2
+      },
+      "explanation": "Năm 2023: Philippines, Indonesia, Ấn Độ dẫn đầu; Việt Nam đứng thứ 4 với khoảng 182.000 tấn dầu dừa.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Coconut_oil",
+      "sourceRef": "05 câu 24 (sửa: dầu dừa, không phải dừa quả)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-baking-soda-kiem-nhe",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "prompt": "Baking soda (natri bicarbonat) hoà vào nước có tính gì?",
+        "options": [
+          "Axit mạnh",
+          "Kiềm nhẹ",
+          "Kiềm mạnh",
+          "Không đổi gì"
+        ],
+        "answer": 1
+      },
+      "explanation": "Dung dịch baking soda có tính kiềm nhẹ.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sodium_bicarbonate",
+      "sourceRef": "05 câu 25",
+      "sourceCheckedAt": "2026-11-17",
+      "inactiveReason": "Trang nguồn (xem 17/11/2026) không còn câu \"mildly alkaline\"; chưa có nguồn A/B thay thế."
+    },
+    {
+      "id": "gm-quiz-baking-soda-nhiet",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Khi đun nóng, baking soda nhả khí CO₂ từ khoảng bao nhiêu độ?",
+        "options": [
+          "Trên khoảng 80 °C",
+          "Trên khoảng 500 °C",
+          "Dưới -20 °C",
+          "Trên khoảng 1000 °C"
+        ],
+        "answer": 0
+      },
+      "explanation": "Trên khoảng 80 °C baking soda tự phân huỷ, nhả khí CO₂; vì vậy nó làm bánh nở khi nướng.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sodium_bicarbonate",
+      "sourceRef": "05 câu 26 (sửa theo trang nguồn hiện tại)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-baking-soda-giam",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Trộn baking soda với giấm tạo ra gì?",
+        "options": [
+          "Khí CO₂, nước và natri axetat",
+          "Khí clo",
+          "Nước javen",
+          "Khí amoniac"
+        ],
+        "answer": 0
+      },
+      "explanation": "Baking soda phản ứng với axit axetic trong giấm, tạo bọt khí CO₂, nước và natri axetat.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Sodium_bicarbonate",
+      "sourceRef": "05 câu 27 (đổi phương án nhiễu)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-giam-axit-axetic",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Giấm ăn thường chứa khoảng bao nhiêu axit axetic?",
+        "options": [
+          "Khoảng 5–8%",
+          "Khoảng 30%",
+          "Khoảng 0,1%",
+          "Khoảng 50%"
+        ],
+        "answer": 0
+      },
+      "explanation": "Giấm thường là dung dịch 5–8% axit axetic trong nước, pH khoảng 2,6.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Vinegar",
+      "sourceRef": "05 câu 28",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-giam-mat-da",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Không nên lau giấm lên bề mặt nào sau đây?",
+        "options": [
+          "Mặt kính cửa sổ",
+          "Mặt bàn đá tự nhiên",
+          "Gương soi",
+          "Ly thuỷ tinh"
+        ],
+        "answer": 1
+      },
+      "explanation": "Giấm có tính axit, có thể làm hỏng mặt bàn đá, lưỡi dao, màn hình thiết bị và đồ cao su.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Vinegar",
+      "sourceRef": "05 câu 29 (đổi phương án nhiễu)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-axit-citric-chanh",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Loại quả nào chứa nhiều axit citric nhất trong các quả sau?",
+        "options": [
+          "Chanh",
+          "Chuối",
+          "Táo",
+          "Dưa hấu"
+        ],
+        "answer": 0
+      },
+      "explanation": "Chanh vàng, chanh xanh có nhiều axit citric, khoảng 47 g mỗi lít nước cốt.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Citric_acid",
+      "sourceRef": "05 câu 30",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-axit-citric-cau-can",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Axit citric giúp tẩy cặn vôi nhờ tính chất nào?",
+        "options": [
+          "Bắt giữ các ion khoáng như canxi",
+          "Phát sáng",
+          "Làm nước nóng lên",
+          "Tạo nhiều bọt"
+        ],
+        "answer": 0
+      },
+      "explanation": "Axit citric kết hợp với các khoáng chất kim loại, giúp chúng tan trong nước, nên được dùng để tẩy và ngừa cặn vôi.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Citric_acid",
+      "sourceRef": "05 câu 31 (đổi phương án nhiễu)",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-photphat-bot-giat",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Photphat trong bột giặt kiểu cũ từng gây hại môi trường thế nào?",
+        "options": [
+          "Làm tảo phát triển quá mức trong sông hồ",
+          "Gây mưa axit",
+          "Làm thủng tầng ôzôn",
+          "Gây động đất"
+        ],
+        "answer": 0
+      },
+      "explanation": "Natri triphotphat từng có trong nhiều bột giặt và góp phần lớn gây phú dưỡng: tảo phát triển quá mức, nước thiếu oxy.",
+      "sourceUrl": "https://en.wikipedia.org/wiki/Eutrophication",
+      "sourceRef": "05 câu 32",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-ubnd-tinh-quyet-dinh",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Theo hướng dẫn của Bộ TN&MT, ai quyết định cách phân loại cụ thể nhóm \"rác sinh hoạt khác\" ở địa phương?",
+        "options": [
+          "Ủy ban nhân dân tỉnh, thành phố",
+          "Từng hộ gia đình",
+          "Công ty thu gom rác",
+          "Tổ dân phố"
+        ],
+        "answer": 0
+      },
+      "explanation": "UBND cấp tỉnh quyết định việc phân loại cụ thể rác sinh hoạt khác (khoản 2 Điều 75 Luật Bảo vệ môi trường), nên mỗi nơi có thể khác nhau.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 phần mở đầu",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-han-trien-khai-2024",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Theo công văn hướng dẫn, các tỉnh phải triển khai phân loại rác sinh hoạt chậm nhất vào ngày nào?",
+        "options": [
+          "31/12/2022",
+          "31/12/2024",
+          "31/12/2030",
+          "Không có hạn"
+        ],
+        "answer": 1
+      },
+      "explanation": "Công văn của Bộ TN&MT đề nghị UBND cấp tỉnh triển khai phân loại rác sinh hoạt chậm nhất ngày 31/12/2024.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 đoạn cuối công văn",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-vo-trung",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Vỏ trứng thuộc nhóm rác nào theo hướng dẫn của Bộ TN&MT?",
+        "options": [
+          "Rác thực phẩm",
+          "Rác sinh hoạt khác",
+          "Rác tái chế",
+          "Rác nguy hại"
+        ],
+        "answer": 1
+      },
+      "explanation": "Vỏ trứng nằm cùng vỏ hạt, xơ dừa trong nhóm rác khác, không phải rác thực phẩm.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-dien-thoai-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Điện thoại cũ đem bỏ, hướng dẫn dặn điều gì?",
+        "options": [
+          "Tháo rời từng linh kiện",
+          "Giữ nguyên, không tự tháo ra",
+          "Ngâm nước cho sạch",
+          "Đập nhỏ cho gọn"
+        ],
+        "answer": 1
+      },
+      "explanation": "Thiết bị điện tử nhỏ như điện thoại thuộc nhóm tái chế; hướng dẫn dặn giữ nguyên hình dạng, không tháo rời.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.8.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-kim-tiem",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Kim tiêm đã dùng ở nhà thuộc nhóm nào?",
+        "options": [
+          "Rác tái chế",
+          "Rác nguy hại",
+          "Rác thực phẩm",
+          "Rác cồng kềnh"
+        ],
+        "answer": 1
+      },
+      "explanation": "Kim tiêm là rác nguy hại; cần xếp gọn vật sắc nhọn để người thu gom không bị thương.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-ta-bim",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Tã, bỉm đã dùng thuộc nhóm nào?",
+        "options": [
+          "Rác tái chế",
+          "Rác thực phẩm",
+          "Rác sinh hoạt khác",
+          "Rác nguy hại"
+        ],
+        "answer": 2
+      },
+      "explanation": "Tã, bỉm, giấy vệ sinh đã dùng thuộc nhóm rác khác. Thu gọn, tránh rơi vãi khi bỏ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-loi-giay-ve-sinh",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Lõi cuộn giấy vệ sinh thuộc nhóm nào?",
+        "options": [
+          "Rác tái chế (giấy)",
+          "Rác thực phẩm",
+          "Rác nguy hại",
+          "Rác cồng kềnh"
+        ],
+        "answer": 0
+      },
+      "explanation": "Hướng dẫn nêu đích danh lõi giấy vệ sinh trong nhóm giấy tái chế, cùng thùng carton, khay trứng giấy.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.1.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-thuc-an-thua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Hướng dẫn dặn gì khi bỏ thức ăn thừa?",
+        "options": [
+          "Đựng kín để không rỉ nước, không bốc mùi",
+          "Trộn chung với giấy báo",
+          "Đổ thẳng xuống cống",
+          "Phơi khô rồi đốt"
+        ],
+        "answer": 0
+      },
+      "explanation": "Rác thực phẩm cần đựng trong túi, hộp kín, không rò rỉ và không để mùi phát tán.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 2.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-sofa-hong",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Chiếc sofa hỏng thuộc loại rác nào?",
+        "options": [
+          "Rác tái chế",
+          "Rác cồng kềnh (nhóm rác khác)",
+          "Rác thực phẩm",
+          "Rác nguy hại"
+        ],
+        "answer": 1
+      },
+      "explanation": "Tủ, bàn ghế, sofa, giường, nệm hỏng là rác cồng kềnh trong nhóm rác khác; nên thu gọn hoặc tháo rời trước khi bỏ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.2.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-hu-thuy-tinh",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Hũ thuỷ tinh đựng đường đã dùng hết thì bỏ vào nhóm nào?",
+        "options": [
+          "Rác tái chế",
+          "Rác thực phẩm",
+          "Rác sinh hoạt khác",
+          "Rác nguy hại"
+        ],
+        "answer": 0
+      },
+      "explanation": "Chai, lọ thuỷ tinh đựng thực phẩm thuộc nhóm tái chế. Lấy hết phần còn lại, tháo nắp và xếp nhẹ tay cho khỏi vỡ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.4.1",
+      "sourceCheckedAt": "2026-11-17",
+      "productSlug": "duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-b67af3"
+    },
+    {
+      "id": "gm-quiz-enzyme-protease",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Nước giặt có enzyme thường dùng enzyme nào cho vết bẩn gốc đạm như máu, trứng?",
+        "options": [
+          "Protease",
+          "Amylase",
+          "Lipase",
+          "Cellulase"
+        ],
+        "answer": 0
+      },
+      "explanation": "Theo một bài tổng quan năm 2024, protease xử lý vết đạm (cỏ, máu, trứng, mồ hôi); amylase lo vết tinh bột, lipase lo vết dầu mỡ.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ bảng 4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-photphat-eu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Liên minh châu Âu đã làm gì với photphat vô cơ trong nước giặt, nước rửa bát máy gia dụng?",
+        "options": [
+          "Cấm dùng (Quy định 259/2012)",
+          "Bắt buộc phải thêm",
+          "Khuyến khích tăng gấp đôi",
+          "Chưa có quy định"
+        ],
+        "answer": 0
+      },
+      "explanation": "Quy định (EU) số 259/2012 cấm photphat vô cơ trong chất giặt và chất rửa bát máy gia dụng, để hạn chế phú dưỡng sông hồ.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC11672837/",
+      "sourceRef": "ENZ mục quy định",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-eco-enzyme-nguyen-lieu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Eco-enzyme được làm bằng cách ủ lên men những gì?",
+        "options": [
+          "Vỏ trái cây, đường và nước",
+          "Muối, giấm và xà phòng",
+          "Dầu ăn và baking soda",
+          "Nước vôi và cát"
+        ],
+        "answer": 0
+      },
+      "explanation": "Một nghiên cứu năm 2023 ủ đường nâu, vỏ cam, vỏ dưa và nước theo tỉ lệ 1:3:10 để làm eco-enzyme.",
+      "sourceUrl": "https://jurnal.polinema.ac.id/index.php/distilat/article/download/4176/3264",
+      "sourceRef": "S20 tóm tắt",
+      "sourceCheckedAt": "2026-11-17",
+      "productSlug": "nuoc-rua-chen-fuwa3e-500ml-185d77"
+    },
+    {
+      "id": "gm-quiz-eco-enzyme-ph",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Mẫu eco-enzyme trong một nghiên cứu năm 2023 đo được độ pH khoảng bao nhiêu?",
+        "options": [
+          "Khoảng 3,5–4 (hơi chua)",
+          "Khoảng 7 (trung tính)",
+          "Khoảng 10 (kiềm)",
+          "Khoảng 13 (kiềm mạnh)"
+        ],
+        "answer": 0
+      },
+      "explanation": "Nghiên cứu đo được pH 3,5–4, tức có tính axit. Kết quả có thể khác tuỳ nguyên liệu và thời gian ủ.",
+      "sourceUrl": "https://jurnal.polinema.ac.id/index.php/distilat/article/download/4176/3264",
+      "sourceRef": "S20 tóm tắt",
+      "sourceCheckedAt": "2026-11-17",
+      "productSlug": "nuoc-giat-huong-cam-fuwa3e-500ml-2d5635"
+    },
+    {
+      "id": "gm-quiz-nguon-vi-nhua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Theo NOAA, vi nhựa có thể sinh ra từ đâu?",
+        "options": [
+          "Mảnh nhựa lớn vỡ dần ra",
+          "Muối biển",
+          "Cát sa mạc",
+          "Lá cây mục"
+        ],
+        "answer": 0
+      },
+      "explanation": "NOAA cho biết vi nhựa đến từ nhiều nguồn: mảnh nhựa lớn vỡ ra, hạt nhựa nguyên liệu và hạt vi nhựa trong mỹ phẩm.",
+      "sourceUrl": "https://oceanservice.noaa.gov/facts/microplastics.html",
+      "sourceRef": "S7",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-quiz-nhua-thai-viet-nam",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "prompt": "Theo Ngân hàng Thế giới (2021), mỗi năm Việt Nam thải bỏ khoảng bao nhiêu nhựa?",
+        "options": [
+          "Khoảng 2,62 triệu tấn",
+          "Khoảng 26.000 tấn",
+          "Khoảng 262 triệu tấn",
+          "Khoảng 2.620 tấn"
+        ],
+        "answer": 0
+      },
+      "explanation": "Bài của Ngân hàng Thế giới (2021) nêu Việt Nam thải bỏ khoảng 2,62 triệu tấn nhựa mỗi năm, làm mất khoảng 75% giá trị vật liệu.",
+      "sourceUrl": "https://blogs.worldbank.org/en/eastasiapacific/stopping-flow-vietnams-plastics-ocean",
+      "sourceRef": "S21",
+      "sourceCheckedAt": "2026-11-17"
+    }
+  ]
+}

@@ -1,0 +1,1255 @@
+{
+  "game": "sort",
+  "items": [
+    {
+      "id": "gm-sort-chai-nhua-nuoc-ngot",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Chai nhựa nước ngọt",
+        "bin": "recycle",
+        "emoji": "🧴"
+      },
+      "explanation": "Bao bì nhựa thuộc nhóm tái chế. Tháo nắp, đổ hết nước rồi ép gọn chai trước khi bỏ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-vo-chai-nuoc-rua-chen",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Vỏ chai nước rửa chén đã dùng hết",
+        "bin": "recycle",
+        "emoji": "🧴"
+      },
+      "explanation": "Bao bì nhựa đồ gia dụng thuộc nhóm tái chế. Riêng bao bì chất tẩy rửa có thành phần nguy hại thì thuộc nhóm nguy hại, nên xem nhãn.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-chai-dau-goi",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Chai dầu gội bằng nhựa",
+        "bin": "recycle",
+        "emoji": "🧴"
+      },
+      "explanation": "Bao bì nhựa đựng mỹ phẩm thuộc nhóm tái chế. Lấy hết phần còn lại bên trong rồi thu gọn.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-thau-chau-nhua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Thau, chậu nhựa hỏng",
+        "bin": "recycle",
+        "emoji": "🪣"
+      },
+      "explanation": "Thau, chậu, ghế nhựa là đồ nhựa gia dụng, thuộc nhóm tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-ghe-nhua-gay",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Ghế nhựa gãy",
+        "bin": "recycle",
+        "emoji": "🪑"
+      },
+      "explanation": "Ghế nhựa hỏng thuộc nhóm tái chế, khác với đồ nhựa dùng một lần (thuộc nhóm rác khác).",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-lon-nhom",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Lon nhôm nước ngọt",
+        "bin": "recycle",
+        "emoji": "🥫"
+      },
+      "explanation": "Bao bì kim loại thuộc nhóm tái chế. Đổ hết nước rồi bóp gọn lon.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-lon-sat-sua-bot",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Lon sắt đựng sữa bột",
+        "bin": "recycle",
+        "emoji": "🥫"
+      },
+      "explanation": "Lon sắt, lon nhôm đựng thực phẩm thuộc nhóm tái chế. Lấy hết phần bên trong và thu gọn.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-noi-xoong-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Nồi, xoong kim loại cũ",
+        "bin": "recycle",
+        "emoji": "🍲"
+      },
+      "explanation": "Đồ dùng nhà bếp bằng kim loại như xoong, nồi, ấm nước thuộc nhóm tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.3.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-thia-kim-loai",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Thìa kim loại cũ",
+        "bin": "recycle",
+        "emoji": "🥄"
+      },
+      "explanation": "Bát, đĩa, thìa bằng kim loại thuộc nhóm tái chế. Còn thìa nhựa lại thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.3.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-bep-gas-hong",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bếp gas hỏng",
+        "bin": "recycle",
+        "emoji": "🍳"
+      },
+      "explanation": "Hướng dẫn xếp bếp gas vào đồ bếp kim loại (tái chế). Khác với bình gas mini đã dùng là rác nguy hại.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.3.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-chai-bia-thuy-tinh",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Chai bia thuỷ tinh",
+        "bin": "recycle",
+        "emoji": "🍾"
+      },
+      "explanation": "Chai, lọ thuỷ tinh thuộc nhóm tái chế. Tháo nắp, đổ hết bên trong và xếp nhẹ tay cho khỏi vỡ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.4.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-lo-thuy-tinh-mut",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Lọ thuỷ tinh đựng mứt",
+        "bin": "recycle",
+        "emoji": "🫙"
+      },
+      "explanation": "Lọ thuỷ tinh đựng thực phẩm thuộc nhóm tái chế. Lấy hết phần còn lại, tháo nắp trước khi bỏ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.4.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-binh-hoa-thuy-tinh",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bình hoa thuỷ tinh",
+        "bin": "recycle",
+        "emoji": "🏺"
+      },
+      "explanation": "Bình hoa, đồ trang trí bằng thuỷ tinh, pha lê thuộc nhóm tái chế; còn nguyên thì nên dùng lại.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.4.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-manh-thuy-tinh-vo",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Mảnh thuỷ tinh vỡ",
+        "bin": "recycle"
+      },
+      "explanation": "Thuỷ tinh vỡ vẫn thuộc nhóm tái chế. Gom và xếp gọn mảnh sắc để người thu gom không bị đứt tay.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.4.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-thung-carton",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Thùng carton",
+        "bin": "recycle",
+        "emoji": "📦"
+      },
+      "explanation": "Thùng, bìa carton thuộc nhóm giấy tái chế. Ép dẹt cho gọn trước khi bỏ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.1.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-bao-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Báo cũ",
+        "bin": "recycle",
+        "emoji": "📰"
+      },
+      "explanation": "Sách, vở, báo cũ thuộc nhóm giấy tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.1.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-loi-giay-ve-sinh",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Lõi cuộn giấy vệ sinh",
+        "bin": "recycle",
+        "emoji": "🧻"
+      },
+      "explanation": "Hướng dẫn nêu đích danh lõi giấy vệ sinh trong nhóm giấy tái chế. Còn giấy vệ sinh đã dùng là rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.1.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-khay-trung-giay",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Khay đựng trứng bằng giấy",
+        "bin": "recycle",
+        "emoji": "🥚"
+      },
+      "explanation": "Khay đựng trứng bằng giấy thuộc nhóm giấy tái chế. Còn vỏ trứng lại thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.1.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-bi-thu-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Phong bì thư cũ",
+        "bin": "recycle",
+        "emoji": "✉️"
+      },
+      "explanation": "Bì thư, biên lai, giấy bọc gói không dính bẩn thuộc nhóm giấy tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.1.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-hop-sua-giay",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Hộp sữa giấy đã uống hết",
+        "bin": "recycle",
+        "emoji": "🧃"
+      },
+      "explanation": "Hộp, túi, ly bằng giấy thuộc nhóm tái chế. Đổ hết phần còn lại bên trong rồi ép dẹt hộp.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.1.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-quan-ao-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Quần áo cũ còn sạch",
+        "bin": "recycle",
+        "emoji": "👕"
+      },
+      "explanation": "Quần áo, chăn màn bằng vải thuộc nhóm tái chế; đồ còn sạch thì có thể dùng lại.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.5.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-chan-man-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Chăn, màn cũ",
+        "bin": "recycle",
+        "emoji": "🛏️"
+      },
+      "explanation": "Chăn, màn, rèm cửa bằng vải không dính hoá chất thuộc nhóm tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.5.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-giay-vai-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Giày vải cũ",
+        "bin": "recycle",
+        "emoji": "👟"
+      },
+      "explanation": "Giày, dép trong nhóm vải, đồ da thuộc nhóm tái chế. Riêng giày, dép nhựa lại thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.5.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-va-li-vai-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Va li vải cũ",
+        "bin": "recycle",
+        "emoji": "🧳"
+      },
+      "explanation": "Hướng dẫn xếp va li vào nhóm vải, đồ da (tái chế); còn dùng được thì nên dùng lại.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.5.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-hop-khay-go",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Hộp, khay gỗ cũ",
+        "bin": "recycle",
+        "emoji": "🪵"
+      },
+      "explanation": "Đồ chơi, hộp, khay bằng gỗ thuộc nhóm tái chế; còn nguyên thì nên dùng lại.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.6.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-lop-xe-dap",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Lốp xe đạp cũ",
+        "bin": "recycle",
+        "emoji": "🛞"
+      },
+      "explanation": "Săm, lốp và đồ cao su thuộc nhóm tái chế. Bó gọn trước khi bỏ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.7.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-do-choi-cao-su",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Đồ chơi cao su hỏng",
+        "bin": "recycle",
+        "emoji": "🦆"
+      },
+      "explanation": "Đồ chơi bằng cao su thuộc nhóm tái chế; đồ còn nguyên thì nên dùng lại.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.7.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-dien-thoai-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Điện thoại cũ",
+        "bin": "recycle",
+        "emoji": "📱"
+      },
+      "explanation": "Điện thoại là thiết bị điện tử nhỏ, thuộc nhóm tái chế. Giữ nguyên máy, không tự tháo ra.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.8.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-ban-phim-hong",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bàn phím máy tính hỏng",
+        "bin": "recycle",
+        "emoji": "⌨️"
+      },
+      "explanation": "Bàn phím, dây cáp, phụ kiện máy tính là đồ điện tử nhỏ, thuộc nhóm tái chế. Giữ nguyên, không tháo rời.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.8.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-bong-den-led",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bóng đèn LED hỏng",
+        "bin": "recycle",
+        "emoji": "💡"
+      },
+      "explanation": "Hướng dẫn xếp đèn LED, đèn halogen vào thiết bị điện tử nhỏ (tái chế). Bóng đèn huỳnh quang thì khác, là rác nguy hại.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.8.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-quat-dien-hong",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Quạt điện hỏng",
+        "bin": "recycle",
+        "emoji": "🌀"
+      },
+      "explanation": "Quạt, máy giặt, tủ lạnh hỏng là thiết bị điện lớn, thuộc nhóm tái chế. Giữ nguyên, không tự tháo.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.8.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-noi-com-dien-hong",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Nồi cơm điện hỏng",
+        "bin": "recycle",
+        "emoji": "🍚"
+      },
+      "explanation": "Hướng dẫn liệt kê nồi cơm điện trong thiết bị điện lớn (tái chế). Giữ nguyên hình dạng, không tháo rời.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.8.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-com-thua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Cơm, thức ăn thừa",
+        "bin": "food",
+        "emoji": "🍛"
+      },
+      "explanation": "Thức ăn thừa là rác thực phẩm. Đựng trong túi hoặc hộp kín để không rỉ nước, không bốc mùi.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 2.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-thuc-pham-het-han",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Thực phẩm hết hạn",
+        "bin": "food",
+        "emoji": "🧀"
+      },
+      "explanation": "Thực phẩm hết hạn sử dụng thuộc nhóm rác thực phẩm. Đựng kín để không rỉ nước và bốc mùi.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 2.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-vo-chuoi",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Vỏ chuối",
+        "bin": "food",
+        "emoji": "🍌"
+      },
+      "explanation": "Vỏ trái cây, rau củ bỏ đi khi sơ chế là rác thực phẩm.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 2.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-cuong-rau-la-ua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Cuống rau, lá úa",
+        "bin": "food",
+        "emoji": "🥬"
+      },
+      "explanation": "Rau củ và phần bỏ đi khi sơ chế, nấu nướng là rác thực phẩm.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 2.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-vo-dua-hau",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Vỏ dưa hấu",
+        "bin": "food",
+        "emoji": "🍉"
+      },
+      "explanation": "Vỏ trái cây bỏ đi sau khi ăn là rác thực phẩm. Đựng kín để không rỉ nước.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 2.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-xuong-dau-ca",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Xương, đầu cá",
+        "bin": "food",
+        "emoji": "🐟"
+      },
+      "explanation": "Phần bỏ đi từ thịt, cá, hải sản là rác thực phẩm. Riêng vỏ cứng của tôm, cua, sò, ốc thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 2.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-pin-da-dung",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Pin đã dùng",
+        "bin": "hazardous",
+        "emoji": "🔋"
+      },
+      "explanation": "Pin là rác nguy hại. Giữ nguyên hình dạng, không tự tháo ra.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-ac-quy-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Ắc quy xe máy cũ",
+        "bin": "hazardous",
+        "emoji": "🔋"
+      },
+      "explanation": "Pin, ắc quy thải là rác nguy hại. Giữ nguyên, không tháo rời.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-bong-huynh-quang",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bóng đèn huỳnh quang",
+        "bin": "hazardous",
+        "emoji": "💡"
+      },
+      "explanation": "Bóng huỳnh quang là rác nguy hại. Không đập vỡ; lỡ vỡ thì gom giữ cẩn thận để thuỷ ngân không phát tán.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-nhiet-ke-thuy-ngan",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Nhiệt kế thuỷ ngân",
+        "bin": "hazardous",
+        "emoji": "🌡️"
+      },
+      "explanation": "Nhiệt kế chứa thuỷ ngân là rác nguy hại. Không làm vỡ; nếu vỡ, gom giữ cẩn thận để thuỷ ngân không phát tán.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-kim-tiem",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Kim tiêm đã dùng",
+        "bin": "hazardous",
+        "emoji": "💉"
+      },
+      "explanation": "Kim tiêm là rác nguy hại. Đựng chắc chắn và xếp gọn vật sắc để người thu gom không bị thương.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-binh-gas-mini",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bình gas mini đã dùng",
+        "bin": "hazardous",
+        "emoji": "🥫"
+      },
+      "explanation": "Bình gas mini là rác nguy hại theo hướng dẫn, khác với bếp gas (đồ bếp kim loại, tái chế).",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-chai-thuoc-bvtv",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Chai thuốc bảo vệ thực vật",
+        "bin": "hazardous",
+        "emoji": "🧪"
+      },
+      "explanation": "Bao bì thuốc bảo vệ thực vật là rác nguy hại, kể cả khi là chai nhựa. Không bỏ chung với bao bì nhựa tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-gie-lau-dau-nhot",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Giẻ lau dính dầu nhớt máy",
+        "bin": "hazardous",
+        "emoji": "🧽"
+      },
+      "explanation": "Găng tay, giẻ lau dính dầu, hoá chất là rác nguy hại. Đựng kín để không phát tán ra ngoài.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-bong-bang-nguoi-benh",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bông băng nhiễm khuẩn từ người bệnh",
+        "bin": "hazardous",
+        "emoji": "🩹"
+      },
+      "explanation": "Khẩu trang, bông băng nhiễm khuẩn từ người bệnh là rác nguy hại. Khẩu trang dùng hằng ngày thì thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-sofa-hong",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Ghế sofa hỏng",
+        "bin": "other",
+        "emoji": "🛋️"
+      },
+      "explanation": "Sofa, giường, nệm hỏng là rác cồng kềnh, thuộc nhóm rác khác. Thu gọn hoặc tháo rời trước khi bỏ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.2.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-nem-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Nệm cũ",
+        "bin": "other",
+        "emoji": "🛏️"
+      },
+      "explanation": "Nệm, giường tủ hỏng là rác cồng kềnh trong nhóm rác khác. Thu gọn trước khi bỏ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.2.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-canh-goc-cay",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Cành cây, gốc cây to",
+        "bin": "other",
+        "emoji": "🌳"
+      },
+      "explanation": "Cành, gốc cây là rác cồng kềnh, thuộc nhóm rác khác. Cắt gọn, giảm kích thước trước khi bỏ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.2.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-canh-cua-sat",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Cánh cửa sắt cũ",
+        "bin": "other",
+        "emoji": "🚪"
+      },
+      "explanation": "Hướng dẫn xếp tủ sắt, khung cửa, cánh cửa vào rác cồng kềnh (nhóm khác), dù làm bằng kim loại. Nếu tháo rời thì phân loại tiếp từng phần.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.2.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-ta-bim",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Tã, bỉm đã dùng",
+        "bin": "other",
+        "emoji": "🧷"
+      },
+      "explanation": "Tã, bỉm đã dùng thuộc nhóm rác khác. Thu gọn, gói kín để không rơi vãi.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-giay-an-da-dung",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Giấy ăn đã dùng",
+        "bin": "other",
+        "emoji": "🧻"
+      },
+      "explanation": "Giấy ăn, giấy vệ sinh đã dùng thuộc nhóm rác khác, không phải giấy tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-khan-giay-uot",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Khăn giấy ướt đã dùng",
+        "bin": "other"
+      },
+      "explanation": "Giấy ướt đã dùng thuộc nhóm rác khác, không bỏ vào nhóm giấy tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-bong-tay-trang",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bông tẩy trang đã dùng",
+        "bin": "other"
+      },
+      "explanation": "Bông tẩy trang đã dùng thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-khau-trang-hang-ngay",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Khẩu trang dùng hằng ngày",
+        "bin": "other",
+        "emoji": "😷"
+      },
+      "explanation": "Khẩu trang dùng hằng ngày thuộc nhóm rác khác. Riêng khẩu trang nhiễm khuẩn từ người bệnh là rác nguy hại.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-hop-xop",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Hộp xốp đựng cơm",
+        "bin": "other",
+        "emoji": "🍱"
+      },
+      "explanation": "Hộp xốp thuộc nhóm rác khác, không phải nhóm nhựa tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-ong-hut-nhua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Ống hút nhựa dùng một lần",
+        "bin": "other",
+        "emoji": "🥤"
+      },
+      "explanation": "Đồ nhựa dùng một lần thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-ba-keo-cao-su",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bã kẹo cao su",
+        "bin": "other"
+      },
+      "explanation": "Bã kẹo cao su thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-dau-loc-thuoc-la",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Đầu lọc thuốc lá",
+        "bin": "other",
+        "emoji": "🚬"
+      },
+      "explanation": "Đầu lọc thuốc lá thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-bong-bay-xi",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bóng bay đã xì",
+        "bin": "other",
+        "emoji": "🎈"
+      },
+      "explanation": "Bóng bay, băng keo, tăm bông thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-bang-keo",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Băng keo đã dùng",
+        "bin": "other"
+      },
+      "explanation": "Băng keo dán đã dùng thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-tam-bong",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Tăm bông ngoáy tai",
+        "bin": "other"
+      },
+      "explanation": "Tăm bông tai, tăm chỉ kẽ răng thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-vo-thuoc",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Vỏ, vỉ thuốc đã dùng hết",
+        "bin": "other",
+        "emoji": "💊"
+      },
+      "explanation": "Hướng dẫn xếp vỏ thuốc đã dùng hết vào nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.3",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-dep-nhua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Dép nhựa hỏng",
+        "bin": "other",
+        "emoji": "🩴"
+      },
+      "explanation": "Giày, dép nhựa thuộc nhóm rác khác. Còn giày vải, giày da lại thuộc nhóm tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-thia-nhua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Thìa nhựa",
+        "bin": "other",
+        "emoji": "🥄"
+      },
+      "explanation": "Thìa, muôi bằng nhựa thuộc nhóm rác khác, khác với thìa kim loại (tái chế).",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-ban-chai-danh-rang",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bàn chải đánh răng cũ",
+        "bin": "other",
+        "emoji": "🪥"
+      },
+      "explanation": "Bàn chải đánh răng thuộc nhóm nhựa thải khác, là rác khác. Bó gọn trước khi bỏ.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-tuyp-kem-danh-rang",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Vỏ tuýp kem đánh răng",
+        "bin": "other"
+      },
+      "explanation": "Vỏ tuýp, hộp kem đánh răng thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-but-bi-het-muc",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bút bi hết mực",
+        "bin": "other",
+        "emoji": "🖊️"
+      },
+      "explanation": "Bút, thước kẻ nhựa thuộc nhóm nhựa thải khác, là rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-bat-lua-het-gas",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bật lửa đã hết gas",
+        "bin": "other"
+      },
+      "explanation": "Bật lửa đã hết gas thuộc nhóm rác khác theo hướng dẫn.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-thuoc-ke-nhua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Thước kẻ nhựa gãy",
+        "bin": "other",
+        "emoji": "📏"
+      },
+      "explanation": "Thước kẻ, muôi, thìa bằng nhựa thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.4",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-ba-ca-phe",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bã cà phê",
+        "bin": "other",
+        "emoji": "☕"
+      },
+      "explanation": "Dễ nhầm: hướng dẫn xếp bã cà phê, bã trà vào nhóm rác khác, không phải rác thực phẩm.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-tui-tra-da-pha",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Túi trà đã pha",
+        "bin": "other",
+        "emoji": "🍵"
+      },
+      "explanation": "Bã các loại như cà phê, trà (túi trà), bã mía thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-vo-trung",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Vỏ trứng",
+        "bin": "other",
+        "emoji": "🥚"
+      },
+      "explanation": "Vỏ trứng thuộc nhóm rác khác, không phải rác thực phẩm. Cùng nhóm với vỏ hạt, xơ dừa.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-vo-hat-dieu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Vỏ hạt điều",
+        "bin": "other",
+        "emoji": "🥜"
+      },
+      "explanation": "Vỏ các loại hạt như hạt điều, óc chó, mắc ca thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-xo-dua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Xơ dừa",
+        "bin": "other",
+        "emoji": "🥥"
+      },
+      "explanation": "Vỏ dừa, xơ dừa, rơm, trấu thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-la-co-vuon",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Lá, cỏ cắt ở vườn nhà",
+        "bin": "other",
+        "emoji": "🍂"
+      },
+      "explanation": "Rác làm vườn của hộ gia đình như lá, rễ, cành nhỏ thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-ba-mia",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bã mía",
+        "bin": "other"
+      },
+      "explanation": "Bã mía, xác mía thuộc nhóm rác khác, không phải rác thực phẩm.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-loi-ngo",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Lõi ngô",
+        "bin": "other",
+        "emoji": "🌽"
+      },
+      "explanation": "Lõi ngô (cùi bắp) thuộc nhóm rác khác theo hướng dẫn.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-chieu-coi-cu",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Chiếu cói cũ",
+        "bin": "other"
+      },
+      "explanation": "Chiếu cói, chiếu tre trúc, gối mây tre thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.1",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-vo-so-oc",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Vỏ sò, vỏ ốc",
+        "bin": "other",
+        "emoji": "🐚"
+      },
+      "explanation": "Vỏ cứng của thuỷ, hải sản thuộc nhóm rác khác. Phần thịt hải sản bỏ đi mới là rác thực phẩm.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.5",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-mai-cua",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Mai cua cứng",
+        "bin": "other",
+        "emoji": "🦀"
+      },
+      "explanation": "Vỏ cứng của cua, tôm, sò, ốc thuộc nhóm rác khác, không phải rác thực phẩm.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.5",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-bat-su-vo",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Bát sứ vỡ",
+        "bin": "other"
+      },
+      "explanation": "Gốm, sành, sứ vỡ thuộc nhóm rác khác, không thuộc nhóm thuỷ tinh. Thu gọn, tránh rơi vãi.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.5",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-xi-than",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Xỉ than tổ ong",
+        "bin": "other"
+      },
+      "explanation": "Xỉ than từ sinh hoạt thuộc nhóm rác khác. Thu gọn, tránh rơi vãi.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.5",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-phan-cho-meo",
+      "active": true,
+      "version": 1,
+      "payload": {
+        "label": "Phân chó, mèo cảnh",
+        "bin": "other",
+        "emoji": "🐕"
+      },
+      "explanation": "Phân động vật cảnh thuộc nhóm rác khác. Đựng kín, không rò rỉ để khỏi bốc mùi.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.3.2",
+      "sourceCheckedAt": "2026-11-17"
+    },
+    {
+      "id": "gm-sort-ly-coc-nhua",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "label": "Ly, cốc nhựa",
+        "bin": "recycle",
+        "emoji": "🥤"
+      },
+      "explanation": "Hướng dẫn xếp ly, cốc nhựa vào nhóm tái chế; nhưng đồ nhựa dùng một lần lại thuộc nhóm rác khác.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.2",
+      "sourceCheckedAt": "2026-11-17",
+      "inactiveReason": "S1 xếp \"ly, cốc nhựa\" ở 1.2.2 (tái chế) và \"đồ nhựa dùng một lần\" ở 3.3.3 (rác khác); ly trà sữa dùng một lần dễ hiểu theo cả hai, đáp án không rõ."
+    },
+    {
+      "id": "gm-sort-ly-giay-ca-phe",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "label": "Ly giấy cà phê",
+        "bin": "recycle"
+      },
+      "explanation": "Hướng dẫn xếp ly, cốc bằng giấy vào nhóm tái chế; đổ hết nước còn lại rồi ép dẹt.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.1.1",
+      "sourceCheckedAt": "2026-11-17",
+      "inactiveReason": "S1 không nói về lớp tráng nhựa bên trong ly giấy; 05 ghi mức suy luận. Chờ người có chuyên môn duyệt."
+    },
+    {
+      "id": "gm-sort-chai-axit-tay-bon-cau",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "label": "Chai axit tẩy bồn cầu đã dùng",
+        "bin": "hazardous"
+      },
+      "explanation": "Bao bì chất tẩy rửa có thành phần nguy hại là rác nguy hại; cần xem nhãn sản phẩm.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 3.1.1",
+      "sourceCheckedAt": "2026-11-17",
+      "inactiveReason": "S1 chỉ xếp vào nguy hại khi chất tẩy rửa có thành phần nguy hại; phải xem nhãn từng sản phẩm nên đáp án không cố định."
+    },
+    {
+      "id": "gm-sort-hop-pizza-dinh-dau",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "label": "Hộp pizza dính dầu mỡ",
+        "bin": "other",
+        "emoji": "🍕"
+      },
+      "explanation": "Giấy dính dầu mỡ, thức ăn không còn là giấy sạch để tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.1.2",
+      "sourceCheckedAt": "2026-11-17",
+      "inactiveReason": "S1 chỉ nhận giấy không nhiễm bẩn, không nêu đích danh hộp pizza; xếp vào rác khác là suy luận."
+    },
+    {
+      "id": "gm-sort-tui-nilon-dinh-thuc-an",
+      "active": false,
+      "version": 1,
+      "payload": {
+        "label": "Túi nilon dính thức ăn",
+        "bin": "other"
+      },
+      "explanation": "Bao bì nhựa cần loại bỏ phần chứa bên trong trước khi tái chế.",
+      "sourceUrl": "https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf",
+      "sourceRef": "S1 mục 1.2.1",
+      "sourceCheckedAt": "2026-11-17",
+      "inactiveReason": "S1 không nêu đích danh túi nilon bẩn; xếp vào rác khác là suy luận."
+    }
+  ]
+}
