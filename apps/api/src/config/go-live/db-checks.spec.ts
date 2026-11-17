@@ -235,6 +235,13 @@ describe('evaluateDb', () => {
       expect(r.detail).toContain('; nặng:');
     });
 
+    it('notify_cap_restock: cột/bảng mới tương thích image cũ; điền notifySocial và ràng buộc nguồn trên users là migration nặng không khoá orders', () => {
+      const name = '20261117090000_notify_cap_restock';
+      expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);
+      expect(HEAVY_MIGRATIONS).toContainEqual({ name, ordersLock: false });
+      expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
+    });
+
     it('w7: migration gỡ chỉ mục một phần của log ZNS FAILED nằm trong danh sách tương thích image, không phải migration nặng', () => {
       const name = '20261106010000_w7_drop_zns_failed_sentat_index';
       expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);

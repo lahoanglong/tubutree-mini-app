@@ -143,6 +143,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'catalog.loved_min_reviews', value: 20, category: 'catalog', description: 'Nhãn "Được yêu thích": số đánh giá tối thiểu (số nguyên, mặc định 20)', createOnly: true },
   { key: 'catalog.loved_min_sold', value: 50, category: 'catalog', description: 'Nhãn "Được yêu thích": tổng đã bán tối thiểu, gồm cả số nhập tay từ sàn ngoài (số nguyên, mặc định 50)', createOnly: true },
   { key: 'catalog.pdp_compare_enabled', value: false, category: 'catalog', description: 'Trang sản phẩm hiện bảng "So với món tương tự": tối đa 2 món cùng phân khúc và cùng loại hàng (theo tên), còn hàng, kèm giá, dung tích và giá trên 100ml/100g. Tắt thì khối này ẩn trên Mini App và web.', createOnly: true },
+  { key: 'catalog.restock_alert_enabled', value: false, category: 'catalog', description: 'Trang sản phẩm có nút "Báo tôi khi có hàng" khi biến thể hết hàng, và gửi một tin cho mỗi đăng ký khi hàng về. Tắt thì nút xám "Tạm hết hàng" như cũ, không gửi tin.', createOnly: true },
 
   // Orders — PendingPaymentExpiryCron. createOnly: không ghi đè giá trị admin đã chỉnh.
   { key: 'orders.pending_payment_ttl_hours', value: 24, category: 'orders', description: 'Đơn trả trước (khách lẻ/CTV) chờ thanh toán quá số giờ này thì tự huỷ (hoàn kho, coupon). Tối thiểu 1, tối đa 720; đơn đại lý dùng orders.dealer_pending_payment_ttl_hours', createOnly: true },
@@ -242,6 +243,9 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'notifications.zns_quiet_start_hour', value: 21, category: 'notifications', description: 'Giờ VN (0-23) bắt đầu giờ yên tĩnh của ZNS: tin ZNS tới trong khung này được hoãn tới giờ kết thúc, không bỏ. Bằng giờ kết thúc = tắt giờ yên tĩnh' },
   { key: 'notifications.zns_quiet_end_hour', value: 8, category: 'notifications', description: 'Giờ VN (0-23) kết thúc giờ yên tĩnh của ZNS (21 → 8: không gửi ZNS từ 21:00 tới 08:00)' },
   { key: 'notifications.zns_promo_monthly_cap', value: 2, category: 'notifications', description: 'Số tin ZNS khuyến mãi/hậu mãi tối đa mỗi khách mỗi tháng (giờ VN); đủ thì bỏ kênh ZNS, tin trong app vẫn gửi. 0 = không giới hạn' },
+  { key: 'notify.proactive_cap_enabled', value: false, category: 'notify', description: 'Trần tin chủ động mỗi khách trên kênh ngoài app (ZNS): nhắc giỏ, mua lại, điểm sắp hết hạn, nhắc chuỗi, hàng về, khuyến mãi. Tin đơn hàng, thanh toán, đổi trả, đổi rác, bảo mật không bao giờ bị trần. Tắt thì gửi như cũ.', createOnly: true },
+  { key: 'notify.proactive_per_day', value: 1, category: 'notify', description: 'Số tin chủ động ngoài app tối đa mỗi khách mỗi ngày (giờ Việt Nam) khi trần tin chủ động bật. Số nguyên từ 1.', createOnly: true },
+  { key: 'notify.proactive_per_week', value: 4, category: 'notify', description: 'Số tin chủ động ngoài app tối đa mỗi khách trong 7 ngày gần nhất khi trần tin chủ động bật. Số nguyên từ 1.', createOnly: true },
   { key: 'payment.bank_bin', value: '970407', category: 'payment', description: 'Mã ngân hàng Napas (BIN) nhận chuyển khoản — 970407 = Techcombank' },
   { key: 'payment.bank_account_no', value: '8386790906', category: 'payment', description: 'Số tài khoản nhận chuyển khoản (VietQR)' },
   { key: 'payment.bank_account_name', value: 'CONG TY TNHH TUBU TREE', category: 'payment', description: 'Tên chủ tài khoản (hiển thị; in hoa không dấu)' },
@@ -914,6 +918,8 @@ export const NOTIFICATION_TEMPLATES = [
   { id: 'nt-cart-abandon', code: 'CART_ABANDONED', channel: 'INAPP', bodyTemplate: '🛒 Bạn còn {{item_count}} món trong giỏ (có {{product}})! Hoàn tất đơn ngay trước khi hết hàng nhé.' },
   { id: 'nt-voucher-expiring', code: 'VOUCHER_EXPIRING', channel: 'INAPP', bodyTemplate: '⏰ Voucher {{code}} của bạn sắp hết hạn ({{expires}}). Dùng ngay kẻo lỡ nhé!' },
   { id: 'nt-flash-starting', code: 'FLASH_STARTING', channel: 'INAPP', bodyTemplate: '⚡ Giờ vàng {{product}} đã bắt đầu! Vào săn ưu đãi ngay trước khi hết suất nhé.' },
+  // Báo hàng về (cờ catalog.restock_alert_enabled): khách tự bấm "Báo tôi khi có hàng" nên không thuộc nhóm khuyến mãi; vẫn là tin chủ động (chịu trần tin ngoài app).
+  { id: 'nt-restock', code: 'RESTOCK_AVAILABLE', channel: 'INAPP', bodyTemplate: 'Hàng về rồi: {{product}} đã có hàng trở lại. Đặt sớm kẻo hết nhé 🌿' },
   { id: 'nt-tier-upgraded', code: 'TIER_UPGRADED', channel: 'INAPP', bodyTemplate: 'Chúc mừng bạn đã lên hạng {{tier}} tại Tubu Tree 🌿', createOnly: true },
   { id: 'nt-tier-drop-notice', code: 'TIER_DROP_NOTICE', channel: 'INAPP', bodyTemplate: '⚠️ Hạng {{tier}} của bạn được giữ đến {{date}}. {{need}} trước ngày đó để giữ hạng nhé 🌿' },
   { id: 'nt-points-expiring', code: 'POINTS_EXPIRING', channel: 'INAPP', bodyTemplate: 'Bạn có {{points}} Điểm Xanh hết hạn trong {{days}} ngày tới, sớm nhất vào {{date}}.' },

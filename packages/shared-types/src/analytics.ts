@@ -173,6 +173,7 @@ export const SERVER_EVENT_NAMES = [
   'game_round_completed',
   'game_round_started',
   'notification_sent',
+  'notification_suppressed',
   'order_paid',
   'order_place_failed',
   'order_placed',

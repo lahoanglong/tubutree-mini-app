@@ -141,14 +141,14 @@ describe('Tuỳ chọn thông báo lưu trên server (C-022)', () => {
     await expect(svc.getPrefs('u1')).resolves.toEqual({ notifyPromo: false, notifyGarden: false });
   });
 
-  it('updatePrefs chỉ ghi trường được gửi lên', async () => {
+  it('updatePrefs chỉ ghi trường được gửi lên, kèm bằng chứng đồng ý của đúng công tắc đó', async () => {
     const { svc, update } = setup(optedOut);
     const res = await svc.updatePrefs('u1', { notifyPromo: false });
     expect(update).toHaveBeenCalledWith({
       where: { id: 'u1' },
-      data: { notifyPromo: false },
-      select: { notifyPromo: true, notifyGarden: true },
+      data: { notifyPromo: false, notifyPromoAt: expect.any(Date), notifyPromoSource: 'settings', notifyPromoTextVersion: 'notify-prefs-v1' },
+      select: { notifyPromo: true, notifyGarden: true, notifySocial: true },
     });
-    expect(res).toEqual({ notifyPromo: false, notifyGarden: true });
+    expect(res).toMatchObject({ notifyPromo: false, notifyGarden: true });
   });
 });

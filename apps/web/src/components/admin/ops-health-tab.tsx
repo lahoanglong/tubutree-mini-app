@@ -131,6 +131,7 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'ExternalClaimCron.pollFallback': 'Kéo dự phòng đơn ngoài app từ Pancake',
   'FlashSaleService.notifyStartedFlashSales': 'Báo khách đã nhắc khi giờ vàng bắt đầu',
   'FlashSaleService.notifyWishlistOfStartedSales': 'Báo khách đã thả tim sản phẩm khi sản phẩm vào giờ vàng',
+  'RestockAlertsDispatcher.dispatchRestocked': 'Báo khách đã bấm "Báo tôi khi có hàng" khi hàng về',
   'GameReminderService.sendDailyReminders': 'Nhắc khách điểm danh và tưới cây mỗi ngày',
   'GroupBuyCron.sweep': 'Đánh dấu nhóm mua chung hết hạn là không thành',
   'GomdonReconcileService.reconcile': 'Đối chiếu Gomdon: chạy lại tin báo, tạo và huỷ vận đơn bị kẹt',

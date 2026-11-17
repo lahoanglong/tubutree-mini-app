@@ -83,12 +83,12 @@ describe('NotificationsService.notify: bộ nhớ đệm mẫu theo mã', () => 
     expect(tplFindUnique).toHaveBeenCalledTimes(2);
   });
 
-  it('user chỉ đọc đúng các trường notify dùng (phone, notifyPromo, notifyGarden)', async () => {
+  it('user chỉ đọc đúng các trường notify dùng (phone, notifyPromo, notifyGarden, notifySocial)', async () => {
     const { svc, userFindUnique } = setup();
     await svc.notify('u1', 'ORDER_CONFIRMED', {});
     expect(userFindUnique).toHaveBeenCalledWith({
       where: { id: 'u1' },
-      select: { phone: true, notifyPromo: true, notifyGarden: true },
+      select: { phone: true, notifyPromo: true, notifyGarden: true, notifySocial: true },
     });
   });
 });

@@ -55,6 +55,7 @@ export const EXCLUDED_CONFIG_PREFIXES: Readonly<Record<string, string>> = {
   'shipping.gomdon': 'thuộc gói đổi rác/Gomdon (phiên khác); migration 20260926100000 đã tạo dòng',
   web: 'cờ tính năng của website (web.guest_cart_enabled): migration 20261117030000_web_guest_cart_flag đã tạo dòng bằng mặc định trong mã (false, ON CONFLICT DO NOTHING), bật tắt ở thẻ Bật/tắt tính năng',
   waste: 'thuộc gói Đổi rác lấy quà; migration 20261020000000_waste_exchange đã tạo 21 dòng và migration 20261030100001_waste_rules_version tạo thêm waste.rules_version, đều bằng giá trị mặc định (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
+  notify: 'trần tin chủ động ngoài app (notify.proactive_cap_enabled, notify.proactive_per_day, notify.proactive_per_week): migration 20261117090000_notify_cap_restock đã tạo 3 dòng bằng mặc định trong mã (cờ TẮT, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa; bật tắt ở thẻ Bật/tắt tính năng',
   mss: 'cờ kết nối MSS; migration 20261117040000_mss_foundation đã tạo 10 dòng, đều TẮT và bằng giá trị mặc định trong mã (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
 };
 
@@ -67,6 +68,7 @@ export const EXCLUDED_CONFIG_KEYS: Readonly<Record<string, string>> = {
   'shipping.first_order_free_enabled': 'migration 20261018150010_claim_freeship_config đã tạo dòng với giá trị bằng mặc định trong mã (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
   'shipping.first_order_free_min_subtotal': 'như shipping.first_order_free_enabled',
   'catalog.pdp_compare_enabled': 'cờ bảng "So với món tương tự" trên trang sản phẩm: migration 20261117070000_pdp_compare_flag đã tạo dòng bằng mặc định trong mã (false, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa; bật tắt ở thẻ Bật/tắt tính năng',
+  'catalog.restock_alert_enabled': 'cờ nút "Báo tôi khi có hàng" trên trang sản phẩm: migration 20261117090000_notify_cap_restock đã tạo dòng bằng mặc định trong mã (false, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa; bật tắt ở thẻ Bật/tắt tính năng',
   'app.miniapp_base_url': 'như shipping.first_order_free_enabled (mặc định rỗng, không rơi về biến môi trường: link thiếu thì QR dùng đường dẫn tương đối)',
   'merchant.consignment_settle_from': 'mốc đối soát hàng giao hộ là quyết định của chủ shop: thiếu dòng thì go-live:check WARN (db.consignment_from) buộc đặt mốc; nạp ngày nào cũng làm WARN thành PASS mà chưa ai xác nhận, và nạp null chỉ đổi WARN sang thông báo "giá trị không hợp lệ". Chủ shop đặt ở Quản trị, Cấu hình (ghi được dù chưa có dòng nhờ luật ghi trong SystemConfigService.JSON_RULES), theo gợi ý của go-live:check',
 };

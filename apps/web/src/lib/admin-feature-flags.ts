@@ -99,4 +99,20 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     onWarning: 'Khách thấy bảng so sánh trên trang sản phẩm có món để so. Món được chọn và giá trên 100ml/100g tính tự động từ tên sản phẩm và tên phân loại; số liệu cập nhật chậm tối đa khoảng 15 phút.',
     offWarning: 'Bảng so sánh biến mất khỏi trang sản phẩm trong vòng khoảng 10 phút. Không dữ liệu nào bị xoá.',
   },
+  {
+    key: 'catalog.restock_alert_enabled',
+    label: 'Nút "Báo tôi khi có hàng" trên trang sản phẩm',
+    description: 'Biến thể hết hàng: nút chính đổi từ "Tạm hết hàng" thành "Báo tôi khi có hàng". Hàng về thì mỗi khách đã bấm nhận đúng một tin, tối đa 100 tin mỗi phút.',
+    fallback: false,
+    onWarning: 'Khách thấy nút "Báo tôi khi có hàng" ở mọi biến thể hết hàng, trên Mini App và web. Hàng về là tin được gửi.',
+    offWarning: 'Nút về lại "Tạm hết hàng" màu xám và không gửi tin hàng về nữa. Đăng ký khách đã bấm vẫn được giữ, bật lại thì gửi tiếp.',
+  },
+  {
+    key: 'notify.proactive_cap_enabled',
+    label: 'Trần tin nhắc chủ động mỗi khách',
+    description: 'Tin nhắc qua Zalo (ZNS) như nhắc giỏ, mua lại, điểm sắp hết hạn, nhắc chuỗi, hàng về, khuyến mãi: tối đa 1 tin mỗi ngày và 4 tin mỗi tuần cho mỗi khách. Tin đơn hàng, thanh toán, đổi trả, đổi rác không bao giờ bị chặn. Tin trong app vẫn đủ.',
+    fallback: false,
+    onWarning: 'Tin nhắc vượt trần chỉ còn nằm trong app, không gửi qua Zalo. Nhiều tin cùng ngày thì tin hàng về và giỏ bỏ quên được ưu tiên.',
+    offWarning: 'Tin nhắc qua Zalo gửi như trước, không giới hạn số tin mỗi ngày (vẫn giữ trần 2 tin khuyến mãi mỗi tháng).',
+  },
 ];

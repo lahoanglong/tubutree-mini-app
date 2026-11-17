@@ -52,6 +52,7 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261117060000_mss_order_events',
   '20261117070000_pdp_compare_flag',
   '20261117083000_game_mini_core',
+  '20261117090000_notify_cap_restock',
 ];
 
 /**
@@ -95,6 +96,7 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261105180000_hg_zns_stuck_logs_index', ordersLock: false },
   { name: '20261117040000_mss_foundation', ordersLock: true },
   { name: '20261117083000_game_mini_core', ordersLock: false },
+  { name: '20261117090000_notify_cap_restock', ordersLock: false },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;

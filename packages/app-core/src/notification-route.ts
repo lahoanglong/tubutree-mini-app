@@ -63,6 +63,7 @@ export function notificationTitle(code: string): string {
   // Trong app mục này tên là "Giờ vàng"; gọi "Flash Sale" khiến khách tìm mục không tồn tại.
   if (code.startsWith('FLASH')) return 'Giờ vàng';
   if (code === 'PRICE_DROP_ALERT') return 'Giảm giá';
+  if (code === 'RESTOCK_AVAILABLE') return 'Hàng về';
   if (code === 'CART_ABANDONED') return 'Giỏ hàng của bạn';
   if (code.startsWith('GAME_')) return 'Vườn Xanh';
   if (code.startsWith('GROUP_BUY_')) return 'Mua chung';
@@ -164,6 +165,9 @@ export function notificationAction(
   }
   if (templateCode === 'PRICE_DROP_ALERT') {
     return { kind: 'link', label: 'Xem sản phẩm', to: productSlug ? `/product/${enc(productSlug)}` : '/wishlist' };
+  }
+  if (templateCode === 'RESTOCK_AVAILABLE' && productSlug) {
+    return { kind: 'link', label: 'Xem sản phẩm', to: `/product/${enc(productSlug)}` };
   }
   if (templateCode.startsWith('COMMUNITY_')) {
     const postId = d.post_id ?? d.postId;

@@ -268,9 +268,22 @@ model User {
   // Mốc thu hồi toàn bộ phiên (khoá tài khoản, phát hiện refresh token bị dùng lại): token xoay trước mốc này
   // không còn được hưởng khoảng ân hạn refresh đồng thời.
   sessionsRevokedAt      DateTime?
-  // Đồng ý nhận tin khuyến mãi / nhắc Vườn Xanh: NotificationsService.notify bỏ qua tin thuộc nhóm đã tắt.
+  // Đồng ý nhận tin khuyến mãi / nhắc Vườn Xanh / tương tác bài viết: NotificationsService.notify bỏ qua tin thuộc nhóm đã tắt.
   notifyPromo            Boolean         @default(true)
   notifyGarden           Boolean         @default(true)
+  /// Tin "bài của bạn có người thích, bình luận, trả lời". Tách khỏi notifyGarden; migration 20261117090000 điền bằng notifyGarden của từng khách.
+  notifySocial           Boolean         @default(true)
+  /// Bằng chứng đồng ý của từng công tắc: lúc khách đổi, nguồn (settings | onboarding | unsubscribe_link), phiên bản câu chữ khách thấy.
+  /// NULL = khách chưa đổi kể từ khi có cột; không điền lùi cho dữ liệu cũ.
+  notifyPromoAt          DateTime?
+  notifyPromoSource      String?
+  notifyPromoTextVersion String?
+  notifyGardenAt         DateTime?
+  notifyGardenSource     String?
+  notifyGardenTextVersion String?
+  notifySocialAt         DateTime?
+  notifySocialSource     String?
+  notifySocialTextVersion String?
   /// Đồng ý nhận tin hành trình đơn qua Zalo (MSS gửi, hợp đồng tubu-mss-order-events mục 7). Opt-in nên mặc định false; tách khỏi notifyPromo.
   notifyOrderZalo        Boolean         @default(false)
   notifyOrderZaloAt      DateTime?
@@ -341,6 +354,8 @@ model User {
   loyaltyCheckIns        LoyaltyCheckIn[]
   posCreditsReceived     PosPointCredit[]        @relation("PosCreditMember")
   posCreditsGiven        PosPointCredit[]        @relation("PosCreditStaff")
+  restockAlerts          RestockAlert[]
+  proactiveNotifyCounters NotificationProactiveCounter[]
 
   @@index([referredById])
   /// Báo cáo nguồn khách × tuần (admin): khách tạo trong khoảng ngày.
@@ -971,6 +986,8 @@ model Variation {
   flashSaleItems     FlashSaleItem[]
   bundleItems        BundleItem[]
   pancakeLinks       MerchantPancakeLink[]
+  restockAlerts      RestockAlert[]
+  restockAlertRounds RestockAlertRound[]
 
   @@index([productId])
   @@map("variations")
@@ -3424,6 +3441,51 @@ model Wishlist {
   @@unique([userId, productId])
   @@index([userId])
   @@map("wishlists")
+}
+
+/// Đăng ký "Báo tôi khi có hàng" cho một biến thể đang hết hàng (cờ catalog.restock_alert_enabled). Mỗi đăng ký nhận đúng một tin: cron
+/// nhận dòng bằng `UPDATE ... WHERE "notifiedAt" IS NULL`. Một đăng ký đang chờ cho mỗi (khách, biến thể): partial unique
+/// `restock_alerts_pending_user_variation_key` (WHERE "notifiedAt" IS NULL) chỉ có trong migration SQL.
+model RestockAlert {
+  id          String    @id @default(cuid())
+  userId      String
+  variationId String
+  createdAt   DateTime  @default(now())
+  /// Lúc cron nhận dòng để gửi; NULL = đang chờ hàng về.
+  notifiedAt  DateTime?
+  /// Đợt báo hàng về đã gửi dòng này.
+  roundId     String?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  variation   Variation @relation(fields: [variationId], references: [id], onDelete: Cascade)
+
+  @@index([variationId, notifiedAt, createdAt])
+  @@index([userId, notifiedAt])
+  @@map("restock_alerts")
+}
+
+/// Một đợt báo hàng về của một biến thể. Chống tồn dao động: một biến thể không mở quá một đợt trong 24 giờ.
+model RestockAlertRound {
+  id           String    @id @default(cuid())
+  variationId  String
+  startedAt    DateTime  @default(now())
+  stockAtStart Int
+  variation    Variation @relation(fields: [variationId], references: [id], onDelete: Cascade)
+
+  @@index([variationId, startedAt])
+  @@map("restock_alert_rounds")
+}
+
+/// Trần tin chủ động ngoài app (cờ notify.proactive_cap_enabled): số tin PROACTIVE đã xếp kênh ngoài app cho khách trong một ngày giờ
+/// Việt Nam (ngày tin tới tay khách, sau giờ yên tĩnh). Tăng bằng UPSERT có điều kiện `count < trần` dưới khoá advisory theo khách.
+model NotificationProactiveCounter {
+  userId String
+  dayKey DateTime @db.Date
+  count  Int      @default(0)
+  user   User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([userId, dayKey])
+  @@index([dayKey])
+  @@map("notification_proactive_counters")
 }
 
 model Subscription {

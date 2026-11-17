@@ -37,6 +37,7 @@ export const TEMPLATE_VARIABLES: Readonly<Record<string, readonly string[]>> = {
   CASHBACK_PAID: ['amount'],
   REORDER_REMINDER: ['product'],
   PRICE_DROP_ALERT: ['product', 'price_note'],
+  RESTOCK_AVAILABLE: ['product'],
   SUBSCRIPTION_ORDER: ['order_code'],
   SUBSCRIPTION_PAUSED: ['reason'],
   SUBSCRIPTION_ORDER_AWAITING_PAYMENT: ['order_code', 'amount', 'hours'],

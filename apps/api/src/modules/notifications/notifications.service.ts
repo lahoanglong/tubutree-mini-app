@@ -16,6 +16,26 @@ import { MARKETING_TEMPLATE_CODES } from './notification-templates-admin.service
 import { captureServerError } from '../../config/sentry';
 import { ZNS_REVIEW_PREFIX } from './zns-review-prefix';
 import { MSS_ZNS_HOLD, type MssZnsHoldPort } from '../integrations/mss/mss-order-event-types';
+import { notificationDelivery, type ProactiveGroup } from './notification-delivery';
+import {
+  claimProactiveSlot,
+  isPreemptedZnsLog,
+  proactiveDayKey,
+  readProactiveCap,
+  type ProactiveCapLimits,
+  type ProactiveMark,
+} from './notification-proactive-cap';
+
+/** Nguồn của một lần khách đổi công tắc nhận tin (cột `notify*Source`). */
+export const NOTIFY_CONSENT_SOURCES = ['settings', 'onboarding', 'unsubscribe_link'] as const;
+export type NotifyConsentSource = (typeof NOTIFY_CONSENT_SOURCES)[number];
+/** Câu chữ của client chưa gửi phiên bản: hai công tắc "Khuyến mãi & mã giảm giá" và "Nhắc nhở Vườn Xanh & tương tác bài viết". */
+export const NOTIFY_PREFS_LEGACY_TEXT_VERSION = 'notify-prefs-v1';
+
+export interface NotificationPrefsPatch extends Partial<NotificationPrefs> {
+  source?: NotifyConsentSource;
+  textVersion?: string;
+}
 
 /** Nội dung dùng khi template chưa được seed — tuyệt đối không in mã code ra cho khách. */
 const MISSING_TEMPLATE_BODY = 'Tubu Tree có cập nhật mới cho bạn. Mở mục liên quan trong app để xem chi tiết nhé 🌿';
@@ -121,6 +141,19 @@ interface PromoCap {
   to: Date;
 }
 
+/** Tin chủ động khi trần tin chủ động bật (notify.proactive_cap_enabled): ngày tính trần, nhóm ưu tiên và trần đang áp. */
+interface ProactiveCtx {
+  limits: ProactiveCapLimits;
+  mark: ProactiveMark;
+}
+
+type SuppressReason = 'day_cap' | 'week_cap' | 'preempted';
+
+/** Kết quả ghi log ZNS dưới khoá trần: log mới, hoặc lý do không ghi; kèm log tin kém ưu tiên vừa nhường lượt (nếu có). */
+type GuardedZnsLog =
+  | { log: { id: string }; preempted: { id: string; templateCode: string } | null }
+  | { log: null; reason: 'promo_monthly' | 'day_cap' | 'week_cap' };
+
 /**
  * Kết cục một lần xử lý job ZNS: RETRY = lỗi tạm thời còn lượt thử lại, processor phải ném lỗi để BullMQ xếp lịch;
  * SKIPPED = job đến muộn sau khi log đã bị đóng và khoá chống trùng đã nhả, không gọi Zalo.
@@ -184,8 +217,8 @@ export class NotificationsService {
       znsOnly = true;
     }
     const tpl = await getTemplateCached(this.prisma, templateCode);
-    // Chỉ các cột dưới đây được dùng: số điện thoại cho ZNS và hai cờ nhóm tin của isAllowedByPrefs.
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, notifyPromo: true, notifyGarden: true } });
+    // Chỉ các cột dưới đây được dùng: số điện thoại cho ZNS và ba cờ nhóm tin của isAllowedByPrefs.
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, notifyPromo: true, notifyGarden: true, notifySocial: true } });
     if (!isAllowedByPrefs(templateCode, user)) {
       this.logger.debug(`Bỏ qua ${templateCode} cho ${userId}: khách đã tắt nhóm tin này.`);
       return;
@@ -243,7 +276,7 @@ export class NotificationsService {
    */
   async sendHeldZns(userId: string, templateCode: string, data: Record<string, string>, znsTemplateId: string, dedupeKey: string): Promise<void> {
     if (await this.prisma.notificationLog.findFirst({ where: this.dedupeWhere(userId, dedupeKey, null, 'ZNS'), select: { id: true } })) return;
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, notifyPromo: true, notifyGarden: true } });
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, notifyPromo: true, notifyGarden: true, notifySocial: true } });
     if (!user?.phone || !isAllowedByPrefs(templateCode, user)) return;
     await this.dispatchZns(userId, templateCode, user.phone, znsTemplateId, data, dedupeKey, null);
   }
@@ -354,6 +387,16 @@ export class NotificationsService {
       this.logger.debug(`Bỏ ZNS ${templateCode} cho ${userId}: đủ ${cap.limit} tin khuyến mãi ZNS trong tháng.`);
       return;
     }
+    const proactive = await this.proactiveCtx(templateCode, deliverAt);
+    // Không có hàng đợi thì ZNS gửi ngay bên dưới, trước khi có log: giành lượt trước khi gọi Zalo.
+    if (proactive && !queue) {
+      const slot = await this.prisma.$transaction(async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`zns-cap:${userId}`}))`;
+        return claimProactiveSlot(tx, { userId, dayKey: proactive.mark.dayKey, group: proactive.mark.group, templateCode, limits: proactive.limits, releasedPayload });
+      });
+      if (!slot.ok) return this.recordSuppressed(userId, templateCode, proactive.mark.group, slot.reason);
+      if (slot.preempted) await this.afterPreempt(userId, slot.preempted, templateCode);
+    }
     let result: ZnsSendResult | null = null;
     if (!queue) result = await this.zns.sendTemplate(phone, templateId, data);
 
@@ -362,17 +405,28 @@ export class NotificationsService {
       templateCode,
       channel: 'ZNS',
       // dedupeWithinMs đi theo log để lúc gửi (deliverZns) xét đúng cửa sổ của nơi gọi: log SENT cũ hơn cửa sổ không chặn tin mới cùng khoá.
-      payload: dedupeKey ? { data, dedupeKey, ...(withinMs ? { dedupeWithinMs: withinMs } : {}) } : { data },
+      payload: {
+        ...(dedupeKey ? { data, dedupeKey, ...(withinMs ? { dedupeWithinMs: withinMs } : {}) } : { data }),
+        ...(proactive ? { proactive: { ...proactive.mark } } : {}),
+      },
       status: !result ? 'PENDING' : result.ok ? 'SENT' : 'FAILED',
       error: result && !result.ok ? znsFailureText(result) : null,
       // Trần đếm theo sentAt: tin khuyến mãi bị trễ ghi mốc tới tay khách để rơi đúng tháng.
       ...(cap && delay > 0 ? { sentAt: deliverAt } : {}),
     };
-    const log = cap && queue ? await this.createCappedZnsLog(logData, cap) : await this.prisma.notificationLog.create({ data: logData });
-    if (!log) {
-      this.logger.debug(`Bỏ ZNS ${templateCode} cho ${userId}: đủ ${cap?.limit} tin khuyến mãi ZNS trong tháng.`);
-      return;
+    const guarded: GuardedZnsLog =
+      (cap || proactive) && queue
+        ? await this.createGuardedZnsLog(logData, cap, proactive, templateCode)
+        : { log: await this.prisma.notificationLog.create({ data: logData }), preempted: null };
+    if (!guarded.log) {
+      if (guarded.reason === 'promo_monthly') {
+        this.logger.debug(`Bỏ ZNS ${templateCode} cho ${userId}: đủ ${cap?.limit} tin khuyến mãi ZNS trong tháng.`);
+        return;
+      }
+      return this.recordSuppressed(userId, templateCode, proactive!.mark.group, guarded.reason);
     }
+    const log = guarded.log;
+    if (guarded.preempted) await this.afterPreempt(userId, guarded.preempted, templateCode);
     await this.analytics.recordBestEffort({
       eventName: 'notification_sent',
       userId,
@@ -402,6 +456,8 @@ export class NotificationsService {
           ...(dedupeKey ? { payload: { data, dedupeKey: releasedZnsDedupeKey(dedupeKey, log.id) } } : {}),
         },
       });
+      // Tin không đi được thì trả lượt tin chủ động đã giành (không để tin hỏng chiếm chỗ của tin sau trong ngày).
+      if (proactive && closed.count > 0) await this.returnProactiveSlot(userId, proactive.mark.dayKey);
       // Chỉ nơi gọi dùng retryZns (đã tự nhận phần việc) mới cần biết để nhả phần việc của nó; tin thường thì lỗi này không ném ra ngoài.
       // Không đóng được log nào (count 0) nghĩa là worker đã nhận log: kết cục (SENT/FAILED) do worker ghi, như khi xếp hàng thành
       // công, nên không ném; nếu ném, nơi gọi trả phần việc và đêm sau tính lại một khách đã được báo.
@@ -443,13 +499,71 @@ export class NotificationsService {
     });
   }
 
-  /** Đếm lại và ghi log dưới khoá advisory theo khách: hai tin khuyến mãi song song không cùng thấy "còn chỗ". */
-  private createCappedZnsLog(data: Prisma.NotificationLogUncheckedCreateInput, cap: PromoCap) {
-    return this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`zns-cap:${cap.userId}`}))`;
-      if ((await this.promoZnsCount(tx, cap)) >= cap.limit) return null;
-      return tx.notificationLog.create({ data });
+  /**
+   * Đếm lại, giành lượt tin chủ động và ghi log trong CÙNG một transaction giữ khoá advisory theo khách: hai tin song song không cùng thấy
+   * "còn chỗ" (trần khuyến mãi theo tháng lẫn trần tin chủ động theo ngày/tuần).
+   */
+  private createGuardedZnsLog(
+    data: Prisma.NotificationLogUncheckedCreateInput,
+    cap: PromoCap | null,
+    proactive: ProactiveCtx | null,
+    templateCode: string,
+  ): Promise<GuardedZnsLog> {
+    const userId = data.userId;
+    return this.prisma.$transaction(async (tx): Promise<GuardedZnsLog> => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`zns-cap:${userId}`}))`;
+      if (cap && (await this.promoZnsCount(tx, cap)) >= cap.limit) return { log: null, reason: 'promo_monthly' };
+      let preempted: { id: string; templateCode: string } | null = null;
+      if (proactive) {
+        const slot = await claimProactiveSlot(tx, { userId, dayKey: proactive.mark.dayKey, group: proactive.mark.group, templateCode, limits: proactive.limits, releasedPayload });
+        if (!slot.ok) return { log: null, reason: slot.reason };
+        preempted = slot.preempted;
+      }
+      return { log: await tx.notificationLog.create({ data, select: { id: true } }), preempted };
     });
+  }
+
+  /** null khi trần tin chủ động tắt (mặc định) hoặc mẫu là tin giao dịch: tin đi đường cũ, không đếm. */
+  private async proactiveCtx(templateCode: string, deliverAt: Date): Promise<ProactiveCtx | null> {
+    const delivery = notificationDelivery(templateCode);
+    if (delivery.kind !== 'PROACTIVE') return null;
+    const limits = await readProactiveCap(this.config);
+    return limits ? { limits, mark: { dayKey: proactiveDayKey(deliverAt), group: delivery.group } } : null;
+  }
+
+  /** Tin trong app đã lưu; chỉ kênh ngoài app bị bỏ. Ghi sự kiện để đo số tin bị trần theo nhóm và lý do. */
+  private async recordSuppressed(userId: string, templateCode: string, group: ProactiveGroup, reason: SuppressReason): Promise<void> {
+    this.logger.debug(`Bỏ ZNS ${templateCode} cho ${userId}: trần tin chủ động (${reason}).`);
+    await this.analytics.recordBestEffort({
+      eventName: 'notification_suppressed',
+      userId,
+      platform: 'system',
+      props: { templateCode, category: group, reason, channel: 'ZNS' },
+    });
+  }
+
+  /** Tin kém ưu tiên vừa nhường lượt: gỡ job hẹn giờ của nó (không gỡ được thì deliverZns vẫn bỏ qua nhờ dấu preemptedBy) và ghi sự kiện. */
+  private async afterPreempt(userId: string, preempted: { id: string; templateCode: string }, byTemplate: string): Promise<void> {
+    const queue = this.notificationsQueue;
+    if (queue) {
+      try {
+        await withQueueTimeout(queue.remove(`zns-${preempted.id}`), `${QUEUE_NOTIFICATIONS} remove ${preempted.id}`);
+      } catch (err) {
+        this.logger.warn(`Không gỡ được job ZNS ${preempted.id} đã nhường lượt cho ${byTemplate}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+    const delivery = notificationDelivery(preempted.templateCode);
+    await this.recordSuppressed(userId, preempted.templateCode, delivery.kind === 'PROACTIVE' ? delivery.group : 'promo', 'preempted');
+  }
+
+  private async returnProactiveSlot(userId: string, dayKey: string): Promise<void> {
+    try {
+      await this.prisma.$executeRaw`
+        UPDATE "notification_proactive_counters" SET "count" = "count" - 1
+         WHERE "userId" = ${userId} AND "dayKey" = ${dayKey}::date AND "count" > 0`;
+    } catch (err) {
+      this.logger.warn(`Không trả được lượt tin chủ động của ${userId} ngày ${dayKey}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   /**
@@ -484,6 +598,8 @@ export class NotificationsService {
       // Tin thường không có khoá để nhả và không ai gửi lại, nên job đến muộn vẫn phải gửi (catch chỉ đóng PENDING nên không còn
       // ai tranh log này nữa).
       if (current?.status === 'FAILED' && isReleasedZnsLog(current.payload, job.notificationLogId)) return 'SKIPPED';
+      // Log đã nhường lượt tin chủ động cho tin ưu tiên hơn (gỡ job hẹn giờ không được): không gửi.
+      if (current?.status === 'FAILED' && isPreemptedZnsLog(current.payload)) return 'SKIPPED';
     }
 
     const result = await this.zns.sendTemplate(job.phone, job.templateId, job.templateData, job.notificationLogId);
@@ -671,17 +787,33 @@ export class NotificationsService {
 
   async getPrefs(userId: string): Promise<NotificationPrefs> {
     const u = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
-    return { notifyPromo: u.notifyPromo, notifyGarden: u.notifyGarden };
+    return { notifyPromo: u.notifyPromo, notifyGarden: u.notifyGarden, notifySocial: u.notifySocial };
   }
 
-  updatePrefs(userId: string, patch: Partial<NotificationPrefs>): Promise<NotificationPrefs> {
-    const data: Partial<NotificationPrefs> = {};
-    if (patch.notifyPromo !== undefined) data.notifyPromo = patch.notifyPromo;
-    if (patch.notifyGarden !== undefined) data.notifyGarden = patch.notifyGarden;
+  /**
+   * Mỗi công tắc khách gửi lên được ghi kèm bằng chứng đồng ý: thời điểm, nguồn (`settings` mặc định) và phiên bản câu chữ khách thấy.
+   * Client chưa gửi `textVersion` là bản cũ chỉ có công tắc gộp "Nhắc nhở Vườn Xanh & tương tác bài viết" (NOTIFY_PREFS_LEGACY_TEXT_VERSION):
+   * đổi công tắc đó là đổi cả tin tương tác bài viết, đúng như câu chữ khách thấy.
+   */
+  updatePrefs(userId: string, patch: NotificationPrefsPatch): Promise<NotificationPrefs> {
+    const at = new Date();
+    const source = patch.source ?? 'settings';
+    const textVersion = patch.textVersion ?? NOTIFY_PREFS_LEGACY_TEXT_VERSION;
+    const values: Partial<NotificationPrefs> = {
+      notifyPromo: patch.notifyPromo,
+      notifyGarden: patch.notifyGarden,
+      notifySocial: patch.notifySocial ?? (patch.textVersion === undefined ? patch.notifyGarden : undefined),
+    };
+    const data: Prisma.UserUpdateInput = {};
+    for (const key of ['notifyPromo', 'notifyGarden', 'notifySocial'] as const) {
+      const value = values[key];
+      if (value === undefined) continue;
+      Object.assign(data, { [key]: value, [`${key}At`]: at, [`${key}Source`]: source, [`${key}TextVersion`]: textVersion });
+    }
     return this.prisma.user.update({
       where: { id: userId },
       data,
-      select: { notifyPromo: true, notifyGarden: true },
+      select: { notifyPromo: true, notifyGarden: true, notifySocial: true },
     });
   }
 

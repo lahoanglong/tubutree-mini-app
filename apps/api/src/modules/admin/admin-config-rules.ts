@@ -227,6 +227,10 @@ const RULES: Record<string, (key: string, v: unknown) => void> = {
   [MINI_NUMERIC_SETTINGS.accountsPerDevice.key]: (k, v) => assertIntInRange(k, v, MINI_NUMERIC_SETTINGS.accountsPerDevice.min, MINI_NUMERIC_SETTINGS.accountsPerDevice.max, 'tài khoản/thiết bị/ngày'),
   [MINI_NUMERIC_SETTINGS.globalBudget.key]: (k, v) => assertIntInRange(k, v, MINI_NUMERIC_SETTINGS.globalBudget.min, MINI_NUMERIC_SETTINGS.globalBudget.max, 'Điểm Xanh/ngày'),
   [MINI_NUMERIC_SETTINGS.minAccountAgeHours.key]: (k, v) => assertIntInRange(k, v, MINI_NUMERIC_SETTINGS.minAccountAgeHours.min, MINI_NUMERIC_SETTINGS.minAccountAgeHours.max, 'giờ'),
+  'notify.proactive_cap_enabled': assertBoolean,
+  'notify.proactive_per_day': (k, v) => assertIntInRange(k, v, 1, 10, 'tin'),
+  'notify.proactive_per_week': (k, v) => assertIntInRange(k, v, 1, 50, 'tin'),
+  'catalog.restock_alert_enabled': assertBoolean,
 };
 
 /** Khoá có luật ghi ở đây (form riêng trong web admin): được ghi kể cả khi DB chưa có dòng. */

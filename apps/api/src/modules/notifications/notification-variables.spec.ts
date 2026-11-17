@@ -113,6 +113,10 @@ describe('Bảng biến khớp các chỗ gọi notify()', () => {
     'modules/storefront/storefront-admin.service.ts|template': { reason: 'Hàm bọc notifyOwner chuyển tiếp mã và dữ liệu của người gọi; chỗ gọi notifyOwner được dò (NOTIFY_CALLS).' },
     'modules/wallet/referral-notify.ts|templateCode': { reason: 'Mã và dữ liệu do referralNoticeMessage trả về; các object { templateCode, data } trong hàm đó được dò theo dạng { templateCode, data }.' },
     'common/notify-admins.ts|notice.template': { reason: 'Hàm chuyển tiếp mẫu và dữ liệu của người gọi; chỗ gọi notifyAdmins được dò theo dạng { template, data }.' },
+    'modules/restock-alerts/restock-alerts.dispatcher.ts|\'RESTOCK_AVAILABLE\'|data:data': {
+      reason: 'Dữ liệu dựng một lần cho cả đợt của một biến thể (messageData: product, product_slug) rồi gửi cho từng đăng ký.',
+      codes: ['RESTOCK_AVAILABLE'],
+    },
     'modules/vouchers/vouchers.service.ts|opts.templateCode': {
       reason: 'Hàm dùng chung cho mọi loại mã giảm giá; mã mẫu do người gọi truyền (templateCode) và dữ liệu là object literal ngay tại chỗ.',
       codes: ['WELCOME_VOUCHER', 'BIRTHDAY_VOUCHER', 'WINBACK_VOUCHER', 'MILESTONE_VOUCHER', 'SECOND_ORDER_VOUCHER'],

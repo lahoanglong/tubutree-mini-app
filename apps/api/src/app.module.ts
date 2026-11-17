@@ -32,6 +32,7 @@ import { GroupBuyModule } from './modules/groupbuy/groupbuy.module';
 import { WasteExchangeModule } from './modules/waste-exchange/waste-exchange.module';
 import { ReviewsModule } from './modules/reviews/reviews.module';
 import { WishlistModule } from './modules/wishlist/wishlist.module';
+import { RestockAlertsModule } from './modules/restock-alerts/restock-alerts.module';
 import { VouchersModule } from './modules/vouchers/vouchers.module';
 import { SubscriptionsModule } from './modules/subscriptions/subscriptions.module';
 import { LifecycleModule } from './modules/lifecycle/lifecycle.module';
@@ -99,6 +100,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     WasteExchangeModule,
     ReviewsModule,
     WishlistModule,
+    RestockAlertsModule,
     VouchersModule,
     SubscriptionsModule,
     LifecycleModule,
