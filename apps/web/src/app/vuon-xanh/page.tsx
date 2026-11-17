@@ -58,6 +58,10 @@ import { WeeklyLeaderboard } from '@/components/game/weekly-leaderboard';
 import { WheelPrizeSheet } from '@/components/game/wheel-prize-sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
+import { miniTodayQuery } from '@tubutree/app-core/game-mini/api';
+import { miniEarnQuizLeft, miniPlayPath, playableToday } from '@tubutree/app-core/game-mini/format';
+import type { MiniTodayResponse } from '@tubutree/shared-types';
+import { PlayTodayCard } from '@/components/game/mini/play-today-card';
 
 const TITLE = 'Vườn Xanh';
 const WASTE_PATH = '/doi-rac';
@@ -65,6 +69,12 @@ const FEED_PATH = '/cong-dong';
 const POINTS_PATH = '/tai-khoan/diem-xanh';
 
 const errText = loadErrorText;
+
+/** Game mini sau cờ `game.mini.enabled`: máy chủ trả 404 khi cờ tắt, lúc đó trang giữ nguyên khối đố vui và sảnh arcade cũ. */
+function useMiniToday(authed: boolean, enabled = true): MiniTodayResponse | null {
+  const { data } = useQuery({ ...miniTodayQuery(coreHttp, authed), enabled });
+  return data && playableToday(data).length > 0 ? data : null;
+}
 
 function GameBody() {
   const router = useRouter();
@@ -95,6 +105,7 @@ function GameBody() {
   const { data: loyalty } = useQuery(loyaltyQuery(coreHttp));
   // Nút điểm danh của Vườn theo trạng thái GỘP (Điểm Xanh + giọt nước): còn bấm được tới khi cả hai phần xong, để lần lỗi một phần bấm lại được.
   const checkInStatusQ = useQuery(checkInQuery(coreHttp));
+  const miniToday = useMiniToday(true);
   // Điểm dùng được: vòng quay chỉ trừ điểm thường chưa khoá, góp quỹ trừ thêm cả điểm quy đổi. Chưa tải được thì null để
   // nút vẫn bấm được (API là lưới an toàn).
   const wheelPoints = loyalty ? (loyalty.redeemablePoints ?? pointsSummary(loyalty).standard) : null;
@@ -143,7 +154,9 @@ function GameBody() {
   const checkInSeeds = status && !status.waterDone ? status.todayWater : undefined;
   const dailyGain = checkInSeeds !== undefined ? (checkInSeeds > 0 ? checkInSeeds : null) : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
   const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
-  const quizState: EarnQuizState = quiz
+  const quizState: EarnQuizState = miniToday
+    ? { status: 'ready', left: miniEarnQuizLeft(miniToday) }
+    : quiz
     ? { status: 'ready', left: quiz.filter((q) => !answeredIds.has(q.id)).length }
     : quizQ.isError
       ? { status: 'error' }
@@ -256,7 +269,7 @@ function GameBody() {
           />
           </div>
 
-          <ArcadeHub />
+          {miniToday ? <PlayTodayCard today={miniToday} /> : <ArcadeHub />}
           <HomeQuizCard />
 
           <div className="empty:hidden">
@@ -272,20 +285,22 @@ function GameBody() {
           </GameCol>
 
           <GameCol place={GAME_COL.bottom}>
-          <div id="game-quiz">
-            <QuizCard
-              quiz={quiz}
-              currentQuiz={currentQuiz}
-              answeredCount={answeredIds.size}
-              reveal={reveal}
-              pending={answerM.isPending}
-              onAnswer={(id, choice) => answerM.mutate({ id, choice })}
-              onNext={nextQuiz}
-              loadError={quizQ.isError}
-              onRetry={() => quizQ.refetch()}
-              answeredToday={profile?.quizAnsweredToday}
-            />
-          </div>
+          {!miniToday && (
+            <div id="game-quiz">
+              <QuizCard
+                quiz={quiz}
+                currentQuiz={currentQuiz}
+                answeredCount={answeredIds.size}
+                reveal={reveal}
+                pending={answerM.isPending}
+                onAnswer={(id, choice) => answerM.mutate({ id, choice })}
+                onNext={nextQuiz}
+                loadError={quizQ.isError}
+                onRetry={() => quizQ.refetch()}
+                answeredToday={profile?.quizAnsweredToday}
+              />
+            </div>
+          )}
 
           <div>
           <LuckyWheelCard
@@ -390,7 +405,11 @@ function GameBody() {
         onDew={() => dewM.mutate()}
         quiz={quizState}
         onRetryQuiz={() => quizQ.refetch()}
-        onGoQuiz={() => goTab('today', 'game-quiz')}
+        onGoQuiz={() => {
+          if (!miniToday) return goTab('today', 'game-quiz');
+          closeEarn();
+          router.push(miniPlayPath.web('daily_quiz'));
+        }}
         hasFriends={GAME_SOCIAL_ON_WEB && (friends?.length ?? 0) > 0}
         onGoFriends={() => goTab('community')}
         error={earnError}
@@ -428,6 +447,7 @@ function GameBody() {
 
 export default function GamePage() {
   const phase = useAuthPhase();
+  const guestMini = useMiniToday(false, phase === 'guest');
   return (
     <main className={`${PAGE_WIDE} py-6 pb-24 max-md:pt-0`}>
       <PageHeader title={TITLE} backHref="/" />
@@ -437,7 +457,7 @@ export default function GamePage() {
         {phase === 'guest' && (
           <div className="flex flex-col gap-3">
             <GameLoginGate returnTo="/vuon-xanh" />
-            <ArcadeHub />
+            {guestMini ? <PlayTodayCard today={guestMini} /> : <ArcadeHub />}
             <HomeQuizCard />
           </div>
         )}

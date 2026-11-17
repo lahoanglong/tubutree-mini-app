@@ -417,6 +417,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
         nextWindowAt: null,
         quizClaimed: false,
       });
+      // "Chơi hôm nay" ở Vườn Xanh (Mini App và web, cả khách) hỏi game mini đang bật; mặc định như PROD khi cờ game.mini.enabled tắt: 404, trang giữ bố cục cũ.
+      api.fallback('GET', '/game/mini/today', reply(404, { statusCode: 404, code: 'GAME_DISABLED', message: 'Trò chơi đang tạm tắt' }));
       // Bấm Chơi ở sảnh mini game (Mini App và web, cả khách) xin mã ván; mặc định cấp một mã cố định hết hạn sau 10 phút.
       api.fallback('POST', '/game/arcade-start', {
         runId: 'r1.dew_catcher.1763190000000.e2e.sig',

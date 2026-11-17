@@ -5,7 +5,9 @@
 // Ngưỡng là ngưỡng cảnh báo của dự án, KHÔNG phải giới hạn của Zalo (giới hạn dung lượng gói hiện hành của Zalo chưa kiểm).
 //   MINIAPP_ENTRY_WARN_KB  file JS lớn nhất (entry), raw, mặc định 700. Mục tiêu trong docs/2026-10-review/03-perf.md A3-013: dưới 450.
 //   MINIAPP_TOTAL_WARN_KB  tổng mọi file của bản build (JS + CSS + font/ảnh), raw, mặc định 2350 (W177 hạ từ 2500 sau khi chuyển 8 màn quản trị/đối tác/nhân sự sang cổng web đưa bản dựng về 2237 KB, để wave sau không đẩy tổng quay lại trên 2350).
-// Đặt hai biến repo cùng tên (Settings > Variables) để chỉnh ngưỡng mà không sửa workflow.
+//   MINIAPP_GAME_MINI_WARN_BYTES  tổng các chunk `mini-*` (khung ván và bàn chơi game mini, tải lười), raw, mặc định 40000 cho cả 5 game; riêng đợt A
+//                                 (khung ván, Đố Xanh, Đúng Thùng) mục tiêu 22000. Một game mới không được kéo cả bộ game vượt ngưỡng này.
+// Đặt các biến repo cùng tên (Settings > Variables) để chỉnh ngưỡng mà không sửa workflow.
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
@@ -37,6 +39,7 @@ function main() {
   const strict = process.env.BUNDLE_BUDGET_STRICT === '1';
   const entryWarnKb = threshold('MINIAPP_ENTRY_WARN_KB', 700);
   const totalWarnKb = threshold('MINIAPP_TOTAL_WARN_KB', 2350);
+  const gameMiniWarnBytes = threshold('MINIAPP_GAME_MINI_WARN_BYTES', 40000);
 
   if (!fs.existsSync(dir)) {
     console.log(`::warning title=Bundle miniapp::không thấy thư mục ${dir}: bản build đổi chỗ đầu ra hoặc build chưa chạy, nên chưa đo được kích thước.`);
@@ -57,6 +60,8 @@ function main() {
   const js = rows.filter((x) => x.file.endsWith('.js')).sort((a, b) => b.raw - a.raw);
   const entry = js[0];
   const total = groups[3][1];
+  const gameMini = rows.filter((x) => /(^|\/)mini-[^/]*\.(js|css)$/.test(x.file));
+  const gameMiniRaw = gameMini.reduce((s, x) => s + x.raw, 0);
 
   const warnings = [];
   if (entry && kb(entry.raw) > entryWarnKb) {
@@ -65,10 +70,15 @@ function main() {
   if (kb(total.raw) > totalWarnKb) {
     warnings.push(`Tổng bản build là ${kb(total.raw)} KB raw / ${kb(total.gz)} KB gzip, vượt ngưỡng cảnh báo ${totalWarnKb} KB.`);
   }
+  if (gameMiniRaw > gameMiniWarnBytes) {
+    warnings.push(`Các chunk game mini (mini-*) tổng ${gameMiniRaw} byte raw, vượt ngưỡng ${gameMiniWarnBytes} byte.`);
+  }
 
   const lines = [
     `Bundle miniapp (${path.relative(process.cwd(), dir) || dir})`,
     ...groups.map(([name, g]) => `  ${name.padEnd(12)} ${String(g.files).padStart(4)} file  ${String(kb(g.raw)).padStart(6)} KB raw  ${String(kb(g.gz)).padStart(6)} KB gzip`),
+    `  Game mini   ${String(gameMini.length).padStart(4)} file  ${String(gameMiniRaw).padStart(6)} byte raw (ngưỡng ${gameMiniWarnBytes})`,
+    ...gameMini.slice().sort((a, b) => b.raw - a.raw).map((x) => `    ${x.file}  ${x.raw} byte raw / ${x.gz} byte gzip`),
     `  Ngưỡng cảnh báo: entry ${entryWarnKb} KB, tổng ${totalWarnKb} KB (giới hạn dung lượng của Zalo: chưa kiểm)`,
     'File lớn nhất:',
     ...rows
@@ -87,6 +97,8 @@ function main() {
       '| Nhóm | File | Raw (KB) | Gzip (KB) |',
       '|---|---:|---:|---:|',
       ...groups.map(([name, g]) => `| ${name} | ${g.files} | ${kb(g.raw)} | ${kb(g.gz)} |`),
+      '',
+      `Game mini (\`mini-*\`): ${gameMini.length} file, ${gameMiniRaw} byte raw (ngưỡng ${gameMiniWarnBytes} byte).`,
       '',
       `Entry lớn nhất: \`${entry ? entry.file : '(không có JS)'}\` ${entry ? `${kb(entry.raw)} KB raw / ${kb(entry.gz)} KB gzip` : ''}. Ngưỡng cảnh báo: entry ${entryWarnKb} KB, tổng ${totalWarnKb} KB. Giới hạn dung lượng gói của Zalo: chưa kiểm.`,
       ...warnings.map((w) => `\n> **Cảnh báo:** ${w}`),

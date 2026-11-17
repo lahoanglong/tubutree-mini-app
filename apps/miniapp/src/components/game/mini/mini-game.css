@@ -1,0 +1,395 @@
+/*
+ * Game mini đợt A: thẻ "Chơi hôm nay", khung ván, Đố Xanh, Đúng Thùng. Mini App và web dùng CÙNG nội dung file này
+ * (web: apps/web/src/components/game/mini/mini-game.css, spec so khớp hai file). Số đo nằm ở đây, mọi màu và khoảng cách đi qua token.
+ */
+
+/* ── Thẻ "Chơi hôm nay" ── */
+.tubu-mg-today {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+}
+.tubu-mg-rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-mg-rows > li + li {
+  border-top: 1px solid var(--color-border-subtle);
+}
+.tubu-mg-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-md);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 60px;
+  padding: var(--space-stack-xs) 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.tubu-mg-row:focus-visible,
+.tubu-mg-option:focus-visible,
+.tubu-mg-bin:focus-visible,
+.tubu-mg-card:focus-visible,
+.tubu-mg-link:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+.tubu-mg-row-icon {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-control);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-brand);
+}
+.tubu-mg-row-text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+}
+.tubu-mg-one-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Khung ván ── */
+.tubu-mg-shell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-stack-sm) var(--space-inline-md) var(--space-stack-lg);
+}
+.tubu-mg-status {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+}
+.tubu-mg-status-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-inline-sm);
+  min-height: 24px;
+}
+.tubu-mg-track {
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--radius-pill);
+  background: var(--color-track);
+}
+.tubu-mg-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: var(--color-action-primary-bg);
+  transition: width var(--motion-enter);
+}
+.tubu-mg-clock {
+  font-variant-numeric: tabular-nums;
+}
+.tubu-mg-clock[data-low='true'] {
+  color: var(--color-text-danger);
+}
+.tubu-mg-chip {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  padding: 2px var(--space-inline-sm);
+  border-radius: var(--radius-pill);
+  background: var(--color-status-neutral-bg);
+  color: var(--color-status-neutral-fg);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-lh);
+}
+.tubu-mg-chip[data-tone='brand'] {
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+}
+.tubu-mg-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+}
+.tubu-mg-lines {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* Chiều cao giữ chỗ của vùng chơi lúc chunk bàn chơi đang tải: bàn chơi về thì không đẩy nút xuống. */
+.tubu-mg-board-skeleton {
+  min-height: 360px;
+  border-radius: var(--radius-card);
+  background: var(--color-bg-subtle);
+}
+
+/* ── Đố Xanh ── */
+.tubu-mg-question {
+  outline: none;
+}
+.tubu-mg-options {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-mg-option {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 52px;
+  padding: var(--space-stack-xs) var(--space-inline-md);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  text-align: left;
+  cursor: pointer;
+}
+.tubu-mg-option[aria-pressed='true'] {
+  border-color: var(--color-border-selected);
+  background: var(--color-action-secondary-bg);
+  box-shadow: inset 0 0 0 1px var(--color-border-selected);
+}
+.tubu-mg-letter {
+  flex: 0 0 auto;
+  font-weight: var(--type-label-weight);
+}
+
+/* ── Đúng Thùng ── */
+.tubu-mg-stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-stack-xs);
+  min-height: 200px;
+}
+.tubu-mg-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-stack-xs);
+  box-sizing: border-box;
+  width: 168px;
+  min-height: 132px;
+  padding: var(--space-stack-sm);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  box-shadow: var(--elevation-2);
+  color: var(--color-text-primary);
+  font: inherit;
+  text-align: center;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  transition: transform var(--motion-enter);
+}
+.tubu-mg-card[data-dragging='true'] {
+  cursor: grabbing;
+  transition: none;
+  box-shadow: var(--elevation-3);
+}
+.tubu-mg-card[data-selected='true'] {
+  border-color: var(--color-border-selected);
+  box-shadow: inset 0 0 0 1px var(--color-border-selected), var(--elevation-2);
+}
+.tubu-mg-emoji {
+  font-size: var(--type-display-md-size);
+  line-height: 1.2;
+}
+.tubu-mg-bins {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(96px, 1fr));
+  gap: var(--space-inline-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-mg-bins[data-count='4'] {
+  grid-template-columns: repeat(2, minmax(96px, 1fr));
+}
+.tubu-mg-bin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 72px;
+  padding: var(--space-stack-xs);
+  border: 2px solid var(--color-border-default);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-label-weight);
+  cursor: pointer;
+}
+.tubu-mg-bin[data-bin='recycle'] {
+  border-color: var(--color-status-info-fg);
+}
+.tubu-mg-bin[data-bin='food'] {
+  border-color: var(--color-status-success-fg);
+}
+.tubu-mg-bin[data-bin='other'] {
+  border-color: var(--color-border-strong);
+}
+.tubu-mg-bin[data-bin='hazardous'] {
+  border-color: var(--color-status-danger-fg);
+}
+.tubu-mg-bin[data-hover='true'] {
+  background: var(--color-action-secondary-bg);
+  box-shadow: var(--elevation-2);
+}
+
+/* ── Kết quả ── */
+.tubu-mg-score {
+  font-variant-numeric: tabular-nums;
+}
+.tubu-mg-gains {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-inline-sm);
+}
+.tubu-mg-review {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-mg-review-item {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+  padding: var(--space-stack-sm);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+}
+.tubu-mg-badge {
+  align-self: flex-start;
+  padding: 2px var(--space-inline-sm);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-label-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-label-lh);
+}
+.tubu-mg-badge[data-state='correct'] {
+  background: var(--color-status-success-bg);
+  color: var(--color-status-success-fg);
+}
+.tubu-mg-badge[data-state='wrong'] {
+  background: var(--color-status-danger-bg);
+  color: var(--color-status-danger-fg);
+}
+.tubu-mg-badge[data-state='skipped'] {
+  background: var(--color-status-neutral-bg);
+  color: var(--color-status-neutral-fg);
+}
+.tubu-mg-link {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 44px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--color-text-link);
+  font: inherit;
+  font-size: var(--type-body-sm-size);
+  font-weight: var(--type-label-weight);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+.tubu-mg-product {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-md);
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 64px;
+  padding: var(--space-stack-xs);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+/* Web từ 1024px: vùng chơi giữa trang, cột phải "Cách chơi" lúc chơi và danh sách "Vì sao" ở màn kết quả. */
+@media (min-width: 1024px) {
+  .tubu-mg-shell[data-wide='true'] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    align-items: start;
+    gap: var(--space-stack-sm) var(--space-inline-lg);
+    max-width: 1040px;
+  }
+  .tubu-mg-shell[data-wide='true'] > .tubu-mg-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-stack-sm);
+    max-width: 720px;
+  }
+  .tubu-mg-shell[data-wide='true'] > .tubu-mg-aside {
+    position: sticky;
+    top: var(--space-stack-lg);
+  }
+}
+@media (max-width: 1023.98px) {
+  .tubu-mg-main {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-stack-sm);
+  }
+  .tubu-mg-aside {
+    display: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tubu-mg-fill,
+  .tubu-mg-card {
+    transition: none;
+  }
+}

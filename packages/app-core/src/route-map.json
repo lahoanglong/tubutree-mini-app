@@ -41,6 +41,7 @@
     ]},
     { "lane": "game", "items": [
       { "miniapp": "/game", "web": "/vuon-xanh", "private": false },
+      { "miniapp": "/game/play/:game", "web": "/vuon-xanh/choi/:game", "private": false },
       { "miniapp": "/ai-advisor", "web": "/tu-van", "private": false }
     ]},
     { "lane": "community", "items": [
