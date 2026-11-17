@@ -10,6 +10,7 @@ import { trimInvisible } from '../../common/text-trim';
 import { CreateAddressDto, NO_HTML, UpdateAddressDto } from './dto/address.dto';
 import { GeoService } from '../integrations/pancake/geo.service';
 import { assertDeliverableAddress } from '../integrations/pancake/address-geo';
+import { ORDER_ZALO_CONSENT_TEXT_VERSION } from '../integrations/mss/mss-order-event-types';
 
 const VN_CONTACT_MOBILE = /^0[35789]\d{8}$/;
 const PHONE_SEPARATORS = /[\s.()\-\u2010-\u2015\u2212]/g;
@@ -85,6 +86,32 @@ export class UsersService {
       include: { tier: true },
     });
     return this.serialize(user);
+  }
+
+  /**
+   * Lựa chọn "nhận tin xác nhận hành trình đơn qua Zalo" (hợp đồng tubu-mss-order-events mục 7), tách khỏi tin khuyến mãi. Không trả SĐT:
+   * màn cài đặt chỉ cần biết số đã xác minh qua Zalo chưa (MSS chỉ nhắn số đã xác minh).
+   */
+  async orderZaloUpdates(userId: string) {
+    const u = await this.prisma.user.findUniqueOrThrow({
+      where: { id: userId },
+      select: { notifyOrderZalo: true, notifyOrderZaloAt: true, notifyOrderZaloSource: true, phoneVerifiedAt: true },
+    });
+    return {
+      enabled: u.notifyOrderZalo,
+      updatedAt: u.notifyOrderZaloAt?.toISOString() ?? null,
+      source: u.notifyOrderZaloSource,
+      phoneVerified: u.phoneVerifiedAt !== null,
+    };
+  }
+
+  /** Bật/tắt ở trang Cài đặt thông báo; lưu mốc, nguồn và phiên bản câu chữ làm bằng chứng đồng ý. */
+  async setOrderZaloUpdates(userId: string, enabled: boolean) {
+    await this.prisma.user.update({
+      where: { id: userId },
+      data: { notifyOrderZalo: enabled, notifyOrderZaloAt: new Date(), notifyOrderZaloSource: 'account_settings', notifyOrderZaloTextVersion: ORDER_ZALO_CONSENT_TEXT_VERSION },
+    });
+    return this.orderZaloUpdates(userId);
   }
 
   async updateMe(userId: string, dto: UpdateMeDto) {

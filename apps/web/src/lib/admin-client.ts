@@ -2187,6 +2187,35 @@ export interface OpsHealth {
   problems: { key: string; message: string }[];
 }
 export const getOpsHealth = () => apiFetch<OpsHealth>('/admin/ops/health');
+
+/** Một dòng outbox tin đơn gửi MSS (MssOrderEventRow ở apps/api/src/modules/integrations/mss/mss-order-events.admin.ts). SĐT đã che. */
+export interface MssOrderEventRow {
+  eventId: string;
+  orderCode: string;
+  eventType: string;
+  status: string;
+  reason: string | null;
+  attempts: number;
+  phone: string | null;
+  fallbackChannel: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface MssOrderEventsCard {
+  enabled: boolean;
+  open: boolean;
+  rolloutPct: number;
+  circuit: { state: 'closed' | 'open' | 'half_open'; consecutiveFailures: number; openUntil: string | null; lastFailureKind: string | null };
+  waiting: number;
+  awaitingResult: number;
+  sent24h: number;
+  failed24h: number;
+  fallbackZns24h: number;
+  recent: MssOrderEventRow[];
+}
+export const getMssOrderEvents = () => apiFetch<MssOrderEventsCard>('/admin/mss/order-events');
+/** Dừng mọi tin đơn MSS còn chờ gửi; tin đã tới MSS không rút lại được. */
+export const cancelPendingMssOrderEvents = () => apiFetch<{ cancelled: number }>('/admin/mss/order-events/cancel-pending', { method: 'POST' });
 /** Gửi một email thử tới các địa chỉ nhận báo động (ADMIN, tối đa 5 lần/phút). Lỗi trả về câu tiếng Việt đã che bí mật. */
 export const sendOpsTestEmail = () => apiFetch<{ ok: true; message: string }>('/admin/ops/alert-email/test', { method: 'POST' });
 /** Đồng bộ danh mục Pancake ngay (không ghi đè tồn kho trừ khi `withStock`). */

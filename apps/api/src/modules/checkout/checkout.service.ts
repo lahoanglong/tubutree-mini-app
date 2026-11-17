@@ -119,6 +119,7 @@ import { isPartnerStore } from '../merchant/partner-store';
 import { forBuyer } from '../orders/buyer-order-fields';
 import { totalChangedError, totalChangedMessage } from './total-changed';
 import { WALLET_SHORT_MESSAGE, walletNegativeMessage } from './wallet-notice';
+import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
 
 const DEFAULT_TTL_CONFIG: Pick<SystemConfigService, 'get'> = { get: async <T>(_key: string, fallback?: T) => fallback as T };
 
@@ -290,6 +291,7 @@ export class CheckoutService {
     // Optional: test dựng tay không truyền; thiếu thì hạn thanh toán dùng TTL mặc định như cron tự huỷ, phí/hoa hồng
     // gian hàng tự giao dùng mặc định.
     @Optional() private readonly config?: SystemConfigService,
+    @Optional() private readonly mssOrderEvents?: MssOrderEventRecorder,
   ) {}
 
   /** Ghi công của lần mua (người giới thiệu, gian hàng) — dùng chung với giỏ, xem attribution.ts. */
@@ -814,6 +816,7 @@ export class CheckoutService {
         } else {
           await this.cart.clearOrdered(userId, [...cart.items, ...cart.unavailableItems].map((l) => l.id), tx);
         }
+        await this.mssOrderEvents?.onOrdersPlaced(tx, created, dto.orderZaloConsent);
         return created;
       });
     } catch (err) {

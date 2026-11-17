@@ -271,6 +271,13 @@ model User {
   // Đồng ý nhận tin khuyến mãi / nhắc Vườn Xanh: NotificationsService.notify bỏ qua tin thuộc nhóm đã tắt.
   notifyPromo            Boolean         @default(true)
   notifyGarden           Boolean         @default(true)
+  /// Đồng ý nhận tin hành trình đơn qua Zalo (MSS gửi, hợp đồng tubu-mss-order-events mục 7). Opt-in nên mặc định false; tách khỏi notifyPromo.
+  notifyOrderZalo        Boolean         @default(false)
+  notifyOrderZaloAt      DateTime?
+  /// checkout | account_settings | mss_opt_out
+  notifyOrderZaloSource  String?
+  /// Phiên bản câu chữ đồng ý khách đã thấy (ORDER_ZALO_CONSENT_TEXT_VERSION), làm bằng chứng.
+  notifyOrderZaloTextVersion String?
   /// @deprecated Không nơi nào ghi hoặc đọc (C-108).
   pancakeCustomerId      String?         @unique
   metadata               Json?
@@ -1195,6 +1202,12 @@ model Order {
   /// Đường phía sau của đơn: PANCAKE_DIRECT | MSS (hợp đồng MSS commerce v0.9 mục 0.5). Ghi lúc tạo, không bao giờ đổi
   /// (CHECK + trigger chặn UPDATE ở DB): lật cờ MSS chỉ ảnh hưởng đơn mới, không đơn nào bị đẩy hai đường.
   backendRoute           String                @default("PANCAKE_DIRECT")
+  /// Bộ đếm `sequence` sự kiện gửi MSS của đơn này; tăng trong cùng transaction đổi trạng thái (MssOrderEventRecorder).
+  mssEventSeq            Int                   @default(0)
+  /// Ảnh chụp lựa chọn "nhận hành trình đơn qua Zalo" lúc đặt đơn này: null = không hỏi (cờ tắt, đơn cũ, đơn không qua bước đặt hàng).
+  orderZaloConsent       Boolean?
+  orderZaloConsentAt     DateTime?
+  mssOrderEvents         MssOrderEventOutbox[]
   paidAt              DateTime? // lúc paymentStatus chuyển PAID — set tại nơi lật trạng thái
   subscriptionId         String? // gắn khi đơn tạo từ subscriptions.service (cron chạy kỳ)
   endCustomerKey         String? // SĐT người nhận dạng nội địa 0xxxxxxxxx (lưu rõ, KHÔNG hash) — CHỈ set khi placedForCustomer = true
@@ -1316,6 +1329,49 @@ model Order {
   @@index([platform, createdAt])
   @@index([placedForCustomer, createdAt])
   @@map("orders")
+}
+
+/// Outbox sự kiện đơn gửi MSS (hợp đồng tubu-mss-order-events v1.2). Dòng ghi trong cùng transaction đổi trạng thái đơn; worker
+/// gửi sau commit và cron quét bù, nên tiến trình chết giữa chừng không làm mất sự kiện. Chỉ có dòng khi `mss.order_events_enabled` bật.
+model MssOrderEventOutbox {
+  id              String    @id @default(cuid())
+  /// ULID, giữ nguyên qua mọi lần thử lại.
+  eventId         String    @unique
+  orderId         String
+  order           Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderCode       String
+  /// order.created | order.payment_confirmed | order.shipping | order.delivered | order.cancelled
+  eventType       String
+  sequence        Int
+  occurredAt      DateTime
+  /// JSON tuần tự hoá một lần lúc ghi; mọi lần gửi dùng đúng các byte này (chữ ký đổi theo timestamp, thân thì không).
+  body            String
+  bodySha256      String
+  /// PENDING | SENDING | DELIVERED | RESULT_SENT | RESULT_SKIPPED | RESULT_FAILED | RESULT_UNKNOWN | DEAD | EXPIRED | CANCELLED
+  status          String    @default("PENDING")
+  resultReason    String?
+  attempts        Int       @default(0)
+  nextAttemptAt   DateTime  @default(now())
+  expiresAt       DateTime
+  claimedAt       DateTime?
+  deliveredAt     DateTime?
+  resultAt        DateTime?
+  lastHttpStatus  Int?
+  lastError       String?
+  /// Tin ZNS bị hoãn vì MSS đang giữ sự kiện này (luật một kênh ngoài app): mẫu + biến để đường lui gửi nốt.
+  znsHeldTemplate String?
+  znsHeldData     Json?
+  znsHeldAt       DateTime?
+  /// ZNS | IN_APP_ONLY
+  fallbackChannel String?
+  fallbackAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([orderId, eventType])
+  @@index([status, nextAttemptAt])
+  @@index([createdAt])
+  @@map("mss_order_event_outbox")
 }
 
 model OrderItem {

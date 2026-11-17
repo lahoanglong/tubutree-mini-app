@@ -65,6 +65,7 @@ import { sendReferralNotices } from '../wallet/referral-notify';
 import { WastePickupHooks } from '../waste-exchange/pickup/waste-pickup-hooks.service';
 import { GameOrderWaterService } from '../game/game-order-water.service';
 import { markReversalEffectsDone } from './reversal-effects';
+import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
 
 /** Mã lỗi (body.code) khi người bấm huỷ mà kho Pancake chưa trả lời — client có thể gợi ý thử lại. */
 export const PANCAKE_UNREACHABLE = 'PANCAKE_UNREACHABLE';
@@ -181,6 +182,7 @@ export class OrderStatusService {
     @Optional() private readonly wastePickupHooks?: WastePickupHooks,
     // Optional như trên: không truyền thì bỏ qua nước thưởng đơn giao.
     @Optional() private readonly gameWater?: GameOrderWaterService,
+    @Optional() private readonly mssOrderEvents?: MssOrderEventRecorder,
   ) {}
 
   /** true nếu transition hợp lệ — dùng để webhook/cron bỏ qua êm thay vì throw. */
@@ -369,6 +371,7 @@ export class OrderStatusService {
           note: opts.note ?? null,
         },
       });
+      await this.mssOrderEvents?.onStatusChanged(tx, order.id, targetStatus, { from: order.status, actorType: opts.actorType, paidBefore: order.paymentStatus === 'PAID' });
 
       if (this.analytics) {
         await this.analytics.record(tx, {
@@ -819,6 +822,7 @@ export class OrderStatusService {
             note: ['Đã nhận tiền (UNPAID → PAID)', opts.note].filter(Boolean).join(' · '),
           },
         });
+        await this.mssOrderEvents?.onPaid(tx, order.id);
         if (this.analytics) {
           await this.analytics.record(tx, {
             eventName: 'order_paid',

@@ -12,6 +12,10 @@ class OnboardingDto {
   @IsArray() @ArrayMaxSize(20) @IsString({ each: true }) segments!: string[];
 }
 
+class OrderZaloUpdatesDto {
+  @IsBoolean() enabled!: boolean;
+}
+
 class DeletionRequestDto {
   @IsOptional() @Trim() @IsString() @MaxLength(500) reason?: string;
   @IsOptional() @IsInt() @Min(0) acknowledgedWalletBalance?: number;
@@ -30,6 +34,17 @@ export class UsersController {
   @Patch('me')
   updateMe(@CurrentUser('sub') userId: string, @Body() dto: UpdateMeDto) {
     return this.users.updateMe(userId, dto);
+  }
+
+  @Get('me/order-zalo-updates')
+  getOrderZaloUpdates(@CurrentUser('sub') userId: string) {
+    return this.users.orderZaloUpdates(userId);
+  }
+
+  @Patch('me/order-zalo-updates')
+  @Throttle({ default: { ttl: 60_000, limit: 10 } })
+  setOrderZaloUpdates(@CurrentUser('sub') userId: string, @Body() dto: OrderZaloUpdatesDto) {
+    return this.users.setOrderZaloUpdates(userId, dto.enabled);
   }
 
   @Patch('me/contact-phone')

@@ -24,6 +24,7 @@ import { PancakeSyncHooks } from '../pancake/pancake-sync-hooks';
 import { OPS_PAYMENT_TEMPLATE, flagRefundAttention, recordLatePaymentRefund, recordOverpaymentRefund } from '../../orders/refund-queue';
 import { formatVnd } from '../../orders/refund-destination';
 import { notifyAdmins } from '../../../common/notify-admins';
+import { MssOrderEventRecorder } from '../mss/mss-order-event.recorder';
 import type { Order } from '@prisma/client';
 
 interface ZalopayCreateResponse {
@@ -70,6 +71,7 @@ export class ZalopayService {
     @Optional() private readonly analytics?: AnalyticsEventsService,
     // Optional như trên: tiền về thì đơn mới được đẩy kho (hoặc báo Pancake "đã thanh toán, không thu COD").
     @Optional() private readonly pancakeHooks?: PancakeSyncHooks,
+    @Optional() private readonly mssOrderEvents?: MssOrderEventRecorder,
   ) {
     this.appId = config.get('ZALOPAY_APP_ID', { infer: true });
     this.key1 = config.get('ZALOPAY_KEY1', { infer: true });
@@ -296,6 +298,7 @@ export class ZalopayService {
           props: { orderId: order.id, method: 'ZALOPAY', amount: order.total },
         });
       }
+      if (r.count > 0) await this.mssOrderEvents?.onPaid(tx, order.id);
       return r;
     });
     await this.resolveAttempt(attempt?.id);

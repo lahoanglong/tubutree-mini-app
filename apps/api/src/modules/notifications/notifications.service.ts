@@ -1,4 +1,4 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Inject, Injectable, Logger, Optional } from '@nestjs/common';
 import { InjectQueue } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import type { Prisma } from '@prisma/client';
@@ -15,6 +15,7 @@ import { isAllowedByPrefs, type NotificationPrefs } from './notification-categor
 import { MARKETING_TEMPLATE_CODES } from './notification-templates-admin.service';
 import { captureServerError } from '../../config/sentry';
 import { ZNS_REVIEW_PREFIX } from './zns-review-prefix';
+import { MSS_ZNS_HOLD, type MssZnsHoldPort } from '../integrations/mss/mss-order-event-types';
 
 /** Nội dung dùng khi template chưa được seed — tuyệt đối không in mã code ra cho khách. */
 const MISSING_TEMPLATE_BODY = 'Tubu Tree có cập nhật mới cho bạn. Mở mục liên quan trong app để xem chi tiết nhé 🌿';
@@ -149,6 +150,8 @@ export class NotificationsService {
     @Optional() private readonly config?: SystemConfigService,
     // Hàng riêng cho job thử lại tin trong app; không có (khởi tạo trực tiếp) thì notifyWithRetry trả LOST khi lỗi như khi không có hàng.
     @Optional() @InjectQueue(QUEUE_NOTIFICATIONS_INAPP_RETRY) private readonly inAppRetryQueue?: Queue,
+    // Luật "một kênh ngoài app" khi MSS gửi tin đơn qua Zalo (wave tubu-mss-order-events); không có thì ZNS đi đường cũ.
+    @Optional() @Inject(MSS_ZNS_HOLD) private readonly mssZnsHold?: MssZnsHoldPort,
   ) {}
 
   /**
@@ -228,8 +231,21 @@ export class NotificationsService {
     // mẫu chưa gắn mã ZNS riêng.
     const znsTemplateId = (tpl?.channel === 'ZNS' && tpl.zaloTemplateId) || opts.znsTemplateId || null;
     if (user?.phone && znsTemplateId) {
+      // MSS đang giữ hoặc đã gửi tin Zalo của sự kiện đơn này: ZNS hoãn, đường lui của MSS gửi nếu MSS không gửi được.
+      if (this.mssZnsHold && (await this.mssZnsHold.holdZns(userId, templateCode, data, znsTemplateId))) return;
       await this.dispatchZns(userId, templateCode, user.phone, znsTemplateId, data, opts.retryZns ? dedupeKey : undefined, withinMs);
     }
+  }
+
+  /**
+   * Đường lui của luật hoãn ZNS (MSS không gửi được tin đơn): gửi nốt kênh ZNS của tin đã hoãn. Tin trong app đã lưu lúc hoãn nên ở
+   * đây chỉ có ZNS; `dedupeKey` riêng của sự kiện MSS chặn gửi lần hai. Lỗi xếp hàng ZNS thì ném cho nơi gọi ghi log.
+   */
+  async sendHeldZns(userId: string, templateCode: string, data: Record<string, string>, znsTemplateId: string, dedupeKey: string): Promise<void> {
+    if (await this.prisma.notificationLog.findFirst({ where: this.dedupeWhere(userId, dedupeKey, null, 'ZNS'), select: { id: true } })) return;
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, notifyPromo: true, notifyGarden: true } });
+    if (!user?.phone || !isAllowedByPrefs(templateCode, user)) return;
+    await this.dispatchZns(userId, templateCode, user.phone, znsTemplateId, data, dedupeKey, null);
   }
 
   /**

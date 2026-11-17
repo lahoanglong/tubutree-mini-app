@@ -35,6 +35,7 @@ import { isPublicProduct } from '../catalog/public-product';
 import { orderLineReviews, type OrderLineReview } from '../reviews/review-eligibility';
 import { publicProductThumb } from '../../common/public-image';
 import { withCoverImages } from '../catalog/card-select';
+import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
 
 export type CancelOrderInput = RefundDestinationInput & { cancelReasonCode?: string; cancelReasonText?: string };
 
@@ -234,6 +235,7 @@ export class OrdersService {
     @Optional() private readonly wastePickupHooks?: WastePickupHooks,
     // Optional như trên: không có thì dòng đơn không mang giá Giờ vàng (sheet Mua lại dùng giá đang bán).
     @Optional() private readonly flashSale?: FlashSaleService,
+    @Optional() private readonly mssOrderEvents?: MssOrderEventRecorder,
   ) {}
 
   async list(userId: string, filter: OrderListFilter, page: number, limit: number) {
@@ -518,6 +520,7 @@ export class OrdersService {
           note: cancelReasonNote(refundInput.cancelReasonCode, refundInput.cancelReasonText),
         },
       });
+      await this.mssOrderEvents?.onStatusChanged(tx, current.id, 'CANCELLED', { from: current.status, actorType: 'CUSTOMER', paidBefore: current.paymentStatus === 'PAID' });
       // Hoàn ví/Điểm Xanh + restock + release flash quota — logic dùng chung với admin.reviewReturn/
       // OrderStatusService (xem order-reversal.service.ts), tránh chép tay lệch nhau (P0-4
       // trong docs/2026-09-08-review-progress.md). Hoàn tiền quyết bằng guard PAID→REFUNDED

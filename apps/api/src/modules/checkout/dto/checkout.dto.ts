@@ -124,6 +124,12 @@ export class PlaceOrderDto extends CheckoutPickupFieldsDto {
   @ValidateNested()
   @Type(() => InvoiceRequestDto)
   invoiceRequest?: InvoiceRequestDto;
+
+  /**
+   * Ô "nhận tin xác nhận hành trình đơn qua Zalo" ở bước đặt hàng (hợp đồng tubu-mss-order-events mục 7). true/false được nhớ cho
+   * khách; bỏ trống (client cũ) thì dùng lựa chọn đã nhớ. Chỉ có tác dụng khi cờ `mss.order_events_enabled` bật.
+   */
+  @IsOptional() @IsBoolean() orderZaloConsent?: boolean;
 }
 
 /** `GET /checkout/pickup-options?addressId=&itemIds=a,b`: cùng địa chỉ và phần giỏ đang thanh toán như báo giá. */

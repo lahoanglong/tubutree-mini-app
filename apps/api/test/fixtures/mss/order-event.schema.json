@@ -1,0 +1,53 @@
+{
+  "$comment": "Thân POST /api/ext/tubu/v1/order-events theo hợp đồng tubu-mss-order-events v1.2 mục 3.3 (bảng trường). MSS trả 422 unexpected_field khi có khoá lạ ở cấp gốc, order, recipient, consent: mọi object đều additionalProperties false.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["event_id", "event_type", "occurred_at", "sequence", "sender", "order", "recipient", "consent"],
+  "properties": {
+    "event_id": { "type": "string", "pattern": "^[A-Za-z0-9_-]{16,64}$" },
+    "event_type": { "enum": ["order.created", "order.payment_confirmed", "order.shipping", "order.delivered", "order.cancelled"] },
+    "occurred_at": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$" },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "sender": { "const": "tubutree" },
+    "order": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["code", "total_vnd", "payment_method", "channel", "item_count"],
+      "properties": {
+        "code": { "type": "string", "minLength": 1, "maxLength": 32 },
+        "total_vnd": { "type": "integer", "minimum": 0 },
+        "payment_method": { "enum": ["COD", "PREPAID"] },
+        "channel": { "enum": ["web", "miniapp"] },
+        "item_count": { "type": "integer", "minimum": 1 },
+        "first_item_name": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "carrier": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "tracking_code": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "tracking_url": { "type": "string", "pattern": "^https://" },
+        "cancel_reason": { "enum": ["CUSTOMER", "OUT_OF_STOCK", "PAYMENT_TIMEOUT", "OTHER"] },
+        "refund_expected": { "type": "boolean" },
+        "group_code": { "type": "string", "minLength": 1, "maxLength": 40 },
+        "group_size": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "recipient": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["phone", "phone_source"],
+      "properties": {
+        "phone": { "type": "string", "pattern": "^(0\\d{9}|\\+84\\d{9})$" },
+        "phone_source": { "enum": ["account_verified", "checkout_contact"] },
+        "name": { "type": "string", "minLength": 1, "maxLength": 30 }
+      }
+    },
+    "consent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["order_updates_zalo", "captured_at", "source"],
+      "properties": {
+        "order_updates_zalo": { "const": true },
+        "captured_at": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$" },
+        "source": { "enum": ["checkout", "account_settings"] }
+      }
+    }
+  }
+}

@@ -1,5 +1,5 @@
-import { Module } from '@nestjs/common';
-import { getQueueToken } from '@nestjs/bullmq';
+import { Global, Module } from '@nestjs/common';
+import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { PancakeModule } from '../pancake/pancake.module';
@@ -9,16 +9,32 @@ import { MssFlagsService } from './mss-flags';
 import { MssHealthService } from './mss-health.service';
 import { MssInboundGuard } from './mss-inbound.guard';
 import { MssClient } from './mss.client';
+import { MSS_ORDER_EVENTS_QUEUE } from './mss-order-event-types';
+import { MssOrderEventDispatcher } from './mss-order-event.dispatch';
+import { MssOrderEventFallback } from './mss-order-event.fallback';
+import { MssOrderEventRecorder } from './mss-order-event.recorder';
+import { MssOrderEventSender } from './mss-order-event.sender';
+import { MssOrderEventsAdminController, MssOrderEventsOpsService } from './mss-order-events.admin';
+import { MssOrderEventsCallbackController } from './mss-order-events.controller';
+import { MssOrderEventsProcessor } from './mss-order-events.processor';
+import { MssOrderEventReconcileService } from './mss-order-events.reconcile';
+import { MSS_ZNS_HOLD, MssZnsHoldService } from './mss-zns-hold';
 
 /**
- * Nền kết nối MSS (quyết định PO số 5, kiểu strangler): cấu hình, cờ, ký/kiểm HMAC, client có cầu dao, dò sức khoẻ, bộ chọn đường
- * đơn. Không có route nào, không đăng ký MssBackend: cờ tắt hay thiếu biến thì không có lời gọi MSS nào và hành vi Tubu không đổi.
+ * Kết nối MSS (quyết định PO số 5, kiểu strangler): cấu hình, cờ, ký/kiểm HMAC, client có cầu dao, dò sức khoẻ, bộ chọn đường đơn, và
+ * luồng sự kiện đơn gửi MSS (outbox, worker, callback, đối soát, luật hoãn ZNS). Cờ tắt hay thiếu biến thì không có lời gọi MSS nào và
+ * hành vi Tubu không đổi.
+ *
+ * @Global: checkout, orders, thanh toán, đại lý và notifications tiêm MssOrderEventRecorder / MSS_ZNS_HOLD (@Optional) mà không import
+ * module này, tránh vòng import với PancakeModule.
  *
  * Kho chung đi qua client Redis của Queue `pancake-push` mà QueueModule (@Global) đã tạo, giống HealthController ping Redis: không mở
- * kết nối mới, không thêm hàng đợi hay job; chỉ GET/SET/DEL trên khoá `tubu:mss:*`.
+ * kết nối mới; chỉ GET/SET/DEL trên khoá `tubu:mss:*`.
  */
+@Global()
 @Module({
-  imports: [PancakeModule],
+  imports: [PancakeModule, BullModule.registerQueue({ name: MSS_ORDER_EVENTS_QUEUE })],
+  controllers: [MssOrderEventsCallbackController, MssOrderEventsAdminController],
   providers: [
     { provide: MSS_SHARED_STORE, inject: [getQueueToken(QUEUE_PANCAKE_PUSH)], useFactory: (q: Queue) => new BullRedisSharedStore(q) },
     MssFlagsService,
@@ -26,7 +42,16 @@ import { MssClient } from './mss.client';
     MssHealthService,
     MssInboundGuard,
     CommerceBackendResolver,
+    MssOrderEventDispatcher,
+    MssOrderEventRecorder,
+    MssOrderEventFallback,
+    MssOrderEventSender,
+    MssOrderEventsProcessor,
+    MssOrderEventReconcileService,
+    MssOrderEventsOpsService,
+    MssZnsHoldService,
+    { provide: MSS_ZNS_HOLD, useExisting: MssZnsHoldService },
   ],
-  exports: [MssFlagsService, MssClient, MssHealthService, MssInboundGuard, CommerceBackendResolver],
+  exports: [MssFlagsService, MssClient, MssHealthService, MssInboundGuard, CommerceBackendResolver, MssOrderEventRecorder, MSS_ZNS_HOLD],
 })
 export class MssModule {}
