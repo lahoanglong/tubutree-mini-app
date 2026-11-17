@@ -63,6 +63,7 @@ const BADGE_TONE: Record<CardBadge['kind'], BadgeTone> = {
   featured: 'verified',
   loved: 'verified',
   new: 'brand',
+  eco: 'success',
   freeship: 'success',
 };
 

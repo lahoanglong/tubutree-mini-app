@@ -3,6 +3,17 @@
  * Con số lấy ở ux-copy mục B; chỗ đo thực tế vượt thì ghi số đo thực. Chỉ spec dùng file này, nên không vào bản build.
  */
 export const SHOP_COPY_MAX: Record<string, number | null> = {
+  // Nhãn xanh có nguồn (eco/copy.ts, wave tubu-w2-01): nhãn thẻ một dòng, khối "Điểm cộng xanh" ở trang sản phẩm.
+  'eco.badgeRefill': 12,
+  'eco.badgePlastic': 19,
+  'eco.badgePlasticSpoken': null,
+  'eco.badgeReturn': 16,
+  'eco.title': 16,
+  'eco.refill': 60,
+  'eco.plastic': 60,
+  'eco.plasticVs': null,
+  'eco.return': 50,
+  'eco.sourceOf': null,
   // Giờ vàng
   'flash.title': 12,
   'flash.todayTitle': 18,

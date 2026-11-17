@@ -84,7 +84,26 @@
       { "miniapp": "/points/scan", "skip": "Q2: tích điểm đơn sàn chạy trên quyền của Zalo (quét QR bằng camera Zalo, xin SĐT đã xác minh, mời quan tâm OA); ô nhập mã tay cũng đòi SĐT đã xác minh nên không phần nào làm riêng được trên web. Web /uu-dai hiện MiniAppOnlyNotice mở lại đúng màn này trên Zalo" }
     ]}
   ],
-  "gaps": [],
+  "gaps": [
+    {
+      "id": "eco-passport-web-only",
+      "flag": ["apps/api/src/modules/eco-impact/eco-facts.rules.ts", "ECO_PASSPORT_KEY"],
+      "missingOn": "miniapp",
+      "reason": "Hộ chiếu Xanh (/tai-khoan/ho-chieu-xanh, dòng lối vào ở Điểm Xanh, dòng dẫn cuối khối Điểm cộng xanh) chỉ có trên web: ngân sách gói Mini của wave tubu-w2-01 là 4.000 B, riêng dòng lối vào Điểm Xanh kèm truy vấn hộ chiếu đã đo +1.589 B; chính sách Zalo không cho link ra ngoài nên Mini không có dòng dẫn."
+    },
+    {
+      "id": "eco-compare-card-web-only",
+      "flag": ["apps/api/src/modules/eco-impact/eco-facts.rules.ts", "ECO_BADGES_KEY"],
+      "missingOn": "miniapp",
+      "reason": "Thẻ so sánh bao bì (Món này / mốc so sánh) của khối Điểm cộng xanh chỉ có trên web vì gói Mini không đủ chỗ; Mini vẫn có nhãn thẻ và các dòng sự thật kèm tên miền nguồn."
+    },
+    {
+      "id": "eco-compare-row-web-only",
+      "flag": ["apps/api/src/modules/eco-impact/eco-facts.rules.ts", "ECO_BADGES_KEY"],
+      "missingOn": "miniapp",
+      "reason": "Hàng Điểm cộng xanh trong bảng So với món tương tự chỉ có trên web: bảng của Mini nằm ở apps/miniapp/src/components/product/pdp-compare.tsx, ngoài danh sách file wave tubu-w2-01 được sửa; API đã trả ecoFactCount cho cả hai."
+    }
+  ],
   "features": [
     { "id": "coupon-claim", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "CouponClaimGate"], "web": ["apps/web/src/components/app-gates.tsx", "CouponClaimGate"] },
     { "id": "onboarding", "lane": "account", "miniapp": ["apps/miniapp/src/components/app.tsx", "OnboardingGate"], "web": ["apps/web/src/components/app-gates.tsx", "OnboardingGate"] },

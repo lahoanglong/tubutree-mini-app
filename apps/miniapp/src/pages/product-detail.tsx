@@ -95,6 +95,7 @@ import { copyText } from '../utils/clipboard';
 import { Button } from '../components/ui/button';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { SectionTitle } from '../components/ui/section-title';
+import { PdpEco } from '../components/eco/pdp-eco';
 import { PriceTag } from '../components/ui/price-tag';
 import { PointsEarnLine } from '../components/product/points-earn-line';
 import { Badge } from '../components/ui/badge';
@@ -1084,6 +1085,8 @@ export default function ProductDetailPage() {
           )}
         </Box>
       )}
+
+      <PdpEco facts={(p as { ecoFacts?: unknown }).ecoFacts} variationId={selected?.id} productSlug={p.slug} />
 
       {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
       {p.ingredients && p.ingredients.length > 0 && <PdpIngredients items={p.ingredients} />}

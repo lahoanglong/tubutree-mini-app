@@ -1,6 +1,7 @@
 import { META_COPY } from './commerce/meta-copy';
 import { fillTemplate } from './copy-template';
 import { TILE_COPY } from './commerce/tile-copy';
+import { ECO_COPY } from './eco/copy';
 
 /**
  * Một nguồn chữ cho gian hàng (Mini App và web). Chữ của màn mua sắm chỉ thêm ở đây; số ký tự tối đa của từng khoá ở
@@ -14,6 +15,7 @@ import { TILE_COPY } from './commerce/tile-copy';
  */
 export const SHOP_COPY: Record<string, string> = {
   ...TILE_COPY,
+  ...ECO_COPY,
   // Giờ vàng
   'flash.title': 'Giờ vàng',
   'flash.todayTitle': 'Giờ vàng hôm nay',

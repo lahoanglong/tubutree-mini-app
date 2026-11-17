@@ -50,6 +50,8 @@ const WORST_BY_KEY: Record<string, Record<string, string>> = {
   'checkout.orderZalo.phone': { phone: '090•••4567' },
   'order.zaloFriend.body': { code: 'TUBU2026111557909' },
   'order.zaloFriend.blocked': { phone: '0899149229' },
+  'eco.badgePlastic': { g: '1000,0kg' },
+  'eco.plastic': { g: '1000,0 kg' },
 };
 
 const hit = (text: string) => FORBIDDEN_TERMS.filter((t) => t.pattern.test(text)).map((t) => t.use);

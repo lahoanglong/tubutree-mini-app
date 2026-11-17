@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { ProductCompare } from '@tubutree/app-core/api/product-compare';
+import { ecoCountCell, fillEcoWebCopy, hasEcoCounts } from '@tubutree/app-core/eco/web-copy';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { PriceTag } from '@/components/mini/price-tag';
 import { compareRows } from './compare-view';
@@ -16,7 +17,7 @@ const rowHead = `${cell} text-left text-xs font-semibold text-[var(--color-text-
 /**
  * "So với món tương tự" (cờ `catalog.pdp_compare_enabled`): món đang xem và tối đa 2 món cùng phân khúc, mỗi món một cột. Hàng Giá luôn có; Giá/100ml hay
  * Giá/100g chỉ khi món đang xem có giá theo đơn vị (máy chủ đã quy về cùng loại đơn vị); Dung tích, Thành phần chính khi có ít nhất một món có số liệu; ô thiếu
- * ghi "—". Hàng cuối là lối "Xem" sang từng món. Bảng chia cột cố định và chữ xuống dòng nên không tràn ngang ở 360px. Dữ liệu do máy chủ lấy khi dựng trang.
+ * ghi "—". Hàng "Điểm cộng xanh" (số loại sự thật xanh đã duyệt) chỉ khi máy chủ gửi số đếm, tức cờ nhãn xanh cũng bật. Hàng cuối là lối "Xem" sang từng món. Bảng chia cột cố định và chữ xuống dòng nên không tràn ngang ở 360px. Dữ liệu do máy chủ lấy khi dựng trang.
  */
 export function PdpCompare({ data }: { data: ProductCompare | null | undefined }) {
   const rows = compareRows(data);
@@ -25,6 +26,7 @@ export function PdpCompare({ data }: { data: ProductCompare | null | undefined }
   const per = rows.current.unitPrice?.per;
   const hasSize = items.some((it) => !!it.size);
   const hasIngredients = items.some((it) => (it.keyIngredients ?? []).length > 0);
+  const hasEco = hasEcoCounts(items);
   return (
     <section data-pdp-block="compare" data-section="pdp-compare" aria-labelledby="pdp-compare-title" className={pdpBand}>
       <h2 id="pdp-compare-title" className={pdpSectionTitle}>
@@ -94,6 +96,18 @@ export function PdpCompare({ data }: { data: ProductCompare | null | undefined }
               {items.map((it) => (
                 <td key={it.productId} className={`${cell} text-xs text-[var(--color-text-secondary)] [overflow-wrap:anywhere]`}>
                   {(it.keyIngredients ?? []).length > 0 ? it.keyIngredients.join(', ') : MISSING}
+                </td>
+              ))}
+            </tr>
+          )}
+          {hasEco && (
+            <tr data-testid="pdp-compare-eco" className="border-b border-[var(--color-border-subtle)]">
+              <th scope="row" className={rowHead}>
+                {fillEcoWebCopy('rowTitle')}
+              </th>
+              {items.map((it) => (
+                <td key={it.productId} className={`${cell} text-xs`}>
+                  {ecoCountCell((it as { ecoFactCount?: unknown }).ecoFactCount) ?? MISSING}
                 </td>
               ))}
             </tr>

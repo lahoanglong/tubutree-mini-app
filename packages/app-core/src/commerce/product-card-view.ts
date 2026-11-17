@@ -1,12 +1,13 @@
 import type { ProductCard } from '../api/catalog';
 import { cardPricing, type FlashPriceItem } from '../flash-price';
 import { isNewProduct } from '../product-badges';
+import { ecoCardBadge } from '../eco/facts';
 import { cardMetaCompact, cardMetaLine, cardMetaSpoken } from './card-meta';
 import { vnd } from './money';
 import { fillTileCopy, type TileCopyKey } from './tile-copy';
 
 export type CardVariant = 'grid' | 'rail-sm' | 'rail-md' | 'flash' | 'rank' | 'line';
-export type CardBadgeKind = 'flash' | 'discount' | 'combo' | 'featured' | 'loved' | 'new' | 'freeship';
+export type CardBadgeKind = 'flash' | 'discount' | 'combo' | 'featured' | 'loved' | 'new' | 'eco' | 'freeship';
 export interface CardBadge {
   kind: CardBadgeKind;
   text: string;
@@ -49,7 +50,7 @@ export interface ProductCardView {
   isDeal: boolean;
   /** Khe A trên ảnh: Giờ vàng -x% hoặc -x%, tối đa một. */
   imageBadge: CardBadge | null;
-  /** Một nhãn đứng đầu dòng tên: combo > Tubu chọn > Được yêu thích > Mới > Miễn phí giao hàng. */
+  /** Một nhãn đứng đầu dòng tên: combo > Tubu chọn > Được yêu thích > Mới > nhãn xanh có nguồn > Miễn phí giao hàng. */
   label: CardBadge | null;
   meta: string | null;
   /** Bản gọn của `meta` (chỉ "Đã bán 8,2k+") cho thẻ quá hẹp; thẻ chọn bản vừa chỗ theo bề rộng ô meta. Optional để fixture của gói khác vẫn biên dịch. */
@@ -109,6 +110,9 @@ function labelOf(input: ProductCardInput, price: number): CardBadge | null {
   if (p.isFeatured) return plain('featured', 'badge.featured');
   if (p.isLoved) return plain('loved', 'badge.loved');
   if (isNewProduct(p.createdAt, input.now, input.launchDate)) return plain('new', 'badge.new');
+  // `ecoFacts` chỉ có khi cờ `eco.product_badges_enabled` bật và món có sự thật đã duyệt; thiếu thì khe nhãn như trước.
+  const eco = ecoCardBadge((p as { ecoFacts?: unknown }).ecoFacts);
+  if (eco) return { kind: 'eco', ...eco };
   // Chỉ nói "Miễn phí giao hàng" khi biết chắc riêng món này được miễn: Tubu giao và giá đạt ngưỡng. Chưa biết thì im, không đoán.
   if (p.fulfiller?.kind === 'TUBU' && input.freeShipThreshold != null && price >= input.freeShipThreshold) return plain('freeship', 'badge.freeship');
   return null;

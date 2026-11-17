@@ -548,6 +548,7 @@ model Product {
   /// Bản sửa nội dung đang chờ duyệt của sản phẩm đang bán (R3-MERCHANT-4); sản phẩm vẫn bán với nội dung của chính dòng này.
   editDraft        ProductEditDraft?
   mssEnrichment    ProductMssEnrichment?
+  ecoFacts         ProductEcoFact[]
   campaignLinks    CampaignProduct[]
   bundleItems      BundleItem[]
   bundleAnchors    Bundle[]              @relation("BundleAnchor")
@@ -991,6 +992,7 @@ model Variation {
   pancakeLinks       MerchantPancakeLink[]
   restockAlerts      RestockAlert[]
   restockAlertRounds RestockAlertRound[]
+  ecoFacts           ProductEcoFact[]
 
   @@index([productId])
   @@map("variations")
@@ -4546,4 +4548,52 @@ model MssCatalogSyncState {
   updatedAt      DateTime  @default(now())
 
   @@map("mss_catalog_sync_state")
+}
+
+/// Loại sự thật xanh gắn sản phẩm (wave tubu-w2-01). Chỉ dòng APPROVED ra API công khai (nhãn thẻ, khối "Điểm cộng xanh", Hộ chiếu Xanh).
+enum EcoFactKind {
+  REFILL_PACK
+  PLASTIC_AVOIDED
+  RETURNABLE_PACKAGING
+  CERTIFICATION
+  INGREDIENT_ORIGIN
+}
+
+enum EcoFactStatus {
+  DRAFT
+  APPROVED
+  RETIRED
+}
+
+/// Sự thật môi trường có nguồn của một sản phẩm, hoặc của một phân loại (`variationId`, vd can 10L). Không có điểm tổng hợp:
+/// mỗi dòng là một điều kiểm được qua `sourceUrl`. Mỗi (sản phẩm, phân loại, loại) một dòng; dòng cấp sản phẩm (`variationId` NULL)
+/// được chỉ mục một phần trong migration 20261118010454_eco_facts giữ duy nhất, vì Postgres coi hai NULL là khác nhau.
+model ProductEcoFact {
+  id           String        @id @default(cuid())
+  productId    String
+  product      Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variationId  String?
+  variation    Variation?    @relation(fields: [variationId], references: [id], onDelete: Cascade)
+  kind         EcoFactKind
+  /// Chỉ PLASTIC_AVOIDED: gam nhựa giảm được mỗi đơn vị so với `baselineText`.
+  valueGrams   Int?
+  /// Mốc so sánh bằng chữ, vd "so với 20 chai 500ml cùng loại".
+  baselineText String?       @db.VarChar(120)
+  /// Chữ hiển thị của CERTIFICATION và INGREDIENT_ORIGIN (tên giấy tờ, vùng nguyên liệu).
+  label        String?       @db.VarChar(80)
+  /// Để trống trừ khi có nguồn riêng cho CO₂.
+  co2Grams     Int?
+  sourceUrl    String        @db.VarChar(500)
+  /// Ghi chú nội bộ về nguồn (trang, bảng số), không ra API công khai.
+  sourceNote   String        @db.VarChar(300)
+  status       EcoFactStatus @default(DRAFT)
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@unique([productId, variationId, kind])
+  @@index([status, productId])
+  @@index([variationId])
+  @@map("product_eco_facts")
 }

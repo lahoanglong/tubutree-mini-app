@@ -2,6 +2,7 @@ import {
   CHECKOUT_ENTRIES,
   CHECKOUT_LAST_STEPS,
   CHECKOUT_STEPS,
+  ECO_FACT_KIND_NAMES,
   ORDER_ZALO_FRIEND_FROM,
   PDP_ACTIONS,
   RECYCLE_FUNNEL_STEPS,
@@ -91,6 +92,9 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   order_zalo_consent_shown: { props: {} },
   order_zalo_consent_checked: { props: { checked: bool }, required: ['checked'] },
   order_zalo_friend_click: { props: { from: oneOf(ORDER_ZALO_FRIEND_FROM) }, required: ['from'] },
+  eco_badge_opened: { props: { productSlug: SLUG, kind: oneOf(ECO_FACT_KIND_NAMES) }, required: ['productSlug', 'kind'] },
+  eco_passport_viewed: { props: { hasData: bool }, required: ['hasData'] },
+  eco_passport_shared: { props: {} },
 };
 
 /**

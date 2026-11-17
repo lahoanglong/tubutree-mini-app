@@ -30,6 +30,8 @@ const PUBLIC_PRODUCT_DETAIL_KEYS = [
   'sold',
   'variations',
   'reviews',
+  // Chỉ có khi cờ eco.product_badges_enabled bật; catalog.service đã lọc còn sự thật ĐÃ DUYỆT, bỏ ghi chú nguồn nội bộ.
+  'ecoFacts',
 ] as const;
 
 export function toPublicProductDetail<T extends object>(product: T): Partial<T> {

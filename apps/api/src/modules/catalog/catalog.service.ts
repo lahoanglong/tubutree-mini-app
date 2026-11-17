@@ -34,6 +34,7 @@ import { MERCH_RANK_SELECT, arrangeByMerchTier, merchTier, withImageFlags, type 
 import { childrenByParent, expandCategoryScope } from './category-scope';
 import { CATALOG_LOVED_KEYS, DEFAULT_LOVED_THRESHOLDS, LOVED_THRESHOLD_MAX, isLoved, sanitizeLovedThreshold, type LovedThresholds } from './catalog-loved';
 import { MssFlagsService } from '../integrations/mss/mss-flags';
+import { EcoFactsReader } from '../eco-impact/eco-facts.reader';
 import {
   effectiveCategoryIds,
   enrichedCategoryWhere,
@@ -270,6 +271,7 @@ export class CatalogService {
     private readonly prisma: PrismaService,
     @Optional() private readonly config?: SystemConfigService,
     @Optional() private readonly mssFlags?: MssFlagsService,
+    @Optional() private readonly eco?: EcoFactsReader,
   ) {}
 
   /**
@@ -716,6 +718,8 @@ export class CatalogService {
     const publicProduct = enrichment ? mergeEnrichment(tubuProduct, enrichment) : tubuProduct;
     // Nhãn chưa công khai thì /brand/:slug trả 404: không đưa slug ra để FE không dựng liên kết chết.
     const brandSlug = brandRef?.isPublished ? brandRef.slug : null;
+    // Cờ `eco.product_badges_enabled` tắt: null, trang sản phẩm không có khoá `ecoFacts` (như trước cờ).
+    const ecoFacts = this.eco ? await this.eco.productFacts(product.id) : null;
     return {
       ...publicProduct,
       brand: canonicalCatalogBrand(publicProduct.brand),
@@ -728,6 +732,7 @@ export class CatalogService {
       fulfiller: await this.fulfillerOf(product.fulfilment, storefront),
       // Hàng của gian hàng đối tác chỉ bán giá lẻ: trang chi tiết ẩn đặt định kỳ và mua chung (partner-goods.ts).
       partnerOwned: isPartnerOwnedProduct(product),
+      ...(ecoFacts ? { ecoFacts } : {}),
     };
   }
 
@@ -1151,16 +1156,20 @@ export class CatalogService {
       this.cardOverrides(rows.map((r) => r.id)),
     ]);
     const cards = overrides.size ? withImages.map((p) => (overrides.has(p.id) ? mergeCardOverride(p, overrides.get(p.id)!) : p)) : withImages;
+    const prices = new Map(cards.map((p) => [p.id, cardPrices(p, p.variations)]));
+    // Cờ `eco.product_badges_enabled` tắt: Map rỗng, không truy vấn, thẻ không có khoá `ecoFacts` (như trước cờ).
+    const eco = this.eco ? await this.eco.cardFactsFor(cards.map((p) => ({ id: p.id, repVariationId: prices.get(p.id)?.repVariationId }))) : new Map();
     return Promise.all(
       cards.map(async (p) => {
         const sold = (p.soldExternal ?? 0) + (p.soldApp ?? 0); // tổng "đã bán" (sàn ngoài + app)
+        const ecoFacts = eco.get(p.id);
         return {
           id: p.id,
           slug: p.slug,
           brand: canonicalCatalogBrand(p.brand),
           name: p.name,
           thumbnail: publicProductThumb(p),
-          ...cardPrices(p, p.variations),
+          ...prices.get(p.id)!,
           isFeatured: p.isFeatured,
           ratingAvg: p.ratingAvg,
           reviewCount: p.reviewCount,
@@ -1169,6 +1178,7 @@ export class CatalogService {
           createdAt: p.createdAt?.toISOString(),
           isLoved: isLoved({ ratingAvg: p.ratingAvg, reviewCount: p.reviewCount, sold }, loved),
           fulfiller: await this.fulfillerOf(p.fulfilment ?? 'TUBU', p.storefrontId ? (stores.get(p.storefrontId) ?? null) : null),
+          ...(ecoFacts ? { ecoFacts } : {}),
         };
       }),
     );

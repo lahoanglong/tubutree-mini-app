@@ -97,3 +97,15 @@ describe('GET /products/:slug — storyConfig', () => {
     expect(CARD_SELECT).not.toHaveProperty('storyConfig');
   });
 });
+
+describe('GET /products/:slug — ecoFacts', () => {
+  const base = { id: 'p1', slug: 's', name: 'n', brand: 'b', description: 'd', images: [], basePrice: 1, variations: [], reviews: [] };
+
+  it('giữ ecoFacts khi service trả (cờ nhãn xanh bật), không có khoá khi service không trả (cờ tắt)', async () => {
+    const facts = [{ kind: 'REFILL_PACK', variationId: null, valueGrams: null, baselineText: null, label: null, co2Grams: null, sourceUrl: 'https://pannature.org/a' }];
+    const on = (await new CatalogController({ getBySlug: jest.fn().mockResolvedValue({ ...base, ecoFacts: facts }) } as unknown as CatalogService).detail('s')) as Record<string, unknown>;
+    expect(on.ecoFacts).toEqual(facts);
+    const off = (await new CatalogController({ getBySlug: jest.fn().mockResolvedValue(base) } as unknown as CatalogService).detail('s')) as Record<string, unknown>;
+    expect(off).not.toHaveProperty('ecoFacts');
+  });
+});

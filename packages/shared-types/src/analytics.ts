@@ -35,6 +35,9 @@ export const CLIENT_EVENT_NAMES = [
   'order_zalo_consent_shown',
   'order_zalo_consent_checked',
   'order_zalo_friend_click',
+  'eco_badge_opened',
+  'eco_passport_viewed',
+  'eco_passport_shared',
 ] as const;
 
 export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];
@@ -42,6 +45,10 @@ export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];
 /** Nơi khách bấm "Mở Zalo Tubu Tree" (`order_zalo_friend_click.from`). */
 export const ORDER_ZALO_FRIEND_FROM = ['success', 'order_detail'] as const;
 export type OrderZaloFriendFrom = (typeof ORDER_ZALO_FRIEND_FROM)[number];
+
+/** Loại sự thật xanh (`eco_badge_opened.kind`), cùng tập với enum `EcoFactKind` của API. */
+export const ECO_FACT_KIND_NAMES = ['REFILL_PACK', 'PLASTIC_AVOIDED', 'RETURNABLE_PACKAGING', 'CERTIFICATION', 'INGREDIENT_ORIGIN'] as const;
+export type EcoFactKindName = (typeof ECO_FACT_KIND_NAMES)[number];
 
 /** Nút bấm trên trang sản phẩm được đếm trong phễu mua (`pdp_action.action`). */
 export const PDP_ACTIONS = ['add_to_cart', 'buy_now', 'open_variant_sheet', 'wishlist_add', 'share', 'video_play'] as const;

@@ -4,12 +4,14 @@ import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Check, ChevronRight, Copy, Gift, Lightbulb, QrCode as QrCodeIcon } from 'lucide-react';
+import { Check, ChevronRight, Copy, Gift, Leaf, Lightbulb, QrCode as QrCodeIcon } from 'lucide-react';
 import { couponsQuery, loyaltyQuery, memberCardQuery, pointsTxnPagesQuery } from '@tubutree/app-core/queries/loyalty';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { wasteMeQuery } from '@tubutree/app-core/queries/waste';
 import { pendingPointsBalanceLine } from '@tubutree/app-core/waste-copy';
 import { loyaltyOffersRow } from '@tubutree/app-core/loyalty-page';
+import { ecoPassportQuery } from '@tubutree/app-core/eco/passport';
+import { passportCopy } from '@tubutree/app-core/eco/passport-copy';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -70,6 +72,9 @@ export default function LoyaltyPage() {
   const configQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
   const wasteEnabled = configQ.data?.waste?.enabled === true;
   const wasteMeQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed && wasteEnabled, retry: false });
+  // Chỉ hỏi hộ chiếu khi /config/public báo `ecoPassportEnabled: true` (cùng cách `waste.enabled`): cờ tắt thì trang không phát thêm request 404.
+  const passportOn = (configQ.data as { ecoPassportEnabled?: unknown } | undefined)?.ecoPassportEnabled === true;
+  const passportQ = useQuery({ ...ecoPassportQuery(coreHttp), enabled: authed && passportOn });
 
   const loadMore = usePressLock(() => txnQ.fetchNextPage());
   const [showCard, setShowCard] = useState(false);
@@ -152,7 +157,8 @@ export default function LoyaltyPage() {
 
   return (
     <LedgerShell title={TITLE} wide>
-      <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:grid-rows-[auto_auto_auto_1fr] lg:items-start">
+      {/* Dòng Hộ chiếu Xanh là một hàng auto nữa ở cột trái: thêm hàng và cho cột phải trải thêm một hàng, để lịch sử vẫn nằm ở hàng 1fr cuối. */}
+      <div className={`grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] lg:items-start ${passportQ.isSuccess ? 'lg:grid-rows-[auto_auto_auto_auto_1fr]' : 'lg:grid-rows-[auto_auto_auto_1fr]'}`}>
           <section aria-label="Hạng thành viên" className={`p-5 text-center tabular-nums lg:col-span-2 ${miniSurface} ${tierStyle.bg}`}>
             <div aria-hidden="true" className="text-5xl leading-none max-md:text-[56px]">
               {tierStyle.emoji}
@@ -221,8 +227,19 @@ export default function LoyaltyPage() {
             </Link>
           )}
 
+          {passportQ.isSuccess && (
+            <Link href="/tai-khoan/ho-chieu-xanh" data-testid="eco-passport-entry" className={`flex min-h-11 items-center gap-3 p-3 hover:bg-stone-50 lg:col-start-1 ${miniCard}`}>
+              <OffersIconTile icon={Leaf} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-stone-900">{passportCopy('title')}</span>
+                <span className="block text-caption text-stone-600">{passportCopy('entrySub')}</span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-stone-500" aria-hidden="true" />
+            </Link>
+          )}
+
           {/* Từ lg: cột trái 2/3 gồm dòng điểm danh, dòng Ưu đãi, lịch sử (xếp tự động nối nhau trong cột 1, nên thẻ nào vắng thì không để lại hàng/khoảng trống; hàng cuối 1fr nhận phần cao dư của cột phải); cột phụ 1/3 bên phải (cách kiếm và dùng, quyền lợi, các hạng) trải qua ba hàng đó; dưới lg thứ tự và khoảng cách như một cột. */}
-          <div className="contents lg:col-start-2 lg:row-span-3 lg:row-start-2 lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
+          <div className={`contents lg:col-start-2 lg:row-start-2 lg:flex lg:min-w-0 lg:flex-col lg:gap-4 ${passportQ.isSuccess ? 'lg:row-span-4' : 'lg:row-span-3'}`}>
           <LoyaltyRulesCard lines={ruleLines} />
 
           {perks.length > 0 && (

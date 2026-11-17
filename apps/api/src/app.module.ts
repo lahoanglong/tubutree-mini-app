@@ -19,6 +19,7 @@ import { SessionStateModule } from './modules/auth/session-state.module';
 import { HealthModule } from './modules/health/health.module';
 import { UsersModule } from './modules/users/users.module';
 import { CatalogModule } from './modules/catalog/catalog.module';
+import { EcoImpactModule } from './modules/eco-impact/eco-impact.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
 import { OrdersModule } from './modules/orders/orders.module';
@@ -87,6 +88,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     HealthModule,
     UsersModule,
     CatalogModule,
+    EcoImpactModule,
     CartModule,
     CheckoutModule,
     OrdersModule,

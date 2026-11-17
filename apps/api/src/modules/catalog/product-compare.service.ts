@@ -1,5 +1,5 @@
 import { canonicalCatalogBrand } from '@tubutree/shared-types';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Optional } from '@nestjs/common';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
@@ -11,6 +11,7 @@ import { VARIATION_ORDER_BY, sortVariationsByPrice } from './variation-order';
 import { isPartnerStore } from '../merchant/partner-store';
 import { merchantStoreUnavailableReason } from '../checkout/checkout-split';
 import { formatSize, measureOf, nameGroup, unitPriceOf, type Measure, type UnitPrice } from './product-compare.unit';
+import { EcoFactsReader } from '../eco-impact/eco-facts.reader';
 
 export const PDP_COMPARE_ENABLED_KEY = 'catalog.pdp_compare_enabled';
 
@@ -26,6 +27,8 @@ export interface CompareItem {
   size: string | null;
   unitPrice: UnitPrice | null;
   keyIngredients: string[];
+  /** Số sự thật xanh đã duyệt (hàng "Điểm cộng xanh"); chỉ có khi cờ `eco.product_badges_enabled` bật. */
+  ecoFactCount?: number;
 }
 
 export interface ProductCompare {
@@ -82,26 +85,37 @@ function compareVariation(variations: readonly Variation[]): Variation | null {
 export class ProductCompareService {
   // Đệm trong tiến trình như `boughtTogetherCache` của CatalogService: mỗi bản API có đệm riêng, lệch tối đa CACHE_TTL_MS. Chỉ slug của
   // sản phẩm công khai có thật mới vào đệm (slug lạ ném 404 trước khi ghi), và có trần số khoá.
-  private readonly cache = new Map<string, { value: ProductCompare; expiresAt: number }>();
+  private readonly cache = new Map<string, { value: ProductCompare; variations: Map<string, string | null>; expiresAt: number }>();
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
+    @Optional() private readonly eco?: EcoFactsReader,
   ) {}
 
   async compare(slug: string): Promise<ProductCompare> {
     // Kiểm cờ trước đệm: tắt cờ thì 404 ngay cả với slug đã nằm trong đệm.
     if ((await this.config.get<unknown>(PDP_COMPARE_ENABLED_KEY, false)) !== true) throw new NotFoundException('Không tìm thấy.');
     const hit = this.cache.get(slug);
-    if (hit && hit.expiresAt > Date.now()) return hit.value;
-    const value = await this.build(slug);
+    if (hit && hit.expiresAt > Date.now()) return this.withEco(hit.value, hit.variations);
+    const { value, variations } = await this.build(slug);
     this.cache.delete(slug);
     if (this.cache.size >= CACHE_MAX_KEYS) this.cache.delete(this.cache.keys().next().value as string);
-    this.cache.set(slug, { value, expiresAt: Date.now() + CACHE_TTL_MS });
-    return value;
+    this.cache.set(slug, { value, variations, expiresAt: Date.now() + CACHE_TTL_MS });
+    return this.withEco(value, variations);
   }
 
-  private async build(slug: string): Promise<ProductCompare> {
+  /** Số sự thật xanh đọc tươi sau đệm, nên tắt cờ hay duyệt thêm một dòng có hiệu lực ngay, không chờ đệm hết hạn. Cờ tắt: trả nguyên bảng. */
+  private async withEco(value: ProductCompare, variations: Map<string, string | null>): Promise<ProductCompare> {
+    if (!this.eco) return value;
+    const items = [value.current, ...value.others];
+    const counts = await this.eco.factCounts(items.map((i) => ({ productId: i.productId, variationId: variations.get(i.productId) ?? null })));
+    if (!counts) return value;
+    const add = (i: CompareItem): CompareItem => ({ ...i, ecoFactCount: counts.get(i.productId) ?? 0 });
+    return { current: add(value.current), others: value.others.map(add) };
+  }
+
+  private async build(slug: string): Promise<{ value: ProductCompare; variations: Map<string, string | null> }> {
     const product = await this.prisma.product.findUnique({
       where: { slug },
       select: {
@@ -136,7 +150,8 @@ export class ProductCompareService {
         keyIngredients: ingredientNames(p.row.ingredients).slice(0, KEY_INGREDIENTS),
       };
     };
-    return { current: item(current), others: others.map(item) };
+    const variations = new Map([current, ...others].map((p) => [p.row.id, p.variation?.id ?? null]));
+    return { value: { current: item(current), others: others.map(item) }, variations };
   }
 
   /** Sản phẩm combo gồm nhiều món: giá chia theo dung tích một món không có nghĩa. */

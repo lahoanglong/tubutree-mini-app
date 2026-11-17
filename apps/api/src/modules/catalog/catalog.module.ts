@@ -33,9 +33,10 @@ import { FlashSaleModule } from '../flash-sale/flash-sale.module';
 import { OrdersModule } from '../orders/orders.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { AiAdvisorModule } from '../ai-advisor/ai-advisor.module';
+import { EcoImpactModule } from '../eco-impact/eco-impact.module';
 
 @Module({
-  imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule, AiAdvisorModule],
+  imports: [ImageRegistryModule, FlashSaleModule, OrdersModule, SubscriptionsModule, AiAdvisorModule, EcoImpactModule],
   controllers: [CatalogController, HomeController, CategoryAdminController, ProductCategoryAdminController, CategorySuggestionController, ProductAdminController, StoryAssetsController, StoryDraftController, CatalogQualityController, WpImageSyncController, PublicImageController, ImageResizeController],
   providers: [CatalogService, ProductCompareService, HomeService, CategoryAdminService, ProductCategoryAdminService, CategorySuggestionService, ProductAdminService, StoryAssetsService, StoryDraftService, CatalogAuditService, CopyDraftService, CopyApproveService, IngredientEnrichService, SeoEnrichService, WpImageSyncService, PublicImageService, ImageResizeService],
   exports: [CatalogService, ImageResizeService],

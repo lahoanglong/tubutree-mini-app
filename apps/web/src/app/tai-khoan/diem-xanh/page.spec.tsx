@@ -14,6 +14,7 @@ const state = vi.hoisted(() => ({
   card: null as Record<string, unknown> | null,
   config: { waste: { enabled: true } } as Record<string, unknown>,
   wasteRequests: [] as unknown[],
+  passport: null as Record<string, unknown> | null,
   fail: new Set<string>(),
   pending: new Set<string>(),
   holds: new Map<string, Promise<unknown>>(),
@@ -52,6 +53,10 @@ vi.mock('@/lib/core-http', () => {
     '/me/loyalty/member-card': () => state.card,
     '/config/public': () => state.config,
     '/waste/requests': () => state.wasteRequests,
+    '/me/eco-passport': () => {
+      if (!state.passport) throw new Error('404');
+      return state.passport;
+    },
   };
   return {
     coreHttp: {
@@ -100,6 +105,7 @@ beforeEach(() => {
   state.applied = [];
   state.config = { waste: { enabled: true } };
   state.wasteRequests = [];
+  state.passport = null;
   state.loyalty = {
     pointsBalance: 1681,
     pointsConvertedBalance: 119,
@@ -746,5 +752,59 @@ describe('/tai-khoan/diem-xanh — khoá chạm đúp', () => {
     g.open();
     await flush(8);
     expect(gets('/me/loyalty/member-card')).toHaveLength(before + 1);
+  });
+});
+
+describe('/tai-khoan/diem-xanh — dòng Hộ chiếu Xanh (cờ eco.passport_enabled)', () => {
+  const PASSPORT = {
+    firstOrderAt: '2026-10-02T03:00:00.000Z',
+    plasticAvoidedGrams: 1200,
+    refillPacks: 1,
+    wasteReturned: { requests: 0, grams: 0, unitsWithoutWeight: 0 },
+    trees: { pledged: 0, planted: 0 },
+    co2Grams: null,
+    monthly: [],
+    stamps: [],
+  };
+
+  it('cấu hình chung bật và API trả hộ chiếu: một dòng tới /tai-khoan/ho-chieu-xanh', async () => {
+    state.config = { waste: { enabled: true }, ecoPassportEnabled: true };
+    state.passport = PASSPORT;
+    const c = await mount();
+    const row = c.querySelector<HTMLAnchorElement>('[data-testid="eco-passport-entry"]');
+    expect(row?.getAttribute('href')).toBe('/tai-khoan/ho-chieu-xanh');
+    expect(row?.textContent).toContain('Hộ chiếu Xanh');
+    // Từ lg: thêm một hàng auto cho dòng này và cột phải trải thêm một hàng, lịch sử vẫn ở hàng 1fr cuối.
+    expect(row?.parentElement?.className).toContain('lg:grid-rows-[auto_auto_auto_auto_1fr]');
+    expect(c.querySelector('.lg\\:col-start-2.lg\\:row-start-2')?.className).toContain('lg:row-span-4');
+  });
+
+  it('cấu hình chung không báo bật: không hỏi /me/eco-passport, không có dòng', async () => {
+    state.passport = PASSPORT;
+    for (const config of [{ waste: { enabled: true } }, { waste: { enabled: true }, ecoPassportEnabled: 'true' }]) {
+      state.config = config;
+      state.calls = [];
+      const c = await mount();
+      expect(state.calls.some((x) => x.path === '/me/eco-passport')).toBe(false);
+      expect(c.querySelector('[data-testid="eco-passport-entry"]')).toBeNull();
+      expect(c.querySelector('.lg\\:grid-rows-\\[auto_auto_auto_1fr\\]')).not.toBeNull();
+      expect(c.querySelector('.lg\\:col-start-2.lg\\:row-start-2')?.className).toContain('lg:row-span-3');
+      expect(c.textContent).toContain('Mầm Xanh');
+    }
+  });
+
+  it('cấu hình chung bật nhưng API 404 hay lỗi: không có dòng, trang vẫn đủ', async () => {
+    state.config = { waste: { enabled: true }, ecoPassportEnabled: true };
+    const c = await mount();
+    expect(state.calls.some((x) => x.path === '/me/eco-passport')).toBe(true);
+    expect(c.querySelector('[data-testid="eco-passport-entry"]')).toBeNull();
+    expect(c.textContent).toContain('Mầm Xanh');
+  });
+
+  it('khách chưa đăng nhập: không hỏi /me/eco-passport', async () => {
+    state.config = { waste: { enabled: true }, ecoPassportEnabled: true };
+    state.phase = 'guest';
+    await mount();
+    expect(state.calls.some((x) => x.path === '/me/eco-passport')).toBe(false);
   });
 });

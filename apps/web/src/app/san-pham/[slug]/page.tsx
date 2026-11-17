@@ -40,6 +40,7 @@ import { PdpRebuyRow } from './pdp-rebuy';
 import { PdpLayout } from '@/components/layouts/pdp-layout';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
 import { PdpStory } from './pdp-story';
+import { PdpEco } from '@/components/eco/pdp-eco';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { phoneBand, phoneBandPad, phoneBrandLabel } from '@/lib/phone-ui';
@@ -306,6 +307,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   )}
                 </div>
               )}
+              <PdpEco facts={(product as { ecoFacts?: unknown }).ecoFacts} productSlug={product.slug} />
             </div>
           }
           below={
