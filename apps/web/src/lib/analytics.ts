@@ -9,7 +9,7 @@ import {
 } from '@tubutree/shared-types';
 import { apiFetch } from './client-api';
 import { readFirstTouchCookie } from './entry-source';
-import { isPreviewPath } from './site';
+import { isPreviewPath } from './preview-frame-ancestors.mjs';
 
 interface QueuedEvent {
   eventId: string;

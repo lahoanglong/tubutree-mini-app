@@ -1,4 +1,4 @@
-import { PREVIEW_PATH } from './preview-frame-ancestors.mjs';
+import { isPreviewPath } from './preview-frame-ancestors.mjs';
 import { privatePrefixes } from './route-map';
 import { SYSTEM_SUBDOMAINS, TENANT_ROOT_DOMAIN, tenantSubdomain } from './tenant-subdomain';
 
@@ -43,11 +43,7 @@ export function isPortalPath(pathname: string | null | undefined): boolean {
   return PORTAL_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`));
 }
 
-/** Trang xem trước nội dung nháp MSS (MSS nhúng iframe): không vỏ trang bán hàng, không ghi sự kiện phân tích. */
-export function isPreviewPath(pathname: string | null | undefined): boolean {
-  if (!pathname) return false;
-  return pathname === PREVIEW_PATH || pathname.startsWith(`${PREVIEW_PATH}/`);
-}
+export { isPreviewPath };
 
 /**
  * Subdomain gian hàng CTV của một host, hoặc null khi là host gốc/hệ thống/ngoài tên miền gốc. Cùng quy tắc với middleware.ts,

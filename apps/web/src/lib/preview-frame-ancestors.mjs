@@ -2,6 +2,15 @@
 export const PREVIEW_PATH = '/san-pham/_preview';
 
 /**
+ * Đường thuộc trang xem trước MSS: không vỏ trang bán hàng, không ghi sự kiện phân tích. Đặt ở đây (không phụ thuộc module nào) để analytics.ts
+ * dùng được mà không kéo theo site.ts → route-map, vốn bị nhiều spec mock một phần.
+ */
+export function isPreviewPath(pathname) {
+  if (!pathname) return false;
+  return pathname === PREVIEW_PATH || pathname.startsWith(`${PREVIEW_PATH}/`);
+}
+
+/**
  * Luật header của Next (`source`, path-to-regexp) cho mọi đường KHÔNG thuộc trang xem trước: giữ X-Frame-Options DENY như cũ.
  * Hai luật bù trừ nhau đúng một lần: `/san-pham/_preview` và `/san-pham/_preview/...` đi luật xem trước, còn lại (kể cả `/san-pham/_previewx`) đi luật này.
  */
