@@ -1,15 +1,16 @@
 import { test as plain, type Page, type TestInfo } from '@playwright/test';
 import { expect, test, type MockApi } from './support/mock-api';
+import { PDP_BLOCK_ORDER } from '../../../packages/app-core/src/commerce/pdp-info';
 import { assertProductOnCi, firstProduct, multiVariationProduct, singleVariationProduct, type PdpProduct } from './support/pdp-product';
 
 /**
  * Trang sản phẩm web ở khổ 375px phải giống Mini App ở ba chỗ: tiêu đề mục không chân, ô số lượng gồm hai nút vuông riêng,
- * khối đánh giá rỗng có hình + lời mời. Phần server của Next gọi API thật nên spec lấy một sản phẩm có sẵn trong DB e2e
+ * khối đánh giá rỗng chỉ một dòng. Phần server của Next gọi API thật nên spec lấy một sản phẩm có sẵn trong DB e2e
  * và tự bỏ qua khi DB chưa có; mọi lời gọi từ trình duyệt đi qua mock.
  */
 
 test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini App', () => {
-  test('tiêu đề mục không serif, nút số lượng 44px tách riêng, đánh giá rỗng có hình và lời mời', async ({ page, api, request }, testInfo) => {
+  test('tiêu đề mục không serif, nút số lượng 44px tách riêng, đánh giá rỗng một dòng', async ({ page, api, request }, testInfo) => {
     const p = await firstProduct(request);
     test.skip(!p, 'DB e2e chưa có sản phẩm nào');
     api.get('/flash-sales/active', []);
@@ -26,9 +27,9 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
 
     const family = (selector: string) => page.locator(selector).first().evaluate((el) => getComputedStyle(el).fontFamily);
     const bodyFamily = await family('body');
-    const promise = page.getByRole('heading', { name: 'Cam kết Tubu' });
-    await expect(promise).toBeVisible();
-    expect(await promise.evaluate((el) => getComputedStyle(el).fontFamily)).toBe(bodyFamily);
+    const reviewsTitle = page.locator('#danh-gia-title');
+    await expect(reviewsTitle).toBeVisible();
+    expect(await reviewsTitle.evaluate((el) => getComputedStyle(el).fontFamily)).toBe(bodyFamily);
 
     const minus = page.getByRole('button', { name: 'Giảm số lượng' });
     const plus = page.getByRole('button', { name: 'Tăng số lượng' });
@@ -40,10 +41,11 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     }
     expect(await minus.evaluate((el) => getComputedStyle(el.parentElement!).borderTopWidth)).toBe('0px');
 
+    // Chưa có đánh giá: khối chỉ một dòng như Mini App, không hình minh hoạ, không lời mời.
     const empty = page.getByText('Chưa có đánh giá', { exact: true });
     await expect(empty).toBeVisible();
-    await expect(page.getByText('Hãy là người đầu tiên chia sẻ trải nghiệm.')).toBeVisible();
-    await expect(page.locator('#danh-gia svg[aria-hidden="true"]').first()).toBeVisible();
+    await expect(page.getByText('Hãy là người đầu tiên chia sẻ trải nghiệm.')).toHaveCount(0);
+    expect((await page.locator('#danh-gia').boundingBox())!.height).toBeLessThan(140);
 
     await page.screenshot({ path: testInfo.outputPath('pdp-web375.png'), fullPage: true });
   });
@@ -83,8 +85,16 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
    * Phần đo chung của hai ca thứ tự khối: sản phẩm từ 2 phân loại (có chip) và sản phẩm một phân loại (không chip). Trang đã mở ở 375px bằng `openPdp375`.
    */
   async function assertPdpBlockOrder(page: Page, hasChips: boolean, testInfo: TestInfo, shot: string): Promise<void> {
-    await expect(page.locator('[data-section="pdp-quick-reviews"]')).toBeVisible();
     await expect(page.locator('[data-section="pdp-reviews"]')).toBeVisible();
+
+    // Thứ tự khối chung với Mini App (`PDP_BLOCK_ORDER` của app-core): khối nào sản phẩm này không có thì vắng, phần còn lại vẫn đúng thứ tự.
+    const order = await page.locator('[data-pdp-block]').evaluateAll((els) =>
+      els.filter((e) => (e as HTMLElement).offsetHeight > 0).map((e) => ({ key: e.getAttribute('data-pdp-block')!, top: Math.round(e.getBoundingClientRect().top + window.scrollY) })),
+    );
+    const keys = order.map((b) => b.key);
+    expect(keys).toEqual(PDP_BLOCK_ORDER.filter((k) => keys.includes(k)));
+    expect(order.map((b) => b.top)).toEqual([...order.map((b) => b.top)].sort((a, b) => a - b));
+    expect(keys).toEqual(expect.arrayContaining(['gallery', 'main', 'reviews', 'promises']));
 
     const blocks = await page.evaluate(() =>
       Array.from(document.querySelectorAll<HTMLElement>('[data-section]'))
@@ -94,30 +104,8 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
         .sort((a, b) => a.top - b.top || a.bottom - b.bottom),
     );
     const ids = blocks.map((b) => b.id);
-    // Thứ tự Mini App; khối nào sản phẩm này không có (Đặt định kỳ, Ưu đãi, ghi chú, Combo tuỳ gian hàng) thì vắng, phần còn lại vẫn đúng thứ tự.
-    // Không còn dòng "Phân loại ›" (pdp-variation): chip đã đủ. Số lượng liền sau chip, Đánh giá nhanh không chen giữa hai khối đó.
-    const MINI_ORDER = [
-      'pdp-main',
-      'pdp-certs',
-      'pdp-subscribe',
-      'pdp-offers',
-      'pdp-notes',
-      'pdp-variation-chips',
-      'pdp-quantity',
-      // Dải cam kết (W45A): ngay dưới Số lượng, trước dải câu chuyện; hàng gian hàng tự giao không có.
-      'pdp-trust',
-      'pdp-story',
-      'pdp-bundles',
-      'pdp-quick-reviews',
-      'pdp-groupbuy',
-      'pdp-ingredients',
-      'pdp-promises',
-      'pdp-description',
-      'pdp-reviews',
-    ];
-    expect(ids).toEqual(MINI_ORDER.filter((id) => ids.includes(id)));
-    // Khối bắt buộc có ở mọi sản phẩm (chip chỉ từ 2 phân loại), để phép lọc ở trên không thành đúng rỗng khi trang thiếu khối.
-    expect(ids).toEqual(expect.arrayContaining(['pdp-main', 'pdp-quantity', 'pdp-quick-reviews', 'pdp-reviews']));
+    // Không còn dòng "Phân loại ›" (pdp-variation): chip đã đủ. Số lượng liền sau chip.
+    expect(ids).toEqual(expect.arrayContaining(['pdp-main', 'pdp-quantity', 'pdp-reviews']));
     expect(ids).not.toContain('pdp-variation');
     if (hasChips) {
       expect(ids).toContain('pdp-variation-chips');
@@ -125,9 +113,6 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     } else {
       expect(ids).not.toContain('pdp-variation-chips');
     }
-    if (ids.includes('pdp-trust')) expect(ids.indexOf('pdp-trust')).toBe(ids.indexOf('pdp-quantity') + 1);
-    expect(ids.indexOf('pdp-quantity')).toBeLessThan(ids.indexOf('pdp-quick-reviews'));
-    expect(ids.indexOf('pdp-quick-reviews')).toBeLessThan(ids.indexOf('pdp-reviews'));
 
     // Từ Số lượng trở xuống mỗi khối là một dải trắng riêng cách dải trên đúng 8px (mt-2) trên nền canvas. Đo chính các dải (phần tử
     // nền surface, lấy phần tử trên cùng trong mỗi khối): vỏ khối `data-section` của Combo và Mua chung chưa chứa mt-2 của dải con, đo vỏ
@@ -147,7 +132,10 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
         }
         for (const child of Array.from(el.children)) walk(child, id);
       };
-      document.querySelectorAll<HTMLElement>('[data-section]').forEach((el) => walk(el, el.dataset.section!));
+      // Khối lợi ích (mô tả ngắn + chứng nhận) là dải riêng nhưng không có `data-section` ở vỏ.
+      document
+        .querySelectorAll<HTMLElement>('[data-section], [data-pdp-block="benefits"]')
+        .forEach((el) => walk(el, el.dataset.section ?? 'pdp-benefits'));
       return found.sort((x, y) => x.top - y.top || x.bottom - y.bottom);
     });
     // Số lượng là dải riêng ngay dưới chip, cách đúng 8px như Mini App (hai hộp liền nhau, mt-2).
@@ -159,14 +147,23 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
       expect(qtyBand!.top - chipBand!.bottom).toBeGreaterThanOrEqual(7);
       expect(qtyBand!.top - chipBand!.bottom).toBeLessThanOrEqual(9);
     }
-    const bandFrom = bands.findIndex((b) => b.id === 'pdp-quantity');
+    // "Mua lại" và "Đặt định kỳ" là lối phụ nối liền dưới Số lượng trong cùng mảng trắng (Mini App cũng vậy): gộp vào dải Số lượng.
+    const merged = bands.reduce<typeof bands>((acc, b) => {
+      const prev = acc[acc.length - 1];
+      if (prev && b.id === 'pdp-subscribe' && prev.id === 'pdp-quantity' && b.top - prev.bottom <= 1) {
+        prev.bottom = Math.max(prev.bottom, b.bottom);
+        return acc;
+      }
+      acc.push({ ...b });
+      return acc;
+    }, []);
+    const bandFrom = merged.findIndex((b) => b.id === 'pdp-quantity');
     expect(bandFrom, 'dải Số lượng phải là dải nền surface').toBeGreaterThanOrEqual(0);
-    expect(bands.some((b) => b.id === 'pdp-quick-reviews'), 'dải Đánh giá nhanh phải là dải nền surface').toBe(true);
-    expect(bands.some((b) => b.id === 'pdp-reviews')).toBe(true);
-    for (let i = bandFrom + 1; i < bands.length; i++) {
-      const gap = bands[i]!.top - bands[i - 1]!.bottom;
-      expect(gap, `${bands[i - 1]!.id} -> ${bands[i]!.id}`).toBeGreaterThanOrEqual(7);
-      expect(gap, `${bands[i - 1]!.id} -> ${bands[i]!.id}`).toBeLessThanOrEqual(9);
+    expect(merged.some((b) => b.id === 'pdp-reviews')).toBe(true);
+    for (let i = bandFrom + 1; i < merged.length; i++) {
+      const gap = merged[i]!.top - merged[i - 1]!.bottom;
+      expect(gap, `${merged[i - 1]!.id} -> ${merged[i]!.id}`).toBeGreaterThanOrEqual(7);
+      expect(gap, `${merged[i - 1]!.id} -> ${merged[i]!.id}`).toBeLessThanOrEqual(9);
     }
 
     // Hàng chip lọc của khối đánh giá đầy đủ như Mini App.
@@ -177,7 +174,7 @@ test.describe('Web khách: trang sản phẩm khổ điện thoại giống Mini
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(375);
     await page.screenshot({ path: testInfo.outputPath(shot), fullPage: true });
   }
-  test('thứ tự khối ở 375px như Mini App: chip phân loại (từ 2 phân loại), Số lượng, rồi Combo và Đánh giá nhanh; các dải trắng cách nhau tối đa 8px; không tràn ngang', async ({ page, api, request }, testInfo) => {
+  test('thứ tự khối ở 375px như Mini App: chip phân loại (từ 2 phân loại), Số lượng, rồi các khối theo PDP_BLOCK_ORDER; các dải trắng cách nhau tối đa 8px; không tràn ngang', async ({ page, api, request }, testInfo) => {
     const p = await multiVariationProduct(request);
     // Trên CI thiếu sản phẩm từ 2 phân loại thì đỏ, không skip (DB migration demo luôn có).
     assertProductOnCi(p, 'sản phẩm từ 2 phân loại');

@@ -215,7 +215,7 @@ for (const vp of VIEWPORTS) {
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 
-    test('chọn phân loại ở vòng cung → chip và bảng chọn của khối mua theo → Thêm vào giỏ ở thanh đáy → Giỏ → Thanh toán', async ({ page, api, request }) => {
+    test('chọn phân loại ở vòng cung → chip của khối mua theo → Thêm vào giỏ ở thanh đáy thêm ngay → Giỏ → Thanh toán', async ({ page, api, request }) => {
       const p = await seeded(request);
       test.skip(!p, 'DB e2e chưa có sản phẩm mẫu của seed');
       test.skip(p!.variations.length < 2, 'Sản phẩm mẫu cần từ 2 phân loại để có vòng cung và bảng chọn phân loại');
@@ -235,12 +235,9 @@ for (const vp of VIEWPORTS) {
 
       const adding = api.waitForCall('POST', '/cart/items');
       await page.getByTestId('sticky-bar').getByTestId('pdp-add-to-cart').click();
-      // Điện thoại có từ 2 phân loại thì hỏi chọn trong bảng; bảng mở sẵn ở phân loại vừa chọn ở vòng cung, không cần chọn lại.
-      const sheet = page.getByRole('dialog', { name: 'Chọn phân loại' });
-      await expect(sheet).toBeVisible();
-      await expect(sheet.getByRole('group', { name: 'Phân loại' }).getByRole('button').nth(target)).toHaveAttribute('aria-pressed', 'true');
-      await sheet.getByRole('button', { name: /^Thêm vào giỏ/ }).click();
+      // Chọn ở vòng cung là khách đã chọn phân loại: Thêm vào giỏ thêm ngay, không mở bảng chọn.
       const call = await adding;
+      await expect(page.getByRole('dialog', { name: 'Chọn phân loại' })).toHaveCount(0);
       const body = call.body as { variationId: string; quantity: number };
       expect(body.variationId).toBe(p!.variations[target]!.id);
       expect(body.quantity).toBeGreaterThanOrEqual(1);

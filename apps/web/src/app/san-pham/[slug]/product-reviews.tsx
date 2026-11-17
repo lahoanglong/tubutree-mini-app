@@ -156,8 +156,8 @@ export function ProductReviewsFallback() {
 export const mediaSrc = (src: string) => (src.startsWith('/') ? apiMediaUrl(src) : src);
 
 /**
- * Đánh giá trên trang sản phẩm web: tóm tắt điểm, 2 đánh giá mở sẵn (ưu tiên có ảnh, `pickQuickReviews`) và "Xem thêm đánh giá" mở danh sách công khai
- * đầy đủ (chip lọc, mới nhất trước); form viết/sửa theo cùng luật với Mini App. Chưa có đánh giá thì chỉ một dòng. Nút "Viết đánh giá" chỉ có khi khách
+ * Đánh giá trên trang sản phẩm web: tóm tắt điểm, hàng chip lọc, 2 đánh giá mở sẵn (ưu tiên có ảnh, `pickQuickReviews`) và "Xem thêm đánh giá" mở danh
+ * sách công khai đầy đủ (mới nhất trước) như Mini App; bấm chip cũng mở danh sách theo chip đó. Form viết/sửa theo cùng luật với Mini App. Chưa có đánh giá thì chỉ một dòng. Nút "Viết đánh giá" chỉ có khi khách
  * đã đăng nhập và còn lần mua chưa đánh giá. `?danh-gia=<id đơn>` (từ chi tiết đơn) mở sẵn form cho đúng lần mua đó.
  */
 export function ProductReviews({ slug }: { slug: string }) {
@@ -177,7 +177,7 @@ export function ProductReviews({ slug }: { slug: string }) {
   const [target, setTarget] = useState<FormTarget | null>(null);
   const [visible, setVisible] = useState(REVIEW_STEP);
   const [filter, setFilter] = useState<ReviewFilterKey>('all');
-  // Danh sách đầy đủ (chip lọc, các trang sau) chỉ mở khi khách bấm "Xem thêm đánh giá"; trước đó chỉ có 2 đánh giá chọn sẵn.
+  // Danh sách đầy đủ (các trang sau) chỉ mở khi khách bấm "Xem thêm đánh giá" hoặc một chip; trước đó chỉ có 2 đánh giá chọn sẵn.
   const [expanded, setExpanded] = useState(false);
   const qc = useQueryClient();
   // Chip lọc hỏi máy chủ: danh sách đầy đủ chỉ có 100 đánh giá mới nhất, lọc trên đó báo "không có đánh giá khớp" sai.
@@ -265,11 +265,18 @@ export function ProductReviews({ slug }: { slug: string }) {
   const retryMore = () => (moreQ.isFetchNextPageError ? moreQ.fetchNextPage() : moreQ.refetch());
   // Chưa biết (đang tải, lỗi) thì null: câu "cần mua để đánh giá" chỉ bỏ khi chắc chắn chưa có đánh giá nào (khối chỉ còn một dòng).
   const empty = data ? data.count === 0 : null;
-  const openList = () => setExpanded(true);
-  // Nút "Xem thêm đánh giá" của phần thu gọn biến mất khi mở danh sách: đưa tiêu điểm tới hàng chip ngay chỗ đó để bàn phím và trình đọc màn hình không rơi về đầu trang.
+  // Nút "Xem thêm đánh giá" của phần thu gọn biến mất khi mở danh sách: đưa tiêu điểm tới hàng chip để bàn phím và trình đọc màn hình không rơi về
+  // đầu trang. Mở bằng chip thì tiêu điểm vẫn ở chip vừa bấm.
   const listTop = useRef<HTMLDivElement>(null);
+  const focusChips = useRef(false);
+  const openList = () => {
+    focusChips.current = true;
+    setExpanded(true);
+  };
   useEffect(() => {
-    if (expanded) listTop.current?.focus({ preventScroll: true });
+    if (!expanded || !focusChips.current) return;
+    focusChips.current = false;
+    listTop.current?.focus({ preventScroll: true });
   }, [expanded]);
   const reviewItem = (r: (typeof items)[number]) => {
     const mine = mineById.get(r.id);
@@ -449,6 +456,29 @@ export function ProductReviews({ slug }: { slug: string }) {
             </ul>
           </div>
 
+          {/* Hàng chip lọc như Mini App, có cả lúc thu gọn: đổi bộ lọc thì mở danh sách đầy đủ ở 5 dòng đầu của chip đó. */}
+          {/* Hàng dưới cách hàng trên 12px (gap-y-3): chip nhìn cao ~33px, vùng chạm 44px giãn ~5,5px mỗi phía; khoảng 8px làm vùng chạm hai hàng chồng nhau. */}
+          <div ref={listTop} tabIndex={-1} aria-label="Lọc đánh giá" role="group" className="mt-3 flex flex-wrap gap-x-2 gap-y-3 outline-none">
+            {chips.map((f) => (
+              <Chip
+                key={String(f.key)}
+                size="sm"
+                selected={filter === f.key}
+                icon={f.key === 'video' ? Video : undefined}
+                count={f.count}
+                onPress={() => {
+                  setExpanded(true);
+                  setFilter(f.key);
+                  setVisible(REVIEW_STEP);
+                  setMoreOn(false);
+                  qc.removeQueries({ queryKey: reviewMorePrefix(slug) });
+                }}
+              >
+                {f.label}
+              </Chip>
+            ))}
+          </div>
+
           {!expanded ? (
             <>
               {picked.length > 0 && (
@@ -464,28 +494,6 @@ export function ProductReviews({ slug }: { slug: string }) {
             </>
           ) : (
             <>
-              {/* Hàng chip lọc như Mini App: đổi bộ lọc thì danh sách về lại 5 dòng đầu. */}
-              {/* Hàng dưới cách hàng trên 12px (gap-y-3): chip nhìn cao ~33px, vùng chạm 44px giãn ~5,5px mỗi phía; khoảng 8px làm vùng chạm hai hàng chồng nhau. */}
-              <div ref={listTop} tabIndex={-1} aria-label="Lọc đánh giá" role="group" className="mt-3 flex flex-wrap gap-x-2 gap-y-3 outline-none">
-                {chips.map((f) => (
-                  <Chip
-                    key={String(f.key)}
-                    size="sm"
-                    selected={filter === f.key}
-                    icon={f.key === 'video' ? Video : undefined}
-                    count={f.count}
-                    onPress={() => {
-                      setFilter(f.key);
-                      setVisible(REVIEW_STEP);
-                      setMoreOn(false);
-                      qc.removeQueries({ queryKey: reviewMorePrefix(slug) });
-                    }}
-                  >
-                    {f.label}
-                  </Chip>
-                ))}
-              </div>
-
               {list.status === 'loading' ? (
                 <ListLoading />
               ) : list.status === 'error' ? (

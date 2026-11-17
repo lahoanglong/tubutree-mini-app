@@ -628,7 +628,9 @@ export default function ProductDetailPage() {
   // bộ hết giờ lúc khách đang xem thì PdpBundles tự ghi "Đã kết thúc" tại chỗ, khối không đổi sang nguồn khác dưới tay khách.
   if ((!addOnLatch.current || addOnLatch.current.slug !== slug) && !bundlesQ.isPending && fbtCartIds !== null && !boughtTogether.isPending && !flashQ.isPending) {
     const bought = pdpShelves({ currentId: p.id, boughtTogether: boughtCandidates, brand: [], feed: [] }).boughtTogether.length > 0;
-    addOnLatch.current = { slug, source: pdpAddOnSource({ bundles: hasLiveBundles(bundlesQ.data, serverNow()), fbt: !!fbtBundle, bought }) };
+    const source = pdpAddOnSource({ bundles: hasLiveBundles(bundlesQ.data, serverNow()), fbt: !!fbtBundle, bought });
+    // Chưa có nguồn nào thì chưa chốt (chưa có khối để nhảy): dữ liệu về muộn vẫn hiện được, như web.
+    if (source) addOnLatch.current = { slug, source };
   }
   const latched = addOnLatch.current;
   const addOnSource = latched && latched.slug === slug ? latched.source : null;

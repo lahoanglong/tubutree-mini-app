@@ -50,13 +50,19 @@ export interface FbtHostArgs {
  * `PdpFbt` (vẽ khối) và `PdpRails` (bỏ đúng các món đó khỏi các dải bên dưới) cùng gọi hook này nên hai nơi luôn khớp: khối không hiện thì dải giữ đủ món.
  * Món đã có trong giỏ lúc giỏ tải xong thì không gợi ý lại, nhưng danh sách đó đóng băng (xem `useFrozenCartProductIds`) để bộ đứng yên sau khi khách thêm. Danh sách đầu do server dựng (khối nằm sẵn trong HTML).
  */
-export function useFbt({ productId, slug, name, thumbnail, variations, blockedReason = null, initialBoughtTogether }: FbtHostArgs): { bundle: FbtBundle | null; claimed: ReadonlySet<string> } {
+export function useFbt({ productId, slug, name, thumbnail, variations, blockedReason = null, initialBoughtTogether }: FbtHostArgs): {
+  bundle: FbtBundle | null;
+  claimed: ReadonlySet<string>;
+  /** Đã biết giỏ (khách vãng lai, hoặc giỏ của khách đăng nhập đã về): trước đó bộ chưa trừ được món đã có trong giỏ. */
+  cartSettled: boolean;
+} {
   const together = useQuery({ ...boughtTogetherQuery(coreHttp, slug), initialData: initialBoughtTogether, staleTime: FIVE_MIN, retry: 0 });
   const stock = useProductStock(slug).data;
   const { flash, now } = useRunningFlash();
   const phase = useAuthPhase();
   const cart = useQuery({ queryKey: useCartKey(), queryFn: getCart, enabled: phase === 'authenticated' });
-  const cartProductIds = useFrozenCartProductIds(slug, cart.data?.items, phase === 'guest' || (phase === 'authenticated' && !cart.isPending));
+  const cartSettled = phase === 'guest' || (phase === 'authenticated' && !cart.isPending);
+  const cartProductIds = useFrozenCartProductIds(slug, cart.data?.items, cartSettled);
   const selectedId = usePdpSelection()?.selectedId;
   const selected = variations.find((v) => v.id === selectedId);
   // Giá của đơn vị vừa thêm theo giỏ HIỆN CÓ (không phải giỏ đóng băng của việc chọn món): vượt suất Giờ vàng của khách thì giỏ tính giá thường cho cả dòng.
@@ -78,5 +84,5 @@ export function useFbt({ productId, slug, name, thumbnail, variations, blockedRe
     candidates: [],
     partners,
   });
-  return { bundle, claimed: new Set(bundle ? partners.map((p) => p.productId) : []) };
+  return { bundle, claimed: new Set(bundle ? partners.map((p) => p.productId) : []), cartSettled };
 }

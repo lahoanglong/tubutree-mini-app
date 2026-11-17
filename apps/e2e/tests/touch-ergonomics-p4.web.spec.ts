@@ -125,7 +125,9 @@ for (const width of NARROW_WIDTHS) {
       await page.goto(`/san-pham/${product!.slug}`);
       const section = page.locator('[data-section="pdp-reviews"]');
       await section.scrollIntoViewIfNeeded();
-      await expect(section.getByText('Nhận xét r1')).toBeVisible({ timeout: 30_000 });
+      await expect(section.getByText('Nhận xét r2')).toBeVisible({ timeout: 30_000 });
+      await section.getByRole('button', { name: 'Xem thêm đánh giá' }).click();
+      await expect(section.getByText('Nhận xét r1')).toBeVisible();
       await expectClean(page, 'Đánh giá', width, '[data-section="pdp-reviews"]');
       await expectPressFeedback(page, section.getByRole('button', { name: /^5 sao/ }), 'chip lọc 5 sao');
 

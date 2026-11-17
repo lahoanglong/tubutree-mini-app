@@ -51,21 +51,21 @@ async function layout(story: Locator): Promise<{ stage: Box; card: Box; points: 
 const noHorizontalScroll = (page: Page) => page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth);
 
 test.describe('Web khách: câu chuyện sản phẩm nội tuyến', () => {
-  test('375px: dải ở dưới khối mua nhanh, một bản hiện, ảnh trên rồi tới mọi chương, ảnh poster không bị phủ gì, không tràn ngang, axe sạch, không có khung toàn màn', async ({ page, api, request }) => {
+  test('375px: dải ở phần dưới trang, một bản duy nhất, ảnh trên rồi tới mọi chương, ảnh poster không bị phủ gì, không tràn ngang, axe sạch, không có khung toàn màn', async ({ page, api, request }) => {
     const p = await seeded(request);
     test.skip(!p, 'DB e2e chưa có sản phẩm mẫu của seed');
     mockPdp(api, p!);
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto(`/san-pham/${SLUG}`);
 
-    const stories = page.locator('[data-section="pdp-story"]');
-    await expect(stories).toHaveCount(2);
-    const story = stories.locator('visible=true');
+    // Một bản duy nhất ở phần dưới trang (sau Thành phần), mọi khổ.
+    const story = page.locator('[data-section="pdp-story"]');
     await expect(story).toHaveCount(1);
+    await expect(story).toBeVisible();
     await story.scrollIntoViewIfNeeded();
 
     const inInfo = await story.evaluate((el) => !!el.closest('[data-testid="pdp-info"]'));
-    expect(inInfo).toBe(true);
+    expect(inInfo).toBe(false);
 
     const qty = page.getByRole('button', { name: 'Tăng số lượng' });
     const qtyBox = await qty.boundingBox();
@@ -120,10 +120,9 @@ test.describe('Web khách: câu chuyện sản phẩm nội tuyến', () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto(`/san-pham/${SLUG}`);
 
-    const stories = page.locator('[data-section="pdp-story"]');
-    await expect(stories).toHaveCount(2);
-    const story = stories.locator('visible=true');
+    const story = page.locator('[data-section="pdp-story"]');
     await expect(story).toHaveCount(1);
+    await expect(story).toBeVisible();
     await story.scrollIntoViewIfNeeded();
 
     const inInfo = await story.evaluate((el) => !!el.closest('[data-testid="pdp-info"]'));

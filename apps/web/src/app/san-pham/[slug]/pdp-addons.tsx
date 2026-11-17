@@ -36,18 +36,19 @@ export function usePdpAddOnState(): PdpAddOnState | null {
 /**
  * Chọn MỘT nguồn cho khối mua kèm của trang (`pdpAddOnSource`): combo/mua kèm giá tốt thật > "Gợi ý mua kèm hợp vị" > dải "Khách thường mua cùng".
  * `hasBundles` do máy chủ tính từ đúng dữ liệu và đúng hàm vẽ của `PdpBundles`; hai nguồn sau tính ở đây từ dải mua cùng (danh sách đầu do máy chủ dựng).
- * Nguồn chốt ngay khi đủ dữ liệu (thường là lần dựng ở máy chủ, nên HTML và lần hydrate cùng nguồn) rồi giữ nguyên: giỏ hay tồn kho về sau làm bộ gợi ý
- * đổi món hay mất đi thì khối không nhảy sang nguồn khác giữa trang. Máy chủ lỗi lúc dựng (chưa có dải mua cùng) thì chốt khi trình duyệt tải xong.
- * Bọc cả trang để dải cuối trang (`PdpRails`) đọc cùng nguồn mà bỏ món trùng.
+ * Combo thật chốt ngay lúc dựng ở máy chủ. Không có combo thì chốt khi đã biết giỏ (bộ gợi ý bỏ món đã có trong giỏ) và dải mua cùng đã về, như Mini App;
+ * chưa có nguồn nào thì chưa chốt (chưa có khối để nhảy), dữ liệu về muộn vẫn hiện được. Đã chốt thì giữ nguyên: giỏ hay tồn kho về sau làm bộ gợi ý
+ * đổi món hay mất đi thì khối không nhảy sang nguồn khác giữa trang. Bọc cả trang để dải cuối trang (`PdpRails`) đọc cùng nguồn mà bỏ món trùng.
  */
 export function PdpAddOnScope({ hasBundles, children, ...host }: FbtHostArgs & { hasBundles: boolean; children: ReactNode }) {
-  const { bundle, claimed } = useFbt(host);
+  const { bundle, claimed, cartSettled } = useFbt(host);
   const together = useQuery({ ...boughtTogetherQuery(coreHttp, host.slug), initialData: host.initialBoughtTogether, staleTime: FIVE_MIN, retry: 0 });
   const bought = pdpShelves({ currentId: host.productId, boughtTogether: together.data ?? [], brand: [], feed: [], claimed }).boughtTogether;
   const latched = useRef<{ slug: string; source: PdpAddOnSource } | null>(null);
   if (latched.current && latched.current.slug !== host.slug) latched.current = null;
-  if (!latched.current && (hasBundles || !together.isPending)) {
-    latched.current = { slug: host.slug, source: pdpAddOnSource({ bundles: hasBundles, fbt: bundle !== null, bought: bought.length > 0 }) };
+  if (!latched.current && (hasBundles || (cartSettled && !together.isPending))) {
+    const source = pdpAddOnSource({ bundles: hasBundles, fbt: bundle !== null, bought: bought.length > 0 });
+    if (source) latched.current = { slug: host.slug, source };
   }
   const value: PdpAddOnState = { source: latched.current?.source ?? null, hasFbt: bundle !== null, claimed, bought };
   return <AddOnContext.Provider value={value}>{children}</AddOnContext.Provider>;

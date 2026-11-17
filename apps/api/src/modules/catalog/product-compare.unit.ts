@@ -23,8 +23,20 @@ const BASE_OF: Record<string, { unit: Measure['unit']; factor: number }> = {
 // đơn vị là đầu một từ khác ("2 lớp", "10 gói").
 const MEASURE_RE = /(?<![a-z0-9.,])(\d+(?:[.,]\d+)?)\s*(ml|lit|l|kg|gram|gr|g)(?![a-z0-9])/g;
 
-// Gói nhiều món: giá là của cả gói nên chia theo dung tích một chai sẽ sai.
-const PACK_RE = /\bcombo\b|\b(?:loc|set)\s*\d|\d\s*[x×*]\s*\d|\d\s*(?:ml|lit|l|kg|gram|gr|g)\s*[x×*]\s*\d|(?<![a-z0-9])[x×]\s?\d+(?![a-z0-9.,])/;
+// Gói nhiều món: giá là của cả gói nên chia theo dung tích một chai sẽ sai. Chạy trên chữ đã gấp dấu.
+const PACK_RE = new RegExp(
+  [
+    '\\bcombo\\b',
+    '\\bcap\\b',
+    // "Thùng 12 hộp", "Bộ 2 chai", "Hộp 10 gói", "Lốc 6": vỏ đựng kèm số món (số không theo sau là đơn vị đo, nên "Hộp 250g" vẫn là một món).
+    '\\b(?:thung|bo|loc|set|hop|goi|tui|vi|khay)\\s*\\d+(?![\\d.,]|\\s*(?:ml|lit|l|kg|gram|gr|g)(?![a-z]))',
+    // "2 chai", "12 hộp", "3 gói": từ 2 món trở lên.
+    '(?<![a-z0-9.,])(?:[2-9]|[1-9]\\d+)\\s*(?:chai|hop|goi|tui|lon|lo|hu|binh|can|tuyp|cuon|vien|thanh|banh|mieng|cai)(?![a-z])',
+    '\\d\\s*[x×*]\\s*\\d',
+    '\\d\\s*(?:ml|lit|l|kg|gram|gr|g)\\s*[x×*]\\s*\\d',
+    '(?<![a-z0-9])[x×]\\s?\\d+(?![a-z0-9.,])',
+  ].join('|'),
+);
 
 type Scan = { kind: 'none' } | { kind: 'unclear' } | { kind: 'ok'; measure: Measure };
 

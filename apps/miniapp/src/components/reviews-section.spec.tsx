@@ -568,12 +568,13 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     });
   });
 
-  it('chưa đăng nhập: "Viết đánh giá" mời đăng nhập, không mở form', async () => {
+  it('chưa đăng nhập: không có nút "Viết đánh giá" (nút chỉ cho người còn lần mua để đánh giá, như web), không hỏi quyền đánh giá', async () => {
     mocks.auth = { status: 'guest' };
     renderSection();
-    fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
-    expect(mocks.login).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('radiogroup', { name: 'Số sao' })).toBeNull();
+    expect(await screen.findByRole('heading', { name: /^Đánh giá/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Viết đánh giá' })).toBeNull();
+    expect(mocks.canReview).not.toHaveBeenCalled();
+    expect(mocks.login).not.toHaveBeenCalled();
   });
 
   it('BE báo chưa đủ điều kiện → ẩn nút, hiện lý do', async () => {

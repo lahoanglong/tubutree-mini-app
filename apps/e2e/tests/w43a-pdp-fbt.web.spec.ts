@@ -97,7 +97,7 @@ for (const size of SIZES) {
       test.skip(testInfo.project.name !== size.project, `Khổ ${size.width}px kiểm ở project ${size.project}`);
     });
 
-    test('món đang xem + 2 món bổ trợ, chọn hết; mọi dòng và nút từ 44px; dải bên dưới không lặp lại 2 món đó; không tràn ngang', async ({ page, api, request }) => {
+    test('món đang xem + 2 món bổ trợ, chọn hết; mọi dòng và nút từ 44px; không có dải mua kèm thứ hai; không tràn ngang', async ({ page, api, request }) => {
       const p = (await product(request))!;
       mockPdp(api, p);
       await openPdp(page, api, p);
@@ -126,18 +126,13 @@ for (const size of SIZES) {
       await addButton(page).scrollIntoViewIfNeeded();
       await expectTouchTarget44(addButton(page));
 
-      // Hai món đầu nằm ở khối nên dải "Khách thường mua cùng" chỉ còn ba món sau.
-      const together = page.getByRole('region', { name: 'Khách thường mua cùng' });
-      await expect(together).toBeVisible();
-      await expect(together).toContainText('Mận hậu');
-      await expect(together).not.toContainText('Bơ sáp');
-      await expect(together).not.toContainText('Dâu tây');
+      // Một khối mua kèm duy nhất: đã có Gợi ý mua kèm thì không còn dải "Khách thường mua cùng" riêng.
+      await expect(page.getByRole('region', { name: 'Khách thường mua cùng' })).toHaveCount(0);
+      await expect(page.locator('[data-pdp-block="addons"]')).toHaveCount(1);
 
       const box = (await fbt(page).boundingBox())!;
       expect(box.x).toBeGreaterThanOrEqual(0);
       expect(box.x + box.width).toBeLessThanOrEqual(size.width);
-      const togetherBox = (await together.boundingBox())!;
-      expect(box.y, 'khối nằm trên dải Khách thường mua cùng').toBeLessThan(togetherBox.y);
       expect(await noHorizontalScroll(page)).toBe(true);
     });
 

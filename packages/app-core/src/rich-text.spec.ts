@@ -87,3 +87,24 @@ describe('parseRichText: bộ lọc an toàn', () => {
     expect(decodeEntities('a&#0;b&#x7;c')).toBe('abc');
   });
 });
+
+describe('parseRichText: chữ thường lẫn thẻ, ngoặc nhọn trong chữ, mã hoá hai lần', () => {
+  it('chữ thường có vài thẻ đậm: giữ xuống dòng và đoạn của chữ', () => {
+    expect(text('Dòng 1\nMàu <b>đỏ</b>\nDòng 3')).toBe('Dòng 1\nMàu đỏ\nDòng 3');
+    expect(text('Đoạn 1 có <i>nghiêng</i>\n\nĐoạn 2')).toBe('Đoạn 1 có nghiêng\n\nĐoạn 2');
+    expect(parseRichText('Màu <b>đỏ</b>')[0]).toEqual({ kind: 'p', inlines: [{ text: 'Màu ' }, { text: 'đỏ', bold: true }] });
+  });
+  it('có thẻ khối thì xuống dòng trong chữ là khoảng trắng như trình duyệt', () => {
+    expect(text('<p>Một\nhai</p>')).toBe('Một hai');
+  });
+  it('chữ trong ngoặc nhọn không phải thẻ thì giữ nguyên', () => {
+    expect(hasHtmlTags('Hương: <Sả chanh>')).toBe(false);
+    expect(text('Hương: <Sả chanh>\n\nĐoạn 2')).toBe('Hương: <Sả chanh>\n\nĐoạn 2');
+    expect(text('<p>Mùi <Sa chanh> dịu</p>')).toBe('Mùi <Sa chanh> dịu');
+  });
+  it('mô tả bị mã hoá hai lần: đọc ra HTML, không hiện thẻ dạng chữ', () => {
+    const out = text('&lt;p&gt;Nước rửa chén&lt;/p&gt;&lt;ul&gt;&lt;li&gt;Sạch&lt;/li&gt;&lt;/ul&gt;');
+    expect(out).toBe('Nước rửa chén\n\nSạch');
+    expect(text('a &lt; 5 tuổi')).toBe('a < 5 tuổi');
+  });
+});

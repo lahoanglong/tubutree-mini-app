@@ -15,6 +15,10 @@ describe('parseMeasure: tách dung tích/khối lượng từ tên', () => {
     ['Can 3.8L (3800ml)', { unit: 'ml', qty: 3800 }],
     ['1.000ml', { unit: 'ml', qty: 1000 }],
     ['0,5kg', { unit: 'g', qty: 500 }],
+    ['Hộp 250g', { unit: 'g', qty: 250 }],
+    ['Túi 1kg', { unit: 'g', qty: 1000 }],
+    ['1 chai 500ml', { unit: 'ml', qty: 500 }],
+    ['Bột giặt hộp 2.5kg', { unit: 'g', qty: 2500 }],
   ])('"%s"', (text, expected) => {
     expect(parseMeasure(text)).toEqual(expected);
   });
@@ -26,6 +30,13 @@ describe('parseMeasure: tách dung tích/khối lượng từ tên', () => {
     ['Combo 3 chai 500ml'],
     ['combo 3'],
     ['Lốc 6 hộp 180ml'],
+    ['Thùng 12 hộp 180ml'],
+    ['Bộ 2 chai 500ml'],
+    ['Hộp 10 gói 20g'],
+    ['Cặp 2 chai'],
+    ['Cặp dầu gội 500ml'],
+    ['2 chai 500ml'],
+    ['Set 3 hũ 250g'],
     ['Mùi sả'],
     [''],
     ['Fuwa3e'],
@@ -52,6 +63,8 @@ describe('measureOf: tên phân loại trước, tên sản phẩm sau', () => {
   it('phân loại là gói nhiều món thì không lùi về tên sản phẩm', () => {
     expect(measureOf('Combo 2 chai', 'Nước rửa chén 500ml')).toBeNull();
     expect(measureOf('2 x 500ml', 'Nước rửa chén 500ml')).toBeNull();
+    expect(measureOf('Cặp 2 chai', 'Nước giặt 3.8L')).toBeNull();
+    expect(measureOf('Thùng 12 hộp', 'Sữa hạt 180ml')).toBeNull();
   });
 
   it('cả hai không ghi lượng thì null', () => {

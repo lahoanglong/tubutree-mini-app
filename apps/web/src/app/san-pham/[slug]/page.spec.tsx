@@ -424,7 +424,7 @@ describe('/san-pham/[slug] — khối đánh giá (R8)', () => {
     expect(section.querySelectorAll('button, a, img, svg')).toHaveLength(0);
   });
 
-  it('nhiều đánh giá: tóm tắt + 2 đánh giá chọn sẵn + "Xem thêm đánh giá" mở danh sách đầy đủ có chip lọc; không còn khối "Đánh giá nhanh" riêng', async () => {
+  it('nhiều đánh giá: tóm tắt + chip lọc + 2 đánh giá chọn sẵn + "Xem thêm đánh giá" mở danh sách đầy đủ; không còn khối "Đánh giá nhanh" riêng', async () => {
     api.reviews = { ...REVIEWS, count: 5 };
     const c = await mount();
     await flush();
@@ -432,7 +432,7 @@ describe('/san-pham/[slug] — khối đánh giá (R8)', () => {
     expect(c.querySelectorAll('[data-testid="quick-review"]')).toHaveLength(0);
     const section = c.querySelector('[data-pdp-block="reviews"]')!;
     expect(section.querySelectorAll('[data-testid="review-picked"] li')).toHaveLength(2);
-    expect(section.querySelector('[role="group"][aria-label="Lọc đánh giá"]')).toBeNull();
+    expect(section.querySelector('[role="group"][aria-label="Lọc đánh giá"]')).not.toBeNull();
     click(section.querySelector('[data-testid="reviews-more"]'));
     await flush();
     expect(section.querySelector('[data-testid="reviews-more"]')).toBeNull();

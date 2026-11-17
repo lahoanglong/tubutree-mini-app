@@ -58,6 +58,7 @@ test.describe('Web khách: lọc đánh giá theo sao ở máy chủ', () => {
     await section.scrollIntoViewIfNeeded();
     await expect(section.getByRole('heading', { name: 'Đánh giá (128)' })).toBeVisible({ timeout: 15_000 });
     await expect(section.getByText('Nhận xét moi0')).toBeVisible();
+    // Thu gọn như Mini App: chip lọc + 2 đánh giá chọn sẵn + "Xem thêm đánh giá"; bấm chip mở danh sách theo chip đó.
     await expect(section.getByRole('button', { name: 'Xem thêm đánh giá' })).toBeVisible();
     await expect(section.getByRole('button', { name: /^Tất cả ?\(128\)$/ })).toBeVisible();
     await expect(section.getByRole('button', { name: /^5 sao ?\(125\)$/ })).toBeVisible();
@@ -114,9 +115,11 @@ test.describe('Web khách: lọc đánh giá theo sao ở máy chủ', () => {
     await section.scrollIntoViewIfNeeded();
     await expect(section.getByText('Nhận xét t1-0')).toBeVisible({ timeout: 15_000 });
     const rows = section.locator('li').filter({ hasText: /Nhận xét t\d-\d/ });
-    await expect(rows).toHaveCount(5);
+    await expect(rows).toHaveCount(2);
     const more = section.getByRole('button', { name: 'Xem thêm đánh giá' });
     const queries = () => api.callsTo('GET', `/products/${p!.slug}/reviews`).map((c) => c.query.toString());
+    await more.click();
+    await expect(rows).toHaveCount(5);
     expect(queries().filter((q) => q.includes('cursor'))).toEqual([]);
 
     await more.click();

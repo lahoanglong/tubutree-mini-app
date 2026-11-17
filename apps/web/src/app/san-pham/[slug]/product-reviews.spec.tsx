@@ -585,11 +585,11 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(form(c)).toBeNull();
   });
 
-  it('thu gọn mặc định: tóm tắt sao + 2 đánh giá chọn sẵn + "Xem thêm đánh giá"; bấm thì mở danh sách đầy đủ có chip lọc và tiêu điểm về hàng chip', async () => {
+  it('thu gọn mặc định: tóm tắt sao + chip lọc + 2 đánh giá chọn sẵn + "Xem thêm đánh giá" (như Mini App); bấm thì mở danh sách đầy đủ và tiêu điểm về hàng chip', async () => {
     const c = await mount({ collapsed: true });
     expect(c.querySelector('[aria-label="Phân bổ số sao"]')).not.toBeNull();
     expect(c.querySelectorAll('[data-testid="review-picked"] li')).toHaveLength(2);
-    expect(button(c, '5 sao')).toBeNull();
+    expect(button(c, '5 sao')).not.toBeNull();
     const more = c.querySelector<HTMLButtonElement>('[data-testid="reviews-more"]')!;
     expect(more.textContent).toBe('Xem thêm đánh giá');
     click(more);
@@ -599,6 +599,17 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     expect(button(c, '5 sao')).not.toBeNull();
     expect(document.activeElement).toBe(c.querySelector('[role="group"][aria-label="Lọc đánh giá"]'));
     expect(smallTouchTargets(c)).toEqual([]);
+  });
+
+  it('thu gọn: bấm chip mở danh sách đầy đủ theo chip đó, tiêu điểm ở lại chip vừa bấm', async () => {
+    const c = await mount({ collapsed: true });
+    const chip = button(c, '5 sao')!;
+    chip.focus();
+    click(chip);
+    await flush(6);
+    expect(c.querySelector('[data-testid="review-picked"]')).toBeNull();
+    expect(button(c, '5 sao')!.getAttribute('aria-pressed')).toBe('true');
+    expect(document.activeElement).not.toBe(c.querySelector('[role="group"][aria-label="Lọc đánh giá"]'));
   });
 
   it('chỉ có 1–2 đánh giá: thu gọn đã hiện đủ nên không có "Xem thêm đánh giá"', async () => {

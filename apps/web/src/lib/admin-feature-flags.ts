@@ -96,7 +96,7 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     label: 'Bảng "So với món tương tự" trên trang sản phẩm',
     description: 'Trang sản phẩm (Mini App và web) hiện bảng so tối đa 2 món cùng phân khúc và cùng loại hàng theo tên, còn hàng: giá, dung tích, giá trên 100ml hoặc 100g và thành phần chính. Không có món nào để so thì bảng tự ẩn.',
     fallback: false,
-    onWarning: 'Khách thấy bảng so sánh trên trang sản phẩm có món để so. Món được chọn và giá trên 100ml/100g tính tự động từ tên sản phẩm và tên phân loại; số liệu cập nhật chậm tối đa khoảng 10 phút.',
-    offWarning: 'Bảng so sánh biến mất khỏi trang sản phẩm trong vòng 2 phút. Không dữ liệu nào bị xoá.',
+    onWarning: 'Khách thấy bảng so sánh trên trang sản phẩm có món để so. Món được chọn và giá trên 100ml/100g tính tự động từ tên sản phẩm và tên phân loại; số liệu cập nhật chậm tối đa khoảng 15 phút.',
+    offWarning: 'Bảng so sánh biến mất khỏi trang sản phẩm trong vòng khoảng 10 phút. Không dữ liệu nào bị xoá.',
   },
 ];

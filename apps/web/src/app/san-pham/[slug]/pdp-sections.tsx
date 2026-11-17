@@ -106,9 +106,12 @@ export function PdpPromises({
       <div data-section="pdp-promises" className={pdpBand}>
         <ProductTrustStrip view={trust} />
         {trust?.cta.slug !== 'van-chuyen' && (
-          <Link href={SHIPPING_POLICY_PATH} data-testid="pdp-shipping-policy" className={`${ui.btnText} ${phoneBrandText}`}>
-            {LEGAL_PAGES['van-chuyen'].title}
-          </Link>
+          // Hàng riêng, cách lối chính sách của dải phía trên: hai link nằm sát hay cùng hàng với nút chat thì vùng chạm 44px chồng nhau.
+          <div className="mt-2">
+            <Link href={SHIPPING_POLICY_PATH} data-testid="pdp-shipping-policy" className={`${ui.btnText} ${phoneBrandText}`}>
+              {LEGAL_PAGES['van-chuyen'].title}
+            </Link>
+          </div>
         )}
         {children}
       </div>

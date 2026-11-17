@@ -17,7 +17,6 @@ import { apiMediaUrl, getErrorMessage, getLoadErrorMessage, isStaleStateError } 
 import { settleWithin } from '../utils/settle-within';
 import { useLockedMutation } from './game/use-locked-mutation';
 import { useAuthStore } from '../store/auth';
-import { useLoginWithNotice } from './ui/auth-gate';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
 import { pickQuickReviews } from '@tubutree/app-core/commerce/pdp-view';
 import {
@@ -138,7 +137,6 @@ export function ReviewsSection({
   openCount?: number;
 }) {
   const { status } = useAuthStore();
-  const login = useLoginWithNotice();
   // Đánh giá đang xem ảnh/video toàn màn hình và vị trí tệp.
   const [lightbox, setLightbox] = useState<{ id: string; index: number } | null>(null);
   const [writing, setWriting] = useState(false);
@@ -171,7 +169,7 @@ export function ReviewsSection({
     // Trang đầu tải lại mà đổi dòng cuối (vừa có đánh giá mới) thì khoá đổi: giữ các trang đang hiện của cùng chip tới khi bản mới về.
     placeholderData: (prev, prevQuery) => (prevQuery?.queryKey[3] === filter ? prev : undefined),
   });
-  // Chỉ hỏi khi đã đăng nhập; chưa đăng nhập thì vẫn hiện nút để còn mời login.
+  // Chỉ hỏi khi đã đăng nhập: khách chưa đăng nhập không có nút viết.
   const eligQ = useQuery({
     queryKey: ['can-review', slug],
     queryFn: () => canReviewProduct(slug),
@@ -220,12 +218,10 @@ export function ReviewsSection({
   const data = reviewsQ.data;
   const hasReviews = !!data && data.count > 0;
   // Đã đăng nhập thì chỉ có nút khi can-review đã về (như web): chưa biết còn đơn nào để viết thì chưa mở được form.
-  // Chưa có đánh giá nào thì khối chỉ còn một dòng: khách chưa đăng nhập không có nút mời đăng nhập ở đó (chỉ người còn lần mua để đánh giá mới có nút viết).
+  // Nút viết chỉ cho người còn lần mua để đánh giá (như web): khách chưa đăng nhập không có nút.
   const headerAction =
     status !== 'authenticated'
-      ? hasReviews
-        ? { label: fillCopy('pdp.reviewWrite'), onPress: () => void login() }
-        : null
+      ? null
       : nextOrder
         ? { label: fillCopy('pdp.reviewWrite'), onPress: () => openNew(nextOrder) }
         : elig?.reason === 'ALL_REVIEWED' && latestMine

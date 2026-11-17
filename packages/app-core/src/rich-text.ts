@@ -23,13 +23,34 @@ const HEADINGS = new Set(['h1', 'h2', 'h3', 'h4', 'h5', 'h6']);
 const BOLD = new Set(['strong', 'b']);
 const ITALIC = new Set(['em', 'i']);
 
+// Chỉ tên thẻ HTML có thật mới là thẻ: "<Sả chanh>" hay "<Hương bưởi>" trong mô tả là chữ, không được nuốt mất.
+const KNOWN_TAGS = new Set([
+  ...DROP_WITH_CONTENT, ...BLOCK_P, ...HEADINGS, ...BOLD, ...ITALIC,
+  'html', 'body', 'br', 'hr', 'ul', 'ol', 'li', 'span', 'a', 'img', 'font', 'u', 's', 'strike', 'del', 'ins', 'small', 'big', 'sub', 'sup', 'mark',
+  'code', 'center', 'thead', 'tbody', 'tfoot', 'td', 'th', 'caption', 'colgroup', 'col', 'label', 'abbr', 'cite', 'q', 'time', 'nav', 'picture',
+  'source', 'video', 'audio', 'wbr', 'meta', 'link', 'input', 'option', 'tt', 'var', 'kbd', 'samp', 'dfn', 'bdi', 'bdo', 'details', 'summary',
+]);
+// Tên thẻ cho phép xuống dòng: có ít nhất một thẻ này thì xuống dòng trong chữ là khoảng trắng như trình duyệt; không có (chữ thường lẫn vài
+// thẻ đậm/nghiêng) thì giữ xuống dòng của chữ như mô tả chữ thường.
+const LINE_TAGS = new Set([...BLOCK_P, ...HEADINGS, 'br', 'hr', 'ul', 'ol', 'li']);
 // Giá trị thuộc tính trong ngoặc có thể chứa `>`: đọc trọn cặp ngoặc để phần đuôi của thuộc tính không rơi ra thành chữ.
-const TAG_RE = /<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9-]*)\b(?:[^>"']|"[^"]*"|'[^']*')*?(\/?)\s*>/y;
+const TAG_RE = /<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9-]*)(?=[\s/>])(?:[^>"']|"[^"]*"|'[^']*')*?(\/?)\s*>/y;
+const TAG_SCAN = new RegExp(TAG_RE.source, 'g');
+
+function tagNames(input: string): string[] {
+  const out: string[] = [];
+  TAG_SCAN.lastIndex = 0;
+  for (let m = TAG_SCAN.exec(input); m; m = TAG_SCAN.exec(input)) {
+    const name = m[2]!.toLowerCase();
+    if (KNOWN_TAGS.has(name)) out.push(name);
+  }
+  return out;
+}
 const NAMED_ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', ndash: '–', mdash: '—', hellip: '…', laquo: '«', raquo: '»', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', bull: '•', middot: '·', deg: '°', times: '×', copy: '©', reg: '®', trade: '™' };
 
-/** true khi chuỗi có thẻ HTML thật (không tính dấu `<` đứng một mình như "< 5 tuổi"). */
+/** true khi chuỗi có thẻ HTML thật (không tính dấu `<` đứng một mình như "< 5 tuổi" hay chữ trong ngoặc nhọn như "<Sả chanh>"). */
 export function hasHtmlTags(input: string | null | undefined): boolean {
-  return !!input && /<\s*\/?\s*[a-zA-Z][a-zA-Z0-9-]*\b[^>]*>/.test(input);
+  return !!input && input.includes('<') && tagNames(input).length > 0;
 }
 
 export function decodeEntities(s: string): string {
@@ -89,8 +110,14 @@ function plainBlocks(input: string): RichBlock[] {
 /** Đọc mô tả (HTML hoặc chữ thường) thành các khối an toàn để vẽ. */
 export function parseRichText(input: string | null | undefined): RichBlock[] {
   if (!input) return [];
-  if (!hasHtmlTags(input)) return plainBlocks(decodeEntities(input));
+  if (hasHtmlTags(input)) return parseHtml(input);
+  const decoded = decodeEntities(input);
+  // Mô tả bị mã hoá hai lần ("&lt;p&gt;…"): giải một lần thì ra HTML thật, đọc như HTML để không hiện thẻ dạng chữ.
+  return hasHtmlTags(decoded) ? parseHtml(decoded) : plainBlocks(decoded);
+}
 
+function parseHtml(input: string): RichBlock[] {
+  const keepLines = !tagNames(input).some((name) => LINE_TAGS.has(name));
   const src = input.replace(/<!--[\s\S]*?(-->|$)/g, '').replace(/<!\[CDATA\[[\s\S]*?(\]\]>|$)/g, '').replace(/<![^>]*>/g, '').replace(/<\?[\s\S]*?(\?>|$)/g, '');
   const blocks: RichBlock[] = [];
   let current: RichInline[] = [];
@@ -127,13 +154,24 @@ export function parseRichText(input: string | null | undefined): RichBlock[] {
     const lt = src.indexOf('<', i);
     const textEnd = lt < 0 ? src.length : lt;
     if (textEnd > i) {
-      if (!dropUntil) pushText(target(), decodeEntities(src.slice(i, textEnd)).replace(/\n/g, ' '), bold, italic);
+      if (!dropUntil) {
+        const text = decodeEntities(src.slice(i, textEnd)).replace(/\r\n?/g, '\n');
+        if (keepLines && !item) {
+          // Chữ thường lẫn vài thẻ đậm/nghiêng: dòng trống tách đoạn, xuống dòng đơn giữ trong đoạn.
+          text.split(/\n[ \t]*\n+/).forEach((para, k) => {
+            if (k > 0) flushPara();
+            pushText(target(), para, bold, italic);
+          });
+        } else {
+          pushText(target(), text.replace(/\n/g, ' '), bold, italic);
+        }
+      }
       i = textEnd;
       continue;
     }
     TAG_RE.lastIndex = lt;
     const m = TAG_RE.exec(src);
-    if (!m) {
+    if (!m || !KNOWN_TAGS.has(m[2]!.toLowerCase())) {
       // `<` không mở thẻ (vd "< 5 tuổi"): giữ như chữ.
       if (!dropUntil) pushText(target(), '<', bold, italic);
       i = lt + 1;
