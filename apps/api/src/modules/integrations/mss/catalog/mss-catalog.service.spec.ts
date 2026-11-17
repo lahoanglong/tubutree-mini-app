@@ -6,7 +6,7 @@ import type { ImageRegistryStale } from '../../../catalog/image-registry-stale';
 import { EMPTY_MSS_PAYLOAD } from '../../../catalog/mss-enrichment';
 import { MssRequestError, type MssClient } from '../mss.client';
 import type { MssHealthService } from '../mss-health.service';
-import { enrichmentColumns, MSS_CATALOG_MAX_PAGES, MssCatalogService, parseListPage } from './mss-catalog.service';
+import { enrichmentColumns, isNewerDoc, MSS_CATALOG_MAX_PAGES, MssCatalogService, parseListPage } from './mss-catalog.service';
 
 const HOST = 'mss.example.test';
 const media = (h: string, ext = 'webp') => `https://${HOST}/api/pub/media/${h}.${ext}`;
@@ -201,6 +201,32 @@ describe('MssCatalogService.applyDocs: không lùi phiên bản, không ghi lạ
     const s2 = stats();
     await lost.svc.applyDocs([doc('a1')], s2, ctx);
     expect(s2).toMatchObject({ applied: 0, skipped: { stale_version: 1 } });
+  });
+
+  it('gỡ xuất bản không mang published_version (đọc thành 0): thắng bản xuất bản v7 khi updated_at mới hơn, thua khi cũ hơn', async () => {
+    const stored = [{ productId: 'p-a', contentVersion: 7, mssUpdatedAt: new Date('2026-11-17T01:00:00Z'), sha256: 'x' }];
+    const later = setup({ existing: stored });
+    const s1 = stats();
+    await later.svc.applyDocs([doc('a1', { state: 'unpublished', published_version: null, updated_at: '2026-11-17T02:00:00Z' })], s1, ctx);
+    expect(s1).toMatchObject({ applied: 1, skipped: {} });
+    expect(upsertArgs(later.exec)).toMatchObject({ state: 'unpublished', version: 0, mediaUrls: [] });
+
+    const earlier = setup({ existing: stored });
+    const s2 = stats();
+    await earlier.svc.applyDocs([doc('a1', { state: 'removed', published_version: null, updated_at: '2026-11-17T00:30:00Z' })], s2, ctx);
+    expect(s2).toMatchObject({ applied: 0, skipped: { stale_version: 1 } });
+  });
+
+  it('isNewerDoc: luật mới hơn cho bản xuất bản và bản gỡ', () => {
+    // published: phiên bản trước, giờ sau
+    expect(isNewerDoc('published', 8, 1, 7, 9)).toBe(true);
+    expect(isNewerDoc('published', 7, 10, 7, 9)).toBe(true);
+    expect(isNewerDoc('published', 7, 9, 7, 9)).toBe(false);
+    expect(isNewerDoc('published', 6, 99, 7, 9)).toBe(false);
+    // gỡ: giờ quyết định (phiên bản 0 khi MSS không gửi), phiên bản lớn hơn vẫn thắng
+    expect(isNewerDoc('unpublished', 0, 10, 7, 9)).toBe(true);
+    expect(isNewerDoc('removed', 0, 8, 7, 9)).toBe(false);
+    expect(isNewerDoc('unpublished', 8, 8, 7, 9)).toBe(true);
   });
 
   it('cùng một lô có hai bản của một sản phẩm: bản sau cũ hơn bị chặn bởi bản vừa ghi', async () => {

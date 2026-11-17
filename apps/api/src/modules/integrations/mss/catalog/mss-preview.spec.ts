@@ -62,13 +62,39 @@ describe('MssPreviewService.product', () => {
   });
 
   it.each([
-    ['sai chữ ký', () => token({}, 'x'.repeat(43))],
+    ['sai dạng', () => 'abc.def'],
     ['hết hạn', () => token({ exp: nowS() - 600 })],
     ['không có token', () => undefined],
   ])('token %s: 404 mà không gọi MSS', async (_l, make) => {
     const f = setup();
     await expect(f.svc.product(make())).rejects.toMatchObject({ response: MSS_PREVIEW_EXPIRED });
     expect(f.request).not.toHaveBeenCalled();
+  });
+
+  it('chữ ký token do MSS kiểm: token đúng dạng ký bằng khoá lạ được chuyển sang MSS, MSS từ chối thì 404 hết hạn', async () => {
+    const f = setup({
+      respond: () => {
+        throw new MssRequestError('unauthorized', 'x', { status: 401 });
+      },
+    });
+    await expect(f.svc.product(token({}, 'khoa-gia-mao'.repeat(4)))).rejects.toMatchObject({ response: MSS_PREVIEW_EXPIRED });
+    expect(f.request).toHaveBeenCalledTimes(1);
+  });
+
+  it('phản hồi chỉ gồm trường công khai của PDP (không lộ cột nội bộ)', async () => {
+    const f = setup();
+    f.getBySlug.mockResolvedValueOnce({ slug: 'nuoc-giat', name: 'Tựa nháp', basePrice: 195_000, approvalStatus: 'APPROVED', storefrontId: 's1', soldApp: 3 } as never);
+    const r = (await f.svc.product(token())) as Record<string, unknown>;
+    expect(r).toMatchObject({ slug: 'nuoc-giat', name: 'Tựa nháp', preview: { version: 8 } });
+    expect(r).not.toHaveProperty('approvalStatus');
+    expect(r).not.toHaveProperty('storefrontId');
+    expect(r).not.toHaveProperty('soldApp');
+  });
+
+  it('sản phẩm có trên Tubu nhưng đang ẩn/chờ duyệt (PDP công khai 404): báo not_found, không phải hết hạn', async () => {
+    const f = setup();
+    f.getBySlug.mockRejectedValueOnce(new NotFoundException('Không tìm thấy sản phẩm.'));
+    await expect(f.svc.product(token())).rejects.toMatchObject({ response: { error: 'not_found' } });
   });
 
   it('chưa cấu hình MSS: 404, không gọi', async () => {

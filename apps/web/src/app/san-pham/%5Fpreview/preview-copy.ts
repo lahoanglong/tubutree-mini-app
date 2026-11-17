@@ -10,7 +10,10 @@ export const PREVIEW_COPY = {
   buy: 'Mua ngay',
   buyDisabledNote: 'Bản xem trước không mua được.',
   expired: { title: 'Hết phiên xem trước', message: 'Phiên xem trước đã hết hạn, mở lại từ MSS' },
-  missing: { title: 'Chưa có trên Tubu Tree', message: 'Sản phẩm này chưa có trên Tubu Tree nên chưa xem trước được. Đồng bộ xong thì mở lại từ MSS' },
+  missing: {
+    title: 'Chưa hiện trên Tubu Tree',
+    message: 'Sản phẩm này chưa có trên Tubu Tree hoặc đang ẩn/chờ duyệt nên chưa xem trước được. Đồng bộ hoặc duyệt xong thì mở lại từ MSS',
+  },
   unavailable: { title: 'Chưa có bản nháp', message: 'MSS chưa trả được bản nháp, thử lại sau' },
 } as const;
 

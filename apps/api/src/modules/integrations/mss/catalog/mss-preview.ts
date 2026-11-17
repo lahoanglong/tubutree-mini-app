@@ -9,11 +9,13 @@ import { MssFlagsService } from '../mss-flags';
 import { MssClient, MssRequestError } from '../mss.client';
 import { parseMssProductDoc } from './mss-catalog-doc';
 import { mssMediaHosts } from './mss-media';
-import { verifyMssPreviewToken } from './mss-preview-token';
+import { toPublicProductDetail } from '../../../catalog/catalog-public';
+import { readMssPreviewToken } from './mss-preview-token';
 
 /** Thân lỗi ổn định cho trang `_preview` của web: hết hạn/sai token và không tìm thấy đều là 404 (không nói sai ở đâu). */
 export const MSS_PREVIEW_EXPIRED = { error: 'preview_expired', message: 'Phiên xem trước đã hết hạn, mở lại từ MSS' } as const;
 export const MSS_PREVIEW_UNAVAILABLE = { error: 'preview_unavailable', message: 'MSS chưa trả được bản nháp, thử lại sau' } as const;
+export const MSS_PREVIEW_NOT_FOUND = { error: 'not_found', message: 'Sản phẩm chưa có trên Tubu hoặc chưa hiện công khai' } as const;
 
 @Injectable()
 export class MssPreviewService {
@@ -28,11 +30,10 @@ export class MssPreviewService {
 
   /**
    * Trang sản phẩm dựng từ dữ liệu Tubu (giá, tồn, biến thể, đánh giá) cộng nội dung NHÁP của MSS, đúng dạng `GET /products/:slug`.
-   * Bản nháp lấy trực tiếp từ MSS theo token, không lưu ở đâu. Token sai/hết hạn thì 404 mà không gọi MSS.
+   * Bản nháp lấy trực tiếp từ MSS theo token, không lưu ở đâu. Token sai dạng/hết hạn thì 404 mà không gọi MSS; chữ ký token do MSS kiểm.
    */
   async product(token: unknown) {
-    const env = this.flags.env();
-    const claims = verifyMssPreviewToken(token, env.inboundSecret ? [env.inboundSecret, env.inboundSecretPrev] : []);
+    const claims = readMssPreviewToken(token);
     if (!claims || !this.flags.configured()) throw new NotFoundException(MSS_PREVIEW_EXPIRED);
     let data: unknown;
     try {
@@ -47,12 +48,20 @@ export class MssPreviewService {
     // Bản MSS trả phải đúng sản phẩm của token: MSS lỗi trả nhầm sản phẩm thì không hiện nội dung của sản phẩm khác.
     if (!parsed.ok || parsed.doc.pancakeProductId !== claims.pid) throw new ServiceUnavailableException(MSS_PREVIEW_UNAVAILABLE);
     const product = await this.prisma.product.findUnique({ where: { pancakeId: claims.pid }, select: { slug: true } });
-    if (!product) throw new NotFoundException({ error: 'not_found', message: 'Sản phẩm chưa có trên Tubu' });
+    if (!product) throw new NotFoundException(MSS_PREVIEW_NOT_FOUND);
     const payload = await this.withCategories(parsed.doc.payload, parsed.doc.categorySlugs);
     const catalog = this.moduleRef?.get(CatalogService, { strict: false });
     if (!catalog) throw new ServiceUnavailableException(MSS_PREVIEW_UNAVAILABLE);
-    const pdp = await catalog.getBySlug(product.slug, { enrichment: payload });
-    return { ...pdp, preview: { version: claims.ver, expiresAt: new Date(claims.exp * 1000).toISOString() } };
+    let pdp: Awaited<ReturnType<CatalogService['getBySlug']>>;
+    try {
+      pdp = await catalog.getBySlug(product.slug, { enrichment: payload });
+    } catch (err) {
+      // Sản phẩm có trên Tubu nhưng đang ẩn hay chờ duyệt: PDP công khai trả 404, người soạn cần biết đúng lý do thay vì "hết hạn".
+      if (err instanceof NotFoundException) throw new NotFoundException(MSS_PREVIEW_NOT_FOUND);
+      throw err;
+    }
+    // Cùng bộ lọc trường công khai với GET /products/:slug: trang xem trước không lộ cột nội bộ.
+    return { ...toPublicProductDetail(pdp), preview: { version: claims.ver, expiresAt: new Date(claims.exp * 1000).toISOString() } };
   }
 
   private async withCategories(payload: MssEnrichmentPayload, slugs: string[] | null): Promise<MssEnrichmentPayload> {

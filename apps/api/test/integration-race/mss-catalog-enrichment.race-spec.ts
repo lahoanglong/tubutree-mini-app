@@ -193,6 +193,29 @@ describe('MSS catalog enrichment (real Postgres)', () => {
     expect(pdp.name).toBe(`Tên Pancake mới ${tag}`);
   });
 
+  it('gỡ xuất bản (không published_version) chạy chồng với bản xuất bản gửi lại: bản gỡ thắng, phiên bản không lùi; xuất bản bản mới thì hiện lại', async () => {
+    const at = (s: number) => new Date(Date.UTC(2026, 10, 17, 1, 0, s)).toISOString();
+    const a = (d: unknown) => new MssCatalogService(prisma, noClient, health).applyDocs([d], stats(), ctx);
+    const b = (d: unknown) => applyInVn([d], stats());
+    for (let round = 0; round < 6; round++) {
+      const base = 100 + round * 10;
+      await a(doc(pidB, base));
+      expect(await row(productB.id)).toMatchObject({ state: 'published', contentVersion: base });
+      const tomb = doc(pidB, 0, { state: 'unpublished', published_version: null, updated_at: at(base + 5) });
+      const resend = doc(pidB, base, { updated_at: at(base + 2) });
+      await Promise.all(round % 2 ? [a(tomb), b(resend)] : [a(resend), b(tomb)]);
+      expect(await row(productB.id)).toMatchObject({ state: 'unpublished', contentVersion: base, mediaUrls: [], mssUpdatedAt: new Date(at(base + 5)) });
+      // Bản xuất bản cũ đến muộn sau lần gỡ: không hồi sinh nội dung đã gỡ.
+      const late = stats();
+      await new MssCatalogService(prisma, noClient, health).applyDocs([doc(pidB, base, { updated_at: at(base + 1) })], late, ctx);
+      expect(late.skipped).toEqual({ stale_version: 1 });
+    }
+    expect((await new CatalogService(prisma, undefined, flagsOn).getBySlug(productB.slug)).name).toBe(`Hàng B ${tag}`);
+    await a(doc(pidB, 300));
+    expect(await row(productB.id)).toMatchObject({ state: 'published', contentVersion: 300 });
+    expect((await new CatalogService(prisma, undefined, flagsOn).getBySlug(productB.slug)).name).toBe('Tựa MSS v300');
+  });
+
   it('xoá sản phẩm: dòng bổ sung đi theo (CASCADE)', async () => {
     const tmp = await prisma.product.create({
       data: { brand: 'IT', slug: `itce-tmp-${tag}`, name: 'Tạm', description: 'x', basePrice: 1, pancakeId: `itce-t-${tag}` },

@@ -192,7 +192,7 @@ describe('trang xem trước MSS', () => {
     expect(c.querySelector('[data-testid="preview-buy"]')).toBeNull();
     api.result = { kind: 'missing' };
     const m = await renderPage({ token: 'tok' });
-    expect(m.querySelector('[data-problem="missing"] [data-testid="error-message"]')!.textContent).toContain('chưa có trên Tubu Tree');
+    expect(m.querySelector('[data-problem="missing"] [data-testid="error-message"]')!.textContent).toContain('đang ẩn/chờ duyệt');
     expect(m.querySelector('button')).toBeNull();
   });
 });

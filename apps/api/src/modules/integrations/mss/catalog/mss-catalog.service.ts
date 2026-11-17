@@ -74,6 +74,17 @@ export function parseListPage(json: unknown): ListPage | null {
   return { items: o.items, nextCursor: typeof cursor === 'string' ? cursor : null, serverTime: new Date(t) };
 }
 
+/**
+ * Bản đến có mới hơn bản đang lưu không (cùng luật với mệnh đề WHERE của câu upsert). Bản xuất bản: phiên bản lớn hơn, hoặc cùng phiên bản mà
+ * `updated_at` muộn hơn. Bản gỡ (`unpublished`/`removed`) thường không mang `published_version` (đọc thành 0) nên xét theo `updated_at`:
+ * gỡ sau lần xuất bản cuối thì thắng. Cột phiên bản giữ số lớn nhất từng thấy, nên bản xuất bản cũ đến muộn sau lần gỡ vẫn bị chặn.
+ */
+export function isNewerDoc(state: string, version: number, at: number, prevVersion: number, prevAt: number): boolean {
+  if (version > prevVersion) return true;
+  if (state !== 'published') return at > prevAt;
+  return version === prevVersion && at > prevAt;
+}
+
 /** Cột rút gọn đi kèm payload (thẻ sản phẩm, bộ lọc danh mục, danh sách ảnh /img). */
 export function enrichmentColumns(state: string, payload: MssEnrichmentPayload) {
   const images = payload.images === null ? null : orderedImageUrls(payload.images);
@@ -245,12 +256,12 @@ export class MssCatalogService {
       if (prev) {
         const prevAt = prev.mssUpdatedAt.getTime();
         const docAt = doc.updatedAt.getTime();
-        if (prev.contentVersion > doc.version || (prev.contentVersion === doc.version && prevAt > docAt)) {
-          bump(stats.skipped, 'stale_version');
+        if (prevAt === docAt && prev.sha256 === sha && (doc.state !== 'published' || prev.contentVersion === doc.version)) {
+          stats.unchanged += 1;
           continue;
         }
-        if (prev.contentVersion === doc.version && prevAt === docAt && prev.sha256 === sha) {
-          stats.unchanged += 1;
+        if (!isNewerDoc(doc.state, doc.version, docAt, prev.contentVersion, prevAt)) {
+          bump(stats.skipped, 'stale_version');
           continue;
         }
       }
@@ -258,7 +269,7 @@ export class MssCatalogService {
         const written = await this.upsert(productId, doc, payload, sha);
         if (written > 0) {
           stats.applied += 1;
-          current.set(productId, { productId, contentVersion: doc.version, mssUpdatedAt: doc.updatedAt, sha256: sha });
+          current.set(productId, { productId, contentVersion: Math.max(prev?.contentVersion ?? 0, doc.version), mssUpdatedAt: doc.updatedAt, sha256: sha });
         } else {
           bump(stats.skipped, 'stale_version');
         }
@@ -299,12 +310,14 @@ export class MssCatalogService {
         ${c.categoryOverride}, ${c.categoryIds}::text[], ${c.mediaUrls}::text[], (now() AT TIME ZONE 'UTC'), (now() AT TIME ZONE 'UTC'))
       ON CONFLICT ("productId") DO UPDATE SET
         "pancakeProductId" = EXCLUDED."pancakeProductId", "mssProductId" = EXCLUDED."mssProductId", "state" = EXCLUDED."state",
-        "payload" = EXCLUDED."payload", "contentVersion" = EXCLUDED."contentVersion", "mssUpdatedAt" = EXCLUDED."mssUpdatedAt",
+        "payload" = EXCLUDED."payload", "contentVersion" = GREATEST("product_mss_enrichment"."contentVersion", EXCLUDED."contentVersion"),
+        "mssUpdatedAt" = EXCLUDED."mssUpdatedAt",
         "fetchedAt" = EXCLUDED."fetchedAt", "sha256" = EXCLUDED."sha256", "title" = EXCLUDED."title", "imagesOverride" = EXCLUDED."imagesOverride",
         "coverImage" = EXCLUDED."coverImage", "categoryOverride" = EXCLUDED."categoryOverride", "categoryIds" = EXCLUDED."categoryIds",
         "mediaUrls" = EXCLUDED."mediaUrls", "updatedAt" = (now() AT TIME ZONE 'UTC')
       WHERE "product_mss_enrichment"."contentVersion" < EXCLUDED."contentVersion"
         OR ("product_mss_enrichment"."contentVersion" = EXCLUDED."contentVersion" AND "product_mss_enrichment"."mssUpdatedAt" < EXCLUDED."mssUpdatedAt")
+        OR (EXCLUDED."state" <> 'published' AND "product_mss_enrichment"."mssUpdatedAt" < EXCLUDED."mssUpdatedAt")
         OR ("product_mss_enrichment"."contentVersion" = EXCLUDED."contentVersion" AND "product_mss_enrichment"."mssUpdatedAt" = EXCLUDED."mssUpdatedAt"
             AND "product_mss_enrichment"."sha256" <> EXCLUDED."sha256")`;
   }
