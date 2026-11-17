@@ -57,6 +57,8 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   }),
 }));
 
+import { QueryClient } from '@tanstack/react-query';
+import { ORDER_ZALO_KEY } from '@/components/checkout/order-zalo';
 import CheckoutPage from './page';
 
 const ADDR = {
@@ -141,6 +143,22 @@ describe('/thanh-toan — ô nhận hành trình đơn qua Zalo', () => {
     expect(consentBox(c)).toBeUndefined();
     const body = await place(c);
     expect('orderZaloConsent' in body).toBe(false);
+  });
+
+  it('đơn trước vừa đổi lựa chọn (cache còn choice cũ): mở lại màn hỏi lại máy chủ, chưa có câu trả lời thì chưa hiện ô, không tick theo cache', async () => {
+    mocks.config = { ...mocks.config, orderZaloEnabled: true };
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    qc.setQueryData(ORDER_ZALO_KEY, { ...STATUS, choice: true });
+    let answer!: (v: unknown) => void;
+    mocks.zalo = () => new Promise((r) => (answer = r));
+    const r = render(<CheckoutPage />, qc);
+    mounted.push(r);
+    await flush(10);
+    expect(mocks.zaloCalls).toBeGreaterThan(0);
+    expect(consentBox(r.container)).toBeUndefined();
+    answer({ ...STATUS, choice: false });
+    await flush(6);
+    expect(consentBox(r.container)!.checked).toBe(false);
   });
 });
 

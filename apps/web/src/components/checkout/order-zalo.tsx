@@ -15,17 +15,22 @@ import { CheckMark, miniCheckbox, miniCheckboxWrap } from '@/components/order-mo
 
 export const ORDER_ZALO_KEY = ['order-zalo'];
 
-/** Chỉ hỏi máy chủ khi cờ chung bật: cờ tắt thì màn không có request hay phần tử nào mới. Lỗi tải = không hiện ô, đơn vẫn đặt được. */
+/**
+ * Chỉ hỏi máy chủ khi cờ chung bật: cờ tắt thì màn không có request hay phần tử nào mới. Lỗi tải = không hiện ô, đơn vẫn đặt được.
+ * Mỗi lần màn mở đều hỏi lại và chỉ dùng kết quả của lần hỏi đó: máy chủ ghi lựa chọn ngay trong giao dịch đặt hàng, bản cache của đơn trước
+ * sẽ tick sẵn (hoặc bỏ tick) theo lựa chọn cũ rồi gửi đè lên lựa chọn khách vừa đổi.
+ */
 export function useOrderZaloStatus() {
   const authed = useAuthPhase() === 'authenticated';
   // Cùng khoá cache với `usePublicConfig` nhưng chỉ tải khi đã đăng nhập: màn chưa đăng nhập không gọi API nào.
   const flag = useQuery({ ...publicConfigQuery(coreHttp), staleTime: 5 * 60_000, enabled: authed }).data?.orderZaloEnabled === true;
-  return useQuery({ queryKey: ORDER_ZALO_KEY, queryFn: () => fetchOrderZaloStatus(coreHttp), enabled: flag && authed, staleTime: 60_000, retry: false });
+  const q = useQuery({ queryKey: ORDER_ZALO_KEY, queryFn: () => fetchOrderZaloStatus(coreHttp), enabled: flag && authed, refetchOnMount: 'always', retry: false });
+  return q.isFetchedAfterMount && !q.isError ? q.data : undefined;
 }
 
 /** `checked` là giá trị gửi kèm đơn; undefined khi ô không hiện (máy chủ dùng lựa chọn đã nhớ). */
 export function useOrderZaloConsent() {
-  const view = orderZaloConsentView(useOrderZaloStatus().data);
+  const view = orderZaloConsentView(useOrderZaloStatus());
   const [picked, setPicked] = useState<boolean | null>(null);
   return { view, checked: view ? picked ?? view.checked : undefined, setPicked };
 }

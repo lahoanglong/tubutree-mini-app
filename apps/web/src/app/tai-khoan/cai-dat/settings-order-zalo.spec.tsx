@@ -84,4 +84,16 @@ describe('Cài đặt web — "Hành trình đơn hàng qua Zalo"', () => {
     expect(zaloSwitch(c)!.getAttribute('aria-checked')).toBe('true');
     expect(c.textContent).toContain('Chưa lưu được cài đặt. Kiểm tra mạng rồi thử lại.');
   });
+
+  it('khách đã đồng ý nhưng ra khỏi nhóm triển khai (enabled false, không số): vẫn có công tắc để rút đồng ý', async () => {
+    mocks.config = { orderZaloEnabled: true };
+    mocks.status = { ...STATUS, enabled: false, phoneMasked: null, choice: true };
+    mocks.patch.mockResolvedValue({ enabled: false, updatedAt: '2026-11-17T01:00:00.000Z', source: 'account_settings' });
+    const c = await mount();
+    const sw = zaloSwitch(c)!;
+    expect(sw.getAttribute('aria-checked')).toBe('true');
+    click(sw);
+    await flush(6);
+    expect(mocks.patch).toHaveBeenCalledWith('/me/order-zalo-updates', { enabled: false });
+  });
 });

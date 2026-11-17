@@ -18,15 +18,17 @@ export const ORDER_ZALO_KEY = ['order-zalo'];
 
 /**
  * Chỉ hỏi máy chủ khi cờ chung bật: cờ tắt thì màn không có request hay phần tử nào mới. Lỗi tải = không hiện ô, đơn vẫn đặt được.
- * Giữ cả tệp dưới 2 KB sau khi gói để Rollup gộp vào chunk sẵn có (`experimentalMinChunkSize`), khỏi tốn đầu import và mục preload riêng.
+ * Mỗi lần màn mở đều hỏi lại và chỉ dùng kết quả của lần hỏi đó: máy chủ ghi lựa chọn ngay trong giao dịch đặt hàng, bản cache của đơn trước
+ * sẽ tick sẵn (hoặc bỏ tick) theo lựa chọn cũ rồi gửi đè lên lựa chọn khách vừa đổi.
  */
 export function useOrderZaloStatus() {
-  return useQuery({ queryKey: ORDER_ZALO_KEY, queryFn: () => fetchOrderZaloStatus(coreHttp), enabled: usePublicConfig().orderZaloEnabled === true, staleTime: 60_000, retry: false });
+  const q = useQuery({ queryKey: ORDER_ZALO_KEY, queryFn: () => fetchOrderZaloStatus(coreHttp), enabled: usePublicConfig().orderZaloEnabled === true, refetchOnMount: 'always', retry: false });
+  return q.isFetchedAfterMount && !q.isError ? q.data : undefined;
 }
 
 /** `checked` là giá trị gửi kèm đơn; undefined khi ô không hiện (máy chủ dùng lựa chọn đã nhớ). */
 export function useOrderZaloConsent() {
-  const view = orderZaloConsentView(useOrderZaloStatus().data);
+  const view = orderZaloConsentView(useOrderZaloStatus());
   const [picked, setPicked] = useState<boolean | null>(null);
   return { view, checked: view ? picked ?? view.checked : undefined, setPicked };
 }

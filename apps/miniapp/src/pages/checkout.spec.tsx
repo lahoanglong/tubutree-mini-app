@@ -115,6 +115,7 @@ import CheckoutPage from './checkout';
 import { recallCheckoutSelection, rememberCheckoutSelection } from '../utils/checkout-selection';
 import { createQueryClient } from '../services/query-client';
 import { COUPON_CHANGE_KEY } from '../components/checkout/use-coupon-hint';
+import { ORDER_ZALO_KEY } from '../components/checkout/order-zalo';
 import { LOCK_REFRESH_WAIT_MS } from '../utils/settle-within';
 import { vi as viCopy } from '../i18n/vi';
 import { setCheckoutEntry, takeCheckoutEntry, trackEvent } from '../services/analytics';
@@ -3870,5 +3871,22 @@ describe('CheckoutPage — ô nhận hành trình đơn qua Zalo (wave tubu-mss-
     const body = await placeOrderClick();
     expect(screen.queryByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toBeNull();
     expect('orderZaloConsent' in body).toBe(false);
+  });
+
+  it('đơn trước vừa đổi lựa chọn (cache còn choice cũ): mở lại màn hỏi lại máy chủ, chưa có câu trả lời thì chưa hiện ô, không tick theo cache', async () => {
+    mocks.publicConfig.orderZaloEnabled = true;
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
+    qc.setQueryData(ORDER_ZALO_KEY, { ...STATUS, choice: true });
+    let answer!: (v: unknown) => void;
+    mocks.coreGet.mockReturnValue(new Promise((r) => (answer = r)));
+    render(
+      <QueryClientProvider client={qc}>
+        <CheckoutPage />
+      </QueryClientProvider>,
+    );
+    await waitFor(() => expect(mocks.coreGet).toHaveBeenCalledWith('/config/order-zalo'));
+    expect(screen.queryByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toBeNull();
+    await act(async () => answer({ ...STATUS, choice: false }));
+    expect(await screen.findByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toHaveAttribute('aria-checked', 'false');
   });
 });

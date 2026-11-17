@@ -20,9 +20,6 @@ export const fetchOrderZaloStatus = (http: HttpClient) => http.get<OrderZaloStat
 export const saveOrderZaloChoice = (http: HttpClient, enabled: boolean) =>
   http.patch<{ enabled: boolean }>('/me/order-zalo-updates', { enabled });
 
-/** Cùng phiên bản câu chữ máy chủ lưu kèm lựa chọn (`ORDER_ZALO_CONSENT_TEXT_VERSION` ở API): đổi câu `checkout.orderZalo*` thì đổi cả hai. */
-export const ORDER_ZALO_CONSENT_TEXT_VERSION = 'order-zalo-v1-2026-11-17';
-
 export const TUBU_ZALO_PHONE = '0899149229';
 
 /** Có hiện ô không (null = không) và trạng thái tick ban đầu: lần đầu theo cấu hình, sau đó theo lựa chọn gần nhất. */

@@ -49,7 +49,7 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   const [saveError, setSaveError] = useState(false);
-  const zalo = useOrderZaloStatus().data;
+  const zalo = useOrderZaloStatus();
   const [zaloSaving, setZaloSaving] = useState(false);
   const [fontScale, setFontScale] = useState<FontScale>('normal');
   // Mỗi lần `logout()` là một lệnh POST /auth/logout và một lượt xoá cache: hai cú chạm cùng khung hình chỉ được chạy một.
@@ -143,7 +143,7 @@ export default function SettingsPage() {
           <p className="text-sm text-stone-900 max-md:font-semibold">Cập nhật đơn hàng</p>
           <p className="text-xs text-stone-600 max-md:text-sm">Luôn bật để bạn không lỡ tin giao hàng, hoàn tiền</p>
         </div>
-        {zalo && orderZaloConsentView(zalo) && (
+        {zalo && (orderZaloConsentView(zalo) || zalo.choice === true) && (
           <SwitchRow label={fillCopy('settings.orderZalo')} on={zalo.choice === true} disabled={zaloSaving} onToggle={() => void toggleZalo(zalo)} />
         )}
         {prefsQ.isLoading && <Skeleton height={44} style={{ marginTop: 8 }} />}

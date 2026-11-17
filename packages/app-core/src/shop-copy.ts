@@ -494,7 +494,7 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.pickup.maxOpenLink': 'Xem yêu cầu đang mở',
   'checkout.shipWaived': 'Miễn phí vận chuyển (đổi rác kèm đơn)',
   // Đồng ý nhận tin hành trình đơn qua Zalo (quyết định PO số 3). Câu `body` phải giữ nguyên cụm PO duyệt; đổi chữ thì đổi
-  // ORDER_ZALO_CONSENT_TEXT_VERSION (app-core order-zalo.ts và API mss-order-event-types.ts).
+  // ORDER_ZALO_CONSENT_TEXT_VERSION ở API (mss-order-event-types.ts): máy chủ đóng dấu phiên bản này khi ghi lựa chọn.
   'checkout.orderZalo.label': 'Nhận hành trình đơn hàng qua Zalo',
   'checkout.orderZalo.body': 'Sẽ có tin nhắn nhắc xác nhận hành trình đơn hàng qua Zalo này.',
   'checkout.orderZalo.phone': 'Số nhận: {phone}',

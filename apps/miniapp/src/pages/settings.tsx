@@ -56,7 +56,7 @@ export default function SettingsPage() {
   const openSnackbarRef = useRef(openSnackbar);
   openSnackbarRef.current = openSnackbar;
   const { logout, user } = useAuthStore();
-  const zalo = useOrderZaloStatus().data;
+  const zalo = useOrderZaloStatus();
   const qc = useQueryClient();
   const [zaloSaving, setZaloSaving] = useState(false);
   // Tài khoản khách tạm không có mật khẩu hay Zalo để đăng nhập lại, đăng xuất là mất đơn và điểm.
@@ -166,7 +166,7 @@ export default function SettingsPage() {
           subtitle="Luôn bật để bạn không lỡ tin giao hàng, hoàn tiền"
           style={{ borderBottom: '1px solid var(--color-border-subtle)' }}
         />
-        {zalo && orderZaloConsentView(zalo) && <Toggle label={fillCopy('settings.orderZalo')} on={zalo.choice === true} disabled={zaloSaving} onToggle={() => void toggleZalo(zalo)} />}
+        {zalo && (orderZaloConsentView(zalo) || zalo.choice === true) && <Toggle label={fillCopy('settings.orderZalo')} on={zalo.choice === true} disabled={zaloSaving} onToggle={() => void toggleZalo(zalo)} />}
         <Toggle
           label="Khuyến mãi & mã giảm giá"
           on={notify?.notifyPromo ?? false}

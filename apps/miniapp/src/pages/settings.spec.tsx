@@ -651,4 +651,15 @@ describe('Cài đặt: công tắc "Hành trình đơn hàng qua Zalo" (wave tub
     expect(sw).toHaveAttribute('aria-checked', 'true');
     await waitFor(() => expect(sw).not.toHaveAttribute('aria-disabled'));
   });
+
+  it('khách đã đồng ý nhưng ra khỏi nhóm triển khai (enabled false, không số): vẫn có công tắc để rút đồng ý', async () => {
+    mocks.orderZaloEnabled = true;
+    mocks.coreGet.mockResolvedValue({ ...STATUS, enabled: false, phoneMasked: null, choice: true });
+    mocks.corePatch.mockResolvedValue({ enabled: false, updatedAt: '2026-11-17T01:00:00.000Z', source: 'account_settings' });
+    render(<SettingsPage />);
+    const sw = await zaloSwitch();
+    expect(sw).toHaveAttribute('aria-checked', 'true');
+    fireEvent.click(sw);
+    await waitFor(() => expect(mocks.corePatch).toHaveBeenCalledWith('/me/order-zalo-updates', { enabled: false }));
+  });
 });
