@@ -60,6 +60,7 @@ export const DAILY_ERROR_CODES = {
   notDone: 'DAILY_NOT_DONE',
   claimed: 'DAILY_CLAIMED',
   guest: 'DAILY_GUEST',
+  tooNew: 'DAILY_TOO_NEW',
 } as const;
 export type DailyErrorCode = (typeof DAILY_ERROR_CODES)[keyof typeof DAILY_ERROR_CODES];
 

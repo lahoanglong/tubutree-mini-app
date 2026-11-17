@@ -5,7 +5,7 @@ import type { DailyMissionId, DailyMissionsResponse } from '@tubutree/shared-typ
 import type { MissionItem } from '@tubutree/app-core/api/game';
 import { gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
 import { collapseMissions, gameMoreCopy } from '@tubutree/app-core/game-more-copy';
-import { DAILY_MISSIONS_KEY, claimDailyMission, classifyDailyClaimError, dailyMissionsQuery } from '@tubutree/app-core/engagement/api';
+import { DAILY_MISSIONS_KEY, claimDailyMission, classifyDailyClaimError, dailyClaimErrorCopy, dailyMissionsQuery } from '@tubutree/app-core/engagement/api';
 import { dailyBonusLine, dailyClaimToast, dailyProgress, dailyRows, gameDeviceId } from '@tubutree/app-core/engagement/view';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { ProgressBar } from '@/components/ui/progress-bar';
@@ -13,6 +13,7 @@ import { ui, uiBar } from '@/lib/guest-ui';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { browserStorage } from '@/lib/recently-viewed';
+import { settleWithin } from '@/lib/settle-within';
 import { GuestPointsNote } from '@/components/loyalty/guest-points-note';
 import { miniBtnSecondary } from '@/components/loyalty/mini-surface';
 import { formatNumber } from './format';
@@ -45,13 +46,15 @@ export function MissionsCard({
   const daily = dailyQ.data?.enabled ? dailyQ.data : undefined;
   // Khách vãng lai: tiến độ vẫn tính nhưng không hứa điểm và không có nút nhận thưởng; một câu mời đăng nhập cho cả thẻ.
   const guest = (missions ?? []).some((m) => m.pointsBlocked) || daily?.pointsBlocked === true;
-  // Nhiệm vụ hằng ngày bật: phần Hôm nay đứng đầu, nhiệm vụ một lần thu lại sau một nút để thẻ không dài thêm.
-  const oneTimeOpen = !daily || showOneTime;
+  // Nhiệm vụ hằng ngày bật: phần Hôm nay đứng đầu, nhiệm vụ một lần thu lại sau một nút để thẻ không dài thêm; có thưởng đang chờ nhận thì
+  // để mở sẵn, không giấu nút Nhận thưởng sau nút gập.
+  const oneTimeClaimable = (missions ?? []).some((m) => m.completed && !m.claimed && !m.pointsBlocked);
+  const oneTimeOpen = !daily || showOneTime || oneTimeClaimable;
   return (
     <GameCard title="Nhiệm vụ" icon={Target}>
       {guest && <GuestPointsNote margin="0 0 4px" />}
       {daily && <DailySection data={daily} onGo={onGo} />}
-      {daily && missions && missions.length > 0 && (
+      {daily && missions && missions.length > 0 && !oneTimeClaimable && (
         <button type="button" aria-expanded={showOneTime} onClick={() => setShowOneTime((v) => !v)} className={`${miniBtnSecondary} mt-1 w-full`}>
           {showOneTime ? fillCopy('daily.oneTimeHide') : fillCopy('daily.oneTimeShow', { n: missions.length })}
         </button>
@@ -143,14 +146,15 @@ function DailySection({ data, onGo }: { data: DailyMissionsResponse; onGo?: (tar
       claimDailyMission(coreHttp, id, gameDeviceId(browserStorage(), (n) => crypto.getRandomValues(new Uint8Array(n)))),
     onSuccess: (res) => {
       notify(dailyClaimToast(res), res.water > 0 || res.points > 0 ? 'success' : 'info');
-      void qc.invalidateQueries({ queryKey: ['game'] });
       void qc.invalidateQueries({ queryKey: ['loyalty'] });
       void qc.invalidateQueries({ queryKey: ['points-txn'] });
+      // Khoá nút giữ tới khi phần Hôm nay tải lại (dòng thành "đã nhận"), có trần chờ: bấm lại lúc dòng còn cũ chỉ ra 409.
+      return settleWithin(qc.invalidateQueries({ queryKey: ['game'] }));
     },
     onError: (err) => {
       const kind = classifyDailyClaimError(err);
-      notify(fillCopy(kind === 'stale' ? 'daily.toastStale' : 'daily.toastError'), kind === 'stale' ? 'info' : 'error');
-      void qc.invalidateQueries({ queryKey: DAILY_MISSIONS_KEY });
+      notify(fillCopy(dailyClaimErrorCopy(kind)), kind === 'stale' ? 'info' : 'error');
+      return settleWithin(qc.invalidateQueries({ queryKey: DAILY_MISSIONS_KEY }));
     },
   });
   return (

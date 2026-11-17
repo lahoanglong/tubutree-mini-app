@@ -100,12 +100,15 @@ export const claimDailyMission = (http: HttpClient, id: DailyMissionId, deviceId
   http.post<DailyMissionClaimResponse>(`/game/daily/${id}/claim`, { deviceId });
 
 /** Việc giao diện cần làm khi nhận thưởng hỏng. `stale`: thẻ đang hiện trạng thái cũ, tải lại là đủ. */
-export type DailyClaimFailure = 'stale' | 'guest' | 'disabled' | 'network';
+export const dailyClaimErrorCopy = (kind: DailyClaimFailure): 'daily.toastStale' | 'daily.toastTooNew' | 'daily.toastError' =>
+  kind === 'stale' ? 'daily.toastStale' : kind === 'tooNew' ? 'daily.toastTooNew' : 'daily.toastError';
+export type DailyClaimFailure = 'stale' | 'guest' | 'tooNew' | 'disabled' | 'network';
 
 export function classifyDailyClaimError(err: unknown): DailyClaimFailure {
   const code = errorCode(err);
   if (code === DAILY_ERROR_CODES.claimed || code === DAILY_ERROR_CODES.notDone || code === DAILY_ERROR_CODES.notToday) return 'stale';
   if (code === DAILY_ERROR_CODES.guest) return 'guest';
+  if (code === DAILY_ERROR_CODES.tooNew) return 'tooNew';
   if (code === DAILY_ERROR_CODES.disabled) return 'disabled';
   const status = errorStatus(err);
   if (status === 404) return 'disabled';

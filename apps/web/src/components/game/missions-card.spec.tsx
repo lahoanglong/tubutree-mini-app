@@ -75,15 +75,15 @@ describe('MissionsCard (web): phần Hôm nay (cờ engagement.daily_missions_en
     mocks.phase = 'guest';
   });
 
-  const showWith = async (onGo = vi.fn()) => {
-    mounted = render(<MissionsCard missions={[DONE, OPEN]} streakDays={0} claimPending={false} claimVariables={undefined} onClaim={vi.fn()} onGo={onGo} />);
+  const showWith = async (onGo = vi.fn(), missions: MissionItem[] = [{ ...DONE, claimed: true }, OPEN]) => {
+    mounted = render(<MissionsCard missions={missions} streakDays={0} claimPending={false} claimVariables={undefined} onClaim={vi.fn()} onGo={onGo} />);
     await flush();
     return mounted.container;
   };
 
   it('cờ tắt: thẻ như cũ, không có phần Hôm nay', async () => {
     mocks.get.mockResolvedValue({ enabled: false });
-    const c = await showWith();
+    const c = await showWith(vi.fn(), [DONE, OPEN]);
     expect(mocks.get).toHaveBeenCalledWith('/game/daily');
     expect(c.querySelector('[data-testid="daily-missions"]')).toBeNull();
     expect(buttons(c)).toContain('Nhận thưởng');
@@ -91,7 +91,7 @@ describe('MissionsCard (web): phần Hôm nay (cờ engagement.daily_missions_en
 
   it('API cũ (404): thẻ như cũ', async () => {
     mocks.get.mockRejectedValue(Object.assign(new Error('Not Found'), { status: 404 }));
-    const c = await showWith();
+    const c = await showWith(vi.fn(), [DONE, OPEN]);
     expect(c.querySelector('[data-testid="daily-missions"]')).toBeNull();
     expect(c.textContent).toContain('Đơn hàng đầu tiên');
   });
@@ -105,20 +105,37 @@ describe('MissionsCard (web): phần Hôm nay (cờ engagement.daily_missions_en
     expect(section.querySelectorAll('[data-testid^="daily-row-"]')).toHaveLength(3);
     expect(section.textContent).toContain('2/3');
     expect(section.textContent).toContain('Xong cả 3 nhiệm vụ: +10 Điểm Xanh');
-    expect(c.textContent).not.toContain('Đơn hàng đầu tiên');
+    expect(c.textContent).not.toContain('Nhà phê bình');
     const toggle = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Xem nhiệm vụ một lần (2)')!;
     expect(toggle.getAttribute('aria-expanded')).toBe('false');
     act(() => toggle.click());
-    expect(c.textContent).toContain('Đơn hàng đầu tiên');
+    expect(c.textContent).toContain('Nhà phê bình');
     act(() => (c.querySelector('button[aria-label="Làm nhiệm vụ: Tưới cây"]') as HTMLButtonElement).click());
     expect(onGo).toHaveBeenCalledWith('checkin');
+  });
+
+  it('nhiệm vụ một lần có thưởng chờ nhận: mở sẵn, không có nút gập', async () => {
+    mocks.get.mockResolvedValue(DAILY);
+    const c = await showWith(vi.fn(), [DONE, OPEN]);
+    expect(c.querySelector('[data-testid="daily-missions"]')).not.toBeNull();
+    expect(buttons(c)).toContain('Nhận thưởng');
+    expect(buttons(c).some((t) => t?.startsWith('Xem nhiệm vụ một lần'))).toBe(false);
+  });
+
+  it('tài khoản mới chưa đủ tuổi: báo chờ, không báo lỗi chung', async () => {
+    mocks.get.mockResolvedValue(DAILY);
+    mocks.post.mockRejectedValue({ status: 403, code: 'DAILY_TOO_NEW' });
+    const c = await showWith();
+    act(() => (c.querySelector('button[aria-label="Nhận thưởng: Xem một sản phẩm"]') as HTMLButtonElement).click());
+    await flush();
+    expect(Array.from(document.body.querySelectorAll('[role="alert"]')).map((n) => n.textContent)).toContain('Tài khoản mới tạo chưa nhận được thưởng nhiệm vụ, bạn quay lại sau nhé.');
   });
 
   it('Nhận: gửi mã thiết bị 32 hex và báo thưởng thật', async () => {
     mocks.get.mockResolvedValue(DAILY);
     mocks.post.mockResolvedValue({ id: 'DAILY_STORY', water: 5, points: 0, bonus: false, capped: [], totalSeeds: null });
     const c = await showWith();
-    act(() => (c.querySelector('button[aria-label="Nhận thưởng: Đọc câu chuyện một sản phẩm"]') as HTMLButtonElement).click());
+    act(() => (c.querySelector('button[aria-label="Nhận thưởng: Xem một sản phẩm"]') as HTMLButtonElement).click());
     await flush();
     expect(mocks.post).toHaveBeenCalledWith('/game/daily/DAILY_STORY/claim', { deviceId: expect.stringMatching(/^[0-9a-f]{32}$/) });
     expect(document.body.querySelector('[role="status"]')?.textContent).toBe('Đã nhận +5 💧');

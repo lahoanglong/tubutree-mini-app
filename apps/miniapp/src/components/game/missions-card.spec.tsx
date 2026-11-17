@@ -100,22 +100,38 @@ describe('MissionsCard: phần Hôm nay (nhiệm vụ hằng ngày)', () => {
 
   it('cờ bật: 3 dòng Hôm nay đứng đầu, nhiệm vụ một lần thu sau một nút', async () => {
     mocks.get.mockResolvedValue(DAILY);
-    card([DONE, OPEN]);
+    card([{ ...DONE, claimed: true }, OPEN]);
     expect(await screen.findByTestId('daily-missions')).toBeInTheDocument();
     expect(screen.getByText('2/3')).toBeInTheDocument();
     expect(screen.getByText('Xong cả 3 nhiệm vụ: +10 Điểm Xanh')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Nhận thưởng: Đọc câu chuyện một sản phẩm' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nhận thưởng: Xem một sản phẩm' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Làm nhiệm vụ: Tưới cây' })).toBeInTheDocument();
-    expect(screen.queryByText('Đơn hàng đầu tiên')).not.toBeInTheDocument();
+    expect(screen.queryByText('Nhà phê bình')).not.toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Xem nhiệm vụ một lần (2)' }));
-    expect(screen.getByText('Đơn hàng đầu tiên')).toBeInTheDocument();
+    expect(screen.getByText('Nhà phê bình')).toBeInTheDocument();
+  });
+
+  it('nhiệm vụ một lần có thưởng chờ nhận: mở sẵn, không có nút gập', async () => {
+    mocks.get.mockResolvedValue(DAILY);
+    card([DONE, OPEN]);
+    expect(await screen.findByTestId('daily-missions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Nhận thưởng' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Xem nhiệm vụ một lần/ })).not.toBeInTheDocument();
+  });
+
+  it('tài khoản mới chưa đủ tuổi: báo chờ, không báo lỗi chung', async () => {
+    mocks.get.mockResolvedValue(DAILY);
+    mocks.post.mockRejectedValue({ status: 403, code: 'DAILY_TOO_NEW' });
+    card([OPEN]);
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhận thưởng: Xem một sản phẩm' }));
+    await waitFor(() => expect(mocks.snack).toHaveBeenCalledWith({ text: 'Tài khoản mới tạo chưa nhận được thưởng nhiệm vụ, bạn quay lại sau nhé.', type: 'error' }));
   });
 
   it('nhận thưởng: gửi mã thiết bị game 32 ký tự, báo thưởng thật', async () => {
     mocks.get.mockResolvedValue(DAILY);
     mocks.post.mockResolvedValue({ id: 'DAILY_STORY', water: 5, points: 0, bonus: false, capped: [], totalSeeds: 105 });
     card([DONE]);
-    fireEvent.click(await screen.findByRole('button', { name: 'Nhận thưởng: Đọc câu chuyện một sản phẩm' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Nhận thưởng: Xem một sản phẩm' }));
     await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
     const [path, body] = mocks.post.mock.calls[0]!;
     expect(path).toBe('/game/daily/DAILY_STORY/claim');

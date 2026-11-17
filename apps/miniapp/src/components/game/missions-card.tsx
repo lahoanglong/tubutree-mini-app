@@ -5,7 +5,7 @@ import { useSnackbar } from 'zmp-ui';
 import type { DailyMissionId, DailyMissionsResponse } from '@tubutree/shared-types';
 import { gameNewbieCopy, missionTarget, type MissionTarget } from '@tubutree/app-core/game-newbie';
 import { collapseMissions, gameMoreCopy } from '@tubutree/app-core/game-more-copy';
-import { DAILY_MISSIONS_KEY, claimDailyMission, classifyDailyClaimError, dailyMissionsQuery } from '@tubutree/app-core/engagement/api';
+import { DAILY_MISSIONS_KEY, claimDailyMission, classifyDailyClaimError, dailyClaimErrorCopy, dailyMissionsQuery } from '@tubutree/app-core/engagement/api';
 import { dailyBonusLine, dailyClaimToast, dailyProgress, dailyRows, gameDeviceId } from '@tubutree/app-core/engagement/view';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import type { MissionItem } from '../../services/game-api';
@@ -15,6 +15,7 @@ import { vi } from '../../i18n/vi';
 import { formatNumber } from '../../utils/format';
 import { haptic } from '../../utils/haptic';
 import { browserStorage } from '../../utils/recently-viewed';
+import { settleWithin } from '../../utils/settle-within';
 import { Button } from '../ui/button';
 import { Icon } from '../ui/icon';
 import { ProgressBar } from '../ui/progress-bar';
@@ -47,13 +48,15 @@ export function MissionsCard({
   const daily = dailyQ.data?.enabled ? dailyQ.data : undefined;
   // Khách vãng lai: tiến độ vẫn tính nhưng không hứa điểm và không có nút nhận thưởng; một câu mời đăng nhập cho cả thẻ.
   const guest = (missions ?? []).some((m) => m.pointsBlocked) || daily?.pointsBlocked === true;
-  // Nhiệm vụ hằng ngày bật: phần Hôm nay đứng đầu, nhiệm vụ một lần thu lại sau một nút để thẻ không dài thêm.
-  const oneTimeOpen = !daily || showOneTime;
+  // Nhiệm vụ hằng ngày bật: phần Hôm nay đứng đầu, nhiệm vụ một lần thu lại sau một nút để thẻ không dài thêm; có thưởng đang chờ nhận thì
+  // để mở sẵn, không giấu nút Nhận thưởng sau nút gập.
+  const oneTimeClaimable = (missions ?? []).some((m) => m.completed && !m.claimed && !m.pointsBlocked);
+  const oneTimeOpen = !daily || showOneTime || oneTimeClaimable;
   return (
     <GameCard title="Nhiệm vụ" icon={Target}>
       {guest && <GuestPointsNote margin="0 0 4px" />}
       {daily && <DailySection data={daily} onGo={onGo} />}
-      {daily && missions && missions.length > 0 && (
+      {daily && missions && missions.length > 0 && !oneTimeClaimable && (
         <Button fullWidth variant="ghost" aria-expanded={showOneTime} onPress={() => setShowOneTime((v) => !v)} style={{ marginTop: 'var(--space-stack-xs)' }}>
           {showOneTime ? fillCopy('daily.oneTimeHide') : fillCopy('daily.oneTimeShow', { n: missions.length })}
         </Button>
@@ -162,14 +165,15 @@ function DailySection({ data, onGo }: { data: DailyMissionsResponse; onGo?: (tar
     onSuccess: (res) => {
       haptic('medium');
       openSnackbar({ text: dailyClaimToast(res), type: res.water > 0 || res.points > 0 ? 'success' : 'warning' });
-      void qc.invalidateQueries({ queryKey: ['game'] });
       void qc.invalidateQueries({ queryKey: ['loyalty'] });
       void qc.invalidateQueries({ queryKey: ['points-txn'] });
+      // Khoá nút giữ tới khi phần Hôm nay tải lại (dòng thành "đã nhận"), có trần chờ: bấm lại lúc dòng còn cũ chỉ ra 409.
+      return settleWithin(qc.invalidateQueries({ queryKey: ['game'] }));
     },
     onError: (err) => {
       const kind = classifyDailyClaimError(err);
-      openSnackbar({ text: fillCopy(kind === 'stale' ? 'daily.toastStale' : 'daily.toastError'), type: kind === 'stale' ? 'warning' : 'error' });
-      void qc.invalidateQueries({ queryKey: DAILY_MISSIONS_KEY });
+      openSnackbar({ text: fillCopy(dailyClaimErrorCopy(kind)), type: kind === 'stale' ? 'warning' : 'error' });
+      return settleWithin(qc.invalidateQueries({ queryKey: DAILY_MISSIONS_KEY }));
     },
   });
   return (

@@ -44,7 +44,7 @@ export const BADGE_RULES: Record<BadgeId, Rule> = {
      WHERE r.game = 'daily_quiz' AND r."submittedAt" IS NOT NULL AND r.total >= 3 AND r.correct = r.total ${user}
      GROUP BY r."userId" HAVING COUNT(DISTINCT r."dayKey") >= 10`,
   PHOTO_REVIEW: (user) => Prisma.sql`
-    SELECT DISTINCT v."userId" FROM reviews v WHERE cardinality(v.images) > 0 ${user}`,
+    SELECT DISTINCT v."userId" FROM reviews v WHERE cardinality(v.images) > 0 AND v."isVisible" = true ${user}`,
   INVITE_1: (user) => Prisma.sql`
     SELECT t."userId" FROM (${REFERRAL_ROWS}) t WHERE true ${user}
      GROUP BY t."userId"

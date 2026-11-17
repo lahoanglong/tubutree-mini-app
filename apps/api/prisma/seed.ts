@@ -224,7 +224,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.mini.global_points_daily_budget', value: 200_000, category: 'game', description: 'Tổng Điểm Xanh game mini phát cho mọi tài khoản mỗi ngày; chạm trần thì các ván sau chỉ nhận 💧. 0–1.000.000.', createOnly: true },
   { key: 'game.mini.min_account_age_hours', value: 0, category: 'game', description: 'Tài khoản tạo chưa đủ số giờ này thì chơi game mini không có thưởng (0 = không chặn). 0–720.', createOnly: true },
   // Nhịp hằng ngày (game/missions): cờ mặc định TẮT, trùng dòng INSERT của migration 20261117120000_engagement_daily_badges.
-  { key: 'engagement.daily_missions_enabled', value: false, category: 'engagement', description: 'Bật 3 nhiệm vụ hằng ngày ở thẻ Nhiệm vụ (Vườn Xanh), chấm nhắc ở thanh đáy và chuông trên web điện thoại. Thưởng 💧 và Điểm Xanh tính chung trần game mini (game.mini.*).', createOnly: true },
+  { key: 'engagement.daily_missions_enabled', value: false, category: 'engagement', description: 'Bật 3 nhiệm vụ hằng ngày ở thẻ Nhiệm vụ (Vườn Xanh) và chấm nhắc ở thanh đáy. Chỉ chạy khi game.mini.enabled cũng bật: thưởng 💧 và Điểm Xanh tính chung trần, tuổi tài khoản tối thiểu và công tắc tổng của game mini.', createOnly: true },
   { key: 'engagement.badges_enabled', value: false, category: 'engagement', description: 'Bật hàng 8 huy hiệu ở màn Cá nhân (0 điểm, chỉ ghi nhận). Tắt thì không cấp huy hiệu mới và không hiện hàng.', createOnly: true },
   { key: 'seasonpass.checkin_xp', value: 10, category: 'game', description: 'XP season pass mỗi lần điểm danh' },
   {
@@ -1004,7 +1004,7 @@ export const MISSIONS = [
     [
       ['daily-quiz', 'DAILY_QUIZ', 'Hôm nay: Đố Xanh', 'Làm xong Đố Xanh hôm nay'],
       ['daily-play', 'DAILY_PLAY', 'Hôm nay: chơi một trò', 'Chơi xong một trò bất kỳ ở Vườn Xanh hôm nay'],
-      ['daily-story', 'DAILY_STORY', 'Hôm nay: xem câu chuyện sản phẩm', 'Mở trang một sản phẩm và xem câu chuyện của nó hôm nay'],
+      ['daily-story', 'DAILY_STORY', 'Hôm nay: xem một sản phẩm', 'Mở trang một sản phẩm bất kỳ hôm nay'],
       ['daily-wishlist', 'DAILY_WISHLIST', 'Hôm nay: thêm vào yêu thích', 'Thêm một món vào Yêu thích hôm nay'],
       ['daily-water', 'DAILY_WATER', 'Hôm nay: tưới cây', 'Tưới cây ở Vườn Xanh hôm nay'],
       ['daily-bonus', 'DAILY_BONUS', 'Hôm nay: xong cả 3 nhiệm vụ', 'Thưởng thêm khi nhận đủ 3 nhiệm vụ của ngày'],

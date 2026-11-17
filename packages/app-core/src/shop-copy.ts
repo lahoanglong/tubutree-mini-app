@@ -844,7 +844,7 @@ export const SHOP_COPY: Record<string, string> = {
   'daily.progress': '{n}/{total}',
   'daily.mission.DAILY_QUIZ': 'Chơi Đố Xanh',
   'daily.mission.DAILY_PLAY': 'Chơi một trò trong Vườn Xanh',
-  'daily.mission.DAILY_STORY': 'Đọc câu chuyện một sản phẩm',
+  'daily.mission.DAILY_STORY': 'Xem một sản phẩm',
   'daily.mission.DAILY_WISHLIST': 'Thêm một sản phẩm vào Yêu thích',
   'daily.mission.DAILY_WATER': 'Tưới cây',
   'daily.water': '+{n} 💧',
@@ -861,6 +861,7 @@ export const SHOP_COPY: Record<string, string> = {
   'daily.toastCapped': 'Hôm nay Vườn Xanh đã trao đủ phần thưởng, mai bạn quay lại nhé.',
   'daily.toastError': 'Chưa nhận được thưởng. Bạn thử lại nhé.',
   'daily.toastStale': 'Nhiệm vụ vừa đổi trạng thái, Tubu đã tải lại cho bạn.',
+  'daily.toastTooNew': 'Tài khoản mới tạo chưa nhận được thưởng nhiệm vụ, bạn quay lại sau nhé.',
   'daily.oneTimeShow': 'Xem nhiệm vụ một lần ({n})',
   'daily.oneTimeHide': 'Ẩn nhiệm vụ một lần',
   // Huy hiệu ghi nhận (cờ engagement.badges_enabled): một hàng cuộn ngang ở Cá nhân, không có điểm.

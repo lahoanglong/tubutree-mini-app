@@ -9,7 +9,7 @@ jest.mock('../game-profile', () => ({ ensureGameProfile: jest.fn(async () => und
 const NOW = new Date('2026-11-17T03:00:00.000Z');
 const DAY = '2026-11-17';
 const USER = 'user-daily-1';
-const REAL = { phone: '0900000001', zaloId: 'z1' };
+const REAL = { phone: '0900000001', zaloId: 'z1', createdAt: new Date('2026-10-01T00:00:00.000Z') };
 const GUEST = { phone: null, zaloId: 'guest_abc' };
 
 function setup(opts: { flags?: Record<string, unknown>; user?: object | null; done?: DailyMissionId[]; claimed?: string[]; ledger?: object | null; templates?: number } = {}) {
@@ -174,5 +174,27 @@ describe('DailyMissionsService.claim', () => {
       }),
     );
     expect(r).toEqual({ id: ids[1], water: 5, points: 0, bonus: false, capped: [], totalSeeds: 105 });
+  });
+});
+
+describe('DailyMissionsService: chặn chung của game mini', () => {
+  it('công tắc tổng game.mini.enabled tắt: không có nhiệm vụ ngày và không nhận được thưởng', async () => {
+    const { svc, reward } = setup({ flags: { 'game.mini.enabled': false }, done: [...DAILY_MISSION_IDS] });
+    expect(await svc.today(USER, NOW)).toMatchObject({ enabled: false, missions: [] });
+    expect(await codeOf(svc.claim(USER, todays()[0], 'a'.repeat(32), NOW))).toEqual({ status: 404, code: DAILY_ERROR_CODES.disabled });
+    expect(reward.settleDailyMission).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản chưa đủ game.mini.min_account_age_hours: 403 DAILY_TOO_NEW, không cộng gì', async () => {
+    const young = { ...REAL, createdAt: new Date(NOW.getTime() - 3_600_000) };
+    const { svc, reward } = setup({ flags: { 'game.mini.min_account_age_hours': 24 }, user: young, done: [...DAILY_MISSION_IDS] });
+    expect(await codeOf(svc.claim(USER, todays()[0], 'a'.repeat(32), NOW))).toEqual({ status: 403, code: DAILY_ERROR_CODES.tooNew });
+    expect(reward.settleDailyMission).not.toHaveBeenCalled();
+  });
+
+  it('tài khoản đủ tuổi: nhận bình thường', async () => {
+    const { svc, reward } = setup({ flags: { 'game.mini.min_account_age_hours': 24 }, done: [...DAILY_MISSION_IDS] });
+    await expect(svc.claim(USER, todays()[0], 'a'.repeat(32), NOW)).resolves.toMatchObject({ water: 5 });
+    expect(reward.settleDailyMission).toHaveBeenCalledTimes(1);
   });
 });

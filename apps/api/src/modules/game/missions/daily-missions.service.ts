@@ -18,7 +18,7 @@ import { startOfVnDay, vnDateKey } from '../../../common/vn-time';
 import { ensureGameProfile } from '../game-profile';
 import { GameMiniRewardService } from '../mini/game-mini-reward.service';
 import { deviceHash } from '../mini/game-mini-crypto';
-import { isGameOn, readMiniSettings } from '../mini/game-mini.settings';
+import { isGameOn, readMiniSettings, type MiniSettings } from '../mini/game-mini.settings';
 import {
   DAILY_MISSIONS_ENABLED_KEY,
   DAILY_TEMPLATE_IDS,
@@ -62,9 +62,19 @@ export class DailyMissionsService {
     private readonly reward: GameMiniRewardService,
   ) {}
 
-  async today(userId: string, now: Date = new Date()): Promise<DailyMissionsResponse> {
-    if (!(await readEngagementFlag(this.config, DAILY_MISSIONS_ENABLED_KEY))) return OFF;
+  /**
+   * Cờ riêng VÀ công tắc tổng game.mini.enabled: tắt game mini là dừng mọi đường phát 💧/điểm của nó, kể cả nhiệm vụ ngày (cùng sổ, cùng
+   * trần), không để một đường phát thứ hai còn chạy.
+   */
+  private async settingsIfOn(): Promise<MiniSettings | null> {
+    if (!(await readEngagementFlag(this.config, DAILY_MISSIONS_ENABLED_KEY))) return null;
     const settings = await readMiniSettings(this.config);
+    return settings.enabled ? settings : null;
+  }
+
+  async today(userId: string, now: Date = new Date()): Promise<DailyMissionsResponse> {
+    const settings = await this.settingsIfOn();
+    if (!settings) return OFF;
     const quizOn = isGameOn(settings, 'daily_quiz');
     const dayKey = vnDateKey(now);
     const ids = pickDailyMissions(userId, dayKey, dailyMissionPool(quizOn));
@@ -94,18 +104,21 @@ export class DailyMissionsService {
   }
 
   async claim(userId: string, rawId: string, deviceId: string, now: Date = new Date()): Promise<DailyMissionClaimResponse> {
-    if (!(await readEngagementFlag(this.config, DAILY_MISSIONS_ENABLED_KEY))) {
+    const settings = await this.settingsIfOn();
+    if (!settings) {
       throw dailyError(HttpStatus.NOT_FOUND, DAILY_ERROR_CODES.disabled, 'Nhiệm vụ hằng ngày đang tạm nghỉ.');
     }
     if (!isDailyMissionId(rawId)) {
       throw dailyError(HttpStatus.BAD_REQUEST, DAILY_ERROR_CODES.notToday, 'Nhiệm vụ này không có trong ngày hôm nay của bạn.');
     }
     const id = rawId;
-    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true } });
-    if (!isRealUser(user)) {
+    const user = await this.prisma.user.findUnique({ where: { id: userId }, select: { phone: true, zaloId: true, createdAt: true } });
+    if (!user || !isRealUser(user)) {
       throw dailyError(HttpStatus.FORBIDDEN, DAILY_ERROR_CODES.guest, 'Bạn đăng nhập Zalo để nhận thưởng nhiệm vụ nhé.');
     }
-    const settings = await readMiniSettings(this.config);
+    if (settings.minAccountAgeHours > 0 && now.getTime() - user.createdAt.getTime() < settings.minAccountAgeHours * 3_600_000) {
+      throw dailyError(HttpStatus.FORBIDDEN, DAILY_ERROR_CODES.tooNew, 'Tài khoản mới tạo chưa nhận được thưởng nhiệm vụ, bạn quay lại sau nhé.');
+    }
     const dayKey = vnDateKey(now);
     const ids = pickDailyMissions(userId, dayKey, dailyMissionPool(isGameOn(settings, 'daily_quiz')));
     if (!ids.includes(id)) {

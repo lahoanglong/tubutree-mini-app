@@ -817,6 +817,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'daily.toastCapped': null,
   'daily.toastError': null,
   'daily.toastStale': null,
+  'daily.toastTooNew': null,
   'daily.oneTimeShow': 32,
   'daily.oneTimeHide': 32,
   'badges.title': 12,

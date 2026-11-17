@@ -66,6 +66,7 @@ describe('classifyDailyClaimError', () => {
     [http(400, 'DAILY_NOT_DONE'), 'stale'],
     [http(400, 'DAILY_NOT_TODAY'), 'stale'],
     [http(403, 'DAILY_GUEST'), 'guest'],
+    [http(403, 'DAILY_TOO_NEW'), 'tooNew'],
     [http(404, 'DAILY_DISABLED'), 'disabled'],
     [http(404), 'disabled'],
     [http(500), 'network'],
@@ -89,7 +90,7 @@ describe('dailyRows', () => {
       ['DAILY_WATER', 'todo', 'checkin'],
     ]);
     expect(rows[0]!.reward).toBe('+5 💧');
-    expect(rows[1]!.aria).toBe('Nhận thưởng: Đọc câu chuyện một sản phẩm');
+    expect(rows[1]!.aria).toBe('Nhận thưởng: Xem một sản phẩm');
     expect(rows[2]!.aria).toBe('Làm nhiệm vụ: Tưới cây');
   });
   it('khách vãng lai: không hứa thưởng, việc đã làm là "done" (không nút Nhận)', () => {
