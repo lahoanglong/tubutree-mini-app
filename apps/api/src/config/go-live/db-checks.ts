@@ -51,6 +51,7 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261117040000_mss_foundation',
   '20261117060000_mss_order_events',
   '20261117070000_pdp_compare_flag',
+  '20261117083000_game_mini_core',
 ];
 
 /**

@@ -226,6 +226,15 @@ describe('evaluateDb', () => {
       expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
     });
 
+    it('game_mini_core: bảng mới và chỉ mục một phần GAME_MINI nằm trong danh sách tương thích image, nặng vì dựng chỉ mục trên points_transactions (không khoá orders)', () => {
+      const name = '20261117083000_game_mini_core';
+      expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);
+      expect(HEAVY_MIGRATIONS).toContainEqual({ name, ordersLock: false });
+      const r = byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope');
+      expect(r.status).toBe('PASS');
+      expect(r.detail).toContain('; nặng:');
+    });
+
     it('w7: migration gỡ chỉ mục một phần của log ZNS FAILED nằm trong danh sách tương thích image, không phải migration nặng', () => {
       const name = '20261106010000_w7_drop_zns_failed_sentat_index';
       expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);
