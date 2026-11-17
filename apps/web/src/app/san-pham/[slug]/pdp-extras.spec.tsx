@@ -444,6 +444,43 @@ describe('PdpSubscribeRow', () => {
   });
 });
 
+describe('PdpSubscribeRow: số % là số máy chủ cấu hình (subscribePct)', () => {
+  const label = async (ui: React.ReactElement) => {
+    const { container } = mount(ui);
+    await flush();
+    return byText(container, 'button', /Đặt định kỳ/)!.textContent;
+  };
+  it.each([
+    [0.12, 'Đặt định kỳ — tiết kiệm 12%'],
+    [0.15, 'Đặt định kỳ — tiết kiệm 15%'],
+    [0, 'Đặt định kỳ — tiết kiệm mỗi kỳ'],
+    [1, 'Đặt định kỳ — tiết kiệm mỗi kỳ'],
+    ['12', 'Đặt định kỳ — tiết kiệm mỗi kỳ'],
+  ])('cấu hình %s → "%s" (không tự đặt số dự phòng)', async (pct, text) => {
+    mocks.config = { ...mocks.config, subscribeDiscountPct: pct, isLoaded: true };
+    expect(await label(<PdpSubscribeRow slug="dau-goi" variations={VARIATIONS} />)).toBe(text);
+  });
+  it('trình duyệt chưa có cấu hình thật: dùng số máy chủ đã dựng trong HTML; không có cả hai thì không nêu số', async () => {
+    mocks.config = { ...mocks.config, subscribeDiscountPct: 0.12, isLoaded: false };
+    expect(await label(<PdpSubscribeRow slug="dau-goi" variations={VARIATIONS} initialConfig={{ subscribeDiscountPct: 0.1 } as never} />)).toBe('Đặt định kỳ — tiết kiệm 10%');
+    expect(await label(<PdpSubscribeRow slug="dau-goi" variations={VARIATIONS} />)).toBe('Đặt định kỳ — tiết kiệm mỗi kỳ');
+  });
+});
+
+describe('PdpShippingRow: dòng "Vận chuyển ›" mở chính sách vận chuyển', () => {
+  it('hàng Tubu (bấm được): chạm mở /chinh-sach/van-chuyen', () => {
+    const { container } = mount(<PdpShippingRow>Tubu Tree giao hàng</PdpShippingRow>);
+    const row = Array.from(container.querySelectorAll<HTMLElement>('[role="button"]')).find((b) => b.textContent?.startsWith('Vận chuyển'))!;
+    click(row);
+    expect(mocks.push).toHaveBeenCalledWith('/chinh-sach/van-chuyen');
+  });
+  it('hàng gian hàng tự giao (chỉ đọc): không phải nút, không điều hướng', () => {
+    const { container } = mount(<PdpShippingRow pressable={false}>Gốm Minh An giao hàng</PdpShippingRow>);
+    expect(container.querySelector('[role="button"]')).toBeNull();
+    expect(mocks.push).not.toHaveBeenCalled();
+  });
+});
+
 describe('PdpLowStock (nhãn tồn kho dưới Điểm Xanh, đúng chữ Mini App ở điện thoại)', () => {
   it('phân loại đang chọn còn từ 1 đến 20: "Chỉ còn N sản phẩm" màu cảnh báo, chỉ hiện dưới md', async () => {
     const { container } = mount(<PdpLowStock slug="dau-goi" variations={VARIATIONS} />);

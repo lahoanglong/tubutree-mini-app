@@ -51,6 +51,13 @@ const product = (over: Record<string, unknown> = {}) => ({
   variations: [{ id: 'v1', sku: 'S1', name: 'Mặc định', attributes: {}, retailPrice: 100000, salePrice: null, stock: 5 }],
   ...over,
 });
+// Câu chuyện riêng do admin bật: chỉ khi có cấu hình này trang mới vẽ khối câu chuyện.
+const LAYER = { id: 'l', spriteId: 'honey-drop', label: 'Mật', from: 'top', xPct: 50, yPct: 50, scale: 1, rotateDeg: 0 };
+const OWN_STORY = {
+  version: 1,
+  enabled: true,
+  scenes: [{ kind: 'ingredient_assembly', steps: [{ title: 'Hái sả', body: 'Sả tươi', layers: [LAYER] }, { title: 'Ép lạnh', body: 'Giữ mùi', layers: [LAYER] }] }],
+};
 
 function renderPdp() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -81,12 +88,20 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
     expect(screen.queryByTestId('product-story')).toBeNull();
   });
 
-  it('có thành phần: khối câu chuyện nằm trước mục Thành phần, không có nút "Xem câu chuyện sản phẩm" và không dựng khung toàn màn (dải đã kể đủ các chương)', async () => {
+  it('có thành phần nhưng chưa có câu chuyện riêng: không vẽ khối câu chuyện dựng sẵn (mục Thành phần đã nói đủ)', async () => {
     mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }] }));
+    renderPdp();
+    await screen.findByText('Thành phần', { selector: 'h2' });
+    expect(screen.queryByTestId('product-story')).toBeNull();
+    expect(document.querySelector('[data-pdp-block="story"]')).toBeNull();
+  });
+
+  it('có câu chuyện riêng: khối câu chuyện nằm sau mục Thành phần, không có nút "Xem câu chuyện sản phẩm" và không dựng khung toàn màn (dải đã kể đủ các chương)', async () => {
+    mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }], storyConfig: OWN_STORY }));
     renderPdp();
     const section = await screen.findByTestId('product-story');
     const heading = screen.getByText('Thành phần', { selector: 'h2' });
-    expect(section.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(heading.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Xem câu chuyện sản phẩm' })).toBeNull();
     expect(screen.queryByRole('dialog', { name: 'Câu chuyện sản phẩm' })).toBeNull();
     expect(section).not.toHaveAttribute('data-fullscreen');
@@ -96,6 +111,7 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
     mocks.fetchProduct.mockResolvedValue(
       product({
         ingredients: [{ name: 'Sả chanh', percentage: '12%' }],
+        storyConfig: OWN_STORY,
         variations: [{ id: 'v1', sku: 'S1', name: '250g', attributes: {}, retailPrice: 100000, salePrice: null, stock: 0 }],
       }),
     );
@@ -105,7 +121,7 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
   });
 
   it('mọi chương hiện cùng lúc dạng thẻ; bấm một thẻ chọn chương đó (aria-current), không có chip/panel/mốc cuộn cũ', async () => {
-    mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }] }));
+    mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }], storyConfig: OWN_STORY }));
     renderPdp();
     const story = await screen.findByTestId('product-story');
     const cards = within(story).getAllByTestId('story-step-card');
@@ -116,16 +132,19 @@ describe('ProductDetailPage — câu chuyện sản phẩm', () => {
     expect(story.querySelector('.tubu-story-sentinel')).toBeNull();
   });
 
-  it('khối câu chuyện nằm ngay dưới khối mua nhanh (sau ô Số lượng), trước Đánh giá nhanh và mục Thành phần', async () => {
-    mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }] }));
+  it('khối câu chuyện nằm sau ô Số lượng và mục Thành phần, trước Mô tả và Đánh giá; không còn dải "Đánh giá nhanh"', async () => {
+    mocks.fetchProduct.mockResolvedValue(product({ ingredients: [{ name: 'Sả chanh', percentage: '12%' }], storyConfig: OWN_STORY }));
     mocks.fetchReviews.mockResolvedValue({ data: [], average: 4.5, count: 2, items: [{ id: 'r1', rating: 5, comment: 'Thơm', images: [], videoUrl: null, author: 'An', createdAt: '2026-11-01T00:00:00.000Z' }] });
     renderPdp();
     const story = await screen.findByTestId('product-story');
     const qty = screen.getByRole('button', { name: /Tăng số lượng/ });
     expect(qty.compareDocumentPosition(story) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    const quick = await screen.findByRole('region', { name: 'Đánh giá nhanh' });
-    expect(story.compareDocumentPosition(quick) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     const heading = screen.getByText('Thành phần', { selector: 'h2' });
-    expect(story.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(heading.compareDocumentPosition(story) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const desc = document.querySelector('[data-pdp-block="description"]')!;
+    const reviews = document.querySelector('[data-pdp-block="reviews"]')!;
+    expect(story.compareDocumentPosition(desc) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(story.compareDocumentPosition(reviews) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Đánh giá nhanh' })).toBeNull();
   });
 });

@@ -401,6 +401,9 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       // Combo ưu đãi / Mua kèm (PDP) và kệ Combo tiết kiệm (Trang chủ) là công khai và tự ẩn khi rỗng: mặc định không có bộ nào.
       api.fallback('GET', '/bundles/combos', []);
       api.fallback('GET', '/products/:slug/bundles', { combos: [], addons: [] });
+      // Trang sản phẩm: bảng So sánh như trên PROD khi cờ catalog.pdp_compare_enabled tắt (404 → khối ẩn), và khách chưa mua món nào (không có dòng Mua lại).
+      api.fallback('GET', '/products/:slug/compare', reply(404, { statusCode: 404, message: 'Not Found' }));
+      api.fallback('GET', '/me/purchased-items', { items: [], nextCursor: null });
       // Sảnh mini game ở Vườn Xanh (Mini App và web) hỏi trạng thái kỷ lục và lượt thưởng khi đã đăng nhập; mặc định chưa chơi ván nào, ngoài khung giờ thưởng, chưa nhận quà Chẩn đoán.
       api.fallback('GET', '/game/arcade/status', {
         games: {

@@ -20,7 +20,7 @@ import { CountBadge } from '@/components/mini/badge';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { defaultVariationFor, pickDefaultVariation, variationPricing } from '@/lib/flash-price';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
+import { needsVariationPicker, shouldOpenVariationPicker } from '@tubutree/app-core/variation-picker';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { fillTileCopy } from '@tubutree/app-core/commerce/tile-copy';
 import dynamic from 'next/dynamic';
@@ -359,8 +359,9 @@ export default function AddToCart({
   // Thêm giỏ và Mua ngay chung cửa kiểm tra phiên: chưa đăng nhập thì nhớ món + ý định rồi sang đăng nhập, quay lại làm nốt.
   const submit = async (buyNow: boolean, chosen?: { id: string; quantity: number }) => {
     if (phase === 'loading' || blockedReason || busy) return;
-    // Điện thoại: từ 2 phân loại thì hỏi chọn trong bảng như Mini App. Máy tính đã có ô chọn ngay cạnh nút.
-    if (!chosen && needsVariationPicker(variations) && isPhoneWidth()) {
+    // Điện thoại: từ 2 phân loại thì hỏi chọn trong bảng như Mini App, trừ khi khách đã tự bấm chip còn hàng (chip đã là lựa chọn, bảng chỉ hỏi lại).
+    // Phân loại mở sẵn do trang tự chọn không tính. Máy tính đã có ô chọn ngay cạnh nút.
+    if (!chosen && shouldOpenVariationPicker(variations, userPicked.current ? selectedId : null) && isPhoneWidth()) {
       if (pdpSlug) trackPdpAction('open_variant_sheet', pdpSlug);
       setSheetOpened(true);
       setSheetMode(buyNow ? 'buy' : 'add');

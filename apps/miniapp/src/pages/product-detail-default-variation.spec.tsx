@@ -209,6 +209,38 @@ describe('ProductDetailPage — phân loại mở sẵn theo cùng luật với 
     expect(screen.queryByRole('group', { name: 'Phân loại' })).toBeNull();
   });
 
+  it('đã chạm chip 1kg: Thêm vào giỏ thêm ngay đúng 1kg, không mở bảng chọn lần nữa', async () => {
+    mocks.authStatus = 'authenticated';
+    mocks.addToCart.mockResolvedValue({ items: [], itemCount: 1 });
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    renderPdp();
+    await screen.findAllByText('500g');
+    fireEvent.click(chip('1kg'));
+    fireEvent.click(screen.getByRole('button', { name: /Thêm vào giỏ/ }));
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v-1kg', 1));
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('group', { name: 'Phân loại' })).toBeNull();
+  });
+
+  it('đã chạm chip: Mua ngay cũng đi thẳng, không mở bảng chọn; chưa chạm chip thì Mua ngay mở bảng', async () => {
+    mocks.authStatus = 'authenticated';
+    mocks.addToCart.mockResolvedValue({ items: [], itemCount: 1 });
+    mocks.fetchActiveFlashSales.mockResolvedValue([]);
+    const first = renderPdp();
+    await screen.findAllByText('500g');
+    fireEvent.click(screen.getByRole('button', { name: /Mua ngay/ }));
+    expect(await screen.findByRole('group', { name: 'Phân loại' })).toBeInTheDocument();
+    expect(mocks.addToCart).not.toHaveBeenCalled();
+    first.unmount();
+
+    renderPdp();
+    await screen.findAllByText('500g');
+    fireEvent.click(chip('500g'));
+    fireEvent.click(screen.getByRole('button', { name: /Mua ngay/ }));
+    await waitFor(() => expect(mocks.addToCart).toHaveBeenCalledWith('v-500', 1));
+    expect(screen.queryByRole('group', { name: 'Phân loại' })).toBeNull();
+  });
+
   it('khách đã tự chọn trước khi Giờ vàng về: không bị đổi lại', async () => {
     let release: (v: unknown[]) => void = () => undefined;
     mocks.fetchActiveFlashSales.mockReturnValue(new Promise((r) => { release = r; }));

@@ -142,6 +142,7 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'catalog.loved_min_rating', value: 4.8, category: 'catalog', description: 'Nhãn "Được yêu thích" trên thẻ sản phẩm: điểm đánh giá trung bình tối thiểu (0 đến 5; mặc định 4.8). Sản phẩm phải đạt cả ba ngưỡng catalog.loved_*', createOnly: true },
   { key: 'catalog.loved_min_reviews', value: 20, category: 'catalog', description: 'Nhãn "Được yêu thích": số đánh giá tối thiểu (số nguyên, mặc định 20)', createOnly: true },
   { key: 'catalog.loved_min_sold', value: 50, category: 'catalog', description: 'Nhãn "Được yêu thích": tổng đã bán tối thiểu, gồm cả số nhập tay từ sàn ngoài (số nguyên, mặc định 50)', createOnly: true },
+  { key: 'catalog.pdp_compare_enabled', value: false, category: 'catalog', description: 'Trang sản phẩm hiện bảng "So với món tương tự": tối đa 2 món cùng phân khúc và cùng loại hàng (theo tên), còn hàng, kèm giá, dung tích và giá trên 100ml/100g. Tắt thì khối này ẩn trên Mini App và web.', createOnly: true },
 
   // Orders — PendingPaymentExpiryCron. createOnly: không ghi đè giá trị admin đã chỉnh.
   { key: 'orders.pending_payment_ttl_hours', value: 24, category: 'orders', description: 'Đơn trả trước (khách lẻ/CTV) chờ thanh toán quá số giờ này thì tự huỷ (hoàn kho, coupon). Tối thiểu 1, tối đa 720; đơn đại lý dùng orders.dealer_pending_payment_ttl_hours', createOnly: true },

@@ -1148,6 +1148,29 @@ describe('AddToCart — khổ điện thoại, từ 2 phân loại (R-6)', () =>
     expect(sheet()!.querySelector('[role="status"]')).not.toBeNull();
   });
 
+  it('khách đã tự bấm chip còn hàng: Thêm vào giỏ thêm thẳng đúng phân loại đó trong một chạm, không mở bảng hỏi lại', async () => {
+    const { container } = mount();
+    await flush();
+    click(byText(container, 'button', /^500ml/));
+    await flush();
+    click(addButton(container));
+    await flush(4);
+    expect(sheet()).toBeNull();
+    expect(mocks.addToCart).toHaveBeenCalledTimes(1);
+    expect(mocks.addToCart).toHaveBeenCalledWith('v2', 1);
+  });
+
+  it('bấm chip phân loại đang mở sẵn cũng tính là đã chọn: thêm thẳng, không mở bảng', async () => {
+    const { container } = mount();
+    await flush();
+    click(byText(container, 'button', /^250ml/));
+    await flush();
+    click(addButton(container));
+    await flush(4);
+    expect(sheet()).toBeNull();
+    expect(mocks.addToCart).toHaveBeenCalledWith('v1', 1);
+  });
+
   it('sản phẩm 1 phân loại thêm thẳng, không bảng chọn', async () => {
     const { container } = mount([VARIATIONS[0]!]);
     await flush();

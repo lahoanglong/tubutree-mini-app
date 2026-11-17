@@ -1,70 +1,35 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { ShoppingCart } from 'lucide-react';
 import { fetchProducts, type ProductCard as CoreProductCard } from '@tubutree/app-core/api/catalog';
 import { PDP_FEED_SOURCE_LIMIT, pdpShelves } from '@tubutree/app-core/commerce/pdp-view';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { boughtTogetherQuery, forYouQuery, relatedQuery } from '@tubutree/app-core/queries/catalog';
-import { ProductRail } from '@/components/mini/product-rail';
-import { Skeleton } from '@/components/ui/skeleton';
+import { forYouQuery, relatedQuery } from '@tubutree/app-core/queries/catalog';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
-import { PdpFeed } from './pdp-feed';
-import { pdpSectionTitle } from './pdp-sections';
-import { useFbt, type FbtHostArgs } from './use-fbt';
+import { usePdpAddOnState } from './pdp-addons';
+import { PdpFeed, Rail } from './pdp-feed';
 
 const FIVE_MIN = 5 * 60_000;
-
-/** `label` là tên đọc của dải khi khác tiêu đề nhìn thấy (dải thương hiệu: tiêu đề bỏ tên, nhãn đọc giữ tên). */
-function Rail({ title, label = title, icon, products, loading, shelf }: { title: string; label?: string; icon?: boolean; products: CoreProductCard[] | undefined; loading: boolean; shelf: string }) {
-  if (loading) {
-    return (
-      <section aria-busy="true" className="mt-8 max-md:mt-4">
-        <Skeleton width={160} height={20} />
-        <div className="mt-3">
-          <ProductRail items={[]} variant="rail-md" label={label} loading skeletonCount={4} />
-        </div>
-      </section>
-    );
-  }
-  // Dải phụ: lỗi hoặc rỗng thì ẩn hẳn, như Mini App; trang vẫn đủ nội dung chính.
-  if (!products || products.length === 0) return null;
-  return (
-    <section className="mt-8 max-md:mt-4">
-      <h2 className={`${pdpSectionTitle} flex items-center gap-1.5`}>
-        {icon && <ShoppingCart className="h-5 w-5" aria-hidden="true" />}
-        {title}
-      </h2>
-      <div className="mt-3">
-        <ProductRail items={products} variant="rail-md" label={label} shelf={shelf} />
-      </div>
-    </section>
-  );
-}
+const NONE: ReadonlySet<string> = new Set();
 
 /**
- * "Khách thường mua cùng", "Cùng thương hiệu" và "Có thể bạn cũng thích" (lưới cuối trang), không trùng nhau, không có món đang xem và không có
- * 2 món bổ trợ đang nằm ở khối "Gợi ý mua kèm hợp vị" (`pdpShelves`: trần và sàn lấy từ SHELVES; dải "mua cùng" có thể xuống dưới sàn và ẩn). Danh sách đầu do server dựng sẵn (liên kết nội bộ cho công cụ tìm kiếm); thiếu thì tải ở
- * trình duyệt; lưới cuối chỉ tải ở trình duyệt. Giá Giờ vàng trên thẻ khớp giá thật qua `ProductCard`.
+ * Dải cuối trang (khối `suggestions`): "Cùng thương hiệu" và "Có thể bạn cũng thích" (lưới), không trùng nhau và không có món đang xem. Dải "Khách thường
+ * mua cùng" không nằm ở đây: nó là một nguồn của khối mua kèm duy nhất (`PdpAddOns`); khi khối đó đang vẽ dải ấy thì các món của nó không lặp ở hai dải
+ * này, khi khối vẽ "Gợi ý mua kèm hợp vị" thì hai món bổ trợ của bộ không lặp (`pdpShelves`). Danh sách thương hiệu do server dựng sẵn (liên kết nội bộ
+ * cho công cụ tìm kiếm); thiếu thì tải ở trình duyệt; lưới cuối chỉ tải ở trình duyệt. Giá Giờ vàng trên thẻ khớp giá thật qua `ProductCard`.
  */
 export function PdpRails({
   productId,
   slug,
   brand,
   initialRelated,
-  initialBoughtTogether,
-  fbt,
 }: {
   productId: string;
   slug: string;
   brand: string;
   initialRelated?: CoreProductCard[];
-  initialBoughtTogether?: CoreProductCard[];
-  /** Món đang xem cho khối "Gợi ý mua kèm hợp vị" ngay trên các dải này: 2 món bổ trợ của khối không lặp ở dải nào. Thiếu thì không có khối, các dải giữ đủ món. */
-  fbt?: Pick<FbtHostArgs, 'name' | 'thumbnail' | 'variations' | 'blockedReason'>;
 }) {
-  const together = useQuery({ ...boughtTogetherQuery(coreHttp, slug), initialData: initialBoughtTogether, staleTime: FIVE_MIN, retry: 0 });
   const related = useQuery({ ...relatedQuery(coreHttp, slug), initialData: initialRelated, staleTime: FIVE_MIN, retry: 0 });
   // `/products/for-you` cần đăng nhập: khách vãng lai (phần lớn lượt vào trang SEO này) gọi sẽ nhận 401 mỗi lần xem. Họ xem bán chạy
   // (nguồn công khai); đang khôi phục phiên thì chờ, chưa gọi nguồn nào.
@@ -78,13 +43,19 @@ export function PdpRails({
     retry: 0,
   });
   const feed = phase === 'authenticated' ? personal.data : popular.data?.data;
-  const { claimed } = useFbt({ productId, slug, name: fbt?.name ?? '', thumbnail: fbt?.thumbnail ?? null, variations: fbt?.variations ?? [], blockedReason: fbt?.blockedReason, initialBoughtTogether });
-  const shelves = pdpShelves({ currentId: productId, boughtTogether: together.data ?? [], brand: related.data ?? [], feed: feed ?? [], claimed });
+  const addOn = usePdpAddOnState();
+  const shelves = pdpShelves({
+    currentId: productId,
+    boughtTogether: addOn?.source === 'bought' ? addOn.bought : [],
+    brand: related.data ?? [],
+    feed: feed ?? [],
+    claimed: addOn?.source === 'fbt' ? addOn.claimed : NONE,
+  });
+  if (!related.isPending && shelves.brand.length === 0 && shelves.feed.length === 0) return null;
   return (
-    <>
-      <Rail title={fillCopy('pdp.boughtTogether')} icon products={shelves.boughtTogether} loading={together.isPending} shelf="pdpTogether" />
+    <div data-pdp-block="suggestions">
       <Rail title={fillCopy('pdp.brandShelf')} label={fillCopy('pdp.brandShelfLabel', { brand })} products={shelves.brand} loading={related.isPending} shelf="pdpBrand" />
       <PdpFeed items={shelves.feed} />
-    </>
+    </div>
   );
 }

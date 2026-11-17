@@ -11,6 +11,7 @@ import {
   type AddonRow,
   type BundleHold,
 } from '@tubutree/app-core/commerce/bundle-view';
+import type { ProductBundles } from '@tubutree/app-core/api/bundle';
 import { vnd } from '@tubutree/app-core/commerce/money';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { haptic } from '../../utils/haptic';
@@ -75,6 +76,19 @@ function useLatched<T>(live: T[], why: (held: T[]) => BundleHold): { items: T[];
   return side;
 }
 
+/** Combo và dòng mua kèm còn chạy mà khối vẽ ra. Trang sản phẩm dùng đúng hàm này để chọn nguồn của khối mua kèm duy nhất, nên không bao giờ chọn nguồn mà khối tự ẩn. */
+export function liveBundleViews(data: ProductBundles | undefined, now: number) {
+  return {
+    combos: (data?.combos ?? []).flatMap((b) => comboView(b, now) ?? []).slice(0, PDP_COMBO_MAX),
+    rows: addonRows(data?.addons ?? [], now),
+  };
+}
+
+export function hasLiveBundles(data: ProductBundles | undefined, now: number): boolean {
+  const live = liveBundleViews(data, now);
+  return live.combos.length > 0 || live.rows.length > 0;
+}
+
 /** Khối đã kết thúc hay tạm hết hàng vẫn giữ nguyên chỗ (không đẩy phần dưới), mờ đi và không bấm được (`inert` viết dạng chuỗi vì React 18 chưa có kiểu boolean). */
 function HeldBody({ held, children }: { held: boolean; children: ReactNode }) {
   if (!held) return <>{children}</>;
@@ -123,8 +137,7 @@ export function PdpBundles({ slug, productName }: { slug: string; productName?: 
     });
 
   const now = serverNow();
-  const liveCombos = (query.data?.combos ?? []).flatMap((b) => comboView(b, now) ?? []).slice(0, PDP_COMBO_MAX);
-  const liveRows = addonRows(query.data?.addons ?? [], now);
+  const { combos: liveCombos, rows: liveRows } = liveBundleViews(query.data, now);
   const comboSide = useLatched(liveCombos, (held) => bundleHoldReason('combos', query.data, now, held.map((c) => c.id)));
   const addonSide = useLatched(liveRows, (held) => bundleHoldReason('addons', query.data, now, held.map((r) => r.bundleId)));
   if (comboSide.items.length === 0 && addonSide.items.length === 0) return null;

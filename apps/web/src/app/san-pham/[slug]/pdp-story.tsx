@@ -2,17 +2,20 @@
 
 import { useCallback, useMemo } from 'react';
 import type { ProductDetail as CoreProductDetail } from '@tubutree/app-core/api/catalog';
-import { resolveStoryConfig } from '@tubutree/app-core/commerce/product-story';
+import { storyProductWithoutLead } from '@tubutree/app-core/commerce/pdp-info';
+import { hasOwnStory, resolveStoryConfig } from '@tubutree/app-core/commerce/product-story';
 import { ProductStoryShowcase } from '@/components/mini/product-story-showcase';
 import { usePdpSelection } from '@/components/pdp-selection';
 import type { ProductDetail } from '@/lib/api';
+import { pdpBand } from './pdp-sections';
 
 /**
- * Dải câu chuyện sản phẩm trên trang chi tiết. Hai bản, mỗi lúc một bản hiện (như hai bộ nút mua): `phone` ở cột thông tin ngay sau khối mua như đặc tả
- * (cột thông tin và phần dưới là hai ô riêng của PdpLayout nên không xen kẽ được bằng `order`), `wide` ở đầu phần dưới từ md. Phân loại dùng chung với giá và nút mua qua `PdpSelectionProvider`.
+ * Dải câu chuyện sản phẩm trên trang chi tiết: MỘT bản ở phần dưới trang (sau Thành phần), mọi khổ. Chỉ vẽ khi sản phẩm có câu chuyện riêng đang bật
+ * (`hasOwnStory`: đã lưu, hoặc viết tay theo slug); kịch bản tự sinh từ thành phần hay cấp nhãn chỉ lặp lại khối Thành phần nên không vẽ. Khung ảnh của dải không lặp ảnh đầu thư viện
+ * ngay phía trên (`storyProductWithoutLead`). Phân loại dùng chung với giá và nút mua qua `PdpSelectionProvider`.
  * Khung toàn màn không mở từ đây: dải đã kể đủ các chương ngay trên trang, nút mua nằm ở khối mua; khung toàn màn chỉ còn cho Reel ở Trang chủ.
  */
-export function PdpStory({ product, placement = 'wide' }: { product: ProductDetail; placement?: 'phone' | 'wide' }) {
+export function PdpStory({ product }: { product: ProductDetail }) {
   const selection = usePdpSelection();
   const pick = useCallback(
     (id: string) => {
@@ -22,13 +25,21 @@ export function PdpStory({ product, placement = 'wide' }: { product: ProductDeta
     },
     [selection],
   );
-  const config = useMemo(() => resolveStoryConfig(product), [product]);
-  // Kiểu của web chưa khai `attributes` của phân loại; dải câu chuyện không đọc nó, chỉ cần khớp hợp đồng chung với Mini.
-  const core = useMemo<CoreProductDetail>(() => ({ ...product, variations: product.variations.map((v) => ({ attributes: {}, ...v })) }), [product]);
+  // Kiểu của web chưa khai `attributes` của phân loại và `storyConfig` (máy chủ vẫn trả); dải câu chuyện không đọc `attributes`, chỉ cần khớp hợp đồng chung với Mini.
+  const core = useMemo<CoreProductDetail | null>(() => {
+    const full: CoreProductDetail = { ...product, variations: product.variations.map((v) => ({ attributes: {}, ...v })) };
+    const config = hasOwnStory(full) ? resolveStoryConfig(full) : null;
+    return config ? storyProductWithoutLead(full, config) : null;
+  }, [product]);
 
-  if (!config) return null;
+  if (!core) return null;
   return (
-    <section data-testid="pdp-story" data-section="pdp-story" className={`min-w-0 bg-[var(--color-bg-surface)] p-4 md:rounded-card md:p-6 ${placement === 'phone' ? 'tubu-pdp-order-7 mt-2 md:hidden' : 'hidden md:block'}`}>
+    <section
+      data-testid="pdp-story"
+      data-section="pdp-story"
+      data-pdp-block="story"
+      className={`${pdpBand} min-w-0 md:rounded-card md:bg-[var(--color-bg-surface)] md:p-6`}
+    >
       <ProductStoryShowcase product={core} selectedVariationId={selection?.selectedId} onSelectVariation={selection ? pick : undefined} />
     </section>
   );

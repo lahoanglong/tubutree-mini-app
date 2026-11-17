@@ -1,6 +1,8 @@
 import { Page } from 'zmp-ui';
 import { useInfiniteQuery } from '@tanstack/react-query';
 import { bestSellersListQuery } from '@tubutree/app-core/queries/browse';
+import { subscribePct } from '@tubutree/app-core/commerce/pdp-info';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { PullToRefresh } from '../components/pull-to-refresh';
 import { SubscriptionsPanel } from '../components/subscriptions-panel';
 import { Button } from '../components/ui/button';
@@ -27,7 +29,8 @@ export default function SubscriptionsPage() {
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
   const cfg = usePublicConfig();
-  const basePct = Math.max(10, Math.round((cfg.subscribeDiscountPct || 0.12) * 100));
+  // Số trên màn phải đúng số máy chủ tính: cấu hình thiếu hay sai thì không nêu số, không tự đặt sàn.
+  const pct = subscribePct(cfg.subscribeDiscountPct);
   const { hasSubscription } = useHasSubscription(authed);
 
   const products = useInfiniteQuery(bestSellersListQuery(coreHttp, undefined));
@@ -42,12 +45,12 @@ export default function SubscriptionsPage() {
 
       <div className="tubu-subs-body">
         <section aria-label="Quyền lợi Mua xoay vòng" data-testid="subscription-hero" className="tubu-subs-hero">
-          <span className="tubu-subs-eyebrow">Đặt định kỳ · Tiết kiệm tới 17%</span>
+          <span className="tubu-subs-eyebrow">{pct ? fillCopy('subs.heroEyebrow', { pct }) : fillCopy('subs.heroEyebrowNoPct')}</span>
           <Heading variant="title-md" font="ui">Chẳng lo hết đồ thiết yếu giữa chừng</Heading>
           <ul className="tubu-subs-perks">
             <li className="tubu-subs-perk">
               <span aria-hidden="true" className="tubu-subs-dot" />
-              <span>Giảm từ {basePct}% ngay kỳ đầu, tăng tới 17% ở các kỳ tiếp theo.</span>
+              <span>{pct ? fillCopy('subs.perkDiscount', { pct }) : fillCopy('subs.perkDiscountNoPct')}</span>
             </li>
             <li className="tubu-subs-perk">
               <span aria-hidden="true" className="tubu-subs-dot" />

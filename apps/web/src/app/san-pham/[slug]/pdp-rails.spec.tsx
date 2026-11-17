@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { PdpSelectionProvider } from '@/components/pdp-selection';
-import { flush, render, type Rendered } from '@/test-utils/dom';
+import { PdpSelectionProvider, usePdpSelection } from '@/components/pdp-selection';
+import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({ phase: 'guest' as string, get: vi.fn() }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase }));
@@ -15,6 +15,8 @@ vi.mock('@/components/mini/product-rail', () => ({
     </ul>
   ),
 }));
+// Khối "Gợi ý mua kèm hợp vị" có spec riêng (pdp-fbt.spec.tsx); ở đây chỉ cần biết khối nào được chọn.
+vi.mock('./pdp-fbt', () => ({ PdpFbt: () => <div data-testid="fbt-stub" /> }));
 vi.mock('@/components/mini/product-grid', () => ({
   ProductGrid: ({ items }: { items: { id: string; name: string }[] }) => (
     <ul data-testid="feed-grid">
@@ -25,6 +27,7 @@ vi.mock('@/components/mini/product-grid', () => ({
   ),
 }));
 
+import { PdpAddOns, PdpAddOnScope } from './pdp-addons';
 import { PdpRails } from './pdp-rails';
 
 const card = (id: string) => ({ id, name: `Món ${id}`, slug: id });
@@ -32,7 +35,7 @@ const many = (prefix: string, n: number) => Array.from({ length: n }, (_, i) => 
 
 let mounted: Rendered[] = [];
 const mount = async () => {
-  const r = render(<PdpRails productId="cur" slug="cur" brand="Tubu" initialRelated={[]} initialBoughtTogether={[]} />);
+  const r = render(<PdpRails productId="cur" slug="cur" brand="Tubu" initialRelated={[]} />);
   mounted.push(r);
   await flush();
   return r.container;
@@ -88,54 +91,100 @@ describe('PdpRails: "Có thể bạn cũng thích"', () => {
   });
 });
 
-describe('PdpRails: bỏ 2 món đang nằm ở khối "Gợi ý mua kèm hợp vị"', () => {
-  const VARIATIONS = [{ id: 'v-cur', retailPrice: 100_000, salePrice: null, stock: 10 }];
+describe('Khối mua kèm duy nhất (PdpAddOnScope + PdpAddOns) và các dải cuối trang', () => {
+  const VARIATIONS = [
+    { id: 'v-cur', retailPrice: 100_000, salePrice: null, stock: 10 },
+    { id: 'v-out', retailPrice: 120_000, salePrice: null, stock: 0 },
+  ];
   const together = [card('b1'), card('b2'), card('b3'), card('b4'), card('b5'), card('b6')].map((c) => ({ ...c, inStock: true, repVariationId: `v-${c.id}`, basePrice: 50_000, salePrice: null, brand: 'Tubu', thumbnail: null, isFeatured: false }));
-  const mountWith = async (fbt: React.ComponentProps<typeof PdpRails>['fbt'], selected = 'v-cur') => {
+  const asCard = (id: string) => ({ ...card(id), inStock: true, basePrice: 50_000, salePrice: null, brand: 'Tubu', thumbnail: null, isFeatured: false });
+
+  function PickOut() {
+    const sel = usePdpSelection();
+    return <button type="button" data-testid="pick-out" onClick={() => sel?.setSelectedId('v-out')} />;
+  }
+
+  const mountPage = async ({
+    hasBundles = false,
+    initialBoughtTogether = together,
+    variations = VARIATIONS,
+    related = [] as ReturnType<typeof asCard>[],
+    blockedReason,
+    selected = 'v-cur',
+  }: {
+    hasBundles?: boolean;
+    initialBoughtTogether?: typeof together;
+    variations?: typeof VARIATIONS;
+    related?: ReturnType<typeof asCard>[];
+    blockedReason?: string;
+    selected?: string;
+  } = {}) => {
+    const host = { productId: 'cur', slug: 'cur', name: 'Món đang xem', thumbnail: null, variations, blockedReason, initialBoughtTogether };
     const r = render(
       <PdpSelectionProvider initialId={selected}>
-        <PdpRails productId="cur" slug="cur" brand="Tubu" initialRelated={[]} initialBoughtTogether={together} fbt={fbt} />
+        <PdpAddOnScope hasBundles={hasBundles} {...host}>
+          <PickOut />
+          <PdpAddOns bundles={<div data-testid="bundles-stub" />} fbt={host} />
+          <PdpRails productId="cur" slug="cur" brand="Tubu" initialRelated={related} />
+        </PdpAddOnScope>
       </PdpSelectionProvider>,
     );
     mounted.push(r);
     await flush();
     return r.container;
   };
-  const shelf = (c: HTMLElement) => Array.from(c.querySelectorAll('[data-testid="rail"] li')).map((li) => li.textContent);
+  const addons = (c: HTMLElement) => c.querySelectorAll('[data-pdp-block="addons"]');
+  const railNames = (root: Element | null) => Array.from(root?.querySelectorAll('[data-testid="rail"] li') ?? []).map((li) => li.textContent);
+  const suggestions = (c: HTMLElement) => c.querySelector('[data-pdp-block="suggestions"]');
 
-  it('khối đang hiện: 2 món đầu của "Khách thường mua cùng" nằm ở khối nên dải bên dưới chỉ còn các món sau', async () => {
+  beforeEach(() => {
     mocks.phase = 'guest';
-    const c = await mountWith({ name: 'Món đang xem', thumbnail: null, variations: VARIATIONS });
-    expect(shelf(c)).toEqual(['Món b3', 'Món b4', 'Món b5', 'Món b6']);
   });
 
-  it('còn dưới sàn 3 món sau khi nhường 2 món cho khối: dải "Khách thường mua cùng" ẩn hẳn (không để dải lẻ 1–2 món)', async () => {
-    mocks.phase = 'guest';
-    const r = render(
-      <PdpSelectionProvider initialId="v-cur">
-        <PdpRails productId="cur" slug="cur" brand="Tubu" initialRelated={[]} initialBoughtTogether={together.slice(0, 4)} fbt={{ name: 'Món đang xem', thumbnail: null, variations: VARIATIONS }} />
-      </PdpSelectionProvider>,
-    );
-    mounted.push(r);
+  it('có combo/mua kèm giá tốt thật: khối là bộ do trang dựng, không có bộ gợi ý hay dải "Khách thường mua cùng" ở đâu cả', async () => {
+    const c = await mountPage({ hasBundles: true, related: [asCard('b1'), asCard('r1')] });
+    expect(addons(c)).toHaveLength(1);
+    expect(addons(c)[0]!.querySelector('[data-testid="bundles-stub"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="fbt-stub"]')).toBeNull();
+    expect(c.querySelector('[aria-label="Khách thường mua cùng"]')).toBeNull();
+    // Không có bộ gợi ý nên dải Cùng thương hiệu giữ cả món b1.
+    expect(railNames(suggestions(c))).toEqual(['Món b1', 'Món r1']);
+  });
+
+  it('không có combo, có bộ "Gợi ý mua kèm hợp vị": khối là bộ đó; dải cuối không lặp 2 món của bộ và không có dải "Khách thường mua cùng"', async () => {
+    const c = await mountPage({ related: [asCard('b1'), asCard('b3'), asCard('r1')] });
+    expect(addons(c)).toHaveLength(1);
+    expect(addons(c)[0]!.querySelector('[data-testid="fbt-stub"]')).not.toBeNull();
+    expect(c.querySelector('[aria-label="Khách thường mua cùng"]')).toBeNull();
+    expect(railNames(suggestions(c))).toEqual(['Món b3', 'Món r1']);
+  });
+
+  it('không dựng được bộ gợi ý (món đang xem hết hàng): khối là dải "Khách thường mua cùng" đủ món; dải Cùng thương hiệu không lặp các món đó', async () => {
+    const c = await mountPage({ selected: 'v-out', related: [asCard('b1'), asCard('r1')] });
+    expect(addons(c)).toHaveLength(1);
+    expect(railNames(addons(c)[0]!)).toEqual(['Món b1', 'Món b2', 'Món b3', 'Món b4', 'Món b5', 'Món b6']);
+    expect(addons(c)[0]!.querySelector('h2')!.textContent).toBe('Khách thường mua cùng');
+    expect(railNames(suggestions(c))).toEqual(['Món r1']);
+  });
+
+  it('gian hàng tạm nghỉ: không có bộ gợi ý, khối là dải "Khách thường mua cùng"', async () => {
+    const c = await mountPage({ blockedReason: 'Gian hàng tạm nghỉ' });
+    expect(c.querySelector('[data-testid="fbt-stub"]')).toBeNull();
+    expect(railNames(addons(c)[0]!)).toHaveLength(6);
+  });
+
+  it('không combo, không bộ gợi ý, dải mua cùng dưới sàn 3 món: không có khối mua kèm (không dải rỗng)', async () => {
+    const c = await mountPage({ selected: 'v-out', initialBoughtTogether: together.slice(0, 2) });
+    expect(addons(c)).toHaveLength(0);
+    expect(c.querySelector('[data-testid="bundles-stub"]')).toBeNull();
+  });
+
+  it('nguồn chốt một lần: bộ gợi ý mất đi sau đó (đổi sang phân loại hết hàng) thì khối ẩn, không nhảy sang dải "Khách thường mua cùng"', async () => {
+    const c = await mountPage();
+    expect(c.querySelector('[data-testid="fbt-stub"]')).not.toBeNull();
+    click(c.querySelector('[data-testid="pick-out"]'));
     await flush();
-    expect(shelf(r.container)).toEqual([]);
-  });
-
-  it('khối ẩn (món đang xem hết hàng): dải giữ đủ món, không mất món nào', async () => {
-    mocks.phase = 'guest';
-    const c = await mountWith({ name: 'Món đang xem', thumbnail: null, variations: [{ ...VARIATIONS[0]!, stock: 0 }] });
-    expect(shelf(c)).toHaveLength(6);
-  });
-
-  it('khối ẩn (gian hàng tạm nghỉ): dải giữ đủ món', async () => {
-    mocks.phase = 'guest';
-    const c = await mountWith({ name: 'Món đang xem', thumbnail: null, variations: VARIATIONS, blockedReason: 'Gian hàng tạm nghỉ' });
-    expect(shelf(c)).toHaveLength(6);
-  });
-
-  it('không truyền fbt (trang không có phân loại): dải giữ đủ món', async () => {
-    mocks.phase = 'guest';
-    const c = await mountWith(undefined);
-    expect(shelf(c)).toHaveLength(6);
+    expect(addons(c)).toHaveLength(0);
+    expect(c.querySelector('[aria-label="Khách thường mua cùng"]')).toBeNull();
   });
 });

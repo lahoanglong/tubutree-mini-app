@@ -1,7 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
   PDP_BLOCK_ORDER,
-  hasOwnStory,
   ingredientsPreview,
   pdpAddOnSource,
   pdpRebuy,
@@ -9,6 +8,8 @@ import {
   subscribePct,
   vnDayMonth,
 } from './pdp-info';
+import { hasOwnStory } from './product-story';
+import { LAUNCH_STORY_PRESETS } from './story-presets-launch';
 
 describe('pdpAddOnSource: một khối mua kèm', () => {
   it('combo/mua kèm thật thắng FBT và "khách thường mua cùng"', () => {
@@ -59,14 +60,21 @@ describe('subscribePct: % định kỳ theo cấu hình', () => {
 });
 
 describe('hasOwnStory', () => {
-  it('không có cấu hình riêng, cấu hình hỏng hoặc tắt: không vẽ', () => {
-    expect(hasOwnStory({ storyConfig: null })).toBe(false);
-    expect(hasOwnStory({ storyConfig: undefined })).toBe(false);
-    expect(hasOwnStory({ storyConfig: { garbage: true } })).toBe(false);
-    expect(hasOwnStory({ storyConfig: { version: 1, enabled: false, scenes: [] } })).toBe(false);
+  const NO_PRESET = 'san-pham-khong-co-kich-ban';
+  const PRESET = Object.keys(LAUNCH_STORY_PRESETS).find((slug) => LAUNCH_STORY_PRESETS[slug]!.enabled)!;
+  it('không có kịch bản riêng, cấu hình hỏng hoặc tắt: không vẽ', () => {
+    expect(hasOwnStory({ slug: NO_PRESET, storyConfig: null })).toBe(false);
+    expect(hasOwnStory({ slug: NO_PRESET, storyConfig: undefined })).toBe(false);
+    expect(hasOwnStory({ slug: NO_PRESET, storyConfig: { garbage: true } })).toBe(false);
+    expect(hasOwnStory({ slug: NO_PRESET, storyConfig: { version: 1, enabled: false, scenes: [] } })).toBe(false);
   });
-  it('cấu hình riêng hợp lệ đang bật: vẽ', () => {
-    expect(hasOwnStory({ storyConfig: { version: 1, enabled: true, scenes: [] } })).toBe(true);
+  it('cấu hình đã lưu hợp lệ đang bật: vẽ', () => {
+    expect(hasOwnStory({ slug: NO_PRESET, storyConfig: { version: 1, enabled: true, scenes: [] } })).toBe(true);
+  });
+  it('chưa lưu gì nhưng có kịch bản viết tay theo slug đang bật: vẽ; admin đã lưu bản tắt thì không', () => {
+    expect(PRESET).toBeTruthy();
+    expect(hasOwnStory({ slug: PRESET, storyConfig: null })).toBe(true);
+    expect(hasOwnStory({ slug: PRESET, storyConfig: { version: 1, enabled: false, scenes: [] } })).toBe(false);
   });
 });
 

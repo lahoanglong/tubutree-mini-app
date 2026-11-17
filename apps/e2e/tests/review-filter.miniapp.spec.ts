@@ -118,18 +118,19 @@ test.describe('Zalo Mini App E2E - Xem thêm đánh giá (phân trang con trỏ)
     await reviews.scrollIntoViewIfNeeded();
     await expect(reviews.getByText('Nhận xét t1-0')).toBeVisible({ timeout: 15_000 });
     const rows = reviews.getByText(/^Nhận xét t\d-\d$/);
-    await expect(rows).toHaveCount(5);
+    // Trang sản phẩm mở sẵn 2 đánh giá; mỗi lần bấm hiện thêm 5 dòng.
+    await expect(rows).toHaveCount(2);
     const more = reviews.getByRole('button', { name: 'Xem thêm đánh giá' });
 
     const queries = () => api.callsTo('GET', '/products/:slug/reviews').map((c) => c.query.toString());
+    await more.click();
+    await expect(rows).toHaveCount(7);
     expect(queries().filter((q) => q.includes('cursor'))).toEqual([]);
     await more.click();
     await expect(reviews.getByText('Nhận xét t2-0')).toBeVisible();
     expect(queries().filter((q) => q.includes('cursor'))).toEqual(['cursor=c-t1-7']);
-    await expect(rows).toHaveCount(10);
-    await expect(reviews.getByText('Nhận xét t1-0')).toBeVisible();
-    await more.click();
     await expect(rows).toHaveCount(12);
+    await expect(reviews.getByText('Nhận xét t1-0')).toBeVisible();
     await expect(rows.last()).toHaveText('Nhận xét t2-3');
     await expect(more).toHaveCount(0);
     await expect(reviews.getByRole('heading', { name: 'Đánh giá (12)' })).toBeVisible();

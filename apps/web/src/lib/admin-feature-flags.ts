@@ -91,4 +91,12 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     onWarning: 'Khách chưa đăng nhập trên web bấm Thêm vào giỏ hay Mua ngay sẽ vào giỏ ngay, không bị đưa sang trang đăng nhập.',
     offWarning: 'Khách chưa đăng nhập bấm mua lại bị đưa sang trang đăng nhập như trước. Món khách đã chọn vẫn nằm trong trình duyệt của họ và hiện lại khi bạn bật lại.',
   },
+  {
+    key: 'catalog.pdp_compare_enabled',
+    label: 'Bảng "So với món tương tự" trên trang sản phẩm',
+    description: 'Trang sản phẩm (Mini App và web) hiện bảng so tối đa 2 món cùng phân khúc và cùng loại hàng theo tên, còn hàng: giá, dung tích, giá trên 100ml hoặc 100g và thành phần chính. Không có món nào để so thì bảng tự ẩn.',
+    fallback: false,
+    onWarning: 'Khách thấy bảng so sánh trên trang sản phẩm có món để so. Món được chọn và giá trên 100ml/100g tính tự động từ tên sản phẩm và tên phân loại; số liệu cập nhật chậm tối đa khoảng 10 phút.',
+    offWarning: 'Bảng so sánh biến mất khỏi trang sản phẩm trong vòng 2 phút. Không dữ liệu nào bị xoá.',
+  },
 ];

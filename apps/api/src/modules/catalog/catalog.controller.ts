@@ -1,8 +1,9 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
+import { Controller, Get, Inject, Param, Query } from '@nestjs/common';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
 import { PublicCache } from '../../common/decorators/public-cache.decorator';
 import { CatalogService } from './catalog.service';
+import { ProductCompareService } from './product-compare.service';
 import { toPublicProductDetail } from './catalog-public';
 import { BrandProductsQuery } from './dto/brand-products-query.dto';
 import { ForYouQuery } from './dto/for-you-query.dto';
@@ -14,6 +15,9 @@ import { SuggestQuery } from './dto/suggest-query.dto';
 @Controller()
 export class CatalogController {
   constructor(private readonly catalog: CatalogService) {}
+
+  // Tiêm qua thuộc tính để chữ ký constructor giữ một tham số: nhiều spec dựng controller trực tiếp chỉ với CatalogService.
+  @Inject(ProductCompareService) private readonly productCompare!: ProductCompareService;
 
   @Public()
   @PublicCache('CATALOG')
@@ -48,6 +52,14 @@ export class CatalogController {
   @Get('products/:slug/bought-together')
   boughtTogether(@Param('slug') slug: string) {
     return this.catalog.boughtTogether(slug);
+  }
+
+  // Cờ `catalog.pdp_compare_enabled` tắt thì 404; hai app coi lỗi nào cũng là "không có bảng" và ẩn khối.
+  @Public()
+  @PublicCache('CATALOG')
+  @Get('products/:slug/compare')
+  compare(@Param('slug') slug: string) {
+    return this.productCompare.compare(slug);
   }
 
   // Trang thương hiệu phân trang thật. Đặt ở đây (không ở BrandController) để dùng chung cách xếp và dựng thẻ của /products

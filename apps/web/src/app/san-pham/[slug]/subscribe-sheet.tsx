@@ -22,6 +22,8 @@ import { formatVnd } from '@/lib/format-vnd';
 import { bankPaymentHref } from '@/lib/order-view';
 import { ui } from '@/lib/guest-ui';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { subscribePct } from '@tubutree/app-core/commerce/pdp-info';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { addressText, formatVnDate, isStartDateAllowed, startDateRange, subscriptionWalletBlockedReason } from '@/lib/subscription-options';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { useRovingGroup } from '@/lib/use-roving-group';
@@ -93,7 +95,8 @@ export function SubscribeSheet({
   const [startDate, setStartDate] = useState('');
   const [payment, setPayment] = useState<SubscriptionPaymentMethod>('COD');
   const [addressId, setAddressId] = useState<string | undefined>();
-  const discountPct = Math.round(usePublicConfig().subscribeDiscountPct * 100);
+  const cfg = usePublicConfig();
+  const discountPct = subscribePct(cfg.isLoaded ? cfg.subscribeDiscountPct : null);
   const addrQ = useQuery({ queryKey: ['addresses'], queryFn: getAddresses, enabled: visible });
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: visible });
   // Truy vấn lỗi mà chưa có dữ liệu bị react-query đặt về pending lúc tải lại và xoá lỗi; giữ vùng lỗi + nút Thử lại đứng yên
@@ -192,7 +195,7 @@ export function SubscribeSheet({
         if (!busy) onClose();
       }}
       dismissible={!busy}
-      title={`Đặt định kỳ — tiết kiệm ${discountPct}%`}
+      title={discountPct === null ? fillCopy('pdp.subscribeSaveNoPct') : fillCopy('pdp.subscribeSave', { pct: discountPct })}
       numericTitle
       description="Tự động giao lại theo chu kỳ bạn chọn. Tạm dừng, sửa hoặc huỷ bất kỳ lúc nào."
       size="full"

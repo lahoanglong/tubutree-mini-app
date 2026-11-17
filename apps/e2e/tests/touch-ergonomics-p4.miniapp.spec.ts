@@ -96,15 +96,12 @@ for (const width of NARROW_WIDTHS) {
       await page.goto(`/product/${PILOT_SLUG}`);
       const reviews = page.getByRole('region', { name: 'Đánh giá sản phẩm' });
       await reviews.scrollIntoViewIfNeeded();
-      await expect(reviews.getByText('Nhận xét r1')).toBeVisible({ timeout: 15_000 });
+      // Trang sản phẩm mở sẵn 2 đánh giá có ảnh/video (r2, r3); các dòng khác hiện sau "Xem thêm đánh giá".
+      await expect(reviews.getByText('Nhận xét r2')).toBeVisible({ timeout: 15_000 });
+      await expectClean(page, 'Đánh giá (2 dòng mở sẵn)', width, REVIEWS);
+      await reviews.getByRole('button', { name: 'Xem thêm đánh giá' }).click();
+      await expect(reviews.getByText('Nhận xét r1')).toBeVisible();
       await expectClean(page, 'Đánh giá', width, REVIEWS);
-
-      // W51A: khối "Đánh giá nhanh" ở đầu trang có huy hiệu Đã mua và dải ảnh thu nhỏ (mock có đánh giá 3 ảnh): đo riêng, ảnh không được thành vùng chạm hay tràn ngang.
-      const quick = page.locator('[data-section="pdp-quick-reviews"]');
-      await quick.scrollIntoViewIfNeeded();
-      await expect(quick.getByTestId('quick-review-verified').first()).toBeVisible();
-      await expect(quick.getByTestId('quick-review-photos').first()).toBeVisible();
-      await expectClean(page, 'Đánh giá nhanh', width, '[data-section="pdp-quick-reviews"]');
 
       await expect.poll(() => api.callsTo('GET', '/products/:slug/reviews/can-review').length, { timeout: 15_000 }).toBeGreaterThan(0);
       await reviews.getByRole('button', { name: 'Viết đánh giá' }).click({ timeout: 15_000 });

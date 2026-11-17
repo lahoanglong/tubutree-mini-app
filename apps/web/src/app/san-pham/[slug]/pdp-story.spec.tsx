@@ -27,10 +27,10 @@ const Probe = () => {
   latest = usePdpSelection();
   return <p data-testid="probe">{latest?.selectedId}</p>;
 };
-const mount = async (product: ProductDetail, placement?: 'phone' | 'wide') => {
+const mount = async (product: ProductDetail) => {
   const r = render(
     <PdpSelectionProvider initialId="v1">
-      <PdpStory product={product} placement={placement} />
+      <PdpStory product={product} />
       <Probe />
     </PdpSelectionProvider>,
   );
@@ -77,17 +77,28 @@ describe('PdpStory', () => {
     expect(latest!.userPicked.current).toBe(true);
   });
 
-  it('placement phone: nằm ở cột thông tin sau khối mua (order 7) và ẩn từ md; wide: chỉ hiện từ md', async () => {
-    const phone = await mount(PRODUCT, 'phone');
-    const p = phone.querySelector('[data-testid="pdp-story"]')!;
-    expect(p.className).toContain('md:hidden');
-    expect(p.className).toContain('tubu-pdp-order-7');
-    expect(p.className.split(' ')).not.toContain('hidden');
-    document.body.innerHTML = '';
-    const wide = await mount(PRODUCT, 'wide');
-    const w = wide.querySelector('[data-testid="pdp-story"]')!;
-    expect(w.className.split(' ')).toContain('hidden');
-    expect(w.className).toContain('md:block');
-    expect(w.className).not.toContain('tubu-pdp-order-7');
+  it('một bản duy nhất, mọi khổ (không còn bản riêng cho điện thoại và máy tính), gốc khối mang data-pdp-block="story"', async () => {
+    const c = await mount(PRODUCT);
+    const all = c.querySelectorAll('[data-testid="pdp-story"]');
+    expect(all).toHaveLength(1);
+    const el = all[0]!;
+    expect(el.getAttribute('data-pdp-block')).toBe('story');
+    expect(el.className.split(' ')).not.toContain('hidden');
+    expect(el.className).not.toContain('md:hidden');
+    expect(el.className).not.toContain('tubu-pdp-order');
+  });
+
+  it('chỉ vẽ khi sản phẩm có câu chuyện riêng đang bật: cấu hình tắt (kịch bản mẫu) thì không có khối', async () => {
+    const off = { ...PRODUCT, storyConfig: { ...(PRODUCT as unknown as { storyConfig: object }).storyConfig, enabled: false } } as unknown as ProductDetail;
+    const c = await mount(off);
+    expect(c.querySelector('[data-pdp-block="story"]')).toBeNull();
+  });
+
+  it('khung ảnh của dải không lặp ảnh đầu thư viện ngay phía trên', async () => {
+    const two = { ...PRODUCT, images: ['https://cdn.test/a.jpg', 'https://cdn.test/b.jpg'] } as unknown as ProductDetail;
+    const c = await mount(two);
+    const srcs = Array.from(c.querySelectorAll('[data-testid="pdp-story"] img')).map((i) => i.getAttribute('src') ?? '');
+    expect(srcs.some((s) => s.includes('b.jpg'))).toBe(true);
+    expect(srcs.some((s) => s.includes('a.jpg'))).toBe(false);
   });
 });

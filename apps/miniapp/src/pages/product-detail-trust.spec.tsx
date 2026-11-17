@@ -77,17 +77,19 @@ describe('ProductDetailPage: dải cam kết (W45A)', () => {
     mocks.fetchProduct.mockResolvedValue(product());
   });
 
-  it('hàng Tubu giao: dải ba trụ cột đứng sau khối Số lượng và trước khối Cam kết Tubu ở cuối trang', async () => {
+  it('hàng Tubu giao: dải ba trụ cột mở đầu khối cam kết, sau khối Số lượng; nút chính sách vận chuyển nằm ngay dưới dải', async () => {
     renderPdp();
     const strip = await screen.findByTestId('product-trust-strip');
     expect(within(strip).getAllByRole('listitem')).toHaveLength(3);
     const limit = document.querySelector('[data-section="pdp-flash-limit"]')!;
-    const promises = document.getElementById('pdp-promises')!;
+    const promises = document.querySelector<HTMLElement>('[data-pdp-block="promises"]')!;
     expect(limit).not.toBeNull();
     expect(promises).not.toBeNull();
     const follows = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(follows(limit, strip)).toBe(true);
-    expect(follows(strip, promises)).toBe(true);
+    expect(promises.firstElementChild).toBe(strip);
+    expect(follows(strip, within(promises).getByRole('button', { name: 'Chính sách vận chuyển' }))).toBe(true);
+    expect(screen.queryByRole('heading', { name: 'Cam kết Tubu' })).toBeNull();
   });
 
   it('chạm lối xem chính sách mở chính sách đổi trả ngay trong trang', async () => {
@@ -96,7 +98,7 @@ describe('ProductDetailPage: dải cam kết (W45A)', () => {
     expect(screen.getByTestId('policy-sheet')).toHaveTextContent('doi-tra');
   });
 
-  it('nút Vận chuyển của khối Cam kết Tubu vẫn mở chính sách vận chuyển', async () => {
+  it('nút Vận chuyển của khối cam kết vẫn mở chính sách vận chuyển', async () => {
     renderPdp();
     await screen.findByTestId('product-trust-strip');
     fireEvent.click(screen.getByRole('button', { name: 'Chính sách vận chuyển' }));
@@ -111,6 +113,8 @@ describe('ProductDetailPage: dải cam kết (W45A)', () => {
     expect(within(strip).queryByTestId('trust-pillar-returns')).toBeNull();
     fireEvent.click(within(strip).getByRole('button', { name: 'Xem chính sách vận chuyển của Tubu Tree' }));
     expect(screen.getByTestId('policy-sheet')).toHaveTextContent('van-chuyen');
+    // Dải đã là lối xem chính sách vận chuyển: không thêm nút thứ hai cho cùng việc.
+    expect(screen.queryByRole('button', { name: 'Chính sách vận chuyển' })).toBeNull();
   });
 
   it.each([

@@ -11,7 +11,8 @@ import { offerAmount, offerRows } from '@tubutree/app-core/commerce/voucher-pick
 import { qtyPickMax, stockText } from '@tubutree/app-core/commerce/stock-text';
 import { serverNow } from '@tubutree/app-core/server-clock';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
+import { productTrustStrip, type ProductTrustStripView } from '@tubutree/app-core/commerce/product-trust-strip';
+import { subscribePct } from '@tubutree/app-core/commerce/pdp-info';
 import { createGroupBuy } from '@tubutree/app-core/api/groupbuy';
 import { affiliateMeQuery } from '@tubutree/app-core/queries/affiliate';
 import { couponsQuery } from '@tubutree/app-core/queries/loyalty';
@@ -135,6 +136,9 @@ const RESUME_SUBSCRIBE = 'dinh-ky';
 
 const pagePath = (slug: string) => `/san-pham/${encodeURIComponent(slug)}`;
 
+/** Chính sách vận chuyển của web (cùng trang với liên kết ở khối cam kết). */
+export const SHIPPING_POLICY_PATH = '/chinh-sach/van-chuyen';
+
 function offlineMessage(what: string): string {
   return `Chưa kết nối được tới Tubu Tree nên chưa ${what}. Bạn kiểm tra mạng rồi bấm lại nhé.`;
 }
@@ -163,31 +167,33 @@ export function PdpFreeship({ initialConfig }: { initialConfig?: PublicConfig } 
   );
 }
 
-/**
- * Dải cam kết (ProductTrustStrip) ngay dưới khối mua: số ngày đổi trả đọc từ cấu hình công khai như khối Cam kết Tubu ở cuối trang,
- * `initialConfig` từ máy chủ để dải có ngay trong HTML. Hàng gian hàng tự giao không có dải (app-core quyết).
- */
-export function PdpTrustStrip({ fulfillerKind, initialConfig }: { fulfillerKind: string | undefined; initialConfig?: PublicConfig }) {
+/** Dải cam kết của sản phẩm: số ngày đổi trả đọc từ cấu hình công khai, `initialConfig` từ máy chủ để dải có ngay trong HTML. Hàng gian hàng tự giao không có dải (app-core quyết). */
+export function useTrustView(fulfillerKind: string | undefined, initialConfig?: PublicConfig): ProductTrustStripView | null {
   const cfg = usePublicConfig(initialConfig);
   // Tải cấu hình ở trình duyệt lỗi (429, 5xx) thì `usePublicConfig` rơi về bản dự phòng không có số ngày: giữ giá trị máy chủ đã dựng trong HTML,
   // nếu không dải tự hứa đổi trả khi chủ shop đã tắt (đổi trả 0 ngày) và bố cục nhảy.
   const returnWindowDays = cfg.isLoaded ? cfg.returnWindowDays : initialConfig?.returnWindowDays;
-  return <ProductTrustStrip view={productTrustStrip({ fulfillerKind, returnWindowDays })} />;
+  return productTrustStrip({ fulfillerKind, returnWindowDays });
+}
+
+export function PdpTrustStrip({ fulfillerKind, initialConfig }: { fulfillerKind: string | undefined; initialConfig?: PublicConfig }) {
+  return <ProductTrustStrip view={useTrustView(fulfillerKind, initialConfig)} />;
 }
 
 /**
- * Dòng "Vận chuyển ›": ai giao và freeship, ngắn. Hàng Tubu bấm cuộn tới Cam kết Tubu; hàng gian hàng tự giao không có cam kết đó nên dòng chỉ
- * để đọc (không bấm, không "›"). Lưu ý dài và thông báo tạm nghỉ do trang cha dựng ngoài dòng. Nội dung nhận qua `children`.
- * Luôn là hàng thông tin cuối nên không kẻ đường dưới (sau nó là chip phân loại, Mini cũng không kẻ ở hàng cuối).
+ * Dòng "Vận chuyển ›": ai giao và freeship, ngắn. Hàng Tubu bấm mở chính sách vận chuyển (Mini mở `PolicySheet` cùng chính sách); hàng gian hàng tự
+ * giao có phí và hạn riêng nên dòng chỉ để đọc (không bấm, không "›"). Lưu ý dài và thông báo tạm nghỉ do trang cha dựng ngoài dòng. Nội dung nhận qua `children`.
+ * Luôn là hàng thông tin cuối nên không kẻ đường dưới (Mini cũng không kẻ ở hàng cuối).
  */
 export function PdpShippingRow({ children, pressable = true }: { children: ReactNode; pressable?: boolean }) {
+  const router = useRouter();
   return (
     <ListRow
       icon={<Icon icon={Truck} size="md" tone="brand" />}
       title={fillCopy('pdp.shipping')}
       subtitle={<div className="flex flex-col gap-1 max-md:gap-0 md:flex-row md:flex-wrap md:items-baseline md:gap-x-3 md:gap-y-0">{children}</div>}
       trailing={pressable ? 'chevron' : undefined}
-      onPress={pressable ? () => document.getElementById('pdp-promises')?.scrollIntoView({ behavior: 'smooth', block: 'start' }) : undefined}
+      onPress={pressable ? () => router.push(SHIPPING_POLICY_PATH) : undefined}
     />
   );
 }
@@ -335,11 +341,16 @@ export function PdpLowStock({ slug, variations }: { slug: string; variations: { 
   );
 }
 
-/** Dòng "Đặt định kỳ" mở sheet tạo gói; chỉ có với hàng Tubu còn hàng ở phân loại đang chọn. */
-export function PdpSubscribeRow({ slug, variations }: { slug: string; variations: PdpVariation[] }) {
+/**
+ * Dòng "Đặt định kỳ" mở sheet tạo gói; chỉ có với hàng Tubu còn hàng ở phân loại đang chọn. Số % là số máy chủ cấu hình (`subscribePct`); chưa có cấu hình
+ * thật (tải lỗi, không có bản máy chủ) thì câu không nêu số thay vì in số dự phòng.
+ */
+export function PdpSubscribeRow({ slug, variations, initialConfig }: { slug: string; variations: PdpVariation[]; initialConfig?: PublicConfig }) {
   const router = useRouter();
   const phase = useAuthPhase();
-  const cfg = usePublicConfig();
+  const cfg = usePublicConfig(initialConfig);
+  // Tải cấu hình ở trình duyệt lỗi thì giữ số máy chủ đã dựng trong HTML (như dải cam kết), không đổi câu giữa chừng.
+  const pct = subscribePct(cfg.isLoaded ? cfg.subscribeDiscountPct : initialConfig?.subscribeDiscountPct);
   const sel = usePdpSelection();
   const stockQ = useProductStock(slug);
   const [open, setOpen] = useState(false);
@@ -377,14 +388,14 @@ export function PdpSubscribeRow({ slug, variations }: { slug: string; variations
   };
 
   return (
-    <div className="mt-3">
+    <div data-pdp-block="subscribe" className="mt-3">
       <button
         type="button"
         onClick={onClick}
         className="flex min-h-11 w-full items-center gap-2 rounded-control border border-dashed border-forest-600 bg-forest-50 px-3 py-2.5 text-left"
       >
         <Repeat className="h-[18px] w-[18px] shrink-0 text-forest-700" aria-hidden="true" />
-        <span className="flex-1 text-sm font-semibold text-forest-700">Đặt định kỳ — tiết kiệm {Math.round(cfg.subscribeDiscountPct * 100)}%</span>
+        <span className="flex-1 text-sm font-semibold text-forest-700">{pct === null ? fillCopy('pdp.subscribeSaveNoPct') : fillCopy('pdp.subscribeSave', { pct })}</span>
         <ChevronRight className="h-[18px] w-[18px] shrink-0 text-forest-700" aria-hidden="true" />
       </button>
       {notice && (

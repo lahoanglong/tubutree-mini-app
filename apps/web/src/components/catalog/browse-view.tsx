@@ -17,6 +17,8 @@ import { categoryEntries, segmentLabel, type CategoryEntry } from '@/lib/browse-
 import { coreHttp } from '@/lib/core-http';
 import { EmptyState } from '@/components/mini/empty-state';
 import { ui } from '@/lib/guest-ui';
+import { usePublicConfig } from '@/lib/use-public-config';
+import { subscribePct } from '@tubutree/app-core/commerce/pdp-info';
 import { clearRecentSearches, pushRecentSearch, readRecentSearches, RECENT_SEARCHES_CHANGED_EVENT } from '@/lib/recent-searches';
 import {
   BROWSE_PATH, CLEAR_SEARCH_PATCH, EMPTY_SEARCH_STATE, PAGE_LIMIT, activeFilterChips, activeFilterCount, browseHref, isBrowseHub, isBrowseRoot,
@@ -77,6 +79,17 @@ const errorMessage = loadErrorText;
  * 20 món mỗi trang. Toàn bộ trạng thái nằm trong URL (`useBrowseState`): từ hub chạm ô hoặc gửi từ khoá là PUSH (Back về hub), trong
  * danh sách là replace. Gõ chỉ hiện GỢI Ý; Enter hoặc chạm gợi ý mới ghi `q`.
  */
+/** Câu giới thiệu Mua xoay vòng: số % là số máy chủ cấu hình (như dòng Đặt định kỳ ở trang sản phẩm); chưa có cấu hình thật thì không nêu số. */
+function SubscriptionPitch() {
+  const cfg = usePublicConfig();
+  const pct = subscribePct(cfg.isLoaded ? cfg.subscribeDiscountPct : null);
+  return (
+    <p className="mt-1 text-sm text-[color:var(--color-text-primary)]">
+      Giao tự động sản phẩm tiêu dùng thiết yếu theo chu kỳ 4 · 6 · 8 · 10 tuần — tiết kiệm {pct === null ? '' : `${pct}% `}mỗi kỳ, đổi ngày hoặc tạm dừng bất cứ lúc nào.
+    </p>
+  );
+}
+
 export default function BrowseView({ initial = null, brands: initialBrands, categories: initialCategories, bestSellers }: BrowseViewProps) {
   const router = useRouter();
   const { state, urlKey, focusSearch, page, update, consumeFocus } = useBrowseState();
@@ -431,9 +444,7 @@ export default function BrowseView({ initial = null, brands: initialBrands, cate
                       Quản lý lịch định kỳ của tôi →
                     </Link>
                   </div>
-                  <p className="mt-1 text-sm text-[color:var(--color-text-primary)]">
-                    Giao tự động sản phẩm tiêu dùng thiết yếu theo chu kỳ 4 · 6 · 8 · 10 tuần — tiết kiệm tới 17% mỗi kỳ, đổi ngày hoặc tạm dừng bất cứ lúc nào.
-                  </p>
+                  <SubscriptionPitch />
                   <p className="mt-1 text-xs text-[color:var(--color-text-secondary)]">
                     Chọn món cần dùng bên dưới, mở chi tiết sản phẩm và bấm Đặt định kỳ để nhận giá ưu đãi xoay vòng.
                   </p>

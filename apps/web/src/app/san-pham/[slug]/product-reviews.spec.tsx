@@ -140,10 +140,19 @@ const REWARD_ALREADY_GIVEN = 'Bạn đã nhận Điểm Xanh cho đánh giá đ�
 const EDIT_HINT = 'Chỉ lần đánh giá đầu tiên của mỗi sản phẩm được cộng Điểm Xanh, sửa đánh giá không cộng thêm.';
 
 let mounted: Rendered[] = [];
-const mount = async () => {
+/**
+ * Mặc định mở luôn danh sách đầy đủ (bấm "Xem thêm đánh giá" của phần thu gọn) vì phần lớn ca dưới đây kiểm danh sách, chip lọc và phân trang;
+ * `collapsed` giữ phần thu gọn (tóm tắt + 2 đánh giá chọn sẵn) như lúc khách vừa vào trang.
+ */
+const mount = async ({ collapsed = false }: { collapsed?: boolean } = {}) => {
   const r = render(<ProductReviews slug="nuoc-rua-chen" />);
   mounted.push(r);
   await flush(8);
+  const more = r.container.querySelector('[data-testid="reviews-more"]');
+  if (!collapsed && more) {
+    click(more);
+    await flush(4);
+  }
   return r.container;
 };
 const button = (c: HTMLElement, text: string | RegExp) => byText(c, 'button', text);
@@ -543,30 +552,68 @@ describe('ProductReviews (web) — danh sách công khai', () => {
     }
   });
 
-  it('chưa có đánh giá → lời mời viết đánh giá đầu tiên', async () => {
+  it('chưa có đánh giá: khối chỉ còn tiêu đề và một dòng "Chưa có đánh giá" (không hình minh hoạ, không lời mời dài); khách có lần mua vẫn có nút viết', async () => {
     mocks.list = { count: 0, average: 0, distribution: {}, items: [] };
     const c = await mount();
-    // Khối rỗng nạp lười (next/dynamic): chờ tới khi hiện.
-    for (let n = 0; n < 40 && !c.textContent!.includes('Chưa có đánh giá'); n++) await flush();
-    expect(c.textContent).toContain('Chưa có đánh giá');
-    expect(c.textContent).toContain('Hãy là người đầu tiên chia sẻ trải nghiệm.');
-    expect(c.querySelector('svg[aria-hidden]')).not.toBeNull();
+    const empty = c.querySelector('[data-testid="pdp-reviews-empty"]')!;
+    expect(empty.textContent).toBe('Chưa có đánh giá');
+    expect(c.textContent).not.toContain('Hãy là người đầu tiên');
+    expect(c.querySelector('svg')).toBeNull();
+    expect(c.querySelector('[aria-label="Phân bổ số sao"]')).toBeNull();
+    expect(c.querySelector('[data-testid="review-write"]')!.textContent).toBe('Viết đánh giá');
     expect(c.querySelector('h2')!.className).toContain('font-ui');
     expect(c.querySelector('h2')!.className).not.toContain('font-display');
   });
 
-  it('khách chưa đăng nhập: không hỏi can-review, nút ghost "Viết đánh giá" mở cổng đăng nhập và quay lại đúng đơn đang mở', async () => {
+  it('chưa có đánh giá và khách chưa mua: chỉ một dòng, không thêm câu "cần mua để đánh giá"', async () => {
+    mocks.list = { count: 0, average: 0, distribution: {}, items: [] };
+    mocks.elig = { canReview: false, reason: 'NOT_PURCHASED' };
+    const c = await mount();
+    expect(c.querySelector('[data-testid="pdp-reviews-empty"]')).not.toBeNull();
+    expect(c.textContent).not.toContain('Mua và nhận hàng để đánh giá');
+    expect(c.querySelectorAll('button, a')).toHaveLength(0);
+  });
+
+  it('khách chưa đăng nhập: không hỏi can-review, không có nút hay liên kết "Viết đánh giá" (chỉ khách có lần mua đánh giá được)', async () => {
     mocks.auth = { status: 'idle', initialized: true, sessionUnavailable: false };
     mocks.search = 'danh-gia=o2';
     const c = await mount();
     expect(mocks.eligCalls).toBe(0);
-    const login = byText(c, 'a', 'Viết đánh giá')!;
-    expect(login.getAttribute('href')).toBe(`/dang-nhap?returnTo=${encodeURIComponent('/san-pham/nuoc-rua-chen?danh-gia=o2')}`);
-    // Như nút ghost của Mini (reviews-section.tsx): chữ thương hiệu, không nền, không viền, không gạch chân.
-    expect(login.className).toContain('max-md:bg-transparent');
-    expect(login.className).not.toContain('underline');
+    expect(byText(c, 'a', 'Viết đánh giá')).toBeNull();
+    expect(button(c, 'Viết đánh giá')).toBeNull();
     expect(byText(c, 'a', 'Đăng nhập để đánh giá')).toBeNull();
     expect(form(c)).toBeNull();
+  });
+
+  it('thu gọn mặc định: tóm tắt sao + 2 đánh giá chọn sẵn + "Xem thêm đánh giá"; bấm thì mở danh sách đầy đủ có chip lọc và tiêu điểm về hàng chip', async () => {
+    const c = await mount({ collapsed: true });
+    expect(c.querySelector('[aria-label="Phân bổ số sao"]')).not.toBeNull();
+    expect(c.querySelectorAll('[data-testid="review-picked"] li')).toHaveLength(2);
+    expect(button(c, '5 sao')).toBeNull();
+    const more = c.querySelector<HTMLButtonElement>('[data-testid="reviews-more"]')!;
+    expect(more.textContent).toBe('Xem thêm đánh giá');
+    click(more);
+    await flush(4);
+    expect(c.querySelector('[data-testid="review-picked"]')).toBeNull();
+    expect(c.querySelectorAll('li.border-t')).toHaveLength(3);
+    expect(button(c, '5 sao')).not.toBeNull();
+    expect(document.activeElement).toBe(c.querySelector('[role="group"][aria-label="Lọc đánh giá"]'));
+    expect(smallTouchTargets(c)).toEqual([]);
+  });
+
+  it('chỉ có 1–2 đánh giá: thu gọn đã hiện đủ nên không có "Xem thêm đánh giá"', async () => {
+    mocks.list = { ...LIST, count: 2, items: LIST.items.slice(0, 2) };
+    const c = await mount({ collapsed: true });
+    expect(c.querySelectorAll('[data-testid="review-picked"] li')).toHaveLength(2);
+    expect(c.querySelector('[data-testid="reviews-more"]')).toBeNull();
+  });
+
+  it('bấm ảnh trong đánh giá chọn sẵn (chưa mở danh sách) vẫn mở xem ảnh', async () => {
+    mocks.list = { ...LIST, items: [review('c', 5, { images: ['/reviews/c/images/0?v=1'] }), review('a', 5), review('b', 4)] };
+    const c = await mount({ collapsed: true });
+    click(c.querySelector('button[aria-label="Xem ảnh đánh giá 1"]'));
+    expect(document.querySelector('[data-testid="review-lightbox"]')).not.toBeNull();
+    click(document.querySelector('[data-testid="review-lightbox"] button[aria-label="Đóng"]'));
   });
 
   it('chưa mua và nhận sản phẩm: không có nút viết hay sửa, nói rõ lý do', async () => {

@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useId, useRef, useState } from 'react';
-import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -20,6 +19,7 @@ import { ui } from '@/lib/guest-ui';
 import { Chip } from '@/components/mini/chip';
 import { mini } from '@/components/order-mobile/mobile-ui';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
+import { pickQuickReviews } from '@tubutree/app-core/commerce/pdp-view';
 import {
   REVIEW_STEP,
   reviewFilterChips,
@@ -35,7 +35,6 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { REVIEW_COMMENT_MAX, reviewFormIssue, type ReviewFormIssue } from '@tubutree/app-core/commerce/review-form';
 import { isImeEnter, isSubmitShortcut } from '@tubutree/app-core/keyboard';
 import { IMAGES_UPLOADING, MAX_PUBLIC_DATA_URL_LENGTH } from '@/lib/image-compress';
-import { loginHref } from '@/lib/return-to';
 import {
   EDIT_HIDDEN_NOTE,
   ELIGIBILITY_FAILED,
@@ -65,7 +64,7 @@ import { hideBrokenImage } from '@tubutree/app-core/image-fallback';
 
 // Mã tải video (Cloudinary, đo độ dài) chỉ cần khi khách mở form đánh giá: tách khỏi First Load của trang sản phẩm.
 const ReviewVideoUpload = dynamic(() => import('./review-video-upload').then((m) => m.ReviewVideoUpload), { ssr: false });
-// Khối "chưa có đánh giá" (minh hoạ + nút của Mini App, ~7KB) chỉ hiện ở sản phẩm chưa có đánh giá và nằm dưới màn hình đầu: nạp lười.
+// Khối "không có đánh giá khớp bộ lọc" (minh hoạ của Mini App, ~7KB) chỉ hiện khi khách đã mở danh sách và lọc ra rỗng: nạp lười.
 // Khung giữ chỗ cao bằng khối thật (đệm 16 + hình 96 + tiêu đề + 2 dòng mô tả) để trang không giật khi nó hiện.
 const EmptyState = dynamic(() => import('@/components/mini/empty-state').then((m) => m.EmptyState), {
   ssr: false,
@@ -144,7 +143,7 @@ function forgetOrderParam() {
 /** Khung chờ khi trang được dựng sẵn (ISR): tham số mở form chỉ đọc được ở trình duyệt. Giữ id để link #danh-gia cuộn tới. */
 export function ProductReviewsFallback() {
   return (
-    <section id="danh-gia" data-section="pdp-reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20 tabular-nums`}>
+    <section id="danh-gia" data-section="pdp-reviews" data-pdp-block="reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20 tabular-nums`}>
       <h2 id="danh-gia-title" className={pdpSectionTitle}>
         Đánh giá
       </h2>
@@ -153,13 +152,14 @@ export function ProductReviewsFallback() {
   );
 }
 
-/**
- * Đánh giá trên trang sản phẩm web: danh sách công khai (mọi đánh giá đang hiện, mới nhất trước) và form viết/sửa theo
- * cùng luật với Mini App. `?danh-gia=<id đơn>` (từ chi tiết đơn) mở sẵn form cho đúng lần mua đó.
- */
 /** Đường dẫn ảnh tương đối của API ghép địa chỉ máy chủ ảnh; địa chỉ đầy đủ (video) giữ nguyên. */
 export const mediaSrc = (src: string) => (src.startsWith('/') ? apiMediaUrl(src) : src);
 
+/**
+ * Đánh giá trên trang sản phẩm web: tóm tắt điểm, 2 đánh giá mở sẵn (ưu tiên có ảnh, `pickQuickReviews`) và "Xem thêm đánh giá" mở danh sách công khai
+ * đầy đủ (chip lọc, mới nhất trước); form viết/sửa theo cùng luật với Mini App. Chưa có đánh giá thì chỉ một dòng. Nút "Viết đánh giá" chỉ có khi khách
+ * đã đăng nhập và còn lần mua chưa đánh giá. `?danh-gia=<id đơn>` (từ chi tiết đơn) mở sẵn form cho đúng lần mua đó.
+ */
 export function ProductReviews({ slug }: { slug: string }) {
   const params = useSearchParams();
   const openForOrderId = params?.get(REVIEW_ORDER_PARAM) ?? undefined;
@@ -177,6 +177,8 @@ export function ProductReviews({ slug }: { slug: string }) {
   const [target, setTarget] = useState<FormTarget | null>(null);
   const [visible, setVisible] = useState(REVIEW_STEP);
   const [filter, setFilter] = useState<ReviewFilterKey>('all');
+  // Danh sách đầy đủ (chip lọc, các trang sau) chỉ mở khi khách bấm "Xem thêm đánh giá"; trước đó chỉ có 2 đánh giá chọn sẵn.
+  const [expanded, setExpanded] = useState(false);
   const qc = useQueryClient();
   // Chip lọc hỏi máy chủ: danh sách đầy đủ chỉ có 100 đánh giá mới nhất, lọc trên đó báo "không có đánh giá khớp" sai.
   const filteredQ = useQuery({ queryKey: reviewListKey(slug, filter), queryFn: () => fetchProductReviews(slug, filter), enabled: filter !== 'all' });
@@ -231,8 +233,6 @@ export function ProductReviews({ slug }: { slug: string }) {
     forgetOrderParam();
   }, [openForOrderId, elig]);
 
-  const returnTo = `/san-pham/${encodeURIComponent(slug)}${openForOrderId ? `?${REVIEW_ORDER_PARAM}=${encodeURIComponent(openForOrderId)}` : ''}`;
-
   // Cache có thể đã đầy (dải "Đánh giá nhanh" dùng chung khoá) trước khi khối Suspense này hydrate; vẽ ngay sẽ lệch HTML máy chủ.
   const data = hydrated ? listQ.data : undefined;
   const listLoading = listQ.isLoading || (!hydrated && !listQ.isError);
@@ -244,7 +244,8 @@ export function ProductReviews({ slug }: { slug: string }) {
     moreOn ? { pages: moreQ.data?.pages, isFetching: moreQ.isFetching, isError: moreQ.isError } : undefined,
   );
   const items = list.items;
-  const lbReview = lightbox ? items.find((x) => x.id === lightbox.id) : undefined;
+  const picked = data ? pickQuickReviews(data.items ?? []) : [];
+  const lbReview = lightbox ? (items.find((x) => x.id === lightbox.id) ?? picked.find((x) => x.id === lightbox.id)) : undefined;
   const lbMedia = lbReview ? reviewMediaItems(lbReview) : [];
   const chips = reviewFilterChips(data, filter);
   const moreLoading = list.more === 'loading';
@@ -262,30 +263,109 @@ export function ProductReviews({ slug }: { slug: string }) {
     if (wantMore && moreSettled) void fetchNextPage();
   }, [wantMore, moreSettled, fetchNextPage]);
   const retryMore = () => (moreQ.isFetchNextPageError ? moreQ.fetchNextPage() : moreQ.refetch());
+  // Chưa biết (đang tải, lỗi) thì null: câu "cần mua để đánh giá" chỉ bỏ khi chắc chắn chưa có đánh giá nào (khối chỉ còn một dòng).
+  const empty = data ? data.count === 0 : null;
+  const openList = () => setExpanded(true);
+  // Nút "Xem thêm đánh giá" của phần thu gọn biến mất khi mở danh sách: đưa tiêu điểm tới hàng chip ngay chỗ đó để bàn phím và trình đọc màn hình không rơi về đầu trang.
+  const listTop = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (expanded) listTop.current?.focus({ preventScroll: true });
+  }, [expanded]);
+  const reviewItem = (r: (typeof items)[number]) => {
+    const mine = mineById.get(r.id);
+    return (
+      <li key={r.id} className="border-t border-stone-200 py-3">
+        <div className="flex items-center gap-2">
+          <span
+            aria-hidden="true"
+            className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-forest-50 text-sm font-semibold text-forest-800"
+          >
+            {r.author.trim().charAt(0).toUpperCase() || '?'}
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-1.5">
+              <span className="text-sm font-semibold text-stone-900">{r.author}</span>
+              {r.verifiedPurchase && (
+                <span className="inline-flex items-center gap-0.5 rounded-full bg-success-bg px-2 py-0.5 text-xs font-medium text-success-fg">
+                  <Check className="h-3 w-3" aria-hidden="true" />
+                  Đã mua
+                </span>
+              )}
+              {mine && (
+                <span className="rounded-full bg-forest-50 px-2 py-0.5 text-xs font-medium text-forest-800">Của bạn</span>
+              )}
+            </div>
+            <Stars value={r.rating} small spoken="score" />
+          </div>
+          <span className="flex-none text-xs text-stone-600">{formatDate(r.createdAt)}</span>
+        </div>
+        {mine && (
+          <div className="mt-1 flex items-center justify-between gap-2">
+            {mine.orderCode && <span className="text-xs text-stone-600">Đơn {mine.orderCode}</span>}
+            <button
+              type="button"
+              className={`${ui.btnText} ml-auto text-forest-700`}
+              aria-label={mine.orderCode ? `Sửa đánh giá đơn ${mine.orderCode}` : 'Sửa đánh giá này'}
+              // Form đang mở thì đổi `target` sẽ dựng lại form (đổi key) và bỏ mất ảnh đang xử lý; nút đầu trang cũng chỉ hiện khi chưa có form. Không `disabled` để nút giữ focus.
+              aria-disabled={target ? true : undefined}
+              onClick={() => !target && openEdit(mine)}
+            >
+              Sửa
+            </button>
+          </div>
+        )}
+        {r.comment && <p className="mt-2 whitespace-pre-line break-words text-sm text-stone-700">{r.comment}</p>}
+        {(r.images.length > 0 || r.videoUrl) && (
+          <div className="mt-2 flex gap-2 overflow-x-auto">
+            {reviewMediaItems(r).map((m, i) =>
+              m.kind === 'image' ? (
+                <button
+                  key={m.src}
+                  type="button"
+                  aria-label={fillCopy('review.mediaOpenImage', { n: i + 1 })}
+                  aria-haspopup="dialog"
+                  onClick={() => setLightbox({ id: r.id, index: i })}
+                  className="tubu-press block h-16 min-h-11 w-16 min-w-11 flex-none overflow-hidden rounded-control"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={mediaSrc(m.src)} alt="" loading="lazy" className="block h-full w-full object-cover" onError={hideBrokenImage} />
+                </button>
+              ) : (
+                <button
+                  key={m.src}
+                  type="button"
+                  aria-label={fillCopy('review.mediaOpenVideo')}
+                  aria-haspopup="dialog"
+                  onClick={() => setLightbox({ id: r.id, index: i })}
+                  className="tubu-press flex h-16 min-h-11 w-16 min-w-11 flex-none items-center justify-center rounded-control bg-stone-900 text-[var(--color-text-inverse)]"
+                >
+                  <Play className="h-6 w-6" aria-hidden="true" />
+                </button>
+              ),
+            )}
+          </div>
+        )}
+      </li>
+    );
+  };
 
   return (
-    <section id="danh-gia" data-section="pdp-reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20 tabular-nums`}>
+    <section id="danh-gia" data-section="pdp-reviews" data-pdp-block="reviews" aria-labelledby="danh-gia-title" className={`${pdpBand} scroll-mt-20 tabular-nums`}>
       <div className="flex flex-wrap items-center justify-between gap-2 max-md:min-h-12">
         <h2 id="danh-gia-title" className={pdpSectionTitle}>
           Đánh giá{data && data.count > 0 ? ` (${data.count})` : ''}
         </h2>
-        {hydrated && phase === 'guest' && (
-          // Cùng nút ghost "Viết đánh giá" của Mini (chưa đăng nhập thì mở cổng đăng nhập), không phải link gạch chân.
-          <Link href={loginHref(returnTo)} className={`${ui.btnSecondary} ${mini.ghost}`}>
-            Viết đánh giá
-          </Link>
-        )}
         {elig && !target && (
           <>
             {nextOrder ? (
-              <button type="button" className={`${ui.btnSecondary} ${mini.ghost}`} onClick={() => openForm(newTarget(nextOrder))}>
-                Viết đánh giá
+              <button type="button" data-testid="review-write" className={`${ui.btnSecondary} ${mini.ghost}`} onClick={() => openForm(newTarget(nextOrder))}>
+                {fillCopy('pdp.reviewWrite')}
               </button>
             ) : elig.reason === 'ALL_REVIEWED' && latestMine ? (
               <button type="button" className={`${ui.btnSecondary} ${mini.ghost}`} onClick={() => openEdit(latestMine)}>
                 Sửa đánh giá của bạn
               </button>
-            ) : elig.reason === 'NOT_PURCHASED' ? (
+            ) : elig.reason === 'NOT_PURCHASED' && empty === false ? (
               <span className="text-sm text-stone-600">{REVIEW_NEEDS_PURCHASE}</span>
             ) : null}
           </>
@@ -340,7 +420,9 @@ export function ProductReviews({ slug }: { slug: string }) {
       ) : listQ.isError && !data ? (
         <ListFailed onRetry={() => listQ.refetch()} />
       ) : !data || data.count === 0 ? (
-        <EmptyState variant="inline" art="sprout" heading="Chưa có đánh giá" body="Hãy là người đầu tiên chia sẻ trải nghiệm." />
+        <p data-testid="pdp-reviews-empty" className="mt-1 text-sm text-[var(--color-text-secondary)]">
+          {fillCopy('pdp.reviewsEmpty')}
+        </p>
       ) : (
         <>
           <div className="mt-3 flex flex-wrap items-center gap-6">
@@ -367,113 +449,71 @@ export function ProductReviews({ slug }: { slug: string }) {
             </ul>
           </div>
 
-          {/* Hàng chip lọc như Mini App: đổi bộ lọc thì danh sách về lại 5 dòng đầu. */}
-          {/* Hàng dưới cách hàng trên 12px (gap-y-3): chip nhìn cao ~33px, vùng chạm 44px giãn ~5,5px mỗi phía; khoảng 8px làm vùng chạm hai hàng chồng nhau. */}
-          <div className="mt-3 flex flex-wrap gap-x-2 gap-y-3">
-            {chips.map((f) => (
-              <Chip
-                key={String(f.key)}
-                size="sm"
-                selected={filter === f.key}
-                icon={f.key === 'video' ? Video : undefined}
-                count={f.count}
-                onPress={() => {
-                  setFilter(f.key);
-                  setVisible(REVIEW_STEP);
-                  setMoreOn(false);
-                  qc.removeQueries({ queryKey: reviewMorePrefix(slug) });
-                }}
-              >
-                {f.label}
-              </Chip>
-            ))}
-          </div>
-
-          {list.status === 'loading' ? (
-            <ListLoading />
-          ) : list.status === 'error' ? (
-            <ListFailed onRetry={() => filteredQ.refetch()} />
+          {!expanded ? (
+            <>
+              {picked.length > 0 && (
+                <ul data-testid="review-picked" className="mt-3">
+                  {picked.map(reviewItem)}
+                </ul>
+              )}
+              {data.count > picked.length && (
+                <button type="button" data-testid="reviews-more" className={`${ui.btnSecondary} ${mini.ghost} w-full`} onClick={openList}>
+                  {fillCopy('pdp.reviewsMore')}
+                </button>
+              )}
+            </>
           ) : (
-          <>
-          <ul className="mt-3">
-            {items.slice(0, visible).map((r) => {
-              const mine = mineById.get(r.id);
-              return (
-                <li key={r.id} className="border-t border-stone-200 py-3">
-                  <div className="flex items-center gap-2">
-                    <span
-                      aria-hidden="true"
-                      className="flex h-8 w-8 flex-none items-center justify-center rounded-full bg-forest-50 text-sm font-semibold text-forest-800"
-                    >
-                      {r.author.trim().charAt(0).toUpperCase() || '?'}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-1.5">
-                        <span className="text-sm font-semibold text-stone-900">{r.author}</span>
-                        {r.verifiedPurchase && (
-                          <span className="inline-flex items-center gap-0.5 rounded-full bg-success-bg px-2 py-0.5 text-xs font-medium text-success-fg">
-                            <Check className="h-3 w-3" aria-hidden="true" />
-                            Đã mua
-                          </span>
-                        )}
-                        {mine && (
-                          <span className="rounded-full bg-forest-50 px-2 py-0.5 text-xs font-medium text-forest-800">Của bạn</span>
-                        )}
-                      </div>
-                      <Stars value={r.rating} small spoken="score" />
-                    </div>
-                    <span className="flex-none text-xs text-stone-600">{formatDate(r.createdAt)}</span>
-                  </div>
-                  {mine && (
-                    <div className="mt-1 flex items-center justify-between gap-2">
-                      {mine.orderCode && <span className="text-xs text-stone-600">Đơn {mine.orderCode}</span>}
+            <>
+              {/* Hàng chip lọc như Mini App: đổi bộ lọc thì danh sách về lại 5 dòng đầu. */}
+              {/* Hàng dưới cách hàng trên 12px (gap-y-3): chip nhìn cao ~33px, vùng chạm 44px giãn ~5,5px mỗi phía; khoảng 8px làm vùng chạm hai hàng chồng nhau. */}
+              <div ref={listTop} tabIndex={-1} aria-label="Lọc đánh giá" role="group" className="mt-3 flex flex-wrap gap-x-2 gap-y-3 outline-none">
+                {chips.map((f) => (
+                  <Chip
+                    key={String(f.key)}
+                    size="sm"
+                    selected={filter === f.key}
+                    icon={f.key === 'video' ? Video : undefined}
+                    count={f.count}
+                    onPress={() => {
+                      setFilter(f.key);
+                      setVisible(REVIEW_STEP);
+                      setMoreOn(false);
+                      qc.removeQueries({ queryKey: reviewMorePrefix(slug) });
+                    }}
+                  >
+                    {f.label}
+                  </Chip>
+                ))}
+              </div>
+
+              {list.status === 'loading' ? (
+                <ListLoading />
+              ) : list.status === 'error' ? (
+                <ListFailed onRetry={() => filteredQ.refetch()} />
+              ) : (
+                <>
+                  <ul className="mt-3">{items.slice(0, visible).map(reviewItem)}</ul>
+                  {items.length === 0 && <EmptyState variant="inline" art="search" heading="Không có đánh giá khớp bộ lọc." />}
+                  {list.more === 'error' && visible >= items.length ? (
+                    <ListFailed onRetry={retryMore} />
+                  ) : (
+                    reviewHasMore(visible, list) && (
                       <button
                         type="button"
-                        className={`${ui.btnText} ml-auto text-forest-700`}
-                        aria-label={mine.orderCode ? `Sửa đánh giá đơn ${mine.orderCode}` : 'Sửa đánh giá này'}
-                        // Form đang mở thì đổi `target` sẽ dựng lại form (đổi key) và bỏ mất ảnh đang xử lý; nút đầu trang cũng chỉ hiện khi chưa có form. Không `disabled` để nút giữ focus.
-                        aria-disabled={target ? true : undefined}
-                        onClick={() => !target && openEdit(mine)}
+                        className={`${ui.btnSecondary} ${mini.ghost} w-full`}
+                        aria-busy={moreLoading || undefined}
+                        aria-disabled={moreLoading || undefined}
+                        onClick={showMore}
                       >
-                        Sửa
+                        {moreLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
+                        {fillCopy('pdp.reviewsMore')}
                       </button>
-                    </div>
+                    )
                   )}
-                  {r.comment && <p className="mt-2 whitespace-pre-line break-words text-sm text-stone-700">{r.comment}</p>}
-                  {(r.images.length > 0 || r.videoUrl) && (
-                    <div className="mt-2 flex gap-2 overflow-x-auto">
-                      {reviewMediaItems(r).map((m, i) =>
-                        m.kind === 'image' ? (
-                          <button
-                            key={m.src}
-                            type="button"
-                            aria-label={fillCopy('review.mediaOpenImage', { n: i + 1 })}
-                            aria-haspopup="dialog"
-                            onClick={() => setLightbox({ id: r.id, index: i })}
-                            className="tubu-press block h-16 min-h-11 w-16 min-w-11 flex-none overflow-hidden rounded-control"
-                          >
-                            {/* eslint-disable-next-line @next/next/no-img-element */}
-                            <img src={mediaSrc(m.src)} alt="" loading="lazy" className="block h-full w-full object-cover" onError={hideBrokenImage} />
-                          </button>
-                        ) : (
-                          <button
-                            key={m.src}
-                            type="button"
-                            aria-label={fillCopy('review.mediaOpenVideo')}
-                            aria-haspopup="dialog"
-                            onClick={() => setLightbox({ id: r.id, index: i })}
-                            className="tubu-press flex h-16 min-h-11 w-16 min-w-11 flex-none items-center justify-center rounded-control bg-stone-900 text-[var(--color-text-inverse)]"
-                          >
-                            <Play className="h-6 w-6" aria-hidden="true" />
-                          </button>
-                        ),
-                      )}
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
+                </>
+              )}
+            </>
+          )}
           <ReviewMediaLightbox
             open={lbReview !== undefined && lbMedia.length > 0}
             onClose={() => setLightbox(null)}
@@ -494,25 +534,6 @@ export function ProductReviews({ slug }: { slug: string }) {
                 : undefined
             }
           />
-          {items.length === 0 && <EmptyState variant="inline" art="search" heading="Không có đánh giá khớp bộ lọc." />}
-          {list.more === 'error' && visible >= items.length ? (
-            <ListFailed onRetry={retryMore} />
-          ) : (
-            reviewHasMore(visible, list) && (
-              <button
-                type="button"
-                className={`${ui.btnSecondary} ${mini.ghost} w-full`}
-                aria-busy={moreLoading || undefined}
-                aria-disabled={moreLoading || undefined}
-                onClick={showMore}
-              >
-                {moreLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden="true" />}
-                {fillCopy('pdp.reviewsMore')}
-              </button>
-            )
-          )}
-          </>
-          )}
         </>
       )}
     </section>

@@ -1339,6 +1339,22 @@ describe('BrowseView — kiểu Mini App ở điện thoại', () => {
     expect(container.querySelector('[role="group"][aria-label="Đổi danh mục"]')).toBeNull();
   });
 
+  it('filter=subscription: câu giới thiệu nêu đúng % máy chủ cấu hình (0.12 → 12%), không còn số cứng 17%; chưa có cấu hình thì không nêu số', async () => {
+    nav.search = 'filter=subscription';
+    routes['/config/public'] = () => ({ freeshipThreshold: 199000, subscribeDiscountPct: 0.12 });
+    const withPct = mount();
+    await flush(6);
+    expect(withPct.container.textContent).toContain('tiết kiệm 12% mỗi kỳ');
+    expect(withPct.container.textContent).not.toContain('17%');
+    withPct.unmount();
+    mounted = null;
+    delete routes['/config/public'];
+    const noCfg = mount();
+    await flush(6);
+    expect(noCfg.container.textContent).toContain('tiết kiệm mỗi kỳ');
+    expect(noCfg.container.textContent).not.toMatch(/tiết kiệm (tới )?\d+%/);
+  });
+
   it('filter=subscription: ẩn sản phẩm đối tác tự gửi (MERCHANT / UNAVAILABLE) không hỗ trợ Đặt định kỳ, giữ sản phẩm kho Tubu', async () => {
     nav.search = 'filter=subscription';
     routes['/products'] = () =>

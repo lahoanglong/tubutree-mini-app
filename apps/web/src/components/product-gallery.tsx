@@ -38,7 +38,8 @@ function SlideImage({ src, alt, eager, onBroken }: { src: string; alt: string; e
       height={800}
       loading={eager ? 'eager' : 'lazy'}
       fetchPriority={eager ? 'high' : undefined}
-      decoding="async"
+      // Ảnh đầu là LCP: để trình duyệt tự quyết lúc giải mã thay vì `async` (có thể vẽ trễ một khung sau chữ); các ảnh tải lười giữ `async`.
+      decoding={eager ? undefined : 'async'}
       onError={() => fallBack() || onBroken()}
     />
   );

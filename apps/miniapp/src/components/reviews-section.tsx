@@ -19,6 +19,7 @@ import { useLockedMutation } from './game/use-locked-mutation';
 import { useAuthStore } from '../store/auth';
 import { useLoginWithNotice } from './ui/auth-gate';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
+import { pickQuickReviews } from '@tubutree/app-core/commerce/pdp-view';
 import {
   REVIEW_STEP,
   reviewFilterChips,
@@ -123,12 +124,18 @@ export function ReviewsSection({
   openForOrderId,
   onOrderLinkUsed,
   onQuickAdd,
+  openCount,
 }: {
   slug: string;
   openForOrderId?: string;
   onOrderLinkUsed?: () => void;
   /** Có thì lightbox ảnh đánh giá hiện nút "Thêm vào giỏ": đóng lightbox rồi chạy luồng thêm giỏ của trang. */
   onQuickAdd?: () => void;
+  /**
+   * Số đánh giá mở sẵn khi chưa lọc (trang sản phẩm: 2). Có thì các đánh giá mở sẵn chọn theo `pickQuickReviews` (có chữ, có ảnh/video trước) từ
+   * trang đầu và đứng đầu danh sách; phần còn lại giữ thứ tự máy chủ. Không truyền thì mở REVIEW_STEP dòng theo thứ tự máy chủ.
+   */
+  openCount?: number;
 }) {
   const { status } = useAuthStore();
   const login = useLoginWithNotice();
@@ -147,7 +154,7 @@ export function ReviewsSection({
   // thì form lấy nội dung của đánh giá đó. null = chưa gõ gì: form lấy đánh giá hiện có (sửa) hoặc form trống (viết mới).
   const [edited, setEdited] = useState<{ key: string; draft: ReviewDraft } | null>(null);
   const [filter, setFilter] = useState<ReviewFilterKey>('all');
-  const [visible, setVisible] = useState(REVIEW_STEP);
+  const [visible, setVisible] = useState(openCount ?? REVIEW_STEP);
   const qc = useQueryClient();
   const reviewsQ = useQuery({ queryKey: reviewListKey(slug, 'all'), queryFn: () => fetchReviews(slug) });
   // Chip lọc hỏi máy chủ: danh sách đầy đủ chỉ có 100 đánh giá mới nhất, lọc trên đó báo "không có đánh giá khớp" sai.
@@ -210,16 +217,20 @@ export function ReviewsSection({
   // Đánh giá bị admin ẩn không nằm trong danh sách công khai: khách chỉ biết qua đây. isVisible thiếu (API cũ) coi là đang hiện.
   const hiddenMine = myReviews.filter((r) => r.isVisible === false);
   const hiddenIds = new Set(hiddenMine.map((r) => r.id));
+  const data = reviewsQ.data;
+  const hasReviews = !!data && data.count > 0;
   // Đã đăng nhập thì chỉ có nút khi can-review đã về (như web): chưa biết còn đơn nào để viết thì chưa mở được form.
+  // Chưa có đánh giá nào thì khối chỉ còn một dòng: khách chưa đăng nhập không có nút mời đăng nhập ở đó (chỉ người còn lần mua để đánh giá mới có nút viết).
   const headerAction =
     status !== 'authenticated'
-      ? { label: 'Viết đánh giá', onPress: () => void login() }
+      ? hasReviews
+        ? { label: fillCopy('pdp.reviewWrite'), onPress: () => void login() }
+        : null
       : nextOrder
-        ? { label: 'Viết đánh giá', onPress: () => openNew(nextOrder) }
+        ? { label: fillCopy('pdp.reviewWrite'), onPress: () => openNew(nextOrder) }
         : elig?.reason === 'ALL_REVIEWED' && latestMine
           ? { label: 'Sửa đánh giá của bạn', onPress: () => openEdit(latestMine) }
           : null;
-  const data = reviewsQ.data;
   const dist = data?.distribution ?? {};
   const list = reviewListView(
     filter,
@@ -227,7 +238,10 @@ export function ReviewsSection({
     filteredQ,
     moreOn ? { pages: moreQ.data?.pages, isFetching: moreQ.isFetching, isError: moreQ.isError } : undefined,
   );
-  const filtered = list.items;
+  // Đánh giá mở sẵn chỉ chọn từ trang đầu: trang sau tải thêm không được đổi các dòng đã đứng đầu.
+  const lead = openCount !== undefined && filter === 'all' ? pickQuickReviews(data?.items ?? [], openCount) : [];
+  const leadIds = new Set(lead.map((r) => r.id));
+  const filtered = lead.length > 0 ? [...lead, ...list.items.filter((r) => !leadIds.has(r.id))] : list.items;
   const lbReview = lightbox ? filtered.find((x) => x.id === lightbox.id) : undefined;
   const lbMedia = lbReview ? reviewMediaItems(lbReview) : [];
   const chips = reviewFilterChips(data, filter);
@@ -246,7 +260,13 @@ export function ReviewsSection({
   const retryMore = () => (moreQ.isFetchNextPageError ? moreQ.fetchNextPage() : moreQ.refetch());
 
   return (
-    <section id="danh-gia" aria-label="Đánh giá sản phẩm" className="tubu-nums" style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}>
+    <section
+      id="danh-gia"
+      aria-label="Đánh giá sản phẩm"
+      aria-busy={reviewsQ.isLoading || undefined}
+      className="tubu-nums"
+      style={{ padding: 16, marginTop: 8, background: 'var(--color-bg-surface)' }}
+    >
       {/* Cao bằng nút đầu mục (48px): nút chỉ hiện khi can-review đã về, hàng không được nhảy lúc đó. */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, minHeight: 48 }}>
         <SectionTitle block>Đánh giá {data && data.count > 0 ? `(${data.count})` : ''}</SectionTitle>
@@ -264,7 +284,8 @@ export function ReviewsSection({
             {headerAction.label}
           </Button>
         )}
-        {status === 'authenticated' && elig?.reason === 'NOT_PURCHASED' && (
+        {/* Chưa có đánh giá nào thì khối chỉ một dòng "Chưa có đánh giá" (như web): lời nhắc mua để đánh giá chỉ hiện khi đã có đánh giá. */}
+        {status === 'authenticated' && elig?.reason === 'NOT_PURCHASED' && hasReviews && (
           <Text variant="caption" tone="tertiary">
             {REVIEW_NEEDS_PURCHASE}
           </Text>
@@ -290,9 +311,8 @@ export function ReviewsSection({
           </div>
         ))}
 
-      {reviewsQ.isLoading ? (
-        <ListSkeleton />
-      ) : reviewsQ.isError ? (
+      {/* Lúc tải chỉ giữ hàng đầu mục: khối nằm giữa trang, khung chờ hai dòng cao hơn hẳn trạng thái một dòng khi chưa có đánh giá. */}
+      {reviewsQ.isLoading ? null : reviewsQ.isError ? (
         <ErrorState message={getLoadErrorMessage(reviewsQ.error)} onRetry={() => reviewsQ.refetch()} />
       ) : data && data.count > 0 ? (
         <>
@@ -471,7 +491,9 @@ export function ReviewsSection({
           )}
         </>
       ) : (
-        <EmptyState variant="inline" art="sprout" heading="Chưa có đánh giá" body="Hãy là người đầu tiên chia sẻ trải nghiệm." />
+        <Text variant="body-sm" tone="tertiary" as="p">
+          {fillCopy('pdp.reviewsEmpty')}
+        </Text>
       )}
 
       <BottomSheet open={writing} onClose={() => setWriting(false)} dismissible={!submitting && !imagesBusy && !videoBusy} title={editingId ? 'Sửa đánh giá' : 'Đánh giá sản phẩm'}>

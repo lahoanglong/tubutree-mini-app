@@ -14,6 +14,7 @@ import {
   addToCart,
   applyCoupon,
   fetchActiveFlashSales,
+  fetchPurchasedItems,
   type CartSummary,
   type VariationDetail,
   type FlashSaleActiveItem,
@@ -65,9 +66,17 @@ import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { pdpMedia, pdpMediaIndexOfImage } from '@tubutree/app-core/commerce/pdp-media';
 import { PdpVideoSlide } from '../components/product/pdp-video-slide';
-import { resolveStoryConfig } from '@tubutree/app-core/commerce/product-story';
-import { returnsPromise } from '@tubutree/app-core/returns-copy';
-import { needsVariationPicker } from '@tubutree/app-core/variation-picker';
+import { hasOwnStory, resolveStoryConfig } from '@tubutree/app-core/commerce/product-story';
+import { needsVariationPicker, shouldOpenVariationPicker } from '@tubutree/app-core/variation-picker';
+import {
+  pdpAddOnSource,
+  pdpRebuy,
+  storyProductWithoutLead,
+  subscribePct,
+  PDP_PURCHASED_LIMIT,
+  type PdpAddOnSource,
+} from '@tubutree/app-core/commerce/pdp-info';
+import { hasHtmlTags, parseRichText, richTextPlain } from '@tubutree/app-core/rich-text';
 import { inCartQuantity, lineNote, variationLinePreview } from '@tubutree/app-core/commerce/flash-line';
 import { useFlashAllowance } from '../hooks/use-flash-allowance';
 import { isLowStock, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
@@ -96,14 +105,16 @@ import { cartKey, useCartKey } from '../services/cart-key';
 import { LeafGlyph } from '../components/ui/product-image';
 import { useSizedImage } from '../utils/image-src';
 import { FlashPriceBar } from '../components/product/flash-price-bar';
-import { PdpBundles } from '../components/product/pdp-bundles';
+import { hasLiveBundles, PdpBundles } from '../components/product/pdp-bundles';
 import { PdpFbt, useFbtCartProductIds } from '../components/product/pdp-fbt';
 import { ProductTrustStrip } from '../components/ui/product-trust-strip';
 import { VariationChip } from '../components/product/variation-chip';
-import { useBundlesWait } from '../components/product/use-product-bundles';
+import { useBundlesWait, useProductBundles } from '../components/product/use-product-bundles';
 import { PdpOffersSheet } from '../components/product/pdp-offers-sheet';
-import { PdpQuickReviews } from '../components/product/pdp-quick-reviews';
 import { PdpFeed } from '../components/product/pdp-feed';
+import { PdpCompare } from '../components/product/pdp-compare';
+import { PdpRebuyRow } from '../components/product/pdp-rebuy';
+import { PdpDescription, PdpIngredients } from '../components/product/pdp-info-blocks';
 import { ListRow } from '../components/ui/list-row';
 
 // Cảnh câu chuyện kéo theo sprite, CSS và ảnh: nạp lười để gói đầu của trang không phải gánh khi khách không mở tới.
@@ -112,7 +123,8 @@ const ProductStoryShowcase = lazy(() => import('../components/ui/product-story-s
 type CartLines = readonly { variationId: string; quantity: number }[] | undefined;
 
 const ADDED_FLASH_MS = 1_200;
-const DESC_COLLAPSED_LINES = 4;
+/** Số đánh giá mở sẵn ở khối Đánh giá của trang sản phẩm (có ảnh/video trước). */
+const PDP_REVIEWS_OPEN = 2;
 // Khung chờ và khung lỗi chưa có tên sản phẩm; h1 ẩn giữ cho route luôn đúng một h1.
 const PDP_TITLE = 'Chi tiết sản phẩm';
 
@@ -170,13 +182,14 @@ export default function ProductDetailPage() {
   // `isPending` chỉ đúng sau lần vẽ kế tiếp nên không chặn được cú chạm thứ hai; ref thì chặn ngay.
   const cartWrite = useRef(false);
   const autoPick = useRef<{ slug: string; id: string | null } | null>(null);
+  const addOnLatch = useRef<{ slug: string | undefined; source: PdpAddOnSource } | null>(null);
   const [quantity, setQuantity] = useState(1);
   // Nút "Thêm vào giỏ" tự xác nhận "Đã thêm" ADDED_FLASH_MS; bấm lại trong lúc đó thì tính lại cửa sổ từ lần bấm sau.
   const [justAdded, setJustAdded] = useState(false);
   const addedTimer = useRef<ReturnType<typeof setTimeout>>();
   useEffect(() => () => clearTimeout(addedTimer.current), []);
   const [showSubscribe, setShowSubscribe] = useState(false);
-  // Chính sách mở ngay trong trang: nút Vận chuyển ở Cam kết Tubu và lối xem chính sách của dải cam kết dùng chung một sheet.
+  // Chính sách mở ngay trong trang: dòng Vận chuyển, nút chính sách vận chuyển và lối xem của dải cam kết dùng chung một sheet.
   const [policySlug, setPolicySlug] = useState<LegalSlug | null>(null);
   const [sheetMode, setSheetMode] = useState<VariationSheetMode | null>(null);
   const [showContentKit, setShowContentKit] = useState(false);
@@ -205,6 +218,7 @@ export default function ProductDetailPage() {
   useRecordRecentlyViewed(product.isSuccess ? product.data : undefined);
   // Combo/Mua kèm tải song song với sản phẩm; trang giữ khung chờ tối đa vài trăm ms để khối chèn cùng lần vẽ đầu, không đẩy các hàng bên dưới.
   const bundlesWaiting = useBundlesWait(slug);
+  const bundlesQ = useProductBundles(slug);
   const related = useQuery({
     queryKey: ['related', slug],
     queryFn: () => fetchRelated(slug!),
@@ -246,6 +260,19 @@ export default function ProductDetailPage() {
     queryFn: () => fetchReviews(slug!),
     enabled: !!slug,
   });
+  // Lần mua trước của sản phẩm này cho dòng "Mua lại": cùng khoá và nguồn `GET /me/purchased-items` với kệ Mua lại; lỗi hay API cũ thì không có dòng.
+  const purchasedQ = useQuery({
+    queryKey: ['purchased-items', PDP_PURCHASED_LIMIT],
+    queryFn: () => fetchPurchasedItems({ limit: PDP_PURCHASED_LIMIT }),
+    enabled: status === 'authenticated',
+    retry: false,
+    staleTime: 60_000,
+  });
+  // Câu chuyện chỉ khi có cấu hình riêng đang bật; khối không lặp ảnh đầu thư viện ngay phía trên. Ghi nhớ theo dữ liệu để khối không dựng lại cảnh mỗi lần trang vẽ.
+  const storyProduct = useMemo(() => {
+    const d = product.data;
+    return d && hasOwnStory(d) ? storyProductWithoutLead(d, resolveStoryConfig(d)) : null;
+  }, [product.data]);
   // Cùng queryKey với FlashSale (trang chủ) → React Query dedupe nếu đã cache sẵn.
   const flashQ = useQuery({
     queryKey: ['flash-sales', 'active'],
@@ -362,7 +389,8 @@ export default function ProductDetailPage() {
   };
 
   const addMutation = useLockedMutation({
-    mutationFn: async (input: { variation: VariationDetail; qty: number }) =>
+    // `source` chỉ để nút Mua lại biết lệnh đang chạy là của nó (vòng chờ trên đúng nút); máy chủ không nhận trường này.
+    mutationFn: async (input: { variation: VariationDetail; qty: number; source?: 'rebuy' }) =>
       applyGroupCoupon(await addToCart(input.variation.id, input.qty)),
     onSuccess: ({ cart: updatedCart, note, couponRejected }) => {
       queryClient.setQueryData(cartKey(), updatedCart);
@@ -522,8 +550,9 @@ export default function ProductDetailPage() {
     }
   };
 
+  // Khách đã tự bấm chip (còn hàng) thì nút dùng luôn lựa chọn đó, một chạm; chưa bấm (trang chỉ chọn sẵn phân loại mặc định) thì hỏi bằng bảng chọn.
   const handleAdd = async () => {
-    if (needsVariationPicker(variations)) {
+    if (shouldOpenVariationPicker(variations, selectedId)) {
       pdpAction('open_variant_sheet');
       setSheetMode('add');
       return;
@@ -542,7 +571,7 @@ export default function ProductDetailPage() {
   };
 
   const handleBuyNow = async () => {
-    if (needsVariationPicker(variations)) {
+    if (shouldOpenVariationPicker(variations, selectedId)) {
       pdpAction('open_variant_sheet');
       setSheetMode('buy');
       return;
@@ -576,11 +605,7 @@ export default function ProductDetailPage() {
     void queryClient.invalidateQueries({ queryKey: ['flash-sales', 'active'] });
   };
 
-  const scrollToId = (id: string) => document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-  const hasStory = resolveStoryConfig(p) !== null;
-  // "Gợi ý mua kèm hợp vị": món đang xem (phân loại đang chọn, đúng giá trang ghi) + 2 món đầu của "Khách thường mua cùng". Hai món đó chiếm chỗ ở khối này
-  // nên dải "Khách thường mua cùng" bên dưới bỏ chúng; khối không hiện (hết hàng, chưa có phân loại, hết gợi ý) thì không chiếm món nào.
+  // "Gợi ý mua kèm hợp vị": món đang xem (phân loại đang chọn, đúng giá trang ghi) + 2 món đầu của "Khách thường mua cùng".
   const fbtCurrentPricing = selected ? addOneVariationPricing(selected, flashList, inCartQuantity(cartLines, selected.id)) : null;
   const fbtPartners = fbtCartIds ? pickFbtPartners({ currentProductId: p.id, candidates: boughtTogether.data, flash: flashList, cartProductIds: fbtCartIds }) : [];
   const fbtBundle = buildFrequentlyBoughtBundle({
@@ -598,13 +623,40 @@ export default function ProductDetailPage() {
     candidates: null,
     partners: fbtPartners,
   });
+  const boughtCandidates = fbtCartIds ? (boughtTogether.data ?? []) : [];
+  // Một khối mua kèm duy nhất. Nguồn chốt một lần mỗi sản phẩm, khi bộ, giỏ (món đã có không được gợi ý), "Khách thường mua cùng" và Giờ vàng đều đã về:
+  // bộ hết giờ lúc khách đang xem thì PdpBundles tự ghi "Đã kết thúc" tại chỗ, khối không đổi sang nguồn khác dưới tay khách.
+  if ((!addOnLatch.current || addOnLatch.current.slug !== slug) && !bundlesQ.isPending && fbtCartIds !== null && !boughtTogether.isPending && !flashQ.isPending) {
+    const bought = pdpShelves({ currentId: p.id, boughtTogether: boughtCandidates, brand: [], feed: [] }).boughtTogether.length > 0;
+    addOnLatch.current = { slug, source: pdpAddOnSource({ bundles: hasLiveBundles(bundlesQ.data, serverNow()), fbt: !!fbtBundle, bought }) };
+  }
+  const latched = addOnLatch.current;
+  const addOnSource = latched && latched.slug === slug ? latched.source : null;
+  // Hai món của khối mua kèm hợp vị không lặp ở các dải gợi ý bên dưới; dải "Khách thường mua cùng" chỉ vẽ khi nó là nguồn của khối mua kèm.
   const shelves = pdpShelves({
     currentId: p.id,
-    boughtTogether: fbtCartIds ? (boughtTogether.data ?? []) : [],
+    boughtTogether: addOnSource === 'bought' ? boughtCandidates : [],
     brand: related.data ?? [],
     feed: feed.data ?? [],
-    claimed: fbtBundle ? new Set(fbtPartners.map((l) => l.productId)) : undefined,
+    claimed: addOnSource === 'fbt' && fbtBundle ? new Set(fbtPartners.map((l) => l.productId)) : undefined,
   });
+
+  // Mô tả ngắn có thể là HTML từ Pancake: chỉ lấy chữ, không bao giờ hiện thẻ.
+  const shortPlain = p.shortDesc && hasHtmlTags(p.shortDesc) ? richTextPlain(parseRichText(p.shortDesc)) : p.shortDesc;
+  // Mô tả ngắn trùng nguyên văn mô tả dài thì khách đọc hai lần: chỉ giữ ở mục Mô tả.
+  const benefitText = shortPlain && p.shortDesc!.trim() !== (p.description ?? '').trim() ? shortPlain.trim() || null : null;
+
+  const subPct = subscribePct(config.subscribeDiscountPct);
+  const purchasedItems = purchasedQ.data?.items;
+  const rebuy = status === 'authenticated' && !unavailable ? pdpRebuy(Array.isArray(purchasedItems) ? purchasedItems : null, p.id, variations) : null;
+  const rebuyVariation = rebuy ? variations.find((v) => v.id === rebuy.variationId) : undefined;
+  // Một chạm thêm đúng phân loại lần trước, số lượng 1, qua cùng khoá ghi giỏ và cùng phản hồi "Đã thêm" của nút Thêm vào giỏ. Không đổi phân loại đang xem.
+  const handleRebuy = (variation: VariationDetail) => {
+    haptic('light');
+    writeCart('add_to_cart', () => addMutation.mutate({ variation, qty: 1, source: 'rebuy' }));
+  };
+
+  const trustView = productTrustStrip({ fulfillerKind: p.fulfiller?.kind, returnWindowDays: config.returnWindowDays });
 
   const handleShare = async () => {
     if (sharing.current) return;
@@ -616,7 +668,7 @@ export default function ProductDetailPage() {
       await shareWithFallback(
         {
           title: p.name,
-          description: shareDescription(p.shortDesc ?? vi.home.tagline, welcomeOfferOf(config)),
+          description: shareDescription(shortPlain ?? vi.home.tagline, welcomeOfferOf(config)),
           thumbnail: p.thumbnail ?? undefined,
           path: withReferral(`/product/${p.slug}`, code),
         },
@@ -677,37 +729,83 @@ export default function ProductDetailPage() {
     });
   }
   if (shippingLines.length > 0) {
-    // Hàng Tubu: bấm tới Cam kết Tubu (giao, đổi trả). Hàng gian hàng tự giao không có cam kết đó nên dòng chỉ để đọc, không bấm được.
+    // Hàng Tubu: bấm mở chính sách vận chuyển ngay trong trang. Hàng gian hàng tự giao không theo chính sách đó nên dòng chỉ để đọc, không bấm được.
     infoRows.push({
       key: 'shipping',
       icon: <Icon icon={Truck} size="md" tone="brand" />,
       title: fillCopy('pdp.shipping'),
       subtitle: <>{shippingLines}</>,
-      onPress: fromStore ? undefined : () => scrollToId('pdp-promises'),
+      onPress: fromStore ? undefined : () => setPolicySlug('van-chuyen'),
     });
+  }
+
+  // Lối xem của dải cam kết đã là chính sách vận chuyển (đổi trả tắt) thì không thêm nút thứ hai cho cùng việc.
+  const promiseButtons: ReactNode[] = [];
+  if (trustView?.cta.slug !== 'van-chuyen') {
+    promiseButtons.push(
+      <Button key="policy" variant="ghost" onPress={() => setPolicySlug('van-chuyen')} style={{ minWidth: 0 }}>
+        {POLICY_TITLES['van-chuyen']}
+      </Button>,
+    );
+  }
+  // Chat OA ở đây, không ở thanh CTA dính: thêm nút 48px vào thanh làm hai nút chính hẹp lại ở màn 360px.
+  if (hasOA || chatReady) {
+    promiseButtons.push(
+      <Button
+        key="chat"
+        variant="secondary"
+        icon={MessageCircle}
+        onPress={() => {
+          haptic('light');
+          if (chatReady) navigate(`/chat?product=${encodeURIComponent(p.slug)}`);
+          else void openOAChat(vi.product.chatAbout(p.name));
+        }}
+        style={{ minWidth: 0 }}
+      >
+        {vi.product.chatWithShop}
+      </Button>,
+    );
+  }
+  if (chatOn && !chatReady && status !== 'loading' && status !== 'error') {
+    promiseButtons.push(
+      <Button
+        key="chat-login"
+        variant="secondary"
+        icon={MessageCircle}
+        onPress={() => {
+          haptic('light');
+          void loginWithNotice();
+        }}
+        style={{ minWidth: 0 }}
+      >
+        Đăng nhập để chat với Tubu Tree
+      </Button>,
+    );
   }
 
   return (
     <Page className="page page-bleed" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 96 }}>
 
       <StorefrontContextBar />
-      {/* `selectedId` chỉ có sau khi khách tự chọn phân loại (chỉ có từ 2 phân loại): lúc mở trang (phân loại mặc định) thư viện không nhảy, ảnh đầu vẫn là ảnh LCP. */}
-      <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} videos={p.videos} alt={p.name} focusSrc={selectedId && variations.length > 1 ? selected?.imageUrl : null} />
-      {flashItem && priceView.isFlash && (
-        <FlashPriceBar
-          price={price}
-          compareAt={originalPrice}
-          pct={flashPct}
-          endAt={flashItem.endAt}
-          soldPct={soldPercent(flashItem.soldCount, flashItem.quota)}
-          soldOut={flashItem.soldCount >= flashItem.quota}
-          perUserLimit={flashItem.perUserLimit}
-          onEnd={onFlashEnd}
-        />
-      )}
+      <div data-pdp-block="gallery">
+        {/* `selectedId` chỉ có sau khi khách tự chọn phân loại (chỉ có từ 2 phân loại): lúc mở trang (phân loại mặc định) thư viện không nhảy, ảnh đầu vẫn là ảnh LCP. */}
+        <Gallery key={p.slug} images={p.images.length > 0 ? p.images : p.thumbnail ? [p.thumbnail] : []} videos={p.videos} alt={p.name} focusSrc={selectedId && variations.length > 1 ? selected?.imageUrl : null} />
+        {flashItem && priceView.isFlash && (
+          <FlashPriceBar
+            price={price}
+            compareAt={originalPrice}
+            pct={flashPct}
+            endAt={flashItem.endAt}
+            soldPct={soldPercent(flashItem.soldCount, flashItem.quota)}
+            soldOut={flashItem.soldCount >= flashItem.quota}
+            perUserLimit={flashItem.perUserLimit}
+            onEnd={onFlashEnd}
+          />
+        )}
+      </div>
 
-      {/* ── Info chính ── */}
-      <Box p={4} style={{ background: 'var(--color-bg-surface)' }}>
+      {/* ── Info chính: nhãn, xuất xứ, tim, chia sẻ, tên, sao, giá, Điểm Xanh, tồn ── */}
+      <Box data-pdp-block="main" p={4} style={{ background: 'var(--color-bg-surface)' }}>
         <Box flex alignItems="center" style={{ gap: 6 }}>
           {/* Nhãn và chip xuất xứ xuống dòng trong nhóm này (flexWrap, minWidth 0) để cụm Tim/Chia sẻ bên phải không bị đẩy tràn ở 320px. */}
           <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', columnGap: 'var(--space-inline-md)', minWidth: 0 }}>
@@ -812,39 +910,80 @@ export default function ProductDetailPage() {
             {vi.product.lowStock(selected!.stock)}
           </Text>
         )}
+      </Box>
 
-        {/* Mô tả ngắn trùng nguyên văn mô tả dài thì khách đọc hai lần: chỉ giữ ở mục Mô tả. */}
-        {p.shortDesc && p.shortDesc.trim() !== (p.description ?? '').trim() && (
-          <Text size="small" style={{ color: 'var(--color-text-secondary)', marginTop: 8 }}>
-            {p.shortDesc}
-          </Text>
-        )}
-
-        {p.certifications.length > 0 && (
-          <Box flex style={{ gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
-            {p.certifications.map((c) => (
-              <Text
-                key={c}
-                size="xSmall"
-                style={{
-                  background: 'var(--color-bg-subtle)',
-                  color: 'var(--color-text-brand)',
-                  padding: '3px 10px',
-                  borderRadius: 'var(--radius-pill)',
-                  fontWeight: 500,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
+      {/* ── Chip phân loại, Số lượng và lưu ý Giờ vàng liền nhau. Không có dòng "Phân loại ›": chip đã nêu đủ tên, giá, hết hàng ── */}
+      <div data-pdp-block="variations" style={{ marginTop: 'var(--space-stack-sm)', background: 'var(--color-bg-surface)' }}>
+        {variations.length > 1 && (
+          <div
+            role="group"
+            aria-label="Phân loại nhanh"
+            style={{ display: 'flex', gap: 8, flexWrap: 'wrap', padding: 'var(--space-inset-page) var(--space-inset-page) 0' }}
+          >
+            {variations.map((v) => (
+              <VariationChip
+                key={v.id}
+                variation={v}
+                pricing={variationPricing(v, flashList)}
+                active={selected?.id === v.id}
+                onClick={() => {
+                  haptic('light');
+                  setSelectedId(v.id);
                 }}
-              >
-                <Icon icon={Check} size="sm" tone="brand" />
-                {c}
-              </Text>
+              />
             ))}
-          </Box>
+          </div>
         )}
+        <Box p={4} flex alignItems="center" justifyContent="space-between">
+          <Text bold size="small">
+            {vi.product.quantity}
+          </Text>
+          <QuantitySelector
+            value={quantity}
+            max={qtyPickMax(selected?.stock ?? 0)}
+            onChange={(n) => {
+              haptic('light');
+              setQuantity(n);
+            }}
+          />
+        </Box>
+        {/* Mua quá giới hạn Giờ vàng mỗi khách (máy chủ tính cả dòng giá thường) hoặc giỏ đã có sẵn phân loại này (Mua ngay thanh toán cả dòng): nói trước ở đây, nút Mua ngay đã ghi đúng số đó. Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
+        <div
+          role="status"
+          data-section="pdp-flash-limit"
+          style={{
+            minHeight: reserveFlashNote ? 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2 + var(--space-inset-card) + 1px)' : undefined,
+          }}
+        >
+          {overLimitText && (
+            <p
+              style={{
+                margin: 0,
+                // Ngang bằng dải Số lượng ngay trên (Box p={4} = 16px) và phoneBandPad của web; dưới 12px như max-md:pb-3 của web.
+                padding: '0 var(--space-inset-page) var(--space-inset-card)',
+                fontSize: 'var(--type-caption-size)',
+                lineHeight: 'var(--type-caption-lh)',
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              {overLimitText}
+            </p>
+          )}
+        </div>
+      </div>
 
-        {SUBSCRIPTIONS_IN_MINIAPP && selected && inStock && !retailOnly && (
+      {rebuy && rebuyVariation && (
+        <PdpRebuyRow
+          dateLabel={rebuy.dateLabel}
+          variationName={variationLabel(rebuyVariation.name, variations.length) || p.name}
+          busy={addMutation.isPending && addMutation.variables?.source === 'rebuy'}
+          blocked={cartWriting}
+          onRebuy={() => handleRebuy(rebuyVariation)}
+        />
+      )}
+
+      {SUBSCRIPTIONS_IN_MINIAPP && selected && inStock && !retailOnly && (
+        <div data-pdp-block="subscribe" style={{ padding: '0 var(--space-inset-page) var(--space-inset-card)', background: 'var(--color-bg-surface)' }}>
           <Box
             role="button"
             {...rowKeyboardProps()}
@@ -861,7 +1000,6 @@ export default function ProductDetailPage() {
             alignItems="center"
             style={{
               gap: 8,
-              marginTop: 12,
               minHeight: 44,
               boxSizing: 'border-box',
               padding: '10px 12px',
@@ -872,16 +1010,16 @@ export default function ProductDetailPage() {
           >
             <Repeat size={18} color="var(--color-text-brand)" strokeWidth={1.9} />
             <Text size="small" bold style={{ color: 'var(--color-text-brand)', flex: 1 }}>
-              Đặt định kỳ — tiết kiệm {Math.round(config.subscribeDiscountPct * 100)}%
+              {subPct ? fillCopy('pdp.subscribeSave', { pct: subPct }) : fillCopy('pdp.subscribeSaveNoPct')}
             </Text>
             <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
           </Box>
-        )}
-      </Box>
+        </div>
+      )}
 
-      {/* ── Dòng thông tin (Ưu đãi, Vận chuyển) ›, ghi chú, chip phân loại; Số lượng liền ngay dưới. Không có dòng "Phân loại ›": chip đã nêu đủ tên, giá, hết hàng, và Thêm giỏ/Mua ngay vẫn mở bảng chọn ── */}
-      {(infoRows.length > 0 || shippingNotes.length > 0 || variations.length > 1) && (
-        <Box px={4} pt={infoRows.length > 0 || shippingNotes.length > 0 ? 0 : 3} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+      {/* ── Ưu đãi, Vận chuyển › và lưu ý giao hàng ── */}
+      {(infoRows.length > 0 || shippingNotes.length > 0) && (
+        <Box data-pdp-block="shipping" px={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
           {infoRows.map((row, i) => (
             <ListRow
               key={row.key}
@@ -904,262 +1042,207 @@ export default function ProductDetailPage() {
               {shippingNotes}
             </div>
           )}
-          {variations.length > 1 && (
-            <div
-              role="group"
-              aria-label="Phân loại nhanh"
-              style={{ display: 'flex', gap: 8, flexWrap: 'wrap', paddingBottom: 12 }}
-            >
-              {variations.map((v) => (
-                <VariationChip
-                  key={v.id}
-                  variation={v}
-                  pricing={variationPricing(v, flashList)}
-                  active={selected?.id === v.id}
-                  onClick={() => {
-                    haptic('light');
-                    setSelectedId(v.id);
+        </Box>
+      )}
+
+      {/* ── Lợi ích (mô tả ngắn) và chứng nhận ── */}
+      {(benefitText || p.certifications.length > 0) && (
+        <Box data-pdp-block="benefits" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
+          {benefitText && (
+            <Text size="small" style={{ color: 'var(--color-text-secondary)', whiteSpace: 'pre-line' }}>
+              {benefitText}
+            </Text>
+          )}
+          {p.certifications.length > 0 && (
+            <Box flex style={{ gap: 6, marginTop: benefitText ? 10 : 0, flexWrap: 'wrap' }}>
+              {p.certifications.map((c) => (
+                <Text
+                  key={c}
+                  size="xSmall"
+                  style={{
+                    background: 'var(--color-bg-subtle)',
+                    color: 'var(--color-text-brand)',
+                    padding: '3px 10px',
+                    borderRadius: 'var(--radius-pill)',
+                    fontWeight: 500,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
                   }}
-                />
+                >
+                  <Icon icon={Check} size="sm" tone="brand" />
+                  {c}
+                </Text>
               ))}
-            </div>
+            </Box>
           )}
         </Box>
       )}
 
-      {/* ── Số lượng: liền dưới phân loại, trước Combo và Đánh giá nhanh ── */}
-      <Box p={4} mt={2} flex alignItems="center" justifyContent="space-between" style={{ background: 'var(--color-bg-surface)' }}>
-        <Text bold size="small">
-          {vi.product.quantity}
-        </Text>
-        <QuantitySelector
-          value={quantity}
-          max={qtyPickMax(selected?.stock ?? 0)}
-          onChange={(n) => {
-            haptic('light');
-            setQuantity(n);
-          }}
-        />
-      </Box>
-      {/* Mua quá giới hạn Giờ vàng mỗi khách (máy chủ tính cả dòng giá thường) hoặc giỏ đã có sẵn phân loại này (Mua ngay thanh toán cả dòng): nói trước ở đây, nút Mua ngay đã ghi đúng số đó. Chỉ đẩy phần bên dưới, không dịch ô Số lượng. */}
-      <div
-        role="status"
-        data-section="pdp-flash-limit"
-        style={{
-          background: 'var(--color-bg-surface)',
-          minHeight: reserveFlashNote ? 'calc(var(--type-caption-size) * var(--type-caption-lh) * 2 + var(--space-inset-card) + 1px)' : undefined,
-        }}
-      >
-        {overLimitText && (
-          <p
+      {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
+      {p.ingredients && p.ingredients.length > 0 && <PdpIngredients items={p.ingredients} />}
+
+      {/* Dải câu chuyện chỉ khi sản phẩm có câu chuyện riêng đang bật (kịch bản mẫu hay tự sinh lặp lại khối Thành phần). Nút mua nằm ở thanh dưới nên dải không có nút/khung toàn màn riêng. */}
+      {storyProduct && (
+        <div data-pdp-block="story">
+          <Suspense fallback={null}>
+            <ProductStoryShowcase
+              product={storyProduct}
+              selectedVariationId={selected?.id}
+              onSelectVariation={(id) => {
+                haptic('light');
+                setSelectedId(id);
+              }}
+            />
+          </Suspense>
+        </div>
+      )}
+
+      {p.description && <PdpDescription text={p.description} />}
+
+      {/* ── Một khối mua kèm: Combo/Mua kèm giá tốt, hoặc Gợi ý mua kèm hợp vị, hoặc dải Khách thường mua cùng (§6.12; tên cũ "Thường mua kèm" nhường chữ "mua kèm" cho ưu đãi giảm giá) ── */}
+      {addOnSource === 'bundles' && slug && (
+        <div data-pdp-block="addons">
+          <PdpBundles slug={slug} productName={p.name} />
+        </div>
+      )}
+      {addOnSource === 'fbt' && fbtBundle && (
+        <div data-pdp-block="addons">
+          <PdpFbt bundle={fbtBundle} />
+        </div>
+      )}
+      {addOnSource === 'bought' && shelves.boughtTogether.length > 0 && (
+        <div data-pdp-block="addons">
+          <Box pt={4} pb={2} px={4} flex alignItems="center" style={{ gap: 6 }}>
+            <ShoppingCart size={18} color="var(--color-text-primary)" strokeWidth={1.9} />
+            <SectionTitle block>{fillCopy('pdp.boughtTogether')}</SectionTitle>
+          </Box>
+          <ProductRail label={fillCopy('pdp.boughtTogether')} variant="rail-md" items={shelves.boughtTogether} />
+        </div>
+      )}
+
+      {slug && (
+        <div data-pdp-block="reviews">
+          <ReviewsSection
+            slug={slug}
+            openCount={PDP_REVIEWS_OPEN}
+            onQuickAdd={inStock ? () => void handleAdd() : undefined}
+            openForOrderId={navState?.reviewOrderId}
+            onOrderLinkUsed={() => {
+              // Thay đúng mục lịch sử hiện tại, giữ mọi trạng thái điều hướng khác (from, variationId, listSource).
+              const rest: Record<string, unknown> = { ...navState };
+              delete rest.reviewOrderId;
+              navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: rest });
+            }}
+          />
+        </div>
+      )}
+
+      {slug && <PdpCompare slug={slug} />}
+
+      {/* ── Cam kết: dải niềm tin, chính sách, chat, mua chung, nội dung CTV ── */}
+      <div data-pdp-block="promises">
+        <ProductTrustStrip view={trustView} onOpenPolicy={setPolicySlug} />
+        {promiseButtons.length > 0 && (
+          <div
             style={{
-              margin: 0,
-              // Ngang bằng dải Số lượng ngay trên (Box p={4} = 16px) và phoneBandPad của web; dưới 12px như max-md:pb-3 của web.
-              padding: '0 var(--space-inset-page) var(--space-inset-card)',
-              fontSize: 'var(--type-caption-size)',
-              lineHeight: 'var(--type-caption-lh)',
-              color: 'var(--color-text-secondary)',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 'var(--space-stack-sm)',
+              // Nối liền nền của dải cam kết ngay trên; hàng gian hàng tự giao không có dải nên khối tự có lề trên.
+              ...(trustView ? { padding: '0 var(--space-inset-page) var(--space-inset-page)' } : { marginTop: 'var(--space-stack-sm)', padding: 'var(--space-inset-page)' }),
+              background: 'var(--color-bg-surface)',
             }}
           >
-            {overLimitText}
-          </p>
+            {promiseButtons}
+          </div>
+        )}
+
+        {/* ── Mua chung (§6.14.8) ── */}
+        {!retailOnly && (
+          <Box
+            className="tubu-press"
+            role="button"
+            {...rowKeyboardProps()}
+            p={4}
+            mt={2}
+            // Trước đây bắn mutation ngay khi chạm: chưa đăng nhập thì ra lỗi 401 khó hiểu, chạm
+            // 2 lần thì tạo 2 nhóm, và không có trạng thái chờ nên tưởng không ăn (P2-7 audit).
+            // Các hành động khác trên trang này (Thêm giỏ / Mua ngay / Đặt định kỳ) đều đã guard.
+            onClick={async () => {
+              haptic('light');
+              if (status !== 'authenticated') {
+                await loginWithNotice();
+                return;
+              }
+              groupBuyMutation.mutate(p.id);
+            }}
+            style={{
+              background: 'var(--color-bg-surface)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 12,
+              opacity: groupBuyMutation.isPending ? 0.6 : 1,
+            }}
+          >
+            <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center' }}>
+              <Users size={20} color="var(--color-text-brand)" strokeWidth={2} />
+            </Box>
+            <Box style={{ flex: 1 }}>
+              <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
+                {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm giá khi đủ người'}
+              </Text>
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                {groupBuyPitch(config.groupBuy)}
+              </Text>
+            </Box>
+            <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
+          </Box>
+        )}
+
+        {isAffiliate && (
+          <Box
+            className="tubu-press"
+            p={4}
+            mt={2}
+            role="button"
+            {...rowKeyboardProps()}
+            aria-label={vi.contentKit.sheetTitle}
+            onClick={() => {
+              haptic('light');
+              setShowContentKit(true);
+            }}
+            style={{ background: 'var(--color-bg-surface)', display: 'flex', alignItems: 'center', gap: 12 }}
+          >
+            <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-action-secondary-bg)', display: 'grid', placeItems: 'center' }}>
+              <Megaphone size={20} color="var(--color-text-brand)" strokeWidth={2} />
+            </Box>
+            <Box style={{ flex: 1 }}>
+              <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
+                {vi.contentKit.sheetTitle}
+              </Text>
+              <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
+                Bài mẫu đã gắn sẵn link giới thiệu của bạn — chép là đăng được
+              </Text>
+            </Box>
+            <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
+          </Box>
         )}
       </div>
 
-      {/* Dải cam kết ngay dưới khối mua nhanh (chip, Số lượng, lưu ý Giờ vàng), trước dải câu chuyện; web điện thoại cùng thứ tự (order 7, đứng trước dải câu chuyện). */}
-      <ProductTrustStrip view={productTrustStrip({ fulfillerKind: p.fulfiller?.kind, returnWindowDays: config.returnWindowDays })} onOpenPolicy={setPolicySlug} />
-
-      {/* Dải câu chuyện ngay dưới khối mua nhanh (chip, Số lượng), trước Combo và Đánh giá nhanh, như đặc tả; web điện thoại cùng thứ tự (order 7).
-          Dải đã kể đủ các chương ngay trên trang và nút mua nằm ở thanh dưới, nên không có nút/khung toàn màn mở lại cùng nội dung (như web); khung toàn màn chỉ còn cho Reel ở Trang chủ. */}
-      {hasStory && (
-        <Suspense fallback={null}>
-          <ProductStoryShowcase
-            product={p}
-            selectedVariationId={selected?.id}
-            onSelectVariation={(id) => {
-              haptic('light');
-              setSelectedId(id);
-            }}
-          />
-        </Suspense>
-      )}
-
-      {fbtBundle && <PdpFbt bundle={fbtBundle} />}
-
-      {slug && <PdpBundles slug={slug} productName={product.data?.name} />}
-
-      {reviews.data && reviews.data.count > 0 && (
-        <PdpQuickReviews average={reviews.data.average} count={reviews.data.count} items={reviews.data.items ?? []} onSeeAll={() => scrollToId('danh-gia')} />
-      )}
-
-      {/* ── Mua chung (§6.14.8) ── */}
-      {!retailOnly && (
-        <Box
-          className="tubu-press"
-          role="button"
-          {...rowKeyboardProps()}
-          p={4}
-          mt={2}
-          // Trước đây bắn mutation ngay khi chạm: chưa đăng nhập thì ra lỗi 401 khó hiểu, chạm
-          // 2 lần thì tạo 2 nhóm, và không có trạng thái chờ nên tưởng không ăn (P2-7 audit).
-          // Các hành động khác trên trang này (Thêm giỏ / Mua ngay / Đặt định kỳ) đều đã guard.
-          onClick={async () => {
-            haptic('light');
-            if (status !== 'authenticated') {
-              await loginWithNotice();
-              return;
-            }
-            groupBuyMutation.mutate(p.id);
-          }}
-          style={{
-            background: 'var(--color-bg-surface)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            opacity: groupBuyMutation.isPending ? 0.6 : 1,
-          }}
-        >
-          <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center' }}>
-            <Users size={20} color="var(--color-text-brand)" strokeWidth={2} />
-          </Box>
-          <Box style={{ flex: 1 }}>
-            <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
-              {groupBuyMutation.isPending ? 'Đang mở nhóm…' : 'Mở nhóm mua chung — nhận mã giảm giá khi đủ người'}
-            </Text>
-            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-              {groupBuyPitch(config.groupBuy)}
-            </Text>
-          </Box>
-          <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
-        </Box>
-      )}
-
-      {isAffiliate && (
-        <Box
-          className="tubu-press"
-          p={4}
-          mt={2}
-          role="button"
-          {...rowKeyboardProps()}
-          aria-label={vi.contentKit.sheetTitle}
-          onClick={() => {
-            haptic('light');
-            setShowContentKit(true);
-          }}
-          style={{ background: 'var(--color-bg-surface)', display: 'flex', alignItems: 'center', gap: 12 }}
-        >
-          <Box style={{ width: 40, height: 40, borderRadius: '50%', background: 'var(--color-action-secondary-bg)', display: 'grid', placeItems: 'center' }}>
-            <Megaphone size={20} color="var(--color-text-brand)" strokeWidth={2} />
-          </Box>
-          <Box style={{ flex: 1 }}>
-            <Text size="small" bold style={{ color: 'var(--color-text-brand)' }}>
-              {vi.contentKit.sheetTitle}
-            </Text>
-            <Text size="xSmall" style={{ color: 'var(--color-text-tertiary)' }}>
-              Bài mẫu đã gắn sẵn link giới thiệu của bạn — chép là đăng được
-            </Text>
-          </Box>
-          <ChevronRight size={18} color="var(--color-text-brand)" strokeWidth={2} />
-        </Box>
-      )}
-
-      {/* ── Thành phần (spec §6.2 — niềm tin cho persona sợ hoá chất) ── */}
-      {p.ingredients && p.ingredients.length > 0 && (
-        <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-          <SectionTitle block style={{ marginBottom: 10 }}>Thành phần</SectionTitle>
-          <Box flex flexDirection="column" style={{ gap: 10 }}>
-            {p.ingredients.map((ing, i) => (
-              <Box key={i} flex style={{ gap: 10 }}>
-                <span
-                  aria-hidden
-                  style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--color-text-brand)', marginTop: 6, flex: '0 0 auto' }}
-                />
-                <Box style={{ flex: 1 }}>
-                  <Box flex alignItems="center" style={{ gap: 6 }}>
-                    <Text size="small" bold>
-                      {ing.name}
-                    </Text>
-                    {ing.percentage && (
-                      <Text
-                        size="xSmall"
-                        style={{ background: 'var(--color-bg-subtle)', color: 'var(--color-text-brand)', padding: '1px 6px', borderRadius: 'var(--radius-pill)' }}
-                      >
-                        {ing.percentage}
-                      </Text>
-                    )}
-                  </Box>
-                  {ing.benefit && (
-                    <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>
-                      {ing.benefit}
-                    </Text>
-                  )}
-                </Box>
+      {/* ── Cùng thương hiệu, gợi ý ── */}
+      {(shelves.brand.length > 0 || shelves.feed.length > 0) && (
+        <div data-pdp-block="suggestions">
+          {shelves.brand.length > 0 && (
+            <>
+              <Box pt={4} pb={2} px={4}>
+                <SectionTitle block>{fillCopy('pdp.brandShelf')}</SectionTitle>
               </Box>
-            ))}
-          </Box>
-        </Box>
-      )}
-
-      {/* ── Cam kết / chính sách (tín hiệu an tâm trước mua — trước đây PDP không có) ── */}
-      <Box id="pdp-promises" p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-        <SectionTitle block style={{ marginBottom: 8 }}>Cam kết Tubu</SectionTitle>
-        <Box flex flexDirection="column" style={{ gap: 6 }}>
-          {['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(config.returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].filter((t): t is string => t !== null).map((t) => (
-            <Box key={t} flex alignItems="center" style={{ gap: 8 }}>
-              <Icon icon={Check} size="sm" tone="brand" style={{ flexShrink: 0 }} />
-              <Text size="xSmall" style={{ color: 'var(--color-text-secondary)' }}>{t}</Text>
-            </Box>
-          ))}
-        </Box>
-        <Button variant="ghost" onPress={() => setPolicySlug('van-chuyen')} style={{ minWidth: 0 }}>
-          {POLICY_TITLES['van-chuyen']}
-        </Button>
-        {/* Chat OA ở đây, không ở thanh CTA dính: thêm nút 48px vào thanh làm hai nút chính hẹp lại ở màn 360px. */}
-        {(hasOA || chatReady) && (
-          <Button
-            variant="secondary"
-            icon={MessageCircle}
-            onPress={() => {
-              haptic('light');
-              if (chatReady) navigate(`/chat?product=${encodeURIComponent(p.slug)}`);
-              else void openOAChat(vi.product.chatAbout(p.name));
-            }}
-            style={{ marginTop: 12, minWidth: 0 }}
-          >
-            {vi.product.chatWithShop}
-          </Button>
-        )}
-        {chatOn && !chatReady && status !== 'loading' && status !== 'error' && (
-          <Button
-            variant="secondary"
-            icon={MessageCircle}
-            onPress={() => {
-              haptic('light');
-              void loginWithNotice();
-            }}
-            style={{ marginTop: 12, minWidth: 0 }}
-          >
-            Đăng nhập để chat với Tubu Tree
-          </Button>
-        )}
-      </Box>
-
-      {/* ── Mô tả ── */}
-      {p.description && <CollapsibleDescription text={p.description} />}
-
-      {/* ── Đánh giá ── */}
-      {slug && (
-        <ReviewsSection
-          slug={slug}
-          onQuickAdd={inStock ? () => void handleAdd() : undefined}
-          openForOrderId={navState?.reviewOrderId}
-          onOrderLinkUsed={() => {
-            // Thay đúng mục lịch sử hiện tại, giữ mọi trạng thái điều hướng khác (from, variationId, listSource).
-            const rest: Record<string, unknown> = { ...navState };
-            delete rest.reviewOrderId;
-            navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: rest });
-          }}
-        />
+              <ProductRail label={fillCopy('pdp.brandShelfLabel', { brand: p.brand })} variant="rail-md" items={shelves.brand} />
+            </>
+          )}
+          <PdpFeed items={shelves.feed} />
+        </div>
       )}
 
       {selected && (
@@ -1201,29 +1284,6 @@ export default function ProductDetailPage() {
           productSlug={slug}
         />
       )}
-
-      {/* ── Khách thường mua cùng (§6.12 co-occurrence; tên cũ "Thường mua kèm" nhường chữ "mua kèm" cho ưu đãi giảm giá) ── */}
-      {shelves.boughtTogether.length > 0 && (
-        <>
-          <Box pt={4} pb={2} px={4} flex alignItems="center" style={{ gap: 6 }}>
-            <ShoppingCart size={18} color="var(--color-text-primary)" strokeWidth={1.9} />
-            <SectionTitle block>{fillCopy('pdp.boughtTogether')}</SectionTitle>
-          </Box>
-          <ProductRail label={fillCopy('pdp.boughtTogether')} variant="rail-md" items={shelves.boughtTogether} />
-        </>
-      )}
-
-      {/* ── Cùng thương hiệu ── */}
-      {shelves.brand.length > 0 && (
-        <>
-          <Box pt={4} pb={2} px={4}>
-            <SectionTitle block>{fillCopy('pdp.brandShelf')}</SectionTitle>
-          </Box>
-          <ProductRail label={fillCopy('pdp.brandShelfLabel', { brand: p.brand })} variant="rail-md" items={shelves.brand} />
-        </>
-      )}
-
-      <PdpFeed items={shelves.feed} />
 
       {/* ── Sticky CTA ── */}
       <StickyActionBar
@@ -1442,47 +1502,6 @@ export function Gallery({ images, videos, alt, focusSrc }: { images: string[]; v
             />
           ))}
         </Box>
-      )}
-    </Box>
-  );
-}
-
-/** Mô tả thu gọn 4 dòng + nút Xem thêm. */
-function CollapsibleDescription({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const isLong = text.length > 220;
-  return (
-    <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)' }}>
-      <SectionTitle block>{vi.product.description}</SectionTitle>
-      <Text
-        size="small"
-        style={{
-          color: 'var(--color-text-secondary)',
-          marginTop: 6,
-          whiteSpace: 'pre-line',
-          ...(expanded || !isLong
-            ? {}
-            : {
-                display: '-webkit-box',
-                WebkitLineClamp: DESC_COLLAPSED_LINES,
-                WebkitBoxOrient: 'vertical',
-                overflow: 'hidden',
-              }),
-        }}
-      >
-        {text}
-      </Text>
-      {isLong && (
-        <Text
-          role="button"
-          {...rowKeyboardProps()}
-          size="small"
-          bold
-          onClick={() => setExpanded((e) => !e)}
-          style={{ color: 'var(--color-text-brand)', marginTop: 8, padding: '8px 0' }}
-        >
-          {expanded ? vi.product.descriptionLess : vi.product.descriptionMore}
-        </Text>
       )}
     </Box>
   );

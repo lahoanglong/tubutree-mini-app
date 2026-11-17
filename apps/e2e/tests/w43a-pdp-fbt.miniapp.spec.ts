@@ -58,7 +58,7 @@ for (const vp of VIEWPORTS) {
   test.describe(`Mini App ${vp.width}px: Gợi ý mua kèm hợp vị`, () => {
     test.use({ viewport: vp });
 
-    test('món đang xem + 2 món bổ trợ, chọn hết; mọi dòng và nút từ 44px; dải bên dưới không lặp lại 2 món đó; không tràn ngang', async ({ page, api }) => {
+    test('món đang xem + 2 món bổ trợ, chọn hết; mọi dòng và nút từ 44px; không có dải mua kèm thứ hai; không tràn ngang', async ({ page, api }) => {
       mockPdp(api);
       await openPdp(page);
 
@@ -85,12 +85,9 @@ for (const vp of VIEWPORTS) {
       const title = (await page.getByRole('heading', { level: 1 }).first().boundingBox())!;
       expect(box.y, 'khối nằm dưới thông tin chính').toBeGreaterThan(title.y);
 
-      const rail = page.getByRole('region', { name: 'Khách thường mua cùng' });
-      await expect(rail).toBeAttached();
-      await expect(rail).toContainText('Mận hậu');
-      await expect(rail).toContainText('Xoài cát');
-      await expect(rail).not.toContainText('Bơ sáp');
-      await expect(rail).not.toContainText('Dâu tây');
+      // Một khối mua kèm duy nhất: khi "Gợi ý mua kèm hợp vị" là nguồn thì không có dải "Khách thường mua cùng" lặp ý bên dưới.
+      await expect(page.getByRole('region', { name: 'Khách thường mua cùng' })).toHaveCount(0);
+      await expect(page.locator('[data-pdp-block="addons"]')).toHaveCount(1);
       expect(await noHorizontalScroll(page)).toBe(true);
     });
   });

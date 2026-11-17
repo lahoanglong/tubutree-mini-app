@@ -179,6 +179,18 @@ function reconcileArc(config: ProductStoryConfig, variations: readonly ArcVariat
 }
 
 /**
+ * Trang sản phẩm chỉ vẽ khối câu chuyện khi sản phẩm có kịch bản của riêng nó: cấu hình đã lưu hợp lệ đang bật, hoặc (chưa lưu gì) kịch bản viết tay
+ * theo đúng slug đang bật. Kịch bản tự sinh từ thành phần và kịch bản cấp nhãn không tính: chúng lặp lại khối Thành phần.
+ */
+export function hasOwnStory(p: Pick<StoryProductInput, 'storyConfig' | 'slug'>): boolean {
+  if (p.storyConfig !== null && p.storyConfig !== undefined) {
+    const parsed = parseStoryConfig(p.storyConfig);
+    if (parsed.ok) return parsed.value.enabled === true;
+  }
+  return findStoryPreset(p.slug)?.enabled === true;
+}
+
+/**
  * Cấu hình dùng để vẽ: đã lưu (hợp lệ) > preset theo slug (mẫu seed hoặc mẫu đợt đầu theo slug gốc; chèn vòng cung từ biến thể thật) > tự sinh từ thành phần >
  * kịch bản cấp nhãn cho sáu nhãn chủ lực (`brand-story.ts`).
  * `enabled:false` là admin tắt hẳn. Trả null thì trang chi tiết không vẽ gì thêm.

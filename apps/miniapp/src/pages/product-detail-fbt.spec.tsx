@@ -97,16 +97,28 @@ describe('ProductDetailPage: Gợi ý mua kèm hợp vị (W43A)', () => {
     expect(within(fbt).getByTestId('fbt-add')).toHaveTextContent('Thêm 3 món vào giỏ · 175.000đ');
   });
 
-  it('hai món bổ trợ chiếm chỗ của dải "Khách thường mua cùng": dải chỉ còn các món sau (đủ sàn 3 món)', async () => {
+  it('một nguồn mua kèm duy nhất: có khối hợp vị thì không vẽ thêm dải "Khách thường mua cùng" (dù còn đủ 3 món)', async () => {
     mocks.fetchBoughtTogether.mockResolvedValue([1, 2, 3, 4, 5].map((n) => card(n)));
     renderPdp();
-    await screen.findByTestId('fbt');
-    await waitFor(() => expect(railNames().length).toBeGreaterThan(0));
-    const names = railNames().join('|');
-    expect(names).toContain('Món 3');
-    expect(names).toContain('Món 5');
-    expect(names).not.toContain('Món 1');
-    expect(names).not.toContain('Món 2');
+    const fbt = await screen.findByTestId('fbt');
+    expect(document.querySelectorAll('[data-pdp-block="addons"]')).toHaveLength(1);
+    expect(document.querySelector('[data-pdp-block="addons"]')!.contains(fbt)).toBe(true);
+    expect(railNames()).toEqual([]);
+  });
+
+  it('có Combo đang chạy: khối mua kèm là Combo, không có khối hợp vị lẫn dải "Khách thường mua cùng"', async () => {
+    const item = (n: number) => ({ productId: `p${n}`, variationId: `v${n}`, maxQty: 1, addonPrice: null, inStock: true, product: card(n) });
+    mocks.getBundles.mockResolvedValue({
+      combos: [{ id: 'c1', kind: 'BUNDLE_PCT', title: 'Bộ đôi', pct: 10, endAt: '2099-01-01T00:00:00.000Z', anchorProductId: null, items: [item(0), item(1)] }],
+      addons: [],
+    });
+    renderPdp();
+    const combo = await screen.findByRole('region', { name: 'Combo ưu đãi' });
+    expect(document.querySelectorAll('[data-pdp-block="addons"]')).toHaveLength(1);
+    expect(document.querySelector('[data-pdp-block="addons"]')!.contains(combo)).toBe(true);
+    await waitFor(() => expect(mocks.fetchBoughtTogether).toHaveBeenCalled());
+    expect(screen.queryByTestId('fbt')).toBeNull();
+    expect(railNames()).toEqual([]);
   });
 
   it('dải bên dưới rơi dưới sàn 3 món sau khi bỏ 2 món của khối: dải ẩn, khối vẫn hiện', async () => {
@@ -197,7 +209,7 @@ describe('ProductDetailPage: Gợi ý mua kèm hợp vị (W43A)', () => {
     });
   });
 
-  it('khối nằm trên Combo/Mua kèm giá tốt và dưới thông tin chính', async () => {
+  it('khối nằm dưới thông tin chính', async () => {
     mocks.getBundles.mockResolvedValue({ combos: [], addons: [] });
     renderPdp();
     const fbt = await screen.findByTestId('fbt');

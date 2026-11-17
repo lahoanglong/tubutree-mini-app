@@ -1,15 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { Fragment, useId, useMemo, useState, type ReactNode } from 'react';
 import Link from 'next/link';
-import { Check, Star } from 'lucide-react';
+import { Star } from 'lucide-react';
+import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { formatRating } from '@tubutree/app-core/commerce/card-meta';
+import { ingredientsPreview } from '@tubutree/app-core/commerce/pdp-info';
 import { LEGAL_PAGES } from '@tubutree/app-core/legal';
-import { returnsPromise } from '@tubutree/app-core/returns-copy';
+import { parseRichText, richTextPlain, type RichBlock, type RichInline } from '@tubutree/app-core/rich-text';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { ProductTrustStrip } from '@/components/mini/product-trust-strip';
 import type { ProductDetail } from '@/lib/api';
-import { usePublicConfig } from '@/lib/use-public-config';
 import { ui } from '@/lib/guest-ui';
 import { phoneBand, phoneBrandText } from '@/lib/phone-ui';
+import { SHIPPING_POLICY_PATH, useTrustView } from './pdp-extras';
 
 /** Tiêu đề khối trong luồng mua (Q1): Inter 16/700, -0.01em ở mọi khổ, cùng số đo với `SectionTitle block` của Mini App. Fraunces chỉ cho tiêu đề trang. */
 export const pdpSectionTitle =
@@ -37,63 +41,143 @@ export function PdpRating({ average, count }: { average: number | undefined; cou
   );
 }
 
-/** Thành phần: niềm tin cho khách ngại hoá chất. Không có thì không dựng mục. */
+/**
+ * Thành phần: niềm tin cho khách ngại hoá chất. Mở sẵn 3 dòng (`ingredientsPreview`), nhiều hơn thì "Xem đủ (n)" / "Thu gọn". Các dòng đang gập vẫn nằm
+ * trong HTML (ẩn bằng `hidden`) để công cụ tìm kiếm đọc đủ thành phần. Không có thì không dựng mục.
+ */
 export function PdpIngredients({ ingredients }: { ingredients: ProductDetail['ingredients'] }) {
+  const [expanded, setExpanded] = useState(false);
+  const listId = useId();
   if (!ingredients || ingredients.length === 0) return null;
+  const { shown, hidden } = ingredientsPreview(ingredients, expanded);
+  const canToggle = expanded || hidden > 0;
   return (
-    <section data-section="pdp-ingredients" className={pdpBand}>
-      <h2 className={pdpSectionTitle}>Thành phần</h2>
-      <ul className="mt-3 flex flex-col gap-2.5">
+    <section data-pdp-block="ingredients" data-section="pdp-ingredients" className={pdpBand}>
+      <h2 className={pdpSectionTitle}>{fillCopy('pdp.ingredients')}</h2>
+      <ul id={listId} className="mt-3 flex flex-col gap-2.5">
         {ingredients.map((ing, i) => (
-          <li key={i} className="flex gap-2.5">
-            <span aria-hidden="true" className="mt-2 h-2 w-2 shrink-0 rounded-full bg-forest-600" />
+          // `hidden` của Tailwind chứ không thuộc tính `hidden`: lớp `flex` đứng sau trong CSS sẽ thắng thuộc tính và dòng gập vẫn hiện.
+          <li key={i} data-testid="pdp-ingredient" className={i < shown.length ? 'flex gap-2.5' : 'hidden'}>
+            <span aria-hidden="true" className="mt-2 h-2 w-2 shrink-0 rounded-full bg-[var(--color-text-brand)]" />
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1.5">
-                <span className="text-sm font-semibold text-stone-900">{ing.name}</span>
-                {ing.percentage && <span className="rounded-full bg-forest-50 px-1.5 py-px text-xs text-forest-700">{ing.percentage}</span>}
+                <span className="text-sm font-semibold text-[var(--color-text-primary)]">{ing.name}</span>
+                {ing.percentage && <span className="rounded-full bg-[var(--color-bg-subtle)] px-1.5 py-px text-xs text-[var(--color-text-brand)]">{ing.percentage}</span>}
               </div>
-              {ing.benefit && <p className="text-sm text-stone-600">{ing.benefit}</p>}
+              {ing.benefit && <p className="text-sm text-[var(--color-text-secondary)]">{ing.benefit}</p>}
             </div>
           </li>
         ))}
       </ul>
+      {canToggle && (
+        <button
+          type="button"
+          data-testid="pdp-ingredients-toggle"
+          aria-expanded={expanded}
+          aria-controls={listId}
+          onClick={() => setExpanded((e) => !e)}
+          className={`${ui.btnText} mt-1 no-underline text-[var(--color-text-brand)] tabular-nums`}
+        >
+          {expanded ? fillCopy('pdp.ingredientsLess') : fillCopy('pdp.ingredientsMore', { n: ingredients.length })}
+        </button>
+      )}
     </section>
   );
 }
 
-/** Cam kết Tubu: tín hiệu an tâm trước khi mua; `children` là chỗ cho nút chat OA. */
-export function PdpPromises({ children }: { children?: React.ReactNode }) {
-  const { returnWindowDays } = usePublicConfig();
-  const promises = ['Hàng chính hãng — nguồn gốc rõ ràng', returnsPromise(returnWindowDays), 'Sản phẩm xanh, an lành cho cả nhà'].filter((t): t is string => t !== null);
+/**
+ * Khối cam kết cuối trang: dải ba trụ cột (`ProductTrustStrip`, hàng gian hàng tự giao không có), lối xem chính sách vận chuyển (bỏ khi lối của dải đã trỏ
+ * đúng chính sách đó), `children` là nút chat ngay trong dải trắng; `rows` (Mở nhóm mua chung, Nội dung bán hàng) là các dải bấm riêng ngay bên dưới.
+ */
+export function PdpPromises({
+  fulfillerKind,
+  initialConfig,
+  children,
+  rows,
+}: {
+  fulfillerKind: string | undefined;
+  initialConfig?: PublicConfig;
+  children?: ReactNode;
+  rows?: ReactNode;
+}) {
+  const trust = useTrustView(fulfillerKind, initialConfig);
   return (
-    <section id="pdp-promises" data-section="pdp-promises" className={`${pdpBand} scroll-mt-20`}>
-      <h2 className={pdpSectionTitle}>Cam kết Tubu</h2>
-      <ul className="mt-2 flex flex-col gap-1.5">
-        {promises.map((t) => (
-          <li key={t} className="flex items-center gap-2 text-sm text-stone-700 max-md:text-xs max-md:text-[var(--color-text-secondary)]">
-            <Check className="h-4 w-4 shrink-0 text-forest-600" aria-hidden="true" />
-            {t}
-          </li>
-        ))}
-      </ul>
-      <Link href="/chinh-sach/van-chuyen" className={`${ui.btnText} ${phoneBrandText}`}>
-        {LEGAL_PAGES['van-chuyen'].title}
-      </Link>
-      {children}
-    </section>
+    <div data-pdp-block="promises">
+      <div data-section="pdp-promises" className={pdpBand}>
+        <ProductTrustStrip view={trust} />
+        {trust?.cta.slug !== 'van-chuyen' && (
+          <Link href={SHIPPING_POLICY_PATH} data-testid="pdp-shipping-policy" className={`${ui.btnText} ${phoneBrandText}`}>
+            {LEGAL_PAGES['van-chuyen'].title}
+          </Link>
+        )}
+        {children}
+      </div>
+      {rows}
+    </div>
   );
 }
 
-/** Mô tả thu gọn 4 dòng + nút Xem thêm; toàn bộ chữ vẫn nằm trong HTML để công cụ tìm kiếm đọc được. */
-export function PdpDescription({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState(false);
-  const isLong = text.length > COLLAPSED_LINES_THRESHOLD;
+function Inlines({ inlines }: { inlines: readonly RichInline[] }) {
   return (
-    <section data-section="pdp-description" className={pdpBand}>
-      <h2 className={pdpSectionTitle}>Mô tả sản phẩm</h2>
-      <p id="pdp-description" className={`mt-2 whitespace-pre-line break-words text-stone-700 max-md:mt-1.5 max-md:text-sm max-md:text-[var(--color-text-secondary)] ${isLong && !expanded ? 'line-clamp-4' : ''}`}>
-        {text}
+    <>
+      {inlines.map((it, i) => {
+        let node: ReactNode = it.text;
+        if (it.italic) node = <em>{node}</em>;
+        if (it.bold) node = <strong className="font-semibold">{node}</strong>;
+        return <Fragment key={i}>{node}</Fragment>;
+      })}
+    </>
+  );
+}
+
+function RichBlockView({ block }: { block: RichBlock }) {
+  if (block.kind === 'h') {
+    return (
+      <h3 className="font-semibold text-[var(--color-text-primary)]">
+        <Inlines inlines={block.inlines} />
+      </h3>
+    );
+  }
+  if (block.kind === 'p') {
+    return (
+      <p>
+        <Inlines inlines={block.inlines} />
       </p>
+    );
+  }
+  const List = block.kind;
+  return (
+    <List className={`flex flex-col gap-1 pl-5 ${block.kind === 'ul' ? 'list-disc' : 'list-decimal'}`}>
+      {block.items.map((item, i) => (
+        <li key={i}>
+          <Inlines inlines={item} />
+        </li>
+      ))}
+    </List>
+  );
+}
+
+/**
+ * Mô tả sản phẩm: chuỗi của Pancake/WordPress có thể là HTML; `parseRichText` (app-core) đọc theo danh sách thẻ cho phép thành đoạn, tiêu đề, danh sách,
+ * chữ đậm/nghiêng và trang vẽ như chữ (không `innerHTML`), nên thẻ không bao giờ hiện thành chữ và không có mã lạ nào chạy. Dài thì thu gọn chừng 4 dòng
+ * kèm Xem thêm; toàn bộ chữ vẫn nằm trong HTML để công cụ tìm kiếm đọc được.
+ */
+export function PdpDescription({ source }: { source: string | null | undefined }) {
+  const [expanded, setExpanded] = useState(false);
+  const blocks = useMemo(() => parseRichText(source), [source]);
+  if (blocks.length === 0) return null;
+  const isLong = richTextPlain(blocks).length > COLLAPSED_LINES_THRESHOLD;
+  return (
+    <section data-pdp-block="description" data-section="pdp-description" className={pdpBand}>
+      <h2 className={pdpSectionTitle}>Mô tả sản phẩm</h2>
+      <div
+        id="pdp-description"
+        className={`mt-2 flex flex-col gap-2 whitespace-pre-line break-words text-stone-700 max-md:mt-1.5 max-md:text-sm max-md:text-[var(--color-text-secondary)] ${isLong && !expanded ? 'max-h-24 overflow-hidden' : ''}`}
+      >
+        {blocks.map((b, i) => (
+          <RichBlockView key={i} block={b} />
+        ))}
+      </div>
       {isLong && (
         <button type="button" aria-expanded={expanded} aria-controls="pdp-description" onClick={() => setExpanded((e) => !e)} className={`${ui.btnText} max-md:px-0 ${phoneBrandText}`}>
           {expanded ? 'Thu gọn' : 'Xem thêm'}

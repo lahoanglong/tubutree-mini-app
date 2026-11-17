@@ -141,7 +141,7 @@ const DATA = {
   items: [review('a', 5, { verifiedPurchase: true }), review('b', 5, { videoUrl: 'https://v/x.mp4' }), review('c', 3, { images: ['https://i/1.jpg'] })],
 };
 
-function renderSection(props: { openForOrderId?: string; onOrderLinkUsed?: () => void } = {}) {
+function renderSection(props: { openForOrderId?: string; onOrderLinkUsed?: () => void; openCount?: number } = {}) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
@@ -652,11 +652,79 @@ describe('ReviewsSection (C-076 di cư DS v2: giữ nguyên hành vi)', () => {
     expect(Number.parseFloat(radio.style.minHeight)).toBeGreaterThanOrEqual(44);
   });
 
-  it('chưa có đánh giá → trạng thái trống có lời mời', async () => {
-    mocks.fetchReviews.mockResolvedValue({ count: 0, average: 0, distribution: {}, items: [] });
-    renderSection();
-    expect(await screen.findByText('Chưa có đánh giá')).toBeInTheDocument();
-    expect(screen.getByText('Hãy là người đầu tiên chia sẻ trải nghiệm.')).toBeInTheDocument();
+  describe('chưa có đánh giá: một dòng, không ảnh trống lớn', () => {
+    const EMPTY = { count: 0, average: 0, distribution: {}, items: [] };
+
+    it('còn lần mua được đánh giá: dòng "Chưa có đánh giá" và nút "Viết đánh giá" mở form cho đúng đơn', async () => {
+      mocks.fetchReviews.mockResolvedValue(EMPTY);
+      renderSection();
+      const line = await screen.findByText('Chưa có đánh giá');
+      expect(line.tagName).toBe('P');
+      expect(screen.queryByText('Hãy là người đầu tiên chia sẻ trải nghiệm.')).toBeNull();
+      expect(screen.queryByRole('img')).toBeNull();
+      fireEvent.click(await screen.findByRole('button', { name: 'Viết đánh giá' }));
+      expect(await screen.findByRole('radiogroup', { name: 'Số sao' })).toBeInTheDocument();
+    });
+
+    it('đã đăng nhập nhưng chưa mua (không còn đơn để viết): chỉ có dòng, không có nút viết', async () => {
+      mocks.fetchReviews.mockResolvedValue(EMPTY);
+      mocks.canReview.mockResolvedValue({ canReview: false, reason: 'NOT_PURCHASED', reviewableOrders: [], myReviews: [] });
+      renderSection();
+      await screen.findByText('Chưa có đánh giá');
+      await waitFor(() => expect(mocks.canReview).toHaveBeenCalled());
+      expect(screen.queryByRole('button', { name: 'Viết đánh giá' })).toBeNull();
+    });
+
+    it('khách chưa đăng nhập: chỉ có dòng, không có nút mời đăng nhập', async () => {
+      mocks.auth = { status: 'guest' };
+      mocks.fetchReviews.mockResolvedValue(EMPTY);
+      renderSection();
+      await screen.findByText('Chưa có đánh giá');
+      expect(screen.queryByRole('button')).toBeNull();
+    });
+
+    it('đang tải: không vẽ khung chờ danh sách, khối chỉ có hàng đầu mục và báo aria-busy', async () => {
+      mocks.fetchReviews.mockReturnValue(new Promise(() => undefined));
+      renderSection();
+      const section = screen.getByRole('region', { name: 'Đánh giá sản phẩm' });
+      expect(section).toHaveAttribute('aria-busy', 'true');
+      expect(section.querySelector('.tubu-skeleton')).toBeNull();
+    });
+  });
+
+  describe('openCount (trang sản phẩm mở sẵn 2 đánh giá)', () => {
+    const MANY = {
+      count: 6,
+      average: 4.5,
+      distribution: { '5': 4, '4': 2 },
+      items: [
+        review('m1', 5, { createdAt: '2026-10-06T00:00:00.000Z' }),
+        review('m2', 5, { createdAt: '2026-10-05T00:00:00.000Z' }),
+        review('m3', 4, { createdAt: '2026-10-04T00:00:00.000Z', images: ['https://i/m3.jpg'] }),
+        review('m4', 5, { createdAt: '2026-10-03T00:00:00.000Z' }),
+        review('m5', 4, { createdAt: '2026-10-02T00:00:00.000Z', videoUrl: 'https://v/m5.mp4' }),
+        review('m6', 5, { createdAt: '2026-10-01T00:00:00.000Z' }),
+      ],
+    };
+    const shownComments = () => screen.queryAllByText(/^Nhận xét m\d$/).map((n) => n.textContent);
+
+    it('mở sẵn đúng 2 đánh giá, có ảnh/video trước; giữ tóm tắt điểm và phân bổ; "Xem thêm đánh giá" hiện tiếp theo thứ tự máy chủ', async () => {
+      mocks.fetchReviews.mockResolvedValue(MANY);
+      renderSection({ openCount: 2 });
+      await screen.findByText('Nhận xét m3');
+      expect(shownComments()).toEqual(['Nhận xét m3', 'Nhận xét m5']);
+      expect(screen.getByRole('img', { name: '4,5 trên 5 sao' })).toBeInTheDocument();
+      fireEvent.click(screen.getByRole('button', { name: 'Xem thêm đánh giá' }));
+      expect(shownComments()).toEqual(['Nhận xét m3', 'Nhận xét m5', 'Nhận xét m1', 'Nhận xét m2', 'Nhận xét m4', 'Nhận xét m6']);
+      expect(screen.queryByRole('button', { name: 'Xem thêm đánh giá' })).toBeNull();
+    });
+
+    it('không truyền openCount: mở REVIEW_STEP dòng theo thứ tự máy chủ như cũ', async () => {
+      mocks.fetchReviews.mockResolvedValue(MANY);
+      renderSection();
+      await screen.findByText('Nhận xét m1');
+      expect(shownComments()).toEqual(['Nhận xét m1', 'Nhận xét m2', 'Nhận xét m3', 'Nhận xét m4', 'Nhận xét m5']);
+    });
   });
 
   it('tải lỗi → thông báo và "Thử lại"', async () => {

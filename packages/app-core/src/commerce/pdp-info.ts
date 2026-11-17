@@ -1,6 +1,5 @@
-import { parseStoryConfig, type ProductStoryConfig } from '@tubutree/shared-types';
+import type { ProductStoryConfig } from '@tubutree/shared-types';
 import type { PurchasedItem } from '../api/orders';
-import type { StoryProductInput } from './product-story';
 
 /**
  * Thứ tự khối trang sản phẩm (Mini App và web cùng thứ tự; web máy tính đặt phần sau nút mua ở hàng dưới nhưng giữ đúng thứ tự này trong HTML).
@@ -52,16 +51,6 @@ export function subscribePct(fraction: number | null | undefined): number | null
   if (typeof fraction !== 'number' || !Number.isFinite(fraction) || fraction <= 0 || fraction >= 1) return null;
   const pct = Math.round(fraction * 100);
   return pct > 0 ? pct : null;
-}
-
-/**
- * Câu chuyện nguyên liệu trên trang sản phẩm chỉ vẽ khi sản phẩm có cấu hình RIÊNG đã lưu, hợp lệ và đang bật (không dùng kịch bản mẫu theo slug,
- * kịch bản tự sinh từ thành phần hay kịch bản cấp nhãn: các bản đó lặp lại thông tin của khối Thành phần).
- */
-export function hasOwnStory(p: Pick<StoryProductInput, 'storyConfig'>): boolean {
-  if (p.storyConfig === null || p.storyConfig === undefined) return false;
-  const parsed = parseStoryConfig(p.storyConfig);
-  return parsed.ok && parsed.value.enabled === true;
 }
 
 /**

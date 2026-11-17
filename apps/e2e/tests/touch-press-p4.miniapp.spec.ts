@@ -77,7 +77,7 @@ for (const width of NARROW_WIDTHS) {
       await page.goto(`/product/${PILOT_SLUG}`);
       const reviews = page.getByRole('region', { name: 'Đánh giá sản phẩm' });
       await reviews.scrollIntoViewIfNeeded();
-      await expect(reviews.getByText('Nhận xét r1')).toBeVisible({ timeout: 15_000 });
+      await expect(reviews.getByText('Nhận xét r2')).toBeVisible({ timeout: 15_000 });
       await expectPressFeedback(page, reviews.getByRole('button', { name: /^5 sao/ }), 'chip lọc 5 sao');
       await expect.poll(() => api.callsTo('GET', '/products/:slug/reviews/can-review').length, { timeout: 15_000 }).toBeGreaterThan(0);
       await reviews.getByRole('button', { name: 'Viết đánh giá' }).click({ timeout: 15_000 });

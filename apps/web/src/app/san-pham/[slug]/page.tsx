@@ -5,7 +5,10 @@ import Link from 'next/link';
 import { AlertCircle, Check, ChevronRight, MapPin } from 'lucide-react';
 import { fetchProductBundles } from '@tubutree/app-core/api/bundle';
 import { fetchBoughtTogether, fetchRelated } from '@tubutree/app-core/api/catalog';
+import { fetchProductCompare } from '@tubutree/app-core/api/product-compare';
+import { addonRows, comboView } from '@tubutree/app-core/commerce/bundle-view';
 import { pdpVideoUrls } from '@tubutree/app-core/commerce/pdp-media';
+import { parseRichText } from '@tubutree/app-core/rich-text';
 import { fetchActiveFlashSalesNoSync, toFlashSeed } from '@/lib/server-flash';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { formatSold, getProduct, pdpFulfillerText, pdpPartnerNote, pdpUnavailableText } from '@/lib/api';
@@ -27,17 +30,19 @@ import { SITE_URL } from '@/lib/site';
 import { ProductReviews, ProductReviewsFallback } from './product-reviews';
 import { RecordRecentlyViewed } from './record-recently-viewed';
 import { ProductViewTracker } from './product-view-tracker';
-import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpLowStock, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow, PdpTrustStrip } from './pdp-extras';
+import { PdpChatButton, PdpContentKitRow, PdpCoupons, PdpFlashBar, PdpFreeship, PdpGroupBuyRow, PdpLowStock, PdpPointsEarn, PdpShippingRow, PdpSold, PdpSubscribeRow } from './pdp-extras';
+import { PdpAddOns, PdpAddOnScope } from './pdp-addons';
 import { PdpBundles } from './pdp-bundles';
-import { PdpQuickReviews } from './pdp-quick-reviews';
-import { PdpFbt } from './pdp-fbt';
+import { compareRows } from './compare-view';
+import { PdpCompare } from './pdp-compare';
 import { PdpRails } from './pdp-rails';
+import { PdpRebuyRow } from './pdp-rebuy';
 import { PdpLayout } from '@/components/layouts/pdp-layout';
 import { PdpDescription, PdpIngredients, PdpPromises, PdpRating } from './pdp-sections';
 import { PdpStory } from './pdp-story';
 import BackLink from '@/components/back-link';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { phoneBandPad, phoneBrandLabel } from '@/lib/phone-ui';
+import { phoneBand, phoneBandPad, phoneBrandLabel } from '@/lib/phone-ui';
 
 export const revalidate = 300;
 const FLASH_REVALIDATE_S = 60;
@@ -78,13 +83,15 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
   if (!product) notFound();
   const http = createServerHttp();
   const bundlesFetchedAt = Date.now();
-  const [related, boughtTogether, bundles, flashAll, publicConfig] = await Promise.all([
+  const [related, boughtTogether, bundles, flashAll, publicConfig, compare] = await Promise.all([
     orUndefined(fetchRelated(http, product.slug)),
     orUndefined(fetchBoughtTogether(http, product.slug)),
     orUndefined(fetchProductBundles(http, product.slug)),
     // Giờ vàng đổi theo giờ và theo số suất còn: giữ ngắn như Trang chủ (lib/home-initial.ts), nên hạn làm mới của trang này thực tế là 60 giây.
     orUndefined(fetchActiveFlashSalesNoSync(createServerHttp({ revalidate: FLASH_REVALIDATE_S }))),
     orUndefined(publicConfigQuery(http).queryFn()),
+    // Cờ so sánh tắt thì máy chủ trả 404: coi như không có bảng.
+    orUndefined(fetchProductCompare(http, product.slug)),
   ]);
   // Hết giờ rồi thì không đưa vào HTML: lần tải ngay sau đó sẽ không còn, thanh Giờ vàng biến mất và trang nhảy.
   const generatedAt = Date.now();
@@ -121,6 +128,14 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
     variations: product.variations.map((v) => ({ id: v.id, name: v.name, retailPrice: v.retailPrice, salePrice: v.salePrice, stock: v.stock })),
     blockedReason: unavailableText,
   };
+  // Khối mua kèm lấy combo/mua kèm giá tốt trước nếu có bộ thật đang chạy, xét bằng đúng hàm vẽ của `PdpBundles` trên cùng dữ liệu và mốc giờ dựng trang.
+  const hasBundles =
+    !!bundles &&
+    ((bundles.combos ?? []).some((b) => comboView(b, bundlesFetchedAt) !== null) || addonRows(bundles.addons ?? [], bundlesFetchedAt).length > 0);
+  const showShortDesc = !!shortDesc && shortDesc !== description;
+  const hasIngredients = (product.ingredients ?? []).length > 0;
+  const hasDescription = parseRichText(product.description).length > 0;
+  const hasCompare = compareRows(compare) !== null;
 
   return (
     <main data-page-bleed className={`${PAGE_WIDE} py-6 max-md:px-0 max-md:py-0`}>
@@ -143,22 +158,25 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
       />
       <FlashSalesSeed items={flash} now={generatedAt}>
       <PdpSelectionProvider initialId={initialVariation?.id ?? ''}>
+      <PdpAddOnScope hasBundles={hasBundles} productId={product.id} slug={product.slug} initialBoughtTogether={boughtTogether} {...fbtHost}>
+        {/*
+          Thứ tự khối theo `PDP_BLOCK_ORDER` (app-core, chung với Mini App), mỗi gốc khối có `data-pdp-block`; khối không có dữ liệu thì không có phần tử.
+          Thứ tự HTML là thứ tự nhìn ở điện thoại và thứ tự Tab/TalkBack ở mọi khổ: cột thông tin không còn xếp lại bằng `order`, nên nút "Thêm vào giỏ"
+          ở máy tính đứng ngay sau giá. Từ lg phần dưới là lưới hai cột xếp dày (`grid-flow-row-dense`): Mô tả lấp ô cạnh Thành phần, Đánh giá cạnh So sánh,
+          còn câu chuyện, mua kèm, cam kết và các dải gợi ý chiếm cả hàng; vì vậy ở lg thứ tự nhìn của Câu chuyện và Mô tả đảo nhau so với HTML (chấp nhận).
+        */}
         <PdpLayout
           gallery={
-            <div className="min-w-0">
+            <div data-pdp-block="gallery" className="min-w-0">
               <ProductGallery images={images} videos={product.videos} name={product.name} variationImages={variationImages} pdpSlug={product.slug} />
               {/* Giờ vàng: giá deal nằm ngay dưới ảnh (đồng hồ, đã bán, giới hạn mua); hết giờ thì thanh biến mất, giá thường quay lại. */}
               <PdpFlashBar product={product} />
             </div>
           }
           info={
-            // Điện thoại: mỗi khối là một dải trắng riêng cách nhau 8px trên nền canvas như Mini App; thứ tự các khối con do lớp `tubu-pdp-order-N` (mini.css)
-            // (bảng thứ tự ở comment dưới). Cột thông tin tự nó không tô nền.
+            // Điện thoại: mỗi khối là một dải trắng riêng trên nền canvas như Mini App; cột thông tin tự nó không tô nền.
             <div data-testid="pdp-info" className="flex min-w-0 flex-col">
-              <div
-                data-section="pdp-main"
-                className={`flex min-w-0 flex-col ${phoneBandPad} max-md:pt-4 ${product.certifications.length > 0 ? '' : 'max-md:pb-4'}`}
-              >
+              <div data-pdp-block="main" data-section="pdp-main" className={`flex min-w-0 flex-col ${phoneBandPad} max-md:py-4`}>
               <div className="flex items-center justify-between gap-2">
                 {/* Nhãn và chip xuất xứ xuống dòng trong nhóm này (flex-wrap, min-w-0) để cụm Tim/Chia sẻ bên phải không bị đẩy tràn ở 320px. */}
                 <div className="flex min-w-0 flex-wrap items-center gap-x-3">
@@ -207,38 +225,46 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
               <PdpPointsEarn product={product} initialConfig={publicConfig} />
               {/* Gian hàng tạm nghỉ thì khối mua không dựng ("Tạm thời chưa mua được"), nên không nhắc chốt sớm. */}
               {!unavailableText && <PdpLowStock slug={product.slug} variations={product.variations} />}
-              {shortDesc && shortDesc !== description && (
-                <p data-testid="pdp-short-desc" className="mt-3 whitespace-pre-line break-words text-stone-600 max-md:mt-2 max-md:text-sm max-md:text-[var(--color-text-secondary)]">
-                  {shortDesc}
-                </p>
+              </div>
+
+              {/* Gốc AddToCart là `contents` ở điện thoại; khung khối này là khối thường nên chip và Số lượng nằm đúng chỗ HTML (lớp `order` bên trong không còn tác dụng).
+                  Hàng chip không tự có đệm trên (vốn nối tiếp dải Vận chuyển), nên khung tách dải và đệm thay; một phân loại thì dải Số lượng tự tách. */}
+              {product.variations.length > 0 && (
+                <div
+                  data-pdp-block="variations"
+                  className={`min-w-0 ${product.variations.length > 1 ? 'max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:pt-4' : ''}`}
+                >
+                  <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} pdpSlug={product.slug} />
+                </div>
               )}
 
+              {/* "Bạn đã mua · Mua lại" đứng trước "Đặt định kỳ" (lối phụ); cả hai rỗng thì dải không chiếm chỗ. */}
+              <div data-section="pdp-subscribe" className={`${phoneBandPad} max-md:pb-4 empty:hidden`}>
+                <PdpRebuyRow productId={product.id} slug={product.slug} productName={product.name} variations={product.variations} blocked={!!unavailableText} />
+                {!retailOnly && <PdpSubscribeRow slug={product.slug} variations={product.variations} initialConfig={publicConfig} />}
               </div>
 
-              {/* Dòng thông tin kiểu Mini App: Ưu đãi › và Vận chuyển ›; chip phân loại và Số lượng nằm trong khối mua (cùng chỗ giữ trạng thái chọn). */}
-              <div data-section="pdp-offers" className={`mt-3 tubu-pdp-order-3 max-md:mt-2 ${phoneBandPad} max-md:empty:hidden`}>
-                <PdpCoupons productId={product.id} product={product} divider={Boolean(fulfillerText || !fromStore)} />
-                {(fulfillerText || !fromStore) && (
-                  <PdpShippingRow pressable={!fromStore}>
-                    {fulfillerText && (
-                      <p
-                        data-testid="pdp-fulfiller"
-                        className={`text-sm text-stone-700 ${fulfillerIsTubu ? phoneBrandLabel : ''}`}
-                      >
-                        {fulfillerText}
-                      </p>
-                    )}
-                    {!fromStore && <PdpFreeship initialConfig={publicConfig} />}
-                  </PdpShippingRow>
-                )}
-              </div>
-              {/* Lưu ý dài (gian hàng tạm nghỉ, hàng đối tác chỉ bán giá lẻ) là chữ thường dưới dòng, không nằm trong nút "Vận chuyển ›". Điện thoại: ngay trên chip phân loại như Mini App. */}
-              {(unavailableText || partnerNote) && (
-                  <div
-                    data-testid="pdp-shipping-notes"
-                    data-section="pdp-notes"
-                    className={`flex flex-col gap-1 py-2 tubu-pdp-order-4 ${phoneBandPad}`}
-                  >
+              <div data-pdp-block="shipping" className="mt-3 max-md:mt-2">
+                {/* Dòng thông tin kiểu Mini App: Ưu đãi › và Vận chuyển › (mở chính sách vận chuyển). */}
+                <div data-section="pdp-offers" className={`${phoneBandPad} empty:hidden`}>
+                  <PdpCoupons productId={product.id} product={product} divider={Boolean(fulfillerText || !fromStore)} />
+                  {(fulfillerText || !fromStore) && (
+                    <PdpShippingRow pressable={!fromStore}>
+                      {fulfillerText && (
+                        <p
+                          data-testid="pdp-fulfiller"
+                          className={`text-sm text-stone-700 ${fulfillerIsTubu ? phoneBrandLabel : ''}`}
+                        >
+                          {fulfillerText}
+                        </p>
+                      )}
+                      {!fromStore && <PdpFreeship initialConfig={publicConfig} />}
+                    </PdpShippingRow>
+                  )}
+                </div>
+                {/* Lưu ý dài (gian hàng tạm nghỉ, hàng đối tác chỉ bán giá lẻ) là chữ thường dưới dòng, không nằm trong nút "Vận chuyển ›". */}
+                {(unavailableText || partnerNote) && (
+                  <div data-testid="pdp-shipping-notes" data-section="pdp-notes" className={`flex flex-col gap-1 py-2 ${phoneBandPad}`}>
                     {unavailableText && (
                       <p
                         data-testid="pdp-unavailable"
@@ -255,109 +281,89 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                       </p>
                     )}
                   </div>
-              )}
-
-              {/*
-                Thứ tự trong HTML là thứ tự đọc và bấm Tab ở máy tính: khối mua rồi mới tới chứng nhận và "Đặt định kỳ" (lối phụ), nên nút
-                "Thêm vào giỏ" không bị đẩy xuống dưới khung 1280×800. Điện thoại xếp lại bằng lớp `tubu-pdp-order-N` (mini.css) theo thứ tự của Mini App:
-                thông tin chính 0, chứng nhận 1, Đặt định kỳ 2 (chỉ web: ngoại lệ có chủ đích), Ưu đãi + Vận chuyển 3, ghi chú vận chuyển 4,
-                chip phân loại 5, Số lượng 6, dải câu chuyện 7, Combo/Mua kèm 8, Đánh giá nhanh 9, Mở nhóm mua chung + Nội dung bán hàng 11.
-                Chip và Số lượng là ruột của AddToCart (gốc `contents`). Không có dòng "Phân loại ›" (chip đã đủ).
-                Hệ quả: thứ tự nhìn và thứ tự Tab/TalkBack lệch nhau ở điện thoại. Tab đi Ưu đãi/Vận chuyển, chip, Số lượng (trong DOM
-                đứng liền nhau và đúng chỗ trên màn hình), thanh dính đáy, rồi mới tới chứng nhận, Đặt định kỳ, Combo, Đánh giá nhanh.
-                Chấp nhận để nút mua giữ chỗ cũ ở máy tính; nút mua thật của điện thoại ở thanh dính đáy nên không phụ thuộc thứ tự này.
-                Bộ hết hạn hay tắt khi trang ISR đã cũ thì khối KHÔNG bị gỡ (PdpBundles giữ chỗ, ghi "Đã kết thúc"), nên chỗ này không nhảy; chỉ bộ
-                mới hiện sau khi tải (máy chủ lỗi lúc dựng, hay bộ vừa tạo sau lần dựng trang) là chèn thêm, như Mini App.
-              */}
-              {product.variations.length > 0 && (
-                <div className="max-md:contents">
-                  <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} pdpSlug={product.slug} />
-                </div>
-              )}
-              {product.certifications.length > 0 && (
-                <div
-                  data-testid="pdp-certs"
-                  data-section="pdp-certs"
-                  className={`mt-3 flex flex-wrap gap-2 tubu-pdp-order-1 max-md:mt-0 ${phoneBandPad} max-md:pb-4 max-md:pt-2.5`}
-                >
-                  {product.certifications.map((c) => (
-                    <span
-                      key={c}
-                      className="flex items-center gap-1 rounded-control border border-forest-200 bg-forest-50 px-2.5 py-1 text-xs font-medium text-forest-800 max-md:rounded-full max-md:border-0 max-md:bg-[var(--color-bg-subtle)] max-md:text-[var(--color-text-brand)]"
-                    >
-                      <Check className="h-3.5 w-3.5 text-forest-600" aria-hidden="true" />
-                      <span>{c}</span>
-                    </span>
-                  ))}
-                </div>
-              )}
-              {!retailOnly && (
-                <div data-section="pdp-subscribe" className={`tubu-pdp-order-2 max-md:flex max-md:flex-col ${phoneBandPad} max-md:pb-4 max-md:empty:hidden`}>
-                  <PdpSubscribeRow slug={product.slug} variations={product.variations} />
-                </div>
-              )}
-
-              {/* Dải cam kết ngay dưới khối mua nhanh (chip, Số lượng): điện thoại order 7 đứng trước dải câu chuyện (cùng order, thứ tự HTML), như Mini App; máy tính ngay dưới khối mua. Rỗng thì ẩn. */}
-              <div data-section="pdp-trust" className="tubu-pdp-order-7 empty:hidden">
-                <PdpTrustStrip fulfillerKind={product.fulfiller?.kind} initialConfig={publicConfig} />
+                )}
               </div>
 
-              {/* Điện thoại: dải câu chuyện ngay dưới khối mua nhanh (chip, Số lượng), order 7 giữa Số lượng (6) và Combo (8); máy tính dùng bản ở `below`. */}
-              <PdpStory product={product} placement="phone" />
-
-              {/* "Gợi ý mua kèm hợp vị": ngay trên Combo/Mua kèm giá tốt (cùng order 8, đứng trước theo thứ tự HTML); ẩn hẳn khi không có bộ. */}
-              {product.variations.length > 0 && (
-                <div className="tubu-pdp-order-8">
-                  <PdpFbt productId={product.id} slug={product.slug} initialBoughtTogether={boughtTogether} {...fbtHost} />
+              {(showShortDesc || product.certifications.length > 0) && (
+                <div data-pdp-block="benefits" className={`mt-3 ${phoneBand}`}>
+                  {showShortDesc && (
+                    <p data-testid="pdp-short-desc" className="whitespace-pre-line break-words text-stone-600 max-md:text-sm max-md:text-[var(--color-text-secondary)]">
+                      {shortDesc}
+                    </p>
+                  )}
+                  {product.certifications.length > 0 && (
+                    <div data-testid="pdp-certs" data-section="pdp-certs" className={`flex flex-wrap gap-2 ${showShortDesc ? 'mt-3' : ''}`}>
+                      {product.certifications.map((c) => (
+                        <span
+                          key={c}
+                          className="flex items-center gap-1 rounded-control border border-forest-200 bg-forest-50 px-2.5 py-1 text-xs font-medium text-forest-800 max-md:rounded-full max-md:border-0 max-md:bg-[var(--color-bg-subtle)] max-md:text-[var(--color-text-brand)]"
+                        >
+                          <Check className="h-3.5 w-3.5 text-forest-600" aria-hidden="true" />
+                          <span>{c}</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               )}
-
-              {/* Điện thoại: Combo/Mua kèm là hai dải trắng riêng như Mini App. Lớp dải đặt ở đây vì khối combo (pdp-bundles) tự nó chỉ có đệm dọc. */}
-              <div
-                data-section="pdp-bundles"
-                className="tubu-pdp-order-8 max-md:[&>div]:mt-2 max-md:[&_section]:bg-[var(--color-bg-surface)] max-md:[&_section]:p-4"
-              >
-                <PdpBundles slug={product.slug} productName={product.name} initialBundles={bundles} initialFetchedAt={bundlesFetchedAt} />
-              </div>
-              {/* Q8: Đánh giá nhanh ngay sau Combo/Mua kèm, như Mini App; danh sách đầy đủ giữ chỗ cũ ở `below`. */}
-              <div className="tubu-pdp-order-9">
-                <PdpQuickReviews slug={product.slug} />
-              </div>
-              <div data-section="pdp-groupbuy" className="tubu-pdp-order-11">
-                {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
-                <PdpContentKitRow slug={product.slug} />
-              </div>
             </div>
           }
           below={
-            <div className="min-w-0">
-              {/* Dải câu chuyện nằm đầu phần dưới: máy tính có đủ bề ngang cho hai cột cuộn kể chuyện; mô tả và thành phần vẫn là chữ trong HTML ở dưới. */}
-              <PdpStory product={product} placement="wide" />
-              {/* Từ lg hai cột (nội dung bán hàng | đánh giá) để thanh phân bổ sao không kéo dài cả bề ngang 1200px; dưới lg vẫn xếp dọc như cũ. */}
-              <div data-testid="pdp-below-cols" className="lg:grid lg:grid-cols-2 lg:items-start lg:gap-x-8">
-                <div className="min-w-0">
-                  <PdpIngredients ingredients={product.ingredients} />
-                  <PdpPromises>
-                    <PdpChatButton productName={product.name} productSlug={product.slug} />
-                  </PdpPromises>
-                  {description && <PdpDescription text={description} />}
-                </div>
-
-                {/* Đọc tham số ?danh-gia= (mở form cho đúng lần mua) cần Suspense để phần còn lại của trang vẫn dựng sẵn được. */}
-                <div className="min-w-0">
-                  <Suspense fallback={<ProductReviewsFallback />}>
-                    <ProductReviews slug={product.slug} />
-                  </Suspense>
-                </div>
+            // Gốc khối nằm trong khung lưới `empty:hidden`: khối tự ẩn (trả null) thì ô lưới cũng không chiếm chỗ.
+            <div data-testid="pdp-below-cols" className="min-w-0 lg:grid lg:grid-flow-row-dense lg:grid-cols-2 lg:items-start lg:gap-x-8">
+              <div className={`min-w-0 empty:hidden ${hasDescription ? '' : 'lg:col-span-2'}`}>
+                <PdpIngredients ingredients={product.ingredients} />
               </div>
-
+              <div className="min-w-0 empty:hidden lg:col-span-2">
+                <PdpStory product={product} />
+              </div>
+              <div className={`min-w-0 empty:hidden ${hasIngredients ? '' : 'lg:col-span-2'}`}>
+                <PdpDescription source={product.description} />
+              </div>
+              <div className="min-w-0 empty:hidden lg:col-span-2">
+                <PdpAddOns
+                  bundles={
+                    // Điện thoại: Combo/Mua kèm là hai dải trắng riêng như Mini App. Lớp dải đặt ở đây vì khối combo (pdp-bundles) tự nó chỉ có đệm dọc.
+                    <div data-section="pdp-bundles" className="md:mt-8 max-md:[&>div]:mt-2 max-md:[&_section]:bg-[var(--color-bg-surface)] max-md:[&_section]:p-4">
+                      <PdpBundles slug={product.slug} productName={product.name} initialBundles={bundles} initialFetchedAt={bundlesFetchedAt} />
+                    </div>
+                  }
+                  fbt={{ productId: product.id, slug: product.slug, initialBoughtTogether: boughtTogether, ...fbtHost }}
+                />
+              </div>
+              {/* Đọc tham số ?danh-gia= (mở form cho đúng lần mua) cần Suspense để phần còn lại của trang vẫn dựng sẵn được. */}
+              <div className={`min-w-0 ${hasCompare ? '' : 'lg:col-span-2'}`}>
+                <Suspense fallback={<ProductReviewsFallback />}>
+                  <ProductReviews slug={product.slug} />
+                </Suspense>
+              </div>
+              {hasCompare && (
+                <div className="min-w-0">
+                  <PdpCompare data={compare} />
+                </div>
+              )}
+              <div className="min-w-0 lg:col-span-2">
+                <PdpPromises
+                  fulfillerKind={product.fulfiller?.kind}
+                  initialConfig={publicConfig}
+                  rows={
+                    <>
+                      {!retailOnly && <PdpGroupBuyRow productId={product.id} slug={product.slug} />}
+                      <PdpContentKitRow slug={product.slug} />
+                    </>
+                  }
+                >
+                  <PdpChatButton productName={product.name} productSlug={product.slug} />
+                </PdpPromises>
+              </div>
               {/* Điện thoại: trang không đệm (ảnh tràn mép), nên dải gợi ý tự đệm 16px; các khối trên là dải trắng tự đệm. */}
-              <div className="max-md:px-4 max-md:pb-6">
-                <PdpRails productId={product.id} slug={product.slug} brand={product.brand} initialRelated={related} initialBoughtTogether={boughtTogether} fbt={fbtHost} />
+              <div className="min-w-0 empty:hidden max-md:px-4 max-md:pb-6 lg:col-span-2">
+                <PdpRails productId={product.id} slug={product.slug} brand={product.brand} initialRelated={related} />
               </div>
             </div>
           }
         />
+      </PdpAddOnScope>
       </PdpSelectionProvider>
       </FlashSalesSeed>
 

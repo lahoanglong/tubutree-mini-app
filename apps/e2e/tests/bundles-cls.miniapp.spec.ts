@@ -142,7 +142,8 @@ test.describe('Trang sản phẩm Mini: bộ tắt khi khách đang ở trang', 
     // Chiều cao khối và khoảng từ đáy khối tới phần tử kế bên dưới: hai số này đổi thì phần dưới đã xê dịch (vị trí tuyệt đối còn phụ thuộc phần trên trang).
     const measure = () =>
       slots.evaluate((el) => {
-        const next = el.nextElementSibling;
+        // Khối bộ là con duy nhất của khối mua kèm (`data-pdp-block="addons"`): phần tử kế bên dưới là khối trang tiếp theo.
+        const next = (el.closest('[data-pdp-block]') ?? el).nextElementSibling;
         const box = el.getBoundingClientRect();
         return { height: box.height, gapBelow: next ? next.getBoundingClientRect().top - box.bottom : null };
       });

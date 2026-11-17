@@ -71,7 +71,9 @@ function renderPdp() {
   );
 }
 
-describe('ProductDetailPage — nút Chat Zalo OA trong khối "Cam kết Tubu" (D7 #3)', () => {
+const promisesBlock = () => document.querySelector<HTMLElement>('[data-pdp-block="promises"]')!;
+
+describe('ProductDetailPage — nút Chat Zalo OA trong khối cam kết (D7 #3)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.hasOA = true;
@@ -83,21 +85,21 @@ describe('ProductDetailPage — nút Chat Zalo OA trong khối "Cam kết Tubu" 
     mocks.fetchBoughtTogether.mockResolvedValue([]);
   });
 
-  it('OA đã cấu hình: nút Chat nằm trong khối "Cam kết Tubu"; bấm mở chat OA kèm tên sản phẩm', async () => {
+  it('OA đã cấu hình: nút Chat nằm trong khối cam kết; bấm mở chat OA kèm tên sản phẩm', async () => {
     renderPdp();
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
-    const block = screen.getByRole('heading', { name: 'Cam kết Tubu' }).parentElement!;
+    const block = promisesBlock();
     const chat = within(block).getByRole('button', { name: 'Chat với Tubu Tree' });
     fireEvent.click(chat);
     expect(mocks.openOAChat).toHaveBeenCalledTimes(1);
     expect(mocks.openOAChat).toHaveBeenCalledWith(expect.stringContaining('Xà phòng sả chanh'));
   });
 
-  it('khối "Cam kết Tubu" có nút "Chính sách vận chuyển": bấm mở chính sách ngay trong app, không rời trang', async () => {
+  it('khối cam kết có nút "Chính sách vận chuyển": bấm mở chính sách ngay trong app, không rời trang', async () => {
     mocks.fetchLegalDoc.mockResolvedValue({ content: 'Giao trong 2 đến 4 ngày làm việc.', vars: {} });
     renderPdp();
     await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
-    const block = screen.getByRole('heading', { name: 'Cam kết Tubu' }).parentElement!;
+    const block = promisesBlock();
     const link = within(block).getByRole('button', { name: 'Chính sách vận chuyển' });
     expect(parseInt(link.style.minHeight, 10)).toBeGreaterThanOrEqual(44);
     fireEvent.click(link);
@@ -106,20 +108,26 @@ describe('ProductDetailPage — nút Chat Zalo OA trong khối "Cam kết Tubu" 
     expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
-  it('cam kết đổi trả nêu số ngày từ cấu hình; chưa có cấu hình thì không nêu số', async () => {
+  it('không còn khối "Cam kết Tubu" lặp dải cam kết; đổi trả tắt (0 ngày) thì dải bỏ trụ đổi trả và chỉ còn một lối xem chính sách vận chuyển', async () => {
     mocks.returnWindowDays = 10;
     const first = renderPdp();
-    await screen.findByText('Đổi trả trong 10 ngày nếu lỗi');
-    first.unmount();
-    mocks.returnWindowDays = 0;
-    const zero = renderPdp();
-    await screen.findByText('Hàng chính hãng — nguồn gốc rõ ràng');
-    expect(document.body.textContent).not.toContain('Đổi trả');
-    zero.unmount();
-    mocks.returnWindowDays = undefined;
-    renderPdp();
-    await screen.findByText('Đổi trả nếu sản phẩm lỗi');
+    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    expect(screen.queryByRole('heading', { name: 'Cam kết Tubu' })).toBeNull();
+    const strip = within(promisesBlock()).getByTestId('product-trust-strip');
+    expect(within(strip).getByTestId('trust-pillar-returns')).toBeInTheDocument();
+    expect(within(strip).getByTestId('product-trust-cta')).toHaveAttribute('data-policy', 'doi-tra');
+    expect(within(promisesBlock()).getByRole('button', { name: 'Chính sách vận chuyển' })).toBeInTheDocument();
     expect(document.body.textContent).not.toContain('7 ngày');
+    first.unmount();
+
+    mocks.returnWindowDays = 0;
+    renderPdp();
+    await screen.findByRole('heading', { level: 1, name: 'Xà phòng sả chanh' });
+    const block = promisesBlock();
+    expect(within(block).queryByTestId('trust-pillar-returns')).toBeNull();
+    expect(within(block).getByTestId('product-trust-cta')).toHaveAttribute('data-policy', 'van-chuyen');
+    expect(within(block).queryByRole('button', { name: 'Chính sách vận chuyển' })).toBeNull();
+    expect(block.textContent).not.toContain('Đổi trả');
   });
 
   it('thanh CTA dính giữ bố cục cũ: chỉ nút giỏ 48px, không có nút Chat làm hẹp hai nút chính', async () => {
@@ -205,7 +213,7 @@ describe('ProductDetailPage — tên SP và tiêu đề mục cùng một kiểu
     expect(h1.style.fontFamily).toBe('var(--font-ui)');
   });
 
-  it.each(['Cam kết Tubu', 'Mô tả sản phẩm', 'Khách thường mua cùng', 'Cùng thương hiệu'])(
+  it.each(['Mô tả sản phẩm', 'Khách thường mua cùng', 'Cùng thương hiệu'])(
     'tiêu đề khối "%s" là h2 Inter 16/700, -0.01em (Q1: khối trong luồng mua)',
     async (title) => {
       renderPdp();
