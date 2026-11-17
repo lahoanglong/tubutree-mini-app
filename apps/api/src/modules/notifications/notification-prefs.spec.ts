@@ -152,3 +152,51 @@ describe('Tuỳ chọn thông báo lưu trên server (C-022)', () => {
     expect(res).toMatchObject({ notifyPromo: false, notifyGarden: true });
   });
 });
+
+describe('Công tắc "Tương tác bài viết" tách khỏi "Nhắc Vườn Xanh" (notifySocial)', () => {
+  const evidence = (key: string, source: string, textVersion: string) => ({
+    [`${key}At`]: expect.any(Date),
+    [`${key}Source`]: source,
+    [`${key}TextVersion`]: textVersion,
+  });
+
+  it('tắt tương tác, giữ nhắc Vườn: không báo thích/bình luận, vẫn nhắc tưới cây', async () => {
+    const { svc, create } = setup({ id: 'u1', phone: '0900000000', notifyPromo: true, notifyGarden: true, notifySocial: false });
+    await svc.notify('u1', 'COMMUNITY_POST_LIKED', { title: 'A' });
+    await svc.notify('u1', 'COMMUNITY_NEW_ANSWER', { title: 'A' });
+    expect(create).not.toHaveBeenCalled();
+    await svc.notify('u1', 'GAME_TREE_THIRSTY', {});
+    expect(create).toHaveBeenCalled();
+  });
+
+  it('dữ liệu chưa có cột notifySocial: theo notifyGarden như công tắc gộp cũ', async () => {
+    const { svc, create } = setup({ id: 'u1', phone: '0900000000', notifyPromo: true, notifyGarden: false });
+    await svc.notify('u1', 'COMMUNITY_POST_LIKED', { title: 'A' });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('client cũ (không gửi textVersion) đổi công tắc gộp: đổi cả tương tác bài viết, ghi phiên bản câu chữ cũ', async () => {
+    const { svc, update } = setup(optedOut);
+    await svc.updatePrefs('u1', { notifyGarden: false });
+    expect(update.mock.calls[0][0].data).toEqual({
+      notifyGarden: false,
+      ...evidence('notifyGarden', 'settings', 'notify-prefs-v1'),
+      notifySocial: false,
+      ...evidence('notifySocial', 'settings', 'notify-prefs-v1'),
+    });
+  });
+
+  it('client mới gửi textVersion: hai công tắc độc lập, chỉ ghi công tắc được gửi, kèm nguồn và phiên bản câu chữ', async () => {
+    const { svc, update } = setup(optedOut);
+    await svc.updatePrefs('u1', { notifyGarden: false, textVersion: 'notify-prefs-v2-2026-11-17' });
+    expect(update.mock.calls[0][0].data).toEqual({ notifyGarden: false, ...evidence('notifyGarden', 'settings', 'notify-prefs-v2-2026-11-17') });
+    await svc.updatePrefs('u1', { notifySocial: true, source: 'onboarding', textVersion: 'notify-prefs-v2-2026-11-17' });
+    expect(update.mock.calls[1][0].data).toEqual({ notifySocial: true, ...evidence('notifySocial', 'onboarding', 'notify-prefs-v2-2026-11-17') });
+  });
+
+  it('không gửi công tắc nào: không ghi bằng chứng', async () => {
+    const { svc, update } = setup(optedOut);
+    await svc.updatePrefs('u1', { source: 'settings', textVersion: 'notify-prefs-v2-2026-11-17' });
+    expect(update.mock.calls[0][0].data).toEqual({});
+  });
+});
