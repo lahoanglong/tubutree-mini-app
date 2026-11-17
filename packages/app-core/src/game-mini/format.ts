@@ -12,8 +12,8 @@ import {
 import type { RoundFailure } from './api';
 import { gameCopy } from './copy';
 
-/** Game đã có giao diện ở đợt này, theo thứ tự hiện trong "Chơi hôm nay". Game khác máy chủ có bật cũng chưa hiện (đợt B). */
-export const PLAYABLE_MINI_GAMES = ['daily_quiz', 'sort'] as const satisfies readonly MiniGameId[];
+/** Game đã có giao diện, theo thứ tự hiện trong "Chơi hôm nay". */
+export const PLAYABLE_MINI_GAMES = ['daily_quiz', 'sort', 'match', 'origin', 'basket'] as const satisfies readonly MiniGameId[];
 export type PlayableMiniGame = (typeof PLAYABLE_MINI_GAMES)[number];
 
 export function isPlayableMiniGame(v: unknown): v is PlayableMiniGame {
@@ -149,6 +149,16 @@ export function miniFailureView(failure: RoundFailure, step: 'start' | 'submit')
     case 'too_fast':
       return step === 'submit' ? { message: gameCopy('error.submit'), action: 'retry' } : { message: gameCopy('error.start'), action: 'new' };
   }
+}
+
+/** Chữ tiến độ của thanh trên: câu/lượt đang làm (Đố Xanh, Đoán Xuất Xứ), số cặp đã ghép, số món đã chọn, số món đã phân loại. */
+export function miniProgressLabel(game: PlayableMiniGame, done: number, total: number): string {
+  const m = total || 1;
+  if (game === 'daily_quiz') return gameCopy('progress.question', { n: Math.min(done + 1, m), m });
+  if (game === 'origin') return gameCopy('progress.turn', { n: Math.min(done + 1, m), m });
+  if (game === 'match') return gameCopy('progress.pairs', { n: done, m: total });
+  if (game === 'basket') return gameCopy('progress.picked', { n: done, m: total });
+  return gameCopy('progress.items', { n: done, m: total });
 }
 
 /** Đồng hồ đếm ngược dạng "0:38". */

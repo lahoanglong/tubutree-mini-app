@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { fetchProductsBySlugs } from '@tubutree/app-core/api/catalog';
 import { classifyMiniError, miniDeviceId, startMiniRound, submitMiniRound } from '@tubutree/app-core/game-mini/api';
 import { isMiniDisabled, miniTodayQuery, withFreshSession, type MiniSessionRefresh } from '@tubutree/app-core/game-mini/today';
 import { type MiniBoardProps, type MiniBoardStatus } from '@tubutree/app-core/game-mini/boards';
@@ -18,12 +19,23 @@ import {
   miniIntroReward,
   miniPlayPath,
   miniProductPath,
+  miniProgressLabel,
   miniResultSummary,
   safeSourceUrl,
   sourceHost,
   type PlayableMiniGame,
 } from '@tubutree/app-core/game-mini/format';
-import { MINI_REVIEW_BADGE, miniProductView, miniQuizProduct, miniReviewRows, type MiniReviewRow } from '@tubutree/app-core/game-mini/review';
+import {
+  MINI_REVIEW_BADGE,
+  miniBasketSet,
+  miniCatalogView,
+  miniMatchProductSlugs,
+  miniProductsKey,
+  miniProductView,
+  miniQuizProduct,
+  miniReviewRows,
+  type MiniReviewRow,
+} from '@tubutree/app-core/game-mini/review';
 import { initialRoundState, roundReducer, submitDelayMs, type RoundState } from '@tubutree/app-core/game-mini/round-machine';
 import { checkInQuery } from '@tubutree/app-core/queries/loyalty';
 import { Button, Heading, ProductTile, Text } from '@/components/mini';
@@ -43,7 +55,16 @@ const boardSkeleton = () => <div className="tubu-mg-board-skeleton" aria-hidden 
 const BOARDS: Record<PlayableMiniGame, ComponentType<MiniBoardProps<never>>> = {
   daily_quiz: dynamic(() => import('./mini-daily-quiz'), { ssr: false, loading: boardSkeleton }) as ComponentType<MiniBoardProps<never>>,
   sort: dynamic(() => import('./mini-sort'), { ssr: false, loading: boardSkeleton }) as ComponentType<MiniBoardProps<never>>,
+  match: dynamic(() => import('./mini-match'), { ssr: false, loading: boardSkeleton }) as ComponentType<MiniBoardProps<never>>,
+  origin: dynamic(() => import('./mini-origin'), { ssr: false, loading: boardSkeleton }) as ComponentType<MiniBoardProps<never>>,
+  basket: dynamic(() => import('./mini-basket'), { ssr: false, loading: boardSkeleton }) as ComponentType<MiniBoardProps<never>>,
 };
+
+// Thêm giỏ chỉ có ở Giỏ Đúng Việc: chunk riêng để màn kết quả của các game khác không mang mã giỏ.
+const MiniBasketCart = dynamic(() => import('./mini-basket-cart'), {
+  ssr: false,
+  loading: () => <div className="tubu-mg-board-skeleton" data-size="sm" aria-hidden />,
+});
 
 const GAME_PATH = '/vuon-xanh';
 const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
@@ -112,7 +133,7 @@ function StatusBar({ game, status, rewarded }: { game: PlayableMiniGame; status:
   const done = status?.done ?? 0;
   const total = status?.total ?? 0;
   const msLeft = status?.msLeft ?? 0;
-  const label = game === 'daily_quiz' ? gameCopy('progress.question', { n: Math.min(done + 1, total || 1), m: total || 1 }) : gameCopy('progress.items', { n: done, m: total });
+  const label = miniProgressLabel(game, done, total);
   return (
     <div className="tubu-mg-status" data-testid="mini-status">
       <div className="tubu-mg-status-row">
@@ -177,11 +198,30 @@ function ReviewList({ rows }: { rows: MiniReviewRow[] }) {
   );
 }
 
+/** "Nguyên liệu này có trong" sau Ghép Cặp: tối đa 2 sản phẩm theo cặp, giá và tồn kho hiện hành từ danh mục. */
+function MatchProducts({ slugs }: { slugs: string[] }) {
+  const q = useQuery({ queryKey: miniProductsKey(slugs), queryFn: () => fetchProductsBySlugs(coreHttp, slugs), staleTime: 60_000 });
+  const cards = q.data ?? [];
+  if (cards.length === 0) return null;
+  return (
+    <div className="tubu-mg-panel" data-testid="mini-result-products">
+      <Text variant="caption" tone="secondary" as="p">
+        {gameCopy('result.matchProduct')}
+      </Text>
+      {cards.map((c) => (
+        <ProductTile key={c.slug} view={miniCatalogView(c)} variant="line" href={miniProductPath.web(c.slug, 'match')} />
+      ))}
+    </div>
+  );
+}
+
 function ResultView({ game, state, onDone, onLogin }: { game: PlayableMiniGame; state: RoundState; onDone: () => void; onLogin: () => void }) {
   const waste = usePublicConfig().waste.enabled && isWebRouteReady(MINI_RECYCLE_PATH.web);
   const r = state.result!;
   const summary = miniResultSummary(r);
   const product = miniQuizProduct(state.round?.content);
+  const matchSlugs = miniMatchProductSlugs(r.review);
+  const basketSet = miniBasketSet(r.review, state.round?.content);
   return (
     <section className="tubu-mg-panel" aria-labelledby="mini-result-title" data-testid="mini-result">
       <Heading id="mini-result-title" as="h2" variant="title-md" font="ui">
@@ -218,20 +258,22 @@ function ResultView({ game, state, onDone, onLogin }: { game: PlayableMiniGame; 
           {gameCopy('invite.sort')}
         </Link>
       )}
-      {game === 'daily_quiz' && product && (
+      {(game === 'daily_quiz' || game === 'origin') && product && (
         <div className="tubu-mg-panel">
           <Text variant="caption" tone="secondary" as="p">
-            {gameCopy('result.product')}
+            {gameCopy(game === 'origin' ? 'result.originProduct' : 'result.product')}
           </Text>
           <div data-testid="mini-result-product">
             <ProductTile view={miniProductView(product)} variant="line" href={miniProductPath.web(product.slug, game)} />
           </div>
         </div>
       )}
+      {game === 'match' && matchSlugs.length > 0 && <MatchProducts slugs={matchSlugs} />}
+      {game === 'basket' && basketSet.length > 0 && <MiniBasketCart products={basketSet} />}
       <Heading as="h3" variant="title-sm" font="ui">
         {gameCopy('result.review')}
       </Heading>
-      {state.round && <ReviewList rows={miniReviewRows(r.review, state.round.content)} />}
+      {state.round && <ReviewList rows={miniReviewRows(r.review, state.round.content, state.answers)} />}
     </section>
   );
 }

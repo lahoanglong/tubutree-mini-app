@@ -162,10 +162,10 @@ test.describe('Web 1440px', () => {
     await expect(page.getByRole('link', { name: gameCopy('invite.sort') })).toHaveAttribute('href', '/doi-rac/tao');
   });
 
-  test('game không có giao diện: 404', async ({ page, api }) => {
+  test('game lạ: 404', async ({ page, api }) => {
     member(api);
     await signedIn(page);
-    const res = await page.goto('/vuon-xanh/choi/match');
+    const res = await page.goto('/vuon-xanh/choi/khong-co');
     expect(res?.status()).toBe(404);
   });
 });

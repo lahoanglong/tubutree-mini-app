@@ -65,7 +65,7 @@ describe('PlayTodayCard', () => {
     render(<PlayTodayCard today={today()} />);
     expect(screen.getByTestId('mini-play-row-sort')).toBeInTheDocument();
     expect(screen.getByTestId('mini-play-row-daily_quiz')).toBeInTheDocument();
-    expect(screen.queryByTestId('mini-play-row-match')).toBeNull();
+    expect(screen.getByTestId('mini-play-row-match')).toBeInTheDocument();
     expect(screen.getByTestId('mini-play-status-sort')).toHaveTextContent(gameCopy('row.left', { n: 2 }));
     expect(screen.getByTestId('mini-play-status-daily_quiz')).toHaveTextContent(gameCopy('row.full'));
     fireEvent.click(screen.getByTestId('mini-play-row-sort'));

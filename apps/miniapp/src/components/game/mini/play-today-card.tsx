@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, CircleHelp, Recycle, type LucideIcon } from 'lucide-react';
+import { ChevronRight, CircleHelp, MapPin, Puzzle, Recycle, ShoppingBasket, type LucideIcon } from 'lucide-react';
 import type { MiniTodayResponse } from '@tubutree/shared-types';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniTodayQuery } from '@tubutree/app-core/game-mini/today';
@@ -22,7 +22,7 @@ import { Icon } from '../../ui/icon';
 import { Heading, Text } from '../../ui/text';
 import './mini-game.css';
 
-const GAME_ICON: Record<PlayableMiniGame, LucideIcon> = { daily_quiz: CircleHelp, sort: Recycle };
+const GAME_ICON: Record<PlayableMiniGame, LucideIcon> = { daily_quiz: CircleHelp, sort: Recycle, match: Puzzle, origin: MapPin, basket: ShoppingBasket };
 
 const refreshSession = () => refreshAccessToken().then(Boolean);
 

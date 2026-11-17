@@ -314,7 +314,7 @@ describe('Đúng Thùng: bàn chơi', () => {
 
 describe('định dạng', () => {
   it('Chơi hôm nay: chỉ game đã có giao diện, Đố Xanh trước', () => {
-    expect(playableToday(today()).map((g) => g.game)).toEqual(['daily_quiz', 'sort']);
+    expect(playableToday(today()).map((g) => g.game)).toEqual(['daily_quiz', 'sort', 'match']);
     expect(playableToday(undefined)).toEqual([]);
   });
 
@@ -384,7 +384,7 @@ describe('định dạng', () => {
 });
 
 describe('chữ game mini', () => {
-  const sample: Record<string, string | number> = { n: 2, m: 3, c: 2, t: 3, water: 10, points: 10, pct: 80, title: 'Đúng Thùng', desc: 'x', status: 'y', item: 'Hộp sữa giấy', bin: 'Tái chế', host: 'monre.gov.vn', a: 'Saponin' };
+  const sample: Record<string, string | number> = { n: 2, m: 3, c: 2, t: 3, water: 10, points: 10, pct: 80, title: 'Đúng Thùng', desc: 'x', status: 'y', item: 'Hộp sữa giấy', bin: 'Tái chế', host: 'monre.gov.vn', a: 'Saponin', k: 2, label: 'Bồ hòn', side: 'Nguyên liệu', ingredient: 'Bồ hòn', use: 'Tạo bọt', names: 'Giấm gạo', place: 'Đà Lạt' };
   const keys = Object.keys(GAME_MINI_COPY) as GameMiniCopyKey[];
 
   it('không có thuật ngữ cấm', () => {

@@ -4,7 +4,7 @@ import { classifyMiniError, miniDeviceId, startMiniRound, submitMiniRound } from
 import { isMiniDisabled, miniTodayQuery, withFreshSession, type MiniSessionRefresh } from '@tubutree/app-core/game-mini/today';
 import { type MiniBoardProps, type MiniBoardStatus } from '@tubutree/app-core/game-mini/boards';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
-import { miniClock, miniFailureView, miniGameRules, miniGameTitle, miniIntroReward, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
+import { miniClock, miniFailureView, miniGameRules, miniGameTitle, miniIntroReward, miniProgressLabel, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
 import { initialRoundState, roundReducer, submitDelayMs } from '@tubutree/app-core/game-mini/round-machine';
 import { useLoginWithNotice } from '../../ui/auth-gate';
 import { Button } from '../../ui/button';
@@ -23,6 +23,9 @@ import './mini-game.css';
 const BOARDS: Record<PlayableMiniGame, ComponentType<MiniBoardProps<never>>> = {
   daily_quiz: lazy(() => import('./mini-daily-quiz')) as ComponentType<MiniBoardProps<never>>,
   sort: lazy(() => import('./mini-sort')) as ComponentType<MiniBoardProps<never>>,
+  match: lazy(() => import('./mini-match')) as ComponentType<MiniBoardProps<never>>,
+  origin: lazy(() => import('./mini-origin')) as ComponentType<MiniBoardProps<never>>,
+  basket: lazy(() => import('./mini-basket')) as ComponentType<MiniBoardProps<never>>,
 };
 const loadResult = () => import('./mini-result');
 const MiniResult = lazy(loadResult);
@@ -87,7 +90,7 @@ function StatusBar({ game, status, rewarded }: { game: PlayableMiniGame; status:
   const done = status?.done ?? 0;
   const total = status?.total ?? 0;
   const msLeft = status?.msLeft ?? 0;
-  const label = game === 'daily_quiz' ? gameCopy('progress.question', { n: Math.min(done + 1, total || 1), m: total || 1 }) : gameCopy('progress.items', { n: done, m: total });
+  const label = miniProgressLabel(game, done, total);
   return (
     <div className="tubu-mg-status" data-testid="mini-status">
       <div className="tubu-mg-status-row">

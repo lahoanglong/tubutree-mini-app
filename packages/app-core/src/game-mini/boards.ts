@@ -1,7 +1,7 @@
 import { MINI_SORT_BINS, type MiniSortBin } from '@tubutree/shared-types';
 
 /**
- * Logic thuần của bàn chơi Đố Xanh (G2) và Đúng Thùng (G1), dùng chung Mini App và web. Máy chủ giữ đáp án nên bàn chơi chỉ ghi lựa chọn
+ * Logic thuần của bàn chơi Đố Xanh (G2), Đoán Xuất Xứ (G4) và Đúng Thùng (G1), dùng chung Mini App và web. Máy chủ giữ đáp án nên bàn chơi chỉ ghi lựa chọn
  * của khách; đúng/sai, "Vì sao" và nguồn hiện ở màn kết quả sau khi máy chủ chấm.
  */
 
@@ -53,8 +53,11 @@ export function quizNext(p: QuizProgress, now: number): QuizProgress {
   return { index: p.index + 1, answers, chosen: null, questionStartedAt: now };
 }
 
-export function quizTimeLeft(p: QuizProgress, now: number): number {
-  return Math.max(0, p.questionStartedAt + QUIZ_QUESTION_MS - now);
+/** Đoán Xuất Xứ dùng chung tiến độ của Đố Xanh (chọn rồi chốt từng lượt), mỗi lượt ngắn hơn. */
+export const ORIGIN_TURN_MS = 12_000;
+
+export function quizTimeLeft(p: QuizProgress, now: number, questionMs: number = QUIZ_QUESTION_MS): number {
+  return Math.max(0, p.questionStartedAt + questionMs - now);
 }
 
 export const QUIZ_LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'] as const;

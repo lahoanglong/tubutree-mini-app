@@ -1,0 +1,60 @@
+/*
+ * Bản đồ minh hoạ Đoán Xuất Xứ: chỉ web từ 1024px, cột bên phải các lựa chọn. File riêng của web (Mini App không có bản đồ) nên không nằm trong
+ * mini-game.css dùng chung, để gói Mini App không mang CSS bản đồ.
+ */
+@media (min-width: 1024px) {
+  .tubu-mg-origin-layout[data-map='true'] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 200px;
+    align-items: start;
+    gap: var(--space-inline-lg);
+  }
+}
+.tubu-mg-map {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+  margin: 0;
+}
+.tubu-mg-map svg {
+  display: block;
+  width: 100%;
+  max-width: 240px;
+  height: auto;
+  margin: 0 auto;
+}
+.tubu-mg-map-land {
+  fill: var(--color-bg-subtle);
+  stroke: var(--color-border-default);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.tubu-mg-map-island {
+  fill: var(--color-bg-surface);
+  stroke: var(--color-border-strong);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+.tubu-mg-map-land[data-on='true'],
+.tubu-mg-map-island[data-on='true'] {
+  fill: var(--color-status-success-bg);
+  stroke: var(--color-status-success-fg);
+  stroke-width: 2;
+}
+.tubu-mg-map-island-n {
+  fill: var(--color-text-primary);
+  font-size: 3px;
+  font-weight: var(--type-label-weight);
+  text-anchor: middle;
+  dominant-baseline: central;
+}
+.tubu-mg-map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 2px var(--space-inline-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}

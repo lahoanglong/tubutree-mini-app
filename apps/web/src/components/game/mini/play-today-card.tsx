@@ -2,14 +2,14 @@
 
 import { useId } from 'react';
 import Link from 'next/link';
-import { ChevronRight, CircleHelp, Recycle, type LucideIcon } from 'lucide-react';
+import { ChevronRight, CircleHelp, MapPin, Puzzle, Recycle, ShoppingBasket, type LucideIcon } from 'lucide-react';
 import type { MiniTodayResponse } from '@tubutree/shared-types';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniGameDesc, miniGameTitle, miniPlayPath, miniRowStatus, playableToday, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
 import { Card, Heading, Icon, Text } from '@/components/mini';
 import './mini-game.css';
 
-const GAME_ICON: Record<PlayableMiniGame, LucideIcon> = { daily_quiz: CircleHelp, sort: Recycle };
+const GAME_ICON: Record<PlayableMiniGame, LucideIcon> = { daily_quiz: CircleHelp, sort: Recycle, match: Puzzle, origin: MapPin, basket: ShoppingBasket };
 
 /**
  * Thẻ "Chơi hôm nay" ở Vườn Xanh (chỉ khi máy chủ bật `game.mini.enabled`): thay khối đố vui cũ và hai thẻ arcade. Mỗi game một dòng gọn

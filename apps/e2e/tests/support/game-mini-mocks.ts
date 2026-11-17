@@ -1,9 +1,12 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import type { MiniStartResponse, MiniSubmitResponse, MiniTodayResponse } from '@tubutree/shared-types';
+import type { MiniBasketTask, MiniChoiceItem, MiniGameId, MiniMatchCard, MiniProductCard, MiniStartResponse, MiniSubmitResponse, MiniTodayResponse } from '@tubutree/shared-types';
 import { gameCopy } from '../../../../packages/app-core/src/game-mini/copy';
 import { reply, type MockApi } from './mock-api';
 
-/** Dữ liệu và thao tác chung của spec game mini (Đố Xanh, Đúng Thùng) ở Mini App và web: API mock như máy chủ thật khi cờ game.mini.* bật. */
+/**
+ * Dữ liệu và thao tác chung của spec game mini (Đố Xanh, Đúng Thùng, Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc) ở Mini App và web: API mock như máy chủ
+ * thật khi cờ game.mini.* bật.
+ */
 
 export { gameCopy };
 
@@ -13,6 +16,9 @@ export function miniToday(over: Partial<MiniTodayResponse> = {}): MiniTodayRespo
     games: [
       { game: 'sort', items: 10, timeLimitMs: 45_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 },
       { game: 'daily_quiz', items: 3, timeLimitMs: 60_000, rewardedRoundsPerDay: 1, rewardedRoundsLeft: 1, playedToday: 0 },
+      { game: 'match', items: 6, timeLimitMs: 60_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 },
+      { game: 'origin', items: 5, timeLimitMs: 60_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 },
+      { game: 'basket', items: 1, timeLimitMs: 45_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 },
     ],
     rewardEligible: true,
     noRewardReason: null,
@@ -22,7 +28,7 @@ export function miniToday(over: Partial<MiniTodayResponse> = {}): MiniTodayRespo
   };
 }
 
-const round = (game: 'daily_quiz' | 'sort', content: MiniStartResponse['content'], over: Partial<MiniStartResponse> = {}): MiniStartResponse => {
+const round = (game: MiniGameId, content: MiniStartResponse['content'], over: Partial<MiniStartResponse> = {}): MiniStartResponse => {
   const now = Date.now();
   return {
     game,
@@ -125,10 +131,206 @@ export function sortResult(over: Partial<MiniSubmitResponse> = {}): MiniSubmitRe
   };
 }
 
+const SOURCE_B = 'https://www.vinmec.com/vie/bai-viet/nguyen-lieu-tu-nhien';
+
+/** Ghép Cặp: 12 thẻ đã xáo; `MATCH_PAIRS` là đáp án đúng [nguyên liệu, công dụng] theo mã thẻ (máy chủ giữ, spec dùng để chơi). */
+export const MATCH_CARDS: MiniMatchCard[] = [
+  { cardId: 'c01', label: 'Bồ kết', side: 'ingredient' },
+  { cardId: 'c02', label: 'Khử mùi tủ lạnh', side: 'use' },
+  { cardId: 'c03', label: 'Giấm gạo', side: 'ingredient' },
+  { cardId: 'c04', label: 'Gội đầu, làm sạch tóc', side: 'use' },
+  { cardId: 'c05', label: 'Vỏ bưởi', side: 'ingredient' },
+  { cardId: 'c06', label: 'Phủ bọc thực phẩm thay màng bọc nhựa', side: 'use' },
+  { cardId: 'c07', label: 'Baking soda', side: 'ingredient' },
+  { cardId: 'c08', label: 'Tẩy cặn vôi trong ấm đun nước', side: 'use' },
+  { cardId: 'c09', label: 'Sáp ong', side: 'ingredient' },
+  { cardId: 'c10', label: 'Rửa chén thay mút nhựa', side: 'use' },
+  { cardId: 'c11', label: 'Xơ mướp', side: 'ingredient' },
+  { cardId: 'c12', label: 'Tinh dầu đuổi muỗi, thơm nhà', side: 'use' },
+];
+export const MATCH_PAIRS: [string, string][] = [
+  ['c01', 'c04'],
+  ['c03', 'c08'],
+  ['c05', 'c12'],
+  ['c07', 'c02'],
+  ['c09', 'c06'],
+  ['c11', 'c10'],
+];
+const label = (id: string) => MATCH_CARDS.find((c) => c.cardId === id)!.label;
+
+export function matchResult(over: Partial<MiniSubmitResponse> = {}): MiniSubmitResponse {
+  return {
+    game: 'match',
+    roundId: 'r-match',
+    correct: 5,
+    total: 6,
+    durationMs: 30_000,
+    rewarded: true,
+    noRewardReason: null,
+    baseWater: 8,
+    basePoints: 0,
+    water: 8,
+    points: 0,
+    capped: [],
+    totalSeeds: 150,
+    checkIn: null,
+    review: {
+      game: 'match',
+      items: MATCH_PAIRS.map(([a, b], i) => ({
+        contentId: `m${i + 1}`,
+        correct: i !== 2,
+        ingredient: label(a),
+        use: label(b),
+        explanation: `Dòng khoa học của cặp ${i + 1}`,
+        sourceUrl: SOURCE_B,
+        productSlug: i === 0 ? 'dau-goi-bo-ket' : i === 4 ? 'giay-sap-ong-boc-thuc-pham' : null,
+      })),
+    },
+    ...over,
+  };
+}
+
+export const ORIGIN_PRODUCT: MiniProductCard = { slug: 'mat-ong-hoa-ca-phe', name: 'Mật ong hoa cà phê 500ml', imageUrl: null, price: 189_000, inStock: true };
+
+export const ORIGIN_ITEMS: MiniChoiceItem[] = [
+  { id: 'o1', prompt: 'Chè Shan tuyết cổ thụ', options: ['Hà Giang', 'Cà Mau', 'Bến Tre', 'Đà Lạt'], product: null },
+  { id: 'o2', prompt: 'Cà phê Robusta', options: ['Sa Pa', 'Buôn Ma Thuột', 'Hạ Long', 'Huế'], product: null },
+  { id: 'o3', prompt: 'Nước mắm truyền thống', options: ['Mộc Châu', 'Lạng Sơn', 'Phú Quốc', 'Điện Biên'], product: null },
+  { id: 'o4', prompt: 'Quế', options: ['Cần Thơ', 'Bạc Liêu', 'Vinh', 'Văn Yên'], product: null },
+  { id: 'o5', prompt: 'Mật ong hoa cà phê', options: ['Đắk Lắk', 'Hà Nội', 'Huế', 'Hạ Long'], product: ORIGIN_PRODUCT },
+];
+
+export function originResult(over: Partial<MiniSubmitResponse> = {}): MiniSubmitResponse {
+  return {
+    game: 'origin',
+    roundId: 'r-origin',
+    correct: 4,
+    total: 5,
+    durationMs: 25_000,
+    rewarded: true,
+    noRewardReason: null,
+    baseWater: 8,
+    basePoints: 0,
+    water: 8,
+    points: 0,
+    capped: [],
+    totalSeeds: 150,
+    checkIn: null,
+    review: {
+      game: 'origin',
+      items: ORIGIN_ITEMS.map((it, i) => ({
+        contentId: it.id,
+        prompt: it.prompt,
+        correct: i !== 3,
+        given: i === 3 ? 0 : i,
+        expected: i,
+        explanation: `Vùng của ${it.prompt}`,
+        sourceUrl: SOURCE_B,
+        productSlug: it.product?.slug ?? null,
+      })),
+    },
+    ...over,
+  };
+}
+
+const p = (slug: string, name: string, price: number): MiniProductCard => ({ slug, name, imageUrl: null, price, inStock: true });
+export const BASKET_TASK: MiniBasketTask = {
+  id: 'b1',
+  task: 'Rửa chén bát cho cả nhà mà không dùng hoá chất mạnh',
+  products: [
+    p('nen-thom-sap-dau-nanh', 'Nến thơm sáp đậu nành', 129_000),
+    p('nuoc-rua-chen-bo-ket', 'Nước rửa chén bồ kết 500ml', 59_000),
+    p('binh-giu-nhiet-inox', 'Bình giữ nhiệt inox 500ml', 210_000),
+    p('xo-muop-rua-chen', 'Xơ mướp rửa chén (2 miếng)', 25_000),
+    p('tui-vai-canvas', 'Túi vải canvas đi chợ', 89_000),
+    p('khan-lau-soi-tre', 'Khăn lau sợi tre', 45_000),
+  ],
+};
+export const BASKET_SET = ['nuoc-rua-chen-bo-ket', 'xo-muop-rua-chen', 'khan-lau-soi-tre'];
+/** Món của bộ đúng hết hàng ở danh mục lúc thêm giỏ (thẻ trong đề vẫn ghi còn hàng: nội dung ván chụp lúc bắt đầu). */
+export const BASKET_SOLD_OUT = 'xo-muop-rua-chen';
+
+export function basketResult(over: Partial<MiniSubmitResponse> = {}): MiniSubmitResponse {
+  return {
+    game: 'basket',
+    roundId: 'r-basket',
+    correct: 0,
+    total: 1,
+    durationMs: 15_000,
+    rewarded: true,
+    noRewardReason: null,
+    baseWater: 2,
+    basePoints: 0,
+    water: 2,
+    points: 0,
+    capped: [],
+    totalSeeds: 150,
+    checkIn: null,
+    review: {
+      game: 'basket',
+      items: [
+        {
+          contentId: 'b1',
+          correct: false,
+          explanation: 'Bồ kết tạo bọt dịu, xơ mướp và khăn sợi tre thay mút nhựa.',
+          sourceUrl: SOURCE_B,
+          correctSlugs: BASKET_SET,
+          picks: [
+            { slug: 'nuoc-rua-chen-bo-ket', correct: true, reason: null },
+            { slug: 'xo-muop-rua-chen', correct: true, reason: null },
+            { slug: 'tui-vai-canvas', correct: false, reason: 'Túi vải dùng đi chợ, không dùng rửa chén.' },
+          ],
+        },
+      ],
+    },
+    ...over,
+  };
+}
+
+/**
+ * Danh mục và giỏ cho màn kết quả đợt B: `GET /products?slugs=` trả thẻ hiện hành (món `BASKET_SOLD_OUT` hết hàng), `POST /cart/items/batch`
+ * ghi lại thân lệnh. Trả mảng thân các lần thêm giỏ.
+ */
+export function mockMiniShop(api: MockApi) {
+  const cartPosts: { items: { variationId: string; quantity: number }[] }[] = [];
+  const names = new Map([...BASKET_TASK.products, ORIGIN_PRODUCT].map((x) => [x.slug, x.name]));
+  api.get('/products', (ctx: { call: { query: URLSearchParams } }) => {
+    const slugs = (ctx.call.query.get('slugs') ?? '').split(',').filter(Boolean);
+    const data = slugs.map((slug) => ({
+      id: `p-${slug}`,
+      slug,
+      brand: 'Tubu Tree',
+      name: names.get(slug) ?? (slug === 'dau-goi-bo-ket' ? 'Dầu gội bồ kết 300ml' : 'Giấy sáp ong bọc thực phẩm'),
+      thumbnail: null,
+      basePrice: 99_000,
+      salePrice: null,
+      repVariationId: `v-${slug}`,
+      isFeatured: false,
+      inStock: slug !== BASKET_SOLD_OUT,
+    }));
+    return { data, total: data.length, page: 1, limit: data.length };
+  });
+  api.post('/cart/items/batch', (ctx: { call: { body: unknown } }) => {
+    cartPosts.push(ctx.call.body as (typeof cartPosts)[number]);
+    return { items: [], subtotal: 0 };
+  });
+  api.allowUnmocked('GET /cart', 'GET /cart/count');
+  return { cartPosts };
+}
+
 /** Bật game mini: "Chơi hôm nay", bắt đầu và nộp từng game; trả mảng thân các lần nộp để spec kiểm đáp án gửi đi. */
 export function mockMiniGames(
   api: MockApi,
-  opts: { today?: MiniTodayResponse; guest?: 'NOT_LOGGED_IN' | 'NOT_REAL_USER'; quiz?: MiniSubmitResponse; sort?: MiniSubmitResponse; failFirstSubmit?: boolean } = {},
+  opts: {
+    today?: MiniTodayResponse;
+    guest?: 'NOT_LOGGED_IN' | 'NOT_REAL_USER';
+    quiz?: MiniSubmitResponse;
+    sort?: MiniSubmitResponse;
+    match?: MiniSubmitResponse;
+    origin?: MiniSubmitResponse;
+    basket?: MiniSubmitResponse;
+    failFirstSubmit?: boolean;
+  } = {},
 ) {
   const submits: { game: string; body: Record<string, unknown> }[] = [];
   const guest = opts.guest;
@@ -137,18 +339,27 @@ export function mockMiniGames(
   api.get('/game/mini/today', () => opts.today ?? (guest ? miniToday({ rewardEligible: false, noRewardReason: guest }) : miniToday()));
   api.post('/game/mini/daily_quiz/start', () => round('daily_quiz', { game: 'daily_quiz', items: QUIZ_ITEMS }, startOver));
   api.post('/game/mini/sort/start', () => round('sort', { game: 'sort', bins: ['recycle', 'food', 'other'], items: SORT_ITEMS }, startOver));
+  api.post('/game/mini/match/start', () => round('match', { game: 'match', cards: MATCH_CARDS }, startOver));
+  api.post('/game/mini/origin/start', () => round('origin', { game: 'origin', items: ORIGIN_ITEMS }, startOver));
+  api.post('/game/mini/basket/start', () => round('basket', { game: 'basket', task: BASKET_TASK }, startOver));
+  const results: Record<string, () => MiniSubmitResponse> = {
+    daily_quiz: () => opts.quiz ?? quizResult(),
+    sort: () => opts.sort ?? sortResult(),
+    match: () => opts.match ?? matchResult(),
+    origin: () => opts.origin ?? originResult(),
+    basket: () => opts.basket ?? basketResult(),
+  };
   let failed = false;
-  const submit = (game: 'daily_quiz' | 'sort') => (ctx: { call: { body: unknown } }) => {
+  const submit = (game: MiniGameId) => (ctx: { call: { body: unknown } }) => {
     submits.push({ game, body: ctx.call.body as Record<string, unknown> });
     if (opts.failFirstSubmit && !failed) {
       failed = true;
       return reply(503, { statusCode: 503, message: 'Service Unavailable' });
     }
     const guestResult = guest ? { rewarded: false, noRewardReason: guest, water: 0, points: 0, checkIn: null, ...(guest === 'NOT_LOGGED_IN' ? { roundId: null } : {}) } : {};
-    return game === 'daily_quiz' ? { ...(opts.quiz ?? quizResult()), ...guestResult } : { ...(opts.sort ?? sortResult()), ...guestResult };
+    return { ...results[game]!(), ...guestResult };
   };
-  api.post('/game/mini/daily_quiz/submit', submit('daily_quiz'));
-  api.post('/game/mini/sort/submit', submit('sort'));
+  for (const game of ['daily_quiz', 'sort', 'match', 'origin', 'basket'] as const) api.post(`/game/mini/${game}/submit`, submit(game));
   return { submits };
 }
 
@@ -165,6 +376,25 @@ export async function playQuiz(page: Page) {
     await page.getByRole('button', { name: gameCopy(i === 2 ? 'quiz.finish' : 'quiz.next') }).click();
   }
 }
+
+/** Ghép đủ 6 cặp bằng chạm: nguyên liệu rồi công dụng. */
+export async function playMatch(page: Page) {
+  for (const [a, b] of MATCH_PAIRS) {
+    await page.getByTestId(`mini-match-card-${MATCH_CARDS.findIndex((c) => c.cardId === a)}`).click();
+    await page.getByTestId(`mini-match-card-${MATCH_CARDS.findIndex((c) => c.cardId === b)}`).click();
+  }
+}
+
+/** Chơi các lượt Đoán Xuất Xứ còn lại từ lượt `from`: chọn vùng `pick(i)` rồi "Lượt tiếp"/"Nộp bài". */
+export async function playOrigin(page: Page, pick: (i: number) => number = (i) => i % 4, from = 0) {
+  for (let i = from; i < ORIGIN_ITEMS.length; i++) {
+    await expect(page.getByTestId('mini-origin-prompt')).toHaveText(ORIGIN_ITEMS[i]!.prompt);
+    await page.getByTestId(`mini-origin-option-${pick(i)}`).click();
+    await page.getByRole('button', { name: gameCopy(i === ORIGIN_ITEMS.length - 1 ? 'quiz.finish' : 'origin.next') }).click();
+  }
+}
+
+export const basketIndex = (slug: string) => BASKET_TASK.products.findIndex((x) => x.slug === slug);
 
 export const sortProgress = (page: Page) => page.getByTestId('mini-status').getByText(/^\d+\/10$/);
 
