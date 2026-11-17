@@ -259,6 +259,7 @@ const SubscriptionsTab = dynamic(() => import('@/components/admin/subscriptions-
 const OpsHealthTab = dynamic(() => import('@/components/admin/ops-health-tab').then((m) => m.OpsHealthTab), { loading: tabLoading });
 const MssConnectionCard = dynamic(() => import('./mss-connection-card').then((m) => m.MssConnectionCard));
 const MssOrderEventsCard = dynamic(() => import('./mss-order-events-card').then((m) => m.MssOrderEventsCard));
+const MssCatalogCard = dynamic(() => import('./mss-catalog-card').then((m) => m.MssCatalogCard));
 const AttendanceTab = dynamic(() => import('@/components/admin/attendance-tab').then((m) => m.AttendanceTab), { loading: tabLoading });
 const StaffRosterTab = dynamic(() => import('@/components/admin/staff-roster-tab').then((m) => m.StaffRosterTab), { loading: tabLoading });
 const ShiftApprovalTab = dynamic(() => import('@/components/admin/shift-approval-tab').then((m) => m.ShiftApprovalTab), { loading: tabLoading });
@@ -830,6 +831,7 @@ export default function AdminPage() {
           {active === 'opsHealth' && <OpsHealthTab onOpenOrder={openOrderByCode} isAdmin={isAdmin} />}
           {active === 'opsHealth' && <MssConnectionCard />}
           {active === 'opsHealth' && isAdmin && <MssOrderEventsCard />}
+          {active === 'opsHealth' && isAdmin && <MssCatalogCard />}
           {active === 'attendance' && <AttendanceTab />}
           {active === 'staffRoster' && <StaffRosterTab meId={user?.id} />}
           {active === 'shiftApproval' && <ShiftApprovalTab />}

@@ -9,6 +9,7 @@ import {
 } from '@tubutree/shared-types';
 import { apiFetch } from './client-api';
 import { readFirstTouchCookie } from './entry-source';
+import { isPreviewPath } from './site';
 
 interface QueuedEvent {
   eventId: string;
@@ -56,6 +57,7 @@ export const WEB_DYNAMIC_ROUTES = [
   '/product/:slug',
   '/s/:slug',
   '/san-pham/:slug',
+  '/san-pham/_preview/:slug',
   '/tai-khoan/don-hang/:code',
   '/thanh-toan/chuyen-khoan/:code',
 ] as const;
@@ -139,8 +141,12 @@ export function getSessionId(now: number = Date.now()): string {
   return next.id;
 }
 
-/** Khách bật Do Not Track: web không gửi sự kiện hành vi nào, chỉ còn sự kiện máy chủ (đơn, thanh toán). */
+/**
+ * Khách bật Do Not Track: web không gửi sự kiện hành vi nào, chỉ còn sự kiện máy chủ (đơn, thanh toán). Trang xem trước MSS cũng không gửi:
+ * người xem là người soạn nội dung, không phải khách, và mọi thành phần trên trang (kể cả ScreenTracker ở layout gốc) đi qua hàm này.
+ */
 export function trackingDisabled(): boolean {
+  if (typeof window !== 'undefined' && isPreviewPath(window.location?.pathname)) return true;
   if (typeof navigator === 'undefined') return false;
   const nav = navigator as Navigator & { msDoNotTrack?: string };
   const w = typeof window !== 'undefined' ? (window as Window & { doNotTrack?: string }) : undefined;

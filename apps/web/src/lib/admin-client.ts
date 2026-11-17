@@ -2216,6 +2216,40 @@ export interface MssOrderEventsCard {
 export const getMssOrderEvents = () => apiFetch<MssOrderEventsCard>('/admin/mss/order-events');
 /** Dừng mọi tin đơn MSS còn chờ gửi; tin đã tới MSS không rút lại được. */
 export const cancelPendingMssOrderEvents = () => apiFetch<{ cancelled: number }>('/admin/mss/order-events/cancel-pending', { method: 'POST' });
+
+export type MssCatalogSkipReason = 'invalid_doc' | 'no_pancake_id' | 'unknown_product' | 'stale_version' | 'not_found' | 'apply_failed';
+export type MssCatalogTrimReason = 'media_rejected' | 'html_emptied' | 'string_truncated' | 'array_truncated' | 'unknown_category_slug';
+/** Thẻ "Nội dung từ MSS" (MssCatalogOpsService.card ở apps/api/src/modules/integrations/mss/catalog/mss-catalog.controller.ts). */
+export interface MssCatalogOpsCard {
+  /** Giá trị cờ mss.catalog_enrichment_enabled. */
+  enabled: boolean;
+  /** Cờ bật + đủ biến MSS + MSS công bố năng lực catalog.enrichment. */
+  effective: boolean;
+  lastRunAt: string | null;
+  lastFinishedAt: string | null;
+  lastFullAt: string | null;
+  watermark: string | null;
+  lastStatus: 'ok' | 'partial' | 'failed' | 'skipped' | null;
+  lastTrigger: 'cron' | 'full' | 'doorbell' | 'admin' | null;
+  lastError: string | null;
+  lastStats: {
+    kind: 'incremental' | 'full' | 'ids';
+    pages: number;
+    received: number;
+    applied: number;
+    unchanged: number;
+    skipped: Partial<Record<MssCatalogSkipReason, number>>;
+    trimmed: Partial<Record<MssCatalogTrimReason, number>>;
+  } | null;
+  published: number;
+  unpublished: number;
+  removed: number;
+  /** Mã chuông đang chờ kéo; null khi không đọc được hàng đợi. */
+  pending: number | null;
+}
+export const getMssCatalog = () => apiFetch<MssCatalogOpsCard>('/admin/mss/catalog');
+/** Xếp một lượt kéo toàn bộ nội dung MSS (202). Cờ chưa có hiệu lực thì 409 kèm lý do tiếng Việt. */
+export const pullMssCatalog = () => apiFetch<{ queued: true }>('/admin/mss/catalog/pull', { method: 'POST' });
 /** Gửi một email thử tới các địa chỉ nhận báo động (ADMIN, tối đa 5 lần/phút). Lỗi trả về câu tiếng Việt đã che bí mật. */
 export const sendOpsTestEmail = () => apiFetch<{ ok: true; message: string }>('/admin/ops/alert-email/test', { method: 'POST' });
 /** Đồng bộ danh mục Pancake ngay (không ghi đè tồn kho trừ khi `withStock`). */

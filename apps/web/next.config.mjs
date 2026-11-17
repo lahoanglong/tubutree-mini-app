@@ -5,6 +5,7 @@ import { buildCatalogRedirects } from './src/lib/catalog-redirects.mjs';
 import { sentryOrigin } from './src/lib/sentry-origin.mjs';
 import { buildCsp } from './src/lib/csp.mjs';
 import { buildMiniappRedirects } from './src/lib/miniapp-redirects.mjs';
+import { NOT_PREVIEW_SOURCE, PREVIEW_SOURCES, previewFrameAncestors } from './src/lib/preview-frame-ancestors.mjs';
 
 const require = createRequire(import.meta.url);
 const { HTML_LIMITED_BOT_UA_RE } = require('next/dist/shared/lib/router/utils/html-bots.js');
@@ -38,6 +39,22 @@ const sentryConnect = sentryOrigin(process.env.NEXT_PUBLIC_SENTRY_DSN);
  * chặn được script từ host lạ, tức chặn đường nhúng mã bên ngoài. Báo cáo vi phạm gửi về API (POST /api/csp-report), xem src/lib/csp.mjs.
  */
 const csp = buildCsp({ apiBaseUrl, sentryConnect, dev: process.env.NODE_ENV !== 'production' });
+
+/**
+ * Trang xem trước nội dung nháp MSS (`/san-pham/_preview`, hợp đồng mục 1.5) là trang DUY NHẤT nhúng được trong iframe, và chỉ từ các origin
+ * khai ở biến build MSS_PREVIEW_FRAME_ANCESTORS (rỗng hoặc sai thì `'none'`). Chặn bằng CSP `frame-ancestors` thật (không Report-Only).
+ */
+const previewAncestors = previewFrameAncestors(process.env.MSS_PREVIEW_FRAME_ANCESTORS, { production: process.env.NODE_ENV === 'production' });
+const previewCsp = buildCsp({ apiBaseUrl, sentryConnect, dev: process.env.NODE_ENV !== 'production', frameAncestors: previewAncestors });
+
+/** Header bảo mật chung của mọi trang (trừ chính sách khung, khác nhau giữa trang thường và trang xem trước). */
+const commonSecurityHeaders = (policy) => [
+  { key: 'X-Content-Type-Options', value: 'nosniff' },
+  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
+  { key: 'Content-Security-Policy-Report-Only', value: policy.policy },
+  ...(policy.reportingEndpoints ? [{ key: 'Reporting-Endpoints', value: policy.reportingEndpoints }] : []),
+];
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
@@ -85,20 +102,23 @@ const nextConfig = {
   },
   // API đã có `helmet()` (apps/api/src/main.ts) nhưng web (trang khách hàng/admin thấy
   // trực tiếp) trước giờ không có header bảo mật nào — Caddy chỉ reverse-proxy thuần,
-  // không thêm header. Áp cho mọi route.
+  // không thêm header. Áp cho mọi route; riêng trang xem trước MSS bỏ X-Frame-Options DENY (header này không có
+  // dạng "cho phép origin X") và thay bằng CSP frame-ancestors. Hai `source` bù trừ nhau: xem preview-frame-ancestors.mjs và spec của nó.
   async headers() {
     return [
       {
-        source: '/:path*',
-        headers: [
-          { key: 'X-Frame-Options', value: 'DENY' },
-          { key: 'X-Content-Type-Options', value: 'nosniff' },
-          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self)' },
-          { key: 'Content-Security-Policy-Report-Only', value: csp.policy },
-          ...(csp.reportingEndpoints ? [{ key: 'Reporting-Endpoints', value: csp.reportingEndpoints }] : []),
-        ],
+        source: NOT_PREVIEW_SOURCE,
+        headers: [{ key: 'X-Frame-Options', value: 'DENY' }, ...commonSecurityHeaders(csp)],
       },
+      ...PREVIEW_SOURCES.map((source) => ({
+        source,
+        headers: [
+          ...commonSecurityHeaders(previewCsp),
+          { key: 'Content-Security-Policy', value: `frame-ancestors ${previewAncestors}` },
+          { key: 'Cache-Control', value: 'no-store' },
+          { key: 'X-Robots-Tag', value: 'noindex, nofollow' },
+        ],
+      })),
     ];
   },
 };

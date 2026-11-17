@@ -39,6 +39,9 @@ ENV NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL
 ENV NEXT_PUBLIC_TENANT_ROOT_DOMAIN=$NEXT_PUBLIC_TENANT_ROOT_DOMAIN
 ENV NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN
 ENV NEXT_PUBLIC_SENTRY_ENVIRONMENT=$NEXT_PUBLIC_SENTRY_ENVIRONMENT
+# Origin được nhúng /san-pham/_preview (CSP frame-ancestors, ghi vào routes-manifest lúc build). Rỗng hoặc sai dạng = không ai nhúng được.
+ARG MSS_PREVIEW_FRAME_ANCESTORS
+ENV MSS_PREVIEW_FRAME_ANCESTORS=$MSS_PREVIEW_FRAME_ANCESTORS
 ENV NEXT_STANDALONE=1
 
 # NEXT_PUBLIC_SITE_URL là gốc của canonical, sitemap, robots, og:url và JSON-LD (nhúng lúc build). Thiếu hoặc trỏ host app.* thì mọi trang

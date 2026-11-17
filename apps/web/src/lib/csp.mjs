@@ -17,8 +17,9 @@ export function cspReportUrl(apiBaseUrl) {
  * Trình duyệt hỗ trợ `report-to` (Chromium) gửi qua Reporting API (application/reports+json) và bỏ qua `report-uri` khi có cả hai;
  * trình duyệt chưa hỗ trợ thì dùng `report-uri` (application/csp-report). API nhận cả hai dạng.
  * `'unsafe-eval'` chỉ cho bản dev: `next dev` chạy mã qua eval (source map, Fast Refresh), bản build production thì không.
+ * `frameAncestors` khác `'none'` chỉ cho trang xem trước MSS (nơi đó có chính sách chặn thật cùng giá trị), để bản Report-Only không báo vi phạm mỗi lần MSS nhúng.
  */
-export function buildCsp({ apiBaseUrl, sentryConnect = '', dev = false }) {
+export function buildCsp({ apiBaseUrl, sentryConnect = '', dev = false, frameAncestors = "'none'" }) {
   let apiOrigin = '';
   try {
     apiOrigin = new URL(apiBaseUrl ?? '').origin;
@@ -30,7 +31,7 @@ export function buildCsp({ apiBaseUrl, sentryConnect = '', dev = false }) {
     "default-src 'self'",
     "base-uri 'self'",
     "object-src 'none'",
-    "frame-ancestors 'none'",
+    `frame-ancestors ${frameAncestors}`,
     "form-action 'self'",
     `script-src 'self' 'unsafe-inline'${dev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",

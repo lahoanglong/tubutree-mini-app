@@ -128,6 +128,23 @@ describe('web analytics', () => {
     expect(apiFetch).not.toHaveBeenCalled();
   });
 
+  it('trang xem trước MSS (/san-pham/_preview...): không xếp hàng, không gửi gì, kể cả screen_viewed của layout gốc', async () => {
+    for (const path of ['/san-pham/_preview?token=x&frame=miniapp', '/san-pham/_preview/nuoc-rua-chen?token=x']) {
+      window.history.replaceState(null, '', path);
+      trackScreenView(window.location.pathname);
+      trackPurchase('pdp_action', { action: 'share', productSlug: 'a' });
+      trackOncePerSession(`home:${path}`, 'home_block_viewed', { block: 'x' });
+    }
+    await vi.advanceTimersByTimeAsync(10_000);
+    await flushWebEvents();
+    expect(apiFetch).not.toHaveBeenCalled();
+    window.history.replaceState(null, '', '/san-pham/_previewx');
+    trackScreenView(window.location.pathname);
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(sentEvents().map((e) => e.eventName)).toEqual(['screen_viewed']);
+    window.history.replaceState(null, '', '/');
+  });
+
   it('trackOncePerSession: một lần mỗi khoá mỗi phiên, kể cả sau tải lại trang', async () => {
     trackOncePerSession('home:flash', 'home_block_viewed', { block: 'flash' });
     trackOncePerSession('home:flash', 'home_block_viewed', { block: 'flash' });
@@ -224,7 +241,8 @@ describe('routeTemplate', () => {
         const p = join(dir, name);
         if (statSync(p).isDirectory()) walk(p);
         else if (name === 'page.tsx') {
-          const route = '/' + relative(appDir, dir).split(sep).filter((s) => !/^\(.*\)$/.test(s)).join('/');
+          // Thư mục `%5Fpreview` là đường `/_preview` (Next mã hoá `_` để thư mục không thành thư mục riêng tư).
+          const route = '/' + relative(appDir, dir).split(sep).filter((s) => !/^\(.*\)$/.test(s)).map(decodeURIComponent).join('/');
           if (route.includes('[')) found.push(route.replace(/\[\.{0,3}([^\]]+)\]/g, ':$1'));
         }
       }

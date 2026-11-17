@@ -1,0 +1,36 @@
+{
+  "slug": "nuoc-rua-chen-bo-ket-mss-e2e",
+  "tokens": { "ok": "e2e-preview-ok", "expired": "e2e-preview-expired", "down": "e2e-preview-down", "missing": "e2e-preview-missing" },
+  "mediaHost": "media.mss-e2e.test",
+  "preview": { "version": 7, "expiresAt": "2099-01-01T01:15:00.000Z" },
+  "product": {
+    "id": "p-mss-e2e",
+    "slug": "nuoc-rua-chen-bo-ket-mss-e2e",
+    "brand": "Xanh Việt",
+    "name": "Nước rửa chén bồ kết vỏ bưởi (nội dung MSS)",
+    "shortDesc": "Sạch dầu mỡ, dịu tay, an toàn cho bé.",
+    "description": "<p>Nước rửa chén từ <strong>bồ kết và vỏ bưởi</strong>, sạch dầu mỡ mà dịu tay.</p><ul><li>Không paraben</li><li>Không hương liệu tổng hợp</li><li>Phân huỷ sinh học</li></ul><script>window.__pwned = 'script'</script><p><img src=\"x\" onerror=\"window.__pwned = 'onerror'\">Rửa với nước ấm cho sạch nhanh.</p><p><a href=\"javascript:window.__pwned = 'js'\">Mẹo dùng</a> tiết kiệm: pha loãng 1:3.</p>",
+    "images": [
+      "https://media.mss-e2e.test/nrc/1.jpg",
+      "https://media.mss-e2e.test/nrc/2.jpg",
+      "https://media.mss-e2e.test/nrc/3.jpg",
+      "https://media.mss-e2e.test/nrc/4.jpg",
+      "https://media.mss-e2e.test/nrc/5.jpg"
+    ],
+    "videos": ["https://media.mss-e2e.test/nrc/gioi-thieu.mp4"],
+    "thumbnail": "https://media.mss-e2e.test/nrc/1.jpg",
+    "basePrice": 89000,
+    "salePrice": null,
+    "certifications": ["Không paraben", "Thuần chay"],
+    "variations": [{ "id": "v-mss-e2e-500", "sku": "NRC-500", "name": "Chai 500ml", "retailPrice": 89000, "salePrice": null, "stock": 12 }],
+    "ratingAvg": 4.8,
+    "reviewCount": 3,
+    "sold": 0,
+    "ingredients": [
+      { "name": "Bồ kết", "benefit": "Làm sạch dịu nhẹ" },
+      { "name": "Tinh dầu vỏ bưởi", "percentage": "2%", "benefit": "Khử mùi tanh" }
+    ],
+    "fulfilment": "TUBU",
+    "fulfiller": { "kind": "TUBU", "name": "Tubu Tree", "shippingFee": null, "freeShipFrom": null }
+  }
+}

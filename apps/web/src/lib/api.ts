@@ -194,6 +194,39 @@ export async function getProduct(slug: string): Promise<ProductDetail | null> {
   return product && withProductCopyFallback(product);
 }
 
+/** Kết quả trang xem trước nội dung nháp MSS: `expired` (token sai/hết hạn), `missing` (sản phẩm chưa có trên Tubu), `unavailable` (MSS hay API chưa trả được). */
+export type PreviewProductResult =
+  | { kind: 'ok'; product: ProductDetail; preview: { version: number; expiresAt: string } }
+  | { kind: 'expired' }
+  | { kind: 'missing' }
+  | { kind: 'unavailable' };
+
+/**
+ * Trang sản phẩm ghép nội dung NHÁP của MSS theo token (GET /mss/preview/product, hợp đồng mục 1.5). Không bộ đệm nào giữ: token sống 15 phút
+ * và bản nháp đổi liên tục. Không ném: mọi lỗi thành trạng thái để trang xem trước nói rõ cho người soạn ở MSS.
+ */
+export async function getPreviewProduct(token: string): Promise<PreviewProductResult> {
+  const throttleBypass = typeof window === 'undefined' ? process.env.THROTTLE_BYPASS_TOKEN : undefined;
+  let res: Response;
+  try {
+    res = await fetch(`${BASE}/mss/preview/product?token=${encodeURIComponent(token)}`, {
+      cache: 'no-store',
+      ...(throttleBypass ? { headers: { 'x-throttle-bypass': throttleBypass } } : {}),
+    });
+  } catch {
+    return { kind: 'unavailable' };
+  }
+  if (res.status === 404) {
+    const body = (await res.json().catch(() => null)) as { error?: unknown } | null;
+    return body?.error === 'not_found' ? { kind: 'missing' } : { kind: 'expired' };
+  }
+  if (!res.ok) return { kind: 'unavailable' };
+  const json = (await res.json().catch(() => null)) as (ProductDetail & { preview?: { version: number; expiresAt: string } }) | null;
+  if (!json || typeof json.slug !== 'string' || !Array.isArray(json.variations) || !json.preview) return { kind: 'unavailable' };
+  const { preview, ...product } = resolveServedMedia(json, PUBLIC_API_BASE);
+  return { kind: 'ok', product: withProductCopyFallback(product as ProductDetail), preview: preview! };
+}
+
 export interface BrandCount {
   brand: string;
   count: number;

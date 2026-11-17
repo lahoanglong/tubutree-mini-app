@@ -104,6 +104,8 @@ services:
         # Rỗng = web không nạp SDK lỗi. DSN phía trình duyệt nằm trong bundle nên là DSN công khai theo thiết kế của Sentry.
         NEXT_PUBLIC_SENTRY_DSN: ${SENTRY_DSN:-}
         NEXT_PUBLIC_SENTRY_ENVIRONMENT: ${SENTRY_ENVIRONMENT:-}
+        # Origin MSS được nhúng trang xem trước /san-pham/_preview, vd https://mss.example.vn (cách nhau dấu cách/phẩy). Rỗng = không ai nhúng được.
+        MSS_PREVIEW_FRAME_ANCESTORS: ${MSS_PREVIEW_FRAME_ANCESTORS:-}
         # Để trống ở production: build web dừng nếu ZALO_APP_ID hoặc ZALO_MINIAPP_ID rỗng, hoặc hai giá trị trùng nhau. Chỉ đặt 1 cho bản thử không dùng Zalo.
         ALLOW_EMPTY_ZALO_APP_ID: ${ALLOW_EMPTY_ZALO_APP_ID:-}
     restart: unless-stopped

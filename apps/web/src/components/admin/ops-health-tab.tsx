@@ -154,6 +154,8 @@ export const CRON_JOB_LABELS: Record<string, string> = {
   'MssHealthService.poll': 'Dò sức khoẻ MSS (chỉ khi có cờ MSS bật)',
   'MssOrderEventReconcileService.sweep': 'Gửi bù tin đơn MSS bị sót và chạy đường lui ZNS',
   'MssOrderEventReconcileService.reconcile': 'Hỏi MSS kết quả tin đơn đã nhận quá 15 phút',
+  'MssCatalogCron.incremental': 'Kéo nội dung MSS theo mốc, 30 phút (chỉ khi cờ bật)',
+  'MssCatalogCron.full': 'Kéo toàn bộ nội dung MSS lúc 02:40 (chỉ khi cờ bật)',
   'merchant.sla-reminder': 'Nhắc đối tác các đơn tự giao quá hạn (có báo khách)',
   'ops.health-alert': 'Kiểm tra sức khoẻ hệ thống và báo động',
   'ops.ledger-drift': 'Đối soát số dư Điểm Xanh và Ví Tubu với sổ cái mỗi đêm (chỉ báo lệch, không tự sửa)',
