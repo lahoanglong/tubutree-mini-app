@@ -23,13 +23,14 @@ import { MSS_ZNS_HOLD, MssZnsHoldService } from './mss-zns-hold';
 /**
  * Kết nối MSS (quyết định PO số 5, kiểu strangler): cấu hình, cờ, ký/kiểm HMAC, client có cầu dao, dò sức khoẻ, bộ chọn đường đơn, và
  * luồng sự kiện đơn gửi MSS (outbox, worker, callback, đối soát, luật hoãn ZNS). Cờ tắt hay thiếu biến thì không có lời gọi MSS nào và
- * hành vi Tubu không đổi.
+ * hành vi Tubu không đổi; vẫn có hàng đợi `mss-order-events` (kết nối Redis của BullMQ như mọi hàng đợi khác, worker rảnh) và hai cron
+ * quét bù/đối soát chạy một câu SELECT trên bảng outbox rỗng.
  *
  * @Global: checkout, orders, thanh toán, đại lý và notifications tiêm MssOrderEventRecorder / MSS_ZNS_HOLD (@Optional) mà không import
  * module này, tránh vòng import với PancakeModule.
  *
- * Kho chung đi qua client Redis của Queue `pancake-push` mà QueueModule (@Global) đã tạo, giống HealthController ping Redis: không mở
- * kết nối mới; chỉ GET/SET/DEL trên khoá `tubu:mss:*`.
+ * Kho chung của cầu dao đi qua client Redis của Queue `pancake-push` mà QueueModule (@Global) đã tạo, giống HealthController ping Redis;
+ * chỉ GET/SET/DEL trên khoá `tubu:mss:*`.
  */
 @Global()
 @Module({

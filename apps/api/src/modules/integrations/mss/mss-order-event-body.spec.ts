@@ -4,7 +4,7 @@ import { buildMssEventBody, greetingName, MssEventBodyError, newEventId, vnIso, 
 import {
   fallbackDecision,
   inRollout,
-  maskPhone,
+  mssEventTypeForZns,
   MSS_ORDER_EVENT_TYPES,
   MSS_RETRY_DELAYS_MS,
   nextRetryAt,
@@ -197,13 +197,21 @@ describe('hàm thuần của outbox', () => {
     expect(fallbackDecision('PENDING', null, true)).toBe('NONE');
   });
 
-  it('normalizeVnPhone và maskPhone', () => {
+  it('normalizeVnPhone', () => {
     expect(normalizeVnPhone('+84901234567')).toBe('0901234567');
     expect(normalizeVnPhone('84 901 234 567')).toBe('0901234567');
     expect(normalizeVnPhone('090.123.4567')).toBe('0901234567');
     expect(normalizeVnPhone('0201234567')).toBeNull();
     expect(normalizeVnPhone('12345')).toBeNull();
-    expect(maskPhone('0901234567')).toBe('090•••4567');
+  });
+
+  it('mssEventTypeForZns: "đơn đã xác nhận" chọn loại theo chính tin (có dòng đã nhận tiền là thanh toán), không lấy dòng loại khác', () => {
+    expect(mssEventTypeForZns('ORDER_CONFIRMED', { order_code: 'TB1' })).toBe('order.created');
+    expect(mssEventTypeForZns('ORDER_CONFIRMED', { order_code: 'TB1', payment_note: 'Đã nhận thanh toán' })).toBe('order.payment_confirmed');
+    expect(mssEventTypeForZns('ORDER_SHIPPING', { order_code: 'TB1' })).toBe('order.shipping');
+    expect(mssEventTypeForZns('ORDER_DELIVERED', {})).toBe('order.delivered');
+    expect(mssEventTypeForZns('ORDER_CANCELLED', {})).toBe('order.cancelled');
+    expect(mssEventTypeForZns('ORDER_AWAITING_PAYMENT', { order_code: 'TB1' })).toBeNull();
   });
 
   it('rollout ổn định theo khách và chỉ thêm khách khi tăng tỉ lệ', () => {

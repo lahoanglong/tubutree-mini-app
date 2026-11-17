@@ -65,15 +65,28 @@ export type OrderZaloConsentSource = 'checkout' | 'account_settings' | 'mss_opt_
 export type MssCancelReason = 'CUSTOMER' | 'OUT_OF_STOCK' | 'PAYMENT_TIMEOUT' | 'OTHER';
 
 /**
- * Mẫu thông báo mà MSS thay kênh ZNS, và các loại sự kiện tương ứng (ưu tiên loại đứng trước khi đơn có nhiều dòng). Hôm nay chỉ
- * ORDER_CONFIRMED và ORDER_SHIPPING có kênh ZNS; hai mẫu sau có mặt để admin đổi kênh sang ZNS cũng không thành tin đôi.
+ * Loại sự kiện MSS mà một tin ZNS đơn hàng thay thế, đọc từ chính tin đó. "Đơn đã xác nhận" có dòng đã nhận tiền (`payment_note`, chỉ
+ * orderConfirmedData đặt khi PAID) là tin thanh toán, không có là tin đặt đơn. Không lấy dòng của loại kia: loại kia có thể đã gửi xong
+ * trong khi sự kiện của tin này bị bỏ qua, và tin ZNS sẽ bị nuốt. Hôm nay chỉ ORDER_CONFIRMED và ORDER_SHIPPING có kênh ZNS; hai mẫu sau
+ * có mặt để admin đổi kênh sang ZNS cũng không thành tin đôi.
  */
-export const MSS_ZNS_TEMPLATE_EVENTS: Readonly<Record<string, readonly MssOrderEventType[]>> = {
-  ORDER_CONFIRMED: ['order.payment_confirmed', 'order.created'],
-  ORDER_SHIPPING: ['order.shipping'],
-  ORDER_DELIVERED: ['order.delivered'],
-  ORDER_CANCELLED: ['order.cancelled'],
-};
+export function mssEventTypeForZns(templateCode: string, data: Record<string, string>): MssOrderEventType | null {
+  switch (templateCode) {
+    case 'ORDER_CONFIRMED':
+      return data.payment_note ? 'order.payment_confirmed' : 'order.created';
+    case 'ORDER_SHIPPING':
+      return 'order.shipping';
+    case 'ORDER_DELIVERED':
+      return 'order.delivered';
+    case 'ORDER_CANCELLED':
+      return 'order.cancelled';
+    default:
+      return null;
+  }
+}
+
+/** Quá hạn sống của sự kiện chừng này thì đường lui không gửi ZNS đã hoãn nữa (tin trễ còn tệ hơn không báo), chỉ còn tin trong app. */
+export const MSS_FALLBACK_ZNS_GRACE_MS = 15 * 60_000;
 
 /** Token NotificationsService tiêm (@Optional): không có thì kênh ZNS đi đúng đường cũ. */
 export const MSS_ZNS_HOLD = Symbol('MSS_ZNS_HOLD');
@@ -125,12 +138,6 @@ export function normalizeVnPhone(raw: string | null | undefined): string | null 
   else if (/^0\d{9}$/.test(digits)) local = digits;
   else return null;
   return /^0[35789]\d{8}$/.test(local) ? local : null;
-}
-
-/** SĐT che cho màn Ops: `090•••4567`. */
-export function maskPhone(phone: string | null | undefined): string | null {
-  if (!phone || phone.length < 7) return null;
-  return `${phone.slice(0, 3)}•••${phone.slice(-4)}`;
 }
 
 export type MssResultStatus = 'sent' | 'skipped' | 'failed' | 'unknown';

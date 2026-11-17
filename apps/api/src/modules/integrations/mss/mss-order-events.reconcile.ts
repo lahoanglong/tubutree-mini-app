@@ -6,7 +6,7 @@ import { PrismaService } from '../../../prisma/prisma.service';
 import { MssFlagsService } from './mss-flags';
 import { MssOrderEventFallback } from './mss-order-event.fallback';
 import { MssOrderEventSender } from './mss-order-event.sender';
-import { MSS_CLAIM_STALE_MS, MSS_FALLBACK_STATUSES, MSS_RESULT_RECONCILE_AFTER_MS } from './mss-order-event-types';
+import { MSS_CLAIM_STALE_MS, MSS_FALLBACK_STATUSES, MSS_RESULT_RECONCILE_AFTER_MS, MSS_RESULT_STUCK_GRACE_MS } from './mss-order-event-types';
 
 export const MSS_ORDER_EVENTS_SWEEP_CRON = '30 */5 * * * *';
 export const MSS_ORDER_EVENTS_RECONCILE_CRON = '45 */10 * * * *';
@@ -83,15 +83,34 @@ export class MssOrderEventReconcileService {
   async reconcile(): Promise<void> {
     try {
       if (!this.flags.configured()) {
-        markCronSkipped('NOT_CONFIGURED');
+        if ((await this.settleStuckOnce()) === 0) markCronSkipped('NOT_CONFIGURED');
         return;
       }
+      await this.settleStuckOnce();
       await this.reconcileOnce();
     } catch (err) {
       const msg = `Đối soát tin đơn MSS lỗi: ${err instanceof Error ? err.message : String(err)}`;
       noteCronError(msg);
       this.logger.error(msg);
     }
+  }
+
+  /**
+   * Dòng MSS đã nhận mà quá hạn sống 2 giờ vẫn chưa có kết quả (MSS treo, hỏi GET lỗi mãi, hay đã gỡ biến MSS_*): chốt "không rõ", chỉ còn
+   * tin trong app (có thể MSS đã gửi nên không gửi ZNS). Không gọi MSS.
+   */
+  async settleStuckOnce(now = Date.now()): Promise<number> {
+    const rows = await this.prisma.mssOrderEventOutbox.findMany({
+      where: { status: 'DELIVERED', expiresAt: { lt: new Date(now - MSS_RESULT_STUCK_GRACE_MS) } },
+      select: { eventId: true },
+      orderBy: { expiresAt: 'asc' },
+      take: BATCH,
+    });
+    let settled = 0;
+    for (const row of rows) {
+      if ((await this.sender.applyResult(row.eventId, {}, 'unknown', 'stuck', 'reconcile')) === 'applied') settled++;
+    }
+    return settled;
   }
 
   /** Hỏi MSS kết quả của dòng đã giao quá 15 phút chưa có callback (hợp đồng mục 4.3). */

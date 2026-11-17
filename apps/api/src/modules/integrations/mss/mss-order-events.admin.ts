@@ -7,7 +7,7 @@ import type { MssCircuitSnapshot } from './mss-circuit';
 import { MssClient } from './mss.client';
 import { MssOrderEventFallback } from './mss-order-event.fallback';
 import { MssOrderEventRecorder } from './mss-order-event.recorder';
-import { maskPhone } from './mss-order-event-types';
+import { maskPhoneOrNull } from '../../../common/mask-pii';
 
 const RECENT_ROWS = 50;
 const CANCEL_BATCH = 500;
@@ -46,7 +46,7 @@ export interface MssOrderEventsOpsCard {
 function maskedRecipient(body: string): string | null {
   try {
     const phone = (JSON.parse(body) as { recipient?: { phone?: unknown } }).recipient?.phone;
-    return typeof phone === 'string' ? maskPhone(phone) : null;
+    return typeof phone === 'string' ? maskPhoneOrNull(phone) : null;
   } catch {
     return null;
   }

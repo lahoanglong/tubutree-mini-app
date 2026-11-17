@@ -393,4 +393,94 @@ describe('MSS order events (real Postgres)', () => {
     expect(after.lastError).toMatch(/network/);
     expect(enqueued).toContain(row!.eventId);
   });
+
+  it('review MAJOR 1: trả trước, created đã tới Zalo mà payment_confirmed bị bỏ qua: ZNS "đã nhận tiền" vẫn gửi (không mượn dòng created)', async () => {
+    const { user, order } = await consentedOrder();
+    await recordIn(order.id, 'order.created');
+    const [row] = await rowsOf(order.id);
+    await sender.deliver(row!.eventId);
+    await sender.applyResult(row!.eventId, {}, 'sent', null, 'callback');
+    // Không có dòng order.payment_confirmed (vd cầu dao ngắt lúc trả tiền): tin có payment_note đi ZNS như cũ.
+    expect(await hold.holdZns(user.id, 'ORDER_CONFIRMED', { order_code: order.code, payment_note: 'Đã nhận thanh toán' }, 'zns-tpl')).toBe(false);
+    // Tin đặt đơn (không payment_note) thì dòng created đã gửi: không ZNS.
+    expect(await hold.holdZns(user.id, 'ORDER_CONFIRMED', { order_code: order.code }, 'zns-tpl')).toBe(true);
+  });
+
+  it('review MAJOR 2: POST quá giờ bị coi là lỗi (dòng về PENDING) mà MSS đã gửi và báo sent: nhận kết quả, không gửi lại, không ZNS', async () => {
+    const { user, order } = await consentedOrder();
+    await recordIn(order.id, 'order.shipping');
+    const [row] = await rowsOf(order.id);
+    expect(await hold.holdZns(user.id, 'ORDER_SHIPPING', { order_code: order.code }, 'zns-tpl')).toBe(true);
+    fetchFake.mockImplementationOnce(async () => {
+      throw new TypeError('fetch failed');
+    });
+    expect(await sender.deliver(row!.eventId)).toBe('PENDING');
+    expect(await sender.applyResult(row!.eventId, { orderCode: order.code, eventType: 'order.shipping' }, 'sent', null, 'callback')).toBe('applied');
+    await makeDue(row!.eventId);
+    expect(await sender.deliver(row!.eventId)).toBe('not_claimable');
+    await prisma.mssOrderEventOutbox.update({ where: { eventId: row!.eventId }, data: { occurredAt: new Date(Date.now() - 31 * 60_000) } });
+    await reconcile.sweepOnce(Date.now() + 120_000);
+    expect(fetchFake.mock.calls.filter(([, init]) => String(init.body ?? '').includes(row!.eventId))).toHaveLength(1);
+    expect(sendHeldZns.mock.calls.filter((c) => (c as unknown[])[0] === user.id)).toHaveLength(0);
+    expect((await rowsOf(order.id))[0]).toMatchObject({ status: 'RESULT_SENT', fallbackAt: null });
+  });
+
+  it('review MAJOR 3: khách tắt nhận tin trong lúc dòng chờ thử lại: lượt sau không gửi MSS, CANCELLED consent_withdrawn, ZNS đã hoãn đi đúng 1 lần', async () => {
+    const { user, order } = await consentedOrder();
+    await recordIn(order.id, 'order.shipping');
+    const [row] = await rowsOf(order.id);
+    await hold.holdZns(user.id, 'ORDER_SHIPPING', { order_code: order.code }, 'zns-tpl');
+    await prisma.user.update({ where: { id: user.id }, data: { notifyOrderZalo: false, notifyOrderZaloSource: 'account_settings' } });
+    await makeDue(row!.eventId);
+    expect(await sender.deliver(row!.eventId)).toBe('CANCELLED');
+    expect(fetchFake).not.toHaveBeenCalled();
+    expect((await rowsOf(order.id))[0]).toMatchObject({ status: 'CANCELLED', resultReason: 'consent_withdrawn', fallbackChannel: 'ZNS' });
+    expect(sendHeldZns).toHaveBeenCalledTimes(1);
+  });
+
+  it('review MINOR 4: đường lui chạy quá hạn sống + 15 phút: chỉ trong app, không gửi ZNS cũ', async () => {
+    const { user, order } = await consentedOrder();
+    await recordIn(order.id, 'order.shipping');
+    const [row] = await rowsOf(order.id);
+    await hold.holdZns(user.id, 'ORDER_SHIPPING', { order_code: order.code }, 'zns-tpl');
+    await prisma.mssOrderEventOutbox.update({
+      where: { eventId: row!.eventId },
+      data: { status: 'EXPIRED', resultReason: 'ttl', expiresAt: new Date(Date.now() - 16 * 60_000) },
+    });
+    expect(await fallback.run(row!.eventId)).toBe('IN_APP_ONLY');
+    expect(sendHeldZns).not.toHaveBeenCalled();
+  });
+
+  it('review MINOR 5: dòng MSS đã nhận, quá hạn sống 2 giờ chưa có kết quả: chốt không rõ, không gọi MSS, không ZNS', async () => {
+    const { user, order } = await consentedOrder();
+    await recordIn(order.id, 'order.shipping');
+    const [row] = await rowsOf(order.id);
+    await hold.holdZns(user.id, 'ORDER_SHIPPING', { order_code: order.code }, 'zns-tpl');
+    await sender.deliver(row!.eventId);
+    fetchFake.mockClear();
+    await prisma.mssOrderEventOutbox.update({ where: { eventId: row!.eventId }, data: { expiresAt: new Date(Date.now() - 2 * 3_600_000 - 60_000) } });
+    expect(await reconcile.settleStuckOnce()).toBeGreaterThanOrEqual(1);
+    expect(fetchFake).not.toHaveBeenCalled();
+    expect((await rowsOf(order.id))[0]).toMatchObject({ status: 'RESULT_UNKNOWN', resultReason: 'stuck', fallbackChannel: 'IN_APP_ONLY' });
+    expect(sendHeldZns).not.toHaveBeenCalled();
+  });
+
+  it('review MINOR 11: gửi ZNS đường lui lỗi một lần: nhả phần việc, lượt quét sau gửi đúng 1 lần', async () => {
+    const { user, order } = await consentedOrder();
+    await recordIn(order.id, 'order.shipping');
+    const [row] = await rowsOf(order.id);
+    await hold.holdZns(user.id, 'ORDER_SHIPPING', { order_code: order.code }, 'zns-tpl');
+    await prisma.mssOrderEventOutbox.update({ where: { eventId: row!.eventId }, data: { status: 'DEAD', resultReason: 'http_413' } });
+    sendHeldZns.mockImplementationOnce(async () => {
+      throw new Error('Redis không phản hồi');
+    });
+    expect(await fallback.run(row!.eventId)).toBeNull();
+    expect((await rowsOf(order.id))[0]).toMatchObject({ fallbackAt: null, fallbackChannel: null });
+    const mine = () => sendHeldZns.mock.calls.filter((c) => (c as unknown[])[0] === user.id).length;
+    await reconcile.sweepOnce();
+    expect(mine()).toBe(2);
+    expect((await rowsOf(order.id))[0]!.fallbackChannel).toBe('ZNS');
+    expect(await fallback.run(row!.eventId)).toBeNull();
+    expect(mine()).toBe(2);
+  });
 });

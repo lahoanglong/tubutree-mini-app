@@ -212,6 +212,13 @@ describe('evaluateDb', () => {
       expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
     });
 
+    it('mss_order_events: cột có mặc định và bảng outbox mới nằm trong danh sách tương thích image, không phải migration nặng', () => {
+      const name = '20261117060000_mss_order_events';
+      expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);
+      expect(HEAVY_MIGRATIONS.map((m) => m.name)).not.toContain(name);
+      expect(byId(run(behind(1_000, [name]), 'pre-deploy'), 'db.pending_scope').status).toBe('PASS');
+    });
+
     it('w7: migration gỡ chỉ mục một phần của log ZNS FAILED nằm trong danh sách tương thích image, không phải migration nặng', () => {
       const name = '20261106010000_w7_drop_zns_failed_sentat_index';
       expect(IMAGE_COMPATIBLE_MIGRATIONS).toContain(name);

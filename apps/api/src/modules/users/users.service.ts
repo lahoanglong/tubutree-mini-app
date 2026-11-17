@@ -88,21 +88,13 @@ export class UsersService {
     return this.serialize(user);
   }
 
-  /**
-   * Lựa chọn "nhận tin xác nhận hành trình đơn qua Zalo" (hợp đồng tubu-mss-order-events mục 7), tách khỏi tin khuyến mãi. Không trả SĐT:
-   * màn cài đặt chỉ cần biết số đã xác minh qua Zalo chưa (MSS chỉ nhắn số đã xác minh).
-   */
+  /** Lựa chọn "nhận tin xác nhận hành trình đơn qua Zalo" (hợp đồng tubu-mss-order-events mục 7), tách khỏi tin khuyến mãi. */
   async orderZaloUpdates(userId: string) {
     const u = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
-      select: { notifyOrderZalo: true, notifyOrderZaloAt: true, notifyOrderZaloSource: true, phoneVerifiedAt: true },
+      select: { notifyOrderZalo: true, notifyOrderZaloAt: true, notifyOrderZaloSource: true },
     });
-    return {
-      enabled: u.notifyOrderZalo,
-      updatedAt: u.notifyOrderZaloAt?.toISOString() ?? null,
-      source: u.notifyOrderZaloSource,
-      phoneVerified: u.phoneVerifiedAt !== null,
-    };
+    return { enabled: u.notifyOrderZalo, updatedAt: u.notifyOrderZaloAt?.toISOString() ?? null, source: u.notifyOrderZaloSource };
   }
 
   /** Bật/tắt ở trang Cài đặt thông báo; lưu mốc, nguồn và phiên bản câu chữ làm bằng chứng đồng ý. */

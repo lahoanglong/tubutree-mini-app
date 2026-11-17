@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { NotificationsService } from '../../notifications/notifications.service';
-import { fallbackDecision, MSS_FALLBACK_STATUSES, type MssFallbackDecision, type MssOutboxStatus } from './mss-order-event-types';
+import { fallbackDecision, MSS_FALLBACK_STATUSES, MSS_FALLBACK_ZNS_GRACE_MS, type MssFallbackDecision, type MssOutboxStatus } from './mss-order-event-types';
 import { parseHeldZns } from './mss-zns-hold';
 
 /** Khoá chống trùng của tin ZNS đường lui: một sự kiện MSS một tin ZNS, kể cả khi đường lui bị gọi lại. */
@@ -24,17 +24,31 @@ export class MssOrderEventFallback {
     for (let i = 0; i < 3; i++) {
       const row = await this.prisma.mssOrderEventOutbox.findUnique({
         where: { eventId },
-        select: { id: true, eventId: true, orderCode: true, status: true, resultReason: true, fallbackAt: true, znsHeldTemplate: true, znsHeldData: true, order: { select: { userId: true } } },
+        select: {
+          id: true,
+          eventId: true,
+          orderCode: true,
+          status: true,
+          resultReason: true,
+          expiresAt: true,
+          fallbackAt: true,
+          znsHeldTemplate: true,
+          znsHeldData: true,
+          order: { select: { userId: true } },
+        },
       });
       if (!row || row.fallbackAt) return null;
       const status = row.status as MssOutboxStatus;
       if (!MSS_FALLBACK_STATUSES.includes(status)) return null;
       const held = row.znsHeldTemplate ? parseHeldZns(row.znsHeldData) : null;
-      const decision = fallbackDecision(status, row.resultReason, held !== null);
+      // Đường lui chạy muộn (API tắt lâu, dừng tin chờ sau nhiều ngày): tin ZNS đã quá hạn sống thì chỉ còn tin trong app.
+      const fresh = Date.now() <= row.expiresAt.getTime() + MSS_FALLBACK_ZNS_GRACE_MS;
+      const decision = fallbackDecision(status, row.resultReason, held !== null && fresh);
       if (decision === 'NONE') return 'NONE';
+      const claimedAt = new Date();
       const claimed = await this.prisma.mssOrderEventOutbox.updateMany({
         where: { id: row.id, status, fallbackAt: null, znsHeldTemplate: row.znsHeldTemplate },
-        data: { fallbackAt: new Date(), fallbackChannel: decision },
+        data: { fallbackAt: claimedAt, fallbackChannel: decision },
       });
       if (claimed.count === 0) continue;
       this.logger.log(`mss_order_event_fallback ${decision} order=${row.orderCode} event=${row.eventId} status=${status} reason=${row.resultReason ?? '-'}`);
@@ -42,7 +56,12 @@ export class MssOrderEventFallback {
         try {
           await this.notifications.sendHeldZns(row.order.userId, row.znsHeldTemplate, held.data, held.znsTemplateId, mssFallbackDedupeKey(row.eventId));
         } catch (err) {
-          this.logger.error(`Gửi ZNS đường lui đơn ${row.orderCode} (sự kiện ${row.eventId}) lỗi: ${err instanceof Error ? err.message : String(err)}`);
+          this.logger.error(`Gửi ZNS đường lui đơn ${row.orderCode} (sự kiện ${row.eventId}) lỗi, lượt quét sau thử lại: ${err instanceof Error ? err.message : String(err)}`);
+          // Nhả phần việc để cron quét bù thử lại; khoá chống trùng mss:<eventId> của sendHeldZns giữ đúng một tin nếu lần này đã kịp gửi.
+          await this.prisma.mssOrderEventOutbox
+            .updateMany({ where: { id: row.id, fallbackAt: claimedAt, fallbackChannel: 'ZNS' }, data: { fallbackAt: null, fallbackChannel: null } })
+            .catch(() => undefined);
+          return null;
         }
       }
       return decision;

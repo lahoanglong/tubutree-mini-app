@@ -93,6 +93,9 @@ export class MssOrderEventSender {
     }
     if (Date.now() >= row.expiresAt.getTime()) return this.finishClaimed(row, 'EXPIRED', 'ttl');
     if (!(await this.flags.isEnabled('orderEvents'))) return this.finishClaimed(row, 'CANCELLED', 'disabled');
+    // Thân đã lưu ghi consent = true lúc ghi; khách có thể tắt sau đó (cài đặt, hay MSS báo opted_out ở đơn khác) trong lúc dòng chờ thử lại.
+    const consent = await this.prisma.order.findUnique({ where: { id: row.orderId }, select: { orderZaloConsent: true, user: { select: { notifyOrderZalo: true } } } });
+    if (consent?.orderZaloConsent !== true || consent.user.notifyOrderZalo !== true) return this.finishClaimed(row, 'CANCELLED', 'consent_withdrawn');
 
     try {
       const res = await this.client.request<MssEventAck>('POST', '/order-events', { body: row.body, eventId: row.eventId, op: 'POST /order-events' });
@@ -167,8 +170,10 @@ export class MssOrderEventSender {
   }
 
   /**
-   * Kết quả cuối MSS báo về (callback hoặc đối soát). Chỉ đổi dòng đang DELIVERED và đúng mã đơn + loại sự kiện: callback lặp, đến muộn
-   * hay lệch dữ liệu đều trả về không đổi gì.
+   * Kết quả cuối MSS báo về (callback hoặc đối soát), đúng mã đơn + loại sự kiện; callback lặp, đến muộn hay lệch dữ liệu đều không đổi gì.
+   * Nhận cả khi dòng còn PENDING/SENDING: MSS chỉ báo kết quả cho sự kiện nó đã nhận, mà phía Tubu có thể chưa biết (POST quá 5 giây bị
+   * coi là lỗi rồi xếp thử lại, hoặc callback tới trước câu ghi DELIVERED). Bỏ kết quả lúc đó thì dòng sau này EXPIRED và đường lui gửi
+   * thêm ZNS cho tin MSS đã gửi.
    */
   async applyResult(
     eventId: string,
@@ -184,7 +189,7 @@ export class MssOrderEventSender {
       return 'mismatch';
     }
     const final = resultStatusOf(status);
-    const won = await this.settle(row.id, eventId, row.orderId, ['DELIVERED'], final, reason, {});
+    const won = await this.settle(row.id, eventId, row.orderId, ['PENDING', 'SENDING', 'DELIVERED'], final, reason, { claimedAt: null });
     if (!won) return 'noop';
     this.logger.log(`mss_order_event_result ${row.eventType} order=${row.orderCode} event=${eventId} status=${final} reason=${reason ?? '-'} via=${source}`);
     return 'applied';
@@ -216,6 +221,10 @@ export class MssOrderEventSender {
         return 'requeued';
       }
       this.logger.warn(`Đối soát MSS sự kiện ${row.eventId} lỗi: ${err instanceof Error ? err.message : String(err)}`);
+      if (Date.now() - row.expiresAt.getTime() >= MSS_RESULT_STUCK_GRACE_MS) {
+        const r = await this.applyResult(row.eventId, {}, 'unknown', 'stuck', 'reconcile');
+        return r === 'applied' ? 'stuck' : r;
+      }
       return 'error';
     }
   }

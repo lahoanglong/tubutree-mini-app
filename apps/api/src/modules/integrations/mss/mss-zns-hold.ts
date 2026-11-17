@@ -7,7 +7,7 @@ import {
   MSS_FALLBACK_STATUSES,
   MSS_HOLDING_STATUSES,
   MSS_NO_ZNS_STATUSES,
-  MSS_ZNS_TEMPLATE_EVENTS,
+  mssEventTypeForZns,
   type MssOutboxStatus,
   type MssZnsHoldPort,
 } from './mss-order-event-types';
@@ -55,11 +55,10 @@ export class MssZnsHoldService implements MssZnsHoldPort {
   ) {}
 
   async holdZns(userId: string, templateCode: string, data: Record<string, string>, znsTemplateId: string): Promise<boolean> {
-    const types = MSS_ZNS_TEMPLATE_EVENTS[templateCode];
+    const eventType = mssEventTypeForZns(templateCode, data);
     const code = data.order_code;
-    if (!types || !code || !(await this.flags.isEnabled('orderEvents'))) return false;
-    const rows = await this.prisma.mssOrderEventOutbox.findMany({ where: { order: { code, userId }, eventType: { in: [...types] } }, select: HOLD_SELECT });
-    const pick = types.map((t) => rows.find((r) => r.eventType === t)).find(Boolean);
+    if (!eventType || !code || !(await this.flags.isEnabled('orderEvents'))) return false;
+    const pick = await this.prisma.mssOrderEventOutbox.findFirst({ where: { order: { code, userId }, eventType }, select: HOLD_SELECT });
     if (!pick) return false;
 
     let row = pick;

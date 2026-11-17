@@ -26,8 +26,9 @@ const MULTI_REVIEWS_MIGRATION = REQUIRED_MIGRATIONS[2];
  * cột trên bảng trả hàng cũ), waste_exchange (chỉ thêm bảng và cột mới mà image cũ không đọc), tám migration đợt hardening
  * 05/11 chỉ dựng chỉ mục (không đổi dữ liệu, không đổi cột), hi (một cột NULL mới trên orders mà image cũ không đọc), câu
  * chuyện sản phẩm (một cột JSONB NULL mới trên products mà image cũ không đọc), w5 (chỉ sửa chữ cột `variations.name` của vài
- * chục dòng, không đổi schema), w7 (gỡ một chỉ mục một phần, truy vấn cũ rơi về chỉ mục thường) và mss_foundation (cột
- * `orders.backendRoute` có mặc định mà image cũ không đọc, không ghi; trigger chỉ chạy khi câu UPDATE đổi giá trị cột đó).
+ * chục dòng, không đổi schema), w7 (gỡ một chỉ mục một phần, truy vấn cũ rơi về chỉ mục thường), mss_foundation (cột
+ * `orders.backendRoute` có mặc định mà image cũ không đọc, không ghi; trigger chỉ chạy khi câu UPDATE đổi giá trị cột đó) và
+ * mss_order_events (cột có mặc định trên users/orders và bảng outbox mới mà image cũ không đọc, không ghi).
  */
 export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   ...REQUIRED_MIGRATIONS,
@@ -47,6 +48,7 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261105230000_w5_variation_name_repair',
   '20261106010000_w7_drop_zns_failed_sentat_index',
   '20261117040000_mss_foundation',
+  '20261117060000_mss_order_events',
 ];
 
 /**
