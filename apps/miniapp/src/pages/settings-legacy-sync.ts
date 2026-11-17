@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { getStorage, setStorage } from 'zmp-sdk/apis';
-import { fetchNotifyPrefs, legacyOptOuts, saveNotifyPrefs, type NotifyPrefs } from './settings-notify-prefs';
+import { fetchNotifyPrefs, legacyOptOuts, saveLegacyOptOuts, type NotifyPrefs } from './settings-notify-prefs';
 
 const PREFS_KEY = 'tubu_prefs';
 
@@ -28,7 +28,7 @@ export async function syncLegacyNotifyPrefs(): Promise<NotifyPrefs | null> {
   if (!stored || !('notifyPromo' in stored || 'notifyGarden' in stored)) return null;
   let server = await fetchNotifyPrefs();
   const patch = legacyOptOuts(stored, server);
-  if (patch) server = await saveNotifyPrefs(patch);
+  if (patch) server = await saveLegacyOptOuts(patch);
   const rest = stored.fontScale ? { fontScale: stored.fontScale } : {};
   await setStorage({ data: { [PREFS_KEY]: JSON.stringify(rest) } });
   return server;

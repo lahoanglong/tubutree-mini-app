@@ -44,6 +44,7 @@ import { trackPdpAction } from '@/components/analytics/funnel';
 import { useGuestCartFlag } from '@/lib/guest-cart/flag';
 import { addGuestLine, GUEST_CART_MAX_LINES as GUEST_CART_LINE_CAP, guestCartCount, type GuestAddResult } from '@/lib/guest-cart/store';
 import { useGuestCartLines } from '@/lib/guest-cart/use-guest-cart';
+import { RestockButton, useRestock } from './restock-button';
 
 // Bảng chỉ dùng ở khổ điện thoại khi khách bấm mua: tách khỏi First Load của trang sản phẩm.
 const VariationSheet = dynamic(() => import('./variation-sheet').then((m) => m.VariationSheet), { ssr: false });
@@ -88,6 +89,7 @@ export default function AddToCart({
   productName = '',
   thumbnail = null,
   pdpSlug,
+  productId,
 }: {
   slug: string;
   productName?: string;
@@ -97,6 +99,8 @@ export default function AddToCart({
   blockedReason?: string | null;
   /** Có khi khối mua nằm trên trang sản phẩm: các nút bấm được đếm vào phễu mua (`pdp_action`). */
   pdpSlug?: string;
+  /** Có thì phân loại hết hàng hiện "Báo tôi khi có hàng" (khi cờ bật) thay cho nút xám. */
+  productId?: string;
 }) {
   const router = useRouter();
   const qc = useQueryClient();
@@ -176,6 +180,20 @@ export default function AddToCart({
   const setBuyable = shared?.setBuyable;
   const buyable = available && !blockedReason;
   useEffect(() => setBuyable?.(buyable), [buyable, setBuyable]);
+  // Câu báo của nút "Báo tôi khi có hàng": tách khỏi câu thêm giỏ (không kèm lối "Xem giỏ hàng").
+  const [restockMsg, setRestockMsg] = useState<{ text: string; ok: boolean } | null>(null);
+  const restock = useRestock({
+    productId,
+    slug,
+    variations,
+    selectedId,
+    onSelect: (id) => {
+      userPicked.current = true;
+      setSelectedId(id);
+    },
+    onNotice: (text, ok) => setRestockMsg({ text, ok }),
+  });
+  const showRestock = !available && restock.view.kind !== 'off';
 
   // Đổi phân loại → reset số lượng về 1 thay vì giữ số lượng cũ (có thể vượt tồn kho mới).
   // Chọn từ bảng phân loại thì giữ số lượng khách vừa chọn trong bảng.
@@ -439,9 +457,10 @@ export default function AddToCart({
   const buyBusy = (busy && buying) || undefined;
   // `busy` chỉ aria-disabled (nút đang giữ focus không bị trình duyệt đẩy về body); trạng thái cố định mới `disabled`.
   const cannotBuy = !available || phase === 'loading';
-  const hasStatus = !!(msg || warn);
+  const hasStatus = !!(msg || warn || restockMsg);
   const statusBody = (
     <>
+      {restockMsg && <p className={restockMsg.ok ? 'text-success-fg' : 'text-danger-fg'}>{restockMsg.text}</p>}
       {msg && (
         <p className={success ? 'text-success-fg' : 'text-danger-fg'}>
           {msg}{' '}
@@ -518,9 +537,18 @@ export default function AddToCart({
           <p className={`text-sm text-[var(--color-text-secondary)] md:pt-2 ${phoneCaption} ${phoneBandPad} max-md:pb-3`}>{overLimitText}</p>
         )}
       </div>
-      <button type="button" data-testid="pdp-buy-now" onClick={onBuyNow} disabled={cannotBuy} aria-busy={buyBusy} aria-disabled={busy || undefined} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>
-        {buyLabel}
-      </button>
+      {showRestock ? (
+        <RestockButton
+          control={restock}
+          testId="pdp-restock-desktop"
+          primaryClass={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}
+          secondaryClass={`${ui.btnSecondary} mt-3 hidden w-full md:inline-flex`}
+        />
+      ) : (
+        <button type="button" data-testid="pdp-buy-now" onClick={onBuyNow} disabled={cannotBuy} aria-busy={buyBusy} aria-disabled={busy || undefined} className={`${ui.btnPrimary} mt-3 hidden w-full md:inline-flex`}>
+          {buyLabel}
+        </button>
+      )}
 
       {/* Vùng báo luôn có mặt trong cây, chỉ đổi phần con: vùng live vừa gắn cùng chữ thường không được đọc ra. */}
       <div role="status" className={`hidden space-y-1 text-sm md:block ${hasStatus ? 'mt-3' : ''}`}>
@@ -580,6 +608,13 @@ export default function AddToCart({
                 <span className="block max-w-full truncate text-xs font-medium tabular-nums">{buyTotal}</span>
               </button>
             </div>
+          ) : showRestock ? (
+            <RestockButton
+              control={restock}
+              testId="pdp-restock"
+              primaryClass={`${uiBar.primary} min-w-0 flex-1`}
+              secondaryClass={`${uiBar.secondary} ${phoneSecondary} min-w-0 flex-1`}
+            />
           ) : (
             <button type="button" disabled className={`${ui.btnPrimary} flex-1`}>
               {fillTileCopy('stock.out')}

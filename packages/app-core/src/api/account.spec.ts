@@ -11,6 +11,7 @@ import {
   markNotificationRead,
   requestAccountDeletion,
   saveNotifyPrefs,
+  NOTIFY_PREFS_TEXT_VERSION,
   updateAddress,
   updateMe,
 } from './account';
@@ -41,13 +42,18 @@ describe('account — hợp đồng gọi API', () => {
     await markAllNotificationsRead(http);
     await fetchNotifyPrefs(http);
     await saveNotifyPrefs(http, { notifyPromo: false });
+    await saveNotifyPrefs(http, { notifySocial: true }, 'onboarding');
     expect(calls).toEqual([
       { method: 'get', path: '/me/notifications' },
       { method: 'post', path: '/me/notifications/n1/read' },
       { method: 'post', path: '/me/notifications/read-all' },
       { method: 'get', path: '/me/notifications/prefs' },
-      { method: 'patch', path: '/me/notifications/prefs', body: { notifyPromo: false } },
+      // Mỗi lần đổi gửi kèm nguồn và phiên bản câu chữ để máy chủ lưu bằng chứng đồng ý.
+      { method: 'patch', path: '/me/notifications/prefs', body: { notifyPromo: false, source: 'settings', textVersion: NOTIFY_PREFS_TEXT_VERSION } },
+      { method: 'patch', path: '/me/notifications/prefs', body: { notifySocial: true, source: 'onboarding', textVersion: NOTIFY_PREFS_TEXT_VERSION } },
     ]);
+    // Máy chủ chỉ nhận phiên bản dạng chữ thường, số, chấm, gạch (tối đa 40 ký tự).
+    expect(NOTIFY_PREFS_TEXT_VERSION).toMatch(/^[a-z0-9][a-z0-9._-]{0,39}$/);
   });
 
   it('trang thông báo kèm con trỏ', async () => {

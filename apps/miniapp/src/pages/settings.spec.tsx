@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   openSnackbar: vi.fn(),
   fetchNotifyPrefs: vi.fn(),
   saveNotifyPrefs: vi.fn(),
+  saveLegacyOptOuts: vi.fn(),
   stored: undefined as string | undefined,
   user: { phone: '0900000000', zaloId: 'z123' } as { phone: string | null; zaloId: string | null },
   storageReads: 0,
@@ -51,6 +52,7 @@ vi.mock('./settings-notify-prefs', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   fetchNotifyPrefs: mocks.fetchNotifyPrefs,
   saveNotifyPrefs: mocks.saveNotifyPrefs,
+  saveLegacyOptOuts: mocks.saveLegacyOptOuts,
 }));
 vi.mock('../store/auth', () => ({ useAuthStore: () => ({ logout: mocks.logout, user: mocks.user }) }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
@@ -122,10 +124,11 @@ describe('Cài đặt thông báo lưu trên server (C-022)', () => {
     expect(promoSwitch()).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('khách từng tắt trên máy (bản cũ) → đẩy lựa chọn tắt lên server một lần, xoá khỏi máy', async () => {
+  it('khách từng tắt trên máy (bản cũ) → đẩy lựa chọn tắt lên server một lần (câu chữ cũ), xoá khỏi máy', async () => {
     mocks.stored = JSON.stringify({ notifyOrders: true, notifyPromo: false, notifyGarden: true, fontScale: 'large' });
+    mocks.saveLegacyOptOuts.mockImplementation(async (patch: object) => ({ notifyPromo: true, notifyGarden: true, ...patch }));
     render(<SettingsPage />);
-    await waitFor(() => expect(mocks.saveNotifyPrefs).toHaveBeenCalledWith({ notifyPromo: false }));
+    await waitFor(() => expect(mocks.saveLegacyOptOuts).toHaveBeenCalledWith({ notifyPromo: false }));
     await waitFor(() => expect(promoSwitch()).toHaveAttribute('aria-checked', 'false'));
     expect(mocks.setStorage).toHaveBeenCalledWith({ data: { tubu_prefs: JSON.stringify({ fontScale: 'large' }) } });
   });
@@ -225,6 +228,18 @@ describe('Cài đặt theo DS v2 (C-076, C-114)', () => {
     expect(small).toHaveAttribute('tabindex', '0');
     fireEvent.keyDown(small, { key: 'Enter' });
     expect(mocks.applyFontScale).toHaveBeenCalledWith('small');
+  });
+
+  it('"Nhắc Vườn Xanh" và "Tương tác bài viết" là hai công tắc riêng, mỗi công tắc chỉ lưu nhóm của nó', async () => {
+    mocks.fetchNotifyPrefs.mockResolvedValue({ notifyPromo: true, notifyGarden: true, notifySocial: true });
+    render(<SettingsPage />);
+    const social = () => screen.getByRole('switch', { name: 'Tương tác bài viết' });
+    await waitFor(() => expect(social()).toHaveAttribute('aria-checked', 'true'));
+    expect(screen.getByRole('switch', { name: 'Nhắc Vườn Xanh' })).toHaveAttribute('aria-checked', 'true');
+    expect(screen.queryByRole('switch', { name: /tương tác bài viết/ })).toBeNull();
+    fireEvent.click(social());
+    await waitFor(() => expect(mocks.saveNotifyPrefs).toHaveBeenCalledWith({ notifySocial: false }));
+    expect(screen.getByRole('switch', { name: 'Nhắc Vườn Xanh' })).toHaveAttribute('aria-checked', 'true');
   });
 
   it('công tắc bật/tắt được bằng bàn phím (Space)', async () => {
@@ -357,7 +372,7 @@ function deferred<T>() {
 }
 
 describe('Cài đặt: chạm đúp cùng nhịp không gọi lặp (W78A)', () => {
-  const gardenSwitch = () => screen.getByRole('switch', { name: 'Nhắc nhở Vườn Xanh & tương tác bài viết' });
+  const gardenSwitch = () => screen.getByRole('switch', { name: 'Nhắc Vườn Xanh' });
 
   beforeEach(() => {
     vi.clearAllMocks();

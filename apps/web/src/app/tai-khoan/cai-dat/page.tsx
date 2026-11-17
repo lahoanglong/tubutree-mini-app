@@ -149,10 +149,16 @@ export default function SettingsPage() {
         {prefsQ.isLoading && <Skeleton height={44} style={{ marginTop: 8 }} />}
         <SwitchRow label="Khuyến mãi & mã giảm giá" on={notify?.notifyPromo ?? false} disabled={switchesLocked} onToggle={() => void toggle('notifyPromo')} />
         <SwitchRow
-          label="Nhắc nhở Vườn Xanh & tương tác bài viết"
+          label={fillCopy('settings.notifyGarden')}
           on={notify?.notifyGarden ?? false}
           disabled={switchesLocked}
           onToggle={() => void toggle('notifyGarden')}
+        />
+        <SwitchRow
+          label={fillCopy('settings.notifySocial')}
+          on={notify?.notifySocial ?? false}
+          disabled={switchesLocked}
+          onToggle={() => void toggle('notifySocial')}
           last
         />
         {prefsQ.isError && !prefsQ.data && (

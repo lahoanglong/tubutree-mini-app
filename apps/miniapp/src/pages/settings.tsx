@@ -18,7 +18,7 @@ import { hasOA, followOA, requestNotifyPermission, getOaPromptState, setOaPrompt
 import { applyFontScale } from '../utils/font-scale';
 import { isStaleStateError } from '../services/api';
 import { settleWithin } from '../utils/settle-within';
-import { fetchNotifyPrefs, legacyOptOuts, saveNotifyPrefs, type NotifyPrefs } from './settings-notify-prefs';
+import { fetchNotifyPrefs, legacyOptOuts, saveLegacyOptOuts, saveNotifyPrefs, type NotifyPrefs } from './settings-notify-prefs';
 import { useQueryClient } from '@tanstack/react-query';
 import { ORDER_ZALO_KEY, useOrderZaloStatus } from '../components/checkout/order-zalo';
 import { orderZaloConsentView, saveOrderZaloChoice } from '@tubutree/app-core/order-zalo';
@@ -79,7 +79,7 @@ export default function SettingsPage() {
       try {
         let server = await fetchNotifyPrefs();
         const patch = legacyOptOuts(stored, server);
-        if (patch) server = await saveNotifyPrefs(patch);
+        if (patch) server = await saveLegacyOptOuts(patch);
         if (stored && ('notifyPromo' in stored || 'notifyGarden' in stored)) {
           void setStorage({ data: { [PREFS_KEY]: JSON.stringify({ fontScale }) } });
         }
@@ -174,10 +174,16 @@ export default function SettingsPage() {
           onToggle={() => void toggleNotify('notifyPromo')}
         />
         <Toggle
-          label="Nhắc nhở Vườn Xanh & tương tác bài viết"
+          label={fillCopy('settings.notifyGarden')}
           on={notify?.notifyGarden ?? false}
           disabled={!notify || saving}
           onToggle={() => void toggleNotify('notifyGarden')}
+        />
+        <Toggle
+          label={fillCopy('settings.notifySocial')}
+          on={notify?.notifySocial ?? false}
+          disabled={!notify || saving}
+          onToggle={() => void toggleNotify('notifySocial')}
           last
         />
       </Section>

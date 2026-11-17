@@ -830,6 +830,15 @@ export const SHOP_COPY: Record<string, string> = {
   'home.todo.more': '+{n} việc khác',
   'home.todo.moreAria': 'Xem {n} việc khác trong Đơn hàng',
   'card.quickAdd': 'Thêm {name} vào giỏ',
+  // Báo hàng về: nút chính của thanh mua khi phân loại đang chọn hết hàng (cờ catalog.restock_alert_enabled). Đã đăng ký thì bấm lại là huỷ.
+  'restock.notifyMe': 'Báo tôi khi có hàng',
+  'restock.subscribed': 'Đã đăng ký báo hàng · Huỷ',
+  'restock.subscribedToast': 'Có hàng là Tubu báo bạn ngay.',
+  'restock.cancelledToast': 'Đã huỷ báo hàng về.',
+  'restock.offline': 'Chưa kết nối được tới Tubu Tree nên chưa đăng ký được. Bạn kiểm tra mạng rồi bấm lại nhé.',
+  // Cài đặt thông báo: hai công tắc tách từ công tắc gộp cũ. Đổi chữ ở đây thì đổi cả NOTIFY_PREFS_TEXT_VERSION (api/account.ts).
+  'settings.notifyGarden': 'Nhắc Vườn Xanh',
+  'settings.notifySocial': 'Tương tác bài viết',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

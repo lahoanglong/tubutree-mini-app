@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 const mocks = vi.hoisted(() => ({
   fetchNotifyPrefs: vi.fn(),
   saveNotifyPrefs: vi.fn(),
+  saveLegacyOptOuts: vi.fn(),
   stored: undefined as string | undefined,
   setStorage: vi.fn(),
 }));
@@ -15,6 +16,7 @@ vi.mock('./settings-notify-prefs', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   fetchNotifyPrefs: mocks.fetchNotifyPrefs,
   saveNotifyPrefs: mocks.saveNotifyPrefs,
+  saveLegacyOptOuts: mocks.saveLegacyOptOuts,
 }));
 
 import { syncLegacyNotifyPrefs, useLegacyNotifyPrefsSync } from './settings-legacy-sync';
@@ -24,7 +26,8 @@ describe('Chuyển lựa chọn tắt thông báo cũ trên máy lên server lú
     vi.clearAllMocks();
     mocks.stored = undefined;
     mocks.fetchNotifyPrefs.mockResolvedValue({ notifyPromo: true, notifyGarden: true });
-    mocks.saveNotifyPrefs.mockImplementation(async (patch: object) => ({ notifyPromo: true, notifyGarden: true, ...patch }));
+    mocks.fetchNotifyPrefs.mockResolvedValue({ notifyPromo: true, notifyGarden: true, notifySocial: true });
+    mocks.saveLegacyOptOuts.mockImplementation(async (patch: object) => ({ notifyPromo: true, notifyGarden: true, notifySocial: true, ...patch }));
   });
 
   it('máy không còn khoá cũ → không gọi mạng', async () => {
@@ -36,14 +39,15 @@ describe('Chuyển lựa chọn tắt thông báo cũ trên máy lên server lú
 
   it('khách đã tắt khuyến mãi ở bản cũ → đẩy lên server rồi chỉ giữ cỡ chữ trên máy', async () => {
     mocks.stored = JSON.stringify({ notifyPromo: false, notifyGarden: true, fontScale: 'large' });
-    await expect(syncLegacyNotifyPrefs()).resolves.toEqual({ notifyPromo: false, notifyGarden: true });
-    expect(mocks.saveNotifyPrefs).toHaveBeenCalledWith({ notifyPromo: false });
+    await expect(syncLegacyNotifyPrefs()).resolves.toEqual({ notifyPromo: false, notifyGarden: true, notifySocial: true });
+    expect(mocks.saveLegacyOptOuts).toHaveBeenCalledWith({ notifyPromo: false });
+    expect(mocks.saveNotifyPrefs).not.toHaveBeenCalled();
     expect(mocks.setStorage).toHaveBeenCalledWith({ data: { tubu_prefs: JSON.stringify({ fontScale: 'large' }) } });
   });
 
   it('lưu server lỗi → giữ nguyên khoá cũ trên máy để lần mở sau thử lại', async () => {
     mocks.stored = JSON.stringify({ notifyPromo: false });
-    mocks.saveNotifyPrefs.mockRejectedValue(new Error('net'));
+    mocks.saveLegacyOptOuts.mockRejectedValue(new Error('net'));
     await expect(syncLegacyNotifyPrefs()).rejects.toThrow('net');
     expect(mocks.setStorage).not.toHaveBeenCalled();
   });
@@ -56,6 +60,12 @@ describe('Chuyển lựa chọn tắt thông báo cũ trên máy lên server lú
     await Promise.resolve();
     expect(mocks.fetchNotifyPrefs).not.toHaveBeenCalled();
     rerender({ authed: true });
-    await waitFor(() => expect(mocks.saveNotifyPrefs).toHaveBeenCalledWith({ notifyPromo: false }));
+    await waitFor(() => expect(mocks.saveLegacyOptOuts).toHaveBeenCalledWith({ notifyPromo: false }));
+  });
+
+  it('công tắc gộp cũ "Vườn Xanh & tương tác bài viết" đã tắt → tắt cả hai công tắc mới', async () => {
+    mocks.stored = JSON.stringify({ notifyGarden: false });
+    await expect(syncLegacyNotifyPrefs()).resolves.toMatchObject({ notifyGarden: false, notifySocial: false });
+    expect(mocks.saveLegacyOptOuts).toHaveBeenCalledWith({ notifyGarden: false, notifySocial: false });
   });
 });

@@ -50,7 +50,7 @@ const mount = async () => {
   return r;
 };
 const promo = (c: HTMLElement) => c.querySelector<HTMLElement>('[role="switch"][aria-label="Khuyến mãi & mã giảm giá"]')!;
-const garden = (c: HTMLElement) => c.querySelector<HTMLElement>('[role="switch"][aria-label="Nhắc nhở Vườn Xanh & tương tác bài viết"]')!;
+const garden = (c: HTMLElement) => c.querySelector<HTMLElement>('[role="switch"][aria-label="Nhắc Vườn Xanh"]')!;
 const radios = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLElement>('[role="radiogroup"][aria-label="Cỡ chữ"] [role="radio"]'));
 
 beforeEach(() => {
@@ -115,7 +115,7 @@ describe('/tai-khoan/cai-dat: thông báo lưu trên server', () => {
     expect(promo(container).getAttribute('aria-checked')).toBe('true');
     click(promo(container));
     await flush(4);
-    expect(mocks.patch).toHaveBeenCalledWith('/me/notifications/prefs', { notifyPromo: false });
+    expect(mocks.patch).toHaveBeenCalledWith('/me/notifications/prefs', { notifyPromo: false, source: 'settings', textVersion: 'notify-prefs-v2-2026-11-17' });
     expect(promo(container).getAttribute('aria-checked')).toBe('false');
     expect(garden(container).getAttribute('aria-checked')).toBe('true');
   });
@@ -177,7 +177,7 @@ describe('/tai-khoan/cai-dat: thông báo lưu trên server', () => {
     expect(promo(container).tagName).toBe('BUTTON');
     click(garden(container));
     await flush(4);
-    expect(mocks.patch).toHaveBeenCalledWith('/me/notifications/prefs', { notifyGarden: false });
+    expect(mocks.patch).toHaveBeenCalledWith('/me/notifications/prefs', { notifyGarden: false, source: 'settings', textVersion: 'notify-prefs-v2-2026-11-17' });
   });
 });
 
@@ -283,7 +283,7 @@ describe('/tai-khoan/cai-dat: khoá chạm đúp (Mini ↔ web)', () => {
     twice(promo(container));
     await flush(2);
     expect(mocks.patch).toHaveBeenCalledTimes(1);
-    expect(mocks.patch.mock.calls[0]![1]).toEqual({ notifyPromo: false });
+    expect(mocks.patch.mock.calls[0]![1]).toEqual({ notifyPromo: false, source: 'settings', textVersion: 'notify-prefs-v2-2026-11-17' });
     await act(async () => resolveSave({ notifyPromo: false, notifyGarden: true }));
     await flush(2);
   });
@@ -298,7 +298,7 @@ describe('/tai-khoan/cai-dat: khoá chạm đúp (Mini ↔ web)', () => {
     });
     await flush(2);
     expect(mocks.patch).toHaveBeenCalledTimes(1);
-    expect(mocks.patch.mock.calls[0]![1]).toEqual({ notifyPromo: false });
+    expect(mocks.patch.mock.calls[0]![1]).toEqual({ notifyPromo: false, source: 'settings', textVersion: 'notify-prefs-v2-2026-11-17' });
     await act(async () => resolveSave({ notifyPromo: false, notifyGarden: true }));
     await flush(2);
   });

@@ -60,11 +60,28 @@ export const markAllNotificationsRead = (http: HttpClient) => http.post<{ ok: bo
 export interface NotifyPrefs {
   notifyPromo: boolean;
   notifyGarden: boolean;
+  /** "Tương tác bài viết" (thích, bình luận, trả lời bài của khách), tách khỏi "Nhắc Vườn Xanh". */
+  notifySocial: boolean;
 }
 
+/**
+ * Phiên bản câu chữ của các công tắc thông báo khách đang thấy, gửi kèm mỗi lần đổi để máy chủ lưu làm bằng chứng đồng ý. Đổi chữ công tắc
+ * (`settings.*` trong shop-copy.ts hay chữ "Khuyến mãi & mã giảm giá") thì đổi chuỗi này.
+ */
+export const NOTIFY_PREFS_TEXT_VERSION = 'notify-prefs-v2-2026-11-17';
+/** Câu chữ trước khi tách công tắc ("Nhắc nhở Vườn Xanh & tương tác bài viết"): dùng khi đẩy lựa chọn cũ lưu trên máy lên máy chủ. */
+export const NOTIFY_PREFS_LEGACY_TEXT_VERSION = 'notify-prefs-v1';
+
+export type NotifyConsentSource = 'settings' | 'onboarding' | 'unsubscribe_link';
+
 export const fetchNotifyPrefs = (http: HttpClient) => http.get<NotifyPrefs>('/me/notifications/prefs');
-export const saveNotifyPrefs = (http: HttpClient, patch: Partial<NotifyPrefs>) =>
-  http.patch<NotifyPrefs>('/me/notifications/prefs', patch);
+/** Mỗi lần đổi công tắc gửi kèm nguồn và phiên bản câu chữ (mặc định: trang Cài đặt, bản hiện tại). */
+export const saveNotifyPrefs = (
+  http: HttpClient,
+  patch: Partial<NotifyPrefs>,
+  source: NotifyConsentSource = 'settings',
+  textVersion: string = NOTIFY_PREFS_TEXT_VERSION,
+) => http.patch<NotifyPrefs>('/me/notifications/prefs', { ...patch, source, textVersion });
 
 export const updateAddress = (http: HttpClient, id: string, data: Partial<Omit<AddressDTO, 'id'>>) =>
   http.patch<AddressDTO>(`/me/addresses/${id}`, data);

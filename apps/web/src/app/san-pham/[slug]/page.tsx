@@ -234,7 +234,7 @@ export default async function ProductPage({ params }: { params: Promise<{ slug: 
                   data-pdp-block="variations"
                   className={`min-w-0 ${product.variations.length > 1 ? 'max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:pt-4' : ''}`}
                 >
-                  <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} pdpSlug={product.slug} />
+                  <AddToCart slug={product.slug} variations={product.variations} blockedReason={unavailableText} productName={product.name} thumbnail={product.thumbnail} pdpSlug={product.slug} productId={product.id} />
                 </div>
               )}
 

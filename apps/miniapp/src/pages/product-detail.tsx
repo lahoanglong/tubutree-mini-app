@@ -66,6 +66,7 @@ import { offerAmount } from '@tubutree/app-core/commerce/voucher-picker';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { pdpMedia, pdpMediaIndexOfImage } from '@tubutree/app-core/commerce/pdp-media';
 import { PdpVideoSlide } from '../components/product/pdp-video-slide';
+import { PdpRestockButton } from '../components/product/pdp-restock-button';
 import { hasOwnStory, resolveStoryConfig } from '@tubutree/app-core/commerce/product-story';
 import { needsVariationPicker, shouldOpenVariationPicker } from '@tubutree/app-core/variation-picker';
 import {
@@ -1361,9 +1362,7 @@ export default function ProductDetailPage() {
               </Button>
             </Box>
           ) : (
-            <Button variant="primary" size="lg" fullWidth disabled>
-              {vi.product.outOfStock}
-            </Button>
+            <PdpRestockButton productId={p.id} variationId={selected?.id} />
           )
         }
       />

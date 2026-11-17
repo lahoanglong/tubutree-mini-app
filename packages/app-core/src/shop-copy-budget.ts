@@ -789,4 +789,11 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'home.todo.more': 16,
   'home.todo.moreAria': null,
   'card.quickAdd': null,
+  'restock.notifyMe': 20,
+  'restock.subscribed': 26,
+  'restock.subscribedToast': null,
+  'restock.cancelledToast': null,
+  'restock.offline': null,
+  'settings.notifyGarden': 20,
+  'settings.notifySocial': 20,
 };
