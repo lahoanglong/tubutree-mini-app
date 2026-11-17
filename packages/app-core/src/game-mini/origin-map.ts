@@ -3,14 +3,6 @@
  * đảo (`MAP_ISLANDS`). Bản đồ chỉ tô vùng khách đang chọn, không phải cách trả lời: lựa chọn chưa có trong bảng (tên mới, hay lựa chọn là năm)
  * thì bản đồ không tô gì, nút vẫn dùng bình thường. Vùng là vùng sơ đồ gần nhất theo tỉnh, không theo tỉ lệ.
  */
-/** Chữ của bản đồ (chỉ web dùng): nằm ở đây chứ không ở `copy.ts` dùng chung để gói Mini App không mang chữ của phần nó không có. */
-export const ORIGIN_MAP_COPY = {
-  aria: 'Bản đồ Việt Nam vẽ sơ đồ, có quần đảo Hoàng Sa và Trường Sa',
-  none: 'Chọn một vùng để xem trên bản đồ',
-} as const;
-
-export const originMapPicked = (place: string) => `Vùng bạn chọn: ${place}`;
-
 export type OriginMapSpot = { kind: 'region'; id: string } | { kind: 'island'; id: 'hoang-sa' | 'truong-sa' | 'phu-quoc' };
 
 const REGION_OF: Record<string, string> = {

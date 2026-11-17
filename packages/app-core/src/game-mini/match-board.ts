@@ -4,8 +4,9 @@ import type { MiniMatchCard } from '@tubutree/shared-types';
  * Logic thuần của bàn Ghép Cặp (G3), dùng chung Mini App và web, chỉ nằm trong chunk của bàn này.
  *
  * Máy chủ giữ đáp án: mã thẻ của ván không cho biết thẻ nào đi với thẻ nào, nên client KHÔNG biết một cặp đúng hay sai lúc ghép. Vì vậy 12 thẻ
- * để ngửa (khách đọc được cả nguyên liệu lẫn công dụng), chạm một nguyên liệu rồi một công dụng là thành một cặp và cặp đó giữ nguyên tới lúc
- * nộp; đúng/sai và dòng khoa học của từng cặp hiện ở màn kết quả. Hai thẻ cùng loại (hai nguyên liệu hoặc hai công dụng) không ghép được:
+ * để ngửa (khách đọc được cả nguyên liệu lẫn công dụng), chạm một nguyên liệu rồi một công dụng là thành một cặp; chạm lại một thẻ của cặp là
+ * gỡ cặp đó (không biết đúng sai nên phải cho sửa, kẻo một lần chạm nhầm khoá sai hai cặp). Đúng/sai và dòng khoa học của từng cặp hiện ở màn
+ * kết quả. Hai thẻ cùng loại (hai nguyên liệu hoặc hai công dụng) không ghép được:
  * hai thẻ báo "không khớp" rồi trở lại như cũ sau `MATCH_MISMATCH_MS`.
  */
 
@@ -38,13 +39,16 @@ export function matchSettle(p: MatchProgress, now: number): MatchProgress {
 }
 
 /**
- * Chạm một thẻ. Bỏ qua (trả lại đúng đối tượng cũ) khi: thẻ lạ, thẻ đã nằm trong cặp, đã ghép hết. Chạm lại thẻ đang chọn thì bỏ chọn. Đang
+ * Chạm một thẻ. Bỏ qua (trả lại đúng đối tượng cũ) khi: thẻ lạ, đã ghép hết (ván đã nộp). Chạm thẻ đã nằm trong cặp thì gỡ cặp đó, hai thẻ về
+ * chưa chọn (số cặp sau nó lùi một). Chạm lại thẻ đang chọn thì bỏ chọn. Đang
  * hiện "không khớp" mà chạm thẻ thứ ba thì hai thẻ kia trở lại ngay và thẻ thứ ba được chọn; chạm lại một trong hai thẻ đó thì chỉ đóng
  * "không khớp". Thẻ thứ hai khác loại với thẻ đang chọn thì thành cặp; cùng loại thì sang "không khớp".
  */
 export function matchTap(p: MatchProgress, cards: readonly MiniMatchCard[], cardId: string, now: number, mismatchMs: number = MATCH_MISMATCH_MS): MatchProgress {
   const card = cards.find((c) => c.cardId === cardId);
-  if (!card || matchDone(p, cards) || matchPairNo(p, cardId) !== null) return p;
+  if (!card || matchDone(p, cards)) return p;
+  const pairNo = matchPairNo(p, cardId);
+  if (pairNo !== null) return { selected: null, mismatch: null, pairs: p.pairs.filter((_, i) => i !== pairNo - 1) };
   if (p.mismatch) {
     const { a, b } = p.mismatch;
     if (cardId === a || cardId === b) return { ...p, mismatch: null };

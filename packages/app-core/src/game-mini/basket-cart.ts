@@ -14,6 +14,50 @@ import { gameCopy } from './copy';
  * sai). Không có lời gọi thưởng nào ở đây: game này không thưởng khi thêm giỏ hay khi mua.
  */
 
+/**
+ * Bộ đúng chờ thêm giỏ khi khách web chưa đăng nhập: kết quả ván chỉ nằm trong bộ nhớ trang, nên trước khi sang đăng nhập bộ đúng được ghi vào
+ * `sessionStorage`; quay về màn Giỏ Đúng Việc trong `BASKET_PENDING_TTL_MS` thì bộ hiện lại để khách bấm thêm (không tự thêm khi khách chưa bấm).
+ */
+export const BASKET_PENDING_KEY = 'tubu.mini.basketPending.v1';
+export const BASKET_PENDING_TTL_MS = 30 * 60_000;
+const BASKET_PENDING_MAX = 6;
+const SLUG_RE = /^[a-z0-9][a-z0-9-]{0,199}$/;
+const IMAGE_RE = /^(https?:\/\/|\/)/;
+
+export function encodeBasketPending(products: readonly MiniProductCard[], now: number = Date.now()): string {
+  return JSON.stringify({
+    at: now,
+    products: products.slice(0, BASKET_PENDING_MAX).map(({ slug, name, imageUrl, price, inStock }) => ({ slug, name, imageUrl, price, inStock })),
+  });
+}
+
+/** Đọc bộ chờ; quá hạn, hỏng hay sai dạng thì null (không tin dữ liệu trong trình duyệt). */
+export function decodeBasketPending(raw: string | null, now: number = Date.now()): MiniProductCard[] | null {
+  if (!raw) return null;
+  let v: unknown;
+  try {
+    v = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!v || typeof v !== 'object') return null;
+  const { at, products } = v as { at?: unknown; products?: unknown };
+  if (typeof at !== 'number' || at > now || now - at > BASKET_PENDING_TTL_MS) return null;
+  if (!Array.isArray(products) || products.length === 0 || products.length > BASKET_PENDING_MAX) return null;
+  const out: MiniProductCard[] = [];
+  for (const p of products as unknown[]) {
+    if (!p || typeof p !== 'object') return null;
+    const { slug, name, imageUrl, price, inStock } = p as Record<string, unknown>;
+    if (typeof slug !== 'string' || !SLUG_RE.test(slug)) return null;
+    if (typeof name !== 'string' || name.length === 0 || name.length > 200) return null;
+    if (imageUrl !== null && (typeof imageUrl !== 'string' || !IMAGE_RE.test(imageUrl))) return null;
+    if (typeof price !== 'number' || !Number.isFinite(price) || price < 0) return null;
+    if (typeof inStock !== 'boolean') return null;
+    out.push({ slug, name, imageUrl, price, inStock });
+  }
+  return out;
+}
+
 export interface BasketCartLine {
   slug: string;
   name: string;

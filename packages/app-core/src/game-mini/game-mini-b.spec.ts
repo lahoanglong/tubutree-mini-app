@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { CART_BATCH_REJECTED, type MiniMatchCard, type MiniProductCard, type MiniReview, type MiniRoundContent } from '@tubutree/shared-types';
 import type { ProductCard } from '../api/catalog';
 import type { HttpClient } from '../http';
-import { addBasketToCart, basketCartLines, basketCartPlan } from './basket-cart';
+import { addBasketToCart, BASKET_PENDING_TTL_MS, basketCartLines, basketCartPlan, decodeBasketPending, encodeBasketPending } from './basket-cart';
 import { basketFull, basketReady, basketToggle } from './basket-board';
 import { GAME_MINI_COPY, GAME_MINI_COPY_MAX, type GameMiniCopyKey } from './copy';
 import { miniGameTitle, miniProgressLabel, PLAYABLE_MINI_GAMES } from './format';
@@ -68,13 +68,31 @@ describe('Ghép Cặp: matchTap', () => {
     expect(p.selected).toBeNull();
   });
 
-  it('chạm thẻ đã ghép hoặc thẻ lạ: bỏ qua, trả đúng đối tượng cũ', () => {
+  it('chạm thẻ lạ: bỏ qua, trả đúng đối tượng cũ', () => {
     const paired = tap(tap(matchStart(), 'i1'), 'u1');
-    expect(tap(paired, 'i1')).toBe(paired);
-    expect(tap(paired, 'u1')).toBe(paired);
     expect(tap(paired, 'không-có')).toBe(paired);
-    const picking = tap(paired, 'i2');
-    expect(tap(picking, 'u1')).toBe(picking);
+  });
+
+  it('chạm một thẻ của cặp đã ghép: gỡ cặp đó, hai thẻ về chưa chọn, cặp sau lùi số; thẻ đang chọn dở bỏ chọn', () => {
+    const two = tap(tap(tap(tap(matchStart(), 'i1'), 'u2'), 'i2'), 'u1');
+    expect(two.pairs).toEqual([
+      ['i1', 'u2'],
+      ['i2', 'u1'],
+    ]);
+    const undone = tap(two, 'u2');
+    expect(undone.pairs).toEqual([['i2', 'u1']]);
+    expect(matchCardState(undone, 'i1')).toBe('idle');
+    expect(matchCardState(undone, 'u2')).toBe('idle');
+    expect(matchPairNo(undone, 'i2')).toBe(1);
+    const fixed = tap(tap(undone, 'i1'), 'u2');
+    expect(fixed.pairs).toEqual([
+      ['i2', 'u1'],
+      ['i1', 'u2'],
+    ]);
+    const picking = tap(fixed, 'i3');
+    const undoWhilePicking = tap(picking, 'i1');
+    expect(undoWhilePicking.selected).toBeNull();
+    expect(undoWhilePicking.pairs).toEqual([['i2', 'u1']]);
   });
 
   it('ghép đủ thì xong; chạm thêm bị bỏ qua; đáp án là các cặp đã ghép', () => {
@@ -168,6 +186,36 @@ function fakeHttp(cards: ProductCard[], post: (body: { items: { variationId: str
 
 const rejected = () => Object.assign(new Error('Sản phẩm đã hết hàng'), { status: 409, code: CART_BATCH_REJECTED });
 
+describe('Giỏ Đúng Việc: bộ chờ khi khách web sang đăng nhập', () => {
+  const NOW = 1_800_000_000_000;
+  const set: MiniProductCard[] = [
+    { slug: 'nuoc-rua-chen', name: 'Nước rửa chén', imageUrl: 'https://cdn.tubutree.com/a.jpg', price: 89_000, inStock: true },
+    { slug: 'khan-lau', name: 'Khăn lau', imageUrl: '/api/img?u=x', price: 45_000, inStock: false },
+    { slug: 'giam-gao', name: 'Giấm gạo', imageUrl: null, price: 30_000, inStock: true },
+  ];
+
+  it('ghi rồi đọc lại đúng bộ trong 30 phút; quá hạn, giờ tương lai, hỏng thì null', () => {
+    const raw = encodeBasketPending(set, NOW);
+    expect(decodeBasketPending(raw, NOW + 60_000)).toEqual(set);
+    expect(decodeBasketPending(raw, NOW + BASKET_PENDING_TTL_MS + 1)).toBeNull();
+    expect(decodeBasketPending(raw, NOW - 1)).toBeNull();
+    expect(decodeBasketPending(null, NOW)).toBeNull();
+    expect(decodeBasketPending('{không phải json', NOW)).toBeNull();
+    expect(decodeBasketPending(JSON.stringify({ at: NOW, products: [] }), NOW)).toBeNull();
+  });
+
+  it('không tin dữ liệu trình duyệt: slug lạ, ảnh javascript:, giá âm, thiếu trường, quá 6 món thì null', () => {
+    const bad = (p: Record<string, unknown>) => decodeBasketPending(JSON.stringify({ at: NOW, products: [{ ...set[0], ...p }] }), NOW);
+    expect(bad({ slug: '../x' })).toBeNull();
+    expect(bad({ imageUrl: 'javascript:alert(1)' })).toBeNull();
+    expect(bad({ price: -1 })).toBeNull();
+    expect(bad({ inStock: 'yes' })).toBeNull();
+    expect(bad({ name: '' })).toBeNull();
+    const seven = Array.from({ length: 7 }, (_, i) => ({ ...set[0], slug: `sp-${i}` }));
+    expect(decodeBasketPending(JSON.stringify({ at: NOW, products: seven }), NOW)).toBeNull();
+  });
+});
+
 describe('Giỏ Đúng Việc: thêm bộ đúng vào giỏ', () => {
   it('basketCartPlan: món hết hàng, thiếu phân loại hay không về từ danh mục thì bỏ qua theo tên', () => {
     const plan = basketCartPlan(
@@ -195,7 +243,7 @@ describe('Giỏ Đúng Việc: thêm bộ đúng vào giỏ', () => {
     );
     const paths = [...http.get.mock.calls.map((c) => c[0]), ...http.post.mock.calls.map((c) => c[0])];
     expect(paths.some((p) => String(p).includes('/game'))).toBe(false);
-    expect(basketCartLines(r)).toEqual(['Đã thêm 2 món vào giỏ.', 'Hết hàng nên chưa thêm: Giấm gạo.']);
+    expect(basketCartLines(r)).toEqual(['Đã thêm 2 món vào giỏ.', 'Chưa thêm được (hết hàng hoặc ngừng bán): Giấm gạo.']);
   });
 
   it('danh mục còn hàng nhưng máy chủ từ chối cả lô: thêm lại từng món, món hỏng nêu tên, món còn lại vào giỏ', async () => {
@@ -214,7 +262,7 @@ describe('Giỏ Đúng Việc: thêm bộ đúng vào giỏ', () => {
     const r = await addBasketToCart(http, SET);
     expect(http.post).not.toHaveBeenCalled();
     expect(r.added).toEqual([]);
-    expect(basketCartLines(r)).toEqual(['Các món trong bộ vừa hết hàng nên chưa thêm được: Nước rửa chén, Giấm gạo, Khăn lau.']);
+    expect(basketCartLines(r)).toEqual(['Chưa thêm được món nào (hết hàng hoặc ngừng bán): Nước rửa chén, Giấm gạo, Khăn lau.']);
   });
 
   it('lỗi mạng ở lệnh đầu: ném lỗi (chưa món nào vào giỏ) để nơi gọi cho thử lại', async () => {

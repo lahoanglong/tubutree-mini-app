@@ -9,8 +9,8 @@ import { Text } from '@/components/mini';
 
 /**
  * Ghép Cặp: 60 giây, 12 thẻ ngửa (6 nguyên liệu, 6 công dụng), lưới 3 cột ở điện thoại, 4 cột từ 1024px. Chạm một nguyên liệu rồi chạm công dụng
- * hợp với nó: hai thẻ thành một cặp đánh số và giữ nguyên tới lúc nộp. Máy chủ giữ đáp án nên đúng/sai và dòng khoa học của từng cặp hiện ở màn kết
- * quả (xem `match-board.ts`). Hai thẻ cùng loại báo "không khớp" 800 ms rồi trở lại. Ghép đủ 6 cặp hoặc hết giờ thì nộp các cặp đã ghép.
+ * hợp với nó: hai thẻ thành một cặp đánh số; chạm lại thẻ của cặp để gỡ. Máy chủ giữ đáp án nên đúng/sai và dòng khoa học của từng cặp hiện ở màn
+ * kết quả (xem `match-board.ts`). Hai thẻ cùng loại báo "không khớp" 800 ms rồi trở lại. Ghép đủ 6 cặp hoặc hết giờ thì nộp các cặp đã ghép.
  */
 export default function MiniMatch({ content, onFinish, onStatus }: MiniBoardProps<{ cards: MiniMatchCard[] }>) {
   const cards = content.cards;

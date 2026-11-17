@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import type { MiniProductCard } from '@tubutree/shared-types';
 import { fetchProductsBySlugs } from '@tubutree/app-core/api/catalog';
 import { classifyMiniError, miniDeviceId, startMiniRound, submitMiniRound } from '@tubutree/app-core/game-mini/api';
 import { isMiniDisabled, miniTodayQuery, withFreshSession, type MiniSessionRefresh } from '@tubutree/app-core/game-mini/today';
@@ -47,6 +48,7 @@ import { coreHttp } from '@/lib/core-http';
 import { loginHref } from '@/lib/return-to';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
+import { takePendingBasket } from './basket-pending';
 import './mini-game.css';
 import './mini-game-b.css';
 
@@ -299,6 +301,13 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
   const onFinish = useCallback((answers: unknown[]) => dispatch({ type: 'finish', answers, now: Date.now() }), [dispatch]);
   const back = () => router.push(GAME_PATH);
   const login = () => router.push(loginHref(miniPlayPath.web(game)));
+  // Bộ đúng khách chưa đăng nhập bấm thêm ở ván trước (đã sang đăng nhập rồi quay về): hiện lại trên màn bắt đầu để khách bấm thêm.
+  const [pendingBasket, setPendingBasket] = useState<MiniProductCard[] | null>(null);
+  useEffect(() => {
+    if (game !== 'basket') return;
+    const p = takePendingBasket();
+    if (p) setPendingBasket(p);
+  }, [game]);
 
   const title = miniGameTitle(game);
   const streak = state.result?.checkIn?.streakDays ?? streakQ.data?.streakDays ?? 0;
@@ -309,7 +318,7 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
 
   let body;
   if (state.phase === 'idle' || state.phase === 'starting') {
-    body = disabled ? (
+    const startPanel = disabled ? (
       <div className="tubu-mg-panel" data-testid="mini-disabled">
         <Text variant="body-md" as="p">
           {gameCopy('error.disabled')}
@@ -341,6 +350,12 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
           {gameCopy('intro.start')}
         </Button>
       </div>
+    );
+    body = (
+      <>
+        {pendingBasket && <MiniBasketCart products={pendingBasket} pending />}
+        {startPanel}
+      </>
     );
   } else if ((state.phase === 'playing' || state.phase === 'submitting') && state.round && content) {
     body = (

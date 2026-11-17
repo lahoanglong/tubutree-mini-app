@@ -13,16 +13,18 @@ import { useAuthPhase } from '@/lib/auth-phase';
 import { cartStorefrontSlug } from '@/lib/cart-key';
 import { coreHttp } from '@/lib/core-http';
 import { loginHref } from '@/lib/return-to';
+import { clearPendingBasket, savePendingBasket } from './basket-pending';
 
 const CART_PATH = '/gio-hang';
 
 /**
  * Bộ đúng của Giỏ Đúng Việc ở màn kết quả (chunk lười riêng, chỉ tải khi ván là Giỏ Đúng Việc): 3 thẻ sản phẩm và MỘT nút "Thêm bộ này vào giỏ".
  * Khoá `busy` là ref đồng bộ nên chạm đúp chỉ gửi một lần; thêm xong (dù chỉ một món) nút thành "Xem giỏ hàng" để không cộng bộ lần hai. Khách
- * chưa đăng nhập được chuyển sang đăng nhập rồi quay về màn chơi, như "Thêm cả combo" của web. Không gọi API thưởng nào: game này không thưởng khi
- * thêm giỏ hay khi mua.
+ * chưa đăng nhập được chuyển sang đăng nhập rồi quay về màn chơi như "Thêm cả combo" của web, nhưng kết quả ván không sống qua lần chuyển trang nên
+ * bộ đúng được ghi lại trước (`basket-pending.ts`) và khung ván hiện lại với `pending` để khách bấm thêm. Không gọi API thưởng nào: game này không
+ * thưởng khi thêm giỏ hay khi mua.
  */
-export default function MiniBasketCart({ products }: { products: MiniProductCard[] }) {
+export default function MiniBasketCart({ products, pending: fromLastRound = false }: { products: MiniProductCard[]; pending?: boolean }) {
   const qc = useQueryClient();
   const router = useRouter();
   const phase = useAuthPhase();
@@ -34,6 +36,7 @@ export default function MiniBasketCart({ products }: { products: MiniProductCard
   const add = async () => {
     if (busy.current || phase === 'loading') return;
     if (phase === 'guest') {
+      savePendingBasket(products);
       router.push(loginHref(miniPlayPath.web('basket')));
       return;
     }
@@ -43,6 +46,7 @@ export default function MiniBasketCart({ products }: { products: MiniProductCard
     try {
       const r = await addBasketToCart(coreHttp, products, cartStorefrontSlug());
       if (r.added.length > 0) void qc.invalidateQueries({ queryKey: ['cart'] });
+      clearPendingBasket();
       setDone(r);
     } catch {
       setError(true);
@@ -57,14 +61,14 @@ export default function MiniBasketCart({ products }: { products: MiniProductCard
   // Không món nào vào được vì hết hàng cả bộ: bấm lại cũng vậy. Còn món chưa gửi vì mạng (chưa món nào vào giỏ) thì bấm lại được.
   const soldOut = done !== null && !added && done.unsent.length === 0;
   return (
-    <div className="tubu-mg-panel" data-testid="mini-basket-set">
+    <div className="tubu-mg-panel" data-testid={fromLastRound ? 'mini-basket-pending' : 'mini-basket-set'}>
       <Text variant="caption" tone="secondary" as="p">
-        {gameCopy('basket.set')}
+        {gameCopy(fromLastRound ? 'basket.pending' : 'basket.set')}
       </Text>
       {products.map((p) => (
         <ProductTile key={p.slug} view={miniProductView(p)} variant="line" href={miniProductPath.web(p.slug, 'basket')} />
       ))}
-      <Button fullWidth size="lg" variant="secondary" loading={pending} disabled={soldOut} onPress={added ? () => router.push(CART_PATH) : add}>
+      <Button fullWidth size="lg" variant="secondary" loading={pending || phase === 'loading'} disabled={soldOut} onPress={added ? () => router.push(CART_PATH) : add}>
         {gameCopy(added ? 'basket.viewCart' : 'basket.add')}
       </Button>
       <div role="status" aria-live="polite" data-testid="mini-basket-status">
