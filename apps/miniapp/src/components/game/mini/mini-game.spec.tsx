@@ -61,11 +61,13 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('PlayTodayCard', () => {
-  it('chỉ liệt kê game đã có giao diện, mỗi dòng ghi lượt thưởng thật và mở màn chơi', () => {
+  it('chỉ liệt kê game phát ở Mini App, mỗi dòng ghi lượt thưởng thật và mở màn chơi; game chỉ phát ở web gom vào một dòng chữ', () => {
     render(<PlayTodayCard today={today()} />);
     expect(screen.getByTestId('mini-play-row-sort')).toBeInTheDocument();
     expect(screen.getByTestId('mini-play-row-daily_quiz')).toBeInTheDocument();
-    expect(screen.getByTestId('mini-play-row-match')).toBeInTheDocument();
+    expect(screen.queryByTestId('mini-play-row-match')).toBeNull();
+    expect(screen.getByTestId('mini-play-web-only')).toHaveTextContent(gameCopy('entry.webOnly', { names: gameCopy('game.match.title') }));
+    expect(screen.getByTestId('mini-play-web-only').closest('button')).toBeNull();
     expect(screen.getByTestId('mini-play-status-sort')).toHaveTextContent(gameCopy('row.left', { n: 2 }));
     expect(screen.getByTestId('mini-play-status-daily_quiz')).toHaveTextContent(gameCopy('row.full'));
     fireEvent.click(screen.getByTestId('mini-play-row-sort'));
@@ -151,6 +153,16 @@ describe('MiniRoundShell', () => {
     fireEvent.click(start);
     await waitFor(() => expect(mocks.post).toHaveBeenCalledTimes(1));
     expect(mocks.post).toHaveBeenCalledWith('/game/mini/sort/start', {});
+  });
+
+  it('mở thẳng game chỉ phát ở web: báo chơi trên tubutree.com, không đọc lượt hôm nay, không xin ván', () => {
+    render(wrap(<MiniRoundShell game="match" />));
+    expect(screen.getByTestId('mini-web-only')).toHaveTextContent(gameCopy('entry.webOnly', { names: gameCopy('game.match.title') }));
+    expect(screen.queryByRole('button', { name: gameCopy('intro.start') })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: gameCopy('result.done') }));
+    expect(mocks.navigate).toHaveBeenCalledWith('/game');
+    expect(mocks.get).not.toHaveBeenCalled();
+    expect(mocks.post).not.toHaveBeenCalled();
   });
 });
 

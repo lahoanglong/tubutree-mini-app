@@ -1,0 +1,143 @@
+/*
+ * Bàn chơi Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc: chỉ phát ở web nên tách khỏi mini-game.css (file dùng chung với Mini App, spec so khớp hai
+ * file). Nạp sau mini-game.css; số đo nằm ở đây, mọi màu và khoảng cách đi qua token.
+ */
+
+.tubu-mg-tile:focus-visible {
+  outline: 2px solid var(--color-border-focus);
+  outline-offset: 2px;
+}
+
+/* ── Lưới thẻ của Ghép Cặp và Giỏ Đúng Việc, lựa chọn hai cột của Đoán Xuất Xứ ── */
+.tubu-mg-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-inline-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* 12 thẻ Ghép Cặp: 3 cột ở điện thoại (thẻ rộng ≥ 96px ở 360px), 4 cột từ 1024px. */
+.tubu-mg-grid[data-cols='match'] {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.tubu-mg-grid > li {
+  display: flex;
+  min-width: 0;
+}
+.tubu-mg-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 88px;
+  padding: var(--space-stack-xs) var(--space-inline-sm);
+  border: 1px solid var(--color-border-default);
+  border-radius: var(--radius-control);
+  background: var(--color-bg-surface);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-size: var(--type-body-sm-size);
+  line-height: var(--type-body-sm-lh);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color var(--motion-tap),
+    background-color var(--motion-tap);
+}
+.tubu-mg-tile[data-side='use'] {
+  background: var(--color-bg-subtle);
+}
+.tubu-mg-tile[data-state='selected'] {
+  border-color: var(--color-border-selected);
+  background: var(--color-action-secondary-bg);
+  box-shadow: inset 0 0 0 1px var(--color-border-selected);
+}
+.tubu-mg-tile[data-state='mismatch'] {
+  border-color: var(--color-status-danger-fg);
+  background: var(--color-status-danger-bg);
+}
+.tubu-mg-tile[data-state='paired'] {
+  border-color: var(--color-status-success-fg);
+  background: var(--color-status-success-bg);
+  cursor: default;
+}
+.tubu-mg-tile[aria-disabled='true'] {
+  color: var(--color-text-secondary);
+  cursor: not-allowed;
+}
+.tubu-mg-tile-side {
+  color: var(--color-text-secondary);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-label-weight);
+  line-height: var(--type-caption-lh);
+}
+.tubu-mg-tile[data-side='ingredient'] .tubu-mg-tile-side {
+  color: var(--color-text-brand);
+}
+.tubu-mg-tile[data-state='paired'] .tubu-mg-tile-side {
+  color: var(--color-status-success-fg);
+}
+.tubu-mg-tile-label {
+  display: -webkit-box;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+}
+.tubu-mg-tile-check {
+  position: absolute;
+  top: var(--space-stack-xs);
+  right: var(--space-inline-sm);
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  font-size: var(--type-caption-size);
+  font-weight: var(--type-label-weight);
+  line-height: 1;
+}
+.tubu-mg-tile[data-state='selected'] .tubu-mg-tile-check {
+  border-color: var(--color-action-primary-bg);
+  background: var(--color-action-primary-bg);
+  color: var(--color-action-primary-fg);
+}
+.tubu-mg-tile-check + .tubu-mg-tile-label {
+  padding-right: 24px;
+}
+.tubu-mg-option[data-center='true'] {
+  justify-content: center;
+  height: 100%;
+  min-height: 56px;
+  text-align: center;
+}
+.tubu-mg-prompt {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+}
+/* Giữ chỗ một dòng chú thích: dòng nhắc hiện ra không đẩy nút "Xong" xuống. */
+.tubu-mg-hint {
+  min-height: calc(var(--type-caption-size) * var(--type-caption-lh));
+}
+.tubu-mg-board-skeleton[data-size='sm'] {
+  min-height: 240px;
+}
+
+@media (min-width: 1024px) {
+  .tubu-mg-grid[data-cols='match'] {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tubu-mg-tile {
+    transition: none;
+  }
+}

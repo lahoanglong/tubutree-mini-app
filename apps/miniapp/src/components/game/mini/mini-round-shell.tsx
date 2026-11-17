@@ -4,10 +4,20 @@ import { classifyMiniError, miniDeviceId, startMiniRound, submitMiniRound } from
 import { isMiniDisabled, miniTodayQuery, withFreshSession, type MiniSessionRefresh } from '@tubutree/app-core/game-mini/today';
 import { type MiniBoardProps, type MiniBoardStatus } from '@tubutree/app-core/game-mini/boards';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
-import { miniClock, miniFailureView, miniGameRules, miniGameTitle, miniIntroReward, miniProgressLabel, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
+import {
+  isMiniAppGame,
+  miniClock,
+  miniFailureView,
+  miniGameRules,
+  miniGameTitle,
+  miniIntroReward,
+  type MiniAppGame,
+  type PlayableMiniGame,
+} from '@tubutree/app-core/game-mini/format';
 import { initialRoundState, roundReducer, submitDelayMs } from '@tubutree/app-core/game-mini/round-machine';
 import { useLoginWithNotice } from '../../ui/auth-gate';
 import { Button } from '../../ui/button';
+import { EmptyState } from '../../ui/empty-state';
 import { PageHeader } from '../../ui/page-header';
 import { Heading, Text } from '../../ui/text';
 import { useAuthPhase } from '../../../hooks/use-auth-phase';
@@ -20,12 +30,9 @@ import { useLockedMutation } from '../use-locked-mutation';
 import './mini-game.css';
 
 // Mỗi game một chunk lười: màn chơi chỉ tải bàn chơi của game đang mở.
-const BOARDS: Record<PlayableMiniGame, ComponentType<MiniBoardProps<never>>> = {
+const BOARDS: Record<MiniAppGame, ComponentType<MiniBoardProps<never>>> = {
   daily_quiz: lazy(() => import('./mini-daily-quiz')) as ComponentType<MiniBoardProps<never>>,
   sort: lazy(() => import('./mini-sort')) as ComponentType<MiniBoardProps<never>>,
-  match: lazy(() => import('./mini-match')) as ComponentType<MiniBoardProps<never>>,
-  origin: lazy(() => import('./mini-origin')) as ComponentType<MiniBoardProps<never>>,
-  basket: lazy(() => import('./mini-basket')) as ComponentType<MiniBoardProps<never>>,
 };
 const loadResult = () => import('./mini-result');
 const MiniResult = lazy(loadResult);
@@ -90,7 +97,7 @@ function StatusBar({ game, status, rewarded }: { game: PlayableMiniGame; status:
   const done = status?.done ?? 0;
   const total = status?.total ?? 0;
   const msLeft = status?.msLeft ?? 0;
-  const label = miniProgressLabel(game, done, total);
+  const label = game === 'daily_quiz' ? gameCopy('progress.question', { n: Math.min(done + 1, total || 1), m: total || 1 }) : gameCopy('progress.items', { n: done, m: total });
   return (
     <div className="tubu-mg-status" data-testid="mini-status">
       <div className="tubu-mg-status-row">
@@ -115,7 +122,7 @@ function StatusBar({ game, status, rewarded }: { game: PlayableMiniGame; status:
  * Khung ván dùng chung của game mini (chunk lười `mini-round-shell`): thanh trên (tên, chuỗi ngày ở Đố Xanh), tiến độ và đồng hồ, vùng chơi,
  * màn kết quả, lỗi và quá hạn. Logic chuyển pha ở `roundReducer` (app-core), bàn chơi từng game tải lười riêng.
  */
-export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
+function RoundShell({ game }: { game: MiniAppGame }) {
   const navigate = useSmartNavigate();
   const login = useLoginWithNotice();
   const phase = useAuthPhase();
@@ -247,4 +254,21 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
       </div>
     </>
   );
+}
+
+/** Mở thẳng màn chơi của game chỉ phát ở web (ví dụ `/game/play/match`): báo chơi trên tubutree.com, không tạo ván. */
+function WebOnlyGame({ game }: { game: PlayableMiniGame }) {
+  const navigate = useSmartNavigate();
+  return (
+    <>
+      <PageHeader title={miniGameTitle(game)} />
+      <div data-testid="mini-web-only">
+        <EmptyState art="sprout" heading={gameCopy('entry.webOnly', { names: miniGameTitle(game) })} ctaLabel={gameCopy('result.done')} onCta={() => navigate(GAME_PATH)} />
+      </div>
+    </>
+  );
+}
+
+export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
+  return isMiniAppGame(game) ? <RoundShell game={game} /> : <WebOnlyGame game={game} />;
 }

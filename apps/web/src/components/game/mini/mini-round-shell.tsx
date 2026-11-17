@@ -48,6 +48,7 @@ import { loginHref } from '@/lib/return-to';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
 import './mini-game.css';
+import './mini-game-b.css';
 
 const boardSkeleton = () => <div className="tubu-mg-board-skeleton" aria-hidden />;
 

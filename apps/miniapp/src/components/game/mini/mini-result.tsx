@@ -1,18 +1,12 @@
-import { lazy, Suspense } from 'react';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
-import { MINI_RECYCLE_PATH, miniResultSummary, sourceHost, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
-import { MINI_REVIEW_BADGE, miniReviewRows, type MiniReviewRow } from '@tubutree/app-core/game-mini/review';
+import { MINI_RECYCLE_PATH, miniProductPath, miniResultSummary, sourceHost, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
+import { MINI_REVIEW_BADGE, miniProductView, miniQuizProduct, miniReviewRows, type MiniReviewRow } from '@tubutree/app-core/game-mini/review';
 import type { RoundState } from '@tubutree/app-core/game-mini/round-machine';
 import { Button } from '../../ui/button';
+import { ProductTile } from '../../ui/product-tile';
 import { Heading, Text } from '../../ui/text';
 import { usePublicConfig } from '../../../hooks/use-public-config';
 import { useSmartNavigate } from '../../../lib/smart-nav';
-
-// Khối sản phẩm (và mã thêm giỏ của Giỏ Đúng Việc) là chunk riêng để màn kết quả giữ dưới trần 6 KB; tải ngay khi chunk này tải (lúc đang chơi)
-// nên khối hiện cùng lúc với điểm.
-const loadProducts = () => import('./mini-result-products');
-const MiniResultProducts = lazy(loadProducts);
-void loadProducts();
 
 /** Nguồn ở Mini App: chỉ hiện tên miền, vì chính sách Zalo không cho Mini App mở trang ngoài Zalo. */
 function SourceNote({ url }: { url: string }) {
@@ -63,6 +57,7 @@ export default function MiniResult({ game, state, onDone, onLogin }: { game: Pla
   const waste = usePublicConfig().waste.enabled;
   const r = state.result!;
   const summary = miniResultSummary(r);
+  const product = miniQuizProduct(state.round?.content);
   return (
     <section className="tubu-mg-panel" aria-labelledby="mini-result-title" data-testid="mini-result">
       <Heading id="mini-result-title" as="h2" variant="title-md" font="ui">
@@ -99,15 +94,20 @@ export default function MiniResult({ game, state, onDone, onLogin }: { game: Pla
           {gameCopy('invite.sort')}
         </button>
       )}
-      {game !== 'sort' && (
-        <Suspense fallback={null}>
-          <MiniResultProducts game={game} state={state} />
-        </Suspense>
+      {game === 'daily_quiz' && product && (
+        <div className="tubu-mg-panel">
+          <Text variant="caption" tone="secondary" as="p">
+            {gameCopy('result.product')}
+          </Text>
+          <div data-testid="mini-result-product">
+            <ProductTile view={miniProductView(product)} variant="line" href={miniProductPath.miniapp(product.slug, game)} />
+          </div>
+        </div>
       )}
       <Heading as="h3" variant="title-sm" font="ui">
         {gameCopy('result.review')}
       </Heading>
-      {state.round && <ReviewList rows={miniReviewRows(r.review, state.round.content, state.answers)} />}
+      {state.round && <ReviewList rows={miniReviewRows(r.review, state.round.content)} />}
     </section>
   );
 }

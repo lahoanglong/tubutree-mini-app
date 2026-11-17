@@ -19,6 +19,8 @@ import {
 } from './boards';
 import { GAME_MINI_COPY, GAME_MINI_COPY_MAX, gameCopy, type GameMiniCopyKey } from './copy';
 import {
+  isMiniAppGame,
+  miniAppToday,
   miniCapLines,
   miniClock,
   miniEarnQuizLeft,
@@ -28,6 +30,7 @@ import {
   miniProductPath,
   miniResultSummary,
   miniRowStatus,
+  miniWebOnlyLine,
   playableToday,
   safeSourceUrl,
   sourceHost,
@@ -316,6 +319,17 @@ describe('định dạng', () => {
   it('Chơi hôm nay: chỉ game đã có giao diện, Đố Xanh trước', () => {
     expect(playableToday(today()).map((g) => g.game)).toEqual(['daily_quiz', 'sort', 'match']);
     expect(playableToday(undefined)).toEqual([]);
+  });
+
+  it('Mini App: chỉ Đố Xanh và Đúng Thùng là dòng chơi; Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc gom vào một dòng "chơi trên tubutree.com"', () => {
+    expect(['daily_quiz', 'sort', 'match', 'origin', 'basket'].filter((g) => isMiniAppGame(g as never))).toEqual(['daily_quiz', 'sort']);
+    const t = miniAppToday(today());
+    expect(t.rows.map((g) => g.game)).toEqual(['daily_quiz', 'sort']);
+    expect(t.webOnly).toEqual(['match']);
+    expect(miniAppToday(undefined)).toEqual({ rows: [], webOnly: [] });
+    expect(miniWebOnlyLine(['match', 'origin', 'basket'])).toBe('Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc: chơi trên tubutree.com');
+    expect(miniWebOnlyLine([])).toBeNull();
+    expect(miniWebOnlyLine(['match', 'origin', 'basket'])!.length).toBeLessThanOrEqual(GAME_MINI_COPY_MAX['entry.webOnly']!);
   });
 
   it('dòng trạng thái: chơi thử / còn n lượt / đã nhận đủ', () => {

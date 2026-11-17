@@ -10,6 +10,7 @@ export const GAME_MINI_COPY = {
   'entry.sub': 'Mỗi ván dưới 1 phút, học thêm một điều xanh',
   'entry.loadError': 'Chưa tải được danh sách game. Bạn thử lại nhé.',
   'entry.retry': 'Thử lại',
+  'entry.webOnly': '{names}: chơi trên tubutree.com',
   'game.daily_quiz.title': 'Đố Xanh Mỗi Ngày',
   'game.daily_quiz.desc': '3 câu, 1 phút, tính luôn điểm danh hôm nay',
   'game.daily_quiz.rules': '3 câu, mỗi câu 20 giây. Chọn một đáp án rồi bấm Câu tiếp. Xong bài là điểm danh luôn cho hôm nay.',
@@ -133,6 +134,7 @@ export type GameMiniCopyKey = keyof typeof GAME_MINI_COPY;
 /** Số ký tự tối đa của từng khoá (sau khi điền biến với giá trị thường gặp): chặn câu dài làm vỡ dòng gọn ở 360px. */
 export const GAME_MINI_COPY_MAX: Partial<Record<GameMiniCopyKey, number>> = {
   'entry.title': 20,
+  'entry.webOnly': 64,
   'game.daily_quiz.title': 24,
   'game.sort.title': 24,
   'game.daily_quiz.desc': 48,

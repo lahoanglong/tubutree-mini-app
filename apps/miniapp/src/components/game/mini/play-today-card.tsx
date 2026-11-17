@@ -1,17 +1,18 @@
 import { useId } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, CircleHelp, MapPin, Puzzle, Recycle, ShoppingBasket, type LucideIcon } from 'lucide-react';
+import { ChevronRight, CircleHelp, Recycle, type LucideIcon } from 'lucide-react';
 import type { MiniTodayResponse } from '@tubutree/shared-types';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniTodayQuery } from '@tubutree/app-core/game-mini/today';
 import {
+  miniAppToday,
   miniEarnQuizLeft,
   miniGameDesc,
   miniGameTitle,
   miniPlayPath,
   miniRowStatus,
-  playableToday,
-  type PlayableMiniGame,
+  miniWebOnlyLine,
+  type MiniAppGame,
 } from '@tubutree/app-core/game-mini/format';
 import { useSmartNavigate } from '../../../lib/smart-nav';
 import { refreshAccessToken } from '../../../services/api';
@@ -22,7 +23,7 @@ import { Icon } from '../../ui/icon';
 import { Heading, Text } from '../../ui/text';
 import './mini-game.css';
 
-const GAME_ICON: Record<PlayableMiniGame, LucideIcon> = { daily_quiz: CircleHelp, sort: Recycle, match: Puzzle, origin: MapPin, basket: ShoppingBasket };
+const GAME_ICON: Record<MiniAppGame, LucideIcon> = { daily_quiz: CircleHelp, sort: Recycle };
 
 const refreshSession = () => refreshAccessToken().then(Boolean);
 
@@ -33,7 +34,7 @@ const refreshSession = () => refreshAccessToken().then(Boolean);
  */
 export function useMiniToday(enabled: boolean, authed: boolean) {
   const { data } = useQuery({ ...miniTodayQuery(coreHttp, authed, refreshSession), enabled });
-  const today = data && playableToday(data).length > 0 ? data : null;
+  const today = data && miniAppToday(data).rows.length > 0 ? data : null;
   const quizOpen = today?.games.some((g) => g.game === 'daily_quiz') ?? false;
   const earn: EarnQuizState | null = today && quizOpen ? { status: 'ready', left: miniEarnQuizLeft(today) } : null;
   return { today, quiz: earn && { earn, path: miniPlayPath.miniapp('daily_quiz') } };
@@ -41,12 +42,14 @@ export function useMiniToday(enabled: boolean, authed: boolean) {
 
 /**
  * Thẻ "Chơi hôm nay" ở Vườn Xanh (chỉ khi máy chủ bật `game.mini.enabled`): thay khối đố vui cũ và hai thẻ arcade. Mỗi game một dòng gọn
- * (tên, mô tả một dòng, lượt thưởng còn lại), chạm dòng mở màn chơi. `inset`: đứng ngoài lưới thẻ của trang (dưới cổng đăng nhập) nên tự lùi lề.
+ * (tên, mô tả một dòng, lượt thưởng còn lại), chạm dòng mở màn chơi. Game chỉ phát ở web gom vào một dòng chữ cuối thẻ, không phải nút: chính
+ * sách Zalo không cho Mini App mở trang ngoài. `inset`: đứng ngoài lưới thẻ của trang (dưới cổng đăng nhập) nên tự lùi lề.
  */
 export function PlayTodayCard({ today, inset = false }: { today: MiniTodayResponse; inset?: boolean }) {
   const titleId = useId();
   const navigate = useSmartNavigate();
-  const games = playableToday(today);
+  const { rows: games, webOnly } = miniAppToday(today);
+  const webLine = miniWebOnlyLine(webOnly);
   return (
     <section
       aria-labelledby={titleId}
@@ -87,6 +90,11 @@ export function PlayTodayCard({ today, inset = false }: { today: MiniTodayRespon
               );
             })}
           </ul>
+          {webLine && (
+            <Text variant="caption" tone="secondary" as="p" data-testid="mini-play-web-only">
+              {webLine}
+            </Text>
+          )}
         </div>
       </Card>
     </section>
