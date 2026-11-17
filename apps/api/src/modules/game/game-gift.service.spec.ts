@@ -116,16 +116,16 @@ describe('GameGiftService.giftWater', () => {
   });
 
   it('cộng tank người nhận có cap tank_capacity (increment vượt cap → clamp qua updateMany guard)', async () => {
-    const { svc, gameProfile, executeRaw } = setup({ recipient: { totalSeeds: 495 } });
-    // Mô phỏng increment atomic thật trong DB: 495 + 10 = 505 (vượt cap 500).
-    (gameProfile.upsert as jest.Mock).mockResolvedValue({ totalSeeds: 505 });
+    const { svc, gameProfile, executeRaw } = setup({ recipient: { totalSeeds: 995 } });
+    // Mô phỏng increment atomic thật trong DB: 995 + 10 = 1005 (vượt cap mặc định 1000).
+    (gameProfile.upsert as jest.Mock).mockResolvedValue({ totalSeeds: 1005 });
     await svc.giftWater('u1', 'friend1');
     expect(gameProfile.upsert.mock.calls[0][0].update.totalSeeds).toEqual({ increment: 10 });
     // Clamp guarded (totalSeeds > cap) thay vì set tuyệt đối không điều kiện — không đè mất phần
     // cộng của thao tác khác diễn ra giữa lúc đọc `upserted` và lúc clamp.
     // Giữ phần đã vượt sẵn từ nước theo đơn: đích = max(cap, tổng trước lượt này) nên chỉ cắt phần vừa cộng.
     const [, cap, added, userId, capAgain] = executeRaw.mock.calls[0];
-    expect([cap, added, userId, capAgain]).toEqual([500, 10, 'friend1', 500]);
+    expect([cap, added, userId, capAgain]).toEqual([1000, 10, 'friend1', 1000]);
   });
 });
 

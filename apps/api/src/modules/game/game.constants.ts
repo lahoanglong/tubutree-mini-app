@@ -5,6 +5,14 @@ import type { SystemConfigService } from '../system-config/system-config.service
 // (Nếu muốn config-driven hơn → đọc từ SystemConfig key 'game.tree_default_type'.)
 export const DEFAULT_TREE_TYPE = 'Cây Dứa Fuwa3e';
 
+/**
+ * Giá trị dùng khi khoá cấu hình chưa có dòng (DB mới chưa seed, dòng bị xoá): trùng seed và giá trị đang chạy trên PROD. Lệch nhau thì
+ * bình nước và giá vé/hồi sinh đổi ngầm theo việc dòng cấu hình có hay không.
+ */
+export const GAME_TANK_CAPACITY_DEFAULT = 1000;
+export const GAME_STREAK_FREEZE_COST_DEFAULT = 40;
+export const GAME_STREAK_REPAIR_COST_DEFAULT = 50;
+
 /** Ngưỡng đơn tối thiểu mặc định của coupon thu hoạch (quyết định Q-02, C-009). */
 export const HARVEST_COUPON_MIN_ORDER_DEFAULT = 199000;
 

@@ -24,7 +24,7 @@ const settings = (over: Partial<MiniSettings> = {}): MiniSettings => ({
   accountsPerDevice: 2,
   globalBudget: 200_000,
   minAccountAgeHours: 0,
-  tankCapacity: 500,
+  tankCapacity: 1000,
   ...over,
 });
 
@@ -166,7 +166,7 @@ describe('readMiniSettings', () => {
       accountsPerDevice: 2,
       globalBudget: 200_000,
       minAccountAgeHours: 0,
-      tankCapacity: 500,
+      tankCapacity: 1000,
     });
   });
 
@@ -198,8 +198,8 @@ describe('readMiniSettings', () => {
     expect(s.tankCapacity).toBe(800);
   });
 
-  it.each([[0], [-10], ['800'], [Number.NaN], [null], [Number.POSITIVE_INFINITY]])('sức chứa bình %j không hợp lệ → 500', async (raw) => {
-    expect((await readMiniSettings(configOf({ 'game.tank_capacity': raw }))).tankCapacity).toBe(500);
+  it.each([[0], [-10], ['800'], [Number.NaN], [null], [Number.POSITIVE_INFINITY]])('sức chứa bình %j không hợp lệ → 1000 (cùng seed)', async (raw) => {
+    expect((await readMiniSettings(configOf({ 'game.tank_capacity': raw }))).tankCapacity).toBe(1000);
   });
 
   it('sức chứa bình thập phân được làm tròn xuống', async () => {

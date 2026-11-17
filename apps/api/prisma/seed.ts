@@ -223,6 +223,9 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'game.mini.accounts_per_device_per_day', value: 2, category: 'game', description: 'Số tài khoản được thưởng game mini trên cùng một thiết bị mỗi ngày (lớp ma sát: mã thiết bị do ứng dụng gửi). 1–10.', createOnly: true },
   { key: 'game.mini.global_points_daily_budget', value: 200_000, category: 'game', description: 'Tổng Điểm Xanh game mini phát cho mọi tài khoản mỗi ngày; chạm trần thì các ván sau chỉ nhận 💧. 0–1.000.000.', createOnly: true },
   { key: 'game.mini.min_account_age_hours', value: 0, category: 'game', description: 'Tài khoản tạo chưa đủ số giờ này thì chơi game mini không có thưởng (0 = không chặn). 0–720.', createOnly: true },
+  // Nhịp hằng ngày (game/missions): cờ mặc định TẮT, trùng dòng INSERT của migration 20261117120000_engagement_daily_badges.
+  { key: 'engagement.daily_missions_enabled', value: false, category: 'engagement', description: 'Bật 3 nhiệm vụ hằng ngày ở thẻ Nhiệm vụ (Vườn Xanh), chấm nhắc ở thanh đáy và chuông trên web điện thoại. Thưởng 💧 và Điểm Xanh tính chung trần game mini (game.mini.*).', createOnly: true },
+  { key: 'engagement.badges_enabled', value: false, category: 'engagement', description: 'Bật hàng 8 huy hiệu ở màn Cá nhân (0 điểm, chỉ ghi nhận). Tắt thì không cấp huy hiệu mới và không hiện hàng.', createOnly: true },
   { key: 'seasonpass.checkin_xp', value: 10, category: 'game', description: 'XP season pass mỗi lần điểm danh' },
   {
     key: 'seasonpass.tiers',
@@ -264,6 +267,8 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
     ],
     category: 'game',
     description: 'Bảng giải vòng quay + trọng số xác suất',
+    // Admin chỉnh bảng giải ở tab Cấu hình: deploy lại không đặt lại về bảng này.
+    createOnly: true,
   },
 
   // Shipping
@@ -993,6 +998,28 @@ export const MISSIONS = [
   { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Điểm danh Vườn Xanh 7 ngày liên tiếp (nhận một lần)', rewardPoints: 30_000, goal: 7, isRepeatable: false },
   { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', description: 'Viết 3 đánh giá có ảnh', rewardPoints: 15_000, goal: 3, isRepeatable: false },
   { id: 'm4', code: 'INVITE_3', title: 'Lan toả sống xanh', description: 'Mời 3 bạn mua hàng thành công qua mã giới thiệu', rewardPoints: 50_000, goal: 3, isRepeatable: false },
+  // Dòng mẫu nhiệm vụ hằng ngày (trùng migration 20261117120000_engagement_daily_badges): luôn có disabledAt để image cũ không vẽ chúng;
+  // bật bằng cờ engagement.daily_missions_enabled, thưởng đi qua sổ ngày game mini nên rewardPoints = 0.
+  ...(
+    [
+      ['daily-quiz', 'DAILY_QUIZ', 'Hôm nay: Đố Xanh', 'Làm xong Đố Xanh hôm nay'],
+      ['daily-play', 'DAILY_PLAY', 'Hôm nay: chơi một trò', 'Chơi xong một trò bất kỳ ở Vườn Xanh hôm nay'],
+      ['daily-story', 'DAILY_STORY', 'Hôm nay: xem câu chuyện sản phẩm', 'Mở trang một sản phẩm và xem câu chuyện của nó hôm nay'],
+      ['daily-wishlist', 'DAILY_WISHLIST', 'Hôm nay: thêm vào yêu thích', 'Thêm một món vào Yêu thích hôm nay'],
+      ['daily-water', 'DAILY_WATER', 'Hôm nay: tưới cây', 'Tưới cây ở Vườn Xanh hôm nay'],
+      ['daily-bonus', 'DAILY_BONUS', 'Hôm nay: xong cả 3 nhiệm vụ', 'Thưởng thêm khi nhận đủ 3 nhiệm vụ của ngày'],
+    ] as const
+  ).map(([id, code, title, description]) => ({
+    id,
+    code,
+    title,
+    description,
+    rewardPoints: 0,
+    goal: 1,
+    isRepeatable: true,
+    kind: code,
+    disabledAt: new Date('2026-11-17T00:00:00Z'),
+  })),
 ];
 
 const CASHBACK_MERCHANTS = [

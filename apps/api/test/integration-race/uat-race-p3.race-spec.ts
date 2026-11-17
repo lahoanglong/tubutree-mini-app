@@ -5,6 +5,7 @@ import { PANCAKE_PUSH, PancakeOrderService } from '../../src/modules/integration
 import type { PancakeClient } from '../../src/modules/integrations/pancake/pancake.client';
 import { PancakeApiError, PancakePushSettlingError } from '../../src/modules/integrations/pancake/pancake-outbound';
 import { GameEconomyService } from '../../src/modules/game/game-economy.service';
+import { GAME_STREAK_FREEZE_COST_DEFAULT, GAME_STREAK_REPAIR_COST_DEFAULT } from '../../src/modules/game/game.constants';
 import { PayrollService } from '../../src/modules/staff/payroll/payroll.service';
 import { AttendanceService } from '../../src/modules/staff/attendance/attendance.service';
 import { AdminAttendanceController } from '../../src/modules/staff/attendance/admin-attendance.controller';
@@ -158,7 +159,7 @@ describe('UAT race p3 (real Postgres)', () => {
       const after = await prisma.gameProfile.findUniqueOrThrow({ where: { userId: u.id } });
       expect(after.streakFreezes).toBe(1);
       expect(after.streakDays).toBe(6);
-      expect(after.totalSeeds).toBe(300 - 80 + 10 + 5);
+      expect(after.totalSeeds).toBe(300 - GAME_STREAK_FREEZE_COST_DEFAULT + 10 + 5);
     });
 
     it('(b) hồi sinh chuỗi lúc điểm danh đang chạy → chuỗi = chuỗi đã hồi sinh + 1, không tụt về 2', async () => {
@@ -185,7 +186,7 @@ describe('UAT race p3 (real Postgres)', () => {
       const after = await prisma.gameProfile.findUniqueOrThrow({ where: { userId: u.id } });
       expect(after.streakDays).toBe(12);
       expect(after.brokenStreakAt).toBeNull();
-      expect(after.totalSeeds).toBe(300 - 150 + 10 + 5);
+      expect(after.totalSeeds).toBe(300 - GAME_STREAK_REPAIR_COST_DEFAULT + 10 + 5);
     });
   });
 

@@ -731,7 +731,7 @@ describe('GameMiniService.submit: người dùng thật, ván đã lưu', () => 
         base: { water: 10, points: 10 },
         deviceHash: deviceHash(SECRET, 'thiet-bi-abcdef12'),
         pointsExpiresAt: new Date('2027-11-17T00:00:00.000Z'),
-        settings: expect.objectContaining({ waterCap: 40, pointsCap: 100, accountsPerDevice: 2, globalBudget: 200_000, tankCapacity: 500 }),
+        settings: expect.objectContaining({ waterCap: 40, pointsCap: 100, accountsPerDevice: 2, globalBudget: 200_000, tankCapacity: 1000 }),
       }),
     );
     expect(w.loyalty.pointsExpiresAt).toHaveBeenCalledWith(NOW);

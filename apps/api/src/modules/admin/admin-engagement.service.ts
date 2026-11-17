@@ -2,7 +2,7 @@ import { BadRequestException, ConflictException, Injectable, Logger, NotFoundExc
 import { randomBytes, randomUUID } from 'node:crypto';
 import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
-import { MISSION_GOAL_MAX, missionKindOf, type MissionKind } from '../../common/mission-kinds';
+import { MISSION_GOAL_MAX, isDailyTemplate, missionKindOf, type MissionKind } from '../../common/mission-kinds';
 
 export interface MissionPatch {
   title?: string;
@@ -32,11 +32,16 @@ export class AdminEngagementService {
 
   constructor(private readonly prisma: PrismaService) {}
 
+  /**
+   * Dòng mẫu của nhiệm vụ hằng ngày (`kind` DAILY_*) không nằm trong màn này: bật/tắt bằng cờ engagement.daily_missions_enabled, và bật
+   * một dòng mẫu ở đây sẽ làm nó hiện thành nhiệm vụ một lần không chấm được.
+   */
   async listMissions() {
-    const [missions, claims] = await Promise.all([
+    const [all, claims] = await Promise.all([
       this.prisma.mission.findMany({ orderBy: { code: 'asc' } }),
       this.prisma.missionProgress.groupBy({ by: ['missionId'], _count: { _all: true } }),
     ]);
+    const missions = all.filter((m) => !isDailyTemplate(m));
     const claimed = new Map(claims.map((c) => [c.missionId, c._count._all]));
     return missions.map((m) => ({
       ...m,
@@ -84,7 +89,7 @@ export class AdminEngagementService {
 
   async updateMission(id: string, patch: MissionPatch) {
     const found = await this.prisma.mission.findUnique({ where: { id } });
-    if (!found) throw new NotFoundException('Không tìm thấy nhiệm vụ.');
+    if (!found || isDailyTemplate(found)) throw new NotFoundException('Không tìm thấy nhiệm vụ.');
     const data: { title?: string; description?: string; rewardPoints?: number; disabledAt?: Date | null } = {};
     if (patch.title !== undefined) data.title = patch.title;
     if (patch.description !== undefined) data.description = patch.description;

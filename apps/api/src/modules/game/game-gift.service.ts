@@ -6,6 +6,7 @@ import { clampTankKeepingOverflow, initialEcoImpact } from './game-profile';
 import { NotificationsService } from '../notifications/notifications.service';
 import { vnDateKey } from '../../common/vn-time';
 import { maskName } from '../../common/mask-name';
+import { GAME_TANK_CAPACITY_DEFAULT } from './game.constants';
 
 /**
  * Vườn Xanh 2.0 (social) — tặng nước cho bạn bè trong mạng giới thiệu.
@@ -83,7 +84,7 @@ export class GameGiftService {
     const dayKey = vnDateKey();
 
     // Đọc cấu hình trước khi mở tx để tx chỉ giữ khoá qua các câu ghi.
-    const cap = await this.config.get<number>('game.tank_capacity', 500);
+    const cap = await this.config.get<number>('game.tank_capacity', GAME_TANK_CAPACITY_DEFAULT);
     const ecoImpact = await initialEcoImpact(this.config);
 
     // Bản ghi gift (unique chống tặng 2 lần/ngày/người), trừ nước người gửi và cộng nước người nhận nằm trong MỘT

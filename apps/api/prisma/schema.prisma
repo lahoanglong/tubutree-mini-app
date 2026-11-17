@@ -324,6 +324,7 @@ model User {
   gameArcadeScores       GameArcadeScore[]
   gamePlayRounds         GamePlayRound[]
   gameDailyLedgers       GameDailyLedger[]
+  userBadges             UserBadge[]
   gameDeviceDailies      GameDeviceDaily[]
   reviews                Review[]
   refreshTokens          RefreshToken[]
@@ -3197,6 +3198,18 @@ model GameGlobalDaily {
   @@map("game_global_daily")
 }
 
+/// Huy hiệu ghi nhận (0 điểm, game/missions/badges.ts): mỗi (khách, huy hiệu) một dòng, cấp bằng INSERT ... ON CONFLICT DO NOTHING
+/// (job đêm và lúc khách mở hàng huy hiệu). Không xoá khi điều kiện tụt (đơn trả, đánh giá xoá): huy hiệu là mốc đã đạt.
+model UserBadge {
+  userId   String
+  user     User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  badge    String
+  earnedAt DateTime @default(now())
+
+  @@id([userId, badge])
+  @@map("user_badges")
+}
+
 model Mission {
   id           String    @id
   code         String    @unique
@@ -3208,7 +3221,8 @@ model Mission {
   isRepeatable Boolean   @default(false)
   /// Cách chấm tiến độ (common/mission-kinds.ts). NULL = suy từ `code` (4 nhiệm vụ seed).
   kind         String?
-  /// Có giá trị = nhiệm vụ đang tạm dừng: không hiện cho khách, không nhận thưởng được.
+  /// Có giá trị = nhiệm vụ đang tạm dừng: không hiện cho khách, không nhận thưởng được. Riêng dòng mẫu nhiệm vụ hằng ngày (`kind`
+  /// DAILY_*) luôn có giá trị để image cũ không vẽ chúng; chúng bật bằng cờ engagement.daily_missions_enabled.
   disabledAt   DateTime?
   /// Chỉ tính việc khách làm từ mốc này. NULL = tính trọn đời (4 nhiệm vụ seed); nhiệm vụ quản trị thêm đặt = lúc tạo.
   startsAt     DateTime?

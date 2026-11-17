@@ -35,3 +35,21 @@ export function missionKindOf(m: { code: string; kind?: string | null }): Missio
   if (isMissionKind(m.kind)) return m.kind;
   return LEGACY_CODE_KIND[m.code] ?? null;
 }
+
+/**
+ * Nhiệm vụ hằng ngày (game/missions): dòng mẫu trong `missions` có `kind` DAILY_*, chu kỳ là ngày VN. Không nằm trong MISSION_KINDS nên
+ * quản trị không tạo được, `missionKindOf` trả null và đường nhận nhiệm vụ một lần không chấm chúng.
+ */
+export const DAILY_MISSION_KINDS = ['DAILY_QUIZ', 'DAILY_PLAY', 'DAILY_STORY', 'DAILY_WISHLIST', 'DAILY_WATER'] as const;
+export type DailyMissionKind = (typeof DAILY_MISSION_KINDS)[number];
+/** Dòng mẫu của phần thưởng "xong cả 3": khoá nhận một lần mỗi ngày như một nhiệm vụ. */
+export const DAILY_BONUS_KIND = 'DAILY_BONUS';
+
+export function isDailyMissionKind(v: unknown): v is DailyMissionKind {
+  return typeof v === 'string' && (DAILY_MISSION_KINDS as readonly string[]).includes(v);
+}
+
+/** Dòng mẫu của nhiệm vụ hằng ngày hoặc thưởng ngày: không phải nhiệm vụ một lần, quản trị không sửa hay bật được. */
+export function isDailyTemplate(m: { kind?: string | null }): boolean {
+  return typeof m.kind === 'string' && m.kind.startsWith('DAILY_');
+}

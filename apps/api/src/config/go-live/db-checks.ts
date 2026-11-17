@@ -28,8 +28,9 @@ const MULTI_REVIEWS_MIGRATION = REQUIRED_MIGRATIONS[2];
  * chuyện sản phẩm (một cột JSONB NULL mới trên products mà image cũ không đọc), w5 (chỉ sửa chữ cột `variations.name` của vài
  * chục dòng, không đổi schema), w7 (gỡ một chỉ mục một phần, truy vấn cũ rơi về chỉ mục thường), mss_foundation (cột
  * `orders.backendRoute` có mặc định mà image cũ không đọc, không ghi; trigger chỉ chạy khi câu UPDATE đổi giá trị cột đó),
- * mss_order_events (cột có mặc định trên users/orders và bảng outbox mới mà image cũ không đọc, không ghi) và pdp_compare_flag
- * (chỉ thêm một dòng cờ tắt vào `system_configs`, không đổi schema).
+ * mss_order_events (cột có mặc định trên users/orders và bảng outbox mới mà image cũ không đọc, không ghi), pdp_compare_flag
+ * (chỉ thêm một dòng cờ tắt vào `system_configs`, không đổi schema) và engagement_daily_badges (bảng `user_badges` mới, 6 dòng mẫu
+ * `missions` có `disabledAt` nên image cũ không liệt kê, không cho nhận; 2 cờ tắt).
  */
 export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   ...REQUIRED_MIGRATIONS,
@@ -55,6 +56,7 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   '20261117090000_notify_cap_restock',
   // Hai bảng mới (nội dung bổ sung MSS, trạng thái kéo) mà image cũ không đọc; FK trỏ về products chỉ khoá ngắn lúc thêm vì bảng mới rỗng.
   '20261117100000_mss_catalog_enrichment',
+  '20261117120000_engagement_daily_badges',
 ];
 
 /**

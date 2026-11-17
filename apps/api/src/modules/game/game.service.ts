@@ -16,6 +16,9 @@ import {
   DEW_SEEDS_DEFAULT,
   FIRST_CHECKIN_BONUS_DEFAULT,
   FIRST_HARVEST_POINTS_DEFAULT,
+  GAME_STREAK_FREEZE_COST_DEFAULT,
+  GAME_STREAK_REPAIR_COST_DEFAULT,
+  GAME_TANK_CAPACITY_DEFAULT,
   HARVEST_COUPON_DAILY_CAP_DEFAULT,
   HARVEST_COUPON_MONTHLY_CAP_DEFAULT,
   QUIZ_WRONG_SEEDS_DEFAULT,
@@ -112,7 +115,7 @@ export class GameService {
     const claimedNow = (await this.orderWater?.claimPending(userId)) ?? 0;
     if (claimedNow > 0) profile = await this.ensureProfile(userId);
     const wiltDays = await this.config.get<number>('game.wilt_days', 3);
-    const streakRepairCost = await this.config.get<number>('game.streak_repair_cost', 150);
+    const streakRepairCost = await this.config.get<number>('game.streak_repair_cost', GAME_STREAK_REPAIR_COST_DEFAULT);
     const windowH = await this.config.get<number>('game.streak_repair_window_hours', 48);
     const cooldownD = await this.config.get<number>('game.streak_repair_cooldown_days', 30);
     // Giá các món — FE trước đây chép cứng (80💧 đóng băng chuỗi, giá góp quỹ trồng cây): admin đổi
@@ -131,9 +134,9 @@ export class GameService {
       orderWater,
       quizAnsweredToday,
     ] = await Promise.all([
-      this.config.get<number>('game.streak_freeze_cost', 80),
+      this.config.get<number>('game.streak_freeze_cost', GAME_STREAK_FREEZE_COST_DEFAULT),
       this.config.get<number>('game.tree_points_price', 50_000),
-      this.config.get<number>('game.tank_capacity', 500),
+      this.config.get<number>('game.tank_capacity', GAME_TANK_CAPACITY_DEFAULT),
       this.config.get<number>('game.spin_buy_cost_points', 10_000),
       configInt(this.config, 'game.daily_login_seeds', DAILY_LOGIN_SEEDS_DEFAULT),
       configInt(this.config, 'game.dew_seeds', DEW_SEEDS_DEFAULT),

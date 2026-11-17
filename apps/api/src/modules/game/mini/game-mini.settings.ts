@@ -1,5 +1,6 @@
 import { MINI_GAME_IDS, type MiniGameId } from '@tubutree/shared-types';
 import type { SystemConfigService } from '../../system-config/system-config.service';
+import { GAME_TANK_CAPACITY_DEFAULT } from '../game.constants';
 
 export const MINI_ENABLED_KEY = 'game.mini.enabled';
 /** Viết nguyên chữ (không ghép chuỗi): spec khoá chết tìm đúng tên khoá trong mã đọc. */
@@ -60,10 +61,10 @@ export async function readMiniSettings(config: Pick<SystemConfigService, 'get'>)
     config.get<unknown>(MINI_ENABLED_KEY, false),
     Promise.all(MINI_GAME_IDS.map((g) => config.get<unknown>(miniGameFlagKey(g), false))),
     Promise.all(names.map((n) => config.get<unknown>(MINI_NUMERIC_SETTINGS[n].key, MINI_NUMERIC_SETTINGS[n].fallback))),
-    config.get<unknown>('game.tank_capacity', 500),
+    config.get<unknown>('game.tank_capacity', GAME_TANK_CAPACITY_DEFAULT),
   ]);
   const numeric = Object.fromEntries(names.map((n, i) => [n, clampSetting(n, numericRaws[i])])) as Record<NumericName, number>;
-  const tank = typeof tankRaw === 'number' && Number.isFinite(tankRaw) && tankRaw > 0 ? Math.floor(tankRaw) : 500;
+  const tank = typeof tankRaw === 'number' && Number.isFinite(tankRaw) && tankRaw > 0 ? Math.floor(tankRaw) : GAME_TANK_CAPACITY_DEFAULT;
   return {
     enabled: readFlag(enabledRaw),
     games: Object.fromEntries(MINI_GAME_IDS.map((g, i) => [g, readFlag(gameRaws[i])])) as Record<MiniGameId, boolean>,

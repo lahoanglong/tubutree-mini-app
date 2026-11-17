@@ -346,21 +346,21 @@ describe.each(MODES)(
       });
 
       it('clamp sau khi cộng sập (người nhận gần đầy): phần đã cộng cũng được huỷ', async () => {
-        const t = setup({ sender: 100, friends: { [F1]: 495 } });
+        const t = setup({ sender: 100, friends: { [F1]: 995 } });
         t.db.failAt = (op) => (op === '$executeRaw' ? new Error('clamp failed') : undefined);
         await expect(t.svc.giftWater('u1', F1)).rejects.toThrow('clamp failed');
         expect(t.db.log).toContain(`credit:${F1}`);
         expect(t.db.log.includes('debit:u1')).toBe(debitFirst);
         expect(t.db.log).toContain('rollback');
         expect(t.db.seeds('u1')).toBe(100);
-        expect(t.db.seeds(F1)).toBe(495);
+        expect(t.db.seeds(F1)).toBe(995);
         expect(t.db.gifts).toEqual([]);
       });
 
       it('người nhận gần đầy, không lỗi: cộng rồi kẹp về trần, giữ phần vượt sẵn', async () => {
-        const t = setup({ sender: 100, friends: { [F1]: 495 } });
+        const t = setup({ sender: 100, friends: { [F1]: 995 } });
         await t.svc.giftWater('u1', F1);
-        expect(t.db.seeds(F1)).toBe(500);
+        expect(t.db.seeds(F1)).toBe(1000);
         expect(t.db.seeds('u1')).toBe(90);
       });
     });

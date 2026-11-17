@@ -4,6 +4,7 @@ import { SystemConfigService } from '../system-config/system-config.service';
 import { clampTankKeepingOverflow, initialEcoImpact } from './game-profile';
 import { RewardPointsService } from '../wallet/reward-points.service';
 import { GUEST_POINTS_MSG, isRealUser, pointsBlockedFor } from '../../common/real-user';
+import { GAME_TANK_CAPACITY_DEFAULT } from './game.constants';
 
 /**
  * Phần thưởng 1 bậc: 💧 (SEEDS) hoặc Điểm Xanh (POINTS). 'XU' là dạng trước PD-3 (đơn vị xu); migration
@@ -152,7 +153,7 @@ export class SeasonPassService {
 
     // Config đọc TRƯỚC tx: cache nguội mà đọc trong tx thì mỗi tx giữ 1 kết nối và xin thêm 1 nữa (cạn pool).
     const [tankCap, expiresAt, ecoImpact] = await Promise.all([
-      reward.type === 'SEEDS' ? this.config.get<number>('game.tank_capacity', 500) : Promise.resolve(0),
+      reward.type === 'SEEDS' ? this.config.get<number>('game.tank_capacity', GAME_TANK_CAPACITY_DEFAULT) : Promise.resolve(0),
       reward.type === 'POINTS' && reward.amount > 0 ? this.rewards.expiresAt() : Promise.resolve(undefined),
       reward.type === 'SEEDS' ? initialEcoImpact(this.config) : Promise.resolve(undefined),
     ]);

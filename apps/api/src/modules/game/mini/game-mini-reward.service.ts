@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, Injectable } from '@nestjs/common';
-import { MINI_ERROR_CODES, type MiniCapId, type MiniGameId } from '@tubutree/shared-types';
+import type { Prisma } from '@prisma/client';
+import { DAILY_ERROR_CODES, MINI_ERROR_CODES, type MiniCapId, type MiniGameId } from '@tubutree/shared-types';
 import { PrismaService } from '../../../prisma/prisma.service';
 import { applyPointsDelta } from '../../loyalty/points-ledger';
 import type { MiniSettings } from './game-mini.settings';
@@ -15,6 +16,54 @@ export const MINI_TX_OPTIONS = { maxWait: 5_000, timeout: 15_000 } as const;
 
 export const miniWaterReason = (game: MiniGameId): string => `MINI_${game.toUpperCase()}`;
 export const miniPointsReason = (game: MiniGameId): string => `${GAME_MINI_REF_TYPE}:${game}`;
+/** Nhiệm vụ hằng ngày: 💧 mỗi nhiệm vụ (refId = dòng mission_progress), Điểm Xanh khi đủ 3 (refId = dòng thưởng ngày). */
+export const MINI_DAILY_MISSION_WATER_REASON = 'MINI_DAILY_MISSION';
+export const MINI_DAILY_BONUS_POINTS_REASON = `${GAME_MINI_REF_TYPE}:daily_missions`;
+
+type MiniCapSettings = Pick<MiniSettings, 'waterCap' | 'pointsCap' | 'accountsPerDevice' | 'globalBudget' | 'tankCapacity'>;
+
+interface MiniCreditInput {
+  userId: string;
+  dayKey: string;
+  now: Date;
+  base: { water: number; points: number };
+  deviceHash: string | null;
+  settings: MiniCapSettings;
+  pointsExpiresAt: Date | null;
+  water: { reason: string; refId: string };
+  points: { reason: string; refId: string };
+  /** Ván game có thưởng thì đếm vào `rewardedRounds`; nhiệm vụ hằng ngày thì không. */
+  countsAsRound: boolean;
+  /** Tên dùng trong lỗi bất biến. */
+  label: string;
+}
+
+interface MiniCreditResult {
+  water: number;
+  points: number;
+  capped: MiniCapId[];
+  totalSeeds: number | null;
+}
+
+export interface MiniMissionSettleInput {
+  userId: string;
+  dayKey: string;
+  now: Date;
+  missionId: string;
+  bonusMissionId: string;
+  /** Id dòng mẫu của các nhiệm vụ khách được giao hôm nay; nhận đủ cả các id này thì có thưởng ngày. */
+  dayMissionIds: string[];
+  water: number;
+  bonusPoints: number;
+  deviceHash: string | null;
+  settings: MiniCapSettings;
+  /** Hạn của lô điểm (đọc ngoài transaction); bắt buộc khi `bonusPoints > 0`. */
+  pointsExpiresAt: Date | null;
+}
+
+export interface MiniMissionSettleResult extends MiniCreditResult {
+  bonus: boolean;
+}
 
 export interface MiniSettleInput {
   roundId: string;
@@ -29,7 +78,7 @@ export interface MiniSettleInput {
   /** Thưởng trước trần; 0 khi khách không phải người dùng thật (đã kiểm ngoài transaction). */
   base: { water: number; points: number };
   deviceHash: string | null;
-  settings: Pick<MiniSettings, 'waterCap' | 'pointsCap' | 'accountsPerDevice' | 'globalBudget' | 'tankCapacity'>;
+  settings: MiniCapSettings;
   /** Hạn của lô điểm (đọc ngoài transaction); bắt buộc khi `base.points > 0`. */
   pointsExpiresAt: Date | null;
 }
@@ -96,122 +145,204 @@ export class GameMiniRewardService {
       const none: MiniSettleResult = { slot, water: 0, points: 0, capped: [], totalSeeds: null };
       if (slot === null || (input.base.water <= 0 && input.base.points <= 0)) return none;
 
-      const capped: MiniCapId[] = [];
-      let water = input.base.water;
-      let points = input.base.points;
+      const credited = await this.credit(tx, {
+        userId,
+        dayKey,
+        now,
+        base: input.base,
+        deviceHash: input.deviceHash,
+        settings,
+        pointsExpiresAt: input.pointsExpiresAt,
+        water: { reason: miniWaterReason(game), refId: roundId },
+        points: { reason: miniPointsReason(game), refId: roundId },
+        countsAsRound: true,
+        label: `ván ${roundId}`,
+      });
+      const cappedBy = credited.capped.length > 0 ? credited.capped.join(',') : null;
+      await tx.gamePlayRound.update({
+        where: { id: roundId },
+        data: { waterAwarded: credited.water, pointsAwarded: credited.points, cappedBy },
+      });
+      return { slot, ...credited };
+    }, MINI_TX_OPTIONS);
+  }
 
-      const profile = await tx.$queryRaw<{ totalSeeds: number }[]>`
-        SELECT "totalSeeds" FROM "game_profiles" WHERE "userId" = ${userId} FOR UPDATE`;
-      if (profile.length === 0) throw new ConflictException('Hồ sơ game đang được cập nhật. Bạn thử lại sau ít giây nhé.');
-      const seedsBefore = profile[0]!.totalSeeds;
+  /**
+   * Áp trần rồi cộng 💧 và Điểm Xanh trong transaction của người gọi (đã giữ khoá `users`): sổ ngày của tài khoản, thiết bị, bình,
+   * ngân sách toàn hệ thống. Ván game mini và nhiệm vụ hằng ngày đều đi qua đây nên dùng chung một trần ngày, không có đường phát thứ hai.
+   */
+  private async credit(tx: Prisma.TransactionClient, input: MiniCreditInput): Promise<MiniCreditResult> {
+    const { userId, dayKey, now, settings } = input;
+    const capped: MiniCapId[] = [];
+    let water = input.base.water;
+    let points = input.base.points;
 
-      await tx.gameDailyLedger.createMany({ data: [{ userId, dayKey }], skipDuplicates: true });
-      const [ledger] = await tx.$queryRaw<{ waterFromGames: number; pointsFromGames: number }[]>`
-        SELECT "waterFromGames", "pointsFromGames" FROM "game_daily_ledger" WHERE "userId" = ${userId} AND "dayKey" = ${dayKey} FOR UPDATE`;
-      const waterLeft = Math.max(0, settings.waterCap - ledger!.waterFromGames);
-      const pointsLeft = Math.max(0, settings.pointsCap - ledger!.pointsFromGames);
-      if (water > waterLeft) {
-        water = waterLeft;
-        capped.push('account_water');
+    const profile = await tx.$queryRaw<{ totalSeeds: number }[]>`
+      SELECT "totalSeeds" FROM "game_profiles" WHERE "userId" = ${userId} FOR UPDATE`;
+    if (profile.length === 0) throw new ConflictException('Hồ sơ game đang được cập nhật. Bạn thử lại sau ít giây nhé.');
+    const seedsBefore = profile[0]!.totalSeeds;
+
+    await tx.gameDailyLedger.createMany({ data: [{ userId, dayKey }], skipDuplicates: true });
+    const [ledger] = await tx.$queryRaw<{ waterFromGames: number; pointsFromGames: number }[]>`
+      SELECT "waterFromGames", "pointsFromGames" FROM "game_daily_ledger" WHERE "userId" = ${userId} AND "dayKey" = ${dayKey} FOR UPDATE`;
+    const waterLeft = Math.max(0, settings.waterCap - ledger!.waterFromGames);
+    const pointsLeft = Math.max(0, settings.pointsCap - ledger!.pointsFromGames);
+    if (water > waterLeft) {
+      water = waterLeft;
+      capped.push('account_water');
+    }
+    if (points > pointsLeft) {
+      points = pointsLeft;
+      capped.push('account_points');
+    }
+
+    // deviceId do ứng dụng tự sinh nên giả được: trần này chỉ là ma sát với một máy nhiều tài khoản; lớp chặn thật là trần tài khoản
+    // và ngân sách toàn hệ thống. Không gửi deviceId thì không thưởng (bỏ trống không được là cách né trần). Khoá tư vấn theo (thiết
+    // bị, ngày) vì các tài khoản khác nhau không chung khoá `users`: thiếu nó, hai tài khoản mới cùng đếm "1 < 2" rồi cùng được thưởng.
+    let registerDevice = false;
+    if (!input.deviceHash && water + points > 0) {
+      water = 0;
+      points = 0;
+      capped.push('device');
+    } else if (input.deviceHash && water + points > 0) {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`game-mini-device:${input.deviceHash}:${dayKey}`}, 0))`;
+      const seen = await tx.gameDeviceDaily.findMany({ where: { deviceHash: input.deviceHash, dayKey }, select: { userId: true } });
+      if (!seen.some((r) => r.userId === userId)) {
+        if (seen.length >= settings.accountsPerDevice) {
+          water = 0;
+          points = 0;
+          capped.push('device');
+        } else {
+          registerDevice = true;
+        }
       }
-      if (points > pointsLeft) {
-        points = pointsLeft;
-        capped.push('account_points');
-      }
+    }
 
-      // deviceId do ứng dụng tự sinh nên giả được: trần này chỉ là ma sát với một máy nhiều tài khoản; lớp chặn thật là trần tài khoản
-      // và ngân sách toàn hệ thống. Không gửi deviceId thì không thưởng (bỏ trống không được là cách né trần). Khoá tư vấn theo (thiết
-      // bị, ngày) vì các tài khoản khác nhau không chung khoá `users`: thiếu nó, hai tài khoản mới cùng đếm "1 < 2" rồi cùng được thưởng.
-      let registerDevice = false;
-      if (!input.deviceHash && water + points > 0) {
-        water = 0;
-        points = 0;
-        capped.push('device');
-      } else if (input.deviceHash && water + points > 0) {
-        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`game-mini-device:${input.deviceHash}:${dayKey}`}, 0))`;
-        const seen = await tx.gameDeviceDaily.findMany({ where: { deviceHash: input.deviceHash, dayKey }, select: { userId: true } });
-        if (!seen.some((r) => r.userId === userId)) {
-          if (seen.length >= settings.accountsPerDevice) {
-            water = 0;
-            points = 0;
-            capped.push('device');
-          } else {
-            registerDevice = true;
+    const tankRoom = Math.max(0, settings.tankCapacity - seedsBefore);
+    if (water > tankRoom) {
+      water = tankRoom;
+      capped.push('tank');
+    }
+
+    if (points > 0) {
+      await tx.gameGlobalDaily.createMany({ data: [{ dayKey }], skipDuplicates: true });
+      const [global] = await tx.$queryRaw<{ pointsMinted: number }[]>`
+        SELECT "pointsMinted" FROM "game_global_daily" WHERE "dayKey" = ${dayKey} FOR UPDATE`;
+      const budgetLeft = Math.max(0, settings.globalBudget - global!.pointsMinted);
+      if (points > budgetLeft) {
+        points = budgetLeft;
+        capped.push('global');
+      }
+      if (points > 0) {
+        const g = await tx.gameGlobalDaily.updateMany({
+          where: { dayKey, pointsMinted: { lte: settings.globalBudget - points } },
+          data: { pointsMinted: { increment: points } },
+        });
+        if (g.count !== 1) throw new Error(`game mini: ngân sách điểm ngày ${dayKey} lệch khi cộng ${input.label}`);
+      }
+    }
+
+    if (water === 0 && points === 0) return { water: 0, points: 0, capped, totalSeeds: null };
+
+    const led = await tx.gameDailyLedger.updateMany({
+      where: {
+        userId,
+        dayKey,
+        ...(water > 0 ? { waterFromGames: { lte: settings.waterCap - water } } : {}),
+        ...(points > 0 ? { pointsFromGames: { lte: settings.pointsCap - points } } : {}),
+      },
+      data: {
+        waterFromGames: { increment: water },
+        pointsFromGames: { increment: points },
+        rewardedRounds: { increment: input.countsAsRound ? 1 : 0 },
+      },
+    });
+    if (led.count !== 1) throw new Error(`game mini: sổ ngày của ${userId} lệch khi cộng ${input.label}`);
+    if (registerDevice) {
+      await tx.gameDeviceDaily.createMany({ data: [{ deviceHash: input.deviceHash!, dayKey, userId }], skipDuplicates: true });
+    }
+
+    let totalSeeds: number | null = null;
+    if (water > 0) {
+      const taken = await tx.gameWaterEvent.createMany({
+        data: [{ userId, delta: water, reason: input.water.reason, refId: input.water.refId, createdAt: now }],
+        skipDuplicates: true,
+      });
+      if (taken.count !== 1) throw new Error(`game mini: ${input.label} đã có dòng nước`);
+      totalSeeds = (
+        await tx.gameProfile.update({ where: { userId }, data: { totalSeeds: { increment: water } }, select: { totalSeeds: true } })
+      ).totalSeeds;
+    }
+    if (points > 0) {
+      const credited = await applyPointsDelta(tx, {
+        userId,
+        delta: points,
+        lot: 'STANDARD',
+        reason: input.points.reason,
+        refType: GAME_MINI_REF_TYPE,
+        refId: input.points.refId,
+        expiresAt: input.pointsExpiresAt,
+        skipDuplicates: true,
+      });
+      if (!credited.applied) throw new Error(`game mini: ${input.label} đã có dòng Điểm Xanh`);
+    }
+    return { water, points, capped, totalSeeds };
+  }
+
+  /**
+   * Nhận thưởng một nhiệm vụ hằng ngày (game/missions). Dòng `mission_progress` (userId, missionId, cycleKey = ngày VN) là khoá nhận:
+   * ghi bằng ON CONFLICT DO NOTHING, không ghi được là đã nhận (409). Đếm số nhiệm vụ của ngày đã nhận SAU khoá `users` nên hai lần nhận
+   * song song của một khách không cùng thấy "đủ 3"; dòng thưởng ngày cũng là một dòng `mission_progress` nên chỉ cộng một lần.
+   */
+  async settleDailyMission(input: MiniMissionSettleInput): Promise<MiniMissionSettleResult> {
+    const { userId, dayKey, now } = input;
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      const row = { userId, cycleKey: dayKey, progress: 1, goal: 1, completedAt: now };
+      const taken = await tx.missionProgress.createMany({ data: [{ ...row, missionId: input.missionId }], skipDuplicates: true });
+      if (taken.count === 0) {
+        throw new ConflictException({
+          statusCode: 409,
+          error: 'Conflict',
+          code: DAILY_ERROR_CODES.claimed,
+          message: 'Bạn đã nhận thưởng nhiệm vụ này hôm nay rồi.',
+        });
+      }
+      const claim = await tx.missionProgress.findUniqueOrThrow({
+        where: { userId_missionId_cycleKey: { userId, missionId: input.missionId, cycleKey: dayKey } },
+        select: { id: true },
+      });
+      let bonusRef: string | null = null;
+      if (input.dayMissionIds.length > 0) {
+        const done = await tx.missionProgress.count({ where: { userId, cycleKey: dayKey, missionId: { in: input.dayMissionIds } } });
+        if (done >= input.dayMissionIds.length) {
+          const bonus = await tx.missionProgress.createMany({ data: [{ ...row, missionId: input.bonusMissionId }], skipDuplicates: true });
+          if (bonus.count === 1) {
+            bonusRef = (
+              await tx.missionProgress.findUniqueOrThrow({
+                where: { userId_missionId_cycleKey: { userId, missionId: input.bonusMissionId, cycleKey: dayKey } },
+                select: { id: true },
+              })
+            ).id;
           }
         }
       }
-
-      const tankRoom = Math.max(0, settings.tankCapacity - seedsBefore);
-      if (water > tankRoom) {
-        water = tankRoom;
-        capped.push('tank');
-      }
-
-      if (points > 0) {
-        await tx.gameGlobalDaily.createMany({ data: [{ dayKey }], skipDuplicates: true });
-        const [global] = await tx.$queryRaw<{ pointsMinted: number }[]>`
-          SELECT "pointsMinted" FROM "game_global_daily" WHERE "dayKey" = ${dayKey} FOR UPDATE`;
-        const budgetLeft = Math.max(0, settings.globalBudget - global!.pointsMinted);
-        if (points > budgetLeft) {
-          points = budgetLeft;
-          capped.push('global');
-        }
-        if (points > 0) {
-          const g = await tx.gameGlobalDaily.updateMany({
-            where: { dayKey, pointsMinted: { lte: settings.globalBudget - points } },
-            data: { pointsMinted: { increment: points } },
-          });
-          if (g.count !== 1) throw new Error(`game mini: ngân sách điểm ngày ${dayKey} lệch khi cộng ván ${roundId}`);
-        }
-      }
-
-      const cappedBy = capped.length > 0 ? capped.join(',') : null;
-      if (water === 0 && points === 0) {
-        await tx.gamePlayRound.update({ where: { id: roundId }, data: { cappedBy } });
-        return { ...none, capped };
-      }
-
-      const led = await tx.gameDailyLedger.updateMany({
-        where: {
-          userId,
-          dayKey,
-          ...(water > 0 ? { waterFromGames: { lte: settings.waterCap - water } } : {}),
-          ...(points > 0 ? { pointsFromGames: { lte: settings.pointsCap - points } } : {}),
-        },
-        data: { waterFromGames: { increment: water }, pointsFromGames: { increment: points }, rewardedRounds: { increment: 1 } },
+      const base = { water: input.water, points: bonusRef ? input.bonusPoints : 0 };
+      if (base.water <= 0 && base.points <= 0) return { water: 0, points: 0, capped: [], totalSeeds: null, bonus: bonusRef !== null };
+      const credited = await this.credit(tx, {
+        userId,
+        dayKey,
+        now,
+        base,
+        deviceHash: input.deviceHash,
+        settings: input.settings,
+        pointsExpiresAt: input.pointsExpiresAt,
+        water: { reason: MINI_DAILY_MISSION_WATER_REASON, refId: claim.id },
+        points: { reason: MINI_DAILY_BONUS_POINTS_REASON, refId: bonusRef ?? claim.id },
+        countsAsRound: false,
+        label: `nhiệm vụ ngày ${claim.id}`,
       });
-      if (led.count !== 1) throw new Error(`game mini: sổ ngày của ${userId} lệch khi cộng ván ${roundId}`);
-      if (registerDevice) {
-        await tx.gameDeviceDaily.createMany({ data: [{ deviceHash: input.deviceHash!, dayKey, userId }], skipDuplicates: true });
-      }
-
-      let totalSeeds: number | null = null;
-      if (water > 0) {
-        const taken = await tx.gameWaterEvent.createMany({
-          data: [{ userId, delta: water, reason: miniWaterReason(game), refId: roundId, createdAt: now }],
-          skipDuplicates: true,
-        });
-        if (taken.count !== 1) throw new Error(`game mini: ván ${roundId} đã có dòng nước`);
-        totalSeeds = (
-          await tx.gameProfile.update({ where: { userId }, data: { totalSeeds: { increment: water } }, select: { totalSeeds: true } })
-        ).totalSeeds;
-      }
-      if (points > 0) {
-        const credited = await applyPointsDelta(tx, {
-          userId,
-          delta: points,
-          lot: 'STANDARD',
-          reason: miniPointsReason(game),
-          refType: GAME_MINI_REF_TYPE,
-          refId: roundId,
-          expiresAt: input.pointsExpiresAt,
-          skipDuplicates: true,
-        });
-        if (!credited.applied) throw new Error(`game mini: ván ${roundId} đã có dòng Điểm Xanh`);
-      }
-
-      await tx.gamePlayRound.update({ where: { id: roundId }, data: { waterAwarded: water, pointsAwarded: points, cappedBy } });
-      return { slot, water, points, capped, totalSeeds };
+      return { ...credited, bonus: bonusRef !== null };
     }, MINI_TX_OPTIONS);
   }
 }

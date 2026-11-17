@@ -3,7 +3,7 @@ import { Prisma } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
-import { QUIZ_WRONG_SEEDS_DEFAULT, configInt } from './game.constants';
+import { QUIZ_WRONG_SEEDS_DEFAULT, configInt, GAME_TANK_CAPACITY_DEFAULT } from './game.constants';
 import { clampTankKeepingOverflow, ensureGameProfile, initialEcoImpact } from './game-profile';
 import { vnDateKey } from '../../common/vn-time';
 import { paginated } from '../../common/pagination';
@@ -122,7 +122,7 @@ export class GameQuizService {
     const isCorrect = quiz.correct === choice;
     // Câu sai vẫn được ít nước (quiz_wrong_seeds) để người mới không trả lời xong hai tay trắng.
     const reward = isCorrect ? quiz.waterReward : await configInt(this.config, 'game.quiz_wrong_seeds', QUIZ_WRONG_SEEDS_DEFAULT);
-    const tankCap = reward > 0 ? await this.config.get<number>('game.tank_capacity', 500) : 0;
+    const tankCap = reward > 0 ? await this.config.get<number>('game.tank_capacity', GAME_TANK_CAPACITY_DEFAULT) : 0;
     const ecoImpact = reward > 0 ? await initialEcoImpact(this.config) : undefined;
     const dayKey = vnDateKey();
     const dayStart = this.startOfDay(new Date());

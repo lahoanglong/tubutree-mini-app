@@ -5,7 +5,7 @@ import { SeasonPassService } from './season-pass.service';
 import { clampTankKeepingOverflow, ensureGameProfile } from './game-profile';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { vnDateKey } from '../../common/vn-time';
-import { DEW_SEEDS_DEFAULT, configInt } from './game.constants';
+import { DEW_SEEDS_DEFAULT, configInt, GAME_TANK_CAPACITY_DEFAULT, GAME_STREAK_FREEZE_COST_DEFAULT, GAME_STREAK_REPAIR_COST_DEFAULT } from './game.constants';
 import { canRepairStreak, planCheckInSeeds, projectCheckIn } from './checkin-streak';
 
 @Injectable()
@@ -51,7 +51,7 @@ export class GameEconomyService {
           platform: 'miniapp',
           props: { action: 'garden_checkin', streakDays },
         });
-        const tankCap = await this.config.get<number>('game.tank_capacity', 500);
+        const tankCap = await this.config.get<number>('game.tank_capacity', GAME_TANK_CAPACITY_DEFAULT);
         await clampTankKeepingOverflow(this.prisma, userId, tankCap, seeds);
 
         // Hook Season Pass: cộng XP chặng mùa (side-effect an toàn, không ảnh hưởng streak math).
@@ -149,7 +149,7 @@ export class GameEconomyService {
       throw new BadRequestException('Hôm nay bạn đã hứng giọt sương rồi 🌿');
     }
     const dew = await configInt(this.config, 'game.dew_seeds', DEW_SEEDS_DEFAULT);
-    const tankCap = await this.config.get<number>('game.tank_capacity', 500);
+    const tankCap = await this.config.get<number>('game.tank_capacity', GAME_TANK_CAPACITY_DEFAULT);
 
     // Idempotent write: only one concurrent call wins (race-safe backstop).
     // totalSeeds ghi ATOMIC bằng increment (không phải absolute value đọc-ngoài-tx) — chống
@@ -174,7 +174,7 @@ export class GameEconomyService {
   async repairStreak(userId: string) {
     const windowH = await this.config.get<number>('game.streak_repair_window_hours', 48);
     const cooldownD = await this.config.get<number>('game.streak_repair_cooldown_days', 30);
-    const cost = await this.config.get<number>('game.streak_repair_cost', 150);
+    const cost = await this.config.get<number>('game.streak_repair_cost', GAME_STREAK_REPAIR_COST_DEFAULT);
     for (let attempt = 0; attempt < GameEconomyService.STREAK_CAS_ATTEMPTS; attempt++) {
       const p = await this.ensure(userId);
       if (!p.brokenStreakAt || p.brokenStreakDays <= 0) {
@@ -227,7 +227,7 @@ export class GameEconomyService {
 
   async buyStreakFreeze(userId: string) {
     await this.ensure(userId);
-    const cost = await this.config.get<number>('game.streak_freeze_cost', 80);
+    const cost = await this.config.get<number>('game.streak_freeze_cost', GAME_STREAK_FREEZE_COST_DEFAULT);
     const dec = await this.prisma.gameProfile.updateMany({
       where: { userId, totalSeeds: { gte: cost } },
       data: { totalSeeds: { decrement: cost }, streakFreezes: { increment: 1 } },
