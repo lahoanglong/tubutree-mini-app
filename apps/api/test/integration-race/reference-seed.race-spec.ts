@@ -2,7 +2,7 @@ import { execFile, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { PrismaClient } from '@prisma/client';
-import { DEALER_TIERS, MISSIONS, NOTIFICATION_TEMPLATES, PLANT_SPECIES, SYSTEM_CONFIGS, TIERS } from '../../prisma/seed';
+import { DAILY_MISSION_TEMPLATES, DEALER_TIERS, MISSIONS, NOTIFICATION_TEMPLATES, PLANT_SPECIES, SYSTEM_CONFIGS, TIERS } from '../../prisma/seed';
 import { QUIZZES as NATURE_QUIZZES } from '../../prisma/seed-game-quiz';
 import { COMMUNITY_GOAL_SEED, SEASON_SEED } from '../../prisma/reference-data/garden';
 import { selectBusinessConfigs, selectReferenceConfigs } from '../../prisma/reference-data/config-selection';
@@ -79,11 +79,16 @@ describe('seed-reference trên DB trống sau migrate deploy (real Postgres)', (
     await has(await p.mission.findMany({ select: { code: true } }), MISSIONS.map((m) => m.code), 'code');
   }
 
-  /** Không cờ: hạng, bậc đại lý, nhiệm vụ và 6 khoá giá trị kinh doanh phải vắng hẳn (DB sau migrate chưa có chúng). */
+  /**
+   * Không cờ: hạng, bậc đại lý, nhiệm vụ và 6 khoá giá trị kinh doanh phải vắng hẳn (DB sau migrate chưa có chúng). Bảng missions chỉ có
+   * 6 dòng mẫu nhiệm vụ hằng ngày do migration 20261117120000 tạo (tắt bằng disabledAt, thưởng 0), không phải nhiệm vụ kinh doanh.
+   */
   async function expectBusinessAbsent(p: PrismaClient) {
     expect(await p.membershipTier.count()).toBe(0);
     expect(await p.dealerTier.count()).toBe(0);
-    expect(await p.mission.count()).toBe(0);
+    const missions = await p.mission.findMany({ select: { id: true, rewardPoints: true, disabledAt: true } });
+    expect(missions.map((m) => m.id).sort()).toEqual(DAILY_MISSION_TEMPLATES.map((m) => m.id).sort());
+    expect(missions.every((m) => m.rewardPoints === 0 && m.disabledAt !== null)).toBe(true);
     expect(await p.systemConfig.count({ where: { key: { in: businessConfigKeys } } })).toBe(0);
   }
 

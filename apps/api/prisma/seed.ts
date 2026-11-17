@@ -998,8 +998,14 @@ export const MISSIONS = [
   { id: 'm2', code: 'CHECKIN_7', title: 'Chăm chỉ 7 ngày', description: 'Điểm danh Vườn Xanh 7 ngày liên tiếp (nhận một lần)', rewardPoints: 30_000, goal: 7, isRepeatable: false },
   { id: 'm3', code: 'REVIEW_3', title: 'Nhà phê bình', description: 'Viết 3 đánh giá có ảnh', rewardPoints: 15_000, goal: 3, isRepeatable: false },
   { id: 'm4', code: 'INVITE_3', title: 'Lan toả sống xanh', description: 'Mời 3 bạn mua hàng thành công qua mã giới thiệu', rewardPoints: 50_000, goal: 3, isRepeatable: false },
-  // Dòng mẫu nhiệm vụ hằng ngày (trùng migration 20261117120000_engagement_daily_badges): luôn có disabledAt để image cũ không vẽ chúng;
-  // bật bằng cờ engagement.daily_missions_enabled, thưởng đi qua sổ ngày game mini nên rewardPoints = 0.
+];
+
+/**
+ * Dòng mẫu nhiệm vụ hằng ngày, trùng migration 20261117120000_engagement_daily_badges (mọi DB đã migrate đều có, nên seed-reference
+ * không nạp lại và chúng không thuộc nhóm giá trị kinh doanh MISSIONS). Luôn có disabledAt để image cũ không vẽ chúng; bật bằng cờ
+ * engagement.daily_missions_enabled, thưởng đi qua sổ ngày game mini nên rewardPoints = 0.
+ */
+export const DAILY_MISSION_TEMPLATES = [
   ...(
     [
       ['daily-quiz', 'DAILY_QUIZ', 'Hôm nay: Đố Xanh', 'Làm xong Đố Xanh hôm nay'],
@@ -1148,7 +1154,7 @@ async function main() {
   for (const q of QUIZZES) {
     await prisma.gameQuiz.upsert({ where: { id: q.id }, update: q, create: q });
   }
-  for (const m of MISSIONS) {
+  for (const m of [...MISSIONS, ...DAILY_MISSION_TEMPLATES]) {
     // Không ghi đè: admin sửa tiêu đề/điểm thưởng ở màn Nhiệm vụ & quà đổi điểm.
     await prisma.mission.upsert({ where: { id: m.id }, update: {}, create: m });
   }
