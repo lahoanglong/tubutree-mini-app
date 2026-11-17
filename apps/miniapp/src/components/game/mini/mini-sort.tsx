@@ -82,6 +82,8 @@ export default function MiniSort({ content, onFinish, onStatus }: MiniBoardProps
 
   const onPointerDown = (e: ReactPointerEvent<HTMLButtonElement>) => {
     if (!e.isPrimary || finished.current) return;
+    // Chạm kéo trên điện thoại không bắn `click` sau khi thả: cử chỉ mới bắt đầu thì bỏ cờ chặn của lần kéo trước.
+    suppressClick.current = false;
     e.currentTarget.setPointerCapture?.(e.pointerId);
     drag.current = { pointerId: e.pointerId, x0: e.clientX, y0: e.clientY, moved: false };
   };

@@ -11,6 +11,7 @@ import { checkInQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
 import type { AnswerResult, HarvestSpecies } from '@tubutree/app-core/api/game';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { loginHref } from '@/lib/return-to';
+import { refreshSession } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
 import { pointsSummary } from '@/lib/checkout-points';
 import { dismissGameTutorial, isGameTutorialDismissed } from '@/lib/game-tutorial';
@@ -71,8 +72,10 @@ const POINTS_PATH = '/tai-khoan/diem-xanh';
 const errText = loadErrorText;
 
 /** Game mini sau cờ `game.mini.enabled`: máy chủ trả 404 khi cờ tắt, lúc đó trang giữ nguyên khối đố vui và sảnh arcade cũ. */
+const refreshMiniSession = () => refreshSession().then((o) => o.kind === 'ok');
+
 function useMiniToday(authed: boolean, enabled = true): MiniTodayResponse | null {
-  const { data } = useQuery({ ...miniTodayQuery(coreHttp, authed), enabled });
+  const { data } = useQuery({ ...miniTodayQuery(coreHttp, authed, authed ? refreshMiniSession : undefined), enabled });
   return data && playableToday(data).length > 0 ? data : null;
 }
 
@@ -106,6 +109,8 @@ function GameBody() {
   // Nút điểm danh của Vườn theo trạng thái GỘP (Điểm Xanh + giọt nước): còn bấm được tới khi cả hai phần xong, để lần lỗi một phần bấm lại được.
   const checkInStatusQ = useQuery(checkInQuery(coreHttp));
   const miniToday = useMiniToday(true);
+  // Đố Xanh có thể tắt riêng trong khi Đúng Thùng vẫn bật: khối đố vui cũ chỉ nhường chỗ khi chính Đố Xanh đang mở.
+  const miniQuiz = miniToday?.games.some((g) => g.game === 'daily_quiz') ? miniToday : null;
   // Điểm dùng được: vòng quay chỉ trừ điểm thường chưa khoá, góp quỹ trừ thêm cả điểm quy đổi. Chưa tải được thì null để
   // nút vẫn bấm được (API là lưới an toàn).
   const wheelPoints = loyalty ? (loyalty.redeemablePoints ?? pointsSummary(loyalty).standard) : null;
@@ -154,8 +159,8 @@ function GameBody() {
   const checkInSeeds = status && !status.waterDone ? status.todayWater : undefined;
   const dailyGain = checkInSeeds !== undefined ? (checkInSeeds > 0 ? checkInSeeds : null) : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
   const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
-  const quizState: EarnQuizState = miniToday
-    ? { status: 'ready', left: miniEarnQuizLeft(miniToday) }
+  const quizState: EarnQuizState = miniQuiz
+    ? { status: 'ready', left: miniEarnQuizLeft(miniQuiz) }
     : quiz
     ? { status: 'ready', left: quiz.filter((q) => !answeredIds.has(q.id)).length }
     : quizQ.isError
@@ -285,7 +290,7 @@ function GameBody() {
           </GameCol>
 
           <GameCol place={GAME_COL.bottom}>
-          {!miniToday && (
+          {!miniQuiz && (
             <div id="game-quiz">
               <QuizCard
                 quiz={quiz}
@@ -406,7 +411,7 @@ function GameBody() {
         quiz={quizState}
         onRetryQuiz={() => quizQ.refetch()}
         onGoQuiz={() => {
-          if (!miniToday) return goTab('today', 'game-quiz');
+          if (!miniQuiz) return goTab('today', 'game-quiz');
           closeEarn();
           router.push(miniPlayPath.web('daily_quiz'));
         }}

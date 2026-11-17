@@ -1,8 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { MiniStartResponse, MiniSubmitResponse, MiniTodayResponse } from '@tubutree/shared-types';
 import { FORBIDDEN_TERMS } from '../shop-copy';
 import { classifyMiniError, MINI_DEVICE_KEY, miniDeviceId } from './api';
-import { isMiniDisabled, miniTodayQuery } from './today';
+import { isMiniDisabled, miniTodayQuery, withFreshSession } from './today';
 import {
   binUnderPoint,
   quizChoose,
@@ -333,7 +333,17 @@ describe('định dạng', () => {
     expect(miniIntroReward(today({ rewardEligible: false, noRewardReason: 'NOT_LOGGED_IN' }), 'sort').rewarded).toBe(false);
     expect(miniIntroReward(today(), 'sort')).toEqual({ rewarded: true, lines: ['Thưởng tới 10 Giọt nước, thêm 10 Điểm Xanh khi đúng từ 80%'] });
     const budget = today({ caps: { ...today().caps, pointsBudgetExhausted: true } });
-    expect(miniIntroReward(budget, 'sort').lines[1]).toBe('Thưởng điểm hôm nay đã hết, bạn vẫn nhận Giọt nước.');
+    expect(miniIntroReward(budget, 'sort').lines).toEqual(['Thưởng tới 10 Giọt nước', 'Thưởng điểm hôm nay đã hết, bạn vẫn nhận Giọt nước.']);
+  });
+
+  it('mức thưởng hứa trước khớp công thức máy chủ: Đố Xanh 3 câu tối đa 4 + 3 = 7 Giọt nước, hạ theo phần 💧 còn lại hôm nay', () => {
+    expect(miniIntroReward(today(), 'daily_quiz').lines[0]).toBe('Thưởng tới 7 Giọt nước, thêm 10 Điểm Xanh khi đúng từ 80%');
+    const nearCap = today({ caps: { ...today().caps, waterUsed: 37, waterCap: 40 } });
+    expect(miniIntroReward(nearCap, 'sort').lines[0]).toBe('Thưởng tới 3 Giọt nước, thêm 10 Điểm Xanh khi đúng từ 80%');
+    const waterFull = today({ caps: { ...today().caps, waterUsed: 40, waterCap: 40 } });
+    expect(miniIntroReward(waterFull, 'sort')).toEqual({ rewarded: true, lines: ['Bạn đã nhận đủ Giọt nước từ game hôm nay.'] });
+    const bothFull = today({ caps: { ...today().caps, waterUsed: 40, waterCap: 40, pointsBudgetExhausted: true } });
+    expect(miniIntroReward(bothFull, 'sort')).toEqual({ rewarded: false, lines: ['Hôm nay bạn đã nhận đủ thưởng game.'] });
   });
 
   it('bị trần: câu nói thật theo bảng 8.6', () => {
@@ -456,5 +466,38 @@ describe('màn kết quả: danh sách Vì sao', () => {
     expect(miniQuizProduct(quiz)?.slug).toBe(product.slug);
     expect(miniQuizProduct({ game: 'sort', bins: ['recycle'], items: [] })).toBeNull();
     expect(miniQuizProduct(undefined)).toBeNull();
+  });
+});
+
+describe('phiên hết hạn ở route game mini (máy chủ coi token hết hạn là khách, không 401)', () => {
+  const answers = (...reasons: Array<'NOT_LOGGED_IN' | null>) => {
+    let i = 0;
+    return vi.fn(async () => ({ noRewardReason: reasons[Math.min(i++, reasons.length - 1)]! }));
+  };
+
+  it('có phiên mà nhận câu trả lời của khách: làm mới phiên rồi gọi lại đúng một lần', async () => {
+    const load = answers('NOT_LOGGED_IN', null);
+    const refresh = vi.fn(async () => true);
+    expect(await withFreshSession(load, true, refresh)).toEqual({ noRewardReason: null });
+    expect(refresh).toHaveBeenCalledTimes(1);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('khách thật, hoặc làm mới phiên thất bại: giữ câu trả lời đầu, không gọi lại', async () => {
+    const guest = answers('NOT_LOGGED_IN');
+    const refresh = vi.fn(async () => true);
+    expect(await withFreshSession(guest, false, refresh)).toEqual({ noRewardReason: 'NOT_LOGGED_IN' });
+    expect(refresh).not.toHaveBeenCalled();
+    const dead = answers('NOT_LOGGED_IN');
+    expect(await withFreshSession(dead, true, async () => false)).toEqual({ noRewardReason: 'NOT_LOGGED_IN' });
+    expect(dead).toHaveBeenCalledTimes(1);
+  });
+
+  it('query "Chơi hôm nay" của thành viên không giữ bản của khách khi token đã hết hạn', async () => {
+    const fresh = { ...today(), noRewardReason: null };
+    const get = vi.fn().mockResolvedValueOnce({ ...today(), rewardEligible: false, noRewardReason: 'NOT_LOGGED_IN' }).mockResolvedValueOnce(fresh);
+    const q = miniTodayQuery({ get, post: vi.fn() } as never, true, async () => true);
+    expect(await q.queryFn()).toBe(fresh);
+    expect(get).toHaveBeenCalledTimes(2);
   });
 });

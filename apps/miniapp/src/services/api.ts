@@ -88,6 +88,18 @@ export function setUnauthorizedHandler(handler: (() => Promise<string | null>) |
   onUnauthorized = handler;
 }
 
+/**
+ * Làm mới access token ngay, gộp chung lượt refresh với interceptor 401. Dùng cho route @Public + OptionalJwtAuthGuard (game mini): ở đó
+ * token hết hạn bị coi là khách chứ không trả 401, nên interceptor không bao giờ tự làm mới. Trả token mới, hoặc null khi không làm mới được.
+ */
+export function refreshAccessToken(): Promise<string | null> {
+  if (!onUnauthorized) return Promise.resolve(null);
+  refreshInFlight ??= onUnauthorized().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
 /** Đăng ký hàm đọc deviceId cho X-Device-Id (set bởi store/auth lúc khởi tạo để tránh import vòng tĩnh + động). */
 export function setDeviceIdProvider(provider: (() => Promise<string>) | null): void {
   deviceIdProvider = provider;

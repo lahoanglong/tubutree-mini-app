@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { classifyMiniError, miniDeviceId, startMiniRound, submitMiniRound } from '@tubutree/app-core/game-mini/api';
-import { isMiniDisabled, miniTodayQuery } from '@tubutree/app-core/game-mini/today';
+import { isMiniDisabled, miniTodayQuery, withFreshSession, type MiniSessionRefresh } from '@tubutree/app-core/game-mini/today';
 import { type MiniBoardProps, type MiniBoardStatus } from '@tubutree/app-core/game-mini/boards';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import {
@@ -30,6 +30,7 @@ import { Button, Heading, ProductThumb, Text } from '@/components/mini';
 import { PageHeader } from '@/components/ui/page-header';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useAuthPhase } from '@/lib/auth-phase';
+import { refreshSession as refreshWebSession } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
 import { loginHref } from '@/lib/return-to';
@@ -56,11 +57,13 @@ function webStorage() {
   }
 }
 
-function useMiniRound(game: PlayableMiniGame) {
+const refreshSession: MiniSessionRefresh = () => refreshWebSession().then((o) => o.kind === 'ok');
+
+function useMiniRound(game: PlayableMiniGame, authed: boolean) {
   const qc = useQueryClient();
   const [state, dispatch] = useReducer(roundReducer, initialRoundState);
   const startM = useLockedMutation({
-    mutationFn: () => startMiniRound(coreHttp, game),
+    mutationFn: () => withFreshSession(() => startMiniRound(coreHttp, game), authed, refreshSession),
     onSuccess: (round) => dispatch({ type: 'started', round, now: Date.now() }),
     onError: (err) => dispatch({ type: 'start_failed', failure: classifyMiniError(err) }),
   });
@@ -89,8 +92,9 @@ function useMiniRound(game: PlayableMiniGame) {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mỗi lần gửi ứng với đúng một cặp (phase, attempts)
   }, [state.phase, state.attempts]);
 
+  // Đang nộp thì không tự cắt: máy chủ có thể đã nhận bài trước hạn của nó, để `ROUND_EXPIRED` của máy chủ quyết thay vì bỏ kết quả về muộn.
   useEffect(() => {
-    const open = state.phase === 'playing' || state.phase === 'submitting' || (state.phase === 'error' && state.failedStep === 'submit');
+    const open = state.phase === 'playing' || (state.phase === 'error' && state.failedStep === 'submit');
     if (!open || state.deadline === null) return;
     const t = setTimeout(() => dispatch({ type: 'expire' }), Math.max(0, state.deadline - Date.now()));
     return () => clearTimeout(t);
@@ -249,9 +253,9 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
   const router = useRouter();
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
-  const todayQ = useQuery({ ...miniTodayQuery(coreHttp, authed), enabled: phase !== 'loading' });
+  const todayQ = useQuery({ ...miniTodayQuery(coreHttp, authed, refreshSession), enabled: phase !== 'loading' });
   const streakQ = useQuery({ ...checkInQuery(coreHttp), enabled: authed && game === 'daily_quiz' });
-  const { state, dispatch, start } = useMiniRound(game);
+  const { state, dispatch, start } = useMiniRound(game, authed);
   const [status, setStatus] = useState<MiniBoardStatus | null>(null);
   const onStatus = useCallback(
     (s: MiniBoardStatus) =>

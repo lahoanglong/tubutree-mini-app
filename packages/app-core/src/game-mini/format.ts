@@ -1,6 +1,7 @@
 import {
   MINI_GAME_RULES,
   MINI_REWARD,
+  miniBaseReward,
   type MiniCapId,
   type MiniGameId,
   type MiniNoRewardReason,
@@ -70,8 +71,16 @@ export function miniIntroReward(today: MiniTodayResponse | undefined, game: Mini
   const g = today.games.find((x) => x.game === game);
   if (!g || g.rewardedRoundsLeft <= 0) return { rewarded: false, lines: [reasonLine('NO_REWARDED_ROUNDS_LEFT')] };
   if (today.caps.accountCapReached) return { rewarded: false, lines: [gameCopy('cap.account')] };
-  const lines = [gameCopy('intro.reward', { water: MINI_REWARD.waterMax, points: MINI_REWARD.points, pct: Math.round(MINI_REWARD.pointsMinRatio * 100) })];
-  if (today.caps.pointsBudgetExhausted || today.caps.pointsUsed >= today.caps.pointsCap) lines.push(gameCopy('cap.points'));
+  // Mức trần của chính game này theo công thức máy chủ (đúng hết số câu/món của ván), hạ theo phần 💧 tài khoản còn nhận được hôm nay.
+  const best = miniBaseReward(g.items, g.items);
+  const water = Math.min(best.water, Math.max(0, today.caps.waterCap - today.caps.waterUsed));
+  const pointsOpen = !today.caps.pointsBudgetExhausted && today.caps.pointsUsed < today.caps.pointsCap;
+  if (water <= 0 && !pointsOpen) return { rewarded: false, lines: [gameCopy('cap.account')] };
+  const lines: string[] = [];
+  if (water <= 0) lines.push(gameCopy('cap.accountWater'));
+  else if (pointsOpen) lines.push(gameCopy('intro.reward', { water, points: best.points, pct: Math.round(MINI_REWARD.pointsMinRatio * 100) }));
+  else lines.push(gameCopy('intro.rewardWater', { water }));
+  if (!pointsOpen) lines.push(gameCopy('cap.points'));
   return { rewarded: true, lines };
 }
 

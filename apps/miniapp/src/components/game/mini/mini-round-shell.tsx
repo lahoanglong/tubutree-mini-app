@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useReducer, useState, type ComponentType } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { classifyMiniError, miniDeviceId, startMiniRound, submitMiniRound } from '@tubutree/app-core/game-mini/api';
-import { isMiniDisabled, miniTodayQuery } from '@tubutree/app-core/game-mini/today';
+import { isMiniDisabled, miniTodayQuery, withFreshSession, type MiniSessionRefresh } from '@tubutree/app-core/game-mini/today';
 import { type MiniBoardProps, type MiniBoardStatus } from '@tubutree/app-core/game-mini/boards';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniClock, miniFailureView, miniGameRules, miniGameTitle, miniIntroReward, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
@@ -13,6 +13,7 @@ import { Heading, Text } from '../../ui/text';
 import { useAuthPhase } from '../../../hooks/use-auth-phase';
 import { useSmartNavigate } from '../../../lib/smart-nav';
 import { getDailyCheckInStatus } from '../../../services/account-api';
+import { refreshAccessToken } from '../../../services/api';
 import { coreHttp } from '../../../services/core-http';
 import { browserStorage } from '../../../utils/recently-viewed';
 import { useLockedMutation } from '../use-locked-mutation';
@@ -30,11 +31,13 @@ const skeleton = <div className="tubu-mg-board-skeleton" aria-hidden />;
 const GAME_PATH = '/game';
 const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
-function useMiniRound(game: PlayableMiniGame) {
+const refreshSession: MiniSessionRefresh = () => refreshAccessToken().then(Boolean);
+
+function useMiniRound(game: PlayableMiniGame, authed: boolean) {
   const qc = useQueryClient();
   const [state, dispatch] = useReducer(roundReducer, initialRoundState);
   const startM = useLockedMutation({
-    mutationFn: () => startMiniRound(coreHttp, game),
+    mutationFn: () => withFreshSession(() => startMiniRound(coreHttp, game), authed, refreshSession),
     onSuccess: (round) => dispatch({ type: 'started', round, now: Date.now() }),
     onError: (err) => dispatch({ type: 'start_failed', failure: classifyMiniError(err) }),
   });
@@ -63,8 +66,9 @@ function useMiniRound(game: PlayableMiniGame) {
     // Mỗi lần gửi ứng với đúng một cặp (phase, attempts).
   }, [state.phase, state.attempts]);
 
+  // Đang nộp thì không tự cắt: máy chủ có thể đã nhận bài trước hạn của nó, để `ROUND_EXPIRED` của máy chủ quyết thay vì bỏ kết quả về muộn.
   useEffect(() => {
-    const open = state.phase === 'playing' || state.phase === 'submitting' || (state.phase === 'error' && state.failedStep === 'submit');
+    const open = state.phase === 'playing' || (state.phase === 'error' && state.failedStep === 'submit');
     if (!open || state.deadline === null) return;
     const t = setTimeout(() => dispatch({ type: 'expire' }), Math.max(0, state.deadline - Date.now()));
     return () => clearTimeout(t);
@@ -113,9 +117,9 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
   const login = useLoginWithNotice();
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
-  const todayQ = useQuery({ ...miniTodayQuery(coreHttp, authed), enabled: phase !== 'loading' });
+  const todayQ = useQuery({ ...miniTodayQuery(coreHttp, authed, refreshSession), enabled: phase !== 'loading' });
   const streakQ = useQuery({ queryKey: ['loyalty-checkin'], queryFn: getDailyCheckInStatus, enabled: authed && game === 'daily_quiz' });
-  const { state, dispatch, start } = useMiniRound(game);
+  const { state, dispatch, start } = useMiniRound(game, authed);
   const [status, setStatus] = useState<MiniBoardStatus | null>(null);
   const onStatus = useCallback(
     (s: MiniBoardStatus) =>
