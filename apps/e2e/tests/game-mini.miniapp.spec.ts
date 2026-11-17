@@ -173,7 +173,7 @@ for (const viewport of [
       await page.goto('/game');
       await expect(page.getByTestId('mini-play-status-daily_quiz')).toHaveText(gameCopy('row.full'), { timeout: 15_000 });
       await page.getByTestId('mini-play-row-daily_quiz').click();
-      await expect(page.getByTestId('mini-no-reward')).toHaveText(gameCopy('intro.noReward'));
+      await expect(page.getByTestId('mini-no-reward')).toHaveText(gameCopy('intro.noReward'), { timeout: 15_000 });
       await expect(page.getByText(gameCopy('reason.NO_REWARDED_ROUNDS_LEFT'))).toBeVisible();
     });
 

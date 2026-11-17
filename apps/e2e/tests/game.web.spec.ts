@@ -107,7 +107,7 @@ test.describe('Web khách: Vườn Xanh', () => {
   });
 
   // B-80: trước khi sửa, mở trang gọi 13 lần của game (11 lần /game/*, điểm và điểm danh); nay chỉ hồ sơ, câu đố, nhiệm vụ, điểm, điểm danh
-  // và trạng thái lượt mini game (sảnh arcade nằm ngay tab Hôm nay).
+  // và trạng thái lượt mini game (sảnh arcade nằm ngay tab Hôm nay), thêm GET /game/mini/today để biết có hiện thẻ "Chơi hôm nay" (cờ tắt trả 404).
   test('mở /vuon-xanh: dữ liệu tab Vườn và Cộng đồng chỉ tải khi mở tab', async ({ page, api }) => {
     mockGame(api, { checkedIn: false });
     await page.goto('/vuon-xanh');
@@ -119,6 +119,7 @@ test.describe('Web khách: Vườn Xanh', () => {
     console.log(`WEB_GAME_CALLS_OPEN ${opened.filter((c) => gameOwned.test(c)).length} (tổng ${opened.length})\n${opened.join('\n')}`);
     expect(opened.filter((c) => gameOwned.test(c)).sort()).toEqual([
       'GET /game/arcade/status',
+      'GET /game/mini/today',
       'GET /game/missions',
       'GET /game/profile',
       'GET /game/quiz/today',

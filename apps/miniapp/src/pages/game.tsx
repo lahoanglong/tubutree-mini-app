@@ -54,7 +54,7 @@ import { useGameData } from '../components/game/use-game-data';
 import { useWheelPrize } from '../components/game/use-wheel-prize';
 import { useGameActions, type HarvestMeta, type HarvestReward } from '../components/game/use-game-actions';
 import { SEASON_PASS_ENABLED } from '../utils/features';
-import { miniTodayQuery } from '@tubutree/app-core/game-mini/api';
+import { miniTodayQuery } from '@tubutree/app-core/game-mini/today';
 import { miniEarnQuizLeft, miniPlayPath, playableToday } from '@tubutree/app-core/game-mini/format';
 import { coreHttp } from '../services/core-http';
 import { PlayTodayCard } from '../components/game/mini/play-today-card';

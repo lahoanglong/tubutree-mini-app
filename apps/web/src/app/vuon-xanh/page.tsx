@@ -58,7 +58,7 @@ import { WeeklyLeaderboard } from '@/components/game/weekly-leaderboard';
 import { WheelPrizeSheet } from '@/components/game/wheel-prize-sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
-import { miniTodayQuery } from '@tubutree/app-core/game-mini/api';
+import { miniTodayQuery } from '@tubutree/app-core/game-mini/today';
 import { miniEarnQuizLeft, miniPlayPath, playableToday } from '@tubutree/app-core/game-mini/format';
 import type { MiniTodayResponse } from '@tubutree/shared-types';
 import { PlayTodayCard } from '@/components/game/mini/play-today-card';

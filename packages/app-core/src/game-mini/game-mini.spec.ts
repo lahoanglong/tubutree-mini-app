@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import type { MiniStartResponse, MiniSubmitResponse, MiniTodayResponse } from '@tubutree/shared-types';
 import { FORBIDDEN_TERMS } from '../shop-copy';
-import { classifyMiniError, isMiniDisabled, MINI_DEVICE_KEY, miniDeviceId, miniTodayQuery } from './api';
+import { classifyMiniError, MINI_DEVICE_KEY, miniDeviceId } from './api';
+import { isMiniDisabled, miniTodayQuery } from './today';
 import {
   binUnderPoint,
   quizChoose,
@@ -32,6 +33,7 @@ import {
   sourceHost,
 } from './format';
 import { initialRoundState, roundMsLeft, roundReducer, submitDelayMs, SUBMIT_RETRIES, type RoundEvent, type RoundState } from './round-machine';
+import { miniQuizProduct, miniReviewRows } from './review';
 
 const T0 = 1_000_000;
 
@@ -408,5 +410,51 @@ describe('màn lỗi và sheet Kiếm nước', () => {
     expect(miniEarnQuizLeft(today({ rewardEligible: false, noRewardReason: 'NOT_LOGGED_IN' }))).toBe(0);
     expect(miniEarnQuizLeft(today({ caps: { ...today().caps, accountCapReached: true } }))).toBe(0);
     expect(miniEarnQuizLeft(today({ games: today().games.filter((g) => g.game !== 'daily_quiz') }))).toBe(0);
+  });
+});
+
+describe('màn kết quả: danh sách Vì sao', () => {
+  const product = { slug: 'nuoc-rua-chen-bo-ket', name: 'Nước rửa chén bồ kết', imageUrl: null, price: 89_000, inStock: true };
+  const quiz = {
+    game: 'daily_quiz' as const,
+    items: [
+      { id: 'q1', prompt: 'Câu 1', options: ['A1', 'B1', 'C1', 'D1'], product: null },
+      { id: 'q2', prompt: 'Câu 2', options: ['A2', 'B2', 'C2', 'D2'], product },
+      { id: 'q3', prompt: 'Câu 3', options: ['A3', 'B3', 'C3', 'D3'], product: null },
+    ],
+  };
+  const base = { explanation: 'Vì vậy', sourceUrl: 'https://example.vn/a', productSlug: null };
+
+  it('Đố Xanh: máy chủ trả chỉ số, dòng ghi chữ của lựa chọn; bỏ trống là "skipped" không có đáp án đã chọn', () => {
+    const rows = miniReviewRows(
+      {
+        game: 'daily_quiz',
+        items: [
+          { ...base, contentId: 'q1', prompt: 'Câu 1', correct: true, given: 0, expected: 0 },
+          { ...base, contentId: 'q2', prompt: 'Câu 2', correct: false, given: 1, expected: 2 },
+          { ...base, contentId: 'q3', prompt: 'Câu 3', correct: false, given: null, expected: 3 },
+        ],
+      },
+      quiz,
+    );
+    expect(rows.map((r) => [r.state, r.given, r.expected])).toEqual([
+      ['correct', 'A1', 'A1'],
+      ['wrong', 'B2', 'C2'],
+      ['skipped', null, 'D3'],
+    ]);
+  });
+
+  it('Đúng Thùng: tên thùng lấy từ chữ game mini', () => {
+    const rows = miniReviewRows(
+      { game: 'sort', items: [{ contentId: 's1', label: 'Vỏ chuối', correct: false, given: 'recycle', expected: 'food', explanation: 'Hữu cơ', sourceUrl: '' }] },
+      { game: 'sort', bins: ['recycle', 'food', 'other'], items: [{ id: 's1', label: 'Vỏ chuối', emoji: null }] },
+    );
+    expect(rows[0]).toMatchObject({ state: 'wrong', given: gameCopy('sort.bin.recycle'), expected: gameCopy('sort.bin.food') });
+  });
+
+  it('thẻ sản phẩm là sản phẩm của câu cuối có gắn sản phẩm; game khác không có thẻ', () => {
+    expect(miniQuizProduct(quiz)?.slug).toBe(product.slug);
+    expect(miniQuizProduct({ game: 'sort', bins: ['recycle'], items: [] })).toBeNull();
+    expect(miniQuizProduct(undefined)).toBeNull();
   });
 });

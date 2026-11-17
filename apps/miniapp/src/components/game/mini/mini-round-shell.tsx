@@ -1,33 +1,19 @@
 import { lazy, Suspense, useCallback, useEffect, useReducer, useState, type ComponentType } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { MiniChoiceItem, MiniProductCard, MiniReview, MiniRoundContent } from '@tubutree/shared-types';
-import { classifyMiniError, isMiniDisabled, miniDeviceId, miniTodayQuery, startMiniRound, submitMiniRound } from '@tubutree/app-core/game-mini/api';
+import { classifyMiniError, miniDeviceId, startMiniRound, submitMiniRound } from '@tubutree/app-core/game-mini/api';
+import { isMiniDisabled, miniTodayQuery } from '@tubutree/app-core/game-mini/today';
 import { type MiniBoardProps, type MiniBoardStatus } from '@tubutree/app-core/game-mini/boards';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
-import {
-  MINI_RECYCLE_PATH,
-  miniClock,
-  miniFailureView,
-  miniGameRules,
-  miniGameTitle,
-  miniIntroReward,
-  miniProductPath,
-  miniResultSummary,
-  sourceHost,
-  type PlayableMiniGame,
-} from '@tubutree/app-core/game-mini/format';
-import { initialRoundState, roundReducer, submitDelayMs, type RoundState } from '@tubutree/app-core/game-mini/round-machine';
+import { miniClock, miniFailureView, miniGameRules, miniGameTitle, miniIntroReward, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
+import { initialRoundState, roundReducer, submitDelayMs } from '@tubutree/app-core/game-mini/round-machine';
 import { useLoginWithNotice } from '../../ui/auth-gate';
 import { Button } from '../../ui/button';
 import { PageHeader } from '../../ui/page-header';
-import { ProductThumb } from '../../ui/product-thumb';
 import { Heading, Text } from '../../ui/text';
 import { useAuthPhase } from '../../../hooks/use-auth-phase';
-import { usePublicConfig } from '../../../hooks/use-public-config';
 import { useSmartNavigate } from '../../../lib/smart-nav';
 import { getDailyCheckInStatus } from '../../../services/account-api';
 import { coreHttp } from '../../../services/core-http';
-import { formatVnd } from '../../../utils/format';
 import { browserStorage } from '../../../utils/recently-viewed';
 import { useLockedMutation } from '../use-locked-mutation';
 import './mini-game.css';
@@ -37,6 +23,9 @@ const BOARDS: Record<PlayableMiniGame, ComponentType<MiniBoardProps<never>>> = {
   daily_quiz: lazy(() => import('./mini-daily-quiz')) as ComponentType<MiniBoardProps<never>>,
   sort: lazy(() => import('./mini-sort')) as ComponentType<MiniBoardProps<never>>,
 };
+const loadResult = () => import('./mini-result');
+const MiniResult = lazy(loadResult);
+const skeleton = <div className="tubu-mg-board-skeleton" aria-hidden />;
 
 const GAME_PATH = '/game';
 const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
@@ -115,165 +104,6 @@ function StatusBar({ game, status, rewarded }: { game: PlayableMiniGame; status:
   );
 }
 
-/** Nguồn ở Mini App: chỉ hiện tên miền, vì chính sách Zalo không cho Mini App mở trang ngoài Zalo. */
-function SourceNote({ url }: { url: string }) {
-  const host = sourceHost(url);
-  if (!host) return null;
-  return (
-    <Text variant="caption" tone="tertiary" as="p">
-      {gameCopy('result.sourceHost', { host })}
-    </Text>
-  );
-}
-
-interface ReviewRow {
-  key: string;
-  title: string;
-  state: 'correct' | 'wrong' | 'skipped';
-  given: string | null;
-  expected: string;
-  explanation: string;
-  sourceUrl: string;
-}
-
-function reviewRows(review: MiniReview, content: MiniRoundContent): ReviewRow[] {
-  const binName = (b: string) => gameCopy(`sort.bin.${b}` as 'sort.bin.recycle');
-  if (review.game === 'sort') {
-    return review.items.map((it, i) => ({
-      key: `${it.contentId}-${i}`,
-      title: it.label,
-      state: it.given === null ? 'skipped' : it.correct ? 'correct' : 'wrong',
-      given: it.given === null ? null : binName(it.given),
-      expected: binName(it.expected),
-      explanation: it.explanation,
-      sourceUrl: it.sourceUrl,
-    }));
-  }
-  if (review.game === 'daily_quiz' || review.game === 'origin') {
-    const items: MiniChoiceItem[] = content.game === 'daily_quiz' || content.game === 'origin' ? content.items : [];
-    return review.items.map((it, i) => {
-      const opts = (items.find((x) => x.id === it.contentId) ?? items[i])?.options ?? [];
-      return {
-        key: `${it.contentId}-${i}`,
-        title: it.prompt,
-        state: it.given === null ? 'skipped' : it.correct ? 'correct' : 'wrong',
-        given: it.given === null ? null : opts[it.given] ?? null,
-        expected: opts[it.expected] ?? '',
-        explanation: it.explanation,
-        sourceUrl: it.sourceUrl,
-      };
-    });
-  }
-  return [];
-}
-
-const BADGE = { correct: 'result.correct', wrong: 'result.wrong', skipped: 'result.skipped' } as const;
-
-function ReviewList({ rows }: { rows: ReviewRow[] }) {
-  return (
-    <ol className="tubu-mg-review" data-testid="mini-review">
-      {rows.map((r) => (
-        <li key={r.key} className="tubu-mg-review-item" data-testid="mini-review-item">
-          <span className="tubu-mg-badge" data-state={r.state}>
-            {gameCopy(BADGE[r.state])}
-          </span>
-          <Text variant="body-sm" as="p" style={{ fontWeight: 'var(--type-label-weight)' }}>
-            {r.title}
-          </Text>
-          {r.state === 'wrong' && r.given && (
-            <Text variant="caption" tone="secondary" as="p">
-              {gameCopy('result.given', { a: r.given })}
-            </Text>
-          )}
-          {r.state !== 'correct' && r.expected && (
-            <Text variant="caption" tone="secondary" as="p">
-              {gameCopy('result.expected', { a: r.expected })}
-            </Text>
-          )}
-          <Text variant="body-sm" as="p">
-            <strong>{gameCopy('result.why')}: </strong>
-            {r.explanation}
-          </Text>
-          <SourceNote url={r.sourceUrl} />
-        </li>
-      ))}
-    </ol>
-  );
-}
-
-function quizProduct(content: MiniRoundContent | undefined): MiniProductCard | null {
-  if (!content || content.game !== 'daily_quiz') return null;
-  return [...content.items].reverse().find((x) => x.product)?.product ?? null;
-}
-
-function ResultView({ game, state, onDone, onLogin }: { game: PlayableMiniGame; state: RoundState; onDone: () => void; onLogin: () => void }) {
-  const navigate = useSmartNavigate();
-  const waste = usePublicConfig().waste.enabled;
-  const r = state.result!;
-  const summary = miniResultSummary(r);
-  const product = quizProduct(state.round?.content);
-  return (
-    <section className="tubu-mg-panel" aria-labelledby="mini-result-title" data-testid="mini-result">
-      <Heading id="mini-result-title" as="h2" variant="title-md" font="ui">
-        {gameCopy('result.title')}
-      </Heading>
-      <Heading as="p" variant="display-md" className="tubu-mg-score" data-testid="mini-result-score">
-        {summary.score}
-      </Heading>
-      {summary.gains.length > 0 && (
-        <div className="tubu-mg-gains">
-          {summary.gains.map((g) => (
-            <span key={g} className="tubu-mg-chip" data-tone="brand">
-              {g}
-            </span>
-          ))}
-        </div>
-      )}
-      {summary.notes.length > 0 && (
-        <ul className="tubu-mg-lines" aria-live="polite">
-          {summary.notes.map((n) => (
-            <li key={n}>
-              <Text variant="body-sm" tone="secondary" as="span">
-                {n}
-              </Text>
-            </li>
-          ))}
-        </ul>
-      )}
-      <Button fullWidth size="lg" onPress={summary.loginToReward ? onLogin : onDone}>
-        {gameCopy(summary.loginToReward ? 'result.login' : 'result.done')}
-      </Button>
-      {game === 'sort' && waste && (
-        <button type="button" className="tubu-mg-link" onClick={() => navigate(MINI_RECYCLE_PATH.miniapp)}>
-          {gameCopy('invite.sort')}
-        </button>
-      )}
-      {game === 'daily_quiz' && product && (
-        <div className="tubu-mg-panel">
-          <Text variant="caption" tone="secondary" as="p">
-            {gameCopy('result.product')}
-          </Text>
-          <button type="button" className="tubu-mg-product" data-testid="mini-result-product" onClick={() => navigate(miniProductPath.miniapp(product.slug, game))}>
-            <ProductThumb src={product.imageUrl} alt={product.name} size={48} />
-            <span className="tubu-mg-row-text">
-              <Text variant="body-sm" as="span" className="tubu-mg-one-line">
-                {product.name}
-              </Text>
-              <Text variant="price-sm" as="span" numeric>
-                {formatVnd(product.price)}
-              </Text>
-            </span>
-          </button>
-        </div>
-      )}
-      <Heading as="h3" variant="title-sm" font="ui">
-        {gameCopy('result.review')}
-      </Heading>
-      {state.round && <ReviewList rows={reviewRows(r.review, state.round.content)} />}
-    </section>
-  );
-}
-
 /**
  * Khung ván dùng chung của game mini (chunk lười `mini-round-shell`): thanh trên (tên, chuỗi ngày ở Đố Xanh), tiến độ và đồng hồ, vùng chơi,
  * màn kết quả, lỗi và quá hạn. Logic chuyển pha ở `roundReducer` (app-core), bàn chơi từng game tải lười riêng.
@@ -294,6 +124,9 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
   );
   const onFinish = useCallback((answers: unknown[]) => dispatch({ type: 'finish', answers, now: Date.now() }), [dispatch]);
   const back = () => navigate(GAME_PATH);
+  useEffect(() => {
+    if (state.phase === 'playing') void loadResult();
+  }, [state.phase]);
 
   const title = miniGameTitle(game);
   const streak = state.result?.checkIn?.streakDays ?? streakQ.data?.streakDays ?? 0;
@@ -342,7 +175,7 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
       <>
         <StatusBar game={game} status={status} rewarded={state.round.rewarded} />
         {state.phase === 'playing' ? (
-          <Suspense fallback={<div className="tubu-mg-board-skeleton" aria-hidden />}>
+          <Suspense fallback={skeleton}>
             <Board content={content as never} onFinish={onFinish} onStatus={onStatus} />
           </Suspense>
         ) : (
@@ -355,7 +188,11 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
       </>
     );
   } else if (state.phase === 'result' && state.result) {
-    body = <ResultView game={game} state={state} onDone={back} onLogin={() => void login()} />;
+    body = (
+      <Suspense fallback={skeleton}>
+        <MiniResult game={game} state={state} onDone={back} onLogin={() => void login()} />
+      </Suspense>
+    );
   } else if (state.phase === 'expired') {
     body = (
       <div className="tubu-mg-panel" role="alert" data-testid="mini-expired">

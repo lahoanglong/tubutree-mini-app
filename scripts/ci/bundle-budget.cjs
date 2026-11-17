@@ -5,8 +5,9 @@
 // Ngưỡng là ngưỡng cảnh báo của dự án, KHÔNG phải giới hạn của Zalo (giới hạn dung lượng gói hiện hành của Zalo chưa kiểm).
 //   MINIAPP_ENTRY_WARN_KB  file JS lớn nhất (entry), raw, mặc định 700. Mục tiêu trong docs/2026-10-review/03-perf.md A3-013: dưới 450.
 //   MINIAPP_TOTAL_WARN_KB  tổng mọi file của bản build (JS + CSS + font/ảnh), raw, mặc định 2350 (W177 hạ từ 2500 sau khi chuyển 8 màn quản trị/đối tác/nhân sự sang cổng web đưa bản dựng về 2237 KB, để wave sau không đẩy tổng quay lại trên 2350).
-//   MINIAPP_GAME_MINI_WARN_BYTES  tổng các chunk `mini-*` (khung ván và bàn chơi game mini, tải lười), raw, mặc định 40000 cho cả 5 game; riêng đợt A
-//                                 (khung ván, Đố Xanh, Đúng Thùng) mục tiêu 22000. Một game mới không được kéo cả bộ game vượt ngưỡng này.
+//   MINIAPP_GAME_MINI_WARN_BYTES  tổng các chunk JS `mini-*` (khung ván, màn kết quả, bàn chơi game mini, tải lười), raw, mặc định 40000 cho cả 5 game; riêng đợt A
+//                                 (khung ván, Đố Xanh, Đúng Thùng) mục tiêu 22000. Một game mới không được kéo cả bộ game vượt ngưỡng này. CSS game mini
+//                                 không tính: Rollup đặt tên file CSS theo chunk dùng chung nên tên không ổn định.
 // Đặt các biến repo cùng tên (Settings > Variables) để chỉnh ngưỡng mà không sửa workflow.
 const fs = require('fs');
 const path = require('path');
@@ -60,7 +61,7 @@ function main() {
   const js = rows.filter((x) => x.file.endsWith('.js')).sort((a, b) => b.raw - a.raw);
   const entry = js[0];
   const total = groups[3][1];
-  const gameMini = rows.filter((x) => /(^|\/)mini-[^/]*\.(js|css)$/.test(x.file));
+  const gameMini = rows.filter((x) => /(^|\/)mini-[^/]*\.js$/.test(x.file));
   const gameMiniRaw = gameMini.reduce((s, x) => s + x.raw, 0);
 
   const warnings = [];

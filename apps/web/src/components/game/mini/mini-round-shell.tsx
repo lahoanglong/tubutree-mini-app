@@ -5,8 +5,8 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { MiniChoiceItem, MiniProductCard, MiniReview, MiniRoundContent } from '@tubutree/shared-types';
-import { classifyMiniError, isMiniDisabled, miniDeviceId, miniTodayQuery, startMiniRound, submitMiniRound } from '@tubutree/app-core/game-mini/api';
+import { classifyMiniError, miniDeviceId, startMiniRound, submitMiniRound } from '@tubutree/app-core/game-mini/api';
+import { isMiniDisabled, miniTodayQuery } from '@tubutree/app-core/game-mini/today';
 import { type MiniBoardProps, type MiniBoardStatus } from '@tubutree/app-core/game-mini/boards';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import {
@@ -23,6 +23,7 @@ import {
   sourceHost,
   type PlayableMiniGame,
 } from '@tubutree/app-core/game-mini/format';
+import { MINI_REVIEW_BADGE, miniQuizProduct, miniReviewRows, type MiniReviewRow } from '@tubutree/app-core/game-mini/review';
 import { initialRoundState, roundReducer, submitDelayMs, type RoundState } from '@tubutree/app-core/game-mini/round-machine';
 import { checkInQuery } from '@tubutree/app-core/queries/loyalty';
 import { Button, Heading, ProductThumb, Text } from '@/components/mini';
@@ -141,56 +142,13 @@ function SourceLink({ url, n }: { url: string; n: number }) {
   );
 }
 
-interface ReviewRow {
-  key: string;
-  title: string;
-  state: 'correct' | 'wrong' | 'skipped';
-  given: string | null;
-  expected: string;
-  explanation: string;
-  sourceUrl: string;
-}
-
-function reviewRows(review: MiniReview, content: MiniRoundContent): ReviewRow[] {
-  const binName = (b: string) => gameCopy(`sort.bin.${b}` as 'sort.bin.recycle');
-  if (review.game === 'sort') {
-    return review.items.map((it, i) => ({
-      key: `${it.contentId}-${i}`,
-      title: it.label,
-      state: it.given === null ? 'skipped' : it.correct ? 'correct' : 'wrong',
-      given: it.given === null ? null : binName(it.given),
-      expected: binName(it.expected),
-      explanation: it.explanation,
-      sourceUrl: it.sourceUrl,
-    }));
-  }
-  if (review.game === 'daily_quiz' || review.game === 'origin') {
-    const items: MiniChoiceItem[] = content.game === 'daily_quiz' || content.game === 'origin' ? content.items : [];
-    return review.items.map((it, i) => {
-      const opts = (items.find((x) => x.id === it.contentId) ?? items[i])?.options ?? [];
-      return {
-        key: `${it.contentId}-${i}`,
-        title: it.prompt,
-        state: it.given === null ? 'skipped' : it.correct ? 'correct' : 'wrong',
-        given: it.given === null ? null : opts[it.given] ?? null,
-        expected: opts[it.expected] ?? '',
-        explanation: it.explanation,
-        sourceUrl: it.sourceUrl,
-      };
-    });
-  }
-  return [];
-}
-
-const BADGE = { correct: 'result.correct', wrong: 'result.wrong', skipped: 'result.skipped' } as const;
-
-function ReviewList({ rows }: { rows: ReviewRow[] }) {
+function ReviewList({ rows }: { rows: MiniReviewRow[] }) {
   return (
     <ol className="tubu-mg-review" data-testid="mini-review">
       {rows.map((r, i) => (
         <li key={r.key} className="tubu-mg-review-item" data-testid="mini-review-item">
           <span className="tubu-mg-badge" data-state={r.state}>
-            {gameCopy(BADGE[r.state])}
+            {gameCopy(MINI_REVIEW_BADGE[r.state])}
           </span>
           <Text variant="body-sm" as="p" style={{ fontWeight: 'var(--type-label-weight)' }}>
             {r.title}
@@ -216,16 +174,11 @@ function ReviewList({ rows }: { rows: ReviewRow[] }) {
   );
 }
 
-function quizProduct(content: MiniRoundContent | undefined): MiniProductCard | null {
-  if (!content || content.game !== 'daily_quiz') return null;
-  return [...content.items].reverse().find((x) => x.product)?.product ?? null;
-}
-
 function ResultView({ game, state, onDone, onLogin }: { game: PlayableMiniGame; state: RoundState; onDone: () => void; onLogin: () => void }) {
   const waste = usePublicConfig().waste.enabled && isWebRouteReady(MINI_RECYCLE_PATH.web);
   const r = state.result!;
   const summary = miniResultSummary(r);
-  const product = quizProduct(state.round?.content);
+  const product = miniQuizProduct(state.round?.content);
   return (
     <section className="tubu-mg-panel" aria-labelledby="mini-result-title" data-testid="mini-result">
       <Heading id="mini-result-title" as="h2" variant="title-md" font="ui">
@@ -283,7 +236,7 @@ function ResultView({ game, state, onDone, onLogin }: { game: PlayableMiniGame; 
       <Heading as="h3" variant="title-sm" font="ui">
         {gameCopy('result.review')}
       </Heading>
-      {state.round && <ReviewList rows={reviewRows(r.review, state.round.content)} />}
+      {state.round && <ReviewList rows={miniReviewRows(r.review, state.round.content)} />}
     </section>
   );
 }

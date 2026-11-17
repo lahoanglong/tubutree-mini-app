@@ -35,8 +35,8 @@ async function signedIn(page: Page) {
   });
 }
 
-/** Bấm Tab tới khi `target` nhận tiêu điểm (tối đa `max` lần), rồi bấm `key`. */
-async function tabAndPress(page: Page, target: Locator, key = 'Enter', max = 12) {
+/** Bấm Tab tới khi `target` nhận tiêu điểm (tối đa `max` lần, khổ 1440 có cả thanh điều hướng đầu trang), rồi bấm `key`. */
+async function tabAndPress(page: Page, target: Locator, key = 'Enter', max = 60) {
   for (let i = 0; i < max; i++) {
     await page.keyboard.press('Tab');
     if (await target.evaluate((el) => el === document.activeElement)) {
