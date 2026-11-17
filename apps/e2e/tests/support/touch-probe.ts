@@ -66,6 +66,20 @@ export async function probeTapTargets(page: Page, options: TapProbeOptions = {})
         return n;
       };
 
+      // Nút ‹ › của kệ web (RailArrows) tự ẩn (`aria-disabled`, không nhận chuột) khi kệ đã ở đầu/cuối, nhưng trạng thái đó chỉ đổi sau sự kiện scroll (bất đồng bộ),
+      // còn bộ dò chạy liền một mạch: sau mỗi lần cuộn, đặt tạm thuộc tính theo vị trí cuộn thật của kệ như app sẽ làm, để nút cũ không che điều khiển vừa cuộn vào.
+      const railArrows = new Map<Element, string | null>();
+      const syncRailArrows = (el: Element): void => {
+        const row = el.closest<HTMLElement>('.scroll-x');
+        const wrap = row?.parentElement;
+        if (!row || !wrap) return;
+        for (const btn of Array.from(wrap.querySelectorAll(':scope > button[aria-label="Xem các mục trước"], :scope > button[aria-label="Xem các mục tiếp"]'))) {
+          if (!railArrows.has(btn)) railArrows.set(btn, btn.getAttribute('aria-disabled'));
+          const exhausted = btn.getAttribute('aria-label') === 'Xem các mục trước' ? row.scrollLeft <= 1 : row.scrollLeft + row.clientWidth >= row.scrollWidth - 1;
+          btn.setAttribute('aria-disabled', String(exhausted));
+        }
+      };
+
       const problems: string[] = [];
       for (const el of Array.from(root.querySelectorAll(selector))) {
         if (!visible(el)) continue;
@@ -80,6 +94,7 @@ export async function probeTapTargets(page: Page, options: TapProbeOptions = {})
           if (!target || !['checkbox', 'radio'].includes(type)) continue;
         }
         (el as HTMLElement).scrollIntoView({ block: 'center', inline: 'center' });
+        syncRailArrows(el);
         const r = el.getBoundingClientRect();
         const cx = Math.round(r.left + r.width / 2);
         const cy = Math.round(r.top + r.height / 2);
@@ -96,6 +111,10 @@ export async function probeTapTargets(page: Page, options: TapProbeOptions = {})
           const blockers = `trên ${stop(0, -1)}, dưới ${stop(0, 1)}, trái ${stop(-1, 0)}, phải ${stop(1, 0)}`;
           problems.push(`${label(el)}: vùng chạm ${w}×${h}px (khung nhìn ${Math.round(r.width)}×${Math.round(r.height)}px; chặn: ${blockers})`);
         }
+      }
+      for (const [btn, value] of railArrows) {
+        if (value === null) btn.removeAttribute('aria-disabled');
+        else btn.setAttribute('aria-disabled', value);
       }
       return problems;
     },

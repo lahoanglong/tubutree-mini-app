@@ -127,7 +127,7 @@ for (const vp of VIEWPORTS) {
       test.skip(testInfo.project.name !== 'Web Customer Mobile', 'Dải Story kiểm ở khổ điện thoại, chỉ project Web Customer Mobile');
     });
 
-    test('dải đứng giữa lối tắt và Giờ vàng, mọi vòng từ 44px, không tràn ngang', async ({ page, api, request }) => {
+    test('dải đứng ngay sau lối tắt (sau Danh mục và Bán chạy nhất), mọi vòng từ 44px, không tràn ngang', async ({ page, api, request }) => {
       const cards = await seededBestSellers(request);
       test.skip(!cards, 'DB e2e chưa có từ 3 món Bán chạy nhất còn hàng');
       mockHome(api, cards!);
@@ -146,8 +146,10 @@ for (const vp of VIEWPORTS) {
       expect(await noHorizontalScroll(page)).toBe(true);
 
       const order = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('[data-home-block]')).map((el) => el.dataset.homeBlock));
-      expect(order.indexOf('stories')).toBeGreaterThan(order.indexOf('shortcuts'));
-      expect(order.indexOf('stories')).toBeLessThan(order.indexOf('flash'));
+      expect(order).toEqual(expect.arrayContaining(['categories', 'bestSellers', 'shortcuts', 'stories', 'suggest']));
+      expect(order.indexOf('stories'), 'dải Story ngay sau lối tắt').toBe(order.indexOf('shortcuts') + 1);
+      expect(order.indexOf('stories')).toBeGreaterThan(order.indexOf('bestSellers'));
+      expect(order.indexOf('stories')).toBeLessThan(order.indexOf('suggest'));
     });
 
     test('chạm vòng mở Reel toàn màn, đóng lại thì vòng đổi xám; phím Esc cũng đóng', async ({ page, api, request }) => {

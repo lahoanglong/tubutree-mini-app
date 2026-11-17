@@ -67,6 +67,8 @@ export interface HomeInitial {
   publicConfig?: PublicConfig;
   /** Suất Giờ vàng đang chạy lúc dựng trang: có trong HTML đầu nên khối không chen vào sau hydrate làm cả trang nhảy. */
   flash?: FlashSaleActiveItem[];
+  /** Số suất Giờ vàng sắp mở lúc dựng trang (bản ẩn danh): cùng `flash`, HTML đầu đã biết hàng lối tắt có giữ lối vào Giờ vàng không. */
+  flashUpcomingCount?: number;
   /** Banner chiến dịch đang chạy lúc dựng trang: có trong HTML đầu nên khối không chen vào sau hydrate. Rỗng nghĩa là server đã hỏi và không có. */
   campaigns?: CampaignBanner[];
   /** Combo toàn sàn đang chạy lúc dựng trang: có trong HTML đầu nên kệ không chen vào sau hydrate, và Bán chạy nhất bỏ món của combo ngay trong HTML. Rỗng nghĩa là server đã hỏi và không có. */
@@ -149,7 +151,11 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
   const pageDown = shelves.bestSellerQuery.isError && shelves.bestSellerQuery.data === undefined;
   // Còn suất Giờ vàng nào có món (đang chạy hay sắp tới) không: chưa biết (đang tải hay lỗi) thì `undefined`, lối vào Giờ vàng giữ nguyên thay vì chớp rồi mất.
   const flashKnown = !shelves.flashQuery.isLoading && !shelves.flashQuery.isError && !upcoming.isPending && !upcoming.isError;
-  const flashLive = flashKnown ? shelves.flash.length > 0 || (upcoming.data?.length ?? 0) > 0 : undefined;
+  // Máy chủ đã hỏi cả suất đang chạy lẫn sắp mở thì giữ đúng quyết định của HTML đầu suốt lượt xem: đổi sau hydrate làm thẻ Đổi rác giãn ra, cả hàng lối tắt nhảy.
+  const [flashLiveAtOpen] = useState(() =>
+    initial.flash !== undefined && initial.flashUpcomingCount !== undefined ? initial.flash.length > 0 || initial.flashUpcomingCount > 0 : undefined,
+  );
+  const flashLive = flashLiveAtOpen ?? (flashKnown ? shelves.flash.length > 0 || (upcoming.data?.length ?? 0) > 0 : undefined);
   // Khối Giờ vàng chỉ gắn khi là ô khuyến mãi được chọn nên không tự ghi "không có" được: không ghi thì lần mở sau giữ khung chờ cho một Giờ vàng đã hết.
   const flashSettledEmpty = !shelves.flashQuery.isLoading && !shelves.flashQuery.isError && shelves.flash.length === 0;
   useEffect(() => {

@@ -5,7 +5,7 @@ import { NOISE, mockImages, runLcp } from './support/lcp-measure';
  * Web 375×812, Trang chủ: ảnh ưu tiên (fetchpriority=high) chỉ nằm trong màn đầu, ảnh LCP là một `<img>` không `loading=lazy`, và không có preload ảnh cho phần
  * tử đang ẩn ở khổ này. Ảnh sản phẩm/banner đi qua `{api}/img` (host Pancake), nên spec chặn `/api/img` và trả một PNG nhiễu: không phụ thuộc mạng, và đủ
  * "entropy" (Chrome không tính ảnh dưới ~0,05 bit/điểm ảnh vào LCP, ảnh 1×1 làm LCP rơi về một đoạn chữ).
- * Ngưỡng ảnh high: tối đa 3 (banner slide 0 + 2 thẻ Giờ vàng đầu; dấu logo Trang chủ chỉ eager, không ưu tiên).
+ * Ngưỡng ảnh high: tối đa 3 (2 thẻ đầu kệ Bán chạy, khối ảnh đầu tiên của Trang chủ; dấu logo Trang chủ chỉ eager, không ưu tiên).
  * Ca /san-pham cần ghi ảnh vào DB nên nằm ở lcp-priority-db.web.spec.ts, chạy ở project riêng sau các project web khách.
  */
 test.use({ viewport: { width: 375, height: 812 } });

@@ -23,7 +23,7 @@ vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !routeState.
 
 import HomeView from './home-view';
 import { homeBlockOrder } from './home-blocks';
-import { HOME_CONTEXT_HEIGHT, HOME_INTERLEAVE_AFTER, HOME_MAX_BLOCKS, HOME_SETTLE_MAX_MS, homeKeptOrder, homeRenderOrder } from '@tubutree/app-core/home-layout';
+import { HOME_CONTEXT_HEIGHT, HOME_INTERLEAVE_AFTER, HOME_MAX_BLOCKS, HOME_SETTLE_MAX_MS, homeKeptOrder, homeRenderOrder, SUGGEST_FIRST_RENDER } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
 import { HOME_KIND_KEY } from './use-home-customer-kind';
 import { BANNER_HINT_KEY, HOME_BEST_SELLER_LIMIT } from '@tubutree/app-core/home-layout';
@@ -211,7 +211,8 @@ describe('HomeView — nội dung các khối', () => {
     const items = suggestItems(c);
     const at = items.findIndex((li) => li.dataset.testid === 'suggest-interleave');
     expect(at).toBe(HOME_INTERLEAVE_AFTER);
-    expect(items.length).toBeGreaterThan(HOME_INTERLEAVE_AFTER + 1);
+    // Điện thoại: lô đầu của lưới là `SUGGEST_FIRST_RENDER` thẻ, thẻ chen khép lô đó; thẻ sau hiện khi khách cuộn tới.
+    expect(items.length).toBe(SUGGEST_FIRST_RENDER + 1);
     expect(items[at]!.querySelector('h2')!.textContent).toBe('Chẩn đoán tổ ấm');
     expect(items[at]!.querySelector('button')!.textContent).toBe('Bắt đầu');
     expect(items[at]!.style.gridColumn).toBe('1 / -1');
@@ -335,6 +336,16 @@ describe('HomeView — HubLayout cho máy tính', () => {
     routes['/flash-sales/upcoming'] = () => [{ itemId: 'u1', variationId: 'vu', productSlug: 'u', productName: 'Sắp tới', thumbnail: null, retailPrice: 100000, flashPrice: 80000, startAt: new Date(Date.now() + 3_600_000).toISOString(), reminded: false }];
     const c = await mount();
     expect(block(c, 'shortcuts').querySelectorAll('[data-pillar]')).toHaveLength(6);
+  });
+
+  it('máy chủ đã hỏi suất đang chạy và sắp mở: hàng lối tắt giữ đúng quyết định của HTML đầu suốt lượt xem, không đổi theo câu trả lời về sau ở trình duyệt', async () => {
+    routes['/flash-sales/upcoming'] = () => [{ itemId: 'u1', variationId: 'vu', productSlug: 'u', productName: 'Sắp tới', thumbnail: null, retailPrice: 100000, flashPrice: 80000, startAt: new Date(Date.now() + 3_600_000).toISOString(), reminded: false }];
+    const none = await mount(<HomeView initial={{ flash: [], flashUpcomingCount: 0 }} />);
+    expect(block(none, 'shortcuts').querySelectorAll('[data-pillar]')).toHaveLength(5);
+    mounted?.unmount();
+    routes['/flash-sales/upcoming'] = () => [];
+    const some = await mount(<HomeView initial={{ flash: [], flashUpcomingCount: 2 }} />);
+    expect(block(some, 'shortcuts').querySelectorAll('[data-pillar]')).toHaveLength(6);
   });
 });
 

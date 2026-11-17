@@ -62,7 +62,8 @@ async function refetchStale(page: Page, api: MockApi, method: string, pattern: s
     .toBeGreaterThanOrEqual(minCalls);
 }
 
-function mockHome(api: MockApi): void {
+/** Ô khuyến mãi của Trang chủ chỉ có MỘT khối (Giờ vàng > banner > combo): `promo: 'combos'` không mock suất Giờ vàng nào để khối combo hiện. */
+function mockHome(api: MockApi, { promo = 'flash' }: { promo?: 'flash' | 'combos' } = {}): void {
   api.get('/categories', [
     { id: 'c-goi', parentId: null, name: 'Dầu gội', slug: 'dau-goi', image: null, sortOrder: 1, productCount: 4, children: [] },
     { id: 'c-xa', parentId: null, name: 'Xà phòng', slug: 'xa-phong', image: null, sortOrder: 2, productCount: 2, children: [] },
@@ -72,6 +73,7 @@ function mockHome(api: MockApi): void {
   api.get('/products', ({ call }) => (call.query.get('sort') === 'best_seller_30d' ? pageOf(BEST, 12) : pageOf(FEED)));
   api.get('/config/public', { freeshipThreshold: 350000, subscribeDiscountPct: 0.12, loyalty: { vndPerPoint: 50, vndPerPointRedeem: 1000 } });
   api.get('/flash-sales/active', () => {
+    if (promo !== 'flash') return [];
     const now = Date.now();
     const names = [LONG_NAME, 'Xà phòng', 'Nước rửa bình sữa cho bé hương dịu nhẹ an toàn', 'Khăn ướt không cồn Bé Na'];
     return names.map((name, i) => ({
@@ -119,25 +121,28 @@ const describeCell = (c: MetaCell) => `${c.variant} "${c.text}" ${c.width}px${c.
 // Kệ Bán chạy nhất có hai bản, mỗi bản `display:none` ở một khổ: kệ vuốt ngang dưới lg, lưới 5×2 từ lg. Spec này đo khổ điện thoại nên chỉ lấy bản kệ.
 const bestRail = (page: Page) => page.getByRole('region', { name: 'Bán chạy nhất', exact: true }).getByTestId('best-seller-rail');
 
-async function openHome(page: Page, api: MockApi, width = 375): Promise<void> {
+async function openHome(page: Page, api: MockApi, width = 375, promo: 'flash' | 'combos' = 'flash'): Promise<void> {
   await page.setViewportSize({ width, height: 812 });
   await page.goto('/');
   await refetchStale(page, api, 'GET', '/products');
-  await expect(page.getByRole('region', { name: 'Giờ vàng', exact: true })).toBeVisible({ timeout: 15_000 });
+  const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
+  await expect(promo === 'flash' ? flash : page.getByTestId('home-combos')).toBeVisible({ timeout: 15_000 });
   await expect(bestRail(page).locator('[data-ds="product-tile"]')).toHaveCount(BEST.length, { timeout: 15_000 });
-  await expect(page.getByTestId('home-combos')).toBeVisible({ timeout: 15_000 });
+  // Một ô khuyến mãi: có Giờ vàng thì không combo, có combo thì không Giờ vàng.
+  await expect(promo === 'flash' ? page.getByTestId('home-combos') : flash).toHaveCount(0);
 }
 
 test.describe('Web 375px: thẻ và hàng cuộn của Trang chủ', () => {
-  test('Trang chủ có Giờ vàng, Bán chạy, Combo: trang không tràn ngang (thanh điều hướng dưới không rơi khỏi màn)', async ({ page, api }) => {
-    mockHome(api);
-    await openHome(page, api);
-    await shot(page.getByRole('region', { name: 'Giờ vàng', exact: true }), 'home-flash');
-    await shot(page.getByTestId('home-combos'), 'home-combos');
-    await shot(page, 'home-top');
-    const width = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
-    expect(width.doc, `tài liệu rộng ${width.doc}px, màn ${width.client}px`).toBeLessThanOrEqual(width.client);
-  });
+  for (const promo of ['flash', 'combos'] as const) {
+    test(`Trang chủ có ${promo === 'flash' ? 'Giờ vàng' : 'Combo (không Giờ vàng, không banner)'} và Bán chạy: trang không tràn ngang (thanh điều hướng dưới không rơi khỏi màn)`, async ({ page, api }) => {
+      mockHome(api, { promo });
+      await openHome(page, api, 375, promo);
+      await shot(promo === 'flash' ? page.getByRole('region', { name: 'Giờ vàng', exact: true }) : page.getByTestId('home-combos'), `home-${promo}`);
+      await shot(page, `home-top-${promo}`);
+      const width = await page.evaluate(() => ({ doc: document.documentElement.scrollWidth, client: document.documentElement.clientWidth }));
+      expect(width.doc, `tài liệu rộng ${width.doc}px, màn ${width.client}px`).toBeLessThanOrEqual(width.client);
+    });
+  }
 
   test('thẻ Giờ vàng: tên một dòng dù tên dài có dấu, mọi thẻ cùng kệ cao bằng nhau', async ({ page, api }) => {
     mockHome(api);

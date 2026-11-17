@@ -568,6 +568,15 @@ export function offersPointsAriaLabel(card: Pick<MemberCardView, 'tierName' | 'p
 /** Số sản phẩm mỗi trang của lưới gợi ý. */
 export const SUGGEST_PAGE_SIZE = 20;
 
+/**
+ * Lưới gợi ý web dựng dần: lần mở đầu ở điện thoại (2 cột) chỉ vẽ chừng này thẻ, đúng bằng số thẻ trước thẻ chen (`HOME_INTERLEAVE_AFTER`); phần đã tải còn lại
+ * hiện khi khách sắp cuộn tới đáy lưới. Trang chủ ở điện thoại không dài quá 4,5 khung nhìn và không quá 1.200 nút DOM trước khi khách cuộn.
+ */
+export const SUGGEST_FIRST_RENDER = HOME_INTERLEAVE_AFTER;
+
+/** Từ md (3–6 cột): 12 thẻ đầu chia đều 3/4/6 cột, hàng trước thẻ chen được lấp bằng xếp dày. */
+export const SUGGEST_FIRST_RENDER_WIDE = 12;
+
 /** Gộp gợi ý cá nhân hoá lên đầu rồi tới các trang danh mục, bỏ trùng theo id và giữ thứ tự. */
 export function mergeSuggestions<T extends { id: string }>(personal: readonly T[], pages: readonly (readonly T[])[]): T[] {
   const seen = new Set<string>();

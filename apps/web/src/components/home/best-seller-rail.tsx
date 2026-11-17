@@ -1,5 +1,6 @@
 'use client';
 
+import { useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { BestSellersBasis } from '@tubutree/app-core/api/browse';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
@@ -11,6 +12,7 @@ import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '@/lib/core-http';
 import { ProductCard, ProductRail, ProductTileSkeleton, SectionHeader } from '@/components/mini';
 import { GRID_RANK_IMAGE_SIZES } from '@/lib/product-grid';
+import { LG_UP } from '@/lib/use-media-query';
 import { HomeBlockError } from './home-block-error';
 import { useBlockQuery } from './use-block-query';
 
@@ -21,6 +23,20 @@ const GRID_SKELETON_COUNT = 10;
 
 /** Từ lg kệ thành lưới đúng 5 cột (10 món = hai hàng đầy, không thanh cuộn ngang): thẻ hạng cùng bề rộng thẻ lưới Sản phẩm, tên đọc trọn. Cùng cột với `/ban-chay`. */
 const GRID_RANK_LG = 'grid grid-cols-5 gap-4';
+
+type ShelfLayout = 'both' | 'rail' | 'grid';
+const subscribeLg = (cb: () => void) => {
+  if (typeof window.matchMedia !== 'function') return () => {};
+  const mq = window.matchMedia(LG_UP);
+  mq.addEventListener('change', cb);
+  return () => mq.removeEventListener('change', cb);
+};
+const lgLayout = (): ShelfLayout => (typeof window.matchMedia !== 'function' ? 'both' : window.matchMedia(LG_UP).matches ? 'grid' : 'rail');
+/**
+ * HTML server và lần hydrate dựng cả hai bản (CSS chọn bản hiện, không nhảy); sau đó bỏ bản đang `display:none` ở khổ này: bản ẩn là cả chục thẻ sản phẩm
+ * nằm không trong DOM. Bỏ một khối đang ẩn không dịch chuyển gì; đổi khổ qua lg thì bản kia dựng lại.
+ */
+const useShelfLayout = () => useSyncExternalStore(subscribeLg, lgLayout, (): ShelfLayout => 'both');
 
 /** Thẻ tải ảnh ngay khi kệ là khối ảnh đầu tiên của trang: ở 375px thấy trọn hai thẻ hạng (thẻ thứ ba lấp ló), một trong hai là ảnh LCP. */
 export const BEST_SELLER_LEAD_PRIORITY = 2;
@@ -46,6 +62,7 @@ export interface BestSellerRailProps {
  */
 export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, retrying, priorityCount = 0 }: BestSellerRailProps) {
   const title = fillCopy('rank.title');
+  const layout = useShelfLayout();
   if (!loading && items.length === 0) {
     return error ? <HomeBlockError title={title} error={error} onRetry={() => onRetry?.()} retrying={retrying} /> : null;
   }
@@ -54,27 +71,31 @@ export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, r
   return (
     <section aria-label={title}>
       <SectionHeader title={title} subtitle={bestSellersBasisCopy([{ basis }])} action={seeAll ? { to: seeAll } : undefined} />
-      {/* Hai bản, mỗi bản `display:none` ở một khổ (như `ShopSection`): kệ vuốt ngang của Mini App dưới lg, lưới 5×2 từ lg. Ảnh ưu tiên chỉ cấp cho kệ: bản lưới nằm ẩn ở điện thoại. */}
-      <div data-testid="best-seller-rail" className="lg:hidden">
-        <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={plain} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={priorityCount} shelf="bestSellers" />
-      </div>
-      <div data-testid="best-seller-grid" className="hidden lg:block">
-        {loading ? (
-          <div aria-hidden="true" className={GRID_RANK_LG}>
-            {Array.from({ length: GRID_SKELETON_COUNT }, (_, i) => (
-              <ProductTileSkeleton key={i} variant="rank" />
-            ))}
-          </div>
-        ) : (
-          <ul role="list" className={GRID_RANK_LG} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-            {items.map((p, i) => (
-              <li key={p.id} className="min-w-0">
-                <ProductCard product={p} variant="rank" rank={ranks?.[i] ?? i + 1} rankPlain={plain} imageSizes={GRID_RANK_IMAGE_SIZES} shelf="bestSellers" position={i + 1} />
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
+      {/* Hai bản, mỗi bản `display:none` ở một khổ (như `ShopSection`): kệ vuốt ngang của Mini App dưới lg, lưới 5×2 từ lg; sau hydrate chỉ giữ bản của khổ đang xem (`useShelfLayout`). Ảnh ưu tiên chỉ cấp cho kệ: bản lưới nằm ẩn ở điện thoại. */}
+      {layout !== 'grid' && (
+        <div data-testid="best-seller-rail" className="lg:hidden">
+          <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={plain} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={priorityCount} shelf="bestSellers" />
+        </div>
+      )}
+      {layout !== 'rail' && (
+        <div data-testid="best-seller-grid" className="hidden lg:block">
+          {loading ? (
+            <div aria-hidden="true" className={GRID_RANK_LG}>
+              {Array.from({ length: GRID_SKELETON_COUNT }, (_, i) => (
+                <ProductTileSkeleton key={i} variant="rank" />
+              ))}
+            </div>
+          ) : (
+            <ul role="list" className={GRID_RANK_LG} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
+              {items.map((p, i) => (
+                <li key={p.id} className="min-w-0">
+                  <ProductCard product={p} variant="rank" rank={ranks?.[i] ?? i + 1} rankPlain={plain} imageSizes={GRID_RANK_IMAGE_SIZES} shelf="bestSellers" position={i + 1} />
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
     </section>
   );
 }

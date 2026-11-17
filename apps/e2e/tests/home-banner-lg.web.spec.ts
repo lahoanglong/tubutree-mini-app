@@ -4,9 +4,9 @@ import { campaignBanner, mockCampaigns } from './support/campaign-mocks';
 import { serverWithoutCampaigns } from './support/server-initial';
 
 /**
- * Web, Trang chủ: khách có cookie phiên, máy chưa nhớ loại khách (HTML dựng sẵn "chưa biết") và nhớ "lần trước có banner". Trong lúc phiên chưa về và
- * banner chưa về, khung giữ chỗ banner phải đứng đúng chỗ của banner thật: từ lg là cột 8 cạnh thẻ thành viên (HubLayout), dưới lg ngay dưới thẻ thành
- * viên; chỉ có MỘT khung ở mỗi khổ; banner về không làm trang nhảy.
+ * Web, Trang chủ: khách có cookie phiên, máy chưa nhớ loại khách (HTML dựng sẵn "chưa biết") và nhớ "lần trước có banner"; không có suất Giờ vàng nào nên ô
+ * khuyến mãi là banner. Trong lúc banner chưa về, khung giữ chỗ banner phải đứng đúng chỗ của banner thật: ô khuyến mãi ngay trên lưới Gợi ý hôm nay (từ lg
+ * rộng 2/3 cột nội dung); chỉ có MỘT khung ở mỗi khổ; banner về không làm trang nhảy.
  *
  * Danh sách chiến dịch phải đến từ trình duyệt (mock). API thật trả mảng (kể cả rỗng) thì server đã đưa nó vào HTML và trình duyệt không hỏi lại, nên spec chặn
  * tài liệu `/` và gỡ danh sách đó khỏi dữ liệu RSC (support/server-initial.ts): điều kiện dữ liệu chắc chắn có, không phụ thuộc API đang chạy trả gì, và
@@ -42,7 +42,9 @@ async function openHome(page: Page, api: MockApi, baseURL: string): Promise<() =
     loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 },
   });
   api.get('/me/new-customer-offer', { isNewCustomer: true, welcomeVoucher: { code: 'WELCOME-U1', type: 'AMOUNT', value: 25_000, minOrder: 150_000, endAt: '2026-11-17T10:00:00.000Z' } });
-  api.allowUnmocked('POST /events', 'GET /products/for-you', 'GET /me/wishlist/ids', 'GET /flash-sales/upcoming', 'GET /flash-sales/active', 'GET /orders/active-count', 'GET /me/orders/active', 'GET /products', 'GET /categories', 'GET /brands', 'GET /me/subscriptions', 'GET /orders', 'GET /home', 'GET /home/me');
+  // Không có suất Giờ vàng nào: ô khuyến mãi nhường cho banner (Giờ vàng > banner > combo).
+  api.get('/flash-sales/active', []);
+  api.allowUnmocked('POST /events', 'GET /products/for-you', 'GET /me/wishlist/ids', 'GET /flash-sales/upcoming', 'GET /orders/active-count', 'GET /me/orders/active', 'GET /products', 'GET /categories', 'GET /brands', 'GET /me/subscriptions', 'GET /orders', 'GET /home', 'GET /home/me');
   mockCampaigns(api, { home: [campaignBanner('thu', { title: 'Giữa Thu' })], hold });
   // Cookie phiên + gợi ý "chưa biết loại khách": middleware chọn bản dựng sẵn cho khách có phiên, HTML đầu đã mang khung chờ.
   await page.context().addCookies([
@@ -94,71 +96,52 @@ const cls = (page: Page) =>
 
 const box = async (page: Page, selector: string) => (await page.locator(selector).first().boundingBox())!;
 
+/** Khung giữ chỗ (hoặc banner thật) nằm trong ô khuyến mãi, và ô này đứng ngay trên lưới Gợi ý hôm nay. */
+async function expectPromoAboveSuggest(page: Page, target: { y: number; height: number }): Promise<void> {
+  const order = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLElement>('[data-home-block]')).map((el) => el.dataset.homeBlock));
+  expect(order.indexOf('banner'), `thứ tự khối ${order.join(',')}`).toBe(order.indexOf('suggest') - 1);
+  const suggest = await box(page, '[data-home-block="suggest"]');
+  expect(target.y + target.height).toBeLessThanOrEqual(suggest.y);
+  expect(suggest.y - (target.y + target.height)).toBeLessThanOrEqual(32);
+}
+
 test.describe('Web Trang chủ, phiên chưa về, máy nhớ lần trước có banner', () => {
-  test('từ lg: khung giữ chỗ banner ở cột 8 cạnh thẻ thành viên, banner thật về đúng chỗ đó và trang không nhảy thêm (CLS tăng < 0,01)', async ({ page, api, baseURL }) => {
-    test.skip(test.info().project.name !== 'Web Customer', 'chỉ đo ở khổ máy tính');
-    await page.setViewportSize({ width: 1280, height: 800 });
-    const release = await openHome(page, api, baseURL!);
-    // Khung chờ chung còn đó (tối đa 4,5 s, hoặc tới khi dữ liệu về): khung giữ chỗ banner phải thấy được NGAY trong lúc đó, không đợi hết chờ.
-    await expect(page.getByTestId('home-settling')).toBeVisible({ timeout: 15_000 });
-    const placeholder = page.getByTestId('home-banner-loading');
-    await expect(placeholder).toBeVisible({ timeout: 2_000 });
-    await expect(placeholder).toHaveCount(1);
-    const hold = (await placeholder.boundingBox())!;
-    const hub = await box(page, '[data-testid="hub-layout"]');
-    const member = await box(page, '[data-home-block="member"]');
-    // Cột 8 trên lưới 12 cột: rộng hơn 60% lưới, sát mép trái lưới, cùng hàng với thẻ thành viên và nằm bên trái nó.
-    expect(Math.abs(hold.x - hub.x)).toBeLessThanOrEqual(1);
-    expect(hold.width).toBeGreaterThan(hub.width * 0.6);
-    expect(hold.x + hold.width).toBeLessThanOrEqual(member.x);
-    expect(Math.abs(hold.y - member.y)).toBeLessThanOrEqual(1);
-    await page.waitForTimeout(300);
-    const before = (await cls(page)).value;
+  for (const c of [
+    { name: 'từ lg', project: 'Web Customer', width: 1280, height: 800 },
+    { name: 'dưới lg (điện thoại)', project: 'Web Customer Mobile', width: 375, height: 812 },
+  ] as const) {
+    test(`${c.name}: chỉ MỘT khung giữ chỗ banner, trong ô khuyến mãi ngay trên lưới Gợi ý; banner thật về đúng chỗ đó và trang không nhảy thêm (CLS tăng < 0,01)`, async ({ page, api, baseURL }) => {
+      test.skip(test.info().project.name !== c.project, `chỉ đo ở project ${c.project}`);
+      await page.setViewportSize({ width: c.width, height: c.height });
+      const release = await openHome(page, api, baseURL!);
+      const placeholder = page.getByTestId('home-banner-loading');
+      await expect(placeholder).toBeVisible({ timeout: 15_000 });
+      await expect(placeholder).toHaveCount(1);
+      await placeholder.scrollIntoViewIfNeeded();
+      const hold = (await placeholder.boundingBox())!;
+      await expectPromoAboveSuggest(page, hold);
+      if (c.width >= 1024) {
+        // Từ lg banner rộng 2/3 cột nội dung (ảnh 5:2 không cao quá màn), sát mép trái cột.
+        const hub = await box(page, '[data-testid="hub-layout"]');
+        expect(Math.abs(hold.x - hub.x)).toBeLessThanOrEqual(1);
+        expect(hold.width).toBeGreaterThan(hub.width * 0.6);
+        expect(hold.width).toBeLessThan(hub.width * 0.7);
+      }
+      await page.waitForTimeout(300);
+      const before = (await cls(page)).value;
 
-    release();
-    const banner = page.getByRole('region', { name: 'Chương trình nổi bật' });
-    await expect(banner).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('home-banner-loading')).toHaveCount(0);
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1500);
-    const real = (await banner.boundingBox())!;
-    expect(Math.abs(real.x - hold.x)).toBeLessThanOrEqual(1);
-    expect(Math.abs(real.y - hold.y)).toBeLessThanOrEqual(1);
-    expect(Math.abs(real.height - hold.height)).toBeLessThanOrEqual(2);
-    const after = await cls(page);
-    expect(after.value - before, `CLS +${(after.value - before).toFixed(4)}: ${after.detail}`).toBeLessThan(0.01);
-    // Có banner: `aside` chỉ 4 cột nên thẻ thành viên và Việc cần làm xếp dọc, mỗi thẻ rộng hết cột (cạnh nhau thì mỗi thẻ ~180px, cắt số điểm và tên).
-    const aside = await box(page, '[data-testid="home-aside"]');
-    const widths = await page.locator('[data-testid="home-aside"] > div:not(:empty)').evaluateAll((els) => els.map((e) => e.getBoundingClientRect().width));
-    expect(widths.length).toBeGreaterThan(0);
-    for (const w of widths) expect(w).toBeGreaterThanOrEqual(aside.width - 1);
-  });
-
-  test('dưới lg (điện thoại): chỉ MỘT khung giữ chỗ banner, ngay dưới thẻ thành viên; banner về không nhảy thêm', async ({ page, api, baseURL }) => {
-    test.skip(test.info().project.name !== 'Web Customer Mobile', 'chỉ đo ở khổ điện thoại');
-    await page.setViewportSize({ width: 375, height: 812 });
-    const release = await openHome(page, api, baseURL!);
-    await expect(page.getByTestId('home-settling')).toBeVisible({ timeout: 15_000 });
-    const placeholder = page.getByTestId('home-banner-loading');
-    await expect(placeholder).toBeVisible({ timeout: 2_000 });
-    await expect(placeholder).toHaveCount(1);
-    const hold = (await placeholder.boundingBox())!;
-    const member = await box(page, '[data-home-block="member"]');
-    expect(hold.y).toBeGreaterThanOrEqual(member.y + member.height);
-    expect(hold.y - (member.y + member.height)).toBeLessThanOrEqual(24);
-    await page.waitForTimeout(300);
-    const before = (await cls(page)).value;
-
-    release();
-    const banner = page.getByRole('region', { name: 'Chương trình nổi bật' });
-    await expect(banner).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('home-banner-loading')).toHaveCount(0);
-    await page.waitForLoadState('networkidle');
-    await page.waitForTimeout(1500);
-    const real = (await banner.boundingBox())!;
-    expect(Math.abs(real.y - hold.y)).toBeLessThanOrEqual(1);
-    expect(Math.abs(real.height - hold.height)).toBeLessThanOrEqual(2);
-    const after = await cls(page);
-    expect(after.value - before, `CLS +${(after.value - before).toFixed(4)}: ${after.detail}`).toBeLessThan(0.01);
-  });
+      release();
+      const banner = page.getByRole('region', { name: 'Chương trình nổi bật' });
+      await expect(banner).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('home-banner-loading')).toHaveCount(0);
+      await page.waitForLoadState('networkidle');
+      await page.waitForTimeout(1500);
+      const real = (await banner.boundingBox())!;
+      expect(Math.abs(real.x - hold.x)).toBeLessThanOrEqual(1);
+      expect(Math.abs(real.y - hold.y)).toBeLessThanOrEqual(1);
+      expect(Math.abs(real.height - hold.height)).toBeLessThanOrEqual(2);
+      const after = await cls(page);
+      expect(after.value - before, `CLS +${(after.value - before).toFixed(4)}: ${after.detail}`).toBeLessThan(0.01);
+    });
+  }
 });

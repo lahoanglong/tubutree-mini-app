@@ -1,5 +1,6 @@
 import { HOME_COMBOS_LIMIT, fetchHomeCombos } from '@tubutree/app-core/api/bundle';
 import { fetchCampaigns } from '@tubutree/app-core/api/campaign';
+import { fetchUpcomingFlashSales } from '@tubutree/app-core/api/flash-sale';
 import { fetchActiveFlashSalesNoSync } from '@/lib/server-flash';
 import { fetchBrands, fetchCategories, fetchProducts } from '@tubutree/app-core/api/catalog';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
@@ -38,11 +39,13 @@ export async function loadHomeInitial(): Promise<HomeInitial> {
   const failed = grids.find((g): g is PromiseRejectedResult => g.status === 'rejected');
   if (failed && grids.every((g) => g.status === 'rejected') && process.env.NEXT_PHASE !== 'phase-production-build') throw failed.reason;
   const combosAt = Date.now();
-  const [categories, brands, publicConfig, flash, campaigns, combos] = await Promise.all([
+  const [categories, brands, publicConfig, flash, flashUpcoming, campaigns, combos] = await Promise.all([
     orUndefined(fetchCategories(http)),
     orUndefined(fetchBrands(http)),
     orUndefined(publicConfigQuery(http).queryFn()),
     orUndefined(fetchActiveFlashSalesNoSync(createServerHttp({ revalidate: FLASH_REVALIDATE_S }))),
+    // Chỉ dùng số suất sắp mở (bản ẩn danh): đủ để HTML đầu biết hàng lối tắt có giữ lối vào Giờ vàng không. Danh sách và cờ nhắc của từng khách vẫn tải ở trình duyệt.
+    orUndefined(fetchUpcomingFlashSales(createServerHttp({ revalidate: FLASH_REVALIDATE_S }))),
     orUndefined(fetchCampaigns(createServerHttp({ revalidate: CAMPAIGN_REVALIDATE_S }), 'HOME_TOP')),
     orUndefined(fetchHomeCombos(createServerHttp({ revalidate: COMBO_REVALIDATE_S }), HOME_COMBOS_LIMIT)),
   ]);
@@ -55,5 +58,8 @@ export async function loadHomeInitial(): Promise<HomeInitial> {
   const liveFlash = flash?.filter((it) => new Date(it.endAt).getTime() > Date.now());
   const liveCampaigns = campaigns?.filter((c) => new Date(c.endAt).getTime() > Date.now());
   const liveCombos = combos?.filter((b) => new Date(b.endAt).getTime() > Date.now());
-  return { bestSellers, suggest, suggestSeed, categories, brands, publicConfig, flash: liveFlash, campaigns: liveCampaigns, combos: liveCombos, combosAt: liveCombos ? combosAt : undefined };
+  return {
+    bestSellers, suggest, suggestSeed, categories, brands, publicConfig, flash: liveFlash, flashUpcomingCount: flashUpcoming?.length,
+    campaigns: liveCampaigns, combos: liveCombos, combosAt: liveCombos ? combosAt : undefined,
+  };
 }

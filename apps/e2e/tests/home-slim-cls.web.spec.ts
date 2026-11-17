@@ -31,6 +31,7 @@ const SIZES = [
   { width: 1440, height: 900 },
 ] as const;
 
+const API_ORIGIN = `http://localhost:${process.env.E2E_API_PORT}`;
 const IMAGE_PNG = solidPng(150, 60, [47, 107, 79]);
 const isServedImage = (url: URL) => url.pathname === '/api/img' || url.pathname.startsWith('/api/public-image/');
 
@@ -75,10 +76,14 @@ async function homeMetrics(page: Page): Promise<HomeMetrics> {
 
 for (const who of ['guest', 'session'] as const) {
   for (const size of SIZES) {
-    test(`Trang chủ web ${size.width}px, ${who === 'guest' ? 'khách vãng lai bộ nhớ trống' : 'khách có phiên, máy chưa nhớ, dải ngữ cảnh về muộn'}`, async ({ page, api }, testInfo) => {
+    test(`Trang chủ web ${size.width}px, ${who === 'guest' ? 'khách vãng lai bộ nhớ trống' : 'khách có phiên, máy chưa nhớ, dải ngữ cảnh về muộn'}`, async ({ page, api, request }, testInfo) => {
       test.skip(testInfo.project.name !== 'Web Customer', 'tự đặt khổ từng ca, chỉ chạy ở một project');
       const user = tourUser('CUSTOMER');
       mockTourWorld(api, user);
+      // HTML đầu dựng từ cấu hình thật của API e2e; trình duyệt phải nhận đúng cấu hình đó như ở PROD. Cấu hình mock khác (không có mã chào mừng) làm dải
+      // Quà khách mới ở md đổi chiều cao sau hydrate: đó là dịch chuyển do dữ liệu test lệch nhau, không phải của trang.
+      const realConfig = await (await request.get(`${API_ORIGIN}/api/config/public`)).json();
+      api.get('/config/public', realConfig);
       if (who === 'session') {
         await page.context().addCookies([{ name: 'tubu_web_session', value: '1', domain: 'localhost', path: '/' }]);
         await page.addInitScript(() => {

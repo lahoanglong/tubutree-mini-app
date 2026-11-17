@@ -31,21 +31,22 @@ const carousel = (page: Page) => page.getByRole('region', { name: 'Chương trì
 const slides = (page: Page) => carousel(page).locator('[aria-roledescription="slide"]');
 
 test.describe('Banner chiến dịch ở Trang chủ', () => {
-  test('không có chiến dịch: khối banner không có chiều cao, không băng chuyền, Giờ vàng hiện ngay trong màn đầu 812', async ({ page, api }) => {
+  test('không có chiến dịch: khối banner không có chiều cao, không băng chuyền, Giờ vàng nằm ngay trên Gợi ý hôm nay', async ({ page, api }) => {
     mockDiscovery(api, { returning: true });
     mockFlash(api);
     mockCampaigns(api);
     await page.goto('/');
     const flash = page.getByRole('region', { name: 'Giờ vàng', exact: true });
+    const suggest = page.getByRole('region', { name: 'Gợi ý hôm nay' });
     await expect(flash).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByRole('region', { name: 'Gợi ý hôm nay' })).toBeVisible({ timeout: 15_000 });
+    await expect(suggest).toBeVisible({ timeout: 15_000 });
     expect((await blockHeights(page)).banner ?? 0).toBe(0);
     await expect(carousel(page)).toHaveCount(0);
     await expect(page.getByTestId('home-banner-loading')).toHaveCount(0);
     expect(api.callsTo('GET', '/campaigns').length).toBeGreaterThan(0);
-    const box = (await flash.boundingBox())!;
-    expect(box.y, `Giờ vàng bắt đầu ở ${Math.round(box.y)}px`).toBeLessThanOrEqual(680);
-    expect(box.y + box.height, `Giờ vàng kết thúc ở ${Math.round(box.y + box.height)}px`).toBeLessThanOrEqual(965);
+    const flashBox = (await flash.boundingBox())!;
+    const suggestBox = (await suggest.boundingBox())!;
+    expect(flashBox.y + flashBox.height, 'Giờ vàng kết thúc trước lưới Gợi ý').toBeLessThanOrEqual(suggestBox.y + 1);
   });
 
   test('khách mới thấy chiến dịch cho mọi người và cho khách mới, không thấy chiến dịch của khách cũ; khối cao đúng 137px', async ({ page, api }) => {

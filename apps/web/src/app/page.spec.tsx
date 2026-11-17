@@ -53,6 +53,7 @@ beforeEach(() => {
     }
     if (path === '/bundles/combos') return combos;
     if (path === '/flash-sales/active') return [];
+    if (path === '/flash-sales/upcoming') return [];
     if (path === '/campaigns') return [];
     if (path === '/categories') return CATEGORIES;
     if (path === '/brands') return [{ brand: 'Tubu', count: 3 }];

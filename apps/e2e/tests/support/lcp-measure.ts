@@ -120,10 +120,12 @@ export interface LcpRoute {
 export async function runLcp(page: Page, api: MockApi, route: LcpRoute): Promise<void> {
   const promos = route.promos ?? true;
   mockImages(api, { promos });
-  const stripped = route.path === '/' && promos ? await serverWithoutCampaigns(page) : null;
+  // Kệ Bán chạy là khối ảnh đầu Trang chủ, nhưng món của DB e2e không có ảnh: gỡ bản server dựng sẵn để trình duyệt tải kệ từ mock có ảnh.
+  const stripped = route.path === '/' && promos ? await serverWithoutCampaigns(page, { alsoDrop: ['bestSellers'] }) : null;
   await page.route('**/api/img?**', (r) => r.fulfill({ status: 200, contentType: 'image/png', body: NOISE }));
   await page.goto(route.path);
   if (stripped) expect(stripped.found(), 'Trang chủ không còn nhúng danh sách chiến dịch: banner sẽ không có').toBeGreaterThan(0);
+  if (stripped) expect(stripped.foundAlso(), 'Trang chủ không còn nhúng kệ Bán chạy').toBeGreaterThan(0);
   await expect(page.locator(route.ready).first()).toBeVisible({ timeout: 20_000 });
   await page.waitForLoadState('networkidle');
   await page.waitForTimeout(500);

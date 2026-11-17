@@ -4,13 +4,14 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { newTestClient } from '@/test-utils/render-hook';
 
-const mocks = vi.hoisted(() => ({ get: vi.fn(), push: vi.fn(), phase: 'guest', desktop: false, now: 0 }));
+const mocks = vi.hoisted(() => ({ get: vi.fn(), push: vi.fn(), phase: 'guest', desktop: false, wide: false, now: 0 }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRestoring: () => false }));
 vi.mock('@/lib/use-flash-sales', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/lib/use-flash-sales')>()), useActiveFlashSales: () => [] }));
 vi.mock('@tubutree/app-core/server-clock', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), serverNow: () => mocks.now }));
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }));
 
+import { SUGGEST_FIRST_RENDER, SUGGEST_FIRST_RENDER_WIDE } from '@tubutree/app-core/home-layout';
 import { SuggestFeed } from './suggest-feed';
 
 const card = (n: number) => ({
@@ -32,17 +33,25 @@ const mount = async (props: Partial<React.ComponentProps<typeof SuggestFeed>> = 
 };
 const productCalls = () => mocks.get.mock.calls.filter(([path]) => path === '/products');
 const tiles = (c: HTMLElement) => Array.from(c.querySelectorAll('a.tubu-tile-link'));
+/** Lưới dựng dần: bấm "Xem thêm" tới khi đủ `n` thẻ đã tải (mỗi lần vẽ thêm phần đã có, không gọi mạng). */
+const revealTo = async (c: HTMLElement, n: number) => {
+  for (let i = 0; i < 10 && tiles(c).length < n; i += 1) {
+    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Xem thêm') ?? null);
+    await flush(4);
+  }
+};
 const chipLabels = (c: HTMLElement) => Array.from(c.querySelectorAll('[role="region"][aria-label="Lọc gợi ý theo danh mục"] button')).map((b) => b.textContent);
 
 beforeEach(() => {
   mocks.phase = 'guest';
   mocks.desktop = false;
+  mocks.wide = false;
   // 08:00 ngày 01/11/2026 giờ Việt Nam.
   mocks.now = Date.parse('2026-11-01T01:00:00.000Z');
   mocks.get.mockReset().mockImplementation(async (path: string) => (path === '/products' ? page(cards(1, 4)) : []));
   mocks.push.mockReset();
   window.matchMedia = ((query: string) => ({
-    matches: query.includes('min-width: 1024px') ? mocks.desktop : false,
+    matches: query.includes('min-width: 1024px') ? mocks.desktop : query.includes('min-width: 768px') ? mocks.desktop || mocks.wide : false,
     media: query,
     addEventListener: () => undefined,
     removeEventListener: () => undefined,
@@ -120,6 +129,8 @@ describe('SuggestFeed (web) — Gợi ý hôm nay (Q9)', () => {
   it('điện thoại dừng ở 100 món: không còn "Xem thêm", có dòng hết gợi ý và nút "Vào Danh mục" tới trang sản phẩm', async () => {
     mocks.get.mockImplementation(async () => page(cards(1, 120), { limit: 120, total: 240 }));
     const c = await mount();
+    expect(tiles(c)).toHaveLength(SUGGEST_FIRST_RENDER);
+    await revealTo(c, 100);
     expect(tiles(c)).toHaveLength(100);
     expect(Array.from(c.querySelectorAll('button')).some((b) => b.textContent === 'Xem thêm')).toBe(false);
     expect(c.textContent).toContain('Bạn đã xem hết gợi ý hôm nay');
@@ -131,6 +142,7 @@ describe('SuggestFeed (web) — Gợi ý hôm nay (Q9)', () => {
     mocks.desktop = true;
     mocks.get.mockImplementation(async () => page(cards(1, 60), { limit: 60, total: 240 }));
     const c = await mount();
+    await revealTo(c, 48);
     expect(tiles(c)).toHaveLength(48);
     expect(c.textContent).not.toContain('Bạn đã xem hết gợi ý hôm nay');
     const more = Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Xem thêm');
@@ -145,9 +157,36 @@ describe('SuggestFeed (web) — Gợi ý hôm nay (Q9)', () => {
     );
     const c = await mount();
     expect(c.textContent).not.toContain('Bạn đã xem hết gợi ý hôm nay');
+    await revealTo(c, 20);
+    expect(tiles(c)).toHaveLength(20);
+    expect(productCalls()).toHaveLength(1);
     click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Xem thêm') ?? null);
     await flush(8);
     expect(tiles(c)).toHaveLength(40);
+  });
+
+  it('dựng dần: lần mở đầu chỉ vẽ SUGGEST_FIRST_RENDER thẻ, "Xem thêm" vẽ tiếp phần đã tải mà không gọi mạng', async () => {
+    mocks.get.mockImplementation(async () => page(cards(1, 20), { total: 20 }));
+    const c = await mount();
+    expect(tiles(c)).toHaveLength(SUGGEST_FIRST_RENDER);
+    expect(c.textContent).not.toContain('Bạn đã xem hết gợi ý hôm nay');
+    click(Array.from(c.querySelectorAll('button')).find((b) => b.textContent === 'Xem thêm') ?? null);
+    await flush(4);
+    expect(tiles(c)).toHaveLength(20);
+    expect(productCalls()).toHaveLength(1);
+    expect(c.textContent).toContain('Bạn đã xem hết gợi ý hôm nay');
+  });
+
+  it('từ md lần mở đầu vẽ SUGGEST_FIRST_RENDER_WIDE thẻ, điện thoại vẽ SUGGEST_FIRST_RENDER', async () => {
+    mocks.get.mockImplementation(async () => page(cards(1, 20), { total: 20 }));
+    mocks.wide = true;
+    const wide = await mount();
+    expect(tiles(wide)).toHaveLength(SUGGEST_FIRST_RENDER_WIDE);
+    mounted?.unmount();
+    mocks.wide = false;
+    const phone = await mount();
+    expect(tiles(phone)).toHaveLength(SUGGEST_FIRST_RENDER);
+    expect(SUGGEST_FIRST_RENDER).toBeLessThan(SUGGEST_FIRST_RENDER_WIDE);
   });
 
   it('đã tải hết mà chưa tới trần: báo hết và mời vào Danh mục', async () => {

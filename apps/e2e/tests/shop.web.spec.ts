@@ -348,19 +348,20 @@ test.describe('Web khách: Trang chủ /', () => {
   });
 
   for (const width of [375, 320]) {
-    test(`điện thoại ${width}px: 2 thẻ chính + 4 ô phụ + lối tắt nhanh không tràn chữ, vùng chạm ≥44px`, async ({ page, api }) => {
+    test(`điện thoại ${width}px: không có suất Giờ vàng thì còn thẻ Đổi rác + 4 ô phụ + lối tắt nhanh, không tràn chữ, vùng chạm ≥44px`, async ({ page, api }) => {
       mockHome(api);
       await page.setViewportSize({ width, height: 812 });
       await page.goto('/');
       const grid = page.getByTestId('shortcut-grid');
-      await expect(grid.locator('[data-pillar]')).toHaveCount(6);
+      // mockHome không có suất Giờ vàng nào: thẻ "Mua lẻ · Giờ vàng" bị bỏ, thẻ Đổi rác trải hết hàng 1.
+      await expect(grid.locator('[data-pillar]')).toHaveCount(5);
       await expect(grid.getByRole('link', { name: /Mã giảm giá/ })).toBeVisible();
       expect(await shortcutLabelProblems(page)).toEqual([]);
-      expect(await homeHierarchyProblems(page)).toEqual([]);
+      expect(await homeHierarchyProblems(page, { heroes: 1 })).toEqual([]);
       const heights = await grid.locator('[data-pillar], [data-testid="shortcut-quick-pills"] > *').evaluateAll((els) =>
         els.map((el) => Math.round(el.getBoundingClientRect().height)),
       );
-      expect(heights.length).toBe(9);
+      expect(heights.length).toBe(8);
       for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
     });
   }
@@ -834,20 +835,15 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await expect(page.getByTestId('offers-dot')).toHaveCount(0);
   });
 
-  test('chip dải thương hiệu và chip danh mục của Gợi ý hôm nay nhìn cao 36px nhưng vùng chạm 44px: cách tâm ±21px vẫn trúng chip, hàng cuộn không cắt', async ({ page, api }) => {
+  test('chip danh mục của Gợi ý hôm nay nhìn cao 36px nhưng vùng chạm 44px: cách tâm ±21px vẫn trúng chip, hàng cuộn không cắt', async ({ page, api }) => {
     await login(page, api);
     mockHomeEngagement(api, { checkedIn: true, expiringInDays: null });
-    api.get('/brands', [{ brand: 'Tubu', count: 28 }, { brand: 'Mộc An', count: 2 }]);
     await page.goto('/');
     // login() chỉ đặt cờ phiên trong localStorage (không có cookie) nên HTML đầu là bản khách vãng lai; khi biết có phiên, các khối dưới
     // thẻ thành viên đổi sang khung chờ rồi dựng lại. Đo chip trước lúc đó thì chip bị gỡ khỏi trang giữa chừng.
     await expect(page.getByText('Chào An')).toBeVisible();
     await expect(page.getByTestId('home-settling')).toHaveCount(0);
-    const chips = [
-      page.getByRole('region', { name: /Dải thương hiệu/ }).getByRole('link').first(),
-      page.getByRole('region', { name: 'Lọc gợi ý theo danh mục' }).getByRole('button', { name: 'Tất cả', exact: true }),
-    ];
-    for (const chip of chips) await expectChipHitArea44(chip);
+    await expectChipHitArea44(page.getByRole('region', { name: 'Lọc gợi ý theo danh mục' }).getByRole('button', { name: 'Tất cả', exact: true }));
   });
 
   test('khách cũ đã nhớ "returning", /auth/refresh chậm 3s: Danh mục không xê dịch từ lúc đầu tới sau đăng nhập (≤ 2px)', async ({ page, api }) => {
@@ -879,9 +875,10 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     await expect(categories).toBeVisible();
     await expect(page.getByTestId('member-card-loading')).toBeVisible();
     const before = (await categories.boundingBox())!.y;
-    await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toBeVisible({ timeout: 15_000 });
+    // Có đơn đang giao: dải ngữ cảnh 64px đổi từ khung chờ sang Việc cần làm (không phải thẻ thành viên), cùng chiều cao.
+    await expect(page.getByRole('region', { name: 'Việc cần làm' })).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('todo-strip-loading')).toHaveCount(0);
+    await expect(page.getByTestId('member-card-loading')).toHaveCount(0);
     const after = (await categories.boundingBox())!.y;
     expect(Math.abs(after - before), `Danh mục ${before}px → ${after}px`).toBeLessThanOrEqual(2);
   });
@@ -969,21 +966,20 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
       return { html, blocks: Array.from(html.matchAll(/data-home-block="(\w+)"/g)).map((m) => m[1]!) };
     };
     const returning = await order('tubu_web_session=1; tubu_home_hint=returning-1');
-    // Banner và Combo là khối rỗng chờ P11/P15 (không chiếm chỗ): bỏ ra khỏi thứ tự đang kiểm.
-    const shown = returning.blocks.filter((b) => b !== 'banner' && b !== 'combos');
-    expect(shown.slice(0, 4)).toEqual(['search', 'member', 'todo', 'shortcuts']);
-    expect(shown).toContain('purchased');
-    // Khách cũ cũng có Bán chạy nhất, sau Danh mục.
-    expect(shown.indexOf('purchased')).toBeLessThan(shown.indexOf('categories'));
-    expect(shown.indexOf('categories')).toBeLessThan(shown.indexOf('bestSellers'));
+    // Dải ngữ cảnh (khung chờ "member") rồi Danh mục và Bán chạy như mọi khách: hai khối này giống nhau ở khách mới lẫn khách cũ nên HTML đầu dựng thật.
+    expect(returning.blocks.slice(0, 4)).toEqual(['search', 'member', 'categories', 'bestSellers']);
+    expect(returning.blocks).toContain('purchased');
+    expect(returning.blocks.indexOf('bestSellers')).toBeLessThan(returning.blocks.indexOf('purchased'));
+    expect(returning.blocks.indexOf('purchased')).toBeLessThan(returning.blocks.indexOf('shortcuts'));
     expect(returning.html).toContain('data-testid="member-card-loading"');
-    expect(returning.html).toContain('data-testid="todo-strip-loading"');
     const fresh = await order();
     expect(fresh.blocks).toContain('bestSellers');
     expect(fresh.blocks).not.toContain('purchased');
     expect(fresh.html).not.toContain('data-testid="member-card-loading"');
+    // Có phiên mà máy chưa nhớ loại khách: chưa biết có kệ Mua lại hay không, nên dưới dải ngữ cảnh là một khung chờ chung thay vì dựng Bán chạy rồi bị chen.
     const unknown = await order('tubu_web_session=1');
     expect(unknown.html).toContain('data-testid="member-card-loading"');
+    expect(unknown.blocks).toContain('settling');
     expect(unknown.blocks).not.toContain('bestSellers');
     expect(unknown.blocks).not.toContain('purchased');
   });
@@ -1026,12 +1022,11 @@ test.describe('Web khách: Trang chủ — chấm đỏ Ưu đãi, Cộng đồn
     const categories = page.getByRole('region', { name: 'Danh mục', exact: true });
     await expect(categories).toBeVisible();
     await expect(page.getByTestId('member-card-loading')).toBeVisible();
-    await expect(page.getByTestId('todo-strip-loading')).toBeVisible();
     const firstHtml = (await categories.boundingBox())!.y;
     openJs();
-    await expect(page.getByRole('region', { name: 'Thẻ thành viên' })).toBeVisible({ timeout: 20_000 });
+    await expect(page.getByRole('region', { name: 'Việc cần làm' })).toBeVisible({ timeout: 20_000 });
     await expect(page.getByRole('region', { name: 'Mua lại' })).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByTestId('todo-strip-loading')).toHaveCount(0);
+    await expect(page.getByTestId('member-card-loading')).toHaveCount(0);
     const settled = (await categories.boundingBox())!.y;
     expect(Math.abs(settled - firstHtml), `Danh mục ${firstHtml}px (HTML đầu) → ${settled}px (sau đăng nhập)`).toBeLessThanOrEqual(2);
   });

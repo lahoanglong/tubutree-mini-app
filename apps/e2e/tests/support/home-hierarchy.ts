@@ -2,22 +2,23 @@ import type { Page } from '@playwright/test';
 
 /**
  * Thứ bậc lối vào Trang chủ (W177): hàng 1 hai thẻ chính (Mua lẻ · Giờ vàng, Đổi rác), hàng 2 bốn ô phụ (Mua chung, Mua xoay vòng, Vườn Xanh, Kho quà 0đ).
+ * Không có suất Giờ vàng nào thì thẻ "Mua lẻ · Giờ vàng" bị bỏ: `heroes: 1` (thẻ Đổi rác trải hết hàng 1).
  * Đo hình học thật trên trình duyệt; trả về danh sách lỗi (rỗng = đúng). Dùng chung cho Mini App (375/360/320) và web điện thoại.
  */
-export async function homeHierarchyProblems(page: Page): Promise<string[]> {
-  return page.evaluate(() => {
+export async function homeHierarchyProblems(page: Page, { heroes: heroCount = 2 }: { heroes?: 1 | 2 } = {}): Promise<string[]> {
+  return page.evaluate((heroCount) => {
     const grid = document.querySelector<HTMLElement>('[data-testid="shortcut-grid"]');
     if (!grid) return ['không có shortcut-grid'];
     const rect = (el: Element) => el.getBoundingClientRect();
     const heroes = Array.from(grid.querySelectorAll<HTMLElement>('[data-tier="hero"]'));
     const chips = Array.from(grid.querySelectorAll<HTMLElement>('[data-tier="chip"]'));
     const problems: string[] = [];
-    if (heroes.length !== 2) problems.push(`thẻ chính: ${heroes.length} (cần 2)`);
+    if (heroes.length !== heroCount) problems.push(`thẻ chính: ${heroes.length} (cần ${heroCount})`);
     if (chips.length !== 4) problems.push(`ô phụ: ${chips.length} (cần 4)`);
     if (problems.length) return problems;
 
     const row = (els: HTMLElement[]) => new Set(els.map((e) => Math.round(rect(e).top))).size;
-    if (row(heroes) !== 1) problems.push('hai thẻ chính không cùng một hàng');
+    if (row(heroes) !== 1) problems.push('các thẻ chính không cùng một hàng');
     if (row(chips) !== 1) problems.push('bốn ô phụ không cùng một hàng');
 
     const heroBottom = Math.max(...heroes.map((e) => rect(e).bottom));
@@ -43,5 +44,5 @@ export async function homeHierarchyProblems(page: Page): Promise<string[]> {
       if (label.scrollHeight > label.clientHeight + 1) problems.push(`${label.textContent}: nhãn bị cắt (${label.scrollHeight}px nội dung trong ${label.clientHeight}px)`);
     }
     return problems;
-  });
+  }, heroCount);
 }

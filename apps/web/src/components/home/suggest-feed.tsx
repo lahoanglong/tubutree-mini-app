@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { homeCopy } from '@tubutree/app-core/home-copy';
-import { HOME_INTERLEAVE_AFTER, mergeSuggestions, SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
+import { HOME_INTERLEAVE_AFTER, mergeSuggestions, SUGGEST_FIRST_RENDER, SUGGEST_FIRST_RENDER_WIDE, SUGGEST_PAGE_SIZE } from '@tubutree/app-core/home-layout';
 import { suggestChips, suggestLimit, vnDateSeed } from '@tubutree/app-core/home-suggest';
 import { fetchCatalog, fetchForYou, type CategoryDTO, type PageResponse, type ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import { serverNow } from '@tubutree/app-core/server-clock';
@@ -13,6 +13,7 @@ import { coreHttp } from '@/lib/core-http';
 import { browseHref, EMPTY_SEARCH_STATE } from '@/lib/search-state';
 import { Button, Chip, ProductCard, ProductGrid, ScrollRow, SectionHeader, Text } from '@/components/mini';
 import { GRID_PRODUCTS, gridImageSizes } from '@/lib/product-grid';
+import { MD_UP, useMediaQuery } from '@/lib/use-media-query';
 import { HomeBlockError } from './home-block-error';
 
 // Từ lg lưới 5–6 cột và có thanh đầu trang đủ lối vào Danh mục: dừng ở 48 món (đủ 8 hàng 6 cột) rồi mời "Xem thêm" ở trang sản phẩm.
@@ -76,6 +77,8 @@ export function SuggestFeed({ initial, seed: serverSeed, categories, exclude, in
   const router = useRouter();
   const authed = useAuthPhase() === 'authenticated';
   const desktop = useSyncExternalStore(subscribeDesktop, isDesktop, () => false);
+  // Từ md lưới từ 3 cột: lần mở đầu vẽ `SUGGEST_FIRST_RENDER_WIDE` thẻ. HTML server là bản điện thoại; thẻ thêm sau hydrate nằm dưới thẻ chen, dưới màn đầu.
+  const wide = useMediaQuery(MD_UP);
   // Chốt một lần mỗi lần mở: qua nửa đêm giữa chừng không đổi thứ tự dưới chân khách.
   const [seed] = useState(() => serverSeed ?? vnDateSeed(serverNow()));
   const chips = useMemo(() => suggestChips(categories.filter((c) => !c.parentId)), [categories]);
@@ -98,22 +101,37 @@ export function SuggestFeed({ initial, seed: serverSeed, categories, exclude, in
   const capped = fresh.length >= max;
   const items = capped ? fresh.slice(0, max) : fresh;
   const loadingFirst = pages.isLoading || (categoryId === null && authed && forYou.isPending && !pages.data);
+  // Dựng dần (`SUGGEST_FIRST_RENDER`): đổi chip thì về lại số thẻ đầu.
+  const first = wide ? SUGGEST_FIRST_RENDER_WIDE : SUGGEST_FIRST_RENDER;
+  const [reveal, setReveal] = useState<{ chip: string; count: number } | null>(null);
+  const shownCount = reveal?.chip === chipKey ? Math.max(reveal.count, first) : first;
+  const shown = items.slice(0, shownCount);
+  const hidden = items.length > shownCount;
 
   const sentinel = useRef<HTMLDivElement>(null);
   const { hasNextPage, isFetchingNextPage, fetchNextPage } = pages;
   const canLoadMore = hasNextPage && !capped;
+  // Còn thẻ đã tải mà chưa vẽ thì vẽ thêm (không gọi mạng); hết rồi mới tải trang sau, và trang đó hiện ngay khi về.
+  const more = useCallback(() => {
+    if (hidden) {
+      setReveal({ chip: chipKey, count: shownCount + SUGGEST_PAGE_SIZE });
+    } else if (!isFetchingNextPage) {
+      setReveal({ chip: chipKey, count: items.length + SUGGEST_PAGE_SIZE });
+      void fetchNextPage();
+    }
+  }, [hidden, chipKey, shownCount, items.length, isFetchingNextPage, fetchNextPage]);
   useEffect(() => {
     const el = sentinel.current;
-    if (!el || !canLoadMore || typeof IntersectionObserver === 'undefined') return;
+    if (!el || !(canLoadMore || hidden) || typeof IntersectionObserver === 'undefined') return;
     const io = new IntersectionObserver(
       (entries) => {
-        if (entries.some((e) => e.isIntersecting) && !isFetchingNextPage) void fetchNextPage();
+        if (entries.some((e) => e.isIntersecting)) more();
       },
       { rootMargin: '400px 0px' },
     );
     io.observe(el);
     return () => io.disconnect();
-  }, [canLoadMore, isFetchingNextPage, fetchNextPage, items.length]);
+  }, [canLoadMore, hidden, more, items.length]);
 
   // Cả trang đã tải đều là món nằm ở kệ trên: lưới rỗng nhưng còn trang sau, nên tải tiếp (không có gì trên màn để cuộn tới thì không có sentinel chạm) thay vì ẩn khối.
   const draining = items.length === 0 && !!hasNextPage && !pages.isError;
@@ -142,11 +160,11 @@ export function SuggestFeed({ initial, seed: serverSeed, categories, exclude, in
       ) : (
         <>
           {/* Khối cuối trang chủ, nằm dưới màn đầu: tải lười, không đặt ảnh ưu tiên. */}
-          <SuggestGrid items={items} interleave={interleave} />
+          <SuggestGrid items={shown} interleave={interleave} />
           <div ref={sentinel} aria-hidden style={{ height: 1 }} />
-          {canLoadMore ? (
+          {hidden || canLoadMore ? (
             <div style={{ display: 'flex', justifyContent: 'center', padding: '16px 0' }}>
-              <Button variant="secondary" loading={isFetchingNextPage} onPress={() => void fetchNextPage()} style={{ minWidth: 160 }}>
+              <Button variant="secondary" loading={!hidden && isFetchingNextPage} onPress={more} style={{ minWidth: 160 }}>
                 {homeCopy.suggest.more}
               </Button>
             </div>
