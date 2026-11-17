@@ -27,7 +27,7 @@ import { isRealUser } from '../../../common/real-user';
 import { vnDateKey } from '../../../common/vn-time';
 import { ensureGameProfile } from '../game-profile';
 import { GameMiniContentService } from './game-mini-content.service';
-import { GameMiniRewardService } from './game-mini-reward.service';
+import { GameMiniRewardService, MINI_TX_OPTIONS } from './game-mini-reward.service';
 import { deviceHash, matchCardId, readGuestRound, signGuestRound } from './game-mini-crypto';
 import { MINI_GAMES, type MiniBuildCtx, type MiniContentRow } from './games';
 import { readMiniSettings, rewardedRoundsFor, type MiniSettings } from './game-mini.settings';
@@ -159,7 +159,8 @@ export class GameMiniService {
 
   /**
    * Phát một ván: máy chủ chọn nội dung và chỉ trả phần không có đáp án. Khách đã đăng nhập: ghi ván (`roundId`), giữ một ô ván có thưởng
-   * nếu còn. Khách chưa đăng nhập: không ghi DB, trả mã ván ký chứa danh sách mục (không thưởng).
+   * nếu còn; còn ván chưa nộp, chưa hết hạn của game này thì trả lại đúng ván đó. Khách chưa đăng nhập: không ghi DB, trả mã ván ký chứa
+   * danh sách mục (không thưởng).
    */
   async start(userId: string | null, gameParam: string, now: Date = new Date()): Promise<MiniStartResponse> {
     const settings = await this.settingsFor(gameParam);
@@ -172,7 +173,6 @@ export class GameMiniService {
     if (!picked) throw noContent();
     const contentIds = picked.map((r) => r.id);
     const expiresAt = new Date(now.getTime() + MINI_ROUND_TTL_MS);
-    const extra = { products: pool.products, sortHazardous: pool.sortHazardous };
 
     if (!userId) {
       const { token, nonce } = signGuestRound({ game, issuedAt: now.getTime(), contentIds }, this.secret());
@@ -185,15 +185,25 @@ export class GameMiniService {
         expiresAt: expiresAt.toISOString(),
         rewarded: false,
         noRewardReason: 'NOT_LOGGED_IN',
-        content: def.build(picked, this.buildCtx(nonce, dayKey, extra)),
+        content: def.build(picked, this.buildCtx(nonce, dayKey, { products: pool.products, sortHazardous: pool.sortHazardous })),
       };
     }
 
     const elig = this.eligibility(await this.user(userId), settings, now);
     const perDay = rewardedRoundsFor(settings, game);
-    // Khoá tư vấn theo (tài khoản, game, ngày): hai lần bấm Chơi song song không cùng giành một ô; partial unique của ô là lớp chặn sau.
-    const round = await this.prisma.$transaction(async (tx) => {
-      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`game-mini-start:${userId}:${game}:${dayKey}`}, 0))`;
+    const roundSelect = { id: true, slot: true, contentIds: true, issuedAt: true, expiresAt: true, dayKey: true } as const;
+    const { round, resumed } = await this.prisma.$transaction(async (tx) => {
+      // Khoá `users` trước như lúc nộp bài (users → ván): hai lần bấm Chơi song song xếp hàng ở đây, không giành cùng một ô và không
+      // khoá ngược thứ tự với transaction nộp bài. Partial unique của ô là lớp chặn sau.
+      await tx.$queryRaw`SELECT "id" FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
+      // Mỗi tài khoản chỉ một ván mở cho mỗi game: ván không thưởng mở song song với ván có thưởng sẽ trả đáp án (màn kết quả) cho
+      // đúng các mục của ván có thưởng (Đố Xanh cùng bộ câu cả ngày). Bấm Chơi khi còn ván mở thì nhận lại chính ván đó.
+      const open = await tx.gamePlayRound.findFirst({
+        where: { userId, game, submittedAt: null, expiresAt: { gt: now } },
+        orderBy: { issuedAt: 'desc' },
+        select: roundSelect,
+      });
+      if (open) return { round: open, resumed: true };
       const started = await tx.gamePlayRound.count({ where: { userId, game, dayKey } });
       if (started >= MINI_MAX_ROUNDS_PER_GAME_PER_DAY) {
         throw miniError(HttpStatus.TOO_MANY_REQUESTS, MINI_ERROR_CODES.roundLimit, 'Hôm nay bạn đã chơi trò này rất nhiều ván. Mai mình chơi tiếp nhé.');
@@ -214,22 +224,33 @@ export class GameMiniService {
           }
         }
       }
-      return tx.gamePlayRound.create({
+      const created = await tx.gamePlayRound.create({
         data: { userId, game, dayKey, slot, contentIds, issuedAt: now, expiresAt },
-        select: { id: true, slot: true },
+        select: roundSelect,
       });
-    });
+      return { round: created, resumed: false };
+    }, MINI_TX_OPTIONS);
+
+    let rows: readonly MiniContentRow[] = picked;
+    let products = pool.products;
+    if (resumed) {
+      const again = await this.content.byIds(game, round.contentIds);
+      if (!again) throw noContent();
+      rows = again;
+      products = await this.content.products(again.flatMap((r) => def.productSlugs(r)));
+    } else {
+      await this.track('game_round_started', userId, { game, slot: round.slot, rewarded: round.slot !== null });
+    }
     const rewarded = round.slot !== null;
-    await this.track('game_round_started', userId, { game, slot: round.slot, rewarded });
     return {
       game,
       roundId: round.id,
       token: null,
-      issuedAt: now.toISOString(),
-      expiresAt: expiresAt.toISOString(),
+      issuedAt: round.issuedAt.toISOString(),
+      expiresAt: round.expiresAt.toISOString(),
       rewarded,
       noRewardReason: rewarded ? null : elig.ok ? 'NO_REWARDED_ROUNDS_LEFT' : elig.reason,
-      content: def.build(picked, this.buildCtx(round.id, dayKey, extra)),
+      content: def.build(rows, this.buildCtx(round.id, round.dayKey, { products, sortHazardous: pool.sortHazardous })),
     };
   }
 

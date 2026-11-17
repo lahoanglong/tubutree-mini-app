@@ -37,12 +37,14 @@ function payloadOf(row: MiniContentRow): BasketPayload {
 
 const slugsOf = (p: BasketPayload) => [...p.correct, ...p.wrong.map((w) => w.slug)];
 
-/** Đề chỉ được phát khi cả 6 sản phẩm còn bán và cả 3 sản phẩm đúng còn hàng (màn kết quả có nút thêm bộ đúng vào giỏ). */
+/**
+ * Đề chỉ được phát khi cả 6 sản phẩm còn bán và còn hàng. Chỉ đòi 3 sản phẩm đúng còn hàng thì thẻ `inStock: false` lúc phát chắc
+ * chắn là đáp án sai (lộ đáp án); đòi đủ 6 thì mọi thẻ đều còn hàng và màn kết quả thêm được bộ đúng vào giỏ.
+ */
 export function basketUsable(row: MiniContentRow, ctx: Pick<MiniPickCtx, 'products'>): boolean {
   const p = readBasketPayload(row.payload);
   if (!p) return false;
-  if (!slugsOf(p).every((s) => ctx.products.has(s))) return false;
-  return p.correct.every((s) => ctx.products.get(s)!.inStock);
+  return slugsOf(p).every((s) => ctx.products.get(s)?.inStock === true);
 }
 
 export const basketGame: MiniGameDef = {

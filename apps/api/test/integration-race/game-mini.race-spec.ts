@@ -1,3 +1,4 @@
+import { randomInt } from 'node:crypto';
 import { HttpException } from '@nestjs/common';
 import type { ConfigService } from '@nestjs/config';
 import { Test, type TestingModule } from '@nestjs/testing';
@@ -15,12 +16,14 @@ import { ensureGameProfile } from '../../src/modules/game/game-profile';
 import { GameMiniService } from '../../src/modules/game/mini/game-mini.service';
 import { GameMiniContentService } from '../../src/modules/game/mini/game-mini-content.service';
 import { GameMiniRewardService } from '../../src/modules/game/mini/game-mini-reward.service';
+import { vnDateKey } from '../../src/common/vn-time';
 import { createRealUser, createUser, randCode, setConfig, warmPool } from './helpers';
 
 /**
  * Lượt chơi có thưởng của game mini trên Postgres thật: nộp trùng, nhiều ván song song, trần tài khoản/thiết bị/ngân sách toàn hệ
- * thống, bình nước, Đố Xanh là điểm danh, người dùng không thật. Mỗi ca dùng một ngày giả riêng (`now` truyền vào service) để sổ ngày
- * và dòng ngân sách toàn hệ thống không dính ca khác; riêng Đố Xanh dùng giờ thật vì điểm danh gộp đọc đồng hồ thật.
+ * thống, bình nước, Đố Xanh là điểm danh, người dùng không thật. Mỗi ca dùng một ngày giả riêng (`now` truyền vào service), lấy ngẫu
+ * nhiên mỗi lần chạy, để sổ ngày và dòng ngân sách toàn hệ thống không dính ca khác hay lần chạy trước trên cùng DB; riêng Đố Xanh
+ * dùng giờ thật vì điểm danh gộp đọc đồng hồ thật.
  */
 describe('game mini race (real Postgres)', () => {
   let moduleRef: TestingModule;
@@ -57,7 +60,8 @@ describe('game mini race (real Postgres)', () => {
     return new GameMiniService(prisma, config, loyalty, env, content, new GameMiniRewardService(prisma), analytics, checkIn);
   }
 
-  const day = (n: number) => new Date(Date.UTC(2031, 0, n, 3, 0, 0));
+  const BASE_DAY = Date.UTC(2031, 0, 1, 3, 0, 0) + randomInt(0, 20_000) * 86_400_000;
+  const day = (n: number) => new Date(BASE_DAY + n * 86_400_000);
   const after = (d: Date, ms: number) => new Date(d.getTime() + ms);
 
   async function realUser() {
@@ -75,10 +79,21 @@ describe('game mini race (real Postgres)', () => {
     return ids.map((id) => (c.game === 'sort' ? byId.get(id)!.bin : byId.get(id)!.answer));
   }
 
-  async function play(svc: GameMiniService, userId: string, game: MiniGameId, now: Date, deviceId?: string) {
+  async function play(svc: GameMiniService, userId: string, game: MiniGameId, now: Date, deviceId = `race-dev-${userId}`) {
     const start = await svc.start(userId, game, now);
     const answers = await correctAnswers(start);
     return svc.submit(userId, game, { roundId: start.roundId, answers, deviceId }, after(now, 6_000));
+  }
+
+  /** Ván có ô thưởng ghi thẳng vào DB (như `start` đã cấp), để nộp song song nhiều ván của một tài khoản. */
+  async function seedRewardedRound(userId: string, game: 'sort' | 'origin', slot: number, now: Date) {
+    const size = game === 'sort' ? 10 : 5;
+    const items = await prisma.gameContentItem.findMany({ where: { game, active: true }, take: size, orderBy: { id: 'asc' } });
+    const round = await prisma.gamePlayRound.create({
+      data: { userId, game, dayKey: vnDateKey(now), slot, contentIds: items.map((i) => i.id), issuedAt: now, expiresAt: after(now, 600_000) },
+    });
+    const answers = items.map((i) => (i.payload as Record<string, unknown>)[game === 'sort' ? 'bin' : 'answer']);
+    return { roundId: round.id, game, answers };
   }
 
   function httpOf(r: PromiseSettledResult<unknown>): { status: number; code: unknown } | null {
@@ -150,7 +165,7 @@ describe('game mini race (real Postgres)', () => {
     expect(start.rewarded).toBe(true);
     const answers = await correctAnswers(start);
     const results = await Promise.allSettled(
-      Array.from({ length: 20 }, () => svc.submit(u.id, 'sort', { roundId: start.roundId, answers }, after(now, 6_000))),
+      Array.from({ length: 20 }, () => svc.submit(u.id, 'sort', { roundId: start.roundId, answers, deviceId: `race-dev-${u.id}` }, after(now, 6_000))),
     );
     const ok = results.filter((r): r is PromiseFulfilledResult<MiniSubmitResponse> => r.status === 'fulfilled');
     const conflicts = results.map(httpOf).filter((h) => h?.status === 409 && h.code === 'ROUND_SUBMITTED');
@@ -166,17 +181,18 @@ describe('game mini race (real Postgres)', () => {
     expect(t.ledger).toEqual([expect.objectContaining({ waterFromGames: 10, pointsFromGames: 10, rewardedRounds: 1 })]);
   });
 
-  it('2. 20 ván song song của một tài khoản (2 game × 10 ván có thưởng): 💧 ≤ 40, điểm ≤ 100, khớp từng dòng sổ', async () => {
+  it('2. 20 ván có thưởng của một tài khoản nộp song song (2 game × 10 ô): 💧 ≤ 40, điểm ≤ 100, khớp từng dòng sổ', async () => {
     const svc = await makeSvc({ 'game.mini.rounds_per_game_per_day': 10 });
     const u = await realUser();
     const now = day(2);
-    const games: MiniGameId[] = [...Array<MiniGameId>(10).fill('sort'), ...Array<MiniGameId>(10).fill('origin')];
-    const starts = await Promise.all(games.map((g) => svc.start(u.id, g, now)));
-    expect(starts.filter((s) => s.rewarded)).toHaveLength(20);
-    const submitted = await Promise.allSettled(
-      starts.map(async (s) => svc.submit(u.id, s.game, { roundId: s.roundId, answers: await correctAnswers(s) }, after(now, 6_000))),
+    const rounds = await Promise.all(
+      (['sort', 'origin'] as const).flatMap((g) => Array.from({ length: 10 }, (_, i) => seedRewardedRound(u.id, g, i + 1, now))),
     );
-    for (const r of submitted) expect(r.status).toBe('fulfilled');
+    const submitted = await Promise.allSettled(
+      rounds.map((r) => svc.submit(u.id, r.game, { roundId: r.roundId, answers: r.answers, deviceId: `race-dev-${u.id}` }, after(now, 6_000))),
+    );
+    const failed = submitted.filter((r): r is PromiseRejectedResult => r.status === 'rejected').map((r) => String(r.reason).slice(0, 300));
+    expect(failed).toEqual([]);
     const out = submitted.map((r) => (r as PromiseFulfilledResult<MiniSubmitResponse>).value);
     const water = out.reduce((s, r) => s + r.water, 0);
     const points = out.reduce((s, r) => s + r.points, 0);
@@ -194,6 +210,33 @@ describe('game mini race (real Postgres)', () => {
     expect(t.profile?.totalSeeds).toBe(40);
   });
 
+  it('2b. 20 lần bấm Chơi song song cùng game: chỉ một ván mở, mọi lần nhận lại đúng ván đó', async () => {
+    const svc = await makeSvc();
+    const u = await realUser();
+    const now = day(12);
+    const starts = await Promise.all(Array.from({ length: 20 }, () => svc.start(u.id, 'sort', now)));
+    expect(new Set(starts.map((s) => s.roundId)).size).toBe(1);
+    expect(starts.every((s) => s.rewarded)).toBe(true);
+    expect(new Set(starts.map((s) => JSON.stringify(s.content.game === 'sort' ? s.content.items.map((i) => i.id).sort() : []))).size).toBe(1);
+    expect(await prisma.gamePlayRound.count({ where: { userId: u.id } })).toBe(1);
+    const r = await svc.submit(u.id, 'sort', { roundId: starts[0]!.roundId, answers: await correctAnswers(starts[0]!), deviceId: `race-dev-${u.id}` }, after(now, 6_000));
+    expect(r.rewarded).toBe(true);
+    const next = await svc.start(u.id, 'sort', after(now, 7_000));
+    expect(next.roundId).not.toBe(starts[0]!.roundId);
+  });
+
+  it('2c. Không gửi deviceId: ván có thưởng không được cộng (trần device)', async () => {
+    const svc = await makeSvc();
+    const u = await realUser();
+    const now = day(13);
+    const start = await svc.start(u.id, 'sort', now);
+    const r = await svc.submit(u.id, 'sort', { roundId: start.roundId, answers: await correctAnswers(start) }, after(now, 6_000));
+    expect(r).toMatchObject({ rewarded: true, water: 0, points: 0, capped: ['device'] });
+    const t = await ledgerOf(u.id);
+    expect(t.water).toEqual([]);
+    expect(t.points).toEqual([]);
+  });
+
   it('3. Cùng một thiết bị: 2 tài khoản được thưởng, tài khoản thứ 3 nhận 0 (song song)', async () => {
     const svc = await makeSvc();
     const users = await Promise.all([realUser(), realUser(), realUser()]);
@@ -206,7 +249,7 @@ describe('game mini race (real Postgres)', () => {
     expect(rewarded).toHaveLength(2);
     expect(blocked).toHaveLength(1);
     expect(blocked[0]).toMatchObject({ water: 0, points: 0, capped: ['device'] });
-    const registered = await prisma.gameDeviceDaily.count({ where: { dayKey: '2031-01-03', userId: { in: users.map((u) => u.id) } } });
+    const registered = await prisma.gameDeviceDaily.count({ where: { dayKey: vnDateKey(day(3)), userId: { in: users.map((u) => u.id) } } });
     expect(registered).toBe(2);
   });
 
@@ -220,7 +263,7 @@ describe('game mini race (real Postgres)', () => {
     expect(points).toBe(5);
     for (const r of out) expect(r.water).toBe(10);
     expect(out.filter((r) => r.capped.includes('global')).length).toBeGreaterThanOrEqual(2);
-    const global = await prisma.gameGlobalDaily.findUniqueOrThrow({ where: { dayKey: '2031-01-04' } });
+    const global = await prisma.gameGlobalDaily.findUniqueOrThrow({ where: { dayKey: vnDateKey(day(4)) } });
     expect(global.pointsMinted).toBe(5);
   });
 

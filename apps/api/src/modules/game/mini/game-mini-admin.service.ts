@@ -131,7 +131,7 @@ export class GameMiniAdminService {
       return {
         ...r,
         payloadError: def ? def.payloadError(r.payload) : 'Game không còn tồn tại.',
-        /** Mục đủ điều kiện phát hôm nay (đề Giỏ Đúng Việc cần cả 3 sản phẩm đúng còn hàng). */
+        /** Mục đủ điều kiện phát hôm nay (đề Giỏ Đúng Việc cần cả 6 sản phẩm còn hàng). */
         usableToday: def ? def.usable(toRow(r), ctx) : false,
       };
     });

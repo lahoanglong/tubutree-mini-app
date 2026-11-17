@@ -99,9 +99,10 @@ describe('basketGame.productSlugs / usable', () => {
     expect(basketUsable(row(), { products: productMap(ALL.filter((s) => s !== 'sp-sai-3')) })).toBe(false);
   });
 
-  it('không dùng được khi một sản phẩm đúng hết hàng; sản phẩm sai hết hàng thì vẫn dùng được', () => {
+  it('không dùng được khi bất kỳ sản phẩm nào (đúng hay sai) hết hàng: thẻ hết hàng sẽ lộ nó là đáp án sai', () => {
     expect(basketUsable(row(), { products: productMap(ALL, ['sp-dung-1']) })).toBe(false);
-    expect(basketUsable(row(), { products: productMap(ALL, ['sp-sai-1', 'sp-sai-2']) })).toBe(true);
+    expect(basketUsable(row(), { products: productMap(ALL, ['sp-sai-1']) })).toBe(false);
+    expect(basketUsable(row(), { products: productMap(ALL) })).toBe(true);
   });
 
   it('payload hỏng thì không dùng được', () => {

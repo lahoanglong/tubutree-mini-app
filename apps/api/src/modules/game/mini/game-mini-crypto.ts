@@ -61,7 +61,8 @@ export function readGuestRound(token: unknown, secret: string | undefined): Gues
  * nào khi lật đúng. Suy lại được lúc chấm nên không cần lưu bảng ánh xạ.
  */
 export function matchCardId(secret: string | undefined, roundKey: string, contentId: string, side: 'ingredient' | 'use'): string {
-  return mac(secret, 'match-card', `${roundKey}|${contentId}|${side}`).slice(0, 16);
+  // Mã hoá đầu vào bằng JSON (không ghép bằng dấu phân cách): hai bộ (ván, mục) khác nhau không bao giờ ra cùng một chuỗi.
+  return mac(secret, 'match-card', JSON.stringify([roundKey, contentId, side])).slice(0, 16);
 }
 
 /**

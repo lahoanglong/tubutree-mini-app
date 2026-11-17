@@ -147,7 +147,7 @@ describe('matchCardId', () => {
   });
 
   it('không lộ contentId: mã ngắn 16 ký tự base64url, không chứa id cặp', () => {
-    const contentIds = ['match-01', 'match-abc-123', 'gq:xyz', 'a'];
+    const contentIds = ['match-01', 'match-abc-123', 'gq:xyz', 'item-zz9'];
     for (const id of contentIds) {
       for (const side of ['ingredient', 'use'] as const) {
         const code = matchCardId(SECRET, 'round-1', id, side);
@@ -163,9 +163,9 @@ describe('matchCardId', () => {
     expect(matchCardId(undefined, 'round-1', 'match-01', 'use')).not.toBe(matchCardId(SECRET, 'round-1', 'match-01', 'use'));
   });
 
-  // game-mini-crypto.ts:64 ghép `${roundKey}|${contentId}|${side}` không thoát '|': (round "a|b", id "c") và (round "a", id "b|c") ra cùng
-  // mã. Id ván (cuid), nonce (base64url) và id mục không bao giờ chứa '|' nên chỉ là lý thuyết; ghi lại để quyết định riêng.
-  it.todo('ranh giới ghép chuỗi: (round "a|b", id "c") phải khác (round "a", id "b|c")');
+  it('ranh giới ghép chuỗi: (round "a|b", id "c") khác (round "a", id "b|c")', () => {
+    expect(matchCardId('s', 'a|b', 'c', 'use')).not.toBe(matchCardId('s', 'a', 'b|c', 'use'));
+  });
 
   it('id thật (không chứa "|") thì 50 ván khác nhau không trùng mã trên cùng một mục', () => {
     const codes = new Set<string>();

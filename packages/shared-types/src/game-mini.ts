@@ -39,7 +39,7 @@ export const MINI_MIN_ROUND_MS = 5_000;
 export const MINI_ROUND_TTL_MS = 10 * 60_000;
 /** Số ván tối đa một tài khoản bắt đầu cho một game trong một ngày (chặn bơm dòng vào DB; ván thứ 3 trở đi đã không thưởng). */
 export const MINI_MAX_ROUNDS_PER_GAME_PER_DAY = 60;
-/** Game có ít mục đang bật hơn mức này thì tự ẩn; Giỏ Đúng Việc còn cần ít nhất một đề có đủ 3 sản phẩm đúng còn hàng. */
+/** Game có ít mục đang bật hơn mức này thì tự ẩn; Giỏ Đúng Việc còn cần ít nhất một đề có cả 6 sản phẩm còn hàng. */
 export const MINI_MIN_ACTIVE_ITEMS = 10;
 
 /** Thưởng một ván có thưởng TRƯỚC khi áp trần: 💧 4 + 1 mỗi mục đúng (tối đa 10), 10 Điểm Xanh nếu đúng từ 80%. */
@@ -150,7 +150,7 @@ export interface MiniSubmitRequest {
   roundId?: string | null;
   token?: string | null;
   answers: unknown[];
-  /** Mã thiết bị do ứng dụng tự sinh và giữ; chỉ là lớp ma sát chống nhiều tài khoản trên một máy. */
+  /** Mã thiết bị do ứng dụng tự sinh và giữ (8–128 ký tự); BẮT BUỘC để ván có thưởng được cộng. Chỉ là lớp ma sát chống nhiều tài khoản trên một máy. */
   deviceId?: string | null;
 }
 

@@ -114,12 +114,20 @@ function makeWorld(opts: WorldOpts = {}) {
   const fx = buildFixtures();
   const config = { get: jest.fn(async (key: string, fallback?: unknown) => (key in cfg ? cfg[key] : fallback)) };
   const tx = {
-    $executeRaw: jest.fn().mockResolvedValue(1),
+    $queryRaw: jest.fn().mockResolvedValue([{ id: 'u1' }]),
     gamePlayRound: {
+      findFirst: jest.fn().mockResolvedValue(null),
       count: jest.fn().mockResolvedValue(0),
       updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       findMany: jest.fn().mockResolvedValue([]),
-      create: jest.fn(async ({ data }: { data: { slot: number | null; [field: string]: any } }) => ({ id: 'round-1', slot: data.slot })),
+      create: jest.fn(async ({ data }: { data: { slot: number | null; [field: string]: any } }) => ({
+        id: 'round-1',
+        slot: data.slot,
+        contentIds: data.contentIds,
+        issuedAt: data.issuedAt,
+        expiresAt: data.expiresAt,
+        dayKey: data.dayKey,
+      })),
     },
   };
   const prisma = {
@@ -146,6 +154,10 @@ function makeWorld(opts: WorldOpts = {}) {
         out.push(found);
       }
       return out;
+    }),
+    products: jest.fn(async (slugs: readonly string[]) => {
+      const all = new Map<string, MiniProductCard>(MINI_GAME_IDS.flatMap((g) => [...fx[g].products]));
+      return new Map(slugs.filter((x) => all.has(x)).map((x) => [x, all.get(x)!] as const));
     }),
   };
   const reward = { settle: jest.fn().mockResolvedValue({ slot: 1, water: 10, points: 10, capped: [], totalSeeds: 90 }) };
@@ -467,9 +479,6 @@ describe('GameMiniService.start: nội dung không lộ đáp án (test 7)', () 
     });
   });
 
-  // game-mini-content.service.ts: đề Giỏ Đúng Việc chỉ phát khi 3 sản phẩm ĐÚNG còn hàng, còn sản phẩm sai thì có thể hết hàng; thẻ phát
-  // đi mang inStock nên một thẻ hết hàng chắc chắn là đáp án sai. Hợp đồng MiniProductCard cố ý có inStock, nên cần quyết định riêng.
-  it.todo('Giỏ Đúng Việc: thẻ sản phẩm hết hàng (inStock=false) loại được đáp án sai vì 3 sản phẩm đúng luôn còn hàng');
 });
 
 describe('GameMiniService.start: tài khoản đăng nhập', () => {
@@ -482,7 +491,7 @@ describe('GameMiniService.start: tài khoản đăng nhập', () => {
     expect(data.expiresAt).toEqual(new Date(NOW.getTime() + MINI_ROUND_TTL_MS));
     if (res.content.game !== 'sort') throw new Error('sai game');
     expect(data.contentIds).toEqual(res.content.items.map((i) => i.id));
-    expect(w.tx.$executeRaw).toHaveBeenCalledTimes(1);
+    expect(w.tx.$queryRaw).toHaveBeenCalledTimes(1);
     expect(w.tx.gamePlayRound.updateMany).toHaveBeenCalledWith({
       where: { userId: 'u1', game: 'sort', dayKey: DAY, slot: { not: null }, submittedAt: null, expiresAt: { lte: NOW } },
       data: { slot: null },
@@ -543,6 +552,28 @@ describe('GameMiniService.start: tài khoản đăng nhập', () => {
     const w = makeWorld();
     w.tx.gamePlayRound.count.mockResolvedValue(MINI_MAX_ROUNDS_PER_GAME_PER_DAY);
     await expectMini(w.service.start('u1', 'sort', NOW), 429, 'ROUND_LIMIT');
+    expect(w.tx.gamePlayRound.create).not.toHaveBeenCalled();
+  });
+
+  it('còn ván chưa nộp, chưa hết hạn của game này: trả lại đúng ván đó (cùng mục, cùng ô), không ghi ván mới', async () => {
+    const w = makeWorld();
+    const ids = w.fx.sort.rows.slice(0, 10).map((r) => r.id);
+    const issuedAt = new Date(NOW.getTime() - 60_000);
+    w.tx.gamePlayRound.findFirst.mockResolvedValue({
+      id: 'open-1',
+      slot: 1,
+      contentIds: ids,
+      issuedAt,
+      expiresAt: new Date(issuedAt.getTime() + MINI_ROUND_TTL_MS),
+      dayKey: DAY,
+    });
+    const res = await w.service.start('u1', 'sort', NOW);
+    expect(res).toMatchObject({ roundId: 'open-1', rewarded: true, issuedAt: issuedAt.toISOString() });
+    if (res.content.game !== 'sort') throw new Error('sai game');
+    expect(res.content.items.map((i) => i.id)).toEqual(ids);
+    expect(w.tx.gamePlayRound.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { userId: 'u1', game: 'sort', submittedAt: null, expiresAt: { gt: NOW } } }),
+    );
     expect(w.tx.gamePlayRound.create).not.toHaveBeenCalled();
   });
 

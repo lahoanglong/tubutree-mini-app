@@ -7,6 +7,12 @@ import type { MiniSettings } from './game-mini.settings';
 /** refType của dòng sổ Điểm Xanh game mini; partial unique "points_transactions_game_mini_ref_key" (refType, refId) chặn trùng mỗi ván. */
 export const GAME_MINI_REF_TYPE = 'GAME_MINI';
 
+/**
+ * Thời gian chờ khoá `users` tính vào thời hạn transaction: nhiều lần nộp/bấm Chơi dồn của một tài khoản xếp hàng nối tiếp, mặc định
+ * 5 giây của Prisma làm lời gọi cuối hết hạn khi máy chủ bận. Hết hạn thì rollback sạch (ván vẫn chưa nộp, khách nộp lại được).
+ */
+export const MINI_TX_OPTIONS = { maxWait: 5_000, timeout: 15_000 } as const;
+
 export const miniWaterReason = (game: MiniGameId): string => `MINI_${game.toUpperCase()}`;
 export const miniPointsReason = (game: MiniGameId): string => `${GAME_MINI_REF_TYPE}:${game}`;
 
@@ -113,10 +119,15 @@ export class GameMiniRewardService {
         capped.push('account_points');
       }
 
-      // deviceId do ứng dụng tự sinh nên giả được: trần này chỉ là ma sát với một máy nhiều tài khoản. Khoá tư vấn theo (thiết bị,
-      // ngày) vì các tài khoản khác nhau không chung khoá `users`: thiếu nó, hai tài khoản mới cùng đếm "1 < 2" rồi cùng được thưởng.
+      // deviceId do ứng dụng tự sinh nên giả được: trần này chỉ là ma sát với một máy nhiều tài khoản; lớp chặn thật là trần tài khoản
+      // và ngân sách toàn hệ thống. Không gửi deviceId thì không thưởng (bỏ trống không được là cách né trần). Khoá tư vấn theo (thiết
+      // bị, ngày) vì các tài khoản khác nhau không chung khoá `users`: thiếu nó, hai tài khoản mới cùng đếm "1 < 2" rồi cùng được thưởng.
       let registerDevice = false;
-      if (input.deviceHash && water + points > 0) {
+      if (!input.deviceHash && water + points > 0) {
+        water = 0;
+        points = 0;
+        capped.push('device');
+      } else if (input.deviceHash && water + points > 0) {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtextextended(${`game-mini-device:${input.deviceHash}:${dayKey}`}, 0))`;
         const seen = await tx.gameDeviceDaily.findMany({ where: { deviceHash: input.deviceHash, dayKey }, select: { userId: true } });
         if (!seen.some((r) => r.userId === userId)) {
@@ -201,6 +212,6 @@ export class GameMiniRewardService {
 
       await tx.gamePlayRound.update({ where: { id: roundId }, data: { waterAwarded: water, pointsAwarded: points, cappedBy } });
       return { slot, water, points, capped, totalSeeds };
-    });
+    }, MINI_TX_OPTIONS);
   }
 }

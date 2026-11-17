@@ -3096,7 +3096,7 @@ model GameQuizAttempt {
 
 /// Một ván của 5 game mini (game.mini.*). `slot` khác NULL = ván có thưởng thứ `slot` của (user, game, ngày VN); NULL = ván không
 /// thưởng. Partial unique "game_play_rounds_reward_slot_key" (userId, game, dayKey, slot) WHERE slot IS NOT NULL chỉ có trong SQL
-/// (migration 20261117090000_game_mini_core). `contentIds` là nội dung máy chủ đã phát, chấm bài chỉ theo danh sách này.
+/// (migration 20261117083000_game_mini_core). `contentIds` là nội dung máy chủ đã phát, chấm bài chỉ theo danh sách này.
 model GamePlayRound {
   id            String    @id @default(cuid())
   userId        String
