@@ -45,6 +45,7 @@ vi.mock('@/lib/core-http', () => ({
       }
       if (state.hang.has(path)) return new Promise(() => undefined);
       if (path === '/config/public') return state.config;
+      if (path === '/game/mini/today') throw Object.assign(new Error('GAME_DISABLED'), { status: 404 });
       if (path in state.data) return state.data[path];
       throw new Error(`chưa mock ${path}`);
     },

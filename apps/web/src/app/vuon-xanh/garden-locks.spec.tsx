@@ -57,6 +57,7 @@ vi.mock('@/lib/core-http', () => ({
       }
       await state.getHold.get(path);
       if (path === '/config/public') return { waste: { enabled: false } };
+      if (path === '/game/mini/today') throw Object.assign(new Error('GAME_DISABLED'), { status: 404 });
       if (!(path in state.data)) throw new Error(`chưa mock ${path}`);
       const v = state.data[path];
       return typeof v === 'function' ? (v as () => unknown)() : v;

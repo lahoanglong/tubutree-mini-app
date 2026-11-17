@@ -23,16 +23,15 @@ import {
   sourceHost,
   type PlayableMiniGame,
 } from '@tubutree/app-core/game-mini/format';
-import { MINI_REVIEW_BADGE, miniQuizProduct, miniReviewRows, type MiniReviewRow } from '@tubutree/app-core/game-mini/review';
+import { MINI_REVIEW_BADGE, miniProductView, miniQuizProduct, miniReviewRows, type MiniReviewRow } from '@tubutree/app-core/game-mini/review';
 import { initialRoundState, roundReducer, submitDelayMs, type RoundState } from '@tubutree/app-core/game-mini/round-machine';
 import { checkInQuery } from '@tubutree/app-core/queries/loyalty';
-import { Button, Heading, ProductThumb, Text } from '@/components/mini';
+import { Button, Heading, ProductTile, Text } from '@/components/mini';
 import { PageHeader } from '@/components/ui/page-header';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { refreshSession as refreshWebSession } from '@/lib/client-api';
 import { coreHttp } from '@/lib/core-http';
-import { formatVnd } from '@/lib/format-vnd';
 import { loginHref } from '@/lib/return-to';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
@@ -224,17 +223,9 @@ function ResultView({ game, state, onDone, onLogin }: { game: PlayableMiniGame; 
           <Text variant="caption" tone="secondary" as="p">
             {gameCopy('result.product')}
           </Text>
-          <Link href={miniProductPath.web(product.slug, game)} className="tubu-mg-product" data-testid="mini-result-product">
-            <ProductThumb src={product.imageUrl} alt={product.name} size={48} />
-            <span className="tubu-mg-row-text">
-              <Text variant="body-sm" as="span" className="tubu-mg-one-line">
-                {product.name}
-              </Text>
-              <Text variant="price-sm" as="span" numeric>
-                {formatVnd(product.price)}
-              </Text>
-            </span>
-          </Link>
+          <div data-testid="mini-result-product">
+            <ProductTile view={miniProductView(product)} variant="line" href={miniProductPath.web(product.slug, game)} />
+          </div>
         </div>
       )}
       <Heading as="h3" variant="title-sm" font="ui">

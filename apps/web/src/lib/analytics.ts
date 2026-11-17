@@ -60,6 +60,7 @@ export const WEB_DYNAMIC_ROUTES = [
   '/san-pham/_preview/:slug',
   '/tai-khoan/don-hang/:code',
   '/thanh-toan/chuyen-khoan/:code',
+  '/vuon-xanh/choi/:game',
 ] as const;
 
 export function routeTemplate(pathname: string): string {

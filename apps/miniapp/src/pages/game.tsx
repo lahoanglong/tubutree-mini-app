@@ -16,7 +16,7 @@ import { ErrorState } from '../components/ui/empty-state';
 import { Skeleton } from '../components/ui/skeleton';
 import { PageHeader } from '../components/ui/page-header';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
-import { getErrorMessage, getLoadErrorMessage, isServerRejection, refreshAccessToken } from '../services/api';
+import { getErrorMessage, getLoadErrorMessage, isServerRejection } from '../services/api';
 import { getDailyCheckInStatus, getLoyalty } from '../services/account-api';
 import { shareLink } from '../services/zmp-bridge';
 import { pointsSummary } from '../utils/points-lots';
@@ -54,12 +54,7 @@ import { useGameData } from '../components/game/use-game-data';
 import { useWheelPrize } from '../components/game/use-wheel-prize';
 import { useGameActions, type HarvestMeta, type HarvestReward } from '../components/game/use-game-actions';
 import { SEASON_PASS_ENABLED } from '../utils/features';
-import { miniTodayQuery } from '@tubutree/app-core/game-mini/today';
-import { miniEarnQuizLeft, miniPlayPath, playableToday } from '@tubutree/app-core/game-mini/format';
-import { coreHttp } from '../services/core-http';
-import { PlayTodayCard } from '../components/game/mini/play-today-card';
-
-const refreshMiniSession = () => refreshAccessToken().then(Boolean);
+import { PlayTodayCard, useMiniToday } from '../components/game/mini/play-today-card';
 
 export default function GamePage() {
   const phase = useAuthPhase();
@@ -93,11 +88,7 @@ export default function GamePage() {
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   // Nút điểm danh của Vườn theo trạng thái GỘP (Điểm Xanh + giọt nước): còn bấm được tới khi cả hai phần xong, để lần lỗi một phần bấm lại được.
   const checkInStatusQ = useQuery({ queryKey: ['loyalty-checkin'], queryFn: getDailyCheckInStatus, enabled: authed });
-  // Game mini sau cờ `game.mini.enabled`: máy chủ trả 404 khi cờ tắt, lúc đó trang giữ nguyên khối đố vui và sảnh arcade cũ.
-  const miniQ = useQuery({ ...miniTodayQuery(coreHttp, authed, refreshMiniSession), enabled: phase !== 'loading' });
-  const miniToday = miniQ.data && playableToday(miniQ.data).length > 0 ? miniQ.data : null;
-  // Đố Xanh có thể tắt riêng trong khi Đúng Thùng vẫn bật: khối đố vui cũ chỉ nhường chỗ khi chính Đố Xanh đang mở.
-  const miniQuiz = miniToday?.games.some((g) => g.game === 'daily_quiz') ? miniToday : null;
+  const mini = useMiniToday(phase !== 'loading', authed);
   // Điểm dùng được: vòng quay chỉ trừ điểm thường chưa khoá, góp quỹ trừ thêm cả điểm quy đổi. Chưa tải được thì null
   // để nút vẫn bấm được (API là lưới an toàn).
   const loyalty = loyaltyQ.data;
@@ -152,18 +143,7 @@ export default function GamePage() {
 
   // Chỉ hiện cổng đăng nhập khi đã chắc chắn user chưa đăng nhập (status settled, không authenticated)
   // — trước đây gộp chung với nhánh loading khiến user đã logout/login lỗi bị kẹt mãi ở skeleton.
-  if (!authed) {
-    return shell(
-      <>
-        <GameLoginGate onLogin={() => login()} />
-        {miniToday && (
-          <div style={{ padding: 'var(--space-stack-sm) var(--space-inset-page) 0' }}>
-            <PlayTodayCard today={miniToday} />
-          </div>
-        )}
-      </>,
-    );
-  }
+  if (!authed) return shell(<><GameLoginGate onLogin={() => login()} />{mini.today && <PlayTodayCard today={mini.today} inset />}</>);
 
   // Profile là dữ liệu chủ đạo của trang (streak/giọt nước/eco-impact) — lỗi thì phải báo rõ,
   // không để rơi xuống render với optional-chaining trông như "mất hết tiến độ".
@@ -178,9 +158,7 @@ export default function GamePage() {
   const checkInSeeds = status && !status.waterDone ? status.todayWater : undefined;
   const dailyGain = checkInSeeds !== undefined ? (checkInSeeds > 0 ? checkInSeeds : null) : profile?.dailyLoginSeeds != null ? profile.dailyLoginSeeds + (profile.firstCheckinBonus ?? 0) : null;
   const tomorrowGain = profile?.dailyLoginSeeds != null && profile.dewSeeds != null ? profile.dailyLoginSeeds + profile.dewSeeds : null;
-  const quizState: EarnQuizState = miniQuiz
-    ? { status: 'ready', left: miniEarnQuizLeft(miniQuiz) }
-    : quiz
+  const quizState: EarnQuizState = quiz
     ? { status: 'ready', left: quiz.filter((q) => !answeredIds.has(q.id)).length }
     : quizQ.isError
       ? { status: 'error' }
@@ -264,7 +242,7 @@ export default function GamePage() {
           />
           </div>
 
-          {miniToday ? <PlayTodayCard today={miniToday} /> : <ArcadeHub />}
+          {mini.today ? <PlayTodayCard today={mini.today} /> : <ArcadeHub />}
           <HomeQuizCard />
           <MissionsCard
             missions={missions}
@@ -274,23 +252,20 @@ export default function GamePage() {
             onClaim={(code) => claimMissionM.mutate(code)}
             onGo={goMission}
           />
-
-          {!miniQuiz && (
-            <div id="game-quiz">
-              <QuizCard
-                quiz={quiz}
-                currentQuiz={currentQuiz}
-                answeredCount={answeredIds.size}
-                reveal={reveal}
-                pending={answerM.isPending}
-                onAnswer={(id, choice) => answerM.mutate({ id, choice })}
-                onNext={nextQuiz}
-                loadError={quizQ.isError}
-                onRetry={() => quizQ.refetch()}
-                answeredToday={profile?.quizAnsweredToday}
-              />
-            </div>
-          )}
+          {!mini.quiz && <div id="game-quiz">
+            <QuizCard
+              quiz={quiz}
+              currentQuiz={currentQuiz}
+              answeredCount={answeredIds.size}
+              reveal={reveal}
+              pending={answerM.isPending}
+              onAnswer={(id, choice) => answerM.mutate({ id, choice })}
+              onNext={nextQuiz}
+              loadError={quizQ.isError}
+              onRetry={() => quizQ.refetch()}
+              answeredToday={profile?.quizAnsweredToday}
+            />
+          </div>}
 
           <LuckyWheelCard
             cost={profile?.spinCostPoints ?? 10_000}
@@ -393,13 +368,9 @@ export default function GamePage() {
         dewPending={dewM.isPending}
         onCheckIn={() => checkInM.mutate()}
         onDew={() => dewM.mutate()}
-        quiz={quizState}
+        quiz={mini.quiz?.earn ?? quizState}
         onRetryQuiz={() => (quizQ.isFetching ? undefined : quizQ.refetch())}
-        onGoQuiz={() => {
-          if (!miniQuiz) return goTab('today', 'game-quiz');
-          closeEarn();
-          navigate(miniPlayPath.miniapp('daily_quiz'));
-        }}
+        onGoQuiz={() => (mini.quiz ? (closeEarn(), navigate(mini.quiz.path)) : goTab('today', 'game-quiz'))}
         error={earnError}
       />
 

@@ -33,7 +33,7 @@ import {
   sourceHost,
 } from './format';
 import { initialRoundState, roundMsLeft, roundReducer, submitDelayMs, SUBMIT_RETRIES, type RoundEvent, type RoundState } from './round-machine';
-import { miniQuizProduct, miniReviewRows } from './review';
+import { miniProductView, miniQuizProduct, miniReviewRows } from './review';
 
 const T0 = 1_000_000;
 
@@ -466,6 +466,12 @@ describe('màn kết quả: danh sách Vì sao', () => {
     expect(miniQuizProduct(quiz)?.slug).toBe(product.slug);
     expect(miniQuizProduct({ game: 'sort', bins: ['recycle'], items: [] })).toBeNull();
     expect(miniQuizProduct(undefined)).toBeNull();
+  });
+
+  it('thẻ sản phẩm vẽ bằng thẻ line chung: giá đang bán, không giá gạch, hết hàng ghi rõ', () => {
+    const view = miniProductView({ slug: 'nuoc-rua-chen', name: 'Nước rửa chén', imageUrl: null, price: 59_000, inStock: true }, 0);
+    expect(view).toMatchObject({ slug: 'nuoc-rua-chen', name: 'Nước rửa chén', price: 59_000, compareAt: null, stock: 'in', label: null });
+    expect(miniProductView({ slug: 'x', name: 'X', imageUrl: null, price: 10_000, inStock: false }, 0).stock).toBe('out');
   });
 });
 

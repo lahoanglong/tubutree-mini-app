@@ -338,23 +338,6 @@
   text-underline-offset: 2px;
   cursor: pointer;
 }
-.tubu-mg-product {
-  display: flex;
-  align-items: center;
-  gap: var(--space-inline-md);
-  box-sizing: border-box;
-  width: 100%;
-  min-height: 64px;
-  padding: var(--space-stack-xs);
-  border: 1px solid var(--color-border-subtle);
-  border-radius: var(--radius-card);
-  background: var(--color-bg-surface);
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  text-decoration: none;
-  cursor: pointer;
-}
 
 /* Web từ 1024px: vùng chơi giữa trang, cột phải "Cách chơi" lúc chơi và danh sách "Vì sao" ở màn kết quả. */
 @media (min-width: 1024px) {

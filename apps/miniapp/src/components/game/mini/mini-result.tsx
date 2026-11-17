@@ -1,13 +1,12 @@
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { MINI_RECYCLE_PATH, miniProductPath, miniResultSummary, sourceHost, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
-import { MINI_REVIEW_BADGE, miniQuizProduct, miniReviewRows, type MiniReviewRow } from '@tubutree/app-core/game-mini/review';
+import { MINI_REVIEW_BADGE, miniProductView, miniQuizProduct, miniReviewRows, type MiniReviewRow } from '@tubutree/app-core/game-mini/review';
 import type { RoundState } from '@tubutree/app-core/game-mini/round-machine';
 import { Button } from '../../ui/button';
-import { ProductThumb } from '../../ui/product-thumb';
+import { ProductTile } from '../../ui/product-tile';
 import { Heading, Text } from '../../ui/text';
 import { usePublicConfig } from '../../../hooks/use-public-config';
 import { useSmartNavigate } from '../../../lib/smart-nav';
-import { formatVnd } from '../../../utils/format';
 
 /** Nguồn ở Mini App: chỉ hiện tên miền, vì chính sách Zalo không cho Mini App mở trang ngoài Zalo. */
 function SourceNote({ url }: { url: string }) {
@@ -100,17 +99,9 @@ export default function MiniResult({ game, state, onDone, onLogin }: { game: Pla
           <Text variant="caption" tone="secondary" as="p">
             {gameCopy('result.product')}
           </Text>
-          <button type="button" className="tubu-mg-product" data-testid="mini-result-product" onClick={() => navigate(miniProductPath.miniapp(product.slug, game))}>
-            <ProductThumb src={product.imageUrl} alt={product.name} size={48} />
-            <span className="tubu-mg-row-text">
-              <Text variant="body-sm" as="span" className="tubu-mg-one-line">
-                {product.name}
-              </Text>
-              <Text variant="price-sm" as="span" numeric>
-                {formatVnd(product.price)}
-              </Text>
-            </span>
-          </button>
+          <div data-testid="mini-result-product">
+            <ProductTile view={miniProductView(product)} variant="line" href={miniProductPath.miniapp(product.slug, game)} />
+          </div>
         </div>
       )}
       <Heading as="h3" variant="title-sm" font="ui">

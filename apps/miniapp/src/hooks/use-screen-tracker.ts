@@ -14,6 +14,7 @@ export const MINI_DYNAMIC_ROUTES = [
   '/feed/events',
   '/feed/leaderboard',
   '/feed/:id',
+  '/game/play/:game',
   '/group-buy/:id',
   '/order/:code',
   '/product/:slug',

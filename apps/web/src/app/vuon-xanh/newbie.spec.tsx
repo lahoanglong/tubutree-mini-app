@@ -36,6 +36,7 @@ vi.mock('@/lib/core-http', () => ({
       state.calls.push({ method: 'get', path });
       if (state.fail.delete(path)) throw new Error('mất mạng');
       if (path === '/config/public') return { waste: { enabled: false } };
+      if (path === '/game/mini/today') throw Object.assign(new Error('GAME_DISABLED'), { status: 404 });
       if (path in state.data) return state.data[path];
       throw new Error(`chưa mock ${path}`);
     },

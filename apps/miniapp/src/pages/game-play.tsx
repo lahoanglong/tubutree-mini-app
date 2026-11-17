@@ -11,7 +11,7 @@ const MiniRoundShell = lazy(() => import('../components/game/mini/mini-round-she
 /** Màn chơi một game mini (`/game/play/:game`, cặp web `/vuon-xanh/choi/:game`). Khung ván và bàn chơi là chunk lười riêng. */
 export default function GamePlayPage() {
   const { game } = useParams<{ game?: string }>();
-  const navigate = useSmartNavigate();
+  const goSmart = useSmartNavigate();
   return (
     <Page style={{ background: 'var(--color-bg-canvas)' }}>
       {isPlayableMiniGame(game) ? (
@@ -21,7 +21,7 @@ export default function GamePlayPage() {
       ) : (
         <>
           <PageHeader title={gameCopy('entry.title')} />
-          <EmptyState art="sprout" heading={gameCopy('notFound')} ctaLabel={gameCopy('result.done')} onCta={() => navigate('/game')} />
+          <EmptyState art="sprout" heading={gameCopy('notFound')} ctaLabel={gameCopy('result.done')} onCta={() => goSmart('/game')} />
         </>
       )}
     </Page>

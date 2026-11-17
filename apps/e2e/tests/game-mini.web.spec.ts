@@ -132,7 +132,7 @@ test.describe('Web 1440px', () => {
     await expect(source).toHaveAttribute('href', 'https://www.moitruong.gov.vn/phan-loai-rac');
     await expect(source).toHaveAttribute('target', '_blank');
     await expect(source).toHaveAttribute('rel', /noopener/);
-    await expect(page.getByTestId('mini-result-product')).toHaveAttribute('href', `/san-pham/${QUIZ_PRODUCT.slug}?entrySource=game:daily_quiz`);
+    await expect(page.getByTestId('mini-result-product').locator('a').first()).toHaveAttribute('href', `/san-pham/${QUIZ_PRODUCT.slug}?entrySource=game:daily_quiz`);
     await expectTargets44(page.getByTestId('mini-result'));
     await expectNoHorizontalOverflow(page);
   });
