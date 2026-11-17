@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import { Page, useNavigate, useSnackbar } from 'zmp-ui';
+import { useNavigate, useSnackbar } from 'zmp-ui';
 import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gift, Info, Leaf, Sprout, Ticket } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -39,7 +39,6 @@ import { Card } from '../components/ui/card';
 import { ErrorState } from '../components/ui/empty-state';
 import { Icon } from '../components/ui/icon';
 import { ListRow } from '../components/ui/list-row';
-import { PageHeader } from '../components/ui/page-header';
 import { ProgressBar } from '../components/ui/progress-bar';
 import { SegmentedTabs } from '../components/ui/segmented-tabs';
 import { Skeleton } from '../components/ui/skeleton';
@@ -419,20 +418,11 @@ function GuestRewards() {
   );
 }
 
-/** Thân Kho quà dùng chung cho trang `/rewards` và tab Đổi quà của Ưu đãi (một nguồn, không chép logic đổi quà). */
+/** Thân Kho quà ở tab Đổi quà của Ưu đãi (`/rewards` cũ chỉ còn là chuyển hướng tới tab này). */
 export function RewardsView() {
   return (
     <AuthGate guest={<GuestRewards />}>
       <RewardsBody />
     </AuthGate>
-  );
-}
-
-export default function RewardsPage() {
-  return (
-    <Page style={{ background: 'var(--color-bg-canvas)' }}>
-      <PageHeader title="Kho quà" />
-      <RewardsView />
-    </Page>
   );
 }

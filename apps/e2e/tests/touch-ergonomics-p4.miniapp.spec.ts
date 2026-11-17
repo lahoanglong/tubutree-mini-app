@@ -62,12 +62,13 @@ for (const width of NARROW_WIDTHS) {
       mockCollectableMine(api, { claimed: [], newCustomerOnly: [] });
       mockWallet(api, WALLET);
       mockCouponHistory(api);
-      for (const [tab, name, ready] of [
-        ['', 'Nhận mã', 'button:has-text("Lưu mã")'],
-        ['?tab=mine', 'Mã của tôi', '[role="group"]'],
-        ['?tab=history', 'Đã dùng–hết hạn', '[role="group"]'],
+      // Mã giảm giá nằm trong hub Ưu đãi: kho mã mở cả, ví, ví kèm lịch sử mở.
+      for (const [query, name, ready] of [
+        ['?codes=all', 'Nhận mã', 'button:has-text("Lưu mã")'],
+        ['?tab=wallet', 'Mã của tôi', '[role="group"]'],
+        ['?tab=wallet&history=1', 'Đã dùng–hết hạn', '[role="group"]'],
       ] as const) {
-        await page.goto(`/vouchers${tab}`);
+        await page.goto(`/offers${query}`);
         await expect(page.locator(ready).first()).toBeVisible({ timeout: 15_000 });
         await expectClean(page, `Mã giảm giá (${name})`, width);
       }

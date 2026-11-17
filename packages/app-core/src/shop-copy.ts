@@ -326,6 +326,8 @@ export const SHOP_COPY: Record<string, string> = {
   'offers.openGarden': 'Mở tab Vườn Xanh',
   'offers.walletMore': 'Nhận thêm mã',
   'offers.walletHistory': 'Mã đã dùng, hết hạn',
+  // Nút cuối kho mã đang mở cả ở Săn mã (`?codes=all`), gập về 3 mã đầu.
+  'offers.codesCollapse': 'Thu gọn',
 
   // Combo và mua kèm
   'combo.title': 'Combo tiết kiệm',
@@ -889,6 +891,11 @@ export const SHOP_COPY: Record<string, string> = {
   // Chấm nhắc ở thanh đáy (cùng cờ nhiệm vụ hằng ngày): chữ đọc của tab có chấm.
   'nav.gardenDot': '{name}, có việc hôm nay',
   'nav.profileDot': '{name}, có thông báo chưa đọc',
+  // Trang Điểm Xanh: đổi quà và mã nằm ở hub Ưu đãi nên chỉ còn một dòng dẫn sang; luật kiếm/tiêu nằm trong một mục gập.
+  'loyalty.offersRowTitle': 'Đổi quà & mã giảm giá',
+  'loyalty.offersRowSub': 'Đổi Điểm Xanh lấy mã giảm giá và quà',
+  'loyalty.offersRowCount': 'Bạn đang có {n} mã giảm giá',
+  'loyalty.rulesTitle': 'Cách kiếm và dùng Điểm Xanh',
 };
 
 /** Thuật ngữ không được xuất hiện trong chữ hiển thị cho khách; `use` là chữ thay thế. Bảng gốc: ux-copy mục D2 và thiết kế §4 Q5. */

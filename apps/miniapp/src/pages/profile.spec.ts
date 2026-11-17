@@ -1,38 +1,15 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 
-vi.mock('zmp-ui', () => ({
-  Box: () => null, Page: () => null, Text: () => null, Button: () => null, Avatar: () => null, Spinner: () => null,
-  useNavigate: () => () => undefined, useSnackbar: () => ({ openSnackbar: () => undefined }),
-}));
-vi.mock('zmp-sdk/apis', () => ({ vibrate: async () => ({}), setStorage: async () => ({}), getStorage: async () => ({}), removeStorage: async () => ({}) }));
-
-import { MENU } from './profile';
-
-describe('Hub Cá nhân gọn (KP mục 3, phương án A)', () => {
-  const targets = MENU.flatMap((s) => s.items.map((i) => i.to));
-  it('ba nhóm: Kiếm tiền cùng Tubu, Tài khoản, Hỗ trợ', () => {
-    expect(MENU.map((s) => s.group)).toEqual(['Kiếm tiền cùng Tubu', 'Tài khoản', 'Hỗ trợ']);
-  });
-  it('"Kiếm tiền cùng Tubu" gom CTV, Học viện, Đại lý', () => {
-    const earn = MENU.find((s) => s.group === 'Kiếm tiền cùng Tubu');
-    expect(earn?.items.map((i) => i.to)).toEqual(['/affiliate', '/academy', '/dealer']);
-  });
-  it('đã chuyển sang tab Ưu đãi / dải trạng thái đơn / Trang chủ: không còn Đơn hàng, Đặt định kỳ, Ví, Điểm Xanh, Đổi rác, Mua chung, Tích điểm đơn sàn, Cộng đồng trong menu', () => {
-    for (const t of ['/orders', '/subscriptions', '/wallet', '/loyalty', '/recycle', '/group-buy', '/points/scan', '/cashback', '/feed']) {
-      expect(targets).not.toContain(t);
-    }
-  });
-  it('giữ Yêu thích, Sổ địa chỉ, Thông báo, Cài đặt, Chat, Về Tubu Tree', () => {
-    expect(targets).toEqual(expect.arrayContaining(['/wishlist', '/addresses', '/notifications', '/settings', '/chat', '/about']));
-  });
-  it('không còn trùng đích trong menu', () => {
-    expect(new Set(targets).size).toBe(targets.length);
-  });
-  it('mọi nhãn trong hub không nhắc "sàn ngoài"', () => {
-    const labels = MENU.flatMap((s) => s.items.map((i) => `${i.label} ${i.hint ?? ''}`));
-    expect(labels.filter((l) => /sàn ngoài|cashback/i.test(l))).toEqual([]);
+// Dòng menu Cá nhân (nhãn, thứ tự, đích, theo vai trò/cờ) có spec ở packages/app-core/src/profile-menu.spec.ts; web dựng từ cùng hàm.
+describe('Cá nhân dựng dòng từ app-core', () => {
+  it('pages/profile.tsx lấy dòng và hàng đơn từ profile-menu, không tự khai danh sách mục', () => {
+    const src = readFileSync(join(process.cwd(), 'src/pages/profile.tsx'), 'utf8');
+    expect(src).toMatch(/buildProfileMenu\(/);
+    expect(src).toMatch(/PROFILE_ORDER_ROW\.map/);
+    expect(src).not.toMatch(/export const MENU/);
+    expect(src).not.toMatch(/CASHBACK_ENABLED|SUBSCRIPTIONS_IN_MINIAPP|'\/notifications'/);
   });
 });
 
@@ -48,9 +25,8 @@ describe('lối vào Đổi rác không thêm lệnh gọi mạng (§16.1)', () 
     expect(src).toMatch(/enabled: authed && mayHaveDesk/);
     expect(src).toMatch(/const mayHaveDesk = isStaffOrAdmin \|\| \(user\?\.role === 'DEALER' && cfg\.waste\.enabled\)/);
   });
-  it('pages/loyalty.tsx chỉ hỏi danh sách yêu cầu khi chương trình tắt (để giữ lối xem lịch sử), không gọi /waste/me', () => {
+  it('pages/loyalty.tsx không còn lối Đổi rác (lối vào ở Cá nhân và Ưu đãi) nên không gọi API đổi rác nào', () => {
     const src = readFileSync(join(SRC, 'pages/loyalty.tsx'), 'utf8');
-    expect(src).not.toMatch(/getWasteMe|useWasteMe/);
-    expect(src).toMatch(/enabled: authed && wasteOff/);
+    expect(src).not.toMatch(/getWasteMe|useWasteMe|listWasteRequests|waste-api/);
   });
 });

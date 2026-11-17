@@ -5,7 +5,7 @@ import { blockingViolations, runAxe } from './support/axe';
 import { COLLECTABLE, mockCollectable, mockCollectableMine, mockCouponHistory, mockWallet } from './support/voucher-mocks';
 
 /**
- * W48B, Mini App ở 320/375/393px: chip lọc làm tab Nhận mã rỗng thì khối trạng thái rỗng có nút "Xem tất cả mã"; bấm đặt lại về "Tất cả", phiếu hiện
+ * W48B, Mini App ở 320/375/393px, kho mã mở cả ở hub Ưu đãi (`/offers?codes=all`, thay trang Mã giảm giá cũ): chip lọc làm khối Nhận mã rỗng thì khối trạng thái rỗng có nút "Xem tất cả mã"; bấm đặt lại về "Tất cả", phiếu hiện
  * lại và focus về chip "Tất cả". Kho chỉ có mã giảm tiền hạn dài, nên chip "Miễn phí giao hàng" luôn rỗng. API mock toàn bộ.
  */
 const VIEWPORTS = [
@@ -31,8 +31,8 @@ for (const vp of VIEWPORTS) {
     });
 
     test('chip không khớp mã nào: nút "Xem tất cả mã" cao từ 44px, bấm về Tất cả, phiếu hiện lại, focus ở chip Tất cả, không tràn ngang, axe sạch', async ({ page }) => {
-      await page.goto('/vouchers');
-      const panel = page.getByRole('tabpanel', { name: 'Nhận mã' });
+      await page.goto('/offers?codes=all');
+      const panel = page.getByRole('region', { name: 'Nhận mã', exact: true });
       await expect(panel.getByRole('group').first()).toBeVisible({ timeout: 15_000 });
 
       await chip(page, 'Miễn phí giao hàng').click();

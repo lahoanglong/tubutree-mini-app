@@ -135,15 +135,17 @@ describe('/tai-khoan — danh sách đơn nhiều hơn 20 (BUYERWEB-8)', () => {
 });
 
 describe('/tai-khoan — thẻ hồ sơ (D5-14)', () => {
-  it('tên lấy từ /me (không phải ảnh chụp lúc đăng nhập) và thẻ dẫn tới trang sửa hồ sơ', async () => {
+  it('tên lấy từ /me (không phải ảnh chụp lúc đăng nhập); thẻ danh tính không còn là link tới trang sửa hồ sơ', async () => {
     const { container } = await mount();
-    const head = container.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/ho-so"]')!;
+    const head = container.querySelector<HTMLElement>('[data-surface="inverse"]')!;
     expect(head.textContent).toContain('Nguyễn An Khang');
-    expect(head.textContent).toContain('Sửa hồ sơ');
+    expect(head.querySelector('a')).toBeNull();
+    expect(container.querySelector('a[href="/tai-khoan/ho-so"]')).toBeNull();
+    expect(container.textContent).not.toContain('Sửa hồ sơ');
     expect(byText(container, 'button', 'Sửa tên')).toBeNull();
   });
 
-  it('vẫn đúng một h1 và không nhảy cấp heading khi có thêm các nhóm menu', async () => {
+  it('vẫn đúng một h1 và không nhảy cấp heading khi có thẻ danh sách menu', async () => {
     const { container } = await mount();
     expect(headingProblems(container)).toEqual([]);
   });

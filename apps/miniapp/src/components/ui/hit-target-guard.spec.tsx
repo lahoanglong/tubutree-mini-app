@@ -24,6 +24,7 @@ import { CartVoucherHintStrip } from './cart-voucher-hint-strip';
 import { FrequentlyBoughtTogether } from './frequently-bought-together';
 import { QuickReorderStrip } from './quick-reorder-strip';
 import { ProductTrustStrip } from './product-trust-strip';
+import { LoyaltyRulesCard } from '../loyalty/loyalty-rules-card';
 
 // `SectionHeader` (tiêu đề của dải) gọi useNavigate của ZaUI, cần router thật; vùng chạm không phụ thuộc nó.
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => vi.fn() }));
@@ -110,6 +111,7 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['OrderTimelineTracker (nút Sao chép thông tin đơn)', () => <OrderTimelineTracker steps={buildOrderTimelineSteps('SHIPPING')} shareText="Đơn hàng Tubu Tree A" />],
     ['AffiliateFeaturedProducts (nút Chép link giới thiệu)', () => <AffiliateFeaturedProducts products={featured} />],
     ['AffiliateFeaturedProducts lỗi (nút Thử lại)', () => <AffiliateFeaturedProducts products={null} error onRetry={() => {}} />],
+    ['LoyaltyRulesCard (nút gập Cách kiếm và dùng Điểm Xanh)', () => <LoyaltyRulesCard lines={['A']} />],
   ];
 
   it.each(cases)('%s', (_name, ui) => {

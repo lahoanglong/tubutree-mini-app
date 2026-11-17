@@ -1,21 +1,18 @@
-import { ctvMenuEntry } from '@tubutree/app-core/storefront-signup';
-import { BRAND_OWNER_TITLE } from '@tubutree/app-core/client-copy';
 import { Page, useLocation, useNavigate, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
-  Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Pencil, Bell, Store, Settings, Info, ChevronRight, Copy, Share2, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, BadgeDollarSign, CreditCard, Package, Truck, PackageCheck, Recycle, Repeat, type LucideIcon,
+  Bell, Heart, MapPin, MessageCircle, Leaf, GraduationCap, Users, Store, Settings, Info, ChevronDown, ChevronRight, Copy, Share2, Sparkles, BookOpen, ShieldCheck, CalendarClock, Wallet, CreditCard, Package, Truck, PackageCheck, Recycle, Gift, Ticket, CircleHelp, type LucideIcon,
 } from 'lucide-react';
-import { canSeeAcademy, orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
+import { orderRowLabel, profileCopy } from '@tubutree/app-core/account-copy';
 import { STAT_VALUE_LINE_HEIGHT, STAT_VALUE_LOOKS, statValueFits, statValueStart } from '@tubutree/app-core/account-stat';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { inviteBody, inviteLink, inviteShareText } from '@tubutree/app-core/commerce/invite-card';
 import { shareDescription, welcomeOfferOf } from '@tubutree/app-core/commerce/share-offer';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { CASHBACK_ENABLED, SUBSCRIPTIONS_IN_MINIAPP } from '../utils/features';
-import { ORDER_STATUS_ROW } from '@tubutree/app-core/home-layout';
-import { DESK_ENTRY_LABEL, PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
+import { buildProfileMenu, PROFILE_MENU_COPY, PROFILE_ORDER_ROW, type ProfileLinkKey, type ProfileMenuLink, type ProfileRowKey } from '@tubutree/app-core/profile-menu';
+import { PROFILE_REFERRAL_SECTION } from '@tubutree/app-core/profile-sections';
 import { useAuthStore } from '../store/auth';
 import { getCoupons, getLoyalty, getReferral, getWallet } from '../services/account-api';
 import { ProfileAvatar } from '../components/account/profile-avatar';
@@ -39,6 +36,7 @@ import { isNotFoundError } from '../services/api';
 import { getDealerMe } from '../services/dealer-api';
 import { getDeskPoints, WASTE_QUERY_KEYS } from '../services/waste-api';
 import { useMeSummary } from '../hooks/use-me-summary';
+import { useRecycleOpenRequests } from '../hooks/use-recycle-open-requests';
 import { getAffiliateMe } from '../services/affiliate-api';
 import { supportChatSummaryQueryOptions } from '../services/support-chat-api';
 import { useAiAdvisorEnabled, usePublicConfig } from '../hooks/use-public-config';
@@ -48,53 +46,65 @@ import { copyText } from '../utils/clipboard';
 import { pointsSummary } from '../utils/points-lots';
 import { miniAppLink } from '../utils/miniapp-link';
 
-interface MenuItem {
-  Icon: LucideIcon;
-  label: string;
-  to: string;
-  hint?: string;
-}
-
 const PAGE_TITLE = 'Cá nhân';
 
-/** Trang Cá nhân gọn (KP mục 3): Đơn, Điểm, Ví, Mã giảm giá và mọi thứ về tiền/quà đã chuyển sang Ưu đãi hoặc dải trạng thái đơn. */
-export const MENU: { group: string; items: MenuItem[] }[] = [
-  {
-    group: homeCopy.profile.groupEarn,
-    items: [
-      { Icon: Users, label: homeCopy.earn.affiliate.label, to: '/affiliate', hint: homeCopy.earn.affiliate.hint },
-      { Icon: GraduationCap, label: homeCopy.earn.academy.label, to: '/academy', hint: homeCopy.earn.academy.hint },
-      { Icon: Store, label: homeCopy.earn.dealer.label, to: '/dealer', hint: homeCopy.earn.dealer.hint },
-    ],
-  },
-  {
-    group: homeCopy.profile.groupAccount,
-    items: [
-      { Icon: Heart, label: 'Sản phẩm yêu thích', to: '/wishlist' },
-      { Icon: MapPin, label: 'Sổ địa chỉ', to: '/addresses' },
-      { Icon: Bell, label: 'Thông báo', to: '/notifications' },
-      { Icon: Settings, label: 'Cài đặt', to: '/settings' },
-    ],
-  },
-  {
-    group: homeCopy.profile.groupSupport,
-    items: [
-      { Icon: MessageCircle, label: 'Chat với Tubu Tree', to: '/chat' },
-      { Icon: Sparkles, label: 'Trợ lý AI 24/7', to: '/ai-advisor', hint: 'Tư vấn sản phẩm' },
-      { Icon: BookOpen, label: 'Câu chuyện thương hiệu', to: '/brand-story' },
-      { Icon: Info, label: 'Về Tubu Tree & Hỗ trợ', to: '/about' },
-    ],
-  },
-];
+const ROW_ICON: Record<ProfileRowKey, LucideIcon> = {
+  notifications: Bell,
+  offers: Ticket,
+  invite: Gift,
+  addresses: MapPin,
+  wishlist: Heart,
+  recycle: Recycle,
+  support: CircleHelp,
+  settings: Settings,
+  partner: Store,
+};
+
+const LINK_ICON: Record<ProfileLinkKey, LucideIcon> = {
+  chat: MessageCircle,
+  ai: Sparkles,
+  about: Info,
+  brandStory: BookOpen,
+  ctv: Users,
+  academy: GraduationCap,
+  dealer: Store,
+  brandOwner: Store,
+  staff: CalendarClock,
+  payroll: Wallet,
+  desk: Recycle,
+  admin: ShieldCheck,
+};
 
 const ORDER_ROW_ICON: Record<string, LucideIcon> = {
   pending_payment: CreditCard,
   processing: Package,
   shipping: Truck,
   delivered: PackageCheck,
-  subscriptions: Repeat,
 };
 
+const DIVIDER = '1px solid var(--color-border-subtle)';
+
+function RowIcon({ icon }: { icon: LucideIcon }) {
+  return (
+    <span style={{ width: 34, height: 34, borderRadius: 'var(--radius-control)', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
+      <Icon icon={icon} size="md" tone="brand" />
+    </span>
+  );
+}
+
+function UnreadDot({ testId, label }: { testId: string; label?: string }) {
+  return (
+    <span
+      data-testid={testId}
+      role={label ? 'img' : undefined}
+      aria-label={label}
+      aria-hidden={label ? undefined : true}
+      style={{ width: 10, height: 10, flex: '0 0 auto', borderRadius: 'var(--radius-pill)', background: 'var(--color-action-danger-bg)' }}
+    />
+  );
+}
+
+/** Trang Cá nhân: thẻ danh tính (không bấm), hai số dư, hàng đơn bốn ô, rồi một thẻ dòng gọn từ `buildProfileMenu` (cùng dòng với web `/tai-khoan`). */
 export default function ProfilePage() {
   const navigate = useNavigate();
   const goSmart = useSmartNavigate();
@@ -111,19 +121,20 @@ export default function ProfilePage() {
   const authed = status === 'authenticated';
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const summaryQ = useMeSummary();
-  const unreadCount = summaryQ.data?.unreadNotifications ?? 0;
   const walletQ = useQuery({ queryKey: ['wallet'], queryFn: getWallet, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const referralQ = useQuery({ queryKey: ['referral'], queryFn: getReferral, enabled: authed });
   const badgesQ = useBadges();
-  const referralRef = useRef<HTMLElement>(null);
+  const referralRef = useRef<HTMLDivElement>(null);
   const wantsReferral = new URLSearchParams(location.search).get('section') === PROFILE_REFERRAL_SECTION;
   const referralReady = referralQ.isSuccess || referralQ.isError;
+  const [open, setOpen] = useState<Partial<Record<ProfileRowKey, boolean>>>(() => (wantsReferral ? { invite: true } : {}));
+  useEffect(() => {
+    if (wantsReferral) setOpen((o) => (o.invite ? o : { ...o, invite: true }));
+  }, [wantsReferral]);
   useEffect(() => {
     if (wantsReferral && referralReady) referralRef.current?.scrollIntoView?.({ block: 'start' });
   }, [wantsReferral, referralReady]);
-  // Mini App tạm không bán giao định kỳ nên hàng đơn bỏ ô Định kỳ khi cờ tắt; web vẫn có ô này.
-  const orderRow = SUBSCRIPTIONS_IN_MINIAPP ? ORDER_STATUS_ROW : ORDER_STATUS_ROW.filter((r) => r.key !== 'subscriptions');
 
   const ownsBrandQ = useQuery({ queryKey: ['auth-me', 'flags'], queryFn: getAuthMeFlags, select: (f) => f.ownsBrand, enabled: authed, retry: false });
   const hasDeskPointQ = useQuery({ queryKey: ['auth-me', 'flags'], queryFn: getAuthMeFlags, select: (f) => f.hasDeskPoint, enabled: authed, retry: false });
@@ -141,57 +152,19 @@ export default function ProfilePage() {
   // Chỉ vai không rõ quyền CTV (đại lý, nhân viên, admin) mới cần hỏi; CTV và khách thường suy được từ vai trò.
   const needsCtvProbe = status === 'authenticated' && !!user?.role && user.role !== 'CUSTOMER' && user.role !== 'AFFILIATE';
   const ctvAccessQ = useQuery({ queryKey: ['affiliate-me'], queryFn: getAffiliateMe, enabled: needsCtvProbe, retry: false });
-  const dealerItem: MenuItem = dealerQ.data?.isDealer || dealerQ.data?.status === 'APPROVED'
-    ? { Icon: Store, label: 'Kênh đại lý', to: '/dealer', hint: dealerQ.data?.tier?.name ?? homeCopy.earn.dealer.hint }
-    : dealerQ.data?.status === 'PENDING'
-      ? { Icon: Store, label: 'Hồ sơ đại lý', to: '/dealer', hint: 'Đang chờ duyệt' }
-      : { Icon: Store, label: homeCopy.earn.dealer.label, to: '/dealer', hint: homeCopy.earn.dealer.hint };
   const aiEnabled = useAiAdvisorEnabled();
   const cfg = usePublicConfig();
   const chatEnabled = cfg.chat?.enabled === true;
   const chatSummaryQ = useQuery({ ...supportChatSummaryQueryOptions(), enabled: authed && chatEnabled });
   const chatUnread = chatEnabled && (chatSummaryQ.data?.unreadCount ?? 0) > 0;
+  const wasteEnabled = cfg.isLoaded && cfg.waste.enabled;
+  const recycleOpenRequests = useRecycleOpenRequests(authed, cfg.isLoaded && !cfg.waste.enabled);
   // Chỉ hỏi quầy khi có lý do (nhân viên/admin kho, đại lý, hoặc cờ hasDeskPoint của /auth/me cho nhân viên điểm đối tác mang vai CUSTOMER)
   // để khách thường không bị gọi thêm API. Cờ chung một lần gọi /auth/me với ownsBrand; cờ đổi rác tắt thì điểm đối tác không mở quầy.
   const isStaffOrAdmin = user?.role === 'STAFF' || user?.role === 'ADMIN';
   const mayHaveDesk = isStaffOrAdmin || (user?.role === 'DEALER' && cfg.waste.enabled) || (hasDeskPointQ.data === true && cfg.waste.enabled);
   const deskQ = useQuery({ queryKey: WASTE_QUERY_KEYS.desk, queryFn: getDeskPoints, enabled: authed && mayHaveDesk, staleTime: 5 * 60_000, retry: false });
   const ownedBrand = ownsBrandQ.data === false ? null : ownedBrandQ.data;
-  const ctvEntry = ctvMenuEntry(user?.role, ctvAccessQ.data);
-
-  // Hàng huy hiệu thay chỗ dòng Câu chuyện thương hiệu (vẫn mở được từ trang sản phẩm và trang thương hiệu) để Cá nhân không dài thêm.
-  const badgesOn = badgesQ.data?.enabled === true;
-  const baseMenu = MENU.map((s) => ({
-    ...s,
-    items: s.items
-      .filter((it) => (aiEnabled || it.to !== '/ai-advisor') && (chatEnabled || it.to !== '/chat') && (canSeeAcademy(user?.role) || it.to !== '/academy') && (!badgesOn || it.to !== '/brand-story'))
-      .map((it) => {
-        if (it.to === '/dealer') return dealerItem;
-        if (it.to === '/affiliate') return ctvEntry ? { ...it, label: ctvEntry.label, hint: ctvEntry.hint } : null;
-        return it;
-      })
-      .filter((it): it is MenuItem => it !== null),
-  })).map((s) =>
-    CASHBACK_ENABLED && s.group === homeCopy.profile.groupAccount
-      ? { ...s, items: [...s.items.slice(0, 3), { Icon: BadgeDollarSign, label: 'Hoàn tiền sàn ngoài', to: '/cashback' }, ...s.items.slice(3)] }
-      : s,
-  ).map((s) =>
-    ownedBrand && s.group === homeCopy.profile.groupEarn
-      ? { ...s, items: [...s.items, { Icon: Store, label: BRAND_OWNER_TITLE, to: '/brand-owner', hint: ownedBrand.name }] }
-      : s,
-  );
-  const workItems: MenuItem[] = [];
-  if (isStaffOrAdmin) {
-    workItems.push({ Icon: CalendarClock, label: 'Ca làm & chấm công', to: '/staff', hint: 'Đăng ký ca, chấm công' });
-    workItems.push({ Icon: Wallet, label: 'Lương của tôi', to: '/my-payroll', hint: 'Xem lương & thông tin nhận' });
-  }
-  if (deskQ.data && deskQ.data.length > 0) {
-    workItems.push({ Icon: Recycle, label: DESK_ENTRY_LABEL, to: '/recycle/desk', hint: deskQ.data.map((p) => p.name).join(', ') });
-  }
-  if (user?.role === 'ADMIN') {
-    workItems.push({ Icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin', hint: 'Cấp quyền, duyệt ca, lương' });
-  }
-  const menu = workItems.length > 0 ? [...baseMenu, { group: homeCopy.profile.groupWork, items: workItems }] : baseMenu;
 
   if (phase !== 'authenticated' || !user) {
     return (
@@ -230,6 +203,22 @@ export default function ProfilePage() {
   const referralRules = { referrerPoints: referral?.referrerRewardPoints, minOrderAmount: referral?.minOrderAmount, windowDays: referral?.windowDays };
   const inviteUrl = code ? inviteLink(miniAppLink('/'), code) : '';
 
+  const rows = buildProfileMenu({
+    role: user.role,
+    chatEnabled,
+    aiEnabled,
+    wasteEnabled,
+    recycleOpenRequests,
+    badgesEnabled: badgesQ.data?.enabled === true,
+    hasReferralCode: !!code,
+    couponCount: couponsQ.data?.length,
+    unreadNotifications: summaryQ.data?.unreadNotifications,
+    dealer: dealerQ.data,
+    ownedBrandName: ownedBrand?.name,
+    ctvAccess: ctvAccessQ.data,
+    deskPointNames: deskQ.data?.map((p) => p.name),
+  });
+
   const copyReferral = () => {
     if (!code) return;
     void referralLock.run('copy', async () => {
@@ -260,9 +249,67 @@ export default function ProfilePage() {
 
   const countFor = (key: string): number | null => {
     if (!summaryQ.data) return null;
-    if (key === 'subscriptions') return summaryQ.data.activeSubscriptions;
     return summaryQ.data.orders[key as keyof typeof summaryQ.data.orders] ?? null;
   };
+
+  const go = (to: string) => {
+    haptic('light');
+    // Cá nhân → Ưu đãi là tab gốc sang tab gốc: thay mục hiện tại, tránh lịch sử [/, /profile, /offers] mà BottomNav sau đó nhân bản.
+    if (to === '/offers') goSmart(to);
+    else navigate(to);
+  };
+
+  const linkRows = (items: ProfileMenuLink[]) =>
+    items.map((item) => (
+      <ListRow
+        key={item.key}
+        icon={<RowIcon icon={LINK_ICON[item.key]} />}
+        title={item.label}
+        subtitle={item.hint}
+        trailing={
+          item.key === 'chat' && chatUnread ? (
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              <UnreadDot testId="chat-unread-dot" label={PROFILE_MENU_COPY.chatUnread} />
+              <Icon icon={ChevronRight} size="sm" tone="muted" />
+            </span>
+          ) : (
+            'chevron'
+          )
+        }
+        onPress={() => go(item.mini)}
+        style={{ padding: '12px 12px 12px 24px', borderTop: DIVIDER }}
+      />
+    ));
+
+  const invitePanel = (
+    <div style={{ padding: '0 12px 12px' }}>
+      <Text variant="body-sm" tone="secondary" as="p">
+        {inviteBody(welcomeOffer, referralRules, earnsPoints)}
+      </Text>
+      {referral && earnsPoints && (referral.successCount > 0 || referral.earnedPoints > 0) && (
+        <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }}>
+          {homeCopy.profile.referralStats(referral.successCount, formatPoints(referral.earnedPoints))}
+        </Text>
+      )}
+      {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
+      {referral?.nextMilestone && earnsPoints && referral.nextMilestone.count > referral.successCount && (
+        <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>
+          {homeCopy.profile.referralMilestone(referral.nextMilestone.count - referral.successCount, formatPoints(referral.nextMilestone.bonusPoints))}
+        </Text>
+      )}
+      <Text variant="caption" as="p" style={{ marginTop: 10, color: 'var(--color-action-secondary-fg)' }}>
+        {fillCopy('invite.codeLabel')}: <strong>{code}</strong>
+      </Text>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
+        <Button fullWidth icon={Share2} loading={referralLock.active === 'share'} aria-disabled={referralLock.busy || undefined} onPress={shareReferral}>
+          {fillCopy('invite.shareZalo')}
+        </Button>
+        <Button fullWidth variant="secondary" icon={Copy} loading={referralLock.active === 'copy'} aria-disabled={referralLock.busy || undefined} onPress={copyReferral}>
+          {fillCopy('invite.copyLink')}
+        </Button>
+      </div>
+    </div>
+  );
 
   return (
     <Page className="page tubu-nums" style={{ background: 'var(--color-bg-canvas)', paddingBottom: 100 }}>
@@ -273,42 +320,15 @@ export default function ProfilePage() {
           background: 'linear-gradient(135deg, var(--color-action-primary-bg), var(--color-action-primary-bg-pressed))',
           color: 'var(--color-text-inverse)',
           padding: '16px 16px 28px',
-          position: 'relative',
         }}
       >
-        {chatEnabled && (
-          <button
-            type="button"
-            aria-label={chatUnread ? 'Chat với Tubu Tree, có tin mới' : 'Chat với Tubu Tree'}
-            className="tubu-press"
-            onClick={() => {
-              haptic('light');
-              navigate('/chat');
-            }}
-            style={{ position: 'absolute', top: 8, right: 8, width: 44, height: 44, border: 'none', borderRadius: 'var(--radius-pill)', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
-          >
-            <Icon icon={MessageCircle} size="lg" tone="inverse" />
-            {chatUnread && (
-              <span data-testid="profile-chat-dot" aria-hidden style={{ position: 'absolute', top: 8, right: 8, width: 10, height: 10, borderRadius: 'var(--radius-pill)', background: 'var(--color-action-danger-bg)', border: '1.5px solid var(--color-action-primary-bg)' }} />
-            )}
-          </button>
-        )}
-        <div
-          role="button"
-          {...rowKeyboardProps()}
-          className="tubu-press"
-          onClick={() => {
-            haptic('light');
-            navigate('/edit-profile');
-          }}
-          style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44, paddingRight: chatEnabled ? 44 : 0 }}
-        >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, minHeight: 44 }}>
           <ProfileAvatar size={56} name={user.fullName} src={user.avatarUrl} />
           <div style={{ flex: 1, minWidth: 0 }}>
             <Heading variant="title-md" as="div" tone="inverse" style={{ lineHeight: 1.2 }}>
               {user.fullName ?? 'Khách Tubu'}
             </Heading>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', alignItems: 'center', marginTop: 6 }}>
               {tierName ? (
                 <Badge tone="brand" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 4, minWidth: TIER_SLOT_WIDTH }}>
                   <Icon icon={Leaf} size="sm" tone="brand" />
@@ -317,13 +337,6 @@ export default function ProfilePage() {
               ) : !tierFailed ? (
                 <span aria-hidden="true" style={{ display: 'inline-block', width: TIER_SLOT_WIDTH, height: 24, borderRadius: 'var(--radius-pill)', background: 'color-mix(in srgb, var(--color-text-inverse) 28%, transparent)' }} />
               ) : null}
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px', borderRadius: 'var(--radius-pill)', border: '1px solid var(--color-text-inverse)' }}>
-                <Icon icon={Pencil} size="sm" tone="inverse" />
-                <Text variant="label" tone="inverse">
-                  {homeCopy.profile.editProfile}
-                </Text>
-                <Icon icon={ChevronRight} size="sm" tone="inverse" />
-              </span>
             </div>
           </div>
         </div>
@@ -348,10 +361,9 @@ export default function ProfilePage() {
         )}
       </div>
 
-      <div style={{ padding: '0 12px', display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8, marginTop: -20, position: 'relative' }}>
+      <div style={{ padding: '0 12px', display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 8, marginTop: -20, position: 'relative' }}>
         <Stat label={homeCopy.profile.statPoints} value={formatPoints(pointsTotal)} onClick={() => navigate('/loyalty')} />
         <Stat label={homeCopy.profile.statWallet} value={formatVnd(walletQ.data?.walletBalance ?? user.walletBalance)} onClick={() => navigate('/wallet', { state: { from: '/profile' } })} />
-        <Stat label={homeCopy.profile.statCoupons} value={couponsQ.data ? homeCopy.profile.couponsCount(couponsQ.data.length) : '—'} onClick={() => goSmart('/offers?section=coupons')} />
       </div>
 
       <GuestLinkCard title={homeCopy.profile.guestTitle} body={homeCopy.profile.guestBody} cta={homeCopy.profile.guestCta} />
@@ -378,8 +390,8 @@ export default function ProfilePage() {
               <Icon icon={ChevronRight} size="sm" tone="brand" />
             </button>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${orderRow.length}, minmax(0, 1fr))`, gap: 4 }}>
-            {orderRow.map((r) => {
+          <div style={{ display: 'grid', gridTemplateColumns: `repeat(${PROFILE_ORDER_ROW.length}, minmax(0, 1fr))`, gap: 4 }}>
+            {PROFILE_ORDER_ROW.map((r) => {
               const n = r.counted ? countFor(r.key) : null;
               return (
                 <button
@@ -427,103 +439,81 @@ export default function ProfilePage() {
 
       <BadgeRow />
 
-      {code && (
-        <section id={PROFILE_REFERRAL_SECTION} ref={referralRef} aria-label={fillCopy('invite.title')} style={{ padding: '12px 16px 0' }}>
-          <Card padding={12}>
-            <Heading variant="title-sm" as="h2">
-              {fillCopy('invite.title')}
-            </Heading>
-            <Text variant="body-sm" tone="secondary" as="p" style={{ marginTop: 4 }}>
-              {inviteBody(welcomeOffer, referralRules, earnsPoints)}
-            </Text>
-            {referral && earnsPoints && (referral.successCount > 0 || referral.earnedPoints > 0) && (
-              <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 6 }}>
-                {homeCopy.profile.referralStats(referral.successCount, formatPoints(referral.earnedPoints))}
-              </Text>
-            )}
-            {/* Đã đủ hoặc vượt mốc (successCount cập nhật trước nextMilestone): không còn "Mời thêm 0/-2 bạn". */}
-            {referral?.nextMilestone && earnsPoints && referral.nextMilestone.count > referral.successCount && (
-              <Text variant="caption" tone="brand" as="p" style={{ marginTop: 4 }}>
-                {homeCopy.profile.referralMilestone(referral.nextMilestone.count - referral.successCount, formatPoints(referral.nextMilestone.bonusPoints))}
-              </Text>
-            )}
-            <Text variant="caption" as="p" style={{ marginTop: 10, color: 'var(--color-action-secondary-fg)' }}>
-              {fillCopy('invite.codeLabel')}: <strong>{code}</strong>
-            </Text>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginTop: 8 }}>
-              <Button
-                fullWidth
-                icon={Share2}
-                loading={referralLock.active === 'share'}
-                aria-disabled={referralLock.busy || undefined}
-                onPress={shareReferral}
-              >
-                {fillCopy('invite.shareZalo')}
-              </Button>
-              <Button
-                fullWidth
-                variant="secondary"
-                icon={Copy}
-                loading={referralLock.active === 'copy'}
-                aria-disabled={referralLock.busy || undefined}
-                onPress={copyReferral}
-              >
-                {fillCopy('invite.copyLink')}
-              </Button>
-            </div>
-          </Card>
-        </section>
-      )}
-
-      {menu.map((section) => (
-        <div key={section.group} style={{ margin: '12px 16px 0' }}>
-          <Text variant="label" tone="tertiary" as="h2" style={{ marginBottom: 6, marginLeft: 4 }}>
-            {section.group.toUpperCase()}
-          </Text>
-          <Card padding={0} style={{ overflow: 'hidden' }}>
-            {section.items.map((item, i) => (
-              <ListRow
-                key={item.to}
-                icon={
-                  <span style={{ width: 34, height: 34, borderRadius: 'var(--radius-control)', background: 'var(--color-bg-subtle)', display: 'grid', placeItems: 'center', flex: '0 0 auto' }}>
-                    <Icon icon={item.Icon} size="md" tone="brand" />
-                  </span>
-                }
-                title={item.label}
-                subtitle={item.hint}
-                trailing={
-                  item.to === '/notifications' && unreadCount > 0 ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <UnreadCount count={unreadCount} />
-                      <Icon icon={ChevronRight} size="sm" tone="muted" />
-                    </span>
-                  ) : item.to === '/chat' && chatUnread ? (
-                    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-                      <span data-testid="chat-unread-dot" role="img" aria-label="Có tin nhắn mới" style={{ width: 10, height: 10, borderRadius: 'var(--radius-pill)', background: 'var(--color-action-danger-bg)' }} />
-                      <Icon icon={ChevronRight} size="sm" tone="muted" />
-                    </span>
-                  ) : (
-                    'chevron'
-                  )
-                }
-                onPress={() => {
-                  haptic('light');
-                  navigate(item.to);
-                }}
-                style={{ padding: '12px 12px', borderTop: i === 0 ? 'none' : '1px solid var(--color-border-subtle)' }}
-              />
-            ))}
-          </Card>
-        </div>
-      ))}
+      <div style={{ margin: '12px 16px 0' }}>
+        <Card padding={0} style={{ overflow: 'hidden' }}>
+          {rows.map((row, i) => {
+            const borderTop = i === 0 ? 'none' : DIVIDER;
+            if (row.kind === 'link') {
+              return (
+                <ListRow
+                  key={row.key}
+                  icon={<RowIcon icon={ROW_ICON[row.key]} />}
+                  title={row.label}
+                  subtitle={row.hint}
+                  trailing="chevron"
+                  onPress={() => go(row.mini)}
+                  style={{ padding: 12, borderTop }}
+                />
+              );
+            }
+            const expanded = open[row.key] === true;
+            const panelId = `profile-${row.key}-panel`;
+            const unreadHere = row.key === 'support' && chatUnread && !expanded;
+            const isInvite = row.key === 'invite';
+            return (
+              <div key={row.key} id={isInvite ? PROFILE_REFERRAL_SECTION : undefined} ref={isInvite ? referralRef : undefined} style={{ borderTop }}>
+                <AccordionButton
+                  expanded={expanded}
+                  controls={panelId}
+                  ariaLabel={unreadHere ? PROFILE_MENU_COPY.unreadName(row.label) : undefined}
+                  onToggle={() => {
+                    haptic('light');
+                    setOpen((o) => ({ ...o, [row.key]: !expanded }));
+                  }}
+                >
+                  <ListRow
+                    icon={<RowIcon icon={ROW_ICON[row.key]} />}
+                    title={row.label}
+                    subtitle={row.hint}
+                    trailing={
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+                        {unreadHere && <UnreadDot testId="support-unread-dot" />}
+                        <Icon icon={ChevronDown} size="sm" tone="muted" style={expanded ? { transform: 'rotate(180deg)' } : undefined} />
+                      </span>
+                    }
+                    style={{ padding: 12 }}
+                  />
+                </AccordionButton>
+                <div id={panelId} hidden={!expanded}>
+                  {isInvite ? invitePanel : linkRows(row.children)}
+                </div>
+              </div>
+            );
+          })}
+        </Card>
+      </div>
     </Page>
   );
 }
 
-/**
- * Bề ngang chung của chỗ hạng thành viên (khung chờ và nhãn thật): hàng này xuống dòng khi nhãn + nút "Chỉnh sửa" không còn vừa (320px chỉ rộng ~220px). Nếu khung chờ
- * hẹp hơn nhãn thật vài px thì cả hai trạng thái xuống dòng khác nhau và hồ sơ nhảy 24px khi hạng về; cùng một bề ngang thì cả hai trạng thái chia dòng như nhau.
- */
+/** Nút mở/đóng một dòng gọn: nút thật (aria-expanded, aria-controls), bên trong là ListRow không tương tác để cùng hình với dòng liên kết. */
+function AccordionButton({ expanded, controls, ariaLabel, onToggle, children }: { expanded: boolean; controls: string; ariaLabel?: string; onToggle: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      aria-expanded={expanded}
+      aria-controls={controls}
+      aria-label={ariaLabel}
+      className="tubu-press"
+      onClick={onToggle}
+      style={{ display: 'block', width: '100%', minHeight: 44, padding: 0, border: 'none', background: 'none', fontFamily: 'inherit', textAlign: 'left', cursor: 'pointer', color: 'inherit' }}
+    >
+      {children}
+    </button>
+  );
+}
+
+/** Bề ngang chung của chỗ hạng thành viên (khung chờ và nhãn thật): khung chờ hẹp hơn nhãn thật thì thẻ đầu đổi bề ngang dòng hạng khi hạng về. */
 const TIER_SLOT_WIDTH = '6.5rem';
 
 function ProfileSkeleton() {
@@ -537,29 +527,6 @@ function ProfileSkeleton() {
       </div>
       <Skeleton height={176} radius="var(--radius-card)" />
     </div>
-  );
-}
-
-function UnreadCount({ count }: { count: number }) {
-  return (
-    <span
-      style={{
-        minWidth: 18,
-        height: 18,
-        padding: '0 5px',
-        boxSizing: 'border-box',
-        borderRadius: 'var(--radius-pill)',
-        background: 'var(--color-action-primary-bg)',
-        color: 'var(--color-action-primary-fg)',
-        fontSize: 'var(--type-label-size)',
-        fontWeight: 700,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-      }}
-    >
-      {count}
-    </span>
   );
 }
 

@@ -319,6 +319,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'offers.openGarden': 20,
   'offers.walletMore': 16,
   'offers.walletHistory': 22,
+  'offers.codesCollapse': 12,
 
   // Combo và mua kèm
   'combo.title': null,
@@ -843,4 +844,8 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'badges.earnedToast': null,
   'nav.gardenDot': null,
   'nav.profileDot': null,
+  'loyalty.offersRowTitle': 24,
+  'loyalty.offersRowSub': 40,
+  'loyalty.offersRowCount': 32,
+  'loyalty.rulesTitle': 30,
 };

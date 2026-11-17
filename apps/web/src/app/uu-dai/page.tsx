@@ -6,7 +6,16 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { Leaf, Recycle, ScanLine, Users, type LucideIcon } from 'lucide-react';
 import { mineRows } from '@tubutree/app-core/commerce/voucher-center';
-import { OFFERS_TABS, offersTabHref, parseOffersTab, type OffersTab } from '@tubutree/app-core/commerce/offers-hub';
+import {
+  OFFERS_CODES_PARAM,
+  OFFERS_HISTORY_PARAM,
+  OFFERS_TABS,
+  offersCodesOpen,
+  offersHistoryOpen,
+  offersTabHref,
+  parseOffersTab,
+  type OffersTab,
+} from '@tubutree/app-core/commerce/offers-hub';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { isCouponExpiring, RECYCLE_REQUESTS_LABEL } from '@tubutree/app-core/home-layout';
 import { couponsQuery, loyaltyQuery } from '@tubutree/app-core/queries/loyalty';
@@ -27,6 +36,7 @@ import { MiniAppOnlyNotice } from '@/components/mini-app-only-notice';
 import { OffersCheckInStrip } from '@/components/offers/offers-check-in-strip';
 import { OffersCollect } from '@/components/offers/offers-collect';
 import { OffersFlash } from '@/components/offers/offers-flash';
+import { OffersHistory } from '@/components/offers/offers-history';
 import { OffersIconTile } from '@/components/offers/offers-icon-tile';
 import { OffersPointsStrip } from '@/components/offers/offers-points-strip';
 import { ErrorState } from '@/components/ui/error-state';
@@ -43,9 +53,10 @@ const RewardsView = lazy(() => import('@/components/rewards/rewards-view').then(
 
 /**
  * Trung tâm Ưu đãi (tab gốc), bản web của `pages/offers.tsx` ở Mini App: MỘT trang, ba phân mục đổi ngay tại chỗ bằng `?tab=` (replace, Back không tua từng tab).
- * Săn mã: Banner, Giờ vàng, Nhận mã, dải Điểm Xanh và dải điểm danh mỏng (điểm danh làm ở Vườn Xanh), Mua chung. Mã của tôi: cả ví mã, "Dùng ngay" vào thẳng Giỏ
- * hoặc Sản phẩm. Đổi quà: Kho quà ngay tại chỗ kèm số dư, và một thẻ sang Điểm Xanh (hạng, lịch sử điểm) và Đổi rác. Phân mục công khai (Giờ vàng, Nhận mã, quà) khách
- * chưa đăng nhập xem được. Link cũ `?section=coupons` mở Mã của tôi; `/kho-qua` và `/ma-giam-gia` vẫn là trang riêng.
+ * Săn mã: Banner, Giờ vàng, Nhận mã, dải Điểm Xanh và dải điểm danh mỏng (điểm danh làm ở Vườn Xanh), Mua chung; "Tất cả (n)" của Nhận mã mở cả kho mã tại chỗ
+ * (`?codes=all` mở sẵn). Mã của tôi: cả ví mã, "Dùng ngay" vào thẳng Giỏ hoặc Sản phẩm, cuối ví mục "Mã đã dùng, hết hạn" mở tại chỗ (`?history=1` mở sẵn).
+ * Đổi quà: Kho quà ngay tại chỗ kèm số dư, và một thẻ sang Điểm Xanh (hạng, lịch sử điểm) và Đổi rác. Phân mục công khai (Giờ vàng, Nhận mã, quà) khách
+ * chưa đăng nhập xem được. Link cũ `?section=coupons` mở Mã của tôi; `/ma-giam-gia` cũ chuyển hướng vào đây; `/kho-qua` vẫn là trang riêng (trang SEO công khai).
  * Khung rộng, không còn khung Tài khoản: từ lg hàng Điểm Xanh | Điểm danh chia hai cột, ví mã xếp lưới ba cột.
  * Dòng "Tích điểm đơn sàn" chỉ hiện khi cấu hình bật và mở thông báo "cần mở trên Zalo" (web không có màn quét).
  */
@@ -76,7 +87,6 @@ function OffersContent() {
   };
 
   const coupons = useMemo(() => couponsQ.data ?? [], [couponsQ.data]);
-  const walletCodes = useMemo(() => new Set(coupons.map((c) => c.code)), [coupons]);
   const rows = useMemo(() => mineRows(coupons, Date.now()), [coupons]);
   // Ghi "đã xem" mã sắp hết hạn chỉ khi khách thật sự thấy cả ví (tab Mã của tôi), để chấm đỏ tắt đúng lúc.
   const walletCoupons = useMemo(() => rows.map((r) => r.coupon), [rows]);
@@ -106,7 +116,7 @@ function OffersContent() {
         {/* Khách chưa đăng nhập là khách mới; đã đăng nhập mà máy chưa nhớ loại (hoặc đang khôi phục phiên) thì chưa biết: chỉ thấy chiến dịch cho mọi người. */}
         <CampaignBanner placement="OFFERS_TOP" kind={authed ? (readStoredHomeKind(user?.id) ?? 'unknown') : phase === 'guest' ? 'new' : 'unknown'} />
         <OffersFlash />
-        <OffersCollect walletCodes={walletCodes} walletLoading={phase === 'loading' || (authed && couponsQ.isLoading)} />
+        <OffersCollect wallet={couponsQ} openAll={offersCodesOpen(params?.get(OFFERS_CODES_PARAM))} />
         {phase === 'loading' && pageSkeleton}
         {phase === 'unavailable' && <SessionUnavailable />}
         {phase === 'guest' && <GuestLinkCard title={fillCopy('offers.guestPointsTitle')} body={fillCopy('offers.guestPointsBody')} cta={fillCopy('login.cta')} />}
@@ -189,9 +199,7 @@ function OffersContent() {
               onCta={() => pickTab('deals')}
             />
           )}
-          <Card variant="outline" padding={0} style={{ overflow: 'hidden' }}>
-            <ListRow title={fillCopy('offers.walletHistory')} trailing="chevron" onPress={() => go('/ma-giam-gia?tab=history')} style={{ padding: 'var(--space-inset-card)' }} />
-          </Card>
+          <OffersHistory initialOpen={offersHistoryOpen(params?.get(OFFERS_HISTORY_PARAM))} scrollReady={!couponsQ.isLoading} />
         </section>
       );
   } else {
@@ -241,7 +249,8 @@ function OffersContent() {
           <SegmentedTabs label={fillCopy('offers.tabsLabel')} items={[...OFFERS_TABS]} value={tab} onChange={pickTab} />
         </div>
       </div>
-      <div role="tabpanel" aria-label={activeLabel} className="mt-3 flex flex-col gap-3">
+      {/* Số đều cho cả ba phân mục (mệnh giá, mã, hạn trên phiếu; điểm ở Kho quà), như trang Mã giảm giá cũ đặt ở gốc trang. */}
+      <div role="tabpanel" aria-label={activeLabel} className="mt-3 flex flex-col gap-3 tabular-nums">
         {panel}
       </div>
     </>

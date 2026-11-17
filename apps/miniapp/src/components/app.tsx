@@ -30,6 +30,7 @@ import { useLegacyNotifyPrefsSync } from '../pages/settings-legacy-sync';
 import { applyFontScale } from '../utils/font-scale';
 import { installPressFeedback } from '../utils/press-feedback';
 import { CASHBACK_ENABLED } from '../utils/features';
+import { LegacyRewardsRedirect, LegacyVouchersRedirect } from './offers/legacy-redirects';
 
 const FONT_PX: Record<string, string> = { small: '15px', normal: '16px', large: '18px' };
 /** Áp cỡ chữ đã lưu (Cài đặt) ngay khi mở app để giữ a11y qua các phiên. */
@@ -63,7 +64,6 @@ const loadBrowse = () => import('../pages/browse');
 const CampaignPage = lazy(() => import('../pages/campaign'));
 const BrowsePage = lazy(loadBrowse);
 const BestSellersPage = lazy(() => import('../pages/best-sellers'));
-const VouchersPage = lazy(() => import('../pages/vouchers'));
 const loadProductDetail = () => import('../pages/product-detail');
 const ProductDetailPage = lazy(loadProductDetail);
 const loadCart = () => import('../pages/cart');
@@ -89,7 +89,6 @@ const RecycleRequestPage = lazy(() => import('../pages/recycle-request'));
 const RecycleEditPage = lazy(() => import('../pages/recycle-edit'));
 const RecycleRequestsPage = lazy(() => import('../pages/recycle-requests'));
 const RecycleDonePage = lazy(() => import('../pages/recycle-done'));
-const RewardsPage = lazy(() => import('../pages/rewards'));
 const RewardsMinePage = lazy(() => import('../pages/rewards-mine'));
 const ProfilePage = lazy(() => import('../pages/profile'));
 const LoyaltyPage = lazy(() => import('../pages/loyalty'));
@@ -101,7 +100,8 @@ const AddressesPage = lazy(() => import('../pages/addresses'));
 const NotificationsPage = lazy(() => import('../pages/notifications'));
 const AffiliatePage = lazy(() => import('../pages/affiliate'));
 const AcademyPage = lazy(() => import('../pages/academy'));
-const CashbackPage = lazy(() => import('../pages/cashback'));
+// Hoàn tiền sàn ngoài đang tắt: cờ là hằng nên nhánh import bị bỏ lúc build, bản build không có chunk trang hoàn tiền (mã trang giữ để bật lại).
+const CashbackPage: ComponentType = CASHBACK_ENABLED ? lazy(() => import('../pages/cashback')) : () => null;
 const AboutPage = lazy(() => import('../pages/about'));
 const WishlistPage = lazy(() => import('../pages/wishlist'));
 const SupportChatPage = lazy(() => import('../pages/support-chat'));
@@ -220,7 +220,7 @@ export default function MyApp() {
                     <Route path="/" element={<RouteShell><HomePage /></RouteShell>} />
                     <Route path="/browse" element={<RouteShell skeleton="grid"><BrowsePage /></RouteShell>} />
                     <Route path="/best-sellers" element={<RouteShell skeleton="grid"><BestSellersPage /></RouteShell>} />
-                    <Route path="/vouchers" element={<RouteShell><VouchersPage /></RouteShell>} />
+                    <Route path="/vouchers" element={<LegacyVouchersRedirect />} />
                     <Route path="/campaign/:slug" element={<RouteShell skeleton="grid"><CampaignPage /></RouteShell>} />
                     <Route path="/product/:slug" element={<RouteShell skeleton="detail"><ProductDetailPage /></RouteShell>} />
                     <Route path="/cart" element={<RouteShell><CartPage /></RouteShell>} />
@@ -247,7 +247,7 @@ export default function MyApp() {
                     <Route path="/recycle/requests" element={<RouteShell><RecycleRequestsPage /></RouteShell>} />
                     <Route path="/recycle/done/:id" element={<RouteShell><RecycleDonePage /></RouteShell>} />
                     <Route path="/recycle/desk" element={<RouteShell><WebPortalRedirectPage screen="/recycle/desk" /></RouteShell>} />
-                    <Route path="/rewards" element={<RouteShell><RewardsPage /></RouteShell>} />
+                    <Route path="/rewards" element={<LegacyRewardsRedirect />} />
                     <Route path="/rewards/mine" element={<RouteShell><RewardsMinePage /></RouteShell>} />
                     <Route path="/profile" element={<RouteShell><ProfilePage /></RouteShell>} />
                     <Route path="/loyalty" element={<RouteShell><LoyaltyPage /></RouteShell>} />
@@ -262,7 +262,7 @@ export default function MyApp() {
                     {/* Khoá học có URL riêng: nút back của Zalo quay về danh sách thay vì thoát
                         hẳn Học viện, và CTV gửi được link thẳng tới một khoá cho đội của mình. */}
                     <Route path="/academy/:courseId" element={<RouteShell><AcademyPage /></RouteShell>} />
-                    <Route path="/cashback" element={CASHBACK_ENABLED ? <RouteShell><CashbackPage /></RouteShell> : <Navigate to="/" replace />} />
+                    <Route path="/cashback" element={CASHBACK_ENABLED ? <RouteShell><CashbackPage /></RouteShell> : <Navigate to="/profile" replace />} />
                     <Route path="/dealer" element={<RouteShell><WebPortalRedirectPage screen="/dealer" /></RouteShell>} />
                     <Route path="/about" element={<RouteShell><AboutPage /></RouteShell>} />
                     <Route path="/wishlist" element={<RouteShell><WishlistPage /></RouteShell>} />

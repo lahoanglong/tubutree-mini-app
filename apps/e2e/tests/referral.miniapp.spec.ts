@@ -1,9 +1,10 @@
+import type { Page } from '@playwright/test';
 import type { ReferralOverview, WalletSummary, LoyaltyOverview } from '../../miniapp/src/services/account-api';
 import { test, expect, makeUser, mockSession, reply, type MockApi } from './support/mock-api';
 
 /**
- * Zalo Mini App E2E — Giới thiệu bạn bè. Không có trang riêng: khối "Mời bạn sống xanh" (mã, chia sẻ, số bạn thành công)
- * nằm ở /profile (apps/miniapp/src/pages/profile.tsx, GET /me/referral). Trang Ví không còn khối này.
+ * Zalo Mini App E2E — Giới thiệu bạn bè. Không có trang riêng: dòng "Mời bạn nhận quà" (mã, chia sẻ, số bạn thành công)
+ * nằm ở /profile (apps/miniapp/src/pages/profile.tsx, GET /me/referral) và chỉ có nội dung nhìn thấy sau khi bấm mở. Trang Ví không còn khối này.
  */
 
 const WALLET: WalletSummary = {
@@ -45,12 +46,23 @@ function mockProfilePage(api: MockApi, referral: unknown = REFERRAL, role: 'CUST
   api.allowUnmocked('GET /affiliate/me', 'GET /me/coupons', 'GET /me/notifications', 'GET /notifications', 'GET /brand/owner/me', 'GET /dealer/me');
 }
 
+/** Dòng accordion đóng sẵn: panel có trong DOM nhưng `hidden` tới khi mở. */
+async function openInvite(page: Page): Promise<void> {
+  const invite = page.getByRole('button', { name: /^Mời bạn nhận quà/ });
+  await invite.click({ timeout: 15_000 });
+  await expect(invite).toHaveAttribute('aria-expanded', 'true');
+}
+
 test.describe('Giới thiệu bạn bè', () => {
   test('hiện mã, điều kiện thưởng, số bạn thành công và tiến độ tới mốc kế tiếp từ API', async ({ page, api }) => {
     mockProfilePage(api);
     await page.goto('/profile');
 
-    await expect(page.getByRole('heading', { name: 'Mời bạn sống xanh' })).toBeVisible({ timeout: 15_000 });
+    const invite = page.getByRole('button', { name: /^Mời bạn nhận quà/ });
+    await expect(invite).toHaveAttribute('aria-expanded', 'false', { timeout: 15_000 });
+    await expect(page.getByText('BANBE77', { exact: true })).toBeHidden();
+    await openInvite(page);
+    await expect(page.getByRole('heading', { name: 'Mời bạn sống xanh' })).toHaveCount(0);
     await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
     await expect(page.getByText(/Bạn nhận 5\.000 Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai từ 250k trong 14 ngày/)).toBeVisible();
     await expect(page.getByText('Đã mời thành công 2 bạn, nhận 40 điểm.')).toBeVisible();
@@ -61,7 +73,8 @@ test.describe('Giới thiệu bạn bè', () => {
     mockProfilePage(api, { ...REFERRAL, successCount: 0, earnedPoints: 0, milestones: [], nextMilestone: null });
     await page.goto('/profile');
 
-    await expect(page.getByText('BANBE77', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await openInvite(page);
+    await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
     await expect(page.getByText(/Đã mời thành công/)).toHaveCount(0);
     await expect(page.getByText(/Mời thêm \d+ bạn/)).toHaveCount(0);
   });
@@ -70,7 +83,8 @@ test.describe('Giới thiệu bạn bè', () => {
     mockProfilePage(api);
     await page.goto('/profile');
 
-    await page.getByRole('button', { name: 'Chia sẻ qua Zalo', exact: true }).click({ timeout: 15_000 });
+    await openInvite(page);
+    await page.getByRole('button', { name: 'Chia sẻ qua Zalo', exact: true }).click();
     // Trước đây thumbnail thiếu làm zmp-sdk từ chối (zod) nên luôn rơi vào thông báo dự phòng. Nay payload hợp lệ, SDK
     // ngoài Zalo trả về bình thường: không có thông báo lỗi, nút vẫn bấm được. Nhánh dự phòng (SDK từ chối → chép
     // liên kết + báo; người dùng huỷ → im lặng) do profile-hub.spec.tsx kiểm, vì e2e không ép được SDK từ chối.
@@ -84,16 +98,19 @@ test.describe('Giới thiệu bạn bè', () => {
     mockProfilePage(api, reply(500, { message: 'Lỗi tạm thời' }));
     await page.goto('/profile');
 
-    await expect(page.getByText('BANBE77', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await openInvite(page);
+    await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
     await expect(page.getByText(/Đã mời thành công/)).toHaveCount(0);
     await expect(page.getByText('Bạn mới nhận mã giảm giá cho đơn đầu. Bạn nhận Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai.')).toBeVisible();
   });
 
   test('CTV (AFFILIATE) không thấy số liệu Điểm Xanh giới thiệu vì API không thưởng cho role này', async ({ page, api }) => {
     mockProfilePage(api, REFERRAL, 'AFFILIATE');
-    await page.goto('/profile');
+    // ?section=referral tự mở dòng "Mời bạn nhận quà".
+    await page.goto('/profile?section=referral');
 
-    await expect(page.getByText('BANBE77', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('button', { name: /^Mời bạn nhận quà/ })).toHaveAttribute('aria-expanded', 'true', { timeout: 15_000 });
+    await expect(page.getByText('BANBE77', { exact: true })).toBeVisible();
     await expect(page.getByText(/Đã mời thành công/)).toHaveCount(0);
   });
 
@@ -119,8 +136,9 @@ test.describe('Giới thiệu bạn bè', () => {
     });
     await page.goto('/profile');
 
+    await openInvite(page);
     const copy = page.getByRole('button', { name: 'Sao chép link mời bạn' });
-    await copy.click({ timeout: 15_000 });
+    await copy.click();
     await expect(page.getByText('Đã sao chép link mời bạn')).toBeVisible();
     expect(await page.evaluate(() => (window as unknown as { __copied: string }).__copied)).toMatch(/^https:\/\/zalo\.me\/s\/\d+\/\?ref=BANBE77$/);
 

@@ -3,7 +3,7 @@ import { CASHBACK_ENABLED } from '../../../packages/app-core/src/features';
 
 /**
  * Web khách: Điểm Xanh và hạng thành viên (/tai-khoan/diem-xanh). Mọi lời gọi /api/** đi qua mock (fixture `api`).
- * Điểm danh phải gửi đúng POST /me/daily-check-in một lần dù bấm đúp; thẻ thành viên số mã hoá đúng memberCode.
+ * Điểm danh chỉ làm ở Vườn Xanh: trang này chỉ có dòng trạng thái mở /vuon-xanh. Thẻ thành viên số mã hoá đúng memberCode.
  */
 
 const USER = {
@@ -16,8 +16,8 @@ const TIERS = [
 ];
 const REWARDS = [1, 2, 3, 4, 5, 6, 7].map((day) => ({ day, points: day === 7 ? 10 : day, claimed: day < 3, isToday: day === 3 }));
 
-/** `tall`: cột phải rất cao (4 hạng × 3 quyền lợi, đủ 3 lối tắt) còn cột trái ngắn (chưa có mã, chưa có lịch sử), ca làm hở hàng ở lưới hai cột. */
-function mockLoyalty(api: MockApi, checkIn: { done: boolean }, opts: { tall?: boolean; guest?: boolean } = {}) {
+/** `tall`: cột phải rất cao (4 hạng × 3 quyền lợi, mục luật) còn cột trái ngắn (chưa có mã, chưa có lịch sử), ca làm hở hàng ở lưới hai cột. */
+function mockLoyalty(api: MockApi, checkIn: { done: boolean }, opts: { tall?: boolean } = {}) {
   const tiers = opts.tall
     ? ['Mầm Xanh', 'Lộc Biếc', 'Cổ Thụ', 'Rừng Xanh'].map((name, i) => ({ id: `t${i + 1}`, name, minPoints: i * 200, minSpending: i * 4_000_000, multiplier: 1 + i * 0.1, perks: ['Quà sinh nhật', 'Freeship đơn từ 99k', 'Ưu tiên chăm sóc'] }))
     : TIERS;
@@ -33,31 +33,9 @@ function mockLoyalty(api: MockApi, checkIn: { done: boolean }, opts: { tall?: bo
     tiers, spent12m: 1_500_000, tierPoints: 80,
     rates: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1000, maxRedeemPct: 0.5 },
   });
-  // Trang Điểm Xanh hỏi lịch sử yêu cầu đổi rác để quyết định có hiện lối xem lại.
-  api.get('/waste/requests', []);
   api.get('/me/coupons', opts.tall ? [] : [{ code: 'FREESHIP1', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' }]);
   api.get('/me/points/transactions', opts.tall ? [] : [{ id: 'p1', delta: 250, reason: 'ORDER_DELIVERED:TB0', expiresAt: null, createdAt: '2026-10-10T05:00:00Z' }]);
-  api.get('/me/daily-check-in', () => ({
-    checkedInToday: checkIn.done, streakDays: 2, currentCycleDay: 3, todayPoints: opts.guest ? 0 : 3, todayWater: 10, rewards: REWARDS,
-    ...(opts.guest ? { pointsBlocked: 'GUEST' } : {}),
-  }));
-  api.post('/me/daily-check-in', () => {
-    checkIn.done = true;
-    if (opts.guest) {
-      return {
-        points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 0, totalPoints: 1681, message: 'Điểm danh Ngày 3 thành công!', pointsBlocked: 'GUEST' },
-        water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' },
-        alreadyDone: false,
-        pending: [],
-      };
-    }
-    return {
-      points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 1803, message: 'Điểm danh thành công +3 Điểm Xanh' },
-      water: { seedsEarned: 10, streakDays: 3, totalSeeds: 1260, streakFrozeUsed: false, bonusNote: '' },
-      alreadyDone: false,
-      pending: [],
-    };
-  });
+  api.get('/me/daily-check-in', () => ({ checkedInToday: checkIn.done, streakDays: 2, currentCycleDay: 3, todayPoints: 3, todayWater: 10, rewards: REWARDS }));
   api.get('/me/loyalty/member-card', {
     memberCode: 'TUBUAN123', name: 'An', phone: null, tierName: 'Mầm Xanh', tierMultiplier: 1, pointsBalance: 1681, posCreditEnabled: true,
   });
@@ -95,26 +73,26 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     await expect(page.getByText('1.800 Điểm Xanh')).toBeVisible();
     await expect(page.getByText('trong đó 119 điểm không hết hạn')).toBeVisible();
     await expect(page.getByText('Còn 2,5 triệu mua hàng để lên hạng Lộc Biếc')).toBeVisible();
-    // Mã giảm giá nằm ở Ưu đãi: trang Hạng chỉ có một dòng dẫn tới đó, không còn khối danh sách mã.
-    await expect(page.getByRole('link', { name: /Ví mã \(1\)/ })).toHaveAttribute('href', '/uu-dai?section=coupons');
+    // Đổi quà và mã nằm ở hub Ưu đãi: trang Hạng chỉ có một dòng dẫn sang tab Đổi quà, phụ đề đếm số mã đang có.
+    await expect(page.getByRole('link', { name: /^Đổi quà & mã giảm giá Bạn đang có 1 mã giảm giá/ })).toHaveAttribute('href', '/uu-dai?tab=rewards');
     await expect(page.getByRole('region', { name: 'Mã giảm giá của tôi' })).toHaveCount(0);
     await expect(page.getByText('Miễn phí giao hàng')).toHaveCount(0);
     await expect(page.getByText('Tích điểm từ đơn hàng', { exact: true })).toBeVisible();
   });
 
-  test('từ lg dòng Ví mã nằm ở cột trái, trên lịch sử; không rơi xuống dưới', async ({ page, api }, testInfo) => {
+  test('từ lg dòng Đổi quà & mã giảm giá nằm ở cột trái, trên lịch sử; không rơi xuống dưới', async ({ page, api }, testInfo) => {
     test.skip(testInfo.project.name !== 'Web Customer', 'Hai cột chỉ có ở máy tính');
     mockLoyalty(api, { done: false });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/tai-khoan/diem-xanh');
     const box = async (name: string) => (await page.getByRole('region', { name }).boundingBox())!;
-    const walletLink = page.getByRole('link', { name: /Ví mã \(1\)/ });
+    const walletLink = page.getByRole('link', { name: /^Đổi quà & mã giảm giá/ });
     await expect(walletLink).toBeVisible();
     const wallet = (await walletLink.boundingBox())!;
     const history = await box('Lịch sử Điểm Xanh');
     expect(wallet.y).toBeLessThan(history.y);
     expect(wallet.y).toBeLessThan(900);
-    // Hai cột thật: cột phải (các hạng) nằm bên phải dòng Ví mã.
+    // Hai cột thật: cột phải (các hạng) nằm bên phải dòng Đổi quà.
     const tiers = await box('Các hạng');
     expect(tiers.x).toBeGreaterThan(wallet.x + wallet.width - 1);
   });
@@ -124,9 +102,9 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
     mockLoyalty(api, { done: false }, { tall: true });
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto('/tai-khoan/diem-xanh');
-    // Chưa có mã: dòng đầu là "Đổi quà" dẫn tới Kho quà.
-    await expect(page.getByRole('link', { name: /^Đổi quà/ })).toBeVisible();
-    await expect(page.getByTestId('daily-check-in')).toBeVisible();
+    // Cột trái dưới thẻ hạng: dòng trạng thái điểm danh, dòng Đổi quà & mã giảm giá, rồi lịch sử.
+    await expect(page.getByRole('link', { name: /^Đổi quà & mã giảm giá/ })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Hôm nay bạn chưa điểm danh' })).toBeVisible();
     // Chờ mọi khối tải xong (không còn lời gọi nào chạy) rồi đo cả bốn hộp trong MỘT lần đọc, để chiều cao không đổi giữa các lần đo.
     await expect(page.getByRole('region', { name: 'Lịch sử Điểm Xanh' })).toBeVisible();
     await expect(page.getByRole('region', { name: 'Các hạng' })).toBeVisible();
@@ -137,47 +115,40 @@ test.describe('Web khách: Điểm Xanh và hạng thành viên', () => {
         return { y: b.top + window.scrollY, height: b.height };
       };
       const region = (name: string) => document.querySelector(`[role="region"][aria-label="${name}"], section[aria-label="${name}"]`);
-      const walletRow = Array.from(document.querySelectorAll('a')).find((a) => a.textContent?.startsWith('Đổi quà'))!.closest('ul');
       return {
-        c: r(walletRow),
-        d: r(document.querySelector('[data-testid="daily-check-in"]')),
+        c: r(Array.from(document.querySelectorAll('a')).find((a) => a.textContent?.startsWith('Đổi quà & mã giảm giá')) ?? null),
+        d: r(region('Hôm nay bạn chưa điểm danh')),
         h: r(region('Lịch sử Điểm Xanh')),
         right: r(region('Các hạng')),
       };
     });
     expect(right.y + right.height).toBeGreaterThan(h.y + h.height); // đúng ca: cột phải thật sự cao hơn
-    expect(Math.abs(d.y - (c.y + c.height) - 16)).toBeLessThanOrEqual(1);
-    expect(Math.abs(h.y - (d.y + d.height) - 16)).toBeLessThanOrEqual(1);
+    expect(Math.abs(c.y - (d.y + d.height) - 16)).toBeLessThanOrEqual(1);
+    expect(Math.abs(h.y - (c.y + c.height) - 16)).toBeLessThanOrEqual(1);
   });
 
-  test('điểm danh: bấm đúp chỉ gửi một POST, báo kết quả và nút chuyển "Đã điểm danh"', async ({ page, api }) => {
+  test('điểm danh chỉ ở Vườn Xanh: trang chỉ có dòng trạng thái, không có nút điểm danh; bấm dòng mở /vuon-xanh', async ({ page, api }) => {
     mockLoyalty(api, { done: false });
     await page.goto('/tai-khoan/diem-xanh');
-    const button = page.getByRole('button', { name: 'Điểm danh', exact: true });
-    await expect(button).toBeEnabled();
-    await button.dblclick();
-    await expect(page.getByText('+3 Điểm Xanh · +10 giọt nước')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled();
-    expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
+    const strip = page.getByRole('region', { name: 'Hôm nay bạn chưa điểm danh' });
+    await expect(strip).toBeVisible();
+    await expect(page.getByTestId('daily-check-in')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /^(Đã )?[Đđ]iểm danh/ })).toHaveCount(0);
+    // Chỉ kiểm điều hướng: Vườn Xanh có spec riêng (game.web.spec.ts), ở đây không mock dữ liệu vườn.
+    api.allowUnmocked('GET /game/:a', 'GET /game/:a/:b');
+    await strip.getByText('Mở tab Vườn Xanh').click();
+    await expect(page).toHaveURL(/\/vuon-xanh$/);
+    expect(api.unmocked.filter((u) => u.startsWith('POST /me/daily-check-in'))).toHaveLength(0);
   });
 
-  test('khách vãng lai điểm danh (khổ 375): không hứa Điểm Xanh, vẫn nhận giọt nước, có lời mời đăng nhập Zalo quay lại đúng trang', async ({ page, api }) => {
-    mockLoyalty(api, { done: false }, { guest: true });
+  test('đã điểm danh hôm nay (khổ 375): dòng trạng thái đổi chữ, không tràn ngang', async ({ page, api }) => {
+    mockLoyalty(api, { done: true });
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/tai-khoan/diem-xanh');
-    const card = page.getByTestId('daily-check-in');
-    await expect(card.getByText('Hôm nay nhận +10 giọt nước', { exact: true })).toBeVisible();
-    await expect(card.getByText('Đăng nhập Zalo để nhận Điểm Xanh', { exact: true })).toBeVisible();
-    await expect(card.getByText(/\+\d[\d.]* Điểm Xanh/)).toHaveCount(0);
-    const login = card.getByRole('link', { name: 'Đăng nhập Zalo', exact: true });
-    await expect(login).toHaveAttribute('href', '/dang-nhap?returnTo=%2Ftai-khoan%2Fdiem-xanh');
-    expect(await card.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    const strip = page.getByRole('region', { name: 'Hôm nay bạn đã điểm danh' });
+    await expect(strip).toBeVisible();
+    expect(await strip.evaluate((el) => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-
-    await card.getByRole('button', { name: 'Điểm danh', exact: true }).click();
-    await expect(page.getByText('+10 giọt nước. Đăng nhập Zalo để nhận Điểm Xanh', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Đã điểm danh', exact: true })).toBeDisabled();
-    expect(api.callsTo('POST', '/me/daily-check-in')).toHaveLength(1);
   });
 
   test('Quà của tôi: "Dùng ngay" mà máy chủ từ chối mã thì dòng mã hiện đúng lý do (role=alert)', async ({ page, api }) => {
@@ -376,7 +347,7 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
   });
 
   test('Hoàn tiền: chọn sàn, POST /cashback/click đúng merchantId rồi mở link đối tác ở tab mới', async ({ page, api, context }) => {
-    test.skip(!CASHBACK_ENABLED, 'Lối vào hoàn tiền đang tắt (CASHBACK_ENABLED): /hoan-tien về trang chủ. Bật cờ thì test này chạy lại.');
+    test.skip(!CASHBACK_ENABLED, 'Lối vào hoàn tiền đang tắt (CASHBACK_ENABLED): /hoan-tien về Cá nhân. Bật cờ thì test này chạy lại.');
     api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
     api.get('/me', () => USER);
     api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
@@ -399,15 +370,18 @@ test.describe('Web khách: Kho quà và Hoàn tiền', () => {
     expect(api.callsTo('POST', '/cashback/click')[0]!.body).toEqual({ merchantId: 'm1' });
   });
 
-  test('Hoàn tiền: cờ tắt thì mở thẳng /hoan-tien về trang chủ như Mini App', async ({ page, api }) => {
+  test('Hoàn tiền: cờ tắt thì mở thẳng /hoan-tien về Cá nhân như Mini App (/cashback → /profile)', async ({ page, api }) => {
     test.skip(CASHBACK_ENABLED, 'Cờ bật: lối vào mở lại, xem test chọn sàn ở trên.');
     api.post('/auth/refresh', () => ({ accessToken: 'e2e-token', user: USER }));
     api.get('/me', () => USER);
     api.get('/config/public', { freeshipThreshold: 500000, cashbackHoldDays: 45, waste: { enabled: false, dropoff: false, mailin: false, pickup: false } });
-    // Trang chủ (đích chuyển hướng) tự gọi các API này; test chỉ kiểm địa chỉ.
-    api.allowUnmocked('GET /brands', 'GET /categories', 'GET /flash-sales/upcoming', 'GET /me/wishlist/ids', 'GET /products/for-you', 'GET /me/purchased-items', 'GET /me/new-customer-offer');
+    // Cá nhân (đích chuyển hướng) tự gọi các API này; test chỉ kiểm địa chỉ.
+    api.allowUnmocked(
+      'GET /me/loyalty', 'GET /me/wallet', 'GET /me/coupons', 'GET /me/summary', 'GET /me/notifications', 'GET /me/referral', 'GET /orders', 'GET /auth/me',
+      'GET /dealer/me', 'GET /brand/owner/me', 'GET /me/subscriptions', 'GET /chat/summary', 'GET /me/badges', 'GET /me/wishlist/ids', 'POST /events',
+    );
     await page.goto('/hoan-tien');
-    await expect(page).toHaveURL(/\/$/);
+    await expect(page).toHaveURL(/\/tai-khoan$/);
   });
 });
 

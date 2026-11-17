@@ -34,9 +34,10 @@ for (const width of NARROW_WIDTHS) {
       await page.setViewportSize({ width, height: 760 });
     });
 
-    test('Cá nhân: hàng hồ sơ', async ({ page, api }) => {
+    test('Cá nhân: dòng Sổ địa chỉ', async ({ page, api }) => {
       await openProfile(page, api);
-      await expectPressFeedback(page, page.getByRole('button', { name: /Nguyễn Văn An/ }).first(), 'hàng hồ sơ (Chỉnh sửa hồ sơ)');
+      // Thẻ danh tính không còn là nút (sửa hồ sơ đi qua Cài đặt): đo trên một dòng của danh sách gọn.
+      await expectPressFeedback(page, page.getByRole('button', { name: /^Sổ địa chỉ/ }), 'dòng Sổ địa chỉ');
     });
 
     test('Điểm Xanh: nút Chép mã thành viên', async ({ page, api }) => {
@@ -54,7 +55,7 @@ for (const width of NARROW_WIDTHS) {
       mockCollectableMine(api, { claimed: [], newCustomerOnly: [] });
       mockWallet(api, WALLET);
       mockCouponHistory(api);
-      await page.goto('/vouchers');
+      await page.goto('/offers?codes=all');
       await expect(page.getByRole('button', { name: 'Lưu mã' }).first()).toBeVisible({ timeout: 15_000 });
       await expectPressFeedback(page, page.getByRole('button', { name: 'Lưu mã' }).first(), 'nút Lưu mã');
       await expectPressFeedback(page, page.getByRole('button', { name: 'Giảm giá', exact: true }), 'chip lọc Giảm giá');

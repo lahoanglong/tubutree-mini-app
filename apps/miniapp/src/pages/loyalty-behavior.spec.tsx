@@ -146,6 +146,7 @@ describe('LoyaltyPage — thẻ hạng', () => {
   it('không còn tên "Vườn Cây" ở trang Điểm Xanh — một tên Vườn Xanh cho một tính năng (D6-07)', async () => {
     renderPage();
     await screen.findByText('Lịch sử Điểm Xanh');
+    await screen.findByText('Hôm nay bạn chưa điểm danh');
     expect(document.body.textContent).not.toContain('Vườn Cây');
     expect(document.body.textContent).toContain('Vườn Xanh');
   });
@@ -157,75 +158,49 @@ describe('LoyaltyPage — thẻ hạng', () => {
     expect(container.querySelector('[style*="width: 50%"]')).toBeNull();
   });
 
-  it('các lối tắt dẫn đúng trang: Vườn Xanh → /game, Đổi rác lấy quà → /recycle, Đổi quà (chưa có mã) → /offers?tab=rewards, mua sắm → /browse', async () => {
+  it('chỉ còn hai lối đi: dòng điểm danh → /game, dòng Ưu đãi → /offers?tab=rewards; không còn Vườn Xanh, Đổi rác, Kho quà riêng hay nút mua sắm', async () => {
     renderPage();
-    fireEvent.click(await screen.findByText('Vườn Xanh'));
+    fireEvent.click(await screen.findByRole('button', { name: /^Hôm nay bạn chưa điểm danh/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/game');
-    fireEvent.click(screen.getByText('Đổi rác lấy quà'));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
-    fireEvent.click(screen.getByRole('button', { name: /Đổi quà/ }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/offers?tab=rewards');
-    fireEvent.click(screen.getByText(/Mua sắm để tích thêm Điểm Xanh/));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/browse');
+    fireEvent.click(screen.getByRole('button', { name: /^Đổi quà & mã giảm giá/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?tab=rewards');
+    for (const gone of ['Chăm cây nhận quà', 'Đổi rác lấy quà', 'Yêu cầu đổi rác', 'Kho quà', /Ví mã/, /Mua sắm để tích thêm/]) {
+      expect(screen.queryByText(gone)).toBeNull();
+    }
   });
 });
 
-describe('LoyaltyPage — dòng mã giảm giá: Ví mã hoặc Đổi quà', () => {
+describe('LoyaltyPage — một dòng sang hub Ưu đãi', () => {
   const COUPON = { code: 'WELCOME30', type: 'AMOUNT', value: 30_000, minOrder: 199_000, maxDiscount: null, endAt: '2026-12-31T00:00:00.000Z' };
 
-  it('có mã: dòng "Ví mã (n)" dẫn tới Ưu đãi mục mã, không liệt kê từng mã; Kho quà vẫn là dòng riêng', async () => {
+  it('có mã: dòng phụ nêu số mã, bấm mở tab Đổi quà của Ưu đãi; không liệt kê từng mã', async () => {
     mocks.getCoupons.mockResolvedValue([COUPON, { ...COUPON, code: 'FREESHIP1' }]);
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /Ví mã \(2\)/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?section=coupons');
+    expect(await screen.findByText('Bạn đang có 2 mã giảm giá')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /^Đổi quà & mã giảm giá/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?tab=rewards');
     expect(screen.queryByText('Mã giảm giá của tôi')).toBeNull();
     expect(screen.queryByText('Giảm 30.000đ')).toBeNull();
-    expect(screen.queryByText('Đổi quà')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: /Kho quà/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?tab=rewards');
+    expect(screen.getAllByRole('button', { name: /^Đổi quà & mã giảm giá/ })).toHaveLength(1);
   });
 
-  it('chưa có mã: dòng "Đổi quà" dẫn tới Kho quà, không lặp thêm dòng "Kho quà"', async () => {
+  it('chưa có mã hoặc tải mã lỗi: dòng phụ nói chung', async () => {
     renderPage();
-    await screen.findByRole('button', { name: /Đổi quà/ });
-    expect(screen.queryByText(/Ví mã/)).toBeNull();
-    expect(screen.queryByText('Kho quà')).toBeNull();
-  });
-
-  it('không tải được mã: dòng "Ví mã" không kèm số, không giả vờ "chưa có mã"', async () => {
-    mocks.getCoupons.mockRejectedValue(new Error('boom'));
-    renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /^Ví mã/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?section=coupons');
-    expect(screen.queryByText('Đổi quà')).toBeNull();
+    expect(await screen.findByText('Đổi Điểm Xanh lấy mã giảm giá và quà')).toBeInTheDocument();
+    expect(screen.queryByText(/Bạn đang có/)).toBeNull();
   });
 });
 
-describe('LoyaltyPage — lối vào Đổi rác theo cờ chương trình', () => {
-  it('chương trình tắt → không có hàng Đổi rác; lối vào Kho quà vẫn hiện', async () => {
-    mocks.publicConfig.waste.enabled = false;
-    boost.cfg = { isLoaded: true };
-    renderPage();
-    await screen.findByText('Lịch sử Điểm Xanh');
-    expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
-    expect(screen.queryByText('Trạm Refill')).toBeNull();
-    expect(screen.getByText('Đổi quà')).toBeInTheDocument();
-    expect(mocks.listWasteRequests).toHaveBeenCalledTimes(1);
-  });
-  it('chương trình tắt nhưng khách từng có yêu cầu → hàng "Yêu cầu đổi rác" chỉ để xem, mở /recycle/requests', async () => {
-    mocks.publicConfig.waste.enabled = false;
+describe('LoyaltyPage — không còn lối Đổi rác riêng (hub Ưu đãi và Trang chủ đã có)', () => {
+  it.each([true, false])('chương trình Đổi rác bật=%s: không có hàng Đổi rác, không hỏi danh sách yêu cầu', async (enabled) => {
+    mocks.publicConfig.waste.enabled = enabled;
     mocks.listWasteRequests.mockResolvedValue([{ id: 'r1' }]);
     boost.cfg = { isLoaded: true };
     renderPage();
-    fireEvent.click(await screen.findByText('Yêu cầu đổi rác'));
-    expect(mocks.navigate).toHaveBeenCalledWith('/recycle/requests');
-    expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
-  });
-  it('chương trình bật → không hỏi danh sách yêu cầu và không có hàng lịch sử riêng', async () => {
-    renderPage();
     await screen.findByText('Lịch sử Điểm Xanh');
-    expect(mocks.listWasteRequests).not.toHaveBeenCalled();
+    expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
     expect(screen.queryByText('Yêu cầu đổi rác')).toBeNull();
+    expect(mocks.listWasteRequests).not.toHaveBeenCalled();
   });
 });
 
@@ -241,17 +216,38 @@ describe('LoyaltyPage — quà đã chuyển sang /rewards', () => {
 describe('LoyaltyPage — giải thích cách tích điểm và mốc hạng (ENGAGE-21)', () => {
   const RATES = { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1_000, maxRedeemPct: 0.2 };
 
-  it('nói rõ tích bao nhiêu % tiền hàng và 1 điểm = 1.000đ khi dùng, lấy từ cấu hình API', async () => {
+  it('luật tích/dùng nằm trong mục gập "Cách kiếm và dùng Điểm Xanh": đóng mặc định, bấm thì mở, bấm lại thì đóng', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: RATES });
     renderPage();
-    expect(await screen.findByText('Tích 2% tiền hàng thành Điểm Xanh')).toBeInTheDocument();
-    expect(screen.getByText('1 điểm = 1.000đ khi dùng ở bước thanh toán (tối đa 20% giá trị đơn)')).toBeInTheDocument();
+    const toggle = await screen.findByRole('button', { name: 'Cách kiếm và dùng Điểm Xanh' });
+    const body = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(body).not.toBeVisible();
+    expect(toggle.closest('h2')).not.toBeNull();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    expect(body).toBeVisible();
+    expect(screen.getByText('Tích 2% tiền hàng thành Điểm Xanh')).toBeVisible();
+    expect(screen.getByText('1 điểm = 1.000đ khi dùng ở bước thanh toán (tối đa 20% giá trị đơn)')).toBeVisible();
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    expect(body).not.toBeVisible();
+  });
+
+  it('thẻ hạng không còn hai dòng luật (đã dời vào mục gập)', async () => {
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: RATES });
+    renderPage();
+    const tierLine = await screen.findByText(/^Tích điểm ×1 ·/);
+    const body = document.getElementById(screen.getByRole('button', { name: 'Cách kiếm và dùng Điểm Xanh' }).getAttribute('aria-controls')!)!;
+    expect(body).toContainElement(screen.getByText('Tích 2% tiền hàng thành Điểm Xanh'));
+    expect(tierLine.parentElement).not.toContainElement(screen.getByText('Tích 2% tiền hàng thành Điểm Xanh'));
   });
 
   it('tỷ lệ cấu hình khác thì chữ đổi theo, không hardcode 2%', async () => {
     mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: { ...RATES, earnPct: 3, vndPerPoint: 33 } });
     renderPage();
-    expect(await screen.findByText('Tích 3% tiền hàng thành Điểm Xanh')).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole('button', { name: 'Cách kiếm và dùng Điểm Xanh' }));
+    expect(screen.getByText('Tích 3% tiền hàng thành Điểm Xanh')).toBeVisible();
   });
 
   it('dòng "còn X điểm" kèm số tiền mua hàng tương ứng', async () => {
@@ -271,67 +267,51 @@ describe('LoyaltyPage — giải thích cách tích điểm và mốc hạng (EN
     expect(screen.getByText('hạng khởi đầu · ×1')).toBeInTheDocument();
   });
 
-  it('API cũ chưa trả rates → không hiện dòng giải thích, danh sách hạng vẫn theo điểm', async () => {
+  it('API cũ chưa trả rates → không có mục gập luật, danh sách hạng vẫn theo điểm', async () => {
     renderPage();
     await screen.findByText(/Tích điểm ×1/);
+    expect(screen.queryByRole('button', { name: 'Cách kiếm và dùng Điểm Xanh' })).toBeNull();
     expect(screen.queryByText(/Tích .* tiền hàng thành Điểm Xanh/)).toBeNull();
     expect(screen.getByText(/từ 2\.500 điểm tích luỹ/)).toBeInTheDocument();
   });
 });
 
-describe('LoyaltyPage — điểm danh Điểm Xanh', () => {
-  it('chưa điểm danh: nút "Điểm danh" bật; chạm đúp chỉ gọi API 1 lần, rồi báo thành công và khoá nút', async () => {
-    mocks.getDailyCheckInStatus.mockResolvedValueOnce(CHECK_IN).mockResolvedValue({ ...CHECK_IN, checkedInToday: true });
-    renderPage();
-    const btn = await screen.findByRole('button', { name: 'Điểm danh' });
-    expect(btn).toBeEnabled();
-    fireEvent.click(btn);
-    fireEvent.click(btn);
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: '+3 Điểm Xanh · +10 giọt nước', type: 'success' }));
-    expect(mocks.postDailyCheckIn).toHaveBeenCalledTimes(1);
-    expect(await screen.findByRole('button', { name: 'Đã điểm danh' })).toBeDisabled();
-  });
+describe('LoyaltyPage — điểm danh chỉ ở Vườn Xanh: trang chỉ có dòng trạng thái', () => {
+  const checkInButtons = () => screen.queryAllByRole('button', { name: /^(Đã )?[Đđ]iểm danh$/ });
 
-  it('ghi chú điểm danh nói một nút cho cả Điểm Xanh và giọt nước, không còn câu "điểm danh riêng trong Vườn Xanh"', async () => {
-    mocks.getDailyCheckInStatus.mockResolvedValue(CHECK_IN);
+  it('chưa điểm danh: dòng "Hôm nay bạn chưa điểm danh" mở Vườn Xanh; không có nút điểm danh, không gọi lệnh điểm danh', async () => {
     renderPage();
-    await screen.findByRole('button', { name: 'Điểm danh' });
-    const note = screen.getByText(/không thì lịch 7 ngày bắt đầu lại/);
-    expect(note.textContent).toContain('Một lần bấm nhận cả Điểm Xanh và giọt nước');
-    expect(note.textContent).not.toContain('điểm danh riêng');
-  });
-
-  it('nửa vời (đã nhận nước, còn thiếu Điểm Xanh): dòng "Hôm nay nhận" chỉ liệt kê Điểm Xanh; vòng 7 ngày ghi "Ngày 3/7"', async () => {
-    mocks.getDailyCheckInStatus.mockResolvedValue({ ...CHECK_IN, pointsDone: false, waterDone: true, todayPoints: 3, todayWater: 0 });
-    renderPage();
-    await screen.findByRole('button', { name: 'Điểm danh' });
-    expect(screen.getByText('Hôm nay nhận +3 Điểm Xanh')).toBeInTheDocument();
-    expect(screen.getByText('Ngày 3/7')).toBeInTheDocument();
-  });
-
-  it('đã điểm danh hôm nay: nút "Đã điểm danh" tắt, bấm không gọi API', async () => {
-    mocks.getDailyCheckInStatus.mockResolvedValue({ ...CHECK_IN, checkedInToday: true });
-    renderPage();
-    const btn = await screen.findByRole('button', { name: 'Đã điểm danh' });
-    expect(btn).toBeDisabled();
-    fireEvent.click(btn);
+    const row = await screen.findByRole('button', { name: /^Hôm nay bạn chưa điểm danh/ });
+    expect(row).toHaveTextContent('Mở tab Vườn Xanh');
+    expect(checkInButtons()).toHaveLength(0);
+    fireEvent.click(row);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/game');
     expect(mocks.postDailyCheckIn).not.toHaveBeenCalled();
   });
 
-  it('lỗi điểm danh: báo lỗi và tải lại trạng thái để nút theo đúng thực tế', async () => {
-    mocks.postDailyCheckIn.mockRejectedValue(new Error('boom'));
+  it('đã điểm danh: dòng "Hôm nay bạn đã điểm danh", vẫn không có nút', async () => {
+    mocks.getDailyCheckInStatus.mockResolvedValue({ ...CHECK_IN, checkedInToday: true });
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: 'Điểm danh' }));
-    await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith(expect.objectContaining({ type: 'error' })));
-    await waitFor(() => expect(mocks.getDailyCheckInStatus).toHaveBeenCalledTimes(2));
+    expect(await screen.findByRole('region', { name: 'Hôm nay bạn đã điểm danh' })).toBeInTheDocument();
+    expect(screen.queryByText('Hôm nay bạn chưa điểm danh')).toBeNull();
+    expect(checkInButtons()).toHaveLength(0);
   });
 
-  it('7 ô ngày: đủ N1..N7, số điểm từng ngày nằm ở nhãn đọc màn hình', async () => {
+  it('không còn thẻ 7 ô điểm danh, luật điểm danh hay lời mời trong thẻ đó', async () => {
     renderPage();
-    await screen.findByText('Điểm danh mỗi ngày');
-    for (const d of [1, 2, 3, 4, 5, 6, 7]) expect(screen.getByText(`N${d}`)).toBeInTheDocument();
-    expect(screen.getByLabelText('Ngày 7: +7 Điểm Xanh')).toBeInTheDocument();
-    expect(screen.getByLabelText('Ngày 1: +1 Điểm Xanh, đã nhận')).toBeInTheDocument();
+    await screen.findByText('Hôm nay bạn chưa điểm danh');
+    expect(screen.queryByText('Điểm danh mỗi ngày')).toBeNull();
+    expect(screen.queryByText('N1')).toBeNull();
+    expect(screen.queryByText(/không thì lịch 7 ngày bắt đầu lại/)).toBeNull();
+  });
+
+  it('tải trạng thái điểm danh lỗi: không vẽ dòng, phần còn lại của trang vẫn đủ', async () => {
+    mocks.getDailyCheckInStatus.mockRejectedValue(new Error('boom'));
+    renderPage();
+    await screen.findByText('Lịch sử Điểm Xanh');
+    await waitFor(() => expect(mocks.getDailyCheckInStatus).toHaveBeenCalled());
+    expect(screen.queryByText(/Hôm nay bạn (chưa|đã) điểm danh/)).toBeNull();
+    expect(screen.getByText('Đổi quà & mã giảm giá')).toBeInTheDocument();
   });
 });
 
@@ -605,7 +585,7 @@ describe('LoyaltyPage — chúc mừng lên hạng (§6.6 #78)', () => {
 });
 
 describe('LoyaltyPage — cảnh báo React trùng key', () => {
-  it('mọi danh sách dựng từ dữ liệu đúng hình của API (mã giảm giá, 7 ô điểm danh, hạng, lịch sử) không phát cảnh báo key', async () => {
+  it('mọi danh sách dựng từ dữ liệu đúng hình của API (hạng, lịch sử) không phát cảnh báo key', async () => {
     const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
     mocks.getCoupons.mockResolvedValue(
       ['GIAM10', 'FREESHIP'].map((code) => ({ code, type: 'AMOUNT', value: 10_000, minOrder: null, maxDiscount: null, endAt: '2026-12-31T00:00:00.000Z' })),
@@ -615,7 +595,7 @@ describe('LoyaltyPage — cảnh báo React trùng key', () => {
     );
     try {
       renderPage();
-      await screen.findByText('Ví mã (2)');
+      await screen.findByText('Bạn đang có 2 mã giảm giá');
       await screen.findByText('Lịch sử Điểm Xanh');
       expect(errors.mock.calls.filter((c) => /same key|unique "key"/.test(String(c[0])))).toEqual([]);
     } finally {

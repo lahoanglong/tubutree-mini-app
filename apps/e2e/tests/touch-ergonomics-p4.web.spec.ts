@@ -64,7 +64,8 @@ for (const width of NARROW_WIDTHS) {
       await page.goto('/tai-khoan');
       await expect(page.getByText('12.450 điểm', { exact: true })).toBeVisible({ timeout: 30_000 });
       await expectClean(page, 'Cá nhân', width);
-      await expectPressFeedback(page, page.getByRole('main').getByRole('link', { name: /Nguyễn Văn An/ }).first(), 'hàng hồ sơ (Chỉnh sửa hồ sơ)');
+      // Thẻ danh tính không còn là link (sửa hồ sơ đi qua Cài đặt): đo trên một dòng của danh sách gọn.
+      await expectPressFeedback(page, page.getByRole('main').getByRole('link', { name: /^Sổ địa chỉ/ }), 'dòng Sổ địa chỉ');
     });
 
     test('Điểm Xanh và thẻ thành viên số', async ({ page, api }) => {
@@ -86,16 +87,17 @@ for (const width of NARROW_WIDTHS) {
     test('Mã giảm giá: Nhận mã, Mã của tôi, Đã dùng–hết hạn', async ({ page, api }) => {
       await webSignIn(page, api);
       mockWebVouchers(api);
-      for (const [tab, name, ready] of [
-        ['', 'Nhận mã', 'button:has-text("Lưu mã")'],
-        ['?tab=mine', 'Mã của tôi', '[role="group"]'],
-        ['?tab=history', 'Đã dùng–hết hạn', '[role="group"]'],
+      // Mã giảm giá nằm trong hub Ưu đãi: kho mã mở cả, ví, ví kèm lịch sử mở.
+      for (const [query, name, ready] of [
+        ['?codes=all', 'Nhận mã', 'button:has-text("Lưu mã")'],
+        ['?tab=wallet', 'Mã của tôi', '[role="group"]'],
+        ['?tab=wallet&history=1', 'Đã dùng–hết hạn', '[role="group"]'],
       ] as const) {
-        await page.goto(`/ma-giam-gia${tab}`);
+        await page.goto(`/uu-dai${query}`);
         await expect(page.locator(ready).first()).toBeVisible({ timeout: 30_000 });
         await expectClean(page, `Mã giảm giá (${name})`, width);
       }
-      await page.goto('/ma-giam-gia');
+      await page.goto('/uu-dai?codes=all');
       await expect(page.getByRole('button', { name: 'Lưu mã' }).first()).toBeVisible({ timeout: 30_000 });
       await expectPressFeedback(page, page.getByRole('button', { name: 'Lưu mã' }).first(), 'nút Lưu mã');
     });

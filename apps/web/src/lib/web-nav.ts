@@ -35,7 +35,7 @@ export const readyNavTabs = (): WebNavTab[] => WEB_NAV_TABS.filter((t) => isWebR
  */
 export const WEB_PROGRAM_LINKS: readonly { path: string; label: string }[] = [
   { path: '/gio-vang', label: 'Giờ vàng' },
-  { path: '/ma-giam-gia', label: 'Mã giảm giá' },
+  { path: '/uu-dai?codes=all', label: 'Mã giảm giá' },
   { path: '/doi-rac', label: 'Đổi rác lấy quà' },
   { path: '/kho-qua', label: 'Kho quà' },
   { path: '/mua-chung', label: 'Mua chung' },

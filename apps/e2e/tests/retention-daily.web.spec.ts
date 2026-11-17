@@ -19,7 +19,8 @@ import {
  * Khổ 390x844 và 1440x900; thanh đáy ẩn từ md nên chấm chỉ kiểm ở 390. Mọi lời gọi /api/** đi qua mock.
  * Ảnh trước/sau lưu ở RETENTION_SHOTS_DIR (mặc định /tmp/review/tubu/shots/waves/tubu-retention-daily).
  */
-const PROFILE_GROWTH_MAX_PX = 72;
+/** Chừa cho lề trên của hàng Huy hiệu và làm tròn khi đo trang dài thêm. */
+const PROFILE_GROWTH_SLACK_PX = 16;
 
 test.beforeEach(({}, testInfo) => {
   test.skip(testInfo.project.name !== 'Web Customer', 'tự đặt khổ từng nhóm ca, chỉ chạy ở một project');
@@ -59,8 +60,13 @@ async function openProfile(page: Page, api: MockApi): Promise<void> {
   await page.waitForTimeout(600);
 }
 
-// Dòng trong danh sách của trang (chân trang web cũng có liên kết cùng tên). Từ md nhóm Hỗ trợ của trang ẩn vì cột menu trái đã thay, nên chỉ kiểm ở khổ điện thoại.
+// Dòng trong danh sách của trang (chân trang web cũng có liên kết cùng tên). Mục con của "Hỗ trợ" (đóng sẵn, panel `hidden`): mở ra mới kiểm có/không được.
 const story = (page: Page) => page.getByRole('main').getByText('Câu chuyện thương hiệu', { exact: true });
+async function openSupport(page: Page): Promise<void> {
+  const support = page.getByRole('main').getByRole('button', { name: /^Hỗ trợ/ });
+  await support.click();
+  await expect(support).toHaveAttribute('aria-expanded', 'true');
+}
 const bottomNav = (page: Page) => page.getByRole('navigation', { name: 'Thanh điều hướng dưới' });
 
 const SIZES = [
@@ -89,7 +95,8 @@ for (const size of SIZES) {
 
       await openProfile(page, api);
       await expect(page.getByTestId('badge-row')).toHaveCount(0);
-      if (phone) await expect(story(page)).toBeVisible();
+      await openSupport(page);
+      await expect(story(page)).toBeVisible();
       await expect(page.getByTestId('garden-dot')).toHaveCount(0);
       await expect(page.getByTestId('profile-dot')).toHaveCount(0);
       if (phone) expect((await horizontalOverflow(page)).ok).toBe(true);
@@ -165,13 +172,15 @@ for (const size of SIZES) {
   });
 
   test.describe(`Web ${size.width}px: hàng Huy hiệu`, () => {
-    test(phone ? 'cờ bật: 8 chip, ẩn "Câu chuyện thương hiệu", Cá nhân dài thêm không quá 72px so với cờ tắt' : 'cờ bật: 8 chip, ẩn "Câu chuyện thương hiệu" (đo chiều cao chỉ ghi số, bố cục nhiều cột)', async ({ page, api }) => {
+    test(phone ? 'cờ bật: 8 chip, ẩn "Câu chuyện thương hiệu", chỉ hàng Huy hiệu làm Cá nhân dài thêm so với cờ tắt' : 'cờ bật: 8 chip, ẩn "Câu chuyện thương hiệu" (đo chiều cao chỉ ghi số, bố cục nhiều cột)', async ({ page, api }) => {
       const { state, crashed } = await setup(page, api, vp, { badgesEnabled: false });
 
       await openProfile(page, api);
       await expect(page.getByTestId('badge-row')).toHaveCount(0);
-      if (phone) await expect(story(page)).toBeVisible();
+      // Đo khi mọi accordion còn đóng, trước khi mở Hỗ trợ.
       const off = await contentHeight(page);
+      await openSupport(page);
+      await expect(story(page)).toBeVisible();
 
       state.badgesEnabled = true;
       await openProfile(page, api);
@@ -184,15 +193,18 @@ for (const size of SIZES) {
       await expect(chips.nth(0)).toHaveAccessibleName('Đơn đầu tiên, đã đạt');
       await expect(chips.nth(1)).toHaveAccessibleName('Chuỗi 7 ngày, đã đạt');
       await expect(chips.nth(2)).toHaveAccessibleName('Đổi rác 3 lần, chưa đạt. Hoàn tất 3 lần Đổi rác lấy quà.');
-      if (phone) await expect(story(page)).toHaveCount(0);
       const on = await contentHeight(page);
+      const rowHeight = (await row.boundingBox())?.height ?? 0;
+      await openSupport(page);
+      await expect(story(page)).toHaveCount(0);
 
+      // Dòng "Câu chuyện thương hiệu" nằm trong Hỗ trợ đóng nên bỏ nó không bù chiều cao: trang chỉ được dài thêm đúng hộp hàng Huy hiệu.
       const delta = on.height - off.height;
-      const line = `PROFILE_HEIGHT_${size.tag.toUpperCase()} off=${off.height} on=${on.height} delta=${delta} (doc ${off.doc}/${on.doc})`;
+      const line = `PROFILE_HEIGHT_${size.tag.toUpperCase()} off=${off.height} on=${on.height} delta=${delta} badgeRow=${rowHeight} (doc ${off.doc}/${on.doc})`;
       console.log(line);
       test.info().annotations.push({ type: 'profile-height', description: line });
       if (phone) {
-        expect(delta, line).toBeLessThanOrEqual(PROFILE_GROWTH_MAX_PX);
+        expect(delta, line).toBeLessThanOrEqual(rowHeight + PROFILE_GROWTH_SLACK_PX);
         expect((await horizontalOverflow(page)).ok).toBe(true);
       }
       await shoot(page, `${size.tag}-profile-after`, page.getByRole('region', { name: 'Đơn của tôi' }));

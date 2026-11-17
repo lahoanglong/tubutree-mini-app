@@ -52,7 +52,8 @@ const PAGES: { name: string; load: () => Promise<{ default: ComponentType }>; ge
   { name: 'Cá nhân', load: () => import('./profile'), generic: /Đăng nhập để xem tích điểm/ },
   { name: 'Ưu đãi', load: () => import('./offers'), generic: /Đăng nhập/ },
   { name: 'Điểm Xanh', load: () => import('./loyalty'), generic: /Đăng nhập/ },
-  { name: 'Đổi quà', load: () => import('./rewards'), generic: /Đăng nhập/ },
+  // `/rewards` chỉ còn là chuyển hướng: thân Kho quà nằm ở tab Đổi quà của Ưu đãi.
+  { name: 'Đổi quà', load: async () => ({ default: (await import('./rewards')).RewardsView }), generic: /Đăng nhập/ },
   { name: 'Cộng đồng', load: () => import('./feed'), generic: /Đăng nhập để xem cộng đồng/ },
   { name: 'Sự kiện cộng đồng', load: () => import('./community-events'), generic: /Đăng nhập để xem cộng đồng/ },
   { name: 'Bài viết', load: () => import('./post-detail'), generic: /Đăng nhập để xem cộng đồng/ },

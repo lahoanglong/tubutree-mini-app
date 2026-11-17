@@ -14,7 +14,6 @@ const ROUTES: ReadonlyArray<readonly [path: string, component: string, page: str
   ['/recycle/r/:id/edit', 'RecycleEditPage', 'recycle-edit'],
   ['/recycle/requests', 'RecycleRequestsPage', 'recycle-requests'],
   ['/recycle/done/:id', 'RecycleDonePage', 'recycle-done'],
-  ['/rewards', 'RewardsPage', 'rewards'],
   ['/rewards/mine', 'RewardsMinePage', 'rewards-mine'],
 ];
 

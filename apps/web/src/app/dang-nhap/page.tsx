@@ -9,7 +9,8 @@ import { publicConfigQuery } from '@tubutree/app-core/queries/config';
 import { homeText } from '@/lib/home-text';
 import { coreHttp } from '@/lib/core-http';
 import { formatVnd } from '@/lib/format-vnd';
-import tubuLogo from '@/assets/tubu-logo-login.png';
+import tubuLogo2x from '@/assets/tubu-logo-login-2x.png';
+import tubuLogo3x from '@/assets/tubu-logo-login.png';
 import { useAuth } from '@/lib/auth-context';
 import { DEFAULT_SUPPORT, getPublicSupport } from '@/lib/api';
 import { loginFailureMessage } from '@/lib/login-errors';
@@ -20,6 +21,10 @@ import { formatPhoneDisplay } from '@/lib/phone-display';
 import { miniAppLink } from '@/lib/zalo-mini-app';
 import { QrCode } from '@/components/ui/qr-code';
 import { LoginSkeleton } from './login-skeleton';
+
+/** Link giữa câu đồng ý: hộp chạm 44px là hộp thật của link (dòng chứa link cao theo), không phải đệm inline tràn sang dòng và đoạn kề,
+ * vì phần tràn đó bị dòng sau và nút phía trên giành mất khi chạm. `.tubu-inline-link` chỉ ra ~41px với chữ 12px. */
+const TERMS_LINK = 'inline-flex min-h-11 items-center font-medium text-forest-700 underline underline-offset-2';
 
 function LoginInner() {
   const router = useRouter();
@@ -71,7 +76,12 @@ function LoginInner() {
 
   return (
     <main className="mx-auto flex min-h-[60vh] max-w-md flex-col items-center justify-center px-6 py-10 text-center">
-      <Image src={tubuLogo} alt="Tubu Tree" width={160} height={58} priority className="h-[58px] w-[160px] object-contain" />
+      {/* Máy 2x tải bản 320px, máy 3x bản 480px (next/image không sinh srcset vì `images.unoptimized`). Không `priority`: thẻ preload chỉ trỏ được một
+          bản nên máy 3x sẽ tải cả hai; ảnh có sẵn trong HTML đầu nên vẫn được tải sớm. */}
+      <picture className="contents">
+        <source srcSet={`${tubuLogo2x.src} 2x, ${tubuLogo3x.src} 3x`} />
+        <Image src={tubuLogo2x} alt="Tubu Tree" width={160} height={58} loading="eager" fetchPriority="high" className="h-[58px] w-[160px] object-contain" />
+      </picture>
       <h1 className="mt-5 font-display text-2xl font-semibold text-forest-800">Đăng nhập</h1>
       <p className="mt-2 text-stone-700">
         Đăng nhập để mua sắm, tích Điểm Xanh và đồng bộ giỏ hàng với Zalo Mini App.
@@ -118,11 +128,11 @@ function LoginInner() {
       {!unavailable && (
         <p className="mt-3 text-xs text-stone-600">
           Bằng việc đăng nhập, bạn đồng ý với{' '}
-          <Link href="/chinh-sach/dieu-khoan" className="tubu-inline-link font-medium text-forest-700 underline underline-offset-2">
+          <Link href="/chinh-sach/dieu-khoan" className={TERMS_LINK}>
             Điều khoản
           </Link>{' '}
           và{' '}
-          <Link href="/chinh-sach/bao-mat" className="tubu-inline-link font-medium text-forest-700 underline underline-offset-2">
+          <Link href="/chinh-sach/bao-mat" className={TERMS_LINK}>
             Chính sách bảo mật
           </Link>
           .

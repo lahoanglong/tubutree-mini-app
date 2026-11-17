@@ -1,10 +1,11 @@
 import type { Page } from '@playwright/test';
 import { expect, test } from './support/mock-api';
 import { blockingViolations, runAxe } from './support/axe';
+import { checkInStatus } from './support/discovery-mocks';
 import { COLLECTABLE, mockCollectable, mockCollectableMine, mockCouponHistory, mockWallet } from './support/voucher-mocks';
 
 /**
- * W48B, web khách ở 320/375/393px và 1440×900: chip lọc làm tab Nhận mã rỗng thì khối trạng thái rỗng có nút "Xem tất cả mã"; bấm đặt lại về "Tất cả",
+ * W48B, web khách ở 320/375/393px và 1440×900, kho mã mở cả ở hub Ưu đãi (`/uu-dai?codes=all`, thay trang Mã giảm giá cũ): chip lọc làm khối Nhận mã rỗng thì khối trạng thái rỗng có nút "Xem tất cả mã"; bấm đặt lại về "Tất cả",
  * phiếu hiện lại và focus về chip "Tất cả". Kho chỉ có mã giảm tiền hạn dài, nên chip "Miễn phí giao hàng" luôn rỗng. Mọi lời gọi từ trình duyệt đi
  * qua mock; trang không gọi API ở máy chủ. Khổ do spec tự đặt, chỉ chạy ở project Web Customer Mobile.
  */
@@ -41,12 +42,14 @@ for (const size of SIZES) {
       mockCollectableMine(api, { claimed: [], newCustomerOnly: [] });
       mockWallet(api, []);
       mockCouponHistory(api, []);
+      api.get('/flash-sales/active', []);
+      api.get('/me/daily-check-in', checkInStatus(false));
       api.allowUnmocked('GET /affiliate/me', 'GET /me/wishlist/ids', 'GET /cart', 'POST /events', 'GET /notifications/unread-count');
     });
 
     test('chip không khớp mã nào: nút "Xem tất cả mã" cao từ 44px, bấm về Tất cả, phiếu hiện lại, focus ở chip Tất cả, không tràn ngang, axe sạch', async ({ page }) => {
-      await page.goto('/ma-giam-gia');
-      const panel = page.getByRole('tabpanel', { name: 'Nhận mã' });
+      await page.goto('/uu-dai?codes=all');
+      const panel = page.getByRole('region', { name: 'Nhận mã', exact: true });
       await expect(panel.getByRole('group').first()).toBeVisible({ timeout: 20_000 });
 
       await chip(page, 'Miễn phí giao hàng').click();

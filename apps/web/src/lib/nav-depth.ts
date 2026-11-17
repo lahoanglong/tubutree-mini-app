@@ -29,7 +29,7 @@ const pathOnly = (p: string): string => p.split(/[?#]/)[0] ?? p;
 
 /**
  * Đích khớp trang trước theo pathname. Đích có `?query` hay `#` phải khớp đủ để không lùi nhầm sang tab khác của cùng trang
- * (`/ma-giam-gia?tab=history` khác `/ma-giam-gia`); đích trần chấp nhận trang trước có query.
+ * (`/uu-dai?tab=wallet` khác `/uu-dai`); đích trần chấp nhận trang trước có query.
  */
 export function pathMatchesPrevious(target: string): boolean {
   const prev = previousPath();

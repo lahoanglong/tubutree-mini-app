@@ -1,23 +1,34 @@
-// @vitest-environment jsdom
-import { renderToStaticMarkup } from 'react-dom/server';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-vi.mock('./vouchers-view', () => ({ default: () => <div data-testid="vouchers-view" /> }));
+const h = vi.hoisted(() => ({ redirect: vi.fn() }));
+vi.mock('next/navigation', () => ({ redirect: h.redirect }));
 
-import { metadata } from './layout';
 import VouchersPage from './page';
 
-describe('/ma-giam-gia (server)', () => {
-  it('metadata: tiêu đề, noindex + nofollow như /uu-dai, không canonical (noindex kèm canonical là hai tín hiệu mâu thuẫn)', () => {
-    expect(metadata.title).toBe('Mã giảm giá');
-    expect(metadata.robots).toEqual({ index: false, follow: false });
-    expect(metadata.alternates).toBeUndefined();
+const open = (sp: Record<string, string | string[] | undefined>) => VouchersPage({ searchParams: Promise.resolve(sp) });
+
+describe('/ma-giam-gia (chuyển hướng vào hub Ưu đãi)', () => {
+  beforeEach(() => h.redirect.mockClear());
+
+  it.each([
+    [{}, '/uu-dai?tab=deals&codes=all'],
+    [{ tab: 'claim' }, '/uu-dai?tab=deals&codes=all'],
+    [{ code: 'X' }, '/uu-dai?tab=deals&codes=all&code=X'],
+    [{ tab: 'mine' }, '/uu-dai?tab=wallet'],
+    [{ tab: 'history', code: 'X' }, '/uu-dai?tab=wallet&history=1&code=X'],
+    [{ tab: 'la' }, '/uu-dai?tab=deals&codes=all'],
+  ])('%j → %s', async (sp, to) => {
+    await open(sp);
+    expect(h.redirect).toHaveBeenCalledTimes(1);
+    expect(h.redirect).toHaveBeenCalledWith(to);
   });
 
-  it('trang dùng khung rộng PAGE_WIDE (không khung Tài khoản) và dựng VouchersView', () => {
-    const html = renderToStaticMarkup(<VouchersPage />);
-    expect(html).toContain('max-w-frame');
-    expect(html).toContain('data-testid="vouchers-view"');
-    expect(html).not.toContain('max-w-3xl');
+  it('giữ tham số lặp và giá trị có ký tự đặc biệt (đọc lại ra đúng giá trị gốc)', async () => {
+    await open({ utm_source: ['zns', 'zalo'], code: 'GIẢM 10&X', empty: undefined });
+    const to = new URL(h.redirect.mock.calls[0]![0] as string, 'https://tubutree.com');
+    expect(to.pathname).toBe('/uu-dai');
+    expect(to.searchParams.getAll('utm_source')).toEqual(['zns', 'zalo']);
+    expect(to.searchParams.get('code')).toBe('GIẢM 10&X');
+    expect(to.searchParams.has('empty')).toBe(false);
   });
 });

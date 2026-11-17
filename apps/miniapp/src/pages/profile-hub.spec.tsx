@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
   subscriptions: true,
   activeSubs: 1,
   badges: null as unknown,
+  recycleOpen: false,
+  recycleHook: vi.fn(),
 }));
 vi.mock('../utils/features', () => ({
   get CASHBACK_ENABLED() {
@@ -68,6 +70,13 @@ vi.mock('../services/zmp-bridge', async (importOriginal) => ({
   shareLink: mocks.shareLink,
 }));
 vi.mock('../services/subscriptions-api', () => ({ getSubscriptions: mocks.getSubscriptions }));
+// Hook thật hỏi /waste/me/open-count; ở đây chỉ cần biết trang truyền đúng (đã đăng nhập, chương trình tạm dừng) và nhận kết quả giả.
+vi.mock('../hooks/use-recycle-open-requests', () => ({
+  useRecycleOpenRequests: (authed: boolean, paused: boolean) => {
+    mocks.recycleHook(authed, paused);
+    return authed && paused && mocks.recycleOpen;
+  },
+}));
 vi.mock('zmp-ui', async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),
   Page: ({ children }: { children: ReactNode }) => <div data-testid="page">{children}</div>,
@@ -123,7 +132,19 @@ function arrangeDefaults() {
   mocks.search = '';
   mocks.getReferral.mockResolvedValue(REFERRAL);
   mocks.getSubscriptions.mockResolvedValue([{ status: 'ACTIVE' }, { status: 'CANCELLED' }]);
+  mocks.recycleOpen = false;
 }
+
+// Dòng accordion mở một lần: bấm lại khi đã mở sẽ đóng, nên chỉ bấm khi đang đóng.
+async function openRow(name: RegExp) {
+  const row = await screen.findByRole('button', { name });
+  if (row.getAttribute('aria-expanded') !== 'true') fireEvent.click(row);
+  expect(row).toHaveAttribute('aria-expanded', 'true');
+  return row;
+}
+const openInvite = () => openRow(/^Mời bạn nhận quà/);
+const openSupport = () => openRow(/^Hỗ trợ/);
+const openPartner = () => openRow(/^Dành cho đối tác/);
 
 describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
   beforeEach(() => {
@@ -135,27 +156,34 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     mocks.cashback = false;
   });
 
-  it('cờ CASHBACK_ENABLED bật: Hoàn tiền sàn ngoài có lối vào ở nhóm Tài khoản và mở /cashback; tắt thì ẩn', async () => {
-    mocks.cashback = true;
-    const { unmount } = renderPage();
-    fireEvent.click(await screen.findByText('Hoàn tiền sàn ngoài'));
-    expect(mocks.navigate).toHaveBeenCalledWith('/cashback');
-    unmount();
-    mocks.cashback = false;
+  it.each([true, false])('cờ CASHBACK_ENABLED %s: Cá nhân không có dòng Hoàn tiền sàn ngoài (trang không đọc cờ này)', async (flag) => {
+    mocks.cashback = flag;
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByText('Cài đặt');
     expect(screen.queryByText('Hoàn tiền sàn ngoài')).toBeNull();
+    expect(mocks.navigate).not.toHaveBeenCalledWith('/cashback');
   });
 
-  it('có đúng ba số dư: Điểm Xanh (tổng hai lô), Ví Tubu, Mã giảm giá — không còn ô xu (C-047, PD-3)', async () => {
+  it('có đúng hai số dư: Điểm Xanh (tổng hai lô), Ví Tubu — không còn ô Mã giảm giá, không ô xu (C-047, PD-3)', async () => {
     renderPage();
-    expect(await screen.findByRole('button', { name: /^2 mã\s*Mã giảm giá$/ })).toBeInTheDocument();
     expect(await screen.findByRole('button', { name: /^150 điểm\s*Điểm Xanh$/ })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /^50\.000đ\s*Ví Tubu$/ })).toBeInTheDocument();
-    const balances = ['Điểm Xanh', 'Ví Tubu', 'Mã giảm giá'].map((label) => screen.getAllByRole('button').find((b) => b.getAttribute('aria-label') === null && (b.textContent ?? '').endsWith(label)));
+    const balances = ['Điểm Xanh', 'Ví Tubu'].map((label) => screen.getAllByRole('button').find((b) => b.getAttribute('aria-label') === null && (b.textContent ?? '').endsWith(label)));
     expect(balances.every(Boolean)).toBe(true);
+    expect(screen.queryByRole('button', { name: /Mã giảm giá$/ })).toBeNull();
     expect(screen.queryByText(/TubuXu/)).toBeNull();
     expect(screen.queryByRole('button', { name: /(?<![\p{L}_])xu(?![\p{L}_])/iu })).toBeNull();
+  });
+
+  it('hàng số dư là lưới hai cột chỉ có hai ô: Điểm Xanh rồi Ví Tubu', async () => {
+    renderPage();
+    const points = await screen.findByRole('button', { name: /Điểm Xanh$/ });
+    const grid = points.parentElement as HTMLElement;
+    expect(grid.style.gridTemplateColumns).toBe('repeat(2, minmax(0, 1fr))');
+    const tiles = within(grid).getAllByRole('button');
+    expect(tiles).toHaveLength(2);
+    expect(tiles[0]).toBe(points);
+    expect(tiles[1]).toHaveTextContent(/Ví Tubu$/);
   });
 
   it('ví từ một triệu xuống price-sm để số không tràn ô ở 320px; ví nhỏ giữ price-md', async () => {
@@ -226,14 +254,27 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     }
   });
 
-  it('khách thường thấy lời mời "Mở gian hàng Cộng tác viên" (không nhắc hoa hồng); CTV thấy "Cộng tác viên"', async () => {
-    const { unmount } = renderPage();
-    expect(await screen.findByText('Mở gian hàng Cộng tác viên')).toBeInTheDocument();
+  it('khách thường không còn lời mời CTV ở Cá nhân; chỉ khi có việc đối tác (điểm nhận hàng) mới thấy "Mở gian hàng Cộng tác viên" (không nhắc hoa hồng); CTV thấy "Cộng tác viên"', async () => {
+    const plain = renderPage();
+    await screen.findByText('Cài đặt');
+    await waitFor(() => expect(mocks.authMeFlags).toHaveBeenCalled());
+    expect(screen.queryByText('Mở gian hàng Cộng tác viên')).toBeNull();
+    plain.unmount();
+
+    mocks.authMeFlags.mockResolvedValue({ ownsBrand: false, hasDeskPoint: true });
+    mocks.deskPoints.mockResolvedValue([{ id: 'p2', name: 'Đại lý An Phát', kind: 'PARTNER' }]);
+    mocks.getPublicConfig.mockResolvedValue({ waste: { enabled: true } });
+    const withDesk = renderPage();
+    await openPartner();
+    expect(await screen.findByRole('button', { name: /^Mở gian hàng Cộng tác viên/ })).toBeInTheDocument();
     expect(screen.queryByText(/hoa hồng/i)).toBeNull();
-    unmount();
+    withDesk.unmount();
+
     mocks.role = 'AFFILIATE';
+    mocks.getPublicConfig.mockResolvedValue({});
     renderPage();
-    expect(await screen.findByText('Cộng tác viên')).toBeInTheDocument();
+    await openPartner();
+    expect(await screen.findByRole('button', { name: /^Cộng tác viên/ })).toBeInTheDocument();
     expect(screen.queryByText('Mở gian hàng Cộng tác viên')).toBeNull();
   });
 
@@ -241,16 +282,17 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     mocks.role = 'DEALER';
     mocks.affiliateMe = { isAffiliate: false, canRegister: false };
     const { unmount } = renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await openPartner();
     await waitFor(() => expect(screen.queryByText('Cộng tác viên')).toBeNull());
     expect(screen.queryByText('Mở gian hàng Cộng tác viên')).toBeNull();
     unmount();
     mocks.affiliateMe = { isAffiliate: true, canRegister: false };
     renderPage();
-    expect(await screen.findByText('Cộng tác viên')).toBeInTheDocument();
+    await openPartner();
+    expect(await screen.findByRole('button', { name: /^Cộng tác viên/ })).toBeInTheDocument();
   });
 
-  it('số ở ba ô số dư dùng font sans tabular, không phải serif của tiêu đề (D6-13)', async () => {
+  it('số ở hai ô số dư dùng font sans tabular, không phải serif của tiêu đề (D6-13)', async () => {
     renderPage();
     const tile = await screen.findByRole('button', { name: /^50\.000đ\s*Ví Tubu$/ });
     const value = Array.from(tile.querySelectorAll<HTMLElement>('*')).find((el) => el.textContent === '50.000đ' && el.children.length === 0)!.parentElement!;
@@ -260,10 +302,11 @@ describe('Thanh số dư ở hub Cá nhân (C-086)', () => {
     expect(value.style.fontVariantNumeric).toBe('tabular-nums');
   });
 
-  it('không còn mục Hoàn tiền sàn ngoài; bấm mục menu điều hướng thật, không báo "đang hoàn thiện"', async () => {
+  it('không còn mục Hoàn tiền sàn ngoài; mở Hỗ trợ rồi bấm mục con điều hướng thật, không báo "đang hoàn thiện"', async () => {
     renderPage();
     expect(screen.queryByText('Hoàn tiền sàn ngoài')).toBeNull();
-    fireEvent.click(await screen.findByText('Câu chuyện thương hiệu'));
+    await openSupport();
+    fireEvent.click(await screen.findByRole('button', { name: /^Câu chuyện thương hiệu/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/brand-story');
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
   });
@@ -278,11 +321,11 @@ describe('Hub Cá nhân theo DS v2 (C-076, C-114)', () => {
     mocks.copyText.mockResolvedValue(true);
   });
 
-  it('có đúng một h1 "Cá nhân" và các nhóm menu là h2', async () => {
+  it('có đúng một h1 "Cá nhân"; thẻ danh sách không có tiêu đề nhóm nên h2 duy nhất là "Đơn của tôi"', async () => {
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByText('Cài đặt');
     expect(screen.getAllByRole('heading', { level: 1 }).map((h) => h.textContent)).toEqual(['Cá nhân']);
-    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Đơn của tôi', 'Mời bạn sống xanh', 'KIẾM TIỀN CÙNG TUBU', 'TÀI KHOẢN', 'HỖ TRỢ']);
+    expect(screen.getAllByRole('heading', { level: 2 }).map((h) => h.textContent)).toEqual(['Đơn của tôi']);
   });
 
   it('chưa đăng nhập vẫn có đúng một h1 và nút Đăng nhập ngay gọi login', async () => {
@@ -302,43 +345,51 @@ describe('Hub Cá nhân theo DS v2 (C-076, C-114)', () => {
     expect(mocks.restore).toHaveBeenCalled();
   });
 
-  it('hàng hồ sơ và nút sao chép link mời bạn là nút thật (bàn phím + đọc màn hình)', async () => {
+  it('nút sao chép link mời bạn là nút thật (bàn phím + đọc màn hình) sau khi mở dòng Mời bạn nhận quà', async () => {
     renderPage();
-    const edit = await screen.findByRole('button', { name: /Sửa hồ sơ/ });
-    fireEvent.click(edit);
-    expect(mocks.navigate).toHaveBeenCalledWith('/edit-profile');
+    await openInvite();
     fireEvent.click(screen.getByRole('button', { name: 'Sao chép link mời bạn' }));
     await waitFor(() => expect(mocks.copyText).toHaveBeenCalledWith(miniAppLink('/?ref=LAN1')));
     await waitFor(() => expect(mocks.openSnackbar).toHaveBeenCalledWith({ text: 'Đã sao chép link mời bạn', type: 'success' }));
   });
 
-  it('mục menu là hàng cao >= 44px; mục Thông báo hiện số chưa đọc', async () => {
+  it('có tin chưa đọc: dòng Thông báo đầu danh sách kèm số tin, mở /notifications; dòng menu là hàng cao >= 44px', async () => {
     mocks.notifications = [{ status: 'UNREAD' }, { status: 'UNREAD' }, { status: 'READ' }];
     renderPage();
-    const row = await screen.findByRole('button', { name: /Thông báo/ });
+    const settings = await screen.findByRole('button', { name: /^Cài đặt/ });
+    expect(settings.style.minHeight).toBe('44px');
+    expect((await openSupport()).style.minHeight).toBe('44px');
+    const row = await screen.findByRole('button', { name: /^Thông báo/ });
+    expect(row).toHaveTextContent('2 thông báo chưa đọc');
     expect(row.style.minHeight).toBe('44px');
-    await waitFor(() => expect(row).toHaveTextContent('2'));
-    fireEvent.click(row);
-    expect(mocks.navigate).toHaveBeenCalledWith('/notifications');
   });
 
-  it('tin chưa đọc lấy từ /me/summary (một lời gọi, cùng lời gọi với số đơn), không tải danh sách tin', async () => {
+  it('đọc hết thông báo: không có dòng Thông báo (lối vào là chuông ở Trang chủ)', async () => {
+    mocks.notifications = [{ status: 'READ' }];
+    renderPage();
+    await screen.findByRole('button', { name: /^Cài đặt/ });
+    expect(screen.queryByRole('button', { name: /^Thông báo/ })).toBeNull();
+  });
+
+  it('số đơn đi qua /me/summary đúng một lời gọi; trang không tải danh sách tin chưa đọc', async () => {
     mocks.notifications = [{ status: 'UNREAD' }];
     renderPage();
-    await waitFor(() => expect(screen.getByRole('button', { name: /Thông báo/ })).toHaveTextContent('1'));
+    await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' });
     const paths = mocks.coreGet.mock.calls.map(([p]) => p);
     expect(paths.filter((p) => p === '/me/summary')).toHaveLength(1);
     expect(paths).not.toContain('/me/notifications/unread-count');
     expect(paths).not.toContain('/me/notifications');
   });
 
-  it('ô Ví Tubu mang state.from để nút quay lại về hub; ô Mã giảm giá mở tab Ưu đãi ở phần mã', async () => {
+  it('ô Điểm Xanh mở /loyalty, ô Ví Tubu mang state.from để nút quay lại về hub; dòng Ưu đãi & quà nêu số mã và mở tab Ưu đãi', async () => {
     renderPage();
-    fireEvent.click(await screen.findByRole('button', { name: /^2 mã\s*Mã giảm giá$/ }));
-    // Hồ sơ → Ưu đãi là tab gốc sang tab gốc: thay mục hiện tại, tránh lịch sử [/, /profile, /offers] mà BottomNav sau đó nhân bản.
-    expect(mocks.navigate).toHaveBeenCalledWith('/offers?section=coupons', { replace: true });
+    fireEvent.click(await screen.findByRole('button', { name: /Điểm Xanh$/ }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/loyalty');
     fireEvent.click(await screen.findByRole('button', { name: /Ví Tubu$/ }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/wallet', { state: { from: '/profile' } });
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/wallet', { state: { from: '/profile' } });
+    fireEvent.click(await screen.findByRole('button', { name: /^Ưu đãi & quà\s*2 mã giảm giá đang có$/ }));
+    // Hồ sơ → Ưu đãi là tab gốc sang tab gốc: thay mục hiện tại, tránh lịch sử [/, /profile, /offers] mà BottomNav sau đó nhân bản.
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers', { replace: true });
   });
 });
 
@@ -353,7 +404,8 @@ describe('Lối vào Trợ lý AI ở hub Cá nhân theo công tắc AI', () => 
   it('server báo bật → có mục Trợ lý AI 24/7', async () => {
     mocks.getPublicConfig.mockResolvedValue({ aiAdvisorEnabled: true });
     renderPage();
-    expect(await screen.findByText('Trợ lý AI 24/7')).toBeInTheDocument();
+    await openSupport();
+    expect(await screen.findByRole('button', { name: /^Trợ lý AI 24\/7/ })).toBeInTheDocument();
   });
 
   it.each([
@@ -362,7 +414,8 @@ describe('Lối vào Trợ lý AI ở hub Cá nhân theo công tắc AI', () => 
   ])('%s → ẩn mục Trợ lý AI, các mục khác vẫn còn', async (_name, arrange) => {
     arrange();
     renderPage();
-    expect(await screen.findByText('Câu chuyện thương hiệu')).toBeInTheDocument();
+    await openSupport();
+    expect(await screen.findByRole('button', { name: /^Về Tubu Tree & Hỗ trợ/ })).toBeInTheDocument();
     await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
     expect(screen.queryByText('Trợ lý AI 24/7')).toBeNull();
     expect(screen.getByText('Cài đặt')).toBeInTheDocument();
@@ -378,21 +431,24 @@ describe('Hàng trạng thái đơn ở đầu trang Cá nhân', () => {
     mocks.getPublicConfig.mockImplementation(async () => ({}));
   });
 
-  it('5 ô: Chờ thanh toán, Đang xử lý, Đang giao, Đã giao, Định kỳ; số đếm từ API, Đã giao không có số', async () => {
+  it('4 ô: Chờ thanh toán, Đang xử lý, Đang giao, Đã giao; số đếm từ API, Đã giao không có số', async () => {
     renderPage();
     expect(await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Đang giao, 1 đơn' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Đang xử lý' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Đã giao' })).toBeInTheDocument();
-    expect(await screen.findByRole('button', { name: 'Định kỳ, 1 đơn' })).toBeInTheDocument();
   });
 
-  it('Mini App tắt giao định kỳ: 4 ô, không có ô Định kỳ và không gọi danh sách định kỳ', async () => {
-    mocks.subscriptions = false;
+  // Trang không đọc cờ SUBSCRIPTIONS_IN_MINIAPP: gói định kỳ mở từ tab Định kỳ của trang đơn và từ Trang chủ.
+  it.each([true, false])('cờ giao định kỳ %s: vẫn đúng 4 ô đơn trong lưới 4 cột, không ô Định kỳ, không gọi danh sách định kỳ', async (flag) => {
+    mocks.subscriptions = flag;
     try {
       renderPage();
-      expect(await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Đã giao' })).toBeInTheDocument();
+      const delivered = await screen.findByRole('button', { name: 'Đã giao' });
+      await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' });
+      const grid = delivered.parentElement as HTMLElement;
+      expect(grid.style.gridTemplateColumns).toBe('repeat(4, minmax(0, 1fr))');
+      expect(within(grid).getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Chờ thanh toán, 2 đơn', 'Đang xử lý', 'Đang giao, 1 đơn', 'Đã giao']);
       expect(screen.queryByRole('button', { name: /^Định kỳ/ })).not.toBeInTheDocument();
       expect(mocks.getSubscriptions).not.toHaveBeenCalled();
     } finally {
@@ -404,8 +460,8 @@ describe('Hàng trạng thái đơn ở đầu trang Cá nhân', () => {
     renderPage();
     fireEvent.click(await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=pending_payment');
-    fireEvent.click(await screen.findByRole('button', { name: 'Định kỳ, 1 đơn' }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=subscriptions');
+    fireEvent.click(screen.getByRole('button', { name: 'Đã giao' }));
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=delivered');
     fireEvent.click(screen.getByRole('button', { name: 'Xem tất cả đơn hàng' }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/orders');
   });
@@ -417,15 +473,14 @@ describe('Hàng trạng thái đơn ở đầu trang Cá nhân', () => {
     expect(mocks.navigate).toHaveBeenLastCalledWith('/orders?tab=shipping');
   });
 
-  it('summary lỗi: không hiện số sai ở bất kỳ ô nào (đơn, định kỳ, tin chưa đọc), các ô vẫn bấm được', async () => {
+  it('summary lỗi: không hiện số sai ở bất kỳ ô đơn nào, các ô vẫn bấm được', async () => {
     mocks.orderCounts.mockRejectedValue(new Error('boom'));
     mocks.notifications = [{ status: 'UNREAD' }, { status: 'UNREAD' }];
     renderPage();
     await screen.findByRole('button', { name: 'Đang giao' });
     await waitFor(() => expect(mocks.orderCounts).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: /đơn$/ })).toBeNull();
-    expect(screen.queryByRole('button', { name: /^Định kỳ, / })).toBeNull();
-    expect(screen.getByRole('button', { name: /Thông báo/ })).not.toHaveTextContent(/\d/);
+    expect(screen.queryAllByTestId('order-count-badge')).toHaveLength(0);
   });
 });
 
@@ -467,6 +522,7 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     mocks.shareLink.mockRejectedValueOnce(new Error('no share'));
     mocks.copyText.mockResolvedValueOnce(true);
     renderPage();
+    await openInvite();
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/?ref=LAN1' })));
     // R-67: link chép là link Mini App, không phải link web.
@@ -479,6 +535,7 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
   it('người dùng huỷ hộp thoại chia sẻ Zalo: không snackbar, không ghi đè clipboard', async () => {
     mocks.shareLink.mockRejectedValueOnce({ code: -2003 });
     renderPage();
+    await openInvite();
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     await new Promise((r) => setTimeout(r, 0));
@@ -490,6 +547,7 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     mocks.getPublicConfig.mockImplementation(async () => ({ newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 } } }));
     mocks.shareLink.mockResolvedValue(undefined);
     renderPage();
+    await openInvite();
     expect(await screen.findByText(/Bạn mới nhận mã 30\.000đ cho đơn đầu từ 199k\. Bạn nhận 5\.000 Điểm Xanh/)).toBeInTheDocument();
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
@@ -502,6 +560,7 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
   it('chưa có mã chào mừng ở cấu hình công khai: thẻ chia sẻ dùng câu không số, không bịa mệnh giá', async () => {
     mocks.shareLink.mockResolvedValue(undefined);
     renderPage();
+    await openInvite();
     fireEvent.click(await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' }));
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     expect((mocks.shareLink.mock.calls[0]![0] as { description: string }).description).toBe('Tubu Tree tặng khách mới mã giảm giá cho đơn đầu');
@@ -511,7 +570,8 @@ describe('Khối mời bạn bè nói đúng thưởng thật (KP-03)', () => {
     mocks.role = 'AFFILIATE';
     mocks.getReferral.mockResolvedValue({ ...REFERRAL, successCount: 2, earnedPoints: 20 });
     renderPage();
-    await screen.findByText('Mời bạn sống xanh');
+    await openInvite();
+    await waitFor(() => expect(mocks.getReferral).toHaveBeenCalled());
     expect(screen.queryByText(/Đã mời thành công/)).toBeNull();
     // CTV chỉ hưởng hoa hồng: khối không hứa Điểm Xanh giới thiệu mà máy chủ sẽ không trả.
     expect(screen.queryByText(/hoàn tất đơn thứ hai/)).toBeNull();
@@ -536,7 +596,7 @@ describe('Tài khoản khách Mini App ở trang Cá nhân (KP-05)', () => {
 
   it('khách thật không thấy thẻ liên kết Zalo', async () => {
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByText('Cài đặt');
     expect(screen.queryByText('Liên kết Zalo để giữ điểm và nhận quà')).toBeNull();
   });
 
@@ -560,30 +620,34 @@ describe('Lối vào "Chat với Tubu Tree" ở hub Cá nhân', () => {
   it('chat tắt: không có dòng menu và không hỏi số chưa đọc', async () => {
     mocks.getPublicConfig.mockResolvedValue(chatCfg(false));
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await openSupport();
+    expect(await screen.findByRole('button', { name: /^Về Tubu Tree & Hỗ trợ/ })).toBeInTheDocument();
     await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
     expect(screen.queryByText('Chat với Tubu Tree')).toBeNull();
     expect(mocks.chatSummary).not.toHaveBeenCalled();
   });
 
-  it('chat bật: có dòng menu mở /chat; chấm đỏ chỉ hiện khi có tin chưa đọc', async () => {
+  it('chat bật: mở Hỗ trợ thấy dòng Chat mở /chat; chấm đỏ chỉ hiện khi có tin chưa đọc', async () => {
     mocks.getPublicConfig.mockResolvedValue(chatCfg(true));
     renderPage();
-    fireEvent.click(await screen.findByText('Chat với Tubu Tree'));
+    await openSupport();
+    fireEvent.click(await screen.findByRole('button', { name: /^Chat với Tubu Tree/ }));
     expect(mocks.navigate).toHaveBeenCalledWith('/chat');
     await waitFor(() => expect(mocks.chatSummary).toHaveBeenCalled());
     expect(screen.queryByTestId('chat-unread-dot')).toBeNull();
+    expect(screen.queryByTestId('support-unread-dot')).toBeNull();
   });
 
-  it('có tin chưa đọc → hiện chấm đỏ', async () => {
+  it('có tin chưa đọc → mở Hỗ trợ thấy chấm đỏ ở dòng Chat', async () => {
     mocks.getPublicConfig.mockResolvedValue(chatCfg(true));
     mocks.chatSummary.mockResolvedValue({ unreadCount: 3 });
     renderPage();
-    expect(await screen.findByTestId('chat-unread-dot')).toBeInTheDocument();
+    await openSupport();
+    expect(await screen.findByRole('img', { name: 'Có tin nhắn mới' })).toBe(screen.getByTestId('chat-unread-dot'));
   });
 });
 
-describe('Cá nhân: hàng đơn, chat ở đầu trang, Học viện theo vai, không Đăng xuất (R-33, R-34, R-53, R-111)', () => {
+describe('Cá nhân: hàng đơn, chat trong Hỗ trợ, Học viện theo vai, không Đăng xuất (R-33, R-34, R-53, R-111)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     arrangeDefaults();
@@ -596,7 +660,7 @@ describe('Cá nhân: hàng đơn, chat ở đầu trang, Học viện theo vai, 
   it('số đơn là chấm ở góc biểu tượng, chỉ hiện khi lớn hơn 0; không còn dấu "·"', async () => {
     renderPage();
     await screen.findByRole('button', { name: 'Chờ thanh toán, 2 đơn' });
-    await waitFor(() => expect(screen.getAllByTestId('order-count-badge').map((b) => b.textContent)).toEqual(['2', '1', '1']));
+    await waitFor(() => expect(screen.getAllByTestId('order-count-badge').map((b) => b.textContent)).toEqual(['2', '1']));
     expect(screen.queryByText('·')).toBeNull();
   });
 
@@ -628,34 +692,39 @@ describe('Cá nhân: hàng đơn, chat ở đầu trang, Học viện theo vai, 
     await waitFor(() => expect(screen.queryByText('Không tải được số đơn.')).toBeNull());
   });
 
-  it('chat bật: biểu tượng chat ở đầu trang mở /chat, có chấm khi có tin chưa đọc; chat tắt thì không có', async () => {
+  it('chat bật có tin chưa đọc: không còn nút chat ở đầu trang; tin mới báo ở dòng Hỗ trợ, chat tắt thì không báo gì', async () => {
     mocks.getPublicConfig.mockResolvedValue({ chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } });
     mocks.chatSummary.mockResolvedValue({ unreadCount: 2 });
     const { unmount } = renderPage();
-    const btn = await screen.findByRole('button', { name: 'Chat với Tubu Tree, có tin mới' });
-    expect(await screen.findByTestId('profile-chat-dot')).toBeInTheDocument();
-    fireEvent.click(btn);
-    expect(mocks.navigate).toHaveBeenCalledWith('/chat');
+    await screen.findByRole('button', { name: 'Hỗ trợ, có tin mới' });
+    expect(await screen.findByTestId('support-unread-dot')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^Chat với Tubu Tree/ })).toBeNull();
+    expect(screen.queryByTestId('profile-chat-dot')).toBeNull();
     unmount();
     mocks.getPublicConfig.mockResolvedValue({});
+    mocks.chatSummary.mockClear();
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByRole('button', { name: 'Hỗ trợ' });
+    await waitFor(() => expect(mocks.getPublicConfig).toHaveBeenCalled());
     expect(screen.queryByRole('button', { name: /^Chat với Tubu Tree/ })).toBeNull();
+    expect(screen.queryByTestId('support-unread-dot')).toBeNull();
+    expect(mocks.chatSummary).not.toHaveBeenCalled();
   });
 
-  it('Học viện chỉ hiện cho CTV, đại lý, nhân viên, quản trị; khách thường không thấy', async () => {
+  it('Học viện chỉ hiện cho CTV, đại lý, nhân viên, quản trị; khách thường không có dòng đối tác nên không thấy', async () => {
     const { unmount } = renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByText('Cài đặt');
     expect(screen.queryByText('Học viện Tubu')).toBeNull();
     unmount();
     mocks.role = 'AFFILIATE';
     renderPage();
-    expect(await screen.findByText('Học viện Tubu')).toBeInTheDocument();
+    await openPartner();
+    expect(await screen.findByRole('button', { name: /^Học viện Tubu/ })).toBeInTheDocument();
   });
 
   it('không còn nút Đăng xuất ở cuối trang Cá nhân', async () => {
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByText('Cài đặt');
     expect(screen.queryByRole('button', { name: 'Đăng xuất' })).toBeNull();
   });
 });
@@ -696,6 +765,7 @@ describe('Lối vào khối mã giới thiệu (E-21)', () => {
     await waitFor(() => expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled());
     const target = (window.HTMLElement.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock.contexts[0] as HTMLElement;
     expect(target.id).toBe('referral');
+    expect(within(target).getByRole('button', { name: /^Mời bạn nhận quà/ })).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('không có ?section=referral thì không cuộn', async () => {
@@ -720,16 +790,18 @@ describe('Lối vào quầy Nhận hàng tại điểm (E-39)', () => {
     mocks.role = 'STAFF';
     mocks.deskPoints.mockResolvedValue(POINTS);
     renderPage();
+    await openPartner();
     expect(await screen.findByText('Kho Tubu HCMC, Đại lý An Phát')).toBeInTheDocument();
-    fireEvent.click(screen.getByText('Nhận hàng tại điểm'));
+    fireEvent.click(screen.getByRole('button', { name: /^Nhận hàng tại điểm/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/desk');
   });
 
   it('nhân viên không có điểm nào: không có hàng', async () => {
     mocks.role = 'STAFF';
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await openPartner();
     await waitFor(() => expect(mocks.deskPoints).toHaveBeenCalled());
+    expect(await screen.findByRole('button', { name: /^Ca làm & chấm công/ })).toBeInTheDocument();
     expect(screen.queryByText('Nhận hàng tại điểm')).toBeNull();
   });
 
@@ -738,12 +810,13 @@ describe('Lối vào quầy Nhận hàng tại điểm (E-39)', () => {
     mocks.deskPoints.mockResolvedValue([POINTS[1]]);
     mocks.getPublicConfig.mockResolvedValue({ waste: { enabled: true } });
     const { unmount } = renderPage();
-    expect(await screen.findByText('Nhận hàng tại điểm')).toBeInTheDocument();
+    await openPartner();
+    expect(await screen.findByRole('button', { name: /^Nhận hàng tại điểm/ })).toBeInTheDocument();
     unmount();
     mocks.deskPoints.mockClear();
     mocks.getPublicConfig.mockResolvedValue({ waste: { enabled: false } });
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByText('Cài đặt');
     await waitFor(() => expect(screen.queryByText('Nhận hàng tại điểm')).toBeNull());
     expect(mocks.deskPoints).not.toHaveBeenCalled();
   });
@@ -753,12 +826,13 @@ describe('Lối vào quầy Nhận hàng tại điểm (E-39)', () => {
     mocks.deskPoints.mockResolvedValue([POINTS[1]]);
     mocks.getPublicConfig.mockResolvedValue({ waste: { enabled: true } });
     const { unmount } = renderPage();
-    expect(await screen.findByText('Nhận hàng tại điểm')).toBeInTheDocument();
+    await openPartner();
+    expect(await screen.findByRole('button', { name: /^Nhận hàng tại điểm/ })).toBeInTheDocument();
     unmount();
     mocks.deskPoints.mockClear();
     mocks.getPublicConfig.mockResolvedValue({ waste: { enabled: false } });
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByText('Cài đặt');
     await waitFor(() => expect(screen.queryByText('Nhận hàng tại điểm')).toBeNull());
     expect(mocks.deskPoints).not.toHaveBeenCalled();
   });
@@ -767,7 +841,7 @@ describe('Lối vào quầy Nhận hàng tại điểm (E-39)', () => {
     mocks.authMeFlags.mockResolvedValue({ ownsBrand: null, hasDeskPoint: false });
     mocks.getPublicConfig.mockResolvedValue({ waste: { enabled: true } });
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByText('Cài đặt');
     await waitFor(() => expect(mocks.orderCounts).toHaveBeenCalled());
     expect(mocks.deskPoints).not.toHaveBeenCalled();
   });
@@ -775,7 +849,7 @@ describe('Lối vào quầy Nhận hàng tại điểm (E-39)', () => {
   it('khách thường không phát sinh lời gọi điểm nhận hàng', async () => {
     mocks.deskPoints.mockResolvedValue(POINTS);
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByText('Cài đặt');
     await waitFor(() => expect(mocks.orderCounts).toHaveBeenCalled());
     expect(mocks.deskPoints).not.toHaveBeenCalled();
     expect(screen.queryByText('Nhận hàng tại điểm')).toBeNull();
@@ -794,7 +868,14 @@ function deferred<T>() {
 
 describe('Cá nhân: chạm đúp cùng nhịp không gọi lặp (W78A)', () => {
   const COUNTS = { pending_payment: 3, processing: 3, shipping: 3, delivered: 3, closed: 3 };
-  const copyRef = () => screen.findByRole('button', { name: /Sao chép link mời bạn/ });
+  const copyRef = async () => {
+    await openInvite();
+    return screen.findByRole('button', { name: /Sao chép link mời bạn/ });
+  };
+  const shareRef = async () => {
+    await openInvite();
+    return screen.findByRole('button', { name: 'Chia sẻ qua Zalo' });
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -843,7 +924,7 @@ describe('Cá nhân: chạm đúp cùng nhịp không gọi lặp (W78A)', () =>
     const d = deferred<void>();
     mocks.shareLink.mockReturnValue(d.promise);
     renderPage();
-    const share = await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' });
+    const share = await shareRef();
     await act(async () => {
       fireEvent.click(share);
       fireEvent.click(share);
@@ -861,7 +942,7 @@ describe('Cá nhân: chạm đúp cùng nhịp không gọi lặp (W78A)', () =>
     const d = deferred<void>();
     mocks.shareLink.mockReturnValue(d.promise);
     renderPage();
-    const share = await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' });
+    const share = await shareRef();
     const copy = await copyRef();
     await act(async () => {
       fireEvent.click(share);
@@ -880,7 +961,7 @@ describe('Cá nhân: chạm đúp cùng nhịp không gọi lặp (W78A)', () =>
   it('khách đóng hộp chia sẻ (huỷ) thì nhả khoá: bấm Chia sẻ lại gọi lần nữa', async () => {
     mocks.shareLink.mockRejectedValueOnce({ code: -2003 }).mockResolvedValue(undefined);
     renderPage();
-    const share = await screen.findByRole('button', { name: 'Chia sẻ qua Zalo' });
+    const share = await shareRef();
     fireEvent.click(share);
     await waitFor(() => expect(mocks.shareLink).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(share).not.toHaveAttribute('aria-busy'));
@@ -963,14 +1044,179 @@ describe('ProfilePage: hàng huy hiệu (cờ engagement.badges_enabled)', () =>
     expect(await screen.findByTestId('badge-row')).toBeInTheDocument();
     expect(screen.getByText('1/8')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Đơn đầu tiên, đã đạt' })).toBeInTheDocument();
+    await openSupport();
+    expect(screen.getByRole('button', { name: /^Về Tubu Tree & Hỗ trợ/ })).toBeInTheDocument();
     expect(screen.queryByText('Câu chuyện thương hiệu')).toBeNull();
   });
 
   it('cờ tắt: không có hàng huy hiệu, dòng Câu chuyện thương hiệu còn', async () => {
     mocks.badges = { enabled: false, badges: [] };
     renderPage();
-    expect(await screen.findByText('Câu chuyện thương hiệu')).toBeInTheDocument();
+    await openSupport();
+    expect(await screen.findByRole('button', { name: /^Câu chuyện thương hiệu/ })).toBeInTheDocument();
     await waitFor(() => expect(mocks.coreGet).toHaveBeenCalledWith('/game/badges'));
     expect(screen.queryByTestId('badge-row')).toBeNull();
+  });
+});
+
+describe('Cá nhân: thẻ danh tính không bấm được', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    arrangeDefaults();
+    mocks.authStatus = 'authenticated';
+    mocks.role = 'CUSTOMER';
+    mocks.getPublicConfig.mockImplementation(async () => ({ chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } }));
+    mocks.chatSummary.mockResolvedValue({ unreadCount: 0 });
+  });
+
+  it('không nút nào mang tên Lan, không "Sửa hồ sơ", bấm vào tên không điều hướng; chat bật mà Hỗ trợ đóng thì không có nút Chat', async () => {
+    renderPage();
+    const name = await screen.findByText('Lan');
+    expect(screen.queryByRole('button', { name: /Lan/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Sửa hồ sơ/ })).toBeNull();
+    expect(name.closest('button, [role="button"], a')).toBeNull();
+    fireEvent.click(name);
+    expect(mocks.navigate).not.toHaveBeenCalled();
+    await waitFor(() => expect(mocks.chatSummary).toHaveBeenCalled());
+    expect(screen.queryByRole('button', { name: /^Chat với Tubu Tree/ })).toBeNull();
+    await openSupport();
+    expect(await screen.findByRole('button', { name: /^Chat với Tubu Tree/ })).toBeInTheDocument();
+  });
+});
+
+describe('Cá nhân: thẻ danh sách một khối (buildProfileMenu)', () => {
+  const SEVEN = ['Ưu đãi & quà', 'Mời bạn nhận quà', 'Sổ địa chỉ', 'Sản phẩm yêu thích', 'Đổi rác lấy quà', 'Hỗ trợ', 'Cài đặt'];
+  const FULL_CFG = { chat: { enabled: true, hours: { start: '08:00', end: '21:00' } }, aiAdvisorEnabled: true, waste: { enabled: true } };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    arrangeDefaults();
+    mocks.authStatus = 'authenticated';
+    mocks.role = 'CUSTOMER';
+    mocks.getPublicConfig.mockImplementation(async () => FULL_CFG);
+    mocks.chatSummary.mockResolvedValue({ unreadCount: 0 });
+    window.HTMLElement.prototype.scrollIntoView = vi.fn();
+  });
+
+  it('khách thường (chat, AI, đổi rác bật) có đúng bảy dòng theo thứ tự, không có "Dành cho đối tác"', async () => {
+    renderPage();
+    await screen.findByRole('button', { name: /^Đổi rác lấy quà/ });
+    await waitFor(() => expect(mocks.authMeFlags).toHaveBeenCalled());
+    const list = screen.getByRole('button', { name: /^Cài đặt/ }).parentElement as HTMLElement;
+    const rows = Array.from(list.children).map((row) => SEVEN.find((label) => row.textContent?.startsWith(label)));
+    expect(rows).toEqual(SEVEN);
+    expect(screen.queryByRole('button', { name: /^Dành cho đối tác/ })).toBeNull();
+    expect(screen.queryByText('Dành cho đối tác')).toBeNull();
+  });
+
+  describe('accordion Mời bạn nhận quà', () => {
+    it('mặc định đóng và nút Chia sẻ không truy cập được; bấm mở thì nút hiện, bấm lại thì đóng', async () => {
+      renderPage();
+      const toggle = await screen.findByRole('button', { name: /^Mời bạn nhận quà/ });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(document.getElementById(toggle.getAttribute('aria-controls')!)).toHaveAttribute('hidden');
+      expect(screen.queryByRole('button', { name: 'Chia sẻ qua Zalo' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Sao chép link mời bạn' })).toBeNull();
+
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(screen.getByRole('button', { name: 'Chia sẻ qua Zalo' })).toBeInTheDocument();
+      expect(screen.getByText(/Mã của bạn:/)).toHaveTextContent('Mã của bạn: LAN1');
+
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('button', { name: 'Chia sẻ qua Zalo' })).toBeNull();
+    });
+  });
+
+  describe('accordion Hỗ trợ', () => {
+    it('mở ra có đủ bốn mục, mỗi mục điều hướng đúng', async () => {
+      renderPage();
+      const toggle = await screen.findByRole('button', { name: /^Hỗ trợ/ });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('button', { name: /^Về Tubu Tree & Hỗ trợ/ })).toBeNull();
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      const targets: [RegExp, string][] = [
+        [/^Chat với Tubu Tree/, '/chat'],
+        [/^Trợ lý AI 24\/7/, '/ai-advisor'],
+        [/^Về Tubu Tree & Hỗ trợ/, '/about'],
+        [/^Câu chuyện thương hiệu/, '/brand-story'],
+      ];
+      for (const [name, path] of targets) {
+        fireEvent.click(await screen.findByRole('button', { name }));
+        expect(mocks.navigate).toHaveBeenLastCalledWith(path);
+      }
+    });
+
+    it('tin chưa đọc: dòng Hỗ trợ đóng có chấm và tên "Hỗ trợ, có tin mới"; mở ra thì chấm nằm ở dòng Chat', async () => {
+      mocks.chatSummary.mockResolvedValue({ unreadCount: 2 });
+      renderPage();
+      const closed = await screen.findByRole('button', { name: 'Hỗ trợ, có tin mới' });
+      expect(await screen.findByTestId('support-unread-dot')).toBeInTheDocument();
+      expect(screen.queryByRole('img', { name: 'Có tin nhắn mới' })).toBeNull();
+
+      fireEvent.click(closed);
+      expect(closed).toHaveAttribute('aria-expanded', 'true');
+      expect(closed).toHaveAccessibleName('Hỗ trợ');
+      expect(screen.queryByTestId('support-unread-dot')).toBeNull();
+      const chat = screen.getByRole('button', { name: /^Chat với Tubu Tree/ });
+      expect(within(chat).getByRole('img', { name: 'Có tin nhắn mới' })).toBe(screen.getByTestId('chat-unread-dot'));
+    });
+  });
+
+  describe('dòng Dành cho đối tác chỉ có khi có vai trò hoặc việc đối tác', () => {
+    it('AFFILIATE có dòng, đóng thì mục con không truy cập được, mở ra thấy Cộng tác viên và Học viện Tubu', async () => {
+      mocks.role = 'AFFILIATE';
+      renderPage();
+      const toggle = await screen.findByRole('button', { name: /^Dành cho đối tác/ });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByRole('button', { name: /^Cộng tác viên/ })).toBeNull();
+      fireEvent.click(toggle);
+      fireEvent.click(await screen.findByRole('button', { name: /^Cộng tác viên/ }));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/affiliate');
+      fireEvent.click(screen.getByRole('button', { name: /^Học viện Tubu/ }));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/academy');
+    });
+
+    it('STAFF có điểm nhận hàng: mở ra thấy ca làm, lương và Nhận hàng tại điểm mở /recycle/desk', async () => {
+      mocks.role = 'STAFF';
+      mocks.deskPoints.mockResolvedValue([{ id: 'p1', name: 'Kho Tubu HCMC', kind: 'WAREHOUSE' }]);
+      renderPage();
+      await openPartner();
+      expect(await screen.findByRole('button', { name: /^Ca làm & chấm công/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /^Lương của tôi/ })).toBeInTheDocument();
+      fireEvent.click(await screen.findByRole('button', { name: /^Nhận hàng tại điểm/ }));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/desk');
+    });
+  });
+
+  describe('dòng đổi rác theo cờ chương trình', () => {
+    it('chương trình bật: "Đổi rác lấy quà" mở /recycle, không hỏi yêu cầu đang mở', async () => {
+      renderPage();
+      fireEvent.click(await screen.findByRole('button', { name: /^Đổi rác lấy quà/ }));
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
+      expect(mocks.recycleHook).not.toHaveBeenCalledWith(true, true);
+    });
+
+    it('chương trình tắt mà còn yêu cầu mở: dòng "Yêu cầu của tôi" kèm gợi ý tạm dừng, mở /recycle', async () => {
+      mocks.getPublicConfig.mockImplementation(async () => ({ waste: { enabled: false } }));
+      mocks.recycleOpen = true;
+      renderPage();
+      const row = await screen.findByRole('button', { name: /^Yêu cầu của tôi/ });
+      expect(row).toHaveTextContent('Chương trình đang tạm dừng, xem yêu cầu còn mở');
+      expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
+      fireEvent.click(row);
+      expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle');
+    });
+
+    it('chương trình tắt và không còn yêu cầu mở: không có dòng đổi rác', async () => {
+      mocks.getPublicConfig.mockImplementation(async () => ({ waste: { enabled: false } }));
+      renderPage();
+      await screen.findByText('Cài đặt');
+      await waitFor(() => expect(mocks.recycleHook).toHaveBeenCalledWith(true, true));
+      expect(screen.queryByText('Đổi rác lấy quà')).toBeNull();
+      expect(screen.queryByText('Yêu cầu của tôi')).toBeNull();
+    });
   });
 });

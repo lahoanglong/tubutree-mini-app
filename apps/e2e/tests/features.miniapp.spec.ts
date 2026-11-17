@@ -68,7 +68,9 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
 
     // Timeout 15s: restore() thử Zalo SDK bridge (login/getAccessToken, tối đa ~3s timeout riêng)
     // trước khi rơi xuống guest login mock.
-    await expect(page.getByText('Quản lý thương hiệu')).toBeVisible({ timeout: 15_000 });
+    // Quản lý thương hiệu nằm trong dòng "Dành cho đối tác" (đóng sẵn): panel có trong DOM nhưng ẩn tới khi mở.
+    await page.getByRole('button', { name: /^Dành cho đối tác/ }).click({ timeout: 15_000 });
+    await expect(page.getByText('Quản lý thương hiệu')).toBeVisible();
     await page.getByText('Quản lý thương hiệu').click();
 
     // Màn quản lý thương hiệu làm đầy đủ trên web (W177): Mini App giữ đường dẫn và hiện thẻ chuyển sang website.
@@ -90,7 +92,8 @@ test.describe('Zalo Mini App - Tính năng mới (Brand Owner & Storefront)', ()
 
     await page.goto('/profile');
 
-    await expect(page.getByText('Cộng tác viên', { exact: true })).toBeVisible({ timeout: 15_000 });
+    await page.getByRole('button', { name: /^Dành cho đối tác/ }).click({ timeout: 15_000 });
+    await expect(page.getByText('Cộng tác viên', { exact: true })).toBeVisible();
     await expect(page.getByText('Quản lý thương hiệu')).toHaveCount(0);
     expect(api.callsTo('GET', '/auth/me').length).toBeGreaterThan(0);
     expect(api.callsTo('GET', '/brand/owner/me')).toHaveLength(0);

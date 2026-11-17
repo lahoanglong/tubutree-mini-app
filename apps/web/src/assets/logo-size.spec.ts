@@ -18,14 +18,18 @@ describe('logo nhẹ và sát cỡ hiển thị (Pa6)', () => {
     expect(bytes).toBeLessThan(12 * 1024);
   });
 
-  it('tubu-logo-login.png: hiện 160×58 ở /dang-nhap: rộng ≥ 3× (480), cùng tỉ lệ logo, nhẹ dưới 12 KB', () => {
-    const { bytes, w, h } = png('tubu-logo-login.png');
-    expect(w).toBeGreaterThanOrEqual(160 * 3);
-    expect(Math.abs(w / h - 1059 / 384)).toBeLessThan(0.02);
-    expect(bytes).toBeLessThan(12 * 1024);
+  it('logo /dang-nhap hiện 160×58: bản 2x (320) cho máy 2x và bản 3x (480) chỉ trong srcset, cùng tỉ lệ logo, mỗi bản nhẹ dưới 12 KB', () => {
+    for (const [name, scale] of [['tubu-logo-login-2x.png', 2], ['tubu-logo-login.png', 3]] as const) {
+      const { bytes, w, h } = png(name);
+      expect(w).toBe(160 * scale);
+      expect(Math.abs(w / h - 1059 / 384)).toBeLessThan(0.02);
+      expect(bytes).toBeLessThan(12 * 1024);
+    }
+    expect(png('tubu-logo-login-2x.png').bytes).toBeLessThan(png('tubu-logo-login.png').bytes);
   });
 
-  it('tubu-logo-home.png: nhẹ dưới 12 KB', () => {
+  it('tubu-logo-home.png (3x) và tubu-logo-home-2x.png: nhẹ dưới 12 KB', () => {
     expect(png('tubu-logo-home.png').bytes).toBeLessThan(12 * 1024);
+    expect(png('tubu-logo-home-2x.png').bytes).toBeLessThan(12 * 1024);
   });
 });

@@ -81,10 +81,10 @@ beforeEach(() => {
 
 const before = (a: Node, b: Node) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
 
-describe('LoyaltyPage — dòng mã giảm giá ngay dưới thẻ hạng', () => {
+describe('LoyaltyPage — thứ tự khối của trang gọn', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mocks.getLoyalty.mockResolvedValue(LOYALTY);
+    mocks.getLoyalty.mockResolvedValue({ ...LOYALTY, rates: { earnPct: 2, vndPerPoint: 50, vndPerPointRedeem: 1_000, maxRedeemPct: 0.2 } });
     mocks.getCoupons.mockResolvedValue([COUPON]);
     mocks.getPointsTransactions.mockResolvedValue([
       { id: 'p1', delta: 1_250, reason: 'ORDER', refType: null, expiresAt: null, createdAt: new Date(2026, 9, 5).toISOString() },
@@ -94,50 +94,42 @@ describe('LoyaltyPage — dòng mã giảm giá ngay dưới thẻ hạng', () =
     mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
   });
 
-  it('"Ví mã (n)" nằm ngay dưới thẻ hạng, trước điểm danh, các hạng, Kho quà và lịch sử', async () => {
+  it('thẻ hạng → dòng điểm danh → dòng Ưu đãi → mục gập luật → quyền lợi → các hạng → lịch sử', async () => {
     renderPage();
-    const vouchers = await screen.findByText('Ví mã (1)');
-    const checkIn = await screen.findByText('Điểm danh mỗi ngày');
-    const tiers = await screen.findByText('Các hạng');
-    const rewards = await screen.findByText('Kho quà');
-    const history = await screen.findByText('Lịch sử Điểm Xanh');
-    const tierCard = await screen.findByText('Tích điểm ×1', { exact: false });
-
-    expect(before(tierCard, vouchers)).toBe(true);
-    for (const later of [checkIn, tiers, rewards, history]) {
-      expect(before(vouchers, later)).toBe(true);
-    }
+    const order = [
+      await screen.findByText('Tích điểm ×1', { exact: false }),
+      await screen.findByText('Hôm nay bạn chưa điểm danh'),
+      await screen.findByText('Đổi quà & mã giảm giá'),
+      await screen.findByRole('button', { name: 'Cách kiếm và dùng Điểm Xanh' }),
+      await screen.findByText('Quyền lợi của bạn'),
+      await screen.findByText('Các hạng'),
+      await screen.findByText('Lịch sử Điểm Xanh'),
+    ];
+    for (let i = 1; i < order.length; i += 1) expect(before(order[i - 1]!, order[i]!), `khối ${i}`).toBe(true);
   });
 
   it('trang Hạng không còn liệt kê từng mã (nhãn giảm giá, điều kiện đơn, hạn dùng nằm ở Ưu đãi)', async () => {
     renderPage();
-    await screen.findByText('Ví mã (1)');
+    await screen.findByText('Bạn đang có 1 mã giảm giá');
     expect(screen.queryByText('Mã giảm giá của tôi')).toBeNull();
     expect(screen.queryByText('Giảm 30.000đ')).toBeNull();
     expect(screen.queryByText(/WELCOME30/)).toBeNull();
     expect(screen.queryByText(/HSD/)).toBeNull();
   });
 
-  it('mã còn đang tải: dòng "Kho quà" ở thẻ lối tắt đã có sẵn, để thẻ không giãn ra khi tải xong', async () => {
+  it('mã còn đang tải: dòng Ưu đãi đã có sẵn và nói chung, để thẻ không đổi khi mã về', async () => {
     mocks.getCoupons.mockReturnValue(new Promise(() => undefined));
     renderPage();
     await screen.findByText('Các hạng');
-    expect(screen.getByText('Kho quà')).toBeInTheDocument();
-    expect(screen.queryByText(/Ví mã/)).toBeNull();
+    expect(screen.getByText('Đổi quà & mã giảm giá')).toBeInTheDocument();
+    expect(screen.getByText('Đổi Điểm Xanh lấy mã giảm giá và quà')).toBeInTheDocument();
   });
 
-  it('chưa có mã → dòng "Đổi quà" thay cho "Ví mã"', async () => {
-    mocks.getCoupons.mockResolvedValue([]);
-    renderPage();
-    expect(await screen.findByText('Đổi quà')).toBeInTheDocument();
-    expect(screen.queryByText(/Ví mã/)).toBeNull();
-  });
-
-  it('không tải được mã → "Ví mã" không kèm số, không giả vờ "chưa có mã"', async () => {
+  it('không tải được mã: dòng Ưu đãi vẫn còn, không giả vờ "có 0 mã"', async () => {
     mocks.getCoupons.mockRejectedValue(new Error('boom'));
     renderPage();
-    expect(await screen.findByText('Ví mã')).toBeInTheDocument();
-    expect(screen.queryByText('Đổi quà')).toBeNull();
+    expect(await screen.findByText('Đổi Điểm Xanh lấy mã giảm giá và quà')).toBeInTheDocument();
+    expect(screen.queryByText(/Bạn đang có/)).toBeNull();
   });
 });
 
@@ -154,14 +146,14 @@ describe('LoyaltyPage — thuật ngữ thống nhất và số có dấu nghìn
     mocks.getMemberCard.mockResolvedValue({ memberCode: 'TUBU123', posCreditEnabled: false });
   });
 
-  it('không còn chữ "voucher" / "hạt giống" trên trang; điểm danh Vườn nói "giọt nước"', async () => {
+  it('không còn chữ "voucher" / "hạt giống" trên trang', async () => {
     const { container } = renderPage();
     await screen.findByText('Lịch sử Điểm Xanh');
-    await screen.findByText('Ví mã (1)');
+    await screen.findByText('Bạn đang có 1 mã giảm giá');
+    await screen.findByText('Hôm nay bạn chưa điểm danh');
     const text = container.textContent ?? '';
     expect(text).not.toMatch(/voucher/i);
     expect(text).not.toMatch(/hạt giống/i);
-    expect(text).toContain('giọt nước');
   });
 
   it('điểm còn thiếu, ngưỡng hạng và lịch sử điểm đều có dấu phân cách nghìn', async () => {

@@ -4,8 +4,8 @@ import { act } from 'react';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 
-// mv-order: hub tài khoản giống Mini App ở điện thoại. Gốc: chép ý profile-hub.spec.tsx, profile-brand-owner.spec.tsx và profile.spec.ts (Mini App): thẻ đầu, ba số dư, menu theo nhóm,
-// mục theo vai trò/cờ, đại lý và chủ nhãn đổi theo dữ liệu, mã giới thiệu có nút chép. Mục trỏ route pending bị ẩn.
+// mv-order: hub tài khoản giống Mini App ở điện thoại. Gốc: chép ý profile-hub.spec.tsx, profile-brand-owner.spec.tsx và profile.spec.ts (Mini App): thẻ danh tính, hai số dư,
+// hàng bốn trạng thái đơn, một thẻ danh sách dòng.
 
 const mocks = vi.hoisted(() => ({
   auth: {
@@ -86,26 +86,30 @@ describe('hub /tai-khoan như Mini App (điện thoại)', () => {
     expect(back.closest('.max-md\\:hidden')).not.toBeNull();
   });
 
-  it('dải xanh chuyển màu tràn ngang ôm hồ sơ; ba ô số liệu là thẻ trắng nổi đè mép dưới', async () => {
+  it('dải xanh chuyển màu tràn ngang ôm tên và hạng, không bấm được; hai ô số dư là thẻ trắng nổi đè mép dưới', async () => {
     const c = await mount();
-    const head = c.querySelector<HTMLAnchorElement>('a[href="/tai-khoan/ho-so"]')!;
-    const band = head.parentElement as HTMLElement;
+    const band = c.querySelector<HTMLElement>('[data-surface="inverse"]')!;
     expect(band.className).toContain('bg-[linear-gradient(');
+    expect(band.closest('a')).toBeNull();
+    expect(band.querySelector('a')).toBeNull();
+    expect(band.textContent).toContain('Nguyễn An');
+    expect(c.querySelector('a[href="/tai-khoan/ho-so"]')).toBeNull();
     const tiles = Array.from(c.querySelectorAll('a')).filter((a) => /(Điểm Xanh|Ví Tubu|Mã giảm giá)$/.test(a.textContent ?? '') && a.className.includes('min-h-11'));
-    expect(tiles).toHaveLength(3);
+    expect(tiles.map((t) => t.getAttribute('href'))).toEqual(['/tai-khoan/diem-xanh', '/tai-khoan/vi-tubu']);
     for (const t of tiles) {
       expect(t.className).toContain('bg-[var(--color-bg-surface)]');
       expect(t.className).toContain('text-center');
     }
     expect(tiles[0]!.parentElement!.className).toContain('-mt-5');
-    expect(tiles[0]!.parentElement!.className).toContain('grid-cols-3');
+    expect(tiles[0]!.parentElement!.className).toContain('grid-cols-2');
   });
 
-  it('hàng trạng thái đơn có năm ô ở điện thoại và khối "Đơn hàng của tôi" có ô tìm chỉ từ md', async () => {
+  it('hàng trạng thái đơn có bốn ô (không còn Định kỳ) ở điện thoại và khối "Đơn hàng của tôi" có ô tìm chỉ từ md', async () => {
     const c = await mount();
     const row = c.querySelector('section[aria-label="Đơn của tôi"]')!;
-    expect(row.querySelectorAll('a.tubu-press').length).toBe(6);
-    expect(row.querySelector('.grid-cols-5')!.children).toHaveLength(5);
+    expect(row.querySelectorAll('a.tubu-press').length).toBe(5);
+    expect(row.querySelector('.grid-cols-4')!.children).toHaveLength(4);
+    expect(row.querySelector('.grid-cols-5')).toBeNull();
   });
 
   it('khối "Đơn hàng của tôi" ẩn ở điện thoại (Mini App không có)', async () => {

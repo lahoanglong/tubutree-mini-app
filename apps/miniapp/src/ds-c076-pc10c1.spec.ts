@@ -33,8 +33,10 @@ const FILES = [
   'src/pages/rewards-mine.tsx',
 ];
 
+/** File trong pages/ chỉ còn xuất thân màn để màn khác nhúng (Kho quà là tab Đổi quà của Ưu đãi, trang đó giữ tiêu đề): không tự có tiêu đề trang. */
+const BODY_ONLY = new Set(['src/pages/rewards.tsx']);
 /** Trang (không phải component con) phải có đúng một tiêu đề trang — PageHeader hoặc <h1> riêng (C-114). */
-const PAGE_FILES = FILES.filter((f) => f.startsWith('src/pages/'));
+const PAGE_FILES = FILES.filter((f) => f.startsWith('src/pages/') && !BODY_ONLY.has(f));
 
 /** Chỉ những thứ DS chưa có bản thay mới được lấy từ ZaUI: khung trang, ô nhập, avatar, vòng quay, snackbar, điều hướng. */
 const ZAUI_ALLOWED = new Set(['Page', 'Input', 'Avatar', 'Spinner', 'useSnackbar', 'useNavigate', 'useLocation', 'useParams']);

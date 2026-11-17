@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { HttpError } from '../services/http';
 import type { ReactNode } from 'react';
@@ -72,6 +72,12 @@ function renderPage() {
   return qc;
 }
 
+// Mục quản lý nhãn nằm trong dòng "Dành cho đối tác" (accordion): phải mở dòng đó thì mục con mới truy cập được.
+async function openPartner() {
+  const row = await screen.findByRole('button', { name: /^Dành cho đối tác/ });
+  if (row.getAttribute('aria-expanded') !== 'true') fireEvent.click(row);
+}
+
 describe('Hub Cá nhân: hỏi chủ nhãn (R6-BUYER-16)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -82,12 +88,13 @@ describe('Hub Cá nhân: hỏi chủ nhãn (R6-BUYER-16)', () => {
     mocks.getOwnedBrand.mockRejectedValue(http404());
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined);
     const qc = renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByText('Cài đặt');
     await waitFor(() => expect(mocks.getOwnedBrand).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(qc.getQueryCache().getAll().some((q) => q.queryKey[0] === 'owned-brand' && q.state.status === 'success')).toBe(true));
     expect(qc.getQueryCache().getAll().filter((q) => q.state.status === 'error')).toEqual([]);
     expect(mocks.openSnackbar).not.toHaveBeenCalled();
     expect(consoleError).not.toHaveBeenCalled();
+    expect(screen.queryByRole('button', { name: /^Dành cho đối tác/ })).toBeNull();
     expect(screen.queryByText('Quản lý thương hiệu')).toBeNull();
     consoleError.mockRestore();
   });
@@ -95,7 +102,8 @@ describe('Hub Cá nhân: hỏi chủ nhãn (R6-BUYER-16)', () => {
   it('chủ nhãn thật vẫn thấy mục "Quản lý thương hiệu"', async () => {
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     renderPage();
-    expect(await screen.findByText('Quản lý thương hiệu')).toBeInTheDocument();
+    await openPartner();
+    expect(await screen.findByRole('button', { name: /^Quản lý thương hiệu/ })).toHaveTextContent('Tubu Home');
   });
 
   it('lỗi khác 404 (mạng, 500) không bị nuốt thành "không phải chủ nhãn"', async () => {
@@ -107,7 +115,7 @@ describe('Hub Cá nhân: hỏi chủ nhãn (R6-BUYER-16)', () => {
   it('/auth/me báo ownsBrand=false: không gọi /brand/owner/me, không có mục quản lý nhãn', async () => {
     mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: false, hasDeskPoint: false });
     renderPage();
-    await screen.findByText('Câu chuyện thương hiệu');
+    await screen.findByText('Cài đặt');
     await waitFor(() => expect(mocks.getAuthMeFlags).toHaveBeenCalledTimes(1));
     expect(mocks.getOwnedBrand).not.toHaveBeenCalled();
     expect(screen.queryByText('Quản lý thương hiệu')).toBeNull();
@@ -117,21 +125,24 @@ describe('Hub Cá nhân: hỏi chủ nhãn (R6-BUYER-16)', () => {
     mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: true, hasDeskPoint: false });
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     renderPage();
-    expect(await screen.findByText('Quản lý thương hiệu')).toBeInTheDocument();
+    await openPartner();
+    expect(await screen.findByRole('button', { name: /^Quản lý thương hiệu/ })).toBeInTheDocument();
   });
 
   it('/auth/me lỗi: giữ cách cũ (vẫn hỏi /brand/owner/me)', async () => {
     mocks.getAuthMeFlags.mockRejectedValue(new Error('mạng'));
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     renderPage();
-    expect(await screen.findByText('Quản lý thương hiệu')).toBeInTheDocument();
+    await openPartner();
+    expect(await screen.findByRole('button', { name: /^Quản lý thương hiệu/ })).toBeInTheDocument();
   });
 
   it('cờ ownsBrand đổi true → false thì mục quản lý nhãn biến mất dù ownedBrand còn data cũ', async () => {
     mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: true, hasDeskPoint: false });
     mocks.getOwnedBrand.mockResolvedValue({ id: 'b1', name: 'Tubu Home' });
     const qc = renderPage();
-    expect(await screen.findByText('Quản lý thương hiệu')).toBeInTheDocument();
+    await openPartner();
+    expect(await screen.findByRole('button', { name: /^Quản lý thương hiệu/ })).toBeInTheDocument();
     mocks.getAuthMeFlags.mockResolvedValue({ ownsBrand: false, hasDeskPoint: false });
     await act(async () => {
       await qc.invalidateQueries({ queryKey: ['auth-me'] });

@@ -19,8 +19,8 @@ import {
  * Ảnh trước/sau lưu ở RETENTION_SHOTS_DIR (mặc định /tmp/review/tubu/shots/waves/tubu-retention-daily).
  */
 const VP = { width: 360, height: 780 } as const;
-/** Cá nhân khi hàng Huy hiệu thay dòng "Câu chuyện thương hiệu": trang không được dài thêm quá ngần này. */
-const PROFILE_GROWTH_MAX_PX = 72;
+/** Chừa cho lề trên của hàng Huy hiệu và làm tròn khi đo trang dài thêm. */
+const PROFILE_GROWTH_SLACK_PX = 16;
 
 const nav = (page: Page) => page.getByRole('navigation');
 
@@ -56,6 +56,13 @@ async function openProfile(page: Page, api: MockApi): Promise<void> {
   await page.waitForTimeout(600);
 }
 
+/** "Câu chuyện thương hiệu" là mục con của "Hỗ trợ" (đóng sẵn, panel `hidden`): mở ra mới kiểm có/không được. */
+async function openSupport(page: Page): Promise<void> {
+  const support = page.getByRole('button', { name: /^Hỗ trợ/ });
+  await support.click();
+  await expect(support).toHaveAttribute('aria-expanded', 'true');
+}
+
 test.describe('Mini App 360px: cờ tắt giữ nguyên màn như trước', () => {
   test('Vườn Xanh và Cá nhân không có nhiệm vụ Hôm nay, huy hiệu hay chấm dù điều kiện chấm đã đủ', async ({ page, api }) => {
     const { crashed } = await setup(page, api, { dailyEnabled: false, badgesEnabled: false, checkedInToday: false, quizPending: true, unread: 3 });
@@ -75,6 +82,7 @@ test.describe('Mini App 360px: cờ tắt giữ nguyên màn như trước', () 
 
     await openProfile(page, api);
     await expect(page.getByTestId('badge-row')).toHaveCount(0);
+    await openSupport(page);
     await expect(page.getByText('Câu chuyện thương hiệu', { exact: true })).toBeVisible();
     await expect(page.getByTestId('garden-dot')).toHaveCount(0);
     await expect(page.getByTestId('profile-dot')).toHaveCount(0);
@@ -153,13 +161,15 @@ test.describe('Mini App 360px: nhiệm vụ một lần đang chờ nhận', () 
 });
 
 test.describe('Mini App 360px: hàng Huy hiệu', () => {
-  test('cờ bật: 8 chip, ẩn "Câu chuyện thương hiệu", Cá nhân dài thêm không quá 72px so với cờ tắt', async ({ page, api }) => {
+  test('cờ bật: 8 chip, ẩn "Câu chuyện thương hiệu", chỉ hàng Huy hiệu làm Cá nhân dài thêm so với cờ tắt', async ({ page, api }) => {
     const { state, crashed } = await setup(page, api, { badgesEnabled: false });
 
     await openProfile(page, api);
     await expect(page.getByTestId('badge-row')).toHaveCount(0);
-    await expect(page.getByText('Câu chuyện thương hiệu', { exact: true })).toBeVisible();
+    // Đo khi mọi accordion còn đóng, trước khi mở Hỗ trợ.
     const off = await contentHeight(page);
+    await openSupport(page);
+    await expect(page.getByText('Câu chuyện thương hiệu', { exact: true })).toBeVisible();
 
     state.badgesEnabled = true;
     await openProfile(page, api);
@@ -173,14 +183,17 @@ test.describe('Mini App 360px: hàng Huy hiệu', () => {
     await expect(chips.nth(0)).toHaveAccessibleName('Đơn đầu tiên, đã đạt');
     await expect(chips.nth(1)).toHaveAccessibleName('Chuỗi 7 ngày, đã đạt');
     await expect(chips.nth(2)).toHaveAccessibleName('Đổi rác 3 lần, chưa đạt. Hoàn tất 3 lần Đổi rác lấy quà.');
-    await expect(page.getByText('Câu chuyện thương hiệu', { exact: true })).toHaveCount(0);
     const on = await contentHeight(page);
+    const rowHeight = (await row.boundingBox())?.height ?? 0;
+    await openSupport(page);
+    await expect(page.getByText('Câu chuyện thương hiệu', { exact: true })).toHaveCount(0);
 
+    // Dòng "Câu chuyện thương hiệu" nằm trong Hỗ trợ đóng nên bỏ nó không bù chiều cao: trang chỉ được dài thêm đúng hộp hàng Huy hiệu.
     const delta = on.height - off.height;
-    const line = `PROFILE_HEIGHT_MINI360 off=${off.height} on=${on.height} delta=${delta} (doc ${off.doc}/${on.doc}, zaui ${off.zaui}/${on.zaui})`;
+    const line = `PROFILE_HEIGHT_MINI360 off=${off.height} on=${on.height} delta=${delta} badgeRow=${rowHeight} (doc ${off.doc}/${on.doc}, zaui ${off.zaui}/${on.zaui})`;
     console.log(line);
     test.info().annotations.push({ type: 'profile-height', description: line });
-    expect(delta, line).toBeLessThanOrEqual(PROFILE_GROWTH_MAX_PX);
+    expect(delta, line).toBeLessThanOrEqual(rowHeight + PROFILE_GROWTH_SLACK_PX);
     expect((await horizontalOverflow(page)).ok).toBe(true);
     await shoot(page, 'mini-profile-after', page.getByRole('region', { name: 'Đơn của tôi' }));
 

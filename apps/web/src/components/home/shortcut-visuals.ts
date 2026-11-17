@@ -25,7 +25,7 @@ export const PILLAR_ICONS: Record<HomePillarId, LucideIcon> = {
 
 /**
  * Đích điều hướng của lối tắt; `null` = mở sheet thay vì sang trang (Kiếm tiền). Đích là route web trong route-map; route chưa làm xong (pending)
- * thì lối tắt ẩn. Giờ vàng và Mã giảm giá đi qua `liveRoute` cùng nguồn với "Xem tất cả" của khối tương ứng.
+ * thì lối tắt ẩn. Giờ vàng và Mã giảm giá đi qua `liveRoute` cùng nguồn với "Xem tất cả" của khối tương ứng (Mã giảm giá: tab Săn mã của Ưu đãi, kho mã mở sẵn).
  */
 export const SHORTCUT_ROUTES: Record<HomeShortcutId, string | null> = {
   flash: liveRoute('/flash-sale', 'web'),

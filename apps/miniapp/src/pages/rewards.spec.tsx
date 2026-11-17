@@ -66,7 +66,7 @@ vi.mock('../services/waste-api', async (orig) => ({
   invalidateAfterRedeem: mocks.invalidate,
 }));
 
-import RewardsPage, { openingHoursText } from './rewards';
+import { openingHoursText, RewardsView } from './rewards';
 import { makeGiftRedemption, makeRewardCatalog, makeRewardItem } from '../services/waste-test-fixtures';
 import { describeNested, findNestedInteractive } from '../components/ui/nested-interactive';
 import { HttpError } from '../services/http';
@@ -77,7 +77,7 @@ function renderPage() {
   const invalidate = vi.spyOn(qc, 'invalidateQueries');
   const utils = render(
     <QueryClientProvider client={qc}>
-      <RewardsPage />
+      <RewardsView />
     </QueryClientProvider>,
   );
   return { ...utils, qc, invalidate };
@@ -391,10 +391,10 @@ describe('/rewards Kho quà (§4.8)', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'Thử lại' }));
     expect(await screen.findByText('Miễn phí vận chuyển')).toBeInTheDocument();
   });
-  it('một PageHeader, không lồng nút', async () => {
+  it('thân Kho quà nằm trong tab Đổi quà của Ưu đãi: không tự vẽ tiêu đề trang (h1 của hub), không lồng nút', async () => {
     const { container } = renderPage();
     await screen.findByText('Miễn phí vận chuyển');
-    expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1);
+    expect(screen.queryAllByRole('heading', { level: 1 })).toHaveLength(0);
     expect(findNestedInteractive(container).map(describeNested)).toEqual([]);
   });
 });
@@ -565,7 +565,7 @@ describe('/rewards đổi quà: bị từ chối thì giữ khoá rồi đóng k
     const invalidate = vi.spyOn(qc, 'invalidateQueries').mockImplementation((() => refresh()) as never);
     render(
       <QueryClientProvider client={qc}>
-        <RewardsPage />
+        <RewardsView />
       </QueryClientProvider>,
     );
     return invalidate;

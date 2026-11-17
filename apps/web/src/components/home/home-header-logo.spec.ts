@@ -5,11 +5,13 @@ import { describe, expect, it } from 'vitest';
 
 /**
  * Logo Trang chủ hiện ở 83×30 px (D9-08). Ảnh nguồn lớn gấp 12 lần chiều rộng hiển thị là ~50 KB tải thừa trên đường tải
- * đầu. Đọc đúng file mà home-header.tsx import và kiểm kích thước thật: đủ nét cho màn 3× (≤ 3 lần), không nhỏ hơn 2×.
+ * đầu. Đọc đúng hai file mà home-header.tsx import (bản 2x cho máy 2x, bản 3x cho máy 3x qua `<source srcSet>`) và kiểm kích thước thật:
+ * mỗi máy tải bản đúng mật độ điểm ảnh của mình, không bản nào gấp ba cỡ hiển thị trên máy 2x.
  */
 const headerSrc = fs.readFileSync(path.join(__dirname, 'home-header.tsx'), 'utf8');
-const alias = /import tubuLogo from '@\/([^']+)'/.exec(headerSrc)?.[1] ?? '';
-const file = path.resolve(__dirname, '../..', alias);
+const aliasOf = (name: string) => new RegExp(`import ${name} from '@/([^']+)'`).exec(headerSrc)?.[1] ?? '';
+const FILES = { 2: aliasOf('tubuLogo2x'), 3: aliasOf('tubuLogo3x') } as const;
+const fileOf = (alias: string) => path.resolve(__dirname, '../..', alias);
 const SHOWN = /width=\{(\d+)\} height=\{(\d+)\}/.exec(headerSrc);
 const LOGO_WIDTH = Number(SHOWN?.[1]);
 const LOGO_HEIGHT = Number(SHOWN?.[2]);
@@ -21,24 +23,27 @@ function pngSize(buf: Buffer): { w: number; h: number } {
 }
 
 describe('logo Trang chủ đúng cỡ hiển thị (D9-08)', () => {
-  it('file được import là bản nhỏ dành cho Trang chủ, tồn tại và là PNG', () => {
-    expect(alias).toBe('assets/tubu-logo-home.png');
-    expect(fs.existsSync(file)).toBe(true);
+  it('hai file được import là bản nhỏ dành cho Trang chủ, tồn tại và là PNG; ảnh mặc định là bản 2x, bản 3x chỉ nằm trong srcset', () => {
+    expect(FILES).toEqual({ 2: 'assets/tubu-logo-home-2x.png', 3: 'assets/tubu-logo-home.png' });
+    for (const alias of Object.values(FILES)) expect(fs.existsSync(fileOf(alias))).toBe(true);
+    expect(headerSrc).toMatch(/<source srcSet=\{`\$\{tubuLogo2x\.src\} 2x, \$\{tubuLogo3x\.src\} 3x`\} \/>/);
+    expect(headerSrc).toMatch(/<Image src=\{tubuLogo2x\}/);
   });
 
-  it('rộng tối đa 3× cỡ hiển thị, tối thiểu 2×, cùng tỉ lệ khung', () => {
-    const { w, h } = pngSize(fs.readFileSync(file));
-    expect(w).toBeLessThanOrEqual(LOGO_WIDTH * 3);
-    expect(w).toBeGreaterThanOrEqual(LOGO_WIDTH * 2);
+  it.each([2, 3] as const)('bản %ix rộng đúng %i lần cỡ hiển thị, cùng tỉ lệ khung', (scale) => {
+    const { w, h } = pngSize(fs.readFileSync(fileOf(FILES[scale])));
+    expect(w).toBe(LOGO_WIDTH * scale);
     expect(Math.abs(w / h - LOGO_WIDTH / LOGO_HEIGHT)).toBeLessThan(0.1);
   });
 
-  it('nhẹ: dưới 20 KB', () => {
-    expect(fs.statSync(file).size).toBeLessThan(20 * 1024);
+  it('nhẹ: mỗi bản dưới 20 KB, bản 2x nhẹ hơn bản 3x', () => {
+    const size = (scale: 2 | 3) => fs.statSync(fileOf(FILES[scale])).size;
+    expect(size(3)).toBeLessThan(20 * 1024);
+    expect(size(2)).toBeLessThan(size(3));
   });
 
-  it('khung dấu logo cắt đúng khe trống giữa dấu và chữ: không lộ một dải chữ "T"/"S" bên phải', () => {
-    const { w, cols } = alphaColumns(fs.readFileSync(file));
+  it.each([2, 3] as const)('bản %ix: khung dấu logo cắt đúng khe trống giữa dấu và chữ, không lộ một dải chữ "T"/"S" bên phải', (scale) => {
+    const { w, cols } = alphaColumns(fs.readFileSync(fileOf(FILES[scale])));
     const markEnd = cols.indexOf(false, cols.indexOf(true)) - 1;
     const textStart = cols.indexOf(true, markEnd + 1);
     const edge = (LOGO_MARK_WIDTH * w) / LOGO_WIDTH;
@@ -47,11 +52,16 @@ describe('logo Trang chủ đúng cỡ hiển thị (D9-08)', () => {
   });
 });
 
-/** Cột nào của PNG RGBA 8-bit (không xen dòng) có điểm ảnh không trong suốt; giải nén tay để test không cần thư viện ảnh. */
+/**
+ * Cột nào của PNG 8-bit (không xen dòng) có điểm ảnh không trong suốt: RGBA (kiểu 6) đọc kênh alpha, bảng màu (kiểu 3) đọc alpha của từng
+ * màu ở khối tRNS (màu ngoài khối là đục). Giải nén tay để test không cần thư viện ảnh.
+ */
 function alphaColumns(buf: Buffer): { w: number; cols: boolean[] } {
   let p = 8;
   let w = 0;
   let h = 0;
+  let colorType = 0;
+  let trns: Buffer = Buffer.alloc(0);
   const idat: Buffer[] = [];
   while (p < buf.length) {
     const len = buf.readUInt32BE(p);
@@ -60,20 +70,25 @@ function alphaColumns(buf: Buffer): { w: number; cols: boolean[] } {
     if (type === 'IHDR') {
       w = data.readUInt32BE(0);
       h = data.readUInt32BE(4);
-      expect([data[8], data[9], data[12]]).toEqual([8, 6, 0]);
+      colorType = data[9] ?? 0;
+      expect(data[8]).toBe(8);
+      expect([6, 3]).toContain(colorType);
+      expect(data[12]).toBe(0);
     }
+    if (type === 'tRNS') trns = Buffer.from(data);
     if (type === 'IDAT') idat.push(data);
     p += 12 + len;
   }
+  const bpp = colorType === 6 ? 4 : 1;
   const raw = inflateSync(Buffer.concat(idat));
-  const stride = w * 4;
+  const stride = w * bpp;
   const img = Buffer.alloc(h * stride);
   for (let y = 0; y < h; y++) {
     const filter = raw[y * (stride + 1)];
     for (let x = 0; x < stride; x++) {
-      const left = x >= 4 ? (img[y * stride + x - 4] ?? 0) : 0;
+      const left = x >= bpp ? (img[y * stride + x - bpp] ?? 0) : 0;
       const up = y ? (img[(y - 1) * stride + x] ?? 0) : 0;
-      const upLeft = x >= 4 && y ? (img[(y - 1) * stride + x - 4] ?? 0) : 0;
+      const upLeft = x >= bpp && y ? (img[(y - 1) * stride + x - bpp] ?? 0) : 0;
       let v = raw[y * (stride + 1) + 1 + x] ?? 0;
       if (filter === 1) v += left;
       else if (filter === 2) v += up;
@@ -86,6 +101,7 @@ function alphaColumns(buf: Buffer): { w: number; cols: boolean[] } {
       img[y * stride + x] = v & 255;
     }
   }
-  const cols = Array.from({ length: w }, (_, x) => Array.from({ length: h }, (_, y) => img[y * stride + x * 4 + 3] ?? 0).some((a) => a > 0));
+  const alpha = (x: number, y: number) => (colorType === 6 ? (img[y * stride + x * 4 + 3] ?? 0) : (trns[img[y * stride + x] ?? 0] ?? 255));
+  const cols = Array.from({ length: w }, (_, x) => Array.from({ length: h }, (_, y) => alpha(x, y)).some((a) => a > 0));
   return { w, cols };
 }

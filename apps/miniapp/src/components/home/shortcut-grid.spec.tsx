@@ -72,12 +72,12 @@ describe('ShortcutGrid Mini App — 2 thẻ chính + 4 ô phụ + lối tắt nh
     expect(container.querySelector('[data-pillar="groupBuy"]')?.getAttribute('aria-label')).toBe('Mua chung. Rủ bạn đủ nhóm giảm sâu');
   });
 
-  it('hàng lối tắt nhanh chỉ còn Mã giảm giá (/vouchers), Cộng đồng (/feed) và nút Thêm; Giờ vàng không lặp vì đã là thẻ chính', async () => {
+  it('hàng lối tắt nhanh chỉ còn Mã giảm giá (tab Săn mã của Ưu đãi, kho mã mở sẵn), Cộng đồng (/feed) và nút Thêm; Giờ vàng không lặp vì đã là thẻ chính', async () => {
     render(<ShortcutGrid />);
     const pills = screen.getByTestId('shortcut-quick-pills');
     expect(within(pills).queryByRole('button', { name: /Giờ vàng/ })).toBeNull();
     fireEvent.click(within(pills).getByRole('button', { name: /Mã giảm giá/ }));
-    expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers');
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/offers?codes=all');
     fireEvent.click(within(pills).getByRole('button', { name: /Cộng đồng/ }));
     expect(mocks.navigate).toHaveBeenLastCalledWith('/feed');
 

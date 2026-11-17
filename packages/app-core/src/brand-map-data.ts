@@ -189,8 +189,8 @@ export const LABEL_METRICS = {
   subLine: 14,
   /** Chữ tên nhãn đậm 12px; ước thừa. */
   nameCharPx: 6.2,
-  /** Chữ tỉnh 11px; ước thừa. */
-  subCharPx: 5.5,
+  /** Chữ tỉnh 12px (web; Mini còn 11px nên ước này càng thừa); ước thừa. */
+  subCharPx: 6.2,
   minHeight: 44,
   /** Khoảng hở nhỏ nhất giữa hai hộp nhãn. */
   gap: 6,

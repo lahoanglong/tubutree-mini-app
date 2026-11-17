@@ -311,15 +311,20 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
       expect(api.callsTo('POST', '/coupons/claim')[0]!.body).toEqual({ code: 'FS99' });
     });
 
-    test('"Tất cả (n)" của Nhận mã dẫn tới trang Mã giảm giá, "Quay lại" lùi thật về Ưu đãi; không còn "Tất cả (n)" của Mã của tôi ở tab này', async ({ page }) => {
+    test('"Tất cả (n)" của Nhận mã mở cả kho ngay tại chỗ (URL không đổi), "Thu gọn" về như cũ; không còn "Tất cả (n)" của Mã của tôi ở tab này', async ({ page }) => {
       await page.goto('/offers');
-      await expect(page.getByRole('region', { name: 'Nhận mã', exact: true })).toBeVisible({ timeout: 15_000 });
+      const collect = page.getByRole('region', { name: 'Nhận mã', exact: true });
+      await expect(collect).toBeVisible({ timeout: 15_000 });
       await expect(page.getByRole('button', { name: /^Tất cả \(\d+\) Mã của tôi$/ })).toHaveCount(0);
       await page.getByRole('button', { name: /^Tất cả \(\d+\) Mã giảm giá$/ }).click();
-      await expect.poll(() => new URL(page.url()).pathname).toBe('/vouchers');
-      await page.getByRole('button', { name: 'Quay lại' }).click();
-      await expect.poll(() => pathAndSearch(page)).toBe('/offers');
-      await expect(page.getByRole('region', { name: 'Giờ vàng hôm nay', exact: true })).toBeVisible({ timeout: 15_000 });
+      // Kho mở cả: thêm mã đã lưu ("Dùng ngay") và chip lọc; vẫn ở /offers, Giờ vàng vẫn trên trang.
+      await expect(collect.getByRole('button', { name: 'Dùng ngay' })).toHaveCount(1);
+      await expect(collect.getByRole('button', { name: 'Tất cả', exact: true })).toHaveAttribute('aria-pressed', 'true');
+      expect(pathAndSearch(page)).toBe('/offers');
+      await expect(page.getByRole('region', { name: 'Giờ vàng hôm nay', exact: true })).toBeVisible();
+      await collect.getByRole('button', { name: 'Thu gọn' }).click();
+      await expect(collect.getByRole('button', { name: 'Dùng ngay' })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: /^Tất cả \(\d+\) Mã giảm giá$/ })).toBeVisible();
     });
   });
 
@@ -340,14 +345,15 @@ test.describe('Ưu đãi — khách đã đăng nhập', () => {
       expect(history.y, 'hàng lịch sử phải nằm dưới phiếu cuối').toBeGreaterThan(last.y + last.height - 1);
     });
 
-    test('hàng "Mã đã dùng, hết hạn" mở lịch sử ở trang Mã giảm giá; "Quay lại" lùi thật về tab Mã của tôi', async ({ page, api }) => {
+    test('hàng "Mã đã dùng, hết hạn" mở lịch sử ngay tại chỗ (URL không đổi, vẫn tab Mã của tôi)', async ({ page, api }) => {
       mockCouponHistory(api);
       await page.goto('/offers?tab=wallet');
-      await expect(page.getByRole('region', { name: 'Mã của tôi', exact: true }).getByRole('group')).toHaveCount(2, { timeout: 15_000 });
-      await page.getByText('Mã đã dùng, hết hạn').click();
-      await expect.poll(() => pathAndSearch(page)).toBe('/vouchers?tab=history');
-      await page.getByRole('button', { name: 'Quay lại' }).click();
-      await expect.poll(() => pathAndSearch(page)).toBe('/offers?tab=wallet');
+      const mine = page.getByRole('region', { name: 'Mã của tôi', exact: true });
+      await expect(mine.getByRole('group')).toHaveCount(2, { timeout: 15_000 });
+      await page.getByRole('button', { name: 'Mã đã dùng, hết hạn' }).click();
+      await expect(page.getByRole('button', { name: 'Mã đã dùng, hết hạn' })).toHaveAttribute('aria-expanded', 'true');
+      await expect(mine.getByRole('group')).toHaveCount(4);
+      expect(pathAndSearch(page)).toBe('/offers?tab=wallet');
       await expect(hubTab(page, 'Mã của tôi')).toHaveAttribute('aria-selected', 'true');
     });
 

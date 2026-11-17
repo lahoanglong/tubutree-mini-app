@@ -1,94 +1,64 @@
-import { ctvMenuEntry, type CtvAccessHint } from '@tubutree/app-core/storefront-signup';
-import { BadgeDollarSign, BookOpen, Bell, CalendarClock, GraduationCap, Heart, Info, MapPin, MessageCircle, Recycle, Settings, ShieldCheck, Sparkles, Store, Users, Wallet, type LucideIcon } from 'lucide-react';
-import type { DealerMe } from '@tubutree/app-core/api/dealer';
-import { canSeeAcademy } from '@tubutree/app-core/account-copy';
-import { BRAND_OWNER_TITLE } from '@tubutree/app-core/client-copy';
-import { homeCopy } from '@tubutree/app-core/home-copy';
-import { DESK_ENTRY_LABEL } from '@tubutree/app-core/profile-sections';
+import { Bell, BookOpen, CalendarClock, CircleHelp, Gift, GraduationCap, Heart, Info, MapPin, MessageCircle, Recycle, Settings, ShieldCheck, Sparkles, Store, Ticket, Users, Wallet, type LucideIcon } from 'lucide-react';
+import { buildProfileMenu, type ProfileLinkKey, type ProfileMenuContext, type ProfileRowKey } from '@tubutree/app-core/profile-menu';
 
-export interface AccountMenuItem {
+const ROW_ICON: Record<ProfileRowKey, LucideIcon> = {
+  notifications: Bell,
+  offers: Ticket,
+  invite: Gift,
+  addresses: MapPin,
+  wishlist: Heart,
+  recycle: Recycle,
+  support: CircleHelp,
+  settings: Settings,
+  partner: Store,
+};
+
+const LINK_ICON: Record<ProfileLinkKey, LucideIcon> = {
+  chat: MessageCircle,
+  ai: Sparkles,
+  about: Info,
+  brandStory: BookOpen,
+  ctv: Users,
+  academy: GraduationCap,
+  dealer: Store,
+  brandOwner: Store,
+  staff: CalendarClock,
+  payroll: Wallet,
+  desk: Recycle,
+  admin: ShieldCheck,
+};
+
+export interface AccountMenuLink {
+  key: ProfileLinkKey;
   icon: LucideIcon;
   label: string;
+  hint?: string;
   /** Route web. */
   to: string;
-  hint?: string;
 }
-export interface AccountMenuGroup {
-  group: string;
-  items: AccountMenuItem[];
-}
-export interface AccountMenuContext {
-  role: string | undefined;
-  aiEnabled: boolean;
-  chatEnabled: boolean;
-  /** Cờ CASHBACK_ENABLED: bật thì có lối vào Hoàn tiền sàn ngoài ở nhóm Tài khoản. */
-  cashbackEnabled?: boolean;
-  dealer: Pick<DealerMe, 'status' | 'isDealer'> & { tier?: { name?: string } | null } | null | undefined;
-  ownedBrandName: string | null | undefined;
-  /** GET /affiliate/me (chỉ cần với đại lý, nhân viên, admin): quyết định mục Cộng tác viên. */
-  ctvAccess?: CtvAccessHint | null;
-  /** Tên các điểm nhận hàng (kho, điểm đối tác) khách này vận hành, từ GET /waste/desk/points; rỗng hoặc chưa có thì không hiện hàng "Nhận hàng tại điểm". */
-  deskPointNames?: readonly string[];
+
+export type AccountMenuRow =
+  | { kind: 'link'; key: ProfileRowKey; icon: LucideIcon; label: string; hint?: string; to: string }
+  | { kind: 'accordion'; key: ProfileRowKey; icon: LucideIcon; label: string; hint?: string; children: AccountMenuLink[] };
+
+export interface AccountMenuContext extends ProfileMenuContext {
   /** Route web đã xong chưa (route map): mục trỏ route còn `pending` bị ẩn để khách không rơi vào 404. */
   isReady: (webPath: string) => boolean;
 }
 
-// Mục theo cùng thứ tự, nhãn và mô tả với MENU trong apps/miniapp/src/pages/profile.tsx; chỉ đổi đích sang route web.
-export function buildAccountMenu(c: AccountMenuContext): AccountMenuGroup[] {
-  const earnDealer = homeCopy.earn.dealer;
-  const ctvEntry = ctvMenuEntry(c.role, c.ctvAccess);
-  const dealerItem: AccountMenuItem =
-    c.dealer?.isDealer || c.dealer?.status === 'APPROVED'
-      ? { icon: Store, label: 'Kênh đại lý', to: '/dai-ly', hint: c.dealer.tier?.name ?? earnDealer.hint }
-      : c.dealer?.status === 'PENDING'
-        ? { icon: Store, label: 'Hồ sơ đại lý', to: '/dai-ly', hint: 'Đang chờ duyệt' }
-        : { icon: Store, label: earnDealer.label, to: '/dai-ly', hint: earnDealer.hint };
+/** Dòng đã có ở cột trái `AccountShell` (từ md): trang Cá nhân ẩn chúng từ md để hai bên không lặp. */
+export const IN_ACCOUNT_SHELL: ReadonlySet<ProfileRowKey> = new Set<ProfileRowKey>(['notifications', 'addresses', 'wishlist', 'settings']);
 
-  const groups: AccountMenuGroup[] = [
-    {
-      group: homeCopy.profile.groupEarn,
-      items: [
-        ...(ctvEntry ? [{ icon: Users, ...ctvEntry, to: '/ctv' }] : []),
-        ...(canSeeAcademy(c.role) ? [{ icon: GraduationCap, label: homeCopy.earn.academy.label, to: '/hoc-vien', hint: homeCopy.earn.academy.hint }] : []),
-        dealerItem,
-        ...(c.ownedBrandName ? [{ icon: Store, label: BRAND_OWNER_TITLE, to: '/chu-thuong-hieu', hint: c.ownedBrandName }] : []),
-      ],
-    },
-    {
-      group: homeCopy.profile.groupAccount,
-      items: [
-        { icon: Heart, label: 'Sản phẩm yêu thích', to: '/tai-khoan/yeu-thich' },
-        { icon: MapPin, label: 'Sổ địa chỉ', to: '/tai-khoan/dia-chi' },
-        { icon: Bell, label: 'Thông báo', to: '/tai-khoan/thong-bao' },
-        ...(c.cashbackEnabled ? [{ icon: BadgeDollarSign, label: 'Hoàn tiền sàn ngoài', to: '/hoan-tien' }] : []),
-        { icon: Settings, label: 'Cài đặt', to: '/tai-khoan/cai-dat' },
-      ],
-    },
-    {
-      group: homeCopy.profile.groupSupport,
-      items: [
-        ...(c.chatEnabled ? [{ icon: MessageCircle, label: 'Chat với Tubu Tree', to: '/ho-tro/chat' }] : []),
-        ...(c.aiEnabled ? [{ icon: Sparkles, label: 'Trợ lý AI 24/7', to: '/tu-van', hint: 'Tư vấn sản phẩm' }] : []),
-        { icon: BookOpen, label: 'Câu chuyện thương hiệu', to: '/cau-chuyen' },
-        { icon: Info, label: 'Về Tubu Tree & Hỗ trợ', to: '/gioi-thieu' },
-      ],
-    },
-  ];
-
-  const isStaffOrAdmin = c.role === 'STAFF' || c.role === 'ADMIN';
-  const work: AccountMenuItem[] = [
-    ...(isStaffOrAdmin
-      ? [
-          { icon: CalendarClock, label: 'Ca làm & chấm công', to: '/nhan-vien', hint: 'Đăng ký ca, chấm công' },
-          { icon: Wallet, label: 'Lương của tôi', to: '/nhan-vien/bang-luong', hint: 'Xem lương & thông tin nhận' },
-        ]
-      : []),
-    ...(c.deskPointNames && c.deskPointNames.length > 0
-      ? [{ icon: Recycle, label: DESK_ENTRY_LABEL, to: '/doi-rac/quay', hint: c.deskPointNames.join(', ') }]
-      : []),
-    ...(c.role === 'ADMIN' ? [{ icon: ShieldCheck, label: 'Quản trị nhân sự', to: '/admin?tab=staffRoster', hint: 'Cấp quyền, duyệt ca, lương' }] : []),
-  ];
-  if (work.length > 0) groups.push({ group: homeCopy.profile.groupWork, items: work });
-
-  return groups.map((g) => ({ ...g, items: g.items.filter((i) => c.isReady(i.to)) })).filter((g) => g.items.length > 0);
+/** Dòng trang Cá nhân web: cùng dòng, thứ tự, chữ với Mini App (`buildProfileMenu` của app-core), đích là route web. */
+export function buildAccountMenu(c: AccountMenuContext): AccountMenuRow[] {
+  return buildProfileMenu(c).flatMap((row): AccountMenuRow[] => {
+    const icon = ROW_ICON[row.key];
+    if (row.kind === 'link') return c.isReady(row.web) ? [{ kind: 'link', key: row.key, icon, label: row.label, hint: row.hint, to: row.web }] : [];
+    const children = row.children
+      .filter((ch) => c.isReady(ch.web))
+      .map((ch): AccountMenuLink => ({ key: ch.key, icon: LINK_ICON[ch.key], label: ch.label, hint: ch.hint, to: ch.web }));
+    // Mời bạn không có mục con (nội dung là thẻ mời); dòng khác hết mục con thì bỏ cả dòng.
+    if (row.key !== 'invite' && children.length === 0) return [];
+    return [{ kind: 'accordion', key: row.key, icon, label: row.label, hint: row.hint, children }];
+  });
 }

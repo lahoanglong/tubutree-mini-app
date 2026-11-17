@@ -6,7 +6,7 @@ import { CAMPAIGN_SLUG, CAMPAIGN_TITLE, campaignDetail, mockCampaigns } from './
 import { mockCollectable, mockCouponHistory, mockWallet } from './support/voucher-mocks';
 
 /**
- * Bốn trang mua sắm có PageHeader (Bán chạy nhất, Giờ vàng, Chiến dịch, Mã giảm giá) phải đặt tiêu đề cùng hàng với nút Quay lại như Giỏ hàng.
+ * Ba trang mua sắm có PageHeader (Bán chạy nhất, Giờ vàng, Chiến dịch; Mã giảm giá nay là khối trong Ưu đãi) phải đặt tiêu đề cùng hàng với nút Quay lại như Giỏ hàng.
  * Lớp `page` của vỏ app cộng thêm 48px đệm đầu khi có nút lùi, mà PageHeader đã tự đệm chỗ cho nút: dùng cả hai thì tiêu đề rơi xuống hàng hai
  * và đầu trang thừa 48px (review hình bước chốt, P1 #5). Đo ở 375px với `--safe-top` 0 (trình duyệt) và 47 (tai thỏ); viewport thấp để trang cuộn được.
  */
@@ -47,7 +47,6 @@ const SCREENS: Screen[] = [
   { name: 'Bán chạy nhất', url: '/best-sellers', title: 'Bán chạy nhất', sticky: (p) => p.getByRole('tablist', { name: 'Danh mục bán chạy' }).locator('..') },
   { name: 'Giờ vàng', url: '/flash-sale', title: 'Giờ vàng', sticky: (p) => p.getByTestId('flash-sticky') },
   { name: 'Chiến dịch', url: `/campaign/${CAMPAIGN_SLUG}`, title: CAMPAIGN_TITLE },
-  { name: 'Mã giảm giá', url: '/vouchers', title: 'Mã giảm giá', sticky: (p) => p.getByRole('tablist', { name: 'Nhóm mã giảm giá' }).locator('..') },
 ];
 
 for (const safe of SAFE_TOPS) {
@@ -72,7 +71,7 @@ for (const safe of SAFE_TOPS) {
       if (!sticky) continue;
       test(`${s.name}: hàng dính dính khít dưới thanh lùi khi cuộn, không hở`, async ({ page, api }) => {
         mockAll(api);
-        // Viewport thấp hơn để cả trang Mã giảm giá (chỉ 3 phiếu) đủ dài mà cuộn tới chỗ hàng dính bám.
+        // Viewport thấp để trang ngắn vẫn đủ dài mà cuộn tới chỗ hàng dính bám.
         await page.setViewportSize({ width: 375, height: 380 });
         await setSafeTop(page, safe);
         await page.goto(s.url);

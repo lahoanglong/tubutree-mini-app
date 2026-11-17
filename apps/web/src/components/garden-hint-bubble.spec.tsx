@@ -42,6 +42,44 @@ afterEach(() => {
   localStorage.removeItem(GARDEN_HINT_KEY);
 });
 
+describe('GardenHintBubble: không đè tiêu đề kệ', () => {
+  it('chỗ bóng nổi lên đang có tiêu đề ("Bán chạy nhất") thì chưa hiện, chưa đánh dấu; khách cuộn đi rồi dừng thì hiện ở chỗ trống', () => {
+    const heading = document.createElement('h2');
+    heading.textContent = 'Bán chạy nhất';
+    document.body.appendChild(heading);
+    let headingTop = 710;
+    const rect = (top: number, height: number, left: number, width: number) =>
+      ({ top, bottom: top + height, left, right: left + width, width, height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+    const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this === heading) return rect(headingTop, 24, 16, 160);
+      if (this.getAttribute('role') === 'status') return rect(700, 44, 60, 240);
+      return rect(0, 0, 0, 0);
+    });
+    try {
+      vi.useFakeTimers();
+      mounted = render(<GardenHintBubble onGardenTab={false} />, qc);
+      act(() => {
+        vi.advanceTimersByTime(GARDEN_HINT_DELAY_MS + 10);
+      });
+      expect(bubble()).toBeNull();
+      expect(localStorage.getItem(GARDEN_HINT_KEY)).toBeNull();
+
+      headingTop = 300;
+      act(() => {
+        document.dispatchEvent(new Event('scroll'));
+      });
+      act(() => {
+        vi.advanceTimersByTime(GARDEN_HINT_DELAY_MS + 10);
+      });
+      expect(bubble()).not.toBeNull();
+      expect(localStorage.getItem(GARDEN_HINT_KEY)).toBe('1');
+    } finally {
+      spy.mockRestore();
+      heading.remove();
+    }
+  });
+});
+
 describe('GardenHintBubble: khoá chạm đúp', () => {
   it('hai cú chạm cùng khung hình vào bóng chỉ điều hướng tới Vườn Xanh một lần và gỡ bóng', async () => {
     await show();

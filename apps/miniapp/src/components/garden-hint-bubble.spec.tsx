@@ -103,6 +103,37 @@ describe('GardenHintBubble — bóng gợi ý tab Vườn Xanh (D6-16)', () => {
     setItem.mockRestore();
   });
 
+  it('chỗ bóng nổi lên đang có tiêu đề kệ thì chưa hiện, chưa đánh dấu; khách cuộn đi rồi dừng thì hiện ở chỗ trống', () => {
+    const heading = document.createElement('h2');
+    heading.textContent = 'Bán chạy nhất';
+    document.body.appendChild(heading);
+    let headingTop = 710;
+    const rect = (top: number, height: number, left: number, width: number) =>
+      ({ top, bottom: top + height, left, right: left + width, width, height, x: left, y: top, toJSON: () => ({}) }) as DOMRect;
+    const spy = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      if (this === heading) return rect(headingTop, 24, 16, 160);
+      if (this.getAttribute('role') === 'status') return rect(700, 44, 60, 240);
+      return rect(0, 0, 0, 0);
+    });
+    try {
+      render(<GardenHintBubble onGardenTab={false} />);
+      settle();
+      expect(screen.queryByRole('status')).toBeNull();
+      expect(localStorage.getItem(GARDEN_HINT_KEY)).toBeNull();
+
+      headingTop = 300;
+      act(() => {
+        document.dispatchEvent(new Event('scroll'));
+      });
+      settle();
+      expect(screen.getByRole('status')).toBeInTheDocument();
+      expect(localStorage.getItem(GARDEN_HINT_KEY)).toBe('1');
+    } finally {
+      spy.mockRestore();
+      heading.remove();
+    }
+  });
+
   it('khách cuộn trang thì bóng tắt ngay, không che nội dung đang đọc', () => {
     render(<GardenHintBubble onGardenTab={false} />);
     settle();

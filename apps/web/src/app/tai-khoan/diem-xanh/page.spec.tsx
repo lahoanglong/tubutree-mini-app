@@ -3,7 +3,6 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
-import { ApiError } from '@/lib/client-api';
 
 const state = vi.hoisted(() => ({
   phase: 'authenticated' as string,
@@ -169,12 +168,29 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
     expect(c.textContent).toContain('Còn 120 điểm tích từ mua hàng (tương đương khoảng 6.000đ mua hàng) để lên hạng Lộc Biếc');
   });
 
-  it('giải thích cách tích điểm và 1 điểm khi dùng theo cấu hình; API cũ chưa trả rates thì không hiện', async () => {
+  it('luật tích/dùng nằm trong mục gập "Cách kiếm và dùng Điểm Xanh" (h2 bọc nút): đóng mặc định, bấm mở, bấm lại đóng; thẻ hạng không còn hai dòng đó', async () => {
     const c = await mount();
-    expect(c.textContent).toContain('Tích 2% tiền hàng thành Điểm Xanh');
-    expect(c.textContent).toContain('1 điểm = 1.000đ khi dùng ở bước thanh toán (tối đa 50% giá trị đơn)');
+    const toggle = byText(c, 'button', 'Cách kiếm và dùng Điểm Xanh') as HTMLButtonElement;
+    expect(toggle.closest('h2')).not.toBeNull();
+    const body = c.querySelector(`#${CSS.escape(toggle.getAttribute('aria-controls')!)}`) as HTMLElement;
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(body.hidden).toBe(true);
+    click(toggle);
+    await flush();
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    expect(body.hidden).toBe(false);
+    expect(body.textContent).toContain('Tích 2% tiền hàng thành Điểm Xanh');
+    expect(body.textContent).toContain('1 điểm = 1.000đ khi dùng ở bước thanh toán (tối đa 50% giá trị đơn)');
+    expect(c.querySelector('section[aria-label="Hạng thành viên"]')!.textContent).not.toContain('tiền hàng thành Điểm Xanh');
+    click(toggle);
+    await flush();
+    expect(body.hidden).toBe(true);
+  });
+
+  it('API cũ chưa trả rates: không có mục gập luật, các hạng vẫn nói mốc theo điểm', async () => {
     state.loyalty = { ...state.loyalty!, rates: undefined };
     const old = await mount();
+    expect(byText(old, 'button', 'Cách kiếm và dùng Điểm Xanh')).toBeFalsy();
     expect(old.textContent).not.toContain('1 điểm = ');
     expect(old.textContent).toContain('từ 200 điểm tích luỹ');
   });
@@ -219,153 +235,93 @@ describe('/tai-khoan/diem-xanh — thẻ hạng', () => {
   });
 });
 
-describe('/tai-khoan/diem-xanh — dòng mã giảm giá: Ví mã hoặc Đổi quà', () => {
+describe('/tai-khoan/diem-xanh — một dòng sang hub Ưu đãi', () => {
   const COUPONS = [
     { code: 'FREESHIP1', type: 'FREESHIP', value: 0, minOrder: 199000, maxDiscount: null, endAt: '2026-12-31T05:00:00Z' },
     { code: 'PCT10', type: 'PERCENT', value: 10, minOrder: null, maxDiscount: 50000, endAt: '2026-11-01T05:00:00Z' },
   ];
+  const offersLinks = (c: HTMLElement) => c.querySelectorAll('a[href^="/uu-dai"], a[href^="/kho-qua"], a[href^="/ma-giam-gia"]');
 
-  it('có mã: "Ví mã (n)" tới Ưu đãi mục mã, nằm ngay dưới thẻ hạng và trước điểm danh; không liệt kê từng mã', async () => {
+  it('có mã: một dòng "Đổi quà & mã giảm giá" tới tab Đổi quà, dòng phụ nêu số mã, ngay dưới thẻ hạng; không liệt kê từng mã', async () => {
     state.coupons = COUPONS;
     state.readyRoutes = new Set(['/uu-dai', '/kho-qua']);
     const c = await mount();
-    const link = c.querySelector('a[href="/uu-dai?section=coupons"]')!;
-    expect(link.textContent).toContain('Ví mã (2)');
-    const heads = Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
-    expect(heads).not.toContain('Mã giảm giá của tôi');
-    for (const later of ['Điểm danh mỗi ngày', 'Các hạng', 'Lịch sử Điểm Xanh']) {
+    expect(offersLinks(c)).toHaveLength(1);
+    const link = c.querySelector('a[href="/uu-dai?tab=rewards"]')!;
+    expect(link.textContent).toContain('Đổi quà & mã giảm giá');
+    expect(link.textContent).toContain('Bạn đang có 2 mã giảm giá');
+    const tier = c.querySelector('section[aria-label="Hạng thành viên"]')!;
+    expect(tier.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    for (const later of ['Các hạng', 'Lịch sử Điểm Xanh']) {
       const h = Array.from(c.querySelectorAll('h2')).find((x) => x.textContent === later)!;
       expect(link.compareDocumentPosition(h) & Node.DOCUMENT_POSITION_FOLLOWING, later).toBeTruthy();
     }
-    const tier = c.querySelector('section[aria-label="Hạng thành viên"]')!;
-    expect(tier.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    for (const gone of ['Miễn phí giao hàng', 'HSD', 'Giảm 10%', 'FREESHIP1']) expect(c.textContent).not.toContain(gone);
-    // Kho quà vẫn là một dòng riêng khi dòng trên là Ví mã.
-    expect(c.querySelector('a[href="/kho-qua"]')?.textContent).toContain('Kho quà');
+    for (const gone of ['Miễn phí giao hàng', 'HSD', 'Giảm 10%', 'FREESHIP1', 'Ví mã', 'Kho quà']) expect(c.textContent).not.toContain(gone);
   });
 
-  it('chưa có mã: "Đổi quà" tới Kho quà, không lặp thêm dòng "Kho quà"', async () => {
+  it('chưa có mã, mã đang tải hay tải lỗi: vẫn đúng một dòng, dòng phụ nói chung', async () => {
     state.readyRoutes = new Set(['/uu-dai', '/kho-qua']);
-    const c = await mount();
-    const links = c.querySelectorAll('a[href="/kho-qua"]');
-    expect(links).toHaveLength(1);
-    expect(links[0]!.textContent).toContain('Đổi quà');
-    expect(c.querySelector('a[href^="/uu-dai"]')).toBeNull();
-    expect(c.textContent).not.toContain('Ví mã');
-  });
-
-  it('mã còn đang tải: dòng "Kho quà" ở thẻ lối tắt đã có sẵn, để thẻ không giãn ra khi tải xong', async () => {
-    state.pending.add('/me/coupons');
-    state.readyRoutes = new Set(['/uu-dai', '/kho-qua']);
-    const c = await mount();
-    expect(c.querySelector('a[href^="/uu-dai"]')).toBeNull();
-    expect(c.querySelector('a[href="/kho-qua"]')?.textContent).toContain('Kho quà');
-  });
-
-  it('không tải được mã: "Ví mã" không kèm số, không giả vờ "chưa có mã"', async () => {
-    state.fail.add('/me/coupons');
-    state.readyRoutes = new Set(['/uu-dai', '/kho-qua']);
-    const c = await mount();
-    const link = c.querySelector('a[href="/uu-dai?section=coupons"]')!;
-    expect(link.textContent).toContain('Ví mã');
-    expect(link.textContent).not.toContain('Ví mã (');
-    expect(c.textContent).not.toContain('Đổi quà');
+    for (const setup of [() => undefined, () => state.pending.add('/me/coupons'), () => state.fail.add('/me/coupons')]) {
+      state.pending = new Set();
+      state.fail = new Set();
+      setup();
+      const c = await mount();
+      expect(offersLinks(c)).toHaveLength(1);
+      expect(c.querySelector('a[href="/uu-dai?tab=rewards"]')!.textContent).toContain('Đổi Điểm Xanh lấy mã giảm giá và quà');
+      expect(c.textContent).not.toContain('Bạn đang có');
+      mounted.pop()!.unmount();
+    }
   });
 
   it('route đích chưa sẵn sàng thì không hiện dòng', async () => {
     state.coupons = COUPONS;
     const c = await mount();
-    expect(c.querySelector('a[href^="/uu-dai"]')).toBeNull();
+    expect(offersLinks(c)).toHaveLength(0);
   });
 });
 
-describe('/tai-khoan/diem-xanh — điểm danh', () => {
-  it('câu giải thích nói một nút cho cả Điểm Xanh và giọt nước, không còn câu "điểm danh riêng trong Vườn Xanh"', async () => {
-    const c = await mount();
-    const note = Array.from(c.querySelectorAll('div')).find((p) => (p.textContent ?? '').startsWith('Một lần bấm nhận cả Điểm Xanh và giọt nước'))!;
-    expect(note.textContent).toContain('Điểm danh không tính vào xét hạng.');
-    expect(c.textContent).not.toContain('điểm danh riêng');
-  });
+describe('/tai-khoan/diem-xanh — điểm danh chỉ ở Vườn Xanh: trang chỉ có dòng trạng thái', () => {
+  const checkInButtons = (c: HTMLElement) => Array.from(c.querySelectorAll('button')).filter((b) => /^(Đã )?[Đđ]iểm danh$/.test(b.textContent?.trim() ?? ''));
+  const strip = (c: HTMLElement) => c.querySelector('section[aria-label^="Hôm nay bạn"]');
 
-  it('chưa điểm danh: nút "Điểm danh"; bấm gửi đúng POST /me/daily-check-in một lần, báo kết quả và khoá nút', async () => {
-    state.checkInPost = async () => {
-      state.checkIn = { ...state.checkIn!, checkedInToday: true };
-      return {
-        points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 1804, message: '' },
-        water: { seedsEarned: 10, streakDays: 1, totalSeeds: 10, streakFrozeUsed: false, bonusNote: '' },
-        alreadyDone: false,
-        pending: [],
-      };
-    };
+  it('chưa điểm danh: dòng "Hôm nay bạn chưa điểm danh" mở /vuon-xanh; không có nút điểm danh, không gọi lệnh điểm danh', async () => {
+    state.readyRoutes = new Set(['/vuon-xanh']);
     const c = await mount();
-    const btn = byText(c, 'button', 'Điểm danh') as HTMLButtonElement;
-    expect(btn.disabled).toBe(false);
-    click(btn);
-    click(btn);
-    await flush();
-    const posts = state.calls.filter((x) => x.method === 'post');
-    expect(posts).toEqual([{ method: 'post', path: '/me/daily-check-in', body: undefined, headers: undefined }]);
-    expect(c.querySelector('[role="status"]')?.textContent).toContain('+3 Điểm Xanh · +10 giọt nước');
-    expect((byText(c, 'button', 'Đã điểm danh') as HTMLButtonElement).disabled).toBe(true);
-  });
-
-  it('thiếu một phần (nước lỗi): báo kiểu lỗi (role=alert) kèm lời nhắc bấm lại, giống Vườn Xanh', async () => {
-    state.checkInPost = async () => ({
-      points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 1804, message: '' },
-      water: null,
-      alreadyDone: false,
-      pending: ['water'],
-    });
-    const c = await mount();
-    click(byText(c, 'button', 'Điểm danh'));
-    await flush();
-    expect(c.querySelector('[role="alert"]')?.textContent).toBe('+3 Điểm Xanh. Còn thiếu một phần, bấm điểm danh lại để nhận nốt');
-    expect(c.querySelector('[role="status"]')).toBeNull();
-  });
-
-  it('nửa vời (đã nhận Điểm Xanh, còn thiếu nước): dòng "Hôm nay nhận" chỉ liệt kê giọt nước', async () => {
-    state.checkIn = { ...state.checkIn!, pointsDone: true, waterDone: false, todayPoints: 0, todayWater: 10 };
-    const c = await mount();
-    expect(c.textContent).toContain('Hôm nay nhận +10 giọt nước');
-    expect(c.textContent).not.toContain('Hôm nay nhận +3 Điểm Xanh');
-  });
-
-  it('đã điểm danh hôm nay: nút "Đã điểm danh" tắt, bấm không gọi API', async () => {
-    state.checkIn = { ...state.checkIn!, checkedInToday: true };
-    const c = await mount();
-    const btn = byText(c, 'button', 'Đã điểm danh') as HTMLButtonElement;
-    expect(btn.disabled).toBe(true);
-    click(btn);
-    await flush();
+    const row = strip(c)!;
+    expect(row.getAttribute('aria-label')).toBe('Hôm nay bạn chưa điểm danh');
+    expect(row.textContent).toContain('Mở tab Vườn Xanh');
+    expect(checkInButtons(c)).toHaveLength(0);
+    click(row.querySelector('[role="button"]') as HTMLElement);
+    expect(state.push).toHaveBeenCalledWith('/vuon-xanh');
     expect(state.calls.some((x) => x.method === 'post')).toBe(false);
   });
 
-  it('lỗi điểm danh: báo lỗi và tải lại trạng thái để nút theo đúng thực tế', async () => {
-    state.checkInPost = async () => {
-      throw new ApiError('Hôm nay bạn đã điểm danh rồi', 409);
-    };
+  it('đã điểm danh: dòng "Hôm nay bạn đã điểm danh", vẫn không có nút', async () => {
+    state.readyRoutes = new Set(['/vuon-xanh']);
+    state.checkIn = { ...state.checkIn!, checkedInToday: true };
     const c = await mount();
-    const before = state.calls.filter((x) => x.path === '/me/daily-check-in' && x.method === 'get').length;
-    click(byText(c, 'button', 'Điểm danh'));
-    await flush();
-    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Hôm nay bạn đã điểm danh rồi');
-    expect(state.calls.filter((x) => x.path === '/me/daily-check-in' && x.method === 'get').length).toBeGreaterThan(before);
+    expect(strip(c)?.getAttribute('aria-label')).toBe('Hôm nay bạn đã điểm danh');
+    expect(checkInButtons(c)).toHaveLength(0);
   });
 
-  it('7 ô ngày với điểm từng ngày và vị trí trong vòng 7 ngày', async () => {
+  it('không còn thẻ 7 ô, luật điểm danh hay ô báo kết quả điểm danh', async () => {
+    state.readyRoutes = new Set(['/vuon-xanh']);
     const c = await mount();
-    expect(c.textContent).toContain('Ngày 3/7');
-    for (const d of ['N1', 'N2', 'N3', 'N7']) expect(c.textContent).toContain(d);
-    expect(c.querySelector('[aria-label="Ngày 7: +10 Điểm Xanh"]')).not.toBeNull();
+    for (const gone of ['Điểm danh mỗi ngày', 'Ngày 3/7', 'N1', 'Một lần bấm nhận cả Điểm Xanh và giọt nước']) expect(c.textContent).not.toContain(gone);
+    expect(c.querySelector('[data-testid="daily-check-in"]')).toBeNull();
   });
 
-  it('lỗi tải lịch điểm danh: báo lỗi có Thử lại', async () => {
+  it('tải trạng thái lỗi hoặc /vuon-xanh chưa có trên web: không vẽ dòng, trang vẫn đủ', async () => {
+    state.readyRoutes = new Set(['/vuon-xanh']);
     state.fail.add('/me/daily-check-in');
-    const c = await mount();
-    expect(c.textContent).toContain('Chưa tải được lịch điểm danh');
-    expect(c.textContent).toContain('Máy chủ đang bận');
-    expect(c.textContent).not.toContain('Chưa tải được lịch điểm danh: ');
-    expect(byText(c, 'button', 'Thử lại')).not.toBeNull();
+    const failed = await mount();
+    expect(strip(failed)).toBeNull();
+    expect(failed.textContent).toContain('Lịch sử Điểm Xanh');
+    mounted.pop()!.unmount();
+    state.fail = new Set();
+    state.readyRoutes = new Set();
+    const notReady = await mount();
+    expect(strip(notReady)).toBeNull();
   });
 });
 
@@ -398,45 +354,15 @@ describe('/tai-khoan/diem-xanh — hạn giữ hạng, biểu tượng theo th�
   });
 });
 
-describe('/tai-khoan/diem-xanh — lối tắt', () => {
-  it('route web chưa làm (pending) thì không hiện lối tắt; chỉ còn lối mua sắm', async () => {
-    const c = await mount();
-    expect(c.querySelector('a[href="/vuon-xanh"]')).toBeNull();
-    expect(c.querySelector('a[href="/doi-rac"]')).toBeNull();
-    expect(c.querySelector('a[href="/kho-qua"]')).toBeNull();
-  });
-
-  it('route đã sẵn sàng: Vườn Xanh, Đổi rác lấy quà (theo waste.enabled), Đổi quà (chưa có mã) tới Kho quà', async () => {
-    state.readyRoutes = new Set(['/vuon-xanh', '/doi-rac', '/kho-qua']);
-    const c = await mount();
-    expect(c.querySelector('a[href="/vuon-xanh"]')?.textContent).toContain('Vườn Xanh');
-    expect(c.querySelector('a[href="/doi-rac"]')?.textContent).toContain('Đổi rác lấy quà');
-    expect(c.querySelector('a[href="/kho-qua"]')?.textContent).toContain('Đổi quà');
-    state.config = { waste: { enabled: false } };
-    const off = await mount();
-    expect(off.querySelectorAll('a[href="/doi-rac"]')).toHaveLength(0);
-    expect(off.querySelectorAll('a[href="/kho-qua"]')).toHaveLength(1);
-  });
-});
-
-describe('/tai-khoan/diem-xanh — xem lại yêu cầu đổi rác khi chương trình tắt', () => {
-  it('chương trình tắt + khách từng có yêu cầu: có lối xem lại; không có yêu cầu hoặc chương trình bật thì không', async () => {
-    state.readyRoutes = new Set(['/doi-rac', '/doi-rac/yeu-cau']);
-    state.config = { waste: { enabled: false } };
+describe('/tai-khoan/diem-xanh — không còn lối tắt riêng (Vườn Xanh, Đổi rác, Kho quà, mua sắm)', () => {
+  it.each([true, false])('mọi route sẵn sàng, Đổi rác bật=%s: không có liên kết Vườn Xanh, Đổi rác, Kho quà hay nút mua sắm; không hỏi danh sách yêu cầu đổi rác', async (enabled) => {
+    state.readyRoutes = new Set(['/vuon-xanh', '/doi-rac', '/doi-rac/yeu-cau', '/kho-qua', '/uu-dai', '/san-pham']);
+    state.config = { waste: { enabled } };
     state.wasteRequests = [{ id: 'r1' }];
     const c = await mount();
-    expect(c.querySelector('a[href="/doi-rac/yeu-cau"]')?.textContent).toContain('Yêu cầu đổi rác');
-    expect(c.querySelector('a[href="/doi-rac"]')).toBeNull();
-    mounted.pop()!.unmount();
-    state.wasteRequests = [];
-    const none = await mount();
-    expect(none.querySelector('a[href="/doi-rac/yeu-cau"]')).toBeNull();
-    mounted.pop()!.unmount();
-    state.config = { waste: { enabled: true } };
-    state.wasteRequests = [{ id: 'r1' }];
-    const on = await mount();
-    expect(on.querySelector('a[href="/doi-rac/yeu-cau"]')).toBeNull();
-    expect(on.querySelector('a[href="/doi-rac"]')).not.toBeNull();
+    for (const href of ['/vuon-xanh', '/doi-rac', '/doi-rac/yeu-cau', '/kho-qua', '/san-pham']) expect(c.querySelector(`a[href="${href}"]`), href).toBeNull();
+    for (const gone of ['Chăm cây nhận quà', 'Đổi rác lấy quà', 'Yêu cầu đổi rác', 'Mua sắm để tích thêm Điểm Xanh']) expect(c.textContent).not.toContain(gone);
+    expect(state.calls.some((x) => x.path === '/waste/requests')).toBe(false);
   });
 });
 
@@ -664,18 +590,16 @@ describe('/tai-khoan/diem-xanh — trạng thái trang', () => {
     expect(c.textContent).not.toContain('Tích điểm ×');
   });
 
-  it('có đúng một h1 nói tên trang, đạt kiểm tra truy cập tối thiểu', async () => {
+  it('có đúng một h1 nói tên trang, đạt kiểm tra truy cập tối thiểu (kể cả nút gập luật và dòng điểm danh)', async () => {
+    state.readyRoutes = new Set(['/vuon-xanh', '/uu-dai']);
     const c = await mount();
+    expect(byText(c, 'button', 'Cách kiếm và dùng Điểm Xanh')).toBeTruthy();
+    expect(c.querySelector('section[aria-label="Hôm nay bạn chưa điểm danh"]')).not.toBeNull();
     expect(c.querySelectorAll('h1')).toHaveLength(1);
     expect(c.querySelector('h1')?.textContent).toBe('Hạng thành viên & Điểm Xanh');
     expect(headingProblems(c)).toEqual([]);
     expect(unnamedControls(c)).toEqual([]);
     expect(smallTouchTargets(c)).toEqual([]);
-  });
-
-  it('nút mua sắm dẫn về danh mục sản phẩm', async () => {
-    const c = await mount();
-    expect(byText(c, 'a', 'Mua sắm để tích thêm Điểm Xanh')?.getAttribute('href')).toBe('/');
   });
 });
 
@@ -697,10 +621,9 @@ describe('/tai-khoan/diem-xanh — giao diện điện thoại như Mini App', (
     expect(card.textContent).not.toContain('Tiến độ lên hạng kế');
   });
 
-  it('nút thẻ thành viên số và nút mua sắm là nút phụ kiểu ZaUI ở điện thoại', async () => {
+  it('nút thẻ thành viên số là nút phụ kiểu ZaUI ở điện thoại', async () => {
     const c = await mount();
     expect(byText(c, 'button', 'Thẻ thành viên số')!.className).toContain('max-md:bg-forest-50');
-    expect(byText(c, 'a', 'Mua sắm để tích thêm Điểm Xanh')!.className).toContain('max-md:bg-forest-50');
   });
 
   it('các thẻ khối không viền ở điện thoại', async () => {
@@ -709,10 +632,10 @@ describe('/tai-khoan/diem-xanh — giao diện điện thoại như Mini App', (
     expect(bordered).toEqual([]);
   });
 
-  it('lối tắt dùng mũi tên chevron, không dùng ký tự ›', async () => {
-    state.readyRoutes = new Set(['/vuon-xanh', '/kho-qua']);
+  it('dòng sang Ưu đãi dùng mũi tên chevron, không dùng ký tự ›', async () => {
+    state.readyRoutes = new Set(['/uu-dai']);
     const c = await mount();
-    const link = c.querySelector('a[href="/vuon-xanh"]')!;
+    const link = c.querySelector('a[href="/uu-dai?tab=rewards"]')!;
     expect(link.textContent).not.toContain('›');
     expect(link.querySelectorAll('svg').length).toBe(2);
   });
@@ -747,74 +670,7 @@ describe('/tai-khoan/diem-xanh — khoá chạm đúp', () => {
       for (const e of els) e.click();
     });
   };
-  const posts = () => state.calls.filter((x) => x.method === 'post');
   const gets = (path: string) => state.calls.filter((x) => x.method === 'get' && x.path === path);
-  const PARTIAL = {
-    points: { success: true, cycleDay: 3, streakDays: 3, pointsEarned: 3, totalPoints: 1804, message: '' },
-    water: null,
-    alreadyDone: false,
-    pending: ['water'],
-  };
-
-  it('điểm danh: hai cú chạm cùng khung hình chỉ POST một lần; nút bận báo aria-busy/aria-disabled, không disabled', async () => {
-    const g = gate();
-    state.checkInPost = async () => {
-      await g.p;
-      return PARTIAL;
-    };
-    const c = await mount();
-    const b = byText(c, 'button', 'Điểm danh') as HTMLButtonElement;
-    await tapTogether(b, b);
-    await flush();
-    expect(posts()).toHaveLength(1);
-    expect(b.getAttribute('aria-busy')).toBe('true');
-    expect(b.getAttribute('aria-disabled')).toBe('true');
-    expect(b.disabled).toBe(false);
-    g.open();
-    await flush(8);
-    expect(posts()).toHaveLength(1);
-  });
-
-  it('điểm danh: khoá giữ tới khi trạng thái mới về (nhận một phần vẫn bấm lại được, nhưng không trước khi tải lại xong)', async () => {
-    state.checkInPost = async () => PARTIAL;
-    const c = await mount();
-    const fresh = gate();
-    state.holds.set('/me/daily-check-in', fresh.p);
-    const b = byText(c, 'button', 'Điểm danh') as HTMLButtonElement;
-    click(b);
-    await flush(8);
-    expect(posts()).toHaveLength(1);
-    // POST đã xong, lịch điểm danh mới chưa về: vẫn bận, chạm thêm không gửi lệnh thứ hai.
-    expect(b.getAttribute('aria-busy')).toBe('true');
-    await tapTogether(b, b);
-    await flush();
-    expect(posts()).toHaveLength(1);
-    fresh.open();
-    await flush(8);
-    expect(b.getAttribute('aria-busy')).toBeNull();
-    click(b);
-    await flush(8);
-    expect(posts()).toHaveLength(2);
-  });
-
-  it('điểm danh lỗi: role="alert", nhả khoá, bấm lại gọi lần hai', async () => {
-    let fail = true;
-    state.checkInPost = async () => {
-      if (fail) throw new Error('Máy chủ đang bận');
-      return PARTIAL;
-    };
-    const c = await mount();
-    const b = byText(c, 'button', 'Điểm danh') as HTMLButtonElement;
-    await tapTogether(b, b);
-    await flush(8);
-    expect(posts()).toHaveLength(1);
-    expect(c.querySelector('[role="alert"]')?.textContent).toContain('Máy chủ đang bận');
-    expect(b.getAttribute('aria-busy')).toBeNull();
-    fail = false;
-    click(b);
-    await flush(8);
-    expect(posts()).toHaveLength(2);
-  });
 
   it('"Xem thêm": hai cú chạm cùng khung hình chỉ tải một trang; nút báo bận không disabled', async () => {
     state.txns = Array.from({ length: 45 }, (_, i) => ({

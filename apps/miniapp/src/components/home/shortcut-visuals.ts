@@ -24,7 +24,10 @@ export const PILLAR_ICONS: Record<HomePillarId, LucideIcon> = {
   rewards: Gift,
 };
 
-/** Đích điều hướng của lối tắt; `null` = mở sheet thay vì sang trang (Kiếm tiền). Giờ vàng và Mã giảm giá đi qua `liveRoute` cùng nguồn với "Xem tất cả" của khối tương ứng. */
+/**
+ * Đích điều hướng của lối tắt; `null` = mở sheet thay vì sang trang (Kiếm tiền). Giờ vàng và Mã giảm giá đi qua `liveRoute` cùng nguồn với "Xem tất cả"
+ * của khối tương ứng (Mã giảm giá: tab Săn mã của Ưu đãi, kho mã mở sẵn).
+ */
 export const SHORTCUT_ROUTES: Record<HomeShortcutId, string | null> = {
   flash: liveRoute('/flash-sale', 'mini'),
   orders: '/orders',

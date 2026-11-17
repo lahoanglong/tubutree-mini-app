@@ -1,10 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import type { ReactNode } from 'react';
-import { Page, useNavigate, useSnackbar } from 'zmp-ui';
-import { offersTabHref } from '@tubutree/app-core/commerce/offers-hub';
+import type { CSSProperties, ReactNode } from 'react';
+import { Page, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Sprout, Recycle, Check, Gift, Copy, Lightbulb, QrCode as QrCodeIcon, Ticket } from 'lucide-react';
+import { Check, Gift, Copy, Lightbulb, QrCode as QrCodeIcon } from 'lucide-react';
 import {
   getLoyalty,
   getCoupons,
@@ -14,18 +13,18 @@ import {
   tierProgressPercent,
   type PointsTxn,
 } from '../services/account-api';
-import { wasteHistoryMenu } from '@tubutree/app-core/waste-copy';
 import { getLoadErrorMessage } from '../services/api';
 import { coreHttp } from '../services/core-http';
 import { pointsTxnPagesQuery } from '@tubutree/app-core/queries/loyalty';
-import { WASTE_QUERY_KEYS, listWasteRequests } from '../services/waste-api';
+import { loyaltyOffersRow } from '@tubutree/app-core/loyalty-page';
 import { GuestTiers } from '../components/loyalty/guest-tiers';
+import { LoyaltyRulesCard } from '../components/loyalty/loyalty-rules-card';
+import { OffersCheckInStrip } from '../components/offers/offers-check-in-strip';
 import { AuthPhaseView } from '../components/ui/auth-gate';
 import { useAuthPhase } from '../hooks/use-auth-phase';
-import { usePublicConfig } from '../hooks/use-public-config';
 import { formatNumber, formatDate, formatMultiplier } from '../utils/format';
 import { haptic } from '../utils/haptic';
-import { couponShortcut, tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-tier-copy';
+import { tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-tier-copy';
 import { earnRuleLine, moneyShort, pointsToSpend, redeemRuleLine, tierThresholdLabel } from '../utils/loyalty-copy';
 import { copyText } from '../utils/clipboard';
 import { PageHeader } from '../components/ui/page-header';
@@ -40,7 +39,6 @@ import { Button } from '../components/ui/button';
 import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { QrCode } from '../components/qr-code';
 import { PointsBoostStrip } from '../components/loyalty/points-boost-strip';
-import { DailyCheckInCard } from '../components/loyalty/daily-check-in-card';
 import { convertedPointsNote, expiringPointsNote, pointExpiryPolicyNote, pointsSummary } from '../utils/points-lots';
 import { tierPerkLabel } from '@tubutree/app-core/number-format';
 
@@ -59,6 +57,9 @@ const TIER_STYLES: readonly { emoji: string; color: string; bg: string }[] = [
 /** Tra theo THỨ HẠNG (không theo tên): đổi tên hạng trong admin vẫn giữ biểu tượng và màu. */
 const tierStyleAt = (rank: number) => TIER_STYLES[Math.min(Math.max(rank, 0), TIER_STYLES.length - 1)]!;
 
+/** Lề của các thẻ khối dưới thẻ hạng (dòng điểm danh, dòng sang Ưu đãi, mục gập luật). */
+const BLOCK_INSET: CSSProperties = { margin: '0 var(--space-gutter) var(--space-inset-card)' };
+
 /** Giữ giá trị khác null gần nhất: BottomSheet còn chạy hoạt ảnh đóng ~200ms sau khi state về null,
  * nội dung không được trống đi trong lúc trượt xuống. */
 function useLastNonNull<T>(value: T | null): T | null {
@@ -68,18 +69,12 @@ function useLastNonNull<T>(value: T | null): T | null {
 }
 
 export default function LoyaltyPage() {
-  const navigate = useNavigate();
   const goSmart = useSmartNavigate();
-  const publicConfig = usePublicConfig();
   const { openSnackbar } = useSnackbar();
   // Các endpoint /me/* cần auth — fetch trước khi restore() xong sẽ 401 và kẹt vĩnh viễn
   // (queryClient retry:false cho 4xx) dù login thành công ~200ms sau (cùng bug đã fix ở wallet.tsx).
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
-  // Chương trình tắt mà khách từng có yêu cầu thì vẫn cho xem lại (không tạo mới được).
-  const wasteOff = publicConfig.isLoaded && !publicConfig.waste.enabled;
-  const wasteHistoryQ = useQuery({ queryKey: WASTE_QUERY_KEYS.requests, queryFn: listWasteRequests, enabled: authed && wasteOff, retry: false });
-  const hasWasteHistory = (wasteHistoryQ.data?.length ?? 0) > 0;
   const loyaltyQ = useQuery({ queryKey: ['loyalty'], queryFn: getLoyalty, enabled: authed });
   const couponsQ = useQuery({ queryKey: ['coupons'], queryFn: getCoupons, enabled: authed });
   const txnQ = useInfiniteQuery({ ...pointsTxnPagesQuery(coreHttp), enabled: authed });
@@ -102,7 +97,7 @@ export default function LoyaltyPage() {
     setTimeout(() => setCopiedCode(false), 2000);
   };
 
-  const couponRow = couponShortcut(couponsQ.isError ? null : (couponsQ.data?.length ?? 0));
+  const offersRow = loyaltyOffersRow('/offers', couponsQ.data?.length);
   const data = loyaltyQ.data;
   const tierStyle = tierStyleAt(data ? tierRank(data.tiers, { id: data.tier?.id }) : 0);
   const tierName = data?.tier?.name ?? 'Mầm Xanh';
@@ -255,17 +250,6 @@ export default function LoyaltyPage() {
                 </Text>
               )}
 
-              {rates && (
-                <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  <Text variant="caption" tone="secondary" as="div">
-                    {earnRuleLine(rates, data.tier?.multiplier ?? 1)}
-                  </Text>
-                  <Text variant="caption" tone="secondary" as="div">
-                    {redeemRuleLine(rates)}
-                  </Text>
-                </div>
-              )}
-
               {/* Nút mở thẻ thành viên số (mã QR) */}
               <div style={{ marginTop: 16, display: 'flex', justifyContent: 'center' }}>
                 <Button
@@ -283,89 +267,27 @@ export default function LoyaltyPage() {
             </div>
           </div>
 
-          {/* Mã giảm giá nằm ở Ưu đãi: trang Hạng chỉ giữ một dòng lối tắt, ngay dưới thẻ hạng để khách có mã vẫn thấy lý do quay lại. */}
-          {couponsQ.isLoading ? (
-            <div style={{ margin: '0 16px 12px' }}>
-              <Skeleton height={56} radius="var(--radius-card)" />
-            </div>
-          ) : (
-            <Card style={{ margin: '0 16px 12px' }} padding={0}>
-              <ListRow
-                icon={
-                  <IconTile>
-                    <Icon icon={couponRow.to === 'coupons' ? Ticket : Gift} tone="brand" />
-                  </IconTile>
-                }
-                title={couponRow.title}
-                subtitle={couponRow.sub}
-                trailing="chevron"
-                onPress={() => goSmart(couponRow.to === 'coupons' ? '/offers?section=coupons' : offersTabHref('/offers', 'rewards'))}
-                style={{ padding: 12 }}
-              />
-            </Card>
-          )}
+          {/* Điểm danh chỉ làm ở Vườn Xanh: trang này chỉ báo hôm nay đã/chưa và mở Vườn Xanh. */}
+          <OffersCheckInStrip
+            authed={authed}
+            onOpenGarden={() => goSmart('/game')}
+            variant="raised"
+            style={{ padding: '0 var(--space-gutter) var(--space-inset-card)' }}
+          />
 
-          {/* Widget Điểm danh 7 ngày (Điểm Xanh) — tách riêng với điểm danh giọt nước ở Vườn Xanh */}
-          <DailyCheckInCard authed={authed} margin="0 16px 12px" />
-
-          {/* Lối tắt tích Điểm & Giọt nước */}
-          <Card style={{ margin: '0 16px 12px' }} padding={0}>
+          {/* Đổi quà và ví mã nằm ở hub Ưu đãi: một dòng dẫn sang, không lặp danh sách ở đây. */}
+          <Card style={BLOCK_INSET} padding={0}>
             <ListRow
-              icon={
-                <IconTile>
-                  <Icon icon={Sprout} tone="brand" />
-                </IconTile>
-              }
-              title="Vườn Xanh"
-              subtitle="Chăm cây nhận quà"
+              icon={<Icon icon={Gift} tone="brand" />}
+              title={offersRow.title}
+              subtitle={offersRow.sub}
               trailing="chevron"
-              onPress={() => goSmart('/game')}
-              style={{ padding: 12 }}
+              onPress={() => goSmart(offersRow.href)}
+              style={{ padding: 'var(--space-inset-card)' }}
             />
-            {!publicConfig.waste.enabled && hasWasteHistory && (
-              <ListRow
-                icon={
-                  <IconTile>
-                    <Icon icon={Recycle} tone="brand" />
-                  </IconTile>
-                }
-                title={wasteHistoryMenu.label}
-                subtitle={wasteHistoryMenu.hint}
-                trailing="chevron"
-                onPress={() => navigate('/recycle/requests')}
-                style={{ padding: 12, borderTop: '1px solid var(--color-border-subtle)' }}
-              />
-            )}
-            {publicConfig.waste.enabled && (
-              <ListRow
-                icon={
-                  <IconTile>
-                    <Icon icon={Recycle} tone="brand" />
-                  </IconTile>
-                }
-                title="Đổi rác lấy quà"
-                subtitle="Đổi bao bì lấy Điểm Xanh"
-                trailing="chevron"
-                onPress={() => navigate('/recycle')}
-                style={{ padding: 12, borderTop: '1px solid var(--color-border-subtle)' }}
-              />
-            )}
-            {/* Dòng "Đổi quà" ở trên đã dẫn tới Kho quà khi khách chưa có mã: không lặp lại. Mã còn đang tải thì giữ dòng, để thẻ không giãn ra khi tải xong. */}
-            {(couponsQ.isLoading || couponRow.to === 'coupons') && (
-              <ListRow
-                icon={
-                  <IconTile>
-                    <Icon icon={Gift} tone="brand" />
-                  </IconTile>
-                }
-                title="Kho quà"
-                subtitle="Đổi Điểm Xanh lấy mã giảm giá và quà"
-                trailing="chevron"
-                onPress={() => goSmart(offersTabHref('/offers', 'rewards'))}
-                style={{ padding: 12, borderTop: '1px solid var(--color-border-subtle)' }}
-              />
-            )}
           </Card>
+
+          <LoyaltyRulesCard lines={rates ? [earnRuleLine(rates, data.tier?.multiplier ?? 1), redeemRuleLine(rates)] : []} style={BLOCK_INSET} />
 
           {/* Quyền lợi hạng */}
           {perks.length > 0 && (
@@ -472,12 +394,6 @@ export default function LoyaltyPage() {
               <EmptyState variant="inline" art="sprout" heading="Chưa có giao dịch điểm nào" />
             )}
           </Section>
-
-          <div style={{ padding: 16, display: 'flex', justifyContent: 'center' }}>
-            <Button variant="secondary" onPress={() => goSmart('/browse')}>
-              Mua sắm để tích thêm Điểm Xanh →
-            </Button>
-          </div>
         </>
       ) : null}
 
@@ -595,24 +511,6 @@ export default function LoyaltyPage() {
         )}
       </BottomSheet>
     </Page>
-  );
-}
-
-function IconTile({ children }: { children: ReactNode }) {
-  return (
-    <div
-      style={{
-        width: 32,
-        height: 32,
-        flexShrink: 0,
-        borderRadius: 'var(--radius-control)',
-        background: 'var(--color-bg-subtle)',
-        display: 'grid',
-        placeItems: 'center',
-      }}
-    >
-      {children}
-    </div>
   );
 }
 

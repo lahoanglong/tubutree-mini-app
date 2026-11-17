@@ -7,8 +7,10 @@ import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { headingProblems, smallTouchTargets, unnamedControls } from '@/test-utils/a11y';
 import { ME_SUMMARY_KEY } from '@tubutree/app-core/api/me-summary';
 
-// Chép ý profile-hub.spec.tsx, profile-brand-owner.spec.tsx và profile.spec.ts (Mini App): thẻ đầu, ba số dư, menu theo nhóm,
-// mục theo vai trò/cờ, đại lý và chủ nhãn đổi theo dữ liệu, mã giới thiệu có nút chép. Mục trỏ route pending bị ẩn.
+// Chép ý profile-hub.spec.tsx, profile-brand-owner.spec.tsx và profile.spec.ts (Mini App): thẻ danh tính, hai số dư, một thẻ danh sách
+// (dòng mở tại chỗ cho Mời bạn / Hỗ trợ / Dành cho đối tác), mục theo vai trò/cờ, đại lý và chủ nhãn đổi theo dữ liệu, mã giới thiệu có
+// nút chép. Mục trỏ route pending bị ẩn. Phần mở của dòng accordion luôn có trong DOM nhưng ẩn bằng `hidden`: ca nào bấm vào bên trong
+// phải mở dòng trước, như khách thật.
 
 const mocks = vi.hoisted(() => ({
   auth: {
@@ -84,6 +86,29 @@ const mount = async () => {
 const chatRow = (c: HTMLElement) => Array.from(c.querySelectorAll<HTMLAnchorElement>('a[href="/ho-tro/chat"]')).find((a) => (a.textContent ?? '').includes('Chat với'));
 const link = (c: HTMLElement, href: string) => c.querySelector<HTMLAnchorElement>(`a[href="${href}"]`);
 const headings2 = (c: HTMLElement) => Array.from(c.querySelectorAll('h2')).map((h) => h.textContent);
+/** Nút của dòng mở tại chỗ theo chữ đầu của tên (tên đọc có thể thêm ", có tin mới" nên so theo textContent). */
+const accordion = (c: HTMLElement, name: string) =>
+  Array.from(c.querySelectorAll<HTMLButtonElement>('button[aria-expanded]')).find((b) => (b.textContent ?? '').trim().startsWith(name)) ?? null;
+const openRow = (c: HTMLElement, name: string) => {
+  const b = accordion(c, name);
+  if (!b) throw new Error(`không có dòng mở tại chỗ "${name}"`);
+  if (b.getAttribute('aria-expanded') !== 'true') click(b);
+  return b;
+};
+const openInvite = (c: HTMLElement) => openRow(c, 'Mời bạn nhận quà');
+/** Phần mở của một dòng accordion (id lấy từ aria-controls). */
+const panelOf = (c: HTMLElement, button: HTMLElement) => c.querySelector<HTMLElement>(`#${button.getAttribute('aria-controls')}`)!;
+/** Thẻ danh sách duy nhất của trang: ul chứa dòng Ưu đãi & quà (dòng đầu, luôn có). */
+const menuList = (c: HTMLElement) => link(c, '/uu-dai')!.closest('ul')!;
+const menuRows = (c: HTMLElement) => Array.from(menuList(c).children).filter((el): el is HTMLLIElement => el.tagName === 'LI');
+/** Nhãn của dòng: phần tử bấm được ở đầu li (liên kết hoặc nút) bắt đầu bằng nhãn nào trong danh sách. */
+const rowLabel = (li: HTMLElement, labels: string[]) => {
+  const head = Array.from(li.children).find((el) => el.tagName === 'A' || el.tagName === 'BUTTON')!;
+  return labels.find((l) => (head.textContent ?? '').trim().startsWith(l)) ?? head.textContent;
+};
+const ALL_ROWS = ['Thông báo', 'Ưu đãi & quà', 'Mời bạn nhận quà', 'Sổ địa chỉ', 'Sản phẩm yêu thích', 'Đổi rác lấy quà', 'Yêu cầu của tôi', 'Hỗ trợ', 'Cài đặt', 'Dành cho đối tác'];
+/** Cấu hình công khai của khách thường có đủ ba cờ bật: chat, trợ lý AI, đổi rác. */
+const fullConfig = () => ({ chat: { enabled: true, hours: { start: '08:00', end: '21:00' } }, aiAdvisorEnabled: true, waste: { enabled: true } });
 
 beforeEach(() => {
   mocks.auth.user = { id: 'u1', fullName: 'Nguyễn An', avatarUrl: null, role: 'CUSTOMER', referralCode: 'AN1', pointsBalance: 0, pointsConvertedBalance: 0, walletBalance: 0 };
@@ -104,14 +129,21 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
-  it('thẻ đầu dẫn tới /tai-khoan/ho-so: tên, hạng thành viên và "Sửa hồ sơ"', async () => {
+describe('hub /tai-khoan — thẻ danh tính và mã giới thiệu', () => {
+  // Thẻ danh tính không bấm được: hồ sơ sửa ở /tai-khoan/cai-dat và cột trái AccountShell, không ở trang này.
+  const identityCard = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-surface="inverse"]')!;
+
+  it('thẻ đầu chỉ hiện tên và hạng: không còn là link tới /tai-khoan/ho-so, không pill "Sửa hồ sơ", không biểu tượng chat góc phải', async () => {
     const c = await mount();
-    const head = link(c, '/tai-khoan/ho-so')!;
+    const head = identityCard(c);
     expect(head).not.toBeNull();
     expect(head.textContent).toContain('Nguyễn An');
     expect(head.textContent).toContain('Hạt Giống');
-    expect(head.textContent).toContain('Sửa hồ sơ');
+    expect(head.closest('a')).toBeNull();
+    expect(head.querySelector('a')).toBeNull();
+    expect(link(c, '/tai-khoan/ho-so')).toBeNull();
+    expect(c.textContent).not.toContain('Sửa hồ sơ');
+    expect(c.querySelector('[data-testid="profile-chat-dot"]')).toBeNull();
   });
 
   it('chưa tải được hạng: không đoán hạng "Mầm Xanh", báo lỗi và có "Thử lại"; khách chưa có tên: "Khách Tubu"', async () => {
@@ -121,8 +153,8 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     mocks.auth.user = { ...mocks.auth.user, fullName: null };
     mocks.meName = null;
     const c = await mount();
-    expect(link(c, '/tai-khoan/ho-so')!.textContent).not.toContain('Mầm Xanh');
-    expect(link(c, '/tai-khoan/ho-so')!.textContent).toContain('Khách Tubu');
+    expect(identityCard(c).textContent).not.toContain('Mầm Xanh');
+    expect(identityCard(c).textContent).toContain('Khách Tubu');
     expect(c.textContent).toContain('Chưa tải được hạng và điểm');
     expect(Array.from(c.querySelectorAll('button')).some((b) => b.textContent === 'Thử lại')).toBe(true);
   });
@@ -130,13 +162,14 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
   it('hiện ảnh đại diện khi có', async () => {
     mocks.auth.user = { ...mocks.auth.user, avatarUrl: 'https://img.test/a.jpg' };
     const c = await mount();
-    expect(link(c, '/tai-khoan/ho-so')!.querySelector('img')?.getAttribute('src')).toBe('https://img.test/a.jpg');
+    expect(identityCard(c).querySelector('img')?.getAttribute('src')).toBe('https://img.test/a.jpg');
   });
 
   it('mã hiện bằng chữ; nút "Sao chép link mời bạn" chép link có ?ref= và báo đã chép', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     const c = await mount();
+    openInvite(c);
     expect(c.textContent).toContain('Mã của bạn: AN1');
     click(byText(c, 'button', 'Sao chép link mời bạn'));
     await flush(3);
@@ -147,26 +180,30 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
   it('không chép được thì nói mã để khách tự chép', async () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn().mockRejectedValue(new Error('denied')) } });
     const c = await mount();
+    openInvite(c);
     click(byText(c, 'button', 'Sao chép link mời bạn'));
     await flush(3);
     expect(c.querySelector('[role="status"]')?.textContent).toContain('Không sao chép được. Mã của bạn: AN1');
   });
 
-  it('khối "Mời bạn sống xanh" nêu đúng quà thật: mã chào mừng của Admin cho bạn mới, Điểm Xanh và điều kiện từ /me/referral cho người mời', async () => {
+  it('phần mở của dòng "Mời bạn nhận quà" nêu đúng quà thật: mã chào mừng của Admin cho bạn mới, Điểm Xanh và điều kiện từ /me/referral cho người mời', async () => {
     mocks.routes['/config/public'] = () => ({ newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 } } });
     mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 0, earnedPoints: 0, minOrderAmount: 200000, windowDays: 30, referrerRewardPoints: 5000 });
     const c = await mount();
+    openInvite(c);
     expect(c.textContent).toContain('Bạn mới nhận mã 30.000đ cho đơn đầu từ 199k. Bạn nhận 5.000 Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai từ 200k trong 30 ngày.');
   });
 
   it('chưa có số liệu: nói chung, không bịa con số; CTV không bị hứa Điểm Xanh giới thiệu', async () => {
     mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 0, earnedPoints: 0 });
     const c = await mount();
+    openInvite(c);
     expect(c.textContent).toContain('Bạn mới nhận mã giảm giá cho đơn đầu. Bạn nhận Điểm Xanh khi bạn ấy hoàn tất đơn thứ hai.');
     mounted.forEach((m) => m.unmount());
     mounted = [];
     mocks.auth.user = { ...mocks.auth.user, role: 'AFFILIATE' };
     const c2 = await mount();
+    openInvite(c2);
     expect(c2.textContent).toContain('Bạn mới nhận mã giảm giá cho đơn đầu.');
     expect(c2.textContent).not.toContain('hoàn tất đơn thứ hai');
   });
@@ -176,6 +213,7 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn() }, share });
     mocks.routes['/config/public'] = () => ({ newCustomer: { welcomeVoucher: { amount: 30000, minOrder: 199000 } } });
     const c = await mount();
+    openInvite(c);
     click(byText(c, 'button', 'Chia sẻ qua Zalo'));
     await flush(3);
     expect(share).toHaveBeenCalledWith({
@@ -188,6 +226,7 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     share.mockClear();
     mocks.routes['/config/public'] = () => ({});
     const c2 = await mount();
+    openInvite(c2);
     click(byText(c2, 'button', 'Chia sẻ qua Zalo'));
     await flush(3);
     expect(share.mock.calls[0]![0].text).toBe('Tubu Tree tặng khách mới mã giảm giá cho đơn đầu');
@@ -212,24 +251,30 @@ describe('hub /tai-khoan — thẻ đầu và mã giới thiệu', () => {
     expect(c2.textContent).not.toContain('Đã mời thành công');
   });
 
-  it('chưa có mã giới thiệu: không có nút', async () => {
+  it('chưa có mã giới thiệu: không có dòng Mời bạn nhận quà, không có nút chép/chia sẻ', async () => {
     mocks.auth.user = { ...mocks.auth.user, referralCode: '' };
     const c = await mount();
+    expect(accordion(c, 'Mời bạn nhận quà')).toBeNull();
+    expect(c.querySelector('li#referral')).toBeNull();
     expect(byText(c, 'button', 'Mã của bạn')).toBeNull();
-    expect(c.textContent).not.toContain('Mời bạn sống xanh');
+    expect(byText(c, 'button', 'Sao chép link mời bạn')).toBeNull();
   });
 });
 
-describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
+describe('hub /tai-khoan — hai số dư và hàng trạng thái đơn', () => {
   const stat = (c: HTMLElement, label: string) => Array.from(c.querySelectorAll('a')).find((a) => a.getAttribute('aria-label') === null && (a.textContent ?? '').endsWith(label))!;
 
-  it('Điểm Xanh, Ví Tubu, Mã giảm giá; Mã giảm giá đếm số mã và mở mục mã của trang Ưu đãi', async () => {
+  it('Điểm Xanh và Ví Tubu là hai ô trong lưới 2 cột; không còn ô Mã giảm giá', async () => {
     const c = await mount();
-    expect(stat(c, 'Điểm Xanh').getAttribute('href')).toBe('/tai-khoan/diem-xanh');
-    expect(stat(c, 'Ví Tubu').getAttribute('href')).toBe('/tai-khoan/vi-tubu');
-    const coupons = stat(c, 'Mã giảm giá');
-    expect(coupons.getAttribute('href')).toBe('/uu-dai?section=coupons');
-    expect(coupons.textContent).toContain('2 mã');
+    const points = stat(c, 'Điểm Xanh');
+    const wallet = stat(c, 'Ví Tubu');
+    expect(points.getAttribute('href')).toBe('/tai-khoan/diem-xanh');
+    expect(wallet.getAttribute('href')).toBe('/tai-khoan/vi-tubu');
+    expect(points.parentElement).toBe(wallet.parentElement);
+    expect(points.parentElement!.className).toContain('grid-cols-2');
+    expect(points.parentElement!.children).toHaveLength(2);
+    expect(stat(c, 'Mã giảm giá')).toBeUndefined();
+    expect(link(c, '/uu-dai?section=coupons')).toBeNull();
   });
 
   it('ví từ một triệu xuống price-sm để số không tràn ô ở 320px; ví nhỏ giữ price-md', async () => {
@@ -289,15 +334,22 @@ describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
     mocks.meWallet = 50000;
   });
 
-  it('chưa tải được mã giảm giá: dấu "—", không đoán số', async () => {
+  it('số mã giảm giá chỉ hiện ở gợi ý của dòng Ưu đãi & quà: 2 mã thì nêu số, chưa tải được hoặc 0 mã thì gợi ý chung, không đoán số', async () => {
+    const offers = (c: HTMLElement) => link(c, '/uu-dai')!;
+    expect(offers(await mount()).textContent).toContain('2 mã giảm giá đang có');
     mocks.routes['/me/coupons'] = () => {
       throw new Error('offline');
     };
-    const c = await mount();
-    expect(stat(c, 'Mã giảm giá').textContent).toContain('—');
+    const failed = offers(await mount());
+    expect(failed.textContent).toContain('Mã giảm giá và đổi quà');
+    expect(failed.textContent).not.toContain('đang có');
+    mocks.routes['/me/coupons'] = () => [];
+    const none = offers(await mount());
+    expect(none.textContent).toContain('Mã giảm giá và đổi quà');
+    expect(none.textContent).not.toContain('đang có');
   });
 
-  it('hàng trạng thái đơn: năm ô mở danh sách đã lọc, có số đếm; Đã giao không đếm', async () => {
+  it('hàng trạng thái đơn: liên kết "Xem tất cả đơn hàng" và bốn ô (grid-cols-4) mở danh sách đã lọc; không còn ô Định kỳ', async () => {
     const c = await mount();
     const row = c.querySelector('section[aria-label="Đơn của tôi"]')!;
     const hrefs = Array.from(row.querySelectorAll('a')).map((a) => a.getAttribute('href'));
@@ -307,46 +359,95 @@ describe('hub /tai-khoan — ba số và hàng trạng thái đơn', () => {
       '/tai-khoan/don-hang?tab=processing',
       '/tai-khoan/don-hang?tab=shipping',
       '/tai-khoan/don-hang?tab=delivered',
-      '/tai-khoan/don-hang?tab=subscriptions',
     ]);
-    expect(row.textContent).toContain('Thanh toán');
-    expect(row.textContent).toContain('Định kỳ');
+    expect(row.querySelector('a[aria-label="Xem tất cả đơn hàng"]')!.getAttribute('href')).toBe('/tai-khoan/don-hang');
+    const grid = row.querySelector('.grid-cols-4')!;
+    expect(grid.children).toHaveLength(4);
+    expect(grid.textContent).toContain('Thanh toán');
+    expect(grid.textContent).toContain('Đã giao');
+    expect(row.textContent).not.toContain('Định kỳ');
+    expect(row.querySelector('.grid-cols-5')).toBeNull();
   });
 });
 
-describe('hub /tai-khoan — menu theo nhóm', () => {
-  it('các nhóm là h2, vẫn đúng một h1, OrdersSection còn nguyên', async () => {
+describe('hub /tai-khoan — một thẻ danh sách', () => {
+  it('đúng một h1; h2 chỉ còn "Đơn của tôi" và khối "Đơn hàng của tôi" của máy tính (huy hiệu tắt); menu không có tiêu đề nhóm', async () => {
     const c = await mount();
-    expect(headings2(c)).toEqual(expect.arrayContaining(['Đơn của tôi', 'Mời bạn sống xanh', 'Kiếm tiền cùng Tubu', 'Tài khoản', 'Hỗ trợ']));
     expect(headingProblems(c)).toEqual([]);
-    expect(c.textContent).toContain('Đơn hàng của tôi');
-  });
-
-  it('mỗi nhóm menu là vùng có tên đúng bằng h2 của nó', async () => {
-    const c = await mount();
-    const sections = Array.from(c.querySelectorAll('section[aria-labelledby]'));
-    expect(sections.length).toBeGreaterThanOrEqual(3);
-    for (const sec of sections) {
-      const ids = sec.getAttribute('aria-labelledby')!.split(/\s+/);
-      expect(ids).toHaveLength(1);
-      expect(document.getElementById(ids[0]!)?.textContent).toBe(sec.querySelector('h2')?.textContent);
+    expect(c.querySelectorAll('h1')).toHaveLength(1);
+    expect(headings2(c)).toEqual(['Đơn của tôi', 'Đơn hàng của tôi']);
+    expect(menuList(c).querySelector('h2, h3')).toBeNull();
+    for (const group of ['Kiếm tiền cùng Tubu', 'Công việc', 'Tài khoản', 'Mời bạn sống xanh']) {
+      expect(headings2(c)).not.toContain(group);
     }
   });
 
-  it('Sổ địa chỉ là liên kết; mục trỏ route pending thì ẩn', async () => {
-    mocks.notReady = new Set(['/hoc-vien', '/tai-khoan/thong-bao']);
+  it('menu là một ul duy nhất, không nằm trong vùng section có tên nhóm; OrdersSection còn nguyên', async () => {
     const c = await mount();
-    expect(link(c, '/tai-khoan/dia-chi')).not.toBeNull();
-    expect(link(c, '/hoc-vien')).toBeNull();
-    expect(link(c, '/tai-khoan/thong-bao')).toBeNull();
+    expect(menuList(c).closest('section')).toBeNull();
+    // Chỉ còn hai vùng có tên: hàng đơn của Cá nhân (aria-label) và OrdersSection (từ md, aria-labelledby).
+    expect(Array.from(c.querySelectorAll('section[aria-labelledby]')).map((s) => s.querySelector('h2')?.textContent)).toEqual(['Đơn hàng của tôi']);
+    expect(Array.from(c.querySelectorAll('section[aria-label]')).map((s) => s.getAttribute('aria-label'))).toEqual(['Đơn của tôi']);
+    expect(c.textContent).toContain('Đơn hàng của tôi');
   });
 
-  it('mục Thông báo hiện số chưa đọc (không tính đã đọc)', async () => {
+  it('khách thường (chat, AI, đổi rác bật, đã đọc hết thông báo): đúng 7 dòng theo thứ tự, không có "Dành cho đối tác"', async () => {
+    mocks.routes['/config/public'] = fullConfig;
+    mocks.routes['/me/support-chat/summary'] = () => ({ unreadCount: 0 });
+    mocks.summarySource.unread = () => 0;
     const c = await mount();
-    const row = link(c, '/tai-khoan/thong-bao')!;
-    expect(row.textContent).toContain('Thông báo');
-    expect(row.textContent).toContain('2');
-    expect(row.getAttribute('aria-label')).toContain('2 chưa đọc');
+    expect(menuRows(c).map((li) => rowLabel(li, ALL_ROWS))).toEqual([
+      'Ưu đãi & quà',
+      'Mời bạn nhận quà',
+      'Sổ địa chỉ',
+      'Sản phẩm yêu thích',
+      'Đổi rác lấy quà',
+      'Hỗ trợ',
+      'Cài đặt',
+    ]);
+    expect(accordion(c, 'Dành cho đối tác')).toBeNull();
+    expect(c.textContent).not.toContain('Dành cho đối tác');
+  });
+
+  it('chỉ Thông báo, Sổ địa chỉ, Sản phẩm yêu thích và Cài đặt mang md:hidden (đã có ở cột trái AccountShell); dòng khác thì không', async () => {
+    mocks.routes['/config/public'] = fullConfig;
+    const c = await mount();
+    const hidden = menuRows(c)
+      .filter((li) => li.classList.contains('md:hidden'))
+      .map((li) => rowLabel(li, ALL_ROWS));
+    expect(hidden).toEqual(['Thông báo', 'Sổ địa chỉ', 'Sản phẩm yêu thích', 'Cài đặt']);
+    const hrefs = menuRows(c).map((li) => li.querySelector(':scope > a')?.getAttribute('href') ?? null);
+    expect(hrefs).toEqual(['/tai-khoan/thong-bao', '/uu-dai', null, '/tai-khoan/dia-chi', '/tai-khoan/yeu-thich', '/doi-rac', null, '/tai-khoan/cai-dat']);
+  });
+
+  it('Sổ địa chỉ là liên kết; mục trỏ route pending thì ẩn (Yêu thích; Học viện của CTV)', async () => {
+    mocks.notReady = new Set(['/tai-khoan/yeu-thich']);
+    const c = await mount();
+    expect(link(c, '/tai-khoan/dia-chi')).not.toBeNull();
+    expect(link(c, '/tai-khoan/yeu-thich')).toBeNull();
+    mocks.notReady = new Set(['/hoc-vien']);
+    mocks.auth.user = { ...mocks.auth.user, role: 'AFFILIATE' };
+    const partner = await mount();
+    openRow(partner, 'Dành cho đối tác');
+    expect(link(partner, '/ctv')).not.toBeNull();
+    expect(link(partner, '/hoc-vien')).toBeNull();
+  });
+
+  it('dòng Thông báo chỉ có khi có tin chưa đọc (kèm số tin); không còn dòng Hoàn tiền sàn ngoài', async () => {
+    const c = await mount();
+    expect(link(c, '/tai-khoan/thong-bao')!.textContent).toContain('2 thông báo chưa đọc');
+    expect(c.textContent).not.toContain('Hoàn tiền');
+    mocks.summarySource.unread = () => 0;
+    const read = await mount();
+    expect(link(read, '/tai-khoan/thong-bao')).toBeNull();
+    expect(read.textContent).not.toContain('chưa đọc');
+  });
+
+  it('không còn thẻ máy tính "Đổi rác & Kho quà Điểm Xanh" (account-desktop-ecosystem)', async () => {
+    mocks.routes['/config/public'] = fullConfig;
+    const c = await mount();
+    expect(c.querySelector('[data-testid="account-desktop-ecosystem"]')).toBeNull();
+    expect(c.textContent).not.toContain('Kho quà Điểm Xanh');
   });
 
   it('tin chưa đọc lấy từ /me/summary (cùng lời gọi với số đơn), không tải danh sách tin', async () => {
@@ -369,8 +470,10 @@ describe('hub /tai-khoan — menu theo nhóm', () => {
 });
 
 describe('hub /tai-khoan — mục theo vai trò và cờ', () => {
-  it('khách thường không có nhóm Công việc', async () => {
-    expect(headings2(await mount())).not.toContain('Công việc');
+  it('khách thường không có dòng "Dành cho đối tác" (không còn nhóm Công việc)', async () => {
+    const c = await mount();
+    expect(accordion(c, 'Dành cho đối tác')).toBeNull();
+    expect(headings2(c)).not.toContain('Công việc');
   });
 
   it('STAFF thấy Nhân viên và Bảng lương, không thấy Quản trị', async () => {
@@ -411,8 +514,11 @@ describe('hub /tai-khoan — mục theo vai trò và cờ', () => {
 });
 
 describe('hub /tai-khoan — đại lý và chủ nhãn', () => {
-  it('đại lý đã duyệt: "Kênh đại lý" kèm hạng; đang chờ: "Hồ sơ đại lý"; chưa có: "Đại lý"', async () => {
+  it('đại lý đã duyệt: "Kênh đại lý" kèm hạng; đang chờ: "Hồ sơ đại lý"; chưa có hồ sơ (vai CTV): "Đại lý"; khách thường chưa có hồ sơ: không có mục', async () => {
+    expect(link(await mount(), '/dai-ly')).toBeNull();
+    mocks.auth.user = { ...mocks.auth.user, role: 'AFFILIATE' };
     expect(link(await mount(), '/dai-ly')!.textContent).toContain('Đại lý');
+    mocks.auth.user = { ...mocks.auth.user, role: 'CUSTOMER' };
     mocks.routes['/dealer/me'] = () => ({ status: 'APPROVED', isDealer: true, tier: { name: 'Bạc' } });
     const approved = link(await mount(), '/dai-ly')!;
     expect(approved.textContent).toContain('Kênh đại lý');
@@ -531,13 +637,13 @@ describe('hub /tai-khoan — đăng xuất và trạng thái phiên', () => {
   });
 });
 
-describe('hub /tai-khoan — hàng đơn, chat ở đầu trang, avatar chữ cái đầu (R-33, R-34, R-110)', () => {
-  it('số đơn là chấm ở góc biểu tượng, chỉ hiện khi lớn hơn 0; không còn dấu "·"', async () => {
+describe('hub /tai-khoan — hàng đơn, avatar chữ cái đầu (R-33, R-110)', () => {
+  it('số đơn là chấm ở góc biểu tượng Chờ thanh toán / Đang xử lý / Đang giao, chỉ hiện khi lớn hơn 0; gói định kỳ đang chạy không thêm chấm; không còn dấu "·"', async () => {
     mocks.summarySource.orderCounts = () => ({ pending_payment: 3, processing: 3, shipping: 3, delivered: 3, closed: 3 });
     mocks.summarySource.subscriptions = () => [{ status: 'ACTIVE' }];
     const c = await mount();
     const row = c.querySelector('section[aria-label="Đơn của tôi"]')!;
-    expect(Array.from(row.querySelectorAll('[data-testid="order-count-badge"]')).map((b) => b.textContent)).toEqual(['3', '3', '3', '1']);
+    expect(Array.from(row.querySelectorAll('[data-testid="order-count-badge"]')).map((b) => b.textContent)).toEqual(['3', '3', '3']);
     expect(row.textContent).not.toContain('·');
   });
 
@@ -567,16 +673,19 @@ describe('hub /tai-khoan — hàng đơn, chat ở đầu trang, avatar chữ c�
     expect(c.querySelector('[data-testid="order-count-badge"]')).not.toBeNull();
   });
 
-  it('chat bật: biểu tượng chat ở đầu trang dẫn tới /ho-tro/chat, có chấm khi có tin chưa đọc; chat tắt thì không có', async () => {
+  it('chat bật, có tin chưa đọc: không còn biểu tượng chat ở thẻ danh tính (profile-chat-dot), liên kết chat chỉ còn một, nằm trong dòng Hỗ trợ; chat tắt thì không có', async () => {
     mocks.routes['/config/public'] = () => ({ chat: { enabled: true, hours: { start: '08:00', end: '21:00' } } });
     mocks.routes['/me/support-chat/summary'] = () => ({ unreadCount: 2 });
     const c = await mount();
-    const icon = c.querySelector<HTMLAnchorElement>('a[aria-label="Chat với Tubu Tree, có tin mới"]')!;
-    expect(icon.getAttribute('href')).toBe('/ho-tro/chat');
-    expect(icon.querySelector('[data-testid="profile-chat-dot"]')).not.toBeNull();
+    expect(c.querySelector('[data-testid="profile-chat-dot"]')).toBeNull();
+    expect(c.querySelector('[data-surface="inverse"] a')).toBeNull();
+    const chats = c.querySelectorAll<HTMLAnchorElement>('a[href="/ho-tro/chat"]');
+    expect(chats).toHaveLength(1);
+    expect(panelOf(c, accordion(c, 'Hỗ trợ')!).contains(chats[0]!)).toBe(true);
     mocks.routes['/config/public'] = () => ({});
     const off = await mount();
     expect(off.querySelector('a[aria-label^="Chat với Tubu Tree"]')).toBeNull();
+    expect(link(off, '/ho-tro/chat')).toBeNull();
   });
 
   it('chưa có ảnh: vòng chữ cái đầu của tên', async () => {
@@ -596,13 +705,14 @@ describe('hub /tai-khoan — lối vào khối mã giới thiệu (E-21)', () =>
     Element.prototype.scrollIntoView = vi.fn();
   });
 
-  it('?section=referral cuộn tới khối mã giới thiệu khi dữ liệu mời bạn đã về', async () => {
+  it('?section=referral tự mở dòng Mời bạn nhận quà và cuộn tới li#referral khi dữ liệu mời bạn đã về', async () => {
     mocks.search = 'section=referral';
     mocks.routes['/me/referral'] = () => ({ referralCode: 'AN1', successCount: 0, earnedPoints: 0 });
     const c = await mount();
-    expect(c.querySelector('section#referral')).not.toBeNull();
+    expect(c.querySelector('li#referral')).not.toBeNull();
+    expect(accordion(c, 'Mời bạn nhận quà')!.getAttribute('aria-expanded')).toBe('true');
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
-    expect((Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock.contexts[0]).toBe(c.querySelector('section#referral'));
+    expect((Element.prototype.scrollIntoView as ReturnType<typeof vi.fn>).mock.contexts[0]).toBe(c.querySelector('li#referral'));
   });
 
   it('không có ?section=referral thì không cuộn', async () => {
@@ -616,7 +726,7 @@ describe('hub /tai-khoan — lối vào quầy Nhận hàng tại điểm (E-39)
   const POINTS = [{ id: 'p1', name: 'Kho Tubu HCMC', kind: 'WAREHOUSE' }, { id: 'p2', name: 'Đại lý An Phát', kind: 'PARTNER' }];
   const deskCalls = () => mocks.calls.filter((p) => p === '/waste/desk/points');
 
-  it('nhân viên có điểm: hiện hàng ở nhóm Công việc, ghi tên điểm, trỏ /doi-rac/quay', async () => {
+  it('nhân viên có điểm: hiện hàng trong dòng Dành cho đối tác, ghi tên điểm, trỏ /doi-rac/quay', async () => {
     mocks.auth.user = { ...mocks.auth.user, role: 'STAFF' };
     mocks.routes['/waste/desk/points'] = () => POINTS;
     const c = await mount();
@@ -689,6 +799,7 @@ describe('hub /tai-khoan — khoá chạm đúp (W78B)', () => {
     const share = vi.fn();
     vi.stubGlobal('navigator', { clipboard: { writeText }, share });
     const c = await mount();
+    openInvite(c);
     const copy = copyBtn(c);
     const sharing = shareBtn(c);
     act(() => {
@@ -721,6 +832,7 @@ describe('hub /tai-khoan — khoá chạm đúp (W78B)', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText }, share });
     const c = await mount();
+    openInvite(c);
     const sharing = shareBtn(c);
     act(() => {
       sharing.click();
@@ -744,6 +856,7 @@ describe('hub /tai-khoan — khoá chạm đúp (W78B)', () => {
     const writeText = vi.fn().mockRejectedValueOnce(new Error('denied')).mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
     const c = await mount();
+    openInvite(c);
     click(copyBtn(c));
     await flush(3);
     expect(c.querySelector('[role="status"]')?.textContent).toContain('Không sao chép được. Mã của bạn: AN1');
@@ -880,6 +993,187 @@ describe('hub /tai-khoan — khoá chạm đúp (W78B)', () => {
   });
 });
 
+
+describe('hub /tai-khoan — dòng mở tại chỗ "Mời bạn nhận quà"', () => {
+  it('mặc định đóng (panel luôn có trong DOM nhưng hidden); bấm mở rồi bấm lại đóng; nội dung là thẻ mời, không còn tiêu đề "Mời bạn sống xanh"', async () => {
+    const c = await mount();
+    const b = accordion(c, 'Mời bạn nhận quà')!;
+    const panel = panelOf(c, b);
+    expect(b.getAttribute('aria-expanded')).toBe('false');
+    expect(panel.hasAttribute('hidden')).toBe(true);
+    expect(b.closest('li')!.id).toBe('referral');
+    click(b);
+    expect(b.getAttribute('aria-expanded')).toBe('true');
+    expect(panel.hasAttribute('hidden')).toBe(false);
+    expect(panel.textContent).toContain('Mã của bạn: AN1');
+    expect(byText(panel, 'button', 'Chia sẻ qua Zalo')).not.toBeNull();
+    expect(byText(panel, 'button', 'Sao chép link mời bạn')).not.toBeNull();
+    expect(panel.querySelector('[role="status"]')).not.toBeNull();
+    expect(headings2(c)).not.toContain('Mời bạn sống xanh');
+    click(b);
+    expect(b.getAttribute('aria-expanded')).toBe('false');
+    expect(panel.hasAttribute('hidden')).toBe(true);
+  });
+
+  it('?section=referral mở sẵn ngay cả khi dữ liệu mời bạn chưa về; không có tham số thì đóng', async () => {
+    mocks.search = 'section=referral';
+    mocks.routes['/me/referral'] = () => {
+      throw new Error('offline');
+    };
+    const opened = accordion(await mount(), 'Mời bạn nhận quà')!;
+    expect(opened.getAttribute('aria-expanded')).toBe('true');
+    expect(panelOf(document.body, opened).hasAttribute('hidden')).toBe(false);
+    mocks.search = '';
+    expect(accordion(await mount(), 'Mời bạn nhận quà')!.getAttribute('aria-expanded')).toBe('false');
+  });
+});
+
+describe('hub /tai-khoan — dòng mở tại chỗ "Hỗ trợ"', () => {
+  it('mặc định đóng; mở ra đủ bốn liên kết đúng đích khi chat và Trợ lý AI bật', async () => {
+    mocks.routes['/config/public'] = fullConfig;
+    mocks.routes['/me/support-chat/summary'] = () => ({ unreadCount: 0 });
+    const c = await mount();
+    const b = accordion(c, 'Hỗ trợ')!;
+    const panel = panelOf(c, b);
+    expect(b.getAttribute('aria-expanded')).toBe('false');
+    expect(panel.hasAttribute('hidden')).toBe(true);
+    click(b);
+    expect(b.getAttribute('aria-expanded')).toBe('true');
+    expect(panel.hasAttribute('hidden')).toBe(false);
+    expect(Array.from(panel.querySelectorAll('a')).map((a) => [a.getAttribute('href'), (a.textContent ?? '').trim()])).toEqual([
+      ['/ho-tro/chat', expect.stringContaining('Chat với Tubu Tree')],
+      ['/tu-van', expect.stringContaining('Trợ lý AI 24/7')],
+      ['/gioi-thieu', expect.stringContaining('Về Tubu Tree & Hỗ trợ')],
+      ['/cau-chuyen', expect.stringContaining('Câu chuyện thương hiệu')],
+    ]);
+    click(b);
+    expect(panel.hasAttribute('hidden')).toBe(true);
+  });
+
+  it('chat và Trợ lý AI tắt: chỉ còn "Về Tubu Tree & Hỗ trợ" và "Câu chuyện thương hiệu"', async () => {
+    const c = await mount();
+    const panel = panelOf(c, openRow(c, 'Hỗ trợ'));
+    expect(Array.from(panel.querySelectorAll('a')).map((a) => a.getAttribute('href'))).toEqual(['/gioi-thieu', '/cau-chuyen']);
+  });
+
+  it('có tin chưa đọc: dòng đóng có chấm support-unread-dot và tên đọc "Hỗ trợ, có tin mới"; mở ra thì chấm chuyển xuống dòng Chat', async () => {
+    mocks.routes['/config/public'] = fullConfig;
+    mocks.routes['/me/support-chat/summary'] = () => ({ unreadCount: 2 });
+    const c = await mount();
+    const b = accordion(c, 'Hỗ trợ')!;
+    expect(b.getAttribute('aria-label')).toBe('Hỗ trợ, có tin mới');
+    expect(b.querySelector('[data-testid="support-unread-dot"]')).not.toBeNull();
+    click(b);
+    expect(b.hasAttribute('aria-label')).toBe(false);
+    expect(b.querySelector('[data-testid="support-unread-dot"]')).toBeNull();
+    const chat = chatRow(c)!;
+    expect(chat.getAttribute('aria-label')).toBe('Chat với Tubu Tree, có tin mới');
+    expect(chat.querySelector('[data-testid="chat-unread-dot"]')).not.toBeNull();
+  });
+
+  it('không có tin chưa đọc hoặc chat tắt: không có chấm nào, tên đọc của dòng chỉ là chữ nhìn thấy', async () => {
+    mocks.routes['/config/public'] = fullConfig;
+    mocks.routes['/me/support-chat/summary'] = () => ({ unreadCount: 0 });
+    const quiet = await mount();
+    expect(accordion(quiet, 'Hỗ trợ')!.hasAttribute('aria-label')).toBe(false);
+    expect(quiet.querySelector('[data-testid="support-unread-dot"]')).toBeNull();
+    expect(quiet.querySelector('[data-testid="chat-unread-dot"]')).toBeNull();
+    mocks.routes['/config/public'] = () => ({ ...fullConfig(), chat: { enabled: false } });
+    mocks.routes['/me/support-chat/summary'] = () => ({ unreadCount: 5 });
+    const off = await mount();
+    expect(accordion(off, 'Hỗ trợ')!.hasAttribute('aria-label')).toBe(false);
+    expect(off.querySelector('[data-testid="support-unread-dot"]')).toBeNull();
+    expect(link(off, '/ho-tro/chat')).toBeNull();
+  });
+});
+
+describe('hub /tai-khoan — dòng "Dành cho đối tác"', () => {
+  const partnerHrefs = (c: HTMLElement) => Array.from(panelOf(c, openRow(c, 'Dành cho đối tác')).querySelectorAll('a')).map((a) => a.getAttribute('href'));
+
+  it('khách thường (CUSTOMER) không có dòng; CTV và nhân viên có, mặc định đóng', async () => {
+    expect(accordion(await mount(), 'Dành cho đối tác')).toBeNull();
+    for (const role of ['AFFILIATE', 'STAFF']) {
+      mocks.auth.user = { ...mocks.auth.user, role };
+      const c = await mount();
+      const b = accordion(c, 'Dành cho đối tác')!;
+      expect(b).not.toBeNull();
+      expect(b.getAttribute('aria-expanded')).toBe('false');
+      expect(panelOf(c, b).hasAttribute('hidden')).toBe(true);
+    }
+  });
+
+  it('CTV mở ra: Cộng tác viên, Học viện Tubu, Đại lý (chưa có hồ sơ); không có mục công việc', async () => {
+    mocks.auth.user = { ...mocks.auth.user, role: 'AFFILIATE' };
+    const c = await mount();
+    expect(partnerHrefs(c)).toEqual(['/ctv', '/hoc-vien', '/dai-ly']);
+    const panel = panelOf(c, accordion(c, 'Dành cho đối tác')!);
+    expect(panel.hasAttribute('hidden')).toBe(false);
+    expect(panel.textContent).toContain('Cộng tác viên');
+    expect(panel.textContent).toContain('Học viện Tubu');
+  });
+
+  it('nhân viên mở ra: Học viện, Đại lý, Ca làm & chấm công, Lương của tôi; thêm Cộng tác viên khi /affiliate/me báo còn quyền CTV; không có Quản trị', async () => {
+    mocks.auth.user = { ...mocks.auth.user, role: 'STAFF' };
+    expect(partnerHrefs(await mount())).toEqual(['/hoc-vien', '/dai-ly', '/nhan-vien', '/nhan-vien/bang-luong']);
+    mocks.routes['/affiliate/me'] = () => ({ isAffiliate: true });
+    expect(partnerHrefs(await mount())).toEqual(['/ctv', '/hoc-vien', '/dai-ly', '/nhan-vien', '/nhan-vien/bang-luong']);
+  });
+
+  it('ADMIN mở ra: thêm Quản trị nhân sự ở cuối; nhân viên có điểm nhận hàng thêm "Nhận hàng tại điểm" trước Quản trị', async () => {
+    mocks.auth.user = { ...mocks.auth.user, role: 'ADMIN' };
+    expect(partnerHrefs(await mount())).toEqual(['/hoc-vien', '/dai-ly', '/nhan-vien', '/nhan-vien/bang-luong', '/admin?tab=staffRoster']);
+    mocks.routes['/config/public'] = () => ({ waste: { enabled: true } });
+    mocks.routes['/waste/desk/points'] = () => [{ id: 'p1', name: 'Kho Tubu HCMC', kind: 'WAREHOUSE' }];
+    expect(partnerHrefs(await mount())).toEqual(['/hoc-vien', '/dai-ly', '/nhan-vien', '/nhan-vien/bang-luong', '/doi-rac/quay', '/admin?tab=staffRoster']);
+  });
+
+  it('khách thường có hồ sơ đại lý (đã duyệt hoặc chờ duyệt) hoặc sở hữu nhãn: có dòng, mở ra đúng mục', async () => {
+    // Khách thường chưa rõ quyền CTV vẫn nhận lời mời mở gian hàng ở mục /ctv (ctvMenuEntry) nên mục này đứng đầu.
+    mocks.routes['/dealer/me'] = () => ({ status: 'PENDING', isDealer: false });
+    expect(partnerHrefs(await mount())).toEqual(['/ctv', '/dai-ly']);
+    mocks.routes['/dealer/me'] = () => ({ status: 'NONE', isDealer: false });
+    mocks.routes['/brand/owner/me'] = () => ({ id: 'b1', name: 'Nhãn A' });
+    expect(partnerHrefs(await mount())).toEqual(['/ctv', '/dai-ly', '/chu-thuong-hieu']);
+  });
+});
+
+describe('hub /tai-khoan — dòng Đổi rác theo cờ waste.enabled', () => {
+  const recycle = (c: HTMLElement) => link(c, '/doi-rac');
+  const openCountCalls = () => mocks.calls.filter((p) => p === '/waste/me/open-count');
+
+  it('chương trình bật: "Đổi rác lấy quà" trỏ /doi-rac, không hỏi số yêu cầu mở', async () => {
+    mocks.routes['/config/public'] = () => ({ waste: { enabled: true } });
+    mocks.routes['/waste/me/open-count'] = () => ({ count: 3 });
+    const row = recycle(await mount())!;
+    expect(row.textContent).toContain('Đổi rác lấy quà');
+    expect(row.textContent).toContain('Đổi bao bì lấy Điểm Xanh');
+    expect(row.textContent).not.toContain('Yêu cầu của tôi');
+    expect(openCountCalls()).toHaveLength(0);
+  });
+
+  it('chương trình tắt nhưng còn yêu cầu đang mở: dòng đổi thành "Yêu cầu của tôi" (vẫn trỏ /doi-rac)', async () => {
+    mocks.routes['/config/public'] = () => ({ waste: { enabled: false } });
+    mocks.routes['/waste/me/open-count'] = () => ({ count: 2 });
+    const row = recycle(await mount())!;
+    expect(row.textContent).toContain('Yêu cầu của tôi');
+    expect(row.textContent).toContain('Chương trình đang tạm dừng, xem yêu cầu còn mở');
+    expect(row.textContent).not.toContain('Đổi rác lấy quà');
+    expect(openCountCalls()).toHaveLength(1);
+  });
+
+  it('chương trình tắt và không còn yêu cầu mở (0, API cũ 404): không có dòng Đổi rác', async () => {
+    mocks.routes['/config/public'] = () => ({ waste: { enabled: false } });
+    mocks.routes['/waste/me/open-count'] = () => ({ count: 0 });
+    expect(recycle(await mount())).toBeNull();
+    mocks.routes['/waste/me/open-count'] = () => {
+      throw new ApiError('Không tìm thấy', 404);
+    };
+    const c = await mount();
+    expect(recycle(c)).toBeNull();
+    expect(c.textContent).not.toContain('Đổi rác lấy quà');
+    expect(c.textContent).not.toContain('Yêu cầu của tôi');
+  });
+});
 
 describe('hub /tai-khoan — hàng huy hiệu (cờ engagement.badges_enabled)', () => {
   it('cờ bật: hàng huy hiệu thay dòng Câu chuyện thương hiệu; chạm huy hiệu chưa đạt thì báo điều kiện', async () => {

@@ -12,10 +12,12 @@ test.describe('Zalo Mini App E2E - Sửa hồ sơ: họ tên trống', () => {
     api.get('/me/loyalty', { tier: { name: 'Hạt Giống' }, pointsBalance: 0, pointsConvertedBalance: 0 });
     api.get('/me/wallet', { walletBalance: 0 });
     api.get('/me/coupons', []);
-    api.allowUnmocked('GET /me/referral', 'GET /dealer/me', 'GET /auth/me', 'GET /brand/owner/me', 'GET /me/subscriptions', 'GET /chat/summary', 'GET /me/summary', 'GET /me/notifications');
-    // Vào từ trang Cá nhân như khách thật: lưu xong form quay lại trang trước, mở thẳng /edit-profile thì "quay lại" rời khỏi app.
+    api.allowUnmocked('GET /me/referral', 'GET /dealer/me', 'GET /auth/me', 'GET /brand/owner/me', 'GET /me/subscriptions', 'GET /chat/summary', 'GET /me/summary', 'GET /me/notifications', 'GET /me/notifications/prefs');
+    // Vào đúng đường khách thật đi (Cá nhân → Cài đặt → Chỉnh sửa hồ sơ): lưu xong form quay lại trang trước, mở thẳng /edit-profile thì "quay lại" rời khỏi app.
     await page.goto('/profile');
-    await page.getByRole('button', { name: /Nguyễn Văn An/ }).first().click();
+    await page.getByRole('button', { name: /^Cài đặt/ }).click();
+    await expect(page).toHaveURL(/\/settings$/);
+    await page.getByRole('button', { name: /^Chỉnh sửa hồ sơ/ }).click();
     await expect(page).toHaveURL(/\/edit-profile$/);
     const name = page.getByLabel('Họ và tên');
     await expect(name).toHaveValue('Nguyễn Văn An', { timeout: 15_000 });
@@ -37,6 +39,8 @@ test.describe('Zalo Mini App E2E - Sửa hồ sơ: họ tên trống', () => {
     await page.getByRole('button', { name: 'Lưu thay đổi' }).click();
     expect(((await saved).body as Record<string, unknown>).fullName).toBe('Nguyễn Văn Bình');
     await expect(page.getByText('Đã cập nhật hồ sơ')).toBeVisible();
+    await expect(page).toHaveURL(/\/settings$/);
+    await page.goBack();
     await expect(page).toHaveURL(/\/profile$/);
     await expect(page.getByText('Nguyễn Văn Bình', { exact: true })).toBeVisible();
   });

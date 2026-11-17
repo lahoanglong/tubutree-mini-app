@@ -7,8 +7,8 @@ export const metadata: Metadata = {
   ...(CASHBACK_ENABLED ? {} : { robots: { index: false, follow: false } }),
 };
 
-// Lối vào đang tắt (CASHBACK_ENABLED): giống Mini App, mở thẳng thì về trang chủ.
+// Lối vào đang tắt (CASHBACK_ENABLED): mở thẳng (link cũ, dấu trang) thì về Cá nhân, như Mini App (/cashback → /profile).
 export default function CashbackLayout({ children }: { children: React.ReactNode }) {
-  if (!CASHBACK_ENABLED) redirect('/');
+  if (!CASHBACK_ENABLED) redirect('/tai-khoan');
   return children;
 }

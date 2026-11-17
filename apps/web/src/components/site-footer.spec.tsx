@@ -184,6 +184,13 @@ describe('SiteFooter', () => {
     }
   });
 
+  it('"Mã giảm giá" trỏ thẳng hub Ưu đãi mở sẵn cả danh sách mã, không qua chuyển hướng /ma-giam-gia', async () => {
+    mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
+    const out = await html();
+    expect(out).toMatch(/<a [^>]*href="\/uu-dai\?codes=all"[^>]*>Mã giảm giá<\/a>/);
+    expect(out).not.toContain('href="/ma-giam-gia"');
+  });
+
   it('Đổi rác tắt (và khách không có yêu cầu đang mở) thì chân trang không có lối vào Đổi rác', async () => {
     mocks.getPublicSupport.mockResolvedValue({ hotline: '0984 606 774', email: 'tubutree@gmail.com' });
     mocks.wasteVisible = false;

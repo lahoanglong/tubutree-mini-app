@@ -5,8 +5,8 @@ import { COLLECTABLE, mockCollectable, mockWallet } from './support/voucher-mock
 import { hubPanel, hubTab, mockLoyaltyPreview, pathAndSearch } from './support/offers-mocks';
 
 /**
- * Web khách, Ưu đãi (/uu-dai) và Mã giảm giá (/ma-giam-gia): Ưu đãi là MỘT trang, ba tab đổi tại chỗ bằng ?tab= (replace): Săn mã (mặc định), Mã của tôi, Đổi quà.
- * Khách chưa đăng nhập xem được Giờ vàng và Nhận mã, "Lưu mã" chuyển tới đăng nhập kèm đường quay lại và KHÔNG gọi /coupons/claim; cả hai trang noindex.
+ * Web khách, Ưu đãi (/uu-dai): MỘT trang, ba tab đổi tại chỗ bằng ?tab= (replace): Săn mã (mặc định), Mã của tôi, Đổi quà. /ma-giam-gia cũ chỉ còn chuyển hướng về đây, giữ tham số.
+ * Khách chưa đăng nhập xem được Giờ vàng và Nhận mã, "Lưu mã" chuyển tới đăng nhập kèm đường quay lại và KHÔNG gọi /coupons/claim; trang noindex.
  * Mọi lời gọi /api/** đi qua mock. Host phải là localhost (baseURL) vì middleware coi nhãn đầu của Host là subdomain gian hàng. Cần API thật khởi chạy cùng web
  * nên chạy ở CI (e2e.yml), không chạy trong máy dev đang thiếu RAM.
  */
@@ -71,9 +71,10 @@ test.describe('Web khách: Ưu đãi, chưa đăng nhập', () => {
   });
 
   test('bấm tab: URL đổi đúng ?tab=, KHÔNG thêm mục lịch sử; Back rời trang Ưu đãi chứ không tua từng tab', async ({ page }) => {
-    // Mở Mã giảm giá rồi mở Ưu đãi bằng tải trang (mục lịch sử thật): Back phải về Mã giảm giá dù đã bấm cả ba tab.
+    // Mở link Mã giảm giá cũ (về Săn mã, kho mã mở cả) rồi mở Ưu đãi bằng tải trang (mục lịch sử thật): Back phải về đúng URL đầu dù đã bấm cả ba tab.
     await page.goto('/ma-giam-gia');
-    await expect(page.getByRole('tab', { name: 'Nhận mã' })).toHaveAttribute('aria-selected', 'true');
+    await expect.poll(() => pathAndSearch(page)).toBe('/uu-dai?tab=deals&codes=all');
+    await expect(page.getByRole('region', { name: 'Nhận mã', exact: true }).getByRole('button', { name: 'Thu gọn' })).toBeVisible();
     await page.goto('/uu-dai');
     await expect(hubTab(page, 'Săn mã')).toHaveAttribute('aria-selected', 'true');
     const length = await page.evaluate(() => window.history.length);
@@ -95,7 +96,7 @@ test.describe('Web khách: Ưu đãi, chưa đăng nhập', () => {
 
     expect(await page.evaluate(() => window.history.length), 'đổi tab đã thêm mục lịch sử').toBe(length);
     await page.goBack();
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/ma-giam-gia');
+    await expect.poll(() => pathAndSearch(page)).toBe('/uu-dai?tab=deals&codes=all');
   });
 
   test('link cũ ?section=coupons mở thẳng tab Mã của tôi (giữ nguyên URL)', async ({ page }) => {
@@ -106,20 +107,22 @@ test.describe('Web khách: Ưu đãi, chưa đăng nhập', () => {
     expect(pathAndSearch(page)).toBe('/uu-dai?section=coupons');
   });
 
-  test('/uu-dai và /ma-giam-gia noindex', async ({ page }) => {
+  test('/uu-dai noindex, cả khi tới từ /ma-giam-gia cũ', async ({ page }) => {
     for (const path of ['/uu-dai', '/ma-giam-gia']) {
       await page.goto(path);
       await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /noindex/);
     }
   });
 
-  test('/ma-giam-gia: Nhận mã xem được; Mã của tôi mời đăng nhập, không gọi /me/coupons', async ({ page, api }) => {
-    await page.goto('/ma-giam-gia');
-    await expect(page.getByRole('tab', { name: 'Nhận mã' })).toHaveAttribute('aria-selected', 'true');
-    await expect(page.getByTestId('voucher-grid').getByRole('button', { name: 'Lưu mã' })).toHaveCount(COLLECTABLE.length);
-    await page.getByRole('tab', { name: 'Mã của tôi' }).click();
-    await expect(page).toHaveURL(/tab=mine/);
-    await expect(page.getByRole('link', { name: 'Đăng nhập với Zalo' })).toHaveAttribute('href', /\/dang-nhap\?returnTo=.*ma-giam-gia.*tab%3Dmine/);
+  test('/ma-giam-gia cũ: về Săn mã với kho mã mở cả, giữ tham số; ?tab=mine về Mã của tôi mời đăng nhập, không gọi /me/coupons', async ({ page, api }) => {
+    await page.goto('/ma-giam-gia?code=KM30K&utm_source=zns');
+    await expect.poll(() => pathAndSearch(page)).toBe('/uu-dai?tab=deals&codes=all&code=KM30K&utm_source=zns');
+    await expect(hubTab(page, 'Săn mã')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('region', { name: 'Nhận mã', exact: true }).getByRole('button', { name: 'Lưu mã' })).toHaveCount(COLLECTABLE.length);
+    await page.goto('/ma-giam-gia?tab=mine');
+    await expect.poll(() => pathAndSearch(page)).toBe('/uu-dai?tab=wallet');
+    await expect(hubTab(page, 'Mã của tôi')).toHaveAttribute('aria-selected', 'true');
+    await expect(hubPanel(page, 'Mã của tôi').getByRole('link', { name: 'Đăng nhập', exact: true })).toHaveAttribute('href', /\/dang-nhap\?returnTo=%2Fuu-dai/);
     expect(api.callsTo('GET', '/me/coupons')).toHaveLength(0);
   });
 });

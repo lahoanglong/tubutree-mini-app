@@ -39,46 +39,61 @@ test.describe('Web khách: tài khoản', () => {
     });
   });
 
-  test('hub: thẻ hồ sơ, ba số dư, hàng trạng thái đơn, menu theo nhóm', async ({ page, api }) => {
+  test('hub: thẻ danh tính không bấm được, hai số dư, hàng bốn trạng thái đơn, một thẻ dòng gọn', async ({ page, api }) => {
     mockAccount(api, { fullName: 'Nguyễn Văn An', email: null, dob: null });
     await page.goto('/tai-khoan');
 
     await expect(page.getByRole('heading', { name: 'Cá nhân', level: 1 })).toBeVisible();
-    const head = page.getByRole('link', { name: /Nguyễn Văn An/ });
-    await expect(head).toHaveAttribute('href', '/tai-khoan/ho-so');
-    await expect(head).toContainText('Hạt Giống');
-    // Thanh đầu và chân website cũng có link "Mã giảm giá": chỉ lấy ô trong hub.
-    await expect(page.getByRole('main').getByRole('link', { name: /Mã giảm giá/ })).toContainText('2 mã');
-    await expect(page.getByRole('heading', { name: 'Kiếm tiền cùng Tubu', level: 2 })).toBeVisible();
-    // Hàng trạng thái đơn ở đầu trang: mỗi ô mở danh sách đơn đã lọc theo trạng thái.
-    await expect(page.getByRole('link', { name: /^Chờ thanh toán/ })).toHaveAttribute('href', '/tai-khoan/don-hang?tab=pending_payment');
-    await expect(page.getByRole('link', { name: /^Định kỳ/ })).toHaveAttribute('href', '/tai-khoan/don-hang?tab=subscriptions');
-    // Điện thoại giống Mini App (có menu đầy đủ trong main, không có khối đơn hàng); máy tính có cột trái AccountShell nên main không lặp lại menu Tài khoản/Hỗ trợ.
+    const main = page.getByRole('main');
+    // Cột trái AccountShell (từ md) cũng có "Sửa hồ sơ" nhưng nằm ngoài main: thẻ đầu trong main chỉ hiển thị, không dẫn tới hồ sơ.
+    await expect(main.getByText('Nguyễn Văn An')).toBeVisible();
+    await expect(main.getByText('Hạt Giống')).toBeVisible();
+    await expect(main.locator('a[href="/tai-khoan/ho-so"]')).toHaveCount(0);
+    await expect(main.getByText('Sửa hồ sơ')).toHaveCount(0);
+    // Thanh đầu và chân website cũng có link "Mã giảm giá": hub chỉ còn hai ô số dư, mã giảm giá nằm ở dòng "Ưu đãi & quà".
+    await expect(main.getByRole('link', { name: /Điểm Xanh/ })).toHaveAttribute('href', '/tai-khoan/diem-xanh');
+    await expect(main.getByRole('link', { name: /Ví Tubu/ })).toHaveAttribute('href', '/tai-khoan/vi-tubu');
+    await expect(main.getByRole('link', { name: /^Mã giảm giá/ })).toHaveCount(0);
+    await expect(main.getByRole('link', { name: /^Ưu đãi & quà/ })).toContainText('2 mã giảm giá đang có');
+    // Hàng trạng thái đơn ở đầu trang: bốn ô, mỗi ô mở danh sách đơn đã lọc theo trạng thái.
+    await expect(main.getByRole('link', { name: /^Chờ thanh toán/ })).toHaveAttribute('href', '/tai-khoan/don-hang?tab=pending_payment');
+    await expect(main.getByRole('link', { name: /^Đã giao/ })).toHaveAttribute('href', '/tai-khoan/don-hang?tab=delivered');
+    await expect(main.getByRole('link', { name: /^Định kỳ/ })).toHaveCount(0);
+    // Không còn tiêu đề nhóm: một thẻ dòng gọn, mục cũ vào accordion.
+    await expect(main.getByRole('heading', { name: 'Kiếm tiền cùng Tubu', level: 2 })).toHaveCount(0);
+    await expect(main.getByRole('button', { name: /^Mời bạn nhận quà/ })).toHaveAttribute('aria-expanded', 'false');
+    await expect(main.getByRole('button', { name: /^Hỗ trợ/ })).toHaveAttribute('aria-expanded', 'false');
+    await expect(main.getByTestId('account-desktop-ecosystem')).toHaveCount(0);
+    await expect(page.getByTestId('account-desktop-ecosystem')).toHaveCount(0);
+    // Điện thoại giống Mini App (có dòng Sổ địa chỉ trong main, không có khối đơn hàng); máy tính có cột trái AccountShell nên main không lặp lại dòng Sổ địa chỉ.
     const narrow = (page.viewportSize()?.width ?? 1280) < 768;
-    const orders = page.getByRole('heading', { name: /Đơn hàng của tôi/ });
+    const orders = page.getByTestId('account-orders-section');
     if (narrow) {
-      await expect(page.getByRole('main').getByRole('link', { name: 'Sổ địa chỉ' })).toHaveAttribute('href', '/tai-khoan/dia-chi');
+      await expect(main.getByRole('link', { name: /^Sổ địa chỉ/ })).toHaveAttribute('href', '/tai-khoan/dia-chi');
       await expect(orders).toBeHidden();
     } else {
       await expect(page.getByTestId('account-shell-nav').getByRole('link', { name: 'Sổ địa chỉ' })).toHaveAttribute('href', '/tai-khoan/dia-chi');
-      await expect(page.getByRole('main').getByRole('link', { name: 'Sổ địa chỉ' })).toHaveCount(0);
-      await expect(page.getByTestId('account-desktop-ecosystem')).toBeVisible();
+      await expect(main.getByRole('link', { name: /^Sổ địa chỉ/ })).toBeHidden();
       await expect(orders).toBeVisible();
+      await expect(orders.getByRole('heading', { name: /Đơn hàng của tôi/ })).toBeVisible();
     }
-    // Khách thường không thấy nhóm công việc nội bộ.
-    await expect(page.getByRole('heading', { name: 'Công việc', level: 2 })).toHaveCount(0);
+    // Khách thường không có dòng "Dành cho đối tác".
+    await expect(main.getByRole('button', { name: /^Dành cho đối tác/ })).toHaveCount(0);
     // Cờ ownsBrand=false trên /auth/me: khỏi hỏi /brand/owner/me (chờ /auth/me trả lời rồi mới đếm).
     await expect.poll(() => api.callsTo('GET', '/auth/me').length).toBeGreaterThan(0);
     await page.waitForLoadState('networkidle');
     expect(api.callsTo('GET', '/brand/owner/me')).toHaveLength(0);
   });
 
-  test('hub: quản trị viên thấy nhóm Công việc', async ({ page, api }) => {
+  test('hub: quản trị viên thấy dòng "Dành cho đối tác" và mở ra được Quản trị nhân sự', async ({ page, api }) => {
     mockAccount(api, { fullName: 'Quản Trị', email: null, dob: null }, 'ADMIN');
     api.get('/affiliate/me', { isAffiliate: true, canRegister: false, canOpenStorefront: true });
     await page.goto('/tai-khoan');
-    await expect(page.getByRole('heading', { name: 'Công việc', level: 2 })).toBeVisible();
-    await expect(page.getByRole('link', { name: /Quản trị nhân sự/ })).toHaveAttribute('href', '/admin?tab=staffRoster');
+    const partner = page.getByRole('main').getByRole('button', { name: /^Dành cho đối tác/ });
+    await expect(partner).toHaveAttribute('aria-expanded', 'false');
+    await partner.click();
+    await expect(partner).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.getByRole('main').getByRole('link', { name: /Quản trị nhân sự/ })).toHaveAttribute('href', '/admin?tab=staffRoster');
   });
 
   test('sửa hồ sơ: email sai bị chặn, email đúng gửi PATCH /me đúng thân', async ({ page, api }) => {

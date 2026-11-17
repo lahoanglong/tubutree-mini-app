@@ -1,6 +1,5 @@
 import { test, expect } from './support/mock-api';
 import { mockDiscovery, mockHomeEngagement } from './support/discovery-mocks';
-import { mockCollectable, mockCouponHistory, mockWallet } from './support/voucher-mocks';
 
 /**
  * Zalo Mini App E2E — thứ tự Tab. Nút Quay lại toàn cục là `position: fixed` ở góc trên trái nên không đổi hình dù đặt ở đâu trong cây, nhưng thứ tự Tab và
@@ -14,12 +13,9 @@ test.use({ viewport: { width: 375, height: 812 } });
 test('trang con: điểm dừng Tab đầu tiên là nút Quay lại, nút nằm trước <main> trong DOM', async ({ page, api }) => {
   mockDiscovery(api, { returning: true });
   mockHomeEngagement(api);
-  mockCollectable(api);
-  mockWallet(api);
-  mockCouponHistory(api);
-  await page.goto('/vouchers');
+  await page.goto('/best-sellers');
   await expect(page.getByRole('button', { name: 'Quay lại' })).toBeVisible();
-  await expect(page.getByRole('tabpanel', { name: 'Nhận mã' }).getByRole('group').first()).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('tablist', { name: 'Danh mục bán chạy' })).toBeVisible({ timeout: 15_000 });
 
   const order = await page.evaluate(() => {
     const tabbable = Array.from(document.body.querySelectorAll<HTMLElement>('a[href], button, input, select, textarea, [tabindex]')).filter(

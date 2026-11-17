@@ -100,7 +100,7 @@ describe('ShortcutGrid web — 2 thẻ chính + 4 ô phụ + lối tắt nhanh (
     const c = mount();
     const quickLinks = Array.from(c.querySelectorAll<HTMLAnchorElement>('[data-testid="shortcut-quick-pills"] a'));
     expect(quickLinks.map((a) => [a.textContent?.trim(), a.getAttribute('href')])).toEqual([
-      ['Mã giảm giá', '/ma-giam-gia'],
+      ['Mã giảm giá', '/uu-dai?codes=all'],
       ['Cộng đồng', '/cong-dong'],
     ]);
 

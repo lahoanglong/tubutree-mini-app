@@ -2,12 +2,14 @@
 
 import { useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { Check, ChevronRight, Copy, Gift, Lightbulb, QrCode as QrCodeIcon, Recycle, Sprout, Ticket } from 'lucide-react';
+import { Check, ChevronRight, Copy, Gift, Lightbulb, QrCode as QrCodeIcon } from 'lucide-react';
 import { couponsQuery, loyaltyQuery, memberCardQuery, pointsTxnPagesQuery } from '@tubutree/app-core/queries/loyalty';
 import { publicConfigQuery } from '@tubutree/app-core/queries/config';
-import { wasteMeQuery, wasteRequestsQuery } from '@tubutree/app-core/queries/waste';
-import { pendingPointsBalanceLine, wasteHistoryMenu } from '@tubutree/app-core/waste-copy';
+import { wasteMeQuery } from '@tubutree/app-core/queries/waste';
+import { pendingPointsBalanceLine } from '@tubutree/app-core/waste-copy';
+import { loyaltyOffersRow } from '@tubutree/app-core/loyalty-page';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { isWebRouteReady } from '@/lib/route-map';
@@ -34,12 +36,14 @@ import { ErrorState } from '@/components/ui/error-state';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Sheet } from '@/components/ui/sheet';
 import { Badge } from '@/components/ui/badge';
-import { DailyCheckInCard } from '@/components/loyalty/daily-check-in-card';
+import { LoyaltyRulesCard } from '@/components/loyalty/loyalty-rules-card';
+import { OffersCheckInStrip } from '@/components/offers/offers-check-in-strip';
+import { OffersIconTile } from '@/components/offers/offers-icon-tile';
 import { QrCode } from '@/components/ui/qr-code';
 import { miniBtnSecondary, miniCard, miniSectionTitle, miniSurface } from '@/components/loyalty/mini-surface';
 import { LedgerShell, SignedAmount } from '../ledger-shell';
 import { loadErrorText } from '@/lib/error-text';
-import { couponShortcut, tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-tier-copy';
+import { tierGraceLine, tierRank } from '@tubutree/app-core/loyalty-tier-copy';
 import { tierPerkLabel } from '@tubutree/app-core/number-format';
 
 const TITLE = 'Hạng thành viên & Điểm Xanh';
@@ -57,6 +61,7 @@ const tierStyleAt = (rank: number) => TIER_STYLES[Math.min(Math.max(rank, 0), TI
 const errText = loadErrorText;
 
 export default function LoyaltyPage() {
+  const router = useRouter();
   const phase = useAuthPhase();
   const authed = phase === 'authenticated';
   const loyaltyQ = useQuery({ ...loyaltyQuery(coreHttp), enabled: authed, refetchOnWindowFocus: true });
@@ -65,10 +70,6 @@ export default function LoyaltyPage() {
   const configQ = useQuery({ ...publicConfigQuery(coreHttp), enabled: authed });
   const wasteEnabled = configQ.data?.waste?.enabled === true;
   const wasteMeQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: authed && wasteEnabled, retry: false });
-  // Chương trình tắt mà khách từng có yêu cầu thì vẫn cho xem lại (không tạo mới được).
-  const wasteOff = configQ.data != null && configQ.data.waste?.enabled !== true;
-  const wasteHistoryQ = useQuery({ ...wasteRequestsQuery(coreHttp), enabled: authed && wasteOff, retry: false });
-  const hasWasteHistory = (wasteHistoryQ.data?.length ?? 0) > 0;
 
   const loadMore = usePressLock(() => txnQ.fetchNextPage());
   const [showCard, setShowCard] = useState(false);
@@ -144,18 +145,9 @@ export default function LoyaltyPage() {
   const pendingWasteLine = pendingPointsBalanceLine(wasteMeQ.data?.pendingPoints);
   const expiring = expiringPointsNote(data.expiringPoints);
   const expiryPolicy = pointExpiryPolicyNote(data.pointExpireMonths);
-  const wasteOn = configQ.data?.waste?.enabled === true;
   const history = txnQ.data?.pages.flat() ?? [];
-  const couponRow = couponShortcut(couponsQ.isError ? null : (couponsQ.data?.length ?? 0));
-  const couponRowHref = couponRow.to === 'coupons' ? '/uu-dai?section=coupons' : '/kho-qua';
-  const couponRowReady = isWebRouteReady(couponRow.to === 'coupons' ? '/uu-dai' : '/kho-qua');
-  const shortcuts = [
-    { href: '/vuon-xanh', icon: Sprout, title: 'Vườn Xanh', sub: 'Chăm cây nhận quà', show: isWebRouteReady('/vuon-xanh') },
-    { href: '/doi-rac', icon: Recycle, title: 'Đổi rác lấy quà', sub: 'Đổi bao bì lấy Điểm Xanh', show: wasteOn && isWebRouteReady('/doi-rac') },
-    { href: '/doi-rac/yeu-cau', icon: Recycle, title: wasteHistoryMenu.label, sub: wasteHistoryMenu.hint, show: wasteOff && hasWasteHistory && isWebRouteReady('/doi-rac/yeu-cau') },
-    // Khi chưa có mã, dòng "Đổi quà" ngay dưới thẻ hạng đã dẫn tới Kho quà: không lặp lại. Mã còn đang tải thì giữ dòng, để thẻ không giãn ra khi tải xong.
-    { href: '/kho-qua', icon: Gift, title: 'Kho quà', sub: 'Đổi Điểm Xanh lấy mã giảm giá và quà', show: (couponsQ.isLoading || couponRow.to === 'coupons') && isWebRouteReady('/kho-qua') },
-  ].filter((s) => s.show);
+  const offersRow = loyaltyOffersRow('/uu-dai', couponsQ.data?.length);
+  const ruleLines = rates ? [earnRuleLine(rates, data.tier?.multiplier ?? 1), redeemRuleLine(rates)] : [];
   const celebrateStyle = tierStyleAt(celebrate ? tierRank(data.tiers, { name: celebrate }) : 0);
 
   return (
@@ -206,71 +198,32 @@ export default function LoyaltyPage() {
 
             {graceLine && <p className="mt-2 text-caption font-semibold text-warning-fg">{graceLine}</p>}
 
-            {rates && (
-              <div className="mt-3 space-y-0.5 text-caption text-stone-600">
-                <p>{earnRuleLine(rates, data.tier?.multiplier ?? 1)}</p>
-                <p>{redeemRuleLine(rates)}</p>
-              </div>
-            )}
-
             <button type="button" onClick={() => setShowCard(true)} className={`${miniBtnSecondary} mt-4 max-w-full gap-2 py-2 text-center`}>
               <QrCodeIcon className="h-4 w-4" aria-hidden="true" />
               Thẻ thành viên số (mã QR)
             </button>
           </section>
 
-          {/* Mã giảm giá nằm ở Ưu đãi: trang Hạng chỉ giữ một dòng lối tắt ngay dưới thẻ hạng, cho khách có mã vẫn thấy lý do quay lại. */}
-          {couponsQ.isLoading ? (
-            <div className="lg:col-start-1">
-              <Skeleton height={56} />
-            </div>
-          ) : (
-            couponRowReady && (
-              <ul className={`lg:col-start-1 ${miniCard}`}>
-                <li>
-                  <Link href={couponRowHref} className="flex min-h-11 items-center gap-3 p-3 hover:bg-stone-50">
-                    <IconTile>
-                      {couponRow.to === 'coupons' ? (
-                        <Ticket className="h-4 w-4 text-forest-600" aria-hidden="true" />
-                      ) : (
-                        <Gift className="h-4 w-4 text-forest-600" aria-hidden="true" />
-                      )}
-                    </IconTile>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-stone-900">{couponRow.title}</span>
-                      <span className="block text-caption text-stone-600">{couponRow.sub}</span>
-                    </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-stone-500" aria-hidden="true" />
-                  </Link>
-                </li>
-              </ul>
-            )
+          {/* Điểm danh chỉ làm ở Vườn Xanh: trang này chỉ báo hôm nay đã/chưa và mở Vườn Xanh. */}
+          {isWebRouteReady('/vuon-xanh') && (
+            <OffersCheckInStrip authed={authed} onOpenGarden={() => router.push('/vuon-xanh')} variant="raised" className="lg:col-start-1" />
           )}
 
-          <div className="contents empty:hidden lg:col-start-1 lg:block">
-            <DailyCheckInCard authed={authed} />
-          </div>
+          {/* Đổi quà và ví mã nằm ở hub Ưu đãi: một dòng dẫn sang, không lặp danh sách ở đây. */}
+          {isWebRouteReady('/uu-dai') && (
+            <Link href={offersRow.href} className={`flex min-h-11 items-center gap-3 p-3 hover:bg-stone-50 lg:col-start-1 ${miniCard}`}>
+              <OffersIconTile icon={Gift} />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-semibold text-stone-900">{offersRow.title}</span>
+                <span className="block text-caption text-stone-600">{offersRow.sub}</span>
+              </span>
+              <ChevronRight className="h-4 w-4 shrink-0 text-stone-500" aria-hidden="true" />
+            </Link>
+          )}
 
-          {/* Từ lg: cột trái 2/3 gồm mã giảm giá, điểm danh, lịch sử (xếp tự động nối nhau trong cột 1, nên thẻ nào vắng thì không để lại hàng/khoảng trống; hàng cuối 1fr nhận phần cao dư của cột phải); cột phụ 1/3 bên phải (lối tắt, quyền lợi, các hạng) trải qua ba hàng đó; dưới lg thứ tự và khoảng cách như một cột. */}
+          {/* Từ lg: cột trái 2/3 gồm dòng điểm danh, dòng Ưu đãi, lịch sử (xếp tự động nối nhau trong cột 1, nên thẻ nào vắng thì không để lại hàng/khoảng trống; hàng cuối 1fr nhận phần cao dư của cột phải); cột phụ 1/3 bên phải (cách kiếm và dùng, quyền lợi, các hạng) trải qua ba hàng đó; dưới lg thứ tự và khoảng cách như một cột. */}
           <div className="contents lg:col-start-2 lg:row-span-3 lg:row-start-2 lg:flex lg:min-w-0 lg:flex-col lg:gap-4">
-          {shortcuts.length > 0 && (
-            <ul className={`divide-y divide-stone-200 ${miniCard}`}>
-              {shortcuts.map((s) => (
-                <li key={s.href}>
-                  <Link href={s.href} className="flex min-h-11 items-center gap-3 p-3 hover:bg-stone-50">
-                    <IconTile>
-                      <s.icon className="h-4 w-4 text-forest-600" aria-hidden="true" />
-                    </IconTile>
-                    <span className="min-w-0 flex-1">
-                      <span className="block text-sm font-semibold text-stone-900">{s.title}</span>
-                      <span className="block text-caption text-stone-600">{s.sub}</span>
-                    </span>
-                    <ChevronRight className="h-4 w-4 shrink-0 text-stone-500" aria-hidden="true" />
-                  </Link>
-                </li>
-              ))}
-            </ul>
-          )}
+          <LoyaltyRulesCard lines={ruleLines} />
 
           {perks.length > 0 && (
             <Section title="Quyền lợi của bạn">
@@ -347,12 +300,6 @@ export default function LoyaltyPage() {
               </button>
             )}
           </section>
-      </div>
-
-      <div className="mt-6 flex justify-center">
-        <Link href={isWebRouteReady('/san-pham') ? '/san-pham' : '/'} className={miniBtnSecondary}>
-          Mua sắm để tích thêm Điểm Xanh →
-        </Link>
       </div>
 
       <MemberCardSheet
@@ -513,8 +460,4 @@ function InlineError({ message, onRetry }: { message: string; onRetry: () => voi
       </button>
     </div>
   );
-}
-
-function IconTile({ children }: { children: React.ReactNode }) {
-  return <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-control bg-stone-100">{children}</span>;
 }

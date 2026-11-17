@@ -27,7 +27,8 @@
   --color-brandmap-island: var(--color-text-secondary);
   --color-brandmap-caption: var(--color-text-secondary);
   --brandmap-label-name-size: var(--type-label-size);
-  --brandmap-label-sub-size: 11px;
+  /* Tỉnh, chú giải đảo và số trên chấm đảo: không dưới 12px (bậc nhãn nhỏ nhất của hệ chữ) để đọc được ở khổ điện thoại. */
+  --brandmap-label-sub-size: var(--type-label-size);
   --brandmap-max-w: 560px;
   /* Màu nhãn đang vẽ: mỗi ghim, đường dẫn, nhãn và thẻ tự đặt lại bằng token màu nhãn --color-brand-<id> qua style; đây là màu lùi khi chưa đặt. */
   --pin: var(--color-text-secondary);

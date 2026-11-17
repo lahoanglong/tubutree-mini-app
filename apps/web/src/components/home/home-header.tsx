@@ -10,7 +10,8 @@ import { useCartKey } from '@/lib/cart-key';
 import { getCart } from '@/lib/shop-client';
 import { homeText } from '@/lib/home-text';
 import { CountBadge } from '@/components/mini/badge';
-import tubuLogo from '@/assets/tubu-logo-home.png';
+import tubuLogo2x from '@/assets/tubu-logo-home-2x.png';
+import tubuLogo3x from '@/assets/tubu-logo-home.png';
 
 const BUTTON = 'relative grid h-11 w-11 flex-none place-items-center rounded-full bg-[var(--color-action-secondary-bg)] text-[var(--color-text-primary)]';
 
@@ -33,7 +34,11 @@ export function HomeHeader({ unreadCount }: { unreadCount: number }) {
     <div data-testid="home-header" className="flex h-14 items-center gap-2 md:hidden">
       <Link href="/" aria-label="Tubu Tree — trang chủ" className="relative block flex-none after:absolute after:-inset-y-2 after:-left-4 after:-right-2 after:content-['']" style={{ width: LOGO_MARK_WIDTH, height: LOGO_MARK_HEIGHT }}>
         <span className="block overflow-hidden" style={{ width: LOGO_MARK_WIDTH, height: LOGO_MARK_HEIGHT }}>
-          <Image src={tubuLogo} alt="Tubu Tree" width={83} height={30} loading="eager" className="block h-[30px] w-[83px] max-w-none object-contain" />
+          {/* `images.unoptimized` nên next/image không tự sinh srcset: máy 2x tải bản 166px, máy 3x bản 249px, không ai tải gấp ba cỡ hiển thị. */}
+          <picture className="contents">
+            <source srcSet={`${tubuLogo2x.src} 2x, ${tubuLogo3x.src} 3x`} />
+            <Image src={tubuLogo2x} alt="Tubu Tree" width={83} height={30} loading="eager" className="block h-[30px] w-[83px] max-w-none object-contain" />
+          </picture>
         </span>
       </Link>
       <Link

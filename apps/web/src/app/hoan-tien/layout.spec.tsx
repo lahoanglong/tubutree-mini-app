@@ -13,10 +13,10 @@ import Layout from './layout';
 describe('/hoan-tien layout', () => {
   beforeEach(() => h.redirect.mockClear());
 
-  it('cờ tắt: chuyển về trang chủ như Mini App', () => {
+  it('cờ tắt: chuyển về Cá nhân như Mini App (/cashback → /profile)', () => {
     h.enabled = false;
     Layout({ children: null });
-    expect(h.redirect).toHaveBeenCalledWith('/');
+    expect(h.redirect).toHaveBeenCalledWith('/tai-khoan');
   });
 
   it('cờ bật: giữ nguyên trang', () => {

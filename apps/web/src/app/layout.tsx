@@ -76,8 +76,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <SiteHeader />
           </HideOnPortals>
           <PortalHeader />
-          {/* Khối bọc để trang ngắn vẫn đẩy chân trang xuống đáy; <main> bên trong giữ nguyên bố cục. Đích của liên kết bỏ qua tự nhận tabindex khi được kích hoạt (SkipLink). */}
-          <div id="main-content" className="flex-1 outline-none">
+          {/* Khối bọc cao ít nhất phần khung nhìn còn lại dưới thanh đầu: chân trang luôn bắt đầu ở mép dưới màn đầu, nên khi nội dung thay khung chờ
+              (dài ra hay ngắn lại) chân trang chỉ dịch ngoài tầm nhìn, không gây CLS. <main> bên trong giữ nguyên bố cục. Đích của liên kết bỏ qua tự nhận tabindex khi được kích hoạt (SkipLink). */}
+          <div id="main-content" className="flex-1 min-h-[calc(100svh_-_var(--header-h))] outline-none">
             {children}
           </div>
           <HideOnPortals>

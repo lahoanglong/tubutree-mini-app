@@ -2,13 +2,15 @@
  * Đích thật của các lối "Xem tất cả" / lối tắt mà `SHELVES` khai theo route Mini (route Mini → route web cho những lối Trang chủ cần). Hiện không route
  * nào chờ: mọi trang đã có. Gói nào khai lối tới một trang chưa làm thì đặt `pending: true` ở đây và thêm dòng thay thế vào `PENDING_TARGET`
  * (trang đang có thay vì màn không tìm thấy); trang xong thì xoá cả hai dấu đó.
+ * Mã giảm giá không còn trang riêng: `/vouchers` (và `/ma-giam-gia`) chỉ còn là chuyển hướng, lối vào đi thẳng tab Săn mã của Ưu đãi với kho mã mở sẵn
+ * (`OFFERS_CODES_PARAM` ở commerce/offers-hub.ts) để khỏi qua một bước chuyển hướng.
  */
 interface Entry { mini: string; web: string; pending: boolean }
 
 const ENTRIES: Record<string, Entry> = {
   '/flash-sale': { mini: '/flash-sale', web: '/gio-vang', pending: false },
   '/best-sellers': { mini: '/best-sellers', web: '/ban-chay', pending: false },
-  '/vouchers': { mini: '/vouchers', web: '/ma-giam-gia', pending: false },
+  '/vouchers': { mini: '/offers?codes=all', web: '/uu-dai?codes=all', pending: false },
   '/orders': { mini: '/orders', web: '/tai-khoan/don-hang', pending: false },
   '/browse': { mini: '/browse', web: '/san-pham', pending: false },
 };

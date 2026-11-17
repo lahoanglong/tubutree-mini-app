@@ -64,6 +64,10 @@ describe('RootLayout — thứ tự Tab và liên kết bỏ qua', () => {
     expect(html).not.toMatch(/id="main-content"[^>]*tabindex/);
   });
 
+  it('khối nội dung cao ít nhất phần khung nhìn dưới thanh đầu: chân trang luôn nằm ngoài màn đầu, khung chờ đổi chiều cao không đẩy nó trong tầm nhìn (CLS)', () => {
+    expect(html).toMatch(/<div id="main-content" class="[^"]*\bmin-h-\[calc\(100svh_-_var\(--header-h\)\)\]/);
+  });
+
   it('nút Quay lại nổi đứng trước nội dung trang trong DOM', () => {
     const src = readFileSync(fileURLToPath(new URL('./layout.tsx', import.meta.url)), 'utf8');
     expect(src.indexOf('<BackButton')).toBeLessThan(src.indexOf('{children}'));

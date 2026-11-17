@@ -20,7 +20,7 @@ import { GroupCycleDealsNavPills } from '@/components/ui/ecosystem-nav-pills';
 import { ErrorState } from '@/components/ui/error-state';
 import { PageHeader } from '@/components/ui/page-header';
 import { ProgressBar } from '@/components/ui/progress-bar';
-import { LineItemSkeleton } from '@/components/ui/skeleton';
+import { LineItemSkeleton, Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/lib/auth-context';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
@@ -264,9 +264,13 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
               actionHref="/san-pham"
               actionLabel="Khám phá sản phẩm"
             />
-            {!invitedId && starters.length > 0 && (
+            {!invitedId && (startersQ.isPending || starters.length > 0) && (
               <div className="mt-6">
-                <StarterShelf items={starters} authed={authed} startingIds={startingIds} onStart={startRoom} />
+                {startersQ.isPending ? (
+                  <StarterShelfSkeleton />
+                ) : (
+                  <StarterShelf items={starters} authed={authed} startingIds={startingIds} onStart={startRoom} />
+                )}
               </div>
             )}
             {/* Máy tính: màn trống rộng, giải thích cách chạy để người xem biết bước tiếp theo. */}
@@ -285,6 +289,52 @@ export function GroupBuyView({ invitedId }: { invitedId?: string }) {
   );
 }
 
+/** Số món tối đa của kệ mở nhóm (`startersQ` cắt 6, PROD thường đủ 6): khung chờ vẽ đủ chừng ấy ô để kệ về không đẩy phần dưới (các bước Mua chung ở máy tính). */
+const STARTER_MAX = 6;
+const STARTER_SHELF = 'rounded-card border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 [box-shadow:var(--elevation-1)]';
+const STARTER_GRID = 'mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3';
+const STARTER_ITEM = 'flex flex-col justify-between gap-3 rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] p-3';
+
+function StarterShelfHead() {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div>
+        <div className="inline-flex items-center gap-1.5 rounded-pill bg-[var(--color-bg-subtle)] px-2.5 py-0.5 text-xs font-semibold text-[var(--color-text-brand)]">
+          <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          MỞ NHÓM TRỰC TIẾP 1 CHẠM
+        </div>
+        <h2 className={`${ui.sectionTitle} mt-1.5`}>Mở nhóm Mua chung mới — Chọn món giá kho</h2>
+        <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">
+          Chọn sản phẩm sinh học bán chạy do Tubu giao để mở nhóm ngay và rủ bạn bè cùng nhận Mã giảm giá.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+/** Kệ mở nhóm đang tải (danh sách nhóm đã về rỗng, món bán chạy về sau): cùng khung, cùng đầu kệ và đủ ô như kệ thật. */
+function StarterShelfSkeleton() {
+  return (
+    <section aria-label="Mở nhóm Mua chung mới — Chọn món giá kho" aria-busy="true" data-testid="group-buy-starter-shelf-loading" className={STARTER_SHELF}>
+      <StarterShelfHead />
+      <div className={STARTER_GRID}>
+        {Array.from({ length: STARTER_MAX }, (_, i) => (
+          <div key={i} aria-hidden="true" className={STARTER_ITEM}>
+            <div className="flex min-h-14 items-start gap-3">
+              <Skeleton width={56} height={56} />
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Skeleton width="80%" height={14} />
+                <Skeleton width="50%" height={12} />
+              </div>
+            </div>
+            <Skeleton height={44} />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 function StarterShelf({
   items,
   authed,
@@ -297,33 +347,15 @@ function StarterShelf({
   onStart: (productId: string) => void;
 }) {
   return (
-    <section
-      aria-label="Mở nhóm Mua chung mới — Chọn món giá kho"
-      data-testid="group-buy-starter-shelf"
-      className="rounded-card border border-[var(--color-border-subtle)] bg-[var(--color-bg-surface)] p-5 [box-shadow:var(--elevation-1)]"
-    >
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <div className="inline-flex items-center gap-1.5 rounded-pill bg-[var(--color-bg-subtle)] px-2.5 py-0.5 text-xs font-semibold text-[var(--color-text-brand)]">
-            <Users className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-            MỞ NHÓM TRỰC TIẾP 1 CHẠM
-          </div>
-          <h2 className={`${ui.sectionTitle} mt-1.5`}>Mở nhóm Mua chung mới — Chọn món giá kho</h2>
-          <p className="mt-0.5 text-sm text-[var(--color-text-secondary)]">
-            Chọn sản phẩm sinh học bán chạy do Tubu giao để mở nhóm ngay và rủ bạn bè cùng nhận Mã giảm giá.
-          </p>
-        </div>
-      </div>
+    <section aria-label="Mở nhóm Mua chung mới — Chọn món giá kho" data-testid="group-buy-starter-shelf" className={STARTER_SHELF}>
+      <StarterShelfHead />
 
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <div className={STARTER_GRID}>
         {items.map((p) => {
           const price = p.salePrice ?? p.basePrice;
           const starting = startingIds.includes(p.id);
           return (
-            <article
-              key={p.id}
-              className="flex flex-col justify-between gap-3 rounded-control border border-[var(--color-border-subtle)] bg-[var(--color-bg-canvas)] p-3 tabular-nums"
-            >
+            <article key={p.id} className={`${STARTER_ITEM} tabular-nums`}>
               <Link href={`/san-pham/${encodeURIComponent(p.slug)}`} className="flex min-h-14 items-start gap-3">
                 <ProductThumb src={p.thumbnail} alt="" size={56} />
                 <span className="min-w-0 flex-1">

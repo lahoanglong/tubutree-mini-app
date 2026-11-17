@@ -290,6 +290,25 @@ describe('Trung tâm Ưu đãi (tab giữa thanh đáy, ba phân mục)', () => 
       expect(h.style.fontFamily).not.toContain('--font-display');
     });
 
+    it('?codes=all (lối tắt Mã giảm giá, link cũ /vouchers): khối Nhận mã mở sẵn cả kho với chip lọc và "Thu gọn"', async () => {
+      mocks.search = '?tab=deals&codes=all';
+      mocks.collectable.mockResolvedValue(Array.from({ length: 5 }, (_, i) => ({ ...OPEN_CODE, code: `NHAN-${i}` })));
+      renderPage();
+      const collect = await screen.findByRole('region', { name: 'Nhận mã' });
+      expect(screen.getByRole('tab', { name: 'Săn mã' })).toHaveAttribute('aria-selected', 'true');
+      await waitFor(() => expect(within(collect).getAllByRole('group')).toHaveLength(5));
+      expect(within(collect).getByRole('button', { name: 'Tất cả' })).toHaveAttribute('aria-pressed', 'true');
+      expect(within(collect).getByRole('button', { name: 'Thu gọn' })).toBeInTheDocument();
+    });
+
+    it('không có ?codes=all: khối Nhận mã gập ở 3 mã', async () => {
+      mocks.collectable.mockResolvedValue(Array.from({ length: 5 }, (_, i) => ({ ...OPEN_CODE, code: `NHAN-${i}` })));
+      renderPage();
+      const collect = await screen.findByRole('region', { name: 'Nhận mã' });
+      await waitFor(() => expect(within(collect).getAllByRole('group')).toHaveLength(3));
+      expect(within(collect).getByRole('button', { name: 'Tất cả (5) Mã giảm giá' })).toBeInTheDocument();
+    });
+
     it('Nhận mã tải lỗi: báo tại chỗ có "Thử lại", các khối khác vẫn vẽ', async () => {
       mocks.collectable.mockRejectedValue({ isHttpError: true, response: { status: 500, data: { message: 'x' } } });
       renderPage();
@@ -334,10 +353,41 @@ describe('Trung tâm Ưu đãi (tab giữa thanh đáy, ba phân mục)', () => 
       expect(mocks.navigate).not.toHaveBeenCalledWith('/vouchers?tab=mine');
     });
 
-    it('hàng "Mã đã dùng, hết hạn" mở lịch sử ở trang Mã giảm giá', async () => {
+    const HISTORY_PATH = '/me/coupons/history';
+    const USED = { ...COUPON, code: 'DA-DUNG', status: 'USED', usedAt: '2026-11-01T00:00:00.000Z' };
+    const historyCalls = () => mocks.coreGet.mock.calls.filter(([p]) => p === HISTORY_PATH);
+    const withHistory = (rows: unknown[]) => {
+      const base = mocks.coreGet.getMockImplementation()!;
+      mocks.coreGet.mockImplementation((path: string, opts: unknown) => (path === HISTORY_PATH ? Promise.resolve(rows) : base(path, opts)));
+    };
+
+    it('"Mã đã dùng, hết hạn" mở/đóng ngay tại chỗ (không sang trang khác); chỉ gọi lịch sử khi mở', async () => {
+      withHistory([USED]);
       renderPage();
-      fireEvent.click(await screen.findByText('Mã đã dùng, hết hạn'));
-      expect(mocks.navigate).toHaveBeenLastCalledWith('/vouchers?tab=history');
+      const toggle = await screen.findByRole('button', { name: 'Mã đã dùng, hết hạn' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(historyCalls()).toHaveLength(0);
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      const panel = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+      await waitFor(() => expect(within(panel).getAllByRole('group')).toHaveLength(1));
+      expect(within(panel).queryByRole('button')).toBeNull();
+      expect(historyCalls()).toHaveLength(1);
+      expect(mocks.navigate).not.toHaveBeenCalled();
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute('aria-expanded', 'false');
+      expect(panel).not.toBeVisible();
+    });
+
+    it('?history=1 (link cũ /vouchers?tab=history): mục lịch sử mở sẵn, gọi lịch sử và cuộn tới mục', async () => {
+      mocks.search = '?tab=wallet&history=1';
+      withHistory([]);
+      renderPage();
+      const toggle = await screen.findByRole('button', { name: 'Mã đã dùng, hết hạn' });
+      expect(toggle).toHaveAttribute('aria-expanded', 'true');
+      expect(await screen.findByText('Chưa có mã đã dùng hoặc hết hạn')).toBeInTheDocument();
+      expect(historyCalls()).toHaveLength(1);
+      await waitFor(() => expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled());
     });
 
     it('chưa có mã nào: trạng thái rỗng, nút "Nhận thêm mã" về tab Săn mã bằng replace', async () => {

@@ -26,6 +26,7 @@ const state = vi.hoisted(() => ({
   campaigns: [] as Record<string, unknown>[],
   campaignQueries: [] as unknown[],
   collectable: [] as Record<string, unknown>[],
+  history: [] as Record<string, unknown>[],
   flash: [] as Record<string, unknown>[],
   use: vi.fn(),
   usingCode: null as string | null,
@@ -65,6 +66,7 @@ vi.mock('@/lib/core-http', () => {
     '/campaigns': () => state.campaigns,
     '/coupons/collectable': () => state.collectable,
     '/coupons/collectable/mine': () => ({ claimed: [], newCustomerOnly: [] }),
+    '/me/coupons/history': () => state.history,
     '/flash-sales/active': () => state.flash,
   };
   return {
@@ -156,6 +158,7 @@ beforeEach(() => {
   state.campaigns = [];
   state.campaignQueries = [];
   state.collectable = [];
+  state.history = [];
   state.flash = [];
   state.use.mockReset();
   state.usingCode = null;
@@ -386,6 +389,36 @@ describe('/uu-dai — tab Săn mã', () => {
     expect(h.style.fontFamily).not.toContain('--font-display');
   });
 
+  it('?codes=all (lối tắt Mã giảm giá, link cũ /ma-giam-gia): Nhận mã mở sẵn cả kho với chip lọc và "Thu gọn", cuộn tới khối', async () => {
+    state.collectable = Array.from({ length: 5 }, (_, i) => ({ ...OPEN_CODE, code: `NHAN-${i}` }));
+    const c = await mount('tab=deals&codes=all');
+    expect(panel(c).getAttribute('aria-label')).toBe('Săn mã');
+    const collect = region(c, 'Nhận mã')!;
+    expect(collect.querySelectorAll('[role="group"]')).toHaveLength(5);
+    expect((byText(collect, 'button', 'Tất cả') as HTMLElement).getAttribute('aria-pressed')).toBe('true');
+    expect(byText(collect, 'button', 'Thu gọn')).not.toBeNull();
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
+  });
+
+  it('không có ?codes=all: Nhận mã gập ở 3 mã, không cuộn', async () => {
+    state.collectable = Array.from({ length: 5 }, (_, i) => ({ ...OPEN_CODE, code: `NHAN-${i}` }));
+    const c = await mount();
+    const collect = region(c, 'Nhận mã')!;
+    expect(collect.querySelectorAll('[role="group"]')).toHaveLength(3);
+    expect(collect.querySelector('button[aria-label="Tất cả (5) Mã giảm giá"]')).not.toBeNull();
+    expect(Element.prototype.scrollIntoView).not.toHaveBeenCalled();
+  });
+
+  it('khách chưa đăng nhập bấm "Lưu mã" ở kho đang mở: đăng nhập xong quay lại đúng /uu-dai?codes=all', async () => {
+    state.phase = 'guest';
+    state.collectable = [OPEN_CODE];
+    const c = await mount('codes=all');
+    click(byText(region(c, 'Nhận mã')!, 'button', 'Lưu mã'));
+    await flush(2);
+    expect(state.push).toHaveBeenCalledWith('/dang-nhap?returnTo=%2Fuu-dai%3Fcodes%3Dall');
+    expect(state.posts).toEqual([]);
+  });
+
   it('khách chưa đăng nhập bấm "Lưu mã": đi tới đăng nhập kèm returnTo=/uu-dai, không gọi POST claim', async () => {
     state.phase = 'guest';
     state.collectable = [OPEN_CODE];
@@ -455,16 +488,40 @@ describe('/uu-dai — tab Mã của tôi', () => {
     expect(panel(c).getAttribute('aria-label')).toBe('Săn mã');
   });
 
-  it('cuối ví có hàng "Mã đã dùng, hết hạn" mở lịch sử ở trang Mã giảm giá', async () => {
+  const historyToggle = (c: HTMLElement) => byText(panel(c), 'button', 'Mã đã dùng, hết hạn') as HTMLButtonElement;
+  const USED = { ...COUPON, code: 'DA-DUNG', status: 'USED', usedAt: '2026-11-01T00:00:00.000Z' };
+
+  it('cuối ví có "Mã đã dùng, hết hạn" mở/đóng ngay tại chỗ (không sang trang khác); chỉ gọi lịch sử khi mở', async () => {
+    state.history = [USED];
     const c = await mount('tab=wallet');
-    click(byText(panel(c), '[role="button"]', 'Mã đã dùng, hết hạn'));
-    expect(state.push).toHaveBeenLastCalledWith('/ma-giam-gia?tab=history');
+    const toggle = historyToggle(c);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(state.calls).not.toContain('/me/coupons/history');
+    click(toggle);
+    await flush(8);
+    expect(toggle.getAttribute('aria-expanded')).toBe('true');
+    const list = document.getElementById(toggle.getAttribute('aria-controls')!)!;
+    expect(list.querySelectorAll('[role="group"]')).toHaveLength(1);
+    expect(list.querySelectorAll('button')).toHaveLength(0);
+    expect(state.calls.filter((p) => p === '/me/coupons/history')).toHaveLength(1);
+    expect(state.push).not.toHaveBeenCalled();
+    click(toggle);
+    expect(toggle.getAttribute('aria-expanded')).toBe('false');
+    expect(list.hidden).toBe(true);
   });
 
-  it('hàng lịch sử vẫn có khi ví rỗng', async () => {
+  it('mục lịch sử vẫn có khi ví rỗng', async () => {
     state.coupons = [];
     const c = await mount('tab=wallet');
-    expect(byText(panel(c), '[role="button"]', 'Mã đã dùng, hết hạn')).not.toBeNull();
+    expect(historyToggle(c)).not.toBeNull();
+  });
+
+  it('?history=1 (link cũ /ma-giam-gia?tab=history): mục lịch sử mở sẵn, gọi lịch sử và cuộn tới mục', async () => {
+    const c = await mount('tab=wallet&history=1');
+    expect(historyToggle(c).getAttribute('aria-expanded')).toBe('true');
+    expect(panel(c).textContent).toContain('Chưa có mã đã dùng hoặc hết hạn');
+    expect(state.calls.filter((p) => p === '/me/coupons/history')).toHaveLength(1);
+    expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
 
   it('chấm đỏ: mở tab ví là thấy cả 4 mã sắp hết hạn nên cả 4 vào danh sách đã xem; mở tab Săn mã thì chưa ghi gì', async () => {
