@@ -3,6 +3,7 @@ import { BullModule, getQueueToken } from '@nestjs/bullmq';
 import type { Queue } from 'bullmq';
 import { QUEUE_PANCAKE_PUSH } from '../../../jobs/queues';
 import { PancakeModule } from '../pancake/pancake.module';
+import { MssCatalogModule } from './catalog/mss-catalog.module';
 import { CommerceBackendResolver } from './commerce-backend.resolver';
 import { BullRedisSharedStore, MSS_SHARED_STORE } from './mss-circuit';
 import { MssFlagsService } from './mss-flags';
@@ -34,7 +35,7 @@ import { MSS_ZNS_HOLD, MssZnsHoldService } from './mss-zns-hold';
  */
 @Global()
 @Module({
-  imports: [PancakeModule, BullModule.registerQueue({ name: MSS_ORDER_EVENTS_QUEUE })],
+  imports: [PancakeModule, BullModule.registerQueue({ name: MSS_ORDER_EVENTS_QUEUE }), MssCatalogModule],
   controllers: [MssOrderEventsCallbackController, MssOrderEventsAdminController],
   providers: [
     { provide: MSS_SHARED_STORE, inject: [getQueueToken(QUEUE_PANCAKE_PUSH)], useFactory: (q: Queue) => new BullRedisSharedStore(q) },

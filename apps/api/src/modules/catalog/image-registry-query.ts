@@ -46,6 +46,7 @@ export function registrySql(
       UNION ALL SELECT "imageUrl" FROM "waste_items" WHERE left("imageUrl", 8) = 'https://'
       UNION ALL SELECT "imageUrl" FROM "waste_gifts" WHERE left("imageUrl", 8) = 'https://'
       UNION ALL SELECT "image" FROM "categories" WHERE left("image", 8) = 'https://'
+      UNION ALL SELECT u FROM (SELECT unnest("mediaUrls") AS u FROM "product_mss_enrichment" WHERE "state" = 'published') m WHERE left(u, 8) = 'https://'
       UNION ALL SELECT "image" FROM "campaigns" WHERE left("image", 8) = 'https://' AND left("image", 300) LIKE ANY(${likes})
       UNION ALL SELECT s."avatarUrl" FROM "storefronts" s WHERE ${visible} AND left(s."avatarUrl", 8) = 'https://' AND left(s."avatarUrl", 300) LIKE ANY(${likes})
       UNION ALL SELECT s."coverUrl" FROM "storefronts" s WHERE ${visible} AND left(s."coverUrl", 8) = 'https://' AND left(s."coverUrl", 300) LIKE ANY(${likes})`;

@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { lookup as dnsLookup } from 'node:dns';
 import { isIP, type LookupFunction } from 'node:net';
 import { UPLOAD_IMAGE_HOSTS } from '../../common/uploaded-image';
+import { mssMediaHosts } from '../integrations/mss/catalog/mss-media';
 
 /**
  * Bề rộng (px) được phép: thẻ SP 160/320/480 (480 cho lưới 2 cột và rail ở màn 2,6x–3x), chi tiết 640/960 (1x và 2x), banner/hero 1280/1920 (khung rộng ở màn 2x–3x). Số khác bị từ chối để cache không
@@ -22,9 +23,13 @@ export type ResizeFormat = 'webp' | 'jpeg';
 
 export const isAllowedWidth = (w: number): boolean => RESIZE_WIDTHS.includes(w);
 
-export function allowedHosts(extra: string | undefined = process.env.IMAGE_RESIZE_EXTRA_HOSTS): string[] {
+/**
+ * Host media của MSS (từ `MSS_BASE_URL` + `MSS_MEDIA_HOSTS`, xem mss-media.ts) cũng được đổi cỡ: chỉ URL nằm trong danh sách ảnh đã lưu
+ * (`product_mss_enrichment.mediaUrls` của bản đã xuất bản) mới qua được, nên host này không mở /img cho tệp tuỳ ý trên MSS.
+ */
+export function allowedHosts(extra: string | undefined = process.env.IMAGE_RESIZE_EXTRA_HOSTS, mss: readonly string[] = mssMediaHosts()): string[] {
   const more = (extra ?? '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
-  return [...PANCAKE_IMAGE_HOSTS, ...UPLOAD_IMAGE_HOSTS, ...more];
+  return [...PANCAKE_IMAGE_HOSTS, ...UPLOAD_IMAGE_HOSTS, ...more, ...mss];
 }
 
 /** Nguồn ảnh hợp lệ: https, đúng host trong danh sách, cổng mặc định, không user:pass, không phải địa chỉ IP. Trả URL đã chuẩn hoá hoặc null. */

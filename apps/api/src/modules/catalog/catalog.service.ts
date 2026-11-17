@@ -33,6 +33,16 @@ import { seedHash, seededOrder } from './catalog-seed';
 import { MERCH_RANK_SELECT, arrangeByMerchTier, merchTier, withImageFlags, type MerchRankFields } from './merch-rank';
 import { childrenByParent, expandCategoryScope } from './category-scope';
 import { CATALOG_LOVED_KEYS, DEFAULT_LOVED_THRESHOLDS, LOVED_THRESHOLD_MAX, isLoved, sanitizeLovedThreshold, type LovedThresholds } from './catalog-loved';
+import { MssFlagsService } from '../integrations/mss/mss-flags';
+import {
+  effectiveCategoryIds,
+  enrichedCategoryWhere,
+  mergeCardOverride,
+  mergeEnrichment,
+  readStoredPayload,
+  type MssCardOverride,
+  type MssEnrichmentPayload,
+} from './mss-enrichment';
 
 /**
  * Ai giao sản phẩm (D4), cho trang chi tiết: hàng gian hàng tự giao đi kiện riêng với phí giao/ngưỡng miễn phí của gian
@@ -175,7 +185,7 @@ export class CatalogService {
   private brandsCache: { value: unknown; expiresAt: number } | null = null;
   // Sản phẩm công khai chưa có nhãn thật ("Tubu Tree"/rỗng) kèm nhãn suy từ tên (xem catalog-brand.ts ở shared-types). Cùng hạn chế per-instance như brandsCache.
   private genericBrandCache: { value: GenericBrandEntry[]; expiresAt: number } | null = null;
-  private categoriesCache: { tree: CategoryNode[]; flat: CategoryWithCount[]; expiresAt: number } | null = null;
+  private categoriesCache: { tree: CategoryNode[]; flat: CategoryWithCount[]; expiresAt: number; enriched: boolean } | null = null;
   // Id con theo id cha, cho lọc `?category=<cha>` gồm cả con. Cùng hạn chế per-instance như categoriesCache.
   private categoryChildrenCache: { value: Map<string, string[]>; expiresAt: number } | null = null;
   private readonly TTL_MS = 60_000;
@@ -259,7 +269,48 @@ export class CatalogService {
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly config?: SystemConfigService,
+    @Optional() private readonly mssFlags?: MssFlagsService,
   ) {}
+
+  /**
+   * Cờ `mss.catalog_enrichment_enabled` (và đủ biến MSS): bật thì nội dung bổ sung MSS đã xuất bản thay trường tương ứng lúc đọc. Không
+   * xét năng lực MSS ở đây: MSS ngừng trả lời thì vẫn phục vụ bản đã lưu (hợp đồng mục 0.2). Tắt thì không đọc bảng mới, đầu ra như cũ.
+   */
+  private async enrichmentOn(): Promise<boolean> {
+    if (!this.mssFlags) return false;
+    try {
+      return await this.mssFlags.isEnabled('catalogEnrichment');
+    } catch {
+      return false;
+    }
+  }
+
+  /** Payload đã xuất bản của một sản phẩm khi cờ bật; lỗi đọc thì phục vụ nội dung Tubu, không làm hỏng trang sản phẩm. */
+  private async publishedEnrichment(productId: string): Promise<MssEnrichmentPayload | null> {
+    if (!(await this.enrichmentOn())) return null;
+    try {
+      const row = await this.prisma.productMssEnrichment.findUnique({ where: { productId }, select: { state: true, payload: true } });
+      return row?.state === 'published' ? readStoredPayload(row.payload) : null;
+    } catch (err) {
+      this.logger.warn(`Không đọc được nội dung MSS của ${productId}: ${err instanceof Error ? err.message : err}`);
+      return null;
+    }
+  }
+
+  /** Tên và ảnh đại diện MSS cho các thẻ, một truy vấn theo lô; cờ tắt thì không truy vấn. */
+  private async cardOverrides(ids: readonly string[]): Promise<Map<string, MssCardOverride>> {
+    if (ids.length === 0 || !(await this.enrichmentOn())) return new Map();
+    try {
+      const rows = await this.prisma.productMssEnrichment.findMany({
+        where: { productId: { in: [...new Set(ids)] }, state: 'published' },
+        select: { productId: true, title: true, imagesOverride: true, coverImage: true },
+      });
+      return new Map(rows.map((r) => [r.productId, r]));
+    } catch (err) {
+      this.logger.warn(`Không đọc được nội dung MSS cho thẻ sản phẩm: ${err instanceof Error ? err.message : err}`);
+      return new Map();
+    }
+  }
 
   async list(query: ProductQuery) {
     const relevance: string[][] = [];
@@ -551,7 +602,10 @@ export class CatalogService {
     if (category) {
       // Cha gồm cả con (BG-13): sản phẩm thường gán vào lá, nên lọc theo cha phải khớp cả id của các con cháu.
       const scope = await this.categoryScope(category);
-      where.categoryIds = scope.length > 1 ? { hasSome: scope } : { has: category };
+      const match = scope.length > 1 ? { hasSome: scope } : { has: category };
+      // Cờ MSS bật: sản phẩm có danh mục MSS đã xuất bản lọc theo danh mục MSS, còn lại theo danh mục Tubu.
+      if (await this.enrichmentOn()) and.push(enrichedCategoryWhere(match));
+      else where.categoryIds = match;
     }
     if (segment) where.forSegment = { has: segment };
     const text = await this.textWhere(query.q, Boolean(relevance) && !query.sort, (query.page ?? 1) > 1);
@@ -618,7 +672,11 @@ export class CatalogService {
     return this.listPage({ ...PUBLIC_PRODUCT_WHERE, brandId: brand.id }, query);
   }
 
-  async getBySlug(slug: string) {
+  /**
+   * `opts.enrichment`: payload MSS dùng thay bản đã xuất bản (bản nháp của trang xem trước, không lưu). Không truyền thì ghép bản đã
+   * xuất bản khi cờ `mss.catalog_enrichment_enabled` bật.
+   */
+  async getBySlug(slug: string, opts: { enrichment?: MssEnrichmentPayload } = {}) {
     const product = await this.prisma.product.findUnique({
       where: { slug },
       select: {
@@ -653,7 +711,9 @@ export class CatalogService {
     if (!product || !isPublicProduct(product)) {
       throw new NotFoundException('Không tìm thấy sản phẩm.');
     }
-    const { brandRef, storefront, ...publicProduct } = product;
+    const { brandRef, storefront, ...tubuProduct } = product;
+    const enrichment = opts.enrichment ?? (await this.publishedEnrichment(product.id));
+    const publicProduct = enrichment ? mergeEnrichment(tubuProduct, enrichment) : tubuProduct;
     // Nhãn chưa công khai thì /brand/:slug trả 404: không đưa slug ra để FE không dựng liên kết chết.
     const brandSlug = brandRef?.isPublished ? brandRef.slug : null;
     return {
@@ -962,15 +1022,23 @@ export class CatalogService {
   }
 
   private async loadCategories() {
-    if (this.categoriesCache && this.categoriesCache.expiresAt > Date.now()) {
+    const enriched = await this.enrichmentOn();
+    if (this.categoriesCache && this.categoriesCache.expiresAt > Date.now() && this.categoriesCache.enriched === enriched) {
       return this.categoriesCache;
     }
     const [rows, products] = await Promise.all([
       this.prisma.category.findMany({ orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }] }),
-      this.prisma.product.findMany({
-        where: PUBLIC_PRODUCT_WHERE,
-        select: { categoryIds: true },
-      }),
+      enriched
+        ? this.prisma.product
+            .findMany({
+              where: PUBLIC_PRODUCT_WHERE,
+              select: { categoryIds: true, mssEnrichment: { select: { state: true, categoryOverride: true, categoryIds: true } } },
+            })
+            .then((ps) => ps.map((p) => ({ categoryIds: effectiveCategoryIds(p) })))
+        : this.prisma.product.findMany({
+            where: PUBLIC_PRODUCT_WHERE,
+            select: { categoryIds: true },
+          }),
     ]);
     const parentOf = new Map(rows.map((c) => [c.id, c.parentId]));
     const counts = new Map<string, number>();
@@ -991,7 +1059,7 @@ export class CatalogService {
       if (parent) parent.children.push(node);
       else tree.push(node);
     }
-    this.categoriesCache = { tree, flat, expiresAt: Date.now() + this.TTL_MS };
+    this.categoriesCache = { tree, flat, expiresAt: Date.now() + this.TTL_MS, enriched };
     return this.categoriesCache;
   }
 
@@ -1010,7 +1078,9 @@ export class CatalogService {
       },
     });
     const rank = new Map((top ?? []).map((id, i) => [id, i]));
-    const rows = top ? [...found].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0)) : found;
+    const sorted = top ? [...found].sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0)) : found;
+    const overrides = await this.cardOverrides(sorted.map((r) => r.id));
+    const rows = overrides.size ? sorted.map((r) => (overrides.has(r.id) ? mergeCardOverride(r, overrides.get(r.id)!) : r)) : sorted;
     return rows.map(({ id, variations, ...r }) => ({
       ...r,
       ...cardPrices(r, variations),
@@ -1074,9 +1144,15 @@ export class CatalogService {
    */
   private async toCards(rows: readonly CardRow[]) {
     if (rows.length === 0) return [];
-    const [loved, stores, withImages] = await Promise.all([this.lovedThresholds(), this.storesOfCards(rows), withCoverImages(this.prisma, rows)]);
+    const [loved, stores, withImages, overrides] = await Promise.all([
+      this.lovedThresholds(),
+      this.storesOfCards(rows),
+      withCoverImages(this.prisma, rows),
+      this.cardOverrides(rows.map((r) => r.id)),
+    ]);
+    const cards = overrides.size ? withImages.map((p) => (overrides.has(p.id) ? mergeCardOverride(p, overrides.get(p.id)!) : p)) : withImages;
     return Promise.all(
-      withImages.map(async (p) => {
+      cards.map(async (p) => {
         const sold = (p.soldExternal ?? 0) + (p.soldApp ?? 0); // tổng "đã bán" (sàn ngoài + app)
         return {
           id: p.id,
