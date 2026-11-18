@@ -17,6 +17,7 @@ import {
   HomeCommunityPreview,
   HomePurchasedRail,
   HomeQuiz,
+  HomeStoryReel,
   HomeSuggestFeed,
   HomeScrollRestoration,
   loadHomeBelow,
@@ -34,7 +35,6 @@ import { HomePageError } from '../components/home/home-page-error';
 import { HomeBanner } from '../components/home/home-banner';
 import { HomeCombos } from '../components/home/home-combos';
 import { HomeQuickAddProvider } from '../components/home/home-quick-add';
-import { HomeStoryReel } from '../components/home/home-story-reel';
 import { HomeHeader } from '../components/home/home-header';
 import { useHomeShelves } from '../components/home/use-home-shelves';
 import { useHomeFeed } from '../components/home/use-home-feed';
@@ -57,6 +57,8 @@ import { vnDateSeed } from '@tubutree/app-core/home-suggest';
 import { haptic } from '../utils/haptic';
 import { browserStorage } from '../utils/recently-viewed';
 import { serverNow } from '../utils/server-clock';
+import { usePublicConfig } from '../hooks/use-public-config';
+import { noteMiniRum, type MiniRum } from '../lib/vitals/mini-vitals';
 
 /**
  * Trang chủ gọn, tối đa 9 khối: header dính 56px (logo, ô tìm, chuông, giỏ) → MỘT dải ngữ cảnh cao 64px (Việc cần làm một dòng, Quà khách mới thu gọn hoặc thẻ thành viên)
@@ -209,6 +211,7 @@ export default function HomePage() {
     // resetScroll tắt: Page tự cuộn về 0 ở layout effect chạy sau hook khôi phục nên khung đầu sau Back vẽ ở đầu trang; hook tự cuộn về 0 khi PUSH.
     <Page className="page" resetScroll={false} style={{ background: 'var(--color-bg-canvas)', paddingBottom: 'calc(72px + var(--safe-bottom))' }}>
       <HomeScrollRestoration ready={scrollReady} />
+      <MiniRumNote />
       <PullToRefresh onRefresh={refreshAll} />
       <HomeBlockErrorSuppressed.Provider value={pageDown}>
         <HomeQuickAddProvider>
@@ -251,6 +254,15 @@ const BestSellerBlock = memo(function BestSellerBlock(props: Omit<ComponentProps
   const retrying = useIsFetching({ queryKey: homeBestSellerQuery.queryKey }) > 0;
   return <HomeBestSellerRail {...props} retrying={retrying} />;
 });
+
+// Cờ đo tốc độ nằm trong cấu hình công khai (cùng khoá với các khối khác, không thêm request). Đọc ở thành phần riêng để lúc cấu hình về
+// không dựng lại cả Trang chủ.
+function MiniRumNote() {
+  const cfg = usePublicConfig();
+  const perfRum = cfg.isLoaded ? ((cfg as { perfRum?: MiniRum }).perfRum ?? {}) : undefined;
+  useEffect(() => noteMiniRum(perfRum), [perfRum]);
+  return null;
+}
 
 function PageErrorStrip({ error, watchRetry, onRetry }: { error: unknown; watchRetry: boolean; onRetry: () => unknown }) {
   const fetching = useIsFetching({ queryKey: homeBestSellerQuery.queryKey }) > 0;

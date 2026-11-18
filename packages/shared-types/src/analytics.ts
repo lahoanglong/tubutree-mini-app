@@ -58,6 +58,8 @@ export const CLIENT_EVENT_NAMES = [
   'subscription_suggestion_shown',
   'subscription_suggestion_accepted',
   'guest_checkout_start',
+  'web_vital',
+  'mini_vital',
 ] as const;
 
 /** Nơi khách đổi địa chỉ giao ở màn thanh toán (`checkout_address_switched.from`). */
@@ -65,6 +67,50 @@ export const CHECKOUT_ADDRESS_SWITCH_FROM = ['sheet'] as const;
 export type CheckoutAddressSwitchFrom = (typeof CHECKOUT_ADDRESS_SWITCH_FROM)[number];
 
 export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];
+
+/**
+ * Số đo tốc độ trên máy khách thật (`web_vital`, `mini_vital`; cờ `perf.rum_enabled`, tỉ lệ lấy mẫu `perf.rum_sample_pct`). Một sự kiện là
+ * một số đo của một lượt xem trang. `READY` (chỉ Mini App): mili giây từ lúc mở app tới lần rảnh đầu tiên của luồng chính sau sự kiện `load`,
+ * tức màn đầu đã vẽ và bấm được.
+ */
+export const WEB_VITAL_NAMES = ['LCP', 'CLS', 'INP', 'FCP', 'TTFB'] as const;
+export const MINI_VITAL_NAMES = ['LCP', 'CLS', 'READY'] as const;
+export type VitalName = (typeof WEB_VITAL_NAMES)[number] | (typeof MINI_VITAL_NAMES)[number];
+export const VITAL_RATINGS = ['good', 'needs-improvement', 'poor'] as const;
+export type VitalRating = (typeof VITAL_RATINGS)[number];
+/** Nhóm bề rộng khung nhìn: `s` ≤ 480px, `m` ≤ 1024px, `l` > 1024px. */
+export const VITAL_VIEWPORTS = ['s', 'm', 'l'] as const;
+export type VitalViewport = (typeof VITAL_VIEWPORTS)[number];
+export const VITAL_NET_TYPES = ['slow-2g', '2g', '3g', '4g', 'unknown'] as const;
+export const VITAL_NAV_TYPES = ['navigate', 'reload', 'back-forward', 'back-forward-cache', 'prerender', 'restore'] as const;
+
+/**
+ * Ngưỡng [tốt tới, kém từ sau] theo Core Web Vitals (web.dev, p75): LCP 2,5 s / 4 s, CLS 0,1 / 0,25, INP 200 / 500 ms, FCP 1,8 / 3 s,
+ * TTFB 0,8 / 1,8 s. `READY` không có chuẩn: dùng ngưỡng TTI của Lighthouse trên điện thoại (3,8 / 7,3 s). Giá trị ≤ mốc đầu là tốt, > mốc sau là kém.
+ */
+export const VITAL_THRESHOLDS: Readonly<Record<VitalName, readonly [number, number]>> = {
+  LCP: [2500, 4000],
+  CLS: [0.1, 0.25],
+  INP: [200, 500],
+  FCP: [1800, 3000],
+  TTFB: [800, 1800],
+  READY: [3800, 7300],
+};
+
+/** Trần hợp lý của từng số đo: lớn hơn là máy hỏng hay gửi giả, máy chủ bỏ. CLS không có đơn vị, còn lại là mili giây. */
+export const VITAL_MAX: Readonly<Record<VitalName, number>> = { LCP: 60_000, CLS: 10, INP: 60_000, FCP: 60_000, TTFB: 60_000, READY: 120_000 };
+
+export function vitalRating(name: VitalName, value: number): VitalRating {
+  const [good, poor] = VITAL_THRESHOLDS[name];
+  return value <= good ? 'good' : value <= poor ? 'needs-improvement' : 'poor';
+}
+
+/** Bề ngang tối đa (px CSS) của nhóm khung nhìn `s` (điện thoại) và `m` (máy tính bảng); rộng hơn `m` là `l`. */
+export const VITAL_VIEWPORT_MAX = { s: 480, m: 1024 } as const;
+
+export function vitalViewport(width: number): VitalViewport {
+  return width <= VITAL_VIEWPORT_MAX.s ? 's' : width <= VITAL_VIEWPORT_MAX.m ? 'm' : 'l';
+}
 
 /** Lối khách vào Chọn Chuẩn Xanh (`matcher_started.entry`). */
 export const MATCHER_ENTRIES = ['play_today', 'tu_van', 'advisor_paused', 'empty_cart', 'direct'] as const;

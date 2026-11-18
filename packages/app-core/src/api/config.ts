@@ -70,6 +70,8 @@ export interface PublicConfig {
   referralShareCardEnabled?: boolean;
   /** Cờ `commerce.freeship_booster_enabled`: dải bù đơn ở đầu giỏ lấy món từ `GET /upsell/freeship` (cửa sổ 45.000đ). Thiếu khi API cũ → dải cũ từ kệ Bán chạy nhất. */
   freeshipBoosterEnabled?: boolean;
+  /** Cờ `perf.rum_enabled` và `perf.rum_sample_pct`: đo tốc độ trên máy khách. Thiếu khi API cũ → không đo. */
+  perfRum?: { enabled: boolean; samplePct: number };
   /** Cờ `checkout.return_packaging_nudge_enabled`: thẻ đổi rác kèm đơn điền sẵn bao bì của đơn đã giao. Thiếu khi API cũ → thẻ như trước. */
   returnPackagingNudgeEnabled?: boolean;
   /** Cờ `catalog.unit_price_enabled`: trang chi tiết hiện giá theo đơn vị và nhãn "Lợi hơn" giữa các cỡ. Thiếu khi API cũ → tắt. */

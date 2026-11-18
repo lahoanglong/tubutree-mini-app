@@ -27,6 +27,16 @@ import { PANCAKE_FORBIDDEN_GUIDE, pancakeStaleGuideText } from './pancake-sync';
 import { BTN_DANGER_OUTLINE, BTN_SECONDARY, BTN_XS_SECONDARY, Notice, ScrollRegion, LoadError } from './ui';
 import { actionErrorText } from '@/lib/admin-error-text';
 import { failingCronJobs, recomputeSoldMessage } from './ops-health-crons';
+import {
+  formatVital,
+  getClientVitals,
+  pivotClientVitals,
+  thresholdText,
+  viewportLabel,
+  VITAL_COLUMNS,
+  VITAL_LABELS,
+  type ClientVitalsRow,
+} from '@/lib/vitals/vitals-admin';
 
 export { failingCronJobs };
 
@@ -50,6 +60,112 @@ const QUEUE_LABELS: Record<string, string> = {
   'support-chat-forward': 'Chuyển tin chat CSKH vào nhóm Zalo',
   'support-chat-notify': 'Chuông báo trả lời chat CSKH',
 };
+
+const VITAL_RATING_TEXT: Record<ClientVitalsRow['rating'], string> = {
+  good: 'text-success-fg',
+  'needs-improvement': 'text-warning-fg',
+  poor: 'text-danger-fg',
+};
+
+const VITAL_RATING_LABEL: Record<ClientVitalsRow['rating'], string> = { good: 'tốt', 'needs-improvement': 'cần cải thiện', poor: 'kém' };
+
+const pct = (n: number, total: number) => (total > 0 ? Math.round((n / total) * 100) : 0);
+
+function VitalCell({ row }: { row?: ClientVitalsRow }) {
+  if (!row) return <td className="px-3 py-2 text-stone-400">—</td>;
+  const split = `${pct(row.good, row.samples)}% tốt · ${pct(row.needsImprovement, row.samples)}% cần cải thiện · ${pct(row.poor, row.samples)}% kém`;
+  return (
+    <td className="whitespace-nowrap px-3 py-2 align-top">
+      {row.enoughSamples ? (
+        <b className={`block font-semibold tabular-nums ${VITAL_RATING_TEXT[row.rating]}`}>
+          {formatVital(row.name, row.p75)} <span className="font-normal">({VITAL_RATING_LABEL[row.rating]})</span>
+        </b>
+      ) : (
+        <span className="block tabular-nums text-stone-500">
+          {formatVital(row.name, row.p75)} <span className="text-xs">(chưa đủ mẫu)</span>
+        </span>
+      )}
+      <span className="block text-[11px] tabular-nums text-stone-500" title={split}>
+        {row.samples} mẫu · {pct(row.good, row.samples)}% tốt
+      </span>
+    </td>
+  );
+}
+
+/**
+ * Tốc độ trên máy khách thật (cờ `perf.rum_enabled`): p75 theo mẫu route và nhóm khung nhìn trong 7 hoặc 28 ngày, tô màu theo ngưỡng Core
+ * Web Vitals. Dưới `minSamples` mẫu thì không tô màu và ghi "chưa đủ mẫu": vài lượt xem không đủ nói trang nhanh hay chậm.
+ */
+function ClientVitalsCard() {
+  const [days, setDays] = useState<7 | 28>(7);
+  const q = useQuery({ queryKey: ['admin', 'perf-vitals', days], queryFn: () => getClientVitals(days), staleTime: 5 * 60_000 });
+  const lines = q.data ? pivotClientVitals(q.data.rows) : [];
+  const columns = VITAL_COLUMNS.filter((name) => lines.some((l) => l.cells[name]));
+  return (
+    <section aria-label="Tốc độ trên máy khách" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-display text-sm font-semibold text-stone-900">Tốc độ trên máy khách</h3>
+        <div role="group" aria-label="Khoảng thời gian" className="inline-flex gap-1">
+          {([7, 28] as const).map((d) => (
+            <button key={d} type="button" aria-pressed={days === d} onClick={() => setDays(d)} className={`${BTN_XS_SECONDARY} ${days === d ? 'border-stone-900 font-semibold text-stone-900' : ''}`}>
+              {d} ngày
+            </button>
+          ))}
+        </div>
+      </div>
+      <p className="mt-1 text-xs text-stone-500">
+        Giá trị p75 (3/4 lượt xem nhanh hơn số này) đo trên máy khách thật, theo mẫu route và bề rộng màn hình. Dưới {q.data?.minSamples ?? 50} mẫu thì chưa đủ để kết luận.
+      </p>
+      {q.isLoading && <p className="mt-2 text-sm text-stone-500">Đang tải số đo…</p>}
+      {/* Không dùng LoadError (role="alert"): thẻ này chỉ để xem, lỗi tải nó không phải sự cố vận hành. */}
+      {q.isError && (
+        <p className="mt-2 flex flex-wrap items-center gap-2 text-sm text-stone-600">
+          Không tải được số đo tốc độ.
+          <button type="button" disabled={q.isFetching} onClick={() => void q.refetch()} className={BTN_XS_SECONDARY}>
+            Thử lại
+          </button>
+        </p>
+      )}
+      {q.data && lines.length === 0 && (
+        <p className="mt-2 text-sm text-stone-600">Chưa có số đo trong {days} ngày qua. Số đo chỉ được gửi khi cờ perf.rum_enabled đang bật.</p>
+      )}
+      {lines.length > 0 && (
+        <>
+          <ScrollRegion label="Bảng tốc độ trên máy khách" className="mt-2">
+            <table className="w-full text-left text-sm">
+              <thead className="bg-stone-50 text-xs text-stone-500">
+                <tr>
+                  <th className="px-3 py-2 font-medium">Nơi đo</th>
+                  {columns.map((name) => (
+                    <th key={name} className="whitespace-nowrap px-3 py-2 font-medium">
+                      {VITAL_LABELS[name]}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map((l) => (
+                  <tr key={l.key} className="border-t border-stone-100">
+                    <td className="px-3 py-2 align-top">
+                      <span className="block font-medium text-stone-900">
+                        {l.platform === 'web' ? 'Web' : 'Mini App'} · {l.route === '*' ? 'Mọi trang' : <span className="break-all font-mono text-xs">{l.route}</span>}
+                      </span>
+                      <span className="block text-xs text-stone-500">{viewportLabel(l.viewport)}</span>
+                    </td>
+                    {columns.map((name) => (
+                      <VitalCell key={name} row={l.cells[name]} />
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </ScrollRegion>
+          <p className="mt-2 text-[11px] text-stone-500">{columns.map(thresholdText).join(' · ')}</p>
+        </>
+      )}
+    </section>
+  );
+}
 
 function cronOutcomeLabel(j: OpsCronJob): string {
   if (j.lastOutcome === 'THREW') return 'Ném lỗi';
@@ -289,6 +405,8 @@ export function OpsHealthTab({ onOpenOrder, isAdmin = true }: { onOpenOrder?: (c
           onCloseAlert={(id, code) => void askCloseAlert(id, code)}
         />
       )}
+
+      {isAdmin && <ClientVitalsCard />}
 
       <section aria-label="Công cụ vận hành" className="rounded-card border border-stone-200 bg-stone-0 p-4 shadow-card">
         <h3 className="font-display text-sm font-semibold text-stone-900">Công cụ vận hành</h3>

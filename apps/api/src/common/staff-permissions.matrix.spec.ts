@@ -220,6 +220,7 @@ const EXPECTED: Record<string, Access> = {
   'POST /admin/payouts/:id/approve': ADMIN_ONLY,
   'POST /admin/payouts/:id/mark-paid': [KE_TOAN],
   'POST /admin/payouts/:id/reject': ADMIN_ONLY,
+  'GET /admin/perf/vitals': ADMIN_ONLY,
   'GET /admin/payouts/pit-report': [KE_TOAN],
   'GET /admin/payroll': ADMIN_ONLY,
   'GET /admin/payroll/:staffId/detail': ADMIN_ONLY,

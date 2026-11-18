@@ -6,6 +6,7 @@ import { QueryClientProvider } from '@tanstack/react-query';
 import { byText, click, flush, render, type Rendered } from '@/test-utils/dom';
 import { newTestClient } from '@/test-utils/render-hook';
 import { ApiError } from '@/lib/client-api';
+import { __resetDeferForTest } from './defer-until-near';
 
 // Chép ý nghĩa pages/home.spec của Mini App (phương án A, 9 khối): thứ tự khối theo khách cũ/mới, một lưới gợi ý, khối lỗi + Thử lại, lỗi cấp trang, khách vãng lai, chuông.
 const mocks = vi.hoisted(() => ({ get: vi.fn(), push: vi.fn(), phase: 'authenticated', restoring: false, user: { id: 'u1', fullName: 'Lan', pointsBalance: 0 } as unknown }));
@@ -21,7 +22,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }), use
 const routeState = vi.hoisted(() => ({ pending: new Set<string>() }));
 vi.mock('@/lib/route-map', () => ({ isWebRouteReady: (p: string) => !routeState.pending.has(p) }));
 
-import HomeView from './home-view';
+import HomeView from './home-view-client';
 import { homeBlockOrder } from './home-blocks';
 import { HOME_CONTEXT_HEIGHT, HOME_INTERLEAVE_AFTER, HOME_MAX_BLOCKS, HOME_SETTLE_MAX_MS, homeKeptOrder, homeRenderOrder, SUGGEST_FIRST_RENDER } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
@@ -33,7 +34,7 @@ const CONFIG = {
   freeshipThreshold: 350_000, subscribeDiscountPct: 0.17, affiliateWalletMultiplier: 1, cashbackHoldDays: 30,
   loyalty: { vndPerPoint: 20_000, vndPerPointRedeem: 1_000 },
 };
-const card = (id: string, name: string) => ({ id, slug: id, brand: 'Tubu', name, thumbnail: null, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true });
+const card = (id: string, name: string) => ({ id, slug: id, brand: 'Tubu', name, thumbnail: null as string | null, basePrice: 50000, salePrice: null, isFeatured: true, inStock: true });
 const PAGE = (items: ReturnType<typeof card>[]) => ({ data: items, meta: { page: 1, limit: 6, total: items.length } });
 /** Ba món bán chạy (kệ Bán chạy nhất chỉ hiện từ 3 món), khác slug với Giờ vàng và lưới gợi ý. */
 const BEST = () => PAGE([card('bs1', 'Hạng nhất A'), card('bs2', 'Hạng nhì B'), card('bs3', 'Hạng ba C')]);
@@ -600,6 +601,37 @@ describe('HomeView — dữ liệu server tải sẵn', () => {
     expect(c.textContent).toContain('Gợi ý từ server');
     expect(productCalls()).toEqual([]);
     expect(calls('/categories')).toHaveLength(0);
+  });
+});
+
+describe('HomeView — khung giữ chỗ của dải Story trong HTML server', () => {
+  const withPhoto = (id: string, name: string) => ({ ...card(id, name), thumbnail: `https://img.test/${id}.webp` });
+  const serverStories = async (bestSellers: ReturnType<typeof PAGE>) => {
+    // Máy chủ dựng HTML đầu như khách vãng lai (chưa đọc phiên), và ở máy chủ trang chưa từng hydrate (các ca trước đã mount ở trình duyệt).
+    mocks.phase = 'guest';
+    __resetDeferForTest();
+    const { renderToString } = await import('react-dom/server');
+    const host = document.createElement('div');
+    host.innerHTML = renderToString(
+      <QueryClientProvider client={newTestClient()}>
+        <HomeView initial={{ bestSellers, categories: CATEGORIES }} />
+      </QueryClientProvider>,
+    );
+    return block(host, 'stories');
+  };
+
+  it('đủ món có ảnh cho dải: HTML chỉ có khung giữ chỗ 144px, dải dựng ở trình duyệt khi khách cuộn gần tới', async () => {
+    const stories = await serverStories(PAGE([withPhoto('a', 'Món A'), withPhoto('b', 'Món B'), withPhoto('c', 'Món C')]));
+    expect(stories.querySelector<HTMLElement>('[data-testid="home-defer"]')?.style.height).toBe('144px');
+    expect(stories.textContent).toBe('');
+  });
+
+  it('không đủ món có ảnh (dải sẽ không hiện): không giữ chỗ, khối rỗng như trước nên trang không co lại khi dựng', async () => {
+    const stories = await serverStories(PAGE([card('a', 'Món A'), card('b', 'Món B'), card('c', 'Món C')]));
+    expect(stories.querySelector('[data-testid="home-defer"]')).toBeNull();
+    // Chỉ còn vùng thông báo cho trình đọc màn hình (không chiếm chỗ), không có dải hay khung chờ.
+    expect(stories.querySelector('section')).toBeNull();
+    expect(stories.textContent).toBe('');
   });
 });
 

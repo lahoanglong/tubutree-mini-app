@@ -11,6 +11,11 @@ import { GUARDS_METADATA } from '@nestjs/common/constants';
 import { SERVER_EVENT_NAMES } from '@tubutree/shared-types';
 import { THROTTLER_LIMIT, THROTTLER_TRACKER, THROTTLER_TTL } from '@nestjs/throttler/dist/throttler.constants';
 import { BODY_TOO_COMPLEX_MESSAGE } from '../../common/body-limits';
+import { VitalsIngestGate } from './vitals/vitals-ingest.gate';
+import type { SystemConfigService } from '../system-config/system-config.service';
+
+/** Cổng số đo cho các ca không thử số đo: cho mọi sự kiện đi qua. */
+const passGate = { filter: async <T,>(events: T[]) => events } as unknown as VitalsIngestGate;
 
 const pipe = new ValidationPipe({ whitelist: true, forbidNonWhitelisted: true, transform: true });
 const asBody = (metatype: new () => object, value: Record<string, unknown>) =>
@@ -20,7 +25,7 @@ describe('AnalyticsController.ingest', () => {
   it('map userId từ JWT, anonymousId ưu tiên body rồi mới tới header', async () => {
     const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
     const svc = { recordManyBestEffort } as unknown as AnalyticsEventsService;
-    const ctrl = new AnalyticsController(svc);
+    const ctrl = new AnalyticsController(svc, passGate);
 
     const res = await ctrl.ingest(
       { sub: 'u1', role: 'CUSTOMER' } as JwtPayload,
@@ -40,7 +45,7 @@ describe('AnalyticsController.ingest', () => {
 
   it('không có anonymousId ở body: dùng băm sha256 cắt 32 ký tự của X-Device-Id, không chép header thô (deviceId là khoá đăng nhập khách)', async () => {
     const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
-    const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+    const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService, passGate);
 
     await ctrl.ingest(
       { sub: 'u1', role: 'CUSTOMER' } as JwtPayload,
@@ -56,7 +61,7 @@ describe('AnalyticsController.ingest', () => {
 
   it('không có anonymousId và không có header → null', async () => {
     const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
-    const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+    const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService, passGate);
     await ctrl.ingest(undefined, { events: [{ eventId: 'e1', eventName: 'app_opened', occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp' }] });
     expect((recordManyBestEffort.mock.calls[0]![0] as Array<{ anonymousId: unknown }>)[0]!.anonymousId).toBeNull();
   });
@@ -64,7 +69,7 @@ describe('AnalyticsController.ingest', () => {
   it('user undefined (edge case) → userId null, không throw', async () => {
     const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
     const svc = { recordManyBestEffort } as unknown as AnalyticsEventsService;
-    const ctrl = new AnalyticsController(svc);
+    const ctrl = new AnalyticsController(svc, passGate);
 
     await ctrl.ingest(undefined, {
       events: [{ eventId: 'e2', eventName: 'client_error', occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp' }],
@@ -91,7 +96,7 @@ describe('AnalyticsController.ingest', () => {
 
     it('ghi đủ 5 bước hợp lệ cùng lane, accepted đếm đúng', async () => {
       const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
-      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService, passGate);
       const steps = ['enter', 'phone_saved', 'geo_granted', 'geo_denied', 'submitted'] as const;
       const res = await ctrl.ingest(undefined, {
         events: steps.map((step, i) => ev({ step, surface: 'miniapp', lane: 'DROP_OFF' }, 'miniapp', i)),
@@ -102,7 +107,7 @@ describe('AnalyticsController.ingest', () => {
 
     it('W180: nhận hai bước của thẻ mời đơn sau (second_order_shown, second_order_click) với lane PICKUP', async () => {
       const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
-      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService, passGate);
       const res = await ctrl.ingest(undefined, {
         events: [ev({ step: 'second_order_shown', surface: 'web', lane: 'PICKUP' }, 'web', 0), ev({ step: 'second_order_click', surface: 'miniapp', lane: 'PICKUP' }, 'miniapp', 1)],
       });
@@ -112,7 +117,7 @@ describe('AnalyticsController.ingest', () => {
 
     it('sai khuôn (step lạ, surface lệch platform, lane bẩn, thiếu props) bị bỏ riêng, sự kiện khác trong lô vẫn được ghi, không 400', async () => {
       const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
-      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService, passGate);
       const res = await ctrl.ingest(undefined, {
         events: [
           ev({ step: 'enter', surface: 'web' }, 'web', 0),
@@ -136,7 +141,7 @@ describe('AnalyticsController.ingest', () => {
       Array.from({ length: n }, (_, i) => ({ ...base, eventId: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`, props: { route: '/', msToContent: i } }));
     const setup = (createMany: jest.Mock, create: jest.Mock = jest.fn().mockResolvedValue(undefined)) => {
       const prisma = { analyticsEvent: { createMany, create } } as unknown as PrismaService;
-      return { ctrl: new AnalyticsController(new AnalyticsEventsService(prisma)), create };
+      return { ctrl: new AnalyticsController(new AnalyticsEventsService(prisma), passGate), create };
     };
 
     it('50 sự kiện → đúng 1 lần createMany với 50 dòng, không INSERT từng dòng', async () => {
@@ -174,7 +179,7 @@ describe('AnalyticsController.ingest', () => {
     const base = { eventId: '11111111-1111-4111-8111-111111111111', occurredAt: '2026-09-27T00:00:00Z', platform: 'miniapp' };
     const run = async (extra: Record<string, unknown>) => {
       const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
-      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+      const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService, passGate);
       const dto = (await asBody(IngestEventsDto, { events: [{ ...base, eventName: 'app_opened', ...extra }] })) as IngestEventsDto;
       await ctrl.ingest({ sub: 'u1', role: 'CUSTOMER' } as JwtPayload, dto);
       return (recordManyBestEffort.mock.calls[0]![0] as Record<string, unknown>[])[0]!;
@@ -307,7 +312,7 @@ describe('Sự kiện website (khách ẩn danh được gửi)', () => {
   });
   const setup = () => {
     const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
-    return { ctrl: new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService), recordManyBestEffort };
+    return { ctrl: new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService, passGate), recordManyBestEffort };
   };
   const rows = (m: jest.Mock) => m.mock.calls[0]![0] as Array<Record<string, unknown>>;
 
@@ -396,7 +401,7 @@ describe('Sự kiện website (khách ẩn danh được gửi)', () => {
 describe('/events (Mini App) áp danh sách trắng props', () => {
   it('bỏ sự kiện có khoá lạ hoặc chuỗi giống email, giữ sự kiện đúng', async () => {
     const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
-    const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService);
+    const ctrl = new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService, passGate);
     const base = { occurredAt: '2026-11-16T15:00:00Z', platform: 'miniapp' as const };
     const res = await ctrl.ingest({ sub: 'u1', role: 'CUSTOMER' } as JwtPayload, {
       events: [
@@ -407,5 +412,61 @@ describe('/events (Mini App) áp danh sách trắng props', () => {
     } as IngestEventsDto);
     expect(res).toEqual({ accepted: 1 });
     expect((recordManyBestEffort.mock.calls[0]![0] as Array<{ eventId: string }>).map((r) => r.eventId)).toEqual(['a']);
+  });
+});
+
+describe('số đo tốc độ (web_vital, mini_vital)', () => {
+  const AID = '3f2b0a91-0123-4567-8901-a23456789012';
+  const vital = (i: number, over: Record<string, unknown> = {}) => ({
+    eventId: `00000000-0000-4000-8000-00000000000${i}`,
+    eventName: 'web_vital',
+    occurredAt: '2026-11-18T15:00:00Z',
+    platform: 'web',
+    anonymousId: AID,
+    sessionId: AID,
+    props: { name: 'LCP', value: 2100, rating: 'good', route: '/san-pham/:slug', vp: 's', et: '4g', nav: 'navigate' },
+    ...over,
+  });
+  const setup = (flag: unknown) => {
+    const recordManyBestEffort = jest.fn().mockResolvedValue(undefined);
+    const gate = new VitalsIngestGate({ get: async () => flag } as unknown as SystemConfigService);
+    return { ctrl: new AnalyticsController({ recordManyBestEffort } as unknown as AnalyticsEventsService, gate), recordManyBestEffort };
+  };
+
+  it('beacon web: cờ bật thì ghi, cờ tắt thì bỏ', async () => {
+    const payload = JSON.stringify({ events: [vital(1)] });
+    const on = setup(true);
+    await on.ctrl.ingestWebBeacon({ payload });
+    expect(on.recordManyBestEffort.mock.calls[0]![0]).toEqual([expect.objectContaining({ eventName: 'web_vital', userId: null, props: expect.objectContaining({ name: 'LCP', value: 2100 }) })]);
+    const off = setup(false);
+    await off.ctrl.ingestWebBeacon({ payload });
+    expect(off.recordManyBestEffort.mock.calls[0]![0]).toEqual([]);
+  });
+
+  it('URL thô, giá trị vô lý và số đo của nền tảng khác bị bỏ dù cờ bật', async () => {
+    const { ctrl, recordManyBestEffort } = setup(true);
+    const res = await ctrl.ingestWeb(undefined, {
+      events: [
+        vital(1, { props: { name: 'LCP', value: 2100, route: '/san-pham/nuoc-giat-cho-be-pineboo-2-1l-22a73c', vp: 's' } }),
+        vital(2, { props: { name: 'LCP', value: 600_000, route: '/', vp: 's' } }),
+        vital(3, { props: { name: 'READY', value: 100, route: '/', vp: 's' } }),
+        vital(4, { eventName: 'mini_vital', props: { name: 'LCP', value: 100, route: '/', vp: 's' } }),
+        vital(5, { props: { name: 'CLS', value: 0.05, route: '/', vp: 'l' } }),
+      ],
+    } as WebIngestEventsDto);
+    expect(res).toEqual({ accepted: 1 });
+    expect((recordManyBestEffort.mock.calls[0]![0] as Array<{ props: { name: string } }>).map((r) => r.props.name)).toEqual(['CLS']);
+  });
+
+  it('Mini App gửi mini_vital qua /events: dòng ghi không mang userId, mã phiên hay nguồn vào', async () => {
+    const { ctrl, recordManyBestEffort } = setup(true);
+    await ctrl.ingest({ sub: 'u1', role: 'CUSTOMER' } as JwtPayload, {
+      events: [
+        vital(1, { eventName: 'mini_vital', platform: 'miniapp', entrySource: 'zalo_oa', campaign: 'tet', props: { name: 'READY', value: 2300, route: '/', vp: 's' } }),
+      ],
+    } as IngestEventsDto, 'device-1');
+    expect(recordManyBestEffort.mock.calls[0]![0]).toEqual([
+      expect.objectContaining({ eventName: 'mini_vital', userId: null, anonymousId: null, sessionId: null, entrySource: null, campaign: null }),
+    ]);
   });
 });

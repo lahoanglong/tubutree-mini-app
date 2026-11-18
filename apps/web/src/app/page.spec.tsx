@@ -85,11 +85,12 @@ describe('HomePage — server render phần công khai', () => {
     expect([before, after]).toContain(suggest.seed);
   });
 
-  it('HTML đầu đã có sản phẩm của kệ Bán chạy và lưới gợi ý, hàng danh mục (ẩn danh mục rỗng); Hành trình nguyên liệu không còn trên Trang chủ', async () => {
+  it('HTML đầu đã có sản phẩm của kệ Bán chạy, hàng danh mục (ẩn danh mục rỗng); lưới gợi ý chỉ là khung giữ chỗ (dựng khi khách cuộn gần tới); Hành trình nguyên liệu không còn trên Trang chủ', async () => {
     const out = await render();
     expect(out).toContain('Bán chạy nhất');
     expect(out).toContain('Sữa rửa mặt bán chạy');
-    expect(out).toContain('Dầu gội bồ kết');
+    expect(out).toMatch(/data-home-block="suggest"[^>]*><div aria-hidden="true" data-testid="home-defer"/);
+    expect(out).not.toContain('Dầu gội bồ kết');
     expect(out).toContain('Dầu gội');
     expect(out).not.toContain('Danh mục trống');
     expect(out).not.toContain(homeCopy.journey.title);
@@ -152,10 +153,10 @@ describe('HomePage — server render phần công khai', () => {
     for (const gone of ['data-home-block="flash"', 'data-home-block="banner"', 'data-home-block="combos"', 'data-home-block="journey"', 'data-home-block="quiz"', 'data-home-block="community"']) expect(out).not.toContain(gone);
   });
 
-  it('thẻ sản phẩm còn hàng có nút ＋ thêm nhanh ngay trong HTML đầu (kệ Bán chạy và lưới gợi ý)', async () => {
+  it('thẻ sản phẩm còn hàng có nút ＋ thêm nhanh ngay trong HTML đầu (kệ Bán chạy; lưới gợi ý dựng ở trình duyệt)', async () => {
     const out = await render();
     expect(out).toContain('aria-label="Thêm Sữa rửa mặt bán chạy vào giỏ"');
-    expect(out).toContain('aria-label="Thêm Dầu gội bồ kết vào giỏ"');
+    expect(out).not.toContain('aria-label="Thêm Dầu gội bồ kết vào giỏ"');
   });
 
   it('cấu hình công khai lỗi: bỏ khối Quà khách mới (không bịa số), phần còn lại vẫn dựng', async () => {

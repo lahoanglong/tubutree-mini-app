@@ -12,6 +12,8 @@ import { IngestEventsDto, WebBeaconDto, WebIngestEventsDto, type EventEnvelopeDt
 import { hashDeviceId } from '../auth/device-id';
 import { checkEventProps } from './event-props';
 import { BODY_TOO_COMPLEX_MESSAGE, MAX_BODY_NODES, inspectBody } from '../../common/body-limits';
+import { isPlausibleVital, isVitalEventName } from './vitals/vitals-rules';
+import { VitalsIngestGate } from './vitals/vitals-ingest.gate';
 
 const RECYCLE_LANE_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -30,9 +32,12 @@ export function isValidRecycleFunnelEvent(e: { eventName: string; platform: stri
   return true;
 }
 
-/** Sự kiện được ghi: đúng luật phễu Đổi rác và `props` qua danh sách trắng (không khoá lạ, không chuỗi giống SĐT/email). */
+/**
+ * Sự kiện được ghi: đúng luật phễu Đổi rác, `props` qua danh sách trắng (không khoá lạ, không chuỗi giống SĐT/email) và số đo tốc độ đúng nền
+ * tảng, trong khoảng hợp lý.
+ */
 export function isAcceptedClientEvent(e: { eventName: string; platform: string; props?: Record<string, unknown> }): boolean {
-  return isValidRecycleFunnelEvent(e) && checkEventProps(e.eventName, e.props) === 'ok';
+  return isValidRecycleFunnelEvent(e) && checkEventProps(e.eventName, e.props) === 'ok' && isPlausibleVital(e);
 }
 
 const uuidOrNull = (v: string | undefined): string | null => (v && UUID_PATTERN.test(v) ? v : null);
@@ -46,7 +51,10 @@ const WEB_BEACONS_PER_MINUTE = 30;
 
 @Controller('events')
 export class AnalyticsController {
-  constructor(private readonly analytics: AnalyticsEventsService) {}
+  constructor(
+    private readonly analytics: AnalyticsEventsService,
+    private readonly vitals: VitalsIngestGate,
+  ) {}
 
   // Không tự đặt getTracker: AppThrottlerGuard toàn cục đã đếm theo userId (JWT) hoặc IP. Khoá theo
   // x-device-id trước đây cho phép đổi header mỗi request để né giới hạn.
@@ -59,7 +67,7 @@ export class AnalyticsController {
   ): Promise<{ accepted: number }> {
     // deviceId thô là khoá đăng nhập tài khoản khách: bảng sự kiện (xem được ở báo cáo) chỉ giữ bản băm.
     const anonymousFromDevice = deviceId ? hashDeviceId(deviceId).slice(0, 32) : null;
-    const events = dto.events.filter(isAcceptedClientEvent);
+    const events = await this.vitals.filter(dto.events.filter(isAcceptedClientEvent));
     await this.analytics.recordManyBestEffort(
       events.map((e) => this.toInput(e, user?.sub ?? null, e.anonymousId ?? anonymousFromDevice, e.sessionId ?? null)),
     );
@@ -104,7 +112,7 @@ export class AnalyticsController {
   }
 
   private async recordWeb(userId: string | null, events: EventEnvelopeDto[]): Promise<{ accepted: number }> {
-    const ok = events.filter((e) => e.platform === 'web' && isAcceptedClientEvent(e));
+    const ok = await this.vitals.filter(events.filter((e) => e.platform === 'web' && isAcceptedClientEvent(e)));
     // Web không gửi appVersion/notificationId/refCode/storefrontSlug: không lưu chuỗi tự do của người gửi ẩn danh vào các cột đó.
     await this.analytics.recordManyBestEffort(
       ok.map((e) => ({
@@ -119,6 +127,25 @@ export class AnalyticsController {
   }
 
   private toInput(e: EventEnvelopeDto, userId: string | null, anonymousId: string | null, sessionId: string | null) {
+    // Số đo tốc độ không gắn với ai: bỏ mọi định danh và nhãn nguồn dù app gửi kèm (Mini App gửi qua hàng đợi chung có JWT và mã phiên).
+    if (isVitalEventName(e.eventName)) {
+      return {
+        eventId: e.eventId,
+        eventName: e.eventName,
+        occurredAt: new Date(e.occurredAt),
+        userId: null,
+        anonymousId: null,
+        sessionId: null,
+        platform: e.platform,
+        appVersion: e.appVersion ?? null,
+        entrySource: null,
+        campaign: null,
+        notificationId: null,
+        refCode: null,
+        storefrontSlug: null,
+        props: e.props ?? {},
+      };
+    }
     return {
       eventId: e.eventId,
       eventName: e.eventName,

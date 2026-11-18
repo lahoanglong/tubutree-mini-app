@@ -67,3 +67,8 @@ jobs:
         env:
           MINIAPP_ENTRY_WARN_KB: ${{ vars.MINIAPP_ENTRY_WARN_KB || '700' }}
           MINIAPP_TOTAL_WARN_KB: ${{ vars.MINIAPP_TOTAL_WARN_KB || '2380' }}
+
+      - name: Ngân sách JS tải lần đầu của web (chặn / và /san-pham)
+        # Ngưỡng ở scripts/ci/web-budget.json. Chỉ / và /san-pham đỏ CI khi vượt; bốn route còn lại chỉ cảnh báo vì các wave khác đang thêm mã vào đó.
+        # HTML Trang chủ cần máy chủ có dữ liệu thật (--html-base) nên ở CI ghi "bỏ qua"; đo tay bằng lệnh trong scripts/ci/web-budget.cjs.
+        run: node scripts/ci/web-budget.cjs apps/web/.next

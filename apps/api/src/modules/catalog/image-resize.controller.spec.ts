@@ -45,3 +45,30 @@ describe('ImageResizeController: IP của khách cho hạn mức sai ?v=', () =>
     expect(await ctx.call()).toMatch(/127\.0\.0\.1/);
   });
 });
+
+describe('ImageResizeController: định dạng theo Accept', () => {
+  it('AVIF, WebP, JPEG theo Accept; luôn Vary: Accept và immutable', async () => {
+    const get = jest.fn(async (_s: unknown, _w: number, f: string) => ({ data: Buffer.from(f), mime: `image/${f}`, etag: `"${f}"` }));
+    const moduleRef = await Test.createTestingModule({
+      controllers: [ImageResizeController],
+      providers: [{ provide: ImageResizeService, useValue: { keyFor: () => null, get } }],
+    }).compile();
+    const app = moduleRef.createNestApplication<NestExpressApplication>({ logger: false });
+    await app.listen(0, '127.0.0.1');
+    try {
+      const { port } = app.getHttpServer().address() as { port: number };
+      const url = `http://127.0.0.1:${port}/img?u=https%3A%2F%2Fcontent.pancake.vn%2Fa.jpg&w=320`;
+      const seen: Record<string, string | null>[] = [];
+      for (const accept of ['image/avif,image/webp,image/apng,*/*;q=0.8', 'image/webp,*/*', '*/*']) {
+        const res = await fetch(url, { headers: { accept } });
+        await res.arrayBuffer();
+        seen.push({ type: res.headers.get('content-type'), vary: res.headers.get('vary'), cache: res.headers.get('cache-control') });
+      }
+      expect(seen.map((x) => x.type)).toEqual(['image/avif', 'image/webp', 'image/jpeg']);
+      expect(seen.every((x) => x.vary === 'Accept' && x.cache === 'public, max-age=31536000, immutable')).toBe(true);
+      expect(get.mock.calls.map((c) => c[2])).toEqual(['avif', 'webp', 'jpeg']);
+    } finally {
+      await app.close();
+    }
+  });
+});

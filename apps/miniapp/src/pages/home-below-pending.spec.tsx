@@ -2,6 +2,7 @@ import { render, act } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode, type ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HOME_SETTLING_HEIGHTS } from '@tubutree/app-core/home-layout';
 import { stubHangingFetch } from '../test/fetch-stub';
 
 // Khung chờ chung của Trang chủ ở cấp trang: Giờ vàng thật (khối hiện lỗi + "Thử lại"), giờ giả, StrictMode. home.spec.tsx mock Giờ vàng nên không thấy được.
@@ -55,7 +56,7 @@ vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 
 vi.mock('../components/home/home-below', async () => {
   await chunk.gate;
-  return { FlashSale: () => null, UpcomingFlashSales: () => null, PurchasedRail: () => null, BestSellerRail: () => null, HomeQuiz: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null, HomeScrollRestoration: () => null };
+  return { FlashSale: () => null, UpcomingFlashSales: () => null, PurchasedRail: () => null, BestSellerRail: () => null, HomeQuiz: () => null, CommunityPreview: () => null, NewCustomerGift: () => null, SuggestFeed: () => null, HomeStoryReel: () => null, HomeScrollRestoration: () => null };
 });
 
 import HomePage from './home';
@@ -106,8 +107,12 @@ describe('HomePage — chunk khối dưới màn đầu chưa về', () => {
     await settle(1000);
     expect(blockOrder()).not.toContain('settling');
     expect(blockOrder()).toContain('bestSellers');
+    // Dải Story nằm trong chunk lười: trong lúc chờ giữ đúng chiều cao của dải để Mua lại và lưới Gợi ý bên dưới không nhảy khi chunk về.
+    const wait = document.querySelector<HTMLElement>('[data-home-block="stories"] [data-testid="home-stories-wait"]');
+    expect(wait?.style.height).toBe(`${HOME_SETTLING_HEIGHTS.stories}px`);
     await act(async () => chunk.release());
     await settle();
     expect(blockOrder()).not.toContain('settling');
+    expect(document.querySelector('[data-testid="home-stories-wait"]')).toBeNull();
   });
 });

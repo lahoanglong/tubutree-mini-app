@@ -63,6 +63,7 @@ export const EXCLUDED_CONFIG_PREFIXES: Readonly<Record<string, string>> = {
   subscriptions: 'gợi ý giao định kỳ theo nhịp mua (subscriptions.smart_interval_enabled): migration 20261118100038_green_box_smart_interval_flags đã tạo dòng bằng mặc định trong mã (cờ TẮT, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
   reviews: 'Góc Sống Xanh (reviews.green_corner_enabled, reviews.photo_reward_points, reviews.photo_reward_daily_cap): migration 20261118142510_review_green_corner đã tạo 3 dòng bằng mặc định trong mã (cờ TẮT, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
   merch: 'Xếp kệ (merch.shelves_enabled, merch.best_seller_min_products, merch.best_seller_min_sold): migration 20261118211128_merch_shelf_pins đã tạo 3 dòng bằng mặc định trong mã (cờ TẮT, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
+  perf: 'đo tốc độ trên máy khách (perf.rum_enabled, perf.rum_sample_pct): migration 20261118211205_perf_rum_flags đã tạo 2 dòng bằng mặc định trong mã (cờ TẮT, lấy mẫu 100, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa; bật tắt ở thẻ Bật/tắt tính năng',
   mss: 'cờ kết nối MSS; migration 20261117040000_mss_foundation đã tạo 10 dòng, đều TẮT và bằng giá trị mặc định trong mã (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
 };
 

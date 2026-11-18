@@ -10,8 +10,15 @@ import {
   PDP_ACTIONS,
   RECYCLE_FUNNEL_STEPS,
   SUBTOTAL_BUCKETS,
+  MINI_VITAL_NAMES,
+  VITAL_NAV_TYPES,
+  VITAL_NET_TYPES,
+  VITAL_RATINGS,
+  VITAL_VIEWPORTS,
+  WEB_VITAL_NAMES,
   type ClientEventName,
 } from '@tubutree/shared-types';
+import { isVitalRoute } from './vitals/vitals-rules';
 
 type Rule = (v: unknown) => boolean;
 
@@ -32,6 +39,20 @@ const COUNT = int(0, 500);
 const AGE_DAYS = int(0, 3650);
 const VND = int(0, 1_000_000_000);
 const PAYMENT_METHOD = str(/^[A-Za-z_]{2,32}$/);
+const num = (min: number, max: number): Rule => (v) => typeof v === 'number' && Number.isFinite(v) && v >= min && v <= max;
+/** Khoảng theo từng tên số đo kiểm thêm ở `vitals/vitals-rules.ts` (isPlausibleVital). */
+const vitalProps = (names: readonly string[]): EventRule => ({
+  props: {
+    name: oneOf(names),
+    value: num(0, 120_000),
+    rating: oneOf(VITAL_RATINGS),
+    route: isVitalRoute,
+    vp: oneOf(VITAL_VIEWPORTS),
+    et: oneOf(VITAL_NET_TYPES),
+    nav: oneOf(VITAL_NAV_TYPES),
+  },
+  required: ['name', 'value', 'route', 'vp'],
+});
 
 interface EventRule {
   props: Readonly<Record<string, Rule>>;
@@ -129,6 +150,9 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   subscription_suggestion_accepted: { props: { intervalWeeks: (v) => v === 4 || v === 6 || v === 8 || v === 10 }, required: ['intervalWeeks'] },
   // Đặt hàng không đăng nhập trên web (wave tubu-w4-01): chỉ số món, không mang tên hay SĐT.
   guest_checkout_start: { props: { itemCount: COUNT }, required: ['itemCount'] },
+  // Số đo tốc độ (wave tubu-w4-05, cờ perf.rum_enabled): mẫu route và nhóm khung nhìn, không URL thật, không mã khách.
+  web_vital: vitalProps(WEB_VITAL_NAMES),
+  mini_vital: vitalProps(MINI_VITAL_NAMES),
 };
 
 /**

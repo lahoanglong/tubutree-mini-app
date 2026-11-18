@@ -16,6 +16,7 @@ import {
   FETCH_TOTAL_MS,
   MAX_SOURCE_BYTES,
   MAX_SOURCE_PIXELS,
+  FORMAT_MIME,
   cacheKey,
   isAllowedWidth,
   parseOwnImagePath,
@@ -31,6 +32,8 @@ export interface ResizedImage {
 }
 
 const MAX_CONCURRENT_JOBS = 4;
+/** Mã hoá AVIF (effort 2) tốn CPU gấp 2–3 lần WebP: trong 4 việc đổi cỡ cùng lúc, tối đa ngần này việc mã hoá AVIF, chỗ còn lại vẫn làm WebP/JPEG. */
+const MAX_CONCURRENT_AVIF = 2;
 /** Hàng đợi chờ xử lý tối đa: đầy thì 503 để RAM (mỗi việc giữ tới 8 MB nguồn) không phình theo số URL khác nhau. */
 const MAX_QUEUED_JOBS = 32;
 const REGISTRY_TTL_MS = 5 * 60 * 1000;
@@ -61,6 +64,8 @@ export class ImageResizeService {
   private readonly inFlight = new Map<string, Promise<ResizedImage>>();
   private active = 0;
   private readonly waiters: (() => void)[] = [];
+  private avifActive = 0;
+  private readonly avifWaiters: (() => void)[] = [];
   private lastPrune = 0;
   private cacheBytes: number | null = null;
   /** Lần quét đầu của tiến trình (tính dung lượng cache đã có trong volume): các lần ghi đầu tiên chờ chung một lần quét. */
@@ -96,7 +101,7 @@ export class ImageResizeService {
     if (!isAllowedWidth(width)) throw new BadRequestException('Bề rộng ảnh không được hỗ trợ.');
     const key = this.keyFor(source, width, format);
     if (!key) throw new BadRequestException('Nguồn ảnh không được hỗ trợ.');
-    const mime = format === 'webp' ? 'image/webp' : 'image/jpeg';
+    const mime = FORMAT_MIME[format];
     const etag = `"${key}"`;
     // Kiểm trước khi phát bản đã cache (cache ở volume, còn qua deploy): ảnh bị gỡ khỏi danh sách (gian hàng bị gỡ, đổi ảnh) không được phát tiếp tới 14 ngày nữa.
     // Ảnh của chính API kiểm trong job (`produce`): DB xác nhận còn công khai và đúng ?v= rồi mới phát bản đã cache.
@@ -223,7 +228,7 @@ export class ImageResizeService {
   private async produce(source: string, key: string, width: number, format: ResizeFormat, client: string): Promise<ResizedImage> {
     const own = parseOwnImagePath(source) !== null;
     if (own && this.ownMissLimited(client)) throw new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.');
-    const mime = format === 'webp' ? 'image/webp' : 'image/jpeg';
+    const mime = FORMAT_MIME[format];
     const release = await this.acquire();
     let data: Buffer;
     try {
@@ -236,7 +241,10 @@ export class ImageResizeService {
       }
       const pipeline = sharp(input, { limitInputPixels: MAX_SOURCE_PIXELS, failOn: 'error' }).rotate().resize({ width, withoutEnlargement: true });
       // Đổi tham số ở đây thì tăng RESIZE_PIPELINE_VERSION (image-resize.ts): cache bền qua deploy.
-      data = await (format === 'webp' ? pipeline.webp({ quality: 78 }) : pipeline.jpeg({ quality: 80, mozjpeg: true })).toBuffer();
+      data =
+        format === 'avif'
+          ? await this.withAvifSlot(() => pipeline.avif({ quality: 50, effort: 2 }).toBuffer())
+          : await (format === 'webp' ? pipeline.webp({ quality: 78 }) : pipeline.jpeg({ quality: 80, mozjpeg: true })).toBuffer();
     } catch (e) {
       if (e instanceof HttpException) throw e;
       throw new BadGatewayException('Không xử lý được ảnh nguồn.');
@@ -325,6 +333,19 @@ export class ImageResizeService {
     if (this.active < MAX_CONCURRENT_JOBS) return Promise.resolve(take());
     if (this.waiters.length >= MAX_QUEUED_JOBS) return Promise.reject(new ServiceUnavailableException('Máy chủ đang bận, thử lại sau.'));
     return new Promise((resolve) => this.waiters.push(() => resolve(take())));
+  }
+
+  /** Chỗ được trao thẳng cho việc đang chờ khi trả, nên số việc AVIF chạy cùng lúc không bao giờ vượt `MAX_CONCURRENT_AVIF`. */
+  private async withAvifSlot<T>(run: () => Promise<T>): Promise<T> {
+    if (this.avifActive < MAX_CONCURRENT_AVIF) this.avifActive += 1;
+    else await new Promise<void>((resolve) => this.avifWaiters.push(resolve));
+    try {
+      return await run();
+    } finally {
+      const next = this.avifWaiters.shift();
+      if (next) next();
+      else this.avifActive -= 1;
+    }
   }
 
   private pathFor(key: string): string {

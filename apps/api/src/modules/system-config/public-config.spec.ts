@@ -189,3 +189,29 @@ describe('buildPublicConfig — unitPriceEnabled, pdpEtaEnabled (trang chi tiế
     expect(restOn).toEqual(restOff);
   });
 });
+
+describe('buildPublicConfig — perfRum (đo tốc độ trên máy khách)', () => {
+  it('mặc định tắt với tỉ lệ 100; chỉ boolean true thật mới bật; tỉ lệ ngoài 0–100 hay sai kiểu là 0', async () => {
+    expect((await build({})).perfRum).toEqual({ enabled: false, samplePct: 100 });
+    expect((await build({ 'perf.rum_enabled': true, 'perf.rum_sample_pct': 25 })).perfRum).toEqual({ enabled: true, samplePct: 25 });
+    expect((await build({ 'perf.rum_enabled': 'true' })).perfRum.enabled).toBe(false);
+    for (const bad of [-1, 101, '50', Number.NaN, null]) {
+      expect((await build({ 'perf.rum_sample_pct': bad })).perfRum.samplePct).toBe(0);
+    }
+  });
+
+  it('bật cờ không đổi một giá trị nào khác: freeship, voucher chào mừng, điểm, trần đổi điểm giữ nguyên', async () => {
+    const { perfRum: off, ...rest } = await build({});
+    const { perfRum: on, ...restOn } = await build({ 'perf.rum_enabled': true, 'perf.rum_sample_pct': 100 });
+    expect(off.enabled).toBe(false);
+    expect(on.enabled).toBe(true);
+    expect(restOn).toEqual(rest);
+    expect(restOn).toEqual(
+      expect.objectContaining({
+        freeshipThreshold: 199000,
+        loyalty: expect.objectContaining({ maxRedeemPct: expect.any(Number) }),
+      }),
+    );
+    expect((restOn as { loyalty: { maxRedeemPct: number } }).loyalty.maxRedeemPct).toBeLessThanOrEqual(0.2);
+  });
+});

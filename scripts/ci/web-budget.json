@@ -1,0 +1,28 @@
+{
+  "$comment": "Ngưỡng gzip (mức 9) của JS tải lần đầu = số đo sau tubu-w4-05 + 3%. Chặn cứng chỉ / và /san-pham; bốn route còn lại chỉ cảnh báo vì các wave đợt 4 khác đang thêm mã, wave release ghi số cuối rồi đợt sau mới siết. HTML / là byte chưa nén, chỉ kiểm khi có --html-base.",
+  "routes": {
+    "/": {
+      "maxGzipBytes": 388992
+    },
+    "/san-pham": {
+      "maxGzipBytes": 313105
+    },
+    "/san-pham/[slug]": {
+      "warnGzipBytes": 402734
+    },
+    "/gio-hang": {
+      "warnGzipBytes": 342716
+    },
+    "/thanh-toan": {
+      "warnGzipBytes": 365563
+    },
+    "/vuon-xanh": {
+      "warnGzipBytes": 332417
+    }
+  },
+  "html": {
+    "/": {
+      "maxBytes": 245000
+    }
+  }
+}

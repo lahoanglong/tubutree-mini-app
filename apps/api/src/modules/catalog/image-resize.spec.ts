@@ -71,14 +71,21 @@ describe('width, định dạng, khoá cache', () => {
     expect([0, 100, 161, 1000, 1200, 2400, NaN].some(isAllowedWidth)).toBe(false);
   });
   it('webp khi trình duyệt nhận, không thì jpeg', () => {
-    expect(negotiateFormat('image/avif,image/webp,*/*')).toBe('webp');
+    expect(negotiateFormat('image/avif,image/webp,*/*')).toBe('avif');
+    expect(negotiateFormat('image/webp,*/*')).toBe('webp');
+    expect(negotiateFormat('image/AVIF')).toBe('avif');
     expect(negotiateFormat('image/png,*/*')).toBe('jpeg');
     expect(negotiateFormat(undefined)).toBe('jpeg');
+    expect(negotiateFormat('image/avif;q=0, image/webp;q=0.8, */*')).toBe('webp');
+    expect(negotiateFormat('image/avif; q=0.0, image/webp;q=0')).toBe('jpeg');
+    expect(negotiateFormat('image/avif;q=0.5,image/webp')).toBe('avif');
   });
   it('khoá cache ổn định và khác nhau theo nguồn, bề rộng, định dạng', () => {
     const k = cacheKey('https://a/x.jpg', 320, 'webp');
     expect(k).toBe(cacheKey('https://a/x.jpg', 320, 'webp'));
-    expect(new Set([k, cacheKey('https://a/y.jpg', 320, 'webp'), cacheKey('https://a/x.jpg', 640, 'webp'), cacheKey('https://a/x.jpg', 320, 'jpeg')]).size).toBe(4);
+    expect(
+      new Set([k, cacheKey('https://a/y.jpg', 320, 'webp'), cacheKey('https://a/x.jpg', 640, 'webp'), cacheKey('https://a/x.jpg', 320, 'jpeg'), cacheKey('https://a/x.jpg', 320, 'avif')]).size,
+    ).toBe(5);
   });
   it('khoá cache đổi theo phiên bản cách đổi cỡ (cache bền qua deploy không phát bản của cách cũ)', () => {
     expect(cacheKey('https://a/x.jpg', 320, 'webp')).toBe(cacheKey('https://a/x.jpg', 320, 'webp', RESIZE_PIPELINE_VERSION));

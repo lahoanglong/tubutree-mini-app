@@ -1,4 +1,5 @@
 import { useEffect, useSyncExternalStore, type ComponentProps, type ReactNode } from 'react';
+import { HOME_SETTLING_HEIGHTS } from '@tubutree/app-core/home-layout';
 import { isChunkError } from '../../utils/chunk-error';
 import { PurchasedRail } from '../reorder/purchased-rail';
 import { BestSellerRail } from './best-seller-rail';
@@ -65,12 +66,12 @@ export function useHomeBelow(): BelowState {
 }
 
 // Không dùng React.lazy: chunk đã về thì khối dựng ngay trong cùng lượt vẽ (không bị treo thêm một nhịp), nên các khối dùng chung
-// query với Trang chủ gắn vào cùng lúc như khi chúng nằm trong gói đầu. Chưa về thì không giữ gì: chỉ các khối CUỐI trang (lưới Gợi ý và hai thẻ chen trong
-// lưới: Chẩn đoán tổ ấm, Cộng đồng) nạp lười, mọi thứ chúng có thể đẩy đều nằm phía trên chúng nên không đẩy gì (CLS 0).
-function Block({ children }: { children: (m: Below) => ReactNode }) {
+// query với Trang chủ gắn vào cùng lúc như khi chúng nằm trong gói đầu. Chưa về thì chỉ giữ `fallback`: các khối CUỐI trang (lưới Gợi ý và hai thẻ chen trong
+// lưới: Chẩn đoán tổ ấm, Cộng đồng) không giữ gì vì mọi thứ chúng có thể đẩy đều nằm phía trên chúng (CLS 0); dải Story nằm trên Mua lại và lưới Gợi ý nên giữ đúng chiều cao của nó.
+function Block({ children, fallback = null }: { children: (m: Below) => ReactNode; fallback?: ReactNode }) {
   // Đăng ký để vẽ lại khi chunk về; chunk hỏng thì Trang chủ hiện một dải lỗi có "Thử lại" (home.tsx) và các khối vẫn không vẽ gì.
   useSyncExternalStore(subscribe, getState, getState);
-  return below ? <>{children(below)}</> : null;
+  return below ? <>{children(below)}</> : <>{fallback}</>;
 }
 
 // Hai kệ sản phẩm và Giờ vàng (FlashSale ở home.tsx, nạp thẳng từ ../flash-sale) nằm trong gói đầu: thẻ sản phẩm đầu không đợi thêm một request chunk; Giờ vàng
@@ -83,3 +84,7 @@ export const HomeCommunityPreview = () => <Block>{(m) => <m.GreenCornerStrip fal
 export const HomeQuiz = () => <Block>{(m) => <m.HomeQuiz />}</Block>;
 export const HomeScrollRestoration = (p: ComponentProps<Below['HomeScrollRestoration']>) => <Block>{(m) => <m.HomeScrollRestoration {...p} />}</Block>;
 export const HomeSuggestFeed = (p: ComponentProps<Below['SuggestFeed']>) => <Block>{(m) => <m.SuggestFeed {...p} />}</Block>;
+// Dải Story (dưới màn đầu) cao đúng `HOME_SETTLING_HEIGHTS.stories` cả lúc chờ lẫn lúc có dữ liệu: khung giữ chỗ cùng chiều cao nên Mua lại và lưới Gợi ý không nhảy khi chunk về.
+export const HomeStoryReel = () => (
+  <Block fallback={<div aria-hidden data-testid="home-stories-wait" style={{ height: HOME_SETTLING_HEIGHTS.stories }} />}>{(m) => <m.HomeStoryReel />}</Block>
+);

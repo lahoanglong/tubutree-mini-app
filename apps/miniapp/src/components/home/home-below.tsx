@@ -3,6 +3,8 @@ export { CommunityPreview } from './community-preview';
 export { GreenCornerStrip } from './green-corner-strip';
 export { SuggestFeed } from './suggest-feed';
 export { HomeQuiz } from './home-quiz';
+// Dải Story kéo theo cả bộ dựng câu chuyện sản phẩm (preset, sprite, câu chuyện thương hiệu) mà trang chi tiết cũng dùng: để ở đây thì entry không gánh nó.
+export { HomeStoryReel } from './home-story-reel';
 
 import { useScrollRestoration } from '../../hooks/use-scroll-restoration';
 

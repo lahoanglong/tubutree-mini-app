@@ -69,6 +69,66 @@ describe('ImageResizeService', () => {
     expect(own.get).toHaveBeenCalledTimes(1);
   });
 
+  it('AVIF: mã hoá AVIF đúng bề rộng, nhỏ hơn WebP của cùng ảnh, khoá cache riêng nên không lẫn với WebP/JPEG', async () => {
+    const photo = await sharp({ create: { width: 1200, height: 800, channels: 3, background: '#808080', noise: { type: 'gaussian', mean: 128, sigma: 40 } } }).png().toBuffer();
+    const { svc } = make(ownImages(photo));
+    const src = '/public-image/product/pav/thumb?v=abc';
+    const [avif, webp, jpeg] = await Promise.all([svc.get(src, 640, 'avif'), svc.get(src, 640, 'webp'), svc.get(src, 640, 'jpeg')]);
+    const meta = await sharp(avif.data).metadata();
+    expect(meta.format).toBe('heif');
+    expect(meta.compression).toBe('av1');
+    expect(meta.width).toBe(640);
+    expect(avif.mime).toBe('image/avif');
+    expect(webp.mime).toBe('image/webp');
+    expect(jpeg.mime).toBe('image/jpeg');
+    expect(avif.data.length).toBeLessThan(webp.data.length);
+    expect(new Set([avif.etag, webp.etag, jpeg.etag]).size).toBe(3);
+    const again = await svc.get(src, 640, 'webp');
+    expect((await sharp(again.data).metadata()).format).toBe('webp');
+  });
+
+  it('AVIF: tối đa 2 việc mã hoá AVIF cùng lúc, việc WebP vẫn chạy song song', async () => {
+    const { svc } = make();
+    const proto = Object.getPrototypeOf(sharp());
+    const realAvif = proto.avif;
+    let running = 0;
+    let peak = 0;
+    const avifSpy = jest.spyOn(proto, 'avif').mockImplementation(function (this: ReturnType<typeof sharp>, ...a: unknown[]) {
+      const inst = realAvif.apply(this, a);
+      const toBuffer = inst.toBuffer.bind(inst);
+      inst.toBuffer = (async () => {
+        running += 1;
+        peak = Math.max(peak, running);
+        await new Promise((r) => setTimeout(r, 30));
+        try {
+          return await toBuffer();
+        } finally {
+          running -= 1;
+        }
+      }) as never;
+      return inst;
+    });
+    try {
+      const jobs = [
+        ...Array.from({ length: 5 }, (_, i) => svc.get(`/public-image/product/pa${i}/0`, 160, 'avif')),
+        svc.get('/public-image/product/pw/0', 160, 'webp'),
+      ];
+      const out = await Promise.all(jobs);
+      expect(out.slice(0, 5).every((o) => o.mime === 'image/avif')).toBe(true);
+      expect(out[5]!.mime).toBe('image/webp');
+      expect(peak).toBe(2);
+    } finally {
+      avifSpy.mockRestore();
+    }
+  });
+
+  it('ảnh nguồn hỏng: AVIF cũng trả lỗi như WebP (502), không ghi cache', async () => {
+    const { svc } = make(ownImages(Buffer.from('khong-phai-anh')));
+    await expect(svc.get('/public-image/product/bad/0', 320, 'avif')).rejects.toBeInstanceOf(BadGatewayException);
+    await expect(svc.get('/public-image/product/bad/0', 320, 'webp')).rejects.toBeInstanceOf(BadGatewayException);
+    expect(readdirSync(dir)).toEqual([]);
+  });
+
   it('không phóng to ảnh nhỏ hơn bề rộng xin', async () => {
     const small = await sharp({ create: { width: 100, height: 100, channels: 3, background: '#fff' } }).png().toBuffer();
     const { svc } = make(ownImages(small));

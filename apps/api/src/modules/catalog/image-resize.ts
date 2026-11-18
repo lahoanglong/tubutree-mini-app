@@ -19,7 +19,9 @@ export const FETCH_TIMEOUT_MS = 6_000;
 export const FETCH_TOTAL_MS = 10_000;
 const MAX_URL_LENGTH = 1_000;
 
-export type ResizeFormat = 'webp' | 'jpeg';
+export type ResizeFormat = 'avif' | 'webp' | 'jpeg';
+
+export const FORMAT_MIME: Readonly<Record<ResizeFormat, string>> = { avif: 'image/avif', webp: 'image/webp', jpeg: 'image/jpeg' };
 
 export const isAllowedWidth = (w: number): boolean => RESIZE_WIDTHS.includes(w);
 
@@ -95,9 +97,19 @@ export const safeLookup: LookupFunction = (hostname, options, callback) => {
   });
 };
 
-/** Client nhận webp thì trả webp, không thì jpeg. */
+/**
+ * Client nhận AVIF thì trả AVIF, không thì WebP, không thì JPEG. AVIF (q50, effort 2) nhỏ hơn WebP q78 trung vị 31% ở w=320 và 33% ở w=640 mà PSNR
+ * không kém, đo trên 29 ảnh sản phẩm thật (`scripts/perf/avif-compare.mjs`). WebKit cũ không khai `image/avif` nên vẫn nhận WebP/JPEG.
+ */
 export function negotiateFormat(accept: string | undefined): ResizeFormat {
-  return /image\/webp/i.test(accept ?? '') ? 'webp' : 'jpeg';
+  const accepted = new Set<string>();
+  for (const part of (accept ?? '').split(',')) {
+    const [type = '', ...params] = part.split(';').map((s) => s.trim().toLowerCase());
+    // `q=0` nghĩa là client từ chối định dạng đó (RFC 9110 §12.4.2).
+    const q = params.find((p) => p.startsWith('q='));
+    if (q === undefined || Number(q.slice(2)) > 0) accepted.add(type);
+  }
+  return accepted.has('image/avif') ? 'avif' : accepted.has('image/webp') ? 'webp' : 'jpeg';
 }
 
 /**

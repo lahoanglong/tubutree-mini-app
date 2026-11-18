@@ -19,6 +19,7 @@ import { GREEN_CORNER_MAX_PHOTOS } from '@tubutree/shared-types';
 import { FREESHIP_BOOSTER_ENABLED_KEY } from '../catalog/upsell/freeship-upsell';
 import { RETURN_PACKAGING_NUDGE_KEY } from '../waste-exchange/customer/waste-return-packaging';
 import { WEB_GUEST_CHECKOUT_ENABLED_KEY } from '../checkout/guest/guest-checkout.config';
+import { PERF_RUM_ENABLED_KEY, PERF_RUM_SAMPLE_PCT_DEFAULT, PERF_RUM_SAMPLE_PCT_KEY, normalizeSamplePct } from '../analytics/vitals/vitals-rules';
 import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PHONE_KEY, orderZaloGateOpen, tubuZaloPhoneOf, type OrderZaloGate } from './order-zalo-config';
 
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
@@ -126,6 +127,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     webGuestCheckout,
     unitPrice,
     pdpEta,
+    perfRumEnabled,
+    perfRumSamplePct,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -177,6 +180,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(WEB_GUEST_CHECKOUT_ENABLED_KEY, false),
     config.get<unknown>(UNIT_PRICE_ENABLED_KEY, false),
     config.get<unknown>(PDP_ETA_ENABLED_KEY, false),
+    config.get<unknown>(PERF_RUM_ENABLED_KEY, false),
+    config.get<unknown>(PERF_RUM_SAMPLE_PCT_KEY, PERF_RUM_SAMPLE_PCT_DEFAULT),
   ]);
   return {
     freeshipThreshold,
@@ -264,6 +269,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     unitPriceEnabled: unitPrice === true,
     // Trang chi tiết: "Nhận dự kiến …" theo `shippingEta` và câu còn thiếu để miễn phí giao hàng theo giỏ. Chỉ boolean true mới bật.
     pdpEtaEnabled: pdpEta === true,
+    // Đo tốc độ trên máy khách: app chỉ gửi khi `enabled` true, với xác suất `samplePct`%. Tắt (hay API cũ không trả) thì app không gửi gì.
+    perfRum: { enabled: perfRumEnabled === true, samplePct: normalizeSamplePct(perfRumSamplePct) },
   };
 }
 

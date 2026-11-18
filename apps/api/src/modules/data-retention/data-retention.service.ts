@@ -15,6 +15,11 @@ export const MAX_RUN_MS = 90 * 60_000;
 
 /** Số ngày giữ SĐT của đơn ngoài app sau khi claim của nó về trạng thái cuối (CREDITED, VOIDED, REVERSED, LAPSED). */
 export const EXTERNAL_PHONE_AFTER_FINAL_DAYS = 7;
+/**
+ * Số ngày giữ số đo tốc độ trên máy khách (`web_vital`, `mini_vital`). Thẻ Tốc độ trên máy khách chỉ đọc cửa sổ 7/28 ngày và không có snapshot
+ * ngày nào cần chờ, nên không giữ tới hạn chung của analytics_events.
+ */
+export const PERF_VITALS_DAYS = 90;
 
 export type RetentionTargetKey = 'analytics_events' | 'notification_logs' | 'webhook_events' | 'refresh_tokens' | 'support_chat' | 'cashback_clicks';
 
@@ -128,7 +133,8 @@ export class DataRetentionService {
 
   private cleanups(target: RetentionTargetKey, cutoff: Date, now: Date): Cleanup[] {
     switch (target) {
-      case 'analytics_events':
+      case 'analytics_events': {
+        const vitalsCutoff = new Date(now.getTime() - PERF_VITALS_DAYS * 86_400_000);
         // Chỉ xoá khi số tổng hợp của NGÀY (giờ VN) đó đã nằm trong retention_daily_snapshot: tổng hợp theo sự kiện
         // (funnel/cohort từ analytics_events) hiện chưa có job ghi nên đây là snapshot duy nhất làm căn cứ.
         // Mốc là receivedAt (giờ server) vì occurredAt do client tự khai.
@@ -140,7 +146,14 @@ export class DataRetentionService {
               WHERE s."date" = ((analytics_events."receivedAt" AT TIME ZONE 'UTC') AT TIME ZONE 'Asia/Ho_Chi_Minh')::date
             )`,
           },
+          {
+            table: 'analytics_events',
+            label: 'analytics_events.perf_vitals',
+            // Chỉ theo `receivedAt` (giờ server, có index riêng): `occurredAt` do máy khách tự khai, khai giờ tương lai thì dòng không bao giờ bị dọn.
+            where: Prisma.sql`"eventName" IN ('web_vital', 'mini_vital') AND "receivedAt" < ${vitalsCutoff}`,
+          },
         ];
+      }
       case 'notification_logs':
         return [{ table: 'notification_logs', where: Prisma.sql`"sentAt" < ${cutoff}` }];
       case 'webhook_events': {

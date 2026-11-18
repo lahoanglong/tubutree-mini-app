@@ -85,6 +85,8 @@ const SHOP: string[] = [
   'app/uu-dai/page.tsx',
   'components/home/home-page-error.tsx',
   'components/home/home-view.tsx',
+  'components/home/home-view-client.tsx',
+  'components/home/defer-until-near.tsx',
   'components/home/new-customer-gift.tsx',
   'components/reorder/purchased-rail.tsx',
   'components/reorder/reorder-sheet.tsx',

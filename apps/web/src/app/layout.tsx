@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { Suspense } from 'react';
 import { preconnect, prefetchDNS } from 'react-dom';
 import './globals.css';
 import { Providers } from './providers';
@@ -15,6 +16,7 @@ import { EntrySourceCapture } from '@/components/entry-source-capture';
 import { ScreenTracker } from '@/components/analytics/screen-tracker';
 import { PdpNavSkeleton } from '@/components/skeletons/pdp-nav-skeleton';
 import { SkipLink } from '@/components/skip-link';
+import { VitalsGate } from '@/lib/vitals/vitals-gate';
 import { apiImageOrigin } from '@/lib/image-origin';
 import { SITE_URL, fontScaleBootScript, offersHintBootScript, recentlyViewedBootScript, restoringBootScript, tenantHostBootScript } from '@/lib/site';
 
@@ -64,6 +66,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <ReferralCapture />
           <EntrySourceCapture />
           <ScreenTracker />
+          {/* Cờ đo tốc độ đọc ở máy chủ (bất đồng bộ): ranh giới riêng để nó không bao giờ giữ khung trang lại. */}
+          <Suspense fallback={null}>
+            <VitalsGate />
+          </Suspense>
           <ErrorReporter />
           <AppGates />
           <PdpNavSkeleton />
