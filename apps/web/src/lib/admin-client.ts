@@ -2241,7 +2241,43 @@ export const getMssOrderEvents = () => apiFetch<MssOrderEventsCard>('/admin/mss/
 export const cancelPendingMssOrderEvents = () => apiFetch<{ cancelled: number }>('/admin/mss/order-events/cancel-pending', { method: 'POST' });
 
 export type MssCatalogSkipReason = 'invalid_doc' | 'no_pancake_id' | 'unknown_product' | 'stale_version' | 'not_found' | 'apply_failed';
-export type MssCatalogTrimReason = 'media_rejected' | 'html_emptied' | 'string_truncated' | 'array_truncated' | 'unknown_category_slug';
+export type MssCatalogTrimReason =
+  | 'media_rejected'
+  | 'html_emptied'
+  | 'string_truncated'
+  | 'array_truncated'
+  | 'story_rejected'
+  | 'eco_fact_rejected'
+  | 'unknown_category_slug';
+export type MssStockSkipReason = 'unknown_variation' | 'stale' | 'too_old' | 'clock_skew';
+/** `applied`: đã xử lý; `disabled`: cờ chưa có hiệu lực nên bỏ qua; `none`: lần đẩy không có phần này. */
+export type MssPushPartStatus = 'applied' | 'disabled' | 'none';
+/** Đếm của lần MSS đẩy gần nhất (MssPushStats ở apps/api/src/modules/integrations/mss-catalog-sync/catalog-sync.service.ts). */
+export interface MssPushStats {
+  syncId: string;
+  sentAt: string | null;
+  products: {
+    status: MssPushPartStatus;
+    received: number;
+    applied: number;
+    unchanged: number;
+    skipped: Partial<Record<MssCatalogSkipReason, number>>;
+    trimmed: Partial<Record<MssCatalogTrimReason, number>>;
+    eco_proposed: number;
+    eco_kept: number;
+  };
+  stock: {
+    status: MssPushPartStatus;
+    received: number;
+    applied: number;
+    invalid: number;
+    skipped: Partial<Record<MssStockSkipReason, number>>;
+    out_of_stock: number;
+    back_in_stock: number;
+    restock_waiting: number;
+  };
+  deferred: { bundles: number };
+}
 /** Thẻ "Nội dung từ MSS" (MssCatalogOpsService.card ở apps/api/src/modules/integrations/mss/catalog/mss-catalog.controller.ts). */
 export interface MssCatalogOpsCard {
   /** Giá trị cờ mss.catalog_enrichment_enabled. */
@@ -2263,12 +2299,18 @@ export interface MssCatalogOpsCard {
     unchanged: number;
     skipped: Partial<Record<MssCatalogSkipReason, number>>;
     trimmed: Partial<Record<MssCatalogTrimReason, number>>;
+    ecoProposed?: number;
+    ecoKept?: number;
   } | null;
   published: number;
   unpublished: number;
   removed: number;
   /** Mã chuông đang chờ kéo; null khi không đọc được hàng đợi. */
   pending: number | null;
+  /** Cờ mss.stock_sync_enabled (nhận tồn Pancake MSS đẩy sang). Thiếu ở API cũ. */
+  stockSync?: { enabled: boolean; effective: boolean };
+  /** Lần MSS đẩy gần nhất; null khi chưa đẩy lần nào. Thiếu ở API cũ. */
+  push?: { at: string | null; status: 'ok' | 'partial' | 'failed' | 'skipped' | null; error: string | null; stats: MssPushStats | null } | null;
 }
 export const getMssCatalog = () => apiFetch<MssCatalogOpsCard>('/admin/mss/catalog');
 /** Xếp một lượt kéo toàn bộ nội dung MSS (202). Cờ chưa có hiệu lực thì 409 kèm lý do tiếng Việt. */

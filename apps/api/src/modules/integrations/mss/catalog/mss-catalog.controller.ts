@@ -6,7 +6,8 @@ import { PrismaService } from '../../../../prisma/prisma.service';
 import { MssHealthService } from '../mss-health.service';
 import { MssSignedRoute } from '../mss-inbound.guard';
 import { MssCatalogQueue } from './mss-catalog.queue';
-import { MSS_CATALOG_STATE_ID, MssCatalogService, type MssCatalogRunStats } from './mss-catalog.service';
+import type { MssPushStats } from '../../mss-catalog-sync/catalog-sync.service';
+import { MSS_CATALOG_STATE_ID, MSS_PUSH_STATE_ID, MssCatalogService, type MssCatalogRunStats } from './mss-catalog.service';
 
 export const MSS_DOORBELL_KINDS = ['product', 'category', 'bundle', 'stock'] as const;
 export type MssDoorbellKind = (typeof MSS_DOORBELL_KINDS)[number];
@@ -81,6 +82,10 @@ export interface MssCatalogOpsCard {
   removed: number;
   /** Mã chuông báo đang chờ lượt kéo; null khi không đọc được Redis. */
   pending: number | null;
+  /** Cờ `mss.stock_sync_enabled`: nhận tồn Pancake MSS đẩy sang. */
+  stockSync: { enabled: boolean; effective: boolean };
+  /** Lần MSS đẩy gần nhất (`POST /api/integrations/mss/catalog-sync`); null khi MSS chưa đẩy lần nào. */
+  push: { at: string | null; status: string | null; error: string | null; stats: MssPushStats | null } | null;
 }
 
 const iso = (d: Date | null | undefined): string | null => (d ? d.toISOString() : null);
@@ -97,13 +102,15 @@ export class MssCatalogOpsService {
   ) {}
 
   async card(): Promise<MssCatalogOpsCard> {
-    const [ops, state, counts, pending] = await Promise.all([
+    const [ops, state, push, counts, pending] = await Promise.all([
       this.health.opsCard(),
       this.prisma.mssCatalogSyncState.findUnique({ where: { id: MSS_CATALOG_STATE_ID } }),
+      this.prisma.mssCatalogSyncState.findUnique({ where: { id: MSS_PUSH_STATE_ID } }),
       this.prisma.productMssEnrichment.groupBy({ by: ['state'], _count: { _all: true } }),
       this.queue.pendingCount(),
     ]);
     const flag = ops.flags.find((f) => f.flag === 'catalogEnrichment');
+    const stock = ops.flags.find((f) => f.flag === 'stockSync');
     const count = (s: string) => counts.find((c) => c.state === s)?._count._all ?? 0;
     return {
       enabled: flag?.enabled ?? false,
@@ -120,6 +127,15 @@ export class MssCatalogOpsService {
       unpublished: count('unpublished'),
       removed: count('removed'),
       pending,
+      stockSync: { enabled: stock?.enabled ?? false, effective: stock?.effective ?? false },
+      push: push
+        ? {
+            at: iso(push.lastFinishedAt ?? push.lastRunAt),
+            status: push.lastStatus,
+            error: push.lastError,
+            stats: (push.lastStats as MssPushStats | null | undefined) ?? null,
+          }
+        : null,
     };
   }
 

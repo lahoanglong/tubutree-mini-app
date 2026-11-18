@@ -57,6 +57,8 @@ export const IMAGE_COMPATIBLE_MIGRATIONS: readonly string[] = [
   // Hai bảng mới (nội dung bổ sung MSS, trạng thái kéo) mà image cũ không đọc; FK trỏ về products chỉ khoá ngắn lúc thêm vì bảng mới rỗng.
   '20261117100000_mss_catalog_enrichment',
   '20261117120000_engagement_daily_badges',
+  // Chỉ thêm một dòng cờ tắt vào `system_configs`, không đổi schema.
+  '20261118170000_mss_stock_sync_flag',
 ];
 
 /**

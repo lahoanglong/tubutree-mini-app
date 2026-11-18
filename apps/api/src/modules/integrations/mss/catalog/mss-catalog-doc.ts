@@ -1,5 +1,8 @@
 import { createHash } from 'node:crypto';
-import type { MssEnrichmentImage, MssEnrichmentIngredient, MssEnrichmentPayload, MssEnrichmentVideo } from '../../../catalog/mss-enrichment';
+import { parseStoryConfig, type ProductStoryConfig } from '@tubutree/shared-types';
+import type { MssEcoFactProposal, MssEnrichmentImage, MssEnrichmentIngredient, MssEnrichmentPayload, MssEnrichmentVideo } from '../../../catalog/mss-enrichment';
+import { parseEcoFactInput } from '../../../eco-impact/eco-facts.input';
+import { httpsSourceUrl } from '../../../eco-impact/eco-facts.rules';
 import { sanitizeMssHtml } from './mss-catalog-html';
 import { parseMssMediaUrl } from './mss-media';
 
@@ -22,6 +25,7 @@ export const MSS_DOC_LIMITS = {
   ingredients: 50,
   certifications: 20,
   categorySlugs: 10,
+  ecoFacts: 10,
 } as const;
 
 export const MSS_DOC_STATES = ['published', 'unpublished', 'removed', 'preview'] as const;
@@ -32,7 +36,7 @@ const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
 const MAX_VERSION = 2_147_483_647;
 
 /** Lý do gọt một tài liệu, để Ops đếm. */
-export type MssDocIssue = 'media_rejected' | 'html_emptied' | 'string_truncated' | 'array_truncated';
+export type MssDocIssue = 'media_rejected' | 'html_emptied' | 'string_truncated' | 'array_truncated' | 'story_rejected' | 'eco_fact_rejected';
 
 export interface MssParsedDoc {
   pancakeProductId: string;
@@ -71,6 +75,14 @@ class Reader {
   readonly issues: Partial<Record<MssDocIssue, number>> = {};
 
   constructor(private readonly ctx: MssDocContext) {}
+
+  get hosts(): readonly string[] {
+    return this.ctx.mediaHosts;
+  }
+
+  get preview(): boolean {
+    return this.ctx.preview === true;
+  }
 
   note(issue: MssDocIssue, n = 1): void {
     this.issues[issue] = (this.issues[issue] ?? 0) + n;
@@ -193,6 +205,9 @@ function readEnrichment(r: Reader, raw: Record<string, unknown> | null): { paylo
     }
   }
 
+  const storyConfig = readStory(r, e.story_config);
+  const ecoFacts = readEcoFacts(r, e.eco_facts);
+
   return {
     payload: {
       v: 1,
@@ -206,9 +221,86 @@ function readEnrichment(r: Reader, raw: Record<string, unknown> | null): { paylo
       metaTitle,
       metaDesc,
       categoryIds: null,
+      ...(storyConfig ? { storyConfig } : {}),
+      ...(ecoFacts ? { ecoFacts } : {}),
     },
     categorySlugs,
   };
+}
+
+/**
+ * Câu chuyện xanh: đúng khung `ProductStoryConfig` của Tubu, kiểm bằng `parseStoryConfig` (bộ kiểm duy nhất, cùng chỗ admin lưu). Ảnh trong
+ * câu chuyện (ảnh tách nền, ảnh lớp nguyên liệu) phải là media MSS như ảnh sản phẩm. Hỏng một chỗ thì bỏ cả câu chuyện: không có ý kiến,
+ * trang sản phẩm giữ câu chuyện Tubu. `variationId` trong vòng cung biến thể là `pancake_variation_id`, đổi sang id Tubu lúc ghép.
+ */
+function readStory(r: Reader, raw: unknown): ProductStoryConfig | null {
+  if (raw === undefined || raw === null) return null;
+  const parsed = parseStoryConfig(raw);
+  if (!parsed.ok) {
+    r.note('story_rejected');
+    return null;
+  }
+  const story = parsed.value;
+  const media = (u: string): string | null => parseMssMediaUrl(u, r.hosts, { allowPreviewToken: r.preview });
+  if (story.cutoutUrl !== undefined) {
+    const u = media(story.cutoutUrl);
+    if (!u) {
+      r.note('story_rejected');
+      return null;
+    }
+    story.cutoutUrl = u;
+  }
+  for (const sc of story.scenes) {
+    if (sc.kind !== 'ingredient_assembly') continue;
+    for (const step of sc.steps) {
+      for (const layer of step.layers) {
+        if (layer.imageUrl === undefined) continue;
+        const u = media(layer.imageUrl);
+        if (!u) {
+          r.note('story_rejected');
+          return null;
+        }
+        layer.imageUrl = u;
+      }
+    }
+  }
+  return story;
+}
+
+/**
+ * Nhãn xanh MSS đề xuất, kiểm bằng đúng luật nhập của màn Sự thật xanh (`parseEcoFactInput`). Thiếu link nguồn https thì bỏ: admin không
+ * duyệt được dòng không có nguồn. Trùng (loại, biến thể) thì giữ dòng đầu. Mảng rỗng = MSS không đề xuất gì (không xoá dòng nào của Tubu).
+ */
+function readEcoFacts(r: Reader, raw: unknown): MssEcoFactProposal[] | null {
+  const list = r.list(raw, MSS_DOC_LIMITS.ecoFacts);
+  if (list === null) return null;
+  const out: MssEcoFactProposal[] = [];
+  for (const it of list) {
+    if (!isObj(it)) throw new DocError();
+    const vid = it.variation_id;
+    if (vid !== undefined && vid !== null && (typeof vid !== 'string' || !ID_RE.test(vid))) throw new DocError();
+    const parsed = parseEcoFactInput({
+      productSlug: 'mss',
+      variationSku: null,
+      kind: it.kind,
+      valueGrams: it.value_grams,
+      baselineText: it.baseline_text,
+      label: it.label,
+      co2Grams: it.co2_grams,
+      sourceUrl: it.source_url,
+      sourceNote: it.source_note,
+    });
+    const sourceUrl = parsed.ok ? httpsSourceUrl(parsed.value.sourceUrl) : null;
+    if (!parsed.ok || !sourceUrl) {
+      r.note('eco_fact_rejected');
+      continue;
+    }
+    const variationId = typeof vid === 'string' ? vid : null;
+    if (out.some((f) => f.kind === parsed.value.kind && f.variationId === variationId)) continue;
+    const v = parsed.value;
+    out.push({ kind: v.kind, variationId, valueGrams: v.valueGrams, baselineText: v.baselineText, label: v.label, co2Grams: v.co2Grams, sourceUrl, sourceNote: v.sourceNote });
+  }
+  return out;
 }
 
 /**
