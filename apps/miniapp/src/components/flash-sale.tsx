@@ -1,4 +1,4 @@
-import { memo, useEffect, useId, useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
+import { memo, useContext, useEffect, useId, useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
 import { Bell, CheckCircle2, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'zmp-ui';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -9,6 +9,7 @@ import {
   type FlashSaleActiveItem,
   type UpcomingFlashItem,
 } from '../services/shop-api';
+import { flashBlockLook, greenHourCanQuickAdd } from '@tubutree/app-core/commerce/green-hour';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { nextFlashSlot, slotClock, type NextFlashSlot } from '@tubutree/app-core/merch/flash-next-slot';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
@@ -23,6 +24,7 @@ import { vi } from '../i18n/vi';
 import { getErrorMessage, isStaleStateError } from '../services/api';
 import { useCountdown } from '../hooks/use-countdown';
 import { useNotify } from '../hooks/use-notify';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { useAuthStore } from '../store/auth';
 import { browserStorage } from '../utils/recently-viewed';
 import { FLASH_NEXT_SLOT_HEIGHT, FLASH_SKELETON_HEIGHT, readFlashHint, readFlashSlotHint, writeFlashHint } from '@tubutree/app-core/home-layout';
@@ -32,6 +34,7 @@ import { HomeBlockError } from './home/home-block-error';
 import { Countdown } from './ui/countdown';
 import { FlashSoldBar } from './ui/flash-sold-bar';
 import { Icon } from './ui/icon';
+import { ProductCardQuickAddContext, QuickAddButton } from './ui/product-card-quick-add';
 import { ProductTile } from './ui/product-tile';
 import { RailCell, RailShell } from './ui/product-rail';
 import { rowKeyboardProps } from './ui/row-keyboard';
@@ -78,6 +81,7 @@ export const FlashSale = memo(function FlashSale({ items, loading, error, onRetr
   // Chờ khôi phục phiên xong rồi mới hỏi: hỏi sớm thì chưa có token nên đi request lẻ dù khách đã đăng nhập, trong khi khối gộp /home/me đã có sẵn.
   const sessionReady = useAuthStore((s) => s.status !== 'loading');
   const upcoming = useQuery({ queryKey: ['flash-sales', 'upcoming'], queryFn: fetchUpcomingFlashSales, staleTime: 30_000, enabled: sessionReady });
+  const look = flashBlockLook(usePublicConfig().flashGreenHourEnabled, 'home');
 
   // `expiredTick` tính lại ngay khi suất đang đếm về 0 (Countdown.onEnd): đồng hồ chuyển sang suất kế tiếp thay vì biến mất, thẻ hết giờ rời kệ.
   const [expiredTick, setExpiredTick] = useState(0);
@@ -100,11 +104,11 @@ export const FlashSale = memo(function FlashSale({ items, loading, error, onRetr
 
   if (loading || (visible && (!sessionReady || upcoming.isLoading))) return hint.had ? <FlashSkeleton withNextSlot={hint.nextSlot} /> : null;
   if (items.length === 0 && error) {
-    return <HomeBlockError title={fillCopy('flash.title')} error={error} onRetry={() => onRetry?.()} retrying={retrying} />;
+    return <HomeBlockError title={look.title} error={error} onRetry={() => onRetry?.()} retrying={retrying} />;
   }
   if (!visible) return null;
 
-  const title = fillCopy('flash.title');
+  const title = look.title;
   const seeAll = seeAllHref('home.flash');
   return (
     <section aria-labelledby={titleId}>
@@ -112,12 +116,13 @@ export const FlashSale = memo(function FlashSale({ items, loading, error, onRetr
         <SectionHeader
           id={titleId}
           title={title}
-          icon="zap"
-          tone="promo"
+          icon={look.icon}
+          tone={look.tone}
           trailing={
             <Countdown
               endAt={soonestEndAt}
               mode="clock"
+              tone={look.soldTone}
               onEnd={() => {
                 setExpiredTick((n) => n + 1);
                 onExpire?.();
@@ -130,7 +135,7 @@ export const FlashSale = memo(function FlashSale({ items, loading, error, onRetr
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
         {live.map((item) => (
           <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} />
+            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} greenHour={look.quickAdd} />
           </RailCell>
         ))}
       </RailShell>
@@ -181,10 +186,19 @@ function NextSlotLine({ slot, onOpen }: { slot: NextFlashSlot; onOpen?: () => vo
   );
 }
 
-/** Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" có chữ ở cuối (luôn có, kể cả chưa bán suất nào: "Vừa mở bán"). */
-export function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleActiveItem; reserveVariation: boolean }) {
-  const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'flash', now: serverNow() });
+/**
+ * Thẻ Giờ vàng đang chạy: thẻ `flash` chung, thanh "đã bán" có chữ ở cuối (luôn có, kể cả chưa bán suất nào: "Vừa mở bán"). `greenHour`: thanh xanh và nút ＋ thêm
+ * nhanh trên ảnh khi nơi dựng cấp đường thêm nhanh (`ProductCardQuickAddContext`); thẻ mang đúng phân loại của suất nên nhiều phân loại thì bảng chọn mở sẵn phân loại đó.
+ */
+export function ActiveFlashCard({ item, reserveVariation, greenHour = false }: { item: FlashSaleActiveItem; reserveVariation: boolean; greenHour?: boolean }) {
+  const quickAdd = useContext(ProductCardQuickAddContext);
+  const product = flashCardProduct(item);
+  const view = productCardView({ product, flash: item, variant: 'flash', now: serverNow() });
   const soldPct = soldPercent(item.soldCount, item.quota);
+  const overlay =
+    greenHour && quickAdd && greenHourCanQuickAdd(item, view.stock) ? (
+      <QuickAddButton name={item.productName} busy={quickAdd.busyId === product.id} onPress={(origin) => quickAdd.add(product, origin)} />
+    ) : undefined;
   return (
     <ProductTile
       view={view}
@@ -194,10 +208,11 @@ export function ActiveFlashCard({ item, reserveVariation }: { item: FlashSaleAct
       // mở ra là giá thường, không nhãn, không đếm ngược. Khách tưởng bị treo giá (P1-3 audit mạch lạc).
       navState={{ variationId: item.variationId }}
       note={reserveVariation ? (variationLabel(item.variationName) ?? '') : undefined}
+      imageOverlay={overlay}
       footerHeight={SOLD_FOOTER_HEIGHT}
       footer={
         <div style={{ height: SOLD_FOOTER_HEIGHT, paddingTop: 4, boxSizing: 'border-box' }}>
-          <FlashSoldBar soldPct={soldPct} soldOut={item.quota > 0 && item.soldCount >= item.quota} />
+          <FlashSoldBar soldPct={soldPct} soldOut={item.quota > 0 && item.soldCount >= item.quota} tone={greenHour ? 'green' : 'flash'} />
         </div>
       }
     />

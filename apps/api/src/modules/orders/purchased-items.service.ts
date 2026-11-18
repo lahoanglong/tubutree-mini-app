@@ -97,6 +97,7 @@ export class PurchasedItemsService {
       JOIN products p ON p.id = v."productId"
       WHERE o."userId" = ${userId}
         AND o.status::text = 'DELIVERED'
+        AND oi."isGift" = false
         AND v."isActive" = true
         AND p."isActive" = true
         AND p."approvalStatus"::text = 'APPROVED'

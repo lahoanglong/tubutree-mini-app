@@ -27,6 +27,7 @@ import {
   updateCartItem,
   removeCartItem,
   addToCart,
+  setCartGift,
   type CartSummary,
   type CartLine,
   type UnavailableCartLine,
@@ -69,11 +70,12 @@ import { PriceTag } from '../components/ui/price-tag';
 import { Heading, Text as DsText } from '../components/ui/text';
 import { fulfillerLabel, groupByFulfiller, showFulfillerHeaders, tubuSubtotal } from '../utils/shipments';
 import { cartKey, useCartKey } from '../services/cart-key';
+import { useNotify } from '../hooks/use-notify';
 import { ProductThumb } from '../components/ui/product-thumb';
 import { Countdown } from '../components/ui/countdown';
 import { ConfirmSheet } from '../components/ui/confirm-sheet';
 import { CartComboBlock } from '../components/cart-combo-block';
-import { GiftNote } from '../components/checkout/gift-rows';
+import { GiftNote, GiftTrialRow } from '../components/checkout/gift-rows';
 import { FreeShippingProgressBar } from '../components/ui/free-shipping-progress-bar';
 import type { FreeshipAddonItem } from '../components/ui/freeship-addon-rail';
 import { FreeshipBoosterRail } from '../components/cart/freeship-booster/freeship-booster-rail';
@@ -194,6 +196,7 @@ export default function CartPage() {
   const goSmart = useSmartNavigate();
   const queryClient = useQueryClient();
   const { openSnackbar } = useSnackbar();
+  const { notify } = useNotify();
   const phase = useAuthPhase();
 
   const cartKeyNow = useCartKey();
@@ -285,6 +288,20 @@ export default function CartPage() {
     ),
     ({ id }) => id,
   );
+
+  // Quà tặng dùng thử 0đ: lưu lựa chọn vào giỏ. Cả giỏ thì giỏ trả về thay cache; chọn một phần thì đọc lại giỏ và phần đang chọn.
+  const giftChoice = useMutation({
+    mutationFn: ({ variationId, itemIds }: { variationId: string | null; itemIds?: string[] }) => setCartGift(variationId, itemIds),
+    onSuccess: (c, { itemIds }) => {
+      if (itemIds) void queryClient.invalidateQueries({ queryKey: cartKey() });
+      else queryClient.setQueryData(cartKey(), c);
+      void queryClient.invalidateQueries({ queryKey: ['quote'] });
+    },
+    onError: (e: unknown) => {
+      notify({ text: getErrorMessage(e) || fillCopy('giftTrial.saveFailed'), type: 'error' });
+      void queryClient.invalidateQueries({ queryKey: cartKey() });
+    },
+  });
 
   // Gợi ý bù đơn (nguồn món và chọn món ở `FreeshipBoosterRail`); lệnh thêm nằm ở đây vì nó sửa giỏ kiểu optimistic như mọi lệnh giỏ khác.
   const addon = useOptimisticCart(
@@ -392,6 +409,8 @@ export default function CartPage() {
   // Món đang chọn (không nằm trong deselected). Toàn-chọn → checkout gửi itemIds=undefined (toàn giỏ).
   const selectedItems = summary.items.filter((l) => !deselected.has(l.id));
   const allSelected = selectedItems.length === summary.items.length;
+  // Quà dùng thử theo đúng phần đang chọn: chọn một phần mà giá phần đó chưa về thì ẩn, không hiện mốc của cả giỏ.
+  const giftTrialShown = allSelected ? summary.giftTrial : priced?.giftTrial;
   // Dòng hết hàng (tồn 0) không mua được: không cộng vào tạm tính hay tiến độ miễn phí giao, để khách không thấy số mà đặt không nổi.
   const buyableSelected = selectedItems.filter((l) => l.stock > 0);
   const outOfStockSelected = selectedItems.filter((l) => l.stock <= 0);
@@ -544,6 +563,19 @@ export default function CartPage() {
           {(summary.pendingGiftRedemptions?.length ?? 0) > 0 && (
             <Box px={3}>
               <GiftNote />
+            </Box>
+          )}
+          {giftTrialShown && (
+            <Box px={3}>
+              <GiftTrialRow
+                summary={giftTrialShown}
+                showLocked
+                busy={giftChoice.isPending}
+                onChoose={(variationId) => {
+                  if (giftChoice.isPending) return;
+                  giftChoice.mutate({ variationId, itemIds: allSelected ? undefined : selectedItems.map((l) => l.id) });
+                }}
+              />
             </Box>
           )}
         </>

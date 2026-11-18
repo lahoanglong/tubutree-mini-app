@@ -14,6 +14,7 @@ import type {
   GreenCornerResponse,
   OrderDTO,
   OrderItemDTO,
+  GiftTrialSummaryDTO,
   PendingGiftRedemptionDTO,
   PickupOptionsResponse,
   ProductStoryConfig,
@@ -198,6 +199,8 @@ export interface CartSummary {
   itemCount: number;
   /** Quà hiện vật 0đ khách đã đổi và chưa gắn đơn nào (sẽ đi cùng đơn kế tiếp có hàng Tubu giao). API cũ chưa trả → coi như rỗng. */
   pendingGiftRedemptions?: PendingGiftRedemptionDTO[];
+  /** Quà tặng dùng thử 0đ theo mốc (cờ commerce.gift_trial_enabled). Cờ tắt, hết quà hoặc API cũ: không có, ẩn hẳn khối. */
+  giftTrial?: GiftTrialSummaryDTO;
 }
 
 export interface CheckoutQuote {
@@ -239,6 +242,8 @@ export interface CheckoutQuote {
   giftMinNetGoodsVnd?: number;
   /** W179-C: số tiền hàng Tubu còn thiếu để nhận quà 0đ (0 khi đủ ngưỡng). */
   giftShortfallVnd?: number;
+  /** Quà tặng dùng thử 0đ theo mốc của phần hàng đang đặt. Cờ tắt, hết quà hoặc API cũ: không có. */
+  giftTrial?: GiftTrialSummaryDTO;
 }
 
 export interface AddressDTO {
@@ -322,6 +327,8 @@ export interface PublicConfig {
   reviewGreenCorner?: { enabled: boolean; rewardPoints: number; dailyCap: number; maxPhotos: number };
   /** Cờ `commerce.freeship_booster_enabled`: dải bù đơn ở đầu giỏ lấy món từ `GET /upsell/freeship`. Thiếu khi API cũ → dải cũ từ kệ Bán chạy nhất. */
   freeshipBoosterEnabled?: boolean;
+  /** Cờ `flashsale.green_hour_enabled`: cùng nghĩa với `PublicConfig.flashGreenHourEnabled` ở app-core. Thiếu khi API cũ → như tắt. */
+  flashGreenHourEnabled?: boolean;
   /** Cờ `checkout.return_packaging_nudge_enabled`: thẻ gửi lại bao bì ở chi tiết đơn đã giao và thanh toán. Thiếu khi API cũ → tắt. */
   returnPackagingNudgeEnabled?: boolean;
 }
@@ -575,6 +582,11 @@ export const removeCartItem = (id: string) =>
 export const applyCoupon = (code: string) =>
   api.post<CartSummary>('/cart/coupon', { code }, cartParams()).then((r) => r.data);
 export const removeCoupon = () => api.delete<CartSummary>('/cart/coupon', cartParams()).then((r) => r.data);
+/** Chọn quà tặng dùng thử 0đ (`null` = "Không nhận quà"); `itemIds` = giỏ đang chọn một phần, để quà trả về khớp phần khách đang đặt. */
+export const setCartGift = (variationId: string | null, itemIds?: string[]) =>
+  api
+    .put<CartSummary>('/cart/gift', { variationId }, itemIds && itemIds.length > 0 ? { params: { ...cartParams().params, itemIds: itemIds.join(',') } } : cartParams())
+    .then((r) => r.data);
 
 // Addresses
 export const getAddresses = () => api.get<AddressDTO[]>('/me/addresses').then((r) => r.data);
@@ -617,6 +629,8 @@ export const placeOrder = (
     itemIds?: string[];
     /** Ô "Nhận hành trình đơn hàng qua Zalo"; thiếu khi ô không hiện thì máy chủ dùng lựa chọn đã nhớ. */
     orderZaloConsent?: boolean;
+    /** Quà tặng dùng thử khách thấy ở thanh toán; `null` = không kèm quà; bỏ trống khi báo giá không có khối quà. */
+    giftVariationId?: string | null;
   } & CheckoutPickupFields,
   idempotencyKey: string,
 ) =>

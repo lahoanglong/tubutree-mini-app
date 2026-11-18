@@ -3,12 +3,12 @@
 // Nguồn: apps/miniapp/src/components/ui/section-header.tsx
 import type { ElementType, ReactNode } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Flame, Gift, Sparkles, Tag, Ticket, Zap, type LucideIcon } from 'lucide-react';
+import { ChevronRight, Flame, Gift, Leaf, Sparkles, Tag, Ticket, Zap, type LucideIcon } from 'lucide-react';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 
-/** Bảng icon nhỏ cho tiêu đề khối: chỉ 6 icon để `SectionHeader` vào gói đầu (Trang chủ) không kéo cả thư viện; icon khác truyền thẳng `LucideIcon`. */
-export type IconName = 'zap' | 'flame' | 'tag' | 'sparkles' | 'ticket' | 'gift';
-const ICONS: Record<IconName, LucideIcon> = { zap: Zap, flame: Flame, tag: Tag, sparkles: Sparkles, ticket: Ticket, gift: Gift };
+/** Bảng icon nhỏ cho tiêu đề khối: chỉ 7 icon để `SectionHeader` vào gói đầu (Trang chủ) không kéo cả thư viện; icon khác truyền thẳng `LucideIcon`. */
+export type IconName = 'zap' | 'flame' | 'tag' | 'sparkles' | 'ticket' | 'gift' | 'leaf';
+const ICONS: Record<IconName, LucideIcon> = { zap: Zap, flame: Flame, tag: Tag, sparkles: Sparkles, ticket: Ticket, gift: Gift, leaf: Leaf };
 
 export interface SectionHeaderProps {
   title: string;

@@ -11,9 +11,10 @@ import { FlashSaleModule } from '../flash-sale/flash-sale.module';
 import { WasteCatalogModule } from '../waste-exchange/catalog/waste-catalog.module';
 import { WasteCoreModule } from '../waste-exchange/core/waste-core.module';
 import { WasteCustomerModule } from '../waste-exchange/customer/waste-customer.module';
+import { GiftTiersModule } from '../gift-tiers/gift-tiers.module';
 
 @Module({
-  imports: [CartModule, PancakeModule, GomdonModule, WalletModule, StorefrontModule, FlashSaleModule, WasteCoreModule, WasteCustomerModule, WasteCatalogModule],
+  imports: [CartModule, PancakeModule, GomdonModule, WalletModule, StorefrontModule, FlashSaleModule, WasteCoreModule, WasteCustomerModule, WasteCatalogModule, GiftTiersModule],
   controllers: [CheckoutController],
   providers: [CheckoutService, ShippingEstimateService],
 })

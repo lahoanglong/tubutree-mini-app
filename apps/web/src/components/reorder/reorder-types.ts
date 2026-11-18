@@ -109,7 +109,8 @@ export function lineFromPurchasedItem(p: PurchasedItem): ReorderLine {
 }
 
 export function orderReorderTarget(order: { code: string; items: OrderItemView[] }): ReorderTarget {
-  return { kind: 'order', orderCode: order.code, lines: order.items.map(lineFromOrderItem) };
+  // Quà tặng dùng thử 0đ không mua lại: máy chủ cũng bỏ qua dòng quà.
+  return { kind: 'order', orderCode: order.code, lines: order.items.filter((it) => !it.isGift).map(lineFromOrderItem) };
 }
 
 export function itemReorderTarget(p: PurchasedItem): ReorderTarget {

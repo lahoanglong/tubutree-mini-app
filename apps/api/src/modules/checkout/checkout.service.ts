@@ -79,7 +79,9 @@ import {
   type PickupRequestInput,
 } from './checkout-pickup';
 import { lockVariationsInIdOrder, reserveVariationStock } from '../catalog/variation-stock';
-import { assertVariationsSellable, productDiscontinuedError } from '../cart/sellable';
+import { assertVariationsSellable, productDiscontinuedError, SELLABLE_PANCAKE_VARIATION_WHERE } from '../cart/sellable';
+import { GiftTrialService } from '../gift-tiers/gift-trial.service';
+import { giftTrialUnavailableError, resolveGiftTrial } from '../gift-tiers/gift-trial';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { classifyOrderError } from '../analytics/order-error-classifier';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
@@ -295,6 +297,7 @@ export class CheckoutService {
     // gian hàng tự giao dùng mặc định.
     @Optional() private readonly config?: SystemConfigService,
     @Optional() private readonly mssOrderEvents?: MssOrderEventRecorder,
+    @Optional() private readonly giftTrial?: GiftTrialService,
     // Optional: thiếu (spec dựng tay) thì ngăn chọn món không kèm gợi ý bao bì, như khi cờ tắt.
     @Optional() private readonly returnPackaging?: WasteReturnPackagingService,
   ) {}
@@ -341,6 +344,8 @@ export class CheckoutService {
       excludedIds: pickupInput.excludeGiftIds,
     });
     const pendingGiftRedemptions = giftDecision.lines;
+    // Quà tặng dùng thử 0đ theo mốc (cờ commerce.gift_trial_enabled): cùng hàm với giỏ, xét trên đúng phần hàng đang đặt.
+    const giftTrial = (await this.giftTrial?.summaryFor(userId, cart.items)) ?? null;
     const blockedPaymentMethods: Record<string, string> = {};
     for (const method of QUOTED_PAYMENT_METHODS) {
       const reason = paymentMethodBlockReason(computed.shipments, method);
@@ -386,6 +391,8 @@ export class CheckoutService {
       pendingGiftRedemptions,
       giftMinNetGoodsVnd: giftDecision.minNetGoodsVnd,
       giftShortfallVnd: giftDecision.shortfallVnd,
+      // Cờ tắt hoặc không còn quà nào còn hàng: không có trường này (màn thanh toán như cũ).
+      ...(giftTrial ? { giftTrial } : {}),
       total: computed.total,
       pointsEarned: computed.pointsEarned,
       pointsBalance: user.pointsBalance,
@@ -490,6 +497,10 @@ export class CheckoutService {
         }),
       );
     }
+    // Quà tặng dùng thử 0đ: quyết NGOÀI tx trên đúng phần hàng đang đặt (quà khách gửi lên không còn mở thì 409 ngay), giữ kho trong tx.
+    const giftSettings = this.giftTrial ? await this.giftTrial.settings() : null;
+    const giftSummary = giftSettings?.enabled ? await this.giftTrial!.summaryFor(userId, cart.items, { settings: giftSettings }) : null;
+    const giftPick = resolveGiftTrial(giftSummary, dto.giftVariationId);
     const paymentMethod = computed.total === 0 ? 'COD' : dto.paymentMethod;
     const blocked = paymentMethodBlockReason(computed.shipments, paymentMethod);
     if (blocked) {
@@ -562,7 +573,8 @@ export class CheckoutService {
         // Đặt TRƯỚC order.create để fail-fast, không tốn resource ghi Order/Item rồi rollback.
         // SP có thể bị gỡ/từ chối giữa lúc tính giá (compute) và lúc ghi đơn — kiểm lại ở đây.
         await assertVariationsSellable(tx, cart.items);
-        await lockVariationsInIdOrder(tx, cart.items.map((l) => l.variationId));
+        // Biến thể quà khoá cùng lượt, theo thứ tự id như mọi dòng: giữ kho quà sau vòng dòng hàng không mở chỗ chờ ngược chiều.
+        await lockVariationsInIdOrder(tx, [...cart.items.map((l) => l.variationId), ...(giftPick ? [giftPick.variationId] : [])]);
         // Giữ kho từng dòng tới dòng thiếu hàng đầu tiên, rồi trừ suất giờ vàng của các dòng trước nó một lượt (khoá theo pha,
         // xem consumeQuotas): lỗi báo khách vẫn là lỗi của dòng hỏng sớm nhất như khi làm từng dòng.
         let short = cart.items.length;
@@ -587,6 +599,9 @@ export class CheckoutService {
         if (short < cart.items.length) {
           throw new BadRequestException(`Sản phẩm "${cart.items[short]!.productName}" không đủ tồn kho.`);
         }
+        // Quà 0đ giữ kho SAU dòng hàng: lỗi của dòng hàng vẫn báo trước. Quà khách đã thấy mà hết thì 409 để chọn lại; app cũ (không vẽ quà) thì bỏ quà.
+        const giftLine = giftPick && tubuShipment ? await this.reserveGiftTrial(tx, giftPick.variationId) : null;
+        if (giftPick?.strict && !giftLine) throw giftTrialUnavailableError();
 
         await this.assertPartnerStoresUnderLock(tx, computed.shipments);
 
@@ -641,24 +656,27 @@ export class CheckoutService {
                 items: {
                   // Combo: trừ phần giảm phân bổ vào total từng dòng → hoa hồng (đọc OrderItem.total)
                   // tính trên giá thực trả sau giảm combo (§7.2).
-                  create: shipment.lineIds.map((lineId, idx) => {
-                    const l = linesById.get(lineId)!;
-                    return {
-                      variationId: l.variationId,
-                      productName: l.productName,
-                      // Snapshot slug để từ chi tiết đơn mở được trang SP (đánh giá / mua lại).
-                      productSlug: l.slug,
-                      variationName: l.variationName,
-                      unitPrice: l.unitPrice,
-                      quantity: l.quantity,
-                      total: l.total - (computed.comboPerLine[l.variationId] ?? 0),
-                      // Tiền khách thực trả cho dòng (mỗi khoản giảm chỉ vào dòng được hưởng) — nền hoàn tiền, hoa hồng,
-                      // đối soát đối tác.
-                      paidTotal: shipment.linePaid[idx] ?? null,
-                      pointsDiscount: shipment.linePoints[idx] ?? null,
-                      flashSaleItemId: l.flashSaleItemId ?? null,
-                    };
-                  }),
+                  create: [
+                    ...shipment.lineIds.map((lineId, idx) => {
+                      const l = linesById.get(lineId)!;
+                      return {
+                        variationId: l.variationId,
+                        productName: l.productName,
+                        // Snapshot slug để từ chi tiết đơn mở được trang SP (đánh giá / mua lại).
+                        productSlug: l.slug,
+                        variationName: l.variationName,
+                        unitPrice: l.unitPrice,
+                        quantity: l.quantity,
+                        total: l.total - (computed.comboPerLine[l.variationId] ?? 0),
+                        // Tiền khách thực trả cho dòng (mỗi khoản giảm chỉ vào dòng được hưởng) — nền hoàn tiền, hoa hồng,
+                        // đối soát đối tác.
+                        paidTotal: shipment.linePaid[idx] ?? null,
+                        pointsDiscount: shipment.linePoints[idx] ?? null,
+                        flashSaleItemId: l.flashSaleItemId ?? null,
+                      };
+                    }),
+                    ...(giftLine && shipment === tubuShipment ? [giftLine] : []),
+                  ],
                 },
               },
             }),
@@ -823,6 +841,8 @@ export class CheckoutService {
         } else {
           await this.cart.clearOrdered(userId, [...cart.items, ...cart.unavailableItems].map((l) => l.id), tx);
         }
+        // Lựa chọn quà là của lần đặt này: đơn sau lại tự lấy quà đầu tiên đã mở (kể cả khách vừa chọn "Không nhận quà").
+        if (giftSettings?.enabled) await tx.cart.updateMany({ where: { userId, giftChoice: { not: null } }, data: { giftChoice: null } });
         await this.mssOrderEvents?.onOrdersPlaced(tx, created, dto.orderZaloConsent);
         return created;
       });
@@ -1033,6 +1053,31 @@ export class CheckoutService {
   /** Lỗi vi phạm ràng buộc unique của Prisma (P2002). */
   private isUniqueViolation(err: unknown): boolean {
     return typeof err === 'object' && err !== null && (err as { code?: string }).code === 'P2002';
+  }
+
+  /**
+   * Giữ 1 đơn vị kho cho quà tặng dùng thử trong tx đặt đơn (biến thể đã khoá cùng lượt với dòng hàng). Quà ngừng bán, không còn kho Tubu giao,
+   * hoặc hết hàng thì `null`. Dòng trả về là dòng đơn 0đ: không có khoản giảm, điểm hay suất Giờ vàng nào gắn vào nó.
+   */
+  private async reserveGiftTrial(tx: Prisma.TransactionClient, variationId: string) {
+    const v = await tx.variation.findFirst({
+      where: { id: variationId, ...SELLABLE_PANCAKE_VARIATION_WHERE },
+      select: { id: true, name: true, product: { select: { name: true, slug: true } } },
+    });
+    if (!v || !(await reserveVariationStock(tx, v.id, 1))) return null;
+    return {
+      variationId: v.id,
+      productName: v.product.name,
+      productSlug: v.product.slug,
+      variationName: v.name,
+      unitPrice: 0,
+      quantity: 1,
+      total: 0,
+      paidTotal: 0,
+      pointsDiscount: 0,
+      flashSaleItemId: null,
+      isGift: true,
+    };
   }
 
   /**

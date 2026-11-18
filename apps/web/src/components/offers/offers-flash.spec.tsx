@@ -6,6 +6,7 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 const mocks = vi.hoisted(() => ({ get: vi.fn() }));
 vi.mock('@/lib/core-http', () => ({ coreHttp: { get: mocks.get, post: vi.fn(), delete: vi.fn() } }));
 vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => 'guest', useAuthRestoring: () => false }));
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/uu-dai' }));
 
 import { FLASH_HINT_KEY, FLASH_SKELETON_HEIGHT } from '@tubutree/app-core/home-layout';
 import { resetFlashSales } from '@/lib/use-flash-sales';
@@ -19,6 +20,7 @@ const item = (n: number, over: Record<string, unknown> = {}) => ({
 const many = (n: number) => Array.from({ length: n }, (_, i) => item(i));
 
 let active: () => Promise<unknown>;
+let config: Record<string, unknown> = {};
 let mounted: Rendered | null = null;
 const mount = async () => {
   mounted = render(<OffersFlash />);
@@ -30,7 +32,9 @@ beforeEach(() => {
   resetFlashSales();
   localStorage.clear();
   active = async () => [];
-  mocks.get.mockReset().mockImplementation(() => active());
+  config = {};
+  // Cấu hình công khai (cờ Giờ Xanh) đi cùng `coreHttp`: trả riêng để lời hứa của suất Giờ vàng không bị lượt hỏi cấu hình lấy mất.
+  mocks.get.mockReset().mockImplementation((path: string) => (path.startsWith('/config/public') ? Promise.resolve(config) : active()));
 });
 afterEach(() => {
   mounted?.unmount();
@@ -61,6 +65,26 @@ describe('OffersFlash (web) — Giờ vàng hôm nay ở trang Ưu đãi', () =>
     expect(region.querySelectorAll('[data-testid="flash-sold-bar"]')).toHaveLength(4);
     expect(region.querySelectorAll('[role="timer"]')).toHaveLength(1);
     expect(region.querySelector('a[aria-label="Xem tất cả Giờ vàng hôm nay"]')!.getAttribute('href')).toBe('/gio-vang');
+  });
+
+  it('cờ Giờ Xanh bật: tiêu đề "Giờ Xanh Ưu Đãi", thanh đã bán xanh chữ xanh đậm, mỗi thẻ có nút ＋ thêm nhanh', async () => {
+    config = { flashGreenHourEnabled: true };
+    active = async () => many(3);
+    const c = await mount();
+    const region = c.querySelector('section[aria-labelledby]')!;
+    expect(region.querySelector('h2')!.textContent).toBe('Giờ Xanh Ưu Đãi');
+    expect(region.querySelectorAll('button[aria-label="Thêm Sản phẩm 0 vào giỏ"]')).toHaveLength(1);
+    expect(region.querySelectorAll('button[aria-label^="Thêm "]')).toHaveLength(3);
+    const label = region.querySelector<HTMLElement>('[data-testid="flash-sold-bar"] span')!;
+    expect(label.style.color).toBe('var(--color-action-secondary-fg)');
+    expect(region.querySelector('[role="timer"] span')!.getAttribute('style')).toContain('color: var(--color-text-brand)');
+  });
+
+  it('cờ Giờ Xanh bật mà suất đã bán hết: thẻ không có nút ＋', async () => {
+    config = { flashGreenHourEnabled: true };
+    active = async () => [item(1), item(2, { soldCount: 10 })];
+    const c = await mount();
+    expect(c.querySelectorAll('button[aria-label^="Thêm "]')).toHaveLength(1);
   });
 
   it('một sản phẩm hai phân loại cùng Giờ vàng chỉ một thẻ; suất đã hết giờ không hiện', async () => {

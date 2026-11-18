@@ -1,12 +1,13 @@
 'use client';
 
-import { useState } from 'react';
-import type { QuotePendingGiftDTO } from '@tubutree/shared-types';
+import { useId, useRef, useState } from 'react';
+import type { GiftTrialSummaryDTO, QuotePendingGiftDTO } from '@tubutree/shared-types';
 import { giftSectionView } from '@tubutree/app-core/checkout-pickup-view';
+import { giftTrialRowView, giftTrialSheetView, type GiftTrialSheetOption } from '@tubutree/app-core/commerce/gift-trial';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { Text } from '@/components/mini';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
-import { CheckMark, miniCheckbox, miniCheckboxGutter, miniCheckboxWrap } from '@/components/order-mobile/mobile-ui';
+import { CheckMark, miniCheckbox, miniCheckboxGutter, miniCheckboxWrap, miniRadio, miniRadioGutter } from '@/components/order-mobile/mobile-ui';
 
 interface GiftRowsProps {
   gifts: readonly QuotePendingGiftDTO[];
@@ -71,5 +72,116 @@ export function GiftNote() {
     <p data-testid="cart-gift-note" className="mt-2 flex min-h-11 items-center tabular-nums">
       <Text variant="caption" tone="secondary">{fillCopy('cart.giftNote')}</Text>
     </p>
+  );
+}
+
+export interface GiftTrialRowProps {
+  summary: GiftTrialSummaryDTO | null | undefined;
+  /** Giỏ: true (chưa đủ mốc thì nhắc số còn thiếu). Thanh toán: false (chưa đủ mốc thì ẩn). */
+  showLocked: boolean;
+  /** Khách chọn quà trong tấm; `null` = "Không nhận quà". Nơi gọi lưu lựa chọn rồi đọc lại giỏ/báo giá. */
+  onChoose: (variationId: string | null) => void;
+  busy?: boolean;
+}
+
+/**
+ * Quà tặng dùng thử 0đ theo mốc giỏ: một dòng chữ (tên quà, mốc kế) và nút mở tấm "Chọn quà tặng 0đ". Quà là dòng 0đ đi cùng kiện
+ * Tubu Tree, không đổi số tiền nào của đơn. Cùng luật và cùng chữ với Mini App.
+ */
+export function GiftTrialRow({ summary, showLocked, onChoose, busy = false }: GiftTrialRowProps) {
+  const [open, setOpen] = useState(false);
+  const name = useId();
+  // Mũi tên trong nhóm radio gốc vừa dời focus vừa chọn; chọn ở đây là lưu và đóng tấm, nên mũi tên chỉ dời focus (React giữ chấm cũ),
+  // Space hay bấm mới chọn.
+  const arrowKey = useRef(false);
+  const view = giftTrialRowView(summary, { showLocked });
+  if (!view || !summary) return null;
+  const sheet = giftTrialSheetView(summary);
+  return (
+    <>
+      <div data-testid="gift-trial-row" data-state={view.state} className="mt-2 flex min-h-11 items-center justify-between gap-3 tabular-nums">
+        <div className="flex min-w-0 flex-1 flex-col gap-0.5 break-words">
+          <Text variant="body-sm" as="span" numeric className="line-clamp-2">
+            {view.label}
+          </Text>
+          {view.sub && (
+            <Text variant="caption" tone="secondary" as="span" numeric>
+              {view.sub}
+            </Text>
+          )}
+        </div>
+        {view.action && (
+          <button
+            type="button"
+            data-testid="gift-trial-change"
+            aria-haspopup="dialog"
+            disabled={busy}
+            aria-busy={busy || undefined}
+            onClick={() => setOpen(true)}
+            className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-end text-[length:var(--type-body-sm-size)] font-semibold text-[color:var(--color-text-brand)] active:opacity-70 disabled:text-[color:var(--color-text-tertiary)]"
+          >
+            {view.action}
+          </button>
+        )}
+      </div>
+      <BottomSheet open={open} onClose={() => setOpen(false)} title={sheet.title}>
+        <div
+          role="radiogroup"
+          aria-label={sheet.title}
+          onKeyDown={(e) => {
+            arrowKey.current = e.key.startsWith('Arrow');
+          }}
+          onKeyUp={() => {
+            arrowKey.current = false;
+          }}
+        >
+          {sheet.options.map((o) => (
+            <GiftTrialOptionRow
+              key={o.variationId ?? 'none'}
+              name={name}
+              option={o}
+              onSelect={() => {
+                if (arrowKey.current) return;
+                setOpen(false);
+                onChoose(o.variationId);
+              }}
+            />
+          ))}
+        </div>
+        {sheet.footer && (
+          <Text variant="caption" tone="secondary" as="p" numeric className="mt-3">
+            {sheet.footer}
+          </Text>
+        )}
+      </BottomSheet>
+    </>
+  );
+}
+
+function GiftTrialOptionRow({ name, option, onSelect }: { name: string; option: GiftTrialSheetOption; onSelect: () => void }) {
+  return (
+    <label
+      data-testid="gift-trial-option"
+      className={`flex min-h-14 items-center gap-3 py-1 tabular-nums ${option.disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+    >
+      <input
+        type="radio"
+        name={name}
+        checked={option.checked}
+        disabled={option.disabled}
+        onChange={() => {
+          if (!option.checked && !option.disabled) onSelect();
+        }}
+        className={`${miniRadio} ${miniRadioGutter}`}
+      />
+      <span className={`flex min-w-0 flex-1 flex-col gap-0.5 ${option.disabled ? 'opacity-60' : ''}`}>
+        <Text variant="body-sm" as="span" numeric className={`line-clamp-2 ${option.checked ? 'font-semibold' : ''}`}>
+          {option.title}
+        </Text>
+        <Text variant="caption" tone={option.disabled ? 'tertiary' : 'secondary'} as="span" numeric>
+          {option.hint}
+        </Text>
+      </span>
+    </label>
   );
 }

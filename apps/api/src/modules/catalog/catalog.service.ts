@@ -809,12 +809,13 @@ export class CatalogService {
           FROM order_items oi
           JOIN variations v ON v.id = oi."variationId"
           JOIN orders o ON o.id = oi."orderId"
-          WHERE v."productId" = ${product.id} AND o."createdAt" >= ${since}
+          WHERE v."productId" = ${product.id} AND o."createdAt" >= ${since} AND oi."isGift" = false
         )
         SELECT v2."productId" AS "productId", COUNT(*) AS cnt
         FROM order_items oi2
         JOIN variations v2 ON v2.id = oi2."variationId"
         WHERE oi2."orderId" IN (SELECT "orderId" FROM target_orders)
+          AND oi2."isGift" = false
           AND v2."productId" <> ${product.id}
         GROUP BY v2."productId"
         ORDER BY cnt DESC
@@ -1228,12 +1229,13 @@ export class CatalogService {
     const [grouped, grouped30d] = await Promise.all([
       this.prisma.orderItem.groupBy({
         by: ['variationId'],
-        where: { order: { status: 'DELIVERED' } },
+        // Quà tặng dùng thử 0đ không phải hàng bán ra: không tính vào "đã bán" và "Bán chạy nhất".
+        where: { isGift: false, order: { status: 'DELIVERED' } },
         _sum: { quantity: true },
       }),
       this.prisma.orderItem.groupBy({
         by: ['variationId'],
-        where: { order: { status: 'DELIVERED', deliveredAt: { gte: since } } },
+        where: { isGift: false, order: { status: 'DELIVERED', deliveredAt: { gte: since } } },
         _sum: { quantity: true },
       }),
     ]);

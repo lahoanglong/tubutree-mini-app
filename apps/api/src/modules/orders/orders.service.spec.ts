@@ -1417,6 +1417,15 @@ describe('OrdersService — ảnh + tồn kho từng dòng đơn (join theo vari
       });
     });
 
+    it('dòng quà tặng dùng thử 0đ (isGift) → không viết đánh giá (không nhận Điểm Xanh cho quà); dòng mua cùng sản phẩm vẫn viết được', async () => {
+      const { svc } = reviewService({ ...delivered, items: [line('i1', 'v2'), { ...line('g1', 'v1'), unitPrice: 0, total: 0, isGift: true }] });
+      const view = await svc.detailView('u1', 'TUBU1');
+      expect(view.items.map((it) => [it.id, it.reviewable])).toEqual([
+        ['i1', true],
+        ['g1', false],
+      ]);
+    });
+
     it('biến thể đã bị xoá (không biết sản phẩm) → không viết được, không có đánh giá', async () => {
       const { svc } = reviewService({ ...delivered, items: [line('i1', 'gone')] });
       expect((await svc.detailView('u1', 'TUBU1')).items[0]).toMatchObject({ reviewId: null, reviewable: false });
@@ -1580,6 +1589,17 @@ describe('OrdersService.repurchase v2 — mỗi dòng xử lý độc lập (A2-
     expect(addItems).toHaveBeenCalledTimes(1);
     expect(addItems).toHaveBeenCalledWith('u1', [{ variationId: 'v2', quantity: 4, addSource: 'repurchase' }], { topUp: expect.any(Function) });
     expect(res.results).toEqual([{ orderItemId: 'i2', status: 'added', addedQuantity: 4 }]);
+  });
+
+  it('dòng quà tặng dùng thử 0đ không mua lại: không body bỏ dòng quà; app gửi id dòng quà thì bỏ qua, không 400', async () => {
+    const gift = { ...line('g1', 'vg', 1), unitPrice: 0, total: 0, isGift: true };
+    const { svc, addItems } = makeRepurchaseService({ items: [line('i1', 'v1', 2), gift], variations: [variation('v1', 10), variation('vg', 10)] });
+    const res = await svc.repurchase('u1', 'TUBU1');
+    expect(addItems.mock.calls[0][1]).toEqual([{ variationId: 'v1', quantity: 2, addSource: 'repurchase' }]);
+    expect(res.results).toEqual([{ orderItemId: 'i1', status: 'added', addedQuantity: 2 }]);
+    const picked = await svc.repurchase('u1', 'TUBU1', { items: [{ orderItemId: 'i1', quantity: 1 }, { orderItemId: 'g1', quantity: 1 }] });
+    expect(addItems.mock.calls[1][1]).toEqual([{ variationId: 'v1', quantity: 1, addSource: 'repurchase' }]);
+    expect(picked.results).toEqual([{ orderItemId: 'i1', status: 'added', addedQuantity: 1 }]);
   });
 
   it('orderItemId không thuộc đơn → 400 TRƯỚC mọi lần ghi', async () => {

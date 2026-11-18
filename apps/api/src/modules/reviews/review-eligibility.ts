@@ -46,7 +46,7 @@ type ReviewDb = Pick<PrismaClient, 'variation' | 'review'>;
  */
 export async function orderLineReviews(
   db: ReviewDb,
-  order: { id: string; userId: string; status: string; type: string; placedForCustomer: boolean; items: { id: string; variationId: string }[] },
+  order: { id: string; userId: string; status: string; type: string; placedForCustomer: boolean; items: { id: string; variationId: string; isGift?: boolean }[] },
 ): Promise<(itemId: string) => OrderLineReview> {
   const eligible =
     order.status === REVIEWABLE_ORDER.status && order.type === REVIEWABLE_ORDER.type && order.placedForCustomer === REVIEWABLE_ORDER.placedForCustomer;
@@ -67,7 +67,7 @@ export async function orderLineReviews(
   const byItem = new Map(
     order.items.map((it) => {
       const productId = productOf.get(it.variationId);
-      if (!productId) return [it.id, NO_REVIEW] as const;
+      if (!productId || it.isGift) return [it.id, NO_REVIEW] as const;
       const reviewId = reviewOf.get(productId) ?? null;
       return [it.id, { reviewId, reviewable: reviewId === null }] as const;
     }),

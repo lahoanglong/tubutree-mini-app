@@ -185,6 +185,7 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
           retrying={shelves.flashQuery.isFetching}
           onExpire={shelves.onFlashEnd}
           guardEndAts={shelves.flashQuery.data?.map((it) => it.endAt)}
+          initialConfig={initial.publicConfig}
         />
       ) : promo === 'banner' ? (
         <div className="lg:w-2/3">

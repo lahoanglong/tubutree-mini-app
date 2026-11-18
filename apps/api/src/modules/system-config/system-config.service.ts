@@ -16,6 +16,7 @@ import { STOREFRONT_REQUIRE_APPROVAL_KEY, STOREFRONT_SUBDOMAIN_ENABLED_KEY } fro
 import { DEALER_BONUS_TIERS_KEY, dealerBonusTiersProblem } from './dealer-bonus-tiers-rule';
 import { WASTE_JSON_RULES, WASTE_RANGES } from '../waste-exchange/waste-config.keys';
 import { MSS_CONFIG_RANGES, MSS_JSON_RULES } from '../integrations/mss/mss-flag-keys';
+import { GIFT_TRIAL_ENABLED_KEY, GIFT_TRIAL_MIN_ORDER_KEY, GIFT_TRIAL_OPTIONS_KEY, giftTrialOptionsProblem } from '../gift-tiers/gift-trial';
 import { CHAT_ENABLED_KEY, CHAT_GROUP_KEY, CHAT_HOURS_KEY, CHAT_OFF_HOURS_TEXT_KEY, CHAT_RETENTION_KEY, chatGroupIdProblem, chatHoursProblem, offHoursTextProblem } from '../support-chat/support-chat.config';
 import { CATALOG_LAUNCH_DATE_KEY, catalogLaunchDateProblem } from '../catalog/catalog-launch-date';
 import { FLASH_SLOTS_KEY, flashSlotsProblem } from '../flash-sale/flash-slots';
@@ -143,6 +144,8 @@ export class SystemConfigService {
     'voucher.birthday_amount': { min: 1000, max: 1_000_000, note: 'đồng' },
     'voucher.winback_amount': { min: 1000, max: 1_000_000, note: 'đồng' },
     'voucher.welcome_min_order': { min: 0, max: 50_000_000, note: 'đồng (0 = không yêu cầu đơn tối thiểu)' },
+    // Quà tặng dùng thử 0đ: mốc chung (luật A6 mặc định 299.000đ). gift-trial.ts đọc lại cùng biên, sai dạng thì về 299.000đ.
+    [GIFT_TRIAL_MIN_ORDER_KEY]: { min: 0, max: 50_000_000, note: 'đồng tạm tính hàng Tubu Tree giao để mở quà tặng dùng thử 0đ', integer: true },
     // 0 ngày = coi mọi khách từng mua là "đã bỏ đi" và cấp mã cho tất cả.
     'voucher.winback_days': { min: 1, max: 365, note: 'số ngày' },
     // PD-3 / points-1d: khoá tính bằng Điểm Xanh (1 điểm = 1đ). Biên chặn gõ nhầm đơn vị cũ (1 điểm = 1.000đ) hoặc
@@ -330,6 +333,8 @@ export class SystemConfigService {
     'shipping.first_order_free_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Cờ Góc Sống Xanh: bật thì bảng thưởng đánh giá lúc gửi ngừng, nên chuỗi "false" (truthy ở chỗ đọc lỏng) không được lưu.
     'reviews.green_corner_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    [GIFT_TRIAL_ENABLED_KEY]: (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    'flashsale.green_hour_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Công tắc kiểm lệch tổng Pancake (PANCAKE_TOTAL_CHECK_KEY): chỉ `false` mới tắt, nên chuỗi "false" phải bị từ chối chứ không được lưu.
     // Nhóm hàng Pancake → danh mục Tubu (PancakeSyncService.mappedCategoryIds): sai dạng thì đồng bộ lặng lẽ không gán danh mục nào.
     [PANCAKE_CATEGORY_MAP_KEY]: categoryMapProblem,
@@ -472,6 +477,7 @@ export class SystemConfigService {
     },
     // Lưới khung mặc định của nút "Tạo khung giờ" ở tab Giờ vàng: mốc sai thì nút sinh ra đợt lệch giờ.
     [FLASH_SLOTS_KEY]: flashSlotsProblem,
+    [GIFT_TRIAL_OPTIONS_KEY]: giftTrialOptionsProblem,
     ...WASTE_JSON_RULES,
     ...MSS_JSON_RULES,
   };

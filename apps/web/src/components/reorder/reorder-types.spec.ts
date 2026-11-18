@@ -84,6 +84,14 @@ describe('reorder-types', () => {
     expect(selectionTotals(t, sel)).toEqual({ units: 2, subtotal: 20000 });
   });
 
+  it('dòng quà tặng dùng thử 0đ (isGift) không có trong "Mua lại" của đơn', () => {
+    const t = orderReorderTarget({
+      code: 'TUBU1',
+      items: [orderItem({ id: 'a', stock: 10, available: true }), orderItem({ id: 'g', variationId: 'vg', unitPrice: 0, total: 0, isGift: true, stock: 10, available: true })],
+    });
+    expect(t.kind === 'order' && t.lines.map((l) => l.key)).toEqual(['a']);
+  });
+
   it('dòng không khả dụng không bao giờ được gửi dù state bị tick; SL bị kẹp 1..max', () => {
     const t = itemReorderTarget(purchased({ stock: 3 }));
     expect(selectedLines(t, { v1: { checked: true, quantity: 50 } })).toEqual([{ key: 'v1', variationId: 'v1', quantity: 3 }]);

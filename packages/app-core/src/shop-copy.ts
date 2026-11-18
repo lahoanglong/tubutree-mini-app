@@ -727,6 +727,21 @@ export const SHOP_COPY: Record<string, string> = {
   'greenBox.progressNext': 'Hộp Xanh đang giảm {pct}%. Thêm {n} món nữa giảm {next}%',
   'greenBox.progressTop': 'Hộp Xanh đã giảm {pct}%, mức cao nhất',
   'greenBox.marks': 'Mốc {marks} món',
+  // Quà tặng dùng thử 0đ theo mốc giỏ (tubu-w3-06): một dòng ở Giỏ và Thanh toán, đổi quà trong tấm "Chọn quà tặng 0đ".
+  'giftTrial.locked': '🎁 Thêm {amount} để nhận quà dùng thử 0đ',
+  'giftTrial.chosen': '🎁 Quà 0đ: {name}',
+  'giftTrial.declined': '🎁 Không nhận quà dùng thử 0đ',
+  'giftTrial.nextTier': 'Thêm {amount} để mở thêm quà',
+  'giftTrial.change': 'Đổi',
+  'giftTrial.choose': 'Chọn quà',
+  'giftTrial.sheetTitle': 'Chọn quà tặng 0đ',
+  'giftTrial.lockedOption': 'Đơn từ {amount}',
+  'giftTrial.free': '0đ',
+  'giftTrial.none': 'Không nhận quà',
+  'giftTrial.noneHint': 'Đơn vẫn giữ nguyên số tiền',
+  'giftTrial.saveFailed': 'Chưa đổi được quà. Bạn thử lại nhé.',
+  // Khối Giờ vàng dạng Giờ Xanh (cờ flashsale.green_hour_enabled): cùng suất Giờ vàng, tông xanh, có nút thêm nhanh.
+  'greenHour.title': 'Giờ Xanh Ưu Đãi',
   // Thanh tiến độ Miễn phí giao hàng và dải gợi ý mua thêm ở đầu Giỏ (W42A)
   'freeship.progress': 'Mua thêm {price} để được Miễn phí giao hàng 🚚',
   'freeship.progressTubu': 'Mua thêm {price} để được Miễn phí giao hàng cho phần hàng Tubu Tree giao 🚚',

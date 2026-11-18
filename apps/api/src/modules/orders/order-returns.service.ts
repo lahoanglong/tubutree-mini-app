@@ -144,6 +144,14 @@ export interface MerchantReturnView {
   images: string[];
 }
 
+/**
+ * Dòng khách có thể trả: bỏ dòng quà tặng dùng thử 0đ (`isGift`). Quà khách giữ, không hoàn tiền (0đ) và không nhập lại kho; trả hết mọi dòng
+ * đã mua là trả cả đơn (hoàn phí giao, đơn sang RETURNED) dù khách giữ quà.
+ */
+function paidItems(order: OrderWithItems): OrderItem[] {
+  return order.items.filter((i) => !i.isGift);
+}
+
 function allocOrder(order: OrderWithItems): AllocOrder {
   return {
     total: order.total,
@@ -151,7 +159,7 @@ function allocOrder(order: OrderWithItems): AllocOrder {
     pointsUsed: order.pointsUsed,
     pointsUsedConverted: order.pointsUsedConverted,
     pointsEarned: order.pointsEarned,
-    items: order.items.map((i) => ({
+    items: paidItems(order).map((i) => ({
       id: i.id,
       total: i.total,
       quantity: i.quantity,
@@ -237,7 +245,7 @@ export class OrderReturnsService {
 
         const prior = await partialReturnTotals(tx, order.id);
         const lines = this.requestedLines(order, prior.approvedQty, dto.items);
-        const remainingAll = order.items.every((i) => (lines.get(i.id) ?? 0) + (prior.approvedQty.get(i.id) ?? 0) >= i.quantity);
+        const remainingAll = paidItems(order).every((i) => (lines.get(i.id) ?? 0) + (prior.approvedQty.get(i.id) ?? 0) >= i.quantity);
         // Đơn đại lý có công nợ/đặt trước/thưởng doanh số theo cả đơn — chưa đảo theo phần được, chỉ nhận trả cả đơn.
         if (order.type === 'DEALER' && !remainingAll) {
           throw new BadRequestException('Đơn đại lý chỉ trả được cả đơn. Bạn chọn tất cả sản phẩm hoặc liên hệ Tubu nhé.');
@@ -738,12 +746,15 @@ export class OrderReturnsService {
     approvedQty: ReadonlyMap<string, number>,
     items: { orderItemId: string; quantity: number }[] | undefined,
   ): Map<string, number> {
-    const remaining = new Map(order.items.map((i) => [i.id, i.quantity - (approvedQty.get(i.id) ?? 0)]));
+    const remaining = new Map(paidItems(order).map((i) => [i.id, i.quantity - (approvedQty.get(i.id) ?? 0)]));
+    const gifts = new Set(order.items.filter((i) => i.isGift).map((i) => i.id));
     const out = new Map<string, number>();
     if (!items) {
       for (const [id, q] of remaining) if (q > 0) out.set(id, q);
     } else {
       for (const it of items) {
+        // App cũ liệt kê cả dòng quà 0đ: bỏ qua thay vì từ chối cả yêu cầu.
+        if (gifts.has(it.orderItemId)) continue;
         if (!remaining.has(it.orderItemId)) throw new BadRequestException('Có dòng hàng không thuộc đơn này.');
         out.set(it.orderItemId, (out.get(it.orderItemId) ?? 0) + it.quantity);
       }
@@ -835,7 +846,9 @@ export class OrderReturnsService {
     const what = shares.lines
       .map((l) => `${byId.get(l.orderItemId)?.productName ?? l.orderItemId} ×${l.quantity}`)
       .join(', ');
-    const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. ${shares.isFull ? 'Tạo phiếu trả hàng' : 'Tạo phiếu "Hoàn một phần" (không dùng "Đã hoàn" cả đơn)'} trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho (kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake).`;
+    const gifts = order.items.filter((i) => i.isGift).map((i) => i.productName);
+    const keptGift = gifts.length ? ` Khách giữ quà tặng dùng thử 0đ (${gifts.join(', ')}): không đưa quà vào phiếu trả, không nhập lại kho.` : '';
+    const reason = `${shares.isFull ? 'Khách trả cả đơn' : 'Khách trả một phần đơn'} (đã duyệt hoàn tiền): ${what}. ${shares.isFull ? 'Tạo phiếu trả hàng' : 'Tạo phiếu "Hoàn một phần" (không dùng "Đã hoàn" cả đơn)'} trên Pancake cho đơn #${order.pancakeOrderId} và bấm "Đã nhận hàng về" khi hàng về kho (kiểm tồn trên Pancake đã cộng lại hàng trả chưa; chỉ nhập kho trên Pancake nếu phiếu hoàn không tự cộng. Tồn kho Tubu lấy theo Pancake).${keptGift}`;
     try {
       // Nối vào ô, không đè: lý do khác (lệch tổng, COD chờ Kế toán, lời đã xử lý của Pancake 15) còn việc. Chỉ thay lời "tạo phiếu trả" cũ.
       await appendPancakeAttention(this.prisma, order.id, reason, ATTENTION_RETURN_APPROVED);

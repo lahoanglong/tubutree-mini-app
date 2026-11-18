@@ -12,6 +12,8 @@ export interface CountdownProps {
   onEnd?: () => void;
   /** Mặc định "Kết thúc sau"; suất sắp tới dùng "Bắt đầu sau". */
   kind?: 'ends' | 'starts';
+  /** Màu chữ và dấu ":": `flash` (mặc định) theo Giờ vàng; `green` cho dạng Giờ Xanh Ưu Đãi. Ô số giữ nền tối ở cả hai. */
+  tone?: 'flash' | 'green';
 }
 
 const CELL: CSSProperties = {
@@ -30,7 +32,8 @@ const CELL: CSSProperties = {
   lineHeight: 1,
   fontVariantNumeric: 'tabular-nums',
 };
-const COLON: CSSProperties = { color: 'var(--color-flash-fg)', fontSize: 'var(--type-label-size)', fontWeight: 700, lineHeight: 1 };
+const ACCENT = { flash: 'var(--color-flash-fg)', green: 'var(--color-text-brand)' } as const;
+const COLON: CSSProperties = { fontSize: 'var(--type-label-size)', fontWeight: 700, lineHeight: 1 };
 
 /**
  * Đồng hồ đếm ngược dùng chung (Q3): ô số nền stone-900 ở đầu khối Giờ vàng, chữ theo phút ở nơi khác. Chữ nhìn thấy là
@@ -38,7 +41,8 @@ const COLON: CSSProperties = { color: 'var(--color-flash-fg)', fontSize: 'var(--
  * từng giây (không dùng `aria-live`, a11y B4). Một `setTimeout` nối tiếp theo `countdownDelay`, giờ theo `serverNow` (đồng hồ máy
  * khách hay lệch). Hết giờ thì ẩn, không hiện 00:00.
  */
-export function Countdown({ endAt, mode, onEnd, kind = 'ends' }: CountdownProps) {
+export function Countdown({ endAt, mode, onEnd, kind = 'ends', tone = 'flash' }: CountdownProps) {
+  const accent = ACCENT[tone];
   const [now, setNow] = useState(serverNow);
   const frame = countdownFrame(Date.parse(endAt), now);
 
@@ -79,19 +83,19 @@ export function Countdown({ endAt, mode, onEnd, kind = 'ends' }: CountdownProps)
       {frame.ended ? null : parts ? (
         <>
           {parts.prefix && (
-            <span aria-hidden="true" style={{ color: 'var(--color-flash-fg)', fontSize: 'var(--type-caption-size)', fontWeight: 600, marginRight: 3 }}>
+            <span aria-hidden="true" style={{ color: accent, fontSize: 'var(--type-caption-size)', fontWeight: 600, marginRight: 3 }}>
               {parts.prefix}
             </span>
           )}
           {parts.cells.map((c, i) => (
             <span key={i} aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-              {i > 0 && <span style={COLON}>:</span>}
+              {i > 0 && <span style={{ ...COLON, color: accent }}>:</span>}
               <span data-testid="countdown-cell" style={CELL}>{c}</span>
             </span>
           ))}
         </>
       ) : (
-        <span aria-hidden="true" style={{ color: 'var(--color-flash-fg)', fontSize: 'var(--type-caption-size)', fontWeight: 600 }}>
+        <span aria-hidden="true" style={{ color: accent, fontSize: 'var(--type-caption-size)', fontWeight: 600 }}>
           {fillCopy(key, { t: frame.text })}
         </span>
       )}

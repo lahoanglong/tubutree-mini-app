@@ -180,6 +180,47 @@
   text-align: left;
   cursor: pointer;
 }
+/* Quà tặng dùng thử 0đ: tên quà dài tối đa 2 dòng, nút chữ mở tấm chọn quà. */
+.tubu-gift-trial-label {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.tubu-gift-trial-action {
+  flex: 0 0 auto;
+  min-width: 44px;
+  text-align: right;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: var(--type-body-sm-size);
+  font-weight: 600;
+  color: var(--color-text-brand);
+  cursor: pointer;
+}
+.tubu-gift-trial-action:disabled {
+  color: var(--color-text-tertiary);
+  cursor: default;
+}
+.tubu-gift-trial-option {
+  box-sizing: border-box;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+  padding: var(--space-inline-xs) 0;
+  cursor: pointer;
+}
+.tubu-gift-trial-option[aria-disabled='true'] {
+  cursor: not-allowed;
+}
+.tubu-gift-trial-footer {
+  margin-top: var(--space-inline-sm);
+}
+
 .tubu-gift-note {
   box-sizing: border-box;
   min-height: 44px;

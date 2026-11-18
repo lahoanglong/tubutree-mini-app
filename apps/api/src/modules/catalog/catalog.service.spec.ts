@@ -699,8 +699,8 @@ describe('CatalogService — "đã bán" (soldExternal + soldApp)', () => {
       } as unknown as PrismaService;
       await new CatalogService(prisma).recomputeSoldCounts();
       const wheres = groupBy.mock.calls.map((c) => c[0].where);
-      expect(wheres).toContainEqual({ order: { status: 'DELIVERED' } });
-      expect(wheres).toContainEqual({ order: { status: 'DELIVERED', deliveredAt: { gte: new Date(Date.UTC(2026, 9, 31, 3, 0, 0) - 30 * 864e5) } } });
+      expect(wheres).toContainEqual({ isGift: false, order: { status: 'DELIVERED' } });
+      expect(wheres).toContainEqual({ isGift: false, order: { status: 'DELIVERED', deliveredAt: { gte: new Date(Date.UTC(2026, 9, 31, 3, 0, 0) - 30 * 864e5) } } });
     } finally {
       now.mockRestore();
     }

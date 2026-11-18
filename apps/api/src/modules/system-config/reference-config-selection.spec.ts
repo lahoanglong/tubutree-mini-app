@@ -91,6 +91,7 @@ const APPROVED_LOADED_KEYS = [
     'dealer.reward_claim_grace_days',
     'dealer.shipping_fee_below_threshold_vnd',
     'flashsale.default_per_user_limit',
+    'flashsale.green_hour_enabled',
     'flashsale.max_discount_pct',
     'flashsale.max_duration_days',
     'flashsale.min_discount_pct',

@@ -115,6 +115,7 @@ export class ReviewInviteService {
       JOIN variations v ON v.id = oi."variationId"
       JOIN products p ON p.id = v."productId"
       WHERE oi."orderId" = ${o.id}
+        AND oi."isGift" = false
         AND NOT EXISTS (SELECT 1 FROM reviews r WHERE r."userId" = ${o.userId} AND r."productId" = v."productId")
       ORDER BY v."productId", oi.id`;
     const items = unreviewed.filter((i) => i.onSale);

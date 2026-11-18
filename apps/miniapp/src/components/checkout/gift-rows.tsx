@@ -1,9 +1,11 @@
 import { useState } from 'react';
-import type { QuotePendingGiftDTO } from '@tubutree/shared-types';
+import type { GiftTrialSummaryDTO, QuotePendingGiftDTO } from '@tubutree/shared-types';
 import { giftSectionView } from '@tubutree/app-core/checkout-pickup-view';
+import { giftTrialRowView, giftTrialSheetView, type GiftTrialSheetOption } from '@tubutree/app-core/commerce/gift-trial';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { BottomSheet } from '../ui/bottom-sheet';
-import { Checkbox } from '../ui/form';
+import { Checkbox, Radio } from '../ui/form';
+import { rowKeyboardProps } from '../ui/row-keyboard';
 import { Text } from '../ui/text';
 import { haptic } from '../../utils/haptic';
 import '../../css/checkout-pickup.css';
@@ -90,6 +92,106 @@ export function GiftNote() {
   return (
     <div className="tubu-gift-note" data-testid="cart-gift-note">
       <Text variant="caption" tone="secondary">{fillCopy('cart.giftNote')}</Text>
+    </div>
+  );
+}
+
+export interface GiftTrialRowProps {
+  summary: GiftTrialSummaryDTO | null | undefined;
+  /** Giỏ: true (chưa đủ mốc thì nhắc số còn thiếu). Thanh toán: false (chưa đủ mốc thì ẩn). */
+  showLocked: boolean;
+  /** Khách chọn quà trong tấm; `null` = "Không nhận quà". Nơi gọi lưu lựa chọn rồi đọc lại giỏ/báo giá. */
+  onChoose: (variationId: string | null) => void;
+  busy?: boolean;
+}
+
+/**
+ * Quà tặng dùng thử 0đ theo mốc giỏ: một dòng chữ (tên quà, mốc kế) và nút mở tấm "Chọn quà tặng 0đ". Quà là dòng 0đ đi cùng kiện
+ * Tubu Tree, không đổi số tiền nào của đơn.
+ */
+export function GiftTrialRow({ summary, showLocked, onChoose, busy = false }: GiftTrialRowProps) {
+  const [open, setOpen] = useState(false);
+  const view = giftTrialRowView(summary, { showLocked });
+  if (!view || !summary) return null;
+  const sheet = giftTrialSheetView(summary);
+  return (
+    <>
+      <div className="tubu-gift-row" data-testid="gift-trial-row" data-state={view.state}>
+        <div className="tubu-gift-col">
+          <Text variant="body-sm" as="span" numeric className="tubu-gift-trial-label">
+            {view.label}
+          </Text>
+          {view.sub && (
+            <Text variant="caption" tone="secondary" as="span" numeric>
+              {view.sub}
+            </Text>
+          )}
+        </div>
+        {view.action && (
+          <button
+            type="button"
+            className="tubu-press tubu-hit-44 tubu-gift-trial-action"
+            data-testid="gift-trial-change"
+            aria-haspopup="dialog"
+            disabled={busy}
+            aria-busy={busy || undefined}
+            onClick={() => {
+              haptic('light');
+              setOpen(true);
+            }}
+          >
+            {view.action}
+          </button>
+        )}
+      </div>
+      <BottomSheet open={open} onClose={() => setOpen(false)} title={sheet.title}>
+        <div role="radiogroup" aria-label={sheet.title}>
+          {sheet.options.map((o) => (
+            <GiftTrialOptionRow
+              key={o.variationId ?? 'none'}
+              option={o}
+              onSelect={() => {
+                setOpen(false);
+                onChoose(o.variationId);
+              }}
+            />
+          ))}
+        </div>
+        {sheet.footer && (
+          <Text variant="caption" tone="secondary" as="p" numeric className="tubu-gift-trial-footer">
+            {sheet.footer}
+          </Text>
+        )}
+      </BottomSheet>
+    </>
+  );
+}
+
+function GiftTrialOptionRow({ option, onSelect }: { option: GiftTrialSheetOption; onSelect: () => void }) {
+  return (
+    <div
+      role="radio"
+      aria-checked={option.checked}
+      aria-disabled={option.disabled || undefined}
+      {...rowKeyboardProps()}
+      className={option.disabled ? 'tubu-gift-trial-option' : 'tubu-gift-trial-option tubu-press'}
+      data-testid="gift-trial-option"
+      onClick={() => {
+        if (option.checked || option.disabled) return;
+        haptic('light');
+        onSelect();
+      }}
+    >
+      {/* Chấm tròn chỉ để nhìn: chọn nằm ở onClick của hàng (role=radio). */}
+      <Radio checked={option.checked} disabled={option.disabled} onChange={() => {}} />
+      <div className="tubu-gift-col" data-dim={option.disabled ? 'true' : undefined}>
+        <Text variant="body-sm" as="span" numeric className="tubu-gift-trial-label" style={option.checked ? { fontWeight: 600 } : undefined}>
+          {option.title}
+        </Text>
+        <Text variant="caption" tone={option.disabled ? 'tertiary' : 'secondary'} as="span" numeric>
+          {option.hint}
+        </Text>
+      </div>
     </div>
   );
 }

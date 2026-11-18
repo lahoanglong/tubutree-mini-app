@@ -109,6 +109,8 @@ export class LifecycleService {
         WHERE o.status::text = 'DELIVERED'
           AND o.type::text = 'RETAIL'
           AND o."placedForCustomer" = false
+          -- Quà tặng dùng thử 0đ không phải món khách mua: không nhắc mua lại.
+          AND oi."isGift" = false
           -- Nhắc mua lại hàng ngừng bán thì khách bấm vào trang 404 (cùng điều kiện với SELLABLE_VARIATION_WHERE).
           AND v."isActive" = true
           AND p."isActive" = true

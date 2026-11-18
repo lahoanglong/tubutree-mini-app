@@ -1,4 +1,4 @@
-import type { CartComboGroup, PendingGiftRedemptionDTO } from '@tubutree/shared-types';
+import type { CartComboGroup, GiftTrialSummaryDTO, PendingGiftRedemptionDTO } from '@tubutree/shared-types';
 import type { HttpClient, RequestOptions } from '../http';
 import type { RemovedCoupon } from '../coupon-min-order';
 
@@ -80,6 +80,8 @@ export interface CartSummary {
   itemCount: number;
   /** Quà hiện vật 0đ khách đã đổi và chưa gắn đơn nào (sẽ đi cùng đơn kế tiếp có hàng Tubu giao). API cũ chưa trả → coi như rỗng. */
   pendingGiftRedemptions?: PendingGiftRedemptionDTO[];
+  /** Quà tặng dùng thử 0đ theo mốc (cờ commerce.gift_trial_enabled). Cờ tắt, hết quà hoặc API cũ: không có, app ẩn hẳn khối. */
+  giftTrial?: GiftTrialSummaryDTO;
 }
 
 export type AddToCartSource = 'pdp' | 'buy_now' | 'repurchase' | 'wishlist' | 'ctv_sheet' | 'reorder_notification';
@@ -115,3 +117,13 @@ export const applyCoupon = (http: HttpClient, code: string, storefrontSlug?: str
   http.post<CartSummary>('/cart/coupon', { code }, cartOpts(storefrontSlug));
 export const removeCoupon = (http: HttpClient, storefrontSlug?: string | null) =>
   http.delete<CartSummary>('/cart/coupon', cartOpts(storefrontSlug));
+/**
+ * Chọn quà tặng dùng thử 0đ (`null` = "Không nhận quà"). Trả giỏ đã tính lại; `itemIds` = giỏ đang chọn một phần, để số và quà trả về
+ * khớp phần khách đang đặt.
+ */
+export const setCartGift = (http: HttpClient, variationId: string | null, storefrontSlug?: string | null, itemIds?: string[]) =>
+  http.put<CartSummary>(
+    '/cart/gift',
+    { variationId },
+    itemIds && itemIds.length > 0 ? { query: { ...cartOpts(storefrontSlug)?.query, itemIds: itemIds.join(',') } } : cartOpts(storefrontSlug),
+  );

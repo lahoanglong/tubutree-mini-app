@@ -1,5 +1,5 @@
 import { Transform, Type } from 'class-transformer';
-import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min, ValidateNested } from 'class-validator';
+import { ArrayMaxSize, ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, MaxLength, Min, ValidateIf, ValidateNested } from 'class-validator';
 import { Trim } from '../../../common/decorators/trim.decorator';
 
 /** Trần số lượng một món trong một lần thêm (DTO) và sau khi batch gộp các dòng trùng variationId. */
@@ -28,6 +28,15 @@ export class AddItemsBatchDto {
 
 export class UpdateItemDto {
   @IsInt() @Min(0) @Max(999) quantity!: number; // 0 = xoá
+}
+
+/** Chọn quà tặng dùng thử 0đ: id biến thể quà, hoặc `null` = không nhận quà. Thiếu trường thì 400 (không đoán ý khách). */
+export class GiftTrialChoiceDto {
+  @ValidateIf((o: { variationId?: unknown }) => o.variationId !== null)
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(64)
+  variationId!: string | null;
 }
 
 export class ApplyCouponDto {

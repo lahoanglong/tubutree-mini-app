@@ -58,6 +58,8 @@ export interface GrowthGroup {
 export const MINI_MASTER_KEY = 'game.mini.enabled';
 /** Khoá mốc Quà tặng dùng thử 0đ; tính năng quà theo mốc giỏ tạo dòng này. Tới lúc đó dòng hiện "Chưa có trên hệ thống". */
 export const GIFT_TRIAL_MIN_ORDER_KEY = 'commerce.gift_trial_min_order';
+export const GIFT_TRIAL_ENABLED_KEY = 'commerce.gift_trial_enabled';
+export const GREEN_HOUR_KEY = 'flashsale.green_hour_enabled';
 export const CHECKIN_POINTS_KEY = 'loyalty.checkin_points';
 
 const WEB_ONLY = 'Chỉ chơi trên web; Mini App hiện một dòng dẫn sang tubutree.com.';
@@ -123,7 +125,7 @@ export const GROWTH_GROUPS: GrowthGroup[] = [
   },
   {
     id: 'growth',
-    title: 'Hộ chiếu Xanh, Mời bạn, Góc Sống Xanh và tin Zalo',
+    title: 'Hộ chiếu Xanh, Mời bạn, Góc Sống Xanh, Giờ Xanh và tin Zalo',
     description: 'Các tính năng giữ chân khách và kết nối MSS.',
     items: [
       {
@@ -151,6 +153,16 @@ export const GROWTH_GROUPS: GrowthGroup[] = [
         needsRow: true,
         onWarning: 'Đánh giá có ảnh chờ duyệt rồi mới hiện. Thưởng cũ lúc gửi đánh giá ngừng; đánh giá chỉ chữ không còn được cộng điểm.',
         offWarning: 'Đánh giá và thưởng về như cũ. Đánh giá đang chờ vẫn duyệt và thưởng được.',
+      },
+      {
+        kind: 'switch',
+        key: GREEN_HOUR_KEY,
+        label: 'Giờ Xanh Ưu Đãi',
+        description: 'Khối Giờ vàng ở Trang chủ và Ưu đãi đổi tên "Giờ Xanh Ưu Đãi", màu xanh, mỗi thẻ có nút ＋ thêm một chạm vào giỏ. Giá, suất và giới hạn mua giữ nguyên của Giờ vàng.',
+        fallback: false,
+        needsRow: true,
+        onWarning: 'Khối Giờ vàng ở Trang chủ và Ưu đãi đổi sang Giờ Xanh Ưu Đãi ngay. Mini App cần bản có Giờ Xanh; bản cũ vẫn hiện Giờ vàng.',
+        offWarning: 'Khối về lại Giờ vàng như cũ. Suất và giá không đổi.',
       },
       {
         kind: 'number',
@@ -197,6 +209,16 @@ export const GROWTH_GROUPS: GrowthGroup[] = [
         max: 50_000_000,
         fallback: 199_000,
         standard: 199_000,
+      },
+      {
+        kind: 'switch',
+        key: GIFT_TRIAL_ENABLED_KEY,
+        label: 'Quà tặng dùng thử 0đ',
+        description: 'Đơn đạt mốc bên dưới thì Giỏ và Thanh toán hiện "Chọn quà tặng 0đ"; đơn có thêm một dòng quà 0đ, không đổi tiền, Điểm Xanh hay mã giảm giá. Danh sách quà sửa ở tab Cấu hình, khoá commerce.gift_trial_options.',
+        fallback: false,
+        needsRow: true,
+        onWarning: 'Cần ít nhất một quà còn hàng ở commerce.gift_trial_options, và Mini App đã lên bản có ô chọn quà. Thiếu quà thì khách không thấy gì.',
+        offWarning: 'Giỏ và Thanh toán thôi hiện quà. Đơn đã đặt vẫn giữ dòng quà 0đ.',
       },
       {
         kind: 'number',

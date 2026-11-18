@@ -48,6 +48,8 @@ describe('danh sách điều khiển', () => {
     expect(num('reviews.photo_reward_points').needsRow).toBe(true);
     expect(sw('game.mini.kitchen_swap.enabled').needsRow).toBe(true);
     expect(sw('reviews.green_corner_enabled').needsRow).toBe(true);
+    expect(sw('commerce.gift_trial_enabled').needsRow).toBe(true);
+    expect(sw('flashsale.green_hour_enabled').needsRow).toBe(true);
     expect(num('shipping.free_threshold').needsRow).toBeUndefined();
   });
 
