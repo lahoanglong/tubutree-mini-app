@@ -560,6 +560,8 @@ const NO_ROLES_ALLOWLIST: Record<string, string> = {
   'POST /webhooks/zalo-oa': WEBHOOK_SECRET,
   'POST /webhooks/pancake': WEBHOOK_SECRET,
   'POST /webhooks/gomdon': WEBHOOK_SECRET,
+  'POST /internal/mss/catalog-sync':
+    'MSS gọi vào, không có phiên người dùng: @MssSignedRoute gắn MssInboundGuard (mss-inbound.guard.ts), bắt buộc chữ ký HMAC trên thân thô trong ±300 giây, thiếu MSS_INBOUND_SECRET thì từ chối 401; cùng handler với /integrations/mss/catalog-sync',
   'POST /webhooks/gomdon/:token': WEBHOOK_SECRET,
   'POST /webhooks/zalopay': WEBHOOK_SECRET,
   'POST /webhooks/accesstrade': WEBHOOK_SECRET,
