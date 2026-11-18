@@ -78,7 +78,8 @@ function Block({ children }: { children: (m: Below) => ReactNode }) {
 // Bán chạy nhất ở lại gói đầu: khách mới không có Giờ vàng thì đó là kệ sản phẩm duy nhất, chunk hỏng/chậm không được làm nó biến mất hay bật ra dưới Danh mục.
 export const HomePurchasedRail = (p: ComponentProps<typeof PurchasedRail>) => <PurchasedRail {...p} />;
 export const HomeBestSellerRail = (p: ComponentProps<typeof BestSellerRail>) => <BestSellerRail {...p} />;
-export const HomeCommunityPreview = () => <Block>{(m) => <m.CommunityPreview />}</Block>;
+// Ngày của thẻ Cộng đồng: Góc Sống Xanh bật và đủ đánh giá ảnh đã duyệt thì dải ảnh khách đứng chỗ đó, không thì thẻ Cộng đồng như cũ.
+export const HomeCommunityPreview = () => <Block>{(m) => <m.GreenCornerStrip fallback={<m.CommunityPreview />} />}</Block>;
 export const HomeQuiz = () => <Block>{(m) => <m.HomeQuiz />}</Block>;
 export const HomeScrollRestoration = (p: ComponentProps<Below['HomeScrollRestoration']>) => <Block>{(m) => <m.HomeScrollRestoration {...p} />}</Block>;
 export const HomeSuggestFeed = (p: ComponentProps<Below['SuggestFeed']>) => <Block>{(m) => <m.SuggestFeed {...p} />}</Block>;

@@ -33,7 +33,20 @@ import {
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { ratingFromKey, reviewFormIssue, type ReviewFormField } from '@tubutree/app-core/commerce/review-form';
 import { isImeEnter, isSubmitShortcut } from '@tubutree/app-core/keyboard';
-import { REVIEW_NEEDS_PURCHASE, REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
+import {
+  REVIEW_NEEDS_PURCHASE,
+  REVIEW_PENDING_SAVED,
+  REWARD_ALREADY_GIVEN,
+  VIDEO_UPLOADING,
+  greenCornerHint,
+  greenCornerRules,
+  pendingNotice,
+  rewardHint,
+  type GreenCornerRules,
+} from '@tubutree/app-core/review-copy';
+import { ECO_TAG_OPTIONS, ecoTagLabel, ecoTagLine, ecoTagLocked, toggleEcoTag } from '@tubutree/app-core/commerce/green-corner';
+import { REVIEW_ECO_TAG_MAX, normalizeEcoTags, type ReviewEcoTag } from '@tubutree/shared-types';
+import { usePublicConfig } from '../hooks/use-public-config';
 import { MultiImageUpload, VideoUpload, isCloudinaryConfigured } from './image-upload';
 import { formatDate, formatNumber } from '../utils/format';
 import { haptic } from '../utils/haptic';
@@ -79,9 +92,10 @@ interface ReviewDraft {
   comment: string;
   images: string[];
   video: string;
+  ecoTags: ReviewEcoTag[];
 }
 
-const EMPTY_DRAFT: ReviewDraft = { rating: 5, comment: '', images: [], video: '' };
+const EMPTY_DRAFT: ReviewDraft = { rating: 5, comment: '', images: [], video: '', ecoTags: [] };
 
 /** Khung chờ của danh sách đánh giá: dùng chung cho danh sách đầy đủ và kết quả chip lọc. */
 function ListSkeleton() {
@@ -98,6 +112,7 @@ const draftFromReview = (r: MyReview): ReviewDraft => ({
   comment: r.comment ?? '',
   images: r.images,
   video: r.videoUrl ?? '',
+  ecoTags: normalizeEcoTags(r.ecoTags),
 });
 
 /**
@@ -213,7 +228,10 @@ export function ReviewsSection({
   const draft = edited && edited.key === key ? edited.draft : base;
   const latestMine = myReviews[0];
   // Đánh giá bị admin ẩn không nằm trong danh sách công khai: khách chỉ biết qua đây. isVisible thiếu (API cũ) coi là đang hiện.
-  const hiddenMine = myReviews.filter((r) => r.isVisible === false);
+  // Đang chờ duyệt ảnh (Góc Sống Xanh) cũng chưa hiện nhưng không phải bị ẩn: câu báo khác, và bỏ hết ảnh thì đánh giá hiện ngay.
+  const hiddenMine = myReviews.filter((r) => r.isVisible === false && r.awaitingApproval !== true);
+  const pendingMine = myReviews.filter((r) => r.awaitingApproval === true);
+  const rules = greenCornerRules(usePublicConfig().reviewGreenCorner);
   const hiddenIds = new Set(hiddenMine.map((r) => r.id));
   const data = reviewsQ.data;
   const hasReviews = !!data && data.count > 0;
@@ -303,6 +321,14 @@ export function ReviewsSection({
           <div key={r.id} role="status" style={{ marginTop: 4 }}>
             <Text variant="caption" tone="warning" as="p">
               {vi.reviews.hiddenNotice(r.orderCode)}
+            </Text>
+          </div>
+        ))}
+      {status === 'authenticated' &&
+        pendingMine.map((r) => (
+          <div key={r.id} role="status" style={{ marginTop: 'var(--space-inline-xs)' }}>
+            <Text variant="caption" tone="secondary" as="p">
+              {pendingNotice(r.orderCode)}
             </Text>
           </div>
         ))}
@@ -426,6 +452,11 @@ export function ReviewsSection({
                     {r.comment}
                   </Text>
                 )}
+                {ecoTagLine(r.ecoTags) && (
+                  <Text variant="caption" tone="brand" as="p" style={{ marginTop: 'var(--space-inline-xs)', fontWeight: 600 }}>
+                    {ecoTagLine(r.ecoTags)}
+                  </Text>
+                )}
                 {(r.images.length > 0 || r.videoUrl) && (
                   <div style={{ display: 'flex', gap: 6, marginTop: 8, overflowX: 'auto' }}>
                     {reviewMediaItems(r).map((m, i) => (
@@ -509,6 +540,7 @@ export function ReviewsSection({
             orderCode={target.orderCode ?? undefined}
             purchaseCount={elig?.purchaseCount ?? 0}
             showReward={elig?.rewardAvailable !== false}
+            rules={rules}
             hidden={target.kind === 'edit' && hiddenIds.has(target.reviewId)}
             onSubmittingChange={setSubmitting}
             imagesBusy={imagesBusy}
@@ -535,6 +567,7 @@ function WriteReview({
   orderCode,
   purchaseCount,
   showReward,
+  rules,
   hidden,
   onSubmittingChange,
   imagesBusy,
@@ -554,6 +587,8 @@ function WriteReview({
   purchaseCount: number;
   /** false chỉ khi API báo hết thưởng; thiếu trường (API cũ) vẫn hiện câu gợi ý. Máy chủ mới quyết định thưởng thật. */
   showReward: boolean;
+  /** Luật Góc Sống Xanh khi cờ bật (thẻ cảm nhận, tối đa ảnh, thưởng sau duyệt); null thì form như cũ. */
+  rules: GreenCornerRules | null;
   /** Đánh giá đang sửa bị Tubu ẩn: lưu không làm nó hiện lại, nên không được báo như thể đã đổi được gì. */
   hidden: boolean;
   onSubmittingChange: (submitting: boolean) => void;
@@ -566,7 +601,10 @@ function WriteReview({
 }) {
   const { openSnackbar } = useSnackbar();
   const qc = useQueryClient();
-  const { rating, comment, images, video } = draft;
+  const { rating, comment, images, video, ecoTags } = draft;
+  // Đánh giá cũ đã có hơn 3 ảnh vẫn sửa được (máy chủ nhận), chỉ không thêm. Lúc mở sửa, nháp mang đúng số ảnh đã lưu.
+  const [startPhotos] = useState(images.length);
+  const maxPhotos = rules ? Math.max(rules.maxPhotos, isEdit ? startPhotos : 0) : 5;
   const mediaBusy = videoBusy || imagesBusy;
   // Lỗi đang hiện: ở hàng sao, ở ô nhận xét, hay lỗi gửi do máy chủ trả (dưới nút). Đọc qua role=alert, focus tới chỗ cần sửa.
   const [issue, setIssue] = useState<{ field: ReviewFormField | 'submit'; message: string } | null>(null);
@@ -585,13 +623,16 @@ function WriteReview({
         images: images.length > 0 ? images : undefined,
         videoUrl: video.trim() || undefined,
         orderId,
+        ...(rules ? { ecoTags } : {}),
       }),
     onSuccess: (res) => {
       haptic('medium');
       // Theo BE chứ không theo chế độ form: đánh giá của đơn này có thể đã được tạo từ thiết bị khác. Thưởng chỉ một lần cho
       // mỗi (khách, sản phẩm) nên đánh giá lần mua sau ra pointsEarned = 0: chỉ báo cộng điểm khi thật sự có điểm.
       const earned = res.updated ? 0 : (res.pointsEarned ?? 0);
-      if (hidden || res.isVisible === false) {
+      if (res.awaitingApproval === true) {
+        openSnackbar({ text: REVIEW_PENDING_SAVED, type: 'info' });
+      } else if (hidden || res.isVisible === false) {
         openSnackbar({ text: vi.reviews.savedHidden, type: 'info' });
       } else {
         openSnackbar({
@@ -741,7 +782,32 @@ function WriteReview({
           </Text>
         </div>
       )}
-      <MultiImageUpload value={images} onChange={(v) => onDraftChange({ images: v })} onBusyChange={onImagesBusyChange} disabled={submit.isPending} max={5} />
+      {rules && (
+        <fieldset data-testid="review-eco-tags" style={{ border: 'none', padding: 0, margin: 'var(--space-stack-sm) 0 0' }}>
+          <Text variant="label" as="legend" style={{ padding: 0 }}>
+            {fillCopy('review.ecoPick', { n: REVIEW_ECO_TAG_MAX })}
+          </Text>
+          {/* Hàng chip nhỏ xuống dòng cách nhau 12px: vùng chạm 44px của hai hàng không chồng lên nhau. */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 'var(--space-inset-card) var(--space-inline-sm)', marginTop: 'var(--space-inline-sm)' }}>
+            {ECO_TAG_OPTIONS.map((t) => (
+              <Chip
+                key={t}
+                size="sm"
+                variant="choice"
+                selected={ecoTags.includes(t)}
+                disabled={submit.isPending || ecoTagLocked(ecoTags, t)}
+                onPress={() => {
+                  haptic('light');
+                  onDraftChange({ ecoTags: toggleEcoTag(ecoTags, t) });
+                }}
+              >
+                {ecoTagLabel(t)}
+              </Chip>
+            ))}
+          </div>
+        </fieldset>
+      )}
+      <MultiImageUpload value={images} onChange={(v) => onDraftChange({ images: v })} onBusyChange={onImagesBusyChange} disabled={submit.isPending} max={maxPhotos} />
       <VideoUpload value={video} onChange={(v) => onDraftChange({ video: v })} onBusyChange={onVideoBusyChange} disabled={submit.isPending} />
       {(purchaseCount > 1 || isEdit) && orderCode && (
         <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
@@ -762,18 +828,20 @@ function WriteReview({
           as="p"
           style={{ marginTop: 8, fontWeight: bonus ? 600 : 400 }}
         >
-          {rewardHint({
-            isEdit,
-            rewardAvailable: true,
-            hasImages: images.length > 0,
-            hasVideo: Boolean(video),
-            canUploadVideo: isCloudinaryConfigured(),
-          })}
+          {rules
+            ? greenCornerHint({ isEdit, rewardAvailable: true, hasMedia: Boolean(video) || images.length > 0, rules })
+            : rewardHint({
+                isEdit,
+                rewardAvailable: true,
+                hasImages: images.length > 0,
+                hasVideo: Boolean(video),
+                canUploadVideo: isCloudinaryConfigured(),
+              })}
         </Text>
       )}
       {!isEdit && !showReward && (
         <Text variant="caption" tone="tertiary" as="p" style={{ marginTop: 8 }}>
-          {REWARD_ALREADY_GIVEN}
+          {rules ? greenCornerHint({ isEdit, rewardAvailable: false, hasMedia: false, rules }) : REWARD_ALREADY_GIVEN}
         </Text>
       )}
       {issue?.field === 'submit' && (

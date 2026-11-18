@@ -1785,7 +1785,7 @@ export interface AdminDealerTier {
 }
 export const listDealerTiers = () => apiFetch<AdminDealerTier[]>('/admin/dealer-tiers');
 
-export type ReviewVisibilityFilter = 'visible' | 'hidden';
+export type ReviewVisibilityFilter = 'visible' | 'hidden' | 'pending';
 export interface AdminReview {
   id: string;
   rating: number;
@@ -1795,6 +1795,13 @@ export interface AdminReview {
   isVisible: boolean;
   isVerified: boolean;
   createdAt: string;
+  /** Góc Sống Xanh: khoá thẻ cảm nhận, đang chờ duyệt, mốc duyệt (có thì đánh giá ảnh lên dải Trang chủ), điểm đã cộng lúc duyệt. Thiếu khi API cũ. */
+  ecoTags?: string[];
+  awaitingApproval?: boolean;
+  approvedAt?: string | null;
+  photoRewardPoints?: number;
+  /** Dấu ảnh/video của dòng (máy chủ dựng): gửi lại nguyên văn khi Duyệt hay Hiện lại để ảnh khách vừa đổi không được duyệt mù. */
+  mediaKey?: string;
   user: { id: string; fullName: string | null; phone: string | null };
   product: { id: string; name: string; slug: string };
 }
@@ -1805,8 +1812,24 @@ export const listAdminReviews = (page = 1, visibility?: ReviewVisibilityFilter, 
   return apiFetch<Page<AdminReview>>(`/admin/reviews?${params.toString()}`);
 };
 /** Route của module reviews (không nằm dưới /admin): BE tự tính lại điểm sao của sản phẩm sau khi ẩn/hiện. */
-export const setReviewVisibility = (id: string, isVisible: boolean) =>
-  apiFetch<{ ok: boolean; isVisible: boolean }>(`/reviews/${id}/visibility`, { method: 'POST', body: { isVisible } });
+export const setReviewVisibility = (id: string, isVisible: boolean, mediaKey?: string) =>
+  apiFetch<{ ok: boolean; isVisible: boolean }>(`/reviews/${id}/visibility`, {
+    method: 'POST',
+    body: isVisible && mediaKey !== undefined ? { isVisible, mediaKey } : { isVisible },
+  });
+
+/** Vì sao lần duyệt không cộng điểm (khớp PhotoRewardSkip ở API). */
+export type PhotoRewardSkip = 'NOT_ENROLLED' | 'NO_MEDIA' | 'ALREADY_REWARDED' | 'RETURNED' | 'DAILY_CAP' | 'ZERO';
+export interface ApproveReviewResult {
+  ok: true;
+  isVisible: true;
+  alreadyApproved: boolean;
+  rewardPoints: number;
+  rewardSkipped: PhotoRewardSkip | null;
+}
+/** Duyệt đánh giá (Góc Sống Xanh): hiện công khai, ghi mốc duyệt, cộng Điểm Xanh một lần cho đánh giá ảnh đi qua hàng chờ. Chỉ ADMIN. */
+export const approveReview = (id: string, mediaKey: string) =>
+  apiFetch<ApproveReviewResult>(`/reviews/${encodeURIComponent(id)}/approve`, { method: 'POST', body: { mediaKey } });
 
 export type SubscriptionStatus = 'ACTIVE' | 'PAUSED' | 'CANCELLED';
 export interface AdminSubscription {

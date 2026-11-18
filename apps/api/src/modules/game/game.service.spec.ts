@@ -1481,7 +1481,8 @@ describe('GameService.getMissions', () => {
     });
     const res = await new GameService(prisma, makeConfig(), analytics).getMissions('u1');
     expect(findMany).toHaveBeenCalledWith({
-      where: { userId: 'u1', NOT: { images: { isEmpty: true } } },
+      // Đánh giá ảnh đã qua hàng chờ Góc Sống Xanh chỉ tính khi đã duyệt (đang chờ hay bị ẩn khỏi hàng chờ thì không).
+      where: { userId: 'u1', NOT: { images: { isEmpty: true } }, OR: [{ photoQueuedAt: null }, { approvedAt: { not: null } }] },
       select: { productId: true, orderId: true, createdAt: true },
     });
     expect(res.find((m) => m.code === 'REVIEW_3')).toMatchObject({ progress: 1, goal: 3, completed: false, claimed: false });

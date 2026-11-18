@@ -1,4 +1,5 @@
 import { reviewFilterQuery, type ReviewFilterKey } from '@tubutree/app-core/commerce/review-filter';
+import { REVIEW_PENDING_SAVED } from '@tubutree/app-core/review-copy';
 import { apiFetch } from './client-api';
 
 /** Một dòng của danh sách đánh giá công khai (GET /products/:slug/reviews). Ảnh base64 đã thành đường dẫn API. */
@@ -11,6 +12,8 @@ export interface PublicReview {
   createdAt: string;
   author: string;
   verifiedPurchase?: boolean;
+  /** Khoá thẻ cảm nhận Góc Sống Xanh (`review.eco.<khoá>`); thiếu khi API cũ. */
+  ecoTags?: string[];
 }
 
 /** Số đánh giá, điểm trung bình, phân bổ sao tính trên mọi đánh giá đang hiện; `items` mới nhất trước. */
@@ -18,6 +21,8 @@ export interface ProductReviews {
   average: number;
   count: number;
   videoCount?: number;
+  /** Số đánh giá có ảnh đang hiện (số trên chip "Có ảnh"); thiếu khi API cũ. */
+  photoCount?: number;
   distribution?: Record<string, number>;
   items: PublicReview[];
   /** Còn trang sau thì gửi lại kèm cùng chip để lấy tiếp; null là hết. Thiếu khi API cũ (chưa phân trang). */
@@ -32,6 +37,8 @@ export interface MyReviewRef {
   rating: number;
   createdAt: string;
   isVisible: boolean;
+  /** Đánh giá có ảnh đang chờ Tubu duyệt (Góc Sống Xanh): chưa hiện nhưng không phải bị ẩn. Thiếu khi API cũ. */
+  awaitingApproval?: boolean;
 }
 
 /** Lần mua (đơn đã nhận) còn viết được đánh giá; đơn nhận sớm nhất trước. */
@@ -64,6 +71,8 @@ export interface MyReview {
   images: string[];
   videoUrl: string | null;
   isVisible: boolean;
+  ecoTags?: string[];
+  awaitingApproval?: boolean;
 }
 
 export interface ReviewInput {
@@ -76,6 +85,8 @@ export interface ReviewInput {
    * cũ) là sửa đánh giá mới nhất khi mọi lần mua đã có đánh giá.
    */
   orderId: string;
+  /** Thẻ cảm nhận (chỉ gửi khi Góc Sống Xanh bật); không gửi thì sửa đánh giá giữ thẻ cũ. */
+  ecoTags?: string[];
 }
 
 /** `updated`: lần gửi này sửa đánh giá đã có (không cộng điểm). `pointsEarned`: điểm của dòng đánh giá, 0 khi không được thưởng. */
@@ -85,6 +96,8 @@ export interface SavedReview {
   updated?: boolean;
   /** false khi admin đang ẩn đánh giá này: lưu/sửa không làm nó hiện lại. Thiếu (API cũ) coi là đang hiện. */
   isVisible?: boolean;
+  /** true: đánh giá có ảnh đang chờ Tubu duyệt (Góc Sống Xanh), chưa hiện công khai và chưa cộng điểm. */
+  awaitingApproval?: boolean;
 }
 
 const productPath = (slug: string) => `/products/${encodeURIComponent(slug)}/reviews`;
@@ -107,7 +120,17 @@ export function reviewHref(slug: string, orderId?: string | null): string {
   return `/san-pham/${encodeURIComponent(slug)}${qs}#danh-gia`;
 }
 
-export { EDIT_HINT, FIRST_REVIEW_ONLY, REWARD_ALREADY_GIVEN, VIDEO_UPLOADING, rewardHint } from '@tubutree/app-core/review-copy';
+export {
+  EDIT_HINT,
+  FIRST_REVIEW_ONLY,
+  REVIEW_PENDING_SAVED,
+  REWARD_ALREADY_GIVEN,
+  VIDEO_UPLOADING,
+  greenCornerHint,
+  greenCornerRules,
+  pendingNotice,
+  rewardHint,
+} from '@tubutree/app-core/review-copy';
 
 /** Câu nói rõ đánh giá đang soạn thuộc lần mua nào; null khi chỉ mua một lần hoặc chưa biết đơn. */
 export function purchaseNote(o: { isEdit: boolean; purchaseCount: number; orderCode?: string | null }): string | null {
@@ -136,6 +159,7 @@ export function hiddenNotice(orderCode: string | null): string {
  * bị ẩn thì không được báo như thể đã đổi được gì: nói thẳng là đã lưu nhưng vẫn chờ xem xét.
  */
 export function savedMessage(res: SavedReview, wasHidden = false): string {
+  if (res.awaitingApproval === true) return REVIEW_PENDING_SAVED;
   if (wasHidden || res.isVisible === false) return SAVED_HIDDEN;
   if (res.updated) return 'Đã cập nhật đánh giá của bạn';
   const earned = res.pointsEarned ?? 0;

@@ -276,7 +276,8 @@ describe('AdminService.listReviews — duyệt đánh giá', () => {
     const svc = mkAdmin({ review: { findMany, count }, $transaction: tx });
     const out = await svc.listReviews(1, 20, 'hidden', 1);
     const args = findMany.mock.calls[0]![0];
-    expect(args.where).toEqual({ isVisible: false, rating: 1 });
+    // "Đã ẩn" là admin ẩn: đánh giá đang chờ duyệt (cũng chưa hiện) nằm ở chip "Chờ duyệt" riêng.
+    expect(args.where).toEqual({ isVisible: false, awaitingApproval: false, rating: 1 });
     // id phá hoà khi nhiều đánh giá cùng mili giây (import, đợt khách gửi cùng lúc): phân trang theo số trang không lặp và không sót dòng giữa hai trang.
     expect(args.orderBy).toEqual([{ createdAt: 'desc' }, { id: 'desc' }]);
     expect(args.skip).toBe(0);
@@ -289,6 +290,8 @@ describe('AdminService.listReviews — duyệt đánh giá', () => {
     expect(findMany.mock.calls[1]![0].skip).toBe(10);
     await svc.listReviews(1, 20);
     expect(findMany.mock.calls[2]![0].where).toEqual({});
+    await svc.listReviews(1, 20, 'pending');
+    expect(findMany.mock.calls[3]![0].where).toEqual({ awaitingApproval: true });
   });
 });
 

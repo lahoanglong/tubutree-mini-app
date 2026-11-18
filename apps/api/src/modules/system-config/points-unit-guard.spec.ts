@@ -66,6 +66,7 @@ const LEGACY_XU_KEYS = [
 const POINTS_NUMBER_KEYS: Record<string, { max: number }> = {
   'referral.referrer_reward_points': { max: 100_000 },
   'community.post_reward_points': { max: 20_000 },
+  'reviews.photo_reward_points': { max: 20_000 },
   'community.answer_reward_points': { max: 20_000 },
   'community.best_answer_reward_points': { max: 20_000 },
   'game.tree_points_price': { max: 500_000 },

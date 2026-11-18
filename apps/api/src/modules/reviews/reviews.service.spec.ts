@@ -877,7 +877,7 @@ describe('ReviewsService.findOwn (nội dung đầy đủ để sửa đánh gi�
 
   it('chủ đánh giá → nguyên nội dung kèm đơn, ảnh base64 giữ nguyên để gửi lại khi lưu, không lộ userId', async () => {
     const out = await svc(row).findOwn('u1', 'r1');
-    expect(out).toEqual({ id: 'r1', orderId: 'o1', rating: 4, comment: 'ổn', images: [PNG], videoUrl: null, isVisible: true, createdAt: row.createdAt });
+    expect(out).toEqual({ id: 'r1', orderId: 'o1', rating: 4, comment: 'ổn', images: [PNG], videoUrl: null, isVisible: true, createdAt: row.createdAt, ecoTags: [], awaitingApproval: false });
   });
 
   it.each([
@@ -1257,7 +1257,8 @@ describe('ReviewsService.setVisibility (§6.13 admin ẩn review)', () => {
     });
     const r = await new ReviewsService(prisma, analytics, loyalty).setVisibility('r1', false);
     expect(r).toEqual({ ok: true, isVisible: false });
-    expect(update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { isVisible: false } });
+    // Ẩn cũng rút đánh giá khỏi hàng chờ duyệt Góc Sống Xanh.
+    expect(update).toHaveBeenCalledWith({ where: { id: 'r1' }, data: { isVisible: false, awaitingApproval: false } });
     expect((prisma as unknown as { review: { delete: jest.Mock } }).review.delete).not.toHaveBeenCalled();
   });
 
@@ -1349,7 +1350,7 @@ describe('ReviewsService.canReview', () => {
     expect(prisma.review.findMany).toHaveBeenCalledWith({
       where: { userId: 'u1', productId: 'p1', orderId: { in: ['o1', 'o2'] } },
       orderBy: { createdAt: 'desc' },
-      select: { id: true, orderId: true, rating: true, createdAt: true, isVisible: true },
+      select: { id: true, orderId: true, rating: true, createdAt: true, isVisible: true, awaitingApproval: true },
     });
   });
 

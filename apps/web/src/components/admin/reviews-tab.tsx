@@ -5,11 +5,14 @@ import { useEffect, useRef, useState } from 'react';
 import { Star } from 'lucide-react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  approveReview,
   listAdminReviews,
   setReviewVisibility,
   type AdminReview,
+  type ApproveReviewResult,
   type ReviewVisibilityFilter,
 } from '@/lib/admin-client';
+import { ecoTagLine } from '@tubutree/app-core/commerce/green-corner';
 import { reviewStarCount, safeHttpsLink } from '@/lib/admin-pickers';
 import { useConfirm } from './confirm-dialog';
 import { AdminImage, isAdminImageRef } from './admin-image';
@@ -22,15 +25,36 @@ import { actionErrorText, loadErrorText } from '@/lib/admin-error-text';
 const PAGE_SIZE = 20;
 const VISIBILITY_CHIPS: { k: ReviewVisibilityFilter | ''; label: string }[] = [
   { k: '', label: 'Tất cả' },
+  { k: 'pending', label: 'Chờ duyệt' },
   { k: 'visible', label: 'Đang hiện' },
   { k: 'hidden', label: 'Đã ẩn' },
 ];
 
-/** Duyệt đánh giá của khách: ẩn đánh giá vi phạm / hiện lại. BE tính lại điểm sao của sản phẩm sau mỗi lần đổi. */
+const SKIP_TEXT: Record<NonNullable<ApproveReviewResult['rewardSkipped']>, string> = {
+  NOT_ENROLLED: 'đánh giá này không đi qua hàng chờ nên không cộng điểm (chỉ được đưa lên dải Trang chủ)',
+  NO_MEDIA: 'đánh giá không còn ảnh hay video nên không cộng điểm',
+  ALREADY_REWARDED: 'lần mua này đã được cộng điểm đánh giá trước đó',
+  RETURNED: 'sản phẩm của lần mua này đã trả hàng nên không cộng điểm',
+  DAILY_CAP: 'khách đã đủ số đánh giá được cộng điểm trong ngày viết',
+  ZERO: 'cấu hình thưởng đang là 0 điểm',
+};
+
+/** Câu báo sau khi duyệt: admin trả lời khách được vì sao có hay không có điểm. */
+export function approveResultText(who: string, res: ApproveReviewResult): string {
+  if (res.alreadyApproved) return `Đánh giá của ${who} đã được duyệt trước đó, không đổi gì.`;
+  if (res.rewardPoints > 0) return `Đã duyệt đánh giá của ${who}, cộng +${res.rewardPoints.toLocaleString('vi-VN')} Điểm Xanh.`;
+  return `Đã duyệt đánh giá của ${who}: ${res.rewardSkipped ? SKIP_TEXT[res.rewardSkipped] : 'không cộng điểm'}.`;
+}
+
+/**
+ * Duyệt đánh giá của khách: duyệt đánh giá ảnh đang chờ (Góc Sống Xanh), ẩn đánh giá vi phạm / hiện lại. BE tính lại điểm sao của sản phẩm sau mỗi lần đổi.
+ * Câu báo kết quả duyệt nằm ở đầu tab: lọc "Chờ duyệt" thì dòng vừa duyệt rời danh sách ngay.
+ */
 export function ReviewsTab() {
   const [page, setPage] = useState(1);
   const [visibility, setVisibility] = useState<ReviewVisibilityFilter | ''>('');
   const [rating, setRating] = useState(0);
+  const [notice, setNotice] = useState<string | null>(null);
   const q = useQuery({
     queryKey: ['admin-reviews', page, visibility, rating],
     queryFn: () => listAdminReviews(page, visibility || undefined, rating || undefined, PAGE_SIZE),
@@ -46,7 +70,15 @@ export function ReviewsTab() {
   return (
     <div className="space-y-3">
       <h2 className="font-display text-lg font-semibold text-stone-900">Đánh giá</h2>
-      <Notice>Đánh giá bị ẩn không hiện trên trang sản phẩm và không tính vào điểm sao; có thể hiện lại bất cứ lúc nào.</Notice>
+      <Notice>
+        Đánh giá bị ẩn không hiện trên trang sản phẩm và không tính vào điểm sao; có thể hiện lại bất cứ lúc nào. Khi Góc Sống Xanh bật, đánh giá có ảnh nằm ở
+        &quot;Chờ duyệt&quot; cho tới khi được duyệt (ảnh không phù hợp thì bấm Ẩn đánh giá).
+      </Notice>
+      {notice && (
+        <Notice tone="success" role="status">
+          {notice}
+        </Notice>
+      )}
       <div className="flex flex-wrap items-center gap-2">
         <div role="tablist" aria-label="Lọc đánh giá theo trạng thái" className="flex flex-wrap gap-2">
           {VISIBILITY_CHIPS.map((c) => (
@@ -91,7 +123,7 @@ export function ReviewsTab() {
       {(q.isLoading || pastEnd) && <ListSkeleton label="Đang tải đánh giá" rows={3} className="h-24" />}
       {q.data && q.data.data.length === 0 && !pastEnd && <p className="rounded-card border border-stone-200 bg-stone-0 p-4 text-sm text-stone-500">Không có đánh giá nào khớp bộ lọc.</p>}
       <div className="space-y-3">
-        {q.data?.data.map((r) => <ReviewRow key={r.id} review={r} />)}
+        {q.data?.data.map((r) => <ReviewRow key={r.id} review={r} onNotice={setNotice} />)}
       </div>
       {q.data && !pastEnd && <PageNav page={q.data.meta.page} limit={q.data.meta.limit} total={q.data.meta.total} onPage={setPage} noun="đánh giá" />}
     </div>
@@ -110,28 +142,65 @@ export function ReviewStars({ rating }: { rating: number }) {
   );
 }
 
-function ReviewRow({ review: r }: { review: AdminReview }) {
+function ReviewRow({ review: r, onNotice }: { review: AdminReview; onNotice: (text: string | null) => void }) {
   const qc = useQueryClient();
   const { confirm, dialog } = useConfirm();
   const inFlight = useRef(false);
+  const who = r.user.fullName?.trim() || r.user.phone || 'Khách';
   const mut = useMutation({
-    mutationFn: (isVisible: boolean) => setReviewVisibility(r.id, isVisible),
+    mutationFn: (isVisible: boolean) => setReviewVisibility(r.id, isVisible, r.mediaKey),
+    onMutate: () => onNotice(null),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['admin-reviews'] }),
     onSettled: () => {
       inFlight.current = false;
     },
   });
+  const approve = useMutation({
+    mutationFn: () => approveReview(r.id, r.mediaKey ?? ''),
+    onMutate: () => onNotice(null),
+    onSuccess: (res) => {
+      onNotice(approveResultText(who, res));
+      return qc.invalidateQueries({ queryKey: ['admin-reviews'] });
+    },
+    onSettled: () => {
+      inFlight.current = false;
+    },
+  });
+  const busy = mut.isPending || approve.isPending;
+  const pending = r.awaitingApproval === true;
+  // Đánh giá ảnh đang hiện mà chưa có mốc duyệt (viết trước khi có Góc Sống Xanh): admin chọn đưa lên dải Trang chủ, không cộng điểm.
+  const canFeature = r.isVisible && !pending && !r.approvedAt && r.images.length > 0;
+  const runApprove = async () => {
+    if (inFlight.current || busy) return;
+    const ok = await confirm(
+      pending
+        ? {
+            title: 'Duyệt đánh giá',
+            message: `Duyệt đánh giá ${r.rating} sao của ${who} cho “${r.product.name}”?\n\nĐánh giá và ảnh sẽ hiện công khai, lên dải Trang chủ, và khách được cộng Điểm Xanh nếu đủ điều kiện. Ảnh không phù hợp thì bấm Ẩn đánh giá thay vì duyệt.`,
+            confirmLabel: 'Duyệt',
+          }
+        : {
+            title: 'Đưa lên Trang chủ',
+            message: `Đưa đánh giá ảnh của ${who} cho “${r.product.name}” lên dải "Khách hàng sống xanh" ở Trang chủ?\n\nĐánh giá này viết trước khi có hàng chờ nên không cộng thêm điểm.`,
+            confirmLabel: 'Đưa lên',
+          },
+    );
+    if (!ok || inFlight.current || busy) return;
+    inFlight.current = true;
+    approve.mutate();
+  };
 
-  const who = r.user.fullName?.trim() || r.user.phone || 'Khách';
   const toggle = async () => {
-    if (inFlight.current || mut.isPending) return;
-    const hide = r.isVisible;
+    if (inFlight.current || busy) return;
+    const hide = r.isVisible || pending;
     const subject = `đánh giá ${r.rating} sao của ${who} cho “${r.product.name}”`;
     const ok = await confirm(
       hide
         ? {
             title: 'Ẩn đánh giá',
-            message: `Ẩn ${subject}?\n\nĐánh giá sẽ biến mất khỏi trang sản phẩm và không còn tính vào điểm sao. Bạn có thể hiện lại sau.`,
+            message: pending
+              ? `Ẩn ${subject}?\n\nĐánh giá rời hàng chờ, ảnh không hiện công khai và khách không được cộng Điểm Xanh. Bạn có thể hiện lại sau.`
+              : `Ẩn ${subject}?\n\nĐánh giá sẽ biến mất khỏi trang sản phẩm và không còn tính vào điểm sao. Bạn có thể hiện lại sau.`,
             confirmLabel: 'Ẩn đánh giá',
             cancelLabel: 'Giữ nguyên',
             tone: 'danger',
@@ -142,7 +211,7 @@ function ReviewRow({ review: r }: { review: AdminReview }) {
             confirmLabel: 'Hiện lại',
           },
     );
-    if (!ok || inFlight.current || mut.isPending) return;
+    if (!ok || inFlight.current || busy) return;
     inFlight.current = true;
     mut.mutate(!hide);
   };
@@ -157,7 +226,12 @@ function ReviewRow({ review: r }: { review: AdminReview }) {
     <article className="rounded-card border border-stone-200 bg-stone-0 p-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">
         <ReviewStars rating={r.rating} />
-        <ToneBadge tone={r.isVisible ? 'success' : 'neutral'}>{r.isVisible ? 'Đang hiện' : 'Đã ẩn'}</ToneBadge>
+        {pending ? (
+          <ToneBadge tone="warning">Chờ duyệt</ToneBadge>
+        ) : (
+          <ToneBadge tone={r.isVisible ? 'success' : 'neutral'}>{r.isVisible ? 'Đang hiện' : 'Đã ẩn'}</ToneBadge>
+        )}
+        {(r.photoRewardPoints ?? 0) > 0 && <ToneBadge tone="info">Đã cộng +{(r.photoRewardPoints ?? 0).toLocaleString('vi-VN')} điểm</ToneBadge>}
         {r.isVerified && <ToneBadge tone="info">Đã mua hàng</ToneBadge>}
         <span className="ml-auto text-xs text-stone-500">{formatDateTime(r.createdAt)}</span>
       </div>
@@ -166,6 +240,7 @@ function ReviewRow({ review: r }: { review: AdminReview }) {
         {r.user.fullName?.trim() || 'Chưa có tên'} · {r.user.phone || 'chưa có SĐT'}
       </div>
       {r.comment && <p className="mt-2 whitespace-pre-wrap break-words text-stone-800">{r.comment}</p>}
+      {ecoTagLine(r.ecoTags) && <p className="mt-1 text-xs font-medium text-forest-700">{ecoTagLine(r.ecoTags)}</p>}
       {(images.length > 0 || video) && (
         <div className="mt-2 flex flex-wrap items-center gap-2">
           {images.map((img, i) => {
@@ -200,19 +275,34 @@ function ReviewRow({ review: r }: { review: AdminReview }) {
         </div>
       )}
       <div className="mt-3 flex flex-wrap items-center gap-2">
+        {(pending || canFeature) && (
+          <button
+            type="button"
+            onClick={runApprove}
+            disabled={busy}
+            className="min-h-[44px] rounded-control border border-forest-600 bg-forest-600 px-3 text-sm font-medium text-stone-0 hover:bg-forest-700 disabled:opacity-50 sm:min-h-[32px]"
+          >
+            {approve.isPending ? 'Đang duyệt…' : pending ? 'Duyệt' : 'Đưa lên Trang chủ'}
+          </button>
+        )}
         <button
           type="button"
           onClick={toggle}
-          disabled={mut.isPending}
+          disabled={busy}
           className={`min-h-[44px] rounded-control border px-3 text-sm font-medium disabled:opacity-50 sm:min-h-[32px] ${
             r.isVisible ? 'border-danger-fg text-danger-fg hover:bg-danger-bg' : 'border-forest-600 text-forest-700 hover:bg-forest-50'
           }`}
         >
-          {mut.isPending ? 'Đang lưu…' : r.isVisible ? 'Ẩn đánh giá' : 'Hiện lại'}
+          {mut.isPending ? 'Đang lưu…' : r.isVisible || pending ? 'Ẩn đánh giá' : 'Hiện lại'}
         </button>
         {mut.isError && (
           <span role="alert" className="text-xs text-danger-fg">
             {actionErrorText(mut.error) || 'Không đổi được trạng thái đánh giá.'}
+          </span>
+        )}
+        {approve.isError && (
+          <span role="alert" className="text-xs text-danger-fg">
+            {actionErrorText(approve.error) || 'Không duyệt được đánh giá.'}
           </span>
         )}
       </div>

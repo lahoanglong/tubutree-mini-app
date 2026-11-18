@@ -1,3 +1,5 @@
+import { formatVnNumber } from './number-format';
+
 // Biểu mẫu không biết khách đã nhận thưởng sản phẩm này trước đó hay chưa (xoá đánh giá rồi viết lại thì BE cho
 // pointsEarned = 0), nên mọi câu nhắc điểm phải nêu điều kiện này thay vì hứa vô điều kiện.
 export const FIRST_REVIEW_ONLY = 'Lần đầu đánh giá sản phẩm này';
@@ -29,4 +31,39 @@ export function rewardHint(o: {
     return `${FIRST_REVIEW_ONLY}, bạn nhận +10.000 Điểm Xanh cho đánh giá có ảnh!${videoOffer ? ' Thêm video để được +15.000.' : ''}`;
   }
   return `${FIRST_REVIEW_ONLY}: thêm ${videoOffer ? 'video +15.000 / ' : ''}ảnh +10.000 Điểm Xanh (chỉ chữ +5.000). Chỉ đánh giá được khi đã mua và nhận hàng.`;
+}
+
+/** Luật Góc Sống Xanh đọc từ cấu hình công khai (`reviewGreenCorner`); null khi tắt hoặc API cũ: form và lời báo như cũ. */
+export interface GreenCornerRules {
+  rewardPoints: number;
+  dailyCap: number;
+  maxPhotos: number;
+}
+
+export function greenCornerRules(cfg: (GreenCornerRules & { enabled: boolean }) | null | undefined): GreenCornerRules | null {
+  if (cfg?.enabled !== true) return null;
+  return { rewardPoints: cfg.rewardPoints, dailyCap: cfg.dailyCap, maxPhotos: cfg.maxPhotos };
+}
+
+/**
+ * Câu về Điểm Xanh dưới form khi Góc Sống Xanh bật: đánh giá có ảnh chờ Tubu duyệt rồi mới hiện và mới cộng điểm. Nêu trần theo ngày vì đó là điều
+ * kiện thật của phần thưởng; không hứa điểm khi lần mua này không còn được thưởng hoặc cấu hình thưởng 0.
+ */
+export function greenCornerHint(o: { isEdit: boolean; rewardAvailable: boolean; hasMedia: boolean; rules: GreenCornerRules }): string {
+  const { rewardPoints, dailyCap, maxPhotos } = o.rules;
+  if (o.isEdit) return 'Đổi ảnh thì Tubu duyệt lại trước khi hiện. Sửa đánh giá không cộng thêm Điểm Xanh.';
+  const reviewed = `Đánh giá có ảnh (tối đa ${maxPhotos}) được Tubu duyệt trước khi hiện công khai.`;
+  if (!o.rewardAvailable) return `${reviewed} Lần mua này không cộng thêm Điểm Xanh.`;
+  if (rewardPoints <= 0 || dailyCap <= 0) return reviewed;
+  const cap = `Mỗi ngày tối đa ${dailyCap} đánh giá được cộng.`;
+  if (o.hasMedia) return `Tubu duyệt ảnh xong sẽ cộng +${formatVnNumber(rewardPoints)} Điểm Xanh. ${cap}`;
+  return `Thêm ảnh thật (tối đa ${maxPhotos}) để nhận +${formatVnNumber(rewardPoints)} Điểm Xanh sau khi Tubu duyệt. ${cap}`;
+}
+
+/** Lời báo sau khi gửi đánh giá có ảnh đang chờ duyệt (máy chủ trả `awaitingApproval: true`). */
+export const REVIEW_PENDING_SAVED = 'Đã gửi. Ảnh của bạn đang chờ Tubu duyệt, duyệt xong đánh giá sẽ hiện công khai.';
+
+/** Đánh giá của chính khách đang chờ duyệt không có trong danh sách công khai: khách chỉ biết qua câu này. Bỏ hết ảnh thì đánh giá hiện ngay. */
+export function pendingNotice(orderCode: string | null): string {
+  return `Đánh giá${orderCode ? ` cho đơn ${orderCode}` : ''} của bạn đang chờ Tubu duyệt ảnh nên chưa hiện công khai.`;
 }

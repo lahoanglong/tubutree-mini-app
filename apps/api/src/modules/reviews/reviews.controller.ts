@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, Query, Res, StreamableFile } from '@nestjs/common';
 import type { Response } from 'express';
-import { IsBoolean } from 'class-validator';
+import { IsBoolean, IsOptional, IsString, MaxLength } from 'class-validator';
 import type { JwtPayload } from '@tubutree/shared-types';
 import { Public } from '../../common/decorators/public.decorator';
 import { PublicCache } from '../../common/decorators/public-cache.decorator';
@@ -11,6 +11,13 @@ import { CreateReviewDto, PublicReviewsQuery } from './dto/review.dto';
 
 class VisibilityDto {
   @IsBoolean() isVisible!: boolean;
+  /** `mediaKey` của dòng admin đang xem (hiện lại đánh giá có ảnh): khách vừa đổi ảnh thì 409. API cũ không gửi thì bỏ qua. */
+  @IsOptional() @IsString() @MaxLength(20_000) mediaKey?: string;
+}
+
+class ApproveDto {
+  /** `mediaKey` của dòng admin đang xem: bắt buộc, để ảnh khách vừa đổi (chưa ai xem) không được duyệt lên công khai. */
+  @IsString() @MaxLength(20_000) mediaKey!: string;
 }
 
 @Controller()
@@ -75,6 +82,21 @@ export class ReviewsController {
   @Roles('ADMIN')
   @Post('reviews/:id/visibility')
   setVisibility(@Param('id') id: string, @Body() dto: VisibilityDto) {
-    return this.reviews.setVisibility(id, dto.isVisible);
+    return this.reviews.setVisibility(id, dto.isVisible, dto.mediaKey);
+  }
+
+  /** Admin duyệt đánh giá (Góc Sống Xanh): hiện công khai, cộng Điểm Xanh nếu đủ điều kiện; trả số điểm hoặc lý do không cộng. */
+  @Roles('ADMIN')
+  @Post('reviews/:id/approve')
+  approve(@Param('id') id: string, @Body() dto: ApproveDto) {
+    return this.reviews.approve(id, dto.mediaKey);
+  }
+
+  /** Dải "Khách hàng sống xanh cùng TubuTree" ở Trang chủ: đánh giá ảnh đã duyệt. Cờ tắt thì `enabled: false`. */
+  @Public()
+  @PublicCache('USER_CONTENT')
+  @Get('green-corner')
+  greenCorner() {
+    return this.reviews.greenCorner();
   }
 }

@@ -140,6 +140,17 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
     offWarning: 'Hàng chip biến mất khỏi ô tìm trong vòng khoảng 1 giờ (bộ đệm). Không dữ liệu nào bị xoá.',
   },
   {
+    key: 'reviews.green_corner_enabled',
+    label: 'Góc Sống Xanh: đánh giá ảnh có duyệt',
+    description:
+      'Đánh giá có ảnh của khách chờ duyệt ở tab Đánh giá (chip "Chờ duyệt") rồi mới hiện. Duyệt xong khách được cộng reviews.photo_reward_points Điểm Xanh (mặc định 100), mỗi khách tối đa reviews.photo_reward_daily_cap đánh giá được cộng cho các đánh giá viết cùng ngày. Trang chủ hiện dải "Khách hàng sống xanh cùng Tubu Tree" khi có từ 3 đánh giá ảnh đã duyệt.',
+    fallback: false,
+    onWarning:
+      'Chỉ bật khi Mini App bản có Góc Sống Xanh đã lên Zalo: bản cũ cho chọn 5 ảnh (máy chủ từ chối quá 3), báo đánh giá chờ duyệt là "đã ẩn" và vẫn hứa thưởng lúc gửi. Bảng thưởng cũ lúc gửi (5.000 / 10.000 / 15.000 điểm) ngừng hẳn. Đánh giá có ảnh mới chỉ hiện sau khi được duyệt; đánh giá chỉ chữ vẫn hiện ngay nhưng không còn được cộng điểm.',
+    offWarning:
+      'Đánh giá mới về lại bảng thưởng cũ lúc gửi và hiện ngay. Đánh giá đang chờ vẫn nằm ở chip "Chờ duyệt", duyệt vẫn cộng điểm như đã báo khách. Dải ở Trang chủ ẩn.',
+  },
+  {
     key: 'notify.proactive_cap_enabled',
     label: 'Trần tin nhắc chủ động mỗi khách',
     description: 'Tin nhắc qua Zalo (ZNS) như nhắc giỏ, mua lại, điểm sắp hết hạn, nhắc chuỗi, hàng về, khuyến mãi: tối đa 1 tin mỗi ngày và 4 tin mỗi tuần cho mỗi khách. Tin đơn hàng, thanh toán, đổi trả, đổi rác không bao giờ bị chặn. Tin trong app vẫn đủ.',

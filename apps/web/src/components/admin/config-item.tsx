@@ -33,7 +33,7 @@ const MONEY_PREFIXES = [
 ];
 
 /** Nhóm trộn khoá thưởng điểm với khoá không đụng tiền (đường dẫn mạng xã hội, bật/tắt tính năng): chỉ hỏi khi tên khoá nói về điểm, thưởng, giá, trần. */
-const MIXED_PREFIXES = ['community.'];
+const MIXED_PREFIXES = ['community.', 'reviews.'];
 const MIXED_MONEY_KEY = /(^|[._])(points?|reward|bonus|cost|price|unlock|budget|cap|prizes?|tiers?|min_order|limit)([._]|$)/;
 
 /** Khoá tiền nằm ngoài các nhóm trên: phạt đi trễ trừ thẳng vào lương nhân viên. */

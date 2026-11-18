@@ -11,6 +11,7 @@ import type {
   CouponPreviewRequest,
   FlashAllowanceResponse,
   CouponPreviewsResponse,
+  GreenCornerResponse,
   OrderDTO,
   OrderItemDTO,
   PendingGiftRedemptionDTO,
@@ -317,6 +318,8 @@ export interface PublicConfig {
   orderZaloEnabled?: boolean;
   orderZaloPrechecked?: boolean;
   tubuZaloPhone?: string;
+  /** Góc Sống Xanh: cùng nghĩa với `PublicConfig.reviewGreenCorner` ở app-core. Thiếu khi API cũ → như tắt. */
+  reviewGreenCorner?: { enabled: boolean; rewardPoints: number; dailyCap: number; maxPhotos: number };
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);
@@ -629,11 +632,15 @@ export interface ReviewItem {
   createdAt: string;
   author: string;
   verifiedPurchase?: boolean;
+  /** Khoá thẻ cảm nhận Góc Sống Xanh (`review.eco.<khoá>`); thiếu khi API cũ. */
+  ecoTags?: string[];
 }
 export interface ReviewSummary {
   average: number;
   count: number;
   videoCount?: number;
+  /** Số đánh giá có ảnh đang hiện (số trên chip "Có ảnh"); thiếu khi API cũ. */
+  photoCount?: number;
   distribution?: Record<string, number>;
   items: ReviewItem[];
   /** Còn trang sau thì gửi lại kèm cùng chip để lấy tiếp; null là hết. Thiếu khi API cũ (chưa phân trang). */
@@ -653,6 +660,8 @@ export interface MyReviewRef {
   rating: number;
   createdAt: string;
   isVisible: boolean;
+  /** Đánh giá có ảnh đang chờ Tubu duyệt (Góc Sống Xanh): chưa hiện nhưng không phải bị ẩn. Thiếu khi API cũ. */
+  awaitingApproval?: boolean;
 }
 /** Lần mua (đơn đã nhận) còn viết được đánh giá; đơn nhận sớm nhất trước. */
 export interface ReviewableOrder {
@@ -686,6 +695,8 @@ export interface MyReview {
   images: string[];
   videoUrl: string | null;
   isVisible: boolean;
+  ecoTags?: string[];
+  awaitingApproval?: boolean;
 }
 export const fetchMyReview = (id: string) => api.get<MyReview>(`/reviews/${id}`).then((r) => r.data);
 
@@ -701,6 +712,8 @@ export type CreatedReview = Pick<ReviewItem, 'id' | 'rating' | 'comment' | 'imag
   updated?: boolean;
   /** false khi admin đang ẩn đánh giá này: lưu/sửa không làm nó hiện lại. Thiếu (API cũ) coi là đang hiện. */
   isVisible?: boolean;
+  /** true: đánh giá có ảnh đang chờ Tubu duyệt (Góc Sống Xanh), chưa hiện công khai và chưa cộng điểm. */
+  awaitingApproval?: boolean;
 };
 /**
  * `orderId`: lần mua được đánh giá; đơn đã có đánh giá thì lần gửi này sửa nó. Bắt buộc: máy chủ hiểu lần gửi không kèm đơn
@@ -708,8 +721,11 @@ export type CreatedReview = Pick<ReviewItem, 'id' | 'rating' | 'comment' | 'imag
  */
 export const createReview = (
   slug: string,
-  data: { rating: number; comment?: string; images?: string[]; videoUrl?: string; orderId: string },
+  data: { rating: number; comment?: string; images?: string[]; videoUrl?: string; orderId: string; ecoTags?: string[] },
 ) => api.post<CreatedReview>(`/products/${slug}/reviews`, data, imageTimeout(data)).then((r) => r.data);
+
+/** Dải "Khách hàng sống xanh" ở Trang chủ (GET /green-corner): `enabled` false khi cờ tắt. */
+export const fetchGreenCorner = () => api.get<GreenCornerResponse>('/green-corner').then((r) => r.data);
 
 // Orders
 /** Ảnh/tồn kho từng dòng do API join theo variationId (dự án 4a). Optional: API cũ không trả. */

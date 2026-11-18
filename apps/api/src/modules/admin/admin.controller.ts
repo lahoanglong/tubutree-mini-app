@@ -420,7 +420,8 @@ export class VariationLookupQuery {
 }
 
 export class ListReviewsQuery extends PaginationQuery {
-  @IsOptional() @IsIn(['visible', 'hidden']) visibility?: 'visible' | 'hidden';
+  // pending = đánh giá có ảnh/video đang chờ duyệt (Góc Sống Xanh); hidden = admin đã ẩn (không gồm đánh giá đang chờ).
+  @IsOptional() @IsIn(['visible', 'hidden', 'pending']) visibility?: 'visible' | 'hidden' | 'pending';
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(5) rating?: number;
 }
 
