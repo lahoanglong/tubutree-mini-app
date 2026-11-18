@@ -42,6 +42,7 @@ const EXPECTED: Record<string, Access> = {
   'GET /admin/analytics/launch-watch': ADMIN_ONLY,
   'GET /admin/analytics/purchase-funnel': ADMIN_ONLY,
   'GET /admin/analytics/retention-daily': ADMIN_ONLY,
+  'GET /admin/growth/overview': ADMIN_ONLY,
   'GET /admin/attendance/live': ADMIN_ONLY,
   'POST /admin/attendance/manual-checkout': ADMIN_ONLY,
   'POST /admin/attendance/session': ADMIN_ONLY,

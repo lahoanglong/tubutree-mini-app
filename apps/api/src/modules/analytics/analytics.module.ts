@@ -11,6 +11,6 @@ import { WebhookRejectCounterService } from './webhook-reject-counter.service';
 @Module({
   controllers: [AnalyticsController, AnalyticsAdminController],
   providers: [AnalyticsEventsService, AnalyticsAggregationService, LaunchWatchService, PurchaseFunnelService, WebhookRejectCounterService],
-  exports: [AnalyticsEventsService, WebhookRejectCounterService],
+  exports: [AnalyticsEventsService, WebhookRejectCounterService, PurchaseFunnelService],
 })
 export class AnalyticsModule {}

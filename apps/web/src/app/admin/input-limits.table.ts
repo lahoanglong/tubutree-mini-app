@@ -182,6 +182,7 @@ export const EXEMPT_INPUTS: Record<string, string> = {
   "components/admin/engagement-tab.tsx::f.rewardPoints": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
   "components/admin/engagement-tab.tsx::f.rewardPoints#2": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
   "components/admin/gomdon-config-card.tsx::weight": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
+  "app/admin/growth-hub/growth-hub-controls.tsx::draft": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
   "components/admin/loyalty-config-card.tsx::v": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
   "components/admin/loyalty-config-card.tsx::form.maxOrderTotal": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",
   "components/admin/loyalty-config-card.tsx::form.staffCap": "ô gõ số (inputMode numeric/decimal): trần là @Min/@Max theo giá trị, không phải độ dài chuỗi",

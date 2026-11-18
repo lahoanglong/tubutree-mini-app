@@ -17,6 +17,8 @@ export const FIELD_LABELS: Record<string, string> = {
   comment: 'Nội dung đánh giá',
   images: 'Ảnh',
   videoUrl: 'Video',
+  ecoTags: 'Thẻ cảm nhận',
+  mediaKey: 'Phiên bản ảnh đang xem',
   reason: 'Lý do',
   body: 'Nội dung',
   title: 'Tiêu đề',
