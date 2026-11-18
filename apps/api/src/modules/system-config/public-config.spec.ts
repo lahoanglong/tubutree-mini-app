@@ -149,6 +149,15 @@ describe('buildPublicConfig — referralShareCardEnabled (trang đích link mờ
   });
 });
 
+describe('buildPublicConfig — returnPackagingNudgeEnabled (gợi ý gửi lại bao bì)', () => {
+  it('mặc định tắt; chỉ boolean true thật mới bật', async () => {
+    expect((await build({})).returnPackagingNudgeEnabled).toBe(false);
+    expect((await build({ 'checkout.return_packaging_nudge_enabled': true })).returnPackagingNudgeEnabled).toBe(true);
+    expect((await build({ 'checkout.return_packaging_nudge_enabled': 'true' })).returnPackagingNudgeEnabled).toBe(false);
+    expect((await build({ 'checkout.return_packaging_nudge_enabled': 1 })).returnPackagingNudgeEnabled).toBe(false);
+  });
+});
+
 describe('buildPublicConfig — freeshipBoosterEnabled (dải "Thêm 1 món nhỏ" ở giỏ)', () => {
   it('mặc định tắt; chỉ boolean true thật mới bật', async () => {
     expect((await build({})).freeshipBoosterEnabled).toBe(false);

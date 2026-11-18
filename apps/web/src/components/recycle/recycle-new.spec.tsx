@@ -30,6 +30,7 @@ const state = vi.hoisted(() => ({
   calls: [] as { path: string; body?: unknown; headers?: Record<string, string> }[],
   keySeq: 0,
   config: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } } as Record<string, unknown>,
+  packaging: { suggestion: null } as unknown,
 }));
 
 vi.mock('next/navigation', () => ({
@@ -44,9 +45,10 @@ vi.mock('@/lib/idempotency-key', () => ({ newIdempotencyKey: () => `key-${++stat
 vi.mock('./recycle-labels', async (orig) => ({ ...(await orig<object>()), PREVIEW_DEBOUNCE_MS: 0 }));
 vi.mock('@/lib/core-http', () => ({
   coreHttp: {
-    get: async (path: string) => {
-      state.calls.push({ path });
+    get: async (path: string, opts?: { query?: Record<string, string> }) => {
+      state.calls.push({ path, ...(path === '/waste/return-packaging' ? { body: opts?.query } : {}) });
       if (path === '/waste/me') return state.me;
+      if (path === '/waste/return-packaging') return state.packaging;
       if (path.startsWith('/waste/points')) return state.points;
       if (path === '/me/loyalty/rewards') return state.rewards;
       if (path === '/waste/rules') {
@@ -129,6 +131,7 @@ beforeEach(() => {
   state.rulesGate = null;
   state.keySeq = 0;
   state.config = { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
+  state.packaging = { suggestion: null };
   state.me = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } });
   state.points = [makeWastePoint()];
   state.rewards = makeRewardCatalog({ redeemablePoints: 14_000 });
@@ -251,6 +254,50 @@ describe('bước 1: chọn món (§4.2)', () => {
     click(barButton(c, 'Tiếp tục'));
     expect(loadDraft()).toEqual({ ...EMPTY_DRAFT, method: 'PICKUP', lines: { 'item-carton': 1 } });
     expect(state.push).toHaveBeenCalledWith('/doi-rac/tao?step=method');
+  });
+  it('?from=<mã đơn> (thẻ bao bì ở chi tiết đơn): điền sẵn bao bì của đơn, kẹp theo trần còn lại, bỏ món không có trên màn', async () => {
+    state.config = { ...state.config, returnPackagingNudgeEnabled: true };
+    state.search = 'method=PICKUP&from=TT100';
+    const base = makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } });
+    state.me = { ...base, items: base.items.map((i) => (i.id === 'item-carton' ? { ...i, monthRemainingQty: 3 } : i)) };
+    state.packaging = {
+      suggestion: {
+        orderCodes: ['TT100'],
+        lines: [
+          { itemId: 'item-carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', qty: 5, unitsPerPoint: 1, pointsPerGroup: 1000 },
+          { itemId: 'item-gone', code: 'TUBU_BOTTLE', name: 'Vỏ chai', unitLabel: 'vỏ', qty: 2, unitsPerPoint: 1, pointsPerGroup: 1000 },
+        ],
+        estimatedPoints: 7000,
+        minPoints: 3000,
+      },
+    };
+    const c = await mount();
+    expect(state.calls).toContainEqual({ path: '/waste/return-packaging', body: { orderCode: 'TT100' } });
+    expect(qtyOf(c, 'Thùng carton')).toBe('3');
+    click(barButton(c, 'Tiếp tục'));
+    expect(loadDraft()).toEqual({ ...EMPTY_DRAFT, method: 'PICKUP', lines: { 'item-carton': 3 } });
+  });
+  it('?from= mà nháp đã có món (quay lại từ bước 2): giữ nguyên lựa chọn của khách', async () => {
+    state.config = { ...state.config, returnPackagingNudgeEnabled: true };
+    state.search = 'method=PICKUP&from=TT100';
+    saveDraft({ ...EMPTY_DRAFT, method: 'PICKUP', lines: { 'item-milk': 4 } });
+    markResume();
+    state.packaging = {
+      suggestion: {
+        orderCodes: ['TT100'],
+        lines: [{ itemId: 'item-carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', qty: 2, unitsPerPoint: 1, pointsPerGroup: 1000 }],
+        estimatedPoints: 2000,
+        minPoints: 3000,
+      },
+    };
+    const c = await mount();
+    click(barButton(c, 'Tiếp tục'));
+    expect(loadDraft()?.lines).toEqual({ 'item-milk': 4 });
+  });
+  it('?from= khi cờ tắt: không gọi API bao bì', async () => {
+    state.search = 'method=PICKUP&from=TT100';
+    await mount();
+    expect(state.calls.some((x) => x.path === '/waste/return-packaging')).toBe(false);
   });
   it('W180: ?method= khác PICKUP (kể cả cách giao hợp lệ khác) bị bỏ, nháp vẫn chưa chọn cách giao', async () => {
     state.search = 'method=MAIL_IN';

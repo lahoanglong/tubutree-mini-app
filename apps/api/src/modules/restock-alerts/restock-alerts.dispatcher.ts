@@ -5,7 +5,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
-import { runExclusive } from '../../common/cron-leader/run-exclusive';
+import { runExclusive, type ExclusiveResult } from '../../common/cron-leader/run-exclusive';
 import { RestockAlertsService } from './restock-alerts.service';
 
 /** Giãn tin: tối đa chừng này tin báo hàng về mỗi phút (mỗi lượt cron), trên mọi biến thể. */
@@ -51,17 +51,56 @@ export class RestockAlertsDispatcher {
   async dispatchRestocked(): Promise<void> {
     try {
       if (!(await this.restock.enabled())) return;
-      const run = await runExclusive(this.prisma, 'restock-alerts', () => this.dispatchOnce(new Date()), { ttlMs: RUN_TTL_MS });
+      const run = await this.runBudgeted(new Date());
       if (!run.acquired) markCronSkipped('LOCKED');
     } catch (err) {
       this.logger.error(err);
     }
   }
 
+  /**
+   * Lượt sớm, ngoài lịch, khi một đường ghi tồn vừa thấy biến thể về hàng mà còn khách chờ (MSS đẩy tồn). Cùng khoá `restock-alerts` với
+   * cron nên không chạy chồng, cùng ngân sách tin 60 giây gần nhất nên giãn tin vẫn ≤ RESTOCK_SENDS_PER_TICK trong mọi cửa sổ 60 giây;
+   * hết ngân sách thì để lượt cron sau gửi. Trả số tin đã gửi.
+   */
+  async kick(now: Date = new Date()): Promise<number> {
+    if (!(await this.restock.enabled())) return 0;
+    const run = await this.runBudgeted(now);
+    return run.acquired ? run.value : 0;
+  }
+
+  /**
+   * Số dòng đã nhận để gửi (tính cả lần gửi lỗi) theo lượt, chung cho lượt cron và lượt sớm; chỉ đọc và ghi khi đang giữ khoá. Một tiến
+   * trình API; nhiều bản thì mỗi bản một ngân sách.
+   */
+  private spends: Array<{ at: number; n: number }> = [];
+
+  private async runBudgeted(now: Date): Promise<ExclusiveResult<number>> {
+    return runExclusive(
+      this.prisma,
+      'restock-alerts',
+      async () => {
+        const t = now.getTime();
+        this.spends = this.spends.filter((s) => s.at > t - 60_000);
+        const budget = RESTOCK_SENDS_PER_TICK - this.spends.reduce((sum, s) => sum + s.n, 0);
+        if (budget <= 0) return 0;
+        const run = await this.dispatchRun(now, budget);
+        if (run.attempted > 0) this.spends.push({ at: t, n: run.attempted });
+        return run.sent;
+      },
+      { ttlMs: RUN_TTL_MS },
+    );
+  }
+
   /** Một lượt: trả số tin đã gửi được. Tách khỏi cron để test gọi thẳng với mốc giờ tự chọn. */
-  async dispatchOnce(now: Date): Promise<number> {
-    const recovered = await this.recoverStale(now, RESTOCK_SENDS_PER_TICK);
-    let budget = RESTOCK_SENDS_PER_TICK - recovered.attempted;
+  async dispatchOnce(now: Date, limit: number = RESTOCK_SENDS_PER_TICK): Promise<number> {
+    return (await this.dispatchRun(now, limit)).sent;
+  }
+
+  /** Như dispatchOnce, kèm số dòng đã nhận để gửi (cả lần gửi lỗi): ngân sách tin trừ theo số này. */
+  async dispatchRun(now: Date, limit: number): Promise<{ sent: number; attempted: number }> {
+    const recovered = await this.recoverStale(now, limit);
+    let budget = limit - recovered.attempted;
     let sent = recovered.sent;
     const variations = await this.prisma.$queryRaw<Array<{ id: string }>>`
       SELECT v."id"
@@ -78,7 +117,7 @@ export class RestockAlertsDispatcher {
       if (claimed.length === 0) continue;
       sent += await this.deliver(id, claimed);
     }
-    return sent;
+    return { sent, attempted: limit - budget };
   }
 
   /** Gửi các dòng vừa nhận của một biến thể. Lỗi giữa chừng không làm mất dòng chưa gửi: dòng được trả về chờ. */

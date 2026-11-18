@@ -30,6 +30,8 @@ export const STEP_LABELS: Record<RecycleFunnelStep, string> = {
   fee_path_dropoff: 'Chọn mang tới điểm nhận',
   second_order_shown: 'Thấy gợi ý đặt đơn thứ hai',
   second_order_click: 'Bấm gợi ý đặt đơn thứ hai',
+  return_nudge_shown: 'Thấy gợi ý gửi lại bao bì ở thanh toán',
+  return_nudge_applied: 'Gửi bao bì kèm đơn bằng một chạm',
 };
 
 export const stepLabel = (step: string): string => (STEP_LABELS as Record<string, string>)[step] ?? step;

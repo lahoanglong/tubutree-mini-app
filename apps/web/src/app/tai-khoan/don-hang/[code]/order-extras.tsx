@@ -7,8 +7,14 @@ import { ChevronRight, Recycle } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
 import { errorStatus } from '@tubutree/app-core/api/error-status';
 import { WASTE_QUERY_KEYS, getWasteRequestByOrder } from '@tubutree/app-core/api/waste';
-import { wasteMeQuery } from '@tubutree/app-core/queries/waste';
-import { SECOND_ORDER_METHOD, secondOrderInviteCopy, secondOrderInviteDecision, secondOrderOrderGate } from '@tubutree/app-core/second-order-invite';
+import { returnPackagingQuery, wasteMeQuery } from '@tubutree/app-core/queries/waste';
+import {
+  SECOND_ORDER_METHOD,
+  secondOrderInviteCopyFor,
+  secondOrderInviteDecision,
+  secondOrderInvitePath,
+  secondOrderOrderGate,
+} from '@tubutree/app-core/second-order-invite';
 import { coreHttp } from '@/lib/core-http';
 import { fetchOrdersPage, type OrderDetailDTO } from '@/lib/shop-client';
 import { safeHttpUrl } from '@/lib/order-view';
@@ -85,8 +91,12 @@ function SecondOrderInviteCard({ order: o, fallback }: { order: OrderDetailDTO; 
   const cfg = usePublicConfig();
   const ready = isWebRouteReady('/doi-rac/tao');
   // Chỉ hỏi /waste/me khi đơn đủ điều kiện và đường kèm đơn đang bật: đơn đang giao, đã kèm rác hay cổng đóng không tốn thêm lời gọi nào.
-  const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: ready && cfg.isLoaded && cfg.waste.pickup && secondOrderOrderGate(o) === null });
+  const orderOk = ready && cfg.isLoaded && cfg.waste.pickup && secondOrderOrderGate(o) === null;
+  const meQ = useQuery({ ...wasteMeQuery(coreHttp), enabled: orderOk });
+  // Cờ `checkout.return_packaging_nudge_enabled`: thẻ nêu đúng bao bì của đơn, chạm vào thì màn tạo yêu cầu điền sẵn số lượng.
+  const packQ = useQuery({ ...returnPackagingQuery(coreHttp, o.code), enabled: orderOk && cfg.returnPackagingNudgeEnabled === true, staleTime: 60_000 });
   const visible = ready && secondOrderInviteDecision({ order: o, cfgPickup: cfg.waste.pickup, me: meQ.data }).show;
+  const packaging = packQ.data?.suggestion ?? null;
   const shown = useRef(false);
   useEffect(() => {
     if (!visible || shown.current) return;
@@ -94,18 +104,21 @@ function SecondOrderInviteCard({ order: o, fallback }: { order: OrderDetailDTO; 
     trackRecycleStep('second_order_shown', SECOND_ORDER_METHOD);
   }, [visible]);
   if (!visible) return cfg.isLoaded && !meQ.isLoading ? (fallback ?? null) : null;
+  // Chờ bao bì về rồi mới vẽ để chữ thẻ không đổi ngay dưới tay khách; lỗi thì giữ chữ cũ.
+  if (packQ.isLoading) return null;
+  const copy = secondOrderInviteCopyFor(packaging);
   return (
     <Link
       id="order-second-order-invite"
-      href={`/doi-rac/tao?method=${SECOND_ORDER_METHOD}`}
-      aria-label={secondOrderInviteCopy.aria}
+      href={secondOrderInvitePath('/doi-rac/tao', o.code, packaging !== null)}
+      aria-label={copy.aria}
       onClick={() => trackRecycleStep('second_order_click', SECOND_ORDER_METHOD)}
       className={`mt-4 flex min-h-11 items-center gap-3 p-4 ${ui.card}`}
     >
       <Recycle className="h-5 w-5 flex-none text-forest-600" aria-hidden="true" />
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold text-stone-900">{secondOrderInviteCopy.title}</span>
-        <span className="block text-xs text-stone-600">{secondOrderInviteCopy.subtitle}</span>
+        <span className="block text-sm font-semibold text-stone-900">{copy.title}</span>
+        <span className="block text-xs text-stone-600 tabular-nums">{copy.subtitle}</span>
       </span>
       <ChevronRight className="h-4 w-4 flex-none text-stone-600" aria-hidden="true" />
     </Link>

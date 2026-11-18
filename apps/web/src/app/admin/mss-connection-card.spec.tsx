@@ -17,7 +17,7 @@ const mount = () => {
 };
 
 const URL_PART = '/admin/ops/health';
-const FLAGS = ['catalogEnrichment', 'orderEvents', 'customerSync', 'orderPush', 'orderStatus', 'invoice', 'catalogShadow'] as const;
+const FLAGS = ['catalogEnrichment', 'orderEvents', 'customerSync', 'orderPush', 'orderStatus', 'invoice', 'catalogShadow', 'stockSync'] as const;
 const KEYS: Record<(typeof FLAGS)[number], string> = {
   catalogEnrichment: 'mss.catalog_enrichment_enabled',
   orderEvents: 'mss.order_events_enabled',
@@ -26,6 +26,7 @@ const KEYS: Record<(typeof FLAGS)[number], string> = {
   orderStatus: 'mss.order_status_enabled',
   invoice: 'mss.invoice_enabled',
   catalogShadow: 'mss.catalog_shadow_enabled',
+  stockSync: 'mss.stock_sync_enabled',
 };
 const CAP: Record<(typeof FLAGS)[number], string> = {
   catalogEnrichment: 'catalog.enrichment',
@@ -35,6 +36,7 @@ const CAP: Record<(typeof FLAGS)[number], string> = {
   orderStatus: 'orders',
   invoice: 'invoice',
   catalogShadow: 'catalog.source',
+  stockSync: 'catalog.source',
 };
 
 const offCard = (): MssOpsCard => ({
@@ -66,7 +68,7 @@ describe('MssConnectionCard', () => {
     expect(r.container.textContent).toBe('');
   });
 
-  it('mặc định PROD (thiếu biến, mọi cờ tắt): Chưa cấu hình, 4 biến Thiếu, khoá trước Không đặt, 7 cờ Tắt, cầu dao Đóng, không dò', async () => {
+  it('mặc định PROD (thiếu biến, mọi cờ tắt): Chưa cấu hình, 4 biến Thiếu, khoá trước Không đặt, 8 cờ Tắt, cầu dao Đóng, không dò', async () => {
     const m = stub(offCard());
     const r = mount();
     await flush(10);
@@ -83,7 +85,7 @@ describe('MssConnectionCard', () => {
       'MSS_INBOUND_SECRET_PREVKhông đặt',
     ]);
     const rows = flagRows(r);
-    expect(rows).toHaveLength(7);
+    expect(rows).toHaveLength(8);
     expect(rows.every((li) => li.textContent!.includes('Tắt'))).toBe(true);
     expect(text).toContain('Không dò (không cờ nào bật)');
     expect(text).toContain('Đóng');

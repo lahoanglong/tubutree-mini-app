@@ -21,6 +21,7 @@ import type {
   WasteRejectRequest,
   WasteRejectResultDTO,
   WasteRequestDetailDTO,
+  ReturnPackagingResponse,
   WasteRequestSummaryDTO,
   WasteRulesDTO,
   WasteTrackingRequest,
@@ -42,6 +43,7 @@ export const WASTE_QUERY_KEYS = {
   desk: ['waste', 'desk'],
   rewards: ['loyalty-rewards'],
   rewardsMine: ['loyalty-rewards', 'mine'],
+  returnPackaging: (orderCode: string) => ['waste', 'return-packaging', orderCode] as const,
 } as const;
 
 export const getWasteMe = () => api.get<WasteMeDTO>('/waste/me').then((r) => r.data);
@@ -76,6 +78,8 @@ export const getWasteFeeQr = (id: string) =>
   });
 export const getWasteRequestByOrder = (orderId: string) =>
   api.get<WasteRequestDetailDTO>(`/waste/requests/by-order/${enc(orderId)}`).then((r) => r.data);
+export const getReturnPackaging = (orderCode: string) =>
+  api.get<ReturnPackagingResponse>('/waste/return-packaging', { params: { orderCode } }).then((r) => r.data);
 export const getWasteRules = () => api.get<WasteRulesDTO>('/waste/rules').then((r) => r.data);
 export const getDeskPoints = () => api.get<WasteDeskPointDTO[]>('/waste/desk/points').then((r) => r.data);
 export const deskLookup = (code: string) =>

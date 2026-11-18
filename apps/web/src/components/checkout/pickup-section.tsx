@@ -21,6 +21,7 @@ import {
   pickupProgressView,
   pickupWeightView,
 } from '@tubutree/app-core/checkout-pickup-view';
+import { pickupNudgeView, type ReturnNudge } from '@tubutree/app-core/return-packaging';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { Badge, Button, Chip, PriceTag, ProgressBar, QuantitySelector, Skeleton, Text } from '@/components/mini';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
@@ -42,11 +43,18 @@ interface PickupSectionProps {
   maxOpenError?: string | null;
   openRequestsHref?: string;
   disabled?: boolean;
+  /** Gợi ý gửi lại bao bì (cờ `checkout.return_packaging_nudge_enabled`); null = thẻ như cũ. */
+  nudge?: ReturnNudge | null;
+  /** Gọi sau khi công tắc áp gợi ý bằng một chạm (đo phễu). */
+  onNudgeApplied?: () => void;
+  /** Gọi một lần khi gợi ý hiện lần đầu (đo phễu). */
+  onNudgeShown?: () => void;
 }
 
 /**
  * Một thẻ duy nhất cho "Đổi rác kèm đơn": đóng là một hàng (chữ + công tắc), mở ra tấm chọn món/kg với đúng một nút Xong.
  * Thay mục "Thu kèm rác" cũ (gắn phiếu có sẵn): phiếu mở có sẵn được chọn sẵn trong tấm qua `existingRequest`. Cùng luật với Mini App.
+ * Có gợi ý bao bì (`nudge`): hàng nêu đúng bao bì khách đang giữ; đủ điểm thì bật công tắc là áp luôn, không thì công tắc mở tấm đã điền sẵn.
  */
 export function PickupSection({
   pickup,
@@ -63,6 +71,9 @@ export function PickupSection({
   maxOpenError,
   openRequestsHref = '/doi-rac/yeu-cau',
   disabled = false,
+  nudge = null,
+  onNudgeApplied,
+  onNudgeShown,
 }: PickupSectionProps) {
   const lastPickup = useRef<CheckoutPickupQuote | null>(null);
   const lastFee = useRef(0);
@@ -78,11 +89,22 @@ export function PickupSection({
     if (!options || draft) return;
     const weight = applied?.returnWeightGrams ?? defaultReturnWeightGrams(returnWeightChips(options.maxReturnWeightGrams));
     if (applied) setDraft({ ...applied, qty: { ...applied.qty } });
+    else if (nudge) setDraft({ ...nudge.draft, qty: { ...nudge.draft.qty } });
     else if (options.existingRequest) setDraft(draftUsingRequest(options.existingRequest, weight));
     else setDraft({ requestId: null, qty: {}, returnWeightGrams: weight });
-  }, [open, options, draft, applied]);
+  }, [open, options, draft, applied, nudge]);
 
   const view = pickupCardView({ pickup: lastPickup.current, applied: applied !== null, tubuShippingFee: lastFee.current });
+  const nudgeVisible = !!view && !view.disabled && !disabled && applied === null && nudge !== null;
+  // Phễu chỉ đếm gợi ý bao bì từ đơn, mỗi lần vào trang một lần; phiếu đã đăng ký thì không phải gợi ý mới.
+  const fromOrder = nudge?.source === 'ORDER';
+  const nudgeSeen = useRef(false);
+  const nudgeTaken = useRef(false);
+  useEffect(() => {
+    if (!nudgeVisible || !fromOrder || nudgeSeen.current) return;
+    nudgeSeen.current = true;
+    onNudgeShown?.();
+  }, [nudgeVisible, fromOrder, onNudgeShown]);
   if (!view) return null;
 
   const locked = view.disabled || disabled;
@@ -90,13 +112,27 @@ export function PickupSection({
   const openSheet = () => {
     if (!locked) onOpenChange(true);
   };
+  const nudgeView = nudgeVisible && nudge ? pickupNudgeView(nudge) : null;
+  const turnOn = () => {
+    if (!nudge?.oneTap || !nudgeView) return openSheet();
+    onApply({ ...nudge.draft, qty: { ...nudge.draft.qty } });
+    if (fromOrder && !nudgeTaken.current) {
+      nudgeTaken.current = true;
+      onNudgeApplied?.();
+    }
+  };
 
   return (
-    <section aria-label={view.title} data-testid="checkout-pickup" className="mt-3 border-t border-[var(--color-border-subtle)] pt-3 tabular-nums">
-      <div className="flex min-h-14 items-center gap-3">
+    <section
+      aria-label={view.title}
+      data-testid="checkout-pickup"
+      data-nudge={nudgeView ? 'true' : undefined}
+      className="mt-3 border-t border-[var(--color-border-subtle)] pt-3 tabular-nums"
+    >
+      <div className={`flex min-h-14 items-center gap-3 ${nudgeView ? 'rounded-card bg-[var(--color-status-success-bg)] p-2' : ''}`}>
         <button
           type="button"
-          aria-label={view.ariaLabel}
+          aria-label={nudgeView?.ariaLabel ?? view.ariaLabel}
           aria-disabled={locked || undefined}
           onClick={openSheet}
           className="flex min-h-11 min-w-0 flex-1 flex-col justify-center gap-0.5 text-left"
@@ -105,20 +141,29 @@ export function PickupSection({
             <Text variant="body-sm" style={{ fontWeight: 600 }}>{view.title}</Text>
             {view.badge && <Badge tone="success" size="sm">{view.badge}</Badge>}
           </span>
-          <Text variant="caption" tone={view.subTone === 'warn' ? 'warning' : 'secondary'} className="truncate" numeric>
-            {view.sub}
-          </Text>
+          {nudgeView ? (
+            <span className="flex min-w-0 flex-col gap-0.5 [overflow-wrap:anywhere]" data-testid="checkout-pickup-nudge">
+              <Text variant="caption" tone="primary" as="span" numeric>{nudgeView.lead}</Text>
+              <Text variant="caption" tone="success" as="span" numeric style={{ fontWeight: 600 }}>
+                {nudgeView.benefit}
+              </Text>
+            </span>
+          ) : (
+            <Text variant="caption" tone={view.subTone === 'warn' ? 'warning' : 'secondary'} className="truncate" numeric>
+              {view.sub}
+            </Text>
+          )}
         </button>
         <button
           type="button"
           role="switch"
           aria-checked={isApplied}
-          aria-label={view.title}
+          aria-label={nudgeView?.oneTap ? nudgeView.benefit : view.title}
           aria-disabled={locked || undefined}
           onClick={() => {
             if (locked) return;
             if (isApplied) onClear();
-            else openSheet();
+            else turnOn();
           }}
           className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center"
         >

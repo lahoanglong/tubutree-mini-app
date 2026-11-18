@@ -15,6 +15,7 @@ import {
   type WasteNearbyRequest,
   type WastePickupQuoteRequest,
   type WastePreviewRequest,
+  type ReturnPackagingResponse,
   type WasteTrackingRequest,
 } from '@tubutree/shared-types';
 import { Public } from '../../../common/decorators/public.decorator';
@@ -29,12 +30,21 @@ import { WasteCatalogueService } from './waste-catalogue.service';
 import { WasteMeService } from './waste-me.service';
 import { WastePreviewService } from './waste-preview.service';
 import { WasteRequestsService } from './waste-requests.service';
+import { WasteReturnPackagingService } from './waste-return-packaging.service';
 
 export class WastePointsQueryDto implements Pick<WasteNearbyRequest, 'provinceCode'> {
   @IsOptional()
   @IsString()
   @MaxLength(20)
   provinceCode?: string;
+}
+
+export class ReturnPackagingQueryDto {
+  @Trim()
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(32)
+  orderCode!: string;
 }
 
 export class WasteNearbyDto implements WasteNearbyRequest {
@@ -203,6 +213,7 @@ export class WasteCustomerController {
     private readonly catalogue: WasteCatalogueService,
     private readonly requests: WasteRequestsService,
     private readonly previews: WastePreviewService,
+    private readonly returnPackaging: WasteReturnPackagingService,
   ) {}
 
   private async gate(userId: string, mode: WasteGateMode): Promise<WasteCustomerContext> {
@@ -244,6 +255,16 @@ export class WasteCustomerController {
   async points(@CurrentUser('sub') userId: string, @Query() q: WastePointsQueryDto) {
     await this.gate(userId, 'FULL');
     return this.catalogue.listPoints(q.provinceCode);
+  }
+
+  /**
+   * Bao bì của một đơn đã giao để thẻ ở chi tiết đơn nêu đúng món và màn tạo yêu cầu điền sẵn số lượng (cờ
+   * `checkout.return_packaging_nudge_enabled`; tắt, đơn lạ hay bao bì đã gửi lại thì `suggestion: null`). Chỉ đọc.
+   */
+  @Get('return-packaging')
+  async returnPackagingOf(@CurrentUser('sub') userId: string, @Query() q: ReturnPackagingQueryDto): Promise<ReturnPackagingResponse> {
+    await this.gate(userId, 'FULL');
+    return { suggestion: await this.returnPackaging.forOrder(userId, q.orderCode) };
   }
 
   @Post('points/nearby')

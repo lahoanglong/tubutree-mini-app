@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { CheckoutLastStep, CheckoutStep, QuotePendingGiftDTO } from '@tubutree/shared-types';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
@@ -48,6 +48,7 @@ import { EmptyState, ErrorState } from '../components/ui/empty-state';
 import { useLockedMutation } from '../components/game/use-locked-mutation';
 import { formatVnd } from '../utils/format';
 import { usePublicConfig } from '../hooks/use-public-config';
+import { trackRecycleStep } from '../services/recycle-funnel';
 import { checkoutEtaLabel } from '@tubutree/app-core/shipping-eta';
 import { createOrderKeyRing } from '../utils/idempotency';
 import { settleWithin } from '../utils/settle-within';
@@ -241,7 +242,10 @@ export default function CheckoutPage() {
     addressId,
     itemIds,
     onReconciled: () => notify({ text: fillCopy('checkout.pickup.reconciled'), type: 'info' }),
+    nudgeEnabled: publicConfig.isLoaded && publicConfig.returnPackagingNudgeEnabled === true,
   });
+  const trackNudgeShown = useCallback(() => trackRecycleStep('return_nudge_shown', 'PICKUP'), []);
+  const trackNudgeApplied = useCallback(() => trackRecycleStep('return_nudge_applied', 'PICKUP'), []);
   const quoteEnabled = !!addressId && authed && cartReady && cartHasItems && !selectionDead && pickup.ready;
   const quote = useQuery({
     queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey, pickup.fieldsKey],
@@ -904,6 +908,9 @@ export default function CheckoutPage() {
             onClear={chosen(pickup.clear)}
             maxOpenError={pickup.maxOpenError}
             onOpenRequests={() => navigate('/recycle/requests')}
+            nudge={pickup.nudge}
+            onNudgeShown={trackNudgeShown}
+            onNudgeApplied={trackNudgeApplied}
           />
           <GiftRows
             gifts={giftsRef.current}

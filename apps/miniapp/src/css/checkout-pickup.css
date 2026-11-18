@@ -47,6 +47,19 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* Gợi ý gửi lại bao bì: hàng thành ô nền xanh nhạt, hai dòng chữ (bao bì đang giữ, lợi ích) được xuống dòng thay cho dòng lợi ích một dòng. */
+.tubu-pickup[data-nudge='true'] .tubu-pickup-row {
+  padding: var(--space-inline-sm);
+  background: var(--color-status-success-bg);
+  border-radius: var(--radius-card);
+}
+.tubu-pickup-nudge {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
 .tubu-pickup-max-open {
   display: flex;
   flex-wrap: wrap;

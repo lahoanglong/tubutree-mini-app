@@ -198,6 +198,28 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
       expect((await post('/api/cart/coupon', batch)).status).toBe(400);
       expect((await post('/api/cart/coupon', { deep })).status).toBe(400);
     });
+    it.each(['/api/integrations/mss/catalog-sync', '/api/internal/mss/catalog-sync', '/api/Integrations/MSS/catalog-sync/'])(
+      'MSS đẩy nội dung + tồn %s: thân 600 KB qua và giữ byte gốc cho HMAC, quá 1 MB thì 413',
+      async (path) => {
+        const body = JSON.stringify({ sync_id: 'sync-0001', products: [{ pad: 'x'.repeat(600 * 1024) }] });
+        const res = await post(path, body);
+        expect(res.status).toBe(200);
+        expect(((await res.json()) as { raw: string | null }).raw).toBe(body);
+        expect((await post(path, { pad: 'x'.repeat(1_100_000) })).status).toBe(413);
+      },
+    );
+    it('lô MSS đẩy sang 28 000 nút (20 tài liệu đầy đủ) qua; route MSS khác vẫn trần 20 000 nút; quá 100 000 nút thì 400', async () => {
+      const docs = (n: number) => ({ sync_id: 'sync-0001', products: Array.from({ length: 20 }, () => ({ images: new Array(n).fill(0) })) });
+      expect((await post('/api/integrations/mss/catalog-sync', docs(1_400))).status).toBe(200);
+      expect((await post('/api/internal/mss/order-events', docs(1_400))).status).toBe(400);
+      expect((await post('/api/integrations/mss/catalog-sync', docs(6_000))).status).toBe(400);
+    });
+    it('route MSS khác (cả tên /api/internal/mss) vẫn trần 64 KB của webhook; đường con của catalog-sync không được trần 1 MB', async () => {
+      const big = { pad: 'x'.repeat(65 * 1024) };
+      expect((await post('/api/internal/mss/order-events', big)).status).toBe(413);
+      expect((await post('/api/integrations/mss/catalog-sync/x', big)).status).toBe(413);
+      expect((await post('/api/internal/mss/order-events', { a: 1 })).status).toBe(200);
+    });
     it('webhook sự kiện nhỏ: thân 65 KB gửi dạng gzip cũng 413 (trần áp sau giải nén)', async () => {
       const gz = gzipSync(JSON.stringify({ pad: 'x'.repeat(65 * 1024) }));
       const res = await fetch(base + '/api/webhooks/zalopay', { method: 'POST', headers: { 'content-type': 'application/json', 'content-encoding': 'gzip' }, body: gz });

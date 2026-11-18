@@ -209,6 +209,8 @@ export interface PublicConfig {
   shippingEta?: { minDays: number; maxDays: number } | null;
   /** Tỉ giá quy đổi điểm khi trả đơn (đ/điểm); thiếu thì coi như 1. */
   loyalty?: { vndPerPointRedeem?: number };
+  /** Cờ `checkout.return_packaging_nudge_enabled`: gợi ý gửi lại bao bì ở thẻ Đổi rác kèm đơn. Thiếu khi API cũ → tắt. */
+  returnPackagingNudgeEnabled?: boolean;
 }
 export const getPublicConfig = () => apiFetch<PublicConfig>('/config/public', { auth: false });
 

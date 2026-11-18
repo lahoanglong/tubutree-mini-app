@@ -8,6 +8,7 @@ import {
   selectGiftForOrder,
   type PickupDraft,
 } from '@tubutree/app-core/checkout-pickup-state';
+import { returnNudge } from '@tubutree/app-core/return-packaging';
 import { getCheckoutPickupOptions } from '../../services/shop-api';
 
 export const PICKUP_OPTIONS_KEY = 'checkout-pickup-options';
@@ -17,8 +18,15 @@ export const PICKUP_OPTIONS_KEY = 'checkout-pickup-options';
  * `fields` đưa vào báo giá và đặt đơn; luật đối chiếu và dựng thân nằm ở app-core (cùng bản với web).
  * Danh sách món chỉ tải khi mở tấm hoặc đã có lựa chọn cần đối chiếu (đổi địa chỉ có thể làm món Pin cũ bị chặn).
  */
-export function useCheckoutPickup(args: { enabled: boolean; addressId: string | null; itemIds: string[] | undefined; onReconciled?: () => void }) {
-  const { enabled, addressId, itemIds, onReconciled } = args;
+export function useCheckoutPickup(args: {
+  enabled: boolean;
+  addressId: string | null;
+  itemIds: string[] | undefined;
+  onReconciled?: () => void;
+  /** Cờ `checkout.return_packaging_nudge_enabled`: tải danh sách món ngay để thẻ điền sẵn bao bì của đơn đã giao. */
+  nudgeEnabled?: boolean;
+}) {
+  const { enabled, addressId, itemIds, onReconciled, nudgeEnabled = false } = args;
   const [applied, setApplied] = useState<PickupDraft | null>(null);
   const [excluded, setExcluded] = useState<string[]>([]);
   const [sheetOpen, setSheetOpen] = useState(false);
@@ -28,7 +36,7 @@ export function useCheckoutPickup(args: { enabled: boolean; addressId: string | 
   const optionsQ = useQuery({
     queryKey: [PICKUP_OPTIONS_KEY, addressId, itemIdsKey],
     queryFn: () => getCheckoutPickupOptions({ addressId: addressId!, itemIds }),
-    enabled: enabled && !!addressId && (sheetOpen || applied !== null),
+    enabled: enabled && !!addressId && (sheetOpen || applied !== null || nudgeEnabled),
   });
   const options = optionsQ.data;
 
@@ -41,6 +49,8 @@ export function useCheckoutPickup(args: { enabled: boolean; addressId: string | 
     onReconciled?.();
   }, [reconciled]);
 
+  // Gợi ý gửi lại bao bì chỉ hiện khi chưa chọn gì; đã chọn thì thẻ tóm tắt lựa chọn như cũ.
+  const nudge = useMemo(() => (nudgeEnabled && effective === null ? returnNudge(options) : null), [nudgeEnabled, effective, options]);
   const fields = useMemo(() => pickupFieldsOf(effective, excluded), [effective, excluded]);
   const fieldsKey = JSON.stringify(fields);
   // Có lựa chọn cần đối chiếu mà danh sách chưa về: chưa báo giá, kẻo báo giá với món có thể bị máy chủ từ chối (400).
@@ -85,5 +95,6 @@ export function useCheckoutPickup(args: { enabled: boolean; addressId: string | 
     fields,
     fieldsKey,
     ready,
+    nudge,
   };
 }

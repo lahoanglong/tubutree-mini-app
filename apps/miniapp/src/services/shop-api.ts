@@ -322,6 +322,8 @@ export interface PublicConfig {
   reviewGreenCorner?: { enabled: boolean; rewardPoints: number; dailyCap: number; maxPhotos: number };
   /** Cờ `commerce.freeship_booster_enabled`: dải bù đơn ở đầu giỏ lấy món từ `GET /upsell/freeship`. Thiếu khi API cũ → dải cũ từ kệ Bán chạy nhất. */
   freeshipBoosterEnabled?: boolean;
+  /** Cờ `checkout.return_packaging_nudge_enabled`: thẻ gửi lại bao bì ở chi tiết đơn đã giao và thanh toán. Thiếu khi API cũ → tắt. */
+  returnPackagingNudgeEnabled?: boolean;
 }
 export const getPublicConfig = async () =>
   (await takePublicBlock('publicConfig')) ?? api.get<PublicConfig>('/config/public').then((r) => r.data);

@@ -15,7 +15,7 @@ import type {
 } from '@tubutree/shared-types';
 import { WASTE_QUERY_KEYS, WASTE_WRITE_INVALIDATE_KEYS, createWasteRequest, previewWaste } from '@tubutree/app-core/api/waste';
 import { getProvinces } from '@tubutree/app-core/api/geo';
-import { wasteMeQuery, wastePointsQuery, wasteRulesVersionQuery } from '@tubutree/app-core/queries/waste';
+import { returnPackagingQuery, wasteMeQuery, wastePointsQuery, wasteRulesVersionQuery } from '@tubutree/app-core/queries/waste';
 import { rewardsQuery } from '@tubutree/app-core/queries/loyalty';
 import {
   ITEMS_NEXT_HINT,
@@ -34,7 +34,7 @@ import {
 } from '@tubutree/app-core/waste-copy';
 import { consentStillValid, WASTE_RULES_UPDATED_NOTE } from '@tubutree/app-core/waste-consent';
 import { sameProvince } from '@tubutree/app-core/waste-province';
-import { preferredWasteMethodFromSearch } from '@tubutree/app-core/second-order-invite';
+import { packagingWizardLines, preferredWasteMethodFromSearch, returnPackagingOrderFromSearch } from '@tubutree/app-core/second-order-invite';
 import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
 import {
   EMPTY_HOME_PICKUP_FORM,
@@ -97,6 +97,7 @@ import {
   formatVnd,
   nextRewardProgress,
   pointAddress,
+  UNCAPPED_QTY_MAX,
   type BlockContext,
 } from './recycle-labels';
 
@@ -254,6 +255,21 @@ export function RecycleNew() {
       return Object.keys(kept).length === Object.keys(d.lines).length ? d : { ...d, lines: kept };
     });
   }, [activeIds, eligible]);
+  // Thẻ ở chi tiết đơn đã giao mở trang này với ?from=<mã đơn>: điền sẵn bao bì của đơn đó một lần, chỉ khi nháp chưa có món nào.
+  const fromOrder = returnPackagingOrderFromSearch(params.toString());
+  const packQ = useQuery({
+    ...returnPackagingQuery(coreHttp, fromOrder ?? ''),
+    enabled: authed && step === 'items' && fromOrder !== null && cfg.returnPackagingNudgeEnabled === true,
+    staleTime: 60_000,
+  });
+  const packSeeded = useRef(false);
+  useEffect(() => {
+    const suggestion = packQ.data?.suggestion;
+    if (packSeeded.current || !ready || !me || !eligible || !suggestion) return;
+    packSeeded.current = true;
+    const lines = packagingWizardLines(suggestion, me.items.filter((i) => i.status === 'ACTIVE'), UNCAPPED_QTY_MAX);
+    if (Object.keys(lines).length > 0) setDraft((d) => (Object.keys(d.lines).length > 0 ? d : { ...d, lines }));
+  }, [ready, me, eligible, packQ.data]);
   const lineInputs = toLineInputs(draft.lines).filter((l) => !activeIds || activeIds.has(l.itemId));
   const missingDraft = ready && eligible && step === 'method' && lineInputs.length === 0;
   useEffect(() => {

@@ -1,5 +1,9 @@
-import type { WasteMeDTO, WasteMethod } from '@tubutree/shared-types';
+import type { ReturnPackagingSuggestion, WasteMeDTO, WasteMeItemDTO, WasteMethod } from '@tubutree/shared-types';
+import { formatVnNumber } from './number-format';
 import { homePickupEnabled } from './recycle-home-pickup-state';
+import { packagingItemsText } from './return-packaging';
+import { fillCopy } from './shop-copy';
+import { itemQtyMax } from './waste-copy';
 
 /**
  * Thẻ mời ở chi tiết đơn đã giao: giữ bao bì gửi kèm đơn mua kế tiếp (đường PICKUP của Đổi rác) để miễn ship và tích Điểm Xanh.
@@ -24,6 +28,8 @@ export const secondOrderInviteCopy = {
 } as const;
 
 export interface SecondOrderInviteOrder {
+  /** Mã đơn: thẻ hỏi bao bì của đúng đơn này và gửi kèm `?from=` sang màn tạo yêu cầu. */
+  code?: string | null;
   status: string;
   type?: string | null;
   source?: string | null;
@@ -89,4 +95,66 @@ export function preferredWasteMethodFromSearch(search: string): typeof SECOND_OR
   } catch {
     return null;
   }
+}
+
+export interface SecondOrderInviteCopy {
+  title: string;
+  subtitle: string;
+  aria: string;
+}
+
+/**
+ * Chữ của thẻ khi đã biết bao bì của đơn (cờ `checkout.return_packaging_nudge_enabled`): giữ tiêu đề cũ, dòng dưới nêu đúng món và điểm dự kiến.
+ * Chỉ hứa miễn ship khi riêng bao bì đơn này đã đủ ngưỡng điểm thu kèm; chưa đủ thì nói rõ ngưỡng. Không có bao bì thì giữ chữ cũ.
+ */
+export function secondOrderInviteCopyFor(packaging: ReturnPackagingSuggestion | null | undefined): SecondOrderInviteCopy {
+  if (!packaging || packaging.lines.length === 0) return secondOrderInviteCopy;
+  const items = packagingItemsText(packaging.lines);
+  const points = formatVnNumber(packaging.estimatedPoints);
+  const subtitle =
+    packaging.estimatedPoints >= packaging.minPoints
+      ? fillCopy('order.packagingInvite.enough', { items: upperFirst(items), points })
+      : fillCopy('order.packagingInvite.more', { items: upperFirst(items), points, min: formatVnNumber(packaging.minPoints) });
+  return { title: secondOrderInviteCopy.title, subtitle, aria: `${secondOrderInviteCopy.title}. ${subtitle}` };
+}
+
+const upperFirst = (s: string) => (s ? s.charAt(0).toLocaleUpperCase('vi') + s.slice(1) : s);
+
+/** Mã đơn hợp lệ trong `?from=`: chữ, số, gạch; tối đa 32 ký tự như API nhận. */
+const ORDER_CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
+
+/** Đường tới màn tạo yêu cầu với cách giao kèm đơn chọn sẵn; có bao bì thì kèm `from=<mã đơn>` để màn đó điền sẵn số lượng. */
+export function secondOrderInvitePath(base: string, orderCode: string | null | undefined, withPackaging: boolean): string {
+  const from = withPackaging && orderCode && ORDER_CODE_RE.test(orderCode) ? `&from=${encodeURIComponent(orderCode)}` : '';
+  return `${base}?method=${SECOND_ORDER_METHOD}${from}`;
+}
+
+/** `?from=<mã đơn>` của màn tạo yêu cầu; giá trị lạ (sai dạng, quá dài) thì bỏ. */
+export function returnPackagingOrderFromSearch(search: string): string | null {
+  try {
+    const v = new URLSearchParams(search).get('from');
+    return v && ORDER_CODE_RE.test(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+/** Món màn tạo yêu cầu đang cho chọn, kèm phần trần tháng/ngày còn lại (`WasteMeItemDTO`). */
+export type PackagingWizardItem = Pick<WasteMeItemDTO, 'id' | 'monthRemainingQty' | 'dayRemainingQty' | 'hazardous'>;
+
+/** Số lượng điền sẵn cho màn tạo yêu cầu: chỉ món màn đó đang cho chọn, số nguyên từ 1, không quá trần còn lại của món và `max` của ô số. */
+export function packagingWizardLines(
+  packaging: ReturnPackagingSuggestion | null | undefined,
+  items: readonly PackagingWizardItem[],
+  max: number,
+): Record<string, number> {
+  const byId = new Map(items.map((i) => [i.id, i]));
+  const out: Record<string, number> = {};
+  for (const l of packaging?.lines ?? []) {
+    const item = byId.get(l.itemId);
+    if (!item) continue;
+    const q = Math.min(Math.trunc(l.qty), max, itemQtyMax(item, 0, max));
+    if (q >= 1) out[l.itemId] = q;
+  }
+  return out;
 }

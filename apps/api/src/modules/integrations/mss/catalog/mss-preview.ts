@@ -11,6 +11,7 @@ import { parseMssProductDoc } from './mss-catalog-doc';
 import { mssMediaHosts } from './mss-media';
 import { toPublicProductDetail } from '../../../catalog/catalog-public';
 import { readMssPreviewToken } from './mss-preview-token';
+import { withTubuStoryVariations } from './mss-catalog.service';
 
 /** Thân lỗi ổn định cho trang `_preview` của web: hết hạn/sai token và không tìm thấy đều là 404 (không nói sai ở đâu). */
 export const MSS_PREVIEW_EXPIRED = { error: 'preview_expired', message: 'Phiên xem trước đã hết hạn, mở lại từ MSS' } as const;
@@ -49,7 +50,7 @@ export class MssPreviewService {
     if (!parsed.ok || parsed.doc.pancakeProductId !== claims.pid) throw new ServiceUnavailableException(MSS_PREVIEW_UNAVAILABLE);
     const product = await this.prisma.product.findUnique({ where: { pancakeId: claims.pid }, select: { slug: true } });
     if (!product) throw new NotFoundException(MSS_PREVIEW_NOT_FOUND);
-    const payload = await this.withCategories(parsed.doc.payload, parsed.doc.categorySlugs);
+    const payload = await this.withStoryVariations(await this.withCategories(parsed.doc.payload, parsed.doc.categorySlugs), claims.pid);
     const catalog = this.moduleRef?.get(CatalogService, { strict: false });
     if (!catalog) throw new ServiceUnavailableException(MSS_PREVIEW_UNAVAILABLE);
     let pdp: Awaited<ReturnType<CatalogService['getBySlug']>>;
@@ -62,6 +63,16 @@ export class MssPreviewService {
     }
     // Cùng bộ lọc trường công khai với GET /products/:slug: trang xem trước không lộ cột nội bộ.
     return { ...toPublicProductDetail(pdp), preview: { version: claims.ver, expiresAt: new Date(claims.exp * 1000).toISOString() } };
+  }
+
+  /** Như lượt kéo: mã biến thể Pancake trong câu chuyện đổi sang id biến thể Tubu, để bấm vòng cung biến thể chọn đúng phân loại. */
+  private async withStoryVariations(payload: MssEnrichmentPayload, pancakeProductId: string): Promise<MssEnrichmentPayload> {
+    if (!payload.storyConfig) return payload;
+    const rows = await this.prisma.variation.findMany({
+      where: { product: { pancakeId: pancakeProductId }, pancakeId: { not: null } },
+      select: { id: true, pancakeId: true },
+    });
+    return withTubuStoryVariations(payload, new Map(rows.map((v) => [v.pancakeId!, v.id])));
   }
 
   private async withCategories(payload: MssEnrichmentPayload, slugs: string[] | null): Promise<MssEnrichmentPayload> {

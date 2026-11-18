@@ -67,20 +67,27 @@ describe('MssCatalogDoorbellController', () => {
 });
 
 describe('MssCatalogOpsService', () => {
-  function setup(effective: boolean) {
+  const PUSH_STATS = { syncId: 'sync-0001', sentAt: null, products: { status: 'disabled' }, stock: { status: 'applied', applied: 2 }, deferred: { bundles: 0 } };
+  function setup(effective: boolean, pushed = true) {
     const enqueue = jest.fn(async () => undefined);
+    const rows: Record<string, unknown> = {
+      catalog: {
+        lastRunAt: new Date('2026-11-17T01:00:00Z'),
+        lastFinishedAt: new Date('2026-11-17T01:00:05Z'),
+        lastFullAt: null,
+        watermark: new Date('2026-11-17T00:59:00Z'),
+        lastStatus: 'ok',
+        lastTrigger: 'cron',
+        lastError: null,
+        lastStats: { kind: 'incremental', pages: 1, received: 3, applied: 2, unchanged: 1, skipped: {}, trimmed: {} },
+      },
+      ...(pushed
+        ? { push: { lastRunAt: new Date('2026-11-17T02:00:00Z'), lastFinishedAt: new Date('2026-11-17T02:00:01Z'), lastStatus: 'partial', lastError: null, lastStats: PUSH_STATS } }
+        : {}),
+    };
     const prisma = {
       mssCatalogSyncState: {
-        findUnique: jest.fn().mockResolvedValue({
-          lastRunAt: new Date('2026-11-17T01:00:00Z'),
-          lastFinishedAt: new Date('2026-11-17T01:00:05Z'),
-          lastFullAt: null,
-          watermark: new Date('2026-11-17T00:59:00Z'),
-          lastStatus: 'ok',
-          lastTrigger: 'cron',
-          lastError: null,
-          lastStats: { kind: 'incremental', pages: 1, received: 3, applied: 2, unchanged: 1, skipped: {}, trimmed: {} },
-        }),
+        findUnique: jest.fn(async ({ where }: { where: { id: string } }) => rows[where.id] ?? null),
       },
       productMssEnrichment: {
         groupBy: jest.fn().mockResolvedValue([
@@ -90,7 +97,12 @@ describe('MssCatalogOpsService', () => {
       },
     } as unknown as PrismaService;
     const health = {
-      opsCard: jest.fn().mockResolvedValue({ flags: [{ flag: 'catalogEnrichment', enabled: true, effective }] }),
+      opsCard: jest.fn().mockResolvedValue({
+        flags: [
+          { flag: 'catalogEnrichment', enabled: true, effective },
+          { flag: 'stockSync', enabled: true, effective: false },
+        ],
+      }),
     } as unknown as MssHealthService;
     const svc = new MssCatalogOpsService(
       prisma,
@@ -101,7 +113,7 @@ describe('MssCatalogOpsService', () => {
     return { svc, enqueue };
   }
 
-  it('thẻ Ops: trạng thái lượt cuối, đếm theo trạng thái, mã chờ', async () => {
+  it('thẻ Ops: trạng thái lượt cuối, đếm theo trạng thái, mã chờ, lần MSS đẩy gần nhất', async () => {
     expect(await setup(true).svc.card()).toEqual({
       enabled: true,
       effective: true,
@@ -117,7 +129,13 @@ describe('MssCatalogOpsService', () => {
       unpublished: 0,
       removed: 1,
       pending: 4,
+      stockSync: { enabled: true, effective: false },
+      push: { at: '2026-11-17T02:00:01.000Z', status: 'partial', error: null, stats: PUSH_STATS },
     });
+  });
+
+  it('thẻ Ops: MSS chưa đẩy lần nào thì push = null', async () => {
+    expect((await setup(true, false).svc.card()).push).toBeNull();
   });
 
   it('Kéo lại ngay: cờ chưa có hiệu lực thì 409, không xếp', async () => {

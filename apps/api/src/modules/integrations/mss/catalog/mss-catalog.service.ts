@@ -8,10 +8,13 @@ import { orderedImageUrls, type MssEnrichmentPayload } from '../../../catalog/ms
 import { MssClient, MssRequestError } from '../mss.client';
 import { MssHealthService } from '../mss-health.service';
 import { parseMssProductDoc, payloadSha256, type MssDocIssue, type MssParsedDoc } from './mss-catalog-doc';
+import { proposeMssEcoFacts } from './mss-eco-proposals';
 import { mssMediaHosts } from './mss-media';
 
 /** Một dòng trạng thái kéo duy nhất trong `mss_catalog_sync_state`. */
 export const MSS_CATALOG_STATE_ID = 'catalog';
+/** Dòng trạng thái của lần MSS ĐẨY gần nhất (`POST /api/integrations/mss/catalog-sync`), tách khỏi dòng của lượt kéo. */
+export const MSS_PUSH_STATE_ID = 'push';
 /** Hợp đồng mục 1.2: lần kéo sau hỏi từ `server_time` của lần trước trừ lùi 60 giây. */
 export const MSS_CATALOG_WATERMARK_OVERLAP_MS = 60_000;
 export const MSS_CATALOG_PAGE_LIMIT = 200;
@@ -22,7 +25,8 @@ const CURSOR_RE = /^[A-Za-z0-9._~+/=-]{1,512}$/;
 const ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 
 export type MssCatalogTrigger = 'cron' | 'full' | 'doorbell' | 'admin';
-export type MssCatalogRunKind = 'incremental' | 'full' | 'ids';
+/** `push`: lô tài liệu MSS đẩy sang qua `POST /api/integrations/mss/catalog-sync`, không gọi lại MSS. */
+export type MssCatalogRunKind = 'incremental' | 'full' | 'ids' | 'push';
 export type MssCatalogSkipReason = 'invalid_doc' | 'no_pancake_id' | 'unknown_product' | 'stale_version' | 'not_found' | 'apply_failed';
 
 export interface MssCatalogRunStats {
@@ -35,6 +39,9 @@ export interface MssCatalogRunStats {
   skipped: Partial<Record<MssCatalogSkipReason, number>>;
   /** Phần bị gọt trong tài liệu vẫn được ghép (URL ngoài host, chuỗi dài, slug danh mục lạ…). */
   trimmed: Partial<Record<MssDocIssue | 'unknown_category_slug', number>>;
+  /** Nhãn xanh MSS đề xuất: tạo dòng nháp chờ admin duyệt / bỏ vì Tubu đã có dòng cùng loại (hoặc biến thể chưa có ở Tubu). */
+  ecoProposed?: number;
+  ecoKept?: number;
 }
 
 export type MssCatalogRunStatus = 'ok' | 'partial' | 'failed' | 'skipped';
@@ -90,7 +97,7 @@ export function enrichmentColumns(state: string, payload: MssEnrichmentPayload) 
   const images = payload.images === null ? null : orderedImageUrls(payload.images);
   const media =
     state === 'published'
-      ? [...(images ?? []), ...(payload.videos ?? []).flatMap((v) => (v.posterUrl ? [v.url, v.posterUrl] : [v.url]))]
+      ? [...(images ?? []), ...(payload.videos ?? []).flatMap((v) => (v.posterUrl ? [v.url, v.posterUrl] : [v.url])), ...storyMediaUrls(payload)]
       : [];
   return {
     title: payload.title,
@@ -100,6 +107,39 @@ export function enrichmentColumns(state: string, payload: MssEnrichmentPayload) 
     categoryIds: payload.categoryIds ?? [],
     mediaUrls: [...new Set(media)],
   };
+}
+
+/** Ảnh trong câu chuyện xanh (ảnh tách nền, ảnh lớp nguyên liệu): cũng phải nằm trong danh sách nguồn /img chịu đổi cỡ. */
+function storyMediaUrls(payload: MssEnrichmentPayload): string[] {
+  const story = payload.storyConfig;
+  if (!story) return [];
+  const out = story.cutoutUrl ? [story.cutoutUrl] : [];
+  for (const sc of story.scenes) {
+    if (sc.kind !== 'ingredient_assembly') continue;
+    for (const step of sc.steps) for (const layer of step.layers) if (layer.imageUrl) out.push(layer.imageUrl);
+  }
+  return out;
+}
+
+/**
+ * Vòng cung biến thể của câu chuyện MSS ghi `pancake_variation_id`; app chọn biến thể theo id Tubu. Mã có ở Tubu thì đổi, mã lạ thì bỏ
+ * `variationId` (mục vẫn hiện, chỉ không chọn được biến thể).
+ */
+export function withTubuStoryVariations(payload: MssEnrichmentPayload, tubuIdOf: ReadonlyMap<string, string>): MssEnrichmentPayload {
+  const story = payload.storyConfig;
+  if (!story || !story.scenes.some((sc) => sc.kind === 'variant_arc' && sc.items.some((it) => it.variationId !== undefined))) return payload;
+  const scenes = story.scenes.map((sc) =>
+    sc.kind !== 'variant_arc'
+      ? sc
+      : {
+          ...sc,
+          items: sc.items.map(({ variationId, ...rest }) => {
+            const id = variationId === undefined ? undefined : tubuIdOf.get(variationId);
+            return id ? { ...rest, variationId: id } : rest;
+          }),
+        },
+  );
+  return { ...payload, storyConfig: { ...story, scenes } };
 }
 
 /**
@@ -223,6 +263,19 @@ export class MssCatalogService {
     return new Map(rows.map((c) => [c.slug.toLowerCase(), c.id]));
   }
 
+  /**
+   * Lô tài liệu MSS ĐẨY sang (`POST /api/integrations/mss/catalog-sync`): cùng bộ đọc, cùng điều kiện "bản mới hơn" như lượt kéo, nên
+   * tài liệu đã nhận qua lượt kéo hay qua lần đẩy trước thì đếm là không đổi. Người gọi kiểm cờ trước; hàm này không ghi dòng trạng thái kéo.
+   */
+  async applyPushed(items: readonly unknown[]): Promise<MssCatalogRunStats> {
+    const stats = emptyStats('push');
+    stats.received = items.length;
+    const ctx: MssApplyContext = { mediaHosts: mssMediaHosts(), categories: await this.categoryIdsBySlug() };
+    await this.applyDocs(items, stats, ctx);
+    if (stats.applied > 0) this.invalidateCaches();
+    return stats;
+  }
+
   /** Ghép một lô tài liệu đã nhận (một trang hoặc một mã). */
   async applyDocs(items: readonly unknown[], stats: MssCatalogRunStats, ctx: MssApplyContext): Promise<void> {
     const docs: MssParsedDoc[] = [];
@@ -238,6 +291,7 @@ export class MssCatalogService {
     if (docs.length === 0) return;
     const products = await this.prisma.product.findMany({ where: { pancakeId: { in: [...new Set(docs.map((d) => d.pancakeProductId))] } }, select: { id: true, pancakeId: true } });
     const productIdOf = new Map(products.map((p) => [p.pancakeId!, p.id]));
+    const variationsOf = await this.variationsByProduct(docs, productIdOf);
     const existing = await this.prisma.productMssEnrichment.findMany({
       where: { productId: { in: products.map((p) => p.id) } },
       select: { productId: true, contentVersion: true, mssUpdatedAt: true, sha256: true },
@@ -250,7 +304,8 @@ export class MssCatalogService {
         bump(stats.skipped, 'unknown_product');
         continue;
       }
-      const payload = this.resolveCategories(doc, ctx.categories, stats);
+      const variations = variationsOf.get(productId) ?? new Map<string, string>();
+      const payload = withTubuStoryVariations(this.resolveCategories(doc, ctx.categories, stats), variations);
       const sha = payloadSha256(doc.state, payload);
       const prev = current.get(productId);
       if (prev) {
@@ -258,6 +313,8 @@ export class MssCatalogService {
         const docAt = doc.updatedAt.getTime();
         if (prevAt === docAt && prev.sha256 === sha && (doc.state !== 'published' || prev.contentVersion === doc.version)) {
           stats.unchanged += 1;
+          // Nội dung không đổi nhưng nhãn xanh nháp vẫn thử lại: lần trước lỗi DB, hoặc biến thể MSS gắn nhãn nay mới có trên Tubu.
+          await this.proposeEco(doc, productId, payload, variations, stats, false);
           continue;
         }
         if (!isNewerDoc(doc.state, doc.version, docAt, prev.contentVersion, prevAt)) {
@@ -270,6 +327,7 @@ export class MssCatalogService {
         if (written > 0) {
           stats.applied += 1;
           current.set(productId, { productId, contentVersion: Math.max(prev?.contentVersion ?? 0, doc.version), mssUpdatedAt: doc.updatedAt, sha256: sha });
+          await this.proposeEco(doc, productId, payload, variations, stats, true);
         } else {
           bump(stats.skipped, 'stale_version');
         }
@@ -278,6 +336,39 @@ export class MssCatalogService {
         this.logger.warn(`Không ghi được nội dung MSS của sản phẩm ${productId}: ${err instanceof Error ? err.message.slice(0, 200) : err}`);
       }
     }
+  }
+
+  /** Nhãn xanh của bản đã xuất bản thành dòng nháp; lỗi chỉ ghi log (lượt sau thử lại). Tài liệu không đổi thì không đếm lại số nhãn giữ. */
+  private async proposeEco(
+    doc: MssParsedDoc,
+    productId: string,
+    payload: MssEnrichmentPayload,
+    variations: ReadonlyMap<string, string>,
+    stats: MssCatalogRunStats,
+    countKept: boolean,
+  ): Promise<void> {
+    if (doc.state !== 'published' || !payload.ecoFacts?.length) return;
+    const eco = await proposeMssEcoFacts(this.prisma, { productId, pancakeProductId: doc.pancakeProductId, version: doc.version, facts: payload.ecoFacts, variations }).catch((err: unknown) => {
+      this.logger.warn(`Không tạo được nhãn xanh nháp từ MSS cho sản phẩm ${productId}: ${err instanceof Error ? err.message.slice(0, 200) : err}`);
+      return null;
+    });
+    if (!eco) return;
+    if (eco.proposed > 0 || countKept) stats.ecoProposed = (stats.ecoProposed ?? 0) + eco.proposed;
+    if (countKept) stats.ecoKept = (stats.ecoKept ?? 0) + eco.kept;
+  }
+
+  /** `pancake_variation_id` → id biến thể Tubu theo sản phẩm, chỉ hỏi khi lô có câu chuyện hoặc nhãn xanh cần đổi mã. */
+  private async variationsByProduct(docs: readonly MssParsedDoc[], productIdOf: ReadonlyMap<string, string>): Promise<Map<string, Map<string, string>>> {
+    const ids = [...new Set(docs.filter((d) => d.payload.storyConfig || d.payload.ecoFacts?.length).map((d) => productIdOf.get(d.pancakeProductId)).filter((x): x is string => !!x))];
+    const out = new Map<string, Map<string, string>>();
+    if (ids.length === 0) return out;
+    const rows = await this.prisma.variation.findMany({ where: { productId: { in: ids }, pancakeId: { not: null } }, select: { id: true, productId: true, pancakeId: true } });
+    for (const v of rows) {
+      const m = out.get(v.productId) ?? new Map<string, string>();
+      m.set(v.pancakeId!, v.id);
+      out.set(v.productId, m);
+    }
+    return out;
   }
 
   /** `category_slugs` → id danh mục Tubu. Slug lạ bỏ và đếm; gửi slug mà không slug nào có ở Tubu thì giữ danh mục Tubu. */

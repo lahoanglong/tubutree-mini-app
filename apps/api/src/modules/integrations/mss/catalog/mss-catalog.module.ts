@@ -15,5 +15,6 @@ import { MssPreviewController, MssPreviewService } from './mss-preview';
   imports: [ImageRegistryModule, BullModule.registerQueue({ name: MSS_CATALOG_QUEUE })],
   controllers: [MssCatalogDoorbellController, MssCatalogAdminController, MssPreviewController],
   providers: [MssCatalogService, MssCatalogQueue, MssCatalogProcessor, MssCatalogCron, MssCatalogOpsService, MssPreviewService],
+  exports: [MssCatalogService],
 })
 export class MssCatalogModule {}
