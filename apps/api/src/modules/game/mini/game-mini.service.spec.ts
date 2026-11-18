@@ -55,7 +55,7 @@ const mk = (game: MiniGameId, id: string, payload: unknown, over: Partial<MiniCo
   ...over,
 });
 
-/** Nội dung hợp lệ đủ 10 mục mỗi game (Giỏ Đúng Việc: một đề và 6 sản phẩm còn hàng). */
+/** Nội dung hợp lệ đủ 10 mục mỗi game (Giỏ Đúng Việc: một đề và 6 sản phẩm còn hàng; Căn Bếp Xanh: 4 góc × 3 món, mọi sản phẩm còn hàng). */
 function buildFixtures(): Record<MiniGameId, Fixture> {
   const choice = (game: 'daily_quiz' | 'origin', slugPrefix: string, linked: number[]): Fixture => {
     const rows = Array.from({ length: 12 }, (_, k) => {
@@ -70,6 +70,20 @@ function buildFixtures(): Record<MiniGameId, Fixture> {
     return { rows, products: new Map(linked.map((i) => [`${slugPrefix}-${i}`, card(`${slugPrefix}-${i}`)] as const)), sortHazardous: false };
   };
   const slugs = ['gio-dung-1', 'gio-dung-2', 'gio-dung-3', 'gio-sai-1', 'gio-sai-2', 'gio-sai-3'];
+  const kitchenRows = (['table', 'kitchen', 'bathroom', 'bag'] as const).flatMap((corner) =>
+    [1, 2, 3].map((n) => {
+      const id = `kitchen-${corner}-${n}`;
+      return mk('kitchen_swap', id, {
+        corner,
+        item: `Món ${corner} số ${n}`,
+        emoji: '🧴',
+        hidden: `Điều giấu ${corner} số ${n}`,
+        options: ['dung', 'sai-a', 'sai-b'].map((k) => ({ slug: `${id}-${k}`, fact: `Nhãn ${id}-${k}` })),
+        answer: `${id}-dung`,
+      });
+    }),
+  );
+  const kitchenSlugs = kitchenRows.flatMap((r) => (r.payload as { options: { slug: string }[] }).options.map((o) => o.slug));
   return {
     sort: {
       rows: Array.from({ length: 12 }, (_, k) =>
@@ -96,6 +110,7 @@ function buildFixtures(): Record<MiniGameId, Fixture> {
       products: new Map(slugs.map((s) => [s, card(s)] as const)),
       sortHazardous: false,
     },
+    kitchen_swap: { rows: kitchenRows, products: new Map(kitchenSlugs.map((s) => [s, card(s)] as const)), sortHazardous: false },
   };
 }
 
@@ -229,6 +244,7 @@ const BLANK: Record<MiniGameId, unknown[]> = {
   origin: Array(5).fill(null),
   match: [],
   basket: [],
+  kitchen_swap: Array(3).fill(null),
 };
 
 const PERFECT: Record<MiniGameId, (rows: MiniContentRow[], roundKey: string) => unknown[]> = {
@@ -237,6 +253,7 @@ const PERFECT: Record<MiniGameId, (rows: MiniContentRow[], roundKey: string) => 
   origin: (rows) => rows.map((r) => (r.payload as { answer: number }).answer),
   match: (rows, key) => rows.map((r) => [matchCardId(SECRET, key, r.id, 'ingredient'), matchCardId(SECRET, key, r.id, 'use')]),
   basket: (rows) => (rows[0]!.payload as { correct: string[] }).correct,
+  kitchen_swap: (rows) => rows.map((r) => (r.payload as { answer: string }).answer),
 };
 
 /** Mọi khoá của mọi object lồng nhau (quét đệ quy qua mảng và object), kèm chính các object để kiểm cặp khoá. */
@@ -261,6 +278,7 @@ const KEY_WHITELIST: Record<MiniGameId, string[]> = {
   origin: ['game', 'items', 'id', 'prompt', 'options', 'product', ...PRODUCT_KEYS],
   match: ['game', 'cards', 'cardId', 'label', 'side'],
   basket: ['game', 'task', 'id', 'products', ...PRODUCT_KEYS],
+  kitchen_swap: ['game', 'swaps', 'id', 'corner', 'item', 'emoji', 'hidden', 'options', 'product', 'fact', ...PRODUCT_KEYS],
 };
 /** Khoá mà fixture phải làm xuất hiện, để phép quét không "xanh vì rỗng". */
 const KEYS_THAT_MUST_APPEAR: Record<MiniGameId, string[]> = {
@@ -269,6 +287,7 @@ const KEYS_THAT_MUST_APPEAR: Record<MiniGameId, string[]> = {
   origin: ['items', 'prompt', 'options', 'product', 'slug', 'price'],
   match: ['cards', 'cardId', 'label', 'side'],
   basket: ['task', 'id', 'products', 'slug', 'price'],
+  kitchen_swap: ['swaps', 'id', 'corner', 'item', 'emoji', 'hidden', 'options', 'product', 'fact', 'slug', 'price'],
 };
 const ANSWER_KEYS = ['answer', 'bin', 'correct', 'wrong', 'reason', 'expected', 'explanation', 'sourceUrl'];
 
@@ -337,7 +356,7 @@ describe('GameMiniService.today', () => {
     }));
     const res = await w.service.today(null, NOW);
     expect(res.dayKey).toBe(DAY);
-    expect(res.games.map((g) => g.game)).toEqual(['sort', 'daily_quiz', 'basket']);
+    expect(res.games.map((g) => g.game)).toEqual(['sort', 'daily_quiz', 'basket', 'kitchen_swap']);
     expect(res.rewardEligible).toBe(false);
     expect(res.noRewardReason).toBe('NOT_LOGGED_IN');
     for (const g of res.games) {
@@ -430,6 +449,7 @@ describe('GameMiniService.start: khách chưa đăng nhập', () => {
     expect(guest.issuedAt).toBe(NOW.getTime());
     expect(guest.contentIds).toHaveLength(MINI_GAME_RULES[game].items);
     if (res.content.game === 'basket') expect(guest.contentIds).toEqual([res.content.task.id]);
+    else if (res.content.game === 'kitchen_swap') expect(guest.contentIds).toEqual(res.content.swaps.map((x) => x.id));
     else if (res.content.game === 'match') expect(guest.contentIds).toHaveLength(res.content.cards.length / 2);
     else expect(guest.contentIds).toEqual(res.content.items.map((i) => i.id));
     expect(readGuestRound(res.token, 'secret-khac-hoan-toan')).toBeNull();
@@ -1034,6 +1054,9 @@ describe('GameMiniService: kiểu nội dung trả về khớp hợp đồng', (
       expect(content.items).toHaveLength(MINI_GAME_RULES[game].items);
     } else if (content.game === 'match') {
       expect(content.cards).toHaveLength(MINI_GAME_RULES.match.items * 2);
+    } else if (content.game === 'kitchen_swap') {
+      expect(content.swaps).toHaveLength(MINI_GAME_RULES.kitchen_swap.items);
+      for (const sw of content.swaps) expect(sw.options).toHaveLength(3);
     } else {
       expect(content.task.products).toHaveLength(6);
     }

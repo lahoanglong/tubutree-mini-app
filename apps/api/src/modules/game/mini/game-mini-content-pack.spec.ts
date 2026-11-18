@@ -1,4 +1,4 @@
-import {
+import { FUWA3E_SKUS,
   MINI_BASKET_PICK,
   MINI_GAME_RULES,
   MINI_MIN_ACTIVE_ITEMS,
@@ -19,19 +19,22 @@ import {
 import { QUIZZES } from '../../../../prisma/seed-game-quiz';
 import { MINI_GAMES, type MiniBuildCtx, type MiniContentRow } from './games';
 import { readBasketPayload } from './games/basket';
+import { kitchenSwapReady, readKitchenSwapPayload } from './games/kitchen-swap';
 import { readChoicePayload } from './games/choice';
 import { readSortPayload } from './games/sort';
 import { LEGACY_QUIZ_PREFIX } from './game-mini-content.service';
 import { MINI_EXPLANATION_MAX } from './game-mini-admin.service';
 
 /**
- * Gói nội dung thật của 5 game mini (`prisma/reference-data/game-mini/*.json`): luật nguồn, cụm cấm, đáp án, và mỗi game chơi trọn
- * được một ván bằng đúng các mục đang bật. Số mục bật ghi cứng để mọi lần thêm hay tắt mục là thay đổi có chủ ý.
+ * Gói nội dung thật của 6 game mini (`prisma/reference-data/game-mini/*.json`): luật nguồn, cụm cấm, đáp án, và mỗi game chơi trọn
+ * được một ván bằng đúng các mục đang bật. Số mục bật ghi cứng để mọi lần thêm hay tắt mục là thay đổi có chủ ý. Căn Bếp Xanh nạp tắt hết
+ * (chờ chuyên gia duyệt) nên không nằm trong `GAMES` (game đang hiện); phần riêng của nó chơi thử bằng mọi món như thể đã bật.
  */
 const GAMES: MiniGameId[] = ['sort', 'daily_quiz', 'match', 'origin', 'basket'];
+const ALL_GAMES: MiniGameId[] = [...GAMES, 'kitchen_swap'];
 const pack = loadGameMiniPack();
 const clone = (): GameMiniPack => JSON.parse(JSON.stringify(pack)) as GameMiniPack;
-const allItems = (): (GameMiniItem & { game: MiniGameId })[] => GAMES.flatMap((game) => pack.games[game].map((i) => ({ ...i, game })));
+const allItems = (): (GameMiniItem & { game: MiniGameId })[] => ALL_GAMES.flatMap((game) => pack.games[game].map((i) => ({ ...i, game })));
 
 function seeded(seed: number): () => number {
   let s = seed >>> 0;
@@ -89,6 +92,8 @@ const correctAnswers = (game: MiniGameId, rows: MiniContentRow[], ctx: MiniBuild
       return rows.map((r) => [ctx.cardId(r.id, 'use'), ctx.cardId(r.id, 'ingredient')]);
     case 'basket':
       return [...readBasketPayload(rows[0]!.payload)!.correct].reverse();
+    case 'kitchen_swap':
+      return rows.map((r) => readKitchenSwapPayload(r.payload)!.answer);
   }
 };
 
@@ -107,6 +112,7 @@ describe('gói nội dung game mini', () => {
       match: { total: 23, active: 22, belowMinimum: false },
       origin: { total: 32, active: 32, belowMinimum: false },
       basket: { total: 13, active: 12, belowMinimum: false },
+      kitchen_swap: { total: 12, active: 0, belowMinimum: true },
     });
     for (const game of GAMES) expect(counts[game].active).toBeGreaterThanOrEqual(MINI_MIN_ACTIVE_ITEMS);
     expect(pack.games.daily_quiz.filter((i) => i.active).length + pack.legacy.length).toBe(counts.daily_quiz.active);
@@ -115,7 +121,14 @@ describe('gói nội dung game mini', () => {
   it('id không trùng trên toàn gói và mỗi id mang tiền tố game của nó', () => {
     const ids = allItems().map((i) => i.id);
     expect(new Set(ids).size).toBe(ids.length);
-    const prefix: Record<MiniGameId, string> = { sort: 'gm-sort-', daily_quiz: 'gm-quiz-', match: 'gm-match-', origin: 'gm-origin-', basket: 'gm-basket-' };
+    const prefix: Record<MiniGameId, string> = {
+      sort: 'gm-sort-',
+      daily_quiz: 'gm-quiz-',
+      match: 'gm-match-',
+      origin: 'gm-origin-',
+      basket: 'gm-basket-',
+      kitchen_swap: 'gm-kitchen-',
+    };
     expect(allItems().filter((i) => !i.id.startsWith(prefix[i.game])).map((i) => i.id)).toEqual([]);
   });
 
@@ -132,7 +145,9 @@ describe('gói nội dung game mini', () => {
 
   it('mục tắt đều ghi lý do; mục bật không mang lý do tắt', () => {
     const inactive = allItems().filter((i) => !i.active);
-    expect(inactive.map((i) => i.game).sort()).toEqual(['basket', 'daily_quiz', 'daily_quiz', 'match', 'sort', 'sort', 'sort', 'sort', 'sort', 'sort']);
+    expect(inactive.map((i) => i.game).sort()).toEqual(
+      ['basket', 'daily_quiz', 'daily_quiz', 'match', 'sort', 'sort', 'sort', 'sort', 'sort', 'sort', ...Array<MiniGameId>(12).fill('kitchen_swap')].sort(),
+    );
     for (const i of inactive) expect(i.inactiveReason?.trim().length ?? 0).toBeGreaterThan(10);
     expect(allItems().filter((i) => i.active && i.inactiveReason).map((i) => i.id)).toEqual([]);
   });
@@ -325,6 +340,30 @@ describe('bộ kiểm gói bắt lỗi', () => {
       /hết hàng/,
     ],
     ['version không phải số nguyên dương', (p) => (firstActive(p, 'match').version = 0), /version/],
+    ['Căn Bếp Xanh: slug không có trong ảnh chụp', (p) => ((p.games.kitchen_swap[0]!.payload as { options: { slug: string }[] }).options[1]!.slug = 'khong-co-san-pham-nay'), /ảnh chụp/],
+    ['Căn Bếp Xanh: lời tuyên bố trong điều nhãn', (p) => ((p.games.kitchen_swap[0]!.payload as { options: { fact: string }[] }).options[0]!.fact = 'Lành tính, an toàn cho da.'), /lời tuyên bố \(proof\)/],
+    ['Căn Bếp Xanh: "tự nhiên" trong điều giấu', (p) => ((p.games.kitchen_swap[0]!.payload as { hidden: string }).hidden = 'Thay bằng đồ tự nhiên.'), /lời tuyên bố \(natural\)/],
+    ['Căn Bếp Xanh: cụm cấm trong tên món', (p) => ((p.games.kitchen_swap[0]!.payload as { item: string }).item = 'Nước diệt khuẩn bồn cầu'), /cụm cấm/],
+    ['Căn Bếp Xanh: dẫn trang Tubu làm nguồn', (p) => (p.games.kitchen_swap[0]!.sourceUrl = 'https://tubutree.com/san-pham/x'), /trang Tubu/],
+    [
+      'Căn Bếp Xanh: một sản phẩm có điều nhãn riêng cho món nó là đáp án',
+      (p) => {
+        const item = p.games.kitchen_swap.find((i) => i.id === 'gm-kitchen-chai-nuoc-rua-chen')!;
+        const answer = (item.payload as { answer: string; options: { slug: string; fact: string }[] }).options.find((o) => o.slug === 'refill-nuoc-rua-chen-fuwa3e-10l-69f244')!;
+        answer.fact = 'Can 10L nước rửa chén, rót lại vào chai cũ.';
+      },
+      /một sản phẩm chỉ có một điều nhãn/,
+    ],
+    [
+      'Căn Bếp Xanh: món bật có sản phẩm hết hàng',
+      (p) => {
+        const i = p.games.kitchen_swap[0]!;
+        i.active = true;
+        delete i.inactiveReason;
+        (i.payload as { options: { slug: string }[] }).options[2]!.slug = p.products.find((x) => !x.inStock)!.slug;
+      },
+      /hết hàng/,
+    ],
   ])('%s', (_name, mutate, expected) => {
     const p = clone();
     mutate(p);
@@ -414,5 +453,74 @@ describe('mỗi game chơi trọn một ván bằng nội dung thật', () => {
       rows.forEach((r) => shown.add(r.id));
     }
     expect(pool.filter((r) => !shown.has(r.id)).map((r) => r.id)).toEqual([]);
+  });
+});
+
+describe('Căn Bếp Xanh: gói nội dung', () => {
+  const items = pack.games.kitchen_swap;
+  const rowsOf = (list: GameMiniItem[]): MiniContentRow[] =>
+    list.map((i) => ({ id: i.id, game: 'kitchen_swap', payload: i.payload, explanation: i.explanation, sourceUrl: i.sourceUrl, productSlug: null }));
+
+  it('12 món nạp tắt (chờ chuyên gia duyệt), góc nào cũng có ít nhất 2 món', () => {
+    expect(items).toHaveLength(12);
+    expect(items.filter((i) => i.active)).toEqual([]);
+    const perCorner = new Map<string, number>();
+    for (const i of items) {
+      const c = readKitchenSwapPayload(i.payload)!.corner;
+      perCorner.set(c, (perCorner.get(c) ?? 0) + 1);
+    }
+    expect([...perCorner.keys()].sort()).toEqual(['bag', 'bathroom', 'kitchen', 'table']);
+    for (const n of perCorner.values()) expect(n).toBeGreaterThanOrEqual(2);
+  });
+
+  it('sản phẩm đúng của mỗi món khác nhau (màn kết quả luôn có 3 sản phẩm khác nhau), mọi sản phẩm còn hàng lúc chụp', () => {
+    const answers = items.map((i) => readKitchenSwapPayload(i.payload)!.answer);
+    expect(new Set(answers).size).toBe(answers.length);
+    const inStock = new Set(pack.products.filter((p) => p.inStock).map((p) => p.slug));
+    for (const i of items) {
+      for (const o of readKitchenSwapPayload(i.payload)!.options) expect(`${i.id} ${o.slug} ${inStock.has(o.slug)}`).toBe(`${i.id} ${o.slug} true`);
+    }
+  });
+
+  it('"eco-enzyme lên men từ vỏ dứa" chỉ gắn cho SKU Fuwa3e bậc 2 của bảng nhãn', () => {
+    for (const i of items) {
+      for (const o of readKitchenSwapPayload(i.payload)!.options) {
+        if (!o.fact.includes('vỏ dứa')) continue;
+        const sku = o.slug.replace(/-[0-9a-f]{6}$/, '');
+        expect(`${o.slug} bậc ${FUWA3E_SKUS[sku]?.[2]}`).toBe(`${o.slug} bậc 2`);
+      }
+    }
+  });
+
+  it('điều nhãn không chỉ ra đáp án: một sản phẩm một điều nhãn ở mọi món, không câu dặn cách dùng, đáp án không là sản phẩm duy nhất ghi eco-enzyme', () => {
+    const factOf = new Map<string, Set<string>>();
+    for (const i of items) {
+      const p = readKitchenSwapPayload(i.payload)!;
+      for (const o of p.options) factOf.set(o.slug, (factOf.get(o.slug) ?? new Set()).add(o.fact));
+      expect(p.options.filter((o) => /rót lại|chiết/i.test(o.fact)).map((o) => o.slug)).toEqual([]);
+      const eco = p.options.filter((o) => o.fact.includes('eco-enzyme')).map((o) => o.slug);
+      expect(`${i.id} ${eco.length === 1 && eco[0] === p.answer}`).toBe(`${i.id} false`);
+    }
+    for (const [slug, facts] of factOf) expect(`${slug} ${facts.size}`).toBe(`${slug} 1`);
+  });
+
+  it('bật hết thì phát được ván: 3 góc khác nhau, nộp đúng hết được 3/3, nhiều hạt giống và nhiều ngày, món nào cũng có lúc ra', () => {
+    const def = MINI_GAMES.kitchen_swap;
+    const pool = rowsOf(items);
+    expect(kitchenSwapReady(pool, { products })).toBe(true);
+    const seen = new Set<string>();
+    for (let seed = 1; seed <= 200; seed++) {
+      const ctx = buildCtx(seeded(seed), days[seed % days.length]!, false);
+      const rows = def.pick(pool, ctx)!;
+      expect(rows).toHaveLength(MINI_GAME_RULES.kitchen_swap.items);
+      expect(new Set(rows.map((r) => readKitchenSwapPayload(r.payload)!.corner)).size).toBe(rows.length);
+      rows.forEach((r) => seen.add(r.id));
+      const content = def.build(rows, ctx);
+      expect(JSON.stringify(content)).not.toMatch(/"(?:answer|correct|explanation|sourceUrl)"/);
+      if (content.game === 'kitchen_swap') for (const sw of content.swaps) expect(sw.options).toHaveLength(3);
+      const grade = def.grade(rows, def.parseAnswers(correctAnswers('kitchen_swap', rows, ctx), rows, ctx), ctx);
+      expect(grade.correct).toBe(3);
+    }
+    expect(seen.size).toBe(items.length);
   });
 });

@@ -37,6 +37,7 @@ import {
   miniReviewRows,
   type MiniReviewRow,
 } from '@tubutree/app-core/game-mini/review';
+import { kitchenDiscovered, kitchenReviewRows } from '@tubutree/app-core/game-mini/kitchen';
 import { initialRoundState, roundReducer, submitDelayMs, type RoundState } from '@tubutree/app-core/game-mini/round-machine';
 import { checkInQuery } from '@tubutree/app-core/queries/loyalty';
 import { Button, Heading, ProductTile, Text } from '@/components/mini';
@@ -48,7 +49,7 @@ import { coreHttp } from '@/lib/core-http';
 import { loginHref } from '@/lib/return-to';
 import { isWebRouteReady } from '@/lib/route-map';
 import { usePublicConfig } from '@/lib/use-public-config';
-import { takePendingBasket } from './basket-pending';
+import { takePendingBasket, type MiniCartGame } from './basket-pending';
 import './mini-game.css';
 import './mini-game-b.css';
 
@@ -61,15 +62,17 @@ const BOARDS: Record<PlayableMiniGame, ComponentType<MiniBoardProps<never>>> = {
   match: dynamic(() => import('./mini-match'), { ssr: false, loading: boardSkeleton }) as ComponentType<MiniBoardProps<never>>,
   origin: dynamic(() => import('./mini-origin'), { ssr: false, loading: boardSkeleton }) as ComponentType<MiniBoardProps<never>>,
   basket: dynamic(() => import('./mini-basket'), { ssr: false, loading: boardSkeleton }) as ComponentType<MiniBoardProps<never>>,
+  kitchen_swap: dynamic(() => import('./mini-kitchen-swap'), { ssr: false, loading: boardSkeleton }) as ComponentType<MiniBoardProps<never>>,
 };
 
-// Thêm giỏ chỉ có ở Giỏ Đúng Việc: chunk riêng để màn kết quả của các game khác không mang mã giỏ.
+// Thêm giỏ chỉ có ở Giỏ Đúng Việc và Căn Bếp Xanh: chunk riêng để màn kết quả của các game khác không mang mã giỏ.
 const MiniBasketCart = dynamic(() => import('./mini-basket-cart'), {
   ssr: false,
   loading: () => <div className="tubu-mg-board-skeleton" data-size="sm" aria-hidden />,
 });
 
 const GAME_PATH = '/vuon-xanh';
+const isCartGame = (g: PlayableMiniGame): g is MiniCartGame => g === 'basket' || g === 'kitchen_swap';
 const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
 
 function webStorage() {
@@ -225,6 +228,7 @@ function ResultView({ game, state, onDone, onLogin }: { game: PlayableMiniGame; 
   const product = miniQuizProduct(state.round?.content);
   const matchSlugs = miniMatchProductSlugs(r.review);
   const basketSet = miniBasketSet(r.review, state.round?.content);
+  const kitchenSet = kitchenDiscovered(r.review, state.round?.content);
   return (
     <section className="tubu-mg-panel" aria-labelledby="mini-result-title" data-testid="mini-result">
       <Heading id="mini-result-title" as="h2" variant="title-md" font="ui">
@@ -273,10 +277,13 @@ function ResultView({ game, state, onDone, onLogin }: { game: PlayableMiniGame; 
       )}
       {game === 'match' && matchSlugs.length > 0 && <MatchProducts slugs={matchSlugs} />}
       {game === 'basket' && basketSet.length > 0 && <MiniBasketCart products={basketSet} />}
+      {game === 'kitchen_swap' && kitchenSet.length > 0 && <MiniBasketCart game="kitchen_swap" products={kitchenSet} />}
       <Heading as="h3" variant="title-sm" font="ui">
         {gameCopy('result.review')}
       </Heading>
-      {state.round && <ReviewList rows={miniReviewRows(r.review, state.round.content, state.answers)} />}
+      {state.round && (
+        <ReviewList rows={game === 'kitchen_swap' ? kitchenReviewRows(r.review, state.round.content) : miniReviewRows(r.review, state.round.content, state.answers)} />
+      )}
     </section>
   );
 }
@@ -301,11 +308,11 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
   const onFinish = useCallback((answers: unknown[]) => dispatch({ type: 'finish', answers, now: Date.now() }), [dispatch]);
   const back = () => router.push(GAME_PATH);
   const login = () => router.push(loginHref(miniPlayPath.web(game)));
-  // Bộ đúng khách chưa đăng nhập bấm thêm ở ván trước (đã sang đăng nhập rồi quay về): hiện lại trên màn bắt đầu để khách bấm thêm.
+  // Bộ sản phẩm khách chưa đăng nhập bấm thêm ở ván trước (đã sang đăng nhập rồi quay về): hiện lại trên màn bắt đầu để khách bấm thêm.
   const [pendingBasket, setPendingBasket] = useState<MiniProductCard[] | null>(null);
   useEffect(() => {
-    if (game !== 'basket') return;
-    const p = takePendingBasket();
+    if (!isCartGame(game)) return;
+    const p = takePendingBasket(game);
     if (p) setPendingBasket(p);
   }, [game]);
 
@@ -353,7 +360,7 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
     );
     body = (
       <>
-        {pendingBasket && <MiniBasketCart products={pendingBasket} pending />}
+        {pendingBasket && isCartGame(game) && <MiniBasketCart game={game} products={pendingBasket} pending />}
         {startPanel}
       </>
     );

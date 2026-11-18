@@ -1,5 +1,5 @@
 /**
- * Nạp nội dung giáo dục có nguồn của 5 game mini (Đúng Thùng, Đố Xanh, Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc) và của Chọn Chuẩn Xanh
+ * Nạp nội dung giáo dục có nguồn của 6 game mini (Đúng Thùng, Đố Xanh, Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc, Căn Bếp Xanh) và của Chọn Chuẩn Xanh
  * (`matcher.json`: câu nhu cầu, câu đố xen giữa, bộ sản phẩm) từ `reference-data/game-mini/*.json` vào `game_content_items`, và gắn link
  * nguồn cho vài câu đố cũ (`game_quizzes`) đã kiểm được. Mục Chọn Chuẩn Xanh luôn nạp ở trạng thái tắt: chuyên gia duyệt rồi bật trong admin.
  *
@@ -21,6 +21,7 @@ import { MINI_GAMES } from '../src/modules/game/mini/games';
 import { SLUG_RE } from '../src/modules/game/mini/games/game-def';
 import { readBasketPayload } from '../src/modules/game/mini/games/basket';
 import { readChoicePayload } from '../src/modules/game/mini/games/choice';
+import { readKitchenSwapPayload } from '../src/modules/game/mini/games/kitchen-swap';
 import { MINI_CONTENT_KIND, MINI_EXPLANATION_MAX } from '../src/modules/game/mini/game-mini-admin.service';
 import {
   MATCHER_GAME,
@@ -46,6 +47,7 @@ export const GAME_MINI_FILES: Record<MiniGameId, string> = {
   match: 'match.json',
   origin: 'origin.json',
   basket: 'basket.json',
+  kitchen_swap: 'kitchen-swap.json',
 };
 
 export const GAME_MATCHER_FILE = 'matcher.json';
@@ -57,6 +59,7 @@ const ID_PREFIX: Record<MiniGameId, string> = {
   match: 'gm-match-',
   origin: 'gm-origin-',
   basket: 'gm-basket-',
+  kitchen_swap: 'gm-kitchen-',
 };
 
 const SOURCE_URL_MAX = 500;
@@ -225,6 +228,12 @@ export function visibleTexts(item: Pick<GameMiniItem, 'payload' | 'explanation'>
   return out;
 }
 
+/** Chữ người chơi thấy của một món Căn Bếp Xanh: tên món, điều nó giấu, điều nhãn của từng sản phẩm, lời giải thích. Góc nhà và slug là mã máy. */
+export function kitchenVisibleTexts(item: Pick<GameMiniItem, 'payload' | 'explanation'>): string[] {
+  const p = readKitchenSwapPayload(item.payload);
+  return p ? [item.explanation, p.item, p.hidden, ...p.options.map((o) => o.fact)] : [item.explanation];
+}
+
 /** Chữ người chơi thấy của một mục Chọn Chuẩn Xanh: lời hỏi, nhãn lựa chọn, tên bộ, câu "vì sao hợp", lời giải thích. Mã và nhãn máy bỏ qua. */
 export function matcherVisibleTexts(item: Pick<GameMatcherItem, 'kind' | 'payload' | 'explanation'>): string[] {
   const out: string[] = [item.explanation];
@@ -267,6 +276,28 @@ const isTubuHost = (url: string) => {
     return false;
   }
 };
+
+/**
+ * Căn Bếp Xanh gửi điều nhãn của cả 3 sản phẩm ngay lúc bắt đầu ván. Điều nhãn đi theo sản phẩm, không theo món: cùng một slug ở mọi món phải
+ * cùng một chữ, kẻo câu chỉ viết cho đáp án (vd "rót lại vào chai cũ") lộ đáp án trước khi chấm. Cách dùng hợp với món để ở `explanation`, chỉ
+ * trả sau khi chấm.
+ */
+function kitchenFactErrors(pack: GameMiniPack): string[] {
+  const errors: string[] = [];
+  const factOf = new Map<string, { fact: string; at: string }>();
+  for (const item of pack.games.kitchen_swap) {
+    const p = readKitchenSwapPayload(item.payload);
+    if (!p) continue;
+    for (const { slug, fact } of p.options) {
+      const first = factOf.get(slug);
+      if (!first) factOf.set(slug, { fact, at: item.id });
+      else if (first.fact !== fact) {
+        errors.push(`${GAME_MINI_FILES.kitchen_swap} ${item.id}: điều nhãn của ${slug} khác ở ${first.at} ("${fact}" / "${first.fact}"); một sản phẩm chỉ có một điều nhãn`);
+      }
+    }
+  }
+  return errors;
+}
 
 /**
  * Lỗi của cả gói (rỗng là hợp lệ). Dùng chung cho seed (chặn trước khi ghi) và spec nội dung. `quizzes` là chữ gốc của câu đố cũ
@@ -320,6 +351,20 @@ export function validateGameMiniPack(pack: GameMiniPack, quizzes: readonly SeedQ
         if (typeof item.productSlug !== 'string' || !SLUG_RE.test(item.productSlug)) errors.push(`${at}: productSlug sai dạng`);
         else if (!products.has(item.productSlug)) errors.push(`${at}: productSlug ${item.productSlug} không có trong ảnh chụp sản phẩm`);
       }
+      if (game === 'kitchen_swap') {
+        const p = readKitchenSwapPayload(item.payload);
+        if (p) {
+          for (const { slug } of p.options) {
+            const snap = products.get(slug);
+            if (!snap) errors.push(`${at}: slug ${slug} không có trong ảnh chụp sản phẩm`);
+            else if (item.active && !snap.inStock) errors.push(`${at}: slug ${slug} hết hàng lúc chụp, món bật sẽ không phát được`);
+          }
+        }
+        // Điều nhãn của sản phẩm đứng cạnh thẻ sản phẩm: cùng mức chặn tuyên bố với chữ sản phẩm (strict), không chỉ cụm cấm của game.
+        for (const text of kitchenVisibleTexts(item)) {
+          for (const claim of claimsIn(text, 'strict')) errors.push(`${at}: lời tuyên bố (${claim}) trong "${text}"`);
+        }
+      }
       if (game === 'basket') {
         const p = readBasketPayload(item.payload);
         if (p) {
@@ -331,12 +376,13 @@ export function validateGameMiniPack(pack: GameMiniPack, quizzes: readonly SeedQ
           if (p.correct.length !== MINI_BASKET_PICK) errors.push(`${at}: cần đúng ${MINI_BASKET_PICK} món đúng`);
         }
       }
-      for (const text of visibleTexts(item)) {
+      for (const text of game === 'kitchen_swap' ? kitchenVisibleTexts(item) : visibleTexts(item)) {
         for (const label of findBannedPhrases(text)) errors.push(`${at}: cụm cấm "${label}" trong "${text}"`);
       }
     }
   }
 
+  errors.push(...kitchenFactErrors(pack));
   errors.push(...validateMatcherItems(pack, seen, products, sourceUrls, labelSource));
 
   const linkedQuiz = pack.games.daily_quiz.filter((i) => i.active && i.productSlug).length;

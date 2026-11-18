@@ -1,11 +1,11 @@
 /**
- * Hợp đồng chung của 5 game mini "Lượt chơi có thưởng" (API `/game/mini/*`, Mini App và web).
+ * Hợp đồng chung của 6 game mini "Lượt chơi có thưởng" (API `/game/mini/*`, Mini App và web).
  *
  * Máy chủ giữ đáp án: `start` chỉ trả nội dung không kèm đáp án, `submit` chấm theo danh sách mục đã phát cho ván rồi mới trả đáp án,
  * lời giải thích và nguồn. Thưởng (💧 và Điểm Xanh) do máy chủ tính sau khi áp trần theo tài khoản, thiết bị và toàn hệ thống.
  */
 
-export const MINI_GAME_IDS = ['sort', 'daily_quiz', 'match', 'origin', 'basket'] as const;
+export const MINI_GAME_IDS = ['sort', 'daily_quiz', 'match', 'origin', 'basket', 'kitchen_swap'] as const;
 export type MiniGameId = (typeof MINI_GAME_IDS)[number];
 
 export function isMiniGameId(v: unknown): v is MiniGameId {
@@ -29,10 +29,17 @@ export const MINI_GAME_RULES: Record<MiniGameId, MiniGameRule> = {
   match: { items: 6, timeLimitMs: 60_000 },
   origin: { items: 5, timeLimitMs: 60_000 },
   basket: { items: 1, timeLimitMs: 45_000 },
+  kitchen_swap: { items: 3, timeLimitMs: 45_000 },
 };
 
 /** Giỏ Đúng Việc: mỗi đề có đúng 3 sản phẩm đúng và 3 sản phẩm sai. */
 export const MINI_BASKET_PICK = 3;
+
+/** Góc nhà của Căn Bếp Xanh. Một ván đi qua `MINI_GAME_RULES.kitchen_swap.items` góc khác nhau, mỗi góc một món cần đổi. */
+export const MINI_KITCHEN_CORNERS = ['table', 'kitchen', 'bathroom', 'bag'] as const;
+export type MiniKitchenCorner = (typeof MINI_KITCHEN_CORNERS)[number];
+/** Căn Bếp Xanh: mỗi món có đúng 3 sản phẩm Tubu để đổi, một sản phẩm đúng việc. */
+export const MINI_KITCHEN_OPTIONS = 3;
 /** Ván nộp sớm hơn mức này bị từ chối (không phải người chơi thật). */
 export const MINI_MIN_ROUND_MS = 5_000;
 /** Ván quá hạn sau chừng này kể từ lúc phát: không chấm, không thưởng, không tính lượt. */
@@ -110,6 +117,22 @@ export interface MiniMatchCard {
   side: 'ingredient' | 'use';
 }
 
+/** Sản phẩm Tubu khách có thể đổi vào, kèm điều nhãn sản phẩm ghi (hiện ngay sau khi đổi, không nói đúng hay sai). */
+export interface MiniKitchenOption {
+  product: MiniProductCard;
+  fact: string;
+}
+
+/** Một món trong góc nhà của Căn Bếp Xanh: món đang dùng, điều nó giấu (vỏ nhựa, chất tẩy), 3 sản phẩm Tubu đã xáo. */
+export interface MiniKitchenSwap {
+  id: string;
+  corner: MiniKitchenCorner;
+  item: string;
+  emoji: string | null;
+  hidden: string;
+  options: MiniKitchenOption[];
+}
+
 export interface MiniBasketTask {
   id: string;
   task: string;
@@ -122,7 +145,8 @@ export type MiniRoundContent =
   | { game: 'daily_quiz'; items: MiniChoiceItem[] }
   | { game: 'origin'; items: MiniChoiceItem[] }
   | { game: 'match'; cards: MiniMatchCard[] }
-  | { game: 'basket'; task: MiniBasketTask };
+  | { game: 'basket'; task: MiniBasketTask }
+  | { game: 'kitchen_swap'; swaps: MiniKitchenSwap[] };
 
 export interface MiniStartResponse {
   game: MiniGameId;
@@ -144,6 +168,7 @@ export interface MiniStartResponse {
  * - daily_quiz, origin: `(number | null)[]`, chỉ số lựa chọn mỗi câu.
  * - match: `[cardId, cardId][]`, các cặp khách đã ghép (tối đa 6).
  * - basket: `string[]`, slug sản phẩm khách chọn (tối đa 3).
+ * - kitchen_swap: `(string | null)[]`, slug sản phẩm khách đổi vào ở mỗi món.
  * `null` = bỏ trống (hết giờ).
  */
 export interface MiniSubmitRequest {
@@ -171,6 +196,10 @@ export type MiniReview =
   | {
       game: 'basket';
       items: Array<MiniReviewBase & { correctSlugs: string[]; picks: Array<{ slug: string; correct: boolean; reason: string | null }> }>;
+    }
+  | {
+      game: 'kitchen_swap';
+      items: Array<MiniReviewBase & { corner: MiniKitchenCorner; item: string; given: string | null; expected: string }>;
     };
 
 export interface MiniCheckInResult {

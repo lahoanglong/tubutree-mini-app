@@ -113,6 +113,7 @@ const APPROVED_LOADED_KEYS = [
     'game.mini.daily_quiz.enabled',
     'game.mini.enabled',
     'game.mini.global_points_daily_budget',
+    'game.mini.kitchen_swap.enabled',
     'game.mini.match.enabled',
     'game.mini.min_account_age_hours',
     'game.mini.origin.enabled',

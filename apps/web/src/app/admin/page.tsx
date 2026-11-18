@@ -237,6 +237,7 @@ type Tab =
   | 'subscriptions'
   | 'analytics'
   | 'launchWatch'
+  | 'growth'
   | 'catalogQuality'
   | 'reports';
 // Mọi tab có tệp riêng trừ trang vào mặc định (Việc cần xử lý) tải khi mở tab: gói đầu của /admin không chứa mã của cả 60 tab.
@@ -272,6 +273,7 @@ const BundlesTab = dynamic(() => import('@/components/admin/bundles-tab').then((
 const NotificationTemplatesTab = dynamic(() => import('@/components/admin/notification-templates-tab').then((m) => m.NotificationTemplatesTab), { loading: tabLoading });
 const AnalyticsTab = dynamic(() => import('./analytics-tab').then((m) => m.AnalyticsTab), { loading: tabLoading });
 const LaunchWatchTab = dynamic(() => import('@/components/admin/launch-watch-tab').then((m) => m.LaunchWatchTab), { loading: tabLoading });
+const GrowthHubTab = dynamic(() => import('./growth-hub/growth-hub-tab').then((m) => m.GrowthHubTab), { loading: tabLoading });
 const CatalogQualityTab = dynamic(() => import('./catalog-quality-tab').then((m) => m.CatalogQualityTab), { loading: tabLoading });
 const ReportsTab = dynamic(() => import('@/components/admin/reports-tab').then((m) => m.ReportsTab), { loading: tabLoading });
 const WasteTab = dynamic(() => import('@/components/admin/waste-tab').then((m) => m.WasteTab), { loading: tabLoading });
@@ -303,6 +305,7 @@ const NAV_GROUPS: NavGroup<Tab>[] = [
     label: 'Tổng quan',
     items: [
       { k: 'dashboard', label: 'Tổng quan chỉ số' },
+      { k: 'growth', label: 'Trung tâm tăng trưởng', keywords: 'phễu chuyển đổi quay lại mua lần 2 game bật tắt ghép cặp đoán xuất xứ giỏ đúng việc chọn chuẩn xanh căn bếp không nhựa điểm danh trần điểm xanh hộ chiếu xanh mời bạn mss zalo banner miễn phí giao quà tặng 0đ' },
       { k: 'analytics', label: 'Giữ chân khách & chỉ số chính' },
       { k: 'launchWatch', label: 'Theo dõi 72h sau launch', keywords: 'launch phễu đổi rác gian lận đơn thứ hai 72 giờ' },
       { k: 'reports', label: 'Báo cáo' },
@@ -851,6 +854,12 @@ export default function AdminPage() {
           {active === 'notificationTemplates' && <NotificationTemplatesTab canEditAll={isAdmin} />}
           {active === 'analytics' && <AnalyticsTab onOpenReports={allowed.has('reports') ? () => setTab('reports') : undefined} />}
           {active === 'launchWatch' && <LaunchWatchTab />}
+          {active === 'growth' && (
+            <GrowthHubTab
+              onOpenConfig={allowed.has('config') ? () => setTab('config') : undefined}
+              onOpenCampaigns={allowed.has('campaigns') ? () => setTab('campaigns') : undefined}
+            />
+          )}
           {active === 'catalogQuality' && <CatalogQualityTab />}
           {active === 'reports' && <ReportsTab key={reportsSeed} initialPreset={reportsSeed > 0 ? 'today' : undefined} sections={reportSectionsFor(isAdmin, accessQ.data?.staffPermissions ?? [])} />}
           </TabErrorBoundary>

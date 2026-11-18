@@ -2,7 +2,7 @@ import { execFile, spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { promisify } from 'node:util';
 import { PrismaClient } from '@prisma/client';
-import { MINI_GAME_RULES, type MiniGameId } from '@tubutree/shared-types';
+import { MINI_GAME_IDS, MINI_GAME_RULES, type MiniGameId } from '@tubutree/shared-types';
 import { activeCounts, loadGameMiniPack, seedGameMini, type GameMiniPack } from '../../prisma/seed-game-mini';
 import { seedGameQuiz } from '../../prisma/seed-game-quiz';
 import type { PrismaService } from '../../src/prisma/prisma.service';
@@ -10,6 +10,7 @@ import { GameMiniContentService, LEGACY_QUIZ_PREFIX } from '../../src/modules/ga
 import { MINI_GAMES, type MiniBuildCtx, type MiniContentRow } from '../../src/modules/game/mini/games';
 import { readBasketPayload } from '../../src/modules/game/mini/games/basket';
 import { readChoicePayload } from '../../src/modules/game/mini/games/choice';
+import { readKitchenSwapPayload } from '../../src/modules/game/mini/games/kitchen-swap';
 import { readSortPayload } from '../../src/modules/game/mini/games/sort';
 
 /**
@@ -32,7 +33,9 @@ const A = scratch('a');
 const B = scratch('b');
 const clientFor = (url: string) => new PrismaClient({ datasources: { db: { url } } });
 
-const GAMES: MiniGameId[] = ['sort', 'daily_quiz', 'match', 'origin', 'basket'];
+const GAMES: readonly MiniGameId[] = MINI_GAME_IDS;
+// Gói nạp Căn Bếp Xanh tắt hết (chờ chuyên gia duyệt): ca chơi trên kho thật bật nó lên để vẫn chơi trọn một ván trên DB vừa migrate.
+const SEEDED_OFF: readonly MiniGameId[] = ['kitchen_swap'];
 const pack = loadGameMiniPack();
 const clone = (): GameMiniPack => JSON.parse(JSON.stringify(pack)) as GameMiniPack;
 const totalItems = GAMES.reduce((n, g) => n + pack.games[g].length, 0) + pack.matcher.length;
@@ -59,6 +62,8 @@ function correctAnswers(game: MiniGameId, rows: MiniContentRow[], ctx: MiniBuild
       return rows.map((r) => [ctx.cardId(r.id, 'ingredient'), ctx.cardId(r.id, 'use')]);
     case 'basket':
       return readBasketPayload(rows[0]!.payload)!.correct;
+    case 'kitchen_swap':
+      return rows.map((r) => readKitchenSwapPayload(r.payload)!.answer);
   }
 }
 
@@ -250,9 +255,12 @@ describe('seed-game-mini trên DB vừa migrate (real Postgres)', () => {
     it('kho thật của từng game: đủ để hiện và chơi trọn một ván với đáp án đúng', async () => {
       const slugs = [
         ...new Set(
-          GAMES.flatMap((g) => pack.games[g].filter((i) => i.active)).flatMap((i) => {
+          GAMES.flatMap((g) => pack.games[g].filter((i) => i.active || SEEDED_OFF.includes(g))).flatMap((i) => {
             const basket = readBasketPayload(i.payload);
-            return basket ? [...basket.correct, ...basket.wrong.map((w) => w.slug)] : i.productSlug ? [i.productSlug] : [];
+            if (basket) return [...basket.correct, ...basket.wrong.map((w) => w.slug)];
+            const kitchen = readKitchenSwapPayload(i.payload);
+            if (kitchen) return kitchen.options.map((o) => o.slug);
+            return i.productSlug ? [i.productSlug] : [];
           }),
         ),
       ];
@@ -271,12 +279,13 @@ describe('seed-game-mini trên DB vừa migrate (real Postgres)', () => {
         });
       }
 
+      await pb.gameContentItem.updateMany({ where: { game: { in: [...SEEDED_OFF] } }, data: { active: true } });
       const content = new GameMiniContentService(pb as unknown as PrismaService);
       const counts = activeCounts(pack);
       for (const game of GAMES) {
         const pool = await content.pool(game, DAY);
         expect(`${game} ${pool.available}`).toBe(`${game} true`);
-        expect(pool.rows).toHaveLength(counts[game].active);
+        expect(pool.rows).toHaveLength(SEEDED_OFF.includes(game) ? counts[game].total : counts[game].active);
         if (game === 'daily_quiz') expect(pool.rows.filter((r) => r.id.startsWith(LEGACY_QUIZ_PREFIX))).toHaveLength(pack.legacy.length);
 
         const def = MINI_GAMES[game];

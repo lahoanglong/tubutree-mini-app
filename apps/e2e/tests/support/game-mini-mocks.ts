@@ -1,10 +1,21 @@
 import { expect, type Locator, type Page } from '@playwright/test';
-import type { MiniBasketTask, MiniChoiceItem, MiniGameId, MiniMatchCard, MiniProductCard, MiniStartResponse, MiniSubmitResponse, MiniTodayResponse } from '@tubutree/shared-types';
+import type {
+  MiniBasketTask,
+  MiniChoiceItem,
+  MiniGameId,
+  MiniKitchenSwap,
+  MiniMatchCard,
+  MiniProductCard,
+  MiniStartResponse,
+  MiniSubmitResponse,
+  MiniTodayGame,
+  MiniTodayResponse,
+} from '@tubutree/shared-types';
 import { gameCopy } from '../../../../packages/app-core/src/game-mini/copy';
 import { reply, type MockApi } from './mock-api';
 
 /**
- * Dữ liệu và thao tác chung của spec game mini (Đố Xanh, Đúng Thùng, Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc) ở Mini App và web: API mock như máy chủ
+ * Dữ liệu và thao tác chung của spec game mini (Đố Xanh, Đúng Thùng, Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc, Căn Bếp Xanh) ở Mini App và web: API mock như máy chủ
  * thật khi cờ game.mini.* bật.
  */
 
@@ -287,13 +298,96 @@ export function basketResult(over: Partial<MiniSubmitResponse> = {}): MiniSubmit
   };
 }
 
+/** Dòng "Chơi hôm nay" của Căn Bếp Xanh: không nằm trong `miniToday()` mặc định (cờ riêng, mặc định tắt), spec của game tự thêm. */
+export const KITCHEN_TODAY_ROW: MiniTodayGame = { game: 'kitchen_swap', items: 3, timeLimitMs: 45_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 };
+
+const kitchenOption = (slug: string, name: string, price: number, fact: string) => ({ product: p(slug, name, price), fact });
+
+/** Ván Căn Bếp Xanh: 3 góc theo thứ tự cố định của máy chủ, lựa chọn đã xáo (đáp án ở vị trí 1, 0, 2). */
+export const KITCHEN_SWAPS: MiniKitchenSwap[] = [
+  {
+    id: 'gm-kitchen-duong-tui-nilon',
+    corner: 'table',
+    item: 'Đường đựng trong túi nilon, mở ra là bỏ túi',
+    emoji: '🍬',
+    hidden: 'Túi nilon còn dính đường phải rửa sạch mới tái chế được.',
+    options: [
+      kitchenOption('nuoc-tuong-mat-hoa-dua-sokfarm-cham-034cc1', 'Nước tương mật hoa dừa Sokfarm (chấm)', 65_000, 'Nước tương mật hoa dừa, loại dùng để chấm.'),
+      kitchenOption('duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-b67af3', 'Đường hoa dừa Sokfarm hũ thuỷ tinh 150g', 79_000, 'Đường hoa dừa đựng trong hũ thuỷ tinh 150g.'),
+      kitchenOption('granola-mix-nuts-tui-tien-loi-bh-nong-3b8792', 'Granola Mix Nuts túi tiện lợi', 55_000, 'Granola trộn hạt, đóng túi tiện lợi.'),
+    ],
+  },
+  {
+    id: 'gm-kitchen-chai-nuoc-rua-chen',
+    corner: 'kitchen',
+    item: 'Chai nước rửa chén 500 ml, hết là mua chai mới',
+    emoji: '🧴',
+    hidden: 'Mỗi lần mua chai mới là thêm một vỏ chai nhựa phải bỏ đi.',
+    options: [
+      kitchenOption('refill-nuoc-rua-chen-fuwa3e-10l-69f244', 'Refill nước rửa chén Fuwa3e 10L', 690_000, 'Can 10L nước rửa chén, rót lại vào chai cũ. Bao bì ghi eco-enzyme lên men từ vỏ dứa.'),
+      kitchenOption('refill-lau-da-nang-fuwa3e-10l-a08433', 'Refill nước lau đa năng Fuwa3e 10L', 690_000, 'Can 10L nước lau đa năng. Bao bì ghi eco-enzyme lên men từ vỏ dứa.'),
+      kitchenOption('refill-nuoc-giat-cam-fuwa3e-10l-dc4433', 'Refill nước giặt hương Cam Fuwa3e 10L', 790_000, 'Can 10L nước giặt quần áo hương Cam. Bao bì ghi eco-enzyme lên men từ vỏ dứa.'),
+    ],
+  },
+  {
+    id: 'gm-kitchen-lo-rua-tay-mini',
+    corner: 'bag',
+    item: 'Lọ nước rửa tay mini mua lẻ, vài hôm lại mua lọ mới',
+    emoji: '👜',
+    hidden: 'Lọ nhỏ nhanh hết, mỗi lọ là thêm một vỏ nhựa nhỏ.',
+    options: [
+      kitchenOption('xit-thom-huong-xuan-fuwa3e-300ml-ff93d6', 'Xịt thơm hương Xuân Fuwa3e 300ml', 99_000, 'Xịt thơm hương Xuân, chai 300ml.'),
+      kitchenOption('lau-noi-that-o-to-fuwa3e-300ml-b202d9', 'Lau nội thất ô tô Fuwa3e 300ml', 99_000, 'Nước lau nội thất ô tô, chai 300ml.'),
+      kitchenOption('nuoc-rua-tay-dang-gel-fuwa3e-300ml-37dfc0', 'Nước rửa tay dạng gel Fuwa3e 300ml', 89_000, 'Nước rửa tay dạng gel hương Quýt, chai 300ml. Bao bì ghi eco-enzyme lên men từ vỏ dứa.'),
+    ],
+  },
+];
+/** Sản phẩm đúng việc của từng góc, theo thứ tự ván: đúng 3 sản phẩm màn kết quả hiện để thêm giỏ dùng thử. */
+export const KITCHEN_SET = ['duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-b67af3', 'refill-nuoc-rua-chen-fuwa3e-10l-69f244', 'nuoc-rua-tay-dang-gel-fuwa3e-300ml-37dfc0'];
+/** Khách đổi đúng góc 1 và 3, đổi nhầm góc 2 sang can nước lau đa năng. */
+export const KITCHEN_PICKS = ['duong-hoa-dua-sokfarm-hu-thuy-tinh-150g-b67af3', 'refill-lau-da-nang-fuwa3e-10l-a08433', 'nuoc-rua-tay-dang-gel-fuwa3e-300ml-37dfc0'];
+const KITCHEN_SOURCE = 'https://cdn.thuvienphapluat.vn/uploads/danluatfile/2023/11/08/cong-van-9368-btnmt-kson-2023-ve-phan-loai-chat-thai-ran-sinh-hoat.pdf';
+
+export function kitchenResult(over: Partial<MiniSubmitResponse> = {}): MiniSubmitResponse {
+  return {
+    game: 'kitchen_swap',
+    roundId: 'r-kitchen_swap',
+    correct: 2,
+    total: 3,
+    durationMs: 20_000,
+    rewarded: true,
+    noRewardReason: null,
+    baseWater: 6,
+    basePoints: 0,
+    water: 6,
+    points: 0,
+    capped: [],
+    totalSeeds: 150,
+    checkIn: null,
+    review: {
+      game: 'kitchen_swap',
+      items: KITCHEN_SWAPS.map((sw, i) => ({
+        contentId: sw.id,
+        correct: KITCHEN_PICKS[i] === KITCHEN_SET[i],
+        corner: sw.corner,
+        item: sw.item,
+        given: KITCHEN_PICKS[i]!,
+        expected: KITCHEN_SET[i]!,
+        explanation: 'Rót can lớn vào chai cũ thì chai được dùng tiếp, bớt vỏ nhựa mới.',
+        sourceUrl: KITCHEN_SOURCE,
+      })),
+    },
+    ...over,
+  };
+}
+
 /**
  * Danh mục và giỏ cho màn kết quả đợt B: `GET /products?slugs=` trả thẻ hiện hành (món `BASKET_SOLD_OUT` hết hàng), `POST /cart/items/batch`
  * ghi lại thân lệnh. Trả mảng thân các lần thêm giỏ.
  */
 export function mockMiniShop(api: MockApi) {
   const cartPosts: { items: { variationId: string; quantity: number }[] }[] = [];
-  const names = new Map([...BASKET_TASK.products, ORIGIN_PRODUCT].map((x) => [x.slug, x.name]));
+  const names = new Map([...BASKET_TASK.products, ORIGIN_PRODUCT, ...KITCHEN_SWAPS.flatMap((sw) => sw.options.map((o) => o.product))].map((x) => [x.slug, x.name]));
   api.get('/products', (ctx: { call: { query: URLSearchParams } }) => {
     const slugs = (ctx.call.query.get('slugs') ?? '').split(',').filter(Boolean);
     const data = slugs.map((slug) => ({
@@ -329,6 +423,7 @@ export function mockMiniGames(
     match?: MiniSubmitResponse;
     origin?: MiniSubmitResponse;
     basket?: MiniSubmitResponse;
+    kitchen?: MiniSubmitResponse;
     failFirstSubmit?: boolean;
   } = {},
 ) {
@@ -342,12 +437,14 @@ export function mockMiniGames(
   api.post('/game/mini/match/start', () => round('match', { game: 'match', cards: MATCH_CARDS }, startOver));
   api.post('/game/mini/origin/start', () => round('origin', { game: 'origin', items: ORIGIN_ITEMS }, startOver));
   api.post('/game/mini/basket/start', () => round('basket', { game: 'basket', task: BASKET_TASK }, startOver));
+  api.post('/game/mini/kitchen_swap/start', () => round('kitchen_swap', { game: 'kitchen_swap', swaps: KITCHEN_SWAPS }, startOver));
   const results: Record<string, () => MiniSubmitResponse> = {
     daily_quiz: () => opts.quiz ?? quizResult(),
     sort: () => opts.sort ?? sortResult(),
     match: () => opts.match ?? matchResult(),
     origin: () => opts.origin ?? originResult(),
     basket: () => opts.basket ?? basketResult(),
+    kitchen_swap: () => opts.kitchen ?? kitchenResult(),
   };
   let failed = false;
   const submit = (game: MiniGameId) => (ctx: { call: { body: unknown } }) => {
@@ -359,7 +456,7 @@ export function mockMiniGames(
     const guestResult = guest ? { rewarded: false, noRewardReason: guest, water: 0, points: 0, checkIn: null, ...(guest === 'NOT_LOGGED_IN' ? { roundId: null } : {}) } : {};
     return { ...results[game]!(), ...guestResult };
   };
-  for (const game of ['daily_quiz', 'sort', 'match', 'origin', 'basket'] as const) api.post(`/game/mini/${game}/submit`, submit(game));
+  for (const game of ['daily_quiz', 'sort', 'match', 'origin', 'basket', 'kitchen_swap'] as const) api.post(`/game/mini/${game}/submit`, submit(game));
   return { submits };
 }
 

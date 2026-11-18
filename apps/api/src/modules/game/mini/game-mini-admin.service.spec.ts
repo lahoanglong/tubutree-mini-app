@@ -18,6 +18,14 @@ const VALID: Record<MiniGameId, Record<string, unknown>> = {
     correct: SLUGS.slice(0, 3),
     wrong: SLUGS.slice(3).map((slug) => ({ slug, reason: 'Nhãn ghi dùng để lau sàn.' })),
   },
+  kitchen_swap: {
+    corner: 'kitchen',
+    item: 'Chai nước rửa chén 500 ml',
+    emoji: '🧴',
+    hidden: 'Mỗi chai mới là thêm một vỏ nhựa.',
+    options: SLUGS.slice(0, 3).map((slug) => ({ slug, fact: 'Can 10L rót lại vào chai cũ.' })),
+    answer: SLUGS[0],
+  },
 };
 /** Mỗi payload sai theo cách khác nhau cho từng game: đủ để payloadError của game đó từ chối. */
 const INVALID: Record<MiniGameId, Record<string, unknown>> = {
@@ -26,6 +34,7 @@ const INVALID: Record<MiniGameId, Record<string, unknown>> = {
   origin: { prompt: 'Câu?', options: ['A', 'B'], answer: 5 },
   match: { ingredient: 'Baking soda' },
   basket: { task: 'Rửa bình sữa', correct: SLUGS.slice(0, 2), wrong: [] },
+  kitchen_swap: { corner: 'kitchen', item: 'Chai nhựa', hidden: 'Vỏ nhựa', options: [{ slug: SLUGS[0], fact: 'Can 10L' }], answer: SLUGS[0] },
 };
 const GAME_NAME: Record<MiniGameId, string> = {
   sort: 'Đúng Thùng',
@@ -33,6 +42,7 @@ const GAME_NAME: Record<MiniGameId, string> = {
   origin: 'Đoán Xuất Xứ',
   match: 'Ghép Cặp',
   basket: 'Giỏ Đúng Việc',
+  kitchen_swap: 'Căn Bếp Xanh',
 };
 
 const input = (game: MiniGameId, over: Partial<MiniContentCreateInput> = {}): MiniContentCreateInput => ({
@@ -162,6 +172,7 @@ describe('GameMiniAdminService.create', () => {
         match: 'match_pair',
         origin: 'origin_question',
         basket: 'basket_task',
+        kitchen_swap: 'kitchen_swap_item',
       });
     });
 

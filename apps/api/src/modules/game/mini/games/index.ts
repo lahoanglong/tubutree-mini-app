@@ -4,6 +4,7 @@ import { sortGame } from './sort';
 import { dailyQuizGame, originGame } from './choice';
 import { matchGame } from './match';
 import { basketGame } from './basket';
+import { kitchenSwapGame } from './kitchen-swap';
 
 export const MINI_GAMES: Record<MiniGameId, MiniGameDef> = {
   sort: sortGame,
@@ -11,6 +12,7 @@ export const MINI_GAMES: Record<MiniGameId, MiniGameDef> = {
   match: matchGame,
   origin: originGame,
   basket: basketGame,
+  kitchen_swap: kitchenSwapGame,
 };
 
 export type { MiniBuildCtx, MiniContentRow, MiniGameDef, MiniGrade, MiniPickCtx } from './game-def';

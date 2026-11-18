@@ -1,0 +1,110 @@
+/*
+ * Bàn chơi Căn Bếp Xanh (chỉ phát ở web, chunk riêng của bàn chơi). Lựa chọn dùng .tubu-mg-options/.tubu-mg-option của mini-game.css; file này
+ * chỉ có dải góc nhà, cảnh món đồ và thẻ "Về sản phẩm này". Mọi màu và khoảng cách đi qua token.
+ */
+
+/* ── Dải góc nhà: 3 cột bằng nhau, dấu tròn trên, tên góc dưới, nên "Túi đi làm" vẫn vừa ở 360px ── */
+.tubu-mg-kitchen-corners {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-inline-sm);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.tubu-mg-kitchen-corner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--type-caption-size);
+  line-height: var(--type-caption-lh);
+  text-align: center;
+}
+.tubu-mg-kitchen-corner-mark {
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  width: 24px;
+  height: 24px;
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-pill);
+  background: var(--color-bg-surface);
+  font-weight: var(--type-label-weight);
+  transition:
+    background-color var(--motion-tap),
+    border-color var(--motion-tap);
+}
+.tubu-mg-kitchen-corner-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tubu-mg-kitchen-corner[data-state='current'] {
+  color: var(--color-text-primary);
+  font-weight: var(--type-label-weight);
+}
+.tubu-mg-kitchen-corner[data-state='current'] .tubu-mg-kitchen-corner-mark {
+  border-color: var(--color-action-primary-bg);
+  color: var(--color-text-brand);
+}
+.tubu-mg-kitchen-corner[data-state='done'] {
+  color: var(--color-status-success-fg);
+}
+.tubu-mg-kitchen-corner[data-state='done'] .tubu-mg-kitchen-corner-mark {
+  border-color: var(--color-status-success-fg);
+  background: var(--color-status-success-bg);
+}
+
+/* ── Cảnh món đồ: món đang giấu gì; đổi xong thì tên món mờ đi và gạch ngang ── */
+.tubu-mg-kitchen-scene {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-stack-xs);
+  padding: var(--space-stack-sm) var(--space-inline-md);
+  border: 1px solid var(--color-border-subtle);
+  border-radius: var(--radius-card);
+  background: var(--color-bg-subtle);
+}
+.tubu-mg-kitchen-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-inline-sm);
+  min-width: 0;
+}
+.tubu-mg-kitchen-emoji {
+  flex: 0 0 auto;
+  font-size: var(--type-display-md-size);
+  line-height: 1;
+}
+.tubu-mg-kitchen-item-name {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  transition: opacity var(--motion-enter);
+}
+.tubu-mg-kitchen-scene[data-swapped='true'] .tubu-mg-kitchen-item-name {
+  opacity: 0.6;
+  text-decoration: line-through;
+}
+
+/* ── Thẻ "Về sản phẩm này" sau khi đổi: điều bao bì ghi, không phải lời chấm đúng sai ── */
+.tubu-mg-kitchen-fact {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--space-stack-sm) var(--space-inline-md);
+  border: 1px solid var(--color-border-selected);
+  border-radius: var(--radius-card);
+  background: var(--color-action-secondary-bg);
+  overflow-wrap: anywhere;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tubu-mg-kitchen-corner-mark,
+  .tubu-mg-kitchen-item-name {
+    transition: none;
+  }
+}
