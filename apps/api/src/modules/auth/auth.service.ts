@@ -108,6 +108,11 @@ export class AuthService {
    * Khi Zalo login khả dụng, có thể nâng cấp guest → tài khoản Zalo qua phone-merge.
    */
   async loginAsGuest(deviceId: string, referralCode?: string, firstTouch?: unknown): Promise<LoginResponse> {
+    return this.issueTokens(await this.ensureGuestUser(deviceId, referralCode, firstTouch));
+  }
+
+  /** Dòng khách của deviceId (tạo khi chưa có). Đặt hàng không đăng nhập trên web (checkout/guest) dùng dòng này mà không cấp phiên. */
+  async ensureGuestUser(deviceId: string, referralCode?: string, firstTouch?: unknown): Promise<User> {
     const guestKey = guestZaloId(deviceId);
     let user = await this.prisma.user.findUnique({ where: { zaloId: guestKey } });
     if (!user) user = await this.adoptLegacyGuest(deviceId, guestKey);
@@ -128,7 +133,38 @@ export class AuthService {
         user = await this.recoverFromZaloIdConflict(err, guestKey);
       }
     }
-    return this.issueTokens(user);
+    return user;
+  }
+
+  /**
+   * Đơn đặt không đăng nhập trên web (checkout/guest) về tài khoản Zalo vừa đăng nhập trên cùng trình duyệt: gộp dòng khách của deviceId
+   * bằng đúng mergeGuestInto (đơn, địa chỉ, và mọi thứ khác theo luật gộp sẵn có; không thêm điểm). Chỉ gộp dòng khách chưa có SĐT và có
+   * đơn vãng lai. Giỏ máy chủ của khách chỉ là bản sao giỏ trên trình duyệt nên xoá trước, không thì giỏ bị cộng hai lần. Trả số đơn đã
+   * chuyển; 0 khi không có gì để gộp hoặc lần gọi song song khác đã gộp.
+   */
+  async claimGuestOrders(targetUserId: string, deviceId: string): Promise<number> {
+    const guest = await this.prisma.user.findUnique({ where: { zaloId: guestZaloId(deviceId) } });
+    if (!guest || guest.phone || guest.mergedIntoId || guest.id === targetUserId) return 0;
+    if ((await this.prisma.order.count({ where: { userId: guest.id, guestPhone: { not: null } } })) === 0) return 0;
+    const target = await this.prisma.user.findUnique({ where: { id: targetUserId } });
+    const targetZaloId = target?.zaloId;
+    if (!target || !targetZaloId || targetZaloId.startsWith('guest_') || target.isBlocked) return 0;
+    // Hai lần gọi chồng (hai tab vừa đăng nhập) xếp hàng ở khoá này: lần sau đọc lại thấy dòng khách đã gộp nên trả 0, số đơn và sự kiện
+    // không bị đếm hai lần. Lần gộp chạy tx riêng của nó trên kết nối khác; tx này chỉ giữ khoá advisory, không khoá dòng nào.
+    return this.prisma.$transaction(
+      async (tx) => {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`guest-claim:${guest.id}`}))`;
+        const fresh = await tx.user.findUnique({ where: { id: guest.id }, select: { zaloId: true, phone: true, mergedIntoId: true } });
+        if (!fresh || fresh.phone || fresh.mergedIntoId || fresh.zaloId !== guest.zaloId) return 0;
+        const moving = await tx.order.count({ where: { userId: guest.id, guestPhone: { not: null } } });
+        if (moving === 0) return 0;
+        await this.prisma.cartItem.deleteMany({ where: { cart: { userId: guest.id } } });
+        await this.mergeGuestInto(guest, target, { zaloId: targetZaloId }, null);
+        const after = await this.prisma.user.findUnique({ where: { id: guest.id }, select: { mergedIntoId: true } });
+        return after?.mergedIntoId === target.id ? moving : 0;
+      },
+      { maxWait: 10_000, timeout: 60_000 },
+    );
   }
 
   /**

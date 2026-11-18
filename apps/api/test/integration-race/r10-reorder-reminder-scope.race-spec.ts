@@ -4,7 +4,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { NotificationsService } from '../../src/modules/notifications/notifications.service';
 import { LifecycleService } from '../../src/modules/lifecycle/lifecycle.service';
-import { createOrder, createUser, randCode, warmPool } from './helpers';
+import { createOrder, createRealUser, randCode, warmPool } from './helpers';
 
 const DAY = 864e5;
 
@@ -56,9 +56,9 @@ describe('Nhắc mua lại chỉ cho đơn bán lẻ khách tự mua (real Postg
   }
 
   it('khách tự mua bán lẻ được nhắc; CTV (đơn lên hộ khách) và đại lý (đơn buôn) không', async () => {
-    const customer = await createUser(prisma, { role: 'CUSTOMER' });
-    const ctv = await createUser(prisma, { role: 'AFFILIATE' });
-    const dealer = await createUser(prisma, { role: 'DEALER' });
+    const customer = await createRealUser(prisma, { role: 'CUSTOMER' });
+    const ctv = await createRealUser(prisma, { role: 'AFFILIATE' });
+    const dealer = await createRealUser(prisma, { role: 'DEALER' });
     const customerVariation = await delivered(customer.id);
     const ctvVariation = await delivered(ctv.id, { placedForCustomer: true, endCustomerKey: '0900000001' });
     const dealerVariation = await delivered(dealer.id, { type: 'DEALER' });

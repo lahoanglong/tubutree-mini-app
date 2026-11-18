@@ -1,4 +1,5 @@
 import { RemarketingService } from './remarketing.service';
+import { REAL_USER_WHERE } from '../../common/real-user';
 import type { PrismaService } from '../../prisma/prisma.service';
 import type { SystemConfigService } from '../system-config/system-config.service';
 import type { NotificationsService } from '../notifications/notifications.service';
@@ -47,6 +48,12 @@ describe('RemarketingService.sendCartAbandonReminders', () => {
   });
   afterEach(() => {
     jest.useRealTimers();
+  });
+
+  it('chỉ lấy giỏ của khách thật: giỏ tài khoản guest_ không vào tập nhắc', async () => {
+    const { svc, findMany } = setupCart([]);
+    await svc.sendCartAbandonReminders();
+    expect(findMany.mock.calls[0][0].where.user).toEqual(REAL_USER_WHERE);
   });
 
   it('giỏ trong khung giờ (min..max), chưa từng nhắc → notify + claim atomic', async () => {

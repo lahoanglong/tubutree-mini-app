@@ -18,6 +18,7 @@ import { readGreenCornerConfig } from '../reviews/review-green-corner';
 import { GREEN_CORNER_MAX_PHOTOS } from '@tubutree/shared-types';
 import { FREESHIP_BOOSTER_ENABLED_KEY } from '../catalog/upsell/freeship-upsell';
 import { RETURN_PACKAGING_NUDGE_KEY } from '../waste-exchange/customer/waste-return-packaging';
+import { WEB_GUEST_CHECKOUT_ENABLED_KEY } from '../checkout/guest/guest-checkout.config';
 import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PHONE_KEY, orderZaloGateOpen, tubuZaloPhoneOf, type OrderZaloGate } from './order-zalo-config';
 
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
@@ -118,6 +119,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     freeshipBooster,
     flashGreenHour,
     returnPackagingNudge,
+    webGuestCheckout,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -166,6 +168,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(FREESHIP_BOOSTER_ENABLED_KEY, false),
     config.get<unknown>(FLASH_GREEN_HOUR_KEY, false),
     config.get<unknown>(RETURN_PACKAGING_NUDGE_KEY, false),
+    config.get<unknown>(WEB_GUEST_CHECKOUT_ENABLED_KEY, false),
   ]);
   return {
     freeshipThreshold,
@@ -247,6 +250,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     freeshipBoosterEnabled: freeshipBooster === true,
     // Thẻ đổi rác kèm đơn điền sẵn bao bì của đơn đã giao (`pickup-options.suggestion`, `GET /waste/return-packaging`); tắt hay API cũ thì thẻ như trước.
     returnPackagingNudgeEnabled: returnPackagingNudge === true,
+    // Đặt hàng không cần đăng nhập trên web (checkout/guest). Chỉ boolean true mới bật; API cũ không trả thì trang thanh toán bắt đăng nhập như cũ.
+    webGuestCheckoutEnabled: webGuestCheckout === true,
   };
 }
 

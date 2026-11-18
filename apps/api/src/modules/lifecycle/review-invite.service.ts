@@ -4,6 +4,7 @@ import { PrismaService } from '../../prisma/prisma.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CRON_TZ } from '../../common/cron-tz';
+import { REAL_USER_SQL } from '../../common/real-user';
 import { markCronSkipped, TrackCron } from '../../common/cron-run/track-cron';
 import { runExclusive } from '../../common/cron-leader/run-exclusive';
 
@@ -87,6 +88,8 @@ export class ReviewInviteService {
           AND o."reviewInvitedAt" IS NULL
           AND o.type::text = 'RETAIL'
           AND o."placedForCustomer" = false
+          -- Chỉ mời khách thật: tài khoản guest_ (Mini chưa có SĐT, đơn web đặt không đăng nhập chưa gộp về Zalo) không có kênh nhận tin.
+          AND EXISTS (SELECT 1 FROM users u WHERE u.id = o."userId" AND ${REAL_USER_SQL})
           AND o."createdAt" >= ${createdFloor}
           AND o."deliveredAt" IS NOT NULL AND o."deliveredAt" <= ${dueBefore} AND o."deliveredAt" >= ${oldest}
           AND o.id > ${cursor}

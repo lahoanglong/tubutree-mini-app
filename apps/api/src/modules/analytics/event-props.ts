@@ -127,6 +127,8 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   green_box_page_viewed: { props: {} },
   subscription_suggestion_shown: { props: {} },
   subscription_suggestion_accepted: { props: { intervalWeeks: (v) => v === 4 || v === 6 || v === 8 || v === 10 }, required: ['intervalWeeks'] },
+  // Đặt hàng không đăng nhập trên web (wave tubu-w4-01): chỉ số món, không mang tên hay SĐT.
+  guest_checkout_start: { props: { itemCount: COUNT }, required: ['itemCount'] },
 };
 
 /**

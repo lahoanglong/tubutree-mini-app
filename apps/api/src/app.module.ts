@@ -23,6 +23,7 @@ import { CatalogModule } from './modules/catalog/catalog.module';
 import { EcoImpactModule } from './modules/eco-impact/eco-impact.module';
 import { CartModule } from './modules/cart/cart.module';
 import { CheckoutModule } from './modules/checkout/checkout.module';
+import { GuestCheckoutModule } from './modules/checkout/guest/guest-checkout.module';
 import { OrdersModule } from './modules/orders/orders.module';
 import { MeSummaryModule } from './modules/me-summary/me-summary.module';
 import { GameModule } from './modules/game/game.module';
@@ -93,6 +94,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     EcoImpactModule,
     CartModule,
     CheckoutModule,
+    GuestCheckoutModule,
     OrdersModule,
     MeSummaryModule,
     GameModule,

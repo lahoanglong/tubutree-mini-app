@@ -22,6 +22,9 @@ import { loginHref } from '@/lib/return-to';
 import { useFlashListExpiry } from '@/lib/use-flash-expiry';
 import { useRunningFlash } from '@/lib/use-flash-sales';
 import { useFreeShipThreshold } from '@/lib/use-free-ship-threshold';
+import { usePublicConfig } from '@/lib/use-public-config';
+import { guestCheckoutOn } from '@/lib/guest-checkout/flag';
+import { guestCopy } from '@/lib/guest-checkout/copy';
 import { variationLabel } from '@/lib/variation-label';
 import { useGuestCartProducts } from '@/lib/guest-cart/products';
 import { removeGuestLine, setGuestQuantity } from '@/lib/guest-cart/store';
@@ -44,6 +47,10 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
   useFlashListExpiry(flash);
   const view = guestCartView(lines, products, flash);
   const threshold = useFreeShipThreshold();
+  // Đặt hàng không đăng nhập (web.guest_checkout_enabled): nút chính sang /thanh-toan; cờ tắt thì vẫn mời đăng nhập như cũ.
+  const cfg = usePublicConfig();
+  const guestCheckout = cfg.isLoaded && guestCheckoutOn(cfg);
+  const ctaHref = guestCheckout ? '/thanh-toan' : LOGIN_TO_ORDER;
   // Khách chưa đăng nhập: phí theo mức chung (không hạng, không ưu đãi đơn đầu), hỏi không kèm phiên. Có hàng gian hàng tự giao thì không ước tính.
   const shipQ = useShippingEstimate(view.settled && !view.hasMerchant ? view.subtotal : null, { anonymous: true });
 
@@ -61,7 +68,7 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
   const freeshipBase = view.hasMerchant ? view.tubuSubtotal : view.subtotal;
   const showFreeship = view.settled && threshold !== null && (!view.hasMerchant || freeshipBase > 0);
   const subtotalLabel = fillCopy('cart.subtotal');
-  const cta = fillCopy('guestCart.loginCta');
+  const cta = guestCheckout ? guestCopy('cartCta') : fillCopy('guestCart.loginCta');
   const freeshipReached = threshold !== null && freeshipProgress({ base: freeshipBase, threshold }).reached;
   const ship = cartShippingView(shipQ.estimate, { goodsNet: view.subtotal, freeshipReached, stale: shipQ.stale });
   const totalLabel = ship?.totalLabel ?? subtotalLabel;
@@ -98,7 +105,7 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
             <span>{totalLabel}</span>
             <span className="tabular-nums">{formatVnd(total)}</span>
           </div>
-          <Link href={LOGIN_TO_ORDER} data-testid="guest-cart-login" className={`${ui.btnPrimary} w-full`}>
+          <Link href={ctaHref} data-testid="guest-cart-login" className={`${ui.btnPrimary} w-full`}>
             {cta}
           </Link>
         </div>
@@ -119,7 +126,7 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
                 {formatVnd(total)}
               </div>
             </div>
-            <Link href={LOGIN_TO_ORDER} data-testid="guest-cart-login" className={`${uiBar.primary} flex-[1_0_auto] whitespace-nowrap`}>
+            <Link href={ctaHref} data-testid="guest-cart-login" className={`${uiBar.primary} flex-[1_0_auto] whitespace-nowrap`}>
               {cta}
             </Link>
           </div>

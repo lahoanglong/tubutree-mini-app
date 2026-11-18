@@ -64,6 +64,8 @@ export interface PublicConfig {
   chat?: { enabled: boolean; hours: { start: string; end: string } };
   /** Giỏ cho khách chưa đăng nhập trên web (`web.guest_cart_enabled`). Thiếu khi API cũ → tắt, khách bấm mua thì sang đăng nhập như cũ. */
   webGuestCartEnabled?: boolean;
+  /** Đặt hàng trên web không cần đăng nhập Zalo (`web.guest_checkout_enabled`). Thiếu khi API cũ → tắt, /thanh-toan mời đăng nhập như cũ. */
+  webGuestCheckoutEnabled?: boolean;
   /** Cờ `referral.share_card_enabled`: link mời trỏ trang đích `/moi/<mã>` và khối mời hiện tiến độ. API cũ chưa trả. */
   referralShareCardEnabled?: boolean;
   /** Cờ `commerce.freeship_booster_enabled`: dải bù đơn ở đầu giỏ lấy món từ `GET /upsell/freeship` (cửa sổ 45.000đ). Thiếu khi API cũ → dải cũ từ kệ Bán chạy nhất. */

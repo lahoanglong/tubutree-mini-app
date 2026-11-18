@@ -389,6 +389,8 @@ export const SYSTEM_CONFIGS: ConfigSeed[] = [
   { key: 'retention.support_chat_days', value: 365, category: 'retention', description: 'Giữ tin chat CSKH và lần chuyển sang Zalo bao nhiêu ngày (sàn 90)', createOnly: true },
   // Giỏ khách trên web. createOnly: admin bật rồi thì seed không tắt lại; migration 20261117030000_web_guest_cart_flag tạo cùng dòng cho PROD.
   { key: 'web.guest_cart_enabled', value: false, category: 'web', description: 'Khách chưa đăng nhập trên web được thêm món vào giỏ và xem giỏ (giá, tạm tính, Miễn phí giao hàng); đăng nhập vẫn bắt buộc ở bước đặt hàng. Tắt thì khách bấm mua là sang trang đăng nhập như cũ.', createOnly: true },
+  { key: 'web.guest_checkout_enabled', value: false, category: 'web', description: 'Khách chưa đăng nhập trên web đặt hàng bằng số điện thoại (không cần Zalo), theo dõi đơn bằng đường dẫn riêng. Không dùng mã giảm giá, Điểm Xanh, giá Giờ vàng; không tích điểm. Tắt thì trang thanh toán bắt đăng nhập như cũ.', createOnly: true },
+  { key: 'checkout.guest_blocked_phones', value: [], category: 'checkout', description: 'Danh sách SĐT (dạng 0xxxxxxxxx) không được đặt hàng khi chưa đăng nhập. Khách nhận lời mời đăng nhập Zalo, không biết mình bị chặn.', createOnly: true },
   { key: 'waste.enabled', value: false, category: 'waste', description: 'Cờ tổng của chương trình Đổi rác lấy quà, tắt thì khách không tạo được yêu cầu mới và bàn đại lý bị chặn, kho vẫn xử lý yêu cầu đã có.', createOnly: true },
   { key: 'waste.lane_dropoff_enabled', value: true, category: 'waste', description: 'Bật cách giao Mang tới điểm nhận cho yêu cầu mới.', createOnly: true },
   { key: 'waste.lane_mailin_enabled', value: true, category: 'waste', description: 'Bật cách giao Gửi về kho cho yêu cầu mới.', createOnly: true },

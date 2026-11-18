@@ -87,6 +87,12 @@
   ],
   "gaps": [
     {
+      "id": "guest-checkout-web-only",
+      "flag": ["apps/api/src/modules/checkout/guest/guest-checkout.config.ts", "WEB_GUEST_CHECKOUT_ENABLED_KEY"],
+      "missingOn": "miniapp",
+      "reason": "Đặt hàng không đăng nhập (biểu mẫu ở /thanh-toan khi chưa đăng nhập) và trang theo dõi đơn /don/[code]#k=<khoá> chỉ có trên web (tubu-w4-01): trong Mini App khách luôn có tài khoản Zalo nên đặt và xem đơn ở /checkout, /order/:code. Không có route Mini tương ứng nên không dùng được dòng skip của mục routes."
+    },
+    {
       "id": "eco-passport-web-only",
       "flag": ["apps/api/src/modules/eco-impact/eco-facts.rules.ts", "ECO_PASSPORT_KEY"],
       "missingOn": "miniapp",

@@ -2,6 +2,8 @@ import { BadRequestException, ForbiddenException, Injectable, Logger, NotFoundEx
 import { Cron } from '@nestjs/schedule';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../../prisma/prisma.service';
+import { isRealUser } from '../../common/real-user';
+import { guestCheckoutEnabled } from '../checkout/guest/guest-checkout.config';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { LifecycleService } from '../lifecycle/lifecycle.service';
@@ -197,12 +199,17 @@ export class FlashSaleService {
         AND v."isActive" = true
         AND s."isActive" = true AND s."startAt" <= ${now} AND s."endAt" > ${now}`);
     const items = rows.map(({ endAt, createdBy, ...it }) => ({ ...it, flashSale: { endAt, createdBy } }));
+    let buyer: { role: string; phone: string | null; zaloId: string | null } | null | undefined;
+    const loadBuyer = async () =>
+      buyer !== undefined ? buyer : (buyer = await this.prisma.user.findUnique({ where: { id: userId! }, select: { role: true, phone: true, zaloId: true } }));
+    // Khi đặt hàng không đăng nhập đang bật, tài khoản vãng lai (guest_, chưa có SĐT) mua theo giá thường: giới hạn mỗi khách đếm theo userId
+    // mà deviceId mới tạo được vô hạn tài khoản vãng lai. Cờ tắt thì không đọc gì thêm, giá như cũ.
+    if (userId && items.length > 0 && (await guestCheckoutEnabled(this.config)) && !isRealUser(await loadBuyer())) return map;
     // Người tạo đợt không mua giá flash của đợt mình (cùng luật mã giảm giá, isOwnStaffCoupon): nhân viên tự đặt giá rồi tự mua.
     // ADMIN được miễn như với mã giảm giá; chỉ tra vai trò khi người mua thật sự là người tạo một đợt đang xét.
     let ownSalesBlocked = false;
     if (userId && items.some((it) => it.flashSale.createdBy === userId)) {
-      const buyer = await this.prisma.user.findUnique({ where: { id: userId }, select: { role: true } });
-      ownSalesBlocked = buyer?.role !== 'ADMIN';
+      ownSalesBlocked = (await loadBuyer())?.role !== 'ADMIN';
     }
     const isOwn = (it: (typeof items)[number]) => ownSalesBlocked && it.flashSale.createdBy === userId;
     const open = items.filter((it) => it.soldCount < it.quota && !isOwn(it));

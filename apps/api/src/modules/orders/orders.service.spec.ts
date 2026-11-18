@@ -1812,7 +1812,8 @@ describe('OrdersService.cancel — hook thu kèm rác (§12.2 bước 3, §17.3)
 describe('ORDER_LIST_SELECT', () => {
   it('đủ mọi cột của đơn trừ shippingHistory và invoiceRequest, kèm items: cột mới thêm vào schema phải vào danh sách (hoặc bị loại có chủ ý)', () => {
     // Các cột sự kiện MSS (số thứ tự, lựa chọn nhận tin Zalo của đơn và nguồn của lựa chọn) chỉ bộ ghi sự kiện và chi tiết đơn đọc.
-    const notListed = new Set(['shippingHistory', 'invoiceRequest', 'mssEventSeq', 'orderZaloConsent', 'orderZaloConsentAt', 'orderZaloConsentSource']);
+    // Cột đơn khách vãng lai trên web (SĐT chưa xác minh, băm khoá theo dõi, băm IP) chỉ luồng checkout/guest và chi tiết đơn admin đọc.
+    const notListed = new Set(['shippingHistory', 'invoiceRequest', 'mssEventSeq', 'orderZaloConsent', 'orderZaloConsentAt', 'orderZaloConsentSource', 'guestPhone', 'guestTokenHash', 'guestIpHash']);
     const expected = Object.keys(Prisma.OrderScalarFieldEnum).filter((k) => !notListed.has(k));
     expect(Object.keys(ORDER_LIST_SELECT).sort()).toEqual([...expected, 'items'].sort());
   });

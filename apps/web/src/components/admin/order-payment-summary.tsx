@@ -29,8 +29,16 @@ export function OrderPaymentSummary({ order: o, isAdmin }: { order: AdminOrder; 
   const status = orderPaymentStatusLabel(o, refunds);
   const inProgress = isRefundInProgress(o, refunds);
   const bankOpen = refunds.some((r) => r.method === 'MANUAL_TRANSFER' && ['UNVERIFIED', 'PENDING', 'PROCESSING'].includes(r.status));
+  // Đơn đặt trên web không đăng nhập (checkout/guest, tubu-w4-01): listOrders trả nguyên dòng nên có cột guestPhone. SĐT do khách tự gõ, chưa xác minh.
+  const guestPhone = (o as AdminOrder & { guestPhone?: string | null }).guestPhone;
   return (
     <div data-order-payment className="space-y-1.5 rounded-control border border-stone-200 bg-stone-0 px-3 py-2 text-xs text-stone-700">
+      {guestPhone && (
+        <div data-guest-order className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <ToneBadge tone="warning">Khách vãng lai</ToneBadge>
+          <span>Đặt trên web không đăng nhập, SĐT {guestPhone} chưa xác minh: gọi xác nhận trước khi giao.</span>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
         <span className="font-semibold text-stone-800">Thanh toán:</span>
         <span>{PAYMENT_METHOD_LABELS[o.paymentMethod] ?? o.paymentMethod}</span>

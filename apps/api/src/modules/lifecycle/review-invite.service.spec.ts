@@ -27,8 +27,17 @@ function setup(o: { items: Item[]; claimCount?: number; notify?: jest.Mock }) {
   const config = { get: async <T>(_k: string, fb: T) => fb } as unknown as SystemConfigService;
   const notify = o.notify ?? jest.fn().mockResolvedValue(undefined);
   const svc = new ReviewInviteService(prisma, config, { notify } as unknown as NotificationsService);
-  return { svc, notify, updateMany };
+  return { svc, notify, updateMany, queryRaw };
 }
+
+describe('ReviewInviteService: chọn đơn', () => {
+  it('chỉ mời khách thật: tài khoản guest_ (Mini chưa có SĐT, đơn web chưa gộp về Zalo) không vào tập mời', async () => {
+    const { svc, queryRaw } = setup({ items: [] });
+    await svc.sendReviewInvites();
+    const orderSql = queryRaw.mock.calls.map((c) => (c[0] as readonly string[]).join('?')).find((t) => t.includes('FROM orders o'));
+    expect(orderSql).toContain('AND EXISTS (SELECT 1 FROM users u WHERE u.id = o."userId" AND');
+  });
+});
 
 describe('ReviewInviteService: dữ liệu tin REVIEW_REQUEST', () => {
   it('kèm order_id để nút "Viết đánh giá" mở thẳng form cho đúng đơn, cùng order_code và product_slug', async () => {

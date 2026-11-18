@@ -8,6 +8,7 @@ import { CRON_TZ } from '../../common/cron-tz';
 import { formatVnDate } from '../../common/vn-time';
 import { SELLABLE_VARIATION_WHERE } from '../cart/sellable';
 import { TrackCron } from '../../common/cron-run/track-cron';
+import { REAL_USER_WHERE } from '../../common/real-user';
 
 /** Khung giờ nhắc giỏ bỏ quên — admin-config-rules so chéo hai khoá này (và mặc định) lúc ghi. */
 export const CART_ABANDON_MIN_HOURS_KEY = 'remarketing.cart_abandon_min_hours';
@@ -61,6 +62,8 @@ export class RemarketingService {
           updatedAt: { lte: new Date(now - minH * 3600e3), gte: new Date(now - maxH * 3600e3) },
           // Giỏ chỉ còn hàng ngừng bán: nhắc thì khách mở giỏ chỉ thấy "đã ngừng bán".
           items: { some: { variation: SELLABLE_VARIATION_WHERE } },
+          // Chỉ nhắc khách thật: giỏ của tài khoản guest_ (Mini chưa có SĐT, bản sao giỏ của đơn web không đăng nhập) không có kênh nhận tin.
+          user: REAL_USER_WHERE,
           // Lọc giỏ đã nhắc ngay trong truy vấn: lọc sau `take` thì 200 giỏ đã nhắc (còn nằm trong cửa sổ ~66 giờ vì claim đặt updatedAt) chiếm hết lô.
           OR: [{ abandonRemindedAt: null }, { abandonRemindedAt: { lt: this.prisma.cart.fields.updatedAt } }],
         },

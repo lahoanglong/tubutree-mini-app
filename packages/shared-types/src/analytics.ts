@@ -57,6 +57,7 @@ export const CLIENT_EVENT_NAMES = [
   'green_box_page_viewed',
   'subscription_suggestion_shown',
   'subscription_suggestion_accepted',
+  'guest_checkout_start',
 ] as const;
 
 /** Nơi khách đổi địa chỉ giao ở màn thanh toán (`checkout_address_switched.from`). */
@@ -215,6 +216,8 @@ export const SERVER_EVENT_NAMES = [
   'game_cap_hit',
   'game_round_completed',
   'game_round_started',
+  'guest_order_claimed',
+  'guest_order_placed',
   'notification_sent',
   'notification_suppressed',
   'order_paid',

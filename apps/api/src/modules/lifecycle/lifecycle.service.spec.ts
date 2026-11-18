@@ -54,8 +54,8 @@ describe('LifecycleService.sendReorderReminders (§6.14.7)', () => {
   it('mặc định (SystemConfig chưa cấu hình reorder.*) → ngưỡng nhắc nằm TRONG cửa sổ 30 ngày, không trễ hơn (A1-01=A2-06=A3-02: mặc định cũ 60×0,85≈51 ngày đã trễ hơn cửa sổ)', async () => {
     const { svc, queryRaw } = setup([]);
     await svc.sendReorderReminders();
-    // threshold là tham số đầu tiên nội suy vào $queryRaw (sau mảng strings) — xem HAVING MAX(...) <= ${threshold}.
-    const threshold = queryRaw.mock.calls[0]![1] as Date;
+    // threshold là tham số Date đầu tiên nội suy vào $queryRaw (đoạn Prisma.sql lồng trong câu đứng trước nó) — xem HAVING MAX(...) <= ${threshold}.
+    const threshold = (queryRaw.mock.calls[0] as unknown[]).slice(1).find((v): v is Date => v instanceof Date)!;
     const daysAgo = (Date.now() - threshold.getTime()) / 864e5;
     expect(daysAgo).toBeLessThanOrEqual(30); // KHÔNG được trễ hơn cửa sổ 30 ngày
     expect(daysAgo).toBeGreaterThanOrEqual(20); // vẫn đủ gần cửa sổ 30 ngày (không quá sớm/vô nghĩa)
@@ -67,6 +67,13 @@ describe('LifecycleService.sendReorderReminders (§6.14.7)', () => {
     const sql = (queryRaw.mock.calls[0]![0] as readonly string[]).join('?');
     expect(sql).toContain(`o.type::text = 'RETAIL'`);
     expect(sql).toContain('o."placedForCustomer" = false');
+  });
+
+  it('chỉ nhắc khách thật: tài khoản guest_ (Mini chưa có SĐT, đơn web chưa gộp về Zalo) không vào tập nhắc', async () => {
+    const { svc, queryRaw } = setup([]);
+    await svc.sendReorderReminders();
+    const sql = (queryRaw.mock.calls[0]![0] as readonly string[]).join('?');
+    expect(sql).toContain('AND EXISTS (SELECT 1 FROM users u WHERE u.id = o."userId" AND');
   });
 
   it('chỉ nhắc mua lại hàng còn bán: biến thể và sản phẩm đang bán, sản phẩm đã duyệt', async () => {

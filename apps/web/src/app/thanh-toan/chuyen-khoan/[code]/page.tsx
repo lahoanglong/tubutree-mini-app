@@ -1,7 +1,7 @@
 'use client';
 
 import { BANK_QR_HINT } from '@tubutree/app-core/bank-payment-copy';
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
@@ -13,6 +13,8 @@ import { PageHeader } from '@/components/ui/page-header';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { BankTransferPanel, type BankPanelState } from '../../bank-transfer-panel';
 import { PAGE_NARROW } from '@/lib/page-frame';
+import { guestBankQr } from '@/lib/guest-checkout/api';
+import { guestTrackHref, hashTrackingKey, savedGuestOrderKey } from '@/lib/guest-checkout/keys';
 
 const TITLE = 'Quét QR để chuyển khoản';
 // Tên trang của Mini App khi chưa có QR để quét (đã trả, chưa đăng nhập).
@@ -37,7 +39,14 @@ export default function BankPaymentPage() {
   const qc = useQueryClient();
   const [paid, setPaid] = useState(false);
   const [panelState, setPanelState] = useState<BankPanelState>('loading');
-  const detail = orderDetailHref(code);
+  // Đơn đặt không đăng nhập mở trang này bằng khoá theo dõi ở `#k=` (hoặc khoá đã lưu khi đặt trên trình duyệt này). Chưa đọc xong thì undefined.
+  const [guestKey, setGuestKey] = useState<string | null | undefined>(undefined);
+  useEffect(() => {
+    setGuestKey(hashTrackingKey(window.location.hash) ?? (code ? savedGuestOrderKey(code) : null));
+  }, [code]);
+  const guestMode = phase === 'guest' && !!guestKey;
+  const detail = guestMode ? guestTrackHref(code, guestKey!) : orderDetailHref(code);
+  const fetchGuestQr = useCallback((c: string) => guestBankQr(c, guestKey!), [guestKey]);
 
   // Không làm mới thì chi tiết/danh sách đơn đọc lại từ cache và còn hiện "Chờ thanh toán" ngay sau khi khách vừa thấy "Đã nhận thanh toán".
   const refreshOrders = useCallback(() => {
@@ -52,12 +61,14 @@ export default function BankPaymentPage() {
   // Dải tiêu đề có `data-page-bleed` bỏ đệm 48px của nút lùi ở điện thoại: vẽ nó ngay khi còn chờ phiên hoặc chờ QR (trạng thái cuối thường gặp),
   // vẽ muộn lúc QR về thì cả trang nhảy lên 48px (CLS ~0,8 ở 390px).
   const showQr =
-    !paid && !!code && (phase === 'loading' || (phase === 'authenticated' && (panelState === 'loading' || panelState === 'ready')));
+    !paid &&
+    !!code &&
+    (phase === 'loading' || ((phase === 'authenticated' || guestMode) && (panelState === 'loading' || panelState === 'ready')));
 
   let body: React.ReactNode;
-  if (phase === 'loading') body = <AuthLoading />;
+  if (phase === 'loading' || (phase === 'guest' && guestKey === undefined)) body = <AuthLoading />;
   else if (phase === 'unavailable') body = <SessionUnavailable />;
-  else if (phase === 'guest' || !code) {
+  else if ((phase === 'guest' && !guestMode) || !code) {
     body = <LoginRequired message="Đăng nhập để thanh toán đơn hàng." returnTo={bankPaymentHref(code)} />;
   } else {
     body = (
@@ -71,6 +82,7 @@ export default function BankPaymentPage() {
           stickyCheck
           // Cùng khung chờ với lúc chờ phiên: hai bước chờ là một khối, cao gần bằng khung QR (CLS điện thoại).
           loadingFallback={<AuthLoading />}
+          {...(guestMode ? { fetchQr: fetchGuestQr } : {})}
           paidFooter={
             <div className="mt-4 flex flex-col gap-2">
               <Link href={detail} onClick={refreshOrders} className={ui.btnPrimary}>

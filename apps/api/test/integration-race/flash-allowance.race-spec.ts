@@ -16,7 +16,9 @@ describe('Số suất Giờ vàng khách còn mua được (real Postgres)', () 
     prisma = new PrismaService();
     await prisma.$connect();
     await warmPool(prisma);
-    flash = new FlashSaleService(prisma, {} as never, {} as never, {} as never);
+    // Cấu hình chỉ cần `get` (cờ web.guest_checkout_enabled, mặc định tắt): trả giá trị mặc định.
+    const config = { get: async <T>(_key: string, fallback: T) => fallback };
+    flash = new FlashSaleService(prisma, config as never, {} as never, {} as never);
     allowances = new FlashAllowanceService(prisma, flash);
   });
 

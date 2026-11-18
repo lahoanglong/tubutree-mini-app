@@ -36,13 +36,13 @@ import { ctvSlugFor, getStorefrontContext, subscribeStorefrontContext } from '@/
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
-import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines, markTransferOrderPlaced, rememberRecentAddress } from '@tubutree/app-core/commerce/checkout-display';
+import { checkoutPlaceHint, checkoutTotalText, markTransferOrderPlaced, rememberRecentAddress } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { shippingRowView } from '@tubutree/app-core/checkout-pickup-view';
 import { visibleGifts } from '@tubutree/app-core/checkout-pickup-state';
 import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
 import { useRemovedCoupon } from '@/lib/use-removed-coupon';
-import { checkoutLineProblems, priceChangedActions, type LineAction, type LineFix, type LineProblem } from '@tubutree/app-core/commerce/checkout-issues';
+import { checkoutLineProblems, priceChangedActions, type LineFix } from '@tubutree/app-core/commerce/checkout-issues';
 import { giftTrialPlaceField } from '@tubutree/app-core/commerce/gift-trial';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, idlePointsLabel, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
@@ -66,6 +66,9 @@ import { settleWithin } from '@/lib/settle-within';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
 import { CouponBox, COUPON_MUTATION_KEY, forgetAutoCoupon, couponPreviewKey } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
+import { GuestCheckout } from '@/components/checkout/guest-checkout';
+import { useGuestOrderClaim } from '@/lib/guest-checkout/claim';
+import { guestCheckoutOn, welcomeAmountOf } from '@/lib/guest-checkout/flag';
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { OrderSuccess } from '@/components/checkout/order-success';
@@ -77,12 +80,13 @@ import { PickupSection, WaivedShippingValue } from '@/components/checkout/pickup
 import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '@/components/checkout/use-checkout-pickup';
 import { useCheckoutFunnel } from '@/components/analytics/use-checkout-funnel';
 import { trackRecycleStep } from '@/lib/recycle-funnel';
+import { DesktopLines, MobileItems, RECALC_DIM, Row, type LineFixView } from '@/components/checkout/checkout-lines';
 import { CheckoutSkeleton } from './checkout-skeleton';
 import { InlineRetry } from './inline-retry';
 import { InvoiceSection } from './invoice-section';
 import { ErrorState } from '@/components/ui/error-state';
 import { EMPTY_INVOICE, loadSavedInvoice, saveInvoice } from '@/lib/saved-invoice';
-import { fulfillerLabel, shipmentsNote } from '@/lib/shipments';
+import { shipmentsNote } from '@/lib/shipments';
 import { useCartKey } from '@/lib/cart-key';
 import { createOrderKeyRing } from '@/lib/order-key-ring';
 import { isOutcomeUnknown } from '@/lib/checkout-waste';
@@ -91,12 +95,11 @@ import { BackAwareLink } from '@/components/back-aware-link';
 import { pushOrBack } from '@/lib/nav-depth';
 import { CheckMark, miniCheckboxWrap, miniCheckbox, miniCheckboxGutter, miniRadio, miniRadioGutter, mini } from '@/components/order-mobile/mobile-ui';
 import { PageHeader } from '@/components/ui/page-header';
-import { Button, ProductThumb } from '@/components/mini';
+import { Button } from '@/components/mini';
 import { EmptyState } from '@/components/mini/empty-state';
 import { CART_EMPTY } from '@tubutree/app-core/cart-copy';
 import { BottomSheet } from '@/components/mini/bottom-sheet';
 import { PAGE_WIDE } from '@/lib/page-frame';
-import { variationLabel } from '@/lib/variation-label';
 
 // Máy chủ trả nguyên mã này (không phải câu cho khách) khi hết suất/hết giờ vàng giữa lúc thanh toán.
 const PRICE_CHANGED = 'PRICE_CHANGED';
@@ -115,12 +118,12 @@ const NOTE_FIELD = ui.field.replace('rounded-control', 'rounded-[0.5rem] md:roun
 const MINI_BAND = `p-4 ${ui.card} ${mini.band} max-md:mt-2`;
 
 type PlaceBody = Parameters<typeof placeOrder>[0];
-// Đang tính lại báo giá cho địa chỉ mới: giữ số cũ nhưng mờ đi, nút Đặt hàng khoá (quoteStale).
-const RECALC_DIM = 'opacity-50';
 const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
 
 export default function CheckoutPage() {
   const phase = useAuthPhase();
+  // Vừa đăng nhập Zalo trên trình duyệt có đơn đặt không đăng nhập: đưa đơn về tài khoản (không có đơn như thế thì không gọi gì).
+  useGuestOrderClaim(phase === 'authenticated');
   const { user } = useAuth();
   const qc = useQueryClient();
   const router = useRouter();
@@ -603,6 +606,21 @@ export default function CheckoutPage() {
   }
 
   if (phase === 'guest') {
+    // Đặt hàng không đăng nhập (web.guest_checkout_enabled): đọc cờ từ chính truy vấn /config/public trang vẫn gọi, cờ tắt thì không thêm yêu cầu nào.
+    if (configQ.isPending) {
+      return (
+        <Shell>
+          <AuthLoading />
+        </Shell>
+      );
+    }
+    if (guestCheckoutOn(configQ.data)) {
+      return (
+        <Shell>
+          <GuestCheckout welcomeAmount={welcomeAmountOf(configQ.data)} />
+        </Shell>
+      );
+    }
     return (
       <Shell>
         <LoginRequired message="Đăng nhập để thanh toán đơn hàng." returnTo="/thanh-toan" />
@@ -1310,119 +1328,6 @@ export default function CheckoutPage() {
 }
 
 // Dưới md đúng KeyValueRow của Mini: đệm 6px, nhãn 14/400, giá trị 15/600 (cỡ 15px là cỡ thừa kế của Mini, không phải bậc body-sm).
-function Row({ label, value, green, valueGreen, ds, dim }: { label: React.ReactNode; value: React.ReactNode; green?: boolean; valueGreen?: boolean; ds?: string; dim?: boolean }) {
-  return (
-    <div
-      data-ds={ds}
-      className={`flex justify-between gap-2.5 py-1.5 text-sm md:mt-1 md:gap-0 md:py-0 ${green ? 'text-[color:var(--color-text-primary)] md:text-success-fg' : 'text-[color:var(--color-text-primary)]'} ${dim ? RECALC_DIM : ''}`}
-    >
-      <span className={`leading-[var(--type-body-sm-lh)] md:leading-5 text-[color:var(--color-text-secondary)] ${green ? 'md:text-inherit' : ''}`}>{label}</span>
-      <span className={`text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] tabular-nums md:text-sm md:font-normal md:leading-5 ${green || valueGreen ? 'text-success-fg' : ''}`}>{value}</span>
-    </div>
-  );
-}
-
-type ShipmentView = { key: string; itemIds: string[]; fulfiller: Parameters<typeof fulfillerLabel>[0]; shippingFee: number; shippingFeeWaived?: number };
-
-// Danh sách chữ trong khung "Đơn hàng" từ md (điện thoại dùng MobileItems). Các dòng thấy được cộng với tiền dòng gập ra đúng "Tạm tính".
-function DesktopLines({ items, shipments, fix }: { items: CartLine[]; shipments: ShipmentView[] | null; fix: LineFixView }) {
-  const [expanded, setExpanded] = useState(false);
-  // Dòng lỗi nằm sau chỗ gập thì khách thấy nút đặt bị khoá mà không thấy lý do: có dòng lỗi thì mở hết.
-  const { shown, hiddenCount, hiddenTotal } = collapseCheckoutLines(items, expanded || Object.keys(fix.problems).length > 0);
-  return (
-    <div role="region" aria-label="Sản phẩm trong đơn" className="mt-2 space-y-1 text-sm max-md:hidden">
-      {shipments
-        ? shipments.map((sh) => (
-            <div key={sh.key} className="space-y-1 border-b border-[var(--color-border-subtle)] pb-2 last:border-b-0">
-              <p className="text-caption font-semibold text-[color:var(--color-text-primary)]">{fulfillerLabel(sh.fulfiller)}</p>
-              {items
-                .filter((it) => sh.itemIds.includes(it.id))
-                .map((it) => (
-                  <LineRow key={it.id} item={it} fix={fix} />
-                ))}
-              <div className="flex justify-between gap-2 text-caption text-[color:var(--color-text-secondary)]">
-                <span>Phí giao</span>
-                {(sh.shippingFeeWaived ?? 0) > 0 ? (
-                  <WaivedShippingValue originalFee={sh.shippingFee + (sh.shippingFeeWaived ?? 0)} note={fillCopy('checkout.shipWaived')} />
-                ) : (
-                  <span className="tabular-nums">{sh.shippingFee === 0 ? 'Miễn phí' : formatVnd(sh.shippingFee)}</span>
-                )}
-              </div>
-            </div>
-          ))
-        : shown.map((it) => <LineRow key={it.id} item={it} fix={fix} />)}
-      {!shipments && (hiddenCount > 0 || expanded) && (
-        <button
-          type="button"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((v) => !v)}
-          className="flex min-h-11 w-full items-center justify-between gap-2 text-left font-semibold text-[color:var(--color-text-brand)]"
-        >
-          <span>{expanded ? fillCopy('checkout.fewerLines') : fillCopy('checkout.moreLines', { n: hiddenCount })}</span>
-          {!expanded && <span className="tabular-nums text-[color:var(--color-text-primary)]">{formatVnd(hiddenTotal)}</span>}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function LineVariationNote({ name }: { name: string }) {
-  const label = variationLabel(name);
-  return label ? <div className="text-caption text-[color:var(--color-text-tertiary)]">{label}</div> : null;
-}
-
-function LineRow({ item, fix }: { item: CartLine; fix: LineFixView }) {
-  const lineVariation = variationLabel(item.variationName);
-  return (
-    <>
-      <div data-testid="checkout-line" className="flex justify-between gap-2">
-        <span className="min-w-0 text-[color:var(--color-text-secondary)]">
-          <span className="line-clamp-2">{item.productName}</span>
-          <span className="block text-caption tabular-nums text-[color:var(--color-text-tertiary)]">
-            {lineVariation && <span>{lineVariation}</span>}
-            {lineVariation ? ' · ' : ''}×{item.quantity}
-          </span>
-        </span>
-        <span className="shrink-0 tabular-nums text-[color:var(--color-text-primary)]">{formatVnd(item.total)}</span>
-      </div>
-      <LineProblemNote id={item.id} fix={fix} />
-    </>
-  );
-}
-
-/** Lỗi của một dòng hàng ngay dưới dòng đó, kèm nút sửa nhanh (bỏ dòng, giảm về số còn). */
-interface LineFixView {
-  problems: Record<string, LineProblem>;
-  pendingIds: string[];
-  errorFor: string | null;
-  errorText: string | null;
-  onFix: (id: string, fix: LineAction) => void;
-}
-
-function LineProblemNote({ id, fix }: { id: string; fix: LineFixView }) {
-  const problem = fix.problems[id];
-  if (!problem) return null;
-  const busy = fix.pendingIds.includes(id);
-  return (
-    <div data-testid="checkout-line-problem" role="alert" className="mt-1 flex flex-wrap items-center justify-between gap-2">
-      <span className="text-caption text-danger-fg">{fix.errorFor === id && fix.errorText ? fix.errorText : problem.text}</span>
-      <button
-        type="button"
-        className={ui.btnSecondary}
-        aria-busy={busy || undefined}
-        aria-disabled={busy || undefined}
-        onClick={() => {
-          // Khoá ref của `useLockedMutation` mất khi trang gắn lại (rời giỏ rồi quay về lúc lệnh còn bay): báo bận lấy từ bộ nhớ chung nên chặn ở đây.
-          if (busy) return;
-          fix.onFix(id, problem.fix);
-        }}
-      >
-        {problem.fixLabel}
-      </button>
-    </div>
-  );
-}
-
 // `bare`: màn thành công ở điện thoại không có thanh tiêu đề (Mini App OrderSuccess tự có h1), từ md vẫn như các màn khác.
 function Shell({ children, bare }: { children: React.ReactNode; bare?: boolean }) {
   return (
@@ -1440,66 +1345,5 @@ function Shell({ children, bare }: { children: React.ReactNode; bare?: boolean }
       )}
       <div className="mt-4 max-md:mt-0">{children}</div>
     </main>
-  );
-}
-
-// Khối "Sản phẩm (n)" của Mini App (checkout.tsx): ảnh 48px, tên tối đa hai dòng, phân loại, đơn giá × số lượng, thành tiền. Chỉ hiện ở điện thoại;
-// từ md danh sách chữ trong khung "Đơn hàng" giữ nguyên.
-function MobileItems({
-  items,
-  shipments,
-  splitNote,
-  fix,
-}: {
-  items: CartLine[];
-  shipments: ShipmentView[] | null;
-  splitNote: string | null;
-  fix: LineFixView;
-}) {
-  if (items.length === 0) return null;
-  const count = items.reduce((sum, it) => sum + it.quantity, 0);
-  const groups = shipments
-    ? shipments.map((sh) => ({ key: sh.key, shipment: sh, lines: items.filter((it) => sh.itemIds.includes(it.id)) }))
-    : [{ key: 'all', shipment: null, lines: items }];
-  return (
-    <div className="md:hidden">
-      <h2 className="font-ui text-sm font-semibold leading-5">Sản phẩm ({count})</h2>
-      {splitNote && <p className="mt-2.5 text-caption text-[color:var(--color-text-secondary)]">{splitNote}</p>}
-      <div className="mt-2.5 space-y-3">
-        {groups.map((g) => (
-          <section key={g.key} aria-label={g.shipment ? fulfillerLabel(g.shipment.fulfiller) : 'Sản phẩm sẽ mua'}>
-            {g.shipment && <p className="mb-2 text-sm font-semibold">{fulfillerLabel(g.shipment.fulfiller)}</p>}
-            <div className="space-y-3">
-              {g.lines.map((it) => (
-                <div key={it.id} className="flex items-center gap-2.5">
-                  <ProductThumb src={it.thumbnail} alt={it.productName} size={48} />
-                  <div className="min-w-0 flex-1">
-                    <div className="line-clamp-2 text-sm">{it.productName}</div>
-                    <LineVariationNote name={it.variationName} />
-                    <div className="text-caption tabular-nums text-[color:var(--color-text-tertiary)]">
-                      {formatVnd(it.unitPrice)} × {it.quantity}
-                    </div>
-                    <LineProblemNote id={it.id} fix={fix} />
-                  </div>
-                  <div className="whitespace-nowrap text-sm font-semibold tabular-nums">{formatVnd(it.total)}</div>
-                </div>
-              ))}
-            </div>
-            {g.shipment && (
-              <div className="mt-1.5 flex justify-between text-sm">
-                <span className="text-[color:var(--color-text-secondary)]">Phí giao</span>
-                {(g.shipment.shippingFeeWaived ?? 0) > 0 ? (
-                  <WaivedShippingValue originalFee={g.shipment.shippingFee + (g.shipment.shippingFeeWaived ?? 0)} note={fillCopy('checkout.shipWaived')} />
-                ) : (
-                  <span className={g.shipment.shippingFee === 0 ? 'text-success-fg' : ''}>
-                    {g.shipment.shippingFee === 0 ? 'Miễn phí' : formatVnd(g.shipment.shippingFee)}
-                  </span>
-                )}
-              </div>
-            )}
-          </section>
-        ))}
-      </div>
-    </div>
   );
 }

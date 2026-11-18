@@ -30,6 +30,8 @@ export const BUYER_HIDDEN_ORDER_FIELDS = [
   'gomdonCancelRetrySince',
   'recipientSearch',
   'orderZaloConsentSource',
+  'guestTokenHash',
+  'guestIpHash',
 ] as const;
 export type BuyerHiddenOrderField = (typeof BUYER_HIDDEN_ORDER_FIELDS)[number];
 

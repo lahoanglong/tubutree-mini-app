@@ -17,5 +17,6 @@ import { GiftTiersModule } from '../gift-tiers/gift-tiers.module';
   imports: [CartModule, PancakeModule, GomdonModule, WalletModule, StorefrontModule, FlashSaleModule, WasteCoreModule, WasteCustomerModule, WasteCatalogModule, GiftTiersModule],
   controllers: [CheckoutController],
   providers: [CheckoutService, ShippingEstimateService],
+  exports: [CheckoutService],
 })
 export class CheckoutModule {}

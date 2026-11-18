@@ -2,7 +2,7 @@ import { PrismaService } from '../../src/prisma/prisma.service';
 import { SystemConfigService } from '../../src/modules/system-config/system-config.service';
 import { RemarketingService } from '../../src/modules/lifecycle/remarketing.service';
 import type { NotificationsService } from '../../src/modules/notifications/notifications.service';
-import { createUser, randCode, setConfig, warmPool } from './helpers';
+import { createRealUser, randCode, setConfig, warmPool } from './helpers';
 
 /**
  * OPS-04 trên Postgres THẬT: lô 200 của nhắc giỏ bỏ quên / nhắc voucher chỉ gồm việc còn phải làm. 200 giỏ đã nhắc (còn nằm
@@ -50,7 +50,7 @@ describe('Remarketing batch không bị việc đã xong chiếm chỗ (real Pos
     const remindedAt = new Date(now - 10 * HOUR);
     const userIds: string[] = [];
     for (let i = 0; i < BULK + 1; i += 20) {
-      const part = await Promise.all(Array.from({ length: Math.min(20, BULK + 1 - i) }, () => createUser(prisma)));
+      const part = await Promise.all(Array.from({ length: Math.min(20, BULK + 1 - i) }, () => createRealUser(prisma)));
       userIds.push(...part.map((u) => u.id));
     }
     const fresh = userIds.pop()!;
@@ -76,7 +76,7 @@ describe('Remarketing batch không bị việc đã xong chiếm chỗ (real Pos
     await prisma.coupon.createMany({
       data: Array.from({ length: BULK + 1 }, (_, i) => ({ ...base, code: `RM-BAD-${tag}-${i}`, scopeMeta: i % 2 ? {} : { reason: 'x' } })),
     });
-    const u = await createUser(prisma);
+    const u = await createRealUser(prisma);
     await prisma.coupon.create({ data: { ...base, endAt: new Date(Date.now() + 48 * HOUR), code: `RM-OK-${tag}`, scopeMeta: { userId: u.id } } });
 
     await svc.sendVoucherExpiryReminders();

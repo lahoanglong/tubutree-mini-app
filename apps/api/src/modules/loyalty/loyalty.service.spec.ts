@@ -325,6 +325,14 @@ describe('LoyaltyService.creditOrderPoints', () => {
     expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'target' } }));
   });
 
+  it('đơn đặt không đăng nhập (guestPhone, kể cả đã gộp về tài khoản) → không cộng điểm, vẫn recalc hạng chủ đơn', async () => {
+    const { prisma } = prismaFor({ id: 'o1', code: 'C1', userId: 'target', pointsEarned: 50 });
+    (prisma.$queryRaw as jest.Mock).mockResolvedValue([{ status: 'DELIVERED', id: 'o1', code: 'C1', userId: 'target', pointsEarned: 50, guestPhone: '0912345678' }]);
+    await expect(new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1')).resolves.toBe(false);
+    expect(created(prisma)).toEqual([]);
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+
   it('cộng muộn (cron chạy lại) mà đơn đã trả/huỷ → không cộng: lần đảo đã chạy khi chưa có gì để thu hồi', async () => {
     const { prisma } = prismaFor({ id: 'o1', code: 'C1', userId: 'u1', pointsEarned: 50 }, null, 'RETURNED');
     await expect(new LoyaltyService(prisma, makeConfig()).creditOrderPoints('o1')).resolves.toBe(false);

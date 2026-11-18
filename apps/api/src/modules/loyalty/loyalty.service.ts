@@ -124,9 +124,11 @@ export class LoyaltyService {
     let credited: boolean;
     try {
       credited = await this.prisma.$transaction(async (tx) => {
-        const [locked] = await tx.$queryRaw<{ status: string; userId: string; code: string; pointsEarned: number }[]>`
-          SELECT "status"::text AS "status", "userId", "code", "pointsEarned" FROM "orders" WHERE "id" = ${order.id} FOR SHARE`;
+        const [locked] = await tx.$queryRaw<{ status: string; userId: string; code: string; pointsEarned: number; guestPhone: string | null }[]>`
+          SELECT "status"::text AS "status", "userId", "code", "pointsEarned", "guestPhone" FROM "orders" WHERE "id" = ${order.id} FOR SHARE`;
         if (!locked || locked.status !== 'DELIVERED') return false;
+        // Đơn đặt không đăng nhập (web, checkout/guest) không tích điểm, kể cả sau khi đã gộp về tài khoản Zalo.
+        if (locked.guestPhone) return false;
         owner = locked.userId;
         const delta = locked.pointsEarned - (await partialReturnTotals(tx, order.id)).pointsEarnedBack;
         if (delta <= 0) return false;

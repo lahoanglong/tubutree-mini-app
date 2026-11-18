@@ -125,6 +125,7 @@ import { forBuyer } from '../orders/buyer-order-fields';
 import { totalChangedError, totalChangedMessage } from './total-changed';
 import { WALLET_SHORT_MESSAGE, walletNegativeMessage } from './wallet-notice';
 import { MssOrderEventRecorder } from '../integrations/mss/mss-order-event.recorder';
+import { GUEST_COD_OVER_MAX, guestCodOverMaxMessage } from './guest/guest-checkout.config';
 
 const DEFAULT_TTL_CONFIG: Pick<SystemConfigService, 'get'> = { get: async <T>(_key: string, fallback?: T) => fallback as T };
 
@@ -186,6 +187,23 @@ export interface CheckoutShipment extends GroupAmounts {
   commissionPct: number | null;
   /** Phí giao miễn nhờ thu rác kèm đơn (RECYCLE_PICKUP); 0 khi không miễn. */
   shippingFeeWaived: number;
+}
+
+/**
+ * Lần đặt của khách vãng lai trên web (checkout/guest, cờ web.guest_checkout_enabled). Tính tiền đúng đường của tài khoản thường, chỉ khác
+ * đầu vào: không mã giảm giá, không hạng, không Điểm Xanh (dùng hay tích), không ghi công giới thiệu, không thu kèm rác. Giá Giờ vàng đã bị
+ * bỏ ngay ở chỗ giỏ lấy giá (FlashSaleService.resolveEffective) nên không có suất nào bị trừ.
+ */
+export interface GuestCheckoutContext {
+  /** SĐT khách gõ, dạng 0xxxxxxxxx: chỉ ghi lên đơn (orders.guestPhone), không ghi vào users.phone. */
+  phone: string;
+  /** sha256 (hex) của khoá theo dõi đơn. */
+  tokenHash: string;
+  ipHash: string | null;
+  /** Trần COD (checkout.guest_cod_max): đơn lớn hơn chỉ nhận chuyển khoản. */
+  codMax: number;
+  /** Kiểm trần chống lạm dụng ngay đầu tx đặt đơn (dưới khoá theo SĐT); ném lỗi khi chạm trần. */
+  assertCaps: (tx: Prisma.TransactionClient) => Promise<void>;
 }
 
 /** Kết quả đánh giá phần thu rác kèm đơn của một lần tính tiền (báo giá và đặt đơn dùng chung). */
@@ -308,9 +326,9 @@ export class CheckoutService {
   }
 
   /** Tính tạm đơn (ship + giảm + điểm) cho màn checkout. */
-  async quote(userId: string, dto: QuoteDto) {
+  async quote(userId: string, dto: QuoteDto, guest = false) {
     try {
-      return await this.quoteInner(userId, dto);
+      return await this.quoteInner(userId, dto, guest);
     } catch (err) {
       if (err instanceof BadRequestException) {
         const message = typeof err.getResponse() === 'string'
@@ -329,10 +347,10 @@ export class CheckoutService {
     }
   }
 
-  private async quoteInner(userId: string, dto: QuoteDto) {
+  private async quoteInner(userId: string, dto: QuoteDto, guest = false) {
     const pickupInput = pickupInputOf(dto);
-    const { storefront } = await this.resolveAttribution(userId, { storefrontSlug: dto.storefrontSlug });
-    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefront?.slug, dto.itemIds, pickupInput);
+    const { storefront } = guest ? { storefront: null } : await this.resolveAttribution(userId, { storefrontSlug: dto.storefrontSlug });
+    const { cart, user, computed } = await this.compute(userId, dto.addressId, dto.pointsToUse, storefront?.slug, dto.itemIds, guest ? null : pickupInput, guest);
     if (cart.items.length === 0) throw new BadRequestException('Chưa chọn sản phẩm để thanh toán.');
     const tubuShipment = computed.shipments.find((s) => s.fulfiller.kind === 'TUBU') ?? null;
     // W179-C (G2): cùng hàm thuần giftAttachDecision cho cả báo giá lẫn đặt đơn (SĐT xác minh Zalo, kiện Tubu >= 99.000đ ròng, tối đa 1 quà/đơn).
@@ -412,9 +430,10 @@ export class CheckoutService {
     dto: PlaceOrderDto,
     idempotencyKey?: string,
     platform: 'miniapp' | 'web' = 'miniapp',
+    guest?: GuestCheckoutContext,
   ) {
     try {
-      return await this.placeOrderInner(userId, dto, idempotencyKey, platform);
+      return await this.placeOrderInner(userId, dto, idempotencyKey, platform, guest);
     } catch (err) {
       if (err instanceof BadRequestException) {
         const message = typeof err.getResponse() === 'string'
@@ -436,6 +455,7 @@ export class CheckoutService {
     dto: PlaceOrderDto,
     idempotencyKey?: string,
     platform: 'miniapp' | 'web' = 'miniapp',
+    guest?: GuestCheckoutContext,
   ) {
     // Gửi cả phiếu có sẵn lẫn món rác chọn ngay là yêu cầu sai: báo trước mọi việc khác, kể cả lần gửi lại cùng Idempotency-Key.
     const pickupInput = pickupInputOf(dto);
@@ -459,7 +479,7 @@ export class CheckoutService {
 
     // Attribution: ưu tiên referralCode/slug của phiên hiện tại; nếu phiên mất nhưng còn "chạm" giới thiệu trong hạn (3 ngày) →
     // fallback. Resolve TRƯỚC compute() để combo + storefrontSlug dùng đúng slug hiệu lực.
-    const { referrerUserId, storefront } = await this.resolveAttribution(userId, dto);
+    const { referrerUserId, storefront } = guest ? { referrerUserId: null, storefront: null } : await this.resolveAttribution(userId, dto);
     const storefrontSlug = storefront?.slug ?? null;
     // Chủ gian hàng đối tác không hưởng hoa hồng giới thiệu trên đơn con do chính gian hàng của mình giao (mua hàng của anh ta qua
     // slug CTV của anh ta); đơn con hàng của người bán khác vẫn ghi hoa hồng như cũ.
@@ -472,7 +492,8 @@ export class CheckoutService {
       dto.pointsToUse,
       storefrontSlug ?? undefined,
       dto.itemIds,
-      wantsPickup ? pickupInput : null,
+      wantsPickup && !guest ? pickupInput : null,
+      !!guest,
     );
     if (cart.items.length === 0) {
       const recent = await this.recentlyPlacedOrder(userId, dto);
@@ -502,6 +523,9 @@ export class CheckoutService {
     const giftSummary = giftSettings?.enabled ? await this.giftTrial!.summaryFor(userId, cart.items, { settings: giftSettings }) : null;
     const giftPick = resolveGiftTrial(giftSummary, dto.giftVariationId);
     const paymentMethod = computed.total === 0 ? 'COD' : dto.paymentMethod;
+    if (guest && paymentMethod === 'COD' && computed.total > guest.codMax) {
+      throw new BadRequestException({ statusCode: 400, error: 'Bad Request', code: GUEST_COD_OVER_MAX, message: guestCodOverMaxMessage(guest.codMax) });
+    }
     const blocked = paymentMethodBlockReason(computed.shipments, paymentMethod);
     if (blocked) {
       throw new BadRequestException({ statusCode: 400, error: 'Bad Request', code: PAYMENT_METHOD_NOT_ALLOWED, message: blocked });
@@ -548,6 +572,7 @@ export class CheckoutService {
     let orders: Awaited<ReturnType<typeof this.prisma.order.create>>[];
     try {
       orders = await this.prisma.$transaction(async (tx) => {
+        if (guest) await guest.assertCaps(tx);
         // Mọi lần đặt của cùng giỏ chạy nối tiếp từ đây, và giỏ được dọn trong chính tx này: lần bấm lại (key khác) đang chờ
         // khoá sẽ thấy dòng đã mua biến mất thay vì đặt thêm một đơn từ bản giỏ đã đọc trước đó (R2-MONEY-2).
         const change = cartChangeSince(cart.items, await this.cart.lockForCheckout(tx, userId));
@@ -644,6 +669,7 @@ export class CheckoutService {
                 checkoutGroup,
                 source: orderSource,
                 platform,
+                ...(guest ? { guestPhone: guest.phone, guestTokenHash: guest.tokenHash, guestIpHash: guest.ipHash } : {}),
                 paidAt: paid ? new Date() : null,
                 // Chỉ gắn coupon khi THỰC SỰ áp (subset không đạt điều kiện → couponApplied=false).
                 couponCode: isPrimary && computed.couponApplied ? cart.couponCode : null,
@@ -848,8 +874,10 @@ export class CheckoutService {
       });
     } catch (err) {
       // Cùng Idempotency-Key gửi chồng: lần đến sau hoặc ăn unique-violation (P2002), hoặc chờ khoá giỏ rồi thấy giỏ đã
-      // thành đơn. Trả lại đơn mà lần thắng đã tạo.
-      if (idempotencyKey && (this.isUniqueViolation(err) || err instanceof CartChangedError)) {
+      // thành đơn. Trả lại đơn mà lần thắng đã tạo. Khách vãng lai còn một đường nữa: lần đến sau chờ khoá trần SĐT/IP rồi đếm cả đơn
+      // lần thắng vừa tạo nên bị chặn trần, trong khi đơn của chính khoá này đã có.
+      const guestCapAfterWinner = !!guest && err instanceof ForbiddenException;
+      if (idempotencyKey && (this.isUniqueViolation(err) || err instanceof CartChangedError || guestCapAfterWinner)) {
         const existing = await this.prisma.order.findUnique({ where: { idempotencyKey } });
         if (existing) return this.replayIdempotentOrder(existing, userId, dto);
       }
@@ -1275,9 +1303,13 @@ export class CheckoutService {
     itemIds?: string[],
     /** Thu rác kèm đơn khách chọn (báo giá luôn truyền để dựng thẻ thu kèm; đặt đơn chỉ truyền khi khách chọn thu kèm). null = không đánh giá. */
     pickupInput: PickupRequestInput | null = null,
+    /** Khách vãng lai (GuestCheckoutContext): tính như tài khoản trắng, không mã, không hạng, không Điểm Xanh dùng hay tích. */
+    guest = false,
   ) {
     const cart = await this.checkoutLines(userId, itemIds);
-    const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const account = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
+    const user = guest ? { ...account, tierId: null, pointsBalance: 0, pointsConvertedBalance: 0 } : account;
+    const couponCode = guest ? null : cart.couponCode;
     const address = await this.deliveryAddress(userId, addressId);
 
     // Thứ tự áp giảm TUẦN TỰ (mỗi mức trên phần còn lại) để KHÔNG giảm chồng và KHÔNG vượt
@@ -1285,7 +1317,7 @@ export class CheckoutService {
     //   1) Combo (shop tài trợ) — phân bổ vào từng dòng → cũng ghi vào OrderItem.total (§7.2, hoa hồng trên giá thực trả).
     //   2) Coupon (Tubu tài trợ) — tính lại trên base SAU combo (đơn không-combo: base = subtotal → y hệt cũ).
     //   3) Điểm Xanh — trên phần còn lại sau coupon (lô STANDARD có trần %, lô quy đổi thì không).
-    const { flashSubtotal, combo, greenBox, goodsAfterCombo, couponLines } = await this.couponBase(cart.items, storefrontSlug, userId, cart.couponCode);
+    const { flashSubtotal, combo, greenBox, goodsAfterCombo, couponLines } = await this.couponBase(cart.items, storefrontSlug, userId, couponCode);
     // Lời báo mã chỉ nhắc combo khi có combo thật: `combo.total` gồm cả Hộp Xanh.
     const hasCombo = combo.total - (greenBox?.total ?? 0) > 0;
 
@@ -1295,9 +1327,9 @@ export class CheckoutService {
     let couponValid = false;
     let couponNotice: string | null = null;
     let couponShortfall: number | undefined;
-    if (cart.couponCode) {
+    if (couponCode) {
       try {
-        const r = await this.coupons.validateAndCompute(cart.couponCode, userId, goodsAfterCombo, couponLines);
+        const r = await this.coupons.validateAndCompute(couponCode, userId, goodsAfterCombo, couponLines);
         discount = Math.min(r.discount, goodsAfterCombo);
         couponProductIds = r.productIds ?? null;
         freeship = r.freeship;
@@ -1425,7 +1457,7 @@ export class CheckoutService {
         lineIds: g.lines.map((l) => l.id),
         shippingFee: shipping,
         total: a.goodsAfterAll + shipping,
-        pointsEarned: await this.pricing.calcPointsEarned(a.goodsAfterAll, multiplier),
+        pointsEarned: guest ? 0 : await this.pricing.calcPointsEarned(a.goodsAfterAll, multiplier),
         commissionPct: terms[i]!.commissionPct,
         shippingFeeWaived: terms[i]!.recycleWaived,
       });

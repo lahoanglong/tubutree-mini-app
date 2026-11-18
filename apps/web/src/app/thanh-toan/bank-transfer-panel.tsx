@@ -5,7 +5,7 @@ import { BANK_CHECK_NETWORK, BANK_NOT_RECEIVED, BANK_TX_FAILED, bankCopyFailed }
 import Link from 'next/link';
 import { CheckCircle2, Check, Clock, Copy, Download, Loader2, TriangleAlert } from 'lucide-react';
 import { useQuery } from '@tanstack/react-query';
-import { getBankQr, formatVnd, type OrderDTO } from '@/lib/shop-client';
+import { getBankQr, formatVnd, type BankQrDTO, type OrderDTO } from '@/lib/shop-client';
 import { CopyButton } from '@/components/copy-button';
 import { ui } from '@/lib/guest-ui';
 import { formatDateTime } from '@/lib/format-date';
@@ -63,6 +63,7 @@ export function BankTransferPanel({
   orderHref,
   stickyCheck = false,
   loadingFallback,
+  fetchQr,
 }: {
   order: Pick<OrderDTO, 'code' | 'paymentMethod'>;
   onPaid?: () => void;
@@ -78,11 +79,13 @@ export function BankTransferPanel({
   stickyCheck?: boolean;
   /** Khung chờ thay cho dòng "Đang tải…": trang riêng của đơn truyền khung cao gần bằng khung QR để lúc QR về nội dung bên dưới không nhảy. */
   loadingFallback?: ReactNode;
+  /** Đơn đặt không đăng nhập: lấy QR bằng khoá theo dõi (GET /checkout/guest/orders/:code/bank-qr) thay cho phiên đăng nhập. */
+  fetchQr?: (code: string) => Promise<BankQrDTO>;
 }) {
   const isBankTransfer = order.paymentMethod === 'BANK_TRANSFER';
   const { data, isLoading, refetch, isFetching, error } = useQuery({
-    queryKey: ['bank-qr', order.code],
-    queryFn: () => getBankQr(order.code),
+    queryKey: fetchQr ? ['bank-qr', order.code, 'guest'] : ['bank-qr', order.code],
+    queryFn: () => (fetchQr ?? getBankQr)(order.code),
     enabled: isBankTransfer,
     // Thanh toán đã tải sẵn QR ngay khi có mã đơn: trang QR mở ra dùng luôn bản vừa về, không gọi lại lần hai. Chỉ áp lúc gắn panel;
     // quay lại tab và dò định kỳ vẫn như cũ.
