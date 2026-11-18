@@ -17,6 +17,7 @@ import { CATALOG_LAUNCH_DATE_KEY, publicCatalogLaunchDate } from '../catalog/cat
 import { readGreenCornerConfig } from '../reviews/review-green-corner';
 import { GREEN_CORNER_MAX_PHOTOS } from '@tubutree/shared-types';
 import { FREESHIP_BOOSTER_ENABLED_KEY } from '../catalog/upsell/freeship-upsell';
+import { RETURN_PACKAGING_NUDGE_KEY } from '../waste-exchange/customer/waste-return-packaging';
 import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PHONE_KEY, orderZaloGateOpen, tubuZaloPhoneOf, type OrderZaloGate } from './order-zalo-config';
 
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
@@ -112,6 +113,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     referralShareCard,
     greenCorner,
     freeshipBooster,
+    returnPackagingNudge,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -158,6 +160,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(REFERRAL_SHARE_CARD_KEY, false),
     readGreenCornerConfig(config),
     config.get<unknown>(FREESHIP_BOOSTER_ENABLED_KEY, false),
+    config.get<unknown>(RETURN_PACKAGING_NUDGE_KEY, false),
   ]);
   return {
     freeshipThreshold,
@@ -235,6 +238,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     referralShareCardEnabled: referralShareCard === true,
     // Dải "Thêm 1 món nhỏ để đủ Miễn phí giao hàng" ở đầu giỏ đọc `GET /upsell/freeship`; tắt hoặc API cũ thì hai app giữ dải lấy từ kệ Bán chạy nhất.
     freeshipBoosterEnabled: freeshipBooster === true,
+    // Thẻ đổi rác kèm đơn điền sẵn bao bì của đơn đã giao (`pickup-options.suggestion`, `GET /waste/return-packaging`); tắt hay API cũ thì thẻ như trước.
+    returnPackagingNudgeEnabled: returnPackagingNudge === true,
   };
 }
 

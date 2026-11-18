@@ -6,12 +6,22 @@ import type { WasteMeDTO } from '@tubutree/shared-types';
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   getWasteMe: vi.fn(),
+  getReturnPackaging: vi.fn(),
   trackRecycleStep: vi.fn(),
-  cfg: { isLoaded: true, isPending: false, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
+  cfg: { isLoaded: true, isPending: false, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } } as {
+    isLoaded: boolean;
+    isPending: boolean;
+    waste: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean };
+    returnPackagingNudgeEnabled?: boolean;
+  },
 }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), useNavigate: () => mocks.navigate }));
 vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.cfg }));
-vi.mock('../../services/waste-api', () => ({ WASTE_QUERY_KEYS: { me: ['waste', 'me'] }, getWasteMe: mocks.getWasteMe }));
+vi.mock('../../services/waste-api', () => ({
+  WASTE_QUERY_KEYS: { me: ['waste', 'me'], returnPackaging: (code: string) => ['waste', 'return-packaging', code] },
+  getWasteMe: mocks.getWasteMe,
+  getReturnPackaging: mocks.getReturnPackaging,
+}));
 vi.mock('../../services/recycle-funnel', () => ({ trackRecycleStep: mocks.trackRecycleStep }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
 
@@ -43,6 +53,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   mocks.cfg = { isLoaded: true, isPending: false, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
   mocks.getWasteMe.mockResolvedValue(me());
+  mocks.getReturnPackaging.mockResolvedValue({ suggestion: null });
 });
 
 describe('SecondOrderInvite — thẻ mời ở chi tiết đơn đã giao (Mini App)', () => {
@@ -146,5 +157,52 @@ describe('SecondOrderInvite — dòng thay thế khi thẻ không hiện', () =>
     expect(screen.queryByText('dòng mời bạn')).toBeNull();
     resolve(me({ blocked: true } as Partial<WasteMeDTO>));
     await waitFor(() => expect(screen.getByText('dòng mời bạn')).toBeInTheDocument());
+  });
+});
+
+describe('SecondOrderInvite — bao bì của đơn (cờ checkout.return_packaging_nudge_enabled)', () => {
+  const PACKAGING = {
+    orderCodes: ['TT123'],
+    lines: [
+      { itemId: 'wi-carton', code: 'CARTON', name: 'Thùng carton cũ', unitLabel: 'thùng', qty: 1, unitsPerPoint: 1, pointsPerGroup: 1000 },
+      { itemId: 'wi-tubu-bottle', code: 'TUBU_BOTTLE', name: 'Vỏ chai, hộp Tubu Tree', unitLabel: 'vỏ', qty: 2, unitsPerPoint: 1, pointsPerGroup: 2000 },
+    ],
+    estimatedPoints: 5000,
+    minPoints: 3000,
+  };
+  const withCode = { ...delivered, code: 'TT123' };
+
+  it('cờ bật, đơn có bao bì: thẻ nêu đúng món và điểm, chạm vào thì màn tạo yêu cầu điền sẵn từ đơn này', async () => {
+    mocks.cfg = { ...mocks.cfg, returnPackagingNudgeEnabled: true };
+    mocks.getReturnPackaging.mockResolvedValue({ suggestion: PACKAGING });
+    renderInvite(withCode);
+    expect(await screen.findByText('Đơn này có 1 thùng carton, 2 vỏ chai Tubu Tree')).toBeInTheDocument();
+    expect(screen.getByText('Gửi lại kèm đơn sau: miễn ship, +5.000 Điểm Xanh')).toBeInTheDocument();
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(mocks.getReturnPackaging).toHaveBeenCalledWith('TT123');
+    fireEvent.click(screen.getByRole('button'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/recycle/new?method=PICKUP&from=TT123');
+  });
+
+  it('bao bì chưa đủ ngưỡng: không hứa miễn ship, nói rõ ngưỡng', async () => {
+    mocks.cfg = { ...mocks.cfg, returnPackagingNudgeEnabled: true };
+    mocks.getReturnPackaging.mockResolvedValue({ suggestion: { ...PACKAGING, lines: [PACKAGING.lines[0]], estimatedPoints: 1000 } });
+    renderInvite(withCode);
+    expect(await screen.findByText('+1.000 Điểm Xanh, đủ 3.000 điểm thì miễn ship')).toBeInTheDocument();
+  });
+
+  it('cờ bật nhưng đơn không còn bao bì (hoặc lỗi): chữ cũ, đường cũ', async () => {
+    mocks.cfg = { ...mocks.cfg, returnPackagingNudgeEnabled: true };
+    mocks.getReturnPackaging.mockRejectedValue(new Error('boom'));
+    renderInvite(withCode);
+    fireEvent.click(await screen.findByRole('button'));
+    expect(screen.getByText('Giữ bao bì gửi kèm đơn sau')).toBeInTheDocument();
+    expect(mocks.navigate).toHaveBeenCalledWith('/recycle/new?method=PICKUP');
+  });
+
+  it('cờ tắt: không gọi API bao bì', async () => {
+    renderInvite(withCode);
+    expect(await screen.findByText('Giữ bao bì gửi kèm đơn sau')).toBeInTheDocument();
+    expect(mocks.getReturnPackaging).not.toHaveBeenCalled();
   });
 });

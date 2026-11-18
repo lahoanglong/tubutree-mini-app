@@ -6,10 +6,16 @@ import { flush, render } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({
   getWasteMe: vi.fn(),
+  getReturnPackaging: vi.fn(),
   trackRecycleStep: vi.fn(),
   routeReady: true,
   cfgReads: vi.fn(),
-  cfg: { isLoaded: true, isPending: false, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
+  cfg: { isLoaded: true, isPending: false, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } } as {
+    isLoaded: boolean;
+    isPending: boolean;
+    waste: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean };
+    returnPackagingNudgeEnabled?: boolean;
+  },
 }));
 vi.mock('next/link', () => ({
   default: ({ href, children, ...rest }: { href: string; children: React.ReactNode } & Record<string, unknown>) => (
@@ -18,7 +24,11 @@ vi.mock('next/link', () => ({
     </a>
   ),
 }));
-vi.mock('@tubutree/app-core/api/waste', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), getWasteMe: mocks.getWasteMe }));
+vi.mock('@tubutree/app-core/api/waste', async (importOriginal) => ({
+  ...(await importOriginal<Record<string, unknown>>()),
+  getWasteMe: mocks.getWasteMe,
+  getReturnPackaging: (_http: unknown, code: string) => mocks.getReturnPackaging(code),
+}));
 vi.mock('@/lib/route-map', async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), isWebRouteReady: () => mocks.routeReady }));
 vi.mock('@/lib/recycle-funnel', () => ({ trackRecycleStep: mocks.trackRecycleStep }));
 vi.mock('@/lib/use-public-config', () => ({
@@ -49,6 +59,7 @@ beforeEach(() => {
   mocks.routeReady = true;
   mocks.cfg = { isLoaded: true, isPending: false, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
   mocks.getWasteMe.mockResolvedValue(me());
+  mocks.getReturnPackaging.mockResolvedValue({ suggestion: null });
 });
 
 describe('OrderSecondOrderInvite — thẻ mời ở chi tiết đơn đã giao (web)', () => {
@@ -187,5 +198,52 @@ describe('OrderSecondOrderInvite — dòng thay thế khi thẻ không hiện (w
     await flush();
     expect(b.container.innerHTML).toBe('');
     b.unmount();
+  });
+});
+
+describe('OrderSecondOrderInvite — bao bì của đơn (cờ checkout.return_packaging_nudge_enabled)', () => {
+  const PACKAGING = {
+    orderCodes: ['TB-9'],
+    lines: [
+      { itemId: 'wi-carton', code: 'CARTON', name: 'Thùng carton cũ', unitLabel: 'thùng', qty: 1, unitsPerPoint: 1, pointsPerGroup: 1000 },
+      { itemId: 'wi-tubu-bottle', code: 'TUBU_BOTTLE', name: 'Vỏ chai, hộp Tubu Tree', unitLabel: 'vỏ', qty: 2, unitsPerPoint: 1, pointsPerGroup: 2000 },
+    ],
+    estimatedPoints: 5000,
+    minPoints: 3000,
+  };
+
+  it('cờ bật, đơn có bao bì: thẻ nêu đúng món + điểm, liên kết mang ?from=<mã đơn>', async () => {
+    mocks.cfg = { ...mocks.cfg, returnPackagingNudgeEnabled: true };
+    mocks.getReturnPackaging.mockResolvedValue({ suggestion: PACKAGING });
+    const view = render(<OrderSecondOrderInvite order={delivered} />);
+    await flush();
+    await flush();
+    const links = view.container.querySelectorAll('a');
+    expect(links).toHaveLength(1);
+    expect(links[0]!.getAttribute('href')).toBe('/doi-rac/tao?method=PICKUP&from=TB-9');
+    expect(view.container.textContent).toContain('Đơn này có 1 thùng carton, 2 vỏ chai Tubu Tree');
+    expect(view.container.textContent).toContain('Gửi lại kèm đơn sau: miễn ship, +5.000 Điểm Xanh');
+    expect(links[0]!.getAttribute('aria-label')).toBe('Đơn này có 1 thùng carton, 2 vỏ chai Tubu Tree. Gửi lại kèm đơn sau: miễn ship, +5.000 Điểm Xanh');
+    expect(mocks.getReturnPackaging).toHaveBeenCalledWith('TB-9');
+    view.unmount();
+  });
+
+  it('cờ bật nhưng lỗi hoặc không có bao bì: chữ cũ, đường cũ', async () => {
+    mocks.cfg = { ...mocks.cfg, returnPackagingNudgeEnabled: true };
+    mocks.getReturnPackaging.mockRejectedValue(new Error('boom'));
+    const view = render(<OrderSecondOrderInvite order={delivered} />);
+    await flush();
+    await flush();
+    expect(view.container.querySelector('a')!.getAttribute('href')).toBe('/doi-rac/tao?method=PICKUP');
+    expect(view.container.textContent).toContain('Giữ bao bì gửi kèm đơn sau');
+    view.unmount();
+  });
+
+  it('cờ tắt: không gọi API bao bì', async () => {
+    const view = render(<OrderSecondOrderInvite order={delivered} />);
+    await flush();
+    expect(view.container.textContent).toContain('Giữ bao bì gửi kèm đơn sau');
+    expect(mocks.getReturnPackaging).not.toHaveBeenCalled();
+    view.unmount();
   });
 });

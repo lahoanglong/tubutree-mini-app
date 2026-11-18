@@ -13,10 +13,11 @@ import { WasteConfirmDto } from '../receiving/waste-receiving.dto';
 import { WasteAccessService } from '../core/waste-access.service';
 import { WasteConfigService } from '../core/waste-config.service';
 import { WasteCatalogueService } from './waste-catalogue.service';
-import { WasteCreateDto, WasteCustomerController, WasteEditDto, WasteNearbyDto, WastePickupQuoteDto, WastePointsQueryDto, WastePreviewDto, WasteTrackingDto } from './waste-customer.controller';
+import { ReturnPackagingQueryDto, WasteCreateDto, WasteCustomerController, WasteEditDto, WasteNearbyDto, WastePickupQuoteDto, WastePointsQueryDto, WastePreviewDto, WasteTrackingDto } from './waste-customer.controller';
 import { WasteMeService } from './waste-me.service';
 import { WastePreviewService } from './waste-preview.service';
 import { WasteRequestsService } from './waste-requests.service';
+import { WasteReturnPackagingService } from './waste-return-packaging.service';
 
 const OFF = 'Tính năng Đổi rác lấy quà đang tắt. Liên hệ quản trị viên.';
 const users: Record<string, unknown> = {
@@ -31,6 +32,7 @@ async function build(enabled: boolean) {
   const catalogue = svc('listItems', 'listPoints', 'nearbyPoints');
   const requests = svc('list', 'detail', 'feeQr', 'byOrder', 'create', 'edit', 'setTracking', 'cancel', 'pickupQuote');
   const preview = svc('preview');
+  const packaging = { forOrder: jest.fn().mockResolvedValue(null) };
   const mod = await Test.createTestingModule({
     controllers: [WasteCustomerController],
     providers: [
@@ -41,9 +43,10 @@ async function build(enabled: boolean) {
       { provide: WasteCatalogueService, useValue: catalogue },
       { provide: WasteRequestsService, useValue: requests },
       { provide: WastePreviewService, useValue: preview },
+      { provide: WasteReturnPackagingService, useValue: packaging },
     ],
   }).compile();
-  return { c: mod.get(WasteCustomerController), me, catalogue, requests, preview };
+  return { c: mod.get(WasteCustomerController), me, catalogue, requests, preview, packaging };
 }
 
 describe('WasteCustomerController read routes (spec 15.1)', () => {
@@ -78,6 +81,26 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     await expect(on.c.points('real', { provinceCode: '79' })).resolves.toEqual({ ok: 'listPoints' });
     expect(on.catalogue.listPoints).toHaveBeenCalledWith('79');
   });
+  it('return-packaging is FULL and returns the service suggestion for the caller and order code', async () => {
+    const off = await build(false);
+    await expect(off.c.returnPackagingOf('real', { orderCode: 'TT1' })).rejects.toThrow(new ForbiddenException(OFF));
+    const on = await build(true);
+    await expect(on.c.returnPackagingOf('blocked', { orderCode: 'TT1' })).rejects.toBeInstanceOf(ForbiddenException);
+    expect(on.packaging.forOrder).not.toHaveBeenCalled();
+    const suggestion = { orderCodes: ['TT1'], lines: [], estimatedPoints: 0, minPoints: 3000 };
+    on.packaging.forOrder.mockResolvedValueOnce(suggestion);
+    await expect(on.c.returnPackagingOf('real', { orderCode: 'TT1' })).resolves.toEqual({ suggestion });
+    expect(on.packaging.forOrder).toHaveBeenCalledWith('real', 'TT1');
+    await expect(on.c.returnPackagingOf('real', { orderCode: 'TT2' })).resolves.toEqual({ suggestion: null });
+  });
+  it('ReturnPackagingQueryDto: orderCode bắt buộc, cắt khoảng trắng, tối đa 32 ký tự', () => {
+    const check = (v: unknown) => validateSync(plainToInstance(ReturnPackagingQueryDto, v));
+    expect(check({ orderCode: ' TT1 ' })).toHaveLength(0);
+    expect(plainToInstance(ReturnPackagingQueryDto, { orderCode: ' TT1 ' }).orderCode).toBe('TT1');
+    expect(check({})).not.toHaveLength(0);
+    expect(check({ orderCode: '   ' })).not.toHaveLength(0);
+    expect(check({ orderCode: 'X'.repeat(33) })).not.toHaveLength(0);
+  });
   it('own reads are OWN: work with the programme off and for a blocked customer; guest 403', async () => {
     const { c, requests } = await build(false);
     await expect(c.list('blocked')).resolves.toEqual({ ok: 'list' });
@@ -94,7 +117,7 @@ describe('WasteCustomerController read routes (spec 15.1)', () => {
     expect(Reflect.getMetadata(PATH_METADATA, WasteCustomerController)).toBe('waste');
     const routes = Object.getOwnPropertyNames(p).filter((k) => Reflect.getMetadata(METHOD_METADATA, (p as never)[k]) !== undefined).map((k) => [k, Reflect.getMetadata(METHOD_METADATA, (p as never)[k]), Reflect.getMetadata(PATH_METADATA, (p as never)[k])]);
     expect(routes).toEqual([
-      ['me', 0, 'me'], ['openCount', 0, 'me/open-count'], ['rules', 0, 'rules'], ['publicCatalogue', 0, 'catalogue'], ['items', 0, 'items'], ['points', 0, 'points'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'], ['pickupQuote', 1, 'pickup-quote'],
+      ['me', 0, 'me'], ['openCount', 0, 'me/open-count'], ['rules', 0, 'rules'], ['publicCatalogue', 0, 'catalogue'], ['items', 0, 'items'], ['points', 0, 'points'], ['returnPackagingOf', 0, 'return-packaging'], ['nearby', 1, 'points/nearby'], ['preview', 1, 'preview'], ['pickupQuote', 1, 'pickup-quote'],
       ['list', 0, 'requests'], ['byOrder', 0, 'requests/by-order/:orderId'], ['detail', 0, 'requests/:id'], ['feeQr', 0, 'requests/:id/fee-qr'], ['create', 1, 'requests'], ['edit', 4, 'requests/:id'],
       ['setTracking', 2, 'requests/:id/tracking'], ['cancel', 1, 'requests/:id/cancel'],
     ]);

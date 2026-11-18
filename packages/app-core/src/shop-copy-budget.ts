@@ -502,6 +502,12 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'checkout.pickup.changed': 72,
   'checkout.pickup.reconciled': 52,
   'checkout.pickup.maxOpenLink': 24,
+  // Gợi ý gửi lại bao bì từ đơn đã giao (tubu-w3-08): {items}/{code} là chữ tự do nên không giới hạn; hai dòng lợi ích xuống tối đa 2 dòng ở 360px.
+  'checkout.pickup.nudgeOrder': null,
+  'checkout.pickup.nudgeOrders': null,
+  'checkout.pickup.nudgeRequest': null,
+  'checkout.pickup.nudgeOneTap': 64,
+  'checkout.pickup.nudgeMore': 52,
   'checkout.shipWaived': 44,
   'checkout.orderZalo.label': 36,
   'checkout.orderZalo.body': 64,

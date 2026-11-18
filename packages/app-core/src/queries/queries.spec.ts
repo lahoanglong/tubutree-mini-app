@@ -90,6 +90,7 @@ const cases: Case[] = [
   ['cashbackTxn', (h) => cashback.cashbackTxnQuery(h), ['cashback-txn'], '/cashback/transactions'],
   ['wasteMe', (h) => waste.wasteMeQuery(h), ['waste', 'me'], '/waste/me'],
   ['wasteItems', (h) => waste.wasteItemsQuery(h), ['waste', 'items'], '/waste/items'],
+  ['returnPackaging', (h) => waste.returnPackagingQuery(h, 'TT1'), ['waste', 'return-packaging', 'TT1'], '/waste/return-packaging'],
   ['wastePoints', (h) => waste.wastePointsQuery(h, null), ['waste', 'points', null], '/waste/points'],
   ['wasteRequests', (h) => waste.wasteRequestsQuery(h), ['waste', 'requests'], '/waste/requests'],
   ['wasteRequest', (h) => waste.wasteRequestQuery(h, 'r1'), ['waste', 'request', 'r1'], '/waste/requests/r1'],

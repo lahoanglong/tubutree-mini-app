@@ -7,12 +7,13 @@ import { WasteCatalogueService } from './waste-catalogue.service';
 import { WasteCustomerController } from './waste-customer.controller';
 import { WasteMeService } from './waste-me.service';
 import { WastePreviewService } from './waste-preview.service';
+import { WasteReturnPackagingService } from './waste-return-packaging.service';
 import { WasteRequestsService } from './waste-requests.service';
 
 @Module({
   imports: [WasteCoreModule, WasteHomePickupModule, GomdonClientModule],
   controllers: [WasteCustomerController],
-  providers: [WasteRequestsService, WasteCatalogueService, WasteMeService, WastePreviewService, WasteHomePickupCustomerService],
-  exports: [WasteRequestsService, WastePreviewService],
+  providers: [WasteRequestsService, WasteCatalogueService, WasteMeService, WastePreviewService, WasteHomePickupCustomerService, WasteReturnPackagingService],
+  exports: [WasteRequestsService, WastePreviewService, WasteReturnPackagingService],
 })
 export class WasteCustomerModule {}

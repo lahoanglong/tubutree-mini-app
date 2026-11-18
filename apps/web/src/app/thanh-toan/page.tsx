@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { CheckCircle2, ChevronRight, Sprout } from 'lucide-react';
@@ -74,6 +74,7 @@ import { comboOnlyDiscount, greenBoxDiscountOf } from '@tubutree/app-core/commer
 import { PickupSection, WaivedShippingValue } from '@/components/checkout/pickup-section';
 import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '@/components/checkout/use-checkout-pickup';
 import { useCheckoutFunnel } from '@/components/analytics/use-checkout-funnel';
+import { trackRecycleStep } from '@/lib/recycle-funnel';
 import { CheckoutSkeleton } from './checkout-skeleton';
 import { InlineRetry } from './inline-retry';
 import { InvoiceSection } from './invoice-section';
@@ -232,7 +233,10 @@ export default function CheckoutPage() {
     addressId,
     itemIds,
     onReconciled: () => setPickupNotice(fillCopy('checkout.pickup.reconciled')),
+    nudgeEnabled: configQ.data?.returnPackagingNudgeEnabled === true,
   });
+  const trackNudgeShown = useCallback(() => trackRecycleStep('return_nudge_shown', 'PICKUP'), []);
+  const trackNudgeApplied = useCallback(() => trackRecycleStep('return_nudge_applied', 'PICKUP'), []);
   const quoteQ = useQuery({
     queryKey: ['quote', addressId, ctvSlug, usePoints, itemIdsKey, pickup.fieldsKey],
     queryFn: () => checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug, itemIds, pickup.fields),
@@ -996,6 +1000,9 @@ export default function CheckoutPage() {
             onClear={chosen(pickup.clear)}
             maxOpenError={pickup.maxOpenError}
             disabled={place.isPending}
+            nudge={pickup.nudge}
+            onNudgeShown={trackNudgeShown}
+            onNudgeApplied={trackNudgeApplied}
           />
           <GiftRows
             gifts={giftsRef.current}

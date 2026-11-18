@@ -151,6 +151,15 @@ export const FEATURE_FLAGS: FeatureFlag[] = [
       'Đánh giá mới về lại bảng thưởng cũ lúc gửi và hiện ngay. Đánh giá đang chờ vẫn nằm ở chip "Chờ duyệt", duyệt vẫn cộng điểm như đã báo khách. Dải ở Trang chủ ẩn.',
   },
   {
+    key: 'checkout.return_packaging_nudge_enabled',
+    label: 'Gợi ý gửi lại bao bì từ đơn đã giao',
+    description:
+      'Thẻ "Đổi rác kèm đơn" ở thanh toán (Mini App và web) điền sẵn thùng carton và vỏ chai/hộp Tubu Tree của các đơn đã giao tới cùng địa chỉ trong 60 ngày. Đủ ngưỡng điểm thì một chạm là gửi kèm đơn, miễn phí giao kiện Tubu. Chi tiết đơn đã giao nêu đúng bao bì của đơn.',
+    fallback: false,
+    onWarning: 'Thẻ đổi rác ở thanh toán sẽ tải danh sách món ngay khi mở trang và có thể bật một chạm. Điểm Xanh vẫn chỉ cộng khi kho kiểm nhận.',
+    offWarning: 'Thẻ đổi rác về lại như cũ: khách tự mở ngăn và chọn món. Phiếu đã gửi kèm đơn không bị ảnh hưởng.',
+  },
+  {
     key: 'commerce.freeship_booster_enabled',
     label: 'Dải "Thêm 1 món nhỏ để đủ Miễn phí giao hàng" ở giỏ',
     description: 'Giỏ hàng (Mini App và web) chưa đủ mức Miễn phí giao hàng: dải gợi ý chọn món Tubu giao còn hàng, chưa có trong giỏ, giá từ số còn thiếu tới số còn thiếu + 45.000đ, bán chạy 30 ngày trước. Mỗi món một chạm "+ Thêm", không rời giỏ.',

@@ -18,6 +18,7 @@ import {
   pickupProgressView,
   pickupWeightView,
 } from '@tubutree/app-core/checkout-pickup-view';
+import { pickupNudgeView, type ReturnNudge } from '@tubutree/app-core/return-packaging';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { BottomSheet } from '../ui/bottom-sheet';
 import { Badge } from '../ui/badge';
@@ -49,11 +50,19 @@ interface PickupSectionProps {
   onClear: () => void;
   maxOpenError?: string | null;
   onOpenRequests?: () => void;
+  /** Gợi ý gửi lại bao bì (cờ `checkout.return_packaging_nudge_enabled`); null = thẻ như cũ. */
+  nudge?: ReturnNudge | null;
+  /** Gọi sau khi công tắc áp gợi ý bằng một chạm (đo phễu). */
+  onNudgeApplied?: () => void;
+  /** Gọi một lần khi gợi ý hiện lần đầu (đo phễu). */
+  onNudgeShown?: () => void;
 }
 
 /**
  * Một thẻ duy nhất cho "Đổi rác kèm đơn": đóng là một hàng (chữ + công tắc), mở ra tấm chọn món/kg với đúng một nút Xong.
  * Thay luôn mục "Thu kèm rác" cũ (gắn phiếu có sẵn): phiếu mở có sẵn được chọn sẵn trong tấm qua `existingRequest`.
+ * Có gợi ý bao bì (`nudge`): hàng nêu đúng bao bì khách đang giữ; đủ điểm thì bật công tắc là áp luôn, không thì công tắc mở tấm đã điền sẵn.
+ * Không thêm nút nào: công tắc vẫn là lối duy nhất để bật.
  */
 export function PickupSection({
   pickup,
@@ -69,6 +78,9 @@ export function PickupSection({
   onClear,
   maxOpenError,
   onOpenRequests,
+  nudge = null,
+  onNudgeApplied,
+  onNudgeShown,
 }: PickupSectionProps) {
   const lastPickup = useRef<CheckoutPickupQuote | null>(null);
   const lastFee = useRef(0);
@@ -84,11 +96,19 @@ export function PickupSection({
     if (!options || draft) return;
     const weight = applied?.returnWeightGrams ?? defaultReturnWeightGrams(returnWeightChips(options.maxReturnWeightGrams));
     if (applied) setDraft({ ...applied, qty: { ...applied.qty } });
+    else if (nudge) setDraft({ ...nudge.draft, qty: { ...nudge.draft.qty } });
     else if (options.existingRequest) setDraft(draftUsingRequest(options.existingRequest, weight));
     else setDraft({ requestId: null, qty: {}, returnWeightGrams: weight });
-  }, [open, options, draft, applied]);
+  }, [open, options, draft, applied, nudge]);
 
   const view = pickupCardView({ pickup: lastPickup.current, applied: applied !== null, tubuShippingFee: lastFee.current });
+  const nudgeVisible = !!view && !view.disabled && applied === null && nudge !== null;
+  const nudgeSeen = useRef(false);
+  useEffect(() => {
+    if (!nudgeVisible || nudgeSeen.current) return;
+    nudgeSeen.current = true;
+    onNudgeShown?.();
+  }, [nudgeVisible, onNudgeShown]);
   if (!view) return null;
 
   const openSheet = () => {
@@ -97,28 +117,50 @@ export function PickupSection({
     onOpenChange(true);
   };
   const isApplied = applied !== null;
+  const nudgeView = nudgeVisible && nudge ? pickupNudgeView(nudge) : null;
+  const turnOn = () => {
+    if (!nudge?.oneTap || !nudgeView) return openSheet();
+    haptic('medium');
+    onApply({ ...nudge.draft, qty: { ...nudge.draft.qty } });
+    onNudgeApplied?.();
+  };
 
   return (
-    <section className="tubu-pickup" aria-label={view.title} data-testid="checkout-pickup">
+    <section className="tubu-pickup" aria-label={view.title} data-testid="checkout-pickup" data-nudge={nudgeView ? 'true' : undefined}>
       <div className="tubu-pickup-row">
-        <button type="button" className="tubu-pickup-body tubu-press" aria-label={view.ariaLabel} aria-disabled={view.disabled || undefined} onClick={openSheet}>
+        <button
+          type="button"
+          className="tubu-pickup-body tubu-press"
+          aria-label={nudgeView?.ariaLabel ?? view.ariaLabel}
+          aria-disabled={view.disabled || undefined}
+          onClick={openSheet}
+        >
           <span className="tubu-pickup-head">
             <Text variant="body-sm" style={{ fontWeight: 600 }}>{view.title}</Text>
             {view.badge && <Badge tone="success" size="sm">{view.badge}</Badge>}
           </span>
-          <Text variant="caption" tone={view.subTone === 'warn' ? 'warning' : 'secondary'} className="tubu-pickup-sub" numeric>
-            {view.sub}
-          </Text>
+          {nudgeView ? (
+            <span className="tubu-pickup-nudge" data-testid="checkout-pickup-nudge">
+              <Text variant="caption" tone="primary" as="span" numeric>{nudgeView.lead}</Text>
+              <Text variant="caption" tone="success" as="span" numeric style={{ fontWeight: 600 }}>
+                {nudgeView.benefit}
+              </Text>
+            </span>
+          ) : (
+            <Text variant="caption" tone={view.subTone === 'warn' ? 'warning' : 'secondary'} className="tubu-pickup-sub" numeric>
+              {view.sub}
+            </Text>
+          )}
         </button>
         <Switch
           checked={isApplied}
           disabled={view.disabled}
-          aria-label={view.title}
+          aria-label={nudgeView?.oneTap ? nudgeView.benefit : view.title}
           onChange={() => {
             if (isApplied) {
               haptic('light');
               onClear();
-            } else openSheet();
+            } else turnOn();
           }}
         />
       </div>

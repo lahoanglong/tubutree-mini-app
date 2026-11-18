@@ -122,6 +122,7 @@ function build(
     phoneVerified?: boolean;
     /** Dựng service như spec race tối giản: không nạp vùng đổi rác. */
     omitWaste?: boolean;
+    returnPackaging?: { forAddress: jest.Mock };
   } = {},
 ) {
   const total = opts.total ?? 100;
@@ -285,6 +286,8 @@ function build(
     (opts.omitWaste ? undefined : giftAttach) as never,
     opts.geo as never,
     opts.systemConfig as never,
+    undefined,
+    opts.returnPackaging as never,
   );
   return { svc, prisma, updateMany, orderCreate, executeRaw, total, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics, affiliate, notifications, wasteHold, wasteRequests, giftAttach };
 }
@@ -3163,6 +3166,50 @@ describe('CheckoutService — đổi rác kèm đơn: miễn phí giao, số kg 
       const { svc, prisma } = buildPickup();
       ((prisma as unknown as { address: { findUnique: jest.Mock } }).address.findUnique).mockResolvedValue({ ...ADDRESS, userId: 'other' });
       await expect(svc.pickupOptions('u1', { addressId: 'addr1' } as never)).rejects.toThrow('Địa chỉ giao hàng không hợp lệ');
+    });
+
+    describe('gợi ý bao bì gửi lại (checkout.return_packaging_nudge_enabled)', () => {
+      const SUGGESTION = {
+        orderCodes: ['TT9'],
+        lines: [{ itemId: 'wi-carton', code: 'CARTON', name: 'Thùng carton cũ', unitLabel: 'thùng', qty: 1, unitsPerPoint: 1, pointsPerGroup: 1000 }],
+        estimatedPoints: 1000,
+        minPoints: 3000,
+      };
+
+      it('trả gợi ý theo đúng khách và địa chỉ giao của lần thanh toán', async () => {
+        const returnPackaging = { forAddress: jest.fn().mockResolvedValue(SUGGESTION) };
+        const { svc, prisma } = buildPickup({ returnPackaging });
+        withItems(prisma);
+        const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
+        expect(out.suggestion).toEqual(SUGGESTION);
+        expect(returnPackaging.forAddress).toHaveBeenCalledWith('u1', expect.objectContaining({ street: ADDRESS.street, ward: ADDRESS.ward, wardCode: ADDRESS.wardCode }));
+      });
+
+      it('đọc gợi ý lỗi → ngăn chọn món vẫn mở, suggestion null', async () => {
+        const returnPackaging = { forAddress: jest.fn().mockRejectedValue(new Error('db down')) };
+        const { svc, prisma } = buildPickup({ returnPackaging });
+        withItems(prisma);
+        const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
+        expect(out).toMatchObject({ gateOpen: true, suggestion: null });
+        expect(out.items).toHaveLength(2);
+      });
+
+      it('cổng đóng hoặc không có kiện Tubu → không hỏi gợi ý', async () => {
+        const returnPackaging = { forAddress: jest.fn().mockResolvedValue(SUGGESTION) };
+        gateMock.mockResolvedValue(false);
+        const { svc, prisma } = buildPickup({ returnPackaging });
+        withItems(prisma);
+        const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
+        expect(out.suggestion).toBeUndefined();
+        expect(returnPackaging.forAddress).not.toHaveBeenCalled();
+      });
+
+      it('service không nạp vùng gợi ý (spec dựng tay) → suggestion null', async () => {
+        const { svc, prisma } = buildPickup();
+        withItems(prisma);
+        const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
+        expect(out.suggestion).toBeNull();
+      });
     });
   });
 

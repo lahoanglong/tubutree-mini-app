@@ -44,6 +44,7 @@ import {
 } from '../waste-exchange/pickup/waste-pickup-attach';
 import { WasteGiftAttachService } from '../waste-exchange/catalog/waste-gift-attach.service';
 import { WasteRequestsService, type InlinePickupPrepared } from '../waste-exchange/customer/waste-requests.service';
+import { WasteReturnPackagingService } from '../waste-exchange/customer/waste-return-packaging.service';
 import { WasteHoldService } from '../waste-exchange/core/waste-hold.service';
 import { WASTE_MESSAGES } from '../waste-exchange/core/waste-messages';
 import { assertPickupItemsAllowedForProvince, isHcmProvince } from '../waste-exchange/core/waste-pickup-rules';
@@ -293,6 +294,8 @@ export class CheckoutService {
     // gian hàng tự giao dùng mặc định.
     @Optional() private readonly config?: SystemConfigService,
     @Optional() private readonly mssOrderEvents?: MssOrderEventRecorder,
+    // Optional: thiếu (spec dựng tay) thì ngăn chọn món không kèm gợi ý bao bì, như khi cờ tắt.
+    @Optional() private readonly returnPackaging?: WasteReturnPackagingService,
   ) {}
 
   /** Ghi công của lần mua (người giới thiệu, gian hàng) — dùng chung với giỏ, xem attribution.ts. */
@@ -1572,7 +1575,7 @@ export class CheckoutService {
     if (!gateOpen) return { gateOpen, minPoints: holdCfg.pickupMinPoints, ...weights, items: [], existingRequest: null };
 
     const hcm = isHcmProvince(address.province);
-    const [items, existing] = await Promise.all([
+    const [items, existing, suggestion] = await Promise.all([
       this.prisma.wasteItem.findMany({
         where: { status: 'ACTIVE' },
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -1588,6 +1591,7 @@ export class CheckoutService {
           lines: { orderBy: { id: 'asc' }, select: { itemId: true, itemName: true, unitLabel: true, declaredQty: true } },
         },
       }),
+      this.returnSuggestion(userId, address),
     ]);
     return {
       gateOpen,
@@ -1595,7 +1599,19 @@ export class CheckoutService {
       ...weights,
       items: items.map((i) => ({ ...i, blockedReason: i.hazardous && !hcm ? ('BATTERY_OUT_OF_HCM' as const) : null })),
       existingRequest: existing,
+      suggestion,
     };
+  }
+
+  /** Bao bì của các đơn đã giao tới địa chỉ này, để thẻ đổi rác điền sẵn gói gửi lại. Đọc gợi ý lỗi thì ngăn chọn món vẫn mở, chỉ thiếu gợi ý. */
+  private async returnSuggestion(userId: string, address: { street: string; ward: string; wardCode: string }) {
+    if (!this.returnPackaging) return null;
+    try {
+      return await this.returnPackaging.forAddress(userId, address);
+    } catch (err) {
+      this.logger.warn(`Gợi ý bao bì gửi lại lỗi cho khách ${userId}: ${err instanceof Error ? err.message : err}`);
+      return null;
+    }
   }
 
   /**

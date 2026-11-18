@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { dropOffDayLimitText, itemQtyMax } from '@tubutree/app-core/waste-copy';
 import { consentStillValid, WASTE_RULES_UPDATED_NOTE } from '@tubutree/app-core/waste-consent';
 import { sameProvince } from '@tubutree/app-core/waste-province';
-import { preferredWasteMethodFromSearch } from '@tubutree/app-core/second-order-invite';
+import { packagingWizardLines, preferredWasteMethodFromSearch, returnPackagingOrderFromSearch } from '@tubutree/app-core/second-order-invite';
 import { isMethodLocked, orderWasteMethods, WASTE_METHODS_BASE } from '@tubutree/app-core/waste-method-order';
 import {
   EMPTY_HOME_PICKUP_FORM,
@@ -34,6 +34,7 @@ import {
   WASTE_QUERY_KEYS,
   createWasteRequest,
   getNearbyWastePoints,
+  getReturnPackaging,
   getWasteMe,
   getWastePoints,
   getWasteRules,
@@ -301,6 +302,22 @@ export default function RecycleNewPage() {
 
   const meQ = useQuery({ queryKey: WASTE_QUERY_KEYS.me, queryFn: getWasteMe, enabled: phase === 'authenticated' });
   const me: WasteMeDTO | undefined = meQ.data;
+  // Thẻ ở chi tiết đơn đã giao mở màn này với ?from=<mã đơn>: điền sẵn bao bì của đơn đó một lần, chỉ khi khách chưa chọn món nào.
+  const fromOrder = returnPackagingOrderFromSearch(location.search);
+  const packQ = useQuery({
+    queryKey: WASTE_QUERY_KEYS.returnPackaging(fromOrder ?? ''),
+    queryFn: () => getReturnPackaging(fromOrder ?? ''),
+    enabled: phase === 'authenticated' && step === 'items' && !stateDraft && fromOrder !== null && cfg.returnPackagingNudgeEnabled === true,
+    staleTime: 60_000,
+  });
+  const packSeeded = useRef(false);
+  useEffect(() => {
+    const suggestion = packQ.data?.suggestion;
+    if (packSeeded.current || !me || !suggestion) return;
+    packSeeded.current = true;
+    const lines = packagingWizardLines(suggestion, me.items.filter((i) => i.status === 'ACTIVE'), UNCAPPED_QTY_MAX);
+    if (Object.keys(lines).length > 0) setDraft((d) => (Object.keys(d.lines).length > 0 ? d : { ...d, lines }));
+  }, [me, packQ.data]);
   const leave = phase === 'guest' || (me !== undefined && (!me.programmeEnabled || me.eligibility !== 'OK' || me.blocked));
   useEffect(() => {
     if (leave) navigate('/recycle', { replace: true });

@@ -1,0 +1,4 @@
+-- Gợi ý gửi lại bao bì từ đơn đã giao (thẻ ở chi tiết đơn và thẻ "Đổi rác kèm đơn" ở thanh toán): cờ mặc định TẮT. Chỉ thêm dòng khi chưa có, không đổi giá trị admin đã đặt.
+INSERT INTO "system_configs" ("key", "value", "description", "category", "updatedAt") VALUES
+  ('checkout.return_packaging_nudge_enabled', 'false'::jsonb, 'Đổi rác kèm đơn (Mini App và web): thẻ ở thanh toán điền sẵn thùng carton và vỏ chai/hộp Tubu Tree (món có nhãn "Trả vỏ đổi điểm") của tối đa 5 đơn Tubu đã giao tới cùng địa chỉ trong 60 ngày, sau lần gửi rác gần nhất. Đủ ngưỡng điểm thì bật công tắc là áp luôn (miễn phí giao kiện Tubu, Điểm Xanh cộng khi kho nhận); thiếu điểm thì mở ngăn chọn món đã điền sẵn. Chi tiết đơn đã giao nêu đúng bao bì của đơn và màn tạo yêu cầu điền sẵn số lượng. Tắt thì thẻ như cũ.', 'checkout', NOW())
+ON CONFLICT ("key") DO NOTHING;

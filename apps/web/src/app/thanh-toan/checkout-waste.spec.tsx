@@ -16,7 +16,14 @@ const OPTIONS = { gateOpen: true, minPoints: 3000, orderWeightGrams: 3000, maxRe
 const EXISTING = { id: 'req-p', code: 'TR-PICK1', estimatedPoints: 12000, lines: [{ itemId: 'it-b', itemName: 'Vỏ chai', unitLabel: 'chai', declaredQty: 12 }] };
 const gift = (id: string, over: Record<string, unknown> = {}) => ({ id, code: `QG-${id}`, giftName: `Hạt giống ${id}`, kind: 'SEED_PACK', pointsCost: 500, included: true, ...over });
 
-const m = vi.hoisted(() => ({ quote: vi.fn(), placeOrder: vi.fn(), cart: vi.fn(), options: vi.fn() }));
+const m = vi.hoisted(() => ({
+  quote: vi.fn(),
+  placeOrder: vi.fn(),
+  cart: vi.fn(),
+  options: vi.fn(),
+  track: vi.fn(),
+  cfg: { waste: { enabled: true, dropoff: true, mailin: true, pickup: true } } as Record<string, unknown>,
+}));
 
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn(), push: vi.fn() }) }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u', walletBalance: 0 }, status: 'authenticated' }) }));
@@ -26,7 +33,7 @@ vi.mock('@/lib/shop-client', async (importOriginal) => ({
   getCart: (...args: unknown[]) => m.cart(...args),
   getMe: async () => ({ pointsBalance: 0, walletBalance: 0 }),
   getMyCoupons: async () => [],
-  getPublicConfig: async () => ({ waste: { enabled: true, dropoff: true, mailin: true, pickup: true } }),
+  getPublicConfig: async () => m.cfg,
   getAddresses: async () => [ADDR],
   checkoutQuote: (...args: unknown[]) => m.quote(...args),
   placeOrder: (...args: unknown[]) => m.placeOrder(...args),
@@ -35,6 +42,8 @@ vi.mock('@tubutree/app-core/api/checkout', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@tubutree/app-core/api/checkout')>()),
   getCheckoutPickupOptions: (...args: unknown[]) => m.options(...args),
 }));
+
+vi.mock('@/lib/recycle-funnel', () => ({ trackRecycleStep: (...a: unknown[]) => m.track(...a) }));
 
 import CheckoutPage from './page';
 
@@ -76,6 +85,8 @@ const placeButton = (r: Rendered) => byText(r.container, 'button', /^(Đặt hà
 beforeEach(() => {
   sessionStorage.clear();
   localStorage.clear();
+  m.cfg = { waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
+  m.track.mockReset();
   m.quote.mockReset().mockImplementation(async (...a: unknown[]) => quoteFor(a[4] as Record<string, unknown> | undefined));
   m.placeOrder.mockReset().mockReturnValue(new Promise(() => undefined));
   m.options.mockReset().mockResolvedValue(OPTIONS);
@@ -365,5 +376,60 @@ describe('/thanh-toan — dòng phí giao khi được miễn (W168)', () => {
     const r = await mount();
     expect(r.container.querySelector('[data-testid="ship-waived"]')).toBeNull();
     expect(r.container.textContent).not.toContain('Miễn phí vận chuyển (đổi rác kèm đơn)');
+  });
+});
+
+describe('/thanh-toan — gợi ý gửi lại bao bì từ đơn đã giao (cờ checkout.return_packaging_nudge_enabled)', () => {
+  const SUGGESTION = {
+    orderCodes: ['TT100'],
+    lines: [{ itemId: 'it-b', code: 'BOTTLE', name: 'Vỏ chai', unitLabel: 'chai', qty: 3, unitsPerPoint: 1, pointsPerGroup: 1000 }],
+    estimatedPoints: 3000,
+    minPoints: 3000,
+  };
+  const ONE_TAP = 'Bật để gửi kèm đơn này: Miễn phí giao hàng, +3.000 Điểm Xanh';
+  const nudge = (r: Rendered) => r.container.querySelector('[data-testid="checkout-pickup-nudge"]') as HTMLElement | null;
+  beforeEach(() => {
+    m.cfg = { ...m.cfg, returnPackagingNudgeEnabled: true };
+    m.options.mockResolvedValue({ ...OPTIONS, suggestion: SUGGESTION });
+  });
+
+  it('đủ ngưỡng: hàng nêu đúng bao bì, công tắc một chạm áp món điền sẵn và miễn phí giao; đo shown + applied', async () => {
+    const r = await mount();
+    expect(nudge(r)!.textContent).toContain('Đơn trước bạn có 3 vỏ chai');
+    expect(nudge(r)!.textContent).toContain(ONE_TAP);
+    const c = card(r)!;
+    expect(c.querySelectorAll('button')).toHaveLength(2);
+    const sw = c.querySelector('[role="switch"]')!;
+    expect(sw.getAttribute('aria-label')).toBe(ONE_TAP);
+    click(sw as HTMLElement);
+    await flush(6);
+    expect(lastQuoteFields()).toMatchObject({ inlinePickup: { lines: [{ itemId: 'it-b', qty: 3 }] } });
+    expect(typeof lastQuoteFields()!.returnWeightGrams).toBe('number');
+    expect(sheet()).toBeNull();
+    expect(nudge(r)).toBeNull();
+    expect(card(r)!.querySelector('[role="switch"]')!.getAttribute('aria-checked')).toBe('true');
+    expect(m.track.mock.calls).toEqual([
+      ['return_nudge_shown', 'PICKUP'],
+      ['return_nudge_applied', 'PICKUP'],
+    ]);
+  });
+
+  it('chưa đủ ngưỡng: công tắc mở tấm đã điền sẵn, chưa áp gì', async () => {
+    m.options.mockResolvedValue({ ...OPTIONS, suggestion: { ...SUGGESTION, lines: [{ ...SUGGESTION.lines[0]!, qty: 1 }], estimatedPoints: 1000 } });
+    const r = await mount();
+    expect(nudge(r)!.textContent).toContain('Còn thiếu 2.000 điểm để gửi kèm, chạm để thêm món');
+    click(card(r)!.querySelector('[role="switch"]') as HTMLElement);
+    await flush(4);
+    expect(sheet()!.querySelector('[role="progressbar"]')!.getAttribute('aria-label')).toBe('Dự kiến 1.000 / 3.000 điểm');
+    expect(lastQuoteFields()).toEqual({});
+    expect(m.track.mock.calls).toEqual([['return_nudge_shown', 'PICKUP']]);
+  });
+
+  it('cờ tắt: thẻ như cũ, không tải danh sách món khi tấm còn đóng', async () => {
+    m.cfg = { waste: { enabled: true, dropoff: true, mailin: true, pickup: true } };
+    const r = await mount();
+    expect(card(r)).not.toBeNull();
+    expect(nudge(r)).toBeNull();
+    expect(m.options).not.toHaveBeenCalled();
   });
 });

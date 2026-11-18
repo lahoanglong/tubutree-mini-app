@@ -68,6 +68,8 @@ export interface PublicConfig {
   referralShareCardEnabled?: boolean;
   /** Cờ `commerce.freeship_booster_enabled`: dải bù đơn ở đầu giỏ lấy món từ `GET /upsell/freeship` (cửa sổ 45.000đ). Thiếu khi API cũ → dải cũ từ kệ Bán chạy nhất. */
   freeshipBoosterEnabled?: boolean;
+  /** Cờ `checkout.return_packaging_nudge_enabled`: thẻ đổi rác kèm đơn điền sẵn bao bì của đơn đã giao. Thiếu khi API cũ → thẻ như trước. */
+  returnPackagingNudgeEnabled?: boolean;
   /**
    * Tin hành trình đơn qua Zalo đang chạy cho một phần khách (`mss.order_events_enabled`, MSS nhận sự kiện, tỉ lệ > 0). Chỉ khi true
    * client mới hỏi GET /config/order-zalo. Thiếu khi API cũ → tắt.

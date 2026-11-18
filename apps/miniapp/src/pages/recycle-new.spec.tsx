@@ -13,8 +13,13 @@ const mocks = vi.hoisted(() => ({
   auth: { status: 'authenticated' as 'idle' | 'loading' | 'authenticated' | 'error' },
   login: vi.fn(),
   ensurePhone: vi.fn(),
-  publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } },
+  publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: true } } as {
+    isLoaded: boolean;
+    waste: { enabled: boolean; dropoff: boolean; mailin: boolean; pickup: boolean };
+    returnPackagingNudgeEnabled?: boolean;
+  },
   getWasteMe: vi.fn(),
+  getReturnPackaging: vi.fn(),
   getWasteRules: vi.fn(),
   getWastePoints: vi.fn(),
   getNearbyWastePoints: vi.fn(),
@@ -53,6 +58,7 @@ vi.mock('../hooks/use-public-config', () => ({ usePublicConfig: () => mocks.publ
 vi.mock('../services/waste-api', async (orig) => ({
   ...(await orig<object>()),
   getWasteMe: mocks.getWasteMe,
+  getReturnPackaging: mocks.getReturnPackaging,
   getWasteRules: mocks.getWasteRules,
   getWastePoints: mocks.getWastePoints,
   getNearbyWastePoints: mocks.getNearbyWastePoints,
@@ -92,6 +98,7 @@ beforeEach(() => {
   mocks.keySeq = 0;
   mocks.location.search = ''; mocks.location.state = null;
   mocks.publicConfig.waste = { enabled: true, dropoff: true, mailin: true, pickup: true };
+  delete mocks.publicConfig.returnPackagingNudgeEnabled;
   mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true } }));
   mocks.getWasteRules.mockResolvedValue({ text: 'Thể lệ' });
   mocks.getWastePoints.mockResolvedValue([makeWastePoint()]);
@@ -246,6 +253,38 @@ describe('bước 1: chọn món (§4.2)', () => {
     await waitFor(() => expect(next).toBeEnabled());
     fireEvent.click(next);
     expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/new?step=method', { state: { draft: expect.objectContaining({ method: 'PICKUP', lines: { 'item-carton': 1 } }) } });
+  });
+  it('?from=<mã đơn> (thẻ bao bì ở chi tiết đơn): điền sẵn số lượng bao bì của đơn, kẹp theo trần còn lại, rồi mang sang bước 2', async () => {
+    mocks.publicConfig.returnPackagingNudgeEnabled = true;
+    mocks.location.search = '?method=PICKUP&from=TT100';
+    mocks.getWasteMe.mockResolvedValue(makeWasteMe({ laneFlags: { dropoff: true, mailin: true, pickup: true }, items: [{ ...ITEM_CARTON, monthRemainingQty: 3 }, ITEM_MILK] }));
+    mocks.getReturnPackaging.mockResolvedValue({
+      suggestion: {
+        orderCodes: ['TT100'],
+        lines: [
+          { itemId: 'item-carton', code: 'CARTON', name: 'Thùng carton', unitLabel: 'thùng', qty: 5, unitsPerPoint: 1, pointsPerGroup: 1000 },
+          { itemId: 'item-gone', code: 'TUBU_BOTTLE', name: 'Vỏ chai', unitLabel: 'vỏ', qty: 2, unitsPerPoint: 1, pointsPerGroup: 1000 },
+        ],
+        estimatedPoints: 7000,
+        minPoints: 3000,
+      },
+    });
+    renderPage();
+    const next = await screen.findByRole('button', { name: 'Tiếp tục' });
+    await waitFor(() => expect(next).toBeEnabled());
+    expect(mocks.getReturnPackaging).toHaveBeenCalledWith('TT100');
+    fireEvent.click(next);
+    expect(mocks.navigate).toHaveBeenLastCalledWith('/recycle/new?step=method', { state: { draft: expect.objectContaining({ method: 'PICKUP', lines: { 'item-carton': 3 } }) } });
+  });
+  it('?from= khi cờ tắt hoặc mã đơn sai dạng: không gọi API bao bì, nháp trống như cũ', async () => {
+    mocks.location.search = '?method=PICKUP&from=TT100';
+    renderPage();
+    await screen.findByRole('button', { name: 'Tiếp tục' });
+    mocks.publicConfig.returnPackagingNudgeEnabled = true;
+    mocks.location.search = '?method=PICKUP&from=../x';
+    renderPage();
+    await new Promise((r) => setTimeout(r, 30));
+    expect(mocks.getReturnPackaging).not.toHaveBeenCalled();
   });
   it('W180: ?method= khác PICKUP (kể cả cách giao hợp lệ khác) bị bỏ, nháp vẫn chưa chọn cách giao', async () => {
     mocks.location.search = '?method=MAIL_IN';

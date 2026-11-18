@@ -115,4 +115,38 @@ export interface PickupOptionsResponse {
   items: PickupOptionItem[];
   /** Phiếu thu kèm đang mở, chưa gắn đơn của khách (cũ nhất); null = chưa có. */
   existingRequest: PickupOptionsExistingRequest | null;
+  /**
+   * Bao bì của các đơn Tubu đã giao tới đúng địa chỉ này mà khách chưa gửi lại (cờ `checkout.return_packaging_nudge_enabled`).
+   * null = không có gì để gợi ý hoặc cờ tắt; thiếu khi API cũ.
+   */
+  suggestion?: ReturnPackagingSuggestion | null;
+}
+
+/** Một dòng bao bì gửi lại, đếm từ đơn đã giao: thùng carton của kiện, vỏ chai/hộp của món có nhãn "Trả vỏ đổi điểm". */
+export interface ReturnPackagingLine {
+  itemId: string;
+  /** Mã món rác (`CARTON`, `TUBU_BOTTLE`). */
+  code: string;
+  name: string;
+  unitLabel: string;
+  /** Số lượng nguyên >= 1, đã kẹp theo trần ngày/tháng của món. */
+  qty: number;
+  unitsPerPoint: number;
+  pointsPerGroup: number;
+}
+
+/** Gợi ý gói gửi lại điền sẵn từ đơn đã giao. */
+export interface ReturnPackagingSuggestion {
+  /** Mã các đơn góp bao bì, mới giao trước. */
+  orderCodes: string[];
+  lines: ReturnPackagingLine[];
+  /** Điểm Xanh dự kiến theo đúng công thức nhóm của máy chủ; chỉ cộng khi kho kiểm nhận. */
+  estimatedPoints: number;
+  /** Ngưỡng điểm tối thiểu của gói thu kèm đơn (`waste.pickup_min_points`). */
+  minPoints: number;
+}
+
+/** `GET /waste/return-packaging?orderCode=<mã đơn>`: bao bì của một đơn đã giao; null khi đơn không đủ điều kiện hoặc cờ tắt. */
+export interface ReturnPackagingResponse {
+  suggestion: ReturnPackagingSuggestion | null;
 }
