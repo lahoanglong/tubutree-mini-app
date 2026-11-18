@@ -9,12 +9,14 @@ import type { MssCatalogRunStats, MssCatalogService } from '../mss/catalog/mss-c
 import type { MssHealthService } from '../mss/mss-health.service';
 import { MssInboundGuard } from '../mss/mss-inbound.guard';
 import { CATALOG_SYNC_LIMITS, parseCatalogSyncBody, type CatalogSyncEnvelope, type CatalogSyncStockLine } from './catalog-sync-body';
-import { applyMssStock, MSS_STOCK_MAX_AGE_MS, MSS_STOCK_MAX_SKEW_MS, type MssStockDb } from './catalog-sync-stock';
+import { applyMssStock, MSS_STOCK_MAX_AGE_MS, MSS_STOCK_MAX_SKEW_MS, MSS_STOCK_TRANSIT_MS, type MssStockDb } from './catalog-sync-stock';
 import { CatalogSyncController } from './catalog-sync.controller';
 import { CatalogSyncService } from './catalog-sync.service';
 
 const NOW = new Date('2026-11-18T09:00:00.000Z');
 const at = (msAgo: number) => new Date(NOW.getTime() - msAgo).toISOString();
+/** Đồng hồ MSS khớp Tubu, MSS ký đúng lúc Tubu nhận. */
+const CLOCK = { signedAt: NOW, now: NOW };
 
 describe('parseCatalogSyncBody', () => {
   const ok = (body: unknown) => {
@@ -128,14 +130,14 @@ const line = (pancakeVariationId: string, stock: number, msAgo = 1000): CatalogS
 describe('applyMssStock', () => {
   it('về 0: tồn Tubu về 0 ngay, báo biến thể vừa hết hàng; 0 → có hàng: báo vừa về hàng', async () => {
     const rows = [row({ id: 'tv1', pancakeId: 'v1', stock: 3 }), row({ id: 'tv2', pancakeId: 'v2', stock: 0, pancakeStock: 0 })];
-    const res = await applyMssStock(stockDb(rows), [line('v1', 0), line('v2', 7)], NOW);
+    const res = await applyMssStock(stockDb(rows), [line('v1', 0), line('v2', 7)], CLOCK);
     expect(res).toEqual({ received: 2, applied: 2, skipped: {}, wentOut: ['tv1'], backIn: ['tv2'] });
     expect(rows.map((r) => r.stock)).toEqual([0, 7]);
   });
 
   it('giữ chỗ của đơn Tubu chưa phản ánh vẫn được trừ (cùng đường với đồng bộ Pancake)', async () => {
     const rows = [row({ id: 'tv1', pancakeId: 'v1', stock: 3, reserved: 2, pancakeStock: 5 })];
-    await applyMssStock(stockDb(rows), [line('v1', 5)], NOW);
+    await applyMssStock(stockDb(rows), [line('v1', 5)], CLOCK);
     expect(rows[0]).toMatchObject({ stock: 3, reserved: 2 });
   });
 
@@ -143,8 +145,8 @@ describe('applyMssStock', () => {
     const rows = [row({ id: 'tv1', pancakeId: 'v1', stock: 3 })];
     const db = stockDb(rows);
     const lines = [line('v1', 0)];
-    expect((await applyMssStock(db, lines, NOW)).wentOut).toEqual(['tv1']);
-    const again = await applyMssStock(db, lines, NOW);
+    expect((await applyMssStock(db, lines, CLOCK)).wentOut).toEqual(['tv1']);
+    const again = await applyMssStock(db, lines, CLOCK);
     expect(again).toMatchObject({ applied: 1, wentOut: [], backIn: [] });
     expect(rows[0]!.stock).toBe(0);
   });
@@ -154,31 +156,62 @@ describe('applyMssStock', () => {
       row({ id: 'tv1', pancakeId: 'v1', stock: 4, readAt: new Date(NOW.getTime() - 500) }),
       row({ id: 'tv2', pancakeId: 'v2', stock: 4, webhookAt: new Date(NOW.getTime() - 500) }),
     ];
-    const res = await applyMssStock(stockDb(rows), [line('v1', 0, 2000), line('v2', 0, 2000)], NOW);
+    const res = await applyMssStock(stockDb(rows), [line('v1', 0, 2000), line('v2', 0, 2000)], CLOCK);
     expect(res).toMatchObject({ applied: 0, skipped: { stale: 2 }, wentOut: [] });
     expect(rows.map((r) => r.stock)).toEqual([4, 4]);
   });
 
-  it('biến thể lạ, số quá cũ, giờ MSS chạy trước quá 5 phút: bỏ và đếm, không chạy câu ghi', async () => {
+  it('biến thể lạ, số quá cũ, as_of muộn hơn lúc ký quá 5 giây: bỏ và đếm, không chạy câu ghi', async () => {
     const db = stockDb([row({ id: 'tv1', pancakeId: 'v1' })]);
     const res = await applyMssStock(
       db,
       [line('nope', 1), line('v1', 1, MSS_STOCK_MAX_AGE_MS + 1), line('v1', 1, -(MSS_STOCK_MAX_SKEW_MS + 1))],
-      NOW,
+      CLOCK,
     );
     expect(res).toEqual({ received: 3, applied: 0, skipped: { unknown_variation: 1, too_old: 1, clock_skew: 1 }, wentOut: [], backIn: [] });
     expect(db.exec).not.toHaveBeenCalled();
   });
 
-  it('as_of muộn hơn giờ nhận vài giây: kẹp mốc đọc về giờ nhận (không ghi mốc tương lai chặn đồng bộ Pancake)', async () => {
+  it('mốc đọc = giờ Tubu nhận − tuổi số trên đồng hồ MSS (lúc ký − as_of) − bù đường truyền', async () => {
     const rows = [row({ id: 'tv1', pancakeId: 'v1' })];
-    await applyMssStock(stockDb(rows), [line('v1', 2, -30_000)], NOW);
-    expect(rows[0]!.readAt).toEqual(NOW);
+    await applyMssStock(stockDb(rows), [line('v1', 2, 30_000)], CLOCK);
+    expect(rows[0]!.readAt).toEqual(new Date(NOW.getTime() - 30_000 - MSS_STOCK_TRANSIT_MS));
+  });
+
+  it('đồng hồ MSS nhanh 3 phút: webhook Tubu nhận sau lúc MSS đọc vẫn thắng, tồn không hồi sinh, không báo về hàng', async () => {
+    const fast = 3 * 60_000;
+    // MSS đọc 5 lúc NOW−30s (giờ thật), ký lúc NOW−1s; webhook Pancake báo 0 tới Tubu lúc NOW−10s; lô MSS tới lúc NOW.
+    const rows = [row({ id: 'tv1', pancakeId: 'v1', stock: 0, pancakeStock: 0, webhookAt: new Date(NOW.getTime() - 10_000) })];
+    const mssLine = { pancakeVariationId: 'v1', stock: 5, asOf: new Date(NOW.getTime() - 30_000 + fast) };
+    const res = await applyMssStock(stockDb(rows), [mssLine], { signedAt: new Date(NOW.getTime() - 1_000 + fast), now: NOW });
+    expect(res).toMatchObject({ applied: 0, skipped: { stale: 1 }, backIn: [] });
+    expect(rows[0]!.stock).toBe(0);
+  });
+
+  it('MSS ký lại và gửi lại lô cũ 10 phút sau: cùng mốc đọc, không đè số Tubu nhận trong 10 phút đó', async () => {
+    const rows = [row({ id: 'tv1', pancakeId: 'v1', stock: 3 })];
+    const db = stockDb(rows);
+    const lines = [line('v1', 0, 5_000)];
+    await applyMssStock(db, lines, CLOCK);
+    const firstReadAt = rows[0]!.readAt;
+    rows[0]!.webhookAt = new Date(NOW.getTime() + 60_000);
+    const later = new Date(NOW.getTime() + 10 * 60_000);
+    const res = await applyMssStock(db, lines, { signedAt: later, now: later });
+    expect(res).toMatchObject({ applied: 0, skipped: { stale: 1 } });
+    expect(rows[0]!.readAt).toEqual(firstReadAt);
+  });
+
+  it('as_of muộn hơn lúc ký quá 5 giây (hai mốc không cùng đồng hồ): bỏ clock_skew; muộn ít hơn thì coi tuổi 0', async () => {
+    const rows = [row({ id: 'tv1', pancakeId: 'v1' })];
+    const db = stockDb(rows);
+    expect((await applyMssStock(db, [line('v1', 1, -(MSS_STOCK_MAX_SKEW_MS + 1))], CLOCK)).skipped).toEqual({ clock_skew: 1 });
+    await applyMssStock(db, [line('v1', 1, -3_000)], CLOCK);
+    expect(rows[0]!.readAt).toEqual(new Date(NOW.getTime() - MSS_STOCK_TRANSIT_MS));
   });
 
   it('biến thể chưa có mốc Pancake: chỉ ghi mốc, không đụng tồn (giống đồng bộ Pancake lần đầu)', async () => {
     const rows = [row({ id: 'tv1', pancakeId: 'v1', stock: 9, pancakeStock: null })];
-    const res = await applyMssStock(stockDb(rows), [line('v1', 0)], NOW);
+    const res = await applyMssStock(stockDb(rows), [line('v1', 0)], CLOCK);
     expect(res).toMatchObject({ applied: 1, wentOut: [] });
     expect(rows[0]).toMatchObject({ stock: 9, pancakeStock: 0 });
   });
@@ -188,6 +221,7 @@ describe('CatalogSyncService', () => {
   const env = (over: Partial<CatalogSyncEnvelope> = {}): CatalogSyncEnvelope => ({
     syncId: 'sync-0001',
     sentAt: null,
+    signedAt: NOW,
     products: [],
     stock: [],
     invalidStock: 0,
@@ -348,10 +382,15 @@ describe('CatalogSyncController', () => {
     expect(receive).not.toHaveBeenCalled();
   });
 
-  it('thân đúng: chuyển phong bì đã đọc cho service', async () => {
+  it('thân đúng: chuyển phong bì đã đọc cho service, kèm lúc ký (cuối giây của X-Mss-Timestamp)', async () => {
     const receive = jest.fn(async () => ({ ok: true }));
     const ctrl = new CatalogSyncController({ receive } as unknown as CatalogSyncService);
-    await ctrl.receive({ sync_id: 'sync-0001', stock: [{ pancake_variation_id: 'v1', stock: 0, as_of: '2026-11-18T09:00:00Z' }] });
-    expect(receive).toHaveBeenCalledWith(expect.objectContaining({ syncId: 'sync-0001', stock: [expect.objectContaining({ pancakeVariationId: 'v1', stock: 0 })] }));
+    const body = { sync_id: 'sync-0001', stock: [{ pancake_variation_id: 'v1', stock: 0, as_of: '2026-11-18T09:00:00Z' }] };
+    await ctrl.receive(body, String(NOW.getTime() / 1000));
+    expect(receive).toHaveBeenCalledWith(
+      expect.objectContaining({ syncId: 'sync-0001', signedAt: new Date(NOW.getTime() + 999), stock: [expect.objectContaining({ pancakeVariationId: 'v1', stock: 0 })] }),
+    );
+    await expect(ctrl.receive(body, undefined)).rejects.toBeInstanceOf(BadRequestException);
+    expect(receive).toHaveBeenCalledTimes(1);
   });
 });

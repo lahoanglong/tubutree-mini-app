@@ -130,7 +130,7 @@ export class CatalogSyncService {
       reply.stock.status = 'disabled';
       return;
     }
-    const res = await applyMssStock(this.prisma, env.stock, now);
+    const res = await applyMssStock(this.prisma, env.stock, { signedAt: env.signedAt, now });
     reply.stock = {
       ...reply.stock,
       status: 'applied',

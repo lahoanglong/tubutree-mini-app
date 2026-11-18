@@ -40,7 +40,7 @@ export const STOCK_SKIP_LABEL: Record<MssStockSkipReason, string> = {
   unknown_variation: 'Biến thể chưa có trên Tubu',
   stale: 'Đọc trước số Tubu đã có',
   too_old: 'Đọc quá 60 phút trước',
-  clock_skew: 'Giờ MSS lệch quá 5 phút',
+  clock_skew: 'Giờ đọc muộn hơn giờ ký của MSS',
 };
 
 const TRIGGER_LABEL: Record<NonNullable<Card['lastTrigger']>, string> = {

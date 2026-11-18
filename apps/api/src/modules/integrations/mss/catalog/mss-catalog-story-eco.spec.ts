@@ -183,11 +183,9 @@ describe('proposeMssEcoFacts', () => {
   });
 
   function db(existing: Array<{ variationId: string | null; kind: string }> = []) {
-    const findFirst = jest.fn(async ({ where }: { where: { variationId: string | null; kind: string } }) =>
-      existing.some((e) => e.variationId === where.variationId && e.kind === where.kind) ? { id: 'x' } : null,
-    );
+    const findMany = jest.fn(async (_args: unknown) => existing);
     const create = jest.fn(async (_args: unknown) => ({}));
-    return { productEcoFact: { findFirst, create }, findFirst, create };
+    return { productEcoFact: { findMany, create }, findMany, create };
   }
 
   it('chỉ tạo dòng NHÁP cho loại sản phẩm chưa có (mọi trạng thái); biến thể lạ không gắn nhầm lên cả sản phẩm', async () => {
@@ -205,6 +203,7 @@ describe('proposeMssEcoFacts', () => {
       variations: new Map([['pv1', 'tubu-v1']]),
     });
     expect(res).toEqual({ proposed: 2, kept: 2 });
+    expect(d.findMany).toHaveBeenCalledTimes(1);
     expect(d.create).toHaveBeenCalledTimes(2);
     expect(d.create.mock.calls[0]![0]).toEqual({
       data: expect.objectContaining({
@@ -252,7 +251,7 @@ describe('MssCatalogService.applyPushed (MSS đẩy tài liệu)', () => {
       product: { findMany: jest.fn().mockResolvedValue([{ id: 'p-a', pancakeId: 'a1' }]) },
       variation: { findMany: jest.fn().mockResolvedValue([{ id: 'tubu-v1', productId: 'p-a', pancakeId: 'pv1' }]) },
       productMssEnrichment: { findMany: jest.fn().mockResolvedValue([]) },
-      productEcoFact: { findFirst: jest.fn().mockResolvedValue(null), create: ecoCreate },
+      productEcoFact: { findMany: jest.fn().mockResolvedValue([]), create: ecoCreate },
       $executeRaw: exec,
     } as unknown as PrismaService;
     const request = jest.fn();
@@ -261,7 +260,7 @@ describe('MssCatalogService.applyPushed (MSS đẩy tài liệu)', () => {
     const moduleRef = { get: jest.fn(() => ({ invalidateCategoryCache })) } as unknown as ModuleRef;
     const health = { assertCapability: jest.fn(async () => true) } as unknown as MssHealthService;
     const svc = new MssCatalogService(prisma, { request } as unknown as MssClient, health, { markStale } as unknown as ImageRegistryStale, moduleRef);
-    return { svc, exec, stateUpsert, ecoCreate, request, markStale, invalidateCategoryCache };
+    return { svc, prisma, exec, stateUpsert, ecoCreate, request, markStale, invalidateCategoryCache };
   }
 
   it('ghép như lượt kéo (kind push), không gọi MSS, không ghi dòng trạng thái kéo; câu chuyện mang id biến thể Tubu; nhãn xanh thành nháp', async () => {
@@ -275,6 +274,25 @@ describe('MssCatalogService.applyPushed (MSS đẩy tài liệu)', () => {
     expect(f.ecoCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ productId: 'p-a', status: 'DRAFT' }) });
     expect(f.markStale).toHaveBeenCalled();
     expect(f.invalidateCategoryCache).toHaveBeenCalled();
+  });
+
+  it('tài liệu không đổi: vẫn thử lại nhãn xanh nháp (lần trước lỗi DB / biến thể mới có), không đếm lại nhãn giữ', async () => {
+    const first = setup();
+    first.ecoCreate.mockRejectedValueOnce(new Error('db down'));
+    const raw = doc({ eco_facts: [eco()] });
+    const firstStats = await first.svc.applyPushed([raw]);
+    expect(firstStats.applied).toBe(1);
+    expect(firstStats.ecoProposed).toBeUndefined();
+    const sha = (first.exec.mock.calls[0] as unknown[]).find((v) => typeof v === 'string' && /^[0-9a-f]{64}$/.test(v));
+    const again = setup();
+    (again.prisma.productMssEnrichment.findMany as jest.Mock).mockResolvedValue([
+      { productId: 'p-a', contentVersion: 3, mssUpdatedAt: new Date('2026-11-18T01:00:00Z'), sha256: sha },
+    ]);
+    const stats = await again.svc.applyPushed([raw]);
+    expect(stats).toMatchObject({ applied: 0, unchanged: 1, ecoProposed: 1 });
+    expect(stats.ecoKept).toBeUndefined();
+    expect(again.exec).not.toHaveBeenCalled();
+    expect(again.ecoCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ productId: 'p-a', kind: 'PLASTIC_AVOIDED', status: 'DRAFT' }) });
   });
 
   it('không gì được ghép: không xoá bộ đệm', async () => {

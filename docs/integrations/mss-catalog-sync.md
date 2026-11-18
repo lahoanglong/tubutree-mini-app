@@ -18,7 +18,9 @@ POST {TUBU_API}/api/internal/mss/catalog-sync      (cùng xử lý; chỉ dùng 
 - Ký như mọi route MSS → Tubu (v1): header `X-Mss-Key-Id`, `X-Mss-Timestamp` (giây Unix), `X-Mss-Signature: v1=<hex>`, chữ ký
   HMAC-SHA256 trên chuỗi `<timestamp>.` nối với **đúng byte thân gửi đi**, bí mật `MSS_INBOUND_SECRET` (nhận cả `MSS_INBOUND_SECRET_PREV`
   khi xoay khoá), lệch giờ tối đa ±300 giây. Sai chữ ký hoặc quá giờ: `401`.
+- **Mỗi lần gửi lại phải ký lại** với `X-Mss-Timestamp` mới (thân giữ nguyên): Tubu dùng mốc ký để tính tuổi của số tồn (mục 2.1).
 - `Content-Type: application/json`. Có thể nén gzip. Thân tối đa **1 MB sau giải nén** (các route MSS khác 64 KB); quá thì `413`.
+  Tối đa 100.000 nút JSON (khoá object cộng phần tử mảng), lồng tối đa 64 tầng; quá thì `400` (`Dữ liệu gửi lên quá phức tạp`).
 - Không giới hạn tần suất phía Tubu (route bỏ qua bộ throttle), nhưng MSS nên gộp: tối đa một lần đẩy mỗi giây, gộp các dòng tồn trong
   khoảng đó vào một lô.
 
@@ -51,7 +53,9 @@ không phải mảng, `sent_at` sai dạng…): `400 invalid_body`. Khoá lạ �
 
 - `pancake_variation_id`: `^[A-Za-z0-9_-]{1,64}$`, khớp `variations.pancakeId` của Tubu.
 - `stock`: số nguyên **tuyệt đối** Pancake báo (`remain_quantity`), `0 ≤ stock ≤ 2.000.000.000`. Không gửi số cộng/trừ.
-- `as_of`: lúc MSS **đọc** số này từ Pancake (giờ máy chủ MSS, ISO 8601 có múi giờ). Đây là mốc quyết định thứ tự, không phải lúc gửi.
+- `as_of`: lúc MSS **đọc** số này từ Pancake (ISO 8601 có múi giờ), lấy từ **cùng đồng hồ** với `X-Mss-Timestamp` (giờ máy chủ MSS).
+  Tubu không so `as_of` thẳng với giờ của mình: tuổi của số là `X-Mss-Timestamp − as_of` (cùng đồng hồ MSS, nên đồng hồ hai bên lệch
+  nhau cũng không sai), và mốc đọc dùng để xếp thứ tự = lúc Tubu nhận − tuổi − 2 giây bù đường truyền.
 - Dòng sai dạng (thiếu mã, số âm, số lẻ, giờ hỏng) bị bỏ riêng dòng đó và đếm `stock.invalid`; các dòng khác vẫn áp.
 - Một biến thể có nhiều dòng trong cùng lô: Tubu giữ dòng có `as_of` muộn nhất.
 
@@ -81,6 +85,7 @@ của Tubu (đổi slug làm gãy link đã chia sẻ), `seo.meta_title`/`seo.me
 
 - `variant_arc.items[].variationId` là **`pancake_variation_id`**; Tubu đổi sang id biến thể của mình lúc ghép, mã chưa có ở Tubu thì bỏ
   riêng `variationId` (mục vẫn hiện, chỉ không chọn được biến thể).
+- `enabled: false`: Tubu giữ câu chuyện admin đang có trên Tubu (không ẩn nó). Muốn gỡ câu chuyện, admin tắt ở màn Tubu.
 - `cutoutUrl` và `layers[].imageUrl` phải là media MSS như ảnh sản phẩm. Sai khung, hay một ảnh ngoài host: Tubu bỏ **cả câu chuyện** (giữ
   câu chuyện Tubu đang có) và đếm `trimmed.story_rejected`; phần còn lại của tài liệu vẫn được ghép.
 
@@ -122,7 +127,7 @@ của Tubu (đổi slug làm gãy link đã chia sẻ), `seo.meta_title`/`seo.me
   `apply_failed`. `products.trimmed`: `media_rejected`, `html_emptied`, `string_truncated`, `array_truncated`, `story_rejected`,
   `eco_fact_rejected`, `unknown_category_slug`.
 - `stock.skipped`: `unknown_variation` (Tubu chưa có biến thể), `stale` (đọc trước số Tubu đã có, xem mục 4), `too_old` (`as_of` cũ hơn
-  60 phút), `clock_skew` (`as_of` vượt giờ Tubu quá 5 phút: đồng hồ MSS sai).
+  60 phút trước lúc ký), `clock_skew` (`as_of` muộn hơn `X-Mss-Timestamp` quá 5 giây: hai mốc không lấy từ cùng một đồng hồ).
 - `out_of_stock` / `back_in_stock`: số biến thể vừa đổi trạng thái do lô này. `restock_waiting`: số đăng ký "Báo tôi khi có hàng" đang
   chờ trên các biến thể vừa về hàng.
 - Lỗi DB giữa chừng: `5xx`. MSS gửi lại nguyên lô (an toàn, mục 4).
@@ -131,16 +136,21 @@ của Tubu (đổi slug làm gãy link đã chia sẻ), `seo.meta_title`/`seo.me
 
 Tubu không lưu biên nhận theo `sync_id`; an toàn nhờ điều kiện trên chính dữ liệu:
 
-- **Tồn**: mỗi dòng đi đúng đường áp tồn của lượt đồng bộ Pancake của Tubu (`applyPancakeStock`, kiểu `sync`, mốc đọc = `as_of`, kẹp về
-  giờ nhận nếu `as_of` muộn hơn vài giây). Điều kiện so mốc nằm trong cùng câu `UPDATE`:
+- **Tồn**: mỗi dòng đi đúng đường áp tồn của lượt đồng bộ Pancake của Tubu (`applyPancakeStock`, kiểu `sync`, mốc đọc tính như mục 2.1).
+  Điều kiện so mốc nằm trong cùng câu `UPDATE`:
   - số MSS đọc **trước** lượt đồng bộ Pancake hay webhook Pancake mà Tubu đã áp thì bị bỏ (`stale`): tồn không lùi;
   - số MSS đọc **sau** thì thắng, dù lô đến muộn hay xử lý song song (đã kiểm 12 lần đẩy song song lệch thứ tự trên Postgres thật);
-  - gửi lại cùng dòng (cùng số, cùng `as_of`) ghi lại đúng giá trị cũ, không báo hết/về hàng lần hai;
+  - gửi lại cùng dòng (ký lại, cùng số, cùng `as_of`) cho cùng mốc đọc: ghi lại đúng giá trị cũ, không báo hết/về hàng lần hai, và
+    không đè số Tubu nhận sau lần gửi đầu;
+  - đồng hồ MSS nhanh hay chậm vài phút không làm số cũ đè số mới (tuổi tính trên đồng hồ MSS); số MSS đọc sát sau (dưới 2 giây) một
+    webhook Pancake có thể bị đếm `stale`, webhook đó đã mang số gần như mới nhất;
   - giữ chỗ của đơn Tubu chưa lên Pancake vẫn được trừ như lượt đồng bộ (`stock = số Pancake − giữ chỗ còn lại`);
   - biến thể Tubu chưa từng có số Pancake (`pancakeStock` null): lần đầu chỉ ghi mốc, không đổi tồn (như lượt đồng bộ đầu tiên).
 - **Nội dung**: cùng điều kiện "bản mới hơn" của lượt kéo (`published_version`, `updated_at`), cùng câu upsert; tài liệu đã nhận qua lượt
-  kéo hay lần đẩy trước thì đếm `unchanged`.
-- Phát lại chữ ký v1 trong 300 giây chỉ gửi lại được đúng lô đó, và lô cũ không ghi đè lô mới nhờ mốc `as_of`/phiên bản.
+  kéo hay lần đẩy trước thì đếm `unchanged`. Tài liệu `unchanged` vẫn được thử lại phần nhãn xanh nháp (lần trước lỗi, hoặc biến thể
+  gắn nhãn nay mới có trên Tubu); dòng đã có thì không tạo lại.
+- Phát lại nguyên văn một yêu cầu đã ký (không ký lại) trong 300 giây chỉ gửi lại được đúng lô đó; mốc đọc của nó trễ thêm đúng khoảng
+  phát lại, nên chỉ thắng được số Tubu nhận trong khoảng đó. MSS luôn ký lại khi gửi lại (mục 1) thì không có trường hợp này.
 
 ## 5. Hết hàng và về hàng
 

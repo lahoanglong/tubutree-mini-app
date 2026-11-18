@@ -313,6 +313,8 @@ export class MssCatalogService {
         const docAt = doc.updatedAt.getTime();
         if (prevAt === docAt && prev.sha256 === sha && (doc.state !== 'published' || prev.contentVersion === doc.version)) {
           stats.unchanged += 1;
+          // Nội dung không đổi nhưng nhãn xanh nháp vẫn thử lại: lần trước lỗi DB, hoặc biến thể MSS gắn nhãn nay mới có trên Tubu.
+          await this.proposeEco(doc, productId, payload, variations, stats, false);
           continue;
         }
         if (!isNewerDoc(doc.state, doc.version, docAt, prev.contentVersion, prevAt)) {
@@ -325,16 +327,7 @@ export class MssCatalogService {
         if (written > 0) {
           stats.applied += 1;
           current.set(productId, { productId, contentVersion: Math.max(prev?.contentVersion ?? 0, doc.version), mssUpdatedAt: doc.updatedAt, sha256: sha });
-          if (doc.state === 'published' && payload.ecoFacts?.length) {
-            const eco = await proposeMssEcoFacts(this.prisma, { productId, pancakeProductId: doc.pancakeProductId, version: doc.version, facts: payload.ecoFacts, variations }).catch((err: unknown) => {
-              this.logger.warn(`Không tạo được nhãn xanh nháp từ MSS cho sản phẩm ${productId}: ${err instanceof Error ? err.message.slice(0, 200) : err}`);
-              return null;
-            });
-            if (eco) {
-              stats.ecoProposed = (stats.ecoProposed ?? 0) + eco.proposed;
-              stats.ecoKept = (stats.ecoKept ?? 0) + eco.kept;
-            }
-          }
+          await this.proposeEco(doc, productId, payload, variations, stats, true);
         } else {
           bump(stats.skipped, 'stale_version');
         }
@@ -343,6 +336,25 @@ export class MssCatalogService {
         this.logger.warn(`Không ghi được nội dung MSS của sản phẩm ${productId}: ${err instanceof Error ? err.message.slice(0, 200) : err}`);
       }
     }
+  }
+
+  /** Nhãn xanh của bản đã xuất bản thành dòng nháp; lỗi chỉ ghi log (lượt sau thử lại). Tài liệu không đổi thì không đếm lại số nhãn giữ. */
+  private async proposeEco(
+    doc: MssParsedDoc,
+    productId: string,
+    payload: MssEnrichmentPayload,
+    variations: ReadonlyMap<string, string>,
+    stats: MssCatalogRunStats,
+    countKept: boolean,
+  ): Promise<void> {
+    if (doc.state !== 'published' || !payload.ecoFacts?.length) return;
+    const eco = await proposeMssEcoFacts(this.prisma, { productId, pancakeProductId: doc.pancakeProductId, version: doc.version, facts: payload.ecoFacts, variations }).catch((err: unknown) => {
+      this.logger.warn(`Không tạo được nhãn xanh nháp từ MSS cho sản phẩm ${productId}: ${err instanceof Error ? err.message.slice(0, 200) : err}`);
+      return null;
+    });
+    if (!eco) return;
+    if (eco.proposed > 0 || countKept) stats.ecoProposed = (stats.ecoProposed ?? 0) + eco.proposed;
+    if (countKept) stats.ecoKept = (stats.ecoKept ?? 0) + eco.kept;
   }
 
   /** `pancake_variation_id` → id biến thể Tubu theo sản phẩm, chỉ hỏi khi lô có câu chuyện hoặc nhãn xanh cần đổi mã. */

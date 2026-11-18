@@ -208,6 +208,12 @@ describe('giới hạn thân request (BAOMAT-01, BAOMAT-03, BAOMAT-08)', () => {
         expect((await post(path, { pad: 'x'.repeat(1_100_000) })).status).toBe(413);
       },
     );
+    it('lô MSS đẩy sang 28 000 nút (20 tài liệu đầy đủ) qua; route MSS khác vẫn trần 20 000 nút; quá 100 000 nút thì 400', async () => {
+      const docs = (n: number) => ({ sync_id: 'sync-0001', products: Array.from({ length: 20 }, () => ({ images: new Array(n).fill(0) })) });
+      expect((await post('/api/integrations/mss/catalog-sync', docs(1_400))).status).toBe(200);
+      expect((await post('/api/internal/mss/order-events', docs(1_400))).status).toBe(400);
+      expect((await post('/api/integrations/mss/catalog-sync', docs(6_000))).status).toBe(400);
+    });
     it('route MSS khác (cả tên /api/internal/mss) vẫn trần 64 KB của webhook; đường con của catalog-sync không được trần 1 MB', async () => {
       const big = { pad: 'x'.repeat(65 * 1024) };
       expect((await post('/api/internal/mss/order-events', big)).status).toBe(413);

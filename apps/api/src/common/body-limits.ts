@@ -56,6 +56,8 @@ export const MAX_ARRAY_LENGTH = 500;
 export const MAX_BODY_NODES = 6_000;
 /** Payload webhook do bên ngoài định dạng nên trần nới hơn (đơn Pancake nhiều dòng hàng + lịch sử). */
 export const MAX_WEBHOOK_BODY_NODES = 20_000;
+/** Lô MSS đẩy sang (20 tài liệu sản phẩm đủ ảnh, thành phần, câu chuyện, nhãn xanh, mỗi tài liệu tới ~1 500 nút, cộng 200 dòng tồn). */
+export const MAX_MSS_SYNC_BODY_NODES = 100_000;
 /** Riêng webhook Pancake (thân tới 10 MB, chỉ nhận sau khi qua token). */
 export const MAX_PANCAKE_WEBHOOK_BODY_NODES = 200_000;
 export const MAX_WEBHOOK_BODY_DEPTH = 64;
@@ -212,7 +214,7 @@ export function createBodyParsers(accessSecret: string, refreshTtlDays = 30): Re
   const specs: Record<BodyTier, { limit: string; inflate: boolean; verify: ReturnType<typeof rawGuard> }> = {
     default: { limit: DEFAULT_BODY_LIMIT, inflate: false, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) },
     webhook: { limit: WEBHOOK_BODY_LIMIT, inflate: true, verify: keepRawBody(rawGuard(MAX_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH)) },
-    mssSync: { limit: MSS_CATALOG_SYNC_BODY_LIMIT, inflate: true, verify: keepRawBody(rawGuard(MAX_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH)) },
+    mssSync: { limit: MSS_CATALOG_SYNC_BODY_LIMIT, inflate: true, verify: keepRawBody(rawGuard(MAX_MSS_SYNC_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH)) },
     pancake: { limit: PANCAKE_WEBHOOK_BODY_LIMIT, inflate: true, verify: rawGuard(MAX_PANCAKE_WEBHOOK_BODY_NODES, MAX_WEBHOOK_BODY_DEPTH) },
     large: { limit: LARGE_BODY_LIMIT, inflate: false, verify: rawGuard(MAX_BODY_NODES, MAX_BODY_DEPTH) },
   };
@@ -235,6 +237,7 @@ const DEFAULT_SHAPE: BodyShapeLimits = { depth: MAX_BODY_DEPTH, keys: MAX_KEYS_P
 /** Webhook do bên ngoài định dạng và body của nó không qua ValidationPipe: chỉ giữ trần tổng nút, để 1 đơn lớn không bị 400 rồi mất đồng bộ. */
 const WEBHOOK_SHAPE: BodyShapeLimits = { depth: MAX_WEBHOOK_BODY_DEPTH, keys: MAX_WEBHOOK_BODY_NODES, array: MAX_WEBHOOK_BODY_NODES };
 const PANCAKE_SHAPE: BodyShapeLimits = { depth: MAX_WEBHOOK_BODY_DEPTH, keys: MAX_PANCAKE_WEBHOOK_BODY_NODES, array: MAX_PANCAKE_WEBHOOK_BODY_NODES };
+const MSS_SYNC_SHAPE: BodyShapeLimits = { depth: MAX_WEBHOOK_BODY_DEPTH, keys: MAX_MSS_SYNC_BODY_NODES, array: MAX_MSS_SYNC_BODY_NODES };
 
 /** Duyệt lặp (không đệ quy: thân lồng sâu không làm tràn stack). Trả vi phạm đầu tiên hoặc null. */
 export function inspectBody(body: unknown, maxNodes: number, limits: BodyShapeLimits = DEFAULT_SHAPE): Violation | null {
@@ -282,9 +285,11 @@ export const requestInputGuard: RequestHandler = (req: Request, res: Response, n
   if (NUL_IN_URL.test(req.url)) return reject(res, 400, NUL_CHAR_MESSAGE);
   const violation = PANCAKE_WEBHOOK_ROUTE.test(req.path)
     ? inspectBody(req.body, MAX_PANCAKE_WEBHOOK_BODY_NODES, PANCAKE_SHAPE)
-    : WEBHOOK_ROUTE.test(req.path) || MSS_INTEGRATION_ROUTE.test(req.path)
-      ? inspectBody(req.body, MAX_WEBHOOK_BODY_NODES, WEBHOOK_SHAPE)
-      : inspectBody(req.body, MAX_BODY_NODES);
+    : MSS_CATALOG_SYNC_ROUTE.test(req.path)
+      ? inspectBody(req.body, MAX_MSS_SYNC_BODY_NODES, MSS_SYNC_SHAPE)
+      : WEBHOOK_ROUTE.test(req.path) || MSS_INTEGRATION_ROUTE.test(req.path)
+        ? inspectBody(req.body, MAX_WEBHOOK_BODY_NODES, WEBHOOK_SHAPE)
+        : inspectBody(req.body, MAX_BODY_NODES);
   if (violation === 'nul') return reject(res, 400, NUL_CHAR_MESSAGE);
   if (violation === 'complex') return reject(res, 400, BODY_TOO_COMPLEX_MESSAGE);
   next();

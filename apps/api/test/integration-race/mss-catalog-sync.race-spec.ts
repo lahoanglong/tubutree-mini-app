@@ -10,6 +10,7 @@ import { RestockAlertsDispatcher } from '../../src/modules/restock-alerts/restoc
 import type { MssCatalogService } from '../../src/modules/integrations/mss/catalog/mss-catalog.service';
 import type { MssHealthService } from '../../src/modules/integrations/mss/mss-health.service';
 import { parseCatalogSyncBody } from '../../src/modules/integrations/mss-catalog-sync/catalog-sync-body';
+import { MSS_STOCK_TRANSIT_MS } from '../../src/modules/integrations/mss-catalog-sync/catalog-sync-stock';
 import { CatalogSyncService } from '../../src/modules/integrations/mss-catalog-sync/catalog-sync.service';
 import { createUser, deleteItData, randCode, uniquePhone, warmPool } from './helpers';
 
@@ -62,7 +63,9 @@ describe('MSS đẩy tồn + báo hàng về (real Postgres)', () => {
       stock: lines.map((l) => ({ pancake_variation_id: l.pid, stock: l.stock, as_of: l.asOf.toISOString() })),
     });
     if (!parsed.ok) throw new Error(parsed.error);
-    return sync.receive(parsed.value);
+    // Đồng hồ MSS khớp Tubu, ký đúng lúc nhận: mốc đọc = as_of − bù đường truyền.
+    const t = new Date();
+    return sync.receive({ ...parsed.value, signedAt: t }, t);
   }
 
   beforeAll(async () => {
@@ -165,7 +168,7 @@ describe('MSS đẩy tồn + báo hàng về (real Postgres)', () => {
     const order = [7, 2, 11, 0, 5, 9, 3, 10, 1, 8, 4, 6];
     await Promise.all(order.map((i) => push([{ pid: v.pancakeId, stock: 100 + i, asOf: new Date(base + i * 1_000) }])));
     const row = await prisma.variation.findUniqueOrThrow({ where: { id: v.variationId }, select: { stock: true, pancakeStock: true, pancakeStockSyncReadAt: true } });
-    expect(row).toEqual({ stock: 111, pancakeStock: 111, pancakeStockSyncReadAt: new Date(base + 11_000) });
+    expect(row).toEqual({ stock: 111, pancakeStock: 111, pancakeStockSyncReadAt: new Date(base + 11_000 - MSS_STOCK_TRANSIT_MS) });
   });
 
   it('cờ mss.stock_sync_enabled tắt: không ghi tồn, không gọi lượt báo', async () => {

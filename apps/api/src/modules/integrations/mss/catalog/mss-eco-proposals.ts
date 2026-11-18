@@ -28,6 +28,9 @@ export function mssEcoSourceNote(pancakeProductId: string, version: number, note
 export async function proposeMssEcoFacts(db: EcoDb, input: MssEcoProposalInput): Promise<{ proposed: number; kept: number }> {
   let proposed = 0;
   let kept = 0;
+  const have = new Set(
+    (await db.productEcoFact.findMany({ where: { productId: input.productId }, select: { variationId: true, kind: true } })).map((r) => `${r.variationId ?? ''}|${r.kind}`),
+  );
   for (const f of input.facts) {
     if (!isEcoFactKind(f.kind)) continue;
     const variationId = f.variationId === null ? null : (input.variations.get(f.variationId) ?? undefined);
@@ -36,11 +39,12 @@ export async function proposeMssEcoFacts(db: EcoDb, input: MssEcoProposalInput):
       kept += 1;
       continue;
     }
-    const exists = await db.productEcoFact.findFirst({ where: { productId: input.productId, variationId, kind: f.kind }, select: { id: true } });
-    if (exists) {
+    const key = `${variationId ?? ''}|${f.kind}`;
+    if (have.has(key)) {
       kept += 1;
       continue;
     }
+    have.add(key);
     try {
       await db.productEcoFact.create({
         data: {

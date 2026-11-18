@@ -35,6 +35,7 @@ function setup(opts: { respond?: () => unknown; configured?: boolean; product?: 
   const prisma = {
     product: { findUnique: jest.fn().mockResolvedValue(opts.product === undefined ? { slug: 'nuoc-giat' } : opts.product) },
     category: { findMany: jest.fn().mockResolvedValue(opts.categories ?? [{ id: 'cat-giat' }]) },
+    variation: { findMany: jest.fn().mockResolvedValue([{ id: 'tubu-v1', pancakeId: 'pv1' }]) },
   } as unknown as PrismaService;
   const getBySlug = jest.fn(async (slug: string, o: { enrichment: { title: string | null } }) => ({ slug, name: o.enrichment.title ?? 'Tubu', basePrice: 195_000 }));
   const moduleRef = { get: jest.fn(() => ({ getBySlug })) } as unknown as ModuleRef;
@@ -50,6 +51,21 @@ afterAll(() => {
 });
 
 describe('MssPreviewService.product', () => {
+  it('câu chuyện nháp: mã biến thể Pancake đổi sang id biến thể Tubu như lượt kéo, mã không có trên Tubu thì bỏ', async () => {
+    const story_config = {
+      version: 1,
+      enabled: true,
+      scenes: [{ kind: 'variant_arc', items: [{ variationId: 'pv1', label: '2L', ambient: 'leaf' }, { variationId: 'pv9', label: '5L', ambient: 'sky' }] }],
+    };
+    const f = setup({ respond: () => draft('a1', { story_config }) });
+    await f.svc.product(token());
+    const passed = f.getBySlug.mock.calls[0]?.[1].enrichment as unknown as { storyConfig: { scenes: Array<{ items: unknown[] }> } };
+    expect(passed.storyConfig.scenes[0]!.items).toEqual([
+      { variationId: 'tubu-v1', label: '2L', ambient: 'leaf' },
+      { label: '5L', ambient: 'sky' },
+    ]);
+  });
+
   it('token đúng: lấy bản nháp từ MSS, ghép lên PDP Tubu (không lưu), kèm phiên bản và hạn', async () => {
     const f = setup();
     const t = token();

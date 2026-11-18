@@ -156,7 +156,8 @@ export function mergeEnrichment<T extends EnrichableProduct>(product: T, e: MssE
   if (e.metaTitle !== null) out.metaTitle = e.metaTitle;
   if (e.metaDesc !== null) out.metaDesc = e.metaDesc;
   if (e.categoryIds !== null) out.categoryIds = [...e.categoryIds];
-  if (e.storyConfig) out.storyConfig = e.storyConfig as unknown as Prisma.JsonValue;
+  // Câu chuyện MSS đang tắt thì giữ câu chuyện admin soạn trên Tubu, không ẩn nó.
+  if (e.storyConfig?.enabled) out.storyConfig = e.storyConfig as unknown as Prisma.JsonValue;
   return out;
 }
 

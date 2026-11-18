@@ -28,6 +28,11 @@ export interface CatalogSyncStockLine {
 export interface CatalogSyncEnvelope {
   syncId: string;
   sentAt: Date | null;
+  /**
+   * Lúc MSS ký yêu cầu, giờ máy chủ MSS: lấy từ `X-Mss-Timestamp` đã qua guard, làm tròn lên cuối giây đó. Cùng đồng hồ với `as_of`
+   * nên tuổi của số tồn (`signedAt − as_of`) không lệch theo đồng hồ hai bên. Gửi lại thì MSS ký lại, mốc này đổi theo.
+   */
+  signedAt: Date;
   products: unknown[];
   stock: CatalogSyncStockLine[];
   /** Dòng tồn sai dạng (thiếu mã, số âm, số lẻ, giờ hỏng), bị bỏ. */
@@ -36,7 +41,16 @@ export interface CatalogSyncEnvelope {
   bundles: number;
 }
 
-export type CatalogSyncParse = { ok: true; value: CatalogSyncEnvelope } | { ok: false; error: 'invalid_body' | 'too_many_products' | 'too_many_stock' | 'empty' };
+/** Phần đọc từ thân; `signedAt` do controller thêm từ header đã ký. */
+export type CatalogSyncBody = Omit<CatalogSyncEnvelope, 'signedAt'>;
+
+export type CatalogSyncParse = { ok: true; value: CatalogSyncBody } | { ok: false; error: 'invalid_body' | 'too_many_products' | 'too_many_stock' | 'empty' };
+
+/** `X-Mss-Timestamp` (giây Unix, giờ MSS) thành cận trên của lúc ký: cuối giây đó, để tuổi số tồn không bị tính thiếu. */
+export function mssSignedAt(timestamp: unknown): Date | null {
+  if (typeof timestamp !== 'string' || !/^\d{1,12}$/.test(timestamp)) return null;
+  return new Date(Number(timestamp) * 1000 + 999);
+}
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 

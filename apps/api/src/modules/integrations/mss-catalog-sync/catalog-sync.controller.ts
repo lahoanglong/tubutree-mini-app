@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, HttpCode, Post } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Headers, HttpCode, Post } from '@nestjs/common';
 import { SkipThrottle } from '@nestjs/throttler';
 import { MssSignedRoute } from '../mss/mss-inbound.guard';
-import { parseCatalogSyncBody } from './catalog-sync-body';
+import { MSS_TIMESTAMP_HEADER } from '../mss/mss-signer';
+import { mssSignedAt, parseCatalogSyncBody } from './catalog-sync-body';
 import { CatalogSyncService, type CatalogSyncReply } from './catalog-sync.service';
 
 /**
@@ -18,9 +19,11 @@ export class CatalogSyncController {
 
   @Post('catalog-sync')
   @HttpCode(200)
-  async receive(@Body() body: unknown): Promise<CatalogSyncReply> {
+  async receive(@Body() body: unknown, @Headers(MSS_TIMESTAMP_HEADER) timestamp?: string): Promise<CatalogSyncReply> {
     const parsed = parseCatalogSyncBody(body);
     if (!parsed.ok) throw new BadRequestException({ error: parsed.error, message: parsed.error });
-    return this.sync.receive(parsed.value);
+    const signedAt = mssSignedAt(timestamp);
+    if (!signedAt) throw new BadRequestException({ error: 'invalid_body', message: 'invalid_body' });
+    return this.sync.receive({ ...parsed.value, signedAt });
   }
 }
