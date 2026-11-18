@@ -77,6 +77,8 @@ export const SHOP_COPY: Record<string, string> = {
 
   // Bán chạy nhất
   'rank.title': 'Bán chạy nhất',
+  // Kệ Bán chạy nhất khi chưa đủ số bán thật: chỉ món admin ghim ở tab Xếp kệ, không xếp hạng, không dòng thước đo.
+  'rank.curatedTitle': 'Tubu chọn cho bạn',
   'rank.basis': 'Theo lượt bán 30 ngày qua',
   'rank.basisAll': 'Theo tổng lượt bán',
   'rank.tabAll': 'Tất cả',

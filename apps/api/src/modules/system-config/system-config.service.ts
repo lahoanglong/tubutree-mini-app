@@ -235,6 +235,9 @@ export class SystemConfigService {
     'catalog.loved_min_rating': { min: 0, max: 5, note: 'điểm đánh giá trung bình tối thiểu (4.8 = 4,8 sao)' },
     'catalog.loved_min_reviews': { min: 0, max: 100_000, note: 'số đánh giá tối thiểu', integer: true },
     'catalog.loved_min_sold': { min: 0, max: 10_000_000, note: 'tổng đã bán tối thiểu', integer: true },
+    // Ngưỡng kệ Bán chạy chọn tay (merch-shelf-reader.ts): khoảng khớp sanitizeCount; ngoài khoảng thì phía đọc cũng lùi về mặc định.
+    'merch.best_seller_min_products': { min: 1, max: 1000, note: 'số sản phẩm có lượt bán tối thiểu', integer: true },
+    'merch.best_seller_min_sold': { min: 1, max: 1_000_000, note: 'lượt bán 30 ngày tối thiểu mỗi sản phẩm', integer: true },
     // ADMINOPS-3 (vòng 3, R3-UI-4): các khoá số còn lại nhận số âm, số khổng lồ hay số thực nên "đã lưu" mà tính năng chạy sai
     // (bán kính chấm công âm, ô vườn mục tiêu âm, giới hạn quay vô hạn). Phía đọc không kẹp lại, nên chặn ngay lúc ghi.
     // config-numeric-ranges.spec.ts buộc mọi khoá số được seed phải có luật ở đây hoặc ở admin-config-rules.

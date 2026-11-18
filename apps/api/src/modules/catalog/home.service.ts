@@ -73,6 +73,8 @@ export class HomeService {
     @Optional() private readonly mssEvents?: MssOrderEventRecorder,
   ) {
     this.bundles = new BundlesService(prisma, catalog, config);
+    // Kệ Bán chạy nhất và Gợi ý của khối gộp mang thứ tự Xếp kệ: admin lưu kệ thì dựng lại ngay, không chờ hết 20 giây.
+    catalog.onMerchShelvesChanged(() => this.invalidateStatic());
   }
 
   private async block<T>(name: string, run: () => Promise<T>, deadline: number = Date.now() + BLOCK_TIMEOUT_MS): Promise<Block<T>> {

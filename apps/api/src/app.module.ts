@@ -55,6 +55,7 @@ import { StaffModule } from './modules/staff/staff.module';
 import { FlashSaleModule } from './modules/flash-sale/flash-sale.module';
 import { CampaignsModule } from './modules/campaigns/campaigns.module';
 import { BundlesModule } from './modules/bundles/bundles.module';
+import { MerchShelvesModule } from './modules/merch-shelves/merch-shelves.module';
 import { ContentKitModule } from './modules/content-kit/content-kit.module';
 import { AcademyModule } from './modules/academy/academy.module';
 import { CskhModule } from './modules/cskh/cskh.module';
@@ -126,6 +127,7 @@ import { throttlerOptions } from './common/throttle/throttle.config';
     FlashSaleModule,
     CampaignsModule,
     BundlesModule,
+    MerchShelvesModule,
     ContentKitModule,
     AcademyModule,
     CskhModule,

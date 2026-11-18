@@ -46,6 +46,14 @@ import {
   type MssCardOverride,
   type MssEnrichmentPayload,
 } from './mss-enrichment';
+import { MerchShelfReader } from '../merch-shelves/merch-shelf-reader';
+import { BEST_SELLERS_SHELF, HOME_FEATURED_SHELF, categoryShelfKey, pinFirst } from '../merch-shelves/merch-shelf';
+
+/**
+ * Ghép món ghim của Xếp kệ vào một lần gọi `/products` (cờ `merch.shelves_enabled`): `lead` đặt món ghim lên đầu thứ tự mặc định, `curated` đặt các món ghim
+ * của kệ `best_sellers` (đánh dấu) lên đầu bảng Bán chạy nhất khi chưa đủ số bán. Không có ghim thì không có kế hoạch, danh sách như cũ.
+ */
+type MerchPlan = { mode: 'lead' | 'curated'; pins: string[] };
 
 /**
  * Ai giao sản phẩm (D4), cho trang chi tiết: hàng gian hàng tự giao đi kiện riêng với phí giao/ngưỡng miễn phí của gian
@@ -269,13 +277,59 @@ export class CatalogService {
     createdAt: true,
   } satisfies Prisma.ReviewSelect;
 
+  private readonly merch: MerchShelfReader;
+  private readonly merchListeners = new Set<() => void>();
+
   constructor(
     private readonly prisma: PrismaService,
     @Optional() private readonly config?: SystemConfigService,
     @Optional() private readonly mssFlags?: MssFlagsService,
     @Optional() private readonly eco?: EcoFactsReader,
     @Optional() private readonly searchMatch?: SearchMatchService,
-  ) {}
+  ) {
+    this.merch = new MerchShelfReader(prisma, config);
+  }
+
+  /** Nơi giữ bản nhớ có món của kệ (khối Trang chủ) đăng ký để bị xoá cùng lúc khi admin lưu kệ. */
+  onMerchShelvesChanged(listener: () => void): void {
+    this.merchListeners.add(listener);
+  }
+
+  /** Admin vừa lưu kệ: bỏ món ghim và thứ hạng đã nhớ (gồm bảng Bán chạy nhất 60 giây) trên instance này, rồi báo nơi đã đăng ký. */
+  invalidateMerchShelves(): void {
+    this.merch.invalidate();
+    this.rankCache.clear();
+    for (const listener of this.merchListeners) listener();
+  }
+
+  /** Trạng thái Xếp kệ cho tab admin: cờ và bảng Bán chạy nhất đang theo số bán thật hay chưa. */
+  async merchStatus(): Promise<{ enabled: boolean; curated: boolean }> {
+    const [enabled, curated] = await Promise.all([this.merch.enabled(), this.merch.isCurated()]);
+    return { enabled, curated };
+  }
+
+  /**
+   * Kệ áp cho một lần gọi `/products`: chỉ thứ tự mặc định (không `sort`, không tìm chữ) không lọc nhãn/đối tượng/điểm/slug (`home_featured`, hay
+   * `category:<slug>` khi lọc danh mục), và `best_seller_30d` khi chưa đủ số bán (`best_sellers`). Bộ lọc giá và còn hàng vẫn áp lên món ghim ở bước ghép.
+   */
+  private async merchPlan(query: ProductQuery): Promise<MerchPlan | null> {
+    if (query.q?.trim() || query.slugs !== undefined || query.brand || query.segment || query.minRating != null) return null;
+    if (query.sort !== undefined && query.sort !== 'best_seller_30d') return null;
+    if (!(await this.merch.enabled())) return null;
+    if (query.sort === 'best_seller_30d') {
+      if (!(await this.merch.isCurated())) return null;
+      const pins = await this.merch.livePins(BEST_SELLERS_SHELF);
+      return pins.length > 0 ? { mode: 'curated', pins } : null;
+    }
+    let key: string = HOME_FEATURED_SHELF;
+    if (query.category) {
+      const slug = (await this.categoriesFlat()).find((c) => c.id === query.category)?.slug;
+      if (!slug) return null;
+      key = categoryShelfKey(slug);
+    }
+    const pins = await this.merch.livePins(key);
+    return pins.length > 0 ? { mode: 'lead', pins } : null;
+  }
 
   /**
    * Cờ `mss.catalog_enrichment_enabled` (và đủ biến MSS): bật thì nội dung bổ sung MSS đã xuất bản thay trường tương ứng lúc đọc. Không
@@ -325,7 +379,7 @@ export class CatalogService {
     const relevance: string[][] = [];
     const text: { match?: TextMatch } = {};
     const where = await this.listWhere(query, relevance, text);
-    const page = await this.listPage(where, query, relevance[0]);
+    const page = await this.listPage(where, query, relevance[0], await this.merchPlan(query));
     return text.match?.corrected ? { ...page, corrected: true, didYouMean: text.match.didYouMean } : page;
   }
 
@@ -333,16 +387,22 @@ export class CatalogService {
    * Trang sản phẩm công khai cho một điều kiện lọc có sẵn: `/products` (bộ lọc của query) và trang thương hiệu (theo nhãn) dùng chung
    * cách xếp, phân trang và dựng thẻ, không có đường thứ hai.
    */
-  private async listPage(where: Prisma.ProductWhereInput, query: Pick<ProductQuery, 'page' | 'limit' | 'sort' | 'minPrice' | 'maxPrice' | 'q' | 'seed'>, relevance?: string[]) {
+  private async listPage(
+    where: Prisma.ProductWhereInput,
+    query: Pick<ProductQuery, 'page' | 'limit' | 'sort' | 'minPrice' | 'maxPrice' | 'q' | 'seed'>,
+    relevance?: string[],
+    merch?: MerchPlan | null,
+  ) {
     const { page, limit, sort } = query;
     const price = priceRange(query.minPrice, query.maxPrice);
     if (relevance && !sort) return this.listByRelevance(where, page, limit, relevance, price);
+    const pins = merch?.mode === 'lead' ? merch.pins : [];
     // Seed ngày chỉ xoay thứ tự mặc định: khách đã chọn cách sắp hay đang tìm chữ thì giữ đúng thứ tự họ yêu cầu.
-    if (query.seed && !sort && !query.q?.trim()) return this.listSeeded(where, page, limit, query.seed, price);
+    if (query.seed && !sort && !query.q?.trim()) return this.listSeeded(where, page, limit, query.seed, price, pins);
     if (sort === 'best_seller') return this.listBestSellers(where, page, limit, price);
-    if (sort === 'best_seller_30d') return this.listBestSellers30d(where, page, limit, price);
+    if (sort === 'best_seller_30d') return merch?.mode === 'curated' ? this.listCurated(where, page, limit, merch.pins, price) : this.listBestSellers30d(where, page, limit, price);
     if (sort === 'price_asc' || sort === 'price_desc') return this.listByStandingPrice(where, page, limit, sort === 'price_asc' ? 'asc' : 'desc', price);
-    if (!sort) return this.listFeatured(where, page, limit, price);
+    if (!sort) return this.listFeatured(where, page, limit, price, pins);
     if (price) return this.listRanked<{ id: string }>(where, page, limit, { id: true }, null, price, [this.orderBy(sort), { id: 'asc' }]);
     const [items, total] = await this.prisma.$transaction([
       this.prisma.product.findMany({
@@ -362,7 +422,7 @@ export class CatalogService {
    * Thứ tự mặc định khi không xoay theo ngày: tầng trưng bày (`merch-rank.ts`: có ảnh và còn hàng trước, chưa ảnh sau, hết hàng cuối),
    * trong tầng thì nổi bật trước, hoà thì id tăng dần như trước. Tầng là biểu thức nên đi đường xếp hạng (nhớ 60 giây) thay vì `orderBy` của DB.
    */
-  private listFeatured(where: Prisma.ProductWhereInput, page: number, limit: number, price?: PriceBounds) {
+  private listFeatured(where: Prisma.ProductWhereInput, page: number, limit: number, price?: PriceBounds, pins: readonly string[] = []) {
     return this.listRanked<{ id: string; isFeatured: boolean } & MerchRankFields>(
       where,
       page,
@@ -376,6 +436,7 @@ export class CatalogService {
       '',
       true,
       true,
+      pins,
     );
   }
 
@@ -383,7 +444,7 @@ export class CatalogService {
    * Thứ tự mặc định xoay theo ngày (`seededOrder`): cùng đường xếp hạng và bộ nhớ 60 giây với Bán chạy, nên cuộn nhiều trang trong ngày
    * không quét lại catalog. Khoá nhớ mang theo `seed` để ngày mới không dùng nhầm thứ tự hôm qua. Xoay trong từng tầng trưng bày.
    */
-  private listSeeded(where: Prisma.ProductWhereInput, page: number, limit: number, seed: string, price?: PriceBounds) {
+  private listSeeded(where: Prisma.ProductWhereInput, page: number, limit: number, seed: string, price?: PriceBounds, pins: readonly string[] = []) {
     return this.listRanked<{ id: string; brandId: string | null } & MerchRankFields>(
       where,
       page,
@@ -397,6 +458,7 @@ export class CatalogService {
       `seed:${seed}`,
       true,
       true,
+      pins,
     );
   }
 
@@ -445,7 +507,7 @@ export class CatalogService {
    * "Bán chạy nhất" theo cửa sổ 30 ngày (Q18): `soldApp30d` giảm dần, hoà thì tổng đã bán (gồm số nhập tay) giảm dần, hoà nữa id tăng dần.
    * Cùng đường xếp hạng và bộ nhớ 60 giây với `listBestSellers`; thứ hạng không phụ thuộc giá nên không đọc phân loại hay Giờ vàng.
    */
-  private listBestSellers30d(where: Prisma.ProductWhereInput, page: number, limit: number, price?: PriceBounds) {
+  private listBestSellers30d(where: Prisma.ProductWhereInput, page: number, limit: number, price?: PriceBounds, pins: readonly string[] = []) {
     return this.listRanked<{ id: string; soldApp30d: number; soldApp: number; soldExternal: number }>(
       where,
       page,
@@ -455,6 +517,11 @@ export class CatalogService {
       price,
       undefined,
       false,
+      undefined,
+      '',
+      true,
+      false,
+      pins,
     );
   }
 
@@ -494,18 +561,44 @@ export class CatalogService {
     cacheTag = '',
     cacheable = true,
     merch = false,
+    pins: readonly string[] = [],
   ) {
     const rankedIds = await this.rankedIds<T>(where, select, compare, price, orderBy, needsPrice, arrange, cacheTag, cacheable, merch);
+    // Món ghim (Xếp kệ) chỉ chiếm đầu trang 1; phần còn lại giữ nguyên thứ tự đã xếp và đã nhớ, tổng số món không đổi.
+    const ids = pins.length > 0 ? pinFirst(rankedIds, pins, limit) : rankedIds;
+    return paginated(await this.pageCards(where, ids, page, limit), page, limit, ids.length);
+  }
+
+  /** Thẻ của trang `page` trong danh sách id đã xếp, giữ thứ tự; sản phẩm vừa ẩn/gỡ bị loại vì thẻ luôn đọc lại với `where`. */
+  private async pageCards(where: Prisma.ProductWhereInput, ids: readonly string[], page: number, limit: number) {
     const { skip, take } = skipTake(page, limit);
-    const pageIds = rankedIds.slice(skip, skip + take);
-    if (pageIds.length === 0) return paginated([], page, limit, rankedIds.length);
+    const pageIds = ids.slice(skip, skip + take);
+    if (pageIds.length === 0) return [];
     const rows = await this.prisma.product.findMany({
       where: { AND: [where, { id: { in: pageIds } }] },
       select: CARD_PRODUCT_SELECT,
     });
     const byId = new Map(rows.map((r) => [r.id, r]));
-    const ordered = pageIds.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p));
-    return paginated(await this.toCards(ordered), page, limit, rankedIds.length);
+    return this.toCards(pageIds.map((id) => byId.get(id)).filter((p): p is NonNullable<typeof p> => Boolean(p)));
+  }
+
+  /**
+   * "Tubu chọn cho bạn" khi chưa đủ số bán: các món ghim của kệ `best_sellers` còn qua bộ lọc của khách (danh mục, giá, còn hàng) đứng đầu trang 1 theo thứ tự ghim,
+   * mỗi thẻ mang `curated: true`; sau đó là bảng Bán chạy nhất thường, không dấu. Kệ Trang chủ, kệ Danh mục và trang Bán chạy nhất chỉ vẽ thẻ có dấu; nơi khác dùng
+   * chung danh sách này (Mua xoay vòng, Story, dải freeship, sắp xếp Bán chạy ở Danh mục) và bản app cũ chỉ thấy thứ tự đổi, không bị thu về vài món ghim.
+   */
+  private async listCurated(where: Prisma.ProductWhereInput, page: number, limit: number, pins: readonly string[], price?: PriceBounds) {
+    const res = await this.listBestSellers30d(where, page, limit, price, pins);
+    const pinned = new Set(pins);
+    // `pinFirst` chỉ đặt món ghim thành một khối liền ở đầu trang 1: món ghim gặp lại sau khối đó là thứ hạng thường, không đánh dấu.
+    let leading = page === 1;
+    return {
+      ...res,
+      data: res.data.map((c) => {
+        leading = leading && pinned.has(c.id);
+        return leading ? { ...c, curated: true as const } : c;
+      }),
+    };
   }
 
   private readonly rankCache = new Map<string, { ids: string[]; expiresAt: number }>();

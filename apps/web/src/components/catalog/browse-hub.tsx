@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
+import { bestSellersHeading, curatedShelfItems } from '@tubutree/app-core/browse/best-sellers';
 import { hubBestSellers } from '@tubutree/app-core/browse/hub';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { shelf } from '@tubutree/app-core/merch/shelves';
@@ -39,9 +40,12 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, br
     retry: false,
     ...(initialBestSellers ? { initialData: initialBestSellers } : {}),
   });
-  const items = hubBestSellers(q.data);
+  const ranked = hubBestSellers(q.data);
+  // Chưa đủ số bán mà admin đã ghim kệ: "Tubu chọn cho bạn", chỉ món ghim, không số hạng (xem `bestSellersHeading`).
+  const heading = bestSellersHeading(ranked);
+  const items = curatedShelfItems(ranked, shelf('browse.bestSellers').minItems);
   const showBestSellers = q.isLoading || items.length > 0;
-  const title = fillCopy('rank.title');
+  const title = heading.title;
   // Hub không lọc theo danh mục, nên trang đích là bảng xếp hạng chung (cùng thước đo 30 ngày với kệ).
   const seeAll = seeAllHref('browse.bestSellers', 'web');
   return (
@@ -51,7 +55,7 @@ export function BrowseHub({ entries, categoriesLoading, placeholderCount = 4, br
       {showBestSellers && (
         <Section id="browse-best-sellers" label={title}>
           <SectionHeader title={title} action={seeAll ? { to: seeAll } : undefined} />
-          <ProductRail items={items} variant="rank" rankFrom={1} label={title} loading={q.isLoading} skeletonCount={max} priorityCount={2} shelf="browseHub" />
+          <ProductRail items={items} variant="rank" rankFrom={heading.ranked ? 1 : undefined} label={title} loading={q.isLoading} skeletonCount={max} priorityCount={2} shelf="browseHub" />
         </Section>
       )}
       <BrandGrid brands={brands} onSelect={onPickBrand} />

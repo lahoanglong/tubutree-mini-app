@@ -68,6 +68,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
 
   // Bán chạy nhất
   'rank.title': 16,
+  'rank.curatedTitle': 20,
   'rank.basis': 28,
   'rank.basisAll': 28,
   'rank.tabAll': 12,

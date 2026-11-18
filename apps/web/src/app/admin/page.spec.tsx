@@ -49,6 +49,7 @@ beforeAll(async () => {
     import('@/components/admin/merchant-fulfilment-tab'),
     import('@/components/admin/campaigns-tab'),
     import('@/components/admin/bundles-tab'),
+    import('@/components/admin/merch-shelves/merch-shelves-tab'),
     import('@/components/admin/notification-templates-tab'),
     import('@/components/admin/reports-tab'),
     import('./analytics-tab'),
@@ -536,7 +537,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
       'Cài đặt',
     ]);
     const items = [...nav.querySelectorAll('button:not([aria-expanded])')];
-    expect(items).toHaveLength(56);
+    expect(items).toHaveLength(57);
     for (const b of items) expect(b.className).toContain('min-h-[44px]');
     const group = (label: string) =>
       [...nav.querySelector(`[role="group"][aria-label="${label}"]`)!.querySelectorAll('button:not([aria-expanded])')].map(navLabel);
@@ -545,6 +546,7 @@ describe('admin/page — khung, đăng nhập, thanh tab', () => {
     );
     expect(group('Bán hàng')).toContain('Sản phẩm');
     expect(group('Bán hàng')).toContain('Kiểm tra catalog');
+    expect(group('Bán hàng')).toContain('Xếp kệ');
     expect(group('Hay dùng')).toEqual(['Hôm nay', 'Đơn hàng', 'Sản phẩm', 'Người dùng', 'Chat CSKH', 'Cộng đồng', 'Mã giảm giá', 'Đổi rác', 'Gian hàng', 'Duyệt SP đối tác', 'Đại lý']);
     expect(group('Khuyến mãi và điểm')).toEqual(['Mã giảm giá', 'Giờ vàng', 'Tích điểm tại quầy', 'Tích điểm đơn sàn', 'Chiến dịch', 'Combo và mua kèm']);
     expect(group('Đổi rác và game')).toEqual(['Đổi rác', 'Nhiệm vụ']);
@@ -3243,6 +3245,7 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       'Mã giảm giá',
       'Đổi rác',
       'Báo cáo',
+      'Xếp kệ',
       'Giờ vàng',
       'Chiến dịch',
       'Combo và mua kèm',
@@ -3315,6 +3318,36 @@ describe('admin/page — nhóm việc MARKETING và KE_TOAN (D1-05)', () => {
       const cskh = await mount();
       expect(navItems(cskh.container)).not.toContain('Combo và mua kèm');
       expect(cskh.container.textContent).not.toContain('Chưa có combo hay mua kèm nào');
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('tab Xếp kệ: nhân viên MARKETING mở được bằng ?tab=merchShelves (tải kệ Trang chủ từ /admin/merch-shelves); nhân viên CSKH thì không thấy mục', async () => {
+    const api = mockFetch({
+      '/admin/merch-shelves/shelf': { body: { key: 'home_featured', label: 'Trang chủ: Gợi ý hôm nay', version: 'v0', maxPins: 12, status: { enabled: false, curated: false }, pins: [] } },
+      '/admin/merch-shelves/empty-entrances': { body: { checkedAt: '2026-11-18T00:00:00.000Z', entrances: [] } },
+      '/admin/merch-shelves': { body: { status: { enabled: false, curated: false }, shelves: [] } },
+    });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    try {
+      window.history.replaceState(null, '', '/admin?tab=merchShelves');
+      asStaff(['MARKETING']);
+      const marketing = await mount();
+      expect(navItems(marketing.container)).toContain('Xếp kệ');
+      expect(marketing.container.textContent).toContain('Kệ chưa ghim món nào');
+      expect(api.calls.some((c) => c.url.includes('/admin/merch-shelves/shelf?key=home_featured'))).toBe(true);
+      marketing.unmount();
+      mounted = [];
+      const merchCalls = () => api.calls.filter((c) => c.url.includes('/admin/merch-shelves')).length;
+      const before = merchCalls();
+
+      window.history.replaceState(null, '', '/admin?tab=merchShelves');
+      asStaff(['CSKH']);
+      const cskh = await mount();
+      expect(navItems(cskh.container)).not.toContain('Xếp kệ');
+      expect(cskh.container.textContent).not.toContain('Kệ chưa ghim món nào');
+      expect(merchCalls()).toBe(before);
     } finally {
       vi.unstubAllGlobals();
     }

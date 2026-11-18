@@ -1597,7 +1597,13 @@ describe('CatalogService — thẻ: fulfiller và isLoved', () => {
     const { svc } = setup([lovedRow('a', { ratingAvg: 4.5, reviewCount: 5, soldExternal: 6, soldApp: 4 }), lovedRow('b', { ratingAvg: 4.4, reviewCount: 5, soldApp: 10 })], { config });
     const r = await svc.list({ page: 1, limit: 10 });
     expect(r.data.map((c) => c.isLoved)).toEqual([true, false]);
-    expect(config.get.mock.calls.map((c) => c[0]).sort()).toEqual(['catalog.loved_min_rating', 'catalog.loved_min_reviews', 'catalog.loved_min_sold']);
+    // Danh sách mặc định còn đọc cờ Xếp kệ (merch.shelves_enabled); phép so này chỉ chốt ba khoá ngưỡng.
+    expect(
+      config.get.mock.calls
+        .map((c) => c[0])
+        .filter((k) => k !== 'merch.shelves_enabled')
+        .sort(),
+    ).toEqual(['catalog.loved_min_rating', 'catalog.loved_min_reviews', 'catalog.loved_min_sold']);
   });
 
   it('ngưỡng cấu hình hỏng (chuỗi) → dùng mặc định cho đúng khoá đó, không biến mọi thẻ thành Được yêu thích', async () => {

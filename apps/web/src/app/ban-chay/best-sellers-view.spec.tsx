@@ -102,6 +102,21 @@ describe('BestSellersView — tiêu đề, tab, hạng', () => {
     expect(productCalls()).toEqual([{ sort: 'best_seller_30d', limit: 20, page: 1 }]);
   });
 
+  it('kệ chọn tay (món ghim mang dấu curated đứng đầu, sau là xếp hạng thường): h1 "Tubu chọn cho bạn", chỉ món ghim theo thứ tự ghim, không số hạng, không dòng thước đo, không phân trang', async () => {
+    const pins = [product(7), product(3)].map((p) => ({ ...p, curated: true }));
+    const organic = Array.from({ length: 18 }, (_, i) => product(40 + i));
+    routes['/products'] = () => ({ data: [...pins, ...organic], meta: { page: 1, limit: 20, total: 45 } });
+    const { container } = mount();
+    await flush();
+    expect(container.querySelector('h1')!.textContent).toBe('Tubu chọn cho bạn');
+    expect(ranks(container)).toEqual([]);
+    expect(container.textContent).not.toContain('Theo lượt bán 30 ngày qua');
+    expect(container.textContent!.indexOf('Sản phẩm 7')).toBeLessThan(container.textContent!.indexOf('Sản phẩm 3'));
+    expect(container.textContent).not.toContain('Sản phẩm 40');
+    expect(container.textContent).not.toContain('Xem thêm');
+    expect(container.querySelector('a[href*="page=2"]')).toBeNull();
+  });
+
   it('từ md hàng tab dính rộng bằng cả khung trang cộng đệm (lùi đúng đệm md 24px) để nền che bóng thẻ tràn ra mép phải khi cuộn; điện thoại giữ lùi 16px', async () => {
     const { container } = mount();
     await flush();

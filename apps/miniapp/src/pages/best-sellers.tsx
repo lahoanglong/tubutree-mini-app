@@ -3,7 +3,7 @@ import { Page } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
 import { useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery } from '@tanstack/react-query';
-import { BEST_SELLERS_ALL_KEY, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersBasisCopy, bestSellersRankFrom } from '@tubutree/app-core/browse/best-sellers';
+import { BEST_SELLERS_ALL_KEY, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersHeading, bestSellersRankFrom, curatedShelfItems } from '@tubutree/app-core/browse/best-sellers';
 import { bestSellersListQuery } from '@tubutree/app-core/queries/browse';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { PullToRefresh } from '../components/pull-to-refresh';
@@ -48,10 +48,13 @@ export default function BestSellersPage() {
   const tabs = categories.isLoading ? null : bestSellerTabs(categories.categories);
   const scope = bestSellerScope(tabs, params.get('category'));
   const tabItems = tabs ?? bestSellerTabs(undefined);
-  const activeLabel = bestSellerPanelLabel(tabs, scope.tab);
 
   const products = useInfiniteQuery(bestSellersListQuery(coreHttp, scope.category));
   const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
+  // Chưa đủ số bán mà admin đã ghim kệ: "Tubu chọn cho bạn", chỉ món ghim, không dòng thước đo, không số hạng, không "Xem thêm" (xem `bestSellersHeading`).
+  const heading = bestSellersHeading(list, products.data?.pages);
+  const shown = curatedShelfItems(list);
+  const activeLabel = bestSellerPanelLabel(tabs, scope.tab, heading.title);
   const { anchorRef: restoreRef } = useScrollRestoration(`best-sellers:${scope.category ?? 'all'}`, list.length > 0);
 
   const pickTab = (key: string) => {
@@ -74,7 +77,7 @@ export default function BestSellersPage() {
           (restoreRef as { current: HTMLDivElement | null }).current = el;
         }}
       />
-      <PageHeader title={fillCopy('rank.title')} subtitle={bestSellersBasisCopy(products.data?.pages)} />
+      <PageHeader title={heading.title} subtitle={heading.subtitle} />
       <div className="sticky-below-back" style={TABS_BAR}>
         <SegmentedTabs scroll label={fillCopy('rank.tabsLabel')} items={tabItems} value={scope.tab} onChange={pickTab} />
       </div>
@@ -92,7 +95,7 @@ export default function BestSellersPage() {
           />
         ) : (
           <>
-            <ProductGrid items={list} variant="rank" rankFrom={bestSellersRankFrom(1)} listSource="best_seller_page" />
+            <ProductGrid items={shown} variant="rank" rankFrom={heading.ranked ? bestSellersRankFrom(1) : undefined} listSource="best_seller_page" />
             {/* Lỗi khi ĐÃ có dữ liệu ("Xem thêm" hoặc làm mới nền thất bại): giữ danh sách, báo và thử lại tại chỗ. */}
             {products.isError && (
               <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, flexWrap: 'wrap', paddingTop: 16 }}>
@@ -111,7 +114,7 @@ export default function BestSellersPage() {
                 </Button>
               </div>
             )}
-            {products.hasNextPage && !products.isFetchNextPageError && (
+            {products.hasNextPage && heading.ranked && !products.isFetchNextPageError && (
               <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 16 }}>
                 <Button
                   variant="secondary"

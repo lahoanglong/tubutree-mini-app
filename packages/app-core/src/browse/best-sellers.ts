@@ -41,9 +41,9 @@ export function bestSellerScope(tabs: BestSellerTab[] | null, category: string |
  * Tên của vùng danh sách theo tab đang chọn. Đang lọc một danh mục mà cây chưa về (`tabs = null`) thì chưa biết tên danh mục: dùng tên trang
  * thay vì "Tất cả", vì vùng này đang chỉ chứa món của danh mục đó. Cây đã về thì tên tab (id không có trong cây đã được `bestSellerScope` đưa về "Tất cả").
  */
-export function bestSellerPanelLabel(tabs: BestSellerTab[] | null, tab: string): string {
+export function bestSellerPanelLabel(tabs: BestSellerTab[] | null, tab: string, title: string = fillCopy('rank.title')): string {
   if (tab === BEST_SELLERS_ALL_KEY) return fillCopy('rank.tabAll');
-  if (tabs === null) return fillCopy('rank.title');
+  if (tabs === null) return title;
   return tabs.find((t) => t.key === tab)?.label ?? fillCopy('rank.tabAll');
 }
 
@@ -53,6 +53,49 @@ export function bestSellerPanelLabel(tabs: BestSellerTab[] | null, tab: string):
  */
 export function bestSellersBasisCopy(pages: readonly Partial<BestSellersPage>[] | undefined): string {
   return pages?.some((p) => p.basis === 'total') ? fillCopy('rank.basisAll') : fillCopy('rank.basis');
+}
+
+const isCuratedCard = (p: object): boolean => (p as { curated?: unknown }).curated === true;
+
+/**
+ * Bảng Bán chạy nhất đang là kệ "Tubu chọn cho bạn": khi chưa đủ số bán thật, API đặt các món admin ghim (kệ `best_sellers`) lên đầu trang 1 và đánh dấu
+ * `curated: true` trên từng thẻ đó; phần sau là bảng xếp hạng thường. Dấu nằm trên thẻ (không ở trang) để mọi đường dữ liệu giữ được nó, kể cả nơi chỉ giữ
+ * mảng thẻ (kệ Danh mục) hay đã đảo thứ tự (ảnh trước). API cũ không gửi dấu thì không bao giờ là kệ chọn tay.
+ */
+export function isCuratedShelf(items: readonly object[] | undefined): boolean {
+  return Boolean(items?.some(isCuratedCard));
+}
+
+/**
+ * Thẻ vẽ ở kệ/trang Bán chạy nhất: kệ chọn tay thì chỉ các món ghim (giữ thứ tự), dưới `minItems` món ghim thì không vẽ gì (như kệ thiếu món hôm nay);
+ * không phải kệ chọn tay thì nguyên danh sách.
+ */
+export function curatedShelfItems<T extends object>(items: readonly T[], minItems = 1): T[] {
+  if (!isCuratedShelf(items)) return [...items];
+  const picks = items.filter(isCuratedCard);
+  return picks.length >= minItems ? picks : [];
+}
+
+/** Cơ sở của bảng đang hiện: `days30`/`total` như `BestSellersBasis`, thêm `curated` cho kệ chọn tay. */
+export type BestSellersHeadingBasis = 'days30' | 'total' | 'curated';
+
+export interface BestSellersHeading {
+  basis: BestSellersHeadingBasis;
+  title: string;
+  /** Dòng thước đo dưới tiêu đề; kệ chọn tay không có số bán nên không có dòng này. */
+  subtitle: string | undefined;
+  /** Vẽ số hạng (#1, #2…) hay không: kệ chọn tay không phải bảng xếp hạng. */
+  ranked: boolean;
+}
+
+/**
+ * Tiêu đề, dòng thước đo và có xếp hạng hay không của mọi nơi vẽ Bán chạy nhất (kệ Trang chủ, kệ Danh mục, trang Bán chạy nhất; web và Mini).
+ * `items` là các thẻ đang hiện; `pages` là các trang đã tải (có `basis`) khi nơi gọi có, để chọn đúng câu thước đo như `bestSellersBasisCopy`.
+ */
+export function bestSellersHeading(items: readonly object[] | undefined, pages?: readonly Partial<BestSellersPage>[]): BestSellersHeading {
+  if (isCuratedShelf(items)) return { basis: 'curated', title: fillCopy('rank.curatedTitle'), subtitle: undefined, ranked: false };
+  const total = pages?.some((p) => p.basis === 'total') ?? false;
+  return { basis: total ? 'total' : 'days30', title: fillCopy('rank.title'), subtitle: bestSellersBasisCopy(pages), ranked: true };
 }
 
 /** Hạng của thẻ đầu khi danh sách bắt đầu từ `startPage` (web mở thẳng `?page=N`); số trang hỏng thì về hạng 1. */

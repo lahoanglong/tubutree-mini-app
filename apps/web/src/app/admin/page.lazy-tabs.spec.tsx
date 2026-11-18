@@ -115,6 +115,10 @@ vi.mock('@/components/admin/bundles-tab', () => {
   loaded.push('bundles-tab');
   return { BundlesTab: () => <div data-tab="BundlesTab" /> };
 });
+vi.mock('@/components/admin/merch-shelves/merch-shelves-tab', () => {
+  loaded.push('merch-shelves-tab');
+  return { MerchShelvesTab: () => <div data-tab="MerchShelvesTab" /> };
+});
 vi.mock('@/components/admin/notification-templates-tab', () => {
   loaded.push('notification-templates-tab');
   return { NotificationTemplatesTab: () => <div data-tab="NotificationTemplatesTab" /> };

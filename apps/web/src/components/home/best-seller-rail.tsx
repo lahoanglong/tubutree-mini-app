@@ -4,11 +4,10 @@ import { useSyncExternalStore } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import type { BestSellersBasis } from '@tubutree/app-core/api/browse';
 import type { ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
-import { bestSellersBasisCopy } from '@tubutree/app-core/browse/best-sellers';
+import { bestSellersHeading, curatedShelfItems } from '@tubutree/app-core/browse/best-sellers';
 import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
 import { ranksAreSequential, seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { shelf } from '@tubutree/app-core/merch/shelves';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { coreHttp } from '@/lib/core-http';
 import { ProductCard, ProductRail, ProductTileSkeleton, SectionHeader } from '@/components/mini';
 import { GRID_RANK_IMAGE_SIZES } from '@/lib/product-grid';
@@ -60,21 +59,25 @@ export interface BestSellerRailProps {
  * Bán chạy nhất (Q18, bản web của `best-seller-rail.tsx` ở Mini App) cho MỌI khách: một hàng thẻ có hạng #1..#n xếp theo lượt bán 30 ngày, "Xem tất cả" tới trang
  * xếp hạng. Đứng sau Giờ vàng và Danh mục. Có banner hay Giờ vàng thì ảnh LCP là của khối đó nên kệ tải lười, không giành băng thông; không có thì ảnh của kệ là LCP (`priorityCount`). Khách cũ trước đây chỉ thấy tab "Bán chạy" ở cuối lưới gợi ý, giờ cũng thấy kệ này.
  */
-export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, retrying, priorityCount = 0 }: BestSellerRailProps) {
-  const title = fillCopy('rank.title');
+export function BestSellerRail({ items: shelfItems, ranks, basis, loading, error, onRetry, retrying, priorityCount = 0 }: BestSellerRailProps) {
+  // Kệ "Tubu chọn cho bạn" (món admin ghim khi chưa đủ số bán): đổi tiêu đề, bỏ dòng thước đo và số hạng, chỉ vẽ món ghim, giữ nguyên bố cục.
+  const heading = bestSellersHeading(shelfItems, [{ basis }]);
+  const items = curatedShelfItems(shelfItems, SHELF.minItems);
+  const title = heading.title;
   const layout = useShelfLayout();
   if (!loading && items.length === 0) {
     return error ? <HomeBlockError title={title} error={error} onRetry={() => onRetry?.()} retrying={retrying} /> : null;
   }
   const seeAll = seeAllHref('home.bestSellers', 'web');
-  const plain = ranks !== undefined && !ranksAreSequential(ranks);
+  const shownRanks = heading.ranked ? ranks : undefined;
+  const plain = shownRanks !== undefined && !ranksAreSequential(shownRanks);
   return (
     <section aria-label={title}>
-      <SectionHeader title={title} subtitle={bestSellersBasisCopy([{ basis }])} action={seeAll ? { to: seeAll } : undefined} />
+      <SectionHeader title={title} subtitle={heading.subtitle} action={seeAll ? { to: seeAll } : undefined} />
       {/* Hai bản, mỗi bản `display:none` ở một khổ (như `ShopSection`): kệ vuốt ngang của Mini App dưới lg, lưới 5×2 từ lg; sau hydrate chỉ giữ bản của khổ đang xem (`useShelfLayout`). Ảnh ưu tiên chỉ cấp cho kệ: bản lưới nằm ẩn ở điện thoại. */}
       {layout !== 'grid' && (
         <div data-testid="best-seller-rail" className="lg:hidden">
-          <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={1} ranks={ranks} rankPlain={plain} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={priorityCount} shelf="bestSellers" />
+          <ProductRail label={`${title}, vuốt ngang để xem thêm`} variant="rank" rankFrom={heading.ranked ? 1 : undefined} ranks={shownRanks} rankPlain={plain} items={items} loading={loading} skeletonCount={SKELETON_COUNT} priorityCount={priorityCount} shelf="bestSellers" />
         </div>
       )}
       {layout !== 'rail' && (
@@ -89,7 +92,7 @@ export function BestSellerRail({ items, ranks, basis, loading, error, onRetry, r
             <ul role="list" className={GRID_RANK_LG} style={{ listStyle: 'none', margin: 0, padding: 0 }}>
               {items.map((p, i) => (
                 <li key={p.id} className="min-w-0">
-                  <ProductCard product={p} variant="rank" rank={ranks?.[i] ?? i + 1} rankPlain={plain} imageSizes={GRID_RANK_IMAGE_SIZES} shelf="bestSellers" position={i + 1} />
+                  <ProductCard product={p} variant="rank" rank={heading.ranked ? (shownRanks?.[i] ?? i + 1) : undefined} rankPlain={plain} imageSizes={GRID_RANK_IMAGE_SIZES} shelf="bestSellers" position={i + 1} />
                 </li>
               ))}
             </ul>

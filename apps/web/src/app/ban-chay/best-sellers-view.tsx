@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import type { CategoryDTO, PageResponse, ProductCard as ProductCardData } from '@tubutree/app-core/api/catalog';
 import {
-  BEST_SELLERS_ALL_KEY, BEST_SELLERS_PAGE_LIMIT, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersBasisCopy, bestSellersHref, bestSellersRankFrom,
+  BEST_SELLERS_ALL_KEY, BEST_SELLERS_PAGE_LIMIT, bestSellerPanelLabel, bestSellerScope, bestSellerTabs, bestSellersHeading, bestSellersHref, bestSellersRankFrom, curatedShelfItems,
 } from '@tubutree/app-core/browse/best-sellers';
 import { bestSellersListQuery } from '@tubutree/app-core/queries/browse';
 import { categoriesQuery } from '@tubutree/app-core/queries/catalog';
@@ -66,7 +66,6 @@ export default function BestSellersView({ initial = null, categories: initialCat
   const tabs = categoriesQ.isLoading ? null : bestSellerTabs(categoriesQ.data);
   const scope = bestSellerScope(tabs, params.get('category'));
   const tabItems = tabs ?? bestSellerTabs(undefined);
-  const activeLabel = bestSellerPanelLabel(tabs, scope.tab);
   const page = parsePage(params.get('page'));
 
   const seeded = initial !== null && initial.category === scope.category && initial.startPage === page ? initial : null;
@@ -77,6 +76,10 @@ export default function BestSellersView({ initial = null, categories: initialCat
     ...(seeded ? { initialData: { pages: [seeded.page], pageParams: [seeded.startPage] }, staleTime: 60_000 } : {}),
   });
   const list = uniqueById(products.data?.pages.flatMap((pg) => pg.data) ?? []);
+  // Chưa đủ số bán mà admin đã ghim kệ: "Tubu chọn cho bạn", chỉ món ghim, không dòng thước đo, không số hạng, không phân trang (xem `bestSellersHeading`).
+  const heading = bestSellersHeading(list, products.data?.pages);
+  const shown = curatedShelfItems(list);
+  const activeLabel = bestSellerPanelLabel(tabs, scope.tab, heading.title);
   const listLength = list.length;
   const fetchingMore = products.isFetchingNextPage;
   useEffect(() => {
@@ -106,7 +109,7 @@ export default function BestSellersView({ initial = null, categories: initialCat
     router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
   };
 
-  const title = fillCopy('rank.title');
+  const title = heading.title;
   const lastPageMeta = products.data?.pages.at(-1)?.meta;
   const totalPages = lastPageMeta ? Math.max(1, Math.ceil(lastPageMeta.total / (lastPageMeta.limit || BEST_SELLERS_PAGE_LIMIT))) : page;
   const emptyHref = browseHref(scope.category ? { ...EMPTY_SEARCH_STATE, category: scope.category } : { ...EMPTY_SEARCH_STATE, all: true });
@@ -115,7 +118,7 @@ export default function BestSellersView({ initial = null, categories: initialCat
   return (
     <>
       <ListingBreadcrumb trail={[{ label: fillCopy('browse.crumbHome'), href: '/' }, { label: title }]} />
-      <PageHeader title={title} subtitle={bestSellersBasisCopy(products.data?.pages)} backHref="/" />
+      <PageHeader title={title} subtitle={heading.subtitle} backHref="/" />
       {/* Hàng tab dính dưới thanh lùi đặc ở điện thoại (`sticky-below-back` đặt top đúng), dưới thanh đầu từ md. Từ md nền lùi đúng đệm khung (24px) mỗi bên: bóng thẻ tràn ra ngoài khung nếu nền hẹp hơn thì lộ thành vệt ở mép phải khi cuộn. */}
       <div className="sticky-below-back sticky top-0 z-[2] -mx-4 bg-[var(--color-bg-canvas)] px-4 py-2 md:top-[var(--header-h)] md:-mx-6 md:px-6">
         <div className="md:w-fit md:max-w-full">
@@ -132,7 +135,7 @@ export default function BestSellersView({ initial = null, categories: initialCat
         ) : (
           <>
             <div ref={gridRef}>
-              <ProductGrid items={list} variant="rank" rankFrom={bestSellersRankFrom(startPage)} className={GRID_RANK} priorityCount={PRIORITY_CARDS} shelf="bestSellersPage" />
+              <ProductGrid items={shown} variant="rank" rankFrom={heading.ranked ? bestSellersRankFrom(startPage) : undefined} className={GRID_RANK} priorityCount={PRIORITY_CARDS} shelf="bestSellersPage" />
             </div>
             {/* Lỗi khi ĐÃ có dữ liệu ("Xem thêm" hoặc làm mới nền thất bại): giữ nguyên danh sách, báo và thử lại tại chỗ. */}
             {products.isError && (
@@ -148,20 +151,22 @@ export default function BestSellersView({ initial = null, categories: initialCat
                 </Button>
               </div>
             )}
-            {products.hasNextPage && !products.isFetchNextPageError && (
+            {products.hasNextPage && heading.ranked && !products.isFetchNextPageError && (
               <div className="flex justify-center pt-4 lg:hidden">
                 <Button variant="secondary" loading={products.isFetchingNextPage} onPress={loadMore} style={{ minWidth: 160 }}>
                   {browseText.loadMore}
                 </Button>
               </div>
             )}
-            <NumberedPager
-              hrefFor={(p) => bestSellersHref('web', { category: scope.category, page: p })}
-              startPage={startPage}
-              lastPage={lastPageMeta?.page ?? startPage}
-              totalPages={totalPages}
-              hasNext={products.hasNextPage}
-            />
+            {heading.ranked && (
+              <NumberedPager
+                hrefFor={(p) => bestSellersHref('web', { category: scope.category, page: p })}
+                startPage={startPage}
+                lastPage={lastPageMeta?.page ?? startPage}
+                totalPages={totalPages}
+                hasNext={products.hasNextPage}
+              />
+            )}
           </>
         )}
       </div>

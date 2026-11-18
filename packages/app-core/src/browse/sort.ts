@@ -32,18 +32,21 @@ export interface BrowseSortOption {
 /**
  * Nhãn thanh sắp xếp. Tab đầu là "Liên quan" khi đang tìm (thứ tự mặc định lúc đó theo độ khớp). Tab giá nói rõ chiều đang xếp
  * (ux-copy UC-05: "Giá giảm" dễ đọc thành "đang giảm giá").
+ * `curated` (bảng Bán chạy nhất đang là kệ chọn tay, xem `isCuratedShelf`): bỏ tab "Bán chạy" vì chưa có số bán để xếp; đang chọn sẵn
+ * (link cũ có `sort=best_seller`) thì giữ để tab đang chọn không biến mất.
  */
-export function browseSortOptions(sort: CatalogSort | undefined, hasQuery: boolean): BrowseSortOption[] {
+export function browseSortOptions(sort: CatalogSort | undefined, hasQuery: boolean, opts: { curated?: boolean } = {}): BrowseSortOption[] {
   const price =
     sort === 'price_asc'
       ? { label: fillCopy('sort.priceAsc'), spoken: fillCopy('sort.priceAscSpoken'), hint: fillCopy('sort.priceHint') }
       : sort === 'price_desc'
         ? { label: fillCopy('sort.priceDesc'), spoken: fillCopy('sort.priceDescSpoken'), hint: fillCopy('sort.priceHint') }
         : { label: fillCopy('sort.price'), spoken: fillCopy('sort.priceSpoken') };
-  return [
+  const options: BrowseSortOption[] = [
     { value: 'default', label: fillCopy(hasQuery ? 'sort.relevant' : 'sort.default') },
     { value: 'best_seller', label: fillCopy('sort.bestSeller') },
     { value: 'newest', label: fillCopy('sort.newest') },
     { value: 'price', ...price },
   ];
+  return opts.curated && sortTab(sort) !== 'best_seller' ? options.filter((o) => o.value !== 'best_seller') : options;
 }

@@ -9,6 +9,7 @@ function setup() {
     brands: jest.fn().mockResolvedValue([{ brand: 'B', count: 1 }]),
     getForYou: jest.fn().mockResolvedValue([{ id: 'fy' }]),
     cardsByIds: jest.fn().mockResolvedValue([]),
+    onMerchShelvesChanged: jest.fn(),
   };
   const flashSale = {
     listActive: jest.fn().mockResolvedValue([{ itemId: 'f1' }]),

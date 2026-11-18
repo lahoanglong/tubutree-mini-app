@@ -552,6 +552,7 @@ model Product {
   campaignLinks    CampaignProduct[]
   bundleItems      BundleItem[]
   bundleAnchors    Bundle[]              @relation("BundleAnchor")
+  merchShelfPins   MerchShelfPin[]
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
@@ -4636,4 +4637,26 @@ model SearchSynonym {
   updatedAt DateTime @updatedAt
 
   @@map("search_synonyms")
+}
+
+/// Món admin ghim lên đầu một kệ (tab "Xếp kệ", cờ merch.shelves_enabled). Khoá kệ: `home_featured`, `best_sellers`, `category:<slug>`; tối đa 12 món
+/// mỗi kệ. Lưu cả kệ một lần (xoá dòng bỏ ghim, cập nhật dòng còn giữ, thêm dòng mới) dưới khoá tư vấn theo kệ; `updatedAt` đổi ở mọi lần lưu nên
+/// dấu phiên bản của kệ (băm các dòng) đổi theo, admin lưu bản đã cũ nhận 409.
+model MerchShelfPin {
+  id          String    @id @default(cuid())
+  shelfKey    String
+  productId   String
+  product     Product   @relation(fields: [productId], references: [id], onDelete: Cascade)
+  position    Int
+  startsAt    DateTime?
+  endsAt      DateTime?
+  note        String?
+  createdById String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @default(now())
+
+  @@unique([shelfKey, productId])
+  @@index([shelfKey, position])
+  @@index([productId])
+  @@map("merch_shelf_pins")
 }
