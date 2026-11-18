@@ -1550,3 +1550,58 @@
 .tubu-daily-row + .tubu-daily-row {
   border-top: 1px solid var(--color-border-subtle);
 }
+
+/* Dải "Khách hàng sống xanh" ở Trang chủ (GreenCornerStrip, Mini App và web cùng số đo): thẻ rộng 148px như kệ ngang, ảnh vuông, phần chữ cao cố định
+   (sao, thẻ cảm nhận một dòng, nhận xét hai dòng, tên sản phẩm một dòng) nên thẻ về muộn không đẩy lưới Gợi ý; thẻ thứ ba lộ một phần ở 375px để khách biết
+   hàng cuộn được. Lúc đang tải vẫn là thẻ Cộng đồng (không có khung chờ riêng). */
+.tubu-green-row {
+  display: flex;
+  gap: var(--space-inline-sm);
+  padding-bottom: var(--space-inline-xs);
+}
+.tubu-green-card {
+  flex: 0 0 148px;
+  width: 148px;
+  height: 252px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-card);
+  background: var(--color-bg-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border-subtle);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+}
+.tubu-green-card img {
+  display: block;
+  flex: none;
+  width: 148px;
+  height: 148px;
+  object-fit: cover;
+  background: var(--color-bg-subtle);
+}
+.tubu-green-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 0;
+  padding: 8px;
+}
+.tubu-green-line {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tubu-green-clamp {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 32px;
+}

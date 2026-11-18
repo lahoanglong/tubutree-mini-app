@@ -14,6 +14,8 @@ import { CHAT_ENABLED_KEY, CHAT_HOURS_KEY, DEFAULT_CHAT_HOURS, chatHoursProblem 
 import { computeWastePublicFlags } from '../waste-exchange/core/waste-public-config';
 import { readCompanyIdentity } from './company-config';
 import { CATALOG_LAUNCH_DATE_KEY, publicCatalogLaunchDate } from '../catalog/catalog-launch-date';
+import { readGreenCornerConfig } from '../reviews/review-green-corner';
+import { GREEN_CORNER_MAX_PHOTOS } from '@tubutree/shared-types';
 import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PHONE_KEY, orderZaloGateOpen, tubuZaloPhoneOf, type OrderZaloGate } from './order-zalo-config';
 
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
@@ -107,6 +109,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     orderZaloPrechecked,
     tubuZaloPhone,
     referralShareCard,
+    greenCorner,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
     config.get<number>('subscribe.discount_pct', 0.12),
@@ -151,6 +154,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(MSS_ORDER_CONSENT_PRECHECKED_KEY, false),
     config.get<unknown>(TUBU_ZALO_PHONE_KEY, TUBU_ZALO_PHONE_DEFAULT),
     config.get<unknown>(REFERRAL_SHARE_CARD_KEY, false),
+    readGreenCornerConfig(config),
   ]);
   return {
     freeshipThreshold,
@@ -198,6 +202,9 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     aiAdvisorEnabled: isAdvisorAvailable((k) => process.env[k]),
     // Miniapp chỉ gọi /feed/public-preview khi cờ này true (API vẫn tự kiểm cờ và trả 404 khi tắt).
     communityPublicPreview: communityPublicPreview === true,
+    // Góc Sống Xanh: app đổi lời mời thưởng ở form đánh giá, giới hạn 3 ảnh, hiện chọn thẻ cảm nhận và dải Trang chủ. Tắt (hoặc API cũ không
+    // trả) thì form và Trang chủ như cũ. Số điểm chỉ để nói trước; máy chủ quyết định lúc admin duyệt.
+    reviewGreenCorner: { enabled: greenCorner.enabled, rewardPoints: greenCorner.rewardPoints, dailyCap: greenCorner.dailyCap, maxPhotos: GREEN_CORNER_MAX_PHOTOS },
     // Chữ trên trang đăng ký đại lý ("giá sỉ đến X%", "xét duyệt trong N giờ"). Giá trị hỏng → null để miniapp bỏ con số.
     dealer: {
       maxDiscountPct: typeof dealerMaxDiscountPct === 'number' && dealerMaxDiscountPct > 0 && dealerMaxDiscountPct <= 1 ? dealerMaxDiscountPct : null,

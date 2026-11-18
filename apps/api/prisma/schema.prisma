@@ -3275,10 +3275,23 @@ model Review {
   isVerified    Boolean  @default(true)
   isVisible     Boolean  @default(true)
   createdAt     DateTime @default(now())
+  // Góc Sống Xanh (reviews.green_corner_enabled): khoá thẻ cảm nhận khách chọn (REVIEW_ECO_TAGS ở shared-types, tối đa 3).
+  ecoTags           String[]  @default([])
+  // Đánh giá có ảnh/video gửi khi cờ bật: chưa công khai (isVisible false) tới khi admin duyệt. Admin ẩn thì về false mà isVisible vẫn false.
+  awaitingApproval  Boolean   @default(false)
+  // Lúc admin duyệt (đánh giá chờ duyệt, hoặc đánh giá ảnh cũ admin chọn đưa lên dải Trang chủ). Null = chưa duyệt.
+  approvedAt        DateTime?
+  // Lần gần nhất ảnh/video của đánh giá vào hàng chờ. Không xoá khi admin ẩn: đánh giá bị ẩn khỏi hàng chờ không tính nhiệm vụ cho tới khi
+  // được duyệt, và lỡ tay ẩn rồi duyệt lại vẫn được thưởng. Null = chưa từng qua hàng chờ (đánh giá cũ, hay viết khi cờ tắt).
+  photoQueuedAt     DateTime?
+  // Điểm thưởng Góc Sống Xanh đã cộng lúc duyệt (đã gộp trong pointsEarned để xoá/trả hàng thu hồi như thưởng cũ). Sổ: REVIEW_PHOTO:<id dòng đơn>.
+  photoRewardPoints Int       @default(0)
 
   // Một đánh giá cho mỗi lần mua (đơn) của sản phẩm. Thứ tự cột để các truy vấn theo (khách, sản phẩm) vẫn dùng tiền tố chỉ mục.
   @@unique([userId, productId, orderId])
   @@index([productId])
+  @@index([awaitingApproval, createdAt])
+  @@index([approvedAt(sort: Desc)])
   // listByProduct: WHERE productId AND isVisible ORDER BY createdAt DESC LIMIT n — khỏi sắp lại mọi đánh giá của sản phẩm.
   @@index([productId, isVisible, createdAt(sort: Desc)])
   @@index([productId, isVisible, rating, createdAt(sort: Desc)])

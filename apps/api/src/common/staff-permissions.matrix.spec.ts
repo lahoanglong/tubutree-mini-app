@@ -380,6 +380,7 @@ const EXPECTED: Record<string, Access> = {
   'POST /loyalty/staff/pos-credit': STAFF,
   'POST /loyalty/staff/scan-member': STAFF,
   'POST /reviews/:id/visibility': ADMIN_ONLY,
+  'POST /reviews/:id/approve': ADMIN_ONLY,
   'POST /staff/attendance/checkin': STAFF,
   'POST /staff/attendance/checkout': STAFF,
   'POST /staff/attendance/heartbeat': STAFF,

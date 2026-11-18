@@ -6,6 +6,7 @@ import { pushRetryGateDecision } from '../integrations/pancake/pancake-order.ser
 import { DEALER_APPLICATION_LIST_SELECT } from '../dealer/dealer-application-select';
 import { decodeServedImage } from '../../common/served-image';
 import { reviewAdminImageRefFromVersion, reviewImageRefFromVersion } from '../reviews/reviews.service';
+import { reviewMediaKey } from '../reviews/review-green-corner';
 import { isUploadedMediaUrl } from '../../common/uploaded-image';
 import type { OrderStatus } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
@@ -592,9 +593,15 @@ export class AdminService {
    * Danh sách đánh giá cho admin duyệt (kể cả đã ẩn). Ẩn/hiện dùng POST /reviews/:id/visibility sẵn có — nó tính
    * lại điểm sao của sản phẩm, nên không viết lại ở đây.
    */
-  async listReviews(page: number, limit: number, visibility?: 'visible' | 'hidden', rating?: number) {
+  async listReviews(page: number, limit: number, visibility?: 'visible' | 'hidden' | 'pending', rating?: number) {
     const where: Prisma.ReviewWhereInput = {
-      ...(visibility ? { isVisible: visibility === 'visible' } : {}),
+      ...(visibility === 'pending'
+        ? { awaitingApproval: true }
+        : visibility === 'hidden'
+          ? { isVisible: false, awaitingApproval: false }
+          : visibility === 'visible'
+            ? { isVisible: true }
+            : {}),
       ...(rating ? { rating } : {}),
     };
     const [items, total] = await this.prisma.$transaction([
@@ -611,6 +618,10 @@ export class AdminService {
           isVisible: true,
           isVerified: true,
           createdAt: true,
+          ecoTags: true,
+          awaitingApproval: true,
+          approvedAt: true,
+          photoRewardPoints: true,
           user: { select: { id: true, fullName: true, phone: true } },
           product: { select: { id: true, name: true, slug: true } },
         },
@@ -620,6 +631,7 @@ export class AdminService {
     // Ảnh base64 nặng tới ~700 nghìn ký tự/ảnh nên không nhúng trong JSON: trả đường dẫn để trình duyệt tải từng ảnh.
     const data = items.map(({ imageVersions, ...r }) => ({
       ...r,
+      mediaKey: reviewMediaKey(imageVersions, r.videoUrl),
       images: imageVersions.map((entry, i) => (r.isVisible ? reviewImageRefFromVersion(r.id, i, entry) : reviewAdminImageRefFromVersion(r.id, i, entry))),
     }));
     return paginated(data, page, limit, total);
@@ -628,7 +640,8 @@ export class AdminService {
   /** Ảnh base64 thứ `index` của một đánh giá (kể cả đã ẩn) cho màn duyệt; chỉ đọc đúng phần tử cần, không kéo cả mảng ảnh. */
   async reviewImage(reviewId: string, index: number): Promise<{ mime: string; data: Buffer }> {
     if (!Number.isInteger(index) || index < 0 || index >= 1000) throw new NotFoundException('Không tìm thấy ảnh.');
-    // `?v=` của đường dẫn chỉ để trình duyệt đổi cache, cố ý không đối chiếu: luôn phát ảnh hiện tại; lúc duyệt đã kiểm phiên bản.
+    // `?v=` của đường dẫn chỉ để trình duyệt đổi cache, cố ý không đối chiếu: luôn phát ảnh hiện tại; lúc duyệt/hiện lại máy chủ đối chiếu
+    // `mediaKey` của dòng admin đang xem nên ảnh khách đổi sau đó không được duyệt mù.
     const rows = await this.prisma.$queryRaw<{ image: string | null }[]>`
       SELECT "images"[${index + 1}::int] AS "image" FROM "reviews" WHERE "id" = ${reviewId}`;
     const decoded = decodeServedImage(rows[0]?.image);

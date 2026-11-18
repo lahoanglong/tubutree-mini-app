@@ -150,6 +150,9 @@ export class SystemConfigService {
     // (cột INTEGER; RewardPointsService.grant ném 500 với số lẻ nên thưởng 2.5 sẽ không bao giờ được cấp).
     'referral.referrer_reward_points': { min: 0, max: 100_000, note: 'Điểm Xanh (1 điểm = 1đ), không phải xu', integer: true },
     'community.post_reward_points': { min: 0, max: 20_000, note: 'Điểm Xanh (1 điểm = 1đ), không phải xu', integer: true },
+    // Góc Sống Xanh: thưởng lúc admin duyệt đánh giá ảnh thật và trần số đánh giá được thưởng mỗi ngày viết (review-green-corner.ts kẹp cùng biên).
+    'reviews.photo_reward_points': { min: 0, max: 20_000, note: 'Điểm Xanh (1 điểm = 1đ), không phải xu', integer: true },
+    'reviews.photo_reward_daily_cap': { min: 0, max: 50, note: 'số đánh giá được thưởng của một khách cho các đánh giá viết cùng ngày (0 = không thưởng)', integer: true },
     'community.answer_reward_points': { min: 0, max: 20_000, note: 'Điểm Xanh (1 điểm = 1đ), không phải xu', integer: true },
     'community.best_answer_reward_points': { min: 0, max: 20_000, note: 'Điểm Xanh (1 điểm = 1đ), không phải xu', integer: true },
     // Điểm UY TÍN cộng đồng (cấp Mầm đến Cổ thụ), không phải Điểm Xanh. Cột reputation/amount là INTEGER: số lẻ làm giao dịch lỗi,
@@ -325,6 +328,8 @@ export class SystemConfigService {
     'payment.bank_account_name': (value) => displayNameProblem(value, 'tên chủ tài khoản in hoa không dấu, vd "CONG TY TUBU TREE"'),
     // Chuỗi "false" là truthy ở chỗ đọc lỏng: chỉ nhận đúng boolean để cờ tắt không vô tình bật freeship đơn đầu.
     'shipping.first_order_free_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
+    // Cờ Góc Sống Xanh: bật thì bảng thưởng đánh giá lúc gửi ngừng, nên chuỗi "false" (truthy ở chỗ đọc lỏng) không được lưu.
+    'reviews.green_corner_enabled': (value) => (typeof value === 'boolean' ? null : 'phải là true hoặc false'),
     // Công tắc kiểm lệch tổng Pancake (PANCAKE_TOTAL_CHECK_KEY): chỉ `false` mới tắt, nên chuỗi "false" phải bị từ chối chứ không được lưu.
     // Nhóm hàng Pancake → danh mục Tubu (PancakeSyncService.mappedCategoryIds): sai dạng thì đồng bộ lặng lẽ không gán danh mục nào.
     [PANCAKE_CATEGORY_MAP_KEY]: categoryMapProblem,

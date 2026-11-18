@@ -17,7 +17,8 @@ export interface ReviewFilterChip {
  * "không có đánh giá khớp" mà không chip nào đang sáng.
  * Đủ năm mức sao, kể cả 2 và 1 sao: biểu đồ phân bố đã vẽ cả năm mức, khách phải lọc riêng được đánh giá thấp để kiểm chứng (ẩn đi là mất tin cậy).
  * Số trên chip Tất cả, 5..1 sao, Có video là số của máy chủ trên mọi đánh giá đang hiện (`count`, `distribution`, `videoCount`, không theo chip đang chọn);
- * API cũ thiếu trường nào thì đếm trên các đánh giá đã tải. Có ảnh không ghi số: máy chủ không đếm, còn đếm trên 100 dòng mới nhất thì sai với sản phẩm nhiều đánh giá.
+ * API cũ thiếu trường nào thì đếm trên các đánh giá đã tải. Có ảnh chỉ ghi số khi máy chủ trả `photoCount`: đếm trên 100 dòng mới nhất thì sai với sản phẩm
+ * nhiều đánh giá, nên API cũ thì chip không có số.
  */
 export function reviewFilterChips(summary: ReviewCountSource | undefined, selected?: ReviewFilterKey): ReviewFilterChip[] {
   const items = summary?.items ?? [];
@@ -30,7 +31,7 @@ export function reviewFilterChips(summary: ReviewCountSource | undefined, select
       label: `${star} sao`,
       count: tally(dist ? (dist[String(star)] ?? 0) : undefined, (r) => r.rating === star),
     })),
-    { key: 'photo', label: 'Có ảnh' },
+    { key: 'photo', label: 'Có ảnh', ...(summary?.photoCount !== undefined ? { count: summary.photoCount } : {}) },
   ];
   const videos = tally(summary?.videoCount, (r) => Boolean(r.videoUrl)) ?? 0;
   if (videos > 0 || selected === 'video') chips.push({ key: 'video', label: 'Có video', count: videos });
@@ -44,6 +45,7 @@ export interface ReviewCountSource {
   count?: number;
   distribution?: Record<string, number>;
   videoCount?: number;
+  photoCount?: number;
   items?: readonly ReviewCountItem[];
 }
 

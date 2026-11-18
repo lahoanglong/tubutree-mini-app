@@ -174,6 +174,14 @@ Máy tính (từ `lg`): hai cột gọn ở `/tai-khoan/don-hang/:code`, trái t
 
 Logic ở `packages/app-core/src/arcade/`: engine thuần không DOM (`dew-catcher.ts`, `refill-rush.ts`, toạ độ chuẩn hoá 0..1, `rng` tiêm vào để test), bộ vẽ và nhập liệu `arcade-canvas.ts` (nhận canvas qua giao diện cấu trúc tối thiểu, `raf/caf/now` tiêm vào, màu qua `theme` do app đọc từ token ngữ nghĩa nên không có hex), khung giờ thưởng giờ VN `arcade-config.ts`, `badge.ts`, `home-quiz.ts` (`pickKitProducts`), tip `arcade-tips.ts`. Tổng mã `arcade/` (không tính spec) dưới 30KB, `arcade-guard.spec` canh. Số liệu thưởng và trần chống cày ở máy chủ (`game-arcade.constants.ts`, `POST /game/arcade-complete`): 3 lượt thưởng mỗi ngày mỗi game, thêm 1 lượt khi ván xong trong khung `06:30–09:00` hoặc `20:00–22:00` giờ VN; hết lượt vẫn chơi và phá kỷ lục. Khách chưa đăng nhập chơi trọn vẹn, chỉ không lưu và không nhận thưởng. Chữ ở `arcade.*` và `homeQuiz.*` của `shop-copy.ts`. Hai câu hứa sản phẩm trong Tip (Bồ Hòn 0% Paraben & SLS; giữ vỏ chai TubuTree đổi Điểm Xanh & Quà tặng) là nguyên văn spec W164, các câu khác chỉ là lời khuyên sống xanh.
 
+### Góc Sống Xanh: đánh giá ảnh có duyệt (tubu-w3-01)
+
+| Cần | Dùng |
+|---|---|
+| dải "Khách hàng sống xanh cùng Tubu Tree" ở Trang chủ: tối đa 8 thẻ ảnh thật đã duyệt (mỗi sản phẩm một thẻ), 5 sao, dòng thẻ cảm nhận, 2 dòng nhận xét, tên sản phẩm; chạm thẻ mở trang sản phẩm | `GreenCornerStrip` (đứng ở chỗ thẻ Cộng đồng trong lưới Gợi ý, cùng ngày, không thêm khối; `fallback` là thẻ Cộng đồng khi cờ `reviews.green_corner_enabled` tắt, đang tải, API lỗi hay dưới 3 thẻ (không có khung chờ riêng, để chỗ đó không co giãn mỗi lần mở Trang chủ); thẻ cố định 148 × 252 trong `.tubu-green-*` ở `css/tokens.css` và `mini.css` nên từ 360 tới 1440px chỉ đổi số thẻ thấy được trong `ScrollRow`) |
+
+Logic ở `packages/app-core/src/commerce/green-corner.ts` (`greenCornerCards`, thẻ cảm nhận `ECO_TAG_OPTIONS`, `toggleEcoTag` tối đa 3) và `review-copy.ts` (`greenCornerHint`, `pendingNotice`). Form đánh giá dùng `Chip` sẵn có cho thẻ cảm nhận; bộ lọc "Có ảnh" ở trang sản phẩm vẫn là chip của `reviewFilterChips`, thêm số đếm `photoCount` từ máy chủ. Ảnh của đánh giá chờ duyệt không có đường công khai; admin bấm Duyệt hay Hiện lại gửi kèm `mediaKey` của dòng đang xem, khách đổi ảnh sau đó thì máy chủ trả 409.
+
 ### Nhiệm vụ hằng ngày, huy hiệu, chấm nhắc thanh đáy
 
 | Cần | Dùng |

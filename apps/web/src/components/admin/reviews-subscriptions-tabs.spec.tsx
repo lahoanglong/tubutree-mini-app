@@ -189,6 +189,127 @@ describe('ReviewsTab — ảnh theo đường dẫn (L3-03)', () => {
   });
 });
 
+// tubu-w3-01: Góc Sống Xanh — đánh giá ảnh chờ duyệt; duyệt mới hiện công khai và cộng Điểm Xanh, ảnh xấu thì ẩn (không bao giờ công khai).
+describe('ReviewsTab — duyệt đánh giá ảnh (Góc Sống Xanh)', () => {
+  const PENDING = {
+    ...REVIEW,
+    id: 'r9',
+    rating: 5,
+    comment: 'Khăn mềm, bé dùng không bị đỏ',
+    images: [],
+    videoUrl: null,
+    isVisible: false,
+    awaitingApproval: true,
+    ecoTags: ['soft', 'baby_safe'],
+    mediaKey: '[["0123456789"],null]',
+  };
+
+  it('chip "Chờ duyệt" gửi visibility=pending; dòng chờ có huy hiệu, thẻ cảm nhận, nút Duyệt', async () => {
+    const calls = stub(() => ({ body: page([PENDING]) }));
+    const { container } = mount(<ReviewsTab />);
+    await flush();
+    click(byText(container, 'button[role="tab"]', 'Chờ duyệt'));
+    await flush();
+    expect(calls.at(-1)!.url).toContain('visibility=pending');
+    const t = container.textContent ?? '';
+    const badges = Array.from(container.querySelectorAll('span')).map((el) => el.textContent);
+    expect(badges).toContain('Chờ duyệt');
+    expect(badges).not.toContain('Đã ẩn');
+    expect(t).toContain('Mềm mịn · An toàn cho bé');
+    expect(byText(container, 'button', 'Duyệt')).toBeTruthy();
+    expect(byText(container, 'button', 'Ẩn đánh giá')).toBeTruthy();
+  });
+
+  it('Duyệt: hỏi xác nhận, POST /reviews/:id/approve, báo số điểm đã cộng rồi tải lại', async () => {
+    const calls = stub((url) =>
+      url.includes('/approve') ? { body: { ok: true, isVisible: true, alreadyApproved: false, rewardPoints: 100, rewardSkipped: null } } : { body: page([PENDING]) },
+    );
+    const { container } = mount(<ReviewsTab />);
+    await flush();
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('Nước rửa chén Lá Sả');
+    expect(calls.some((c) => c.url.includes('/approve'))).toBe(false);
+    answerConfirm(true);
+    await flush();
+    const post = calls.find((c) => c.url.includes('/reviews/r9/approve'))!;
+    expect(post.init?.method).toBe('POST');
+    expect(JSON.parse(String(post.init?.body))).toEqual({ mediaKey: '[["0123456789"],null]' });
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('cộng +100 Điểm Xanh');
+    expect(calls.filter((c) => c.url.includes('/admin/reviews')).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('duyệt mà không cộng điểm: nói rõ lý do (vượt trần trong ngày)', async () => {
+    stub((url) =>
+      url.includes('/approve') ? { body: { ok: true, isVisible: true, alreadyApproved: false, rewardPoints: 0, rewardSkipped: 'DAILY_CAP' } } : { body: page([PENDING]) },
+    );
+    const { container } = mount(<ReviewsTab />);
+    await flush();
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.querySelector('[role="status"]')?.textContent).toContain('đủ số đánh giá được cộng điểm trong ngày');
+  });
+
+  it('Ẩn đánh giá đang chờ gửi isVisible:false (ảnh không bao giờ lên công khai), không gọi approve', async () => {
+    const calls = stub((url) => (url.includes('/visibility') ? { body: { ok: true, isVisible: false } } : { body: page([PENDING]) }));
+    const { container } = mount(<ReviewsTab />);
+    await flush();
+    click(byText(container, 'button', 'Ẩn đánh giá'));
+    await flush();
+    expect(confirmDialog()?.textContent).toContain('không được cộng Điểm Xanh');
+    answerConfirm(true);
+    await flush();
+    expect(JSON.parse(String(calls.find((c) => c.url.includes('/reviews/r9/visibility'))!.init?.body))).toEqual({ isVisible: false });
+    expect(calls.some((c) => c.url.includes('/approve'))).toBe(false);
+  });
+
+  it('đánh giá ảnh cũ đang hiện, chưa duyệt: có "Đưa lên Trang chủ"; đã duyệt hay không ảnh thì không', async () => {
+    const old = { ...REVIEW, id: 'r3', images: ['https://cdn.example.com/b.jpg'], videoUrl: null, approvedAt: null };
+    stub(() => ({ body: page([old, { ...old, id: 'r4', approvedAt: '2026-11-18T03:00:00.000Z' }, { ...old, id: 'r5', images: [] }]) }));
+    const { container } = mount(<ReviewsTab />);
+    await flush();
+    const feature = Array.from(container.querySelectorAll('button')).filter((b) => b.textContent === 'Đưa lên Trang chủ');
+    expect(feature).toHaveLength(1);
+    expect(Array.from(container.querySelectorAll('button')).some((b) => b.textContent === 'Duyệt')).toBe(false);
+  });
+
+  it('khách vừa đổi ảnh (409): báo nguyên văn lỗi máy chủ, không báo đã duyệt', async () => {
+    stub((url) =>
+      url.includes('/approve') ? { status: 409, body: { message: 'Khách vừa đổi ảnh hoặc video của đánh giá này.' } } : { body: page([PENDING]) },
+    );
+    const { container } = mount(<ReviewsTab />);
+    await flush();
+    click(byText(container, 'button', 'Duyệt'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(container.querySelector('[role="alert"]')?.textContent).toContain('Khách vừa đổi ảnh');
+    expect(container.querySelector('[role="status"]')).toBeNull();
+  });
+
+  it('Hiện lại đánh giá đã ẩn gửi kèm dấu ảnh; Ẩn thì không', async () => {
+    const calls = stub((url) =>
+      url.includes('/visibility') ? { body: { ok: true, isVisible: true } } : { body: page([{ ...REVIEW, isVisible: false, mediaKey: 'k1' }]) },
+    );
+    const { container } = mount(<ReviewsTab />);
+    await flush();
+    click(byText(container, 'button', 'Hiện lại'));
+    await flush();
+    answerConfirm(true);
+    await flush();
+    expect(JSON.parse(String(calls.find((c) => c.url.includes('/visibility'))!.init?.body))).toEqual({ isVisible: true, mediaKey: 'k1' });
+  });
+
+  it('đánh giá đã thưởng lúc duyệt: huy hiệu số điểm', async () => {
+    stub(() => ({ body: page([{ ...REVIEW, approvedAt: '2026-11-18T03:00:00.000Z', photoRewardPoints: 100 }]) }));
+    const { container } = mount(<ReviewsTab />);
+    await flush();
+    expect(container.textContent).toContain('Đã cộng +100 điểm');
+  });
+});
+
 describe('SubscriptionsTab', () => {
   it('liệt kê gói định kỳ: khách, sản phẩm × số lượng, chu kỳ, lần giao kế tiếp, trạng thái; chỉ xem', async () => {
     const calls = stub(() => ({ body: page([SUB, { ...SUB, id: 's2', status: 'PAUSED' }, { ...SUB, id: 's3', status: 'CANCELLED', lastOrderId: null }]) }));

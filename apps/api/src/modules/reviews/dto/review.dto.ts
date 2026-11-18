@@ -1,5 +1,6 @@
 import { Transform, Type } from 'class-transformer';
-import { ArrayMaxSize, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { ArrayMaxSize, ArrayUnique, IsArray, IsBoolean, IsIn, IsInt, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { REVIEW_ECO_TAG_MAX, REVIEW_ECO_TAGS } from '@tubutree/shared-types';
 import { IsUploadedImage, IsUploadedMediaUrl, PUBLIC_CONTENT_IMAGE } from '../../../common/uploaded-image';
 import { Trim } from '../../../common/decorators/trim.decorator';
 import { KeysetCursorField } from '../../../common/keyset-cursor';
@@ -19,6 +20,13 @@ export class CreateReviewDto {
   @IsOptional() @IsUploadedMediaUrl({ message: 'Video đánh giá phải là video đã tải lên từ ứng dụng.' }) videoUrl?: string;
   // Lần mua (đơn) được đánh giá: mỗi đơn đã nhận một đánh giá. Đơn đã có đánh giá thì lần gửi này sửa nó.
   @IsOptional() @IsString() @MaxLength(64) orderId?: string;
+  // Thẻ cảm nhận Góc Sống Xanh (khoá, không phải chữ). Không gửi = giữ thẻ cũ khi sửa (app cũ chưa biết trường này).
+  @IsOptional()
+  @IsArray()
+  @ArrayMaxSize(REVIEW_ECO_TAG_MAX)
+  @ArrayUnique()
+  @IsIn(REVIEW_ECO_TAGS, { each: true, message: 'Thẻ cảm nhận không hợp lệ.' })
+  ecoTags?: string[];
 }
 
 export const REVIEW_MEDIA_FILTERS = ['photo', 'video'] as const;

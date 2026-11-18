@@ -392,6 +392,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/payments/bank-preview', { enabled: false, bank: null });
       // Banner chiến dịch (Trang chủ, Ưu đãi) là công khai và tự ẩn khi không có: mặc định không có chiến dịch nào.
       api.fallback('GET', '/campaigns', []);
+      // Dải "Khách hàng sống xanh" ở Trang chủ chỉ hỏi khi /config/public bật reviewGreenCorner; mặc định như PROD khi cờ reviews.green_corner_enabled tắt.
+      api.fallback('GET', '/green-corner', { enabled: false, items: [] });
       // Số suất Giờ vàng khách còn mua được (đã trừ đơn trước) cho nút mua: mặc định chưa có số nào, UI giữ số theo danh sách Giờ vàng như API cũ.
       api.fallback('GET', '/flash-sales/me/allowance', { items: {} });
       // Kho mã công khai (khối Nhận mã ở Ưu đãi, trang Mã giảm giá) tự ẩn khi rỗng: mặc định chưa có mã nào để nhận.

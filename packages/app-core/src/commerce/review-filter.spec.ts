@@ -60,6 +60,12 @@ describe('reviewFilterChips', () => {
     ]);
   });
 
+  it('máy chủ trả photoCount: chip Có ảnh ghi số của máy chủ (kể cả 0), không đếm trên dòng đã tải', () => {
+    const items = [r('a', 5, { images: ['x.jpg'] })];
+    expect(reviewFilterChips({ count: 300, photoCount: 41, items }).find((c) => c.key === 'photo')?.count).toBe(41);
+    expect(reviewFilterChips({ count: 3, photoCount: 0, items }).find((c) => c.key === 'photo')?.count).toBe(0);
+  });
+
   it('API cũ chưa trả số đếm: đếm trên các đánh giá đã tải', () => {
     const items = [r('a', 5), r('b', 5, { videoUrl: 'v.mp4' }), r('c', 1), r('d', 4, { images: ['x.jpg'] })];
     const chips = reviewFilterChips({ items });

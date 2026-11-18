@@ -74,6 +74,11 @@ export interface PublicConfig {
   orderZaloPrechecked?: boolean;
   /** Số Zalo Tubu Tree cho nút kết bạn (`https://zalo.me/<số>`). */
   tubuZaloPhone?: string;
+  /**
+   * Góc Sống Xanh (`reviews.green_corner_enabled`): đánh giá có ảnh chờ admin duyệt, duyệt xong cộng `rewardPoints` Điểm Xanh (mỗi khách tối đa
+   * `dailyCap` đánh giá được cộng trong số các đánh giá viết cùng ngày), tối đa `maxPhotos` ảnh. Thiếu khi API cũ → như tắt.
+   */
+  reviewGreenCorner?: { enabled: boolean; rewardPoints: number; dailyCap: number; maxPhotos: number };
 }
 
 export const getPublicConfig = (http: HttpClient) => http.get<PublicConfig>('/config/public');

@@ -954,6 +954,15 @@
       ]
     },
     {
+      "name": "GreenCornerStrip",
+      "miniapp": "apps/miniapp/src/components/home/green-corner-strip.tsx",
+      "web": "apps/web/src/components/home/green-corner-strip.tsx",
+      "props": "GreenCornerStripProps",
+      "screens": [
+        "/"
+      ]
+    },
+    {
       "name": "BadgeRow",
       "miniapp": "apps/miniapp/src/components/game/badge-row.tsx",
       "web": "apps/web/src/components/game/badge-row.tsx",

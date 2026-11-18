@@ -406,6 +406,17 @@ export const SHOP_COPY: Record<string, string> = {
   // Form viết đánh giá (web và Mini App): lỗi ở ô, đọc qua role=alert
   'review.ratingInvalid': 'Chọn từ 1 đến 5 sao để gửi đánh giá.',
   'review.commentTooLong': 'Nhận xét tối đa {max} ký tự, bạn đang có {n} ký tự.',
+  // Góc Sống Xanh: thẻ cảm nhận lưu bằng khoá (REVIEW_ECO_TAGS ở shared-types), chữ ở đây. Ô chọn ở form, dòng chữ dưới đánh giá và trên thẻ Trang chủ.
+  'review.eco.soft': 'Mềm mịn',
+  'review.eco.dust_free': 'Không bụi',
+  'review.eco.saving': 'Tiết kiệm',
+  'review.eco.baby_safe': 'An toàn cho bé',
+  'review.eco.gentle_scent': 'Mùi dịu nhẹ',
+  'review.eco.less_plastic': 'Ít nhựa',
+  'review.ecoPick': 'Cảm nhận của bạn (chọn tối đa {n})',
+  // Dải đánh giá ảnh đã duyệt ở Trang chủ (GreenCornerStrip); nhãn đọc của mỗi thẻ (thẻ là liên kết tới khối đánh giá của sản phẩm).
+  'home.greenCorner.title': 'Khách hàng sống xanh cùng Tubu Tree',
+  'home.greenCorner.cardLabel': '{product}, {author} đánh giá {rating} sao',
   'pdp.alsoLike': 'Có thể bạn cũng thích',
   // Tiêu đề dải không kèm tên (tên dài thì xuống dòng); tên thương hiệu nằm ở nhãn đọc của dải.
   'pdp.brandShelf': 'Cùng thương hiệu',

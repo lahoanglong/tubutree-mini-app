@@ -43,7 +43,10 @@ import {
   fetchCanReview,
   fetchMyReview,
   fetchProductReviews,
+  greenCornerHint,
+  greenCornerRules,
   hiddenNotice,
+  pendingNotice,
   purchaseNote,
   rewardHint,
   saveReview,
@@ -52,6 +55,10 @@ import {
   type MyReviewRef,
   type ReviewableOrder,
 } from '@/lib/reviews-client';
+import type { GreenCornerRules } from '@tubutree/app-core/review-copy';
+import { ECO_TAG_OPTIONS, ecoTagLabel, ecoTagLine, ecoTagLocked, toggleEcoTag } from '@tubutree/app-core/commerce/green-corner';
+import { REVIEW_ECO_TAG_MAX, normalizeEcoTags, type ReviewEcoTag } from '@tubutree/shared-types';
+import { usePublicConfig } from '@/lib/use-public-config';
 import { EvidenceUpload } from '@/components/evidence-upload';
 import { pdpBand, pdpSectionTitle } from './pdp-sections';
 import { reviewVideoConfig } from './review-video-config';
@@ -202,7 +209,11 @@ export function ProductReviews({ slug }: { slug: string }) {
   const myReviews = elig?.myReviews ?? [];
   const mineById = new Map(myReviews.map((r) => [r.id, r]));
   const latestMine = myReviews[0];
-  const hiddenMine = myReviews.filter((r) => r.isVisible === false);
+  // Đang chờ duyệt ảnh (Góc Sống Xanh) cũng chưa hiện nhưng không phải bị ẩn: câu báo khác, và bỏ hết ảnh thì đánh giá hiện ngay.
+  const isHidden = (r: MyReviewRef | undefined) => r?.isVisible === false && r.awaitingApproval !== true;
+  const hiddenMine = myReviews.filter(isHidden);
+  const pendingMine = myReviews.filter((r) => r.awaitingApproval === true);
+  const rules = greenCornerRules(usePublicConfig().reviewGreenCorner);
   const nextOrder = elig?.canReview ? elig.reviewableOrders?.[0] : undefined;
 
   const openForm = (t: FormTarget) => {
@@ -322,6 +333,7 @@ export function ProductReviews({ slug }: { slug: string }) {
           </div>
         )}
         {r.comment && <p className="mt-2 whitespace-pre-line break-words text-sm text-stone-700">{r.comment}</p>}
+        {ecoTagLine(r.ecoTags) && <p className="mt-1 text-xs font-medium text-forest-700">{ecoTagLine(r.ecoTags)}</p>}
         {(r.images.length > 0 || r.videoUrl) && (
           <div className="mt-2 flex gap-2 overflow-x-auto">
             {reviewMediaItems(r).map((m, i) =>
@@ -399,6 +411,11 @@ export function ProductReviews({ slug }: { slug: string }) {
           {hiddenNotice(r.orderCode)}
         </p>
       ))}
+      {pendingMine.map((r) => (
+        <p key={r.id} role="status" className="mt-2 rounded-control bg-info-bg px-3 py-2 text-sm text-info-fg">
+          {pendingNotice(r.orderCode)}
+        </p>
+      ))}
 
       {notice && (
         <p role="status" className="mt-2 rounded-control bg-success-bg px-3 py-2 text-sm font-medium text-success-fg">
@@ -413,7 +430,8 @@ export function ProductReviews({ slug }: { slug: string }) {
           target={target}
           purchaseCount={elig?.purchaseCount ?? 0}
           rewardAvailable={elig?.rewardAvailable !== false}
-          hidden={target.kind === 'edit' && mineById.get(target.reviewId)?.isVisible === false}
+          rules={rules}
+          hidden={target.kind === 'edit' && isHidden(mineById.get(target.reviewId))}
           onCancel={() => setTarget(null)}
           onSaved={(message) => {
             setTarget(null);
@@ -557,6 +575,7 @@ function ReviewEditor({
   target: FormTarget;
   purchaseCount: number;
   rewardAvailable: boolean;
+  rules: GreenCornerRules | null;
   hidden: boolean;
   onCancel: () => void;
   onSaved: (message: string) => void;
@@ -620,6 +639,7 @@ function ReviewForm({
   deliveredAt,
   purchaseCount,
   rewardAvailable,
+  rules,
   hidden,
   onCancel,
   onSaved,
@@ -633,6 +653,8 @@ function ReviewForm({
   deliveredAt: string | null;
   purchaseCount: number;
   rewardAvailable: boolean;
+  /** Luật Góc Sống Xanh khi cờ bật (thẻ cảm nhận, tối đa ảnh, thưởng sau duyệt); null thì form như cũ. */
+  rules: GreenCornerRules | null;
   /** Đánh giá đang sửa bị Tubu ẩn: lưu không làm nó hiện lại, nên không được báo như thể đã đổi được gì. */
   hidden: boolean;
   onCancel: () => void;
@@ -645,6 +667,10 @@ function ReviewForm({
   const starsGroup = useRovingGroup();
   const [images, setImages] = useState<string[]>(initial?.images ?? []);
   const [videoUrl, setVideoUrl] = useState<string | null>(initial?.videoUrl ?? null);
+  const [ecoTags, setEcoTags] = useState<ReviewEcoTag[]>(() => normalizeEcoTags(initial?.ecoTags));
+  // Đánh giá cũ đã có hơn 3 ảnh vẫn sửa được (máy chủ nhận), chỉ không thêm.
+  const maxPhotos = rules ? Math.max(rules.maxPhotos, initial?.images.length ?? 0) : 5;
+  const wasHidden = hidden || (initial?.isVisible === false && initial.awaitingApproval !== true);
   // Đang tải video lên: gửi lúc này sẽ lưu đánh giá không kèm video (mất phần thưởng video, sửa lại cũng không được cộng thêm).
   const [videoBusy, setVideoBusy] = useState(false);
   // Ảnh còn đang xử lý cũng vậy: gửi lúc này lưu đánh giá thiếu ảnh, và ảnh chen vào sau khi đã gửi không vào bản đang gửi.
@@ -670,6 +696,7 @@ function ReviewForm({
         images: images.length > 0 ? images : undefined,
         videoUrl: videoUrl ?? undefined,
         orderId,
+        ...(rules ? { ecoTags } : {}),
       }),
     onMutate: () => setSaveError(null),
     // "Đơn đã trả hàng", đơn không còn: quyền đánh giá đang hiện (nút "Viết đánh giá", đơn chốt lúc mở form) đã cũ, tải lại để trang hiện đúng.
@@ -686,7 +713,7 @@ function ReviewForm({
       void qc.invalidateQueries({ queryKey: ['loyalty'] });
       const age = isEdit ? null : orderAgeDays(deliveredAt);
       if (age !== null) trackPurchase('review_submitted', { orderAgeDays: age });
-      onSaved(savedMessage(res, hidden || initial?.isVisible === false));
+      onSaved(savedMessage(res, wasHidden));
     },
     onSettled: () => {
       sending.current = false;
@@ -717,13 +744,15 @@ function ReviewForm({
   };
 
   const hasMedia = images.length > 0 || videoUrl !== null;
-  const hint = rewardHint({
-    isEdit,
-    rewardAvailable,
-    hasImages: images.length > 0,
-    hasVideo: videoUrl !== null,
-    canUploadVideo: reviewVideoConfig() !== null,
-  });
+  const hint = rules
+    ? greenCornerHint({ isEdit, rewardAvailable, hasMedia, rules })
+    : rewardHint({
+        isEdit,
+        rewardAvailable,
+        hasImages: images.length > 0,
+        hasVideo: videoUrl !== null,
+        canUploadVideo: reviewVideoConfig() !== null,
+      });
   const note = purchaseNote({ isEdit, purchaseCount, orderCode });
 
   return (
@@ -741,7 +770,7 @@ function ReviewForm({
     >
       <h3 className="text-base font-semibold text-stone-900">{isEdit ? 'Sửa đánh giá' : 'Đánh giá sản phẩm'}</h3>
       {note && <p className="mt-1 text-sm text-stone-600">{note}</p>}
-      {isEdit && (hidden || initial?.isVisible === false) && <p className="mt-1 text-sm text-warning-fg">{EDIT_HIDDEN_NOTE}</p>}
+      {isEdit && wasHidden && <p className="mt-1 text-sm text-warning-fg">{EDIT_HIDDEN_NOTE}</p>}
       <div
         ref={starsGroup.ref}
         onKeyDown={starsGroup.onKeyDown}
@@ -799,11 +828,31 @@ function ReviewForm({
           {issue.message}
         </p>
       )}
+      {rules && (
+        <fieldset className="mt-3" data-testid="review-eco-tags">
+          <legend className="text-sm font-semibold text-stone-900">{fillCopy('review.ecoPick', { n: REVIEW_ECO_TAG_MAX })}</legend>
+          {/* Hàng chip nhỏ xuống dòng cách nhau 12px: vùng chạm 44px của hai hàng không chồng lên nhau. */}
+          <div className="mt-2 flex flex-wrap gap-x-2 gap-y-3">
+            {ECO_TAG_OPTIONS.map((t) => (
+              <Chip
+                key={t}
+                size="sm"
+                variant="choice"
+                selected={ecoTags.includes(t)}
+                disabled={save.isPending || ecoTagLocked(ecoTags, t)}
+                onPress={() => setEcoTags((cur) => toggleEcoTag(cur, t))}
+              >
+                {ecoTagLabel(t)}
+              </Chip>
+            ))}
+          </div>
+        </fieldset>
+      )}
       <div className="mt-3">
         <EvidenceUpload
           value={images}
           onChange={setImages}
-          max={5}
+          max={maxPhotos}
           label="Ảnh đánh giá"
           hint="không bắt buộc"
           maxDataUrlLength={MAX_PUBLIC_DATA_URL_LENGTH}

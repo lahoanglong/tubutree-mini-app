@@ -33,6 +33,7 @@ import { usePurchasedItems } from '@/components/reorder/use-purchased-items';
 import { BEST_SELLER_LEAD_PRIORITY, BestSellerRail } from './best-seller-rail';
 import { CategoryRow } from './category-row';
 import { CommunityPreview } from './community-preview';
+import { GreenCornerStrip } from './green-corner-strip';
 import { HomeContextStrip, useHomeContextVariant } from './context-strip';
 import { HomeQuickAddProvider } from './home-quick-add';
 import { HomeCombos } from './home-combos';
@@ -224,7 +225,8 @@ function HomeViewBody({ initial }: { initial: HomeInitial }) {
         seed={initial.suggestSeed}
         categories={categories.data ?? []}
         exclude={shelves.seen}
-        interleave={homeInterleaveCard(daySeed) === 'quiz' ? <HomeQuizCard /> : <CommunityPreview />}
+        // Ngày của thẻ Cộng đồng: Góc Sống Xanh bật và đủ đánh giá ảnh đã duyệt thì dải ảnh khách đứng chỗ đó, không thì thẻ Cộng đồng như cũ.
+        interleave={homeInterleaveCard(daySeed) === 'quiz' ? <HomeQuizCard /> : <GreenCornerStrip fallback={<CommunityPreview />} />}
       />
     ),
   };

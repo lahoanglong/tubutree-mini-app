@@ -59,6 +59,7 @@ describe('pointsReasonLabel', () => {
     ['MISSION:m1:2026-10-15', 'Thưởng nhiệm vụ Vườn Xanh'],
     ['REVIEW_DELETE:r1', 'Thu hồi điểm đánh giá đã xoá'],
     ['REVIEW_RETURN:r1', 'Thu hồi điểm đánh giá (trả hàng)'],
+    ['REVIEW_PHOTO:li1', 'Đánh giá sản phẩm'],
     ['REFERRAL_ORDER2_DEBT:u1', 'Ghi nợ thu hồi thưởng giới thiệu'],
     ['REFERRAL_MILESTONE_DEBT:u1:3', 'Ghi nợ thu hồi thưởng giới thiệu'],
     ['AFFILIATE_MILESTONE_REVOKE:c1:1', 'Thu hồi thưởng mốc doanh số CTV'],

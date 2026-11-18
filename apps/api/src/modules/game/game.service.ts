@@ -719,7 +719,9 @@ export class GameService {
       this.returnWindowDays(),
       this.prisma.order.findMany({ where: { userId, ...REVIEWABLE_ORDER }, select: { id: true, deliveredAt: true, updatedAt: true } }),
       this.prisma.review.findMany({
-        where: { userId, NOT: { images: { isEmpty: true } } },
+        // Đánh giá ảnh đã qua hàng chờ Góc Sống Xanh chỉ tính khi đã được duyệt: đang chờ, hay bị admin ẩn khỏi hàng chờ (ảnh không phù hợp),
+        // không ăn thưởng nhiệm vụ. Đánh giá chưa từng qua hàng chờ (cờ tắt, đánh giá cũ) tính như trước.
+        where: { userId, NOT: { images: { isEmpty: true } }, OR: [{ photoQueuedAt: null }, { approvedAt: { not: null } }] },
         select: { productId: true, orderId: true, createdAt: true },
       }),
       referral.rows ? readReferralSuccessRows(this.prisma, userId) : Promise.resolve([]),
