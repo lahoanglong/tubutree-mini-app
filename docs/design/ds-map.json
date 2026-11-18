@@ -137,6 +137,7 @@
       "screens": [
         "/",
         "/flash-sale",
+        "/offers",
         "/product/:slug"
       ]
     },
@@ -976,6 +977,16 @@
       "web": "apps/web/src/components/game/missions-card.tsx",
       "screens": [
         "/game"
+      ]
+    },
+    {
+      "name": "GiftTrialRow",
+      "miniapp": "apps/miniapp/src/components/checkout/gift-rows.tsx",
+      "web": "apps/web/src/components/checkout/gift-rows.tsx",
+      "props": "GiftTrialRowProps",
+      "screens": [
+        "/cart",
+        "/checkout"
       ]
     }
   ],

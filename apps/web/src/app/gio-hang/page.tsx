@@ -5,7 +5,7 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { AlertTriangle, Truck, Zap, Trash2, Minus, Plus } from 'lucide-react';
-import { useQuery, useQueryClient, useMutationState } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient, useMutationState } from '@tanstack/react-query';
 import { cartSaving, lineCompareAt } from '@tubutree/app-core/commerce/pdp-view';
 import { CART_OUT_OF_STOCK, CART_OVER_STOCK_BLOCKED, cartOutOfStockBlocked } from '@tubutree/app-core/cart-copy';
 import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
@@ -19,7 +19,7 @@ import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
 import { useRemovedCoupon } from '@/lib/use-removed-coupon';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { useMediaQuery } from '@/lib/use-media-query';
-import { addToCart, getCart, getCartSelection, updateCartItem, removeCartItem, formatVnd, type CartLine } from '@/lib/shop-client';
+import { addToCart, getCart, getCartSelection, updateCartItem, removeCartItem, setCartGift, formatVnd, type CartLine } from '@/lib/shop-client';
 import { CouponBox, couponPreviewKey, couponProductIds, PREVIEW_DEBOUNCE_MS, useSettled } from '@/components/coupon-box';
 import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/login-required';
 import { StickyActionBar } from '@/components/sticky-action-bar';
@@ -42,7 +42,7 @@ import type { CouponPreviewParams } from '@/lib/shop-client';
 import { PAGE_WIDE } from '@/lib/page-frame';
 import { cartStockNote, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { CartComboBlock } from '@/components/cart-combo-block';
-import { GiftNote } from '@/components/checkout/gift-rows';
+import { GiftNote, GiftTrialRow } from '@/components/checkout/gift-rows';
 import { ConfirmSheet } from '@/components/ui/confirm-sheet';
 import { useAutoDismiss } from '@/lib/use-auto-dismiss';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
@@ -190,6 +190,16 @@ export default function CartPage() {
       return next;
     });
 
+  // Quà tặng dùng thử 0đ: lưu lựa chọn vào giỏ. Cả giỏ thì giỏ trả về thay cache; chọn một phần thì đọc lại giỏ và phần đang chọn.
+  const giftChoice = useMutation({
+    mutationFn: ({ variationId, itemIds }: { variationId: string | null; itemIds?: string[] }) => setCartGift(variationId, itemIds),
+    onSuccess: (c, { itemIds }) => {
+      if (itemIds) void queryClient.invalidateQueries({ queryKey: cartKeyNow });
+      else queryClient.setQueryData(cartKeyNow, c);
+      void queryClient.invalidateQueries({ queryKey: ['quote'] });
+    },
+    onError: () => void queryClient.invalidateQueries({ queryKey: cartKeyNow }),
+  });
   const [removedLine, setRemovedLine] = useState<CartLine | null>(null);
   const [undoError, setUndoError] = useState<string | null>(null);
   // Lỗi nhớ theo từng dòng: `mutation.error` chỉ giữ lệnh sau cùng nên lệnh của dòng A lỗi sau khi dòng B đã chạy sẽ mất lời báo.
@@ -362,6 +372,8 @@ export default function CartPage() {
   const allItems = cart?.items ?? [];
   const selectedItems = allItems.filter((it) => !deselected.has(it.id));
   const allSelected = selectedItems.length === allItems.length;
+  // Quà dùng thử theo đúng phần đang chọn: chọn một phần mà giá phần đó chưa về thì ẩn, không hiện mốc của cả giỏ.
+  const giftTrialShown = allSelected ? cart?.giftTrial : priced?.giftTrial;
   // Dòng hết hàng (tồn 0) không mua được: không cộng vào tạm tính hay tiến độ miễn phí giao, như Mini App.
   const buyableSelected = selectedItems.filter((it) => it.stock > 0);
   const selectedSubtotal = buyableSelected.reduce((sum, it) => sum + it.total, 0);
@@ -694,6 +706,20 @@ export default function CartPage() {
               })}
             </div>
             {(cart.pendingGiftRedemptions?.length ?? 0) > 0 && <GiftNote />}
+            <GiftTrialRow
+              summary={giftTrialShown}
+              showLocked
+              busy={giftChoice.isPending}
+              onChoose={(variationId) => {
+                if (giftChoice.isPending) return;
+                giftChoice.mutate({ variationId, itemIds: allSelected ? undefined : selectedItems.map((it) => it.id) });
+              }}
+            />
+            {giftChoice.isError && (
+              <p role="alert" className="mt-1 text-caption text-danger-fg">
+                {actionErrorText(giftChoice.error) || fillCopy('giftTrial.saveFailed')}
+              </p>
+            )}
           </div>
 
           {/* Giỏ chưa có dòng nào trước tổng (không giảm, không phí giao): khung từ md mở đầu bằng khối mã giảm giá, bỏ vạch kẻ + khoảng trống của nó. */}

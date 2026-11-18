@@ -35,7 +35,8 @@ const STEPPER_BTN =
 
 /** Các dòng còn trả được (đã trừ phần các yêu cầu được duyệt trước), chưa chọn dòng nào. */
 function returnableLines(order: OrderDetailDTO, returns: ReturnRequestDTO[]): ReturnLineState[] {
-  const items = order.items.filter((it): it is typeof it & { id: string } => !!it.id);
+  // Quà tặng dùng thử 0đ khách giữ, không trả: máy chủ cũng bỏ dòng quà.
+  const items = order.items.filter((it): it is typeof it & { id: string } => !!it.id && !it.isGift);
   const remaining = remainingByLine(items, returns);
   return items
     .map((it) => ({

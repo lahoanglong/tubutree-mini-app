@@ -25,6 +25,7 @@ import { FrequentlyBoughtTogether } from './frequently-bought-together';
 import { QuickReorderStrip } from './quick-reorder-strip';
 import { ProductTrustStrip } from './product-trust-strip';
 import { LoyaltyRulesCard } from '../loyalty/loyalty-rules-card';
+import { GiftTrialRow } from '../checkout/gift-rows';
 
 // `SectionHeader` (tiêu đề của dải) gọi useNavigate của ZaUI, cần router thật; vùng chạm không phụ thuộc nó.
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => vi.fn() }));
@@ -112,6 +113,21 @@ describe('vùng chạm DS v2 >= 44x44', () => {
     ['AffiliateFeaturedProducts (nút Chép link giới thiệu)', () => <AffiliateFeaturedProducts products={featured} />],
     ['AffiliateFeaturedProducts lỗi (nút Thử lại)', () => <AffiliateFeaturedProducts products={null} error onRetry={() => {}} />],
     ['LoyaltyRulesCard (nút gập Cách kiếm và dùng Điểm Xanh)', () => <LoyaltyRulesCard lines={['A']} />],
+    ['GiftTrialRow (nút Đổi quà tặng dùng thử 0đ)', () => (
+      <GiftTrialRow
+        summary={{
+          base: 320_000,
+          minOrder: 299_000,
+          nextMinOrder: null,
+          shortfall: 0,
+          options: [{ variationId: 'g', productName: 'Khăn giấy tre', variationName: 'Gói bỏ túi', slug: 'k', thumbnail: null, minOrder: 299_000, unlocked: true }],
+          selectedVariationId: 'g',
+          declined: false,
+        }}
+        showLocked
+        onChoose={() => {}}
+      />
+    )],
   ];
 
   it.each(cases)('%s', (_name, ui) => {

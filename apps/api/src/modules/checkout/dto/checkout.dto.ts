@@ -109,6 +109,12 @@ export class PlaceOrderDto extends CheckoutPickupFieldsDto {
 
   @IsOptional() @Trim() @IsString() @MaxLength(500) note?: string;
 
+  /**
+   * Quà tặng dùng thử 0đ khách thấy ở màn thanh toán (id biến thể quà), hoặc `null` = khách không nhận quà. Thiếu trường (app cũ) thì máy chủ
+   * theo lựa chọn ở giỏ. Quà gửi lên không còn mở với phần hàng đang đặt thì 409 GIFT_TRIAL_CHANGED, hết kho thì 409 GIFT_TRIAL_UNAVAILABLE.
+   */
+  @IsOptional() @IsString() @MaxLength(64) giftVariationId?: string | null;
+
   /** Mã giới thiệu CTV (nếu mua qua link chia sẻ). */
   @IsOptional() @Trim() @IsString() referralCode?: string;
 

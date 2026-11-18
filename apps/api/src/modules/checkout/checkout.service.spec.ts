@@ -122,6 +122,8 @@ function build(
     phoneVerified?: boolean;
     /** Dựng service như spec race tối giản: không nạp vùng đổi rác. */
     omitWaste?: boolean;
+    /** Quà tặng dùng thử 0đ (GiftTrialService); thiếu = tính năng không nạp, như cờ tắt. */
+    giftTrial?: unknown;
     returnPackaging?: { forAddress: jest.Mock };
   } = {},
 ) {
@@ -170,7 +172,12 @@ function build(
       findMany: jest.fn().mockImplementation(({ where }: { where: { id: { in: string[] } } }) =>
         Promise.resolve(where.id.in.map((id) => ({ id }))),
       ),
+      // Biến thể quà tặng dùng thử kiểm lại trong tx (bán được, kho Tubu giao).
+      findFirst: jest.fn().mockImplementation(({ where }: { where: { id: string } }) =>
+        Promise.resolve({ id: where.id, name: 'Gói bỏ túi', product: { name: 'Khăn giấy tre', slug: 'khan-giay-tre' } }),
+      ),
     },
+    cart: { updateMany: jest.fn().mockResolvedValue({ count: 0 }) },
   } as unknown as PrismaService;
   (prisma as unknown as { $transaction: jest.Mock }).$transaction = jest
     .fn()
@@ -287,6 +294,7 @@ function build(
     opts.geo as never,
     opts.systemConfig as never,
     undefined,
+    opts.giftTrial as never,
     opts.returnPackaging as never,
   );
   return { svc, prisma, updateMany, orderCreate, executeRaw, total, combo, cart, coupons, flashSale, pancake, gomdon, pricing, loyalty, analytics, affiliate, notifications, wasteHold, wasteRequests, giftAttach };
@@ -3338,5 +3346,101 @@ describe('CheckoutService: Hộp Xanh đi đúng đường combo (commerce.green
     });
     const q = await svc.quote('u1', { addressId: 'addr1' } as never);
     expect(q.greenBoxDiscount).toBe(0);
+  });
+});
+
+describe('CheckoutService: quà tặng dùng thử 0đ theo mốc (commerce.gift_trial_enabled)', () => {
+  const { giftTrialBase, giftTrialSummary } = jest.requireActual('../gift-tiers/gift-trial') as typeof import('../gift-tiers/gift-trial');
+  const SETTINGS = { enabled: true, minOrder: 299_000, options: [{ variationId: 'g1', minOrder: 299_000 }] };
+  const STOCK = new Map([['g1', { variationId: 'g1', productName: 'Khăn giấy tre', variationName: 'Gói bỏ túi', slug: 'khan-giay-tre', thumbnail: null }]]);
+  const giftStub = (choice: string | null = null) => ({
+    settings: jest.fn().mockResolvedValue(SETTINGS),
+    summaryFor: jest.fn(async (_u: string, lines: Array<{ total: number }>) => giftTrialSummary(SETTINGS, giftTrialBase(lines), STOCK, choice)),
+  });
+  const cartOf = (total: number) => ({
+    items: [{ id: 'ci1', variationId: 'v1', productId: 'p1', productName: 'Nước giặt', variationName: '2L', unitPrice: total, quantity: 1, total, stock: 9, isFlash: false }],
+    subtotal: total,
+    discount: 0,
+    freeship: false,
+    couponCode: null,
+  });
+  const codeOf = async (p: Promise<unknown>) => {
+    try {
+      await p;
+    } catch (e) {
+      return ((e as ConflictException).getResponse() as { code?: string }).code;
+    }
+    return 'NO_THROW';
+  };
+
+  it('không nạp GiftTrialService (cờ tắt): báo giá không có giftTrial, đơn không có dòng quà', async () => {
+    const { svc, orderCreate } = build({ cartData: cartOf(320_000) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q).not.toHaveProperty('giftTrial');
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect((orderCreate.mock.calls[0]![0].data.items.create as unknown[]).length).toBe(1);
+  });
+
+  it('báo giá kèm khối quà tính trên đúng phần hàng đang đặt', async () => {
+    const { svc } = build({ cartData: cartOf(320_000), giftTrial: giftStub() });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.giftTrial).toMatchObject({ base: 320_000, selectedVariationId: 'g1', shortfall: 0 });
+  });
+
+  it('đặt đơn kèm quà khách thấy: thêm một dòng 0đ (isGift), giữ 1 đơn vị kho quà, tiền đơn không đổi, xoá lựa chọn ở giỏ', async () => {
+    const { svc, orderCreate, executeRaw, prisma } = build({ cartData: cartOf(320_000), giftTrial: giftStub() });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', giftVariationId: 'g1' } as never);
+    const data = orderCreate.mock.calls[0]![0].data;
+    const items = data.items.create as Array<Record<string, unknown>>;
+    expect(items).toHaveLength(2);
+    expect(items[1]).toEqual({
+      variationId: 'g1',
+      productName: 'Khăn giấy tre',
+      productSlug: 'khan-giay-tre',
+      variationName: 'Gói bỏ túi',
+      unitPrice: 0,
+      quantity: 1,
+      total: 0,
+      paidTotal: 0,
+      pointsDiscount: 0,
+      flashSaleItemId: null,
+      isGift: true,
+    });
+    expect(data.subtotal).toBe(320_000);
+    expect(data.total).toBe(320_000 + data.shippingFee - data.discount);
+    // Lần giữ kho thứ hai là của quà (sau dòng hàng), đúng 1 đơn vị.
+    const reserveCalls = executeRaw.mock.calls.filter((c: unknown[]) => String((c[0] as string[]).join('?')).includes('"reservedStock" = "reservedStock" +'));
+    expect(reserveCalls.map((c: unknown[]) => c.slice(1))).toEqual([
+      [1, 1, 'v1', 1],
+      [1, 1, 'g1', 1],
+    ]);
+    expect((prisma as unknown as { cart: { updateMany: jest.Mock } }).cart.updateMany).toHaveBeenCalledWith({ where: { userId: 'u1', giftChoice: { not: null } }, data: { giftChoice: null } });
+  });
+
+  it('quà khách gửi lên chưa mở với phần hàng này: 409 GIFT_TRIAL_CHANGED, không ghi đơn', async () => {
+    const { svc, orderCreate } = build({ cartData: cartOf(250_000), giftTrial: giftStub() });
+    expect(await codeOf(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', giftVariationId: 'g1' } as never))).toBe('GIFT_TRIAL_CHANGED');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('quà khách đã thấy vừa hết lúc giữ kho: 409 GIFT_TRIAL_UNAVAILABLE (cả đơn rollback)', async () => {
+    const executeRaw = jest.fn().mockImplementation(async (strings: TemplateStringsArray, ...values: unknown[]) => (values.includes('g1') ? 0 : 1));
+    const { svc, orderCreate } = build({ cartData: cartOf(320_000), giftTrial: giftStub(), executeRaw });
+    expect(await codeOf(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', giftVariationId: 'g1' } as never))).toBe('GIFT_TRIAL_UNAVAILABLE');
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('app cũ không gửi trường quà: theo lựa chọn ở giỏ; quà hết thì đặt không kèm quà (app cũ không hứa quà)', async () => {
+    const executeRaw = jest.fn().mockImplementation(async (strings: TemplateStringsArray, ...values: unknown[]) => (values.includes('g1') ? 0 : 1));
+    const { svc, orderCreate } = build({ cartData: cartOf(320_000), giftTrial: giftStub(), executeRaw });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect((orderCreate.mock.calls[0]![0].data.items.create as unknown[]).length).toBe(1);
+  });
+
+  it('khách chọn không nhận quà (null): không dòng quà, không giữ kho quà', async () => {
+    const { svc, orderCreate, executeRaw } = build({ cartData: cartOf(320_000), giftTrial: giftStub() });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', giftVariationId: null } as never);
+    expect((orderCreate.mock.calls[0]![0].data.items.create as unknown[]).length).toBe(1);
+    expect(executeRaw.mock.calls.some((c: unknown[]) => c.includes('g1'))).toBe(false);
   });
 });

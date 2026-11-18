@@ -58,6 +58,11 @@ describe('cặp màu commerce của gói tokens-a11y đạt 4,5:1 (chữ) — WC
     ['--color-text-primary', '--color-bg-subtle'],
     ['--color-flash-fg', '--color-flash-bg'],
     ['--color-flash-solid-fg', '--color-flash-solid-bg'],
+    // Thanh đã bán dạng Giờ Xanh Ưu Đãi: chữ xanh đậm đè lên phần đã bán (xanh non) và rãnh (xanh nhạt).
+    ['--color-action-secondary-fg', '--color-progress-fill-from'],
+    ['--color-action-secondary-fg', '--color-action-secondary-bg'],
+    // Đồng hồ dạng Giờ Xanh: chữ "Kết thúc sau …" và dấu ":" màu chữ thương hiệu trên nền trang.
+    ['--color-text-brand', '--color-bg-canvas'],
     ['--color-countdown-fg', '--color-countdown-bg'],
     ['--color-voucher-fg', '--color-voucher-bg'],
     ['--color-voucher-stub-fg', '--color-voucher-stub-bg'],

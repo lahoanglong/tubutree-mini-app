@@ -5,6 +5,7 @@ import type {
   CartComboGroup,
   CheckoutPickupFields,
   CheckoutPickupQuote,
+  GiftTrialSummaryDTO,
   PendingGiftRedemptionDTO,
   QuotePendingGiftDTO,
   ShippingFeeWaivedReason,
@@ -90,6 +91,8 @@ export interface CartSummary {
   unavailableItems?: { id: string; productName: string; variationName: string; quantity: number }[];
   /** Quà hiện vật 0đ khách đã đổi và chưa gắn đơn nào (sẽ đi cùng đơn kế tiếp có hàng Tubu giao). API cũ chưa trả → coi như rỗng. */
   pendingGiftRedemptions?: PendingGiftRedemptionDTO[];
+  /** Quà tặng dùng thử 0đ theo mốc (cờ commerce.gift_trial_enabled). Cờ tắt, hết quà hoặc API cũ: không có, ẩn hẳn khối. */
+  giftTrial?: GiftTrialSummaryDTO;
 }
 export interface AddressDTO {
   id: string;
@@ -148,6 +151,8 @@ export interface CheckoutQuote {
   giftMinNetGoodsVnd?: number;
   /** W179-C: số tiền hàng Tubu còn thiếu để nhận quà 0đ (0 khi đủ ngưỡng). */
   giftShortfallVnd?: number;
+  /** Quà tặng dùng thử 0đ theo mốc của phần hàng đang đặt. Cờ tắt, hết quà hoặc API cũ: không có. */
+  giftTrial?: GiftTrialSummaryDTO;
 }
 /** Đơn cùng lần đặt bị tách theo nơi giao (kể cả chính đơn này). */
 export interface SplitOrderDTO {
@@ -176,6 +181,8 @@ export interface OrderDTO {
     total: number;
     /** Ảnh nhỏ của dòng (API ghép theo biến thể); thiếu → hiện biểu tượng lá. */
     thumbnail?: string | null;
+    /** Dòng quà tặng dùng thử 0đ: khách giữ quà, không trả. API cũ không gửi. */
+    isGift?: boolean;
   }[];
   /**
    * Đơn chờ thanh toán mà hàng đã bàn giao vận chuyển (hệ thống thôi tự huỷ): Tubu xử lý với khách — không ghi hạn, không QR,
@@ -291,6 +298,12 @@ export const getCouponPreviews = (params: CouponPreviewParams) =>
 export const applyCoupon = (code: string) =>
   apiFetch<CartSummary>(cartPath('/cart/coupon'), { method: 'POST', body: { code } });
 export const removeCoupon = () => apiFetch<CartSummary>(cartPath('/cart/coupon'), { method: 'DELETE' });
+/** Chọn quà tặng dùng thử 0đ (`null` = "Không nhận quà"); `itemIds` = giỏ đang chọn một phần, để quà trả về khớp phần khách đang đặt. */
+export const setCartGift = (variationId: string | null, itemIds?: string[]) => {
+  const base = cartPath('/cart/gift');
+  const path = itemIds && itemIds.length > 0 ? `${base}${base.includes('?') ? '&' : '?'}itemIds=${encodeURIComponent(itemIds.join(','))}` : base;
+  return apiFetch<CartSummary>(path, { method: 'PUT', body: { variationId } });
+};
 
 /** GET /me — chỉ khai các trường web hiển thị; hồ sơ trong phiên đăng nhập là ảnh chụp lúc đăng nhập nên sẽ cũ. */
 export interface MyBalances {
@@ -397,6 +410,8 @@ export const placeOrder = (
     referralCode?: string;
     /** Ô "Nhận hành trình đơn hàng qua Zalo"; thiếu khi ô không hiện thì máy chủ dùng lựa chọn đã nhớ. */
     orderZaloConsent?: boolean;
+    /** Quà tặng dùng thử khách thấy ở thanh toán; `null` = không kèm quà; bỏ trống khi báo giá không có khối quà. */
+    giftVariationId?: string | null;
   } & CheckoutPickupFields,
   idempotencyKey: string,
 ) =>

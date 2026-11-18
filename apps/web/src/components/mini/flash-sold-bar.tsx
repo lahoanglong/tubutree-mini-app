@@ -10,6 +10,8 @@ export interface FlashSoldBarProps {
   soldOut?: boolean;
   /** Màu rãnh. 'flash' (mặc định) là cam nhạt cho thẻ trên nền trắng; 'neutral' cho thanh đặt trên nền cam nhạt (PDP), nơi rãnh cam sẽ chìm mất. */
   track?: 'flash' | 'neutral';
+  /** Màu thanh. 'green' cho khối Giờ Xanh Ưu Đãi: rãnh xanh nhạt, phần đã bán xanh lá non, chữ xanh đậm (đạt tương phản trên cả hai). */
+  tone?: 'flash' | 'green';
 }
 
 /**
@@ -17,7 +19,8 @@ export interface FlashSoldBarProps {
  * chữ luôn hiện và mang thông tin ("Vừa mở bán", "Đã bán 68%", "Sắp hết", "Đã bán hết"), a11y B3. Chữ đè lên thanh dùng stone-900
  * (đạt trên cả cam lẫn rãnh). Phần đã bán dựng bằng scaleX để chạy một lần lúc vào màn mà không đo lại bố cục; transition nằm ở CSS (.tubu-flash-fill) để prefers-reduced-motion tắt được.
  */
-export function FlashSoldBar({ soldPct, soldOut = false, track = 'flash' }: FlashSoldBarProps) {
+export function FlashSoldBar({ soldPct, soldOut = false, track = 'flash', tone = 'flash' }: FlashSoldBarProps) {
+  const green = tone === 'green';
   const ratio = Number.isFinite(soldPct) ? Math.min(1, Math.max(0, soldPct / 100)) : 0;
   // Vẽ 0 ở lần đầu rồi mới lên đúng mức để transition chạy lúc khối hiện ra.
   const [shown, setShown] = useState(false);
@@ -27,7 +30,7 @@ export function FlashSoldBar({ soldPct, soldOut = false, track = 'flash' }: Flas
       <div
         data-testid="flash-sold-track"
         aria-hidden="true"
-        style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'var(--radius-pill)', background: soldOut || track === 'neutral' ? 'var(--color-track)' : 'var(--color-flash-bg)' }}
+        style={{ position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 'var(--radius-pill)', background: soldOut || track === 'neutral' ? 'var(--color-track)' : green ? 'var(--color-action-secondary-bg)' : 'var(--color-flash-bg)' }}
       >
         {!soldOut && (
           <div
@@ -37,7 +40,7 @@ export function FlashSoldBar({ soldPct, soldOut = false, track = 'flash' }: Flas
               width: '100%',
               height: '100%',
               borderRadius: 'var(--radius-pill)',
-              background: 'var(--color-flash-solid-bg)',
+              background: green ? 'var(--color-progress-fill-from)' : 'var(--color-flash-solid-bg)',
               transformOrigin: 'left',
               transform: `scaleX(${shown ? ratio : 0})`,
             }}
@@ -57,7 +60,7 @@ export function FlashSoldBar({ soldPct, soldOut = false, track = 'flash' }: Flas
           lineHeight: 1,
           whiteSpace: 'nowrap',
           fontVariantNumeric: 'tabular-nums',
-          color: soldOut ? 'var(--color-text-secondary)' : 'var(--color-flash-solid-fg)',
+          color: soldOut ? 'var(--color-text-secondary)' : green ? 'var(--color-action-secondary-fg)' : 'var(--color-flash-solid-fg)',
         }}
       >
         {flashSoldText(soldPct, soldOut)}

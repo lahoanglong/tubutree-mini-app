@@ -1097,6 +1097,9 @@ model Cart {
   user              User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   items             CartItem[]
   couponCode        String?
+  /// Quà tặng dùng thử 0đ khách chọn (gift-tiers/gift-trial.ts): NULL = chưa chọn, máy chủ lấy quà đầu tiên đã mở; 'NONE' = không nhận
+  /// quà; còn lại là id biến thể quà. Không khoá ngoại: quà bị gỡ khỏi cấu hình thì giỏ tự rơi về quà khác.
+  giftChoice        String?
   updatedAt         DateTime   @updatedAt
   // Remarketing (nhắc giỏ bỏ quên): null/cũ hơn updatedAt = chưa nhắc cho lần bỏ quên này.
   abandonRemindedAt DateTime?
@@ -1423,6 +1426,8 @@ model OrderItem {
   /// Trả hàng hoàn điểm theo đúng phần này. Null ở đơn cũ và đơn không qua checkout — trả hàng chia điểm theo giá trị dòng.
   pointsDiscount      Int?
   flashSaleItemId     String?
+  /// Dòng quà tặng dùng thử 0đ theo mốc giỏ (gift-tiers): không phải hàng khách mua, nên Mua lại, "đã bán", "Thường mua kèm" bỏ qua.
+  isGift              Boolean              @default(false)
   /// Số đơn vị của dòng này CHƯA có hàng thật để giữ chỗ — chỉ > 0 cho đơn ĐẠI LÝ khi đặt vượt
   /// tồn (§ DealerService.placeOrder cho đặt trước thay vì từ chối). Với mọi đơn khác luôn 0.
   /// `quantity - backorderedQty` là số đã thực sự trừ kho (dùng khi hoàn kho lúc huỷ/trả).

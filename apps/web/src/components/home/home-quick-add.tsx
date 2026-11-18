@@ -64,7 +64,11 @@ export function HomeQuickAddProvider({ children }: { children: ReactNode }) {
   };
 
   const mutation = useLockedMutation<void, Error, AddVars>(
-    { mutationFn: (vars) => (phase === 'guest' ? addAsGuest(vars) : quickAdd(vars.product, { origin: vars.origin })) },
+    {
+      // Thẻ ghim phân loại (thẻ Giờ Xanh mang phân loại của suất): bảng chọn mở sẵn phân loại đó, như Mini App.
+      mutationFn: (vars) =>
+        phase === 'guest' ? addAsGuest(vars) : quickAdd(vars.product, { origin: vars.origin, initialId: vars.product.pinnedVariationId ?? null }),
+    },
     (vars) => vars.product.id,
   );
   // `mutate` mới mỗi lần dựng lại: giữ `add` đứng yên để các thẻ không dựng lại chỉ vì nút ＋ của thẻ khác đổi trạng thái.

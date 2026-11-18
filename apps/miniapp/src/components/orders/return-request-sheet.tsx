@@ -43,7 +43,9 @@ const RETURN_WINDOW_CLOSED = /^Quá hạn đổi\/trả/;
 
 function initialLines(order: OrderView, returns: ReturnRequestDTO[]): ReturnLineState[] {
   const remaining = remainingByLine(order.items, returns.filter((r) => r.orderId === order.id));
+  // Quà tặng dùng thử 0đ khách giữ, không trả: máy chủ cũng bỏ dòng quà.
   const lines = order.items
+    .filter((it) => !it.isGift)
     .map((it) => ({
       orderItemId: it.id,
       productName: it.productName,

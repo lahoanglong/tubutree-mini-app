@@ -260,7 +260,7 @@ describe('ReviewsService.create', () => {
           status: 'DELIVERED',
           type: 'RETAIL',
           placedForCustomer: false,
-          items: { some: { variationId: { in: ['v1'] } } },
+          items: { some: { isGift: false, variationId: { in: ['v1'] } } },
         },
         orderBy: [{ deliveredAt: 'asc' }, { createdAt: 'asc' }],
         select: { id: true, code: true, deliveredAt: true },
@@ -1315,7 +1315,7 @@ describe('ReviewsService.canReview', () => {
     const prisma = withPurchases([PURCHASE_O1]);
     await check(prisma);
     expect(prisma.order.findMany).toHaveBeenCalledWith({
-      where: { userId: 'u1', status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false, items: { some: { variationId: { in: ['v1'] } } } },
+      where: { userId: 'u1', status: 'DELIVERED', type: 'RETAIL', placedForCustomer: false, items: { some: { isGift: false, variationId: { in: ['v1'] } } } },
       orderBy: [{ deliveredAt: 'asc' }, { createdAt: 'asc' }],
       select: { id: true, code: true, deliveredAt: true },
     });

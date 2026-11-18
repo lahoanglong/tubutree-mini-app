@@ -23,6 +23,8 @@ export interface OrderItemDTO {
   reviewId?: string | null;
   /** Chỉ GET /orders/:code: dòng này còn viết đánh giá mới được (đơn đã nhận, mua lẻ cho chính mình, chưa đánh giá). */
   reviewable?: boolean;
+  /** Dòng quà tặng dùng thử 0đ: khách giữ quà, không mua lại, không trả, không đánh giá. API cũ không gửi. */
+  isGift?: boolean;
 }
 
 export interface ShippingAddressSnapshot {

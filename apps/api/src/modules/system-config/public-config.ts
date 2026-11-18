@@ -21,6 +21,9 @@ import { RETURN_PACKAGING_NUDGE_KEY } from '../waste-exchange/customer/waste-ret
 import { MSS_ORDER_CONSENT_PRECHECKED_KEY, TUBU_ZALO_PHONE_DEFAULT, TUBU_ZALO_PHONE_KEY, orderZaloGateOpen, tubuZaloPhoneOf, type OrderZaloGate } from './order-zalo-config';
 
 /** Giỏ cho khách chưa đăng nhập trên web; mặc định tắt (seed createOnly + migration 20261117030000_web_guest_cart_flag). */
+/** Cờ Giờ Xanh Ưu Đãi (tubu-w3-06): chỉ đổi cách vẽ khối Giờ vàng ở Trang chủ và Ưu đãi, giá và suất vẫn của Giờ vàng. */
+export const FLASH_GREEN_HOUR_KEY = 'flashsale.green_hour_enabled';
+
 export const WEB_GUEST_CART_ENABLED_KEY = 'web.guest_cart_enabled';
 
 /** Trang đích link mời và tiến độ mời; mặc định tắt (seed createOnly + migration 20261118015753). */
@@ -113,6 +116,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     referralShareCard,
     greenCorner,
     freeshipBooster,
+    flashGreenHour,
     returnPackagingNudge,
   ] = await Promise.all([
     config.get<number>('shipping.free_threshold', FREE_SHIP_THRESHOLD_DEFAULT),
@@ -160,6 +164,7 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     config.get<unknown>(REFERRAL_SHARE_CARD_KEY, false),
     readGreenCornerConfig(config),
     config.get<unknown>(FREESHIP_BOOSTER_ENABLED_KEY, false),
+    config.get<unknown>(FLASH_GREEN_HOUR_KEY, false),
     config.get<unknown>(RETURN_PACKAGING_NUDGE_KEY, false),
   ]);
   return {
@@ -210,6 +215,8 @@ export async function buildPublicConfig(config: SystemConfigService, loadTiers: 
     communityPublicPreview: communityPublicPreview === true,
     // Góc Sống Xanh: app đổi lời mời thưởng ở form đánh giá, giới hạn 3 ảnh, hiện chọn thẻ cảm nhận và dải Trang chủ. Tắt (hoặc API cũ không
     // trả) thì form và Trang chủ như cũ. Số điểm chỉ để nói trước; máy chủ quyết định lúc admin duyệt.
+    // Giờ Xanh Ưu Đãi: khối Giờ vàng ở Trang chủ và Ưu đãi đổi tên, màu xanh và có nút ＋ một chạm. Chỉ boolean true mới bật; API cũ không trả thì như cũ.
+    flashGreenHourEnabled: flashGreenHour === true,
     reviewGreenCorner: { enabled: greenCorner.enabled, rewardPoints: greenCorner.rewardPoints, dailyCap: greenCorner.dailyCap, maxPhotos: GREEN_CORNER_MAX_PHOTOS },
     // Chữ trên trang đăng ký đại lý ("giá sỉ đến X%", "xét duyệt trong N giờ"). Giá trị hỏng → null để miniapp bỏ con số.
     dealer: {

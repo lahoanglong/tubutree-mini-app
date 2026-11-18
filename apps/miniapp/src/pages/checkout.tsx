@@ -2,9 +2,9 @@ import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } fr
 import type { CheckoutLastStep, CheckoutStep, QuotePendingGiftDTO } from '@tubutree/shared-types';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
-import { useIsMutating, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useIsMutating, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Ticket, ChevronRight, Sprout, AlertCircle } from 'lucide-react';
-import { getAddresses, getCart, checkoutQuote, placeOrder, removeCartItem, updateCartItem, type PlacedOrder } from '../services/shop-api';
+import { getAddresses, getCart, checkoutQuote, placeOrder, removeCartItem, setCartGift, updateCartItem, type PlacedOrder } from '../services/shop-api';
 import { cartPreviewKey, cartProductIds } from '../utils/coupon-scope';
 import { fulfillerLabel, shipmentsNote } from '../utils/shipments';
 import { getWallet, getLoyalty } from '../services/account-api';
@@ -17,7 +17,7 @@ import { useAuthPhase } from '../hooks/use-auth-phase';
 import { useNotify } from '../hooks/use-notify';
 import { useStorefrontContext } from '../store/storefront-context';
 import { AddressSection } from '../components/checkout/address-section';
-import { GiftRows } from '../components/checkout/gift-rows';
+import { GiftRows, GiftTrialRow } from '../components/checkout/gift-rows';
 import { useShippingEstimate } from '../components/checkout/use-shipping-estimate';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { comboOnlyDiscount, greenBoxDiscountOf } from '@tubutree/app-core/commerce/green-box';
@@ -33,6 +33,7 @@ import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
 import { flashLimitNotice, isCartFixableError } from '@tubutree/app-core/commerce/flash-limit';
 import { checkoutLineProblems, isPriceChangedError, priceChangedActions, type LineFix } from '@tubutree/app-core/commerce/checkout-issues';
+import { giftTrialPlaceField, isGiftTrialError } from '@tubutree/app-core/commerce/gift-trial';
 import { checkoutPlaceHint, checkoutTotalText, markTransferOrderPlaced, rememberRecentAddress } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { shippingRowView } from '@tubutree/app-core/checkout-pickup-view';
@@ -423,6 +424,8 @@ export default function CheckoutPage() {
         storefrontSlug: ctvSlug,
         itemIds,
         ...(zalo.checked !== undefined ? { orderZaloConsent: zalo.checked } : {}),
+        // Quà dùng thử đúng như khách đang thấy: quà vừa đổi mốc hoặc hết thì BE trả 409 thay vì âm thầm đổi quà.
+        ...giftTrialPlaceField(quote.data?.giftTrial),
       };
       const frozen = unknownAttempt.current;
       if (frozen) {
@@ -528,6 +531,12 @@ export default function CheckoutPage() {
       }
       // Giữ key: lỗi mạng/quá thời gian/5xx có thể xảy ra sau khi server đã tạo đơn — bấm lại cùng nội dung phải là replay,
       // không phải đơn thứ hai. Khách sửa địa chỉ/thanh toán/món thì keyFor tự ra key mới.
+      if (isGiftTrialError(e)) {
+        notify({ text: getErrorMessage(e), type: 'error' });
+        reload(['quote']);
+        reload(['cart']);
+        return hold();
+      }
       if (getErrorCode(e) === 'CART_CHANGED') {
         reload(['cart']);
         reload(['orders']);
@@ -583,6 +592,12 @@ export default function CheckoutPage() {
 
   // Sửa nhanh dòng hết hàng/vượt tồn ngay tại màn: khách không rời trang nên các ô đã nhập còn nguyên. Đổi dòng là đổi lựa chọn
   // của khách, nên một lần đặt đang đóng băng (chưa rõ kết quả) không được phát lại nữa.
+  // Quà tặng dùng thử 0đ: lưu lựa chọn vào giỏ (đúng phần đang đặt) rồi báo giá lại để dòng quà và trường gửi khi đặt khớp nhau.
+  const giftChoice = useMutation({
+    mutationFn: (variationId: string | null) => setCartGift(variationId, itemIds),
+    onSettled: () => Promise.all([queryClient.invalidateQueries({ queryKey: ['quote'] }), queryClient.invalidateQueries({ queryKey: ['cart'] })]),
+    onError: (e: unknown) => notify({ text: getErrorMessage(e) || fillCopy('giftTrial.saveFailed'), type: 'error' }),
+  });
   const lineFix = useLockedMutation({
     mutationFn: ({ id, fix }: { id: string; fix: LineFix }) => (fix.kind === 'remove' ? removeCartItem(id) : updateCartItem(id, fix.quantity)),
     // Chờ giỏ và báo giá về mới thôi bận: nút xoá còn bấm được trong lúc giỏ cũ còn hiện thì lần bấm hai gọi xoá dòng đã mất và nhận 404.
@@ -705,8 +720,9 @@ export default function CheckoutPage() {
   // Thiếu địa chỉ hoặc ô hoá đơn thì nút vẫn bấm được: bấm để chỉ ra ô thiếu (lỗi ngay dưới ô, con trỏ nhảy tới). Chỉ những lý do
   // không phải ô nhập (đang tính tiền, dòng cần sửa, chưa có cách thanh toán, đang áp mã) mới khoá hẳn, và đã có chữ nói lý do.
   const formBlocked = !addressId || !invoiceValid;
+  // Đang lưu quà 0đ: đơn gửi lúc này mang quà cũ trong khi giỏ đã đổi, máy chủ trả 409; chờ lưu xong và báo giá mới về.
   const placeLocked =
-    hasLineProblem || autoCoupon.busy || couponChanging || (!!addressId && (!quote.isSuccess || quote.isFetching || recalculating || (!zeroNote && payment === '')));
+    hasLineProblem || giftChoice.isPending || autoCoupon.busy || couponChanging || (!!addressId && (!quote.isSuccess || quote.isFetching || recalculating || (!zeroNote && payment === '')));
 
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
   const paymentMethods = [
@@ -919,6 +935,14 @@ export default function CheckoutPage() {
             shortfallVnd={quote.data?.giftShortfallVnd ?? 0}
             onVerifyPhone={user?.phone ? undefined : verifyPhone}
             verifyingPhone={verifyingPhone}
+          />
+          <GiftTrialRow
+            summary={quote.data?.giftTrial}
+            showLocked={false}
+            busy={giftChoice.isPending}
+            onChoose={chosen((variationId: string | null) => {
+              if (!giftChoice.isPending) giftChoice.mutate(variationId);
+            })}
           />
         </Box>
         ) : null;

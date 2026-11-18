@@ -121,6 +121,7 @@ export const FIELD_LABELS: Record<string, string> = {
   flashPrice: 'Giá giờ vàng',
   freeShipFrom: 'Miễn phí vận chuyển từ',
   from: 'Từ ngày',
+  giftVariationId: 'Quà tặng dùng thử',
   goal: 'Mục tiêu',
   gramsPerUnit: 'Số gram mỗi đơn vị',
   headerNote: 'Ghi chú đầu trang',

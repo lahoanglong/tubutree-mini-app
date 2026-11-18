@@ -15,6 +15,8 @@ export interface CountdownProps {
   onEnd?: () => void;
   /** Mặc định "Kết thúc sau"; suất sắp tới dùng "Bắt đầu sau". */
   kind?: 'ends' | 'starts';
+  /** Màu chữ và dấu ":": `flash` (mặc định) theo Giờ vàng; `green` cho dạng Giờ Xanh Ưu Đãi. Ô số giữ nền tối ở cả hai. */
+  tone?: 'flash' | 'green';
 }
 
 const CELL: CSSProperties = {
@@ -33,8 +35,9 @@ const CELL: CSSProperties = {
   lineHeight: 1,
   fontVariantNumeric: 'tabular-nums',
 };
-const COLON: CSSProperties = { color: 'var(--color-flash-fg)', fontSize: 'var(--type-label-size)', fontWeight: 700, lineHeight: 1 };
-const TEXT: CSSProperties = { color: 'var(--color-flash-fg)', fontSize: 'var(--type-caption-size)', fontWeight: 600 };
+const ACCENT = { flash: 'var(--color-flash-fg)', green: 'var(--color-text-brand)' } as const;
+const COLON: CSSProperties = { fontSize: 'var(--type-label-size)', fontWeight: 700, lineHeight: 1 };
+const TEXT: CSSProperties = { fontSize: 'var(--type-caption-size)', fontWeight: 600 };
 // Hai dấu cách số (U+2007) rộng bằng hai chữ số: giữ chỗ cho "2 giờ 05 phút" mà HTML dựng sẵn không có chữ số nào.
 const FIGURE_SPACES = '\u2007\u2007';
 
@@ -49,7 +52,8 @@ const FIGURE_SPACES = '\u2007\u2007';
  * (bề rộng thường gặp, từ 1 giờ trở lên), text vẽ nhãn ẩn "Kết thúc sau ?? giờ ?? phút" bằng dấu cách số (cùng bề rộng chữ số, không có chữ số
  * nên hydrate không lệch). Khung chỉ được tính từ chế độ vì giờ còn lại chưa biết trước khi mount: dưới 1 giờ ô thật hẹp hơn khung ba ô.
  */
-export function Countdown({ endAt, mode, onEnd, kind = 'ends' }: CountdownProps) {
+export function Countdown({ endAt, mode, onEnd, kind = 'ends', tone = 'flash' }: CountdownProps) {
+  const accent = ACCENT[tone];
   const [now, setNow] = useState<number | null>(null);
   const frame = now === null ? null : countdownFrame(Date.parse(endAt), now);
 
@@ -85,12 +89,12 @@ export function Countdown({ endAt, mode, onEnd, kind = 'ends' }: CountdownProps)
         {mode === 'clock' ? (
           [0, 1, 2].map((i) => (
             <span key={i} aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-              {i > 0 && <span style={COLON}>:</span>}
+              {i > 0 && <span style={{ ...COLON, color: accent }}>:</span>}
               <span style={CELL} />
             </span>
           ))
         ) : (
-          <span aria-hidden="true" style={TEXT}>
+          <span aria-hidden="true" style={{ ...TEXT, color: accent }}>
             {fillCopy(key, { t: fillCopy('time.hoursMinutes', { h: FIGURE_SPACES, m: FIGURE_SPACES }) })}
           </span>
         )}
@@ -108,19 +112,19 @@ export function Countdown({ endAt, mode, onEnd, kind = 'ends' }: CountdownProps)
       {frame.ended ? null : parts ? (
         <>
           {parts.prefix && (
-            <span aria-hidden="true" style={{ color: 'var(--color-flash-fg)', fontSize: 'var(--type-caption-size)', fontWeight: 600, marginRight: 3 }}>
+            <span aria-hidden="true" style={{ color: accent, fontSize: 'var(--type-caption-size)', fontWeight: 600, marginRight: 3 }}>
               {parts.prefix}
             </span>
           )}
           {parts.cells.map((c, i) => (
             <span key={i} aria-hidden="true" style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
-              {i > 0 && <span style={COLON}>:</span>}
+              {i > 0 && <span style={{ ...COLON, color: accent }}>:</span>}
               <span data-testid="countdown-cell" style={CELL}>{c}</span>
             </span>
           ))}
         </>
       ) : (
-        <span aria-hidden="true" style={TEXT}>
+        <span aria-hidden="true" style={{ ...TEXT, color: accent }}>
           {fillCopy(key, { t: frame.text })}
         </span>
       )}

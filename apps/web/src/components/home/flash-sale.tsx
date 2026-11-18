@@ -1,10 +1,12 @@
 'use client';
 
-import { useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useContext, useEffect, useId, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Bell, CheckCircle2, ChevronRight } from 'lucide-react';
 import { cancelFlashReminder, setFlashReminder, type FlashSaleActiveItem, type UpcomingFlashItem } from '@tubutree/app-core/api/flash-sale';
+import type { PublicConfig } from '@tubutree/app-core/api/config';
+import { flashBlockLook, greenHourCanQuickAdd } from '@tubutree/app-core/commerce/green-hour';
 import { productCardView } from '@tubutree/app-core/commerce/product-card-view';
 import { nextFlashSlot, slotClock, type NextFlashSlot } from '@tubutree/app-core/merch/flash-next-slot';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
@@ -22,11 +24,13 @@ import { flashSaleText } from '@/lib/home-text';
 import { useCountdown } from '@/lib/use-countdown';
 import { useFlashExpiry } from '@/lib/use-flash-expiry';
 import { useHydrated } from '@/lib/use-hydrated';
+import { usePublicConfig } from '@/lib/use-public-config';
 import { variationLabel } from '@/lib/variation-label';
 import { browserStorage } from '@/lib/recently-viewed';
 import { Icon, SectionHeader, Skeleton, Text } from '@/components/mini';
 import { Countdown } from '@/components/mini/countdown';
 import { FlashSoldBar } from '@/components/mini/flash-sold-bar';
+import { ProductCardQuickAddContext, QuickAddButton } from '@/components/mini/product-card-quick-add';
 import { ProductTile } from '@/components/mini/product-tile';
 import { RailCell, RailShell } from '@/components/mini/product-rail';
 import { trackCardClick } from '@/components/analytics/funnel';
@@ -66,6 +70,8 @@ export interface FlashSaleProps {
    * nên đếm trên `items` đã cắt có thể ẩn một kệ mà hydrate lại hiện; đếm trên danh sách gốc thì không bao giờ ẩn nhầm.
    */
   guardEndAts?: readonly string[];
+  /** Cấu hình công khai dựng sẵn ở máy chủ: HTML đầu đã đúng dạng Giờ vàng hay Giờ Xanh, không đổi tiêu đề sau khi tải. */
+  initialConfig?: PublicConfig;
 }
 
 /**
@@ -76,13 +82,14 @@ export interface FlashSaleProps {
  * Khác Mini: kệ có trong HTML server (dữ liệu dựng sẵn) nên KHÔNG chờ suất sắp mở tải xong mới hiện, mà dòng "suất kế" vào sau; lần mở trước có dòng đó
  * thì chỗ của nó được giữ sẵn. Trước hydrate mọi suất coi là còn giờ (đúng như HTML máy chủ đã vẽ), sau hydrate mới tính theo giờ máy chủ thật.
  */
-export function FlashSale({ items, loading, error, onRetry, retrying = false, onExpire, guardEndAts }: FlashSaleProps) {
+export function FlashSale({ items, loading, error, onRetry, retrying = false, onExpire, guardEndAts, initialConfig }: FlashSaleProps) {
   const titleId = useId();
   const hydrated = useHydrated();
   // Chờ biết phiên xong rồi mới hỏi: hỏi sớm thì đi request lẻ dù khách đã đăng nhập. Không dùng `useAuthRestoring`: ở lượt hydrate đầu nó là `false`
   // (ảnh chụp phía server) cả với khách có cờ phiên, nên câu hỏi sớm vẫn lọt ra trước khi phiên khôi phục xong.
   const sessionReady = useAuthPhase() !== 'loading';
   const upcoming = useQuery({ ...flashUpcomingQuery(coreHttp), enabled: sessionReady, staleTime: 30_000 });
+  const look = flashBlockLook(usePublicConfig(initialConfig).flashGreenHourEnabled, 'home');
 
   // `expiredTick` tính lại ngay khi suất đang đếm về 0 (Countdown.onEnd): đồng hồ chuyển sang suất kế tiếp thay vì biến mất, thẻ hết giờ rời kệ.
   const [expiredTick, setExpiredTick] = useState(0);
@@ -119,23 +126,24 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
 
   if (loading) return hadFlash ? <FlashSkeleton withNextSlot={hadNextSlot} /> : null;
   if (items.length === 0 && error) {
-    return <HomeBlockError title={fillCopy('flash.title')} error={error} onRetry={() => onRetry?.()} retrying={retrying} />;
+    return <HomeBlockError title={look.title} error={error} onRetry={() => onRetry?.()} retrying={retrying} />;
   }
   if (!visible) return null;
 
-  const title = fillCopy('flash.title');
+  const title = look.title;
   const seeAll = seeAllHref('home.flash', 'web');
   return (
     <section ref={sectionRef} aria-labelledby={titleId} suppressHydrationWarning>
       <SectionHeader
         id={titleId}
         title={title}
-        icon="zap"
-        tone="promo"
+        icon={look.icon}
+        tone={look.tone}
         trailing={
           <Countdown
             endAt={soonestEndAt}
             mode="clock"
+            tone={look.soldTone}
             onEnd={() => {
               setExpiredTick((n) => n + 1);
               onExpire?.();
@@ -147,7 +155,13 @@ export function FlashSale({ items, loading, error, onRetry, retrying = false, on
       <RailShell label={`${title}, vuốt ngang để xem thêm`}>
         {live.map((item, i) => (
           <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} shelf="flash" position={i + 1} />
+            <ActiveFlashCard
+              item={item}
+              reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))}
+              shelf="flash"
+              position={i + 1}
+              greenHour={look.quickAdd}
+            />
           </RailCell>
         ))}
       </RailShell>
@@ -211,6 +225,7 @@ export function ActiveFlashCard({
   priority = false,
   shelf,
   position,
+  greenHour = false,
 }: {
   item: FlashSaleActiveItem;
   reserveVariation: boolean;
@@ -218,13 +233,22 @@ export function ActiveFlashCard({
   /** Kệ và vị trí (từ 1) cho `product_card_click`; thiếu thì chạm thẻ không được đếm. */
   shelf?: string;
   position?: number;
+  /** Khối Giờ Xanh Ưu Đãi: thanh xanh và nút ＋ thêm nhanh trên ảnh khi nơi dựng cấp `ProductCardQuickAddContext`. */
+  greenHour?: boolean;
 }) {
   const hydrated = useHydrated();
+  const quickAdd = useContext(ProductCardQuickAddContext);
   useFlashExpiry(item.endAt);
   const end = Date.parse(item.endAt);
   const now = hydrated || !Number.isFinite(end) ? serverNow() : end - 1;
-  const view = productCardView({ product: flashCardProduct(item), flash: item, variant: 'flash', now });
+  const product = flashCardProduct(item);
+  const view = productCardView({ product, flash: item, variant: 'flash', now });
   const soldPct = soldPercent(item.soldCount, item.quota);
+  // Thẻ mang đúng phân loại của suất (`pinnedVariationId`): món nhiều phân loại thì bảng chọn mở sẵn phân loại đang Giờ Xanh.
+  const overlay =
+    greenHour && quickAdd && greenHourCanQuickAdd(item, view.stock) ? (
+      <QuickAddButton name={item.productName} busy={quickAdd.busyId === product.id} onPress={(origin) => quickAdd.add(product, origin)} />
+    ) : undefined;
   return (
     <ProductTile
       view={view}
@@ -235,10 +259,11 @@ export function ActiveFlashCard({
       href={productHref(encodeURIComponent(item.productSlug), view.isFlash ? item.variationId : null)}
       note={reserveVariation ? (variationLabel(item.variationName) ?? '') : undefined}
       onOpen={shelf && position ? () => trackCardClick(shelf, position, item.productSlug) : undefined}
+      imageOverlay={overlay}
       footerHeight={SOLD_FOOTER_HEIGHT}
       footer={
         <div style={{ height: SOLD_FOOTER_HEIGHT, paddingTop: 4, boxSizing: 'border-box' }}>
-          <FlashSoldBar soldPct={soldPct} soldOut={item.quota > 0 && item.soldCount >= item.quota} />
+          <FlashSoldBar soldPct={soldPct} soldOut={item.quota > 0 && item.soldCount >= item.quota} tone={greenHour ? 'green' : 'flash'} />
         </div>
       }
     />

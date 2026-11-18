@@ -149,7 +149,7 @@ export class ReviewsService {
   private async orderLineOf(db: Db, orderId: string, productId: string): Promise<string | null> {
     const variations = await db.variation.findMany({ where: { productId }, select: { id: true } });
     const line = await db.orderItem.findFirst({
-      where: { orderId, variationId: { in: variations.map((v) => v.id) } },
+      where: { orderId, isGift: false, variationId: { in: variations.map((v) => v.id) } },
       orderBy: { id: 'asc' },
       select: { id: true },
     });
@@ -224,7 +224,8 @@ export class ReviewsService {
   private async purchasesOf(userId: string, productId: string) {
     const variations = await this.prisma.variation.findMany({ where: { productId }, select: { id: true } });
     return this.prisma.order.findMany({
-      where: { userId, ...REVIEWABLE_ORDER, items: { some: { variationId: { in: variations.map((v) => v.id) } } } },
+      // Quà tặng dùng thử 0đ không tính là lần mua: không đánh giá "Đã mua", không nhận thưởng Góc Sống Xanh.
+      where: { userId, ...REVIEWABLE_ORDER, items: { some: { isGift: false, variationId: { in: variations.map((v) => v.id) } } } },
       orderBy: [{ deliveredAt: 'asc' }, { createdAt: 'asc' }],
       select: { id: true, code: true, deliveredAt: true },
     });

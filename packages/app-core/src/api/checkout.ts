@@ -3,6 +3,7 @@ import type {
   CheckoutPickupQuote,
   CouponPreviewRequest,
   CouponPreviewsResponse,
+  GiftTrialSummaryDTO,
   InlinePickupInput,
   OrderDTO,
   PickupOptionsResponse,
@@ -93,6 +94,8 @@ export interface CheckoutQuote {
   giftMinNetGoodsVnd?: number;
   /** W179-C: số tiền hàng Tubu còn thiếu để nhận quà 0đ (0 khi đủ ngưỡng). */
   giftShortfallVnd?: number;
+  /** Quà tặng dùng thử 0đ theo mốc của phần hàng đang đặt. Cờ tắt, hết quà hoặc API cũ: không có. */
+  giftTrial?: GiftTrialSummaryDTO;
 }
 
 export interface AddressDTO {
@@ -168,6 +171,11 @@ export interface PlaceOrderBody {
   returnWeightGrams?: number;
   /** Quà hiện vật khách bỏ ra khỏi đơn này; quà ở lại ví cho đơn sau. */
   excludeGiftRedemptionIds?: string[];
+  /**
+   * Quà tặng dùng thử khách thấy ở màn thanh toán: mã biến thể quà, `null` = không kèm quà. Bỏ trống khi báo giá không có khối quà.
+   * Quà không còn mở với phần hàng đặt lúc này thì 409 `GIFT_TRIAL_CHANGED`; hết lúc giữ chỗ thì 409 `GIFT_TRIAL_UNAVAILABLE`.
+   */
+  giftVariationId?: string | null;
 }
 /** Đặt hàng kèm Idempotency-Key (AD-004) — retry sau timeout không tạo đơn đôi. */
 export const placeOrder = (http: HttpClient, body: PlaceOrderBody, idempotencyKey: string) =>

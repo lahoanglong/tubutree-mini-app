@@ -24,6 +24,7 @@ import {
   placeOrder,
   updateCartItem,
   removeCartItem,
+  setCartGift,
   getMe,
   getPublicConfig,
   formatVnd,
@@ -42,6 +43,7 @@ import { visibleGifts } from '@tubutree/app-core/checkout-pickup-state';
 import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
 import { useRemovedCoupon } from '@/lib/use-removed-coupon';
 import { checkoutLineProblems, priceChangedActions, type LineAction, type LineFix, type LineProblem } from '@tubutree/app-core/commerce/checkout-issues';
+import { giftTrialPlaceField } from '@tubutree/app-core/commerce/gift-trial';
 import { checkoutEtaLabel, placedOrderKinds } from '@tubutree/app-core/shipping-eta';
 import { checkoutPointsOffer, convertedPointsLine, formatCount, idlePointsLabel, lockedPointsLabel, pointsCapState, zeroTotalNote, type CheckoutPointsOffer } from '@/lib/checkout-points';
 import {
@@ -67,7 +69,7 @@ import { AuthLoading, LoginRequired, SessionUnavailable } from '@/components/log
 import { ReferralCodeBox } from '@/components/referral-code-box';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { OrderSuccess } from '@/components/checkout/order-success';
-import { GiftRows } from '@/components/checkout/gift-rows';
+import { GiftRows, GiftTrialRow } from '@/components/checkout/gift-rows';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { comboOnlyDiscount, greenBoxDiscountOf } from '@tubutree/app-core/commerce/green-box';
@@ -387,6 +389,8 @@ export default function CheckoutPage() {
         storefrontSlug: ctvSlug,
         referralCode: effectiveReferralCode(referralApplied, orderLinkReferral),
         ...(zalo.checked !== undefined ? { orderZaloConsent: zalo.checked } : {}),
+        // Quà dùng thử đúng như khách đang thấy: quà vừa đổi mốc hoặc hết thì BE trả 409 thay vì âm thầm đổi quà.
+        ...giftTrialPlaceField(quote?.giftTrial),
       };
       const frozen = unknownAttempt.current;
       if (frozen) {
@@ -516,6 +520,11 @@ export default function CheckoutPage() {
   // Khoá đồng bộ THEO DÒNG như Mini App (apps/miniapp/src/pages/checkout.tsx:500-516): chạm đúp vào cùng một dòng chỉ gửi một lệnh, dòng khác vẫn đi song song.
   // Lỗi nhớ riêng theo dòng (không đọc `lineFix.error`): `isError` chỉ bật sau khi lời hứa tải lại của `onError` xong, mà lời lỗi phải hiện ngay.
   const [lineFixError, setLineFixError] = useState<{ id: string; error: unknown } | null>(null);
+  // Quà tặng dùng thử 0đ: lưu lựa chọn vào giỏ (đúng phần đang đặt) rồi báo giá lại để dòng quà và trường gửi khi đặt khớp nhau.
+  const giftChoice = useMutation({
+    mutationFn: (variationId: string | null) => setCartGift(variationId, itemIds),
+    onSettled: () => Promise.all([qc.invalidateQueries({ queryKey: ['quote'] }), qc.invalidateQueries({ queryKey: ['cart'] })]),
+  });
   const lineFix = useLockedMutation(
     {
       mutationKey: LINE_FIX_KEY,
@@ -732,7 +741,8 @@ export default function CheckoutPage() {
   // Thiếu địa chỉ hoặc ô hoá đơn thì nút vẫn bấm được: bấm để chỉ ra ô thiếu (lỗi ngay dưới ô, con trỏ nhảy tới). Chỉ những lý do
   // không phải ô nhập (đang tính tiền, dòng cần sửa, chưa có cách thanh toán) mới khoá hẳn, và đã có chữ nói lý do.
   // Đang gửi thì nút `aria-busy` + `aria-disabled` chứ không `disabled`: nút khoá thật làm Chromium thả focus về body; `startPlace` đã chặn cú bấm lặp.
-  const placeDisabled = hasLineProblem || (!!addressId && (!quote || quoteStale || (!zeroNote && payment === '')));
+  // Đang lưu quà 0đ: đơn gửi lúc này mang quà cũ trong khi giỏ đã đổi, máy chủ trả 409; chờ lưu xong và báo giá mới về.
+  const placeDisabled = hasLineProblem || giftChoice.isPending || (!!addressId && (!quote || quoteStale || (!zeroNote && payment === '')));
   const onPlace = () => {
     if (formBlocked) {
       setPlaceAttempted(true);
@@ -1011,6 +1021,19 @@ export default function CheckoutPage() {
             shortfallVnd={quote?.giftShortfallVnd ?? 0}
             disabled={place.isPending}
           />
+          <GiftTrialRow
+            summary={quote?.giftTrial}
+            showLocked={false}
+            busy={giftChoice.isPending || place.isPending}
+            onChoose={chosen((variationId: string | null) => {
+              if (!giftChoice.isPending) giftChoice.mutate(variationId);
+            })}
+          />
+          {giftChoice.isError && (
+            <p role="alert" className="mt-1 text-caption text-danger-fg">
+              {actionErrorText(giftChoice.error) || fillCopy('giftTrial.saveFailed')}
+            </p>
+          )}
           </div>
           <div data-mini-block="summary" className="max-md:order-10 max-md:mt-2 max-md:bg-[var(--color-bg-surface)] max-md:px-4 max-md:pt-4">
           <div className="mb-2.5 hidden items-center justify-between max-md:flex">

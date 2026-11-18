@@ -139,3 +139,50 @@ describe('CartController — quà hiện vật 0đ chờ gắn đơn (pendingGif
     expect(res.pendingGiftRedemptions).toEqual([]);
   });
 });
+
+describe('CartController — quà tặng dùng thử 0đ (giftTrial)', () => {
+  const SUMMARY = {
+    base: 320_000,
+    minOrder: 299_000,
+    nextMinOrder: null,
+    shortfall: 0,
+    options: [{ variationId: 'g1', productName: 'Khăn giấy tre', variationName: 'Gói bỏ túi', slug: 'khan-giay-tre', thumbnail: null, minOrder: 299_000, unlocked: true }],
+    selectedVariationId: 'g1',
+    declined: false,
+  };
+  const cart = { id: 'c1', subtotal: 320_000, items: [{ id: 'i1', total: 320_000, fulfiller: { kind: 'TUBU', storefrontId: null, name: 'Tubu Tree', ownerUserId: null } }] };
+
+  function make(summary: unknown) {
+    const svc = { getCart: jest.fn().mockResolvedValue(cart), getCartSelection: jest.fn().mockResolvedValue(cart) };
+    const giftTrial = { summaryFor: jest.fn().mockResolvedValue(summary), setChoice: jest.fn().mockResolvedValue(undefined) };
+    const ctl = new CartController(svc as unknown as CartService, NO_GIFTS, giftTrial as never);
+    return { ctl, svc, giftTrial };
+  }
+
+  it('cờ tắt (summaryFor trả null): giỏ không có trường giftTrial, giống hệt trước', async () => {
+    const res = await make(null).ctl.get('u1', {});
+    expect(res).not.toHaveProperty('giftTrial');
+  });
+
+  it('cờ bật: giỏ kèm khối quà tính trên đúng các dòng trả về', async () => {
+    const { ctl, giftTrial } = make(SUMMARY);
+    const res = await ctl.get('u1', {});
+    expect(giftTrial.summaryFor).toHaveBeenCalledWith('u1', cart.items);
+    expect(res).toMatchObject({ giftTrial: SUMMARY });
+  });
+
+  it('PUT /cart/gift ghi lựa chọn rồi trả lại giỏ (giữ phần chọn và gian hàng ghi công)', async () => {
+    const { ctl, svc, giftTrial } = make(SUMMARY);
+    const res = await ctl.setGift('u1', { variationId: null }, { storefrontSlug: 'shop-a', itemIds: ['i1'] });
+    expect(giftTrial.setChoice).toHaveBeenCalledWith('u1', null);
+    expect(svc.getCartSelection).toHaveBeenCalledWith('u1', 'shop-a', ['i1']);
+    expect(res).toMatchObject({ giftTrial: SUMMARY });
+  });
+
+  it('không có GiftTrialService (dựng tay): PUT /cart/gift báo tạm dừng, không ghi gì', async () => {
+    const svc = { getCart: jest.fn() };
+    const ctl = new CartController(svc as unknown as CartService, NO_GIFTS);
+    await expect(ctl.setGift('u1', { variationId: 'g1' }, {})).rejects.toThrow('Quà tặng dùng thử đang tạm dừng.');
+    expect(svc.getCart).not.toHaveBeenCalled();
+  });
+});

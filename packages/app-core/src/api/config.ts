@@ -83,6 +83,8 @@ export interface PublicConfig {
    * `dailyCap` đánh giá được cộng trong số các đánh giá viết cùng ngày), tối đa `maxPhotos` ảnh. Thiếu khi API cũ → như tắt.
    */
   reviewGreenCorner?: { enabled: boolean; rewardPoints: number; dailyCap: number; maxPhotos: number };
+  /** Cờ `flashsale.green_hour_enabled`: khối Giờ vàng ở Trang chủ và Ưu đãi hiện dạng "Giờ Xanh Ưu Đãi" (tông xanh, nút thêm nhanh). Thiếu khi API cũ → như tắt. */
+  flashGreenHourEnabled?: boolean;
 }
 
 export const getPublicConfig = (http: HttpClient) => http.get<PublicConfig>('/config/public');

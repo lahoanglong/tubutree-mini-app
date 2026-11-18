@@ -226,6 +226,38 @@ describe('OrderReturnsService.estimate — khách thấy số tiền dự kiến
   });
 });
 
+describe('OrderReturnsService — dòng quà tặng dùng thử 0đ (isGift) khách giữ', () => {
+  const gift = { ...line('g', 1, 0), unitPrice: 0, isGift: true };
+  const order = () =>
+    deliveredOrder({ total: 320_000, shippingFee: 20_000, pointsUsed: 0, pointsUsedConverted: 0, pointsEarned: 30, items: [line('a', 3, 270_000), line('b', 1, 30_000), gift] });
+
+  it('trả hết các dòng đã mua là trả cả đơn (hoàn phí giao) dù không trả quà; dòng quà không vào phần hoàn', async () => {
+    const { svc } = makeService(order());
+    const r = await svc.estimate('u1', 'TUBU1', { reasonCode: 'OTHER', items: [{ orderItemId: 'a', quantity: 3 }, { orderItemId: 'b', quantity: 1 }] });
+    expect(r).toMatchObject({ isFull: true, goods: 300_000, shipping: 20_000, refund: 320_000 });
+    expect(r.lines.map((l) => l.orderItemId)).toEqual(['a', 'b']);
+  });
+
+  it('app cũ không gửi dòng: trả mọi dòng đã mua, bỏ dòng quà; app gửi kèm id dòng quà: bỏ qua dòng quà, không 400', async () => {
+    const { svc, create } = makeService(order());
+    await svc.request('u1', 'TUBU1', { reason: 'hàng lỗi cả đơn' });
+    expect(create.mock.calls[0][0].data.items.create).toEqual([
+      { orderItemId: 'a', quantity: 3 },
+      { orderItemId: 'b', quantity: 1 },
+    ]);
+    await svc.request('u1', 'TUBU1', { reasonCode: 'DEFECTIVE', items: [{ orderItemId: 'a', quantity: 1 }, { orderItemId: 'g', quantity: 1 }] });
+    expect(create.mock.calls[1][0].data.items.create).toEqual([{ orderItemId: 'a', quantity: 1 }]);
+  });
+
+  it('chỉ gửi dòng quà → 400 không còn sản phẩm nào có thể trả, không tạo', async () => {
+    const { svc, create } = makeService(order());
+    await expect(svc.request('u1', 'TUBU1', { reasonCode: 'DEFECTIVE', items: [{ orderItemId: 'g', quantity: 1 }] })).rejects.toThrow(
+      'không còn sản phẩm nào',
+    );
+    expect(create).not.toHaveBeenCalled();
+  });
+});
+
 describe('OrderReturnsService.request — hạn đổi/trả tính từ mốc giao THẬT (deliveredAt), không phải updatedAt', () => {
   it('giao 10 ngày trước, webhook vừa ghi đơn (updatedAt = hôm nay) → QUÁ HẠN 7 ngày', async () => {
     const { svc, create } = makeService(deliveredOrder({ deliveredAt: new Date(Date.now() - 10 * DAY) }));

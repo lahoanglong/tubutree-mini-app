@@ -731,7 +731,9 @@ export class OrdersService {
         throw new BadRequestException('Có dòng hàng không thuộc đơn này.');
       }
     }
-    const lines = requested ? order.items.filter((i) => requested.has(i.id)) : order.items;
+    // Quà tặng dùng thử 0đ không mua lại (vào giỏ sẽ thành giá thường); app cũ gửi cả id dòng quà thì bỏ qua, không báo dòng lỗi.
+    const buyable = order.items.filter((i) => !i.isGift);
+    const lines = requested ? buyable.filter((i) => requested.has(i.id)) : buyable;
     const [variations, cartRow] = await Promise.all([
       this.prisma.variation.findMany({
         where: { id: { in: [...new Set(lines.map((l) => l.variationId))] } },

@@ -3,12 +3,14 @@ import { useQuery } from '@tanstack/react-query';
 import { readFlashHint } from '@tubutree/app-core/home-layout';
 import { seeAllHref } from '@tubutree/app-core/merch/home-shelves';
 import { shelf } from '@tubutree/app-core/merch/shelves';
-import { fillCopy } from '@tubutree/app-core/shop-copy';
+import { flashBlockLook } from '@tubutree/app-core/commerce/green-hour';
+import { usePublicConfig } from '../../hooks/use-public-config';
 import { fetchActiveFlashSales } from '../../services/shop-api';
 import { serverNow } from '../../utils/server-clock';
 import { variationLabel } from '../../utils/variation-label';
 import { browserStorage } from '../../utils/recently-viewed';
 import { ActiveFlashCard, FlashSkeleton } from '../flash-sale';
+import { HomeQuickAddProvider } from '../home/home-quick-add';
 import { Countdown } from '../ui/countdown';
 import { RailCell, RailShell } from '../ui/product-rail';
 import { SectionHeader } from '../ui/section-header';
@@ -27,6 +29,7 @@ export function OffersFlash() {
   const q = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000 });
   const [expiredTick, setExpiredTick] = useState(0);
   const [hinted] = useState(() => readFlashHint(browserStorage()));
+  const look = flashBlockLook(usePublicConfig().flashGreenHourEnabled, 'offers');
 
   const live = useMemo(() => {
     const now = serverNow();
@@ -47,30 +50,33 @@ export function OffersFlash() {
   }
   if (live.length < FLASH_SHELF.minItems || soonestEndAt === null) return null;
 
-  const title = fillCopy('flash.todayTitle');
+  const title = look.title;
   // Giờ vàng là ngoại lệ của mẫu "Tất cả (n)": trang đích chia theo khung giờ (hôm nay, ngày mai, mỗi khung một danh sách) và các khung lần lượt hết giờ, nên không có một con số n đúng để hứa trước; nút giữ "Xem tất cả".
   const seeAll = seeAllHref('offers.flash');
+  const rail = (
+    <RailShell label={`${title}, vuốt ngang để xem thêm`}>
+      {live.map((item) => (
+        <RailCell key={item.itemId} variant="flash">
+          <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} greenHour={look.quickAdd} />
+        </RailCell>
+      ))}
+    </RailShell>
+  );
   return (
     <section aria-labelledby={titleId} style={{ paddingTop: 12 }}>
       <div style={{ padding: '0 16px' }}>
         <SectionHeader
           id={titleId}
           title={title}
-          icon="zap"
-          tone="promo"
+          icon={look.icon}
+          tone={look.tone}
           action={seeAll ? { to: seeAll } : undefined}
         />
         <div style={{ display: 'flex', alignItems: 'center', minHeight: FLASH_TEXT_ROW_H }}>
-          <Countdown endAt={soonestEndAt} mode="text" onEnd={() => setExpiredTick((n) => n + 1)} />
+          <Countdown endAt={soonestEndAt} mode="text" tone={look.soldTone} onEnd={() => setExpiredTick((n) => n + 1)} />
         </div>
       </div>
-      <RailShell label={`${title}, vuốt ngang để xem thêm`}>
-        {live.map((item) => (
-          <RailCell key={item.itemId} variant="flash">
-            <ActiveFlashCard item={item} reserveVariation={live.some((it) => Boolean(variationLabel(it.variationName)))} />
-          </RailCell>
-        ))}
-      </RailShell>
+      {look.quickAdd ? <HomeQuickAddProvider>{rail}</HomeQuickAddProvider> : rail}
     </section>
   );
 }

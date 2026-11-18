@@ -1,12 +1,22 @@
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import type { ReactNode } from 'react';
 import type * as ZmpUi from 'zmp-ui';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ fetchActive: vi.fn(), navigate: vi.fn() }));
+const mocks = vi.hoisted(() => ({ fetchActive: vi.fn(), navigate: vi.fn(), add: vi.fn(), config: {} as { flashGreenHourEnabled?: boolean } }));
 vi.mock('zmp-ui', async (importOriginal) => ({ ...(await importOriginal<typeof ZmpUi>()), useNavigate: () => mocks.navigate }));
 vi.mock('../../services/shop-api', () => ({ fetchActiveFlashSales: mocks.fetchActive }));
 vi.mock('../../utils/haptic', () => ({ haptic: vi.fn() }));
+vi.mock('../../hooks/use-public-config', () => ({ usePublicConfig: () => ({ ...mocks.config, isLoaded: true, isPending: false }) }));
+vi.mock('../home/home-quick-add', async () => {
+  const { ProductCardQuickAddContext } = await import('../ui/product-card-quick-add');
+  return {
+    HomeQuickAddProvider: ({ children }: { children: ReactNode }) => (
+      <ProductCardQuickAddContext.Provider value={{ add: mocks.add, busyId: null }}>{children}</ProductCardQuickAddContext.Provider>
+    ),
+  };
+});
 
 import { FLASH_HINT_KEY, FLASH_SKELETON_HEIGHT } from '@tubutree/app-core/home-layout';
 import { OffersFlash } from './offers-flash';
@@ -31,6 +41,21 @@ describe('OffersFlash — Giờ vàng hôm nay ở trang Ưu đãi', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     localStorage.clear();
+    mocks.config = {};
+  });
+
+  it('cờ Giờ Xanh bật: tiêu đề "Giờ Xanh Ưu Đãi", ＋ trên từng thẻ còn suất, chạm ＋ thêm đúng phân loại của suất', async () => {
+    mocks.config = { flashGreenHourEnabled: true };
+    mocks.fetchActive.mockResolvedValue([item(0), item(1, { soldCount: 10 }), item(2, { variationId: 'v9' })]);
+    renderFlash();
+    const region = await screen.findByRole('region', { name: 'Giờ Xanh Ưu Đãi' });
+    const adds = within(region).getAllByRole('button', { name: /^Thêm .* vào giỏ$/ });
+    expect(adds.map((b) => b.getAttribute('aria-label'))).toEqual(['Thêm Sản phẩm 0 vào giỏ', 'Thêm Sản phẩm 2 vào giỏ']);
+    fireEvent.click(adds[1]!);
+    expect(mocks.add).toHaveBeenCalledTimes(1);
+    expect(mocks.add.mock.calls[0]![0]).toMatchObject({ id: 'i2', slug: 'p2', pinnedVariationId: 'v9' });
+    expect(within(region).getAllByTestId('flash-sold-bar')[0]!.querySelector('span')!.style.color).toBe('var(--color-action-secondary-fg)');
+    expect(within(region).getByRole('timer').querySelector('span')!.style.color).toBe('var(--color-text-brand)');
   });
 
   it('không có suất nào đang chạy: không vẽ gì', async () => {
