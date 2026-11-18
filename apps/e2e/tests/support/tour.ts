@@ -71,6 +71,7 @@ export const TOUR: Record<string, Omit<TourEntry, 'key'>> = {
   '/cashback': { name: 'Hoàn tiền', miniapp: '/cashback', web: '/hoan-tien', role: 'CUSTOMER' },
   '/game': { name: 'Vườn Xanh', miniapp: '/game', web: '/vuon-xanh', role: 'CUSTOMER' },
   '/game/play/:game': { name: 'Chơi game mini (Đúng Thùng)', miniapp: '/game/play/sort', web: '/vuon-xanh/choi/sort', role: 'CUSTOMER' },
+  '/game/matcher': { name: 'Chọn Chuẩn Xanh', miniapp: '/game/matcher', web: '/vuon-xanh/chon-chuan-xanh', role: 'CUSTOMER' },
   '/ai-advisor': { name: 'Trợ lý AI', miniapp: '/ai-advisor', web: '/tu-van', role: 'CUSTOMER' },
   '/feed': { name: 'Cộng đồng', miniapp: '/feed', web: '/cong-dong', role: 'CUSTOMER' },
   '/feed/leaderboard': { name: 'Bảng xếp hạng cũ (chuyển về Cộng đồng)', miniapp: '/feed/leaderboard', web: '/cong-dong', role: 'CUSTOMER' },

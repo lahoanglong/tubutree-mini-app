@@ -4,6 +4,7 @@ import { mockAffiliateDashboard } from './affiliate-mocks';
 import { BANK_QR } from './checkout-mocks';
 import { CAMPAIGN_SLUG, campaignDetail, mockCampaigns } from './campaign-mocks';
 import { mockFlashSlots } from './flash-slot-mocks';
+import { mockMatcherOn } from './matcher-mocks';
 import { publicConfig, type MockApi } from './mock-api';
 import { mockCollectable, mockCouponHistory, mockWallet } from './voucher-mocks';
 import { wasteDetail, wastePoint, mockDeskStaff, mockWasteCustomer, WASTE_ITEMS } from './waste-mocks';
@@ -136,6 +137,7 @@ function wasteCustomer(api: MockApi) {
 
 /** Mock riêng của từng màn, theo route Mini App. Gọi SAU mockTourWorld nên đăng ký sau thắng. */
 export const SETUPS: Record<string, (api: MockApi) => void> = {
+  '/game/matcher': (api) => mockMatcherOn(api),
   '/checkout': (api) => {
     api.post('/checkout/quote', { subtotal: tourCart().subtotal, discount: 0, comboDiscount: 0, pointsUsed: 0, pointsDiscount: 0, shippingFee: 0, total: tourCart().subtotal, pointsEarned: 11, pointsBalance: 1800 });
     api.get('/me/wallet', { walletBalance: 350_000, cashbackPending: 0, commissionApproved: 0, commissionPending: 0 });
