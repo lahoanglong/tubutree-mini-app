@@ -150,6 +150,7 @@ export const INPUT_LIMITS: Record<string, { dto: string; max: number; stricter?:
   "components/admin/waste-requests-section.tsx::note": { dto: "apps/api/src/modules/waste-exchange/receiving/waste-admin-requests.controller.ts:WasteUnmatchedResolveDto.note", max: 500 },
   "components/admin/coupon-listing.tsx::title": { dto: "apps/api/src/modules/admin/admin.controller.ts:UpdateCouponDto.title", max: 60 },
   "components/admin/merchant-products-tab.tsx::rejectReason": { dto: "apps/api/src/modules/admin/admin.controller.ts:ReviewMerchantProductDto.rejectReason", max: 500 },
+  "components/admin/merch-shelves/merch-shelves-tab.tsx::pin.note": { dto: "apps/api/src/modules/merch-shelves/dto/merch-shelf.dto.ts:MerchPinDto.note", max: 200 },
 };
 
 /** Ô gõ chữ không đặt `maxLength`, kèm lý do. */

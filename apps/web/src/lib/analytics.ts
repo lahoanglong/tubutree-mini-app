@@ -51,6 +51,7 @@ export const WEB_DYNAMIC_ROUTES = [
   '/doi-rac/xong/:id',
   '/doi-rac/yeu-cau/:id',
   '/doi-rac/yeu-cau/:id/sua',
+  '/don/:code',
   '/hoc-vien/:courseId',
   '/khoi-phuc/:hint',
   '/moi/:code',
