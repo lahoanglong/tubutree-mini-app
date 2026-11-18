@@ -19,6 +19,8 @@ import { useReorder } from './use-reorder';
 import { ProductThumb } from '@/components/mini';
 import { variationLabel } from '@/lib/variation-label';
 import { reorderSavingsNote, reorderSkippedNote, type ReorderLineNotice } from '@tubutree/app-core/commerce/reorder-notice';
+import type { SubscriptionSuggestion } from '@tubutree/app-core/commerce/green-box';
+import { SubscriptionSuggestionRow, SuggestedSubscribe, useSubscriptionSuggestion } from './subscription-suggestion';
 
 export interface ReorderSheetProps {
   target: ReorderTarget | null;
@@ -69,6 +71,13 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
   const savedNote = view ? reorderSavingsNote(selectionSavings(view, sel, cart)) : null;
   const availableCount = view ? availableLines(view).length : 0;
   const selectionState = view ? availableSelectionState(view, sel) : 'none';
+  const { suggestion, discountFraction } = useSubscriptionSuggestion(target !== null, lines.map((l) => l.variationId));
+  // Sheet sống qua các lần mở (trang chỉ đổi `target`) nên sheet Đặt định kỳ mở từ đây còn sau khi sheet mua lại đóng.
+  const [subscribeTo, setSubscribeTo] = useState<SubscriptionSuggestion | null>(null);
+  const acceptSuggestion = (s: SubscriptionSuggestion) => {
+    setSubscribeTo(s);
+    onClose();
+  };
 
   // Khoá ĐỒNG BỘ chống chạm đúp: isPending của react-query chỉ cập nhật sau một nhịp notify.
   const inFlight = useRef(false);
@@ -121,82 +130,86 @@ export function ReorderSheet({ target, source, onClose, onDone, navigateToCart }
   };
 
   return (
-    <Sheet
-      open={target !== null}
-      onClose={onClose}
-      title={reorderText.sheetTitle}
-      description={view?.kind === 'order' ? `Từ đơn ${view.orderCode}` : undefined}
-      footer={
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center justify-between text-sm font-semibold text-stone-900">
-            <span>{reorderText.subtotal}</span>
-            <span className="tabular-nums">{formatVnd(subtotal)}</span>
+    <>
+      <Sheet
+        open={target !== null}
+        onClose={onClose}
+        title={reorderText.sheetTitle}
+        description={view?.kind === 'order' ? `Từ đơn ${view.orderCode}` : undefined}
+        footer={
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between text-sm font-semibold text-stone-900">
+              <span>{reorderText.subtotal}</span>
+              <span className="tabular-nums">{formatVnd(subtotal)}</span>
+            </div>
+            {savedNote && (
+              <p data-testid="reorder-savings-note" className="text-xs font-semibold tabular-nums text-success-fg">
+                {savedNote}
+              </p>
+            )}
+            <p className="text-xs text-stone-600">{reorderText.priceNote}</p>
+            {notice?.kind === 'error' && (
+              <p role="alert" className={ui.error}>
+                {notice.text}
+              </p>
+            )}
+            {notice?.kind === 'problem' && (
+              <p role="status" className="text-sm text-stone-700">
+                {notice.text}{' '}
+                <Link href="/gio-hang" className="font-semibold text-forest-700 underline">
+                  {reorderText.viewCart}
+                </Link>
+              </p>
+            )}
+            <button
+              type="button"
+              disabled={units === 0 || reorder.isPending || partiallyAdded || !cartReady}
+              aria-busy={!cartReady || undefined}
+              onClick={() => void submit()}
+              className={`${ui.btnPrimary} w-full`}
+            >
+              {reorderText.addCta(units)}
+            </button>
           </div>
-          {savedNote && (
-            <p data-testid="reorder-savings-note" className="text-xs font-semibold tabular-nums text-success-fg">
-              {savedNote}
+        }
+      >
+        <div className="flex flex-col gap-3">
+          {suggestion && <SubscriptionSuggestionRow suggestion={suggestion} discountFraction={discountFraction} onAccept={acceptSuggestion} />}
+          {skippedNote && (
+            <p className="text-sm text-[color:var(--color-text-secondary)]" data-testid="reorder-skipped-note">
+              {skippedNote}
             </p>
           )}
-          <p className="text-xs text-stone-600">{reorderText.priceNote}</p>
-          {notice?.kind === 'error' && (
-            <p role="alert" className={ui.error}>
-              {notice.text}
-            </p>
+          {view && availableCount >= 2 && (
+            <label className="flex min-h-11 items-center gap-2.5 text-sm font-semibold text-[color:var(--color-text-primary)]">
+              <span className="flex h-11 w-11 flex-none items-center justify-center">
+                <input
+                  type="checkbox"
+                  data-testid="reorder-toggle-all"
+                  checked={selectionState === 'all'}
+                  ref={(el) => {
+                    if (el) el.indeterminate = selectionState === 'some';
+                  }}
+                  onChange={() => setSel((s) => toggleAllAvailable(view, s))}
+                  className="h-5 w-5 accent-[color:var(--color-action-primary-bg)]"
+                />
+              </span>
+              {reorderText.selectAll(availableCount)}
+            </label>
           )}
-          {notice?.kind === 'problem' && (
-            <p role="status" className="text-sm text-stone-700">
-              {notice.text}{' '}
-              <Link href="/gio-hang" className="font-semibold text-forest-700 underline">
-                {reorderText.viewCart}
-              </Link>
-            </p>
-          )}
-          <button
-            type="button"
-            disabled={units === 0 || reorder.isPending || partiallyAdded || !cartReady}
-            aria-busy={!cartReady || undefined}
-            onClick={() => void submit()}
-            className={`${ui.btnPrimary} w-full`}
-          >
-            {reorderText.addCta(units)}
-          </button>
+          {lines.map((line) => (
+            <ReorderLineRow
+              key={line.key}
+              line={line}
+              value={sel[line.key]}
+              inCart={view ? unitsSharingCartLine(view, sel, cart, line) : 0}
+              onChange={(v) => setSel((s) => ({ ...s, [line.key]: v }))}
+            />
+          ))}
         </div>
-      }
-    >
-      <div className="flex flex-col gap-3">
-        {skippedNote && (
-          <p className="text-sm text-[color:var(--color-text-secondary)]" data-testid="reorder-skipped-note">
-            {skippedNote}
-          </p>
-        )}
-        {view && availableCount >= 2 && (
-          <label className="flex min-h-11 items-center gap-2.5 text-sm font-semibold text-[color:var(--color-text-primary)]">
-            <span className="flex h-11 w-11 flex-none items-center justify-center">
-              <input
-                type="checkbox"
-                data-testid="reorder-toggle-all"
-                checked={selectionState === 'all'}
-                ref={(el) => {
-                  if (el) el.indeterminate = selectionState === 'some';
-                }}
-                onChange={() => setSel((s) => toggleAllAvailable(view, s))}
-                className="h-5 w-5 accent-[color:var(--color-action-primary-bg)]"
-              />
-            </span>
-            {reorderText.selectAll(availableCount)}
-          </label>
-        )}
-        {lines.map((line) => (
-          <ReorderLineRow
-            key={line.key}
-            line={line}
-            value={sel[line.key]}
-            inCart={view ? unitsSharingCartLine(view, sel, cart, line) : 0}
-            onChange={(v) => setSel((s) => ({ ...s, [line.key]: v }))}
-          />
-        ))}
-      </div>
-    </Sheet>
+      </Sheet>
+      {subscribeTo && <SuggestedSubscribe suggestion={subscribeTo} onDone={() => setSubscribeTo(null)} />}
+    </>
   );
 }
 

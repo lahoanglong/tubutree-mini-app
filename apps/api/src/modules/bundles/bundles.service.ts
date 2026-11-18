@@ -7,11 +7,15 @@ import { PUBLIC_PRODUCT_WHERE } from '../catalog/public-product';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { BUNDLE_MIN_PRODUCTS, addonPayPrice } from './bundle-rules';
 import { bundleLiveWhere, isTubuOnlyBundle, loadFlashFootprint, readBundleMaxPct, type FlashFootprint } from './bundle-read';
+import { loadGreenBoxSettings, type GreenBoxTier } from './green-box';
+import { LEGACY_FAKE_PANCAKE_PREFIX } from '../integrations/pancake/pancake-fulfilment';
 
 export const PDP_COMBO_MAX = 2;
 export const PDP_ADDON_MAX = 3;
 export const HOME_COMBOS_DEFAULT = 4;
 export const HOME_COMBOS_MAX = 8;
+/** Trang ghép Hộp Xanh: số món tối đa (đủ cho vài danh mục, một lần tải). */
+export const GREEN_BOX_PAGE_MAX = 60;
 
 type CardOf = Awaited<ReturnType<CatalogService['cardsByIds']>>[number];
 
@@ -38,6 +42,19 @@ export interface BundleDTO {
   endAt: string;
   anchorProductId: string | null;
   items: BundleItemDTO[];
+}
+
+/** Một danh mục thật của trang ghép Hộp Xanh. */
+export interface GreenBoxPageGroup {
+  category: { id: string; name: string; slug: string } | null;
+  products: CardOf[];
+}
+
+export interface GreenBoxPageDTO {
+  /** Cờ `commerce.green_box_enabled` tắt (hoặc bậc cấu hình sai dạng) thì `false` và trang báo chưa mở, không có món. */
+  enabled: boolean;
+  tiers: GreenBoxTier[];
+  groups: GreenBoxPageGroup[];
 }
 
 const PUBLIC_SELECT = {
@@ -117,6 +134,53 @@ export class BundlesService {
     });
     const shown = await this.toPublic(rows, now);
     return shown.filter((b) => b.items.every((i) => i.inStock)).slice(0, take);
+  }
+
+  /**
+   * Danh mục đã lọc sẵn món đủ điều kiện Hộp Xanh: Tubu giao, không phải hàng gian hàng đối tác, còn hàng, không đang Giờ vàng (dòng Giờ vàng
+   * không được tính). Nhóm theo danh mục thật đầu tiên của sản phẩm, theo `sortOrder` của danh mục; món không có danh mục vào nhóm cuối. Giá thật và
+   * việc món có được tính hay không vẫn do giỏ quyết (`applyGreenBox`): trang này chỉ là lối vào.
+   */
+  async greenBoxPage(now: Date = new Date()): Promise<GreenBoxPageDTO> {
+    const settings = await loadGreenBoxSettings(this.config);
+    if (!settings.enabled || settings.tiers.length === 0) return { enabled: false, tiers: [], groups: [] };
+    const rows = await this.prisma.product.findMany({
+      where: {
+        ...PUBLIC_PRODUCT_WHERE,
+        fulfilment: 'TUBU',
+        storefrontId: null,
+        // Cùng điều kiện "kho Tubu giao" của giỏ (`fulfillerOf`): thiếu mã Pancake thật thì giỏ báo không giao được, không vào Hộp Xanh.
+        variations: { some: { isActive: true, stock: { gt: 0 }, retailPrice: { gt: 0 }, pancakeId: { not: null }, NOT: { pancakeId: { startsWith: LEGACY_FAKE_PANCAKE_PREFIX } } } },
+      },
+      select: { id: true, categoryIds: true },
+      orderBy: [{ soldApp30d: 'desc' }, { id: 'asc' }],
+      take: GREEN_BOX_PAGE_MAX * 2,
+    });
+    const flash = await loadFlashFootprint(this.prisma, now, rows.map((r) => r.id));
+    const picked = rows.filter((r) => !flash.productIds.has(r.id)).slice(0, GREEN_BOX_PAGE_MAX);
+    const categoryIds = [...new Set(picked.flatMap((r) => r.categoryIds))];
+    const [cards, categories] = await Promise.all([
+      this.catalog.cardsByIds(picked.map((r) => r.id)),
+      categoryIds.length > 0
+        ? this.prisma.category.findMany({ where: { id: { in: categoryIds } }, select: { id: true, name: true, slug: true, sortOrder: true } })
+        : Promise.resolve([] as { id: string; name: string; slug: string; sortOrder: number }[]),
+    ]);
+    const catById = new Map(categories.map((c) => [c.id, c]));
+    const byGroup = new Map<string, GreenBoxPageGroup & { order: number }>();
+    const cardById = new Map(cards.map((c) => [c.id, c]));
+    for (const r of picked) {
+      const card = cardById.get(r.id);
+      if (!card || card.inStock === false) continue;
+      const cat = r.categoryIds.map((id) => catById.get(id)).find((c) => c !== undefined) ?? null;
+      const key = cat?.id ?? '';
+      const g = byGroup.get(key) ?? { category: cat ? { id: cat.id, name: cat.name, slug: cat.slug } : null, products: [], order: cat ? cat.sortOrder : Number.MAX_SAFE_INTEGER };
+      g.products.push(card);
+      byGroup.set(key, g);
+    }
+    const groups = [...byGroup.values()]
+      .sort((a, b) => a.order - b.order || (a.category?.name ?? '').localeCompare(b.category?.name ?? '', 'vi'))
+      .map(({ category, products }) => ({ category, products }));
+    return { enabled: true, tiers: settings.tiers, groups };
   }
 
   /**

@@ -45,6 +45,9 @@ export type CreatedSubscription = SubscriptionDTO & { firstOrder?: SubscriptionF
 
 export const getSubscriptions = (http: HttpClient) => http.get<SubscriptionDTO[]>('/me/subscriptions');
 
+/** `GET /me/subscriptions/suggestions` (cờ subscriptions.smart_interval_enabled): đọc kết quả qua `readSubscriptionSuggestions` (commerce/green-box). */
+export const getSubscriptionSuggestions = (http: HttpClient) => http.get<unknown>('/me/subscriptions/suggestions');
+
 export const createSubscription = (
   http: HttpClient,
   data: {

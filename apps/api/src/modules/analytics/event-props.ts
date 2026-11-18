@@ -121,6 +121,12 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
   checkout_address_switched: { props: { from: oneOf(CHECKOUT_ADDRESS_SWITCH_FROM) }, required: ['from'] },
   transfer_preview_shown: { props: {} },
   transfer_qr_shown: { props: { msSinceOrder: (v) => int(0, 600_000)(v) && (v as number) % 100 === 0 }, required: ['msSinceOrder'] },
+  // Hộp Xanh và gợi ý định kỳ (wave tubu-w2-03): chỉ số đếm và bậc, không mang món, tiền hay mã đơn. `tier` là minItems của bậc đã đạt (0 = chưa đạt).
+  green_box_progress_shown: { props: { items: int(0, 99), tier: int(0, 50) }, required: ['items', 'tier'] },
+  green_box_tier_reached: { props: { tier: int(2, 50) }, required: ['tier'] },
+  green_box_page_viewed: { props: {} },
+  subscription_suggestion_shown: { props: {} },
+  subscription_suggestion_accepted: { props: { intervalWeeks: (v) => v === 4 || v === 6 || v === 8 || v === 10 }, required: ['intervalWeeks'] },
 };
 
 /**

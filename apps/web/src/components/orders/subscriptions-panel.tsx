@@ -27,6 +27,8 @@ import { PAY_SHORT, addressText } from './subscription-options';
 import { ProductThumb } from '@/components/mini';
 import { actionErrorText, loadErrorText } from '@/lib/error-text';
 import { joinDetailParts, variationLabel } from '@/lib/variation-label';
+import type { SubscriptionSuggestion } from '@tubutree/app-core/commerce/green-box';
+import { SubscriptionSuggestionRow, SuggestedSubscribe, useSubscriptionSuggestion } from '@/components/reorder/subscription-suggestion';
 
 type SubStatus = SubscriptionDTO['status'];
 const STATUS_TONE: Record<SubStatus, BadgeTone> = { ACTIVE: 'success', PAUSED: 'warning', CANCELLED: 'neutral' };
@@ -53,6 +55,10 @@ export function SubscriptionsPanel() {
   const [editTarget, setEditTarget] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [rejected, setRejected] = useState<string | null>(null);
+  // Gợi ý định kỳ chỉ khi khách chưa có gói nào đang chạy hay tạm dừng.
+  const noOpenSub = subsQ.isSuccess && !subs.some((s) => s.status !== 'CANCELLED');
+  const { suggestion, discountFraction } = useSubscriptionSuggestion(noOpenSub);
+  const [subscribeTo, setSubscribeTo] = useState<SubscriptionSuggestion | null>(null);
   // Nhiều gói cùng SP chỉ khác nhau ở địa chỉ, nên thẻ phải hiện địa chỉ để khách phân biệt.
   const addrQ = useQuery({ ...addressesQuery(coreHttp), enabled: authed && subs.length > 0 });
   const addressById = new Map((addrQ.data ?? []).map((a) => [a.id, a]));
@@ -142,6 +148,9 @@ export function SubscriptionsPanel() {
           {actionError}
         </p>
       )}
+
+      {suggestion && <SubscriptionSuggestionRow suggestion={suggestion} discountFraction={discountFraction} onAccept={setSubscribeTo} />}
+      {subscribeTo && <SuggestedSubscribe suggestion={subscribeTo} onDone={() => setSubscribeTo(null)} />}
 
       {!authed || subsQ.isLoading ? (
         <>

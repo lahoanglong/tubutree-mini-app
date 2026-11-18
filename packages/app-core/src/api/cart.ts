@@ -64,8 +64,12 @@ export interface CartSummary {
   subtotal: number;
   /** Giảm giá combo của gian hàng đang ghi công (đã trừ trước khi tính mã); API cũ chưa trả → coi như 0. */
   comboDiscount?: number;
-  /** Các combo đã khớp của giỏ (id, tên, dòng, số giảm); tổng `discount` bằng `comboDiscount`. API cũ chưa trả → coi như rỗng, mọi dòng là dòng lẻ. */
+  /** Các combo đã khớp của giỏ (id, tên, dòng, số giảm); tổng `discount` bằng `comboDiscount − greenBoxDiscount`. API cũ chưa trả → coi như rỗng, mọi dòng là dòng lẻ. */
   comboGroups?: CartComboGroup[];
+  /** Phần Hộp Xanh NẰM TRONG `comboDiscount` (cờ commerce.green_box_enabled). Cờ tắt hoặc API cũ: không có. Đọc qua `greenBoxDiscountOf`. */
+  greenBoxDiscount?: number;
+  /** Tiến độ bậc Hộp Xanh; đọc qua `readGreenBox` (commerce/green-box). Cờ tắt: không có. */
+  greenBox?: unknown;
   /** Mức giảm của mã, tính trên phần hàng sau combo (cùng số báo giá checkout trừ). */
   discount: number;
   /** Ưu đãi hạng thành viên, tính sau combo và mã (cùng số báo giá checkout trừ); API cũ chưa trả → coi như 0. */

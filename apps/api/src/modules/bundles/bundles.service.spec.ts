@@ -295,3 +295,55 @@ describe('BundlesService.homeCombos', () => {
     expect((await setup({ rows }).svc.homeCombos(0, NOW))).toHaveLength(1);
   });
 });
+
+describe('BundlesService.greenBoxPage (trang ghép Hộp Xanh)', () => {
+  const pageSetup = (o: { on?: boolean; products?: { id: string; categoryIds: string[] }[]; cards?: ReturnType<typeof card>[]; flash?: FlashRow[] } = {}) => {
+    const prisma = {
+      product: { findMany: jest.fn().mockResolvedValue(o.products ?? [{ id: 'p1', categoryIds: ['c2'] }, { id: 'p2', categoryIds: ['c1'] }, { id: 'p3', categoryIds: [] }]) },
+      category: {
+        findMany: jest.fn().mockResolvedValue([
+          { id: 'c1', name: 'Giặt giũ', slug: 'giat-giu', sortOrder: 1 },
+          { id: 'c2', name: 'Bếp', slug: 'bep', sortOrder: 2 },
+        ]),
+      },
+      flashSaleItem: {
+        findMany: jest
+          .fn()
+          .mockResolvedValue((o.flash ?? []).map((f) => ({ variationId: f.variationId, soldCount: 0, quota: 10, variation: { productId: f.productId } }))),
+      },
+    };
+    const catalog = { cardsByIds: jest.fn().mockImplementation(async (ids: string[]) => (o.cards ?? ids.map((id) => card(id))).filter((c) => ids.includes(c.id))) };
+    const config = { get: jest.fn().mockImplementation(async (k: string, fb: unknown) => (k === 'commerce.green_box_enabled' ? (o.on ?? true) : fb)) };
+    return { svc: new BundlesService(prisma as never, catalog as never, config as never), prisma };
+  };
+
+  it('cờ tắt: báo chưa mở, không truy vấn sản phẩm', async () => {
+    const { svc, prisma } = pageSetup({ on: false });
+    expect(await svc.greenBoxPage(NOW)).toEqual({ enabled: false, tiers: [], groups: [] });
+    expect(prisma.product.findMany).not.toHaveBeenCalled();
+  });
+
+  it('chỉ hỏi hàng Tubu giao (có mã Pancake thật), không phải hàng gian hàng, còn hàng', async () => {
+    const { svc, prisma } = pageSetup();
+    await svc.greenBoxPage(NOW);
+    const where = prisma.product.findMany.mock.calls[0]![0].where;
+    expect(where).toMatchObject({ isActive: true, approvalStatus: 'APPROVED', fulfilment: 'TUBU', storefrontId: null });
+    expect(where.variations.some).toMatchObject({ isActive: true, stock: { gt: 0 }, pancakeId: { not: null } });
+  });
+
+  it('nhóm theo danh mục thật (theo sortOrder), món không danh mục ở cuối; bỏ món đang Giờ vàng và thẻ hết hàng', async () => {
+    const { svc } = pageSetup({
+      products: [{ id: 'p1', categoryIds: ['c2'] }, { id: 'p2', categoryIds: ['c1'] }, { id: 'p3', categoryIds: [] }, { id: 'p4', categoryIds: ['c1'] }, { id: 'p5', categoryIds: ['c1'] }],
+      cards: [card('p1'), card('p2'), card('p3'), card('p4'), card('p5', { inStock: false })],
+      flash: [{ variationId: 'v-p4', productId: 'p4' }],
+    });
+    const page = await svc.greenBoxPage(NOW);
+    expect(page.enabled).toBe(true);
+    expect(page.tiers).toEqual([{ minItems: 3, pct: 3 }, { minItems: 5, pct: 5 }, { minItems: 7, pct: 7 }]);
+    expect(page.groups.map((g) => [g.category?.slug ?? null, g.products.map((p) => p.id)])).toEqual([
+      ['giat-giu', ['p2']],
+      ['bep', ['p1']],
+      [null, ['p3']],
+    ]);
+  });
+});

@@ -60,6 +60,8 @@ export interface CheckoutQuote {
   /** Số tiền hàng còn thiếu để mã đạt đơn tối thiểu của lần đặt này (máy chủ tính trên phần hàng nó xét); không có khi mã chưa áp vì lý do khác. API cũ chưa trả. */
   couponShortfall?: number | null;
   comboDiscount: number;
+  /** Phần Hộp Xanh nằm TRONG `comboDiscount`; cờ tắt hoặc API cũ: không có. */
+  greenBoxDiscount?: number;
   /** Ưu đãi hạng thành viên tự động (API cũ chưa trả). */
   tierDiscount?: number;
   pointsUsed: number;

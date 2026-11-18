@@ -1409,3 +1409,79 @@ describe('SubscriptionsService.update — đổi chu kỳ giao (Q22)', () => {
     );
   });
 });
+
+
+describe('SubscriptionsService.suggestions (subscriptions.smart_interval_enabled)', () => {
+  const NOW = new Date('2026-11-18T03:00:00Z');
+  const daysAgo = (n: number) => new Date(NOW.getTime() - n * 86_400_000);
+  const item = (variationId: string, deliveredAt: Date) => ({ variationId, order: { deliveredAt } });
+  const variation = (id: string, o: Record<string, unknown> = {}) => ({
+    id,
+    name: `PL ${id}`,
+    productId: `p-${id}`,
+    isActive: true,
+    stock: 10,
+    retailPrice: 90_000,
+    salePrice: null,
+    pancakeId: `pk-${id}`,
+    product: { name: `SP ${id}`, slug: `sp-${id}`, thumbnail: null, isActive: true, approvalStatus: 'APPROVED', fulfilment: 'TUBU', storefrontId: null },
+    ...o,
+  });
+  const setup = (o: { on?: boolean; items?: unknown[]; variations?: unknown[]; open?: { variationId: string }[] } = {}) => {
+    const prisma = {
+      orderItem: { findMany: jest.fn().mockResolvedValue(o.items ?? []) },
+      subscription: { findMany: jest.fn().mockResolvedValue(o.open ?? []) },
+      variation: { findMany: jest.fn().mockResolvedValue(o.variations ?? []) },
+    } as unknown as PrismaService;
+    const cfg = { get: jest.fn(async (k: string, d: unknown) => (k === 'subscriptions.smart_interval_enabled' ? (o.on ?? true) : d)) } as unknown as SystemConfigService;
+    return { svc: new SubscriptionsService(prisma, cfg, pricing, loyalty, notifications, pancakeStub(), makeAnalytics(), walletLedger()), prisma };
+  };
+
+  it('cờ tắt: không đọc đơn, không gợi ý', async () => {
+    const { svc, prisma } = setup({ on: false });
+    expect(await svc.suggestions('u1', NOW)).toEqual({ enabled: false, items: [] });
+    expect((prisma as unknown as { orderItem: { findMany: jest.Mock } }).orderItem.findMany).not.toHaveBeenCalled();
+  });
+
+  it('một đơn: không gợi ý', async () => {
+    const { svc } = setup({ items: [item('a', daysAgo(10))], variations: [variation('a')] });
+    expect((await svc.suggestions('u1', NOW)).items).toEqual([]);
+  });
+
+  it('hai đơn cách 30 ngày → 4 tuần; nhịp 55 ngày → 8 tuần; lần nhận gần nhất trước', async () => {
+    const { svc, prisma } = setup({
+      items: [item('a', daysAgo(40)), item('a', daysAgo(10)), item('b', daysAgo(60)), item('b', daysAgo(5))],
+      variations: [variation('a'), variation('b')],
+    });
+    const out = await svc.suggestions('u1', NOW);
+    expect(out.items.map((i) => [i.variationId, i.intervalWeeks])).toEqual([
+      ['b', 8],
+      ['a', 4],
+    ]);
+    expect(out.items[0]).toMatchObject({ productName: 'SP b', slug: 'sp-b', unitPrice: 90_000 });
+    const where = (prisma as unknown as { orderItem: { findMany: jest.Mock } }).orderItem.findMany.mock.calls[0]![0].where;
+    expect(where.order).toMatchObject({ userId: 'u1', status: 'DELIVERED' });
+  });
+
+  it('bỏ món đã có gói ACTIVE/PAUSED, món hết hàng, ngừng bán, hàng gian hàng; tối đa 3', async () => {
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f', 'g'];
+    const items = ids.flatMap((id, i) => [item(id, daysAgo(40 + i)), item(id, daysAgo(10 + i))]);
+    const { svc, prisma } = setup({
+      items,
+      open: [{ variationId: 'a' }],
+      variations: [
+        variation('a'),
+        variation('b', { stock: 0 }),
+        variation('c', { isActive: false }),
+        variation('d', { product: { ...variation('d').product, storefrontId: 'sf-1' } }),
+        variation('e'),
+        variation('f'),
+        variation('g'),
+      ],
+    });
+    const out = await svc.suggestions('u1', NOW);
+    expect(out.items.map((i) => i.variationId)).toEqual(['e', 'f', 'g']);
+    const subWhere = (prisma as unknown as { subscription: { findMany: jest.Mock } }).subscription.findMany.mock.calls[0]![0].where;
+    expect(subWhere.status).toEqual({ in: ['ACTIVE', 'PAUSED'] });
+  });
+});

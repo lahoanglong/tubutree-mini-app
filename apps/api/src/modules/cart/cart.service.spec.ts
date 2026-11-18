@@ -1668,3 +1668,85 @@ describe('CartService: comboGroups, các combo đã khớp của giỏ (K5)', ()
     expect(cart).toMatchObject({ subtotal: 300_000, comboDiscount: 65_250, discount: 0, itemCount: 3 });
   });
 });
+
+describe('CartService: Hộp Xanh (commerce.green_box_enabled)', () => {
+  const dbLine = (n: number, o: { productId?: string; stock?: number; quantity?: number; storefrontId?: string | null; fulfilment?: string } = {}) => ({
+    id: `i${n}`,
+    variationId: `v${n}`,
+    quantity: o.quantity ?? 1,
+    variation: {
+      isActive: true,
+      productId: o.productId ?? `p${n}`,
+      salePrice: null,
+      retailPrice: 100_000,
+      stock: o.stock ?? 50,
+      name: `PL ${n}`,
+      pancakeId: `pk-${n}`,
+      product: {
+        name: `SP ${n}`,
+        slug: `sp-${n}`,
+        thumbnail: null,
+        isActive: true,
+        approvalStatus: 'APPROVED',
+        fulfilment: o.fulfilment ?? 'TUBU',
+        storefrontId: o.storefrontId ?? null,
+        storefront: o.storefrontId ? { title: 'Shop', ownerUserId: 'owner', type: 'PARTNER', ordersPausedAt: null, isPartner: true, owner: { role: 'MERCHANT', isBlocked: false } } : null,
+      },
+    },
+  });
+  const cfg = (on: boolean) =>
+    ({
+      get: async <T>(k: string, fb?: T): Promise<T> =>
+        (k === 'shipping.first_order_free_enabled' ? false : k === 'commerce.green_box_enabled' ? on : fb) as T,
+    }) as unknown as SystemConfigService;
+  const build = (on: boolean, items: ReturnType<typeof dbLine>[], match: unknown = { total: 0, perLine: {}, groups: [] }) => {
+    const prisma = {
+      cart: { upsert: jest.fn().mockResolvedValue({ id: 'c1' }), findUnique: jest.fn().mockResolvedValue({ id: 'c1', couponCode: null, items }) },
+    } as unknown as PrismaService;
+    const comboSvc = { computeWithGroups: jest.fn().mockResolvedValue(match), computeForStorefront: jest.fn() } as unknown as ComboService;
+    return new CartService(prisma, coupons, cfg(on), flash, analytics, comboSvc);
+  };
+
+  it('cờ tắt: giỏ không có trường Hộp Xanh và tổng giảm như cũ, dù có 5 món đủ điều kiện', async () => {
+    const cart = await build(false, [1, 2, 3, 4, 5].map((n) => dbLine(n))).getCart('u1');
+    expect(cart).not.toHaveProperty('greenBox');
+    expect(cart).not.toHaveProperty('greenBoxDiscount');
+    expect(cart.comboDiscount).toBe(0);
+  });
+
+  it('cờ bật, 3 sản phẩm khác nhau: giảm 3% gộp vào comboDiscount, nhóm combo không đổi', async () => {
+    const cart = await build(true, [1, 2, 3].map((n) => dbLine(n))).getCart('u1');
+    expect(cart.greenBoxDiscount).toBe(9_000);
+    expect(cart.comboDiscount).toBe(9_000);
+    expect(cart.comboGroups).toEqual([]);
+    expect(cart.greenBox).toEqual({
+      items: 3,
+      tier: { minItems: 3, pct: 3 },
+      next: { minItems: 5, pct: 5 },
+      tiers: [{ minItems: 3, pct: 3 }, { minItems: 5, pct: 5 }, { minItems: 7, pct: 7 }],
+      discount: 9_000,
+    });
+  });
+
+  it('cờ bật, chưa đủ bậc: có tiến độ, không giảm', async () => {
+    const cart = await build(true, [1, 2].map((n) => dbLine(n))).getCart('u1');
+    expect(cart.greenBoxDiscount).toBe(0);
+    expect(cart.greenBox).toMatchObject({ items: 2, tier: null, next: { minItems: 3, pct: 3 } });
+  });
+
+  it('không đếm hàng đối tác, hàng gian hàng tự giao, dòng thiếu tồn và dòng đang có combo', async () => {
+    const items = [dbLine(1), dbLine(2), dbLine(3, { storefrontId: 'sf' }), dbLine(4, { fulfilment: 'MERCHANT', storefrontId: 'sf' }), dbLine(5, { stock: 1, quantity: 2 }), dbLine(6)];
+    const match = { total: 5_000, perLine: { v6: 5_000 }, groups: [{ id: 'bundle:b', kind: 'BUNDLE_PCT', title: 'B', discount: 5_000, variationIds: ['v6'], keyVariationIds: ['v6'] }] };
+    const cart = await build(true, items, match).getCart('u1');
+    expect(cart.greenBox?.items).toBe(2);
+    expect(cart.greenBoxDiscount).toBe(0);
+    expect(cart.comboDiscount).toBe(5_000);
+  });
+
+  it('phần chọn của giỏ tính Hộp Xanh trên đúng các dòng đã chọn', async () => {
+    const svc = build(true, [1, 2, 3].map((n) => dbLine(n)));
+    const part = await svc.getCartSelection('u1', undefined, ['i1', 'i2']);
+    expect(part.greenBox?.items).toBe(2);
+    expect(part.greenBoxDiscount).toBe(0);
+  });
+});

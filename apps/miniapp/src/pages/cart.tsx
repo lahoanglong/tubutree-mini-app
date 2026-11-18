@@ -9,6 +9,17 @@ import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { cartStockNote, isLowStock, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { freeshipProgress, pickFreeshipAddons } from '@tubutree/app-core/commerce/freeship-progress';
+import {
+  cartProgressStrip,
+  comboOnlyDiscount,
+  greenBoxCartHint,
+  greenBoxDiscountOf,
+  greenBoxProgress,
+  greenBoxTierRise,
+  readGreenBox,
+  type GreenBoxProgressView,
+  type GreenBoxState,
+} from '@tubutree/app-core/commerce/green-box';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import {
   getCart,
@@ -396,6 +407,11 @@ export default function CartPage() {
   const showFreeship = !hasMerchant || freeshipBase > 0;
   const freeshipServerReached = !hasMerchant && allSelected && summary.freeship && outOfStockSelected.length === 0;
   const freeship = freeshipProgress({ base: freeshipBase, threshold: summary.freeshipThreshold, serverReached: freeshipServerReached });
+  // Hộp Xanh đọc cùng nguồn số với chân dính (cả giỏ, hoặc giá phần chọn của máy chủ): chưa có số đúng của phần chọn thì không nói gì.
+  const greenBox = showFreeship ? readGreenBox(allSelected ? summary : priced) : null;
+  const strip = cartProgressStrip(freeship.reached, greenBox);
+  const greenBoxView = strip === 'greenBox' ? greenBoxProgress(greenBox) : null;
+  const greenBoxHint = strip === 'freeship' ? greenBoxCartHint(greenBox) : null;
   const addonItems: FreeshipAddonItem[] =
     showFreeship && !freeship.reached
       ? pickFreeshipAddons(
@@ -457,9 +473,14 @@ export default function CartPage() {
         <>
           {showFreeship && (
             <Box px={3} pt={2}>
-              <FreeShippingProgressBar base={freeshipBase} threshold={summary.freeshipThreshold} serverReached={freeshipServerReached} tubuOnly={hasMerchant} onShopMore={() => goSmart('/')} />
+              {greenBoxView ? (
+                <GreenBoxStrip view={greenBoxView} />
+              ) : (
+                <FreeShippingProgressBar base={freeshipBase} threshold={summary.freeshipThreshold} serverReached={freeshipServerReached} tubuOnly={hasMerchant} onShopMore={() => goSmart('/')} />
+              )}
             </Box>
           )}
+          <GreenBoxEvents state={greenBox} visible={greenBoxView !== null || greenBoxHint !== null} />
           {addonItems.length > 0 && (
             <Box px={3} pt={2}>
               <FreeshipAddonRail items={addonItems} busySlug={addon.isPending ? addon.variables?.item.slug : null} onAdd={handleAddAddon} />
@@ -589,6 +610,7 @@ export default function CartPage() {
           onCheckout={goCheckout}
           shipBase={selectedItems.some((l) => l.fulfiller?.kind === 'MERCHANT') ? null : tubuSubtotal(buyableSelected)}
           freeshipReached={freeship.reached}
+          greenBoxHint={greenBoxHint}
           savingLines={buyableSelected}
           removedNotice={<CouponRemovedNotice notice={removedCoupon.notice} onDismiss={removedCoupon.dismiss} />}
           coupon={
@@ -1019,6 +1041,56 @@ function CouponRow({
 /** Dòng giảm giá trong chân dính: bỏ đệm dọc 6px mặc định của KeyValueRow (khoảng cách đã do thanh lo) để thêm một dòng giảm chỉ tốn ~24px. */
 const COMPACT_ROW = { padding: 0 } as const;
 
+/**
+ * Dải Hộp Xanh ở đầu giỏ, thay chỗ dải Miễn phí giao hàng khi đã đạt ngưỡng (một dải tại một thời điểm). Dùng chung khung `tubu-freeship` nên đổi dải
+ * không đổi chiều cao. Bậc cao nhất: một dòng xác nhận, không thanh. Mini không có trang ghép hộp (chỉ web, `gaps` của route-map) nên không có nút.
+ */
+function GreenBoxStrip({ view }: { view: GreenBoxProgressView }) {
+  return (
+    <div data-testid="green-box-progress" data-reached={view.done} className="tubu-freeship">
+      <p role="status" aria-live="polite" aria-atomic="true" className="tubu-freeship-text">
+        {view.text}
+      </p>
+      {!view.done && (
+        <>
+          <div
+            role="progressbar"
+            aria-label={view.marksText}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={view.pct}
+            className="tubu-freeship-track"
+          >
+            <div className="tubu-freeship-fill" style={{ width: `${view.pct}%` }} />
+          </div>
+          <p className="tubu-freeship-text" data-testid="green-box-marks">
+            {view.marksText}
+          </p>
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Sự kiện Hộp Xanh của một lần mở giỏ: lần đầu thấy tiến độ, và mỗi lần bậc tăng (không tính lần đọc đầu, giỏ mở ra đã ở bậc đó). */
+function GreenBoxEvents({ state, visible }: { state: GreenBoxState | null; visible: boolean }) {
+  const shownRef = useRef(false);
+  const tierRef = useRef<number | null>(null);
+  const items = state?.items ?? null;
+  const tier = state ? (state.tier?.minItems ?? 0) : null;
+  useEffect(() => {
+    if (items === null || tier === null) return;
+    if (visible && !shownRef.current) {
+      shownRef.current = true;
+      trackEvent('green_box_progress_shown', 'miniapp', { items, tier });
+    }
+    const rise = greenBoxTierRise(tierRef.current, tier);
+    if (rise !== null) trackEvent('green_box_tier_reached', 'miniapp', { tier: rise });
+    tierRef.current = tier;
+  }, [items, tier, visible]);
+  return null;
+}
+
 /** Chân dính của giỏ: mã giảm giá, các dòng giảm, tổng tiền và nút Thanh toán. Thanh Miễn phí giao hàng nằm ở đầu giỏ (`FreeShippingProgressBar`), không ở đây. */
 function StickySummary({
   summary,
@@ -1031,10 +1103,13 @@ function StickySummary({
   onCheckout,
   shipBase,
   freeshipReached,
+  greenBoxHint,
   savingLines,
   coupon,
   removedNotice,
 }: {
+  /** "Thêm {n} món nữa giảm {pct}% Hộp Xanh" khi chưa đạt Miễn phí giao hàng (dải đầu giỏ còn đang nói về phí giao); null thì không có dòng. */
+  greenBoxHint: string | null;
   /** Tiền hàng kiện Tubu đang chọn để ước tính phí giao; null khi có hàng gian hàng tự giao (phí từng gian hàng chỉ biết ở Thanh toán). */
   shipBase: number | null;
   /** Thanh Miễn phí giao hàng đang báo đã đạt: dòng phí nói cùng một điều. */
@@ -1062,6 +1137,9 @@ function StickySummary({
   const discount = shown?.discount ?? 0;
   const comboDiscount = shown?.comboDiscount ?? 0;
   const tierDiscount = shown?.tierDiscount ?? 0;
+  // Hộp Xanh nằm trong `comboDiscount` của máy chủ: tách ra dòng riêng, tổng không đổi.
+  const greenBoxDiscount = greenBoxDiscountOf(shown);
+  const comboRowDiscount = comboOnlyDiscount(shown);
   // Cùng số `comboDiscount` đang hiện ở dòng "Giảm giá combo" (0 khi chưa có giá phần chọn). Mã giảm giá và hạng đã có dòng riêng nên không cộng.
   const saving = cartSaving(savingLines, comboDiscount);
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
@@ -1080,8 +1158,11 @@ function StickySummary({
       summary={
         <>
           {coupon}
-          {comboDiscount > 0 && (
-            <KeyValueRow label={vi.cart.comboDiscount} value={`-${formatVnd(comboDiscount)}`} tone="success" style={COMPACT_ROW} />
+          {comboRowDiscount > 0 && (
+            <KeyValueRow label={vi.cart.comboDiscount} value={`-${formatVnd(comboRowDiscount)}`} tone="success" style={COMPACT_ROW} />
+          )}
+          {greenBoxDiscount > 0 && (
+            <KeyValueRow label={fillCopy('greenBox.name')} value={`-${formatVnd(greenBoxDiscount)}`} tone="success" style={COMPACT_ROW} dataDs="cart-green-box" />
           )}
           {discount > 0 && (
             <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(discount)}`} tone="success" style={COMPACT_ROW} />
@@ -1092,6 +1173,11 @@ function StickySummary({
             <Text size="xSmall" role="status" data-testid="coupon-notice" style={{ color: 'var(--color-text-warning)' }}>
               {couponLine}
             </Text>
+          )}
+          {greenBoxHint && (
+            <DsText variant="caption" tone="success" as="p" data-testid="green-box-hint">
+              {greenBoxHint}
+            </DsText>
           )}
           {removedNotice}
           {outOfStockNames.length > 0 && (

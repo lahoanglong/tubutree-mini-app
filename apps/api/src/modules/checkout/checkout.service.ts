@@ -19,7 +19,7 @@ import {
 import { PrismaService } from '../../prisma/prisma.service';
 import { generateUniqueOrderCode } from '../../common/order-code';
 import { CartService } from '../cart/cart.service';
-import { CouponsService } from '../coupons/coupons.service';
+import { CouponMinOrderError, CouponsService } from '../coupons/coupons.service';
 import {
   FIRST_ORDER_FREESHIP_TAKEN_MSG,
   firstOrderFreeShipFrom,
@@ -49,6 +49,7 @@ import { WASTE_MESSAGES } from '../waste-exchange/core/waste-messages';
 import { assertPickupItemsAllowedForProvince, isHcmProvince } from '../waste-exchange/core/waste-pickup-rules';
 import { AffiliateService } from '../affiliate/affiliate.service';
 import { ComboService, goodsAfterComboOf } from '../storefront/combo.service';
+import { applyGreenBox, comboKeyIds, greenBoxLineOf, loadGreenBoxSettings, yieldGreenBoxToCoupon, type GreenBoxResult } from '../bundles/green-box';
 import { resolveAttribution } from './attribution';
 import {
   FlashQuotaLineError,
@@ -360,6 +361,8 @@ export class CheckoutService {
       couponNotice: computed.couponNotice,
       ...(computed.couponShortfall !== undefined ? { couponShortfall: computed.couponShortfall } : {}),
       comboDiscount: computed.comboDiscount,
+      // Cờ commerce.green_box_enabled tắt thì không có trường này. Bật: phần Hộp Xanh nằm TRONG `comboDiscount` (cùng đường tiền với combo).
+      ...(computed.greenBox ? { greenBoxDiscount: computed.greenBox.total } : {}),
       tierDiscount: computed.tierDiscount,
       pointsUsed: computed.pointsUsed,
       pointsUsedConverted: computed.pointsUsedConverted,
@@ -1092,6 +1095,17 @@ export class CheckoutService {
       base.goodsAfterCombo,
       base.couponLines,
     );
+    // Mã hụt đơn tối thiểu chỉ vì Hộp Xanh: báo giá sẽ bỏ Hộp Xanh để áp mã (yieldGreenBoxToCoupon), nên thẻ voucher ghi số của bản đó.
+    const baseOf = new Map<string, number>();
+    const plain = base.withoutGreenBox;
+    const knocked = plain ? [...results].filter(([, r]) => r instanceof CouponMinOrderError).map(([code]) => code) : [];
+    if (plain && knocked.length > 0) {
+      for (const [code, r] of await this.coupons.previewMany(knocked, userId, plain.goodsAfterCombo, plain.couponLines)) {
+        if (r instanceof BadRequestException) continue;
+        results.set(code, r);
+        baseOf.set(code, plain.goodsAfterCombo);
+      }
+    }
     // Báo giá ném lỗi này cho cả lần đặt; xem trước cũng vậy để không hứa số tiền của một lần đặt không đặt được.
     if (withShipping) assertNoUnavailableLine(cart.items);
     let freeshipSaved = 0;
@@ -1112,7 +1126,7 @@ export class CheckoutService {
         coupons.push({ code, eligible: false, reason: couponRejectReason(r, cart.items), discount: 0, ...(shortfall !== undefined ? { shortfall } : {}) });
         continue;
       }
-      const discount = Math.min(r.discount, base.goodsAfterCombo);
+      const discount = Math.min(r.discount, baseOf.get(code) ?? base.goodsAfterCombo);
       // Trang giỏ chưa có phí giao: mã freeship hợp lệ là dùng được (như getCart), số tiền miễn phí giao chỉ biết ở thanh toán.
       const alreadyFree = r.freeship && discount === 0 && freeshipSaved === 0 ? alreadyFreeReason : null;
       const nothing = withShipping
@@ -1177,18 +1191,31 @@ export class CheckoutService {
    * Phần hàng tính mã: loại hàng giờ vàng (giá cuối, không cộng dồn mã), trừ combo của gian hàng (combo CHỈ áp trên dòng
    * không giờ vàng). Báo giá, đặt đơn và xem trước mã dùng chung.
    */
-  private async couponBase(items: CheckoutLine[], storefrontSlug: string | undefined, userId: string) {
+  private async couponBase(items: CheckoutLine[], storefrontSlug: string | undefined, userId: string, couponCode?: string | null) {
     const nonFlash = items.filter((l) => !l.isFlash);
     const flashSubtotal = items
       .filter((l) => l.isFlash)
       .reduce((s, l) => s + l.total, 0);
-    const combo = await this.combo.computeForStorefront(
-      storefrontSlug,
-      nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity })),
-      userId,
+    const comboLines = nonFlash.map((l) => ({ variationId: l.variationId, productId: l.productId, total: l.total, quantity: l.quantity }));
+    const greenBoxSettings = await loadGreenBoxSettings(this.config);
+    // Cờ Hộp Xanh tắt: đúng một lời gọi như trước. Bật: cần nhóm combo để biết dòng khoá của bộ đang áp (sản phẩm chính của "mua kèm").
+    if (!greenBoxSettings.enabled) {
+      const combo = await this.combo.computeForStorefront(storefrontSlug, comboLines, userId);
+      // goodsAfterCombo = coupon base (loại flash)
+      return { flashSubtotal, combo, greenBox: null, ...goodsAfterComboOf(nonFlash, combo), withoutGreenBox: null };
+    }
+    const match = await this.combo.computeWithGroups(storefrontSlug, comboLines, userId);
+    const plainCombo = { total: match.total, perLine: match.perLine };
+    const applied = applyGreenBox(plainCombo, nonFlash.map(greenBoxLineOf), greenBoxSettings, comboKeyIds(match.groups));
+    const withBox = { combo: applied.combo, greenBox: applied.greenBox as GreenBoxResult | null, ...goodsAfterComboOf(nonFlash, applied.combo) };
+    if (!applied.greenBox?.total) return { flashSubtotal, ...withBox, withoutGreenBox: null };
+    // Bản không Hộp Xanh: để mã của khách được xét lại khi Hộp Xanh làm nó hụt đơn tối thiểu (yieldGreenBoxToCoupon).
+    const withoutBox = { combo: plainCombo, greenBox: null as GreenBoxResult | null, ...goodsAfterComboOf(nonFlash, plainCombo) };
+    if (!couponCode) return { flashSubtotal, ...withBox, withoutGreenBox: withoutBox };
+    const picked = await yieldGreenBoxToCoupon(withBox, withoutBox, (b) =>
+      this.coupons.validateAndCompute(couponCode, userId, b.goodsAfterCombo, b.couponLines),
     );
-    const { goodsAfterCombo, couponLines } = goodsAfterComboOf(nonFlash, combo); // goodsAfterCombo = coupon base (loại flash)
-    return { flashSubtotal, combo, goodsAfterCombo, couponLines };
+    return { flashSubtotal, ...picked, withoutGreenBox: null };
   }
 
   private async compute(
@@ -1209,7 +1236,9 @@ export class CheckoutService {
     //   1) Combo (shop tài trợ) — phân bổ vào từng dòng → cũng ghi vào OrderItem.total (§7.2, hoa hồng trên giá thực trả).
     //   2) Coupon (Tubu tài trợ) — tính lại trên base SAU combo (đơn không-combo: base = subtotal → y hệt cũ).
     //   3) Điểm Xanh — trên phần còn lại sau coupon (lô STANDARD có trần %, lô quy đổi thì không).
-    const { flashSubtotal, combo, goodsAfterCombo, couponLines } = await this.couponBase(cart.items, storefrontSlug, userId);
+    const { flashSubtotal, combo, greenBox, goodsAfterCombo, couponLines } = await this.couponBase(cart.items, storefrontSlug, userId, cart.couponCode);
+    // Lời báo mã chỉ nhắc combo khi có combo thật: `combo.total` gồm cả Hộp Xanh.
+    const hasCombo = combo.total - (greenBox?.total ?? 0) > 0;
 
     let discount = 0; // coupon (sau combo)
     let couponProductIds: string[] | null = null;
@@ -1230,7 +1259,7 @@ export class CheckoutService {
         // cart.discount (0đ khi flash kéo phần còn lại dưới minOrder) mà vẫn redeem → đốt mất mã một lần
         // của khách cho đơn không được giảm đồng nào (MONEY-3). Lỗi hạ tầng thì báo lỗi, không âm thầm bỏ mã.
         if (!(err instanceof BadRequestException)) throw err;
-        couponNotice = couponNotAppliedNotice(couponRejectReason(err, cart.items), flashSubtotal > 0, combo.total > 0);
+        couponNotice = couponNotAppliedNotice(couponRejectReason(err, cart.items), flashSubtotal > 0, hasCombo);
         couponShortfall = couponShortfallOf(err);
       }
     }
@@ -1331,7 +1360,7 @@ export class CheckoutService {
     const couponApplied = couponValid && nothingReason === null;
     if (nothingReason !== null) {
       // Hàng giờ vàng và phần giảm combo vẫn tính vào ngưỡng phí giao, nên câu lý do freeship không kèm ngoặc loại trừ của điều kiện mã.
-      couponNotice = freeship ? couponNotAppliedNotice(nothingReason, false, false) : couponNotAppliedNotice(nothingReason, flashSubtotal > 0, combo.total > 0);
+      couponNotice = freeship ? couponNotAppliedNotice(nothingReason, false, false) : couponNotAppliedNotice(nothingReason, flashSubtotal > 0, hasCombo);
     } else if (couponApplied && discount > 0 && flashSubtotal > 0) {
       couponNotice = couponFlashExcludedNotice(goodsAfterCombo);
     }
@@ -1366,6 +1395,7 @@ export class CheckoutService {
         couponShortfall,
         comboDiscount: combo.total,
         comboPerLine: combo.perLine,
+        greenBox,
         tierDiscount,
         pointsUsed: redemption.pointsUsed,
         pointsUsedConverted: redemption.pointsUsedConverted,

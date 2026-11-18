@@ -52,6 +52,11 @@ export const CLIENT_EVENT_NAMES = [
   'checkout_address_switched',
   'transfer_preview_shown',
   'transfer_qr_shown',
+  'green_box_progress_shown',
+  'green_box_tier_reached',
+  'green_box_page_viewed',
+  'subscription_suggestion_shown',
+  'subscription_suggestion_accepted',
 ] as const;
 
 /** Nơi khách đổi địa chỉ giao ở màn thanh toán (`checkout_address_switched.from`). */

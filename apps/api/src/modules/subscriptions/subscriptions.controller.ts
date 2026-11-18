@@ -40,6 +40,12 @@ export class SubscriptionsController {
     return this.subs.list(userId, { take: clampTake(query.take, 100, 200), cursor: query.cursor });
   }
 
+  /** Gợi ý giao định kỳ theo nhịp mua (cờ subscriptions.smart_interval_enabled). Khai trước các route `:id`. */
+  @Get('suggestions')
+  suggestions(@CurrentUser('sub') userId: string) {
+    return this.subs.suggestions(userId);
+  }
+
   @Post()
   create(@CurrentUser('sub') userId: string, @Body() dto: CreateSubDto) {
     return this.subs.create(userId, dto);

@@ -13,6 +13,7 @@ import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
 import { freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
+import { cartProgressStrip, comboOnlyDiscount, greenBoxCartHint, greenBoxDiscountOf, greenBoxProgress, readGreenBox } from '@tubutree/app-core/commerce/green-box';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
 import { useRemovedCoupon } from '@/lib/use-removed-coupon';
@@ -51,6 +52,7 @@ import { settleWithin } from '@/lib/settle-within';
 import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 import { FreeshipAddons } from './freeship-addons';
 import { GuestCartView } from './guest-cart-view';
+import { GreenBoxEvents, GreenBoxStrip } from './green-box-strip';
 import { useGuestCartFlag } from '@/lib/guest-cart/flag';
 import { runGuestMerge, takeGuestMergeNote, type GuestMergeNote } from '@/lib/guest-cart/after-login';
 import { readGuestCart } from '@/lib/guest-cart/store';
@@ -382,6 +384,13 @@ export default function CartPage() {
   const shownDiscount = shown?.discount ?? 0;
   const shownCombo = shown?.comboDiscount ?? 0;
   const shownTier = shown?.tierDiscount ?? 0;
+  // Hộp Xanh nằm trong `comboDiscount` của máy chủ: tách ra dòng riêng, tổng không đổi. Tiến độ đọc cùng nguồn số với các dòng giảm.
+  const shownGreenBox = greenBoxDiscountOf(shown);
+  const shownComboOnly = comboOnlyDiscount(shown);
+  const greenBox = showFreeship ? readGreenBox(shown) : null;
+  const strip = cartProgressStrip(!!freeship?.reached, greenBox);
+  const greenBoxView = strip === 'greenBox' ? greenBoxProgress(greenBox) : null;
+  const greenBoxHint = strip === 'freeship' ? greenBoxCartHint(greenBox) : null;
   // Giảm giá của phần chọn tính trên tạm tính CỦA CHÍNH phần chọn máy chủ trả (giá có thể đổi so với giỏ đã tải, vd hết giờ vàng).
   const shownSubtotal = !allSelected && priced ? priced.subtotal : selectedSubtotal;
   const payTotal = Math.max(0, shownSubtotal - shownCombo - shownDiscount - shownTier);
@@ -622,10 +631,15 @@ export default function CartPage() {
           <div className="min-w-0">
             {showFreeship && freeship && (
               <div data-testid="cart-freeship" className="mb-3 max-md:mb-2">
-                <FreeShippingProgressBar base={freeshipBase} threshold={cart.freeshipThreshold} serverReached={serverFreeship} tubuOnly={hasMerchant} onShopMore={() => router.push('/')} />
+                {greenBoxView ? (
+                  <GreenBoxStrip view={greenBoxView} onMore={() => router.push('/hop-xanh')} />
+                ) : (
+                  <FreeShippingProgressBar base={freeshipBase} threshold={cart.freeshipThreshold} serverReached={serverFreeship} tubuOnly={hasMerchant} onShopMore={() => router.push('/')} />
+                )}
                 {!freeship.reached && <FreeshipAddons remaining={freeship.remaining} lines={allItems} />}
               </div>
             )}
+            <GreenBoxEvents state={greenBox} visible={greenBoxView !== null || greenBoxHint !== null} />
             <CartVoucherHintSection
               currentCode={cart.couponCode}
               subtotal={selectedSubtotal}
@@ -690,10 +704,16 @@ export default function CartPage() {
                 <span className="text-stone-900">{formatVnd(shownSubtotal)}</span>
               </div>
             )}
-            {shownCombo > 0 && (
+            {shownComboOnly > 0 && (
               <div className="mt-1 flex justify-between text-sm text-success-fg">
                 <span>Giảm giá combo</span>
-                <span>-{formatVnd(shownCombo)}</span>
+                <span>-{formatVnd(shownComboOnly)}</span>
+              </div>
+            )}
+            {shownGreenBox > 0 && (
+              <div data-testid="cart-green-box" className="mt-1 flex justify-between text-sm text-success-fg">
+                <span>{fillCopy('greenBox.name')}</span>
+                <span>-{formatVnd(shownGreenBox)}</span>
               </div>
             )}
             {shownDiscount > 0 && (
@@ -718,6 +738,11 @@ export default function CartPage() {
               <div data-testid="cart-saving" className="mt-1 text-right text-caption font-semibold text-[color:var(--color-text-price-deal)]">
                 {fillCopy('cart.saving', { x: formatVnd(saving) })}
               </div>
+            )}
+            {greenBoxHint && (
+              <p data-testid="green-box-hint" className="mt-1 text-caption text-success-fg">
+                {greenBoxHint}
+              </p>
             )}
             </div>
             {!phoneCoupon && couponBox(false)}
@@ -810,12 +835,18 @@ export default function CartPage() {
             {phoneCoupon && couponBox(true)}
             <div className="mt-1 space-y-1">
               {/* Từ md khung tóm tắt trong thân trang đã ghi các khoản giảm và "Tiết kiệm": thanh dính chỉ giữ tổng + nút, không lặp lại. */}
-              {(shownCombo > 0 || shownDiscount > 0 || shownTier > 0 || ship) && (
+              {(shownCombo > 0 || shownDiscount > 0 || shownTier > 0 || ship || greenBoxHint) && (
                 <div className="space-y-1 md:hidden">
-                  {shownCombo > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownCombo)}`} tone="success" style={{ padding: 0 }} />}
+                  {shownComboOnly > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownComboOnly)}`} tone="success" style={{ padding: 0 }} />}
+                  {shownGreenBox > 0 && <KeyValueRow label={fillCopy('greenBox.name')} value={`-${formatVnd(shownGreenBox)}`} tone="success" style={{ padding: 0 }} />}
                   {shownDiscount > 0 && <KeyValueRow label="Giảm giá" value={`-${formatVnd(shownDiscount)}`} tone="success" style={{ padding: 0 }} />}
                   {shownTier > 0 && <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(shownTier)}`} tone="success" style={{ padding: 0 }} />}
                   {ship && <KeyValueRow label={ship.feeLabel} value={ship.feeText} tone={ship.free ? 'success' : 'primary'} style={{ padding: 0 }} dataDs="cart-ship-estimate" />}
+                  {greenBoxHint && (
+                    <p data-testid="green-box-hint" className="text-caption text-success-fg">
+                      {greenBoxHint}
+                    </p>
+                  )}
                 </div>
               )}
               {/* Tổng bên trái, nút bên phải CÙNG MỘT HÀNG (như Mini App). Khối tổng grow 1000 và không min-w-0, nên hàng chỉ xuống dòng khi số tiền (không ngắt được)

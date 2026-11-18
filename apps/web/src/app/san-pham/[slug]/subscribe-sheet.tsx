@@ -79,18 +79,21 @@ export function SubscribeSheet({
   onNotice,
   variationId,
   quantity,
+  initialWeeks,
 }: {
   visible: boolean;
   onClose: () => void;
   onNotice: (text: string) => void;
   variationId: string;
   quantity: number;
+  /** Chu kỳ chọn sẵn (gợi ý theo nhịp mua thật); không truyền thì 4 tuần như trước. */
+  initialWeeks?: number;
 }) {
   const router = useRouter();
   const qc = useQueryClient();
   const payGroup = useRovingGroup();
   const addrGroup = useRovingGroup();
-  const [weeks, setWeeks] = useState(4);
+  const [weeks, setWeeks] = useState(initialWeeks ?? 4);
   const [startMode, setStartMode] = useState<'now' | 'date'>('now');
   const [startDate, setStartDate] = useState('');
   const [payment, setPayment] = useState<SubscriptionPaymentMethod>('COD');

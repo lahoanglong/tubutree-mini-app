@@ -10,7 +10,8 @@ import { freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress'
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
-import { Badge, Card, FreeShippingProgressBar, IconButton, PriceTag, ProductThumb, QuantitySelector } from '@/components/mini';
+import type { ProductCardView } from '@tubutree/app-core/commerce/product-card-view';
+import { Badge, FreeShippingProgressBar, IconButton, ProductTile, QuantitySelector } from '@/components/mini';
 import { StickyActionBar } from '@/components/sticky-action-bar';
 import { LineItemSkeleton } from '@/components/ui/skeleton';
 import { trackPurchase } from '@/lib/analytics';
@@ -127,8 +128,8 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
   );
 }
 
-// Dòng giỏ khách dựng từ khuôn Mini App (thẻ nổi, giá, bộ chọn số lượng sm, nút xoá biểu tượng) ở mọi khổ: không có trạng thái chọn món hay hoàn tác
-// như giỏ tài khoản, nên không cần bản dòng riêng cho máy tính.
+// Dòng giỏ khách là thẻ dòng của design system (`ProductTile` biến thể `line`: ảnh 64px, tên là liên kết phủ cả thẻ, giá): không có trạng thái chọn món hay hoàn tác
+// như giỏ tài khoản. Nút xoá ở chỗ `action`; cảnh báo, Thử lại và bộ chọn số lượng ở `footer`, nổi trên lớp phủ của liên kết tên.
 function GuestLine({ row, retry }: { row: GuestCartRow; retry: { status: string; refetch?: () => void } | undefined }) {
   // Chưa tải được sản phẩm thì chưa biết tên: gọi trung tính, không gọi là ngừng bán kẻo khách xoá món vẫn đang bán.
   const name = row.productName ?? fillCopy(row.state === 'gone' ? 'guestCart.gone' : 'guestCart.itemFallback');
@@ -146,67 +147,68 @@ function GuestLine({ row, retry }: { row: GuestCartRow; retry: { status: string;
           : row.state === 'error'
             ? fillCopy('guestCart.loadFailed')
             : null;
+  // Thẻ dòng chỉ cần các trường này; trạng thái hết hàng nói bằng dòng cảnh báo (rõ hơn lớp phủ chữ trên ảnh 64px) nên `stock` luôn 'in'.
+  const view: ProductCardView = {
+    id: row.variationId,
+    slug: row.slug,
+    name,
+    brandLine: null,
+    thumbnail: row.thumbnail,
+    price: row.unitPrice ?? 0,
+    compareAt: row.compareAt,
+    discountPct: 0,
+    isFlash: row.isFlash,
+    isDeal: row.compareAt !== null || row.isFlash,
+    imageBadge: null,
+    label: null,
+    meta: null,
+    stock: 'in',
+    stockText: null,
+    rank: null,
+    spoken: { price: row.unitPrice !== null ? formatVnd(row.unitPrice) : '', stock: null, badges: null },
+  };
+  const footer = (
+    <div className="flex flex-col gap-1">
+      {row.isFlash && buyable && (
+        <div>
+          <Badge tone="promo" size="sm" icon={Zap}>
+            Giờ vàng
+          </Badge>
+        </div>
+      )}
+      {(status || stockNote) && (
+        <p className="flex items-center gap-1 text-caption text-warning-fg">
+          <AlertTriangle size={13} aria-hidden className="shrink-0" />
+          {status ?? stockNote}
+        </p>
+      )}
+      {row.state === 'error' && retry?.refetch && (
+        <div className="relative z-[1] self-start">
+          <button type="button" onClick={retry.refetch} className="inline-flex min-h-11 items-center text-sm font-semibold text-[color:var(--color-action-secondary-fg)] underline">
+            {fillCopy('guestCart.retry')}
+          </button>
+        </div>
+      )}
+      {buyable && (
+        <div className="relative z-[1] flex flex-wrap items-center justify-between gap-2">
+          <QuantitySelector size="sm" value={row.quantity} max={row.maxQty} itemLabel={name} onChange={(n) => setGuestQuantity(row.variationId, Math.min(row.maxQty, n))} />
+          {row.quantity > 1 && <span className="text-caption tabular-nums text-[color:var(--color-text-secondary)]">Thành tiền {formatVnd(row.total)}</span>}
+        </div>
+      )}
+    </div>
+  );
   return (
     <div data-testid="cart-line" data-variation-id={row.variationId} data-state={row.state}>
-      <Card padding={12}>
-        <div className="flex gap-3">
-          <Link href={href} tabIndex={-1} aria-hidden="true" className="flex-none self-start">
-            <ProductThumb src={row.thumbnail} alt="" size={64} />
-          </Link>
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <div className="flex items-start gap-1">
-              <Link href={href} className="tubu-hit-44 min-w-0 flex-1 break-words text-sm font-medium text-[color:var(--color-text-primary)] hover:underline">
-                {name}
-              </Link>
-              <IconButton
-                icon={Trash2}
-                size="sm"
-                label={fillCopy('guestCart.removeAria', { name })}
-                onPress={() => removeGuestLine(row.variationId)}
-                className="-mr-2 -mt-2 flex-none"
-              />
-            </div>
-            {lineVariation && <div className="break-words text-caption text-[color:var(--color-text-tertiary)]">{lineVariation}</div>}
-            {row.isFlash && buyable && (
-              <div>
-                <Badge tone="promo" size="sm" icon={Zap}>
-                  Giờ vàng
-                </Badge>
-              </div>
-            )}
-            {(status || stockNote) && (
-              <p className="flex items-center gap-1 text-caption text-warning-fg">
-                <AlertTriangle size={13} aria-hidden className="shrink-0" />
-                {status ?? stockNote}
-              </p>
-            )}
-            {row.state === 'error' && retry?.refetch && (
-              <button type="button" onClick={retry.refetch} className="inline-flex min-h-11 items-center self-start text-sm font-semibold text-[color:var(--color-action-secondary-fg)] underline">
-                {fillCopy('guestCart.retry')}
-              </button>
-            )}
-            {(row.unitPrice !== null || buyable) && (
-              <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
-                {row.unitPrice !== null && (
-                  <PriceTag value={row.unitPrice} compareAt={row.compareAt} size="sm" tone={row.compareAt || row.isFlash ? 'deal' : 'default'} layout="stack" />
-                )}
-                {buyable && (
-                  <div className="ml-auto">
-                    <QuantitySelector
-                      size="sm"
-                      value={row.quantity}
-                      max={row.maxQty}
-                      itemLabel={name}
-                      onChange={(n) => setGuestQuantity(row.variationId, Math.min(row.maxQty, n))}
-                    />
-                  </div>
-                )}
-              </div>
-            )}
-            {buyable && row.quantity > 1 && <div className="text-caption tabular-nums text-[color:var(--color-text-secondary)]">Thành tiền {formatVnd(row.total)}</div>}
-          </div>
-        </div>
-      </Card>
+      <ProductTile
+        view={view}
+        variant="line"
+        href={href}
+        note={lineVariation ?? undefined}
+        hidePrice={row.unitPrice === null}
+        dimMedia={!buyable}
+        footer={footer}
+        action={<IconButton icon={Trash2} size="sm" label={fillCopy('guestCart.removeAria', { name })} onPress={() => removeGuestLine(row.variationId)} />}
+      />
     </div>
   );
 }

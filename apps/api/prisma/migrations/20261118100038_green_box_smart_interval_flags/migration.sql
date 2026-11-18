@@ -1,0 +1,7 @@
+-- Hộp Xanh (giảm theo bậc số món) và gợi ý giao định kỳ theo nhịp mua: hai cờ mặc định TẮT và bảng bậc mặc định. Chỉ thêm dòng khi chưa có,
+-- không đổi giá trị admin đã đặt.
+INSERT INTO "system_configs" ("key", "value", "description", "category", "updatedAt") VALUES
+  ('commerce.green_box_enabled', 'false'::jsonb, 'Hộp Xanh: giỏ có đủ số món Tubu giao khác nhau (giá thường, không Giờ vàng, không thuộc combo đang áp, còn hàng) thì giảm theo bậc ở commerce.green_box_tiers, mỗi dòng tối đa 2 đơn vị. Khoản giảm đi chung đường với giảm combo (hoàn trả, hoa hồng CTV, điểm tích tính trên số sau giảm). Tắt thì giỏ, thanh toán và đơn như cũ; trang /hop-xanh báo chưa mở.', 'commerce', NOW()),
+  ('commerce.green_box_tiers', '[{"minItems":3,"pct":3},{"minItems":5,"pct":5},{"minItems":7,"pct":7}]'::jsonb, 'Bậc Hộp Xanh: số sản phẩm khác nhau tối thiểu (minItems, từ 2) và phần trăm giảm (pct). Mã kẹp pct ở 10% và ở bundle.max_pct; sai dạng (thiếu trường, minItems trùng, bậc sau giảm ít hơn bậc trước) thì không giảm.', 'commerce', NOW()),
+  ('subscriptions.smart_interval_enabled', 'false'::jsonb, 'Gợi ý giao định kỳ theo nhịp mua: món khách đã nhận ít nhất 2 lần trong một năm, chu kỳ là trung vị khoảng cách làm tròn về 4/6/8/10 tuần. Hiện một dòng trong sheet Mua lại và ở tab Định kỳ khi khách chưa có gói. Không đổi giá, không phát điểm. Tắt thì không hiện.', 'subscriptions', NOW())
+ON CONFLICT ("key") DO NOTHING;

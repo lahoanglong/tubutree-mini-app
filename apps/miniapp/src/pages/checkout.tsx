@@ -20,6 +20,7 @@ import { AddressSection } from '../components/checkout/address-section';
 import { GiftRows } from '../components/checkout/gift-rows';
 import { useShippingEstimate } from '../components/checkout/use-shipping-estimate';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
+import { comboOnlyDiscount, greenBoxDiscountOf } from '@tubutree/app-core/commerce/green-box';
 import { PickupSection, WaivedShippingValue } from '../components/checkout/pickup-section';
 import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '../components/checkout/use-checkout-pickup';
 import { OrderSuccess } from '../components/checkout/order-success';
@@ -735,9 +736,12 @@ export default function CheckoutPage() {
   // Chưa có báo giá: tiền hàng trừ combo (chỉ khi mua cả giỏ — chọn một phần thì máy chủ tính lại) rồi trừ mã, như checkout trừ.
   // Lựa chọn nhớ lại có thể bằng đúng mọi dòng của giỏ (vd còn lại sau khi dọn món đã xoá): vẫn là cả giỏ.
   // Combo, mã và hạng của giỏ chỉ đúng cho cả giỏ (mã tính trên phần hàng sau combo, hạng trên phần còn lại); mua một phần thì máy chủ tính lại.
-  const previewCombo = wholeCart ? (cart.data?.comboDiscount ?? 0) : 0;
   const previewDiscount = wholeCart && cart.data?.couponCode ? (cart.data.discount ?? 0) : 0;
   const previewTier = wholeCart ? (cart.data?.tierDiscount ?? 0) : 0;
+  // Hộp Xanh nằm trong `comboDiscount` (giỏ và báo giá): hiện thành dòng riêng, tổng không đổi.
+  const comboSrc = quote.data ?? (wholeCart ? cart.data : null);
+  const shownGreenBox = greenBoxDiscountOf(comboSrc);
+  const shownComboOnly = comboOnlyDiscount(comboSrc);
   // Lý do nút Đặt hàng đang khoá do thiếu địa chỉ hoặc báo giá lỗi: nói ngay trên nút (cùng câu với web).
   const addressOutdated = getErrorCode(quote.error) === 'ADDRESS_OUTDATED';
   const placeHint = checkoutPlaceHint({ hasAddress: !!addressId, quoteFailed: quote.isError, addressOutdated }) ?? (hasLineProblem ? fillCopy('checkout.fixLinesHint') : null);
@@ -1325,9 +1329,8 @@ export default function CheckoutPage() {
             {quote.data.discount > 0 && (
               <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(quote.data.discount)}`} tone="success" />
             )}
-            {quote.data.comboDiscount > 0 && (
-              <KeyValueRow label="Ưu đãi combo" value={`-${formatVnd(quote.data.comboDiscount)}`} tone="success" />
-            )}
+            {shownComboOnly > 0 && <KeyValueRow label="Ưu đãi combo" value={`-${formatVnd(shownComboOnly)}`} tone="success" />}
+            <GreenBoxRow amount={shownGreenBox} />
             {(quote.data.tierDiscount ?? 0) > 0 && (
               <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote.data.tierDiscount ?? 0)}`} tone="success" />
             )}
@@ -1363,9 +1366,8 @@ export default function CheckoutPage() {
           /* Fallback preview summary when addressId is missing/unselected */
           <>
             <KeyValueRow dataDs="checkout-summary-row" label={vi.cart.subtotal} value={formatVnd(previewSubtotal)} />
-            {previewCombo > 0 && (
-              <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(previewCombo)}`} tone="success" />
-            )}
+            {shownComboOnly > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownComboOnly)}`} tone="success" />}
+            <GreenBoxRow amount={shownGreenBox} />
             {previewDiscount > 0 && (
               <KeyValueRow label={vi.cart.discount} value={`-${formatVnd(previewDiscount)}`} tone="success" />
             )}
@@ -1552,9 +1554,8 @@ export default function CheckoutPage() {
             <KeyValueRow label="Mã giảm giá" value={`-${formatVnd(quote.data?.discount ?? previewDiscount)}`} tone="success" />
           )}
 
-          {(quote.data ? quote.data.comboDiscount : previewCombo) > 0 && (
-            <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(quote.data ? quote.data.comboDiscount : previewCombo)}`} tone="success" />
-          )}
+          {shownComboOnly > 0 && <KeyValueRow label="Giảm giá combo" value={`-${formatVnd(shownComboOnly)}`} tone="success" />}
+          <GreenBoxRow amount={shownGreenBox} />
 
           {(quote.data ? (quote.data.tierDiscount ?? 0) : previewTier) > 0 && (
             <KeyValueRow label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote.data ? (quote.data.tierDiscount ?? 0) : previewTier)}`} tone="success" />
@@ -1651,4 +1652,9 @@ function ConsentLink({ onPress, children }: { onPress: () => void; children: Rea
       {children}
     </button>
   );
+}
+
+/** Dòng "Hộp Xanh −{tiền}": phần Hộp Xanh trong `comboDiscount` của máy chủ, tách khỏi dòng combo (tổng không đổi). */
+function GreenBoxRow({ amount }: { amount: number }) {
+  return amount > 0 ? <KeyValueRow label={fillCopy('greenBox.name')} value={`-${formatVnd(amount)}`} tone="success" /> : null;
 }

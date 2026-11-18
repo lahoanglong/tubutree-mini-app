@@ -30,6 +30,7 @@ import { isPartnerOwnedVariation, partnerGoodsError, partnerGoodsMessage } from 
 import { overStockText } from '../cart/cart.stock-message';
 import { TrackCron } from '../../common/cron-run/track-cron';
 import { publicImage } from '../../common/public-image';
+import { intervalCandidates, SMART_INTERVAL_ENABLED_KEY, SMART_INTERVAL_LOOKBACK_DAYS, SMART_INTERVAL_MAX } from './smart-interval';
 
 /** Phương thức trả cho gói định kỳ (Q-13). Cổng ZaloPay/VNPAY cần khách thao tác mỗi kỳ nên không nhận. */
 export const SUBSCRIPTION_PAYMENT_METHODS = ['COD', 'WALLET', 'BANK_TRANSFER'] as const;
@@ -441,6 +442,66 @@ export class SubscriptionsService {
     const earliest = new Date(startOfVnDay().getTime() + 864e5);
     const due = this.addWeeks(startOfVnDay(last.createdAt), intervalWeeks);
     return { intervalWeeks, nextRunAt: due < earliest ? earliest : due, retryCount: 0 };
+  }
+
+  /**
+   * Gợi ý giao định kỳ theo nhịp mua của chính khách (cờ `subscriptions.smart_interval_enabled`). Phân loại khách đã nhận ở ≥ 2 đơn DELIVERED (trong
+   * một năm), chu kỳ là trung vị khoảng cách làm tròn về 4/6/8/10 tuần (`smart-interval.ts`). Bỏ món đã có gói ACTIVE/PAUSED, món ngừng bán, hết hàng,
+   * hàng gian hàng đối tác (tự giao hay giao hộ: không có giảm định kỳ). Tối đa 3, lần nhận gần nhất trước. Chỉ đọc; không đổi giá, không phát điểm.
+   */
+  async suggestions(userId: string, now: Date = new Date()) {
+    if ((await this.config.get<boolean>(SMART_INTERVAL_ENABLED_KEY, false)) !== true) return { enabled: false, items: [] };
+    const since = new Date(now.getTime() - SMART_INTERVAL_LOOKBACK_DAYS * 86_400_000);
+    const rows = await this.prisma.orderItem.findMany({
+      where: { order: { userId, status: 'DELIVERED', deliveredAt: { gte: since } } },
+      select: { variationId: true, order: { select: { deliveredAt: true } } },
+      orderBy: { order: { deliveredAt: 'desc' } },
+      take: 500,
+    });
+    const candidates = intervalCandidates(
+      rows.flatMap((r) => (r.order.deliveredAt ? [{ variationId: r.variationId, deliveredAt: r.order.deliveredAt }] : [])),
+      SUBSCRIPTION_INTERVAL_WEEKS,
+    );
+    if (candidates.length === 0) return { enabled: true, items: [] };
+    const ids = candidates.map((c) => c.variationId);
+    const [open, variations] = await Promise.all([
+      this.prisma.subscription.findMany({ where: { userId, status: { in: OPEN_STATUSES }, variationId: { in: ids } }, select: { variationId: true } }),
+      this.prisma.variation.findMany({
+        where: { id: { in: ids } },
+        select: {
+          id: true,
+          name: true,
+          productId: true,
+          isActive: true,
+          stock: true,
+          retailPrice: true,
+          salePrice: true,
+          pancakeId: true,
+          product: { select: { name: true, slug: true, thumbnail: true, isActive: true, approvalStatus: true, fulfilment: true, storefrontId: true } },
+        },
+      }),
+    ]);
+    const subscribed = new Set(open.map((o) => o.variationId));
+    const byId = new Map(variations.map((v) => [v.id, v]));
+    const items = [];
+    for (const c of candidates) {
+      const v = byId.get(c.variationId);
+      if (!v || subscribed.has(v.id) || !isSellableVariation(v) || v.stock <= 0) continue;
+      // Đơn kỳ chỉ đi kho Tubu qua Pancake (`PANCAKE_FULFILLED_VARIATION_WHERE` ở lúc tạo gói): món không giao được kiểu đó thì không mời.
+      if (!isPancakeFulfilledLine({ pancakeId: v.pancakeId, fulfilment: v.product.fulfilment }) || isPartnerOwnedVariation(v)) continue;
+      items.push({
+        variationId: v.id,
+        productName: v.product.name,
+        variationName: v.name,
+        slug: v.product.slug,
+        thumbnail: publicImage('product', v.productId, 'thumb', v.product.thumbnail),
+        unitPrice: v.salePrice ?? v.retailPrice,
+        intervalWeeks: c.intervalWeeks,
+        lastDeliveredAt: c.lastDeliveredAt.toISOString(),
+      });
+      if (items.length >= SMART_INTERVAL_MAX) break;
+    }
+    return { enabled: true, items };
   }
 
   /** Mặc định 100 gói mới nhất (tối đa 200); cursor = id gói cuối của trang trước. */

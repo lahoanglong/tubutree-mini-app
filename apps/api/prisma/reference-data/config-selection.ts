@@ -59,6 +59,8 @@ export const EXCLUDED_CONFIG_PREFIXES: Readonly<Record<string, string>> = {
   notify: 'trần tin chủ động ngoài app (notify.proactive_cap_enabled, notify.proactive_per_day, notify.proactive_per_week): migration 20261117090000_notify_cap_restock đã tạo 3 dòng bằng mặc định trong mã (cờ TẮT, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa; bật tắt ở thẻ Bật/tắt tính năng',
   eco: 'nhãn xanh và Hộ chiếu Xanh (eco.product_badges_enabled, eco.passport_enabled): migration 20261118010454_eco_facts đã tạo 2 dòng bằng mặc định trong mã (cờ TẮT, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
   checkout: 'thẻ xem trước chuyển khoản (checkout.transfer_preview_enabled): migration 20261118060137_checkout_transfer_preview_flag đã tạo dòng bằng mặc định trong mã (false, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa; bật tắt ở tab Cấu hình, nhóm checkout',
+  commerce: 'Hộp Xanh (commerce.green_box_enabled, commerce.green_box_tiers): migration 20261118100038_green_box_smart_interval_flags đã tạo 2 dòng bằng mặc định trong mã (cờ TẮT, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
+  subscriptions: 'gợi ý giao định kỳ theo nhịp mua (subscriptions.smart_interval_enabled): migration 20261118100038_green_box_smart_interval_flags đã tạo dòng bằng mặc định trong mã (cờ TẮT, ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
   mss: 'cờ kết nối MSS; migration 20261117040000_mss_foundation đã tạo 10 dòng, đều TẮT và bằng giá trị mặc định trong mã (ON CONFLICT DO NOTHING), nên nạp lại ở seed-reference là thừa',
 };
 

@@ -47,3 +47,18 @@ export const fetchProductBundles = (http: HttpClient, slug: string) =>
 /** `GET /bundles/combos`: combo đang chạy mà mọi món còn hàng (Trang chủ). */
 export const fetchHomeCombos = (http: HttpClient, limit?: number) =>
   http.get<BundleDTO[]>('/bundles/combos', { query: limit ? { limit } : {}, anonymous: true });
+
+/** Một danh mục của trang ghép Hộp Xanh. */
+export interface GreenBoxPageGroup {
+  category: { id: string; name: string; slug: string } | null;
+  products: ProductCard[];
+}
+
+/** `GET /bundles/green-box`: món đủ điều kiện nhóm theo danh mục, kèm bảng bậc. Cờ tắt: `enabled` false, không có món. */
+export interface GreenBoxPage {
+  enabled: boolean;
+  tiers: { minItems: number; pct: number }[];
+  groups: GreenBoxPageGroup[];
+}
+
+export const fetchGreenBoxPage = (http: HttpClient) => http.get<GreenBoxPage>('/bundles/green-box', { anonymous: true });

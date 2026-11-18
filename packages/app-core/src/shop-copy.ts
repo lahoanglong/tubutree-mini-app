@@ -701,6 +701,13 @@ export const SHOP_COPY: Record<string, string> = {
   'invite.landing.cta': 'Bắt đầu mua sắm',
   'invite.progress': '{a} bạn đã nhận mã · {b} bạn đã mua đơn đầu · {c} bạn đã đủ điều kiện, bạn nhận {points} Điểm Xanh',
   'invite.progressNoPoints': '{a} bạn đã nhận mã · {b} bạn đã mua đơn đầu',
+  // Hộp Xanh ở giỏ và thanh toán (chữ chỉ có ở web nằm ở GREEN_BOX_WEB_COPY của commerce/green-box.ts). Bậc và % đọc từ máy chủ, không gõ cứng.
+  'greenBox.name': 'Hộp Xanh',
+  'greenBox.cartHint': 'Thêm {n} món nữa giảm {pct}% Hộp Xanh',
+  'greenBox.progressStart': 'Ghép Hộp Xanh: thêm {n} món nữa giảm {pct}%',
+  'greenBox.progressNext': 'Hộp Xanh đang giảm {pct}%. Thêm {n} món nữa giảm {next}%',
+  'greenBox.progressTop': 'Hộp Xanh đã giảm {pct}%, mức cao nhất',
+  'greenBox.marks': 'Mốc {marks} món',
   // Thanh tiến độ Miễn phí giao hàng và dải gợi ý mua thêm ở đầu Giỏ (W42A)
   'freeship.progress': 'Mua thêm {price} để được Miễn phí giao hàng 🚚',
   'freeship.progressTubu': 'Mua thêm {price} để được Miễn phí giao hàng cho phần hàng Tubu Tree giao 🚚',

@@ -21,4 +21,12 @@ export class BundlesController {
   homeCombos(@Query('limit', new DefaultValuePipe(HOME_COMBOS_DEFAULT), ParseIntPipe) limit: number) {
     return this.bundles.homeCombos(limit);
   }
+
+  /** Trang ghép Hộp Xanh: món đủ điều kiện nhóm theo danh mục, kèm bảng bậc. Cờ tắt trả `enabled: false`. */
+  @Public()
+  @PublicCache('CATALOG')
+  @Get('bundles/green-box')
+  greenBox() {
+    return this.bundles.greenBoxPage();
+  }
 }

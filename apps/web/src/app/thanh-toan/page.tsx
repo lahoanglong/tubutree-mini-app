@@ -70,6 +70,7 @@ import { OrderSuccess } from '@/components/checkout/order-success';
 import { GiftRows } from '@/components/checkout/gift-rows';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
+import { comboOnlyDiscount, greenBoxDiscountOf } from '@tubutree/app-core/commerce/green-box';
 import { PickupSection, WaivedShippingValue } from '@/components/checkout/pickup-section';
 import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '@/components/checkout/use-checkout-pickup';
 import { useCheckoutFunnel } from '@/components/analytics/use-checkout-funnel';
@@ -706,7 +707,10 @@ export default function CheckoutPage() {
   // Chưa có báo giá: xem trước khoản giảm từ giỏ như Mini. Combo, mã và hạng của giỏ chỉ đúng cho cả giỏ; mua một phần thì máy chủ tính lại.
   const earnedLabel = quote ? `Nhận +${formatCount(quote.pointsEarned)} Điểm Xanh khi giao thành công` : '';
   const wholeCart = !itemIds || itemIds.length === (cart?.items.length ?? 0);
-  const previewCombo = wholeCart ? (cart?.comboDiscount ?? 0) : 0;
+  // Hộp Xanh nằm trong `comboDiscount` (giỏ và báo giá): hiện thành dòng riêng, tổng không đổi.
+  const comboSrc = quote ?? (wholeCart ? cart : null);
+  const shownComboOnly = comboOnlyDiscount(comboSrc);
+  const shownGreenBox = greenBoxDiscountOf(comboSrc);
   const previewDiscount = wholeCart && cart?.couponCode ? (cart.discount ?? 0) : 0;
   const previewTier = wholeCart ? (cart?.tierDiscount ?? 0) : 0;
   // Như Mini: thẻ tóm tắt chỉ dùng xem trước khi báo giá không chạy (chưa có địa chỉ); đang tải hay lỗi thì không chen dòng giảm vào.
@@ -1015,7 +1019,8 @@ export default function CheckoutPage() {
             </button>
           </div>
           <Row ds="checkout-summary-row" label="Tạm tính" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
-          {cardPreview && previewCombo > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(previewCombo)}`} green />}
+          {cardPreview && shownComboOnly > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(shownComboOnly)}`} green />}
+          {cardPreview && shownGreenBox > 0 && <Row label={fillCopy('greenBox.name')} value={`-${formatVnd(shownGreenBox)}`} green />}
           {cardPreview && previewDiscount > 0 && <Row label="Giảm giá" value={`-${formatVnd(previewDiscount)}`} green />}
           {cardPreview && previewTier > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(previewTier)}`} green />}
           {cardPreview && previewRecalcNote && (
@@ -1028,7 +1033,8 @@ export default function CheckoutPage() {
               green
             />
           )}
-          {(quote?.comboDiscount ?? 0) > 0 && <Row label="Ưu đãi combo" value={`-${formatVnd(quote!.comboDiscount!)}`} green />}
+          {quote && shownComboOnly > 0 && <Row label="Ưu đãi combo" value={`-${formatVnd(shownComboOnly)}`} green />}
+          {quote && shownGreenBox > 0 && <Row label={fillCopy('greenBox.name')} value={`-${formatVnd(shownGreenBox)}`} green />}
           {(quote?.tierDiscount ?? 0) > 0 && (
             <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote!.tierDiscount!)}`} green />
           )}
@@ -1055,7 +1061,8 @@ export default function CheckoutPage() {
             <div className="rounded-[var(--radius-card)] bg-[var(--color-bg-canvas)] p-3">
               <Row label="Tạm tính tiền hàng" value={formatVnd(quote?.subtotal ?? previewSubtotal)} />
               {(quote ? quote.discount : previewDiscount) > 0 && <Row label="Mã giảm giá" value={`-${formatVnd(quote ? quote.discount : previewDiscount)}`} valueGreen />}
-              {(quote ? (quote.comboDiscount ?? 0) : previewCombo) > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(quote ? quote.comboDiscount! : previewCombo)}`} valueGreen />}
+              {shownComboOnly > 0 && <Row label="Giảm giá combo" value={`-${formatVnd(shownComboOnly)}`} valueGreen />}
+              {shownGreenBox > 0 && <Row label={fillCopy('greenBox.name')} value={`-${formatVnd(shownGreenBox)}`} valueGreen />}
               {(quote ? (quote.tierDiscount ?? 0) : previewTier) > 0 && <Row label="Ưu đãi hạng thành viên" value={`-${formatVnd(quote ? quote.tierDiscount! : previewTier)}`} valueGreen />}
               {(quote?.pointsDiscount ?? 0) > 0 && <Row label="Giảm giá Điểm Xanh" value={`-${formatVnd(quote!.pointsDiscount)}`} valueGreen />}
               <Row label="Phí vận chuyển" value={shippingValue} valueGreen={quote?.shippingFee === 0} />

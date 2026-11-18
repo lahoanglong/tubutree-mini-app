@@ -3184,3 +3184,84 @@ describe('CheckoutService — đổi rác kèm đơn: miễn phí giao, số kg 
     });
   });
 });
+
+describe('CheckoutService: Hộp Xanh đi đúng đường combo (commerce.green_box_enabled)', () => {
+  const line = (n: number, o: Record<string, unknown> = {}) => ({
+    id: `ci${n}`,
+    variationId: `v${n}`,
+    productId: `p${n}`,
+    productName: `SP ${n}`,
+    variationName: 'V',
+    unitPrice: 100_000,
+    quantity: 1,
+    total: 100_000,
+    stock: 20,
+    isFlash: false,
+    partnerOwned: false,
+    ...o,
+  });
+  const cartOf = (items: ReturnType<typeof line>[]) => ({ items, subtotal: items.reduce((s, l) => s + (l.total as number), 0), discount: 0, freeship: false, couponCode: null });
+  const configOf = (on: boolean) => ({ get: jest.fn(async (k: string, d: unknown) => (k === 'commerce.green_box_enabled' ? on : d)) });
+  const comboStub = () => ({
+    computeForStorefront: jest.fn().mockResolvedValue({ total: 0, perLine: {} }),
+    computeWithGroups: jest.fn().mockResolvedValue({ total: 0, perLine: {}, groups: [] }),
+  });
+  const three = [line(1), line(2), line(3)];
+
+  it('cờ tắt: báo giá không có greenBoxDiscount, chỉ một lời gọi combo như cũ', async () => {
+    const combo = comboStub();
+    const { svc } = build({ cartData: cartOf(three), combo: combo as never, systemConfig: configOf(false) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q).not.toHaveProperty('greenBoxDiscount');
+    expect(q.comboDiscount).toBe(0);
+    expect(combo.computeForStorefront).toHaveBeenCalledTimes(1);
+    expect(combo.computeWithGroups).not.toHaveBeenCalled();
+  });
+
+  it('cờ bật, 3 món: báo giá giảm 3% trong comboDiscount, tổng = tiền hàng − giảm', async () => {
+    const { svc } = build({ cartData: cartOf(three), combo: comboStub() as never, systemConfig: configOf(true) });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.greenBoxDiscount).toBe(9_000);
+    expect(q.comboDiscount).toBe(9_000);
+    expect(q.total).toBe(300_000 - 9_000);
+  });
+
+  it('mã giảm giá xét đơn tối thiểu trên tiền hàng sau Hộp Xanh', async () => {
+    const validateAndCompute = jest.fn().mockResolvedValue({ discount: 10_000, freeship: false });
+    const { svc } = build({ cartData: { ...cartOf(three), couponCode: 'XANH10' }, combo: comboStub() as never, systemConfig: configOf(true), validateAndCompute });
+    await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(validateAndCompute.mock.calls[0]![2]).toBe(291_000);
+  });
+
+  it('đặt đơn: khoản giảm vào Order.comboDiscount và từng dòng (OrderItem.total, paidTotal), tổng dòng = tổng đơn', async () => {
+    const { svc, orderCreate } = build({ cartData: cartOf(three), combo: comboStub() as never, systemConfig: configOf(true) });
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const data = orderCreate.mock.calls[0]![0].data;
+    expect(data.comboDiscount).toBe(9_000);
+    expect(data.discount).toBe(9_000);
+    const items = data.items.create as Array<{ total: number; paidTotal: number }>;
+    expect(items.map((i) => i.total)).toEqual([97_000, 97_000, 97_000]);
+    expect(items.reduce((s, i) => s + i.paidTotal, 0)).toBe(data.subtotal - data.discount);
+  });
+
+  it('giỏ tụt bậc giữa lúc xem và lúc đặt (tổng tăng so với số khách thấy): chặn bằng "tổng đã đổi", không đặt với số cũ', async () => {
+    // Khách thấy 291.000đ (3 món, giảm 3%); tới lúc đặt món thứ ba vào Giờ vàng (99.000đ) nên không còn được đếm: 2 món, mất bậc, tổng 299.000đ.
+    const { svc, orderCreate } = build({
+      cartData: cartOf([line(1), line(2), line(3, { isFlash: true, unitPrice: 99_000, total: 99_000 })]),
+      combo: comboStub() as never,
+      systemConfig: configOf(true),
+    });
+    await expect(svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', expectedTotal: 291_000 } as never)).rejects.toThrow(/291\.000/);
+    expect(orderCreate).not.toHaveBeenCalled();
+  });
+
+  it('dòng Giờ vàng và dòng thiếu tồn không được đếm', async () => {
+    const { svc } = build({
+      cartData: cartOf([line(1), line(2), line(3, { isFlash: true }), line(4, { stock: 0 })]),
+      combo: comboStub() as never,
+      systemConfig: configOf(true),
+    });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q.greenBoxDiscount).toBe(0);
+  });
+});
