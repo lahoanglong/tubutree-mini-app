@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { homeCopy } from '@tubutree/app-core/home-copy';
 import { Heading, Text } from '@/components/mini';
+import { MD_UP } from '@/lib/use-media-query';
+import { useBreakpointSide } from './use-breakpoint-side';
 
 /** Lá và cành vẽ bằng đường nét, màu chữ sáng nhạt dần: hoạ tiết nền, không mang nghĩa. */
 const SPRIG = 'M20 150c0-60 30-110 90-136 0 52-28 100-90 136z';
@@ -22,6 +24,8 @@ const BTN = 'inline-flex min-h-11 items-center justify-center rounded-control px
  */
 export function HomeEditorialHero() {
   const c = homeCopy.hero;
+  // Điện thoại ẩn hẳn khối này: sau hydrate bỏ khỏi DOM (xem `useBreakpointSide`).
+  if (useBreakpointSide(MD_UP) === 'below') return null;
   return (
     <section
       aria-label={c.label}

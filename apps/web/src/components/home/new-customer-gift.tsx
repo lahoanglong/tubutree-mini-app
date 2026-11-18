@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useContext, useState, type ReactNode } from 'react';
 import { CalendarClock, ChevronDown, ChevronUp, Gift, Leaf, Ticket, Truck, type LucideIcon } from 'lucide-react';
 import type { PublicConfig } from '@tubutree/app-core/api/config';
 import { homeCopy } from '@tubutree/app-core/home-copy';
@@ -15,9 +15,12 @@ import { useAuthPhase, useAuthRestoring } from '@/lib/auth-phase';
 import { coreHttp } from '@/lib/core-http';
 import { formatDate } from '@/lib/format-date';
 import { formatVnd } from '@/lib/format-vnd';
+import { HomeRestoreHintContext } from '@/lib/home-restore-context';
 import { homeText } from '@/lib/home-text';
 import { earnPctOf, percentLabel } from '@/lib/points-boost';
+import { LG_UP, MD_UP } from '@/lib/use-media-query';
 import { Card, Icon, Skeleton, Text } from '@/components/mini';
+import { useBreakpointSide } from './use-breakpoint-side';
 
 interface Benefit {
   icon: LucideIcon;
@@ -57,6 +60,7 @@ function voucherTitle(v: NonNullable<NewCustomerOffer['welcomeVoucher']>): strin
  * Quà khách mới trong dải ngữ cảnh của Trang chủ (D2-07b): voucher chào mừng của khách (nếu có) và 3 lợi ích mua trực tiếp. Chỉ khách chưa có
  * đơn theo định nghĩa đơn đầu của API (GET /me/new-customer-offer); khách chưa đăng nhập thì chỉ thấy phần lợi ích.
  * Thu gọn đúng `HOME_GIFT_HEIGHT` (64px) ở điện thoại: icon + tiêu đề một dòng + câu lợi ích một dòng (cắt "…") + nút hành động 44px cùng hàng; chi tiết mở bằng nút gập.
+ * Chi tiết luôn mở từ md chỉ cho khách vãng lai (HTML server đã có dải cao đúng như vậy); khách có phiên giữ dải gọn tới lg, xem `openFromMd`.
  * Đang tải: khung chờ cùng chiều cao; lỗi tải hay thiếu cấu hình, hay khách không còn ưu đãi: vẽ `fallback` (thẻ thành viên) để dải không trống.
  * Khách chưa đăng nhập được hứa mã chào mừng theo cấu hình công khai và nút "Nhận quà" dẫn tới đăng nhập (như Mini App).
  */
@@ -66,6 +70,12 @@ export function NewCustomerGift({ initialConfig, fallback }: { initialConfig?: P
   const restoring = useAuthRestoring();
   const authed = phase === 'authenticated';
   const userId = useAuth().user?.id;
+  // Khách có phiên chỉ biết là khách mới sau khi phiên và ưu đãi đã về, lúc đó HTML đầu đã vẽ dải ngữ cảnh 64px: ở md–lg dải nằm trên mọi khối
+  // (từ lg nó đứng cột bên cạnh khối giới thiệu), nên mở chi tiết hay giữ khung chờ cao hơn 64px ở khổ đó đẩy cả trang xuống. Vậy chỉ khách vãng lai mở sẵn từ md.
+  const prebuiltRestore = useContext(HomeRestoreHintContext) !== null;
+  const openFromMd = !authed && !restoring && !prebuiltRestore;
+  // Nút gập chỉ hiện dưới khổ mở sẵn; tiêu đề tĩnh và chi tiết (khi chưa mở) chỉ hiện từ khổ đó. Sau hydrate phần đang ẩn rời DOM.
+  const side = useBreakpointSide(openFromMd ? MD_UP : LG_UP);
   // Cùng queryKey/hàm với usePublicConfig → một cache; cần trạng thái lỗi riêng để ẩn khối thay vì hiện giá trị dự phòng.
   // placeholderData (không phải initialData): HTML server vẫn có khối này, nhưng bản dựng ISR có thể cũ tới vài phút nên trình duyệt phải tải
   // cấu hình thật; initialData làm cache coi bản dựng sẵn là mới và các khối khác (lối tắt Đổi rác...) đọc nhầm cấu hình cũ.
@@ -77,7 +87,7 @@ export function NewCustomerGift({ initialConfig, fallback }: { initialConfig?: P
   // khách vãng lai thật (HTML server dựng sẵn bản này nên Danh mục không nhảy sau hydrate).
   if (phase === 'unavailable') return fallback ?? null;
   if (cfgQ.isError || (authed && offerQ.isError)) return fallback ?? null;
-  if (restoring || cfgQ.isPending || (authed && offerQ.isPending)) return <NewCustomerGiftSkeleton />;
+  if (restoring || cfgQ.isPending || (authed && offerQ.isPending)) return <NewCustomerGiftSkeleton openFromMd={openFromMd} />;
   if (authed && offerQ.data?.isNewCustomer !== true) return fallback ?? null;
 
   const voucher = authed ? (offerQ.data?.welcomeVoucher ?? null) : null;
@@ -101,31 +111,35 @@ export function NewCustomerGift({ initialConfig, fallback }: { initialConfig?: P
       <Card variant="flat" padding={0}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-inline-sm)', height: HOME_GIFT_HEIGHT, boxSizing: 'border-box', padding: '0 var(--space-inline-md) 0 var(--space-inline-lg)' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* Điện thoại: nút gập (Mini App). Từ md chi tiết luôn mở sẵn nên nút ẩn hẳn (không còn trong cây trợ năng) và tiêu đề là chữ tĩnh. */}
-            <div className="md:hidden">
-              <button
-                type="button"
-                aria-expanded={expanded}
-                aria-label={`${homeText.newGift.title}: ${headline}. ${expanded ? homeText.newGift.collapse : homeText.newGift.expand}`}
-                className="tubu-press"
-                onClick={() => setExpanded((v) => !v)}
-                style={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 'var(--space-inline-sm)', padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}
-              >
+            {/* Điện thoại: nút gập (Mini App). Từ khổ chi tiết luôn mở sẵn, nút ẩn hẳn (không còn trong cây trợ năng) và tiêu đề là chữ tĩnh. */}
+            {side !== 'above' && (
+              <div className={openFromMd ? 'md:hidden' : 'lg:hidden'}>
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-label={`${homeText.newGift.title}: ${headline}. ${expanded ? homeText.newGift.collapse : homeText.newGift.expand}`}
+                  className="tubu-press"
+                  onClick={() => setExpanded((v) => !v)}
+                  style={{ width: '100%', minHeight: 44, display: 'flex', alignItems: 'center', gap: 'var(--space-inline-sm)', padding: 0, border: 'none', background: 'transparent', color: 'inherit', textAlign: 'left', cursor: 'pointer', fontFamily: 'inherit' }}
+                >
+                  <Icon icon={Gift} tone="brand" />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {homeText.newGift.title}
+                    </Text>
+                  </span>
+                  <Icon icon={expanded ? ChevronUp : ChevronDown} size="sm" tone="muted" />
+                </button>
+              </div>
+            )}
+            {side !== 'below' && (
+              <div className={`hidden min-h-11 min-w-0 items-center gap-2 ${openFromMd ? 'md:flex' : 'lg:flex'}`}>
                 <Icon icon={Gift} tone="brand" />
-                <span style={{ flex: 1, minWidth: 0 }}>
-                  <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {homeText.newGift.title}
-                  </Text>
-                </span>
-                <Icon icon={expanded ? ChevronUp : ChevronDown} size="sm" tone="muted" />
-              </button>
-            </div>
-            <div className="hidden min-h-11 min-w-0 items-center gap-2 md:flex">
-              <Icon icon={Gift} tone="brand" />
-              <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {homeText.newGift.title}
-              </Text>
-            </div>
+                <Text variant="label" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {homeText.newGift.title}
+                </Text>
+              </div>
+            )}
             {/* Dòng lợi ích cao 16px cố định: nút gập 44 + 16 = 60 nằm gọn trong 64, câu dài cắt "…" chứ không xuống dòng làm dải cao thêm. */}
             <Text variant="caption" tone="secondary" as="div" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', lineHeight: '16px' }}>
               {headline}
@@ -141,59 +155,61 @@ export function NewCustomerGift({ initialConfig, fallback }: { initialConfig?: P
             </Link>
           )}
         </div>
-        {/* Điện thoại: mở bằng nút gập. Từ md luôn mở: bề ngang đủ chỗ cho quyền lợi, không bắt khách bấm mũi tên để thấy mã và ba lợi ích. */}
-        <div data-testid="new-customer-gift-details" className={expanded ? undefined : 'hidden md:block'}>
-          <div style={{ padding: '0 16px 16px' }}>
-            {voucher && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-                <Icon icon={Ticket} tone="brand" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text variant="label" as="div">
-                    {voucherTitle(voucher)}
-                  </Text>
-                  <Text variant="caption" tone="secondary" as="div">
-                    {voucherDetail}
-                  </Text>
+        {/* Điện thoại: mở bằng nút gập. Từ md (khách có phiên: từ lg) luôn mở: bề ngang đủ chỗ cho quyền lợi, không bắt khách bấm mũi tên để thấy mã và ba lợi ích. */}
+        {(expanded || side !== 'below') && (
+          <div data-testid="new-customer-gift-details" className={expanded ? undefined : openFromMd ? 'hidden md:block' : 'hidden lg:block'}>
+            <div style={{ padding: '0 16px 16px' }}>
+              {voucher && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+                  <Icon icon={Ticket} tone="brand" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Text variant="label" as="div">
+                      {voucherTitle(voucher)}
+                    </Text>
+                    <Text variant="caption" tone="secondary" as="div">
+                      {voucherDetail}
+                    </Text>
+                  </div>
                 </div>
-              </div>
-            )}
-            {promised && promised.amount > 0 && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
-                <Icon icon={Ticket} tone="brand" />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <Text variant="label" as="div">
-                    {homeText.newGift.voucherAmount(formatVnd(promised.amount))}
-                  </Text>
-                  <Text variant="caption" tone="secondary" as="div">
-                    {[promised.minOrder ? homeText.newGift.voucherMinOrder(formatVnd(promised.minOrder)) : null, homeCopy.guestGift.webCtaHint].filter(Boolean).join(' · ')}
-                  </Text>
+              )}
+              {promised && promised.amount > 0 && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 4 }}>
+                  <Icon icon={Ticket} tone="brand" />
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <Text variant="label" as="div">
+                      {homeText.newGift.voucherAmount(formatVnd(promised.amount))}
+                    </Text>
+                    <Text variant="caption" tone="secondary" as="div">
+                      {[promised.minOrder ? homeText.newGift.voucherMinOrder(formatVnd(promised.minOrder)) : null, homeCopy.guestGift.webCtaHint].filter(Boolean).join(' · ')}
+                    </Text>
+                  </div>
                 </div>
-              </div>
-            )}
-            <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 12 }}>
-              {homeText.newGift.benefitsTitle}
-            </Text>
-            <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0 md:grid md:grid-cols-3 md:gap-4 lg:flex lg:flex-col lg:gap-2">
-              {benefits.map((b) => (
-                <li key={b.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                  <Icon icon={b.icon} size="sm" tone="brand" style={{ flex: '0 0 auto', marginTop: 3 }} />
-                  <Text variant="body-sm" tone="secondary">
-                    {b.text}
-                  </Text>
-                </li>
-              ))}
-            </ul>
+              )}
+              <Text variant="caption" tone="secondary" as="p" style={{ marginTop: 12 }}>
+                {homeText.newGift.benefitsTitle}
+              </Text>
+              <ul className="m-0 mt-2 flex list-none flex-col gap-2 p-0 md:grid md:grid-cols-3 md:gap-4 lg:flex lg:flex-col lg:gap-2">
+                {benefits.map((b) => (
+                  <li key={b.text} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                    <Icon icon={b.icon} size="sm" tone="brand" style={{ flex: '0 0 auto', marginTop: 3 }} />
+                    <Text variant="body-sm" tone="secondary">
+                      {b.text}
+                    </Text>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
-        </div>
+        )}
       </Card>
     </section>
   );
 }
 
-function NewCustomerGiftSkeleton() {
+function NewCustomerGiftSkeleton({ openFromMd }: { openFromMd: boolean }) {
   return (
-    // Từ md chi tiết luôn mở nên khối thật cao hơn dải gọn của điện thoại: khung chờ cao theo đó (`md:h-64`) để thẻ về không đẩy các khối dưới.
-    <div data-testid="new-customer-gift-loading" aria-hidden="true" className="md:h-64">
+    // Từ khổ chi tiết luôn mở, khối thật cao hơn dải gọn của điện thoại: khung chờ cao theo đó để thẻ về không đẩy các khối dưới.
+    <div data-testid="new-customer-gift-loading" aria-hidden="true" className={openFromMd ? 'md:h-64' : 'lg:h-64'}>
       <Skeleton height="100%" radius="var(--radius-card)" style={{ minHeight: HOME_GIFT_HEIGHT }} />
     </div>
   );

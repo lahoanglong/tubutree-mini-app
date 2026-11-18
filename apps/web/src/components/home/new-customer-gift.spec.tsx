@@ -9,6 +9,8 @@ vi.mock('@/lib/auth-phase', () => ({ useAuthPhase: () => mocks.phase, useAuthRes
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u1' } }) }));
 
 import { HOME_GIFT_HEIGHT } from '@tubutree/app-core/home-layout';
+import { HomeRestoreHintContext } from '@/lib/home-restore-context';
+import { hintOfSlug } from '@/lib/home-restore-hint';
 import { NewCustomerGift } from './new-customer-gift';
 
 // Số cố ý KHÁC mọi mặc định trong mã: nếu khối còn viết cứng 30.000đ/199.000đ/10.000đ/12% thì test đỏ.
@@ -60,6 +62,7 @@ beforeEach(() => {
 afterEach(() => {
   mounted?.unmount();
   mounted = null;
+  delete (window as { matchMedia?: unknown }).matchMedia;
 });
 
 describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b)', () => {
@@ -94,22 +97,101 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     expect(region(mounted.container)).toBeNull();
   });
 
-  it('dải gọn: tóm tắt mã chào mừng trên một dòng; chi tiết còn gập ở điện thoại (ẩn bằng CSS, vẫn có trong HTML cho md trở lên)', async () => {
+  it('dải gọn: tóm tắt mã chào mừng trên một dòng; chi tiết còn gập ở điện thoại (ẩn bằng CSS, vẫn có trong HTML cho khổ rộng)', async () => {
     const root = region(await mount())!;
     expect(root.textContent).toContain('Mã 25.000đ · cho đơn từ 150.000đ');
     const details = root.querySelector<HTMLElement>('[data-testid="new-customer-gift-details"]')!;
-    expect(details.className.split(' ')).toEqual(expect.arrayContaining(['hidden', 'md:block']));
+    expect(details.className.split(' ')).toEqual(expect.arrayContaining(['hidden', 'lg:block']));
   });
 
-  it('từ md chi tiết luôn mở: nút gập chỉ có ở điện thoại (md:hidden), tiêu đề là chữ tĩnh; ba lợi ích xếp 3 cột ở md và 1 cột khi aside chỉ còn 4 cột (lg)', async () => {
+  it('khách vãng lai: từ md chi tiết luôn mở, nút gập chỉ có ở điện thoại (md:hidden), tiêu đề là chữ tĩnh; ba lợi ích xếp 3 cột ở md và 1 cột khi aside chỉ còn 4 cột (lg)', async () => {
+    mocks.phase = 'guest';
     const root = region(await mount())!;
     const toggle = root.querySelector<HTMLElement>('button[aria-expanded]')!;
-    expect(toggle.parentElement!.className).toContain('md:hidden');
+    expect(toggle.parentElement!.className).toBe('md:hidden');
     const staticTitle = Array.from(root.querySelectorAll<HTMLElement>('div.hidden.md\\:flex')).find((d) => d.textContent === 'Quà khách mới');
     expect(staticTitle).toBeDefined();
+    const details = root.querySelector<HTMLElement>('[data-testid="new-customer-gift-details"]')!;
+    expect(details.className.split(' ')).toEqual(['hidden', 'md:block']);
     const list = root.querySelector<HTMLElement>('ul')!;
     expect(list.className).toContain('md:grid-cols-3');
     expect(list.className).toContain('lg:flex-col');
+  });
+
+  // Khách có phiên chỉ thành "khách mới" sau khi phiên và ưu đãi về, khi HTML đầu đã vẽ dải 64px: ở md–lg dải nằm trên mọi khối nên mở sẵn chi tiết
+  // (hay khung chờ cao hơn) đẩy cả trang xuống (CLS 0,18 ở 768px). Khách có phiên giữ dải gọn như điện thoại tới lg.
+  it('khách đã đăng nhập: dải gọn tới lg (nút gập lg:hidden, chi tiết hidden lg:block), không mở sẵn từ md', async () => {
+    const root = region(await mount())!;
+    expect(root.querySelector<HTMLElement>('button[aria-expanded]')!.parentElement!.className).toBe('lg:hidden');
+    expect(root.querySelector('div.hidden.md\\:flex')).toBeNull();
+    expect(Array.from(root.querySelectorAll<HTMLElement>('div.hidden.lg\\:flex')).some((d) => d.textContent === 'Quà khách mới')).toBe(true);
+    expect(root.querySelector<HTMLElement>('[data-testid="new-customer-gift-details"]')!.className.split(' ')).toEqual(['hidden', 'lg:block']);
+  });
+
+  it('khung chờ: khách vãng lai cao theo bản mở từ md (md:h-64); khách có phiên hay đang khôi phục giữ 64px tới lg (lg:h-64)', async () => {
+    const loadingClass = (c: HTMLElement) => c.querySelector<HTMLElement>('[data-testid="new-customer-gift-loading"]')!.className;
+    offer = never;
+    expect(loadingClass(await mount())).toBe('lg:h-64');
+    mounted!.unmount();
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    expect(loadingClass(await mount())).toBe('lg:h-64');
+    mounted!.unmount();
+    mocks.phase = 'guest';
+    mocks.restoring = false;
+    config = never;
+    expect(loadingClass(await mount())).toBe('md:h-64');
+  });
+
+  it('trang dựng sẵn cho khách có cookie phiên mà khôi phục hỏng (về khách vãng lai): vẫn giữ dải gọn tới lg như HTML đầu', async () => {
+    mocks.phase = 'guest';
+    mounted = render(
+      <HomeRestoreHintContext.Provider value={hintOfSlug('unknown')}>
+        <NewCustomerGift />
+      </HomeRestoreHintContext.Provider>,
+    );
+    await flush(8);
+    const root = region(mounted.container)!;
+    expect(root.querySelector<HTMLElement>('button[aria-expanded]')!.parentElement!.className).toBe('lg:hidden');
+    expect(root.querySelector<HTMLElement>('[data-testid="new-customer-gift-details"]')!.className.split(' ')).toEqual(['hidden', 'lg:block']);
+  });
+
+  // HTML server dựng cả nút gập lẫn chi tiết (lớp md:/lg: chọn phần hiện); trong trình duyệt phần đang ẩn ở khổ hiện tại rời DOM (trần 1.200 nút ở điện thoại).
+  it('trình duyệt dưới khổ mở sẵn: không dựng tiêu đề tĩnh và chi tiết chưa mở; bấm nút gập thì chi tiết mới dựng', async () => {
+    mocks.phase = 'guest';
+    window.matchMedia = ((media: string) => ({ matches: false, media, addEventListener: () => undefined, removeEventListener: () => undefined })) as unknown as typeof window.matchMedia;
+    const c = await mount();
+    expect(region(c)!.querySelector('[data-testid="new-customer-gift-details"]')).toBeNull();
+    expect(region(c)!.querySelector('div.hidden.md\\:flex')).toBeNull();
+    const details = (await open(c)).querySelector<HTMLElement>('[data-testid="new-customer-gift-details"]')!;
+    expect(details.className).toBe('');
+    expect(details.textContent).toContain('Đặt định kỳ giảm 17% mỗi đơn');
+  });
+
+  it('trình duyệt từ khổ mở sẵn: không dựng nút gập (đang ẩn), chi tiết và tiêu đề tĩnh có sẵn', async () => {
+    mocks.phase = 'guest';
+    const queries: string[] = [];
+    window.matchMedia = ((media: string) => {
+      queries.push(media);
+      return { matches: true, media, addEventListener: () => undefined, removeEventListener: () => undefined };
+    }) as unknown as typeof window.matchMedia;
+    const root = region(await mount())!;
+    expect(queries).toContain('(min-width: 768px)');
+    expect(root.querySelector('button[aria-expanded]')).toBeNull();
+    expect(root.querySelector('[data-testid="new-customer-gift-details"]')).not.toBeNull();
+    expect(Array.from(root.querySelectorAll<HTMLElement>('div.hidden.md\\:flex')).some((d) => d.textContent === 'Quà khách mới')).toBe(true);
+  });
+
+  it('khách có phiên hỏi điểm gãy lg (dải gọn tới lg), không phải md', async () => {
+    const queries: string[] = [];
+    window.matchMedia = ((media: string) => {
+      queries.push(media);
+      return { matches: false, media, addEventListener: () => undefined, removeEventListener: () => undefined };
+    }) as unknown as typeof window.matchMedia;
+    const root = region(await mount())!;
+    expect(new Set(queries)).toEqual(new Set(['(min-width: 1024px)']));
+    expect(root.querySelector('button[aria-expanded]')).not.toBeNull();
+    expect(root.querySelector('[data-testid="new-customer-gift-details"]')).toBeNull();
   });
 
   it('mở bằng nút gập ở điện thoại: chi tiết hết lớp hidden', async () => {

@@ -8,7 +8,12 @@ let mounted: Rendered | null = null;
 afterEach(() => {
   mounted?.unmount();
   mounted = null;
+  delete (window as { matchMedia?: unknown }).matchMedia;
 });
+
+const stubWide = (wide: boolean) => {
+  window.matchMedia = ((media: string) => ({ matches: wide, media, addEventListener: () => undefined, removeEventListener: () => undefined })) as unknown as typeof window.matchMedia;
+};
 
 describe('HomeEditorialHero — khối giới thiệu mặc định của Trang chủ web', () => {
   it('chỉ có từ md (điện thoại ẩn hẳn như Mini) và giữ tỉ lệ banner để chiến dịch về muộn không làm trang nhảy', () => {
@@ -45,6 +50,17 @@ describe('HomeEditorialHero — khối giới thiệu mặc định của Trang 
     expect(html).not.toMatch(/#[0-9a-f]{3,8}\b/i);
     expect(html).not.toMatch(/--(forest|stone|sage|clay)-/);
     expect(html).not.toContain('max-md:');
+  });
+
+  // HTML server vẫn có khối (ẩn bằng lớp dưới md) để md đúng ngay khung hình đầu; trên điện thoại khối ẩn rời DOM sau hydrate, Trang chủ điện thoại có trần 1.200 nút.
+  it('trình duyệt dưới md: không dựng khối (đang ẩn); từ md: dựng đủ', () => {
+    stubWide(false);
+    mounted = render(<HomeEditorialHero />);
+    expect(mounted.container.innerHTML).toBe('');
+    mounted.unmount();
+    stubWide(true);
+    mounted = render(<HomeEditorialHero />);
+    expect(mounted.container.querySelector('section[data-testid="home-editorial-hero"]')).not.toBeNull();
   });
 
   it('chữ không chứa thuật ngữ cấm hay lời hứa chưa kiểm chứng', () => {
