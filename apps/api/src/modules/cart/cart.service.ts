@@ -6,6 +6,7 @@ import { CouponMinOrderError, CouponsService, normalizeCouponCode, type CouponUs
 import { CouponClaimService } from '../coupons/coupon-claim.service';
 import { SystemConfigService } from '../system-config/system-config.service';
 import { calcTierDiscount, firstOrderFreeShipFrom, freeShipThreshold, tierDiscountPctOf } from '../pricing/pricing.service';
+import { combinedRedeemCap, COUPON_CAP_ZERO_REASON, couponCapNote, loadRedeemPct } from '../pricing/redeem-cap';
 import { FlashSaleService } from '../flash-sale/flash-sale.service';
 import { priceFlashLine } from '../flash-sale/flash-line-price';
 import { AnalyticsEventsService } from '../analytics/analytics-events.service';
@@ -266,15 +267,24 @@ export class CartService {
     let couponRemoved: { code: string; reason: string; shortfall?: number } | null = null;
     // Mã giữ trong giỏ nhưng chưa áp vì phần hàng được tính còn thiếu đơn tối thiểu: số tiền thiếu (app nói "mua thêm …", không tự trừ từ tổng giỏ).
     let couponShortfall: number | undefined;
+    // Trần giảm gộp voucher + Điểm Xanh trên tạm tính (redeem-cap.ts), cùng số với báo giá và đặt đơn.
+    const redeemPct = await loadRedeemPct(this.config);
+    const redeemCap = combinedRedeemCap(subtotal, redeemPct);
+    let couponCapNoteText: string | null = null;
     const applyCoupon = async (code: string) => {
       const r = await this.coupons.validateAndCompute(code, userId, couponBase, couponLines, userFacts);
       // Coupon PERCENT không tự giới hạn ở subtotal khi value>100% và không set maxDiscount
       // (coupons.service.ts) — checkout đã clamp bằng Math.min(..., goodsAfterCombo), cart
       // trước đây thiếu clamp này nên có thể hiển thị discount > couponBase.
-      discount = Math.min(r.discount, couponBase);
+      const full = Math.min(r.discount, couponBase);
+      discount = Math.min(full, redeemCap);
       freeship = r.freeship;
+      couponCapNoteText = discount > 0 && discount < full ? couponCapNote(discount, redeemPct) : null;
       if (lines.length > 0 && discount === 0 && !freeship) {
-        couponNotice = couponNotAppliedNotice(COUPON_ZERO_DISCOUNT_REASON, lines.some((l) => l.isFlash), hasCombo);
+        couponNotice =
+          full > 0
+            ? couponNotAppliedNotice(COUPON_CAP_ZERO_REASON, false, false)
+            : couponNotAppliedNotice(COUPON_ZERO_DISCOUNT_REASON, lines.some((l) => l.isFlash), hasCombo);
       } else if (discount > 0 && lines.some((l) => l.isFlash)) {
         couponNotice = couponFlashExcludedNotice(couponBase);
       }
@@ -360,6 +370,8 @@ export class CartService {
       // Cờ commerce.green_box_enabled tắt thì không có hai trường này (giỏ giống hệt trước). Bật: `comboDiscount` đã gồm `greenBoxDiscount`.
       ...(greenBox ? { greenBoxDiscount: greenBox.total, greenBox: greenBoxSummary(greenBox) } : {}),
       discount,
+      // Mã bị kẹp ở trần gộp voucher + Điểm Xanh: câu nói vì sao mã giảm ít hơn mệnh giá; không kẹp thì không có trường này.
+      ...(couponCapNoteText ? { couponCapNote: couponCapNoteText as string } : {}),
       tierDiscount,
       freeship,
       freeshipThreshold,

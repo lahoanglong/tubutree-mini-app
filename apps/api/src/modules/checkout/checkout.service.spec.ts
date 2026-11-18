@@ -22,6 +22,7 @@ import type { ComboService } from '../storefront/combo.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import { applyWalletDelta } from '../wallet/wallet-ledger.service';
 import { PICKUP_BATTERY_HCM_ONLY_MESSAGE } from '../waste-exchange/core/waste-pickup-rules';
+import { COUPON_CAP_ZERO_REASON } from '../pricing/redeem-cap';
 
 // Sổ cái thật chạy trên Postgres ở test/integration-race/wallet-ledger*.race-spec.ts.
 jest.mock('../wallet/wallet-ledger.service', () => ({
@@ -665,9 +666,9 @@ describe('CheckoutService.placeOrder — combo discount (§7.2)', () => {
   });
 
   it('combo + coupon TUẦN TỰ: coupon tính trên base SAU combo (không giảm chồng) + invariant', async () => {
-    // subtotal 100, combo 20 → goodsAfterCombo 80; coupon 30% → validateAndCompute(_, 80) = 24
+    // subtotal 100, combo 20 → goodsAfterCombo 80; coupon 20% → validateAndCompute(_, 80) = 16 (dưới trần gộp 20% tạm tính = 20)
     const combo = { computeForStorefront: jest.fn().mockResolvedValue({ total: 20, perLine: { v1: 20 } }) };
-    const validateAndCompute = jest.fn().mockResolvedValue({ discount: 24, freeship: false });
+    const validateAndCompute = jest.fn().mockResolvedValue({ discount: 16, freeship: false });
     (CART as { couponCode: string | null }).couponCode = 'SALE30';
     try {
       const { svc, orderCreate } = build({ stockCount: 1, combo, validateAndCompute });
@@ -675,9 +676,9 @@ describe('CheckoutService.placeOrder — combo discount (§7.2)', () => {
       // coupon được tính trên 80 (sau combo), KHÔNG phải 100
       expect(validateAndCompute).toHaveBeenCalledWith('SALE30', 'u1', 80, [{ productId: 'prod1', total: 80 }]);
       const data = orderCreate.mock.calls[0][0].data;
-      // discount = combo 20 + coupon 24 = 44 (≤ subtotal); total = 100 - 44 = 56
-      expect(data.discount).toBe(44);
-      expect(data.total).toBe(56);
+      // discount = combo 20 + coupon 16 = 36 (≤ subtotal); total = 100 - 36 = 64
+      expect(data.discount).toBe(36);
+      expect(data.total).toBe(64);
       expect(data.discount).toBeLessThanOrEqual(data.subtotal);
     } finally {
       (CART as { couponCode: string | null }).couponCode = null;
@@ -693,10 +694,11 @@ describe('CheckoutService.placeOrder — combo discount (§7.2)', () => {
       const { svc, orderCreate } = build({ stockCount: 1, combo, validateAndCompute });
       await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', storefrontSlug: 'linh-shop' } as never);
       const data = orderCreate.mock.calls[0][0].data;
-      // combo 20 + coupon 80 = 100 = subtotal; total = 0
-      expect(data.discount).toBe(100);
+      // coupon 80 bị kẹp ở trần gộp voucher + Điểm Xanh 20% tạm tính = 20: combo 20 + coupon 20 = 40; total = 60
+      expect(data.couponDiscount).toBe(20);
+      expect(data.discount).toBe(40);
       expect(data.discount).toBeLessThanOrEqual(data.subtotal);
-      expect(data.total).toBe(0);
+      expect(data.total).toBe(60);
     } finally {
       (CART as { couponCode: string | null }).couponCode = null;
     }
@@ -762,21 +764,21 @@ describe('CheckoutService — chỉ tiêu Điểm Xanh DÙNG ĐƯỢC (cùng lu�
   it('quote: kẹp điểm theo số dùng được (số dư − phần khoá) và trả redeemablePoints/lockedPoints cho FE', async () => {
     const { svc, pricing } = build({ pointsBalance: 1000, locked: 600 });
     const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 1000 } as never);
-    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(1000, 400, 0, expect.any(Number));
+    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(1000, 400, 0, expect.any(Number), expect.any(Number));
     expect(q).toMatchObject({ pointsBalance: 1000, lockedPoints: 600, redeemablePoints: 400 });
   });
 
   it('quote: phần khoá ≥ số dư (điểm đã tiêu trước đó) → redeemablePoints = 0, không âm; không tiêu điểm nào', async () => {
     const { svc, pricing } = build({ pointsBalance: 100, locked: 250 });
     const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 100 } as never);
-    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(100, 0, 0, expect.any(Number));
+    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(100, 0, 0, expect.any(Number), expect.any(Number));
     expect(q.redeemablePoints).toBe(0);
   });
 
   it('placeOrder: kẹp theo số dùng được như quote (không tin pointsToUse client gửi)', async () => {
     const { svc, pricing } = build({ pointsBalance: 1000, locked: 600, pointsUsed: 400 });
     await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 1000 } as never);
-    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(1000, 400, 0, expect.any(Number));
+    expect(pricing.resolvePointsRedemptionByLot).toHaveBeenCalledWith(1000, 400, 0, expect.any(Number), expect.any(Number));
   });
 
   it('placeOrder: khoá dòng user (FOR UPDATE) rồi tính phần khoá TRONG tx, guard pointsBalance ≥ dùng + khoá', async () => {
@@ -1320,9 +1322,10 @@ describe('CheckoutService — quyền lợi hạng thành viên tự động (P0
     // subtotal 500.000 → combo (shop tài trợ) giảm 50.000 → 450.000
     //   → coupon (Tubu tài trợ, tính trên base SAU combo) giảm 45.000 → 405.000
     //   → giảm hạng Cổ Thụ 5% trên phần CÒN LẠI sau coupon (không phải trên subtotal gốc): 405.000×5%=20.250 → 384.750
-    //   → điểm Xanh (khách TỰ CHỌN dùng, luôn tính SAU CÙNG trên phần nhỏ nhất còn lại): trần 20%×384.750=76.950
-    //     → tối đa 76 điểm (1.000đ/điểm); user có 1000 điểm, xin dùng 1000 → chỉ dùng được 76 → giảm 76.000
-    // goodsAfterAll = 384.750 - 76.000 = 308.750; freeship (Cổ Thụ) nên total = 308.750
+    //   → điểm Xanh (khách TỰ CHỌN dùng, luôn tính SAU CÙNG trên phần nhỏ nhất còn lại): trần 20%×384.750=76.950, nhưng trần gộp
+    //     voucher + Điểm Xanh = 20%×500.000 = 100.000, mã đã dùng 45.000 → điểm còn tối đa 55.000
+    //     → 55 điểm (1.000đ/điểm); user có 1000 điểm, xin dùng 1000 → chỉ dùng được 55 → giảm 55.000
+    // goodsAfterAll = 384.750 - 55.000 = 329.750; freeship (Cổ Thụ) nên total = 329.750
     const STACK_CART = {
       items: [{ variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: 500000, quantity: 1, total: 500000 }],
       subtotal: 500000, discount: 0, freeship: false, couponCode: 'SALE10',
@@ -1346,19 +1349,125 @@ describe('CheckoutService — quyền lợi hạng thành viên tự động (P0
     const data = orderCreate.mock.calls[0][0].data;
 
     expect(validateAndCompute).toHaveBeenCalledWith('SALE10', 'u1', 450000, [{ productId: 'p1', total: 450000 }]); // coupon vẫn thấy base ĐÚNG NHƯ TRƯỚC (không bị hạng thu nhỏ trước)
-    expect(data.pointsUsed).toBe(76);
+    expect(data.pointsUsed).toBe(55);
     expect(data.shippingFee).toBe(0);
-    // discount field gộp cả 4 nguồn: combo 50.000 + coupon 45.000 + điểm 76.000 + hạng 20.250 = 191.250
-    expect(data.discount).toBe(191250);
-    expect(data.total).toBe(308750);
+    // discount field gộp cả 4 nguồn: combo 50.000 + coupon 45.000 + điểm 55.000 + hạng 20.250 = 170.250
+    expect(data.discount).toBe(170250);
+    expect(data.total).toBe(329750);
     // Bất biến an toàn tiền: không âm, không vượt subtotal, và discount+total khớp đúng subtotal
     // (không có flash trong test này nên không lệch phần flash).
     expect(data.total).toBeGreaterThan(0);
     expect(data.discount).toBeLessThan(data.subtotal);
     expect(data.discount + data.total).toBe(data.subtotal);
     // R2-BUYERMINI-8: lưu từng phần để chi tiết đơn tách "Mã giảm giá" và "Điểm Xanh" bằng số tiền thật.
-    expect(data).toMatchObject({ comboDiscount: 50000, couponDiscount: 45000, tierDiscount: 20250, pointsDiscount: 76000 });
+    expect(data).toMatchObject({ comboDiscount: 50000, couponDiscount: 45000, tierDiscount: 20250, pointsDiscount: 55000 });
+    // Trần gộp: mã + Điểm Xanh = 100.000 = 20% tạm tính.
+    expect(data.couponDiscount + data.pointsDiscount).toBe(100000);
     expect(data.comboDiscount + data.couponDiscount + data.tierDiscount + data.pointsDiscount).toBe(data.discount);
+  });
+});
+
+describe('CheckoutService — trần giảm gộp voucher + Điểm Xanh ≤ 20% tạm tính (w5-01, luật A6)', () => {
+  const CAP_CONFIG = {
+    'shipping.free_threshold': 199000,
+    'shipping.flat_fee_below_threshold': 19000,
+    'loyalty.vnd_per_point_redeem': 1,
+    'loyalty.max_redeem_pct': 0.2,
+  };
+  function realPricing(): PricingService {
+    const values = CAP_CONFIG as Record<string, unknown>;
+    const config = { get: async <T>(k: string, fb?: T): Promise<T> => (k in values ? (values[k] as T) : (fb as T)) };
+    return new PricingService(config as never);
+  }
+  const cartOf = (subtotal: number, couponCode: string | null) => ({
+    items: [{ variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: subtotal, quantity: 1, total: subtotal }],
+    subtotal, discount: 0, freeship: false, couponCode,
+  });
+  const couponOf = (discount: number) => jest.fn().mockResolvedValue({ discount, freeship: false });
+
+  it('mã một mình vượt 20% tạm tính (50.000đ trên 100.000đ) → chỉ giảm 20.000đ, vẫn áp và vẫn tiêu lượt, kèm câu giải thích', async () => {
+    const { svc, orderCreate, coupons } = build({ cartData: cartOf(100_000, 'GIAM50K'), validateAndCompute: couponOf(50_000), pricing: realPricing(), pointsBalance: 0 });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q).toMatchObject({ discount: 20_000, couponApplied: true, couponNotice: null, total: 80_000 + 19_000 });
+    expect(q.couponCapNote).toBe('Voucher và Điểm Xanh giảm tối đa 20% tạm tính mỗi đơn, nên mã giảm 20.000đ cho đơn này.');
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data).toMatchObject({ couponCode: 'GIAM50K', couponDiscount: 20_000, discount: 20_000, total: 99_000 });
+    expect((coupons as unknown as { redeem: jest.Mock }).redeem).toHaveBeenCalled();
+  });
+
+  it('mã 12% tạm tính → Điểm Xanh chỉ còn 8% (40.000đ trên 500.000đ), báo giá và đặt đơn cùng số, mã + điểm = đúng 20%', async () => {
+    const { svc, orderCreate } = build({ cartData: cartOf(500_000, 'GIAM12'), validateAndCompute: couponOf(60_000), pricing: realPricing(), pointsBalance: 1_000_000 });
+    const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 1_000_000 } as never);
+    expect(q).toMatchObject({ discount: 60_000, pointsMax: 40_000, pointsUsed: 40_000, pointsDiscount: 40_000, total: 400_000 });
+    expect(q.couponCapNote).toBeUndefined();
+    expect(q.pointsCapNote).toBe('Đơn này dùng tối đa 40.000 Điểm Xanh: voucher và Điểm Xanh giảm tối đa 20% tạm tính mỗi đơn.');
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD', pointsToUse: 1_000_000 } as never);
+    const data = orderCreate.mock.calls[0][0].data;
+    expect(data).toMatchObject({ couponDiscount: 60_000, pointsDiscount: 40_000, pointsUsed: 40_000, total: 400_000 });
+    expect(data.couponDiscount + data.pointsDiscount).toBe(Math.floor(500_000 * 0.2));
+  });
+
+  it('mã dùng hết 20% → ô Điểm Xanh về 0 kèm lý do; lô quy đổi từ xu cũ vẫn trả được (PD-3: lô này không trần)', async () => {
+    const onlyStandard = build({ cartData: cartOf(500_000, 'GIAM100K'), validateAndCompute: couponOf(100_000), pricing: realPricing(), pointsBalance: 1_000_000 });
+    const q1 = await onlyStandard.svc.quote('u1', { addressId: 'addr1', pointsToUse: 1_000_000 } as never);
+    expect(q1).toMatchObject({ discount: 100_000, pointsMax: 0, pointsUsed: 0, pointsDiscount: 0, total: 400_000 });
+    expect(q1.pointsCapNote).toBe('Voucher đã dùng hết mức giảm 20% tạm tính của đơn này, nên chưa dùng thêm được Điểm Xanh.');
+
+    const withConverted = build({ cartData: cartOf(500_000, 'GIAM100K'), validateAndCompute: couponOf(100_000), pricing: realPricing(), pointsBalance: 1_000_000, pointsConvertedBalance: 50_000 });
+    const q2 = await withConverted.svc.quote('u1', { addressId: 'addr1', pointsToUse: 1_050_000 } as never);
+    expect(q2).toMatchObject({ pointsMax: 50_000, pointsUsed: 50_000, pointsUsedConverted: 50_000, pointsDiscount: 50_000, total: 350_000 });
+    expect(q2.pointsCapNote).toBe('Đơn này dùng tối đa 50.000 Điểm Xanh: voucher và Điểm Xanh giảm tối đa 20% tạm tính mỗi đơn.');
+  });
+
+  it('không có mã → trần Điểm Xanh như cũ (20% giá trị hàng), không có câu trần gộp', async () => {
+    const { svc } = build({ cartData: cartOf(500_000, null), pricing: realPricing(), pointsBalance: 1_000_000 });
+    const q = await svc.quote('u1', { addressId: 'addr1', pointsToUse: 1_000_000 } as never);
+    expect(q).toMatchObject({ discount: 0, pointsMax: 100_000, pointsUsed: 100_000, total: 400_000 });
+    expect(q.couponCapNote).toBeUndefined();
+    expect(q.pointsCapNote).toBeUndefined();
+  });
+
+  it('admin hạ trần về 0% → mã giữ trong giỏ nhưng không giảm, không tiêu lượt, nói đúng lý do', async () => {
+    const zero = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'loyalty.max_redeem_pct' ? (0 as T) : (fb as T)) };
+    const { svc, orderCreate, coupons } = build({ cartData: cartOf(300_000, 'GIAM10'), validateAndCompute: couponOf(30_000), pricing: realPricing(), systemConfig: zero as never, pointsBalance: 0 });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q).toMatchObject({ discount: 0, couponApplied: false });
+    expect(q.couponNotice).toContain('Mức giảm tối đa từ voucher và Điểm Xanh đang là 0%');
+    await svc.placeOrder('u1', { addressId: 'addr1', paymentMethod: 'COD' } as never);
+    expect((coupons as unknown as { redeem: jest.Mock }).redeem).not.toHaveBeenCalled();
+    expect(orderCreate.mock.calls[0][0].data.couponCode).toBeNull();
+  });
+
+  it('xem trước mã (thẻ voucher) ghi số đã kẹp trần gộp, cùng số báo giá trừ', async () => {
+    const { svc, coupons, loyalty } = build({ cartData: cartOf(100_000, null), pricing: realPricing() });
+    (loyalty as unknown as { getAvailableCoupons: jest.Mock }).getAvailableCoupons = jest.fn().mockResolvedValue([{ code: 'GIAM50K' }, { code: 'GIAM10K' }]);
+    (coupons as unknown as { previewMany: jest.Mock }).previewMany = jest.fn().mockResolvedValue(
+      new Map([
+        ['GIAM50K', { discount: 50_000, freeship: false }],
+        ['GIAM10K', { discount: 10_000, freeship: false }],
+      ]),
+    );
+    const res = await svc.couponPreviews('u1', {} as never);
+    expect(res.coupons).toEqual([
+      { code: 'GIAM50K', eligible: true, discount: 20_000, cappedFrom: 50_000 },
+      { code: 'GIAM10K', eligible: true, discount: 10_000 },
+    ]);
+  });
+
+  it('trần 0% với giỏ có hàng Giờ vàng → câu lý do không kèm ngoặc "hàng Giờ vàng … điều kiện của mã" (không liên quan trần)', async () => {
+    const zero = { get: async <T>(k: string, fb?: T): Promise<T> => (k === 'loyalty.max_redeem_pct' ? (0 as T) : (fb as T)) };
+    const cart = {
+      items: [
+        { variationId: 'v1', productId: 'p1', productName: 'P', variationName: 'V', unitPrice: 300_000, quantity: 1, total: 300_000 },
+        { variationId: 'v2', productId: 'p2', productName: 'F', variationName: 'V', unitPrice: 50_000, quantity: 1, total: 50_000, isFlash: true },
+      ],
+      subtotal: 350_000, discount: 0, freeship: false, couponCode: 'GIAM10',
+    };
+    const { svc } = build({ cartData: cart, validateAndCompute: couponOf(30_000), pricing: realPricing(), systemConfig: zero as never, pointsBalance: 0 });
+    const q = await svc.quote('u1', { addressId: 'addr1' } as never);
+    expect(q).toMatchObject({ discount: 0, couponApplied: false });
+    expect(q.couponNotice).toBe(`Mã chưa được áp dụng cho đơn này: ${COUPON_CAP_ZERO_REASON}`);
   });
 });
 
@@ -1719,10 +1828,10 @@ describe('CheckoutService — MONEY-3: mã không đạt điều kiện trên ph
   it('mã áp được → couponApplied true, couponNotice null', async () => {
     const { svc } = build({
       cartData: { ...FLASH_MIX, items: [FLASH_MIX.items[0]], subtotal: 89000 },
-      validateAndCompute: jest.fn().mockResolvedValue({ discount: 20000, freeship: false }),
+      validateAndCompute: jest.fn().mockResolvedValue({ discount: 15000, freeship: false }),
     });
     const q = await svc.quote('u1', { addressId: 'addr1' } as never);
-    expect(q.discount).toBe(20000);
+    expect(q.discount).toBe(15000);
     expect(q.couponApplied).toBe(true);
     expect(q.couponNotice).toBeNull();
   });
@@ -2819,12 +2928,12 @@ describe('CheckoutService — đổi rác kèm đơn: miễn phí giao, số kg 
         const { svc } = buildPickup({
           cartData: SMALL_CART,
           pendingGifts: GIFTS,
-          validateAndCompute: jest.fn().mockResolvedValue({ discount: 30_000, freeship: false }),
+          validateAndCompute: jest.fn().mockResolvedValue({ discount: 24_000, freeship: false }),
         });
         const q = await svc.quote('u1', { addressId: 'addr1' } as never);
-        // subtotal 120k - discount 30k = 90k < 99k (dù cộng phí giao 19k thì total = 109k)
-        expect(q.total).toBe(109_000);
-        expect(q.giftShortfallVnd).toBe(9_000);
+        // subtotal 120k - discount 24k (đúng trần gộp 20%) = 96k < 99k (dù cộng phí giao 19k thì total = 115k)
+        expect(q.total).toBe(115_000);
+        expect(q.giftShortfallVnd).toBe(3_000);
         expect(q.pendingGiftRedemptions.map((g) => [g.included, g.blockedReason])).toEqual([
           [false, 'MIN_ORDER'],
           [false, 'MIN_ORDER'],

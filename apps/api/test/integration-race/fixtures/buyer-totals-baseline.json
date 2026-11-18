@@ -75,7 +75,7 @@
     "placement": {
       "buyer": {
         "walletBalance": 0,
-        "pointsBalance": 0,
+        "pointsBalance": 8,
         "pointsConvertedBalance": 0
       },
       "orders": [
@@ -86,15 +86,15 @@
           "paymentStatus": "UNPAID",
           "fulfiller": "TUBU",
           "subtotal": 225922,
-          "discount": 77758,
+          "discount": 69758,
           "couponDiscount": 22592,
           "comboDiscount": 0,
           "tierDiscount": 10166,
-          "pointsDiscount": 45000,
+          "pointsDiscount": 37000,
           "shippingFee": 0,
-          "total": 148164,
-          "pointsEarned": 22224,
-          "pointsUsed": 45,
+          "total": 156164,
+          "pointsEarned": 23424,
+          "pointsUsed": 37,
           "pointsUsedConverted": 15,
           "commission": 0,
           "couponCode": true,
@@ -126,28 +126,28 @@
         {
           "refunds": {
             "1 × A": {
-              "goods": 21860,
-              "pointsUsedBack": 7,
+              "goods": 23041,
+              "pointsUsedBack": 5,
               "convertedBack": 2,
-              "pointsEarnedBack": 3279
+              "pointsEarnedBack": 3456
             },
             "1 × B": {
-              "goods": 51008,
-              "pointsUsedBack": 15,
+              "goods": 53762,
+              "pointsUsedBack": 13,
               "convertedBack": 5,
-              "pointsEarnedBack": 7651
+              "pointsEarnedBack": 8064
             },
             "1 × C": {
-              "goods": 8096,
+              "goods": 8533,
               "pointsUsedBack": 2,
               "convertedBack": 1,
-              "pointsEarnedBack": 1214
+              "pointsEarnedBack": 1280
             },
             "cả đơn": {
-              "goods": 148164,
+              "goods": 156164,
               "shipping": 0,
-              "pointsUsedBack": 45,
-              "pointsEarnedBack": 22224
+              "pointsUsedBack": 37,
+              "pointsEarnedBack": 23424
             }
           },
           "commissions": []
@@ -243,7 +243,7 @@
     "placement": {
       "buyer": {
         "walletBalance": 0,
-        "pointsBalance": 0,
+        "pointsBalance": 4,
         "pointsConvertedBalance": 0
       },
       "orders": [
@@ -254,15 +254,15 @@
           "paymentStatus": "UNPAID",
           "fulfiller": "TUBU",
           "subtotal": 209900,
-          "discount": 51085,
+          "discount": 47085,
           "couponDiscount": 20400,
           "comboDiscount": 0,
           "tierDiscount": 5685,
-          "pointsDiscount": 25000,
+          "pointsDiscount": 21000,
           "shippingFee": 0,
-          "total": 158815,
-          "pointsEarned": 23822,
-          "pointsUsed": 25,
+          "total": 162815,
+          "pointsEarned": 24422,
+          "pointsUsed": 21,
           "pointsUsedConverted": 0,
           "commission": 0,
           "couponCode": true,
@@ -294,28 +294,28 @@
         {
           "refunds": {
             "1 × A": {
-              "goods": 66583,
+              "goods": 75608,
               "pointsUsedBack": 10,
               "convertedBack": 0,
-              "pointsEarnedBack": 11062
+              "pointsEarnedBack": 11341
             },
             "1 × B": {
-              "goods": 38588,
-              "pointsUsedBack": 6,
+              "goods": 35055,
+              "pointsUsedBack": 5,
               "convertedBack": 0,
-              "pointsEarnedBack": 5129
+              "pointsEarnedBack": 5258
             },
             "1 × C": {
-              "goods": 15057,
+              "goods": 17098,
               "pointsUsedBack": 2,
               "convertedBack": 0,
-              "pointsEarnedBack": 2502
+              "pointsEarnedBack": 2565
             },
             "cả đơn": {
-              "goods": 158815,
+              "goods": 162815,
               "shipping": 0,
-              "pointsUsedBack": 25,
-              "pointsEarnedBack": 23822
+              "pointsUsedBack": 21,
+              "pointsEarnedBack": 24422
             }
           },
           "commissions": []
@@ -327,7 +327,7 @@
     "placement": {
       "buyer": {
         "walletBalance": 0,
-        "pointsBalance": 0,
+        "pointsBalance": 1,
         "pointsConvertedBalance": 0
       },
       "orders": [
@@ -338,15 +338,15 @@
           "paymentStatus": "UNPAID",
           "fulfiller": "TUBU",
           "subtotal": 250000,
-          "discount": 72588,
+          "discount": 71588,
           "couponDiscount": 15988,
           "comboDiscount": 21600,
           "tierDiscount": 0,
-          "pointsDiscount": 35000,
+          "pointsDiscount": 34000,
           "shippingFee": 0,
-          "total": 177412,
-          "pointsEarned": 17741,
-          "pointsUsed": 35,
+          "total": 178412,
+          "pointsEarned": 17841,
+          "pointsUsed": 34,
           "pointsUsedConverted": 0,
           "commission": 0,
           "couponCode": true,
@@ -378,38 +378,38 @@
         {
           "refunds": {
             "1 × A": {
-              "goods": 75190,
-              "pointsUsedBack": 15,
+              "goods": 75614,
+              "pointsUsedBack": 14,
               "convertedBack": 0,
-              "pointsEarnedBack": 7519
+              "pointsEarnedBack": 7561
             },
             "1 × B": {
-              "goods": 47848,
+              "goods": 48118,
               "pointsUsedBack": 9,
               "convertedBack": 0,
-              "pointsEarnedBack": 4785
+              "pointsEarnedBack": 4812
             },
             "1 × C": {
-              "goods": 27187,
+              "goods": 27340,
               "pointsUsedBack": 5,
               "convertedBack": 0,
-              "pointsEarnedBack": 2719
+              "pointsEarnedBack": 2734
             },
             "cả đơn": {
-              "goods": 177412,
+              "goods": 178412,
               "shipping": 0,
-              "pointsUsedBack": 35,
-              "pointsEarnedBack": 17741
+              "pointsUsedBack": 34,
+              "pointsEarnedBack": 17841
             }
           },
           "commissions": [
             {
-              "amount": 14064,
-              "commissionableTotal": 177411,
+              "amount": 14144,
+              "commissionableTotal": 178412,
               "lines": {
-                "A": 7519,
-                "B": 3827,
-                "C": 2718
+                "A": 7561,
+                "B": 3849,
+                "C": 2734
               }
             }
           ]

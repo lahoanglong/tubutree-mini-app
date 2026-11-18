@@ -247,8 +247,8 @@ export const GROWTH_GROUPS: GrowthGroup[] = [
       {
         kind: 'number',
         key: 'loyalty.max_redeem_pct',
-        label: 'Trần dùng Điểm Xanh mỗi đơn',
-        hint: 'Phần trăm tạm tính đơn được trả bằng Điểm Xanh. Giỏ hàng, thanh toán và máy chủ cùng đọc mức này. Tối đa 20%.',
+        label: 'Trần giảm voucher + Điểm Xanh mỗi đơn',
+        hint: 'Phần trăm tạm tính đơn được giảm bằng voucher và Điểm Xanh cộng lại (mã lấy trước, Điểm Xanh lấy phần còn lại). Giỏ hàng, thanh toán và máy chủ cùng đọc mức này. Tối đa 20%.',
         unit: '%',
         min: 0,
         max: 20,

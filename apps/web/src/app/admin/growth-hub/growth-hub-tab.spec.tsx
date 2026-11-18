@@ -191,7 +191,7 @@ describe('GrowthHubTab', () => {
   it('trần dùng Điểm Xanh: hiện 20, chặn trên 20%, lưu 15% thành 0,15', async () => {
     const { container, puts } = setup(cfg({ 'loyalty.max_redeem_pct': 0.2 }));
     await flush(8);
-    const field = input(container, 'Trần dùng Điểm Xanh mỗi đơn');
+    const field = input(container, 'Trần giảm voucher + Điểm Xanh mỗi đơn');
     expect(field.value).toBe('20');
     typeInto(field, '25');
     await flush();

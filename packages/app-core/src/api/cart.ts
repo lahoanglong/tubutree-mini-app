@@ -59,6 +59,8 @@ export interface CartSummary {
   couponNotice?: string | null;
   /** Số tiền hàng còn thiếu để mã đang giữ đạt đơn tối thiểu (máy chủ tính trên phần hàng nó xét); không có khi mã chưa áp vì lý do khác. API cũ chưa trả. */
   couponShortfall?: number | null;
+  /** Mã bị kẹp ở trần giảm gộp voucher + Điểm Xanh (`loyalty.max_redeem_pct` tạm tính): câu giải thích vì sao mã giảm ít hơn mệnh giá. null/không có = không kẹp. */
+  couponCapNote?: string | null;
   /** Mã máy chủ vừa gỡ khỏi giỏ ở lần đọc này (giỏ rơi dưới đơn tối thiểu, mã hết hạn hay bị tắt); chỉ báo đúng một lần nên app phải nhớ. API cũ chưa trả. */
   couponRemoved?: RemovedCoupon | null;
   subtotal: number;

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { couponGoodsOf, couponMinOrderCopy, couponNoticeText, heldCouponNotice, rememberRemovedCoupon, removedCouponNotice, type RemovedCouponMemory } from './coupon-min-order';
+import { couponCapNoteText, couponGoodsOf, couponMinOrderCopy, couponNoticeText, heldCouponNotice, rememberRemovedCoupon, removedCouponNotice, type RemovedCouponMemory } from './coupon-min-order';
 
 const fmt = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
 
@@ -55,6 +55,13 @@ describe('couponNoticeText: chữ lời báo mã ở giỏ và thanh toán', () 
     expect(couponNoticeText({ couponCode: 'GIAM10', discount: 8_900, couponNotice: null }, fmt)).toBeNull();
     expect(couponNoticeText(undefined, fmt)).toBeNull();
     expect(couponNoticeText(null, fmt)).toBeNull();
+  });
+
+  it('mã bị kẹp ở trần giảm gộp voucher + Điểm Xanh: nói câu trần của máy chủ, nối sau câu Giờ vàng nếu có', () => {
+    const cap = 'Voucher và Điểm Xanh giảm tối đa 20% tạm tính mỗi đơn, nên mã giảm 20.000đ cho đơn này.';
+    expect(couponNoticeText({ couponCode: 'GIAM50K', discount: 20_000, couponNotice: null, couponCapNote: cap }, fmt)).toBe(cap);
+    const flash = 'Hàng Giờ vàng không được giảm thêm theo mã: mã chỉ tính trên 89.000đ hàng còn lại.';
+    expect(couponNoticeText({ couponCode: 'GIAM50K', discount: 17_800, couponNotice: flash, couponCapNote: cap }, fmt)).toBe(`${flash} ${cap}`);
   });
 
   it('API cũ (không có couponShortfall): giữ nguyên câu của máy chủ', () => {
@@ -159,5 +166,16 @@ describe('couponMinOrderCopy: chữ cố định', () => {
   it('nút đóng có nhãn đọc được', () => {
     expect(couponMinOrderCopy.dismiss).toBe('Đóng');
     expect(couponMinOrderCopy.dismissAria('MIN300')).toBe('Đóng lời báo mã MIN300 đã gỡ');
+  });
+});
+
+describe('couponCapNoteText: câu trần giảm gộp cho dòng mã ở giỏ (cả giỏ)', () => {
+  const cap = 'Voucher và Điểm Xanh giảm tối đa 20% tạm tính mỗi đơn, nên mã giảm 26.000đ cho đơn này.';
+  it('chỉ nói khi giỏ giữ mã và mã đang giảm tiền', () => {
+    expect(couponCapNoteText({ couponCode: 'GIAM50K', discount: 26_000, couponCapNote: cap })).toBe(cap);
+    expect(couponCapNoteText({ couponCode: 'GIAM50K', discount: 0, couponCapNote: cap })).toBeNull();
+    expect(couponCapNoteText({ couponCode: null, discount: 26_000, couponCapNote: cap })).toBeNull();
+    expect(couponCapNoteText({ couponCode: 'GIAM10', discount: 10_000 })).toBeNull();
+    expect(couponCapNoteText(null)).toBeNull();
   });
 });

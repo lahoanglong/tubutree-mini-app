@@ -22,6 +22,8 @@ export interface HeldCouponSource {
   freeship?: boolean;
   couponNotice?: string | null;
   couponShortfall?: number | null;
+  /** Mã bị kẹp ở trần giảm gộp voucher + Điểm Xanh (máy chủ nói); API cũ chưa trả. */
+  couponCapNote?: string | null;
 }
 
 /**
@@ -39,10 +41,19 @@ export function heldCouponNotice(src: HeldCouponSource | null | undefined, forma
 
 /**
  * Chữ lời báo mã ở giỏ và thanh toán: mã đang giữ chưa áp thì câu lý do kèm số cần mua thêm; mã đã có tác dụng mà máy chủ vẫn nói
- * (vd "Hàng Giờ vàng không được giảm thêm…") thì giữ nguyên câu của máy chủ. null khi không có gì để nói.
+ * (vd "Hàng Giờ vàng không được giảm thêm…", mã bị kẹp ở trần giảm gộp) thì giữ nguyên câu của máy chủ. null khi không có gì để nói.
  */
 export function couponNoticeText(src: HeldCouponSource | null | undefined, formatMoney: (n: number) => string): string | null {
-  return heldCouponNotice(src, formatMoney) ?? (src?.couponNotice?.trim() || null);
+  const held = heldCouponNotice(src, formatMoney);
+  if (held) return held;
+  const parts = [src?.couponNotice?.trim(), couponCapNoteText(src)].filter(Boolean);
+  return parts.length > 0 ? parts.join(' ') : null;
+}
+
+/** Câu mã bị kẹp ở trần giảm gộp voucher + Điểm Xanh, chỉ khi giỏ giữ mã và mã đang giảm tiền. null khi không kẹp. */
+export function couponCapNoteText(src: HeldCouponSource | null | undefined): string | null {
+  if (!src?.couponCode || !((src.discount ?? 0) > 0)) return null;
+  return src.couponCapNote?.trim() || null;
 }
 
 /** Mã máy chủ vừa gỡ khỏi giỏ (trường `couponRemoved` của giỏ). `shortfall` chỉ có khi lý do là đơn tối thiểu. */

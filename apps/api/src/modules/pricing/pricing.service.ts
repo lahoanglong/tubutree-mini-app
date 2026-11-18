@@ -5,6 +5,7 @@ import { isRealUser } from '../../common/real-user';
 import { hasPriorOrder } from '../../common/first-order';
 import { pointsForGoods } from './points-earn';
 import { DEFAULT_EARN_PCT, EARN_PCT_KEY } from '../loyalty/earn-rates';
+import { loadRedeemPct } from './redeem-cap';
 
 export interface ShippingInput {
   subtotal: number; // sau giảm giá hàng (chưa gồm ship)
@@ -108,16 +109,26 @@ export class PricingService {
     return Math.floor(orderValue * maxPct);
   }
 
-  /** Quy đổi số điểm muốn dùng → VND được trừ, đã kẹp theo trần 20% và số điểm sẵn có. */
+  /** Tỉ lệ của trần giảm gộp voucher + Điểm Xanh (redeem-cap.ts). */
+  maxRedeemPct(): Promise<number> {
+    return loadRedeemPct(this.config);
+  }
+
+  /**
+   * Quy đổi số điểm muốn dùng → VND được trừ, đã kẹp theo trần 20% và số điểm sẵn có. `capVnd`: trần VND thêm cho lần trừ này
+   * (phần trần gộp voucher + Điểm Xanh còn lại sau mã), bỏ trống = không có.
+   */
   async resolvePointsRedemption(
     pointsToUse: number,
     pointsBalance: number,
     orderValue: number,
+    capVnd?: number,
   ): Promise<{ pointsUsed: number; discount: number }> {
-    const [vndPerPointRedeem, maxValue] = await Promise.all([
+    const [vndPerPointRedeem, pctCap] = await Promise.all([
       this.config.get<number>('loyalty.vnd_per_point_redeem', 1),
       this.calcMaxRedeemableValue(orderValue),
     ]);
+    const maxValue = capVnd === undefined ? pctCap : Math.min(pctCap, Math.max(0, capVnd));
     // Guard chia 0/âm (mirror calcPointsEarned's earnPct guard): misconfig hoặc orderValue=0
     // → tránh NaN lan vào pointsUsed/discount rồi vào tx tạo đơn (Prisma nhận NaN có thể lỗi khó hiểu).
     if (vndPerPointRedeem <= 0) return { pointsUsed: 0, discount: 0 };
@@ -139,11 +150,13 @@ export class PricingService {
     standardUsable: number,
     convertedBalance: number,
     orderValue: number,
+    /** Trần VND thêm cho phần STANDARD (phần trần gộp voucher + Điểm Xanh còn lại sau mã); lô CONVERTED không chịu. */
+    standardCapVnd?: number,
   ): Promise<{ pointsUsed: number; pointsUsedStandard: number; pointsUsedConverted: number; discount: number }> {
     const none = { pointsUsed: 0, pointsUsedStandard: 0, pointsUsedConverted: 0, discount: 0 };
     const vnd = await this.config.get<number>('loyalty.vnd_per_point_redeem', 1);
     if (!(vnd > 0) || !(orderValue > 0) || !(pointsToUse > 0)) return none;
-    const std = await this.resolvePointsRedemption(pointsToUse, Math.max(0, standardUsable), orderValue);
+    const std = await this.resolvePointsRedemption(pointsToUse, Math.max(0, standardUsable), orderValue, standardCapVnd);
     const s = std.pointsUsed;
     const c = Math.max(
       0,

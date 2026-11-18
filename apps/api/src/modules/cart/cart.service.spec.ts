@@ -7,6 +7,7 @@ import type { SystemConfigService } from '../system-config/system-config.service
 import type { FlashSaleService } from '../flash-sale/flash-sale.service';
 import type { AnalyticsEventsService } from '../analytics/analytics-events.service';
 import type { ComboService } from '../storefront/combo.service';
+import { COUPON_CAP_ZERO_REASON } from '../pricing/redeem-cap';
 
 const coupons = {} as unknown as CouponsService;
 // Freeship đơn đầu mặc định bật; các test không xét nó tắt cờ để khỏi phải dựng bảng user/order.
@@ -976,6 +977,59 @@ describe('CartService guard tồn kho', () => {
       const c = await new CartService(flashCart('XANH10'), couponsSvc, config, flashSvc, analytics, combo).getCart('u1');
       expect(c.discount).toBe(16500);
       expect(c.couponNotice).toBe('Hàng Giờ vàng không được giảm thêm theo mã: mã chỉ tính trên 165.000đ hàng còn lại.');
+    });
+  });
+
+  describe('trần giảm gộp voucher + Điểm Xanh ≤ 20% tạm tính (w5-01)', () => {
+    const capCart = (couponCode: string) =>
+      ({
+        cart: {
+          findUnique: jest.fn().mockResolvedValue({
+            id: 'c1',
+            couponCode,
+            items: [
+              {
+                id: 'ci1',
+                variationId: 'v1',
+                quantity: 1,
+                variation: { isActive: true, productId: 'p1', salePrice: null, retailPrice: 100000, stock: 5, name: 'A', product: { name: 'A', slug: 'a', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
+              },
+              {
+                id: 'ci2',
+                variationId: 'v2',
+                quantity: 1,
+                variation: { isActive: true, productId: 'p2', salePrice: null, retailPrice: 30000, stock: 5, name: 'B', product: { name: 'B', slug: 'b', thumbnail: null, isActive: true, approvalStatus: 'APPROVED' } },
+              },
+            ],
+          }),
+        },
+        user: { findUnique: jest.fn().mockResolvedValue({ tierId: null, phone: null, zaloId: null, _count: { orders: 0 } }) },
+        membershipTier: { findUnique: jest.fn().mockResolvedValue(null) },
+      }) as any;
+
+    it('mã 50.000đ trên giỏ 130.000đ → giỏ ghi giảm 26.000đ (20%) và câu giải thích, cùng số báo giá', async () => {
+      const couponsSvc = { validateAndCompute: jest.fn().mockResolvedValue({ discount: 50000, freeship: false }) } as any;
+      const c = await new CartService(capCart('GIAM50K'), couponsSvc, config, flash, analytics, combo).getCart('u1');
+      expect(c.subtotal).toBe(130000);
+      expect(c.discount).toBe(26000);
+      expect(c.couponCapNote).toBe('Voucher và Điểm Xanh giảm tối đa 20% tạm tính mỗi đơn, nên mã giảm 26.000đ cho đơn này.');
+      expect(c.couponNotice).toBeNull();
+    });
+
+    it('mã dưới trần → giữ nguyên số mã, không có câu trần gộp', async () => {
+      const couponsSvc = { validateAndCompute: jest.fn().mockResolvedValue({ discount: 20000, freeship: false }) } as any;
+      const c = await new CartService(capCart('GIAM20K'), couponsSvc, config, flash, analytics, combo).getCart('u1');
+      expect(c.discount).toBe(20000);
+      expect(c).not.toHaveProperty('couponCapNote');
+    });
+
+    it('trần 0% → mã giữ trong giỏ, không giảm, câu lý do trần không kèm ngoặc điều kiện mã', async () => {
+      const couponsSvc = { validateAndCompute: jest.fn().mockResolvedValue({ discount: 20000, freeship: false }) } as any;
+      const zero = { ...config, get: (k: string, fb?: unknown) => (k === 'loyalty.max_redeem_pct' ? Promise.resolve(0) : config.get(k, fb)) } as any;
+      const c = await new CartService(capCart('GIAM20K'), couponsSvc, zero, flash, analytics, combo).getCart('u1');
+      expect(c.discount).toBe(0);
+      expect(c.couponNotice).toBe(`Mã chưa được áp dụng cho đơn này: ${COUPON_CAP_ZERO_REASON}`);
+      expect(c).not.toHaveProperty('couponCapNote');
     });
   });
 

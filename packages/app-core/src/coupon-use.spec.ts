@@ -109,7 +109,7 @@ describe('couponHintShort', () => {
 });
 
 describe('pickBestCoupon', () => {
-  const pv = (code: string, discount: number, extra: Partial<{ eligible: boolean; freeshipSaving: number }> = {}) => ({
+  const pv = (code: string, discount: number, extra: Partial<{ eligible: boolean; freeshipSaving: number; cappedFrom: number }> = {}) => ({
     code,
     eligible: true,
     discount,
@@ -127,6 +127,16 @@ describe('pickBestCoupon', () => {
     ];
     expect(pickBestCoupon([pv('A', 20_000), pv('B', 20_000), pv('Z', 20_000)], wallet)).toBe('B');
     expect(pickBestCoupon([pv('Z', 20_000), pv('A', 20_000)], wallet)).toBe('A');
+  });
+
+  it('trần giảm gộp làm hoà: chọn mã mất ít mệnh giá nhất trước khi xét hạn (không đốt mã 100k để giảm 60k)', () => {
+    const wallet = [
+      { code: 'BIG', endAt: '2026-12-10T00:00:00Z' },
+      { code: 'EXACT', endAt: '2026-12-31T00:00:00Z' },
+    ];
+    expect(pickBestCoupon([pv('BIG', 60_000, { cappedFrom: 100_000 }), pv('EXACT', 60_000)], wallet)).toBe('EXACT');
+    expect(pickBestCoupon([pv('BIG', 60_000, { cappedFrom: 100_000 }), pv('MID', 60_000, { cappedFrom: 70_000 })], [])).toBe('MID');
+    expect(pickBestCoupon([pv('BIG', 60_000, { cappedFrom: 100_000 }), pv('SMALL', 50_000)], [])).toBe('BIG');
   });
 
   it('hoà cả hạn thì theo mã để kết quả ổn định', () => {

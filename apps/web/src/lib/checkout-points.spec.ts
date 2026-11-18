@@ -110,6 +110,14 @@ describe('zeroTotalNote', () => {
 const NOTE = 'Điểm Xanh chỉ dùng cho hàng của Tubu, không dùng cho hàng của gian hàng đối tác';
 
 describe('pointsCapState (Q8 S7, R4-BUYER-2)', () => {
+  it('voucher đã dùng một phần trần giảm gộp: câu của máy chủ thay câu chung; trần 0 thì tắt ô kèm câu đó', () => {
+    const note = 'Đơn này dùng tối đa 40.000 Điểm Xanh: voucher và Điểm Xanh giảm tối đa 20% tạm tính mỗi đơn.';
+    expect(pointsCapState({ pointsMax: 40_000, pointsCapNote: note }, 120_000)).toEqual({ disabled: false, capNote: note, partnerNote: null });
+    const used = 'Voucher đã dùng hết mức giảm 20% tạm tính của đơn này, nên chưa dùng thêm được Điểm Xanh.';
+    expect(pointsCapState({ pointsMax: 0, pointsCapNote: used }, 120_000)).toEqual({ disabled: true, capNote: used, partnerNote: null });
+    expect(pointsCapState({ pointsMax: 40_000, pointsCapNote: null }, 120_000).capNote).toContain('tính theo giá trị hàng của đơn');
+  });
+
   it('báo giá chưa có trần (đang tải, API cũ): không đổi gì', () => {
     expect(pointsCapState(undefined)).toEqual({ disabled: false, capNote: null, partnerNote: null });
     expect(pointsCapState({}, 8000)).toEqual({ disabled: false, capNote: null, partnerNote: null });

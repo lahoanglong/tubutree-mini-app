@@ -49,7 +49,7 @@ import { recompute } from '../utils/cart-rules';
 import { StorefrontContextBar } from '../components/storefront-context-bar';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
 import { couponHintShort } from '@tubutree/app-core/coupon-use';
-import { couponNoticeText, heldCouponNotice } from '@tubutree/app-core/coupon-min-order';
+import { couponCapNoteText, couponNoticeText, heldCouponNotice } from '@tubutree/app-core/coupon-min-order';
 import { CouponRemovedNotice } from '../components/checkout/coupon-removed-notice';
 import { useRemovedCoupon } from '../hooks/use-removed-coupon';
 import { useStorefrontContext } from '../store/storefront-context';
@@ -1227,7 +1227,8 @@ function StickySummary({
   // Lời báo của mã đang giữ trên phần đang hiển thị, kèm số cần mua thêm khi mã chỉ thiếu đơn tối thiểu. Cả giỏ chỉ nói khi mã giữ chưa áp (thêm dòng cho chân dính vốn chật
   // ở 320px); phần chọn nói cả câu của máy chủ về mã đã áp (vd Giờ vàng không giảm thêm) như trước.
   const couponSrc = shown?.couponCode ? shown : null;
-  const couponLine = allSelected ? heldCouponNotice(couponSrc, formatVnd) : couponNoticeText(couponSrc, formatVnd);
+  // Mã bị kẹp ở trần giảm gộp voucher + Điểm Xanh thì cả giỏ cũng nói, vì dòng mã ghi ít hơn mệnh giá.
+  const couponLine = allSelected ? (heldCouponNotice(couponSrc, formatVnd) ?? couponCapNoteText(couponSrc)) : couponNoticeText(couponSrc, formatVnd);
   const goodsNet = Math.max(0, shownSubtotal - comboDiscount - discount - tierDiscount);
   const { estimate, stale } = useShippingEstimate(selectedCount > 0 ? shipBase : null);
   const ship = cartShippingView(estimate, { goodsNet, freeshipReached, stale });

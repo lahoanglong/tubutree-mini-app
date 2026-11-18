@@ -180,6 +180,8 @@ export interface CartSummary {
   couponNotice?: string | null;
   /** Số tiền hàng còn thiếu để mã đang giữ đạt đơn tối thiểu (máy chủ tính trên phần hàng nó xét); không có khi mã chưa áp vì lý do khác. API cũ chưa trả. */
   couponShortfall?: number | null;
+  /** Mã bị kẹp ở trần giảm gộp voucher + Điểm Xanh (`loyalty.max_redeem_pct` tạm tính): câu giải thích vì sao mã giảm ít hơn mệnh giá. null/không có = không kẹp. */
+  couponCapNote?: string | null;
   /** Mã máy chủ vừa gỡ khỏi giỏ ở lần đọc này (giỏ rơi dưới đơn tối thiểu, hết hạn, bị tắt); chỉ báo đúng một lần nên app phải nhớ. API cũ chưa trả. */
   couponRemoved?: { code: string; reason: string; shortfall?: number } | null;
   subtotal: number;
@@ -210,6 +212,8 @@ export interface CheckoutQuote {
   couponNotice?: string | null;
   /** Số tiền hàng còn thiếu để mã đạt đơn tối thiểu của lần đặt này (máy chủ tính trên phần hàng nó xét). API cũ chưa trả. */
   couponShortfall?: number | null;
+  /** Mã bị kẹp ở trần giảm gộp voucher + Điểm Xanh (`loyalty.max_redeem_pct` tạm tính): câu giải thích vì sao mã giảm ít hơn mệnh giá. null/không có = không kẹp. */
+  couponCapNote?: string | null;
   comboDiscount: number;
   /** Ưu đãi hạng thành viên tự động (API cũ chưa trả). */
   tierDiscount?: number;
@@ -223,6 +227,8 @@ export interface CheckoutQuote {
   pointsBalance: number;
   /** Số Điểm Xanh tối đa dùng được cho lần đặt này (chỉ trên hàng Tubu). API cũ chưa trả. */
   pointsMax?: number;
+  /** Voucher đã dùng một phần trần giảm gộp nên `pointsMax` thấp hơn khi không có mã: câu giải thích cạnh ô Điểm Xanh. null/không có = không vậy. */
+  pointsCapNote?: string | null;
   /** Câu giải thích khi giỏ có hàng của gian hàng đối tác (Điểm Xanh không trả cho hàng đó); null = không có. */
   pointsPartnerNote?: string | null;
   /** Số điểm khách chọn bị kẹp vì hàng của gian hàng đối tác. */

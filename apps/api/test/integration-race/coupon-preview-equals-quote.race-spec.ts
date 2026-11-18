@@ -229,8 +229,9 @@ describe('Xem trước mã giảm giá = báo giá checkout (real Postgres)', ()
     const { byCode, cartByCode } = await expectPreviewEqualsQuote(b);
     expect(byCode.get(p10)).toMatchObject({ eligible: true, discount: 14_000 });
     expect(byCode.get(p15max)).toMatchObject({ eligible: true, discount: 5_000 });
-    expect(byCode.get(p150)).toMatchObject({ eligible: true, discount: 140_000 });
-    expect(byCode.get(amtBig)).toMatchObject({ eligible: true, discount: 140_000 });
+    // Mã > 20% tạm tính bị kẹp ở trần gộp voucher + Điểm Xanh: 20% × 140.000đ = 28.000đ (xem trước = báo giá).
+    expect(byCode.get(p150)).toMatchObject({ eligible: true, discount: 28_000 });
+    expect(byCode.get(amtBig)).toMatchObject({ eligible: true, discount: 28_000 });
     expect(byCode.get(minLo)).toMatchObject({ eligible: true, discount: 20_000 });
     expect(byCode.get(minHi)).toMatchObject({ eligible: false, discount: 0, reason: 'Đơn tối thiểu 150.000đ để dùng mã này.' });
     // Giá trị mã freeship không phải trần: miễn đủ 19.000đ phí kho Tubu.

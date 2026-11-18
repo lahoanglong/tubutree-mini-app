@@ -49,6 +49,9 @@ type Snapshot = { placement: Json; perLine: Json };
 /**
  * Khác biệt có chủ đích của M1 so với code cũ, theo `<kịch bản>.<đường dẫn>` trong perLine: giá trị mới kỳ vọng + lý do.
  * Đường dẫn không có ở đây phải khớp bản ghi cũ.
+ *
+ * Ba kịch bản `cod-coupon-tier-points`, `transfer-scoped-coupon-tier`, `ctv-combo-coupon-points` được ghi lại ở w5-01 (trần giảm gộp
+ * voucher + Điểm Xanh ≤ 20% tạm tính kẹp phần Điểm Xanh của chúng), trên code đã có M1, nên bản ghi của chúng đã gồm khác biệt M1.
  */
 const ROUNDING = 'làm tròn theo từng dòng (paidTotal) thay vì theo tỉ lệ cả đơn, lệch 1đ';
 const FLASH = 'hàng giờ vàng không gánh mã giảm giá: hoàn đúng giá giờ vàng đã trả (trừ phần Điểm Xanh), dòng thường hoàn ít hơn';
@@ -60,25 +63,11 @@ const PER_LINE_CHANGES: Record<string, { now: unknown; why: string }> = {
   'wallet-flash-coupon-points.orders[0].refunds.1 × F.pointsUsedBack': { now: 13, why: POINTS },
   'wallet-flash-coupon-points.orders[0].refunds.1 × A.pointsUsedBack': { now: 7, why: POINTS },
   'wallet-flash-coupon-points.orders[0].refunds.1 × B.pointsUsedBack': { now: 2, why: POINTS },
-  'transfer-scoped-coupon-tier.orders[0].refunds.1 × A.pointsUsedBack': { now: 12, why: POINTS },
-  'transfer-scoped-coupon-tier.orders[0].refunds.1 × B.pointsUsedBack': { now: 5, why: POINTS },
-  'transfer-scoped-coupon-tier.orders[0].refunds.1 × C.pointsUsedBack': { now: 3, why: POINTS },
-  'cod-coupon-tier-points.orders[0].refunds.1 × A.goods': { now: 21_861, why: ROUNDING },
   'wallet-flash-coupon-points.orders[0].refunds.1 × F.goods': { now: 86_080, why: FLASH },
   'wallet-flash-coupon-points.orders[0].refunds.1 × A.goods': { now: 46_987, why: FLASH },
   'wallet-flash-coupon-points.orders[0].refunds.1 × B.goods': { now: 15_784, why: FLASH },
-  'transfer-scoped-coupon-tier.orders[0].refunds.1 × A.goods': { now: 73_750, why: SCOPED },
-  'transfer-scoped-coupon-tier.orders[0].refunds.1 × B.goods': { now: 34_194, why: SCOPED },
-  'transfer-scoped-coupon-tier.orders[0].refunds.1 × C.goods': { now: 16_678, why: SCOPED },
-  'ctv-combo-coupon-points.orders[0].refunds.1 × B.goods': { now: 47_849, why: ROUNDING },
-  'ctv-combo-coupon-points.orders[0].commissions[0].commissionableTotal': {
-    now: 177_412,
-    why: 'nền hoa hồng = tổng paidTotal (đúng tiền hàng thực trả) thay vì cộng các dòng đã làm tròn xuống; số hoa hồng không đổi',
-  },
   'groupbuy-coupon.orders[0].refunds.1 × G.goods': { now: 145_154, why: `mã mua chung là ${SCOPED}` },
   'groupbuy-coupon.orders[0].refunds.1 × A.goods': { now: 39_846, why: `mã mua chung là ${SCOPED}` },
-  'transfer-scoped-coupon-tier.orders[0].refunds.1 × A.pointsEarnedBack': { now: 11_062, why: EARNED },
-  'transfer-scoped-coupon-tier.orders[0].refunds.1 × B.pointsEarnedBack': { now: 5_129, why: EARNED },
   'groupbuy-coupon.orders[0].refunds.1 × G.pointsEarnedBack': { now: 14_515, why: EARNED },
   'groupbuy-coupon.orders[0].refunds.1 × A.pointsEarnedBack': { now: 3_985, why: EARNED },
 };

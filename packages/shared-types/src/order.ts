@@ -137,6 +137,8 @@ export interface CouponPreviewDTO {
   reason?: string;
   /** Số tiền hàng mã giảm cho lần đặt này (đúng số checkout trừ). */
   discount: number;
+  /** Mức mã giảm khi chưa kẹp ở trần giảm gộp voucher + Điểm Xanh; chỉ có khi trần làm `discount` nhỏ hơn. API cũ không có. */
+  cappedFrom?: number;
   /** Phí giao mã freeship miễn được; chỉ có khi gửi kèm `addressId` (thanh toán). */
   freeshipSaving?: number;
   /**

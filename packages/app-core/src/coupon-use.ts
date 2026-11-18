@@ -84,7 +84,8 @@ export const couponAutoCopy = {
 
 /**
  * Mã tự áp ở thanh toán: mã dùng được có mức tiết kiệm (giảm tiền hàng + phí giao được miễn) lớn nhất theo xem trước của máy chủ.
- * Hoà thì mã hết hạn sớm hơn (`endAt` trong ví; không biết hạn thì xếp sau), vẫn hoà thì theo mã cho kết quả ổn định.
+ * Hoà thì mã mất ít mệnh giá nhất vì trần giảm gộp (`cappedFrom − discount`; trần làm nhiều mã cùng chạm một mức, đừng đốt mã lớn cho
+ * cùng số tiền), rồi mã hết hạn sớm hơn (`endAt` trong ví; không biết hạn thì xếp sau), vẫn hoà thì theo mã cho kết quả ổn định.
  * Trả null khi không mã nào giảm được.
  */
 export function pickBestCoupon(
@@ -97,8 +98,9 @@ export function pickBestCoupon(
     const t = expiry.get(p.code.toUpperCase());
     return t == null || Number.isNaN(t) ? Infinity : t;
   };
+  const lost = (p: CouponPreviewDTO) => Math.max(0, (p.cappedFrom ?? 0) - Math.max(0, p.discount || 0));
   const candidates = (previews ?? []).filter((p) => p.eligible && saving(p) > 0);
-  candidates.sort((a, b) => saving(b) - saving(a) || endsAt(a) - endsAt(b) || a.code.localeCompare(b.code));
+  candidates.sort((a, b) => saving(b) - saving(a) || lost(a) - lost(b) || endsAt(a) - endsAt(b) || a.code.localeCompare(b.code));
   return candidates[0]?.code ?? null;
 }
 

@@ -29,6 +29,7 @@ import {
   PricingService,
   tierDiscountPctOf,
 } from '../pricing/pricing.service';
+import { combinedRedeemCap, COUPON_CAP_ZERO_REASON, couponCapNote, loadRedeemPct, pointsCapNote } from '../pricing/redeem-cap';
 import { assertFirstOrderInTx } from '../../common/first-order';
 import { LoyaltyService } from '../loyalty/loyalty.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -386,6 +387,8 @@ export class CheckoutService {
       discount: computed.discount,
       couponApplied: computed.couponApplied,
       couponNotice: computed.couponNotice,
+      // Mã bị kẹp ở trần gộp voucher + Điểm Xanh (redeem-cap.ts): câu nói vì sao mã giảm ít hơn mệnh giá. Không kẹp: không có trường.
+      ...(computed.couponCapNote ? { couponCapNote: computed.couponCapNote } : {}),
       ...(computed.couponShortfall !== undefined ? { couponShortfall: computed.couponShortfall } : {}),
       comboDiscount: computed.comboDiscount,
       // Cờ commerce.green_box_enabled tắt thì không có trường này. Bật: phần Hộp Xanh nằm TRONG `comboDiscount` (cùng đường tiền với combo).
@@ -397,6 +400,8 @@ export class CheckoutService {
       // Số Điểm Xanh tối đa dùng được cho lần đặt này (số dư dùng được, trần %, chỉ trên hàng Tubu) và câu giải thích khi giỏ
       // có hàng của gian hàng đối tác; pointsNotice khi số khách chọn bị kẹp vì hàng đó.
       pointsMax: computed.pointsMax,
+      // Mã đã dùng một phần trần gộp nên pointsMax thấp hơn khi không có mã: câu giải thích cho ô Điểm Xanh. Không vậy: không có trường.
+      ...(computed.pointsCapNote ? { pointsCapNote: computed.pointsCapNote } : {}),
       pointsPartnerNote: computed.pointsPartnerNote,
       pointsNotice: computed.pointsNotice,
       shippingFee: computed.shippingFee,
@@ -1196,6 +1201,9 @@ export class CheckoutService {
       alreadyFreeReason = shipAlreadyFreeReason(terms);
     }
 
+    // Cùng trần gộp voucher + Điểm Xanh như báo giá (compute): thẻ voucher ghi số mã thật sự giảm.
+    const redeemPct = await loadRedeemPct(this.config ?? DEFAULT_TTL_CONFIG);
+    const redeemCap = combinedRedeemCap(cart.subtotal, redeemPct);
     const coupons: CouponPreviewItem[] = [];
     for (const [code, r] of results) {
       if (r instanceof BadRequestException) {
@@ -1203,21 +1211,26 @@ export class CheckoutService {
         coupons.push({ code, eligible: false, reason: couponRejectReason(r, cart.items), discount: 0, ...(shortfall !== undefined ? { shortfall } : {}) });
         continue;
       }
-      const discount = Math.min(r.discount, baseOf.get(code) ?? base.goodsAfterCombo);
+      const full = Math.min(r.discount, baseOf.get(code) ?? base.goodsAfterCombo);
+      const discount = Math.min(full, redeemCap);
+      const cappedToZero = discount === 0 && full > 0 && !r.freeship;
       // Trang giỏ chưa có phí giao: mã freeship hợp lệ là dùng được (như getCart), số tiền miễn phí giao chỉ biết ở thanh toán.
       const alreadyFree = r.freeship && discount === 0 && freeshipSaved === 0 ? alreadyFreeReason : null;
-      const nothing = withShipping
-        ? couponNothingReason(discount, r.freeship, r.freeship ? freeshipSaved : 0, alreadyFreeReason ?? undefined)
-        : alreadyFree
-          ? alreadyFree
-          : discount > 0 || r.freeship
-            ? null
-            : COUPON_ZERO_DISCOUNT_REASON;
+      const nothing = cappedToZero
+        ? COUPON_CAP_ZERO_REASON
+        : withShipping
+          ? couponNothingReason(discount, r.freeship, r.freeship ? freeshipSaved : 0, alreadyFreeReason ?? undefined)
+          : alreadyFree
+            ? alreadyFree
+            : discount > 0 || r.freeship
+              ? null
+              : COUPON_ZERO_DISCOUNT_REASON;
       coupons.push({
         code,
         eligible: nothing === null,
         ...(nothing ? { reason: nothing } : {}),
         discount,
+        ...(discount > 0 && discount < full ? { cappedFrom: full } : {}),
         ...(withShipping && r.freeship ? { freeshipSaving: freeshipSaved } : {}),
       });
     }
@@ -1321,7 +1334,11 @@ export class CheckoutService {
     // Lời báo mã chỉ nhắc combo khi có combo thật: `combo.total` gồm cả Hộp Xanh.
     const hasCombo = combo.total - (greenBox?.total ?? 0) > 0;
 
+    // Trần giảm gộp voucher + Điểm Xanh trên tạm tính của lần đặt (redeem-cap.ts): mã lấy trước, điểm lô thường lấy phần còn lại.
+    const redeemPct = await loadRedeemPct(this.config ?? DEFAULT_TTL_CONFIG);
+    const redeemCap = combinedRedeemCap(cart.subtotal, redeemPct);
     let discount = 0; // coupon (sau combo)
+    let couponCapped = false;
     let couponProductIds: string[] | null = null;
     let freeship = false;
     let couponValid = false;
@@ -1330,7 +1347,9 @@ export class CheckoutService {
     if (couponCode) {
       try {
         const r = await this.coupons.validateAndCompute(couponCode, userId, goodsAfterCombo, couponLines);
-        discount = Math.min(r.discount, goodsAfterCombo);
+        const full = Math.min(r.discount, goodsAfterCombo);
+        discount = Math.min(full, redeemCap);
+        couponCapped = discount < full;
         couponProductIds = r.productIds ?? null;
         freeship = r.freeship;
         couponValid = true;
@@ -1378,21 +1397,25 @@ export class CheckoutService {
     const lockedPoints =
       user.pointsBalance > 0 ? (await this.loyalty.lockedOrderPoints(userId, new Date())).locked : 0;
     const redeemablePoints = Math.max(0, user.pointsBalance - lockedPoints);
-    // PD-3: STANDARD (trần max_redeem_pct) trước, phần còn lại từ lô quy đổi (không trần), spec 2.3.
+    // PD-3: STANDARD (trần max_redeem_pct) trước, phần còn lại từ lô quy đổi (không trần), spec 2.3. Phần STANDARD còn chịu
+    // phần trần gộp mã đã chưa dùng.
+    const pointsCapVnd = Math.max(0, redeemCap - discount);
     const redemption = await this.pricing.resolvePointsRedemptionByLot(
       pointsToUse ?? 0,
       redeemablePoints,
       user.pointsConvertedBalance,
       redeemBase,
+      pointsCapVnd,
     );
+    const allPoints = redeemablePoints + user.pointsConvertedBalance;
     const pointsMax = (
-      await this.pricing.resolvePointsRedemptionByLot(
-        redeemablePoints + user.pointsConvertedBalance,
-        redeemablePoints,
-        user.pointsConvertedBalance,
-        redeemBase,
-      )
+      await this.pricing.resolvePointsRedemptionByLot(allPoints, redeemablePoints, user.pointsConvertedBalance, redeemBase, pointsCapVnd)
     ).pointsUsed;
+    // Mã đã dùng một phần trần gộp làm khách dùng được ít điểm hơn khi không có mã: nói lý do cạnh ô Điểm Xanh.
+    const pointsCappedByCoupon =
+      discount > 0 &&
+      allPoints > pointsMax &&
+      (await this.pricing.resolvePointsRedemptionByLot(allPoints, redeemablePoints, user.pointsConvertedBalance, redeemBase)).pointsUsed > pointsMax;
     // Báo khách khi chính hàng của gian hàng đối tác làm số điểm dùng được ít hơn số khách chọn (không báo khi chỉ vì số dư/trần %).
     let pointsNotice: string | null = null;
     if (hasPartnerLines && (pointsToUse ?? 0) > redemption.pointsUsed) {
@@ -1401,6 +1424,7 @@ export class CheckoutService {
         redeemablePoints,
         user.pointsConvertedBalance,
         goodsAfterTierDiscount + flashSubtotal,
+        pointsCapVnd,
       );
       if (withPartner.pointsUsed > redemption.pointsUsed) pointsNotice = partnerPointsNotice(pointsMax);
     }
@@ -1437,11 +1461,18 @@ export class CheckoutService {
     // được gì. Coi là chưa áp để placeOrder không redeem, tránh đốt mã một lần cho đơn không được giảm.
     const freeshipSaved = terms.reduce((s, t) => s + t.freeshipWaived, 0);
     // couponApplied: coupon có THỰC SỰ áp không → placeOrder chỉ redeem khi true.
-    const nothingReason = couponValid ? couponNothingReason(discount, freeship, freeshipSaved, alreadyFreeReason ?? undefined) : null;
+    const nothingReason = !couponValid
+      ? null
+      : couponCapped && discount === 0 && !freeship
+        ? COUPON_CAP_ZERO_REASON
+        : couponNothingReason(discount, freeship, freeshipSaved, alreadyFreeReason ?? undefined);
     const couponApplied = couponValid && nothingReason === null;
+    const couponCapNoteText = couponApplied && couponCapped && discount > 0 ? couponCapNote(discount, redeemPct) : null;
     if (nothingReason !== null) {
-      // Hàng giờ vàng và phần giảm combo vẫn tính vào ngưỡng phí giao, nên câu lý do freeship không kèm ngoặc loại trừ của điều kiện mã.
-      couponNotice = freeship ? couponNotAppliedNotice(nothingReason, false, false) : couponNotAppliedNotice(nothingReason, flashSubtotal > 0, hasCombo);
+      // Hàng giờ vàng và phần giảm combo vẫn tính vào ngưỡng phí giao, nên câu lý do freeship không kèm ngoặc loại trừ của điều kiện mã;
+      // trần giảm gộp cũng không liên quan tới điều kiện mã.
+      const plain = freeship || nothingReason === COUPON_CAP_ZERO_REASON;
+      couponNotice = plain ? couponNotAppliedNotice(nothingReason, false, false) : couponNotAppliedNotice(nothingReason, flashSubtotal > 0, hasCombo);
     } else if (couponApplied && discount > 0 && flashSubtotal > 0) {
       couponNotice = couponFlashExcludedNotice(goodsAfterCombo);
     }
@@ -1481,7 +1512,9 @@ export class CheckoutService {
         pointsUsed: redemption.pointsUsed,
         pointsUsedConverted: redemption.pointsUsedConverted,
         pointsDiscount: redemption.discount,
+        couponCapNote: couponCapNoteText,
         pointsMax,
+        pointsCapNote: pointsCappedByCoupon ? pointsCapNote(pointsMax, redeemPct) : null,
         pointsNotice,
         pointsPartnerNote: hasPartnerLines ? PARTNER_POINTS_NOTE : null,
         redeemablePoints,

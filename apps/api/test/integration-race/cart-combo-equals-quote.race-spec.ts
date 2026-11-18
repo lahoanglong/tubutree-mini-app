@@ -195,6 +195,7 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     expect(c.comboDiscount).toBe(q.comboDiscount);
     expect(c.discount).toBe(q.discount);
     expect(c.couponNotice).toBe(q.couponNotice);
+    expect(c.couponCapNote).toBe(q.couponCapNote);
     expect(c.subtotal - c.comboDiscount - c.discount).toBe(q.total - q.shippingFee);
     return { c, q };
   }
@@ -215,7 +216,7 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
     expect(got.subtotal).toBe(140_000);
   });
 
-  it('giỏ có combo + mã AMOUNT bị kẹp theo phần hàng sau combo', async () => {
+  it('giỏ có combo + mã AMOUNT lớn: giỏ và báo giá cùng kẹp ở trần gộp voucher + Điểm Xanh 20% tạm tính', async () => {
     const b = await buyer();
     const a = await product(60_000);
     const c = await product(40_000);
@@ -227,7 +228,9 @@ describe('Trang giỏ = báo giá checkout: combo, mã, tiền hàng (real Postg
 
     const { c: got } = await expectCartEqualsQuote(b.userId, b.addressId, slug);
     expect(got.comboDiscount).toBe(30_000);
-    expect(got.discount).toBe(70_000);
+    // Phần hàng sau combo 70.000đ, nhưng trần gộp = 20% × tạm tính 100.000đ = 20.000đ.
+    expect(got.discount).toBe(20_000);
+    expect(got.couponCapNote).toBe('Voucher và Điểm Xanh giảm tối đa 20% tạm tính mỗi đơn, nên mã giảm 20.000đ cho đơn này.');
   });
 
   it('mã đạt đơn tối thiểu trên giá chưa trừ combo nhưng không đạt sau combo: giỏ và báo giá cùng không giảm', async () => {
