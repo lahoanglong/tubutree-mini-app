@@ -3176,13 +3176,41 @@ describe('CheckoutService — đổi rác kèm đơn: miễn phí giao, số kg 
         minPoints: 3000,
       };
 
-      it('trả gợi ý theo đúng khách và địa chỉ giao của lần thanh toán', async () => {
+      it('trả gợi ý theo đúng khách và địa chỉ giao; đúng các dòng gợi ý qua kiểm tra của báo giá → oneTapReady', async () => {
+        const returnPackaging = { forAddress: jest.fn().mockResolvedValue(SUGGESTION) };
+        const { svc, prisma, wasteHold } = buildPickup({ returnPackaging });
+        withItems(prisma);
+        const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
+        expect(out.suggestion).toEqual({ ...SUGGESTION, oneTapReady: true });
+        expect(returnPackaging.forAddress).toHaveBeenCalledWith('u1', expect.objectContaining({ street: ADDRESS.street, ward: ADDRESS.ward, wardCode: ADDRESS.wardCode }));
+        expect(wasteHold.evaluate).toHaveBeenCalledWith(
+          expect.anything(),
+          expect.objectContaining({ method: 'PICKUP', userId: 'u1', lines: [{ itemId: 'wi-carton', declaredQty: 1 }] }),
+          PREPARED_INLINE.holdCfg,
+        );
+      });
+
+      it('kiểm tra của báo giá chặn (trần tháng, trần điểm, đủ yêu cầu đang mở, dưới ngưỡng) hay lỗi → oneTapReady false, gợi ý vẫn còn', async () => {
+        for (const evaluate of [
+          jest.fn().mockResolvedValue({ result: { estimatedPoints: 1_000 }, blocks: [{ code: 'MAX_OPEN' }], messages: [] }),
+          jest.fn().mockRejectedValue(new Error('db down')),
+        ]) {
+          const returnPackaging = { forAddress: jest.fn().mockResolvedValue(SUGGESTION) };
+          const { svc, prisma } = buildPickup({ returnPackaging, wasteHold: { evaluate, validateAndHold: jest.fn() } });
+          withItems(prisma);
+          const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
+          expect(out.suggestion).toEqual({ ...SUGGESTION, oneTapReady: false });
+        }
+      });
+
+      it('khách có phiếu thu kèm đang mở → phiếu thắng, không đọc gợi ý', async () => {
         const returnPackaging = { forAddress: jest.fn().mockResolvedValue(SUGGESTION) };
         const { svc, prisma } = buildPickup({ returnPackaging });
         withItems(prisma);
+        ((prisma as unknown as { wasteRequest: { findFirst: jest.Mock } }).wasteRequest.findFirst).mockResolvedValue({ id: 'r9', code: 'TR-XYZ12', estimatedPoints: 4_200, lines: [] });
         const out = await svc.pickupOptions('u1', { addressId: 'addr1' } as never);
-        expect(out.suggestion).toEqual(SUGGESTION);
-        expect(returnPackaging.forAddress).toHaveBeenCalledWith('u1', expect.objectContaining({ street: ADDRESS.street, ward: ADDRESS.ward, wardCode: ADDRESS.wardCode }));
+        expect(out.suggestion).toBeNull();
+        expect(returnPackaging.forAddress).not.toHaveBeenCalled();
       });
 
       it('đọc gợi ý lỗi → ngăn chọn món vẫn mở, suggestion null', async () => {

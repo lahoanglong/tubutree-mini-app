@@ -144,6 +144,11 @@ export interface ReturnPackagingSuggestion {
   estimatedPoints: number;
   /** Ngưỡng điểm tối thiểu của gói thu kèm đơn (`waste.pickup_min_points`). */
   minPoints: number;
+  /**
+   * Chỉ có ở `pickup-options`: đúng các dòng này đã qua cùng kiểm tra của báo giá (ngưỡng điểm, trần tháng, trần điểm, số yêu cầu đang mở).
+   * Thiếu hoặc false = không được áp bằng một chạm, phải mở ngăn chọn món.
+   */
+  oneTapReady?: boolean;
 }
 
 /** `GET /waste/return-packaging?orderCode=<mã đơn>`: bao bì của một đơn đã giao; null khi đơn không đủ điều kiện hoặc cờ tắt. */

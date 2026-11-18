@@ -15,6 +15,7 @@ import {
   type CouponPreviewDTO,
   type CouponPreviewsResponse,
   type PickupOptionsResponse,
+  type ReturnPackagingSuggestion,
 } from '@tubutree/shared-types';
 import { PrismaService } from '../../prisma/prisma.service';
 import { generateUniqueOrderCode } from '../../common/order-code';
@@ -1575,7 +1576,7 @@ export class CheckoutService {
     if (!gateOpen) return { gateOpen, minPoints: holdCfg.pickupMinPoints, ...weights, items: [], existingRequest: null };
 
     const hcm = isHcmProvince(address.province);
-    const [items, existing, suggestion] = await Promise.all([
+    const [items, existing] = await Promise.all([
       this.prisma.wasteItem.findMany({
         where: { status: 'ACTIVE' },
         orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
@@ -1591,8 +1592,9 @@ export class CheckoutService {
           lines: { orderBy: { id: 'asc' }, select: { itemId: true, itemName: true, unitLabel: true, declaredQty: true } },
         },
       }),
-      this.returnSuggestion(userId, address),
     ]);
+    // Phiếu thu kèm có sẵn thắng gợi ý từ đơn ở cả hai app, nên khỏi đọc gợi ý.
+    const suggestion = existing ? null : await this.returnSuggestion(userId, address, holdCfg);
     return {
       gateOpen,
       minPoints: holdCfg.pickupMinPoints,
@@ -1604,13 +1606,43 @@ export class CheckoutService {
   }
 
   /** Bao bì của các đơn đã giao tới địa chỉ này, để thẻ đổi rác điền sẵn gói gửi lại. Đọc gợi ý lỗi thì ngăn chọn món vẫn mở, chỉ thiếu gợi ý. */
-  private async returnSuggestion(userId: string, address: { street: string; ward: string; wardCode: string }) {
+  private async returnSuggestion(
+    userId: string,
+    address: { street: string; ward: string; wardCode: string },
+    holdCfg: InlinePickupPrepared['holdCfg'],
+  ): Promise<ReturnPackagingSuggestion | null> {
     if (!this.returnPackaging) return null;
     try {
-      return await this.returnPackaging.forAddress(userId, address);
+      const suggestion = await this.returnPackaging.forAddress(userId, address);
+      if (!suggestion) return null;
+      return { ...suggestion, oneTapReady: await this.suggestionPassesHold(userId, suggestion, holdCfg) };
     } catch (err) {
       this.logger.warn(`Gợi ý bao bì gửi lại lỗi cho khách ${userId}: ${err instanceof Error ? err.message : err}`);
       return null;
+    }
+  }
+
+  /**
+   * Đúng các dòng gợi ý qua được kiểm tra của báo giá (chỉ đọc, như `inlinePickupStanding`): chỉ khi đó thẻ mới hứa miễn phí giao bằng một chạm.
+   * Kiểm tra lỗi thì coi như chưa qua: khách vẫn mở được ngăn chọn món đã điền sẵn.
+   */
+  private async suggestionPassesHold(userId: string, suggestion: ReturnPackagingSuggestion, holdCfg: InlinePickupPrepared['holdCfg']): Promise<boolean> {
+    try {
+      const { blocks } = await this.pickupDeps().wasteHold.evaluate(
+        this.prisma,
+        {
+          path: 'CREATE',
+          userId,
+          method: 'PICKUP',
+          lines: suggestion.lines.map((l) => ({ itemId: l.itemId, declaredQty: l.qty })),
+          pointId: null,
+          now: new Date(),
+        },
+        holdCfg,
+      );
+      return blocks.length === 0;
+    } catch {
+      return false;
     }
   }
 

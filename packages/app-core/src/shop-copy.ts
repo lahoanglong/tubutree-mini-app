@@ -521,8 +521,11 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.pickup.nudgeOrder': 'Đơn trước bạn có {items}',
   'checkout.pickup.nudgeOrders': '{n} đơn trước bạn có {items}',
   'checkout.pickup.nudgeRequest': 'Phiếu {code} chờ gửi: {items}',
-  'checkout.pickup.nudgeOneTap': 'Bật để gửi kèm đơn này: Miễn phí giao hàng, +{points} Điểm Xanh',
+  'checkout.pickup.nudgeOneTap': 'Bật để gửi kèm: miễn phí giao kiện Tubu Tree, +{points} Điểm Xanh',
   'checkout.pickup.nudgeMore': 'Còn thiếu {points} điểm để gửi kèm, chạm để thêm món',
+  'checkout.pickup.nudgeReview': 'Chạm để xem lại món gửi kèm, +{points} Điểm Xanh',
+  'order.packagingInvite.enough': '{items}: miễn ship, +{points} Điểm Xanh',
+  'order.packagingInvite.more': '{items}: +{points} Điểm Xanh, đủ {min} điểm thì miễn ship',
   'checkout.shipWaived': 'Miễn phí vận chuyển (đổi rác kèm đơn)',
   // Đồng ý nhận tin hành trình đơn qua Zalo (quyết định PO số 3). Câu `body` phải giữ nguyên cụm PO duyệt; đổi chữ thì đổi
   // ORDER_ZALO_CONSENT_TEXT_VERSION ở API (mss-order-event-types.ts): máy chủ đóng dấu phiên bản này khi ghi lựa chọn.

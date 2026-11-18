@@ -176,8 +176,8 @@ describe('SecondOrderInvite — bao bì của đơn (cờ checkout.return_packag
     mocks.cfg = { ...mocks.cfg, returnPackagingNudgeEnabled: true };
     mocks.getReturnPackaging.mockResolvedValue({ suggestion: PACKAGING });
     renderInvite(withCode);
-    expect(await screen.findByText('Đơn này có 1 thùng carton, 2 vỏ chai Tubu Tree')).toBeInTheDocument();
-    expect(screen.getByText('Gửi lại kèm đơn sau: miễn ship, +5.000 Điểm Xanh')).toBeInTheDocument();
+    expect(await screen.findByText('1 thùng carton, 2 vỏ chai Tubu Tree: miễn ship, +5.000 Điểm Xanh')).toBeInTheDocument();
+    expect(screen.getByText('Giữ bao bì gửi kèm đơn sau')).toBeInTheDocument();
     expect(screen.getAllByRole('button')).toHaveLength(1);
     expect(mocks.getReturnPackaging).toHaveBeenCalledWith('TT123');
     fireEvent.click(screen.getByRole('button'));
@@ -188,7 +188,7 @@ describe('SecondOrderInvite — bao bì của đơn (cờ checkout.return_packag
     mocks.cfg = { ...mocks.cfg, returnPackagingNudgeEnabled: true };
     mocks.getReturnPackaging.mockResolvedValue({ suggestion: { ...PACKAGING, lines: [PACKAGING.lines[0]], estimatedPoints: 1000 } });
     renderInvite(withCode);
-    expect(await screen.findByText('+1.000 Điểm Xanh, đủ 3.000 điểm thì miễn ship')).toBeInTheDocument();
+    expect(await screen.findByText('1 thùng carton: +1.000 Điểm Xanh, đủ 3.000 điểm thì miễn ship')).toBeInTheDocument();
   });
 
   it('cờ bật nhưng đơn không còn bao bì (hoặc lỗi): chữ cũ, đường cũ', async () => {

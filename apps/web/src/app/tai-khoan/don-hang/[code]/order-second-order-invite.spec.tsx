@@ -221,9 +221,9 @@ describe('OrderSecondOrderInvite — bao bì của đơn (cờ checkout.return_p
     const links = view.container.querySelectorAll('a');
     expect(links).toHaveLength(1);
     expect(links[0]!.getAttribute('href')).toBe('/doi-rac/tao?method=PICKUP&from=TB-9');
-    expect(view.container.textContent).toContain('Đơn này có 1 thùng carton, 2 vỏ chai Tubu Tree');
-    expect(view.container.textContent).toContain('Gửi lại kèm đơn sau: miễn ship, +5.000 Điểm Xanh');
-    expect(links[0]!.getAttribute('aria-label')).toBe('Đơn này có 1 thùng carton, 2 vỏ chai Tubu Tree. Gửi lại kèm đơn sau: miễn ship, +5.000 Điểm Xanh');
+    expect(view.container.textContent).toContain('Giữ bao bì gửi kèm đơn sau');
+    expect(view.container.textContent).toContain('1 thùng carton, 2 vỏ chai Tubu Tree: miễn ship, +5.000 Điểm Xanh');
+    expect(links[0]!.getAttribute('aria-label')).toBe('Giữ bao bì gửi kèm đơn sau. 1 thùng carton, 2 vỏ chai Tubu Tree: miễn ship, +5.000 Điểm Xanh');
     expect(mocks.getReturnPackaging).toHaveBeenCalledWith('TB-9');
     view.unmount();
   });

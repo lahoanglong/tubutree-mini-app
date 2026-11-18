@@ -25,6 +25,7 @@ const suggestion = (over: Partial<ReturnPackagingSuggestion> = {}): ReturnPackag
   ],
   estimatedPoints: 5000,
   minPoints: 3000,
+  oneTapReady: true,
   ...over,
 });
 
@@ -61,6 +62,13 @@ describe('returnNudge', () => {
     expect(n).toMatchObject({ source: 'ORDER', oneTap: false, points: 1000, missingPoints: 2000 });
   });
 
+  it('máy chủ chưa xác nhận gói qua kiểm tra của báo giá (oneTapReady false/thiếu) → không một chạm, mời xem lại', () => {
+    const n = returnNudge(options({ suggestion: suggestion({ oneTapReady: false }) }));
+    expect(n).toMatchObject({ source: 'ORDER', oneTap: false, missingPoints: 0 });
+    expect(pickupNudgeView(n!).benefit).toBe('Chạm để xem lại món gửi kèm, +5.000 Điểm Xanh');
+    expect(returnNudge(options({ suggestion: suggestion({ oneTapReady: undefined }) }))?.oneTap).toBe(false);
+  });
+
   it('kiện quá nhẹ không có mức kg nào (trần < 0,5 kg) → không một chạm dù đủ điểm', () => {
     expect(returnNudge(options({ maxReturnWeightGrams: 300 }))?.oneTap).toBe(false);
   });
@@ -69,18 +77,26 @@ describe('returnNudge', () => {
     const n = returnNudge(options({ items: [item()] }));
     expect(n?.draft.qty).toEqual({ 'wi-carton': 1 });
     expect(n?.itemsText).toBe('1 thùng carton');
+    expect(n?.oneTap).toBe(false);
     expect(returnNudge(options({ items: [item({ blockedReason: 'BATTERY_OUT_OF_HCM' })] }))).toBeNull();
   });
 
   it('số lượng kẹp ở 999 như ô số của ngăn chọn món', () => {
     const big = suggestion({ lines: [{ ...suggestion().lines[0]!, qty: 5000 }] });
-    expect(returnNudge(options({ suggestion: big }))?.draft.qty).toEqual({ 'wi-carton': 999 });
+    const n = returnNudge(options({ suggestion: big }));
+    expect(n?.draft.qty).toEqual({ 'wi-carton': 999 });
+    expect(n?.oneTap).toBe(false);
   });
 
   it('phiếu thu kèm đã đăng ký thắng bao bì từ đơn: dùng nguyên phiếu', () => {
     const n = returnNudge(options({ existingRequest: EXISTING }));
     expect(n).toMatchObject({ source: 'REQUEST', oneTap: true, points: 4000, requestCode: 'TR-ABCDE', itemsText: 'Thùng carton cũ ×4' });
     expect(pickupFieldsOf(n!.draft)).toEqual({ wasteRequestId: 'r1', returnWeightGrams: 500 });
+  });
+
+  it('phiếu có món không còn nhận hay bị chặn ở địa chỉ này → không một chạm', () => {
+    expect(returnNudge(options({ existingRequest: EXISTING, items: [bottle] }))?.oneTap).toBe(false);
+    expect(returnNudge(options({ existingRequest: EXISTING, items: [item({ blockedReason: 'BATTERY_OUT_OF_HCM' }), bottle] }))?.oneTap).toBe(false);
   });
 
   it('cổng đóng, chưa tải, hay không có gợi ý (cờ tắt, API cũ) → null', () => {
@@ -95,9 +111,9 @@ describe('pickupNudgeView', () => {
   it('một đơn, một chạm', () => {
     expect(pickupNudgeView(returnNudge(options())!)).toEqual({
       lead: 'Đơn trước bạn có 1 thùng carton, 2 vỏ chai Tubu Tree',
-      benefit: 'Bật để gửi kèm đơn này: Miễn phí giao hàng, +5.000 Điểm Xanh',
+      benefit: 'Bật để gửi kèm: miễn phí giao kiện Tubu Tree, +5.000 Điểm Xanh',
       oneTap: true,
-      ariaLabel: '♻️ Đổi rác kèm đơn — Đơn trước bạn có 1 thùng carton, 2 vỏ chai Tubu Tree. Bật để gửi kèm đơn này: Miễn phí giao hàng, +5.000 Điểm Xanh',
+      ariaLabel: '♻️ Đổi rác kèm đơn — Đơn trước bạn có 1 thùng carton, 2 vỏ chai Tubu Tree. Bật để gửi kèm: miễn phí giao kiện Tubu Tree, +5.000 Điểm Xanh',
     });
   });
 

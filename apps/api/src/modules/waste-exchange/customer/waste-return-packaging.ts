@@ -15,6 +15,11 @@ export const RETURN_PACKAGING_WINDOW_DAYS = 60;
 export const RETURN_PACKAGING_MAX_ORDERS = 5;
 /** Trần số lượng một dòng, bằng ô số của ngăn chọn món ở thanh toán. */
 export const RETURN_PACKAGING_QTY_MAX = 999;
+/**
+ * Ở thanh toán, vỏ chai/hộp chỉ tính từ đơn giao đã ngần này ngày: chai giao hôm qua thường còn đầy, khai thừa thì kho nhận thiếu và
+ * khách bị tính một lần khai sai. Thùng carton rỗng ngay khi mở hàng nên không chờ.
+ */
+export const RETURN_PACKAGING_BOTTLE_MIN_DAYS = 7;
 
 /** Mỗi kiện Tubu giao tới một thùng carton; món có nhãn "Trả vỏ đổi điểm" (RETURNABLE_PACKAGING) cho mỗi đơn vị một vỏ. */
 export const RETURN_PACKAGING_CODES = { carton: 'CARTON', bottle: 'TUBU_BOTTLE' } as const;
@@ -42,7 +47,6 @@ export interface ReturnPackagingItem {
   unitLabel: string;
   unitsPerPoint: number;
   pointsPerGroup: number;
-  dailyCapQty: number | null;
   monthlyCapQty: number | null;
   status: string;
   hazardous: boolean;
@@ -94,36 +98,54 @@ export function returnableUnits(items: ReturnPackagingOrder['items'], facts: rea
   }, 0);
 }
 
-function packagingLine(item: ReturnPackagingItem | undefined, qty: number): ReturnPackagingLine | null {
+/**
+ * Một dòng gói gửi lại, kẹp theo phần trần tháng còn lại của món (thu kèm đơn không xét trần ngày, như `checkCaps`) và ô số 999.
+ * Trần 0 hay đã dùng hết trần tháng thì bỏ dòng.
+ */
+function packagingLine(item: ReturnPackagingItem | undefined, qty: number, usedMonth: number): ReturnPackagingLine | null {
   if (!item || item.status !== 'ACTIVE' || item.hazardous || item.unitsPerPoint <= 0 || qty <= 0) return null;
-  const caps = [item.dailyCapQty, item.monthlyCapQty, RETURN_PACKAGING_QTY_MAX].filter((c): c is number => typeof c === 'number' && c > 0);
+  const monthLeft = item.monthlyCapQty === null ? RETURN_PACKAGING_QTY_MAX : Math.max(0, item.monthlyCapQty - usedMonth);
+  const q = Math.min(qty, monthLeft, RETURN_PACKAGING_QTY_MAX);
+  if (q <= 0) return null;
   return {
     itemId: item.id,
     code: item.code,
     name: item.name,
     unitLabel: item.unitLabel,
-    qty: Math.min(qty, ...caps),
+    qty: q,
     unitsPerPoint: item.unitsPerPoint,
     pointsPerGroup: item.pointsPerGroup,
   };
 }
 
+export interface BuildReturnPackagingOptions {
+  /** Số lượng từng món (theo id) khách đã dùng trong trần tháng này (`WasteHoldService.capUsage().itemMonth`). */
+  usedMonth?: ReadonlyMap<string, number>;
+  /** Chỉ đếm vỏ chai/hộp của đơn giao trước mốc này (thanh toán); thiếu = đếm mọi đơn (thẻ ở chi tiết đơn). */
+  bottlesDeliveredBefore?: Date;
+}
+
 /**
  * Gói gửi lại của các đơn (đã lọc, mới giao trước): một thùng carton mỗi đơn, một vỏ Tubu Tree mỗi đơn vị món có nhãn "Trả vỏ đổi điểm".
- * Món tắt, món nguy hại hay thiếu trong danh mục thì bỏ dòng; số lượng kẹp theo trần ngày/tháng của món. null khi không còn dòng nào.
+ * Món tắt, món nguy hại hay thiếu trong danh mục thì bỏ dòng; số lượng kẹp theo phần trần tháng còn lại của món. null khi không còn dòng nào.
  */
 export function buildReturnPackaging(
   orders: readonly ReturnPackagingOrder[],
   facts: readonly ReturnableFact[],
   itemsByCode: ReadonlyMap<string, ReturnPackagingItem>,
   minPoints: number,
+  opts: BuildReturnPackagingOptions = {},
 ): ReturnPackagingSuggestion | null {
   if (orders.length === 0) return null;
-  const bottles = orders.reduce((sum, o) => sum + returnableUnits(o.items, facts), 0);
-  const lines = [
-    packagingLine(itemsByCode.get(RETURN_PACKAGING_CODES.carton), orders.length),
-    packagingLine(itemsByCode.get(RETURN_PACKAGING_CODES.bottle), bottles),
-  ].filter((l): l is ReturnPackagingLine => l !== null);
+  const before = opts.bottlesDeliveredBefore;
+  const bottles = orders.reduce((sum, o) => (before && !(o.deliveredAt && o.deliveredAt <= before) ? sum : sum + returnableUnits(o.items, facts)), 0);
+  const line = (code: string, qty: number) => {
+    const item = itemsByCode.get(code);
+    return packagingLine(item, qty, item ? (opts.usedMonth?.get(item.id) ?? 0) : 0);
+  };
+  const lines = [line(RETURN_PACKAGING_CODES.carton, orders.length), line(RETURN_PACKAGING_CODES.bottle, bottles)].filter(
+    (l): l is ReturnPackagingLine => l !== null,
+  );
   if (lines.length === 0) return null;
   const estimatedPoints = lines.reduce((sum, l) => sum + linePoints(l.qty, { ...l, dropsPerUnit: 0, gramsPerUnit: null }), 0);
   return { orderCodes: orders.map((o) => o.code), lines, estimatedPoints, minPoints };

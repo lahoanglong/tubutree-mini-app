@@ -135,18 +135,18 @@ describe('thẻ biết bao bì của đơn (checkout.return_packaging_nudge_enab
     ...patch,
   });
 
-  it('đủ ngưỡng: tiêu đề nêu đúng món, dòng dưới hứa miễn ship kèm điểm dự kiến', () => {
+  it('đủ ngưỡng: giữ tiêu đề, dòng dưới nêu đúng món, miễn ship và điểm dự kiến', () => {
     expect(secondOrderInviteCopyFor(packaging())).toEqual({
-      title: 'Đơn này có 1 thùng carton, 2 vỏ chai Tubu Tree',
-      subtitle: 'Gửi lại kèm đơn sau: miễn ship, +5.000 Điểm Xanh',
-      aria: 'Đơn này có 1 thùng carton, 2 vỏ chai Tubu Tree. Gửi lại kèm đơn sau: miễn ship, +5.000 Điểm Xanh',
+      title: 'Giữ bao bì gửi kèm đơn sau',
+      subtitle: '1 thùng carton, 2 vỏ chai Tubu Tree: miễn ship, +5.000 Điểm Xanh',
+      aria: 'Giữ bao bì gửi kèm đơn sau. 1 thùng carton, 2 vỏ chai Tubu Tree: miễn ship, +5.000 Điểm Xanh',
     });
   });
 
   it('chưa đủ ngưỡng: không hứa miễn ship, nói rõ ngưỡng điểm', () => {
     const out = secondOrderInviteCopyFor(packaging({ lines: [packaging().lines[0]!], estimatedPoints: 1000 }));
-    expect(out.title).toBe('Đơn này có 1 thùng carton');
-    expect(out.subtitle).toBe('+1.000 Điểm Xanh, đủ 3.000 điểm thì miễn ship');
+    expect(out.title).toBe('Giữ bao bì gửi kèm đơn sau');
+    expect(out.subtitle).toBe('1 thùng carton: +1.000 Điểm Xanh, đủ 3.000 điểm thì miễn ship');
   });
 
   it('không có bao bì (null, chưa tải, rỗng) → chữ cũ', () => {

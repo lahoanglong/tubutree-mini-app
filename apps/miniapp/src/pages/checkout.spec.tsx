@@ -1927,7 +1927,9 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
       lines: [{ itemId: 'it-b', code: 'BOTTLE', name: 'Vỏ chai', unitLabel: 'chai', qty: 3, unitsPerPoint: 1, pointsPerGroup: 1000 }],
       estimatedPoints: 3000,
       minPoints: 3000,
+      oneTapReady: true,
     };
+    const ONE_TAP = 'Bật để gửi kèm: miễn phí giao kiện Tubu Tree, +3.000 Điểm Xanh';
     const cfg = mocks.publicConfig as typeof mocks.publicConfig & { returnPackagingNudgeEnabled?: boolean };
     const funnel = () =>
       vi.mocked(trackEvent).mock.calls.filter((c) => c[0] === 'recycle_funnel_step').map((c) => (c[2] as { step: string; lane?: string }));
@@ -1943,10 +1945,10 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
       renderPage();
       const nudge = await screen.findByTestId('checkout-pickup-nudge');
       expect(within(nudge).getByText('Đơn trước bạn có 3 vỏ chai')).toBeInTheDocument();
-      expect(within(nudge).getByText('Bật để gửi kèm đơn này: Miễn phí giao hàng, +3.000 Điểm Xanh')).toBeInTheDocument();
+      expect(within(nudge).getByText(ONE_TAP)).toBeInTheDocument();
       const card = screen.getByTestId('checkout-pickup');
       expect(card.querySelectorAll('button, [role="checkbox"]').length).toBeLessThanOrEqual(3);
-      fireEvent.click(within(card).getByRole('checkbox', { name: 'Bật để gửi kèm đơn này: Miễn phí giao hàng, +3.000 Điểm Xanh' }));
+      fireEvent.click(within(card).getByRole('checkbox', { name: ONE_TAP }));
       await waitFor(() => expect(pickupArg()).toMatchObject({ inlinePickup: { lines: [{ itemId: 'it-b', qty: 3 }] } }));
       expect(typeof pickupArg()?.returnWeightGrams).toBe('number');
       expect(screen.queryByTestId('checkout-pickup-sheet')).toBeNull();
@@ -1970,6 +1972,30 @@ describe('CheckoutPage — Đổi rác kèm đơn và quà 0đ (W168)', () => {
       expect(await within(sheet).findByRole('progressbar', { name: 'Dự kiến 1.000 / 3.000 điểm' })).toBeInTheDocument();
       expect(pickupArg()).toEqual({});
       expect(funnel().map((p) => p.step)).toEqual(['return_nudge_shown']);
+    });
+
+    it('đủ điểm nhưng máy chủ chưa xác nhận gói (oneTapReady false): không hứa miễn phí giao, công tắc mở tấm đã điền sẵn', async () => {
+      mocks.getCheckoutPickupOptions.mockResolvedValue({ ...OPTIONS, suggestion: { ...SUGGESTION, oneTapReady: false } });
+      renderPage();
+      const nudge = await screen.findByTestId('checkout-pickup-nudge');
+      expect(within(nudge).getByText('Chạm để xem lại món gửi kèm, +3.000 Điểm Xanh')).toBeInTheDocument();
+      expect(nudge.textContent).not.toContain('miễn phí giao');
+      fireEvent.click(screen.getByRole('checkbox', { name: '♻️ Đổi rác kèm đơn' }));
+      await screen.findByTestId('checkout-pickup-sheet');
+      expect(pickupArg()).toEqual({});
+      expect(funnel().map((p) => p.step)).toEqual(['return_nudge_shown']);
+    });
+
+    it('phiếu thu kèm đã đăng ký: hàng nêu phiếu, phễu không đếm như gợi ý bao bì từ đơn', async () => {
+      mocks.getCheckoutPickupOptions.mockResolvedValue({
+        ...OPTIONS,
+        existingRequest: { id: 'r1', code: 'TR-ABCDE', estimatedPoints: 3000, lines: [{ itemId: 'it-b', itemName: 'Vỏ chai', unitLabel: 'chai', declaredQty: 3 }] },
+        suggestion: null,
+      });
+      renderPage();
+      const nudge = await screen.findByTestId('checkout-pickup-nudge');
+      expect(within(nudge).getByText('Phiếu TR-ABCDE chờ gửi: Vỏ chai ×3')).toBeInTheDocument();
+      expect(funnel()).toEqual([]);
     });
 
     it('cờ tắt: thẻ như cũ, không tải danh sách món khi tấm còn đóng', async () => {

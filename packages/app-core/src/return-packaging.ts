@@ -29,7 +29,10 @@ export interface ReturnNudge {
   source: 'ORDER' | 'REQUEST';
   /** Lựa chọn điền sẵn: phiếu có sẵn, hoặc số lượng từng món từ đơn đã giao, kèm mức kg nhỏ nhất. */
   draft: PickupDraft;
-  /** Đủ ngưỡng điểm và có mức kg: bật công tắc là áp luôn. false = mở ngăn chọn món đã điền sẵn để khách thêm món. */
+  /**
+   * Đủ ngưỡng điểm, có mức kg, máy chủ xác nhận gói qua kiểm tra của báo giá (`oneTapReady`) và mọi món của phiếu nhận được ở địa chỉ này:
+   * bật công tắc là áp luôn. false = mở ngăn chọn món đã điền sẵn.
+   */
   oneTap: boolean;
   points: number;
   missingPoints: number;
@@ -49,13 +52,16 @@ export function returnNudge(options: PickupOptionsResponse | undefined): ReturnN
   if (!options || !options.gateOpen) return null;
   const weight = defaultReturnWeightGrams(returnWeightChips(options.maxReturnWeightGrams));
   const existing = options.existingRequest;
+  const items = new Map(options.items.map((i) => [i.id, i]));
   if (existing) {
     const draft = draftUsingRequest(existing, weight);
     const state = pickupConfirmState(draft, options);
+    // Món của phiếu không còn nhận hay bị chặn ở địa chỉ này (Pin cũ ngoài TP.HCM): báo giá sẽ từ chối, nên không hứa một chạm.
+    const blocked = existing.lines.some((l) => !items.get(l.itemId) || items.get(l.itemId)!.blockedReason);
     return {
       source: 'REQUEST',
       draft,
-      oneTap: state.ok,
+      oneTap: state.ok && !blocked,
       points: state.points,
       missingPoints: state.missingPoints,
       itemsText: existing.lines.map((l) => `${l.itemName} ×${formatVnNumber(l.declaredQty)}`).join(', '),
@@ -65,7 +71,6 @@ export function returnNudge(options: PickupOptionsResponse | undefined): ReturnN
   }
   const suggestion = options.suggestion;
   if (!suggestion) return null;
-  const items = new Map(options.items.map((i) => [i.id, i]));
   const qty: Record<string, number> = {};
   const used: ReturnPackagingLine[] = [];
   for (const line of suggestion.lines) {
@@ -78,10 +83,12 @@ export function returnNudge(options: PickupOptionsResponse | undefined): ReturnN
   if (used.length === 0) return null;
   const draft: PickupDraft = { requestId: null, qty, returnWeightGrams: weight };
   const state = pickupConfirmState(draft, options);
+  // Máy chủ đã chạy đúng kiểm tra của báo giá trên các dòng gợi ý (trần tháng, trần điểm, số yêu cầu đang mở); bớt dòng thì phải chạy lại.
+  const unchanged = used.length === suggestion.lines.length && used.every((l, i) => l.qty === suggestion.lines[i]!.qty);
   return {
     source: 'ORDER',
     draft,
-    oneTap: state.ok,
+    oneTap: state.ok && suggestion.oneTapReady === true && unchanged,
     points: state.points,
     missingPoints: state.missingPoints,
     itemsText: packagingItemsText(used),
@@ -108,6 +115,8 @@ export function pickupNudgeView(nudge: ReturnNudge): PickupNudgeView {
         : fillCopy('checkout.pickup.nudgeOrder', { items: nudge.itemsText });
   const benefit = nudge.oneTap
     ? fillCopy('checkout.pickup.nudgeOneTap', { points: formatVnNumber(nudge.points) })
-    : fillCopy('checkout.pickup.nudgeMore', { points: formatVnNumber(nudge.missingPoints) });
+    : nudge.missingPoints > 0
+      ? fillCopy('checkout.pickup.nudgeMore', { points: formatVnNumber(nudge.missingPoints) })
+      : fillCopy('checkout.pickup.nudgeReview', { points: formatVnNumber(nudge.points) });
   return { lead, benefit, oneTap: nudge.oneTap, ariaLabel: `${fillCopy('checkout.pickup.title')} — ${lead}. ${benefit}` };
 }

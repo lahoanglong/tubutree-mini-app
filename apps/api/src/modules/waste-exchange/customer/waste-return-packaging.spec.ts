@@ -1,6 +1,7 @@
 import { WASTE_CAP_STATUSES } from '../waste.constants';
 import { WASTE_SEED_ITEMS } from '../waste-seed-data';
 import {
+  RETURN_PACKAGING_BOTTLE_MIN_DAYS,
   RETURN_PACKAGING_MAX_ORDERS,
   RETURN_PACKAGING_NUDGE_KEY,
   buildReturnPackaging,
@@ -129,10 +130,26 @@ describe('buildReturnPackaging', () => {
     expect(out?.estimatedPoints).toBe(1000);
   });
 
-  it('số lượng kẹp theo trần tháng của vỏ Tubu (20) và trần ngày của thùng (10)', () => {
+  it('số lượng kẹp theo trần tháng của món (vỏ Tubu 20); trần ngày không áp cho thu kèm đơn (12 thùng > trần ngày 10 vẫn giữ)', () => {
     const orders = Array.from({ length: 12 }, (_, i) => order({ code: `TT${i}`, items: bottles(3) }));
     const out = buildReturnPackaging(orders, facts, ITEMS, 3000);
-    expect(out?.lines.map((l) => [l.code, l.qty])).toEqual([['CARTON', 10], ['TUBU_BOTTLE', 20]]);
+    expect(out?.lines.map((l) => [l.code, l.qty])).toEqual([['CARTON', 12], ['TUBU_BOTTLE', 20]]);
+  });
+
+  it('kẹp theo phần trần tháng còn lại: đã gửi 15/20 vỏ tháng này → còn 5; dùng hết trần → bỏ dòng; trần 0 → bỏ dòng', () => {
+    const o = [order({ items: bottles(8) })];
+    const used = (n: number) => ({ usedMonth: new Map([['wi-tubu-bottle', n]]) });
+    expect(buildReturnPackaging(o, facts, ITEMS, 3000, used(15))?.lines.map((l) => [l.code, l.qty])).toEqual([['CARTON', 1], ['TUBU_BOTTLE', 5]]);
+    expect(buildReturnPackaging(o, facts, ITEMS, 3000, used(20))?.lines.map((l) => l.code)).toEqual(['CARTON']);
+    const zero = new Map(ITEMS);
+    zero.set('TUBU_BOTTLE', { ...seedItem('TUBU_BOTTLE'), monthlyCapQty: 0 });
+    expect(buildReturnPackaging(o, facts, zero, 3000)?.lines.map((l) => l.code)).toEqual(['CARTON']);
+  });
+
+  it('bottlesDeliveredBefore: vỏ chỉ tính từ đơn giao trước mốc; thùng carton tính mọi đơn', () => {
+    const o = [order({ code: 'NEW', deliveredAt: ago(1), items: bottles(4) }), order({ code: 'OLD', deliveredAt: ago(10), items: bottles(2) })];
+    const out = buildReturnPackaging(o, facts, ITEMS, 3000, { bottlesDeliveredBefore: ago(RETURN_PACKAGING_BOTTLE_MIN_DAYS) });
+    expect(out?.lines.map((l) => [l.code, l.qty])).toEqual([['CARTON', 2], ['TUBU_BOTTLE', 2]]);
   });
 
   it('món tắt, món nguy hại hay thiếu trong danh mục → bỏ dòng; không còn dòng nào → null', () => {
@@ -163,7 +180,7 @@ describe('WasteReturnPackagingService', () => {
     ...over,
   });
 
-  function build(opts: { flag?: unknown; orders?: unknown[]; order?: unknown; lastReturnAt?: Date | null } = {}) {
+  function build(opts: { flag?: unknown; orders?: unknown[]; order?: unknown; lastReturnAt?: Date | null; usedMonth?: [string, number][] } = {}) {
     const prisma = {
       order: {
         findFirst: jest.fn().mockResolvedValue(opts.order ?? null),
@@ -176,8 +193,11 @@ describe('WasteReturnPackagingService', () => {
     };
     const systemConfig = { get: jest.fn(async (key: string, fallback: unknown) => (key === RETURN_PACKAGING_NUDGE_KEY ? (opts.flag ?? true) : fallback)) };
     const wasteConfig = { snapshot: jest.fn().mockResolvedValue({ pickupMinPoints: 3000 }) };
-    const svc = new WasteReturnPackagingService(prisma as never, systemConfig as never, wasteConfig as never);
-    return { svc, prisma };
+    const hold = {
+      capUsage: jest.fn().mockResolvedValue({ itemDay: new Map(), itemMonth: new Map(opts.usedMonth ?? []), pointsMonth: 0, openCount: 0, pickupPendingCode: null }),
+    };
+    const svc = new WasteReturnPackagingService(prisma as never, systemConfig as never, wasteConfig as never, hold as never);
+    return { svc, prisma, hold };
   }
 
   it('cờ tắt (hay giá trị không phải true) → null, không đọc đơn nào', async () => {
@@ -199,10 +219,28 @@ describe('WasteReturnPackagingService', () => {
       expect(out?.lines.map((l) => [l.code, l.qty])).toEqual([['CARTON', 1], ['TUBU_BOTTLE', 2]]);
     });
 
-    it('lần gửi rác gần nhất chỉ đếm phiếu còn hiệu lực (WASTE_CAP_STATUSES)', async () => {
+    it('lần gửi rác gần nhất: phiếu còn hiệu lực, phiếu kho từ chối và phiếu thất lạc (bao bì đã rời nhà); phiếu huỷ/hết hạn khác không tính', async () => {
       const { svc, prisma } = build({ order: dbOrder() });
       await svc.forOrder('u1', 'TT1', NOW);
-      expect(prisma.wasteRequest.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: { userId: 'u1', status: { in: [...WASTE_CAP_STATUSES] } } }));
+      expect(prisma.wasteRequest.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: {
+            userId: 'u1',
+            OR: [
+              { status: { in: [...WASTE_CAP_STATUSES] } },
+              { status: 'REJECTED' },
+              { status: 'EXPIRED', closeReason: { in: ['LOST', 'LOST_AT_WAREHOUSE'] } },
+            ],
+          },
+        }),
+      );
+    });
+
+    it('kẹp theo phần trần tháng còn lại của chính khách, tháng theo giờ Việt Nam', async () => {
+      const { svc, hold } = build({ order: dbOrder(), usedMonth: [['wi-tubu-bottle', 19]] });
+      const out = await svc.forOrder('u1', 'TT1', NOW);
+      expect(out?.lines.map((l) => [l.code, l.qty])).toEqual([['CARTON', 1], ['TUBU_BOTTLE', 1]]);
+      expect(hold.capUsage).toHaveBeenCalledWith(expect.anything(), 'u1', '2026-11-18', '2026-11');
     });
 
     it('đơn lạ, chưa giao, hay giao trước lần gửi rác gần nhất → null', async () => {
@@ -233,6 +271,14 @@ describe('WasteReturnPackagingService', () => {
           orderBy: [{ deliveredAt: 'desc' }, { id: 'desc' }],
         }),
       );
+    });
+
+    it('vỏ chai của đơn giao chưa đủ 7 ngày không tính ở thanh toán (chai thường còn đầy); thẻ chi tiết đơn vẫn tính', async () => {
+      const fresh = dbOrder({ deliveredAt: ago(2) });
+      const atCheckout = await build({ orders: [fresh] }).svc.forAddress('u1', PLACE, NOW);
+      expect(atCheckout?.lines.map((l) => [l.code, l.qty])).toEqual([['CARTON', 1]]);
+      const onOrder = await build({ order: fresh }).svc.forOrder('u1', 'TT1', NOW);
+      expect(onOrder?.lines.map((l) => [l.code, l.qty])).toEqual([['CARTON', 1], ['TUBU_BOTTLE', 2]]);
     });
 
     it('đơn CTV hỗ trợ bị bỏ dù cùng địa chỉ; không còn đơn nào → null, không đọc danh mục', async () => {

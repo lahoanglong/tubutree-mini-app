@@ -385,8 +385,9 @@ describe('/thanh-toan — gợi ý gửi lại bao bì từ đơn đã giao (c�
     lines: [{ itemId: 'it-b', code: 'BOTTLE', name: 'Vỏ chai', unitLabel: 'chai', qty: 3, unitsPerPoint: 1, pointsPerGroup: 1000 }],
     estimatedPoints: 3000,
     minPoints: 3000,
+    oneTapReady: true,
   };
-  const ONE_TAP = 'Bật để gửi kèm đơn này: Miễn phí giao hàng, +3.000 Điểm Xanh';
+  const ONE_TAP = 'Bật để gửi kèm: miễn phí giao kiện Tubu Tree, +3.000 Điểm Xanh';
   const nudge = (r: Rendered) => r.container.querySelector('[data-testid="checkout-pickup-nudge"]') as HTMLElement | null;
   beforeEach(() => {
     m.cfg = { ...m.cfg, returnPackagingNudgeEnabled: true };
@@ -423,6 +424,29 @@ describe('/thanh-toan — gợi ý gửi lại bao bì từ đơn đã giao (c�
     expect(sheet()!.querySelector('[role="progressbar"]')!.getAttribute('aria-label')).toBe('Dự kiến 1.000 / 3.000 điểm');
     expect(lastQuoteFields()).toEqual({});
     expect(m.track.mock.calls).toEqual([['return_nudge_shown', 'PICKUP']]);
+  });
+
+  it('đủ điểm nhưng máy chủ chưa xác nhận gói (oneTapReady false): không hứa miễn phí giao, công tắc mở tấm đã điền sẵn', async () => {
+    m.options.mockResolvedValue({ ...OPTIONS, suggestion: { ...SUGGESTION, oneTapReady: false } });
+    const r = await mount();
+    expect(nudge(r)!.textContent).toContain('Chạm để xem lại món gửi kèm, +3.000 Điểm Xanh');
+    expect(nudge(r)!.textContent).not.toContain('miễn phí giao');
+    click(card(r)!.querySelector('[role="switch"]') as HTMLElement);
+    await flush(4);
+    expect(sheet()).not.toBeNull();
+    expect(lastQuoteFields()).toEqual({});
+    expect(m.track.mock.calls).toEqual([['return_nudge_shown', 'PICKUP']]);
+  });
+
+  it('phiếu thu kèm đã đăng ký: hàng nêu phiếu, phễu không đếm như gợi ý bao bì từ đơn', async () => {
+    m.options.mockResolvedValue({
+      ...OPTIONS,
+      existingRequest: { id: 'r1', code: 'TR-ABCDE', estimatedPoints: 3000, lines: [{ itemId: 'it-b', itemName: 'Vỏ chai', unitLabel: 'chai', declaredQty: 3 }] },
+      suggestion: null,
+    });
+    const r = await mount();
+    expect(nudge(r)!.textContent).toContain('Phiếu TR-ABCDE chờ gửi: Vỏ chai ×3');
+    expect(m.track.mock.calls).toEqual([]);
   });
 
   it('cờ tắt: thẻ như cũ, không tải danh sách món khi tấm còn đóng', async () => {

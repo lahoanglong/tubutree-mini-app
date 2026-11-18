@@ -96,12 +96,15 @@ export function PickupSection({
 
   const view = pickupCardView({ pickup: lastPickup.current, applied: applied !== null, tubuShippingFee: lastFee.current });
   const nudgeVisible = !!view && !view.disabled && !disabled && applied === null && nudge !== null;
+  // Phễu chỉ đếm gợi ý bao bì từ đơn, mỗi lần vào trang một lần; phiếu đã đăng ký thì không phải gợi ý mới.
+  const fromOrder = nudge?.source === 'ORDER';
   const nudgeSeen = useRef(false);
+  const nudgeTaken = useRef(false);
   useEffect(() => {
-    if (!nudgeVisible || nudgeSeen.current) return;
+    if (!nudgeVisible || !fromOrder || nudgeSeen.current) return;
     nudgeSeen.current = true;
     onNudgeShown?.();
-  }, [nudgeVisible, onNudgeShown]);
+  }, [nudgeVisible, fromOrder, onNudgeShown]);
   if (!view) return null;
 
   const locked = view.disabled || disabled;
@@ -113,7 +116,10 @@ export function PickupSection({
   const turnOn = () => {
     if (!nudge?.oneTap || !nudgeView) return openSheet();
     onApply({ ...nudge.draft, qty: { ...nudge.draft.qty } });
-    onNudgeApplied?.();
+    if (fromOrder && !nudgeTaken.current) {
+      nudgeTaken.current = true;
+      onNudgeApplied?.();
+    }
   };
 
   return (

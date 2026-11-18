@@ -2,6 +2,7 @@ import type { ReturnPackagingSuggestion, WasteMeDTO, WasteMeItemDTO, WasteMethod
 import { formatVnNumber } from './number-format';
 import { homePickupEnabled } from './recycle-home-pickup-state';
 import { packagingItemsText } from './return-packaging';
+import { fillCopy } from './shop-copy';
 import { itemQtyMax } from './waste-copy';
 
 /**
@@ -103,19 +104,21 @@ export interface SecondOrderInviteCopy {
 }
 
 /**
- * Chữ của thẻ khi đã biết bao bì của đơn (cờ `checkout.return_packaging_nudge_enabled`): tiêu đề nêu đúng món, dòng dưới nêu điểm dự kiến.
+ * Chữ của thẻ khi đã biết bao bì của đơn (cờ `checkout.return_packaging_nudge_enabled`): giữ tiêu đề cũ, dòng dưới nêu đúng món và điểm dự kiến.
  * Chỉ hứa miễn ship khi riêng bao bì đơn này đã đủ ngưỡng điểm thu kèm; chưa đủ thì nói rõ ngưỡng. Không có bao bì thì giữ chữ cũ.
  */
 export function secondOrderInviteCopyFor(packaging: ReturnPackagingSuggestion | null | undefined): SecondOrderInviteCopy {
   if (!packaging || packaging.lines.length === 0) return secondOrderInviteCopy;
   const items = packagingItemsText(packaging.lines);
   const points = formatVnNumber(packaging.estimatedPoints);
-  const enough = packaging.estimatedPoints >= packaging.minPoints;
-  const subtitle = enough
-    ? `Gửi lại kèm đơn sau: miễn ship, +${points} Điểm Xanh`
-    : `+${points} Điểm Xanh, đủ ${formatVnNumber(packaging.minPoints)} điểm thì miễn ship`;
-  return { title: `Đơn này có ${items}`, subtitle, aria: `Đơn này có ${items}. ${subtitle}` };
+  const subtitle =
+    packaging.estimatedPoints >= packaging.minPoints
+      ? fillCopy('order.packagingInvite.enough', { items: upperFirst(items), points })
+      : fillCopy('order.packagingInvite.more', { items: upperFirst(items), points, min: formatVnNumber(packaging.minPoints) });
+  return { title: secondOrderInviteCopy.title, subtitle, aria: `${secondOrderInviteCopy.title}. ${subtitle}` };
 }
+
+const upperFirst = (s: string) => (s ? s.charAt(0).toLocaleUpperCase('vi') + s.slice(1) : s);
 
 /** Mã đơn hợp lệ trong `?from=`: chữ, số, gạch; tối đa 32 ký tự như API nhận. */
 const ORDER_CODE_RE = /^[A-Za-z0-9_-]{1,32}$/;
