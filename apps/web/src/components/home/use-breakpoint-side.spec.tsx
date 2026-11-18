@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { act } from 'react';
+import { hydrateRoot } from 'react-dom/client';
 import { renderToString } from 'react-dom/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { render, type Rendered } from '@/test-utils/dom';
@@ -42,13 +43,48 @@ afterEach(() => {
 const side = () => mounted!.container.querySelector('[data-testid="side"]')!.textContent;
 
 describe('useBreakpointSide', () => {
-  it('HTML server dựng cả hai phía (both): khổ nào cũng đúng ngay khung hình đầu', () => {
-    expect(renderToString(<Probe />)).toContain('>both<');
+  it('HTML server dựng cả hai phía (both) dù môi trường có matchMedia; hydrate không lệch HTML rồi mới chọn phía của khổ đang xem', async () => {
+    stubMedia(false);
+    const html = renderToString(<Probe />);
+    expect(html).toContain('>both<');
+    const container = document.createElement('div');
+    container.innerHTML = html;
+    document.body.appendChild(container);
+    const errors: unknown[] = [];
+    let root: ReturnType<typeof hydrateRoot> | null = null;
+    await act(async () => {
+      root = hydrateRoot(container, <Probe />, { onRecoverableError: (e) => errors.push(e) });
+    });
+    expect(errors).toEqual([]);
+    expect(container.textContent).toBe('below');
+    act(() => root!.unmount());
+    container.remove();
   });
 
   it('không có matchMedia (jsdom, trình duyệt cũ): giữ cả hai phía, CSS chọn phía hiện', () => {
     mounted = render(<Probe />);
     expect(side()).toBe('both');
+  });
+
+  it('Safari dưới 14 (chỉ có addListener): vẫn nghe đổi khổ', () => {
+    let matches = false;
+    const listeners = new Set<() => void>();
+    window.matchMedia = ((media: string) => ({
+      get matches() {
+        return matches;
+      },
+      media,
+      addListener: (cb: () => void) => listeners.add(cb),
+      removeListener: (cb: () => void) => listeners.delete(cb),
+    })) as unknown as typeof window.matchMedia;
+    mounted = render(<Probe />);
+    expect(side()).toBe('below');
+    matches = true;
+    act(() => listeners.forEach((cb) => cb()));
+    expect(side()).toBe('above');
+    mounted.unmount();
+    mounted = null;
+    expect(listeners.size).toBe(0);
   });
 
   it('trình duyệt: chỉ phía của khổ đang xem; đổi khổ qua điểm gãy thì đổi phía, gỡ thì bỏ lắng nghe', () => {

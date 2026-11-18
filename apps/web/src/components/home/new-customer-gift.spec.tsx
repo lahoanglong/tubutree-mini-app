@@ -1,4 +1,6 @@
 // @vitest-environment jsdom
+import { act } from 'react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 
@@ -141,6 +143,28 @@ describe('NewCustomerGift — khối "Quà khách mới" ở Trang chủ (D2-07b
     mocks.restoring = false;
     config = never;
     expect(loadingClass(await mount())).toBe('md:h-64');
+  });
+
+  // HTML vãng lai (`/`, cookie phiên mất nhưng localStorage còn cờ): sau hydrate mới thấy "đang khôi phục", rồi phiên hỏng về lại vãng lai. Kiểu dải đổi giữa chừng
+  // thì khung chờ 64px thay dải đã mở ~200px ở md, cả trang dồn lên rồi lại bị đẩy xuống.
+  it('kiểu dải chốt theo lần dựng đầu: vãng lai rồi mới thấy cờ phiên vẫn giữ khung chờ md:h-64 và chi tiết mở từ md', async () => {
+    mocks.phase = 'guest';
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    // Mỗi lượt một phần tử mới: cùng một phần tử thì React bỏ qua lượt dựng lại.
+    const ui = () => <QueryClientProvider client={client}><NewCustomerGift /></QueryClientProvider>;
+    mounted = render(<NewCustomerGift />, client);
+    await flush(8);
+    expect(region(mounted.container)!.querySelector<HTMLElement>('[data-testid="new-customer-gift-details"]')!.className.split(' ')).toEqual(['hidden', 'md:block']);
+    mocks.phase = 'loading';
+    mocks.restoring = true;
+    act(() => mounted!.root.render(ui()));
+    await flush(2);
+    expect(mounted.container.querySelector<HTMLElement>('[data-testid="new-customer-gift-loading"]')!.className).toBe('md:h-64');
+    mocks.phase = 'guest';
+    mocks.restoring = false;
+    act(() => mounted!.root.render(ui()));
+    await flush(2);
+    expect(region(mounted.container)!.querySelector<HTMLElement>('[data-testid="new-customer-gift-details"]')!.className.split(' ')).toEqual(['hidden', 'md:block']);
   });
 
   it('trang dựng sẵn cho khách có cookie phiên mà khôi phục hỏng (về khách vãng lai): vẫn giữ dải gọn tới lg như HTML đầu', async () => {

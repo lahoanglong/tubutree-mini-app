@@ -72,8 +72,9 @@ export function NewCustomerGift({ initialConfig, fallback }: { initialConfig?: P
   const userId = useAuth().user?.id;
   // Khách có phiên chỉ biết là khách mới sau khi phiên và ưu đãi đã về, lúc đó HTML đầu đã vẽ dải ngữ cảnh 64px: ở md–lg dải nằm trên mọi khối
   // (từ lg nó đứng cột bên cạnh khối giới thiệu), nên mở chi tiết hay giữ khung chờ cao hơn 64px ở khổ đó đẩy cả trang xuống. Vậy chỉ khách vãng lai mở sẵn từ md.
+  // Chốt theo lần dựng đầu: HTML vãng lai mà sau hydrate mới thấy cờ phiên (cookie mất, localStorage còn) vẫn giữ đúng chiều cao đã vẽ.
   const prebuiltRestore = useContext(HomeRestoreHintContext) !== null;
-  const openFromMd = !authed && !restoring && !prebuiltRestore;
+  const [openFromMd] = useState(() => !authed && !restoring && !prebuiltRestore);
   // Nút gập chỉ hiện dưới khổ mở sẵn; tiêu đề tĩnh và chi tiết (khi chưa mở) chỉ hiện từ khổ đó. Sau hydrate phần đang ẩn rời DOM.
   const side = useBreakpointSide(openFromMd ? MD_UP : LG_UP);
   // Cùng queryKey/hàm với usePublicConfig → một cache; cần trạng thái lỗi riêng để ẩn khối thay vì hiện giá trị dự phòng.

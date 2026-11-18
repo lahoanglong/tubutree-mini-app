@@ -22,8 +22,14 @@ export function useBreakpointSide(query: string): BreakpointSide {
   const subscribe = useCallback(
     (onChange: () => void) => {
       const list = mediaList(query);
-      list?.addEventListener?.('change', onChange);
-      return () => list?.removeEventListener?.('change', onChange);
+      if (!list) return () => {};
+      // Safari dưới 14 chỉ có addListener: không nghe được thì xoay máy qua điểm gãy vẫn kẹt phía cũ (phần cần hiện đã rời DOM).
+      if (typeof list.addEventListener === 'function') {
+        list.addEventListener('change', onChange);
+        return () => list.removeEventListener('change', onChange);
+      }
+      list.addListener?.(onChange);
+      return () => list.removeListener?.(onChange);
     },
     [query],
   );
