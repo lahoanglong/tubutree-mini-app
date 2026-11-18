@@ -36,8 +36,8 @@ export default defineConfig(({ command, mode }) => {
       // Zalo cân tổng dung lượng thô của bản build. terser (đã có trong lockfile qua peer của vite) nén JS gọn hơn esbuild ~16 KB;
       // `module: true` vì mọi chunk là ES module nên đổi tên được cả biến cấp cao nhất.
       // Bản đồ preload không ghi lại chunk khởi động (đã chạy xong trước mọi import động): xem build-preload-trim.ts.
-      // Không chèn polyfill modulepreload (703 byte trong entry): chunk khởi động là import tĩnh nên polyfill không giúp lúc mở app; WebKit trước
-      // iOS 17 bỏ qua thẻ modulepreload nên route lười tải phụ thuộc lần lượt thay vì song song, vẫn chạy đúng.
+      // Không chèn polyfill modulepreload (703 byte trong entry): chunk khởi động là import tĩnh nên polyfill không giúp lúc mở app, và trình duyệt
+      // không hỗ trợ modulepreload (WebKit trước iOS 17) thì hàm preload của Vite tự dùng rel="preload" as="script", phụ thuộc vẫn tải song song.
       modulePreload: { polyfill: false, resolveDependencies: trim.resolveDependencies },
       minify: 'terser',
       terserOptions: { ecma: 2020, module: true, compress: { passes: 3 }, format: { comments: false } },

@@ -101,8 +101,12 @@ for (const viewport of [
       member(api);
       mockMiniGames(api);
       api.get('/game/matcher', reply(404, { statusCode: 404, code: 'GAME_DISABLED', message: 'Trò chơi đang tạm tắt' }));
+      api.get('/game/matcher/status', { enabled: false });
       await page.goto('/game');
       await expect(page.getByTestId('mini-play-today')).toBeVisible({ timeout: 15_000 });
+      // Đợi câu trả lời của cờ về (không chỉ lúc lệnh vừa gửi) rồi mới khẳng định không có dòng.
+      await expect.poll(() => api.calls.some((c) => c.method === 'GET' && c.path === '/game/matcher/status')).toBe(true);
+      await page.waitForLoadState('networkidle');
       await expect(page.getByTestId('mini-play-row-matcher')).toHaveCount(0);
       await page.goto('/game/matcher');
       const off = page.getByTestId('matcher-off');

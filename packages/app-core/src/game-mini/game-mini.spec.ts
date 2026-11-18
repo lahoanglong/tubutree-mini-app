@@ -410,6 +410,14 @@ describe('chữ game mini', () => {
   });
 });
 
+describe('dòng Chọn Chuẩn Xanh trong bảng chữ game mini', () => {
+  it('tên và mô tả của dòng ở "Chơi hôm nay" (cả Mini App và web) không có lời tuyên bố (mức strict)', () => {
+    const keys = (Object.keys(GAME_MINI_COPY) as GameMiniCopyKey[]).filter((k) => k.startsWith('game.matcher.'));
+    expect(keys.sort()).toEqual(['game.matcher.desc', 'game.matcher.title']);
+    for (const key of keys) expect(claimsIn(gameCopy(key), 'strict'), key).toEqual([]);
+  });
+});
+
 describe('chữ game mini chỉ web dùng', () => {
   const keys = Object.keys(GAME_MINI_WEB_COPY) as GameMiniWebCopyKey[];
   const sample = { n: 2, place: 'Đà Lạt' };

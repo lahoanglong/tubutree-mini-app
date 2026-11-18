@@ -109,7 +109,8 @@ export function MiniBasketCart({ products, game }: { products: MiniProductCard[]
     }
   };
 
-  const lines = done ? basketCartLines(done) : error ? [gameCopy('basket.error')] : [];
+  // Lần bấm lại lỗi mạng: báo lỗi của lần này, không để dòng của lần trước che mất.
+  const lines = error ? [gameCopy('basket.error')] : done ? basketCartLines(done) : [];
   const added = (done?.added.length ?? 0) > 0;
   // Không món nào vào được vì hết hàng cả bộ: bấm lại cũng vậy. Còn món chưa gửi vì mạng (chưa món nào vào giỏ) thì bấm lại được.
   const soldOut = done !== null && !added && done.unsent.length === 0;
@@ -134,24 +135,20 @@ export function MiniBasketCart({ products, game }: { products: MiniProductCard[]
 
 /**
  * Sản phẩm vừa học kèm nút "+ Thêm vào giỏ" một chạm: sản phẩm của câu/lượt cuối (Đố Xanh, Đoán Xuất Xứ) hoặc tối đa 2 sản phẩm theo cặp (Ghép Cặp,
- * giá và tồn kho hiện hành từ danh mục). Món hết hàng không có nút. Báo kết quả bằng thanh thông báo; khoá ref nên chạm đúp chỉ gửi một lần.
+ * giá và tồn kho hiện hành từ danh mục). Món hết hàng không có nút. Báo kết quả bằng thanh thông báo. `onAdd` trả về promise nên nút của từng thẻ
+ * tự khoá tới khi xong: chạm đúp một thẻ chỉ gửi một lần, thẻ kia vẫn bấm được (khách chưa đăng nhập: các lần login() chồng nhau gộp làm một).
  */
 export function LearnedProducts({ game, product, matchSlugs }: { game: PlayableMiniGame; product: MiniProductCard | null; matchSlugs: string[] }) {
   const addToCart = useAddToCart();
   const { notify } = useNotify();
-  const busy = useRef(false);
   const cardsQ = useQuery({ queryKey: miniProductsKey(matchSlugs), queryFn: () => fetchProductsBySlugs(coreHttp, matchSlugs), staleTime: 60_000, enabled: matchSlugs.length > 0 });
 
   const add = async (slug: string, name: string) => {
-    if (busy.current) return;
-    busy.current = true;
     try {
       const r = await addToCart([{ slug, name, imageUrl: null, price: 0, inStock: true }]);
       if (r) notify({ text: basketCartLines(r).join(' '), type: r.added.length > 0 ? 'success' : 'warning' });
     } catch {
       notify({ text: gameCopy('basket.error'), type: 'error' });
-    } finally {
-      busy.current = false;
     }
   };
 
@@ -168,7 +165,7 @@ export function LearnedProducts({ game, product, matchSlugs }: { game: PlayableM
           view={t.view}
           variant="line"
           href={miniProductPath.miniapp(t.slug, game)}
-          onAdd={t.inStock ? () => void add(t.slug, t.name) : undefined}
+          onAdd={t.inStock ? () => add(t.slug, t.name) : undefined}
           addLabel={gameCopy('result.add')}
         />
       ))}

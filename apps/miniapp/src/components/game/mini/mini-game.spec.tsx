@@ -87,6 +87,10 @@ describe('PlayTodayCard', () => {
     mocks.get.mockResolvedValue({ enabled: false });
     render(wrap(<PlayTodayCard today={today()} />));
     await waitFor(() => expect(mocks.get).toHaveBeenCalledWith('/game/matcher/status'));
+    // Đợi câu trả lời {enabled:false} về và được vẽ, không chỉ lúc lệnh vừa gửi.
+    await act(async () => {
+      await mocks.get.mock.results[0]!.value;
+    });
     expect(screen.queryByTestId('mini-play-row-matcher')).toBeNull();
   });
 });

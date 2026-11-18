@@ -6,10 +6,12 @@ import { MINI_REVIEW_BADGE, miniReviewRows, type MiniReviewRow } from '@tubutree
 import type { RoundState } from '@tubutree/app-core/game-mini/round-machine';
 import { Button } from '../../ui/button';
 import { Heading, Text } from '../../ui/text';
+import { SilentBoundary } from '../../route-shell';
 import { usePublicConfig } from '../../../hooks/use-public-config';
 import { useSmartNavigate } from '../../../lib/smart-nav';
 
-// Sản phẩm của ván và "Thêm vào giỏ" là một chunk lười riêng; Đúng Thùng không có sản phẩm nên không tải nó.
+// Sản phẩm của ván và "Thêm vào giỏ" là một chunk lười riêng; Đúng Thùng không có sản phẩm nên không tải nó. Tải chunk lỗi (mạng chập chờn)
+// thì chỉ khối này biến mất, điểm và "Vì sao" của ván vẫn còn.
 const ResultProducts = lazy(() => import('./mini-result-cart'));
 
 /** Nguồn ở Mini App: chỉ hiện tên miền, vì chính sách Zalo không cho Mini App mở trang ngoài Zalo. */
@@ -98,9 +100,11 @@ export default function MiniResult({ game, state, onDone, onLogin }: { game: Pla
         </button>
       )}
       {game !== 'sort' && (
-        <Suspense fallback={null}>
-          <ResultProducts game={game} state={state} />
-        </Suspense>
+        <SilentBoundary>
+          <Suspense fallback={null}>
+            <ResultProducts game={game} state={state} />
+          </Suspense>
+        </SilentBoundary>
       )}
       <Heading as="h3" variant="title-sm" font="ui">
         {gameCopy('result.review')}
