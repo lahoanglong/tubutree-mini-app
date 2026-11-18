@@ -12,7 +12,7 @@ import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
-import { freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
+import { cartUnlockLevel, freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
 import { cartProgressStrip, comboOnlyDiscount, greenBoxCartHint, greenBoxDiscountOf, greenBoxProgress, readGreenBox } from '@tubutree/app-core/commerce/green-box';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { couponNoticeText } from '@tubutree/app-core/coupon-min-order';
@@ -51,6 +51,7 @@ import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
 import { joinVariationLine, variationLabel } from '@/lib/variation-label';
 import { FreeshipAddons } from './freeship-addons';
+import { CartUnlockSlot } from '@/components/cart/freeship-booster/cart-unlock-slot';
 import { GuestCartView } from './guest-cart-view';
 import { GreenBoxEvents, GreenBoxStrip } from './green-box-strip';
 import { useGuestCartFlag } from '@/lib/guest-cart/flag';
@@ -630,14 +631,14 @@ export default function CartPage() {
         <div className={CART_GRID}>
           <div className="min-w-0">
             {showFreeship && freeship && (
-              <div data-testid="cart-freeship" className="mb-3 max-md:mb-2">
+              <CartUnlockSlot testId="cart-freeship" className="mb-3 max-md:mb-2" level={cartUnlockLevel(freeship.reached, greenBox?.tier?.minItems)}>
                 {greenBoxView ? (
                   <GreenBoxStrip view={greenBoxView} onMore={() => router.push('/hop-xanh')} />
                 ) : (
                   <FreeShippingProgressBar base={freeshipBase} threshold={cart.freeshipThreshold} serverReached={serverFreeship} tubuOnly={hasMerchant} onShopMore={() => router.push('/')} />
                 )}
                 {!freeship.reached && <FreeshipAddons remaining={freeship.remaining} lines={allItems} />}
-              </div>
+              </CartUnlockSlot>
             )}
             <GreenBoxEvents state={greenBox} visible={greenBoxView !== null || greenBoxHint !== null} />
             <CartVoucherHintSection

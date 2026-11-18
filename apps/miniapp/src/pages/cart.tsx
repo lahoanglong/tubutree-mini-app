@@ -8,7 +8,7 @@ import { cartTotalLabel } from '@tubutree/app-core/commerce/cart-total';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { cartStockNote, isLowStock, overStockTarget, qtyPickMax } from '@tubutree/app-core/commerce/stock-text';
 import { cartComboBlocks, comboRemovalNotice, comboSavingPending, type ComboRemovalNotice } from '@tubutree/app-core/commerce/cart-combo';
-import { freeshipProgress, pickFreeshipAddons } from '@tubutree/app-core/commerce/freeship-progress';
+import { cartUnlockLevel, freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
 import {
   cartProgressStrip,
   comboOnlyDiscount,
@@ -27,7 +27,6 @@ import {
   updateCartItem,
   removeCartItem,
   addToCart,
-  fetchActiveFlashSales,
   type CartSummary,
   type CartLine,
   type UnavailableCartLine,
@@ -76,13 +75,12 @@ import { ConfirmSheet } from '../components/ui/confirm-sheet';
 import { CartComboBlock } from '../components/cart-combo-block';
 import { GiftNote } from '../components/checkout/gift-rows';
 import { FreeShippingProgressBar } from '../components/ui/free-shipping-progress-bar';
-import { FreeshipAddonRail, type FreeshipAddonItem } from '../components/ui/freeship-addon-rail';
+import type { FreeshipAddonItem } from '../components/ui/freeship-addon-rail';
+import { FreeshipBoosterRail } from '../components/cart/freeship-booster/freeship-booster-rail';
+import { CartUnlockSlot } from '../components/cart/freeship-booster/cart-unlock-slot';
 import { CartVoucherHintStrip } from '../components/ui/cart-voucher-hint-strip';
 import { useCartVoucherHint } from '../components/checkout/use-cart-voucher-hint';
 import { useShippingEstimate } from '../components/checkout/use-shipping-estimate';
-import { homeBestSellerQuery } from '../components/home/home-best-seller-query';
-import { cardAddTarget } from '../utils/card-add-target';
-import { serverNow } from '../utils/server-clock';
 import { settleWithin } from '../utils/settle-within';
 import { joinVariationLine, variationLabel } from '../utils/variation-label';
 
@@ -288,9 +286,7 @@ export default function CartPage() {
     ({ id }) => id,
   );
 
-  // Gợi ý bù đơn lấy từ Bán chạy nhất (cùng khoá với Trang chủ nên thường đã có sẵn). Lỗi chỉ làm ẩn dải, không chặn giỏ.
-  const bestQ = useQuery({ ...homeBestSellerQuery, enabled: phase === 'authenticated', staleTime: 60_000 });
-  const flashQ = useQuery({ queryKey: ['flash-sales', 'active'], queryFn: fetchActiveFlashSales, staleTime: 30_000, enabled: phase === 'authenticated' });
+  // Gợi ý bù đơn (nguồn món và chọn món ở `FreeshipBoosterRail`); lệnh thêm nằm ở đây vì nó sửa giỏ kiểu optimistic như mọi lệnh giỏ khác.
   const addon = useOptimisticCart(
     ({ item }: { item: FreeshipAddonItem }) => addToCart(item.variationId, 1),
     (prev, { item }) => recompute(prev, [...prev.items, pendingAddonLine(item)]),
@@ -412,23 +408,8 @@ export default function CartPage() {
   const strip = cartProgressStrip(freeship.reached, greenBox);
   const greenBoxView = strip === 'greenBox' ? greenBoxProgress(greenBox) : null;
   const greenBoxHint = strip === 'freeship' ? greenBoxCartHint(greenBox) : null;
-  const addonItems: FreeshipAddonItem[] =
-    showFreeship && !freeship.reached
-      ? pickFreeshipAddons(
-          // Hàng gian hàng tự giao (hoặc gian hàng đang nghỉ) không hưởng Miễn phí giao hàng của Tubu: thêm vào cũng không bù được khoảng thiếu.
-          (bestQ.data?.data ?? [])
-            .filter((card) => (card.fulfiller?.kind ?? 'TUBU') === 'TUBU')
-            .map((card) => {
-              const target = cardAddTarget(card, flashQ.data ?? [], serverNow());
-              return { slug: card.slug, name: card.name, thumbnail: card.thumbnail, price: target.price, compareAt: target.compareAt, variationId: target.variationId, inStock: card.inStock !== false };
-            }),
-          {
-            remaining: freeship.remaining,
-            inCartSlugs: new Set(summary.items.map((l) => l.slug)),
-            inCartVariationIds: new Set(summary.items.map((l) => l.variationId)),
-          },
-        ).map((c) => ({ slug: c.slug, name: c.name, thumbnail: c.thumbnail, price: c.price, compareAt: c.compareAt, variationId: c.variationId! }))
-      : [];
+  // Mức mở khoá của dải đầu giỏ: tăng khi vừa đạt Miễn phí giao hàng hay lên bậc Hộp Xanh thì dải nảy mừng một lần (`CartUnlockSlot`).
+  const unlockLevel = cartUnlockLevel(freeship.reached, greenBox?.tier?.minItems);
   // Máy chủ từ chối đặt đơn khi số lượng vượt tồn: chặn ngay ở giỏ thay vì để khách điền xong mới báo lỗi.
   const overStockSelected = selectedItems.some((l) => l.quantity > l.stock);
   // Cùng gian hàng checkout gửi (combo) để số giảm của từng mã đúng số thanh toán sẽ trừ.
@@ -473,18 +454,23 @@ export default function CartPage() {
         <>
           {showFreeship && (
             <Box px={3} pt={2}>
-              {greenBoxView ? (
-                <GreenBoxStrip view={greenBoxView} />
-              ) : (
-                <FreeShippingProgressBar base={freeshipBase} threshold={summary.freeshipThreshold} serverReached={freeshipServerReached} tubuOnly={hasMerchant} onShopMore={() => goSmart('/')} />
-              )}
+              <CartUnlockSlot level={unlockLevel}>
+                {greenBoxView ? (
+                  <GreenBoxStrip view={greenBoxView} />
+                ) : (
+                  <FreeShippingProgressBar base={freeshipBase} threshold={summary.freeshipThreshold} serverReached={freeshipServerReached} tubuOnly={hasMerchant} onShopMore={() => goSmart('/')} />
+                )}
+              </CartUnlockSlot>
             </Box>
           )}
           <GreenBoxEvents state={greenBox} visible={greenBoxView !== null || greenBoxHint !== null} />
-          {addonItems.length > 0 && (
-            <Box px={3} pt={2}>
-              <FreeshipAddonRail items={addonItems} busySlug={addon.isPending ? addon.variables?.item.slug : null} onAdd={handleAddAddon} />
-            </Box>
+          {showFreeship && !freeship.reached && (
+            <FreeshipBoosterRail
+              remaining={freeship.remaining}
+              lines={summary.items}
+              busySlug={addon.isPending ? addon.variables?.item.slug : null}
+              onAdd={handleAddAddon}
+            />
           )}
           <CartVoucherHintSection
             currentCode={summary.couponCode}

@@ -726,6 +726,7 @@ export const SHOP_COPY: Record<string, string> = {
   'freeship.reachedTubu': '🎉 Phần hàng Tubu Tree giao đã được Miễn phí giao hàng',
   'freeship.barAria': 'Đã đạt {pct}% để được Miễn phí giao hàng',
   'freeship.addonsTitle': 'Gợi ý mua thêm cho đủ Miễn phí giao hàng',
+  'freeship.boosterTitle': 'Thêm 1 món nhỏ để đủ Miễn phí giao hàng',
   'freeship.add': '+ Thêm',
   'freeship.addAria': 'Thêm {name} vào giỏ, {price}',
   'freeship.shopMoreCta': 'Mua thêm',

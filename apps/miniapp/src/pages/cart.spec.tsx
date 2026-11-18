@@ -1607,9 +1607,11 @@ describe('CartPage: thanh Miễn phí giao hàng và dải gợi ý bù đơn (W
   it('thêm món đủ bù khoảng thiếu: thanh chuyển sang chúc mừng, dải biến mất', async () => {
     renderPage();
     await screen.findByTestId('freeship-addons');
+    expect(screen.getByTestId('cart-unlock')).not.toHaveAttribute('data-celebrate');
     fireEvent.click(addBtn('Món A'));
     await waitFor(() => expect(screen.getByTestId('freeship-progress')).toHaveAttribute('data-reached', 'true'));
     expect(barText()).toBe('🎉 Đơn hàng đã được Miễn phí giao hàng');
+    expect(screen.getByTestId('cart-unlock')).toHaveAttribute('data-celebrate', 'true');
     expect(screen.queryByTestId('freeship-bar')).toBeNull();
     expect(screen.queryByTestId('freeship-addons')).toBeNull();
     act(() => resolveAdd());

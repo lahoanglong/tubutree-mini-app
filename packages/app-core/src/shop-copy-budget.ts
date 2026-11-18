@@ -693,6 +693,7 @@ export const SHOP_COPY_MAX: Record<string, number | null> = {
   'freeship.reachedTubu': 60,
   'freeship.barAria': 50,
   'freeship.addonsTitle': 44,
+  'freeship.boosterTitle': 44,
   'freeship.add': 8,
   'freeship.addAria': null,
   'freeship.shopMoreCta': 12,

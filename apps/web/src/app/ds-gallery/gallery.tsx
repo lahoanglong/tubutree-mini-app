@@ -7,6 +7,7 @@ import { frequentlyBoughtSummary, type FbtLine } from '@tubutree/app-core/commer
 import type { QuickReorderItem } from '@tubutree/app-core/commerce/quick-reorder';
 import { GALLERY_STORY_PRODUCTS, GALLERY_COMBO_ITEMS, GALLERY_PICKER_ROWS, GALLERY_SLIDES, GALLERY_SORT_OPTIONS, GALLERY_VOUCHERS, galleryCombo, galleryEnd, type GalleryVoucher } from '@tubutree/app-core/commerce/ds-gallery-data';
 import { cartComboBlocks } from '@tubutree/app-core/commerce/cart-combo';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { CartComboBlock } from '@/components/cart-combo-block';
 import type { CartVoucherHint } from '@tubutree/app-core/commerce/cart-voucher-hint';
 import { productTrustStrip } from '@tubutree/app-core/commerce/product-trust-strip';
@@ -335,6 +336,9 @@ export function DsGallery() {
           </Variant>
           <Variant label="đang thêm món đầu">
             <FreeshipAddonRail items={GALLERY_ADDON_ITEMS} busySlug="rau-muong" onAdd={() => undefined} />
+          </Variant>
+          <Variant label="nguồn gợi ý mới bật: tiêu đề Thêm 1 món nhỏ">
+            <FreeshipAddonRail title={fillCopy('freeship.boosterTitle')} items={GALLERY_ADDON_ITEMS} onAdd={() => undefined} />
           </Variant>
         </Group>
 

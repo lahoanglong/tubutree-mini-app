@@ -6,7 +6,8 @@ import { AlertTriangle, Trash2, Zap } from 'lucide-react';
 import { subtotalBucket } from '@tubutree/shared-types';
 import { CART_OUT_OF_STOCK } from '@tubutree/app-core/cart-copy';
 import { cartStockNote } from '@tubutree/app-core/commerce/stock-text';
-import { freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
+import { cartUnlockLevel, freeshipProgress } from '@tubutree/app-core/commerce/freeship-progress';
+import { CartUnlockSlot } from '@/components/cart/freeship-booster/cart-unlock-slot';
 import { cartShippingView } from '@tubutree/app-core/api/shipping-estimate';
 import { useShippingEstimate } from '@/components/checkout/use-shipping-estimate';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
@@ -71,9 +72,9 @@ export function GuestCartView({ empty, gridClassName }: { empty: ReactNode; grid
       <div className={gridClassName} data-testid="guest-cart">
         <div className="min-w-0">
           {showFreeship && (
-            <div data-testid="cart-freeship" className="mb-3">
+            <CartUnlockSlot testId="cart-freeship" className="mb-3" level={cartUnlockLevel(freeshipReached)}>
               <FreeShippingProgressBar base={freeshipBase} threshold={threshold} tubuOnly={view.hasMerchant} />
-            </div>
+            </CartUnlockSlot>
           )}
           <section aria-label="Sản phẩm trong giỏ" className="flex flex-col gap-2.5">
             {view.rows.map((row) => (row.state === 'loading' ? <LineItemSkeleton key={row.variationId} /> : <GuestLine key={row.variationId} row={row} retry={products.get(row.slug)} />))}

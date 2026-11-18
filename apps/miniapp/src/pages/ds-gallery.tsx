@@ -6,6 +6,7 @@ import { BannerCarousel } from '../components/ui/banner-carousel';
 import { ComboCard } from '../components/ui/combo-card';
 import { ProductStoryShowcase } from '../components/ui/product-story-showcase';
 import { cartComboBlocks } from '@tubutree/app-core/commerce/cart-combo';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { CartComboBlock } from '../components/cart-combo-block';
 import { Countdown } from '../components/ui/countdown';
 import { FlashSoldBar } from '../components/ui/flash-sold-bar';
@@ -338,6 +339,9 @@ export default function DsGalleryPage() {
           </Variant>
           <Variant label="đang thêm món đầu">
             <FreeshipAddonRail items={GALLERY_ADDON_ITEMS} busySlug="rau-muong" onAdd={() => undefined} />
+          </Variant>
+          <Variant label="nguồn gợi ý mới bật: tiêu đề Thêm 1 món nhỏ">
+            <FreeshipAddonRail title={fillCopy('freeship.boosterTitle')} items={GALLERY_ADDON_ITEMS} onAdd={() => undefined} />
           </Variant>
         </Group>
 

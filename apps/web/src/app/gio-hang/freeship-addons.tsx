@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useMutationState, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutationState, useQueryClient } from '@tanstack/react-query';
 import type { ProductCard } from '@tubutree/app-core/api/catalog';
-import { pickFreeshipAddons } from '@tubutree/app-core/commerce/freeship-progress';
-import { homeBestSellerQuery } from '@tubutree/app-core/queries/home';
+import { FREESHIP_BOOSTER_WINDOW, pickFreeshipAddons } from '@tubutree/app-core/commerce/freeship-progress';
+import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { FreeshipAddonRail, type FreeshipAddonItem } from '@/components/mini';
+import { FREESHIP_UPSELL_QUERY_PREFIX, useFreeshipBoosterCards } from '@/components/cart/freeship-booster/use-freeship-booster-cards';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
-import { coreHttp } from '@/lib/core-http';
 import { actionErrorText } from '@/lib/error-text';
 import { serverRejectedState } from '@/lib/server-rejected-state';
 import { settleWithin } from '@/lib/settle-within';
@@ -30,13 +30,14 @@ export interface FreeshipAddonsProps {
 }
 
 /**
- * Dải gợi ý món bù đơn dưới thanh Miễn phí giao hàng của Giỏ. Nguồn là kệ Bán chạy nhất (cùng khoá query với Trang chủ nên thường đã có sẵn trong bộ nhớ).
+ * Dải gợi ý món bù đơn dưới thanh Miễn phí giao hàng của Giỏ. Nguồn do `useFreeshipBoosterCards` chọn: cờ `commerce.freeship_booster_enabled` bật thì
+ * `GET /upsell/freeship` (tiêu đề "Thêm 1 món nhỏ để đủ Miễn phí giao hàng", cửa sổ 45.000đ, giữ thứ tự máy chủ), tắt thì kệ Bán chạy nhất (cùng khoá query với Trang chủ).
  * Lỗi tải thì không vẽ gì: dải chỉ là phần thêm, không được làm giỏ hỏng. Thêm một món là một chạm, cập nhật giỏ theo phản hồi của máy chủ
  * (giá Giờ vàng, combo và mã giảm giá tính lại ở đó nên không cập nhật trước), món mới tự được chọn vì giỏ chỉ nhớ tập món ĐÃ BỎ chọn.
  */
 export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
   const qc = useQueryClient();
-  const best = useQuery({ ...homeBestSellerQuery(coreHttp), staleTime: 60_000, retry: false });
+  const source = useFreeshipBoosterCards(remaining, lines);
   const pricing = useCardPricing();
   // Lỗi nhớ riêng (không đọc `mutation.error`): lỗi của món bay trước sẽ mất nếu lệnh sau cùng thuộc món khác và thành công.
   const [error, setError] = useState<{ value: unknown } | null>(null);
@@ -56,10 +57,11 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
       onError: (e, _item, cmd) => {
         setError({ value: e });
         const stale = serverRejectedState(e);
-        // Giỏ chờ các lệnh giỏ đang bay xong (xem `useCartWrite`); kệ Bán chạy không phụ thuộc giỏ nên tải ngay.
+        // Giỏ chờ các lệnh giỏ đang bay xong (xem `useCartWrite`); nguồn gợi ý không phụ thuộc giỏ nên tải ngay.
         const cartReloaded = cartWrite.fail(cmd, stale);
         if (!stale) return undefined;
-        return settleWithin(Promise.all([cartReloaded, qc.invalidateQueries({ queryKey: homeBestSellerQuery(coreHttp).queryKey })]));
+        const sourceKey = source.booster ? FREESHIP_UPSELL_QUERY_PREFIX : source.bestKey;
+        return settleWithin(Promise.all([cartReloaded, qc.invalidateQueries({ queryKey: sourceKey })]));
       },
     },
     (item) => item.slug,
@@ -69,7 +71,7 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
 
   // Không bọc `useMemo`: giá và phân loại phụ thuộc kho Giờ vàng và đồng hồ (đọc trong `pricing`), nên Giờ vàng hết hạn phải tính lại ngay, không giữ giá cũ.
   const picked = (() => {
-    const candidates: Candidate[] = (best.data?.data ?? [])
+    const candidates: Candidate[] = source.cards
       .filter((c: ProductCard) => (c.fulfiller?.kind ?? 'TUBU') === 'TUBU')
       .flatMap((c: ProductCard) => {
         const p = pricing(c);
@@ -80,6 +82,7 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
       remaining,
       inCartSlugs: new Set(lines.map((l) => l.slug)),
       inCartVariationIds: new Set(lines.map((l) => l.variationId)),
+      ...(source.booster ? { window: FREESHIP_BOOSTER_WINDOW, ranked: true } : {}),
     });
   })();
 
@@ -93,7 +96,12 @@ export function FreeshipAddons({ remaining, lines }: FreeshipAddonsProps) {
   if (railGone && !error) return null;
   return (
     <>
-      <FreeshipAddonRail items={picked} busySlug={busySlugs} onAdd={(item) => add.mutate(item)} />
+      <FreeshipAddonRail
+        title={source.booster ? fillCopy('freeship.boosterTitle') : undefined}
+        items={picked}
+        busySlug={busySlugs}
+        onAdd={(item) => add.mutate(item)}
+      />
       {error && (
         <p role="alert" className="mt-2 text-caption text-danger-fg">
           {actionErrorText(error.value)}

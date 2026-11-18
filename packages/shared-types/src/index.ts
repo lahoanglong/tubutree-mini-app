@@ -28,3 +28,4 @@ export * from './order-discount';
 export * from './game-mini';
 export * from './engagement';
 export * from './review-green-corner';
+export * from './freeship-upsell';
