@@ -1,10 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { FORBIDDEN_TERMS } from '../shop-copy';
 import { claimsIn } from '../commerce/copy-claims-guard';
-import { GAME_MINI_COPY_MAX, gameCopy } from './copy';
-import { miniWebOnlyLine } from './format';
 import { MATCHER_COPY, MATCHER_COPY_MAX, matcherCopy, type MatcherCopyKey } from './matcher-copy';
-import { matcherOn } from './matcher-status';
+import { MATCHER_MINI_PATH, matcherOn } from './matcher-status';
 import {
   MATCHER_FLOW_LENGTH,
   MATCHER_PENDING_TTL_MS,
@@ -273,11 +271,7 @@ describe('Chọn Chuẩn Xanh: chữ', () => {
     expect(promise).toEqual(['result.water']);
   });
 
-  it('Mini: tên Chọn Chuẩn Xanh nằm chung dòng "chơi trên tubutree.com", vẫn trong ngân sách khi đủ 4 tên', () => {
-    expect(gameCopy('game.matcher.title')).toBe(MATCHER_COPY.title);
-    const line = miniWebOnlyLine(['match', 'origin', 'basket'], [gameCopy('game.matcher.title')])!;
-    expect(line).toBe('Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc, Chọn Chuẩn Xanh: chơi trên tubutree.com');
-    expect(line.length).toBeLessThanOrEqual(GAME_MINI_COPY_MAX['entry.webOnly']!);
-    expect(miniWebOnlyLine([], [gameCopy('game.matcher.title')])).toBe('Chọn Chuẩn Xanh: chơi trên tubutree.com');
+  it('Mini App chơi ngay trong app ở `/game/matcher`, không còn dòng "chơi trên tubutree.com"', () => {
+    expect(MATCHER_MINI_PATH).toBe('/game/matcher');
   });
 });

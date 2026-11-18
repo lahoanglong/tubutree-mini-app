@@ -13,6 +13,7 @@ import {
   type MatcherResult,
 } from '@tubutree/app-core/game-mini/matcher';
 import { matcherCopy } from '@tubutree/app-core/game-mini/matcher-copy';
+import { gameWebCopy } from '@tubutree/app-core/game-mini/web-copy';
 import { Button, Heading, Money, ProductTile, Text } from '@/components/mini';
 import { trackWebEvent } from '@/lib/analytics';
 import { useAuthPhase } from '@/lib/auth-phase';
@@ -73,7 +74,7 @@ export function MatcherResultView({ result, pending, onAgain }: { result: Matche
         const guestOn = phase === 'guest' && (await guestCartFlagNow(qc));
         const r = guestOn ? addToGuestCart(result) : 'storage';
         if (r === 'ok') return done(n);
-        if (r === 'full') return setAdd({ kind: 'error', text: matcherCopy('result.guestFull') });
+        if (r === 'full') return setAdd({ kind: 'error', text: gameWebCopy('matcher.result.guestFull') });
         savePendingMatcher(result);
         router.push(loginHref(MATCHER_PATH));
         return;
@@ -112,7 +113,7 @@ export function MatcherResultView({ result, pending, onAgain }: { result: Matche
   return (
     <section className="tubu-mg-panel" aria-labelledby="matcher-result-title" data-testid="matcher-result" data-fallback={result.fallback}>
       <Text variant="caption" tone="brand" as="p" style={{ fontWeight: 'var(--type-label-weight)' }}>
-        {pending ? matcherCopy('result.pending') : matcherCopy(result.fallback ? 'result.fallback' : 'result.kicker')}
+        {pending ? gameWebCopy('matcher.result.pending') : matcherCopy(result.fallback ? 'result.fallback' : 'result.kicker')}
       </Text>
       <Heading id="matcher-result-title" as="h2" variant="title-md" font="ui">
         {result.title}
@@ -139,7 +140,7 @@ export function MatcherResultView({ result, pending, onAgain }: { result: Matche
       </ul>
       {pending ? (
         <Text variant="body-sm" tone="secondary" as="p" data-testid="matcher-pending-price">
-          {matcherCopy('result.pendingPrice')}
+          {gameWebCopy('matcher.result.pendingPrice')}
         </Text>
       ) : (
         <div className="tubu-mx-total" data-testid="matcher-total">
@@ -175,7 +176,7 @@ export function MatcherResultView({ result, pending, onAgain }: { result: Matche
       </div>
       <div className="tubu-mx-links">
         <button type="button" className="tubu-mg-link" onClick={viewEach} data-testid="matcher-view-each">
-          {matcherCopy('result.viewEach')}
+          {gameWebCopy('matcher.result.viewEach')}
         </button>
         <button type="button" className="tubu-mg-link" onClick={onAgain} data-testid="matcher-again">
           {matcherCopy('result.again')}

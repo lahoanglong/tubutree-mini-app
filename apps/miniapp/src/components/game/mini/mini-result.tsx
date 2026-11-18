@@ -1,12 +1,16 @@
+import { lazy, Suspense } from 'react';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
-import { MINI_RECYCLE_PATH, miniProductPath, miniResultSummary, sourceHost, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
-import { MINI_REVIEW_BADGE, miniProductView, miniQuizProduct, miniReviewRows, type MiniReviewRow } from '@tubutree/app-core/game-mini/review';
+import { MINI_RECYCLE_PATH, miniResultSummary, sourceHost, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
+import { kitchenReviewRows } from '@tubutree/app-core/game-mini/kitchen';
+import { MINI_REVIEW_BADGE, miniReviewRows, type MiniReviewRow } from '@tubutree/app-core/game-mini/review';
 import type { RoundState } from '@tubutree/app-core/game-mini/round-machine';
 import { Button } from '../../ui/button';
-import { ProductTile } from '../../ui/product-tile';
 import { Heading, Text } from '../../ui/text';
 import { usePublicConfig } from '../../../hooks/use-public-config';
 import { useSmartNavigate } from '../../../lib/smart-nav';
+
+// Sản phẩm của ván và "Thêm vào giỏ" là một chunk lười riêng; Đúng Thùng không có sản phẩm nên không tải nó.
+const ResultProducts = lazy(() => import('./mini-result-cart'));
 
 /** Nguồn ở Mini App: chỉ hiện tên miền, vì chính sách Zalo không cho Mini App mở trang ngoài Zalo. */
 function SourceNote({ url }: { url: string }) {
@@ -51,13 +55,12 @@ function ReviewList({ rows }: { rows: MiniReviewRow[] }) {
   );
 }
 
-/** Màn kết quả (chunk lười `mini-result`, khung ván tải trước lúc bắt đầu chơi): điểm, phần thưởng, một nút chính, danh sách "Vì sao". */
+/** Màn kết quả (chunk lười `mini-result`, khung ván tải trước lúc bắt đầu chơi): điểm, phần thưởng, một nút chính, sản phẩm vừa học, "Vì sao". */
 export default function MiniResult({ game, state, onDone, onLogin }: { game: PlayableMiniGame; state: RoundState; onDone: () => void; onLogin: () => void }) {
   const navigate = useSmartNavigate();
   const waste = usePublicConfig().waste.enabled;
   const r = state.result!;
   const summary = miniResultSummary(r);
-  const product = miniQuizProduct(state.round?.content);
   return (
     <section className="tubu-mg-panel" aria-labelledby="mini-result-title" data-testid="mini-result">
       <Heading id="mini-result-title" as="h2" variant="title-md" font="ui">
@@ -94,20 +97,17 @@ export default function MiniResult({ game, state, onDone, onLogin }: { game: Pla
           {gameCopy('invite.sort')}
         </button>
       )}
-      {game === 'daily_quiz' && product && (
-        <div className="tubu-mg-panel">
-          <Text variant="caption" tone="secondary" as="p">
-            {gameCopy('result.product')}
-          </Text>
-          <div data-testid="mini-result-product">
-            <ProductTile view={miniProductView(product)} variant="line" href={miniProductPath.miniapp(product.slug, game)} />
-          </div>
-        </div>
+      {game !== 'sort' && (
+        <Suspense fallback={null}>
+          <ResultProducts game={game} state={state} />
+        </Suspense>
       )}
       <Heading as="h3" variant="title-sm" font="ui">
         {gameCopy('result.review')}
       </Heading>
-      {state.round && <ReviewList rows={miniReviewRows(r.review, state.round.content)} />}
+      {state.round && (
+        <ReviewList rows={game === 'kitchen_swap' ? kitchenReviewRows(r.review, state.round.content) : miniReviewRows(r.review, state.round.content, state.answers)} />
+      )}
     </section>
   );
 }

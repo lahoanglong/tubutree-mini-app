@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MiniStartResponse, MiniSubmitResponse, MiniTodayResponse } from '@tubutree/shared-types';
 import { FORBIDDEN_TERMS } from '../shop-copy';
+import { claimsIn } from '../commerce/copy-claims-guard';
 import { classifyMiniError, MINI_DEVICE_KEY, miniDeviceId } from './api';
 import { isMiniDisabled, miniTodayQuery, withFreshSession } from './today';
 import {
@@ -18,9 +19,9 @@ import {
   sortStart,
 } from './boards';
 import { GAME_MINI_COPY, GAME_MINI_COPY_MAX, gameCopy, type GameMiniCopyKey } from './copy';
+import { MATCHER_COPY } from './matcher-copy';
+import { GAME_MINI_WEB_COPY, GAME_MINI_WEB_COPY_MAX, gameWebCopy, type GameMiniWebCopyKey } from './web-copy';
 import {
-  isMiniAppGame,
-  miniAppToday,
   miniCapLines,
   miniClock,
   miniEarnQuizLeft,
@@ -30,8 +31,8 @@ import {
   miniProductPath,
   miniResultSummary,
   miniRowStatus,
-  miniWebOnlyLine,
   playableToday,
+  PLAYABLE_MINI_GAMES,
   safeSourceUrl,
   sourceHost,
 } from './format';
@@ -321,15 +322,8 @@ describe('định dạng', () => {
     expect(playableToday(undefined)).toEqual([]);
   });
 
-  it('Mini App: chỉ Đố Xanh và Đúng Thùng là dòng chơi; Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc gom vào một dòng "chơi trên tubutree.com"', () => {
-    expect(['daily_quiz', 'sort', 'match', 'origin', 'basket'].filter((g) => isMiniAppGame(g as never))).toEqual(['daily_quiz', 'sort']);
-    const t = miniAppToday(today());
-    expect(t.rows.map((g) => g.game)).toEqual(['daily_quiz', 'sort']);
-    expect(t.webOnly).toEqual(['match']);
-    expect(miniAppToday(undefined)).toEqual({ rows: [], webOnly: [] });
-    expect(miniWebOnlyLine(['match', 'origin', 'basket'])).toBe('Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc: chơi trên tubutree.com');
-    expect(miniWebOnlyLine([])).toBeNull();
-    expect(miniWebOnlyLine(['match', 'origin', 'basket'])!.length).toBeLessThanOrEqual(GAME_MINI_COPY_MAX['entry.webOnly']!);
+  it('Mini App và web chơi cùng bộ game mini: mọi game có bàn chơi ở cả hai nơi', () => {
+    expect([...PLAYABLE_MINI_GAMES]).toEqual(['daily_quiz', 'sort', 'match', 'origin', 'basket', 'kitchen_swap']);
   });
 
   it('dòng trạng thái: chơi thử / còn n lượt / đã nhận đủ', () => {
@@ -412,6 +406,32 @@ describe('chữ game mini', () => {
       const text = gameCopy(key, sample);
       const max = GAME_MINI_COPY_MAX[key];
       if (max) expect(text.length, key).toBeLessThanOrEqual(max);
+    }
+  });
+});
+
+describe('chữ game mini chỉ web dùng', () => {
+  const keys = Object.keys(GAME_MINI_WEB_COPY) as GameMiniWebCopyKey[];
+  const sample = { n: 2, place: 'Đà Lạt' };
+
+  it('không có thuật ngữ cấm, không hứa thưởng; dòng của Chọn Chuẩn Xanh không có lời tuyên bố (mức strict)', () => {
+    for (const key of keys) {
+      for (const { pattern, use } of FORBIDDEN_TERMS) expect(GAME_MINI_WEB_COPY[key], `${key}: dùng "${use}"`).not.toMatch(pattern);
+      if (key.startsWith('matcher.')) expect(claimsIn(gameWebCopy(key, sample), 'strict'), key).toEqual([]);
+    }
+    expect(keys.filter((k) => /Giọt nước|Điểm Xanh|thưởng/i.test(GAME_MINI_WEB_COPY[k]))).toEqual([]);
+  });
+
+  it('trong ngân sách độ dài sau khi điền biến', () => {
+    for (const [key, max] of Object.entries(GAME_MINI_WEB_COPY_MAX) as Array<[GameMiniWebCopyKey, number]>) {
+      expect(gameWebCopy(key, sample).length, key).toBeLessThanOrEqual(max);
+    }
+  });
+
+  it('không lặp khoá của các bảng đi trong Mini App', () => {
+    for (const key of keys) {
+      const own = key.startsWith('matcher.') ? key.slice('matcher.'.length) in MATCHER_COPY : key in GAME_MINI_COPY;
+      expect(own, key).toBe(false);
     }
   });
 });

@@ -34,7 +34,7 @@ export default defineConfig(({ command, mode }) => {
       // Zalo cân tổng dung lượng thô của bản build. terser (đã có trong lockfile qua peer của vite) nén JS gọn hơn esbuild ~16 KB;
       // `module: true` vì mọi chunk là ES module nên đổi tên được cả biến cấp cao nhất.
       minify: 'terser',
-      terserOptions: { ecma: 2020, module: true, compress: { passes: 2 }, format: { comments: false } },
+      terserOptions: { ecma: 2020, module: true, compress: { passes: 3 }, format: { comments: false } },
       rollupOptions: {
         output: {
           // Tổng bản build là cái Zalo cân, và mỗi chunk nhỏ mang theo import/export + một mục trong bản đồ preload. Gộp chunk dưới 2 KB (hook, api, icon lucide):

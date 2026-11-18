@@ -40,6 +40,7 @@ import {
 import { kitchenDiscovered, kitchenReviewRows } from '@tubutree/app-core/game-mini/kitchen';
 import { initialRoundState, roundReducer, submitDelayMs, type RoundState } from '@tubutree/app-core/game-mini/round-machine';
 import { checkInQuery } from '@tubutree/app-core/queries/loyalty';
+import { gameWebCopy } from '@tubutree/app-core/game-mini/web-copy';
 import { Button, Heading, ProductTile, Text } from '@/components/mini';
 import { PageHeader } from '@/components/ui/page-header';
 import { useLockedMutation } from '@/components/game/use-locked-mutation';
@@ -166,7 +167,7 @@ function SourceLink({ url, n }: { url: string; n: number }) {
   const host = sourceHost(url);
   if (!href || !host) return null;
   return (
-    <a href={href} target="_blank" rel="noopener noreferrer" className="tubu-mg-link" aria-label={gameCopy('result.sourceAria', { n })}>
+    <a href={href} target="_blank" rel="noopener noreferrer" className="tubu-mg-link" aria-label={gameWebCopy('result.sourceAria', { n })}>
       {gameCopy('result.sourceHost', { host })}
     </a>
   );
@@ -429,7 +430,7 @@ export default function MiniRoundShell({ game }: { game: PlayableMiniGame }) {
         <aside className="tubu-mg-aside" aria-labelledby="mini-aside-title">
           <div className="tubu-mg-panel">
             <Heading id="mini-aside-title" as="h2" variant="title-sm" font="ui">
-              {gameCopy('aside.how')}
+              {gameWebCopy('aside.how')}
             </Heading>
             <Text variant="body-sm" tone="secondary" as="p">
               {miniGameRules(game)}

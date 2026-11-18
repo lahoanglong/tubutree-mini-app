@@ -12,6 +12,7 @@ import type {
   MiniTodayResponse,
 } from '@tubutree/shared-types';
 import { gameCopy } from '../../../../packages/app-core/src/game-mini/copy';
+import { gameWebCopy } from '../../../../packages/app-core/src/game-mini/web-copy';
 import { reply, type MockApi } from './mock-api';
 
 /**
@@ -19,7 +20,7 @@ import { reply, type MockApi } from './mock-api';
  * thật khi cờ game.mini.* bật.
  */
 
-export { gameCopy };
+export { gameCopy, gameWebCopy };
 
 export function miniToday(over: Partial<MiniTodayResponse> = {}): MiniTodayResponse {
   return {

@@ -7,6 +7,7 @@ import {
   expectTargets44,
   finishSort,
   gameCopy,
+  gameWebCopy,
   mockMiniGames,
   playQuiz,
   QUIZ_PRODUCT,
@@ -128,7 +129,7 @@ test.describe('Web 1440px', () => {
       await tabAndPress(page, page.getByRole('button', { name: gameCopy(i === 2 ? 'quiz.finish' : 'quiz.next') }));
     }
     await expect(page.getByTestId('mini-result')).toBeVisible({ timeout: 15_000 });
-    const source = page.getByTestId('mini-review').getByRole('link', { name: gameCopy('result.sourceAria', { n: 1 }) });
+    const source = page.getByTestId('mini-review').getByRole('link', { name: gameWebCopy('result.sourceAria', { n: 1 }) });
     await expect(source).toHaveAttribute('href', 'https://www.moitruong.gov.vn/phan-loai-rac');
     await expect(source).toHaveAttribute('target', '_blank');
     await expect(source).toHaveAttribute('rel', /noopener/);

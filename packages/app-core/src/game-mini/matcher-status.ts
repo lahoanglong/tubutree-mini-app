@@ -20,4 +20,7 @@ export const matcherStatusQuery = (http: HttpClient) => ({
   retry: 1,
 });
 
+/** Màn chơi ở Mini App (cặp route-map `/game/matcher` ↔ `MATCHER_PATH` của web). Nằm ở đây vì thẻ Chơi hôm nay của Mini chỉ nạp file này. */
+export const MATCHER_MINI_PATH = '/game/matcher';
+
 export const matcherOn = (s: MatcherStatus | undefined | null): boolean => s?.enabled === true;

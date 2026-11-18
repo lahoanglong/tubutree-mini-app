@@ -41,38 +41,6 @@ export function playableToday(today: MiniTodayResponse | undefined): Array<MiniT
   return PLAYABLE_MINI_GAMES.flatMap((g) => today.games.filter((x): x is MiniTodayGame & { game: PlayableMiniGame } => x.game === g));
 }
 
-/**
- * Game phát được trong Mini App. Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc chỉ phát ở web: ba bàn chơi cần khoảng 21 KB mà gói Mini chỉ còn chưa tới
- * 9 KB dưới trần 2350 KB, nên danh sách ở Mini nêu tên chúng trong một dòng "chơi trên tubutree.com". Căn Bếp Xanh cũng chỉ phát ở web vì cùng lý do.
- */
-export const MINIAPP_MINI_GAMES = ['daily_quiz', 'sort'] as const satisfies readonly PlayableMiniGame[];
-export type MiniAppGame = (typeof MINIAPP_MINI_GAMES)[number];
-
-export function isMiniAppGame(game: PlayableMiniGame): game is MiniAppGame {
-  return (MINIAPP_MINI_GAMES as readonly string[]).includes(game);
-}
-
-/** "Chơi hôm nay" ở Mini App: dòng chơi được ngay, và các game hôm nay chỉ phát ở web (theo thứ tự cố định). */
-export function miniAppToday(today: MiniTodayResponse | undefined): {
-  rows: Array<MiniTodayGame & { game: MiniAppGame }>;
-  webOnly: PlayableMiniGame[];
-} {
-  const all = playableToday(today);
-  return {
-    rows: all.filter((g): g is MiniTodayGame & { game: MiniAppGame } => isMiniAppGame(g.game)),
-    webOnly: all.map((g) => g.game).filter((g) => !isMiniAppGame(g)),
-  };
-}
-
-/**
- * Dòng "Ghép Cặp, Giỏ Đúng Việc: chơi trên tubutree.com"; null khi không có game nào chỉ phát ở web. `extra`: tên các màn chỉ có trên web
- * nhưng không phải ván game mini (Chọn Chuẩn Xanh), đứng sau các game.
- */
-export function miniWebOnlyLine(games: readonly PlayableMiniGame[], extra: readonly string[] = []): string | null {
-  const names = [...games.map((g) => miniGameTitle(g)), ...extra];
-  return names.length > 0 ? gameCopy('entry.webOnly', { names: names.join(', ') }) : null;
-}
-
 export const miniGameTitle = (game: PlayableMiniGame) => gameCopy(`game.${game}.title`);
 export const miniGameDesc = (game: PlayableMiniGame) => gameCopy(`game.${game}.desc`);
 export const miniGameRules = (game: PlayableMiniGame) => gameCopy(`game.${game}.rules`);

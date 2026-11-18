@@ -3,6 +3,7 @@ import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MiniSortBin, MiniSortItem, MiniTodayResponse } from '@tubutree/shared-types';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
+import { gameWebCopy } from '@tubutree/app-core/game-mini/web-copy';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { waitFor } from '@/test-utils/render-hook';
 
@@ -100,7 +101,7 @@ describe('MiniRoundShell (web)', () => {
     mounted = render(<MiniRoundShell game="daily_quiz" />);
     await waitFor(() => expect(q('mini-no-reward')?.textContent).toBe(gameCopy('intro.noReward')));
     expect(mounted.container.textContent).toContain(gameCopy('reason.NO_REWARDED_ROUNDS_LEFT'));
-    expect(mounted.container.querySelector('.tubu-mg-aside')?.textContent).toContain(gameCopy('aside.how'));
+    expect(mounted.container.querySelector('.tubu-mg-aside')?.textContent).toContain(gameWebCopy('aside.how'));
     expect(mocks.post).not.toHaveBeenCalled();
   });
 

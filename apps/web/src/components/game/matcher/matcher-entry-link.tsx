@@ -4,8 +4,8 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import type { MatcherEntry } from '@tubutree/shared-types';
 import { MATCHER_PATH } from '@tubutree/app-core/game-mini/matcher';
-import { matcherCopy } from '@tubutree/app-core/game-mini/matcher-copy';
 import { matcherOn, matcherStatusQuery } from '@tubutree/app-core/game-mini/matcher-status';
+import { gameWebCopy } from '@tubutree/app-core/game-mini/web-copy';
 import { coreHttp } from '@/lib/core-http';
 
 /**
@@ -17,7 +17,7 @@ export function MatcherEntryLink({ from, className = '' }: { from: MatcherEntry;
   if (!matcherOn(data)) return null;
   return (
     <Link href={`${MATCHER_PATH}?from=${from}`} className={`inline-flex min-h-11 items-center text-sm font-semibold text-[var(--color-text-link)] underline underline-offset-2 ${className}`} data-testid={`matcher-entry-${from}`}>
-      {matcherCopy('entry.link')}
+      {gameWebCopy('matcher.entry.link')}
     </Link>
   );
 }

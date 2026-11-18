@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronLeft } from 'lucide-react';
 import { MATCHER_ENTRIES, type MatcherEntry } from '@tubutree/shared-types';
+import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniDeviceId } from '@tubutree/app-core/game-mini/api';
 import {
   MATCHER_FLOW,
@@ -29,6 +30,7 @@ import {
   type MatcherTrivia,
 } from '@tubutree/app-core/game-mini/matcher';
 import { matcherCopy } from '@tubutree/app-core/game-mini/matcher-copy';
+import { gameWebCopy } from '@tubutree/app-core/game-mini/web-copy';
 import { Button, Heading, Text } from '@/components/mini';
 import { PageHeader } from '@/components/ui/page-header';
 import { trackWebEvent } from '@/lib/analytics';
@@ -140,7 +142,7 @@ function TriviaStep({ trivia, chosen, onChoose, onNext }: { trivia: MatcherTrivi
               target="_blank"
               rel="noopener noreferrer nofollow"
               className="tubu-mg-link"
-              aria-label={`${matcherCopy('trivia.source', { host: hostOf(trivia.sourceUrl) })}. ${matcherCopy('trivia.sourceAria')}`}
+              aria-label={`${matcherCopy('trivia.source', { host: hostOf(trivia.sourceUrl) })}. ${gameWebCopy('matcher.trivia.sourceAria')}`}
             >
               {matcherCopy('trivia.source', { host: hostOf(trivia.sourceUrl) })}
             </a>
@@ -348,7 +350,7 @@ export default function MatcherFlow() {
 
   return (
     <>
-      <PageHeader title={matcherCopy('title')} backHref={GAME_PATH} />
+      <PageHeader title={gameCopy('game.matcher.title')} backHref={GAME_PATH} />
       <div ref={rootRef} className="tubu-mg-shell" data-testid="matcher" data-view={view.kind}>
         {body}
       </div>

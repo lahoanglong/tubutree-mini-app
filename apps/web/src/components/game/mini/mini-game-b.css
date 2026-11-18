@@ -1,6 +1,7 @@
 /*
- * Bàn chơi Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc: chỉ phát ở web nên tách khỏi mini-game.css (file dùng chung với Mini App, spec so khớp hai
- * file). Nạp sau mini-game.css; số đo nằm ở đây, mọi màu và khoảng cách đi qua token.
+ * Bàn chơi Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc và bố cục từ 1024px của khung ván. Tách khỏi mini-game.css (file dùng chung với Mini App, spec so
+ * khớp hai file) vì Mini App không có màn rộng: bản của Mini (apps/miniapp/src/components/game/mini/mini-game-b.css) bỏ các luật từ 1024px. Nạp sau
+ * mini-game.css; số đo nằm ở đây, mọi màu và khoảng cách đi qua token.
  */
 
 .tubu-mg-tile:focus-visible {
@@ -130,9 +131,29 @@
   min-height: 240px;
 }
 
+/* Từ 1024px: vùng chơi giữa trang, cột phải "Cách chơi" lúc chơi và danh sách "Vì sao" ở màn kết quả; Ghép Cặp 4 cột. */
 @media (min-width: 1024px) {
   .tubu-mg-grid[data-cols='match'] {
     grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+  .tubu-mg-shell[data-wide='true'] {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    align-items: start;
+    gap: var(--space-stack-sm) var(--space-inline-lg);
+    max-width: 1040px;
+  }
+  .tubu-mg-shell[data-wide='true'] > .tubu-mg-main {
+    max-width: 720px;
+  }
+  .tubu-mg-shell[data-wide='true'] > .tubu-mg-aside {
+    position: sticky;
+    top: var(--space-stack-lg);
+  }
+}
+@media (max-width: 1023.98px) {
+  .tubu-mg-aside {
+    display: none;
   }
 }
 

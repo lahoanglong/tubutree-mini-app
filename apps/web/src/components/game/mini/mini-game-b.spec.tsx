@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { MiniChoiceItem, MiniMatchCard, MiniProductCard } from '@tubutree/shared-types';
 import { BASKET_PENDING_KEY, decodeBasketPending, encodeBasketPending } from '@tubutree/app-core/game-mini/basket-cart';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
+import { gameWebCopy } from '@tubutree/app-core/game-mini/web-copy';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { waitFor } from '@/test-utils/render-hook';
 
@@ -106,7 +107,7 @@ describe('MiniBasketCart (web)', () => {
     mocks.get.mockResolvedValue({ data: SET.map((p) => catalog(p.slug)), total: 3 });
     mocks.post.mockResolvedValue({ ok: true });
     mounted = render(<MiniBasketCart products={SET} pending />);
-    expect(q('mini-basket-pending')?.textContent).toContain(gameCopy('basket.pending'));
+    expect(q('mini-basket-pending')?.textContent).toContain(gameWebCopy('basket.pending'));
     click(buttonByText(gameCopy('basket.add')));
     await waitFor(() => expect(q('mini-basket-status')?.textContent).toContain(gameCopy('basket.added', { n: 3 })));
     expect(window.sessionStorage.getItem(BASKET_PENDING_KEY)).toBeNull();

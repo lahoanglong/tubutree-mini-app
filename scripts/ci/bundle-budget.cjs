@@ -5,8 +5,9 @@
 // Ngưỡng là ngưỡng cảnh báo của dự án, KHÔNG phải giới hạn của Zalo (giới hạn dung lượng gói hiện hành của Zalo chưa kiểm).
 //   MINIAPP_ENTRY_WARN_KB  file JS lớn nhất (entry), raw, mặc định 700. Mục tiêu trong docs/2026-10-review/03-perf.md A3-013: dưới 450.
 //   MINIAPP_TOTAL_WARN_KB  tổng mọi file của bản build (JS + CSS + font/ảnh), raw, mặc định 2350 (W177 hạ từ 2500 sau khi chuyển 8 màn quản trị/đối tác/nhân sự sang cổng web đưa bản dựng về 2237 KB, để wave sau không đẩy tổng quay lại trên 2350).
-//   MINIAPP_GAME_MINI_WARN_BYTES  tổng các chunk JS `mini-*` (khung ván, màn kết quả, bàn chơi game mini, tải lười), raw, mặc định 22000 cho đợt A
-//                                 (khung ván, Đố Xanh, Đúng Thùng). Đợt B thêm game thì nâng tối đa 40000 cho cả 5 game, không hơn. CSS game mini không
+//   MINIAPP_GAME_MINI_WARN_BYTES  tổng các chunk JS `mini-*` (khung ván, màn kết quả, bàn chơi game mini, tải lười), raw, mặc định 40000: khung ván,
+//                                 màn kết quả (kèm chunk thêm giỏ `mini-result-cart`) và bàn chơi của cả 6 game mini chơi ngay trong Mini App; không nâng
+//                                 hơn. Chọn Chuẩn Xanh là route riêng (chunk `game-matcher`) nên chỉ nằm trong tổng 2350 KB. CSS game mini không
 //                                 tính: Rollup đặt tên file CSS theo chunk dùng chung nên tên không ổn định. Mỗi chunk còn có trần riêng: `mini-round-shell`
 //                                 10 KB, chunk `mini-*` khác 6 KB. Không thấy chunk `mini-*` nào (Rollup gộp chunk nhỏ vào chunk tên khác) cũng là cảnh báo,
 //                                 để ngưỡng không xanh vì không đo được gì.
@@ -42,7 +43,7 @@ function main() {
   const strict = process.env.BUNDLE_BUDGET_STRICT === '1';
   const entryWarnKb = threshold('MINIAPP_ENTRY_WARN_KB', 700);
   const totalWarnKb = threshold('MINIAPP_TOTAL_WARN_KB', 2350);
-  const gameMiniWarnBytes = threshold('MINIAPP_GAME_MINI_WARN_BYTES', 22000);
+  const gameMiniWarnBytes = threshold('MINIAPP_GAME_MINI_WARN_BYTES', 40000);
 
   if (!fs.existsSync(dir)) {
     console.log(`::warning title=Bundle miniapp::không thấy thư mục ${dir}: bản build đổi chỗ đầu ra hoặc build chưa chạy, nên chưa đo được kích thước.`);

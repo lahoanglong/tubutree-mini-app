@@ -1,8 +1,8 @@
 'use client';
 
 import { MAP_GEO_TRANSFORM, MAP_ISLANDS, MAP_REGIONS, geoToFrame, smoothRegionPath } from '@tubutree/app-core/brand-map-data';
-import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { originMapSpot } from '@tubutree/app-core/game-mini/origin-map';
+import { gameWebCopy } from '@tubutree/app-core/game-mini/web-copy';
 import { Text } from '@/components/mini';
 
 const PAD = 3;
@@ -21,7 +21,7 @@ export default function MiniOriginMap({ place }: { place: string | null }) {
   const spot = originMapSpot(place);
   return (
     <figure className="tubu-mg-map" data-testid="mini-origin-map" data-spot={spot?.id}>
-      <svg role="img" aria-label={gameCopy('origin.mapAria')} viewBox={VIEWBOX}>
+      <svg role="img" aria-label={gameWebCopy('origin.mapAria')} viewBox={VIEWBOX}>
         <g transform={MAP_GEO_TRANSFORM}>
           {MAP_REGIONS.map((r) => (
             <path key={r.id} d={smoothRegionPath(r)} className="tubu-mg-map-land" data-on={spot?.id === r.id ? 'true' : undefined} />
@@ -47,7 +47,7 @@ export default function MiniOriginMap({ place }: { place: string | null }) {
       </ol>
       <figcaption>
         <Text variant="body-sm" tone="secondary" as="span" data-testid="mini-origin-map-caption">
-          {place ? gameCopy('origin.mapPicked', { place }) : gameCopy('origin.mapNone')}
+          {place ? gameWebCopy('origin.mapPicked', { place }) : gameWebCopy('origin.mapNone')}
         </Text>
       </figcaption>
     </figure>

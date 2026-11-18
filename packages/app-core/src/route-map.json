@@ -42,6 +42,7 @@
     { "lane": "game", "items": [
       { "miniapp": "/game", "web": "/vuon-xanh", "private": false },
       { "miniapp": "/game/play/:game", "web": "/vuon-xanh/choi/:game", "private": false },
+      { "miniapp": "/game/matcher", "web": "/vuon-xanh/chon-chuan-xanh", "private": false },
       { "miniapp": "/ai-advisor", "web": "/tu-van", "private": false }
     ]},
     { "lane": "community", "items": [
@@ -102,12 +103,6 @@
       "flag": ["apps/api/src/modules/eco-impact/eco-facts.rules.ts", "ECO_BADGES_KEY"],
       "missingOn": "miniapp",
       "reason": "Hàng Điểm cộng xanh trong bảng So với món tương tự chỉ có trên web: bảng của Mini nằm ở apps/miniapp/src/components/product/pdp-compare.tsx, ngoài danh sách file wave tubu-w2-01 được sửa; API đã trả ecoFactCount cho cả hai."
-    },
-    {
-      "id": "matcher-web-only",
-      "flag": ["apps/api/src/modules/game/mini/matcher/matcher.rules.ts", "MATCHER_ENABLED_KEY"],
-      "missingOn": "miniapp",
-      "reason": "Chọn Chuẩn Xanh (/vuon-xanh/chon-chuan-xanh: 5 bước, bộ 2–4 món, Thêm cả bộ) chỉ có trên web. Gói Mini sau tubu-w2-04 đo 2.400.606 B, trần 2350 KB = 2.406.400 B, còn 5.794 B; wave tubu-w2-02 được +3.500 B và chunk mini-matcher phải ≤ 6 KB, trong khi chunk trang web của màn này đo 54.742 B thô (19.340 B gzip) nên Mini chỉ nối tên game vào dòng \"chơi trên tubutree.com\" của thẻ Chơi hôm nay (+274 B, đo 2.400.880 B). Chính sách Zalo không cho mở trang ngoài nên Tư vấn và giỏ trống của Mini không có dòng dẫn."
     },
     {
       "id": "green-box-builder-web-only",

@@ -9,6 +9,7 @@ import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniPlayPath, miniProductPath } from '@tubutree/app-core/game-mini/format';
 import { kitchenCopy } from '@tubutree/app-core/game-mini/kitchen-copy';
 import { miniProductView } from '@tubutree/app-core/game-mini/review';
+import { gameWebCopy } from '@tubutree/app-core/game-mini/web-copy';
 import { Button, ProductTile, Text } from '@/components/mini';
 import { useAuthPhase } from '@/lib/auth-phase';
 import { cartStorefrontSlug } from '@/lib/cart-key';
@@ -20,7 +21,7 @@ const CART_PATH = '/gio-hang';
 
 /** Chữ khác nhau giữa hai game; dòng kết quả thêm giỏ ("Đã thêm n món", hết hàng, mạng chậm) và "Xem giỏ hàng" dùng chung. */
 const HEAD: Record<MiniCartGame, { set: string; pending: string; add: string; testid: string }> = {
-  basket: { set: gameCopy('basket.set'), pending: gameCopy('basket.pending'), add: gameCopy('basket.add'), testid: 'mini-basket' },
+  basket: { set: gameCopy('basket.set'), pending: gameWebCopy('basket.pending'), add: gameCopy('basket.add'), testid: 'mini-basket' },
   kitchen_swap: { set: kitchenCopy('set'), pending: kitchenCopy('pending'), add: kitchenCopy('add'), testid: 'mini-kitchen' },
 };
 

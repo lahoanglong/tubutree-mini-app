@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MATCHER_PENDING_KEY, encodeMatcherPending, type MatcherContent, type MatcherResult } from '@tubutree/app-core/game-mini/matcher';
 import { matcherCopy } from '@tubutree/app-core/game-mini/matcher-copy';
+import { gameWebCopy } from '@tubutree/app-core/game-mini/web-copy';
 import { click, flush, render, type Rendered } from '@/test-utils/dom';
 import { waitFor } from '@/test-utils/render-hook';
 
@@ -200,10 +201,10 @@ describe('Chọn Chuẩn Xanh (web)', () => {
     mocks.post.mockReset();
     mounted = render(<MatcherFlow />);
     await waitFor(() => expect(q('matcher-result')).not.toBeNull());
-    expect(q('matcher-result')?.textContent).toContain(matcherCopy('result.pending'));
+    expect(q('matcher-result')?.textContent).toContain(gameWebCopy('matcher.result.pending'));
     expect(q('matcher-water')).toBeNull();
     expect(q('matcher-total')).toBeNull();
-    expect(q('matcher-pending-price')?.textContent).toBe(matcherCopy('result.pendingPrice'));
+    expect(q('matcher-pending-price')?.textContent).toBe(gameWebCopy('matcher.result.pendingPrice'));
     expect(q('matcher-items')?.querySelector('[data-ds-part="price"]')?.textContent ?? '').toBe('');
     expect(mocks.post).not.toHaveBeenCalled();
     expect(window.sessionStorage.getItem(MATCHER_PENDING_KEY)).toBeNull();
@@ -244,7 +245,7 @@ describe('Lối vào Chọn Chuẩn Xanh', () => {
     mounted = render(<MatcherEntryLink from="empty_cart" />);
     await waitFor(() => expect(q('matcher-entry-empty_cart')).not.toBeNull());
     expect(q('matcher-entry-empty_cart')?.getAttribute('href')).toBe('/vuon-xanh/chon-chuan-xanh?from=empty_cart');
-    expect(q('matcher-entry-empty_cart')?.textContent).toBe(matcherCopy('entry.link'));
+    expect(q('matcher-entry-empty_cart')?.textContent).toBe(gameWebCopy('matcher.entry.link'));
     mounted.unmount();
     mocks.get.mockImplementation(() => Promise.resolve({ enabled: false }));
     mounted = render(<MatcherEntryLink from="empty_cart" />);

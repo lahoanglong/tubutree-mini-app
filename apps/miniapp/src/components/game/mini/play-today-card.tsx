@@ -1,20 +1,11 @@
 import { useId } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { ChevronRight, CircleHelp, Recycle, type LucideIcon } from 'lucide-react';
+import { ChevronRight, CircleHelp, LayoutGrid, MapPin, Recycle, RefreshCw, ShoppingCart, Sparkles, type LucideIcon } from 'lucide-react';
 import type { MiniTodayResponse } from '@tubutree/shared-types';
 import { gameCopy } from '@tubutree/app-core/game-mini/copy';
 import { miniTodayQuery } from '@tubutree/app-core/game-mini/today';
-import { matcherOn, matcherStatusQuery } from '@tubutree/app-core/game-mini/matcher-status';
-import {
-  miniAppToday,
-  miniEarnQuizLeft,
-  miniGameDesc,
-  miniGameTitle,
-  miniPlayPath,
-  miniRowStatus,
-  miniWebOnlyLine,
-  type MiniAppGame,
-} from '@tubutree/app-core/game-mini/format';
+import { MATCHER_MINI_PATH, matcherOn, matcherStatusQuery } from '@tubutree/app-core/game-mini/matcher-status';
+import { miniEarnQuizLeft, miniGameDesc, miniGameTitle, miniPlayPath, miniRowStatus, playableToday, type PlayableMiniGame } from '@tubutree/app-core/game-mini/format';
 import { useSmartNavigate } from '../../../lib/smart-nav';
 import { refreshAccessToken } from '../../../services/api';
 import { coreHttp } from '../../../services/core-http';
@@ -24,7 +15,14 @@ import { Icon } from '../../ui/icon';
 import { Heading, Text } from '../../ui/text';
 import './mini-game.css';
 
-const GAME_ICON: Record<MiniAppGame, LucideIcon> = { daily_quiz: CircleHelp, sort: Recycle };
+const GAME_ICON: Record<PlayableMiniGame, LucideIcon> = {
+  daily_quiz: CircleHelp,
+  sort: Recycle,
+  match: LayoutGrid,
+  origin: MapPin,
+  basket: ShoppingCart,
+  kitchen_swap: RefreshCw,
+};
 
 const refreshSession = () => refreshAccessToken().then(Boolean);
 
@@ -35,24 +33,50 @@ const refreshSession = () => refreshAccessToken().then(Boolean);
  */
 export function useMiniToday(enabled: boolean, authed: boolean) {
   const { data } = useQuery({ ...miniTodayQuery(coreHttp, authed, refreshSession), enabled });
-  const today = data && miniAppToday(data).rows.length > 0 ? data : null;
+  const today = data && playableToday(data).length > 0 ? data : null;
   const quizOpen = today?.games.some((g) => g.game === 'daily_quiz') ?? false;
   const earn: EarnQuizState | null = today && quizOpen ? { status: 'ready', left: miniEarnQuizLeft(today) } : null;
   return { today, quiz: earn && { earn, path: miniPlayPath.miniapp('daily_quiz') } };
 }
 
+/** Một dòng game: biểu tượng, tên, mô tả một dòng, lượt thưởng còn lại (nếu game có thưởng theo lượt); chạm dòng mở màn chơi. */
+function Row({ id, icon, title, desc, status, to }: { id: string; icon: LucideIcon; title: string; desc: string; status?: ReturnType<typeof miniRowStatus>; to: string }) {
+  const navigate = useSmartNavigate();
+  return (
+    <li>
+      <button type="button" className="tubu-mg-row" data-testid={`mini-play-row-${id}`} onClick={() => navigate(to)}>
+        <span className="tubu-mg-row-icon" aria-hidden>
+          <Icon icon={icon} tone="brand" />
+        </span>
+        <span className="tubu-mg-row-text">
+          <Text variant="body-md" as="span" className="tubu-mg-one-line" style={{ fontWeight: 'var(--type-label-weight)' }}>
+            {title}
+          </Text>
+          <Text variant="caption" tone="secondary" as="span" className="tubu-mg-one-line">
+            {desc}
+          </Text>
+          {status && (
+            <Text variant="caption" tone={status.tone} as="span" data-testid={`mini-play-status-${id}`}>
+              {status.text}
+            </Text>
+          )}
+        </span>
+        <Icon icon={ChevronRight} size="sm" tone="muted" />
+      </button>
+    </li>
+  );
+}
+
 /**
  * Thẻ "Chơi hôm nay" ở Vườn Xanh (chỉ khi máy chủ bật `game.mini.enabled`): thay khối đố vui cũ và hai thẻ arcade. Mỗi game một dòng gọn
- * (tên, mô tả một dòng, lượt thưởng còn lại), chạm dòng mở màn chơi. Game chỉ phát ở web gom vào một dòng chữ cuối thẻ, không phải nút: chính
- * sách Zalo không cho Mini App mở trang ngoài. `inset`: đứng ngoài lưới thẻ của trang (dưới cổng đăng nhập) nên tự lùi lề.
+ * (tên, mô tả một dòng, lượt thưởng còn lại), chạm dòng mở màn chơi ngay trong Mini App. Cùng bố cục với web: cờ `game.matcher_enabled` bật thì
+ * thêm dòng Chọn Chuẩn Xanh cuối danh sách (không dòng lượt thưởng: thưởng của nó không hứa trước). `inset`: đứng ngoài lưới thẻ của trang (dưới
+ * cổng đăng nhập) nên tự lùi lề.
  */
 export function PlayTodayCard({ today, inset = false }: { today: MiniTodayResponse; inset?: boolean }) {
   const titleId = useId();
-  const navigate = useSmartNavigate();
-  const { rows: games, webOnly } = miniAppToday(today);
-  // Chọn Chuẩn Xanh chỉ có trên web (route-map.json gap `matcher-web-only`): bật cờ thì tên nó nối vào cùng dòng "chơi trên tubutree.com".
+  const games = playableToday(today);
   const matcher = matcherOn(useQuery(matcherStatusQuery(coreHttp)).data);
-  const webLine = miniWebOnlyLine(webOnly, matcher ? [gameCopy('game.matcher.title')] : []);
   return (
     <section
       aria-labelledby={titleId}
@@ -68,36 +92,21 @@ export function PlayTodayCard({ today, inset = false }: { today: MiniTodayRespon
             {gameCopy('entry.sub')}
           </Text>
           <ul className="tubu-mg-rows">
-            {games.map((g) => {
-              const status = miniRowStatus(today, g);
-              return (
-                <li key={g.game}>
-                  <button type="button" className="tubu-mg-row" data-testid={`mini-play-row-${g.game}`} onClick={() => navigate(miniPlayPath.miniapp(g.game))}>
-                    <span className="tubu-mg-row-icon" aria-hidden>
-                      <Icon icon={GAME_ICON[g.game]} tone="brand" />
-                    </span>
-                    <span className="tubu-mg-row-text">
-                      <Text variant="body-md" as="span" className="tubu-mg-one-line" style={{ fontWeight: 'var(--type-label-weight)' }}>
-                        {miniGameTitle(g.game)}
-                      </Text>
-                      <Text variant="caption" tone="secondary" as="span" className="tubu-mg-one-line">
-                        {miniGameDesc(g.game)}
-                      </Text>
-                      <Text variant="caption" tone={status.tone} as="span" data-testid={`mini-play-status-${g.game}`}>
-                        {status.text}
-                      </Text>
-                    </span>
-                    <Icon icon={ChevronRight} size="sm" tone="muted" />
-                  </button>
-                </li>
-              );
-            })}
+            {games.map((g) => (
+              <Row
+                key={g.game}
+                id={g.game}
+                icon={GAME_ICON[g.game]}
+                title={miniGameTitle(g.game)}
+                desc={miniGameDesc(g.game)}
+                status={miniRowStatus(today, g)}
+                to={miniPlayPath.miniapp(g.game)}
+              />
+            ))}
+            {matcher && (
+              <Row id="matcher" icon={Sparkles} title={gameCopy('game.matcher.title')} desc={gameCopy('game.matcher.desc')} to={`${MATCHER_MINI_PATH}?from=play_today`} />
+            )}
           </ul>
-          {webLine && (
-            <Text variant="caption" tone="secondary" as="p" data-testid="mini-play-web-only">
-              {webLine}
-            </Text>
-          )}
         </div>
       </Card>
     </section>

@@ -61,27 +61,33 @@ beforeEach(() => {
 afterEach(() => vi.useRealTimers());
 
 describe('PlayTodayCard', () => {
-  it('chỉ liệt kê game phát ở Mini App, mỗi dòng ghi lượt thưởng thật và mở màn chơi; game chỉ phát ở web gom vào một dòng chữ', () => {
+  it('mọi game máy chủ bật đều là dòng chơi ngay trong Mini App, theo thứ tự cố định, ghi lượt thưởng thật; không còn dòng "chơi trên tubutree.com"', () => {
     mocks.get.mockResolvedValue({ enabled: false });
     render(wrap(<PlayTodayCard today={today()} />));
-    expect(screen.getByTestId('mini-play-row-sort')).toBeInTheDocument();
-    expect(screen.getByTestId('mini-play-row-daily_quiz')).toBeInTheDocument();
-    expect(screen.queryByTestId('mini-play-row-match')).toBeNull();
-    expect(screen.getByTestId('mini-play-web-only')).toHaveTextContent(gameCopy('entry.webOnly', { names: gameCopy('game.match.title') }));
-    expect(screen.getByTestId('mini-play-web-only').closest('button')).toBeNull();
+    const rows = screen.getAllByRole('button').map((b) => b.getAttribute('data-testid'));
+    expect(rows).toEqual(['mini-play-row-daily_quiz', 'mini-play-row-sort', 'mini-play-row-match']);
+    expect(screen.queryByText(/tubutree\.com/)).toBeNull();
     expect(screen.getByTestId('mini-play-status-sort')).toHaveTextContent(gameCopy('row.left', { n: 2 }));
     expect(screen.getByTestId('mini-play-status-daily_quiz')).toHaveTextContent(gameCopy('row.full'));
-    fireEvent.click(screen.getByTestId('mini-play-row-sort'));
-    expect(mocks.navigate).toHaveBeenCalledWith('/game/play/sort');
+    fireEvent.click(screen.getByTestId('mini-play-row-match'));
+    expect(mocks.navigate).toHaveBeenCalledWith('/game/play/match');
   });
 
-  it('Chọn Chuẩn Xanh chỉ có trên web: cờ bật thì tên nối vào cùng dòng chữ, không thành dòng chơi hay nút', async () => {
+  it('Chọn Chuẩn Xanh: cờ bật thì thêm dòng cuối mở màn chơi trong Mini App (kèm from), cờ tắt thì không có dòng', async () => {
     mocks.get.mockImplementation((path: string) => Promise.resolve(path === '/game/matcher/status' ? { enabled: true } : undefined));
     render(wrap(<PlayTodayCard today={today()} />));
-    const names = `${gameCopy('game.match.title')}, ${gameCopy('game.matcher.title')}`;
-    await waitFor(() => expect(screen.getByTestId('mini-play-web-only')).toHaveTextContent(gameCopy('entry.webOnly', { names })));
+    const row = await screen.findByTestId('mini-play-row-matcher');
+    expect(row.tagName).toBe('BUTTON');
+    expect(screen.getAllByRole('button').at(-1)).toBe(row);
+    fireEvent.click(row);
+    expect(mocks.navigate).toHaveBeenCalledWith('/game/matcher?from=play_today');
+  });
+
+  it('Chọn Chuẩn Xanh: cờ tắt thì không có dòng', async () => {
+    mocks.get.mockResolvedValue({ enabled: false });
+    render(wrap(<PlayTodayCard today={today()} />));
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledWith('/game/matcher/status'));
     expect(screen.queryByTestId('mini-play-row-matcher')).toBeNull();
-    expect(screen.getByTestId('mini-play-web-only').closest('button, a')).toBeNull();
   });
 });
 
@@ -165,14 +171,15 @@ describe('MiniRoundShell', () => {
     expect(mocks.post).toHaveBeenCalledWith('/game/mini/sort/start', {});
   });
 
-  it('mở thẳng game chỉ phát ở web: báo chơi trên tubutree.com, không đọc lượt hôm nay, không xin ván', () => {
-    render(wrap(<MiniRoundShell game="match" />));
-    expect(screen.getByTestId('mini-web-only')).toHaveTextContent(gameCopy('entry.webOnly', { names: gameCopy('game.match.title') }));
-    expect(screen.queryByRole('button', { name: gameCopy('intro.start') })).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: gameCopy('result.done') }));
-    expect(mocks.navigate).toHaveBeenCalledWith('/game');
-    expect(mocks.get).not.toHaveBeenCalled();
-    expect(mocks.post).not.toHaveBeenCalled();
+  it.each(['match', 'origin', 'basket', 'kitchen_swap'] as const)('%s chơi ngay trong Mini App: màn mở đầu có luật chơi, Bắt đầu xin ván của chính game đó', async (game) => {
+    mocks.get.mockResolvedValue(today({ games: [{ game, items: 3, timeLimitMs: 45_000, rewardedRoundsPerDay: 2, rewardedRoundsLeft: 2, playedToday: 0 }] }));
+    mocks.post.mockReturnValue(new Promise(() => {}));
+    render(wrap(<MiniRoundShell game={game} />));
+    expect(await screen.findByTestId('mini-intro')).toHaveTextContent(gameCopy(`game.${game}.rules`));
+    const start = screen.getByRole('button', { name: gameCopy('intro.start') });
+    await waitFor(() => expect(start).not.toBeDisabled());
+    fireEvent.click(start);
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith(`/game/mini/${game}/start`, {}));
   });
 });
 

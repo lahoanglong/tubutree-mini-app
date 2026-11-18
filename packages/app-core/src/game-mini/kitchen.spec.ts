@@ -2,8 +2,7 @@ import type { MiniKitchenCorner, MiniProductCard, MiniReview, MiniRoundContent }
 import { describe, expect, it } from 'vitest';
 import { FORBIDDEN_TERMS } from '../shop-copy';
 import { claimsIn } from '../commerce/copy-claims-guard';
-import { GAME_MINI_COPY_MAX, gameCopy } from './copy';
-import { miniGameDesc, miniGameRules, miniGameTitle, miniProgressLabel, miniWebOnlyLine } from './format';
+import { miniGameDesc, miniGameRules, miniGameTitle, miniProgressLabel } from './format';
 import {
   kitchenDiscovered,
   kitchenDoneCount,
@@ -139,9 +138,4 @@ describe('Căn Bếp Xanh: chữ', () => {
     expect((['table', 'kitchen', 'bathroom', 'bag'] as const).map(kitchenCornerName)).toEqual(['Bàn ăn', 'Gian bếp', 'Phòng tắm', 'Túi đi làm']);
   });
 
-  it('Mini: Căn Bếp Xanh nằm trong dòng "chơi trên tubutree.com", vẫn trong ngân sách khi đủ 5 tên', () => {
-    const line = miniWebOnlyLine(['match', 'origin', 'basket', 'kitchen_swap'], [gameCopy('game.matcher.title')])!;
-    expect(line).toBe('Ghép Cặp, Đoán Xuất Xứ, Giỏ Đúng Việc, Căn Bếp Xanh, Chọn Chuẩn Xanh: chơi trên tubutree.com');
-    expect(line.length).toBeLessThanOrEqual(GAME_MINI_COPY_MAX['entry.webOnly']!);
-  });
 });
