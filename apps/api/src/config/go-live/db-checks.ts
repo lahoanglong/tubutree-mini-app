@@ -103,6 +103,8 @@ export const HEAVY_MIGRATIONS: ReadonlyArray<{ name: string; ordersLock: boolean
   { name: '20261117040000_mss_foundation', ordersLock: true },
   { name: '20261117083000_game_mini_core', ordersLock: false },
   { name: '20261117090000_notify_cap_restock', ordersLock: false },
+  // Chỉ mục duy nhất một phần trên points_transactions (thưởng REVIEW_PHOTO, mỗi dòng đơn một lần); không đụng orders.
+  { name: '20261118142510_review_green_corner', ordersLock: false },
 ];
 
 export const ORDERS_LOCK_SECONDS_PER_300K = 14;

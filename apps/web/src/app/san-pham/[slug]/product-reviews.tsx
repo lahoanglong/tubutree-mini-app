@@ -333,7 +333,7 @@ export function ProductReviews({ slug }: { slug: string }) {
           </div>
         )}
         {r.comment && <p className="mt-2 whitespace-pre-line break-words text-sm text-stone-700">{r.comment}</p>}
-        {ecoTagLine(r.ecoTags) && <p className="mt-1 text-xs font-medium text-forest-700">{ecoTagLine(r.ecoTags)}</p>}
+        {ecoTagLine(r.ecoTags) && <p className="mt-1 text-xs font-medium text-[var(--color-text-brand)]">{ecoTagLine(r.ecoTags)}</p>}
         {(r.images.length > 0 || r.videoUrl) && (
           <div className="mt-2 flex gap-2 overflow-x-auto">
             {reviewMediaItems(r).map((m, i) =>
@@ -830,7 +830,7 @@ function ReviewForm({
       )}
       {rules && (
         <fieldset className="mt-3" data-testid="review-eco-tags">
-          <legend className="text-sm font-semibold text-stone-900">{fillCopy('review.ecoPick', { n: REVIEW_ECO_TAG_MAX })}</legend>
+          <legend className="text-sm font-semibold text-[var(--color-text-primary)]">{fillCopy('review.ecoPick', { n: REVIEW_ECO_TAG_MAX })}</legend>
           {/* Hàng chip nhỏ xuống dòng cách nhau 12px: vùng chạm 44px của hai hàng không chồng lên nhau. */}
           <div className="mt-2 flex flex-wrap gap-x-2 gap-y-3">
             {ECO_TAG_OPTIONS.map((t) => (
