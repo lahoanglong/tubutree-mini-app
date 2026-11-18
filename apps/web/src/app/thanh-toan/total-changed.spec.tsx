@@ -134,11 +134,11 @@ describe('/thanh-toan — địa chỉ theo địa giới cũ (PANCAKE-16)', () 
       expect(alertOf(r)).toBeUndefined();
     });
 
-    it('đang sửa một địa chỉ (kể cả địa chỉ khác): ẩn; huỷ sửa thì hiện lại', async () => {
+    it('đang sửa địa chỉ đang chọn: ẩn; huỷ sửa thì hiện lại', async () => {
       m.addresses = [LEGACY, OTHER];
       const r = await mount();
       expect(alertOf(r)).toBeDefined();
-      click(editBtn(r, 'Bình'));
+      click(editBtn(r, LEGACY.recipient));
       await flush(2);
       expect(alertOf(r)).toBeUndefined();
       click([...r.container.querySelectorAll('button')].find((b) => /^Huỷ|^Huỷ|^Đóng/.test(b.textContent ?? ''))!);

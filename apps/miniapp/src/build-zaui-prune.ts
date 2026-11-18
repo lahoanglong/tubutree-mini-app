@@ -49,7 +49,17 @@ export function deadZauiClasses(selector: string, deadTokens: ReadonlySet<string
   return [...selector.matchAll(CLASS_RE)].filter((m) => deadTokens.has(m[2] ?? '') && !isExempt(m[1] ?? '')).map((m) => m[1] ?? '');
 }
 
-/** Bỏ mọi luật mà MỌI vế của danh sách selector đều nhắm vào lớp của thành phần bị cắt; luật chung (`:root`, biến, lớp dùng chung) giữ nguyên. */
+/**
+ * `<App>` của zmp-ui đặt `body[zaui-theme]` theo prop `theme` (mặc định light) và chỉ đổi khi app gọi `useTheme()`.
+ * Mini không làm cả hai (`build-zaui-prune.spec.ts` canh), nên luật chỉ dành cho chủ đề tối (~16 KB) không bao giờ khớp.
+ */
+const DARK_THEME_RE = /\[zaui-theme=["']?dark["']?\]/;
+
+export function isDarkThemeOnly(selector: string): boolean {
+  return selector.split(',').every((part) => DARK_THEME_RE.test(part));
+}
+
+/** Bỏ mọi luật mà MỌI vế của danh sách selector đều nhắm vào lớp của thành phần bị cắt hoặc chỉ khớp chủ đề tối; luật chung (`:root`, biến, lớp dùng chung) giữ nguyên. */
 export function pruneZauiCss(css: string, components: readonly string[] = PRUNED_ZMP_UI_COMPONENTS): { css: string; removedSelectors: string[] } {
   const dead = new Set(components.map(zauiClassToken));
   const root = postcss.parse(css);
@@ -60,7 +70,7 @@ export function pruneZauiCss(css: string, components: readonly string[] = PRUNED
 
   root.walkRules((rule) => {
     const parts = rule.selector.split(',').map((s) => s.trim());
-    const allDead = parts.every((part) => deadZauiClasses(part, dead).length > 0);
+    const allDead = parts.every((part) => deadZauiClasses(part, dead).length > 0 || DARK_THEME_RE.test(part));
     if (!allDead) return;
     removedSelectors.push(rule.selector);
     rule.walkDecls(/^(-webkit-)?animation(-name)?$/i, (decl) => animationNames(decl).forEach((n) => orphanCandidates.add(n)));
@@ -79,7 +89,39 @@ export function pruneZauiCss(css: string, components: readonly string[] = PRUNED
     if (orphanCandidates.has(name) && !stillReferenced.has(name)) at.remove();
   });
 
+  pruneUnusedZauiVars(root);
   return { css: root.toString(), removedSelectors };
+}
+
+/** Biến `--zaui-*` mà JS của zmp-ui đặt hay đọc theo tên (style inline); `build-zaui-prune.spec.ts` đối chiếu với mã zmp-ui. */
+export const ZAUI_JS_VARS = ['--zaui-tabbar-width', '--zaui-avatar-size'] as const;
+
+const ZAUI_VAR_REF = /var\(\s*(--zaui-[A-Za-z0-9_-]+)/g;
+
+/**
+ * Bỏ khai báo `--zaui-*` không còn ai đọc qua `var()` sau khi cắt luật (biến của thành phần bị cắt và của chủ đề tối, ~11 KB).
+ * Lặp tới khi ổn định vì biến này hay chỉ tới biến kia. Mã app không đọc biến `--zaui-*` nào (spec canh); `zaui-bridge.css` chỉ ghi đè giá trị.
+ */
+export function pruneUnusedZauiVars(root: postcss.Root): string[] {
+  const removed: string[] = [];
+  for (;;) {
+    const used = new Set<string>(ZAUI_JS_VARS);
+    root.walkDecls((decl) => {
+      for (const m of decl.value.matchAll(ZAUI_VAR_REF)) used.add(m[1] ?? '');
+    });
+    let changed = false;
+    root.walkDecls(/^--zaui-/, (decl) => {
+      if (used.has(decl.prop)) return;
+      removed.push(decl.prop);
+      decl.remove();
+      changed = true;
+    });
+    if (!changed) break;
+  }
+  root.walkRules((rule) => {
+    if (rule.nodes.length === 0) rule.remove();
+  });
+  return removed;
 }
 
 /** Chỉ đổi `zmp-ui/zaui.css`; CSS khác của app đi nguyên. Chạy trước vite:css nên tác dụng cả dev lẫn build. */

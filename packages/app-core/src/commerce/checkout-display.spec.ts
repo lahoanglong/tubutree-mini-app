@@ -1,5 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { CHECKOUT_LINES_COLLAPSED, checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from './checkout-display';
+import {
+  CHECKOUT_LINES_COLLAPSED,
+  COMPACT_ADDRESS_MAX,
+  RECENT_ADDRESS_KEY,
+  checkoutPlaceHint,
+  checkoutTotalText,
+  collapseCheckoutLines,
+  compactAddressView,
+  markTransferOrderPlaced,
+  maskPhone,
+  pushRecentAddress,
+  readRecentAddressIds,
+  rememberRecentAddress,
+  sortAddressesForPicker,
+  takeTransferQrDelay,
+  transferPreviewView,
+} from './checkout-display';
 import { fillCopy } from '../shop-copy';
 
 const fmt = (n: number) => `${n.toLocaleString('vi-VN')}đ`;
@@ -93,5 +109,74 @@ describe('chữ thanh toán dùng chung', () => {
     expect(fillCopy('checkout.placeWith', { price: '330.000đ' })).toBe('Đặt hàng · 330.000đ');
     expect(fillCopy('coupon.autoApplied')).toBe('Tubu đã tự áp mã tốt nhất');
     expect(fillCopy('flash.priceChangedBody')).toBe('Vài sản phẩm Giờ vàng vừa hết suất hoặc hết giờ. Bạn xem lại giỏ trước khi đặt nhé.');
+  });
+});
+
+describe('dòng địa chỉ gọn (wave w2-06)', () => {
+  it('che giữa số điện thoại, giữ 3 số đầu và 3 số cuối; dạng +84 đổi về 0', () => {
+    expect(maskPhone('0901234567')).toBe('090****567');
+    expect(maskPhone('+84 901 234 567')).toBe('090****567');
+    expect(maskPhone('0901.234.567')).toBe('090****567');
+    expect(maskPhone('12345')).toBe('12345');
+  });
+
+  it('tên · SĐT che bớt, địa chỉ nối bằng dấu phẩy, bỏ phần trống, cắt có dấu … khi quá dài', () => {
+    const v = compactAddressView({ recipient: ' Lan ', phone: '0901234567', street: '12 Lý Thường Kiệt', ward: 'Phường Bến Nghé', district: '', province: 'TP. Hồ Chí Minh' });
+    expect(v.title).toBe('Lan · 090****567');
+    expect(v.line).toBe('12 Lý Thường Kiệt, Phường Bến Nghé, TP. Hồ Chí Minh');
+    expect(v.title).not.toContain('1234');
+    const long = compactAddressView({ recipient: 'A', phone: '0901234567', street: 'x'.repeat(200), province: 'Hà Nội' });
+    expect(long.line.length).toBe(COMPACT_ADDRESS_MAX);
+    expect(long.line.endsWith('…')).toBe(true);
+  });
+
+  it('tấm chọn: mặc định đứng đầu, kế đến dùng gần nhất (mới trước), còn lại giữ thứ tự sổ', () => {
+    const list = [
+      { id: 'a', isDefault: false },
+      { id: 'b', isDefault: false },
+      { id: 'c', isDefault: true },
+      { id: 'd', isDefault: false },
+    ];
+    expect(sortAddressesForPicker(list, ['d', 'b']).map((x) => x.id)).toEqual(['c', 'd', 'b', 'a']);
+    expect(sortAddressesForPicker(list).map((x) => x.id)).toEqual(['c', 'a', 'b', 'd']);
+    expect(sortAddressesForPicker(list, ['c', 'zzz']).map((x) => x.id)).toEqual(['c', 'a', 'b', 'd']);
+  });
+
+  it('nhớ địa chỉ vừa dùng theo tài khoản, không trùng, tối đa 5, bộ nhớ hỏng thì danh sách rỗng', () => {
+    const store = new Map<string, string>();
+    const storage = { getItem: (k: string) => store.get(k) ?? null, setItem: (k: string, v: string) => void store.set(k, v) };
+    for (const id of ['a', 'b', 'a', 'c', 'd', 'e', 'f']) rememberRecentAddress(storage, id, 'u1');
+    expect(readRecentAddressIds(storage, 'u1')).toEqual(['f', 'e', 'd', 'c', 'a']);
+    expect(readRecentAddressIds(storage, 'u2')).toEqual([]);
+    expect(pushRecentAddress(['x', 'y'], 'y')).toEqual(['y', 'x']);
+    store.set(`${RECENT_ADDRESS_KEY}:u1`, '{bad');
+    expect(readRecentAddressIds(storage, 'u1')).toEqual([]);
+    expect(readRecentAddressIds(null)).toEqual([]);
+  });
+});
+
+describe('thẻ xem trước chuyển khoản', () => {
+  const on = { enabled: true, bank: { name: 'Techcombank', accountName: 'CONG TY TUBU TREE' } };
+
+  it('cờ bật, đủ ngân hàng và có tổng → tên ngân hàng, chủ tài khoản, đúng tổng báo giá', () => {
+    expect(transferPreviewView(on, 250000)).toEqual({ bankName: 'Techcombank', accountName: 'CONG TY TUBU TREE', amount: 250000 });
+  });
+
+  it('cờ tắt, thiếu cấu hình ngân hàng, chưa có báo giá hay tổng 0 → ẩn thẻ', () => {
+    expect(transferPreviewView({ enabled: false, bank: on.bank }, 250000)).toBeNull();
+    expect(transferPreviewView({ enabled: true, bank: null }, 250000)).toBeNull();
+    expect(transferPreviewView({ enabled: true, bank: { name: ' ', accountName: 'X' } }, 250000)).toBeNull();
+    expect(transferPreviewView(on, null)).toBeNull();
+    expect(transferPreviewView(on, 0)).toBeNull();
+    expect(transferPreviewView(undefined, 250000)).toBeNull();
+  });
+
+  it('thời gian tới QR: làm tròn 100 ms, chỉ lấy được một lần, mã lạ thì null', () => {
+    markTransferOrderPlaced('TUBU1', 1000);
+    expect(takeTransferQrDelay('TUBU1', 1849)).toBe(800);
+    expect(takeTransferQrDelay('TUBU1', 2000)).toBeNull();
+    expect(takeTransferQrDelay('KHAC', 2000)).toBeNull();
+    markTransferOrderPlaced('TUBU2', 5000);
+    expect(takeTransferQrDelay('TUBU2', 4000)).toBe(0);
   });
 });

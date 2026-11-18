@@ -37,5 +37,8 @@ export const CAMPAIGN_HERO_SIZES = `${upTo(PHONE)} ${vwMinus(32)}, ${px(768)}`;
 export const SHOP_COVER_SIZES = `${upTo(MD)} 100vw, ${px(500)}`;
 /** Avatar gian hàng: 56, từ lg 72. */
 export const SHOP_AVATAR_SIZES = `(min-width: ${px(MD + 1)}) ${px(72)}, ${px(56)}`;
+/** Điện thoại (dưới md) và từ md: điều kiện `media` cho `<source>`/preload của ảnh tràn mép ở điện thoại. */
+export const PHONE_MEDIA = upTo(PHONE);
+export const FROM_MD_MEDIA = `(min-width: ${px(PHONE + 1)})`;
 /** Ảnh chính trang sản phẩm: tràn mép ở điện thoại, md nửa khung (lề 24, khe 32), lg cột trái 440. */
 export const PDP_MAIN_IMAGE_SIZES = `${upTo(PHONE)} 100vw, ${upTo(MD)} calc((${vwSub(80)}) / 2), ${px(440)}`;

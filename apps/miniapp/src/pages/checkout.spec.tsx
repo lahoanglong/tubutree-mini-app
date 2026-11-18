@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   getCoupons: vi.fn().mockResolvedValue([]),
   getCheckoutPickupOptions: vi.fn(),
   coreGet: vi.fn(),
+  getBankQr: vi.fn(),
   publicConfig: { isLoaded: true, waste: { enabled: true, dropoff: true, mailin: true, pickup: false }, orderZaloEnabled: false as boolean },
   user: { id: 'u1', fullName: 'Long', phone: '0900000000' as string | null, walletBalance: 0, pointsBalance: 0, pointsConvertedBalance: 0 },
   sfCtx: { slug: null as string | null, referralCode: null as string | null, kind: 'ctv' as 'ctv' | 'brand', referralEligible: null as boolean | null },
@@ -103,6 +104,7 @@ vi.mock('../components/checkout/voucher-sheet', () => ({
     return null;
   },
 }));
+vi.mock('../services/payment-api', () => ({ getBankQr: (...a: unknown[]) => mocks.getBankQr(...a) }));
 vi.mock('../components/checkout/order-success', () => ({ OrderSuccess: () => <div data-testid="order-success" /> }));
 vi.mock('../utils/haptic', () => ({ haptic: vi.fn() }));
 vi.mock('../services/geo-api', () => ({
@@ -390,6 +392,7 @@ describe('CheckoutPage — đơn đầu: xin tên + SĐT Zalo để điền sẵ
   it('đã có địa chỉ (thêm địa chỉ thứ 2) → không tự xin quyền Zalo', async () => {
     mocks.getAddresses.mockResolvedValue([ADDRESS]);
     renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Đổi địa chỉ giao hàng/ }));
     fireEvent.click(await screen.findByText('Thêm địa chỉ mới'));
     await screen.findByText('Lưu');
     expect(mocks.requestZaloProfile).not.toHaveBeenCalled();
@@ -1067,7 +1070,7 @@ describe('CheckoutPage — tổng tiền đổi lúc đặt (PANCAKE-13) và đ�
     const response = { status: 400, data: { statusCode: 400, code: 'ADDRESS_OUTDATED', message } };
     mocks.checkoutQuote.mockRejectedValue(new HttpError('Bad Request', 'ERR_BAD_REQUEST', response));
     renderPage();
-    const card = (await screen.findByText(/1 Lê Lợi/)).closest('[data-ds="checkout-address-card"]') as HTMLElement;
+    const card = (await screen.findByText(/1 Lê Lợi/)).closest('[data-testid="checkout-address-row"]') as HTMLElement;
     const alert = await within(card).findByRole('alert');
     expect(alert).toHaveTextContent('chưa đúng nên Tubu chưa giao được');
     expect(alert).not.toHaveTextContent('theo địa giới cũ');
@@ -1120,6 +1123,7 @@ describe('CheckoutPage — thêm địa chỉ mới giữa lúc thanh toán (W31
       .mockImplementationOnce(() => new Promise((resolve) => (release = resolve)))
       .mockResolvedValue([ADDRESS, A2]);
     renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: /Đổi địa chỉ giao hàng/ }));
     fireEvent.click(await screen.findByText('Thêm địa chỉ mới'));
     fireEvent.change(await screen.findByLabelText('Số nhà, tên đường'), { target: { value: A2.street } });
     fireEvent.click(screen.getByRole('button', { name: /^Tỉnh\/Thành phố/ }));
@@ -1132,9 +1136,8 @@ describe('CheckoutPage — thêm địa chỉ mới giữa lúc thanh toán (W31
     await waitFor(() => expect(mocks.getAddresses).toHaveBeenCalledTimes(2));
 
     release([ADDRESS, A2]);
-    const card = (text: string) => screen.getByText(new RegExp(text)).closest('[role="radio"]');
-    await waitFor(() => expect(card(A2.street)).toHaveAttribute('aria-checked', 'true'));
-    expect(card(ADDRESS.street)).toHaveAttribute('aria-checked', 'false');
+    await waitFor(() => expect(screen.getByTestId('checkout-address-row')).toHaveTextContent(A2.street));
+    expect(screen.getByTestId('checkout-address-row')).not.toHaveTextContent(ADDRESS.street);
     await waitFor(() => expect(mocks.checkoutQuote.mock.calls.at(-1)?.[0]).toBe('a2'));
   });
 });
@@ -3332,6 +3335,7 @@ describe('CheckoutPage — khoá chéo Đặt hàng với đổi mã, "Thử l�
       mocks.placeOrder.mockResolvedValue({ id: 'o1', code: 'TT001' });
       renderPage();
       await waitFor(() => expect(mocks.checkoutQuote).toHaveBeenCalledWith('a1', 0, undefined, undefined, {}));
+      fireEvent.click(await screen.findByRole('button', { name: /Đổi địa chỉ giao hàng/ }));
       fireEvent.click((await screen.findByText(/9 Hai Bà Trưng/)).closest('[role="radio"]')!);
       expect(await screen.findByText(/Đặt hàng · 99\.000/)).toBeInTheDocument();
       await act(async () => slow.resolve({ ...QUOTE, total: 70_000 }));
@@ -3888,5 +3892,112 @@ describe('CheckoutPage — ô nhận hành trình đơn qua Zalo (wave tubu-mss-
     expect(screen.queryByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toBeNull();
     await act(async () => answer({ ...STATUS, choice: false }));
     expect(await screen.findByRole('checkbox', { name: /Nhận hành trình đơn hàng qua Zalo/ })).toHaveAttribute('aria-checked', 'false');
+  });
+});
+
+describe('CheckoutPage — địa chỉ gọn, đổi trong 2 chạm, xem trước chuyển khoản (w2-06)', () => {
+  const B2 = { ...ADDRESS, id: 'a2', recipient: 'Bình', street: '9 Hai Bà Trưng', isDefault: false };
+  const pending = <T,>() => {
+    let resolve!: (v: T) => void;
+    let reject!: (e: unknown) => void;
+    const promise = new Promise<T>((res, rej) => {
+      resolve = res;
+      reject = rej;
+    });
+    return { promise, resolve, reject };
+  };
+  const placeBtn = async () => (await screen.findByText(/Đặt hàng · /)).closest('button')!;
+  const switchTo = async (name: RegExp) => {
+    fireEvent.click(await screen.findByRole('button', { name: /Đổi địa chỉ giao hàng/ }));
+    fireEvent.click(await screen.findByRole('radio', { name }));
+  };
+  const PREVIEW_ON = { enabled: true, bank: { name: 'Techcombank', accountName: 'CONG TY TUBU TREE' } };
+
+  beforeEach(() => {
+    mocks.publicConfig.waste.pickup = false;
+    vi.clearAllMocks();
+    mocks.placeOrder.mockReset();
+    mocks.checkoutQuote.mockReset();
+    mocks.coreGet.mockReset();
+    sessionStorage.clear();
+    localStorage.clear();
+    mocks.sfCtx.slug = null;
+    mocks.sfCtx.referralCode = null;
+    mocks.sfCtx.referralEligible = null;
+    mocks.getAddresses.mockResolvedValue([ADDRESS, B2]);
+    mocks.getCart.mockResolvedValue(CART);
+    mocks.ensurePhone.mockResolvedValue('0900000000');
+    mocks.getWallet.mockResolvedValue({ walletBalance: 0 });
+    mocks.getLoyalty.mockResolvedValue({ pointsBalance: 0 });
+    mocks.getCouponPreviews.mockResolvedValue([]);
+    mocks.coreGet.mockResolvedValue(undefined);
+  });
+
+  it('đổi địa chỉ: tổng cũ đứng yên trên nút (không về "…"), nút khoá tới khi báo giá mới về rồi mở với tổng mới', async () => {
+    const slow = pending<typeof QUOTE>();
+    mocks.checkoutQuote.mockImplementation((addressId: string) => (addressId === 'a1' ? Promise.resolve(QUOTE) : slow.promise));
+    renderPage();
+    const btn = await placeBtn();
+    await waitFor(() => expect(btn).not.toBeDisabled());
+    await switchTo(/Bình/);
+    expect(await screen.findByTestId('checkout-address-row')).toHaveTextContent('Bình');
+    expect(screen.getByText(/Đặt hàng · 70\.000/).closest('button')).toBeDisabled();
+    expect(screen.queryByText('…')).toBeNull();
+    expect(screen.getByText('Đang tính lại…')).toBeInTheDocument();
+    await act(async () => slow.resolve({ ...QUOTE, shippingFee: 30_000, total: 80_000 }));
+    const next = (await screen.findByText(/Đặt hàng · 80\.000/)).closest('button')!;
+    await waitFor(() => expect(next).not.toBeDisabled());
+    expect(screen.queryByText('Đang tính lại…')).toBeNull();
+    const body = await placeOrderClick();
+    expect(body).toMatchObject({ addressId: 'a2', expectedTotal: 80_000 });
+    expect(JSON.parse(localStorage.getItem('tubu_recent_address_ids:u1') ?? '[]')).toEqual(['a2']);
+  });
+
+  it('báo giá của địa chỉ mới lỗi: giữ địa chỉ mới, hiện lỗi kèm Thử lại, nút Đặt hàng không dùng số cũ', async () => {
+    mocks.checkoutQuote.mockImplementation((addressId: string) => (addressId === 'a1' ? Promise.resolve(QUOTE) : Promise.reject(new Error('mạng'))));
+    renderPage();
+    await placeBtn();
+    await switchTo(/Bình/);
+    expect(await screen.findByRole('button', { name: viCopy.common.retry })).toBeInTheDocument();
+    expect(screen.getByTestId('checkout-address-row')).toHaveTextContent('Bình');
+    expect(screen.queryByText(/Đặt hàng · 70\.000/)).toBeNull();
+  });
+
+  it('Chuyển khoản, cờ bật: thẻ có ngân hàng, chủ tài khoản, đúng tổng báo giá; KHÔNG có mã QR trước khi đặt', async () => {
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.coreGet.mockImplementation((path: string) => Promise.resolve(path === '/payments/bank-preview' ? PREVIEW_ON : undefined));
+    renderPage();
+    await placeBtn();
+    fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    const card = await screen.findByTestId('transfer-preview');
+    expect(card).toHaveTextContent('Techcombank');
+    expect(card).toHaveTextContent('CONG TY TUBU TREE');
+    expect(card).toHaveTextContent('70.000');
+    expect(card).toHaveTextContent('Mã QR có đúng số tiền và nội dung sẽ hiện ngay sau khi bạn bấm Đặt hàng.');
+    expect(document.querySelector('img[alt="VietQR"], img[src*="vietqr"], canvas')).toBeNull();
+    expect(vi.mocked(trackEvent)).toHaveBeenCalledWith('transfer_preview_shown', 'miniapp', {});
+  });
+
+  it('cờ tắt (hoặc API cũ): chọn Chuyển khoản không có thẻ nào, màn như trước', async () => {
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.coreGet.mockImplementation((path: string) => Promise.resolve(path === '/payments/bank-preview' ? { enabled: false, bank: null } : undefined));
+    renderPage();
+    await placeBtn();
+    fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    await waitFor(() => expect(mocks.coreGet).toHaveBeenCalledWith('/payments/bank-preview'));
+    expect(screen.queryByTestId('transfer-preview')).toBeNull();
+    expect(vi.mocked(trackEvent)).not.toHaveBeenCalledWith('transfer_preview_shown', expect.anything(), expect.anything());
+  });
+
+  it('đặt đơn Chuyển khoản: gọi QR của đúng đơn ngay khi đơn về rồi sang màn QR', async () => {
+    mocks.checkoutQuote.mockResolvedValue(QUOTE);
+    mocks.getBankQr.mockResolvedValue({ orderCode: 'TT009' });
+    mocks.placeOrder.mockResolvedValue({ id: 'o9', code: 'TT009', paymentMethod: 'BANK_TRANSFER' });
+    renderPage();
+    await placeBtn();
+    fireEvent.click(within(paymentBox()).getByRole('radio', { name: /Chuyển khoản ngân hàng/ }));
+    await placeOrderClick();
+    await waitFor(() => expect(mocks.navigate).toHaveBeenCalledWith('/bank-payment/TT009', { replace: true }));
+    expect(mocks.getBankQr).toHaveBeenCalledWith('TT009');
   });
 });

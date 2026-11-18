@@ -34,3 +34,113 @@ export function collapseCheckoutLines<T extends { total: number }>(
   const hidden = lines.slice(max);
   return { shown: lines.slice(0, max), hiddenCount: hidden.length, hiddenTotal: hidden.reduce((s, l) => s + l.total, 0) };
 }
+
+/** SĐT trên dòng địa chỉ gọn: giữ 3 số đầu và 3 số cuối để khách nhận ra, phần giữa che (ảnh chụp màn hình không lộ trọn số). */
+export function maskPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length < 7) return phone.trim();
+  const local = digits.startsWith('84') && digits.length === 11 ? `0${digits.slice(2)}` : digits;
+  return `${local.slice(0, 3)}****${local.slice(-3)}`;
+}
+
+/** Trần ký tự của dòng địa chỉ một dòng; CSS vẫn cắt theo bề ngang, trần này giữ DOM gọn khi địa chỉ dài bất thường. */
+export const COMPACT_ADDRESS_MAX = 90;
+
+export interface CompactAddressInput {
+  recipient: string;
+  phone: string;
+  street?: string | null;
+  ward?: string | null;
+  district?: string | null;
+  province?: string | null;
+}
+
+/** Khối địa chỉ thu về một dòng ở màn thanh toán: "Tên · 090****567" và địa chỉ một dòng đã cắt. */
+export function compactAddressView(a: CompactAddressInput): { title: string; line: string } {
+  const full = [a.street, a.ward, a.district, a.province].map((p) => (p ?? '').trim()).filter(Boolean).join(', ');
+  const line = full.length > COMPACT_ADDRESS_MAX ? `${full.slice(0, COMPACT_ADDRESS_MAX - 1).trimEnd()}…` : full;
+  return { title: `${a.recipient.trim()} · ${maskPhone(a.phone)}`, line };
+}
+
+/** Thứ tự trong tấm chọn địa chỉ: mặc định đứng đầu, kế đến địa chỉ dùng gần nhất (mới trước), còn lại giữ thứ tự sổ địa chỉ. */
+export function sortAddressesForPicker<T extends { id: string; isDefault: boolean }>(addresses: readonly T[], recentIds: readonly string[] = []): T[] {
+  const rank = (a: T): number => {
+    if (a.isDefault) return -1;
+    const i = recentIds.indexOf(a.id);
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+  };
+  return addresses
+    .map((a, index) => ({ a, index, r: rank(a) }))
+    .sort((x, y) => x.r - y.r || x.index - y.index)
+    .map((x) => x.a);
+}
+
+/** Địa chỉ vừa dùng để đặt đơn lên đầu danh sách gần nhất (không trùng, tối đa `max`). */
+export function pushRecentAddress(recentIds: readonly string[], id: string, max = 5): string[] {
+  return [id, ...recentIds.filter((x) => x !== id)].slice(0, max);
+}
+
+/** Khoá lưu id địa chỉ dùng gần nhất trên máy (theo tài khoản qua `scopedKey`). Chỉ id, không có địa chỉ hay SĐT. */
+export const RECENT_ADDRESS_KEY = 'tubu_recent_address_ids';
+
+export interface RecentStorageLike {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+}
+
+const recentKey = (userId?: string | null) => (userId ? `${RECENT_ADDRESS_KEY}:${userId}` : RECENT_ADDRESS_KEY);
+
+export function readRecentAddressIds(storage: RecentStorageLike | null, userId?: string | null): string[] {
+  try {
+    const raw = storage?.getItem(recentKey(userId));
+    const parsed: unknown = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed.filter((x): x is string => typeof x === 'string' && x.length <= 64).slice(0, 5) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function rememberRecentAddress(storage: RecentStorageLike | null, id: string, userId?: string | null): void {
+  if (!storage || !id) return;
+  try {
+    storage.setItem(recentKey(userId), JSON.stringify(pushRecentAddress(readRecentAddressIds(storage, userId), id)));
+  } catch {
+    /* bộ nhớ đầy hoặc bị chặn: thứ tự tấm chọn chỉ thiếu mục "gần nhất" */
+  }
+}
+
+export interface TransferPreviewInput {
+  enabled: boolean;
+  bank: { name: string; accountName: string } | null;
+}
+
+/**
+ * Thẻ xem trước chuyển khoản: cờ tắt, thiếu thông tin ngân hàng hoặc chưa có tổng của báo giá thì null (app ẩn thẻ).
+ * Không bao giờ mang số tài khoản hay chuỗi QR: mã quét được khi chưa có mã đơn tạo khoản chuyển không đối soát được.
+ */
+export function transferPreviewView(
+  preview: TransferPreviewInput | null | undefined,
+  total: number | null | undefined,
+): { bankName: string; accountName: string; amount: number } | null {
+  if (!preview?.enabled || !preview.bank) return null;
+  const bankName = preview.bank.name.trim();
+  const accountName = preview.bank.accountName.trim();
+  if (!bankName || !accountName || typeof total !== 'number' || !Number.isFinite(total) || total <= 0) return null;
+  return { bankName, accountName, amount: total };
+}
+
+/** Mốc lúc máy chủ trả lời đặt đơn chuyển khoản, để trang QR đo "thời gian tới QR" (`transfer_qr_shown.msSinceOrder`). */
+const transferPlacedAt = new Map<string, number>();
+
+export function markTransferOrderPlaced(code: string, nowMs: number): void {
+  if (transferPlacedAt.size > 20) transferPlacedAt.clear();
+  transferPlacedAt.set(code, nowMs);
+}
+
+/** Lấy một lần (gọi lại trả null): số ms từ lúc đặt tới lúc QR hiện, làm tròn 100 ms; mở lại trang từ link cũ thì null. */
+export function takeTransferQrDelay(code: string, nowMs: number): number | null {
+  const at = transferPlacedAt.get(code);
+  if (at === undefined) return null;
+  transferPlacedAt.delete(code);
+  return Math.min(600_000, Math.max(0, Math.round((nowMs - at) / 100) * 100));
+}

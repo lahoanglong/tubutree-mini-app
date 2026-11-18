@@ -473,6 +473,17 @@ export const SHOP_COPY: Record<string, string> = {
   'checkout.changeCode': 'Đổi mã',
   'checkout.pointsNone': 'Tích điểm từ đơn đầu tiên nhé',
   'checkout.addressEmpty': 'Bạn chưa thêm địa chỉ',
+  // Khối địa chỉ gọn một dòng + tấm chọn địa chỉ đã lưu (wave tubu-w2-06)
+  'checkout.addressChange': 'Đổi',
+  'checkout.addressChangeAria': 'Đổi địa chỉ giao hàng',
+  'checkout.addressSheetTitle': 'Chọn địa chỉ giao hàng',
+  'checkout.addressAddNew': 'Thêm địa chỉ mới',
+  'checkout.recalculating': 'Đang tính lại…',
+  // Thẻ xem trước chuyển khoản (cờ checkout.transfer_preview_enabled): chưa có mã QR trước khi có mã đơn
+  'checkout.transferBank': 'Ngân hàng',
+  'checkout.transferHolder': 'Chủ tài khoản',
+  'checkout.transferAmount': 'Số tiền chuyển',
+  'checkout.transferNote': 'Mã QR có đúng số tiền và nội dung sẽ hiện ngay sau khi bạn bấm Đặt hàng.',
   // Đổi rác kèm đơn (thẻ thanh toán + tấm chọn món)
   'checkout.pickup.title': '♻️ Đổi rác kèm đơn',
   'checkout.pickup.sub': 'Miễn 100% phí vận chuyển',

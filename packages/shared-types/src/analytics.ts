@@ -49,7 +49,14 @@ export const CLIENT_EVENT_NAMES = [
   'matcher_add_all',
   'matcher_item_opened',
   'search_zero_result',
+  'checkout_address_switched',
+  'transfer_preview_shown',
+  'transfer_qr_shown',
 ] as const;
+
+/** Nơi khách đổi địa chỉ giao ở màn thanh toán (`checkout_address_switched.from`). */
+export const CHECKOUT_ADDRESS_SWITCH_FROM = ['sheet'] as const;
+export type CheckoutAddressSwitchFrom = (typeof CHECKOUT_ADDRESS_SWITCH_FROM)[number];
 
 export type ClientEventName = (typeof CLIENT_EVENT_NAMES)[number];
 

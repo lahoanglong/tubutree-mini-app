@@ -91,20 +91,46 @@ describe('/thanh-toan — khối xếp như Mini App ở điện thoại', () =>
 });
 
 describe('/thanh-toan — thẻ địa chỉ như Mini App', () => {
-  it('địa chỉ mặc định có huy hiệu "Mặc định"; nút radio chỉ còn cho trình đọc màn hình ở điện thoại', async () => {
+  it('một dòng: tên, SĐT che bớt, địa chỉ cắt một dòng và "Đổi"; danh sách đầy đủ chỉ ở tấm chọn', async () => {
     const c = await mount();
-    const card = c.querySelector<HTMLElement>('[data-mini-block="address"] label')!;
-    expect(card.textContent).toContain('Mặc định');
-    expect(card.querySelector('input[type="radio"]')!.className).toMatch(/\bmax-md:sr-only\b/);
+    const row = c.querySelector<HTMLElement>('[data-testid="checkout-address-row"]')!;
+    expect(row.textContent).toContain('An · 091****678');
+    expect(row.textContent).not.toContain('0912345678');
+    expect(row.textContent).toContain('Đổi');
+    expect(row.querySelector('.truncate')).not.toBeNull();
+    expect(c.querySelectorAll('[data-mini-block="address"] [role="radio"], [data-mini-block="address"] input[type="radio"]')).toHaveLength(0);
+    click(row.querySelector<HTMLButtonElement>('button[aria-haspopup="dialog"]')!);
+    await flush(2);
+    const dlg = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const radios = Array.from(dlg.querySelectorAll<HTMLElement>('[role="radio"]'));
+    expect(radios.map((r) => r.textContent)).toEqual([expect.stringContaining('An · 0912345678'), expect.stringContaining('Bình · 0987654321')]);
+    expect(radios[0]!.textContent).toContain('Mặc định');
+    expect(radios[0]!.getAttribute('aria-checked')).toBe('true');
   });
 
-  it('"Thêm địa chỉ mới" không có dấu +, "Quản lý sổ địa chỉ" ẩn ở điện thoại, "Sửa" chỉ hiện với địa chỉ địa giới cũ', async () => {
+  it('tấm chọn: "Thêm địa chỉ mới" không có dấu + ở cuối, "Quản lý sổ địa chỉ" ẩn ở điện thoại; "Sửa" cạnh dòng chỉ từ md', async () => {
     const c = await mount();
-    const add = Array.from(c.querySelectorAll('button')).find((b) => b.textContent?.includes('Thêm địa chỉ mới'))!;
+    expect(c.querySelector('button[aria-label="Sửa địa chỉ của An"]')!.className).toMatch(/(?=.*\bhidden\b)(?=.*\bmd:inline-flex\b)/);
+    click(c.querySelector<HTMLButtonElement>('[data-testid="checkout-address-row"] button[aria-haspopup="dialog"]')!);
+    await flush(2);
+    const dlg = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    const add = Array.from(dlg.querySelectorAll('button')).find((b) => b.textContent?.includes('Thêm địa chỉ mới'))!;
     expect(add.textContent?.trim()).toBe('Thêm địa chỉ mới');
-    expect(c.querySelector('a[href="/tai-khoan/dia-chi"]')!.className).toMatch(/\bmax-md:hidden\b/);
-    expect(c.querySelector('button[aria-label="Sửa địa chỉ của An"]')!.className).toMatch(/\bmax-md:hidden\b/);
-    expect(c.querySelector('button[aria-label="Sửa địa chỉ của Bình"]')!.className).not.toMatch(/\bmax-md:hidden\b/);
+    expect(dlg.querySelector('a[href="/tai-khoan/dia-chi"]')!.className).toMatch(/(?=.*\bhidden\b)(?=.*\bmd:inline-flex\b)/);
+  });
+
+  it('chọn địa chỉ địa giới cũ trong tấm: tấm đóng, cảnh báo và nút "Cập nhật địa chỉ" hiện cả ở điện thoại', async () => {
+    const c = await mount();
+    click(c.querySelector<HTMLButtonElement>('[data-testid="checkout-address-row"] button[aria-haspopup="dialog"]')!);
+    await flush(2);
+    const bình = Array.from(document.querySelectorAll<HTMLElement>('[role="dialog"] [role="radio"]')).find((r) => r.textContent?.includes('Bình'))!;
+    click(bình);
+    await flush(4);
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
+    const row = c.querySelector<HTMLElement>('[data-testid="checkout-address-row"]')!;
+    expect(row.textContent).toContain('Bình · 098****321');
+    const fix = Array.from(row.querySelectorAll('button')).find((b) => b.textContent === 'Cập nhật địa chỉ')!;
+    expect(fix.className).not.toMatch(/\bmax-md:hidden\b/);
   });
 });
 
@@ -165,7 +191,9 @@ describe('/thanh-toan — địa chỉ địa giới cũ', () => {
   it('phường sai tỉnh (địa chỉ mã mới, không phải địa giới cũ): báo giá ADDRESS_OUTDATED thì địa chỉ đang chọn vẫn có nút Sửa ở điện thoại', async () => {
     quoteFail.error = new ApiError('Phường không thuộc tỉnh.', 400, 'ADDRESS_OUTDATED');
     const c = await mount();
-    expect(c.querySelector('button[aria-label="Sửa địa chỉ của An"]')!.className).not.toMatch(/\bmax-md:hidden\b/);
+    const row = c.querySelector<HTMLElement>('[data-testid="checkout-address-row"]')!;
+    const fix = Array.from(row.querySelectorAll('button')).find((b) => b.textContent === 'Sửa địa chỉ')!;
+    expect(fix.className).not.toMatch(/\bmax-md:hidden\b/);
   });
 });
 
@@ -348,11 +376,10 @@ describe('/thanh-toan — truy cập (A11Y-09)', () => {
     expect(pay.every((r) => group.contains(r))).toBe(true);
   });
 
-  it('thẻ địa chỉ và dòng thanh toán dùng viền focus theo :focus-visible của ô radio bên trong (radio địa chỉ bị sr-only ở điện thoại)', async () => {
+  it('dòng địa chỉ có viền focus theo :focus-visible; dòng thanh toán theo :focus-visible của ô radio bên trong', async () => {
     const c = await mount();
-    const card = c.querySelector<HTMLElement>('[data-ds="checkout-address-card"]')!;
-    expect(card.className).toContain('has-[:focus-visible]:outline');
-    expect(card.querySelector('input')!.className).toContain('max-md:sr-only');
+    const change = c.querySelector<HTMLElement>('[data-testid="checkout-address-row"] button[aria-haspopup="dialog"]')!;
+    expect(change.className).toContain('focus-visible:outline');
     const payRow = c.querySelector<HTMLInputElement>('input[name="pay"]')!.closest('label')!;
     expect(payRow.className).toContain('has-[:focus-visible]:outline');
   });

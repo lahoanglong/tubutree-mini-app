@@ -113,6 +113,8 @@ test.describe('Web khách: thanh toán', () => {
     test.skip(testInfo.project.name !== 'Web Customer', 'Khung tóm tắt có nút Đặt hàng riêng chỉ từ lg');
     mockBuyer(api, { wallet: 0, points: 0 });
     api.get('/me/addresses', []);
+    // Sổ địa chỉ trống thì form thêm địa chỉ tự mở và tải danh sách tỉnh.
+    api.get('/geo/provinces', []);
     api.post('/checkout/coupon-previews', { previews: [] });
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.goto('/thanh-toan');

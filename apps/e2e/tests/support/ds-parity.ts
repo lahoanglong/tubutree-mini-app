@@ -182,9 +182,9 @@ export const EXPECTED: Record<string, Record<string, string>> = {
   'tile-grid-compare': { ...STRIKE, fontSize: '13px', lineHeight: px(M.compare) },
   'tile-grid-meta': SMALL,
 
-  // Thanh toán: số đo Mini 375px (thẻ địa chỉ một dòng + huy hiệu Mặc định, dòng KeyValueRow đệm 6px, ô Input 48px).
+  // Thanh toán: số đo Mini 375px (dòng địa chỉ gọn w2-06: tên · SĐT che bớt, địa chỉ một dòng, "Đổi"; dòng KeyValueRow đệm 6px, ô Input 48px).
   'checkout-block-title': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '600', letterSpacing: 'normal', color: INK, fontFamilyKind: 'inter' },
-  'checkout-address-card': { heightNoBorder: '67.97px', borderRadius: '12px' },
+  'checkout-address-card': { heightNoBorder: '51.98px', borderRadius: '12px' },
   'checkout-summary-row': { height: '35.55px', paddingTop: '6px', paddingBottom: '6px', marginTop: '0px', marginBottom: '0px' },
   'checkout-summary-label': { fontSize: '14px', lineHeight: '21.98px', fontWeight: '400', letterSpacing: 'normal', color: 'rgb(90, 84, 74)', fontFamilyKind: 'inter', height: '23.55px' },
   // Giá trị 15px/600: KeyValueRow của Mini ghi đè fontSize bằng undefined nên thừa kế cỡ 15px của khối cha; web theo số đo đó.

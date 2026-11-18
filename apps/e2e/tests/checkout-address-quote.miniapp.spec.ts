@@ -28,7 +28,7 @@ test('Mini App 375: máy chủ báo phường không thuộc tỉnh cho địa c
   });
   await openState(page, 'miniapp', 375);
 
-  const card = page.locator('[data-ds="checkout-address-card"]').filter({ hasText: CHECKOUT_ADDRESS.street });
+  const card = page.getByTestId('checkout-address-row');
   const alert = card.getByRole('alert');
   await expect(alert).toContainText('chưa đúng nên Tubu chưa giao được', { timeout: 15_000 });
   await expect(page.getByText('Sửa địa chỉ giao hàng rồi đặt hàng.')).toBeVisible();

@@ -71,8 +71,9 @@ export function baseWorld(): World {
   };
 }
 
-const textVisible = (text: string | RegExp) => async (page: Page) => {
-  await page.getByText(text).first().waitFor({ state: 'visible', timeout: 15_000 });
+// Sổ địa chỉ trống thì form thêm địa chỉ tự mở (Mini App và web), nên chờ ô nhập chứ không chờ nút "Thêm địa chỉ mới".
+const addressFormOpen = async (page: Page) => {
+  await page.getByLabel('Số nhà, tên đường').first().waitFor({ state: 'visible', timeout: 15_000 });
 };
 const orderButton = (page: Page) => page.getByRole('button', { name: /Đặt hàng/ }).last();
 const readyWithButton = async (page: Page) => {
@@ -134,7 +135,7 @@ export const STATES: CheckoutState[] = [
   {
     key: 'no-address',
     name: 'Chưa có địa chỉ',
-    ready: textVisible(/Thêm địa chỉ mới/),
+    ready: addressFormOpen,
     world: (w) => {
       w.addresses = [];
     },
@@ -146,12 +147,11 @@ export const STATES: CheckoutState[] = [
   {
     key: 'address-errors',
     name: 'Nhập sai tên và số điện thoại',
-    ready: textVisible(/Thêm địa chỉ mới/),
+    ready: addressFormOpen,
     world: (w) => {
       w.addresses = [];
     },
     act: async (page) => {
-      await page.getByRole('button', { name: /Thêm địa chỉ mới/ }).click();
       const phone = page.getByLabel(/Số điện thoại/).first();
       await phone.waitFor({ state: 'visible' });
       await page.getByLabel(/Người nhận/).first().fill('');
@@ -255,7 +255,7 @@ export const STATES: CheckoutState[] = [
   {
     key: 'no-address-pressed',
     name: 'Chưa có địa chỉ, bấm Đặt hàng',
-    ready: textVisible(/Thêm địa chỉ mới/),
+    ready: addressFormOpen,
     world: (w) => {
       w.addresses = [];
     },

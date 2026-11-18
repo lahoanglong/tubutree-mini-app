@@ -43,6 +43,17 @@ export function sizedImage(src: string, cssWidth: number, sizes?: string, wide =
 }
 
 /**
+ * srcset (mô tả w) chỉ tới bản `maxWidth` cho `<source media>` của ảnh tràn mép ở điện thoại: với `sizes=100vw`, máy 390px ở DPR 2–3 cần 780–1170px
+ * nên luôn chọn bản to nhất (960), nặng gấp ~2 bản 640 trên 4G mà mắt không phân biệt được với ảnh sản phẩm nền trơn. Null khi ảnh không đổi cỡ được.
+ */
+export function cappedSrcSet(src: string, maxWidth: number): string | null {
+  const widths = IMAGE_WIDTHS.filter((w) => w <= maxWidth);
+  const urls = widths.map((w) => resizedImageUrl(src, w, API_BASE));
+  if (widths.length < 2 || urls.some((u) => !u)) return null;
+  return urls.map((u, i) => `${u} ${widths[i]}w`).join(', ');
+}
+
+/**
  * Đường lùi cho `<img>` đi qua bộ đổi cỡ mà không dùng `useSizedImage`: bản đổi cỡ lỗi (nguồn quá lớn, hết giờ, API tạm hỏng)
  * thì chuyển sang ảnh gốc một lần. Lỗi lần hai (gốc cũng hỏng) để yên, không lặp vô hạn.
  */

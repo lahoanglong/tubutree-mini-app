@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { PRUNED_ZMP_UI_COMPONENTS, deadZauiClasses, pruneZauiCss, zauiClassToken } from './build-zaui-prune';
+import postcss from 'postcss';
+import { PRUNED_ZMP_UI_COMPONENTS, ZAUI_JS_VARS, deadZauiClasses, isDarkThemeOnly, pruneUnusedZauiVars, pruneZauiCss, zauiClassToken } from './build-zaui-prune';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const ZMP_UI = fs.realpathSync(path.resolve(here, '../node_modules/zmp-ui'));
@@ -84,11 +85,11 @@ function zmpUiClosure(exportNames: Set<string>): { components: Set<string>; file
 
 describe('pruneZauiCss — chỉ bỏ luật của thành phần zmp-ui không có trong bản build', () => {
   it('bỏ luật nhắm vào thành phần bị cắt, giữ luật của thành phần đang dùng và luật chung', () => {
-    const css = ':root{--zaui-x:1}.zaui-calendar-panel{color:red}.zaui-sheet{color:blue}.zaui-btn.zaui-btn-primary{color:green}';
+    const css = ':root{--zaui-x:1}.zaui-calendar-panel{color:red}.zaui-sheet{color:blue;border-color:var(--zaui-x)}.zaui-btn.zaui-btn-primary{color:green}';
     const { css: out, removedSelectors } = pruneZauiCss(css);
     expect(removedSelectors).toEqual(['.zaui-calendar-panel']);
     expect(out).toContain(':root{--zaui-x:1}');
-    expect(out).toContain('.zaui-sheet{color:blue}');
+    expect(out).toContain('.zaui-sheet{color:blue;border-color:var(--zaui-x)}');
     expect(out).toContain('.zaui-btn.zaui-btn-primary{color:green}');
     expect(out).not.toContain('calendar');
   });
@@ -132,6 +133,30 @@ describe('pruneZauiCss — chỉ bỏ luật của thành phần zmp-ui không c
     const { css: out, removedSelectors } = pruneZauiCss(css);
     expect(out).toContain('.zaui-modal-wrapper{display:flex}');
     expect(removedSelectors).toEqual(['.zaui-modal-content']);
+  });
+
+  it('luật chỉ cho chủ đề tối của zaui bị bỏ; danh sách trộn còn một vế chủ đề sáng thì giữ', () => {
+    const css = 'body[zaui-theme=dark] .zaui-btn{color:#fff}body[zaui-theme="dark"] .zaui-input,body[zaui-theme=dark] .zaui-sheet{color:#000}body[zaui-theme=dark] .zaui-btn,.zaui-btn{color:red}.zaui-btn{color:blue}';
+    const { css: out, removedSelectors } = pruneZauiCss(css);
+    expect(removedSelectors).toEqual(['body[zaui-theme=dark] .zaui-btn', 'body[zaui-theme="dark"] .zaui-input,body[zaui-theme=dark] .zaui-sheet']);
+    expect(out).toContain('body[zaui-theme=dark] .zaui-btn,.zaui-btn{color:red}');
+    expect(out).toContain('.zaui-btn{color:blue}');
+    expect(isDarkThemeOnly('body[zaui-theme=light] .zaui-btn')).toBe(false);
+  });
+
+  it('biến --zaui-* không còn ai đọc bị bỏ, kể cả chuỗi biến chỉ trỏ tới nhau; biến JS zmp-ui đọc và biến còn dùng giữ nguyên', () => {
+    const root = postcss.parse(
+      ':root{--zaui-a:red;--zaui-b:var(--zaui-a);--zaui-c:blue;--zaui-d:var(--zaui-c);--zaui-tabbar-width:1px;--color-x:1px}.zaui-btn{color:var(--zaui-c)}.zaui-calendar-x{color:var(--zaui-b)}',
+    );
+    root.walkRules((r) => {
+      if (r.selector === '.zaui-calendar-x') r.remove();
+    });
+    const removed = pruneUnusedZauiVars(root);
+    expect(removed.sort()).toEqual(['--zaui-a', '--zaui-b', '--zaui-d']);
+    const out = root.toString();
+    expect(out).toContain('--zaui-c:blue');
+    expect(out).toContain('--zaui-tabbar-width:1px');
+    expect(out).toContain('--color-x:1px');
   });
 
   it('token lớp của thư mục nhiều từ lấy từ đầu: image-viewer → image, date-picker → date', () => {
@@ -185,6 +210,33 @@ describe('zaui.css thật — cắt không đụng thành phần app đang dùng
       }
     }
     expect(collisions).toEqual([]);
+  });
+
+  it('Mini không bao giờ bật chủ đề tối của zaui (không useTheme, <App> không nhận prop theme), nên cắt luật tối là an toàn', () => {
+    expect(used.names.has('useTheme')).toBe(false);
+    const offenders: string[] = [];
+    for (const file of walk(here).filter((f) => /\.tsx?$/.test(f) && !/\.spec\.tsx?$/.test(f) && path.basename(f) !== 'build-zaui-prune.ts')) {
+      const src = fs.readFileSync(file, 'utf8');
+      if (/<App\b[^>]*\btheme\s*=/.test(src) || /zaui-theme/.test(src)) offenders.push(path.relative(here, file));
+    }
+    expect(offenders).toEqual([]);
+    const darkLeft = [...pruned.matchAll(/([^{}]+)\{[^{}]*\}/g)].map((m) => (m[1] ?? '').trim()).filter((sel) => sel && isDarkThemeOnly(sel));
+    expect(darkLeft).toEqual([]);
+  });
+
+  it('JS của zmp-ui chỉ nhắc tên biến --zaui-* có trong ZAUI_JS_VARS; mã app không đọc var(--zaui-*) nào', () => {
+    const inJs = new Set<string>();
+    for (const f of walk(ESM).filter((x) => x.endsWith('.js'))) {
+      for (const m of fs.readFileSync(f, 'utf8').matchAll(/--zaui-[a-z0-9-]+/g)) inJs.add(m[0]);
+    }
+    expect([...inJs].sort()).toEqual([...ZAUI_JS_VARS].sort());
+    const readers: string[] = [];
+    for (const file of walk(here).filter((f) => /\.(tsx?|css)$/.test(f) && !/\.spec\.tsx?$/.test(f) && path.basename(f) !== 'build-zaui-prune.ts')) {
+      const code = fs.readFileSync(file, 'utf8').replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
+      if (/var\(\s*--zaui-/.test(code)) readers.push(path.relative(here, file));
+    }
+    expect(readers).toEqual([]);
+    expect(pruned).toContain('--zaui-light-color-primary');
   });
 
   it('mã app không tự viết lớp zaui-* của thành phần bị cắt', () => {

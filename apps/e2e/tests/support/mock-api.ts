@@ -388,6 +388,8 @@ export const test = base.extend<{ api: MockApi; visualCapture: void }>({
       api.fallback('GET', '/waste/me/open-count', { count: 0 });
       // Đầu và chân trang web đọc cờ Đổi rác ở MỌI trang; spec nào cần cờ bật thì tự mock /config/public.
       api.fallback('GET', '/config/public', {});
+      // Thẻ xem trước chuyển khoản ở thanh toán hỏi cờ checkout.transfer_preview_enabled khi khách chọn Chuyển khoản: mặc định cờ tắt như PROD.
+      api.fallback('GET', '/payments/bank-preview', { enabled: false, bank: null });
       // Banner chiến dịch (Trang chủ, Ưu đãi) là công khai và tự ẩn khi không có: mặc định không có chiến dịch nào.
       api.fallback('GET', '/campaigns', []);
       // Số suất Giờ vàng khách còn mua được (đã trừ đơn trước) cho nút mua: mặc định chưa có số nào, UI giữ số theo danh sách Giờ vàng như API cũ.

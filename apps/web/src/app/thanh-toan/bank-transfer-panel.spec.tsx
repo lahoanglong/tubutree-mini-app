@@ -6,11 +6,18 @@ import { BANK_QR_LOAD_FAILED } from '@tubutree/app-core/bank-payment-copy';
 import { BankTransferPanel } from './bank-transfer-panel';
 import { byText, click, flush, mockFetch, render, type Rendered } from '@/test-utils/dom';
 import type { OrderDTO } from '@/lib/shop-client';
+import { markTransferOrderPlaced } from '@tubutree/app-core/commerce/checkout-display';
 
 // A2-02 = A6-01 (docs/audit-2026-09): web /thanh-toan cho chọn "Chuyển khoản ngân hàng" nhưng
 // trước đây sau khi đặt đơn KHÔNG BAO GIỜ hiện QR/STK/nội dung CK ở đâu cả — khách không có cách
 // nào trả tiền cho đơn đã đặt. BankTransferPanel là khối hiện đầy đủ thông tin đó ngay trên màn
 // thành công, mirror apps/miniapp/src/pages/bank-payment.tsx (cùng contract GET /payments/bank-qr/:code).
+
+const events = vi.hoisted(() => [] as [string, unknown][]);
+vi.mock('@/lib/analytics', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/analytics')>()),
+  trackWebEvent: (name: string, props: unknown) => events.push([name, props]),
+}));
 
 // "Lưu mã QR" nạp mô-đun này bằng import() động; lần nạp đầu phải biên dịch, trên máy CI chậm lâu hơn vài nhịp flush().
 beforeAll(async () => {
@@ -615,5 +622,41 @@ describe('BankTransferPanel — thanh toán chuyển khoản sau khi đặt đơ
     const { container } = mount(<BankTransferPanel order={order()} paidFooter={<a href="/x">Xem đơn hàng</a>} />);
     await flush();
     expect(container.querySelector('a[href="/x"]')?.textContent).toBe('Xem đơn hàng');
+  });
+});
+
+describe('BankTransferPanel — sự kiện transfer_qr_shown (w2-06)', () => {
+  beforeEach(() => {
+    events.length = 0;
+  });
+
+  it('đơn vừa đặt ở trang thanh toán: ảnh QR tải xong thì ghi thời gian từ lúc có đơn, làm tròn 100 ms, chỉ một lần', async () => {
+    const api = mockFetch({ '/payments/bank-qr/': { body: QR_BODY } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    markTransferOrderPlaced('TB-777', Date.now() - 640);
+    const { container } = mount(<BankTransferPanel order={order()} />);
+    await flush();
+    const img = container.querySelector('img[alt="VietQR"]') as HTMLImageElement;
+    await act(async () => {
+      img.dispatchEvent(new Event('load'));
+      img.dispatchEvent(new Event('load'));
+    });
+    const shown = events.filter(([n]) => n === 'transfer_qr_shown');
+    expect(shown).toHaveLength(1);
+    const ms = (shown[0]![1] as { msSinceOrder: number }).msSinceOrder;
+    expect(ms % 100).toBe(0);
+    expect(ms).toBeGreaterThanOrEqual(600);
+    expect(Object.keys(shown[0]![1] as object)).toEqual(['msSinceOrder']);
+  });
+
+  it('mở lại từ chi tiết đơn (không có mốc đặt đơn): không ghi', async () => {
+    const api = mockFetch({ '/payments/bank-qr/': { body: { ...QR_BODY, orderCode: 'TB-778', memo: 'TB-778' } } });
+    vi.stubGlobal('fetch', vi.fn(api.fn));
+    const { container } = mount(<BankTransferPanel order={order({ code: 'TB-778' })} />);
+    await flush();
+    await act(async () => {
+      (container.querySelector('img[alt="VietQR"]') as HTMLImageElement).dispatchEvent(new Event('load'));
+    });
+    expect(events.filter(([n]) => n === 'transfer_qr_shown')).toEqual([]);
   });
 });

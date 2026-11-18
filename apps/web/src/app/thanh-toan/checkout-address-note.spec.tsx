@@ -168,10 +168,13 @@ describe('/thanh-toan — mất mạng lúc đặt đơn (BUYERWEB-12)', () => {
 });
 
 describe('/thanh-toan — sửa địa chỉ ngay tại chỗ (BUYERWEB-14)', () => {
-  it('có nút Sửa cạnh mỗi địa chỉ và lối vào Sổ địa chỉ', async () => {
+  it('có nút Sửa cạnh địa chỉ đang chọn; tấm Đổi có lối vào Sổ địa chỉ', async () => {
     const c = await mount();
     expect(btn(c, 'Sửa địa chỉ của Nguyễn An')).toBeDefined();
-    expect(c.querySelector('a[href="/tai-khoan/dia-chi"]')?.textContent).toBe('Quản lý sổ địa chỉ');
+    const change = c.querySelector<HTMLButtonElement>('[data-testid="checkout-address-row"] button[aria-haspopup="dialog"]')!;
+    click(change);
+    await flush(2);
+    expect(document.body.querySelector('[role="dialog"] a[href="/tai-khoan/dia-chi"]')?.textContent).toBe('Quản lý sổ địa chỉ');
   });
 
   it('sửa SĐT: PATCH đúng id, form đóng và báo giá được tính lại', async () => {

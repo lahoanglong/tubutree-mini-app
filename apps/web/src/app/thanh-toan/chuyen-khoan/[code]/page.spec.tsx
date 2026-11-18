@@ -116,6 +116,15 @@ describe('trang chuyển khoản /thanh-toan/chuyen-khoan/[code]', () => {
     expect(guest.querySelector('h1')!.textContent).toBe('Thanh toán chuyển khoản');
   });
 
+  it('QR chưa về: dải tiêu đề (data-page-bleed) đã có sẵn, nên lúc QR về trang không nhảy (CLS điện thoại)', async () => {
+    const c = mount();
+    expect(c.querySelector('header[data-page-bleed]')).not.toBeNull();
+    expect(c.querySelector('img[alt="VietQR"]')).toBeNull();
+    await flush();
+    expect(c.querySelector('header[data-page-bleed]')).not.toBeNull();
+    expect(c.querySelectorAll('h1')).toHaveLength(1);
+  });
+
   it('đã PAID hoặc chưa có QR: không vẽ dải tiêu đề, vẫn đúng một h1 và còn trang cha cho nút lùi', async () => {
     mocks.qr.paymentStatus = 'PAID';
     const c = mount();

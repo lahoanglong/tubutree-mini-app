@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { preload } from 'react-dom';
 import { ChevronLeft, ChevronRight, Play } from 'lucide-react';
 import { pdpMedia, pdpMediaIndexOfImage } from '@tubutree/app-core/commerce/pdp-media';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { LeafGlyph } from '@/components/mini/product-image';
 import PdpVideoSlide from '@/components/pdp-video-slide';
 import { usePdpSelection } from '@/components/pdp-selection';
-import { useSizedImage } from '@/lib/image-src';
-import { PDP_MAIN_IMAGE_SIZES } from '@/lib/image-sizes';
+import { cappedSrcSet, useSizedImage } from '@/lib/image-src';
+import { FROM_MD_MEDIA as WIDE_MEDIA, PDP_MAIN_IMAGE_SIZES, PHONE_MEDIA } from '@/lib/image-sizes';
 
 /** Bề rộng ảnh chính lớn nhất (CSS px): máy tính bảng dọc, 767px tràn mép. */
 const MAIN_IMAGE_WIDTH = 600;
@@ -22,26 +23,41 @@ const FRAME =
 const ARROW =
   'absolute top-1/2 z-10 flex h-11 w-11 min-h-11 -translate-y-1/2 items-center justify-center rounded-full bg-stone-0/90 text-stone-900 shadow-card transition hover:bg-stone-0 disabled:hidden max-md:hidden';
 
-/** Ảnh chính của một slide: bản đổi cỡ theo bề rộng, lỗi thì thử ảnh gốc một lần rồi báo hỏng để rơi về hình lá. */
+/** Điện thoại (dưới md) ảnh tràn mép 100vw: chỉ tải tới bản 640 (xem `cappedSrcSet`). */
+const PHONE_MAX_WIDTH = 640;
+
+/**
+ * Ảnh chính của một slide: bản đổi cỡ theo bề rộng, lỗi thì thử ảnh gốc một lần rồi báo hỏng để rơi về hình lá.
+ * Ảnh đầu (`eager`) là LCP của trang: phát preload ngay trong HTML máy chủ (React đưa lên `<head>`) cho đúng khổ, vì trong `<picture>` React không tự preload thẻ ảnh.
+ */
 function SlideImage({ src, alt, eager, onBroken }: { src: string; alt: string; eager: boolean; onBroken: () => void }) {
   const { img, fallBack } = useSizedImage(src, MAIN_IMAGE_WIDTH, MAIN_IMAGE_SIZES);
+  // Đã lùi về ảnh gốc (img không còn srcSet) thì bỏ luôn nguồn điện thoại, nếu không điện thoại vẫn đọc bản đổi cỡ đã lỗi.
+  const phoneSet = img?.srcSet ? cappedSrcSet(src, PHONE_MAX_WIDTH) : null;
+  if (eager && img?.srcSet) {
+    if (phoneSet) preload(img.src, { as: 'image', imageSrcSet: phoneSet, imageSizes: '100vw', fetchPriority: 'high', media: PHONE_MEDIA });
+    preload(img.src, { as: 'image', imageSrcSet: img.srcSet, imageSizes: img.sizes, fetchPriority: 'high', media: phoneSet ? WIDE_MEDIA : undefined });
+  }
   if (!img) return null;
   return (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={img.src}
-      srcSet={img.srcSet}
-      sizes={img.sizes}
-      alt={alt}
-      className="h-full w-full object-contain"
-      width={800}
-      height={800}
-      loading={eager ? 'eager' : 'lazy'}
-      fetchPriority={eager ? 'high' : undefined}
-      // Ảnh đầu là LCP: để trình duyệt tự quyết lúc giải mã thay vì `async` (có thể vẽ trễ một khung sau chữ); các ảnh tải lười giữ `async`.
-      decoding={eager ? undefined : 'async'}
-      onError={() => fallBack() || onBroken()}
-    />
+    <picture className="contents">
+      {phoneSet && <source media={PHONE_MEDIA} srcSet={phoneSet} sizes="100vw" />}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={img.src}
+        srcSet={img.srcSet}
+        sizes={img.sizes}
+        alt={alt}
+        className="h-full w-full object-contain"
+        width={800}
+        height={800}
+        loading={eager ? 'eager' : 'lazy'}
+        fetchPriority={eager ? 'high' : undefined}
+        // Ảnh đầu là LCP: để trình duyệt tự quyết lúc giải mã thay vì `async` (có thể vẽ trễ một khung sau chữ); các ảnh tải lười giữ `async`.
+        decoding={eager ? undefined : 'async'}
+        onError={() => fallBack() || onBroken()}
+      />
+    </picture>
   );
 }
 

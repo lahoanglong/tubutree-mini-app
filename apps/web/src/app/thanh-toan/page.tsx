@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, CheckCircle2, ChevronRight, Plus, Sprout } from 'lucide-react';
+import { CheckCircle2, ChevronRight, Sprout } from 'lucide-react';
 import { useQuery, useMutation, useMutationState, useQueryClient, useIsMutating } from '@tanstack/react-query';
 import { WASTE_QUERY_KEYS } from '@tubutree/app-core/api/waste';
 import type { QuotePendingGiftDTO } from '@tubutree/shared-types';
@@ -12,16 +12,15 @@ import { rememberActiveOrder } from '@tubutree/app-core/home-todo-rows';
 import { browserStorage } from '@/lib/recently-viewed';
 import { syncHomeHintCookie } from '@/lib/home-hint-cookie';
 import { useAuthPhase } from '@/lib/auth-phase';
-import { AddressForm } from '@/components/address-form';
 import { OrderConsent } from '@/components/order-consent';
 import { OrderZaloConsentRow, useOrderZaloConsent } from '@/components/checkout/order-zalo';
-import { addressToForm, isLegacyGeo } from '@/lib/address-form';
+import { AddressPicker } from '@/components/checkout/address-picker';
+import { TransferPreview, warmBankPayment } from '@/components/checkout/transfer-preview';
 import {
   getCart,
   getAddresses,
-  createAddress,
-  updateAddress,
   checkoutQuote,
+  getBankQr,
   placeOrder,
   updateCartItem,
   removeCartItem,
@@ -36,7 +35,7 @@ import { ctvSlugFor, getStorefrontContext, subscribeStorefrontContext } from '@/
 import { pointsOfferText } from '@tubutree/app-core/points-offer';
 import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
-import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines } from '@tubutree/app-core/commerce/checkout-display';
+import { checkoutPlaceHint, checkoutTotalText, collapseCheckoutLines, markTransferOrderPlaced, rememberRecentAddress } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { shippingRowView } from '@tubutree/app-core/checkout-pickup-view';
 import { visibleGifts } from '@tubutree/app-core/checkout-pickup-state';
@@ -106,19 +105,14 @@ const optionClass = (selected: boolean) =>
 // Mini App: dòng phương thức thanh toán không viền/nền, cách nhau bằng khoảng đệm (checkout.tsx: padding 12px 0).
 const payOptionClass = (selected: boolean) =>
   `${optionClass(selected)} max-md:rounded-none max-md:border-0 max-md:bg-transparent max-md:px-0 max-md:py-3`;
-// Mini App: thẻ địa chỉ viền 1,5px; đang chọn viền xanh và nền sage nhạt.
-const addressOptionClass = (selected: boolean) =>
-  `${optionClass(selected)} max-md:border-[1.5px] ${
-    selected
-      ? 'max-md:border-[var(--color-border-selected)] max-md:bg-[var(--color-bg-subtle)]'
-      : 'max-md:border-[var(--color-border-subtle)] max-md:bg-[var(--color-bg-surface)]'
-  }`;
 // Ô ghi chú: dưới md cao một dòng và bo 8px như Input của Mini, từ md nhiều dòng với bo của ô nhập thường.
 const NOTE_FIELD = ui.field.replace('rounded-control', 'rounded-[0.5rem] md:rounded-control');
 // Mỗi phần của trang thanh toán ở điện thoại là dải trắng phẳng tràn ngang cách nhau 8px (Box p=4 mt=2 của Mini App).
 const MINI_BAND = `p-4 ${ui.card} ${mini.band} max-md:mt-2`;
 
 type PlaceBody = Parameters<typeof placeOrder>[0];
+// Đang tính lại báo giá cho địa chỉ mới: giữ số cũ nhưng mờ đi, nút Đặt hàng khoá (quoteStale).
+const RECALC_DIM = 'opacity-50';
 const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
 
 export default function CheckoutPage() {
@@ -243,7 +237,15 @@ export default function CheckoutPage() {
     queryFn: () => checkoutQuote(addressId!, usePoints ? usablePoints : 0, ctvSlug, itemIds, pickup.fields),
     // Chờ giỏ tải xong: địa chỉ có thể về trước, lúc đó chưa biết giỏ có trống không và báo giá giỏ trống bị 400.
     enabled: !!addressId && phase === 'authenticated' && cartLoaded && cartReady && !cartEmpty && pickup.ready,
+    // Đổi địa chỉ: giữ báo giá cũ trên màn (mờ phí giao và tổng, khoá Đặt hàng) tới khi báo giá mới về, để tổng không nhảy về "…" rồi nhảy lại.
+    // Chỉ khi các lựa chọn khác giữ nguyên; lỗi báo giá thì TanStack bỏ dữ liệu giữ chỗ và màn hiện dòng lỗi có Thử lại.
+    placeholderData: (prev, prevQuery) =>
+      prevQuery && prevQuery.queryKey[1] !== addressId && prevQuery.queryKey[2] === ctvSlug && prevQuery.queryKey[3] === usePoints && prevQuery.queryKey[4] === itemIdsKey
+        ? prev
+        : undefined,
   });
+  // Số trên màn là của địa chỉ trước: query mới có thể chưa chạy (đang chờ phần đổi rác) nên `isFetching` chưa bật, phải xét riêng.
+  const recalculating = quoteQ.isPlaceholderData;
   const { pruneGifts } = pickup;
   const pendingGifts = quoteQ.data?.pendingGiftRedemptions;
   useEffect(() => {
@@ -258,7 +260,7 @@ export default function CheckoutPage() {
     if (quoteQ.data && !usePoints) setPointsOffer(checkoutPointsOffer(quoteQ.data));
   }, [quoteQ.data, usePoints]);
 
-  const quoteStale = couponChanging || quoteQ.isFetching;
+  const quoteStale = couponChanging || quoteQ.isFetching || recalculating;
   // Refetch lỗi vẫn giữ `data` của lần trước (React Query v5): không coi đó là báo giá hiện hành, nếu không
   // khách thấy số cũ trong khi server đã tính theo mã mới và nút Đặt hàng vẫn bật.
   const quote = quoteQ.isError ? undefined : quoteQ.data;
@@ -417,9 +419,15 @@ export default function CheckoutPage() {
       }
       // Điểm Xanh đã tiêu/tích và tiền ví đã trừ: các số dư và sổ cái đang cache đều cũ.
       invalidateBalances(qc);
+      if (addressId) rememberRecentAddress(browserStorage(), addressId, userId);
       // Chuyển khoản: sang trang VietQR để khách trả ngay (đối soát xong đơn tự xác nhận), như Mini App.
-      if (isBank) setRedirectingCode(order.code);
-      if (isBank) router.replace(bankPaymentHref(order.code));
+      if (isBank) {
+        // Gọi QR ngay, song song với việc chuyển trang: khung QR dùng chung khoá ['bank-qr', mã] nên nhận đúng lời gọi đang chạy, không gọi lần hai.
+        markTransferOrderPlaced(order.code, Date.now());
+        void qc.prefetchQuery({ queryKey: ['bank-qr', order.code], queryFn: () => getBankQr(order.code) });
+        setRedirectingCode(order.code);
+        router.replace(bankPaymentHref(order.code));
+      }
     },
     onError: (e) => {
       setPlaceFailure({ error: e });
@@ -833,6 +841,9 @@ export default function CheckoutPage() {
               userId={user?.id}
               onSelect={chosen(setAddressId)}
               onCreated={(a) => {
+                // Đưa địa chỉ mới vào danh sách trước khi chọn: dòng địa chỉ chỉ vẽ khi id đang chọn có trong danh sách,
+                // chờ tải lại (hoặc tải lại lỗi) thì khối địa chỉ trống, khách không còn chỗ bấm.
+                qc.setQueryData<AddressDTO[]>(['addresses'], (old = []) => (old.some((x) => x.id === a.id) ? old : [...old, a]));
                 void qc.invalidateQueries({ queryKey: ['addresses'] });
                 chosen(setAddressId)(a.id);
                 funnel.step('address_saved');
@@ -869,6 +880,7 @@ export default function CheckoutPage() {
                           onChange={chosen(() => {
                             setPayment(p.k);
                             funnel.step('payment_method_selected', p.k);
+                            if (p.k === 'BANK_TRANSFER') warmBankPayment((href) => router.prefetch(href));
                           })}
                           disabled={!!reason || place.isPending}
                           aria-describedby={reason ? `pay-blocked-${p.k}` : undefined}
@@ -888,6 +900,7 @@ export default function CheckoutPage() {
                           {reason}
                         </p>
                       )}
+                      {p.k === 'BANK_TRANSFER' && payment === 'BANK_TRANSFER' && !reason && <TransferPreview total={quote?.total ?? null} dim={recalculating} />}
                     </div>
                   );
                 })}
@@ -1026,7 +1039,7 @@ export default function CheckoutPage() {
               green
             />
           )}
-          <Row label="Phí vận chuyển" value={shippingValue} valueGreen={quote?.shippingFee === 0} />
+          <Row label="Phí vận chuyển" value={shippingValue} valueGreen={quote?.shippingFee === 0} dim={recalculating} />
           {quote && etaLabel && <Row label="Giao dự kiến" value={etaLabel} />}
           </div>
           <BottomSheet
@@ -1132,8 +1145,12 @@ export default function CheckoutPage() {
             <span className="text-sm font-normal leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-secondary)] md:text-base md:font-bold md:leading-[inherit] md:text-[color:var(--color-text-primary)]">Tổng cộng</span>
             {/* Đang tải/đang lỗi thì hiện "…" thay vì 0đ: con số 0 đứng yên cạnh dòng báo lỗi
                 trông như đơn không mất tiền. */}
-            <span className="text-base font-bold leading-[var(--type-body-sm-lh)] tabular-nums md:leading-[inherit]">{totalText}</span>
+            <span className={`text-base font-bold leading-[var(--type-body-sm-lh)] tabular-nums md:leading-[inherit] ${recalculating ? RECALC_DIM : ''}`}>{totalText}</span>
           </div>
+          {/* Chữ chỉ cho trình đọc màn hình: chữ hiện ra rồi biến mất sẽ làm khối nhảy. */}
+          <p role="status" className="sr-only">
+            {recalculating ? fillCopy('checkout.recalculating') : ''}
+          </p>
           {quote && quote.pointsEarned > 0 && (
             <p className="mt-1 flex items-center gap-1 text-caption text-success-fg">
               <Sprout size={13} aria-hidden="true" />
@@ -1163,7 +1180,7 @@ export default function CheckoutPage() {
           {/* Bản sao hiển thị của dòng Tổng cộng ở khối tổng phía trên (ẩn từ lg): tổng tiền đi cùng khối dính, luôn nằm cạnh nút Đặt hàng. */}
           <div className="mb-3 hidden justify-between border-t border-[var(--color-border-subtle)] pt-3 font-bold text-[color:var(--color-text-primary)] lg:flex">
             <span>Tổng cộng</span>
-            <span className="tabular-nums">{totalText}</span>
+            <span className={`tabular-nums ${recalculating ? RECALC_DIM : ''}`}>{totalText}</span>
           </div>
           {zalo.view && <OrderZaloConsentRow phone={zalo.view.phone} checked={zalo.checked === true} onChange={zalo.setPicked} />}
           <OrderConsent className="hidden lg:block" />
@@ -1256,11 +1273,11 @@ export default function CheckoutPage() {
 }
 
 // Dưới md đúng KeyValueRow của Mini: đệm 6px, nhãn 14/400, giá trị 15/600 (cỡ 15px là cỡ thừa kế của Mini, không phải bậc body-sm).
-function Row({ label, value, green, valueGreen, ds }: { label: React.ReactNode; value: React.ReactNode; green?: boolean; valueGreen?: boolean; ds?: string }) {
+function Row({ label, value, green, valueGreen, ds, dim }: { label: React.ReactNode; value: React.ReactNode; green?: boolean; valueGreen?: boolean; ds?: string; dim?: boolean }) {
   return (
     <div
       data-ds={ds}
-      className={`flex justify-between gap-2.5 py-1.5 text-sm md:mt-1 md:gap-0 md:py-0 ${green ? 'text-[color:var(--color-text-primary)] md:text-success-fg' : 'text-[color:var(--color-text-primary)]'}`}
+      className={`flex justify-between gap-2.5 py-1.5 text-sm md:mt-1 md:gap-0 md:py-0 ${green ? 'text-[color:var(--color-text-primary)] md:text-success-fg' : 'text-[color:var(--color-text-primary)]'} ${dim ? RECALC_DIM : ''}`}
     >
       <span className={`leading-[var(--type-body-sm-lh)] md:leading-5 text-[color:var(--color-text-secondary)] ${green ? 'md:text-inherit' : ''}`}>{label}</span>
       <span className={`text-[0.9375rem] font-semibold leading-[var(--type-body-sm-lh)] tabular-nums md:text-sm md:font-normal md:leading-5 ${green || valueGreen ? 'text-success-fg' : ''}`}>{value}</span>
@@ -1365,158 +1382,6 @@ function LineProblemNote({ id, fix }: { id: string; fix: LineFixView }) {
       >
         {problem.fixLabel}
       </button>
-    </div>
-  );
-}
-
-function AddressPicker({
-  addresses,
-  selectedId,
-  quoteOutdated,
-  loadFailed,
-  autoOpen = false,
-  userId,
-  onSelect,
-  onCreated,
-  onUpdated,
-}: {
-  addresses: AddressDTO[];
-  selectedId: string | null;
-  quoteOutdated: boolean;
-  /** Danh sách không tải được: đã có dòng lỗi riêng, không được nói "chưa thêm địa chỉ". */
-  loadFailed: boolean;
-  /** Sổ địa chỉ đã tải xong và trống: mở sẵn form một lần (như Mini App). Đang tải thì false, kẻo mở nhầm khi sổ có địa chỉ. */
-  autoOpen?: boolean;
-  userId?: string;
-  onSelect: (id: string) => void;
-  onCreated: (a: AddressDTO) => void;
-  onUpdated: (a: AddressDTO) => void;
-}) {
-  const [adding, setAdding] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const autoOpened = useRef(false);
-  useEffect(() => {
-    if (!autoOpen || autoOpened.current) return;
-    autoOpened.current = true;
-    setAdding(true);
-  }, [autoOpen]);
-
-  return (
-    <div className="mt-2 space-y-2">
-      {addresses.length === 0 && !adding && !loadFailed && (
-        <p data-testid="address-empty" className="text-sm leading-[var(--type-body-sm-lh)] text-[color:var(--color-text-tertiary)]">
-          {fillCopy('checkout.addressEmpty')}
-        </p>
-      )}
-      {addresses.map((a) =>
-        editingId === a.id ? (
-          <AddressForm
-            key={a.id}
-            title="Sửa địa chỉ"
-            submitLabel="Lưu"
-            initial={addressToForm(a)}
-            userId={userId}
-            onSubmit={async (payload) => {
-              const saved = await updateAddress(a.id, payload);
-              setEditingId(null);
-              onUpdated(saved);
-            }}
-            onCancel={() => setEditingId(null)}
-          />
-        ) : (
-          <div key={a.id}>
-          <div className="flex items-start gap-1">
-            <label data-ds="checkout-address-card" className={`tubu-press ${addressOptionClass(selectedId === a.id)} min-w-0 flex-1 items-start max-md:block`}>
-              <input
-                type="radio"
-                name="addr"
-                checked={selectedId === a.id}
-                onChange={() => onSelect(a.id)}
-                className={`${miniRadio} max-md:sr-only`}
-              />
-              <span className="min-w-0 break-words">
-                <span className="flex items-center gap-x-1.5 leading-[var(--type-body-sm-lh)] md:flex-wrap md:leading-5">
-                  <span className="min-w-0 truncate font-semibold text-[color:var(--color-text-primary)] md:overflow-visible md:whitespace-normal md:font-medium">{a.recipient} · {a.phone}</span>
-                  {a.isDefault && (
-                    <span className="shrink-0 rounded-full bg-[var(--color-action-secondary-bg)] px-2 py-[3px] text-[length:var(--type-label-size)] font-semibold leading-[var(--type-label-lh)] text-[color:var(--color-action-secondary-fg)]">
-                      Mặc định
-                    </span>
-                  )}
-                </span>
-                <span className="mt-0.5 block text-caption text-[color:var(--color-text-secondary)] md:mt-0 md:text-sm">{[a.street, a.ward, a.district, a.province].filter(Boolean).join(', ')}</span>
-              </span>
-            </label>
-            <button
-              type="button"
-              onClick={() => {
-                setAdding(false);
-                setEditingId(a.id);
-              }}
-              aria-label={`Sửa địa chỉ của ${a.recipient}`}
-              className={`${ui.btnText} ${isLegacyGeo(a) || (selectedId === a.id && quoteOutdated) ? '' : 'max-md:hidden'}`}
-            >
-              Sửa
-            </button>
-          </div>
-          {selectedId === a.id && isLegacyGeo(a) && editingId === null && (
-            <div role="alert" className="mt-2 flex flex-col gap-2 rounded-control bg-warning-bg p-3">
-              <span className="flex items-start gap-1.5 text-sm text-warning-fg">
-                <AlertTriangle className="mt-0.5 h-4 w-4 flex-none" aria-hidden="true" />
-                Địa chỉ này theo địa giới cũ (trước khi sắp xếp tỉnh/phường năm 2025) nên chưa giao được. Bạn cập nhật lại tỉnh/thành và phường/xã giúp Tubu nhé.
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setAdding(false);
-                  setEditingId(a.id);
-                }}
-                className={`${ui.btnSecondary} self-start`}
-              >
-                Cập nhật địa chỉ
-              </button>
-            </div>
-          )}
-          </div>
-        ),
-      )}
-
-      {adding ? (
-        <AddressForm
-          title="Thêm địa chỉ"
-          userId={userId}
-          submitLabel="Lưu"
-          onSubmit={async (payload) => {
-            const created = await createAddress(payload);
-            setAdding(false);
-            onCreated(created);
-          }}
-          onCancel={() => setAdding(false)}
-        />
-      ) : (
-        <div className="flex flex-wrap items-center gap-x-4">
-          <button
-            type="button"
-            onClick={() => {
-              setEditingId(null);
-              setAdding(true);
-            }}
-            className="inline-flex min-h-11 items-center gap-1.5 text-sm font-semibold text-[color:var(--color-text-brand)] hover:underline"
-          >
-            <span
-              aria-hidden="true"
-              className="inline-flex h-5 w-5 items-center justify-center rounded-full border-[1.5px] border-dashed border-[var(--color-action-primary-bg)]"
-            >
-              <Plus className="h-4 w-4" strokeWidth={1.75} />
-            </span>
-            Thêm địa chỉ mới
-          </button>
-          {addresses.length > 0 && (
-            <Link href="/tai-khoan/dia-chi" className="inline-flex min-h-11 items-center text-sm text-[color:var(--color-text-secondary)] hover:underline max-md:hidden">
-              Quản lý sổ địa chỉ
-            </Link>
-          )}
-        </div>
-      )}
     </div>
   );
 }

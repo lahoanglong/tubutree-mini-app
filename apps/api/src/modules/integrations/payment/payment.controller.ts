@@ -22,6 +22,12 @@ export class PaymentController {
     return this.zalopay.createPayment(userId, dto.orderCode);
   }
 
+  /** Thẻ xem trước ở màn thanh toán khi khách chọn Chuyển khoản (cờ checkout.transfer_preview_enabled). Không chứa số tài khoản. */
+  @Get('payments/bank-preview')
+  bankPreview() {
+    return this.bankTransfer.getTransferPreview();
+  }
+
   /** VietQR chuyển khoản cho đơn BANK_TRANSFER (Pancake đối soát → webhook lật PAID). */
   @Get('payments/bank-qr/:code')
   bankQr(@CurrentUser('sub') userId: string, @Param('code') code: string) {

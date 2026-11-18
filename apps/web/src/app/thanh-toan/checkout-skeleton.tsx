@@ -25,7 +25,8 @@ export function CheckoutSkeleton() {
     >
       <div className={LEFT}>
         <Skeleton width={140} height={14} />
-        <Skeleton height={64} />
+        {/* Địa chỉ là một dòng gọn (tên + địa chỉ cắt một dòng, cao 44–48px), không còn thẻ chọn nhiều dòng. */}
+        <Skeleton height={48} />
       </div>
       <div className={ORDER_PART}>
         <Skeleton width={120} height={14} />

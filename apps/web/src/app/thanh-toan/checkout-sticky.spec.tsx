@@ -278,11 +278,11 @@ describe('/thanh-toan — thanh dính đáy', () => {
 });
 
 describe('/thanh-toan — radio/checkbox đủ lớn (≥ 24px)', () => {
-  it('radio địa chỉ, radio thanh toán và ô dùng Điểm Xanh đều h-6 w-6', async () => {
+  it('radio thanh toán và ô dùng Điểm Xanh đều h-6 w-6 (địa chỉ là một dòng chạm mở tấm chọn, không còn radio)', async () => {
     state.points = 50;
     const c = await mount();
     const controls = Array.from(c.querySelectorAll<HTMLInputElement>('input[type="radio"], input[type="checkbox"]'));
-    expect(controls.length).toBeGreaterThanOrEqual(5);
+    expect(controls.length).toBeGreaterThanOrEqual(3);
     const small = controls.filter((el) => !/\bh-6\b/.test(el.className) || !/\bw-6\b/.test(el.className));
     expect(small.map((el) => el.outerHTML.slice(0, 100))).toEqual([]);
   });
@@ -370,14 +370,20 @@ describe('/thanh-toan — 375px theo số đo Mini (K2)', () => {
     expect(note.className).toMatch(/\bmd:h-auto\b/);
   });
 
-  it('thẻ địa chỉ: huy hiệu Mặc định không xuống dòng, tên dài cắt một dòng; có móc đo', async () => {
+  it('thẻ địa chỉ: dòng tên và dòng địa chỉ cắt một dòng; trong tấm chọn huy hiệu Mặc định không xuống dòng; có móc đo', async () => {
     const c = await mount();
     const card = c.querySelector<HTMLElement>('[data-ds="checkout-address-card"]')!;
     expect(card).not.toBeNull();
-    const badge = Array.from(card.querySelectorAll('span')).find((s) => s.textContent === 'Mặc định')!;
-    expect(badge.className).toMatch(/\bshrink-0\b/);
-    const name = Array.from(card.querySelectorAll('span')).find((s) => s.textContent === 'An · 0912345678')!;
+    const name = Array.from(card.querySelectorAll('span')).find((s) => s.textContent === 'An · 091****678')!;
     expect(name.className).toMatch(/\btruncate\b/);
+    expect(card.getAttribute('aria-haspopup')).toBe('dialog');
+    click(card);
+    await flush(2);
+    const sheetCard = document.querySelector<HTMLElement>('[role="dialog"] [data-ds="checkout-address-card"]')!;
+    const badge = Array.from(sheetCard.querySelectorAll('span')).find((s) => s.textContent === 'Mặc định')!;
+    expect(badge.className).toMatch(/\bshrink-0\b/);
+    const fullName = Array.from(sheetCard.querySelectorAll('span')).find((s) => s.textContent === 'An · 0912345678')!;
+    expect(fullName.className).toMatch(/\btruncate\b/);
     expect(c.querySelector('[data-ds="checkout-block-title"]')!.textContent).toBe('Địa chỉ giao hàng');
   });
 });

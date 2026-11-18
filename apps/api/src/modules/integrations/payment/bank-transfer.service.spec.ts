@@ -284,3 +284,41 @@ describe('BankTransferService.getBankQr — hạn thanh toán (BUYERMINI-8)', ()
   });
 });
 
+
+describe('BankTransferService.getTransferPreview (cờ checkout.transfer_preview_enabled)', () => {
+  const ON = { 'checkout.transfer_preview_enabled': true };
+
+  it('cờ tắt (mặc định) → enabled false, không đọc ra thông tin ngân hàng nào', async () => {
+    const r = await new BankTransferService(makePrisma(null), makeConfig()).getTransferPreview();
+    expect(r).toEqual({ enabled: false, bank: null });
+    const off = await new BankTransferService(makePrisma(null), makeConfig({ 'checkout.transfer_preview_enabled': 'true' })).getTransferPreview();
+    expect(off).toEqual({ enabled: false, bank: null });
+  });
+
+  it('cờ bật → chỉ tên ngân hàng và tên chủ tài khoản; không số tài khoản, BIN, chuỗi QR hay ảnh QR', async () => {
+    const r = await new BankTransferService(makePrisma(null), makeConfig(ON)).getTransferPreview();
+    expect(r).toEqual({ enabled: true, bank: { name: 'Techcombank', accountName: 'CONG TY TUBU TREE' } });
+    const json = JSON.stringify(r);
+    expect(json).not.toContain('9984606774');
+    expect(json).not.toContain('970407');
+    expect(Object.keys(r.bank ?? {}).sort()).toEqual(['accountName', 'name']);
+  });
+
+  it.each([
+    ['payment.bank_bin', ''],
+    ['payment.bank_account_no', ''],
+    ['payment.bank_account_name', '  '],
+    ['payment.bank_name', ''],
+  ])('thiếu %s → bank null để app ẩn thẻ (không hứa mã QR không tạo được)', async (key, value) => {
+    const r = await new BankTransferService(makePrisma(null), makeConfig({ ...ON, [key]: value })).getTransferPreview();
+    expect(r).toEqual({ enabled: true, bank: null });
+  });
+
+  it('cờ bật hay tắt thì câu trả lời của GET /payments/bank-qr/:code vẫn giữ nguyên bộ khoá cũ', async () => {
+    const keys = async (o: Record<string, unknown>) =>
+      Object.keys(await new BankTransferService(makePrisma(ORDER), makeConfig(o)).getBankQr('TUBU250625001', 'u1')).sort();
+    const expected = ['amount', 'bank', 'memo', 'orderCode', 'paidSoFar', 'paymentDeadline', 'paymentStatus', 'qrImageUrl', 'qrString', 'serverNow'];
+    expect(await keys({})).toEqual(expected);
+    expect(await keys(ON)).toEqual(expected);
+  });
+});

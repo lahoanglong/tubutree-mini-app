@@ -4,6 +4,18 @@ import { SystemConfigService } from '../../system-config/system-config.service';
 import { buildVietQrPayload } from './vietqr';
 import { pendingPaymentDeadline } from '../../orders/pending-payment-ttl';
 
+/** Thẻ xem trước chuyển khoản ở màn thanh toán; mặc định tắt (seed createOnly + migration 20261118060137_checkout_transfer_preview_flag). */
+export const TRANSFER_PREVIEW_ENABLED_KEY = 'checkout.transfer_preview_enabled';
+
+/**
+ * Thẻ xem trước trước khi đặt đơn: chỉ tên ngân hàng và tên chủ tài khoản. Không có số tài khoản, BIN hay chuỗi QR:
+ * mã quét được khi chưa có mã đơn sẽ tạo khoản chuyển không đối soát được.
+ */
+export interface TransferPreviewDTO {
+  enabled: boolean;
+  bank: { name: string; accountName: string } | null;
+}
+
 /**
  * Thanh toán chuyển khoản qua VietQR (Napas 247). Sinh QR phía server cho đơn BANK_TRANSFER:
  * nội dung CK = mã đơn để Pancake POS (đã liên kết TK ngân hàng) tự đối soát rồi bắn webhook
@@ -17,6 +29,23 @@ export class BankTransferService {
     private readonly prisma: PrismaService,
     private readonly config: SystemConfigService,
   ) {}
+
+  /** Cờ tắt hoặc thiếu cấu hình nào trong bốn khoá ngân hàng (thẻ sẽ hứa một mã QR không tạo được) thì `bank` là null và app ẩn thẻ. */
+  async getTransferPreview(): Promise<TransferPreviewDTO> {
+    const enabled = (await this.config.get<boolean>(TRANSFER_PREVIEW_ENABLED_KEY, false)) === true;
+    if (!enabled) return { enabled: false, bank: null };
+    const [bin, accountNo, accountName, bankName] = await Promise.all([
+      this.config.get<string>('payment.bank_bin', ''),
+      this.config.get<string>('payment.bank_account_no', ''),
+      this.config.get<string>('payment.bank_account_name', ''),
+      this.config.get<string>('payment.bank_name', ''),
+    ]);
+    const text = (v: unknown) => (typeof v === 'string' ? v.trim() : '');
+    const name = text(bankName);
+    const holder = text(accountName);
+    if (!text(bin) || !text(accountNo) || !name || !holder) return { enabled: true, bank: null };
+    return { enabled: true, bank: { name, accountName: holder } };
+  }
 
   async getBankQr(orderCode: string, userId: string) {
     const order = await this.prisma.order.findUnique({ where: { code: orderCode } });

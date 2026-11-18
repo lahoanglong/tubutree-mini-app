@@ -205,8 +205,14 @@ describe('trang khách — heading và tên truy cập (C-123, C-077)', () => {
   it('/thanh-toan: ô địa chỉ, select tỉnh/phường, radio thanh toán đều có tên', async () => {
     const { container } = mount(<CheckoutPage />);
     await flush();
-    click(Array.from(container.querySelectorAll('button')).find((b) => b.textContent?.includes('Thêm địa chỉ mới')) ?? null);
+    // Có sẵn địa chỉ: "Thêm địa chỉ mới" nằm cuối tấm chọn mở từ dòng địa chỉ.
+    click(container.querySelector('[data-testid="checkout-address-row"] button[aria-haspopup="dialog"]'));
+    await flush(2);
+    const sheet = document.querySelector<HTMLElement>('[role="dialog"]')!;
+    expect(Array.from(sheet.querySelectorAll('button')).every((b) => (b.getAttribute('aria-label') ?? b.textContent ?? '').trim() !== '')).toBe(true);
+    click(Array.from(sheet.querySelectorAll('button')).find((b) => b.textContent?.includes('Thêm địa chỉ mới')) ?? null);
     await flush();
+    expect(document.querySelector('[role="dialog"]')).toBeNull();
     expectAccessible(container);
     expect(selectByLabel(container, 'Tỉnh/Thành phố')).not.toBeNull();
     expect(selectByLabel(container, 'Phường/Xã')).not.toBeNull();

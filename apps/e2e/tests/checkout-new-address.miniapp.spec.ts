@@ -26,6 +26,8 @@ test('Mini App 375: thêm địa chỉ mới ở thanh toán thì địa chỉ �
   const place = page.getByRole('button', { name: /Đặt hàng · / });
   await expect(place).toBeEnabled({ timeout: 15_000 });
 
+  // Từ w2-06 nút "Thêm địa chỉ mới" nằm cuối tấm chọn địa chỉ, mở bằng dòng địa chỉ.
+  await page.getByRole('button', { name: /Đổi địa chỉ giao hàng/ }).click();
   await page.getByRole('button', { name: /Thêm địa chỉ mới/ }).click();
   await page.getByLabel(/Người nhận/).first().fill(OFFICE.recipient);
   await page.getByLabel(/Số điện thoại/).first().fill(OFFICE.phone);
@@ -38,12 +40,15 @@ test('Mini App 375: thêm địa chỉ mới ở thanh toán thì địa chỉ �
   await page.getByRole('button', { name: /^Lưu$/ }).click();
   expect((await created).body).toMatchObject({ street: OFFICE.street, wardCode: OFFICE.wardCode });
 
-  const office = page.getByRole('radio').filter({ hasText: OFFICE.street });
-  const home = page.getByRole('radio').filter({ hasText: CHECKOUT_ADDRESS.street });
-  await expect(office).toHaveAttribute('aria-checked', 'true');
+  const row = page.getByTestId('checkout-address-row');
+  await expect(row).toContainText(OFFICE.street);
   await expect.poll(() => api.callsTo('GET', '/me/addresses').length, { timeout: 10_000 }).toBeGreaterThanOrEqual(2);
-  await expect(office).toHaveAttribute('aria-checked', 'true');
-  await expect(home).toHaveAttribute('aria-checked', 'false');
+  await expect(row).toContainText(OFFICE.street);
+  await row.getByRole('button', { name: /Đổi địa chỉ giao hàng/ }).click();
+  await expect(page.getByRole('radio').filter({ hasText: OFFICE.street })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('radio').filter({ hasText: CHECKOUT_ADDRESS.street })).toHaveAttribute('aria-checked', 'false');
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('radio').filter({ hasText: OFFICE.street })).toHaveCount(0);
 
   await expect(place).toBeEnabled();
   const placed = api.waitForCall('POST', '/checkout/place-order');

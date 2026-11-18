@@ -24,6 +24,8 @@ import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { platformBridge } from '../services/platform-bridge';
 import { BANK_DEADLINE_LEAD, BANK_DEADLINE_TAIL, BANK_QR_HINT, BANK_QR_LOAD_FAILED, BANK_QR_SAVED, BANK_QR_SAVE_FAILED } from '@tubutree/app-core/bank-payment-copy';
 import type { SaveImageResult } from '@tubutree/app-core/bridge';
+import { takeTransferQrDelay } from '@tubutree/app-core/commerce/checkout-display';
+import { trackEvent } from '../services/analytics';
 
 const PAGE_TITLE = 'Thanh toán chuyển khoản';
 // Trạng thái "đã thanh toán" không có PageHeader nên chữ tiêu đề là h1 duy nhất. `font: inherit` bỏ cỡ chữ/đậm mặc định
@@ -283,6 +285,10 @@ export default function BankPaymentPage() {
               width={240}
               height={240}
               onError={() => setFailedQr(data.qrImageUrl)}
+              onLoad={() => {
+                const ms = takeTransferQrDelay(data.orderCode, Date.now());
+                if (ms !== null) trackEvent('transfer_qr_shown', 'miniapp', { msSinceOrder: ms });
+              }}
               style={{ width: 240, height: 240, maxWidth: '70%', margin: '0 auto', display: 'block' }}
             />
           )}

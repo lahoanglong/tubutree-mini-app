@@ -20,6 +20,8 @@ import { copyText } from '@/lib/copy-text';
 import { ApiError, NetworkError } from '@/lib/client-api';
 import { isBusinessMessage, loadErrorText } from '@/lib/error-text';
 import { SupportHotline } from '@/components/support-hotline';
+import { takeTransferQrDelay } from '@tubutree/app-core/commerce/checkout-display';
+import { trackWebEvent } from '@/lib/analytics';
 
 export type BankPanelState = 'loading' | 'error' | 'ready' | 'paid' | 'closed';
 
@@ -60,6 +62,7 @@ export function BankTransferPanel({
   onState,
   orderHref,
   stickyCheck = false,
+  loadingFallback,
 }: {
   order: Pick<OrderDTO, 'code' | 'paymentMethod'>;
   onPaid?: () => void;
@@ -73,12 +76,17 @@ export function BankTransferPanel({
   orderHref?: string;
   /** Trang riêng của đơn: ở điện thoại nút Kiểm tra dính đáy như StickyActionBar của Mini App; từ md vẫn nằm trong dòng chảy. */
   stickyCheck?: boolean;
+  /** Khung chờ thay cho dòng "Đang tải…": trang riêng của đơn truyền khung cao gần bằng khung QR để lúc QR về nội dung bên dưới không nhảy. */
+  loadingFallback?: ReactNode;
 }) {
   const isBankTransfer = order.paymentMethod === 'BANK_TRANSFER';
   const { data, isLoading, refetch, isFetching, error } = useQuery({
     queryKey: ['bank-qr', order.code],
     queryFn: () => getBankQr(order.code),
     enabled: isBankTransfer,
+    // Thanh toán đã tải sẵn QR ngay khi có mã đơn: trang QR mở ra dùng luôn bản vừa về, không gọi lại lần hai. Chỉ áp lúc gắn panel;
+    // quay lại tab và dò định kỳ vẫn như cũ.
+    refetchOnMount: (q) => Date.now() - q.state.dataUpdatedAt > 3_000,
     // Pancake/ngân hàng đối soát chuyển khoản → webhook lật PAID; FE tự dò mỗi 4s tới khi thấy tiền về.
     refetchInterval: (q) => (q.state.data?.paymentStatus === 'PAID' || isFinalRejection(q.state.error) ? false : 4000),
   });
@@ -147,6 +155,7 @@ export function BankTransferPanel({
   };
 
   if (isLoading) {
+    if (loadingFallback) return <>{loadingFallback}</>;
     return (
       <section className={`mt-4 p-6 text-center ${ui.card}`}>
         <p className="text-sm text-stone-600">Đang tải thông tin chuyển khoản…</p>
@@ -240,6 +249,11 @@ export function BankTransferPanel({
               width={240}
               height={240}
               onError={() => setFailedQr(data.qrImageUrl)}
+              onLoad={() => {
+                // Chỉ đơn vừa đặt ở trang thanh toán có mốc: mở lại từ chi tiết đơn không đếm.
+                const msSinceOrder = takeTransferQrDelay(data.orderCode, Date.now());
+                if (msSinceOrder !== null) trackWebEvent('transfer_qr_shown', { msSinceOrder });
+              }}
               className="h-56 w-56 rounded-card border border-stone-200 bg-stone-0 object-contain max-md:h-60 max-md:w-60 max-md:max-w-[70%] max-md:rounded-none max-md:border-0"
             />
           )}

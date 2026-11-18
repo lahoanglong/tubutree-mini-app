@@ -160,7 +160,8 @@ test.describe('A11Y-04: thanh dính không che phần tử đang focus', () => {
 });
 
 test.describe('A11Y-09: thanh toán', () => {
-  test('thẻ địa chỉ (radio sr-only ở điện thoại) có vòng focus khi tới bằng bàn phím; nhóm phương thức thanh toán là radiogroup có tên', async ({ page, api }) => {
+  // Từ w2-06 địa chỉ là một dòng có nút "Đổi" mở tấm chọn (như Mini App), không còn radio trong trang.
+  test('dòng địa chỉ (nút mở tấm chọn) có vòng focus khi tới bằng bàn phím; nhóm phương thức thanh toán là radiogroup có tên', async ({ page, api }) => {
     mockBuyer(api);
     await page.setViewportSize({ width: 375, height: 812 });
     await page.goto('/thanh-toan');
@@ -169,13 +170,13 @@ test.describe('A11Y-09: thanh toán', () => {
     for (let i = 0; i < 40 && !outline; i++) {
       await page.keyboard.press('Tab');
       outline = await page.evaluate(() => {
-        const el = document.activeElement as HTMLInputElement | null;
-        if (el?.name !== 'addr') return null;
-        const s = getComputedStyle(el.closest('label')!);
+        const el = document.activeElement;
+        if (!el?.matches('[data-testid="checkout-address-row"] button[aria-haspopup="dialog"]')) return null;
+        const s = getComputedStyle(el);
         return { style: s.outlineStyle, width: parseFloat(s.outlineWidth) };
       });
     }
-    expect(outline, 'Tab tới được radio địa chỉ').not.toBeNull();
+    expect(outline, 'Tab tới được dòng địa chỉ').not.toBeNull();
     expect(outline!.style).toBe('solid');
     expect(outline!.width).toBeGreaterThanOrEqual(2);
   });

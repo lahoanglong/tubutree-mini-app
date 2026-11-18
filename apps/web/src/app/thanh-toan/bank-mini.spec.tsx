@@ -8,7 +8,7 @@ import { flush, render, type Rendered } from '@/test-utils/dom';
 
 const mocks = vi.hoisted(() => ({ saveImage: vi.fn(), deadline: '2099-01-01T00:00:00.000Z' as string | null, qr: 'ok' as 'ok' | 'error' | 'pending', status: 'UNPAID' as string, failRefetch: false, calls: 0 }));
 vi.mock('@/lib/auth-context', () => ({ useAuth: () => ({ user: { id: 'u' }, status: 'authenticated', initialized: true }) }));
-vi.mock('next/navigation', () => ({ useParams: () => ({ code: 'TB-9' }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
+vi.mock('next/navigation', () => ({ useParams: () => ({ code: 'TB-9' }), usePathname: () => '/thanh-toan/chuyen-khoan/TB-9', useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }));
 vi.mock('@/lib/shop-client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('@/lib/shop-client')>()),
   getBankQr: async (code: string) => {
@@ -123,10 +123,13 @@ describe('/thanh-toan/chuyen-khoan — tiêu đề khi chưa có QR để quét'
     expect(c.textContent).not.toContain('quét mã VietQR bên dưới');
   });
 
-  it('QR đang tải: h1 trung tính', async () => {
+  // Đang tải thì giữ sẵn dải tiêu đề của trạng thái QR (trạng thái cuối thường gặp): vẽ nó lúc QR về làm cả trang nhảy 48px ở điện thoại.
+  it('QR đang tải: đã có dải tiêu đề "Quét QR để chuyển khoản" và khung chờ, chưa có QR', async () => {
     mocks.qr = 'pending';
     const c = await mount();
-    expect(c.querySelector('h1')!.textContent).toBe('Thanh toán chuyển khoản');
+    expect(c.querySelector('h1')!.textContent).toBe('Quét QR để chuyển khoản');
+    expect(c.querySelector('header[data-page-bleed]')).not.toBeNull();
+    expect(c.querySelector('img[alt="VietQR"]')).toBeNull();
   });
 });
 

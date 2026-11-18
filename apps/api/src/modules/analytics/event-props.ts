@@ -1,4 +1,5 @@
 import {
+  CHECKOUT_ADDRESS_SWITCH_FROM,
   CHECKOUT_ENTRIES,
   CHECKOUT_LAST_STEPS,
   CHECKOUT_STEPS,
@@ -116,6 +117,10 @@ export const CLIENT_EVENT_RULES: Record<ClientEventName, EventRule> = {
     props: { q: (v) => text(100)(v) && isShareableSearchTerm(v as string), hadSuggestion: bool },
     required: ['q', 'hadSuggestion'],
   },
+  // Thanh toán gọn (wave tubu-w2-06): không mang địa chỉ, SĐT, số tài khoản hay mã đơn.
+  checkout_address_switched: { props: { from: oneOf(CHECKOUT_ADDRESS_SWITCH_FROM) }, required: ['from'] },
+  transfer_preview_shown: { props: {} },
+  transfer_qr_shown: { props: { msSinceOrder: (v) => int(0, 600_000)(v) && (v as number) % 100 === 0 }, required: ['msSinceOrder'] },
 };
 
 /**

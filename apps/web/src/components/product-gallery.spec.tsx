@@ -141,3 +141,48 @@ describe('ProductGallery: chọn biến thể thì ảnh chính đổi (W181)', 
     expect(activeThumb(container)).toBe(0);
   });
 });
+
+describe('ProductGallery: ảnh đầu là LCP (w2-06)', () => {
+  const PANCAKE = ['https://content.pancake.vn/2-26/a.jpg', 'https://content.pancake.vn/2-26/b.jpg'];
+  const widthsOf = (set: string | null) => (set ?? '').split(', ').map((c) => Number(c.split(' ')[1]!.replace('w', '')));
+
+  it('ảnh đầu: không lazy, fetchpriority=high; điện thoại chỉ có bản tới 640 (nguồn riêng), từ md giữ bản tới 960; ảnh sau tải lười', () => {
+    const { container } = mount(<ProductGallery images={PANCAKE} name="Tiêu đen" />);
+    const [first, second] = Array.from(container.querySelectorAll('img'));
+    expect(first!.getAttribute('loading')).toBe('eager');
+    expect(first!.getAttribute('fetchpriority')).toBe('high');
+    expect(Math.max(...widthsOf(first!.getAttribute('srcset')))).toBe(960);
+    const phone = first!.closest('picture')!.querySelector('source')!;
+    expect(phone.getAttribute('media')).toBe('(max-width: 767px)');
+    expect(phone.getAttribute('sizes')).toBe('100vw');
+    expect(Math.max(...widthsOf(phone.getAttribute('srcset')))).toBe(640);
+    expect(second!.getAttribute('loading')).toBe('lazy');
+    expect(second!.getAttribute('fetchpriority')).toBeNull();
+    // Khung vuông giữ nguyên: <picture> không tạo hộp riêng, ảnh vẫn là phần tử con trực tiếp về bố cục.
+    expect(first!.closest('picture')!.className).toBe('contents');
+    expect(first!.getAttribute('width')).toBe('800');
+    expect(first!.getAttribute('height')).toBe('800');
+  });
+
+  it('HTML máy chủ có preload ảnh đầu cho từng khổ (điện thoại tới 640, từ md bản đầy đủ), ảnh sau không preload', async () => {
+    const { renderToString } = await import('react-dom/server');
+    const html = renderToString(<ProductGallery images={PANCAKE} name="Tiêu đen" />);
+    const links = html.match(/<link rel="preload"[^>]*>/g) ?? [];
+    expect(links).toHaveLength(2);
+    expect(links.every((l) => /as="image"/.test(l) && /fetchPriority="high"/i.test(l))).toBe(true);
+    expect(links.some((l) => l.includes('media="(max-width: 767px)"') && l.includes('640w') && !l.includes('960w'))).toBe(true);
+    expect(links.some((l) => l.includes('media="(min-width: 768px)"') && l.includes('960w'))).toBe(true);
+    expect(links.some((l) => l.includes(encodeURIComponent(PANCAKE[1]!)))).toBe(false);
+  });
+
+  it('bản đổi cỡ lỗi thì lùi về ảnh gốc: bỏ cả nguồn điện thoại, không để điện thoại đọc lại bản lỗi', () => {
+    const { container } = mount(<ProductGallery images={PANCAKE} name="Tiêu đen" />);
+    const img = container.querySelector('img')!;
+    act(() => {
+      img.dispatchEvent(new Event('error'));
+    });
+    const after = container.querySelector('img')!;
+    expect(after.getAttribute('src')).toBe(PANCAKE[0]);
+    expect(after.closest('picture')!.querySelector('source')).toBeNull();
+  });
+});

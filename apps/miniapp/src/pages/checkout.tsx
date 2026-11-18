@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { CheckoutLastStep, CheckoutStep, QuotePendingGiftDTO } from '@tubutree/shared-types';
 import { Box, Page, Text, Input, useNavigate, useLocation, useSnackbar } from 'zmp-ui';
 import { useSmartNavigate } from '../lib/smart-nav';
@@ -25,12 +25,14 @@ import { PICKUP_OPTIONS_KEY, useCheckoutPickup } from '../components/checkout/us
 import { OrderSuccess } from '../components/checkout/order-success';
 import { OrderZaloConsentRow, useOrderZaloConsent } from '../components/checkout/order-zalo';
 import { VoucherSheet } from '../components/checkout/voucher-sheet';
+import { TransferPreview, warmBankPayment } from '../components/checkout/transfer-preview';
+import { getBankQr } from '../services/payment-api';
 import { COUPON_CHANGE_KEY, useCheckoutCoupon } from '../components/checkout/use-coupon-hint';
 import { normalizeTaxCode } from '@tubutree/app-core/commerce/tax-code';
 import { validateInvoiceFields, type InvoiceField } from '@tubutree/app-core/commerce/checkout-form';
 import { flashLimitNotice, isCartFixableError } from '@tubutree/app-core/commerce/flash-limit';
 import { checkoutLineProblems, isPriceChangedError, priceChangedActions, type LineFix } from '@tubutree/app-core/commerce/checkout-issues';
-import { checkoutPlaceHint, checkoutTotalText } from '@tubutree/app-core/commerce/checkout-display';
+import { checkoutPlaceHint, checkoutTotalText, markTransferOrderPlaced, rememberRecentAddress } from '@tubutree/app-core/commerce/checkout-display';
 import { fillCopy } from '@tubutree/app-core/shop-copy';
 import { shippingRowView } from '@tubutree/app-core/checkout-pickup-view';
 import { visibleGifts } from '@tubutree/app-core/checkout-pickup-state';
@@ -82,6 +84,7 @@ import { KeyValueRow } from '../components/ui/key-value-row';
 import { StickyActionBar } from '../components/ui/sticky-action-bar';
 import { Button } from '../components/ui/button';
 import { Text as DsText } from '../components/ui/text';
+import { SR_ONLY } from '../components/ui/sr-only';
 import { useCartKey } from '../services/cart-key';
 import { INPUT_LIMITS } from '../utils/input-limits';
 import { variationLabel } from '../utils/variation-label';
@@ -89,6 +92,9 @@ import { variationLabel } from '../utils/variation-label';
 const PREVIOUS_MAYBE_PLACED = 'Đơn trước có thể đã được tạo. Kiểm tra mục Đơn hàng trước khi đặt lại.';
 
 type PlaceBody = Parameters<typeof placeOrder>[0];
+
+// Đang tính lại báo giá cho địa chỉ mới: giữ số cũ nhưng mờ đi, khoá Đặt hàng (placeLocked).
+const RECALC_DIM = { opacity: 0.5 } as const;
 
 export default function CheckoutPage() {
   const navigate = useNavigate();
@@ -240,7 +246,14 @@ export default function CheckoutPage() {
     queryKey: ['quote', addressId, pointsToUse, ctvSlug, itemIdsKey, pickup.fieldsKey],
     queryFn: () => checkoutQuote(addressId!, pointsToUse, ctvSlug, itemIds, pickup.fields),
     enabled: quoteEnabled,
+    // Đổi địa chỉ: giữ báo giá cũ trên màn (mờ phí giao, khoá Đặt hàng) tới khi báo giá mới về, để tổng không nhảy về "…" rồi nhảy lại.
+    // Chỉ khi các lựa chọn khác giữ nguyên; lỗi báo giá thì TanStack bỏ dữ liệu giữ chỗ và màn hiện dòng lỗi có Thử lại.
+    placeholderData: (prev, prevQuery) =>
+      prevQuery && prevQuery.queryKey[1] !== addressId && prevQuery.queryKey[2] === pointsToUse && prevQuery.queryKey[3] === ctvSlug && prevQuery.queryKey[4] === itemIdsKey
+        ? prev
+        : undefined,
   });
+  const recalculating = quote.isPlaceholderData;
   const { pruneGifts } = pickup;
   const pendingGifts = quote.data?.pendingGiftRedemptions;
   useEffect(() => {
@@ -456,7 +469,11 @@ export default function CheckoutPage() {
       clearCheckoutSelection(); // lựa chọn của đơn vừa đặt không được dính sang đơn sau
       autoCoupon.forget();
       // Chuyển khoản: sang màn VietQR để khách quét trả ngay (Pancake đối soát → tự xác nhận).
+      if (addressId) rememberRecentAddress(browserStorage(), addressId, user?.id);
       if ((o.paymentMethod ?? sentMethod.current) === 'BANK_TRANSFER') {
+        // Gọi QR ngay, song song với việc chuyển màn: màn QR dùng chung khoá ['bank-qr', mã] nên nhận đúng lời gọi đang chạy, không gọi lần hai.
+        markTransferOrderPlaced(o.code, Date.now());
+        void queryClient.prefetchQuery({ queryKey: ['bank-qr', o.code], queryFn: () => getBankQr(o.code) });
         navigate(`/bank-payment/${o.code}`, { replace: true });
         return;
       }
@@ -684,7 +701,7 @@ export default function CheckoutPage() {
   // không phải ô nhập (đang tính tiền, dòng cần sửa, chưa có cách thanh toán, đang áp mã) mới khoá hẳn, và đã có chữ nói lý do.
   const formBlocked = !addressId || !invoiceValid;
   const placeLocked =
-    hasLineProblem || autoCoupon.busy || couponChanging || (!!addressId && (!quote.isSuccess || quote.isFetching || (!zeroNote && payment === '')));
+    hasLineProblem || autoCoupon.busy || couponChanging || (!!addressId && (!quote.isSuccess || quote.isFetching || recalculating || (!zeroNote && payment === '')));
 
   // Chưa có báo giá (chưa chọn địa chỉ) thì chưa biết tổng đơn → chưa khoá, chưa có lý do.
   const paymentMethods = [
@@ -774,6 +791,7 @@ export default function CheckoutPage() {
         <AddressSection
           addresses={addresses.data ?? []}
           selectedId={addressId}
+          userId={user?.id}
           onSelect={chosen(setAddressId)}
           // Địa chỉ lưu trước báo giá đầu đã được tính ở `checkout_started`, không đếm hai lần.
           onSaved={() => funnel.current.started && funnelStep('address_saved', 0)}
@@ -1035,8 +1053,8 @@ export default function CheckoutPage() {
           </Text>
         )}
         {!zeroNote && paymentMethods.map((m) => (
+          <Fragment key={m.value}>
           <Box
-            key={m.value}
             role="radio"
             {...rowKeyboardProps()}
             aria-checked={payment === m.value}
@@ -1049,6 +1067,7 @@ export default function CheckoutPage() {
               // Chạm lại đúng cách đang chọn không phải là đổi lựa chọn: không được mở băng của lần đặt chưa rõ kết quả.
               if (m.value !== payment) {
                 funnelStep('payment_method_selected', 2, m.value);
+                if (m.value === 'BANK_TRANSFER') warmBankPayment();
                 chosen(setPayment)(m.value);
               }
             }}
@@ -1077,6 +1096,8 @@ export default function CheckoutPage() {
               )}
             </Box>
           </Box>
+          {m.value === 'BANK_TRANSFER' && payment === 'BANK_TRANSFER' && <TransferPreview total={quote.isError ? null : (quote.data?.total ?? null)} dim={recalculating} />}
+          </Fragment>
         ))}
         {paymentNote && (
           <Text role="status" size="small" style={{ color: 'var(--color-text-warning)', marginTop: 4 }}>
@@ -1325,9 +1346,10 @@ export default function CheckoutPage() {
                 )
               }
               tone={quote.data.shippingFee === 0 ? 'success' : 'primary'}
+              style={recalculating ? RECALC_DIM : undefined}
             />
             {etaLabel && <KeyValueRow label={vi.success.etaLabel} value={etaLabel} />}
-            <KeyValueRow dataDs="checkout-summary-total" label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis />
+            <KeyValueRow dataDs="checkout-summary-total" label={vi.checkout.total} value={formatVnd(quote.data.total)} emphasis style={recalculating ? RECALC_DIM : undefined} />
             {quote.data.pointsEarned > 0 && (
               <Box flex alignItems="center" style={{ gap: 4, marginTop: 4 }}>
                 <Sprout size={13} color="var(--color-text-success)" aria-hidden />
@@ -1363,6 +1385,13 @@ export default function CheckoutPage() {
           </>
         )}
       </Box>
+      {/* Chữ chỉ cho trình đọc màn hình, đặt ngoài thẻ tóm tắt vì thẻ là nút (con của nút không được đọc như vùng báo). Khung relative giữ span
+          tuyệt đối trong khung cuộn của trang: không có nó span bám vào body và body cuộn được thêm một đoạn. */}
+      <div style={{ position: 'relative' }}>
+        <span role="status" style={SR_ONLY}>
+          {recalculating ? fillCopy('checkout.recalculating') : ''}
+        </span>
+      </div>
 
       {placeNotice && (
         <Box p={4} data-testid="place-notice" role="alert" style={{ background: 'var(--color-bg-surface)' }}>
@@ -1597,8 +1626,8 @@ function CheckoutSkeleton() {
     <Shell>
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Skeleton width={120} height={14} />
-        <Skeleton height={64} />
-        <Skeleton height={64} />
+        {/* Địa chỉ là một dòng gọn (AddressSection), không còn danh sách thẻ. */}
+        <Skeleton height={48} />
       </Box>
       <Box p={4} mt={2} style={{ background: 'var(--color-bg-surface)', display: 'flex', flexDirection: 'column', gap: 10 }}>
         <Skeleton width={150} height={14} />

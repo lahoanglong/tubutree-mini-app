@@ -19,3 +19,10 @@ export const getBankQr = async (http: HttpClient, code: string) => {
   syncServerClock(qr?.serverNow);
   return qr;
 };
+
+/** Thẻ xem trước ở màn thanh toán (cờ `checkout.transfer_preview_enabled`): chỉ tên ngân hàng và tên chủ tài khoản. */
+export interface TransferPreview {
+  enabled: boolean;
+  bank: { name: string; accountName: string } | null;
+}
+export const getTransferPreview = (http: HttpClient) => http.get<TransferPreview>('/payments/bank-preview');

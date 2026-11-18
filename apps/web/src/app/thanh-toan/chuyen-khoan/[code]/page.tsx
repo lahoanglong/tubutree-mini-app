@@ -49,7 +49,10 @@ export default function BankPaymentPage() {
     refreshOrders();
   }, [refreshOrders]);
 
-  const showQr = !paid && !!code && phase === 'authenticated' && panelState === 'ready';
+  // Dải tiêu đề có `data-page-bleed` bỏ đệm 48px của nút lùi ở điện thoại: vẽ nó ngay khi còn chờ phiên hoặc chờ QR (trạng thái cuối thường gặp),
+  // vẽ muộn lúc QR về thì cả trang nhảy lên 48px (CLS ~0,8 ở 390px).
+  const showQr =
+    !paid && !!code && (phase === 'loading' || (phase === 'authenticated' && (panelState === 'loading' || panelState === 'ready')));
 
   let body: React.ReactNode;
   if (phase === 'loading') body = <AuthLoading />;
@@ -66,6 +69,8 @@ export default function BankPaymentPage() {
           showHeading={false}
           orderHref={detail}
           stickyCheck
+          // Cùng khung chờ với lúc chờ phiên: hai bước chờ là một khối, cao gần bằng khung QR (CLS điện thoại).
+          loadingFallback={<AuthLoading />}
           paidFooter={
             <div className="mt-4 flex flex-col gap-2">
               <Link href={detail} onClick={refreshOrders} className={ui.btnPrimary}>
