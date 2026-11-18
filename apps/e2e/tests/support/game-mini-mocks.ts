@@ -433,6 +433,8 @@ export function mockMiniGames(
   // Chưa đăng nhập (web): ván ký `token`, không lưu. Tài khoản khách theo thiết bị (Mini App): ván có `roundId` nhưng không tính thưởng.
   const startOver = guest ? { ...(guest === 'NOT_LOGGED_IN' ? { roundId: null, token: 'tok.e2e' } : {}), rewarded: false, noRewardReason: guest } : {};
   api.get('/game/mini/today', () => opts.today ?? (guest ? miniToday({ rewardEligible: false, noRewardReason: guest }) : miniToday()));
+  // Dòng Sổ tay Xanh dưới "Chơi hôm nay" và ở màn kết quả: để 404 như cờ `game.album_enabled` tắt (mặc định); spec sổ mock riêng (game-album-mocks.ts).
+  api.allowUnmocked('GET /game/album');
   api.post('/game/mini/daily_quiz/start', () => round('daily_quiz', { game: 'daily_quiz', items: QUIZ_ITEMS }, startOver));
   api.post('/game/mini/sort/start', () => round('sort', { game: 'sort', bins: ['recycle', 'food', 'other'], items: SORT_ITEMS }, startOver));
   api.post('/game/mini/match/start', () => round('match', { game: 'match', cards: MATCH_CARDS }, startOver));

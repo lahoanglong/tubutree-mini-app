@@ -81,6 +81,14 @@ export function isBadgeId(v: unknown): v is BadgeId {
   return typeof v === 'string' && (BADGE_IDS as readonly string[]).includes(v);
 }
 
+/**
+ * Huy hiệu thuộc bài của Sổ tay Xanh (cờ game.album_enabled), 0 điểm: thuộc 10 thẻ, thuộc trọn một chủ đề, thuộc cả sổ. Ghi vào cùng
+ * bảng `user_badges` nhưng KHÔNG nằm trong `BADGE_IDS`: hàng huy hiệu chung tự điền mọi id của `BADGE_IDS` còn thiếu, nên thêm vào đó là
+ * lộ 3 ô mới cả khi cờ tắt. Sổ tay tự hiện 3 huy hiệu này.
+ */
+export const ALBUM_BADGE_IDS = ['ALBUM_MASTER_10', 'ALBUM_TOPIC', 'ALBUM_ALL'] as const;
+export type AlbumBadgeId = (typeof ALBUM_BADGE_IDS)[number];
+
 export interface BadgeItem {
   id: BadgeId;
   earned: boolean;

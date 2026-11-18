@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import dynamic from 'next/dynamic';
 import { useRouter } from 'next/navigation';
 import { MessagesSquare, Recycle } from 'lucide-react';
 import { GAME_SOCIAL_ON_WEB, SEASON_PASS_ENABLED } from '@tubutree/app-core/features';
@@ -63,6 +64,9 @@ import { miniTodayQuery } from '@tubutree/app-core/game-mini/today';
 import { miniEarnQuizLeft, miniPlayPath, playableToday } from '@tubutree/app-core/game-mini/format';
 import type { MiniTodayResponse } from '@tubutree/shared-types';
 import { PlayTodayCard } from '@/components/game/mini/play-today-card';
+
+// Chỉ vẽ khi có "Chơi hôm nay": chunk riêng để trang không nặng thêm khi cờ game mini hay cờ sổ tắt.
+const AlbumLine = dynamic(() => import('@/components/game-album/album-line').then((m) => m.AlbumLine), { ssr: false });
 
 const TITLE = 'Vườn Xanh';
 const WASTE_PATH = '/doi-rac';
@@ -275,6 +279,7 @@ function GameBody() {
           </div>
 
           {miniToday ? <PlayTodayCard today={miniToday} /> : <ArcadeHub />}
+          {miniToday && <AlbumLine />}
           <HomeQuizCard />
 
           <div className="empty:hidden">

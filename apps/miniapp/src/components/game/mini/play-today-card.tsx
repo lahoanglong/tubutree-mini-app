@@ -1,4 +1,4 @@
-import { useId } from 'react';
+import { lazy, Suspense, useId } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight, CircleHelp, LayoutGrid, MapPin, Recycle, RefreshCw, ShoppingCart, Sparkles, type LucideIcon } from 'lucide-react';
 import type { MiniTodayResponse } from '@tubutree/shared-types';
@@ -10,6 +10,7 @@ import { useSmartNavigate } from '../../../lib/smart-nav';
 import { refreshAccessToken } from '../../../services/api';
 import { coreHttp } from '../../../services/core-http';
 import type { EarnQuizState } from '../earn-water-sheet';
+import { SilentBoundary } from '../../route-shell';
 import { Card } from '../../ui/card';
 import { Icon } from '../../ui/icon';
 import { Heading, Text } from '../../ui/text';
@@ -25,6 +26,9 @@ const GAME_ICON: Record<PlayableMiniGame, LucideIcon> = {
 };
 
 const refreshSession = () => refreshAccessToken().then(Boolean);
+
+// Dòng "Sổ tay Xanh" ngay dưới khối, chunk riêng của sổ (`game.tsx` đã chạm trần 400 dòng của game-layout.spec).
+const AlbumLine = lazy(() => import('../../../pages/game-album').then((m) => ({ default: m.AlbumLine })));
 
 /**
  * Lượt game mini hôm nay cho trang Vườn Xanh. Máy chủ trả 404 khi `game.mini.enabled` tắt: `today` là null và trang giữ khối đố vui, sảnh arcade
@@ -78,6 +82,7 @@ export function PlayTodayCard({ today, inset = false }: { today: MiniTodayRespon
   const games = playableToday(today);
   const matcher = matcherOn(useQuery(matcherStatusQuery(coreHttp)).data);
   return (
+    <>
     <section
       aria-labelledby={titleId}
       data-testid="mini-play-today"
@@ -110,5 +115,13 @@ export function PlayTodayCard({ today, inset = false }: { today: MiniTodayRespon
         </div>
       </Card>
     </section>
+    {!inset && (
+      <SilentBoundary>
+        <Suspense fallback={null}>
+          <AlbumLine />
+        </Suspense>
+      </SilentBoundary>
+    )}
+    </>
   );
 }
